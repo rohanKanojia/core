@@ -20,50 +20,52 @@
 #ifndef INCLUDED_SVX_SVDOGRP_HXX
 #define INCLUDED_SVX_SVDOGRP_HXX
 
+#include <memory>
 #include <svx/svdobj.hxx>
 #include <svx/svxdllapi.h>
+#include <svx/svdpage.hxx>
 
-
-//   Vorausdeklarationen
-
-
-class SdrObjList;
-class SdrObjListIter;
+// Forward declarations
 class SfxItemSet;
 
-
 //   SdrObjGroup
-
-
-class SVX_DLLPUBLIC SdrObjGroup : public SdrObject
+class SVX_DLLPUBLIC SdrObjGroup final : public SdrObject, public SdrObjList
 {
 private:
-protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
-    virtual sdr::properties::BaseProperties* CreateObjectSpecificProperties() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::properties::BaseProperties> CreateObjectSpecificProperties() override;
 
-    SdrObjList*                 pSub;    // Subliste (Kinder)
-    Point                       aRefPoint; // Referenzpunkt innerhalb der Objektgruppe
-    bool                        bRefPoint; // Ist ein RefPoint gesetzt?
+    Point                       aRefPoint;      // Reference point inside the object group
+
+private:
+    // protected destructor - due to final, make private
+    virtual ~SdrObjGroup() override;
 
 public:
-    SdrObjGroup();
-    virtual ~SdrObjGroup();
+    SdrObjGroup(SdrModel& rSdrModel);
+
+    // derived from SdrObjList
+    virtual SdrPage* getSdrPageFromSdrObjList() const override;
+    virtual SdrObject* getSdrObjectFromSdrObjList() const override;
+
+    // derived from SdrObject
+    virtual SdrObjList* getChildrenOfSdrObject() const override;
 
     virtual void SetBoundRectDirty() override;
     virtual sal_uInt16 GetObjIdentifier() const override;
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
     virtual SdrLayerID GetLayer() const override;
     virtual void NbcSetLayer(SdrLayerID nLayer) override;
-    virtual void SetObjList(SdrObjList* pNewObjList) override;
-    virtual void SetPage(SdrPage* pNewPage) override;
-    virtual void SetModel(SdrModel* pNewModel) override;
+
+    // react on model/page change
+    virtual void handlePageChange(SdrPage* pOldPage, SdrPage* pNewPage) override;
+
     virtual SdrObjList* GetSubList() const override;
 
-    virtual const Rectangle& GetCurrentBoundRect() const override;
-    virtual const Rectangle& GetSnapRect() const override;
+    virtual const tools::Rectangle& GetCurrentBoundRect() const override;
+    virtual const tools::Rectangle& GetSnapRect() const override;
 
-    virtual SdrObjGroup* Clone() const override;
+    virtual SdrObjGroup* CloneSdrObject(SdrModel& rTargetModel) const override;
     SdrObjGroup& operator=(const SdrObjGroup& rObj);
 
     virtual OUString TakeObjNameSingul() const override;
@@ -87,8 +89,8 @@ public:
     virtual void Shear(const Point& rRef, long nAngle, double tn, bool bVShear) override;
     virtual void SetAnchorPos(const Point& rPnt) override;
     virtual void SetRelativePos(const Point& rPnt) override;
-    virtual void SetSnapRect(const Rectangle& rRect) override;
-    virtual void SetLogicRect(const Rectangle& rRect) override;
+    virtual void SetSnapRect(const tools::Rectangle& rRect) override;
+    virtual void SetLogicRect(const tools::Rectangle& rRect) override;
 
     virtual void NbcMove(const Size& rSiz) override;
     virtual void NbcResize(const Point& rRef, const Fraction& xFact, const Fraction& yFact) override;
@@ -97,11 +99,10 @@ public:
     virtual void NbcShear(const Point& rRef, long nAngle, double tn, bool bVShear) override;
     virtual void NbcSetAnchorPos(const Point& rPnt) override;
     virtual void NbcSetRelativePos(const Point& rPnt) override;
-    virtual void NbcSetSnapRect(const Rectangle& rRect) override;
-    virtual void NbcSetLogicRect(const Rectangle& rRect) override;
+    virtual void NbcSetSnapRect(const tools::Rectangle& rRect) override;
+    virtual void NbcSetLogicRect(const tools::Rectangle& rRect) override;
 
     virtual void NbcReformatText() override;
-    virtual void ReformatText() override;
 
     virtual SdrObject* DoConvertToPolyObj(bool bBezier, bool bAddText) const override;
 

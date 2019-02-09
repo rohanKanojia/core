@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FORMSHELLMANAGER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FORMSHELLMANAGER_HXX
 
-#include <ViewShellManager.hxx>
+#include "ViewShellManager.hxx"
 
 #include <tools/link.hxx>
 #include <svl/lstner.hxx>
@@ -28,6 +28,7 @@
 
 class VclWindowEvent;
 class FmFormShell;
+namespace vcl { class Window; }
 
 namespace sd { namespace tools { class EventMultiplexerEvent; } }
 
@@ -52,7 +53,7 @@ class FormShellManager
 {
 public:
     FormShellManager (ViewShellBase& rBase);
-    virtual ~FormShellManager();
+    virtual ~FormShellManager() override;
 
     /** Typically called by a ShellFactory.  It tells the
         FormShellManager which form shell to manage.
@@ -108,18 +109,18 @@ private:
         when the window gets the focus.  In this case the form shell is
         moved to the bottom of the shell stack.
     */
-    DECL_LINK_TYPED(WindowEventHandler, VclWindowEvent&, void);
+    DECL_LINK(WindowEventHandler, VclWindowEvent&, void);
 
     /** This call back is called when view in the center pane is replaced.
         When this happens then we unregister at the window of the old and
         register at the window of the new shell.
     */
-    DECL_LINK_TYPED(ConfigurationUpdateHandler, ::sd::tools::EventMultiplexerEvent&, void);
+    DECL_LINK(ConfigurationUpdateHandler, ::sd::tools::EventMultiplexerEvent&, void);
 
     /** This call back is called by the form shell when it gets the focus.
         In this case the form shell is moved to the top of the shell stack.
     */
-    DECL_LINK_TYPED(FormControlActivated, LinkParamNone*, void);
+    DECL_LINK(FormControlActivated, LinkParamNone*, void);
 
     /** This method is called by the form shell when that is destroyed.  It
         acts as a last resort against referencing a dead form shell.  With

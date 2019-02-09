@@ -28,8 +28,8 @@
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <com/sun/star/rendering/XColorSpace.hpp>
-#include "com/sun/star/rendering/PathCapType.hpp"
-#include "com/sun/star/rendering/PathJoinType.hpp"
+#include <com/sun/star/rendering/PathCapType.hpp>
+#include <com/sun/star/rendering/PathJoinType.hpp>
 
 #include <unordered_map>
 #include <vector>
@@ -43,7 +43,7 @@ namespace com { namespace sun { namespace star { namespace task
 
 namespace pdfi
 {
-    typedef std::unordered_map< OUString, OUString, OUStringHash > PropertyMap;
+    typedef std::unordered_map< OUString, OUString > PropertyMap;
     typedef sal_Int32 ImageId;
 
     /// What to do with a polygon. values can be ORed together
@@ -82,7 +82,7 @@ namespace pdfi
     {
         size_t operator()(const FontAttributes& rFont ) const
         {
-            return (size_t)rFont.familyName.hashCode()
+            return static_cast<size_t>(rFont.familyName.hashCode())
                 ^  size_t(rFont.isBold ? 0xd47be593 : 0)
                 ^  size_t(rFont.isItalic ? 0x1efd51a1 : 0)
                 ^  size_t(rFont.isUnderline ? 0xf6bd325a : 0)

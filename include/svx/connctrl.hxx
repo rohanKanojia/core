@@ -19,47 +19,54 @@
 #ifndef INCLUDED_SVX_CONNCTRL_HXX
 #define INCLUDED_SVX_CONNCTRL_HXX
 
-#include <vcl/ctrl.hxx>
+#include <sal/types.h>
 #include <svx/svxdllapi.h>
+#include <tools/gen.hxx>
+#include <tools/wintypes.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/event.hxx>
+#include <vcl/outdev.hxx>
+#include <memory>
+
+namespace vcl { class Window; }
 
 class SfxItemSet;
 class SdrEdgeObj;
 class SdrView;
-class SdrObjList;
+class SdrPage;
 
 /*************************************************************************
 |*
 |* SvxXConnectionPreview
 |*
 \************************************************************************/
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxXConnectionPreview : public Control
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxXConnectionPreview : public weld::CustomWidgetController
 {
  friend class SvxConnectionPage;
 
 private:
+    MapMode aNewMapMode;
     SdrEdgeObj*         pEdgeObj;
-    SdrObjList*         pObjList;
+    std::unique_ptr<SdrPage> pSdrPage;
     const SdrView*      pView;
 
-    SVX_DLLPRIVATE void SetStyles();
     SVX_DLLPRIVATE void AdaptSize();
+    SVX_DLLPRIVATE void SetMapMode(const MapMode& rNewMapMode) { aNewMapMode = rNewMapMode; }
+    SVX_DLLPRIVATE const MapMode& GetMapMode() const { return aNewMapMode; }
 public:
-    SvxXConnectionPreview( vcl::Window* pParent, WinBits nStyle);
-    virtual ~SvxXConnectionPreview();
-    virtual void dispose() override;
+    SvxXConnectionPreview();
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual ~SvxXConnectionPreview() override;
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void Resize() override;
-    virtual Size GetOptimalSize() const override;
-    virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
+    virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
 
     void         SetAttributes( const SfxItemSet& rInAttrs );
     sal_uInt16   GetLineDeltaCount();
 
     void         Construct();
     void         SetView( const SdrView* pSdrView ) { pView = pSdrView; }
-
-    virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
 };
 
 #endif // INCLUDED_SVX_CONNCTRL_HXX

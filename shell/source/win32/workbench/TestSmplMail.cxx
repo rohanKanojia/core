@@ -26,13 +26,8 @@
 #include <osl/diagnose.h>
 
 #include <stdio.h>
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
+
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include <osl/file.hxx>
 
@@ -150,7 +145,7 @@ int SAL_CALL main(int , char*, char* )
     // Print a message if an error occurred.
     if ( xComponent.is() == sal_False )
     {
-        OSL_FAIL("Error shuting down");
+        OSL_FAIL("Error shutting down");
     }
 
     // Dispose and clear factory

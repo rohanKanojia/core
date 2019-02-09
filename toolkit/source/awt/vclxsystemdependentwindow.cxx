@@ -29,9 +29,9 @@
 #include <cppuhelper/queryinterface.hxx>
 
 #ifdef MACOSX
-#include "premac.h"
+#include <premac.h>
 #include <Cocoa/Cocoa.h>
-#include "postmac.h"
+#include <postmac.h>
 #endif
 
 #include <vcl/svapp.hxx>
@@ -50,10 +50,10 @@ VCLXSystemDependentWindow::~VCLXSystemDependentWindow()
 }
 
 // css::uno::XInterface
-css::uno::Any VCLXSystemDependentWindow::queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Any VCLXSystemDependentWindow::queryInterface( const css::uno::Type & rType )
 {
     css::uno::Any aRet = ::cppu::queryInterface( rType,
-                                        (static_cast< css::awt::XSystemDependentWindowPeer* >(this)) );
+                                        static_cast< css::awt::XSystemDependentWindowPeer* >(this) );
     return (aRet.hasValue() ? aRet : VCLXWindow::queryInterface( rType ));
 }
 
@@ -63,16 +63,16 @@ IMPL_XTYPEPROVIDER_START( VCLXSystemDependentWindow )
     VCLXWindow::getTypes()
 IMPL_XTYPEPROVIDER_END
 
-css::uno::Any VCLXSystemDependentWindow::getWindowHandle( const css::uno::Sequence< sal_Int8 >& /*ProcessId*/, sal_Int16 SystemType ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Any VCLXSystemDependentWindow::getWindowHandle( const css::uno::Sequence< sal_Int8 >& /*ProcessId*/, sal_Int16 SystemType )
 {
     SolarMutexGuard aGuard;
 
     // TODO, check the process id
     css::uno::Any aRet;
-    vcl::Window* pWindow = GetWindow();
+    VclPtr<vcl::Window> pWindow = GetWindow();
     if ( pWindow )
     {
-        const SystemEnvData* pSysData = static_cast<SystemChildWindow *>(pWindow)->GetSystemData();
+        const SystemEnvData* pSysData = static_cast<SystemChildWindow *>(pWindow.get())->GetSystemData();
         if( pSysData )
         {
 #if defined(_WIN32)

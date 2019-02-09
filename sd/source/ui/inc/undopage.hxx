@@ -23,7 +23,7 @@
 #include <tools/gen.hxx>
 #include <vcl/prntypes.hxx>
 
-#include "sdundo.hxx"
+#include <sdundo.hxx>
 
 class SdDrawDocument;
 class SdPage;
@@ -34,24 +34,24 @@ class SdPageFormatUndoAction : public SdUndoAction
 {
     SdPage*     mpPage;
 
-    Size        maOldSize;
-    sal_Int32       mnOldLeft;
-    sal_Int32       mnOldRight;
-    sal_Int32       mnOldUpper;
-    sal_Int32       mnOldLower;
-    Orientation meOldOrientation;
-    sal_uInt16      mnOldPaperBin;
-    bool        mbOldFullSize;
+    Size const        maOldSize;
+    sal_Int32 const       mnOldLeft;
+    sal_Int32 const       mnOldRight;
+    sal_Int32 const       mnOldUpper;
+    sal_Int32 const       mnOldLower;
+    Orientation const meOldOrientation;
+    sal_uInt16 const      mnOldPaperBin;
+    bool const        mbOldFullSize;
 
-    Size        maNewSize;
-    sal_Int32       mnNewLeft;
-    sal_Int32       mnNewRight;
-    sal_Int32       mnNewUpper;
-    sal_Int32       mnNewLower;
-    bool        mbNewScale;
-    Orientation meNewOrientation;
-    sal_uInt16      mnNewPaperBin;
-    bool        mbNewFullSize;
+    Size const        maNewSize;
+    sal_Int32 const       mnNewLeft;
+    sal_Int32 const       mnNewRight;
+    sal_Int32 const       mnNewUpper;
+    sal_Int32 const       mnNewLower;
+    bool const        mbNewScale;
+    Orientation const meNewOrientation;
+    sal_uInt16 const      mnNewPaperBin;
+    bool const        mbNewFullSize;
 
 public:
     SdPageFormatUndoAction( SdDrawDocument* pDoc,
@@ -97,7 +97,7 @@ public:
         mbNewFullSize (bNFullSize)
 
         {}
-    virtual ~SdPageFormatUndoAction();
+    virtual ~SdPageFormatUndoAction() override;
 
     virtual void Undo() override;
     virtual void Redo() override;
@@ -109,10 +109,10 @@ class SdPageLRUndoAction : public SdUndoAction
 {
     SdPage* mpPage;
 
-    sal_Int32   mnOldLeft;
-    sal_Int32   mnOldRight;
-    sal_Int32   mnNewLeft;
-    sal_Int32   mnNewRight;
+    sal_Int32 const   mnOldLeft;
+    sal_Int32 const   mnOldRight;
+    sal_Int32 const   mnNewLeft;
+    sal_Int32 const   mnNewRight;
 
 public:
     SdPageLRUndoAction( SdDrawDocument* pDoc, SdPage* pThePage,
@@ -125,7 +125,7 @@ public:
         mnNewLeft   (nNewLft),
         mnNewRight  (nNewRgt)
         {}
-    virtual ~SdPageLRUndoAction();
+    virtual ~SdPageLRUndoAction() override;
 
     virtual void Undo() override;
     virtual void Redo() override;
@@ -137,10 +137,10 @@ class SdPageULUndoAction : public SdUndoAction
 {
     SdPage* mpPage;
 
-    sal_Int32   mnOldUpper;
-    sal_Int32   mnOldLower;
-    sal_Int32   mnNewUpper;
-    sal_Int32   mnNewLower;
+    sal_Int32 const   mnOldUpper;
+    sal_Int32 const   mnOldLower;
+    sal_Int32 const   mnNewUpper;
+    sal_Int32 const   mnNewLower;
 
 public:
     SdPageULUndoAction( SdDrawDocument* pDoc, SdPage* pThePage,
@@ -153,7 +153,7 @@ public:
         mnNewUpper  (nNewUpr),
         mnNewLower  (nNewLwr)
         {}
-    virtual ~SdPageULUndoAction();
+    virtual ~SdPageULUndoAction() override;
 
     virtual void Undo() override;
     virtual void Redo() override;

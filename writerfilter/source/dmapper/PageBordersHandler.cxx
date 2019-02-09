@@ -24,21 +24,21 @@
 namespace writerfilter {
 namespace dmapper {
 
-_PgBorder::_PgBorder( ) :
+PgBorder::PgBorder( ) :
     m_nDistance( 0 ),
     m_ePos( BORDER_RIGHT ),
     m_bShadow(false)
 {
 }
 
-_PgBorder::~_PgBorder( )
+PgBorder::~PgBorder( )
 {
 }
 
 PageBordersHandler::PageBordersHandler( ) :
 LoggedProperties("PageBordersHandler"),
-m_nDisplay( 0 ),
-m_nOffset( 0 )
+m_eBorderApply(SectionPropertyMap::BorderApply::ToAllInSection),
+m_eOffsetFrom(SectionPropertyMap::BorderOffsetFrom::Text)
 {
 }
 
@@ -57,13 +57,13 @@ void PageBordersHandler::lcl_attribute( Id eName, Value& rVal )
             {
                 default:
                 case NS_ooxml::LN_Value_doc_ST_PageBorderDisplay_allPages:
-                    m_nDisplay = 0;
+                    m_eBorderApply = SectionPropertyMap::BorderApply::ToAllInSection;
                     break;
                 case NS_ooxml::LN_Value_doc_ST_PageBorderDisplay_firstPage:
-                    m_nDisplay = 1;
+                    m_eBorderApply = SectionPropertyMap::BorderApply::ToFirstPageInSection;
                     break;
                 case NS_ooxml::LN_Value_doc_ST_PageBorderDisplay_notFirstPage:
-                    m_nDisplay = 2;
+                    m_eBorderApply = SectionPropertyMap::BorderApply::ToAllButFirstInSection;
                     break;
             }
         }
@@ -74,10 +74,10 @@ void PageBordersHandler::lcl_attribute( Id eName, Value& rVal )
             {
                 default:
                 case NS_ooxml::LN_Value_doc_ST_PageBorderOffset_page:
-                    m_nOffset = 1;
+                    m_eOffsetFrom = SectionPropertyMap::BorderOffsetFrom::Edge;
                     break;
                 case NS_ooxml::LN_Value_doc_ST_PageBorderOffset_text:
-                    m_nOffset = 0;
+                    m_eOffsetFrom = SectionPropertyMap::BorderOffsetFrom::Text;
                     break;
             }
         }
@@ -98,7 +98,7 @@ void PageBordersHandler::lcl_sprm( Sprm& rSprm )
             writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
             if( pProperties.get())
             {
-                BorderHandlerPtr pBorderHandler( new BorderHandler( true ) );
+                std::shared_ptr<BorderHandler> pBorderHandler( new BorderHandler( true ) );
                 pProperties->resolve(*pBorderHandler);
                 BorderPosition ePos = BorderPosition( 0 );
                 switch( rSprm.getId( ) )
@@ -118,7 +118,7 @@ void PageBordersHandler::lcl_sprm( Sprm& rSprm )
                     default:;
                 }
 
-                _PgBorder aPgBorder;
+                PgBorder aPgBorder;
                 aPgBorder.m_rLine = pBorderHandler->getBorderLine( );
                 aPgBorder.m_nDistance = pBorderHandler->getLineDistance( );
                 aPgBorder.m_ePos = ePos;
@@ -133,11 +133,12 @@ void PageBordersHandler::lcl_sprm( Sprm& rSprm )
 
 void PageBordersHandler::SetBorders( SectionPropertyMap* pSectContext )
 {
-    for ( int i = 0, length = m_aBorders.size( ); i < length; i++ )
+    for (const PgBorder& rBorder : m_aBorders)
     {
-        _PgBorder aBorder = m_aBorders[i];
-        pSectContext->SetBorder( aBorder.m_ePos, aBorder.m_nDistance, aBorder.m_rLine, aBorder.m_bShadow );
+        pSectContext->SetBorder( rBorder.m_ePos, rBorder.m_nDistance, rBorder.m_rLine, rBorder.m_bShadow );
     }
+    pSectContext->SetBorderApply(m_eBorderApply);
+    pSectContext->SetBorderOffsetFrom(m_eOffsetFrom);
 }
 
 } }

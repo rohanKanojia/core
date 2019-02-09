@@ -23,7 +23,6 @@
 #include "connpooloptions.hxx"
 #include <svl/itemset.hxx>
 #include <unotools/confignode.hxx>
-#include <comphelper/extract.hxx>
 #include <svl/eitem.hxx>
 #include <comphelper/processfactory.hxx>
 #include "sdbcdriverenum.hxx"
@@ -88,12 +87,9 @@ namespace offapp
         DriverPoolingSettings aSettings;
         // first get all the drivers register at the driver manager
         ODriverEnumeration aEnumDrivers;
-        for (   ODriverEnumeration::const_iterator aLoopDrivers = aEnumDrivers.begin();
-                aLoopDrivers != aEnumDrivers.end();
-                ++aLoopDrivers
-            )
+        for (auto const& elem : aEnumDrivers)
         {
-            aSettings.push_back(DriverPooling(*aLoopDrivers, 120));
+            aSettings.push_back(DriverPooling(elem));
         }
 
         // then look for which of them settings are stored in the configuration
@@ -111,17 +107,17 @@ namespace offapp
 
             // look if we (resp. the driver manager) know this driver
             // doing O(n) search here, which is expensive, but this doesn't matter in this small case ...
-             DriverPoolingSettings::iterator aLookup;
-             for    (   aLookup = aSettings.begin();
+            DriverPoolingSettings::iterator aLookup;
+            for    (   aLookup = aSettings.begin();
                     aLookup != aSettings.end();
                     ++aLookup
                 )
-                if (sThisDriverName.equals(aLookup->sName))
+                if (sThisDriverName == aLookup->sName)
                     break;
 
             if (aLookup == aSettings.end())
             {   // do not know the driver - add it
-                aSettings.push_back(DriverPooling(sThisDriverName, 120));
+                aSettings.push_back(DriverPooling(sThisDriverName));
 
                 // and the position of the new entry
                 aLookup = aSettings.end();
@@ -153,8 +149,8 @@ namespace offapp
         const SfxBoolItem* pEnabled = _rSourceItems.GetItem<SfxBoolItem>(SID_SB_POOLING_ENABLED);
         if (pEnabled)
         {
-            sal_Bool bEnabled = pEnabled->GetValue();
-            aConnectionPoolRoot.setNodeValue(getEnablePoolingNodeName(), Any(&bEnabled, cppu::UnoType<bool>::get()));
+            bool bEnabled = pEnabled->GetValue();
+            aConnectionPoolRoot.setNodeValue(getEnablePoolingNodeName(), Any(bEnabled));
             bNeedCommit = true;
         }
 
@@ -170,24 +166,21 @@ namespace offapp
             OConfigurationNode aThisDriverSettings;
 
             const DriverPoolingSettings& rNewSettings = pDriverSettings->getSettings();
-            for (   DriverPoolingSettings::const_iterator aLoop = rNewSettings.begin();
-                    aLoop != rNewSettings.end();
-                    ++aLoop
-                )
+            for (auto const& newSetting : rNewSettings)
             {
                 // need the name as OUString
-                sThisDriverName = aLoop->sName;
+                sThisDriverName = newSetting.sName;
 
                 // the sub-node for this driver
-                if (aDriverSettings.hasByName(aLoop->sName))
-                    aThisDriverSettings = aDriverSettings.openNode(aLoop->sName);
+                if (aDriverSettings.hasByName(newSetting.sName))
+                    aThisDriverSettings = aDriverSettings.openNode(newSetting.sName);
                 else
-                    aThisDriverSettings = aDriverSettings.createNode(aLoop->sName);
+                    aThisDriverSettings = aDriverSettings.createNode(newSetting.sName);
 
                 // set the values
-                aThisDriverSettings.setNodeValue(getDriverNameNodeName(), makeAny(sThisDriverName));
-                aThisDriverSettings.setNodeValue(getEnableNodeName(), Any(&aLoop->bEnabled, cppu::UnoType<bool>::get()));
-                aThisDriverSettings.setNodeValue(getTimeoutNodeName(), makeAny(aLoop->nTimeoutSeconds));
+                aThisDriverSettings.setNodeValue(getDriverNameNodeName(), Any(sThisDriverName));
+                aThisDriverSettings.setNodeValue(getEnableNodeName(), Any(newSetting.bEnabled));
+                aThisDriverSettings.setNodeValue(getTimeoutNodeName(), Any(newSetting.nTimeoutSeconds));
             }
             bNeedCommit = true;
         }

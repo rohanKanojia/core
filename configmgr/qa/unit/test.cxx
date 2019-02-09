@@ -20,6 +20,7 @@
 #include <sal/config.h>
 
 #include <cstddef>
+#include <string_view>
 
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/PropertyChangeEvent.hpp>
@@ -56,7 +57,6 @@
 #include <sal/types.h>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/configuration.hxx>
-#include <comphelper/configurationlistener.hxx>
 #include <comphelper/configurationlistener.hxx>
 #include <unotest/bootstrapfixturebase.hxx>
 #include <officecfg/Office/Math.hxx>
@@ -123,19 +123,17 @@ public:
     void test();
 
 protected:
-    virtual ~RecursiveTest();
+    virtual ~RecursiveTest() override;
 
     virtual void step() const = 0;
 
     Test const & test_;
 
 private:
-    virtual void SAL_CALL disposing(css::lang::EventObject const &)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(css::lang::EventObject const &) override;
 
     virtual void SAL_CALL propertyChange(
-        css::beans::PropertyChangeEvent const &)
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::beans::PropertyChangeEvent const &) override;
 
     int count_;
     bool * destroyed_;
@@ -156,7 +154,7 @@ void RecursiveTest::test()
         css::uno::UNO_QUERY_THROW);
     properties_->addPropertyChangeListener("Label", this);
     step();
-    CPPUNIT_ASSERT(count_ == 0);
+    CPPUNIT_ASSERT_EQUAL(0, count_);
     css::uno::Reference< css::lang::XComponent >(
         properties_, css::uno::UNO_QUERY_THROW)->dispose();
 }
@@ -167,16 +165,22 @@ RecursiveTest::~RecursiveTest()
 }
 
 void RecursiveTest::disposing(css::lang::EventObject const & Source)
-    throw (css::uno::RuntimeException, std::exception)
 {
-    CPPUNIT_ASSERT(properties_.is() && Source.Source == properties_);
+    CPPUNIT_ASSERT(properties_.is());
+    CPPUNIT_ASSERT_EQUAL(
+        css::uno::Reference<css::uno::XInterface>(
+            properties_, css::uno::UNO_QUERY_THROW),
+        Source.Source);
     properties_.clear();
 }
 
 void RecursiveTest::propertyChange(css::beans::PropertyChangeEvent const & evt)
-    throw (css::uno::RuntimeException, std::exception)
 {
-    CPPUNIT_ASSERT( evt.Source == properties_ && evt.PropertyName == "Label" );
+    CPPUNIT_ASSERT_EQUAL(
+        css::uno::Reference<css::uno::XInterface>(
+            properties_, css::uno::UNO_QUERY_THROW),
+        evt.Source);
+    CPPUNIT_ASSERT_EQUAL( OUString("Label"), evt.PropertyName );
     if (count_ > 0) {
         --count_;
         step();
@@ -202,7 +206,7 @@ void SimpleRecursiveTest::step() const
         "/org.openoffice.Office.UI.GenericCommands/UserInterface/Commands/"
                  ".uno:WebHtml",
         "Label",
-        css::uno::makeAny(OUString("step")));
+        css::uno::Any(OUString("step")));
 }
 
 void Test::setUp()
@@ -226,14 +230,14 @@ void Test::testKeySet()
     setKey(
         "/org.openoffice.System/L10N",
         "Locale",
-        css::uno::makeAny(OUString("com.sun.star.configuration.backend.LocaleBackend UILocale")));
+        css::uno::Any(OUString("com.sun.star.configuration.backend.LocaleBackend UILocale")));
     OUString s;
     CPPUNIT_ASSERT(
         getKey(
             "/org.openoffice.System/L10N",
             "Locale") >>=
         s);
-    CPPUNIT_ASSERT( s == "com.sun.star.configuration.backend.LocaleBackend UILocale" );
+    CPPUNIT_ASSERT_EQUAL( OUString("com.sun.star.configuration.backend.LocaleBackend UILocale"), s );
 }
 
 void Test::testKeyReset()
@@ -248,7 +252,7 @@ void Test::testKeyReset()
                 "/org.openoffice.System/L10N",
                 "Locale") >>=
             s);
-        CPPUNIT_ASSERT( s == "com.sun.star.configuration.backend.LocaleBackend Locale" );
+        CPPUNIT_ASSERT_EQUAL( OUString("com.sun.star.configuration.backend.LocaleBackend Locale"), s );
     }
 }
 
@@ -261,7 +265,7 @@ void Test::testSetSetMemberName()
                      ".uno:FontworkShapeType",
             "Label") >>=
         s);
-    CPPUNIT_ASSERT( s == "Fontwork Shape" );
+    CPPUNIT_ASSERT_EQUAL( OUString("Fontwork Shape"), s );
 
     css::uno::Reference< css::container::XNameAccess > access(
         createUpdateAccess(
@@ -283,7 +287,7 @@ void Test::testSetSetMemberName()
                     ".uno:FontworkShapeType",
             "Label") >>=
         s);
-    CPPUNIT_ASSERT( s == "Fontwork Gallery..." );
+    CPPUNIT_ASSERT_EQUAL( OUString("Fontwork Style"), s );
 }
 
 void Test::testInsertSetMember() {
@@ -296,21 +300,21 @@ void Test::testInsertSetMember() {
         css::uno::Reference<css::lang::XSingleServiceFactory>(
             access, css::uno::UNO_QUERY_THROW)->createInstance());
     CPPUNIT_ASSERT(member.is());
-    access->insertByName("A", css::uno::makeAny(member));
+    access->insertByName("A", css::uno::Any(member));
     member.set(
         css::uno::Reference<css::lang::XSingleServiceFactory>(
             access, css::uno::UNO_QUERY_THROW)->createInstance());
     CPPUNIT_ASSERT(member.is());
     try {
-        access->insertByName("", css::uno::makeAny(member));
+        access->insertByName("", css::uno::Any(member));
         CPPUNIT_FAIL("expected IllegalArgumentException");
     } catch (css::lang::IllegalArgumentException &) {}
     try {
-        access->insertByName("\x01", css::uno::makeAny(member));
+        access->insertByName("\x01", css::uno::Any(member));
         CPPUNIT_FAIL("expected IllegalArgumentException");
     } catch (css::lang::IllegalArgumentException &) {}
     try {
-        access->insertByName("a/b", css::uno::makeAny(member));
+        access->insertByName("a/b", css::uno::Any(member));
     } catch (css::lang::IllegalArgumentException &) {
         CPPUNIT_FAIL("unexpected IllegalArgumentException");
     }
@@ -452,10 +456,9 @@ css::uno::Reference< css::uno::XInterface > Test::createViewAccess(
     OUString const & path) const
 {
     css::uno::Any arg(
-        css::uno::makeAny(
             css::beans::NamedValue(
-                OUString("nodepath"),
-                css::uno::makeAny(path))));
+                "nodepath",
+                css::uno::Any(path)));
     return provider_->createInstanceWithArguments(
         "com.sun.star.configuration.ConfigurationAccess",
         css::uno::Sequence< css::uno::Any >(&arg, 1));
@@ -465,10 +468,9 @@ css::uno::Reference< css::uno::XInterface > Test::createUpdateAccess(
     OUString const & path) const
 {
     css::uno::Any arg(
-        css::uno::makeAny(
             css::beans::NamedValue(
-                OUString("nodepath"),
-                css::uno::makeAny(path))));
+                "nodepath",
+                css::uno::Any(path)));
     return provider_->createInstanceWithArguments(
         "com.sun.star.configuration.ConfigurationUpdateAccess",
         css::uno::Sequence< css::uno::Any >(&arg, 1));
@@ -552,7 +554,7 @@ void normalize(
     } else {
         OUStringBuffer buf(path);
         buf.append('/');
-        buf.append(relative.copy(0, i));
+        buf.append(std::u16string_view(relative).substr(0, i));
         *normalizedPath = buf.makeStringAndClear();
         *name = relative.copy(i + 1);
     }
@@ -589,8 +591,8 @@ bool WriterThread::iteration() {
         OUString("kippers"),
         OUString("bloaters") };
 
-    test_.setKey(path_, name_, css::uno::makeAny(options[index_]));
-    index_ = (index_ + 1) % (sizeof options / sizeof (OUString));
+    test_.setKey(path_, name_, css::uno::Any(options[index_]));
+    index_ = (index_ + 1) % SAL_N_ELEMENTS(options);
     return true;
 }
 
@@ -613,7 +615,7 @@ void Test::testThreads()
         { OUString("/org.openoffice.System"),
           OUString("L10N/Locale") }
     };
-    std::size_t const numReaders = sizeof list / sizeof (Entry);
+    std::size_t const numReaders = SAL_N_ELEMENTS(list);
     std::size_t const numWriters = numReaders - 2;
     ReaderThread * readers[numReaders];
     WriterThread * writers[numWriters];

@@ -26,13 +26,13 @@
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawView.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/task/XStatusIndicatorFactory.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 
 #include <com/sun/star/drawing/XDrawPage.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
-#include <com/sun/star/frame/XController.hdl>
+#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 
 #include <cppuhelper/implbase.hxx>
@@ -49,7 +49,6 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::drawing;
-using namespace ::com::sun::star::presentation;
 using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::view;
 
@@ -57,8 +56,6 @@ using ::com::sun::star::lang::XComponent;
 using ::com::sun::star::beans::PropertyValue;
 using ::com::sun::star::io::XOutputStream;
 using ::com::sun::star::container::XIndexAccess;
-using ::osl::FileBase;
-using ::com::sun::star::frame::XModel;
 
 namespace swf {
 
@@ -74,12 +71,12 @@ public:
     }
 
     // css::io::XOutputStream
-    virtual void SAL_CALL writeBytes( const css::uno::Sequence< sal_Int8 >& aData ) throw (css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL flush(  ) throw (css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL closeOutput(  ) throw (css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL writeBytes( const css::uno::Sequence< sal_Int8 >& aData ) override;
+    virtual void SAL_CALL flush(  ) override;
+    virtual void SAL_CALL closeOutput(  ) override;
 };
 
-void SAL_CALL OslOutputStreamWrapper::writeBytes( const css::uno::Sequence< sal_Int8 >& aData ) throw (css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception)
+void SAL_CALL OslOutputStreamWrapper::writeBytes( const css::uno::Sequence< sal_Int8 >& aData )
 {
     sal_uInt64 uBytesToWrite = aData.getLength();
     sal_uInt64 uBytesWritten = 0;
@@ -113,11 +110,11 @@ void SAL_CALL OslOutputStreamWrapper::writeBytes( const css::uno::Sequence< sal_
     }
 }
 
-void SAL_CALL OslOutputStreamWrapper::flush(  ) throw (css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception)
+void SAL_CALL OslOutputStreamWrapper::flush(  )
 {
 }
 
-void SAL_CALL OslOutputStreamWrapper::closeOutput(  ) throw (css::io::NotConnectedException, css::io::BufferSizeExceededException, css::io::IOException, css::uno::RuntimeException, std::exception)
+void SAL_CALL OslOutputStreamWrapper::closeOutput(  )
 {
     osl::File::RC eRC = mrFile.close();
 
@@ -157,23 +154,23 @@ public:
     explicit FlashExportFilter( const Reference< XComponentContext > &rxContext);
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& aDescriptor ) throw(RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& aDescriptor ) override;
 
-    bool ExportAsMultipleFiles( const Sequence< PropertyValue >& aDescriptor );
-    bool ExportAsSingleFile( const Sequence< PropertyValue >& aDescriptor );
+    void ExportAsMultipleFiles( const Sequence< PropertyValue >& aDescriptor );
+    void ExportAsSingleFile( const Sequence< PropertyValue >& aDescriptor );
 
-    virtual void SAL_CALL cancel( ) throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL cancel( ) override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) throw(IllegalArgumentException, RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) throw(Exception, RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw(RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames()  throw(RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 };
 
 FlashExportFilter::FlashExportFilter(const Reference< XComponentContext > &rxContext)
@@ -186,10 +183,10 @@ FlashExportFilter::FlashExportFilter(const Reference< XComponentContext > &rxCon
 {
 }
 
-OUString exportBackground(FlashExporter &aFlashExporter, const Reference< XDrawPage >& xDrawPage, const OUString& sPath, sal_uInt32 nPage, const char* suffix)
+static OUString exportBackground(FlashExporter &aFlashExporter, const Reference< XDrawPage >& xDrawPage, const OUString& sPath, sal_uInt32 nPage, const char* suffix)
 {
-    OUString filename = STR("slide") + VAL(nPage+1) + STR(suffix) + STR(".swf");
-    OUString fullpath = sPath + STR("/") + filename;
+    OUString filename = "slide" + OUString::number(nPage+1) + OUString::createFromAscii(suffix) + ".swf";
+    OUString fullpath = sPath + "/" + filename;
 
     // AS: If suffix is "o" then the last parameter is true (for exporting objects).
     Reference<XOutputStream> xOutputStreamWrap(*(new OslOutputStreamWrapper(fullpath)), UNO_QUERY);
@@ -201,16 +198,16 @@ OUString exportBackground(FlashExporter &aFlashExporter, const Reference< XDrawP
     {
         osl_removeFile(fullpath.pData);
         if ( 0xffff == nCached )
-            return STR("NULL");
+            return OUString("NULL");
         else
-            return STR("slide") + VAL(nCached+1) + STR(suffix) + STR(".swf");
+            return "slide" + OUString::number(nCached+1) + OUString::createFromAscii(suffix) + ".swf";
     }
 
     return filename;
 }
 
 template <typename TYPE>
-TYPE findPropertyValue(const Sequence< PropertyValue >& aPropertySequence, const sal_Char* name, TYPE def)
+static TYPE findPropertyValue(const Sequence< PropertyValue >& aPropertySequence, const sal_Char* name, TYPE def)
 {
     TYPE temp = TYPE();
 
@@ -230,7 +227,6 @@ TYPE findPropertyValue(const Sequence< PropertyValue >& aPropertySequence, const
 }
 
 sal_Bool SAL_CALL FlashExportFilter::filter( const css::uno::Sequence< css::beans::PropertyValue >& aDescriptor )
-    throw (RuntimeException, std::exception)
 {
     mxStatusIndicator = findPropertyValue<Reference<XStatusIndicator> >(aDescriptor, "StatusIndicator", mxStatusIndicator);
 
@@ -238,7 +234,7 @@ sal_Bool SAL_CALL FlashExportFilter::filter( const css::uno::Sequence< css::bean
     aFilterData = findPropertyValue<Sequence< PropertyValue > >(aDescriptor, "FilterData", aFilterData);
 
     // #i56084# check if selection shall be exported only; if yes, get the selected page and the selection itself
-    if(findPropertyValue<sal_Bool>(aDescriptor, "SelectionOnly", sal_False))
+    if(findPropertyValue<bool>(aDescriptor, "SelectionOnly", false))
     {
         Reference< XDesktop2 > xDesktop(Desktop::create(mxContext));
 
@@ -265,12 +261,7 @@ sal_Bool SAL_CALL FlashExportFilter::filter( const css::uno::Sequence< css::bean
 
                         if(xSelection.is())
                         {
-                            Any aSelection;
-
-                            if(xSelection->getSelection() >>= aSelection)
-                            {
-                                aSelection >>= mxSelectedShapes;
-                            }
+                            xSelection->getSelection() >>= mxSelectedShapes;
                         }
                     }
                 }
@@ -286,7 +277,7 @@ sal_Bool SAL_CALL FlashExportFilter::filter( const css::uno::Sequence< css::bean
     }
 
     // #i56084# no multiple files (suppress) when selection since selection can only export a single page
-    if (!mbExportSelection && findPropertyValue<sal_Bool>(aFilterData, "ExportMultipleFiles", false ))
+    if (!mbExportSelection && findPropertyValue<bool>(aFilterData, "ExportMultipleFiles", false ))
     {
         ExportAsMultipleFiles(aDescriptor);
     }
@@ -298,7 +289,7 @@ sal_Bool SAL_CALL FlashExportFilter::filter( const css::uno::Sequence< css::bean
     if( mxStatusIndicator.is() )
         mxStatusIndicator->end();
 
-    return sal_True;
+    return true;
 }
 
 
@@ -311,21 +302,21 @@ sal_Bool SAL_CALL FlashExportFilter::filter( const css::uno::Sequence< css::bean
 // AS: HACK!  Right now, I create a directory as a sibling to the swf file selected in the Export
 //  dialog.  This directory is called presentation.sxi-swf-files.  The name of the swf file selected
 //  in the Export dialog has no impact on this.  All files created are placed in this directory.
-bool FlashExportFilter::ExportAsMultipleFiles(const Sequence< PropertyValue >& aDescriptor)
+void FlashExportFilter::ExportAsMultipleFiles(const Sequence< PropertyValue >& aDescriptor)
 {
     Reference< XDrawPagesSupplier > xDrawPagesSupplier(mxDoc, UNO_QUERY);
     if(!xDrawPagesSupplier.is())
-        return false;
+        return;
 
     Reference< XIndexAccess > xDrawPages( xDrawPagesSupplier->getDrawPages(), UNO_QUERY );
     if(!xDrawPages.is())
-        return false;
+        return;
 
     Reference< XDesktop2 > rDesktop = Desktop::create( mxContext );
 
     Reference< XStorable > xStorable(rDesktop->getCurrentComponent(), UNO_QUERY);
     if (!xStorable.is())
-        return false;
+        return;
 
     Reference< XDrawPage > xDrawPage;
 
@@ -361,25 +352,25 @@ bool FlashExportFilter::ExportAsMultipleFiles(const Sequence< PropertyValue >& a
 
     OUString fullpath, swfdirpath, backgroundfilename, objectsfilename;
 
-    swfdirpath = sPath + STR("/") + sPresentationName + STR(".sxi-swf-files");
+    swfdirpath = sPath + "/" + sPresentationName + ".sxi-swf-files";
 
     oslFileError err;
     err = osl_createDirectory( swfdirpath.pData );
 
-    fullpath = swfdirpath + STR("/backgroundconfig.txt");
+    fullpath = swfdirpath + "/backgroundconfig.txt";
 
-    oslFileHandle xBackgroundConfig( nullptr );
+    oslFileHandle aBackgroundConfig( nullptr );
 
     // AS: Only export the background config if we're exporting all of the pages, otherwise we'll
     //  screw it up.
-    bool bExportAll = findPropertyValue<sal_Bool>(aFilterData, "ExportAll", true);
+    bool bExportAll = findPropertyValue<bool>(aFilterData, "ExportAll", true);
     if (bExportAll)
     {
         osl_removeFile(fullpath.pData);
-        osl_openFile( fullpath.pData, &xBackgroundConfig, osl_File_OpenFlag_Create | osl_File_OpenFlag_Write );
+        osl_openFile( fullpath.pData, &aBackgroundConfig, osl_File_OpenFlag_Create | osl_File_OpenFlag_Write );
 
         sal_uInt64 bytesWritten;
-        err = osl_writeFile(xBackgroundConfig, "slides=", strlen("slides="), &bytesWritten);
+        err = osl_writeFile(aBackgroundConfig, "slides=", strlen("slides="), &bytesWritten);
     }
 
     // TODO: check for errors
@@ -390,7 +381,7 @@ bool FlashExportFilter::ExportAsMultipleFiles(const Sequence< PropertyValue >& a
         mxSelectedShapes,
         mxSelectedDrawPage,
         findPropertyValue<sal_Int32>(aFilterData, "CompressMode", 75),
-        findPropertyValue<sal_Bool>(aFilterData, "ExportOLEAsJPEG", false));
+        findPropertyValue<bool>(aFilterData, "ExportOLEAsJPEG", false));
 
     const sal_Int32 nPageCount = xDrawPages->getCount();
     if ( mxStatusIndicator.is() )
@@ -407,22 +398,22 @@ bool FlashExportFilter::ExportAsMultipleFiles(const Sequence< PropertyValue >& a
             continue;
 
         // AS: Export the background, the background objects, and then the slide contents.
-        if (bExportAll || findPropertyValue<sal_Bool>(aFilterData, "ExportBackgrounds", true))
+        if (bExportAll || findPropertyValue<bool>(aFilterData, "ExportBackgrounds", true))
         {
             backgroundfilename = exportBackground(aFlashExporter, xDrawPage, swfdirpath, nPage, "b");
         }
 
-        if (bExportAll || findPropertyValue<sal_Bool>(aFilterData, "ExportBackgroundObjects", true))
+        if (bExportAll || findPropertyValue<bool>(aFilterData, "ExportBackgroundObjects", true))
         {
             objectsfilename = exportBackground(aFlashExporter, xDrawPage, swfdirpath, nPage, "o");
         }
 
-        if (bExportAll || findPropertyValue<sal_Bool>(aFilterData, "ExportSlideContents", true))
+        if (bExportAll || findPropertyValue<bool>(aFilterData, "ExportSlideContents", true))
         {
-            fullpath = swfdirpath + STR("/slide") + VAL(nPage+1) + STR("p.swf");
+            fullpath = swfdirpath + "/slide"+ OUString::number(nPage+1) + "p.swf";
 
             Reference<XOutputStream> xOutputStreamWrap(*(new OslOutputStreamWrapper(fullpath)), UNO_QUERY);
-            bool ret = aFlashExporter.exportSlides( xDrawPage, xOutputStreamWrap, sal::static_int_cast<sal_uInt16>( nPage ) );
+            bool ret = aFlashExporter.exportSlides( xDrawPage, xOutputStreamWrap );
             aFlashExporter.Flush();
             xOutputStreamWrap.clear();
 
@@ -434,24 +425,22 @@ bool FlashExportFilter::ExportAsMultipleFiles(const Sequence< PropertyValue >& a
         //  slide used.
         if (bExportAll)
         {
-            OUString temp = backgroundfilename + STR("|") + objectsfilename;
+            OUString temp = backgroundfilename + "|" + objectsfilename;
             OString ASCIItemp(temp.getStr(), temp.getLength(), RTL_TEXTENCODING_ASCII_US);
 
             sal_uInt64 bytesWritten;
-            osl_writeFile(xBackgroundConfig, ASCIItemp.getStr(), ASCIItemp.getLength(), &bytesWritten);
+            osl_writeFile(aBackgroundConfig, ASCIItemp.getStr(), ASCIItemp.getLength(), &bytesWritten);
 
             if (nPage < nPageCount - 1)
-                osl_writeFile(xBackgroundConfig, "|", 1, &bytesWritten);
+                osl_writeFile(aBackgroundConfig, "|", 1, &bytesWritten);
         }
     }
 
     if (bExportAll)
-        osl_closeFile(xBackgroundConfig);
-
-    return true;
+        osl_closeFile(aBackgroundConfig);
 }
 
-bool FlashExportFilter::ExportAsSingleFile(const Sequence< PropertyValue >& aDescriptor)
+void FlashExportFilter::ExportAsSingleFile(const Sequence< PropertyValue >& aDescriptor)
 {
     Reference < XOutputStream > xOutputStream = findPropertyValue<Reference<XOutputStream> >(aDescriptor, "OutputStream", nullptr);
     Sequence< PropertyValue > aFilterData;
@@ -459,7 +448,7 @@ bool FlashExportFilter::ExportAsSingleFile(const Sequence< PropertyValue >& aDes
     if (!xOutputStream.is() )
     {
         OSL_ASSERT ( false );
-        return false;
+        return;
     }
 
     FlashExporter aFlashExporter(
@@ -467,21 +456,19 @@ bool FlashExportFilter::ExportAsSingleFile(const Sequence< PropertyValue >& aDes
         mxSelectedShapes,
         mxSelectedDrawPage,
         findPropertyValue<sal_Int32>(aFilterData, "CompressMode", 75),
-        findPropertyValue<sal_Bool>(aFilterData, "ExportOLEAsJPEG", false));
+        findPropertyValue<bool>(aFilterData, "ExportOLEAsJPEG", false));
 
-    return aFlashExporter.exportAll( mxDoc, xOutputStream, mxStatusIndicator );
+    aFlashExporter.exportAll( mxDoc, xOutputStream, mxStatusIndicator );
 }
 
 
 void SAL_CALL FlashExportFilter::cancel(  )
-    throw (RuntimeException, std::exception)
 {
 }
 
 
 // XExporter
 void SAL_CALL FlashExportFilter::setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
-    throw (css::lang::IllegalArgumentException, RuntimeException, std::exception)
 {
     mxDoc = xDoc;
 }
@@ -489,44 +476,37 @@ void SAL_CALL FlashExportFilter::setSourceDocument( const css::uno::Reference< c
 
 // XInitialization
 void SAL_CALL FlashExportFilter::initialize( const css::uno::Sequence< css::uno::Any >& /* aArguments */ )
-    throw (Exception, RuntimeException, std::exception)
 {
 }
 
 OUString FlashExportFilter_getImplementationName ()
-    throw (RuntimeException)
 {
     return OUString ( "com.sun.star.comp.Impress.FlashExportFilter" );
 }
 
-Sequence< OUString > SAL_CALL FlashExportFilter_getSupportedServiceNames(  )
-    throw (RuntimeException)
+Sequence< OUString > FlashExportFilter_getSupportedServiceNames(  )
 {
     Sequence<OUString> aRet { "com.sun.star.document.ExportFilter" };
     return aRet;
 }
 
-Reference< XInterface > SAL_CALL FlashExportFilter_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
-    throw( Exception )
+Reference< XInterface > FlashExportFilter_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new FlashExportFilter( comphelper::getComponentContext(rSMgr) ));
 }
 
 // XServiceInfo
 OUString SAL_CALL FlashExportFilter::getImplementationName(  )
-    throw (RuntimeException, std::exception)
 {
     return FlashExportFilter_getImplementationName();
 }
 
 sal_Bool SAL_CALL FlashExportFilter::supportsService( const OUString& rServiceName )
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService( this, rServiceName );
 }
 
 css::uno::Sequence< OUString > SAL_CALL FlashExportFilter::getSupportedServiceNames(  )
-    throw (RuntimeException, std::exception)
 {
     return FlashExportFilter_getSupportedServiceNames();
 }

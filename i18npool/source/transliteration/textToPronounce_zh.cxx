@@ -17,21 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/i18n/MultipleCharsOutputException.hpp>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
 
 #include <textToPronounce_zh.hxx>
 
+using namespace com::sun::star::i18n;
 using namespace com::sun::star::uno;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
-sal_Int16 SAL_CALL TextToPronounce_zh::getType() throw (RuntimeException, std::exception)
+sal_Int16 SAL_CALL TextToPronounce_zh::getType()
 {
     return TransliterationType::ONE_TO_ONE| TransliterationType::IGNORE;
 }
 
-const sal_Unicode* SAL_CALL
+const sal_Unicode*
 TextToPronounce_zh::getPronounce(const sal_Unicode ch)
 {
     static const sal_Unicode emptyString[]={0};
@@ -44,9 +48,9 @@ TextToPronounce_zh::getPronounce(const sal_Unicode ch)
     return emptyString;
 }
 
-OUString SAL_CALL
-TextToPronounce_zh::folding(const OUString & inStr, sal_Int32 startPos,
-        sal_Int32 nCount, Sequence< sal_Int32 > & offset) throw (RuntimeException, std::exception)
+OUString
+TextToPronounce_zh::foldingImpl(const OUString & inStr, sal_Int32 startPos,
+        sal_Int32 nCount, Sequence< sal_Int32 > & offset, bool useOffset)
 {
     OUStringBuffer sb;
     const sal_Unicode * chArr = inStr.getStr() + startPos;
@@ -69,13 +73,13 @@ TextToPronounce_zh::folding(const OUString & inStr, sal_Int32 startPos,
 }
 
 OUString SAL_CALL
-TextToPronounce_zh::transliterateChar2String( sal_Unicode inChar) throw(RuntimeException, std::exception)
+TextToPronounce_zh::transliterateChar2String( sal_Unicode inChar)
 {
     return OUString(getPronounce(inChar));
 }
 
 sal_Unicode SAL_CALL
-TextToPronounce_zh::transliterateChar2Char( sal_Unicode inChar) throw(RuntimeException, MultipleCharsOutputException, std::exception)
+TextToPronounce_zh::transliterateChar2Char( sal_Unicode inChar)
 {
     const sal_Unicode* pron=getPronounce(inChar);
     if (!pron || !pron[0])
@@ -88,7 +92,6 @@ TextToPronounce_zh::transliterateChar2Char( sal_Unicode inChar) throw(RuntimeExc
 sal_Bool SAL_CALL
 TextToPronounce_zh::equals( const OUString & str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32 & nMatch1,
         const OUString & str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32 & nMatch2)
-        throw (RuntimeException, std::exception)
 {
     sal_Int32 realCount;
     int i;  // loop variable
@@ -100,7 +103,7 @@ TextToPronounce_zh::equals( const OUString & str1, sal_Int32 pos1, sal_Int32 nCo
     if (nCount2 + pos2 > str2.getLength())
         nCount2 = str2.getLength() - pos2;
 
-    realCount = ((nCount1 > nCount2) ? nCount2 : nCount1);
+    realCount = std::min(nCount1, nCount2);
 
     s1 = str1.getStr() + pos1;
     s2 = str2.getStr() + pos2;
@@ -109,7 +112,7 @@ TextToPronounce_zh::equals( const OUString & str1, sal_Int32 pos1, sal_Int32 nCo
         const sal_Unicode *pron2 = getPronounce(*s2++);
         if (pron1 != pron2) {
             nMatch1 = nMatch2 = i;
-            return sal_False;
+            return false;
         }
     }
     nMatch1 = nMatch2 = realCount;
@@ -151,7 +154,7 @@ TextToChuyin_zh_TW::TextToChuyin_zh_TW() :
 
 #ifndef DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 TextToPronounce_zh::TextToPronounce_zh(const sal_Char* func_name)
 {
@@ -185,6 +188,6 @@ TextToPronounce_zh::~TextToPronounce_zh()
     if (hModule) osl_unloadModule(hModule);
 #endif
 }
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

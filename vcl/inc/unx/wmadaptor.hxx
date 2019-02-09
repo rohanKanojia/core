@@ -27,6 +27,7 @@
 #include <X11/Xutil.h>
 
 #include <vclpluginapi.h>
+#include "salframe.h"
 #include <vector>
 
 class SalDisplay;
@@ -42,6 +43,7 @@ public:
         UTF8_STRING,
 
         // atoms for extended WM hints
+        NET_ACTIVE_WINDOW,
         NET_SUPPORTED,
         NET_SUPPORTING_WM_CHECK,
         NET_WM_NAME,
@@ -88,7 +90,6 @@ public:
         WIN_APP_STATE,
         WIN_EXPANDED_SIZE,
         WIN_ICONS,
-        WIN_WORKSPACE_NAMES,
         WIN_CLIENT_LIST,
 
         // atoms for general WM hints
@@ -107,7 +108,6 @@ public:
         SAL_USEREVENT,
         SAL_EXTTEXTEVENT,
         SAL_GETTIMEEVENT,
-        DTWM_IS_RUNNING,
         VCL_SYSTEM_SETTINGS,
         XSETTINGS,
         XEMBED,
@@ -126,30 +126,15 @@ public:
     static const int decoration_CloseBtn        = 0x00000020;
     static const int decoration_All         = 0x10000000;
 
-    /*
-     *  window type
-     */
-    enum WMWindowType
-    {
-        windowType_Normal,
-        windowType_ModalDialogue,
-        windowType_ModelessDialogue,
-        windowType_Utility,
-        windowType_Splash,
-        windowType_Toolbar,
-        windowType_Dock
-    };
-
 protected:
-    SalDisplay*             m_pSalDisplay;      // Display to use
+    SalDisplay* const       m_pSalDisplay;      // Display to use
     Display*                m_pDisplay;         // X Display of SalDisplay
     OUString                m_aWMName;
     Atom                    m_aWMAtoms[ NetAtomMax];
     int                     m_nDesktops;
     bool                    m_bEqualWorkAreas;
-    ::std::vector< Rectangle >
+    ::std::vector< tools::Rectangle >
                             m_aWMWorkAreas;
-    bool                    m_bTransientBehaviour;
     bool                    m_bEnableAlwaysOnTopWorks;
     bool                    m_bLegacyPartialFullscreen;
     int                     m_nWinGravity;
@@ -175,7 +160,7 @@ public:
     /*
      *  creates a valid WMAdaptor instance for the SalDisplay
      */
-    static WMAdaptor* createWMAdaptor( SalDisplay* );
+    static std::unique_ptr<WMAdaptor> createWMAdaptor( SalDisplay* );
 
     /*
      *  may return an empty string if the window manager could
@@ -195,7 +180,7 @@ public:
     /*
      *  gets the specified workarea
      */
-    const Rectangle& getWorkArea( int n ) const
+    const tools::Rectangle& getWorkArea( int n ) const
     { return m_aWMWorkAreas[n]; }
 
     /*
@@ -211,14 +196,14 @@ public:
     /*
      * set NET_WM_PID
      */
-    void setPID( X11SalFrame* pFrame ) const;
+    void setPID( X11SalFrame const * pFrame ) const;
 
     /*
      * set WM_CLIENT_MACHINE
      */
-    void setClientMachine( X11SalFrame* pFrame ) const;
+    void setClientMachine( X11SalFrame const * pFrame ) const;
 
-    void answerPing( X11SalFrame*, XClientMessageEvent* ) const;
+    void answerPing( X11SalFrame const *, XClientMessageEvent const * ) const;
 
     /*
      *  maximizes frame
@@ -259,7 +244,7 @@ public:
      *  set hints what decoration is needed;
      *  must be called before showing the frame
      */
-    virtual void setFrameTypeAndDecoration( X11SalFrame* pFrame, WMWindowType eType, int nDecorationFlags, X11SalFrame* pTransientFrame = nullptr ) const;
+    virtual void setFrameTypeAndDecoration( X11SalFrame* pFrame, WMWindowType eType, int nDecorationFlags, X11SalFrame* pTransientFrame ) const;
 
     /*
      *  tells whether there is WM support for splash screens
@@ -298,17 +283,17 @@ public:
     { return m_nInitWinGravity; }
 
     /*
-     *  expected behaviour is that the WM will not allow transient
-     *  windows to get stacked behind the windows they are transient for
-     */
-    bool isTransientBehaviourAsExpected() const
-    { return m_bTransientBehaviour; }
-
-    /*
      *  changes the transient hint of a window to reference frame
      *  if reference frame is NULL the root window is used instead
      */
-    void changeReferenceFrame( X11SalFrame* pFrame, X11SalFrame* pReferenceFrame ) const;
+    void changeReferenceFrame( X11SalFrame* pFrame, X11SalFrame const * pReferenceFrame ) const;
+
+    /*
+     *  Requests the change of active window by sending
+     *  _NET_ACTIVE_WINDOW message to the frame. The frame
+     *  has to be mapped
+     */
+    void activateWindow( X11SalFrame const *pFrame, Time nTimestamp );
 };
 
 } // namespace

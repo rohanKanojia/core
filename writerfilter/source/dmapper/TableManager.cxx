@@ -17,9 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <TableManager.hxx>
-#include <DomainMapperTableHandler.hxx>
-#include <util.hxx>
+#include "TableManager.hxx"
+#include "DomainMapperTableHandler.hxx"
+#include "DomainMapper_Impl.hxx"
+#include "util.hxx"
+
+#include <sal/log.hxx>
 
 namespace writerfilter
 {
@@ -38,7 +41,7 @@ void TableManager::openCell(const css::uno::Reference<css::text::XTextRange>& rH
     TagLogger::getInstance().endElement();
 #endif
 
-    if (mTableDataStack.size() > 0)
+    if (!mTableDataStack.empty())
     {
         TableData::Pointer_t pTableData = mTableDataStack.top();
 
@@ -66,9 +69,9 @@ void TableManager::insertTableProps(const TablePropertyMapPtr& pProps)
 #endif
 
     if (getTableProps().get() && getTableProps() != pProps)
-        getTableProps()->InsertProps(pProps);
+        getTableProps()->InsertProps(pProps.get());
     else
-        setTableProps(pProps);
+        mState.setTableProps(pProps);
 
 #ifdef DEBUG_WRITERFILTER
     TagLogger::getInstance().endElement();
@@ -82,22 +85,9 @@ void TableManager::insertRowProps(const TablePropertyMapPtr& pProps)
 #endif
 
     if (getRowProps().get())
-        getRowProps()->InsertProps(pProps);
+        getRowProps()->InsertProps(pProps.get());
     else
-        setRowProps(pProps);
-
-#ifdef DEBUG_WRITERFILTER
-    TagLogger::getInstance().endElement();
-#endif
-}
-
-void TableManager::cellPropsByCell(unsigned int i, const TablePropertyMapPtr& pProps)
-{
-#ifdef DEBUG_WRITERFILTER
-    TagLogger::getInstance().startElement("tablemanager.cellPropsByCell");
-#endif
-
-    mTableDataStack.top()->insertCellProperties(i, pProps);
+        mState.setRowProps(pProps);
 
 #ifdef DEBUG_WRITERFILTER
     TagLogger::getInstance().endElement();
@@ -111,9 +101,9 @@ void TableManager::cellProps(const TablePropertyMapPtr& pProps)
 #endif
 
     if (getCellProps().get())
-        getCellProps()->InsertProps(pProps);
+        getCellProps()->InsertProps(pProps.get());
     else
-        setCellProps(pProps);
+        mState.setCellProps(pProps);
 
 #ifdef DEBUG_WRITERFILTER
     TagLogger::getInstance().endElement();
@@ -135,11 +125,8 @@ void TableManager::utext(const sal_uInt8* data, std::size_t len)
 void TableManager::text(const sal_uInt8* data, std::size_t len)
 {
     // optimization: cell/row end characters are the last characters in a run
-    if (len > 0)
-    {
-        if (data[len - 1] == 0x7)
-            handle0x7();
-    }
+    if (len > 0 && data[len - 1] == 0x7)
+        handle0x7();
 }
 
 void TableManager::handle0x7()
@@ -196,11 +183,14 @@ void TableManager::closeCell(const css::uno::Reference<css::text::XTextRange>& r
     TagLogger::getInstance().endElement();
 #endif
 
-    if (mTableDataStack.size() > 0)
+    if (!mTableDataStack.empty())
     {
         TableData::Pointer_t pTableData = mTableDataStack.top();
 
         pTableData->endCell(rHandle);
+
+        if (mpTableDataHandler)
+            mpTableDataHandler->getDomainMapperImpl().ClearPreviousParagraph();
     }
 }
 
@@ -210,11 +200,11 @@ void TableManager::ensureOpenCell(const TablePropertyMapPtr& pProps)
     TagLogger::getInstance().startElement("tablemanager.ensureOpenCell");
 #endif
 
-    if (mTableDataStack.size() > 0)
+    if (!mTableDataStack.empty())
     {
         TableData::Pointer_t pTableData = mTableDataStack.top();
 
-        if (pTableData.get() != nullptr)
+        if (pTableData != nullptr)
         {
             if (!pTableData->isCellOpen())
                 openCell(getHandle(), pProps);
@@ -251,26 +241,24 @@ void TableManager::endParagraphGroup()
 
     if (mnTableDepth > 0)
     {
-        TableData::Pointer_t pTableData = mTableDataStack.top();
-
         if (isRowEnd())
         {
             endOfRowAction();
             mTableDataStack.top()->endRow(getRowProps());
-            resetRowProps();
+            mState.resetRowProps();
         }
 
         else if (isInCell())
         {
             ensureOpenCell(getCellProps());
 
-            if (isCellEnd())
+            if (mState.isCellEnd())
             {
                 endOfCellAction();
                 closeCell(getHandle());
             }
         }
-        resetCellProps();
+        mState.resetCellProps();
     }
 }
 
@@ -286,7 +274,7 @@ void TableManager::resolveCurrentTable()
     TagLogger::getInstance().startElement("tablemanager.resolveCurrentTable");
 #endif
 
-    if (mpTableDataHandler.get() != nullptr)
+    if (mpTableDataHandler != nullptr)
     {
         try
         {
@@ -294,7 +282,7 @@ void TableManager::resolveCurrentTable()
 
             unsigned int nRows = pTableData->getRowCount();
 
-            mpTableDataHandler->startTable(pTableData->getDepth(), getTableProps());
+            mpTableDataHandler->startTable(getTableProps());
 
             for (unsigned int nRow = 0; nRow < nRows; ++nRow)
             {
@@ -314,14 +302,14 @@ void TableManager::resolveCurrentTable()
                 mpTableDataHandler->endRow();
             }
 
-            mpTableDataHandler->endTable(mTableDataStack.size() - 1);
+            mpTableDataHandler->endTable(mTableDataStack.size() - 1, m_bTableStartsAtCellStart);
         }
         catch (css::uno::Exception const& e)
         {
-            SAL_WARN("writerfilter", "resolving of current table failed with: " << e.Message);
+            SAL_WARN("writerfilter", "resolving of current table failed with: " << e);
         }
     }
-    resetTableProps();
+    mState.resetTableProps();
     clearData();
 
 #ifdef DEBUG_WRITERFILTER
@@ -331,7 +319,7 @@ void TableManager::resolveCurrentTable()
 
 void TableManager::endLevel()
 {
-    if (mpTableDataHandler.get() != nullptr)
+    if (mpTableDataHandler != nullptr)
         resolveCurrentTable();
 
     // Store the unfinished row as it will be used for the next table
@@ -343,13 +331,13 @@ void TableManager::endLevel()
 #ifdef DEBUG_WRITERFILTER
     TableData::Pointer_t pTableData;
 
-    if (mTableDataStack.size() > 0)
+    if (!mTableDataStack.empty())
         pTableData = mTableDataStack.top();
 
     TagLogger::getInstance().startElement("tablemanager.endLevel");
     TagLogger::getInstance().attribute("level", mTableDataStack.size());
 
-    if (pTableData.get() != nullptr)
+    if (pTableData != nullptr)
         TagLogger::getInstance().attribute("openCell", pTableData->isCellOpen() ? "yes" : "no");
 
     TagLogger::getInstance().endElement();
@@ -361,13 +349,13 @@ void TableManager::startLevel()
 #ifdef DEBUG_WRITERFILTER
     TableData::Pointer_t pTableData;
 
-    if (mTableDataStack.size() > 0)
+    if (!mTableDataStack.empty())
         pTableData = mTableDataStack.top();
 
     TagLogger::getInstance().startElement("tablemanager.startLevel");
     TagLogger::getInstance().attribute("level", mTableDataStack.size());
 
-    if (pTableData.get() != nullptr)
+    if (pTableData != nullptr)
         TagLogger::getInstance().attribute("openCell", pTableData->isCellOpen() ? "yes" : "no");
 
     TagLogger::getInstance().endElement();
@@ -383,7 +371,7 @@ void TableManager::startLevel()
             pTableData2->addCell(mpUnfinishedRow->getCellStart(i), mpUnfinishedRow->getCellProperties(i));
             pTableData2->endCell(mpUnfinishedRow->getCellEnd(i));
         }
-        mpUnfinishedRow.reset();
+        mpUnfinishedRow.clear();
     }
 
     mTableDataStack.push(pTableData2);
@@ -409,7 +397,7 @@ void TableManager::handle(const css::uno::Reference<css::text::XTextRange>& rHan
     setHandle(rHandle);
 }
 
-void TableManager::setHandler(const std::shared_ptr<DomainMapperTableHandler>& pTableDataHandler)
+void TableManager::setHandler(const tools::SvRef<DomainMapperTableHandler>& pTableDataHandler)
 {
     mpTableDataHandler = pTableDataHandler;
 }
@@ -454,12 +442,24 @@ void TableManager::cellDepth(sal_uInt32 nDepth)
     mnTableDepthNew = nDepth;
 }
 
+void TableManager::setTableStartsAtCellStart(bool bTableStartsAtCellStart)
+{
+    m_bTableStartsAtCellStart = bTableStartsAtCellStart;
+}
+
+void TableManager::setCellLastParaAfterAutospacing(bool bIsAfterAutospacing)
+{
+    m_bCellLastParaAfterAutospacing = bIsAfterAutospacing;
+}
+
 TableManager::TableManager()
-    : mnTableDepthNew(0), mnTableDepth(0), mbKeepUnfinishedRow(false)
+    : mnTableDepthNew(0), mnTableDepth(0), mbKeepUnfinishedRow(false),
+      m_bTableStartsAtCellStart(false)
 {
     setRowEnd(false);
     setInCell(false);
     setCellEnd(false);
+    m_bCellLastParaAfterAutospacing = false;
 }
 
 }

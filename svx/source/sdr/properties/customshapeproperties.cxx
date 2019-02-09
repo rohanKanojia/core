@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/customshapeproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
@@ -24,7 +27,7 @@
 #include <editeng/eeitem.hxx>
 #include <svx/sdtagitm.hxx>
 #include <svl/whiter.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 
 
 namespace sdr
@@ -38,7 +41,7 @@ namespace sdr
 
             // change TextFrame flag when bResizeShapeToFitText changes (which is mapped
             // on the item SDRATTR_TEXT_AUTOGROWHEIGHT for custom shapes, argh)
-            rObj.bTextFrame = static_cast< const SdrOnOffItem& >(GetObjectItemSet().Get(SDRATTR_TEXT_AUTOGROWHEIGHT)).GetValue();
+            rObj.bTextFrame = GetObjectItemSet().Get(SDRATTR_TEXT_AUTOGROWHEIGHT).GetValue();
 
             // check if it did change
             if(rObj.bTextFrame != bOld)
@@ -59,29 +62,20 @@ namespace sdr
             }
         }
 
-        SfxItemSet* CustomShapeProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> CustomShapeProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
-            return new SfxItemSet(rPool,
-
-                // ranges from SdrAttrObj
-                SDRATTR_START, SDRATTR_SHADOW_LAST,
-                SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-
-                // Graphic Attributes
-                SDRATTR_GRAF_FIRST, SDRATTR_GRAF_LAST,
-
-                // 3d Properties
-                SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-
-                // CustomShape properties
-                SDRATTR_CUSTOMSHAPE_FIRST, SDRATTR_CUSTOMSHAPE_LAST,
-
-                // range from SdrTextObj
-                EE_ITEMS_START, EE_ITEMS_END,
-
-                // end
-                0, 0);
+            return o3tl::make_unique<SfxItemSet>(
+                rPool,
+                svl::Items<
+                    // Ranges from SdrAttrObj:
+                    SDRATTR_START, SDRATTR_SHADOW_LAST,
+                    SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
+                    SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
+                    // Graphic attributes, 3D properties, CustomShape
+                    // properties:
+                    SDRATTR_GRAF_FIRST, SDRATTR_CUSTOMSHAPE_LAST,
+                    // Range from SdrTextObj:
+                    EE_ITEMS_START, EE_ITEMS_END>{});
         }
 
         bool CustomShapeProperties::AllowItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem ) const
@@ -171,7 +165,7 @@ namespace sdr
 
         void CustomShapeProperties::SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr)
         {
-            // call parent
+            // call parent (always first thing to do, may create the SfxItemSet)
             TextProperties::SetStyleSheet( pNewStyleSheet, bDontRemoveHardAttr );
 
             // update bTextFrame and RenderGeometry
@@ -201,9 +195,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& CustomShapeProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> CustomShapeProperties::Clone(SdrObject& rObj) const
         {
-            return *(new CustomShapeProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new CustomShapeProperties(*this, rObj));
         }
 
         void CustomShapeProperties::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
@@ -212,19 +206,19 @@ namespace sdr
 
             bool bRemoveRenderGeometry = false;
             const SfxStyleSheetHint* pStyleHint = dynamic_cast<const SfxStyleSheetHint*>(&rHint);
-            const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
 
             if ( pStyleHint && pStyleHint->GetStyleSheet() == GetStyleSheet() )
             {
-                switch( pStyleHint->GetHint() )
+                switch( pStyleHint->GetId() )
                 {
-                    case SfxStyleSheetHintId::MODIFIED :
-                    case SfxStyleSheetHintId::CHANGED  :
+                    case SfxHintId::StyleSheetModified :
+                    case SfxHintId::StyleSheetChanged  :
                         bRemoveRenderGeometry = true;
                     break;
+                    default: break;
                 };
             }
-            else if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DATACHANGED )
+            else if ( rHint.GetId() == SfxHintId::DataChanged )
             {
                 bRemoveRenderGeometry = true;
             }

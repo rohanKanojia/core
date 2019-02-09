@@ -21,14 +21,9 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_ERRORBARITEMCONVERTER_HXX
 
 #include "ItemConverter.hxx"
-#include "GraphicPropertyItemConverter.hxx"
-#include "NumberFormatterWrapper.hxx"
 
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-
-#include <memory>
-#include <vector>
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
 
 class SdrModel;
 
@@ -46,7 +41,7 @@ public:
         SfxItemPool& rItemPool,
         SdrModel& rDrawModel,
         const css::uno::Reference< css::lang::XMultiServiceFactory > & xNamedPropertyContainerFactory );
-    virtual ~ErrorBarItemConverter();
+    virtual ~ErrorBarItemConverter() override;
 
     virtual void FillItemSet( SfxItemSet & rOutItemSet ) const override;
     virtual bool ApplyItemSet( const SfxItemSet & rItemSet ) override;
@@ -55,10 +50,8 @@ protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
     virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
 
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw( css::uno::Exception ) override;
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw( css::uno::Exception ) override;
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const override;
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet ) override;
 
 private:
     std::shared_ptr< ItemConverter >  m_spGraphicConverter;

@@ -20,6 +20,7 @@
 #include <sdr/primitive2d/sdrcustomshapeprimitive2d.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <svx/sdr/primitive2d/sdrdecompositiontools.hxx>
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
@@ -33,14 +34,14 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrCustomShapePrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrCustomShapePrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             Primitive2DContainer aRetval(getSubPrimitives());
 
             // add text
             if(!getSdrSTAttribute().getText().isDefault())
             {
-                const basegfx::B2DPolygon aUnitOutline(basegfx::tools::createUnitPolygon());
+                const basegfx::B2DPolygon& aUnitOutline(basegfx::utils::createUnitPolygon());
 
                 aRetval.push_back(
                     createTextPrimitive(
@@ -49,8 +50,7 @@ namespace drawinglayer
                         getSdrSTAttribute().getText(),
                         attribute::SdrLineAttribute(),
                         false,
-                        getWordWrap(),
-                        isForceTextClipToTextRange()));
+                        getWordWrap()));
             }
 
             // add shadow
@@ -72,7 +72,7 @@ namespace drawinglayer
                 }
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         SdrCustomShapePrimitive2D::SdrCustomShapePrimitive2D(
@@ -86,8 +86,7 @@ namespace drawinglayer
             maSubPrimitives(rSubPrimitives),
             maTextBox(rTextBox),
             mbWordWrap(bWordWrap),
-            mb3DShape(b3DShape),
-            mbForceTextClipToTextRange(false)
+            mb3DShape(b3DShape)
         {
         }
 
@@ -101,8 +100,7 @@ namespace drawinglayer
                     && getSubPrimitives() == rCompare.getSubPrimitives()
                     && getTextBox() == rCompare.getTextBox()
                     && getWordWrap() == rCompare.getWordWrap()
-                    && get3DShape() == rCompare.get3DShape()
-                    && isForceTextClipToTextRange() == rCompare.isForceTextClipToTextRange());
+                    && get3DShape() == rCompare.get3DShape());
             }
 
             return false;

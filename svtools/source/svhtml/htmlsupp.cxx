@@ -17,8 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#include <ctype.h>
 #include <comphelper/string.hxx>
 #include <svtools/parhtml.hxx>
 #include <svtools/htmltokn.h>
@@ -26,13 +24,13 @@
 #include <tools/urlobj.hxx>
 
 // Table for converting option values into strings
-static HTMLOptionEnum const aScriptLangOptEnums[] =
+static HTMLOptionEnum<HTMLScriptLanguage> const aScriptLangOptEnums[] =
 {
-    { OOO_STRING_SVTOOLS_HTML_LG_starbasic, HTML_SL_STARBASIC   },
-    { OOO_STRING_SVTOOLS_HTML_LG_javascript,    HTML_SL_JAVASCRIPT  },
-    { OOO_STRING_SVTOOLS_HTML_LG_javascript11,HTML_SL_JAVASCRIPT    },
-    { OOO_STRING_SVTOOLS_HTML_LG_livescript,    HTML_SL_JAVASCRIPT  },
-    { nullptr,                    0                   }
+    { OOO_STRING_SVTOOLS_HTML_LG_starbasic,    HTMLScriptLanguage::StarBasic     },
+    { OOO_STRING_SVTOOLS_HTML_LG_javascript,   HTMLScriptLanguage::JavaScript    },
+    { OOO_STRING_SVTOOLS_HTML_LG_javascript11, HTMLScriptLanguage::JavaScript    },
+    { OOO_STRING_SVTOOLS_HTML_LG_livescript,   HTMLScriptLanguage::JavaScript    },
+    { nullptr,                                 HTMLScriptLanguage(0) }
 };
 
 void HTMLParser::ParseScriptOptions( OUString& rLangString, const OUString& rBaseURL,
@@ -44,7 +42,7 @@ void HTMLParser::ParseScriptOptions( OUString& rLangString, const OUString& rBas
     const HTMLOptions& aScriptOptions = GetOptions();
 
     rLangString.clear();
-    rLang = HTML_SL_JAVASCRIPT;
+    rLang = HTMLScriptLanguage::JavaScript;
     rSrc.clear();
     rLibrary.clear();
     rModule.clear();
@@ -54,37 +52,38 @@ void HTMLParser::ParseScriptOptions( OUString& rLangString, const OUString& rBas
         const HTMLOption& aOption = aScriptOptions[--i];
         switch( aOption.GetToken() )
         {
-        case HTML_O_LANGUAGE:
+        case HtmlOptionId::LANGUAGE:
             {
                 rLangString = aOption.GetString();
-                sal_uInt16 nLang;
+                HTMLScriptLanguage nLang;
                 if( aOption.GetEnum( nLang, aScriptLangOptEnums ) )
-                    rLang = (HTMLScriptLanguage)nLang;
+                    rLang = nLang;
                 else
-                    rLang = HTML_SL_UNKNOWN;
+                    rLang = HTMLScriptLanguage::Unknown;
             }
             break;
 
-        case HTML_O_SRC:
+        case HtmlOptionId::SRC:
             rSrc = INetURLObject::GetAbsURL( rBaseURL, aOption.GetString() );
             break;
-        case HTML_O_SDLIBRARY:
+        case HtmlOptionId::SDLIBRARY:
             rLibrary = aOption.GetString();
             break;
 
-        case HTML_O_SDMODULE:
+        case HtmlOptionId::SDMODULE:
             rModule = aOption.GetString();
             break;
+        default: break;
         }
     }
 }
 
-void HTMLParser::RemoveSGMLComment( OUString &rString, bool bFull )
+void HTMLParser::RemoveSGMLComment( OUString &rString )
 {
     sal_Unicode c = 0;
     while( !rString.isEmpty() &&
            ( ' '==(c=rString[0]) || '\t'==c || '\r'==c || '\n'==c ) )
-        rString = rString.copy( 1, rString.getLength() - 1 );
+        rString = rString.copy( 1 );
 
     while( !rString.isEmpty() &&
            ( ' '==(c=rString[rString.getLength()-1])
@@ -95,55 +94,48 @@ void HTMLParser::RemoveSGMLComment( OUString &rString, bool bFull )
     // remove SGML comments
     if( rString.startsWith( "<!--" ) )
     {
-        sal_Int32 nPos = 3;
-        if( bFull )
-        {
-            // the whole line
-            nPos = 4;
-            while( nPos < rString.getLength() &&
-                ( ( c = rString[nPos] ) != '\r' && c != '\n' ) )
-                ++nPos;
-            if( c == '\r' && nPos+1 < rString.getLength() &&
-                '\n' == rString[nPos+1] )
-                ++nPos;
-            else if( c != '\n' )
-                nPos = 3;
-        }
+        // the whole line
+        sal_Int32 nPos = 4;
+        while( nPos < rString.getLength() &&
+            ( ( c = rString[nPos] ) != '\r' && c != '\n' ) )
+            ++nPos;
+        if( c == '\r' && nPos+1 < rString.getLength() &&
+            '\n' == rString[nPos+1] )
+            ++nPos;
+        else if( c != '\n' )
+            nPos = 3;
         ++nPos;
-        rString = rString.copy( nPos, rString.getLength() - nPos );
+        rString = rString.copy( nPos );
     }
 
-    if( rString.endsWith("-->") )
+    if( !rString.endsWith("-->") )
+        return;
+
+    rString = rString.copy( 0, rString.getLength()-3 );
+    // "//" or "'", maybe preceding CR/LF
+    rString = comphelper::string::stripEnd(rString, ' ');
+    sal_Int32 nDel = 0, nLen = rString.getLength();
+    if( nLen >= 2 &&
+        rString.endsWith("//") )
     {
-        rString = rString.copy( 0, rString.getLength()-3 );
-        if( bFull )
+        nDel = 2;
+    }
+    else if( nLen && '\'' == rString[nLen-1] )
+    {
+        nDel = 1;
+    }
+    if( nDel && nLen >= nDel+1 )
+    {
+        c = rString[nLen-(nDel+1)];
+        if( '\r'==c || '\n'==c )
         {
-            // "//" or "'", maybe preceding CR/LF
-            rString = comphelper::string::stripEnd(rString, ' ');
-            sal_Int32 nDel = 0, nLen = rString.getLength();
-            if( nLen >= 2 &&
-                rString.endsWith("//") )
-            {
-                nDel = 2;
-            }
-            else if( nLen && '\'' == rString[nLen-1] )
-            {
-                nDel = 1;
-            }
-            if( nDel && nLen >= nDel+1 )
-            {
-                c = rString[nLen-(nDel+1)];
-                if( '\r'==c || '\n'==c )
-                {
-                    nDel++;
-                    if( '\n'==c && nLen >= nDel+1 &&
-                        '\r'==rString[nLen-(nDel+1)] )
-                        nDel++;
-                }
-            }
-            rString = rString.copy( 0, nLen-nDel );
+            nDel++;
+            if( '\n'==c && nLen >= nDel+1 &&
+                '\r'==rString[nLen-(nDel+1)] )
+                nDel++;
         }
     }
+    rString = rString.copy( 0, nLen-nDel );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

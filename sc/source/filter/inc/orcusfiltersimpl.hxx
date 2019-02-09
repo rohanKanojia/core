@@ -10,9 +10,8 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_ORCUSFILTERSIMPL_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_ORCUSFILTERSIMPL_HXX
 
-#include "orcusfilters.hxx"
+#include <orcusfilters.hxx>
 
-#define __ORCUS_STATIC_LIB
 #include <orcus/xml_namespace.hpp>
 
 class ScOrcusFiltersImpl : public ScOrcusFilters
@@ -22,8 +21,11 @@ public:
 
     virtual bool importCSV(ScDocument& rDoc, SfxMedium& rMedium) const override;
     virtual bool importGnumeric(ScDocument& rDoc, SfxMedium& rMedium) const override;
+    virtual bool importExcel2003XML(ScDocument& rDoc, SfxMedium& rMedium) const override;
     virtual bool importXLSX(ScDocument& rDoc, SfxMedium& rMedium) const override;
     virtual bool importODS(ScDocument& rDoc, SfxMedium& rMedium) const override;
+
+    virtual bool importODS_Styles(ScDocument& rDoc, OUString& aFileName) const override;
 
     virtual ScOrcusXMLContext* createXMLContext(ScDocument& rDoc, const OUString& rPath) const override;
 };
@@ -31,13 +33,13 @@ public:
 class ScOrcusXMLContextImpl : public ScOrcusXMLContext
 {
     ScDocument& mrDoc;
-    OUString maPath;
+    OUString const maPath;
 
     orcus::xmlns_repository maNsRepo; /// XML namespace repository for this context.
 
 public:
     ScOrcusXMLContextImpl(ScDocument& rDoc, const OUString& rPath);
-    virtual ~ScOrcusXMLContextImpl();
+    virtual ~ScOrcusXMLContextImpl() override;
 
     virtual void loadXMLStructure(SvTreeListBox& rTreeCtrl, ScOrcusXMLTreeParam& rParam) override;
 

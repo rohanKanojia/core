@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "DAVSessionFactory.hxx"
 #include "SerfSession.hxx"
 #include "SerfUri.hxx"
@@ -32,45 +33,36 @@ DAVSessionFactory::~DAVSessionFactory()
 rtl::Reference< DAVSession > DAVSessionFactory::createDAVSession(
                 const OUString & inUri,
                 const uno::Reference< uno::XComponentContext > & rxContext )
-    throw( DAVException )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
     if ( !m_xProxyDecider.get() )
         m_xProxyDecider.reset( new ucbhelper::InternetProxyDecider( rxContext ) );
 
-    Map::iterator aIt( m_aMap.begin() );
-    Map::iterator aEnd( m_aMap.end() );
+    Map::iterator aIt = std::find_if(m_aMap.begin(), m_aMap.end(),
+        [&inUri](const Map::value_type& rEntry) { return rEntry.second->CanUse( inUri ); });
 
-    while ( aIt != aEnd )
-    {
-        if ( (*aIt).second->CanUse( inUri ) )
-            break;
-
-        ++aIt;
-    }
-
-    if ( aIt == aEnd )
+    if ( aIt == m_aMap.end() )
     {
         SerfUri aURI( inUri );
 
         std::unique_ptr< DAVSession > xElement(
             new SerfSession( this, inUri, *m_xProxyDecider.get() ) );
 
-        aIt = m_aMap.insert( Map::value_type( inUri, xElement.get() ) ).first;
+        aIt = m_aMap.emplace(  inUri, xElement.get() ).first;
         aIt->second->m_aContainerIt = aIt;
         xElement.release();
         return aIt->second;
     }
-    else if ( osl_incrementInterlockedCount( &aIt->second->m_nRefCount ) > 1 )
+    else if ( osl_atomic_increment( &aIt->second->m_nRefCount ) > 1 )
     {
         rtl::Reference< DAVSession > xElement( aIt->second );
-        osl_decrementInterlockedCount( &aIt->second->m_nRefCount );
+        osl_atomic_decrement( &aIt->second->m_nRefCount );
         return xElement;
     }
     else
     {
-        osl_decrementInterlockedCount( &aIt->second->m_nRefCount );
+        osl_atomic_decrement( &aIt->second->m_nRefCount );
         aIt->second->m_aContainerIt = m_aMap.end();
 
         // If URL scheme is different from http or https we definitely

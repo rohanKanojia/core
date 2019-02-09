@@ -20,17 +20,14 @@
 #ifndef INCLUDED_UCBHELPER_PROVIDERHELPER_HXX
 #define INCLUDED_UCBHELPER_PROVIDERHELPER_HXX
 
-#include <list>
+#include <vector>
 #include <memory>
 #include <com/sun/star/ucb/XContentProvider.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <cppuhelper/weak.hxx>
 
-#include <osl/mutex.hxx>
 #include <rtl/ref.hxx>
-#include <ucbhelper/macros.hxx>
 #include <ucbhelper/ucbhelperdllapi.h>
 
 
@@ -39,6 +36,8 @@ namespace com { namespace sun { namespace star { namespace ucb {
     class XPersistentPropertySet;
 } } } }
 
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
 namespace ucbhelper_impl { struct ContentProviderImplHelper_Impl; }
 
 namespace ucbhelper {
@@ -46,7 +45,7 @@ namespace ucbhelper {
 
 class ContentImplHelper;
 typedef rtl::Reference< ContentImplHelper > ContentImplHelperRef;
-typedef std::list< ContentImplHelperRef > ContentRefList;
+typedef std::vector< ContentImplHelperRef > ContentRefList;
 
 /**
   * This is an abstract base class for implementations of the service
@@ -112,7 +111,7 @@ protected:
       * This method registers a newly created content instance with the
       * content provider. It should be called directly after creating a new
       * content instance. The provider can reuse a registered instance upon
-      * subsedent requests for content instances with an idententifier
+      * subsequent requests for content instances with an identifier
       * of a registered instance.
       * Note that the provider does not hold a hard reference on the
       * registered instance. If last external reference is gone, the provider
@@ -133,12 +132,11 @@ public:
 
     ContentProviderImplHelper(
                 const css::uno::Reference< css::uno::XComponentContext >& rxContext );
-    virtual ~ContentProviderImplHelper();
+    virtual ~ContentProviderImplHelper() override;
 
 
     // XInterface
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
     virtual void SAL_CALL acquire()
         throw() override;
     virtual void SAL_CALL release()
@@ -148,24 +146,19 @@ public:
 
 
     virtual css::uno::Sequence< sal_Int8 > SAL_CALL
-    getImplementationId()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    getImplementationId() override;
     virtual css::uno::Sequence< css::uno::Type > SAL_CALL
-    getTypes()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    getTypes() override;
 
     // XServiceInfo
 
 
     virtual OUString SAL_CALL
-    getImplementationName()
-        throw( css::uno::RuntimeException, std::exception ) override = 0;
+    getImplementationName() override = 0;
     virtual sal_Bool SAL_CALL
-    supportsService( const OUString& ServiceName )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    supportsService( const OUString& ServiceName ) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-    getSupportedServiceNames()
-        throw( css::uno::RuntimeException, std::exception ) override = 0;
+    getSupportedServiceNames() override = 0;
 
 
     // XContentProvider
@@ -183,13 +176,10 @@ public:
       *   content, otherwise
       */
     virtual css::uno::Reference< css::ucb::XContent > SAL_CALL
-    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier )
-        throw( css::ucb::IllegalIdentifierException,
-               css::uno::RuntimeException, std::exception ) override = 0;
+    queryContent( const css::uno::Reference< css::ucb::XContentIdentifier >& Identifier ) override = 0;
     virtual sal_Int32 SAL_CALL
     compareContentIds( const css::uno::Reference< css::ucb::XContentIdentifier >& Id1,
-                       const css::uno::Reference< css::ucb::XContentIdentifier >& Id2 )
-        throw( css::uno::RuntimeException, std::exception ) override;
+                       const css::uno::Reference< css::ucb::XContentIdentifier >& Id2 ) override;
 
 
     // Non-interface methods.

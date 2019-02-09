@@ -13,20 +13,21 @@
 
 #include <oox/dllapi.h>
 
-#include <oox/ole/olestorage.hxx>
-#include <oox/helper/binaryinputstream.hxx>
-#include <oox/helper/binaryoutputstream.hxx>
-
-#include <com/sun/star/io/XStream.hpp>
-#include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
-
-#include <oox/crypto/CryptTools.hxx>
-#include <oox/crypto/AgileEngine.hxx>
-#include <oox/crypto/Standard2007Engine.hxx>
-
 #include <memory>
-#include <vector>
+
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <oox/crypto/CryptoEngine.hxx>
+#include <rtl/ustring.hxx>
+
+namespace com { namespace sun { namespace star {
+    namespace beans { struct NamedValue; }
+    namespace io { class XInputStream; }
+    namespace io { class XStream; }
+    namespace uno { class XComponentContext; }
+} } }
+
+namespace oox { namespace ole { class OleStorage; } }
 
 namespace oox {
 namespace core {
@@ -34,8 +35,6 @@ namespace core {
 class OOX_DLLPUBLIC DocumentDecryption
 {
 private:
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-
     enum CryptoType
     {
         UNKNOWN,
@@ -47,13 +46,8 @@ private:
     std::unique_ptr<CryptoEngine>   mEngine;
     CryptoType                      mCryptoType;
 
-    bool readAgileEncryptionInfo( css::uno::Reference< css::io::XInputStream >& rStream );
-    bool readStandard2007EncryptionInfo( BinaryInputStream& rStream );
-
 public:
-    DocumentDecryption(
-        oox::ole::OleStorage& rOleStorage,
-        css::uno::Reference< css::uno::XComponentContext > xContext);
+    DocumentDecryption(oox::ole::OleStorage& rOleStorage);
 
     bool decrypt(const css::uno::Reference< css::io::XStream >& xDocumentStream);
     bool readEncryptionInfo();

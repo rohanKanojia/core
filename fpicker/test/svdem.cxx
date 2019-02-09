@@ -25,7 +25,6 @@
 
 #include <rtl/ustring>
 #include <sal/types.h>
-#include <osl/diagnose.h>
 #include <com/sun/star/ui/dialogs/XFilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilterManager.hpp>
 
@@ -45,7 +44,6 @@
 #include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/button.hxx>
 
 #include <comphelper/processfactory.hxx>
@@ -162,12 +160,12 @@ void MyWin::Resize()
 }
 
 
-IMPL_LINK_TYPED( MyWin, Test, PushButton*, pBtn, void )
+IMPL_LINK( MyWin, Test, PushButton*, pBtn, void )
 {
 printf("Test\n");
     if ( pBtn == &aOKBtn )
     {
-        ScopedVclPtrInstance<SvtFileDialog> pDlg(this,SFXWB_PATHDIALOG);
+        ScopedVclPtrInstance<SvtFileDialog> pDlg(this, PickerFlags::PathDialog);
         pDlg->Execute();
         printf("ok\n");
     }

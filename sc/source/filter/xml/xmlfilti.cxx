@@ -19,17 +19,16 @@
 
 #include "xmlfilti.hxx"
 #include "xmlimprt.hxx"
-#include "docuno.hxx"
-#include "convuno.hxx"
-#include "XMLConverter.hxx"
-#include "rangeutl.hxx"
-#include "queryentry.hxx"
-#include "document.hxx"
+#include "xmldrani.hxx"
+#include "xmldpimp.hxx"
+#include <rangeutl.hxx>
+#include <queryentry.hxx>
+#include <document.hxx>
 
+#include <o3tl/safeint.hxx>
 #include <svl/sharedstringpool.hxx>
-#include <xmloff/xmltkmap.hxx>
-#include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
+#include <xmloff/xmlnmspe.hxx>
 
 using namespace com::sun::star;
 using namespace xmloff::token;
@@ -40,12 +39,10 @@ using ::com::sun::star::xml::sax::XAttributeList;
 ScXMLFilterContext::ConnStackItem::ConnStackItem(bool bOr) : mbOr(bOr), mnCondCount(0) {}
 
 ScXMLFilterContext::ScXMLFilterContext( ScXMLImport& rImport,
-                                        sal_uInt16 nPrfx,
-                                        const OUString& rLName,
-                                        const Reference<XAttributeList>& xAttrList,
+                                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                         ScQueryParam& rParam,
                                         ScXMLDatabaseRangeContext* pTempDatabaseRangeContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     mrQueryParam(rParam),
     pDatabaseRangeContext(pTempDatabaseRangeContext),
     bSkipDuplicates(false),
@@ -54,46 +51,41 @@ ScXMLFilterContext::ScXMLFilterContext( ScXMLImport& rImport,
 {
     ScDocument* pDoc(GetScImport().GetDocument());
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetFilterAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_FILTER_ATTR_TARGET_RANGE_ADDRESS :
+            switch (aIter.getToken())
             {
-                ScRange aScRange;
-                sal_Int32 nOffset(0);
-                if (ScRangeStringConverter::GetRangeFromString( aScRange, sValue, pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
+                case XML_ELEMENT( TABLE, XML_TARGET_RANGE_ADDRESS ):
                 {
-                    ScUnoConversion::FillApiAddress( aOutputPosition, aScRange.aStart );
-                    bCopyOutputData = true;
+                    ScRange aScRange;
+                    sal_Int32 nOffset(0);
+                    if (ScRangeStringConverter::GetRangeFromString( aScRange, aIter.toString(), pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
+                    {
+                        aOutputPosition = aScRange.aStart;
+                        bCopyOutputData = true;
+                    }
                 }
+                break;
+                case XML_ELEMENT( TABLE, XML_CONDITION_SOURCE_RANGE_ADDRESS ):
+                {
+                    sal_Int32 nOffset(0);
+                    if (ScRangeStringConverter::GetRangeFromString( aConditionSourceRangeAddress, aIter.toString(), pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ) )
+                        bConditionSourceRange = true;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_CONDITION_SOURCE ):
+                {
+                    // not supported by StarOffice
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_DUPLICATES ):
+                {
+                    bSkipDuplicates = !IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
             }
-            break;
-            case XML_TOK_FILTER_ATTR_CONDITION_SOURCE_RANGE_ADDRESS :
-            {
-                sal_Int32 nOffset(0);
-                if (ScRangeStringConverter::GetRangeFromString( aConditionSourceRangeAddress, sValue, pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
-                    bConditionSourceRange = true;
-            }
-            break;
-            case XML_TOK_FILTER_ATTR_CONDITION_SOURCE :
-            {
-                // not supported by StarOffice
-            }
-            break;
-            case XML_TOK_FILTER_ATTR_DISPLAY_DUPLICATES :
-            {
-                bSkipDuplicates = !IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
         }
     }
 }
@@ -102,51 +94,51 @@ ScXMLFilterContext::~ScXMLFilterContext()
 {
 }
 
-SvXMLImportContext *ScXMLFilterContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLFilterContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_FILTER_AND:
+        case XML_ELEMENT( TABLE, XML_FILTER_AND ):
         {
             pContext = new ScXMLAndContext(
-                GetScImport(), nPrefix, rLName, xAttrList, mrQueryParam, this);
+                GetScImport(), mrQueryParam, this);
         }
         break;
-        case XML_TOK_FILTER_OR:
+        case XML_ELEMENT( TABLE, XML_FILTER_OR ):
         {
             pContext = new ScXMLOrContext(
-                GetScImport(), nPrefix, rLName, xAttrList, mrQueryParam, this);
+                GetScImport(), mrQueryParam, this);
         }
         break;
-        case XML_TOK_FILTER_CONDITION:
+        case XML_ELEMENT( TABLE, XML_FILTER_CONDITION ):
         {
             pContext = new ScXMLConditionContext(
-                GetScImport(), nPrefix, rLName, xAttrList, mrQueryParam, this);
+                GetScImport(), nElement, pAttribList, mrQueryParam, this);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLFilterContext::EndElement()
+void SAL_CALL ScXMLFilterContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     mrQueryParam.bInplace = !bCopyOutputData;
     mrQueryParam.bDuplicate = !bSkipDuplicates;
 
     if (bCopyOutputData)
     {
-        mrQueryParam.nDestCol = aOutputPosition.Column;
-        mrQueryParam.nDestRow = aOutputPosition.Row;
-        mrQueryParam.nDestTab = aOutputPosition.Sheet;
+        mrQueryParam.nDestCol = aOutputPosition.Col();
+        mrQueryParam.nDestRow = aOutputPosition.Row();
+        mrQueryParam.nDestTab = aOutputPosition.Tab();
     }
 
     if (bConditionSourceRange)
@@ -155,7 +147,7 @@ void ScXMLFilterContext::EndElement()
 
 void ScXMLFilterContext::OpenConnection(bool b)
 {
-    maConnStack.push_back(ConnStackItem(b));
+    maConnStack.emplace_back(b);
 }
 
 void ScXMLFilterContext::CloseConnection()
@@ -196,12 +188,9 @@ bool ScXMLFilterContext::GetConnection()
 }
 
 ScXMLAndContext::ScXMLAndContext( ScXMLImport& rImport,
-                                  sal_uInt16 nPrfx,
-                                  const OUString& rLName,
-                                  const Reference<XAttributeList>& /* xAttrList */,
                                   ScQueryParam& rParam,
                                   ScXMLFilterContext* pTempFilterContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     mrQueryParam(rParam),
     pFilterContext(pTempFilterContext)
 {
@@ -212,46 +201,43 @@ ScXMLAndContext::~ScXMLAndContext()
 {
 }
 
-SvXMLImportContext *ScXMLAndContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLAndContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_FILTER_OR:
+        case XML_ELEMENT( TABLE, XML_FILTER_OR ):
         {
             // not supported in StarOffice
         }
         break;
-        case XML_TOK_FILTER_CONDITION:
+        case XML_ELEMENT( TABLE, XML_FILTER_CONDITION ):
         {
             pContext = new ScXMLConditionContext(
-                GetScImport(), nPrefix, rLName, xAttrList, mrQueryParam, pFilterContext);
+                GetScImport(), nElement, pAttribList, mrQueryParam, pFilterContext);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLAndContext::EndElement()
+void SAL_CALL ScXMLAndContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     pFilterContext->CloseConnection();
 }
 
 ScXMLOrContext::ScXMLOrContext( ScXMLImport& rImport,
-                                sal_uInt16 nPrfx,
-                                const OUString& rLName,
-                                const Reference<css::xml::sax::XAttributeList>& /* xAttrList */,
                                 ScQueryParam& rParam,
                                 ScXMLFilterContext* pTempFilterContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     mrQueryParam(rParam),
     pFilterContext(pTempFilterContext)
 {
@@ -262,46 +248,46 @@ ScXMLOrContext::~ScXMLOrContext()
 {
 }
 
-SvXMLImportContext *ScXMLOrContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLOrContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_FILTER_AND:
+        case XML_ELEMENT( TABLE, XML_FILTER_AND ):
         {
             pContext = new ScXMLAndContext(
-                GetScImport(), nPrefix, rLName, xAttrList, mrQueryParam, pFilterContext);
+                GetScImport(), mrQueryParam, pFilterContext);
         }
         break;
-        case XML_TOK_FILTER_CONDITION:
+        case XML_ELEMENT( TABLE, XML_FILTER_CONDITION ):
         {
             pContext = new ScXMLConditionContext(
-                GetScImport(), nPrefix, rLName, xAttrList, mrQueryParam, pFilterContext);
+                GetScImport(), nElement, pAttribList, mrQueryParam, pFilterContext);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLOrContext::EndElement()
+void SAL_CALL ScXMLOrContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     pFilterContext->CloseConnection();
 }
 
 ScXMLConditionContext::ScXMLConditionContext(
-    ScXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName,
-    const Reference<XAttributeList>& xAttrList,
+    ScXMLImport& rImport, sal_Int32 /*nElement*/,
+    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
     ScQueryParam& rParam,
     ScXMLFilterContext* pTempFilterContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     mrQueryParam(rParam),
     pFilterContext(pTempFilterContext),
     nField(0),
@@ -309,43 +295,38 @@ ScXMLConditionContext::ScXMLConditionContext(
 {
     sDataType = GetXMLToken(XML_TEXT);
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap(GetScImport().GetFilterConditionAttrTokenMap());
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_CONDITION_ATTR_FIELD_NUMBER :
+            switch (aIter.getToken())
             {
-                nField = sValue.toInt32();
+                case XML_ELEMENT( TABLE, XML_FIELD_NUMBER ):
+                {
+                    nField = aIter.toInt32();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_CASE_SENSITIVE ):
+                {
+                    bIsCaseSensitive = IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DATA_TYPE ):
+                {
+                    sDataType = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_VALUE ):
+                {
+                    sConditionValue = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_OPERATOR ):
+                {
+                    sOperator = aIter.toString();
+                }
+                break;
             }
-            break;
-            case XML_TOK_CONDITION_ATTR_CASE_SENSITIVE :
-            {
-                bIsCaseSensitive = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_CONDITION_ATTR_DATA_TYPE :
-            {
-                sDataType = sValue;
-            }
-            break;
-            case XML_TOK_CONDITION_ATTR_VALUE :
-            {
-                sConditionValue = sValue;
-            }
-            break;
-            case XML_TOK_CONDITION_ATTR_OPERATOR :
-            {
-                sOperator = sValue;
-            }
-            break;
         }
     }
 }
@@ -354,25 +335,25 @@ ScXMLConditionContext::~ScXMLConditionContext()
 {
 }
 
-SvXMLImportContext *ScXMLConditionContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const Reference<XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLConditionContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterConditionElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_CONDITION_FILTER_SET_ITEM:
+        case XML_ELEMENT( TABLE, XML_FILTER_SET_ITEM ):
         {
             pContext = new ScXMLSetItemContext(
-                GetScImport(), nPrefix, rLName, xAttrList, *this);
+                GetScImport(), nElement, pAttribList, *this);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
@@ -380,15 +361,15 @@ SvXMLImportContext *ScXMLConditionContext::CreateChildContext( sal_uInt16 nPrefi
 void ScXMLConditionContext::GetOperator(
     const OUString& aOpStr, ScQueryParam& rParam, ScQueryEntry& rEntry)
 {
-    rParam.eSearchType = utl::SearchParam::SRCH_NORMAL;
+    rParam.eSearchType = utl::SearchParam::SearchType::Normal;
     if (IsXMLToken(aOpStr, XML_MATCH))
     {
-        rParam.eSearchType = utl::SearchParam::SRCH_REGEXP;
+        rParam.eSearchType = utl::SearchParam::SearchType::Regexp;
         rEntry.eOp = SC_EQUAL;
     }
     else if (IsXMLToken(aOpStr, XML_NOMATCH))
     {
-        rParam.eSearchType = utl::SearchParam::SRCH_REGEXP;
+        rParam.eSearchType = utl::SearchParam::SearchType::Regexp;
         rEntry.eOp = SC_NOT_EQUAL;
     }
     else if (aOpStr == "=")
@@ -434,7 +415,7 @@ void ScXMLConditionContext::AddSetItem(const ScQueryEntry::Item& rItem)
     maQueryItems.push_back(rItem);
 }
 
-void ScXMLConditionContext::EndElement()
+void SAL_CALL ScXMLConditionContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScQueryEntry& rEntry = mrQueryParam.AppendEntry();
 
@@ -446,7 +427,7 @@ void ScXMLConditionContext::EndElement()
 
     GetOperator(sOperator, mrQueryParam, rEntry);
     SCCOLROW nStartPos = mrQueryParam.bByRow ? mrQueryParam.nCol1 : mrQueryParam.nRow1;
-    rEntry.nField = nField + nStartPos;
+    rEntry.nField = o3tl::saturating_add(nField, nStartPos);
 
     if (maQueryItems.empty())
     {
@@ -467,72 +448,43 @@ void ScXMLConditionContext::EndElement()
         rEntry.GetQueryItems().swap(maQueryItems);
 }
 
-const ScXMLImport& ScXMLSetItemContext::GetScImport() const
-{
-    return static_cast<const ScXMLImport&>(GetImport());
-}
-
-ScXMLImport& ScXMLSetItemContext::GetScImport()
-{
-    return static_cast<ScXMLImport&>(GetImport());
-}
-
 ScXMLSetItemContext::ScXMLSetItemContext(
-    ScXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName,
-    const Reference<XAttributeList>& xAttrList, ScXMLConditionContext& rParent) :
-    SvXMLImportContext(rImport, nPrfx, rLName)
+    ScXMLImport& rImport, sal_Int32 /*nElement*/,
+    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList, ScXMLConditionContext& rParent) :
+    ScXMLImportContext(rImport)
 {
-    sal_Int32 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetFilterSetItemAttrTokenMap();
-    for (sal_Int32 i = 0; i < nAttrCount; ++i)
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName = xAttrList->getNameByIndex(i);
-        OUString aLocalName;
-        sal_uInt16 nPrefix =
-            GetScImport().GetNamespaceMap().GetKeyByAttrName(sAttrName, &aLocalName);
-
-        const OUString& sValue = xAttrList->getValueByIndex(i);
-
-        switch (rAttrTokenMap.Get(nPrefix, aLocalName))
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_FILTER_SET_ITEM_ATTR_VALUE:
+            switch (aIter.getToken())
             {
-                svl::SharedStringPool& rPool = GetScImport().GetDocument()->GetSharedStringPool();
-                ScQueryEntry::Item aItem;
-                aItem.maString = rPool.intern(sValue);
-                aItem.meType = ScQueryEntry::ByString;
-                aItem.mfVal = 0.0;
-                rParent.AddSetItem(aItem);
+                case XML_ELEMENT( TABLE, XML_VALUE ):
+                {
+                    svl::SharedStringPool& rPool = GetScImport().GetDocument()->GetSharedStringPool();
+                    ScQueryEntry::Item aItem;
+                    aItem.maString = rPool.intern(aIter.toString());
+                    aItem.meType = ScQueryEntry::ByString;
+                    aItem.mfVal = 0.0;
+                    rParent.AddSetItem(aItem);
+                }
+                break;
             }
-            break;
         }
     }
-}
-
-SvXMLImportContext* ScXMLSetItemContext::CreateChildContext(
-    sal_uInt16 nPrefix, const OUString& rLName,
-    const Reference<XAttributeList>& /*xAttrList*/ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
 }
 
 ScXMLSetItemContext::~ScXMLSetItemContext()
 {
 }
 
-void ScXMLSetItemContext::EndElement()
-{
-}
-
 ScXMLDPFilterContext::ScXMLDPFilterContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotTableContext* pTempDataPilotTableContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotTable(pTempDataPilotTableContext),
     aFilterFields(),
-    eSearchType(utl::SearchParam::SRCH_NORMAL),
+    eSearchType(utl::SearchParam::SearchType::Normal),
     nFilterFieldCount(0),
     bSkipDuplicates(false),
     bCopyOutputData(false),
@@ -543,46 +495,41 @@ ScXMLDPFilterContext::ScXMLDPFilterContext( ScXMLImport& rImport,
 {
     ScDocument* pDoc(GetScImport().GetDocument());
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap(GetScImport().GetFilterAttrTokenMap());
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_FILTER_ATTR_TARGET_RANGE_ADDRESS :
+            switch (aIter.getToken())
             {
-                ScRange aScRange;
-                sal_Int32 nOffset(0);
-                if (ScRangeStringConverter::GetRangeFromString( aScRange, sValue, pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
+                case XML_ELEMENT( TABLE, XML_TARGET_RANGE_ADDRESS ):
                 {
-                    aOutputPosition = aScRange.aStart;
-                    bCopyOutputData = true;
+                    ScRange aScRange;
+                    sal_Int32 nOffset(0);
+                    if (ScRangeStringConverter::GetRangeFromString( aScRange, aIter.toString(), pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
+                    {
+                        aOutputPosition = aScRange.aStart;
+                        bCopyOutputData = true;
+                    }
                 }
-            }
-            break;
-            case XML_TOK_FILTER_ATTR_CONDITION_SOURCE_RANGE_ADDRESS :
-            {
-                sal_Int32 nOffset(0);
-                if(ScRangeStringConverter::GetRangeFromString( aConditionSourceRangeAddress, sValue, pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
-                    bConditionSourceRange = true;
-            }
-            break;
-            case XML_TOK_FILTER_ATTR_CONDITION_SOURCE :
-            {
-                // not supported by StarOffice
-            }
-            break;
-            case XML_TOK_FILTER_ATTR_DISPLAY_DUPLICATES :
-            {
-                bSkipDuplicates = !IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
+                break;
+                case XML_ELEMENT( TABLE, XML_CONDITION_SOURCE_RANGE_ADDRESS ):
+                {
+                    sal_Int32 nOffset(0);
+                    if(ScRangeStringConverter::GetRangeFromString( aConditionSourceRangeAddress, aIter.toString(), pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset ))
+                        bConditionSourceRange = true;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_CONDITION_SOURCE ):
+                {
+                    // not supported by StarOffice
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_DUPLICATES ):
+                {
+                    bSkipDuplicates = !IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
+                }
         }
     }
 }
@@ -591,42 +538,39 @@ ScXMLDPFilterContext::~ScXMLDPFilterContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPFilterContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDPFilterContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_FILTER_AND:
+        case XML_ELEMENT( TABLE, XML_FILTER_AND ):
         {
-            pContext = new ScXMLDPAndContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLDPAndContext( GetScImport(), this);
         }
         break;
-        case XML_TOK_FILTER_OR:
+        case XML_ELEMENT( TABLE, XML_FILTER_OR ):
         {
-            pContext = new ScXMLDPOrContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLDPOrContext( GetScImport(), this);
         }
         break;
-        case XML_TOK_FILTER_CONDITION:
+        case XML_ELEMENT( TABLE, XML_FILTER_CONDITION ):
         {
-            pContext = new ScXMLDPConditionContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, this);
+            pContext = new ScXMLDPConditionContext( GetScImport(), nElement, pAttribList, this);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDPFilterContext::EndElement()
+void SAL_CALL ScXMLDPFilterContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     aFilterFields.eSearchType = eSearchType;
     aFilterFields.bCaseSens = bIsCaseSensitive;
@@ -649,11 +593,8 @@ void ScXMLDPFilterContext::AddFilterField (const ScQueryEntry& aFilterField)
 }
 
 ScXMLDPAndContext::ScXMLDPAndContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */,
                                       ScXMLDPFilterContext* pTempFilterContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     pFilterContext = pTempFilterContext;
     pFilterContext->OpenConnection(false);
@@ -663,45 +604,41 @@ ScXMLDPAndContext::~ScXMLDPAndContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPAndContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDPAndContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_FILTER_OR:
+        case XML_ELEMENT( TABLE, XML_FILTER_OR ):
         {
             // not supported in StarOffice
         }
         break;
-        case XML_TOK_FILTER_CONDITION:
+        case XML_ELEMENT( TABLE, XML_FILTER_CONDITION ):
         {
-            pContext = new ScXMLDPConditionContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pFilterContext);
+            pContext = new ScXMLDPConditionContext( GetScImport(), nElement, pAttribList, pFilterContext);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDPAndContext::EndElement()
+void SAL_CALL ScXMLDPAndContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     pFilterContext->CloseConnection();
 }
 
 ScXMLDPOrContext::ScXMLDPOrContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */,
-                                      ScXMLDPFilterContext* pTempFilterContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+                                    ScXMLDPFilterContext* pTempFilterContext) :
+    ScXMLImportContext( rImport ),
     pFilterContext(pTempFilterContext)
 {
     pFilterContext->OpenConnection(true);
@@ -711,89 +648,81 @@ ScXMLDPOrContext::~ScXMLDPOrContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPOrContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDPOrContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext(nullptr);
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap(GetScImport().GetFilterElemTokenMap());
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_FILTER_AND:
+        case XML_ELEMENT( TABLE, XML_FILTER_AND ):
         {
-            pContext = new ScXMLDPAndContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pFilterContext);
+            pContext = new ScXMLDPAndContext( GetScImport(), pFilterContext);
         }
         break;
-        case XML_TOK_FILTER_CONDITION:
+        case XML_ELEMENT( TABLE, XML_FILTER_CONDITION ):
         {
-            pContext = new ScXMLDPConditionContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList, pFilterContext);
+            pContext = new ScXMLDPConditionContext( GetScImport(), nElement, pAttribList, pFilterContext);
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDPOrContext::EndElement()
+void SAL_CALL ScXMLDPOrContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     pFilterContext->CloseConnection();
 }
 
 ScXMLDPConditionContext::ScXMLDPConditionContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      sal_Int32 /*nElement*/,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDPFilterContext* pTempFilterContext) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pFilterContext(pTempFilterContext),
     sDataType(GetXMLToken(XML_TEXT)),
     nField(0),
     bIsCaseSensitive(false)
 {
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap(GetScImport().GetFilterConditionAttrTokenMap());
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_CONDITION_ATTR_FIELD_NUMBER :
+            switch (aIter.getToken())
             {
-                nField = sValue.toInt32();
+                case XML_ELEMENT( TABLE, XML_FIELD_NUMBER ):
+                {
+                    nField = aIter.toInt32();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_CASE_SENSITIVE ):
+                {
+                    bIsCaseSensitive = IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DATA_TYPE ):
+                {
+                    sDataType = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_VALUE ):
+                {
+                    sConditionValue = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_OPERATOR ):
+                {
+                    sOperator = aIter.toString();
+                }
+                break;
             }
-            break;
-            case XML_TOK_CONDITION_ATTR_CASE_SENSITIVE :
-            {
-                bIsCaseSensitive = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_CONDITION_ATTR_DATA_TYPE :
-            {
-                sDataType = sValue;
-            }
-            break;
-            case XML_TOK_CONDITION_ATTR_VALUE :
-            {
-                sConditionValue = sValue;
-            }
-            break;
-            case XML_TOK_CONDITION_ATTR_OPERATOR :
-            {
-                sOperator = sValue;
-            }
-            break;
         }
     }
 }
@@ -802,25 +731,18 @@ ScXMLDPConditionContext::~ScXMLDPConditionContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPConditionContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
 void ScXMLDPConditionContext::getOperatorXML(
     const OUString& sTempOperator, ScQueryOp& aFilterOperator, utl::SearchParam::SearchType& rSearchType)
 {
-    rSearchType = utl::SearchParam::SRCH_NORMAL;
+    rSearchType = utl::SearchParam::SearchType::Normal;
     if (IsXMLToken(sTempOperator, XML_MATCH))
     {
-        rSearchType = utl::SearchParam::SRCH_REGEXP;
+        rSearchType = utl::SearchParam::SearchType::Regexp;
         aFilterOperator = SC_EQUAL;
     }
     else if (IsXMLToken(sTempOperator, XML_NOMATCH))
     {
-        rSearchType = utl::SearchParam::SRCH_REGEXP;
+        rSearchType = utl::SearchParam::SearchType::Regexp;
         aFilterOperator = SC_NOT_EQUAL;
     }
     else if (sTempOperator == "=")
@@ -845,7 +767,7 @@ void ScXMLDPConditionContext::getOperatorXML(
         aFilterOperator = SC_TOPVAL;
 }
 
-void ScXMLDPConditionContext::EndElement()
+void SAL_CALL ScXMLDPConditionContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScQueryEntry aFilterField;
     if (pFilterContext->GetConnection())
@@ -859,7 +781,7 @@ void ScXMLDPConditionContext::EndElement()
         aFilterField.SetQueryByNonEmpty();
     else
     {
-        utl::SearchParam::SearchType eSearchType = utl::SearchParam::SRCH_NORMAL;
+        utl::SearchParam::SearchType eSearchType = utl::SearchParam::SearchType::Normal;
         getOperatorXML(sOperator, aFilterField.eOp, eSearchType);
         pFilterContext->SetSearchType(eSearchType);
         aFilterField.nField = nField;

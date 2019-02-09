@@ -13,13 +13,17 @@ import uno
 from org.libreoffice.unotest import pyuno
 from com.sun.star.beans import PropertyValue
 
+testEnvironmentInitialized = False
 
 class CollectionsTestBase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         cls.context = pyuno.getComponentContext()
-        pyuno.private_initTestEnvironment()
+        global testEnvironmentInitialized
+        if not testEnvironmentInitialized:
+            pyuno.private_initTestEnvironment()
+            testEnvironmentInitialized = True
 
     def setUp(self):
         self._components = []
@@ -32,13 +36,13 @@ class CollectionsTestBase(unittest.TestCase):
                 pass
 
     def createHiddenWindow(self, url):
-        serviceManager = self.context.ServiceManager
-        desktop = serviceManager.createInstanceWithContext('com.sun.star.frame.Desktop', self.context)
-        loadProps = (
+        service_manager = self.context.ServiceManager
+        desktop = service_manager.createInstanceWithContext('com.sun.star.frame.Desktop', self.context)
+        load_props = (
           PropertyValue(Name='Hidden', Value=True),
           PropertyValue(Name='ReadOnly', Value=False)
         )
-        component = desktop.loadComponentFromURL(url, '_blank', 0, loadProps)
+        component = desktop.loadComponentFromURL(url, '_blank', 0, load_props)
         return component
 
     def createBlankTextDocument(self):

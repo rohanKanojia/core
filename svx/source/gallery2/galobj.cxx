@@ -21,10 +21,10 @@
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <sfx2/objsh.hxx>
 #include <sfx2/docfac.hxx>
+#include <comphelper/fileformat.h>
 #include <comphelper/classids.hxx>
-#include <comphelper/string.hxx>
 #include <unotools/pathoptions.hxx>
-#include <tools/rcid.h>
+#include <unotools/resmgr.hxx>
 #include <tools/vcompat.hxx>
 #include <tools/helpers.hxx>
 #include <vcl/virdev.hxx>
@@ -32,14 +32,14 @@
 #include <svx/fmmodel.hxx>
 #include <svx/fmview.hxx>
 #include <svx/fmpage.hxx>
-#include "gallery.hrc"
-#include "svx/galmisc.hxx"
-#include "galobj.hxx"
+#include <svx/galmisc.hxx>
+#include <galobj.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/dibtools.hxx>
 #include "gallerydrawmodel.hxx"
 #include <memory>
+#include <bitmaps.hlst>
 
 using namespace ::com::sun::star;
 
@@ -55,9 +55,9 @@ BitmapEx SgaObject::createPreviewBitmapEx(const Size& rSizePixel) const
 
     if(rSizePixel.Width() && rSizePixel.Height())
     {
-        if(SGA_OBJ_SOUND == GetObjKind())
+        if(SgaObjKind::Sound == GetObjKind())
         {
-            aRetval = GAL_RES(RID_SVXBMP_GALLERY_MEDIA);
+            aRetval = BitmapEx(RID_SVXBMP_GALLERY_MEDIA);
         }
         else if(IsThumbBitmap())
         {
@@ -73,8 +73,8 @@ BitmapEx SgaObject::createPreviewBitmapEx(const Size& rSizePixel) const
         if(!aRetval.IsEmpty())
         {
             const Size aCurrentSizePixel(aRetval.GetSizePixel());
-            const double fScaleX((double)rSizePixel.Width() / (double)aCurrentSizePixel.Width());
-            const double fScaleY((double)rSizePixel.Height() / (double)aCurrentSizePixel.Height());
+            const double fScaleX(static_cast<double>(rSizePixel.Width()) / static_cast<double>(aCurrentSizePixel.Width()));
+            const double fScaleY(static_cast<double>(rSizePixel.Height()) / static_cast<double>(aCurrentSizePixel.Height()));
             const double fScale(std::min(fScaleX, fScaleY));
 
             // only scale when need to decrease, no need to make bigger as original. Also
@@ -93,18 +93,18 @@ bool SgaObject::CreateThumb( const Graphic& rGraphic )
 {
     bool bRet = false;
 
-    if( rGraphic.GetType() == GRAPHIC_BITMAP )
+    if( rGraphic.GetType() == GraphicType::Bitmap )
     {
         BitmapEx    aBmpEx( rGraphic.GetBitmapEx() );
         Size        aBmpSize( aBmpEx.GetSizePixel() );
 
         if( aBmpSize.Width() && aBmpSize.Height() )
         {
-            if( aBmpEx.GetPrefMapMode().GetMapUnit() != MAP_PIXEL &&
+            if( aBmpEx.GetPrefMapMode().GetMapUnit() != MapUnit::MapPixel &&
                 aBmpEx.GetPrefSize().Width() > 0 &&
                 aBmpEx.GetPrefSize().Height() > 0 )
             {
-                Size aLogSize( OutputDevice::LogicToLogic( aBmpEx.GetPrefSize(), aBmpEx.GetPrefMapMode(), MAP_100TH_MM ) );
+                Size aLogSize( OutputDevice::LogicToLogic(aBmpEx.GetPrefSize(), aBmpEx.GetPrefMapMode(), MapMode(MapUnit::Map100thMM)) );
 
                 if( aLogSize.Width() > 0 && aLogSize.Height() > 0 )
                 {
@@ -112,11 +112,11 @@ bool SgaObject::CreateThumb( const Graphic& rGraphic )
                     double  fFactorPix = static_cast< double >( aBmpSize.Width() ) / aBmpSize.Height();
 
                     if( fFactorPix > fFactorLog )
-                        aBmpSize.Width() = FRound( aBmpSize.Height() * fFactorLog );
+                        aBmpSize.setWidth( FRound( aBmpSize.Height() * fFactorLog ) );
                     else
-                        aBmpSize.Height() = FRound( aBmpSize.Width() / fFactorLog );
+                        aBmpSize.setHeight( FRound( aBmpSize.Width() / fFactorLog ) );
 
-                    aBmpEx.SetSizePixel( aBmpSize, BmpScaleFlag::BestQuality );
+                    aBmpEx.Scale(aBmpSize, BmpScaleFlag::BestQuality);
                 }
             }
 
@@ -125,41 +125,41 @@ bool SgaObject::CreateThumb( const Graphic& rGraphic )
 
             if( ( aBmpSize.Width() <= S_THUMB ) && ( aBmpSize.Height() <= S_THUMB ) )
             {
-                aThumbBmp.Convert( BMP_CONVERSION_8BIT_COLORS );
+                aThumbBmp.Convert( BmpConversion::N8BitColors );
                 bRet = true;
             }
             else
             {
-                const float fFactor  = (float) aBmpSize.Width() / aBmpSize.Height();
-                const Size  aNewSize( std::max( (long) (fFactor < 1. ? S_THUMB * fFactor : S_THUMB), 8L ),
-                                      std::max( (long) (fFactor < 1. ? S_THUMB : S_THUMB / fFactor), 8L ) );
+                const float fFactor  = static_cast<float>(aBmpSize.Width()) / aBmpSize.Height();
+                const Size  aNewSize( std::max( static_cast<long>(fFactor < 1. ? S_THUMB * fFactor : S_THUMB), 8L ),
+                                      std::max( static_cast<long>(fFactor < 1. ? S_THUMB : S_THUMB / fFactor), 8L ) );
                 if(aThumbBmp.Scale(
-                    (double) aNewSize.Width() / aBmpSize.Width(),
-                    (double) aNewSize.Height() / aBmpSize.Height(),
+                    static_cast<double>(aNewSize.Width()) / aBmpSize.Width(),
+                    static_cast<double>(aNewSize.Height()) / aBmpSize.Height(),
                     BmpScaleFlag::BestQuality ) )
                 {
-                    aThumbBmp.Convert( BMP_CONVERSION_8BIT_COLORS );
+                    aThumbBmp.Convert( BmpConversion::N8BitColors );
                     bRet = true;
                 }
             }
         }
     }
-    else if( rGraphic.GetType() == GRAPHIC_GDIMETAFILE )
+    else if( rGraphic.GetType() == GraphicType::GdiMetafile )
     {
         const Size aPrefSize( rGraphic.GetPrefSize() );
-        const double fFactor  = (double)aPrefSize.Width() / (double)aPrefSize.Height();
+        const double fFactor  = static_cast<double>(aPrefSize.Width()) / static_cast<double>(aPrefSize.Height());
         Size aSize( S_THUMB, S_THUMB );
         if ( fFactor < 1.0 )
-            aSize.Width() = (sal_Int32)( S_THUMB * fFactor );
+            aSize.setWidth( static_cast<sal_Int32>( S_THUMB * fFactor ) );
         else
-            aSize.Height() = (sal_Int32)( S_THUMB / fFactor );
+            aSize.setHeight( static_cast<sal_Int32>( S_THUMB / fFactor ) );
 
         const GraphicConversionParameters aParameters(aSize, false, true, true /*TODO: extra ", true" post-#i121194#*/);
         aThumbBmp = rGraphic.GetBitmapEx(aParameters);
 
         if( !aThumbBmp.IsEmpty() )
         {
-            aThumbBmp.Convert( BMP_CONVERSION_8BIT_COLORS );
+            aThumbBmp.Convert( BmpConversion::N8BitColors );
             bRet = true;
         }
     }
@@ -171,7 +171,7 @@ void SgaObject::WriteData( SvStream& rOut, const OUString& rDestDir ) const
 {
     static const sal_uInt32 nInventor = COMPAT_FORMAT( 'S', 'G', 'A', '3' );
 
-    rOut.WriteUInt32( nInventor ).WriteUInt16( 0x0004 ).WriteUInt16( GetVersion() ).WriteUInt16( GetObjKind() );
+    rOut.WriteUInt32( nInventor ).WriteUInt16( 0x0004 ).WriteUInt16( GetVersion() ).WriteUInt16( static_cast<sal_uInt16>(GetObjKind()) );
     rOut.WriteBool( bIsThumbBmp );
 
     if( bIsThumbBmp )
@@ -190,7 +190,7 @@ void SgaObject::WriteData( SvStream& rOut, const OUString& rDestDir ) const
     else
         WriteGDIMetaFile( rOut, aThumbMtf );
 
-    OUString aURLWithoutDestDir = aURL.GetMainURL( INetURLObject::NO_DECODE );
+    OUString aURLWithoutDestDir = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
     aURLWithoutDestDir = aURLWithoutDestDir.replaceFirst(rDestDir, "");
     write_uInt16_lenPrefixed_uInt8s_FromOUString(rOut, aURLWithoutDestDir, RTL_TEXTENCODING_UTF8);
 }
@@ -215,35 +215,9 @@ void SgaObject::ReadData(SvStream& rIn, sal_uInt16& rReadVersion )
     aURL = INetURLObject(aTmpStr);
 }
 
-const OUString SgaObject::GetTitle() const
+OUString const & SgaObject::GetTitle() const
 {
-    OUString aReturnValue( aTitle );
-    if ( !getenv( "GALLERY_SHOW_PRIVATE_TITLE" ) )
-    {
-        if ( comphelper::string::getTokenCount(aReturnValue, ':') == 3 )
-        {
-            OUString    aPrivateInd  ( aReturnValue.getToken( 0, ':' ) );
-            OUString    aResourceName( aReturnValue.getToken( 1, ':' ) );
-            sal_Int32   nResId       ( aReturnValue.getToken( 2, ':' ).toInt32() );
-            if ( aPrivateInd == "private" &&
-                !aResourceName.isEmpty() && ( nResId > 0 ) && ( nResId < 0x10000 ) )
-            {
-                OString aMgrName(OUStringToOString(aResourceName, RTL_TEXTENCODING_UTF8));
-                std::unique_ptr<ResMgr> pResMgr(ResMgr::CreateResMgr( aMgrName.getStr(),
-                            Application::GetSettings().GetUILanguageTag() ));
-                if ( pResMgr )
-                {
-                    ResId aResId( (sal_uInt16)nResId, *pResMgr );
-                    aResId.SetRT( RSC_STRING );
-                    if ( pResMgr->IsAvailable( aResId ) )
-                    {
-                        aReturnValue = aResId.toString();
-                    }
-                }
-            }
-        }
-    }
-    return aReturnValue;
+    return aTitle;
 }
 
 void SgaObject::SetTitle( const OUString& rTitle )
@@ -280,7 +254,7 @@ SgaObjectBmp::SgaObjectBmp( const INetURLObject& rURL )
         Init( aGraphic, rURL );
 }
 
-SgaObjectBmp::SgaObjectBmp( const Graphic& rGraphic, const INetURLObject& rURL, const OUString& )
+SgaObjectBmp::SgaObjectBmp( const Graphic& rGraphic, const INetURLObject& rURL )
 {
     if( FileExists( rURL ) )
         Init( rGraphic, rURL );
@@ -296,8 +270,8 @@ void SgaObjectBmp::WriteData( SvStream& rOut, const OUString& rDestDir ) const
 {
     // Set version
     SgaObject::WriteData( rOut, rDestDir );
-    char aDummy[ 10 ];
-    rOut.Write( aDummy, 10 );
+    char const aDummy[ 10 ] = { 0 };
+    rOut.WriteBytes(aDummy, 10);
     write_uInt16_lenPrefixed_uInt8s_FromOString(rOut, OString()); //dummy
     write_uInt16_lenPrefixed_uInt8s_FromOUString(rOut, aTitle, RTL_TEXTENCODING_UTF8);
 }
@@ -339,25 +313,25 @@ SgaObjectSound::~SgaObjectSound()
 
 BitmapEx SgaObjectSound::GetThumbBmp() const
 {
-    sal_uInt16 nId;
+    OUString sId;
 
     switch( eSoundType )
     {
-        case SOUND_COMPUTER: nId = RID_SVXBMP_GALLERY_SOUND_1; break;
-        case SOUND_MISC: nId = RID_SVXBMP_GALLERY_SOUND_2; break;
-        case SOUND_MUSIC: nId = RID_SVXBMP_GALLERY_SOUND_3; break;
-        case SOUND_NATURE: nId = RID_SVXBMP_GALLERY_SOUND_4; break;
-        case SOUND_SPEECH: nId = RID_SVXBMP_GALLERY_SOUND_5; break;
-        case SOUND_TECHNIC: nId = RID_SVXBMP_GALLERY_SOUND_6; break;
-        case SOUND_ANIMAL: nId = RID_SVXBMP_GALLERY_SOUND_7; break;
+        case SOUND_COMPUTER: sId = RID_SVXBMP_GALLERY_SOUND_1; break;
+        case SOUND_MISC: sId = RID_SVXBMP_GALLERY_SOUND_2; break;
+        case SOUND_MUSIC: sId = RID_SVXBMP_GALLERY_SOUND_3; break;
+        case SOUND_NATURE: sId = RID_SVXBMP_GALLERY_SOUND_4; break;
+        case SOUND_SPEECH: sId = RID_SVXBMP_GALLERY_SOUND_5; break;
+        case SOUND_TECHNIC: sId = RID_SVXBMP_GALLERY_SOUND_6; break;
+        case SOUND_ANIMAL: sId = RID_SVXBMP_GALLERY_SOUND_7; break;
 
         // standard
         default:
-             nId = RID_SVXBMP_GALLERY_MEDIA;
+             sId = RID_SVXBMP_GALLERY_MEDIA;
         break;
     }
 
-    const BitmapEx  aBmpEx( GAL_RES( nId ) );
+    const BitmapEx  aBmpEx(sId);
 
     return aBmpEx;
 }
@@ -377,7 +351,7 @@ void SgaObjectSound::ReadData( SvStream& rIn, sal_uInt16& rReadVersion )
     {
         sal_uInt16      nTmp16;
 
-        rIn.ReadUInt16( nTmp16 ); eSoundType = (GalSoundType) nTmp16;
+        rIn.ReadUInt16( nTmp16 ); eSoundType = static_cast<GalSoundType>(nTmp16);
 
         if( rReadVersion >= 6 )
             aTitle = read_uInt16_lenPrefixed_uInt8s_ToOUString(rIn, RTL_TEXTENCODING_UTF8);
@@ -389,8 +363,7 @@ SgaObjectAnim::SgaObjectAnim()
 }
 
 SgaObjectAnim::SgaObjectAnim( const Graphic& rGraphic,
-                              const INetURLObject& rURL,
-                              const OUString& )
+                              const INetURLObject& rURL )
 {
     aURL = rURL;
     bIsValid = CreateThumb( rGraphic );
@@ -400,8 +373,8 @@ SgaObjectINet::SgaObjectINet()
 {
 }
 
-SgaObjectINet::SgaObjectINet( const Graphic& rGraphic, const INetURLObject& rURL, const OUString& rFormatName ) :
-            SgaObjectAnim   ( rGraphic, rURL, rFormatName )
+SgaObjectINet::SgaObjectINet( const Graphic& rGraphic, const INetURLObject& rURL ) :
+            SgaObjectAnim   ( rGraphic, rURL )
 {
 }
 
@@ -478,12 +451,12 @@ bool SgaObjectSvDraw::CreateThumb( const FmFormModel& rModel )
 
         if(pPage)
         {
-            const Rectangle aObjRect(pPage->GetAllObjBoundRect());
+            const tools::Rectangle aObjRect(pPage->GetAllObjBoundRect());
 
             if(aObjRect.GetWidth() && aObjRect.GetHeight())
             {
                 ScopedVclPtrInstance< VirtualDevice > pVDev;
-                FmFormView aView(const_cast< FmFormModel* >(&rModel), pVDev);
+                FmFormView aView(const_cast< FmFormModel& >(rModel), pVDev);
 
                 aView.ShowSdrPage(const_cast< FmFormPage* >(pPage));
                 aView.MarkAllObj();
@@ -508,7 +481,7 @@ bool SgaObjectSvDraw::CreateThumb( const FmFormModel& rModel )
                     if(!!aThumbBmp)
                     {
                         aThumbBmp.Scale(Size(nTargetSizeX, nTargetSizeY), BmpScaleFlag::BestQuality);
-                        aThumbBmp.Convert(BMP_CONVERSION_8BIT_COLORS);
+                        aThumbBmp.Convert(BmpConversion::N8BitColors);
                         bRet = true;
                     }
                 }

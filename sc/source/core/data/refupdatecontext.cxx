@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "refupdatecontext.hxx"
+#include <refupdatecontext.hxx>
 #include <algorithm>
 
 namespace sc {
@@ -25,7 +25,7 @@ void UpdatedRangeNames::setUpdatedName(SCTAB nTab, sal_uInt16 nIndex)
         // Insert a new container for this sheet index.
         NameIndicesType aIndices;
         std::pair<UpdatedNamesType::iterator,bool> r =
-            maUpdatedNames.insert(UpdatedNamesType::value_type(nTab, aIndices));
+            maUpdatedNames.emplace( nTab, aIndices);
 
         if (!r.second)
             // Insertion failed for whatever reason.
@@ -77,10 +77,6 @@ bool RefUpdateContext::isDeleted() const
 }
 
 RefUpdateResult::RefUpdateResult() : mbValueChanged(false), mbReferenceModified(false), mbNameModified(false) {}
-RefUpdateResult::RefUpdateResult(const RefUpdateResult& r) :
-    mbValueChanged(r.mbValueChanged),
-    mbReferenceModified(r.mbReferenceModified),
-    mbNameModified(r.mbNameModified) {}
 
 RefUpdateInsertTabContext::RefUpdateInsertTabContext(ScDocument& rDoc, SCTAB nInsertPos, SCTAB nSheets) :
     mrDoc(rDoc), mnInsertPos(nInsertPos), mnSheets(nSheets) {}

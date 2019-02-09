@@ -28,7 +28,6 @@
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/script/provider/XScriptProvider.hpp>
 
 #include <unordered_map>
@@ -45,39 +44,38 @@ struct ProviderDetails
     css::uno::Reference< css::lang::XSingleComponentFactory > factory;
     css::uno::Reference< css::script::provider::XScriptProvider > provider;
 };
-typedef std::unordered_map < OUString, ProviderDetails , OUStringHash > ProviderDetails_hash;
+typedef std::unordered_map < OUString, ProviderDetails  > ProviderDetails_hash;
 
 
 class ProviderCache
 {
 
 public:
-     ProviderCache( const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Sequence< css::uno::Any >& scriptContext )
-        throw ( css::uno::RuntimeException );
+     /// @throws css::uno::RuntimeException
+     ProviderCache( const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Sequence< css::uno::Any >& scriptContext );
+     /// @throws css::uno::RuntimeException
      ProviderCache( const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Sequence< css::uno::Any >& scriptContext,
-        const css::uno::Sequence< OUString >& blackList )
-        throw ( css::uno::RuntimeException );
+        const css::uno::Sequence< OUString >& blackList );
     ~ProviderCache();
      css::uno::Reference< css::script::provider::XScriptProvider >
          getProvider( const OUString& providerName );
+     /// @throws css::uno::RuntimeException
      css::uno::Sequence < css::uno::Reference< css::script::provider::XScriptProvider > >
-         getAllProviders() throw ( css::uno::RuntimeException );
+         getAllProviders();
 private:
-    void populateCache()
-        throw ( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    void populateCache();
 
+    /// @throws css::uno::RuntimeException
    css::uno::Reference< css::script::provider::XScriptProvider >
-        createProvider( ProviderDetails& details ) throw ( css::uno::RuntimeException );
+        createProvider( ProviderDetails& details );
     bool isInBlackList( const OUString& serviceName )
     {
-        if ( m_sBlackList.getLength() > 0 )
+        for ( sal_Int32 index = 0; index < m_sBlackList.getLength(); index++ )
         {
-            for ( sal_Int32 index = 0; index < m_sBlackList.getLength(); index++ )
+            if ( m_sBlackList[ index ] == serviceName )
             {
-                if ( m_sBlackList[ index ].equals( serviceName ) )
-                {
-                    return true;
-                }
+                return true;
             }
         }
         return false;
@@ -85,7 +83,7 @@ private:
     css::uno::Sequence< OUString >  m_sBlackList;
     ProviderDetails_hash  m_hProviderDetailsCache;
     osl::Mutex m_mutex;
-    css::uno::Sequence< css::uno::Any >  m_Sctx;
+    css::uno::Sequence< css::uno::Any > const  m_Sctx;
     css::uno::Reference< css::uno::XComponentContext > m_xContext;
     css::uno::Reference< css::lang::XMultiComponentFactory > m_xMgr;
 

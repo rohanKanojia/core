@@ -12,10 +12,11 @@ BOOTSTRAPDIR=../Bootstrap
 include $(BOOTSTRAPDIR)/Makefile.shared
 
 native-code.cxx: $(SRCDIR)/solenv/bin/native-code.py
+	@echo "[build PY ] $@"
 	$< -j -g core -g writer -g calc -g draw -g edit > $@
 
 install:
-	./gradlew $(if $(verbose),--info) $(if $(versionCode),-PcmdVersionCode=$(versionCode)) install$(if $(DISABLE_UI),StrippedUI,FullUI)Debug
+	./gradlew $(if $(verbose),--info) $(if $(versionCode),-PcmdVersionCode=$(versionCode)) install$(if $(DISABLE_UI),StrippedUI,FullUI)$(if $(ENABLE_ANDROID_EDITING),Editing)Debug
 	@echo
 	@echo 'Run it with "make run"'
 	@echo
@@ -29,10 +30,10 @@ clean:
 	rm -f liboSettings.gradle
 
 build-gradle: liboSettings.gradle local.properties link-so
-	./gradlew $(if $(verbose),--info) $(if $(versionCode),-PcmdVersionCode=$(versionCode)) assemble$(if $(DISABLE_UI),StrippedUI,FullUI)$(if $(ENABLE_RELEASE_BUILD),Release,Debug)
+	./gradlew $(if $(verbose),--info) $(if $(versionCode),-PcmdVersionCode=$(versionCode)) assemble$(if $(DISABLE_UI),StrippedUI,FullUI)$(if $(ENABLE_ANDROID_EDITING),Editing)$(if $(ENABLE_RELEASE_BUILD),Release,Debug)
 
 run:
 	$(ANDROID_SDK_HOME)/platform-tools/adb shell am start -n $(ANDROID_PACKAGE_NAME)/.ui.LibreOfficeUIActivity
 
 debugrun:
-	$(SYSBASE)/../../../ndk-gdb --start
+	@echo "please debug with lldb from within Android Studio, or setup ndk-gdb manually (see android/README for details)"

@@ -25,7 +25,7 @@
 #include <sal/log.hxx>
 
 #include <com/sun/star/uno/genfunc.hxx>
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <typelib/typedescription.hxx>
 #include <uno/any2.h>
 
@@ -50,13 +50,13 @@ static OUString toUNOname( char const * p )
     // example: N3com3sun4star4lang24IllegalArgumentExceptionE
 
     OUStringBuffer buf( 64 );
-    assert( 'N' == *p );
+    assert( *p == 'N' );
     ++p; // skip N
 
-    while ('E' != *p)
+    while (*p != 'E')
     {
         // read chars count
-        long n = (*p++ - '0');
+        int n = *p++ - '0';
         while ('0' <= *p && '9' >= *p)
         {
             n *= 10;
@@ -64,7 +64,7 @@ static OUString toUNOname( char const * p )
         }
         buf.appendAscii( p, n );
         p += n;
-        if ('E' != *p)
+        if (*p != 'E')
             buf.append( '.' );
     }
 
@@ -81,7 +81,7 @@ static OUString toUNOname( char const * p )
 extern "C" {
 static void _GLIBCXX_CDTOR_CALLABI deleteException( void * pExc )
 {
-    __cxxabiv1::__cxa_exception const * header = (static_cast<__cxxabiv1::__cxa_exception const *>(pExc) - 1);
+    __cxxabiv1::__cxa_exception const * header = static_cast<__cxxabiv1::__cxa_exception const *>(pExc) - 1;
     typelib_TypeDescription * pTD = nullptr;
     OUString unoName( toUNOname( header->exceptionType->name() ) );
     ::typelib_typedescription_getByName( &pTD, unoName.pData );
@@ -138,8 +138,9 @@ void raiseException( uno_Any * pUnoExc, uno_Mapping * pUno2Cpp )
     __cxxabiv1::__cxa_throw( pCppExc, rtti, deleteException );
 }
 
-void fillUnoException( __cxxabiv1::__cxa_exception * header, uno_Any * pUnoExc, uno_Mapping * pCpp2Uno )
+void fillUnoException(uno_Any * pUnoExc, uno_Mapping * pCpp2Uno)
 {
+    __cxxabiv1::__cxa_exception * header = __cxxabiv1::__cxa_get_globals()->caughtExceptions;
     if (! header)
     {
         RuntimeException aRE( "no exception header!" );
@@ -149,14 +150,16 @@ void fillUnoException( __cxxabiv1::__cxa_exception * header, uno_Any * pUnoExc, 
         return;
     }
 
+    std::type_info *exceptionType = __cxxabiv1::__cxa_current_exception_type();
+
     typelib_TypeDescription * pExcTypeDescr = nullptr;
-    OUString unoName( toUNOname( header->exceptionType->name() ) );
+    OUString unoName( toUNOname( exceptionType->name() ) );
 #if OSL_DEBUG_LEVEL > 1
     OString cstr_unoName( OUStringToOString( unoName, RTL_TEXTENCODING_ASCII_US ) );
     fprintf( stderr, "> c++ exception occurred: %s\n", cstr_unoName.getStr() );
 #endif
     typelib_typedescription_getByName( &pExcTypeDescr, unoName.pData );
-    if (nullptr == pExcTypeDescr)
+    if (pExcTypeDescr == nullptr)
     {
         RuntimeException aRE( "exception type not found: " + unoName );
         Type const & rType = cppu::UnoType<decltype(aRE)>::get();

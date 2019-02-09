@@ -33,20 +33,17 @@
 class EDITENG_DLLPUBLIC SvxParaGridItem : public SfxBoolItem
 {
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxParaGridItem( const bool bSnapToGrid /*= true*/,
                      const sal_uInt16 nId  );
 
     // "pure virtual Methods" from SfxPoolItem
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*    Create(SvStream &, sal_uInt16) const override;
     virtual sal_uInt16          GetVersion( sal_uInt16 nFileVersion ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 };
 
 #endif

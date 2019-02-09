@@ -7,8 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "editeng/fieldupdater.hxx"
-#include "editeng/flditem.hxx"
+#include <memory>
+#include <editeng/fieldupdater.hxx>
+#include <editeng/flditem.hxx>
 #include <editeng/edtdlg.hxx>
 #include "editobj2.hxx"
 
@@ -22,20 +23,19 @@ class FieldUpdaterImpl
 {
     EditTextObjectImpl& mrObj;
 public:
-    explicit FieldUpdaterImpl(EditTextObject& rObj) : mrObj(*rObj.mpImpl) {}
-    FieldUpdaterImpl(const FieldUpdaterImpl& r) : mrObj(r.mrObj) {}
+    explicit FieldUpdaterImpl(EditTextObject const & rObj) : mrObj(*rObj.mpImpl) {}
 
     void updateTableFields(int nTab)
     {
         SfxItemPool* pPool = mrObj.GetPool();
         EditTextObjectImpl::ContentInfosType& rContents = mrObj.GetContents();
-        for (size_t i = 0; i < rContents.size(); ++i)
+        for (std::unique_ptr<ContentInfo> & i : rContents)
         {
-            ContentInfo& rContent = *rContents[i].get();
-            ContentInfo::XEditAttributesType& rAttribs = rContent.GetAttribs();
-            for (size_t j = 0; j < rAttribs.size(); ++j)
+            ContentInfo& rContent = *i;
+            ContentInfo::XEditAttributesType& rAttribs = rContent.GetCharAttribs();
+            for (std::unique_ptr<XEditAttribute> & rAttrib : rAttribs)
             {
-                XEditAttribute& rAttr = *rAttribs[j].get();
+                XEditAttribute& rAttr = *rAttrib;
                 const SfxPoolItem* pItem = rAttr.GetItem();
                 if (pItem->Which() != EE_FEATURE_FIELD)
                     // This is not a field item.
@@ -56,7 +56,7 @@ public:
     }
 };
 
-FieldUpdater::FieldUpdater(EditTextObject& rObj) : mpImpl(new FieldUpdaterImpl(rObj)) {}
+FieldUpdater::FieldUpdater(EditTextObject const & rObj) : mpImpl(new FieldUpdaterImpl(rObj)) {}
 FieldUpdater::FieldUpdater(const FieldUpdater& r) : mpImpl(new FieldUpdaterImpl(*r.mpImpl)) {}
 
 FieldUpdater::~FieldUpdater()

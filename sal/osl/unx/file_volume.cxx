@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/file.h"
+#include <sal/config.h>
 
-#include "osl/diagnose.h"
-#include "osl/thread.h"
-#include "rtl/alloc.h"
+#include <osl/file.h>
+
+#include <osl/diagnose.h>
+#include <osl/thread.h>
+#include <rtl/alloc.h>
 
 #include "file_error_transl.hxx"
 #include "file_url.hxx"
@@ -44,7 +46,7 @@
 #define FREEBSD 1
 #endif
 
-#if defined(SOLARIS)
+#if defined(__sun)
 
 #include <sys/mnttab.h>
 #include <sys/statvfs.h>
@@ -75,21 +77,8 @@
  *   ToDo
  *
  *   - Fix: check for corresponding struct sizes in exported functions
- *   - check size/use of oslVolumeDeviceHandle
  *   - check size/use of oslVolumeInfo
  ***********************************************************************/
-/******************************************************************************
- *
- *                  Data Type Definition
- *
- ******************************************************************************/
-
-struct oslVolumeDeviceHandleImpl
-{
-    sal_Char pszMountPoint[PATH_MAX];
-    sal_Char ident[4];
-    sal_uInt32   RefCount;
-};
 
 /******************************************************************************
  *
@@ -118,7 +107,7 @@ oslFileError osl_getVolumeInformation( rtl_uString* ustrDirectoryURL, oslVolumeI
 
 #ifdef MACOSX
     if ( macxp_resolveAlias( path, PATH_MAX ) != 0 )
-      return oslTranslateFileError( OSL_FET_ERROR, errno );
+      return oslTranslateFileError( errno );
 #endif/* MACOSX */
 
     return osl_psz_getVolumeInformation( path, pInfo, uFieldMask);
@@ -135,7 +124,7 @@ oslFileError osl_getVolumeInformation( rtl_uString* ustrDirectoryURL, oslVolumeI
 #if defined(FREEBSD) || defined(MACOSX) || defined(OPENBSD) || defined(DRAGONFLY)
 #   define OSL_detail_STATFS_STRUCT                  struct statfs
 #   define OSL_detail_STATFS(dir, sfs)               statfs((dir), (sfs))
-#   define OSL_detail_STATFS_BLKSIZ(a)               ((sal_uInt64)((a).f_bsize))
+#   define OSL_detail_STATFS_BLKSIZ(a)               (static_cast<sal_uInt64>((a).f_bsize))
 #   define OSL_detail_STATFS_TYPENAME(a)             ((a).f_fstypename)
 #if defined(OPENBSD)
 #   define OSL_detail_STATFS_ISREMOTE(a)             (rtl_str_compare((a).f_fstypename, "nfs") == 0)
@@ -151,8 +140,6 @@ oslFileError osl_getVolumeInformation( rtl_uString* ustrDirectoryURL, oslVolumeI
 #endif /* FREEBSD || MACOSX || OPENBSD */
 
 #if defined(NETBSD)
-
-#include <sys/param.h>
 
 #   define OSL_detail_STATFS_STRUCT              struct statvfs
 #   define OSL_detail_STATFS(dir, sfs)           statvfs((dir), (sfs))
@@ -172,7 +159,7 @@ oslFileError osl_getVolumeInformation( rtl_uString* ustrDirectoryURL, oslVolumeI
 #   define OSL_detail_NTFS_SUPER_MAGIC                0x5346544e
 #   define OSL_detail_STATFS_STRUCT                   struct statfs
 #   define OSL_detail_STATFS(dir, sfs)                statfs((dir), (sfs))
-#   define OSL_detail_STATFS_BLKSIZ(a)                ((sal_uInt64)((a).f_bsize))
+#   define OSL_detail_STATFS_BLKSIZ(a)                (static_cast<sal_uInt64>((a).f_bsize))
 #   define OSL_detail_STATFS_IS_NFS(a)                (OSL_detail_NFS_SUPER_MAGIC == (a).f_type)
 #   define OSL_detail_STATFS_IS_SMB(a)                (OSL_detail_SMB_SUPER_MAGIC == (a).f_type)
 #   define OSL_detail_STATFS_ISREMOTE(a)              (OSL_detail_STATFS_IS_NFS((a)) || OSL_detail_STATFS_IS_SMB((a)))
@@ -180,7 +167,7 @@ oslFileError osl_getVolumeInformation( rtl_uString* ustrDirectoryURL, oslVolumeI
 #   define OSL_detail_STATFS_IS_CASE_PRESERVING_FS(a) ((OSL_detail_MSDOS_SUPER_MAGIC != (a).f_type))
 #endif /* LINUX */
 
-#if defined(SOLARIS)
+#if defined(__sun)
 #   define OSL_detail_STATFS_STRUCT                   struct statvfs
 #   define OSL_detail_STATFS(dir, sfs)                statvfs((dir), (sfs))
 #   define OSL_detail_STATFS_BLKSIZ(a)                ((sal_uInt64)((a).f_frsize))
@@ -192,7 +179,7 @@ oslFileError osl_getVolumeInformation( rtl_uString* ustrDirectoryURL, oslVolumeI
    of the target platforms fix it!!!! */
 #   define OSL_detail_STATFS_IS_CASE_SENSITIVE_FS(a)  (true)
 #   define OSL_detail_STATFS_IS_CASE_PRESERVING_FS(a) (true)
-#endif /* SOLARIS */
+#endif /* __sun */
 
 #   define OSL_detail_STATFS_INIT(a)         (memset(&(a), 0, sizeof(OSL_detail_STATFS_STRUCT)))
 
@@ -227,16 +214,18 @@ static oslFileError osl_psz_getVolumeInformation (
     {
         OSL_detail_STATFS_STRUCT sfs;
         OSL_detail_STATFS_INIT(sfs);
-        if ((OSL_detail_STATFS(pszDirectory, &sfs)) < 0)
+        if ((OSL_detail_STATFS(pszDirectory, &sfs)) < (0))
         {
-            oslFileError result = oslTranslateFileError(OSL_FET_ERROR, errno);
+            oslFileError result = oslTranslateFileError(errno);
             return result;
         }
 
         /* FIXME: how to detect the kind of storage (fixed, cdrom, ...) */
         if (uFieldMask & osl_VolumeInfo_Mask_Attributes)
         {
-            if (OSL_detail_STATFS_ISREMOTE(sfs))
+            bool const remote = OSL_detail_STATFS_ISREMOTE(sfs);
+                // extracted from the 'if' to avoid Clang -Wunreachable-code
+            if (remote)
                 pInfo->uAttributes  |= osl_Volume_Attribute_Remote;
 
             pInfo->uValidFields |= osl_VolumeInfo_Mask_Attributes;
@@ -259,7 +248,7 @@ static oslFileError osl_psz_getVolumeInformation (
             (uFieldMask & osl_VolumeInfo_Mask_UsedSpace))
         {
             pInfo->uTotalSpace   = OSL_detail_STATFS_BLKSIZ(sfs);
-            pInfo->uTotalSpace  *= (sal_uInt64)(sfs.f_blocks);
+            pInfo->uTotalSpace  *= static_cast<sal_uInt64>(sfs.f_blocks);
             pInfo->uValidFields |= osl_VolumeInfo_Mask_TotalSpace;
         }
 
@@ -269,9 +258,9 @@ static oslFileError osl_psz_getVolumeInformation (
             pInfo->uFreeSpace = OSL_detail_STATFS_BLKSIZ(sfs);
 
             if (getuid() == 0)
-                pInfo->uFreeSpace *= (sal_uInt64)(sfs.f_bfree);
+                pInfo->uFreeSpace *= static_cast<sal_uInt64>(sfs.f_bfree);
             else
-                pInfo->uFreeSpace *= (sal_uInt64)(sfs.f_bavail);
+                pInfo->uFreeSpace *= static_cast<sal_uInt64>(sfs.f_bavail);
 
             pInfo->uValidFields |= osl_VolumeInfo_Mask_FreeSpace;
         }
@@ -309,7 +298,7 @@ static oslFileError osl_psz_getVolumeInformation (
         long nLen = pathconf(pszDirectory, _PC_NAME_MAX);
         if (nLen > 0)
         {
-            pInfo->uMaxNameLength = (sal_uInt32)nLen;
+            pInfo->uMaxNameLength = static_cast<sal_uInt32>(nLen);
             pInfo->uValidFields |= osl_VolumeInfo_Mask_MaxNameLength;
         }
     }
@@ -320,7 +309,7 @@ static oslFileError osl_psz_getVolumeInformation (
         long nLen = pathconf (pszDirectory, _PC_PATH_MAX);
         if (nLen > 0)
         {
-            pInfo->uMaxPathLength  = (sal_uInt32)nLen;
+            pInfo->uMaxPathLength  = static_cast<sal_uInt32>(nLen);
             pInfo->uValidFields   |= osl_VolumeInfo_Mask_MaxPathLength;
         }
     }
@@ -328,105 +317,19 @@ static oslFileError osl_psz_getVolumeInformation (
     return osl_File_E_None;
 }
 
-/******************************************************************************
- *
- *                  GENERIC FLOPPY FUNCTIONS
- *
- *****************************************************************************/
-
-/*****************************************
- * osl_getVolumeDeviceMountPath
- ****************************************/
-static rtl_uString* oslMakeUStrFromPsz(const sal_Char* pszStr, rtl_uString** ustrValid)
+oslFileError osl_getVolumeDeviceMountPath( oslVolumeDeviceHandle, rtl_uString ** )
 {
-    rtl_string2UString(
-        ustrValid,
-        pszStr,
-        rtl_str_getLength( pszStr ),
-        osl_getThreadTextEncoding(),
-        OUSTRING_TO_OSTRING_CVTFLAGS );
-    OSL_ASSERT(*ustrValid != nullptr);
-
-    return *ustrValid;
+    return osl_File_E_INVAL;
 }
 
-oslFileError osl_getVolumeDeviceMountPath( oslVolumeDeviceHandle Handle, rtl_uString **pstrPath )
+oslFileError osl_acquireVolumeDeviceHandle( oslVolumeDeviceHandle )
 {
-    oslVolumeDeviceHandleImpl* pItem = static_cast<oslVolumeDeviceHandleImpl*>(Handle);
-    sal_Char Buffer[PATH_MAX];
-
-    Buffer[0] = '\0';
-
-    if ( pItem == nullptr || pstrPath == nullptr )
-    {
-        return osl_File_E_INVAL;
-    }
-
-    if ( pItem->ident[0] != 'O' || pItem->ident[1] != 'V' || pItem->ident[2] != 'D' || pItem->ident[3] != 'H' )
-    {
-        return osl_File_E_INVAL;
-    }
-
-    snprintf(Buffer, sizeof(Buffer), "file://%s", pItem->pszMountPoint);
-
-#ifdef DEBUG_OSL_FILE
-    fprintf(stderr,"Mount Point is: '%s'\n",Buffer);
-#endif
-
-    oslMakeUStrFromPsz(Buffer, pstrPath);
-
-    return osl_File_E_None;
+    return osl_File_E_INVAL;
 }
 
-/*****************************************
- * osl_acquireVolumeDeviceHandle
- ****************************************/
-
-oslFileError SAL_CALL osl_acquireVolumeDeviceHandle( oslVolumeDeviceHandle Handle )
+oslFileError osl_releaseVolumeDeviceHandle( oslVolumeDeviceHandle )
 {
-    oslVolumeDeviceHandleImpl* pItem =static_cast<oslVolumeDeviceHandleImpl*>(Handle);
-
-    if ( pItem == nullptr )
-    {
-        return osl_File_E_INVAL;
-    }
-
-    if ( pItem->ident[0] != 'O' || pItem->ident[1] != 'V' || pItem->ident[2] != 'D' || pItem->ident[3] != 'H' )
-    {
-        return osl_File_E_INVAL;
-    }
-
-    ++pItem->RefCount;
-
-    return osl_File_E_None;
-}
-
-/*****************************************
- * osl_releaseVolumeDeviceHandle
- ****************************************/
-
-oslFileError osl_releaseVolumeDeviceHandle( oslVolumeDeviceHandle Handle )
-{
-    oslVolumeDeviceHandleImpl* pItem =static_cast<oslVolumeDeviceHandleImpl*>(Handle);
-
-    if ( pItem == nullptr )
-    {
-        return osl_File_E_INVAL;
-    }
-
-    if ( pItem->ident[0] != 'O' || pItem->ident[1] != 'V' || pItem->ident[2] != 'D' || pItem->ident[3] != 'H' )
-    {
-        return osl_File_E_INVAL;
-    }
-
-    --pItem->RefCount;
-
-    if ( pItem->RefCount == 0 )
-    {
-        rtl_freeMemory(pItem);
-    }
-
-    return osl_File_E_None;
+    return osl_File_E_INVAL;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -71,7 +72,7 @@ class OnewayExecutor extends Thread
     /**
      * @member  m_rLink     the object, which wish to be called back by this thread
      * @member  m_nRequest  describes the type of the original request (means the
-     *                      called oneyway method)
+     *                      called oneway method)
      * @member  m_lParams   list of parameters of the original request
      */
     private final IOnewayLink m_rLink     ;
@@ -184,3 +185,5 @@ class OnewayExecutor extends Thread
             }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

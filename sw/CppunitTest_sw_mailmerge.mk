@@ -19,8 +19,10 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_mailmerge, \
     cppuhelper \
     sal \
     sfx \
+    svl \
     sw \
     test \
+    tl \
     unotest \
     utl \
 ))
@@ -31,8 +33,9 @@ $(eval $(call gb_CppunitTest_use_externals,sw_mailmerge, \
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_mailmerge,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_components,sw_mailmerge, \
@@ -41,12 +44,16 @@ $(eval $(call gb_CppunitTest_use_components,sw_mailmerge, \
     configmgr/source/configmgr \
     connectivity/source/cpool/dbpool2 \
     connectivity/source/drivers/calc/calc \
+    connectivity/source/drivers/writer/writer \
     connectivity/source/manager/sdbc2 \
     dbaccess/source/filter/xml/dbaxml \
     dbaccess/util/dba \
     embeddedobj/util/embobj \
     filter/source/config/cache/filterconfig1 \
+    filter/source/odfflatxml/odfflatxml \
     filter/source/storagefilterdetect/storagefd \
+    filter/source/xmlfilteradaptor/xmlfa \
+    filter/source/xmlfilterdetect/xmlfd \
     forms/util/frm \
     framework/util/fwk \
     i18npool/util/i18npool \
@@ -57,6 +64,7 @@ $(eval $(call gb_CppunitTest_use_components,sw_mailmerge, \
     package/util/package2 \
     sax/source/expatwrap/expwrap \
     sc/util/sc \
+    sc/util/scfilt \
     sfx2/util/sfx \
     sot/util/sot \
     svl/source/fsstor/fsstorage \
@@ -72,12 +80,14 @@ $(eval $(call gb_CppunitTest_use_components,sw_mailmerge, \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
     uui/util/uui \
+    vcl/vcl.common \
     $(if $(filter-out MACOSX WNT,$(OS)), \
-        $(if $(ENABLE_HEADLESS),, \
+        $(if $(DISABLE_GUI),, \
             vcl/vcl.unx \
         ) \
     ) \
     xmloff/util/xo \
+    xmlscript/util/xmlscript \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_mailmerge))
@@ -90,6 +100,10 @@ $(eval $(call gb_CppunitTest_set_include,sw_mailmerge,\
     -I$(SRCDIR)/sw/qa/extras/inc \
     -I$(SRCDIR)/sw/source/uibase/inc \
     $$(INCLUDE) \
+))
+
+$(eval $(call gb_CppunitTest_use_uiconfigs,sw_mailmerge,\
+	modules/swriter \
 ))
 
 # vim: set noet sw=4 ts=4:

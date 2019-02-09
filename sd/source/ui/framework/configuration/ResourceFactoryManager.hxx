@@ -26,11 +26,13 @@
 #include <utility>
 #include <vector>
 
-#include <com/sun/star/drawing/framework/XControllerManager.hpp>
-#include <com/sun/star/drawing/framework/XModuleController.hpp>
-#include <com/sun/star/drawing/framework/XResourceFactoryManager.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <rtl/ustring.hxx>
 #include <osl/mutex.hxx>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XControllerManager; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceFactory; } } } } }
+namespace com { namespace sun { namespace star { namespace util { class XURLTransformer; } } } }
 
 namespace sd { namespace framework {
 
@@ -49,29 +51,29 @@ public:
             The type of the resource that will be created by the factory.
         @param rxFactory
             The factory that will create resource objects of the specified type.
+        @throws css::uno::RuntimeException
     */
     void AddFactory (
         const OUString& rsURL,
-        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxFactory)
-        throw (css::uno::RuntimeException);
+        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxFactory);
 
     /** Unregister the specified factory.
         @param rsURL
             Unregister only the factory for this URL.  When the same factory
             is registered for other URLs then these remain registered.
+        @throws css::uno::RuntimeException
     */
     void RemoveFactoryForURL(
-        const OUString& rsURL)
-        throw (css::uno::RuntimeException);
+        const OUString& rsURL);
 
     /** Unregister the specified factory.
         @param rxFactory
             Unregister the this factory for all URLs that it has been
             registered for.
+        @throws css::uno::RuntimeException
     */
     void RemoveFactoryForReference(
-        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxFactory)
-        throw (css::uno::RuntimeException);
+        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxFactory);
 
     /** Return a factory that can create resources specified by the given URL.
         @param rsCompleteURL
@@ -80,17 +82,16 @@ public:
             When a factory for the specified URL has been registered by a
             previous call to AddFactory() then a reference to that factory
             is returned.  Otherwise an empty reference is returned.
+        @throws css::uno::RuntimeException
     */
     css::uno::Reference<css::drawing::framework::XResourceFactory> GetFactory (
-        const OUString& rsURL)
-        throw (css::uno::RuntimeException);
+        const OUString& rsURL);
 
 private:
     ::osl::Mutex maMutex;
     typedef std::unordered_map<
         OUString,
-        css::uno::Reference<css::drawing::framework::XResourceFactory>,
-        OUStringHash> FactoryMap;
+        css::uno::Reference<css::drawing::framework::XResourceFactory> > FactoryMap;
     FactoryMap maFactoryMap;
 
     typedef ::std::vector<
@@ -109,10 +110,10 @@ private:
             stripped off by the caller.
         @return
             When the factory has not yet been added then return NULL.
+        @throws css::uno::RuntimeException
     */
     css::uno::Reference<css::drawing::framework::XResourceFactory> FindFactory (
-        const OUString& rsURLBase)
-        throw (css::uno::RuntimeException);
+        const OUString& rsURLBase);
 };
 
 } } // end of namespace sd::framework

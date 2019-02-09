@@ -30,15 +30,16 @@ namespace dbaui
         VclPtr<Splitter>                m_pSplitter;
         VclPtr<vcl::Window>             m_pLeft;
         VclPtr<vcl::Window>             m_pRight;
-        bool                            m_bVertical;
+        ImplSVEvent *m_pResizeId;
 
         void ImplInitSettings();
-        DECL_LINK_TYPED( SplitHdl, Splitter*, void );
+        DECL_LINK(SplitHdl, Splitter*, void);
+        DECL_LINK(ResizeHdl, void*, void);
     protected:
         virtual void DataChanged(const DataChangedEvent& rDCEvt) override;
     public:
         OSplitterView(vcl::Window* _pParent);
-        virtual ~OSplitterView();
+        virtual ~OSplitterView() override;
         // Window overrides
         virtual void dispose() override;
         virtual void GetFocus() override;

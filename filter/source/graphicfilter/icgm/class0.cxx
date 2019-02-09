@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <main.hxx>
-#include <outact.hxx>
+#include "main.hxx"
+#include "outact.hxx"
 
 
 void CGM::ImplDoClass0()
@@ -33,13 +33,12 @@ void CGM::ImplDoClass0()
         break;
         case 0x02 : /*End MetaFile*/
         {
-            if ( mpBitmapInUse )                            // process existend graphic
+            if ( mpBitmapInUse )                            // process existing graphic
             {
                 CGMBitmapDescriptor* pBmpDesc = mpBitmapInUse->GetBitmap();
                 // do anything with the bitmap
                 mpOutAct->DrawBitmap( pBmpDesc );
-                delete mpBitmapInUse;
-                mpBitmapInUse = nullptr;
+                mpBitmapInUse.reset();
             }
             mbIsFinished = true;
             mbPictureBody = false;
@@ -70,13 +69,12 @@ void CGM::ImplDoClass0()
         {
             if ( mbPicture )
             {
-                if ( mpBitmapInUse )                            // process existend graphic
+                if ( mpBitmapInUse )                            // process existing graphic
                 {
                     CGMBitmapDescriptor* pBmpDesc = mpBitmapInUse->GetBitmap();
                     // do anything with the bitmap
                     mpOutAct->DrawBitmap( pBmpDesc );
-                    delete mpBitmapInUse;
-                    mpBitmapInUse = nullptr;
+                    mpBitmapInUse.reset();
                 }
                 mpOutAct->EndFigure();                          // close potential figures
                 mpOutAct->EndGrouping();                        // finish potential groups

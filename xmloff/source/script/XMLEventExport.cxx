@@ -25,6 +25,8 @@
 
 #include <com/sun/star/container/XNameReplace.hpp>
 #include <tools/debug.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -38,41 +40,27 @@ using ::com::sun::star::beans::PropertyValue;
 using ::com::sun::star::document::XEventsSupplier;
 using ::com::sun::star::container::XNameReplace;
 using ::com::sun::star::container::XNameAccess;
-using ::xmloff::token::GetXMLToken;
 using ::xmloff::token::XML_EVENT_LISTENERS;
 
+static const OUStringLiteral gsEventType("EventType");
 
-XMLEventExport::XMLEventExport(SvXMLExport& rExp,
-                         const XMLEventNameTranslation* pTranslationTable) :
-    sEventType("EventType"),
+XMLEventExport::XMLEventExport(SvXMLExport& rExp) :
     rExport(rExp),
     bExtNamespace(false)
 {
-    AddTranslationTable(pTranslationTable);
 }
 
 XMLEventExport::~XMLEventExport()
 {
     // delete all handlers
-    HandlerMap::iterator aEnd = aHandlerMap.end();
-    for( HandlerMap::iterator aIter =
-             aHandlerMap.begin();
-         aIter != aEnd;
-         ++aIter )
-    {
-        delete aIter->second;
-    }
     aHandlerMap.clear();
 }
 
 void XMLEventExport::AddHandler( const OUString& rName,
-                                 XMLEventExportHandler* pHandler )
+                                 std::unique_ptr<XMLEventExportHandler> pHandler )
 {
-    DBG_ASSERT(pHandler != nullptr, "Need EventExportHandler");
-    if (pHandler != nullptr)
-    {
-        aHandlerMap[rName] = pHandler;
-    }
+    assert(pHandler);
+    aHandlerMap[rName] = std::move(pHandler);
 }
 
 void XMLEventExport::AddTranslationTable(
@@ -92,7 +80,7 @@ void XMLEventExport::AddTranslationTable(
     // else? ignore!
 }
 
-void XMLEventExport::Export( Reference<XEventsSupplier> & rSupplier,
+void XMLEventExport::Export( Reference<XEventsSupplier> const & rSupplier,
                              bool bWhitespace)
 {
     if (rSupplier.is())
@@ -103,14 +91,14 @@ void XMLEventExport::Export( Reference<XEventsSupplier> & rSupplier,
     // else: no supplier, no export -> ignore!
 }
 
-void XMLEventExport::Export( Reference<XNameReplace> & rReplace,
+void XMLEventExport::Export( Reference<XNameReplace> const & rReplace,
                              bool bWhitespace)
 {
     Reference<XNameAccess> xAccess(rReplace, UNO_QUERY);
     Export(xAccess, bWhitespace);
 }
 
-void XMLEventExport::Export( Reference<XNameAccess> & rAccess,
+void XMLEventExport::Export( Reference<XNameAccess> const & rAccess,
                              bool bWhitespace)
 {
     // early out if we don't actually get any events
@@ -141,15 +129,11 @@ void XMLEventExport::Export( Reference<XNameAccess> & rAccess,
             // now export the current event
             ExportEvent( aValues, rXmlName, bWhitespace, bStarted );
         }
-#ifdef DBG_UTIL
         else
         {
             // don't proceed further
-            OString aStr("Unknown event name:" );
-            aStr += OUStringToOString( aNames[i], RTL_TEXTENCODING_UTF8 );
-            OSL_FAIL( aStr.getStr() );
+            SAL_WARN("xmloff", "Unknown event name:" << aNames[i] );
         }
-#endif
     }
 
     // close <script:events> element (if it was opened before)
@@ -159,7 +143,7 @@ void XMLEventExport::Export( Reference<XNameAccess> & rAccess,
     }
 }
 
-void XMLEventExport::ExportExt( Reference<XNameAccess> & rAccess )
+void XMLEventExport::ExportExt( Reference<XNameAccess> const & rAccess )
 {
     // set bExtNamespace flag to use XML_NAMESPACE_OFFICE_EXT namespace
     // for events element (not for child elements)
@@ -168,7 +152,7 @@ void XMLEventExport::ExportExt( Reference<XNameAccess> & rAccess )
     bExtNamespace = false;          // reset for future Export calls
 }
 
-/// export a singular event and wirte <office:events> container
+/// export a singular event and write <office:events> container
 void XMLEventExport::ExportSingleEvent(
     Sequence<PropertyValue>& rEventValues,
     const OUString& rApiEventName,
@@ -190,15 +174,11 @@ void XMLEventExport::ExportSingleEvent(
             EndElement(bUseWhitespace);
         }
     }
-#ifdef DBG_UTIL
     else
     {
         // don't proceed further
-        OString aStr("Unknown event name:" );
-        aStr += OUStringToOString( rApiEventName, RTL_TEXTENCODING_UTF8 );
-        OSL_FAIL( aStr.getStr() );
+        SAL_WARN("xmloff", "Unknown event name:" << rApiEventName );
     }
-#endif
 }
 
 
@@ -215,7 +195,7 @@ void XMLEventExport::ExportEvent(
 
     for(sal_Int32 nVal = 0; nVal < nValues; nVal++)
     {
-        if (sEventType.equals(pValues[nVal].Name))
+        if (gsEventType == pValues[nVal].Name)
         {
             // found! Now find handler and delegate
             OUString sType;

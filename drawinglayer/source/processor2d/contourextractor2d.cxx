@@ -67,10 +67,10 @@ namespace drawinglayer
                         {
                             // line polygons need to be represented as open polygons to differentiate them
                             // from filled polygons
-                            basegfx::tools::openWithGeometryChange(aLocalPolygon);
+                            basegfx::utils::openWithGeometryChange(aLocalPolygon);
                         }
 
-                        maExtractedContour.push_back(basegfx::B2DPolyPolygon(aLocalPolygon));
+                        maExtractedContour.emplace_back(aLocalPolygon);
                     }
                     break;
                 }
@@ -88,9 +88,9 @@ namespace drawinglayer
                     // extract BoundRect from bitmaps in world coordinates
                     const primitive2d::BitmapPrimitive2D& rBitmapCandidate(static_cast< const primitive2d::BitmapPrimitive2D& >(rCandidate));
                     basegfx::B2DHomMatrix aLocalTransform(getViewInformation2D().getObjectTransformation() * rBitmapCandidate.getTransform());
-                    basegfx::B2DPolygon aPolygon(basegfx::tools::createUnitPolygon());
+                    basegfx::B2DPolygon aPolygon(basegfx::utils::createUnitPolygon());
                     aPolygon.transform(aLocalTransform);
-                    maExtractedContour.push_back(basegfx::B2DPolyPolygon(aPolygon));
+                    maExtractedContour.emplace_back(aPolygon);
                     break;
                 }
                 case PRIMITIVE2D_ID_METAFILEPRIMITIVE2D :
@@ -98,9 +98,9 @@ namespace drawinglayer
                     // extract BoundRect from MetaFiles in world coordinates
                     const primitive2d::MetafilePrimitive2D& rMetaCandidate(static_cast< const primitive2d::MetafilePrimitive2D& >(rCandidate));
                     basegfx::B2DHomMatrix aLocalTransform(getViewInformation2D().getObjectTransformation() * rMetaCandidate.getTransform());
-                    basegfx::B2DPolygon aPolygon(basegfx::tools::createUnitPolygon());
+                    basegfx::B2DPolygon aPolygon(basegfx::utils::createUnitPolygon());
                     aPolygon.transform(aLocalTransform);
-                    maExtractedContour.push_back(basegfx::B2DPolyPolygon(aPolygon));
+                    maExtractedContour.emplace_back(aPolygon);
                     break;
                 }
                 case PRIMITIVE2D_ID_TRANSPARENCEPRIMITIVE2D :
@@ -116,7 +116,7 @@ namespace drawinglayer
                     const primitive2d::MaskPrimitive2D& rMaskCandidate(static_cast< const primitive2d::MaskPrimitive2D& >(rCandidate));
                     basegfx::B2DPolyPolygon aMask(rMaskCandidate.getMask());
                     aMask.transform(getViewInformation2D().getObjectTransformation());
-                    maExtractedContour.push_back(basegfx::B2DPolyPolygon(aMask));
+                    maExtractedContour.push_back(aMask);
                     break;
                 }
                 case PRIMITIVE2D_ID_TRANSFORMPRIMITIVE2D :
@@ -148,7 +148,7 @@ namespace drawinglayer
                     // 2D Scene primitive containing 3D stuff; extract 2D contour in world coordinates
                     const primitive2d::ScenePrimitive2D& rScenePrimitive2DCandidate(static_cast< const primitive2d::ScenePrimitive2D& >(rCandidate));
                     const primitive2d::Primitive2DContainer xExtracted2DSceneGeometry(rScenePrimitive2DCandidate.getGeometry2D());
-                    const primitive2d::Primitive2DContainer xExtracted2DSceneShadow(rScenePrimitive2DCandidate.getShadow2D(getViewInformation2D()));
+                    const primitive2d::Primitive2DContainer xExtracted2DSceneShadow(rScenePrimitive2DCandidate.getShadow2D());
 
                     // process content
                     if(!xExtracted2DSceneGeometry.empty())
@@ -177,13 +177,13 @@ namespace drawinglayer
                     // primitives who's BoundRect will be added in world coordinates
                     basegfx::B2DRange aRange(rCandidate.getB2DRange(getViewInformation2D()));
                     aRange.transform(getViewInformation2D().getObjectTransformation());
-                    maExtractedContour.push_back(basegfx::B2DPolyPolygon(basegfx::tools::createPolygonFromRect(aRange)));
+                    maExtractedContour.emplace_back(basegfx::utils::createPolygonFromRect(aRange));
                     break;
                 }
                 default :
                 {
                     // process recursively
-                    process(rCandidate.get2DDecomposition(getViewInformation2D()));
+                    process(rCandidate);
                     break;
                 }
             }

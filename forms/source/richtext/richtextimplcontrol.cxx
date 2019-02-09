@@ -20,6 +20,9 @@
 #include "richtextimplcontrol.hxx"
 #include "textattributelistener.hxx"
 #include "richtextengine.hxx"
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
+#include <i18nlangtag/languagetag.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/editview.hxx>
 #include <editeng/eeitem.hxx>
@@ -34,6 +37,7 @@
 #include <vcl/window.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/commandevent.hxx>
 
 #define EMPTY_PAPER_SIZE    0x7FFFFFFF
 
@@ -48,7 +52,6 @@ namespace frm
         ,m_pVScroll             ( nullptr                )
         ,m_pScrollCorner        ( nullptr                )
         ,m_pEngine              ( _pEngine            )
-        ,m_pView                ( nullptr                )
         ,m_pTextAttrListener    ( _pTextAttrListener  )
         ,m_pSelectionListener   ( _pSelectionListener )
         ,m_bHasEverBeenShown    ( false               )
@@ -65,8 +68,8 @@ namespace frm
         m_pAntiImpl->SetMapMode( aRefDeviceMapMode );
         m_pViewport->SetMapMode( aRefDeviceMapMode );
 
-        m_pView = new EditView( m_pEngine, m_pViewport );
-        m_pEngine->InsertView( m_pView );
+        m_pView.reset(new EditView( m_pEngine, m_pViewport ));
+        m_pEngine->InsertView( m_pView.get() );
         m_pViewport->setView( *m_pView );
 
         m_pEngine->registerEngineStatusListener( this );
@@ -78,7 +81,7 @@ namespace frm
         }
 
         // ensure that it's initially scrolled to the upper left
-        m_pView->SetVisArea( Rectangle( Point( ), m_pViewport->GetOutputSize() ) );
+        m_pView->SetVisArea( tools::Rectangle( Point( ), m_pViewport->GetOutputSize() ) );
 
         ensureScrollbars();
 
@@ -88,9 +91,9 @@ namespace frm
 
     RichTextControlImpl::~RichTextControlImpl( )
     {
-        m_pEngine->RemoveView( m_pView );
+        m_pEngine->RemoveView( m_pView.get() );
         m_pEngine->revokeEngineStatusListener( this );
-        delete m_pView;
+        m_pView.reset();
         m_pViewport.disposeAndClear();
         m_pHScroll.disposeAndClear();
         m_pVScroll.disposeAndClear();
@@ -98,7 +101,7 @@ namespace frm
     }
 
 
-    void RichTextControlImpl::implUpdateAttribute( AttributeHandlerPool::const_iterator _pHandler )
+    void RichTextControlImpl::implUpdateAttribute( const AttributeHandlerPool::const_iterator& _pHandler )
     {
         if  (  ( _pHandler->first == SID_ATTR_CHAR_WEIGHT )
             || ( _pHandler->first == SID_ATTR_CHAR_POSTURE )
@@ -114,7 +117,7 @@ namespace frm
             // This is useful in case the observer is for instance a toolbox which contains only
             // an, e.g., "bold" slot, and thus not interested in the particular script type of the
             // current selection.
-            SvxScriptSetItem aNormalizedSet( (WhichId)_pHandler->first, *m_pView->GetAttribs().GetPool() );
+            SvxScriptSetItem aNormalizedSet( static_cast<WhichId>(_pHandler->first), *m_pView->GetAttribs().GetPool() );
             normalizeScriptDependentAttribute( aNormalizedSet );
 
             implCheckUpdateCache( _pHandler->first, _pHandler->second->getState( aNormalizedSet.GetItemSet() ) );
@@ -146,7 +149,7 @@ namespace frm
         if ( m_pSelectionListener && m_pView )
         {
             ESelection aCurrentSelection = m_pView->GetSelection();
-            if ( !aCurrentSelection.IsEqual( m_aLastKnownSelection ) )
+            if ( aCurrentSelection != m_aLastKnownSelection )
             {
                 m_aLastKnownSelection = aCurrentSelection;
                 m_pSelectionListener->onSelectionChanged( m_aLastKnownSelection );
@@ -191,12 +194,12 @@ namespace frm
                 return;
             SAL_WARN_IF( _nAttributeId != aHandler->getAttributeId(), "forms.richtext", "RichTextControlImpl::enableAttributeNotification: suspicious handler!" );
 
-            aHandlerPos = m_aAttributeHandlers.insert( AttributeHandlerPool::value_type( _nAttributeId , aHandler ) ).first;
+            aHandlerPos = m_aAttributeHandlers.emplace( _nAttributeId , aHandler ).first;
         }
 
         // remember the listener
         if ( _pListener )
-            m_aAttributeListeners.insert( AttributeListenerPool::value_type( _nAttributeId, _pListener ) );
+            m_aAttributeListeners.emplace( _nAttributeId, _pListener );
 
         // update (and broadcast) the state of this attribute
         updateAttribute( _nAttributeId );
@@ -225,10 +228,9 @@ namespace frm
         WhichId nNormalizedWhichId = _rScriptSetItem.GetItemSet().GetPool()->GetWhich( _rScriptSetItem.Which() );
         if ( pNormalizedItem )
         {
-            SfxPoolItem* pProperWhich = pNormalizedItem->Clone();
+            std::unique_ptr<SfxPoolItem> pProperWhich(pNormalizedItem->Clone());
             pProperWhich->SetWhich( nNormalizedWhichId );
             _rScriptSetItem.GetItemSet().Put( *pProperWhich );
-            DELETEZ( pProperWhich );
         }
         else
             _rScriptSetItem.GetItemSet().InvalidateItem( nNormalizedWhichId );
@@ -240,7 +242,7 @@ namespace frm
         StateCache::iterator aCachePos = m_aLastKnownStates.find( _nAttribute );
         if ( aCachePos == m_aLastKnownStates.end() )
         {   // nothing known about this attribute, yet
-            m_aLastKnownStates.insert( StateCache::value_type( _nAttribute, _rState ) );
+            m_aLastKnownStates.emplace( _nAttribute, _rState );
         }
         else
         {
@@ -276,10 +278,10 @@ namespace frm
     {
         EditStatusFlags nStatusWord( _rStatus.GetStatusWord() );
         if  (   ( nStatusWord & EditStatusFlags::TEXTWIDTHCHANGED )
-            ||  ( nStatusWord & EditStatusFlags::TEXTHEIGHTCHANGED )
+            ||  ( nStatusWord & EditStatusFlags::TextHeightChanged )
             )
         {
-            if ( ( nStatusWord & EditStatusFlags::TEXTHEIGHTCHANGED ) && windowHasAutomaticLineBreak() )
+            if ( ( nStatusWord & EditStatusFlags::TextHeightChanged ) && windowHasAutomaticLineBreak() )
                 m_pEngine->SetPaperSize( Size( m_pEngine->GetPaperSize().Width(), m_pEngine->GetTextHeight() ) );
 
             updateScrollbars();
@@ -311,19 +313,19 @@ namespace frm
     }
 
 
-    IMPL_LINK_NOARG_TYPED( RichTextControlImpl, OnInvalidateAllAttributes, LinkParamNone*, void )
+    IMPL_LINK_NOARG( RichTextControlImpl, OnInvalidateAllAttributes, LinkParamNone*, void )
     {
         updateAllAttributes();
     }
 
 
-    IMPL_LINK_TYPED( RichTextControlImpl, OnHScroll, ScrollBar*, _pScrollbar, void )
+    IMPL_LINK( RichTextControlImpl, OnHScroll, ScrollBar*, _pScrollbar, void )
     {
         m_pView->Scroll( -_pScrollbar->GetDelta(), 0, ScrollRangeCheck::PaperWidthTextSize );
     }
 
 
-    IMPL_LINK_TYPED( RichTextControlImpl, OnVScroll, ScrollBar*, _pScrollbar, void )
+    IMPL_LINK( RichTextControlImpl, OnVScroll, ScrollBar*, _pScrollbar, void )
     {
         m_pView->Scroll( 0, -_pScrollbar->GetDelta(), ScrollRangeCheck::PaperWidthTextSize );
     }
@@ -409,8 +411,8 @@ namespace frm
         // the size of the viewport - note that the viewport does *not* occupy all the place
         // which is left when subtracting the scrollbar width/height
         Size aViewportPlaygroundPixel( aPlaygroundSizePixel );
-        aViewportPlaygroundPixel.Width() = ::std::max( long( 10 ), long( aViewportPlaygroundPixel.Width() - nScrollBarWidth ) );
-        aViewportPlaygroundPixel.Height() = ::std::max( long( 10 ), long( aViewportPlaygroundPixel.Height() - nScrollBarHeight ) );
+        aViewportPlaygroundPixel.setWidth( ::std::max( long( 10 ), long( aViewportPlaygroundPixel.Width() - nScrollBarWidth ) ) );
+        aViewportPlaygroundPixel.setHeight( ::std::max( long( 10 ), long( aViewportPlaygroundPixel.Height() - nScrollBarHeight ) ) );
         Size aViewportPlaygroundLogic( m_pViewport->PixelToLogic( aViewportPlaygroundPixel ) );
 
         const long nOffset = 2;
@@ -432,8 +434,8 @@ namespace frm
             m_pEngine->SetPaperSize( Size( aViewportSizeLogic.Width(), m_pEngine->GetTextHeight() ) );
 
         // output area of the view
-        m_pView->SetOutputArea( Rectangle( Point( ), aViewportSizeLogic ) );
-        m_pView->SetVisArea( Rectangle( Point( ), aViewportSizeLogic ) );
+        m_pView->SetOutputArea( tools::Rectangle( Point( ), aViewportSizeLogic ) );
+        m_pView->SetVisArea( tools::Rectangle( Point( ), aViewportSizeLogic ) );
 
         if ( m_pVScroll )
         {
@@ -543,16 +545,16 @@ namespace frm
 
     namespace
     {
-        void lcl_inflate( Rectangle& _rRect, long _nInflateX, long _nInflateY )
+        void lcl_inflate( tools::Rectangle& _rRect, long _nInflateX, long _nInflateY )
         {
-            _rRect.Left() -= _nInflateX;
-            _rRect.Right() += _nInflateX;
-            _rRect.Top() -= _nInflateY;
-            _rRect.Bottom() += _nInflateY;
+            _rRect.AdjustLeft( -_nInflateX );
+            _rRect.AdjustRight(_nInflateX );
+            _rRect.AdjustTop( -_nInflateY );
+            _rRect.AdjustBottom(_nInflateY );
         }
     }
 
-    long RichTextControlImpl::HandleCommand( const CommandEvent& _rEvent )
+    bool RichTextControlImpl::HandleCommand( const CommandEvent& _rEvent )
     {
         if (  ( _rEvent.GetCommand() == CommandEventId::Wheel )
            || ( _rEvent.GetCommand() == CommandEventId::StartAutoScroll )
@@ -560,13 +562,13 @@ namespace frm
            )
         {
             m_pAntiImpl->HandleScrollCommand( _rEvent, m_pHScroll, m_pVScroll );
-            return 1;
+            return true;
         }
-        return 0;
+        return false;
     }
 
 
-    void RichTextControlImpl::Draw( OutputDevice* _pDev, const Point& _rPos, const Size& _rSize, DrawFlags /*_nFlags*/ )
+    void RichTextControlImpl::Draw( OutputDevice* _pDev, const Point& _rPos, const Size& _rSize )
     {
         // need to normalize the map mode of the device - every paint operation on any device needs
         // to use the same map mode
@@ -581,7 +583,7 @@ namespace frm
         // translate coordinates
         Point aPos( _rPos );
         Size aSize( _rSize );
-        if ( aOriginalMapMode.GetMapUnit() == MAP_PIXEL )
+        if ( aOriginalMapMode.GetMapUnit() == MapUnit::MapPixel )
         {
             aPos = _pDev->PixelToLogic( _rPos, aNormalizedMapMode );
             aSize = _pDev->PixelToLogic( _rSize, aNormalizedMapMode );
@@ -592,10 +594,10 @@ namespace frm
             aSize = OutputDevice::LogicToLogic( _rSize, aOriginalMapMode, aNormalizedMapMode );
         }
 
-        Rectangle aPlayground( aPos, aSize );
+        tools::Rectangle aPlayground( aPos, aSize );
         Size aOnePixel( _pDev->PixelToLogic( Size( 1, 1 ) ) );
-        aPlayground.Right() -= aOnePixel.Width();
-        aPlayground.Bottom() -= aOnePixel.Height();
+        aPlayground.AdjustRight( -(aOnePixel.Width()) );
+        aPlayground.AdjustBottom( -(aOnePixel.Height()) );
 
         // background
         _pDev->SetLineColor();

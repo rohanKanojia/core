@@ -34,17 +34,17 @@
 #include <com/sun/star/sdbc/SQLWarning.hpp>
 #include <com/sun/star/sdb/SQLContext.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbtools.hxx>
-#include <vcl/msgbox.hxx>
 #include <comphelper/interaction.hxx>
 #include <vcl/stdtext.hxx>
-#include <svtools/localresaccess.hxx>
 #include <connectivity/conncleanup.hxx>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <tools/urlobj.hxx>
 #include <vcl/layout.hxx>
+
+#define WINDOW_SIZE_X   240
+#define WINDOW_SIZE_Y   185
 
 namespace dbp
 {
@@ -156,11 +156,10 @@ namespace dbp
         const OUString* pItems = _rItems.getConstArray();
         const OUString* pEnd = pItems + _rItems.getLength();
         ::svt::WizardTypes::WizardState nPos;
-        sal_Int32 nIndex = 0;
         for (;pItems < pEnd; ++pItems)
         {
             nPos = _rList.InsertEntry(*pItems);
-            _rList.SetEntryData(nPos, reinterpret_cast<void*>(nIndex));
+            _rList.SetEntryData(nPos, nullptr);
         }
     }
 
@@ -213,26 +212,26 @@ namespace dbp
 
             INetURLObject aURL( sDataSource );
             if( aURL.GetProtocol() != INetProtocol::NotValid )
-                sDataSource = aURL.GetName(INetURLObject::DECODE_WITH_CHARSET);
+                sDataSource = aURL.GetName(INetURLObject::DecodeMechanism::WithCharset);
             m_pFormDatasource->SetText(sDataSource);
             m_pFormTable->SetText(sCommand);
 
-            ::svt::WizardTypes::WizardState nCommandTypeResourceId = 0;
+            const char* pCommandTypeResourceId = nullptr;
             switch (nCommandType)
             {
                 case CommandType::TABLE:
-                    nCommandTypeResourceId = RID_STR_TYPE_TABLE;
+                    pCommandTypeResourceId = RID_STR_TYPE_TABLE;
                     break;
 
                 case CommandType::QUERY:
-                    nCommandTypeResourceId = RID_STR_TYPE_QUERY;
+                    pCommandTypeResourceId = RID_STR_TYPE_QUERY;
                     break;
 
                 default:
-                    nCommandTypeResourceId = RID_STR_TYPE_COMMAND;
+                    pCommandTypeResourceId = RID_STR_TYPE_COMMAND;
                     break;
             }
-            m_pFormContentType->SetText(ModuleRes(nCommandTypeResourceId).toString());
+            m_pFormContentType->SetText(compmodule::ModuleRes(pCommandTypeResourceId));
         }
 
         OControlWizardPage_Base::initializePage();
@@ -246,7 +245,7 @@ namespace dbp
         m_aContext.xObjectModel = _rxObjectModel;
         initContext();
 
-        SetPageSizePixel(LogicToPixel(::Size(WINDOW_SIZE_X, WINDOW_SIZE_Y), MAP_APPFONT));
+        SetPageSizePixel(LogicToPixel(::Size(WINDOW_SIZE_X, WINDOW_SIZE_Y), MapMode(MapUnit::MapAppFont)));
         defaultButton(WizardButtonFlags::NEXT);
         enableButtons(WizardButtonFlags::FINISH, false);
     }
@@ -276,12 +275,6 @@ namespace dbp
         ActivatePage();
 
         return OControlWizard_Base::Execute();
-    }
-
-
-    void OControlWizard::ActivatePage()
-    {
-        OControlWizard_Base::ActivatePage();
     }
 
 
@@ -443,10 +436,9 @@ namespace dbp
             // set the new connection
             if ( _bAutoDispose )
             {
-                // for this, use a AutoDisposer (so the conn is cleaned up when the form dies or get's another connection)
+                // for this, use a AutoDisposer (so the conn is cleaned up when the form dies or gets another connection)
                 Reference< XRowSet > xFormRowSet( m_aContext.xForm, UNO_QUERY );
-                OAutoConnectionDisposer* pAutoDispose = new OAutoConnectionDisposer( xFormRowSet, _rxConn );
-                Reference< XPropertyChangeListener > xEnsureDelete( pAutoDispose );
+                rtl::Reference<OAutoConnectionDisposer> pAutoDispose = new OAutoConnectionDisposer( xFormRowSet, _rxConn );
             }
             else
             {
@@ -465,7 +457,7 @@ namespace dbp
         return initContext();
     }
 
-    Reference< XInteractionHandler > OControlWizard::getInteractionHandler(vcl::Window* _pWindow) const
+    Reference< XInteractionHandler > OControlWizard::getInteractionHandler(weld::Window* _pWindow) const
     {
         Reference< XInteractionHandler > xHandler;
         try
@@ -528,7 +520,7 @@ namespace dbp
                 Reference< XConnection > xConnection;
                 m_aContext.bEmbedded = ::dbtools::isEmbeddedInDatabase( m_aContext.xForm, xConnection );
                 if ( !m_aContext.bEmbedded )
-                    xConnection = ::dbtools::connectRowset( m_aContext.xRowSet, m_xContext, true );
+                    xConnection = ::dbtools::connectRowset( m_aContext.xRowSet, m_xContext );
 
                 // get the fields
                 if (xConnection.is())
@@ -581,7 +573,6 @@ namespace dbp
             if (xColumns.is())
             {
                 m_aContext.aFieldNames = xColumns->getElementNames();
-                static const char s_sFieldTypeProperty[] = "Type";
                 const OUString* pBegin = m_aContext.aFieldNames.getConstArray();
                 const OUString* pEnd   = pBegin + m_aContext.aFieldNames.getLength();
                 for(;pBegin != pEnd;++pBegin)
@@ -591,13 +582,13 @@ namespace dbp
                     {
                         Reference< XPropertySet > xColumn;
                         xColumns->getByName(*pBegin) >>= xColumn;
-                        xColumn->getPropertyValue(s_sFieldTypeProperty) >>= nFieldType;
+                        xColumn->getPropertyValue("Type") >>= nFieldType;
                     }
                     catch(const Exception&)
                     {
                         OSL_FAIL("OControlWizard::initContext: unexpected exception while gathering column information!");
                     }
-                    m_aContext.aTypes.insert(OControlWizardContext::TNameTypeMap::value_type(*pBegin,nFieldType));
+                    m_aContext.aTypes.emplace(*pBegin,nFieldType);
                 }
             }
         }
@@ -616,11 +607,11 @@ namespace dbp
 
             // prepend an extra SQLContext explaining what we were doing
             SQLContext aContext;
-            aContext.Message = ModuleRes(RID_STR_COULDNOTOPENTABLE).toString();
+            aContext.Message = compmodule::ModuleRes(RID_STR_COULDNOTOPENTABLE);
             aContext.NextException = aSQLException;
 
             // create an interaction handler to display this exception
-            Reference< XInteractionHandler > xHandler = getInteractionHandler(this);
+            Reference< XInteractionHandler > xHandler = getInteractionHandler(GetFrameWeld());
             if ( !xHandler.is() )
                 return false;
 
@@ -637,7 +628,7 @@ namespace dbp
     }
 
 
-    void OControlWizard::commitControlSettings(OControlWizardSettings* _pSettings)
+    void OControlWizard::commitControlSettings(OControlWizardSettings const * _pSettings)
     {
         DBG_ASSERT(m_aContext.xObjectModel.is(), "OControlWizard::commitControlSettings: have no control model to work with!");
         if (!m_aContext.xObjectModel.is())
@@ -646,9 +637,8 @@ namespace dbp
         // the only thing we have at the moment is the label
         try
         {
-            OUString sLabelPropertyName("Label");
             Reference< XPropertySetInfo > xInfo = m_aContext.xObjectModel->getPropertySetInfo();
-            if (xInfo.is() && xInfo->hasPropertyByName(sLabelPropertyName))
+            if (xInfo.is() && xInfo->hasPropertyByName("Label"))
             {
                 OUString sControlLabel(_pSettings->sControlLabel);
                 m_aContext.xObjectModel->setPropertyValue(

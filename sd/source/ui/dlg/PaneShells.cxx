@@ -17,12 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PaneShells.hxx"
+#include <PaneShells.hxx>
 
-#include "PaneChildWindows.hxx"
-
-#include "glob.hrc"
-#include "sdresid.hxx"
+#include <PaneChildWindows.hxx>
 
 #include <sfx2/msg.hxx>
 #include <sfx2/objface.hxx>
@@ -33,7 +30,7 @@ namespace sd {
 
 static SfxSlot aLeftImpressPaneShellSlots_Impl[] =
 {
-    { 0, 0, SfxSlotMode::NONE, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr }
+    { 0, SfxGroupId::NONE, SfxSlotMode::NONE, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, 0, SfxDisableFlags::NONE, nullptr }
 };
 
 SFX_IMPL_INTERFACE(LeftImpressPaneShell, SfxShell)
@@ -58,7 +55,7 @@ LeftImpressPaneShell::~LeftImpressPaneShell()
 
 static SfxSlot aLeftDrawPaneShellSlots_Impl[] =
 {
-    { 0, 0, SfxSlotMode::NONE, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, 0, nullptr }
+    { 0, SfxGroupId::NONE, SfxSlotMode::NONE, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, 0, SfxDisableFlags::NONE, nullptr }
 };
 
 SFX_IMPL_INTERFACE(LeftDrawPaneShell, SfxShell)

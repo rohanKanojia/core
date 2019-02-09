@@ -11,77 +11,35 @@
 #define INCLUDED_SC_SOURCE_UI_OPTDLG_CALCOPTIONSDLG_HXX
 
 #include <config_features.h>
+#include <vcl/weld.hxx>
+#include <calcconfig.hxx>
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/field.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
-
-#include <svx/checklbx.hxx>
-
-#include <svtools/treelistbox.hxx>
-
-#include "calcconfig.hxx"
-
-#if HAVE_FEATURE_OPENCL
-#include <opencl/openclconfig.hxx>
-#include <opencl/platforminfo.hxx>
-#endif
-
-class ScCalcOptionsDialog : public ModalDialog
+class ScCalcOptionsDialog : public weld::GenericDialogController
 {
 public:
-    ScCalcOptionsDialog(vcl::Window* pParent, const ScCalcConfig& rConfig, bool bWriteConfig);
-    virtual ~ScCalcOptionsDialog();
-    virtual void dispose() override;
+    ScCalcOptionsDialog(weld::Window* pParent, const ScCalcConfig& rConfig, bool bWriteConfig);
+    virtual ~ScCalcOptionsDialog() override;
 
-    DECL_LINK_TYPED( BtnAutomaticSelectHdl, RadioButton&, void );
-    DECL_LINK_TYPED( DeviceSelHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( EditModifiedHdl, Edit&, void );
-    DECL_STATIC_LINK_TYPED( ScCalcOptionsDialog, TestClickHdl, Button*, void );
-    DECL_LINK_TYPED( AsZeroModifiedHdl, Button*, void);
-    DECL_LINK_TYPED( ConversionModifiedHdl, ListBox&, void);
-    DECL_LINK_TYPED( SyntaxModifiedHdl, ListBox&, void);
-    DECL_LINK_TYPED( CurrentDocOnlyHdl, Button*, void);
-    DECL_LINK_TYPED( CBUseOpenCLHdl, Button*, void);
-    DECL_LINK_TYPED( SpinOpenCLMinSizeHdl, Edit&, void);
+    DECL_LINK(AsZeroModifiedHdl, weld::ToggleButton&, void);
+    DECL_LINK(ConversionModifiedHdl, weld::ComboBox&, void);
+    DECL_LINK(SyntaxModifiedHdl, weld::ComboBox&, void);
+    DECL_LINK(CurrentDocOnlyHdl, weld::ToggleButton&, void);
 
     const ScCalcConfig& GetConfig() const { return maConfig;}
     bool GetWriteCalcConfig() const { return mbWriteConfig;}
 
 private:
-    void OpenCLAutomaticSelectionChanged();
-    void SelectedDeviceChanged();
     void CoupleEmptyAsZeroToStringConversion();
 
 private:
-    VclPtr<CheckBox> mpEmptyAsZero;
-    VclPtr<ListBox> mpConversion;
-    VclPtr<ListBox> mpSyntax;
-    VclPtr<CheckBox> mpCurrentDocOnly;
-
-    VclPtr<CheckBox> mpUseOpenCL;
-    VclPtr<NumericField> mpSpinButton;
-    VclPtr<VclMultiLineEdit> mpEditField;
-    VclPtr<PushButton> mpTestButton;
-
-    VclPtr<FixedText> mpFtFrequency;
-    VclPtr<FixedText> mpFtComputeUnits;
-    VclPtr<FixedText> mpFtMemory;
-
-    VclPtr<SvTreeListBox> mpOpenclInfoList;
-    VclPtr<RadioButton> mpBtnAutomaticSelectionTrue;
-    VclPtr<RadioButton> mpBtnAutomaticSelectionFalse;
-
-    OUString maSoftware;
-
     ScCalcConfig maConfig;
-
     bool mbSelectedEmptyStringAsZero;
     bool mbWriteConfig;
+
+    std::unique_ptr<weld::CheckButton> mxEmptyAsZero;
+    std::unique_ptr<weld::ComboBox> mxConversion;
+    std::unique_ptr<weld::CheckButton> mxCurrentDocOnly;
+    std::unique_ptr<weld::ComboBox> mxSyntax;
 };
 
 #endif

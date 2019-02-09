@@ -20,12 +20,10 @@
 #include <svx/svxids.hrc>
 #include <tools/stream.hxx>
 #include <unotools/configmgr.hxx>
-#include <unotools/pathoptions.hxx>
 #include <sot/storage.hxx>
 #include <svl/intitem.hxx>
 #include <editeng/forbiddencharacterstable.hxx>
 
-#include <unotools/ucbstreamhelper.hxx>
 #include <svx/xtable.hxx>
 #include <svx/drawitem.hxx>
 #include <viewsh.hxx>
@@ -36,28 +34,19 @@
 #include <docsh.hxx>
 #include <shellio.hxx>
 #include <hintids.hxx>
-#include <com/sun/star/embed/ElementModes.hpp>
 #include <DocumentSettingManager.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 
 using namespace com::sun::star;
 
 // Constructor
-
-const OUString GetPalettePath()
-{
-    if (utl::ConfigManager::IsAvoidConfig())
-        return OUString();
-    SvtPathOptions aPathOpt;
-    return aPathOpt.GetPalettePath();
-}
-
 SwDrawModel::SwDrawModel(SwDoc *const pDoc)
-    : FmFormModel( ::GetPalettePath(), &pDoc->GetAttrPool(),
-                     pDoc->GetDocShell(), true )
+:   FmFormModel(
+        &pDoc->GetAttrPool(),
+        pDoc->GetDocShell())
     , m_pDoc( pDoc )
 {
-    SetScaleUnit( MAP_TWIP );
+    SetScaleUnit( MapUnit::MapTwip );
     SetSwapGraphics();
 
     // use common InitDrawModelAndDocShell which will set the associations as needed,
@@ -88,24 +77,22 @@ SwDrawModel::SwDrawModel(SwDoc *const pDoc)
                     0 != (nEdtWhich = pSdrPool->GetWhich( nSlotId )) &&
                     nSlotId != nEdtWhich )
                 {
-                    SfxPoolItem* pCpy = pItem->Clone();
+                    std::unique_ptr<SfxPoolItem> pCpy(pItem->Clone());
                     pCpy->SetWhich( nEdtWhich );
                     pSdrPool->SetPoolDefaultItem( *pCpy );
-                    delete pCpy;
                 }
     }
 
     SetForbiddenCharsTable(m_pDoc->GetDocumentSettingManager().getForbiddenCharacterTable());
     // Implementation for asian compression
-    SetCharCompressType( static_cast<sal_uInt16>(
-            m_pDoc->GetDocumentSettingManager().getCharacterCompressionType()));
+    SetCharCompressType( m_pDoc->GetDocumentSettingManager().getCharacterCompressionType() );
 }
 
 // Destructor
 
 SwDrawModel::~SwDrawModel()
 {
-    Broadcast(SdrHint(HINT_MODELCLEARED));
+    Broadcast(SdrHint(SdrHintKind::ModelCleared));
 
     ClearModel(true);
 }
@@ -154,6 +141,7 @@ void SwDrawModel::PutAreaListItems(SfxItemSet& rSet) const
     rSet.Put(SvxGradientListItem(GetGradientList(), SID_GRADIENT_LIST));
     rSet.Put(SvxHatchListItem(GetHatchList(), SID_HATCH_LIST));
     rSet.Put(SvxBitmapListItem(GetBitmapList(), SID_BITMAP_LIST));
+    rSet.Put(SvxPatternListItem(GetPatternList(), SID_PATTERN_LIST));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

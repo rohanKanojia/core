@@ -13,8 +13,7 @@ $(eval $(call gb_CustomTarget_register_targets,odk/check,\
 	checkbin \
 ))
 
-odk_PLATFORM := $(if $(filter WNT,$(OS)),\
-	$(if $(filter GCC,$(COM)),mingw,windows),\
+odk_PLATFORM := $(if $(filter WNT,$(OS)),windows,\
 	$(if $(filter SOLARIS,$(OS)),\
 		$(if $(filter SPARC,$(CPUNAME)),solsparc,\
 			$(if $(filter SPARC64,$(CPUNAME)),solsparc64,solintel)),\
@@ -25,6 +24,7 @@ odk_PLATFORM := $(if $(filter WNT,$(OS)),\
 						$(if $(filter MACOSX,$(OS)),macosx,\
 							$(if $(filter AIX,$(OS)),aix))))))))
 
+.PHONY: $(call gb_CustomTarget_get_workdir,odk/check)/checkbin
 $(call gb_CustomTarget_get_workdir,odk/check)/checkbin : \
 		$(SRCDIR)/odk/util/check.pl \
 		$(if $(DOXYGEN),$(call gb_GeneratedPackage_get_target,odk_doxygen)) \
@@ -36,10 +36,12 @@ $(call gb_CustomTarget_get_workdir,odk/check)/checkbin : \
 		$(call gb_Package_get_target,odk_docs) \
 		$(call gb_Package_get_target,odk_html) \
 		$(if $(ENABLE_JAVA),$(call gb_GeneratedPackage_get_target,odk_javadoc)) \
-		$(call gb_Package_get_target,odk_lib) \
 		$(call gb_Package_get_target,odk_settings) \
 		$(call gb_Package_get_target,odk_settings_generated) \
 		$(if $(ENABLE_JAVA),$(call gb_Package_get_target,odk_unowinreg))
+ifneq ($(gb_SUPPRESS_TESTS),)
+	@true
+else
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),CHK,1)
 	$(call gb_Helper_print_on_error,\
 		$(PERL) $< \
@@ -47,5 +49,6 @@ $(call gb_CustomTarget_get_workdir,odk/check)/checkbin : \
 			$(odk_PLATFORM) '$(gb_Executable_EXT)' \
 		,$@.log \
 	)
+endif
 
 # vim: set noet sw=4 ts=4:

@@ -50,10 +50,10 @@ public final class Driver {
     /** {@code mergeFile} name. */
     private String mergeFile = null;
 
-    /** Command-line parmeter. */
+    /** Command-line parameter. */
     private final ArrayList<String> deviceFiles = new ArrayList<String>();
 
-    /** Command-line parmeter shortcuts. */
+    /** Command-line parameter shortcuts. */
     private final String mimeTypes[] = {
                                     "sxc", "staroffice/sxc",
                                     "sxw","staroffice/sxw"
@@ -168,7 +168,7 @@ public final class Driver {
                         docOut.write(fos);
                         fos.flush();
                     } catch (Exception writeExcept) {
-                        System.out.println("\nThere was an writing out file <" +
+                        System.out.println("\nThere was a writing out file <" +
                             fileName + ">");
                         writeExcept.printStackTrace();
                     } finally {

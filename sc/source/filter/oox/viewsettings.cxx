@@ -17,28 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "viewsettings.hxx"
+#include <viewsettings.hxx>
 
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/document/IndexedPropertyValues.hpp>
 #include <com/sun/star/document/XViewDataSupplier.hpp>
 #include <com/sun/star/document/NamedPropertyValues.hpp>
 #include <osl/diagnose.h>
 #include <unotools/mediadescriptor.hxx>
 #include <oox/core/filterbase.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/attributelist.hxx>
 #include <oox/helper/containerhelper.hxx>
 #include <oox/helper/propertymap.hxx>
 #include <oox/helper/propertyset.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "unitconverter.hxx"
-#include "workbooksettings.hxx"
-#include "worksheetbuffer.hxx"
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <addressconverter.hxx>
+#include <workbooksettings.hxx>
+#include <worksheetbuffer.hxx>
+
+namespace com { namespace sun { namespace star { namespace container { class XNameContainer; } } } }
 
 namespace oox {
 namespace xls {
@@ -46,7 +48,6 @@ namespace xls {
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::document;
-using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::uno;
 
 using ::oox::core::FilterBase;
@@ -89,7 +90,7 @@ const sal_Int16 API_SPLITMODE_NONE                  = 0;        /// No splits in
 const sal_Int16 API_SPLITMODE_SPLIT                 = 1;        /// Window is split.
 const sal_Int16 API_SPLITMODE_FREEZE                = 2;        /// Window has frozen panes.
 
-// no predefined constants for pane idetifiers
+// no predefined constants for pane identifiers
 const sal_Int16 API_SPLITPANE_TOPLEFT               = 0;        /// Top-left, or top pane.
 const sal_Int16 API_SPLITPANE_TOPRIGHT              = 1;        /// Top-right pane.
 const sal_Int16 API_SPLITPANE_BOTTOMLEFT            = 2;        /// Bottom-left, bottom, left, or single pane.
@@ -152,19 +153,14 @@ sal_Int32 SheetViewModel::getPageBreakZoom() const
     return getLimitedValue< sal_Int32 >( nZoom, API_ZOOMVALUE_MIN, API_ZOOMVALUE_MAX );
 }
 
-sal_Int32 SheetViewModel::getGridColor( const FilterBase& rFilter ) const
+::Color SheetViewModel::getGridColor( const FilterBase& rFilter ) const
 {
     return mbDefGridColor ? API_RGB_TRANSPARENT : maGridColor.getColor( rFilter.getGraphicHelper() );
 }
 
-const PaneSelectionModel* SheetViewModel::getPaneSelection( sal_Int32 nPaneId ) const
-{
-    return maPaneSelMap.get( nPaneId ).get();
-}
-
 const PaneSelectionModel* SheetViewModel::getActiveSelection() const
 {
-    return getPaneSelection( mnActivePaneId );
+    return maPaneSelMap.get( mnActivePaneId ).get();
 }
 
 PaneSelectionModel& SheetViewModel::createPaneSelection( sal_Int32 nPaneId )
@@ -227,7 +223,7 @@ void SheetViewSettings::importSelection( const AttributeList& rAttribs )
         rSelData.maActiveCell = getAddressConverter().createValidCellAddress( rAttribs.getString( XML_activeCell, OUString() ), getSheetIndex(), false );
         rSelData.mnActiveCellId = rAttribs.getInteger( XML_activeCellId, 0 );
         // selection
-        rSelData.maSelection.clear();
+        rSelData.maSelection.RemoveAll();
         getAddressConverter().convertToCellRangeList( rSelData.maSelection, rAttribs.getString( XML_sqref, OUString() ), getSheetIndex(), false );
     }
 }
@@ -308,7 +304,7 @@ void SheetViewSettings::importSelection( SequenceInputStream& rStrm )
         // selection
         BinRangeList aSelection;
         rStrm >> aSelection;
-        rPaneSel.maSelection.clear();
+        rPaneSel.maSelection.RemoveAll();
         getAddressConverter().convertToCellRangeList( rPaneSel.maSelection, aSelection, getSheetIndex(), false );
     }
 }
@@ -331,10 +327,10 @@ void SheetViewSettings::finalizeImport()
     SheetViewModelRef xModel = maSheetViews.empty() ? createSheetView() : maSheetViews.front();
 
     // #i59590# #158194# special handling for chart sheets (Excel ignores some settings in chart sheets)
-    if( getSheetType() == SHEETTYPE_CHARTSHEET )
+    if( getSheetType() == WorksheetType::Chart )
     {
         xModel->maPaneSelMap.clear();
-        xModel->maFirstPos = xModel->maSecondPos = ScAddress( SCCOL ( 0 ), SCROW ( 0 ), SCTAB (getSheetIndex() ) );
+        xModel->maFirstPos = xModel->maSecondPos = ScAddress( SCCOL ( 0 ), SCROW ( 0 ), getSheetIndex() );
         xModel->mnViewType = XML_normal;
         xModel->mnActivePaneId = XML_topLeft;
         xModel->mnPaneState = XML_split;
@@ -355,7 +351,7 @@ void SheetViewSettings::finalizeImport()
         // active tab/sheet cannot be hidden
         // always force it to be displayed
         PropertySet aPropSet( getSheet() );
-        aPropSet.setProperty( PROP_IsVisible, sal_True );
+        aPropSet.setProperty( PROP_IsVisible, true );
     }
     // visible area and current cursor position (selection not supported via API)
     ScAddress aFirstPos = xModel->maFirstPos;
@@ -535,9 +531,10 @@ void ViewSettings::setSheetViewSettings( sal_Int16 nSheet, const SheetViewModelR
     maSheetProps[ nSheet ] = rProperties;
 }
 
-void ViewSettings::setSheetUsedArea( const CellRangeAddress& rUsedArea )
+void ViewSettings::setSheetUsedArea( const ScRange& rUsedArea )
 {
-    maSheetUsedAreas[ rUsedArea.Sheet ] = rUsedArea;
+    assert( rUsedArea.IsValid() );
+    maSheetUsedAreas[ rUsedArea.aStart.Tab() ] = rUsedArea;
 }
 
 void ViewSettings::finalizeImport()
@@ -554,8 +551,8 @@ void ViewSettings::finalizeImport()
     // view settings for all sheets
     Reference< XNameContainer > xSheetsNC = NamedPropertyValues::create( getBaseFilter().getComponentContext() );
     if( !xSheetsNC.is() ) return;
-    for( SheetPropertiesMap::const_iterator aIt = maSheetProps.begin(), aEnd = maSheetProps.end(); aIt != aEnd; ++aIt )
-        ContainerHelper::insertByName( xSheetsNC, rWorksheets.getCalcSheetName( aIt->first ), aIt->second );
+    for( const auto& [rWorksheet, rObj] : maSheetProps )
+        ContainerHelper::insertByName( xSheetsNC, rWorksheets.getCalcSheetName( rWorksheet ), rObj );
 
     // use active sheet to set sheet properties that are document-global in Calc
     sal_Int16 nActiveSheet = getActiveCalcSheet();
@@ -598,8 +595,9 @@ void ViewSettings::finalizeImport()
         #i44077# If a new OLE object is inserted from file, there is no OLESIZE
         record in the Excel file. In this case, use the used area calculated
         from file contents (used cells and drawing objects). */
-    maOleSize.Sheet = nActiveSheet;
-    const CellRangeAddress* pVisibleArea = mbValidOleSize ?
+    maOleSize.aStart.SetTab( nActiveSheet );
+    maOleSize.aEnd.SetTab( nActiveSheet );
+    const ScRange* pVisibleArea = mbValidOleSize ?
         &maOleSize : ContainerHelper::getMapElement( maSheetUsedAreas, nActiveSheet );
     if( pVisibleArea )
     {

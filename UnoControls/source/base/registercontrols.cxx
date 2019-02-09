@@ -31,42 +31,42 @@
 
 namespace {
 
-css::uno::Reference<css::uno::XInterface> SAL_CALL FrameControl_createInstance(
+/// @throws css::uno::Exception
+css::uno::Reference<css::uno::XInterface> FrameControl_createInstance(
     css::uno::Reference<css::lang::XMultiServiceFactory> const &
         rServiceManager)
-    throw (css::uno::Exception)
 {
     return static_cast<cppu::OWeakObject *>(
         new unocontrols::FrameControl(
             comphelper::getComponentContext(rServiceManager)));
 }
 
-css::uno::Reference<css::uno::XInterface> SAL_CALL ProgressBar_createInstance(
+/// @throws css::uno::Exception
+css::uno::Reference<css::uno::XInterface> ProgressBar_createInstance(
     css::uno::Reference<css::lang::XMultiServiceFactory> const &
         rServiceManager)
-    throw (css::uno::Exception)
 {
     return static_cast<cppu::OWeakObject *>(
         new unocontrols::ProgressBar(
             comphelper::getComponentContext(rServiceManager)));
 }
 
-css::uno::Reference<css::uno::XInterface> SAL_CALL
+/// @throws css::uno::Exception
+css::uno::Reference<css::uno::XInterface>
 ProgressMonitor_createInstance(
     css::uno::Reference<css::lang::XMultiServiceFactory> const &
         rServiceManager)
-    throw (css::uno::Exception)
 {
     return static_cast<cppu::OWeakObject *>(
         new unocontrols::ProgressMonitor(
             comphelper::getComponentContext(rServiceManager)));
 }
 
-css::uno::Reference<css::uno::XInterface> SAL_CALL
+/// @throws css::uno::Exception
+css::uno::Reference<css::uno::XInterface>
 StatusIndicator_createInstance(
     css::uno::Reference<css::lang::XMultiServiceFactory> const &
         rServiceManager)
-    throw (css::uno::Exception)
 {
     return static_cast<cppu::OWeakObject *>(
         new unocontrols::StatusIndicator(
@@ -75,7 +75,7 @@ StatusIndicator_createInstance(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL ctl_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * ctl_component_getFactory(
     char const * pImplName, void * pServiceManager, SAL_UNUSED_PARAMETER void *)
 {
     css::uno::Reference<css::lang::XMultiServiceFactory > smgr(

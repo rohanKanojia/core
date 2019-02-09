@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ThemeTable.hxx>
+#include "ThemeTable.hxx"
+#include <i18nlangtag/languagetag.hxx>
 #include <ooxml/resourceids.hxx>
 
 using namespace com::sun::star;
@@ -216,7 +217,7 @@ const OUString ThemeTable::getFontNameForTheme(const Id id) const
     {
          std::map<sal_uInt32, OUString>::const_iterator Iter = tmpThemeFontMap.find(NS_ooxml::LN_CT_FontCollection_latin);
              if (Iter != tmpThemeFontMap.end())
-                  return (Iter)->second;
+                  return Iter->second;
              return OUString();
         }
     case NS_ooxml::LN_Value_ST_Theme_majorBidi:
@@ -224,7 +225,7 @@ const OUString ThemeTable::getFontNameForTheme(const Id id) const
         {
              std::map<sal_uInt32, OUString>::const_iterator Iter = tmpThemeFontMap.find(NS_ooxml::LN_CT_FontCollection_cs);
              if (Iter != tmpThemeFontMap.end())
-                 return (Iter)->second;
+                 return Iter->second;
              return OUString();
         }
     case NS_ooxml::LN_Value_ST_Theme_majorEastAsia:
@@ -232,7 +233,7 @@ const OUString ThemeTable::getFontNameForTheme(const Id id) const
         {
              std::map<sal_uInt32, OUString>::const_iterator Iter = tmpThemeFontMap.find(NS_ooxml::LN_CT_FontCollection_ea);
              if (Iter != tmpThemeFontMap.end())
-                 return (Iter)->second;
+                 return Iter->second;
              return OUString();
         }
     default:
@@ -263,7 +264,7 @@ OUString ThemeTable::fromLCIDToScriptTag(LanguageType lang)
 {
     // conversion list from:
     // http://blogs.msdn.com/b/officeinteroperability/archive/2013/04/22/office-open-xml-themes-schemes-and-fonts.aspx
-    switch (lang)
+    switch (static_cast<sal_uInt16>(lang))
     {
         case 0x429  :  // lidFarsi
         case 0x401  :  // lidArabic
@@ -552,7 +553,7 @@ OUString ThemeTable::fromLCIDToScriptTag(LanguageType lang)
         case 0x478  :  // lidYi
             return OUString("Yiii");
         default:
-            return OUString("");
+            return OUString();
     }
 }
 

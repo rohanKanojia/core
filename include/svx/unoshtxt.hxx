@@ -52,10 +52,11 @@ public:
         The window is necessary, since our views can display on multiple windows
      */
     SvxTextEditSource( SdrObject& rObj, SdrText* pText, SdrView& rView, const vcl::Window& rViewWindow );
+    SvxTextEditSource(const SvxTextEditSource&) = delete;
+    SvxTextEditSource& operator=(const SvxTextEditSource&) = delete;
+    virtual ~SvxTextEditSource() override;
 
-    virtual ~SvxTextEditSource();
-
-    virtual SvxEditSource*          Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder*       GetTextForwarder() override;
     virtual SvxViewForwarder*      GetViewForwarder() override;
     virtual SvxEditViewForwarder*  GetEditViewForwarder( bool bCreate = false ) override;
@@ -63,7 +64,7 @@ public:
 
     virtual void addRange( SvxUnoTextRangeBase* pNewRange ) override;
     virtual void removeRange( SvxUnoTextRangeBase* pOldRange ) override;
-    virtual const SvxUnoTextRangeBaseList& getRanges() const override;
+    virtual const SvxUnoTextRangeBaseVec& getRanges() const override;
 
     virtual SfxBroadcaster&         GetBroadcaster() const override;
 
@@ -72,18 +73,15 @@ public:
 
     // the SvxViewForwarder interface
     virtual bool        IsValid() const override;
-    virtual Rectangle   GetVisArea() const override;
     virtual Point       LogicToPixel( const Point&, const MapMode& ) const override;
     virtual Point       PixelToLogic( const Point&, const MapMode& ) const override;
-
-    void ChangeModel( SdrModel* pNewModel );
 
     void UpdateOutliner();
 
 private:
     SVX_DLLPRIVATE SvxTextEditSource( SvxTextEditSourceImpl* pImpl );
 
-    SvxTextEditSourceImpl*  mpImpl;
+    rtl::Reference<SvxTextEditSourceImpl>  mpImpl;
 };
 
 #endif

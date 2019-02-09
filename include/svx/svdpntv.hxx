@@ -22,7 +22,6 @@
 
 #include <svl/SfxBroadcaster.hxx>
 #include <svl/lstner.hxx>
-#include <svl/smplhint.hxx>
 #include <svl/undo.hxx>
 #include <svx/svddrag.hxx>
 #include <svx/svdlayer.hxx>
@@ -35,6 +34,7 @@
 #include <svtools/optionsdrawinglayer.hxx>
 #include <unotools/options.hxx>
 #include <vcl/idle.hxx>
+#include <memory>
 
 
 // Pre defines
@@ -63,20 +63,11 @@ namespace sdr { namespace contact {
 
 
 // Defines for AnimationMode
-enum SdrAnimationMode
+enum class SdrAnimationMode
 {
-    SDR_ANIMATION_ANIMATE,
-    SDR_ANIMATION_DONT_ANIMATE,
-    SDR_ANIMATION_DISABLE
+    Animate,
+    Disable
 };
-
-
-// Typedefs and defines
-typedef unsigned char SDR_TRISTATE;
-#define FUZZY                   (2)
-#define SDR_ANYFORMAT           (0xFFFFFFFF)
-#define SDR_ANYITEM             (0xFFFF)
-#define SDRVIEWWIN_NOTFOUND     (0xFFFF)
 
 
 class SdrPaintView;
@@ -90,21 +81,13 @@ namespace sdr
 }
 
 
-class SVX_DLLPUBLIC SvxViewHint : public SfxHint
+class SVX_DLLPUBLIC SvxViewChangedHint : public SfxHint
 {
 public:
-    enum HintType { SVX_HINT_VIEWCHANGED };
-    explicit SvxViewHint(HintType eType);
-    HintType GetHintType() const { return meHintType;}
-
-private:
-    HintType meHintType;
+    explicit SvxViewChangedHint();
 };
 
-/// Typedefs for a list of SdrPaintWindows
 class SdrPaintWindow;
-typedef ::std::vector< SdrPaintWindow* > SdrPaintWindowVector;
-
 
 /**
  * Helper to convert any GDIMetaFile to a good quality BitmapEx,
@@ -113,15 +96,42 @@ typedef ::std::vector< SdrPaintWindow* > SdrPaintWindowVector;
 BitmapEx SVX_DLLPUBLIC convertMetafileToBitmapEx(
     const GDIMetaFile& rMtf,
     const basegfx::B2DRange& rTargetRange,
-    const sal_uInt32 nMaximumQuadraticPixels = 500000);
+    const sal_uInt32 nMaximumQuadraticPixels);
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//  SdrPaintView
+//      SdrSnapView
+//          SdrMarkView
+//              SdrEditView
+//                  SdrPolyEditView
+//                      SdrGlueEditView
+//                          SdrObjEditView
+//                              SdrExchangeView
+//                                  SdrDragView
+//                                      SdrCreateView
+//                                          SdrView
+//                                              DlgEdView
+//                                              GraphCtrlView
+//                                              E3dView
+//                                                  DrawViewWrapper
+//                                                  FmFormView
+//                                                      ScDrawView
+//                                                      sd::View (may have more?)
+//                                                          sd::DrawView
+//                                                      SwDrawView
+//                                              OSectionView
 
 class SVX_DLLPUBLIC SdrPaintView : public SfxListener, public SfxRepeatTarget, public SfxBroadcaster, public ::utl::ConfigurationListener
 {
+private:
     friend class                SdrPageView;
     friend class                SdrGrafObj;
 
-    SdrPageView*                mpPageView;
+    // the SdrModel this view was created with, unchanged during lifetime
+    SdrModel&                   mrSdrModelFromSdrView;
+
+    std::unique_ptr<SdrPageView> mpPageView;
 protected:
     SdrModel*                   mpModel;
 #ifdef DBG_UTIL
@@ -137,25 +147,24 @@ protected:
 //  Container                   aPagV;         // List of SdrPageViews
 
     // All windows this view is displayed on
-    SdrPaintWindowVector        maPaintWindows;
+    std::vector< std::unique_ptr<SdrPaintWindow> >  maPaintWindows;
 
     Size                        maGridBig;   // FIXME: We need to get rid of this eventually
     Size                        maGridFin;   // FIXME: We need to get rid of this eventually
     SdrDragStat                 maDragStat;
-    Rectangle                   maMaxWorkArea;
+    tools::Rectangle            maMaxWorkArea;
     SfxItemSet                  maDefaultAttr;
     Idle                        maComeBackIdle;
 
     SdrAnimationMode            meAnimationMode;
 
-    sal_uInt16                      mnHitTolPix;
-    sal_uInt16                      mnMinMovPix;
-    sal_uInt16                      mnHitTolLog;
-    sal_uInt16                      mnMinMovLog;
-    GraphicManagerDrawFlags         mnGraphicManagerDrawMode;
+    sal_uInt16                  mnHitTolPix;
+    sal_uInt16                  mnMinMovPix;
+    sal_uInt16                  mnHitTolLog;
+    sal_uInt16                  mnMinMovLog;
 
     // Hold an incarnation of Drawinglayer configuration options
-    SvtOptionsDrawinglayer      maDrawinglayerOpt;
+    SvtOptionsDrawinglayer const maDrawinglayerOpt;
 
     bool                        mbPageVisible : 1;
     bool                        mbPageShadowVisible : 1;
@@ -169,16 +178,12 @@ protected:
     bool                        mbGlueVisible2 : 1;   // Also show glue points for GluePointEdit
     bool                        mbGlueVisible3 : 1;   // Also show glue points for EdgeTool
     bool                        mbGlueVisible4 : 1;   // Show glue points, if one edge is selected
-    bool                        mbRestoreColors : 1;  // Pens and Brushes are reset
     bool                        mbSomeObjChgdFlag : 1;
     bool                        mbSwapAsynchron : 1;
     bool                        mbPrintPreview : 1;
 
     // These bools manage, the status that is displayed
     //
-    // Enter/Leave group: default is true, but is set to false in
-    // e.g. Chart, where we'd get Ghost effects when rendering
-    bool                        mbVisualizeEnteredGroup : 1;
     bool                        mbAnimationPause : 1;
 
     // Flag which decides if buffered output for this view is allowed. When
@@ -220,10 +225,8 @@ protected:
     Color                           maGridColor;
 
     // Interface to SdrPaintWindow
-protected:
-    void AppendPaintWindow(SdrPaintWindow& rNew);
-    SdrPaintWindow* RemovePaintWindow(SdrPaintWindow& rOld);
-    void ConfigurationChanged( ::utl::ConfigurationBroadcaster*, sal_uInt32 ) override;
+    void DeletePaintWindow(SdrPaintWindow& rOld);
+    void ConfigurationChanged( ::utl::ConfigurationBroadcaster*, ConfigurationHints ) override;
 
 public:
     sal_uInt32 PaintWindowCount() const { return maPaintWindows.size(); }
@@ -234,7 +237,7 @@ public:
 
 private:
     SVX_DLLPRIVATE void ImpClearVars();
-    DECL_LINK_TYPED(ImpComeBackHdl, Idle*, void);
+    DECL_LINK(ImpComeBackHdl, Timer*, void);
 
 protected:
     sal_uInt16 ImpGetMinMovLogic(short nMinMov, const OutputDevice* pOut) const;
@@ -249,22 +252,24 @@ protected:
 
 public:
     bool ImpIsGlueVisible() { return mbGlueVisible || mbGlueVisible2 || mbGlueVisible3 || mbGlueVisible4; }
-protected:
 
+protected:
     virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
     void GlueInvalidate() const;
 
-    // ModelHasChanged is called, as soon as the system is idle again after many HINT_OBJCHG.
+    // ModelHasChanged is called, as soon as the system is idle again after many SdrHintKind::ObjectChange.
     //
     // Any sub-class override this method, MUST call the base class' ModelHasChanged() method
     virtual void ModelHasChanged();
 
-protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrPaintView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrPaintView();
+    // A SdrView always needs a SdrModel for lifetime (Pool, ...)
+    SdrPaintView(SdrModel& rSdrModel, OutputDevice* pOut);
+    virtual ~SdrPaintView() override;
 
 public:
+    // SdrModel access on SdrView level
+    SdrModel& getSdrModelFromSdrView() const { return mrSdrModelFromSdrView; }
 
     virtual void ClearPageView();
     SdrModel* GetModel() const { return mpModel; }
@@ -274,13 +279,10 @@ public:
     virtual void EndAction();
     virtual void BckAction();
     virtual void BrkAction(); // Cancel all Actions (e.g. cancel dragging)
-    virtual void TakeActionRect(Rectangle& rRect) const;
+    virtual void TakeActionRect(tools::Rectangle& rRect) const;
 
     // Info about TextEdit. Default is sal_False.
     virtual bool IsTextEdit() const;
-
-    // Info about TextEditPageView. Default is 0L.
-    virtual SdrPageView* GetTextEditPageView() const;
 
     // Must be called for every Window change as well as MapMode (Scaling) change:
     // If the SdrView is shown in multiple windows at the same time (e.g.
@@ -289,13 +291,10 @@ public:
     void SetActualWin(const OutputDevice* pWin);
     void SetMinMoveDistancePixel(sal_uInt16 nVal) { mnMinMovPix=nVal; TheresNewMapMode(); }
     void SetHitTolerancePixel(sal_uInt16 nVal) { mnHitTolPix=nVal; TheresNewMapMode(); }
-    sal_uInt16 GetHitTolerancePixel() const { return (sal_uInt16)mnHitTolPix; }
+    sal_uInt16 GetHitTolerancePixel() const { return mnHitTolPix; }
 
     // Data read access on logic HitTolerance and MinMoveTolerance
     sal_uInt16 getHitTolLog() const { return mnHitTolLog; }
-
-    // Flag for group visualization
-    bool DoVisualizeEnteredGroup() const { return mbVisualizeEnteredGroup; }
 
     // Using the DragState we can tell e.g. which distance was
     // already dragged
@@ -312,19 +311,19 @@ public:
     virtual void HideSdrPage();
 
     // Iterate over all registered PageViews
-    SdrPageView* GetSdrPageView() const { return mpPageView; }
+    SdrPageView* GetSdrPageView() const { return mpPageView.get(); }
 
     // A SdrView can be displayed on multiple Windows at the same time
     virtual void AddWindowToPaintView(OutputDevice* pNewWin, vcl::Window* pWindow);
     virtual void DeleteWindowFromPaintView(OutputDevice* pOldWin);
 
-    void SetLayerVisible(const OUString& rName, bool bShow=true);
+    void SetLayerVisible(const OUString& rName, bool bShow);
     bool IsLayerVisible(const OUString& rName) const;
 
     void SetLayerLocked(const OUString& rName, bool bLock=true);
     bool IsLayerLocked(const OUString& rName) const;
 
-    void SetLayerPrintable(const OUString& rName, bool bPrn=true);
+    void SetLayerPrintable(const OUString& rName, bool bPrn);
     bool IsLayerPrintable(const OUString& rName) const;
 
     // PrePaint call forwarded from app windows
@@ -387,20 +386,19 @@ public:
     /// Draw Help line of the Page or not
     bool IsHlplVisible() const { return mbHlplVisible; }
 
-    /// Draw Help line in fron of the objects or beging them
+    /// Draw Help line in front of the objects or behind them
     bool IsHlplFront() const { return mbHlplFront  ; }
 
-    Color GetGridColor() const { return maGridColor;}
+    const Color& GetGridColor() const { return maGridColor;}
     void SetPageVisible(bool bOn = true) { mbPageVisible=bOn; InvalidateAllWin(); }
-    void SetPageShadowVisible(bool bOn = true) { mbPageShadowVisible=bOn; InvalidateAllWin(); }
+    void SetPageShadowVisible(bool bOn) { mbPageShadowVisible=bOn; InvalidateAllWin(); }
     void SetPageBorderVisible(bool bOn = true) { mbPageBorderVisible=bOn; InvalidateAllWin(); }
     void SetBordVisible(bool bOn = true) { mbBordVisible=bOn; InvalidateAllWin(); }
-    void SetGridVisible(bool bOn = true) { mbGridVisible=bOn; InvalidateAllWin(); }
-    void SetGridFront(bool bOn = true) { mbGridFront  =bOn; InvalidateAllWin(); }
+    void SetGridVisible(bool bOn) { mbGridVisible=bOn; InvalidateAllWin(); }
+    void SetGridFront(bool bOn) { mbGridFront  =bOn; InvalidateAllWin(); }
     void SetHlplVisible(bool bOn = true) { mbHlplVisible=bOn; InvalidateAllWin(); }
-    void SetHlplFront(bool bOn = true) { mbHlplFront  =bOn; InvalidateAllWin(); }
+    void SetHlplFront(bool bOn) { mbHlplFront  =bOn; InvalidateAllWin(); }
     void SetGlueVisible(bool bOn = true) { if (mbGlueVisible!=bOn) { mbGlueVisible=bOn; if (!mbGlueVisible2 && !mbGlueVisible3 && !mbGlueVisible4) GlueInvalidate(); } }
-    void SetGridColor( Color aColor );
 
     bool IsPreviewRenderer() const { return mbPreviewRenderer; }
     void SetPreviewRenderer(bool bOn) { mbPreviewRenderer=bOn; }
@@ -410,27 +408,27 @@ public:
     bool getHideChart() const { return mbHideChart; }
     bool getHideDraw() const { return mbHideDraw; }
     bool getHideFormControl() const { return mbHideFormControl; }
-    void setHideOle(bool bNew) { if(bNew != (bool)mbHideOle) mbHideOle = bNew; }
-    void setHideChart(bool bNew) { if(bNew != (bool)mbHideChart) mbHideChart = bNew; }
-    void setHideDraw(bool bNew) { if(bNew != (bool)mbHideDraw) mbHideDraw = bNew; }
-    void setHideFormControl(bool bNew) { if(bNew != (bool)mbHideFormControl) mbHideFormControl = bNew; }
+    void setHideOle(bool bNew) { if(bNew != mbHideOle) mbHideOle = bNew; }
+    void setHideChart(bool bNew) { if(bNew != mbHideChart) mbHideChart = bNew; }
+    void setHideDraw(bool bNew) { if(bNew != mbHideDraw) mbHideDraw = bNew; }
+    void setHideFormControl(bool bNew) { if(bNew != mbHideFormControl) mbHideFormControl = bNew; }
 
     void SetGridCoarse(const Size& rSiz) { maGridBig=rSiz; }
     void SetGridFine(const Size& rSiz) {
         maGridFin=rSiz;
-        if (maGridFin.Height()==0) maGridFin.Height()=maGridFin.Width();
+        if (maGridFin.Height()==0) maGridFin.setHeight(maGridFin.Width());
         if (mbGridVisible) InvalidateAllWin();
     }
     const Size& GetGridCoarse() const { return maGridBig; }
     const Size& GetGridFine() const { return maGridFin; }
 
     void InvalidateAllWin();
-    void InvalidateAllWin(const Rectangle& rRect);
+    void InvalidateAllWin(const tools::Rectangle& rRect);
 
     /// If the View should not call Invalidate() on the windows, override
     /// the following 2 methods and do something else.
     virtual void InvalidateOneWin(vcl::Window& rWin);
-    virtual void InvalidateOneWin(vcl::Window& rWin, const Rectangle& rRect);
+    virtual void InvalidateOneWin(vcl::Window& rWin, const tools::Rectangle& rRect);
 
     void SetActiveLayer(const OUString& rName) { maActualLayer=rName; }
     const OUString&  GetActiveLayer() const { return maActualLayer; }
@@ -449,10 +447,9 @@ public:
     void SetDefaultAttr(const SfxItemSet& rAttr, bool bReplaceAll);
     const SfxItemSet& GetDefaultAttr() const { return maDefaultAttr; }
     void SetDefaultStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
-    SfxStyleSheet* GetDefaultStyleSheet() const { return mpDefaultStyleSheet; }
 
-    void SetNotPersistDefaultAttr(const SfxItemSet& rAttr, bool bReplaceAll);
-    void MergeNotPersistDefaultAttr(SfxItemSet& rAttr, bool bOnlyHardAttr) const;
+    void SetNotPersistDefaultAttr(const SfxItemSet& rAttr);
+    void MergeNotPersistDefaultAttr(SfxItemSet& rAttr) const;
 
     /// Execute a swap-in of e.g. graphics asynchronously.
     /// This does not reload all graphics like Paint does, but kicks off
@@ -466,15 +463,16 @@ public:
     virtual bool MouseButtonDown(const MouseEvent& /*rMEvt*/, vcl::Window* /*pWin*/) { return false; }
     virtual bool MouseButtonUp(const MouseEvent& /*rMEvt*/, vcl::Window* /*pWin*/) { return false; }
     virtual bool MouseMove(const MouseEvent& /*rMEvt*/, vcl::Window* /*pWin*/) { return false; }
+    virtual bool RequestHelp(const HelpEvent& /*rHEvt*/) { return false; }
     virtual bool Command(const CommandEvent& /*rCEvt*/, vcl::Window* /*pWin*/) { return false; }
 
-    bool GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr=false) const;
+    void GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr) const;
 
-    bool SetAttributes(const SfxItemSet& rSet, bool bReplaceAll);
+    void SetAttributes(const SfxItemSet& rSet, bool bReplaceAll);
     SfxStyleSheet* GetStyleSheet() const; // SfxStyleSheet* GetStyleSheet(bool& rOk) const;
-    bool SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
+    void SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
 
-    virtual void MakeVisible(const Rectangle& rRect, vcl::Window& rWin);
+    virtual void MakeVisible(const tools::Rectangle& rRect, vcl::Window& rWin);
 
     /// For Plugins
     /// Is called by the Paint of the OLE object
@@ -483,29 +481,29 @@ public:
     /// Enable/disable animations for ::Paint
     /// Is used by e.g. SdrGrafObj, if it contains an animation
     /// Preventing automatic animation is needed for e.g. the presentation view
-    bool IsAnimationEnabled() const { return ( SDR_ANIMATION_ANIMATE == meAnimationMode ); }
+    bool IsAnimationEnabled() const { return ( SdrAnimationMode::Animate == meAnimationMode ); }
     void SetAnimationEnabled( bool bEnable=true );
 
     /// Set/unset pause state for animations
     void SetAnimationPause( bool bSet );
 
     /// Mode when starting an animation in the Paint Handler:
-    /// 1. SDR_ANIMATION_ANIMATE (default): start animation normally
+    /// 1. SdrAnimationMode::Animate (default): start animation normally
     /// 2. SDR_ANIMATION_DONT_ANIMATE: only show the replacement picture
-    /// 3. SDR_ANIMATION_DISABLE: don't start and don't show any replacement
+    /// 3. SdrAnimationMode::Disable: don't start and don't show any replacement
     void SetAnimationMode( const SdrAnimationMode eMode );
 
     /// The Browser is destroyed for bShow=false
 #ifdef DBG_UTIL
-    void ShowItemBrowser(bool bShow=true);
+    void ShowItemBrowser(bool bShow);
     bool IsItemBrowserVisible() const { return mpItemBrowser!=nullptr && GetItemBrowser()->IsVisible(); }
     vcl::Window* GetItemBrowser() const;
 #endif
 
     /// Must be called by the App when scrolling etc. in order for
-    /// an active FormularControl to be moved too
-    void VisAreaChanged(const OutputDevice* pOut=nullptr);
-    void VisAreaChanged(const SdrPageWindow& rWindow);
+    /// an active FormControl to be moved too
+    void VisAreaChanged(const OutputDevice* pOut);
+    void VisAreaChanged();
 
     bool IsPrintPreview() const { return mbPrintPreview; }
     void SetPrintPreview(bool bOn = true) { mbPrintPreview=bOn; }

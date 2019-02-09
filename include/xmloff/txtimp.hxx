@@ -22,28 +22,24 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <sal/types.h>
+#include <rtl/ustring.hxx>
 #include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/uno/Sequence.hxx>
 
 #include <map>
 #include <memory>
 
-#include <xmloff/xmltkmap.hxx>
-#include <rtl/ref.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 
 class XMLTextListsHelper;
 class SvXMLImportContext;
 class SvXMLTokenMap;
 class SvXMLImportPropertyMapper;
-class SvXMLNamespaceMap;
 class SvXMLImport;
 class SvXMLStylesContext;
-class XMLTextListBlockContext;
 class SvxXMLListStyleContext;
 class XMLPropStyleContext;
 class SvI18NMap;
-class XMLSectionImportContext;
-class XMLFontStylesContext;
 template<class A> class XMLPropertyBackpatcher;
 class XMLEventsImportContext;
 
@@ -60,12 +56,13 @@ namespace text {
     class XFormField;
 }
 namespace frame { class XModel; }
-namespace container { class XNameContainer; class XIndexReplace; class XNameAccess; }
+namespace container { class XNameContainer; class XIndexReplace; }
 namespace beans { class XPropertySet; }
 namespace xml { namespace sax { class XAttributeList; } }
 namespace util { struct DateTime; }
-namespace lang { class XMultiServiceFactory; }
 } } }
+
+namespace rtl { template <class reference_type> class Reference; }
 
 enum SwXMLTextElemTokens
 {
@@ -95,8 +92,7 @@ enum SwXMLTextElemTokens
     XML_TOK_TEXT_FORMS,
     XML_TOK_TEXT_CALCULATION_SETTINGS,
     XML_TOK_TEXT_AUTOMARK,
-    XML_TOK_TEXT_NUMBERED_PARAGRAPH,
-    XML_TOK_TEXT_ELEM_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_NUMBERED_PARAGRAPH
 };
 
 enum XMLTextPElemTokens
@@ -235,9 +231,7 @@ enum XMLTextPElemTokens
 
     XML_TOK_TEXT_FIELDMARK,
     XML_TOK_TEXT_FIELDMARK_START,
-    XML_TOK_TEXT_FIELDMARK_END,
-
-    XML_TOK_TEXT_P_ELEM_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_FIELDMARK_END
 };
 
 enum XMLTextPAttrTokens
@@ -251,11 +245,9 @@ enum XMLTextPAttrTokens
     XML_TOK_TEXT_P_STYLE_NAME,
     XML_TOK_TEXT_P_COND_STYLE_NAME,
     XML_TOK_TEXT_P_LEVEL,
-    XML_TOK_TEXT_P_CLASS_NAMES,
     XML_TOK_TEXT_P_IS_LIST_HEADER,
     XML_TOK_TEXT_P_RESTART_NUMBERING,
-    XML_TOK_TEXT_P_START_VALUE,
-    XML_TOK_TEXT_P_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_P_START_VALUE
 };
 
 enum XMLTextNumberedParagraphAttrTokens
@@ -265,8 +257,7 @@ enum XMLTextNumberedParagraphAttrTokens
     XML_TOK_TEXT_NUMBERED_PARAGRAPH_LEVEL,
     XML_TOK_TEXT_NUMBERED_PARAGRAPH_STYLE_NAME,
     XML_TOK_TEXT_NUMBERED_PARAGRAPH_CONTINUE_NUMBERING,
-    XML_TOK_TEXT_NUMBERED_PARAGRAPH_START_VALUE,
-    XML_TOK_TEXT_NUMBERED_PARAGRAPH_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_NUMBERED_PARAGRAPH_START_VALUE
 };
 
 enum XMLTextListBlockAttrTokens
@@ -274,16 +265,13 @@ enum XMLTextListBlockAttrTokens
     XML_TOK_TEXT_LIST_BLOCK_XMLID,
     XML_TOK_TEXT_LIST_BLOCK_STYLE_NAME,
     XML_TOK_TEXT_LIST_BLOCK_CONTINUE_NUMBERING,
-    XML_TOK_TEXT_LIST_BLOCK_ID,
-    XML_TOK_TEXT_LIST_BLOCK_CONTINUE_LIST,
-    XML_TOK_TEXT_LIST_BLOCK_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_LIST_BLOCK_CONTINUE_LIST
 };
 
 enum XMLTextListBlockElemTokens
 {
     XML_TOK_TEXT_LIST_HEADER,
-    XML_TOK_TEXT_LIST_ITEM,
-    XML_TOK_TEXT_LIST_BLOCK_ELEM_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_LIST_ITEM
 };
 
 enum XMLTextFrameAttrTokens
@@ -313,8 +301,7 @@ enum XMLTextFrameAttrTokens
     XML_TOK_TEXT_FRAME_APPLET_NAME,
     XML_TOK_TEXT_FRAME_FRAME_NAME,
     XML_TOK_TEXT_FRAME_NOTIFY_ON_UPDATE,
-    XML_TOK_TEXT_FRAME_MIN_WIDTH,
-    XML_TOK_TEXT_FRAME_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_FRAME_MIN_WIDTH
 };
 
 enum XMLTextHyperlinkAttrTokens
@@ -325,8 +312,7 @@ enum XMLTextHyperlinkAttrTokens
     XML_TOK_TEXT_HYPERLINK_SHOW,
     XML_TOK_TEXT_HYPERLINK_STYLE_NAME,
     XML_TOK_TEXT_HYPERLINK_VIS_STYLE_NAME,
-    XML_TOK_TEXT_HYPERLINK_SERVER_MAP,
-    XML_TOK_TEXT_HYPERLINK_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_HYPERLINK_SERVER_MAP
 };
 
 enum XMLTextPageMasterElemTokens
@@ -336,8 +322,7 @@ enum XMLTextPageMasterElemTokens
     XML_TOK_TEXT_MP_HEADER_LEFT,
     XML_TOK_TEXT_MP_FOOTER_LEFT,
     XML_TOK_TEXT_MP_HEADER_FIRST,
-    XML_TOK_TEXT_MP_FOOTER_FIRST,
-    XML_TOK_TEXT_MP_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_MP_FOOTER_FIRST
 };
 
 enum XMLTextContourAttrTokens
@@ -347,19 +332,18 @@ enum XMLTextContourAttrTokens
     XML_TOK_TEXT_CONTOUR_VIEWBOX,
     XML_TOK_TEXT_CONTOUR_POINTS,
     XML_TOK_TEXT_CONTOUR_D,
-    XML_TOK_TEXT_CONTOUR_AUTO,
-    XML_TOK_TEXT_CONTOUR_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_CONTOUR_AUTO
 };
 enum XMLTextType
 {
-    XML_TEXT_TYPE_BODY,
-    XML_TEXT_TYPE_CELL,
-    XML_TEXT_TYPE_SHAPE,
-    XML_TEXT_TYPE_TEXTBOX,
-    XML_TEXT_TYPE_HEADER_FOOTER,
-    XML_TEXT_TYPE_SECTION,
-    XML_TEXT_TYPE_FOOTNOTE,
-    XML_TEXT_TYPE_CHANGED_REGION
+    Body,
+    Cell,
+    Shape,
+    TextBox,
+    HeaderFooter,
+    Section,
+    Footnote,
+    ChangedRegion
 };
 
 /// variable type (for XMLSetVarFieldImportContext)
@@ -410,7 +394,7 @@ public:
             bool const bProgress = false, bool const bBlockMode = false,
             bool const bOrganizerMode = false);
 
-    virtual ~XMLTextImportHelper();
+    virtual ~XMLTextImportHelper() override;
 
     void SetCursor(
             const css::uno::Reference< css::text::XTextCursor >& rCursor );
@@ -422,7 +406,7 @@ public:
             SvXMLImport& rImport,
             sal_uInt16 nPrefix, const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
-            XMLTextType eType = XML_TEXT_TYPE_SHAPE );
+            XMLTextType eType = XMLTextType::Shape );
 
     SvXMLTokenMap const& GetTextElemTokenMap();
     SvXMLTokenMap const& GetTextPElemTokenMap();
@@ -461,12 +445,12 @@ public:
     void DeleteParagraph();
 
     void InsertControlCharacter( sal_Int16 nControl );
-    void InsertTextContent( css::uno::Reference< css::text::XTextContent > & xContent);
+    void InsertTextContent( css::uno::Reference< css::text::XTextContent > const & xContent);
 
     // Add parameter <bOutlineLevelAttrFound> (#i73509#)
     // Add parameter <bSetListAttrs> in order to suppress the handling of the list attributes (#i80724#)
     OUString SetStyleAndAttrs(
-            SvXMLImport& rImport,
+            SvXMLImport const & rImport,
             const css::uno::Reference< css::text::XTextCursor >& rCursor,
             const OUString& rStyleName,
             bool bPara,
@@ -489,16 +473,16 @@ public:
     void SetOutlineStyles( bool bSetEmpty );
 
     void SetHyperlink(
-            SvXMLImport& rImport,
+            SvXMLImport const & rImport,
             const css::uno::Reference< css::text::XTextCursor >& rCursor,
             const OUString& rHRef,
             const OUString& rName,
             const OUString& rTargetFrameName,
             const OUString& rStyleName,
             const OUString& rVisitedStyleName,
-            XMLEventsImportContext* pEvents = nullptr);
+            XMLEventsImportContext* pEvents);
     void SetRuby(
-            SvXMLImport& rImport,
+            SvXMLImport const & rImport,
             const css::uno::Reference< css::text::XTextCursor >& rCursor,
             const OUString& rStyleName,
             const OUString& rTextStyleName,
@@ -530,10 +514,17 @@ public:
 
     const css::uno::Reference< css::container::XNameContainer> & GetPageStyles() const;
 
+    const css::uno::Reference< css::container::XNameContainer> & GetCellStyles() const;
+
     const css::uno::Reference< css::container::XIndexReplace > &
         GetChapterNumbering() const;
 
     bool HasFrameByName( const OUString& rName ) const;
+
+    bool IsDuplicateFrame(const OUString& sName, sal_Int32 nX, sal_Int32 nY, sal_Int32 nWidth, sal_Int32 nHeight) const;
+    void StoreLastImportedFrameName(const OUString& rName);
+    void ClearLastImportedTextFrameName();
+
     void ConnectFrameChains( const OUString& rFrmName,
         const OUString& rNextFrmName,
         const css::uno::Reference< css::beans::XPropertySet >& rFrmPropSet );
@@ -552,6 +543,7 @@ public:
     static SvXMLImportPropertyMapper* CreateParaDefaultExtPropMapper(SvXMLImport&);
     static SvXMLImportPropertyMapper* CreateTableDefaultExtPropMapper(SvXMLImport&);
     static SvXMLImportPropertyMapper* CreateTableRowDefaultExtPropMapper(SvXMLImport&);
+    static SvXMLImportPropertyMapper* CreateTableCellExtPropMapper(SvXMLImport&);
 
     SvI18NMap& GetRenameMap();
 
@@ -575,7 +567,7 @@ public:
     void pushFieldCtx( const OUString& name, const OUString& type );
     void popFieldCtx();
     void addFieldParam( const OUString& name, const OUString& value );
-    void setCurrentFieldParamsTo(css::uno::Reference< css::text::XFormField> &xFormField);
+    void setCurrentFieldParamsTo(css::uno::Reference< css::text::XFormField> const &xFormField);
     OUString getCurrentFieldType();
     bool hasCurrentFieldCtx();
 
@@ -688,7 +680,7 @@ public:
         const css::uno::Sequence<sal_Int8> & rProtectionKey );
 
     /// get the last open redline ID
-    OUString GetOpenRedlineId();
+    OUString const & GetOpenRedlineId();
     /// modify the last open redline ID
     void SetOpenRedlineId( OUString const & rId);
     /// reset the last open redline ID
@@ -716,6 +708,11 @@ public:
 
     void AddCrossRefHeadingMapping(OUString const& rFrom, OUString const& rTo);
     void MapCrossRefHeadingFieldsHorribly();
+
+    void setBookmarkAttributes(OUString const& bookmark, bool hidden, OUString const& condition);
+    bool getBookmarkHidden(OUString const& bookmark) const;
+    const OUString& getBookmarkCondition(OUString const& bookmark) const;
+
 };
 
 #endif

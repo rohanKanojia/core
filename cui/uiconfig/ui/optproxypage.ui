@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkFrame" id="OptProxyPage">
     <property name="visible">True</property>
@@ -29,7 +29,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Proxy s_erver:</property>
+                <property name="label" translatable="yes" context="optproxypage|label2">Proxy s_erver:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">proxymode</property>
               </object>
@@ -80,7 +80,6 @@
                 <property name="can_focus">True</property>
                 <property name="valign">center</property>
                 <property name="hexpand">True</property>
-                <property name="invisible_char">●</property>
               </object>
               <packing>
                 <property name="left_attach">1</property>
@@ -135,9 +134,9 @@
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
                 <items>
-                  <item translatable="yes">None</item>
-                  <item translatable="yes">System</item>
-                  <item translatable="yes">Manual</item>
+                  <item translatable="yes" context="optproxypage|proxymode">None</item>
+                  <item translatable="yes" context="optproxypage|proxymode">System</item>
+                  <item translatable="yes" context="optproxypage|proxymode">Manual</item>
                 </items>
               </object>
               <packing>
@@ -150,7 +149,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">HT_TP proxy:</property>
+                <property name="label" translatable="yes" context="optproxypage|httpft">HT_TP proxy:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">http</property>
               </object>
@@ -163,7 +162,7 @@
               <object class="GtkLabel" id="httpportft">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">_Port:</property>
+                <property name="label" translatable="yes" context="optproxypage|httpportft">_Port:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">httpport</property>
               </object>
@@ -177,7 +176,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">HTTP_S proxy:</property>
+                <property name="label" translatable="yes" context="optproxypage|httpsft">HTTP_S proxy:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">https</property>
               </object>
@@ -191,7 +190,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">_FTP proxy:</property>
+                <property name="label" translatable="yes" context="optproxypage|ftpft">_FTP proxy:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">ftp</property>
               </object>
@@ -205,7 +204,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">_No proxy for:</property>
+                <property name="label" translatable="yes" context="optproxypage|noproxyft">_No proxy for:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">noproxy</property>
               </object>
@@ -218,7 +217,7 @@
               <object class="GtkLabel" id="httpsportft">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">P_ort:</property>
+                <property name="label" translatable="yes" context="optproxypage|httpsportft">P_ort:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">httpsport</property>
               </object>
@@ -231,7 +230,7 @@
               <object class="GtkLabel" id="ftpportft">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">P_ort:</property>
+                <property name="label" translatable="yes" context="optproxypage|ftpportft">P_ort:</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">ftpport</property>
               </object>
@@ -245,7 +244,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Separator ;</property>
+                <property name="label" translatable="yes" context="optproxypage|noproxydesc">Separator ;</property>
               </object>
               <packing>
                 <property name="left_attach">2</property>
@@ -267,7 +266,7 @@
       <object class="GtkLabel" id="label1">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Settings</property>
+        <property name="label" translatable="yes" context="optproxypage|label1">Settings</property>
         <attributes>
           <attribute name="weight" value="bold"/>
         </attributes>

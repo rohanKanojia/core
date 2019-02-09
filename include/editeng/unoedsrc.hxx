@@ -26,17 +26,16 @@
 #include <rtl/ustring.hxx>
 #include <tools/gen.hxx>
 #include <vcl/mapmod.hxx>
-#include <tools/color.hxx>
 #include <svl/poolitem.hxx>
-#include <svl/itempool.hxx>
 #include <editeng/editengdllapi.h>
 #include <editeng/editeng.hxx>
 
-#include <list>
+#include <vector>
 
 struct ESelection;
 struct EFieldInfo;
 struct EBulletInfo;
+class Color;
 class OutputDevice;
 class SfxItemSet;
 class SvxTextForwarder;
@@ -46,7 +45,7 @@ class SvxFieldItem;
 class SfxBroadcaster;
 class SvxUnoTextRangeBase;
 
-typedef std::list< SvxUnoTextRangeBase* > SvxUnoTextRangeBaseList;
+typedef std::vector< SvxUnoTextRangeBase* > SvxUnoTextRangeBaseVec;
 
 /** Wrapper class for unified EditEngine/Outliner access
 
@@ -57,10 +56,16 @@ typedef std::list< SvxUnoTextRangeBase* > SvxUnoTextRangeBaseList;
 class EDITENG_DLLPUBLIC SvxEditSource
 {
 public:
+    SvxEditSource() = default;
+    SvxEditSource(SvxEditSource const &) = default;
+    SvxEditSource(SvxEditSource &&) = default;
+    SvxEditSource & operator =(SvxEditSource const &) = default;
+    SvxEditSource & operator =(SvxEditSource &&) = default;
+
     virtual                 ~SvxEditSource();
 
     /// Returns a new reference to the same object. This is a shallow copy
-    virtual SvxEditSource*      Clone() const = 0;
+    virtual std::unique_ptr<SvxEditSource> Clone() const = 0;
 
     /** Query the text forwarder
 
@@ -123,7 +128,7 @@ public:
 
     /** returns a const list of all text ranges that are registered
         for the underlying text object. */
-    virtual const SvxUnoTextRangeBaseList& getRanges() const;
+    virtual const SvxUnoTextRangeBaseVec& getRanges() const;
 };
 
 
@@ -137,12 +142,12 @@ public:
 class EDITENG_DLLPUBLIC SvxTextForwarder
 {
 public:
-    virtual             ~SvxTextForwarder();
+    virtual             ~SvxTextForwarder() COVERITY_NOEXCEPT_FALSE;
 
     virtual sal_Int32   GetParagraphCount() const = 0;
     virtual sal_Int32   GetTextLen( sal_Int32 nParagraph ) const = 0;
     virtual OUString    GetText( const ESelection& rSel ) const = 0;
-    virtual SfxItemSet  GetAttribs( const ESelection& rSel, EditEngineAttribs nOnlyHardAttrib = EditEngineAttribs_All ) const = 0;
+    virtual SfxItemSet  GetAttribs( const ESelection& rSel, EditEngineAttribs nOnlyHardAttrib = EditEngineAttribs::All ) const = 0;
     virtual SfxItemSet  GetParaAttribs( sal_Int32 nPara ) const = 0;
     virtual void        SetParaAttribs( sal_Int32 nPara, const SfxItemSet& rSet ) = 0;
     virtual void        RemoveAttribs( const ESelection& rSelection ) = 0;
@@ -156,7 +161,7 @@ public:
     virtual void        QuickSetAttribs( const SfxItemSet& rSet, const ESelection& rSel ) = 0;
     virtual void        QuickInsertLineBreak( const ESelection& rSel ) = 0;
 
-    virtual OUString    CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, Color*& rpTxtColor, Color*& rpFldColor ) = 0;
+    virtual OUString    CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, boost::optional<Color>& rpTxtColor, boost::optional<Color>& rpFldColor ) = 0;
     virtual void         FieldClicked( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos ) = 0;
 
     virtual SfxItemPool* GetPool() const = 0;
@@ -210,9 +215,6 @@ public:
      */
     virtual EBulletInfo     GetBulletInfo( sal_Int32 nPara ) const = 0;
 
-    virtual void            SetUpdateModeForAcc(bool) {}
-    virtual bool            GetUpdateModeForAcc() const { return true; }
-
     /** Query the bounding rectangle of the given character
 
         @param nPara[0 .. n]
@@ -234,7 +236,7 @@ public:
         left corner of text. The coordinates returned here are to be
         interpreted in the map mode given by GetMapMode().
     */
-    virtual Rectangle       GetCharBounds( sal_Int32 nPara, sal_Int32 nIndex ) const = 0;
+    virtual tools::Rectangle       GetCharBounds( sal_Int32 nPara, sal_Int32 nIndex ) const = 0;
 
     /** Query the bounding rectangle of the given paragraph
 
@@ -245,7 +247,7 @@ public:
         left corner of text. The coordinates returned here are to be
         interpreted in the map mode given by GetMapMode().
      */
-    virtual Rectangle       GetParaBounds( sal_Int32 nPara ) const = 0;
+    virtual tools::Rectangle       GetParaBounds( sal_Int32 nPara ) const = 0;
 
     /** Query the map mode of the underlying EditEngine/Outliner
 
@@ -270,7 +272,7 @@ public:
 
         @param rPoint
         Point to query text position of. Is interpreted in logical
-        coordinates, relativ to the upper left corner of the text, and
+        coordinates, relative to the upper left corner of the text, and
         in the map mode given by GetMapMode()
 
         @param rPara[0 .. n-1]
@@ -454,15 +456,6 @@ public:
         @return sal_False, if no longer valid
      */
     virtual bool        IsValid() const = 0;
-
-    /** Query visible area of the view containing the text
-
-        @return the visible rectangle of the text, i.e. the part of
-        the EditEngine or Outliner that is currently on screen. The
-        values are already in screen coordinates (pixel), and have to
-        be relative to the EditEngine/Outliner's upper left corner.
-     */
-    virtual Rectangle   GetVisArea() const = 0;
 
     /** Convert from logical, EditEngine-relative coordinates to screen coordinates
 

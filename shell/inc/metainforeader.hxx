@@ -23,6 +23,7 @@
 #include "basereader.hxx"
 #include "types.hxx"
 #include <stack>
+#include "filepath.hxx"
 
 class ITag;
 class CKeywordsTag;
@@ -32,9 +33,9 @@ class CDummyTag;
 class CMetaInfoReader : public CBaseReader
 {
 public:
-    virtual ~CMetaInfoReader();
+    virtual ~CMetaInfoReader() override;
 
-    CMetaInfoReader( const std::string& DocumentName );
+    CMetaInfoReader( const Filepath_t& DocumentName );
 
     CMetaInfoReader( StreamInterface* stream );
 
@@ -89,7 +90,7 @@ protected: // protected because its only an implementation relevant class
     virtual void start_element(
         const std::wstring& raw_name,
         const std::wstring& local_name,
-        const XmlTagAttributes_t& attributes);
+        const XmlTagAttributes_t& attributes) override;
 
     /** end_element occurs when a tag is closed
 
@@ -99,14 +100,14 @@ protected: // protected because its only an implementation relevant class
         local name of the tag.
     */
     virtual void end_element(
-        const std::wstring& raw_name, const std::wstring& local_name);
+        const std::wstring& raw_name, const std::wstring& local_name) override;
 
     /** characters occurs when receiving characters
 
         @param character
         content of the information received.
     */
-    virtual void characters(const std::wstring& character);
+    virtual void characters(const std::wstring& character) override;
 
 protected:
     /** choose an appropriate tag reader to handle the tag.

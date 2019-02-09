@@ -23,7 +23,6 @@
 #include <sfx2/childwin.hxx>
 #include <editeng/SpellPortions.hxx>
 #include <svx/svxdllapi.h>
-#include <vcl/image.hxx>
 
 class AbstractSpellDialog;
 
@@ -46,14 +45,13 @@ class SVX_DLLPUBLIC SpellDialogChildWindow
     : public SfxChildWindow
 {
     friend class SpellDialog;
-    std::unique_ptr<AbstractSpellDialog> m_xAbstractSpellDialog;
+    VclPtr<AbstractSpellDialog> m_xAbstractSpellDialog;
 public:
     SpellDialogChildWindow (
         vcl::Window*pParent,
         sal_uInt16 nId,
-        SfxBindings* pBindings,
-        SfxChildWinInfo* pInfo);
-    virtual ~SpellDialogChildWindow ();
+        SfxBindings* pBindings);
+    virtual ~SpellDialogChildWindow () override;
 
 protected:
     /** This abstract method has to be defined by a derived class.  It

@@ -1,7 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<!-- Generated with glade 3.22.1 -->
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
+  <object class="GtkTreeStore" id="liststore1">
+    <columns>
+      <!-- column-name check1 -->
+      <column type="gboolean"/>
+      <!-- column-name check2 -->
+      <column type="gboolean"/>
+      <!-- column-name text -->
+      <column type="gchararray"/>
+      <!-- column-name id -->
+      <column type="gchararray"/>
+      <!-- column-name checkvis1 -->
+      <column type="gboolean"/>
+      <!-- column-name checkvis2 -->
+      <column type="gboolean"/>
+    </columns>
+  </object>
+  <object class="GtkTreeStore" id="liststore2">
+    <columns>
+      <!-- column-name check1 -->
+      <column type="gboolean"/>
+      <!-- column-name text -->
+      <column type="gchararray"/>
+      <!-- column-name id -->
+      <column type="gchararray"/>
+      <!-- column-name checkvis1 -->
+      <column type="gboolean"/>
+    </columns>
+  </object>
   <object class="GtkBox" id="ApplyLocalizedPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -24,71 +52,136 @@
             <property name="vexpand">True</property>
             <property name="column_homogeneous">True</property>
             <child>
-              <object class="GtkLabel" id="m">
-                <property name="can_focus">False</property>
-                <property name="no_show_all">True</property>
-                <property name="label" translatable="yes">[M]</property>
+              <object class="GtkScrolledWindow">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkTreeView" id="list">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="model">liststore1</property>
+                    <property name="search_column">0</property>
+                    <property name="show_expanders">False</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection" id="Macro Library List-selection1"/>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="treeviewcolumn1">
+                        <property name="resizable">True</property>
+                        <property name="spacing">6</property>
+                        <property name="title" translatable="yes" context="applylocalizedpage|m">[M]</property>
+                        <property name="alignment">0.5</property>
+                        <child>
+                          <object class="GtkCellRendererToggle" id="cellrenderer1"/>
+                          <attributes>
+                            <attribute name="visible">4</attribute>
+                            <attribute name="active">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="treeviewcolumn2">
+                        <property name="resizable">True</property>
+                        <property name="spacing">6</property>
+                        <property name="title" translatable="yes" context="applylocalizedpage|t">[T]</property>
+                        <property name="alignment">0.5</property>
+                        <child>
+                          <object class="GtkCellRendererToggle" id="cellrenderer2"/>
+                          <attributes>
+                            <attribute name="visible">5</attribute>
+                            <attribute name="active">1</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="treeviewcolumn3">
+                        <property name="resizable">True</property>
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="cellrenderer3"/>
+                          <attributes>
+                            <attribute name="text">2</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
+                <property name="width">2</property>
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="t">
-                <property name="can_focus">False</property>
-                <property name="no_show_all">True</property>
-                <property name="label" translatable="yes">[T]</property>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="svtlo-SvSimpleTableContainer" id="list:border">
+              <object class="GtkScrolledWindow">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
-                <child internal-child="selection">
-                  <object class="GtkTreeSelection" id="Simple Table Container-selection1"/>
+                <property name="shadow_type">in</property>
+                <child>
+                  <object class="GtkTreeView" id="checklist">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="model">liststore2</property>
+                    <property name="headers_visible">False</property>
+                    <property name="search_column">0</property>
+                    <property name="show_expanders">False</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection" id="Macro Library List-selection2"/>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="treeviewcolumn4">
+                        <property name="resizable">True</property>
+                        <property name="spacing">6</property>
+                        <property name="alignment">0.5</property>
+                        <child>
+                          <object class="GtkCellRendererToggle" id="cellrenderer5"/>
+                          <attributes>
+                            <attribute name="visible">3</attribute>
+                            <attribute name="active">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="treeviewcolumn5">
+                        <property name="resizable">True</property>
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="cellrenderer4"/>
+                          <attributes>
+                            <attribute name="text">1</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
                 </child>
               </object>
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">1</property>
                 <property name="width">2</property>
-                <property name="height">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="svxcorelo-SvxCheckListBox" id="checklist:border">
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="hexpand">True</property>
-                <property name="vexpand">True</property>
-                <child internal-child="selection">
-                  <object class="GtkTreeSelection" id="Check List Box-selection1"/>
-                </child>
-              </object>
-              <packing>
-                <property name="left_attach">0</property>
-                <property name="top_attach">2</property>
-                <property name="width">2</property>
-                <property name="height">1</property>
               </packing>
             </child>
           </object>
           <packing>
             <property name="left_attach">0</property>
             <property name="top_attach">0</property>
-            <property name="width">1</property>
-            <property name="height">1</property>
           </packing>
         </child>
         <child>
@@ -115,7 +208,7 @@
                         <property name="row_spacing">6</property>
                         <child>
                           <object class="GtkCheckButton" id="singlereplace">
-                            <property name="label" translatable="yes">Repla_ce</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|singlereplace">Repla_ce</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -126,24 +219,20 @@
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">0</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkLabel" id="startquoteft">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Start quote:</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|startquoteft">_Start quote:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">startsingle</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">1</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
@@ -159,42 +248,36 @@
                                 <property name="receives_default">True</property>
                                 <child internal-child="accessible">
                                   <object class="AtkObject" id="startsingle-atkobject">
-                                    <property name="AtkObject::accessible-name" translatable="yes">Start quote of single quotes</property>
+                                    <property name="AtkObject::accessible-name" translatable="yes" context="applylocalizedpage|startsingle-atkobject">Start quote of single quotes</property>
                                   </object>
                                 </child>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                             <child>
                               <object class="GtkLabel" id="singlestartex">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
+                                <property name="label" translatable="yes" context="applylocalizedpage|singlestartex">Default</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Default</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">2</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkButton" id="defaultsingle">
-                            <property name="label" translatable="yes">_Default</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|defaultsingle">_Default</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -202,31 +285,27 @@
                             <property name="use_underline">True</property>
                             <child internal-child="accessible">
                               <object class="AtkObject" id="defaultsingle-atkobject">
-                                <property name="AtkObject::accessible-name" translatable="yes">Single quotes default</property>
+                                <property name="AtkObject::accessible-name" translatable="yes" context="applylocalizedpage|defaultsingle-atkobject">Single quotes default</property>
                               </object>
                             </child>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">5</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkLabel" id="endquoteft">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_End quote:</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|endquoteft">_End quote:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">endsingle</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">3</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
@@ -242,37 +321,31 @@
                                 <property name="receives_default">True</property>
                                 <child internal-child="accessible">
                                   <object class="AtkObject" id="endsingle-atkobject">
-                                    <property name="AtkObject::accessible-name" translatable="yes">End quote of single quotes</property>
+                                    <property name="AtkObject::accessible-name" translatable="yes" context="applylocalizedpage|endsingle-atkobject">End quote of single quotes</property>
                                   </object>
                                 </child>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                             <child>
                               <object class="GtkLabel" id="singleendex">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
+                                <property name="label" translatable="yes" context="applylocalizedpage|singleendex">Default</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Default</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">4</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                       </object>
@@ -283,7 +356,7 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Single Quotes</property>
+                    <property name="label" translatable="yes" context="applylocalizedpage|label1">Single Quotes</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -293,8 +366,6 @@
               <packing>
                 <property name="left_attach">0</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
             <child>
@@ -315,7 +386,7 @@
                         <property name="row_spacing">6</property>
                         <child>
                           <object class="GtkCheckButton" id="doublereplace">
-                            <property name="label" translatable="yes">Repla_ce</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|doublereplace">Repla_ce</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -326,24 +397,20 @@
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">0</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkLabel" id="label6">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Start quote:</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|label6">_Start quote:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">startdouble</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">1</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
@@ -359,42 +426,36 @@
                                 <property name="receives_default">True</property>
                                 <child internal-child="accessible">
                                   <object class="AtkObject" id="startdouble-atkobject">
-                                    <property name="AtkObject::accessible-name" translatable="yes">Start quote of double quotes</property>
+                                    <property name="AtkObject::accessible-name" translatable="yes" context="applylocalizedpage|startdouble-atkobject">Start quote of double quotes</property>
                                   </object>
                                 </child>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                             <child>
                               <object class="GtkLabel" id="doublestartex">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
+                                <property name="label" translatable="yes" context="applylocalizedpage|doublestartex">Default</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Default</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">2</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkButton" id="defaultdouble">
-                            <property name="label" translatable="yes">_Default</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|defaultdouble">_Default</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
@@ -402,31 +463,27 @@
                             <property name="use_underline">True</property>
                             <child internal-child="accessible">
                               <object class="AtkObject" id="defaultdouble-atkobject">
-                                <property name="AtkObject::accessible-name" translatable="yes">Double quotes default</property>
+                                <property name="AtkObject::accessible-name" translatable="yes" context="applylocalizedpage|defaultdouble-atkobject">Double quotes default</property>
                               </object>
                             </child>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">5</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkLabel" id="label8">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_End quote:</property>
+                            <property name="label" translatable="yes" context="applylocalizedpage|label8">_End quote:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">enddouble</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">3</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                         <child>
@@ -442,37 +499,31 @@
                                 <property name="receives_default">True</property>
                                 <child internal-child="accessible">
                                   <object class="AtkObject" id="enddouble-atkobject">
-                                    <property name="AtkObject::accessible-name" translatable="yes">End quote of double quotes</property>
+                                    <property name="AtkObject::accessible-name" translatable="yes" context="applylocalizedpage|enddouble-atkobject">End quote of double quotes</property>
                                   </object>
                                 </child>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                             <child>
                               <object class="GtkLabel" id="doubleendex">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
+                                <property name="label" translatable="yes" context="applylocalizedpage|doubleendex">Default</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="yes">Default</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
                                 <property name="top_attach">0</property>
-                                <property name="width">1</property>
-                                <property name="height">1</property>
                               </packing>
                             </child>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
                             <property name="top_attach">4</property>
-                            <property name="width">1</property>
-                            <property name="height">1</property>
                           </packing>
                         </child>
                       </object>
@@ -483,7 +534,7 @@
                   <object class="GtkLabel" id="label10">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Double Quotes</property>
+                    <property name="label" translatable="yes" context="applylocalizedpage|label10">Double Quotes</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -493,16 +544,12 @@
               <packing>
                 <property name="left_attach">1</property>
                 <property name="top_attach">0</property>
-                <property name="width">1</property>
-                <property name="height">1</property>
               </packing>
             </child>
           </object>
           <packing>
             <property name="left_attach">0</property>
             <property name="top_attach">1</property>
-            <property name="width">1</property>
-            <property name="height">1</property>
           </packing>
         </child>
       </object>

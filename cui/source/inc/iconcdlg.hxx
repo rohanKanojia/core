@@ -20,68 +20,60 @@
 #define INCLUDED_CUI_SOURCE_INC_ICONCDLG_HXX
 
 #include <rtl/ustring.hxx>
-#include <svl/itempool.hxx>
-#include <svl/itemset.hxx>
 #include <svtools/ivctrl.hxx>
 #include <vcl/tabpage.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
 #include <vcl/image.hxx>
 #include <vcl/layout.hxx>
+#include <sfx2/tabdlg.hxx>
+#include <sfx2/basedlgs.hxx>
 #include <vector>
 
 // forward-declarations
 struct IconChoicePageData;
 class IconChoiceDialog;
 class IconChoicePage;
+class SfxItemPool;
+class SfxItemSet;
+enum class HyperLinkPageType;
 
 // Create-Function
-typedef VclPtr<IconChoicePage> (*CreatePage)(vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet &rAttrSet);
-typedef const sal_uInt16*      (*GetPageRanges)(); // gives international Which-value
+typedef VclPtr<IconChoicePage> (*CreatePage)(vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet* pAttrSet);
 
 /// Data-structure for pages in dialog
 struct IconChoicePageData
 {
-    sal_uInt16 nId;
+    HyperLinkPageType nId;
     CreatePage fnCreatePage;    ///< pointer to the factory
-    GetPageRanges fnGetRanges;  ///< pointer to the ranges-function
     VclPtr<IconChoicePage> pPage;      ///< the TabPage itself
-    bool bOnDemand;         ///< Flag: ItemSet onDemand
     bool bRefresh;          ///< Flag: page has to be newly initialized
 
     // constructor
-    IconChoicePageData( sal_uInt16 Id, CreatePage fnPage, GetPageRanges fnRanges )
+    IconChoicePageData( HyperLinkPageType Id, CreatePage fnPage )
         : nId           ( Id ),
           fnCreatePage  ( fnPage ),
-          fnGetRanges   ( fnRanges ),
           pPage         ( nullptr ),
-          bOnDemand     ( false ),
           bRefresh      ( false )
     {}
 };
 
 class IconChoicePage : public TabPage
 {
-    using TabPage::ActivatePage;
-    using TabPage::DeactivatePage;
-
 private:
     const SfxItemSet*   pSet;
-    OUString            aUserString;
     bool                bHasExchangeSupport;
-    VclPtr<IconChoiceDialog>   pDialog;
 
     void                ImplInitSettings();
 
 protected:
-    IconChoicePage( vcl::Window *pParent, const OString& rID, const OUString& rUIXMLDescription, const SfxItemSet &rAttrSet );
+    using TabPage::ActivatePage;
+    using TabPage::DeactivatePage;
 
-    sal_uInt16          GetWhich( sal_uInt16 nSlot ) const  { return pSet->GetPool()->GetWhich( nSlot ); }
+    IconChoicePage( vcl::Window *pParent, const OString& rID, const OUString& rUIXMLDescription, const SfxItemSet* pItemSet );
 
 public:
-    virtual ~IconChoicePage();
-    virtual void        dispose() override;
+    virtual ~IconChoicePage() override;
 
     const SfxItemSet&   GetItemSet() const { return *pSet; }
 
@@ -91,34 +83,24 @@ public:
     bool                HasExchangeSupport() const { return bHasExchangeSupport; }
     void                SetExchangeSupport()       { bHasExchangeSupport = true; }
 
-    enum {
-        KEEP_PAGE = 0x0000, ///< error handling
-        /** 2nd filling of an ItemSet for updating superior examples;
-            this pointer can always be NULL!! */
-        LEAVE_PAGE = 0x0001,
-        /// refresh set and update other pages
-        REFRESH_SET = 0x0002
-    };
-
     virtual void        ActivatePage( const SfxItemSet& );
-    virtual int         DeactivatePage( SfxItemSet* pSet );
-    OUString            GetUserData() { return aUserString; }
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet );
     virtual bool        QueryClose();
 
     void                StateChanged( StateChangedType nType ) override;
     void                DataChanged( const DataChangedEvent& rDCEvt ) override;
 };
 
-class IconChoiceDialog : public ModalDialog
+class IconChoiceDialog : public SfxModalDialog
 {
 private:
     friend class IconChoicePage;
 
-    ::std::vector< IconChoicePageData* > maPageList;
+    std::vector< std::unique_ptr<IconChoicePageData> > maPageList;
 
     VclPtr<SvtIconChoiceCtrl>       m_pIconCtrl;
 
-    sal_uInt16                  mnCurrentPageId;
+    HyperLinkPageType               mnCurrentPageId;
 
     // Buttons
     VclPtr<OKButton>                m_pOKBtn;
@@ -129,59 +111,51 @@ private:
 
     VclPtr<VclVBox>                 m_pTabContainer;
     const SfxItemSet*       pSet;
-    SfxItemSet*             pOutSet;
+    std::unique_ptr<SfxItemSet>     pOutSet;
     SfxItemSet*             pExampleSet;
-    sal_uInt16*                 pRanges;
+    std::unique_ptr<sal_uInt16[]>   pRanges;
 
-    bool                    bHideResetBtn;
-    bool                    bModal;
-    bool                    bInOK;
-    bool                    bItemsReset;
+    DECL_LINK( ChosePageHdl_Impl, SvtIconChoiceCtrl*, void );
+    DECL_LINK( OkHdl, Button*, void );
+    DECL_LINK( ApplyHdl, Button*, void) ;
+    DECL_LINK( ResetHdl, Button*, void) ;
+    DECL_LINK( CancelHdl, Button*, void );
 
-    DECL_LINK_TYPED( ChosePageHdl_Impl, SvtIconChoiceCtrl*, void );
-    DECL_LINK_TYPED( OkHdl, Button*, void );
-    DECL_LINK_TYPED( ApplyHdl, Button*, void) ;
-    DECL_LINK_TYPED( ResetHdl, Button*, void) ;
-    DECL_LINK_TYPED( CancelHdl, Button*, void );
-
-    IconChoicePageData*     GetPageData ( sal_uInt16 nId );
+    IconChoicePageData*     GetPageData ( HyperLinkPageType nId );
     void                    Start_Impl();
     bool                    OK_Impl();
 
-    void                    FocusOnIcon ( sal_uInt16 nId );
+    void                    FocusOnIcon ( HyperLinkPageType nId );
 
 protected:
-    static void             ShowPageImpl ( IconChoicePageData* pData );
-    static void             HidePageImpl ( IconChoicePageData* pData );
+    static void             ShowPageImpl ( IconChoicePageData const * pData );
+    static void             HidePageImpl ( IconChoicePageData const * pData );
 
-    virtual void            PageCreated( sal_uInt16 nId, IconChoicePage& rPage );
-    static SfxItemSet*      CreateInputItemSet( sal_uInt16 nId );
-    inline IconChoicePage*  GetTabPage( sal_uInt16 nPageId )
+    virtual void            PageCreated( HyperLinkPageType nId, IconChoicePage& rPage );
+    IconChoicePage*         GetTabPage( HyperLinkPageType nPageId )
                                 { return ( GetPageData (nPageId)->pPage ? GetPageData (nPageId)->pPage.get() : nullptr); }
-    static void             RefreshInputSet();
 
     void                    ActivatePageImpl ();
     void                    DeActivatePageImpl ();
     void                    ResetPageImpl ();
 
-    short                   Ok();
+    void                    Ok();
 
 public:
 
     // the IconChoiceCtrl's could also be set in the Ctor
-    IconChoiceDialog ( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription,
-                       const SfxItemSet * pItemSet = nullptr );
-    virtual ~IconChoiceDialog ();
+    IconChoiceDialog ( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription );
+    virtual ~IconChoiceDialog () override;
     virtual void dispose() override;
 
     // interface
     SvxIconChoiceCtrlEntry* AddTabPage(
-        sal_uInt16 nId, const OUString& rIconText, const Image& rChoiceIcon,
+        HyperLinkPageType nId, const OUString& rIconText, const Image& rChoiceIcon,
         CreatePage pCreateFunc /* != NULL */ );
 
-    void                SetCurPageId( sal_uInt16 nId ) { mnCurrentPageId = nId; FocusOnIcon( nId ); }
-    sal_uInt16          GetCurPageId() const       { return mnCurrentPageId; }
-    void                ShowPage( sal_uInt16 nId );
+    void                SetCurPageId( HyperLinkPageType nId ) { mnCurrentPageId = nId; FocusOnIcon( nId ); }
+    HyperLinkPageType   GetCurPageId() const       { return mnCurrentPageId; }
+    void                ShowPage( HyperLinkPageType nId );
 
     /// gives via map converted local slots if applicable
     const sal_uInt16*   GetInputRanges( const SfxItemPool& );

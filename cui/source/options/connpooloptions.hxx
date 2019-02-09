@@ -33,11 +33,10 @@ namespace offapp
 
     struct DriverPooling;
     class DriverListControl;
-    class ConnectionPoolOptionsPage : public SfxTabPage
+    class ConnectionPoolOptionsPage final : public SfxTabPage
     {
         using TabPage::ActivatePage;
 
-    protected:
         VclPtr<CheckBox>               m_pEnablePooling;
         VclPtr<FixedText>              m_pDriversLabel;
         VclPtr<DriverListControl>      m_pDriverList;
@@ -49,22 +48,21 @@ namespace offapp
 
     public:
         ConnectionPoolOptionsPage(vcl::Window* _pParent, const SfxItemSet& _rAttrSet);
-        virtual ~ConnectionPoolOptionsPage();
+        virtual ~ConnectionPoolOptionsPage() override;
         virtual void dispose() override;
-        static VclPtr<SfxTabPage>  Create(vcl::Window* _pParent, const SfxItemSet* _rAttrSet);
+        static VclPtr<SfxTabPage>  Create(TabPageParent _pParent, const SfxItemSet* _rAttrSet);
 
-    protected:
-        virtual bool        Notify( NotifyEvent& _rNEvt ) override;
+    private:
+        virtual bool        EventNotify( NotifyEvent& _rNEvt ) override;
 
         virtual bool        FillItemSet(SfxItemSet* _rSet) override;
         virtual void        Reset(const SfxItemSet* _rSet) override;
         virtual void        ActivatePage( const SfxItemSet& _rSet) override;
 
-    protected:
-        DECL_LINK_TYPED( OnEnabledDisabled, Button*, void );
-        DECL_LINK_TYPED( OnDriverRowChanged, const DriverPooling*, void );
+        DECL_LINK( OnEnabledDisabled, Button*, void );
+        DECL_LINK( OnDriverRowChanged, const DriverPooling*, void );
 
-        void implInitControls(const SfxItemSet& _rSet, bool _bFromReset);
+        void implInitControls(const SfxItemSet& _rSet);
 
         void commitTimeoutField();
     };

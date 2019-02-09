@@ -21,6 +21,7 @@
 #include <comphelper/sequence.hxx>
 #include <comphelper/types.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #if OSL_DEBUG_LEVEL > 0
     #include <rtl/strbuf.hxx>
@@ -30,9 +31,10 @@
     #include <typeinfo>
 #endif
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/uno/genfunc.h>
-
+#include <rtl/ustrbuf.hxx>
 #include <algorithm>
 
 
@@ -71,57 +73,55 @@ void copyProperties(const Reference<XPropertySet>& _rxSource,
     Reference< XPropertySetInfo > xDestProps = _rxDest->getPropertySetInfo();
 
     Sequence< Property > aSourceProps = xSourceProps->getProperties();
-    const Property* pSourceProps = aSourceProps.getConstArray();
     Property aDestProp;
-    for (sal_Int32 i=0; i<aSourceProps.getLength(); ++i, ++pSourceProps)
+    for (const Property& rSourceProp : aSourceProps)
     {
-        if ( xDestProps->hasPropertyByName(pSourceProps->Name) )
+        if ( xDestProps->hasPropertyByName(rSourceProp.Name) )
         {
             try
             {
-                aDestProp = xDestProps->getPropertyByName(pSourceProps->Name);
+                aDestProp = xDestProps->getPropertyByName(rSourceProp.Name);
                 if (0 == (aDestProp.Attributes & PropertyAttribute::READONLY) )
                 {
-                    const Any aSourceValue = _rxSource->getPropertyValue(pSourceProps->Name);
+                    const Any aSourceValue = _rxSource->getPropertyValue(rSourceProp.Name);
                     if ( 0 != (aDestProp.Attributes & PropertyAttribute::MAYBEVOID) || aSourceValue.hasValue() )
-                        _rxDest->setPropertyValue(pSourceProps->Name, aSourceValue);
+                        _rxDest->setPropertyValue(rSourceProp.Name, aSourceValue);
                 }
             }
             catch (Exception&)
             {
 #if OSL_DEBUG_LEVEL > 0
-                OStringBuffer aBuffer;
+                OUStringBuffer aBuffer;
                 aBuffer.append( "::comphelper::copyProperties: could not copy property '" );
-                aBuffer.append( OString( pSourceProps->Name.getStr(), pSourceProps->Name.getLength(), RTL_TEXTENCODING_ASCII_US ) );
+                aBuffer.append(rSourceProp.Name );
                 aBuffer.append( "' to the destination set (a '" );
 
                 Reference< XServiceInfo > xSI( _rxDest, UNO_QUERY );
                 if ( xSI.is() )
                 {
-                    aBuffer.append( OUStringToOString( xSI->getImplementationName(), osl_getThreadTextEncoding() ) );
+                    aBuffer.append( xSI->getImplementationName() );
                 }
                 else
                 {
-                    aBuffer.append( typeid( *_rxDest.get() ).name() );
+                    aBuffer.append( OUString::createFromAscii(typeid( *_rxDest.get() ).name()) );
                 }
                 aBuffer.append( "' implementation).\n" );
 
                 Any aException( ::cppu::getCaughtException() );
                 aBuffer.append( "Caught an exception of type '" );
-                OUString sExceptionType( aException.getValueTypeName() );
-                aBuffer.append( OString( sExceptionType.getStr(), sExceptionType.getLength(), RTL_TEXTENCODING_ASCII_US ) );
+                aBuffer.append( aException.getValueTypeName() );
                 aBuffer.append( "'" );
 
                 Exception aBaseException;
                 if ( ( aException >>= aBaseException ) && !aBaseException.Message.isEmpty() )
                 {
                     aBuffer.append( ", saying '" );
-                    aBuffer.append( OString( aBaseException.Message.getStr(), aBaseException.Message.getLength(), osl_getThreadTextEncoding() ) );
+                    aBuffer.append( aBaseException.Message );
                     aBuffer.append( "'" );
                 }
                 aBuffer.append( "." );
 
-                OSL_FAIL( aBuffer.getStr() );
+                SAL_WARN( "comphelper", aBuffer.makeStringAndClear() );
 #endif
             }
         }
@@ -144,15 +144,14 @@ void RemoveProperty(Sequence<Property>& _rProps, const OUString& _rPropName)
 {
     sal_Int32 nLen = _rProps.getLength();
 
-    // binaere Suche
+    // binary search
     const Property* pProperties = _rProps.getConstArray();
     Property aNameProp(_rPropName, 0, Type(), 0);
-    const Property* pResult = ::std::lower_bound(pProperties, pProperties + nLen, aNameProp, PropertyCompareByName());
+    const Property* pResult = std::lower_bound(pProperties, pProperties + nLen, aNameProp, PropertyCompareByName());
 
-    // gefunden ?
-    if ( pResult && (pResult != pProperties + nLen) && (pResult->Name == _rPropName) )
+    if ( pResult != _rProps.end() && pResult->Name == _rPropName )
     {
-        OSL_ENSURE(pResult->Name.equals(_rPropName), "::RemoveProperty Properties nicht sortiert");
+        OSL_ENSURE(pResult->Name == _rPropName, "::RemoveProperty Properties not sorted");
         removeElementAt(_rProps, pResult - pProperties);
     }
 }
@@ -162,13 +161,12 @@ void ModifyPropertyAttributes(Sequence<Property>& seqProps, const OUString& sPro
 {
     sal_Int32 nLen = seqProps.getLength();
 
-    // binaere Suche
+    // binary search
     Property* pProperties = seqProps.getArray();
     Property aNameProp(sPropName, 0, Type(), 0);
-    Property* pResult = ::std::lower_bound(pProperties, pProperties + nLen, aNameProp, PropertyCompareByName());
+    Property* pResult = std::lower_bound(pProperties, pProperties + nLen, aNameProp, PropertyCompareByName());
 
-    // gefunden ?
-    if ( pResult && (pResult != pProperties + nLen) && (pResult->Name == sPropName) )
+    if ( (pResult != seqProps.end()) && (pResult->Name == sPropName) )
     {
         pResult->Attributes |= nAddAttrib;
         pResult->Attributes &= ~nRemoveAttrib;

@@ -41,30 +41,24 @@ namespace sdr
         {
         }
 
-        BaseProperties& E3dCompoundProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> E3dCompoundProperties::Clone(SdrObject& rObj) const
         {
-            return *(new E3dCompoundProperties(*this, rObj));
-        }
-
-        const SfxItemSet& E3dCompoundProperties::GetObjectItemSet() const
-        {
-            //DBG_ASSERT(sal_False, "E3dCompoundProperties::GetObjectItemSet() maybe the wrong call (!)");
-            return E3dProperties::GetObjectItemSet();
+            return std::unique_ptr<BaseProperties>(new E3dCompoundProperties(*this, rObj));
         }
 
         const SfxItemSet& E3dCompoundProperties::GetMergedItemSet() const
         {
             // include Items of scene this object belongs to
             const E3dCompoundObject& rObj = static_cast<const E3dCompoundObject&>(GetSdrObject());
-            E3dScene* pScene = rObj.GetScene();
+            E3dScene* pScene(rObj.getRootE3dSceneFromE3dObject());
 
-            if(pScene)
+            if(nullptr != pScene)
             {
                 // force ItemSet
                 GetObjectItemSet();
 
                 // add filtered scene properties (SDRATTR_3DSCENE_) to local itemset
-                SfxItemSet aSet(*mpItemSet->GetPool(), SDRATTR_3DSCENE_FIRST, SDRATTR_3DSCENE_LAST);
+                SfxItemSet aSet(*mpItemSet->GetPool(), svl::Items<SDRATTR_3DSCENE_FIRST, SDRATTR_3DSCENE_LAST>{});
                 aSet.Put(pScene->GetProperties().GetObjectItemSet());
                 mpItemSet->Put(aSet);
             }
@@ -77,15 +71,15 @@ namespace sdr
         {
             // Set scene specific items at scene
             E3dCompoundObject& rObj = static_cast<E3dCompoundObject&>(GetSdrObject());
-            E3dScene* pScene = rObj.GetScene();
+            E3dScene* pScene(rObj.getRootE3dSceneFromE3dObject());
 
-            if(pScene)
+            if(nullptr != pScene)
             {
                 // force ItemSet
                 GetObjectItemSet();
 
                 // Generate filtered scene properties (SDRATTR_3DSCENE_) itemset
-                SfxItemSet aSet(*mpItemSet->GetPool(), SDRATTR_3DSCENE_FIRST, SDRATTR_3DSCENE_LAST);
+                SfxItemSet aSet(*mpItemSet->GetPool(), svl::Items<SDRATTR_3DSCENE_FIRST, SDRATTR_3DSCENE_LAST>{});
                 aSet.Put(rSet);
 
                 if(bClearAllItems)

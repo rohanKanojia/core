@@ -12,60 +12,86 @@
 #ifndef PLUGINHANDLER_H
 #define PLUGINHANDLER_H
 
-#include "plugin.hxx"
-
+#include <cstddef>
+#include <functional>
+#include <memory>
 #include <set>
+#include <unordered_map>
 
 #include <clang/AST/ASTConsumer.h>
+#include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
+#include <clang/Rewrite/Core/Rewriter.h>
+
+using namespace clang;
+
+namespace std {
+
+template<> struct hash<::clang::SourceLocation> {
+    size_t operator ()(::clang::SourceLocation loc) const
+    { return loc.getRawEncoding(); }
+};
+
+}
 
 namespace loplugin
 {
+
+class Plugin;
+struct InstantiationData;
 
 /**
  Class that manages all LO modules.
 */
 class PluginHandler
     : public ASTConsumer
-    {
-    public:
-        PluginHandler( CompilerInstance& compiler, const vector< string >& args );
-        virtual ~PluginHandler();
-        virtual void HandleTranslationUnit( ASTContext& context ) override;
-        static void registerPlugin( Plugin* (*create)( const Plugin::InstantiationData& ), const char* optionName, bool isPPCallback, bool byDefault );
-        DiagnosticBuilder report( DiagnosticsEngine::Level level, const char * plugin, StringRef message,
+{
+public:
+    PluginHandler( CompilerInstance& compiler, const std::vector< std::string >& args );
+    virtual ~PluginHandler();
+    virtual void HandleTranslationUnit( ASTContext& context ) override;
+    static void registerPlugin( Plugin* (*create)( const InstantiationData& ), const char* optionName, bool isPPCallback, bool byDefault );
+    DiagnosticBuilder report( DiagnosticsEngine::Level level, const char * plugin, StringRef message,
             CompilerInstance& compiler, SourceLocation loc = SourceLocation());
-        bool addRemoval( SourceLocation loc );
-    private:
-        void handleOption( const string& option );
-        void createPlugins( set< string > rewriters );
-        DiagnosticBuilder report( DiagnosticsEngine::Level level, StringRef message, SourceLocation loc = SourceLocation());
-        CompilerInstance& compiler;
-        Rewriter rewriter;
-        set< SourceLocation > removals;
-        string scope;
-        string warningsOnly;
-    };
+    bool ignoreLocation(SourceLocation loc);
+    bool isDebugMode() const { return debugMode; }
+    static bool isUnitTestMode();
+    // If we overlap with a previous area we modified, we cannot perform this change
+    // without corrupting the source
+    bool checkOverlap(SourceRange range);
+    void addSourceModification(SourceRange range);
+    StringRef const& getMainFileName() const { return mainFileName; }
+private:
+    void handleOption( const std::string& option );
+    void createPlugins( std::set< std::string > rewriters );
+    DiagnosticBuilder report( DiagnosticsEngine::Level level, StringRef message, SourceLocation loc = SourceLocation());
+    bool checkIgnoreLocation(SourceLocation loc);
+    CompilerInstance& compiler;
+    StringRef const mainFileName;
+    std::unordered_map<SourceLocation, bool> ignored_;
+    Rewriter rewriter;
+    std::string scope;
+    std::string warningsOnly;
+    bool warningsAsErrors;
+    bool debugMode = false;
+    std::vector<std::pair<char const*, char const*>> mvModifiedRanges;
+};
 
 /**
  The Clang plugin class, just forwards to PluginHandler.
 */
 class LibreOfficeAction
     : public PluginASTAction
-    {
-    public:
-#if CLANG_VERSION >= 30600
-        virtual std::unique_ptr<ASTConsumer> CreateASTConsumer( CompilerInstance& Compiler, StringRef InFile );
-#else
-        virtual ASTConsumer* CreateASTConsumer( CompilerInstance& Compiler, StringRef InFile );
-#endif
+{
+public:
+    virtual std::unique_ptr<ASTConsumer> CreateASTConsumer( CompilerInstance& Compiler, StringRef InFile );
 
-        virtual bool ParseArgs( const CompilerInstance& CI, const vector< string >& args );
-    private:
-        vector< string > _args;
-    };
+    virtual bool ParseArgs( const CompilerInstance& CI, const std::vector< std::string >& args );
+private:
+    std::vector< std::string > _args;
+};
 
-} // namespace
+}
 
 #endif // COMPILEPLUGIN_H
 

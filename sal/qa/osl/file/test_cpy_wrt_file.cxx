@@ -27,10 +27,6 @@
 
 using namespace osl;
 
-using ::rtl::OUString;
-using ::rtl::OUStringToOString;
-using ::rtl::OString;
-
 class test_osl_writeFile : public CppUnit::TestFixture
 {
 public:
@@ -39,24 +35,26 @@ public:
         FileBase::RC err;
 
         //create a tempfile
-        rtl::OUString aTmpFile;
+        OUString aTmpFile;
         err = FileBase::createTempFile(nullptr, nullptr, &aTmpFile);
-        CPPUNIT_ASSERT_MESSAGE("temp File creation failed", err == osl::FileBase::E_None);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("temp File creation failed", osl::FileBase::E_None, err);
 
         //now attempt to open with Create flag an existing file, should get E_EXIST
         File tmp_file(aTmpFile);
         err = tmp_file.open(osl_File_OpenFlag_Write | osl_File_OpenFlag_Create);
 
-        rtl::OString sErrorMsg = "Expected that '";
-        sErrorMsg += rtl::OUStringToOString(aTmpFile, RTL_TEXTENCODING_ASCII_US);
+        OString sErrorMsg = "Expected that '";
+        sErrorMsg += OUStringToOString(aTmpFile, RTL_TEXTENCODING_ASCII_US);
         sErrorMsg += "' would exist!";
-        CPPUNIT_ASSERT_MESSAGE(sErrorMsg.getStr(), err == FileBase::E_EXIST);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE(sErrorMsg.getStr(), FileBase::E_EXIST, err);
 
         char buffer[1];
         sal_uInt64 written = 0;
         err = tmp_file.write(static_cast<void*>(buffer), sizeof(buffer), written);
         CPPUNIT_ASSERT_MESSAGE("write on unconnected file should fail",
-            err != osl::FileBase::E_None && written == 0);
+            err != osl::FileBase::E_None);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("write on unconnected file should fail",
+            sal_uInt64(0), written);
 
         err = tmp_file.sync();
         CPPUNIT_ASSERT_MESSAGE("sync on unconnected file should fail", err != FileBase::E_None);
@@ -64,7 +62,7 @@ public:
         CPPUNIT_ASSERT_MESSAGE("close on unconnected file should fail", err != FileBase::E_None);
 
         err = ::osl::File::remove(aTmpFile);
-        CPPUNIT_ASSERT_MESSAGE("temp file should have existed", err == FileBase::E_None);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("temp file should have existed", FileBase::E_None, err);
     }
 
     CPPUNIT_TEST_SUITE(test_osl_writeFile);
@@ -74,7 +72,5 @@ public:
 
 // register test suites
 CPPUNIT_TEST_SUITE_REGISTRATION(test_osl_writeFile);
-
-CPPUNIT_PLUGIN_IMPLEMENT();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

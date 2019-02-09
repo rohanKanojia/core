@@ -23,12 +23,12 @@
 #include <txtinet.hxx>
 #include <frmfmt.hxx>
 
-#include <accnotexthyperlink.hxx>
+#include "accnotexthyperlink.hxx"
 
 #include <fmturl.hxx>
 
-#include <svtools/imap.hxx>
-#include <svtools/imapobj.hxx>
+#include <vcl/imap.hxx>
+#include <vcl/imapobj.hxx>
 
 #include <accmap.hxx>
 
@@ -38,14 +38,13 @@ using namespace css::uno;
 using namespace css::accessibility;
 
 SwAccessibleNoTextHyperlink::SwAccessibleNoTextHyperlink( SwAccessibleNoTextFrame *p, const SwFrame *aFrame ) :
-    xFrame( p ),
+    mxFrame( p ),
     mpFrame( aFrame )
 {
 }
 
 // XAccessibleAction
 sal_Int32 SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionCount()
-        throw (RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -64,7 +63,6 @@ sal_Int32 SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionCount()
 }
 
 sal_Bool SAL_CALL SwAccessibleNoTextHyperlink::doAccessibleAction( sal_Int32 nIndex )
-        throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -79,10 +77,10 @@ sal_Bool SAL_CALL SwAccessibleNoTextHyperlink::doAccessibleAction( sal_Int32 nIn
         IMapObject* pMapObj = pMap->GetIMapObject(nIndex);
         if (!pMapObj->GetURL().isEmpty())
         {
-            SwViewShell *pVSh = xFrame->GetShell();
+            SwViewShell *pVSh = mxFrame->GetShell();
             if( pVSh )
             {
-                LoadURL( *pVSh, pMapObj->GetURL(), URLLOAD_NOFILTER,
+                LoadURL( *pVSh, pMapObj->GetURL(), LoadUrlFlags::NONE,
                          pMapObj->GetTarget() );
                 bRet = true;
             }
@@ -90,10 +88,10 @@ sal_Bool SAL_CALL SwAccessibleNoTextHyperlink::doAccessibleAction( sal_Int32 nIn
     }
     else if (!aURL.GetURL().isEmpty())
     {
-        SwViewShell *pVSh = xFrame->GetShell();
+        SwViewShell *pVSh = mxFrame->GetShell();
         if( pVSh )
         {
-            LoadURL( *pVSh, aURL.GetURL(), URLLOAD_NOFILTER,
+            LoadURL( *pVSh, aURL.GetURL(), LoadUrlFlags::NONE,
                      aURL.GetTargetFrameName() );
             bRet = true;
         }
@@ -104,7 +102,6 @@ sal_Bool SAL_CALL SwAccessibleNoTextHyperlink::doAccessibleAction( sal_Int32 nIn
 
 OUString SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionDescription(
         sal_Int32 nIndex )
-        throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -131,7 +128,6 @@ OUString SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionDescription(
 
 Reference< XAccessibleKeyBinding > SAL_CALL
     SwAccessibleNoTextHyperlink::getAccessibleActionKeyBinding( sal_Int32 nIndex )
-    throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -172,7 +168,6 @@ Reference< XAccessibleKeyBinding > SAL_CALL
 // XAccessibleHyperlink
 Any SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionAnchor(
         sal_Int32 nIndex )
-        throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -181,7 +176,7 @@ Any SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionAnchor(
 
     Any aRet;
     //SwFrame* pAnchor = static_cast<SwFlyFrame*>(mpFrame)->GetAnchor();
-    Reference< XAccessible > xAnchor = xFrame->GetAccessibleMap()->GetContext(mpFrame);
+    Reference< XAccessible > xAnchor = mxFrame->GetAccessibleMap()->GetContext(mpFrame);
     //SwAccessibleNoTextFrame* pFrame = xFrame.get();
     //Reference< XAccessible > xAnchor = (XAccessible*)pFrame;
     aRet <<= xAnchor;
@@ -190,7 +185,6 @@ Any SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionAnchor(
 
 Any SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionObject(
             sal_Int32 nIndex )
-    throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -215,27 +209,24 @@ Any SAL_CALL SwAccessibleNoTextHyperlink::getAccessibleActionObject(
 }
 
 sal_Int32 SAL_CALL SwAccessibleNoTextHyperlink::getStartIndex()
-        throw (RuntimeException, std::exception)
 {
     return 0;
 }
 
 sal_Int32 SAL_CALL SwAccessibleNoTextHyperlink::getEndIndex()
-        throw (RuntimeException, std::exception)
 {
     return 0;
 }
 
 sal_Bool SAL_CALL SwAccessibleNoTextHyperlink::isValid(  )
-        throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     SwFormatURL aURL( GetFormat()->GetURL() );
 
     if( aURL.GetMap() || !aURL.GetURL().isEmpty() )
-        return sal_True;
-    return sal_False;
+        return true;
+    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

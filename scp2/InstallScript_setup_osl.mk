@@ -10,7 +10,6 @@
 $(eval $(call gb_InstallScript_InstallScript,setup_osl))
 
 $(eval $(call gb_InstallScript_use_modules,setup_osl,\
-	scp2/accessories \
 	scp2/base \
 	scp2/calc \
 	scp2/draw \
@@ -23,7 +22,7 @@ $(eval $(call gb_InstallScript_use_modules,setup_osl,\
 	scp2/writer \
 	scp2/xsltfilter \
 	$(if $(filter WNT,$(OS)),\
-		$(if $(DISABLE_ACTIVEX),,scp2/activex) \
+		scp2/activex \
 		scp2/quickstart \
 		scp2/windows \
 		$(if $(filter MSC,$(COM)),\
@@ -36,14 +35,11 @@ $(eval $(call gb_InstallScript_use_modules,setup_osl,\
 	$(if $(filter TRUE,$(ENABLE_EVOAB2) $(ENABLE_GIO) $(ENABLE_GTK) $(ENABLE_GTK3)),\
 		scp2/gnome \
 	) \
-	$(if $(filter TRUE,$(ENABLE_KDE4)),\
+	$(if $(filter TRUE,$(ENABLE_QT5) $(ENABLE_KDE5) $(ENABLE_GTK3_KDE5)),\
 		scp2/kde \
 	) \
 	$(if $(filter TRUE,$(ENABLE_ONLINE_UPDATE)),\
 		scp2/onlineupdate \
-	) \
-	$(if $(filter TRUE,$(ENABLE_TDE)),\
-		scp2/tde \
 	) \
 ))
 

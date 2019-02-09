@@ -23,7 +23,6 @@
 
 #include "QEnumTypes.hxx"
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/button.hxx>
 
@@ -31,9 +30,8 @@ namespace dbaui
 {
     class OWizColumnSelect;
     class OWizNormalExtend;
-    class OCopyTable : public OWizardPage
+    class OCopyTable final : public OWizardPage
     {
-    protected:
         VclPtr<Edit>              m_pEdTableName;
         VclPtr<RadioButton>       m_pRB_DefData;
         VclPtr<RadioButton>       m_pRB_Def;
@@ -45,15 +43,12 @@ namespace dbaui
         VclPtr<Edit>              m_pEdKeyName;
         sal_Int16          m_nOldOperation;
 
-        VclPtr<OWizColumnSelect>  m_pPage2;
-        VclPtr<OWizNormalExtend>  m_pPage3;
-
         bool               m_bPKeyAllowed;
         bool               m_bUseHeaderAllowed;
 
-        DECL_LINK_TYPED( AppendDataClickHdl, Button*, void );
-        DECL_LINK_TYPED( RadioChangeHdl, Button*, void );
-        DECL_LINK_TYPED( KeyClickHdl, Button*, void );
+        DECL_LINK( AppendDataClickHdl, Button*, void );
+        DECL_LINK( RadioChangeHdl, Button*, void );
+        DECL_LINK( KeyClickHdl, Button*, void );
 
         bool checkAppendData();
         void SetAppendDataRadio();
@@ -65,7 +60,7 @@ namespace dbaui
         virtual OUString        GetTitle() const override ;
 
         OCopyTable( vcl::Window * pParent );
-        virtual ~OCopyTable();
+        virtual ~OCopyTable() override;
         virtual void dispose() override;
 
         bool IsOptionDefData() const { return m_pRB_DefData->IsChecked(); }
@@ -74,11 +69,11 @@ namespace dbaui
         OUString GetKeyName() const { return m_pEdKeyName->GetText(); }
 
         void setCreateStyleAction();
-        inline void disallowViews()
+        void disallowViews()
         {
             m_pRB_View->Disable();
         }
-        inline void disallowUseHeaderLine()
+        void disallowUseHeaderLine()
         {
             m_bUseHeaderAllowed = false;
             m_pCB_UseHeaderLine->Disable();

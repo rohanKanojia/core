@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/astmodule.hxx>
-#include <idlc/asttypedef.hxx>
-#include <idlc/astservice.hxx>
-#include <idlc/astconstant.hxx>
-#include <idlc/astattribute.hxx>
-#include <idlc/astinterfacemember.hxx>
-#include <idlc/astservicemember.hxx>
-#include <idlc/astobserves.hxx>
-#include <idlc/astneeds.hxx>
-#include <idlc/astsequence.hxx>
-#include "idlc/astoperation.hxx"
+#include <astmodule.hxx>
+#include <asttypedef.hxx>
+#include <astservice.hxx>
+#include <astconstant.hxx>
+#include <astattribute.hxx>
+#include <astinterfacemember.hxx>
+#include <astservicemember.hxx>
+#include <astobserves.hxx>
+#include <astneeds.hxx>
+#include <astsequence.hxx>
+#include <astoperation.hxx>
 
 #include <osl/diagnose.h>
 
@@ -36,7 +36,6 @@
 
 bool AstModule::dump(RegistryKey& rKey)
 {
-    OUString emptyStr;
     RegistryKey localKey;
     if ( getNodeType() == NT_root )
     {
@@ -62,7 +61,7 @@ bool AstModule::dump(RegistryKey& rKey)
 
         typereg::Writer aBlob(
             m_bPublished ? TYPEREG_VERSION_1 : TYPEREG_VERSION_0,
-            getDocumentation(), emptyStr, typeClass,
+            getDocumentation(), "", typeClass,
             m_bPublished,
             OStringToOUString(getRelativName(), RTL_TEXTENCODING_UTF8), 0,
             nConst, 0, 0);
@@ -86,7 +85,7 @@ bool AstModule::dump(RegistryKey& rKey)
         sal_uInt32 aBlobSize;
         void const * pBlob = aBlob.getBlob(&aBlobSize);
 
-        if (localKey.setValue(emptyStr, RegValueType::BINARY,
+        if (localKey.setValue("", RegValueType::BINARY,
                                 const_cast<RegValue>(pBlob), aBlobSize) != RegError::NO_ERROR)
         {
             fprintf(stderr, "%s: warning, could not set value of key \"%s\" in %s\n",
@@ -102,7 +101,7 @@ bool AstModule::dump(RegistryKey& rKey)
 
         typereg::Writer aBlob(
             m_bPublished ? TYPEREG_VERSION_1 : TYPEREG_VERSION_0,
-            getDocumentation(), emptyStr, typeClass, m_bPublished,
+            getDocumentation(), "", typeClass, m_bPublished,
             OStringToOUString(getRelativName(), RTL_TEXTENCODING_UTF8), 0, 0, 0,
             0);
 
@@ -111,7 +110,7 @@ bool AstModule::dump(RegistryKey& rKey)
 
         if ( getNodeType() != NT_root )
         {
-            if (localKey.setValue(emptyStr, RegValueType::BINARY,
+            if (localKey.setValue("", RegValueType::BINARY,
                                     const_cast<RegValue>(pBlob), aBlobSize) != RegError::NO_ERROR)
             {
                 fprintf(stderr, "%s: warning, could not set value of key \"%s\" in %s\n",
@@ -130,7 +129,6 @@ bool AstModule::dump(RegistryKey& rKey)
 
 bool AstTypeDef::dump(RegistryKey& rKey)
 {
-    OUString emptyStr;
     RegistryKey localKey;
     if (rKey.createKey( OStringToOUString(getFullName(), RTL_TEXTENCODING_UTF8 ), localKey) != RegError::NO_ERROR)
     {
@@ -142,7 +140,7 @@ bool AstTypeDef::dump(RegistryKey& rKey)
 
     typereg::Writer aBlob(
         m_bPublished ? TYPEREG_VERSION_1 : TYPEREG_VERSION_0,
-        getDocumentation(), emptyStr, RT_TYPE_TYPEDEF, m_bPublished,
+        getDocumentation(), "", RT_TYPE_TYPEDEF, m_bPublished,
         OStringToOUString(getRelativName(), RTL_TEXTENCODING_UTF8), 1, 0, 0, 0);
     aBlob.setSuperTypeName(
         0,
@@ -152,7 +150,7 @@ bool AstTypeDef::dump(RegistryKey& rKey)
     sal_uInt32 aBlobSize;
     void const * pBlob = aBlob.getBlob(&aBlobSize);
 
-    if (localKey.setValue(emptyStr, RegValueType::BINARY, const_cast<RegValue>(pBlob), aBlobSize) != RegError::NO_ERROR)
+    if (localKey.setValue("", RegValueType::BINARY, const_cast<RegValue>(pBlob), aBlobSize) != RegError::NO_ERROR)
     {
         fprintf(stderr, "%s: warning, could not set value of key \"%s\" in %s\n",
                 idlc()->getOptions()->getProgramName().getStr(),
@@ -165,7 +163,6 @@ bool AstTypeDef::dump(RegistryKey& rKey)
 
 bool AstService::dump(RegistryKey& rKey)
 {
-    OUString emptyStr;
     typereg_Version version = m_bPublished
         ? TYPEREG_VERSION_1 : TYPEREG_VERSION_0;
     OString superName;
@@ -196,10 +193,11 @@ bool AstService::dump(RegistryKey& rKey)
         case NT_service_member:
             if (getNodeType() == NT_singleton) {
                 OSL_ASSERT(superName.isEmpty());
-                superName = (static_cast<AstServiceMember *>(*i))->
+                superName = static_cast<AstServiceMember *>(*i)->
                     getRealService()->getRelativName();
                 break;
             }
+            [[fallthrough]];
         case NT_interface_member:
         case NT_observes:
         case NT_needs:
@@ -229,7 +227,7 @@ bool AstService::dump(RegistryKey& rKey)
         return false;
     }
     typereg::Writer writer(
-        version, getDocumentation(), emptyStr,
+        version, getDocumentation(), "",
         getNodeType() == NT_singleton ? RT_TYPE_SINGLETON : RT_TYPE_SERVICE,
         m_bPublished,
         OStringToOUString(getRelativName(), RTL_TEXTENCODING_UTF8),
@@ -302,14 +300,14 @@ bool AstService::dump(RegistryKey& rKey)
     }
     if (m_defaultConstructor) {
         writer.setMethodData(
-            constructorIndex++, emptyStr, RTMethodMode::TWOWAY,
-            emptyStr, "void",
+            constructorIndex++, "", RTMethodMode::TWOWAY,
+            "", "void",
             0, 0);
     }
     sal_uInt32 size;
     void const * blob = writer.getBlob(&size);
     if (localKey.setValue(
-            emptyStr, RegValueType::BINARY, const_cast< void * >(blob),
+            "", RegValueType::BINARY, const_cast< void * >(blob),
             size) != RegError::NO_ERROR)
     {
         fprintf(
@@ -323,8 +321,8 @@ bool AstService::dump(RegistryKey& rKey)
     return true;
 }
 
-bool AstAttribute::dumpBlob(
-    typereg::Writer & rBlob, sal_uInt16 index, sal_uInt16 * methodIndex)
+void AstAttribute::dumpBlob(
+    typereg::Writer & rBlob, sal_uInt16 index, sal_uInt16 * methodIndex) const
 {
     RTFieldAccess accessMode = RTFieldAccess::INVALID;
 
@@ -371,7 +369,7 @@ bool AstAttribute::dumpBlob(
     OUString name(OStringToOUString(getLocalName(), RTL_TEXTENCODING_UTF8));
     rBlob.setFieldData(
         index, getDocumentation(), OUString(), accessMode, name,
-        OStringToOUString(getType()->getRelativName(), RTL_TEXTENCODING_UTF8),
+        OStringToOUString(m_pType->getRelativName(), RTL_TEXTENCODING_UTF8),
         RTConstValue());
     dumpExceptions(
         rBlob, m_getDocumentation, m_getExceptions, RTMethodMode::ATTRIBUTE_GET,
@@ -379,13 +377,11 @@ bool AstAttribute::dumpBlob(
     dumpExceptions(
         rBlob, m_setDocumentation, m_setExceptions, RTMethodMode::ATTRIBUTE_SET,
         methodIndex);
-
-    return true;
 }
 
 void AstAttribute::dumpExceptions(
     typereg::Writer & writer, OUString const & documentation,
-    DeclList const & exceptions, RTMethodMode flags, sal_uInt16 * methodIndex)
+    DeclList const & exceptions, RTMethodMode flags, sal_uInt16 * methodIndex) const
 {
     if (!exceptions.empty()) {
         OSL_ASSERT(methodIndex != nullptr);
@@ -398,27 +394,26 @@ void AstAttribute::dumpExceptions(
             "void", 0,
             static_cast< sal_uInt16 >(exceptions.size()));
         sal_uInt16 exceptionIndex = 0;
-        for (DeclList::const_iterator i(exceptions.begin());
-             i != exceptions.end(); ++i)
+        for (auto const& elem : exceptions)
         {
             writer.setMethodExceptionTypeName(
                 idx, exceptionIndex++,
                 OStringToOUString(
-                    (*i)->getRelativName(), RTL_TEXTENCODING_UTF8));
+                    elem->getRelativName(), RTL_TEXTENCODING_UTF8));
         }
     }
 }
 
 const sal_Char* AstSequence::getRelativName() const
 {
-    if ( !m_pRelativName )
+    if ( !m_xRelativName )
     {
-        m_pRelativName = new OString("[]");
+        m_xRelativName = OString("[]");
         AstDeclaration const * pType = resolveTypedefs( m_pMemberType );
-        *m_pRelativName += pType->getRelativName();
+        *m_xRelativName += pType->getRelativName();
     }
 
-    return m_pRelativName->getStr();
+    return m_xRelativName->getStr();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,15 +20,18 @@
 
 #include "modulepcr.hxx"
 #include "pcrservices.hxx"
+#include <mutex>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
-extern "C" void SAL_CALL pcr_initializeModule()
+extern "C" {
+
+static void pcr_initializeModule()
 {
-    static bool s_bInit = false;
-    if (!s_bInit)
+    std::once_flag aInit;
+    std::call_once(aInit, [&]()
     {
         createRegistryInfo_OPropertyBrowserController();
         createRegistryInfo_FormController();
@@ -49,12 +52,13 @@ extern "C" void SAL_CALL pcr_initializeModule()
         createRegistryInfo_StringRepresentation();
         createRegistryInfo_MasterDetailLinkDialog();
         createRegistryInfo_FormGeometryHandler();
-        s_bInit = true;
-    }
+        return true;
+    });
 }
 
+}
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL pcr_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* pcr_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     SAL_UNUSED_PARAMETER void* /*pRegistryKey*/)

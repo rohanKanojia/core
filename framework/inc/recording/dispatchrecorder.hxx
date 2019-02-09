@@ -25,8 +25,6 @@
 */
 #include <vector>
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <macros/xserviceinfo.hxx>
 #include <general.h>
 #include <rtl/ustring.hxx>
@@ -59,34 +57,38 @@ class DispatchRecorder
     // public interface
     public:
         DispatchRecorder( const css::uno::Reference< css::uno::XComponentContext >& xSMGR );
-        virtual ~DispatchRecorder();
+        virtual ~DispatchRecorder() override;
 
         // XInterface, XTypeProvider, XServiceInfo
-        DECLARE_XSERVICEINFO
+        DECLARE_XSERVICEINFO_NOFACTORY
+        /* Helper for registry */
+        /// @throws css::uno::Exception
+        static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+        static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
         // XDispatchRecorder
-        virtual void SAL_CALL            startRecording         ( const css::uno::Reference< css::frame::XFrame >& xFrame ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL            recordDispatch         ( const css::util::URL& aURL, const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL            recordDispatchAsComment( const css::util::URL& aURL, const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL            endRecording           () throw( css::uno::RuntimeException, std::exception ) override;
-        virtual OUString SAL_CALL getRecordedMacro       () throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL            startRecording         ( const css::uno::Reference< css::frame::XFrame >& xFrame ) override;
+        virtual void SAL_CALL            recordDispatch         ( const css::util::URL& aURL, const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) override;
+        virtual void SAL_CALL            recordDispatchAsComment( const css::util::URL& aURL, const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) override;
+        virtual void SAL_CALL            endRecording           () override;
+        virtual OUString SAL_CALL getRecordedMacro       () override;
 
-        virtual css::uno::Type SAL_CALL getElementType() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Type SAL_CALL getElementType() override;
 
-        virtual sal_Bool SAL_CALL hasElements()  throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL hasElements() override;
 
-        virtual sal_Int32 SAL_CALL getCount() throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int32 SAL_CALL getCount() override;
 
-        virtual css::uno::Any SAL_CALL getByIndex(sal_Int32)  throw (css::uno::RuntimeException, css::lang::WrappedTargetException, css::lang::IndexOutOfBoundsException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getByIndex(sal_Int32) override;
 
-        virtual void SAL_CALL replaceByIndex(sal_Int32, const css::uno::Any&)  throw (css::lang::IllegalArgumentException, css::lang::IndexOutOfBoundsException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL replaceByIndex(sal_Int32, const css::uno::Any&) override;
 
     // private functions
     private:
-        void SAL_CALL implts_recordMacro( const OUString& aURL,
+        void implts_recordMacro( const OUString& aURL,
                                           const css::uno::Sequence< css::beans::PropertyValue >& lArguments,
                                                 bool bAsComment, OUStringBuffer& );
-        void SAL_CALL AppendToBuffer( const css::uno::Any& aValue, OUStringBuffer& aArgumentBuffer );
+        void AppendToBuffer( const css::uno::Any& aValue, OUStringBuffer& aArgumentBuffer );
 
 }; // class DispatcRecorder
 

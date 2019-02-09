@@ -19,8 +19,8 @@
 #ifndef INCLUDED_CPPU_SOURCE_UNO_CONSTR_HXX
 #define INCLUDED_CPPU_SOURCE_UNO_CONSTR_HXX
 
-#include <string.h>
 #include "prim.hxx"
+#include <osl/diagnose.h>
 
 namespace cppu
 {
@@ -42,7 +42,7 @@ inline void _defaultConstructStruct(
         defaultConstructStruct( pMem, pTypeDescr->pBaseTypeDescription );
     }
 
-    typelib_TypeDescriptionReference ** ppTypeRefs = (pTypeDescr)->ppTypeRefs;
+    typelib_TypeDescriptionReference ** ppTypeRefs = pTypeDescr->ppTypeRefs;
     sal_Int32 * pMemberOffsets = pTypeDescr->pMemberOffsets;
     sal_Int32 nDescr = pTypeDescr->nMembers;
 
@@ -64,7 +64,7 @@ inline void _defaultConstructData(
         *static_cast<sal_Unicode *>(pMem) = '\0';
         break;
     case typelib_TypeClass_BOOLEAN:
-        *static_cast<sal_Bool *>(pMem) = sal_False;
+        *static_cast<sal_Bool *>(pMem) = false;
         break;
     case typelib_TypeClass_BYTE:
         *static_cast<sal_Int8 *>(pMem) = 0;

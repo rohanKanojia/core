@@ -28,8 +28,8 @@
 #else
 // From MinGW
 typedef unsigned short WORD;
-#define PRIMARYLANGID(lgid) ((WORD)(lgid) & 0x3ff)
-#define SUBLANGID(lgid) ((WORD)(lgid) >> 10)
+#define PRIMARYLANGID(lgid) (static_cast<WORD>(lgid) & 0x3ff)
+#define SUBLANGID(lgid) (static_cast<WORD>(lgid) >> 10)
 #define LANG_SPANISH 0x0a
 #define SUBLANG_NEUTRAL 0x00
 #define SUBLANG_SPANISH 0x01
@@ -38,13 +38,13 @@ typedef unsigned short WORD;
 #include "cmdline.hxx"
 
 #include <comphelper/string.hxx>
-#include "osl/thread.h"
-#include "osl/process.h"
-#include "osl/file.hxx"
-#include "sal/main.h"
+#include <osl/thread.h>
+#include <osl/process.h>
+#include <osl/file.hxx>
+#include <sal/main.h>
 
-#include "tools/config.hxx"
-#include "i18nlangtag/languagetag.hxx"
+#include <tools/config.hxx>
+#include <i18nlangtag/languagetag.hxx>
 
 #include <iostream>
 #include <fstream>
@@ -72,10 +72,10 @@ void ShowUsage()
     std::cout << "-rcf Name of the resource file footer" << std::endl;
 }
 
-inline OUString OStringToOUString(const OString& str)
+OUString OStringToOUString(const OString& str)
 { return OStringToOUString(str, osl_getThreadTextEncoding()); }
 
-inline OString OUStringToOString(const OUString& str)
+OString OUStringToOString(const OUString& str)
 { return OUStringToOString(str, osl_getThreadTextEncoding()); }
 
 /** Get the directory where the module
@@ -130,12 +130,11 @@ class StreamExceptionsEnabler
 {
 public:
     explicit StreamExceptionsEnabler(
-        std::ios& iostrm,
-        std::ios::iostate NewIos = std::ios::failbit | std::ios::badbit) :
+        std::ios& iostrm ) :
         m_IoStrm(iostrm),
         m_OldIos(m_IoStrm.exceptions())
     {
-        m_IoStrm.exceptions(NewIos);
+        m_IoStrm.exceptions(std::ios::failbit | std::ios::badbit);
     }
 
     ~StreamExceptionsEnabler()
@@ -144,10 +143,8 @@ public:
     }
 private:
     std::ios& m_IoStrm;
-    std::ios::iostate m_OldIos;
+    std::ios::iostate const m_OldIos;
 };
-
-typedef std::vector<std::string> string_container_t;
 
 class iso_lang_identifier
 {
@@ -184,7 +181,7 @@ std::string make_winrc_unicode_string(const OUString& str)
     const sal_Unicode* pchr = str.getStr();
 
     for (size_t i = 0; i < length; i++)
-        oss << "\\x" << std::hex << (int)*pchr++;
+        oss << "\\x" << std::hex << static_cast<int>(*pchr++);
 
     oss << "\"";
     return oss.str();
@@ -202,7 +199,7 @@ class Substitutor
 {
 private:
     typedef std::map<std::string, std::string> replacement_table_t;
-    typedef std::map<std::string, replacement_table_t*> iso_lang_replacement_table_t;
+    typedef std::map<std::string, replacement_table_t> iso_lang_replacement_table_t;
 
 public:
     typedef iso_lang_replacement_table_t::iterator iterator;
@@ -218,17 +215,6 @@ public:
 
     Substitutor() {};
 
-    ~Substitutor()
-    {
-        iso_lang_replacement_table_t::iterator iter_end = iso_lang_replacement_table_.end();
-        iso_lang_replacement_table_t::iterator iter = iso_lang_replacement_table_.begin();
-
-        for( /* no init */; iter != iter_end; ++iter)
-            delete iter->second;
-
-        iso_lang_replacement_table_.clear();
-    }
-
     void set_language(const iso_lang_identifier& iso_lang)
     {
         active_iso_lang_ = iso_lang;
@@ -238,42 +224,26 @@ public:
     //its substitute else leave it unchanged
     void substitute(std::string& Text)
     {
-        replacement_table_t* prt = get_replacement_table(active_iso_lang_.make_std_string());
-        OSL_ASSERT(prt);
-        replacement_table_t::iterator iter = prt->find(Text);
-        if (iter != prt->end())
+        replacement_table_t& prt = get_replacement_table(active_iso_lang_.make_std_string());
+        replacement_table_t::iterator iter = prt.find(Text);
+        if (iter != prt.end())
             Text = iter->second;
     }
 
     void add_substitution(
         const std::string& Placeholder, const std::string& Substitute)
     {
-        replacement_table_t* prt = get_replacement_table(active_iso_lang_.make_std_string());
-        OSL_ASSERT(prt);
-        prt->insert(std::make_pair(Placeholder, Substitute));
+        replacement_table_t& prt = get_replacement_table(active_iso_lang_.make_std_string());
+        prt.insert(std::make_pair(Placeholder, Substitute));
     }
 
 
 private:
     // Return the replacement table for the iso lang id
     // create a new one if not already present
-    replacement_table_t* get_replacement_table(const std::string& iso_lang)
+    replacement_table_t& get_replacement_table(const std::string& iso_lang)
     {
-        iso_lang_replacement_table_t::iterator iter =
-            iso_lang_replacement_table_.find(iso_lang);
-
-        replacement_table_t* prt = nullptr;
-
-        if (iso_lang_replacement_table_.end() == iter)
-        {
-            prt = new replacement_table_t();
-            iso_lang_replacement_table_.insert(std::make_pair(iso_lang, prt));
-        }
-        else
-        {
-            prt = iter->second;
-        }
-        return prt;
+        return iso_lang_replacement_table_[iso_lang];
     }
 
 private:
@@ -290,7 +260,7 @@ void add_group_entries(
 
     aConfig.SetGroup(GroupName);
     size_t key_count = aConfig.GetKeyCount();
-    std::map< unsigned short , std::string > map;
+    std::map< LanguageType, std::string > map;
 
     for (size_t i = 0; i < key_count; i++)
     {
@@ -298,7 +268,7 @@ void add_group_entries(
         OString key_value_utf8 = aConfig.ReadKey(sal::static_int_cast<sal_uInt16>(i));
         iso_lang_identifier myiso_lang( iso_lang );
         LanguageType ltype = LanguageTag( myiso_lang.make_OUString()).makeFallback().getLanguageType();
-        if(  ( ltype & 0x0200 ) == 0 && map[ ltype ].empty()  )
+        if(  ( static_cast<sal_uInt16>(ltype) & 0x0200 ) == 0 && map[ ltype ].empty()  )
         {
             Substitutor.set_language(iso_lang_identifier(iso_lang));
 
@@ -309,13 +279,13 @@ void add_group_entries(
 
             Substitutor.add_substitution(
                 GroupName.getStr(), make_winrc_unicode_string(key_value_utf16));
-            map[ static_cast<unsigned short>(ltype) ] = std::string( iso_lang.getStr() );
+            map[ ltype ] = std::string( iso_lang.getStr() );
         }
         else
         {
             if( !map[ ltype ].empty() )
             {
-                printf("ERROR: Duplicated ms id %d found for the languages %s and %s !!!! This does not work in microsoft resources\nPlease remove one!\n", ltype , map[ ltype ].c_str() , iso_lang.getStr());
+                printf("ERROR: Duplicated ms id %d found for the languages %s and %s !!!! This does not work in microsoft resources\nPlease remove one!\n", static_cast<sal_uInt16>(ltype) , map[ ltype ].c_str() , iso_lang.getStr());
                 exit( -1 );
             }
         }
@@ -344,7 +314,7 @@ void read_ulf_file(const std::string& FileName, Substitutor& Substitutor)
         StreamExceptionsEnabler sexc_in(in);
 
         //skip the byte-order-mark 0xEF 0xBB 0xBF, identifying UTF8 files
-        unsigned char BOM[3] = {0xEF, 0xBB, 0xBF};
+        unsigned char const BOM[3] = {0xEF, 0xBB, 0xBF};
         char buff[3];
         in.read(&buff[0], 3);
 
@@ -364,7 +334,7 @@ void read_ulf_file(const std::string& FileName, Substitutor& Substitutor)
 
     // end work-around for #i32420#
 
-    Config config(tmpfile_url.getStr());
+    Config config(tmpfile_url);
     size_t grpcnt = config.GetGroupCount();
     for (size_t i = 0; i < grpcnt; i++)
         add_group_entries(config, config.GetGroupName(sal::static_int_cast<sal_uInt16>(i)), Substitutor);
@@ -372,7 +342,7 @@ void read_ulf_file(const std::string& FileName, Substitutor& Substitutor)
 
 void read_file(
     const std::string& fname,
-    string_container_t& string_container)
+    std::vector<std::string>& string_container)
 {
     std::ifstream file(fname.c_str());
     StreamExceptionsEnabler sexc(file);
@@ -431,7 +401,7 @@ void start_language_section(
     int subLangID = SUBLANGID(ltype);
     // Our resources are normally not sub language dependent.
     // Esp. for spanish we don't want to distinguish between trad.
-    // and internatinal sorting ( which leads to two different sub languages )
+    // and international sorting (which leads to two different sub languages)
     // Setting the sub language to neutral allows us to use one
     // stringlist for all spanish variants
     if ( ( primLangID == LANG_SPANISH ) &&
@@ -460,7 +430,7 @@ void start_language_section(
     replace the all placeholder and append the
     result to the output file */
 void inflate_rc_template_to_file(
-    std::ostream& os, const string_container_t& rctmpl, Substitutor& substitutor)
+    std::ostream& os, const std::vector<std::string>& rctmpl, Substitutor& substitutor)
 {
     StreamExceptionsEnabler sexc(os);
 
@@ -473,15 +443,12 @@ void inflate_rc_template_to_file(
     {
         substitutor.set_language(iso_lang_identifier(iter->first));
 
-        string_container_t::const_iterator rct_iter = rctmpl.begin();
-        string_container_t::const_iterator rct_iter_end = rctmpl.end();
-
         if (!rctmpl.empty())
             start_language_section(oi, iso_lang_identifier(iter->first));
 
-        for ( /**/ ;rct_iter != rct_iter_end; ++rct_iter)
+        for ( auto& rct : rctmpl)
         {
-            std::istringstream iss(*rct_iter);
+            std::istringstream iss(rct);
             std::string line;
 
             while (iss)
@@ -536,7 +503,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
         Substitutor substitutor;
         read_ulf_file(ULF_FILE(cmdline), substitutor);
 
-        string_container_t rc_tmpl;
+        std::vector<std::string> rc_tmpl;
         read_file(RC_TEMPLATE(cmdline), rc_tmpl);
 
         std::ofstream rc_file(RC_FILE(cmdline));

@@ -19,16 +19,19 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_DIALOGMODEL_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_DIALOGMODEL_HXX
 
-#include "TimerTriggeredControllerLock.hxx"
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-
-#include "ChartModel.hxx"
+#include <TimerTriggeredControllerLock.hxx>
+#include <rtl/ustring.hxx>
 
 #include <map>
 #include <memory>
 #include <vector>
+
+namespace chart { class ChartModel; }
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartDocument; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
 
 namespace com { namespace sun { namespace star { namespace chart2 {
     class XDataSeriesContainer;
@@ -64,19 +67,19 @@ public:
         const css::uno::Reference< css::uno::XComponentContext > & xContext );
     ~DialogModel();
 
-    typedef ::std::pair<
+    typedef std::pair<
                 OUString,
-                ::std::pair< css::uno::Reference< css::chart2::XDataSeries >,
+                std::pair< css::uno::Reference< css::chart2::XDataSeries >,
                              css::uno::Reference< css::chart2::XChartType > > >
         tSeriesWithChartTypeByName;
 
-    typedef ::std::map< OUString, OUString >
+    typedef std::map< OUString, OUString >
         tRolesWithRanges;
 
     void setTemplate(
         const css::uno::Reference< css::chart2::XChartTypeTemplate > & xTemplate );
 
-    std::shared_ptr< RangeSelectionHelper >
+    std::shared_ptr< RangeSelectionHelper > const &
         getRangeSelectionHelper() const;
 
     css::uno::Reference< css::frame::XModel >
@@ -85,10 +88,10 @@ public:
     css::uno::Reference< css::chart2::data::XDataProvider >
         getDataProvider() const;
 
-    ::std::vector< css::uno::Reference< css::chart2::XDataSeriesContainer > >
+    std::vector< css::uno::Reference< css::chart2::XDataSeriesContainer > >
         getAllDataSeriesContainers() const;
 
-    ::std::vector< tSeriesWithChartTypeByName >
+    std::vector< tSeriesWithChartTypeByName >
         getAllDataSeriesWithLabel() const;
 
     static tRolesWithRanges getRolesWithRanges(
@@ -96,14 +99,13 @@ public:
         const OUString & aRoleOfSequenceForLabel,
         const css::uno::Reference< css::chart2::XChartType > & xChartType );
 
-    enum eMoveDirection
+    enum class MoveDirection
     {
-        MOVE_DOWN,
-        MOVE_UP
+        Down, Up
     };
 
     void moveSeries( const css::uno::Reference< css::chart2::XDataSeries > & xSeries,
-                     eMoveDirection eDirection );
+                     MoveDirection eDirection );
 
     /// @return the newly inserted series
     css::uno::Reference<
@@ -146,6 +148,8 @@ public:
     // relative ordering, to get e.g. x-values and y-values in the right order
     static sal_Int32 GetRoleIndexForSorting( const OUString & rInternalRoleString );
 
+    ChartModel& getModel() const;
+
 private:
     css::uno::Reference< css::chart2::XChartDocument >
         m_xChartDocument;
@@ -164,11 +168,10 @@ private:
 private:
     void applyInterpretedData(
         const css::chart2::InterpretedData & rNewData,
-        const ::std::vector< css::uno::Reference< css::chart2::XDataSeries > > & rSeriesToReUse );
+        const std::vector< css::uno::Reference< css::chart2::XDataSeries > > & rSeriesToReUse );
 
     sal_Int32 countSeries() const;
 
-    ChartModel& getModel() const;
     mutable DialogModelTimeBasedInfo maTimeBasedInfo;
 };
 

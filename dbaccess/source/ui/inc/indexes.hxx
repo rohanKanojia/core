@@ -45,9 +45,8 @@ namespace dbaui
         GrantIndexAccess() { }
     };
 
-    struct OIndex
+    struct OIndex final
     {
-    protected:
         OUString     sOriginalName;
         bool            bModified;
 
@@ -58,7 +57,6 @@ namespace dbaui
         bool            bUnique;
         IndexFields         aFields;
 
-    public:
         OIndex(const OUString& _rOriginalName)
             : sOriginalName(_rOriginalName), bModified(false), sName(_rOriginalName), bPrimaryKey(false), bUnique(false)
         {
@@ -73,9 +71,6 @@ namespace dbaui
         bool    isNew() const { return getOriginalName().isEmpty(); }
         void        flagAsNew(const GrantIndexAccess&) { sOriginalName.clear(); }
         void        flagAsCommitted(const GrantIndexAccess&) { sOriginalName = sName; }
-
-    private:
-        OIndex();   // not implemented
     };
 
     typedef std::vector<OIndex> Indexes;

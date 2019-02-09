@@ -26,8 +26,8 @@
 #include <editeng/fhgtitem.hxx>
 
 #include <editeng/outliner.hxx>
-#include <outleeng.hxx>
-#include <paralist.hxx>
+#include "outleeng.hxx"
+#include "paralist.hxx"
 #include <editeng/editrids.hrc>
 #include <svl/itemset.hxx>
 #include <editeng/eeitem.hxx>
@@ -64,9 +64,9 @@ const SvxNumberFormat* OutlinerEditEng::GetNumberFormat( sal_Int32 nPara ) const
 }
 
 
-Rectangle OutlinerEditEng::GetBulletArea( sal_Int32 nPara )
+tools::Rectangle OutlinerEditEng::GetBulletArea( sal_Int32 nPara )
 {
-    Rectangle aBulletArea = Rectangle( Point(), Point() );
+    tools::Rectangle aBulletArea = tools::Rectangle( Point(), Point() );
     if ( nPara < pOwner->pParaList->GetParagraphCount() )
     {
         if ( pOwner->ImplHasNumberFormat( nPara ) )
@@ -96,7 +96,7 @@ void OutlinerEditEng::ParagraphConnected( sal_Int32 /*nLeftParagraph*/, sal_Int3
         Paragraph* pPara = pOwner->GetParagraph( nRightParagraph );
         if( pPara && Outliner::HasParaFlag( pPara, ParaFlag::ISPAGE ) )
         {
-            pOwner->InsertUndo( new OutlinerUndoChangeParaFlags( pOwner, nRightParagraph, ParaFlag::ISPAGE, ParaFlag::NONE ) );
+            pOwner->InsertUndo( std::make_unique<OutlinerUndoChangeParaFlags>( pOwner, nRightParagraph, ParaFlag::ISPAGE, ParaFlag::NONE ) );
         }
     }
 }
@@ -127,19 +127,19 @@ OUString OutlinerEditEng::GetUndoComment( sal_uInt16 nUndoId ) const
     switch( nUndoId )
     {
         case OLUNDO_DEPTH:
-            return EE_RESSTR(RID_OUTLUNDO_DEPTH);
+            return EditResId(RID_OUTLUNDO_DEPTH);
 
         case OLUNDO_EXPAND:
-            return EE_RESSTR(RID_OUTLUNDO_EXPAND);
+            return EditResId(RID_OUTLUNDO_EXPAND);
 
         case OLUNDO_COLLAPSE:
-            return EE_RESSTR(RID_OUTLUNDO_COLLAPSE);
+            return EditResId(RID_OUTLUNDO_COLLAPSE);
 
         case OLUNDO_ATTR:
-            return EE_RESSTR(RID_OUTLUNDO_ATTR);
+            return EditResId(RID_OUTLUNDO_ATTR);
 
         case OLUNDO_INSERT:
-            return EE_RESSTR(RID_OUTLUNDO_INSERT);
+            return EditResId(RID_OUTLUNDO_INSERT);
 
         default:
             return EditEngine::GetUndoComment( nUndoId );
@@ -169,13 +169,7 @@ void OutlinerEditEng::DrawingTab( const Point& rStartPos, long nWidth, const OUS
             bEndOfLine, bEndOfParagraph, rOverlineColor, rTextLineColor );
 }
 
-void OutlinerEditEng::FieldClicked( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos )
-{
-    EditEngine::FieldClicked( rField, nPara, nPos );    // If URL
-    pOwner->FieldClicked( rField, nPara, nPos );
-}
-
-OUString OutlinerEditEng::CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, Color*& rpTxtColor, Color*& rpFldColor )
+OUString OutlinerEditEng::CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, boost::optional<Color>& rpTxtColor, boost::optional<Color>& rpFldColor )
 {
     return pOwner->CalcFieldValue( rField, nPara, nPos, rpTxtColor, rpFldColor );
 }
@@ -197,7 +191,7 @@ void OutlinerEditEng::SetParaAttribs( sal_Int32 nPara, const SfxItemSet& rSet )
         pOwner->ImplCheckParagraphs( nPara, pOwner->pParaList->GetParagraphCount() );
 
         if ( !IsInUndo() && IsUndoEnabled() )
-            pOwner->UndoActionEnd( OLUNDO_ATTR );
+            pOwner->UndoActionEnd();
     }
 }
 

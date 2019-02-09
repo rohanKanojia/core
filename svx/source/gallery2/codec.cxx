@@ -61,22 +61,21 @@ void GalleryCodec::Write( SvStream& rStmToWrite )
 {
     sal_uInt32 nPos, nCompSize;
 
-    rStmToWrite.Seek( STREAM_SEEK_TO_END );
-    const sal_uInt32 nSize = rStmToWrite.Tell();
-    rStmToWrite.Seek( 0UL );
+    const sal_uInt32 nSize = rStmToWrite.TellEnd();
+    rStmToWrite.Seek( 0 );
 
     rStm.WriteChar( 'S' ).WriteChar( 'V' ).WriteChar( 'R' ).WriteChar( 'L' ).WriteChar( 'E' ).WriteChar( '2' );
     rStm.WriteUInt32( nSize );
 
     nPos = rStm.Tell();
-    rStm.SeekRel( 4UL );
+    rStm.SeekRel( 4 );
 
     ZCodec aCodec;
     aCodec.BeginCompression();
     aCodec.Compress( rStmToWrite, rStm );
     aCodec.EndCompression();
 
-    nCompSize = rStm.Tell() - nPos - 4UL;
+    nCompSize = rStm.Tell() - nPos - 4;
     rStm.Seek( nPos );
     rStm.WriteUInt32( nCompSize );
     rStm.Seek( STREAM_SEEK_TO_END );
@@ -97,12 +96,12 @@ void GalleryCodec::Read( SvStream& rStmToRead )
         if( 1 == nVersion )
         {
             std::unique_ptr<sal_uInt8[]> pCompressedBuffer(new sal_uInt8[ nCompressedSize ]);
-            rStm.Read( pCompressedBuffer.get(), nCompressedSize );
+            rStm.ReadBytes(pCompressedBuffer.get(), nCompressedSize);
             sal_uInt8*  pInBuf = pCompressedBuffer.get();
             std::unique_ptr<sal_uInt8[]> pOutBuf(new sal_uInt8[ nUnCompressedSize ]);
             sal_uInt8*  pTmpBuf = pOutBuf.get();
             sal_uInt8*  pLast = pOutBuf.get() + nUnCompressedSize - 1;
-            sal_uIntPtr   nIndex = 0UL, nCountByte, nRunByte;
+            sal_uIntPtr   nIndex = 0, nCountByte, nRunByte;
             bool    bEndDecoding = false;
 
             do
@@ -137,7 +136,7 @@ void GalleryCodec::Read( SvStream& rStmToRead )
             }
             while ( !bEndDecoding && ( pTmpBuf <= pLast ) );
 
-            rStmToRead.Write( pOutBuf.get(), nUnCompressedSize );
+            rStmToRead.WriteBytes(pOutBuf.get(), nUnCompressedSize);
         }
         else if( 2 == nVersion )
         {

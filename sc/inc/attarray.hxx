@@ -23,6 +23,9 @@
 #include "global.hxx"
 #include "attrib.hxx"
 #include <algorithm>
+#include <memory>
+
+#include <svl/itemset.hxx>
 
 class ScDocument;
 class ScEditDataArray;
@@ -61,16 +64,21 @@ struct ScLineFlags
 
 struct ScMergePatternState
 {
-    SfxItemSet* pItemSet;           ///< allocated in MergePatternArea, used for resulting ScPatternAttr
+    std::unique_ptr<SfxItemSet> pItemSet;
     const ScPatternAttr* pOld1;     ///< existing objects, temporary
     const ScPatternAttr* pOld2;
 
-    ScMergePatternState() : pItemSet(nullptr), pOld1(nullptr), pOld2(nullptr) {}
+    bool mbValidPatternId;
+    sal_uInt64 mnPatternId;
+
+    ScMergePatternState() : pOld1(nullptr), pOld2(nullptr),
+                        mbValidPatternId(true), mnPatternId(0) {}
 };
 
+// we store an array of these where the pattern applies to all rows up till nEndRow
 struct ScAttrEntry
 {
-    SCROW                   nRow;
+    SCROW                   nEndRow;
     const ScPatternAttr*    pPattern;
 };
 
@@ -79,11 +87,9 @@ class ScAttrArray
 private:
     SCCOL           nCol;
     SCTAB           nTab;
-    ScDocument*     pDocument;
+    ScDocument* const     pDocument;
 
-    SCSIZE          nCount;
-    SCSIZE          nLimit;
-    ScAttrEntry*    pData;
+    std::vector<ScAttrEntry> mvData;
 
 friend class ScDocument;                // for FillInfo
 friend class ScDocumentIterator;
@@ -96,14 +102,17 @@ friend class ScHorizontalAttrIterator;
 
     void RemoveCellCharAttribs( SCROW nStartRow, SCROW nEndRow,
                               const ScPatternAttr* pPattern, ScEditDataArray* pDataArray );
+    void SetDefaultIfNotInit( SCSIZE nNeeded = 1 );
+    bool HasAttrib_Impl(const ScPatternAttr* pPattern, HasAttrFlags nMask, SCROW nRow1, SCROW nRow2, SCSIZE i) const;
 
     ScAttrArray(const ScAttrArray&) = delete;
     ScAttrArray& operator=(const ScAttrArray&) = delete;
 
 public:
-            ScAttrArray( SCCOL nNewCol, SCTAB nNewTab, ScDocument* pDoc );
+            ScAttrArray( SCCOL nNewCol, SCTAB nNewTab, ScDocument* pDoc, ScAttrArray* pNextColAttrArray );
             ~ScAttrArray();
 
+    ScDocument* GetDoc() { return pDocument; }
     void    SetTab(SCTAB nNewTab)   { nTab = nNewTab; }
     void    SetCol(SCCOL nNewCol)   { nCol = nNewCol; }
 #if DEBUG_SC_TESTATTRARRAY
@@ -113,21 +122,28 @@ public:
     bool    Concat(SCSIZE nPos);
 
     const ScPatternAttr* GetPattern( SCROW nRow ) const;
+
+    /** Returns if you search for attributes at nRow the range from rStartRow
+        to rEndRow where that attribute combination (ScPatternAttr) is applied.
+        The next ScPatternAttr different from this one starts at rEndRow+1
+        (if that is <= MAXROW).
+     */
     const ScPatternAttr* GetPatternRange( SCROW& rStartRow, SCROW& rEndRow, SCROW nRow ) const;
+
     void    MergePatternArea( SCROW nStartRow, SCROW nEndRow, ScMergePatternState& rState, bool bDeep ) const;
 
     void    MergeBlockFrame( SvxBoxItem* pLineOuter, SvxBoxInfoItem* pLineInner, ScLineFlags& rFlags,
                             SCROW nStartRow, SCROW nEndRow, bool bLeft, SCCOL nDistRight ) const;
-    void    ApplyBlockFrame( const SvxBoxItem* pLineOuter, const SvxBoxInfoItem* pLineInner,
-                            SCROW nStartRow, SCROW nEndRow, bool bLeft, SCCOL nDistRight );
+    void    ApplyBlockFrame(const SvxBoxItem& rLineOuter, const SvxBoxInfoItem* pLineInner,
+                            SCROW nStartRow, SCROW nEndRow, bool bLeft, SCCOL nDistRight);
 
     void    SetPattern( SCROW nRow, const ScPatternAttr* pPattern, bool bPutToPool = false );
     void    SetPatternArea( SCROW nStartRow, SCROW nEndRow, const ScPatternAttr* pPattern,
                             bool bPutToPool = false, ScEditDataArray* pDataArray = nullptr );
-    void    ApplyStyleArea( SCROW nStartRow, SCROW nEndRow, ScStyleSheet* pStyle );
+    void    ApplyStyleArea( SCROW nStartRow, SCROW nEndRow, const ScStyleSheet& rStyle );
     void    ApplyCacheArea( SCROW nStartRow, SCROW nEndRow, SfxItemPoolCache* pCache,
-                            ScEditDataArray* pDataArray = nullptr );
-    void    SetAttrEntries(ScAttrEntry* pNewData, SCSIZE nSize);
+                            ScEditDataArray* pDataArray = nullptr, bool* const pIsChanged = nullptr );
+    void    SetAttrEntries(std::vector<ScAttrEntry> && vNewData);
     void    ApplyLineStyleArea( SCROW nStartRow, SCROW nEndRow,
                                 const ::editeng::SvxBorderLine* pLine, bool bColorOnly );
 
@@ -139,23 +155,23 @@ public:
     void    ChangeIndent( SCROW nStartRow, SCROW nEndRow, bool bIncrement );
 
             /// Including current, may return -1
-    SCsROW  GetNextUnprotected( SCsROW nRow, bool bUp ) const;
+    SCROW  GetNextUnprotected( SCROW nRow, bool bUp ) const;
 
             /// May return -1 if not found
-    SCsROW SearchStyle(
-        SCsROW nRow, const ScStyleSheet* pSearchStyle, bool bUp,
+    SCROW SearchStyle(
+        SCROW nRow, const ScStyleSheet* pSearchStyle, bool bUp,
         const ScMarkArray* pMarkArray = nullptr) const;
 
     bool SearchStyleRange(
-        SCsROW& rRow, SCsROW& rEndRow, const ScStyleSheet* pSearchStyle, bool bUp,
+        SCROW& rRow, SCROW& rEndRow, const ScStyleSheet* pSearchStyle, bool bUp,
         const ScMarkArray* pMarkArray = nullptr) const;
 
-    bool    ApplyFlags( SCROW nStartRow, SCROW nEndRow, sal_Int16 nFlags );
-    bool    RemoveFlags( SCROW nStartRow, SCROW nEndRow, sal_Int16 nFlags );
+    bool    ApplyFlags( SCROW nStartRow, SCROW nEndRow, ScMF nFlags );
+    bool    RemoveFlags( SCROW nStartRow, SCROW nEndRow, ScMF nFlags );
 
     bool    Search( SCROW nRow, SCSIZE& nIndex ) const;
 
-    bool    HasAttrib( SCROW nRow1, SCROW nRow2, sal_uInt16 nMask ) const;
+    bool    HasAttrib( SCROW nRow1, SCROW nRow2, HasAttrFlags nMask ) const;
     bool    IsMerged( SCROW nRow ) const;
     bool    ExtendMerge( SCCOL nThisCol, SCROW nStartRow, SCROW nEndRow,
                                 SCCOL& rPaintCol, SCROW& rPaintRow,
@@ -163,9 +179,8 @@ public:
     void    RemoveAreaMerge( SCROW nStartRow, SCROW nEndRow );
 
     void    FindStyleSheet( const SfxStyleSheetBase* pStyleSheet, ScFlatBoolRowSegments& rUsedRows, bool bReset );
-    bool    IsStyleSheetUsed( const ScStyleSheet& rStyle, bool bGatherAllStyles ) const;
+    bool    IsStyleSheetUsed( const ScStyleSheet& rStyle ) const;
 
-    void    DeleteAreaSafe(SCROW nStartRow, SCROW nEndRow);
     void    SetPatternAreaSafe( SCROW nStartRow, SCROW nEndRow,
                                     const ScPatternAttr* pWantedPattern, bool bDefault );
     void    CopyAreaSafe( SCROW nStartRow, SCROW nEndRow, long nDy, ScAttrArray& rAttrArray );
@@ -187,13 +202,13 @@ public:
     void    DeleteArea( SCROW nStartRow, SCROW nEndRow );
     void    MoveTo( SCROW nStartRow, SCROW nEndRow, ScAttrArray& rAttrArray );
     void    CopyArea(
-        SCROW nStartRow, SCROW nEndRow, long nDy, ScAttrArray& rAttrArray, sal_Int16 nStripFlags = 0) const;
+        SCROW nStartRow, SCROW nEndRow, long nDy, ScAttrArray& rAttrArray, ScMF nStripFlags = ScMF::NONE) const;
 
     void    DeleteHardAttr( SCROW nStartRow, SCROW nEndRow );
 
     /* i123909: Pre-calculate needed memory, and pre-reserve enough memory */
     bool    Reserve( SCSIZE nReserve );
-    SCSIZE  Count() const { return nCount; }
+    SCSIZE  Count() const { return mvData.size(); }
     SCSIZE  Count( SCROW nRow1, SCROW nRow2 ) const;
 };
 
@@ -202,23 +217,30 @@ public:
 class ScAttrIterator
 {
     const ScAttrArray*  pArray;
+    const ScPatternAttr* pDefPattern;
     SCSIZE              nPos;
     SCROW               nRow;
-    SCROW               nEndRow;
+    SCROW const         nEndRow;
 public:
-    inline              ScAttrIterator( const ScAttrArray* pNewArray, SCROW nStart, SCROW nEnd );
+    inline              ScAttrIterator( const ScAttrArray* pNewArray, SCROW nStart, SCROW nEnd, const ScPatternAttr* pDefaultPattern );
     inline const ScPatternAttr* Next( SCROW& rTop, SCROW& rBottom );
     inline const ScPatternAttr* Resync( SCROW nRow, SCROW& rTop, SCROW& rBottom );
     SCROW               GetNextRow() const { return nRow; }
 };
 
-inline ScAttrIterator::ScAttrIterator( const ScAttrArray* pNewArray, SCROW nStart, SCROW nEnd ) :
+inline ScAttrIterator::ScAttrIterator( const ScAttrArray* pNewArray, SCROW nStart, SCROW nEnd, const ScPatternAttr* pDefaultPattern ) :
     pArray( pNewArray ),
+    pDefPattern( pDefaultPattern ),
     nRow( nStart ),
     nEndRow( nEnd )
 {
-    if ( nStart > 0 )
-        pArray->Search( nStart, nPos );
+    if ( pArray->Count() )
+    {
+        if ( nStart > 0 )
+            pArray->Search( nStart, nPos );
+        else
+            nPos = 0;
+    }
     else
         nPos = 0;
 }
@@ -226,11 +248,26 @@ inline ScAttrIterator::ScAttrIterator( const ScAttrArray* pNewArray, SCROW nStar
 inline const ScPatternAttr* ScAttrIterator::Next( SCROW& rTop, SCROW& rBottom )
 {
     const ScPatternAttr* pRet;
-    if ( nPos < pArray->nCount && nRow <= nEndRow )
+    if ( !pArray->Count() )
+    {
+        if ( !nPos )
+        {
+            ++nPos;
+            if ( nRow > MAXROW )
+                return nullptr;
+            rTop = nRow;
+            rBottom = std::min( nEndRow, MAXROW );
+            nRow = rBottom + 1;
+            return pDefPattern;
+        }
+        return nullptr;
+    }
+
+    if ( nPos < pArray->Count() && nRow <= nEndRow )
     {
         rTop = nRow;
-        rBottom = std::min( pArray->pData[nPos].nRow, nEndRow );
-        pRet = pArray->pData[nPos].pPattern;
+        rBottom = std::min( pArray->mvData[nPos].nEndRow, nEndRow );
+        pRet = pArray->mvData[nPos].pPattern;
         nRow = rBottom + 1;
         ++nPos;
     }
@@ -242,17 +279,22 @@ inline const ScPatternAttr* ScAttrIterator::Next( SCROW& rTop, SCROW& rBottom )
 inline const ScPatternAttr* ScAttrIterator::Resync( SCROW nRowP, SCROW& rTop, SCROW& rBottom )
 {
     nRow = nRowP;
+    if ( !pArray->Count() )
+    {
+        nPos = 0;
+        return Next( rTop, rBottom );
+    }
     // Chances are high that the pattern changed on nRowP introduced a span
     // starting right there. Assume that Next() was called so nPos already
     // advanced. Another high chance is that the change extended a previous or
     // next pattern. In all these cases we don't need to search.
-    if (3 <= nPos && nPos <= pArray->nCount && pArray->pData[nPos-3].nRow < nRowP &&
-            nRowP <= pArray->pData[nPos-2].nRow)
+    if (3 <= nPos && nPos <= pArray->Count() && pArray->mvData[nPos-3].nEndRow < nRowP &&
+            nRowP <= pArray->mvData[nPos-2].nEndRow)
         nPos -= 2;
-    else if (2 <= nPos && nPos <= pArray->nCount && pArray->pData[nPos-2].nRow < nRowP &&
-            nRowP <= pArray->pData[nPos-1].nRow)
+    else if (2 <= nPos && nPos <= pArray->Count() && pArray->mvData[nPos-2].nEndRow < nRowP &&
+            nRowP <= pArray->mvData[nPos-1].nEndRow)
         --nPos;
-    else if (pArray->nCount > 0 && nRowP <= pArray->pData[0].nRow)
+    else if (pArray->Count() > 0 && nRowP <= pArray->mvData[0].nEndRow)
         nPos = 0;
     else
         pArray->Search( nRowP, nPos );

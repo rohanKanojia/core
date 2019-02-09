@@ -19,6 +19,7 @@
 
 #include <config_features.h>
 
+#include <osl/diagnose.h>
 #include <unotools/charclass.hxx>
 #include <editsh.hxx>
 #include <fldbas.hxx>
@@ -28,6 +29,7 @@
 #include <docary.hxx>
 #include <fmtfld.hxx>
 #include <txtfld.hxx>
+#include <pamtyp.hxx>
 #include <edimp.hxx>
 #include <dbfld.hxx>
 #include <expfld.hxx>
@@ -41,12 +43,12 @@
 #include <DocumentSettingManager.hxx>
 #include <IDocumentContentOperations.hxx>
 
-/// count field types with a ResId, if 0 count all
-size_t SwEditShell::GetFieldTypeCount(sal_uInt16 nResId ) const
+/// count field types with a ResId, if SwFieldIds::Unknown count all
+size_t SwEditShell::GetFieldTypeCount(SwFieldIds nResId ) const
 {
     const SwFieldTypes* pFieldTypes = GetDoc()->getIDocumentFieldsAccess().GetFieldTypes();
 
-    if(nResId == USHRT_MAX)
+    if(nResId == SwFieldIds::Unknown)
     {
         return static_cast<sal_uInt16>(pFieldTypes->size());
     }
@@ -63,11 +65,11 @@ size_t SwEditShell::GetFieldTypeCount(sal_uInt16 nResId ) const
 }
 
 /// get field types with a ResId, if 0 get all
-SwFieldType* SwEditShell::GetFieldType(size_t nField, sal_uInt16 nResId ) const
+SwFieldType* SwEditShell::GetFieldType(size_t nField, SwFieldIds nResId ) const
 {
     const SwFieldTypes* pFieldTypes = GetDoc()->getIDocumentFieldsAccess().GetFieldTypes();
 
-    if(nResId == USHRT_MAX && nField < pFieldTypes->size())
+    if(nResId == SwFieldIds::Unknown && nField < pFieldTypes->size())
     {
         return (*pFieldTypes)[nField];
     }
@@ -87,7 +89,7 @@ SwFieldType* SwEditShell::GetFieldType(size_t nField, sal_uInt16 nResId ) const
 }
 
 /// get first type with given ResId and name
-SwFieldType* SwEditShell::GetFieldType(sal_uInt16 nResId, const OUString& rName) const
+SwFieldType* SwEditShell::GetFieldType(SwFieldIds nResId, const OUString& rName) const
 {
     return GetDoc()->getIDocumentFieldsAccess().GetFieldType( nResId, rName, false );
 }
@@ -99,7 +101,7 @@ void SwEditShell::RemoveFieldType(size_t nField)
 }
 
 /// delete field type based on its name
-void SwEditShell::RemoveFieldType(sal_uInt16 nResId, const OUString& rStr)
+void SwEditShell::RemoveFieldType(SwFieldIds nResId, const OUString& rStr)
 {
     const SwFieldTypes* pFieldTypes = GetDoc()->getIDocumentFieldsAccess().GetFieldTypes();
     const SwFieldTypes::size_type nSize = pFieldTypes->size();
@@ -122,18 +124,18 @@ void SwEditShell::RemoveFieldType(sal_uInt16 nResId, const OUString& rStr)
     }
 }
 
-void SwEditShell::FieldToText( SwFieldType* pType )
+void SwEditShell::FieldToText( SwFieldType const * pType )
 {
     if( !pType->HasWriterListeners() )
         return;
 
     SET_CURR_SHELL( this );
     StartAllAction();
-    StartUndo( UNDO_DELETE );
+    StartUndo( SwUndoId::DELETE );
     Push();
     SwPaM* pPaM = GetCursor();
     // TODO: this is really hackish
-    SwFieldHint aHint( pPaM );
+    SwFieldHint aHint(pPaM, GetLayout());
     SwIterator<SwClient,SwFieldType> aIter(*pType);
     for( SwClient* pClient = aIter.First(); pClient; pClient = aIter.Next() )
     {
@@ -141,19 +143,19 @@ void SwEditShell::FieldToText( SwFieldType* pType )
         pClient->SwClientNotifyCall( *pType, aHint );
     }
 
-    Pop( false );
+    Pop(PopMode::DeleteCurrent);
     EndAllAction();
-    EndUndo( UNDO_DELETE );
+    EndUndo( SwUndoId::DELETE );
 }
 
 /// add a field at the cursor position
-void SwEditShell::Insert2(SwField& rField, const bool bForceExpandHints)
+void SwEditShell::Insert2(SwField const & rField, const bool bForceExpandHints)
 {
     SET_CURR_SHELL( this );
     StartAllAction();
     SwFormatField aField( rField );
 
-    const SetAttrMode nInsertFlags = (bForceExpandHints)
+    const SetAttrMode nInsertFlags = bForceExpandHints
         ? SetAttrMode::FORCEHINTEXPAND
         : SetAttrMode::DEFAULT;
 
@@ -161,7 +163,6 @@ void SwEditShell::Insert2(SwField& rField, const bool bForceExpandHints)
     {
         const bool bSuccess(GetDoc()->getIDocumentContentOperations().InsertPoolItem(rPaM, aField, nInsertFlags));
         OSL_ENSURE( bSuccess, "Doc->Insert(Field) failed");
-        (void) bSuccess;
     }
 
     EndAllAction();
@@ -172,7 +173,7 @@ static SwTextField* lcl_FindInputField( SwDoc* pDoc, SwField& rField )
 {
     // Search field via its address. For input fields this needs to be done in protected fields.
     SwTextField* pTField = nullptr;
-    if( RES_INPUTFLD == rField.Which() )
+    if( SwFieldIds::Input == rField.Which() )
     {
         const sal_uInt32 nMaxItems =
             pDoc->GetAttrPool().GetItemCount2( RES_TXTATR_INPUTFIELD );
@@ -187,7 +188,7 @@ static SwTextField* lcl_FindInputField( SwDoc* pDoc, SwField& rField )
             }
         }
     }
-    else if( RES_SETEXPFLD == rField.Which()
+    else if( SwFieldIds::SetExp == rField.Which()
         && static_cast<SwSetExpField&>(rField).GetInputFlag() )
     {
         const sal_uInt32 nMaxItems =
@@ -206,7 +207,7 @@ static SwTextField* lcl_FindInputField( SwDoc* pDoc, SwField& rField )
     return pTField;
 }
 
-void SwEditShell::UpdateFields( SwField &rField )
+void SwEditShell::UpdateOneField(SwField &rField)
 {
     SET_CURR_SHELL( this );
     StartAllAction();
@@ -214,8 +215,8 @@ void SwEditShell::UpdateFields( SwField &rField )
         // If there are no selections so take the value of the current cursor position.
         SwMsgPoolItem* pMsgHint = nullptr;
         SwRefMarkFieldUpdate aRefMkHt( GetOut() );
-        sal_uInt16 nFieldWhich = rField.GetTyp()->Which();
-        if( RES_GETREFFLD == nFieldWhich )
+        SwFieldIds nFieldWhich = rField.GetTyp()->Which();
+        if( SwFieldIds::GetRef == nFieldWhich )
             pMsgHint = &aRefMkHt;
 
         SwPaM* pCursor = GetCursor();
@@ -261,9 +262,9 @@ void SwEditShell::UpdateFields( SwField &rField )
                 // Search for SwTextField ...
                 while(  bOkay
                      && pCurStt->nContent != pCurEnd->nContent
-                     && ( aPam.Find( aFieldHint, false, fnMoveForward, &aCurPam, true )
-                          || aPam.Find( aAnnotationFieldHint, false, fnMoveForward, &aCurPam )
-                          || aPam.Find( aInputFieldHint, false, fnMoveForward, &aCurPam ) ) )
+                     && (sw::FindAttrImpl(aPam, aFieldHint, fnMoveForward, aCurPam, true, GetLayout())
+                          || sw::FindAttrImpl(aPam, aAnnotationFieldHint, fnMoveForward, aCurPam, false, GetLayout())
+                          || sw::FindAttrImpl(aPam, aInputFieldHint, fnMoveForward, aCurPam, false, GetLayout())))
                 {
                     // if only one PaM has more than one field  ...
                     if( aPam.Start()->nContent != pCurStt->nContent )
@@ -296,7 +297,7 @@ void SwEditShell::UpdateFields( SwField &rField )
     EndAllAction();
 }
 
-SwDBData SwEditShell::GetDBData() const
+SwDBData const & SwEditShell::GetDBData() const
 {
     return GetDoc()->GetDBData();
 }
@@ -312,7 +313,7 @@ void SwEditShell::ChgDBData(const SwDBData& rNewData)
 }
 
 void SwEditShell::GetAllUsedDB( std::vector<OUString>& rDBNameList,
-                                std::vector<OUString>* pAllDBNames )
+                                std::vector<OUString> const * pAllDBNames )
 {
     GetDoc()->GetAllUsedDB( rDBNameList, pAllDBNames );
 }
@@ -402,10 +403,10 @@ bool SwEditShell::IsAnyDatabaseFieldInDoc()const
         {
             switch(pFieldType->Which())
             {
-                case RES_DBFLD:
-                case RES_DBNEXTSETFLD:
-                case RES_DBNUMSETFLD:
-                case RES_DBSETNUMBERFLD:
+                case SwFieldIds::Database:
+                case SwFieldIds::DbNextSet:
+                case SwFieldIds::DbNumSet:
+                case SwFieldIds::DbSetNumber:
                 {
                     SwIterator<SwFormatField,SwFieldType> aIter( *pFieldType );
                     SwFormatField* pField = aIter.First();
@@ -417,6 +418,7 @@ bool SwEditShell::IsAnyDatabaseFieldInDoc()const
                     }
                 }
                 break;
+                default: break;
             }
         }
     }

@@ -26,6 +26,9 @@
 #endif // End UNIX
 
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <stdlib.h>
 #include <shlobj.h>
@@ -68,9 +71,9 @@ namespace
     static const char* DefaultProductDir[NB_PRODUCTS][NB_CANDIDATES] =
     {
     #if defined(_WIN32)
-        { "Mozilla/SeaMonkey/", NULL, NULL, NULL },
-        { "Mozilla/Firefox/", NULL, NULL, NULL },
-        { "Thunderbird/", "Mozilla/Thunderbird/", NULL, NULL }
+        { "Mozilla/SeaMonkey/", nullptr, nullptr, nullptr },
+        { "Mozilla/Firefox/", nullptr, nullptr, nullptr },
+        { "Thunderbird/", "Mozilla/Thunderbird/", nullptr, nullptr }
     #elif defined(MACOSX)
         { "../Mozilla/SeaMonkey/", nullptr, nullptr, nullptr },
         { "Firefox/", nullptr, nullptr, nullptr },
@@ -90,9 +93,9 @@ namespace
     };
 
 
-    OUString lcl_guessProfileRoot( MozillaProductType _product )
+    OUString const & lcl_guessProfileRoot( MozillaProductType _product )
     {
-        size_t productIndex = _product - 1;
+        size_t productIndex = static_cast<int>(_product) - 1;
 
         static OUString s_productDirectories[NB_PRODUCTS];
 
@@ -110,7 +113,7 @@ namespace
             else
             {
                 OUString sProductDirCandidate;
-                const char* pProfileRegistry = "profiles.ini";
+                const char pProfileRegistry[] = "profiles.ini";
 
                 // check all possible candidates
                 for ( size_t i=0; i<NB_CANDIDATES; ++i )
@@ -123,7 +126,7 @@ namespace
 
                     // check existence
                     ::osl::DirectoryItem aRegistryItem;
-                    ::osl::FileBase::RC result = ::osl::DirectoryItem::get( sProductDirCandidate + OUString::createFromAscii( pProfileRegistry ), aRegistryItem );
+                    ::osl::FileBase::RC result = ::osl::DirectoryItem::get( sProductDirCandidate + pProfileRegistry, aRegistryItem );
                     if ( result == ::osl::FileBase::E_None  )
                     {
                         ::osl::FileStatus aStatus( osl_FileStatus_Mask_Validate );

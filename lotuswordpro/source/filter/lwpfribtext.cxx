@@ -58,23 +58,23 @@
  *  For LWP filter architecture prototype
  ************************************************************************/
 
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 #include "lwpfribtext.hxx"
 #include "lwpcharsetmgr.hxx"
 #include "lwphyperlinkmgr.hxx"
-#include "lwptools.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xftextspan.hxx"
-#include "xfilter/xfbookmark.hxx"
-#include "xfilter/xfentry.hxx"
-#include "xfilter/xftextcontent.hxx"
-#include "xfilter/xfcrossref.hxx"
-#include "xfilter/xfpagenumber.hxx"
-#include "xfilter/xfdocfield.hxx"
-#include "xfilter/xfdatestyle.hxx"
-#include "xfilter/xftimestyle.hxx"
-#include "xfilter/xfdate.hxx"
-#include "xfilter/xfannotation.hxx"
+#include <lwptools.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xftextspan.hxx>
+#include <xfilter/xfbookmark.hxx>
+#include <xfilter/xfentry.hxx>
+#include <xfilter/xftextcontent.hxx>
+#include <xfilter/xfcrossref.hxx>
+#include <xfilter/xfpagenumber.hxx>
+#include <xfilter/xfdocfield.hxx>
+#include <xfilter/xfdatestyle.hxx>
+#include <xfilter/xftimestyle.hxx>
+#include <xfilter/xfdate.hxx>
+#include <xfilter/xfannotation.hxx>
 
 LwpFribText::LwpFribText( LwpPara *pPara, bool bNoUnicode )
     : LwpFrib(pPara), m_bNoUnicode(bNoUnicode)
@@ -129,7 +129,7 @@ void LwpFribParaNumber::Read(LwpObjectStream* pObjStrm, sal_uInt16 /*len*/)
  * @short:   default constructor of LwpFribDocVar
  */
 LwpFribDocVar::LwpFribDocVar(LwpPara* pPara)
-    : LwpFrib(pPara), m_nType(0), m_pName(new LwpAtomHolder)
+    : LwpFrib(pPara), m_nType(0)
 {
 }
 /**
@@ -137,11 +137,6 @@ LwpFribDocVar::LwpFribDocVar(LwpPara* pPara)
  */
 LwpFribDocVar::~LwpFribDocVar()
 {
-    if (m_pName)
-    {
-        delete m_pName;
-        m_pName = nullptr;
-    }
 }
 /**
  * @short:   Reading mothed of document variable frib.
@@ -151,7 +146,7 @@ LwpFribDocVar::~LwpFribDocVar()
 void LwpFribDocVar::Read(LwpObjectStream* pObjStrm, sal_uInt16 /*len*/)
 {
     m_nType = pObjStrm->QuickReaduInt16();
-    m_pName->Read(pObjStrm);
+    m_aName.Read(pObjStrm);
 }
 
 /**
@@ -182,7 +177,7 @@ void LwpFribDocVar::RegisterStyle(LwpFoundry* pFoundry)
  */
 void LwpFribDocVar::RegisterDefaultTimeStyle()
 {
-    XFDateStyle* pDateStyle = new XFDateStyle;//use the default format
+    std::unique_ptr<XFDateStyle> pDateStyle(new XFDateStyle);//use the default format
 
     pDateStyle->AddMonth();
     pDateStyle->AddText("/");
@@ -197,15 +192,15 @@ void LwpFribDocVar::RegisterDefaultTimeStyle()
     pDateStyle->AddSecond();
 
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    m_TimeStyle = pXFStyleManager->AddStyle(pDateStyle).m_pStyle->GetStyleName();
+    m_TimeStyle = pXFStyleManager->AddStyle(std::move(pDateStyle)).m_pStyle->GetStyleName();
 }
 void LwpFribDocVar::RegisterTotalTimeStyle()
 {
-    XFTimeStyle* pTimeStyle = new XFTimeStyle;//use the default format
+    std::unique_ptr<XFTimeStyle> pTimeStyle(new XFTimeStyle);//use the default format
     pTimeStyle->SetTruncate(false);
     pTimeStyle->AddMinute();
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    m_TimeStyle = pXFStyleManager->AddStyle(pTimeStyle).m_pStyle->GetStyleName();
+    m_TimeStyle = pXFStyleManager->AddStyle(std::move(pTimeStyle)).m_pStyle->GetStyleName();
 }
 
 /**

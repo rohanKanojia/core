@@ -22,35 +22,35 @@
 
 #include <svx/svxdllapi.h>
 #include <svx/svdxcgv.hxx>
+#include <memory>
 
 class SdrUndoGeoObj;
 
-class SVX_DLLPUBLIC SdrDragView: public SdrExchangeView
+class SVX_DLLPUBLIC SdrDragView : public SdrExchangeView
 {
     friend class                SdrPageView;
     friend class                SdrDragMethod;
 
+    // See GetDragXorPolyLimit/GetDragXorPointLimit
+    enum : size_t {
+        eDragXorPolyLimit = 100,
+        eDragXorPointLimit = 500
+    };
+
 protected:
     SdrHdl*                     mpDragHdl;
-    SdrDragMethod*              mpCurrentSdrDragMethod;
+    std::unique_ptr<SdrDragMethod> mpCurrentSdrDragMethod;
     SdrUndoGeoObj*              mpInsPointUndo;
-    Rectangle                   maDragLimit;
+    tools::Rectangle            maDragLimit;
     OUString                    maInsPointUndoStr;
     SdrHdlKind                  meDragHdl;
 
-    sal_uIntPtr                 mnDragXorPolyLimit;
-    sal_uIntPtr                 mnDragXorPointLimit;
-    sal_uInt16                  mnDetailedEdgeDraggingLimit;
-
     bool                        mbFramDrag : 1;        // currently frame dragging
-    bool                        mbDragSpecial : 1;     // currently Special Obj-dragging
     bool                        mbMarkedHitMovesAlways : 1; // Persistent
     bool                        mbDragLimit : 1;      // Limit on SnapRect instead of BoundRect
     bool                        mbDragHdl : 1;        // TRUE: RefPt is slid
     bool                        mbDragStripes : 1;    // Persistent
-    bool                        mbMirrRefDragObj : 1; // Persistent - During the drag, show the mirror axis of the mirrored objects as Xor
     bool                        mbSolidDragging : 1;  // allow solid create/drag of objects
-    bool                        mbMouseHideWhileDraggingPoints : 1;
     bool                        mbResizeAtCenter : 1;
     bool                        mbCrookAtCenter : 1;
     bool                        mbDragWithCopy : 1;
@@ -58,24 +58,23 @@ protected:
     bool                        mbInsObjPointMode : 1;
     bool                        mbInsGluePointMode : 1;
     bool                        mbNoDragXorPolys : 1;
-    bool                        mbAutoVertexCon : 1;  // automatic generation of connectors at the vertices
-    bool                        mbAutoCornerCon : 1;  // automatic generation of connectors at the corners
-    bool                        mbRubberEdgeDragging : 1;
-    bool                        mbDetailedEdgeDragging : 1;
 
 private:
     SVX_DLLPRIVATE void ImpClearVars();
 
 protected:
-    virtual void SetMarkHandles() override;
+    virtual void SetMarkHandles(SfxViewShell* pOtherShell) override;
     void ShowDragObj();
     void HideDragObj();
-    bool ImpBegInsObjPoint(bool bIdxZwang, sal_uInt32 nIdx, const Point& rPnt, bool bNewObj, OutputDevice* pOut);
+    bool ImpBegInsObjPoint(bool bIdxZwang, const Point& rPnt, bool bNewObj, OutputDevice* pOut);
 
 protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrDragView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrDragView();
+    SdrDragView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
+
+    virtual ~SdrDragView() override;
 
 public:
     virtual bool IsAction() const override;
@@ -83,7 +82,7 @@ public:
     virtual void EndAction() override;
     virtual void BckAction() override;
     virtual void BrkAction() override;
-    virtual void TakeActionRect(Rectangle& rRect) const override;
+    virtual void TakeActionRect(tools::Rectangle& rRect) const override;
 
     // special implementation for Writer:
     // TakeDragObjAnchorPos() returns the position at which an object
@@ -95,20 +94,20 @@ public:
     // In case of return value 'false', the position could not be
     // determined (e.g. point shift, multiple selection, shift of the
     // mirror axis,...)
-    bool TakeDragObjAnchorPos(Point& rPos, bool bTopRight = false ) const;
+    bool TakeDragObjAnchorPos(Point& rPos, bool bTopRight ) const;
 
     // If pForcedMeth is passed, then pHdl, ... is not evaluated, but this Drag
     // method is used. In this, the ownership of the instance passes
     // to the View and is destroyed at the end of the dragging.
-    virtual bool BegDragObj(const Point& rPnt, OutputDevice* pOut=nullptr, SdrHdl* pHdl=nullptr, short nMinMov=-3, SdrDragMethod* pForcedMeth=nullptr);
+    virtual bool BegDragObj(const Point& rPnt, OutputDevice* pOut, SdrHdl* pHdl, short nMinMov=-3, SdrDragMethod* pForcedMeth=nullptr);
     void MovDragObj(const Point& rPnt);
     bool EndDragObj(bool bCopy=false);
     void BrkDragObj();
     bool IsDragObj() const { return mpCurrentSdrDragMethod && !mbInsPolyPoint && !mbInsGluePoint; }
     SdrHdl* GetDragHdl() const { return mpDragHdl; }
-    SdrDragMethod* GetDragMethod() const { return mpCurrentSdrDragMethod; }
-    bool IsDraggingPoints() const { return meDragHdl==HDL_POLY; }
-    bool IsDraggingGluePoints() const { return meDragHdl==HDL_GLUE; }
+    SdrDragMethod* GetDragMethod() const { return mpCurrentSdrDragMethod.get(); }
+    bool IsDraggingPoints() const { return meDragHdl==SdrHdlKind::Poly; }
+    bool IsDraggingGluePoints() const { return meDragHdl==SdrHdlKind::Glue; }
 
     // If you want to define that already during BegDrag
     // or in the middle.
@@ -121,7 +120,7 @@ public:
 
     // Interactive insertion of a new point. nIdx=0 => in front of the first point
     bool IsInsObjPointPossible() const;
-    bool BegInsObjPoint(const Point& rPnt, bool bNewObj) { return ImpBegInsObjPoint(false, 0L, rPnt, bNewObj, nullptr); }
+    bool BegInsObjPoint(const Point& rPnt, bool bNewObj) { return ImpBegInsObjPoint(false, rPnt, bNewObj, nullptr); }
     void MovInsObjPoint(const Point& rPnt) { MovDragObj(rPnt); }
     bool EndInsObjPoint(SdrCreateCmd eCmd);
     bool IsInsObjPoint() const { return mpCurrentSdrDragMethod && mbInsPolyPoint; }
@@ -145,14 +144,6 @@ public:
     void SetDragStripes(bool bOn);
     bool IsDragStripes() const { return mbDragStripes; }
 
-    // hide handles during dragging
-    //HMHvoid SetDragHdlHide(bool bOn);
-    //HMHBOOL IsDragHdlHide() const { return bNoDragHdl; }
-
-    // Hide the mouse when dragging polygon points or glue points.
-    // Default=false
-    bool IsMouseHideWhileDraggingPoints() const { return mbMouseHideWhileDraggingPoints; }
-
     // As a general rule, the contours of the selected objects
     // are displayed as Xor-polygons. If this flag is set, only one
     // Xor-Frame is drawn (e.g. in case of multiple selection).
@@ -164,45 +155,18 @@ public:
     bool IsNoDragXorPolys() const { return mbNoDragXorPolys; }
 
     // If the number of selected objects exceeds the value set here,
-    // NoDragPolys is (temporarily) activated implicitely.
+    // NoDragPolys is (temporarily) activated implicitly.
     // PolyPolygons etc. are regarded as multiple objects respectively.
-    // Default=100
-    sal_uIntPtr GetDragXorPolyLimit() const { return mnDragXorPolyLimit; }
+    static size_t GetDragXorPolyLimit() { return eDragXorPolyLimit; }
 
     // Like DragXorPolyLimit, but in respect to the total number of
-    // all polygons. Default=500.
+    // all polygons.
     // NoDragPolys is (temporarily) activated, if one of the limits
     // is exceeded.
-    sal_uIntPtr GetDragXorPointLimit() const { return mnDragXorPointLimit; }
+    static size_t GetDragXorPointLimit() { return eDragXorPointLimit; }
 
     void SetSolidDragging(bool bOn);
     bool IsSolidDragging() const;
-
-    // Dragging/Creation of connectors:
-    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // Stick Connectors to vertices
-    // Default=true=Yes
-    bool IsAutoVertexConnectors() const { return mbAutoVertexCon; }
-
-    // Stick Connectors to Corners
-    // Default=false=No
-    bool IsAutoCornerConnectors() const { return mbAutoCornerCon; }
-
-    // Dragging of connected objects (Nodes):
-    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    // DetailedEdgeDraggingLimit: like RubberEdgeDraggingLimit,
-    // but this limit refers to the detailed depiction, i.e. not
-    // only rubber bands but total recalculations are visible while
-    // dragging. This detailed depiction is only possible in MoveDrag.
-    // Default value: 10
-    bool IsDetailedEdgeDragging() const { return mbDetailedEdgeDragging; }
-
-    // EdgeDraggingLimit: If more than nEdgeObjCount edges are affected,
-    // they are not shown in the interactive dragging.
-    // This here talks about the "rubber bands", which take less computing time
-    // than the complete recalculations in the DetailedEdgeDragging.
-    // default value: 100
-    bool IsRubberEdgeDragging() const { return mbRubberEdgeDragging; }
 
     // Connector handling is thus as follows (when using default settings):
     // - If at most 10 Connectors are affected, they are recalculated
@@ -245,8 +209,8 @@ public:
     // errors,...
     // Default=EmptyRect=no limitation
     // only partially implemented
-    void SetWorkArea(const Rectangle& rRect) { maMaxWorkArea=rRect; }
-    const Rectangle& GetWorkArea() const { return maMaxWorkArea; }
+    void SetWorkArea(const tools::Rectangle& rRect) { maMaxWorkArea=rRect; }
+    const tools::Rectangle& GetWorkArea() const { return maMaxWorkArea; }
 
 
     // The DragLimit refers to the Page of the object.
@@ -261,7 +225,7 @@ public:
     // occur, because of which the LimitRect might be exceeded by a
     // very small extent....
     // Implemented for Move and Resize
-    virtual bool TakeDragLimit(SdrDragMode eMode, Rectangle& rRect) const;
+    virtual bool TakeDragLimit(SdrDragMode eMode, tools::Rectangle& rRect) const;
 };
 
 #endif // INCLUDED_SVX_SVDDRGV_HXX

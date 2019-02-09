@@ -15,7 +15,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-SfxBoolItem AbsoluteRecord SID_FM_RECORD_ABSOLUTE
+SfxInt32Item AbsoluteRecord SID_FM_RECORD_ABSOLUTE
 (SfxInt32Item Position FN_PARAM_1)
 [
     AutoUpdate = TRUE,
@@ -26,12 +26,10 @@ SfxBoolItem AbsoluteRecord SID_FM_RECORD_ABSOLUTE
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxInt32Item
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -51,7 +49,7 @@ SfxBoolItem AddField SID_FM_ADD_FIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -69,7 +67,7 @@ SfxVoidItem AddTable SID_FM_ADDTABLE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem LineToolbox SID_DRAWTBX_LINES
@@ -87,7 +85,7 @@ SfxVoidItem LineToolbox SID_DRAWTBX_LINES
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 SfxBoolItem Polygon SID_DRAW_POLYGON
@@ -105,7 +103,7 @@ SfxBoolItem Polygon SID_DRAW_POLYGON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 SfxVoidItem AlignCenter SID_OBJECT_ALIGN_CENTER
@@ -122,7 +120,7 @@ SfxVoidItem AlignCenter SID_OBJECT_ALIGN_CENTER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -140,7 +138,7 @@ SfxVoidItem AlignDown SID_OBJECT_ALIGN_DOWN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -158,7 +156,7 @@ SfxVoidItem ObjectAlignLeft SID_OBJECT_ALIGN_LEFT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -177,7 +175,7 @@ SvxAdjustItem Alignment SID_ATTR_PARA_ADJUST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -195,7 +193,7 @@ SfxVoidItem AlignMiddle SID_OBJECT_ALIGN_MIDDLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -213,7 +211,7 @@ SfxVoidItem ObjectAlignRight SID_OBJECT_ALIGN_RIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -231,11 +229,11 @@ SfxVoidItem AlignUp SID_OBJECT_ALIGN_UP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
-SfxVoidItem Arc SID_DRAW_ARC
+SfxBoolItem Arc SID_DRAW_ARC
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -246,12 +244,10 @@ SfxVoidItem Arc SID_DRAW_ARC
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -270,7 +266,7 @@ SfxBoolItem Assign3D SID_3D_ASSIGN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -290,7 +286,7 @@ SfxBoolItem AutoControlFocus SID_FM_AUTOCONTROLFOCUS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -308,7 +304,7 @@ SfxVoidItem AutoFilter SID_FM_AUTOFILTER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -327,12 +323,12 @@ SfxVoidItem AutoFormat SID_AUTOFORMAT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
 
-SfxVoidItem BackgroundImage SID_GALLERY_BG_BRUSH
+SfxStringItem BackgroundImage SID_GALLERY_BG_BRUSH
 (SvxBrushItem Background SID_GALLERY_BG_BRUSH, SfxUInt16Item Position SID_GALLERY_BG_POS)
 [
     AutoUpdate = FALSE,
@@ -343,17 +339,15 @@ SfxVoidItem BackgroundImage SID_GALLERY_BG_BRUSH
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
 
-SfxStringItem TableStyle SID_TABLE_STYLE
+SfxVoidItem TableStyle SID_TABLE_STYLE
 ()
 [
     AutoUpdate = FALSE,
@@ -368,7 +362,7 @@ SfxStringItem TableStyle SID_TABLE_STYLE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -392,7 +386,7 @@ SfxVoidItem TableStyleSettings SID_TABLE_STYLE_SETTINGS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -410,7 +404,7 @@ SfxVoidItem TableDesign SID_TABLEDESIGN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SvxColorItem BackgroundColor SID_BACKGROUND_COLOR
@@ -428,9 +422,26 @@ SvxColorItem BackgroundColor SID_BACKGROUND_COLOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
+SvxColorItem TableCellBackgroundColor SID_TABLE_CELL_BACKGROUND_COLOR
+
+[
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Format;
+]
 
 SvxBrushItem BackgroundPattern SID_ATTR_BRUSH
 
@@ -447,7 +458,7 @@ SvxBrushItem BackgroundPattern SID_ATTR_BRUSH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -466,7 +477,7 @@ SvxBrushItem BackgroundPatternController SID_BACKGROUND_PATTERN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -484,26 +495,7 @@ SfxBoolItem Bezier_Unfilled SID_DRAW_BEZIER_NOFILL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
-]
-
-
-SfxBoolItem BezierAppend SID_BEZIER_APPEND
-
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -522,7 +514,7 @@ SfxStringItem BezierClose SID_BEZIER_CLOSE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -541,7 +533,7 @@ SfxStringItem BezierConvert SID_BEZIER_CONVERT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -560,7 +552,7 @@ SfxBoolItem BezierCutLine SID_BEZIER_CUTLINE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -579,7 +571,7 @@ SfxBoolItem BezierDelete SID_BEZIER_DELETE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -598,7 +590,7 @@ SfxBoolItem BezierEdge SID_BEZIER_EDGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -617,7 +609,7 @@ SfxBoolItem BezierEliminatePoints SID_BEZIER_ELIMINATE_POINTS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -635,7 +627,7 @@ SfxBoolItem BezierFill SID_DRAW_BEZIER_FILL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -654,7 +646,7 @@ SfxBoolItem BezierInsert SID_BEZIER_INSERT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -673,7 +665,7 @@ SfxBoolItem BezierMove SID_BEZIER_MOVE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -692,7 +684,7 @@ SfxBoolItem BezierSmooth SID_BEZIER_SMOOTH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -711,7 +703,7 @@ SfxBoolItem BezierSymmetric SID_BEZIER_SYMMTR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -748,7 +740,7 @@ SfxBoolItem BmpMask SID_BMPMASK
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -767,7 +759,7 @@ SfxBoolItem BmpMaskExec SID_BMPMASK_EXEC
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -786,7 +778,7 @@ SfxBoolItem BmpMaskPipette SID_BMPMASK_PIPETTE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -805,7 +797,7 @@ SvxWeightItem Bold SID_ATTR_CHAR_WEIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -824,7 +816,7 @@ SvxWeightItem BoldLatin SID_ATTR_CHAR_LATIN_WEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -843,7 +835,7 @@ SvxWeightItem BoldCJK SID_ATTR_CHAR_CJK_WEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -862,26 +854,7 @@ SvxWeightItem BoldCTL SID_ATTR_CHAR_CTL_WEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
-]
-
-
-SfxObjectItem Border SID_BORDER_OBJECT
-
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = ;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -900,7 +873,7 @@ SvxBoxInfoItem BorderInner SID_ATTR_BORDER_INNER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -919,11 +892,11 @@ SvxBoxItem BorderOuter SID_ATTR_BORDER_OUTER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
-SfxVoidItem SetBorderStyle SID_ATTR_BORDER
+SvxBoxItem SetBorderStyle SID_ATTR_BORDER
 (SvxBoxItem OuterBorder SID_ATTR_BORDER_OUTER,SvxBoxInfoItem InnerBorder SID_ATTR_BORDER_INNER)
 [
     AutoUpdate = TRUE,
@@ -934,12 +907,10 @@ SfxVoidItem SetBorderStyle SID_ATTR_BORDER
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SvxBoxItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -957,7 +928,7 @@ SfxVoidItem BringToFront SID_FRAME_TO_TOP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -976,7 +947,7 @@ SfxBoolItem DrawCaption SID_DRAW_CAPTION
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -995,7 +966,7 @@ SvxCaseMapItem CaseMap SID_ATTR_CHAR_CASEMAP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1010,12 +981,10 @@ SfxBoolItem CenterPara SID_ATTR_PARA_ADJUST_CENTER
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1034,7 +1003,7 @@ SfxVoidItem ChangeCaseToFullWidth SID_TRANSLITERATE_FULLWIDTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1053,7 +1022,7 @@ SfxVoidItem ChangeCaseToHalfWidth SID_TRANSLITERATE_HALFWIDTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1072,7 +1041,7 @@ SfxVoidItem ChangeCaseToHiragana SID_TRANSLITERATE_HIRAGANA
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1091,7 +1060,7 @@ SfxVoidItem ChangeCaseToKatakana SID_TRANSLITERATE_KATAGANA
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1110,7 +1079,7 @@ SfxVoidItem ChangeCaseToSentenceCase SID_TRANSLITERATE_SENTENCE_CASE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1129,7 +1098,7 @@ SfxVoidItem ChangeCaseToTitleCase SID_TRANSLITERATE_TITLE_CASE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1148,7 +1117,7 @@ SfxVoidItem ChangeCaseToToggleCase SID_TRANSLITERATE_TOGGLE_CASE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1167,7 +1136,7 @@ SfxVoidItem ChangeCaseRotateCase SID_TRANSLITERATE_ROTATE_CASE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1186,7 +1155,7 @@ SfxVoidItem ChangeCaseToLower SID_TRANSLITERATE_LOWER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1205,7 +1174,7 @@ SfxVoidItem ChangeCaseToUpper SID_TRANSLITERATE_UPPER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1243,7 +1212,7 @@ SvxFontItem CharFontName SID_ATTR_CHAR_FONT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SvxFontItem CharPreviewFontName SID_ATTR_CHAR_PREVIEW_FONT
@@ -1298,7 +1267,7 @@ SvxFontItem CharFontNameLatin SID_ATTR_CHAR_LATIN_FONT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1317,7 +1286,7 @@ SvxFontItem CharFontNameCJK SID_ATTR_CHAR_CJK_FONT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1336,7 +1305,7 @@ SvxFontItem CharFontNameCTL SID_ATTR_CHAR_CTL_FONT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1355,7 +1324,7 @@ SfxBoolItem Checkbox SID_INSERT_CHECKBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1374,11 +1343,11 @@ SfxBoolItem CheckBox SID_FM_CHECKBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SvxChooseControlItem ChooseControls SID_CHOOSE_CONTROLS
+SfxVoidItem ChooseControls SID_CHOOSE_CONTROLS
 
 [
     AutoUpdate = TRUE,
@@ -1393,32 +1362,11 @@ SvxChooseControlItem ChooseControls SID_CHOOSE_CONTROLS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
-    PseudoSlots = TRUE;
-    PseudoPrefix = SID_INSERT;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxBoolItem ChoosePolygon SID_CHOOSE_POLYGON
-
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
-]
-
-
-SfxVoidItem Circle SID_DRAW_CIRCLE
+SfxBoolItem Circle SID_DRAW_CIRCLE
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y)
 [
     AutoUpdate = TRUE,
@@ -1428,16 +1376,14 @@ SfxVoidItem Circle SID_DRAW_CIRCLE
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Circle_Unfilled SID_DRAW_CIRCLE_NOFILL
+SfxBoolItem Circle_Unfilled SID_DRAW_CIRCLE_NOFILL
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y)
 [
     AutoUpdate = TRUE,
@@ -1447,16 +1393,14 @@ SfxVoidItem Circle_Unfilled SID_DRAW_CIRCLE_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem CircleArc SID_DRAW_CIRCLEARC
+SfxBoolItem CircleArc SID_DRAW_CIRCLEARC
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -1466,16 +1410,14 @@ SfxVoidItem CircleArc SID_DRAW_CIRCLEARC
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem CircleCut SID_DRAW_CIRCLECUT
+SfxBoolItem CircleCut SID_DRAW_CIRCLECUT
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -1486,16 +1428,14 @@ SfxVoidItem CircleCut SID_DRAW_CIRCLECUT
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem CircleCut_Unfilled SID_DRAW_CIRCLECUT_NOFILL
+SfxBoolItem CircleCut_Unfilled SID_DRAW_CIRCLECUT_NOFILL
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -1505,16 +1445,14 @@ SfxVoidItem CircleCut_Unfilled SID_DRAW_CIRCLECUT_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem CirclePie SID_DRAW_CIRCLEPIE
+SfxBoolItem CirclePie SID_DRAW_CIRCLEPIE
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -1524,16 +1462,14 @@ SfxVoidItem CirclePie SID_DRAW_CIRCLEPIE
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem CirclePie_Unfilled SID_DRAW_CIRCLEPIE_NOFILL
+SfxBoolItem CirclePie_Unfilled SID_DRAW_CIRCLEPIE_NOFILL
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -1543,12 +1479,10 @@ SfxVoidItem CirclePie_Unfilled SID_DRAW_CIRCLEPIE_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -1566,7 +1500,7 @@ SfxVoidItem ClearOutline SID_OUTLINE_DELETEALL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DATA;
+    GroupId = SfxGroupId::Data;
 ]
 
 
@@ -1585,7 +1519,7 @@ SvxColorItem Color SID_ATTR_CHAR_COLOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SvxBackgroundColorItem CharBackColor SID_ATTR_CHAR_BACK_COLOR
@@ -1603,7 +1537,7 @@ SvxBackgroundColorItem CharBackColor SID_ATTR_CHAR_BACK_COLOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxBoolItem ColorControl SID_COLOR_CONTROL
@@ -1621,7 +1555,7 @@ SfxBoolItem ColorControl SID_COLOR_CONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -1640,7 +1574,7 @@ SfxBoolItem ComboBox SID_FM_COMBOBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1658,7 +1592,7 @@ SfxBoolItem NavigationBar SID_FM_NAVIGATIONBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1677,11 +1611,11 @@ SfxBoolItem Combobox SID_INSERT_COMBOBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxUInt16Item Config SID_FM_CONFIG
+SfxVoidItem Config SID_FM_CONFIG
 
 [
     AutoUpdate = TRUE,
@@ -1696,9 +1630,7 @@ SfxUInt16Item Config SID_FM_CONFIG
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
-    PseudoSlots = TRUE;
-    PseudoPrefix = SID_INSERT;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1717,9 +1649,7 @@ SfxBoolItem MoreControls SID_FM_MORE_CONTROLS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
-    PseudoSlots = TRUE;
-    PseudoPrefix = SID_INSERT;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1738,9 +1668,7 @@ SfxBoolItem FormDesignTools SID_FM_FORM_DESIGN_TOOLS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
-    PseudoSlots = TRUE;
-    PseudoPrefix = SID_INSERT;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1759,7 +1687,7 @@ SfxBoolItem ContourDialog SID_CONTOUR_DLG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_GRAPHIC;
+    GroupId = SfxGroupId::Graphic;
 ]
 
 
@@ -1778,7 +1706,7 @@ SfxBoolItem ContourExecute SID_CONTOUR_EXEC
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -1797,7 +1725,7 @@ SfxBoolItem ControlProperties SID_FM_CTL_PROPERTIES
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1816,7 +1744,7 @@ SfxBoolItem ConvertToButton SID_FM_CONVERTTO_BUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1835,7 +1763,7 @@ SfxBoolItem ConvertToCheckBox SID_FM_CONVERTTO_CHECKBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1854,7 +1782,7 @@ SfxBoolItem ConvertToCombo SID_FM_CONVERTTO_COMBOBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1873,7 +1801,7 @@ SfxBoolItem ConvertToCurrency SID_FM_CONVERTTO_CURRENCY
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1892,7 +1820,7 @@ SfxBoolItem ConvertToDate SID_FM_CONVERTTO_DATE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1911,7 +1839,7 @@ SfxBoolItem ConvertToEdit SID_FM_CONVERTTO_EDIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1930,7 +1858,7 @@ SfxBoolItem ConvertToFileControl SID_FM_CONVERTTO_FILECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1949,7 +1877,7 @@ SfxBoolItem ConvertToFixed SID_FM_CONVERTTO_FIXEDTEXT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1968,7 +1896,7 @@ SfxBoolItem ConvertToFormatted SID_FM_CONVERTTO_FORMATTED
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -1987,7 +1915,7 @@ SfxBoolItem ConvertToScrollBar SID_FM_CONVERTTO_SCROLLBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2006,7 +1934,7 @@ SfxBoolItem ConvertToSpinButton SID_FM_CONVERTTO_SPINBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2025,7 +1953,7 @@ SfxBoolItem ConvertToGroup SID_FM_CONVERTTO_GROUPBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2044,7 +1972,7 @@ SfxBoolItem ConvertToImageBtn SID_FM_CONVERTTO_IMAGEBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2063,7 +1991,7 @@ SfxBoolItem ConvertToImageControl SID_FM_CONVERTTO_IMAGECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2082,7 +2010,7 @@ SfxBoolItem ConvertToList SID_FM_CONVERTTO_LISTBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2101,7 +2029,7 @@ SfxBoolItem ConvertToNumeric SID_FM_CONVERTTO_NUMERIC
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2120,7 +2048,7 @@ SfxBoolItem ConvertToPattern SID_FM_CONVERTTO_PATTERN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2139,7 +2067,7 @@ SfxBoolItem ConvertToRadio SID_FM_CONVERTTO_RADIOBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2158,7 +2086,7 @@ SfxBoolItem ConvertToTime SID_FM_CONVERTTO_TIME
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2177,25 +2105,7 @@ SfxBoolItem ConvertToNavigationBar SID_FM_CONVERTTO_NAVIGATIONBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
-]
-
-
-SfxVoidItem CountAll SID_FM_COUNTALL
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2210,12 +2120,10 @@ SfxBoolItem CreateControl SID_FM_CREATE_CONTROL
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2234,7 +2142,7 @@ SfxBoolItem InsertCurrencyField SID_INSERT_CURRENCYFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2253,7 +2161,7 @@ SfxBoolItem CurrencyField SID_FM_CURRENCYFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2271,7 +2179,7 @@ SfxVoidItem Dash SID_DASH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -2290,7 +2198,7 @@ SfxBoolItem AddDateField SID_INSERT_DATEFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2309,11 +2217,11 @@ SfxBoolItem DateField SID_FM_DATEFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxVoidItem DefaultBullet FN_NUM_BULLET_ON
+SfxBoolItem DefaultBullet FN_NUM_BULLET_ON
 (SfxBoolItem On FN_PARAM_1)
 [
     AutoUpdate = FALSE,
@@ -2324,14 +2232,10 @@ SfxVoidItem DefaultBullet FN_NUM_BULLET_ON
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_ENUMERATION;
+    GroupId = SfxGroupId::Enumeration;
 ]
 
 
@@ -2346,12 +2250,10 @@ SfxBoolItem DeleteRecord SID_FM_RECORD_DELETE
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2371,7 +2273,7 @@ SfxBoolItem SwitchControlDesignMode SID_FM_DESIGN_MODE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2390,7 +2292,7 @@ SfxVoidItem DistributeSelection SID_DISTRIBUTE_DLG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -2409,7 +2311,7 @@ SfxBoolItem DrawSelect SID_DRAW_SELECT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -2428,7 +2330,7 @@ SfxBoolItem InsertDraw SID_INSERT_DRAW
     AccelConfig = FALSE,
         MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -2447,7 +2349,7 @@ SfxBoolItem DSBrowserExplorer SID_DSBROWSER_EXPLORER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2466,7 +2368,7 @@ SfxBoolItem Edit SID_FM_EDIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2485,11 +2387,11 @@ SfxBoolItem InsertEdit SID_INSERT_EDIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxVoidItem Ellipse SID_DRAW_ELLIPSE
+SfxBoolItem Ellipse SID_DRAW_ELLIPSE
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y)
 [
     AutoUpdate = TRUE,
@@ -2500,16 +2402,14 @@ SfxVoidItem Ellipse SID_DRAW_ELLIPSE
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Ellipse_Unfilled SID_DRAW_ELLIPSE_NOFILL
+SfxBoolItem Ellipse_Unfilled SID_DRAW_ELLIPSE_NOFILL
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y)
 [
     AutoUpdate = TRUE,
@@ -2519,16 +2419,14 @@ SfxVoidItem Ellipse_Unfilled SID_DRAW_ELLIPSE_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem EllipseCut SID_DRAW_ELLIPSECUT
+SfxBoolItem EllipseCut SID_DRAW_ELLIPSECUT
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -2538,16 +2436,14 @@ SfxVoidItem EllipseCut SID_DRAW_ELLIPSECUT
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem EllipseCut_Unfilled SID_DRAW_ELLIPSECUT_NOFILL
+SfxBoolItem EllipseCut_Unfilled SID_DRAW_ELLIPSECUT_NOFILL
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -2557,12 +2453,10 @@ SfxVoidItem EllipseCut_Unfilled SID_DRAW_ELLIPSECUT_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -2580,7 +2474,7 @@ SfxVoidItem EnterGroup SID_ENTER_GROUP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2599,7 +2493,7 @@ SvxEscapementItem Escapement SID_ATTR_CHAR_ESCAPEMENT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2637,7 +2531,7 @@ SfxBoolItem FileControl SID_FM_FILECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2656,7 +2550,7 @@ SfxBoolItem InsertFileControl SID_INSERT_FILECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2675,7 +2569,7 @@ SfxBoolItem InsertTreeControl SID_INSERT_TREECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2695,9 +2589,27 @@ XFillBitmapItem FillBitmap SID_ATTR_FILL_BITMAP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
+XFillBitmapItem FillPageBitmap SID_ATTR_PAGE_BITMAP
+
+[
+    /* flags: */
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Special;
+]
 
 XFillColorItem FillColor SID_ATTR_FILL_COLOR
 
@@ -2714,9 +2626,28 @@ XFillColorItem FillColor SID_ATTR_FILL_COLOR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
+XFillColorItem FillPageColor SID_ATTR_PAGE_COLOR
+
+[
+    /* flags: */
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
+]
 
 XFillGradientItem FillGradient SID_ATTR_FILL_GRADIENT
 
@@ -2733,9 +2664,27 @@ XFillGradientItem FillGradient SID_ATTR_FILL_GRADIENT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
+XFillGradientItem FillPageGradient SID_ATTR_PAGE_GRADIENT
+
+[
+    /* flags: */
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
+]
 
 XFillHatchItem FillHatch SID_ATTR_FILL_HATCH
 
@@ -2752,9 +2701,27 @@ XFillHatchItem FillHatch SID_ATTR_FILL_HATCH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
+XFillHatchItem FillPageHatch SID_ATTR_PAGE_HATCH
+
+[
+    /* flags: */
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Special;
+]
 
 XFillStyleItem FillStyle SID_ATTR_FILL_STYLE
 
@@ -2771,7 +2738,26 @@ XFillStyleItem FillStyle SID_ATTR_FILL_STYLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
+]
+
+XFillStyleItem FillPageStyle SID_ATTR_PAGE_FILLSTYLE
+
+[
+    /* flags: */
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2789,7 +2775,7 @@ SfxVoidItem FilterCrit SID_FM_FILTERCRIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -2804,12 +2790,10 @@ SfxBoolItem FirstRecord SID_FM_RECORD_FIRST
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -2828,7 +2812,7 @@ SvxBlinkItem Flash SID_ATTR_FLASH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2885,7 +2869,7 @@ SfxVoidItem FontDialog SID_CHAR_DLG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem FontEffectsDialog SID_CHAR_DLG_EFFECT
@@ -2903,7 +2887,7 @@ SfxVoidItem FontEffectsDialog SID_CHAR_DLG_EFFECT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2922,7 +2906,7 @@ SvxFontHeightItem  FontHeight SID_ATTR_CHAR_FONTHEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2941,7 +2925,7 @@ SvxFontHeightItem FontHeighLatin SID_ATTR_CHAR_LATIN_FONTHEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2960,7 +2944,7 @@ SvxFontHeightItem FontHeightCJK SID_ATTR_CHAR_CJK_FONTHEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2979,7 +2963,7 @@ SvxFontHeightItem FontHeightCTL SID_ATTR_CHAR_CTL_FONTHEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -2998,7 +2982,7 @@ SfxBoolItem FontWork SID_FONTWORK
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3017,7 +3001,7 @@ XFormTextAdjustItem FontWorkTextAdjust SID_FORMTEXT_ADJUST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3036,7 +3020,7 @@ XFormTextDistanceItem FontWorkTextDistance SID_FORMTEXT_DISTANCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3055,7 +3039,7 @@ XFormTextMirrorItem FontWorkTextMirror SID_FORMTEXT_MIRROR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3074,7 +3058,7 @@ XFormTextOutlineItem FontWorkTextOutline SID_FORMTEXT_OUTLINE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3093,7 +3077,7 @@ XFormTextShadowItem FontWorkTextShadow SID_FORMTEXT_SHADOW
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3112,7 +3096,7 @@ XFormTextShadowColorItem FontWorkTextShadowColor SID_FORMTEXT_SHDWCOLOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3131,7 +3115,7 @@ XFormTextShadowXValItem FontWorkTextShadowXVal SID_FORMTEXT_SHDWXVAL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3150,7 +3134,7 @@ XFormTextShadowYValItem FontWorkTextShadowYVal SID_FORMTEXT_SHDWYVAL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3169,7 +3153,7 @@ XFormTextStartItem FontWorkTextStart SID_FORMTEXT_START
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3188,7 +3172,7 @@ XFormTextStyleItem FontWorkTextStyle SID_FORMTEXT_STYLE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3206,7 +3190,7 @@ SfxVoidItem FormatArea SID_ATTRIBUTES_AREA
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3225,7 +3209,7 @@ XFormTextHideFormItem FormatFontWorkClose SID_FORMTEXT_HIDEFORM
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -3243,7 +3227,7 @@ SfxVoidItem FormatGroup SID_GROUP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3261,7 +3245,7 @@ SfxVoidItem FormatLine SID_ATTRIBUTES_LINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3280,7 +3264,7 @@ SfxBoolItem FormattedField SID_FM_FORMATTEDFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -3299,7 +3283,7 @@ SfxBoolItem ScrollBar SID_FM_SCROLLBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -3318,7 +3302,7 @@ SfxBoolItem SpinButton SID_FM_SPINBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -3337,7 +3321,7 @@ SfxBoolItem InsertFormattedField SID_INSERT_FORMATTEDFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -3355,7 +3339,7 @@ SfxVoidItem FormatUngroup SID_UNGROUP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3373,7 +3357,7 @@ SfxVoidItem FormFilter SID_FM_FILTER_START
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -3388,12 +3372,10 @@ SfxBoolItem FormFiltered SID_FM_FORM_FILTERED
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -3411,7 +3393,7 @@ SfxVoidItem FormFilterExecute SID_FM_FILTER_EXECUTE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -3429,11 +3411,11 @@ SfxVoidItem FormFilterExit SID_FM_FILTER_EXIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
-SfxBoolItem FormFilterNavigator SID_FM_FILTER_NAVIGATOR
+SfxVoidItem FormFilterNavigator SID_FM_FILTER_NAVIGATOR
 ()
 [
     AutoUpdate = TRUE,
@@ -3447,7 +3429,7 @@ SfxBoolItem FormFilterNavigator SID_FM_FILTER_NAVIGATOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -3466,7 +3448,7 @@ SfxBoolItem FormProperties SID_FM_PROPERTIES
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -3485,12 +3467,13 @@ SfxBoolItem Freeline SID_DRAW_FREELINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
 SfxBoolItem Freeline_Unfilled SID_DRAW_FREELINE_NOFILL
-
+(SfxUInt16Item Transparence FN_PARAM_1, SfxStringItem Color FN_PARAM_2,
+ SfxUInt16Item Width FN_PARAM_3, SfxBoolItem IsSticky FN_PARAM_4)
 [
     AutoUpdate = TRUE,
     FastCall = FALSE,
@@ -3504,26 +3487,7 @@ SfxBoolItem Freeline_Unfilled SID_DRAW_FREELINE_NOFILL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
-]
-
-
-SfxBoolItem AutoColorInvalid SID_ATTR_AUTO_COLOR_INVALID
-
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -3543,7 +3507,7 @@ SfxVoidItem Gallery SID_GALLERY
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -3562,7 +3526,7 @@ SfxBoolItem GalleryEnableAddCopy SID_GALLERY_ENABLE_ADDCOPY
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -3581,7 +3545,7 @@ SfxStringListItem GetRedoStrings SID_GETREDOSTRINGS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -3600,7 +3564,7 @@ SfxStringListItem GetUndoStrings SID_GETUNDOSTRINGS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -3618,7 +3582,7 @@ SfxVoidItem GrafAttrCrop SID_ATTR_GRAF_CROP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3637,7 +3601,7 @@ SfxInt16Item GrafBlue SID_ATTR_GRAF_BLUE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3656,7 +3620,7 @@ SfxInt16Item GrafContrast SID_ATTR_GRAF_CONTRAST
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3675,7 +3639,7 @@ SfxUInt32Item GrafGamma SID_ATTR_GRAF_GAMMA
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3694,7 +3658,7 @@ SfxInt16Item GrafGreen SID_ATTR_GRAF_GREEN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3713,7 +3677,7 @@ SfxBoolItem GrafInvert SID_ATTR_GRAF_INVERT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3732,7 +3696,7 @@ SfxInt16Item GrafLuminance SID_ATTR_GRAF_LUMINANCE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3751,7 +3715,7 @@ SfxUInt16Item GrafMode SID_ATTR_GRAF_MODE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3770,7 +3734,7 @@ SfxInt16Item GrafRed SID_ATTR_GRAF_RED
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3789,7 +3753,7 @@ SfxUInt16Item GrafTransparence SID_ATTR_GRAF_TRANSPARENCE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -3807,7 +3771,7 @@ SfxVoidItem GraphicFilterInvert SID_GRFFILTER_INVERT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3825,7 +3789,7 @@ SfxVoidItem GraphicFilterMosaic SID_GRFFILTER_MOSAIC
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3843,7 +3807,7 @@ SfxVoidItem GraphicFilterPopart SID_GRFFILTER_POPART
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3861,7 +3825,7 @@ SfxVoidItem GraphicFilterPoster SID_GRFFILTER_POSTER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3879,7 +3843,7 @@ SfxVoidItem GraphicFilterRelief SID_GRFFILTER_EMBOSS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3897,7 +3861,7 @@ SfxVoidItem GraphicFilterRemoveNoise SID_GRFFILTER_REMOVENOISE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3915,7 +3879,7 @@ SfxVoidItem GraphicFilterSepia SID_GRFFILTER_SEPIA
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3933,7 +3897,7 @@ SfxVoidItem GraphicFilterSharpen SID_GRFFILTER_SHARPEN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3951,7 +3915,7 @@ SfxVoidItem GraphicFilterSmooth SID_GRFFILTER_SMOOTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3969,7 +3933,7 @@ SfxVoidItem GraphicFilterSobel SID_GRFFILTER_SOBEL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -3987,7 +3951,7 @@ SfxVoidItem GraphicFilterSolarize SID_GRFFILTER_SOLARIZE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -4006,7 +3970,7 @@ SfxVoidItem GraphicFilterToolbox SID_GRFFILTER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -4025,7 +3989,7 @@ SfxBoolItem Grid SID_FM_DBGRID
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4044,7 +4008,7 @@ SfxBoolItem GridUse SID_GRID_USE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -4063,7 +4027,7 @@ SfxBoolItem GridVisible SID_GRID_VISIBLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -4082,7 +4046,7 @@ SfxBoolItem GroupBox SID_FM_GROUPBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4101,7 +4065,7 @@ SfxBoolItem Groupbox SID_INSERT_GROUPBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4139,7 +4103,7 @@ SfxBoolItem HelplinesMove SID_HELPLINES_MOVE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -4158,7 +4122,7 @@ SfxBoolItem HFixedLine SID_INSERT_HFIXEDLINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4177,7 +4141,7 @@ SfxBoolItem HScrollbar SID_INSERT_HSCROLLBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4196,7 +4160,7 @@ SvxHyperlinkItem Hyperlink SID_HYPERLINK_GETLINK
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4215,7 +4179,7 @@ SfxBoolItem Imagebutton SID_FM_IMAGEBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4234,7 +4198,7 @@ SfxBoolItem ImageControl SID_FM_IMAGECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4253,7 +4217,7 @@ SfxBoolItem InsertImageControl SID_INSERT_IMAGECONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -4272,7 +4236,7 @@ SfxBoolItem ImageMapDialog SID_IMAP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_GRAPHIC;
+    GroupId = SfxGroupId::Graphic;
 ]
 
 
@@ -4291,7 +4255,7 @@ SfxBoolItem ImageMapExecute SID_IMAP_EXEC
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 SfxVoidItem ExternalEdit SID_EXTERNAL_EDIT
@@ -4307,7 +4271,7 @@ SfxVoidItem ExternalEdit SID_EXTERNAL_EDIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_GRAPHIC;
+    GroupId = SfxGroupId::Graphic;
 ]
 
 SfxVoidItem RotateLeft SID_ROTATE_GRAPHIC_LEFT
@@ -4315,7 +4279,7 @@ SfxVoidItem RotateLeft SID_ROTATE_GRAPHIC_LEFT
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
+    ReadOnlyDoc = FALSE,
     Toggle = FALSE,
     Container = FALSE,
     RecordAbsolute = FALSE,
@@ -4324,15 +4288,30 @@ SfxVoidItem RotateLeft SID_ROTATE_GRAPHIC_LEFT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_GRAPHIC;
+    GroupId = SfxGroupId::Graphic;
 ]
+SfxVoidItem Rotate180 SID_ROTATE_GRAPHIC_180
 
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Graphic;
+]
 SfxVoidItem RotateRight SID_ROTATE_GRAPHIC_RIGHT
 
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
+    ReadOnlyDoc = FALSE,
     Toggle = FALSE,
     Container = FALSE,
     RecordAbsolute = FALSE,
@@ -4341,26 +4320,41 @@ SfxVoidItem RotateRight SID_ROTATE_GRAPHIC_RIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_GRAPHIC;
+    GroupId = SfxGroupId::Graphic;
 ]
 
-SfxVoidItem Crop SID_OBJECT_CROP
+SfxVoidItem RotateReset SID_ROTATE_GRAPHIC_RESET
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Graphic;
+]
+
+SfxBoolItem Crop SID_OBJECT_CROP
 ()
 [
     AutoUpdate = TRUE,
     FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
+    ReadOnlyDoc = FALSE,
     Toggle = FALSE,
     Container = FALSE,
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DOCUMENT ;
+    GroupId = SfxGroupId::Document ;
 ]
 
 SfxVoidItem ChangePicture SID_CHANGE_PICTURE
@@ -4377,7 +4371,7 @@ SfxVoidItem ChangePicture SID_CHANGE_PICTURE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_GRAPHIC;
+    GroupId = SfxGroupId::Graphic;
 ]
 
 SfxVoidItem SaveGraphic SID_SAVE_GRAPHIC
@@ -4394,7 +4388,7 @@ SfxVoidItem SaveGraphic SID_SAVE_GRAPHIC
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 SfxVoidItem CompressGraphic SID_COMPRESS_GRAPHIC
@@ -4411,9 +4405,44 @@ SfxVoidItem CompressGraphic SID_COMPRESS_GRAPHIC
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
+SfxVoidItem ClassificationDialog SID_CLASSIFICATION_DIALOG
+()
+[
+    AutoUpdate = TRUE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+    Asynchron;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Document;
+]
+
+SfxVoidItem ParagraphClassificationDialog SID_PARAGRAPH_SIGN_CLASSIFY_DLG
+()
+[
+    AutoUpdate = TRUE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+    Asynchron;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Document;
+]
 
 SfxBoolItem Init3D SID_3D_INIT
 
@@ -4430,7 +4459,7 @@ SfxBoolItem Init3D SID_3D_INIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -4448,7 +4477,7 @@ SfxVoidItem InPlaceObjectResize SID_OBJECTRESIZE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -4466,11 +4495,11 @@ SfxVoidItem InsertAnnotation SID_INSERT_POSTIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem EditAnnotation SID_EDIT_POSTIT
-(SvxPostItAuthorItem Author SID_ATTR_POSTIT_AUTHOR,SvxPostItDateItem Date SID_ATTR_POSTIT_DATE,SvxPostItTextItem Text SID_ATTR_POSTIT_TEXT)
+(SvxPostItIdItem Id SID_ATTR_POSTIT_ID,SvxPostItAuthorItem Author SID_ATTR_POSTIT_AUTHOR,SvxPostItDateItem Date SID_ATTR_POSTIT_DATE,SvxPostItTextItem Text SID_ATTR_POSTIT_TEXT)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
@@ -4480,13 +4509,13 @@ SfxVoidItem EditAnnotation SID_EDIT_POSTIT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Edit;
 ]
 
-SfxBoolItem ShowAnnotations SID_SHOW_POSTIT
+SfxVoidItem ShowAnnotations SID_TOGGLE_NOTES
 ()
 [
     AutoUpdate = FALSE,
@@ -4500,13 +4529,13 @@ SfxBoolItem ShowAnnotations SID_SHOW_POSTIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
 
 SfxVoidItem ReplyToAnnotation SID_REPLYTO_POSTIT
-()
+(SvxPostItIdItem Id SID_ATTR_POSTIT_ID,SvxPostItTextItem Text SID_ATTR_POSTIT_TEXT)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
@@ -4519,13 +4548,13 @@ SfxVoidItem ReplyToAnnotation SID_REPLYTO_POSTIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
 
 SfxVoidItem DeleteAnnotation SID_DELETE_POSTIT
-()
+(SvxPostItIdItem Id SID_ATTR_POSTIT_ID)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
@@ -4538,7 +4567,7 @@ SfxVoidItem DeleteAnnotation SID_DELETE_POSTIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -4557,7 +4586,7 @@ SfxVoidItem DeleteAllAnnotation SID_DELETEALL_POSTIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 SfxVoidItem DeleteAllAnnotationByAuthor SID_DELETEALLBYAUTHOR_POSTIT
@@ -4574,7 +4603,7 @@ SfxVoidItem DeleteAllAnnotationByAuthor SID_DELETEALLBYAUTHOR_POSTIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -4593,7 +4622,7 @@ SfxVoidItem NextAnnotation SID_NEXT_POSTIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -4612,7 +4641,7 @@ SfxVoidItem PreviousAnnotation SID_PREVIOUS_POSTIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -4630,11 +4659,11 @@ SfxVoidItem InsertGalleryPic SID_GALLERY_FORMATS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
-SfxBoolItem InsertGraphic SID_INSERT_GRAPHIC
+SfxVoidItem InsertGraphic SID_INSERT_GRAPHIC
 (SfxStringItem FileName SID_INSERT_GRAPHIC,SfxStringItem FilterName FN_PARAM_FILTER,SfxBoolItem AsLink FN_PARAM_1,SfxStringItem Style FN_PARAM_2)
 [
     AutoUpdate = FALSE,
@@ -4649,26 +4678,7 @@ SfxBoolItem InsertGraphic SID_INSERT_GRAPHIC
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
-]
-
-
-SfxVoidItem InsertImage SID_INSERT_IMAGE
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4687,7 +4697,7 @@ SfxVoidItem InsertMath SID_INSERT_MATH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4706,11 +4716,11 @@ SfxBoolItem InsertMode SID_ATTR_INSERT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
-SfxVoidItem DefaultNumbering FN_NUM_NUMBERING_ON
+SfxBoolItem DefaultNumbering FN_NUM_NUMBERING_ON
 (SfxBoolItem On FN_PARAM_1)
 [
     AutoUpdate = FALSE,
@@ -4721,14 +4731,10 @@ SfxVoidItem DefaultNumbering FN_NUM_NUMBERING_ON
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_ENUMERATION;
+    GroupId = SfxGroupId::Enumeration;
 ]
 
 SfxUInt16Item CurrentBulletListType FN_BUL_NUM_RULE_INDEX
@@ -4744,7 +4750,7 @@ SfxUInt16Item CurrentBulletListType FN_BUL_NUM_RULE_INDEX
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_ENUMERATION;
+    GroupId = SfxGroupId::Enumeration;
 ]
 SfxUInt16Item CurrentNumListType FN_NUM_NUM_RULE_INDEX
 [
@@ -4759,7 +4765,7 @@ SfxUInt16Item CurrentNumListType FN_NUM_NUM_RULE_INDEX
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_ENUMERATION;
+    GroupId = SfxGroupId::Enumeration;
 ]
 
 
@@ -4778,7 +4784,7 @@ SfxVoidItem InsertObject SID_INSERT_OBJECT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4797,26 +4803,7 @@ SfxVoidItem InsertObjectChart SID_INSERT_DIAGRAM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
-]
-
-
-SfxVoidItem InsertObjectChartFromFile SID_INSERT_DIAGRAM_FROM_FILE
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4834,7 +4821,7 @@ SfxVoidItem InsertSymbol SID_CHARMAP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4852,12 +4839,12 @@ SfxVoidItem InsertSpreadsheet SID_ATTR_TABLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
 
-SfxVoidItem InsertTable SID_INSERT_TABLE
+SfxUInt16Item InsertTable SID_INSERT_TABLE
 (SfxUInt16Item Columns SID_ATTR_TABLE_COLUMN,SfxUInt16Item Rows SID_ATTR_TABLE_ROW )
 [
     AutoUpdate = FALSE,
@@ -4869,12 +4856,10 @@ SfxVoidItem InsertTable SID_INSERT_TABLE
     RecordPerSet;
     Asynchron;
 
-    SlotType = SfxUInt16Item
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4892,7 +4877,7 @@ SfxVoidItem InsertTextFrame SID_INSERT_FRAME
     AccelConfig = TRUE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -4910,7 +4895,7 @@ SfxVoidItem InternetDialog SID_INET_DLG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -4928,7 +4913,7 @@ SfxVoidItem Intersect SID_POLY_INTERSECT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -4947,7 +4932,7 @@ SvxPostureItem Italic SID_ATTR_CHAR_POSTURE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -4966,7 +4951,7 @@ SvxPostureItem ItalicLatin SID_ATTR_CHAR_LATIN_POSTURE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -4985,7 +4970,7 @@ SvxPostureItem ItalicCJK SID_ATTR_CHAR_CJK_POSTURE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5004,7 +4989,7 @@ SvxPostureItem ItalicCTL SID_ATTR_CHAR_CTL_POSTURE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5019,13 +5004,10 @@ SfxBoolItem JustifyPara SID_ATTR_PARA_ADJUST_BLOCK
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5044,7 +5026,7 @@ SfxBoolItem InsertFixedText SID_INSERT_FIXEDTEXT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5063,7 +5045,7 @@ SfxBoolItem Label SID_FM_FIXEDTEXT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5082,7 +5064,7 @@ SvxLanguageItem Language SID_ATTR_CHAR_LANGUAGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5101,7 +5083,7 @@ SvxLanguageItem LanguageLatin SID_ATTR_CHAR_LATIN_LANGUAGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5116,12 +5098,10 @@ SfxBoolItem LastRecord SID_FM_RECORD_LAST
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5139,7 +5119,7 @@ SfxVoidItem LeaveFMCreateMode SID_FM_LEAVE_CREATE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -5157,7 +5137,7 @@ SfxVoidItem LeaveGroup SID_LEAVE_GROUP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5172,12 +5152,10 @@ SfxBoolItem LeftPara SID_ATTR_PARA_ADJUST_LEFT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5196,11 +5174,11 @@ SvxLRSpaceItem LeftRightMargin SID_ATTR_LRSPACE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
-SfxVoidItem LeftRightParaMargin SID_ATTR_PARA_LRSPACE
+SvxLRSpaceItem LeftRightParaMargin SID_ATTR_PARA_LRSPACE
 (SvxLRSpaceItem LRSpace SID_ATTR_PARA_LRSPACE)
 [
     AutoUpdate = FALSE,
@@ -5214,7 +5192,61 @@ SfxVoidItem LeftRightParaMargin SID_ATTR_PARA_LRSPACE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxLRSpaceItem LeftParaMargin SID_ATTR_PARA_LEFTSPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxLRSpaceItem FirstLineParaMargin SID_ATTR_PARA_FIRSTLINESPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxLRSpaceItem RightParaMargin SID_ATTR_PARA_RIGHTSPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5232,7 +5264,26 @@ SfxVoidItem LeftRightParaMargin_Vertical SID_ATTR_PARA_LRSPACE_VERTICAL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
+]
+
+
+SfxBoolItem MeasureLine SID_DRAW_MEASURELINE
+
+[
+    AutoUpdate = TRUE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -5251,9 +5302,134 @@ SfxBoolItem Line SID_DRAW_LINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
+SfxBoolItem LineArrowCircle SID_LINE_ARROW_CIRCLE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+SfxBoolItem LineArrowEnd SID_LINE_ARROW_END
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+SfxBoolItem LineArrows SID_LINE_ARROWS
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+SfxBoolItem LineArrowSquare SID_LINE_ARROW_SQUARE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+SfxBoolItem LineArrowStart SID_LINE_ARROW_START
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+SfxBoolItem LineCircleArrow SID_LINE_CIRCLE_ARROW
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+SfxBoolItem LineSquareArrow SID_LINE_SQUARE_ARROW
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerItem;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
 
 SfxBoolItem Line_Diagonal SID_DRAW_XLINE
 
@@ -5269,9 +5445,26 @@ SfxBoolItem Line_Diagonal SID_DRAW_XLINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
+SfxVoidItem ArrowsToolbox SID_DRAWTBX_ARROWS
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
 
 SvxColorItem FrameLineColor SID_FRAME_LINECOLOR
 
@@ -5288,7 +5481,7 @@ SvxColorItem FrameLineColor SID_FRAME_LINECOLOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FRAME;
+    GroupId = SfxGroupId::Frame;
 ]
 
 
@@ -5307,7 +5500,7 @@ XLineDashItem LineDash SID_ATTR_LINE_DASH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5322,12 +5515,10 @@ SfxBoolItem LineEndStyle SID_ATTR_LINEEND_STYLE
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5346,7 +5537,7 @@ SvxLineSpacingItem LineSpacing SID_ATTR_PARA_LINESPACE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SvxULSpaceItem ULSpacing SID_ATTR_PARA_ULSPACE
@@ -5364,7 +5555,45 @@ SvxULSpaceItem ULSpacing SID_ATTR_PARA_ULSPACE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxULSpaceItem AboveSpacing SID_ATTR_PARA_ABOVESPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxULSpaceItem BelowSpacing SID_ATTR_PARA_BELOWSPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5383,7 +5612,7 @@ SvxLineItem LineStyle SID_FRAME_LINESTYLE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FRAME;
+    GroupId = SfxGroupId::Frame;
 ]
 
 
@@ -5402,7 +5631,7 @@ XLineWidthItem LineWidth SID_ATTR_LINE_WIDTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5421,7 +5650,7 @@ SfxBoolItem ListBox SID_FM_LISTBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5440,7 +5669,7 @@ SfxBoolItem InsertListbox SID_INSERT_LISTBOX
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5458,27 +5687,9 @@ SfxVoidItem Merge SID_POLY_MERGE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
-
-SfxVoidItem NewJavaModule SID_BASICIDE_NEWJAVAMODULE
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = GID_MACRO;
-]
 
 
 SfxBoolItem NewRecord SID_FM_RECORD_NEW
@@ -5492,12 +5703,10 @@ SfxBoolItem NewRecord SID_FM_RECORD_NEW
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5512,12 +5721,10 @@ SfxBoolItem NextRecord SID_FM_RECORD_NEXT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5536,7 +5743,7 @@ SfxBoolItem NumericField SID_FM_NUMERICFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5555,11 +5762,11 @@ SfxBoolItem InsertNumericField SID_INSERT_NUMERICFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SvxDrawAlignItem ObjectAlign SID_OBJECT_ALIGN
+SfxVoidItem ObjectAlign SID_OBJECT_ALIGN
 
 [
     AutoUpdate = FALSE,
@@ -5574,9 +5781,7 @@ SvxDrawAlignItem ObjectAlign SID_OBJECT_ALIGN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
-    PseudoSlots = TRUE;
-    PseudoPrefix = SID_OBJECT_ALIGN;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5594,7 +5799,7 @@ SfxVoidItem ObjectBackOne SID_FRAME_DOWN
     AccelConfig = FALSE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5612,7 +5817,7 @@ SfxVoidItem ObjectForwardOne SID_FRAME_UP
     AccelConfig = FALSE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5632,7 +5837,7 @@ SfxBoolItem OpenReadOnly SID_FM_OPEN_READONLY
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -5650,7 +5855,7 @@ SfxVoidItem OrderCrit SID_FM_ORDERCRIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -5669,7 +5874,7 @@ SvxOrphansItem Orphan SID_ATTR_PARA_ORPHANS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5684,12 +5889,10 @@ SfxVoidItem OutlineBullet SID_OUTLINE_BULLET
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxUInt16Item SetNumber FN_SVX_SET_NUMBER
@@ -5706,7 +5909,7 @@ SfxUInt16Item SetNumber FN_SVX_SET_NUMBER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -5724,7 +5927,7 @@ SfxUInt16Item SetBullet FN_SVX_SET_BULLET
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -5742,7 +5945,7 @@ SfxVoidItem OutlineCollapse SID_OUTLINE_COLLAPSE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5760,7 +5963,7 @@ SfxVoidItem OutlineCollapseAll SID_OUTLINE_COLLAPSE_ALL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5778,7 +5981,7 @@ SfxVoidItem OutlineDown SID_OUTLINE_DOWN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5796,7 +5999,7 @@ SfxVoidItem OutlineExpand SID_OUTLINE_EXPAND
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5814,7 +6017,7 @@ SfxVoidItem OutlineExpandAll SID_OUTLINE_EXPAND_ALL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5833,7 +6036,7 @@ SvxContourItem OutlineFont SID_ATTR_CHAR_CONTOUR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5852,7 +6055,7 @@ SfxBoolItem OutlineFormat SID_OUTLINE_FORMAT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5870,7 +6073,7 @@ SfxVoidItem OutlineLeft SID_OUTLINE_LEFT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5888,7 +6091,7 @@ SfxVoidItem OutlineRight SID_OUTLINE_RIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5906,7 +6109,7 @@ SfxVoidItem OutlineUp SID_OUTLINE_UP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -5925,7 +6128,7 @@ SvxFormatBreakItem Pagebreak SID_ATTR_PARA_PAGEBREAK
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5944,7 +6147,7 @@ SvxPaperBinItem PagePaperBin SID_ATTR_PAGE_PAPERBIN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5963,7 +6166,7 @@ SvxSizeItem AttributePageSize SID_ATTR_PAGE_SIZE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -5982,7 +6185,7 @@ SvxPageModelItem AttributeParaModel SID_ATTR_PARA_MODEL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6001,7 +6204,64 @@ SvxPageItem AttributePage SID_ATTR_PAGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxPageItem Orientation SID_ATTR_PAGE_ORIENTATION
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxLongULSpaceItem PageULMargin SID_ATTR_PAGE_ULSPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
+]
+
+
+SvxLongLRSpaceItem PageLRMargin SID_ATTR_PAGE_LRSPACE
+
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6020,7 +6280,7 @@ SvxAutoKernItem PairKerning SID_ATTR_CHAR_AUTOKERN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6039,7 +6299,7 @@ SfxVoidItem ParagraphDialog SID_PARA_DLG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6058,7 +6318,7 @@ SvxFormatKeepItem ParaKeepTogether SID_ATTR_PARA_KEEP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6077,7 +6337,7 @@ SvxFormatSplitItem ParaSplit SID_ATTR_PARA_SPLIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6096,7 +6356,7 @@ SfxBoolItem InsertPatternField SID_INSERT_PATTERNFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6115,11 +6375,11 @@ SfxBoolItem PatternField SID_FM_PATTERNFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxVoidItem Pie SID_DRAW_PIE
+SfxBoolItem Pie SID_DRAW_PIE
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -6130,16 +6390,14 @@ SfxVoidItem Pie SID_DRAW_PIE
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Pie_Unfilled SID_DRAW_PIE_NOFILL
+SfxBoolItem Pie_Unfilled SID_DRAW_PIE_NOFILL
 (SfxUInt32Item CenterX ID_VAL_CENTER_X,SfxUInt32Item CenterY ID_VAL_CENTER_Y,SfxUInt32Item AxisX ID_VAL_AXIS_X,SfxUInt32Item AxisY ID_VAL_AXIS_Y,SfxUInt32Item StartAngle ID_VAL_ANGLESTART,SfxUInt32Item EndAngle ID_VAL_ANGLEEND)
 [
     AutoUpdate = TRUE,
@@ -6149,31 +6407,10 @@ SfxVoidItem Pie_Unfilled SID_DRAW_PIE_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
-]
-
-
-SfxVoidItem PolyFormen SID_POLY_FORMEN
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-    Asynchron;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -6191,7 +6428,7 @@ SfxBoolItem Polygon_Diagonal SID_DRAW_XPOLYGON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -6209,7 +6446,7 @@ SfxBoolItem Polygon_Diagonal_Unfilled SID_DRAW_XPOLYGON_NOFILL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -6227,7 +6464,7 @@ SfxBoolItem Polygon_Unfilled SID_DRAW_POLYGON_NOFILL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -6246,26 +6483,7 @@ SfxPointItem Position SID_ATTR_POSITION
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
-]
-
-
-SfxBoolItem Preview SID_INSERT_PREVIEW
-
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerItem;
-
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -6280,12 +6498,10 @@ SfxBoolItem PrevRecord SID_FM_RECORD_PREV
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6304,7 +6520,7 @@ SfxBoolItem ProgressBar SID_INSERT_PROGRESSBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6342,7 +6558,7 @@ SfxBoolItem Pushbutton SID_FM_PUSHBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6361,7 +6577,7 @@ SfxBoolItem InsertPushbutton SID_INSERT_PUSHBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6381,7 +6597,7 @@ SfxBoolItem InsertFormRadio SID_INSERT_FORM_RADIO
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6400,7 +6616,7 @@ SfxBoolItem InsertFormCheck SID_INSERT_FORM_CHECK
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6419,7 +6635,7 @@ SfxBoolItem InsertFormList SID_INSERT_FORM_LIST
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6438,7 +6654,7 @@ SfxBoolItem InsertFormCombo SID_INSERT_FORM_COMBO
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 SfxBoolItem InsertFormSpin SID_INSERT_FORM_SPIN
@@ -6456,7 +6672,7 @@ SfxBoolItem InsertFormSpin SID_INSERT_FORM_SPIN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6475,7 +6691,7 @@ SfxBoolItem InsertFormVScroll SID_INSERT_FORM_VSCROLL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6495,7 +6711,7 @@ SfxBoolItem InsertFormHScroll SID_INSERT_FORM_HSCROLL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6514,7 +6730,7 @@ SfxBoolItem Radiobutton SID_INSERT_RADIOBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6533,7 +6749,7 @@ SfxBoolItem RadioButton SID_FM_RADIOBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6552,7 +6768,7 @@ SfxBoolItem ReadOnlyMode SID_READONLY_MODE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -6567,12 +6783,10 @@ SfxBoolItem RecFromText SID_FM_RECORD_FROM_TEXT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6587,12 +6801,10 @@ SfxBoolItem RecSave SID_FM_RECORD_SAVE
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6607,17 +6819,18 @@ SfxVoidItem RecSearch SID_FM_SEARCH
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxVoidItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxVoidItem Rect SID_DRAW_RECT
-(SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
+SfxBoolItem Rect SID_DRAW_RECT
+(SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X, SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,
+ SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X, SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y,
+ SfxUInt16Item FillTransparence FN_PARAM_1, SfxStringItem FillColor FN_PARAM_2,
+ SfxUInt16Item LineStyle FN_PARAM_3, SfxBoolItem IsSticky FN_PARAM_4)
 [
     AutoUpdate = TRUE,
     FastCall = FALSE,
@@ -6627,16 +6840,14 @@ SfxVoidItem Rect SID_DRAW_RECT
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Rect_Rounded SID_DRAW_RECT_ROUND
+SfxBoolItem Rect_Rounded SID_DRAW_RECT_ROUND
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -6646,16 +6857,14 @@ SfxVoidItem Rect_Rounded SID_DRAW_RECT_ROUND
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Rect_Rounded_Unfilled SID_DRAW_RECT_ROUND_NOFILL
+SfxBoolItem Rect_Rounded_Unfilled SID_DRAW_RECT_ROUND_NOFILL
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -6665,16 +6874,14 @@ SfxVoidItem Rect_Rounded_Unfilled SID_DRAW_RECT_ROUND_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Rect_Unfilled SID_DRAW_RECT_NOFILL
+SfxBoolItem Rect_Unfilled SID_DRAW_RECT_NOFILL
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -6684,12 +6891,10 @@ SfxVoidItem Rect_Unfilled SID_DRAW_RECT_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -6704,12 +6909,10 @@ SfxBoolItem RecText SID_FM_RECORD_TEXT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6724,12 +6927,10 @@ SfxStringItem RecTotal SID_FM_RECORD_TOTAL
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6744,12 +6945,10 @@ SfxBoolItem RecUndo SID_FM_RECORD_UNDO
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -6767,7 +6966,7 @@ SfxVoidItem Refresh SID_FM_REFRESH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -6785,25 +6984,7 @@ SfxVoidItem RefreshFormControl SID_FM_REFRESH_FORM_CONTROL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
-]
-
-
-SfxVoidItem RemoveFilter SID_FM_FILTER_REMOVE
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = FALSE,
-    MenuConfig = FALSE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -6821,11 +7002,11 @@ SfxVoidItem RemoveFilterSort SID_FM_REMOVE_FILTER_SORT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
-SfxSetItem ReplaceSet FID_SEARCH_REPLACESET
+SfxVoidItem ReplaceSet FID_SEARCH_REPLACESET
 ()
 [
     AutoUpdate = FALSE,
@@ -6839,7 +7020,7 @@ SfxSetItem ReplaceSet FID_SEARCH_REPLACESET
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -6854,12 +7035,10 @@ SfxBoolItem RightPara SID_ATTR_PARA_ADJUST_RIGHT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -6878,7 +7057,7 @@ SvxLRSpaceItem RulerBorderDistance SID_RULER_BORDER_DISTANCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -6897,7 +7076,7 @@ SvxColumnItem RulerBorders SID_RULER_BORDERS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -6916,7 +7095,7 @@ SvxColumnItem RulerBordersVertical SID_RULER_BORDERS_VERTICAL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -6973,7 +7152,25 @@ SvxProtectItem RulerProtect SID_RULER_PROTECT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
+]
+
+SfxVoidItem RulerChangeState SID_RULER_CHANGE_STATE
+(SfxStringItem Margin1 SID_RULER_MARGIN1, SfxStringItem Margin2 SID_RULER_MARGIN2)
+[
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = TRUE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = ;
 ]
 
 
@@ -6991,11 +7188,11 @@ SfxVoidItem SbaExecuteSql SID_FM_EXECUTE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
-SfxBoolItem SbaNativeSql SID_FM_NATIVESQL
+SfxVoidItem SbaNativeSql SID_FM_NATIVESQL
 ()
 [
     AutoUpdate = TRUE,
@@ -7009,7 +7206,7 @@ SfxBoolItem SbaNativeSql SID_FM_NATIVESQL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -7028,7 +7225,7 @@ SfxVoidItem Scan SID_SCAN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -7046,7 +7243,7 @@ SfxVoidItem ScEditOptions SID_SC_EDITOPTIONS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7064,7 +7261,7 @@ SfxVoidItem SchEditOptions SID_SCH_EDITOPTIONS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7082,7 +7279,7 @@ SfxVoidItem SdEditOptions SID_SD_EDITOPTIONS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7100,7 +7297,7 @@ SfxVoidItem SdGraphicOptions SID_SD_GRAPHIC_OPTIONS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7118,7 +7315,7 @@ SfxVoidItem SearchOff FID_SEARCH_OFF
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -7136,11 +7333,11 @@ SfxVoidItem SearchOn FID_SEARCH_ON
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
-SfxSetItem SearchSet FID_SEARCH_SEARCHSET
+SfxVoidItem SearchSet FID_SEARCH_SEARCHSET
 ()
 [
     AutoUpdate = FALSE,
@@ -7154,7 +7351,7 @@ SfxSetItem SearchSet FID_SEARCH_SEARCHSET
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -7172,7 +7369,7 @@ SfxVoidItem Select SID_SELECT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -7190,7 +7387,7 @@ SfxVoidItem SendToBack SID_FRAME_TO_BOTTOM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7208,7 +7405,7 @@ SfxVoidItem SetDefault SID_SET_DEFAULT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7226,7 +7423,7 @@ SfxVoidItem SetHyperlink SID_HYPERLINK_SETLINK
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -7245,7 +7442,7 @@ SvxHyphenZoneItem SetHyphenZone SID_ATTR_PARA_HYPHENZONE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7279,12 +7476,10 @@ SvxLongULSpaceItem SetLongTopBottomMargin SID_ATTR_LONG_ULSPACE
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SvxLongULSpaceItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7302,7 +7497,7 @@ SfxVoidItem SetObjectToBackground SID_OBJECT_HELL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7320,7 +7515,7 @@ SfxVoidItem SetObjectToForeground SID_OBJECT_HEAVEN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7338,7 +7533,7 @@ SfxVoidItem SetPageMaxSize SID_ATTR_PAGE_MAXSIZE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7357,7 +7552,7 @@ SvxShadowItem BorderShadow SID_ATTR_BORDER_SHADOW
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7377,7 +7572,7 @@ SdrOnOffItem FillShadow SID_ATTR_FILL_SHADOW
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 XColorItem FillShadowColor SID_ATTR_SHADOW_COLOR
@@ -7396,7 +7591,7 @@ XColorItem FillShadowColor SID_ATTR_SHADOW_COLOR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 SdrPercentItem FillShadowTransparency SID_ATTR_SHADOW_TRANSPARENCE
@@ -7415,7 +7610,7 @@ SdrPercentItem FillShadowTransparency SID_ATTR_SHADOW_TRANSPARENCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 SdrMetricItem FillShadowXDistance SID_ATTR_SHADOW_XDISTANCE
@@ -7434,7 +7629,7 @@ SdrMetricItem FillShadowXDistance SID_ATTR_SHADOW_XDISTANCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 SdrMetricItem FillShadowYDistance SID_ATTR_SHADOW_YDISTANCE
@@ -7453,7 +7648,7 @@ SdrMetricItem FillShadowYDistance SID_ATTR_SHADOW_YDISTANCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 SvxShadowedItem Shadowed SID_ATTR_CHAR_SHADOWED
@@ -7471,7 +7666,7 @@ SvxShadowedItem Shadowed SID_ATTR_CHAR_SHADOWED
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7491,7 +7686,7 @@ SfxBoolItem ShowFmExplorer SID_FM_SHOW_FMEXPLORER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -7511,7 +7706,7 @@ SfxBoolItem ShowItemBrowser SID_SHOW_ITEMBROWSER
     AccelConfig = TRUE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -7530,7 +7725,7 @@ SfxBoolItem ShowPropBrowser SID_SHOW_PROPERTYBROWSER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -7550,7 +7745,7 @@ SfxBoolItem ShowProperties SID_FM_SHOW_PROPERTIES
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -7565,12 +7760,10 @@ SfxBoolItem ShowPropertyBrowser SID_FM_SHOW_PROPERTY_BROWSER
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -7589,25 +7782,7 @@ SfxBoolItem ShowRuler SID_RULER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
-]
-
-
-SfxVoidItem SimEditOptions SID_SIM_EDITOPTIONS
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = TRUE,
-    ReadOnlyDoc = TRUE,
-    Toggle = FALSE,
-    Container = TRUE,
-    RecordAbsolute = FALSE,
-    RecordPerSet;
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -7626,7 +7801,7 @@ SvxSizeItem Size SID_ATTR_SIZE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -7644,7 +7819,7 @@ SfxVoidItem SmEditOptions SID_SM_EDITOPTIONS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7662,7 +7837,7 @@ SfxVoidItem SortDown SID_FM_SORTDOWN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -7680,7 +7855,7 @@ SfxVoidItem Sortup SID_FM_SORTUP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxBoolItem SpacePara1 SID_ATTR_PARA_LINESPACE_10
@@ -7694,13 +7869,10 @@ SfxBoolItem SpacePara1 SID_ATTR_PARA_LINESPACE_10
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7715,13 +7887,10 @@ SfxBoolItem SpacePara15 SID_ATTR_PARA_LINESPACE_15
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7736,13 +7905,10 @@ SfxBoolItem SpacePara2 SID_ATTR_PARA_LINESPACE_20
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-    ImageReflection = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7760,8 +7926,8 @@ SvxKerningItem Spacing SID_ATTR_CHAR_KERNING
 
     AccelConfig = FALSE,
     MenuConfig = FALSE,
-    ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7780,7 +7946,7 @@ SfxBoolItem SpellOnline SID_AUTOSPELL_CHECK
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7799,11 +7965,11 @@ SfxBoolItem Spinbutton SID_INSERT_SPINBUTTON
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxVoidItem Square SID_DRAW_SQUARE
+SfxBoolItem Square SID_DRAW_SQUARE
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -7813,16 +7979,14 @@ SfxVoidItem Square SID_DRAW_SQUARE
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Square_Rounded SID_DRAW_SQUARE_ROUND
+SfxBoolItem Square_Rounded SID_DRAW_SQUARE_ROUND
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -7832,16 +7996,14 @@ SfxVoidItem Square_Rounded SID_DRAW_SQUARE_ROUND
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Square_Rounded_Unfilled SID_DRAW_SQUARE_ROUND_NOFILL
+SfxBoolItem Square_Rounded_Unfilled SID_DRAW_SQUARE_ROUND_NOFILL
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -7851,16 +8013,14 @@ SfxVoidItem Square_Rounded_Unfilled SID_DRAW_SQUARE_ROUND_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem Square_Unfilled SID_DRAW_SQUARE_NOFILL
+SfxBoolItem Square_Unfilled SID_DRAW_SQUARE_NOFILL
 (SfxUInt32Item MouseStartX ID_VAL_MOUSESTART_X,SfxUInt32Item MouseStartY ID_VAL_MOUSESTART_Y,SfxUInt32Item MouseEndX ID_VAL_MOUSEEND_X,SfxUInt32Item MouseEndY ID_VAL_MOUSEEND_Y)
 [
     AutoUpdate = TRUE,
@@ -7870,12 +8030,10 @@ SfxVoidItem Square_Unfilled SID_DRAW_SQUARE_NOFILL
     Container = FALSE,
     RecordAbsolute = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -7894,7 +8052,7 @@ SfxUInt32Item State3D SID_3D_STATE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -7913,7 +8071,7 @@ SvxCrossedOutItem Strikeout SID_ATTR_CHAR_STRIKEOUT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7932,7 +8090,7 @@ SfxBoolItem SubScript SID_SET_SUB_SCRIPT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -7950,7 +8108,7 @@ SfxVoidItem Substract SID_POLY_SUBSTRACT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 SfxVoidItem EqualizeWidth SID_EQUALIZEWIDTH
@@ -7967,7 +8125,7 @@ SfxVoidItem EqualizeWidth SID_EQUALIZEWIDTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 SfxVoidItem EqualizeHeight SID_EQUALIZEHEIGHT
@@ -7984,7 +8142,7 @@ SfxVoidItem EqualizeHeight SID_EQUALIZEHEIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_MODIFY;
+    GroupId = SfxGroupId::Modify;
 ]
 
 SfxBoolItem SuperScript SID_SET_SUPER_SCRIPT
@@ -8002,7 +8160,7 @@ SfxBoolItem SuperScript SID_SET_SUPER_SCRIPT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8020,7 +8178,7 @@ SfxVoidItem SwEditOptions SID_SW_EDITOPTIONS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -8036,13 +8194,10 @@ SfxBoolItem TabDialog SID_FM_TAB_DIALOG
     RecordPerSet;
     Asynchron;
 
-    SlotType = SfxBoolItem
-
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8062,7 +8217,7 @@ SvxTabStopItem Tabstops SID_ATTR_TABSTOP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8082,7 +8237,7 @@ SvxTabStopItem TabstopsVertical SID_ATTR_TABSTOP_VERTICAL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8098,12 +8253,10 @@ SfxBoolItem TestMode SID_DIALOG_TESTMODE
     RecordPerSet;
     Asynchron;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8122,7 +8275,7 @@ SfxBoolItem Text SID_ATTR_CHAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -8137,13 +8290,10 @@ SfxBoolItem DrawText SID_DRAW_TEXT
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -8162,7 +8312,7 @@ SfxBoolItem Text_Marquee SID_DRAW_TEXT_MARQUEE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -8181,7 +8331,7 @@ SfxBoolItem TextdirectionLeftToRight SID_TEXTDIRECTION_LEFT_TO_RIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8200,7 +8350,7 @@ SfxBoolItem TextdirectionTopToBottom SID_TEXTDIRECTION_TOP_TO_BOTTOM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8219,7 +8369,7 @@ SdrTextFitToSizeTypeItem TextFitToSize SID_ATTR_TEXT_FITTOSIZE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8238,7 +8388,7 @@ SfxVoidItem ThesaurusDialog SID_THESAURUS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -8257,7 +8407,7 @@ SfxBoolItem InsertTimeField SID_INSERT_TIMEFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8276,11 +8426,11 @@ SfxBoolItem TimeField SID_FM_TIMEFIELD
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxBoolItem ToggleObjectBezierMode SID_BEZIER_EDIT
+SfxVoidItem ToggleObjectBezierMode SID_BEZIER_EDIT
 ()
 [
     AutoUpdate = TRUE,
@@ -8295,11 +8445,11 @@ SfxBoolItem ToggleObjectBezierMode SID_BEZIER_EDIT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxBoolItem ToggleObjectRotateMode SID_OBJECT_ROTATE
+SfxVoidItem ToggleObjectRotateMode SID_OBJECT_ROTATE
 ()
 [
     AutoUpdate = TRUE,
@@ -8313,7 +8463,7 @@ SfxBoolItem ToggleObjectRotateMode SID_OBJECT_ROTATE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -8332,7 +8482,7 @@ SfxBoolItem ToolEdit SID_TEXTEDIT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -8351,7 +8501,7 @@ SfxBoolItem SelectObject SID_OBJECT_SELECT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -8370,12 +8520,12 @@ SvxULSpaceItem TopBottomMargin SID_ATTR_ULSPACE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
 SfxVoidItem TransformDialog SID_ATTR_TRANSFORM
-()
+(SfxUInt32Item TransformPosX SID_ATTR_TRANSFORM_POS_X,SfxUInt32Item TransformPosY SID_ATTR_TRANSFORM_POS_Y,SfxUInt32Item TransformWidth SID_ATTR_TRANSFORM_WIDTH, SfxUInt32Item TransformHeight SID_ATTR_TRANSFORM_HEIGHT,SfxUInt32Item TransformRotationDeltaAngle SID_ATTR_TRANSFORM_DELTA_ANGLE,SfxUInt32Item TransformRotationAngle SID_ATTR_TRANSFORM_ANGLE,SfxUInt32Item TransformRotationX SID_ATTR_TRANSFORM_ROT_X,SfxUInt32Item TransformRotationY SID_ATTR_TRANSFORM_ROT_Y)
 [
     AutoUpdate = FALSE,
     FastCall = TRUE,
@@ -8388,11 +8538,28 @@ SfxVoidItem TransformDialog SID_ATTR_TRANSFORM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
+]
+
+SfxVoidItem MeasureAttributes SID_MEASURE_DLG
+()
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
-SfxBoolItem TwainSelect SID_TWAIN_SELECT
+SfxVoidItem TwainSelect SID_TWAIN_SELECT
 ()
 [
     AutoUpdate = FALSE,
@@ -8407,7 +8574,7 @@ SfxBoolItem TwainSelect SID_TWAIN_SELECT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -8426,11 +8593,11 @@ SfxVoidItem TwainTransfer SID_TWAIN_TRANSFER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
-SvxTextLineItem Underline SID_ATTR_CHAR_UNDERLINE
+SvxUnderlineItem Underline SID_ATTR_CHAR_UNDERLINE
 
 [
     AutoUpdate = TRUE,
@@ -8445,11 +8612,11 @@ SvxTextLineItem Underline SID_ATTR_CHAR_UNDERLINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
-SvxTextLineItem Overline SID_ATTR_CHAR_OVERLINE
+SvxOverlineItem Overline SID_ATTR_CHAR_OVERLINE
 
 [
     AutoUpdate = TRUE,
@@ -8464,26 +8631,7 @@ SvxTextLineItem Overline SID_ATTR_CHAR_OVERLINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
-]
-
-
-SfxBoolItem URLButton SID_INSERT_URLBUTTON
-
-[
-    AutoUpdate = TRUE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    RecordAbsolute = FALSE,
-    RecordPerItem;
-
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8503,7 +8651,7 @@ SfxBoolItem UseWizards SID_FM_USE_WIZARDS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8522,7 +8670,7 @@ SfxBoolItem VerticalCaption SID_DRAW_CAPTION_VERTICAL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -8541,7 +8689,7 @@ SfxBoolItem VerticalText SID_DRAW_TEXT_VERTICAL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -8560,11 +8708,11 @@ SfxBoolItem VFixedLine SID_INSERT_VFIXEDLINE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
-SfxVoidItem ViewFormAsGrid SID_FM_VIEW_AS_GRID
+SfxBoolItem ViewFormAsGrid SID_FM_VIEW_AS_GRID
 ()
 [
     AutoUpdate = TRUE,
@@ -8575,12 +8723,10 @@ SfxVoidItem ViewFormAsGrid SID_FM_VIEW_AS_GRID
     RecordAbsolute = FALSE,
     RecordPerItem;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8599,7 +8745,7 @@ SfxBoolItem VScrollbar SID_INSERT_VSCROLLBAR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8618,7 +8764,7 @@ SvxWidowsItem Widow SID_ATTR_PARA_WIDOWS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8637,7 +8783,7 @@ SfxBoolItem Window3D SID_3D_WIN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -8656,7 +8802,7 @@ SvxWordLineModeItem WordMode SID_ATTR_CHAR_WORDLINEMODE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8675,7 +8821,7 @@ XLineColorItem XLineColor SID_ATTR_LINE_COLOR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8694,7 +8840,7 @@ XLineStyleItem XLineStyle SID_ATTR_LINE_STYLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8712,7 +8858,7 @@ SfxVoidItem Zoom100Percent SID_SIZE_REAL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -8730,7 +8876,7 @@ SfxVoidItem ZoomObjects SID_SIZE_OPTIMAL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -8748,7 +8894,7 @@ SfxVoidItem ZoomOptimal SID_SIZE_ALL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -8766,7 +8912,7 @@ SfxVoidItem ZoomPage SID_SIZE_PAGE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -8784,7 +8930,7 @@ SfxVoidItem ZoomPageWidth SID_SIZE_PAGE_WIDTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -8802,7 +8948,7 @@ SfxVoidItem ZoomVisArea SID_SIZE_VISAREA
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -8817,12 +8963,10 @@ SfxVoidItem ToggleControlFocus SID_FM_TOGGLECONTROLFOCUS
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxVoidItem
-
     AccelConfig = TRUE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8837,12 +8981,10 @@ SfxVoidItem CreateFieldControl SID_FM_CREATE_FIELDCONTROL
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxVoidItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8861,7 +9003,7 @@ SfxBoolItem SelectMode SID_INSERT_SELECT
     AccelConfig = FALSE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8880,7 +9022,7 @@ SvxParaVertAlignItem VerticalParagraphAlignment SID_PARA_VERTALIGN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8899,7 +9041,7 @@ SvxCharReliefItem CharacterRelief SID_ATTR_CHAR_RELIEF
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -8918,7 +9060,7 @@ SvxBrushItem CharacterBackgroundPattern SID_ATTR_BRUSH_CHAR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8937,7 +9079,7 @@ SvxCharRotateItem CharacterRotation SID_ATTR_CHAR_ROTATED
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8956,7 +9098,7 @@ SvxCharScaleWidthItem CharacterWidthScalingFactor SID_ATTR_CHAR_SCALEWIDTH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8975,7 +9117,7 @@ SfxUInt32Item NumberFormatValue SID_ATTR_NUMBERFORMAT_VALUE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -8994,7 +9136,7 @@ SvxHorJustifyItem HorizontalJustification SID_ATTR_ALIGN_HOR_JUSTIFY
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9013,7 +9155,7 @@ SvxVerJustifyItem VerticalJustification SID_ATTR_ALIGN_VER_JUSTIFY
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9032,7 +9174,7 @@ SfxUInt16Item AlignmentIndent SID_ATTR_ALIGN_INDENT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9051,7 +9193,7 @@ SfxBoolItem AlignmentHyphenation SID_ATTR_ALIGN_HYPHENATION
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9070,7 +9212,7 @@ SfxInt32Item AlignmentRotation SID_ATTR_ALIGN_DEGREES
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9089,7 +9231,7 @@ SvxRotateModeItem AlignmentRotationMode SID_ATTR_ALIGN_LOCKPOS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9108,7 +9250,7 @@ SvxMarginItem AlignmentMargin SID_ATTR_ALIGN_MARGIN
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9127,7 +9269,7 @@ SfxBoolItem AlignmentStacked SID_ATTR_ALIGN_STACKED
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9142,12 +9284,10 @@ SfxBoolItem ParaLeftToRight SID_ATTR_PARA_LEFT_TO_RIGHT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9162,12 +9302,10 @@ SfxBoolItem ParaRightToLeft SID_ATTR_PARA_RIGHT_TO_LEFT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9186,7 +9324,7 @@ SfxBoolItem TextRTL SID_RULER_TEXT_RIGHT_TO_LEFT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -9204,7 +9342,7 @@ SfxVoidItem OpenHyperlinkOnCursor SID_OPEN_HYPERLINK
         AccelConfig = TRUE,
         MenuConfig = TRUE,
         ToolBoxConfig = TRUE,
-        GroupId = GID_EDIT;
+        GroupId = SfxGroupId::Edit;
 ]
 
 SfxBoolItem CTLFontState SID_CTLFONT_STATE
@@ -9220,7 +9358,7 @@ SfxBoolItem CTLFontState SID_CTLFONT_STATE
         AccelConfig = FALSE,
         MenuConfig = FALSE,
         ToolBoxConfig = FALSE,
-        GroupId = GID_APPLICATION;
+        GroupId = SfxGroupId::Application;
 ]
 
 SfxBoolItem VerticalTextState SID_VERTICALTEXT_STATE
@@ -9236,7 +9374,7 @@ SfxBoolItem VerticalTextState SID_VERTICALTEXT_STATE
         AccelConfig = FALSE,
         MenuConfig = FALSE,
         ToolBoxConfig = FALSE,
-        GroupId = GID_APPLICATION;
+        GroupId = SfxGroupId::Application;
 ]
 
 
@@ -9254,7 +9392,7 @@ SfxVoidItem OpenXMLFilterSettings SID_OPEN_XML_FILTERSETTINGS
         AccelConfig = TRUE,
         MenuConfig = TRUE,
         ToolBoxConfig = TRUE,
-        GroupId = GID_OPTIONS;
+        GroupId = SfxGroupId::Options;
 ]
 
 
@@ -9273,7 +9411,7 @@ SfxVoidItem HangulHanjaConversion SID_HANGUL_HANJA_CONVERSION
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 SfxVoidItem ChineseConversion SID_CHINESE_CONVERSION
@@ -9291,7 +9429,7 @@ SfxVoidItem ChineseConversion SID_CHINESE_CONVERSION
         AccelConfig = TRUE,
         MenuConfig = TRUE,
         ToolBoxConfig = TRUE,
-        GroupId = GID_OPTIONS;
+        GroupId = SfxGroupId::Options;
 ]
 
 
@@ -9310,7 +9448,7 @@ SfxBoolItem SpellDialog SID_SPELL_DIALOG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 SvxColumnItem RulerRows SID_RULER_ROWS
@@ -9327,7 +9465,7 @@ SvxColumnItem RulerRows SID_RULER_ROWS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 SvxColumnItem RulerRowsVertical SID_RULER_ROWS_VERTICAL
@@ -9344,12 +9482,12 @@ SvxColumnItem RulerRowsVertical SID_RULER_ROWS_VERTICAL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
 
-SvxFontListItem FontNameList SID_ATTR_CHAR_FONTLIST
+SfxVoidItem FontNameList SID_ATTR_CHAR_FONTLIST
 ()
 [
     // flags:
@@ -9365,11 +9503,11 @@ SvxFontListItem FontNameList SID_ATTR_CHAR_FONTLIST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
-SfxBoolItem ExtrusionToggle SID_EXTRUSION_TOOGLE
+SfxBoolItem ExtrusionToggle SID_EXTRUSION_TOGGLE
 
 [
     AutoUpdate = TRUE,
@@ -9382,7 +9520,7 @@ SfxBoolItem ExtrusionToggle SID_EXTRUSION_TOOGLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9399,7 +9537,7 @@ SfxVoidItem ExtrusionTiltDown SID_EXTRUSION_TILT_DOWN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9416,7 +9554,7 @@ SfxVoidItem ExtrusionTiltUp SID_EXTRUSION_TILT_UP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9433,7 +9571,7 @@ SfxVoidItem ExtrusionTiltLeft SID_EXTRUSION_TILT_LEFT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9450,11 +9588,11 @@ SfxVoidItem ExtrusionTiltRight SID_EXTRUSION_TILT_RIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem ExtrusionDepthFloater SID_EXTRUSION_DEPTH_FLOATER
+SfxBoolItem ExtrusionDepthFloater SID_EXTRUSION_DEPTH_FLOATER
 ()
 [
     AutoUpdate = FALSE,
@@ -9463,16 +9601,14 @@ SfxVoidItem ExtrusionDepthFloater SID_EXTRUSION_DEPTH_FLOATER
     Toggle = FALSE,
     Container = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem ExtrusionDepthDialog SID_EXTRUSION_DEPTH_DIALOG
+SvxDoubleItem ExtrusionDepthDialog SID_EXTRUSION_DEPTH_DIALOG
 (SvxDoubleItem Depth SID_EXTRUSION_DEPTH,SfxUInt16Item Metric SID_ATTR_METRIC)
 [
     AutoUpdate = FALSE,
@@ -9481,16 +9617,14 @@ SfxVoidItem ExtrusionDepthDialog SID_EXTRUSION_DEPTH_DIALOG
     Toggle = FALSE,
     Container = FALSE,
 
-    SlotType = SvxDoubleItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem ExtrusionDirectionFloater SID_EXTRUSION_DIRECTION_FLOATER
+SfxBoolItem ExtrusionDirectionFloater SID_EXTRUSION_DIRECTION_FLOATER
 ()
 [
     AutoUpdate = FALSE,
@@ -9499,35 +9633,14 @@ SfxVoidItem ExtrusionDirectionFloater SID_EXTRUSION_DIRECTION_FLOATER
     Toggle = FALSE,
     Container = FALSE,
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem ExtrusionLightingFloater SID_EXTRUSION_LIGHTING_FLOATER
-()
-[
-    AutoUpdate = FALSE,
-    FastCall = FALSE,
-    ReadOnlyDoc = FALSE,
-    Toggle = FALSE,
-    Container = FALSE,
-    Asynchron;
-
-    SlotType = SfxBoolItem
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
-]
-
-
-SfxVoidItem ExtrusionSurfaceFloater SID_EXTRUSION_SURFACE_FLOATER
+SfxBoolItem ExtrusionLightingFloater SID_EXTRUSION_LIGHTING_FLOATER
 ()
 [
     AutoUpdate = FALSE,
@@ -9537,12 +9650,27 @@ SfxVoidItem ExtrusionSurfaceFloater SID_EXTRUSION_SURFACE_FLOATER
     Container = FALSE,
     Asynchron;
 
-    SlotType = SfxBoolItem
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Drawing;
+]
+
+
+SfxBoolItem ExtrusionSurfaceFloater SID_EXTRUSION_SURFACE_FLOATER
+()
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    Asynchron;
 
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9559,7 +9687,7 @@ SvxColorItem Extrusion3DColor SID_EXTRUSION_3D_COLOR
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9576,7 +9704,7 @@ SvxDoubleItem ExtrusionDepth SID_EXTRUSION_DEPTH
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9593,7 +9721,7 @@ SfxInt32Item ExtrusionDirection SID_EXTRUSION_DIRECTION
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9610,7 +9738,7 @@ SfxInt32Item ExtrusionProjection SID_EXTRUSION_PROJECTION
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9627,7 +9755,7 @@ SfxInt32Item ExtrusionLightingDirection SID_EXTRUSION_LIGHTING_DIRECTION
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9644,7 +9772,7 @@ SfxInt32Item ExtrusionLightingIntensity SID_EXTRUSION_LIGHTING_INTENSITY
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9661,11 +9789,11 @@ SfxInt32Item ExtrusionSurface SID_EXTRUSION_SURFACE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem FontworkGalleryFloater SID_FONTWORK_GALLERY_FLOATER
+SfxBoolItem FontworkGalleryFloater SID_FONTWORK_GALLERY_FLOATER
 ()
 [
     AutoUpdate = FALSE,
@@ -9675,16 +9803,14 @@ SfxVoidItem FontworkGalleryFloater SID_FONTWORK_GALLERY_FLOATER
     Container = FALSE,
     Asynchron;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxBoolItem FontworkShapeType SID_FONTWORK_SHAPE_TYPE
+SfxStringItem FontworkShapeType SID_FONTWORK_SHAPE_TYPE
 (SfxStringItem FontworkShapeType SID_FONTWORK_SHAPE_TYPE)
 [
     AutoUpdate = TRUE,
@@ -9695,12 +9821,10 @@ SfxBoolItem FontworkShapeType SID_FONTWORK_SHAPE_TYPE
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -9717,11 +9841,11 @@ SfxBoolItem FontworkSameLetterHeights SID_FONTWORK_SAME_LETTER_HEIGHTS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem FontworkAlignmentFloater SID_FONTWORK_ALIGNMENT_FLOATER
+SfxBoolItem FontworkAlignmentFloater SID_FONTWORK_ALIGNMENT_FLOATER
 ()
 [
     AutoUpdate = FALSE,
@@ -9731,16 +9855,14 @@ SfxVoidItem FontworkAlignmentFloater SID_FONTWORK_ALIGNMENT_FLOATER
     Container = FALSE,
     Asynchron;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem FontworkCharacterSpacingFloater SID_FONTWORK_CHARACTER_SPACING_FLOATER
+SfxBoolItem FontworkCharacterSpacingFloater SID_FONTWORK_CHARACTER_SPACING_FLOATER
 ()
 [
     AutoUpdate = FALSE,
@@ -9750,12 +9872,10 @@ SfxVoidItem FontworkCharacterSpacingFloater SID_FONTWORK_CHARACTER_SPACING_FLOAT
     Container = FALSE,
     Asynchron;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9771,7 +9891,7 @@ SfxInt32Item FontworkShape SID_FONTWORK_SHAPE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9787,7 +9907,7 @@ SfxInt32Item FontworkAlignment SID_FONTWORK_ALIGNMENT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9803,11 +9923,11 @@ SfxInt32Item FontworkCharacterSpacing SID_FONTWORK_CHARACTER_SPACING
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-SfxVoidItem FontworkCharacterSpacingDialog SID_FONTWORK_CHARACTER_SPACING_DIALOG
+SfxInt32Item FontworkCharacterSpacingDialog SID_FONTWORK_CHARACTER_SPACING_DIALOG
 (SfxInt32Item FontworkCharacterSpacing SID_FONTWORK_CHARACTER_SPACING)
 [
     AutoUpdate = FALSE,
@@ -9816,12 +9936,10 @@ SfxVoidItem FontworkCharacterSpacingDialog SID_FONTWORK_CHARACTER_SPACING_DIALOG
     Toggle = FALSE,
     Container = FALSE,
 
-    SlotType = SfxInt32Item
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
@@ -9837,11 +9955,11 @@ SfxBoolItem FontworkKernCharacterPairs SID_FONTWORK_KERN_CHARACTER_PAIRS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 
-OfaRefItem GetColorTable SID_GET_COLORLIST
+SfxVoidItem GetColorTable SID_GET_COLORLIST
 ()
 [
     AutoUpdate = FALSE,
@@ -9855,7 +9973,7 @@ OfaRefItem GetColorTable SID_GET_COLORLIST
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -9873,11 +9991,11 @@ SfxVoidItem SpellCheckerChanged SID_SPELLCHECKER_CHANGED
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
-SfxUInt16Item Year2000 SID_ATTR_YEAR2000
+SfxVoidItem Year2000 SID_ATTR_YEAR2000
 ()
 [
     AutoUpdate = FALSE,
@@ -9891,7 +10009,7 @@ SfxUInt16Item Year2000 SID_ATTR_YEAR2000
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_INTERN;
+    GroupId = SfxGroupId::Intern;
 ]
 
 
@@ -9906,13 +10024,10 @@ SfxVoidItem IncrementIndent SID_INC_INDENT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-        ImageReflection = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9927,13 +10042,10 @@ SfxVoidItem DecrementIndent SID_DEC_INDENT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    ImageRotation = TRUE;
-        ImageReflection = TRUE;
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -9952,7 +10064,7 @@ SfxStringItem StateTableCell SID_TABLE_CELL
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_VIEW;
+    GroupId = SfxGroupId::View;
 ]
 
 
@@ -9970,7 +10082,7 @@ SfxVoidItem SendOutlineToImpress SID_OUTLINE_TO_IMPRESS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -9989,7 +10101,7 @@ SfxUInt16Item DefTabStop SID_ATTR_DEFTABSTOP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -10008,7 +10120,7 @@ SvxLanguageItem DocumentLanguage SID_ATTR_LANGUAGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -10027,7 +10139,7 @@ SvxLanguageItem DocumentLanguageCJK SID_ATTR_CHAR_CJK_LANGUAGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -10046,7 +10158,7 @@ SvxLanguageItem DocumentLanguageCTL SID_ATTR_CHAR_CTL_LANGUAGE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -10065,7 +10177,7 @@ SfxBoolItem OptionsLocaleChanged SID_OPT_LOCALE_CHANGED
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -10083,11 +10195,11 @@ SfxVoidItem SbaBrwInsert SID_SBA_BRW_INSERT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DATA;
+    GroupId = SfxGroupId::Data;
 ]
 
 
-SfxBoolItem BasicShapes SID_DRAWTBX_CS_BASIC
+SfxStringItem BasicShapes SID_DRAWTBX_CS_BASIC
 (SfxStringItem BasicShapes SID_DRAWTBX_CS_BASIC)
 [
     AutoUpdate = TRUE,
@@ -10098,16 +10210,14 @@ SfxBoolItem BasicShapes SID_DRAWTBX_CS_BASIC
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
-SfxBoolItem SymbolShapes SID_DRAWTBX_CS_SYMBOL
+SfxStringItem SymbolShapes SID_DRAWTBX_CS_SYMBOL
 (SfxStringItem SymbolShapes SID_DRAWTBX_CS_SYMBOL)
 [
     AutoUpdate = TRUE,
@@ -10118,16 +10228,14 @@ SfxBoolItem SymbolShapes SID_DRAWTBX_CS_SYMBOL
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
-SfxBoolItem ArrowShapes SID_DRAWTBX_CS_ARROW
+SfxStringItem ArrowShapes SID_DRAWTBX_CS_ARROW
 (SfxStringItem ArrowShapes SID_DRAWTBX_CS_ARROW)
 [
     AutoUpdate = TRUE,
@@ -10138,16 +10246,14 @@ SfxBoolItem ArrowShapes SID_DRAWTBX_CS_ARROW
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
-SfxBoolItem FlowChartShapes SID_DRAWTBX_CS_FLOWCHART
+SfxStringItem FlowChartShapes SID_DRAWTBX_CS_FLOWCHART
 (SfxStringItem FlowChartShapes SID_DRAWTBX_CS_FLOWCHART)
 [
     AutoUpdate = TRUE,
@@ -10158,16 +10264,14 @@ SfxBoolItem FlowChartShapes SID_DRAWTBX_CS_FLOWCHART
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
-SfxBoolItem CalloutShapes SID_DRAWTBX_CS_CALLOUT
+SfxStringItem CalloutShapes SID_DRAWTBX_CS_CALLOUT
 (SfxStringItem CalloutShapes SID_DRAWTBX_CS_CALLOUT)
 [
     AutoUpdate = TRUE,
@@ -10178,16 +10282,14 @@ SfxBoolItem CalloutShapes SID_DRAWTBX_CS_CALLOUT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
-SfxBoolItem StarShapes SID_DRAWTBX_CS_STAR
+SfxStringItem StarShapes SID_DRAWTBX_CS_STAR
 (SfxStringItem StarShapes SID_DRAWTBX_CS_STAR)
 [
     AutoUpdate = TRUE,
@@ -10198,12 +10300,10 @@ SfxBoolItem StarShapes SID_DRAWTBX_CS_STAR
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringItem
-
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_OPTIONS;
+    GroupId = SfxGroupId::Options;
 ]
 
 
@@ -10220,7 +10320,7 @@ SfxStringItem CustomShape SID_DRAW_CS_ID
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_DRAWING;
+    GroupId = SfxGroupId::Drawing;
 ]
 
 SvxDashListItem DashListState SID_DASH_LIST
@@ -10236,7 +10336,7 @@ SvxDashListItem DashListState SID_DASH_LIST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -10253,7 +10353,7 @@ SvxLineEndListItem LineEndListState SID_LINEEND_LIST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 SvxColorListItem ColorTableState SID_COLOR_TABLE
@@ -10269,7 +10369,7 @@ SvxColorListItem ColorTableState SID_COLOR_TABLE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 SvxGradientListItem GradientListState SID_GRADIENT_LIST
@@ -10285,7 +10385,7 @@ SvxGradientListItem GradientListState SID_GRADIENT_LIST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 SvxHatchListItem HatchListState SID_HATCH_LIST
@@ -10301,7 +10401,7 @@ SvxHatchListItem HatchListState SID_HATCH_LIST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
 ]
 
 SvxBitmapListItem BitmapListState SID_BITMAP_LIST
@@ -10317,7 +10417,23 @@ SvxBitmapListItem BitmapListState SID_BITMAP_LIST
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EDIT;
+    GroupId = SfxGroupId::Edit;
+]
+
+SvxPatternListItem PatternListState SID_PATTERN_LIST
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = TRUE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Edit;
 ]
 
 SvxEmphasisMarkItem EmphasisMark SID_ATTR_CHAR_EMPHASISMARK
@@ -10334,7 +10450,7 @@ SvxEmphasisMarkItem EmphasisMark SID_ATTR_CHAR_EMPHASISMARK
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -10349,12 +10465,10 @@ SfxBoolItem ShowDataNavigator SID_FM_SHOW_DATANAVIGATOR
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -10391,7 +10505,7 @@ SfxVoidItem CommonAlignLeft SID_ALIGN_ANY_LEFT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -10409,7 +10523,7 @@ SfxVoidItem CommonAlignHorizontalCenter SID_ALIGN_ANY_HCENTER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignRight SID_ALIGN_ANY_RIGHT
@@ -10426,7 +10540,7 @@ SfxVoidItem CommonAlignRight SID_ALIGN_ANY_RIGHT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignJustified SID_ALIGN_ANY_JUSTIFIED
@@ -10443,7 +10557,7 @@ SfxVoidItem CommonAlignJustified SID_ALIGN_ANY_JUSTIFIED
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignTop SID_ALIGN_ANY_TOP
@@ -10460,7 +10574,7 @@ SfxVoidItem CommonAlignTop SID_ALIGN_ANY_TOP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignVerticalCenter SID_ALIGN_ANY_VCENTER
@@ -10477,7 +10591,7 @@ SfxVoidItem CommonAlignVerticalCenter SID_ALIGN_ANY_VCENTER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignBottom SID_ALIGN_ANY_BOTTOM
@@ -10494,7 +10608,7 @@ SfxVoidItem CommonAlignBottom SID_ALIGN_ANY_BOTTOM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignHorizontalDefault SID_ALIGN_ANY_HDEFAULT
@@ -10511,7 +10625,7 @@ SfxVoidItem CommonAlignHorizontalDefault SID_ALIGN_ANY_HDEFAULT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem CommonAlignVerticalDefault SID_ALIGN_ANY_VDEFAULT
@@ -10528,10 +10642,10 @@ SfxVoidItem CommonAlignVerticalDefault SID_ALIGN_ANY_VDEFAULT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
-SfxVoidItem AVMediaToolBox SID_AVMEDIA_TOOLBOX
+avmedia_MediaItem AVMediaToolBox SID_AVMEDIA_TOOLBOX
 ( avmedia_MediaItem AVMediaToolBox SID_AVMEDIA_TOOLBOX )
 [
     AutoUpdate = FALSE,
@@ -10541,12 +10655,11 @@ SfxVoidItem AVMediaToolBox SID_AVMEDIA_TOOLBOX
     Container = FALSE,
     RecordAbsolute = FALSE,
     RecordPerSet;
-    SlotType = avmedia_MediaItem;
 
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_APPLICATION;
+    GroupId = SfxGroupId::Application;
 ]
 
 
@@ -10566,7 +10679,7 @@ SfxBoolItem BorderReducedMode SID_BORDER_REDUCED_MODE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -10585,9 +10698,7 @@ SfxBoolItem ColorSettings SID_COLOR_SETTINGS
         AccelConfig = FALSE,
         MenuConfig = FALSE,
         ToolBoxConfig = TRUE,
-        GroupId = GID_MODIFY;
-        PseudoSlots = TRUE;
-        PseudoPrefix = SID_INSERT;
+        GroupId = SfxGroupId::Modify;
 ]
 
 
@@ -10605,7 +10716,7 @@ SfxVoidItem MailExportFinished SID_MAIL_EXPORT_FINISHED
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EXPLORER;
+    GroupId = SfxGroupId::Explorer;
 ]
 
 SfxVoidItem InsertZWSP SID_INSERT_ZWSP
@@ -10622,7 +10733,7 @@ SfxVoidItem InsertZWSP SID_INSERT_ZWSP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem InsertZWNBSP SID_INSERT_ZWNBSP
@@ -10639,7 +10750,7 @@ SfxVoidItem InsertZWNBSP SID_INSERT_ZWNBSP
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem InsertLRM SID_INSERT_LRM
@@ -10656,7 +10767,7 @@ SfxVoidItem InsertLRM SID_INSERT_LRM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem InsertRLM SID_INSERT_RLM
@@ -10673,7 +10784,7 @@ SfxVoidItem InsertRLM SID_INSERT_RLM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem InsertSoftHyphen FN_INSERT_SOFT_HYPHEN
@@ -10690,7 +10801,7 @@ SfxVoidItem InsertSoftHyphen FN_INSERT_SOFT_HYPHEN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem InsertHardHyphen FN_INSERT_HARDHYPHEN
@@ -10707,7 +10818,7 @@ SfxVoidItem InsertHardHyphen FN_INSERT_HARDHYPHEN
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 SfxVoidItem InsertNonBreakingSpace FN_INSERT_HARD_SPACE
@@ -10724,7 +10835,7 @@ SfxVoidItem InsertNonBreakingSpace FN_INSERT_HARD_SPACE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_INSERT;
+    GroupId = SfxGroupId::Insert;
 ]
 
 
@@ -10742,7 +10853,7 @@ SfxVoidItem ManageLanguage SID_BASICIDE_MANAGE_LANG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 
@@ -10760,7 +10871,7 @@ SfxStringItem CurrentLanguage SID_BASICIDE_CURRENT_LANG
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_CONTROLS;
+    GroupId = SfxGroupId::Controls;
 ]
 
 SfxVoidItem MergeCells SID_TABLE_MERGE_CELLS
@@ -10777,7 +10888,7 @@ SfxVoidItem MergeCells SID_TABLE_MERGE_CELLS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem SplitCell SID_TABLE_SPLIT_CELLS
@@ -10794,7 +10905,7 @@ SfxVoidItem SplitCell SID_TABLE_SPLIT_CELLS
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem OptimizeTable SID_OPTIMIZE_TABLE
@@ -10812,7 +10923,7 @@ SfxVoidItem OptimizeTable SID_OPTIMIZE_TABLE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxBoolItem CellVertBottom SID_TABLE_VERT_BOTTOM
@@ -10830,7 +10941,7 @@ SfxBoolItem CellVertBottom SID_TABLE_VERT_BOTTOM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -10849,7 +10960,7 @@ SfxBoolItem CellVertCenter SID_TABLE_VERT_CENTER
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -10868,7 +10979,7 @@ SfxBoolItem CellVertTop SID_TABLE_VERT_NONE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem InsertRows SID_TABLE_INSERT_ROW
@@ -10885,8 +10996,8 @@ SfxVoidItem InsertRows SID_TABLE_INSERT_ROW
 
     AccelConfig = FALSE,
     MenuConfig = FALSE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem InsertColumns SID_TABLE_INSERT_COL
@@ -10903,8 +11014,8 @@ SfxVoidItem InsertColumns SID_TABLE_INSERT_COL
 
     AccelConfig = FALSE,
     MenuConfig = FALSE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem DeleteRows SID_TABLE_DELETE_ROW
@@ -10921,7 +11032,7 @@ SfxVoidItem DeleteRows SID_TABLE_DELETE_ROW
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem DeleteColumns SID_TABLE_DELETE_COL
@@ -10938,7 +11049,7 @@ SfxVoidItem DeleteColumns SID_TABLE_DELETE_COL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem SelectTable SID_TABLE_SELECT_ALL
@@ -10955,7 +11066,7 @@ SfxVoidItem SelectTable SID_TABLE_SELECT_ALL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem EntireColumn SID_TABLE_SELECT_COL
@@ -10972,7 +11083,7 @@ SfxVoidItem EntireColumn SID_TABLE_SELECT_COL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -10990,7 +11101,7 @@ SfxVoidItem EntireRow SID_TABLE_SELECT_ROW
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem TableDialog SID_FORMAT_TABLE_DLG
@@ -11008,7 +11119,7 @@ SfxVoidItem TableDialog SID_FORMAT_TABLE_DLG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 SfxVoidItem AutoSum SID_TABLE_AUTOSUM
@@ -11025,7 +11136,7 @@ SfxVoidItem AutoSum SID_TABLE_AUTOSUM
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
@@ -11044,11 +11155,11 @@ SfxVoidItem TableSort SID_TABLE_SORT_DIALOG
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
 
-SfxVoidItem OpenSmartTagMenuOnCursor SID_OPEN_SMARTTAGMENU
+SvxSmartTagItem OpenSmartTagMenuOnCursor SID_OPEN_SMARTTAGMENU
 ()
 [
         AutoUpdate = FALSE,
@@ -11058,12 +11169,11 @@ SfxVoidItem OpenSmartTagMenuOnCursor SID_OPEN_SMARTTAGMENU
         Container = FALSE,
         RecordAbsolute = FALSE,
         RecordPerSet;
-        SlotType = SvxSmartTagItem;
 
         AccelConfig = FALSE,
         MenuConfig = TRUE,
         ToolBoxConfig = FALSE,
-        GroupId = GID_EDIT;
+        GroupId = SfxGroupId::Edit;
 ]
 
 
@@ -11081,30 +11191,11 @@ SvxZoomSliderItem ZoomSlider SID_ATTR_ZOOMSLIDER
         AccelConfig = FALSE,
         MenuConfig = FALSE,
         ToolBoxConfig = FALSE,
-        GroupId = GID_VIEW;
+        GroupId = SfxGroupId::View;
 ]
 
 
- SfxStringListItem FontNameStringList SID_FONTNAMELIST
- [
-     // flags:
-     AutoUpdate = FALSE,
-     FastCall = FALSE,
-     ReadOnlyDoc = TRUE,
-     Toggle = FALSE,
-     Container = FALSE,
-     RecordAbsolute = FALSE,
-     RecordPerSet;
-
-     // config:
-     AccelConfig = FALSE,
-     MenuConfig = FALSE,
-     ToolBoxConfig = FALSE,
-     GroupId = GID_DOCUMENT;
-]
-
-
-SfxVoidItem LanguageStatus SID_LANGUAGE_STATUS
+SfxStringListItem LanguageStatus SID_LANGUAGE_STATUS
 (SfxStringItem Language SID_LANGUAGE_STATUS)
 [
     AutoUpdate = FALSE,
@@ -11115,12 +11206,10 @@ SfxVoidItem LanguageStatus SID_LANGUAGE_STATUS
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxStringListItem
-
-    AccelConfig = TRUE,
-    MenuConfig = TRUE,
-    ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11140,7 +11229,7 @@ SfxVoidItem FontDialogForParagraph SID_CHAR_DLG_FOR_PARAGRAPH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11159,7 +11248,7 @@ SfxVoidItem Grow SID_GROW_FONT_SIZE
     AccelConfig = TRUE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11178,7 +11267,7 @@ SfxVoidItem Shrink SID_SHRINK_FONT_SIZE
     AccelConfig = TRUE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11197,7 +11286,7 @@ SfxVoidItem RecheckDocument SID_RECHECK_DOCUMENT
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_DOCUMENT;
+    GroupId = SfxGroupId::Document;
 ]
 
 
@@ -11217,10 +11306,48 @@ SfxVoidItem InsertColumnDialog SID_TABLE_INSERT_COL_DLG
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
+SfxVoidItem InsertColumnsBefore SID_TABLE_INSERT_COL_BEFORE
+()
+[
+    /* flags: */
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+    Asynchron;
 
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Table;
+]
+
+SfxVoidItem InsertColumnsAfter SID_TABLE_INSERT_COL_AFTER
+()
+[
+    /* flags: */
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+    Asynchron;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Table;
+]
 
 SfxVoidItem InsertRowDialog SID_TABLE_INSERT_ROW_DLG
 ()
@@ -11237,10 +11364,50 @@ SfxVoidItem InsertRowDialog SID_TABLE_INSERT_ROW_DLG
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_TABLE;
+    GroupId = SfxGroupId::Table;
 ]
 
-SfxVoidItem PrepareMailExport SID_MAIL_PREPAREEXPORT
+SfxVoidItem InsertRowsBefore SID_TABLE_INSERT_ROW_BEFORE
+()
+[
+    /* flags: */
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+    Asynchron;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Table;
+]
+
+SfxVoidItem InsertRowsAfter SID_TABLE_INSERT_ROW_AFTER
+()
+[
+    /* flags: */
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+    Asynchron;
+
+    /* config: */
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Table;
+]
+
+SfxBoolItem PrepareMailExport SID_MAIL_PREPAREEXPORT
 ()
 [
     AutoUpdate = FALSE,
@@ -11251,12 +11418,10 @@ SfxVoidItem PrepareMailExport SID_MAIL_PREPAREEXPORT
     RecordAbsolute = FALSE,
     RecordPerSet;
 
-    SlotType = SfxBoolItem
-
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_EXPLORER;
+    GroupId = SfxGroupId::Explorer;
 ]
 
 
@@ -11275,7 +11440,7 @@ SfxUInt16Item FillTransparence SID_ATTR_FILL_TRANSPARENCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11294,7 +11459,7 @@ XFillFloatTransparenceItem FillFloatTransparence SID_ATTR_FILL_FLOATTRANSPARENCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11313,7 +11478,7 @@ SfxUInt16Item LineTransparence SID_ATTR_LINE_TRANSPARENCE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11335,7 +11500,7 @@ XLineJointItem LineJoint SID_ATTR_LINE_JOINT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11354,7 +11519,7 @@ XLineCapItem LineCap SID_ATTR_LINE_CAP
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11373,7 +11538,7 @@ XLineStartItem LineStart SID_ATTR_LINE_START
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11392,7 +11557,7 @@ XLineEndItem LineEnd SID_ATTR_LINE_END
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11411,7 +11576,7 @@ SfxUInt32Item TransformPosX SID_ATTR_TRANSFORM_POS_X
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -11430,7 +11595,7 @@ SfxUInt32Item TransformPosY SID_ATTR_TRANSFORM_POS_Y
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -11449,7 +11614,7 @@ SfxUInt32Item TransformWidth SID_ATTR_TRANSFORM_WIDTH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -11468,7 +11633,7 @@ SfxUInt32Item TransformHeight SID_ATTR_TRANSFORM_HEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -11487,7 +11652,7 @@ SfxUInt32Item TransformRotationAngle SID_ATTR_TRANSFORM_ANGLE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11506,7 +11671,7 @@ SfxUInt32Item TransformRotationX SID_ATTR_TRANSFORM_ROT_X
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11525,7 +11690,7 @@ SfxUInt32Item TransformRotationY SID_ATTR_TRANSFORM_ROT_Y
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11544,7 +11709,7 @@ SfxBoolItem ProtectPos SID_ATTR_TRANSFORM_PROTECT_POS
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11563,7 +11728,7 @@ SfxBoolItem ProtectSize SID_ATTR_TRANSFORM_PROTECT_SIZE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11582,7 +11747,7 @@ SfxVoidItem FlipHorizontal SID_FLIP_HORIZONTAL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11601,7 +11766,7 @@ SfxVoidItem FlipVertical SID_FLIP_VERTICAL
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11620,7 +11785,7 @@ SfxBoolItem AutomaticWidth SID_ATTR_TRANSFORM_AUTOWIDTH
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -11639,7 +11804,7 @@ SfxBoolItem AutomaticHeight SID_ATTR_TRANSFORM_AUTOHEIGHT
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_SPECIAL;
+    GroupId = SfxGroupId::Special;
 ]
 
 
@@ -11657,7 +11822,7 @@ SvxLineItem BorderTLBR SID_ATTR_BORDER_DIAG_TLBR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SvxLineItem BorderBLTR SID_ATTR_BORDER_DIAG_BLTR
@@ -11674,7 +11839,7 @@ SvxLineItem BorderBLTR SID_ATTR_BORDER_DIAG_BLTR
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 
@@ -11694,7 +11859,7 @@ SfxVoidItem FormatCellBorders SID_CELL_FORMAT_BORDER
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem ParaspaceDecrease SID_PARASPACE_DECREASE
@@ -11711,7 +11876,7 @@ SfxVoidItem ParaspaceDecrease SID_PARASPACE_DECREASE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem ParaspaceIncrease SID_PARASPACE_INCREASE
@@ -11728,7 +11893,7 @@ SfxVoidItem ParaspaceIncrease SID_PARASPACE_INCREASE
     AccelConfig = TRUE,
     MenuConfig = TRUE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_FORMAT;
+    GroupId = SfxGroupId::Format;
 ]
 
 SfxVoidItem SetOutline FN_SVX_SET_OUTLINE
@@ -11745,7 +11910,7 @@ SfxVoidItem SetOutline FN_SVX_SET_OUTLINE
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = TRUE,
-    GroupId = GID_ENUMERATION;
+    GroupId = SfxGroupId::Enumeration;
 ]
 
 SfxUInt16Item CurrentOutlineType FN_OUTLINE_RULE_INDEX
@@ -11761,5 +11926,91 @@ SfxUInt16Item CurrentOutlineType FN_OUTLINE_RULE_INDEX
     AccelConfig = FALSE,
     MenuConfig = FALSE,
     ToolBoxConfig = FALSE,
-    GroupId = GID_ENUMERATION;
+    GroupId = SfxGroupId::Enumeration;
+]
+
+SfxVoidItem HangingIndent SID_HANGING_INDENT
+
+[
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Format;
+]
+
+SfxVoidItem AnchorMenu SID_ANCHOR_MENU
+()
+[
+    AutoUpdate = FALSE,
+    FastCall = TRUE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Format;
+]
+
+SfxVoidItem InsertSignatureLine SID_INSERT_SIGNATURELINE
+()
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Insert;
+]
+
+SfxVoidItem EditSignatureLine SID_EDIT_SIGNATURELINE
+()
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = TRUE,
+    MenuConfig = TRUE,
+    ToolBoxConfig = TRUE,
+    GroupId = SfxGroupId::Edit;
+]
+
+SfxVoidItem SignSignatureLine SID_SIGN_SIGNATURELINE
+()
+[
+    AutoUpdate = FALSE,
+    FastCall = FALSE,
+    ReadOnlyDoc = FALSE,
+    Toggle = FALSE,
+    Container = FALSE,
+    RecordAbsolute = FALSE,
+    RecordPerSet;
+
+    AccelConfig = FALSE,
+    MenuConfig = FALSE,
+    ToolBoxConfig = FALSE,
+    GroupId = SfxGroupId::Edit;
 ]

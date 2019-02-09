@@ -11,6 +11,7 @@ $(eval $(call gb_Library_Library,sdbt))
 
 $(eval $(call gb_Library_set_include,sdbt,\
     $$(INCLUDE) \
+	-I$(SRCDIR)/dbaccess/inc/ \
 	-I$(SRCDIR)/dbaccess/source/inc/ \
 	-I$(SRCDIR)/dbaccess/source/sdbtools/inc \
 ))
@@ -25,12 +26,12 @@ $(eval $(call gb_Library_use_libraries,sdbt,\
     comphelper \
     cppu \
     cppuhelper \
+    dba \
     dbtools \
     sal \
     salhelper \
     tl \
     utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,sdbt,dbaccess/util/sdbt))
@@ -40,9 +41,7 @@ $(eval $(call gb_Library_add_exception_objects,sdbt,\
     dbaccess/source/sdbtools/connection/datasourcemetadata \
     dbaccess/source/sdbtools/connection/objectnames \
     dbaccess/source/sdbtools/connection/tablename \
-    dbaccess/source/sdbtools/misc/module_sdbt \
     dbaccess/source/sdbtools/misc/sdbt_services \
-    dbaccess/source/shared/sdbtstrings \
 ))
 
 # vim: set noet sw=4 ts=4:

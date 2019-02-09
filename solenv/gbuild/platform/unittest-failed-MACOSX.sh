@@ -19,10 +19,27 @@
 cat << EOF
 
 Error: a unit test failed, please do one of:
-make $1Test_$2 CPPUNITTRACE="lldb --"       # for interactive debugging on OS X
+make $1Test_$2 CPPUNITTRACE="lldb --"       # for interactive debugging on macOS
 make $1Test_$2 VALGRIND=memcheck            # for memory checking
 
+You can limit the execution to just one particular test by:
+
 EOF
+
+case $1 in
+    Python)
+    cat << EOF
+make $1Test_$2 PYTHON_TEST_NAME="testXYZ" ...above mentioned params...
+
+EOF
+    ;;
+    *)
+    cat << EOF
+make $1Test_$2 CPPUNIT_TEST_NAME="testXYZ" ...above mentioned params...
+
+EOF
+    ;;
+esac
 
 exit 1
 

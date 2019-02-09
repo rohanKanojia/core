@@ -22,10 +22,10 @@
 #include <xmloff/xmlmetai.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <comphelper/processfactory.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/document/XDocumentProperties.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
@@ -39,25 +39,20 @@ public:
     // XMLMetaImportComponent() throw();
     explicit XMLMetaImportComponent(
         const css::uno::Reference< css::uno::XComponentContext >& xContext
-        ) throw();
-
-    virtual ~XMLMetaImportComponent() throw();
+        );
 
 protected:
 
-    virtual SvXMLImportContext* CreateContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
+    virtual SvXMLImportContext *CreateFastContext( sal_Int32 nElement,
+        const ::css::uno::Reference< ::css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
     // XImporter
-    virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
-        throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setTargetDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 };
 
 // global functions to support the component
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 XMLMetaImportComponent_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)
@@ -66,46 +61,38 @@ XMLMetaImportComponent_get_implementation(
 }
 
 XMLMetaImportComponent::XMLMetaImportComponent(
-    const uno::Reference< uno::XComponentContext >& xContext) throw()
+    const uno::Reference< uno::XComponentContext >& xContext)
     :   SvXMLImport(xContext, ""), mxDocProps()
 {
 }
 
-XMLMetaImportComponent::~XMLMetaImportComponent() throw()
+SvXMLImportContext *XMLMetaImportComponent::CreateFastContext( sal_Int32 nElement,
+        const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
-}
-
-SvXMLImportContext* XMLMetaImportComponent::CreateContext(
-    sal_uInt16 nPrefix,
-    const OUString& rLocalName,
-    const uno::Reference<xml::sax::XAttributeList > & xAttrList )
-{
-    if (  (XML_NAMESPACE_OFFICE == nPrefix) &&
-         IsXMLToken(rLocalName, XML_DOCUMENT_META) )
+    if (nElement == XML_ELEMENT( OFFICE, XML_DOCUMENT_META ))
     {
         if (!mxDocProps.is()) {
-            throw uno::RuntimeException(OUString(
-                "XMLMetaImportComponent::CreateContext: setTargetDocument "
-                "has not been called"), *this);
+            throw uno::RuntimeException(
+                "XMLMetaImportComponent::CreateFastContext: setTargetDocument "
+                "has not been called", *this);
         }
         return new SvXMLMetaDocumentContext(
-                        *this, nPrefix, rLocalName, mxDocProps);
+                        *this, mxDocProps);
     }
     else
     {
-        return SvXMLImport::CreateContext(nPrefix, rLocalName, xAttrList);
+        return SvXMLImport::CreateFastContext(nElement, xAttrList);
     }
 }
 
 void SAL_CALL XMLMetaImportComponent::setTargetDocument(
     const uno::Reference< lang::XComponent >& xDoc )
-    throw(lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     mxDocProps.set( xDoc, uno::UNO_QUERY );
     if( !mxDocProps.is() )
-        throw lang::IllegalArgumentException(OUString(
+        throw lang::IllegalArgumentException(
             "XMLMetaImportComponent::setTargetDocument: argument is no "
-            "XDocumentProperties"), uno::Reference<uno::XInterface>(*this), 0);
+            "XDocumentProperties", uno::Reference<uno::XInterface>(*this), 0);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

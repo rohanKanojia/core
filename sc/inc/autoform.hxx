@@ -23,14 +23,8 @@
 /*************************************************************************
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    Die akt. Struktur der Autoformatierung darf nicht mehr veraendert werden.
-    Diese wird durch unterschiedlichen Code vom StartWriter und vom StarCalc
-    eingelesen/geschrieben.
-    Sollte sich doch mal eine Aenderung nicht vermeiden lassen, dann auf
-    jedenfall in beiden Applikationen aendern.
-
-    The structure of table auto formatting should not changed. It is used
-    by different code of Writer and Calc. If a change is necessary, the
+    The structure of auto formatting should not be changed. It is used
+    by various code of Writer and Calc. If a change is necessary, the
     source code of both applications must be changed!
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -55,11 +49,13 @@
 #include <svl/intitem.hxx>
 #include <editeng/lineitem.hxx>
 #include "scdllapi.h"
-#include "global.hxx"
 #include "zforauto.hxx"
 
+#include <array>
 #include <memory>
 #include <map>
+
+class ScDocument;
 
 /**
 A binary blob of writer-specific data. This data typically consists of types that are
@@ -72,23 +68,18 @@ blobs to avoid needlessly complicating the Calc logic.
 */
 struct AutoFormatSwBlob
 {
-    sal_uInt8 *pData;
-    sal_Size size;
+    std::unique_ptr<sal_uInt8[]> pData;
+    std::size_t size;
 
-    AutoFormatSwBlob() : pData(nullptr), size(0)
+    AutoFormatSwBlob() : size(0)
     {
     }
     AutoFormatSwBlob(const AutoFormatSwBlob&) = delete;
     const AutoFormatSwBlob& operator=(const AutoFormatSwBlob&) = delete;
-    ~AutoFormatSwBlob()
-    {
-        Reset();
-    }
 
     void Reset()
     {
-        delete[] pData;
-        pData = nullptr;
+        pData.reset();
         size = 0;
     }
 };
@@ -266,7 +257,7 @@ private:
     // Writer-specific data
     AutoFormatSwBlob m_swFields;
 
-    ScAutoFormatDataField**     ppDataField;
+    std::array<std::unique_ptr<ScAutoFormatDataField>,16> ppDataField;
 
     SAL_DLLPRIVATE ScAutoFormatDataField&       GetField( sal_uInt16 nIndex );
     SAL_DLLPRIVATE const ScAutoFormatDataField& GetField( sal_uInt16 nIndex ) const;
@@ -294,6 +285,10 @@ public:
     void            SetIncludeWidthHeight( bool bWidthHeight )  { bIncludeWidthHeight = bWidthHeight; }
 
     const SfxPoolItem*          GetItem( sal_uInt16 nIndex, sal_uInt16 nWhich ) const;
+    template<class T> const T*  GetItem( sal_uInt16 nIndex, TypedWhichId<T> nWhich ) const
+    {
+        return static_cast<const T*>(GetItem(nIndex, sal_uInt16(nWhich)));
+    }
     void                        PutItem( sal_uInt16 nIndex, const SfxPoolItem& rItem );
     void                        CopyItem( sal_uInt16 nToIndex, sal_uInt16 nFromIndex, sal_uInt16 nWhich );
 
@@ -301,7 +296,7 @@ public:
 
     bool                        IsEqualData( sal_uInt16 nIndex1, sal_uInt16 nIndex2 ) const;
 
-    void                        FillToItemSet( sal_uInt16 nIndex, SfxItemSet& rItemSet, ScDocument& rDoc ) const;
+    void                        FillToItemSet( sal_uInt16 nIndex, SfxItemSet& rItemSet, const ScDocument& rDoc ) const;
     void                        GetFromItemSet( sal_uInt16 nIndex, const SfxItemSet& rItemSet, const ScNumFormatAbbrev& rNumFormat );
 
     bool                        Load( SvStream& rStream, const ScAfVersions& rVersions );
@@ -319,13 +314,14 @@ class SC_DLLPUBLIC ScAutoFormat
     bool mbSaveLater;
     ScAfVersions m_aVersions;
 
+    ScAutoFormat(const ScAutoFormat&) = delete;
+    const ScAutoFormat operator=(const ScAutoFormat&) = delete;
+
 public:
     typedef MapType::const_iterator const_iterator;
     typedef MapType::iterator iterator;
 
     ScAutoFormat();
-    ScAutoFormat(const ScAutoFormat& r);
-    ~ScAutoFormat();
     void Load();
     bool Save();
 
@@ -334,10 +330,9 @@ public:
 
     const ScAutoFormatData* findByIndex(size_t nIndex) const;
     ScAutoFormatData* findByIndex(size_t nIndex);
-    iterator find(const ScAutoFormatData* pData);
     iterator find(const OUString& rName);
 
-    bool insert(ScAutoFormatData* pNew);
+    iterator insert(std::unique_ptr<ScAutoFormatData> pNew);
     void erase(const iterator& it);
 
     size_t size() const;

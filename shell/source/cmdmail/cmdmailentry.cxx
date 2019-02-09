@@ -19,27 +19,22 @@
 
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/container/XSet.hpp>
-#include <osl/diagnose.h>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
 #include "cmdmailsuppl.hxx"
 
-
-// namespace directives
-
-
-using namespace ::com::sun::star::uno       ;
-using namespace ::com::sun::star::container ;
-using namespace ::com::sun::star::lang      ;
-using namespace ::com::sun::star::registry  ;
-using namespace ::cppu                      ;
+using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::container;
+using namespace ::com::sun::star::lang;
+using namespace ::com::sun::star::registry;
+using namespace ::cppu;
 using com::sun::star::system::XSimpleMailClientSupplier;
 
 #define COMP_SERVICE_NAME  "com.sun.star.system.SimpleCommandMail"
 #define COMP_IMPL_NAME     "com.sun.star.comp.system.SimpleCommandMail"
 
-
 namespace
 {
-    Reference< XInterface > SAL_CALL createInstance( const Reference< XComponentContext >& xContext )
+    Reference< XInterface > createInstance( const Reference< XComponentContext >& xContext )
     {
         return Reference< XInterface >( static_cast< XSimpleMailClientSupplier* >( new CmdMailSuppl( xContext ) ) );
     }
@@ -48,10 +43,7 @@ namespace
 extern "C"
 {
 
-// component_getFactory
-
-
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL cmdmail_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void* cmdmail_component_getFactory(
     const sal_Char* pImplName,
     SAL_UNUSED_PARAMETER void* /*pSrvManager*/,
     SAL_UNUSED_PARAMETER void* /*pRegistryKey*/ )

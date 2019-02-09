@@ -17,21 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <sfx2/app.hxx>
-#include <vcl/virdev.hxx>
-#include <vcl/builderfactory.hxx>
-#include <tools/tenccvt.hxx>
-#include <osl/thread.h>
-
-#include <tools/stream.hxx>
-
-#include "starmath.hrc"
-
-#include "utility.hxx"
-#include "dialog.hxx"
-#include "view.hxx"
-#include "smdll.hxx"
-
+#include <strings.hrc>
+#include <smmod.hxx>
+#include <utility.hxx>
+#include <dialog.hxx>
+#include <view.hxx>
 
 // return pointer to active SmViewShell, if this is not possible
 // return 0 instead.
@@ -55,8 +45,8 @@ SmFontPickList& SmFontPickList::operator = (const SmFontPickList& rList)
 {
     Clear();
     nMaxItems = rList.nMaxItems;
-    for (size_t nPos = 0; nPos < rList.aFontVec.size(); nPos++)
-        aFontVec.push_back( rList.aFontVec[nPos] );
+    for (const auto & nPos : rList.aFontVec)
+        aFontVec.push_back( nPos );
 
     return *this;
 }
@@ -66,7 +56,9 @@ vcl::Font SmFontPickList::Get(sal_uInt16 nPos) const
     return nPos < aFontVec.size() ? aFontVec[nPos] : vcl::Font();
 }
 
-bool SmFontPickList::CompareItem(const vcl::Font & rFirstFont, const vcl::Font & rSecondFont)
+namespace {
+
+bool lcl_CompareItem(const vcl::Font & rFirstFont, const vcl::Font & rSecondFont)
 {
   return rFirstFont.GetFamilyName() == rSecondFont.GetFamilyName() &&
          rFirstFont.GetFamilyType() == rSecondFont.GetFamilyType() &&
@@ -75,27 +67,35 @@ bool SmFontPickList::CompareItem(const vcl::Font & rFirstFont, const vcl::Font &
          rFirstFont.GetItalic()     == rSecondFont.GetItalic();
 }
 
-OUString SmFontPickList::GetStringItem(const vcl::Font &rFont)
+OUString lcl_GetStringItem(const vcl::Font &rFont)
 {
     OUStringBuffer aString(rFont.GetFamilyName());
 
     if (IsItalic( rFont ))
     {
         aString.append(", ");
-        aString.append(SM_RESSTR(RID_FONTITALIC));
+        aString.append(SmResId(RID_FONTITALIC));
     }
     if (IsBold( rFont ))
     {
         aString.append(", ");
-        aString.append(SM_RESSTR(RID_FONTBOLD));
+        aString.append(SmResId(RID_FONTBOLD));
     }
 
     return aString.makeStringAndClear();
 }
 
+}
+
 void SmFontPickList::Insert(const vcl::Font &rFont)
 {
-    Remove(rFont);
+    for (size_t nPos = 0; nPos < aFontVec.size(); nPos++)
+        if (lcl_CompareItem( aFontVec[nPos], rFont))
+        {
+            aFontVec.erase( aFontVec.begin() + nPos );
+            break;
+        }
+
     aFontVec.push_front( rFont );
 
     if (aFontVec.size() > nMaxItems)
@@ -103,27 +103,6 @@ void SmFontPickList::Insert(const vcl::Font &rFont)
         aFontVec.pop_back();
     }
 }
-
-void SmFontPickList::Update(const vcl::Font &rFont, const vcl::Font &rNewFont)
-{
-    for (size_t nPos = 0; nPos < aFontVec.size(); nPos++)
-        if (CompareItem( aFontVec[nPos], rFont ))
-        {
-            aFontVec[nPos] = rNewFont;
-            break;
-        }
-}
-
-void SmFontPickList::Remove(const vcl::Font &rFont)
-{
-    for (size_t nPos = 0; nPos < aFontVec.size(); nPos++)
-        if (CompareItem( aFontVec[nPos], rFont))
-        {
-            aFontVec.erase( aFontVec.begin() + nPos );
-            break;
-        }
-}
-
 
 void SmFontPickList::ReadFrom(const SmFontDialog& rDialog)
 {
@@ -138,43 +117,38 @@ void SmFontPickList::WriteTo(SmFontDialog& rDialog) const
 
 /**************************************************************************/
 
-VCL_BUILDER_FACTORY_ARGS(SmFontPickListBox, WB_DROPDOWN)
-
-SmFontPickListBox::SmFontPickListBox (vcl::Window* pParent, WinBits nBits) :
-    SmFontPickList(4),
-    ListBox(pParent, nBits)
+SmFontPickListBox::SmFontPickListBox(std::unique_ptr<weld::ComboBox> pWidget)
+    : SmFontPickList(4)
+    , m_xWidget(std::move(pWidget))
 {
-    SetSelectHdl(LINK(this, SmFontPickListBox, SelectHdl));
+    m_xWidget->connect_changed(LINK(this, SmFontPickListBox, SelectHdl));
 }
 
-IMPL_LINK_NOARG_TYPED( SmFontPickListBox, SelectHdl, ListBox&, void )
+IMPL_LINK_NOARG(SmFontPickListBox, SelectHdl, weld::ComboBox&, void)
 {
     OUString aString;
 
-    const sal_Int32 nPos = GetSelectEntryPos();
-
+    const int nPos = m_xWidget->get_active();
     if (nPos != 0)
     {
         SmFontPickList::Insert(Get(nPos));
-        aString = GetEntry(nPos);
-        RemoveEntry(nPos);
-        InsertEntry(aString, 0);
+        aString = m_xWidget->get_text(nPos);
+        m_xWidget->remove(nPos);
+        m_xWidget->insert_text(0, aString);
     }
 
-    SelectEntryPos(0);
+    m_xWidget->set_active(0);
 }
 
 SmFontPickListBox& SmFontPickListBox::operator=(const SmFontPickList& rList)
 {
-    sal_uInt16 nPos;
-
     *static_cast<SmFontPickList *>(this) = rList;
 
-    for (nPos = 0; nPos < aFontVec.size(); nPos++)
-        InsertEntry(GetStringItem(aFontVec[nPos]), nPos);
+    for (decltype(aFontVec)::size_type nPos = 0; nPos < aFontVec.size(); nPos++)
+        m_xWidget->insert_text(nPos, lcl_GetStringItem(aFontVec[nPos]));
 
-    if (aFontVec.size() > 0)
-        SelectEntry(GetStringItem(aFontVec.front()));
+    if (!aFontVec.empty())
+        m_xWidget->set_active_text(lcl_GetStringItem(aFontVec.front()));
 
     return *this;
 }
@@ -183,16 +157,16 @@ void SmFontPickListBox::Insert(const vcl::Font &rFont)
 {
     SmFontPickList::Insert(rFont);
 
-    RemoveEntry(GetStringItem(aFontVec.front()));
-    InsertEntry(GetStringItem(aFontVec.front()), 0);
-    SelectEntry(GetStringItem(aFontVec.front()));
+    OUString aEntry(lcl_GetStringItem(aFontVec.front()));
+    int nPos = m_xWidget->find_text(aEntry);
+    if (nPos != -1)
+        m_xWidget->remove(nPos);
+    m_xWidget->insert_text(0, aEntry);
+    m_xWidget->set_active(0);
 
-    while (GetEntryCount() > nMaxItems)
-        RemoveEntry(GetEntryCount() - 1);
-
-    return;
+    while (m_xWidget->get_count() > nMaxItems)
+        m_xWidget->remove(m_xWidget->get_count() - 1);
 }
-
 
 bool IsItalic( const vcl::Font &rFont )
 {
@@ -205,7 +179,7 @@ bool IsItalic( const vcl::Font &rFont )
 bool IsBold( const vcl::Font &rFont )
 {
     FontWeight eWeight = rFont.GetWeight();
-    return eWeight != WEIGHT_DONTKNOW && eWeight > WEIGHT_NORMAL;
+    return eWeight > WEIGHT_NORMAL;
 }
 
 
@@ -225,7 +199,7 @@ void SmFace::SetSize(const Size& rSize)
     static int const    nMinVal = SmPtsTo100th_mm(2);
 
     if (aSize.Height() < nMinVal)
-        aSize.Height() = nMinVal;
+        aSize.setHeight( nMinVal );
 
     //! we don't force a maximum value here because this may prevent eg the
     //! parentheses in "left ( ... right )" from matching up with large
@@ -258,10 +232,9 @@ SmFace & operator *= (SmFace &rFace, const Fraction &rFrac)
     // It's main use is to make scaling fonts look easier.
 {   const Size &rFaceSize = rFace.GetFontSize();
 
-    rFace.SetSize(Size(Fraction(rFaceSize.Width())  *= rFrac,
-                       Fraction(rFaceSize.Height()) *= rFrac));
+    rFace.SetSize(Size(long(rFaceSize.Width() * rFrac),
+                       long(rFaceSize.Height() * rFrac)));
     return rFace;
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

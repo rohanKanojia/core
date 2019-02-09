@@ -18,21 +18,20 @@
  */
 
 #include "SlideSorterService.hxx"
-#include "facreg.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsProperties.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "DrawController.hxx"
+#include <SlideSorter.hxx>
+#include <facreg.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsProperties.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <DrawController.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
-#include <cppuhelper/proptypehlp.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -41,26 +40,13 @@ using ::sd::slidesorter::view::Layouter;
 
 namespace sd { namespace slidesorter {
 
-namespace {
-    enum Properties
-    {
-        PropertyDocumentSlides,
-        PropertyHighlightCurrentSlide,
-        PropertyShowSelection,
-        PropertyCenterSelection,
-        PropertySuspendPreviewUpdatesDuringFullScreenPresentation,
-        PropertyOrientationVertical
-    };
-}
-
 //===== SlideSorterService ==========================================================
 
-SlideSorterService::SlideSorterService (const Reference<XComponentContext>& rxContext)
+SlideSorterService::SlideSorterService()
     : SlideSorterServiceInterfaceBase(m_aMutex),
       mpSlideSorter(),
       mxParentWindow()
 {
-    (void)rxContext;
 }
 
 SlideSorterService::~SlideSorterService()
@@ -80,103 +66,79 @@ void SAL_CALL SlideSorterService::disposing()
 //----- XInitialization -------------------------------------------------------
 
 void SAL_CALL SlideSorterService::initialize (const Sequence<Any>& rArguments)
-    throw (Exception, RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
-    if (rArguments.getLength() == 3)
-    {
-        try
-        {
-            mxViewId.set(rArguments[0], UNO_QUERY_THROW);
-
-            // Get the XController.
-            Reference<frame::XController> xController (rArguments[1], UNO_QUERY_THROW);
-
-            // Tunnel through the controller to obtain a ViewShellBase.
-            ViewShellBase* pBase = nullptr;
-            Reference<lang::XUnoTunnel> xTunnel (xController, UNO_QUERY_THROW);
-            ::sd::DrawController* pController = reinterpret_cast<sd::DrawController*>(
-                xTunnel->getSomething(sd::DrawController::getUnoTunnelId()));
-            if (pController != nullptr)
-                pBase = pController->GetViewShellBase();
-
-            // Get the parent window.
-            mxParentWindow.set(rArguments[2], UNO_QUERY_THROW);
-            vcl::Window* pParentWindow = VCLUnoHelper::GetWindow(mxParentWindow);
-
-            mxParentWindow->addWindowListener(this);
-
-            if (pBase != nullptr && pParentWindow!=nullptr)
-                mpSlideSorter = SlideSorter::CreateSlideSorter(
-                    *pBase,
-                    nullptr,
-                    *pParentWindow);
-
-            Resize();
-        }
-        catch (RuntimeException&)
-        {
-            throw;
-        }
-    }
-    else
+    if (rArguments.getLength() != 3)
     {
         throw RuntimeException("SlideSorterService: invalid number of arguments",
             static_cast<drawing::XDrawView*>(this));
     }
+
+    mxViewId.set(rArguments[0], UNO_QUERY_THROW);
+
+    // Get the XController.
+    Reference<frame::XController> xController (rArguments[1], UNO_QUERY_THROW);
+
+    // Tunnel through the controller to obtain a ViewShellBase.
+    ViewShellBase* pBase = nullptr;
+    Reference<lang::XUnoTunnel> xTunnel (xController, UNO_QUERY_THROW);
+    ::sd::DrawController* pController = reinterpret_cast<sd::DrawController*>(
+        xTunnel->getSomething(sd::DrawController::getUnoTunnelId()));
+    if (pController != nullptr)
+        pBase = pController->GetViewShellBase();
+
+    // Get the parent window.
+    mxParentWindow.set(rArguments[2], UNO_QUERY_THROW);
+    VclPtr<vcl::Window> pParentWindow = VCLUnoHelper::GetWindow(mxParentWindow);
+
+    mxParentWindow->addWindowListener(this);
+
+    if (pBase != nullptr && pParentWindow)
+        mpSlideSorter = SlideSorter::CreateSlideSorter(
+            *pBase,
+            *pParentWindow);
+
+    Resize();
 }
 
 //----- XView -----------------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL SlideSorterService::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     return mxViewId;
 }
 
 sal_Bool SAL_CALL SlideSorterService::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
-    return sal_False;
+    return false;
 }
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL SlideSorterService::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL SlideSorterService::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 
     Resize();
 }
 
-void SAL_CALL SlideSorterService::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL SlideSorterService::windowMoved (const awt::WindowEvent&) {}
 
-void SAL_CALL SlideSorterService::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL SlideSorterService::windowShown (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     Resize();
 }
 
-void SAL_CALL SlideSorterService::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL SlideSorterService::windowHidden (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
 //----- lang::XEventListener --------------------------------------------------
 
 void SAL_CALL SlideSorterService::disposing (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source == mxParentWindow)
         mxParentWindow = nullptr;
@@ -185,19 +147,17 @@ void SAL_CALL SlideSorterService::disposing (const lang::EventObject& rEvent)
 //----- XDrawView -------------------------------------------------------------
 
 void SAL_CALL SlideSorterService::setCurrentPage(const Reference<drawing::XDrawPage>& rxSlide)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr)
+    if (mpSlideSorter != nullptr)
         mpSlideSorter->GetController().GetCurrentSlideManager()->NotifyCurrentSlideChange(
             mpSlideSorter->GetModel().GetIndex(rxSlide));
 }
 
 Reference<drawing::XDrawPage> SAL_CALL SlideSorterService::getCurrentPage()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr)
+    if (mpSlideSorter != nullptr)
         return mpSlideSorter->GetController().GetCurrentSlideManager()->GetCurrentSlide()->GetXDrawPage();
     else
         return nullptr;
@@ -206,35 +166,31 @@ Reference<drawing::XDrawPage> SAL_CALL SlideSorterService::getCurrentPage()
 //----- attributes ------------------------------------------------------------
 
 Reference<container::XIndexAccess> SAL_CALL SlideSorterService::getDocumentSlides()
-    throw (RuntimeException, std::exception)
 {
     return mpSlideSorter->GetModel().GetDocumentSlides();
 }
 
 void SAL_CALL SlideSorterService::setDocumentSlides (
     const Reference<container::XIndexAccess >& rxSlides)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetController().SetDocumentSlides(rxSlides);
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsHighlightCurrentSlide()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return false;
     else
         return mpSlideSorter->GetProperties()->IsHighlightCurrentSlide();
 }
 
 void SAL_CALL SlideSorterService::setIsHighlightCurrentSlide (sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
     {
         mpSlideSorter->GetProperties()->SetHighlightCurrentSlide(bValue);
         controller::SlideSorterController::ModelChangeLock aLock (mpSlideSorter->GetController());
@@ -243,64 +199,57 @@ void SAL_CALL SlideSorterService::setIsHighlightCurrentSlide (sal_Bool bValue)
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsShowSelection()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return false;
     else
         return mpSlideSorter->GetProperties()->IsShowSelection();
 }
 
 void SAL_CALL SlideSorterService::setIsShowSelection (sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetShowSelection(bValue);
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsShowFocus()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return false;
     else
         return mpSlideSorter->GetProperties()->IsShowFocus();
 }
 
 void SAL_CALL SlideSorterService::setIsShowFocus (sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetShowFocus(bValue);
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsCenterSelection()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return false;
     else
         return mpSlideSorter->GetProperties()->IsCenterSelection();
 }
 
 void SAL_CALL SlideSorterService::setIsCenterSelection (sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetCenterSelection(bValue);
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsSuspendPreviewUpdatesDuringFullScreenPresentation()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return true;
     else
         return mpSlideSorter->GetProperties()
@@ -309,143 +258,128 @@ sal_Bool SAL_CALL SlideSorterService::getIsSuspendPreviewUpdatesDuringFullScreen
 
 void SAL_CALL SlideSorterService::setIsSuspendPreviewUpdatesDuringFullScreenPresentation (
     sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()
             ->SetSuspendPreviewUpdatesDuringFullScreenPresentation(bValue);
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsOrientationVertical()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return true;
     else
         return mpSlideSorter->GetView().GetOrientation() != Layouter::HORIZONTAL;
 }
 
 void SAL_CALL SlideSorterService::setIsOrientationVertical (sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetView().SetOrientation(bValue
             ? Layouter::GRID
             : Layouter::HORIZONTAL);
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsSmoothScrolling()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return false;
     else
         return mpSlideSorter->GetProperties()->IsSmoothSelectionScrolling();
 }
 
 void SAL_CALL SlideSorterService::setIsSmoothScrolling (sal_Bool bValue)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetSmoothSelectionScrolling(bValue);
 }
 
 util::Color SAL_CALL SlideSorterService::getBackgroundColor()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return util::Color();
     else
         return util::Color(
-            mpSlideSorter->GetProperties()->GetBackgroundColor().GetColor());
+            mpSlideSorter->GetProperties()->GetBackgroundColor());
 }
 
 void SAL_CALL SlideSorterService::setBackgroundColor (util::Color aBackgroundColor)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetBackgroundColor(Color(aBackgroundColor));
 }
 
 util::Color SAL_CALL SlideSorterService::getTextColor()
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return util::Color();
     else
         return util::Color(
-            mpSlideSorter->GetProperties()->GetTextColor().GetColor());
+            mpSlideSorter->GetProperties()->GetTextColor());
 }
 
 void SAL_CALL SlideSorterService::setTextColor (util::Color aTextColor)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetTextColor(Color(aTextColor));
 }
 
 util::Color SAL_CALL SlideSorterService::getSelectionColor()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return util::Color();
     else
         return util::Color(
-            mpSlideSorter->GetProperties()->GetSelectionColor().GetColor());
+            mpSlideSorter->GetProperties()->GetSelectionColor());
 }
 
 void SAL_CALL SlideSorterService::setSelectionColor (util::Color aSelectionColor)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetSelectionColor(Color(aSelectionColor));
 }
 
 util::Color SAL_CALL SlideSorterService::getHighlightColor()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return util::Color();
     else
         return util::Color(
-            mpSlideSorter->GetProperties()->GetHighlightColor().GetColor());
+            mpSlideSorter->GetProperties()->GetHighlightColor());
 }
 
 void SAL_CALL SlideSorterService::setHighlightColor (util::Color aHighlightColor)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetHighlightColor(Color(aHighlightColor));
 }
 
 sal_Bool SAL_CALL SlideSorterService::getIsUIReadOnly()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() == nullptr || ! mpSlideSorter->IsValid())
+    if (mpSlideSorter == nullptr || !mpSlideSorter->IsValid())
         return true;
     else
         return mpSlideSorter->GetProperties()->IsUIReadOnly();
 }
 
 void SAL_CALL SlideSorterService::setIsUIReadOnly (sal_Bool bIsUIReadOnly)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    if (mpSlideSorter.get() != nullptr && mpSlideSorter->IsValid())
+    if (mpSlideSorter != nullptr && mpSlideSorter->IsValid())
         mpSlideSorter->GetProperties()->SetUIReadOnly(bIsUIReadOnly);
 }
 
@@ -461,7 +395,6 @@ void SlideSorterService::Resize()
 }
 
 void SlideSorterService::ThrowIfDisposed()
-    throw (css::lang::DisposedException)
 {
     if (SlideSorterServiceInterfaceBase::rBHelper.bDisposed || SlideSorterServiceInterfaceBase::rBHelper.bInDispose)
     {
@@ -473,11 +406,11 @@ void SlideSorterService::ThrowIfDisposed()
 } } // end of namespace ::sd::slidesorter
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_Draw_SlideSorter_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_Draw_SlideSorter_get_implementation(css::uno::XComponentContext* /*context*/,
                                                       css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new sd::slidesorter::SlideSorterService(context));
+    return cppu::acquire(new sd::slidesorter::SlideSorterService);
 }
 
 

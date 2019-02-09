@@ -17,8 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbmm_global.hrc"
-#include "dbmm_module.hxx"
 #include "dbmm_types.hxx"
 #include "docinteraction.hxx"
 #include "migrationengine.hxx"
@@ -27,20 +25,16 @@
 #include "migrationlog.hxx"
 #include "progresscapture.hxx"
 #include "progressmixer.hxx"
+#include <core_resource.hxx>
+#include <strings.hrc>
 
-#include <com/sun/star/sdb/XFormDocumentsSupplier.hpp>
-#include <com/sun/star/sdb/XReportDocumentsSupplier.hpp>
-#include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/ucb/XCommandProcessor.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
-#include <com/sun/star/embed/XComponentSupplier.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/document/XStorageBasedDocument.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/embed/XEmbedPersist.hpp>
 #include <com/sun/star/script/DocumentScriptLibraryContainer.hpp>
 #include <com/sun/star/script/DocumentDialogLibraryContainer.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
@@ -57,10 +51,8 @@
 #include <com/sun/star/io/XInputStreamProvider.hpp>
 
 #include <comphelper/documentinfo.hxx>
-#include <comphelper/interaction.hxx>
 #include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/storagehelper.hxx>
-#include <comphelper/types.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/ustrbuf.hxx>
@@ -88,25 +80,18 @@ namespace dbmm
     using ::com::sun::star::uno::makeAny;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::sdb::XOfficeDatabaseDocument;
-    using ::com::sun::star::sdb::XFormDocumentsSupplier;
-    using ::com::sun::star::sdb::XReportDocumentsSupplier;
     using ::com::sun::star::container::XNameAccess;
     using ::com::sun::star::uno::Sequence;
-    using ::com::sun::star::util::XCloseable;
-    using ::com::sun::star::util::CloseVetoException;
     using ::com::sun::star::lang::XComponent;
     using ::com::sun::star::frame::XModel;
-    using ::com::sun::star::frame::XComponentLoader;
     using ::com::sun::star::ucb::XCommandProcessor;
     using ::com::sun::star::ucb::XContent;
     using ::com::sun::star::ucb::Command;
-    using ::com::sun::star::embed::XComponentSupplier;
     using ::com::sun::star::task::XStatusIndicator;
     using ::com::sun::star::embed::XStorage;
     using ::com::sun::star::document::XStorageBasedDocument;
     using ::com::sun::star::embed::XTransactedObject;
     using ::com::sun::star::frame::XStorable;
-    using ::com::sun::star::embed::XEmbedPersist;
     using ::com::sun::star::script::DocumentDialogLibraryContainer;
     using ::com::sun::star::script::DocumentScriptLibraryContainer;
     using ::com::sun::star::script::XStorageBasedLibraryContainer;
@@ -161,7 +146,7 @@ namespace dbmm
         }
     };
 
-    typedef ::std::vector< SubDocument >    SubDocuments;
+    typedef std::vector< SubDocument >    SubDocuments;
 
     // helper
     typedef ::utl::SharedUNOComponent< XStorage >   SharedStorage;
@@ -199,7 +184,7 @@ namespace dbmm
                 {
                 }
             };
-            const LanguageMapping aLanguageMapping[] =
+            static const LanguageMapping aLanguageMapping[] =
             {
                 LanguageMapping( "JavaScript", eJavaScript ),
                 LanguageMapping( "BeanShell",  eBeanShell ),
@@ -207,11 +192,11 @@ namespace dbmm
                 LanguageMapping( "Python",     ePython ),          // TODO: is this correct?
                 LanguageMapping( "Basic",      eBasic )
             };
-            for ( size_t i=0; i < SAL_N_ELEMENTS( aLanguageMapping ); ++i )
+            for (const LanguageMapping& i : aLanguageMapping)
             {
-                if ( _rLanguage.equalsAscii( aLanguageMapping[i].pAsciiLanguage ) )
+                if ( _rLanguage.equalsAscii( i.pAsciiLanguage ) )
                 {
-                    _out_rScriptType = aLanguageMapping[i].eScriptType;
+                    _out_rScriptType = i.eScriptType;
                     return true;
                 }
             }
@@ -222,8 +207,8 @@ namespace dbmm
         OUString lcl_getSubDocumentDescription( const SubDocument& _rDocument )
         {
             OUString sObjectName(
-                    MacroMigrationResId(
-                        _rDocument.eType == eForm ? STR_FORM : STR_REPORT).toString().
+                    DBA_RES(
+                        _rDocument.eType == eForm ? STR_FORM : STR_REPORT).
                 replaceFirst("$name$", _rDocument.sHierarchicalName));
             return sObjectName;
         }
@@ -251,7 +236,7 @@ namespace dbmm
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
             return sMimeType;
         }
@@ -419,7 +404,7 @@ namespace dbmm
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
                 return false;
             }
             return true;
@@ -557,12 +542,11 @@ namespace dbmm
     public:
         explicit ScriptsStorage( MigrationLog& _rLogger );
         ScriptsStorage( const Reference< XModel >& _rxDocument, MigrationLog& _rLogger );
-        ~ScriptsStorage();
 
         /** determines whether the instance is valid, i.e. refers to a valid root storage
             for reading/storing scripts
         */
-        inline bool isValid() const { return m_xScriptsStorage.is(); }
+        bool isValid() const { return m_xScriptsStorage.is(); }
 
         /** binds the instance to a new document. Only to be called when the instance is not yet
             bound (i.e. isValid returns <FALSE/>).
@@ -578,7 +562,7 @@ namespace dbmm
 
         /** returns the names of the elements in the "Scripts" storage
         */
-        ::std::set< OUString >
+        std::set< OUString >
                 getElementNames() const;
 
         /** removes the sub storage for a given script type
@@ -617,10 +601,6 @@ namespace dbmm
         ,m_xScriptsStorage()
     {
         bind( _rxDocument );
-    }
-
-    ScriptsStorage::~ScriptsStorage()
-    {
     }
 
     bool ScriptsStorage::commit()
@@ -685,17 +665,17 @@ namespace dbmm
         return xStorage;
     }
 
-    ::std::set< OUString > ScriptsStorage::getElementNames() const
+    std::set< OUString > ScriptsStorage::getElementNames() const
     {
         Sequence< OUString > aElementNames;
         if ( isValid() )
             aElementNames = m_xScriptsStorage->getElementNames();
 
-        ::std::set< OUString > aNames;
-        ::std::copy(
-            aElementNames.getConstArray(),
-            aElementNames.getConstArray() + aElementNames.getLength(),
-            ::std::insert_iterator< ::std::set< OUString > >( aNames, aNames.end() )
+        std::set< OUString > aNames;
+        std::copy(
+            aElementNames.begin(),
+            aElementNames.end(),
+            std::insert_iterator< std::set< OUString > >( aNames, aNames.end() )
         );
         return aNames;
     }
@@ -797,10 +777,9 @@ namespace dbmm
             IMigrationProgress& _rProgress,
             MigrationLog& _rLogger
         );
-        ~MigrationEngine_Impl();
 
-        inline  size_t      getFormCount() const    { return m_nFormCount; }
-        inline  size_t      getReportCount()const   { return m_nReportCount; }
+        size_t      getFormCount() const    { return m_nFormCount; }
+        size_t      getReportCount()const   { return m_nReportCount; }
         bool    migrateAll();
 
     private:
@@ -930,10 +909,6 @@ namespace dbmm
         OSL_VERIFY( impl_collectSubDocuments_nothrow() );
     }
 
-    MigrationEngine_Impl::~MigrationEngine_Impl()
-    {
-    }
-
     bool MigrationEngine_Impl::migrateAll()
     {
         if  ( m_aSubDocs.empty() )
@@ -947,17 +922,14 @@ namespace dbmm
         // initialize global progress
         sal_Int32 nOverallRange( m_aSubDocs.size() );
         OUString sProgressSkeleton(
-            MacroMigrationResId( STR_OVERALL_PROGRESS).toString().
+            DBA_RES( STR_OVERALL_PROGRESS).
             replaceFirst("$overall$", OUString::number(nOverallRange)));
 
         m_rProgress.start( nOverallRange );
 
-        for (   SubDocuments::const_iterator doc = m_aSubDocs.begin();
-                doc != m_aSubDocs.end();
-                ++doc
-            )
+        sal_Int32 nOverallProgressValue = 1;
+        for (auto const& subDoc : m_aSubDocs)
         {
-            sal_Int32 nOverallProgressValue( doc - m_aSubDocs.begin() + 1 );
             // update overall progress text
             OUString sOverallProgress(
                 sProgressSkeleton.replaceFirst("$current$",
@@ -965,11 +937,12 @@ namespace dbmm
             m_rProgress.setOverallProgressText( sOverallProgress );
 
             // migrate document
-            if ( !impl_handleDocument_nothrow( *doc ) )
+            if ( !impl_handleDocument_nothrow(subDoc) )
                 return false;
 
             // update overall progress value
             m_rProgress.setOverallProgressValue( nOverallProgressValue );
+            ++nOverallProgressValue;
         }
 
         // commit the root storage of the database document, for all changes made so far to take effect
@@ -994,13 +967,10 @@ namespace dbmm
                                            OUString( _rContainerLoc +  "/" ) );
 
             Sequence< OUString > aElementNames( _rxContainer->getElementNames() );
-            for (   const OUString* elementName = aElementNames.getConstArray();
-                    elementName != aElementNames.getConstArray() + aElementNames.getLength();
-                    ++elementName
-                )
+            for ( auto const & elementName : aElementNames )
             {
-                Any aElement( _rxContainer->getByName( *elementName ) );
-                OUString sElementName( sHierarhicalBase + *elementName );
+                Any aElement( _rxContainer->getByName( elementName ) );
+                OUString sElementName( sHierarhicalBase + elementName );
 
                 Reference< XNameAccess > xSubContainer( aElement, UNO_QUERY );
                 if ( xSubContainer.is() )
@@ -1013,7 +983,7 @@ namespace dbmm
                     OSL_ENSURE( xCommandProcessor.is(), "lcl_collectHierarchicalElementNames_throw: no container, and no command processor? What *is* it, then?!" );
                     if ( xCommandProcessor.is() )
                     {
-                        _out_rDocs.push_back( SubDocument( xCommandProcessor, sElementName, _eType, ++_io_counter ) );
+                        _out_rDocs.emplace_back( xCommandProcessor, sElementName, _eType, ++_io_counter );
                     }
                 }
             }
@@ -1058,7 +1028,7 @@ namespace dbmm
         m_rProgress.startObject( sObjectName, OUString(), DEFAULT_DOC_PROGRESS_RANGE );
 
         // load the document
-        Reference< ProgressCapture > pStatusIndicator( new ProgressCapture( sObjectName, m_rProgress ) );
+        rtl::Reference< ProgressCapture > pStatusIndicator( new ProgressCapture( sObjectName, m_rProgress ) );
         SubDocument aSubDocument( _rDocument );
         OpenDocResult eResult = lcl_loadSubDocument_nothrow( aSubDocument, pStatusIndicator.get(), m_rLogger );
         if ( eResult != eOpenedDoc )
@@ -1071,7 +1041,7 @@ namespace dbmm
         }
 
         // migrate the libraries
-        ProgressDelegator aDelegator(m_rProgress, sObjectName, MacroMigrationResId(STR_MIGRATING_LIBS).toString());
+        ProgressDelegator aDelegator(m_rProgress, sObjectName, DBA_RES(STR_MIGRATING_LIBS));
         ProgressMixer aProgressMixer( aDelegator );
         aProgressMixer.registerPhase( PHASE_JAVASCRIPT, 1 );
         aProgressMixer.registerPhase( PHASE_BEANSHELL, 1 );
@@ -1184,7 +1154,7 @@ namespace dbmm
             // "too many" invalid characters, or the name composed with the base name was already used.
             // (The latter is valid, since there can be multiple sub documents with the same base name,
             // in different levels in the hierarchy.)
-            // In this case, just use the umambiguous sub document number.
+            // In this case, just use the unambiguous sub document number.
             return sPrefix + OUString::number( _rDocument.nNumber ) + "_" + _rSourceLibName;
         }
     }
@@ -1203,13 +1173,13 @@ namespace dbmm
             {   // no scripts at all, or no scripts of the given type
                 return !m_rLogger.hadFailure();
             }
-            ::std::set< OUString > aElementNames( aDocStorage.getElementNames() );
+            std::set< OUString > aElementNames( aDocStorage.getElementNames() );
 
             const ScriptType aKnownStorageBasedTypes[] = {
                 eBeanShell, eJavaScript, ePython, eJava
             };
-            for ( size_t i=0; i<SAL_N_ELEMENTS( aKnownStorageBasedTypes ); ++i )
-                aElementNames.erase( lcl_getScriptsSubStorageName( aKnownStorageBasedTypes[i] ) );
+            for (ScriptType aKnownStorageBasedType : aKnownStorageBasedTypes)
+                aElementNames.erase( lcl_getScriptsSubStorageName( aKnownStorageBasedType ) );
 
             if ( !aElementNames.empty() )
             {
@@ -1462,12 +1432,9 @@ namespace dbmm
                     Reference< XNameContainer > xTargetLib( xTargetLibraries->createLibrary( sNewLibName ), UNO_QUERY_THROW );
 
                     Sequence< OUString > aLibElementNames( xSourceLib->getElementNames() );
-                    for (   const OUString* pSourceElementName = aLibElementNames.getConstArray();
-                            pSourceElementName != aLibElementNames.getConstArray() + aLibElementNames.getLength();
-                            ++pSourceElementName
-                        )
+                    for ( auto const & sourceElementName : aLibElementNames )
                     {
-                        Any aElement = xSourceLib->getByName( *pSourceElementName );
+                        Any aElement = xSourceLib->getByName( sourceElementName );
                         OSL_ENSURE( aElement.hasValue(),
                             "MigrationEngine_Impl::impl_migrateContainerLibraries_nothrow: invalid (empty) lib element!" );
 
@@ -1475,10 +1442,10 @@ namespace dbmm
                         if ( _eScriptType == eDialog )
                         {
                             impl_adjustDialogEvents_nothrow( aElement, lcl_getSubDocumentDescription( _rDocument ),
-                                *pSourceLibName, *pSourceElementName );
+                                *pSourceLibName, sourceElementName );
                         }
 
-                        xTargetLib->insertByName( *pSourceElementName, aElement );
+                        xTargetLib->insertByName( sourceElementName, aElement );
                     }
 
                     // transfer the read-only flag
@@ -1663,12 +1630,9 @@ namespace dbmm
             Sequence< OUString > aEventNames = xEvents->getElementNames();
 
             Any aEvent;
-            for (   const OUString* eventName = aEventNames.getConstArray();
-                    eventName != aEventNames.getConstArray() + aEventNames.getLength();
-                    ++eventName
-                )
+            for ( auto const & eventName : aEventNames )
             {
-                aEvent = xEvents->getByName( *eventName );
+                aEvent = xEvents->getByName( eventName );
                 if ( !aEvent.hasValue() )
                     continue;
 
@@ -1677,7 +1641,7 @@ namespace dbmm
                     continue;
 
                 // put back
-                xEvents->replaceByName( *eventName, aEvent );
+                xEvents->replaceByName( eventName, aEvent );
             }
         }
         catch( const Exception& )
@@ -1696,18 +1660,15 @@ namespace dbmm
         Reference< XNameReplace > xEvents( xEventsSupplier->getEvents(), UNO_QUERY_THROW );
         Sequence< OUString > aEventNames( xEvents->getElementNames() );
 
-        const OUString* eventName = aEventNames.getArray();
-        const OUString* eventNamesEnd = eventName + aEventNames.getLength();
-
         ScriptEventDescriptor aScriptEvent;
-        for ( ; eventName != eventNamesEnd; ++eventName )
+        for ( OUString const & eventName : aEventNames )
         {
-            OSL_VERIFY( xEvents->getByName( *eventName ) >>= aScriptEvent );
+            OSL_VERIFY( xEvents->getByName( eventName ) >>= aScriptEvent );
 
             if ( !impl_adjustScriptLibrary_nothrow( aScriptEvent ) )
                 continue;
 
-            xEvents->replaceByName( *eventName, makeAny( aScriptEvent ) );
+            xEvents->replaceByName( eventName, makeAny( aScriptEvent ) );
         }
     }
 
@@ -1763,12 +1724,9 @@ namespace dbmm
             Sequence< ScriptEventDescriptor > aEvents( aComponent.getEvents() );
 
             bool bChangedComponentEvents = false;
-            for (   ScriptEventDescriptor* scriptEvent = aEvents.getArray();
-                    scriptEvent != aEvents.getArray() + aEvents.getLength();
-                    ++scriptEvent
-                )
+            for ( ScriptEventDescriptor & scriptEvent : aEvents )
             {
-                if ( !impl_adjustScriptLibrary_nothrow( *scriptEvent ) )
+                if ( !impl_adjustScriptLibrary_nothrow( scriptEvent ) )
                     continue;
 
                 bChangedComponentEvents = true;
@@ -1811,7 +1769,7 @@ namespace dbmm
     {
         // a human-readable description of the affected library
         OUString sLibraryDescription(
-            MacroMigrationResId(STR_LIBRARY_TYPE_AND_NAME).toString().
+            DBA_RES(STR_LIBRARY_TYPE_AND_NAME).
             replaceFirst("$type$",
                 getScriptTypeDisplayName(_eScriptType)).
             replaceFirst("$library$", _rLibraryName));

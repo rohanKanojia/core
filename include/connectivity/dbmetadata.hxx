@@ -71,6 +71,8 @@ namespace dbtools
             const css::uno::Reference< css::sdbc::XConnection >& _connection );
         DatabaseMetaData( const DatabaseMetaData& _copyFrom );
         DatabaseMetaData& operator=( const DatabaseMetaData& _copyFrom );
+        DatabaseMetaData( DatabaseMetaData&& _copyFrom );
+        DatabaseMetaData& operator=( DatabaseMetaData&& _copyFrom );
 
         ~DatabaseMetaData();
 
@@ -84,7 +86,7 @@ namespace dbtools
 
         /** resets the instance so that it's based on a new connection
         */
-        inline  void    reset( const css::uno::Reference< css::sdbc::XConnection >& _connection )
+        void    reset( const css::uno::Reference< css::sdbc::XConnection >& _connection )
         {
             *this = DatabaseMetaData( _connection );
         }
@@ -132,6 +134,10 @@ namespace dbtools
         /** should date time be escaped like '2001-01-01' => {D '2001-01-01' }
         */
         bool shouldEscapeDateTime() const;
+
+        /** should named parameters (:foo, [foo]) be replaced by unnamed parameters (?)
+        */
+        bool shouldSubstituteParameterNames() const;
 
         /** auto increment columns should be automatically used as primary key.
         */

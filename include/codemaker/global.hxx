@@ -30,42 +30,34 @@
 #include <rtl/ustring.hxx>
 #include <rtl/strbuf.hxx>
 
-struct LessString
-{
-    bool operator()(const ::rtl::OString& str1, const ::rtl::OString& str2) const
-    {
-        return (str1 < str2);
-    }
-};
-
 typedef ::std::list< ::rtl::OString >               StringList;
 typedef ::std::vector< ::rtl::OString >             StringVector;
-typedef ::std::set< ::rtl::OString, LessString >    StringSet;
+typedef ::std::set< ::rtl::OString >    StringSet;
 
 
 // FileStream
 
-class FileStream
+class FileStream final
 {
 public:
     FileStream();
-    virtual ~FileStream();
+    ~FileStream();
 
-    bool isValid();
+    bool isValid() const;
 
     void createTempFile(const ::rtl::OString& sPath);
     void close();
 
-    const ::rtl::OString& getName() { return m_name; }
+    const ::rtl::OString& getName() const { return m_name; }
 
     bool write(void const * buffer, sal_uInt64 size);
 
     // friend functions
     friend FileStream &operator<<(FileStream& o, sal_uInt32 i);
     friend FileStream &operator<<(FileStream& o, char const * s);
-    friend FileStream &operator<<(FileStream& o, ::rtl::OString* s);
+    friend FileStream &operator<<(FileStream& o, ::rtl::OString const * s);
     friend FileStream &operator<<(FileStream& o, const ::rtl::OString& s);
-    friend FileStream &operator<<(FileStream& o, ::rtl::OStringBuffer* s);
+    friend FileStream &operator<<(FileStream& o, ::rtl::OStringBuffer const * s);
     friend FileStream &operator<<(FileStream& o, const ::rtl::OStringBuffer& s);
     friend FileStream & operator <<(FileStream & out, rtl::OUString const & s);
 
@@ -81,8 +73,7 @@ private:
 
 ::rtl::OString createFileNameFromType(const ::rtl::OString& destination,
                                       const ::rtl::OString& type,
-                                      const ::rtl::OString& postfix,
-                                      bool bLowerCase=false);
+                                      const ::rtl::OString& postfix);
 
 bool fileExists(const ::rtl::OString& fileName);
 bool makeValidTypeFile(const ::rtl::OString& targetFileName,
@@ -92,11 +83,11 @@ bool removeTypeFile(const ::rtl::OString& fileName);
 
 ::rtl::OUString convertToFileUrl(const ::rtl::OString& fileName);
 
-class CannotDumpException {
+class CannotDumpException final {
 public:
     CannotDumpException(OUString const & message): message_(message) {}
 
-    virtual ~CannotDumpException() throw ();
+    ~CannotDumpException() throw ();
 
     const OUString& getMessage() const { return message_; }
 

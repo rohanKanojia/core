@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rootfrm.hxx"
-#include "cntfrm.hxx"
-#include "flyfrm.hxx"
+#include <rootfrm.hxx>
+#include <cntfrm.hxx>
+#include <flyfrm.hxx>
 
 void SwFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderAttrs * )
 {
     OSL_FAIL( "Format() of the base class called." );
 }
 
-void SwFrame::Paint(vcl::RenderContext&, SwRect const&, SwPrintData const*const) const
+void SwFrame::PaintSwFrame(vcl::RenderContext&, SwRect const&, SwPrintData const*const) const
 {
-    OSL_FAIL( "Paint() of the base class called." );
+    OSL_FAIL( "PaintSwFrame() of the base class called." );
 }
 
 bool SwContentFrame::WouldFit( SwTwips &, bool&, bool )
@@ -69,7 +69,7 @@ void SwFlyFrame::Paste( SwFrame *, SwFrame * )
 #endif
 
 bool SwFrame::GetCharRect( SwRect&, const SwPosition&,
-                         SwCursorMoveState* ) const
+                         SwCursorMoveState*, bool ) const
 {
     OSL_FAIL( "GetCharRect() of the base called." );
     return false;

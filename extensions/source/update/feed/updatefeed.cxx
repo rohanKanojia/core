@@ -19,6 +19,7 @@
 
 #include <config_folders.h>
 
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -35,19 +36,20 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
 #include <com/sun/star/ucb/UniversalContentBroker.hpp>
 #include <com/sun/star/ucb/XWebDAVCommandEnvironment.hpp>
 #include <com/sun/star/ucb/XCommandProcessor2.hpp>
 #include <com/sun/star/ucb/XContentIdentifierFactory.hpp>
 #include <com/sun/star/ucb/XContentProvider.hpp>
-#include "com/sun/star/ucb/XInteractionSupplyAuthentication.hpp"
+#include <com/sun/star/ucb/XInteractionSupplyAuthentication.hpp>
 #include <com/sun/star/ucb/OpenCommandArgument3.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/task/PasswordContainerInteractionHandler.hpp>
 #include <com/sun/star/xml/dom/DocumentBuilder.hpp>
 #include <com/sun/star/xml/xpath/XPathAPI.hpp>
-
+#include <com/sun/star/xml/xpath/XPathException.hpp>
 #include <rtl/ref.hxx>
 #include <rtl/bootstrap.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -57,6 +59,10 @@
 #include <osl/conditn.hxx>
 #include <vcl/svapp.hxx>
 
+#ifdef DEBUG
+#include <com/sun/star/io/NotConnectedException.hpp>
+#include <com/sun/star/io/BufferSizeExceededException.hpp>
+#endif
 namespace beans = com::sun::star::beans ;
 namespace container = com::sun::star::container ;
 namespace deployment = com::sun::star::deployment ;
@@ -66,7 +72,6 @@ namespace task = com::sun::star::task ;
 namespace ucb = com::sun::star::ucb ;
 namespace uno = com::sun::star::uno ;
 namespace xml = com::sun::star::xml ;
-namespace sdbc = com::sun::star::sdbc ;
 
 
 namespace
@@ -86,16 +91,12 @@ public:
         throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException)
         {
             sal_Int32 n = m_xStream->readBytes(aData, nBytesToRead);
-            if ( n )
-                OSL_TRACE( "Read [%d] bytes: %s", n, aData.get()->elements );
             return n;
         };
     virtual sal_Int32 SAL_CALL readSomeBytes(uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead)
         throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException)
         {
             sal_Int32 n = m_xStream->readSomeBytes(aData, nMaxBytesToRead);
-            if ( n )
-                OSL_TRACE( "Read [%d] bytes: %s", n, aData.get()->elements );
             return n;
         };
     virtual void SAL_CALL skipBytes( sal_Int32 nBytesToSkip )
@@ -122,10 +123,8 @@ class ActiveDataSink : public ::cppu::WeakImplHelper< io::XActiveDataSink >
 public:
     ActiveDataSink() {};
 
-    virtual uno::Reference< io::XInputStream > SAL_CALL getInputStream()
-        throw (uno::RuntimeException, std::exception) override { return m_xStream; };
-    virtual void SAL_CALL setInputStream( uno::Reference< io::XInputStream > const & rStream )
-        throw (uno::RuntimeException, std::exception) override { m_xStream = rStream; };
+    virtual uno::Reference< io::XInputStream > SAL_CALL getInputStream() override { return m_xStream; };
+    virtual void SAL_CALL setInputStream( uno::Reference< io::XInputStream > const & rStream ) override { m_xStream = rStream; };
 };
 
 
@@ -151,44 +150,36 @@ public:
     getUpdateInformation(
         uno::Sequence< OUString > const & repositories,
         OUString const & extensionId
-    ) throw (uno::Exception, uno::RuntimeException, std::exception) override;
+    ) override;
 
-    virtual void SAL_CALL cancel()
-        throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL cancel() override;
 
     virtual void SAL_CALL setInteractionHandler(
-        uno::Reference< task::XInteractionHandler > const & handler )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference< task::XInteractionHandler > const & handler ) override;
 
     virtual uno::Reference< container::XEnumeration > SAL_CALL
     getUpdateInformationEnumeration(
         uno::Sequence< OUString > const & repositories,
         OUString const & extensionId
-    ) throw (uno::Exception, uno::RuntimeException, std::exception) override;
+    ) override;
 
     // XCommandEnvironment
-    virtual uno::Reference< task::XInteractionHandler > SAL_CALL getInteractionHandler()
-        throw ( uno::RuntimeException, std::exception ) override;
+    virtual uno::Reference< task::XInteractionHandler > SAL_CALL getInteractionHandler() override;
 
-    virtual uno::Reference< ucb::XProgressHandler > SAL_CALL getProgressHandler()
-        throw ( uno::RuntimeException, std::exception ) override { return  uno::Reference< ucb::XProgressHandler >(); };
+    virtual uno::Reference< ucb::XProgressHandler > SAL_CALL getProgressHandler() override { return  uno::Reference< ucb::XProgressHandler >(); };
 
     // XWebDAVCommandEnvironment
     virtual uno::Sequence< beans::StringPair > SAL_CALL getUserRequestHeaders(
-        const OUString&,  ucb::WebDAVHTTPMethod )
-        throw ( uno::RuntimeException, std::exception ) override;
+        const OUString&,  ucb::WebDAVHTTPMethod ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName)
-        throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw (uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName) override;
+    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 protected:
 
-    virtual ~UpdateInformationProvider();
+    virtual ~UpdateInformationProvider() override;
     static OUString getConfigurationItem(uno::Reference<lang::XMultiServiceFactory> const & configurationProvider, OUString const & node, OUString const & item);
     static uno::Any getConfigurationItemAny(uno::Reference<lang::XMultiServiceFactory> const & configurationProvider, OUString const & node, OUString const & item);
 
@@ -226,7 +217,7 @@ class UpdateInformationEnumeration : public ::cppu::WeakImplHelper< container::X
 {
 public:
     UpdateInformationEnumeration(const uno::Reference< xml::dom::XNodeList >& xNodeList,
-                                 const uno::Reference< UpdateInformationProvider >& xUpdateInformationProvider) :
+                                 const rtl::Reference< UpdateInformationProvider >& xUpdateInformationProvider) :
         m_xUpdateInformationProvider(xUpdateInformationProvider),
         m_xNodeList(xNodeList),
         m_nNodes(xNodeList.is() ? xNodeList->getLength() : 0),
@@ -234,16 +225,14 @@ public:
     {
     };
 
-    virtual ~UpdateInformationEnumeration() {};
-
     // XEnumeration
-    sal_Bool SAL_CALL hasMoreElements() throw (uno::RuntimeException, std::exception) override { return m_nCount < m_nNodes; };
-    uno::Any SAL_CALL nextElement() throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    sal_Bool SAL_CALL hasMoreElements() override { return m_nCount < m_nNodes; };
+    uno::Any SAL_CALL nextElement() override
     {
         OSL_ASSERT( m_xNodeList.is() );
         OSL_ASSERT( m_xUpdateInformationProvider.is() );
 
-        if( !(m_nCount < m_nNodes ) )
+        if( m_nCount >= m_nNodes )
             throw container::NoSuchElementException(OUString::number(m_nCount), *this);
 
         try
@@ -267,21 +256,27 @@ public:
 
             return uno::makeAny(aEntry);
         }
-
-        // action has been aborted
-        catch( ucb::CommandAbortedException const & e)
-            { throw lang::WrappedTargetException( "Command aborted", *this, uno::makeAny(e) ); }
-
-        // let runtime exception pass
-        catch( uno::RuntimeException const & ) { throw; }
-
-        // document not accessible
-        catch( uno::Exception const & e)
-            { throw lang::WrappedTargetException( "Document not accessible", *this, uno::makeAny(e) ); }
+        catch( ucb::CommandAbortedException const &)
+        {
+            // action has been aborted
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw lang::WrappedTargetException( "Command aborted", *this, anyEx );
+        }
+        catch( uno::RuntimeException const & )
+        {
+            // let runtime exception pass
+            throw;
+        }
+        catch( uno::Exception const &)
+        {
+            // document not accessible
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw lang::WrappedTargetException( "Document not accessible", *this, anyEx );
+        }
     }
 
 private:
-    const uno::Reference< UpdateInformationProvider > m_xUpdateInformationProvider;
+    const rtl::Reference< UpdateInformationProvider > m_xUpdateInformationProvider;
     const uno::Reference< xml::dom::XNodeList > m_xNodeList;
     const sal_Int32 m_nNodes;
     sal_Int32 m_nCount;
@@ -293,11 +288,10 @@ class SingleUpdateInformationEnumeration : public ::cppu::WeakImplHelper< contai
 public:
     explicit SingleUpdateInformationEnumeration(const uno::Reference< xml::dom::XElement >& xElement)
         : m_nCount(0) { m_aEntry.UpdateDocument = xElement; };
-    virtual ~SingleUpdateInformationEnumeration() {};
 
     // XEnumeration
-    sal_Bool SAL_CALL hasMoreElements() throw (uno::RuntimeException, std::exception) override { return 0 == m_nCount; };
-    uno::Any SAL_CALL nextElement() throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    sal_Bool SAL_CALL hasMoreElements() override { return 0 == m_nCount; };
+    uno::Any SAL_CALL nextElement() override
     {
         if( m_nCount > 0 )
             throw container::NoSuchElementException(OUString::number(m_nCount), *this);
@@ -393,7 +387,6 @@ OUString UpdateInformationProvider::getUserAgent(bool bExtended)
 
 uno::Sequence< beans::StringPair > SAL_CALL UpdateInformationProvider::getUserRequestHeaders(
     const OUString &aURL, ucb::WebDAVHTTPMethod )
-    throw ( uno::RuntimeException, std::exception )
 {
     bool bExtendedUserAgent;
     uno::Sequence< beans::StringPair > aPair = m_aRequestHeaderList;
@@ -442,10 +435,10 @@ UpdateInformationProvider::getConfigurationItemAny(uno::Reference<lang::XMultiSe
 {
     beans::PropertyValue aProperty;
     aProperty.Name  = "nodepath";
-    aProperty.Value = uno::makeAny(node);
+    aProperty.Value <<= node;
 
     uno::Sequence< uno::Any > aArgumentList( 1 );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aArgumentList[0] <<= aProperty;
 
     uno::Reference< container::XNameAccess > xNameAccess(
         configurationProvider->createInstanceWithArguments(
@@ -489,7 +482,7 @@ UpdateInformationProvider::load(const OUString& rURL)
 
     // Disable KeepAlive in webdav - don't want millions of office
     // instances phone home & clog up servers
-    uno::Sequence< beans::NamedValue > aProps { { "KeepAlive", uno::makeAny(sal_False) } };
+    uno::Sequence< beans::NamedValue > aProps { { "KeepAlive", uno::makeAny(false) } };
 
     ucb::OpenCommandArgument3 aOpenArgument;
     aOpenArgument.Mode = ucb::OpenMode::DOCUMENT;
@@ -499,7 +492,7 @@ UpdateInformationProvider::load(const OUString& rURL)
 
     ucb::Command aCommand;
     aCommand.Name = "open";
-    aCommand.Argument = uno::makeAny(aOpenArgument);
+    aCommand.Argument <<= aOpenArgument;
 
     sal_Int32 nCommandId = xCommandProcessor->createCommandIdentifier();
 
@@ -565,7 +558,7 @@ UpdateInformationProvider::getDocumentRoot(const uno::Reference< xml::dom::XNode
                  * seems to evaluate expression always relative to the root node.
                  */
                 uno::Reference< xml::dom::XDocument > xUpdateXML = m_xDocumentBuilder->newDocument();
-                xUpdateXML->appendChild( xUpdateXML->importNode(xChildElement.get(), sal_True ) );
+                xUpdateXML->appendChild( xUpdateXML->importNode(xChildElement.get(), true ) );
                 return xUpdateXML->getDocumentElement();
             }
         }
@@ -593,7 +586,7 @@ uno::Reference< container::XEnumeration > SAL_CALL
 UpdateInformationProvider::getUpdateInformationEnumeration(
     uno::Sequence< OUString > const & repositories,
     OUString const & extensionId
-) throw (uno::Exception, uno::RuntimeException, std::exception)
+)
 {
     OSL_ASSERT(m_xDocumentBuilder.is());
 
@@ -663,7 +656,7 @@ uno::Sequence< uno::Reference< xml::dom::XElement > > SAL_CALL
 UpdateInformationProvider::getUpdateInformation(
     uno::Sequence< OUString > const & repositories,
     OUString const & extensionId
-) throw (uno::Exception, uno::RuntimeException, std::exception)
+)
 {
     uno::Reference< container::XEnumeration > xEnumeration(
         getUpdateInformationEnumeration(repositories, extensionId)
@@ -702,7 +695,7 @@ UpdateInformationProvider::getUpdateInformation(
 
 
 void SAL_CALL
-UpdateInformationProvider::cancel() throw (uno::RuntimeException, std::exception)
+UpdateInformationProvider::cancel()
 {
     m_bCancelled.set();
 
@@ -715,7 +708,6 @@ UpdateInformationProvider::cancel() throw (uno::RuntimeException, std::exception
 void SAL_CALL
 UpdateInformationProvider::setInteractionHandler(
         uno::Reference< task::XInteractionHandler > const & handler )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard(m_aMutex);
     m_xInteractionHandler = handler;
@@ -724,7 +716,6 @@ UpdateInformationProvider::setInteractionHandler(
 
 uno::Reference< task::XInteractionHandler > SAL_CALL
 UpdateInformationProvider::getInteractionHandler()
-    throw ( uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -770,20 +761,20 @@ UpdateInformationProvider::getImplName()
 
 
 OUString SAL_CALL
-UpdateInformationProvider::getImplementationName() throw (uno::RuntimeException, std::exception)
+UpdateInformationProvider::getImplementationName()
 {
     return getImplName();
 }
 
 
 uno::Sequence< OUString > SAL_CALL
-UpdateInformationProvider::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+UpdateInformationProvider::getSupportedServiceNames()
 {
     return getServiceNames();
 }
 
 sal_Bool SAL_CALL
-UpdateInformationProvider::supportsService( OUString const & serviceName ) throw (uno::RuntimeException, std::exception)
+UpdateInformationProvider::supportsService( OUString const & serviceName )
 {
     return cppu::supportsService(this, serviceName);
 }
@@ -791,7 +782,7 @@ UpdateInformationProvider::supportsService( OUString const & serviceName ) throw
 } // anonymous namespace
 
 
-static uno::Reference<uno::XInterface> SAL_CALL
+static uno::Reference<uno::XInterface>
 createInstance(uno::Reference<uno::XComponentContext> const & xContext)
 {
     return UpdateInformationProvider::createInstance(xContext);
@@ -812,7 +803,7 @@ static const cppu::ImplementationEntry kImplementations_entries[] =
 } ;
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL updatefeed_component_getFactory(const sal_Char *pszImplementationName, void *pServiceManager, void *pRegistryKey)
+extern "C" SAL_DLLPUBLIC_EXPORT void * updatefeed_component_getFactory(const sal_Char *pszImplementationName, void *pServiceManager, void *pRegistryKey)
 {
     return cppu::component_getFactoryHelper(
         pszImplementationName,

@@ -21,16 +21,17 @@
 #include <fmtclds.hxx>
 #include <fmtfordr.hxx>
 #include <frmfmt.hxx>
-#include "frmtool.hxx"
-#include "colfrm.hxx"
-#include "pagefrm.hxx"
-#include "bodyfrm.hxx"
-#include "rootfrm.hxx"
-#include "sectfrm.hxx"
+#include <frmtool.hxx>
+#include <colfrm.hxx>
+#include <pagefrm.hxx>
+#include <bodyfrm.hxx>
+#include <rootfrm.hxx>
+#include <sectfrm.hxx>
 #include <calbck.hxx>
-#include "ftnfrm.hxx"
+#include <ftnfrm.hxx>
 #include <IDocumentState.hxx>
 #include <IDocumentLayoutAccess.hxx>
+#include <IDocumentUndoRedo.hxx>
 
 SwColumnFrame::SwColumnFrame( SwFrameFormat *pFormat, SwFrame* pSib ):
     SwFootnoteBossFrame( pFormat, pSib )
@@ -152,9 +153,12 @@ static bool lcl_AddColumns( SwLayoutFrame *pCont, sal_uInt16 nCount )
     else
     {
         bRet = true;
+        // tdf#103359, like #i32968# Inserting columns in the section causes MakeFrameFormat to put
+        // nCount objects of type SwUndoFrameFormat on the undo stack. We don't want them.
+        ::sw::UndoGuard const undoGuard(pDoc->GetIDocumentUndoRedo());
         for ( sal_uInt16 i = 0; i < nCount; ++i )
         {
-            SwFrameFormat *pFormat = pDoc->MakeFrameFormat( aEmptyOUStr, pDoc->GetDfltFrameFormat());
+            SwFrameFormat *pFormat = pDoc->MakeFrameFormat(OUString(), pDoc->GetDfltFrameFormat());
             SwColumnFrame *pTmp = new SwColumnFrame( pFormat, pCont );
             pTmp->SetMaxFootnoteHeight( nMax );
             pTmp->Paste( pCont );
@@ -229,7 +233,7 @@ void SwLayoutFrame::ChgColumns( const SwFormatCol &rOld, const SwFormatCol &rNew
             else
                 GetFormat()->SetFormatAttr( SwFormatFillOrder() );
             if ( pSave )
-                ::RestoreContent( pSave, this, nullptr, true );
+                ::RestoreContent( pSave, this, nullptr );
             return;
         }
         if ( nOldNum == 1 )
@@ -282,7 +286,7 @@ void SwLayoutFrame::ChgColumns( const SwFormatCol &rOld, const SwFormatCol &rNew
                 static_cast<SwLayoutFrame*>(Lower())->Lower() &&
                 static_cast<SwLayoutFrame*>(Lower())->Lower()->IsLayoutFrame(),
                 "no column body." );   // ColumnFrames contain BodyFrames
-        ::RestoreContent( pSave, static_cast<SwLayoutFrame*>(static_cast<SwLayoutFrame*>(Lower())->Lower()), nullptr, true );
+        ::RestoreContent( pSave, static_cast<SwLayoutFrame*>(static_cast<SwLayoutFrame*>(Lower())->Lower()), nullptr );
     }
 }
 
@@ -290,7 +294,7 @@ void SwLayoutFrame::AdjustColumns( const SwFormatCol *pAttr, bool bAdjustAttribu
 {
     if( !Lower()->GetNext() )
     {
-        Lower()->ChgSize( Prt().SSize() );
+        Lower()->ChgSize( getFramePrintArea().SSize() );
         return;
     }
 
@@ -305,11 +309,11 @@ void SwLayoutFrame::AdjustColumns( const SwFormatCol *pAttr, bool bAdjustAttribu
         pAttr = &GetFormat()->GetCol();
         if ( !bAdjustAttributes )
         {
-            long nAvail = (Prt().*fnRect->fnGetWidth)();
+            long nAvail = (getFramePrintArea().*fnRect->fnGetWidth)();
             for ( SwLayoutFrame *pCol = static_cast<SwLayoutFrame*>(Lower());
                   pCol;
                   pCol = static_cast<SwLayoutFrame*>(pCol->GetNext()) )
-                nAvail -= (pCol->Frame().*fnRect->fnGetWidth)();
+                nAvail -= (pCol->getFrameArea().*fnRect->fnGetWidth)();
             if ( !nAvail )
                 return;
         }
@@ -317,7 +321,7 @@ void SwLayoutFrame::AdjustColumns( const SwFormatCol *pAttr, bool bAdjustAttribu
 
     //The columns can now be easily adjusted.
     //The widths get counted so we can give the reminder to the last one.
-    SwTwips nAvail = (Prt().*fnRect->fnGetWidth)();
+    SwTwips nAvail = (getFramePrintArea().*fnRect->fnGetWidth)();
     const bool bLine = pAttr->GetLineAdj() != COLADJ_NONE;
     const sal_uInt16 nMin = bLine ? sal_uInt16( 20 + ( pAttr->GetLineWidth() / 2) ) : 0;
 
@@ -336,11 +340,11 @@ void SwLayoutFrame::AdjustColumns( const SwFormatCol *pAttr, bool bAdjustAttribu
         {
             const SwTwips nWidth = i == (pAttr->GetNumCols() - 1) ?
                                    nAvail :
-                                   pAttr->CalcColWidth( i, sal_uInt16( (Prt().*fnRect->fnGetWidth)() ) );
+                                   pAttr->CalcColWidth( i, sal_uInt16( (getFramePrintArea().*fnRect->fnGetWidth)() ) );
 
             const Size aColSz = bVert ?
-                                Size( Prt().Width(), nWidth ) :
-                                Size( nWidth, Prt().Height() );
+                                Size( getFramePrintArea().Width(), nWidth ) :
+                                Size( nWidth, getFramePrintArea().Height() );
 
             pCol->ChgSize( aColSz );
 
@@ -390,8 +394,8 @@ void SwLayoutFrame::AdjustColumns( const SwFormatCol *pAttr, bool bAdjustAttribu
             if ( bAdjustAttributes )
             {
                 SvxULSpaceItem aUL( pSet->GetULSpace() );
-                aUL.SetUpper( pC->GetUpper());
-                aUL.SetLower( pC->GetLower());
+                aUL.SetUpper(0);
+                aUL.SetLower(0);
 
                 static_cast<SwLayoutFrame*>(pCol)->GetFormat()->SetFormatAttr( aLR );
                 static_cast<SwLayoutFrame*>(pCol)->GetFormat()->SetFormatAttr( aUL );
@@ -421,8 +425,8 @@ void SwLayoutFrame::AdjustColumns( const SwFormatCol *pAttr, bool bAdjustAttribu
                 nWidth = 0;
 
             const Size aColSz = bVert ?
-                                Size( Prt().Width(), nWidth ) :
-                                Size( nWidth, Prt().Height() );
+                                Size( getFramePrintArea().Width(), nWidth ) :
+                                Size( nWidth, getFramePrintArea().Height() );
 
             pCol->ChgSize( aColSz );
 

@@ -20,16 +20,16 @@
 #ifndef INCLUDED_UCBHELPER_REGISTERUCB_HXX
 #define INCLUDED_UCBHELPER_REGISTERUCB_HXX
 
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/ucb/XContentProviderManager.hpp>
+#include <rtl/ustring.hxx>
 #include <vector>
 
 #include <ucbhelper/ucbhelperdllapi.h>
 
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+
 namespace com { namespace sun { namespace star {
-    namespace lang { class XMultiServiceFactory; }
     namespace uno { class XComponentContext; }
+    namespace ucb { class XContentProviderManager; }
 } } }
 
 
@@ -41,7 +41,7 @@ namespace ucbhelper {
  */
 struct ContentProviderData
 {
-    /** The UNO service name to use to instanciate the content provider.
+    /** The UNO service name to use to instantiate the content provider.
 
         If it is the empty string, a null provider will be used (see the
         documentation of the Provider argument to
@@ -49,19 +49,13 @@ struct ContentProviderData
      */
     OUString ServiceName;
 
-    /** The URL template to use to instanciate the content provider.
+    /** The URL template to use to instantiate the content provider.
      */
     OUString URLTemplate;
 
-    /** The arguments to use to instanciate the content provider.
+    /** The arguments to use to instantiate the content provider.
      */
     OUString Arguments;
-
-    ContentProviderData() {};
-    ContentProviderData( const OUString & rService,
-                         const OUString & rTemplate,
-                         const OUString & rArgs )
-    : ServiceName( rService ), URLTemplate( rTemplate ), Arguments( rArgs ) {}
 };
 
 typedef std::vector< ContentProviderData > ContentProviderDataList;
@@ -86,6 +80,8 @@ typedef std::vector< ContentProviderData > ContentProviderDataList;
 
     @param pInfo  If not null, this output parameter is filled with
     information about the (attemptively) registered provider.
+
+    @throws css::uno::RuntimeException
  */
 
 UCBHELPER_DLLPUBLIC bool registerAtUcb(
@@ -93,8 +89,7 @@ UCBHELPER_DLLPUBLIC bool registerAtUcb(
     css::uno::Reference< css::uno::XComponentContext > const & rxContext,
     OUString const & rName,
     OUString const & rArguments,
-    OUString const & rTemplate)
-    throw (css::uno::RuntimeException);
+    OUString const & rTemplate);
 
 }
 #endif // INCLUDED_UCBHELPER_REGISTERUCB_HXX

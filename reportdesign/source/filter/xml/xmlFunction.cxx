@@ -23,8 +23,7 @@
 #include <xmloff/nmspmap.hxx>
 #include "xmlHelper.hxx"
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
-#include <tools/debug.hxx>
+#include <strings.hxx>
 
 namespace rptxml
 {
@@ -78,7 +77,7 @@ OXMLFunction::OXMLFunction( ORptFilter& _rImport
                     break;
                 case XML_TOK_INITIAL_FORMULA:
                     if ( !sValue.isEmpty() )
-                        m_xFunction->setInitialFormula(beans::Optional< OUString>(sal_True,ORptFilter::convertFormula(sValue)));
+                        m_xFunction->setInitialFormula(beans::Optional< OUString>(true,ORptFilter::convertFormula(sValue)));
                     break;
                 case XML_TOK_DEEP_TRAVERSING:
                     m_xFunction->setDeepTraversing(sValue == s_sTRUE);
@@ -89,7 +88,7 @@ OXMLFunction::OXMLFunction( ORptFilter& _rImport
         }
         catch(const Exception&)
         {
-            OSL_FAIL("Exception catched while putting Function props!");
+            OSL_FAIL("Exception caught while putting Function props!");
         }
     }
 }
@@ -119,7 +118,7 @@ void OXMLFunction::EndElement()
             m_xFunction.clear();
         }catch(uno::Exception&)
         {
-            OSL_FAIL("Exception catched!");
+            OSL_FAIL("Exception caught!");
         }
     }
 }

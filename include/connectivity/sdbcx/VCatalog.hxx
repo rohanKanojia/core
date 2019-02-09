@@ -30,10 +30,9 @@
 #include <cppuhelper/compbase.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <connectivity/CommonTools.hxx>
-#include <connectivity/OSubComponent.hxx>
 #include <connectivity/sdbcx/IRefreshable.hxx>
-#include <connectivity/StdTypeDefs.hxx>
 #include <connectivity/dbtoolsdllapi.hxx>
+#include <memory>
 
 namespace connectivity
 {
@@ -55,20 +54,18 @@ namespace connectivity
         class OOO_DLLPUBLIC_DBTOOLS SAL_NO_VTABLE OCatalog :
                             public OCatalog_BASE,
                             public IRefreshableGroups,
-                            public IRefreshableUsers,
-                            public connectivity::OSubComponent<OCatalog, OCatalog_BASE>
+                            public IRefreshableUsers
         {
-            friend class connectivity::OSubComponent<OCatalog, OCatalog_BASE>;
         protected:
 
             ::osl::Mutex        m_aMutex;
 
             // this members are deleted when the dtor is called
             // they are hold weak
-            OCollection*        m_pTables;
-            OCollection*        m_pViews;
-            OCollection*        m_pGroups;
-            OCollection*        m_pUsers;
+            std::unique_ptr<OCollection> m_pTables;
+            std::unique_ptr<OCollection> m_pViews;
+            std::unique_ptr<OCollection> m_pGroups;
+            std::unique_ptr<OCollection> m_pUsers;
 
             css::uno::Reference< css::sdbc::XDatabaseMetaData > m_xMetaData; // just to make things easier
 
@@ -86,11 +83,11 @@ namespace connectivity
                 @param  _rNames
                     The vector who will be filled.
             */
-            void fillNames(css::uno::Reference< css::sdbc::XResultSet >& _xResult,TStringVector& _rNames);
+            void fillNames(css::uno::Reference< css::sdbc::XResultSet >& _xResult,::std::vector< OUString>& _rNames);
 
         public:
             OCatalog(const css::uno::Reference< css::sdbc::XConnection> &_xConnection);
-            virtual ~OCatalog();
+            virtual ~OCatalog() override;
 
             DECLARE_SERVICE_INFO();
 
@@ -104,17 +101,14 @@ namespace connectivity
 
             // ::cppu::OComponentHelper
             virtual void SAL_CALL disposing() override;
-            // XInterface
-            void SAL_CALL acquire() throw() override;
-            void SAL_CALL release() throw() override;
             // XTablesSupplier
-            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getTables(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getTables(  ) override;
             // XViewsSupplier
-            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getViews(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getViews(  ) override;
             // XUsersSupplier
-            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getUsers(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getUsers(  ) override;
             // XGroupsSupplier
-            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getGroups(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getGroups(  ) override;
 
         };
     }

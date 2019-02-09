@@ -19,21 +19,24 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_VIEWELEMENTLISTPROVIDER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_VIEWELEMENTLISTPROVIDER_HXX
 
+#include <memory>
 #include <svx/xtable.hxx>
-#include <svx/svdpage.hxx>
 
 class FontList;
+class SdrObjList;
+class SfxItemSet;
 
 namespace chart
 {
 
 class DrawModelWrapper;
 
-class ViewElementListProvider
+class ViewElementListProvider final
 {
 public:
     ViewElementListProvider( DrawModelWrapper* pDrawModelWrapper );
-    virtual ~ViewElementListProvider();
+    ViewElementListProvider( ViewElementListProvider&& );
+    ~ViewElementListProvider();
 
     XColorListRef     GetColorTable() const;
     XDashListRef      GetDashList() const;
@@ -41,6 +44,7 @@ public:
     XGradientListRef  GetGradientList() const;
     XHatchListRef     GetHatchList() const;
     XBitmapListRef    GetBitmapList() const;
+    XPatternListRef   GetPatternList() const;
 
     //create chartspecific symbols for linecharts
     SdrObjList*     GetSymbolList() const;
@@ -50,8 +54,8 @@ public:
     //SfxPrinter*   getPrinter();
 
 private:
-    DrawModelWrapper*   m_pDrawModelWrapper;
-    mutable FontList*   m_pFontList;
+    DrawModelWrapper*                  m_pDrawModelWrapper;
+    mutable std::unique_ptr<FontList>  m_pFontList;
 };
 
 } //namespace chart

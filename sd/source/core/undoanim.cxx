@@ -19,20 +19,19 @@
 
 #include <sal/config.h>
 
-#include <com/sun/star/util/XCloneable.hpp>
-#include <com/sun/star/animations/XAnimationNode.hpp>
-#include "CustomAnimationCloner.hxx"
+#include <CustomAnimationCloner.hxx>
 
-#include "undoanim.hxx"
-#include "glob.hrc"
-#include "sdpage.hxx"
-#include "sdresid.hxx"
-#include "CustomAnimationEffect.hxx"
-#include "drawdoc.hxx"
+#include <undoanim.hxx>
+#include <strings.hrc>
+#include <sdpage.hxx>
+#include <sdresid.hxx>
+#include <CustomAnimationEffect.hxx>
+#include <drawdoc.hxx>
+
+namespace com { namespace sun { namespace star { namespace animations { class XAnimationNode; } } } }
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Exception;
-using ::com::sun::star::util::XCloneable;
 using namespace ::com::sun::star::animations;
 
 namespace sd
@@ -107,7 +106,7 @@ void UndoAnimation::Redo()
 
 OUString UndoAnimation::GetComment() const
 {
-    return SdResId(STR_UNDO_ANIMATION).toString();
+    return SdResId(STR_UNDO_ANIMATION);
 }
 
 struct UndoAnimationPathImpl
@@ -182,7 +181,7 @@ void UndoAnimationPath::Redo()
 
 OUString UndoAnimationPath::GetComment() const
 {
-    return SdResId(STR_UNDO_ANIMATION).toString();
+    return SdResId(STR_UNDO_ANIMATION);
 }
 
 struct UndoTransitionImpl
@@ -272,7 +271,7 @@ void UndoTransition::Redo()
 
 OUString UndoTransition::GetComment() const
 {
-    return SdResId(STR_UNDO_SLIDE_PARAMS).toString();
+    return SdResId(STR_UNDO_SLIDE_PARAMS);
 }
 
 }

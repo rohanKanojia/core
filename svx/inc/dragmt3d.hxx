@@ -30,7 +30,7 @@
 class E3dDragMethodUnit
 {
 public:
-    E3dObject*                      mp3DObj;
+    E3dObject&                      mr3DObj;
     basegfx::B3DPolyPolygon         maWireframePoly;
     basegfx::B3DHomMatrix           maDisplayTransform;
     basegfx::B3DHomMatrix           maInvDisplayTransform;
@@ -39,8 +39,8 @@ public:
     sal_Int32                       mnStartAngle;
     sal_Int32                       mnLastAngle;
 
-    E3dDragMethodUnit()
-    :   mp3DObj(nullptr),
+    E3dDragMethodUnit(E3dObject& r3DObj)
+    :   mr3DObj(r3DObj),
         maWireframePoly(),
         maDisplayTransform(),
         maInvDisplayTransform(),
@@ -48,7 +48,8 @@ public:
         maTransform(),
         mnStartAngle(0),
         mnLastAngle(0)
-    {}
+    {
+    }
 };
 
 // Derivative of SdrDragMethod for 3D objects
@@ -56,9 +57,9 @@ class E3dDragMethod : public SdrDragMethod
 {
 protected:
     ::std::vector< E3dDragMethodUnit >  maGrp;
-    E3dDragConstraint                   meConstraint;
+    E3dDragConstraint const             meConstraint;
     Point                               maLastPos;
-    Rectangle                           maFullBound;
+    tools::Rectangle                           maFullBound;
     bool                                mbMoveFull;
     bool                                mbMovedAtAll;
 
@@ -66,8 +67,8 @@ public:
     E3dDragMethod(
         SdrDragView &rView,
         const SdrMarkList& rMark,
-        E3dDragConstraint eConstr = E3DDRAG_CONSTR_XYZ,
-        bool bFull = false);
+        E3dDragConstraint eConstr,
+        bool bFull);
 
     virtual void TakeSdrDragComment(OUString& rStr) const override;
     virtual bool BeginSdrDrag() override;
@@ -76,7 +77,9 @@ public:
     virtual bool EndSdrDrag(bool bCopy) override;
 
     // for migration from XOR to overlay
-    virtual void CreateOverlayGeometry(sdr::overlay::OverlayManager& rOverlayManager) override;
+    virtual void CreateOverlayGeometry(
+        sdr::overlay::OverlayManager& rOverlayManager,
+        const sdr::contact::ObjectContact& rObjectContact) override;
 };
 
 // Derivative of SdrDragMethod for spinning 3D objects
@@ -88,8 +91,8 @@ public:
     E3dDragRotate(
         SdrDragView &rView,
         const SdrMarkList& rMark,
-        E3dDragConstraint eConstr = E3DDRAG_CONSTR_XYZ,
-        bool bFull = false);
+        E3dDragConstraint eConstr,
+        bool bFull);
 
     virtual void MoveSdrDrag(const Point& rPnt) override;
     virtual Pointer GetSdrDragPointer() const override;
@@ -105,9 +108,9 @@ public:
     E3dDragMove(
         SdrDragView &rView,
         const SdrMarkList& rMark,
-        SdrHdlKind eDrgHdl = HDL_MOVE,
-        E3dDragConstraint eConstr = E3DDRAG_CONSTR_XYZ,
-        bool bFull = false);
+        SdrHdlKind eDrgHdl,
+        E3dDragConstraint eConstr,
+        bool bFull);
 
     virtual void MoveSdrDrag(const Point& rPnt) override;
     virtual Pointer GetSdrDragPointer() const override;

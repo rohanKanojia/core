@@ -20,19 +20,16 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_MVTABDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_MVTABDLG_HXX
 
-#include "address.hxx"
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/edit.hxx>
+#include <types.hxx>
+#include <vcl/weld.hxx>
 
-class ScMoveTableDlg : public ModalDialog
+class ScDocument;
+
+class ScMoveTableDlg : public weld::GenericDialogController
 {
 public:
-    ScMoveTableDlg(vcl::Window* pParent, const OUString& rDefault);
-    virtual ~ScMoveTableDlg();
-    virtual void dispose() override;
+    ScMoveTableDlg(weld::Window* pParent, const OUString& rDefault);
+    virtual ~ScMoveTableDlg() override;
 
     sal_uInt16  GetSelectedDocument     () const { return nDocument; }
     SCTAB   GetSelectedTable        () const { return nTable; }
@@ -40,23 +37,14 @@ public:
     bool    GetRenameTable          () const { return bRenameTable; }
     void    GetTabNameString( OUString& rString ) const;
     void    SetForceCopyTable       ();
-    void    EnableRenameTable       (bool bFlag=true);
+    void    EnableRenameTable       (bool bFlag);
 
 private:
     void ResetRenameInput();
     void CheckNewTabName();
     ScDocument* GetSelectedDoc();
-    bool IsCurrentDocSelected() const;
 
 private:
-    VclPtr<RadioButton>     pBtnMove;
-    VclPtr<RadioButton>     pBtnCopy;
-    VclPtr<ListBox>         pLbDoc;
-    VclPtr<ListBox>         pLbTable;
-    VclPtr<Edit>            pEdTabName;
-    VclPtr<FixedText>       pFtWarn;
-    VclPtr<OKButton>        pBtnOk;
-
     OUString   msCurrentDoc;
     OUString   msNewDoc;
 
@@ -73,12 +61,23 @@ private:
     bool            bRenameTable:1;
     bool            mbEverEdited:1;
 
+    std::unique_ptr<weld::RadioButton> m_xBtnMove;
+    std::unique_ptr<weld::RadioButton> m_xBtnCopy;
+    std::unique_ptr<weld::ComboBox> m_xLbDoc;
+    std::unique_ptr<weld::TreeView> m_xLbTable;
+    std::unique_ptr<weld::Entry> m_xEdTabName;
+    std::unique_ptr<weld::Label> m_xFtWarn;
+    std::unique_ptr<weld::Button> m_xBtnOk;
+    std::unique_ptr<weld::Label> m_xUnusedLabel;
+    std::unique_ptr<weld::Label> m_xEmptyLabel;
+    std::unique_ptr<weld::Label> m_xInvalidLabel;
+
     void    Init            ();
     void    InitDocListBox  ();
-    DECL_LINK_TYPED( OkHdl, Button*, void );
-    DECL_LINK_TYPED( SelHdl, ListBox&, void );
-    DECL_LINK_TYPED( CheckBtnHdl, RadioButton&, void );
-    DECL_LINK_TYPED( CheckNameHdl, Edit&, void );
+    DECL_LINK(OkHdl, weld::Button&, void);
+    DECL_LINK(SelHdl, weld::ComboBox&, void);
+    DECL_LINK(CheckBtnHdl, weld::ToggleButton&, void);
+    DECL_LINK(CheckNameHdl, weld::Entry&, void);
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_MVTABDLG_HXX

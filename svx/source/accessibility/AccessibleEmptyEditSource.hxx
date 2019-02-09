@@ -50,13 +50,13 @@ namespace accessibility
             does not contain text.
         */
         AccessibleEmptyEditSource(  SdrObject& rObj, SdrView& rView, const vcl::Window& rViewWindow );
-        virtual ~AccessibleEmptyEditSource();
+        virtual ~AccessibleEmptyEditSource() override;
 
         // from the SvxEditSource interface
         SvxTextForwarder*       GetTextForwarder() override;
         SvxViewForwarder*       GetViewForwarder() override;
 
-        SvxEditSource*          Clone() const override;
+        std::unique_ptr<SvxEditSource> Clone() const override;
 
         // this method internally switches from empty to proxy mode,
         // creating an SvxTextEditSource for the functionality.

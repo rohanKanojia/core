@@ -38,7 +38,7 @@ namespace basegfx
     class BASEGFX_DLLPUBLIC B3DPolyPolygon
     {
     public:
-        typedef o3tl::cow_wrapper< ImplB3DPolyPolygon > ImplType;
+        typedef o3tl::cow_wrapper< ImplB3DPolyPolygon, o3tl::ThreadSafeRefCountingPolicy > ImplType;
 
     private:
         ImplType                                        mpPolyPolygon;
@@ -46,11 +46,13 @@ namespace basegfx
     public:
         B3DPolyPolygon();
         B3DPolyPolygon(const B3DPolyPolygon& rPolyPolygon);
+        B3DPolyPolygon(B3DPolyPolygon&& rPolygon);
         explicit B3DPolyPolygon(const B3DPolygon& rPolygon);
         ~B3DPolyPolygon();
 
         // assignment operator
         B3DPolyPolygon& operator=(const B3DPolyPolygon& rPolyPolygon);
+        B3DPolyPolygon& operator=(B3DPolyPolygon&& rPolyPolygon);
 
         // compare operators
         bool operator==(const B3DPolyPolygon& rPolyPolygon) const;
@@ -60,7 +62,7 @@ namespace basegfx
         sal_uInt32 count() const;
 
         // B3DPolygon interface
-        B3DPolygon getB3DPolygon(sal_uInt32 nIndex) const;
+        B3DPolygon const & getB3DPolygon(sal_uInt32 nIndex) const;
         void setB3DPolygon(sal_uInt32 nIndex, const B3DPolygon& rPolygon);
 
         // BColor interface

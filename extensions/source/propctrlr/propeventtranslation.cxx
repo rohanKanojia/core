@@ -20,7 +20,6 @@
 #include "propeventtranslation.hxx"
 
 #include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/lang/NullPointerException.hpp>
 
 
 namespace pcr
@@ -34,7 +33,6 @@ namespace pcr
     using ::com::sun::star::beans::XPropertyChangeListener;
     using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::lang::DisposedException;
-    using ::com::sun::star::lang::NullPointerException;
 
 
     //= PropertyEventTranslation
@@ -50,7 +48,7 @@ namespace pcr
     }
 
 
-    void SAL_CALL PropertyEventTranslation::propertyChange( const PropertyChangeEvent& evt ) throw (RuntimeException, std::exception)
+    void SAL_CALL PropertyEventTranslation::propertyChange( const PropertyChangeEvent& evt )
     {
         if ( !m_xDelegator.is() )
             throw DisposedException();
@@ -66,7 +64,7 @@ namespace pcr
     }
 
 
-    void SAL_CALL PropertyEventTranslation::disposing( const EventObject& Source ) throw (RuntimeException, std::exception)
+    void SAL_CALL PropertyEventTranslation::disposing( const EventObject& Source )
     {
         if ( !m_xDelegator.is() )
             throw DisposedException();

@@ -36,7 +36,7 @@ namespace ucbhelper {
   * instance contains an AuthenticationRequest and three interaction
   * continuations: "Abort", "Retry" and "SupplyAuthentication". The parameters
   * for the AuthenticationRequest and the InteractionSupplyAuthentication
-  * objects are partly taken from contructors parameters and partly defaulted
+  * objects are partly taken from constructors parameters and partly defaulted
   * as follows:
   *
   * Read-only values : servername, realm
@@ -60,9 +60,8 @@ private:
                      bool bCanSetUserName,
                      bool bCanSetPassword,
                      bool bCanSetAccount,
-                     bool bAllowPersistentStoring,
                      bool bAllowUseSystemCredentials,
-                     bool bAllowSessionStoring = true );
+                     bool bAllowSessionStoring );
 
 public:
     /** Specification whether some entity (realm, username, password, account)
@@ -85,7 +84,6 @@ public:
       *        a previous try).
       * @param rPassword contains a password, if available (for instance from
       *        a previous try).
-      * @param rAccount contains an account, if applicable.
       * @param bAllowUseSystemCredentials specifies if requesting client is
       *        able to obtain and use system credentials for authentication
       */
@@ -94,7 +92,6 @@ public:
                                  const OUString & rRealm,
                                  const OUString & rUserName,
                                  const OUString & rPassword,
-                                 const OUString & rAccount,
                                  bool bAllowUseSystemCredentials,
                                  bool bAllowSessionStoring = true );
 

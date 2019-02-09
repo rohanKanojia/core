@@ -19,11 +19,11 @@
 
 
 #include "effectrewinder.hxx"
-#include "eventqueue.hxx"
-#include "usereventqueue.hxx"
-#include "mouseeventhandler.hxx"
-#include "animationnodes/basecontainernode.hxx"
-#include "delayevent.hxx"
+#include <eventqueue.hxx>
+#include <usereventqueue.hxx>
+#include <mouseeventhandler.hxx>
+#include <basecontainernode.hxx>
+#include <delayevent.hxx>
 
 #include <com/sun/star/awt/MouseEvent.hpp>
 #include <com/sun/star/animations/Event.hpp>
@@ -43,7 +43,7 @@ class RewinderEventHandler : public EventHandler
 public:
     typedef ::std::function<bool ()> Action;
     explicit RewinderEventHandler (const Action& rAction) : maAction(rAction) {}
-    virtual ~RewinderEventHandler() {}
+
 private:
     const Action maAction;
     virtual bool handleEvent() override { return maAction(); }
@@ -55,7 +55,7 @@ class RewinderAnimationEventHandler : public AnimationEventHandler
 public:
     typedef ::std::function<bool (const AnimationNodeSharedPtr& rpNode)> Action;
     explicit RewinderAnimationEventHandler (const Action& rAction) : maAction(rAction) {}
-    virtual ~RewinderAnimationEventHandler() {}
+
 private:
     const Action maAction;
     virtual bool handleAnimationEvent (const AnimationNodeSharedPtr& rpNode) override
@@ -312,7 +312,7 @@ bool EffectRewinder::notifyAnimationStart (const AnimationNodeSharedPtr& rpNode)
     if (xNode.is())
     {
         animations::Event aEvent;
-        if ((xNode->getBegin() >>= aEvent))
+        if (xNode->getBegin() >>= aEvent)
             bIsUserTriggered = (aEvent.Trigger == animations::EventTrigger::ON_NEXT);
     }
 

@@ -19,13 +19,13 @@
 #ifndef INCLUDED_UNODEVTOOLS_SOURCE_SKELETONMAKER_SKELETONCOMMON_HXX
 #define INCLUDED_UNODEVTOOLS_SOURCE_SKELETONMAKER_SKELETONCOMMON_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/ref.hxx"
-#include "rtl/string.hxx"
-#include "codemaker/typemanager.hxx"
-#include "codemaker/unotype.hxx"
-#include "unoidl/unoidl.hxx"
+#include <rtl/ref.hxx>
+#include <rtl/string.hxx>
+#include <codemaker/typemanager.hxx>
+#include <codemaker/unotype.hxx>
+#include <unoidl/unoidl.hxx>
 
 #include <fstream>
 #include <map>
@@ -33,8 +33,7 @@
 
 namespace skeletonmaker {
 
-typedef ::std::map< OString, ::std::vector< OString >,
-                    ::std::less< OString > > ProtocolCmdMap;
+typedef ::std::map< OString, ::std::vector< OString > > ProtocolCmdMap;
 
 typedef ::std::vector< unoidl::AccumulationBasedServiceEntity::Property >
 AttributeInfo;

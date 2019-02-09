@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "layout.hxx"
+#include <layout.hxx>
 
-#include "bastypes.hxx"
+#include <bastypes.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/event.hxx>
 
 namespace basctl
 {
@@ -37,14 +38,14 @@ Layout::Layout (vcl::Window* pParent) :
     Window(pParent, WB_CLIPCHILDREN),
     pChild(nullptr),
     bFirstSize(true),
-    aLeftSide(this, SplittedSide::Left),
-    aBottomSide(this, SplittedSide::Bottom)
+    aLeftSide(this, SplittedSide::Side::Left),
+    aBottomSide(this, SplittedSide::Side::Bottom)
 {
     SetBackground(GetSettings().GetStyleSettings().GetWindowColor());
 
     vcl::Font aFont = GetFont();
     Size aSz = aFont.GetFontSize();
-    aSz.Height() *= 1.5;
+    aSz.setHeight( aSz.Height() * 1.5 );
     aFont.SetFontSize(aSz);
     aFont.SetWeight(WEIGHT_BOLD);
     aFont.SetColor(GetSettings().GetStyleSettings().GetWindowTextColor());
@@ -97,12 +98,12 @@ void Layout::ArrangeWindows ()
         if (bFirstSize)
         {
             bFirstSize = false;
-            this->OnFirstSize(nWidth, nHeight); // virtual
+            OnFirstSize(nWidth, nHeight); // virtual
         }
 
         // sides
-        aBottomSide.ArrangeIn(Rectangle(Point(0, 0), aSize));
-        aLeftSide.ArrangeIn(Rectangle(Point(0, 0), Size(nWidth, nHeight - aBottomSide.GetSize())));
+        aBottomSide.ArrangeIn(tools::Rectangle(Point(0, 0), aSize));
+        aLeftSide.ArrangeIn(tools::Rectangle(Point(0, 0), Size(nWidth, nHeight - aBottomSide.GetSize())));
         // child in the middle
         pChild->SetPosSizePixel(
             Point(aLeftSide.GetSize(), 0),
@@ -111,11 +112,6 @@ void Layout::ArrangeWindows ()
     }
 
     bInArrangeWindows = false;
-}
-
-void Layout::DockaWindow (DockingWindow*)
-{
-    ArrangeWindows();
 }
 
 void Layout::Activating (BaseWindow& rWindow)
@@ -169,21 +165,21 @@ void Layout::DataChanged (DataChangedEvent const& rDCEvt)
 // ctor
 Layout::SplittedSide::SplittedSide (Layout* pParent, Side eSide) :
     rLayout(*pParent),
-    bVertical(eSide == Left || eSide == Right),
-    bLower(eSide == Left || eSide == Top),
+    bVertical(eSide == Side::Left),
+    bLower(eSide == Side::Left),
     nSize(0),
     aSplitter(VclPtr<Splitter>::Create(pParent, bVertical ? WB_HSCROLL : WB_VSCROLL))
 {
-    InitSplitter(*aSplitter.get());
+    InitSplitter(*aSplitter);
 }
 
 void Layout::SplittedSide::dispose()
 {
     aSplitter.disposeAndClear();
-    for (auto i = vItems.begin(); i != vItems.end(); ++i)
+    for (auto & item : vItems)
     {
-        i->pSplit.disposeAndClear();
-        i->pWin.clear();
+        item.pSplit.disposeAndClear();
+        item.pWin.clear();
     }
 }
 
@@ -216,7 +212,7 @@ void Layout::SplittedSide::Add (DockingWindow* pWin, Size const& rSize)
 void Layout::SplittedSide::Remove (DockingWindow* pWin)
 {
     // contains?
-    unsigned iWin;
+    std::vector<Item>::size_type iWin;
     for (iWin = 0; iWin != vItems.size(); ++iWin)
         if (vItems[iWin].pWin == pWin)
             break;
@@ -251,8 +247,8 @@ bool Layout::SplittedSide::IsDocking (DockingWindow const& rWin)
 // IsEmpty() -- are there no windows docked in this strip?
 bool Layout::SplittedSide::IsEmpty () const
 {
-    for (unsigned i = 0; i != vItems.size(); ++i)
-        if (IsDocking(*vItems[i].pWin))
+    for (auto const & i: vItems)
+        if (IsDocking(*i.pWin))
             return false;
     return true;
 }
@@ -265,7 +261,7 @@ long Layout::SplittedSide::GetSize () const
 
 // Arrange() -- arranges the docking windows
 // rRect: the available space
-void Layout::SplittedSide::ArrangeIn (Rectangle const& rRect)
+void Layout::SplittedSide::ArrangeIn (tools::Rectangle const& rRect)
 {
     // saving the rectangle
     aRect = rRect;
@@ -301,9 +297,9 @@ void Layout::SplittedSide::ArrangeIn (Rectangle const& rRect)
     // positioning separator lines and windows
     bool bPrevDocking = false; // is the previous window docked?
     long nStartPos = 0; // window position in the strip
-    unsigned iLastWin = vItems.size(); // index of last docking window in the strip
+    std::vector<Item>::size_type iLastWin = vItems.size(); // index of last docking window in the strip
 
-    for (unsigned i = 0; i != vItems.size(); ++i)
+    for (std::vector<Item>::size_type i = 0; i != vItems.size(); ++i)
     {
         // window
         DockingWindow& rWin = *vItems[i].pWin;
@@ -333,7 +329,7 @@ void Layout::SplittedSide::ArrangeIn (Rectangle const& rRect)
                     MakeSize(nSplitThickness, nSize - nSplitThickness)
                 );
                 // the dragging rectangle
-                rSplit.SetDragRectPixel(Rectangle(
+                rSplit.SetDragRectPixel(tools::Rectangle(
                     MakePoint(nPos2, nPos1),
                     MakeSize(nLength, nSize - nSplitThickness)
                 ));
@@ -354,7 +350,10 @@ void Layout::SplittedSide::ArrangeIn (Rectangle const& rRect)
     {
         Item& rItem = vItems[iLastWin];
         Size aSize = rItem.pWin->GetDockingSize();
-        (bVertical ? aSize.Height() : aSize.Width()) += nLength - rItem.nEndPos;
+        if (bVertical)
+            aSize.AdjustHeight( nLength - rItem.nEndPos );
+        else
+            aSize.AdjustWidth( nLength - rItem.nEndPos );
         rItem.pWin->ResizeIfDocking(aSize);
         // and hiding the split line after the window
         if (iLastWin < vItems.size() - 1)
@@ -362,7 +361,7 @@ void Layout::SplittedSide::ArrangeIn (Rectangle const& rRect)
     }
 }
 
-IMPL_LINK_TYPED(Layout::SplittedSide, SplitHdl, Splitter*, pSplitter, void)
+IMPL_LINK(Layout::SplittedSide, SplitHdl, Splitter*, pSplitter, void)
 {
     // checking margins
     CheckMarginsFor(pSplitter);

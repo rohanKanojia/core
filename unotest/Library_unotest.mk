@@ -22,7 +22,6 @@ $(eval $(call gb_Library_use_libraries,unotest,\
 	cppuhelper \
 	sal \
 	sb \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,unotest,\
@@ -39,7 +38,6 @@ $(eval $(call gb_Library_add_exception_objects,unotest,\
     unotest/source/cpp/macros_test \
     unotest/source/cpp/officeconnection \
     unotest/source/cpp/toabsolutefileurl \
-    unotest/source/cpp/uniquepipename \
 ))
 
 # vim: set noet sw=4 ts=4:

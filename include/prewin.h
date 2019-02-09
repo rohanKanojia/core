@@ -21,7 +21,6 @@
 
 #if defined(_WIN32)
 
-#define Rectangle    BLA_Rectangle
 #define Folder       WIN_Folder
 #define GradientStyle_RECT  WIN_GradientStyle_RECT
 
@@ -35,30 +34,15 @@
 #if !defined STRICT
 #   define STRICT
 #endif
-#ifdef _MSC_VER
-#   pragma warning(push, 1)
-#   pragma warning (disable: 4005)
-#endif
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-
-#ifdef _MSC_VER
-#   pragma warning(pop)
-#endif
 
 #include <shellapi.h>
 #include <commdlg.h>
 #include <dlgs.h>
 
-#ifdef _MSC_VER
-#   pragma warning(push, 1)
-#endif
-
 #include <commctrl.h>
-
-#ifdef _MSC_VER
-#   pragma warning(pop)
-#endif
 
 #endif
 

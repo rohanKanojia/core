@@ -17,13 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/XPropertyTable.hxx"
+#include <memory>
+#include <svx/XPropertyTable.hxx>
+#include <unotools/configmgr.hxx>
 #include <unotools/pathoptions.hxx>
 
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
 #include <svx/xtable.hxx>
 #include <svx/xpool.hxx>
+
+#include <o3tl/make_unique.hxx>
 
 using namespace com::sun::star;
 
@@ -31,7 +35,9 @@ XColorListRef XColorList::CreateStdColorList()
 {
     return XPropertyList::AsColorList(
         XPropertyList::CreatePropertyList(
-            XCOLOR_LIST, SvtPathOptions().GetPalettePath(), ""));
+            XPropertyListType::Color, !utl::ConfigManager::IsFuzzing() ?
+                                          SvtPathOptions().GetPalettePath() :
+                                          "", ""));
 }
 
 XColorListRef XColorList::GetStdColorList()
@@ -40,16 +46,10 @@ XColorListRef XColorList::GetStdColorList()
     return aTable;
 }
 
-XColorEntry* XColorList::Replace(long nIndex, XColorEntry* pEntry )
+void XColorList::Replace(long nIndex, std::unique_ptr<XColorEntry> pEntry)
 {
-    return static_cast<XColorEntry*>(XPropertyList::Replace( pEntry, nIndex ));
+    XPropertyList::Replace(std::move(pEntry), nIndex);
 }
-
-XColorEntry* XColorList::Remove(long nIndex)
-{
-    return static_cast<XColorEntry*>(XPropertyList::Remove(nIndex));
-}
-
 XColorEntry* XColorList::GetColor(long nIndex) const
 {
     return static_cast<XColorEntry*>( XPropertyList::Get(nIndex) );
@@ -68,38 +68,38 @@ bool XColorList::Create()
     sal_uInt32 b(0);
 
     // <!-- Gray palette from white to black -->
-    const OUString aStrGrey( SVX_RESSTR( RID_SVXSTR_COLOR_GREY ) );
+    const OUString aStrGrey( SvxResId( RID_SVXSTR_COLOR_GREY ) );
 
-    Insert( new XColorEntry( Color( 0xff, 0xff, 0xff ), SVX_RESSTR( RID_SVXSTR_COLOR_WHITE ) ) );
-    Insert( new XColorEntry( Color( 0xee, 0xee, 0xee ), aStrGrey + " 1" ) );
-    Insert( new XColorEntry( Color( 0xdd, 0xdd, 0xdd ), aStrGrey + " 2" ) );
-    Insert( new XColorEntry( Color( 0xcc, 0xcc, 0xcc ), aStrGrey + " 3" ) );
-    Insert( new XColorEntry( Color( 0xb2, 0xb2, 0xb2 ), aStrGrey + " 4" ) );
-    Insert( new XColorEntry( Color( 0x99, 0x99, 0x99 ), aStrGrey + " 5" ) );
-    Insert( new XColorEntry( Color( 0x80, 0x80, 0x80 ), aStrGrey + " 6" ) );
-    Insert( new XColorEntry( Color( 0x66, 0x66, 0x66 ), aStrGrey + " 7" ) );
-    Insert( new XColorEntry( Color( 0x33, 0x33, 0x33 ), aStrGrey + " 8" ) );
-    Insert( new XColorEntry( Color( 0x1c, 0x1c, 0x1c ), aStrGrey + " 9" ) );
-    Insert( new XColorEntry( Color( 0x11, 0x11, 0x11 ), aStrGrey + " 10") );
-    Insert( new XColorEntry( Color( 0x00, 0x00, 0x00 ), SVX_RESSTR( RID_SVXSTR_COLOR_BLACK ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xff, 0xff, 0xff ), SvxResId( RID_SVXSTR_COLOR_WHITE ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xee, 0xee, 0xee ), aStrGrey + " 1" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xdd, 0xdd, 0xdd ), aStrGrey + " 2" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xcc, 0xcc, 0xcc ), aStrGrey + " 3" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xb2, 0xb2, 0xb2 ), aStrGrey + " 4" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x99, 0x99, 0x99 ), aStrGrey + " 5" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x80, 0x80, 0x80 ), aStrGrey + " 6" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x66, 0x66, 0x66 ), aStrGrey + " 7" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x33, 0x33, 0x33 ), aStrGrey + " 8" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x1c, 0x1c, 0x1c ), aStrGrey + " 9" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x11, 0x11, 0x11 ), aStrGrey + " 10") );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x00, 0x00, 0x00 ), SvxResId( RID_SVXSTR_COLOR_BLACK ) ) );
 
     // <!-- Base colors step 0 to 10 -->
     const sal_uInt32 nNumColorsInGroup(12);
     const sal_uInt32 nNumGroups(11);
     const OUString aStrCol[nNumColorsInGroup] = {
-        SVX_RESSTR(RID_SVXSTR_COLOR_YELLOW),
-        SVX_RESSTR(RID_SVXSTR_COLOR_ORANGE),
-        SVX_RESSTR(RID_SVXSTR_COLOR_RED),
-        SVX_RESSTR(RID_SVXSTR_COLOR_PINK),
-        SVX_RESSTR(RID_SVXSTR_COLOR_MAGENTA),
-        SVX_RESSTR(RID_SVXSTR_COLOR_PURPLE),
-        SVX_RESSTR(RID_SVXSTR_COLOR_BLUE),
-        SVX_RESSTR(RID_SVXSTR_COLOR_SKYBLUE),
-        SVX_RESSTR(RID_SVXSTR_COLOR_CYAN),
-        SVX_RESSTR(RID_SVXSTR_COLOR_TURQUOISE),
-        SVX_RESSTR(RID_SVXSTR_COLOR_GREEN),
-        SVX_RESSTR(RID_SVXSTR_COLOR_YELLOWGREEN) };
-    const sal_uInt32 aStdCol[nNumColorsInGroup * nNumGroups] = {
+        SvxResId(RID_SVXSTR_COLOR_YELLOW),
+        SvxResId(RID_SVXSTR_COLOR_ORANGE),
+        SvxResId(RID_SVXSTR_COLOR_RED),
+        SvxResId(RID_SVXSTR_COLOR_PINK),
+        SvxResId(RID_SVXSTR_COLOR_MAGENTA),
+        SvxResId(RID_SVXSTR_COLOR_PURPLE),
+        SvxResId(RID_SVXSTR_COLOR_BLUE),
+        SvxResId(RID_SVXSTR_COLOR_SKYBLUE),
+        SvxResId(RID_SVXSTR_COLOR_CYAN),
+        SvxResId(RID_SVXSTR_COLOR_TURQUOISE),
+        SvxResId(RID_SVXSTR_COLOR_GREEN),
+        SvxResId(RID_SVXSTR_COLOR_YELLOWGREEN) };
+    static const sal_uInt32 aStdCol[nNumColorsInGroup * nNumGroups] = {
         0xffff99, 0xff6600, 0xff3333, 0xff00cc, 0xff33ff, 0x9900ff, 0x6666ff, 0x00ccff, 0x66ffff, 0x33ff99, 0x99ff66, 0xccff00,
         0xffff66, 0xffcc00, 0xff9999, 0xff66cc, 0xff99ff, 0xcc66ff, 0x9999ff, 0x9999ff, 0x99ffff, 0x66ff99, 0x99ff99, 0xccff66,
         0xffff00, 0xff9900, 0xff6666, 0xff3399, 0xff66ff, 0x9933ff, 0x3333ff, 0x3399ff, 0x00ffff, 0x00ff66, 0x66ff66, 0x99ff33,
@@ -121,44 +121,57 @@ bool XColorList::Create()
 
         for(b = 0; b < nNumColorsInGroup; b++)
         {
-            Insert( new XColorEntry( aStdCol[nOffset + b], aStrCol[b] + aSuffix ) );
+            Insert( o3tl::make_unique<XColorEntry>( Color(aStdCol[nOffset + b]), aStrCol[b] + aSuffix ) );
         }
     }
 
     // <!-- use some 'nice' colors from original palette -->
-    Insert( new XColorEntry( Color( 0xe6, 0xe6, 0xff ), SVX_RESSTR( RID_SVXSTR_COLOR_BLUEGREY) ) );
-    Insert( new XColorEntry( Color( 0xCF, 0xE7, 0xF5  ), SVX_RESSTR( RID_SVXSTR_COLOR_BLUE_CLASSIC ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xe6, 0xe6, 0xff ), SvxResId( RID_SVXSTR_COLOR_BLUEGREY) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xCF, 0xE7, 0xF5  ), SvxResId( RID_SVXSTR_COLOR_BLUE_CLASSIC ) ) );
 
     // <!-- add 'pale' colors from original palette -->
-    Insert( new XColorEntry( Color( 0x99, 0x99, 0xff ), SVX_RESSTR( RID_SVXSTR_COLOR_VIOLET ) ) );
-    Insert( new XColorEntry( Color( 0x99, 0x33, 0x66 ), SVX_RESSTR( RID_SVXSTR_COLOR_BORDEAUX ) ) );
-    Insert( new XColorEntry( Color( 0xff, 0xff, 0xcc ), SVX_RESSTR( RID_SVXSTR_COLOR_PALE_YELLOW ) ) );
-    Insert( new XColorEntry( Color( 0xcc, 0xff, 0xff ), SVX_RESSTR( RID_SVXSTR_COLOR_PALE_GREEN ) ) );
-    Insert( new XColorEntry( Color( 0x66, 0x00, 0x66 ), SVX_RESSTR( RID_SVXSTR_COLOR_DARKVIOLET ) ) );
-    Insert( new XColorEntry( Color( 0xff, 0x80, 0x80 ), SVX_RESSTR( RID_SVXSTR_COLOR_SALMON ) ) );
-    Insert( new XColorEntry( Color( 0x00, 0x66, 0xcc ), SVX_RESSTR( RID_SVXSTR_COLOR_SEABLUE ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x99, 0x99, 0xff ), SvxResId( RID_SVXSTR_COLOR_VIOLET ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x99, 0x33, 0x66 ), SvxResId( RID_SVXSTR_COLOR_BORDEAUX ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xff, 0xff, 0xcc ), SvxResId( RID_SVXSTR_COLOR_PALE_YELLOW ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xcc, 0xff, 0xff ), SvxResId( RID_SVXSTR_COLOR_PALE_GREEN ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x66, 0x00, 0x66 ), SvxResId( RID_SVXSTR_COLOR_DARKVIOLET ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xff, 0x80, 0x80 ), SvxResId( RID_SVXSTR_COLOR_SALMON ) ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x00, 0x66, 0xcc ), SvxResId( RID_SVXSTR_COLOR_SEABLUE ) ) );
 
     // <!-- add Chart colors from original palette (also 12, coincidence?) -->
-    const OUString aStrChart( SVX_RESSTR( RID_SVXSTR_COLOR_CHART ) );
-    Insert( new XColorEntry( Color( 0x00, 0x45, 0x86 ), aStrChart + " 1" ) );
-    Insert( new XColorEntry( Color( 0xff, 0x42, 0x0e ), aStrChart + " 2" ) );
-    Insert( new XColorEntry( Color( 0xff, 0xd3, 0x20 ), aStrChart + " 3" ) );
-    Insert( new XColorEntry( Color( 0x57, 0x9d, 0x1c ), aStrChart + " 4" ) );
-    Insert( new XColorEntry( Color( 0x7e, 0x00, 0x21 ), aStrChart + " 5" ) );
-    Insert( new XColorEntry( Color( 0x83, 0xca, 0xff ), aStrChart + " 6" ) );
-    Insert( new XColorEntry( Color( 0x31, 0x40, 0x04 ), aStrChart + " 7" ) );
-    Insert( new XColorEntry( Color( 0xae, 0xcf, 0x00 ), aStrChart + " 8" ) );
-    Insert( new XColorEntry( Color( 0x4b, 0x1f, 0x6f ), aStrChart + " 9" ) );
-    Insert( new XColorEntry( Color( 0xff, 0x95, 0x0e ), aStrChart + " 10" ) );
-    Insert( new XColorEntry( Color( 0xc5, 0x00, 0x0b ), aStrChart + " 11" ) );
-    Insert( new XColorEntry( Color( 0x00, 0x84, 0xd1 ), aStrChart + " 12" ) );
+    const OUString aStrChart( SvxResId( RID_SVXSTR_COLOR_CHART ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x00, 0x45, 0x86 ), aStrChart + " 1" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xff, 0x42, 0x0e ), aStrChart + " 2" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xff, 0xd3, 0x20 ), aStrChart + " 3" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x57, 0x9d, 0x1c ), aStrChart + " 4" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x7e, 0x00, 0x21 ), aStrChart + " 5" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x83, 0xca, 0xff ), aStrChart + " 6" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x31, 0x40, 0x04 ), aStrChart + " 7" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xae, 0xcf, 0x00 ), aStrChart + " 8" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x4b, 0x1f, 0x6f ), aStrChart + " 9" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xff, 0x95, 0x0e ), aStrChart + " 10" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0xc5, 0x00, 0x0b ), aStrChart + " 11" ) );
+    Insert( o3tl::make_unique<XColorEntry>( Color( 0x00, 0x84, 0xd1 ), aStrChart + " 12" ) );
 
     return(165 == Count());
 }
 
-Bitmap XColorList::CreateBitmapForUI( long /*nIndex*/ )
+BitmapEx XColorList::CreateBitmapForUI( long /*nIndex*/ )
 {
-    return Bitmap();
+    return BitmapEx();
+}
+
+long XColorList::GetIndexOfColor( const Color& rColor ) const
+{
+    for( long i = 0, n = maList.size(); i < n; ++i )
+    {
+        const Color aColor = static_cast<XColorEntry*>( maList[i].get() )->GetColor();
+
+        if (aColor == rColor )
+            return i;
+    }
+
+    return -1;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

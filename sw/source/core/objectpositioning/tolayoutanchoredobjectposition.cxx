@@ -28,9 +28,9 @@
 #include <fmtsrnd.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <frmatr.hxx>
-#include "viewsh.hxx"
-#include "viewopt.hxx"
-#include "rootfrm.hxx"
+#include <viewsh.hxx>
+#include <viewopt.hxx>
+#include <rootfrm.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/ulspitem.hxx>
 
@@ -52,13 +52,13 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
 {
     const SwRect aObjBoundRect( GetAnchoredObj().GetObjRect() );
 
-    SWRECTFN( (&GetAnchorFrame()) );
+    SwRectFnSet aRectFnSet(&GetAnchorFrame());
 
     const SwFrameFormat& rFrameFormat = GetFrameFormat();
     const SvxLRSpaceItem &rLR = rFrameFormat.GetLRSpace();
     const SvxULSpaceItem &rUL = rFrameFormat.GetULSpace();
 
-    const bool bFlyAtFly = FLY_AT_FLY == rFrameFormat.GetAnchor().GetAnchorId();
+    const bool bFlyAtFly = RndStdIds::FLY_AT_FLY == rFrameFormat.GetAnchor().GetAnchorId();
 
     // determine position.
     // 'vertical' and 'horizontal' position are calculated separately
@@ -68,21 +68,21 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
     SwFormatVertOrient aVert( rFrameFormat.GetVertOrient() );
     {
         // to-frame anchored objects are *only* vertical positioned centered or
-        // bottom, if its wrap mode is 'throught' and its anchor frame has fixed
+        // bottom, if its wrap mode is 'through' and its anchor frame has fixed
         // size. Otherwise, it's positioned top.
         sal_Int16 eVertOrient = aVert.GetVertOrient();
-        if ( ( bFlyAtFly &&
-               ( eVertOrient == text::VertOrientation::CENTER ||
-                 eVertOrient == text::VertOrientation::BOTTOM ) &&
-             SURROUND_THROUGHT != rFrameFormat.GetSurround().GetSurround() &&
-             !GetAnchorFrame().HasFixSize() ) )
+        if ( bFlyAtFly &&
+             ( eVertOrient == text::VertOrientation::CENTER ||
+               eVertOrient == text::VertOrientation::BOTTOM ) &&
+             css::text::WrapTextMode_THROUGH != rFrameFormat.GetSurround().GetSurround() &&
+             !GetAnchorFrame().HasFixSize() )
         {
             eVertOrient = text::VertOrientation::TOP;
         }
         // #i26791# - get vertical offset to frame anchor position.
-        SwTwips nVertOffsetToFrameAnchorPos( 0L );
+        SwTwips nVertOffsetToFrameAnchorPos( 0 );
         SwTwips nRelPosY =
-                _GetVertRelPos( GetAnchorFrame(), GetAnchorFrame(), eVertOrient,
+                GetVertRelPos( GetAnchorFrame(), GetAnchorFrame(), eVertOrient,
                                 aVert.GetRelationOrient(), aVert.GetPos(),
                                 rLR, rUL, nVertOffsetToFrameAnchorPos );
 
@@ -103,20 +103,18 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
         // determine absolute 'vertical' position, depending on layout-direction
         // #i26791# - determine offset to 'vertical' frame
         // anchor position, depending on layout-direction
-        if( bVert )
+        if( aRectFnSet.IsVert() )
         {
-            OSL_ENSURE( !bRev, "<SwToLayoutAnchoredObjectPosition::CalcPosition()> - reverse layout set." );
-
-            if ( bVertL2R )
-                   aRelPos.X() = nRelPosY;
+            if ( aRectFnSet.IsVertL2R() )
+                   aRelPos.setX( nRelPosY );
             else
-                   aRelPos.X() = -nRelPosY - aObjBoundRect.Width();
-            maOffsetToFrameAnchorPos.X() = nVertOffsetToFrameAnchorPos;
+                   aRelPos.setX( -nRelPosY - aObjBoundRect.Width() );
+            maOffsetToFrameAnchorPos.setX( nVertOffsetToFrameAnchorPos );
         }
         else
         {
-            aRelPos.Y() = nRelPosY;
-            maOffsetToFrameAnchorPos.Y() = nVertOffsetToFrameAnchorPos;
+            aRelPos.setY( nRelPosY );
+            maOffsetToFrameAnchorPos.setY( nVertOffsetToFrameAnchorPos );
         }
 
         // if in online-layout the bottom of to-page anchored object is beyond
@@ -125,8 +123,8 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
         if ( !bFlyAtFly && GetAnchorFrame().IsPageFrame() &&
              pSh && pSh->GetViewOptions()->getBrowseMode() )
         {
-            const long nAnchorBottom = GetAnchorFrame().Frame().Bottom();
-            const long nBottom = GetAnchorFrame().Frame().Top() +
+            const long nAnchorBottom = GetAnchorFrame().getFrameArea().Bottom();
+            const long nBottom = GetAnchorFrame().getFrameArea().Top() +
                                  aRelPos.Y() + aObjBoundRect.Height();
             if ( nAnchorBottom < nBottom )
             {
@@ -145,7 +143,7 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
         sal_Int16 eHoriOrient = aHori.GetHoriOrient();
         sal_Int16 eRelOrient = aHori.GetRelationOrient();
         // toggle orientation
-        _ToggleHoriOrientAndAlign( bToggle, eHoriOrient, eRelOrient );
+        ToggleHoriOrientAndAlign( bToggle, eHoriOrient, eRelOrient );
 
         // determine alignment values:
         // <nWidth>: 'width' of the alignment area
@@ -154,12 +152,12 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
         SwTwips nWidth, nOffset;
         {
             bool bDummy; // in this context irrelevant output parameter
-            _GetHoriAlignmentValues( GetAnchorFrame(), GetAnchorFrame(),
+            GetHoriAlignmentValues( GetAnchorFrame(), GetAnchorFrame(),
                                      eRelOrient, false,
                                      nWidth, nOffset, bDummy );
         }
 
-        SwTwips nObjWidth = (aObjBoundRect.*fnRect->fnGetWidth)();
+        SwTwips nObjWidth = aRectFnSet.GetWidth(aObjBoundRect);
 
         // determine relative horizontal position
         SwTwips nRelPosX;
@@ -179,9 +177,9 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
             nRelPosX = (nWidth / 2) - (nObjWidth / 2);
         else if ( text::HoriOrientation::RIGHT == eHoriOrient )
             nRelPosX = nWidth - ( nObjWidth +
-                             ( bVert ? rUL.GetLower() : rLR.GetRight() ) );
+                             ( aRectFnSet.IsVert() ? rUL.GetLower() : rLR.GetRight() ) );
         else
-            nRelPosX = bVert ? rUL.GetUpper() : rLR.GetLeft();
+            nRelPosX = aRectFnSet.IsVert() ? rUL.GetUpper() : rLR.GetLeft();
         nRelPosX += nOffset;
 
         // no 'negative' relative horizontal position
@@ -195,16 +193,16 @@ void SwToLayoutAnchoredObjectPosition::CalcPosition()
         // determine absolute 'horizontal' position, depending on layout-direction
         // #i26791# - determine offset to 'horizontal' frame
         // anchor position, depending on layout-direction
-        if( bVert || bVertL2R )
+        if( aRectFnSet.IsVert() || aRectFnSet.IsVertL2R() )
         {
 
-            aRelPos.Y() = nRelPosX;
-            maOffsetToFrameAnchorPos.Y() = nOffset;
+            aRelPos.setY( nRelPosX );
+            maOffsetToFrameAnchorPos.setY( nOffset );
         }
         else
         {
-            aRelPos.X() = nRelPosX;
-            maOffsetToFrameAnchorPos.X() = nOffset;
+            aRelPos.setX( nRelPosX );
+            maOffsetToFrameAnchorPos.setX( nOffset );
         }
 
         // keep the calculated relative horizontal position - needed for filters

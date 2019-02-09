@@ -21,14 +21,13 @@
 #include <com/sun/star/embed/XEmbedPersist.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
-#include <osl/mutex.hxx>
+#include <comphelper/fileformat.h>
 #include <unotools/ucbstreamhelper.hxx>
 #include <unotools/tempfile.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
 #include <svx/svdpagv.hxx>
 #include <sfx2/app.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/svdoole2.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdotext.hxx>
@@ -53,17 +52,16 @@
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <svtools/embedtransfer.hxx>
-#include "DrawDocShell.hxx"
-#include "View.hxx"
-#include "sdpage.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "stlpool.hxx"
-#include "strings.hrc"
-#include "sdresid.hxx"
-#include "imapinfo.hxx"
-#include "sdxfer.hxx"
-#include "unomodel.hxx"
+#include <DrawDocShell.hxx>
+#include <View.hxx>
+#include <sdmod.hxx>
+#include <sdpage.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <stlpool.hxx>
+#include <imapinfo.hxx>
+#include <sdxfer.hxx>
+#include <unomodel.hxx>
 #include <vcl/virdev.hxx>
 
 using namespace ::com::sun::star;
@@ -73,29 +71,23 @@ using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::datatransfer;
 using namespace ::com::sun::star::datatransfer::clipboard;
 
-#define SDTRANSFER_OBJECTTYPE_DRAWMODEL         static_cast<SotClipboardFormatId>(0x00000001)
-#define SDTRANSFER_OBJECTTYPE_DRAWOLE           static_cast<SotClipboardFormatId>(0x00000002)
+constexpr sal_uInt32 SDTRANSFER_OBJECTTYPE_DRAWMODEL = 1;
+constexpr sal_uInt32 SDTRANSFER_OBJECTTYPE_DRAWOLE   = 2;
 
 SdTransferable::SdTransferable( SdDrawDocument* pSrcDoc, ::sd::View* pWorkView, bool bInitOnGetData )
 :   mpPageDocShell( nullptr )
-,   mpOLEDataHelper( nullptr )
-,   mpObjDesc( nullptr )
 ,   mpSdView( pWorkView )
 ,   mpSdViewIntern( pWorkView )
 ,   mpSdDrawDocument( nullptr )
 ,   mpSdDrawDocumentIntern( nullptr )
 ,   mpSourceDoc( pSrcDoc )
 ,   mpVDev( nullptr )
-,   mpBookmark( nullptr )
-,   mpGraphic( nullptr )
-,   mpImageMap( nullptr )
 ,   mbInternalMove( false )
 ,   mbOwnDocument( false )
 ,   mbOwnView( false )
 ,   mbLateInit( bInitOnGetData )
 ,   mbPageTransferable( false )
 ,   mbPageTransferablePersistent( false )
-,   mbIsUnoObj( false )
 ,   maUserData()
 {
     if( mpSourceDoc )
@@ -123,26 +115,26 @@ SdTransferable::~SdTransferable()
     if( mbOwnView )
         delete mpSdViewIntern;
 
-    delete mpOLEDataHelper;
+    mpOLEDataHelper.reset();
 
-    if( maDocShellRef.Is() )
+    if( maDocShellRef.is() )
     {
-        SfxObjectShell* pObj = maDocShellRef;
+        SfxObjectShell* pObj = maDocShellRef.get();
         ::sd::DrawDocShell* pDocSh = static_cast< ::sd::DrawDocShell*>(pObj);
         pDocSh->DoClose();
     }
 
-    maDocShellRef.Clear();
+    maDocShellRef.clear();
 
     if( mbOwnDocument )
         delete mpSdDrawDocumentIntern;
 
-    delete mpGraphic;
-    delete mpBookmark;
-    delete mpImageMap;
+    mpGraphic.reset();
+    mpBookmark.reset();
+    mpImageMap.reset();
 
     mpVDev.disposeAndClear();
-    delete mpObjDesc;
+    mpObjDesc.reset();
 
     //call explicitly at end of dtor to be covered by above SolarMutex
     maUserData.clear();
@@ -152,14 +144,10 @@ void SdTransferable::CreateObjectReplacement( SdrObject* pObj )
 {
     if( pObj )
     {
-        delete mpOLEDataHelper;
-        mpOLEDataHelper = nullptr;
-        delete mpGraphic;
-        mpGraphic = nullptr;
-        delete mpBookmark;
-        mpBookmark = nullptr;
-        delete mpImageMap;
-        mpImageMap = nullptr;
+        mpOLEDataHelper.reset();
+        mpGraphic.reset();
+        mpBookmark.reset();
+        mpImageMap.reset();
 
         if( nullptr!= dynamic_cast< const SdrOle2Obj* >( pObj ) )
         {
@@ -169,29 +157,29 @@ void SdTransferable::CreateObjectReplacement( SdrObject* pObj )
                 uno::Reference < embed::XEmbedPersist > xPersist( xObj, uno::UNO_QUERY );
                 if( xObj.is() && xPersist.is() && xPersist->hasEntry() )
                 {
-                    mpOLEDataHelper = new TransferableDataHelper( new SvEmbedTransferHelper( xObj, static_cast< SdrOle2Obj* >( pObj )->GetGraphic(), static_cast< SdrOle2Obj* >( pObj )->GetAspect() ) );
+                    mpOLEDataHelper.reset( new TransferableDataHelper( new SvEmbedTransferHelper( xObj, static_cast< SdrOle2Obj* >( pObj )->GetGraphic(), static_cast< SdrOle2Obj* >( pObj )->GetAspect() ) ) );
 
                     // TODO/LATER: the standalone handling of the graphic should not be used any more in future
                     // The EmbedDataHelper should bring the graphic in future
                     const Graphic* pObjGr = static_cast< SdrOle2Obj* >( pObj )->GetGraphic();
                     if ( pObjGr )
-                        mpGraphic = new Graphic( *pObjGr );
+                        mpGraphic.reset( new Graphic( *pObjGr ) );
                 }
             }
             catch( uno::Exception& )
             {}
         }
-        else if( dynamic_cast< const SdrGrafObj *>( pObj ) !=  nullptr && (mpSourceDoc && !mpSourceDoc->GetAnimationInfo( pObj )) )
+        else if( dynamic_cast< const SdrGrafObj *>( pObj ) !=  nullptr && (mpSourceDoc && !SdDrawDocument::GetAnimationInfo( pObj )) )
         {
-            mpGraphic = new Graphic( static_cast< SdrGrafObj* >( pObj )->GetTransformedGraphic() );
+            mpGraphic.reset( new Graphic( static_cast< SdrGrafObj* >( pObj )->GetTransformedGraphic() ) );
         }
-        else if( pObj->IsUnoObj() && FmFormInventor == pObj->GetObjInventor() && ( pObj->GetObjIdentifier() == (sal_uInt16) OBJ_FM_BUTTON ) )
+        else if( pObj->IsUnoObj() && SdrInventor::FmForm == pObj->GetObjInventor() && ( pObj->GetObjIdentifier() == sal_uInt16(OBJ_FM_BUTTON) ) )
         {
             SdrUnoObj* pUnoCtrl = static_cast< SdrUnoObj* >( pObj );
 
-            if (pUnoCtrl && FmFormInventor == pUnoCtrl->GetObjInventor())
+            if (SdrInventor::FmForm == pUnoCtrl->GetObjInventor())
             {
-                Reference< css::awt::XControlModel > xControlModel( pUnoCtrl->GetUnoControlModel() );
+                const Reference< css::awt::XControlModel >& xControlModel( pUnoCtrl->GetUnoControlModel() );
 
                 if( !xControlModel.is() )
                     return;
@@ -211,7 +199,7 @@ void SdTransferable::CreateObjectReplacement( SdrObject* pObj )
                     xPropSet->getPropertyValue( "Label" ) >>= aLabel;
                     xPropSet->getPropertyValue( "TargetURL" ) >>= aURL;
 
-                    mpBookmark = new INetBookmark( aURL, aLabel );
+                    mpBookmark.reset( new INetBookmark( aURL, aLabel ) );
                 }
             }
         }
@@ -227,10 +215,8 @@ void SdTransferable::CreateObjectReplacement( SdrObject* pObj )
                 {
                     const SvxFieldData* pData = pField->GetField();
 
-                    if( pData && dynamic_cast< const SvxURLField *>( pData ) !=  nullptr )
+                    if( auto pURL = dynamic_cast< const SvxURLField *>( pData ) )
                     {
-                        const SvxURLField* pURL = static_cast<const SvxURLField*>(pData);
-
                         // #i63399# This special code identifies TextFrames which have just an URL
                         // as content and directly add this to the clipboard, probably to avoid adding
                         // an unnecessary DrawObject to the target where paste may take place. This is
@@ -239,19 +225,17 @@ void SdTransferable::CreateObjectReplacement( SdrObject* pObj )
                         // when both are unused
                         if(!pObj->HasFillStyle() && !pObj->HasLineStyle())
                         {
-                            mpBookmark = new INetBookmark( pURL->GetURL(), pURL->GetRepresentation() );
+                            mpBookmark.reset( new INetBookmark( pURL->GetURL(), pURL->GetRepresentation() ) );
                         }
                     }
                 }
             }
         }
 
-        SdIMapInfo* pInfo = static_cast< SdDrawDocument* >( pObj->GetModel() )->GetIMapInfo( static_cast< SdrObject* >( pObj ) );
+        SdIMapInfo* pInfo = SdDrawDocument::GetIMapInfo( pObj );
 
         if( pInfo )
-            mpImageMap = new ImageMap( pInfo->GetImageMap() );
-
-        mbIsUnoObj = pObj && pObj->IsUnoObj();
+            mpImageMap.reset( new ImageMap( pInfo->GetImageMap() ) );
     }
 }
 
@@ -261,7 +245,7 @@ void SdTransferable::CreateData()
     {
         mbOwnView = true;
 
-        SdPage* pPage = mpSdDrawDocument->GetSdPage(0, PK_STANDARD);
+        SdPage* pPage = mpSdDrawDocument->GetSdPage(0, PageKind::Standard);
 
         if( 1 == pPage->GetObjCount() )
             CreateObjectReplacement( pPage->GetObj( 0 ) );
@@ -283,14 +267,14 @@ void SdTransferable::CreateData()
 
         if( mpSourceDoc )
             mpSourceDoc->CreatingDataObj(this);
-        mpSdDrawDocumentIntern = static_cast<SdDrawDocument*>( mpSdView->GetMarkedObjModel() );
+        mpSdDrawDocumentIntern = static_cast<SdDrawDocument*>( mpSdView->CreateMarkedObjModel().release() );
         if( mpSourceDoc )
             mpSourceDoc->CreatingDataObj(nullptr);
 
-        if( !maDocShellRef.Is() && mpSdDrawDocumentIntern->GetDocSh() )
+        if( !maDocShellRef.is() && mpSdDrawDocumentIntern->GetDocSh() )
             maDocShellRef = mpSdDrawDocumentIntern->GetDocSh();
 
-        if( !maDocShellRef.Is() )
+        if( !maDocShellRef.is() )
         {
             OSL_FAIL( "SdTransferable::CreateData(), failed to create a model with persist, clipboard operation will fail for OLE objects!" );
             mbOwnDocument = true;
@@ -302,7 +286,7 @@ void SdTransferable::CreateData()
         SdrModel*           pOldModel = mpSdView->GetModel();
         SdStyleSheetPool*   pOldStylePool = static_cast<SdStyleSheetPool*>( pOldModel->GetStyleSheetPool() );
         SdStyleSheetPool*   pNewStylePool = static_cast<SdStyleSheetPool*>( mpSdDrawDocumentIntern->GetStyleSheetPool() );
-        SdPage*             pPage = mpSdDrawDocumentIntern->GetSdPage( 0, PK_STANDARD );
+        SdPage*             pPage = mpSdDrawDocumentIntern->GetSdPage( 0, PageKind::Standard );
         OUString            aOldLayoutName( pOldPage->GetLayoutName() );
 
         pPage->SetSize( pOldPage->GetSize() );
@@ -313,7 +297,7 @@ void SdTransferable::CreateData()
         sal_Int32 nPos = aOldLayoutName.indexOf( SD_LT_SEPARATOR );
         if( nPos != -1 )
             aOldLayoutName = aOldLayoutName.copy( 0, nPos );
-        SdStyleSheetVector aCreatedSheets;
+        StyleSheetCopyResultVector aCreatedSheets;
         pNewStylePool->CopyLayoutSheets( aOldLayoutName, *pOldStylePool, aCreatedSheets );
     }
 
@@ -322,13 +306,14 @@ void SdTransferable::CreateData()
         mpSdDrawDocumentIntern && mpSdViewIntern &&
         mpSdDrawDocumentIntern->GetPageCount() )
     {
-        SdPage* pPage = mpSdDrawDocumentIntern->GetSdPage( 0, PK_STANDARD );
+        SdPage* pPage = mpSdDrawDocumentIntern->GetSdPage( 0, PageKind::Standard );
 
         if( 1 == mpSdDrawDocumentIntern->GetPageCount() )
         {
             // #112978# need to use GetAllMarkedBoundRect instead of GetAllMarkedRect to get
             // fat lines correctly
-            Point   aOrigin( ( maVisArea = mpSdViewIntern->GetAllMarkedBoundRect() ).TopLeft() );
+            maVisArea = mpSdViewIntern->GetAllMarkedBoundRect();
+            Point   aOrigin( maVisArea.TopLeft() );
             Size    aVector( -aOrigin.X(), -aOrigin.Y() );
 
             for( size_t nObj = 0, nObjCount = pPage->GetObjCount(); nObj < nObjCount; ++nObj )
@@ -354,7 +339,7 @@ static bool lcl_HasOnlyControls( SdrModel* pModel )
         SdrPage* pPage = pModel->GetPage(0);
         if (pPage)
         {
-            SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+            SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
             SdrObject* pObj = aIter.Next();
             if ( pObj )
             {
@@ -404,10 +389,9 @@ void SdTransferable::AddSupportedFormats()
             AddFormat( SotClipboardFormatId::EMBED_SOURCE );
 
             DataFlavorExVector              aVector( mpOLEDataHelper->GetDataFlavorExVector() );
-            DataFlavorExVector::iterator    aIter( aVector.begin() ), aEnd( aVector.end() );
 
-            while( aIter != aEnd )
-                AddFormat( *aIter++ );
+            for( const auto& rItem : aVector )
+                AddFormat( rItem );
         }
         else if( mpGraphic )
         {
@@ -416,7 +400,7 @@ void SdTransferable::AddSupportedFormats()
 
             AddFormat( SotClipboardFormatId::SVXB );
 
-            if( mpGraphic->GetType() == GRAPHIC_BITMAP )
+            if( mpGraphic->GetType() == GraphicType::Bitmap )
             {
                 AddFormat( SotClipboardFormatId::PNG );
                 AddFormat( SotClipboardFormatId::BITMAP );
@@ -445,8 +429,10 @@ void SdTransferable::AddSupportedFormats()
                 AddFormat( SotClipboardFormatId::BITMAP );
             }
 
-            if( lcl_HasOnlyOneTable( mpSdDrawDocument ) )
+            if( lcl_HasOnlyOneTable( mpSdDrawDocument ) ) {
                 AddFormat( SotClipboardFormatId::RTF );
+                AddFormat( SotClipboardFormatId::RICHTEXT );
+            }
         }
 
         if( mpImageMap )
@@ -466,49 +452,38 @@ bool SdTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
 
     if( nFormat == SotClipboardFormatId::RTF && lcl_HasOnlyOneTable( mpSdDrawDocument ) )
     {
-        bOK = SetTableRTF( mpSdDrawDocument, rFlavor );
+        bOK = SetTableRTF( mpSdDrawDocument );
     }
     else if( mpOLEDataHelper && mpOLEDataHelper->HasFormat( rFlavor ) )
     {
-        SdrSwapGraphicsMode nOldSwapMode(SdrSwapGraphicsMode::DEFAULT);
-
-        if( mpSdDrawDocumentIntern )
-        {
-            nOldSwapMode = mpSdDrawDocumentIntern->GetSwapGraphicsMode();
-            mpSdDrawDocumentIntern->SetSwapGraphicsMode( SdrSwapGraphicsMode::PURGE );
-        }
-
         // TODO/LATER: support all the graphical formats, the embedded object scenario should not have separated handling
         if( nFormat == SotClipboardFormatId::GDIMETAFILE && mpGraphic )
-            bOK = SetGDIMetaFile( mpGraphic->GetGDIMetaFile(), rFlavor );
+            bOK = SetGDIMetaFile( mpGraphic->GetGDIMetaFile() );
         else
-            bOK = SetAny( mpOLEDataHelper->GetAny(rFlavor, rDestDoc), rFlavor );
-
-        if( mpSdDrawDocumentIntern )
-            mpSdDrawDocumentIntern->SetSwapGraphicsMode( nOldSwapMode );
+            bOK = SetAny( mpOLEDataHelper->GetAny(rFlavor, rDestDoc) );
     }
     else if( HasFormat( nFormat ) )
     {
         if( ( nFormat == SotClipboardFormatId::LINKSRCDESCRIPTOR || nFormat == SotClipboardFormatId::OBJECTDESCRIPTOR ) && mpObjDesc )
         {
-            bOK = SetTransferableObjectDescriptor( *mpObjDesc, rFlavor );
+            bOK = SetTransferableObjectDescriptor( *mpObjDesc );
         }
         else if( nFormat == SotClipboardFormatId::DRAWING )
         {
             SfxObjectShellRef aOldRef( maDocShellRef );
 
-            maDocShellRef.Clear();
+            maDocShellRef.clear();
 
             if( mpSdViewIntern )
             {
                 SdDrawDocument& rInternDoc = mpSdViewIntern->GetDoc();
                 rInternDoc.CreatingDataObj(this);
-                SdDrawDocument* pDoc = dynamic_cast< SdDrawDocument* >( mpSdViewIntern->GetMarkedObjModel() );
+                SdDrawDocument* pDoc = dynamic_cast< SdDrawDocument* >( mpSdViewIntern->CreateMarkedObjModel().release() );
                 rInternDoc.CreatingDataObj(nullptr);
 
                 bOK = SetObject( pDoc, SDTRANSFER_OBJECTTYPE_DRAWMODEL, rFlavor );
 
-                if( maDocShellRef.Is() )
+                if( maDocShellRef.is() )
                 {
                     maDocShellRef->DoClose();
                 }
@@ -527,7 +502,7 @@ bool SdTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
                 const bool bToggleOnlineSpell = mpSdDrawDocumentIntern && mpSdDrawDocumentIntern->GetOnlineSpell();
                 if (bToggleOnlineSpell)
                     mpSdDrawDocumentIntern->SetOnlineSpell(false);
-                bOK = SetGDIMetaFile( mpSdViewIntern->GetMarkedObjMetaFile( true ), rFlavor );
+                bOK = SetGDIMetaFile( mpSdViewIntern->GetMarkedObjMetaFile( true ) );
                 if (bToggleOnlineSpell)
                     mpSdDrawDocumentIntern->SetOnlineSpell(true);
             }
@@ -550,11 +525,11 @@ bool SdTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
         }
         else if( ( nFormat == SotClipboardFormatId::SVXB ) && mpGraphic )
         {
-            bOK = SetGraphic( *mpGraphic, rFlavor );
+            bOK = SetGraphic( *mpGraphic );
         }
         else if( ( nFormat == SotClipboardFormatId::SVIM ) && mpImageMap )
         {
-            bOK = SetImageMap( *mpImageMap, rFlavor );
+            bOK = SetImageMap( *mpImageMap );
         }
         else if( mpBookmark )
         {
@@ -564,10 +539,7 @@ bool SdTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
         {
             if( mpSdDrawDocumentIntern )
             {
-                SdrSwapGraphicsMode nOldSwapMode = mpSdDrawDocumentIntern->GetSwapGraphicsMode();
-                mpSdDrawDocumentIntern->SetSwapGraphicsMode( SdrSwapGraphicsMode::PURGE );
-
-                if( !maDocShellRef.Is() )
+                if( !maDocShellRef.is() )
                 {
                     maDocShellRef = new ::sd::DrawDocShell(
                         mpSdDrawDocumentIntern,
@@ -579,9 +551,7 @@ bool SdTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
                 }
 
                 maDocShellRef->SetVisArea( maVisArea );
-                bOK = SetObject( &maDocShellRef, SDTRANSFER_OBJECTTYPE_DRAWOLE, rFlavor );
-
-                mpSdDrawDocumentIntern->SetSwapGraphicsMode( nOldSwapMode );
+                bOK = SetObject( maDocShellRef.get(), SDTRANSFER_OBJECTTYPE_DRAWOLE, rFlavor );
             }
         }
     }
@@ -589,7 +559,7 @@ bool SdTransferable::GetData( const DataFlavor& rFlavor, const OUString& rDestDo
     return bOK;
 }
 
-bool SdTransferable::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* pObject, SotClipboardFormatId nObjectType, const DataFlavor& )
+bool SdTransferable::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* pObject, sal_uInt32 nObjectType, const DataFlavor& )
 {
     bool bRet = false;
 
@@ -610,7 +580,7 @@ bool SdTransferable::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* 
 
                 {
                     css::uno::Reference<css::io::XOutputStream> xDocOut( new utl::OOutputStreamWrapper( *rxOStm ) );
-                    if( SvxDrawingLayerExport( pDoc, xDocOut, xComponent, (pDoc->GetDocumentType() == DOCUMENT_TYPE_IMPRESS) ? "com.sun.star.comp.Impress.XMLClipboardExporter" : "com.sun.star.comp.DrawingLayer.XMLExporter" ) )
+                    if( SvxDrawingLayerExport( pDoc, xDocOut, xComponent, (pDoc->GetDocumentType() == DocumentType::Impress) ? "com.sun.star.comp.Impress.XMLClipboardExporter" : "com.sun.star.comp.DrawingLayer.XMLExporter" ) )
                         rxOStm->Commit();
                 }
 
@@ -619,7 +589,7 @@ bool SdTransferable::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* 
             }
             catch( Exception& )
             {
-                OSL_FAIL( "sd::SdTransferable::WriteObject(), exception catched!" );
+                OSL_FAIL( "sd::SdTransferable::WriteObject(), exception caught!" );
                 bRet = false;
             }
         }
@@ -640,19 +610,19 @@ bool SdTransferable::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* 
                 pEmbObj->SetupStorage( xWorkStore, SOFFICE_FILEFORMAT_CURRENT, false );
                 // mba: no relative URLs for clipboard!
                 SfxMedium aMedium( xWorkStore, OUString() );
-                bRet = pEmbObj->DoSaveObjectAs( aMedium, false );
+                pEmbObj->DoSaveObjectAs( aMedium, false );
                 pEmbObj->DoSaveCompleted();
 
                 uno::Reference< embed::XTransactedObject > xTransact( xWorkStore, uno::UNO_QUERY );
                 if ( xTransact.is() )
                     xTransact->commit();
 
-                SvStream* pSrcStm = ::utl::UcbStreamHelper::CreateStream( aTempFile.GetURL(), StreamMode::READ );
+                std::unique_ptr<SvStream> pSrcStm = ::utl::UcbStreamHelper::CreateStream( aTempFile.GetURL(), StreamMode::READ );
                 if( pSrcStm )
                 {
                     rxOStm->SetBufferSize( 0xff00 );
                     rxOStm->WriteStream( *pSrcStm );
-                    delete pSrcStm;
+                    pSrcStm.reset();
                 }
 
                 bRet = true;
@@ -689,11 +659,10 @@ void SdTransferable::ObjectReleased()
         SD_MOD()->pTransferSelection = nullptr;
 }
 
-void SdTransferable::SetObjectDescriptor( const TransferableObjectDescriptor& rObjDesc )
+void SdTransferable::SetObjectDescriptor( std::unique_ptr<TransferableObjectDescriptor> pObjDesc )
 {
-    delete mpObjDesc;
-    mpObjDesc = new TransferableObjectDescriptor( rObjDesc );
-    PrepareOLE( rObjDesc );
+    mpObjDesc = std::move(pObjDesc);
+    PrepareOLE( *mpObjDesc );
 }
 
 void SdTransferable::SetPageBookmarks( const std::vector<OUString> &rPageBookmarks, bool bPersistent )
@@ -723,7 +692,7 @@ void SdTransferable::SetPageBookmarks( const std::vector<OUString> &rPageBookmar
 
         if( mpSdViewIntern )
         {
-            SdPage* pPage = mpSdDrawDocument->GetSdPage( 0, PK_STANDARD );
+            SdPage* pPage = mpSdDrawDocument->GetSdPage( 0, PageKind::Standard );
 
             if( pPage )
             {
@@ -738,7 +707,7 @@ void SdTransferable::SetPageBookmarks( const std::vector<OUString> &rPageBookmar
     }
 }
 
-sal_Int64 SAL_CALL SdTransferable::getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw( css::uno::RuntimeException, std::exception )
+sal_Int64 SAL_CALL SdTransferable::getSomething( const css::uno::Sequence< sal_Int8 >& rId )
 {
     sal_Int64 nRet;
 
@@ -801,7 +770,7 @@ void SdTransferable::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
     const SdrHint* pSdrHint = dynamic_cast< const SdrHint* >( &rHint );
     if( pSdrHint )
     {
-        if( HINT_MODELCLEARED == pSdrHint->GetKind() )
+        if( SdrHintKind::ModelCleared == pSdrHint->GetKind() )
         {
             EndListening(*mpSourceDoc);
             mpSourceDoc = nullptr;
@@ -809,8 +778,7 @@ void SdTransferable::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
     }
     else
     {
-        const SfxSimpleHint* pSimpleHint = dynamic_cast< const SfxSimpleHint * >(&rHint);
-        if(pSimpleHint && (pSimpleHint->GetId() == SFX_HINT_DYING) )
+        if( rHint.GetId() == SfxHintId::Dying )
         {
             if( &rBC == mpSourceDoc )
                 mpSourceDoc = nullptr;
@@ -831,7 +799,7 @@ void SdTransferable::SetView(const ::sd::View* pView)
         StartListening(*const_cast<sd::View*>(mpSdView));
 }
 
-bool SdTransferable::SetTableRTF( SdDrawDocument* pModel, const DataFlavor& rFlavor)
+bool SdTransferable::SetTableRTF( SdDrawDocument* pModel )
 {
     if ( pModel )
     {
@@ -843,7 +811,7 @@ bool SdTransferable::SetTableRTF( SdDrawDocument* pModel, const DataFlavor& rFla
             {
                 SvMemoryStream aMemStm( 65535, 65535 );
                 sdr::table::SdrTableObj::ExportAsRTF( aMemStm, *pTableObj );
-                return SetAny( Any( Sequence< sal_Int8 >( static_cast< const sal_Int8* >( aMemStm.GetData() ), aMemStm.Seek( STREAM_SEEK_TO_END ) ) ), rFlavor );
+                return SetAny( Any( Sequence< sal_Int8 >( static_cast< const sal_Int8* >( aMemStm.GetData() ), aMemStm.TellEnd() ) ) );
             }
         }
     }

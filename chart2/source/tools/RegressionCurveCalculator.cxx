@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RegressionCurveCalculator.hxx"
-#include "RegressionCalculationHelper.hxx"
-#include "servicenames_coosystems.hxx"
+#include <RegressionCurveCalculator.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <rtl/math.hxx>
 
 #include <com/sun/star/lang/XServiceName.hpp>
 #include <com/sun/star/util/NumberFormatter.hpp>
+
+#include <comphelper/numbers.hxx>
+#include <comphelper/extract.hxx>
 
 using namespace ::com::sun::star;
 
@@ -40,7 +41,8 @@ RegressionCurveCalculator::RegressionCurveCalculator() :
         mDegree(2),
         mForceIntercept(false),
         mInterceptValue(0.0),
-        mPeriod(2)
+        mPeriod(2),
+        mXName("x"), mYName("f(x)")
 {
     rtl::math::setNan( &m_fCorrelationCoeffitient );
     rtl::math::setNan( &mInterceptValue );
@@ -71,7 +73,6 @@ void RegressionCurveCalculator::setRegressionProperties(
     sal_Bool    aForceIntercept,
     double      aInterceptValue,
     sal_Int32   aPeriod )
-        throw (uno::RuntimeException, std::exception)
 {
     mDegree = aDegree;
     mForceIntercept = aForceIntercept;
@@ -82,17 +83,46 @@ void RegressionCurveCalculator::setRegressionProperties(
 OUString RegressionCurveCalculator::getFormattedString(
     const Reference< util::XNumberFormatter >& xNumFormatter,
     sal_Int32 nNumberFormatKey,
-    double fNumber )
+    double fNumber, const sal_Int32* pStringLength /* = nullptr */ )
 {
+    if ( pStringLength && *pStringLength <= 0 )
+        return OUString("###");
     OUString aResult;
 
-    if( xNumFormatter.is())
+    if( xNumFormatter.is() )
+    {
+        bool bStandard = ::cppu::any2bool( ::comphelper::getNumberFormatProperty( xNumFormatter, nNumberFormatKey, "StandardFormat" ) );
+        if( pStringLength && bStandard )
+        {   // round fNumber to *pStringLength characters
+            const sal_Int32 nMinDigit = 6; // minimum significant digits for General format
+            sal_Int32 nSignificantDigit = ( *pStringLength <= nMinDigit ? nMinDigit : *pStringLength );
+            aResult = OStringToOUString(
+                        ::rtl::math::doubleToString( fNumber, rtl_math_StringFormat_G1, nSignificantDigit, '.', true ),
+                                        RTL_TEXTENCODING_ASCII_US );
+            // count characters different from significant digits (decimal separator, scientific notation)
+            sal_Int32 nExtraChar = aResult.getLength() - *pStringLength;
+            if ( nExtraChar > 0 && *pStringLength > nMinDigit )
+            {
+                nSignificantDigit = *pStringLength - nExtraChar;
+                if ( nSignificantDigit < nMinDigit )
+                    nSignificantDigit = nMinDigit;
+                aResult = OStringToOUString(
+                    ::rtl::math::doubleToString( fNumber, rtl_math_StringFormat_G1, nSignificantDigit, '.', true ),
+                                            RTL_TEXTENCODING_ASCII_US );
+            }
+            fNumber = ::rtl::math::stringToDouble( aResult, '.', ',' );
+        }
         aResult = xNumFormatter->convertNumberToString( nNumberFormatKey, fNumber );
+    }
     else
+    {
+        sal_Int32 nStringLength = 4;  // default length
+        if ( pStringLength )
+            nStringLength = *pStringLength;
         aResult = OStringToOUString(
-                      ::rtl::math::doubleToString( fNumber, rtl_math_StringFormat_G1, 4, '.', true ),
+                      ::rtl::math::doubleToString( fNumber, rtl_math_StringFormat_G1, nStringLength, '.', true ),
                       RTL_TEXTENCODING_ASCII_US );
-
+    }
     return aResult;
 }
 
@@ -101,7 +131,6 @@ Sequence< geometry::RealPoint2D > SAL_CALL RegressionCurveCalculator::getCurveVa
     const Reference< chart2::XScaling >& xScalingX,
     const Reference< chart2::XScaling >& /* xScalingY */,
     sal_Bool /* bMaySkipPointsInCalculation */ )
-        throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     if( nPointCount < 2 )
         throw lang::IllegalArgumentException();
@@ -130,28 +159,25 @@ Sequence< geometry::RealPoint2D > SAL_CALL RegressionCurveCalculator::getCurveVa
         if( bDoXScaling )
             x = xInverseScaling->doScaling( x );
         aResult[nP].X = x;
-        aResult[nP].Y = this->getCurveValue( x );
+        aResult[nP].Y = getCurveValue( x );
     }
 
     return aResult;
 }
 
 double SAL_CALL RegressionCurveCalculator::getCorrelationCoefficient()
-    throw (uno::RuntimeException, std::exception)
 {
     return m_fCorrelationCoeffitient;
 }
 
 OUString SAL_CALL RegressionCurveCalculator::getRepresentation()
-    throw (uno::RuntimeException, std::exception)
 {
     return ImplGetRepresentation( Reference< util::XNumberFormatter >(), 0 );
 }
 
 OUString SAL_CALL RegressionCurveCalculator::getFormattedRepresentation(
     const Reference< util::XNumberFormatsSupplier > & xNumFmtSupplier,
-    sal_Int32 nNumberFormatKey )
-    throw (uno::RuntimeException, std::exception)
+    sal_Int32 nNumberFormatKey, sal_Int32 nFormulaLength )
 {
     // create and prepare a number formatter
     if( !xNumFmtSupplier.is())
@@ -160,7 +186,33 @@ OUString SAL_CALL RegressionCurveCalculator::getFormattedRepresentation(
     Reference< util::XNumberFormatter > xNumFormatter( util::NumberFormatter::create(xContext), uno::UNO_QUERY_THROW );
     xNumFormatter->attachNumberFormatsSupplier( xNumFmtSupplier );
 
+    if ( nFormulaLength > 0 )
+        return ImplGetRepresentation( xNumFormatter, nNumberFormatKey, &nFormulaLength );
     return ImplGetRepresentation( xNumFormatter, nNumberFormatKey );
+}
+
+void RegressionCurveCalculator::addStringToEquation(
+        OUStringBuffer& aStrEquation, sal_Int32& nLineLength, OUStringBuffer const & aAddString, const sal_Int32* pMaxWidth)
+{
+    if ( pMaxWidth && ( nLineLength + aAddString.getLength() > *pMaxWidth ) )
+    {  // wrap line
+        aStrEquation.append( "\n " ); // start new line with a blank
+        nLineLength = 1;
+    }
+    aStrEquation.append( aAddString );
+    nLineLength += aAddString.getLength();
+}
+
+void SAL_CALL RegressionCurveCalculator::setXYNames( const OUString& aXName, const OUString& aYName )
+{
+    if ( aXName.isEmpty() )
+        mXName = OUString ("x");
+    else
+        mXName = aXName;
+    if ( aYName.isEmpty() )
+        mYName = OUString ("f(x)");
+    else
+        mYName = aYName;
 }
 
 } //  namespace chart

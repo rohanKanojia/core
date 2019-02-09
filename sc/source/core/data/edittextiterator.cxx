@@ -7,10 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "edittextiterator.hxx"
-#include "document.hxx"
-#include "table.hxx"
-#include "column.hxx"
+#include <edittextiterator.hxx>
+#include <document.hxx>
+#include <table.hxx>
+#include <column.hxx>
 
 namespace sc {
 
@@ -61,15 +61,6 @@ const EditTextObject* EditTextIterator::seek()
     return sc::edittext_block::at(*maPos.first->data, maPos.second);
 }
 
-void EditTextIterator::incPos()
-{
-    if (maPos.second + 1 < maPos.first->size)
-        // Increment within the block.
-        ++maPos.second;
-    else
-        incBlock();
-}
-
 void EditTextIterator::incBlock()
 {
     ++maPos.first;
@@ -92,7 +83,13 @@ const EditTextObject* EditTextIterator::next()
     if (maPos.first == miEnd)
         return nullptr;
 
-    incPos();
+    // increment position by one
+    if (maPos.second + 1 < maPos.first->size)
+        // Increment within the block.
+        ++maPos.second;
+    else
+        incBlock();
+
     return seek();
 }
 

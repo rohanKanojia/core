@@ -17,35 +17,37 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessibleSpreadsheet.hxx"
-#include "AccessibilityHints.hxx"
-#include "AccessibleCell.hxx"
-#include "AccessibleDocument.hxx"
-#include "tabvwsh.hxx"
-#include "document.hxx"
-#include "hints.hxx"
-#include "scmod.hxx"
-#include "markdata.hxx"
+#include <AccessibleSpreadsheet.hxx>
+#include <AccessibilityHints.hxx>
+#include <AccessibleCell.hxx>
+#include <AccessibleDocument.hxx>
+#include <tabvwsh.hxx>
+#include <document.hxx>
+#include <hints.hxx>
+#include <scmod.hxx>
+#include <markdata.hxx>
 #include <gridwin.hxx>
 
 #include <unotools/accessiblestatesethelper.hxx>
+#include <unotools/accessiblerelationsethelper.hxx>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleTableModelChangeType.hpp>
-#include <comphelper/servicehelper.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <sal/log.hxx>
 #include <tools/gen.hxx>
 #include <svtools/colorcfg.hxx>
 #include <vcl/svapp.hxx>
-#include "scresid.hxx"
-#include "sc.hrc"
+#include <scresid.hxx>
+#include <strings.hrc>
 
 #include <algorithm>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
 
-bool CompMinCol(const std::pair<sal_uInt16,sal_uInt16> & pc1,const std::pair<sal_uInt16,sal_uInt16>  &pc2)
+static bool CompMinCol(const std::pair<sal_uInt16,sal_uInt16> & pc1,const std::pair<sal_uInt16,sal_uInt16>  &pc2)
 {
     return pc1.first < pc2.first;
 }
@@ -54,16 +56,13 @@ ScMyAddress ScAccessibleSpreadsheet::CalcScAddressFromRangeList(ScRangeList *pMa
 {
     if (pMarkedRanges->size() <= 1)
     {
-        ScRange* pRange = pMarkedRanges->front();
-        if (pRange)
-        {
-            // MT IA2: Not used.
-            // const int nRowNum = pRange->aEnd.Row() - pRange->aStart.Row() + 1;
-            const int nColNum = pRange->aEnd.Col() - pRange->aStart.Col() + 1;
-            const int nCurCol = nSelectedChildIndex % nColNum;
-            const int nCurRow = (nSelectedChildIndex - nCurCol)/nColNum;
-            return ScMyAddress(static_cast<SCCOL>(pRange->aStart.Col() + nCurCol), pRange->aStart.Row() + nCurRow, maActiveCell.Tab());
-        }
+        ScRange const & rRange = pMarkedRanges->front();
+        // MT IA2: Not used.
+        // const int nRowNum = rRange.aEnd.Row() - rRange.aStart.Row() + 1;
+        const int nColNum = rRange.aEnd.Col() - rRange.aStart.Col() + 1;
+        const int nCurCol = nSelectedChildIndex % nColNum;
+        const int nCurRow = (nSelectedChildIndex - nCurCol)/nColNum;
+        return ScMyAddress(static_cast<SCCOL>(rRange.aStart.Col() + nCurCol), rRange.aStart.Row() + nCurRow, maActiveCell.Tab());
     }
     else
     {
@@ -73,24 +72,24 @@ ScMyAddress ScAccessibleSpreadsheet::CalcScAddressFromRangeList(ScRangeList *pMa
         size_t nSize = pMarkedRanges->size();
         for (size_t i = 0; i < nSize; ++i)
         {
-            ScRange* pRange = (*pMarkedRanges)[i];
-            if (pRange->aStart.Tab() != pRange->aEnd.Tab())
+            ScRange const & rRange = (*pMarkedRanges)[i];
+            if (rRange.aStart.Tab() != rRange.aEnd.Tab())
             {
-                if ((maActiveCell.Tab() >= pRange->aStart.Tab()) ||
-                    maActiveCell.Tab() <= pRange->aEnd.Tab())
+                if ((maActiveCell.Tab() >= rRange.aStart.Tab()) ||
+                    maActiveCell.Tab() <= rRange.aEnd.Tab())
                 {
-                    m_vecTempRange.push_back(pRange);
-                    nMinRow = std::min(pRange->aStart.Row(),nMinRow);
-                    nMaxRow = std::max(pRange->aEnd.Row(),nMaxRow);
+                    m_vecTempRange.push_back(rRange);
+                    nMinRow = std::min(rRange.aStart.Row(),nMinRow);
+                    nMaxRow = std::max(rRange.aEnd.Row(),nMaxRow);
                 }
                 else
                     SAL_WARN("sc", "Range of wrong table");
             }
-            else if(pRange->aStart.Tab() == maActiveCell.Tab())
+            else if(rRange.aStart.Tab() == maActiveCell.Tab())
             {
-                m_vecTempRange.push_back(pRange);
-                nMinRow = std::min(pRange->aStart.Row(),nMinRow);
-                nMaxRow = std::max(pRange->aEnd.Row(),nMaxRow);
+                m_vecTempRange.push_back(rRange);
+                nMinRow = std::min(rRange.aStart.Row(),nMinRow);
+                nMaxRow = std::max(rRange.aEnd.Row(),nMaxRow);
             }
             else
                 SAL_WARN("sc", "Range of wrong table");
@@ -100,26 +99,22 @@ ScMyAddress ScAccessibleSpreadsheet::CalcScAddressFromRangeList(ScRangeList *pMa
         {
             m_vecTempCol.clear();
             {
-                VEC_RANGE::const_iterator vi = m_vecTempRange.begin();
-                for (; vi < m_vecTempRange.end(); ++vi)
+                for (ScRange const & r : m_vecTempRange)
                 {
-                    ScRange *p = *vi;
-                    if ( row >= p->aStart.Row() && row <= p->aEnd.Row())
+                    if ( row >= r.aStart.Row() && row <= r.aEnd.Row())
                     {
-                        m_vecTempCol.push_back(std::make_pair(p->aStart.Col(),p->aEnd.Col()));
+                        m_vecTempCol.emplace_back(r.aStart.Col(),r.aEnd.Col());
                     }
                 }
             }
             std::sort(m_vecTempCol.begin(),m_vecTempCol.end(),CompMinCol);
             {
-                VEC_COL::const_iterator vic = m_vecTempCol.begin();
-                for(; vic != m_vecTempCol.end(); ++vic)
+                for(const PAIR_COL &pairCol : m_vecTempCol)
                 {
-                    const PAIR_COL &pariCol = *vic;
-                    sal_uInt16 nCol = pariCol.second - pariCol.first + 1;
+                    sal_uInt16 nCol = pairCol.second - pairCol.first + 1;
                     if (nCol + nCurrentIndex > nSelectedChildIndex)
                     {
-                        return ScMyAddress(static_cast<SCCOL>(pariCol.first + nSelectedChildIndex - nCurrentIndex), row, maActiveCell.Tab());
+                        return ScMyAddress(static_cast<SCCOL>(pairCol.first + nSelectedChildIndex - nCurrentIndex), row, maActiveCell.Tab());
                     }
                     nCurrentIndex += nCol;
                 }
@@ -129,46 +124,46 @@ ScMyAddress ScAccessibleSpreadsheet::CalcScAddressFromRangeList(ScRangeList *pMa
     return ScMyAddress(0,0,maActiveCell.Tab());
 }
 
-bool ScAccessibleSpreadsheet::CalcScRangeDifferenceMax(ScRange *pSrc, ScRange *pDest, int nMax, VEC_MYADDR &vecRet, int &nSize)
+bool ScAccessibleSpreadsheet::CalcScRangeDifferenceMax(const ScRange & rSrc, const ScRange & rDest, int nMax, VEC_MYADDR &vecRet, int &nSize)
 {
     //Src Must be :Src > Dest
-    if (pDest->In(*pSrc))
+    if (rDest.In(rSrc))
     {//Here is Src In Dest,Src <= Dest
         return false;
     }
-    if (!pDest->Intersects(*pSrc))
+    if (!rDest.Intersects(rSrc))
     {
-        int nCellCount = sal_uInt32(pDest->aEnd.Col() - pDest->aStart.Col() + 1)
-            * sal_uInt32(pDest->aEnd.Row() - pDest->aStart.Row() + 1)
-            * sal_uInt32(pDest->aEnd.Tab() - pDest->aStart.Tab() + 1);
+        int nCellCount = sal_uInt32(rDest.aEnd.Col() - rDest.aStart.Col() + 1)
+            * sal_uInt32(rDest.aEnd.Row() - rDest.aStart.Row() + 1)
+            * sal_uInt32(rDest.aEnd.Tab() - rDest.aStart.Tab() + 1);
         if (nCellCount + nSize > nMax)
         {
             return true;
         }
         else if(nCellCount > 0)
         {
-            for (sal_Int32 row = pDest->aStart.Row(); row <=  pDest->aEnd.Row();++row)
+            for (sal_Int32 row = rDest.aStart.Row(); row <=  rDest.aEnd.Row();++row)
             {
-                for (sal_uInt16 col = pDest->aStart.Col(); col <=  pDest->aEnd.Col();++col)
+                for (sal_uInt16 col = rDest.aStart.Col(); col <=  rDest.aEnd.Col();++col)
                 {
-                    vecRet.push_back(ScMyAddress(col,row,pDest->aStart.Tab()));
+                    vecRet.emplace_back(col,row,rDest.aStart.Tab());
                 }
             }
         }
         return false;
     }
-    sal_Int32 nMinRow = pSrc->aStart.Row();
-    sal_Int32 nMaxRow = pSrc->aEnd.Row();
+    sal_Int32 nMinRow = rSrc.aStart.Row();
+    sal_Int32 nMaxRow = rSrc.aEnd.Row();
     for (; nMinRow <= nMaxRow ; ++nMinRow,--nMaxRow)
     {
-        for (sal_uInt16 col = pSrc->aStart.Col(); col <=  pSrc->aEnd.Col();++col)
+        for (sal_uInt16 col = rSrc.aStart.Col(); col <=  rSrc.aEnd.Col();++col)
         {
             if (nSize > nMax)
             {
                 return true;
             }
-            ScMyAddress cell(col,nMinRow,pSrc->aStart.Tab());
-            if(!pDest->In(cell))
+            ScMyAddress cell(col,nMinRow,rSrc.aStart.Tab());
+            if(!rDest.In(cell))
             {//In Src ,Not In Dest
                 vecRet.push_back(cell);
                 ++nSize;
@@ -176,14 +171,14 @@ bool ScAccessibleSpreadsheet::CalcScRangeDifferenceMax(ScRange *pSrc, ScRange *p
         }
         if (nMinRow != nMaxRow)
         {
-            for (sal_uInt16 col = pSrc->aStart.Col(); col <=  pSrc->aEnd.Col();++col)
+            for (sal_uInt16 col = rSrc.aStart.Col(); col <=  rSrc.aEnd.Col();++col)
             {
                 if (nSize > nMax)
                 {
                     return true;
                 }
-                ScMyAddress cell(col,nMaxRow,pSrc->aStart.Tab());
-                if(!pDest->In(cell))
+                ScMyAddress cell(col,nMaxRow,rSrc.aStart.Tab());
+                if(!rDest.In(cell))
                 {//In Src ,Not In Dest
                     vecRet.push_back(cell);
                     ++nSize;
@@ -213,12 +208,12 @@ bool ScAccessibleSpreadsheet::CalcScRangeListDifferenceMax(ScRangeList *pSrc,ScR
         size_t nSrcSize = pSrc->size();
         for (size_t i = 0; i < nSrcSize; ++i)
         {
-            ScRange* pRange = (*pSrc)[i];
-            for (sal_Int32 row = pRange->aStart.Row(); row <=  pRange->aEnd.Row();++row)
+            ScRange const & rRange = (*pSrc)[i];
+            for (sal_Int32 row = rRange.aStart.Row(); row <= rRange.aEnd.Row();++row)
             {
-                for (sal_uInt16 col = pRange->aStart.Col(); col <=  pRange->aEnd.Col();++col)
+                for (sal_uInt16 col = rRange.aStart.Col(); col <= rRange.aEnd.Col();++col)
                 {
-                    vecRet.push_back(ScMyAddress(col,row,pRange->aStart.Tab()));
+                    vecRet.emplace_back(col,row, rRange.aStart.Tab());
                 }
             }
         }
@@ -229,12 +224,12 @@ bool ScAccessibleSpreadsheet::CalcScRangeListDifferenceMax(ScRangeList *pSrc,ScR
     size_t nSizeSrc = pSrc->size();
     for (size_t i = 0; i < nSizeSrc; ++i)
     {
-        ScRange* pRange = (*pSrc)[i];
+        ScRange const & rRange = (*pSrc)[i];
         size_t nSizeDest = pDest->size();
         for (size_t j = 0; j < nSizeDest; ++j)
         {
-            ScRange* pRangeDest = (*pDest)[j];
-            if (CalcScRangeDifferenceMax(pRange,pRangeDest,nMax,vecRet,nSize))
+            ScRange const & rRangeDest = (*pDest)[j];
+            if (CalcScRangeDifferenceMax(rRange,rRangeDest,nMax,vecRet,nSize))
             {
                 return true;
             }
@@ -253,8 +248,7 @@ ScAccessibleSpreadsheet::ScAccessibleSpreadsheet(
         SCTAB nTab,
         ScSplitPos eSplitPos)
     :
-    ScAccessibleTableBase (pAccDoc, GetDocument(pViewShell),
-        ScRange(ScAddress(0, 0, nTab),ScAddress(MAXCOL, MAXROW, nTab))),
+    ScAccessibleTableBase( pAccDoc, GetDocument(pViewShell), ScRange( 0, 0, nTab, MAXCOL, MAXROW, nTab)),
     mbIsSpreadsheet( true ),
     m_bFormulaMode( false ),
     m_bFormulaLastMode( false ),
@@ -273,7 +267,7 @@ ScAccessibleSpreadsheet::ScAccessibleSpreadsheet(
 
 ScAccessibleSpreadsheet::~ScAccessibleSpreadsheet()
 {
-    delete mpMarkedRanges;
+    mpMarkedRanges.reset();
     if (mpViewShell)
         mpViewShell->RemoveAccessibilityObject(*this);
 }
@@ -286,12 +280,10 @@ void ScAccessibleSpreadsheet::ConstructScAccessibleSpreadsheet(
 {
     mpViewShell = pViewShell;
     mpMarkedRanges = nullptr;
-    mpSortedMarkedCells = nullptr;
     mpAccDoc = pAccDoc;
     mpAccCell.clear();
     meSplitPos = eSplitPos;
     mnTab = nTab;
-    mbHasSelection = false;
     mbDelIns = false;
     mbIsFocusSend = false;
     maVisCells = GetVisCells(GetVisArea(mpViewShell, meSplitPos));
@@ -300,10 +292,7 @@ void ScAccessibleSpreadsheet::ConstructScAccessibleSpreadsheet(
         mpViewShell->AddAccessibilityObject(*this);
 
         const ScViewData& rViewData = mpViewShell->GetViewData();
-        const ScMarkData& rMarkData = rViewData.GetMarkData();
         maActiveCell = rViewData.GetCurPos();
-        mbHasSelection = rMarkData.GetTableSelect(maActiveCell.Tab()) &&
-                    (rMarkData.IsMarked() || rMarkData.IsMultiMarked());
         mpAccCell = GetAccessibleCellAt(maActiveCell.Row(), maActiveCell.Col());
         ScDocument* pScDoc= GetDocument(mpViewShell);
         if (pScDoc)
@@ -332,16 +321,14 @@ void ScAccessibleSpreadsheet::CompleteSelectionChanged(bool bNewState)
     {
         return ;
     }
-    if (mpMarkedRanges)
-        DELETEZ(mpMarkedRanges);
-    mbHasSelection = bNewState;
+    mpMarkedRanges.reset();
 
     AccessibleEventObject aEvent;
     aEvent.EventId = AccessibleEventId::STATE_CHANGED;
     if (bNewState)
-        aEvent.NewValue = uno::makeAny(AccessibleStateType::SELECTED);
+        aEvent.NewValue <<= AccessibleStateType::SELECTED;
     else
-        aEvent.OldValue = uno::makeAny(AccessibleStateType::SELECTED);
+        aEvent.OldValue <<= AccessibleStateType::SELECTED;
     aEvent.Source = uno::Reference< XAccessibleContext >(this);
 
     CommitChange(aEvent);
@@ -418,10 +405,66 @@ void ScAccessibleSpreadsheet::VisAreaChanged()
 
 void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint)
+    if ( dynamic_cast<const ScUpdateRefHint*>(&rHint) )
     {
-        if (pSimpleHint->GetId() == SC_HINT_ACC_CURSORCHANGED)
+        const ScUpdateRefHint& rRef = static_cast<const ScUpdateRefHint&>(rHint);
+        if (rRef.GetMode() == URM_INSDEL && rRef.GetDz() == 0) //test whether table is inserted or deleted
+        {
+            if (((rRef.GetRange().aStart.Col() == maRange.aStart.Col()) &&
+                (rRef.GetRange().aEnd.Col() == maRange.aEnd.Col())) ||
+                ((rRef.GetRange().aStart.Row() == maRange.aStart.Row()) &&
+                (rRef.GetRange().aEnd.Row() == maRange.aEnd.Row())))
+            {
+                // ignore next SfxHintId::ScDataChanged notification
+                mbDelIns = true;
+
+                sal_Int16 nId(0);
+                SCCOL nX(rRef.GetDx());
+                SCROW nY(rRef.GetDy());
+                ScRange aRange(rRef.GetRange());
+                if ((nX < 0) || (nY < 0))
+                {
+                    OSL_ENSURE(!((nX < 0) && (nY < 0)), "should not be possible to remove row and column at the same time");
+                    nId = AccessibleTableModelChangeType::DELETE;
+                    if (nX < 0)
+                    {
+                        nX = -nX;
+                        nY = aRange.aEnd.Row() - aRange.aStart.Row();
+                    }
+                    else
+                    {
+                        nY = -nY;
+                        nX = aRange.aEnd.Col() - aRange.aStart.Col();
+                    }
+                }
+                else if ((nX > 0) || (nY > 0))
+                {
+                    OSL_ENSURE(!((nX > 0) && (nY > 0)), "should not be possible to add row and column at the same time");
+                    nId = AccessibleTableModelChangeType::INSERT;
+                    nX = aRange.aEnd.Col() - aRange.aStart.Col();
+                }
+                else
+                {
+                    OSL_FAIL("is it a deletion or a insertion?");
+                }
+
+                CommitTableModelChange(rRef.GetRange().aStart.Row(),
+                    rRef.GetRange().aStart.Col(),
+                    rRef.GetRange().aStart.Row() + nY,
+                    rRef.GetRange().aStart.Col() + nX, nId);
+
+                AccessibleEventObject aEvent;
+                aEvent.EventId = AccessibleEventId::ACTIVE_DESCENDANT_CHANGED;
+                aEvent.Source = uno::Reference< XAccessibleContext >(this);
+                aEvent.NewValue <<= uno::Reference<XAccessible>(mpAccCell.get());
+
+                CommitChange(aEvent);
+            }
+        }
+    }
+    else
+    {
+        if (rHint.GetId() == SfxHintId::ScAccCursorChanged)
         {
             if (mpViewShell)
             {
@@ -472,22 +515,22 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                 sal_uInt16 nTab = rViewData.GetTabNo();
                 ScRange aMarkRange;
                 refScMarkData.GetMarkArea(aMarkRange);
-                aEvent.OldValue <<= css::uno::Any();
+                aEvent.OldValue.clear();
                 //Mark All
                 if ( !bNewPosCellFocus &&
                     (bNewMarked || bIsMark || bIsMultMark ) &&
                     aMarkRange == ScRange( 0,0,nTab, MAXCOL,MAXROW,nTab ) )
                 {
                     aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_WITHIN;
-                    aEvent.NewValue <<= css::uno::Any();
+                    aEvent.NewValue.clear();
                     CommitChange(aEvent);
                     return ;
                 }
                 if (!mpMarkedRanges)
                 {
-                    mpMarkedRanges = new ScRangeList();
+                    mpMarkedRanges.reset(new ScRangeList());
                 }
-                refScMarkData.FillRangeListWithMarks(mpMarkedRanges, true);
+                refScMarkData.FillRangeListWithMarks(mpMarkedRanges.get(), true);
 
                 //For Whole Col Row
                 bool bWholeRow = ::labs(aMarkRange.aStart.Row() - aMarkRange.aEnd.Row()) == MAXROW ;
@@ -511,7 +554,7 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                         if( !bSelSmaller )
                         {
                             aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_WITHIN;
-                            aEvent.NewValue <<= css::uno::Any();
+                            aEvent.NewValue.clear();
                             CommitChange(aEvent);
                         }
                         m_aLastWithInMarkRange = aMarkRange;
@@ -548,7 +591,7 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                     aEvent.NewValue <<= xChild;
                     CommitChange(aEvent);
                     OSL_ASSERT(m_mapSelectionSend.count(aNewCell) == 0 );
-                    m_mapSelectionSend.insert(MAP_ADDR_XACC::value_type(aNewCell,xChild));
+                    m_mapSelectionSend.emplace(aNewCell,xChild);
 
                 }
                 else
@@ -558,7 +601,7 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                     if ( (!bIsDel || aMarkRange != aDelRange) &&
                         bNewMarked &&
                         nNewMarkCount > 0 &&
-                        !IsSameMarkCell() )
+                        m_LastMarkedRanges != *mpMarkedRanges )
                     {
                         RemoveSelection(refScMarkData);
                         if(bNewPosCellFocus)
@@ -566,19 +609,18 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                             CommitFocusCell(aNewCell);
                         }
                         VEC_MYADDR vecNew;
-                        if(CalcScRangeListDifferenceMax(mpMarkedRanges,&m_LastMarkedRanges,10,vecNew))
+                        if(CalcScRangeListDifferenceMax(mpMarkedRanges.get(), &m_LastMarkedRanges,10,vecNew))
                         {
                             aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_WITHIN;
-                            aEvent.NewValue <<= css::uno::Any();
+                            aEvent.NewValue.clear();
                             CommitChange(aEvent);
                         }
                         else
                         {
-                            VEC_MYADDR::iterator viAddr = vecNew.begin();
-                            for(; viAddr < vecNew.end() ; ++viAddr )
+                            for(const auto& rAddr : vecNew)
                             {
-                                uno::Reference< XAccessible > xChild = getAccessibleCellAt(viAddr->Row(),viAddr->Col());
-                                if (!(bNewPosCellFocus && *viAddr == aNewCell) )
+                                uno::Reference< XAccessible > xChild = getAccessibleCellAt(rAddr.Row(),rAddr.Col());
+                                if (!(bNewPosCellFocus && rAddr == aNewCell) )
                                 {
                                     aEvent.EventId = AccessibleEventId::ACTIVE_DESCENDANT_CHANGED_NOFOCUS;
                                     aEvent.NewValue <<= xChild;
@@ -587,7 +629,7 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                                 aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_ADD;
                                 aEvent.NewValue <<= xChild;
                                 CommitChange(aEvent);
-                                m_mapSelectionSend.insert(MAP_ADDR_XACC::value_type(*viAddr,xChild));
+                                m_mapSelectionSend.emplace(rAddr,xChild);
                             }
                         }
                     }
@@ -599,7 +641,7 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
                 m_LastMarkedRanges = *mpMarkedRanges;
             }
         }
-        else if (pSimpleHint->GetId() == SC_HINT_DATACHANGED)
+        else if (rHint.GetId() == SfxHintId::ScDataChanged)
         {
             if (!mbDelIns)
                 CommitTableModelChange(maRange.aStart.Row(), maRange.aStart.Col(), maRange.aEnd.Row(), maRange.aEnd.Col(), AccessibleTableModelChangeType::UPDATE);
@@ -657,75 +699,14 @@ void ScAccessibleSpreadsheet::Notify( SfxBroadcaster& rBC, const SfxHint& rHint 
             }
         }*/
     }
-    else if ( dynamic_cast<const ScUpdateRefHint*>(&rHint) )
-    {
-        const ScUpdateRefHint& rRef = static_cast<const ScUpdateRefHint&>(rHint);
-        if (rRef.GetMode() == URM_INSDEL && rRef.GetDz() == 0) //test whether table is inserted or deleted
-        {
-            if (((rRef.GetRange().aStart.Col() == maRange.aStart.Col()) &&
-                (rRef.GetRange().aEnd.Col() == maRange.aEnd.Col())) ||
-                ((rRef.GetRange().aStart.Row() == maRange.aStart.Row()) &&
-                (rRef.GetRange().aEnd.Row() == maRange.aEnd.Row())))
-            {
-                // ignore next SC_HINT_DATACHANGED notification
-                mbDelIns = true;
-
-                sal_Int16 nId(0);
-                SCsCOL nX(rRef.GetDx());
-                SCsROW nY(rRef.GetDy());
-                ScRange aRange(rRef.GetRange());
-                if ((nX < 0) || (nY < 0))
-                {
-                    OSL_ENSURE(!((nX < 0) && (nY < 0)), "should not be possible to remove row and column at the same time");
-                    nId = AccessibleTableModelChangeType::DELETE;
-                    if (nX < 0)
-                    {
-                        nX = -nX;
-                        nY = aRange.aEnd.Row() - aRange.aStart.Row();
-                    }
-                    else
-                    {
-                        nY = -nY;
-                        nX = aRange.aEnd.Col() - aRange.aStart.Col();
-                    }
-                }
-                else if ((nX > 0) || (nY > 0))
-                {
-                    OSL_ENSURE(!((nX > 0) && (nY > 0)), "should not be possible to add row and column at the same time");
-                    nId = AccessibleTableModelChangeType::INSERT;
-                    if (nX < 0)
-                        nY = aRange.aEnd.Row() - aRange.aStart.Row();
-                    else
-                        nX = aRange.aEnd.Col() - aRange.aStart.Col();
-                }
-                else
-                {
-                    OSL_FAIL("is it a deletion or a insertion?");
-                }
-
-                CommitTableModelChange(rRef.GetRange().aStart.Row(),
-                    rRef.GetRange().aStart.Col(),
-                    rRef.GetRange().aStart.Row() + nY,
-                    rRef.GetRange().aStart.Col() + nX, nId);
-
-                AccessibleEventObject aEvent;
-                aEvent.EventId = AccessibleEventId::ACTIVE_DESCENDANT_CHANGED;
-                aEvent.Source = uno::Reference< XAccessibleContext >(this);
-                aEvent.NewValue <<= uno::Reference<XAccessible>(mpAccCell.get());
-
-                CommitChange(aEvent);
-            }
-        }
-    }
 
     ScAccessibleTableBase::Notify(rBC, rHint);
 }
 
-void ScAccessibleSpreadsheet::RemoveSelection(ScMarkData &refScMarkData)
+void ScAccessibleSpreadsheet::RemoveSelection(const ScMarkData &refScMarkData)
 {
     AccessibleEventObject aEvent;
     aEvent.Source = uno::Reference< XAccessible >(this);
-    aEvent.OldValue <<= css::uno::Any();
     MAP_ADDR_XACC::iterator miRemove = m_mapSelectionSend.begin();
     for(;  miRemove != m_mapSelectionSend.end() ;)
     {
@@ -738,10 +719,7 @@ void ScAccessibleSpreadsheet::RemoveSelection(ScMarkData &refScMarkData)
         aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_REMOVE;
         aEvent.NewValue <<= miRemove->second;
         CommitChange(aEvent);
-        MAP_ADDR_XACC::iterator miNext = miRemove;
-        ++miNext;
-        m_mapSelectionSend.erase(miRemove);
-        miRemove = miNext;
+        miRemove = m_mapSelectionSend.erase(miRemove);
     }
 }
 void ScAccessibleSpreadsheet::CommitFocusCell(const ScAddress &aNewCell)
@@ -767,15 +745,9 @@ void ScAccessibleSpreadsheet::CommitFocusCell(const ScAddress &aNewCell)
     CommitChange(aEvent);
 }
 
-bool ScAccessibleSpreadsheet::IsSameMarkCell()
-{
-    return m_LastMarkedRanges == *mpMarkedRanges;
-}
-
 //=====  XAccessibleTable  ================================================
 
 uno::Reference< XAccessibleTable > SAL_CALL ScAccessibleSpreadsheet::getAccessibleRowHeaders(  )
-                    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -794,7 +766,6 @@ uno::Reference< XAccessibleTable > SAL_CALL ScAccessibleSpreadsheet::getAccessib
 }
 
 uno::Reference< XAccessibleTable > SAL_CALL ScAccessibleSpreadsheet::getAccessibleColumnHeaders(  )
-                    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -813,7 +784,6 @@ uno::Reference< XAccessibleTable > SAL_CALL ScAccessibleSpreadsheet::getAccessib
 }
 
 uno::Sequence< sal_Int32 > SAL_CALL ScAccessibleSpreadsheet::getSelectedAccessibleRows(  )
-                    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -844,7 +814,6 @@ uno::Sequence< sal_Int32 > SAL_CALL ScAccessibleSpreadsheet::getSelectedAccessib
 }
 
 uno::Sequence< sal_Int32 > SAL_CALL ScAccessibleSpreadsheet::getSelectedAccessibleColumns(  )
-                    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -869,13 +838,12 @@ uno::Sequence< sal_Int32 > SAL_CALL ScAccessibleSpreadsheet::getSelectedAccessib
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::isAccessibleRowSelected( sal_Int32 nRow )
-    throw (uno::RuntimeException, lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
     if (IsFormulaMode())
     {
-        return sal_False;
+        return false;
     }
 
     if ((nRow > (maRange.aEnd.Row() - maRange.aStart.Row())) || (nRow < 0))
@@ -885,20 +853,19 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::isAccessibleRowSelected( sal_Int32 nR
     if (mpViewShell)
     {
         const ScMarkData& rMarkdata = mpViewShell->GetViewData().GetMarkData();
-        bResult = rMarkdata.IsRowMarked((SCROW)nRow);
+        bResult = rMarkdata.IsRowMarked(static_cast<SCROW>(nRow));
     }
     return bResult;
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::isAccessibleColumnSelected( sal_Int32 nColumn )
-    throw (uno::RuntimeException, lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
 
     if (IsFormulaMode())
     {
-        return sal_False;
+        return false;
     }
     if ((nColumn > (maRange.aEnd.Col() - maRange.aStart.Col())) || (nColumn < 0))
         throw lang::IndexOutOfBoundsException();
@@ -907,7 +874,7 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::isAccessibleColumnSelected( sal_Int32
     if (mpViewShell)
     {
         const ScMarkData& rMarkdata = mpViewShell->GetViewData().GetMarkData();
-        bResult = rMarkdata.IsColumnMarked((SCCOL)nColumn);
+        bResult = rMarkdata.IsColumnMarked(static_cast<SCCOL>(nColumn));
     }
     return bResult;
 }
@@ -938,7 +905,6 @@ rtl::Reference<ScAccessibleCell> ScAccessibleSpreadsheet::GetAccessibleCellAt(sa
 }
 
 uno::Reference< XAccessible > SAL_CALL ScAccessibleSpreadsheet::getAccessibleCellAt( sal_Int32 nRow, sal_Int32 nColumn )
-                    throw (uno::RuntimeException, lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -955,7 +921,6 @@ uno::Reference< XAccessible > SAL_CALL ScAccessibleSpreadsheet::getAccessibleCel
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::isAccessibleSelected( sal_Int32 nRow, sal_Int32 nColumn )
-    throw (uno::RuntimeException, lang::IndexOutOfBoundsException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -981,7 +946,6 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::isAccessibleSelected( sal_Int32 nRow,
     //=====  XAccessibleComponent  ============================================
 
 uno::Reference< XAccessible > SAL_CALL ScAccessibleSpreadsheet::getAccessibleAtPoint(const awt::Point& rPoint)
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Reference< XAccessible > xAccessible;
     if (containsPoint(rPoint))
@@ -990,8 +954,8 @@ uno::Reference< XAccessible > SAL_CALL ScAccessibleSpreadsheet::getAccessibleAtP
         IsObjectValid();
         if (mpViewShell)
         {
-            SCsCOL nX;
-            SCsROW nY;
+            SCCOL nX;
+            SCROW nY;
             mpViewShell->GetViewData().GetPosFromPixel( rPoint.X, rPoint.Y, meSplitPos, nX, nY);
             try {
                 xAccessible = getAccessibleCellAt(nY, nX);
@@ -1006,7 +970,6 @@ uno::Reference< XAccessible > SAL_CALL ScAccessibleSpreadsheet::getAccessibleAtP
 }
 
 void SAL_CALL ScAccessibleSpreadsheet::grabFocus(  )
-        throw (uno::RuntimeException, std::exception)
 {
     if (getAccessibleParent().is())
     {
@@ -1017,23 +980,20 @@ void SAL_CALL ScAccessibleSpreadsheet::grabFocus(  )
 }
 
 sal_Int32 SAL_CALL ScAccessibleSpreadsheet::getForeground(  )
-        throw (uno::RuntimeException, std::exception)
 {
-    return COL_BLACK;
+    return sal_Int32(COL_BLACK);
 }
 
 sal_Int32 SAL_CALL ScAccessibleSpreadsheet::getBackground(  )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
-    return SC_MOD()->GetColorConfig().GetColorValue( ::svtools::DOCCOLOR ).nColor;
+    return sal_Int32(SC_MOD()->GetColorConfig().GetColorValue( ::svtools::DOCCOLOR ).nColor);
 }
 
     //=====  XAccessibleContext  ==============================================
 
 uno::Reference<XAccessibleRelationSet> SAL_CALL ScAccessibleSpreadsheet::getAccessibleRelationSet()
-        throw (css::uno::RuntimeException, std::exception)
 {
     utl::AccessibleRelationSetHelper* pRelationSet = nullptr;
     if(mpAccDoc)
@@ -1045,7 +1005,6 @@ uno::Reference<XAccessibleRelationSet> SAL_CALL ScAccessibleSpreadsheet::getAcce
 
 uno::Reference<XAccessibleStateSet> SAL_CALL
     ScAccessibleSpreadsheet::getAccessibleStateSet()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     uno::Reference<XAccessibleStateSet> xParentStates;
@@ -1060,7 +1019,7 @@ uno::Reference<XAccessibleStateSet> SAL_CALL
     else
     {
         pStateSet->AddState(AccessibleStateType::MANAGES_DESCENDANTS);
-        if (IsEditable(xParentStates))
+        if (IsEditable())
             pStateSet->AddState(AccessibleStateType::EDITABLE);
         pStateSet->AddState(AccessibleStateType::ENABLED);
         pStateSet->AddState(AccessibleStateType::FOCUSABLE);
@@ -1082,7 +1041,6 @@ uno::Reference<XAccessibleStateSet> SAL_CALL
     ///=====  XAccessibleSelection  ===========================================
 
 void SAL_CALL ScAccessibleSpreadsheet::selectAccessibleChild( sal_Int32 nChildIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -1100,19 +1058,14 @@ void SAL_CALL ScAccessibleSpreadsheet::selectAccessibleChild( sal_Int32 nChildIn
 
 void SAL_CALL
         ScAccessibleSpreadsheet::clearAccessibleSelection(  )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
-    if (mpViewShell)
-    {
-        if (!IsFormulaMode())
-            mpViewShell->Unmark();
-    }
+    if (mpViewShell && !IsFormulaMode())
+        mpViewShell->Unmark();
 }
 
 void SAL_CALL ScAccessibleSpreadsheet::selectAllAccessibleChildren(  )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -1133,7 +1086,6 @@ void SAL_CALL ScAccessibleSpreadsheet::selectAllAccessibleChildren(  )
 
 sal_Int32 SAL_CALL
         ScAccessibleSpreadsheet::getSelectedAccessibleChildCount(  )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -1148,9 +1100,9 @@ sal_Int32 SAL_CALL
         {
             if (!mpMarkedRanges)
             {
-                mpMarkedRanges = new ScRangeList();
+                mpMarkedRanges.reset(new ScRangeList());
                 ScMarkData aMarkData(mpViewShell->GetViewData().GetMarkData());
-                aMarkData.FillRangeListWithMarks(mpMarkedRanges, false);
+                aMarkData.FillRangeListWithMarks(mpMarkedRanges.get(), false);
             }
             // is possible, because there shouldn't be overlapped ranges in it
             if (mpMarkedRanges)
@@ -1162,7 +1114,6 @@ sal_Int32 SAL_CALL
 
 uno::Reference<XAccessible > SAL_CALL
         ScAccessibleSpreadsheet::getSelectedAccessibleChild( sal_Int32 nSelectedChildIndex )
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -1180,8 +1131,8 @@ uno::Reference<XAccessible > SAL_CALL
     {
         if (!mpMarkedRanges)
         {
-            mpMarkedRanges = new ScRangeList();
-            mpViewShell->GetViewData().GetMarkData().FillRangeListWithMarks(mpMarkedRanges, false);
+            mpMarkedRanges.reset(new ScRangeList());
+            mpViewShell->GetViewData().GetMarkData().FillRangeListWithMarks(mpMarkedRanges.get(), false);
         }
         if (mpMarkedRanges)
         {
@@ -1190,7 +1141,7 @@ uno::Reference<XAccessible > SAL_CALL
             {
                 throw lang::IndexOutOfBoundsException();
             }
-            ScMyAddress addr = CalcScAddressFromRangeList(mpMarkedRanges,nSelectedChildIndex);
+            ScMyAddress addr = CalcScAddressFromRangeList(mpMarkedRanges.get(),nSelectedChildIndex);
             if( m_mapSelectionSend.find(addr) != m_mapSelectionSend.end() )
                 xAccessible = m_mapSelectionSend[addr];
             else
@@ -1201,7 +1152,6 @@ uno::Reference<XAccessible > SAL_CALL
 }
 
 void SAL_CALL ScAccessibleSpreadsheet::deselectAccessibleChild( sal_Int32 nChildIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -1302,14 +1252,12 @@ void ScAccessibleSpreadsheet::AddMarkedRange(const ScRange& rRange)
     //=====  XServiceInfo  ====================================================
 
 OUString SAL_CALL ScAccessibleSpreadsheet::getImplementationName()
-        throw (uno::RuntimeException, std::exception)
 {
     return OUString("ScAccessibleSpreadsheet");
 }
 
 uno::Sequence< OUString> SAL_CALL
     ScAccessibleSpreadsheet::getSupportedServiceNames()
-        throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aSequence = ScAccessibleTableBase::getSupportedServiceNames();
     sal_Int32 nOldSize(aSequence.getLength());
@@ -1324,7 +1272,6 @@ uno::Sequence< OUString> SAL_CALL
 
 uno::Sequence<sal_Int8> SAL_CALL
     ScAccessibleSpreadsheet::getImplementationId()
-    throw (uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -1332,7 +1279,6 @@ uno::Sequence<sal_Int8> SAL_CALL
 ///=====  XAccessibleEventBroadcaster  =====================================
 
 void SAL_CALL ScAccessibleSpreadsheet::addAccessibleEventListener(const uno::Reference<XAccessibleEventListener>& xListener)
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -1342,10 +1288,9 @@ void SAL_CALL ScAccessibleSpreadsheet::addAccessibleEventListener(const uno::Ref
 
 //====  internal  =========================================================
 
-Rectangle ScAccessibleSpreadsheet::GetBoundingBoxOnScreen() const
-    throw (uno::RuntimeException, std::exception)
+tools::Rectangle ScAccessibleSpreadsheet::GetBoundingBoxOnScreen() const
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     if (mpViewShell)
     {
         vcl::Window* pWindow = mpViewShell->GetWindowByPos(meSplitPos);
@@ -1355,10 +1300,9 @@ Rectangle ScAccessibleSpreadsheet::GetBoundingBoxOnScreen() const
     return aRect;
 }
 
-Rectangle ScAccessibleSpreadsheet::GetBoundingBox() const
-    throw (uno::RuntimeException, std::exception)
+tools::Rectangle ScAccessibleSpreadsheet::GetBoundingBox() const
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     if (mpViewShell)
     {
         vcl::Window* pWindow = mpViewShell->GetWindowByPos(meSplitPos);
@@ -1376,8 +1320,7 @@ bool ScAccessibleSpreadsheet::IsDefunc(
         (rxParentStates.is() && rxParentStates->contains(AccessibleStateType::DEFUNC));
 }
 
-bool ScAccessibleSpreadsheet::IsEditable(
-    const uno::Reference<XAccessibleStateSet>& /* rxParentStates */)
+bool ScAccessibleSpreadsheet::IsEditable()
 {
     if (IsFormulaMode())
     {
@@ -1427,9 +1370,9 @@ ScDocument* ScAccessibleSpreadsheet::GetDocument(ScTabViewShell* pViewShell)
     return pDoc;
 }
 
-Rectangle ScAccessibleSpreadsheet::GetVisArea(ScTabViewShell* pViewShell, ScSplitPos eSplitPos)
+tools::Rectangle ScAccessibleSpreadsheet::GetVisArea(ScTabViewShell* pViewShell, ScSplitPos eSplitPos)
 {
-    Rectangle aVisArea;
+    tools::Rectangle aVisArea;
     if (pViewShell)
     {
         vcl::Window* pWindow = pViewShell->GetWindowByPos(eSplitPos);
@@ -1442,30 +1385,29 @@ Rectangle ScAccessibleSpreadsheet::GetVisArea(ScTabViewShell* pViewShell, ScSpli
     return aVisArea;
 }
 
-Rectangle ScAccessibleSpreadsheet::GetVisCells(const Rectangle& rVisArea)
+tools::Rectangle ScAccessibleSpreadsheet::GetVisCells(const tools::Rectangle& rVisArea)
 {
     if (mpViewShell)
     {
-        SCsCOL nStartX, nEndX;
-        SCsROW nStartY, nEndY;
+        SCCOL nStartX, nEndX;
+        SCROW nStartY, nEndY;
 
         mpViewShell->GetViewData().GetPosFromPixel( 1, 1, meSplitPos, nStartX, nStartY);
         mpViewShell->GetViewData().GetPosFromPixel( rVisArea.GetWidth(), rVisArea.GetHeight(), meSplitPos, nEndX, nEndY);
 
-        return Rectangle(nStartX, nStartY, nEndX, nEndY);
+        return tools::Rectangle(nStartX, nStartY, nEndX, nEndY);
     }
     else
-        return Rectangle();
+        return tools::Rectangle();
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::selectRow( sal_Int32 row )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     if (IsFormulaMode())
     {
-        return sal_False;
+        return false;
     }
 
     mpViewShell->SetTabNo( maRange.aStart.Tab() );
@@ -1473,17 +1415,16 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::selectRow( sal_Int32 row )
     mpViewShell->InitBlockMode( 0, row, maRange.aStart.Tab(), false, false, true );
     mpViewShell->MarkCursor( MAXCOL, row, maRange.aStart.Tab(), false, true );
     mpViewShell->SelectionChanged();
-    return sal_True;
+    return true;
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::selectColumn( sal_Int32 column )
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     if (IsFormulaMode())
     {
-        return sal_False;
+        return false;
     }
 
     mpViewShell->SetTabNo( maRange.aStart.Tab() );
@@ -1491,17 +1432,16 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::selectColumn( sal_Int32 column )
     mpViewShell->InitBlockMode( static_cast<SCCOL>(column), 0, maRange.aStart.Tab(), false, true );
     mpViewShell->MarkCursor( static_cast<SCCOL>(column), MAXROW, maRange.aStart.Tab(), true );
     mpViewShell->SelectionChanged();
-    return sal_True;
+    return true;
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::unselectRow( sal_Int32 row )
-        throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     if (IsFormulaMode())
     {
-        return sal_False;
+        return false;
     }
 
     mpViewShell->SetTabNo( maRange.aStart.Tab() );
@@ -1510,17 +1450,16 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::unselectRow( sal_Int32 row )
     mpViewShell->MarkCursor( MAXCOL, row, maRange.aStart.Tab(), false, true );
     mpViewShell->SelectionChanged();
     mpViewShell->DoneBlockMode( true );
-    return sal_True;
+    return true;
 }
 
 sal_Bool SAL_CALL ScAccessibleSpreadsheet::unselectColumn( sal_Int32 column )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     if (IsFormulaMode())
     {
-        return sal_False;
+        return false;
     }
 
     mpViewShell->SetTabNo( maRange.aStart.Tab() );
@@ -1529,7 +1468,7 @@ sal_Bool SAL_CALL ScAccessibleSpreadsheet::unselectColumn( sal_Int32 column )
     mpViewShell->MarkCursor( static_cast<SCCOL>(column), MAXROW, maRange.aStart.Tab(), true );
     mpViewShell->SelectionChanged();
     mpViewShell->DoneBlockMode( true );
-    return sal_True;
+    return true;
 }
 
 void ScAccessibleSpreadsheet::FireFirstCellFocus()
@@ -1576,7 +1515,6 @@ void ScAccessibleSpreadsheet::NotifyRefMode()
         AccessibleEventObject aEvent;
         aEvent.Source = uno::Reference< XAccessible >(this);
         aEvent.EventId = AccessibleEventId::ACTIVE_DESCENDANT_CHANGED;
-        aEvent.Source = uno::Reference< XAccessible >(this);
         aEvent.OldValue <<= uno::Reference<XAccessible>(m_pAccFormulaCell.get());
         m_pAccFormulaCell = GetAccessibleCellAt(aFormulaAddr.Row(), aFormulaAddr.Col());
         uno::Reference< XAccessible > xNew = m_pAccFormulaCell.get();
@@ -1587,9 +1525,9 @@ void ScAccessibleSpreadsheet::NotifyRefMode()
             aEvent.EventId = AccessibleEventId::SELECTION_CHANGED;
             aEvent.NewValue <<= xNew;
             CommitChange(aEvent);
-            m_mapFormulaSelectionSend.insert(MAP_ADDR_XACC::value_type(aFormulaAddr,xNew));
+            m_mapFormulaSelectionSend.emplace(aFormulaAddr,xNew);
             m_vecFormulaLastMyAddr.clear();
-            m_vecFormulaLastMyAddr.push_back(aFormulaAddr);
+            m_vecFormulaLastMyAddr.emplace_back(aFormulaAddr);
         }
         else
         {
@@ -1613,22 +1551,21 @@ void ScAccessibleSpreadsheet::NotifyRefMode()
             if ( nNewSize > 10 )
             {
                 aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_WITHIN;
-                aEvent.NewValue <<= css::uno::Any();
+                aEvent.NewValue.clear();
                 CommitChange(aEvent);
             }
             else
             {
-                VEC_MYADDR::iterator viAddr = vecNew.begin();
-                for(; viAddr != vecNew.end() ; ++viAddr )
+                for(const auto& rAddr : vecNew)
                 {
                     uno::Reference< XAccessible > xChild;
-                    if (*viAddr == aFormulaAddr)
+                    if (rAddr == aFormulaAddr)
                     {
                         xChild = m_pAccFormulaCell.get();
                     }
                     else
                     {
-                        xChild = getAccessibleCellAt(viAddr->Row(),viAddr->Col());
+                        xChild = getAccessibleCellAt(rAddr.Row(),rAddr.Col());
                         aEvent.EventId = AccessibleEventId::ACTIVE_DESCENDANT_CHANGED_NOFOCUS;
                         aEvent.NewValue <<= xChild;
                         CommitChange(aEvent);
@@ -1636,7 +1573,7 @@ void ScAccessibleSpreadsheet::NotifyRefMode()
                     aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_ADD;
                     aEvent.NewValue <<= xChild;
                     CommitChange(aEvent);
-                    m_mapFormulaSelectionSend.insert(MAP_ADDR_XACC::value_type(*viAddr,xChild));
+                    m_mapFormulaSelectionSend.emplace(rAddr,xChild);
                 }
             }
             m_vecFormulaLastMyAddr.swap(vecCurSel);
@@ -1649,7 +1586,6 @@ void ScAccessibleSpreadsheet::RemoveFormulaSelection(bool bRemoveAll )
 {
     AccessibleEventObject aEvent;
     aEvent.Source = uno::Reference< XAccessible >(this);
-    aEvent.OldValue <<= css::uno::Any();
     MAP_ADDR_XACC::iterator miRemove = m_mapFormulaSelectionSend.begin();
     for(;  miRemove != m_mapFormulaSelectionSend.end() ;)
     {
@@ -1661,22 +1597,15 @@ void ScAccessibleSpreadsheet::RemoveFormulaSelection(bool bRemoveAll )
         aEvent.EventId = AccessibleEventId::SELECTION_CHANGED_REMOVE;
         aEvent.NewValue <<= miRemove->second;
         CommitChange(aEvent);
-        MAP_ADDR_XACC::iterator miNext = miRemove;
-        ++miNext;
-        m_mapFormulaSelectionSend.erase(miRemove);
-        miRemove = miNext;
+        miRemove = m_mapFormulaSelectionSend.erase(miRemove);
     }
 }
 
 bool ScAccessibleSpreadsheet::IsScAddrFormulaSel(const ScAddress &addr) const
 {
-    if( addr.Col() >= m_nMinX && addr.Col() <= m_nMaxX &&
+    return addr.Col() >= m_nMinX && addr.Col() <= m_nMaxX &&
         addr.Row() >= m_nMinY && addr.Row() <= m_nMaxY &&
-        addr.Tab() == mpViewShell->GetViewData().GetTabNo() )
-    {
-        return true;
-    }
-    return false;
+        addr.Tab() == mpViewShell->GetViewData().GetTabNo();
 }
 
 bool ScAccessibleSpreadsheet::CheckChildIndex(sal_Int32 nIndex) const
@@ -1744,9 +1673,9 @@ bool ScAccessibleSpreadsheet::GetFormulaCurrentFocusCell(ScAddress &addr)
 uno::Reference < XAccessible > ScAccessibleSpreadsheet::GetActiveCell()
 {
     if( m_mapSelectionSend.find( maActiveCell ) != m_mapSelectionSend.end() )
-            return m_mapSelectionSend[maActiveCell];
-        else
-            return getAccessibleCellAt(maActiveCell.Row(), maActiveCell .Col());
+        return m_mapSelectionSend[maActiveCell];
+    else
+        return getAccessibleCellAt(maActiveCell.Row(), maActiveCell .Col());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

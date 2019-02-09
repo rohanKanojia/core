@@ -21,10 +21,12 @@
 #include "oleprops.hxx"
 
 #include <comphelper/types.hxx>
+#include <o3tl/safeint.hxx>
 #include <tools/debug.hxx>
 #include <tools/datetime.hxx>
 #include <rtl/tencinfo.h>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 
 
 #define STREAM_BUFFER_SIZE 2048
@@ -46,7 +48,7 @@ class SfxOleInt32Property : public SfxOlePropertyBase
 public:
     explicit            SfxOleInt32Property( sal_Int32 nPropId, sal_Int32 nValue = 0 );
 
-    inline sal_Int32    GetValue() const { return mnValue; }
+    sal_Int32    GetValue() const { return mnValue; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
@@ -63,7 +65,7 @@ class SfxOleDoubleProperty : public SfxOlePropertyBase
 public:
     explicit            SfxOleDoubleProperty( sal_Int32 nPropId, double fValue = 0.0 );
 
-    inline double       GetValue() const { return mfValue; }
+    double       GetValue() const { return mfValue; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
@@ -80,7 +82,7 @@ class SfxOleBoolProperty : public SfxOlePropertyBase
 public:
     explicit            SfxOleBoolProperty( sal_Int32 nPropId, bool bValue = false );
 
-    inline bool         GetValue() const { return mbValue; }
+    bool         GetValue() const { return mbValue; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
@@ -105,8 +107,8 @@ public:
                             sal_Int32 nPropId, sal_Int32 nPropType,
                             rtl_TextEncoding eTextEnc );
 
-    inline const OUString& GetValue() const { return maValue; }
-    inline void            SetValue( const OUString& rValue ) { maValue = rValue; }
+    const OUString& GetValue() const { return maValue; }
+    void            SetValue( const OUString& rValue ) { maValue = rValue; }
 
 private:
     OUString            maValue;
@@ -150,7 +152,7 @@ public:
     explicit            SfxOleFileTimeProperty( sal_Int32 nPropId, const util::DateTime& rDateTime );
 
     /** Returns the time value as LOCAL time. */
-    inline const util::DateTime& GetValue() const { return maDateTime; }
+    const util::DateTime& GetValue() const { return maDateTime; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
@@ -167,7 +169,7 @@ public:
     explicit            SfxOleDateProperty( sal_Int32 nPropId );
 
     /** Returns the date value as LOCAL time. */
-    inline const util::Date& GetValue() const { return maDate; }
+    const util::Date& GetValue() const { return maDate; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
@@ -186,16 +188,16 @@ class SfxOleThumbnailProperty : public SfxOlePropertyBase
 {
 public:
     explicit            SfxOleThumbnailProperty( sal_Int32 nPropId,
-                            const uno::Sequence<sal_uInt8> & i_rData);
+                            const uno::Sequence<sal_Int8> & i_rData);
 
-    inline bool         IsValid() const { return mData.getLength() > 0; }
+    bool         IsValid() const { return mData.getLength() > 0; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
     virtual void        ImplSave( SvStream& rStrm ) override;
 
 private:
-    uno::Sequence<sal_uInt8>    mData;
+    uno::Sequence<sal_Int8> const    mData;
 };
 
 
@@ -208,15 +210,15 @@ class SfxOleBlobProperty : public SfxOlePropertyBase
 {
 public:
     explicit            SfxOleBlobProperty( sal_Int32 nPropId,
-                            const uno::Sequence<sal_uInt8> & i_rData);
-    inline bool         IsValid() const { return mData.getLength() > 0; }
+                            const uno::Sequence<sal_Int8> & i_rData);
+    bool         IsValid() const { return mData.getLength() > 0; }
 
 private:
     virtual void        ImplLoad( SvStream& rStrm ) override;
     virtual void        ImplSave( SvStream& rStrm ) override;
 
 private:
-    uno::Sequence<sal_uInt8>    mData;
+    uno::Sequence<sal_Int8> const    mData;
 };
 
 
@@ -265,7 +267,6 @@ void SfxOleStringHelper::SaveString16( SvStream& rStrm, const OUString& rValue )
 
 OUString SfxOleStringHelper::ImplLoadString8( SvStream& rStrm ) const
 {
-    OUString aValue;
     // read size field (signed 32-bit)
     sal_Int32 nSize(0);
     rStrm.ReadInt32( nSize );
@@ -273,43 +274,33 @@ OUString SfxOleStringHelper::ImplLoadString8( SvStream& rStrm ) const
     DBG_ASSERT( (0 < nSize) && (nSize <= 0xFFFF),
         OStringBuffer("SfxOleStringHelper::ImplLoadString8 - invalid string of len ").
         append(nSize).getStr() );
-    if( (0 < nSize) && (nSize <= 0xFFFF) )
-    {
-        // load character buffer
-        ::std::vector< sal_Char > aBuffer( static_cast< size_t >( nSize + 1 ), 0 );
-        rStrm.Read( &aBuffer.front(), static_cast< sal_Size >( nSize ) );
-        // create string from encoded character array
-        aValue = OUString( &aBuffer.front(), strlen( &aBuffer.front() ), GetTextEncoding() );
-    }
-    return aValue;
+    if (nSize < 0 || nSize > 0xFFFF)
+        return OUString();
+    // load character buffer
+    OString sValue(read_uInt8s_ToOString(rStrm, nSize - 1));
+    if (rStrm.good() && rStrm.remainingSize())
+        rStrm.SeekRel(1);  // skip null-byte at end
+    return OStringToOUString(sValue, GetTextEncoding());
 }
 
 OUString SfxOleStringHelper::ImplLoadString16( SvStream& rStrm )
 {
-    OUString aValue;
     // read size field (signed 32-bit), may be buffer size or character count
     sal_Int32 nSize(0);
     rStrm.ReadInt32( nSize );
     DBG_ASSERT( (0 < nSize) && (nSize <= 0xFFFF), "SfxOleStringHelper::ImplLoadString16 - invalid string" );
     // size field includes trailing NUL character
-    if( (0 < nSize) && (nSize <= 0xFFFF) )
-    {
-        // load character buffer
-        ::std::vector< sal_Unicode > aBuffer;
-        aBuffer.reserve( static_cast< size_t >( nSize + 1 ) );
-        sal_uInt16 cChar;
-        for( sal_Int32 nIdx = 0; nIdx < nSize; ++nIdx )
-        {
-            rStrm.ReadUInt16( cChar );
-            aBuffer.push_back( static_cast< sal_Unicode >( cChar ) );
-        }
-        // stream is always padded to 32-bit boundary, skip 2 bytes on odd character count
-        if( (nSize & 1) == 1 )
-            rStrm.SeekRel( 2 );
-        // create string from character array
-        aBuffer.push_back( 0 );
-        aValue = OUString( &aBuffer.front() );
-    }
+    if (nSize < 0 || nSize > 0xFFFF)
+        return OUString();
+    // load character buffer
+    OUString aValue = read_uInt16s_ToOUString(rStrm, nSize - 1);
+    sal_Int32 nSkip(2); // skip null-byte at end
+    // stream is always padded to 32-bit boundary, skip 2 bytes on odd character count
+    if ((nSize & 1) == 1)
+        nSkip += 2;
+    nSkip = std::min<sal_uInt32>(nSkip, rStrm.remainingSize());
+    if (rStrm.good() && nSkip)
+        rStrm.SeekRel(nSkip);
     return aValue;
 }
 
@@ -321,7 +312,7 @@ void SfxOleStringHelper::ImplSaveString8( SvStream& rStrm, const OUString& rValu
     sal_Int32 nSize = aEncoded.getLength() + 1;
     rStrm.WriteInt32( nSize );
     // write character array with trailing NUL character
-    rStrm.Write(aEncoded.getStr(), aEncoded.getLength());
+    rStrm.WriteBytes(aEncoded.getStr(), aEncoded.getLength());
     rStrm.WriteUChar( 0 );
 }
 
@@ -344,7 +335,7 @@ SfxOleObjectBase::~SfxOleObjectBase()
 {
 }
 
-ErrCode SfxOleObjectBase::Load( SvStream& rStrm )
+ErrCode const & SfxOleObjectBase::Load( SvStream& rStrm )
 {
     mnErrCode = ERRCODE_NONE;
     ImplLoad( rStrm );
@@ -352,7 +343,7 @@ ErrCode SfxOleObjectBase::Load( SvStream& rStrm )
     return GetError();
 }
 
-ErrCode SfxOleObjectBase::Save( SvStream& rStrm )
+ErrCode const & SfxOleObjectBase::Save( SvStream& rStrm )
 {
     mnErrCode = ERRCODE_NONE;
     ImplSave( rStrm );
@@ -376,12 +367,12 @@ SfxOleCodePageProperty::SfxOleCodePageProperty() :
 {
 }
 
-void SfxOleCodePageProperty::ImplLoad( SvStream& rStrm )
+void SfxOleCodePageProperty::ImplLoad(SvStream& rStrm)
 {
     // property type is signed int16, but we use always unsigned int16 for codepages
-    sal_uInt16 nCodePage;
-    rStrm.ReadUInt16( nCodePage );
-    SetCodePage( nCodePage );
+    sal_uInt16 nCodePage(0);
+    rStrm.ReadUInt16(nCodePage);
+    SetCodePage(nCodePage);
 }
 
 void SfxOleCodePageProperty::ImplSave( SvStream& rStrm )
@@ -572,26 +563,32 @@ void SfxOleDateProperty::ImplLoad( SvStream& rStrm )
     double fValue(0.0);
     rStrm.ReadDouble( fValue );
     //stored as number of days (not seconds) since December 31, 1899
-    ::Date aDate(31, 12, 1899);
-    long nDays = fValue;
-    aDate += nDays;
-    maDate.Day = aDate.GetDay();
-    maDate.Month = aDate.GetMonth();
-    maDate.Year = aDate.GetYear();
+    sal_Int32 nDays = fValue;
+    sal_Int32 nStartDays = ::Date::DateToDays(31, 12, 1899);
+    if (o3tl::checked_add(nStartDays, nDays, nStartDays))
+        SAL_WARN("sfx.doc", "SfxOleDateProperty::ImplLoad bad date, ignored");
+    else
+    {
+        ::Date aDate(31, 12, 1899);
+        aDate.AddDays(nDays);
+        maDate.Day = aDate.GetDay();
+        maDate.Month = aDate.GetMonth();
+        maDate.Year = aDate.GetYear();
+    }
 }
 
 void SfxOleDateProperty::ImplSave( SvStream& rStrm )
 {
-    long nDays = ::Date::DateToDays(maDate.Day, maDate.Month, maDate.Year);
+    sal_Int32 nDays = ::Date::DateToDays(maDate.Day, maDate.Month, maDate.Year);
     //number of days (not seconds) since December 31, 1899
-    long nStartDays = ::Date::DateToDays(31, 12, 1899);
+    sal_Int32 nStartDays = ::Date::DateToDays(31, 12, 1899);
     double fValue = nDays-nStartDays;
     rStrm.WriteDouble( fValue );
 }
 
 
 SfxOleThumbnailProperty::SfxOleThumbnailProperty(
-        sal_Int32 nPropId, const uno::Sequence<sal_uInt8> & i_rData) :
+        sal_Int32 nPropId, const uno::Sequence<sal_Int8> & i_rData) :
     SfxOlePropertyBase( nPropId, PROPTYPE_CLIPFMT ),
     mData(i_rData)
 {
@@ -629,7 +626,7 @@ void SfxOleThumbnailProperty::ImplSave( SvStream& rStrm )
         // clipboard size: clip_format_tag + data_format_tag + bitmap_len
         sal_Int32 nClipSize = static_cast< sal_Int32 >( 4 + 4 + mData.getLength() );
         rStrm.WriteInt32( nClipSize ).WriteInt32( CLIPFMT_WIN ).WriteInt32( CLIPDATAFMT_DIB );
-        rStrm.Write( mData.getConstArray(), mData.getLength() );
+        rStrm.WriteBytes(mData.getConstArray(), mData.getLength());
     }
     else
     {
@@ -640,7 +637,7 @@ void SfxOleThumbnailProperty::ImplSave( SvStream& rStrm )
 
 
 SfxOleBlobProperty::SfxOleBlobProperty( sal_Int32 nPropId,
-        const uno::Sequence<sal_uInt8> & i_rData) :
+        const uno::Sequence<sal_Int8> & i_rData) :
     SfxOlePropertyBase( nPropId, PROPTYPE_BLOB ),
     mData(i_rData)
 {
@@ -655,7 +652,7 @@ void SfxOleBlobProperty::ImplLoad( SvStream& )
 void SfxOleBlobProperty::ImplSave( SvStream& rStrm )
 {
     if (IsValid()) {
-        rStrm.Write( mData.getConstArray(), mData.getLength() );
+        rStrm.WriteBytes(mData.getConstArray(), mData.getLength());
     } else {
         SAL_WARN( "sfx.doc", "SfxOleBlobProperty::ImplSave - invalid BLOB property" );
         SetError( SVSTREAM_INVALID_ACCESS );
@@ -672,7 +669,7 @@ SfxOleDictionaryProperty::SfxOleDictionaryProperty( const SfxOleTextEncoding& rT
 OUString SfxOleDictionaryProperty::GetPropertyName( sal_Int32 nPropId ) const
 {
     SfxOlePropNameMap::const_iterator aIt = maPropNameMap.find( nPropId );
-    return (aIt == maPropNameMap.end()) ? OUString("") : aIt->second;
+    return (aIt == maPropNameMap.end()) ? OUString() : aIt->second;
 }
 
 void SfxOleDictionaryProperty::SetPropertyName( sal_Int32 nPropId, const OUString& rPropName )
@@ -688,23 +685,23 @@ void SfxOleDictionaryProperty::ImplLoad( SvStream& rStrm )
     sal_Int32 nNameCount = GetPropType();
     // read property ID/name pairs
     maPropNameMap.clear();
-    for( sal_Int32 nIdx = 0; (nIdx < nNameCount) && (rStrm.GetErrorCode() == SVSTREAM_OK) && !rStrm.IsEof(); ++nIdx )
+    for (sal_Int32 nIdx = 0; nIdx < nNameCount && rStrm.good(); ++nIdx)
     {
         sal_Int32 nPropId(0);
-        rStrm.ReadInt32( nPropId );
+        rStrm.ReadInt32(nPropId);
         // name always stored as byte string
-        maPropNameMap[ nPropId ] = LoadString8( rStrm );
+        maPropNameMap[nPropId] = LoadString8(rStrm);
     }
 }
 
 void SfxOleDictionaryProperty::ImplSave( SvStream& rStrm )
 {
     // write property ID/name pairs
-    for( SfxOlePropNameMap::const_iterator aIt = maPropNameMap.begin(), aEnd = maPropNameMap.end(); aIt != aEnd; ++aIt )
+    for (auto const& propName : maPropNameMap)
     {
-        rStrm.WriteInt32( aIt->first );
+        rStrm.WriteInt32( propName.first );
         // name always stored as byte string
-        SaveString8( rStrm, aIt->second );
+        SaveString8( rStrm, propName.second );
     }
 }
 
@@ -847,7 +844,7 @@ void SfxOleSection::SetDateValue( sal_Int32 nPropId, const util::Date& rValue )
 }
 
 void SfxOleSection::SetThumbnailValue( sal_Int32 nPropId,
-    const uno::Sequence<sal_uInt8> & i_rData)
+    const uno::Sequence<sal_Int8> & i_rData)
 {
     SfxOleThumbnailProperty* pThumbnail = new SfxOleThumbnailProperty( nPropId, i_rData );
     SfxOlePropertyRef xProp( pThumbnail );  // take ownership
@@ -856,7 +853,7 @@ void SfxOleSection::SetThumbnailValue( sal_Int32 nPropId,
 }
 
 void SfxOleSection::SetBlobValue( sal_Int32 nPropId,
-    const uno::Sequence<sal_uInt8> & i_rData)
+    const uno::Sequence<sal_Int8> & i_rData)
 {
     SfxOleBlobProperty* pBlob( new SfxOleBlobProperty( nPropId, i_rData ) );
     SfxOlePropertyRef xProp( pBlob );
@@ -880,7 +877,7 @@ Any SfxOleSection::GetAnyValue( sal_Int32 nPropId ) const
     else if( GetDoubleValue( fDouble, nPropId ) )
         aValue <<= fDouble;
     else if( GetBoolValue( bBool, nPropId ) )
-        ::comphelper::setBOOL( aValue, bBool );
+        aValue <<= bBool;
     else if( GetStringValue( aString, nPropId ) )
         aValue <<= aString;
     else if( GetFileTimeValue( aApiDateTime, nPropId ) )
@@ -933,8 +930,8 @@ void SfxOleSection::SetPropertyName( sal_Int32 nPropId, const OUString& rPropNam
 void SfxOleSection::GetPropertyIds( ::std::vector< sal_Int32 >& rPropIds ) const
 {
     rPropIds.clear();
-    for( SfxOlePropMap::const_iterator aIt = maPropMap.begin(), aEnd = maPropMap.end(); aIt != aEnd; ++aIt )
-        rPropIds.push_back( aIt->first );
+    for (auto const& prop : maPropMap)
+        rPropIds.push_back(prop.first);
 }
 
 sal_Int32 SfxOleSection::GetFreePropertyId() const
@@ -953,7 +950,7 @@ void SfxOleSection::ImplLoad( SvStream& rStrm )
     // read property ID/position pairs
     typedef ::std::map< sal_Int32, sal_uInt32 > SfxOlePropPosMap;
     SfxOlePropPosMap aPropPosMap;
-    for( sal_Int32 nPropIdx = 0; (nPropIdx < nPropCount) && (rStrm.GetErrorCode() == SVSTREAM_OK) && !rStrm.IsEof(); ++nPropIdx )
+    for (sal_Int32 nPropIdx = 0; nPropIdx < nPropCount && rStrm.good(); ++nPropIdx)
     {
         sal_Int32 nPropId(0);
         sal_uInt32 nPropPos(0);
@@ -993,9 +990,9 @@ void SfxOleSection::ImplLoad( SvStream& rStrm )
 
     // read other properties
     maPropMap.clear();
-    for( SfxOlePropPosMap::const_iterator aIt = aPropPosMap.begin(), aEnd = aPropPosMap.end(); aIt != aEnd; ++aIt )
-        if( SeekToPropertyPos( rStrm, aIt->second ) )
-            LoadProperty( rStrm, aIt->first );
+    for (auto const& propPos : aPropPosMap)
+        if( SeekToPropertyPos( rStrm, propPos.second ) )
+            LoadProperty( rStrm, propPos.first );
 }
 
 void SfxOleSection::ImplSave( SvStream& rStrm )
@@ -1012,7 +1009,7 @@ void SfxOleSection::ImplSave( SvStream& rStrm )
     rStrm.WriteUInt32( 0 ).WriteInt32( nPropCount );
 
     // write placeholders for property ID/position pairs
-    sal_Size nPropPosPos = rStrm.Tell();
+    sal_uInt64 nPropPosPos = rStrm.Tell();
     rStrm.SeekRel( static_cast< sal_sSize >( 8 * nPropCount ) );
 
     // write dictionary property
@@ -1021,8 +1018,8 @@ void SfxOleSection::ImplSave( SvStream& rStrm )
     // write codepage property
     SaveProperty( rStrm, maCodePageProp, nPropPosPos );
     // write other properties
-    for( SfxOlePropMap::const_iterator aIt = maPropMap.begin(), aEnd = maPropMap.end(); aIt != aEnd; ++aIt )
-        SaveProperty( rStrm, *aIt->second, nPropPosPos );
+    for (auto const& prop : maPropMap)
+        SaveProperty( rStrm, *prop.second, nPropPosPos );
 
     // write section size (first field in section header)
     rStrm.Seek( STREAM_SEEK_TO_END );
@@ -1033,8 +1030,8 @@ void SfxOleSection::ImplSave( SvStream& rStrm )
 
 bool SfxOleSection::SeekToPropertyPos( SvStream& rStrm, sal_uInt32 nPropPos ) const
 {
-    rStrm.Seek( static_cast< sal_Size >( mnStartPos + nPropPos ) );
-    return rStrm.GetErrorCode() == SVSTREAM_OK;
+    return checkSeek(rStrm, static_cast<std::size_t>(mnStartPos + nPropPos)) &&
+           rStrm.GetErrorCode() == ERRCODE_NONE;
 }
 
 void SfxOleSection::LoadProperty( SvStream& rStrm, sal_Int32 nPropId )
@@ -1076,7 +1073,7 @@ void SfxOleSection::LoadProperty( SvStream& rStrm, sal_Int32 nPropId )
     }
 }
 
-void SfxOleSection::SaveProperty( SvStream& rStrm, SfxOlePropertyBase& rProp, sal_Size& rnPropPosPos )
+void SfxOleSection::SaveProperty( SvStream& rStrm, SfxOlePropertyBase& rProp, sal_uInt64 & rnPropPosPos )
 {
     rStrm.Seek( STREAM_SEEK_TO_END );
     sal_uInt32 nPropPos = static_cast< sal_uInt32 >( rStrm.Tell() - mnStartPos );
@@ -1094,12 +1091,12 @@ void SfxOleSection::SaveProperty( SvStream& rStrm, SfxOlePropertyBase& rProp, sa
 }
 
 
-ErrCode SfxOlePropertySet::LoadPropertySet( SotStorage* pStrg, const OUString& rStrmName )
+ErrCode const & SfxOlePropertySet::LoadPropertySet( SotStorage* pStrg, const OUString& rStrmName )
 {
     if( pStrg )
     {
-        tools::SvRef<SotStorageStream> xStrm = pStrg->OpenSotStream( rStrmName, STREAM_STD_READ );
-        if( xStrm.Is() && (xStrm->GetError() == SVSTREAM_OK) )
+        tools::SvRef<SotStorageStream> xStrm = pStrg->OpenSotStream( rStrmName, StreamMode::STD_READ );
+        if( xStrm.is() && (xStrm->GetError() == ERRCODE_NONE) )
         {
             xStrm->SetBufferSize( STREAM_BUFFER_SIZE );
             Load( *xStrm );
@@ -1112,12 +1109,12 @@ ErrCode SfxOlePropertySet::LoadPropertySet( SotStorage* pStrg, const OUString& r
     return GetError();
 }
 
-ErrCode SfxOlePropertySet::SavePropertySet( SotStorage* pStrg, const OUString& rStrmName )
+ErrCode const & SfxOlePropertySet::SavePropertySet( SotStorage* pStrg, const OUString& rStrmName )
 {
     if( pStrg )
     {
-        tools::SvRef<SotStorageStream> xStrm = pStrg->OpenSotStream( rStrmName, StreamMode::TRUNC | STREAM_STD_WRITE );
-        if( xStrm.Is() )
+        tools::SvRef<SotStorageStream> xStrm = pStrg->OpenSotStream( rStrmName, StreamMode::TRUNC | StreamMode::STD_WRITE );
+        if( xStrm.is() )
             Save( *xStrm );
         else
             SetError( ERRCODE_IO_ACCESSDENIED );
@@ -1173,7 +1170,7 @@ void SfxOlePropertySet::ImplLoad( SvStream& rStrm )
     rStrm.ReadInt32( nSectCount );
 
     // read sections
-    sal_Size nSectPosPos = rStrm.Tell();
+    sal_uInt64 nSectPosPos = rStrm.Tell();
     for (sal_Int32 nSectIdx = 0; nSectIdx < nSectCount; ++nSectIdx)
     {
         // read section guid/position pair
@@ -1186,7 +1183,8 @@ void SfxOlePropertySet::ImplLoad( SvStream& rStrm )
             break;
         nSectPosPos = rStrm.Tell();
         // read section
-        rStrm.Seek(nSectPos);
+        if (!checkSeek(rStrm, nSectPos))
+            break;
         LoadObject(rStrm, AddSection(aSectGuid));
         if (!rStrm.good())
             break;
@@ -1206,20 +1204,20 @@ void SfxOlePropertySet::ImplSave( SvStream& rStrm )
     rStrm  .WriteInt32( nSectCount );              // number of sections
 
     // write placeholders for section guid/position pairs
-    sal_Size nSectPosPos = rStrm.Tell();
+    sal_uInt64 nSectPosPos = rStrm.Tell();
     rStrm.SeekRel( static_cast< sal_sSize >( 20 * nSectCount ) );
 
     // write sections
-    for( SfxOleSectionMap::const_iterator aIt = maSectionMap.begin(), aEnd = maSectionMap.end(); aIt != aEnd; ++aIt )
+    for (auto const& section : maSectionMap)
     {
-        SfxOleSection& rSection = *aIt->second;
+        SfxOleSection& rSection = *section.second;
         rStrm.Seek( STREAM_SEEK_TO_END );
         sal_uInt32 nSectPos = static_cast< sal_uInt32 >( rStrm.Tell() );
         // write the section
         SaveObject( rStrm, rSection );
         // write section guid/position pair
         rStrm.Seek( nSectPosPos );
-        WriteSvGlobalName( rStrm, aIt->first );
+        WriteSvGlobalName( rStrm, section.first );
         rStrm.WriteUInt32( nSectPos );
         nSectPosPos = rStrm.Tell();
     }

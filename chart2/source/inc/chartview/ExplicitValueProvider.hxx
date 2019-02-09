@@ -19,26 +19,28 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_EXPLICITVALUEPROVIDER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_EXPLICITVALUEPROVIDER_HXX
 
-#include "ExplicitScaleValues.hxx"
-
-#include <com/sun/star/chart2/XAxis.hpp>
-#include <com/sun/star/chart2/XCoordinateSystem.hpp>
-#include <com/sun/star/chart2/XDataSeries.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
-#include "chartviewdllapi.hxx"
-#include "ChartModel.hxx"
+#include <chartview/chartviewdllapi.hxx>
 
 #include <memory>
 
+namespace chart { class ChartModel; }
+namespace chart { struct ExplicitIncrementData; }
+namespace chart { struct ExplicitScaleData; }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XAxis; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartDocument; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XCoordinateSystem; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDiagram; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XNumberFormatsSupplier; } } } }
+
 namespace chart
 {
-
-/**
-*/
 
 class DrawModelWrapper;
 class OOO_DLLPUBLIC_CHARTVIEW ExplicitValueProvider
@@ -70,16 +72,10 @@ public:
     static ExplicitValueProvider* getExplicitValueProvider( const css::uno::Reference< css::uno::XInterface >& xChartView );
 
     static css::awt::Rectangle
-        addAxisTitleSizes(
+        AddSubtractAxisTitleSizes(
                 ChartModel& rModel
             , const css::uno::Reference< css::uno::XInterface >& xChartView
-            , const css::awt::Rectangle& rExcludingPositionAndSize );
-
-    static css::awt::Rectangle
-        substractAxisTitleSizes(
-                ChartModel& rModel
-            , const css::uno::Reference< css::uno::XInterface >& xChartView
-            , const css::awt::Rectangle& rPositionAndSizeIncludingTitles );
+            , const css::awt::Rectangle& rPositionAndSize, bool bSubtract );
 
     static sal_Int32 getExplicitNumberFormatKeyForAxis(
               const css::uno::Reference< css::chart2::XAxis >& xAxis

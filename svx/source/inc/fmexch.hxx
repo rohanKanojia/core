@@ -24,10 +24,11 @@
 #include <set>
 
 #include <sot/exchange.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/form/XForms.hpp>
+#include <rtl/ref.hxx>
 #include <tools/link.hxx>
 #include <vcl/window.hxx>
 #include <svx/svxdllapi.h>
@@ -74,17 +75,15 @@ namespace svxform
 
     protected:
         // XClipboardOwner
-        virtual void SAL_CALL lostOwnership( const css::uno::Reference< css::datatransfer::clipboard::XClipboard >& _rxClipboard, const css::uno::Reference< css::datatransfer::XTransferable >& _rxTrans ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL lostOwnership( const css::uno::Reference< css::datatransfer::clipboard::XClipboard >& _rxClipboard, const css::uno::Reference< css::datatransfer::XTransferable >& _rxTrans ) override;
 
         // TransferableHelper
         virtual void        DragFinished( sal_Int8 nDropAction ) override;
         virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
 
     private:
-        void StartDrag( vcl::Window* pWindow, sal_Int8 nDragSourceActions, sal_Int32 nDragPointer = DND_POINTER_NONE )
-        {   // don't allow this base class method to be called from outside
-            TransferableHelper::StartDrag(pWindow, nDragSourceActions, nDragPointer);
-        }
+         // don't allow this base class method to be called from outside
+        using TransferableHelper::StartDrag;
     };
 
 
@@ -94,8 +93,8 @@ namespace svxform
     class SVX_DLLPUBLIC OLocalExchangeHelper
     {
     protected:
-        VclPtr<vcl::Window> m_pDragSource;
-        OLocalExchange*     m_pTransferable;
+        VclPtr<vcl::Window>            m_pDragSource;
+        rtl::Reference<OLocalExchange> m_xTransferable;
 
     public:
         OLocalExchangeHelper( vcl::Window* _pDragSource );
@@ -106,12 +105,12 @@ namespace svxform
         void        startDrag( sal_Int8 nDragSourceActions );
         void        copyToClipboard( ) const;
 
-        inline  bool    isDragSource() const { return m_pTransferable && m_pTransferable->isDragging(); }
-        inline  bool    isClipboardOwner() const { return m_pTransferable && m_pTransferable->isClipboardOwner(); }
-        inline  bool    isDataExchangeActive( ) const { return isDragSource() || isClipboardOwner(); }
-        inline  void        clear() { if ( isDataExchangeActive() ) m_pTransferable->clear(); }
+        bool    isDragSource() const { return m_xTransferable.is() && m_xTransferable->isDragging(); }
+        bool    isClipboardOwner() const { return m_xTransferable.is() && m_xTransferable->isClipboardOwner(); }
+        bool    isDataExchangeActive( ) const { return isDragSource() || isClipboardOwner(); }
+        void        clear() { if ( isDataExchangeActive() ) m_xTransferable->clear(); }
 
-        SVX_DLLPRIVATE void     setClipboardListener( const Link<OLocalExchange&,void>& _rListener ) { if ( m_pTransferable ) m_pTransferable->setClipboardListener( _rListener ); }
+        SVX_DLLPRIVATE void     setClipboardListener( const Link<OLocalExchange&,void>& _rListener ) { if ( m_xTransferable.is() ) m_xTransferable->setClipboardListener( _rListener ); }
 
     protected:
         SVX_DLLPRIVATE virtual OLocalExchange* createExchange() const = 0;
@@ -169,24 +168,24 @@ namespace svxform
             const css::uno::Reference< css::form::XForms >& _rxFormsRoot
             ) { m_xFormsRoot = _rxFormsRoot; }
 
-        void buildPathFormat(SvTreeListBox* pTreeBox, SvTreeListEntry* pRoot);
-            // baut aus m_aSelectedEntries m_aControlPaths auf
-            // (es wird davon ausgegangen, dass die Eintraege in m_aSelectedEntries sortiert sind in Bezug auf die Nachbar-Beziehung)
+        void buildPathFormat(SvTreeListBox const * pTreeBox, SvTreeListEntry const * pRoot);
+            // assembles m_aControlPaths from m_aSelectedEntries
+            // (it is assumed that the entries are sorted in m_aSelectedEntries with respect to the neighbor relationship)
 
 
-        void buildListFromPath(SvTreeListBox* pTreeBox, SvTreeListEntry* pRoot);
-            // der umgekehrte Weg : wirft alles aus m_aSelectedEntries weg und baut es mittels m_aControlPaths neu auf
+        void buildListFromPath(SvTreeListBox const * pTreeBox, SvTreeListEntry* pRoot);
+            // The reverse way: throws everything out of m_aSelectedEntries and rebuilds it using m_aControlPaths
 
         void addHiddenControlsFormat(const css::uno::Sequence< css::uno::Reference< css::uno::XInterface > >& seqInterfaces);
-            // fuegt ein SVX_FML_HIDDEN_CONTROLS-Format hinzu und merk sich dafuer die uebergebenen Interfaces
-            // (es erfolgt KEINE Ueberpruefung, ob dadurch auch tatsaechlich nur hidden Controls bezeichnet werden, dass muss der
-            // Aufrufer sicherstellen)
+            // adds an SVX_FML_HIDDEN_CONTROLS format and remembers the passed interfaces for it
+            // (it is NOT checked whether actually only hidden controls are denominated
+            // by this - the caller must ensure that)
 
         const ListBoxEntrySet&      selected() const { return m_aSelectedEntries; }
-        css::uno::Sequence< css::uno::Reference< css::uno::XInterface > >
+        const css::uno::Sequence< css::uno::Reference< css::uno::XInterface > >&
                                     hiddenControls() const { return m_aHiddenControlModels; }
 
-        css::uno::Reference< css::form::XForms >
+        const css::uno::Reference< css::form::XForms >&
                                 getFormsRoot() const { return m_xFormsRoot; }
     };
 
@@ -221,8 +220,8 @@ namespace svxform
     public:
         OControlExchangeHelper(vcl::Window* _pDragSource) : OLocalExchangeHelper(_pDragSource) { }
 
-        OControlExchange* operator->() const { return static_cast< OControlExchange* >( m_pTransferable ); }
-        OControlExchange& operator*() const { return *static_cast< OControlExchange* >( m_pTransferable ); }
+        OControlExchange* operator->() const { return static_cast< OControlExchange* >( m_xTransferable.get() ); }
+        OControlExchange& operator*() const { return *static_cast< OControlExchange* >( m_xTransferable.get() ); }
 
     protected:
         virtual OLocalExchange* createExchange() const override;

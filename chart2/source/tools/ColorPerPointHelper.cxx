@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ColorPerPointHelper.hxx"
-#include "macros.hxx"
+#include <ColorPerPointHelper.hxx>
 #include <com/sun/star/chart2/XDataSeries.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
 
@@ -67,7 +66,7 @@ bool ColorPerPointHelper::hasPointOwnProperties(
         {
             const sal_Int32 * pBegIt = aIndexList.getConstArray();
             const sal_Int32 * pEndIt = pBegIt + aIndexList.getLength();
-            return ( ::std::find( pBegIt, pEndIt, nPointIndex ) != pEndIt );
+            return ( std::find( pBegIt, pEndIt, nPointIndex ) != pEndIt );
         }
     }
 

@@ -17,14 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ado/AIndex.hxx"
+#include <ado/AIndex.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <cppuhelper/typeprovider.hxx>
-#include <comphelper/sequence.hxx>
-#include "ado/AColumns.hxx"
-#include <comphelper/extract.hxx>
-#include "TConnection.hxx"
+#include <ado/AColumns.hxx>
+#include <TConnection.hxx>
 #include <comphelper/types.hxx>
 
 using namespace ::comphelper;
@@ -36,8 +34,8 @@ using namespace com::sun::star::beans;
 using namespace com::sun::star::sdbc;
 
 
-OAdoIndex::OAdoIndex(sal_Bool _bCase,OConnection* _pConnection,ADOIndex* _pIndex)
-    : sdbcx::OIndex(OUString(),OUString(),sal_False,sal_False,sal_False,_bCase)
+OAdoIndex::OAdoIndex(bool _bCase,OConnection* _pConnection,ADOIndex* _pIndex)
+    : sdbcx::OIndex(OUString(),OUString(),false,false,false,_bCase)
     ,m_pConnection(_pConnection)
 {
     construct();
@@ -45,7 +43,7 @@ OAdoIndex::OAdoIndex(sal_Bool _bCase,OConnection* _pConnection,ADOIndex* _pIndex
     fillPropertyValues();
 }
 
-OAdoIndex::OAdoIndex(sal_Bool _bCase,OConnection* _pConnection)
+OAdoIndex::OAdoIndex(bool _bCase,OConnection* _pConnection)
     : sdbcx::OIndex(_bCase)
     ,m_pConnection(_pConnection)
 {
@@ -56,7 +54,7 @@ OAdoIndex::OAdoIndex(sal_Bool _bCase,OConnection* _pConnection)
 
 void OAdoIndex::refreshColumns()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     WpADOColumns aColumns;
     if ( m_aIndex.IsValid() )
@@ -74,29 +72,21 @@ void OAdoIndex::refreshColumns()
 
 Sequence< sal_Int8 > OAdoIndex::getUnoTunnelImplementationId()
 {
-    static ::cppu::OImplementationId * pId = 0;
-    if (! pId)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (! pId)
-        {
-            static ::cppu::OImplementationId aId;
-            pId = &aId;
-        }
-    }
-    return pId->getImplementationId();
+    static ::cppu::OImplementationId implId;
+
+    return implId.getImplementationId();
 }
 
-// com::sun::star::lang::XUnoTunnel
+// css::lang::XUnoTunnel
 
-sal_Int64 OAdoIndex::getSomething( const Sequence< sal_Int8 > & rId ) throw (RuntimeException)
+sal_Int64 OAdoIndex::getSomething( const Sequence< sal_Int8 > & rId )
 {
     return (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
                 ? reinterpret_cast< sal_Int64 >( this )
                 : sdbcx::OIndex::getSomething(rId);
 }
 
-void SAL_CALL OAdoIndex::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue)throw (Exception)
+void SAL_CALL OAdoIndex::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue)
 {
     if(m_aIndex.IsValid())
     {
@@ -129,16 +119,5 @@ void SAL_CALL OAdoIndex::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,cons
     }
     sdbcx::OIndex::setFastPropertyValue_NoBroadcast(nHandle,rValue);
 }
-
-void SAL_CALL OAdoIndex::acquire() throw()
-{
-    sdbcx::OIndex::acquire();
-}
-
-void SAL_CALL OAdoIndex::release() throw()
-{
-    sdbcx::OIndex::release();
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

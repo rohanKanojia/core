@@ -21,26 +21,23 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
 #include <editeng/langitem.hxx>
+#include <editeng/outlobj.hxx>
 #include <svx/langbox.hxx>
 #include <svx/svdotext.hxx>
 #include <editeng/editeng.hxx>
 #include <sfx2/viewfrm.hxx>
 
-#include "sdresid.hxx"
-
 #include <vcl/button.hxx>
-#include <vcl/combobox.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
 
-#include "helpids.h"
-#include "Outliner.hxx"
-#include "dialogs.hrc"
-#include "headerfooterdlg.hxx"
-#include "DrawDocShell.hxx"
-#include "drawdoc.hxx"
-#include "ViewShell.hxx"
+#include <Outliner.hxx>
+#include <headerfooterdlg.hxx>
+#include <DrawDocShell.hxx>
+#include <drawdoc.hxx>
+#include <ViewShell.hxx>
+#include <sdmod.hxx>
 
 // preview control for presentation layout
 #include <vcl/ctrl.hxx>
@@ -53,8 +50,8 @@
 #include <vcl/decoview.hxx>
 #include <vcl/builderfactory.hxx>
 
-#include "undoheaderfooter.hxx"
-#include "sdundogr.hxx"
+#include <undoheaderfooter.hxx>
+#include <sdundogr.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -69,20 +66,19 @@ private:
     SdPage* mpMaster;
     HeaderFooterSettings maSettings;
     Size maPageSize;
-    Rectangle maOutRect;
+    ::tools::Rectangle maOutRect;
 
 private:
-    void Paint(vcl::RenderContext& rRenderContext, SdrTextObj* pObj, bool bVisible, bool bDotted = false);
+    void Paint(vcl::RenderContext& rRenderContext, SdrTextObj const * pObj, bool bVisible, bool bDotted = false);
 
 public:
     explicit PresLayoutPreview(vcl::Window* pParent);
-    virtual ~PresLayoutPreview();
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect) override;
     virtual Size GetOptimalSize() const override;
 
     void init(SdPage* pMaster);
-    void update(HeaderFooterSettings& rSettings);
+    void update(HeaderFooterSettings const & rSettings);
 };
 
 }
@@ -93,23 +89,27 @@ namespace sd
 {
 
 const int nDateTimeFormatsCount = 12;
-int nDateTimeFormats[nDateTimeFormatsCount] =
+struct DateAndTimeFormat {
+    SvxDateFormat const meDateFormat;
+    SvxTimeFormat const meTimeFormat;
+};
+DateAndTimeFormat const nDateTimeFormats[nDateTimeFormatsCount] =
 {
-    SVXDATEFORMAT_A,
-    SVXDATEFORMAT_B,
-    SVXDATEFORMAT_C,
-    SVXDATEFORMAT_D,
-    SVXDATEFORMAT_E,
-    SVXDATEFORMAT_F,
+    { SvxDateFormat::A, SvxTimeFormat::AppDefault },
+    { SvxDateFormat::B, SvxTimeFormat::AppDefault },
+    { SvxDateFormat::C, SvxTimeFormat::AppDefault },
+    { SvxDateFormat::D, SvxTimeFormat::AppDefault },
+    { SvxDateFormat::E, SvxTimeFormat::AppDefault },
+    { SvxDateFormat::F, SvxTimeFormat::AppDefault },
 
-    SVXDATEFORMAT_A | (SVXTIMEFORMAT_24_HM << 4),
-    SVXDATEFORMAT_A | (SVXTIMEFORMAT_12_HM << 4),
+    { SvxDateFormat::A, SvxTimeFormat::HH24_MM },
+    { SvxDateFormat::A, SvxTimeFormat::HH12_MM },
 
-    (SVXTIMEFORMAT_24_HM << 4),
-    (SVXTIMEFORMAT_24_HMS <<4),
+    { SvxDateFormat::AppDefault, SvxTimeFormat::HH24_MM },
+    { SvxDateFormat::AppDefault, SvxTimeFormat::HH24_MM_SS },
 
-    (SVXTIMEFORMAT_12_HM << 4 ),
-    (SVXTIMEFORMAT_12_HMS << 4 )
+    { SvxDateFormat::AppDefault, SvxTimeFormat::HH12_MM },
+    { SvxDateFormat::AppDefault, SvxTimeFormat::HH12_MM_SS },
 };
 
 class HeaderFooterTabPage : public TabPage
@@ -143,18 +143,18 @@ private:
     SdDrawDocument*    mpDoc;
     LanguageType        meOldLanguage;
 
-    bool            mbHandoutMode;
+    bool const          mbHandoutMode;
 
-    DECL_LINK_TYPED( UpdateOnClickHdl, Button*, void );
-    DECL_LINK_TYPED( LanguageChangeHdl, ListBox&, void );
+    DECL_LINK( UpdateOnClickHdl, Button*, void );
+    DECL_LINK( LanguageChangeHdl, ListBox&, void );
 
-    void FillFormatList(int eFormat);
+    void FillFormatList(sal_Int32 nSelectedPos);
     void GetOrSetDateTimeLanguage( LanguageType &rLanguage, bool bSet );
     void GetOrSetDateTimeLanguage( LanguageType &rLanguage, bool bSet, SdPage* pPage );
 
 public:
     HeaderFooterTabPage( vcl::Window* pParent, SdDrawDocument* pDoc, SdPage* pActualPage, bool bHandoutMode );
-    virtual ~HeaderFooterTabPage();
+    virtual ~HeaderFooterTabPage() override;
     virtual void dispose() override;
 
     void    init( const HeaderFooterSettings& rSettings, bool bNotOnTitle );
@@ -176,12 +176,12 @@ HeaderFooterDialog::HeaderFooterDialog( ViewShell* pViewShell, vcl::Window* pPar
 
     SdPage* pSlide;
     SdPage* pNotes;
-    if( pCurrentPage->GetPageKind() == PK_STANDARD )
+    if( pCurrentPage->GetPageKind() == PageKind::Standard )
     {
         pSlide = pCurrentPage;
         pNotes = static_cast<SdPage*>(pDoc->GetPage( pCurrentPage->GetPageNum() + 1 ));
     }
-    else if( pCurrentPage->GetPageKind() == PK_NOTES )
+    else if( pCurrentPage->GetPageKind() == PageKind::Notes )
     {
         pNotes = pCurrentPage;
         pSlide = static_cast<SdPage*>(pDoc->GetPage( pCurrentPage->GetPageNum() -1 ));
@@ -190,8 +190,8 @@ HeaderFooterDialog::HeaderFooterDialog( ViewShell* pViewShell, vcl::Window* pPar
     else
     {
         // handout
-        pSlide = pDoc->GetSdPage( 0, PK_STANDARD );
-        pNotes = pDoc->GetSdPage( 0, PK_NOTES );
+        pSlide = pDoc->GetSdPage( 0, PageKind::Standard );
+        pNotes = pDoc->GetSdPage( 0, PageKind::Notes );
         mpCurrentPage = nullptr;
     }
 
@@ -211,9 +211,9 @@ HeaderFooterDialog::HeaderFooterDialog( ViewShell* pViewShell, vcl::Window* pPar
         aCtrlSiz = aSiz;
     }
 
-    mnNotesId = mpTabCtrl->GetPageId("notes");
+    sal_uInt16 nNotesId = mpTabCtrl->GetPageId("notes");
     mpNotesHandoutsTabPage = VclPtr<HeaderFooterTabPage>::Create( mpTabCtrl, pDoc, pNotes, true );
-    mpTabCtrl->SetTabPage( mnNotesId, mpNotesHandoutsTabPage );
+    mpTabCtrl->SetTabPage( nNotesId, mpNotesHandoutsTabPage );
 
     get(maPBApplyToAll, "apply_all" );
     get(maPBApply, "apply" );
@@ -229,7 +229,7 @@ HeaderFooterDialog::HeaderFooterDialog( ViewShell* pViewShell, vcl::Window* pPar
 
     maSlideSettings = pSlide->getHeaderFooterSettings();
 
-    const HeaderFooterSettings& rTitleSettings = mpDoc->GetSdPage(0, PK_STANDARD)->getHeaderFooterSettings();
+    const HeaderFooterSettings& rTitleSettings = mpDoc->GetSdPage(0, PageKind::Standard)->getHeaderFooterSettings();
     bool bNotOnTitle = !rTitleSettings.mbFooterVisible && !rTitleSettings.mbSlideNumberVisible && !rTitleSettings.mbDateTimeVisible;
 
     mpSlideTabPage->init( maSlideSettings, bNotOnTitle );
@@ -254,7 +254,7 @@ void HeaderFooterDialog::dispose()
     TabDialog::dispose();
 }
 
-IMPL_LINK_TYPED( HeaderFooterDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
+IMPL_LINK( HeaderFooterDialog, ActivatePageHdl, TabControl *, pTabCtrl, void )
 {
     const sal_uInt16 nId = pTabCtrl->GetCurPageId();
     TabPage* pTabPage = pTabCtrl->GetTabPage( nId );
@@ -263,19 +263,19 @@ IMPL_LINK_TYPED( HeaderFooterDialog, ActivatePageHdl, TabControl *, pTabCtrl, vo
     maPBApply->Enable( mpCurrentPage != nullptr );
 }
 
-IMPL_LINK_NOARG_TYPED(HeaderFooterDialog, ClickApplyToAllHdl, Button*, void)
+IMPL_LINK_NOARG(HeaderFooterDialog, ClickApplyToAllHdl, Button*, void)
 {
     ApplyToAll();
 }
 
-IMPL_LINK_NOARG_TYPED(HeaderFooterDialog, ClickApplyHdl, Button*, void)
+IMPL_LINK_NOARG(HeaderFooterDialog, ClickApplyHdl, Button*, void)
 {
     Apply();
 }
 
-IMPL_LINK_NOARG_TYPED(HeaderFooterDialog, ClickCancelHdl, Button*, void)
+IMPL_LINK_NOARG(HeaderFooterDialog, ClickCancelHdl, Button*, void)
 {
-    Cancel();
+    EndDialog();
 }
 
 short HeaderFooterDialog::Execute()
@@ -300,14 +300,9 @@ void HeaderFooterDialog::Apply()
     EndDialog(1);
 }
 
-void HeaderFooterDialog::Cancel()
-{
-    EndDialog();
-}
-
 void HeaderFooterDialog::apply( bool bToAll, bool bForceSlides )
 {
-    SdUndoGroup* pUndoGroup = new SdUndoGroup(mpDoc);
+    std::unique_ptr<SdUndoGroup> pUndoGroup(new SdUndoGroup(mpDoc));
     OUString aComment( GetText() );
     pUndoGroup->SetComment( aComment );
 
@@ -325,21 +320,21 @@ void HeaderFooterDialog::apply( bool bToAll, bool bForceSlides )
         // apply to all slides
         if( bToAll )
         {
-            int nPageCount = mpDoc->GetSdPageCount( PK_STANDARD );
+            int nPageCount = mpDoc->GetSdPageCount( PageKind::Standard );
             int nPage;
             for( nPage = 0; nPage < nPageCount; nPage++ )
             {
-                SdPage* pPage = mpDoc->GetSdPage( (sal_uInt16)nPage, PK_STANDARD );
-                change( pUndoGroup, pPage, aNewSettings );
+                SdPage* pPage = mpDoc->GetSdPage( static_cast<sal_uInt16>(nPage), PageKind::Standard );
+                change( pUndoGroup.get(), pPage, aNewSettings );
             }
         }
         else
         {
             // apply only to the current slide
-            DBG_ASSERT( mpCurrentPage && mpCurrentPage->GetPageKind() == PK_STANDARD, "no current page to apply to!" );
-            if( mpCurrentPage && (mpCurrentPage->GetPageKind() == PK_STANDARD) )
+            DBG_ASSERT( mpCurrentPage && mpCurrentPage->GetPageKind() == PageKind::Standard, "no current page to apply to!" );
+            if( mpCurrentPage && (mpCurrentPage->GetPageKind() == PageKind::Standard) )
             {
-                change( pUndoGroup, mpCurrentPage, aNewSettings );
+                change( pUndoGroup.get(), mpCurrentPage, aNewSettings );
             }
         }
     }
@@ -348,13 +343,13 @@ void HeaderFooterDialog::apply( bool bToAll, bool bForceSlides )
     if( bNewNotOnTitle )
     {
         // just hide them, plain simple UI feature
-        HeaderFooterSettings aTempSettings = mpDoc->GetSdPage( 0, PK_STANDARD )->getHeaderFooterSettings();
+        HeaderFooterSettings aTempSettings = mpDoc->GetSdPage( 0, PageKind::Standard )->getHeaderFooterSettings();
 
         aTempSettings.mbFooterVisible = false;
         aTempSettings.mbSlideNumberVisible = false;
         aTempSettings.mbDateTimeVisible = false;
 
-        change( pUndoGroup, mpDoc->GetSdPage( 0, PK_STANDARD ), aTempSettings );
+        change( pUndoGroup.get(), mpDoc->GetSdPage( 0, PageKind::Standard ), aTempSettings );
     }
 
     // now notes settings
@@ -366,27 +361,48 @@ void HeaderFooterDialog::apply( bool bToAll, bool bForceSlides )
     if( !bForceSlides || !(aNewSettings == maNotesHandoutSettings) )
     {
         // first set to all notes pages
-        int nPageCount = mpDoc->GetSdPageCount( PK_NOTES );
+        int nPageCount = mpDoc->GetSdPageCount( PageKind::Notes );
         int nPage;
         for( nPage = 0; nPage < nPageCount; nPage++ )
         {
-            SdPage* pPage = mpDoc->GetSdPage( (sal_uInt16)nPage, PK_NOTES );
+            SdPage* pPage = mpDoc->GetSdPage( static_cast<sal_uInt16>(nPage), PageKind::Notes );
 
-            change( pUndoGroup, pPage, aNewSettings );
+            change( pUndoGroup.get(), pPage, aNewSettings );
         }
 
         // and last but not least to the handout page
-        change( pUndoGroup, mpDoc->GetMasterSdPage( 0, PK_HANDOUT ), aNewSettings );
+        change( pUndoGroup.get(), mpDoc->GetMasterSdPage( 0, PageKind::Handout ), aNewSettings );
     }
 
     // give the undo group to the undo manager
-    mpViewShell->GetViewFrame()->GetObjectShell()->GetUndoManager()->AddUndoAction(pUndoGroup);
+    mpViewShell->GetViewFrame()->GetObjectShell()->GetUndoManager()->AddUndoAction(std::move(pUndoGroup));
 }
 
 void HeaderFooterDialog::change( SdUndoGroup* pUndoGroup, SdPage* pPage, const HeaderFooterSettings& rNewSettings )
 {
     pUndoGroup->AddAction(new SdHeaderFooterUndoAction(mpDoc, pPage, rNewSettings ));
     pPage->setHeaderFooterSettings( rNewSettings );
+}
+
+namespace {
+
+void recursive_rename_ui_element(vcl::Window& rWindow, const OUString& rPrefix)
+{
+    OUString aID = rWindow.get_id();
+    if (aID.isEmpty())
+    {
+        rWindow.set_id(rPrefix +  aID);
+    }
+
+    size_t nChildCount = rWindow.GetChildCount();
+    for (size_t i = 0; i < nChildCount; ++i)
+    {
+        vcl::Window* pChild = rWindow.GetChild(i);
+        if (pChild)
+            recursive_rename_ui_element(*pChild, rPrefix);
+    }
+}
+
 }
 
 HeaderFooterTabPage::HeaderFooterTabPage( vcl::Window* pWindow, SdDrawDocument* pDoc, SdPage* pActualPage, bool bHandoutMode ) :
@@ -417,7 +433,7 @@ HeaderFooterTabPage::HeaderFooterTabPage( vcl::Window* pWindow, SdDrawDocument* 
     get(mpCTPreview, "preview");
     mpCTPreview->init( pActualPage ?
             (pActualPage->IsMasterPage() ? pActualPage : static_cast<SdPage*>(&(pActualPage->TRG_GetMasterPage()))) :
-            (pDoc->GetMasterSdPage( 0, bHandoutMode ? PK_NOTES : PK_STANDARD )) );
+            (pDoc->GetMasterSdPage( 0, bHandoutMode ? PageKind::Notes : PageKind::Standard )) );
 
     if( mbHandoutMode )
     {
@@ -446,7 +462,12 @@ HeaderFooterTabPage::HeaderFooterTabPage( vcl::Window* pWindow, SdDrawDocument* 
     meOldLanguage = MsLangId::getRealLanguage( meOldLanguage );
     mpCBDateTimeLanguage->SelectLanguage( meOldLanguage );
 
-    FillFormatList(SVXDATEFORMAT_A);
+    FillFormatList(0);
+
+    if (mbHandoutMode)
+        recursive_rename_ui_element(*this, "handout");
+    else
+        recursive_rename_ui_element(*this, "slide");
 }
 
 HeaderFooterTabPage::~HeaderFooterTabPage()
@@ -476,29 +497,27 @@ void HeaderFooterTabPage::dispose()
     TabPage::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(HeaderFooterTabPage, LanguageChangeHdl, ListBox&, void)
+IMPL_LINK_NOARG(HeaderFooterTabPage, LanguageChangeHdl, ListBox&, void)
 {
-    FillFormatList( (int)reinterpret_cast<sal_IntPtr>(mpCBDateTimeFormat->GetSelectEntryData()) );
+    FillFormatList( mpCBDateTimeFormat->GetSelectedEntryPos() );
 }
 
-void HeaderFooterTabPage::FillFormatList( int eFormat )
+void HeaderFooterTabPage::FillFormatList( sal_Int32 nSelectedPos )
 {
-    LanguageType eLanguage = mpCBDateTimeLanguage->GetSelectLanguage();
+    LanguageType eLanguage = mpCBDateTimeLanguage->GetSelectedLanguage();
 
     mpCBDateTimeFormat->Clear();
 
-    Date aDate( Date::SYSTEM );
-    tools::Time aTime( tools::Time::SYSTEM );
+    DateTime aDateTime( DateTime::SYSTEM );
 
-    int nFormat;
-    for( nFormat = 0; nFormat < nDateTimeFormatsCount; nFormat++ )
+    for( int nFormat = 0; nFormat < nDateTimeFormatsCount; nFormat++ )
     {
         OUString aStr( SvxDateTimeField::GetFormatted(
-                aDate, aTime, nDateTimeFormats[nFormat],
+                aDateTime, aDateTime,
+                nDateTimeFormats[nFormat].meDateFormat, nDateTimeFormats[nFormat].meTimeFormat,
                 *(SD_MOD()->GetNumberFormatter()), eLanguage ) );
         const sal_Int32 nEntry = mpCBDateTimeFormat->InsertEntry( aStr );
-        mpCBDateTimeFormat->SetEntryData( nEntry, reinterpret_cast<void*>((sal_IntPtr)nDateTimeFormats[nFormat] ));
-        if( nDateTimeFormats[nFormat] == eFormat )
+        if( nFormat == nSelectedPos )
         {
             mpCBDateTimeFormat->SelectEntryPos( nEntry );
             mpCBDateTimeFormat->SetText( aStr );
@@ -525,11 +544,9 @@ void HeaderFooterTabPage::init( const HeaderFooterSettings& rSettings, bool bNot
 
     mpCBDateTimeLanguage->SelectLanguage( meOldLanguage );
 
-    sal_uInt16 nPos;
-    for( nPos = 0; nPos < mpCBDateTimeFormat->GetEntryCount(); nPos++ )
+    for( sal_Int32 nPos = 0; nPos < mpCBDateTimeFormat->GetEntryCount(); nPos++ )
     {
-        int nFormat = (int)reinterpret_cast<sal_IntPtr>(mpCBDateTimeFormat->GetEntryData( nPos ));
-        if( nFormat == rSettings.meDateTimeFormat )
+        if( nDateTimeFormats[nPos].meDateFormat == rSettings.meDateFormat && nDateTimeFormats[nPos].meTimeFormat == rSettings.meTimeFormat )
         {
             mpCBDateTimeFormat->SelectEntryPos( nPos );
             mpCBDateTimeFormat->SetText( mpCBDateTimeFormat->GetEntry(nPos) );
@@ -551,10 +568,14 @@ void HeaderFooterTabPage::getData( HeaderFooterSettings& rSettings, bool& rNotOn
     rSettings.mbHeaderVisible = mpCBHeader->IsChecked();
     rSettings.maHeaderText = mpTBHeader->GetText();
 
-    if( mpCBDateTimeFormat->GetSelectEntryCount() == 1 )
-        rSettings.meDateTimeFormat = (int)reinterpret_cast<sal_IntPtr>(mpCBDateTimeFormat->GetSelectEntryData());
+    if( mpCBDateTimeFormat->GetSelectedEntryCount() == 1 )
+    {
+        sal_Int32 nPos = mpCBDateTimeFormat->GetSelectedEntryPos();
+        rSettings.meDateFormat = nDateTimeFormats[nPos].meDateFormat;
+        rSettings.meTimeFormat = nDateTimeFormats[nPos].meTimeFormat;
+    }
 
-    LanguageType eLanguage = mpCBDateTimeLanguage->GetSelectLanguage();
+    LanguageType eLanguage = mpCBDateTimeLanguage->GetSelectedLanguage();
     if( eLanguage != meOldLanguage )
         GetOrSetDateTimeLanguage( eLanguage, true );
 
@@ -580,7 +601,7 @@ void HeaderFooterTabPage::update()
     mpCTPreview->update( aSettings );
 }
 
-IMPL_LINK_NOARG_TYPED(HeaderFooterTabPage, UpdateOnClickHdl, Button*, void)
+IMPL_LINK_NOARG(HeaderFooterTabPage, UpdateOnClickHdl, Button*, void)
 {
     update();
 }
@@ -592,26 +613,26 @@ void HeaderFooterTabPage::GetOrSetDateTimeLanguage( LanguageType &rLanguage, boo
         // if set, set it on all notes master pages
         if( bSet )
         {
-            sal_uInt16 nPageCount = mpDoc->GetMasterSdPageCount( PK_NOTES );
+            sal_uInt16 nPageCount = mpDoc->GetMasterSdPageCount( PageKind::Notes );
             sal_uInt16 nPage;
             for( nPage = 0; nPage < nPageCount; nPage++ )
             {
-                GetOrSetDateTimeLanguage( rLanguage, bSet, mpDoc->GetMasterSdPage( nPage, PK_NOTES ) );
+                GetOrSetDateTimeLanguage( rLanguage, bSet, mpDoc->GetMasterSdPage( nPage, PageKind::Notes ) );
             }
         }
 
         // #i119985# and set it, or just get it from the notes master page
-        GetOrSetDateTimeLanguage( rLanguage, bSet, mpDoc->GetMasterSdPage( 0, PK_NOTES ) );
+        GetOrSetDateTimeLanguage( rLanguage, bSet, mpDoc->GetMasterSdPage( 0, PageKind::Notes ) );
     }
     else
     {
         // get the language from the first master page
         // or set it to all master pages
-        sal_uInt16 nPageCount = bSet ? mpDoc->GetMasterSdPageCount( PK_NOTES ) : 1;
+        sal_uInt16 nPageCount = bSet ? mpDoc->GetMasterSdPageCount( PageKind::Notes ) : 1;
         sal_uInt16 nPage;
         for( nPage = 0; nPage < nPageCount; nPage++ )
         {
-            GetOrSetDateTimeLanguage( rLanguage, bSet, mpDoc->GetMasterSdPage( nPage, PK_STANDARD ) );
+            GetOrSetDateTimeLanguage( rLanguage, bSet, mpDoc->GetMasterSdPage( nPage, PageKind::Standard ) );
         }
     }
 }
@@ -624,8 +645,8 @@ void HeaderFooterTabPage::GetOrSetDateTimeLanguage( LanguageType &rLanguage, boo
         if( pObj )
         {
             Outliner* pOutl = mpDoc->GetInternalOutliner();
-            pOutl->Init( OUTLINERMODE_TEXTOBJECT );
-            sal_uInt16 nOutlMode = pOutl->GetMode();
+            pOutl->Init( OutlinerMode::TextObject );
+            OutlinerMode nOutlMode = pOutl->GetMode();
 
             EditEngine* pEdit = const_cast< EditEngine* >(&pOutl->GetEditEngine());
 
@@ -633,35 +654,38 @@ void HeaderFooterTabPage::GetOrSetDateTimeLanguage( LanguageType &rLanguage, boo
             if( pOPO )
                 pOutl->SetText( *pOPO );
 
-            EFieldInfo aFieldInfo;
-            aFieldInfo.pFieldItem = nullptr;
+            EPosition aDateFieldPosition;
+            bool bHasDateFieldItem = false;
 
             sal_Int32 nParaCount = pEdit->GetParagraphCount();
-            sal_Int32 nPara;
-            for( nPara = 0; (nPara < nParaCount) && (aFieldInfo.pFieldItem == nullptr); nPara++ )
+            for (sal_Int32 nPara = 0; (nPara < nParaCount) && !bHasDateFieldItem; ++nPara)
             {
-                sal_uInt16 nFieldCount = pEdit->GetFieldCount( nPara );
-                sal_uInt16 nField;
-                for( nField = 0; (nField < nFieldCount) && (aFieldInfo.pFieldItem == nullptr); nField++ )
+                sal_uInt16 nFieldCount = pEdit->GetFieldCount(nPara);
+                for (sal_uInt16 nField = 0; (nField < nFieldCount); ++nField)
                 {
-                    aFieldInfo = pEdit->GetFieldInfo( nPara, nField );
-                    if( aFieldInfo.pFieldItem )
+                    EFieldInfo aFieldInfo = pEdit->GetFieldInfo(nPara, nField);
+                    if (aFieldInfo.pFieldItem)
                     {
                         const SvxFieldData* pFieldData = aFieldInfo.pFieldItem->GetField();
-                        if( pFieldData && ( dynamic_cast< const SvxDateTimeField *>( pFieldData ) != nullptr || dynamic_cast< const SvxDateField *>( pFieldData ) != nullptr))
+                        if (dynamic_cast<const SvxDateTimeField*>(pFieldData) != nullptr ||
+                            dynamic_cast<const SvxDateField*>(pFieldData) != nullptr)
                         {
+                            bHasDateFieldItem = true;
+                            aDateFieldPosition = aFieldInfo.aPosition;
                             break;
                         }
                     }
-                    aFieldInfo.pFieldItem = nullptr;
                 }
             }
 
-            if( aFieldInfo.pFieldItem != nullptr )
+            if (bHasDateFieldItem)
             {
                 if( bSet )
                 {
-                    SfxItemSet aSet( pEdit->GetAttribs( aFieldInfo.aPosition.nPara, aFieldInfo.aPosition.nIndex, aFieldInfo.aPosition.nIndex+1, GetAttribsFlags::CHARATTRIBS ) );
+                    SfxItemSet aSet(pEdit->GetAttribs(aDateFieldPosition.nPara,
+                                                      aDateFieldPosition.nIndex,
+                                                      aDateFieldPosition.nIndex+1,
+                                                      GetAttribsFlags::CHARATTRIBS));
 
                     SvxLanguageItem aItem( rLanguage, EE_CHAR_LANGUAGE );
                     aSet.Put( aItem );
@@ -672,7 +696,8 @@ void HeaderFooterTabPage::GetOrSetDateTimeLanguage( LanguageType &rLanguage, boo
                     SvxLanguageItem aItemCTL( rLanguage, EE_CHAR_LANGUAGE_CTL );
                     aSet.Put( aItemCTL );
 
-                    ESelection aSel( aFieldInfo.aPosition.nPara, aFieldInfo.aPosition.nIndex, aFieldInfo.aPosition.nPara, aFieldInfo.aPosition.nIndex+1 );
+                    ESelection aSel(aDateFieldPosition.nPara, aDateFieldPosition.nIndex,
+                                    aDateFieldPosition.nPara, aDateFieldPosition.nIndex+1 );
                     pEdit->QuickSetAttribs( aSet, aSel );
 
                     pObj->SetOutlinerParaObject( pOutl->CreateParaObject() );
@@ -680,7 +705,8 @@ void HeaderFooterTabPage::GetOrSetDateTimeLanguage( LanguageType &rLanguage, boo
                 }
                 else
                 {
-                    rLanguage =  pOutl->GetLanguage( aFieldInfo.aPosition.nPara, aFieldInfo.aPosition.nIndex );
+                    rLanguage =  pOutl->GetLanguage(aDateFieldPosition.nPara,
+                                                    aDateFieldPosition.nIndex );
                 }
             }
 
@@ -698,13 +724,9 @@ PresLayoutPreview::PresLayoutPreview( vcl::Window* pParent )
 
 VCL_BUILDER_FACTORY(PresLayoutPreview)
 
-PresLayoutPreview::~PresLayoutPreview()
-{
-}
-
 Size PresLayoutPreview::GetOptimalSize() const
 {
-    return LogicToPixel(Size(80, 80), MAP_APPFONT);
+    return LogicToPixel(Size(80, 80), MapMode(MapUnit::MapAppFont));
 }
 
 void PresLayoutPreview::init( SdPage *pMaster )
@@ -713,13 +735,13 @@ void PresLayoutPreview::init( SdPage *pMaster )
     maPageSize = pMaster->GetSize();
 }
 
-void PresLayoutPreview::update( HeaderFooterSettings& rSettings )
+void PresLayoutPreview::update( HeaderFooterSettings const & rSettings )
 {
     maSettings = rSettings;
     Invalidate();
 }
 
-void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, SdrTextObj* pObj, bool bVisible, bool bDotted /* = false*/ )
+void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, SdrTextObj const * pObj, bool bVisible, bool bDotted /* = false*/ )
 {
     // get object transformation
     basegfx::B2DHomMatrix aObjectTransform;
@@ -728,25 +750,25 @@ void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, SdrTextObj* pO
 
     // build complete transformation by adding view transformation from
     // logic page coordinates to local pixel coordinates
-    const double fScaleX((double)maOutRect.getWidth() / (double)maPageSize.Width());
-    const double fScaleY((double)maOutRect.getHeight() / (double)maPageSize.Height());
+    const double fScaleX(static_cast<double>(maOutRect.getWidth()) / static_cast<double>(maPageSize.Width()));
+    const double fScaleY(static_cast<double>(maOutRect.getHeight()) / static_cast<double>(maPageSize.Height()));
     aObjectTransform.scale(fScaleX, fScaleY);
     aObjectTransform.translate(maOutRect.TopLeft().X(), maOutRect.TopLeft().Y());
 
     // create geometry using unit range and object transform
-    basegfx::B2DPolyPolygon aGeometry(basegfx::tools::createUnitPolygon());
+    basegfx::B2DPolyPolygon aGeometry(basegfx::utils::createUnitPolygon());
     aGeometry.transform(aObjectTransform);
 
     // apply line pattern if wanted
     if (bDotted)
     {
         std::vector<double> aPattern;
-        static double fFactor(1.0);
+        static const double fFactor(1.0);
         aPattern.push_back(3.0 * fFactor);
         aPattern.push_back(1.0 * fFactor);
 
         basegfx::B2DPolyPolygon aDashed;
-        basegfx::tools::applyLineDashing(aGeometry, aPattern, &aDashed);
+        basegfx::utils::applyLineDashing(aGeometry, aPattern, &aDashed);
         aGeometry = aDashed;
     }
 
@@ -755,7 +777,7 @@ void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, SdrTextObj* pO
     svtools::ColorConfigValue aColor( aColorConfig.GetColorValue( bVisible ? svtools::FONTCOLOR : svtools::OBJECTBOUNDARIES ) );
 
     // paint at OutDev
-    rRenderContext.SetLineColor(Color(aColor.nColor));
+    rRenderContext.SetLineColor(aColor.nColor);
     rRenderContext.SetFillColor();
 
     for (sal_uInt32 a(0); a < aGeometry.count(); a++)
@@ -764,58 +786,61 @@ void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, SdrTextObj* pO
     }
 }
 
-void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void PresLayoutPreview::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle&)
 {
     rRenderContext.Push();
 
-    maOutRect = Rectangle(Point(0,0), rRenderContext.GetOutputSize());
+    maOutRect = ::tools::Rectangle(Point(0,0), rRenderContext.GetOutputSize());
 
     // calculate page size with correct aspect ratio
     int nWidth, nHeight;
     if( maPageSize.Width() > maPageSize.Height() )
     {
         nWidth = maOutRect.GetWidth();
-        nHeight = long( (double)(nWidth * maPageSize.Height()) / (double)maPageSize.Width() );
+        nHeight = maPageSize.Width() == 0 ? 0 : long( static_cast<double>(nWidth * maPageSize.Height()) / static_cast<double>(maPageSize.Width()) );
     }
     else
     {
         nHeight = maOutRect.GetHeight();
-        nWidth = long( (double)(nHeight * maPageSize.Width()) / (double)maPageSize.Height() );
+        nWidth = maPageSize.Height() == 0 ? 0 : long( static_cast<double>(nHeight * maPageSize.Width()) / static_cast<double>(maPageSize.Height()) );
     }
 
-    maOutRect.Left() += (maOutRect.GetWidth() - nWidth) >> 1;
-    maOutRect.Right() = maOutRect.Left() + nWidth - 1;
-    maOutRect.Top() += (maOutRect.GetHeight() - nHeight) >> 1;
-    maOutRect.Bottom() = maOutRect.Top() + nHeight - 1;
+    maOutRect.AdjustLeft((maOutRect.GetWidth() - nWidth) >> 1 );
+    maOutRect.SetRight( maOutRect.Left() + nWidth - 1 );
+    maOutRect.AdjustTop((maOutRect.GetHeight() - nHeight) >> 1 );
+    maOutRect.SetBottom( maOutRect.Top() + nHeight - 1 );
 
     // draw decoration frame
     DecorationView aDecoView(&rRenderContext);
     maOutRect = aDecoView.DrawFrame(maOutRect, DrawFrameStyle::In);
 
     // draw page background
-    rRenderContext.SetFillColor(Color(COL_WHITE));
+    rRenderContext.SetFillColor(COL_WHITE);
     rRenderContext.DrawRect(maOutRect);
 
     // paint presentation objects from masterpage
-    SdrTextObj* pMasterTitle = static_cast<SdrTextObj*>(mpMaster->GetPresObj( PRESOBJ_TITLE ));
-    SdrTextObj* pMasterOutline = static_cast<SdrTextObj*>(mpMaster->GetPresObj( mpMaster->GetPageKind()==PK_NOTES ? PRESOBJ_NOTES : PRESOBJ_OUTLINE ));
-    SdrTextObj* pHeader = static_cast<SdrTextObj*>(mpMaster->GetPresObj( PRESOBJ_HEADER ));
-    SdrTextObj* pFooter = static_cast<SdrTextObj*>(mpMaster->GetPresObj( PRESOBJ_FOOTER ));
-    SdrTextObj* pDate   = static_cast<SdrTextObj*>(mpMaster->GetPresObj( PRESOBJ_DATETIME ));
-    SdrTextObj* pNumber = static_cast<SdrTextObj*>(mpMaster->GetPresObj( PRESOBJ_SLIDENUMBER ));
+    if (nullptr != mpMaster)
+    {
+        SdrTextObj* pMasterTitle = static_cast<SdrTextObj*>(mpMaster->GetPresObj(PRESOBJ_TITLE));
+        SdrTextObj* pMasterOutline = static_cast<SdrTextObj*>(mpMaster->GetPresObj(mpMaster->GetPageKind() == PageKind::Notes ? PRESOBJ_NOTES : PRESOBJ_OUTLINE));
+        SdrTextObj* pHeader = static_cast<SdrTextObj*>(mpMaster->GetPresObj(PRESOBJ_HEADER));
+        SdrTextObj* pFooter = static_cast<SdrTextObj*>(mpMaster->GetPresObj(PRESOBJ_FOOTER));
+        SdrTextObj* pDate = static_cast<SdrTextObj*>(mpMaster->GetPresObj(PRESOBJ_DATETIME));
+        SdrTextObj* pNumber = static_cast<SdrTextObj*>(mpMaster->GetPresObj(PRESOBJ_SLIDENUMBER));
 
-    if (pMasterTitle)
-        Paint(rRenderContext, pMasterTitle, true, true);
-    if (pMasterOutline)
-        Paint(rRenderContext, pMasterOutline, true, true);
-    if (pHeader)
-        Paint(rRenderContext, pHeader, maSettings.mbHeaderVisible);
-    if (pFooter)
-        Paint(rRenderContext, pFooter, maSettings.mbFooterVisible);
-    if (pDate)
-        Paint(rRenderContext, pDate, maSettings.mbDateTimeVisible);
-    if (pNumber)
-        Paint(rRenderContext, pNumber, maSettings.mbSlideNumberVisible);
+        if (pMasterTitle)
+            Paint(rRenderContext, pMasterTitle, true, true);
+        if (pMasterOutline)
+            Paint(rRenderContext, pMasterOutline, true, true);
+        if (pHeader)
+            Paint(rRenderContext, pHeader, maSettings.mbHeaderVisible);
+        if (pFooter)
+            Paint(rRenderContext, pFooter, maSettings.mbFooterVisible);
+        if (pDate)
+            Paint(rRenderContext, pDate, maSettings.mbDateTimeVisible);
+        if (pNumber)
+            Paint(rRenderContext, pNumber, maSettings.mbSlideNumberVisible);
+    }
 
     rRenderContext.Pop();
 }

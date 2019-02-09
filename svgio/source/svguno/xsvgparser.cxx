@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <com/sun/star/graphic/XSvgParser.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -29,7 +30,7 @@
 #include <com/sun/star/xml/sax/Parser.hpp>
 #include <com/sun/star/xml/sax/InputSource.hpp>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
-#include <svgio/svgreader/svgdocumenthandler.hxx>
+#include <svgdocumenthandler.hxx>
 
 #include "xsvgparser.hxx"
 
@@ -48,19 +49,18 @@ namespace svgio
         public:
             explicit XSvgParser(
                 uno::Reference< uno::XComponentContext > const & context);
-            virtual ~XSvgParser();
             XSvgParser(const XSvgParser&) = delete;
             XSvgParser& operator=(const XSvgParser&) = delete;
 
             // XSvgParser
             virtual uno::Sequence< uno::Reference< ::graphic::XPrimitive2D > > SAL_CALL getDecomposition(
                 const uno::Reference< ::io::XInputStream >& xSVGStream,
-                const OUString& aAbsolutePath) throw (uno::RuntimeException, std::exception) override;
+                const OUString& aAbsolutePath) override;
 
             // XServiceInfo
-            virtual OUString SAL_CALL getImplementationName() throw(uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL supportsService(const OUString&) throw(uno::RuntimeException, std::exception) override;
-            virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(uno::RuntimeException, std::exception) override;
+            virtual OUString SAL_CALL getImplementationName() override;
+            virtual sal_Bool SAL_CALL supportsService(const OUString&) override;
+            virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
         };
     } // end of namespace svgreader
 } // end of namespace svgio
@@ -80,7 +80,7 @@ namespace svgio
             return OUString( "svgio::svgreader::XSvgParser" );
         }
 
-        uno::Reference< uno::XInterface > SAL_CALL XSvgParser_createInstance(const uno::Reference< uno::XComponentContext >& context)
+        uno::Reference< uno::XInterface > XSvgParser_createInstance(const uno::Reference< uno::XComponentContext >& context)
         {
             return static_cast< ::cppu::OWeakObject* >(new XSvgParser(context));
         }
@@ -97,15 +97,11 @@ namespace svgio
         {
         }
 
-        XSvgParser::~XSvgParser()
-        {
-        }
-
         uno::Sequence< uno::Reference< ::graphic::XPrimitive2D > > XSvgParser::getDecomposition(
             const uno::Reference< ::io::XInputStream >& xSVGStream,
-            const OUString& aAbsolutePath ) throw (uno::RuntimeException, std::exception)
+            const OUString& aAbsolutePath )
         {
-            drawinglayer::primitive2d::Primitive2DSequence aRetval;
+            drawinglayer::primitive2d::Primitive2DContainer aRetval;
 
             if(xSVGStream.is())
             {
@@ -143,22 +139,15 @@ namespace svgio
                 }
                 catch(const uno::Exception& e)
                 {
-                    SAL_WARN( "svg", "Parse error! : " << e.Message);
+                    SAL_WARN( "svg", "Parse error! : " << e);
                 }
 
                 // decompose to primitives
-                const SvgNodeVector& rResults = pSvgDocHdl->getSvgDocument().getSvgNodeVector();
-                const sal_uInt32 nCount(rResults.size());
-
-                for(sal_uInt32 a(0); a < nCount; a++)
+                for(std::unique_ptr<SvgNode> const & pCandidate : pSvgDocHdl->getSvgDocument().getSvgNodeVector())
                 {
-                    SvgNode* pCandidate = rResults[a];
-
                     if(Display_none != pCandidate->getDisplay())
                     {
-                        drawinglayer::primitive2d::Primitive2DContainer aTmp = comphelper::sequenceToContainer<drawinglayer::primitive2d::Primitive2DContainer>(aRetval);
-                        pCandidate->decomposeSvgNode(aTmp, false);
-                        aRetval = comphelper::containerToSequence(aTmp);
+                        pCandidate->decomposeSvgNode(aRetval, false);
                     }
                 }
             }
@@ -167,20 +156,20 @@ namespace svgio
                 OSL_ENSURE(false, "Invalid stream (!)");
             }
 
-            return aRetval;
+            return comphelper::containerToSequence(aRetval);
         }
 
-        OUString SAL_CALL XSvgParser::getImplementationName() throw(uno::RuntimeException, std::exception)
+        OUString SAL_CALL XSvgParser::getImplementationName()
         {
-            return(XSvgParser_getImplementationName());
+            return XSvgParser_getImplementationName();
         }
 
-        sal_Bool SAL_CALL XSvgParser::supportsService(const OUString& rServiceName) throw(uno::RuntimeException, std::exception)
+        sal_Bool SAL_CALL XSvgParser::supportsService(const OUString& rServiceName)
         {
             return cppu::supportsService(this, rServiceName);
         }
 
-        uno::Sequence< OUString > SAL_CALL XSvgParser::getSupportedServiceNames() throw(uno::RuntimeException, std::exception)
+        uno::Sequence< OUString > SAL_CALL XSvgParser::getSupportedServiceNames()
         {
             return XSvgParser_getSupportedServiceNames();
         }

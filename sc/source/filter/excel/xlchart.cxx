@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xlchart.hxx"
+#include <xlchart.hxx>
 
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/awt/Size.hpp>
@@ -34,9 +34,9 @@
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/chart/XSecondAxisTitleSupplier.hpp>
 #include <com/sun/star/chart2/Symbol.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <sal/macros.h>
-#include <rtl/math.hxx>
 #include <svl/itemset.hxx>
 #include <svx/xfillit0.hxx>
 #include <svx/xflclit.hxx>
@@ -45,21 +45,11 @@
 #include <svx/xbtmpit.hxx>
 #include <svx/unomid.hxx>
 #include <filter/msfilter/escherex.hxx>
-#include <editeng/memberids.hrc>
-#include "global.hxx"
-#include "xlroot.hxx"
-#include "xlstyle.hxx"
+#include <xlroot.hxx>
+#include <xlstyle.hxx>
+#include <xltools.hxx>
 
-using namespace com::sun::star;
-using ::com::sun::star::uno::Any;
-using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::UNO_QUERY;
-using ::com::sun::star::uno::Exception;
-using ::com::sun::star::lang::XMultiServiceFactory;
-using ::com::sun::star::chart2::XChartDocument;
-using ::com::sun::star::drawing::XShape;
-
-namespace cssc = ::com::sun::star::chart;
+using namespace css;
 
 // Common =====================================================================
 
@@ -448,9 +438,8 @@ static const XclChFormatInfo spFmtInfos[] =
 
 XclChFormatInfoProvider::XclChFormatInfoProvider()
 {
-    const XclChFormatInfo* pEnd = STATIC_ARRAY_END( spFmtInfos );
-    for( const XclChFormatInfo* pIt = spFmtInfos; pIt != pEnd; ++pIt )
-        maInfoMap[ pIt->meObjType ] = pIt;
+    for(auto const &rIt : spFmtInfos)
+        maInfoMap[ rIt.meObjType ] = &rIt;
 }
 
 const XclChFormatInfo& XclChFormatInfoProvider::GetFormatInfo( XclChObjectType eObjType ) const
@@ -476,7 +465,7 @@ const sal_Char SERVICE_CHART2_SCATTER[]   = "com.sun.star.chart2.ScatterChartTyp
 const sal_Char SERVICE_CHART2_BUBBLE[]    = "com.sun.star.chart2.BubbleChartType";
 const sal_Char SERVICE_CHART2_SURFACE[]   = "com.sun.star.chart2.ColumnChartType";    // Todo
 
-namespace csscd = cssc::DataLabelPlacement;
+namespace csscd = css::chart::DataLabelPlacement;
 
 static const XclChTypeInfo spTypeInfos[] =
 {
@@ -515,9 +504,8 @@ void XclChExtTypeInfo::Set( const XclChTypeInfo& rTypeInfo, bool b3dChart, bool 
 
 XclChTypeInfoProvider::XclChTypeInfoProvider()
 {
-    const XclChTypeInfo* pEnd = STATIC_ARRAY_END( spTypeInfos );
-    for( const XclChTypeInfo* pIt = spTypeInfos; pIt != pEnd; ++pIt )
-        maInfoMap[ pIt->meTypeId ] = pIt;
+    for(const auto &rIt : spTypeInfos)
+        maInfoMap[ rIt.meTypeId ] = &rIt;
 }
 
 const XclChTypeInfo& XclChTypeInfoProvider::GetTypeInfo( XclChTypeId eTypeId ) const
@@ -529,27 +517,27 @@ const XclChTypeInfo& XclChTypeInfoProvider::GetTypeInfo( XclChTypeId eTypeId ) c
 
 const XclChTypeInfo& XclChTypeInfoProvider::GetTypeInfoFromRecId( sal_uInt16 nRecId ) const
 {
-    const XclChTypeInfo* pEnd = STATIC_ARRAY_END( spTypeInfos );
-    for( const XclChTypeInfo* pIt = spTypeInfos; pIt != pEnd; ++pIt )
-        if( pIt->mnRecId == nRecId )
-            return *pIt;
+    for(const auto &rIt : spTypeInfos)
+    {
+        if(rIt.mnRecId == nRecId)
+            return rIt;
+    }
     OSL_FAIL( "XclChTypeInfoProvider::GetTypeInfoFromRecId - unknown record id" );
     return GetTypeInfo( EXC_CHTYPEID_UNKNOWN );
 }
 
 const XclChTypeInfo& XclChTypeInfoProvider::GetTypeInfoFromService( const OUString& rServiceName ) const
 {
-    const XclChTypeInfo* pEnd = STATIC_ARRAY_END( spTypeInfos );
-    for( const XclChTypeInfo* pIt = spTypeInfos; pIt != pEnd; ++pIt )
-        if( rServiceName.equalsAscii( pIt->mpcServiceName ) )
-            return *pIt;
+    for(auto const &rIt : spTypeInfos)
+        if( rServiceName.equalsAscii( rIt.mpcServiceName ) )
+            return rIt;
     OSL_FAIL( "XclChTypeInfoProvider::GetTypeInfoFromService - unknown service name" );
     return GetTypeInfo( EXC_CHTYPEID_UNKNOWN );
 }
 
 // Property helpers ===========================================================
 
-XclChObjectTable::XclChObjectTable( Reference< XMultiServiceFactory > xFactory,
+XclChObjectTable::XclChObjectTable(uno::Reference<lang::XMultiServiceFactory> const & xFactory,
         const OUString& rServiceName, const OUString& rObjNameBase ) :
     mxFactory( xFactory ),
     maServiceName( rServiceName ),
@@ -558,14 +546,14 @@ XclChObjectTable::XclChObjectTable( Reference< XMultiServiceFactory > xFactory,
 {
 }
 
-Any XclChObjectTable::GetObject( const OUString& rObjName )
+uno::Any XclChObjectTable::GetObject( const OUString& rObjName )
 {
     // get object table
     if( !mxContainer.is() )
-        mxContainer.set( ScfApiHelper::CreateInstance( mxFactory, maServiceName ), UNO_QUERY );
+        mxContainer.set(ScfApiHelper::CreateInstance( mxFactory, maServiceName ), uno::UNO_QUERY);
     OSL_ENSURE( mxContainer.is(), "XclChObjectTable::GetObject - container not found" );
 
-    Any aObj;
+    uno::Any aObj;
     if( mxContainer.is() )
     {
         // get object from container
@@ -573,7 +561,7 @@ Any XclChObjectTable::GetObject( const OUString& rObjName )
         {
             aObj = mxContainer->getByName( rObjName );
         }
-        catch( Exception& )
+        catch (uno::Exception &)
         {
             OSL_FAIL( "XclChObjectTable::GetObject - object not found" );
         }
@@ -581,12 +569,12 @@ Any XclChObjectTable::GetObject( const OUString& rObjName )
     return aObj;
 }
 
-OUString XclChObjectTable::InsertObject( const Any& rObj )
+OUString XclChObjectTable::InsertObject(const uno::Any& rObj)
 {
 
     // create object table
     if( !mxContainer.is() )
-        mxContainer.set( ScfApiHelper::CreateInstance( mxFactory, maServiceName ), UNO_QUERY );
+        mxContainer.set(ScfApiHelper::CreateInstance( mxFactory, maServiceName ), uno::UNO_QUERY);
     OSL_ENSURE( mxContainer.is(), "XclChObjectTable::InsertObject - container not found" );
 
     OUString aObjName;
@@ -604,7 +592,7 @@ OUString XclChObjectTable::InsertObject( const Any& rObj )
         {
             mxContainer->insertByName( aObjName, rObj );
         }
-        catch( Exception& )
+        catch (uno::Exception &)
         {
             OSL_FAIL( "XclChObjectTable::InsertObject - cannot insert object" );
             aObjName.clear();
@@ -664,13 +652,11 @@ void XclChPropSetHelper::ReadLineProperties(
         XclChLineFormat& rLineFmt, XclChObjectTable& rDashTable,
         const ScfPropertySet& rPropSet, XclChPropertyMode ePropMode )
 {
-    namespace cssd = ::com::sun::star::drawing;
-
     // read properties from property set
-    cssd::LineStyle eApiStyle = cssd::LineStyle_NONE;
+    drawing::LineStyle eApiStyle = drawing::LineStyle_NONE;
     sal_Int32 nApiWidth = 0;
     sal_Int16 nApiTrans = 0;
-    Any aDashNameAny;
+    uno::Any aDashNameAny;
 
     ScfPropSetHelper& rLineHlp = GetLineHelper( ePropMode );
     rLineHlp.ReadFromPropertySet( rPropSet );
@@ -688,10 +674,10 @@ void XclChPropSetHelper::ReadLineProperties(
     // line style
     switch( eApiStyle )
     {
-        case cssd::LineStyle_NONE:
+        case drawing::LineStyle_NONE:
             rLineFmt.mnPattern = EXC_CHLINEFORMAT_NONE;
         break;
-        case cssd::LineStyle_SOLID:
+        case drawing::LineStyle_SOLID:
         {
             if( nApiTrans < 13 )        rLineFmt.mnPattern = EXC_CHLINEFORMAT_SOLID;
             else if( nApiTrans < 38 )   rLineFmt.mnPattern = EXC_CHLINEFORMAT_DARKTRANS;
@@ -700,11 +686,11 @@ void XclChPropSetHelper::ReadLineProperties(
             else                        rLineFmt.mnPattern = EXC_CHLINEFORMAT_NONE;
         }
         break;
-        case cssd::LineStyle_DASH:
+        case drawing::LineStyle_DASH:
         {
             rLineFmt.mnPattern = EXC_CHLINEFORMAT_SOLID;
             OUString aDashName;
-            cssd::LineDash aApiDash;
+            drawing::LineDash aApiDash;
             if( (aDashNameAny >>= aDashName) && (rDashTable.GetObject( aDashName ) >>= aApiDash) )
             {
                 // reorder dashes that are shorter than dots
@@ -738,10 +724,8 @@ void XclChPropSetHelper::ReadLineProperties(
 bool XclChPropSetHelper::ReadAreaProperties( XclChAreaFormat& rAreaFmt,
         const ScfPropertySet& rPropSet, XclChPropertyMode ePropMode )
 {
-    namespace cssd = ::com::sun::star::drawing;
-
     // read properties from property set
-    cssd::FillStyle eApiStyle = cssd::FillStyle_NONE;
+    drawing::FillStyle eApiStyle = drawing::FillStyle_NONE;
     sal_Int16 nTransparency = 0;
 
     ScfPropSetHelper& rAreaHlp = GetAreaHelper( ePropMode );
@@ -752,10 +736,10 @@ bool XclChPropSetHelper::ReadAreaProperties( XclChAreaFormat& rAreaFmt,
     ::set_flag( rAreaFmt.mnFlags, EXC_CHAREAFORMAT_AUTO, false );
 
     // set fill style transparent or solid (set solid for anything but transparent)
-    rAreaFmt.mnPattern = (eApiStyle == cssd::FillStyle_NONE) ? EXC_PATT_NONE : EXC_PATT_SOLID;
+    rAreaFmt.mnPattern = (eApiStyle == drawing::FillStyle_NONE) ? EXC_PATT_NONE : EXC_PATT_SOLID;
 
     // return true to indicate complex fill (gradient, bitmap, solid transparency)
-    return (eApiStyle != cssd::FillStyle_NONE) && ((eApiStyle != cssd::FillStyle_SOLID) || (nTransparency > 0));
+    return (eApiStyle != drawing::FillStyle_NONE) && ((eApiStyle != drawing::FillStyle_SOLID) || (nTransparency > 0));
 }
 
 void XclChPropSetHelper::ReadEscherProperties(
@@ -763,11 +747,8 @@ void XclChPropSetHelper::ReadEscherProperties(
         XclChObjectTable& rGradientTable, XclChObjectTable& rHatchTable, XclChObjectTable& rBitmapTable,
         const ScfPropertySet& rPropSet, XclChPropertyMode ePropMode )
 {
-    namespace cssd = ::com::sun::star::drawing;
-    namespace cssa = ::com::sun::star::awt;
-
     // read style and transparency properties from property set
-    cssd::FillStyle eApiStyle = cssd::FillStyle_NONE;
+    drawing::FillStyle eApiStyle = drawing::FillStyle_NONE;
     Color aColor;
     sal_Int16 nTransparency = 0;
 
@@ -777,7 +758,7 @@ void XclChPropSetHelper::ReadEscherProperties(
 
     switch( eApiStyle )
     {
-        case cssd::FillStyle_SOLID:
+        case drawing::FillStyle_SOLID:
         {
             OSL_ENSURE( nTransparency > 0, "XclChPropSetHelper::ReadEscherProperties - unexpected solid area without transparency" );
             if( (0 < nTransparency) && (nTransparency <= 100) )
@@ -798,14 +779,14 @@ void XclChPropSetHelper::ReadEscherProperties(
             }
         }
         break;
-        case cssd::FillStyle_GRADIENT:
+        case drawing::FillStyle_GRADIENT:
         {
             // extract gradient from global gradient table
             OUString aGradientName;
             ScfPropSetHelper& rGradHlp = GetGradientHelper( ePropMode );
             rGradHlp.ReadFromPropertySet( rPropSet );
             rGradHlp >> eApiStyle >> aGradientName;
-            cssa::Gradient aGradient;
+            awt::Gradient aGradient;
             if( rGradientTable.GetObject( aGradientName ) >>= aGradient )
             {
                 // convert to Escher properties
@@ -814,7 +795,7 @@ void XclChPropSetHelper::ReadEscherProperties(
             }
         }
         break;
-        case cssd::FillStyle_HATCH:
+        case drawing::FillStyle_HATCH:
         {
             // extract hatch from global hatch table
             OUString aHatchName;
@@ -822,7 +803,7 @@ void XclChPropSetHelper::ReadEscherProperties(
             ScfPropSetHelper& rHatchHlp = GetHatchHelper( ePropMode );
             rHatchHlp.ReadFromPropertySet( rPropSet );
             rHatchHlp >> eApiStyle >> aHatchName >> aColor >> bFillBackground;
-            cssd::Hatch aHatch;
+            drawing::Hatch aHatch;
             if( rHatchTable.GetObject( aHatchName ) >>= aHatch )
             {
                 // convert to Escher properties
@@ -832,20 +813,20 @@ void XclChPropSetHelper::ReadEscherProperties(
             }
         }
         break;
-        case cssd::FillStyle_BITMAP:
+        case drawing::FillStyle_BITMAP:
         {
             // extract bitmap URL from global bitmap table
             OUString aBitmapName;
-            cssd::BitmapMode eApiBmpMode;
+            drawing::BitmapMode eApiBmpMode;
             maBitmapHlp.ReadFromPropertySet( rPropSet );
             maBitmapHlp >> eApiStyle >> aBitmapName >> eApiBmpMode;
-            OUString aBitmapUrl;
-            if( rBitmapTable.GetObject( aBitmapName ) >>= aBitmapUrl )
+            uno::Reference<awt::XBitmap> xBitmap;
+            if (rBitmapTable.GetObject( aBitmapName ) >>= xBitmap)
             {
                 // convert to Escher properties
                 rEscherFmt.mxEscherSet.reset( new EscherPropertyContainer );
-                rEscherFmt.mxEscherSet->CreateEmbeddedBitmapProperties( aBitmapUrl, eApiBmpMode );
-                rPicFmt.mnBmpMode = (eApiBmpMode == cssd::BitmapMode_REPEAT) ?
+                rEscherFmt.mxEscherSet->CreateEmbeddedBitmapProperties( xBitmap, eApiBmpMode );
+                rPicFmt.mnBmpMode = (eApiBmpMode == drawing::BitmapMode_REPEAT) ?
                     EXC_CHPICFORMAT_STACK : EXC_CHPICFORMAT_STRETCH;
             }
         }
@@ -858,9 +839,7 @@ void XclChPropSetHelper::ReadEscherProperties(
 void XclChPropSetHelper::ReadMarkerProperties(
         XclChMarkerFormat& rMarkerFmt, const ScfPropertySet& rPropSet, sal_uInt16 nFormatIdx )
 {
-    namespace cssc = ::com::sun::star::chart2;
-    namespace cssa = ::com::sun::star::awt;
-    cssc::Symbol aApiSymbol;
+    chart2::Symbol aApiSymbol;
     if( rPropSet.GetProperty( aApiSymbol, EXC_CHPROP_SYMBOL ) )
     {
         // clear automatic flag
@@ -869,10 +848,10 @@ void XclChPropSetHelper::ReadMarkerProperties(
         // symbol style
         switch( aApiSymbol.Style )
         {
-            case cssc::SymbolStyle_NONE:
+            case chart2::SymbolStyle_NONE:
                 rMarkerFmt.mnMarkerType = EXC_CHMARKERFORMAT_NOSYMBOL;
             break;
-            case cssc::SymbolStyle_STANDARD:
+            case chart2::SymbolStyle_STANDARD:
                 switch( aApiSymbol.StandardSymbol )
                 {
                     case 0:     rMarkerFmt.mnMarkerType = EXC_CHMARKERFORMAT_SQUARE;    break;  // square
@@ -904,8 +883,8 @@ void XclChPropSetHelper::ReadMarkerProperties(
         rMarkerFmt.mnMarkerSize = XclTools::GetTwipsFromHmm( nApiSize );
 
         // symbol colors
-        rMarkerFmt.maLineColor = ScfApiHelper::ConvertFromApiColor( aApiSymbol.BorderColor );
-        rMarkerFmt.maFillColor = ScfApiHelper::ConvertFromApiColor( aApiSymbol.FillColor );
+        rMarkerFmt.maLineColor = Color( aApiSymbol.BorderColor );
+        rMarkerFmt.maFillColor = Color( aApiSymbol.FillColor );
     }
 }
 
@@ -925,8 +904,6 @@ void XclChPropSetHelper::WriteLineProperties(
         ScfPropertySet& rPropSet, XclChObjectTable& rDashTable,
         const XclChLineFormat& rLineFmt, XclChPropertyMode ePropMode )
 {
-    namespace cssd = ::com::sun::star::drawing;
-
     // line width
     sal_Int32 nApiWidth = 0;    // 0 is the width of a hair line
     switch( rLineFmt.mnWeight )
@@ -937,47 +914,47 @@ void XclChPropSetHelper::WriteLineProperties(
     }
 
     // line style
-    cssd::LineStyle eApiStyle = cssd::LineStyle_NONE;
+    drawing::LineStyle eApiStyle = drawing::LineStyle_NONE;
     sal_Int16 nApiTrans = 0;
     sal_Int32 nDotLen = ::std::min< sal_Int32 >( rLineFmt.mnWeight + 105, 210 );
-    cssd::LineDash aApiDash( cssd::DashStyle_RECT, 0, nDotLen, 0, 4 * nDotLen, nDotLen );
+    drawing::LineDash aApiDash( drawing::DashStyle_RECT, 0, nDotLen, 0, 4 * nDotLen, nDotLen );
 
     switch( rLineFmt.mnPattern )
     {
         case EXC_CHLINEFORMAT_SOLID:
-            eApiStyle = cssd::LineStyle_SOLID;
+            eApiStyle = drawing::LineStyle_SOLID;
         break;
         case EXC_CHLINEFORMAT_DARKTRANS:
-            eApiStyle = cssd::LineStyle_SOLID; nApiTrans = 25;
+            eApiStyle = drawing::LineStyle_SOLID; nApiTrans = 25;
         break;
         case EXC_CHLINEFORMAT_MEDTRANS:
-            eApiStyle = cssd::LineStyle_SOLID; nApiTrans = 50;
+            eApiStyle = drawing::LineStyle_SOLID; nApiTrans = 50;
         break;
         case EXC_CHLINEFORMAT_LIGHTTRANS:
-            eApiStyle = cssd::LineStyle_SOLID; nApiTrans = 75;
+            eApiStyle = drawing::LineStyle_SOLID; nApiTrans = 75;
         break;
         case EXC_CHLINEFORMAT_DASH:
-            eApiStyle = cssd::LineStyle_DASH; aApiDash.Dashes = 1;
+            eApiStyle = drawing::LineStyle_DASH; aApiDash.Dashes = 1;
         break;
         case EXC_CHLINEFORMAT_DOT:
-            eApiStyle = cssd::LineStyle_DASH; aApiDash.Dots = 1;
+            eApiStyle = drawing::LineStyle_DASH; aApiDash.Dots = 1;
         break;
         case EXC_CHLINEFORMAT_DASHDOT:
-            eApiStyle = cssd::LineStyle_DASH; aApiDash.Dashes = aApiDash.Dots = 1;
+            eApiStyle = drawing::LineStyle_DASH; aApiDash.Dashes = aApiDash.Dots = 1;
         break;
         case EXC_CHLINEFORMAT_DASHDOTDOT:
-            eApiStyle = cssd::LineStyle_DASH; aApiDash.Dashes = 1; aApiDash.Dots = 2;
+            eApiStyle = drawing::LineStyle_DASH; aApiDash.Dashes = 1; aApiDash.Dots = 2;
         break;
     }
 
     // line color
-    sal_Int32 nApiColor = ScfApiHelper::ConvertToApiColor( rLineFmt.maColor );
+    sal_Int32 nApiColor = sal_Int32( rLineFmt.maColor );
 
     // try to insert the dash style and receive its name
-    Any aDashNameAny;
-    if( eApiStyle == cssd::LineStyle_DASH )
+    uno::Any aDashNameAny;
+    if( eApiStyle == drawing::LineStyle_DASH )
     {
-        OUString aDashName = rDashTable.InsertObject( css::uno::makeAny( aApiDash ) );
+        OUString aDashName = rDashTable.InsertObject( uno::makeAny( aApiDash ) );
         if( !aDashName.isEmpty() )
             aDashNameAny <<= aDashName;
     }
@@ -992,84 +969,79 @@ void XclChPropSetHelper::WriteLineProperties(
 void XclChPropSetHelper::WriteAreaProperties( ScfPropertySet& rPropSet,
         const XclChAreaFormat& rAreaFmt, XclChPropertyMode ePropMode )
 {
-    namespace cssd = ::com::sun::star::drawing;
-    cssd::FillStyle eFillStyle = cssd::FillStyle_NONE;
+    drawing::FillStyle eFillStyle = drawing::FillStyle_NONE;
     Color aColor;
-    sal_Int16 nTransparency = 0;
 
     // fill color
     if( rAreaFmt.mnPattern != EXC_PATT_NONE )
     {
-        eFillStyle = cssd::FillStyle_SOLID;
+        eFillStyle = drawing::FillStyle_SOLID;
         aColor = XclTools::GetPatternColor( rAreaFmt.maPattColor, rAreaFmt.maBackColor, rAreaFmt.mnPattern );
     }
 
     // write the properties
     ScfPropSetHelper& rAreaHlp = GetAreaHelper( ePropMode );
     rAreaHlp.InitializeWrite();
-    rAreaHlp << eFillStyle << aColor << nTransparency;
+    rAreaHlp << eFillStyle << aColor << sal_Int16(0)/*nTransparency*/;
     rAreaHlp.WriteToPropertySet( rPropSet );
 }
 
 void XclChPropSetHelper::WriteEscherProperties( ScfPropertySet& rPropSet,
-        XclChObjectTable& rGradientTable, XclChObjectTable& /*rHatchTable*/, XclChObjectTable& rBitmapTable,
+        XclChObjectTable& rGradientTable, XclChObjectTable& rBitmapTable,
         const XclChEscherFormat& rEscherFmt, const XclChPicFormat* pPicFmt,
         sal_uInt32 nDffFillType, XclChPropertyMode ePropMode )
 {
     if( rEscherFmt.mxItemSet )
     {
-        if( const XFillStyleItem* pStyleItem = static_cast< const XFillStyleItem* >( rEscherFmt.mxItemSet->GetItem( XATTR_FILLSTYLE, false ) ) )
+        if( const XFillStyleItem* pStyleItem = rEscherFmt.mxItemSet->GetItem<XFillStyleItem>( XATTR_FILLSTYLE, false ) )
         {
             switch( pStyleItem->GetValue() )
             {
                 case drawing::FillStyle_SOLID:
                     // #i84812# Excel 2007 writes Escher properties for solid fill
-                    if( const XFillColorItem* pColorItem = static_cast< const XFillColorItem* >( rEscherFmt.mxItemSet->GetItem( XATTR_FILLCOLOR, false ) ) )
+                    if( const XFillColorItem* pColorItem = rEscherFmt.mxItemSet->GetItem<XFillColorItem>( XATTR_FILLCOLOR, false ) )
                     {
-                        namespace cssd = ::com::sun::star::drawing;
                         // get solid transparence too
-                        const XFillTransparenceItem* pTranspItem = static_cast< const XFillTransparenceItem* >( rEscherFmt.mxItemSet->GetItem( XATTR_FILLTRANSPARENCE, false ) );
+                        const XFillTransparenceItem* pTranspItem = rEscherFmt.mxItemSet->GetItem<XFillTransparenceItem>( XATTR_FILLTRANSPARENCE, false );
                         sal_uInt16 nTransp = pTranspItem ? pTranspItem->GetValue() : 0;
                         ScfPropSetHelper& rAreaHlp = GetAreaHelper( ePropMode );
                         rAreaHlp.InitializeWrite();
-                        rAreaHlp << cssd::FillStyle_SOLID << pColorItem->GetColorValue() << static_cast< sal_Int16 >( nTransp );
+                        rAreaHlp << drawing::FillStyle_SOLID << pColorItem->GetColorValue() << static_cast< sal_Int16 >( nTransp );
                         rAreaHlp.WriteToPropertySet( rPropSet );
                     }
                 break;
                 case drawing::FillStyle_GRADIENT:
-                    if( const XFillGradientItem* pGradItem = static_cast< const XFillGradientItem* >( rEscherFmt.mxItemSet->GetItem( XATTR_FILLGRADIENT, false ) ) )
+                    if( const XFillGradientItem* pGradItem = rEscherFmt.mxItemSet->GetItem<XFillGradientItem>( XATTR_FILLGRADIENT, false ) )
                     {
-                        Any aGradientAny;
+                        uno::Any aGradientAny;
                         if( pGradItem->QueryValue( aGradientAny, MID_FILLGRADIENT ) )
                         {
                             OUString aGradName = rGradientTable.InsertObject( aGradientAny );
                             if( !aGradName.isEmpty() )
                             {
-                                namespace cssd = ::com::sun::star::drawing;
                                 ScfPropSetHelper& rGradHlp = GetGradientHelper( ePropMode );
                                 rGradHlp.InitializeWrite();
-                                rGradHlp << cssd::FillStyle_GRADIENT << aGradName;
+                                rGradHlp << drawing::FillStyle_GRADIENT << aGradName;
                                 rGradHlp.WriteToPropertySet( rPropSet );
                             }
                         }
                     }
                 break;
                 case drawing::FillStyle_BITMAP:
-                    if( const XFillBitmapItem* pBmpItem = static_cast< const XFillBitmapItem* >( rEscherFmt.mxItemSet->GetItem( XATTR_FILLBITMAP, false ) ) )
+                    if( const XFillBitmapItem* pBmpItem = rEscherFmt.mxItemSet->GetItem<XFillBitmapItem>( XATTR_FILLBITMAP, false ) )
                     {
-                        Any aBitmapAny;
-                        if( pBmpItem->QueryValue( aBitmapAny, MID_GRAFURL ) )
+                        uno::Any aBitmapAny;
+                        if (pBmpItem->QueryValue(aBitmapAny, MID_BITMAP))
                         {
                             OUString aBmpName = rBitmapTable.InsertObject( aBitmapAny );
                             if( !aBmpName.isEmpty() )
                             {
-                                namespace cssd = ::com::sun::star::drawing;
                                 /*  #i71810# Caller decides whether to use a CHPICFORMAT record for bitmap mode.
                                     If not passed, detect fill mode from the DFF property 'fill-type'. */
                                 bool bStretch = pPicFmt ? (pPicFmt->mnBmpMode == EXC_CHPICFORMAT_STRETCH) : (nDffFillType == mso_fillPicture);
-                                cssd::BitmapMode eApiBmpMode = bStretch ? cssd::BitmapMode_STRETCH : cssd::BitmapMode_REPEAT;
+                                drawing::BitmapMode eApiBmpMode = bStretch ? drawing::BitmapMode_STRETCH : drawing::BitmapMode_REPEAT;
                                 maBitmapHlp.InitializeWrite();
-                                maBitmapHlp << cssd::FillStyle_BITMAP << aBmpName << eApiBmpMode;
+                                maBitmapHlp << drawing::FillStyle_BITMAP << aBmpName << eApiBmpMode;
                                 maBitmapHlp.WriteToPropertySet( rPropSet );
                             }
                         }
@@ -1085,15 +1057,12 @@ void XclChPropSetHelper::WriteEscherProperties( ScfPropertySet& rPropSet,
 void XclChPropSetHelper::WriteMarkerProperties(
         ScfPropertySet& rPropSet, const XclChMarkerFormat& rMarkerFmt )
 {
-    namespace cssc = ::com::sun::star::chart2;
-    namespace cssa = ::com::sun::star::awt;
-
     // symbol style
-    cssc::Symbol aApiSymbol;
-    aApiSymbol.Style = cssc::SymbolStyle_STANDARD;
+    chart2::Symbol aApiSymbol;
+    aApiSymbol.Style = chart2::SymbolStyle_STANDARD;
     switch( rMarkerFmt.mnMarkerType )
     {
-        case EXC_CHMARKERFORMAT_NOSYMBOL:   aApiSymbol.Style = cssc::SymbolStyle_NONE;  break;
+        case EXC_CHMARKERFORMAT_NOSYMBOL:   aApiSymbol.Style = chart2::SymbolStyle_NONE;  break;
         case EXC_CHMARKERFORMAT_SQUARE:     aApiSymbol.StandardSymbol = 0;              break;  // square
         case EXC_CHMARKERFORMAT_DIAMOND:    aApiSymbol.StandardSymbol = 1;              break;  // diamond
         case EXC_CHMARKERFORMAT_TRIANGLE:   aApiSymbol.StandardSymbol = 3;              break;  // arrow up
@@ -1108,12 +1077,12 @@ void XclChPropSetHelper::WriteMarkerProperties(
 
     // symbol size
     sal_Int32 nApiSize = XclTools::GetHmmFromTwips( rMarkerFmt.mnMarkerSize );
-    aApiSymbol.Size = cssa::Size( nApiSize, nApiSize );
+    aApiSymbol.Size = awt::Size( nApiSize, nApiSize );
 
     // symbol colors
-    aApiSymbol.FillColor = ScfApiHelper::ConvertToApiColor( rMarkerFmt.maFillColor );
+    aApiSymbol.FillColor = sal_Int32( rMarkerFmt.maFillColor );
     aApiSymbol.BorderColor = ::get_flag( rMarkerFmt.mnFlags, EXC_CHMARKERFORMAT_NOLINE ) ?
-        aApiSymbol.FillColor : ScfApiHelper::ConvertToApiColor( rMarkerFmt.maLineColor );
+        aApiSymbol.FillColor : sal_Int32( rMarkerFmt.maLineColor );
 
     // set the property
     rPropSet.SetProperty( EXC_CHPROP_SYMBOL, aApiSymbol );
@@ -1185,37 +1154,59 @@ namespace {
     supported title objects (chart and axes). This needs some effort due to the
     design of the old Chart1 API used to access these objects. */
 
-/** A code fragment that returns a shape object from the passed shape supplier
-    using the specified interface function. Checks a boolean property first. */
-#define EXC_FRAGMENT_GETTITLESHAPE( shape_supplier, supplier_func, property_name ) \
-    ScfPropertySet aPropSet( shape_supplier ); \
-    if( shape_supplier.is() && aPropSet.GetBoolProperty( #property_name ) ) \
-        return shape_supplier->supplier_func(); \
-    return Reference< XShape >(); \
-
-/** Implements a function returning the drawing shape of an axis title, if
-    existing, using the specified API interface and its function. */
-#define EXC_DEFINEFUNC_GETAXISTITLESHAPE( func_name, interface_type, supplier_func, property_name ) \
-Reference< XShape > func_name( const Reference< cssc::XChartDocument >& rxChart1Doc ) \
-{ \
-    Reference< cssc::interface_type > xAxisSupp( rxChart1Doc->getDiagram(), UNO_QUERY ); \
-    EXC_FRAGMENT_GETTITLESHAPE( xAxisSupp, supplier_func, property_name ) \
-}
-
 /** Returns the drawing shape of the main title, if existing. */
-Reference< XShape > lclGetMainTitleShape( const Reference< cssc::XChartDocument >& rxChart1Doc )
+uno::Reference<drawing::XShape> lclGetMainTitleShape(const uno::Reference<chart::XChartDocument> & rxChart1Doc)
 {
-    EXC_FRAGMENT_GETTITLESHAPE( rxChart1Doc, getTitle, HasMainTitle )
+    ScfPropertySet aPropSet(rxChart1Doc);
+    if (rxChart1Doc.is() && aPropSet.GetBoolProperty("HasMainTitle"))
+        return rxChart1Doc->getTitle();
+    return uno::Reference<drawing::XShape>();
 }
 
-EXC_DEFINEFUNC_GETAXISTITLESHAPE( lclGetXAxisTitleShape, XAxisXSupplier, getXAxisTitle, HasXAxisTitle )
-EXC_DEFINEFUNC_GETAXISTITLESHAPE( lclGetYAxisTitleShape, XAxisYSupplier, getYAxisTitle, HasYAxisTitle )
-EXC_DEFINEFUNC_GETAXISTITLESHAPE( lclGetZAxisTitleShape, XAxisZSupplier, getZAxisTitle, HasZAxisTitle )
-EXC_DEFINEFUNC_GETAXISTITLESHAPE( lclGetSecXAxisTitleShape, XSecondAxisTitleSupplier, getSecondXAxisTitle, HasSecondaryXAxisTitle )
-EXC_DEFINEFUNC_GETAXISTITLESHAPE( lclGetSecYAxisTitleShape, XSecondAxisTitleSupplier, getSecondYAxisTitle, HasSecondaryYAxisTitle )
+uno::Reference<drawing::XShape> lclGetXAxisTitleShape(const uno::Reference<chart::XChartDocument> & rxChart1Doc)
+{
+    uno::Reference<chart::XAxisXSupplier> xAxisSupp(rxChart1Doc->getDiagram(), uno::UNO_QUERY);
+    ScfPropertySet aPropSet(xAxisSupp);
+    if (xAxisSupp.is() && aPropSet.GetBoolProperty("HasXAxisTitle"))
+        return xAxisSupp->getXAxisTitle();
+    return uno::Reference<drawing::XShape>();
+}
 
-#undef EXC_DEFINEFUNC_GETAXISTITLESHAPE
-#undef EXC_IMPLEMENT_GETTITLESHAPE
+uno::Reference<drawing::XShape> lclGetYAxisTitleShape(const uno::Reference<chart::XChartDocument> & rxChart1Doc )
+{
+    uno::Reference<chart::XAxisYSupplier> xAxisSupp(rxChart1Doc->getDiagram(), uno::UNO_QUERY);
+    ScfPropertySet aPropSet(xAxisSupp);
+    if (xAxisSupp.is() && aPropSet.GetBoolProperty("HasYAxisTitle"))
+        return xAxisSupp->getYAxisTitle();
+    return uno::Reference<drawing::XShape>();
+}
+
+uno::Reference<drawing::XShape> lclGetZAxisTitleShape(const uno::Reference<chart::XChartDocument> & rxChart1Doc )
+{
+    uno::Reference<chart::XAxisZSupplier> xAxisSupp(rxChart1Doc->getDiagram(), uno::UNO_QUERY);
+    ScfPropertySet aPropSet(xAxisSupp);
+    if (xAxisSupp.is() && aPropSet.GetBoolProperty("HasZAxisTitle"))
+        return xAxisSupp->getZAxisTitle();
+    return uno::Reference<drawing::XShape>();
+}
+
+uno::Reference<drawing::XShape> lclGetSecXAxisTitleShape(const uno::Reference<chart::XChartDocument> & rxChart1Doc)
+{
+    uno::Reference<chart::XSecondAxisTitleSupplier> xAxisSupp(rxChart1Doc->getDiagram(), uno::UNO_QUERY);
+    ScfPropertySet aPropSet(xAxisSupp);
+    if (xAxisSupp.is() && aPropSet.GetBoolProperty("HasSecondaryXAxisTitle"))
+        return xAxisSupp->getSecondXAxisTitle();
+    return uno::Reference<drawing::XShape>();
+}
+
+uno::Reference<drawing::XShape> lclGetSecYAxisTitleShape(const uno::Reference<chart::XChartDocument> & rxChart1Doc)
+{
+    uno::Reference<chart::XSecondAxisTitleSupplier> xAxisSupp(rxChart1Doc->getDiagram(), uno::UNO_QUERY);
+    ScfPropertySet aPropSet(xAxisSupp);
+    if (xAxisSupp.is() && aPropSet.GetBoolProperty("HasSecondaryYAxisTitle"))
+        return xAxisSupp->getSecondYAxisTitle();
+    return uno::Reference<drawing::XShape>();
+}
 
 } // namespace
 
@@ -1240,7 +1231,7 @@ XclChRootData::~XclChRootData()
 {
 }
 
-void XclChRootData::InitConversion( const XclRoot& rRoot, const Reference< XChartDocument >& rxChartDoc, const Rectangle& rChartRect )
+void XclChRootData::InitConversion(const XclRoot& rRoot, const uno::Reference<chart2::XChartDocument> & rxChartDoc, const tools::Rectangle& rChartRect)
 {
     // remember chart document reference and chart shape position/size
     OSL_ENSURE( rxChartDoc.is(), "XclChRootData::InitConversion - missing chart document" );
@@ -1252,19 +1243,15 @@ void XclChRootData::InitConversion( const XclRoot& rRoot, const Reference< XChar
     mnBorderGapY = rRoot.GetHmmFromPixelY( 5.0 );
 
     // size of a chart unit in 1/100 mm
-    mfUnitSizeX = ::std::max< double >( maChartRect.GetWidth() - 2 * mnBorderGapX, mnBorderGapX ) / EXC_CHART_TOTALUNITS;
-    mfUnitSizeY = ::std::max< double >( maChartRect.GetHeight() - 2 * mnBorderGapY, mnBorderGapY ) / EXC_CHART_TOTALUNITS;
+    mfUnitSizeX = std::max<double>( maChartRect.GetWidth()  - 2 * mnBorderGapX, mnBorderGapX ) / EXC_CHART_TOTALUNITS;
+    mfUnitSizeY = std::max<double>( maChartRect.GetHeight() - 2 * mnBorderGapY, mnBorderGapY ) / EXC_CHART_TOTALUNITS;
 
     // create object tables
-    Reference< XMultiServiceFactory > xFactory( mxChartDoc, UNO_QUERY );
-    mxLineDashTable.reset( new XclChObjectTable(
-        xFactory, SERVICE_DRAWING_DASHTABLE, "Excel line dash " ) );
-    mxGradientTable.reset( new XclChObjectTable(
-        xFactory, SERVICE_DRAWING_GRADIENTTABLE, "Excel gradient " ) );
-    mxHatchTable.reset( new XclChObjectTable(
-        xFactory, SERVICE_DRAWING_HATCHTABLE, "Excel hatch " ) );
-    mxBitmapTable.reset( new XclChObjectTable(
-        xFactory, SERVICE_DRAWING_BITMAPTABLE, "Excel bitmap " ) );
+    uno::Reference<lang::XMultiServiceFactory> xFactory(mxChartDoc, uno::UNO_QUERY);
+    mxLineDashTable.reset(new XclChObjectTable(xFactory, SERVICE_DRAWING_DASHTABLE, "Excel line dash "));
+    mxGradientTable.reset(new XclChObjectTable(xFactory, SERVICE_DRAWING_GRADIENTTABLE, "Excel gradient "));
+    mxHatchTable.reset(new XclChObjectTable(xFactory, SERVICE_DRAWING_HATCHTABLE, "Excel hatch "));
+    mxBitmapTable.reset(new XclChObjectTable(xFactory, SERVICE_DRAWING_BITMAPTABLE, "Excel bitmap "));
 }
 
 void XclChRootData::FinishConversion()
@@ -1278,14 +1265,14 @@ void XclChRootData::FinishConversion()
     mxChartDoc.clear();
 }
 
-Reference< XShape > XclChRootData::GetTitleShape( const XclChTextKey& rTitleKey ) const
+uno::Reference<drawing::XShape> XclChRootData::GetTitleShape(const XclChTextKey& rTitleKey) const
 {
     XclChGetShapeFuncMap::const_iterator aIt = maGetShapeFuncs.find( rTitleKey );
     OSL_ENSURE( aIt != maGetShapeFuncs.end(), "XclChRootData::GetTitleShape - invalid title key" );
-    Reference< cssc::XChartDocument > xChart1Doc( mxChartDoc, UNO_QUERY );
-    Reference< XShape > xTitleShape;
-    if( xChart1Doc.is() && (aIt != maGetShapeFuncs.end()) )
-        xTitleShape = (aIt->second)( xChart1Doc );
+    uno::Reference<chart::XChartDocument> xChart1Doc( mxChartDoc, uno::UNO_QUERY );
+    uno::Reference<drawing::XShape> xTitleShape;
+    if (xChart1Doc.is() && (aIt != maGetShapeFuncs.end()))
+        xTitleShape = (aIt->second)(xChart1Doc);
     return xTitleShape;
 }
 

@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ado/Aolevariant.hxx"
+#include <ado/Aolevariant.hxx>
 #include <connectivity/dbconversion.hxx>
 #include <osl/diagnose.h>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/util/Time.hpp>
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/DateTime.hpp>
-#include "resource/sharedresources.hxx"
-#include "resource/ado_res.hrc"
+#include <resource/sharedresources.hxx>
+#include <strings.hrc>
 #include <com/sun/star/bridge/oleautomation/Date.hpp>
 #include <com/sun/star/bridge/oleautomation/Currency.hpp>
 #include <com/sun/star/bridge/oleautomation/SCode.hpp>
@@ -37,7 +38,7 @@ using namespace com::sun::star::bridge::oleautomation;
 using namespace connectivity::ado;
 
 OLEString::OLEString()
-    :m_sStr(NULL)
+    :m_sStr(nullptr)
 {
 }
 OLEString::OLEString(const BSTR& _sBStr)
@@ -46,7 +47,7 @@ OLEString::OLEString(const BSTR& _sBStr)
 }
 OLEString::OLEString(const OUString& _sBStr)
 {
-    m_sStr = ::SysAllocString(reinterpret_cast<LPCOLESTR>(_sBStr.getStr()));
+    m_sStr = ::SysAllocString(o3tl::toW(_sBStr.getStr()));
 }
 OLEString::~OLEString()
 {
@@ -57,7 +58,7 @@ OLEString& OLEString::operator=(const OUString& _rSrc)
 {
     if(m_sStr)
         ::SysFreeString(m_sStr);
-    m_sStr = ::SysAllocString(reinterpret_cast<LPCOLESTR>(_rSrc.getStr()));
+    m_sStr = ::SysAllocString(o3tl::toW(_rSrc.getStr()));
     return *this;
 }
 OLEString& OLEString::operator=(const OLEString& _rSrc)
@@ -77,21 +78,21 @@ OLEString& OLEString::operator=(const BSTR& _rSrc)
     m_sStr = _rSrc;
     return *this;
 }
-OLEString::operator OUString() const
+OUString OLEString::asOUString() const
 {
-    return (m_sStr != NULL) ? OUString(reinterpret_cast<const sal_Unicode*>(LPCOLESTR(m_sStr)),::SysStringLen(m_sStr)) : OUString();
+    return (m_sStr != nullptr) ? OUString(o3tl::toU(LPCOLESTR(m_sStr)),::SysStringLen(m_sStr)) : OUString();
 }
-OLEString::operator BSTR() const
+BSTR OLEString::asBSTR() const
 {
     return m_sStr;
 }
-BSTR* OLEString::operator &()
+BSTR* OLEString::getAddress()
 {
     return &m_sStr;
 }
 sal_Int32 OLEString::length() const
 {
-    return (m_sStr != NULL) ? ::SysStringLen(m_sStr) : 0;
+    return (m_sStr != nullptr) ? ::SysStringLen(m_sStr) : 0;
 }
 
 OLEVariant::OLEVariant()
@@ -101,13 +102,13 @@ OLEVariant::OLEVariant()
 OLEVariant::OLEVariant(const VARIANT& varSrc)
 {
     ::VariantInit(this);
-    HRESULT eRet = ::VariantCopy(this, const_cast<VARIANT*>(&varSrc));
+    HRESULT eRet = ::VariantCopy(this, &varSrc);
     OSL_ENSURE(eRet == S_OK,"Error while copying an ado variant!");
 }
 OLEVariant::OLEVariant(const OLEVariant& varSrc)
 {
     ::VariantInit(this);
-    HRESULT eRet = ::VariantCopy(this, const_cast<VARIANT*>(static_cast<const VARIANT*>(&varSrc)));
+    HRESULT eRet = ::VariantCopy(this, static_cast<const VARIANT*>(&varSrc));
     OSL_ENSURE(eRet == S_OK,"Error while copying an ado variant!");
 }
 
@@ -115,13 +116,13 @@ OLEVariant::OLEVariant(bool x)              {   VariantInit(this);  vt = VT_BOOL
 OLEVariant::OLEVariant(sal_Int8 n)              {   VariantInit(this);  vt = VT_I1;     bVal        = n;}
 OLEVariant::OLEVariant(sal_Int16 n)             {   VariantInit(this);  vt = VT_I2;     intVal      = n;}
 OLEVariant::OLEVariant(sal_Int32 n)             {   VariantInit(this);  vt = VT_I4;     lVal        = n;}
-OLEVariant::OLEVariant(sal_Int64 x)             {   VariantInit(this);  vt = VT_I4;     lVal        = (LONG)x;}
+OLEVariant::OLEVariant(sal_Int64 x)             {   VariantInit(this);  vt = VT_I4;     lVal        = static_cast<LONG>(x);}
 
 OLEVariant::OLEVariant(const OUString& us)
 {
     ::VariantInit(this);
     vt      = VT_BSTR;
-    bstrVal = SysAllocString(reinterpret_cast<LPCOLESTR>(us.getStr()));
+    bstrVal = SysAllocString(o3tl::toW(us.getStr()));
 }
 OLEVariant::~OLEVariant()
 {
@@ -129,25 +130,25 @@ OLEVariant::~OLEVariant()
     OSL_ENSURE(eRet == S_OK,"Error while clearing an ado variant!");
 } // clears all the memory that was allocated before
 
-OLEVariant::OLEVariant(const ::com::sun::star::util::Date& x )
+OLEVariant::OLEVariant(const css::util::Date& x )
 {
     VariantInit(this);
     vt      = VT_DATE;
-    dblVal  = ::dbtools::DBTypeConversion::toDouble(x,::com::sun::star::util::Date(30,12,1899));
+    dblVal  = ::dbtools::DBTypeConversion::toDouble(x,css::util::Date(30,12,1899));
 }
-OLEVariant::OLEVariant(const ::com::sun::star::util::Time& x )
+OLEVariant::OLEVariant(const css::util::Time& x )
 {
     VariantInit(this);
     vt      = VT_DATE;
     dblVal  = ::dbtools::DBTypeConversion::toDouble(x);
 }
-OLEVariant::OLEVariant(const ::com::sun::star::util::DateTime& x )
+OLEVariant::OLEVariant(const css::util::DateTime& x )
 {
     VariantInit(this);
     vt      = VT_DATE;
-    dblVal  = ::dbtools::DBTypeConversion::toDouble(x,::com::sun::star::util::Date(30,12,1899));
+    dblVal  = ::dbtools::DBTypeConversion::toDouble(x,css::util::Date(30,12,1899));
 }
-OLEVariant::OLEVariant(const float &x)
+OLEVariant::OLEVariant(float x)
 {
     VariantInit(this);
     vt      = VT_R4;
@@ -167,7 +168,7 @@ OLEVariant::OLEVariant(IDispatch* pDispInterface)
     setIDispatch( pDispInterface );
 }
 
-OLEVariant::OLEVariant(const ::com::sun::star::uno::Sequence< sal_Int8 >& x)
+OLEVariant::OLEVariant(const css::uno::Sequence< sal_Int8 >& x)
 {
     VariantInit(this);
 
@@ -187,7 +188,7 @@ OLEVariant::OLEVariant(const ::com::sun::star::uno::Sequence< sal_Int8 >& x)
 
 OLEVariant& OLEVariant::operator=(const OLEVariant& varSrc)
 {
-    HRESULT eRet = ::VariantCopy(this, const_cast<VARIANT*>(static_cast<const VARIANT*>(&varSrc)));
+    HRESULT eRet = ::VariantCopy(this, static_cast<const VARIANT*>(&varSrc));
     OSL_ENSURE(eRet == S_OK,"Error while copying an ado variant!");
     return *this;
 }
@@ -195,7 +196,7 @@ OLEVariant& OLEVariant::operator=(const OLEVariant& varSrc)
 
 OLEVariant& OLEVariant::operator=(const tagVARIANT& varSrc)
 {
-    HRESULT eRet = ::VariantCopy(this, const_cast<VARIANT*>(&varSrc));
+    HRESULT eRet = ::VariantCopy(this, &varSrc);
     OSL_ENSURE(eRet == S_OK,"Error while copying an ado variant!");
 
     return *this;
@@ -205,7 +206,7 @@ OLEVariant& OLEVariant::operator=(const tagVARIANT& varSrc)
 
 OLEVariant& OLEVariant::operator=(const VARIANT* pSrc)
 {
-    HRESULT eRet = ::VariantCopy(this, const_cast<VARIANT*>(pSrc));
+    HRESULT eRet = ::VariantCopy(this, pSrc);
     OSL_ENSURE(eRet == S_OK,"Error while copying an ado variant!");
 
     return *this;
@@ -265,7 +266,7 @@ void OLEVariant::setCurrency(double aCur)
     vt = VT_CY;
     set(aCur*10000);
 }
-void OLEVariant::setBool(sal_Bool b)
+void OLEVariant::setBool(bool b)
 {
     HRESULT eRet = VariantClear(this);
     OSL_ENSURE(eRet == S_OK,"Error while clearing an ado variant!");
@@ -277,7 +278,7 @@ void OLEVariant::setString(const OUString& us)
     HRESULT eRet = VariantClear(this);
     OSL_ENSURE(eRet == S_OK,"Error while clearing an ado variant!");
     vt = VT_BSTR;
-    bstrVal     = ::SysAllocString(reinterpret_cast<LPCOLESTR>(us.getStr()));
+    bstrVal     = ::SysAllocString(o3tl::toW(us.getStr()));
 }
 void OLEVariant::setNoArg()
 {
@@ -311,7 +312,7 @@ void OLEVariant::setArray(SAFEARRAY* pSafeArray, VARTYPE vtType)
 {
     HRESULT eRet = VariantClear(this);
     OSL_ENSURE(eRet == S_OK,"Error while clearing an ado variant!");
-    vt = (VARTYPE)(VT_ARRAY|vtType);
+    vt = static_cast<VARTYPE>(VT_ARRAY|vtType);
     parray = pSafeArray;
 }
 
@@ -328,32 +329,32 @@ void OLEVariant::setIDispatch(IDispatch* pDispInterface)
 }
 
 
-sal_Bool OLEVariant::isNull() const  {  return (vt == VT_NULL);     }
-sal_Bool OLEVariant::isEmpty() const {  return (vt == VT_EMPTY);    }
+bool OLEVariant::isNull() const  {  return (vt == VT_NULL);     }
+bool OLEVariant::isEmpty() const {  return (vt == VT_EMPTY);    }
 
 VARTYPE OLEVariant::getType() const { return vt; }
 
-OLEVariant::operator ::com::sun::star::util::Date() const
+css::util::Date OLEVariant::getDate() const
 {
-    return isNull() ? ::com::sun::star::util::Date(30,12,1899) : ::dbtools::DBTypeConversion::toDate(getDate(),::com::sun::star::util::Date(30,12,1899));
+    return isNull() ? css::util::Date(30,12,1899) : ::dbtools::DBTypeConversion::toDate(getDateAsDouble(),css::util::Date(30,12,1899));
 }
-OLEVariant::operator ::com::sun::star::util::Time() const
+css::util::Time OLEVariant::getTime() const
 {
-    return isNull() ? ::com::sun::star::util::Time() : ::dbtools::DBTypeConversion::toTime(getDate());
+    return isNull() ? css::util::Time() : ::dbtools::DBTypeConversion::toTime(getDateAsDouble());
 }
-OLEVariant::operator ::com::sun::star::util::DateTime()const
+css::util::DateTime OLEVariant::getDateTime() const
 {
-    return isNull() ? ::com::sun::star::util::DateTime() : ::dbtools::DBTypeConversion::toDateTime(getDate(),::com::sun::star::util::Date(30,12,1899));
+    return isNull() ? css::util::DateTime() : ::dbtools::DBTypeConversion::toDateTime(getDateAsDouble(),css::util::Date(30,12,1899));
 }
 
-VARIANT_BOOL OLEVariant::VariantBool(sal_Bool bEinBoolean)
+VARIANT_BOOL OLEVariant::VariantBool(bool bEinBoolean)
 {
     return (bEinBoolean ? VARIANT_TRUE : VARIANT_FALSE);
 }
 
 void OLEVariant::CHS()
 {
-    cyVal.Lo  ^= (sal_uInt32)-1;
+    cyVal.Lo  ^= sal_uInt32(-1);
     cyVal.Hi ^= -1;
     cyVal.Lo++;
     if( !cyVal.Lo )
@@ -364,20 +365,20 @@ void OLEVariant::set(double n)
 {
     if( n >= 0 )
     {
-        cyVal.Hi = (sal_Int32)(n / (double)4294967296.0);
-        cyVal.Lo  = (sal_uInt32)(n - ((double)cyVal.Hi * (double)4294967296.0));
+        cyVal.Hi = static_cast<sal_Int32>(n / 4294967296.0);
+        cyVal.Lo  = static_cast<sal_uInt32>(n - (static_cast<double>(cyVal.Hi) * 4294967296.0));
     }
     else {
-        cyVal.Hi = (sal_Int32)(-n / (double)4294967296.0);
-        cyVal.Lo  = (sal_uInt32)(-n - ((double)cyVal.Hi * (double)4294967296.0));
+        cyVal.Hi = static_cast<sal_Int32>(-n / 4294967296.0);
+        cyVal.Lo  = static_cast<sal_uInt32>(-n - (static_cast<double>(cyVal.Hi) * 4294967296.0));
         CHS();
     }
 }
 
-OLEVariant::operator OUString() const
+OUString OLEVariant::getString() const
 {
     if (V_VT(this) == VT_BSTR)
-        return reinterpret_cast<const sal_Unicode*>(LPCOLESTR(V_BSTR(this)));
+        return o3tl::toU(LPCOLESTR(V_BSTR(this)));
 
     if(isNull())
         return OUString();
@@ -386,7 +387,7 @@ OLEVariant::operator OUString() const
 
     varDest.ChangeType(VT_BSTR, this);
 
-    return reinterpret_cast<const sal_Unicode*>(LPCOLESTR(V_BSTR(&varDest)));
+    return o3tl::toU(LPCOLESTR(V_BSTR(&varDest)));
 }
 
 
@@ -395,7 +396,7 @@ void OLEVariant::ChangeType(VARTYPE vartype, const OLEVariant* pSrc)
 
     // If pDest is NULL, convert type in place
 
-    if (pSrc == NULL)
+    if (pSrc == nullptr)
         pSrc = this;
 
     if  (   ( this != pSrc )
@@ -403,31 +404,31 @@ void OLEVariant::ChangeType(VARTYPE vartype, const OLEVariant* pSrc)
         )
     {
         if ( FAILED( ::VariantChangeType(   static_cast< VARIANT* >( this ),
-                                            const_cast< VARIANT* >( static_cast< const VARIANT* >( pSrc ) ),
+                                            static_cast< const VARIANT* >( pSrc ),
                                             0,
                                             vartype ) ) )
         {
             ::connectivity::SharedResources aResources;
             const OUString sError( aResources.getResourceString(STR_TYPE_NOT_CONVERT));
-            throw ::com::sun::star::sdbc::SQLException(
+            throw css::sdbc::SQLException(
                 sError,
-                NULL,
-                OUString( "S1000" ),
+                nullptr,
+                "S1000",
                 1000,
-                ::com::sun::star::uno::Any()
+                css::uno::Any()
             );
         }
     }
 }
 
 
-OLEVariant::operator ::com::sun::star::uno::Sequence< sal_Int8 >() const
+css::uno::Sequence< sal_Int8 > OLEVariant::getByteSequence() const
 {
-    ::com::sun::star::uno::Sequence< sal_Int8 > aRet;
+    css::uno::Sequence< sal_Int8 > aRet;
     if(V_VT(this) == VT_BSTR)
     {
         OLEString sStr(V_BSTR(this));
-        aRet = ::com::sun::star::uno::Sequence<sal_Int8>(reinterpret_cast<const sal_Int8*>((const wchar_t*)sStr),sizeof(sal_Unicode)*sStr.length());
+        aRet = css::uno::Sequence<sal_Int8>(reinterpret_cast<const sal_Int8*>(sStr.asBSTR()),sizeof(sal_Unicode)*sStr.length());
     }
     else if(!isNull())
     {
@@ -462,26 +463,18 @@ OLEVariant::operator ::com::sun::star::uno::Sequence< sal_Int8 >() const
     return aRet;
 }
 
-OUString OLEVariant::getString() const
-{
-    if(isNull())
-        return OUString();
-    else
-        return *this;
-}
-
-sal_Bool OLEVariant::getBool() const
+bool OLEVariant::getBool() const
 {
     if (V_VT(this) == VT_BOOL)
-        return V_BOOL(this) == VARIANT_TRUE ? sal_True : sal_False;
+        return V_BOOL(this) == VARIANT_TRUE;
     if(isNull())
-        return sal_False;
+        return false;
 
     OLEVariant varDest;
 
     varDest.ChangeType(VT_BOOL, this);
 
-    return V_BOOL(&varDest) == VARIANT_TRUE ? sal_True : sal_False;
+    return V_BOOL(&varDest) == VARIANT_TRUE;
 }
 
 IUnknown* OLEVariant::getIUnknown() const
@@ -491,7 +484,7 @@ IUnknown* OLEVariant::getIUnknown() const
         return V_UNKNOWN(this);
     }
     if(isNull())
-        return NULL;
+        return nullptr;
 
     OLEVariant varDest;
 
@@ -509,7 +502,7 @@ IDispatch* OLEVariant::getIDispatch() const
     }
 
     if(isNull())
-        return NULL;
+        return nullptr;
 
     OLEVariant varDest;
 
@@ -620,7 +613,7 @@ double OLEVariant::getDouble() const
     return V_R8(&varDest);
 }
 
-double OLEVariant::getDate() const
+double OLEVariant::getDateAsDouble() const
 {
     if (V_VT(this) == VT_DATE)
         return V_DATE(this);
@@ -658,7 +651,7 @@ SAFEARRAY* OLEVariant::getUI1SAFEARRAYPtr() const
         return V_ARRAY(this);
 
     if(isNull())
-        return 0;
+        return nullptr;
     OLEVariant varDest;
 
     varDest.ChangeType((VT_ARRAY|VT_UI1), this);
@@ -666,14 +659,14 @@ SAFEARRAY* OLEVariant::getUI1SAFEARRAYPtr() const
     return V_ARRAY(&varDest);
 }
 
-::com::sun::star::uno::Any OLEVariant::makeAny() const
+css::uno::Any OLEVariant::makeAny() const
 {
-    ::com::sun::star::uno::Any aValue;
+    css::uno::Any aValue;
     switch (V_VT(this))
     {
         case VT_EMPTY:
         case VT_NULL:
-            aValue.setValue(NULL, Type());
+            aValue.setValue(nullptr, Type());
             break;
         case VT_I2:
             aValue.setValue( & iVal, cppu::UnoType<sal_Int16>::get());
@@ -695,26 +688,25 @@ SAFEARRAY* OLEVariant::getUI1SAFEARRAYPtr() const
          }
         case VT_DATE:
          {
-             aValue <<= (::com::sun::star::util::Date)*this;
+             aValue <<= getDate();
             break;
          }
         case VT_BSTR:
         {
-            OUString b(reinterpret_cast<const sal_Unicode*>(bstrVal));
+            OUString b(o3tl::toU(bstrVal));
             aValue.setValue( &b, cppu::UnoType<decltype(b)>::get());
             break;
         }
         case VT_BOOL:
         {
-            sal_Bool b= boolVal == VARIANT_TRUE;
-            aValue.setValue( &b, cppu::UnoType<decltype(b)>::get());
+            aValue <<= (boolVal == VARIANT_TRUE);
             break;
         }
         case VT_I1:
             aValue.setValue( & cVal, cppu::UnoType<sal_Int8>::get());
             break;
         case VT_UI1: // there is no unsigned char in UNO
-            aValue.setValue( & bVal, cppu::UnoType<sal_Int8>::get());
+            aValue <<= sal_Int8(bVal);
             break;
         case VT_UI2:
             aValue.setValue( & uiVal, cppu::UnoType<cppu::UnoUnsignedShortType>::get());
@@ -729,7 +721,7 @@ SAFEARRAY* OLEVariant::getUI1SAFEARRAYPtr() const
             aValue.setValue( & uintVal, cppu::UnoType<sal_uInt32>::get());
             break;
         case VT_VOID:
-            aValue.setValue( NULL, Type());
+            aValue.setValue( nullptr, Type());
             break;
          case VT_DECIMAL:
          {

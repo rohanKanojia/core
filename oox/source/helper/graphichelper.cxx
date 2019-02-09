@@ -18,7 +18,7 @@
  */
 
 #include <com/sun/star/container/XNameContainer.hpp>
-#include "oox/helper/graphichelper.hxx"
+#include <oox/helper/graphichelper.hxx>
 
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
@@ -26,20 +26,24 @@
 #include <com/sun/star/awt/XUnitConversion.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
 #include <com/sun/star/graphic/GraphicObject.hpp>
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <comphelper/seqstream.hxx>
 #include <vcl/wmf.hxx>
+#include <vcl/wmfexternal.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/outdev.hxx>
 #include <tools/gen.hxx>
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/token/properties.hxx"
-#include "oox/token/tokens.hxx"
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/sequence.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 
@@ -53,7 +57,7 @@ using namespace ::com::sun::star::uno;
 
 namespace {
 
-inline sal_Int32 lclConvertScreenPixelToHmm( double fPixel, double fPixelPerHmm )
+sal_Int32 lclConvertScreenPixelToHmm( double fPixel, double fPixelPerHmm )
 {
     return static_cast< sal_Int32 >( (fPixelPerHmm > 0.0) ? (fPixel / fPixelPerHmm + 0.5) : 0.0 );
 }
@@ -62,44 +66,43 @@ inline sal_Int32 lclConvertScreenPixelToHmm( double fPixel, double fPixelPerHmm 
 
 GraphicHelper::GraphicHelper( const Reference< XComponentContext >& rxContext, const Reference< XFrame >& rxTargetFrame, const StorageRef& rxStorage ) :
     mxContext( rxContext ),
-    mxStorage( rxStorage ),
-    maGraphicObjScheme( "vnd.sun.star.GraphicObject:" )
+    mxStorage( rxStorage )
 {
     OSL_ENSURE( mxContext.is(), "GraphicHelper::GraphicHelper - missing component context" );
     if( mxContext.is() )
-        mxGraphicProvider.set( graphic::GraphicProvider::create( mxContext ) );
+        mxGraphicProvider.set( graphic::GraphicProvider::create( mxContext ), uno::UNO_QUERY );
 
     //! TODO: get colors from system
-    maSystemPalette[ XML_3dDkShadow ]               = 0x716F64;
-    maSystemPalette[ XML_3dLight ]                  = 0xF1EFE2;
-    maSystemPalette[ XML_activeBorder ]             = 0xD4D0C8;
-    maSystemPalette[ XML_activeCaption ]            = 0x0054E3;
-    maSystemPalette[ XML_appWorkspace ]             = 0x808080;
-    maSystemPalette[ XML_background ]               = 0x004E98;
-    maSystemPalette[ XML_btnFace ]                  = 0xECE9D8;
-    maSystemPalette[ XML_btnHighlight ]             = 0xFFFFFF;
-    maSystemPalette[ XML_btnShadow ]                = 0xACA899;
-    maSystemPalette[ XML_btnText ]                  = 0x000000;
-    maSystemPalette[ XML_captionText ]              = 0xFFFFFF;
-    maSystemPalette[ XML_gradientActiveCaption ]    = 0x3D95FF;
-    maSystemPalette[ XML_gradientInactiveCaption ]  = 0xD8E4F8;
-    maSystemPalette[ XML_grayText ]                 = 0xACA899;
-    maSystemPalette[ XML_highlight ]                = 0x316AC5;
-    maSystemPalette[ XML_highlightText ]            = 0xFFFFFF;
-    maSystemPalette[ XML_hotLight ]                 = 0x000080;
-    maSystemPalette[ XML_inactiveBorder ]           = 0xD4D0C8;
-    maSystemPalette[ XML_inactiveCaption ]          = 0x7A96DF;
-    maSystemPalette[ XML_inactiveCaptionText ]      = 0xD8E4F8;
-    maSystemPalette[ XML_infoBk ]                   = 0xFFFFE1;
-    maSystemPalette[ XML_infoText ]                 = 0x000000;
-    maSystemPalette[ XML_menu ]                     = 0xFFFFFF;
-    maSystemPalette[ XML_menuBar ]                  = 0xECE9D8;
-    maSystemPalette[ XML_menuHighlight ]            = 0x316AC5;
-    maSystemPalette[ XML_menuText ]                 = 0x000000;
-    maSystemPalette[ XML_scrollBar ]                = 0xD4D0C8;
-    maSystemPalette[ XML_window ]                   = 0xFFFFFF;
-    maSystemPalette[ XML_windowFrame ]              = 0x000000;
-    maSystemPalette[ XML_windowText ]               = 0x000000;
+    maSystemPalette[ XML_3dDkShadow ]               = Color(0x716F64);
+    maSystemPalette[ XML_3dLight ]                  = Color(0xF1EFE2);
+    maSystemPalette[ XML_activeBorder ]             = Color(0xD4D0C8);
+    maSystemPalette[ XML_activeCaption ]            = Color(0x0054E3);
+    maSystemPalette[ XML_appWorkspace ]             = Color(0x808080);
+    maSystemPalette[ XML_background ]               = Color(0x004E98);
+    maSystemPalette[ XML_btnFace ]                  = Color(0xECE9D8);
+    maSystemPalette[ XML_btnHighlight ]             = Color(0xFFFFFF);
+    maSystemPalette[ XML_btnShadow ]                = Color(0xACA899);
+    maSystemPalette[ XML_btnText ]                  = Color(0x000000);
+    maSystemPalette[ XML_captionText ]              = Color(0xFFFFFF);
+    maSystemPalette[ XML_gradientActiveCaption ]    = Color(0x3D95FF);
+    maSystemPalette[ XML_gradientInactiveCaption ]  = Color(0xD8E4F8);
+    maSystemPalette[ XML_grayText ]                 = Color(0xACA899);
+    maSystemPalette[ XML_highlight ]                = Color(0x316AC5);
+    maSystemPalette[ XML_highlightText ]            = Color(0xFFFFFF);
+    maSystemPalette[ XML_hotLight ]                 = Color(0x000080);
+    maSystemPalette[ XML_inactiveBorder ]           = Color(0xD4D0C8);
+    maSystemPalette[ XML_inactiveCaption ]          = Color(0x7A96DF);
+    maSystemPalette[ XML_inactiveCaptionText ]      = Color(0xD8E4F8);
+    maSystemPalette[ XML_infoBk ]                   = Color(0xFFFFE1);
+    maSystemPalette[ XML_infoText ]                 = Color(0x000000);
+    maSystemPalette[ XML_menu ]                     = Color(0xFFFFFF);
+    maSystemPalette[ XML_menuBar ]                  = Color(0xECE9D8);
+    maSystemPalette[ XML_menuHighlight ]            = Color(0x316AC5);
+    maSystemPalette[ XML_menuText ]                 = Color(0x000000);
+    maSystemPalette[ XML_scrollBar ]                = Color(0xD4D0C8);
+    maSystemPalette[ XML_window ]                   = Color(0xFFFFFF);
+    maSystemPalette[ XML_windowFrame ]              = Color(0x000000);
+    maSystemPalette[ XML_windowText ]               = Color(0x000000);
 
     // if no target frame has been passed (e.g. OLE objects), try to fallback to the active frame
     // TODO: we need some mechanism to keep and pass the parent frame
@@ -116,7 +119,7 @@ GraphicHelper::GraphicHelper( const Reference< XComponentContext >& rxContext, c
     // get the metric of the output device
     OSL_ENSURE( xFrame.is(), "GraphicHelper::GraphicHelper - cannot get target frame" );
     // some default just in case, 100 000 is 1 meter in MM100
-    Size aDefault = Application::GetDefaultDevice()->LogicToPixel(Size(100000, 100000), MapMode(MAP_100TH_MM));
+    Size aDefault = Application::GetDefaultDevice()->LogicToPixel(Size(100000, 100000), MapMode(MapUnit::Map100thMM));
     maDeviceInfo.PixelPerMeterX = aDefault.Width();
     maDeviceInfo.PixelPerMeterY = aDefault.Height();
     if( xFrame.is() ) try
@@ -140,18 +143,18 @@ GraphicHelper::~GraphicHelper()
 
 // System colors and predefined colors ----------------------------------------
 
-sal_Int32 GraphicHelper::getSystemColor( sal_Int32 nToken, sal_Int32 nDefaultRgb ) const
+::Color GraphicHelper::getSystemColor( sal_Int32 nToken, ::Color nDefaultRgb ) const
 {
     return ContainerHelper::getMapElement( maSystemPalette, nToken, nDefaultRgb );
 }
 
-sal_Int32 GraphicHelper::getSchemeColor( sal_Int32 /*nToken*/ ) const
+::Color GraphicHelper::getSchemeColor( sal_Int32 /*nToken*/ ) const
 {
     OSL_FAIL( "GraphicHelper::getSchemeColor - scheme colors not implemented" );
     return API_RGB_TRANSPARENT;
 }
 
-sal_Int32 GraphicHelper::getPaletteColor( sal_Int32 /*nPaletteIdx*/ ) const
+::Color GraphicHelper::getPaletteColor( sal_Int32 /*nPaletteIdx*/ ) const
 {
     OSL_FAIL( "GraphicHelper::getPaletteColor - palette colors not implemented" );
     return API_RGB_TRANSPARENT;
@@ -232,14 +235,17 @@ awt::Size GraphicHelper::convertHmmToAppFont( const awt::Size& rHmm ) const
 // Graphics and graphic objects  ----------------------------------------------
 
 Reference< XGraphic > GraphicHelper::importGraphic( const Reference< XInputStream >& rxInStrm,
-        const WMF_EXTERNALHEADER* pExtHeader ) const
+        const WmfExternal* pExtHeader ) const
 {
     Reference< XGraphic > xGraphic;
     if( rxInStrm.is() && mxGraphicProvider.is() ) try
     {
-        Sequence< PropertyValue > aArgs( 1 );
+        Sequence< PropertyValue > aArgs( 2 );
         aArgs[ 0 ].Name = "InputStream";
         aArgs[ 0 ].Value <<= rxInStrm;
+        aArgs[ 1 ].Name = "LazyRead";
+        bool bLazyRead = !pExtHeader;
+        aArgs[ 1 ].Value <<= bLazyRead;
 
         if ( pExtHeader && pExtHeader->mapMode > 0 )
         {
@@ -251,8 +257,8 @@ Reference< XGraphic > GraphicHelper::importGraphic( const Reference< XInputStrea
             aFilterData[ 1 ].Value <<= pExtHeader->yExt;
             aFilterData[ 2 ].Name = "ExternalMapMode";
             aFilterData[ 2 ].Value <<= pExtHeader->mapMode;
-            aArgs[ 1 ].Name = "FilterData";
-            aArgs[ 1 ].Value <<= aFilterData;
+            aArgs[ 2 ].Name = "FilterData";
+            aArgs[ 2 ].Value <<= aFilterData;
         }
 
         xGraphic = mxGraphicProvider->queryGraphic( aArgs );
@@ -261,6 +267,27 @@ Reference< XGraphic > GraphicHelper::importGraphic( const Reference< XInputStrea
     {
     }
     return xGraphic;
+}
+
+std::vector< uno::Reference<graphic::XGraphic> > GraphicHelper::importGraphics(const std::vector< uno::Reference<io::XInputStream> >& rStreams) const
+{
+    std::vector< uno::Sequence<beans::PropertyValue> > aArgsVec;
+
+    for (const auto& rStream : rStreams)
+    {
+        uno::Sequence<beans::PropertyValue > aArgs = comphelper::InitPropertySequence(
+        {
+            {"InputStream", uno::makeAny(rStream)}
+        });
+        aArgsVec.push_back(aArgs);
+    }
+
+    std::vector< uno::Reference<graphic::XGraphic> > aRet;
+
+    if (mxGraphicProvider.is())
+        aRet = comphelper::sequenceToContainer< std::vector< uno::Reference<graphic::XGraphic> > >(mxGraphicProvider->queryGraphics(comphelper::containerToSequence(aArgsVec)));
+
+    return aRet;
 }
 
 Reference< XGraphic > GraphicHelper::importGraphic( const StreamDataSequence& rGraphicData ) const
@@ -274,7 +301,41 @@ Reference< XGraphic > GraphicHelper::importGraphic( const StreamDataSequence& rG
     return xGraphic;
 }
 
-Reference< XGraphic > GraphicHelper::importEmbeddedGraphic( const OUString& rStreamName, const WMF_EXTERNALHEADER* pExtHeader ) const
+void GraphicHelper::importEmbeddedGraphics(const std::vector<OUString>& rStreamNames) const
+{
+    // Don't actually return anything, just fill maEmbeddedGraphics.
+
+    // Stream names and streams to be imported.
+    std::vector<OUString> aMissingStreamNames;
+    std::vector< uno::Reference<io::XInputStream> > aMissingStreams;
+
+    for (const auto& rStreamName : rStreamNames)
+    {
+        if(rStreamName.isEmpty())
+        {
+            SAL_WARN("oox", "GraphicHelper::importEmbeddedGraphics - empty stream name");
+            continue;
+        }
+
+        EmbeddedGraphicMap::const_iterator aIt = maEmbeddedGraphics.find(rStreamName);
+        if (aIt == maEmbeddedGraphics.end())
+        {
+            aMissingStreamNames.push_back(rStreamName);
+            aMissingStreams.push_back(mxStorage->openInputStream(rStreamName));
+        }
+    }
+
+    std::vector< uno::Reference<graphic::XGraphic> > aGraphics = importGraphics(aMissingStreams);
+
+    assert(aGraphics.size() == aMissingStreamNames.size());
+    for (size_t i = 0; i < aGraphics.size(); ++i)
+    {
+        if (aGraphics[i].is())
+            maEmbeddedGraphics[aMissingStreamNames[i]] = aGraphics[i];
+    }
+}
+
+Reference< XGraphic > GraphicHelper::importEmbeddedGraphic( const OUString& rStreamName, const WmfExternal* pExtHeader ) const
 {
     Reference< XGraphic > xGraphic;
     OSL_ENSURE( !rStreamName.isEmpty(), "GraphicHelper::importEmbeddedGraphic - empty stream name" );
@@ -283,6 +344,11 @@ Reference< XGraphic > GraphicHelper::importEmbeddedGraphic( const OUString& rStr
         EmbeddedGraphicMap::const_iterator aIt = maEmbeddedGraphics.find( rStreamName );
         if( aIt == maEmbeddedGraphics.end() )
         {
+            // Lazy-loading doesn't work with TIFF at the moment.
+            WmfExternal aHeader;
+            if (rStreamName.endsWith(".tiff") && !pExtHeader)
+                pExtHeader = &aHeader;
+
             xGraphic = importGraphic(mxStorage->openInputStream(rStreamName), pExtHeader);
             if( xGraphic.is() )
                 maEmbeddedGraphics[ rStreamName ] = xGraphic;
@@ -291,39 +357,6 @@ Reference< XGraphic > GraphicHelper::importEmbeddedGraphic( const OUString& rStr
             xGraphic = aIt->second;
     }
     return xGraphic;
-}
-
-OUString GraphicHelper::createGraphicObject( const Reference< XGraphic >& rxGraphic ) const
-{
-    OUString aGraphicObjUrl;
-    if( mxContext.is() && rxGraphic.is() ) try
-    {
-        Reference< XGraphicObject > xGraphicObj( graphic::GraphicObject::create( mxContext ), UNO_SET_THROW );
-        xGraphicObj->setGraphic( rxGraphic );
-        maGraphicObjects.push_back( xGraphicObj );
-        aGraphicObjUrl = maGraphicObjScheme + xGraphicObj->getUniqueID();
-    }
-    catch( Exception& )
-    {
-    }
-    return aGraphicObjUrl;
-}
-
-OUString GraphicHelper::importGraphicObject( const Reference< XInputStream >& rxInStrm,
-        const WMF_EXTERNALHEADER* pExtHeader ) const
-{
-    return createGraphicObject( importGraphic( rxInStrm, pExtHeader ) );
-}
-
-OUString GraphicHelper::importGraphicObject( const StreamDataSequence& rGraphicData ) const
-{
-    return createGraphicObject( importGraphic( rGraphicData ) );
-}
-
-OUString GraphicHelper::importEmbeddedGraphicObject( const OUString& rStreamName ) const
-{
-    Reference< XGraphic > xGraphic = importEmbeddedGraphic( rStreamName );
-    return xGraphic.is() ? createGraphicObject( xGraphic ) : OUString();
 }
 
 awt::Size GraphicHelper::getOriginalSize( const Reference< XGraphic >& xGraphic ) const

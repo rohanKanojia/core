@@ -13,15 +13,14 @@
 // only compile this on clang 3.7 or higher, which is known to work
 // there were problems on clang 3.5 at least
 #include "config_clang.h"
-#if CLANG_VERSION >= 30700
 #include <cassert>
 #include <stdlib.h>
 #include <string>
 #include <iostream>
 #include <fstream>
 #include <regex>
+#include "check.hxx"
 #include "plugin.hxx"
-#include "typecheck.hxx"
 #include "clang/Frontend/CompilerInstance.h"
 
 namespace {
@@ -75,12 +74,11 @@ std::string replace_all(std::string subject, const std::string& search, const st
 }
 
 class GetImplementationName:
-    public clang::RecursiveASTVisitor<GetImplementationName>,
-    public loplugin::Plugin
+    public loplugin::FilteringPlugin<GetImplementationName>
 {
 public:
-    explicit GetImplementationName(InstantiationData const & data)
-        : Plugin(data)
+    explicit GetImplementationName(loplugin::InstantiationData const & data)
+        : FilteringPlugin(data)
         , m_Outdir(initOutdir())
         , m_OutdirCreated(false)
         , m_Srcdir(initSrcdir())
@@ -170,7 +168,7 @@ bool GetImplementationName::isStringConstant(
             }
         }
     }
-    StringLiteral const * lit = dyn_cast<StringLiteral>(expr);
+    clang::StringLiteral const * lit = dyn_cast<clang::StringLiteral>(expr);
     if (lit != nullptr) {
         if (!lit->isAscii()) {
             return false;
@@ -311,7 +309,6 @@ std::string GetImplementationName::initSrcdir() {
 loplugin::Plugin::Registration<GetImplementationName> X(
     "getimplementationname", false);
 }
-#endif
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

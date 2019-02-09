@@ -60,12 +60,12 @@ struct FWI_DLLPUBLIC ProtocolHandler
     uno implementation names as value. Overloading of the index operator makes it possible
     to search for a key by using a full qualified URL on list of all possible pattern keys.
 */
-typedef std::unordered_map<OUString, OUString, OUStringHash> PatternHash;
+typedef std::unordered_map<OUString, OUString> PatternHash;
 
 /**
     This hash holds protocol handler structs by her names.
 */
-typedef std::unordered_map<OUString, ProtocolHandler, OUStringHash> HandlerHash;
+typedef std::unordered_map<OUString, ProtocolHandler> HandlerHash;
 
 /**
     @short          this hash makes it easy to find a protocol handler by using his uno implementation name.
@@ -87,17 +87,17 @@ typedef std::unordered_map<OUString, ProtocolHandler, OUStringHash> HandlerHash;
 */
 
 class HandlerCFGAccess;
-class FWI_DLLPUBLIC HandlerCache
+class FWI_DLLPUBLIC HandlerCache final
 {
     /* member */
     private:
 
         /// list of all registered handler registered by her uno implementation names
-        static HandlerHash* m_pHandler;
+        static std::unique_ptr<HandlerHash> s_pHandler;
         /// maps URL pattern to handler names
-        static PatternHash* m_pPattern;
+        static std::unique_ptr<PatternHash> s_pPattern;
         /// informs about config updates
-        static HandlerCFGAccess* m_pConfig;
+        static HandlerCFGAccess* s_pConfig;
         /// ref count to construct/destruct internal member lists on demand by using singleton mechanism
         static sal_Int32 m_nRefCount;
 
@@ -105,12 +105,12 @@ class FWI_DLLPUBLIC HandlerCache
     public:
 
                  HandlerCache();
-        virtual ~HandlerCache();
+                 ~HandlerCache();
 
         bool search( const OUString& sURL, ProtocolHandler* pReturn ) const;
         bool search( const css::util::URL&  aURL, ProtocolHandler* pReturn ) const;
 
-        void takeOver(HandlerHash* pHandler, PatternHash* pPattern);
+        void takeOver(std::unique_ptr<HandlerHash> pHandler, std::unique_ptr<PatternHash> pPattern);
 };
 
 /**
@@ -137,8 +137,7 @@ class FWI_DLLPUBLIC HandlerCFGAccess : public ::utl::ConfigItem
     /* interface */
     public:
                  HandlerCFGAccess( const OUString& sPackage  );
-        void     read            (       HandlerHash**    ppHandler ,
-                                         PatternHash**    ppPattern );
+        void     read            ( HandlerHash& rHandlerHash, PatternHash& rPatternHash );
 
         void setCache(HandlerCache* pCache) {m_pCache = pCache;};
         virtual void Notify(const css::uno::Sequence< OUString >& lPropertyNames) override;

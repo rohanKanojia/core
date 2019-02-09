@@ -20,26 +20,22 @@
 #define INCLUDED_BASCTL_SOURCE_BASICIDE_BASTYPE3_HXX
 
 #include <svtools/svmedit.hxx>
-#include <iderid.hxx>
 #include <vcl/accel.hxx>
 
 namespace basctl
 {
 
-class ExtendedEdit : public Edit
+class ExtendedEdit final : public Edit
 {
-private:
     Accelerator               aAcc;
     Link<Accelerator&,void>   aAccHdl;
-    Link<ExtendedEdit*,void>  aLoseFocusHdl;
 
-protected:
-    DECL_LINK_TYPED( EditAccHdl, Accelerator&, void );
-    DECL_LINK_TYPED( ImplGetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( ImplLoseFocusHdl, Control&, void );
+    DECL_LINK( EditAccHdl, Accelerator&, void );
+    DECL_LINK( ImplGetFocusHdl, Control&, void );
+    DECL_LINK( ImplLoseFocusHdl, Control&, void );
 
 public:
-                    ExtendedEdit( vcl::Window* pParent, IDEResId nRes );
+    ExtendedEdit(vcl::Window* pParent, WinBits nStyle);
 
     void            SetAccHdl( const Link<Accelerator&,void>& rLink )         { aAccHdl = rLink; }
     Accelerator&    GetAccelerator()                                          { return aAcc; }

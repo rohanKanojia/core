@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/connectorproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
@@ -30,23 +33,17 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* ConnectorProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> ConnectorProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
-            return new SfxItemSet(rPool,
-
-                // range from SdrAttrObj
-                SDRATTR_START, SDRATTR_SHADOW_LAST,
-                SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-
-                // range from SdrEdgeObj
-                SDRATTR_EDGE_FIRST, SDRATTR_EDGE_LAST,
-
-                // range from SdrTextObj
-                EE_ITEMS_START, EE_ITEMS_END,
-
-                // end
-                0, 0);
+            return o3tl::make_unique<SfxItemSet>(
+                rPool,
+                svl::Items<
+                    // Ranges from SdrAttrObj, SdrEdgeObj:
+                    SDRATTR_START, SDRATTR_SHADOW_LAST,
+                    SDRATTR_MISC_FIRST, SDRATTR_EDGE_LAST,
+                    SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
+                    // Range from SdrTextObj:
+                    EE_ITEMS_START, EE_ITEMS_END>{});
         }
 
         ConnectorProperties::ConnectorProperties(SdrObject& rObj)
@@ -63,9 +60,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& ConnectorProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> ConnectorProperties::Clone(SdrObject& rObj) const
         {
-            return *(new ConnectorProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new ConnectorProperties(*this, rObj));
         }
 
         void ConnectorProperties::ItemSetChanged(const SfxItemSet& rSet)
@@ -81,12 +78,11 @@ namespace sdr
 
         void ConnectorProperties::SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr)
         {
-            SdrEdgeObj& rObj = static_cast<SdrEdgeObj&>(GetSdrObject());
-
-            // call parent
+            // call parent (always first thing to do, may create the SfxItemSet)
             TextProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
 
             // local changes
+            SdrEdgeObj& rObj = static_cast<SdrEdgeObj&>(GetSdrObject());
             rObj.ImpSetAttrToEdgeInfo();
         }
     } // end of namespace properties

@@ -33,14 +33,9 @@ class XMLEventsImportContext;
 
 class XMLStarBasicContextFactory : public XMLEventContextFactory
 {
-    const OUString sEventType;
-    const OUString sLibrary;
-    const OUString sMacroName;
-    const OUString sStarBasic;
-
 public:
     XMLStarBasicContextFactory();
-    virtual ~XMLStarBasicContextFactory();
+    virtual ~XMLStarBasicContextFactory() override;
 
     virtual SvXMLImportContext* CreateContext(
         SvXMLImport& rImport,               /// import context

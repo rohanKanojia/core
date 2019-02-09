@@ -11,13 +11,11 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_SAMPLINGDIALOG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_SAMPLINGDIALOG_HXX
 
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include "anyrefdg.hxx"
+#include "viewdata.hxx"
 
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
-#include <vcl/lstbox.hxx>
 
 class ScSamplingDialog : public ScAnyRefDlg
 {
@@ -26,7 +24,7 @@ public:
         SfxBindings* pB, SfxChildWindow* pCW,
         vcl::Window* pParent, ScViewData* pViewData );
 
-    virtual ~ScSamplingDialog();
+    virtual ~ScSamplingDialog() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -47,6 +45,8 @@ private:
     VclPtr<NumericField>       mpPeriod;
 
     VclPtr<RadioButton>        mpRandomMethodRadio;
+    VclPtr<CheckBox>           mpWithReplacement;
+    VclPtr<CheckBox>           mpKeepOrder;
     VclPtr<RadioButton>        mpPeriodicMethodRadio;
 
     VclPtr<OKButton>           mpButtonOk;
@@ -54,30 +54,38 @@ private:
     VclPtr<formula::RefEdit>   mpActiveEdit;
 
     // Data
-    ScViewData*         mViewData;
-    ScDocument*         mDocument;
+    ScViewData* const         mViewData;
+    ScDocument* const         mDocument;
 
-    ScRange             mInputRange;
-    ScAddress::Details  mAddressDetails;
-    ScAddress           mOutputAddress;
+    ScRange                   mInputRange;
+    ScAddress::Details const  mAddressDetails;
+    ScAddress                 mOutputAddress;
 
-    ScAddress           mCurrentAddress;
+    ScAddress const           mCurrentAddress;
+
+    sal_Int64                 mnLastSampleSizeValue;
+    sal_Int64                 mnLastPeriodValue;
 
     bool                mDialogLostFocus;
 
     void Init();
     void GetRangeFromSelection();
     void PerformSampling();
+    sal_Int64 GetPopulationSize() const;
+    void LimitSampleSizeAndPeriod();
 
     ScRange PerformRandomSampling(ScDocShell* pDocShell);
+    ScRange PerformRandomSamplingKeepOrder(ScDocShell* pDocShell);
     ScRange PerformPeriodicSampling(ScDocShell* pDocShell);
 
-    DECL_LINK_TYPED( OkClicked, Button*, void );
-    DECL_LINK_TYPED( GetFocusHandler, Control&, void );
-    DECL_LINK_TYPED( LoseFocusHandler, Control&, void );
-    DECL_LINK_TYPED( SamplingSizeValueModified, Edit&, void );
-    DECL_LINK_TYPED( ToggleSamplingMethod, RadioButton&, void );
-    DECL_LINK_TYPED( RefInputModifyHandler, Edit&, void );
+    DECL_LINK( OkClicked, Button*, void );
+    DECL_LINK( GetFocusHandler, Control&, void );
+    DECL_LINK( LoseFocusHandler, Control&, void );
+    DECL_LINK( SamplingSizeValueModified, Edit&, void );
+    DECL_LINK( PeriodValueModified, Edit&, void );
+    DECL_LINK( ToggleSamplingMethod, RadioButton&, void );
+    DECL_LINK( RefInputModifyHandler, Edit&, void );
+    DECL_LINK( CheckHdl, Button*, void );
     void ToggleSamplingMethod();
 };
 

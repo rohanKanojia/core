@@ -22,17 +22,19 @@
 
 #include <sal/config.h>
 
-#include <cstddef>
 #include <vector>
 #include <comphelper/comphelperdllapi.h>
 #include <sal/types.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/Sequence.h>
+#include <com/sun/star/uno/Reference.hxx>
 
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/i18n/XCollator.hpp>
-#include <com/sun/star/i18n/XBreakIterator.hpp>
+#include <com/sun/star/lang/Locale.hpp>
+
+namespace com { namespace sun { namespace star { namespace i18n { class XBreakIterator; } } } }
+namespace com { namespace sun { namespace star { namespace i18n { class XCollator; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 // OUString helper functions that are not widespread or mature enough to
 // go into the stable URE API:
@@ -41,40 +43,12 @@ namespace comphelper { namespace string {
 /** Compare an OUString to a single char
 
     @param rIn      The input OUString
-    @param c        The character to compare againsg
+    @param c        The character to compare against
 
     @return         true if rIn has one char and its equal to c
  */
 inline bool equals(const OUString& rIn, sal_Unicode c)
 { return rIn.getLength() == 1 && rIn[0] == c; }
-
-/** Removes all occurrences of a character from within the source string
-
-    @deprecated  Use OString::replaceAll(OString(c), OString())
-    instead.
-
-    @param rIn      The input OString
-    @param c        The character to be removed
-
-    @return         The resulting OString
- */
-inline OString remove(const OString &rIn,
-    sal_Char c)
-{ return rIn.replaceAll(OString(c), OString()); }
-
-/** Removes all occurrences of a character from within the source string
-
-    @deprecated  Use
-    OUString::replaceAll(OUString(c), OUString()) instead.
-
-    @param rIn      The input OUString
-    @param c        The character to be removed
-
-    @return         The resulting OUString
- */
-inline OUString remove(const OUString &rIn,
-    sal_Unicode c)
-{ return rIn.replaceAll(OUString(c), ""); }
 
 /** Removes all occurrences of a character from within the source string
 
@@ -281,7 +255,16 @@ COMPHELPER_DLLPUBLIC OUString setToken(const OUString& rIn, sal_Int32 nToken, sa
             or -1 if none of the code units occur in the string
  */
 COMPHELPER_DLLPUBLIC sal_Int32 indexOfAny(OUString const& rIn,
-        sal_Unicode const*const pChars, sal_Int32 const nPos = 0);
+        sal_Unicode const*const pChars, sal_Int32 const nPos);
+
+/** Remove any of a list of code units in the string.
+    @param rIn      OUString to search
+    @param pChars   0-terminated array of sal_Unicode code units to search for
+
+    @return OUString that has all of the pChars code units removed
+ */
+COMPHELPER_DLLPUBLIC OUString removeAny(OUString const& rIn,
+        sal_Unicode const*const pChars);
 
 /** Convert a sequence of strings to a single comma separated string.
 
@@ -319,6 +302,9 @@ COMPHELPER_DLLPUBLIC OString join(const OString& rSeparator, const std::vector<O
 COMPHELPER_DLLPUBLIC sal_uInt32 decimalStringToNumber(
     OUString const & str );
 
+COMPHELPER_DLLPUBLIC std::vector<OUString>
+    split(const OUString& rString, const sal_Unicode cSeparator);
+
 /** Convert a single comma separated string to a sequence of strings.
 
     Note that no escaping of commas or anything fancy is done.
@@ -355,7 +341,7 @@ COMPHELPER_DLLPUBLIC sal_Int32 compareNatural( const OUString &rLHS, const OUStr
 class COMPHELPER_DLLPUBLIC NaturalStringSorter
 {
 private:
-    css::lang::Locale                                m_aLocale;
+    css::lang::Locale const                          m_aLocale;
     css::uno::Reference< css::i18n::XCollator >      m_xCollator;
     css::uno::Reference< css::i18n::XBreakIterator > m_xBI;
 public:

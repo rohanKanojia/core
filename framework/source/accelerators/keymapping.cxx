@@ -27,7 +27,7 @@ namespace framework
 
 // helper
 
-KeyMapping::KeyIdentifierInfo KeyMapping::KeyIdentifierMap[] =
+KeyMapping::KeyIdentifierInfo const KeyMapping::KeyIdentifierMap[] =
 {
     {css::awt::Key::NUM0          , "KEY_0"          },
     {css::awt::Key::NUM1          , "KEY_1"          },
@@ -164,13 +164,12 @@ KeyMapping & KeyMapping::get() {
 }
 
 sal_uInt16 KeyMapping::mapIdentifierToCode(const OUString& sIdentifier)
-    throw(css::lang::IllegalArgumentException)
 {
     Identifier2CodeHash::const_iterator pIt = m_lIdentifierHash.find(sIdentifier);
     if (pIt != m_lIdentifierHash.end())
         return pIt->second;
 
-    // Its not well known identifier - but may be a pure key code formatted as string ...
+    // It's not well known identifier - but may be a pure key code formatted as string...
     // Check and convert it!
     sal_uInt16 nCode = 0;
     if (!KeyMapping::impl_st_interpretIdentifierAsPureKeyCode(sIdentifier, nCode))
@@ -179,7 +178,7 @@ sal_uInt16 KeyMapping::mapIdentifierToCode(const OUString& sIdentifier)
                 css::uno::Reference< css::uno::XInterface >(),
                 0);
 
-    return (sal_uInt16)nCode;
+    return nCode;
 }
 
 OUString KeyMapping::mapCodeToIdentifier(sal_uInt16 nCode)
@@ -198,7 +197,7 @@ bool KeyMapping::impl_st_interpretIdentifierAsPureKeyCode(const OUString& sIdent
     sal_Int32 nCode = sIdentifier.toInt32();
     if (nCode > 0)
     {
-        rCode = (sal_uInt16)nCode;
+        rCode = static_cast<sal_uInt16>(nCode);
         return true;
     }
 

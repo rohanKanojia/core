@@ -19,10 +19,9 @@
 
 #include "VPolarRadiusAxis.hxx"
 #include "VCartesianAxis.hxx"
-#include "PlottingPositionHelper.hxx"
-#include "CommonConverters.hxx"
+#include <PlottingPositionHelper.hxx>
+#include <CommonConverters.hxx>
 #include "Tickmarks_Equidistant.hxx"
-#include <rtl/math.hxx>
 
 namespace chart
 {
@@ -48,8 +47,6 @@ VPolarRadiusAxis::VPolarRadiusAxis( const AxisProperties& rAxisProperties
 
 VPolarRadiusAxis::~VPolarRadiusAxis()
 {
-    delete m_pPosHelper;
-    m_pPosHelper = nullptr;
 }
 
 void VPolarRadiusAxis::setTransformationSceneToScreen( const drawing::HomogenMatrix& rMatrix)
@@ -61,7 +58,6 @@ void VPolarRadiusAxis::setTransformationSceneToScreen( const drawing::HomogenMat
 void VPolarRadiusAxis::setExplicitScaleAndIncrement(
               const ExplicitScaleData& rScale
             , const ExplicitIncrementData& rIncrement )
-            throw (uno::RuntimeException)
 {
     VPolarAxis::setExplicitScaleAndIncrement( rScale, rIncrement );
     m_apAxisWithLabels->setExplicitScaleAndIncrement( rScale, rIncrement );
@@ -71,7 +67,6 @@ void VPolarRadiusAxis::initPlotter(  const uno::Reference< drawing::XShapes >& x
        , const uno::Reference< drawing::XShapes >& xFinalTarget
        , const uno::Reference< lang::XMultiServiceFactory >& xShapeFactory
        , const OUString& rCID )
-            throw (uno::RuntimeException)
 {
     VPolarAxis::initPlotter(  xLogicTarget, xFinalTarget, xShapeFactory, rCID );
     m_apAxisWithLabels->initPlotter(  xLogicTarget, xFinalTarget, xShapeFactory, rCID );
@@ -134,14 +129,14 @@ void VPolarRadiusAxis::createShapes()
     TickFactory aAngleTickFactory( rAngleScale, rAngleIncrement );
     aAngleTickFactory.getAllTicks( aAngleTickInfos );
 
-    uno::Reference< XScaling > xInverseScaling( nullptr );
+    uno::Reference< XScaling > xInverseScaling;
     if( rAngleScale.Scaling.is() )
         xInverseScaling = rAngleScale.Scaling->getInverseScaling();
 
     AxisProperties aAxisProperties(m_aAxisProperties);
 
     sal_Int32 nTick = 0;
-    EquidistantTickIter aIter( aAngleTickInfos, rAngleIncrement, 0, 0 );
+    EquidistantTickIter aIter( aAngleTickInfos, rAngleIncrement, 0 );
     for( TickInfo* pTickInfo = aIter.firstInfo()
         ; pTickInfo; pTickInfo = aIter.nextInfo(), nTick++ )
     {

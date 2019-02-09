@@ -18,10 +18,10 @@
  */
 
 #include "FormsCollection.hxx"
-#include "services.hxx"
+#include <services.hxx>
 #include <comphelper/sequence.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/form/XForm.hpp>
 
 using namespace frm;
@@ -31,30 +31,30 @@ using namespace ::com::sun::star::form;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::util;
 
-OUString SAL_CALL OFormsCollection::getServiceName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OFormsCollection::getServiceName()
 {
     return OUString("com.sun.star.form.Forms");
 }
 
-Sequence< sal_Int8 > SAL_CALL OFormsCollection::getImplementationId(  ) throw(RuntimeException, std::exception)
+Sequence< sal_Int8 > SAL_CALL OFormsCollection::getImplementationId(  )
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-Sequence<Type> SAL_CALL OFormsCollection::getTypes() throw(RuntimeException, std::exception)
+Sequence<Type> SAL_CALL OFormsCollection::getTypes()
 {
-    return concatSequences(OInterfaceContainer::getTypes(), FormsCollectionComponentBase::getTypes(), OFormsCollection_BASE::getTypes());
+    return concatSequences(OInterfaceContainer::getTypes(), ::cppu::OComponentHelper::getTypes(), OFormsCollection_BASE::getTypes());
 }
 
 OFormsCollection::OFormsCollection(const Reference<XComponentContext>& _rxFactory)
-    :FormsCollectionComponentBase( m_aMutex )
+    : ::cppu::OComponentHelper( m_aMutex )
     ,OInterfaceContainer( _rxFactory, m_aMutex, cppu::UnoType<XForm>::get() )
     ,OFormsCollection_BASE()
 {
 }
 
 OFormsCollection::OFormsCollection( const OFormsCollection& _cloneSource )
-    :FormsCollectionComponentBase( m_aMutex )
+    : ::cppu::OComponentHelper( m_aMutex )
     ,OInterfaceContainer( m_aMutex, _cloneSource )
     ,OFormsCollection_BASE()
 {
@@ -62,14 +62,14 @@ OFormsCollection::OFormsCollection( const OFormsCollection& _cloneSource )
 
 OFormsCollection::~OFormsCollection()
 {
-    if (!FormsCollectionComponentBase::rBHelper.bDisposed)
+    if (!::cppu::OComponentHelper::rBHelper.bDisposed)
     {
         acquire();
         dispose();
     }
 }
 
-Any SAL_CALL OFormsCollection::queryAggregation(const Type& _rType) throw(RuntimeException, std::exception)
+Any SAL_CALL OFormsCollection::queryAggregation(const Type& _rType)
 {
     Any aReturn = OFormsCollection_BASE::queryInterface(_rType);
     if (!aReturn.hasValue())
@@ -77,23 +77,23 @@ Any SAL_CALL OFormsCollection::queryAggregation(const Type& _rType) throw(Runtim
         aReturn = OInterfaceContainer::queryInterface(_rType);
 
         if (!aReturn.hasValue())
-            aReturn = FormsCollectionComponentBase::queryAggregation(_rType);
+            aReturn = ::cppu::OComponentHelper::queryAggregation(_rType);
     }
 
     return aReturn;
 }
 
-OUString SAL_CALL OFormsCollection::getImplementationName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OFormsCollection::getImplementationName()
 {
     return OUString("com.sun.star.form.OFormsCollection");
 }
 
-sal_Bool SAL_CALL OFormsCollection::supportsService( const OUString& _rServiceName ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL OFormsCollection::supportsService( const OUString& _rServiceName )
 {
     return cppu::supportsService(this, _rServiceName);
 }
 
-css::uno::Sequence<OUString> SAL_CALL OFormsCollection::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OFormsCollection::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aReturn(2);
 
@@ -104,7 +104,7 @@ css::uno::Sequence<OUString> SAL_CALL OFormsCollection::getSupportedServiceNames
 }
 
 // XCloneable
-Reference< XCloneable > SAL_CALL OFormsCollection::createClone(  ) throw (RuntimeException, std::exception)
+Reference< XCloneable > SAL_CALL OFormsCollection::createClone(  )
 {
     OFormsCollection* pClone = new OFormsCollection( *this );
     osl_atomic_increment( &pClone->m_refCount );
@@ -121,24 +121,24 @@ void OFormsCollection::disposing()
         SAL_INFO( "forms.component", "forms::OFormsCollection::disposing" );
         OInterfaceContainer::disposing();
     }
-    FormsCollectionComponentBase::disposing();
+    ::cppu::OComponentHelper::disposing();
     m_xParent = nullptr;
 }
 
 //XChild
 
-void OFormsCollection::setParent(const css::uno::Reference<css::uno::XInterface>& Parent) throw( NoSupportException, RuntimeException, std::exception )
+void OFormsCollection::setParent(const css::uno::Reference<css::uno::XInterface>& Parent)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     m_xParent = Parent;
 }
 
-css::uno::Reference<css::uno::XInterface>  OFormsCollection::getParent() throw( RuntimeException, std::exception )
+css::uno::Reference<css::uno::XInterface>  OFormsCollection::getParent()
 {
     return m_xParent;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OFormsCollection_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {

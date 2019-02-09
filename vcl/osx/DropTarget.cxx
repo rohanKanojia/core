@@ -44,12 +44,12 @@ using namespace com::sun::star::uno;
 using namespace com::sun::star;
 using namespace comphelper;
 
-OUString dropTarget_getImplementationName()
+static OUString dropTarget_getImplementationName()
 {
     return OUString("com.sun.star.comp.datatransfer.dnd.OleDropTarget_V1");
 }
 
-Sequence<OUString> dropTarget_getSupportedServiceNames()
+static Sequence<OUString> dropTarget_getSupportedServiceNames()
 {
     return { OUString("com.sun.star.datatransfer.dnd.OleDropTarget") };
 }
@@ -60,7 +60,7 @@ namespace /* private */
     // coordinate system upper-left hence we need to transform
     // coordinates
 
-    inline void CocoaToVCL(NSPoint& rPoint, const NSRect& bounds)
+    void CocoaToVCL(NSPoint& rPoint, const NSRect& bounds)
     {
         rPoint.y = bounds.size.height - rPoint.y;
     }
@@ -130,7 +130,7 @@ DropTarget::DropTarget() :
 DropTarget::~DropTarget()
 {
     if( AquaSalFrame::isAlive( mpFrame ) )
-        [(id <DraggingDestinationHandler>)mView unregisterDraggingDestinationHandler:mDropTargetHelper];
+        [static_cast<id <DraggingDestinationHandler>>(mView) unregisterDraggingDestinationHandler:mDropTargetHelper];
     [mDropTargetHelper release];
 }
 
@@ -350,7 +350,6 @@ void SAL_CALL DropTarget::disposing()
 }
 
 void SAL_CALL DropTarget::initialize(const Sequence< Any >& aArguments)
-    throw(Exception, std::exception)
 {
     if (aArguments.getLength() < 2)
     {
@@ -362,79 +361,86 @@ void SAL_CALL DropTarget::initialize(const Sequence< Any >& aArguments)
     sal_uInt64 tmp = 0;
     pNSView >>= tmp;
     mView = reinterpret_cast<id>(tmp);
-    mpFrame = [(SalFrameView*)mView getSalFrame];
+    mpFrame = [static_cast<SalFrameView*>(mView) getSalFrame];
 
     mDropTargetHelper = [[DropTargetHelper alloc] initWithDropTarget: this];
 
-    [(id <DraggingDestinationHandler>)mView registerDraggingDestinationHandler:mDropTargetHelper];
+    [static_cast<id <DraggingDestinationHandler>>(mView) registerDraggingDestinationHandler:mDropTargetHelper];
     [mView registerForDraggedTypes: DataFlavorMapper::getAllSupportedPboardTypes()];
 
     id wnd = [mView window];
     NSWindow* parentWnd = [wnd parentWindow];
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // 'NSClosableWindowMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSResizableWindowMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSTitleWindowMask' is deprecated: first deprecated in macOS 10.12
     unsigned int topWndStyle = (NSTitledWindowMask | NSClosableWindowMask | NSResizableWindowMask);
+SAL_WNODEPRECATED_DECLARATIONS_POP
     unsigned int wndStyles = [wnd styleMask] & topWndStyle;
 
     if (parentWnd == nil && (wndStyles == topWndStyle))
     {
         [wnd registerDraggingDestinationHandler:mDropTargetHelper];
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+            // "'NSFilenamesPboardType' is deprecated: first deprecated in macOS 10.14 - Create
+            // multiple pasteboard items with NSPasteboardTypeFileURL or kUTTypeFileURL instead"
         [wnd registerForDraggedTypes: [NSArray arrayWithObjects: NSFilenamesPboardType, nil]];
+SAL_WNODEPRECATED_DECLARATIONS_POP
     }
 }
 
 void SAL_CALL DropTarget::addDropTargetListener(const uno::Reference<XDropTargetListener>& dtl)
-    throw(RuntimeException, std::exception)
 {
     rBHelper.addListener(cppu::UnoType<decltype(dtl)>::get(), dtl);
 }
 
 void SAL_CALL DropTarget::removeDropTargetListener(const uno::Reference<XDropTargetListener>& dtl)
-    throw(RuntimeException, std::exception)
 {
     rBHelper.removeListener(cppu::UnoType<decltype(dtl)>::get(), dtl);
 }
 
-sal_Bool SAL_CALL DropTarget::isActive(  ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL DropTarget::isActive(  )
 {
     return mbActive;
 }
 
-void SAL_CALL DropTarget::setActive(sal_Bool active) throw(RuntimeException, std::exception)
+void SAL_CALL DropTarget::setActive(sal_Bool active)
 {
     mbActive = active;
 }
 
-sal_Int8 SAL_CALL DropTarget::getDefaultActions() throw(RuntimeException, std::exception)
+sal_Int8 SAL_CALL DropTarget::getDefaultActions()
 {
     return mDefaultActions;
 }
 
-void SAL_CALL DropTarget::setDefaultActions(sal_Int8 actions) throw(RuntimeException, std::exception)
+void SAL_CALL DropTarget::setDefaultActions(sal_Int8 actions)
 {
     OSL_ENSURE( actions < 8, "No valid default actions");
     mDefaultActions= actions;
 }
 
-void SAL_CALL DropTarget::acceptDrag(sal_Int8 dragOperation) throw (RuntimeException, std::exception)
+void SAL_CALL DropTarget::acceptDrag(sal_Int8 dragOperation)
 {
     mSelectedDropAction = dragOperation;
 }
 
-void SAL_CALL DropTarget::rejectDrag() throw (RuntimeException, std::exception)
+void SAL_CALL DropTarget::rejectDrag()
 {
     mSelectedDropAction = DNDConstants::ACTION_NONE;
 }
 
-void SAL_CALL DropTarget::acceptDrop(sal_Int8 dropOperation) throw( RuntimeException, std::exception)
+void SAL_CALL DropTarget::acceptDrop(sal_Int8 dropOperation)
 {
     mSelectedDropAction = dropOperation;
 }
 
-void SAL_CALL DropTarget::rejectDrop() throw (RuntimeException, std::exception)
+void SAL_CALL DropTarget::rejectDrop()
 {
     mSelectedDropAction = DNDConstants::ACTION_NONE;
 }
 
-void SAL_CALL DropTarget::dropComplete(sal_Bool success) throw (RuntimeException, std::exception)
+void SAL_CALL DropTarget::dropComplete(sal_Bool success)
 {
     // Reset the internal transferable used as shortcut in case this is
     // an internal D&D operation
@@ -524,17 +530,17 @@ void DropTarget::fire_dropActionChanged(const DropTargetDragEvent& dtde)
     }
 }
 
-OUString SAL_CALL DropTarget::getImplementationName() throw (RuntimeException, std::exception)
+OUString SAL_CALL DropTarget::getImplementationName()
 {
     return dropTarget_getImplementationName();
 }
 
-sal_Bool SAL_CALL DropTarget::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL DropTarget::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL DropTarget::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL DropTarget::getSupportedServiceNames(  )
 {
     return dropTarget_getSupportedServiceNames();
 }

@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SFX2_SOURCE_SIDEBAR_FOCUSMANAGER_HXX
 #define INCLUDED_SFX2_SOURCE_SIDEBAR_FOCUSMANAGER_HXX
 
-#include "Panel.hxx"
+#include <sfx2/sidebar/Panel.hxx>
 #include <tools/link.hxx>
 #include <vcl/keycod.hxx>
 
@@ -50,7 +50,8 @@ class DeckTitleBar;
 class FocusManager
 {
 public:
-    FocusManager(const std::function<void(const Panel&)>& rShowPanelFunctor);
+    FocusManager(const std::function<void(const Panel&)>& rShowPanelFunctor,
+                 const std::function<bool(const sal_Int32)> &rIsDeckOpenFunctor);
     ~FocusManager();
 
     /** Forget all panels and buttons.  Remove all window listeners.
@@ -62,6 +63,7 @@ public:
         pressing the F6 key.
     */
     void GrabFocus();
+    void GrabFocusPanel();
 
     void SetDeckTitle(DeckTitleBar* pDeckTitleBar);
     void SetPanels(const SharedPanelContainer& rPanels);
@@ -72,9 +74,7 @@ private:
     std::vector<VclPtr<Panel> > maPanels;
     std::vector<VclPtr<Button> > maButtons;
     const std::function<void(const Panel&)> maShowPanelFunctor;
-    bool mbObservingContentControlFocus;
-    VclPtr<vcl::Window> mpFirstFocusedContentControl;
-    VclPtr<vcl::Window> mpLastFocusedWindow;
+    const std::function<bool(const sal_Int32)> mbIsDeckOpenFunctor;
 
     enum PanelComponent
     {
@@ -96,8 +96,8 @@ private:
 
     /** Listen for key events for panels and buttons.
     */
-    DECL_LINK_TYPED( WindowEventListener, VclWindowEvent&, void);
-    DECL_LINK_TYPED(ChildEventListener, VclWindowEvent&, void);
+    DECL_LINK( WindowEventListener, VclWindowEvent&, void);
+    DECL_LINK(ChildEventListener, VclWindowEvent&, void);
 
     void ClearPanels();
     void ClearButtons();

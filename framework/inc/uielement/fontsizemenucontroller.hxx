@@ -29,14 +29,14 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XPopupMenuController.hpp>
 #include <com/sun/star/frame/status/FontHeight.hpp>
 
 #include <svtools/popupmenucontrollerbase.hxx>
 #include <toolkit/awt/vclxmenu.hxx>
 #include <cppuhelper/weak.hxx>
 #include <rtl/ustring.hxx>
+
+#include <memory>
 
 namespace framework
 {
@@ -46,27 +46,31 @@ namespace framework
 
         public:
             FontSizeMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-            virtual ~FontSizeMenuController();
+            virtual ~FontSizeMenuController() override;
 
             // XServiceInfo
-            DECLARE_XSERVICEINFO
+            DECLARE_XSERVICEINFO_NOFACTORY
+            /* Helper for registry */
+            /// @throws css::uno::Exception
+            static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+            static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
             // XPopupMenuController
-            virtual void SAL_CALL updatePopupMenu() throw (css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL updatePopupMenu() override;
 
             // XStatusListener
-            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
             // XEventListener
-            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         private:
             virtual void impl_setPopupMenu() override;
-            void setCurHeight( long nHeight, css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu );
-            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu );
-            OUString retrievePrinterName( css::uno::Reference< css::frame::XFrame >& rFrame );
+            void setCurHeight( long nHeight, css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
+            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
+            OUString retrievePrinterName( css::uno::Reference< css::frame::XFrame > const & rFrame );
 
-            long*                                            m_pHeightArray;
+            std::unique_ptr<long[]>                          m_pHeightArray;
             css::awt::FontDescriptor                         m_aFontDescriptor;
             css::frame::status::FontHeight                   m_aFontHeight;
             css::uno::Reference< css::frame::XDispatch >     m_xCurrentFontDispatch;

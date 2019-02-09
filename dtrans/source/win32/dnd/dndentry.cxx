@@ -20,7 +20,7 @@
 #include <cppuhelper/factory.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/container/XSet.hpp>
-#include <osl/diagnose.h>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 #include "source.hxx"
 #include "target.hxx"
@@ -30,13 +30,13 @@ using namespace ::com::sun::star::registry  ;
 using namespace ::cppu                      ;
 using namespace ::com::sun::star::lang;
 
-Reference< XInterface > SAL_CALL createDragSource( const Reference< XMultiServiceFactory >& rServiceManager )
+static Reference< XInterface > createDragSource( const Reference< XMultiServiceFactory >& rServiceManager )
 {
     DragSource* pSource= new DragSource( comphelper::getComponentContext(rServiceManager) );
     return Reference<XInterface>( static_cast<XInitialization*>(pSource), UNO_QUERY);
 }
 
-Reference< XInterface > SAL_CALL createDropTarget( const Reference< XMultiServiceFactory >& rServiceManager )
+static Reference< XInterface > createDropTarget( const Reference< XMultiServiceFactory >& rServiceManager )
 {
     DropTarget* pTarget= new DropTarget( comphelper::getComponentContext(rServiceManager) );
     return Reference<XInterface>( static_cast<XInitialization*>(pTarget), UNO_QUERY);
@@ -45,10 +45,10 @@ Reference< XInterface > SAL_CALL createDropTarget( const Reference< XMultiServic
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL
+SAL_DLLPUBLIC_EXPORT void*
 dnd_component_getFactory( const sal_Char* pImplName, void* pSrvManager, void* /*pRegistryKey*/ )
 {
-    void* pRet = 0;
+    void* pRet = nullptr;
     Reference< XSingleServiceFactory > xFactory;
 
     if ( pSrvManager && ( 0 == rtl_str_compare( pImplName, DNDSOURCE_IMPL_NAME ) ) )
@@ -56,7 +56,7 @@ dnd_component_getFactory( const sal_Char* pImplName, void* pSrvManager, void* /*
         Sequence< OUString > aSNS { DNDSOURCE_SERVICE_NAME };
 
         xFactory= createSingleFactory(
-            reinterpret_cast< XMultiServiceFactory* > ( pSrvManager ),
+            static_cast< XMultiServiceFactory* > ( pSrvManager ),
             OUString::createFromAscii( pImplName ),
             createDragSource,
             aSNS);
@@ -67,7 +67,7 @@ dnd_component_getFactory( const sal_Char* pImplName, void* pSrvManager, void* /*
         Sequence< OUString > aSNS { DNDTARGET_SERVICE_NAME };
 
         xFactory= createSingleFactory(
-            reinterpret_cast< XMultiServiceFactory* > ( pSrvManager ),
+            static_cast< XMultiServiceFactory* > ( pSrvManager ),
             OUString::createFromAscii( pImplName ),
             createDropTarget,
             aSNS);

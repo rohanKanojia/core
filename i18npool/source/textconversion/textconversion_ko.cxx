@@ -21,6 +21,7 @@
 #include <textconversion.hxx>
 #include <com/sun/star/i18n/TextConversionType.hpp>
 #include <com/sun/star/i18n/TextConversionOption.hpp>
+#include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/linguistic2/ConversionDirection.hpp>
 #include <com/sun/star/linguistic2/ConversionDictionaryType.hpp>
 #include <com/sun/star/linguistic2/ConversionDictionaryList.hpp>
@@ -34,7 +35,7 @@ using namespace com::sun::star::linguistic2;
 using namespace com::sun::star::uno;
 
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 #define SCRIPT_OTHERS   0
 #define SCRIPT_HANJA    1
@@ -57,9 +58,7 @@ TextConversion_ko::TextConversion_ko( const Reference < XComponentContext >& xCo
 
     // get maximum length of word in dictionary
     if (xCDL.is()) {
-        Locale loc(OUString("ko"),
-                    OUString("KR"),
-                    OUString());
+        Locale loc("ko", "KR", OUString());
         maxLeftLength = xCDL->queryMaxCharCount(loc,
                         ConversionDictionaryType::HANGUL_HANJA,
                         ConversionDirection_FROM_LEFT);
@@ -80,7 +79,7 @@ TextConversion_ko::TextConversion_ko( const Reference < XComponentContext >& xCo
     }
 }
 
-sal_Int16 SAL_CALL checkScriptType(sal_Unicode c)
+static sal_Int16 checkScriptType(sal_Unicode c)
 {
     typedef struct {
         UBlockCode from;
@@ -88,7 +87,7 @@ sal_Int16 SAL_CALL checkScriptType(sal_Unicode c)
         sal_Int16 script;
     } UBlock2Script;
 
-    static UBlock2Script scriptList[] = {
+    static const UBlock2Script scriptList[] = {
         {UBLOCK_HANGUL_JAMO, UBLOCK_HANGUL_JAMO, SCRIPT_HANGUL},
         {UBLOCK_CJK_RADICALS_SUPPLEMENT, UBLOCK_BOPOMOFO, SCRIPT_HANJA},
         {UBLOCK_HANGUL_COMPATIBILITY_JAMO, UBLOCK_HANGUL_COMPATIBILITY_JAMO, SCRIPT_HANGUL},
@@ -99,14 +98,12 @@ sal_Int16 SAL_CALL checkScriptType(sal_Unicode c)
         {UBLOCK_HALFWIDTH_AND_FULLWIDTH_FORMS, UBLOCK_HALFWIDTH_AND_FULLWIDTH_FORMS, SCRIPT_HANJA},
     };
 
-#define scriptListCount sizeof (scriptList) / sizeof (UBlock2Script)
-
-    UBlockCode block=ublock_getCode((sal_uInt32) c);
-    sal_uInt16 i;
-    for ( i = 0; i < scriptListCount; i++) {
+    UBlockCode block=ublock_getCode(static_cast<sal_uInt32>(c));
+    size_t i;
+    for ( i = 0; i < SAL_N_ELEMENTS(scriptList); i++) {
         if (block <= scriptList[i].to) break;
     }
-    return (i < scriptListCount && block >= scriptList[i].from) ? scriptList[i].script : SCRIPT_OTHERS;
+    return (i < SAL_N_ELEMENTS(scriptList) && block >= scriptList[i].from) ? scriptList[i].script : SCRIPT_OTHERS;
 }
 
 #ifdef DISABLE_DYNLOADING
@@ -123,7 +120,7 @@ const sal_Unicode* getHanja2HangulData();
 
 #endif
 
-Sequence< OUString > SAL_CALL
+Sequence< OUString >
 TextConversion_ko::getCharConversions(const OUString& aText, sal_Int32 nStartPos, sal_Int32 nLength, bool toHanja)
 {
     sal_Unicode ch;
@@ -218,97 +215,95 @@ static Sequence< OUString >& operator += (Sequence< OUString > &rSeq1, Sequence<
 TextConversionResult SAL_CALL
 TextConversion_ko::getConversions( const OUString& aText, sal_Int32 nStartPos, sal_Int32 nLength,
     const Locale& aLocale, sal_Int16 nConversionType, sal_Int32 nConversionOptions)
-    throw(  RuntimeException, IllegalArgumentException, NoSupportException, std::exception )
 {
     TextConversionResult result;
     Sequence <OUString> candidates;
     result.Boundary.startPos = result.Boundary.endPos = 0;
 
     // do conversion only when there are right conversion type and dictionary services.
-    if (nConversionType == TextConversionType::TO_HANGUL ||
-            nConversionType == TextConversionType::TO_HANJA) {
-        sal_Int32 start, end, length = aText.getLength() - nStartPos;
+    if (nConversionType != TextConversionType::TO_HANGUL &&
+        nConversionType != TextConversionType::TO_HANJA)
+        throw NoSupportException(); // Conversion type is not supported in this service.
+    sal_Int32 start, end, length = aText.getLength() - nStartPos;
 
-        if (length < 0 || nStartPos < 0)
-            length = 0;
-        else if (length > nLength)
-            length = nLength;
+    if (length < 0 || nStartPos < 0)
+        length = 0;
+    else if (length > nLength)
+        length = nLength;
 
-        sal_Int16 scriptType = SCRIPT_OTHERS;
-        sal_Int32 len = 1;
-        bool toHanja = (nConversionType == TextConversionType::TO_HANJA);
-        // FROM_LEFT:  Hangul -> Hanja
-        // FROM_RIGHT: Hanja  -> Hangul
-        ConversionDirection eDirection = toHanja ? ConversionDirection_FROM_LEFT : ConversionDirection_FROM_RIGHT;
-        sal_Int32 maxLength = toHanja ? maxLeftLength : maxRightLength;
-        if (maxLength == 0) maxLength = 1;
+    sal_Int16 scriptType = SCRIPT_OTHERS;
+    sal_Int32 len = 1;
+    bool toHanja = (nConversionType == TextConversionType::TO_HANJA);
+    // FROM_LEFT:  Hangul -> Hanja
+    // FROM_RIGHT: Hanja  -> Hangul
+    ConversionDirection eDirection = toHanja ? ConversionDirection_FROM_LEFT : ConversionDirection_FROM_RIGHT;
+    sal_Int32 maxLength = toHanja ? maxLeftLength : maxRightLength;
+    if (maxLength == 0) maxLength = 1;
 
-        // search for a max length of convertible text
-        for (start = 0, end = 0; start < length; start++) {
-            if (end <= start) {
-                scriptType = checkScriptType(aText[nStartPos + start]);
-                if (nConversionType == TextConversionType::TO_HANJA) {
-                    if (scriptType != SCRIPT_HANGUL) // skip non-Hangul characters
-                        continue;
-                } else {
-                    if (scriptType != SCRIPT_HANJA) // skip non-Hanja characters
-                        continue;
-                }
-                end = start + 1;
-            }
-            if (nConversionOptions & TextConversionOption::CHARACTER_BY_CHARACTER) {
-                result.Candidates = getCharConversions(aText, nStartPos + start, len, toHanja); // char2char conversion
+    // search for a max length of convertible text
+    for (start = 0, end = 0; start < length; start++) {
+        if (end <= start) {
+            scriptType = checkScriptType(aText[nStartPos + start]);
+            if (nConversionType == TextConversionType::TO_HANJA) {
+                if (scriptType != SCRIPT_HANGUL) // skip non-Hangul characters
+                    continue;
             } else {
-                for (; end < length && end - start < maxLength; end++)
-                    if (checkScriptType(aText[nStartPos + end]) != scriptType)
-                        break;
-
-                for (len = end - start; len > 0; len--) {
-                    if (len > 1) {
-                        try {
-                            if (xCDL.is())
-                                result.Candidates = xCDL->queryConversions(aText, start + nStartPos, len,
-                                    aLocale, ConversionDictionaryType::HANGUL_HANJA, eDirection, nConversionOptions); // user dictionary
-                        }
-                        catch ( NoSupportException & ) {
-                            // clear reference (when there is no user dictionary) in order
-                            // to not always have to catch this exception again
-                            // in further calls. (save time)
-                            xCDL = nullptr;
-                        }
-                        catch (...) {
-                            // catch all other exceptions to allow
-                            // querying the system dictionary in the next line
-                        }
-                        if (xCD.is() && toHanja) { // System dictionary would not do Hanja_to_Hangul conversion.
-                            candidates = xCD->getConversions(aText, start + nStartPos, len, eDirection, nConversionOptions);
-                            result.Candidates += candidates;
-                        }
-                    } else if (! toHanja) { // do whole word character 2 character conversion for Hanja to Hangul conversion
-                        result.Candidates = getCharConversions(aText, nStartPos + start, length - start, toHanja);
-                        if (result.Candidates.hasElements())
-                            len = result.Candidates[0].getLength();
-                    }
-                    if (result.Candidates.hasElements())
-                        break;
-                }
+                if (scriptType != SCRIPT_HANJA) // skip non-Hanja characters
+                    continue;
             }
-            // found match
-            if (result.Candidates.hasElements()) {
-                result.Boundary.startPos = start + nStartPos;
-                result.Boundary.endPos = start + len + nStartPos;
-                return result;
+            end = start + 1;
+        }
+        if (nConversionOptions & TextConversionOption::CHARACTER_BY_CHARACTER) {
+            result.Candidates = getCharConversions(aText, nStartPos + start, len, toHanja); // char2char conversion
+        } else {
+            for (; end < length && end - start < maxLength; end++)
+                if (checkScriptType(aText[nStartPos + end]) != scriptType)
+                    break;
+
+            for (len = end - start; len > 0; len--) {
+                if (len > 1) {
+                    try {
+                        if (xCDL.is())
+                            result.Candidates = xCDL->queryConversions(aText, start + nStartPos, len,
+                                aLocale, ConversionDictionaryType::HANGUL_HANJA, eDirection, nConversionOptions); // user dictionary
+                    }
+                    catch ( NoSupportException & ) {
+                        // clear reference (when there is no user dictionary) in order
+                        // to not always have to catch this exception again
+                        // in further calls. (save time)
+                        xCDL = nullptr;
+                    }
+                    catch (...) {
+                        // catch all other exceptions to allow
+                        // querying the system dictionary in the next line
+                    }
+                    if (xCD.is() && toHanja) { // System dictionary would not do Hanja_to_Hangul conversion.
+                        candidates = xCD->getConversions(aText, start + nStartPos, len, eDirection, nConversionOptions);
+                        result.Candidates += candidates;
+                    }
+                } else if (! toHanja) { // do whole word character 2 character conversion for Hanja to Hangul conversion
+                    result.Candidates = getCharConversions(aText, nStartPos + start, length - start, toHanja);
+                    if (result.Candidates.hasElements())
+                        len = result.Candidates[0].getLength();
+                }
+                if (result.Candidates.hasElements())
+                    break;
             }
         }
-    } else
-        throw NoSupportException(); // Conversion type is not supported in this service.
+        // found match
+        if (result.Candidates.hasElements()) {
+            result.Boundary.startPos = start + nStartPos;
+            result.Boundary.endPos = start + len + nStartPos;
+            return result;
+        }
+    }
+
     return result;
 }
 
 OUString SAL_CALL
 TextConversion_ko::getConversion( const OUString& aText, sal_Int32 nStartPos, sal_Int32 nLength,
     const Locale& aLocale, sal_Int16 nConversionType, sal_Int32 nConversionOptions)
-    throw(  RuntimeException, IllegalArgumentException, NoSupportException, std::exception )
 {
     sal_Int32 length = aText.getLength() - nStartPos;
 
@@ -330,8 +325,7 @@ TextConversion_ko::getConversion( const OUString& aText, sal_Int32 nStartPos, sa
                 aBuf.append(str + start, result.Boundary.startPos - start); // append skip portion
             aBuf.append(result.Candidates[0]); // append converted portion
         } else {
-            if (length + nStartPos > start)
-                aBuf.append(str + start, length + nStartPos - start); // append last portion
+            aBuf.append(str + start, length + nStartPos - start); // append last portion
             break;
         }
     }
@@ -342,7 +336,6 @@ TextConversion_ko::getConversion( const OUString& aText, sal_Int32 nStartPos, sa
 OUString SAL_CALL
 TextConversion_ko::getConversionWithOffset( const OUString& aText, sal_Int32 nStartPos, sal_Int32 nLength,
     const Locale& rLocale, sal_Int16 nConversionType, sal_Int32 nConversionOptions, Sequence<sal_Int32>& offset)
-    throw(  RuntimeException, IllegalArgumentException, NoSupportException, std::exception )
 {
     offset.realloc(0);
     return getConversion(aText, nStartPos, nLength, rLocale, nConversionType, nConversionOptions);
@@ -350,11 +343,10 @@ TextConversion_ko::getConversionWithOffset( const OUString& aText, sal_Int32 nSt
 
 sal_Bool SAL_CALL
 TextConversion_ko::interactiveConversion( const Locale& /*rLocale*/, sal_Int16 /*nTextConversionType*/, sal_Int32 /*nTextConversionOptions*/ )
-    throw(  RuntimeException, IllegalArgumentException, NoSupportException, std::exception )
 {
-    return sal_True;
+    return true;
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

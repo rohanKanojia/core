@@ -31,9 +31,13 @@
 class SVX_DLLPUBLIC SdrCaptionLineLenItem: public SdrMetricItem {
 public:
     SdrCaptionLineLenItem(long nLineLen=0): SdrMetricItem(SDRATTR_CAPTIONLINELEN,nLineLen) {}
-    SdrCaptionLineLenItem(SvStream& rIn)  : SdrMetricItem(SDRATTR_CAPTIONLINELEN,rIn)      {}
-    virtual ~SdrCaptionLineLenItem();
+    virtual ~SdrCaptionLineLenItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrCaptionLineLenItem(SdrCaptionLineLenItem const &) = default;
+    SdrCaptionLineLenItem(SdrCaptionLineLenItem &&) = default;
+    SdrCaptionLineLenItem & operator =(SdrCaptionLineLenItem const &) = delete; // due to SdrMetricItem
+    SdrCaptionLineLenItem & operator =(SdrCaptionLineLenItem &&) = delete; // due to SdrMetricItem
 };
 
 /**
@@ -43,9 +47,13 @@ public:
 class SVX_DLLPUBLIC SdrCaptionFitLineLenItem: public SdrYesNoItem {
 public:
     SdrCaptionFitLineLenItem(bool bBestFit=true): SdrYesNoItem(SDRATTR_CAPTIONFITLINELEN,bBestFit) {}
-    SdrCaptionFitLineLenItem(SvStream& rIn)     : SdrYesNoItem(SDRATTR_CAPTIONFITLINELEN,rIn)      {}
-    virtual ~SdrCaptionFitLineLenItem();
+    virtual ~SdrCaptionFitLineLenItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrCaptionFitLineLenItem(SdrCaptionFitLineLenItem const &) = default;
+    SdrCaptionFitLineLenItem(SdrCaptionFitLineLenItem &&) = default;
+    SdrCaptionFitLineLenItem & operator =(SdrCaptionFitLineLenItem const &) = delete; // due to SdrYesNoItem
+    SdrCaptionFitLineLenItem & operator =(SdrCaptionFitLineLenItem &&) = delete; // due to SdrYesNoItem
 };
 
 #endif

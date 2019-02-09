@@ -20,8 +20,9 @@
 #ifndef INCLUDED_FILTER_SOURCE_GRAPHICFILTER_IDXF_DXFREPRD_HXX
 #define INCLUDED_FILTER_SOURCE_GRAPHICFILTER_IDXF_DXFREPRD_HXX
 
-#include <dxfblkrd.hxx>
-#include <dxftblrd.hxx>
+#include "dxfblkrd.hxx"
+#include "dxftblrd.hxx"
+#include <array>
 
 
 //--------------------Other stuff---------------------------------------------
@@ -58,9 +59,9 @@ public:
     sal_uInt8 GetBlue(sal_uInt8 nIndex) const;
 
 private:
-    sal_uInt8 * pRed;
-    sal_uInt8 * pGreen;
-    sal_uInt8 * pBlue;
+    std::array<sal_uInt8, 256> pRed;
+    std::array<sal_uInt8, 256> pGreen;
+    std::array<sal_uInt8, 256> pBlue;
     void SetColor(sal_uInt8 nIndex, sal_uInt8 nRed, sal_uInt8 nGreen, sal_uInt8 nBlue);
 };
 
@@ -90,28 +91,29 @@ public:
 
     rtl_TextEncoding mEnc;  // $DWGCODEPAGE
 
-    bool bUseUTF8; // for AC1021 and higher
-
     double mfGlobalLineTypeScale; // $LTSCALE
+
+    bool mbInCalc;  // guard for self-recursive bounding box calc
 
     DXFRepresentation();
     ~DXFRepresentation();
 
     rtl_TextEncoding getTextEncoding() const;
-    void setTextEncoding(rtl_TextEncoding aEnc);
+    void setTextEncoding(rtl_TextEncoding aEnc) { mEnc = aEnc; }
     OUString ToOUString(const OString& s) const;
 
-    double getGlobalLineTypeScale() const;
-    void setGlobalLineTypeScale(double fGlobalLineTypeScale);
+    double getGlobalLineTypeScale() const { return mfGlobalLineTypeScale; }
+    void setGlobalLineTypeScale(double fGlobalLineTypeScale) { mfGlobalLineTypeScale = fGlobalLineTypeScale; }
 
-    bool Read( SvStream & rIStream, sal_uInt16 nMinPercent, sal_uInt16 nMaxPercent);
+    bool Read( SvStream & rIStream );
         // Reads complete DXF file.
 
 private:
-
     void ReadHeader(DXFGroupReader & rDGR);
     void CalcBoundingBox(const DXFEntities & rEntities,
                          DXFBoundingBox & rBox);
+
+    bool isTextEncodingSet() const { return mEnc != RTL_TEXTENCODING_DONTKNOW; }
 };
 
 
@@ -121,10 +123,6 @@ private:
 inline sal_uInt8 DXFPalette::GetRed(sal_uInt8 nIndex) const { return pRed[nIndex]; }
 inline sal_uInt8 DXFPalette::GetGreen(sal_uInt8 nIndex) const { return pGreen[nIndex]; }
 inline sal_uInt8 DXFPalette::GetBlue(sal_uInt8 nIndex) const { return pBlue[nIndex]; }
-inline rtl_TextEncoding DXFRepresentation::getTextEncoding() const { return bUseUTF8 ? RTL_TEXTENCODING_UTF8 : mEnc; }
-inline void DXFRepresentation::setTextEncoding(rtl_TextEncoding aEnc) { mEnc = aEnc; }
-inline double DXFRepresentation::getGlobalLineTypeScale() const { return mfGlobalLineTypeScale; }
-inline void DXFRepresentation::setGlobalLineTypeScale(double fGlobalLineTypeScale) { mfGlobalLineTypeScale = fGlobalLineTypeScale; }
 
 #endif
 

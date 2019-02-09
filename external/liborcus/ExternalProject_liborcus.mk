@@ -44,7 +44,7 @@ else
 liborcus_LIBS+=-L$(gb_StaticLibrary_WORKDIR) -lboost_system -lboost_iostreams -lboost_filesystem
 endif
 ifeq ($(OS),ANDROID)
-liborcus_LIBS+=-lgnustl_shared -lm
+liborcus_LIBS+=$(gb_STDLIBS)
 endif
 
 liborcus_CPPCLAGS=$(CPPFLAGS)
@@ -58,7 +58,7 @@ endif
 # library (glibc), the NDK does offer the GNU C++ library as one of
 # the C++ libraries available, and we use it.
 #
-ifneq (,$(filter ANDROID DRAGONFLY FREEBSD IOS LINUX NETBSD OPENBSD,$(OS)))
+ifneq (,$(filter ANDROID DRAGONFLY FREEBSD iOS LINUX NETBSD OPENBSD,$(OS)))
 ifneq (,$(gb_ENABLE_DBGUTIL))
 liborcus_CPPFLAGS+=-D_GLIBCXX_DEBUG
 endif
@@ -70,7 +70,7 @@ ifeq ($(COM),MSC)
 liborcus_CXXFLAGS+=$(BOOST_CXXFLAGS)
 endif
 ifeq ($(SYSTEM_BOOST),)
-liborcus_CXXFLAGS+=-I$(WORKDIR)/UnpackedTarball/boost
+liborcus_CXXFLAGS+=${BOOST_CPPFLAGS}
 else
 liborcus_LDFLAGS+=$(BOOST_LDFLAGS)
 endif
@@ -107,14 +107,15 @@ $(call gb_ExternalProject_get_state_target,liborcus,build) :
 				--with-boost=$(WORKDIR)/UnpackedTarball/boost \
 				boost_cv_lib_iostreams=yes \
 				boost_cv_lib_system=yes \
+				boost_cv_lib_filesystem=yes \
 			) \
 			$(if $(CROSS_COMPILING),--build=$(BUILD_PLATFORM) --host=$(HOST_PLATFORM)) \
 		&& $(if $(verbose),V=1) \
 		   $(MAKE) \
 		$(if $(filter MACOSX,$(OS)),\
 			&& $(PERL) $(SRCDIR)/solenv/bin/macosx-change-install-names.pl shl OOO \
-				$(gb_Package_SOURCEDIR_liborcus)/src/liborcus/.libs/liborcus-0.11.0.dylib \
-				$(gb_Package_SOURCEDIR_liborcus)/src/parser/.libs/liborcus-parser-0.11.0.dylib \
+				$(EXTERNAL_WORKDIR)/src/liborcus/.libs/liborcus-0.14.0.dylib \
+				$(EXTERNAL_WORKDIR)/src/parser/.libs/liborcus-parser-0.14.0.dylib \
 		) \
 	)
 

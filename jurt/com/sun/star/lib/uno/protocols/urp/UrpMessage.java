@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -20,14 +21,14 @@ package com.sun.star.lib.uno.protocols.urp;
 
 import com.sun.star.lib.uno.environments.remote.Message;
 import com.sun.star.lib.uno.environments.remote.ThreadId;
-import com.sun.star.uno.IMethodDescription;
-import com.sun.star.uno.ITypeDescription;
+import com.sun.star.lib.uno.typedesc.MethodDescription;
+import com.sun.star.lib.uno.typedesc.TypeDescription;
 import com.sun.star.uno.XCurrentContext;
 
 final class UrpMessage extends Message {
     public UrpMessage(
         ThreadId threadId, boolean request, String objectId,
-        ITypeDescription type, IMethodDescription method, boolean synchronous,
+        TypeDescription type, MethodDescription method, boolean synchronous,
         XCurrentContext currentContext, boolean abnormalTermination,
         Object result, Object[] arguments, boolean internal)
     {
@@ -43,3 +44,5 @@ final class UrpMessage extends Message {
 
     private final boolean internal;
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

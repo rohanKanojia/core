@@ -25,6 +25,8 @@
 #include <com/sun/star/uno/Reference.hxx>
 #include <sal/types.h>
 #include <basegfx/vector/b2dsize.hxx>
+#include <vcl/bitmap.hxx>
+#include <bitmapwriteaccess.hxx>
 
 #include <jpeglib.h>
 
@@ -34,20 +36,33 @@ namespace com { namespace sun { namespace star { namespace task {
 class JPEGReader;
 class JPEGWriter;
 class Size;
+class SvStream;
+enum class GraphicFilterImportFlags;
 
 void jpeg_svstream_src (j_decompress_ptr cinfo, void* infile);
 
 void jpeg_svstream_dest (j_compress_ptr cinfo, void* outfile);
 
 bool    WriteJPEG( JPEGWriter* pJPEGWriter, void* pOutputStream,
-                   long nWidth, long nHeight, basegfx::B2DSize aPPI, bool bGreyScale,
+                   long nWidth, long nHeight, basegfx::B2DSize const &  aPPI, bool bGreyScale,
                    long nQualityPercent, long aChromaSubsampling,
                    css::uno::Reference<css::task::XStatusIndicator> const & status);
 
 void    ReadJPEG( JPEGReader* pJPEGReader, void* pInputStream, long* pLines,
-                  Size const & previewSize );
+                  Size const & previewSize, GraphicFilterImportFlags nImportFlags,
+                  BitmapScopedWriteAccess* ppAccess );
 
-long    Transform( void* pInputStream, void* pOutputStream, long nAngle );
+void    Transform(void* pInputStream, void* pOutputStream, long nAngle);
+
+/* Expanded data source object for stdio input */
+
+struct SourceManagerStruct {
+    jpeg_source_mgr pub;                /* public fields */
+    SvStream*   stream;                 /* source stream */
+    JOCTET*     buffer;                 /* start of buffer */
+    boolean     start_of_file;          /* have we gotten any data yet? */
+    boolean     no_data_available;
+};
 
 #endif
 

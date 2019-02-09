@@ -18,29 +18,26 @@
  */
 
 #include "DataInterpreter.hxx"
-#include "DataSeries.hxx"
-#include "DataSourceHelper.hxx"
-#include "DataSeriesHelper.hxx"
-#include "macros.hxx"
-#include "CommonConverters.hxx"
-#include "ContainerHelper.hxx"
+#include <DataSeries.hxx>
+#include <DataSourceHelper.hxx>
+#include <DataSeriesHelper.hxx>
+#include <CommonConverters.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/chart2/data/XDataSink.hpp>
 #include <cppuhelper/supportsservice.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <vector>
 #include <algorithm>
-#include <iterator>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 using namespace ::std;
-using namespace ::chart::ContainerHelper;
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 
-#if OSL_DEBUG_LEVEL > 1
+#ifdef DEBUG_CHART2_TEMPLATE
 namespace
 {
 void lcl_ShowDataSource( const Reference< data::XDataSource > & xSource );
@@ -50,9 +47,7 @@ void lcl_ShowDataSource( const Reference< data::XDataSource > & xSource );
 namespace chart
 {
 
-DataInterpreter::DataInterpreter(
-    const Reference< uno::XComponentContext > & xContext ) :
-        m_xContext( xContext )
+DataInterpreter::DataInterpreter()
 {}
 
 DataInterpreter::~DataInterpreter()
@@ -63,12 +58,11 @@ InterpretedData SAL_CALL DataInterpreter::interpretDataSource(
     const Reference< data::XDataSource >& xSource,
     const Sequence< beans::PropertyValue >& aArguments,
     const Sequence< Reference< XDataSeries > >& aSeriesToReUse )
-    throw (uno::RuntimeException, std::exception)
 {
     if( ! xSource.is())
         return InterpretedData();
 
-#if OSL_DEBUG_LEVEL > 1
+#ifdef DEBUG_CHART2_TEMPLATE
     lcl_ShowDataSource( xSource );
 #endif
 
@@ -101,34 +95,32 @@ InterpretedData SAL_CALL DataInterpreter::interpretDataSource(
                     SetRole( aData[i]->getValues(), "values-y");
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
     // create DataSeries
-    vector< Reference< data::XLabeledDataSequence > >::const_iterator
-          aSequencesVecIt = aSequencesVec.begin();
-
     sal_Int32 nSeriesIndex = 0;
     vector< Reference< XDataSeries > > aSeriesVec;
     aSeriesVec.reserve( aSequencesVec.size());
 
-    for( ;aSequencesVecIt != aSequencesVec.end(); ++aSequencesVecIt, ++nSeriesIndex )
+    for (auto const& elem : aSequencesVec)
     {
-        Sequence< Reference< data::XLabeledDataSequence > > aNewData( & (*aSequencesVecIt), 1 );
+        Sequence< Reference< data::XLabeledDataSequence > > aNewData( &elem, 1 );
         Reference< XDataSeries > xSeries;
         if( nSeriesIndex < aSeriesToReUse.getLength())
             xSeries.set( aSeriesToReUse[nSeriesIndex] );
         else
-            xSeries.set( new DataSeries( GetComponentContext() ));
+            xSeries.set( new DataSeries );
         OSL_ASSERT( xSeries.is() );
         Reference< data::XDataSink > xSink( xSeries, uno::UNO_QUERY );
         OSL_ASSERT( xSink.is() );
         xSink->setData( aNewData );
 
         aSeriesVec.push_back( xSeries );
+        ++nSeriesIndex;
     }
 
     Sequence< Sequence< Reference< XDataSeries > > > aSeries(1);
@@ -138,7 +130,6 @@ InterpretedData SAL_CALL DataInterpreter::interpretDataSource(
 
 InterpretedData SAL_CALL DataInterpreter::reinterpretDataSeries(
     const InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     InterpretedData aResult( aInterpretedData );
 
@@ -172,20 +163,20 @@ InterpretedData SAL_CALL DataInterpreter::reinterpretDataSeries(
             Sequence< Reference< data::XLabeledDataSequence > > aSeqs( xSeriesSource->getDataSequences());
             if( aSeqs.getLength() != aNewSequences.getLength() )
             {
-#if OSL_DEBUG_LEVEL > 1
+#ifdef DEBUG_CHART2_TEMPLATE
                 sal_Int32 j=0;
                 for( ; j<aSeqs.getLength(); ++j )
                 {
-                    OSL_ENSURE( aSeqs[j] == xValuesY, "All sequences should be used" );
+                    assert( aSeqs[j] == xValuesY && "All sequences should be used" );
                 }
 #endif
                 Reference< data::XDataSink > xSink( xSeriesSource, uno::UNO_QUERY_THROW );
                 xSink->setData( aNewSequences );
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
@@ -195,7 +186,6 @@ InterpretedData SAL_CALL DataInterpreter::reinterpretDataSeries(
 // criterion: all series must have exactly one data::XLabeledDataSequence
 sal_Bool SAL_CALL DataInterpreter::isDataCompatible(
     const chart2::InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     Sequence< Reference< XDataSeries > > aSeries( FlattenSequence( aInterpretedData.Series ));
     for( sal_Int32 i=0; i<aSeries.getLength(); ++i )
@@ -205,21 +195,21 @@ sal_Bool SAL_CALL DataInterpreter::isDataCompatible(
             Reference< data::XDataSource > xSrc( aSeries[i], uno::UNO_QUERY_THROW );
             Sequence< Reference< data::XLabeledDataSequence > > aSeq( xSrc->getDataSequences());
             if( aSeq.getLength() != 1 )
-                return sal_False;
+                return false;
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
-    return sal_True;
+    return true;
 }
 
 namespace
 {
 
-struct lcl_LabeledSequenceEquals : public std::unary_function< Reference< data::XLabeledDataSequence >, bool >
+struct lcl_LabeledSequenceEquals
 {
     explicit lcl_LabeledSequenceEquals( const Reference< data::XLabeledDataSequence > & xLSeqToCmp ) :
             m_bHasLabels ( false ),
@@ -254,9 +244,9 @@ struct lcl_LabeledSequenceEquals : public std::unary_function< Reference< data::
         bool bHasLabels = xSeqLabels.is();
 
         return ( ( (m_bHasValues == bHasValues) &&
-                   (!bHasValues || m_aValuesRangeRep.equals( xSeqValues->getSourceRangeRepresentation())) ) &&
+                   (!bHasValues || m_aValuesRangeRep == xSeqValues->getSourceRangeRepresentation()) ) &&
                  ( (m_bHasLabels == bHasLabels) &&
-                   (!bHasLabels || m_aLabelRangeRep.equals( xSeqLabels->getSourceRangeRepresentation())) )
+                   (!bHasLabels || m_aLabelRangeRep == xSeqLabels->getSourceRangeRepresentation()) )
             );
     }
 
@@ -271,7 +261,6 @@ private:
 
 Reference< data::XDataSource > SAL_CALL DataInterpreter::mergeInterpretedData(
     const InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     vector< Reference< data::XLabeledDataSequence > > aResultVec;
     aResultVec.reserve( aInterpretedData.Series.getLength() +
@@ -295,20 +284,20 @@ Reference< data::XDataSource > SAL_CALL DataInterpreter::mergeInterpretedData(
                 Reference< data::XLabeledDataSequence > xAdd( aSeq[nSeqIdx] );
 
                 // only add if sequence is not yet in the result
-                if( find_if( aResultVec.begin(), aResultVec.end(),
-                             lcl_LabeledSequenceEquals( xAdd )) == aResultVec.end())
+                if( none_of( aResultVec.begin(), aResultVec.end(),
+                             lcl_LabeledSequenceEquals( xAdd )) )
                 {
                     aResultVec.push_back( xAdd );
                 }
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
-    return Reference< data::XDataSource >( DataSourceHelper::createDataSource( comphelper::containerToSequence( aResultVec ) ) );
+    return DataSourceHelper::createDataSource( comphelper::containerToSequence( aResultVec ) );
 }
 
 // convenience methods
@@ -324,9 +313,9 @@ OUString DataInterpreter::GetRole( const Reference< data::XDataSequence > & xSeq
         Reference< beans::XPropertySet > xProp( xSeq, uno::UNO_QUERY_THROW );
         xProp->getPropertyValue( "Role") >>= aResult;
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return aResult;
 }
@@ -338,11 +327,11 @@ void DataInterpreter::SetRole( const Reference< data::XDataSequence > & xSeq, co
     try
     {
         Reference< beans::XPropertySet > xProp( xSeq, uno::UNO_QUERY_THROW );
-        xProp->setPropertyValue( "Role", uno::makeAny( rRole ));
+        xProp->setPropertyValue( "Role", uno::Any( rRole ));
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -352,7 +341,7 @@ uno::Any DataInterpreter::GetProperty(
 {
     for( sal_Int32 i=aArguments.getLength(); i--; )
     {
-        if( aArguments[i].Name.equals( rName ))
+        if( aArguments[i].Name == rName )
             return aArguments[i].Value;
     }
     return uno::Any();
@@ -381,39 +370,24 @@ bool DataInterpreter::UseCategoriesAsX( const Sequence< beans::PropertyValue > &
     return bUseCategoriesAsX;
 }
 
-Sequence< OUString > DataInterpreter::getSupportedServiceNames_Static()
-{
-    Sequence<OUString> aServices { "com.sun.star.chart2.DataInterpreter" };
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL DataInterpreter::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString DataInterpreter::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart2.DataInterpreter");
 }
 
 sal_Bool SAL_CALL DataInterpreter::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL DataInterpreter::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return { "com.sun.star.chart2.DataInterpreter" };
 }
 
 } // namespace chart
 
-#if OSL_DEBUG_LEVEL > 1
+#ifdef DEBUG_CHART2_TEMPLATE
 namespace
 {
 

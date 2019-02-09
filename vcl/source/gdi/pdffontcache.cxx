@@ -21,10 +21,10 @@
 
 #include <sal/types.h>
 
-#include "fontinstance.hxx"
-#include "PhysicalFontFace.hxx"
-#include "salgdi.hxx"
-#include "sallayout.hxx"
+#include <fontinstance.hxx>
+#include <PhysicalFontFace.hxx>
+#include <salgdi.hxx>
+#include <sallayout.hxx>
 
 #include "pdffontcache.hxx"
 
@@ -44,7 +44,7 @@ PDFFontCache::FontData& PDFFontCache::getFont( const PhysicalFontFace* pFont, bo
     if( it != m_aFontToIndex.end() )
         return m_aFonts[ it->second ];
     m_aFontToIndex[ aId ] = sal_uInt32(m_aFonts.size());
-    m_aFonts.push_back( FontData() );
+    m_aFonts.emplace_back( );
     return m_aFonts.back();
 }
 
@@ -58,23 +58,8 @@ sal_Int32 PDFFontCache::getGlyphWidth( const PhysicalFontFace* pFont, sal_GlyphI
     }
     if( ! rFontData.m_nWidths.empty() )
     {
-        sal_GlyphId nIndex = nGlyph;
-        if( (nGlyph & GF_ISCHAR) != 0 )
-        {
-            const sal_Ucs cCode = static_cast<sal_Ucs>(nGlyph & GF_IDXMASK);
-            Ucs2UIntMap::const_iterator it = rFontData.m_aGlyphIdToIndex.find( cCode );
-
-            // allow symbol aliasing U+00xx -> U+F0xx if there is no direct match
-            if( it == rFontData.m_aGlyphIdToIndex.end()
-            &&  pFont->IsSymbolFont()
-            &&  (cCode < 0x0100) )
-                it = rFontData.m_aGlyphIdToIndex.find( cCode+0xF000 );
-
-            nIndex = (it != rFontData.m_aGlyphIdToIndex.end()) ? it->second : 0;
-        }
-        nIndex &= GF_IDXMASK;
-        if( nIndex < rFontData.m_nWidths.size() )
-            nWidth = rFontData.m_nWidths[ nIndex ];
+        if (nGlyph < rFontData.m_nWidths.size())
+            nWidth = rFontData.m_nWidths[nGlyph];
     }
     return nWidth;
 }

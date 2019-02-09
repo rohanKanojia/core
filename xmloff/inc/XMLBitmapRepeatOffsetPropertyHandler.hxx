@@ -22,22 +22,22 @@
 
 #include <xmloff/xmlprhdl.hxx>
 
-struct SvXMLEnumMapEntry;
+template<typename EnumT> struct SvXMLEnumMapEntry;
 
 /** Abstract base-class for different XML-types. Derivations of this class
     knows how to compare, im/export a special XML-type
 */
 class XMLBitmapRepeatOffsetPropertyHandler: public XMLPropertyHandler
 {
-    bool mbX;
-    OUString msVertical;
-    OUString msHorizontal;
+    bool const mbX;
+    OUString const msVertical;
+    OUString const msHorizontal;
 public:
 
     XMLBitmapRepeatOffsetPropertyHandler( bool bX );
 
     // Just needed for virtual destruction
-    virtual ~XMLBitmapRepeatOffsetPropertyHandler();
+    virtual ~XMLBitmapRepeatOffsetPropertyHandler() override;
 
     /// Imports the given value in cas of the given XML-data-type
     virtual bool importXML(

@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/embed/EmbedStates.hpp>
 
 #include <sfx2/ipclient.hxx>
 #include <sfx2/viewsh.hxx>
@@ -77,7 +76,6 @@ SwFlyFrame *SwFEShell::FindFlyFrame( const uno::Reference < embed::XEmbeddedObje
         }
 
         OSL_ENSURE( bExist, "OLE-Object unknown and FlyFrame not found." );
-        (void)bExist;
     }
     return pFly;
 }
@@ -106,7 +104,6 @@ bool SwFEShell::FinishOLEObj()                      // Server is terminated
     bool bRet = pIPClient->IsObjectInPlaceActive();
     if( bRet )
     {
-        uno::Reference < embed::XEmbeddedObject > xObj = pIPClient->GetObject();
         if( CNT_OLE == GetCntType() )
             ClearAutomaticContour();
 

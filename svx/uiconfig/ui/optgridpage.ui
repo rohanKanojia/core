@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="svx">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">0.01</property>
     <property name="upper">10</property>
@@ -32,6 +32,18 @@
     <property name="step_increment">5</property>
     <property name="page_increment">10</property>
   </object>
+  <object class="GtkAdjustment" id="adjustment6">
+    <property name="lower">0.01</property>
+    <property name="upper">10</property>
+    <property name="step_increment">0.20000000000000001</property>
+    <property name="page_increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustment7">
+    <property name="lower">1</property>
+    <property name="upper">99</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
   <object class="GtkBox" id="OptGridPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -60,7 +72,7 @@
                 <property name="row_spacing">6</property>
                 <child>
                   <object class="GtkCheckButton" id="usegridsnap">
-                    <property name="label" translatable="yes">_Snap to grid</property>
+                    <property name="label" translatable="yes" context="optgridpage|usegridsnap">_Snap to grid</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -75,7 +87,7 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="gridvisible">
-                    <property name="label" translatable="yes">_Visible grid</property>
+                    <property name="label" translatable="yes" context="optgridpage|gridvisible">_Visible grid</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -96,7 +108,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Grid</property>
+            <property name="label" translatable="yes" context="optgridpage|label1">Grid</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -138,10 +150,10 @@
                     <property name="row_spacing">6</property>
                     <property name="column_spacing">12</property>
                     <child>
-                      <object class="GtkSpinButton" id="mtrflddrawx:0.00cm">
+                      <object class="GtkSpinButton" id="mtrflddrawx">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
+                        <property name="activates_default">True</property>
                         <property name="adjustment">adjustment1</property>
                         <property name="digits">2</property>
                       </object>
@@ -151,11 +163,11 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSpinButton" id="mtrflddrawy:0.00cm">
+                      <object class="GtkSpinButton" id="mtrflddrawy">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
-                        <property name="adjustment">adjustment1</property>
+                        <property name="activates_default">True</property>
+                        <property name="adjustment">adjustment6</property>
                         <property name="digits">2</property>
                       </object>
                       <packing>
@@ -167,10 +179,10 @@
                       <object class="GtkLabel" id="flddrawx">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">H_orizontal:</property>
+                        <property name="label" translatable="yes" context="optgridpage|flddrawx">H_orizontal:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">mtrflddrawx:0.00cm</property>
+                        <property name="mnemonic_widget">mtrflddrawx</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -181,10 +193,10 @@
                       <object class="GtkLabel" id="flddrawy">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">_Vertical:</property>
+                        <property name="label" translatable="yes" context="optgridpage|flddrawy">_Vertical:</property>
                         <property name="use_underline">True</property>
-                        <property name="mnemonic_widget">mtrflddrawy:0.00cm</property>
+                        <property name="mnemonic_widget">mtrflddrawy</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -193,7 +205,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="synchronize">
-                        <property name="label" translatable="yes">Synchronize a_xes</property>
+                        <property name="label" translatable="yes" context="optgridpage|synchronize">Synchronize a_xes</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -216,7 +228,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Resolution</property>
+                <property name="label" translatable="yes" context="optgridpage|label2">Resolution</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -261,7 +273,7 @@
                           <object class="GtkSpinButton" id="numflddivisionx">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
+                            <property name="activates_default">True</property>
                             <property name="adjustment">adjustment2</property>
                           </object>
                           <packing>
@@ -273,8 +285,8 @@
                           <object class="GtkLabel" id="label4">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
+                            <property name="label" translatable="yes" context="optgridpage|label4">space(s)</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">space(s)</property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -296,8 +308,8 @@
                           <object class="GtkSpinButton" id="numflddivisiony">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
-                            <property name="adjustment">adjustment2</property>
+                            <property name="activates_default">True</property>
+                            <property name="adjustment">adjustment7</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -308,8 +320,8 @@
                           <object class="GtkLabel" id="label5">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
+                            <property name="label" translatable="yes" context="optgridpage|label5">space(s)</property>
                             <property name="xalign">0</property>
-                            <property name="label" translatable="yes">space(s)</property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -326,10 +338,10 @@
                       <object class="GtkLabel" id="divisionx">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">Horizont_al:</property>
+                        <property name="label" translatable="yes" context="optgridpage|divisionx">Horizont_al:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">numflddivisionx</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -340,10 +352,10 @@
                       <object class="GtkLabel" id="divisiony">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="xalign">0</property>
-                        <property name="label" translatable="yes">V_ertical:</property>
+                        <property name="label" translatable="yes" context="optgridpage|divisiony">V_ertical:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">numflddivisiony</property>
+                        <property name="xalign">0</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -358,7 +370,7 @@
               <object class="GtkLabel" id="label3">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Subdivision</property>
+                <property name="label" translatable="yes" context="optgridpage|label3">Subdivision</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -403,10 +415,11 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="snaphelplines">
-                        <property name="label" translatable="yes">To snap lines</property>
+                        <property name="label" translatable="yes" context="optgridpage|snaphelplines">To snap lines</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                       </object>
@@ -417,7 +430,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="snapborder">
-                        <property name="label" translatable="yes">To the _page margins</property>
+                        <property name="label" translatable="yes" context="optgridpage|snapborder">To the _page margins</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -432,7 +445,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="snapframe">
-                        <property name="label" translatable="yes">To object _frame</property>
+                        <property name="label" translatable="yes" context="optgridpage|snapframe">To object _frame</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -447,7 +460,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="snappoints">
-                        <property name="label" translatable="yes">To obje_ct points</property>
+                        <property name="label" translatable="yes" context="optgridpage|snappoints">To obje_ct points</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -466,10 +479,10 @@
                         <property name="can_focus">False</property>
                         <property name="column_spacing">12</property>
                         <child>
-                          <object class="GtkSpinButton" id="mtrfldsnaparea:0pixels">
+                          <object class="GtkSpinButton" id="mtrfldsnaparea">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
+                            <property name="activates_default">True</property>
                             <property name="adjustment">adjustment3</property>
                           </object>
                           <packing>
@@ -481,10 +494,10 @@
                           <object class="GtkLabel" id="label7">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">_Snap range:</property>
+                            <property name="label" translatable="yes" context="optgridpage|label7">_Snap range:</property>
                             <property name="use_underline">True</property>
-                            <property name="mnemonic_widget">mtrfldsnaparea:0pixels</property>
+                            <property name="mnemonic_widget">mtrfldsnaparea</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -505,7 +518,7 @@
               <object class="GtkLabel" id="label6">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Snap</property>
+                <property name="label" translatable="yes" context="optgridpage|label6">Snap</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -539,7 +552,7 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkCheckButton" id="ortho">
-                        <property name="label" translatable="yes">_When creating or moving objects</property>
+                        <property name="label" translatable="yes" context="optgridpage|ortho">_When creating or moving objects</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -554,7 +567,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="bigortho">
-                        <property name="label" translatable="yes">_Extend edges</property>
+                        <property name="label" translatable="yes" context="optgridpage|bigortho">_Extend edges</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -574,10 +587,9 @@
                         <property name="row_spacing">6</property>
                         <property name="column_spacing">12</property>
                         <child>
-                          <object class="GtkSpinButton" id="mtrfldangle:0.00degrees">
+                          <object class="GtkSpinButton" id="mtrfldangle">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
                             <property name="adjustment">adjustment4</property>
                             <property name="digits">2</property>
                             <accessibility>
@@ -591,7 +603,7 @@
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="rotate">
-                            <property name="label" translatable="yes">When ro_tating:</property>
+                            <property name="label" translatable="yes" context="optgridpage|rotate">When ro_tating:</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
@@ -599,7 +611,7 @@
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
                             <accessibility>
-                              <relation type="label-for" target="mtrfldangle:0.00degrees"/>
+                              <relation type="label-for" target="mtrfldangle"/>
                             </accessibility>
                           </object>
                           <packing>
@@ -608,10 +620,10 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkSpinButton" id="mtrfldbezangle:0.00degrees">
+                          <object class="GtkSpinButton" id="mtrfldbezangle">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="invisible_char">●</property>
+                            <property name="activates_default">True</property>
                             <property name="adjustment">adjustment5</property>
                             <property name="digits">2</property>
                           </object>
@@ -624,10 +636,10 @@
                           <object class="GtkLabel" id="label9">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="xalign">0</property>
-                            <property name="label" translatable="yes">Point reducti_on:</property>
+                            <property name="label" translatable="yes" context="optgridpage|label9">Point reducti_on:</property>
                             <property name="use_underline">True</property>
-                            <property name="mnemonic_widget">mtrfldbezangle:0.00degrees</property>
+                            <property name="mnemonic_widget">mtrfldbezangle</property>
+                            <property name="xalign">0</property>
                           </object>
                           <packing>
                             <property name="left_attach">0</property>
@@ -648,7 +660,7 @@
               <object class="GtkLabel" id="label8">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Snap Position</property>
+                <property name="label" translatable="yes" context="optgridpage|label8">Constrain Objects</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>

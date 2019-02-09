@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TimerTriggeredControllerLock.hxx"
+#include <TimerTriggeredControllerLock.hxx>
+#include <ControllerLockGuard.hxx>
 
 #include <vcl/edit.hxx>
 
@@ -32,7 +33,7 @@ TimerTriggeredControllerLock::TimerTriggeredControllerLock( const uno::Reference
     , m_aTimer()
 {
     m_aTimer.SetTimeout( 4*EDIT_UPDATEDATA_TIMEOUT );
-    m_aTimer.SetTimeoutHdl( LINK( this, TimerTriggeredControllerLock, TimerTimeout ) );
+    m_aTimer.SetInvokeHandler( LINK( this, TimerTriggeredControllerLock, TimerTimeout ) );
 }
 TimerTriggeredControllerLock::~TimerTriggeredControllerLock()
 {
@@ -41,11 +42,11 @@ TimerTriggeredControllerLock::~TimerTriggeredControllerLock()
 
 void TimerTriggeredControllerLock::startTimer()
 {
-    if(!m_apControllerLockGuard.get())
+    if (!m_apControllerLockGuard)
         m_apControllerLockGuard.reset( new  ControllerLockGuardUNO(m_xModel) );
     m_aTimer.Start();
 }
-IMPL_LINK_NOARG_TYPED(TimerTriggeredControllerLock, TimerTimeout, Timer *, void)
+IMPL_LINK_NOARG(TimerTriggeredControllerLock, TimerTimeout, Timer *, void)
 {
     m_apControllerLockGuard.reset();
 }

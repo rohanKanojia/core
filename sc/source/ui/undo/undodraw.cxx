@@ -19,25 +19,22 @@
 
 #include <svx/svdundo.hxx>
 
-#include "undodraw.hxx"
-#include "docsh.hxx"
-#include "tabvwsh.hxx"
+#include <undodraw.hxx>
+#include <docsh.hxx>
+#include <tabvwsh.hxx>
 
 
-ScUndoDraw::ScUndoDraw( SfxUndoAction* pUndo, ScDocShell* pDocSh ) :
-    pDrawUndo( pUndo ),
-    pDocShell( pDocSh )
+ScUndoDraw::ScUndoDraw( std::unique_ptr<SfxUndoAction> pUndo, ScDocShell* pDocSh ) :
+    pDrawUndo( std::move(pUndo) ),
+    pDocShell( pDocSh ),
+    mnViewShellId( -1 )
 {
+    if (ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell())
+        mnViewShellId = pViewShell->GetViewShellId();
 }
 
 ScUndoDraw::~ScUndoDraw()
 {
-    delete pDrawUndo;
-}
-
-void ScUndoDraw::ForgetDrawUndo()
-{
-    pDrawUndo = nullptr;   // do not delete (DrawUndo has to be remembered from outside)
 }
 
 OUString ScUndoDraw::GetComment() const
@@ -47,27 +44,16 @@ OUString ScUndoDraw::GetComment() const
     return OUString();
 }
 
+ViewShellId ScUndoDraw::GetViewShellId() const
+{
+    return mnViewShellId;
+}
+
 OUString ScUndoDraw::GetRepeatComment(SfxRepeatTarget& rTarget) const
 {
     if (pDrawUndo)
         return pDrawUndo->GetRepeatComment(rTarget);
     return OUString();
-}
-
-sal_uInt16 ScUndoDraw::GetId() const
-{
-    if (pDrawUndo)
-        return pDrawUndo->GetId();
-    else
-        return 0;
-}
-
-void ScUndoDraw::SetLinkToSfxLinkUndoAction(SfxLinkUndoAction* pSfxLinkUndoAction)
-{
-    if (pDrawUndo)
-        pDrawUndo->SetLinkToSfxLinkUndoAction(pSfxLinkUndoAction);
-    else
-        SetLinkToSfxLinkUndoAction(pSfxLinkUndoAction);
 }
 
 bool  ScUndoDraw::Merge( SfxUndoAction* pNextAction )

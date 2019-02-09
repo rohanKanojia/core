@@ -20,10 +20,9 @@
 #ifndef INCLUDED_FORMS_SOURCE_SOLAR_COMPONENT_NAVBARCONTROL_HXX
 #define INCLUDED_FORMS_SOURCE_SOLAR_COMPONENT_NAVBARCONTROL_HXX
 
-#include "formnavigation.hxx"
+#include <formnavigation.hxx>
 
 #include <com/sun/star/frame/XDispatchProviderInterception.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
 
 #include <toolkit/controls/unocontrol.hxx>
 #include <toolkit/awt/vclxwindow.hxx>
@@ -49,80 +48,70 @@ namespace frm
         );
 
     protected:
-        virtual ~ONavigationBarControl();
+        virtual ~ONavigationBarControl() override;
 
-    public:
-        // XServiceInfo - static version
-        static  OUString SAL_CALL getImplementationName_Static();
-        static  css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames_Static();
-
-    protected:
         // UNO
         DECLARE_UNO3_AGG_DEFAULTS( ONavigationBarControl, UnoControl )
-        virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _rType ) override;
 
         // XControl
-        virtual void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& _rToolkit, const css::uno::Reference< css::awt::XWindowPeer >& _rParent ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL createPeer( const css::uno::Reference< css::awt::XToolkit >& _rToolkit, const css::uno::Reference< css::awt::XWindowPeer >& _rParent ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName()  throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()  throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
         // XTypeProvider
         DECLARE_XTYPEPROVIDER()
 
         // XVclWindowPeer
-        virtual void SAL_CALL setDesignMode( sal_Bool _bOn ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setDesignMode( sal_Bool _bOn ) override;
 
         // XDispatchProviderInterception
-        virtual void SAL_CALL registerDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL releaseDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL registerDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor ) override;
+        virtual void SAL_CALL releaseDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor ) override;
     };
 
-    class ONavigationBarPeer
+    class ONavigationBarPeer final
                         :public VCLXWindow
                         ,public OFormNavigationHelper
     {
     public:
         /** factory method
-            @return
-                a new ONavigationBarPeer instance, which has been acquired once!
         */
-        static ONavigationBarPeer* Create(
+        static rtl::Reference<ONavigationBarPeer> Create(
             const css::uno::Reference< css::uno::XComponentContext >& _rxORB,
             vcl::Window* _pParentWindow,
             const css::uno::Reference< css::awt::XControlModel >& _rxModel
         );
 
-    protected:
-        explicit ONavigationBarPeer(
-            const css::uno::Reference< css::uno::XComponentContext >& _rxORB
-        );
-        virtual ~ONavigationBarPeer();
-
-    public:
         // XInterface
         DECLARE_XINTERFACE( )
 
         // XVclWindowPeer
-        virtual void SAL_CALL setDesignMode( sal_Bool _bOn ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL setDesignMode( sal_Bool _bOn ) override;
 
         // XWindow2
         using VCLXWindow::isEnabled;
 
-    protected:
+    private:
+        explicit ONavigationBarPeer(
+            const css::uno::Reference< css::uno::XComponentContext >& _rxORB
+        );
+        virtual ~ONavigationBarPeer() override;
+
         // XTypeProvider
         DECLARE_XTYPEPROVIDER( )
 
         // XComponent
-        void SAL_CALL dispose(  ) throw( css::uno::RuntimeException, std::exception ) override;
+        void SAL_CALL dispose(  ) override;
 
         // XVclWindowPeer
-        void SAL_CALL setProperty( const OUString& _rPropertyName, const css::uno::Any& _rValue ) throw( css::uno::RuntimeException, std::exception ) override;
-        css::uno::Any SAL_CALL getProperty( const OUString& _rPropertyName ) throw(css::uno::RuntimeException, std::exception) override;
+        void SAL_CALL setProperty( const OUString& _rPropertyName, const css::uno::Any& _rValue ) override;
+        css::uno::Any SAL_CALL getProperty( const OUString& _rPropertyName ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // OFormNavigationHelper overriables
         virtual void    interceptorsChanged( ) override;

@@ -30,6 +30,7 @@
 #include <xmloff/contextid.hxx>
 #include <xmloff/controlpropertyhdl.hxx>
 #include <xmloff/maptype.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 #include <tools/debug.hxx>
 #include "controlpropertymap.hxx"
@@ -180,7 +181,6 @@ namespace xmloff
         Sequence< ScriptEventDescriptor > aElementEvents;
 
         Reference< XPropertySetInfo > xPropsInfo;
-        Reference< XIndexAccess > xCurrentContainer;
         for (sal_Int32 i=0; i<nElements; ++i)
         {
             try
@@ -257,12 +257,7 @@ namespace xmloff
 
     void OFormLayerXMLExport_Impl::exportAutoStyles()
     {
-        m_rContext.GetAutoStylePool()->exportXML(
-            XML_STYLE_FAMILY_CONTROL_ID,
-            m_rContext.GetDocHandler(),
-            m_rContext.GetMM100UnitConverter(),
-            m_rContext.GetNamespaceMap()
-        );
+        m_rContext.GetAutoStylePool()->exportXML( XML_STYLE_FAMILY_CONTROL_ID );
     }
 
     void OFormLayerXMLExport_Impl::exportForms(const Reference< XDrawPage >& _rxDrawPage)
@@ -290,7 +285,7 @@ namespace xmloff
     bool OFormLayerXMLExport_Impl::pageContainsForms( const Reference< XDrawPage >& _rxDrawPage )
     {
         Reference< XFormsSupplier2 > xFormsSupp( _rxDrawPage, UNO_QUERY );
-        DBG_ASSERT( xFormsSupp.is(), "OFormLayerXMLExport_Impl::pageContainsForms: no XFormsSupplier2!" );
+        SAL_WARN_IF( !xFormsSupp.is(), "xmloff", "OFormLayerXMLExport_Impl::pageContainsForms: no XFormsSupplier2!" );
         return xFormsSupp.is() && xFormsSupp->hasForms();
     }
 
@@ -464,7 +459,7 @@ namespace xmloff
 
     namespace
     {
-        struct AccumulateSize : public ::std::binary_function< size_t, MapPropertySet2Map::value_type, size_t >
+        struct AccumulateSize
         {
             size_t operator()( size_t _size, const MapPropertySet2Map::value_type& _map ) const
             {
@@ -474,26 +469,19 @@ namespace xmloff
 
         OUString lcl_findFreeControlId( const MapPropertySet2Map& _rAllPagesControlIds )
         {
-            static const char sControlIdBase[] = "control";
-            OUString sControlId = sControlIdBase;
+            OUString sControlId = "control";
 
-            size_t nKnownControlCount = ::std::accumulate( _rAllPagesControlIds.begin(), _rAllPagesControlIds.end(), (size_t)0, AccumulateSize() );
-            sControlId += OUString::number( (sal_Int32)nKnownControlCount + 1 );
+            size_t nKnownControlCount = ::std::accumulate( _rAllPagesControlIds.begin(), _rAllPagesControlIds.end(), size_t(0), AccumulateSize() );
+            sControlId += OUString::number( static_cast<sal_Int32>(nKnownControlCount) + 1 );
 
         #ifdef DBG_UTIL
             // Check if the id is already used. It shouldn't, as we currently have no mechanism for removing entries
             // from the map, so the approach used above (take the accumulated map size) should be sufficient. But if
             // somebody changes this (e.g. allows removing entries from the map), the assertion below probably will fail.
-            for (   MapPropertySet2Map::const_iterator outer = _rAllPagesControlIds.begin();
-                    outer != _rAllPagesControlIds.end();
-                    ++outer
-                )
-                for (   MapPropertySet2String::const_iterator inner = outer->second.begin();
-                        inner != outer->second.end();
-                        ++inner
-                    )
+            for ( const auto& outer : _rAllPagesControlIds )
+                for ( const auto& inner : outer.second )
                 {
-                    OSL_ENSURE( inner->second != sControlId,
+                    OSL_ENSURE( inner.second != sControlId,
                         "lcl_findFreeControlId: auto-generated control ID is already used!" );
                 }
         #endif
@@ -603,14 +591,6 @@ namespace xmloff
                     aPropertyStates.push_back( aNumberStyleState );
                 }
 
-#if OSL_DEBUG_LEVEL > 0
-                ::std::vector< XMLPropertyState >::const_iterator aHaveALook = aPropertyStates.begin();
-                for ( ; aHaveALook != aPropertyStates.end(); ++aHaveALook )
-                {
-                    (void)aHaveALook;
-                }
-#endif
-
                 // determine the column style
 
                 if ( !aPropertyStates.empty() )
@@ -620,13 +600,13 @@ namespace xmloff
                     OSL_ENSURE( m_aGridColumnStyles.end() == m_aGridColumnStyles.find( xColumnProperties ),
                         "OFormLayerXMLExport_Impl::collectGridColumnStylesAndIds: already have a style for this column!" );
 
-                    m_aGridColumnStyles.insert( MapPropertySet2String::value_type( xColumnProperties, sColumnStyleName ) );
+                    m_aGridColumnStyles.emplace( xColumnProperties, sColumnStyleName );
                 }
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
         }
     }
 
@@ -689,7 +669,7 @@ namespace xmloff
             }
 
             // check if our own formats collection already knows the format
-            nOwnFormatKey = m_xControlNumberFormats->queryKey(sFormatDescription, aFormatLocale, sal_False);
+            nOwnFormatKey = m_xControlNumberFormats->queryKey(sFormatDescription, aFormatLocale, false);
             if (-1 == nOwnFormatKey)
             {   // no, we don't
                 // -> create a new format
@@ -717,10 +697,7 @@ namespace xmloff
             {
                 // create it for en-US (does not really matter, as we will specify a locale for every
                 // concrete language to use)
-                Locale aLocale (  OUString("en"),
-                                                 OUString("US"),
-                                                 OUString()
-                                             );
+                Locale aLocale (  "en", "US", OUString() );
                 xFormatsSupplier = NumberFormatsSupplier::createWithLocale( m_rContext.getComponentContext(), aLocale );
                 m_xControlNumberFormats = xFormatsSupplier->getNumberFormats();
             }

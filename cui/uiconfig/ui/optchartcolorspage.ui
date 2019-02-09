@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<!-- Generated with glade 3.18.3 -->
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
+  <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkBox" id="OptChartColorsPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -26,12 +27,15 @@
             <property name="top_padding">6</property>
             <property name="left_padding">12</property>
             <child>
-              <object class="svxlo-ColorLB" id="colors:border">
-                <property name="dropdown">False</property>
+              <object class="GtkTreeView" id="colors:border">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
+                <property name="show_expanders">False</property>
+                <child internal-child="selection">
+                  <object class="GtkTreeSelection" id="treeview-selection1"/>
+                </child>
               </object>
             </child>
           </object>
@@ -40,7 +44,7 @@
           <object class="GtkLabel" id="label20">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Chart Colors</property>
+            <property name="label" translatable="yes" context="optchartcolorspage|label20">Chart Colors</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -70,25 +74,11 @@
             <property name="top_padding">6</property>
             <property name="left_padding">12</property>
             <child>
-              <object class="GtkBox" id="box2">
+              <object class="GtkGrid" id="grid1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="hexpand">True</property>
-                <property name="vexpand">True</property>
-                <property name="spacing">12</property>
-                <child>
-                  <object class="svtlo-ValueSet" id="table:border">
-                    <property name="visible">True</property>
-                    <property name="can_focus">True</property>
-                    <property name="hexpand">True</property>
-                    <property name="vexpand">True</property>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">0</property>
-                  </packing>
-                </child>
+                <property name="orientation">vertical</property>
+                <property name="column_spacing">12</property>
                 <child>
                   <object class="GtkButtonBox" id="buttonbox1">
                     <property name="visible">True</property>
@@ -126,7 +116,7 @@
                     </child>
                     <child>
                       <object class="GtkButton" id="default">
-                        <property name="label" translatable="yes">_Default</property>
+                        <property name="label" translatable="yes" context="optchartcolorspage|default">_Default</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
@@ -141,10 +131,34 @@
                     </child>
                   </object>
                   <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">False</property>
-                    <property name="position">2</property>
+                    <property name="left_attach">1</property>
+                    <property name="top_attach">1</property>
                   </packing>
+                </child>
+                <child>
+                  <object class="GtkComboBoxText" id="paletteselector">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                  </object>
+                  <packing>
+                    <property name="left_attach">0</property>
+                    <property name="top_attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="svxcorelo-SvxColorValueSet" id="table:border">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">True</property>
+                  </object>
+                  <packing>
+                    <property name="left_attach">0</property>
+                    <property name="top_attach">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <placeholder/>
                 </child>
               </object>
             </child>
@@ -154,7 +168,7 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Color Table</property>
+            <property name="label" translatable="yes" context="optchartcolorspage|label1">Color Table</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -168,10 +182,5 @@
       </packing>
     </child>
   </object>
-  <object class="GtkSizeGroup" id="sizegroup1">
-    <widgets>
-      <widget name="colors:border"/>
-      <widget name="table:border"/>
-    </widgets>
-  </object>
+  <object class="GtkSizeGroup" id="sizegroup1"/>
 </interface>

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "spelldialog.hxx"
+#include <spelldialog.hxx>
 
 #include <sfx2/app.hxx>
 #include <sfx2/bindings.hxx>
@@ -26,22 +26,22 @@
 #include <editeng/editstat.hxx>
 #include <editeng/editview.hxx>
 #include <editeng/unolingu.hxx>
-#include "selectionstate.hxx"
+#include <selectionstate.hxx>
 
-#include "spelleng.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "scmod.hxx"
-#include "editable.hxx"
-#include "undoblk.hxx"
+#include <spelleng.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <scmod.hxx>
+#include <editable.hxx>
+#include <undoblk.hxx>
 #include <gridwin.hxx>
 #include <refupdatecontext.hxx>
 
 SFX_IMPL_CHILDWINDOW_WITHID( ScSpellDialogChildWindow, SID_SPELL_DIALOG )
 
 ScSpellDialogChildWindow::ScSpellDialogChildWindow( vcl::Window* pParentP, sal_uInt16 nId,
-        SfxBindings* pBindings, SfxChildWinInfo* pInfo ) :
-    svx::SpellDialogChildWindow( pParentP, nId, pBindings, pInfo ),
+        SfxBindings* pBindings, SAL_UNUSED_PARAMETER SfxChildWinInfo* /*pInfo*/ ) :
+    svx::SpellDialogChildWindow( pParentP, nId, pBindings ),
     mpViewShell( nullptr ),
     mpViewData( nullptr ),
     mpDocShell( nullptr ),
@@ -81,7 +81,7 @@ svx::SpellPortions ScSpellDialogChildWindow::GetNextWrongSentence( bool /*bReche
             {
                 if( mbNeedNextObj )
                     mxEngine->SpellNextDocument();
-                mbNeedNextObj = !mxEngine->IsFinished() && !mxEngine->SpellSentence( *pEditView, aPortions, false );
+                mbNeedNextObj = !mxEngine->IsFinished() && !mxEngine->SpellSentence( *pEditView, aPortions );
             }
             while( mbNeedNextObj );
         }
@@ -124,10 +124,10 @@ void ScSpellDialogChildWindow::Reset()
             SCROW nOldRow = rCursor.Row();
             SCCOL nNewCol = mpViewData->GetCurX();
             SCROW nNewRow = mpViewData->GetCurY();
-            mpDocShell->GetUndoManager()->AddUndoAction( new ScUndoConversion(
+            mpDocShell->GetUndoManager()->AddUndoAction( std::make_unique<ScUndoConversion>(
                 mpDocShell, mpViewData->GetMarkData(),
-                nOldCol, nOldRow, nTab, mxUndoDoc.release(),
-                nNewCol, nNewRow, nTab, mxRedoDoc.release(),
+                nOldCol, nOldRow, nTab, std::move(mxUndoDoc),
+                nNewCol, nNewRow, nTab, std::move(mxRedoDoc),
                 ScConversionParam( SC_CONVERSION_SPELLCHECK ) ) );
 
             sc::SetFormulaDirtyContext aCxt;
@@ -146,7 +146,7 @@ void ScSpellDialogChildWindow::Reset()
     mxUndoDoc.reset();
     mxRedoDoc.reset();
     mxOldSel.reset();
-    mxOldRangeList.reset();
+    mxOldRangeList.clear();
     mpViewShell = nullptr;
     mpViewData = nullptr;
     mpDocShell = nullptr;
@@ -180,7 +180,7 @@ void ScSpellDialogChildWindow::Init()
 
     ScMarkData& rMarkData = mpViewData->GetMarkData();
 
-    mxOldRangeList.reset(new ScRangeList);
+    mxOldRangeList = new ScRangeList;
     rMarkData.FillRangeListWithMarks(mxOldRangeList.get(), true);
 
     rMarkData.MarkToMulti();
@@ -225,13 +225,12 @@ void ScSpellDialogChildWindow::Init()
 
     if ( rMarkData.GetSelectCount() > 1 )
     {
-        ScMarkData::iterator itr = rMarkData.begin(), itrEnd = rMarkData.end();
-        for (; itr != itrEnd; ++itr)
+        for (const auto& rTab : rMarkData)
         {
-            if( *itr != nTab )
+            if( rTab != nTab )
             {
-                mxUndoDoc->AddUndoTab( *itr, *itr );
-                mxRedoDoc->AddUndoTab( *itr, *itr );
+                mxUndoDoc->AddUndoTab( rTab, rTab );
+                mxRedoDoc->AddUndoTab( rTab, rTab );
             }
         }
     }
@@ -245,7 +244,7 @@ void ScSpellDialogChildWindow::Init()
     mpViewShell->MakeEditView( mxEngine.get(), nCol, nRow );
     EditView* pEditView = mpViewData->GetEditView( mpViewData->GetActivePart() );
     mpViewData->SetSpellingView( pEditView );
-    Rectangle aRect( Point( 0, 0 ), Point( 0, 0 ) );
+    tools::Rectangle aRect( Point( 0, 0 ), Point( 0, 0 ) );
     pEditView->SetOutputArea( aRect );
     mxEngine->SetControlWord( EEControlBits::USECHARATTRIBS );
     mxEngine->EnableUndo( false );
@@ -258,7 +257,8 @@ void ScSpellDialogChildWindow::Init()
 
 bool ScSpellDialogChildWindow::IsSelectionChanged()
 {
-    if( !mxOldRangeList.get() || !mpViewShell || (mpViewShell != dynamic_cast<ScTabViewShell*>( SfxViewShell::Current() ))  )
+    if (!mxOldRangeList || !mpViewShell
+        || (mpViewShell != dynamic_cast<ScTabViewShell*>(SfxViewShell::Current())))
         return true;
 
     if( EditView* pEditView = mpViewData->GetSpellingView() )

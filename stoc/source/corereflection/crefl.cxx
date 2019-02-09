@@ -20,11 +20,13 @@
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/reflection/XConstantTypeDescription.hpp>
 #include <com/sun/star/reflection/XTypeDescription.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
+#include <o3tl/any.hxx>
 #include <uno/lbnames.h>
 
 using namespace css;
@@ -42,25 +44,10 @@ using namespace osl;
 namespace stoc_corefl
 {
 
-static const sal_Int32 CACHE_SIZE = 256;
-
-#define IMPLNAME    "com.sun.star.comp.stoc.CoreReflection"
-
-static Sequence< OUString > core_getSupportedServiceNames()
-{
-    Sequence< OUString > seqNames { "com.sun.star.reflection.CoreReflection" };
-    return seqNames;
-}
-
-static OUString core_getImplementationName()
-{
-    return OUString(IMPLNAME);
-}
-
 IdlReflectionServiceImpl::IdlReflectionServiceImpl(
     const Reference< XComponentContext > & xContext )
     : OComponentHelper( _aComponentMutex )
-    , _aElements( CACHE_SIZE )
+    , _aElements()
 {
     xContext->getValueByName(
         "/singletons/com.sun.star.reflection.theTypeDescriptionManager" ) >>= _xTDMgr;
@@ -72,7 +59,6 @@ IdlReflectionServiceImpl::~IdlReflectionServiceImpl() {}
 // XInterface
 
 Any IdlReflectionServiceImpl::queryInterface( const Type & rType )
-    throw(css::uno::RuntimeException, std::exception)
 {
     Any aRet( ::cppu::queryInterface(
         rType,
@@ -96,27 +82,17 @@ void IdlReflectionServiceImpl::release() throw()
 // XTypeProvider
 
 Sequence< Type > IdlReflectionServiceImpl::getTypes()
-    throw (css::uno::RuntimeException, std::exception)
 {
-    static OTypeCollection * s_pTypes = nullptr;
-    if (! s_pTypes)
-    {
-        MutexGuard aGuard( _aComponentMutex );
-        if (! s_pTypes)
-        {
-            static OTypeCollection s_aTypes(
-                cppu::UnoType<XIdlReflection>::get(),
-                cppu::UnoType<XHierarchicalNameAccess>::get(),
-                cppu::UnoType<XServiceInfo>::get(),
-                OComponentHelper::getTypes() );
-            s_pTypes = &s_aTypes;
-        }
-    }
-    return s_pTypes->getTypes();
+    static OTypeCollection s_aTypes(
+        cppu::UnoType<XIdlReflection>::get(),
+        cppu::UnoType<XHierarchicalNameAccess>::get(),
+        cppu::UnoType<XServiceInfo>::get(),
+        OComponentHelper::getTypes() );
+
+    return s_aTypes.getTypes();
 }
 
 Sequence< sal_Int8 > IdlReflectionServiceImpl::getImplementationId()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -124,7 +100,6 @@ Sequence< sal_Int8 > IdlReflectionServiceImpl::getImplementationId()
 // XComponent
 
 void IdlReflectionServiceImpl::dispose()
-    throw(css::uno::RuntimeException, std::exception)
 {
     OComponentHelper::dispose();
 
@@ -132,11 +107,9 @@ void IdlReflectionServiceImpl::dispose()
     _aElements.clear();
 #ifdef TEST_LIST_CLASSES
     OSL_ENSURE( g_aClassNames.empty(), "### idl classes still alive!" );
-    ClassNameList::const_iterator iPos( g_aClassNames.begin() );
-    while (iPos != g_aClassNames.end())
+    for (auto const& className : g_aClassNames)
     {
-        OUString aName( *iPos );
-        ++iPos;
+        OUString aName(className);
     }
 #endif
 }
@@ -144,27 +117,24 @@ void IdlReflectionServiceImpl::dispose()
 // XServiceInfo
 
 OUString IdlReflectionServiceImpl::getImplementationName()
-    throw(css::uno::RuntimeException, std::exception)
 {
-    return core_getImplementationName();
+    return OUString("com.sun.star.comp.stoc.CoreReflection");
 }
 
 sal_Bool IdlReflectionServiceImpl::supportsService( const OUString & rServiceName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > IdlReflectionServiceImpl::getSupportedServiceNames()
-    throw(css::uno::RuntimeException, std::exception)
 {
-    return core_getSupportedServiceNames();
+    Sequence< OUString > seqNames { "com.sun.star.reflection.CoreReflection" };
+    return seqNames;
 }
 
 // XIdlReflection
 
 Reference< XIdlClass > IdlReflectionServiceImpl::getType( const Any & rObj )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return (rObj.hasValue() ? forType( rObj.getValueTypeRef() ) : Reference< XIdlClass >());
 }
@@ -193,7 +163,7 @@ inline Reference< XIdlClass > IdlReflectionServiceImpl::constructClass(
     case typelib_TypeClass_ANY:
         return new IdlClassImpl( this, pTypeDescr->pTypeName, pTypeDescr->eTypeClass, pTypeDescr );
 
-    case TypeClass_ENUM:
+    case typelib_TypeClass_ENUM:
         return new EnumIdlClassImpl( this, pTypeDescr->pTypeName, pTypeDescr->eTypeClass, pTypeDescr );
 
     case typelib_TypeClass_STRUCT:
@@ -216,15 +186,13 @@ inline Reference< XIdlClass > IdlReflectionServiceImpl::constructClass(
 }
 
 Reference< XIdlClass > IdlReflectionServiceImpl::forName( const OUString & rTypeName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     Reference< XIdlClass > xRet;
     Any aAny( _aElements.getValue( rTypeName ) );
 
     if (aAny.hasValue())
     {
-        if (aAny.getValueTypeClass() == TypeClass_INTERFACE)
-            xRet = *static_cast<const Reference< XIdlClass > *>(aAny.getValue());
+        aAny >>= xRet;
     }
     else
     {
@@ -245,7 +213,6 @@ Reference< XIdlClass > IdlReflectionServiceImpl::forName( const OUString & rType
 // XHierarchicalNameAccess
 
 Any IdlReflectionServiceImpl::getByHierarchicalName( const OUString & rName )
-    throw(css::container::NoSuchElementException, css::uno::RuntimeException, std::exception)
 {
     Any aRet( _aElements.getValue( rName ) );
     if (! aRet.hasValue())
@@ -254,7 +221,7 @@ Any IdlReflectionServiceImpl::getByHierarchicalName( const OUString & rName )
         if (aRet.getValueTypeClass() == TypeClass_INTERFACE)
         {
             // type retrieved from tdmgr
-            OSL_ASSERT( (*static_cast<Reference< XInterface > const *>(aRet.getValue()))->queryInterface(
+            OSL_ASSERT( (*o3tl::forceAccess<Reference<XInterface>>(aRet))->queryInterface(
                 cppu::UnoType<XTypeDescription>::get()).hasValue() );
 
             css::uno::Reference< css::reflection::XConstantTypeDescription >
@@ -288,18 +255,15 @@ Any IdlReflectionServiceImpl::getByHierarchicalName( const OUString & rName )
         // else is enum member(?)
 
         // update
-        if (aRet.hasValue())
-            _aElements.setValue( rName, aRet );
-        else
-        {
+        if (!aRet.hasValue())
             throw container::NoSuchElementException( rName );
-        }
+
+        _aElements.setValue( rName, aRet );
     }
     return aRet;
 }
 
 sal_Bool IdlReflectionServiceImpl::hasByHierarchicalName( const OUString & rName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     try
     {
@@ -308,12 +272,11 @@ sal_Bool IdlReflectionServiceImpl::hasByHierarchicalName( const OUString & rName
     catch (container::NoSuchElementException &)
     {
     }
-    return sal_False;
+    return false;
 }
 
 
 Reference< XIdlClass > IdlReflectionServiceImpl::forType( typelib_TypeDescription * pTypeDescr )
-    throw(css::uno::RuntimeException)
 {
     Reference< XIdlClass > xRet;
     OUString aName( pTypeDescr->pTypeName );
@@ -321,8 +284,7 @@ Reference< XIdlClass > IdlReflectionServiceImpl::forType( typelib_TypeDescriptio
 
     if (aAny.hasValue())
     {
-        if (aAny.getValueTypeClass() == TypeClass_INTERFACE)
-            xRet = *static_cast<const Reference< XIdlClass > *>(aAny.getValue());
+        aAny >>= xRet;
     }
     else
     {
@@ -334,7 +296,6 @@ Reference< XIdlClass > IdlReflectionServiceImpl::forType( typelib_TypeDescriptio
 }
 
 Reference< XIdlClass > IdlReflectionServiceImpl::forType( typelib_TypeDescriptionReference * pRef )
-    throw(css::uno::RuntimeException)
 {
     typelib_TypeDescription * pTD = nullptr;
     TYPELIB_DANGER_GET( &pTD, pRef );
@@ -351,7 +312,6 @@ Reference< XIdlClass > IdlReflectionServiceImpl::forType( typelib_TypeDescriptio
 
 
 const Mapping & IdlReflectionServiceImpl::getCpp2Uno()
-    throw(css::uno::RuntimeException)
 {
     if (! _aCpp2Uno.is())
     {
@@ -374,7 +334,6 @@ const Mapping & IdlReflectionServiceImpl::getCpp2Uno()
 }
 
 const Mapping & IdlReflectionServiceImpl::getUno2Cpp()
-    throw(css::uno::RuntimeException)
 {
     if (! _aUno2Cpp.is())
     {
@@ -398,7 +357,6 @@ const Mapping & IdlReflectionServiceImpl::getUno2Cpp()
 
 uno_Interface * IdlReflectionServiceImpl::mapToUno(
     const Any & rObj, typelib_InterfaceTypeDescription * pTo )
-    throw(css::uno::RuntimeException)
 {
     Reference< XInterface > xObj;
     if (extract( rObj, pTo, xObj, this ))
@@ -409,33 +367,35 @@ uno_Interface * IdlReflectionServiceImpl::mapToUno(
         static_cast<XWeak *>(static_cast<OWeakObject *>(this)) );
 }
 
-
-Reference< XInterface > SAL_CALL IdlReflectionServiceImpl_create(
-    const Reference< XComponentContext > & xContext )
-    throw(css::uno::Exception)
-{
-    return Reference< XInterface >( static_cast<XWeak *>(static_cast<OWeakObject *>(new IdlReflectionServiceImpl( xContext ))) );
-}
-
 }
 
 
-using namespace stoc_corefl;
+namespace {
 
-static const struct ImplementationEntry g_entries[] =
-{
-    {
-        IdlReflectionServiceImpl_create, core_getImplementationName,
-        core_getSupportedServiceNames, createSingleComponentFactory,
-        nullptr, 0
-    },
-    { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
+struct Instance {
+    explicit Instance(
+        css::uno::Reference<css::uno::XComponentContext> const & context):
+        instance(new stoc_corefl::IdlReflectionServiceImpl(context))
+    {}
+
+    rtl::Reference<cppu::OWeakObject> instance;
 };
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL reflection_component_getFactory(
-    const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
+struct Singleton:
+    public rtl::StaticWithArg<
+        Instance, css::uno::Reference<css::uno::XComponentContext>, Singleton>
+{};
+
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_stoc_CoreReflection_get_implementation(
+    css::uno::XComponentContext * context,
+    css::uno::Sequence<css::uno::Any> const & arguments)
 {
-    return component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , g_entries );
+    SAL_WARN_IF(
+        arguments.hasElements(), "stoc", "unexpected singleton arguments");
+    return cppu::acquire(Singleton::get(context).instance.get());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

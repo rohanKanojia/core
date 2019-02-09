@@ -8,10 +8,8 @@
  */
 
 #include <app.hrc>
-#include <docvw.hrc>
+#include <strings.hrc>
 #include <globals.hrc>
-#include <popup.hrc>
-#include <svtools/svtools.hrc>
 
 #include <cmdid.h>
 #include <DashedLine.hxx>
@@ -40,11 +38,13 @@
 #include <drawinglayer/primitive2d/textlayoutdevice.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <editeng/boxitem.hxx>
-#include <svtools/svtresid.hxx>
+#include <editeng/brushitem.hxx>
 #include <svx/hdft.hxx>
+#include <sfx2/dispatch.hxx>
 #include <drawinglayer/processor2d/processorfromoutputdevice.hxx>
 #include <vcl/decoview.hxx>
 #include <vcl/gradient.hxx>
+#include <vcl/metric.hxx>
 #include <vcl/menubtn.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
@@ -55,32 +55,32 @@
 #define BUTTON_WIDTH 18
 
 using namespace basegfx;
-using namespace basegfx::tools;
+using namespace basegfx::utils;
 using namespace drawinglayer::attribute;
 
 namespace
 {
     basegfx::BColor lcl_GetFillColor(const basegfx::BColor& rLineColor)
     {
-        basegfx::BColor aHslLine = basegfx::tools::rgb2hsl(rLineColor);
+        basegfx::BColor aHslLine = basegfx::utils::rgb2hsl(rLineColor);
         double nLuminance = aHslLine.getZ() * 2.5;
         if ( nLuminance == 0 )
             nLuminance = 0.5;
         else if ( nLuminance >= 1.0 )
             nLuminance = aHslLine.getZ() * 0.4;
         aHslLine.setZ( nLuminance );
-        return basegfx::tools::hsl2rgb( aHslLine );
+        return basegfx::utils::hsl2rgb( aHslLine );
     }
 
     basegfx::BColor lcl_GetLighterGradientColor(const basegfx::BColor& rDarkColor)
     {
-        basegfx::BColor aHslDark = basegfx::tools::rgb2hsl(rDarkColor);
+        basegfx::BColor aHslDark = basegfx::utils::rgb2hsl(rDarkColor);
         double nLuminance = aHslDark.getZ() * 255 + 20;
         aHslDark.setZ( nLuminance / 255.0 );
-        return basegfx::tools::hsl2rgb( aHslDark );
+        return basegfx::utils::hsl2rgb( aHslDark );
     }
 
-    B2DPolygon lcl_GetPolygon( const Rectangle& rRect, bool bHeader )
+    B2DPolygon lcl_GetPolygon( const ::tools::Rectangle& rRect, bool bOnTop )
     {
         const double nRadius = 3;
         const double nKappa((M_SQRT2 - 1.0) * 4.0 / 3.0);
@@ -112,7 +112,7 @@ namespace
 
         aPolygon.append( B2DPoint( rRect.Right(), rRect.Top() ) );
 
-        if ( !bHeader )
+        if ( !bOnTop )
         {
             B2DRectangle aBRect( rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom() );
             B2DHomMatrix aRotation = createRotateAroundPoint(
@@ -124,10 +124,47 @@ namespace
     }
 }
 
+void SwFrameButtonPainter::PaintButton(drawinglayer::primitive2d::Primitive2DContainer& rSeq,
+                                       const tools::Rectangle& rRect, bool bOnTop)
+{
+    rSeq.clear();
+    B2DPolygon aPolygon = lcl_GetPolygon(rRect, bOnTop);
+
+    // Colors
+    basegfx::BColor aLineColor = SwViewOption::GetHeaderFooterMarkColor().getBColor();
+    basegfx::BColor aFillColor = lcl_GetFillColor(aLineColor);
+    basegfx::BColor aLighterColor = lcl_GetLighterGradientColor(aFillColor);
+
+    const StyleSettings& rSettings = Application::GetSettings().GetStyleSettings();
+    if (rSettings.GetHighContrastMode())
+    {
+        aFillColor = rSettings.GetDialogColor().getBColor();
+        aLineColor = rSettings.GetDialogTextColor().getBColor();
+
+        rSeq.push_back(drawinglayer::primitive2d::Primitive2DReference(
+                            new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(B2DPolyPolygon(aPolygon), aFillColor)));
+    }
+    else
+    {
+        B2DRectangle aGradientRect(rRect.Left(), rRect.Top(), rRect.Right(), rRect.Bottom());
+        double nAngle = M_PI;
+        if (bOnTop)
+            nAngle = 0;
+        FillGradientAttribute aFillAttrs(drawinglayer::attribute::GradientStyle::Linear, 0.0, 0.0, 0.0, nAngle, aLighterColor, aFillColor, 10);
+        rSeq.push_back(drawinglayer::primitive2d::Primitive2DReference(
+                            new drawinglayer::primitive2d::FillGradientPrimitive2D(aGradientRect, aFillAttrs)));
+    }
+
+    // Create the border lines primitive
+    rSeq.push_back(drawinglayer::primitive2d::Primitive2DReference(
+                new drawinglayer::primitive2d::PolygonHairlinePrimitive2D(aPolygon, aLineColor)));
+}
+
 SwHeaderFooterWin::SwHeaderFooterWin( SwEditWin* pEditWin, const SwFrame *pFrame, bool bHeader ) :
     SwFrameMenuButtonBase( pEditWin, pFrame ),
+    m_aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "modules/swriter/ui/headerfootermenu.ui", ""),
     m_bIsHeader( bHeader ),
-    m_pPopupMenu( nullptr ),
+    m_pPopupMenu(m_aBuilder.get_menu("menu")),
     m_pLine( nullptr ),
     m_bIsAppearing( false ),
     m_nFadeRate( 100 ),
@@ -143,25 +180,23 @@ SwHeaderFooterWin::SwHeaderFooterWin( SwEditWin* pEditWin, const SwFrame *pFrame
     m_pLine = VclPtr<SwDashedLine>::Create(GetEditWin(), &SwViewOption::GetHeaderFooterMarkColor);
     m_pLine->SetZOrder(this, ZOrderFlags::Before);
 
-    // Create and set the PopupMenu
-    m_pPopupMenu = new PopupMenu(SW_RES(MN_HEADERFOOTER_BUTTON));
-
+    // set the PopupMenu
     // Rewrite the menu entries' text
     if (m_bIsHeader)
     {
-        m_pPopupMenu->SetItemText(FN_HEADERFOOTER_EDIT, SW_RESSTR(STR_FORMAT_HEADER));
-        m_pPopupMenu->SetItemText(FN_HEADERFOOTER_DELETE, SW_RESSTR(STR_DELETE_HEADER));
+        m_pPopupMenu->SetItemText(m_pPopupMenu->GetItemId("edit"), SwResId(STR_FORMAT_HEADER));
+        m_pPopupMenu->SetItemText(m_pPopupMenu->GetItemId("delete"), SwResId(STR_DELETE_HEADER));
     }
     else
     {
-        m_pPopupMenu->SetItemText(FN_HEADERFOOTER_EDIT, SW_RESSTR(STR_FORMAT_FOOTER));
-        m_pPopupMenu->SetItemText(FN_HEADERFOOTER_DELETE, SW_RESSTR(STR_DELETE_FOOTER));
+        m_pPopupMenu->SetItemText(m_pPopupMenu->GetItemId("edit"), SwResId(STR_FORMAT_FOOTER));
+        m_pPopupMenu->SetItemText(m_pPopupMenu->GetItemId("delete"), SwResId(STR_DELETE_FOOTER));
     }
 
     SetPopupMenu(m_pPopupMenu);
 
     m_aFadeTimer.SetTimeout(50);
-    m_aFadeTimer.SetTimeoutHdl(LINK(this, SwHeaderFooterWin, FadeHandler));
+    m_aFadeTimer.SetInvokeHandler(LINK(this, SwHeaderFooterWin, FadeHandler));
 }
 
 SwHeaderFooterWin::~SwHeaderFooterWin( )
@@ -171,7 +206,8 @@ SwHeaderFooterWin::~SwHeaderFooterWin( )
 
 void SwHeaderFooterWin::dispose()
 {
-    delete m_pPopupMenu;
+    m_pPopupMenu.clear();
+    m_aBuilder.disposeBuilder();
     m_pLine.disposeAndClear();
     SwFrameMenuButtonBase::dispose();
 }
@@ -183,25 +219,25 @@ void SwHeaderFooterWin::SetOffset(Point aOffset, long nXLineStart, long nXLineEn
     bool bIsFirst = !pDesc->IsFirstShared() && GetPageFrame()->OnFirstPage();
     bool bIsLeft  = !pDesc->IsHeaderShared() && !GetPageFrame()->OnRightPage();
     bool bIsRight = !pDesc->IsHeaderShared() && GetPageFrame()->OnRightPage();
-    m_sLabel = SW_RESSTR(STR_HEADER_TITLE);
+    m_sLabel = SwResId(STR_HEADER_TITLE);
     if (!m_bIsHeader)
-        m_sLabel = bIsFirst ? SW_RESSTR(STR_FIRST_FOOTER_TITLE)
-            : bIsLeft  ? SW_RESSTR(STR_LEFT_FOOTER_TITLE)
-            : bIsRight ? SW_RESSTR(STR_RIGHT_FOOTER_TITLE)
-            : SW_RESSTR(STR_FOOTER_TITLE );
+        m_sLabel = bIsFirst ? SwResId(STR_FIRST_FOOTER_TITLE)
+            : bIsLeft  ? SwResId(STR_LEFT_FOOTER_TITLE)
+            : bIsRight ? SwResId(STR_RIGHT_FOOTER_TITLE)
+            : SwResId(STR_FOOTER_TITLE );
     else
-        m_sLabel = bIsFirst ? SW_RESSTR(STR_FIRST_HEADER_TITLE)
-            : bIsLeft  ? SW_RESSTR(STR_LEFT_HEADER_TITLE)
-            : bIsRight ? SW_RESSTR(STR_RIGHT_HEADER_TITLE)
-            : SW_RESSTR(STR_HEADER_TITLE);
+        m_sLabel = bIsFirst ? SwResId(STR_FIRST_HEADER_TITLE)
+            : bIsLeft  ? SwResId(STR_LEFT_HEADER_TITLE)
+            : bIsRight ? SwResId(STR_RIGHT_HEADER_TITLE)
+            : SwResId(STR_HEADER_TITLE);
 
     sal_Int32 nPos = m_sLabel.lastIndexOf("%1");
     m_sLabel = m_sLabel.replaceAt(nPos, 2, pDesc->GetName());
 
     // Compute the text size and get the box position & size from it
-    Rectangle aTextRect;
-    GetTextBoundRect(aTextRect, OUString(m_sLabel));
-    Rectangle aTextPxRect = LogicToPixel(aTextRect);
+    ::tools::Rectangle aTextRect;
+    GetTextBoundRect(aTextRect, m_sLabel);
+    ::tools::Rectangle aTextPxRect = LogicToPixel(aTextRect);
     FontMetric aFontMetric = GetFontMetric(GetFont());
     Size aBoxSize (aTextPxRect.GetWidth() + BUTTON_WIDTH + TEXT_PADDING * 2,
                    aFontMetric.GetLineHeight() + TEXT_PADDING  * 2 );
@@ -243,57 +279,25 @@ void SwHeaderFooterWin::ShowAll(bool bShow)
 
 bool SwHeaderFooterWin::Contains( const Point &rDocPt ) const
 {
-    Rectangle aRect(GetPosPixel(), GetSizePixel());
+    ::tools::Rectangle aRect(GetPosPixel(), GetSizePixel());
     if (aRect.IsInside(rDocPt))
         return true;
 
-    Rectangle aLineRect(m_pLine->GetPosPixel(), m_pLine->GetSizePixel());
-    if (aLineRect.IsInside(rDocPt))
-        return true;
-
-    return false;
+    ::tools::Rectangle aLineRect(m_pLine->GetPosPixel(), m_pLine->GetSizePixel());
+    return aLineRect.IsInside(rDocPt);
 }
 
-void SwHeaderFooterWin::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void SwHeaderFooterWin::Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle&)
 {
     // Use pixels for the rest of the drawing
-    SetMapMode(MapMode(MAP_PIXEL));
+    SetMapMode(MapMode(MapUnit::MapPixel));
+    drawinglayer::primitive2d::Primitive2DContainer aSeq;
+    const ::tools::Rectangle aRect(::tools::Rectangle(Point(0, 0), rRenderContext.PixelToLogic(GetSizePixel())));
 
-    const Rectangle aRect(Rectangle(Point(0, 0), rRenderContext.PixelToLogic(GetSizePixel())));
-    drawinglayer::primitive2d::Primitive2DContainer aSeq(3);
-
-    B2DPolygon aPolygon = lcl_GetPolygon(aRect, m_bIsHeader);
-
-    // Colors
-    basegfx::BColor aLineColor = SwViewOption::GetHeaderFooterMarkColor().getBColor();
-    basegfx::BColor aFillColor = lcl_GetFillColor(aLineColor);
-    basegfx::BColor aLighterColor = lcl_GetLighterGradientColor(aFillColor);
-
-    const StyleSettings& rSettings = Application::GetSettings().GetStyleSettings();
-    if (rSettings.GetHighContrastMode())
-    {
-        aFillColor = rSettings.GetDialogColor().getBColor();
-        aLineColor = rSettings.GetDialogTextColor().getBColor();
-
-        aSeq[0] = drawinglayer::primitive2d::Primitive2DReference(
-                    new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(B2DPolyPolygon(aPolygon), aFillColor));
-    }
-    else
-    {
-        B2DRectangle aGradientRect(aRect.Left(), aRect.Top(), aRect.Right(), aRect.Bottom());
-        double nAngle = M_PI;
-        if (m_bIsHeader)
-            nAngle = 0;
-        FillGradientAttribute aFillAttrs(GRADIENTSTYLE_LINEAR, 0.0, 0.0, 0.0, nAngle, aLighterColor, aFillColor, 10);
-        aSeq[0] = drawinglayer::primitive2d::Primitive2DReference(
-                    new drawinglayer::primitive2d::FillGradientPrimitive2D(aGradientRect, aFillAttrs));
-    }
-
-    // Create the border lines primitive
-    aSeq[1] = drawinglayer::primitive2d::Primitive2DReference(
-                new drawinglayer::primitive2d::PolygonHairlinePrimitive2D(aPolygon, aLineColor));
+    SwFrameButtonPainter::PaintButton(aSeq, aRect, m_bIsHeader);
 
     // Create the text primitive
+    basegfx::BColor aLineColor = SwViewOption::GetHeaderFooterMarkColor().getBColor();
     B2DVector aFontSize;
     FontAttribute aFontAttr = drawinglayer::primitive2d::getFontAttributeFromVclFont(aFontSize, rRenderContext.GetFont(), false, false);
 
@@ -305,10 +309,10 @@ void SwHeaderFooterWin::Paint(vcl::RenderContext& rRenderContext, const Rectangl
                                             aFontSize.getX(), aFontSize.getY(),
                                             double(aTextPos.X()), double(aTextPos.Y())));
 
-    aSeq[2] = drawinglayer::primitive2d::Primitive2DReference(
+    aSeq.push_back(drawinglayer::primitive2d::Primitive2DReference(
                     new drawinglayer::primitive2d::TextSimplePortionPrimitive2D(
-                        aTextMatrix, OUString(m_sLabel), 0, m_sLabel.getLength(),
-                        std::vector<double>(), aFontAttr, css::lang::Locale(), aLineColor));
+                        aTextMatrix, m_sLabel, 0, m_sLabel.getLength(),
+                        std::vector<double>(), aFontAttr, css::lang::Locale(), aLineColor)));
 
     // Create the 'plus' or 'arrow' primitive
     B2DRectangle aSignArea(B2DPoint(aRect.Right() - BUTTON_WIDTH, 0.0),
@@ -351,14 +355,13 @@ void SwHeaderFooterWin::Paint(vcl::RenderContext& rRenderContext, const Rectangl
         aSign.setClosed(true);
     }
 
-    BColor aSignColor = Color(COL_BLACK).getBColor();
+    BColor aSignColor = COL_BLACK.getBColor();
     if (Application::GetSettings().GetStyleSettings().GetHighContrastMode())
-        aSignColor = Color(COL_WHITE).getBColor();
+        aSignColor = COL_WHITE.getBColor();
 
-    aSeq.resize(aSeq.size() + 1);
-    aSeq[aSeq.size() - 1] = drawinglayer::primitive2d::Primitive2DReference(
+    aSeq.push_back( drawinglayer::primitive2d::Primitive2DReference(
                                     new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
-                                        B2DPolyPolygon(aSign), aSignColor));
+                                        B2DPolyPolygon(aSign), aSignColor)) );
 
     // Create the processor and process the primitives
     const drawinglayer::geometry::ViewInformation2D aNewViewInfos;
@@ -370,7 +373,7 @@ void SwHeaderFooterWin::Paint(vcl::RenderContext& rRenderContext, const Rectangl
     double nFadeRate = double(m_nFadeRate) / 100.0;
 
     const basegfx::BColorModifierSharedPtr aBColorModifier(
-        new basegfx::BColorModifier_interpolate(Color(COL_WHITE).getBColor(),
+        new basegfx::BColorModifier_interpolate(COL_WHITE.getBColor(),
                                                 1.0 - nFadeRate));
 
     aGhostedSeq[0] = drawinglayer::primitive2d::Primitive2DReference(
@@ -402,78 +405,83 @@ bool SwHeaderFooterWin::IsEmptyHeaderFooter( )
     return bResult;
 }
 
-void SwHeaderFooterWin::ExecuteCommand( sal_uInt16 nSlot )
+void SwHeaderFooterWin::ExecuteCommand(const OString& rIdent)
 {
     SwView& rView = GetEditWin()->GetView();
     SwWrtShell& rSh = rView.GetWrtShell();
 
     const OUString& rStyleName = GetPageFrame()->GetPageDesc()->GetName();
-    switch ( nSlot )
+    if (rIdent == "edit")
     {
-        case FN_HEADERFOOTER_EDIT:
+        OString sPageId = m_bIsHeader ? OString("header") : OString("footer");
+        rView.GetDocShell()->FormatPage(rStyleName, sPageId, rSh);
+    }
+    else if (rIdent == "borderback")
+    {
+        const SwPageDesc* pDesc = GetPageFrame()->GetPageDesc();
+        const SwFrameFormat& rMaster = pDesc->GetMaster();
+        SwFrameFormat* pHFFormat = const_cast< SwFrameFormat* >( rMaster.GetFooter().GetFooterFormat() );
+        if ( m_bIsHeader )
+            pHFFormat = const_cast< SwFrameFormat* >( rMaster.GetHeader().GetHeaderFormat() );
+
+        SfxItemPool* pPool = pHFFormat->GetAttrSet().GetPool();
+        SfxItemSet aSet(
+            *pPool,
+            svl::Items<
+                RES_BACKGROUND, RES_SHADOW,
+                XATTR_FILL_FIRST, XATTR_FILL_LAST,
+                SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_INNER>{});
+
+        aSet.Put( pHFFormat->GetAttrSet() );
+
+        aSet.Put( pHFFormat->makeBackgroundBrushItem() );
+
+        // Create a box info item... needed by the dialog
+        SvxBoxInfoItem aBoxInfo( SID_ATTR_BORDER_INNER );
+        const SfxPoolItem *pBoxInfo;
+        if ( SfxItemState::SET == pHFFormat->GetAttrSet().GetItemState( SID_ATTR_BORDER_INNER,
+                                                true, &pBoxInfo) )
+            aBoxInfo = *static_cast<const SvxBoxInfoItem*>(pBoxInfo);
+
+        aBoxInfo.SetTable( false );
+        aBoxInfo.SetDist( true);
+        aBoxInfo.SetMinDist( false );
+        aBoxInfo.SetDefDist( MIN_BORDER_DIST );
+        aBoxInfo.SetValid( SvxBoxInfoItemValidFlags::DISABLE );
+        aSet.Put( aBoxInfo );
+
+        if (svx::ShowBorderBackgroundDlg(GetFrameWeld(), &aSet))
         {
-            OString sPageId = m_bIsHeader ? OString("header") : OString("footer");
-            rView.GetDocShell()->FormatPage(rStyleName, sPageId, rSh);
-        }
-        break;
-        case FN_HEADERFOOTER_BORDERBACK:
-            {
-                const SwPageDesc* pDesc = GetPageFrame()->GetPageDesc();
-                const SwFrameFormat& rMaster = pDesc->GetMaster();
-                SwFrameFormat* pHFFormat = const_cast< SwFrameFormat* >( rMaster.GetFooter().GetFooterFormat() );
-                if ( m_bIsHeader )
-                    pHFFormat = const_cast< SwFrameFormat* >( rMaster.GetHeader().GetHeaderFormat() );
+            const SfxPoolItem* pItem;
+            if ( SfxItemState::SET == aSet.GetItemState( RES_BACKGROUND, false, &pItem ) ) {
+                pHFFormat->SetFormatAttr( *pItem );
+                rView.GetDocShell()->SetModified();
+            }
 
-                SfxItemPool* pPool = pHFFormat->GetAttrSet().GetPool();
-                SfxItemSet aSet( *pPool,
-                       RES_BACKGROUND, RES_BACKGROUND,
-                       RES_BOX, RES_BOX,
-                       SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_INNER,
-                       RES_SHADOW, RES_SHADOW, 0 );
+            if ( SfxItemState::SET == aSet.GetItemState( RES_BOX, false, &pItem ) ) {
+                pHFFormat->SetFormatAttr( *pItem );
+                rView.GetDocShell()->SetModified();
+            }
 
-            aSet.Put( pHFFormat->GetAttrSet() );
-
-            // Create a box info item... needed by the dialog
-            SvxBoxInfoItem aBoxInfo( SID_ATTR_BORDER_INNER );
-            const SfxPoolItem *pBoxInfo;
-            if ( SfxItemState::SET == pHFFormat->GetAttrSet().GetItemState( SID_ATTR_BORDER_INNER,
-                                                    true, &pBoxInfo) )
-                aBoxInfo = *static_cast<const SvxBoxInfoItem*>(pBoxInfo);
-
-            aBoxInfo.SetTable( false );
-            aBoxInfo.SetDist( true);
-            aBoxInfo.SetMinDist( false );
-            aBoxInfo.SetDefDist( MIN_BORDER_DIST );
-            aBoxInfo.SetValid( SvxBoxInfoItemValidFlags::DISABLE );
-            aSet.Put( aBoxInfo );
-
-            if ( svx::ShowBorderBackgroundDlg( this, &aSet, true ) )
-            {
-                const SfxPoolItem* pItem;
-                if ( SfxItemState::SET == aSet.GetItemState( RES_BACKGROUND, false, &pItem ) ) {
-                    pHFFormat->SetFormatAttr( *pItem );
-                    rView.GetDocShell()->SetModified();
-                }
-
-                if ( SfxItemState::SET == aSet.GetItemState( RES_BOX, false, &pItem ) ) {
-                    pHFFormat->SetFormatAttr( *pItem );
-                    rView.GetDocShell()->SetModified();
-                }
-
-                if ( SfxItemState::SET == aSet.GetItemState( RES_SHADOW, false, &pItem ) ) {
-                    pHFFormat->SetFormatAttr( *pItem );
-                    rView.GetDocShell()->SetModified();
-                }
+            if ( SfxItemState::SET == aSet.GetItemState( RES_SHADOW, false, &pItem ) ) {
+                pHFFormat->SetFormatAttr( *pItem );
+                rView.GetDocShell()->SetModified();
             }
         }
-        break;
-        case FN_HEADERFOOTER_DELETE:
-        {
-            rSh.ChangeHeaderOrFooter( rStyleName, m_bIsHeader, false, true );
-        }
-        break;
-        default:
-            break;
+    }
+    else if (rIdent == "delete")
+    {
+        rSh.ChangeHeaderOrFooter( rStyleName, m_bIsHeader, false, true );
+    }
+    else if (rIdent == "insert_pagenumber")
+    {
+        SfxViewFrame* pVFrame = rSh.GetView().GetViewFrame();
+        pVFrame->GetBindings().Execute(FN_INSERT_FLD_PGNUMBER);
+    }
+    else if (rIdent == "insert_pagecount")
+    {
+        SfxViewFrame* pVFrame = rSh.GetView().GetViewFrame();
+        pVFrame->GetBindings().Execute(FN_INSERT_FLD_PGCOUNT);
     }
 }
 
@@ -498,10 +506,10 @@ void SwHeaderFooterWin::MouseButtonDown( const MouseEvent& rMEvt )
 
 void SwHeaderFooterWin::Select()
 {
-    ExecuteCommand(GetCurItemId());
+    ExecuteCommand(GetCurItemIdent());
 }
 
-IMPL_LINK_NOARG_TYPED(SwHeaderFooterWin, FadeHandler, Timer *, void)
+IMPL_LINK_NOARG(SwHeaderFooterWin, FadeHandler, Timer *, void)
 {
     if (m_bIsAppearing && m_nFadeRate > 0)
         m_nFadeRate -= 25;

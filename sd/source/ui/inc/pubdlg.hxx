@@ -20,30 +20,26 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_PUBDLG_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_PUBDLG_HXX
 
-#include <com/sun/star/beans/PropertyValue.hpp>
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
 #include <vcl/button.hxx>
 #include <vcl/field.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/layout.hxx>
-#include "resltn.hxx"
-#include "pres.hxx"
+#include <pres.hxx>
 #include "assclass.hxx"
 
 #include <memory>
 #include <vector>
 
-class FixedText;
-class RadioButton;
 class ListBox;
-class ComboBox;
 class Edit;
-class MultiLineEdit;
 class ValueSet;
 class SdHtmlAttrPreview;
 class SdPublishingDesign;
 class ButtonSet;
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class E> class Sequence; } } } }
 
 // *********************************************************************
 // Html-Export Autopilot
@@ -173,33 +169,37 @@ private:
     bool    Save();
 
     void    GetDesign( SdPublishingDesign* pDesign );
-    void    SetDesign( SdPublishingDesign* pDesign );
+    void    SetDesign( SdPublishingDesign const * pDesign );
 
     void    LoadPreviewButtons();
 
-    DECL_LINK_TYPED( FinishHdl, Button*, void );
-    DECL_LINK_TYPED( NextPageHdl, Button*, void );
-    DECL_LINK_TYPED( LastPageHdl, Button*, void );
+    DECL_LINK( FinishHdl, Button*, void );
+    DECL_LINK( NextPageHdl, Button*, void );
+    DECL_LINK( LastPageHdl, Button*, void );
 
-    DECL_LINK_TYPED( DesignHdl, Button*, void );
-    DECL_LINK_TYPED( DesignSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( DesignDeleteHdl, Button*, void );
-    DECL_LINK_TYPED( BaseHdl, Button*, void );
-    DECL_LINK_TYPED( ContentHdl, Button*, void );
-    DECL_LINK_TYPED( GfxFormatHdl, Button *, void );
-    DECL_LINK_TYPED( ResolutionHdl, Button*, void );
-    DECL_LINK_TYPED( ButtonsHdl, ValueSet*, void );
-    DECL_LINK_TYPED( ColorHdl, Button*, void );
-    DECL_LINK_TYPED( WebServerHdl, Button *, void );
-    DECL_LINK_TYPED( SlideChgHdl, Button*, void );
+    DECL_LINK( DesignHdl, Button*, void );
+    DECL_LINK( DesignSelectHdl, ListBox&, void );
+    DECL_LINK( DesignDeleteHdl, Button*, void );
+    DECL_LINK( BaseHdl, Button*, void );
+    DECL_LINK( ContentHdl, Button*, void );
+    DECL_LINK( GfxFormatHdl, Button *, void );
+    DECL_LINK( ResolutionHdl, Button*, void );
+    DECL_LINK( ButtonsHdl, ValueSet*, void );
+    DECL_LINK( ColorHdl, Button*, void );
+    DECL_LINK( WebServerHdl, Button *, void );
+    DECL_LINK( SlideChgHdl, Button*, void );
 
 public:
 
     SdPublishingDlg(vcl::Window* pWindow, DocumentType eDocType);
-    virtual ~SdPublishingDlg();
+    virtual ~SdPublishingDlg() override;
     virtual void dispose() override;
 
     void GetParameterSequence( css::uno::Sequence< css::beans::PropertyValue >& rParams );
+
+    // Screenshot interface
+    virtual std::vector<OString> getAllPageUIXMLDescriptions() const override;
+    virtual bool selectPageByUIXMLDescription(const OString& rUIXMLDescription) override;
 };
 
 #endif // INCLUDED_SD_SOURCE_UI_INC_PUBDLG_HXX

@@ -19,21 +19,20 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_SLIDE_SHAPEMANAGERIMPL_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_SLIDE_SHAPEMANAGERIMPL_HXX
 
-#include <osl/mutex.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <com/sun/star/presentation/XShapeEventListener.hpp>
 
-#include "shape.hxx"
-#include "subsettableshapemanager.hxx"
-#include "eventmultiplexer.hxx"
+#include <shape.hxx>
+#include <subsettableshapemanager.hxx>
+#include <eventmultiplexer.hxx>
 #include "layermanager.hxx"
-#include "viewupdate.hxx"
-#include "shapemaps.hxx"
-#include "cursormanager.hxx"
-#include "hyperlinkarea.hxx"
-#include "listenercontainer.hxx"
-#include "shapelistenereventhandler.hxx"
-#include "mouseeventhandler.hxx"
+#include <viewupdate.hxx>
+#include <shapemaps.hxx>
+#include <cursormanager.hxx>
+#include <hyperlinkarea.hxx>
+#include <listenercontainer.hxx>
+#include <shapelistenereventhandler.hxx>
+#include <mouseeventhandler.hxx>
 
 #include <set>
 #include <map>
@@ -59,7 +58,7 @@ public:
 
         @param rEventMultiplexer
         The slideshow-global event source, where this class
-        registeres its event handlers.
+        registers its event handlers.
     */
     ShapeManagerImpl( EventMultiplexer&            rMultiplexer,
                       LayerManagerSharedPtr const& rLayerManager,

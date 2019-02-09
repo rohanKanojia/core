@@ -24,7 +24,6 @@
 #include <sfx2/viewfrm.hxx>
 
 class SfxViewFrame;
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/awt/XTopWindow.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/awt/PosSize.hpp>
@@ -37,7 +36,7 @@ class SfxFrame_Impl : public SfxBroadcaster
 {
 public:
     css::uno::Reference< css::frame::XFrame > xFrame;
-    sal_uInt32                nType;
+    bool                      mbHasTitle;
     SfxViewFrame*             pCurrentViewFrame;
     SfxFrameDescriptor*       pDescr;
     bool                      bClosing : 1;
@@ -55,7 +54,7 @@ public:
     bool                      bMenuBarOn;
 
     explicit SfxFrame_Impl()
-        :nType( 0L )
+        :mbHasTitle( false )
         ,pCurrentViewFrame( nullptr )
         ,pDescr( nullptr )
         ,bClosing(false)
@@ -71,8 +70,6 @@ public:
         ,bMenuBarOn( true )
     {
     }
-
-    virtual ~SfxFrame_Impl() { }
 };
 
 #endif

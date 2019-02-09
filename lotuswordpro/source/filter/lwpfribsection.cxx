@@ -62,26 +62,21 @@
 #include "lwpfribbreaks.hxx"
 #include "lwpstory.hxx"
 #include "lwpsection.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfsectionstyle.hxx"
-#include "xfilter/xfsection.hxx"
-#include "xfilter/xfindex.hxx"
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfsectionstyle.hxx>
+#include <xfilter/xfsection.hxx>
+#include <xfilter/xfindex.hxx>
 #include "lwpfribptr.hxx"
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 
 LwpFribSection::LwpFribSection(LwpPara *pPara)
-     : LwpFrib(pPara),m_pMasterPage(nullptr)
+     : LwpFrib(pPara)
 {
 
 }
 
 LwpFribSection::~LwpFribSection()
 {
-    if(m_pMasterPage)
-    {
-        delete m_pMasterPage;
-        m_pMasterPage = nullptr;
-    }
 }
 
 /**
@@ -111,7 +106,7 @@ void LwpFribSection::RegisterSectionStyle()
     LwpPageLayout* pLayout = GetPageLayout();
     if(pLayout)
     {
-        m_pMasterPage = new LwpMasterPage(m_pPara, pLayout);
+        m_pMasterPage.reset( new LwpMasterPage(m_pPara, pLayout) );
         m_pMasterPage->RegisterMasterPage(this);
     }
 }
@@ -259,9 +254,9 @@ void LwpMasterPage::RegisterMasterPage(LwpFrib* pFrib)
     m_bNewSection = false;
     //sal_Bool bSectionColumns = sal_False;
 
-    XFParaStyle* pOverStyle = new XFParaStyle;
-    *pOverStyle = *(m_pPara->GetXFParaStyle());
-    pOverStyle->SetStyleName("");
+    std::unique_ptr<XFParaStyle> xOverStyle(new XFParaStyle);
+    *xOverStyle = *(m_pPara->GetXFParaStyle());
+    xOverStyle->SetStyleName("");
 
     LwpLayout::UseWhenType eUserType = m_pLayout->GetUseWhenType();
     switch(eUserType)
@@ -289,7 +284,7 @@ void LwpMasterPage::RegisterMasterPage(LwpFrib* pFrib)
                 m_pLayout = pStory->GetCurrentLayout();
                 m_bNewSection = IsNeedSection();
                 //bSectionColumns = m_bNewSection;
-                pOverStyle->SetMasterPage( m_pLayout->GetStyleName());
+                xOverStyle->SetMasterPage(m_pLayout->GetStyleName());
                 RegisterFillerPageStyle();
             }
             break;
@@ -304,14 +299,14 @@ void LwpMasterPage::RegisterMasterPage(LwpFrib* pFrib)
         return;
 
     pStory->SetTabLayout(m_pLayout);
-    m_pPara->RegisterTabStyle(pOverStyle);
+    m_pPara->RegisterTabStyle(xOverStyle.get());
 
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    m_StyleName = pXFStyleManager->AddStyle(pOverStyle).m_pStyle->GetStyleName();
+    m_StyleName = pXFStyleManager->AddStyle(std::move(xOverStyle)).m_pStyle->GetStyleName();
     //register section style here
     if(m_bNewSection)
     {
-        XFSectionStyle* pSectStyle= new XFSectionStyle();
+        std::unique_ptr<XFSectionStyle> pSectStyle(new XFSectionStyle());
         //set margin
         pStory = dynamic_cast<LwpStory*>(m_pPara->GetStoryID().obj().get());
         LwpPageLayout* pCurrentLayout = pStory ? pStory->GetCurrentLayout() : nullptr;
@@ -332,7 +327,7 @@ void LwpMasterPage::RegisterMasterPage(LwpFrib* pFrib)
                 pSectStyle->SetColumns(pColumns);
             }
         //}
-        m_SectionStyleName = pXFStyleManager->AddStyle(pSectStyle).m_pStyle->GetStyleName();
+        m_SectionStyleName = pXFStyleManager->AddStyle(std::move(pSectStyle)).m_pStyle->GetStyleName();
     }
 }
 
@@ -382,7 +377,7 @@ void LwpMasterPage::ParseSection(LwpFrib* pFrib)
     if(m_pLayout->HasFillerPageText(m_pPara->GetFoundry()))
     {
         XFParagraph *pPara = new XFParagraph();
-        pPara->SetStyleName(GetFillerPageStyleName());
+        pPara->SetStyleName(m_FillerPageStyleName);
         m_pPara->AddXFContent(pPara);
         rFribPtr.SetXFPara(pPara);
 
@@ -419,7 +414,7 @@ void LwpMasterPage::ParseSection(LwpFrib* pFrib)
     if(pFrib->HasNextFrib())
     {
         XFParagraph *pNextPara = new XFParagraph();
-        pNextPara->SetStyleName(GetStyleName());
+        pNextPara->SetStyleName(m_StyleName);
         m_pPara->AddXFContent(pNextPara);
         rFribPtr.SetXFPara(pNextPara);
     }
@@ -438,12 +433,12 @@ void LwpMasterPage::RegisterFillerPageStyle()
     {
         if(m_pLayout->HasFillerPageText(m_pPara->GetFoundry()))
         {
-            XFParaStyle* pPagebreakStyle = new XFParaStyle;
+            std::unique_ptr<XFParaStyle> pPagebreakStyle(new XFParaStyle);
             *pPagebreakStyle = *(m_pPara->GetXFParaStyle());
             pPagebreakStyle->SetStyleName("");
             pPagebreakStyle->SetBreaks(enumXFBreakAftPage);
             XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-            m_FillerPageStyleName= pXFStyleManager->AddStyle(pPagebreakStyle).m_pStyle->GetStyleName();
+            m_FillerPageStyleName= pXFStyleManager->AddStyle(std::move(pPagebreakStyle)).m_pStyle->GetStyleName();
         }
     }
 }
@@ -455,13 +450,9 @@ void LwpMasterPage::RegisterFillerPageStyle()
 bool LwpMasterPage::IsNextPageType()
 {
     LwpLayout::UseWhenType eUserType = m_pLayout->GetUseWhenType();
-    if(eUserType == LwpLayout::StartOnNextPage
+    return eUserType == LwpLayout::StartOnNextPage
         || eUserType == LwpLayout::StartOnOddPage
-        || eUserType == LwpLayout::StartOnEvenPage )
-    {
-        return true;
-    }
-    return false;
+        || eUserType == LwpLayout::StartOnEvenPage;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

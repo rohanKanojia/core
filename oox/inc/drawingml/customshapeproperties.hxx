@@ -23,21 +23,9 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
-#include <map>
 #include <com/sun/star/drawing/EnhancedCustomShapeParameterPair.hpp>
-#include <com/sun/star/drawing/EnhancedCustomShapeParameterType.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
-#include <com/sun/star/drawing/EnhancedCustomShapeGluePointType.hpp>
-#include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
-#include <com/sun/star/drawing/EnhancedCustomShapeTextFrame.hpp>
-#include <com/sun/star/drawing/EnhancedCustomShapeAdjustmentValue.hpp>
-#include <com/sun/star/drawing/EnhancedCustomShapeTextPathMode.hpp>
-#include <com/sun/star/beans/PropertyValues.hpp>
-#include <com/sun/star/drawing/ProjectionMode.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/graphic/XGraphic.hpp>
-#include <oox/core/xmlfilterbase.hxx>
-#include <oox/drawingml/color.hxx>
 #include <oox/helper/helper.hxx>
 #include <oox/helper/propertymap.hxx>
 #include <oox/token/tokens.hxx>
@@ -104,20 +92,18 @@ struct Path2D
 };
 
 
-class CustomShapeProperties
+class CustomShapeProperties final
 {
 public:
-
     CustomShapeProperties();
-    virtual ~CustomShapeProperties();
+    ~CustomShapeProperties();
 
-    void pushToPropSet( const ::oox::core::FilterBase& rFilterBase,
-                        const css::uno::Reference < css::beans::XPropertySet > & xPropSet,
+    void pushToPropSet( const css::uno::Reference < css::beans::XPropertySet > & xPropSet,
                         const css::uno::Reference < css::drawing::XShape > & xShape,
                         const css::awt::Size &aSize );
 
     sal_Int32 getShapePresetType() const { return mnShapePresetType; }
-    css::uno::Sequence< sal_Int8 > getShapePresetTypeName() const;
+    css::uno::Sequence< sal_Int8 > const & getShapePresetTypeName() const;
     void setShapePresetType( sal_Int32 nShapePresetType ){ mnShapePresetType = nShapePresetType; };
     bool                                getShapeTypeOverride(){ return mbShapeTypeOverride; };
     void                                setShapeTypeOverride( bool bShapeTypeOverride ) { mbShapeTypeOverride = bShapeTypeOverride; };

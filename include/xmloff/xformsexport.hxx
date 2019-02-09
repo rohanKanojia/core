@@ -26,20 +26,19 @@ class SvXMLExport;
 namespace com { namespace sun { namespace star {
     namespace uno { template<typename T> class Reference; }
     namespace uno { template<typename T> class Sequence; }
-    namespace frame { class XModel; }
     namespace beans { class XPropertySet; struct PropertyValue; }
     namespace container { class XNameAccess; }
 } } }
 
 
 /** export an XForms model. */
-void SAL_DLLPRIVATE exportXForms( SvXMLExport& );
+void exportXForms( SvXMLExport& );
 
-OUString SAL_DLLPRIVATE getXFormsBindName( const css::uno::Reference<css::beans::XPropertySet>& xBinding );
+OUString getXFormsBindName( const css::uno::Reference<css::beans::XPropertySet>& xBinding );
 
-OUString SAL_DLLPRIVATE getXFormsListBindName( const css::uno::Reference<css::beans::XPropertySet>& xBinding );
+OUString getXFormsListBindName( const css::uno::Reference<css::beans::XPropertySet>& xBinding );
 
-OUString SAL_DLLPRIVATE getXFormsSubmissionName( const css::uno::Reference<css::beans::XPropertySet>& xBinding );
+OUString getXFormsSubmissionName( const css::uno::Reference<css::beans::XPropertySet>& xBinding );
 
 
 /** returns the settings of the given XForms container, to be exported as document specific settings

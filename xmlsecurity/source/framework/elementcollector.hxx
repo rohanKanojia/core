@@ -44,13 +44,13 @@ private:
      * BEFOREMODIFY - this ElementCollector must notify before any
      *                    internal modification happens.
      */
-    css::xml::crypto::sax::ElementMarkPriority m_nPriority;
+    css::xml::crypto::sax::ElementMarkPriority const m_nPriority;
 
     /*
      * the modify flag, representing whether which elementcollector will
      * modify its data.
      */
-    bool m_bToModify;
+    bool const m_bToModify;
 
     /* the notify enable flag, see notifyListener method */
     bool m_bAbleToNotify;
@@ -63,12 +63,10 @@ private:
 
 public:
     ElementCollector(
-        sal_Int32 nSecurityId,
         sal_Int32 nBufferId,
         css::xml::crypto::sax::ElementMarkPriority nPriority,
         bool bToModify,
         const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& xReferenceResolvedListener);
-    virtual ~ElementCollector() {};
 
     css::xml::crypto::sax::ElementMarkPriority getPriority() const { return m_nPriority;}
     bool getModify() const { return m_bToModify;}
@@ -76,9 +74,6 @@ public:
     void setReferenceResolvedListener(
         const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& referenceResolvedListener);
     void doNotify();
-    ElementCollector* clone(
-        sal_Int32 nId,
-        css::xml::crypto::sax::ElementMarkPriority nPriority ) const;
 };
 
 #endif

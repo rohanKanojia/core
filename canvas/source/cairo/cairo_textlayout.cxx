@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <math.h>
 #include <memory>
@@ -51,19 +52,19 @@ namespace cairocanvas
                               sal_Int8      nTextDirection )
         {
             // TODO(P3): avoid if already correctly set
-            ComplexTextLayoutMode nLayoutMode = TEXT_LAYOUT_DEFAULT;
+            ComplexTextLayoutFlags nLayoutMode = ComplexTextLayoutFlags::Default;
             switch( nTextDirection )
             {
                 case rendering::TextDirection::WEAK_LEFT_TO_RIGHT:
                     break;
                 case rendering::TextDirection::STRONG_LEFT_TO_RIGHT:
-                    nLayoutMode = TEXT_LAYOUT_BIDI_STRONG;
+                    nLayoutMode = ComplexTextLayoutFlags::BiDiStrong;
                     break;
                 case rendering::TextDirection::WEAK_RIGHT_TO_LEFT:
-                    nLayoutMode = TEXT_LAYOUT_BIDI_RTL;
+                    nLayoutMode = ComplexTextLayoutFlags::BiDiRtl;
                     break;
                 case rendering::TextDirection::STRONG_RIGHT_TO_LEFT:
-                    nLayoutMode = TEXT_LAYOUT_BIDI_RTL | TEXT_LAYOUT_BIDI_STRONG;
+                    nLayoutMode = ComplexTextLayoutFlags::BiDiRtl | ComplexTextLayoutFlags::BiDiStrong;
                     break;
                 default:
                     break;
@@ -71,7 +72,7 @@ namespace cairocanvas
 
             // set calculated layout mode. Origin is always the left edge,
             // as required at the API spec
-            rOutDev.SetLayoutMode( nLayoutMode | TEXT_LAYOUT_TEXTORIGIN_LEFT );
+            rOutDev.SetLayoutMode( nLayoutMode | ComplexTextLayoutFlags::TextOriginLeft );
         }
 
         bool compareFallbacks(const SystemGlyphData&rA, const SystemGlyphData &rB)
@@ -107,38 +108,32 @@ namespace cairocanvas
     }
 
     // XTextLayout
-    uno::Sequence< uno::Reference< rendering::XPolyPolygon2D > > SAL_CALL TextLayout::queryTextShapes(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< uno::Reference< rendering::XPolyPolygon2D > > SAL_CALL TextLayout::queryTextShapes(  )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return uno::Sequence< uno::Reference< rendering::XPolyPolygon2D > >();
     }
 
-    uno::Sequence< geometry::RealRectangle2D > SAL_CALL TextLayout::queryInkMeasures(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< geometry::RealRectangle2D > SAL_CALL TextLayout::queryInkMeasures(  )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return uno::Sequence< geometry::RealRectangle2D >();
     }
 
-    uno::Sequence< geometry::RealRectangle2D > SAL_CALL TextLayout::queryMeasures(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< geometry::RealRectangle2D > SAL_CALL TextLayout::queryMeasures(  )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return uno::Sequence< geometry::RealRectangle2D >();
     }
 
-    uno::Sequence< double > SAL_CALL TextLayout::queryLogicalAdvancements(  ) throw (uno::RuntimeException, std::exception)
+    uno::Sequence< double > SAL_CALL TextLayout::queryLogicalAdvancements(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
         return maLogicalAdvancements;
     }
 
-    void SAL_CALL TextLayout::applyLogicalAdvancements( const uno::Sequence< double >& aAdvancements ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+    void SAL_CALL TextLayout::applyLogicalAdvancements( const uno::Sequence< double >& aAdvancements )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -151,7 +146,7 @@ namespace cairocanvas
         maLogicalAdvancements = aAdvancements;
     }
 
-    geometry::RealRectangle2D SAL_CALL TextLayout::queryTextBounds(  ) throw (uno::RuntimeException, std::exception)
+    geometry::RealRectangle2D SAL_CALL TextLayout::queryTextBounds(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -166,9 +161,9 @@ namespace cairocanvas
         // relative to baseline
         const ::FontMetric& aMetric( pVDev->GetFontMetric() );
 
-        setupLayoutMode( *pVDev.get(), mnTextDirection );
+        setupLayoutMode( *pVDev, mnTextDirection );
 
-        const sal_Int32 nAboveBaseline( -aMetric.GetInternalLeading() - aMetric.GetAscent() );
+        const sal_Int32 nAboveBaseline( -aMetric.GetAscent() );
         const sal_Int32 nBelowBaseline( aMetric.GetDescent() );
 
         if( maLogicalAdvancements.getLength() )
@@ -188,91 +183,75 @@ namespace cairocanvas
         }
     }
 
-    double SAL_CALL TextLayout::justify( double /*nSize*/ ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+    double SAL_CALL TextLayout::justify( double /*nSize*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return 0.0;
     }
 
     double SAL_CALL TextLayout::combinedJustify( const uno::Sequence< uno::Reference< rendering::XTextLayout > >& /*aNextLayouts*/,
-                                                 double /*nSize*/ ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
+                                                 double /*nSize*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return 0.0;
     }
 
-    rendering::TextHit SAL_CALL TextLayout::getTextHit( const geometry::RealPoint2D& /*aHitPoint*/ ) throw (uno::RuntimeException, std::exception)
+    rendering::TextHit SAL_CALL TextLayout::getTextHit( const geometry::RealPoint2D& /*aHitPoint*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return rendering::TextHit();
     }
 
     rendering::Caret SAL_CALL TextLayout::getCaret( sal_Int32 /*nInsertionIndex*/,
-                                                    sal_Bool /*bExcludeLigatures*/ ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+                                                    sal_Bool /*bExcludeLigatures*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return rendering::Caret();
     }
 
     sal_Int32 SAL_CALL TextLayout::getNextInsertionIndex( sal_Int32 /*nStartIndex*/,
                                                           sal_Int32 /*nCaretAdvancement*/,
-                                                          sal_Bool /*bExcludeLigatures*/ ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+                                                          sal_Bool /*bExcludeLigatures*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return 0;
     }
 
     uno::Reference< rendering::XPolyPolygon2D > SAL_CALL TextLayout::queryVisualHighlighting( sal_Int32 /*nStartIndex*/,
-                                                                                              sal_Int32 /*nEndIndex*/ ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+                                                                                              sal_Int32 /*nEndIndex*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return uno::Reference< rendering::XPolyPolygon2D >();
     }
 
     uno::Reference< rendering::XPolyPolygon2D > SAL_CALL TextLayout::queryLogicalHighlighting( sal_Int32 /*nStartIndex*/,
-                                                                                               sal_Int32 /*nEndIndex*/ ) throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+                                                                                               sal_Int32 /*nEndIndex*/ )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return uno::Reference< rendering::XPolyPolygon2D >();
     }
 
-    double SAL_CALL TextLayout::getBaselineOffset(  ) throw (uno::RuntimeException, std::exception)
+    double SAL_CALL TextLayout::getBaselineOffset(  )
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
         // TODO
         return 0.0;
     }
 
-    sal_Int8 SAL_CALL TextLayout::getMainTextDirection(  ) throw (uno::RuntimeException, std::exception)
+    sal_Int8 SAL_CALL TextLayout::getMainTextDirection(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
         return mnTextDirection;
     }
 
-    uno::Reference< rendering::XCanvasFont > SAL_CALL TextLayout::getFont(  ) throw (uno::RuntimeException, std::exception)
+    uno::Reference< rendering::XCanvasFont > SAL_CALL TextLayout::getFont(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
         return mpFont.get();
     }
 
-    rendering::StringContext SAL_CALL TextLayout::getText(  ) throw (uno::RuntimeException, std::exception)
+    rendering::StringContext SAL_CALL TextLayout::getText(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -314,10 +293,8 @@ namespace cairocanvas
    *
    * Note: some text effects are not rendered due to lacking generic canvas or cairo canvas
    *       implementation. See issues 92657, 92658, 92659, 92660, 97529
-   *
-   * @return true, if successful
    **/
-    bool TextLayout::draw( CairoSharedPtr&               pSCairo,
+    void TextLayout::draw( CairoSharedPtr const &        pSCairo,
                            OutputDevice&                 rOutDev,
                            const Point&                  rOutpos,
                            const rendering::ViewState&   viewState,
@@ -328,7 +305,7 @@ namespace cairocanvas
         setupLayoutMode( rOutDev, mnTextDirection );
 
         // TODO(P2): cache that
-        ::std::unique_ptr< long []> aOffsets(new long[maLogicalAdvancements.getLength()]);
+        std::unique_ptr< long []> aOffsets(new long[maLogicalAdvancements.getLength()]);
 
         if( maLogicalAdvancements.getLength() )
         {
@@ -349,16 +326,13 @@ namespace cairocanvas
 
         //Pull all the fonts we need to render the text
         typedef std::pair<SystemFontData,int> FontLevel;
-        typedef std::vector<FontLevel> FontLevelVector;
-        FontLevelVector aFontData;
-        SystemGlyphDataVector::const_iterator aGlyphIter=aSysLayoutData.rGlyphData.begin();
-        const SystemGlyphDataVector::const_iterator aGlyphEnd=aSysLayoutData.rGlyphData.end();
-        for( ; aGlyphIter != aGlyphEnd; ++aGlyphIter )
+        std::vector<FontLevel> aFontData;
+        for (auto const& glyph : aSysLayoutData.rGlyphData)
         {
-            if( aFontData.empty() || aGlyphIter->fallbacklevel != aFontData.back().second )
+            if( aFontData.empty() || glyph.fallbacklevel != aFontData.back().second )
             {
-                aFontData.push_back(FontLevel(rOutDev.GetSysFontData(aGlyphIter->fallbacklevel),
-                                              aGlyphIter->fallbacklevel));
+                aFontData.emplace_back(rOutDev.GetSysFontData(glyph.fallbacklevel),
+                                              glyph.fallbacklevel);
                 if( !isCairoRenderable(aFontData.back().first) )
                 {
                     bCairoRenderable = false;
@@ -383,40 +357,36 @@ namespace cairocanvas
                 rOutDev.DrawTextArray( rOutpos, maText.Text, aOffsets.get(),
                                        ::canvas::tools::numeric_cast<sal_uInt16>(maText.StartPosition),
                                        ::canvas::tools::numeric_cast<sal_uInt16>(maText.Length) );
-                return true;
+                return;
             }
             else                                               // VCL FALLBACK - without advances
             {
                 rOutDev.DrawText( rOutpos, maText.Text,
                                   ::canvas::tools::numeric_cast<sal_uInt16>(maText.StartPosition),
                                   ::canvas::tools::numeric_cast<sal_uInt16>(maText.Length) );
-                return true;
+                return;
             }
         }
 
         if (aSysLayoutData.rGlyphData.empty())
-            return false; //??? false?
+            return; //??? false?
 
         /**
          * Setup platform independent glyph vector into cairo-based glyphs vector.
          **/
 
         // Loop through the fonts used and render the matching glyphs for each
-        FontLevelVector::const_iterator aFontDataIter = aFontData.begin();
-        const FontLevelVector::const_iterator aFontDataEnd = aFontData.end();
-        for( ; aFontDataIter != aFontDataEnd; ++aFontDataIter )
+        for (auto const& elemFontData : aFontData)
         {
-            const SystemFontData &rSysFontData = aFontDataIter->first;
+            const SystemFontData &rSysFontData = elemFontData.first;
 
             // setup glyphs
             std::vector<cairo_glyph_t> cairo_glyphs;
             cairo_glyphs.reserve( 256 );
 
-            aGlyphIter=aSysLayoutData.rGlyphData.begin();
-            for( ; aGlyphIter != aGlyphEnd; ++aGlyphIter )
+            for (auto const& systemGlyph : aSysLayoutData.rGlyphData)
             {
-                SystemGlyphData systemGlyph = *aGlyphIter;
-                if( systemGlyph.fallbacklevel != aFontDataIter->second )
+                if( systemGlyph.fallbacklevel != elemFontData.second )
                     continue;
 
                 cairo_glyph_t aGlyph;
@@ -429,7 +399,7 @@ namespace cairocanvas
             if (cairo_glyphs.empty())
                 continue;
 
-            vcl::Font aFont = rOutDev.GetFont();
+            const vcl::Font& aFont = rOutDev.GetFont();
             long nWidth = aFont.GetAverageFontWidth();
             long nHeight = aFont.GetFontHeight();
             if (nWidth == 0)
@@ -463,11 +433,11 @@ namespace cairocanvas
             cairo_set_font_options( pSCairo.get(), options);
 
             // Font color
-            Color mTextColor = rOutDev.GetTextColor();
+            Color aTextColor = rOutDev.GetTextColor();
             cairo_set_source_rgb(pSCairo.get(),
-                                 mTextColor.GetRed()/255.0,
-                                 mTextColor.GetGreen()/255.0,
-                                 mTextColor.GetBlue()/255.0);
+                                 aTextColor.GetRed()/255.0,
+                                 aTextColor.GetGreen()/255.0,
+                                 aTextColor.GetBlue()/255.0);
 
             // Font rotation and scaling
             cairo_matrix_t m;
@@ -481,7 +451,7 @@ namespace cairocanvas
 
             //faux italics
             if (rSysFontData.bFakeItalic)
-                m.xy = -m.xx * 0x6000L / 0x10000L;
+                m.xy = -m.xx * 0x6000 / 0x10000;
 
             cairo_set_font_matrix(pSCairo.get(), &m);
 
@@ -490,7 +460,7 @@ namespace cairocanvas
                 "Size:(" << aFont.GetAverageFontWidth() << "," << aFont.GetFontHeight()
                     << "), Pos (" << rOutpos.X() << "," << rOutpos.Y()
                     << "), G("
-                    << (cairo_glyphs.size() > 0 ? cairo_glyphs[0].index : -1)
+                    << (!cairo_glyphs.empty() ? cairo_glyphs[0].index : -1)
                     << ","
                     << (cairo_glyphs.size() > 1 ? cairo_glyphs[1].index : -1)
                     << ","
@@ -508,25 +478,24 @@ namespace cairocanvas
             if (rSysFontData.bFakeBold)
             {
                 double bold_dx = 0.5 * sqrt( 0.7 * aFont.GetFontHeight() );
-                int total_steps = 1 * ((int) (bold_dx + 0.5));
+                int total_steps = 1 * static_cast<int>(bold_dx + 0.5);
 
                 // loop to draw the text for every half pixel of displacement
                 for (int nSteps = 0; nSteps < total_steps; nSteps++)
                 {
-                    for(int nGlyphIdx = 0; nGlyphIdx < (int) cairo_glyphs.size(); nGlyphIdx++)
+                    for(cairo_glyph_t & cairo_glyph : cairo_glyphs)
                     {
-                        cairo_glyphs[nGlyphIdx].x += (bold_dx * nSteps / total_steps) / 4;
-                        cairo_glyphs[nGlyphIdx].y -= (bold_dx * nSteps / total_steps) / 4;
+                        cairo_glyph.x += (bold_dx * nSteps / total_steps) / 4;
+                        cairo_glyph.y -= (bold_dx * nSteps / total_steps) / 4;
                     }
                     cairo_show_glyphs(pSCairo.get(), &cairo_glyphs[0], cairo_glyphs.size());
                 }
-                SAL_INFO("canvas.cairo",":cairocanvas::TextLayout::draw(S,O,p,v,r): FAKEBOLD - dx:" << (int) bold_dx);
+                SAL_INFO("canvas.cairo",":cairocanvas::TextLayout::draw(S,O,p,v,r): FAKEBOLD - dx:" << static_cast<int>(bold_dx));
             }
 
             cairo_font_face_destroy(font_face);
             cairo_font_options_destroy(options);
         }
-        return true;
     }
 
     namespace
@@ -576,27 +545,25 @@ namespace cairocanvas
                                                      renderState);
 
         // fill integer offsets
-        ::std::transform( inputOffsets.getConstArray(),
-                          inputOffsets.getConstArray()+inputOffsets.getLength(),
+        std::transform( inputOffsets.begin(),
+                          inputOffsets.end(),
                           outputOffsets,
                           OffsetTransformer( aMatrix ) );
     }
 
-    OUString SAL_CALL TextLayout::getImplementationName() throw( uno::RuntimeException, std::exception )
+    OUString SAL_CALL TextLayout::getImplementationName()
     {
         return OUString( "CairoCanvas::TextLayout" );
     }
 
-    sal_Bool SAL_CALL TextLayout::supportsService( const OUString& ServiceName ) throw( uno::RuntimeException, std::exception )
+    sal_Bool SAL_CALL TextLayout::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService( this, ServiceName );
     }
 
-    uno::Sequence< OUString > SAL_CALL TextLayout::getSupportedServiceNames()  throw( uno::RuntimeException, std::exception )
+    uno::Sequence< OUString > SAL_CALL TextLayout::getSupportedServiceNames()
     {
-        uno::Sequence< OUString > aRet { "com.sun.star.rendering.TextLayout" };
-
-        return aRet;
+        return { "com.sun.star.rendering.TextLayout" };
     }
 }
 

@@ -27,11 +27,11 @@ $(eval $(call gb_CppunitTest_use_libraries,xmlsecurity_signing, \
 	unotest \
 	utl \
 	xmlsecurity \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,xmlsecurity_signing,\
     boost_headers \
+    libxml2 \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,xmlsecurity_signing,\
@@ -47,5 +47,17 @@ $(eval $(call gb_CppunitTest_use_vcl,xmlsecurity_signing))
 $(eval $(call gb_CppunitTest_use_rdb,xmlsecurity_signing,services))
 
 $(eval $(call gb_CppunitTest_use_configuration,xmlsecurity_signing))
+
+ifeq ($(ENABLE_PDFIMPORT),TRUE)
+$(eval $(call gb_CppunitTest_use_executable,xmlsecurity_signing,xpdfimport))
+endif
+
+# various hacks to make unit test work on Linux more often
+ifeq ($(OS),LINUX)
+# reset the LD_LIBRARY_PATH for spawned GPG processes
+$(call gb_CppunitTest_get_target,xmlsecurity_signing): \
+    EXTRA_ENV_VARS := \
+        LIBO_LD_PATH=$$LD_LIBRARY_PATH
+endif
 
 # vim: set noet sw=4 ts=4:

@@ -19,8 +19,24 @@
 #ifndef INCLUDED_VCL_TEXTENG_HXX
 #define INCLUDED_VCL_TEXTENG_HXX
 
+#include <memory>
+#include <sal/config.h>
+
+#include <cstddef>
+#include <vector>
+
 #include <vcl/dllapi.h>
 #include <vcl/vclptr.hxx>
+#include <rtl/ustring.hxx>
+#include <svl/SfxBroadcaster.hxx>
+#include <tools/lineend.hxx>
+#include <tools/link.hxx>
+#include <tools/gen.hxx>
+#include <tools/color.hxx>
+#include <vcl/font.hxx>
+
+#include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 
 class TextDoc;
 class TextView;
@@ -31,34 +47,14 @@ class TextAttrib;
 class TextCharAttrib;
 class TextUndo;
 class TextUndoManager;
-class EditSelFunctionSet;
-class Idle;
 class IdleFormatter;
 class TextNode;
 class OutputDevice;
-class SfxUndoAction;
 class KeyEvent;
 class Timer;
-
-namespace svl
-{
-    class IUndoManager;
-}
-
+class SfxUndoManager;
 class TextLine;
-class TETextPortion;
-#include <rtl/ustring.hxx>
-#include <svl/SfxBroadcaster.hxx>
-#include <tools/lineend.hxx>
-#include <tools/link.hxx>
-#include <tools/gen.hxx>
-#include <vcl/font.hxx>
-
-#include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-
 struct TEIMEInfos;
-class SvtCTLOptions;
 
 namespace com {
 namespace sun {
@@ -70,7 +66,7 @@ namespace i18n {
 
 class LocaleDataWrapper;
 
-enum TxtAlign { TXTALIGN_LEFT, TXTALIGN_CENTER, TXTALIGN_RIGHT };
+enum class TxtAlign { Left, Center, Right };
 
 typedef std::vector<TextView*> TextViews;
 
@@ -79,7 +75,6 @@ class VCL_DLLPUBLIC TextEngine : public SfxBroadcaster
     friend class        TextView;
     friend class        TextSelFunctionSet;
     friend class        ExtTextEngine;
-    friend class        ExtTextView;
 
     friend class        TextUndo;
     friend class        TextUndoManager;
@@ -88,37 +83,34 @@ class VCL_DLLPUBLIC TextEngine : public SfxBroadcaster
     friend class        TextUndoSplitPara;
     friend class        TextUndoInsertChars;
     friend class        TextUndoRemoveChars;
-    friend class        TextUndoSetAttribs;
 
-private:
-    TextDoc*            mpDoc;
-    TEParaPortions*     mpTEParaPortions;
+    std::unique_ptr<TextDoc>          mpDoc;
+    std::unique_ptr<TEParaPortions>   mpTEParaPortions;
     VclPtr<OutputDevice> mpRefDev;
 
-    TextViews*          mpViews;
+    std::unique_ptr<TextViews>        mpViews;
     TextView*           mpActiveView;
 
-    TextUndoManager*    mpUndoManager;
+    std::unique_ptr<TextUndoManager>  mpUndoManager;
 
-    IdleFormatter*      mpIdleFormatter;
+    std::unique_ptr<IdleFormatter>    mpIdleFormatter;
 
-    TEIMEInfos*         mpIMEInfos;
+    std::unique_ptr<TEIMEInfos> mpIMEInfos;
 
     css::lang::Locale   maLocale;
     css::uno::Reference< css::i18n::XBreakIterator > mxBreakIterator;
     css::uno::Reference < css::i18n::XExtendedInputSequenceChecker > mxISC;
 
-    Rectangle           maInvalidRect;
+    tools::Rectangle           maInvalidRect;
 
-    LocaleDataWrapper*  mpLocaleDataWrapper;
+    std::unique_ptr<LocaleDataWrapper> mpLocaleDataWrapper;
 
     vcl::Font           maFont;
     Color               maTextColor;
-    long                mnCharHeight;
-    sal_uInt16          mnFixCharWidth100;
 
     sal_Int32           mnMaxTextLen;
     long                mnMaxTextWidth;
+    long                mnCharHeight;
     long                mnCurTextWidth;
     long                mnCurTextHeight;
     long                mnDefTab;
@@ -134,11 +126,6 @@ private:
     bool                mbDowning           : 1;
     bool                mbRightToLeft       : 1;
     bool                mbHasMultiLineParas : 1;
-
-                        TextEngine( const TextEngine& ) : SfxBroadcaster()  {}
-    TextEngine&         operator=( const TextEngine& )      { return *this; }
-
-protected:
 
     void                CursorMoved( sal_uInt32 nNode );
     void                TextModified();
@@ -158,10 +145,10 @@ protected:
 
     // to remain compatible in the minor release we copy the above ImpInsertText
     // function and add the extra parameter we need but make sure this function
-    // gets not exported. First and second parameter swapped to have a different signatur.
-    SAL_DLLPRIVATE TextPaM  ImpInsertText( sal_Unicode c, const TextSelection& rSel, bool bOverwrite = false, bool bIsUserInput = false );
+    // gets not exported. First and second parameter swapped to have a different signature.
+    SAL_DLLPRIVATE TextPaM  ImpInsertText( sal_Unicode c, const TextSelection& rSel, bool bOverwrite, bool bIsUserInput = false );
     // some other new functions needed that must not be exported to remain compatible
-    SAL_DLLPRIVATE css::uno::Reference < css::i18n::XExtendedInputSequenceChecker > GetInputSequenceChecker();
+    SAL_DLLPRIVATE css::uno::Reference< css::i18n::XExtendedInputSequenceChecker > const & GetInputSequenceChecker();
     SAL_DLLPRIVATE bool IsInputSequenceCheckingRequired( sal_Unicode c, const TextSelection& rCurSel ) const;
 
     // broadcast or adjust selections
@@ -169,18 +156,15 @@ protected:
     void                ImpParagraphRemoved( sal_uInt32 nPara );
     void                ImpCharsRemoved( sal_uInt32 nPara, sal_Int32 nPos, sal_Int32 nChars );
     void                ImpCharsInserted( sal_uInt32 nPara, sal_Int32 nPos, sal_Int32 nChars );
-    void                ImpFormattingParagraph( sal_uInt32 nPara );
-    void                ImpTextHeightChanged();
-    void                ImpTextFormatted();
 
-    DECL_LINK_TYPED(    IdleFormatHdl, Idle *, void );
+    DECL_LINK(    IdleFormatHdl, Timer *, void );
     void                CheckIdleFormatter();
-    void                IdleFormatAndUpdate( TextView* pCurView = nullptr, sal_uInt16 nMaxTimerRestarts = 5 );
+    void                IdleFormatAndUpdate( TextView* pCurView, sal_uInt16 nMaxTimerRestarts = 5 );
 
     bool                CreateLines( sal_uInt32 nPara );
     void                CreateAndInsertEmptyLine( sal_uInt32 nPara );
-    void                ImpBreakLine( sal_uInt32 nPara, TextLine* pLine, TETextPortion* pPortion, sal_Int32 nPortionStart, long nRemainingWidth );
-    sal_uInt16          SplitTextPortion( sal_uInt32 nPara, sal_Int32 nPos );
+    void                ImpBreakLine( sal_uInt32 nPara, TextLine* pLine, sal_Int32 nPortionStart, long nRemainingWidth );
+    std::size_t         SplitTextPortion( sal_uInt32 nPara, sal_Int32 nPos );
     void                CreateTextPortions( sal_uInt32 nPara, sal_Int32 nStartPos );
     void                RecalcTextPortion( sal_uInt32 nPara, sal_Int32 nStartPos, sal_Int32 nNewChars );
     void                SeekCursor( sal_uInt32 nNode, sal_Int32 nPos, vcl::Font& rFont, OutputDevice* pOutDev );
@@ -191,17 +175,17 @@ protected:
     bool                IsFormatting() const { return mbIsFormatting; }
     void                UpdateViews( TextView* pCurView = nullptr );
 
-    void                ImpPaint( OutputDevice* pOut, const Point& rStartPos, Rectangle const* pPaintArea, TextSelection const* pPaintRange = nullptr, TextSelection const* pSelection = nullptr );
+    void                ImpPaint( OutputDevice* pOut, const Point& rStartPos, tools::Rectangle const* pPaintArea, TextSelection const* pSelection = nullptr );
 
     bool                IsFormatted() const { return mbFormatted; }
 
-    sal_Int32           GetCharPos( sal_uInt32 nPara, sal_uInt16 nLine, long nDocPosX, bool bSmart = false );
-    Rectangle           GetEditCursor( const TextPaM& rPaM, bool bSpecial, bool bPreferPortionStart = false );
-    sal_Int32           ImpFindIndex( sal_uInt32 nPortion, const Point& rPosInPara, bool bSmart );
-    long                ImpGetPortionXOffset( sal_uInt32 nPara, TextLine* pLine, sal_uInt16 nTextPortion );
+    sal_Int32           GetCharPos( sal_uInt32 nPara, std::vector<TextLine>::size_type nLine, long nDocPosX );
+    tools::Rectangle    GetEditCursor( const TextPaM& rPaM, bool bSpecial, bool bPreferPortionStart = false );
+    sal_Int32           ImpFindIndex( sal_uInt32 nPortion, const Point& rPosInPara );
+    long                ImpGetPortionXOffset( sal_uInt32 nPara, TextLine const * pLine, std::size_t nTextPortion );
     long                ImpGetXPos( sal_uInt32 nPara, TextLine* pLine, sal_Int32 nIndex, bool bPreferPortionStart = false );
     long                ImpGetOutputOffset( sal_uInt32 nPara, TextLine* pLine, sal_Int32 nIndex, sal_Int32 nIndex2 );
-    sal_uInt8           ImpGetRightToLeft( sal_uInt32 nPara, sal_Int32 nPos );
+    bool                ImpGetRightToLeft( sal_uInt32 nPara, sal_Int32 nPos );
     static void         ImpInitLayoutMode( OutputDevice* pOutDev );
     TxtAlign            ImpGetAlign() const;
 
@@ -212,7 +196,7 @@ protected:
     Range               GetInvalidYOffsets( sal_uInt32 nPortion );
 
     // for Undo/Redo
-    void                InsertContent( TextNode* pNode, sal_uInt32 nPara );
+    void                InsertContent( std::unique_ptr<TextNode> pNode, sal_uInt32 nPara );
     TextPaM             SplitContent( sal_uInt32 nNode, sal_Int32 nSepPos );
     TextPaM             ConnectContents( sal_uInt32 nLeftNode );
 
@@ -222,7 +206,9 @@ protected:
 
 public:
                         TextEngine();
-                        virtual ~TextEngine();
+                        virtual ~TextEngine() override;
+                        TextEngine( const TextEngine& ) = delete;
+    TextEngine&         operator=( const TextEngine& ) = delete;
 
     void                SetText( const OUString& rStr );
     OUString            GetText( LineEnd aSeparator = LINEEND_LF ) const;
@@ -263,6 +249,8 @@ public:
     sal_Int32           GetTextLen( sal_uInt32 nParagraph ) const;
     long                GetTextHeight( sal_uInt32 nParagraph ) const;
 
+    void                GetTextPortionRange(const TextPaM& rPaM, sal_Int32& nStart, sal_Int32& nEnd);
+
     sal_uInt16          GetLineCount( sal_uInt32 nParagraph ) const;
     sal_Int32           GetLineLen( sal_uInt32 nParagraph, sal_uInt16 nLine ) const;
 
@@ -270,11 +258,10 @@ public:
     bool                IsRightToLeft() const { return mbRightToLeft; }
 
     bool                HasUndoManager() const { return mpUndoManager != nullptr; }
-    ::svl::IUndoManager&
-                        GetUndoManager();
+    SfxUndoManager&     GetUndoManager();
     void                UndoActionStart( sal_uInt16 nId = 0 );
     void                UndoActionEnd();
-    void                InsertUndo( TextUndo* pUndo, bool bTryMerge = false );
+    void                InsertUndo( std::unique_ptr<TextUndo> pUndo, bool bTryMerge = false );
     bool                IsInUndo()                  { return mbIsInUndo; }
     void                SetIsInUndo( bool bInUndo ) { mbIsInUndo = bInUndo; }
     void                ResetUndo();
@@ -287,18 +274,17 @@ public:
 
     bool                Read( SvStream& rInput, const TextSelection* pSel = nullptr );
 
-    bool                Write( SvStream& rOutput, const TextSelection* pSel = nullptr, bool bHTML = false );
+    void                Write( SvStream& rOutput );
 
-    TextPaM             GetPaM( const Point& rDocPos, bool bSmart = true );
-    Rectangle           PaMtoEditCursor( const TextPaM& rPaM, bool bSpecial = false );
+    TextPaM             GetPaM( const Point& rDocPos );
+    tools::Rectangle    PaMtoEditCursor( const TextPaM& rPaM, bool bSpecial = false );
     OUString            GetWord( const TextPaM& rCursorPos, TextPaM* pStartOfWord = nullptr );
 
-    bool                HasAttrib( sal_uInt16 nWhich ) const;
     const TextAttrib*       FindAttrib( const TextPaM& rPaM, sal_uInt16 nWhich ) const;
     const TextCharAttrib*   FindCharAttrib( const TextPaM& rPaM, sal_uInt16 nWhich ) const;
 
     void                RemoveAttribs( sal_uInt32 nPara, sal_uInt16 nWhich );
-    void                RemoveAttrib( sal_uInt32 nPara, const TextCharAttrib& rAttrib );
+    std::unique_ptr<TextCharAttrib>     RemoveAttrib( sal_uInt32 nPara, const TextCharAttrib& rAttrib );
     void                RemoveAttribs( sal_uInt32 nPara );
     void                SetAttrib( const TextAttrib& rAttr, sal_uInt32 nPara, sal_Int32 nStart, sal_Int32 nEnd, bool bIdleFormatAndUpdate = true );
 
@@ -308,13 +294,13 @@ public:
     void                Draw( OutputDevice* pDev, const Point& rPos );
 
     void                SetLocale( const css::lang::Locale& rLocale );
-    css::lang::Locale   GetLocale();
-    css::uno::Reference< css::i18n::XBreakIterator > GetBreakIterator();
+    css::lang::Locale const & GetLocale();
+    css::uno::Reference< css::i18n::XBreakIterator > const & GetBreakIterator();
 
     static bool         DoesKeyChangeText( const KeyEvent& rKeyEvent );
     static bool         IsSimpleCharInput( const KeyEvent& rKeyEvent );
 
-    Color               GetTextColor() const { return maTextColor; }
+    const Color&        GetTextColor() const { return maTextColor; }
 };
 
 #endif // INCLUDED_VCL_TEXTENG_HXX

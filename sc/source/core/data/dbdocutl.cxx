@@ -22,11 +22,10 @@
 
 #include <svl/zforlist.hxx>
 
-#include "dbdocutl.hxx"
-#include "document.hxx"
+#include <dbdocutl.hxx>
+#include <document.hxx>
 #include <formula/errorcodes.hxx>
-#include "stringutil.hxx"
-#include "globalnames.hxx"
+#include <stringutil.hxx>
 
 using namespace ::com::sun::star;
 
@@ -56,7 +55,7 @@ void ScDatabaseDocUtil::PutData( ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB
             case sdbc::DataType::BOOLEAN:
                 //TODO: use language from doc (here, date/time and currency)?
                 nFormatIndex = pDoc->GetFormatTable()->GetStandardFormat(
-                                    css::util::NumberFormat::LOGICAL, ScGlobal::eLnge );
+                                    SvNumFormatType::LOGICAL, ScGlobal::eLnge );
                 nVal = (xRow->getBoolean(nRowPos) ? 1 : 0);
                 bEmptyFlag = ( nVal == 0.0 ) && xRow->wasNull();
                 bValue = true;
@@ -86,14 +85,17 @@ void ScDatabaseDocUtil::PutData( ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB
 
             case sdbc::DataType::DATE:
                 {
-                    SvNumberFormatter* pFormTable = pDoc->GetFormatTable();
-                    nFormatIndex = pFormTable->GetStandardFormat(
-                                        css::util::NumberFormat::DATE, ScGlobal::eLnge );
-
                     util::Date aDate = xRow->getDate(nRowPos);
-                    nVal = Date( aDate.Day, aDate.Month, aDate.Year ) -
-                                                *pFormTable->GetNullDate();
                     bEmptyFlag = xRow->wasNull();
+                    if (bEmptyFlag)
+                        nVal = 0.0;
+                    else
+                    {
+                        SvNumberFormatter* pFormTable = pDoc->GetFormatTable();
+                        nFormatIndex = pFormTable->GetStandardFormat(
+                                SvNumFormatType::DATE, ScGlobal::eLnge );
+                        nVal = Date( aDate ) - pFormTable->GetNullDate();
+                    }
                     bValue = true;
                 }
                 break;
@@ -102,7 +104,7 @@ void ScDatabaseDocUtil::PutData( ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB
                 {
                     SvNumberFormatter* pFormTable = pDoc->GetFormatTable();
                     nFormatIndex = pFormTable->GetStandardFormat(
-                                        css::util::NumberFormat::TIME, ScGlobal::eLnge );
+                                        SvNumFormatType::TIME, ScGlobal::eLnge );
 
                     util::Time aTime = xRow->getTime(nRowPos);
                     nVal = aTime.Hours       / static_cast<double>(::tools::Time::hourPerDay)   +
@@ -118,17 +120,20 @@ void ScDatabaseDocUtil::PutData( ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB
                 {
                     SvNumberFormatter* pFormTable = pDoc->GetFormatTable();
                     nFormatIndex = pFormTable->GetStandardFormat(
-                                        css::util::NumberFormat::DATETIME, ScGlobal::eLnge );
+                                        SvNumFormatType::DATETIME, ScGlobal::eLnge );
 
                     util::DateTime aStamp = xRow->getTimestamp(nRowPos);
-                    nVal = ( Date( aStamp.Day, aStamp.Month, aStamp.Year ) -
-                                                *pFormTable->GetNullDate() ) +
-                           aStamp.Hours       / static_cast<double>(::tools::Time::hourPerDay)   +
-                           aStamp.Minutes     / static_cast<double>(::tools::Time::minutePerDay) +
-                           aStamp.Seconds     / static_cast<double>(::tools::Time::secondPerDay) +
-                           aStamp.NanoSeconds / static_cast<double>(::tools::Time::nanoSecPerDay);
-                    bEmptyFlag = xRow->wasNull();
-                    bValue = true;
+                    if (aStamp.Year != 0)
+                    {
+                        nVal = ( Date( aStamp.Day, aStamp.Month, aStamp.Year ) -
+                                                    pFormTable->GetNullDate() ) +
+                               aStamp.Hours       / static_cast<double>(::tools::Time::hourPerDay)   +
+                               aStamp.Minutes     / static_cast<double>(::tools::Time::minutePerDay) +
+                               aStamp.Seconds     / static_cast<double>(::tools::Time::secondPerDay) +
+                               aStamp.NanoSeconds / static_cast<double>(::tools::Time::nanoSecPerDay);
+                        bEmptyFlag = xRow->wasNull();
+                        bValue = true;
+                    }
                 }
                 break;
 
@@ -150,14 +155,14 @@ void ScDatabaseDocUtil::PutData( ScDocument* pDoc, SCCOL nCol, SCROW nRow, SCTAB
 
     if ( bValue && bCurrency )
         nFormatIndex = pDoc->GetFormatTable()->GetStandardFormat(
-                            css::util::NumberFormat::CURRENCY, ScGlobal::eLnge );
+                            SvNumFormatType::CURRENCY, ScGlobal::eLnge );
 
     ScAddress aPos(nCol, nRow, nTab);
     if (bEmptyFlag)
         pDoc->SetEmptyCell(aPos);
     else if (bError)
     {
-        pDoc->SetError( nCol, nRow, nTab, NOTAVAILABLE );
+        pDoc->SetError( nCol, nRow, nTab, FormulaError::NotAvailable );
     }
     else if (bValue)
     {

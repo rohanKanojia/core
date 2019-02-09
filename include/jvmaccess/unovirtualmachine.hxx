@@ -36,14 +36,14 @@ class JVMACCESS_DLLPUBLIC UnoVirtualMachine: public salhelper::SimpleReferenceOb
 public:
     /** An exception indicating failure to create a UnoVirtualMachine.
      */
-    class JVMACCESS_DLLPUBLIC CreationException
+    class JVMACCESS_DLLPUBLIC CreationException final
     {
     public:
         CreationException();
 
         CreationException(CreationException const &);
 
-        virtual ~CreationException();
+        ~CreationException();
 
         CreationException & operator =(CreationException const &);
     };
@@ -88,10 +88,10 @@ public:
     void * getClassLoader() const { return m_classLoader;}
 
 private:
-    UnoVirtualMachine(UnoVirtualMachine &) = delete;
-    void operator =(UnoVirtualMachine &) = delete;
+    UnoVirtualMachine(UnoVirtualMachine const &) = delete;
+    UnoVirtualMachine& operator =(UnoVirtualMachine const &) = delete;
 
-    virtual ~UnoVirtualMachine();
+    virtual ~UnoVirtualMachine() override;
 
     rtl::Reference< jvmaccess::VirtualMachine > m_virtualMachine;
     void * m_classLoader;

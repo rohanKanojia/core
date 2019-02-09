@@ -30,7 +30,7 @@
 #include <rtl/ustring.hxx>
 #include <tools/stream.hxx>
 #include <tools/link.hxx>
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
 #include <tools/datetime.hxx>
 
 namespace com
@@ -67,13 +67,6 @@ namespace utl
 class UcbLockBytes;
 typedef tools::SvRef<UcbLockBytes> UcbLockBytesRef;
 
-class UcbLockBytesHandler : public SvRefBase
-{
-public:
-                    UcbLockBytesHandler()
-                    {}
-};
-
 class UcbLockBytes : public virtual SvLockBytes
 {
     osl::Condition          m_aInitialized;
@@ -96,31 +89,29 @@ class UcbLockBytes : public virtual SvLockBytes
 
                             UcbLockBytes();
 protected:
-    virtual                 ~UcbLockBytes();
+    virtual                 ~UcbLockBytes() override;
 
 public:
                             // properties: Referer, PostMimeType
     static UcbLockBytesRef  CreateLockBytes( const css::uno::Reference < css::ucb::XContent >& xContent,
                                             const css::uno::Sequence < css::beans::PropertyValue >& rProps,
                                             StreamMode eMode,
-                                            const css::uno::Reference < css::task::XInteractionHandler >& xInter,
-                                            UcbLockBytesHandler* pHandler=nullptr );
+                                            const css::uno::Reference < css::task::XInteractionHandler >& xInter );
 
     static UcbLockBytesRef  CreateInputLockBytes( const css::uno::Reference < css::io::XInputStream >& xContent );
     static UcbLockBytesRef  CreateLockBytes( const css::uno::Reference < css::io::XStream >& xContent );
 
     // SvLockBytes
-    virtual void            SetSynchronMode (bool bSynchron) override;
-    virtual ErrCode         ReadAt(sal_uInt64 nPos, void *pBuffer, sal_uLong nCount, sal_uLong *pRead) const override;
-    virtual ErrCode         WriteAt(sal_uInt64, const void*, sal_uLong, sal_uLong *pWritten) override;
+    virtual ErrCode         ReadAt(sal_uInt64 nPos, void *pBuffer, std::size_t nCount, std::size_t *pRead) const override;
+    virtual ErrCode         WriteAt(sal_uInt64, const void*, std::size_t, std::size_t *pWritten) override;
     virtual ErrCode         Flush() const override;
     virtual ErrCode         SetSize(sal_uInt64) override;
-    virtual ErrCode         Stat ( SvLockBytesStat *pStat, SvLockBytesStatFlag) const override;
+    virtual ErrCode         Stat ( SvLockBytesStat *pStat ) const override;
 
     void                    SetError( ErrCode nError )
                             { m_nError = nError; }
 
-    ErrCode                 GetError() const
+    ErrCode const &         GetError() const
                             { return m_nError; }
 
     // calling this method delegates the responsibility to call closeinput to the caller!
@@ -133,19 +124,19 @@ public:
 
     css::uno::Reference < css::io::XInputStream > getInputStream_Impl() const
                             {
-                                osl::MutexGuard aGuard( (const_cast< UcbLockBytes* >(this))->m_aMutex );
+                                osl::MutexGuard aGuard( const_cast< UcbLockBytes* >(this)->m_aMutex );
                                 return m_xInputStream;
                             }
 
     css::uno::Reference < css::io::XOutputStream > getOutputStream_Impl() const
                             {
-                                osl::MutexGuard aGuard( (const_cast< UcbLockBytes* >(this))->m_aMutex );
+                                osl::MutexGuard aGuard( const_cast< UcbLockBytes* >(this)->m_aMutex );
                                 return m_xOutputStream;
                             }
 
     css::uno::Reference < css::io::XSeekable > getSeekable_Impl() const
                             {
-                                osl::MutexGuard aGuard( (const_cast< UcbLockBytes* >(this))->m_aMutex );
+                                osl::MutexGuard aGuard( const_cast< UcbLockBytes* >(this)->m_aMutex );
                                 return m_xSeekable;
                             }
 

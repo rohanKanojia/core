@@ -183,7 +183,7 @@
       </prop>
       <prop oor:name="ControlType" oor:type="xs:string">
         <info>
-          <desc>A property to define the control type of the toolbar item. An will be interpreted as OpenOffice.org default toggle button.</desc>
+          <desc>A property to define the control type of the toolbar item. It will be interpreted as OpenOffice.org default toggle button.</desc>
         </info>
       </prop>
       <prop oor:name="Width" oor:type="xs:long">
@@ -281,6 +281,12 @@
           <desc>Specifies whether the contents of the status bar item are drawn by the client (true) or by the internal implementation (false).</desc>
         </info>
         <value>false</value>
+      </prop>
+      <prop oor:name="Mandatory" oor:type="xs:boolean">
+        <info>
+          <desc>Specifies whether the element can be hidden (false) or not (true) if status bar width is not sufficient to fit all elements.</desc>
+        </info>
+        <value>true</value>
       </prop>
       <prop oor:name="Width" oor:type="xs:long">
         <info>

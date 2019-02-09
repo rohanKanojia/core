@@ -19,6 +19,7 @@
 
 #include <sal/config.h>
 
+#include <memory>
 #include <vector>
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +33,7 @@
 
 /* Main Procedure */
 
-void data_write(char* file, char* name, sal_uInt8 *data, sal_Int32 len)
+static void data_write(char* file, char* name, sal_uInt8 *data, sal_Int32 len)
 {
     FILE *fp = fopen(file, "wb");
     if (fp == nullptr) {
@@ -112,7 +113,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
     //UCollator *coll = ucol_openRules(Obuf.getStr(), Obuf.getLength(), UCOL_OFF,
     //        UCOL_DEFAULT_STRENGTH, &parseError, &status);
 
-    RuleBasedCollator *coll = new RuleBasedCollator(reinterpret_cast<const UChar *>(Obuf.getStr()), status);    // UChar != sal_Unicode in MinGW
+    auto coll = std::make_unique<icu::RuleBasedCollator>(reinterpret_cast<const UChar *>(Obuf.getStr()), status);
 
     if (U_SUCCESS(status)) {
         std::vector<uint8_t> data;
@@ -128,10 +129,8 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             printf("Could not get rule data from collator\n");
         }
     } else {
-        printf("\nRule parsering error\n");
+        printf("\nRule parsing error\n");
     }
-
-    delete coll;
 
     return U_SUCCESS(status) ? 0 : 1;
 }   // End of main

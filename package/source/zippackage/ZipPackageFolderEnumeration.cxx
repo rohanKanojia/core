@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ZipPackageFolderEnumeration.hxx>
-#include <ContentInfo.hxx>
+#include "ZipPackageFolderEnumeration.hxx"
+#include "ContentInfo.hxx"
 #include <cppuhelper/supportsservice.hxx>
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
 
@@ -40,12 +41,10 @@ ZipPackageFolderEnumeration::~ZipPackageFolderEnumeration()
 }
 
 sal_Bool SAL_CALL ZipPackageFolderEnumeration::hasMoreElements(  )
-        throw(uno::RuntimeException, std::exception)
 {
     return (aIterator != rContents.end() );
 }
 uno::Any SAL_CALL ZipPackageFolderEnumeration::nextElement(  )
-        throw(container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     uno::Any aAny;
     if (aIterator == rContents.end() )
@@ -56,20 +55,17 @@ uno::Any SAL_CALL ZipPackageFolderEnumeration::nextElement(  )
 }
 
 OUString ZipPackageFolderEnumeration::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString ("ZipPackageFolderEnumeration");
 }
 
 uno::Sequence< OUString > ZipPackageFolderEnumeration::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence< OUString > aNames { "com.sun.star.packages.PackageFolderEnumeration" };
     return aNames;
 }
 
 sal_Bool SAL_CALL ZipPackageFolderEnumeration::supportsService( OUString const & rServiceName )
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }

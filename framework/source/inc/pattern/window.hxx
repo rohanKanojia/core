@@ -30,7 +30,6 @@
 #include <vcl/syswin.hxx>
 #include <vcl/wrkwin.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <rtl/ustring.hxx>
 
 // namespaces
@@ -54,11 +53,8 @@ static bool isTopWindow(const css::uno::Reference< css::awt::XWindow >& xWindow)
         // Because sometimes VCL create "implicit border windows" as parents even we created
         // a simple XWindow using the toolkit only .-(
         SolarMutexGuard aSolarGuard;
-        vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-        if (
-            (pWindow                  ) &&
-            (pWindow->IsSystemWindow())
-           )
+        VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+        if ( pWindow && pWindow->IsSystemWindow() )
             return true;
     }
 

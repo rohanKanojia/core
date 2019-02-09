@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE script:module PUBLIC "-//OpenOffice.org//DTD OfficeDocument 1.0//EN" "module.dtd">
-<script:module xmlns:script="http://openoffice.org/2000/script" script:name="PropertiesGet" script:language="StarBasic">REM =======================================================================================================================
+<script:module xmlns:script="http://openoffice.org/2000/script" script:name="PropertiesGet" script:language="StarBasic">
+REM =======================================================================================================================
 REM ===					The Access2Base library is a part of the LibreOffice project.									===
 REM ===					Full documentation is available on http://www.access2base.com									===
 REM =======================================================================================================================
@@ -447,7 +448,7 @@ Dim oDoc As Object
 			Case OBJCOLLECTION
 				Select Case vCurrentObject._CollType
 					Case COLLFORMS
-						vCurrentObject = Application.Forms(sComponents(iCurrentIndex))
+						vCurrentObject = Application.AllForms(sComponents(iCurrentIndex))
 					Case COLLALLDIALOGS
 						sDialog = UCase(sComponents(iCurrentIndex))
 						vCurrentObject = Application.AllDialogs(sDialog)
@@ -461,7 +462,7 @@ Dim oDoc As Object
 			Case OBJFORM, OBJSUBFORM, OBJCONTROL, OBJDIALOG
 				vCurrentObject = vCurrentObject.Controls(sComponents(iCurrentIndex))
 		End Select
-		If sCurrentProperty &lt;&gt; &quot;&quot; Then vCurrentObject = PropertiesGet._getProperty(vCurrentObject, sCurrentProperty)
+		If sCurrentProperty &lt;&gt; &quot;&quot; Then vCurrentObject = vCurrentObject.getProperty(sCurrentProperty)
 	Next iCurrentIndex
 	
 	Set getObject = vCurrentObject
@@ -714,10 +715,11 @@ Dim vItem As Variant, sProperty As String
 		Set vItem = getObject(pvObject)
 		sProperty = Utils._FinalProperty(pvObject)
 		If sProperty = &quot;&quot; Then sProperty = &quot;Value&quot;			&apos;	Default value if final property in shortcut is absent
-		getValue = PropertiesGet._getProperty(vItem, sProperty)
+		getValue = vItem.getProperty(sproperty)
 		Utils._ResetCalledSub(&quot;getValue&quot;)
 	Else
-		getValue = PropertiesGet._getProperty(pvObject, &quot;Value&quot;)
+		Set vItem = pvObject
+		getValue = vItem.getProperty(&quot;Value&quot;)
 	End If
 End Function		&apos;	getValue
 
@@ -1211,4 +1213,5 @@ Exit_Function:
 	Set _PropertiesList = vPropertiesList
 	Exit Function
 End Function		&apos;	PropertiesList		V0.9.0
+
 </script:module>

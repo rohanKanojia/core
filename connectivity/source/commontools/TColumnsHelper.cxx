@@ -28,9 +28,8 @@
 #include <com/sun/star/sdbcx/XKeysSupplier.hpp>
 #include <comphelper/types.hxx>
 #include <connectivity/dbtools.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <connectivity/TTableHelper.hxx>
-#include <comphelper/property.hxx>
 
 using namespace ::comphelper;
 
@@ -61,18 +60,15 @@ namespace connectivity
 OColumnsHelper::OColumnsHelper( ::cppu::OWeakObject& _rParent
                                 ,bool _bCase
                                 ,::osl::Mutex& _rMutex
-                                ,const TStringVector &_rVector
+                                ,const ::std::vector< OUString> &_rVector
                                 ,bool _bUseHardRef
             ) : OCollection(_rParent,_bCase,_rMutex,_rVector,false,_bUseHardRef)
-    ,m_pImpl(nullptr)
     ,m_pTable(nullptr)
 {
 }
 
 OColumnsHelper::~OColumnsHelper()
 {
-    delete m_pImpl;
-    m_pImpl = nullptr;
 }
 
 
@@ -82,7 +78,7 @@ sdbcx::ObjectType OColumnsHelper::createObject(const OUString& _rName)
     Reference<XConnection> xConnection = m_pTable->getConnection();
 
     if ( !m_pImpl )
-        m_pImpl = new OColumnsHelperImpl(isCaseSensitive());
+        m_pImpl.reset(new OColumnsHelperImpl(isCaseSensitive()));
 
     bool bQueryInfo     = true;
     bool bAutoIncrement = false;
@@ -154,7 +150,7 @@ sdbcx::ObjectType OColumnsHelper::createObject(const OUString& _rName)
 }
 
 
-void OColumnsHelper::impl_refresh() throw(RuntimeException)
+void OColumnsHelper::impl_refresh()
 {
     if ( m_pTable )
     {
@@ -178,7 +174,7 @@ sdbcx::ObjectType OColumnsHelper::appendObject( const OUString& _rForName, const
 
     Reference<XDatabaseMetaData> xMetaData = m_pTable->getConnection()->getMetaData();
     OUString aSql = "ALTER TABLE " +
-        ::dbtools::composeTableName( xMetaData, m_pTable, ::dbtools::EComposeRule::InTableDefinitions, false, false, true ) +
+        ::dbtools::composeTableName( xMetaData, m_pTable, ::dbtools::EComposeRule::InTableDefinitions, true ) +
         " ADD " +
         ::dbtools::createStandardColumnPart(descriptor,m_pTable->getConnection(),nullptr,m_pTable->getTypeCreatePattern());
 
@@ -200,7 +196,7 @@ void OColumnsHelper::dropObject(sal_Int32 /*_nPos*/, const OUString& _sElementNa
         Reference<XDatabaseMetaData> xMetaData = m_pTable->getConnection()->getMetaData();
         OUString aQuote  = xMetaData->getIdentifierQuoteString(  );
         OUString aSql = "ALTER TABLE " +
-            ::dbtools::composeTableName( xMetaData, m_pTable, ::dbtools::EComposeRule::InTableDefinitions, false, false, true ) +
+            ::dbtools::composeTableName( xMetaData, m_pTable, ::dbtools::EComposeRule::InTableDefinitions, true ) +
             " DROP " +
             ::dbtools::quoteName( aQuote,_sElementName);
 

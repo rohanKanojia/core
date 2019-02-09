@@ -10,20 +10,21 @@
 #ifndef INCLUDED_WRITERFILTER_SOURCE_RTFTOK_RTFSKIPDESTINATION_HXX
 #define INCLUDED_WRITERFILTER_SOURCE_RTFTOK_RTFSKIPDESTINATION_HXX
 
-#include <rtflistener.hxx>
-
 namespace writerfilter
 {
 namespace rtftok
 {
+class RTFListener;
+
 /// Skips a destination after a not parsed control word if it was prefixed with \*
-class RTFSkipDestination
+class RTFSkipDestination final
 {
 public:
-    RTFSkipDestination(RTFListener& rImport);
-    virtual ~RTFSkipDestination();
+    explicit RTFSkipDestination(RTFListener& rImport);
+    ~RTFSkipDestination();
     void setParsed(bool bParsed);
     void setReset(bool bReset);
+
 private:
     RTFListener& m_rImport;
     bool m_bParsed;

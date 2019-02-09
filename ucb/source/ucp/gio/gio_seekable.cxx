@@ -17,8 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
 #include <ucbhelper/cancelcommandexecution.hxx>
+#include <cppuhelper/queryinterface.hxx>
 #include <string.h>
 
 #include "gio_seekable.hxx"
@@ -40,7 +45,6 @@ Seekable::~Seekable()
 }
 
 void SAL_CALL Seekable::truncate()
-    throw( io::IOException, uno::RuntimeException, std::exception )
 {
     if (!mpStream)
         throw io::NotConnectedException();
@@ -55,7 +59,6 @@ void SAL_CALL Seekable::truncate()
 }
 
 void SAL_CALL Seekable::seek( sal_Int64 location )
-    throw( lang::IllegalArgumentException, io::IOException, uno::RuntimeException, std::exception )
 {
     if (!mpStream)
         throw io::NotConnectedException();
@@ -69,7 +72,7 @@ void SAL_CALL Seekable::seek( sal_Int64 location )
         convertToIOException(pError, static_cast< cppu::OWeakObject * >(this));
 }
 
-sal_Int64 SAL_CALL Seekable::getPosition() throw( io::IOException, uno::RuntimeException, std::exception )
+sal_Int64 SAL_CALL Seekable::getPosition()
 {
     if (!mpStream)
         throw io::NotConnectedException();
@@ -77,7 +80,7 @@ sal_Int64 SAL_CALL Seekable::getPosition() throw( io::IOException, uno::RuntimeE
     return g_seekable_tell(mpStream);
 }
 
-sal_Int64 SAL_CALL Seekable::getLength() throw( io::IOException, uno::RuntimeException, std::exception )
+sal_Int64 SAL_CALL Seekable::getLength()
 {
     if (!mpStream)
         throw io::NotConnectedException();
@@ -112,7 +115,7 @@ sal_Int64 SAL_CALL Seekable::getLength() throw( io::IOException, uno::RuntimeExc
     return nSize;
 }
 
-uno::Any Seekable::queryInterface( const uno::Type &type ) throw( uno::RuntimeException, std::exception )
+uno::Any Seekable::queryInterface( const uno::Type &type )
 {
     uno::Any aRet = ::cppu::queryInterface ( type,
         static_cast< XSeekable * >( this ) );

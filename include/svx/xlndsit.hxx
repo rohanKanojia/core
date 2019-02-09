@@ -38,22 +38,19 @@ public:
                             static SfxPoolItem* CreateDefault();
                             XLineDashItem() : NameOrIndex(XATTR_LINEDASH, -1) {}
                             XLineDashItem(const OUString& rName, const XDash& rTheDash);
-                            XLineDashItem(SfxItemPool* pPool, const XDash& rTheDash);
+                            XLineDashItem(const XDash& rTheDash);
                             XLineDashItem(const XLineDashItem& rItem);
-                            XLineDashItem(SvStream& rIn);
 
     virtual bool            operator==(const SfxPoolItem& rItem) const override;
     virtual SfxPoolItem*    Clone(SfxItemPool* pPool = nullptr) const override;
-    virtual SfxPoolItem*    Create(SvStream& rIn, sal_uInt16 nVer) const override;
-    virtual SvStream&       Store(SvStream& rOut, sal_uInt16 nItemVersion ) const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
     virtual bool            HasMetrics() const override;
     virtual void            ScaleMetrics(long nMul, long nDiv) override;
 
@@ -61,7 +58,7 @@ public:
     void                    SetDashValue(const XDash& rNew)   { aDash = rNew; Detach(); } // SetValue -> SetDashValue
 
     static bool CompareValueFunc( const NameOrIndex* p1, const NameOrIndex* p2 );
-    XLineDashItem* checkForUniqueItem( SdrModel* pModel ) const;
+    std::unique_ptr<XLineDashItem> checkForUniqueItem( SdrModel* pModel ) const;
 };
 
 #endif

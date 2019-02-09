@@ -20,14 +20,12 @@
 #ifndef INCLUDED_RTL_INSTANCE_HXX
 #define INCLUDED_RTL_INSTANCE_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <osl/doublecheckedlocking.h>
-#if ! HAVE_THREADSAFE_STATICS
-#include <osl/getglobalmutex.hxx>
-#endif
+#include "osl/doublecheckedlocking.h"
+#include "osl/getglobalmutex.hxx"
 
 namespace {
 
@@ -221,7 +219,7 @@ namespace {
       T * getInstance()
       {
           return rtl_Instance< T, InitInstance,
-                               ::osl::Mutex, ::osl::GetGlobalMutex,
+                               ::osl::MutexGuard, ::osl::GetGlobalMutex,
                                Data, InitData >::create(
               InitInstance(), ::osl::GetGlobalMutex(), InitData());
       }
@@ -270,7 +268,7 @@ template< typename Inst, typename InstCtor,
 class rtl_Instance
 {
 public:
-    static inline Inst * create(InstCtor aInstCtor, GuardCtor aGuardCtor)
+    static Inst * create(InstCtor aInstCtor, GuardCtor aGuardCtor)
     {
 #if defined _MSC_VER
         static Inst * m_pInstance = 0;
@@ -294,7 +292,7 @@ public:
         return p;
     }
 
-    static inline Inst * create(InstCtor aInstCtor, GuardCtor aGuardCtor,
+    static Inst * create(InstCtor aInstCtor, GuardCtor aGuardCtor,
                                 DataCtor aDataCtor)
     {
 #if defined _MSC_VER
@@ -320,7 +318,7 @@ public:
         return p;
     }
 
-    static inline Inst * create(InstCtor aInstCtor, GuardCtor aGuardCtor,
+    static Inst * create(InstCtor aInstCtor, GuardCtor aGuardCtor,
                                 const Data &rData)
     {
 #if defined _MSC_VER
@@ -383,7 +381,7 @@ namespace rtl {
               using the outer class
               (the one that derives from this base class)
 */
-#if HAVE_THREADSAFE_STATICS
+#if defined LIBO_INTERNAL_ONLY
 template<typename T, typename Unique>
 class Static {
 public:
@@ -443,7 +441,7 @@ private:
               using the outer class
               (the one that derives from this base class)
 */
-#if HAVE_THREADSAFE_STATICS
+#if defined LIBO_INTERNAL_ONLY
 template<typename T, typename Data, typename Unique>
 class StaticWithArg {
 public:
@@ -525,7 +523,7 @@ private:
     @tparam InitAggregate
               initializer functor class
 */
-#if HAVE_THREADSAFE_STATICS
+#if defined LIBO_INTERNAL_ONLY
 template<typename T, typename InitAggregate>
 class StaticAggregate {
 public:
@@ -590,7 +588,7 @@ public:
               Initializer functor's return type.
               Default is T (common practice).
 */
-#if HAVE_THREADSAFE_STATICS
+#if defined LIBO_INTERNAL_ONLY
 template<typename T, typename InitData,
          typename Unique = InitData, typename Data = T>
 class StaticWithInit {

@@ -25,6 +25,8 @@
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
 #include <comphelper/stl_types.hxx>
+#include <o3tl/typed_flags_set.hxx>
+#include <tools/color.hxx>
 
 #include <set>
 
@@ -32,26 +34,28 @@ namespace com { namespace sun { namespace star { namespace form { namespace vali
     class XValidatableFormComponent;
 } } } } }
 
+enum class ControlStatus {
+    NONE        = 0x00,
+    Focused     = 0x01,
+    MouseHover  = 0x02,
+    Invalid     = 0x04
+};
+namespace o3tl {
+    template<> struct typed_flags<ControlStatus> : is_typed_flags<ControlStatus, 0x07> {};
+}
+
 
 namespace svxform
 {
 
 
-    typedef sal_Int16 ControlStatus;
-
-    #define CONTROL_STATUS_NONE         0x00
-    #define CONTROL_STATUS_FOCUSED      0x01
-    #define CONTROL_STATUS_MOUSE_HOVER  0x02
-    #define CONTROL_STATUS_INVALID      0x04
-
     struct BorderDescriptor
     {
         sal_Int16   nBorderType;
-        sal_Int32   nBorderColor;
+        Color       nBorderColor;
 
         BorderDescriptor()
             :nBorderType( css::awt::VisualEffect::FLAT )
-            ,nBorderColor( 0x00000000 )
         {
         }
     };
@@ -59,15 +63,14 @@ namespace svxform
     struct UnderlineDescriptor
     {
         sal_Int16 nUnderlineType;
-        sal_Int32 nUnderlineColor;
+        Color     nUnderlineColor;
 
         UnderlineDescriptor()
             :nUnderlineType( css::awt::FontUnderline::NONE )
-            ,nUnderlineColor( 0x00000000 )
         {
         }
 
-        UnderlineDescriptor( sal_Int16 _nUnderlineType, sal_Int32 _nUnderlineColor )
+        UnderlineDescriptor( sal_Int16 _nUnderlineType, Color _nUnderlineColor )
             :nUnderlineType( _nUnderlineType )
             ,nUnderlineColor( _nUnderlineColor )
         {
@@ -99,7 +102,7 @@ namespace svxform
     class ControlBorderManager
     {
     private:
-        struct ControlDataCompare : public ::std::binary_function< ControlData, ControlData, bool >
+        struct ControlDataCompare
         {
            bool operator()( const ControlData& _rLHS, const ControlData& _rRHS ) const
            {
@@ -120,9 +123,9 @@ namespace svxform
 
 
         // attributes
-        sal_Int32   m_nFocusColor;
-        sal_Int32   m_nMouseHoveColor;
-        sal_Int32   m_nInvalidColor;
+        Color       m_nFocusColor;
+        Color       m_nMouseHoveColor;
+        Color       m_nInvalidColor;
         bool        m_bDynamicBorderColors;
 
     public:
@@ -147,11 +150,11 @@ namespace svxform
 
         /** sets a color to be used for a given status
             @param _nStatus
-                the status which the color should be applied for. Must not be CONTROL_STATUS_NONE
+                the status which the color should be applied for. Must not be ControlStatus::NONE
             @param _nColor
                 the color to apply for the given status
         */
-        void    setStatusColor( ControlStatus _nStatus, sal_Int32 _nColor );
+        void    setStatusColor( ControlStatus _nStatus, Color _nColor );
 
         /** restores all colors of all controls where we possibly changed them
         */
@@ -191,7 +194,7 @@ namespace svxform
             @param _eStatus
                 the status of the control. Must not be <member>ControlStatus::none</member>
         */
-        sal_Int32       getControlColorByStatus( ControlStatus _eStatus );
+        Color       getControlColorByStatus( ControlStatus _eStatus );
 
         /** sets the border color for a given control, depending on its status
             @param _rxControl
@@ -200,7 +203,7 @@ namespace svxform
                 the peer of the control, to be passed herein for optimization the caller usually needs it, anyway).
                 Must not be <NULL/>
             @param _rFallback
-                the color/type to use when the control has the status CONTROL_STATUS_NONE
+                the color/type to use when the control has the status ControlStatus::NONE
         */
         void            updateBorderStyle(
                             const css::uno::Reference< css::awt::XControl >& _rxControl,

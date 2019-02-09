@@ -21,10 +21,7 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_ADVANCEDSETTINGSDLG_HXX
 
 #include "IItemSetHelper.hxx"
-#include "moduledbu.hxx"
-
 #include <sfx2/tabdlg.hxx>
-
 #include <memory>
 
 namespace dbaui
@@ -34,24 +31,23 @@ namespace dbaui
     class ODbDataSourceAdministrationHelper;
     /** implements the advanced page dlg of the data source properties.
     */
-    class AdvancedSettingsDialog    :public SfxTabDialog
-                                    ,public IItemSetHelper
-                                    ,public IDatabaseSettingsDialog
+    class AdvancedSettingsDialog : public SfxTabDialogController
+                                 , public IItemSetHelper
+                                 , public IDatabaseSettingsDialog
     {
-        OModuleClient                                       m_aModuleClient;
-        ::std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
+        std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
 
     protected:
-        virtual void PageCreated(sal_uInt16 _nId, SfxTabPage& _rPage) override;
+        virtual void PageCreated(const OString& rId, SfxTabPage& _rPage) override;
+        virtual short Ok() override;
 
     public:
-        AdvancedSettingsDialog( vcl::Window* _pParent
-                            ,SfxItemSet* _pItems
-                            ,const css::uno::Reference< css::uno::XComponentContext >& _rxORB
-                            ,const css::uno::Any& _aDataSourceName);
+        AdvancedSettingsDialog(weld::Window* pParent,
+                               SfxItemSet* _pItems,
+                               const css::uno::Reference< css::uno::XComponentContext >& _rxORB,
+                               const css::uno::Any& _aDataSourceName);
 
-        virtual ~AdvancedSettingsDialog();
-        virtual void dispose() override;
+        virtual ~AdvancedSettingsDialog() override;
 
         /// determines whether or not the given data source type has any advanced setting
         static  bool    doesHaveAnyAdvancedSettings( const OUString& _sURL );
@@ -59,11 +55,9 @@ namespace dbaui
         virtual const SfxItemSet* getOutputSet() const override;
         virtual SfxItemSet* getWriteOutputSet() override;
 
-        virtual short   Execute() override;
-
         // forwards to ODbDataSourceAdministrationHelper
         virtual css::uno::Reference< css::uno::XComponentContext > getORB() const override;
-        virtual ::std::pair< css::uno::Reference< css::sdbc::XConnection >,sal_Bool> createConnection() override;
+        virtual std::pair< css::uno::Reference< css::sdbc::XConnection >,bool> createConnection() override;
         virtual css::uno::Reference< css::sdbc::XDriver > getDriver() override;
         virtual OUString getDatasourceType(const SfxItemSet& _rSet) const override;
         virtual void clearPassword() override;

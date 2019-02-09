@@ -18,13 +18,12 @@
  */
 
 
-#include <tools/debug.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <com/sun/star/drawing/XLayerManager.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/xml/sax/XAttributeList.hpp>
 #include <com/sun/star/drawing/XLayerSupplier.hpp>
-#include <comphelper/extract.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -33,7 +32,7 @@
 #include "layerimp.hxx"
 
 
-#include "XMLStringBufferImportContext.hxx"
+#include <XMLStringBufferImportContext.hxx>
 
 using namespace ::std;
 using namespace ::cppu;
@@ -52,9 +51,8 @@ class SdXMLLayerContext : public SvXMLImportContext
 {
 public:
     SdXMLLayerContext( SvXMLImport& rImport, sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList >& xAttrList, const Reference< XNameAccess >& xLayerManager );
-    virtual ~SdXMLLayerContext();
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList >& xAttrList ) override;
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
 private:
@@ -62,6 +60,8 @@ private:
     OUString msName;
     OUStringBuffer sDescriptionBuffer;
     OUStringBuffer sTitleBuffer;
+    OUString msDisplay;
+    OUString msProtected;
 };
 
 SdXMLLayerContext::SdXMLLayerContext( SvXMLImport& rImport, sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList >& xAttrList, const Reference< XNameAccess >& xLayerManager )
@@ -79,18 +79,21 @@ SdXMLLayerContext::SdXMLLayerContext( SvXMLImport& rImport, sal_uInt16 nPrefix, 
             if( IsXMLToken( aLocalName, XML_NAME ) )
             {
                 msName = sValue;
-                break; // no more attributes needed
+            }
+            else if ( IsXMLToken( aLocalName, XML_DISPLAY))
+            {
+                msDisplay = sValue;
+            }
+            else if ( IsXMLToken( aLocalName, XML_PROTECTED))
+            {
+                msProtected = sValue;
             }
         }
     }
 
 }
 
-SdXMLLayerContext::~SdXMLLayerContext()
-{
-}
-
-SvXMLImportContext * SdXMLLayerContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList >& )
+SvXMLImportContextRef SdXMLLayerContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList >& )
 {
     if( (XML_NAMESPACE_SVG == nPrefix) && IsXMLToken(rLocalName, XML_TITLE) )
     {
@@ -108,7 +111,7 @@ SvXMLImportContext * SdXMLLayerContext::CreateChildContext( sal_uInt16 nPrefix, 
 
 void SdXMLLayerContext::EndElement()
 {
-    DBG_ASSERT( !msName.isEmpty(), "xmloff::SdXMLLayerContext::EndElement(), draw:layer element without draw:name!" );
+    SAL_WARN_IF( msName.isEmpty(), "xmloff", "xmloff::SdXMLLayerContext::EndElement(), draw:layer element without draw:name!" );
     if( !msName.isEmpty() ) try
     {
         Reference< XPropertySet > xLayer;
@@ -116,14 +119,14 @@ void SdXMLLayerContext::EndElement()
         if( mxLayerManager->hasByName( msName ) )
         {
             mxLayerManager->getByName( msName ) >>= xLayer;
-            DBG_ASSERT( xLayer.is(), "xmloff::SdXMLLayerContext::EndElement(), failed to get existing XLayer!" );
+            SAL_WARN_IF( !xLayer.is(), "xmloff", "xmloff::SdXMLLayerContext::EndElement(), failed to get existing XLayer!" );
         }
         else
         {
             Reference< XLayerManager > xLayerManager( mxLayerManager, UNO_QUERY );
             if( xLayerManager.is() )
                 xLayer.set( xLayerManager->insertNewByIndex( xLayerManager->getCount() ), UNO_QUERY );
-            DBG_ASSERT( xLayer.is(), "xmloff::SdXMLLayerContext::EndElement(), failed to create new XLayer!" );
+            SAL_WARN_IF( !xLayer.is(), "xmloff", "xmloff::SdXMLLayerContext::EndElement(), failed to create new XLayer!" );
 
             if( xLayer.is() )
                 xLayer->setPropertyValue("Name", Any( msName ) );
@@ -133,6 +136,19 @@ void SdXMLLayerContext::EndElement()
         {
             xLayer->setPropertyValue("Title", Any( sTitleBuffer.makeStringAndClear() ) );
             xLayer->setPropertyValue("Description", Any( sDescriptionBuffer.makeStringAndClear() ) );
+            bool bIsVisible( true );
+            bool bIsPrintable( true );
+            if ( !msDisplay.isEmpty() )
+            {
+                bIsVisible = (msDisplay == "always") || (msDisplay == "screen");
+                bIsPrintable = (msDisplay == "always") || (msDisplay == "printer");
+            }
+            xLayer->setPropertyValue("IsVisible", Any( bIsVisible ) );
+            xLayer->setPropertyValue("IsPrintable", Any( bIsPrintable ) );
+            bool bIsLocked( false );
+            if ( !msProtected.isEmpty() )
+                bIsLocked = (msProtected == "true");
+            xLayer->setPropertyValue("IsLocked", Any( bIsLocked ) );
         }
     }
     catch( Exception& )
@@ -147,7 +163,7 @@ SdXMLLayerSetContext::SdXMLLayerSetContext( SvXMLImport& rImport, sal_uInt16 nPr
 : SvXMLImportContext(rImport, nPrfx, rLocalName)
 {
     Reference< XLayerSupplier > xLayerSupplier( rImport.GetModel(), UNO_QUERY );
-    DBG_ASSERT( xLayerSupplier.is(), "xmloff::SdXMLLayerSetContext::SdXMLLayerSetContext(), XModel is not supporting XLayerSupplier!" );
+    SAL_WARN_IF( !xLayerSupplier.is(), "xmloff", "xmloff::SdXMLLayerSetContext::SdXMLLayerSetContext(), XModel is not supporting XLayerSupplier!" );
     if( xLayerSupplier.is() )
         mxLayerManager = xLayerSupplier->getLayerManager();
 }
@@ -156,7 +172,7 @@ SdXMLLayerSetContext::~SdXMLLayerSetContext()
 {
 }
 
-SvXMLImportContext * SdXMLLayerSetContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+SvXMLImportContextRef SdXMLLayerSetContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList )
 {
     return new SdXMLLayerContext( GetImport(), nPrefix, rLocalName, xAttrList, mxLayerManager );

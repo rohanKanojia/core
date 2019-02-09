@@ -19,34 +19,24 @@
 
 #include <iterator>
 
-#include <comphelper/processfactory.hxx>
 #include <com/sun/star/ucb/Command.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/i18n/Transliteration.hpp>
 #include <com/sun/star/ucb/XCommandProcessor.hpp>
 #include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/script/XInvocation.hpp>
 
 #include <helpcompiler/HelpSearch.hxx>
 
-#if defined _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4068 4263 4264 4266)
-#endif
-
-#if defined(__GNUC__) && defined(HAVE_GCC_VISIBILITY_FEATURE)
+#if defined(__GNUC__)
 #  pragma GCC visibility push (default)
 #endif
 #include <CLucene.h>
-#if defined(__GNUC__) && defined(HAVE_GCC_VISIBILITY_FEATURE)
+#if defined(__GNUC__)
 #  pragma GCC visibility pop
 #endif
 
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
-
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <set>
@@ -81,7 +71,7 @@ struct HitItem
 ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentContext >& rxContext,
                                       const uno::Reference< XContentProvider >&  xProvider,
                                       const uno::Sequence< beans::Property >& seq,
-                                      URLParameter& aURLParameter,
+                                      const URLParameter& aURLParameter,
                                       Databases* pDatabases )
     : ResultSetBase( rxContext,xProvider,seq ),
       m_aURLParameter( aURLParameter )
@@ -129,7 +119,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
     OUString idxDir;
     bool bExtension = false;
     int iDir = 0;
-    vector< vector<HitItem>* > aIndexFolderResultVectorVector;
+    vector< vector<HitItem> > aIndexFolderResultVectorVector;
 
     bool bTemporary;
     while( !(idxDir = aIndexFolderIt.nextIndexFolder( bExtension, bTemporary )).isEmpty() )
@@ -138,7 +128,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
 
         try
         {
-            vector< vector<HitItem>* > aQueryListResultVectorVector;
+            vector< vector<HitItem> > aQueryListResultVectorVector;
             set< OUString > aSet,aCurrent,aResultSet;
 
             int nQueryListSize = queryList.size();
@@ -150,8 +140,8 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
                 vector<HitItem>* pQueryResultVector;
                 if( nQueryListSize > 1 )
                 {
-                    pQueryResultVector = new vector<HitItem>();
-                    aQueryListResultVectorVector.push_back( pQueryResultVector );
+                    aQueryListResultVectorVector.emplace_back();
+                    pQueryResultVector = &aQueryListResultVectorVector.back();
                 }
                 else
                 {
@@ -207,8 +197,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
             {
                 for( int n = 0 ; n < nQueryListSize ; ++n )
                 {
-                    vector<HitItem>* pQueryResultVector = aQueryListResultVectorVector[n];
-                    vector<HitItem>& rQueryResultVector = *pQueryResultVector;
+                    vector<HitItem>& rQueryResultVector = aQueryListResultVectorVector[n];
 
                     int nItemCount = rQueryResultVector.size();
                     for( int i = 0 ; i < nItemCount ; ++i )
@@ -230,7 +219,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
                                 for( int j = 0 ; j < nCount ; ++j )
                                 {
                                     HitItem& rFindItem = aIndexFolderResultVector[ j ];
-                                    if( rFindItem.m_aURL.equals( aItemCopy.m_aURL ) )
+                                    if( rFindItem.m_aURL == aItemCopy.m_aURL )
                                     {
                                         rFindItem.m_fScore += aItemCopy.m_fScore;
                                         break;
@@ -239,20 +228,16 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
                             }
                         }
                     }
-
-                    delete pQueryResultVector;
                 }
 
                 sort( aIndexFolderResultVector.begin(), aIndexFolderResultVector.end() );
             }
 
-            vector<HitItem>* pIndexFolderHitItemVector = new vector<HitItem>( aIndexFolderResultVector );
-            aIndexFolderResultVectorVector.push_back( pIndexFolderHitItemVector );
-            aIndexFolderResultVector.clear();
+            aIndexFolderResultVectorVector.push_back( std::move(aIndexFolderResultVector) );
         }
         catch (const Exception &e)
         {
-            SAL_WARN("xmlhelp", "Exception: " << e.Message);
+            SAL_WARN("xmlhelp", e);
         }
 
         ++iDir;
@@ -264,7 +249,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
 
 
     int nVectorCount = aIndexFolderResultVectorVector.size();
-    vector<HitItem>::size_type* pCurrentVectorIndex = new vector<HitItem>::size_type[nVectorCount];
+    std::unique_ptr<std::vector<HitItem>::size_type[]> pCurrentVectorIndex(new vector<HitItem>::size_type[nVectorCount]);
     for( int j = 0 ; j < nVectorCount ; ++j )
         pCurrentVectorIndex[j] = 0;
 
@@ -276,7 +261,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
         float fBestScore = 0.0;
         for( int k = 0 ; k < nVectorCount ; ++k )
         {
-            vector<HitItem>& rIndexFolderVector = *aIndexFolderResultVectorVector[k];
+            vector<HitItem>& rIndexFolderVector = aIndexFolderResultVectorVector[k];
             if( pCurrentVectorIndex[k] < rIndexFolderVector.size() )
             {
                 const HitItem& rItem = rIndexFolderVector[ pCurrentVectorIndex[k] ];
@@ -292,7 +277,7 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
         if( iVectorWithBestScore == -1 )    // No item left at all
             break;
 
-        vector<HitItem>& rIndexFolderVector = *aIndexFolderResultVectorVector[iVectorWithBestScore];
+        vector<HitItem>& rIndexFolderVector = aIndexFolderResultVectorVector[iVectorWithBestScore];
         const HitItem& rItem = rIndexFolderVector[ pCurrentVectorIndex[iVectorWithBestScore] ];
 
         pCurrentVectorIndex[iVectorWithBestScore]++;
@@ -301,12 +286,8 @@ ResultSetForQuery::ResultSetForQuery( const uno::Reference< uno::XComponentConte
         ++nHitCount;
     }
 
-    delete[] pCurrentVectorIndex;
-    for( int n = 0 ; n < nVectorCount ; ++n )
-    {
-        vector<HitItem>* pIndexFolderVector = aIndexFolderResultVectorVector[n];
-        delete pIndexFolderVector;
-    }
+    pCurrentVectorIndex.reset();
+    aIndexFolderResultVectorVector.clear();
 
     sal_Int32 replIdx = OUString( "#HLP#" ).getLength();
     OUString replWith = "vnd.sun.star.help://";

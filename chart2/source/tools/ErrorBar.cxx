@@ -17,27 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ErrorBar.hxx"
-#include "macros.hxx"
-#include "LineProperties.hxx"
-#include "ContainerHelper.hxx"
-#include "EventListenerHelper.hxx"
-#include "PropertyHelper.hxx"
-#include "CloneHelper.hxx"
+#include <ErrorBar.hxx>
+#include <ContainerHelper.hxx>
+#include <EventListenerHelper.hxx>
+#include <CloneHelper.hxx>
+#include <ModifyListenerHelper.hxx>
 
+#include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <svl/itemprop.hxx>
 #include <vcl/svapp.hxx>
 
-#include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/chart/ErrorBarStyle.hpp>
 
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/util/Color.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 
-#include <rtl/math.hxx>
-#include <rtl/ustrbuf.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 
@@ -82,41 +80,43 @@ const SfxItemPropertySet* GetErrorBarPropertySet()
 namespace chart
 {
 
-uno::Reference< beans::XPropertySet > createErrorBar( const uno::Reference< uno::XComponentContext > & xContext )
-{
-    return new ErrorBar( xContext );
-}
-
-ErrorBar::ErrorBar(
-    uno::Reference< uno::XComponentContext > const & xContext ) :
-    LineProperties(),
+ErrorBar::ErrorBar() :
+    mnLineWidth(0),
+    meLineStyle(drawing::LineStyle_SOLID),
+    maLineColor(0),
+    mnLineTransparence(0),
+    meLineJoint(drawing::LineJoint_ROUND),
     mbShowPositiveError(true),
     mbShowNegativeError(true),
     mfPositiveError(0),
     mfNegativeError(0),
     mfWeight(1),
     meStyle(css::chart::ErrorBarStyle::NONE),
-    m_xContext( xContext ),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {}
 
 ErrorBar::ErrorBar( const ErrorBar & rOther ) :
     MutexContainer(),
-    impl::ErrorBar_Base(),
-    LineProperties(rOther),
+    impl::ErrorBar_Base(rOther),
+    maDashName(rOther.maDashName),
+    maLineDash(rOther.maLineDash),
+    mnLineWidth(rOther.mnLineWidth),
+    meLineStyle(rOther.meLineStyle),
+    maLineColor(rOther.maLineColor),
+    mnLineTransparence(rOther.mnLineTransparence),
+    meLineJoint(rOther.meLineJoint),
     mbShowPositiveError(rOther.mbShowPositiveError),
     mbShowNegativeError(rOther.mbShowNegativeError),
     mfPositiveError(rOther.mfPositiveError),
     mfNegativeError(rOther.mfNegativeError),
     mfWeight(rOther.mfWeight),
     meStyle(rOther.meStyle),
-    m_xContext( rOther.m_xContext ),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {
     if( ! rOther.m_aDataSequences.empty())
     {
         if( lcl_isInternalData( rOther.m_aDataSequences.front()))
-            CloneHelper::CloneRefVector< tDataSequenceContainer::value_type >(
+            CloneHelper::CloneRefVector< css::chart2::data::XLabeledDataSequence >(
                 rOther.m_aDataSequences, m_aDataSequences );
         else
             m_aDataSequences = rOther.m_aDataSequences;
@@ -128,14 +128,12 @@ ErrorBar::~ErrorBar()
 {}
 
 uno::Reference< util::XCloneable > SAL_CALL ErrorBar::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< util::XCloneable >( new ErrorBar( *this ));
 }
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL ErrorBar::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     static uno::Reference< beans::XPropertySetInfo > aRef (
             new SfxItemPropertySetInfo( GetErrorBarPropertySet()->getPropertyMap() ) );
@@ -143,8 +141,6 @@ uno::Reference< beans::XPropertySetInfo > SAL_CALL ErrorBar::getPropertySetInfo(
 }
 
 void ErrorBar::setPropertyValue( const OUString& rPropName, const uno::Any& rAny )
-    throw (beans::UnknownPropertyException, beans::PropertyVetoException,
-            lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -169,8 +165,20 @@ void ErrorBar::setPropertyValue( const OUString& rPropName, const uno::Any& rAny
         rAny >>= mbShowNegativeError;
     else if(rPropName == "ErrorBarRangePositive" || rPropName == "ErrorBarRangeNegative")
         throw beans::UnknownPropertyException("read-only property", static_cast< uno::XWeak*>(this));
-    else
-        LineProperties::setPropertyValue(rPropName, rAny);
+    else if(rPropName == "LineDashName")
+        rAny >>= maDashName;
+    else if(rPropName == "LineDash")
+        rAny >>= maLineDash;
+    else if(rPropName == "LineWidth")
+        rAny >>= mnLineWidth;
+    else if(rPropName == "LineStyle")
+        rAny >>= meLineStyle;
+    else if(rPropName == "LineColor")
+        rAny >>= maLineColor;
+    else if(rPropName == "LineTransparence")
+        rAny >>= mnLineTransparence;
+    else if(rPropName == "LineJoint")
+        rAny >>= meLineJoint;
 
     m_xModifyEventForwarder->modified( lang::EventObject( static_cast< uno::XWeak* >( this )));
 }
@@ -215,7 +223,6 @@ OUString getSourceRangeStrFromLabeledSequences( const uno::Sequence< uno::Refere
 }
 
 uno::Any ErrorBar::getPropertyValue(const OUString& rPropName)
-    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -260,15 +267,26 @@ uno::Any ErrorBar::getPropertyValue(const OUString& rPropName)
 
         aRet <<= aRange;
     }
-    else
-        aRet = LineProperties::getPropertyValue(rPropName);
+    else if(rPropName == "LineDashName")
+        aRet <<= maDashName;
+    else if(rPropName == "LineDash")
+        aRet <<= maLineDash;
+    else if(rPropName == "LineWidth")
+        aRet <<= mnLineWidth;
+    else if(rPropName == "LineStyle")
+        aRet <<= meLineStyle;
+    else if(rPropName == "LineColor")
+        aRet <<= maLineColor;
+    else if(rPropName == "LineTransparence")
+        aRet <<= mnLineTransparence;
+    else if(rPropName == "LineJoint")
+        aRet <<= meLineJoint;
 
     SAL_WARN_IF(!aRet.hasValue(), "chart2", "asked for property value: " << rPropName);
     return aRet;
 }
 
 beans::PropertyState ErrorBar::getPropertyState( const OUString& rPropName )
-        throw (css::beans::UnknownPropertyException, std::exception)
 {
     if(rPropName == "ErrorBarStyle")
     {
@@ -339,7 +357,6 @@ beans::PropertyState ErrorBar::getPropertyState( const OUString& rPropName )
 }
 
 uno::Sequence< beans::PropertyState > ErrorBar::getPropertyStates( const uno::Sequence< OUString >& rPropNames )
-        throw (css::beans::UnknownPropertyException, std::exception)
 {
     uno::Sequence< beans::PropertyState > aRet( rPropNames.getLength() );
     for(sal_Int32 i = 0; i < rPropNames.getLength(); ++i)
@@ -350,84 +367,73 @@ uno::Sequence< beans::PropertyState > ErrorBar::getPropertyStates( const uno::Se
 }
 
 void ErrorBar::setPropertyToDefault( const OUString& )
-        throw (beans::UnknownPropertyException, std::exception)
 {
     //keep them unimplemented for now
 }
 
 uno::Any ErrorBar::getPropertyDefault( const OUString& )
-        throw (beans::UnknownPropertyException, lang::WrappedTargetException, std::exception)
 {
     //keep them unimplemented for now
     return uno::Any();
 }
 
 void ErrorBar::addPropertyChangeListener( const OUString&, const css::uno::Reference< css::beans::XPropertyChangeListener >& )
-    throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
 }
 
 void ErrorBar::removePropertyChangeListener( const OUString&, const css::uno::Reference< css::beans::XPropertyChangeListener >& )
-    throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
 }
 
 void ErrorBar::addVetoableChangeListener( const OUString&, const css::uno::Reference< css::beans::XVetoableChangeListener >& )
-    throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
 }
 
 void ErrorBar::removeVetoableChangeListener( const OUString&, const css::uno::Reference< css::beans::XVetoableChangeListener >& )
-    throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
 }
 
 // ____ XModifyBroadcaster ____
 void SAL_CALL ErrorBar::addModifyListener( const uno::Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL ErrorBar::removeModifyListener( const uno::Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 // ____ XModifyListener ____
 void SAL_CALL ErrorBar::modified( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xModifyEventForwarder->modified( aEvent );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL ErrorBar::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
     // nothing
 }
 
 // ____ XDataSink ____
 void SAL_CALL ErrorBar::setData( const uno::Sequence< uno::Reference< chart2::data::XLabeledDataSequence > >& aData )
-    throw (uno::RuntimeException, std::exception)
 {
     ModifyListenerHelper::removeListenerFromAllElements( m_aDataSequences, m_xModifyEventForwarder );
     EventListenerHelper::removeListenerFromAllElements( m_aDataSequences, this );
@@ -438,41 +444,26 @@ void SAL_CALL ErrorBar::setData( const uno::Sequence< uno::Reference< chart2::da
 
 // ____ XDataSource ____
 uno::Sequence< uno::Reference< chart2::data::XLabeledDataSequence > > SAL_CALL ErrorBar::getDataSequences()
-    throw (uno::RuntimeException, std::exception)
 {
     return comphelper::containerToSequence( m_aDataSequences );
 }
 
-uno::Sequence< OUString > ErrorBar::getSupportedServiceNames_Static()
-{
-    uno::Sequence< OUString > aServices( 2 );
-    aServices[ 0 ] = lcl_aServiceName;
-    aServices[ 1 ] = "com.sun.star.chart2.ErrorBar";
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL ErrorBar::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString ErrorBar::getImplementationName_Static()
 {
     return OUString(lcl_aServiceName);
 }
 
 sal_Bool SAL_CALL ErrorBar::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL ErrorBar::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        lcl_aServiceName,
+        "com.sun.star.chart2.ErrorBar"
+    };
 }
 
 // needed by MSC compiler
@@ -480,11 +471,11 @@ using impl::ErrorBar_Base;
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart2_ErrorBar_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart2_ErrorBar_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::ErrorBar(context));
+    return cppu::acquire(new ::chart::ErrorBar);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

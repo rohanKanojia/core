@@ -32,7 +32,7 @@ class SFX2_DLLPUBLIC SfxMacroInfoItem: public SfxPoolItem
     OUString                aLibName;
     OUString                aModuleName;
     OUString                aMethodName;
-    OUString                aCommentText;
+    OUString const          aCommentText;
 
 public:
     static SfxPoolItem* CreateDefault();
@@ -42,8 +42,6 @@ public:
                     const OUString &rModuleName,
                     const OUString &rMethodName,
                     const OUString &rComment);
-
-    SfxMacroInfoItem( const SfxMacroInfoItem& );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;

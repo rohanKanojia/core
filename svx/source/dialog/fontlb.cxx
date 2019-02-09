@@ -17,50 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/fontlb.hxx"
+#include <svx/fontlb.hxx>
+#include <o3tl/make_unique.hxx>
 #include <vcl/builderfactory.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
-#include "svtools/treelistentry.hxx"
-#include "svtools/viewdataentry.hxx"
+#include <vcl/treelistentry.hxx>
+#include <vcl/viewdataentry.hxx>
 
 SvLBoxFontString::SvLBoxFontString()
     : SvLBoxString()
-    , mbUseColor(false)
 {
-}
-
-SvLBoxFontString::SvLBoxFontString( const OUString& rString,
-        const vcl::Font& rFont, const Color* pColor ) :
-    SvLBoxString( rString ),
-    maFont( rFont ),
-    mbUseColor( pColor != nullptr )
-{
-    SetText(rString);
-    if(pColor)
-        maFont.SetColor(*pColor);
 }
 
 SvLBoxFontString::~SvLBoxFontString()
 {
 }
 
-SvLBoxItem* SvLBoxFontString::Create() const
+std::unique_ptr<SvLBoxItem> SvLBoxFontString::Clone(SvLBoxItem const *) const
 {
-    return new SvLBoxFontString;
+    return std::unique_ptr<SvLBoxItem>(new SvLBoxFontString);
 }
 
 void SvLBoxFontString::Paint(const Point& rPos, SvTreeListBox& rDev, vcl::RenderContext& rRenderContext,
                              const SvViewDataEntry* pView, const SvTreeListEntry& rEntry)
 {
     rRenderContext.Push(PushFlags::FONT);
-    vcl::Font aNewFont(maFont);
+    vcl::Font aNewFont;
     bool bSel = pView->IsSelected();
-    if (!mbUseColor || bSel)       // selection always gets highlight color
-    {
-        const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
-        aNewFont.SetColor(bSel ? rStyleSettings.GetHighlightTextColor() : rStyleSettings.GetFieldTextColor());
-    }
+    const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
+    aNewFont.SetColor(bSel ? rStyleSettings.GetHighlightTextColor() : rStyleSettings.GetFieldTextColor());
 
     rRenderContext.SetFont(aNewFont);
     SvLBoxString::Paint(rPos, rDev, rRenderContext, pView, rEntry);
@@ -70,80 +56,9 @@ void SvLBoxFontString::Paint(const Point& rPos, SvTreeListBox& rDev, vcl::Render
 void SvLBoxFontString::InitViewData( SvTreeListBox* pView, SvTreeListEntry* pEntry, SvViewDataItem* pViewData )
 {
     vcl::Font aOldFont( pView->GetFont() );
-    pView->Control::SetFont( maFont );
+    pView->Control::SetFont( vcl::Font() );
     SvLBoxString::InitViewData( pView, pEntry, pViewData);
     pView->Control::SetFont( aOldFont );
 }
-
-
-SvxFontListBox::SvxFontListBox(vcl::Window* pParent, WinBits nStyle)
-    : SvTabListBox(pParent, nStyle)
-    , maStdFont(GetFont())
-    , mpEntryColor(nullptr)
-    , mbUseFont(false)
-{
-    maStdFont.SetTransparent(true);
-    maEntryFont = maStdFont;
-}
-
-VCL_BUILDER_DECL_FACTORY(SvxFontListBox)
-{
-    WinBits nWinStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<SvxFontListBox>::Create(pParent, nWinStyle);
-}
-
-void SvxFontListBox::InsertFontEntry( const OUString& rString, const vcl::Font& rFont, const Color* pColor )
-{
-    mbUseFont = true;           // InitEntry() will use maEntryFont
-    maEntryFont = rFont;        // font to use in InitEntry() over InsertEntry()
-    mpEntryColor = pColor;      // color to use in InitEntry() over InsertEntry()
-    InsertEntry( rString );
-    mbUseFont = false;
-}
-
-void SvxFontListBox::SelectEntryPos( sal_uLong nPos )
-{
-    SvTreeListEntry* pEntry = GetEntry( nPos );
-    if( pEntry )
-    {
-        Select( pEntry );
-        ShowEntry( pEntry );
-    }
-}
-
-void SvxFontListBox::SetNoSelection()
-{
-    SelectAll( false );
-}
-
-sal_uLong SvxFontListBox::GetSelectEntryPos() const
-{
-    SvTreeListEntry* pSvLBoxEntry = FirstSelected();
-    return pSvLBoxEntry ? GetModel()->GetAbsPos( pSvLBoxEntry ) : TREELIST_ENTRY_NOTFOUND;
-}
-
-void SvxFontListBox::InitEntry(
-        SvTreeListEntry* pEntry, const OUString& rEntryText,
-        const Image& rCollImg, const Image& rExpImg,
-        SvLBoxButtonKind eButtonKind)
-{
-    if( mbUseFont )
-    {
-        if( nTreeFlags & SvTreeFlags::CHKBTN )
-            pEntry->AddItem(std::unique_ptr<SvLBoxButton>(new SvLBoxButton(
-                        eButtonKind, pCheckButtonData)));
-        pEntry->AddItem(std::unique_ptr<SvLBoxContextBmp>(new SvLBoxContextBmp(
-                        rCollImg, rExpImg, true)));
-        pEntry->AddItem(std::unique_ptr<SvLBoxFontString>(new SvLBoxFontString(
-                        rEntryText, maEntryFont, mpEntryColor)));
-    }
-    else
-        SvTreeListBox::InitEntry( pEntry, rEntryText, rCollImg, rExpImg,
-                                  eButtonKind );
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

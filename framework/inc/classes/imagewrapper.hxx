@@ -36,22 +36,22 @@ class FWE_DLLPUBLIC ImageWrapper :
 {
     public:
         ImageWrapper( const Image& aImage );
-        virtual ~ImageWrapper();
+        virtual ~ImageWrapper() override;
 
         const Image&    GetImage() const
         {
             return m_aImage;
         }
 
-        static css::uno::Sequence< sal_Int8 > GetUnoTunnelId();
+        static css::uno::Sequence< sal_Int8 > const & GetUnoTunnelId();
 
         // XBitmap
-        virtual css::awt::Size SAL_CALL getSize() throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getDIB() throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getMaskDIB() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::awt::Size SAL_CALL getSize() override;
+        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getDIB() override;
+        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getMaskDIB() override;
 
         // XUnoTunnel
-        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     private:
         Image   m_aImage;

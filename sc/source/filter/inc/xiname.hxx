@@ -20,16 +20,14 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XINAME_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XINAME_HXX
 
-#include "xlname.hxx"
 #include "xiroot.hxx"
 #include "xistream.hxx"
 
-#include "rangenam.hxx"
+#include <rangenam.hxx>
 
 #include <memory>
 #include <vector>
 
-class ScRangeData;
 class ScTokenArray;
 
 /** Represents a defined name. It may be related to a single sheet or global. */
@@ -39,8 +37,8 @@ class XclImpName : protected XclImpRoot
     {
         XclImpStream& mrStrm;
         XclImpStreamPos maStrmPos;
-        sal_Size mnStrmPos;
-        sal_Size mnStrmSize;
+        std::size_t mnStrmPos;
+        std::size_t mnStrmSize;
 
         TokenStrmData( XclImpStream& rStrm );
     };
@@ -51,12 +49,12 @@ public:
 
     explicit            XclImpName( XclImpStream& rStrm, sal_uInt16 nXclNameIdx );
 
-    inline const OUString& GetXclName() const { return maXclName; }
-    inline const OUString& GetScName() const { return maScName; }
-    inline SCTAB        GetScTab() const { return mnScTab; }
-    inline const ScRangeData* GetScRangeData() const { return mpScData; }
-    inline bool         IsGlobal() const { return mnScTab == SCTAB_MAX; }
-    inline bool         IsVBName() const { return mbVBName; }
+    const OUString& GetXclName() const { return maXclName; }
+    const OUString& GetScName() const { return maScName; }
+    SCTAB        GetScTab() const { return mnScTab; }
+    const ScRangeData* GetScRangeData() const { return mpScData; }
+    bool         IsGlobal() const { return mnScTab == SCTAB_MAX; }
+    bool         IsVBName() const { return mbVBName; }
     bool IsMacro() const { return mbMacro; }
     void ConvertTokens();
 
@@ -66,11 +64,10 @@ private:
     OUString            maXclName;      /// Original name read from the file.
     OUString            maScName;       /// Name inserted into the Calc document.
     const ScRangeData*  mpScData;       /// Pointer to Calc defined name (no ownership).
-    sal_Unicode         mcBuiltIn;      /// Excel built-in name index.
     SCTAB               mnScTab;        /// Calc sheet index of local names.
     ScRangeData::Type   meNameType;
     sal_uInt16          mnXclTab;
-    sal_uInt16          mnNameIndex;
+    sal_uInt16 const    mnNameIndex;
     bool                mbVBName:1;     /// true = Visual Basic procedure or function.
     bool                mbMacro:1;      /// Whether it's a user-defined macro.
 
@@ -94,7 +91,7 @@ public:
         @param nScTab  The sheet index for local names or SCTAB_MAX for global names.
         If no local name is found, tries to find a matching global name.
         @return  Pointer to the defined name or 0 on error. */
-    const XclImpName*   FindName( const OUString& rXclName, SCTAB nScTab = SCTAB_MAX ) const;
+    const XclImpName*   FindName( const OUString& rXclName, SCTAB nScTab ) const;
 
     /** Returns the defined name specified by its Excel index.
         @param nXclNameIdx  The index of the internal defined name.

@@ -24,6 +24,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <editeng/editengdllapi.h>
 #include <svl/itemprop.hxx>
+#include <memory>
 #include <vector>
 
 class SdrItemPool;
@@ -31,18 +32,19 @@ class SfxItemSet;
 class SvxShape;
 struct SvxIDPropertyCombine;
 
-#define SFX_METRIC_ITEM                         (0x40)
-
 class EDITENG_DLLPUBLIC SvxItemPropertySet
 {
     SfxItemPropertyMap          m_aPropertyMap;
     mutable css::uno::Reference<css::beans::XPropertySetInfo> m_xInfo;
-    ::std::vector< SvxIDPropertyCombine* > aCombineList;
+    ::std::vector< std::unique_ptr<SvxIDPropertyCombine> > aCombineList;
     SfxItemPool&                    mrItemPool;
 
 public:
     SvxItemPropertySet( const SfxItemPropertyMapEntry *pMap, SfxItemPool& rPool );
     ~SvxItemPropertySet();
+
+    SvxItemPropertySet& operator=( SvxItemPropertySet const & ) = delete; // MSVC2015 workaround
+    SvxItemPropertySet( SvxItemPropertySet const & ) = delete; // MSVC2015 workaround
 
     // Methods, which work directly with the ItemSet
     static css::uno::Any getPropertyValue( const SfxItemPropertySimpleEntry* pMap, const SfxItemSet& rSet, bool bSearchInParent, bool bDontConvertNegativeValues );
@@ -57,16 +59,16 @@ public:
     void AddUsrAnyForID(const css::uno::Any& rAny, sal_uInt16 nWID);
     void ClearAllUsrAny();
 
-    css::uno::Reference< css::beans::XPropertySetInfo > getPropertySetInfo() const;
+    css::uno::Reference< css::beans::XPropertySetInfo > const & getPropertySetInfo() const;
     const SfxItemPropertyMap& getPropertyMap() const { return m_aPropertyMap;}
     const SfxItemPropertySimpleEntry* getPropertyMapEntry(const OUString &rName) const;
 };
 
 /** converts the given any with a metric to 100th/mm if needed */
-EDITENG_DLLPUBLIC void SvxUnoConvertToMM( const SfxMapUnit eSourceMapUnit, css::uno::Any & rMetric ) throw();
+EDITENG_DLLPUBLIC void SvxUnoConvertToMM( const MapUnit eSourceMapUnit, css::uno::Any & rMetric ) throw();
 
 /** converts the given any with a metric from 100th/mm to the given metric if needed */
-EDITENG_DLLPUBLIC void SvxUnoConvertFromMM( const SfxMapUnit eDestinationMapUnit, css::uno::Any & rMetric ) throw();
+EDITENG_DLLPUBLIC void SvxUnoConvertFromMM( const MapUnit eDestinationMapUnit, css::uno::Any & rMetric ) throw();
 
 #endif // INCLUDED_EDITENG_UNOIPSET_HXX
 

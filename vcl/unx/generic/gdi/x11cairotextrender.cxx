@@ -18,29 +18,11 @@
  */
 
 #include "x11cairotextrender.hxx"
-#include "unx/saldata.hxx"
-#include "unx/saldisp.hxx"
-#include "unx/salvd.h"
-
-#include "gcach_xpeer.hxx"
-
+#include <unx/saldisp.hxx>
+#include <unx/salvd.h>
+#include <unx/glyphcache.hxx>
+#include <X11/Xregion.h>
 #include <cairo.h>
-
-struct BOX
-{
-    short x1, x2, y1, y2;
-};
-struct _XRegion
-{
-    long size;
-    long numRects;
-    BOX *rects;
-    BOX extents;
-};
-
-#if CAIRO_VERSION < CAIRO_VERSION_ENCODE(1, 10, 0)
-#    define CAIRO_OPERATOR_DIFFERENCE (static_cast<cairo_operator_t>(23))
-#endif
 
 X11CairoTextRender::X11CairoTextRender(X11SalGraphics& rParent)
     : mrParent(rParent)
@@ -49,27 +31,12 @@ X11CairoTextRender::X11CairoTextRender(X11SalGraphics& rParent)
 
 GlyphCache& X11CairoTextRender::getPlatformGlyphCache()
 {
-    return X11GlyphCache::GetInstance();
+    return GlyphCache::GetInstance();
 }
 
 cairo_t* X11CairoTextRender::getCairoContext()
 {
-    cairo_t *cr = mrParent.getCairoContext();
-
-    //rhbz#1283420 bodge to draw and undraw something which has the side effect
-    //of making the mysterious xrender related problem go away
-    if (cairo_version() >= CAIRO_VERSION_ENCODE(1, 10, 0))
-    {
-        cairo_save(cr);
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-        cairo_set_operator(cr, CAIRO_OPERATOR_DIFFERENCE);
-        cairo_rectangle(cr, 0, 0, 1, 1);
-        cairo_fill_preserve(cr);
-        cairo_fill(cr);
-        cairo_restore(cr);
-    }
-
-    return cr;
+    return mrParent.getCairoContext();
 }
 
 void X11CairoTextRender::getSurfaceOffset( double& nDX, double& nDY )

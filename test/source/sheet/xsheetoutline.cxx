@@ -19,7 +19,7 @@
 #include <com/sun/star/sheet/XSheetCellRanges.hpp>
 #include <com/sun/star/sheet/XCellRangesQuery.hpp>
 
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 #include <rtl/ustring.hxx>
 
 using namespace css;
@@ -37,7 +37,7 @@ const OUString rowLevel2 = "OutlineSheet.A3:A27";
 const OUString rowLevel3 = "OutlineSheet.A5:A24";
 const OUString rowLevel4 = "OutlineSheet.A7:A21";
 
-OUString getVisibleAdress(
+static OUString getVisibleAdress(
     uno::Reference<sheet::XSpreadsheet> const& xSheet,
     const OUString& aLevelRangeString)
 {
@@ -53,7 +53,7 @@ OUString getVisibleAdress(
 
 }
 
-table::CellRangeAddress getAddressFromRangeString(
+static table::CellRangeAddress getAddressFromRangeString(
     uno::Reference<sheet::XSpreadsheet> const& xSheet,
     const OUString& aStringAddress)
 {
@@ -79,14 +79,14 @@ void XSheetOutline::testHideDetail()
     aSheetOutline->hideDetail(aLevelRangeAddress);
 
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Column level 2 not hidden",
-            getVisibleAdress(aSheet, colLevel2), OUString(""));
+            getVisibleAdress(aSheet, colLevel2), OUString());
 
     // Row Level 2
     aLevelRangeAddress = getAddressFromRangeString(aSheet, rowLevel2);
     aSheetOutline->hideDetail(aLevelRangeAddress);
 
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Row level 2 not hidden",
-            getVisibleAdress(aSheet, rowLevel2), OUString(""));
+            getVisibleAdress(aSheet, rowLevel2), OUString());
 
 }
 
@@ -138,14 +138,14 @@ void XSheetOutline::testShowLevel()
 
     aSheetOutline->showLevel(2, table::TableOrientation_COLUMNS);
 
-    std::cout << " verifiy showLevel col apres" << OUStringToOString(getVisibleAdress(aSheet, "OutlineSheet.A1:Z30"), RTL_TEXTENCODING_UTF8).getStr() << std::endl;
+    std::cout << " verifiy showLevel col apres" << getVisibleAdress(aSheet, "OutlineSheet.A1:Z30") << std::endl;
 
     // verify that level 2 and level 1 are shown --> column 0..3 & column 22..26
     // level 3 & 4 are hidden --> column 4..19
 
     CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Column", OUString("OutlineSheet.A1:D1"), getVisibleAdress(aSheet, "OutlineSheet.A1:D1"));
     CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Column", OUString("OutlineSheet.V1:Z1"), getVisibleAdress(aSheet, "OutlineSheet.V1:Z1"));
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Column", OUString(""), getVisibleAdress(aSheet, colLevel3));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Column", OUString(), getVisibleAdress(aSheet, colLevel3));
 
 /* FIXME !!
 
@@ -178,7 +178,7 @@ void XSheetOutline::testShowLevel()
 
     CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Row", OUString("OutlineSheet.A1:A4"), getVisibleAdress("OutlineSheet.A1:A4"));
     CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Row", OUString("OutlineSheet.A25:A30"), getVisibleAdress("OutlineSheet.A25:A30"));
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Row", OUString(""), getVisibleAdress(rowLevel3));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("testShowLevel Row", OUString(), getVisibleAdress(rowLevel3));
 
 */
 
@@ -197,7 +197,7 @@ void XSheetOutline::testGroup()
 
     aSheetOutline->hideDetail(aLevelRangeAddress);
 
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("testGroup Column still visible", getVisibleAdress(aSheet, aNewString), OUString(""));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("testGroup Column still visible", getVisibleAdress(aSheet, aNewString), OUString());
 
     // Row Level 2
     aNewString = "OutlineSheet.A50:A60";
@@ -206,7 +206,7 @@ void XSheetOutline::testGroup()
 
     aSheetOutline->hideDetail(aLevelRangeAddress);
 
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("testGroup Row still visible", getVisibleAdress(aSheet, aNewString), OUString(""));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("testGroup Row still visible", getVisibleAdress(aSheet, aNewString), OUString());
 
 }
 
@@ -226,7 +226,7 @@ void XSheetOutline::testUngroup()
     aSheetOutline->showDetail(aLevelRangeAddress);
     // should remain hidden ?
 
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("testUnGroup Column becomes visible after ungroup", getVisibleAdress(aSheet, aNewString), OUString(""));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("testUnGroup Column becomes visible after ungroup", getVisibleAdress(aSheet, aNewString), OUString());
 
     // New Row level
     aNewString = "OutlineSheet.A70:A80";
@@ -239,7 +239,7 @@ void XSheetOutline::testUngroup()
     aSheetOutline->showDetail(aLevelRangeAddress);
     // should remain hidden ?
 
-    CPPUNIT_ASSERT_EQUAL_MESSAGE("testUnGroup Row becomes visible after ungroup", getVisibleAdress(aSheet, aNewString), OUString(""));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("testUnGroup Row becomes visible after ungroup", getVisibleAdress(aSheet, aNewString), OUString());
 
 }
 

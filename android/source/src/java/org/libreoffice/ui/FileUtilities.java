@@ -13,6 +13,7 @@ import org.libreoffice.storage.IFile;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FilenameFilter;
+import java.text.Collator;
 import java.util.Map;
 import java.util.Collections;
 import java.util.List;
@@ -45,6 +46,11 @@ public class FileUtilities {
     static final int SORT_LARGEST = 4;
     /** Smallest Files First */
     static final int SORT_SMALLEST = 5;
+
+    public static final String DEFAULT_WRITER_EXTENSION = ".odt";
+    public static final String DEFAULT_IMPRESS_EXTENSION = ".odp";
+    public static final String DEFAULT_SPREADSHEET_EXTENSION = ".ods";
+    public static final String DEFAULT_DRAWING_EXTENSION = ".odg";
 
     private static final Map<String, Integer> mExtnMap = new HashMap<String, Integer>();
     private static final Map<String, String> extensionToMimeTypeMap = new HashMap<String, String>();
@@ -121,7 +127,7 @@ public class FileUtilities {
         extensionToMimeTypeMap.put("oth", "application/vnd.oasis.opendocument.text-web");
     }
 
-    private static final String getExtension(String filename) {
+    public static String getExtension(String filename) {
         if (filename == null)
             return "";
         int nExt = filename.lastIndexOf('.');
@@ -130,7 +136,7 @@ public class FileUtilities {
         return filename.substring(nExt);
     }
 
-    private static final int lookupExtension(String filename) {
+    private static int lookupExtension(String filename) {
         String extn = getExtension(filename);
         if (!mExtnMap.containsKey(extn))
             return UNKNOWN;
@@ -160,12 +166,6 @@ public class FileUtilities {
         if (filename == null)
             return false;
 
-        if (byMode == ALL && byFilename.equals("")) {
-            if (filename.startsWith(".")) {//ignore hidden files
-                return false;
-            }
-            return true;
-        }
         // check extension
         if (byMode != ALL) {
             if (mExtnMap.get (getExtension (filename)) != byMode)
@@ -202,18 +202,20 @@ public class FileUtilities {
     static void sortFiles(List<IFile> files, int sortMode) {
         if (files == null)
             return;
+        // Compare filenames in the default locale
+        final Collator mCollator = Collator.getInstance();
         switch (sortMode) {
             case SORT_AZ:
                 Collections.sort(files , new Comparator<IFile>() {
                     public int compare(IFile lhs, IFile rhs) {
-                        return lhs.getName().compareTo(rhs.getName());
+                        return mCollator.compare(lhs.getName(), rhs.getName());
                     }
                 });
                 break;
             case SORT_ZA:
                 Collections.sort(files , new Comparator<IFile>() {
                     public int compare(IFile lhs, IFile rhs) {
-                        return rhs.getName().compareTo(lhs.getName());
+                        return mCollator.compare(rhs.getName(), lhs.getName());
                     }
                 });
                 break;
@@ -248,19 +250,14 @@ public class FileUtilities {
             default:
                 Log.e(LOGTAG, "uncatched sortMode: " + sortMode);
         }
-        return;
     }
 
     static boolean isHidden(File file) {
-        if (file.getName().startsWith("."))
-            return true;
-        return false;
+        return file.getName().startsWith(".");
     }
 
     static boolean isThumbnail(File file) {
-        if (isHidden(file) && file.getName().endsWith(".png"))
-            return true;
-        return false;
+        return isHidden(file) && file.getName().endsWith(".png");
     }
 
     static boolean hasThumbnail(File file) {
@@ -268,9 +265,7 @@ public class FileUtilities {
         if (lookupExtension(filename) == DOC) // only do this for docs for now
         {
             // Will need another method to check if Thumb is up-to-date - or extend this one?
-            if (new File(file.getParent() , getThumbnailName(file)).isFile())
-                return true;
-            return false; // If it's a document with no thumb
+            return new File(file.getParent(), getThumbnailName(file)).isFile();
         }
         return true;
     }

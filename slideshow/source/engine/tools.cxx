@@ -37,14 +37,14 @@
 #include <basegfx/vector/b2ivector.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/numeric/ftools.hxx>
-#include <basegfx/tools/lerp.hxx>
+#include <basegfx/utils/lerp.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 
 #include <cppcanvas/basegfxfactory.hxx>
 
-#include "unoview.hxx"
-#include "smilfunctionparser.hxx"
-#include "tools.hxx"
+#include <unoview.hxx>
+#include <smilfunctionparser.hxx>
+#include <tools.hxx>
 
 #include <limits>
 
@@ -87,7 +87,7 @@ namespace slideshow
                                       pAttr->getShearYAngle() :
                                       0.0 );
                 const double nRotation( pAttr->isRotationAngleValid() ?
-                                        pAttr->getRotationAngle()*M_PI/180.0 :
+                                        basegfx::deg2rad(pAttr->getRotationAngle()) :
                                         0.0 );
 
                 // scale, shear and rotation pivot point is the shape
@@ -139,7 +139,7 @@ namespace slideshow
                            const ::basegfx::B2DVector&  rSlideBounds )
         {
             // try to extract numeric value (double, or smaller POD, like float or int)
-            if( (rSourceAny >>= o_rValue) )
+            if( rSourceAny >>= o_rValue)
             {
                 // succeeded
                 return true;
@@ -174,7 +174,7 @@ namespace slideshow
                            const ::basegfx::B2DVector&      /*rSlideBounds*/ )
         {
             // try to extract numeric value (int, or smaller POD, like byte)
-            if( (rSourceAny >>= o_rValue) )
+            if( rSourceAny >>= o_rValue)
             {
                 // succeeded
                 return true;
@@ -182,7 +182,7 @@ namespace slideshow
 
             // okay, no plain int. Maybe one of the domain-specific enums?
             drawing::FillStyle eFillStyle;
-            if( (rSourceAny >>= eFillStyle) )
+            if( rSourceAny >>= eFillStyle )
             {
                 o_rValue = sal::static_int_cast<sal_Int16>(eFillStyle);
 
@@ -191,7 +191,7 @@ namespace slideshow
             }
 
             drawing::LineStyle eLineStyle;
-            if( (rSourceAny >>= eLineStyle) )
+            if( rSourceAny >>= eLineStyle )
             {
                 o_rValue = sal::static_int_cast<sal_Int16>(eLineStyle);
 
@@ -200,7 +200,7 @@ namespace slideshow
             }
 
             awt::FontSlant eFontSlant;
-            if( (rSourceAny >>= eFontSlant) )
+            if( rSourceAny >>= eFontSlant )
             {
                 o_rValue = sal::static_int_cast<sal_Int16>(eFontSlant);
 
@@ -242,7 +242,7 @@ namespace slideshow
             // try to extract numeric value (double, or smaller POD, like float or int)
             {
                 double nTmp = 0;
-                if( (rSourceAny >>= nTmp) )
+                if( rSourceAny >>= nTmp )
                 {
                     sal_uInt32 aIntColor( static_cast< sal_uInt32 >(nTmp) );
 
@@ -257,7 +257,7 @@ namespace slideshow
             // try double sequence
             {
                 uno::Sequence< double > aTmp;
-                if( (rSourceAny >>= aTmp) )
+                if( rSourceAny >>= aTmp )
                 {
                     ENSURE_OR_THROW( aTmp.getLength() == 3,
                                       "extractValue(): inappropriate length for RGB color value" );
@@ -272,7 +272,7 @@ namespace slideshow
             // try sal_Int32 sequence
             {
                 uno::Sequence< sal_Int32 > aTmp;
-                if( (rSourceAny >>= aTmp) )
+                if( rSourceAny >>= aTmp )
                 {
                     ENSURE_OR_THROW( aTmp.getLength() == 3,
                                       "extractValue(): inappropriate length for RGB color value" );
@@ -292,7 +292,7 @@ namespace slideshow
             // try sal_Int8 sequence
             {
                 uno::Sequence< sal_Int8 > aTmp;
-                if( (rSourceAny >>= aTmp) )
+                if( rSourceAny >>= aTmp )
                 {
                     ENSURE_OR_THROW( aTmp.getLength() == 3,
                                       "extractValue(): inappropriate length for RGB color value" );
@@ -324,7 +324,7 @@ namespace slideshow
             // try double sequence
             {
                 uno::Sequence< double > aTmp;
-                if( (rSourceAny >>= aTmp) )
+                if( rSourceAny >>= aTmp )
                 {
                     ENSURE_OR_THROW( aTmp.getLength() == 3,
                                       "extractValue(): inappropriate length for HSL color value" );
@@ -339,7 +339,7 @@ namespace slideshow
             // try sal_Int8 sequence
             {
                 uno::Sequence< sal_Int8 > aTmp;
-                if( (rSourceAny >>= aTmp) )
+                if( rSourceAny >>= aTmp )
                 {
                     ENSURE_OR_THROW( aTmp.getLength() == 3,
                                       "extractValue(): inappropriate length for HSL color value" );
@@ -361,10 +361,7 @@ namespace slideshow
                            const ::basegfx::B2DVector&  /*rSlideBounds*/ )
         {
             // try to extract string
-            if( !(rSourceAny >>= o_rValue) )
-                return false; // nothing left to try
-
-            return true;
+            return rSourceAny >>= o_rValue;
         }
 
         /// extract bool value from Any
@@ -375,7 +372,7 @@ namespace slideshow
         {
             bool bTmp;
             // try to extract bool value
-            if( (rSourceAny >>= bTmp) )
+            if( rSourceAny >>= bTmp )
             {
                 o_rValue = bTmp;
 
@@ -464,7 +461,7 @@ namespace slideshow
         {
             if( !pAttr )
             {
-                const basegfx::B2DHomMatrix aTransform(basegfx::tools::createScaleTranslateB2DHomMatrix(
+                const basegfx::B2DHomMatrix aTransform(basegfx::utils::createScaleTranslateB2DHomMatrix(
                     rShapeBounds.getWidth(), rShapeBounds.getHeight(),
                     rShapeBounds.getMinX(), rShapeBounds.getMinY()));
 
@@ -492,7 +489,7 @@ namespace slideshow
                                       pAttr->getShearYAngle() :
                                       0.0 );
                 const double nRotation( pAttr->isRotationAngleValid() ?
-                                        pAttr->getRotationAngle()*M_PI/180.0 :
+                                        basegfx::deg2rad(pAttr->getRotationAngle()) :
                                         0.0 );
 
                 // scale, shear and rotation pivot point is the
@@ -580,16 +577,16 @@ namespace slideshow
                                                     const ::basegfx::B2DRange&      rShapeBounds )
         {
             return ::basegfx::B2DRectangle(
-                basegfx::tools::lerp( rShapeBounds.getMinX(),
+                basegfx::utils::lerp( rShapeBounds.getMinX(),
                                       rShapeBounds.getMaxX(),
                                       rUnitBounds.getMinX() ),
-                basegfx::tools::lerp( rShapeBounds.getMinY(),
+                basegfx::utils::lerp( rShapeBounds.getMinY(),
                                       rShapeBounds.getMaxY(),
                                       rUnitBounds.getMinY() ),
-                basegfx::tools::lerp( rShapeBounds.getMinX(),
+                basegfx::utils::lerp( rShapeBounds.getMinX(),
                                       rShapeBounds.getMaxX(),
                                       rUnitBounds.getMaxX() ),
-                basegfx::tools::lerp( rShapeBounds.getMinY(),
+                basegfx::utils::lerp( rShapeBounds.getMinY(),
                                       rShapeBounds.getMaxY(),
                                       rUnitBounds.getMaxY() ) );
         }
@@ -649,7 +646,7 @@ namespace slideshow
                     static_cast< sal_uInt8 >( nColor >> 24U ) ) );
         }
 
-        sal_Int32 RGBAColor2UnoColor( ::cppcanvas::Color::IntSRGBA aColor )
+        sal_Int32 RGBAColor2UnoColor( ::cppcanvas::IntSRGBA aColor )
         {
             return ::cppcanvas::makeColorARGB(
                 // convert from IntSRGBA color to API color
@@ -662,10 +659,10 @@ namespace slideshow
 
         void fillRect( const ::cppcanvas::CanvasSharedPtr& rCanvas,
                        const ::basegfx::B2DRectangle&      rRect,
-                       ::cppcanvas::Color::IntSRGBA        aFillColor )
+                       ::cppcanvas::IntSRGBA        aFillColor )
         {
             const ::basegfx::B2DPolygon aPoly(
-                ::basegfx::tools::createPolygonFromRect( rRect ));
+                ::basegfx::utils::createPolygonFromRect( rRect ));
 
             ::cppcanvas::PolyPolygonSharedPtr pPolyPoly(
                 ::cppcanvas::BaseGfxFactory::createPolyPolygon( rCanvas, aPoly ) );

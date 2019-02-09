@@ -21,30 +21,41 @@
 #define INCLUDED_VCL_VIRDEV_HXX
 
 #include <vcl/dllapi.h>
-#include <vcl/salgtype.hxx>
 #include <vcl/outdev.hxx>
-
+#include <vcl/salgtype.hxx>
+#include <memory>
 
 class SalVirtualDevice;
 struct SystemGraphicsData;
+typedef struct _cairo_surface cairo_surface_t;
 
 class VCL_DLLPUBLIC VirtualDevice : public OutputDevice
 {
     friend class Application;
     friend class ::OutputDevice;
     friend class Printer;
+    friend cairo_surface_t* get_underlying_cairo_surface(const VirtualDevice&);
+public:
+    // reference device modes for different compatibility levels
+    enum class RefDevMode { NONE = 0,
+                            Dpi600 = 1,      // 600 dpi
+                            MSO1 = 3,
+                            PDF1 = 4,
+                            Custom = 5
+                          };
 
 private:
-    SalVirtualDevice*   mpVirDev;
+    std::unique_ptr<SalVirtualDevice> mpVirDev;
     VclPtr<VirtualDevice>  mpPrev;
     VclPtr<VirtualDevice>  mpNext;
     sal_uInt16          mnBitCount;
     bool                mbScreenComp;
-    DeviceFormat        meFormat;
-    DeviceFormat        meAlphaFormat;
-    sal_uInt8           meRefDevMode;
+    const DeviceFormat  meFormat;
+    const DeviceFormat  meAlphaFormat;
+    RefDevMode          meRefDevMode;
+    bool                mbForceZeroExtleadBug;
 
-    SAL_DLLPRIVATE void ImplInitVirDev( const OutputDevice* pOutDev, long nDX, long nDY, DeviceFormat eFormat, const SystemGraphicsData *pData = nullptr );
+    SAL_DLLPRIVATE void ImplInitVirDev( const OutputDevice* pOutDev, long nDX, long nDY, const SystemGraphicsData *pData = nullptr );
     SAL_DLLPRIVATE bool InnerImplSetOutputSizePixel( const Size& rNewSize, bool bErase,
                                                      sal_uInt8* pBuffer );
     SAL_DLLPRIVATE bool ImplSetOutputSizePixel( const Size& rNewSize, bool bErase,
@@ -57,16 +68,33 @@ private:
 
         @since \#i32109#
      */
-    SAL_DLLPRIVATE void ImplFillOpaqueRectangle( const Rectangle& rRect );
-
-    // TODO: add extra member for refdev backward compatibility options
-    #define REFDEV_FORCE_ZERO_EXTLEAD 0x80
-    SAL_DLLPRIVATE bool ForceZeroExtleadBug() const
-        { return ((meRefDevMode & REFDEV_FORCE_ZERO_EXTLEAD) != 0); }
+    SAL_DLLPRIVATE void ImplFillOpaqueRectangle( const tools::Rectangle& rRect );
 
 protected:
     virtual bool AcquireGraphics() const override;
     virtual void ReleaseGraphics( bool bRelease = true ) override;
+
+    /** Create a virtual device of size 1x1
+
+        @param pCompDev
+        The generated vdev will be compatible to this device.
+        If it's the nullptr, it uses Application::GetDefaultDevice().
+
+        @param eFormat
+        Device format of the generated virtual device. Use DeviceFormat::DEFAULT here, to
+        indicate: take default screen depth. Only DeviceFormat::BITMASK
+        is the other possibility to denote a binary mask.
+
+        @param eAlphaFormat
+        Device format of the generated virtual device. Use DeviceFormat::DEFAULT here, to
+        indicate: take default screen depth. Only DeviceFormat::BITMASK
+        is the other possibility to denote a binary mask.
+
+        @param eOutDevType
+        This real virtual output device type.
+     */
+    explicit VirtualDevice(const OutputDevice* pCompDev, DeviceFormat eFormat,
+                           DeviceFormat eAlphaFormat, OutDevType eOutDevType);
 
 public:
 
@@ -77,7 +105,8 @@ public:
         indicate: take default screen depth. Only DeviceFormat::BITMASK
         is the other possibility to denote a binary mask.
      */
-    explicit            VirtualDevice(DeviceFormat eFormat = DeviceFormat::DEFAULT);
+    explicit VirtualDevice(DeviceFormat eFormat = DeviceFormat::DEFAULT)
+        : VirtualDevice(nullptr, eFormat, DeviceFormat::NONE, OUTDEV_VIRDEV) {}
 
     /** Create a virtual device of size 1x1
 
@@ -89,8 +118,9 @@ public:
         indicate: take default screen depth. Only DeviceFormat::BITMASK
         is the other possibility to denote a binary mask.
      */
-     explicit           VirtualDevice(const OutputDevice& rCompDev,
-                                      DeviceFormat eFormat = DeviceFormat::DEFAULT);
+    explicit VirtualDevice(const OutputDevice& rCompDev,
+                           DeviceFormat eFormat = DeviceFormat::DEFAULT)
+        : VirtualDevice(&rCompDev, eFormat, DeviceFormat::NONE, OUTDEV_VIRDEV) {}
 
     /** Create a virtual device  of size 1x1 with alpha channel
 
@@ -107,17 +137,18 @@ public:
         indicate: take default screen depth. Only DeviceFormat::BITMASK
         is the other possibility to denote a binary mask.
      */
-     explicit           VirtualDevice( const OutputDevice& rCompDev,
-                                       DeviceFormat eFormat, DeviceFormat eAlphaFormat);
+    explicit VirtualDevice(const OutputDevice& rCompDev,
+                           DeviceFormat eFormat, DeviceFormat eAlphaFormat)
+        : VirtualDevice(&rCompDev, eFormat, eAlphaFormat, OUTDEV_VIRDEV) {}
 
     /** Create a virtual device using an existing system dependent device or graphics context
         Any rendering will happen directly on the context and not on any intermediate bitmap.
         Note: This might not be supported on all platforms !
-    */
-    explicit            VirtualDevice(const SystemGraphicsData *pData, const Size &rSize,
-                                      DeviceFormat eFormat);
+     */
+    explicit VirtualDevice(const SystemGraphicsData *pData, const Size &rSize,
+                           DeviceFormat eFormat);
 
-    virtual             ~VirtualDevice();
+    virtual             ~VirtualDevice() override;
     virtual void        dispose() override;
 
     virtual void        EnableRTL( bool bEnable = true ) override;
@@ -130,14 +161,6 @@ public:
 
     bool                SetOutputSize( const Size& rNewSize )
                             { return SetOutputSizePixel( LogicToPixel( rNewSize ) ); }
-
-    // reference device modes for different compatibility levels
-    enum RefDevMode {   REFDEV_NONE = 0,
-                        REFDEV_MODE06 = 1,      // 600 dpi
-                        REFDEV_MODE_MSO1 = 3,
-                        REFDEV_MODE_PDF1 = 4,
-                        REFDEV_CUSTOM = 5
-                    };
 
     void                SetReferenceDevice( RefDevMode );
 

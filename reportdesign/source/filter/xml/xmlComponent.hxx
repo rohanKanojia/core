@@ -26,11 +26,9 @@
 namespace rptxml
 {
     class ORptFilter;
-    class OXMLComponent : public SvXMLImportContext
+    class OXMLComponent final : public SvXMLImportContext
     {
-    protected:
         css::uno::Reference< css::report::XReportComponent >  m_xComponent;
-        OUString m_sTextStyleName;
 
         OXMLComponent(const OXMLComponent&);
         OXMLComponent& operator =(const OXMLComponent&);
@@ -42,7 +40,7 @@ namespace rptxml
                     ,const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList
                     ,const css::uno::Reference< css::report::XReportComponent >& _xComponent
                     );
-        virtual ~OXMLComponent();
+        virtual ~OXMLComponent() override;
     };
 
 } // namespace rptxml

@@ -17,17 +17,17 @@ $(eval $(call gb_Module_add_targets,desktop,\
     Library_deploymentmisc \
     Library_offacc \
     Library_sofficeapp \
-    $(if $(ENABLE_BREAKPAD),Library_crashreport) \
-    $(if $(ENABLE_HEADLESS),,Library_spl) \
+    $(if $(ENABLE_BREAKPAD), \
+        Library_crashreport \
+        ) \
+    $(if $(DISABLE_GUI),,Library_spl) \
     Package_branding \
     $(if $(CUSTOM_BRAND_DIR),Package_branding_custom) \
+    UIConfig_deployment \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,desktop,\
-    AllLangResTarget_deployment \
-    AllLangResTarget_deploymentgui \
-    AllLangResTarget_dkt \
-    UIConfig_deployment \
+    AllLangMoTarget_dkt \
 ))
 
 ifneq (,$(filter DESKTOP,$(BUILD_TYPE)))
@@ -50,6 +50,10 @@ $(eval $(call gb_Module_add_targets,desktop,\
     Pagein_impress \
     Pagein_writer \
     CustomTarget_soffice \
+))
+
+ifeq ($(USING_X11), TRUE)
+$(eval $(call gb_Module_add_targets,desktop,\
     Package_sbase_sh \
     Package_scalc_sh \
     Package_sdraw_sh \
@@ -58,6 +62,7 @@ $(eval $(call gb_Module_add_targets,desktop,\
     Package_swriter_sh \
     Package_soffice_sh \
 ))
+endif
 endif
 endif
 endif
@@ -73,7 +78,8 @@ $(eval $(call gb_Module_add_targets,desktop,\
     Executable_sdraw \
     Executable_simpress \
     Executable_smath \
-    Executable_soffice \
+    Executable_soffice_exe \
+    Executable_soffice_com \
     Executable_sweb \
     Executable_swriter \
     Executable_unoinfo \
@@ -93,13 +99,11 @@ $(eval $(call gb_Module_add_targets,desktop,\
 
 else ifeq ($(OS),MACOSX)
 
-$(eval $(call gb_Module_add_targets,desktop,\
-    Package_desktop_install \
-))
-
 else ifeq ($(OS),ANDROID)
 
-else ifeq ($(OS),IOS)
+else ifeq ($(OS),iOS)
+
+else ifeq ($(OS),HAIKU)
 
 else
 
@@ -129,13 +133,20 @@ $(eval $(call gb_Module_add_targets,desktop, \
 endif
 
 $(eval $(call gb_Module_add_check_targets,desktop, \
+    CppunitTest_desktop_app \
     CppunitTest_desktop_version \
 ))
 
 ifeq ($(OS),LINUX)
 $(eval $(call gb_Module_add_check_targets,desktop, \
     CppunitTest_desktop_lib \
+    CppunitTest_desktop_lokinit \
 ))
 endif
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,desktop,\
+    CppunitTest_desktop_dialogs_test \
+))
 
 # vim: set ts=4 sw=4 et:

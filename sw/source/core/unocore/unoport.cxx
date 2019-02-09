@@ -20,7 +20,6 @@
 #include <unoport.hxx>
 
 #include <cmdid.h>
-#include <osl/mutex.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <vcl/svapp.hxx>
@@ -71,7 +70,7 @@ SwXTextPortion::SwXTextPortion(
             ?  PROPERTY_MAP_REDLINE_PORTION
             :  PROPERTY_MAP_TEXTPORTION_EXTENSIONS))
     , m_xParentText(rParent)
-    , m_FrameDepend(this, nullptr)
+    , m_aDepends(*this)
     , m_pFrameFormat(nullptr)
     , m_ePortionType(eType)
     , m_bIsCollapsed(false)
@@ -86,11 +85,12 @@ SwXTextPortion::SwXTextPortion(
     : m_pPropSet(aSwMapProvider.GetPropertySet(
                     PROPERTY_MAP_TEXTPORTION_EXTENSIONS))
     , m_xParentText(rParent)
-    , m_FrameDepend(this, &rFormat)
+    , m_aDepends(*this)
     , m_pFrameFormat(&rFormat)
     , m_ePortionType(PORTION_FRAME)
     , m_bIsCollapsed(false)
 {
+    m_aDepends.StartListening(&rFormat);
     init( pPortionCursor);
 }
 
@@ -106,7 +106,8 @@ SwXTextPortion::SwXTextPortion(
     , m_pRubyStyle  ( bIsEnd ? nullptr : new uno::Any )
     , m_pRubyAdjust ( bIsEnd ? nullptr : new uno::Any )
     , m_pRubyIsAbove( bIsEnd ? nullptr : new uno::Any )
-    , m_FrameDepend(this, nullptr)
+    , m_pRubyPosition( bIsEnd ? nullptr : new uno::Any )
+    , m_aDepends(*this)
     , m_pFrameFormat(nullptr)
     , m_ePortionType( bIsEnd ? PORTION_RUBY_END : PORTION_RUBY_START )
     , m_bIsCollapsed(false)
@@ -120,6 +121,7 @@ SwXTextPortion::SwXTextPortion(
         rItem.QueryValue(*m_pRubyStyle, MID_RUBY_CHARSTYLE);
         rItem.QueryValue(*m_pRubyAdjust, MID_RUBY_ADJUST);
         rItem.QueryValue(*m_pRubyIsAbove, MID_RUBY_ABOVE);
+        rItem.QueryValue(*m_pRubyPosition, MID_RUBY_POSITION);
     }
 }
 
@@ -127,21 +129,15 @@ SwXTextPortion::~SwXTextPortion()
 {
     SolarMutexGuard aGuard;
     m_pUnoCursor.reset(nullptr);
-    if(m_FrameDepend.GetRegisteredIn())
-    {
-        auto pFrameDepend(const_cast<SwDepend*>(&m_FrameDepend));
-        pFrameDepend->GetRegisteredIn()->Remove(pFrameDepend);
-    }
+    m_aDepends.EndListeningAll();
 }
 
 uno::Reference< text::XText >  SwXTextPortion::getText()
-throw( uno::RuntimeException, std::exception )
 {
     return m_xParentText;
 }
 
 uno::Reference< text::XTextRange >  SwXTextPortion::getStart()
-throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     uno::Reference< text::XTextRange >  xRet;
@@ -154,7 +150,6 @@ throw( uno::RuntimeException, std::exception )
 }
 
 uno::Reference< text::XTextRange >  SwXTextPortion::getEnd()
-throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     uno::Reference< text::XTextRange >  xRet;
@@ -167,7 +162,6 @@ throw( uno::RuntimeException, std::exception )
 }
 
 OUString SwXTextPortion::getString()
-throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     OUString aText;
@@ -178,13 +172,13 @@ throw( uno::RuntimeException, std::exception )
     if ( pTextNd )
     {
         const sal_Int32 nStt = rUnoCursor.Start()->nContent.GetIndex();
-        aText = pTextNd->GetExpandText( nStt,
+        aText = pTextNd->GetExpandText(nullptr, nStt,
                 rUnoCursor.End()->nContent.GetIndex() - nStt );
     }
     return aText;
 }
 
-void SwXTextPortion::setString(const OUString& aString) throw( uno::RuntimeException, std::exception )
+void SwXTextPortion::setString(const OUString& aString)
 {
     SolarMutexGuard aGuard;
     SwUnoCursor& rUnoCursor = GetCursor();
@@ -193,7 +187,6 @@ void SwXTextPortion::setString(const OUString& aString) throw( uno::RuntimeExcep
 }
 
 uno::Reference< beans::XPropertySetInfo >  SwXTextPortion::getPropertySetInfo()
-throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     //! PropertySetInfo for text portion extensions
@@ -211,8 +204,6 @@ throw( uno::RuntimeException, std::exception )
 
 void SwXTextPortion::setPropertyValue(const OUString& rPropertyName,
     const uno::Any& aValue)
-    throw( beans::UnknownPropertyException,
-        beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     SwUnoCursor& rUnoCursor = GetCursor();
@@ -225,164 +216,162 @@ void SwXTextPortion::GetPropertyValue(
         uno::Any &rVal,
         const SfxItemPropertySimpleEntry& rEntry,
         SwUnoCursor *pUnoCursor,
-        SfxItemSet *&pSet )
+        std::unique_ptr<SfxItemSet> &pSet )
 {
     OSL_ENSURE( pUnoCursor, "UNO cursor missing" );
     if (!pUnoCursor)
         return;
-    if(pUnoCursor)
+    switch(rEntry.nWID)
     {
-        switch(rEntry.nWID)
+        case FN_UNO_TEXT_PORTION_TYPE:
         {
-            case FN_UNO_TEXT_PORTION_TYPE:
+            const char* pRet;
+            switch (m_ePortionType)
             {
-                const char* pRet;
-                switch (m_ePortionType)
-                {
-                case PORTION_TEXT:          pRet = "Text";break;
-                case PORTION_FIELD:         pRet = "TextField";break;
-                case PORTION_FRAME:         pRet = "Frame";break;
-                case PORTION_FOOTNOTE:      pRet = "Footnote";break;
-                case PORTION_REFMARK_START:
-                case PORTION_REFMARK_END:   pRet = UNO_NAME_REFERENCE_MARK;break;
-                case PORTION_TOXMARK_START:
-                case PORTION_TOXMARK_END:   pRet = UNO_NAME_DOCUMENT_INDEX_MARK;break;
-                case PORTION_BOOKMARK_START :
-                case PORTION_BOOKMARK_END : pRet = UNO_NAME_BOOKMARK;break;
-                case PORTION_REDLINE_START:
-                case PORTION_REDLINE_END:   pRet = "Redline";break;
-                case PORTION_RUBY_START:
-                case PORTION_RUBY_END:      pRet = "Ruby";break;
-                case PORTION_SOFT_PAGEBREAK:pRet = "SoftPageBreak";break;
-                case PORTION_META:          pRet = UNO_NAME_META; break;
-                case PORTION_FIELD_START:pRet = "TextFieldStart";break;
-                case PORTION_FIELD_END:pRet = "TextFieldEnd";break;
-                case PORTION_FIELD_START_END:pRet = "TextFieldStartEnd";break;
-                case PORTION_ANNOTATION:
-                    pRet = "Annotation";
-                    break;
-                case PORTION_ANNOTATION_END:
-                    pRet = "AnnotationEnd";
-                    break;
-                default:
-                    pRet = nullptr;
-                }
-
-                OUString sRet;
-                if( pRet )
-                    sRet = OUString::createFromAscii( pRet );
-                rVal <<= sRet;
-            }
-            break;
-            case FN_UNO_CONTROL_CHARACTER: // obsolete!
-            break;
-            case FN_UNO_DOCUMENT_INDEX_MARK:
-                rVal <<= m_xTOXMark;
-            break;
-            case FN_UNO_REFERENCE_MARK:
-                rVal <<= m_xRefMark;
-            break;
-            case FN_UNO_BOOKMARK:
-                rVal <<= m_xBookmark;
-            break;
-            case FN_UNO_FOOTNOTE:
-                rVal <<= m_xFootnote;
-            break;
-            case FN_UNO_TEXT_FIELD:
-                rVal <<= m_xTextField;
-            break;
-            case FN_UNO_META:
-                rVal <<= m_xMeta;
-            break;
-            case FN_UNO_IS_COLLAPSED:
-            {
-                switch (m_ePortionType)
-                {
-                    case PORTION_REFMARK_START:
-                    case PORTION_BOOKMARK_START :
-                    case PORTION_TOXMARK_START:
-                    case PORTION_REFMARK_END:
-                    case PORTION_TOXMARK_END:
-                    case PORTION_BOOKMARK_END :
-                    case PORTION_REDLINE_START :
-                    case PORTION_REDLINE_END :
-                    case PORTION_RUBY_START:
-                    case PORTION_RUBY_END:
-                    case PORTION_FIELD_START:
-                    case PORTION_FIELD_END:
-                        rVal <<= m_bIsCollapsed;
-                    break;
-                    default:
-                    break;
-                }
-            }
-            break;
-            case FN_UNO_IS_START:
-            {
-                bool bStart = true, bPut = true;
-                switch (m_ePortionType)
-                {
-                    case PORTION_REFMARK_START:
-                    case PORTION_BOOKMARK_START:
-                    case PORTION_TOXMARK_START:
-                    case PORTION_REDLINE_START:
-                    case PORTION_RUBY_START:
-                    case PORTION_FIELD_START:
-                    break;
-
-                    case PORTION_REFMARK_END:
-                    case PORTION_TOXMARK_END:
-                    case PORTION_BOOKMARK_END:
-                    case PORTION_REDLINE_END:
-                    case PORTION_RUBY_END:
-                    case PORTION_FIELD_END:
-                        bStart = false;
-                    break;
-                    default:
-                        bPut = false;
-                }
-                if(bPut)
-                    rVal <<= bStart;
-            }
-            break;
-            case RES_TXTATR_CJK_RUBY:
-            {
-                const uno::Any* pToSet = nullptr;
-                switch(rEntry.nMemberId)
-                {
-                    case MID_RUBY_TEXT :    pToSet = m_pRubyText.get();   break;
-                    case MID_RUBY_ADJUST :  pToSet = m_pRubyAdjust.get(); break;
-                    case MID_RUBY_CHARSTYLE:pToSet = m_pRubyStyle.get();  break;
-                    case MID_RUBY_ABOVE :   pToSet = m_pRubyIsAbove.get();break;
-                }
-                if(pToSet)
-                    rVal = *pToSet;
-            }
-            break;
+            case PORTION_TEXT:          pRet = "Text";break;
+            case PORTION_FIELD:         pRet = "TextField";break;
+            case PORTION_FRAME:         pRet = "Frame";break;
+            case PORTION_FOOTNOTE:      pRet = "Footnote";break;
+            case PORTION_REFMARK_START:
+            case PORTION_REFMARK_END:   pRet = UNO_NAME_REFERENCE_MARK;break;
+            case PORTION_TOXMARK_START:
+            case PORTION_TOXMARK_END:   pRet = UNO_NAME_DOCUMENT_INDEX_MARK;break;
+            case PORTION_BOOKMARK_START :
+            case PORTION_BOOKMARK_END : pRet = UNO_NAME_BOOKMARK;break;
+            case PORTION_REDLINE_START:
+            case PORTION_REDLINE_END:   pRet = "Redline";break;
+            case PORTION_RUBY_START:
+            case PORTION_RUBY_END:      pRet = "Ruby";break;
+            case PORTION_SOFT_PAGEBREAK:pRet = "SoftPageBreak";break;
+            case PORTION_META:          pRet = UNO_NAME_META; break;
+            case PORTION_FIELD_START:pRet = "TextFieldStart";break;
+            case PORTION_FIELD_END:pRet = "TextFieldEnd";break;
+            case PORTION_FIELD_START_END:pRet = "TextFieldStartEnd";break;
+            case PORTION_ANNOTATION:
+                pRet = "Annotation";
+                break;
+            case PORTION_ANNOTATION_END:
+                pRet = "AnnotationEnd";
+                break;
             default:
-                beans::PropertyState eTemp;
-                bool bDone = SwUnoCursorHelper::getCursorPropertyValue(
-                                    rEntry, *pUnoCursor, &(rVal), eTemp );
-                if(!bDone)
-                {
-                    if(!pSet)
-                    {
-                        pSet = new SfxItemSet(pUnoCursor->GetDoc()->GetAttrPool(),
-                            RES_CHRATR_BEGIN, RES_FRMATR_END - 1,
-                            RES_UNKNOWNATR_CONTAINER, RES_UNKNOWNATR_CONTAINER,
-                            RES_TXTATR_UNKNOWN_CONTAINER, RES_TXTATR_UNKNOWN_CONTAINER,
-                            0L);
-                        SwUnoCursorHelper::GetCursorAttr(*pUnoCursor, *pSet);
-                    }
-                    m_pPropSet->getPropertyValue(rEntry, *pSet, rVal);
-                }
+                pRet = nullptr;
+            }
+
+            OUString sRet;
+            if( pRet )
+                sRet = OUString::createFromAscii( pRet );
+            rVal <<= sRet;
         }
+        break;
+        case FN_UNO_CONTROL_CHARACTER: // obsolete!
+        break;
+        case FN_UNO_DOCUMENT_INDEX_MARK:
+            rVal <<= m_xTOXMark;
+        break;
+        case FN_UNO_REFERENCE_MARK:
+            rVal <<= m_xRefMark;
+        break;
+        case FN_UNO_BOOKMARK:
+            rVal <<= m_xBookmark;
+        break;
+        case FN_UNO_FOOTNOTE:
+            rVal <<= m_xFootnote;
+        break;
+        case FN_UNO_TEXT_FIELD:
+            rVal <<= m_xTextField;
+        break;
+        case FN_UNO_META:
+            rVal <<= m_xMeta;
+        break;
+        case FN_UNO_IS_COLLAPSED:
+        {
+            switch (m_ePortionType)
+            {
+                case PORTION_REFMARK_START:
+                case PORTION_BOOKMARK_START :
+                case PORTION_TOXMARK_START:
+                case PORTION_REFMARK_END:
+                case PORTION_TOXMARK_END:
+                case PORTION_BOOKMARK_END :
+                case PORTION_REDLINE_START :
+                case PORTION_REDLINE_END :
+                case PORTION_RUBY_START:
+                case PORTION_RUBY_END:
+                case PORTION_FIELD_START:
+                case PORTION_FIELD_END:
+                    rVal <<= m_bIsCollapsed;
+                break;
+                default:
+                break;
+            }
+        }
+        break;
+        case FN_UNO_IS_START:
+        {
+            bool bStart = true, bPut = true;
+            switch (m_ePortionType)
+            {
+                case PORTION_REFMARK_START:
+                case PORTION_BOOKMARK_START:
+                case PORTION_TOXMARK_START:
+                case PORTION_REDLINE_START:
+                case PORTION_RUBY_START:
+                case PORTION_FIELD_START:
+                break;
+
+                case PORTION_REFMARK_END:
+                case PORTION_TOXMARK_END:
+                case PORTION_BOOKMARK_END:
+                case PORTION_REDLINE_END:
+                case PORTION_RUBY_END:
+                case PORTION_FIELD_END:
+                    bStart = false;
+                break;
+                default:
+                    bPut = false;
+            }
+            if(bPut)
+                rVal <<= bStart;
+        }
+        break;
+        case RES_TXTATR_CJK_RUBY:
+        {
+            const uno::Any* pToSet = nullptr;
+            switch(rEntry.nMemberId)
+            {
+                case MID_RUBY_TEXT :    pToSet = m_pRubyText.get();   break;
+                case MID_RUBY_ADJUST :  pToSet = m_pRubyAdjust.get(); break;
+                case MID_RUBY_CHARSTYLE:pToSet = m_pRubyStyle.get();  break;
+                case MID_RUBY_ABOVE :   pToSet = m_pRubyIsAbove.get();break;
+                case MID_RUBY_POSITION: pToSet = m_pRubyPosition.get();break;
+            }
+            if(pToSet)
+                rVal = *pToSet;
+        }
+        break;
+        default:
+            beans::PropertyState eTemp;
+            bool bDone = SwUnoCursorHelper::getCursorPropertyValue(
+                                rEntry, *pUnoCursor, &rVal, eTemp );
+            if(!bDone)
+            {
+                if(!pSet)
+                {
+                    pSet = std::make_unique<SfxItemSet>(
+                        pUnoCursor->GetDoc()->GetAttrPool(),
+                        svl::Items<
+                            RES_CHRATR_BEGIN, RES_FRMATR_END - 1,
+                            RES_UNKNOWNATR_CONTAINER,
+                                RES_UNKNOWNATR_CONTAINER>{});
+                    SwUnoCursorHelper::GetCursorAttr(*pUnoCursor, *pSet);
+                }
+                m_pPropSet->getPropertyValue(rEntry, *pSet, rVal);
+            }
     }
 }
 
-uno::Sequence< uno::Any > SAL_CALL SwXTextPortion::GetPropertyValues_Impl(
+uno::Sequence< uno::Any > SwXTextPortion::GetPropertyValues_Impl(
         const uno::Sequence< OUString >& rPropertyNames )
-    throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException )
 {
     sal_Int32 nLength = rPropertyNames.getLength();
     const OUString *pPropertyNames = rPropertyNames.getConstArray();
@@ -391,39 +380,32 @@ uno::Sequence< uno::Any > SAL_CALL SwXTextPortion::GetPropertyValues_Impl(
     SwUnoCursor& rUnoCursor = GetCursor();
 
     {
-        SfxItemSet *pSet = nullptr;
+        std::unique_ptr<SfxItemSet> pSet;
         // get starting point for the look-up, either the provided one or else
         // from the beginning of the map
         const SfxItemPropertyMap& rMap = m_pPropSet->getPropertyMap();
         for(sal_Int32 nProp = 0; nProp < nLength; nProp++)
         {
             const SfxItemPropertySimpleEntry* pEntry = rMap.getByName(pPropertyNames[nProp]);
-            if(pEntry)
-            {
-                GetPropertyValue( pValues[nProp], *pEntry, &rUnoCursor, pSet );
-            }
-            else
+            if(!pEntry)
                 throw beans::UnknownPropertyException( "Unknown property: " + pPropertyNames[nProp], static_cast < cppu::OWeakObject * > ( this ) );
+            GetPropertyValue( pValues[nProp], *pEntry, &rUnoCursor, pSet );
         }
-        delete pSet;
     }
     return aValues;
 }
 
 uno::Any SwXTextPortion::getPropertyValue(
     const OUString& rPropertyName)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     uno::Sequence< OUString > aPropertyNames { rPropertyName };
     return GetPropertyValues_Impl(aPropertyNames).getConstArray()[0];
 }
 
-void SAL_CALL SwXTextPortion::SetPropertyValues_Impl(
+void SwXTextPortion::SetPropertyValues_Impl(
     const uno::Sequence< OUString >& rPropertyNames,
     const uno::Sequence< uno::Any >& rValues )
-    throw( beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException,
-            lang::WrappedTargetException, uno::RuntimeException)
 {
     SwUnoCursor& rUnoCursor = GetCursor();
 
@@ -450,8 +432,6 @@ void SAL_CALL SwXTextPortion::SetPropertyValues_Impl(
 void SwXTextPortion::setPropertyValues(
     const uno::Sequence< OUString >& rPropertyNames,
     const uno::Sequence< uno::Any >& rValues )
-        throw(beans::PropertyVetoException, lang::IllegalArgumentException,
-            lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -472,7 +452,6 @@ void SwXTextPortion::setPropertyValues(
 
 uno::Sequence< uno::Any > SwXTextPortion::getPropertyValues(
     const uno::Sequence< OUString >& rPropertyNames )
-        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     uno::Sequence< uno::Any > aValues;
@@ -484,11 +463,15 @@ uno::Sequence< uno::Any > SwXTextPortion::getPropertyValues(
     }
     catch (beans::UnknownPropertyException &)
     {
-        throw uno::RuntimeException("Unknown property exception caught", static_cast < cppu::OWeakObject * > ( this ) );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw lang::WrappedTargetRuntimeException("Unknown property exception caught",
+                static_cast < cppu::OWeakObject * > ( this ), anyEx );
     }
     catch (lang::WrappedTargetException &)
     {
-        throw uno::RuntimeException("WrappedTargetException caught", static_cast < cppu::OWeakObject * > ( this ) );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw lang::WrappedTargetRuntimeException("WrappedTargetException caught",
+                static_cast < cppu::OWeakObject * > ( this ), anyEx );
     }
 
     return aValues;
@@ -498,13 +481,12 @@ uno::Sequence< uno::Any > SwXTextPortion::getPropertyValues(
 uno::Sequence< beans::SetPropertyTolerantFailed > SAL_CALL SwXTextPortion::setPropertyValuesTolerant(
         const uno::Sequence< OUString >& rPropertyNames,
         const uno::Sequence< uno::Any >& rValues )
-    throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     if (rPropertyNames.getLength() != rValues.getLength())
         throw lang::IllegalArgumentException();
-    SwUnoCursor& rUnoCursor = this->GetCursor();
+    SwUnoCursor& rUnoCursor = GetCursor();
 
     sal_Int32 nProps = rPropertyNames.getLength();
     const OUString *pProp = rPropertyNames.getConstArray();
@@ -566,7 +548,6 @@ uno::Sequence< beans::SetPropertyTolerantFailed > SAL_CALL SwXTextPortion::setPr
 
 uno::Sequence< beans::GetPropertyTolerantResult > SAL_CALL SwXTextPortion::getPropertyValuesTolerant(
         const uno::Sequence< OUString >& rPropertyNames )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -585,20 +566,18 @@ uno::Sequence< beans::GetPropertyTolerantResult > SAL_CALL SwXTextPortion::getPr
 
 uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion::getDirectPropertyValuesTolerant(
         const uno::Sequence< OUString >& rPropertyNames )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return GetPropertyValuesTolerant_Impl( rPropertyNames, true );
 }
 
-uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion::GetPropertyValuesTolerant_Impl(
+uno::Sequence< beans::GetDirectPropertyTolerantResult > SwXTextPortion::GetPropertyValuesTolerant_Impl(
         const uno::Sequence< OUString >& rPropertyNames,
         bool bDirectValuesOnly )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    SwUnoCursor& rUnoCursor = this->GetCursor();
+    SwUnoCursor& rUnoCursor = GetCursor();
 
     std::vector< beans::GetDirectPropertyTolerantResult > aResultVector;
 
@@ -607,7 +586,7 @@ uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion:
         sal_Int32 nProps = rPropertyNames.getLength();
         const OUString *pProp = rPropertyNames.getConstArray();
 
-        SfxItemSet *pSet = nullptr;
+        std::unique_ptr<SfxItemSet> pSet;
 
         const SfxItemPropertyMap& rPropMap = m_pPropSet->getPropertyMap();
 
@@ -625,7 +604,7 @@ uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion:
             try
             {
                 aResult.Name = pProp[i];
-                if(pPropertyStates[i] == beans::PropertyState_MAKE_FIXED_SIZE)     // property unknown?
+                if(pPropertyStates[i] == beans::PropertyState::PropertyState_MAKE_FIXED_SIZE)     // property unknown?
                 {
                     if( bDirectValuesOnly )
                         continue;
@@ -675,7 +654,6 @@ uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion:
                 aResult.Result = beans::TolerantPropertySetResultType::WRAPPED_TARGET;
             }
         }
-        delete pSet;
     }
     catch (const uno::RuntimeException&)
     {
@@ -695,45 +673,40 @@ uno::Sequence< beans::GetDirectPropertyTolerantResult > SAL_CALL SwXTextPortion:
 void SwXTextPortion::addPropertiesChangeListener(
     const uno::Sequence< OUString >& /*aPropertyNames*/,
     const uno::Reference< beans::XPropertiesChangeListener >& /*xListener*/ )
-        throw(uno::RuntimeException, std::exception)
 {}
 
 void SwXTextPortion::removePropertiesChangeListener(
     const uno::Reference< beans::XPropertiesChangeListener >& /*xListener*/ )
-        throw(uno::RuntimeException, std::exception)
 {}
 
 void SwXTextPortion::firePropertiesChangeEvent(
     const uno::Sequence< OUString >& /*aPropertyNames*/,
     const uno::Reference< beans::XPropertiesChangeListener >& /*xListener*/ )
-        throw(uno::RuntimeException, std::exception)
 {}
 
 void SwXTextPortion::addPropertyChangeListener(
     const OUString& /*PropertyName*/,
     const uno::Reference< beans::XPropertyChangeListener > & /*xListener*/)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     OSL_FAIL("not implemented");
 }
 
-void SwXTextPortion::removePropertyChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XPropertyChangeListener > & /*aListener*/) throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
+void SwXTextPortion::removePropertyChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XPropertyChangeListener > & /*aListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
-void SwXTextPortion::addVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*aListener*/) throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
+void SwXTextPortion::addVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*aListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
-void SwXTextPortion::removeVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*aListener*/) throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
+void SwXTextPortion::removeVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*aListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
 beans::PropertyState SwXTextPortion::getPropertyState(const OUString& rPropertyName)
-            throw( beans::UnknownPropertyException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     beans::PropertyState eRet = beans::PropertyState_DEFAULT_VALUE;
@@ -754,7 +727,6 @@ beans::PropertyState SwXTextPortion::getPropertyState(const OUString& rPropertyN
 
 uno::Sequence< beans::PropertyState > SwXTextPortion::getPropertyStates(
         const uno::Sequence< OUString >& rPropertyNames)
-        throw( beans::UnknownPropertyException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     SwUnoCursor& rUnoCursor = GetCursor();
@@ -777,7 +749,6 @@ uno::Sequence< beans::PropertyState > SwXTextPortion::getPropertyStates(
 }
 
 void SwXTextPortion::setPropertyToDefault(const OUString& rPropertyName)
-                throw( beans::UnknownPropertyException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     SwUnoCursor& rUnoCursor = GetCursor();
@@ -787,7 +758,6 @@ void SwXTextPortion::setPropertyToDefault(const OUString& rPropertyName)
 }
 
 uno::Any SwXTextPortion::getPropertyDefault(const OUString& rPropertyName)
-        throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     uno::Any aRet;
@@ -799,7 +769,6 @@ uno::Any SwXTextPortion::getPropertyDefault(const OUString& rPropertyName)
 }
 
 uno::Reference< container::XEnumeration >  SwXTextPortion::createContentEnumeration(const OUString& /*aServiceName*/)
-        throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     SwUnoCursor& rUnoCursor = GetCursor();
@@ -818,7 +787,6 @@ const uno::Sequence< sal_Int8 > & SwXTextPortion::getUnoTunnelId()
 }
 
 sal_Int64 SwXTextPortion::getSomething( const uno::Sequence< sal_Int8 >& rId )
-    throw(uno::RuntimeException, std::exception)
 {
     if( rId.getLength() == 16
         && 0 == memcmp( getUnoTunnelId().getConstArray(),
@@ -830,45 +798,38 @@ sal_Int64 SwXTextPortion::getSomething( const uno::Sequence< sal_Int8 >& rId )
 }
 
 uno::Sequence< OUString > SwXTextPortion::getAvailableServiceNames()
-throw( uno::RuntimeException, std::exception )
 {
-    SolarMutexGuard aGuard;
-    uno::Sequence<OUString> aRet { "com.sun.star.text.TextContent" };
-    return aRet;
+    return { "com.sun.star.text.TextContent" };
 }
 
 OUString SwXTextPortion::getImplementationName()
-throw( uno::RuntimeException, std::exception )
 {
-    return OUString("SwXTextPortion");
+    return { "SwXTextPortion" };
 }
 
-sal_Bool SwXTextPortion::supportsService(const OUString& rServiceName) throw( uno::RuntimeException, std::exception )
+sal_Bool SwXTextPortion::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SwXTextPortion::getSupportedServiceNames()
-throw( uno::RuntimeException, std::exception )
 {
-    uno::Sequence< OUString > aRet(7);
-    OUString* pArray = aRet.getArray();
-    pArray[0] = "com.sun.star.text.TextPortion";
-    pArray[1] = "com.sun.star.style.CharacterProperties";
-    pArray[2] = "com.sun.star.style.CharacterPropertiesAsian";
-    pArray[3] = "com.sun.star.style.CharacterPropertiesComplex";
-    pArray[4] = "com.sun.star.style.ParagraphProperties";
-    pArray[5] = "com.sun.star.style.ParagraphPropertiesAsian";
-    pArray[6] = "com.sun.star.style.ParagraphPropertiesComplex";
-    return aRet;
+    return { "com.sun.star.text.TextPortion",
+            "com.sun.star.style.CharacterProperties",
+            "com.sun.star.style.CharacterPropertiesAsian",
+            "com.sun.star.style.CharacterPropertiesComplex",
+            "com.sun.star.style.ParagraphProperties",
+            "com.sun.star.style.ParagraphPropertiesAsian",
+            "com.sun.star.style.ParagraphPropertiesComplex" };
 }
 
-void SwXTextPortion::Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew)
+void SwXTextPortion::SwClientNotify(const SwModify&, const SfxHint& rHint)
 {
-    ClientModify(this, pOld, pNew);
-    if (!m_FrameDepend.GetRegisteredIn())
+    if (auto pLegacyHint = dynamic_cast<const sw::LegacyModifyHint*>(&rHint))
     {
-        m_pFrameFormat = nullptr;
+        ClientModify(this, pLegacyHint->m_pOld, pLegacyHint->m_pNew);
+        if(!m_aDepends.IsListeningTo(m_pFrameFormat))
+            m_pFrameFormat = nullptr;
     }
 }
 

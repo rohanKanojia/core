@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_WRAPTABLE_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_WRAPTABLE_HXX
 
-#include "ado/WrapTypeDefs.hxx"
+#include <ado/WrapTypeDefs.hxx>
 
 namespace connectivity
 {
@@ -30,10 +30,10 @@ namespace connectivity
         class WpADOTable : public WpOLEBase<_ADOTable>
         {
         public:
-            WpADOTable(_ADOTable* pInt=NULL)    :   WpOLEBase<_ADOTable>(pInt){}
+            WpADOTable(_ADOTable* pInt=nullptr)    :   WpOLEBase<_ADOTable>(pInt){}
             WpADOTable(const WpADOTable& rhs) : WpOLEBase<_ADOTable>(rhs) {}
 
-            inline WpADOTable& operator=(const WpADOTable& rhs)
+            WpADOTable& operator=(const WpADOTable& rhs)
                 {WpOLEBase<_ADOTable>::operator=(rhs); return *this;}
 
             void Create();

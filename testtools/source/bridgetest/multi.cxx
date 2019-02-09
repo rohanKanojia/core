@@ -18,13 +18,13 @@
  */
 
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include "multi.hxx"
 
-#include "rtl/string.hxx"
-#include "rtl/textenc.h"
-#include "rtl/ustring.hxx"
+#include <rtl/string.hxx>
+#include <rtl/textenc.h>
+#include <rtl/ustring.hxx>
 
 #include <sstream>
 
@@ -34,13 +34,8 @@ struct CheckFailed {
     explicit CheckFailed(OUString const & theMessage): message(theMessage)
     {}
 
-    OUString message;
+    OUString const message;
 };
-
-::std::ostream& operator<< (::std::ostream& os, const OUString& str)
-{
-    return os << OUStringToOString(str, RTL_TEXTENCODING_UTF8).getStr();
-}
 
 template< typename T > void checkEqual(T const & value, T const & argument) {
     if (argument != value) {

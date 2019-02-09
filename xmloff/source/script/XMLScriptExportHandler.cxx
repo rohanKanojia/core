@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLScriptExportHandler.hxx"
+#include <XMLScriptExportHandler.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <xmloff/xmlexp.hxx>
@@ -31,9 +31,9 @@ using namespace ::xmloff::token;
 
 using ::com::sun::star::beans::PropertyValue;
 
+static const OUStringLiteral gsURL("Script");
 
-XMLScriptExportHandler::XMLScriptExportHandler() :
-    sURL("Script")
+XMLScriptExportHandler::XMLScriptExportHandler()
 {
 }
 
@@ -56,7 +56,7 @@ void XMLScriptExportHandler::Export(
     sal_Int32 nCount = rValues.getLength();
     for(sal_Int32 i = 0; i < nCount; i++)
     {
-        if (sURL.equals(rValues[i].Name))
+        if (gsURL == rValues[i].Name)
         {
             OUString sTmp;
             rValues[i].Value >>= sTmp;

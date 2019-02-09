@@ -17,17 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
 #include <tools/urlobj.hxx>
 #include <svl/urihelper.hxx>
 #include <unotools/pathoptions.hxx>
-#include <svl/mailenum.hxx>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
-#include <helpid.h>
 #include <view.hxx>
 #include <docsh.hxx>
 #include <IDocumentDeviceAccess.hxx>
@@ -38,12 +35,10 @@
 #include <swmodule.hxx>
 #include <modcfg.hxx>
 #include <mailmergehelper.hxx>
-#include <envelp.hrc>
 #include <mailmrge.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
 #include <comphelper/sequenceashashmap.hxx>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XContainerQuery.hpp>
 #include <com/sun/star/container/XEnumeration.hpp>
@@ -90,20 +85,16 @@ class SwXSelChgLstnr_Impl : public cppu::WeakImplHelper
     SwMailMergeDlg& rParent;
 public:
     explicit SwXSelChgLstnr_Impl(SwMailMergeDlg& rParentDlg);
-    virtual ~SwXSelChgLstnr_Impl();
 
-    virtual void SAL_CALL selectionChanged( const EventObject& aEvent ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL disposing( const EventObject& Source ) throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL selectionChanged( const EventObject& aEvent ) override;
+    virtual void SAL_CALL disposing( const EventObject& Source ) override;
 };
 
 SwXSelChgLstnr_Impl::SwXSelChgLstnr_Impl(SwMailMergeDlg& rParentDlg) :
     rParent(rParentDlg)
 {}
 
-SwXSelChgLstnr_Impl::~SwXSelChgLstnr_Impl()
-{}
-
-void SwXSelChgLstnr_Impl::selectionChanged( const EventObject&  ) throw (RuntimeException, std::exception)
+void SwXSelChgLstnr_Impl::selectionChanged( const EventObject&  )
 {
     //call the parent to enable selection mode
     Sequence <Any> aSelection;
@@ -120,7 +111,7 @@ void SwXSelChgLstnr_Impl::selectionChanged( const EventObject&  ) throw (Runtime
     }
 }
 
-void SwXSelChgLstnr_Impl::disposing( const EventObject&  ) throw (RuntimeException, std::exception)
+void SwXSelChgLstnr_Impl::disposing( const EventObject&  )
 {
     OSL_FAIL("disposing");
 }
@@ -130,16 +121,16 @@ SwMailMergeDlg::SwMailMergeDlg(vcl::Window* pParent, SwWrtShell& rShell,
                                const OUString& rTableName,
                                sal_Int32 nCommandType,
                                const uno::Reference< XConnection>& _xConnection,
-                               Sequence< Any >* pSelection) :
+                               Sequence< Any > const * pSelection) :
 
     SvxStandardDialog(pParent, "MailmergeDialog", "modules/swriter/ui/mailmerge.ui"),
 
     pImpl           (new SwMailMergeDlg_Impl),
 
     rSh             (rShell),
-    nMergeType      (DBMGR_MERGE_EMAIL),
-    m_aDialogSize( GetSizePixel() )
+    nMergeType      (DBMGR_MERGE_EMAIL)
 {
+    Size aDialogSize( GetSizePixel() );
     get(m_pBeamerWin, "beamer");
 
     get(m_pAllRB, "all");
@@ -156,7 +147,7 @@ SwMailMergeDlg::SwMailMergeDlg(vcl::Window* pParent, SwWrtShell& rShell,
 
     get(m_pSaveMergedDocumentFT, "savemergeddoclabel");
     get(m_pSaveSingleDocRB, "singledocument");
-    get(m_pSaveIndividualRB, "idividualdocuments");
+    get(m_pSaveIndividualRB, "individualdocuments");
     get(m_pGenerateFromDataBaseCB, "generate");
 
     get(m_pColumnFT, "fieldlabel");
@@ -196,7 +187,7 @@ SwMailMergeDlg::SwMailMergeDlg(vcl::Window* pParent, SwWrtShell& rShell,
 
     Point aMailPos = m_pMailingRB->GetPosPixel();
     Point aFilePos = m_pFileRB->GetPosPixel();
-    aFilePos.X() -= (aFilePos.X() - aMailPos.X()) /2;
+    aFilePos.AdjustX( -((aFilePos.X() - aMailPos.X()) /2) );
     m_pFileRB->SetPosPixel(aFilePos);
     uno::Reference< lang::XMultiServiceFactory > xMSF = comphelper::getProcessServiceFactory();
     if(pSelection) {
@@ -311,9 +302,9 @@ SwMailMergeDlg::SwMailMergeDlg(vcl::Window* pParent, SwWrtShell& rShell,
     } else
         m_pColumnLB->SelectEntry(pModOpt->GetNameFromColumn());
 
-    if (m_pAddressFieldLB->GetSelectEntryCount() == 0)
+    if (m_pAddressFieldLB->GetSelectedEntryCount() == 0)
         m_pAddressFieldLB->SelectEntryPos(0);
-    if (m_pColumnLB->GetSelectEntryCount() == 0)
+    if (m_pColumnLB->GetSelectedEntryCount() == 0)
         m_pColumnLB->SelectEntryPos(0);
 
     const bool bEnable = m_aSelection.getLength() != 0;
@@ -324,7 +315,7 @@ SwMailMergeDlg::SwMailMergeDlg(vcl::Window* pParent, SwWrtShell& rShell,
         m_pAllRB->Check();
         m_pMarkedRB->Enable(false);
     }
-    SetMinOutputSizePixel(m_aDialogSize);
+    SetMinOutputSizePixel(aDialogSize);
     try {
         uno::Reference< container::XNameContainer> xFilterFactory(
             xMSF->createInstance("com.sun.star.document.FilterFactory"), UNO_QUERY_THROW);
@@ -380,7 +371,7 @@ void SwMailMergeDlg::dispose()
         OUString* pData = static_cast< OUString* >( m_pFilterLB->GetEntryData(nFilter) );
         delete pData;
     }
-    delete pImpl;
+    pImpl.reset();
     m_pBeamerWin.clear();
     m_pAllRB.clear();
     m_pMarkedRB.clear();
@@ -420,15 +411,13 @@ void SwMailMergeDlg::Apply()
 {
 }
 
-IMPL_LINK_TYPED( SwMailMergeDlg, ButtonHdl, Button *, pBtn, void )
+IMPL_LINK( SwMailMergeDlg, ButtonHdl, Button *, pBtn, void )
 {
-    if (pBtn == m_pOkBTN) {
-        if( ExecQryShell() )
-            EndDialog(RET_OK);
-    }
+    if (pBtn == m_pOkBTN && ExecQryShell() )
+        EndDialog(RET_OK);
 }
 
-IMPL_LINK_TYPED( SwMailMergeDlg, OutputTypeHdl, Button *, pBtn, void )
+IMPL_LINK( SwMailMergeDlg, OutputTypeHdl, Button *, pBtn, void )
 {
     bool bPrint = pBtn == m_pPrinterRB;
     m_pSingleJobsCB->Enable(bPrint);
@@ -451,7 +440,7 @@ IMPL_LINK_TYPED( SwMailMergeDlg, OutputTypeHdl, Button *, pBtn, void )
     }
 }
 
-IMPL_LINK_TYPED( SwMailMergeDlg, SaveTypeHdl, Button*,  pBtn, void )
+IMPL_LINK( SwMailMergeDlg, SaveTypeHdl, Button*,  pBtn, void )
 {
     bool bIndividual = pBtn == m_pSaveIndividualRB;
 
@@ -469,7 +458,7 @@ IMPL_LINK_TYPED( SwMailMergeDlg, SaveTypeHdl, Button*,  pBtn, void )
     }
 }
 
-IMPL_LINK_TYPED( SwMailMergeDlg, FilenameHdl, Button*, pBox, void )
+IMPL_LINK( SwMailMergeDlg, FilenameHdl, Button*, pBox, void )
 {
     bool bEnable = static_cast<CheckBox*>(pBox)->IsChecked();
     m_pColumnFT->Enable( bEnable );
@@ -481,7 +470,7 @@ IMPL_LINK_TYPED( SwMailMergeDlg, FilenameHdl, Button*, pBox, void )
     m_pFilterLB->Enable( bEnable );
 }
 
-IMPL_LINK_NOARG_TYPED(SwMailMergeDlg, ModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(SwMailMergeDlg, ModifyHdl, Edit&, void)
 {
     m_pFromRB->Check();
 }
@@ -520,16 +509,16 @@ bool SwMailMergeDlg::ExecQryShell()
         pModOpt->SetIsNameFromColumn(m_pGenerateFromDataBaseCB->IsChecked());
 
         if (!AskUserFilename()) {
-            pModOpt->SetNameFromColumn(m_pColumnLB->GetSelectEntry());
-            if( m_pFilterLB->GetSelectEntryPos() != LISTBOX_ENTRY_NOTFOUND)
-                m_sSaveFilter = *static_cast<const OUString*>(m_pFilterLB->GetSelectEntryData());
+            pModOpt->SetNameFromColumn(m_pColumnLB->GetSelectedEntry());
+            if( m_pFilterLB->GetSelectedEntryPos() != LISTBOX_ENTRY_NOTFOUND)
+                m_sSaveFilter = *static_cast<const OUString*>(m_pFilterLB->GetSelectedEntryData());
             m_sFilename = OUString();
         } else {
             //#i97667# reset column name - otherwise it's remembered from the last run
             pModOpt->SetNameFromColumn(OUString());
             //start save as dialog
             OUString sFilter;
-            m_sFilename = SwMailMergeHelper::CallSaveAsDialog(sFilter);
+            m_sFilename = SwMailMergeHelper::CallSaveAsDialog(GetFrameWeld(), sFilter);
             if (m_sFilename.isEmpty())
                 return false;
             m_sSaveFilter = sFilter;
@@ -599,7 +588,7 @@ OUString SwMailMergeDlg::GetTargetURL() const
     return sPath;
 }
 
-IMPL_LINK_NOARG_TYPED(SwMailMergeDlg, InsertPathHdl, Button*, void)
+IMPL_LINK_NOARG(SwMailMergeDlg, InsertPathHdl, Button*, void)
 {
     uno::Reference< XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
     uno::Reference < XFolderPicker2 > xFP = FolderPicker::create(xContext);
@@ -625,40 +614,24 @@ uno::Reference<XResultSet> SwMailMergeDlg::GetResultSet() const
     return xResSetClone;
 }
 
-SwMailMergeCreateFromDlg::SwMailMergeCreateFromDlg(vcl::Window* pParent)
-    : ModalDialog(pParent, "MailMergeDialog",
-                  "modules/swriter/ui/mailmergedialog.ui")
+SwMailMergeCreateFromDlg::SwMailMergeCreateFromDlg(weld::Window* pParent)
+    : GenericDialogController(pParent, "modules/swriter/ui/mailmergedialog.ui", "MailMergeDialog")
+    , m_xThisDocRB(m_xBuilder->weld_radio_button("document"))
 {
-    get(m_pThisDocRB, "document");
 }
 
 SwMailMergeCreateFromDlg::~SwMailMergeCreateFromDlg()
 {
-    disposeOnce();
 }
 
-void SwMailMergeCreateFromDlg::dispose()
+SwMailMergeFieldConnectionsDlg::SwMailMergeFieldConnectionsDlg(weld::Window* pParent)
+    : GenericDialogController(pParent, "modules/swriter/ui/mergeconnectdialog.ui", "MergeConnectDialog")
+    , m_xUseExistingRB(m_xBuilder->weld_radio_button("existing"))
 {
-    m_pThisDocRB.clear();
-    ModalDialog::dispose();
-}
-
-SwMailMergeFieldConnectionsDlg::SwMailMergeFieldConnectionsDlg(vcl::Window* pParent)
-    : ModalDialog(pParent, "MergeConnectDialog",
-                  "modules/swriter/ui/mergeconnectdialog.ui")
-{
-    get(m_pUseExistingRB, "existing");
 }
 
 SwMailMergeFieldConnectionsDlg::~SwMailMergeFieldConnectionsDlg()
 {
-    disposeOnce();
-}
-
-void SwMailMergeFieldConnectionsDlg::dispose()
-{
-    m_pUseExistingRB.clear();
-    ModalDialog::dispose();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

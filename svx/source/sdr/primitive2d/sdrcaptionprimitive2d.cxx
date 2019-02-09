@@ -18,6 +18,7 @@
  */
 
 #include <sdr/primitive2d/sdrcaptionprimitive2d.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <svx/sdr/primitive2d/sdrdecompositiontools.hxx>
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
@@ -32,12 +33,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrCaptionPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrCaptionPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             Primitive2DContainer aRetval;
 
             // create unit outline polygon
-            const basegfx::B2DPolygon aUnitOutline(basegfx::tools::createPolygonFromRect(
+            const basegfx::B2DPolygon aUnitOutline(basegfx::utils::createPolygonFromRect(
                 basegfx::B2DRange(0.0, 0.0, 1.0, 1.0),
                 getCornerRadiusX(),
                 getCornerRadiusY()));
@@ -110,7 +111,6 @@ namespace drawinglayer
                         getSdrLFSTAttribute().getText(),
                         getSdrLFSTAttribute().getLine(),
                         false,
-                        false,
                         false));
             }
 
@@ -120,7 +120,7 @@ namespace drawinglayer
                 aRetval = createEmbeddedShadowPrimitive(aRetval, getSdrLFSTAttribute().getShadow());
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         SdrCaptionPrimitive2D::SdrCaptionPrimitive2D(

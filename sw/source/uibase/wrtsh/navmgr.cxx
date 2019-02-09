@@ -7,8 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "navmgr.hxx"
-#include "wrtsh.hxx"
+#include <navmgr.hxx>
+#include <wrtsh.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <cmdid.h>
@@ -44,6 +44,32 @@ void SwNavigationMgr::GotoSwPosition(const SwPosition &rPos) {
 SwNavigationMgr::SwNavigationMgr(SwWrtShell & rShell)
     : m_nCurrent(0), m_rMyShell(rShell)
 {
+}
+
+SwNavigationMgr::~SwNavigationMgr()
+{
+    SolarMutexGuard g;
+    for (auto & it : m_entries)
+    {
+        EndListening(it->m_aNotifier);
+    }
+    m_entries.clear();
+}
+
+void SwNavigationMgr::Notify(SfxBroadcaster& rBC, const SfxHint& rHint)
+{
+    // our cursors may now spontaneously self-destruct: remove from
+    // m_entries if that happens
+    if (typeid(rHint) == typeid(sw::UnoCursorHint))
+    {
+        auto it = std::find_if(m_entries.begin(), m_entries.end(),
+            [&rBC](const sw::UnoCursorPointer& rItem) { return !rItem || &rBC == &rItem.get()->m_aNotifier; });
+        if (it != m_entries.end())
+        {
+            EndListening(rBC);
+            m_entries.erase(it);
+        }
+    }
 }
 
 // This method is used by the navigation shell - defined in sw/source/uibase/inc/navsh.hxx
@@ -148,7 +174,7 @@ bool SwNavigationMgr::addEntry(const SwPosition& rPos) {
                        // Indicates whether the index should be decremented before
                        // jumping back or not
     // The navigation history has recency with temporal ordering enhancement,
-    //  as described on http://zing.ncsl.nist.gov/hfweb/proceedings/greenberg/
+    // as described on http://zing.ncsl.nist.gov/hfweb/proceedings/greenberg/
     // If any forward history exists, twist the tail of the
     // list from the current position to the end
     if (bForwardWasEnabled) {
@@ -157,12 +183,13 @@ bool SwNavigationMgr::addEntry(const SwPosition& rPos) {
         int curr = m_nCurrent; // Index from which we'll twist the tail.
         int n = (number_ofm_entries - curr) / 2; // Number of entries that will swap places
         for (int i = 0; i < n; i++) {
-            ::std::swap(m_entries[curr + i], m_entries[number_ofm_entries -1 - i]);
+            std::swap(m_entries[curr + i], m_entries[number_ofm_entries -1 - i]);
         }
 
         if (*m_entries.back()->GetPoint() != rPos)
         {
             sw::UnoCursorPointer pCursor(m_rMyShell.GetDoc()->CreateUnoCursor(rPos));
+            StartListening(pCursor->m_aNotifier);
             m_entries.push_back(pCursor);
         }
         bRet = true;
@@ -170,6 +197,7 @@ bool SwNavigationMgr::addEntry(const SwPosition& rPos) {
     else {
         if ( (!m_entries.empty() && *m_entries.back()->GetPoint() != rPos) || m_entries.empty() ) {
             sw::UnoCursorPointer pCursor(m_rMyShell.GetDoc()->CreateUnoCursor(rPos));
+            StartListening(pCursor->m_aNotifier);
             m_entries.push_back(pCursor);
             bRet = true;
         }

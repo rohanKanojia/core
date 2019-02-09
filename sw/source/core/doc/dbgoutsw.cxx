@@ -19,6 +19,7 @@
 
 #ifdef DBG_UTIL
 
+#include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
 #include <svl/poolitem.hxx>
 #include <svl/itemiter.hxx>
@@ -41,7 +42,6 @@
 #include <paratr.hxx>
 #include <SwNodeNum.hxx>
 #include <dbgoutsw.hxx>
-#include <SwRewriter.hxx>
 #include <iostream>
 #include <cstdio>
 
@@ -54,22 +54,22 @@ bool bDbgOutPrintAttrSet = false;
 template<class T>
 static OUString lcl_dbg_out_SvPtrArr(const T & rArr)
 {
-    OUString aStr("[ ");
+    OUStringBuffer aStr("[ ");
 
     for (typename T::const_iterator i(rArr.begin()); i != rArr.end(); ++i)
     {
         if (i != rArr.begin())
-            aStr += ", ";
+            aStr.append(", ");
 
         if (*i)
-            aStr += lcl_dbg_out(**i);
+            aStr.append(lcl_dbg_out(**i));
         else
-            aStr += "(null)";
+            aStr.append("(null)");
     }
 
-    aStr += " ]";
+    aStr.append(" ]");
 
-    return aStr;
+    return aStr.makeStringAndClear();
 }
 
 const char * dbg_out(const void * pVoid)
@@ -93,148 +93,133 @@ const char * dbg_out(const OUString & aStr)
     return aDbgOutResult.getStr();
 }
 
-struct CompareUShort
+static map<sal_uInt16,OUString> & GetItemWhichMap()
 {
-    bool operator()(sal_uInt16 a, sal_uInt16 b) const
+    static map<sal_uInt16,OUString> aItemWhichMap
     {
-        return a < b;
-    }
-};
-
-map<sal_uInt16,OUString,CompareUShort> & GetItemWhichMap()
-{
-    static map<sal_uInt16,OUString,CompareUShort> aItemWhichMap;
-    static bool bInitialized = false;
-
-    if (! bInitialized)
-    {
-        aItemWhichMap[RES_CHRATR_CASEMAP] = "CHRATR_CASEMAP";
-        aItemWhichMap[RES_CHRATR_CHARSETCOLOR] = "CHRATR_CHARSETCOLOR";
-        aItemWhichMap[RES_CHRATR_COLOR] = "CHRATR_COLOR";
-        aItemWhichMap[RES_CHRATR_CONTOUR] = "CHRATR_CONTOUR";
-        aItemWhichMap[RES_CHRATR_CROSSEDOUT] = "CHRATR_CROSSEDOUT";
-        aItemWhichMap[RES_CHRATR_ESCAPEMENT] = "CHRATR_ESCAPEMENT";
-        aItemWhichMap[RES_CHRATR_FONT] = "CHRATR_FONT";
-        aItemWhichMap[RES_CHRATR_FONTSIZE] = "CHRATR_FONTSIZE";
-        aItemWhichMap[RES_CHRATR_KERNING] = "CHRATR_KERNING";
-        aItemWhichMap[RES_CHRATR_LANGUAGE] = "CHRATR_LANGUAGE";
-        aItemWhichMap[RES_CHRATR_POSTURE] = "CHRATR_POSTURE";
-        aItemWhichMap[RES_CHRATR_PROPORTIONALFONTSIZE] = "CHRATR_PROPORTIONALFONTSIZE";
-        aItemWhichMap[RES_CHRATR_SHADOWED] = "CHRATR_SHADOWED";
-        aItemWhichMap[RES_CHRATR_UNDERLINE] = "CHRATR_UNDERLINE";
-        aItemWhichMap[RES_CHRATR_OVERLINE] = "CHRATR_OVERLINE";
-        aItemWhichMap[RES_CHRATR_WEIGHT] = "CHRATR_WEIGHT";
-        aItemWhichMap[RES_CHRATR_WORDLINEMODE] = "CHRATR_WORDLINEMODE";
-        aItemWhichMap[RES_CHRATR_AUTOKERN] = "CHRATR_AUTOKERN";
-        aItemWhichMap[RES_CHRATR_BLINK] = "CHRATR_BLINK";
-        aItemWhichMap[RES_CHRATR_NOHYPHEN] = "CHRATR_NOHYPHEN";
-        aItemWhichMap[RES_CHRATR_NOLINEBREAK] = "CHRATR_NOLINEBREAK";
-        aItemWhichMap[RES_CHRATR_BACKGROUND] = "CHRATR_BACKGROUND";
-        aItemWhichMap[RES_CHRATR_HIGHLIGHT] = "CHRATR_HIGHLIGHT";
-        aItemWhichMap[RES_CHRATR_CJK_FONT] = "CHRATR_CJK_FONT";
-        aItemWhichMap[RES_CHRATR_CJK_FONTSIZE] = "CHRATR_CJK_FONTSIZE";
-        aItemWhichMap[RES_CHRATR_CJK_LANGUAGE] = "CHRATR_CJK_LANGUAGE";
-        aItemWhichMap[RES_CHRATR_CJK_POSTURE] = "CHRATR_CJK_POSTURE";
-        aItemWhichMap[RES_CHRATR_CJK_WEIGHT] = "CHRATR_CJK_WEIGHT";
-        aItemWhichMap[RES_CHRATR_CTL_FONT] = "CHRATR_CTL_FONT";
-        aItemWhichMap[RES_CHRATR_CTL_FONTSIZE] = "CHRATR_CTL_FONTSIZE";
-        aItemWhichMap[RES_CHRATR_CTL_LANGUAGE] = "CHRATR_CTL_LANGUAGE";
-        aItemWhichMap[RES_CHRATR_CTL_POSTURE] = "CHRATR_CTL_POSTURE";
-        aItemWhichMap[RES_CHRATR_CTL_WEIGHT] = "CHRATR_CTL_WEIGHT";
-        aItemWhichMap[RES_CHRATR_ROTATE] = "CHRATR_ROTATE";
-        aItemWhichMap[RES_CHRATR_EMPHASIS_MARK] = "CHRATR_EMPHASIS_MARK";
-        aItemWhichMap[RES_CHRATR_TWO_LINES] = "CHRATR_TWO_LINES";
-        aItemWhichMap[RES_CHRATR_SCALEW] = "CHRATR_SCALEW";
-        aItemWhichMap[RES_CHRATR_RELIEF] = "CHRATR_RELIEF";
-        aItemWhichMap[RES_CHRATR_HIDDEN] = "CHRATR_HIDDEN";
-        aItemWhichMap[RES_CHRATR_BOX] = "CHRATR_BOX";
-        aItemWhichMap[RES_CHRATR_SHADOW] = "CHRATR_SHADOW";
-        aItemWhichMap[RES_TXTATR_AUTOFMT] = "TXTATR_AUTOFMT";
-        aItemWhichMap[RES_TXTATR_INETFMT] = "TXTATR_INETFMT";
-        aItemWhichMap[RES_TXTATR_REFMARK] = "TXTATR_REFMARK";
-        aItemWhichMap[RES_TXTATR_TOXMARK] = "TXTATR_TOXMARK";
-        aItemWhichMap[RES_TXTATR_CHARFMT] = "TXTATR_CHARFMT";
-        aItemWhichMap[RES_TXTATR_INPUTFIELD] = "RES_TXTATR_INPUTFIELD";
-        aItemWhichMap[RES_TXTATR_CJK_RUBY] = "TXTATR_CJK_RUBY";
-        aItemWhichMap[RES_TXTATR_UNKNOWN_CONTAINER] = "TXTATR_UNKNOWN_CONTAINER";
-        aItemWhichMap[RES_TXTATR_META] = "TXTATR_META";
-        aItemWhichMap[RES_TXTATR_METAFIELD] = "TXTATR_METAFIELD";
-        aItemWhichMap[RES_TXTATR_FIELD] = "TXTATR_FIELD";
-        aItemWhichMap[RES_TXTATR_FLYCNT] = "TXTATR_FLYCNT";
-        aItemWhichMap[RES_TXTATR_FTN] = "TXTATR_FTN";
-        aItemWhichMap[RES_TXTATR_ANNOTATION] = "TXTATR_ANNOTATION";
-        aItemWhichMap[RES_TXTATR_DUMMY3] = "TXTATR_DUMMY3";
-        aItemWhichMap[RES_TXTATR_DUMMY1] = "TXTATR_DUMMY1";
-        aItemWhichMap[RES_TXTATR_DUMMY2] = "TXTATR_DUMMY2";
-        aItemWhichMap[RES_PARATR_LINESPACING] = "PARATR_LINESPACING";
-        aItemWhichMap[RES_PARATR_ADJUST] = "PARATR_ADJUST";
-        aItemWhichMap[RES_PARATR_SPLIT] = "PARATR_SPLIT";
-        aItemWhichMap[RES_PARATR_ORPHANS] = "PARATR_ORPHANS";
-        aItemWhichMap[RES_PARATR_WIDOWS] = "PARATR_WIDOWS";
-        aItemWhichMap[RES_PARATR_TABSTOP] = "PARATR_TABSTOP";
-        aItemWhichMap[RES_PARATR_HYPHENZONE] = "PARATR_HYPHENZONE";
-        aItemWhichMap[RES_PARATR_DROP] = "PARATR_DROP";
-        aItemWhichMap[RES_PARATR_REGISTER] = "PARATR_REGISTER";
-        aItemWhichMap[RES_PARATR_NUMRULE] = "PARATR_NUMRULE";
-        aItemWhichMap[RES_PARATR_SCRIPTSPACE] = "PARATR_SCRIPTSPACE";
-        aItemWhichMap[RES_PARATR_HANGINGPUNCTUATION] = "PARATR_HANGINGPUNCTUATION";
-        aItemWhichMap[RES_PARATR_FORBIDDEN_RULES] = "PARATR_FORBIDDEN_RULES";
-        aItemWhichMap[RES_PARATR_VERTALIGN] = "PARATR_VERTALIGN";
-        aItemWhichMap[RES_PARATR_SNAPTOGRID] = "PARATR_SNAPTOGRID";
-        aItemWhichMap[RES_PARATR_CONNECT_BORDER] = "PARATR_CONNECT_BORDER";
-        aItemWhichMap[RES_FILL_ORDER] = "FILL_ORDER";
-        aItemWhichMap[RES_FRM_SIZE] = "FRM_SIZE";
-        aItemWhichMap[RES_PAPER_BIN] = "PAPER_BIN";
-        aItemWhichMap[RES_LR_SPACE] = "LR_SPACE";
-        aItemWhichMap[RES_UL_SPACE] = "UL_SPACE";
-        aItemWhichMap[RES_PAGEDESC] = "PAGEDESC";
-        aItemWhichMap[RES_BREAK] = "BREAK";
-        aItemWhichMap[RES_CNTNT] = "CNTNT";
-        aItemWhichMap[RES_HEADER] = "HEADER";
-        aItemWhichMap[RES_FOOTER] = "FOOTER";
-        aItemWhichMap[RES_PRINT] = "PRINT";
-        aItemWhichMap[RES_OPAQUE] = "OPAQUE";
-        aItemWhichMap[RES_PROTECT] = "PROTECT";
-        aItemWhichMap[RES_SURROUND] = "SURROUND";
-        aItemWhichMap[RES_VERT_ORIENT] = "VERT_ORIENT";
-        aItemWhichMap[RES_HORI_ORIENT] = "HORI_ORIENT";
-        aItemWhichMap[RES_ANCHOR] = "ANCHOR";
-        aItemWhichMap[RES_BACKGROUND] = "BACKGROUND";
-        aItemWhichMap[RES_BOX] = "BOX";
-        aItemWhichMap[RES_SHADOW] = "SHADOW";
-        aItemWhichMap[RES_FRMMACRO] = "FRMMACRO";
-        aItemWhichMap[RES_COL] = "COL";
-        aItemWhichMap[RES_KEEP] = "KEEP";
-        aItemWhichMap[RES_URL] = "URL";
-        aItemWhichMap[RES_EDIT_IN_READONLY] = "EDIT_IN_READONLY";
-        aItemWhichMap[RES_LAYOUT_SPLIT] = "LAYOUT_SPLIT";
-        aItemWhichMap[RES_CHAIN] = "CHAIN";
-        aItemWhichMap[RES_TEXTGRID] = "TEXTGRID";
-        aItemWhichMap[RES_LINENUMBER  ] = "LINENUMBER";
-        aItemWhichMap[RES_FTN_AT_TXTEND] = "FTN_AT_TXTEND";
-        aItemWhichMap[RES_END_AT_TXTEND] = "END_AT_TXTEND";
-        aItemWhichMap[RES_COLUMNBALANCE] = "COLUMNBALANCE";
-        aItemWhichMap[RES_FRAMEDIR] = "FRAMEDIR";
-        aItemWhichMap[RES_HEADER_FOOTER_EAT_SPACING] = "HEADER_FOOTER_EAT_SPACING";
-        aItemWhichMap[RES_ROW_SPLIT] = "ROW_SPLIT";
-        aItemWhichMap[RES_GRFATR_MIRRORGRF] = "GRFATR_MIRRORGRF";
-        aItemWhichMap[RES_GRFATR_CROPGRF] = "GRFATR_CROPGRF";
-        aItemWhichMap[RES_GRFATR_ROTATION] = "GRFATR_ROTATION";
-        aItemWhichMap[RES_GRFATR_LUMINANCE] = "GRFATR_LUMINANCE";
-        aItemWhichMap[RES_GRFATR_CONTRAST] = "GRFATR_CONTRAST";
-        aItemWhichMap[RES_GRFATR_CHANNELR] = "GRFATR_CHANNELR";
-        aItemWhichMap[RES_GRFATR_CHANNELG] = "GRFATR_CHANNELG";
-        aItemWhichMap[RES_GRFATR_CHANNELB] = "GRFATR_CHANNELB";
-        aItemWhichMap[RES_GRFATR_GAMMA] = "GRFATR_GAMMA";
-        aItemWhichMap[RES_GRFATR_INVERT] = "GRFATR_INVERT";
-        aItemWhichMap[RES_GRFATR_TRANSPARENCY] = "GRFATR_TRANSPARENCY";
-        aItemWhichMap[RES_GRFATR_DRAWMODE] = "GRFATR_DRAWMODE";
-        aItemWhichMap[RES_BOXATR_FORMAT] = "BOXATR_FORMAT";
-        aItemWhichMap[RES_BOXATR_FORMULA] = "BOXATR_FORMULA";
-        aItemWhichMap[RES_BOXATR_VALUE] = "BOXATR_VALUE";
-
-        bInitialized = true;
-    }
+        { RES_CHRATR_CASEMAP , "CHRATR_CASEMAP" },
+        { RES_CHRATR_CHARSETCOLOR , "CHRATR_CHARSETCOLOR" },
+        { RES_CHRATR_COLOR , "CHRATR_COLOR" },
+        { RES_CHRATR_CONTOUR , "CHRATR_CONTOUR" },
+        { RES_CHRATR_CROSSEDOUT , "CHRATR_CROSSEDOUT" },
+        { RES_CHRATR_ESCAPEMENT , "CHRATR_ESCAPEMENT" },
+        { RES_CHRATR_FONT , "CHRATR_FONT" },
+        { RES_CHRATR_FONTSIZE , "CHRATR_FONTSIZE" },
+        { RES_CHRATR_KERNING , "CHRATR_KERNING" },
+        { RES_CHRATR_LANGUAGE , "CHRATR_LANGUAGE" },
+        { RES_CHRATR_POSTURE , "CHRATR_POSTURE" },
+        { RES_CHRATR_SHADOWED , "CHRATR_SHADOWED" },
+        { RES_CHRATR_UNDERLINE , "CHRATR_UNDERLINE" },
+        { RES_CHRATR_OVERLINE , "CHRATR_OVERLINE" },
+        { RES_CHRATR_WEIGHT , "CHRATR_WEIGHT" },
+        { RES_CHRATR_WORDLINEMODE , "CHRATR_WORDLINEMODE" },
+        { RES_CHRATR_AUTOKERN , "CHRATR_AUTOKERN" },
+        { RES_CHRATR_BLINK , "CHRATR_BLINK" },
+        { RES_CHRATR_NOHYPHEN , "CHRATR_NOHYPHEN" },
+        { RES_CHRATR_BACKGROUND , "CHRATR_BACKGROUND" },
+        { RES_CHRATR_HIGHLIGHT , "CHRATR_HIGHLIGHT" },
+        { RES_CHRATR_CJK_FONT , "CHRATR_CJK_FONT" },
+        { RES_CHRATR_CJK_FONTSIZE , "CHRATR_CJK_FONTSIZE" },
+        { RES_CHRATR_CJK_LANGUAGE , "CHRATR_CJK_LANGUAGE" },
+        { RES_CHRATR_CJK_POSTURE , "CHRATR_CJK_POSTURE" },
+        { RES_CHRATR_CJK_WEIGHT , "CHRATR_CJK_WEIGHT" },
+        { RES_CHRATR_CTL_FONT , "CHRATR_CTL_FONT" },
+        { RES_CHRATR_CTL_FONTSIZE , "CHRATR_CTL_FONTSIZE" },
+        { RES_CHRATR_CTL_LANGUAGE , "CHRATR_CTL_LANGUAGE" },
+        { RES_CHRATR_CTL_POSTURE , "CHRATR_CTL_POSTURE" },
+        { RES_CHRATR_CTL_WEIGHT , "CHRATR_CTL_WEIGHT" },
+        { RES_CHRATR_ROTATE , "CHRATR_ROTATE" },
+        { RES_CHRATR_EMPHASIS_MARK , "CHRATR_EMPHASIS_MARK" },
+        { RES_CHRATR_TWO_LINES , "CHRATR_TWO_LINES" },
+        { RES_CHRATR_SCALEW , "CHRATR_SCALEW" },
+        { RES_CHRATR_RELIEF , "CHRATR_RELIEF" },
+        { RES_CHRATR_HIDDEN , "CHRATR_HIDDEN" },
+        { RES_CHRATR_BOX , "CHRATR_BOX" },
+        { RES_CHRATR_SHADOW , "CHRATR_SHADOW" },
+        { RES_TXTATR_AUTOFMT , "TXTATR_AUTOFMT" },
+        { RES_TXTATR_INETFMT , "TXTATR_INETFMT" },
+        { RES_TXTATR_REFMARK , "TXTATR_REFMARK" },
+        { RES_TXTATR_TOXMARK , "TXTATR_TOXMARK" },
+        { RES_TXTATR_CHARFMT , "TXTATR_CHARFMT" },
+        { RES_TXTATR_INPUTFIELD , "RES_TXTATR_INPUTFIELD" },
+        { RES_TXTATR_CJK_RUBY , "TXTATR_CJK_RUBY" },
+        { RES_TXTATR_UNKNOWN_CONTAINER , "TXTATR_UNKNOWN_CONTAINER" },
+        { RES_TXTATR_META , "TXTATR_META" },
+        { RES_TXTATR_METAFIELD , "TXTATR_METAFIELD" },
+        { RES_TXTATR_FIELD , "TXTATR_FIELD" },
+        { RES_TXTATR_FLYCNT , "TXTATR_FLYCNT" },
+        { RES_TXTATR_FTN , "TXTATR_FTN" },
+        { RES_TXTATR_ANNOTATION , "TXTATR_ANNOTATION" },
+        { RES_TXTATR_DUMMY3 , "TXTATR_DUMMY3" },
+        { RES_TXTATR_DUMMY1 , "TXTATR_DUMMY1" },
+        { RES_TXTATR_DUMMY2 , "TXTATR_DUMMY2" },
+        { RES_PARATR_LINESPACING , "PARATR_LINESPACING" },
+        { RES_PARATR_ADJUST , "PARATR_ADJUST" },
+        { RES_PARATR_SPLIT , "PARATR_SPLIT" },
+        { RES_PARATR_ORPHANS , "PARATR_ORPHANS" },
+        { RES_PARATR_WIDOWS , "PARATR_WIDOWS" },
+        { RES_PARATR_TABSTOP , "PARATR_TABSTOP" },
+        { RES_PARATR_HYPHENZONE , "PARATR_HYPHENZONE" },
+        { RES_PARATR_DROP , "PARATR_DROP" },
+        { RES_PARATR_REGISTER , "PARATR_REGISTER" },
+        { RES_PARATR_NUMRULE , "PARATR_NUMRULE" },
+        { RES_PARATR_SCRIPTSPACE , "PARATR_SCRIPTSPACE" },
+        { RES_PARATR_HANGINGPUNCTUATION , "PARATR_HANGINGPUNCTUATION" },
+        { RES_PARATR_FORBIDDEN_RULES , "PARATR_FORBIDDEN_RULES" },
+        { RES_PARATR_VERTALIGN , "PARATR_VERTALIGN" },
+        { RES_PARATR_SNAPTOGRID , "PARATR_SNAPTOGRID" },
+        { RES_PARATR_CONNECT_BORDER , "PARATR_CONNECT_BORDER" },
+        { RES_FILL_ORDER , "FILL_ORDER" },
+        { RES_FRM_SIZE , "FRM_SIZE" },
+        { RES_PAPER_BIN , "PAPER_BIN" },
+        { RES_LR_SPACE , "LR_SPACE" },
+        { RES_UL_SPACE , "UL_SPACE" },
+        { RES_PAGEDESC , "PAGEDESC" },
+        { RES_BREAK , "BREAK" },
+        { RES_CNTNT , "CNTNT" },
+        { RES_HEADER , "HEADER" },
+        { RES_FOOTER , "FOOTER" },
+        { RES_PRINT , "PRINT" },
+        { RES_OPAQUE , "OPAQUE" },
+        { RES_PROTECT , "PROTECT" },
+        { RES_SURROUND , "SURROUND" },
+        { RES_VERT_ORIENT , "VERT_ORIENT" },
+        { RES_HORI_ORIENT , "HORI_ORIENT" },
+        { RES_ANCHOR , "ANCHOR" },
+        { RES_BACKGROUND , "BACKGROUND" },
+        { RES_BOX , "BOX" },
+        { RES_SHADOW , "SHADOW" },
+        { RES_FRMMACRO , "FRMMACRO" },
+        { RES_COL , "COL" },
+        { RES_KEEP , "KEEP" },
+        { RES_URL , "URL" },
+        { RES_EDIT_IN_READONLY , "EDIT_IN_READONLY" },
+        { RES_LAYOUT_SPLIT , "LAYOUT_SPLIT" },
+        { RES_CHAIN , "CHAIN" },
+        { RES_TEXTGRID , "TEXTGRID" },
+        { RES_LINENUMBER   , "LINENUMBER" },
+        { RES_FTN_AT_TXTEND , "FTN_AT_TXTEND" },
+        { RES_END_AT_TXTEND , "END_AT_TXTEND" },
+        { RES_COLUMNBALANCE , "COLUMNBALANCE" },
+        { RES_FRAMEDIR , "FRAMEDIR" },
+        { RES_HEADER_FOOTER_EAT_SPACING , "HEADER_FOOTER_EAT_SPACING" },
+        { RES_ROW_SPLIT , "ROW_SPLIT" },
+        { RES_GRFATR_MIRRORGRF , "GRFATR_MIRRORGRF" },
+        { RES_GRFATR_CROPGRF , "GRFATR_CROPGRF" },
+        { RES_GRFATR_ROTATION , "GRFATR_ROTATION" },
+        { RES_GRFATR_LUMINANCE , "GRFATR_LUMINANCE" },
+        { RES_GRFATR_CONTRAST , "GRFATR_CONTRAST" },
+        { RES_GRFATR_CHANNELR , "GRFATR_CHANNELR" },
+        { RES_GRFATR_CHANNELG , "GRFATR_CHANNELG" },
+        { RES_GRFATR_CHANNELB , "GRFATR_CHANNELB" },
+        { RES_GRFATR_GAMMA , "GRFATR_GAMMA" },
+        { RES_GRFATR_INVERT , "GRFATR_INVERT" },
+        { RES_GRFATR_TRANSPARENCY , "GRFATR_TRANSPARENCY" },
+        { RES_GRFATR_DRAWMODE , "GRFATR_DRAWMODE" },
+        { RES_BOXATR_FORMAT , "BOXATR_FORMAT" },
+        { RES_BOXATR_FORMULA , "BOXATR_FORMULA" },
+        { RES_BOXATR_VALUE , "BOXATR_VALUE" },
+    };
 
     return aItemWhichMap;
 }
@@ -268,28 +253,28 @@ static const OUString lcl_dbg_out(const SfxItemSet & rSet)
     SfxItemIter aIter(rSet);
     const SfxPoolItem * pItem;
     bool bFirst = true;
-    OUString aStr = "[ ";
+    OUStringBuffer aStr = "[ ";
 
     pItem = aIter.FirstItem();
 
     while (pItem )
     {
         if (!bFirst)
-            aStr += ", ";
+            aStr.append(", ");
 
         if (reinterpret_cast<sal_uIntPtr>(pItem) != SAL_MAX_SIZE)
-            aStr += lcl_dbg_out(*pItem);
+            aStr.append(lcl_dbg_out(*pItem));
         else
-            aStr += "invalid";
+            aStr.append("invalid");
 
         bFirst = false;
 
         pItem = aIter.NextItem();
     }
 
-    aStr += " ]";
+    aStr.append(" ]");
 
-    return aStr;
+    return aStr.makeStringAndClear();
 }
 
 const char * dbg_out(const SfxItemSet & rSet)
@@ -319,18 +304,18 @@ const char * dbg_out(const SwTextAttr & rAttr)
 
 static const OUString lcl_dbg_out(const SwpHints & rHints)
 {
-    OUString aStr("[ SwpHints\n");
+    OUStringBuffer aStr("[ SwpHints\n");
 
     for (size_t i = 0; i < rHints.Count(); ++i)
     {
-        aStr += "  ";
-        aStr += lcl_dbg_out(*rHints.Get(i));
-        aStr += "\n";
+        aStr.append("  ");
+        aStr.append(lcl_dbg_out(*rHints.Get(i)));
+        aStr.append("\n");
     }
 
-    aStr += "]\n";
+    aStr.append("]\n");
 
-    return aStr;
+    return aStr.makeStringAndClear();
 }
 
 const char * dbg_out(const SwpHints &rHints)
@@ -361,19 +346,19 @@ const char * dbg_out(const SwPosition & rPos)
 
 static OUString lcl_dbg_out(const SwPaM & rPam)
 {
-   OUString aStr("[ Pt: ");
+    OUString aStr("[ Pt: ");
 
-   aStr += lcl_dbg_out(*rPam.GetPoint());
+    aStr += lcl_dbg_out(*rPam.GetPoint());
 
-   if (rPam.HasMark())
-   {
-       aStr += ", Mk: ";
-       aStr += lcl_dbg_out(*rPam.GetMark());
-   }
+    if (rPam.HasMark())
+    {
+        aStr += ", Mk: ";
+        aStr += lcl_dbg_out(*rPam.GetMark());
+    }
 
-   aStr += " ]";
+    aStr += " ]";
 
-   return aStr;
+    return aStr;
 }
 
 const char * dbg_out(const SwPaM & rPam)
@@ -442,7 +427,7 @@ const char * dbg_out(const SwFrameFormat & rFrameFormat)
 
 static const OUString lcl_AnchoredFrames(const SwNode & rNode)
 {
-    OUString aResult("[");
+    OUStringBuffer aResult("[");
 
     const SwDoc * pDoc = rNode.GetDoc();
     if (pDoc)
@@ -461,19 +446,19 @@ static const OUString lcl_AnchoredFrames(const SwNode & rNode)
                 if (pPos && &pPos->nNode.GetNode() == &rNode)
                 {
                     if (! bFirst)
-                        aResult += ", ";
+                        aResult.append(", ");
 
                     if (*i)
-                        aResult += lcl_dbg_out(**i);
+                        aResult.append(lcl_dbg_out(**i));
                     bFirst = false;
                 }
             }
         }
     }
 
-    aResult += "]";
+    aResult.append("]");
 
-    return aResult;
+    return aResult.makeStringAndClear();
 }
 
 static OUString lcl_dbg_out_NumType(sal_Int16 nType)
@@ -524,11 +509,9 @@ static OUString lcl_dbg_out(const SwNode & rNode)
     aTmpStr += OUString::number(rNode.GetIndex());
     aTmpStr += "\"";
 
-#ifdef DBG_UTIL
     aTmpStr += " serial=\"";
     aTmpStr += OUString::number(rNode.GetSerial());
     aTmpStr += "\"";
-#endif
 
     aTmpStr += " type=\"";
     aTmpStr += OUString::number(sal_Int32( rNode.GetNodeType() ) );
@@ -623,9 +606,8 @@ static OUString lcl_dbg_out(const SwNode & rNode)
             }
 
             const SwNumRuleItem & rItem =
-                static_cast<const SwNumRuleItem &>
-                (pColl->GetFormatAttr(RES_PARATR_NUMRULE));
-            const OUString sNumruleName = rItem.GetValue();
+                pColl->GetFormatAttr(RES_PARATR_NUMRULE);
+            const OUString& sNumruleName = rItem.GetValue();
 
             if (!sNumruleName.isEmpty())
             {
@@ -703,89 +685,10 @@ const char * dbg_out(const SwTextNode * pNode)
         return nullptr;
 }
 
-static void lcl_dbg_nodes_inner(OUString & aStr, SwNodes & rNodes, sal_uLong & nIndex)
-{
-    SwNode * pNode = rNodes[nIndex];
-    SwStartNode * pStartNode = dynamic_cast<SwStartNode *> (pNode);
-
-    SwNode * pEndNode = nullptr;
-    if (pStartNode != nullptr)
-        pEndNode = pStartNode->EndOfSectionNode();
-
-    sal_uLong nCount = rNodes.Count();
-    sal_uLong nStartIndex = nIndex;
-
-    bool bDone = false;
-
-    OUString aTag;
-    if (pNode->IsTableNode())
-        aTag += "table";
-    else if (pNode->IsSectionNode())
-        aTag += "section";
-    else
-        aTag += "nodes";
-
-    aStr += "<";
-    aStr += aTag;
-    aStr += ">";
-
-    while (! bDone)
-    {
-        if (pNode->IsStartNode() && nIndex != nStartIndex)
-            lcl_dbg_nodes_inner(aStr, rNodes, nIndex);
-        else
-        {
-            aStr += lcl_dbg_out(*pNode);
-            aStr += "\n";
-
-            nIndex++;
-        }
-
-        if (pNode == pEndNode || nIndex >= nCount)
-            bDone = true;
-        else
-            pNode = rNodes[nIndex];
-    }
-
-    aStr += "</";
-    aStr += aTag;
-    aStr += ">\n";
-}
-
-static OUString lcl_dbg_out(SwNodes & rNodes)
-{
-    OUString aStr("<nodes-array>");
-
-    sal_uLong nIndex = 0;
-    sal_uLong nCount = rNodes.Count();
-
-    while (nIndex < nCount)
-    {
-        lcl_dbg_nodes_inner(aStr, rNodes, nIndex);
-    }
-
-    aStr += "</nodes-array>\n";
-
-    return aStr;
-}
-
-const char * dbg_out(SwNodes & rNodes)
-{
-    return dbg_out(lcl_dbg_out(rNodes));
-}
-
 static OUString lcl_dbg_out(const SwUndo & rUndo)
 {
-    OUString aStr("[ ");
-
-    aStr += OUString::number(
-                static_cast<SfxUndoAction const&>(rUndo).GetId());
-    aStr += ": ";
-
-    aStr += rUndo.GetComment();
-    aStr += " ]";
-
-    return aStr;
+    return "[ " + OUString::number(static_cast<int>(rUndo.GetId()))
+                + ": " + rUndo.GetComment() + " ]";
 }
 
 const char * dbg_out(const SwUndo & rUndo)
@@ -793,40 +696,24 @@ const char * dbg_out(const SwUndo & rUndo)
     return dbg_out(lcl_dbg_out(rUndo));
 }
 
-static OUString lcl_dbg_out(SwOutlineNodes & rNodes)
+static OUString lcl_dbg_out(SwOutlineNodes const & rNodes)
 {
-    OUString aStr("[\n");
+    OUStringBuffer aStr("[\n");
 
     for (size_t i = 0; i < rNodes.size(); i++)
     {
-        aStr += lcl_dbg_out(*rNodes[i]);
-        aStr += "\n";
+        aStr.append(lcl_dbg_out(*rNodes[i]));
+        aStr.append("\n");
     }
 
-    aStr += "]\n";
+    aStr.append("]\n");
 
-    return aStr;
+    return aStr.makeStringAndClear();
 }
 
-const char * dbg_out(SwOutlineNodes & rNodes)
+const char * dbg_out( SwOutlineNodes const & rNodes)
 {
     return dbg_out(lcl_dbg_out(rNodes));
-}
-
-//FIXME: this method seems to do nothing at all
-static OUString lcl_dbg_out(const SwRewriter & rRewriter)
-{
-    (void) rRewriter;
-    OUString aResult;
-
-    //aResult = rRewriter.ToString();
-
-    return aResult;
-}
-
-const char * dbg_out(const SwRewriter & rRewriter)
-{
-    return dbg_out(lcl_dbg_out(rRewriter));
 }
 
 static OUString lcl_dbg_out(const SvxNumberFormat & rFormat)
@@ -840,24 +727,24 @@ static OUString lcl_dbg_out(const SvxNumberFormat & rFormat)
 
 static OUString lcl_dbg_out(const SwNumRule & rRule)
 {
-    OUString aResult("[ ");
+    OUStringBuffer aResult("[ ");
 
-    aResult += rRule.GetName();
-    aResult += " [";
+    aResult.append(rRule.GetName());
+    aResult.append(" [");
 
     for (sal_uInt8 n = 0; n < MAXLEVEL; n++)
     {
         if (n > 0)
-            aResult += ", ";
+            aResult.append(", ");
 
-        aResult += lcl_dbg_out(rRule.Get(n));
+        aResult.append(lcl_dbg_out(rRule.Get(n)));
     }
 
-    aResult += "]";
+    aResult.append("]");
 
-    aResult += "]";
+    aResult.append("]");
 
-    return aResult;
+    return aResult.makeStringAndClear();
 }
 
 const char * dbg_out(const SwNumRule & rRule)
@@ -893,23 +780,23 @@ const char * dbg_out(const SwFrameFormats & rFrameFormats)
 
 static OUString lcl_dbg_out(const SwNumRuleTable & rTable)
 {
-    OUString aResult("[");
+    OUStringBuffer aResult("[");
 
     for (size_t n = 0; n < rTable.size(); n++)
     {
         if (n > 0)
-            aResult += ", ";
+            aResult.append(", ");
 
-        aResult += rTable[n]->GetName();
+        aResult.append(rTable[n]->GetName());
 
         char sBuffer[256];
         sprintf(sBuffer, "(%p)", rTable[n]);
-        aResult += OUString(sBuffer, strlen(sBuffer), RTL_TEXTENCODING_ASCII_US);
+        aResult.appendAscii(sBuffer);
     }
 
-    aResult += "]";
+    aResult.append("]");
 
-    return aResult;
+    return aResult.makeStringAndClear();
 }
 
 const char * dbg_out(const SwNumRuleTable & rTable)
@@ -961,23 +848,23 @@ const char * dbg_out(const SwFormToken & rToken)
 
 static OUString lcl_dbg_out(const SwFormTokens & rTokens)
 {
-    OUString aStr("[");
+    OUStringBuffer aStr("[");
 
     SwFormTokens::const_iterator aIt;
 
     for (aIt = rTokens.begin(); aIt != rTokens.end(); ++aIt)
     {
         if (aIt != rTokens.begin())
-            aStr += ", ";
+            aStr.append(", ");
 
-        aStr += lcl_TokenType2Str(aIt->eTokenType);
-        aStr += ": ";
-        aStr += lcl_dbg_out(*aIt);
+        aStr.append(lcl_TokenType2Str(aIt->eTokenType));
+        aStr.append(": ");
+        aStr.append(lcl_dbg_out(*aIt));
     }
 
-    aStr += "]";
+    aStr.append("]");
 
-    return aStr;
+    return aStr.makeStringAndClear();
 }
 
 const char * dbg_out(const SwFormTokens & rTokens)

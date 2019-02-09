@@ -17,17 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "localizationmgr.hxx"
+#include <localizationmgr.hxx>
 
-#include "basidesh.hxx"
-#include "baside3.hxx"
-#include "iderdll.hxx"
-#include "dlged.hxx"
-#include "managelang.hxx"
+#include <basidesh.hxx>
+#include <baside3.hxx>
+#include <iderdll.hxx>
+#include <dlged.hxx>
+#include <managelang.hxx>
 
 #include <com/sun/star/frame/XLayoutManager.hpp>
+#include <com/sun/star/resource/MissingResourceException.hpp>
 #include <com/sun/star/resource/XStringResourceSupplier.hpp>
 #include <sfx2/dispatch.hxx>
+#include <tools/debug.hxx>
 
 namespace basctl
 {
@@ -68,7 +70,6 @@ bool LocalizationMgr::isLibraryLocalized ()
 
 void LocalizationMgr::handleTranslationbar ()
 {
-    static const char aLayoutManagerName[] = "LayoutManager";
     static const char aToolBarResName[] = "private:resource/toolbar/translationbar";
 
     Reference< beans::XPropertySet > xFrameProps
@@ -76,7 +77,7 @@ void LocalizationMgr::handleTranslationbar ()
     if ( xFrameProps.is() )
     {
         Reference< css::frame::XLayoutManager > xLayoutManager;
-        uno::Any a = xFrameProps->getPropertyValue( aLayoutManagerName );
+        uno::Any a = xFrameProps->getPropertyValue( "LayoutManager" );
         a >>= xLayoutManager;
         if ( xLayoutManager.is() )
         {
@@ -96,13 +97,8 @@ void LocalizationMgr::handleTranslationbar ()
 
 // TODO: -> export from toolkit
 
-namespace
-{
 
-
-}
-
-bool isLanguageDependentProperty( const OUString& aName )
+static bool isLanguageDependentProperty( const OUString& aName )
 {
     static struct Prop
     {
@@ -137,7 +133,7 @@ void LocalizationMgr::implEnableDisableResourceForAllLibraryDialogs( HandleResou
     for( sal_Int32 i = 0 ; i < nDlgCount ; i++ )
     {
         OUString aDlgName = pDlgNames[ i ];
-        if (DialogWindow* pWin = m_pShell->FindDlgWin(m_aDocument, m_aLibName, aDlgName))
+        if (VclPtr<DialogWindow> pWin = m_pShell->FindDlgWin(m_aDocument, m_aLibName, aDlgName))
         {
             Reference< container::XNameContainer > xDialog = pWin->GetDialog();
             if( xDialog.is() )
@@ -165,20 +161,19 @@ void LocalizationMgr::implEnableDisableResourceForAllLibraryDialogs( HandleResou
 }
 
 
-OUString implCreatePureResourceId
+static OUString implCreatePureResourceId
     ( const OUString& aDialogName, const OUString& aCtrlName,
       const OUString& aPropName,
       const Reference< XStringResourceManager >& xStringResourceManager )
 {
     sal_Int32 nUniqueId = xStringResourceManager->getUniqueNumericId();
-    OUString aPureIdStr = OUString::number( nUniqueId );
-    aPureIdStr += aDot;
-    aPureIdStr += aDialogName;
-    aPureIdStr += aDot;
+    OUString aPureIdStr = OUString::number( nUniqueId )
+                        + aDot
+                        + aDialogName
+                        + aDot;
     if( !aCtrlName.isEmpty() )
     {
-        aPureIdStr += aCtrlName;
-        aPureIdStr += aDot;
+        aPureIdStr += aCtrlName + aDot;
     }
     aPureIdStr += aPropName;
     return aPureIdStr;
@@ -247,12 +242,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             xStringResourceManager->setStringForLocale( aPureIdStr, aPropStr, rLocale );
                         }
 
-                        OUString aPropIdStr = aEsc;
-                        aPropIdStr += aPureIdStr;
+                        OUString aPropIdStr = aEsc + aPureIdStr;
                         // TODO?: Change here and in toolkit
                         (void)aSemi;
-                        aPropAny <<= aPropIdStr;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aPropIdStr) );
                     }
                     // Replace id by string from StringResource
                     else if( eMode == RESET_IDS )
@@ -268,8 +261,7 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             catch(const MissingResourceException&)
                             {
                             }
-                            aPropAny <<= aNewPropStr;
-                            xPropertySet->setPropertyValue( aPropName, aPropAny );
+                            xPropertySet->setPropertyValue( aPropName, Any(aNewPropStr) );
                         }
                     }
                     // Remove Id for all locales
@@ -318,12 +310,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             {}
                         }
 
-                        OUString aPropIdStr = aEsc;
-                        aPropIdStr += aPureIdStr;
+                        OUString aPropIdStr = aEsc + aPureIdStr;
                         // TODO?: Change here and in toolkit
                         (void)aSemi;
-                        aPropAny <<= aPropIdStr;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aPropIdStr) );
                     }
                     // Replace string by string from source StringResourceResolver
                     else if( eMode == MOVE_RESOURCES && xSourceStringResolver.is() )
@@ -354,12 +344,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             xStringResourceManager->setStringForLocale( aPureIdStr, aResStr, rLocale );
                         }
 
-                        OUString aPropIdStr = aEsc;
-                        aPropIdStr += aPureIdStr;
+                        OUString aPropIdStr = aEsc + aPureIdStr;
                         // TODO?: Change here and in toolkit
                         (void)aSemi;
-                        aPropAny <<= aPropIdStr;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aPropIdStr) );
                     }
                     // Copy string from source to target resource
                     else if( eMode == COPY_RESOURCES && xSourceStringResolver.is() )
@@ -409,10 +397,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                         aIdStrings.realloc( nPropStringCount );
                         OUString* pIdStrings = aIdStrings.getArray();
 
-                        OUString aIdStrBase = aDot;
-                        aIdStrBase += aCtrlName;
-                        aIdStrBase += aDot;
-                        aIdStrBase += aPropName;
+                        OUString aIdStrBase = aDot
+                                            + aCtrlName
+                                            + aDot
+                                            + aPropName;
 
                         const Locale* pLocales = aLocaleSeq.getConstArray();
                         sal_Int32 i;
@@ -427,8 +415,8 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             }
 
                             sal_Int32 nUniqueId = xStringResourceManager->getUniqueNumericId();
-                            OUString aPureIdStr = OUString::number( nUniqueId );
-                            aPureIdStr += aIdStrBase;
+                            OUString aPureIdStr = OUString::number( nUniqueId )
+                                                + aIdStrBase;
 
                             // Set Id for all locales
                             for( sal_Int32 iLocale = 0 ; iLocale < nLocaleCount ; iLocale++ )
@@ -437,12 +425,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                                 xStringResourceManager->setStringForLocale( aPureIdStr, aPropStr, rLocale );
                             }
 
-                            OUString aPropIdStr = aEsc;
-                            aPropIdStr += aPureIdStr;
+                            OUString aPropIdStr = aEsc + aPureIdStr;
                             pIdStrings[i] = aPropIdStr;
                         }
-                        aPropAny <<= aIdStrings;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aIdStrings) );
                     }
                     // Replace id by string from StringResource
                     else if( eMode == RESET_IDS )
@@ -469,15 +455,11 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             }
                             pNewPropStrings[i] = aNewPropStr;
                         }
-                        aPropAny <<= aNewPropStrings;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aNewPropStrings) );
                     }
                     // Remove Id for all locales
                     else if( eMode == REMOVE_IDS_FROM_RESOURCE )
                     {
-                        Sequence< OUString > aNewPropStrings;
-                        aNewPropStrings.realloc( nPropStringCount );
-
                         const Locale* pLocales = aLocaleSeq.getConstArray();
                         sal_Int32 i;
                         for ( i = 0; i < nPropStringCount; ++i )
@@ -508,10 +490,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                         aIdStrings.realloc( nPropStringCount );
                         OUString* pIdStrings = aIdStrings.getArray();
 
-                        OUString aIdStrBase = aDot;
-                        aIdStrBase += aCtrlName;
-                        aIdStrBase += aDot;
-                        aIdStrBase += aPropName;
+                        OUString aIdStrBase = aDot
+                                            + aCtrlName
+                                            + aDot
+                                            + aPropName;
 
                         const Locale* pLocales = aLocaleSeq.getConstArray();
                         sal_Int32 i;
@@ -521,8 +503,8 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             OUString aPureSourceIdStr = aSourceIdStr.copy( 1 );
 
                             sal_Int32 nUniqueId = xStringResourceManager->getUniqueNumericId();
-                            OUString aPureIdStr = OUString::number( nUniqueId );
-                            aPureIdStr += aIdStrBase;
+                            OUString aPureIdStr = OUString::number( nUniqueId )
+                                                + aIdStrBase;
 
                             // Set Id for all locales
                             for( sal_Int32 iLocale = 0 ; iLocale < nLocaleCount ; iLocale++ )
@@ -541,12 +523,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                                 {}
                             }
 
-                            OUString aPropIdStr = aEsc;
-                            aPropIdStr += aPureIdStr;
+                            OUString aPropIdStr = aEsc + aPureIdStr;
                             pIdStrings[i] = aPropIdStr;
                         }
-                        aPropAny <<= aIdStrings;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aIdStrings) );
                     }
                     // Replace string by string from source StringResourceResolver
                     else if( eMode == MOVE_RESOURCES && xSourceStringResolver.is() )
@@ -555,10 +535,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                         aIdStrings.realloc( nPropStringCount );
                         OUString* pIdStrings = aIdStrings.getArray();
 
-                        OUString aIdStrBase = aDot;
-                        aIdStrBase += aCtrlName;
-                        aIdStrBase += aDot;
-                        aIdStrBase += aPropName;
+                        OUString aIdStrBase = aDot
+                                            + aCtrlName
+                                            + aDot
+                                            + aPropName;
 
                         const Locale& rDefaultLocale = xSourceStringResolver->getDefaultLocale();
 
@@ -570,8 +550,8 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                             OUString aPureSourceIdStr = aSourceIdStr.copy( 1 );
 
                             sal_Int32 nUniqueId = xStringResourceManager->getUniqueNumericId();
-                            OUString aPureIdStr = OUString::number( nUniqueId );
-                            aPureIdStr += aIdStrBase;
+                            OUString aPureIdStr = OUString::number( nUniqueId )
+                                                + aIdStrBase;
 
                             // Set Id for all locales
                             for( sal_Int32 iLocale = 0 ; iLocale < nLocaleCount ; iLocale++ )
@@ -592,12 +572,10 @@ sal_Int32 LocalizationMgr::implHandleControlResourceProperties
                                 xStringResourceManager->setStringForLocale( aPureIdStr, aResStr, rLocale );
                             }
 
-                            OUString aPropIdStr = aEsc;
-                            aPropIdStr += aPureIdStr;
+                            OUString aPropIdStr = aEsc + aPureIdStr;
                             pIdStrings[i] = aPropIdStr;
                         }
-                        aPropAny <<= aIdStrings;
-                        xPropertySet->setPropertyValue( aPropName, aPropAny );
+                        xPropertySet->setPropertyValue( aPropName, Any(aIdStrings) );
                     }
                     // Copy string from source to target resource
                     else if( eMode == COPY_RESOURCES && xSourceStringResolver.is() )
@@ -695,7 +673,7 @@ void LocalizationMgr::handleRemoveLocales( const Sequence< Locale >& aLocaleSeq 
             }
             else
             {
-                // Inconsistancy, keep last locale
+                // Inconsistency, keep last locale
                 bConsistant = false;
                 bRemove = false;
             }
@@ -730,7 +708,6 @@ void LocalizationMgr::handleRemoveLocales( const Sequence< Locale >& aLocaleSeq 
 
     DBG_ASSERT( bConsistant,
         "LocalizationMgr::handleRemoveLocales(): sequence contains unsupported locales" );
-    (void)bConsistant;
 }
 
 void LocalizationMgr::handleSetDefaultLocale(const Locale& rLocale)
@@ -794,12 +771,12 @@ void LocalizationMgr::handleBasicStopped()
 }
 
 
-DialogWindow* FindDialogWindowForEditor( DlgEditor* pEditor )
+static DialogWindow* FindDialogWindowForEditor( DlgEditor const * pEditor )
 {
     Shell::WindowTable const& aWindowTable = GetShell()->GetWindowTable();
-    for (Shell::WindowTableIt it = aWindowTable.begin(); it != aWindowTable.end(); ++it )
+    for (auto const& window : aWindowTable)
     {
-        BaseWindow* pWin = it->second;
+        BaseWindow* pWin = window.second;
         if (!pWin->IsSuspended())
             if (DialogWindow* pDlgWin = dynamic_cast<DialogWindow*>(pWin))
             {
@@ -811,7 +788,7 @@ DialogWindow* FindDialogWindowForEditor( DlgEditor* pEditor )
 }
 
 
-void LocalizationMgr::setControlResourceIDsForNewEditorObject( DlgEditor* pEditor,
+void LocalizationMgr::setControlResourceIDsForNewEditorObject( DlgEditor const * pEditor,
     const Any& rControlAny, const OUString& aCtrlName )
 {
     // Get library for DlgEditor
@@ -841,7 +818,7 @@ void LocalizationMgr::setControlResourceIDsForNewEditorObject( DlgEditor* pEdito
         MarkDocumentModified( aDocument );
 }
 
-void LocalizationMgr::renameControlResourceIDsForEditorObject( DlgEditor* pEditor,
+void LocalizationMgr::renameControlResourceIDsForEditorObject( DlgEditor const * pEditor,
     const css::uno::Any& rControlAny, const OUString& aNewCtrlName )
 {
     // Get library for DlgEditor
@@ -869,7 +846,7 @@ void LocalizationMgr::renameControlResourceIDsForEditorObject( DlgEditor* pEdito
 }
 
 
-void LocalizationMgr::deleteControlResourceIDsForDeletedEditorObject( DlgEditor* pEditor,
+void LocalizationMgr::deleteControlResourceIDsForDeletedEditorObject( DlgEditor const * pEditor,
     const Any& rControlAny, const OUString& aCtrlName )
 {
     // Get library for DlgEditor
@@ -898,8 +875,6 @@ void LocalizationMgr::deleteControlResourceIDsForDeletedEditorObject( DlgEditor*
 void LocalizationMgr::setStringResourceAtDialog( const ScriptDocument& rDocument, const OUString& aLibName,
     const OUString& aDlgName, const Reference< container::XNameContainer >& xDialogModel )
 {
-    static const char aResourceResolverPropName[] = "ResourceResolver";
-
     // Get library
     Reference< container::XNameContainer > xDialogLib( rDocument.getLibrary( E_DIALOGS, aLibName, true ) );
     Reference< XStringResourceManager > xStringResourceManager =
@@ -921,9 +896,7 @@ void LocalizationMgr::setStringResourceAtDialog( const ScriptDocument& rDocument
         }
 
         Reference< beans::XPropertySet > xDlgPSet( xDialogModel, UNO_QUERY );
-        Any aStringResourceManagerAny;
-        aStringResourceManagerAny <<= xStringResourceManager;
-        xDlgPSet->setPropertyValue( aResourceResolverPropName, aStringResourceManagerAny );
+        xDlgPSet->setPropertyValue( "ResourceResolver", Any(xStringResourceManager) );
     }
 }
 
@@ -1043,7 +1016,7 @@ void LocalizationMgr::setResourceIDsForDialog( const Reference< container::XName
     }
 }
 
-void LocalizationMgr::copyResourcesForPastedEditorObject( DlgEditor* pEditor,
+void LocalizationMgr::copyResourcesForPastedEditorObject( DlgEditor const * pEditor,
     const Any& rControlAny, const OUString& aCtrlName,
     const Reference< XStringResourceResolver >& xSourceStringResolver )
 {
@@ -1078,11 +1051,10 @@ void LocalizationMgr::copyResourceForDroppedDialog( const Reference< container::
         return;
 
     // Dialog as control
-    OUString aDummyName;
     Any aDialogCtrl;
     aDialogCtrl <<= xDialogModel;
     implHandleControlResourceProperties( aDialogCtrl, aDialogName,
-        aDummyName, xStringResourceManager, xSourceStringResolver, MOVE_RESOURCES );
+        OUString(), xStringResourceManager, xSourceStringResolver, MOVE_RESOURCES );
 
     // Handle all controls
     Sequence< OUString > aNames = xDialogModel->getElementNames();

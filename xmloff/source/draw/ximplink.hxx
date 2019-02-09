@@ -35,20 +35,17 @@ class SdXMLShapeLinkContext : public SvXMLShapeContext
 {
     // the parent shape group this link is placed in
     css::uno::Reference< css::drawing::XShapes > mxParent;
-    OUString msHyperlink;
 
 public:
 
     SdXMLShapeLinkContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLShapeLinkContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLShapeLinkContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
-    virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
-    virtual void EndElement() override;
 };
 
 #endif // INCLUDED_XMLOFF_SOURCE_DRAW_XIMPLINK_HXX

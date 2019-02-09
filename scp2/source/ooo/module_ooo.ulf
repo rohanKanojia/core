@@ -76,6 +76,12 @@ en-US = "Bengali"
 [STR_DESC_MODULE_EXTENSION_DICTIONARY_BN]
 en-US = "Bengali spelling dictionary"
 
+[STR_NAME_MODULE_EXTENSION_DICTIONARY_BO]
+en-US = "Classical Tibetan"
+
+[STR_DESC_MODULE_EXTENSION_DICTIONARY_BO]
+en-US = "Classical Tibetan syllable spelling dictionary"
+
 [STR_NAME_MODULE_EXTENSION_DICTIONARY_BR]
 en-US = "Breton"
 
@@ -184,6 +190,12 @@ en-US = "Croatian"
 [STR_DESC_MODULE_EXTENSION_DICTIONARY_HR]
 en-US = "Croatian spelling dictionary, and hyphenation rules"
 
+[STR_NAME_MODULE_EXTENSION_DICTIONARY_ID]
+en-US = "Indonesian"
+
+[STR_DESC_MODULE_EXTENSION_DICTIONARY_ID]
+en-US = "Indonesian spelling dictionary, hyphenation rules, and thesaurus"
+
 [STR_NAME_MODULE_EXTENSION_DICTIONARY_IS]
 en-US = "Icelandic"
 
@@ -291,6 +303,12 @@ en-US = "Slovenian"
 
 [STR_DESC_MODULE_EXTENSION_DICTIONARY_SL]
 en-US = "Slovenian spelling dictionary, hyphenation rules, and thesaurus"
+
+[STR_NAME_MODULE_EXTENSION_DICTIONARY_SQ]
+en-US = "Albanian"
+
+[STR_DESC_MODULE_EXTENSION_DICTIONARY_SQ]
+en-US = "Albanian spelling dictionary"
 
 [STR_NAME_MODULE_EXTENSION_DICTIONARY_SR]
 en-US = "Serbian"

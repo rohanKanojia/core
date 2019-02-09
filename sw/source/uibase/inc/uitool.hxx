@@ -21,8 +21,9 @@
 
 #include <tools/wintypes.hxx>
 #include <vcl/field.hxx>
+#include <vcl/weld.hxx>
 #include <swtypes.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 class MetricFormatter;
 class SfxItemSet;
@@ -30,6 +31,7 @@ class SwPageDesc;
 class SvxTabStopItem;
 class SwWrtShell;
 class ListBox;
+namespace weld { class ComboBox; }
 class SwDocShell;
 class SwFrameFormat;
 class SwTabCols;
@@ -42,17 +44,12 @@ SW_DLLPUBLIC void SetMetric(MetricFormatter& rCtrl, FieldUnit eUnit);
 // fill BoxInfo attribute
 SW_DLLPUBLIC void PrepareBoxInfo(SfxItemSet& rSet, const SwWrtShell& rSh);
 
-// Modes for attribute conversion
-#define CONV_ATTR_STD    1  // Standard character dialog
-#define CONV_ATTR_ENV    2  // Character dialog opened from envelope dialog
-
 /**
  * Convert character specific attributes to general ones used by tab pages.
  *
  * @param[in,out]   rSet    the set in which character attributes are stored
- * @param[in]       nMode   specify the dialog which will be called after conversion
 **/
-SW_DLLPUBLIC void ConvertAttrCharToGen(SfxItemSet& rSet, const sal_uInt8 nMode);
+SW_DLLPUBLIC void ConvertAttrCharToGen(SfxItemSet& rSet);
 
 /**
  * Convert general attributes to the corresponding character attributes.
@@ -60,9 +57,8 @@ SW_DLLPUBLIC void ConvertAttrCharToGen(SfxItemSet& rSet, const sal_uInt8 nMode);
  *
  * @param[in,out]   rSet    the set in which character attributes are stored
  * @param[in]       rOrigSet    original itemset used as input for the dialog
- * @param[in]       nMode   specify the dialog which was called before
 **/
-SW_DLLPUBLIC void ConvertAttrGenToChar(SfxItemSet& rSet, const SfxItemSet& rOrigSet, const sal_uInt8 nMode);
+SW_DLLPUBLIC void ConvertAttrGenToChar(SfxItemSet& rSet, const SfxItemSet& rOrigSet);
 
 // SfxItemSets <-> PageDesc
 void ItemSetToPageDesc( const SfxItemSet& rSet, SwPageDesc& rPageDesc );
@@ -90,20 +86,20 @@ SW_DLLPUBLIC bool HasCharUnit( bool bWeb );
 void SetApplyCharUnit(bool bApplyChar, bool bWeb);
 
 // fill ListBox with all char style templates, except the standard ones
-SW_DLLPUBLIC void FillCharStyleListBox(ListBox& rToFill, SwDocShell* pDocSh, bool bSorted = false, bool bWithDefault = false);
+SW_DLLPUBLIC void FillCharStyleListBox(weld::ComboBox& rToFill, SwDocShell* pDocSh, bool bSorted = false, bool bWithDefault = false);
 
 //inserts a string sorted into a ListBox,
-SW_DLLPUBLIC sal_Int32 InsertStringSorted(const OUString& rEntry, ListBox& rToFill, sal_Int32 nOffset);
+SW_DLLPUBLIC void InsertStringSorted(const OUString& rId, const OUString& rEntry, weld::ComboBox& rToFill, int nOffset);
 
-// Get table width and alignement
-SwTwips GetTableWidth( SwFrameFormat* pFormat, SwTabCols& rCols, sal_uInt16 *pPercent,
+// Get table width and alignment
+SwTwips GetTableWidth( SwFrameFormat const * pFormat, SwTabCols const & rCols, sal_uInt16 *pPercent,
         SwWrtShell* pSh );
 
 OUString GetAppLangDateTimeString( const DateTime& );
 
 // search for a command string within the menu structure and execute it
 // at the dispatcher if there is one, if executed return true
-bool ExecuteMenuCommand( PopupMenu& rMenu, SfxViewFrame& rViewFrame, sal_uInt16 nId );
+bool ExecuteMenuCommand( PopupMenu const & rMenu, SfxViewFrame const & rViewFrame, sal_uInt16 nId );
 
 #endif // INCLUDED_SW_SOURCE_UIBASE_INC_UITOOL_HXX
 

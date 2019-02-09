@@ -7,6 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <cassert>
+#include <limits>
+
 #include "clang/Lex/Lexer.h"
 
 #include "compat.hxx"
@@ -15,23 +18,28 @@
 namespace {
 
 class LiteralToBoolConversion:
-    public RecursiveASTVisitor<LiteralToBoolConversion>,
-    public loplugin::RewritePlugin
+    public loplugin::FilteringRewritePlugin<LiteralToBoolConversion>
 {
 public:
-    explicit LiteralToBoolConversion(InstantiationData const & data):
-        RewritePlugin(data) {}
+    explicit LiteralToBoolConversion(loplugin::InstantiationData const & data):
+        FilteringRewritePlugin(data) {}
 
     virtual void run() override
     { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
 
     bool VisitImplicitCastExpr(ImplicitCastExpr const * expr);
 
+    bool TraverseLinkageSpecDecl(LinkageSpecDecl * decl);
+
 private:
     bool isFromCIncludeFile(SourceLocation spellingLocation) const;
 
+    bool isSharedCAndCppCode(SourceLocation location) const;
+
     void handleImplicitCastSubExpr(
         ImplicitCastExpr const * castExpr, Expr const * subExpr);
+
+    unsigned int externCContexts_ = 0;
 };
 
 bool LiteralToBoolConversion::VisitImplicitCastExpr(
@@ -47,14 +55,34 @@ bool LiteralToBoolConversion::VisitImplicitCastExpr(
     return true;
 }
 
+bool LiteralToBoolConversion::TraverseLinkageSpecDecl(LinkageSpecDecl * decl) {
+    assert(externCContexts_ != std::numeric_limits<unsigned int>::max()); //TODO
+    ++externCContexts_;
+    bool ret = RecursiveASTVisitor::TraverseLinkageSpecDecl(decl);
+    assert(externCContexts_ != 0);
+    --externCContexts_;
+    return ret;
+}
+
 bool LiteralToBoolConversion::isFromCIncludeFile(
     SourceLocation spellingLocation) const
 {
-    return !compat::isInMainFile(compiler.getSourceManager(), spellingLocation)
+    return !compiler.getSourceManager().isInMainFile(spellingLocation)
         && (StringRef(
                 compiler.getSourceManager().getPresumedLoc(spellingLocation)
                 .getFilename())
             .endswith(".h"));
+}
+
+bool LiteralToBoolConversion::isSharedCAndCppCode(SourceLocation location) const
+{
+    // Assume that code is intended to be shared between C and C++ if it comes
+    // from an include file ending in .h, and is either in an extern "C" context
+    // or the body of a macro definition:
+    return
+        isFromCIncludeFile(compiler.getSourceManager().getSpellingLoc(location))
+        && (externCContexts_ != 0
+            || compiler.getSourceManager().isMacroBodyExpansion(location));
 }
 
 void LiteralToBoolConversion::handleImplicitCastSubExpr(
@@ -89,26 +117,23 @@ void LiteralToBoolConversion::handleImplicitCastSubExpr(
         && subExpr->isIntegerConstantExpr(res, compiler.getASTContext())
         && res.getLimitedValue() <= 1)
     {
-        SourceLocation loc { subExpr->getLocStart() };
+        SourceLocation loc { compat::getBeginLoc(subExpr) };
         while (compiler.getSourceManager().isMacroArgExpansion(loc)) {
             loc = compiler.getSourceManager().getImmediateMacroCallerLoc(loc);
         }
-        if (compat::isMacroBodyExpansion(compiler, loc)) {
+        if (compiler.getSourceManager().isMacroBodyExpansion(loc)) {
             StringRef name { Lexer::getImmediateMacroName(
                 loc, compiler.getSourceManager(), compiler.getLangOpts()) };
             if (name == "sal_False" || name == "sal_True") {
-                loc = compiler.getSourceManager().getImmediateExpansionRange(
-                    loc).first;
+                loc = compat::getImmediateExpansionRange(compiler.getSourceManager(), loc).first;
             }
-            if (isFromCIncludeFile(
-                    compiler.getSourceManager().getSpellingLoc(loc)))
-            {
+            if (isSharedCAndCppCode(loc)) {
                 return;
             }
         }
     }
-    if (isa<StringLiteral>(subExpr)) {
-        SourceLocation loc { subExpr->getLocStart() };
+    if (isa<clang::StringLiteral>(subExpr)) {
+        SourceLocation loc { compat::getBeginLoc(subExpr) };
         if (compiler.getSourceManager().isMacroArgExpansion(loc)
             && (Lexer::getImmediateMacroName(
                     loc, compiler.getSourceManager(), compiler.getLangOpts())
@@ -119,30 +144,30 @@ void LiteralToBoolConversion::handleImplicitCastSubExpr(
     }
     if (isa<IntegerLiteral>(subExpr) || isa<CharacterLiteral>(subExpr)
         || isa<FloatingLiteral>(subExpr) || isa<ImaginaryLiteral>(subExpr)
-        || isa<StringLiteral>(subExpr))
+        || isa<clang::StringLiteral>(subExpr))
     {
         bool bRewritten = false;
         if (rewriter != nullptr) {
             SourceLocation loc { compiler.getSourceManager().getExpansionLoc(
-                    expr2->getLocStart()) };
-            if (compiler.getSourceManager().getExpansionLoc(expr2->getLocEnd())
+                    compat::getBeginLoc(expr2)) };
+            if (compiler.getSourceManager().getExpansionLoc(compat::getEndLoc(expr2))
                 == loc)
             {
                 char const * s = compiler.getSourceManager().getCharacterData(
                     loc);
                 unsigned n = Lexer::MeasureTokenLength(
-                    expr2->getLocEnd(), compiler.getSourceManager(),
+                    compat::getEndLoc(expr2), compiler.getSourceManager(),
                     compiler.getLangOpts());
                 std::string tok { s, n };
                 if (tok == "sal_False" || tok == "0") {
                     bRewritten = replaceText(
                         compiler.getSourceManager().getExpansionLoc(
-                            expr2->getLocStart()),
+                            compat::getBeginLoc(expr2)),
                         n, "false");
                 } else if (tok == "sal_True" || tok == "1") {
                     bRewritten = replaceText(
                         compiler.getSourceManager().getExpansionLoc(
-                            expr2->getLocStart()),
+                            compat::getBeginLoc(expr2)),
                         n, "true");
                 }
             }
@@ -151,7 +176,7 @@ void LiteralToBoolConversion::handleImplicitCastSubExpr(
             report(
                 DiagnosticsEngine::Warning,
                 "implicit conversion (%0) of literal of type %1 to %2",
-                expr2->getLocStart())
+                compat::getBeginLoc(expr2))
                 << castExpr->getCastKindName() << subExpr->getType()
                 << castExpr->getType() << expr2->getSourceRange();
         }
@@ -168,7 +193,7 @@ void LiteralToBoolConversion::handleImplicitCastSubExpr(
             DiagnosticsEngine::Warning,
             ("implicit conversion (%0) of null pointer constant of type %1 to"
              " %2"),
-            expr2->getLocStart())
+            compat::getBeginLoc(expr2))
             << castExpr->getCastKindName() << subExpr->getType()
             << castExpr->getType() << expr2->getSourceRange();
     } else if (!subExpr->isValueDependent()
@@ -178,7 +203,7 @@ void LiteralToBoolConversion::handleImplicitCastSubExpr(
             DiagnosticsEngine::Warning,
             ("implicit conversion (%0) of integer constant expression of type"
              " %1 with value %2 to %3"),
-            expr2->getLocStart())
+            compat::getBeginLoc(expr2))
             << castExpr->getCastKindName() << subExpr->getType()
             << res.toString(10) << castExpr->getType()
             << expr2->getSourceRange();

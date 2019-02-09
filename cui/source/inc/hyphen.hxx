@@ -21,9 +21,7 @@
 
 #include <memory>
 
-#include <vcl/edit.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/linguistic2/XHyphenator.hpp>
@@ -31,25 +29,8 @@
 
 class SvxSpellWrapper;
 
-class HyphenEdit : public Edit
+class SvxHyphenWordDialog : public SfxDialogController
 {
-public:
-    HyphenEdit(vcl::Window* pParent);
-
-protected:
-    virtual void KeyInput(const KeyEvent &rKEvt) override;
-};
-
-class SvxHyphenWordDialog : public SfxModalDialog
-{
-    VclPtr<HyphenEdit>         m_pWordEdit;
-    VclPtr<PushButton>         m_pLeftBtn;
-    VclPtr<PushButton>         m_pRightBtn;
-    VclPtr<PushButton>         m_pOkBtn;
-    VclPtr<PushButton>         m_pContBtn;
-    VclPtr<PushButton>         m_pDelBtn;
-    VclPtr<PushButton>         m_pHyphAll;
-    VclPtr<CloseButton>        m_pCloseBtn;
     OUString            m_aLabel;
     SvxSpellWrapper     *const m_pHyphWrapper;
     css::uno::Reference< css::linguistic2::XHyphenator >        m_xHyphenator;
@@ -58,40 +39,49 @@ class SvxHyphenWordDialog : public SfxModalDialog
     OUString            m_aActWord;           // actual word to be hyphenated
     LanguageType        m_nActLanguage;       // and its language
     sal_Int16           m_nMaxHyphenationPos; // right most valid hyphenation pos
-    sal_uInt16          m_nHyphPos;
     sal_Int32           m_nOldPos;
     sal_Int32           m_nHyphenationPositionsOffset;
+    int                 m_nWordEditWidth;
     bool                m_bBusy;
+
+    std::unique_ptr<weld::Entry> m_xWordEdit;
+    std::unique_ptr<weld::Button> m_xLeftBtn;
+    std::unique_ptr<weld::Button> m_xRightBtn;
+    std::unique_ptr<weld::Button> m_xOkBtn;
+    std::unique_ptr<weld::Button> m_xContBtn;
+    std::unique_ptr<weld::Button> m_xDelBtn;
+    std::unique_ptr<weld::Button> m_xHyphAll;
+    std::unique_ptr<weld::Button> m_xCloseBtn;
 
     void            EnableLRBtn_Impl();
     OUString        EraseUnusableHyphens_Impl();
 
     void            InitControls_Impl();
     void            ContinueHyph_Impl( sal_Int32 nInsPos = -1 ); // continue by default
-    sal_uInt16      GetHyphIndex_Impl();
 
-    DECL_LINK_TYPED(Left_Impl, Button*, void);
-    DECL_LINK_TYPED(Right_Impl, Button*, void);
-    DECL_LINK_TYPED(CutHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(ContinueHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(DeleteHdl_Impl, Button*, void);
-    DECL_LINK_TYPED( HyphenateAllHdl_Impl, Button*, void );
-    DECL_LINK_TYPED(CancelHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(GetFocusHdl_Impl, Control&, void);
+    void            select_region(int nStart, int nEnd);
+
+    DECL_LINK(Left_Impl, weld::Button&, void);
+    DECL_LINK(Right_Impl, weld::Button&, void);
+    DECL_LINK(CutHdl_Impl, weld::Button&, void);
+    DECL_LINK(ContinueHdl_Impl, weld::Button&, void);
+    DECL_LINK(DeleteHdl_Impl, weld::Button&, void);
+    DECL_LINK(HyphenateAllHdl_Impl, weld::Button&, void);
+    DECL_LINK(CancelHdl_Impl, weld::Button&, void);
+    DECL_LINK(GetFocusHdl_Impl, weld::Widget&, void);
+    DECL_LINK(CursorChangeHdl_Impl, weld::Entry&, void);
 
 public:
-    SvxHyphenWordDialog( const OUString &rWord, LanguageType nLang,
-                         vcl::Window* pParent,
-                         css::uno::Reference< css::linguistic2::XHyphenator >  &xHyphen,
-                         SvxSpellWrapper* pWrapper );
-    virtual ~SvxHyphenWordDialog();
-    virtual void    dispose() override;
+    SvxHyphenWordDialog(const OUString &rWord, LanguageType nLang,
+                        weld::Window* pParent,
+                        css::uno::Reference<css::linguistic2::XHyphenator> const &xHyphen,
+                        SvxSpellWrapper* pWrapper);
+    virtual ~SvxHyphenWordDialog() override;
 
     void            SetWindowTitle( LanguageType nLang );
-    void            SelLeft();
-    void            SelRight();
+    bool            SelLeft();
+    bool            SelRight();
 };
-
 
 #endif
 

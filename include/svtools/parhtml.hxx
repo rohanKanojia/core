@@ -22,8 +22,11 @@
 
 #include <svtools/svtdllapi.h>
 #include <svtools/svparser.hxx>
+#include <svtools/htmltokn.h>
 
 #include <vector>
+
+namespace com :: sun :: star :: uno { template <class interface_type> class Reference; }
 
 namespace com { namespace sun { namespace star {
     namespace document {
@@ -32,8 +35,7 @@ namespace com { namespace sun { namespace star {
 } } }
 
 class Color;
-class SvNumberFormatter;
-class SvKeyValueIterator;
+enum class HtmlOptionId;
 
 #define HTMLFONTSZ1_DFLT 7
 #define HTMLFONTSZ2_DFLT 10
@@ -43,39 +45,38 @@ class SvKeyValueIterator;
 #define HTMLFONTSZ6_DFLT 24
 #define HTMLFONTSZ7_DFLT 36
 
-enum HTMLTableFrame { HTML_TF_VOID, HTML_TF_ABOVE, HTML_TF_BELOW,
-    HTML_TF_HSIDES, HTML_TF_LHS, HTML_TF_RHS, HTML_TF_VSIDES, HTML_TF_BOX };
+enum class HTMLTableFrame { Void, Above, Below, HSides, LHS, RHS, VSides, Box };
 
-enum HTMLTableRules { HTML_TR_NONE, HTML_TR_GROUPS, HTML_TR_ROWS,
-    HTML_TR_COLS, HTML_TR_ALL };
+enum class HTMLTableRules { NONE, Groups, Rows, Cols, All };
 
-enum HTMLInputType
+enum class HTMLInputType
 {
-    HTML_IT_TEXT =      0x01,
-    HTML_IT_PASSWORD =  0x02,
-    HTML_IT_CHECKBOX =  0x03,
-    HTML_IT_RADIO =     0x04,
-    HTML_IT_RANGE =     0x05,
-    HTML_IT_SCRIBBLE =  0x06,
-    HTML_IT_FILE =      0x07,
-    HTML_IT_HIDDEN =    0x08,
-    HTML_IT_SUBMIT =    0x09,
-    HTML_IT_IMAGE =     0x0a,
-    HTML_IT_RESET =     0x0b,
-    HTML_IT_BUTTON =    0x0c
+    Text =      1,
+    Password,
+    Checkbox,
+    Radio,
+    Range,
+    Scribble,
+    File,
+    Hidden,
+    Submit,
+    Image,
+    Reset,
+    Button
 };
 
-enum HTMLScriptLanguage
+enum class HTMLScriptLanguage
 {
-    HTML_SL_STARBASIC,
-    HTML_SL_JAVASCRIPT,
-    HTML_SL_UNKNOWN
+    StarBasic,
+    JavaScript,
+    Unknown
 };
 
+template<typename EnumT>
 struct HTMLOptionEnum
 {
     const sal_Char *pName;  // value of an HTML option
-    sal_uInt16 nValue;      // and corresponding value of an enum
+    EnumT const     nValue; // and corresponding value of an enum
 };
 
 /** Representation of an HTML option (=attribute in a start tag).
@@ -85,16 +86,16 @@ struct HTMLOptionEnum
  */
 class SVT_DLLPUBLIC HTMLOption
 {
-    OUString aValue;          // value of the option (always as string)
-    OUString aToken;          // name of the option as string
-    sal_uInt16 nToken;        // and respective token
+    OUString const aValue;          // value of the option (always as string)
+    OUString const aToken;          // name of the option as string
+    HtmlOptionId const nToken;        // and respective token
 
 public:
 
-    HTMLOption( sal_uInt16 nTyp, const OUString& rToken, const OUString& rValue );
+    HTMLOption( HtmlOptionId nTyp, const OUString& rToken, const OUString& rValue );
 
     // name of the option...
-    sal_uInt16 GetToken() const { return nToken; }  // ... as enum
+    HtmlOptionId GetToken() const { return nToken; }  // ... as enum
     const OUString& GetTokenString() const { return aToken; } // ... as string
 
     // value of the option ...
@@ -105,10 +106,33 @@ public:
     void GetNumbers( std::vector<sal_uInt32> &rNumbers ) const; // ... as numbers
     void GetColor( Color& ) const;                      // ... as color
 
-    // ... as enum; pOptEnums is an HTMLOptionEnum array
-    sal_uInt16 GetEnum( const HTMLOptionEnum *pOptEnums,
-                        sal_uInt16 nDflt=0 ) const;
-    bool GetEnum( sal_uInt16 &rEnum, const HTMLOptionEnum *pOptEnums ) const;
+    template<typename EnumT>
+    EnumT GetEnum( const HTMLOptionEnum<EnumT> *pOptEnums,
+                        EnumT nDflt = static_cast<EnumT>(0) ) const
+    {
+        while( pOptEnums->pName )
+        {
+            if( aValue.equalsIgnoreAsciiCaseAscii( pOptEnums->pName ) )
+                return pOptEnums->nValue;
+            pOptEnums++;
+        }
+        return nDflt;
+    }
+
+    template<typename EnumT>
+    bool GetEnum( EnumT &rEnum, const HTMLOptionEnum<EnumT> *pOptEnums ) const
+    {
+        while( pOptEnums->pName )
+        {
+            if( aValue.equalsIgnoreAsciiCaseAscii( pOptEnums->pName ) )
+            {
+                rEnum = pOptEnums->nValue;
+                return true;
+            }
+            pOptEnums++;
+        }
+        return false;
+    }
 
     // ... and as a few special enums
     HTMLInputType GetInputType() const;                 // <INPUT TYPE=...>
@@ -119,14 +143,13 @@ public:
 
 typedef ::std::vector<HTMLOption> HTMLOptions;
 
-class SVT_DLLPUBLIC HTMLParser : public SvParser
+class SVT_DLLPUBLIC HTMLParser : public SvParser<HtmlTokenId>
 {
 private:
     mutable HTMLOptions maOptions; // options of the start tag
 
-    bool bNewDoc        : 1;        // read new Doc?
+    bool const bNewDoc  : 1;        // read new Doc?
     bool bIsInHeader    : 1;        // scan header section
-    bool bIsInBody      : 1;        // scan body section
     bool bReadListing   : 1;        // read listings
     bool bReadXMP       : 1;        // read XMP
     bool bReadPRE       : 1;        // read preformatted text
@@ -141,23 +164,28 @@ private:
 
     sal_uInt32 nPre_LinePos;            // Pos in the line in the PRE-Tag
 
-    int mnPendingOffToken;          ///< OFF token pending for a <XX.../> ON/OFF ON token
+    HtmlTokenId mnPendingOffToken;          ///< OFF token pending for a <XX.../> ON/OFF ON token
 
     OUString aEndToken;
+
+    /// XML namespace, in case of XHTML.
+    OUString maNamespace;
 
 protected:
     OUString sSaveToken;             // the read tag as string
 
-    int ScanText( const sal_Unicode cBreak = 0U );
+    HtmlTokenId ScanText( const sal_Unicode cBreak = 0U );
 
-    int GetNextRawToken();
+    HtmlTokenId GetNextRawToken();
 
     // scan next token
-    virtual int GetNextToken_() override;
+    virtual HtmlTokenId GetNextToken_() override;
 
-    virtual ~HTMLParser();
+    virtual ~HTMLParser() override;
 
-    void FinishHeader( bool bBody ) { bIsInHeader = false; bIsInBody = bBody; }
+    void FinishHeader() { bIsInHeader = false; }
+
+    void SetNamespace(const OUString& rNamespace);
 
 public:
     HTMLParser( SvStream& rIn, bool bReadNewDoc = true );
@@ -175,15 +203,15 @@ public:
     // start PRE-/LISTING or XMP mode or filter tags respectively
     inline void StartPRE();
     void FinishPRE() { bReadPRE = false; }
-    int FilterPRE( int nToken );
+    HtmlTokenId FilterPRE( HtmlTokenId nToken );
 
     inline void StartListing();
     void FinishListing() { bReadListing = false; }
-    int FilterListing( int nToken );
+    HtmlTokenId FilterListing( HtmlTokenId nToken );
 
     inline void StartXMP();
     void FinishXMP() { bReadXMP = false; }
-    int FilterXMP( int nToken );
+    HtmlTokenId FilterXMP( HtmlTokenId nToken );
 
     void FinishTextArea() { bReadTextArea = false; }
 
@@ -194,7 +222,7 @@ public:
     // (PRE, XMP, ...) and set the flags. Is called by Continue before
     // NextToken is called. If you implement own loops or call
     // NextToken yourself, you should call this method beforehand.
-    int FilterToken( int nToken );
+    HtmlTokenId FilterToken( HtmlTokenId nToken );
 
     void ReadRawData( const OUString &rEndToken ) { aEndToken = rEndToken; }
 
@@ -204,10 +232,10 @@ public:
     // Determine the options. pNoConvertToken is the optional token
     // of an option, for which the CR/LFs are not deleted from the value
     // of the option.
-    const HTMLOptions& GetOptions( sal_uInt16 *pNoConvertToken=nullptr );
+    const HTMLOptions& GetOptions( HtmlOptionId const *pNoConvertToken=nullptr );
 
     // for asynchronous reading from the SvStream
-    virtual void Continue( int nToken ) override;
+    virtual void Continue( HtmlTokenId nToken ) override;
 
 
 protected:
@@ -232,10 +260,9 @@ public:
     void ParseScriptOptions( OUString& rLangString, const OUString&, HTMLScriptLanguage& rLang,
                              OUString& rSrc, OUString& rLibrary, OUString& rModule );
 
-    // remove a comment around the content of <SCRIPT> or <STYLE>
-    // In case of 'bFull', the whole line behind a "<!--" might
-    // be deleted (for JavaSript)
-    static void RemoveSGMLComment( OUString &rString, bool bFull );
+    // Remove a comment around the content of <SCRIPT> or <STYLE>.
+    // The whole line behind a "<!--" might be deleted (for JavaScript).
+    static void RemoveSGMLComment( OUString &rString );
 
     static bool InternalImgToPrivateURL( OUString& rURL );
     static rtl_TextEncoding GetEncodingByHttpHeader( SvKeyValueIterator *pHTTPHeader );
@@ -246,21 +273,21 @@ inline void HTMLParser::StartPRE()
 {
     bReadPRE = true;
     bPre_IgnoreNewPara = true;
-    nPre_LinePos = 0UL;
+    nPre_LinePos = 0;
 }
 
 inline void HTMLParser::StartListing()
 {
     bReadListing = true;
     bPre_IgnoreNewPara = true;
-    nPre_LinePos = 0UL;
+    nPre_LinePos = 0;
 }
 
 inline void HTMLParser::StartXMP()
 {
     bReadXMP = true;
     bPre_IgnoreNewPara = true;
-    nPre_LinePos = 0UL;
+    nPre_LinePos = 0;
 }
 
 #endif

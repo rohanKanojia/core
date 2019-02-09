@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <hintids.hxx>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentContentOperations.hxx>
+#include <IDocumentRedlineAccess.hxx>
 #include <editsh.hxx>
 #include <cntfrm.hxx>
 #include <pam.hxx>
+#include <unocrsr.hxx>
 #include <swundo.hxx>
 #include <edimp.hxx>
 #include <IMark.hxx>
@@ -31,8 +34,8 @@
 #include <SwRewriter.hxx>
 #include <globals.hrc>
 
-#include <comcore.hrc>
-#include <list>
+#include <strings.hrc>
+#include <vector>
 
 void SwEditShell::DeleteSel( SwPaM& rPam, bool* pUndo )
 {
@@ -53,7 +56,7 @@ void SwEditShell::DeleteSel( SwPaM& rPam, bool* pUndo )
         // group the Undo in the table
         if( pUndo && !*pUndo )
         {
-            GetDoc()->GetIDocumentUndoRedo().StartUndo( UNDO_START, nullptr );
+            GetDoc()->GetIDocumentUndoRedo().StartUndo( SwUndoId::START, nullptr );
             *pUndo = true;
         }
         SwPaM aDelPam( *rPam.Start() );
@@ -71,7 +74,7 @@ void SwEditShell::DeleteSel( SwPaM& rPam, bool* pUndo )
             {
                 // then go to the end of the selection
                 aDelPam.GetPoint()->nNode = rEndNd;
-                aDelPam.Move( fnMoveBackward, fnGoContent );
+                aDelPam.Move( fnMoveBackward, GoInContent );
             }
             // skip protected boxes
             if( !rNd.IsContentNode() ||
@@ -85,7 +88,7 @@ void SwEditShell::DeleteSel( SwPaM& rPam, bool* pUndo )
             if( !pEndSelPos ) // at the end of a selection
                 break;
             aDelPam.DeleteMark();
-            aDelPam.Move( fnMoveForward, fnGoContent ); // next box
+            aDelPam.Move( fnMoveForward, GoInContent ); // next box
         } while( pEndSelPos );
     }
     else
@@ -111,10 +114,10 @@ void SwEditShell::DeleteSel( SwPaM& rPam, bool* pUndo )
     rPam.DeleteMark();
 }
 
-long SwEditShell::Delete()
+bool SwEditShell::Delete()
 {
     SET_CURR_SHELL( this );
-    long nRet = 0;
+    bool bRet = false;
     if ( !HasReadonlySel() || CursorInsideInputField() )
     {
         StartAllAction();
@@ -123,9 +126,9 @@ long SwEditShell::Delete()
         if( bUndo ) // more than one selection?
         {
             SwRewriter aRewriter;
-            aRewriter.AddRule(UndoArg1, SW_RESSTR(STR_MULTISEL));
+            aRewriter.AddRule(UndoArg1, SwResId(STR_MULTISEL));
 
-            GetDoc()->GetIDocumentUndoRedo().StartUndo(UNDO_DELETE, &aRewriter);
+            GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::DELETE, &aRewriter);
         }
 
         for(SwPaM& rPaM : GetCursor()->GetRingContainer())
@@ -136,12 +139,17 @@ long SwEditShell::Delete()
         // If undo container then close here
         if( bUndo )
         {
-            GetDoc()->GetIDocumentUndoRedo().EndUndo(UNDO_END, nullptr);
+            GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::END, nullptr);
         }
         EndAllAction();
-        nRet = 1;
+        bRet = true;
     }
-    return nRet;
+    else
+    {
+        bRet = RemoveParagraphMetadataFieldAtCursor();
+    }
+
+    return bRet;
 }
 
 bool SwEditShell::Copy( SwEditShell* pDestShell )
@@ -152,7 +160,7 @@ bool SwEditShell::Copy( SwEditShell* pDestShell )
     SET_CURR_SHELL( pDestShell );
 
     // List of insert positions for smart insert of block selections
-    std::list< std::shared_ptr<SwPosition> > aInsertList;
+    std::vector< std::shared_ptr<SwPosition> > aInsertList;
 
     // Fill list of insert positions
     {
@@ -179,7 +187,7 @@ bool SwEditShell::Copy( SwEditShell* pDestShell )
                 if( nMove )
                 {
                     SwCursor aCursor( *pPos, nullptr);
-                    if( aCursor.UpDown( false, nMove, nullptr, 0 ) )
+                    if (aCursor.UpDown(false, nMove, nullptr, 0, *GetLayout()))
                     {
                         pInsertPos.reset( new SwPosition( *aCursor.GetPoint() ) );
                         aInsertList.push_back( pInsertPos );
@@ -204,9 +212,9 @@ bool SwEditShell::Copy( SwEditShell* pDestShell )
     SwNodeIndex aSttNdIdx( pDestShell->GetDoc()->GetNodes() );
     sal_Int32 nSttCntIdx = 0;
     // For block selection this list is filled with the insert positions
-    std::list< std::shared_ptr<SwPosition> >::iterator pNextInsert = aInsertList.begin();
+    auto pNextInsert = aInsertList.begin();
 
-    pDestShell->GetDoc()->GetIDocumentUndoRedo().StartUndo( UNDO_START, nullptr );
+    pDestShell->GetDoc()->GetIDocumentUndoRedo().StartUndo( SwUndoId::START, nullptr );
     for(SwPaM& rPaM : GetCursor()->GetRingContainer())
     {
         if( !pPos )
@@ -278,14 +286,12 @@ bool SwEditShell::Copy( SwEditShell* pDestShell )
                     == rCmp.GetContentNode(), "Point in wrong Node" );
         OSL_ENSURE( rCmp.GetMark()->nContent.GetIdxReg()
                     == rCmp.GetContentNode(false), "Mark in wrong Node" );
-        bool bTst = *rCmp.GetPoint() == *rCmp.GetMark();
-        (void) bTst;
     }
 }
 #endif
 
     // close Undo container here
-    pDestShell->GetDoc()->GetIDocumentUndoRedo().EndUndo( UNDO_END, nullptr );
+    pDestShell->GetDoc()->GetIDocumentUndoRedo().EndUndo( SwUndoId::END, nullptr );
     pDestShell->EndAllAction();
 
     pDestShell->SaveTableBoxContent( pDestShell->GetCursor()->GetPoint() );
@@ -308,20 +314,20 @@ bool SwEditShell::Replace( const OUString& rNewStr, bool bRegExpRplc )
     if( !HasReadonlySel() )
     {
         StartAllAction();
-        GetDoc()->GetIDocumentUndoRedo().StartUndo(UNDO_EMPTY, nullptr);
+        GetDoc()->GetIDocumentUndoRedo().StartUndo(SwUndoId::EMPTY, nullptr);
 
         for(SwPaM& rPaM : GetCursor()->GetRingContainer())
         {
             if( rPaM.HasMark() && *rPaM.GetMark() != *rPaM.GetPoint() )
             {
-                bRet = GetDoc()->getIDocumentContentOperations().ReplaceRange( rPaM, rNewStr, bRegExpRplc )
+                bRet = sw::ReplaceImpl(rPaM, rNewStr, bRegExpRplc, *GetDoc(), GetLayout())
                     || bRet;
                 SaveTableBoxContent( rPaM.GetPoint() );
             }
         }
 
         // close Undo container here
-        GetDoc()->GetIDocumentUndoRedo().EndUndo(UNDO_EMPTY, nullptr);
+        GetDoc()->GetIDocumentUndoRedo().EndUndo(SwUndoId::EMPTY, nullptr);
         EndAllAction();
     }
     return bRet;

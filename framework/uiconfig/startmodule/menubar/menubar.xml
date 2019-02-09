@@ -25,6 +25,18 @@
             <menu:menuitem menu:id=".uno:RecentFileList"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:AutoPilotMenu"/>
+            <menu:menu menu:id=".uno:TemplateMenu">
+                <menu:menupopup>
+                    <menu:menuitem menu:id=".uno:OpenTemplate"/>
+                    <menu:menuitem menu:id=".uno:NewDoc"/>
+                </menu:menupopup>
+            </menu:menu>
+            <menu:menuseparator/>
+            <menu:menu menu:id=".uno:SignaturesMenu">
+                <menu:menupopup>
+                    <menu:menuitem menu:id=".uno:SignPDF"/>
+                </menu:menupopup>
+            </menu:menu>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:Quit"/>
         </menu:menupopup>
@@ -33,9 +45,8 @@
         <menu:menupopup>
             <menu:menu menu:id=".uno:MacrosMenu">
                 <menu:menupopup>
-                    <menu:menuitem menu:id=".uno:MacroRecorder"/>
                     <menu:menuitem menu:id=".uno:RunMacro"/>
-                    <menu:menu menu:id=".uno:ScriptOrganizer"/>
+                    <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
                     <menu:menuseparator/>
                     <menu:menuitem menu:id=".uno:MacroOrganizer?TabId:short=1"/>
                 </menu:menupopup>
@@ -48,8 +59,16 @@
     <menu:menu menu:id=".uno:HelpMenu">
         <menu:menupopup>
             <menu:menuitem menu:id=".uno:HelpIndex"/>
+            <menu:menuitem menu:id=".uno:ExtendedHelp"/>
+            <menu:menuitem menu:id=".uno:Documentation"/>
             <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:QuestionAnswers"/>
             <menu:menuitem menu:id=".uno:SendFeedback"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:SafeMode"/>
+            <menu:menuseparator/>
+            <menu:menuitem menu:id=".uno:GetInvolved"/>
+            <menu:menuitem menu:id=".uno:Donation"/>
             <menu:menuseparator/>
             <menu:menuitem menu:id=".uno:ShowLicense"/>
             <menu:menuitem menu:id=".uno:About"/>

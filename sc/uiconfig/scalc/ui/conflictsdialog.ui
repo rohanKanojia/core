@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="ConflictsDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Resolve Conflicts</property>
+    <property name="title" translatable="yes" context="conflictsdialog|ConflictsDialog">Resolve Conflicts</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
@@ -19,8 +19,7 @@
             <property name="layout_style">end</property>
             <child>
               <object class="GtkButton" id="keepallmine">
-                <property name="label" translatable="yes">_Keep All Mine</property>
-                <property name="use_action_appearance">False</property>
+                <property name="label" translatable="yes" context="conflictsdialog|keepallmine">_Keep All Mine</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -34,8 +33,7 @@
             </child>
             <child>
               <object class="GtkButton" id="keepallothers">
-                <property name="label" translatable="yes">Keep _All Others</property>
-                <property name="use_action_appearance">False</property>
+                <property name="label" translatable="yes" context="conflictsdialog|keepallothers">Keep _All Others</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -50,7 +48,6 @@
             <child>
               <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -65,7 +62,6 @@
             <child>
               <object class="GtkButton" id="help">
                 <property name="label">gtk-help</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -99,7 +95,7 @@
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">There are conflicting changes in this shared spreadsheet. Conflicts must be resolved before saving the spreadsheet. Keep either own or other changes.</property>
+                <property name="label" translatable="yes" context="conflictsdialog|label1">There are conflicting changes in this shared spreadsheet. Conflicts must be resolved before saving the spreadsheet. Keep either own or other changes.</property>
                 <property name="wrap">True</property>
                 <property name="max_width_chars">120</property>
               </object>
@@ -134,8 +130,7 @@
                 <property name="layout_style">center</property>
                 <child>
                   <object class="GtkButton" id="keepmine">
-                    <property name="label" translatable="yes">Keep _Mine</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="conflictsdialog|keepmine">Keep _Mine</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -149,8 +144,7 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="keepother">
-                    <property name="label" translatable="yes">Keep _Other</property>
-                    <property name="use_action_appearance">False</property>
+                    <property name="label" translatable="yes" context="conflictsdialog|keepother">Keep _Other</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -181,8 +175,8 @@
     <action-widgets>
       <action-widget response="0">keepallmine</action-widget>
       <action-widget response="0">keepallothers</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

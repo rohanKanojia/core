@@ -24,19 +24,20 @@
 
 #include <unistd.h>
 
-#include "unx/cupsmgr.hxx"
+#include <unx/cupsmgr.hxx>
 
-#include "osl/thread.h"
-#include "osl/diagnose.h"
-#include "osl/conditn.hxx"
+#include <osl/thread.h>
+#include <osl/diagnose.h>
+#include <osl/conditn.hxx>
 
-#include "rtl/ustrbuf.hxx"
+#include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <officecfg/Office/Common.hxx>
 
-#include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/window.hxx>
 
 #include <algorithm>
 
@@ -81,14 +82,21 @@ struct GetPPDAttribs
     {
         // This CUPS method is not at all thread-safe we need
         // to dup the pointer to a static buffer it returns ASAP
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
         OString aResult = cupsGetPPD(m_aParameter.getStr());
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
         MutexGuard aGuard( *m_pSyncMutex );
         m_aResult = aResult;
         m_aCondition.set();
         unref();
     }
 
-    OString waitResult( TimeValue *pDelay )
+    OString waitResult( TimeValue const *pDelay )
     {
         m_pSyncMutex->release();
 
@@ -145,13 +153,13 @@ OString CUPSManager::threadedCupsGetPPD( const char* pPrinter )
     return aResult;
 }
 
-static const char* setPasswordCallback( const char* pIn )
+static const char* setPasswordCallback( const char* /*pIn*/ )
 {
     const char* pRet = nullptr;
 
     PrinterInfoManager& rMgr = PrinterInfoManager::get();
-    if( rMgr.getType() == PrinterInfoManager::CUPS ) // sanity check
-        pRet = static_cast<CUPSManager&>(rMgr).authenticateUser( pIn );
+    if( rMgr.getType() == PrinterInfoManager::Type::CUPS ) // sanity check
+        pRet = static_cast<CUPSManager&>(rMgr).authenticateUser();
     return pRet;
 }
 
@@ -179,7 +187,7 @@ static void run_dest_thread_stub( void* pThis )
 }
 
 CUPSManager::CUPSManager() :
-        PrinterInfoManager( CUPS ),
+        PrinterInfoManager( PrinterInfoManager::Type::CUPS ),
         m_nDests( 0 ),
         m_pDests( nullptr ),
         m_bNewDests( false ),
@@ -214,6 +222,10 @@ void CUPSManager::runDests()
 
     // n#722902 - do a fast-failing check for cups working *at all* first
     http_t* p_http;
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
     if( (p_http=httpConnectEncrypt(
              cupsServer(),
              ippPort(),
@@ -230,6 +242,9 @@ void CUPSManager::runDests()
 
         httpClose(p_http);
     }
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 }
 
 void CUPSManager::initialize()
@@ -333,7 +348,7 @@ void CUPSManager::initialize()
         // behaviour
         aPrinter.m_aInfo.m_pParser = nullptr;
         aPrinter.m_aInfo.m_aContext.setParser( nullptr );
-        std::unordered_map< OUString, PPDContext, OUStringHash >::const_iterator c_it = m_aDefaultContexts.find( aPrinterName );
+        std::unordered_map< OUString, PPDContext >::const_iterator c_it = m_aDefaultContexts.find( aPrinterName );
         if( c_it != m_aDefaultContexts.end() )
         {
             aPrinter.m_aInfo.m_pParser = c_it->second.getParser();
@@ -341,7 +356,6 @@ void CUPSManager::initialize()
         }
         aPrinter.m_aInfo.setDefaultBackend(bUsePDF);
         aPrinter.m_aInfo.m_aDriverName = aBuf.makeStringAndClear();
-        aPrinter.m_bModified = false;
 
         m_aPrinters[ aPrinter.m_aInfo.m_aPrinterName ] = aPrinter;
         m_aCUPSDestMap[ aPrinter.m_aInfo.m_aPrinterName ] = nPrinter;
@@ -349,21 +363,21 @@ void CUPSManager::initialize()
 
     // remove everything that is not a CUPS printer and not
     // a special purpose printer (PDF, Fax)
-    std::list< OUString > aRemovePrinters;
-    for( std::unordered_map< OUString, Printer, OUStringHash >::iterator it = m_aPrinters.begin();
-         it != m_aPrinters.end(); ++it )
+    std::unordered_map< OUString, Printer >::iterator it = m_aPrinters.begin();
+    while(it != m_aPrinters.end())
     {
         if( m_aCUPSDestMap.find( it->first ) != m_aCUPSDestMap.end() )
+        {
+            ++it;
             continue;
+        }
 
         if( !it->second.m_aInfo.m_aFeatures.isEmpty() )
+        {
+            ++it;
             continue;
-        aRemovePrinters.push_back( it->first );
-    }
-    while( aRemovePrinters.begin() != aRemovePrinters.end() )
-    {
-        m_aPrinters.erase( aRemovePrinters.front() );
-        aRemovePrinters.pop_front();
+        }
+        it = m_aPrinters.erase(it);
     }
 
     cupsSetPasswordCB( setPasswordCallback );
@@ -425,7 +439,7 @@ const PPDParser* CUPSManager::createCUPSParser( const OUString& rPrinter )
     {
         if (m_nDests && m_pDests)
         {
-            std::unordered_map< OUString, int, OUStringHash >::iterator dest_it =
+            std::unordered_map< OUString, int >::iterator dest_it =
             m_aCUPSDestMap.find( aPrinter );
             if( dest_it != m_aCUPSDestMap.end() )
             {
@@ -438,7 +452,14 @@ const PPDParser* CUPSManager::createCUPSParser( const OUString& rPrinter )
                     rtl_TextEncoding aEncoding = osl_getThreadTextEncoding();
                     OUString aFileName( OStringToOUString( aPPDFile, aEncoding ) );
                     // update the printer info with context information
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
                     ppd_file_t* pPPD = ppdOpenFile( aPPDFile.getStr() );
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
                     if( pPPD )
                     {
                         // create the new parser
@@ -446,7 +467,14 @@ const PPDParser* CUPSManager::createCUPSParser( const OUString& rPrinter )
                         pCUPSParser->m_aFile = rPrinter;
                         pNewParser = pCUPSParser;
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
                         /*int nConflicts =*/ cupsMarkOptions( pPPD, pDest->num_options, pDest->options );
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
                         SAL_INFO("vcl.unx.print", "processing the following options for printer " << pDest->name << " (instance " << (pDest->instance == nullptr ? "null" : pDest->instance) << "):");
                         for( int k = 0; k < pDest->num_options; k++ )
                             SAL_INFO("vcl.unx.print",
@@ -467,13 +495,22 @@ const PPDParser* CUPSManager::createCUPSParser( const OUString& rPrinter )
                         rInfo.m_aContext = rContext;
 
                         // clean up the mess
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
                         ppdClose( pPPD );
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
                     }
                     else
                         SAL_INFO("vcl.unx.print", "ppdOpenFile failed, falling back to generic driver");
 
                     // remove temporary PPD file
-                    unlink( aPPDFile.getStr() );
+                    if (!getenv("SAL_CUPS_PPD_RETAIN_TMP"))
+                        unlink( aPPDFile.getStr() );
                 }
                 else
                     SAL_INFO("vcl.unx.print", "cupsGetPPD failed, falling back to generic driver");
@@ -490,6 +527,7 @@ const PPDParser* CUPSManager::createCUPSParser( const OUString& rPrinter )
     {
         // get the default PPD
         pNewParser = PPDParser::getParser( "SGENPRT" );
+        SAL_WARN("vcl.unx.print", "Parsing default SGENPRT PPD" );
 
         PrinterInfo& rInfo = m_aPrinters[ aPrinter ].m_aInfo;
 
@@ -502,13 +540,13 @@ const PPDParser* CUPSManager::createCUPSParser( const OUString& rPrinter )
 
 void CUPSManager::setupJobContextData( JobData& rData )
 {
-    std::unordered_map< OUString, int, OUStringHash >::iterator dest_it =
+    std::unordered_map< OUString, int >::iterator dest_it =
         m_aCUPSDestMap.find( rData.m_aPrinterName );
 
     if( dest_it == m_aCUPSDestMap.end() )
         return PrinterInfoManager::setupJobContextData( rData );
 
-    std::unordered_map< OUString, Printer, OUStringHash >::iterator p_it =
+    std::unordered_map< OUString, Printer >::iterator p_it =
         m_aPrinters.find( rData.m_aPrinterName );
     if( p_it == m_aPrinters.end() ) // huh ?
     {
@@ -540,13 +578,11 @@ void CUPSManager::setupJobContextData( JobData& rData )
 
 FILE* CUPSManager::startSpool( const OUString& rPrintername, bool bQuickCommand )
 {
-    OSL_TRACE( "startSpool: %s, %s",
-               OUStringToOString( rPrintername, RTL_TEXTENCODING_UTF8 ).getStr(),
-              bQuickCommand ? "true" : "false" );
+    SAL_INFO( "vcl.unx.print", "startSpool: " << rPrintername << " " << (bQuickCommand ? "true" : "false") );
 
     if( m_aCUPSDestMap.find( rPrintername ) == m_aCUPSDestMap.end() )
     {
-        OSL_TRACE( "defer to PrinterInfoManager::startSpool" );
+        SAL_INFO( "vcl.unx.print", "defer to PrinterInfoManager::startSpool" );
         return PrinterInfoManager::startSpool( rPrintername, bQuickCommand );
     }
 
@@ -561,7 +597,7 @@ FILE* CUPSManager::startSpool( const OUString& rPrintername, bool bQuickCommand 
     return fp;
 }
 
-struct less_ppd_key : public ::std::binary_function<double, double, bool>
+struct less_ppd_key
 {
     bool operator()(const PPDKey* left, const PPDKey* right)
     { return left->getOrderDependency() < right->getOrderDependency(); }
@@ -619,21 +655,17 @@ void CUPSManager::getOptionsFromDocumentSetup( const JobData& rJob, bool bBanner
 
 bool CUPSManager::endSpool( const OUString& rPrintername, const OUString& rJobTitle, FILE* pFile, const JobData& rDocumentJobData, bool bBanner, const OUString& rFaxNumber )
 {
-    OSL_TRACE( "endSpool: %s, %s, copy count = %d",
-               OUStringToOString( rPrintername, RTL_TEXTENCODING_UTF8 ).getStr(),
-               OUStringToOString( rJobTitle, RTL_TEXTENCODING_UTF8 ).getStr(),
-               rDocumentJobData.m_nCopies
-               );
+    SAL_INFO( "vcl.unx.print", "endSpool: " << rPrintername << "," << rJobTitle << " copy count = " << rDocumentJobData.m_nCopies );
 
     int nJobID = 0;
 
     osl::MutexGuard aGuard( m_aCUPSMutex );
 
-    std::unordered_map< OUString, int, OUStringHash >::iterator dest_it =
+    std::unordered_map< OUString, int >::iterator dest_it =
         m_aCUPSDestMap.find( rPrintername );
     if( dest_it == m_aCUPSDestMap.end() )
     {
-        OSL_TRACE( "defer to PrinterInfoManager::endSpool" );
+        SAL_INFO( "vcl.unx.print", "defer to PrinterInfoManager::endSpool" );
         return PrinterInfoManager::endSpool( rPrintername, rJobTitle, pFile, rDocumentJobData, bBanner, rFaxNumber );
     }
 
@@ -670,7 +702,7 @@ bool CUPSManager::endSpool( const OUString& rPrintername, const OUString& rJobTi
                 "    option " << pOptions[n].name << "=" << pOptions[n].value);
 #if OSL_DEBUG_LEVEL > 1
         OString aCmd( "cp " );
-        aCmd = aCmd + files.front();
+        aCmd = aCmd + it->second.getStr();
         aCmd = aCmd + OString( " $HOME/cupsprint.ps" );
         system( aCmd.getStr() );
 #endif
@@ -682,11 +714,6 @@ bool CUPSManager::endSpool( const OUString& rPrintername, const OUString& rJobTi
     }
 
     return nJobID != 0;
-}
-
-void CUPSManager::changePrinterInfo( const OUString& rPrinter, const PrinterInfo& rNewInfo )
-{
-    PrinterInfoManager::changePrinterInfo( rPrinter, rNewInfo );
 }
 
 bool CUPSManager::checkPrintersChanged( bool bWait )
@@ -741,161 +768,52 @@ bool CUPSManager::checkPrintersChanged( bool bWait )
     return bChanged;
 }
 
-bool CUPSManager::addPrinter( const OUString& rName, const OUString& rDriver )
-{
-    // don't touch the CUPS printers
-    if( m_aCUPSDestMap.find( rName ) != m_aCUPSDestMap.end() ||
-        rDriver.startsWith("CUPS:")
-        )
-        return false;
-    return PrinterInfoManager::addPrinter( rName, rDriver );
-}
-
-bool CUPSManager::removePrinter( const OUString& rName, bool bCheck )
-{
-    // don't touch the CUPS printers
-    if( m_aCUPSDestMap.find( rName ) != m_aCUPSDestMap.end() )
-        return false;
-    return PrinterInfoManager::removePrinter( rName, bCheck );
-}
-
-bool CUPSManager::setDefaultPrinter( const OUString& rName )
-{
-    bool bSuccess = false;
-    std::unordered_map< OUString, int, OUStringHash >::iterator nit =
-        m_aCUPSDestMap.find( rName );
-    if( nit != m_aCUPSDestMap.end() && m_aCUPSMutex.tryToAcquire() )
-    {
-        cups_dest_t* pDests = static_cast<cups_dest_t*>(m_pDests);
-        for( int i = 0; i < m_nDests; i++ )
-            pDests[i].is_default = 0;
-        pDests[ nit->second ].is_default = 1;
-        cupsSetDests( m_nDests, static_cast<cups_dest_t*>(m_pDests) );
-        m_aDefaultPrinter = rName;
-        m_aCUPSMutex.release();
-        bSuccess = true;
-    }
-    else
-        bSuccess = PrinterInfoManager::setDefaultPrinter( rName );
-
-    return bSuccess;
-}
-
-bool CUPSManager::writePrinterConfig()
-{
-    bool bDestModified = false;
-    rtl_TextEncoding aEncoding = osl_getThreadTextEncoding();
-
-    for( std::unordered_map< OUString, Printer, OUStringHash >::iterator prt =
-             m_aPrinters.begin(); prt != m_aPrinters.end(); ++prt )
-    {
-        std::unordered_map< OUString, int, OUStringHash >::iterator nit =
-            m_aCUPSDestMap.find( prt->first );
-        if( nit == m_aCUPSDestMap.end() )
-            continue;
-
-        if( ! prt->second.m_bModified )
-            continue;
-
-        if( m_aCUPSMutex.tryToAcquire() )
-        {
-            bDestModified = true;
-            cups_dest_t* pDest = static_cast<cups_dest_t*>(m_pDests) + nit->second;
-            PrinterInfo& rInfo = prt->second.m_aInfo;
-
-            // create new option list
-            int nNewOptions = 0;
-            cups_option_t* pNewOptions = nullptr;
-            int nValues = rInfo.m_aContext.countValuesModified();
-            for( int i = 0; i < nValues; i++ )
-            {
-                const PPDKey* pKey = rInfo.m_aContext.getModifiedKey( i );
-                const PPDValue* pValue = rInfo.m_aContext.getValue( pKey );
-                if( pKey && pValue ) // sanity check
-                {
-                    OString aName = OUStringToOString( pKey->getKey(), aEncoding );
-                    OString aValue = OUStringToOString( pValue->m_aOption, aEncoding );
-                    nNewOptions = cupsAddOption( aName.getStr(), aValue.getStr(), nNewOptions, &pNewOptions );
-                }
-            }
-            // set PPD options on CUPS dest
-            cupsFreeOptions( pDest->num_options, pDest->options );
-            pDest->num_options = nNewOptions;
-            pDest->options = pNewOptions;
-            m_aCUPSMutex.release();
-        }
-    }
-    if( bDestModified && m_aCUPSMutex.tryToAcquire() )
-    {
-        cupsSetDests( m_nDests, static_cast<cups_dest_t*>(m_pDests) );
-        m_aCUPSMutex.release();
-    }
-
-    return PrinterInfoManager::writePrinterConfig();
-}
-
 namespace
 {
-    class RTSPWDialog : public ModalDialog
+    class RTSPWDialog : public weld::GenericDialogController
     {
-        VclPtr<FixedText> m_pText;
-        VclPtr<Edit>      m_pUserEdit;
-        VclPtr<Edit>      m_pPassEdit;
+        std::unique_ptr<weld::Label> m_xText;
+        std::unique_ptr<weld::Entry> m_xUserEdit;
+        std::unique_ptr<weld::Entry> m_xPassEdit;
 
     public:
-        RTSPWDialog(const OString& rServer, const OString& rUserName, vcl::Window* pParent);
-        virtual ~RTSPWDialog();
-        virtual void dispose() override;
+        RTSPWDialog(const OString& rServer, const OString& rUserName, weld::Window* pParent);
         OString getUserName() const;
         OString getPassword() const;
     };
 
-    RTSPWDialog::RTSPWDialog( const OString& rServer, const OString& rUserName, vcl::Window* pParent )
-        : ModalDialog(pParent, "CUPSPasswordDialog",
-            "vcl/ui/cupspassworddialog.ui")
+    RTSPWDialog::RTSPWDialog( const OString& rServer, const OString& rUserName, weld::Window* pParent )
+        : GenericDialogController(pParent, "vcl/ui/cupspassworddialog.ui", "CUPSPasswordDialog")
+        , m_xText(m_xBuilder->weld_label("text"))
+        , m_xUserEdit(m_xBuilder->weld_entry("user"))
+        , m_xPassEdit(m_xBuilder->weld_entry("pass"))
     {
-        get(m_pText, "text");
-        get(m_pUserEdit, "user");
-        get(m_pPassEdit, "pass");
-
-        OUString aText(m_pText->GetText());
+        OUString aText(m_xText->get_label());
         aText = aText.replaceFirst("%s", OStringToOUString(rServer, osl_getThreadTextEncoding()));
-        m_pText->SetText(aText);
-        m_pUserEdit->SetText( OStringToOUString(rUserName, osl_getThreadTextEncoding()));
-    }
-
-    RTSPWDialog::~RTSPWDialog()
-    {
-        disposeOnce();
-    }
-
-    void RTSPWDialog::dispose()
-    {
-        m_pText.clear();
-        m_pUserEdit.clear();
-        m_pPassEdit.clear();
-        ModalDialog::dispose();
+        m_xText->set_label(aText);
+        m_xUserEdit->set_text(OStringToOUString(rUserName, osl_getThreadTextEncoding()));
     }
 
     OString RTSPWDialog::getUserName() const
     {
-        return OUStringToOString( m_pUserEdit->GetText(), osl_getThreadTextEncoding() );
+        return OUStringToOString( m_xUserEdit->get_text(), osl_getThreadTextEncoding() );
     }
 
     OString RTSPWDialog::getPassword() const
     {
-        return OUStringToOString( m_pPassEdit->GetText(), osl_getThreadTextEncoding() );
+        return OUStringToOString( m_xPassEdit->get_text(), osl_getThreadTextEncoding() );
     }
 
     bool AuthenticateQuery(const OString& rServer, OString& rUserName, OString& rPassword)
     {
         bool bRet = false;
 
-        ScopedVclPtrInstance<RTSPWDialog> aDialog(rServer, rUserName, nullptr);
-        if (aDialog->Execute())
+        vcl::Window* pWin = Application::GetDefDialogParent();
+        RTSPWDialog aDialog(rServer, rUserName, pWin ? pWin->GetFrameWeld() : nullptr);
+        if (aDialog.run() == RET_OK)
         {
-            rUserName = aDialog->getUserName();
-            rPassword = aDialog->getPassword();
+            rUserName = aDialog.getUserName();
+            rPassword = aDialog.getPassword();
             bRet = true;
         }
 
@@ -903,7 +821,7 @@ namespace
     }
 }
 
-const char* CUPSManager::authenticateUser( const char* /*pIn*/ )
+const char* CUPSManager::authenticateUser()
 {
     const char* pRet = nullptr;
 

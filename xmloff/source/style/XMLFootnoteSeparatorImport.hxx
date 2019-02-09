@@ -41,7 +41,7 @@ class XMLFootnoteSeparatorImport : public SvXMLImportContext
 {
     ::std::vector<XMLPropertyState> & rProperties;
     rtl::Reference<XMLPropertySetMapper> rMapper;
-    sal_Int32 nPropIndex;
+    sal_Int32 const nPropIndex;
 
 public:
 
@@ -54,7 +54,7 @@ public:
         const rtl::Reference<XMLPropertySetMapper> & rMapperRef,
         sal_Int32 nIndex);
 
-    virtual ~XMLFootnoteSeparatorImport();
+    virtual ~XMLFootnoteSeparatorImport() override;
 
     virtual void StartElement(
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList ) override;

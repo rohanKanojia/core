@@ -20,12 +20,10 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_INC_LISTVIEWITEMS_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_LISTVIEWITEMS_HXX
 
-#include <svtools/svlbitm.hxx>
+#include <vcl/svlbitm.hxx>
 
 namespace dbaui
 {
-
-    #define SV_ITEM_ID_BOLDLBSTRING SV_ITEM_ID_LBOXSTRING
 
     // OBoldListboxString
     class OBoldListboxString : public SvLBoxString
@@ -39,11 +37,11 @@ namespace dbaui
         {
         }
 
-        virtual sal_uInt16 GetType() const override;
+        virtual SvLBoxItemType GetType() const override;
 
         virtual void Paint(const Point& rPos, SvTreeListBox& rOutDev, vcl::RenderContext& rRenderContext,
                            const SvViewDataEntry* pView, const SvTreeListEntry& rEntry) override;
-        virtual void InitViewData( SvTreeListBox* pView,SvTreeListEntry* pEntry, SvViewDataItem* _pViewData) override;
+        virtual void InitViewData( SvTreeListBox* pView,SvTreeListEntry* pEntry, SvViewDataItem* _pViewData = nullptr) override;
 
         bool    isEmphasized() const { return m_bEmphasized; }
         void        emphasize(bool _bEmphasize) { m_bEmphasized = _bEmphasize; }

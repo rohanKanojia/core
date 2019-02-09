@@ -17,17 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "VLegendSymbolFactory.hxx"
-#include "macros.hxx"
-#include "PropertyMapper.hxx"
-#include "AbstractShapeFactory.hxx"
-#include "ObjectIdentifier.hxx"
-#include <com/sun/star/drawing/LineStyle.hpp>
+#include <VLegendSymbolFactory.hxx>
+#include <PropertyMapper.hxx>
+#include <ShapeFactory.hxx>
+#include <com/sun/star/drawing/Position3D.hpp>
 #include <com/sun/star/chart2/Symbol.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/drawing/Direction3D.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::Sequence;
 
 namespace
 {
@@ -35,32 +37,24 @@ namespace
 void getPropNamesAndValues( const Reference< beans::XPropertySet >& xProp,
         ::chart::tNameSequence& rNames,
         ::chart::tAnySequence& rValues,
-        ::chart::VLegendSymbolFactory::tPropertyType ePropertyType,
-        const awt::Size& aMaxSymbolExtent = awt::Size(0,0))
+        ::chart::VLegendSymbolFactory::PropertyType ePropertyType,
+        const awt::Size& aMaxSymbolExtent)
 {
     const ::chart::tPropertyNameMap & aFilledSeriesNameMap( ::chart::PropertyMapper::getPropertyNameMapForFilledSeriesProperties());
     const ::chart::tPropertyNameMap & aLineSeriesNameMap( ::chart::PropertyMapper::getPropertyNameMapForLineSeriesProperties());
     const ::chart::tPropertyNameMap & aLineNameMap( ::chart::PropertyMapper::getPropertyNameMapForLineProperties());
-    const ::chart::tPropertyNameMap & aFillNameMap( ::chart::PropertyMapper::getPropertyNameMapForFillProperties());
-    const ::chart::tPropertyNameMap & aFillLineNameMap( ::chart::PropertyMapper::getPropertyNameMapForFillAndLineProperties());
 
     ::chart::tPropertyNameValueMap aValueMap;
     switch( ePropertyType )
     {
-        case ::chart::VLegendSymbolFactory::PROP_TYPE_FILLED_SERIES:
+        case ::chart::VLegendSymbolFactory::PropertyType::FilledSeries:
             ::chart::PropertyMapper::getValueMap( aValueMap, aFilledSeriesNameMap, xProp );
             break;
-        case ::chart::VLegendSymbolFactory::PROP_TYPE_LINE_SERIES:
+        case ::chart::VLegendSymbolFactory::PropertyType::LineSeries:
             ::chart::PropertyMapper::getValueMap( aValueMap, aLineSeriesNameMap, xProp );
             break;
-        case ::chart::VLegendSymbolFactory::PROP_TYPE_LINE:
+        case ::chart::VLegendSymbolFactory::PropertyType::Line:
             ::chart::PropertyMapper::getValueMap( aValueMap, aLineNameMap, xProp );
-            break;
-        case ::chart::VLegendSymbolFactory::PROP_TYPE_FILL:
-            ::chart::PropertyMapper::getValueMap( aValueMap, aFillNameMap, xProp );
-            break;
-        case ::chart::VLegendSymbolFactory::PROP_TYPE_FILL_AND_LINE:
-            ::chart::PropertyMapper::getValueMap( aValueMap, aFillLineNameMap, xProp );
             break;
     }
 
@@ -73,15 +67,15 @@ void getPropNamesAndValues( const Reference< beans::XPropertySet >& xProp,
         // use legend entry height as upper limit for line width
         sal_Int32 nMaxLineWidthForLegend = aMaxSymbolExtent.Height;
         if( nLineWidth>nMaxLineWidthForLegend )
-            *pLineWidthAny = uno::makeAny( nMaxLineWidthForLegend );
+            *pLineWidthAny <<= nMaxLineWidthForLegend;
     }
 }
 
-void lcl_setPropetiesToShape(
+void lcl_setPropertiesToShape(
     const Reference< beans::XPropertySet > & xProp,
     const Reference< drawing::XShape > & xShape,
-    ::chart::VLegendSymbolFactory::tPropertyType ePropertyType,
-    const awt::Size& aMaxSymbolExtent = awt::Size(0,0))
+    ::chart::VLegendSymbolFactory::PropertyType ePropertyType,
+    const awt::Size& aMaxSymbolExtent)
 {
     ::chart::tNameSequence aPropNames;
     ::chart::tAnySequence aPropValues;
@@ -103,14 +97,14 @@ Reference< drawing::XShape > VLegendSymbolFactory::createSymbol(
     LegendSymbolStyle eStyle,
     const Reference< lang::XMultiServiceFactory > & xShapeFactory,
     const Reference< beans::XPropertySet > & xLegendEntryProperties,
-    tPropertyType ePropertyType, const uno::Any& rExplicitSymbol )
+    PropertyType ePropertyType, const uno::Any& rExplicitSymbol )
 {
     Reference< drawing::XShape > xResult;
 
     if( ! (rSymbolContainer.is() && xShapeFactory.is()))
         return xResult;
 
-    AbstractShapeFactory* pShapeFactory = AbstractShapeFactory::getOrCreateShapeFactory(xShapeFactory);
+    ShapeFactory* pShapeFactory = ShapeFactory::getOrCreateShapeFactory(xShapeFactory);
     xResult.set( pShapeFactory->createGroup2D( rSymbolContainer ), uno::UNO_QUERY );
 
     Reference< drawing::XShapes > xResultGroup( xResult, uno::UNO_QUERY );
@@ -124,14 +118,14 @@ Reference< drawing::XShape > VLegendSymbolFactory::createSymbol(
     // create symbol
     try
     {
-        if( eStyle == LegendSymbolStyle_LINE )
+        if( eStyle == LegendSymbolStyle::Line )
         {
             Reference< drawing::XShape > xLine =
                 pShapeFactory->createLine( xResultGroup, awt::Size( rEntryKeyAspectRatio.Width, 0 ),
                         awt::Point( 0, rEntryKeyAspectRatio.Height/2 ));
             if( xLine.is())
             {
-                lcl_setPropetiesToShape( xLegendEntryProperties, xLine, ePropertyType, rEntryKeyAspectRatio );
+                lcl_setPropertiesToShape( xLegendEntryProperties, xLine, ePropertyType, rEntryKeyAspectRatio );
             }
 
             Reference< drawing::XShape > xSymbol;
@@ -141,7 +135,7 @@ Reference< drawing::XShape > VLegendSymbolFactory::createSymbol(
             {
                 drawing::Direction3D aSymbolSize( nSize, nSize, 0 );
                 drawing::Position3D aPos( rEntryKeyAspectRatio.Width/2.0, rEntryKeyAspectRatio.Height/2.0, 0 );
-                AbstractShapeFactory* pFactory = AbstractShapeFactory::getOrCreateShapeFactory( xShapeFactory );
+                ShapeFactory* pFactory = ShapeFactory::getOrCreateShapeFactory( xShapeFactory );
                 if( aSymbol.Style == chart2::SymbolStyle_STANDARD )
                 {
                     // take series color as fill color
@@ -171,7 +165,7 @@ Reference< drawing::XShape > VLegendSymbolFactory::createSymbol(
                 }
             }
         }
-        else if( eStyle == LegendSymbolStyle_CIRCLE )
+        else if( eStyle == LegendSymbolStyle::Circle )
         {
             sal_Int32 nSize = std::min( rEntryKeyAspectRatio.Width, rEntryKeyAspectRatio.Height );
             Reference< drawing::XShape > xShape =
@@ -179,26 +173,25 @@ Reference< drawing::XShape > VLegendSymbolFactory::createSymbol(
                         awt::Point( rEntryKeyAspectRatio.Width/2-nSize/2, rEntryKeyAspectRatio.Height/2-nSize/2 ));
             if( xShape.is() )
             {
-                lcl_setPropetiesToShape( xLegendEntryProperties, xShape, ePropertyType ); // PROP_TYPE_FILLED_SERIES );
+                lcl_setPropertiesToShape( xLegendEntryProperties, xShape, ePropertyType, awt::Size(0,0) ); // PropertyType::FilledSeries );
             }
         }
-        else // eStyle == LegendSymbolStyle_BOX
+        else // eStyle == LegendSymbolStyle::Box
         {
             tNameSequence aPropNames;
             tAnySequence aPropValues;
 
             getPropNamesAndValues( xLegendEntryProperties, aPropNames, aPropValues,
-                    ePropertyType );// PROP_TYPE_FILLED_SERIES
+                    ePropertyType, awt::Size(0,0) );// PropertyType::FilledSeries
 
-            Reference< drawing::XShape > xShape =
-                pShapeFactory->createRectangle( xResultGroup,
+            pShapeFactory->createRectangle( xResultGroup,
                         rEntryKeyAspectRatio, awt::Point( 0, 0 ),
                         aPropNames, aPropValues );
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;

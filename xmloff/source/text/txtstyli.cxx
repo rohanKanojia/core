@@ -30,26 +30,30 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/maptype.hxx>
+#include <xmloff/xmlimppr.hxx>
+#include <xmloff/xmlement.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/document/XEventsSupplier.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/style/ParagraphStyleCategory.hpp>
 #include <com/sun/star/style/XStyle.hpp>
+
+#include <o3tl/any.hxx>
 
 #include <sax/tools/converter.hxx>
 
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <functional>
 #include <utility>
 #include <vector>
 
-//UUUU
 #include <xmlsdtypes.hxx>
 #include <xmloff/xmlerror.hxx>
 
@@ -59,13 +63,12 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::style;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 using namespace ::xmloff::token;
 
-static const SvXMLEnumMapEntry aCategoryMap[] =
+static const SvXMLEnumMapEntry<sal_uInt16> aCategoryMap[] =
 {
     { XML_TEXT,     ParagraphStyleCategory::TEXT },
     { XML_CHAPTER,  ParagraphStyleCategory::CHAPTER },
@@ -86,33 +89,35 @@ void XMLTextStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
         if( IsXMLToken( rLocalName, XML_AUTO_UPDATE ) )
         {
             if( IsXMLToken( rValue, XML_TRUE ) )
-                bAutoUpdate = true;
+                m_isAutoUpdate = true;
         }
         else if( IsXMLToken( rLocalName, XML_LIST_STYLE_NAME ) )
         {
-            sListStyleName = rValue;
+            m_sListStyleName = rValue;
             // Inherited paragraph style lost information about unset numbering (#i69523#)
-            mbListStyleSet = true;
+            m_bListStyleSet = true;
         }
         else if( IsXMLToken( rLocalName, XML_MASTER_PAGE_NAME ) )
         {
-            sMasterPageName = rValue;
-            bHasMasterPageName = true;
+            m_sMasterPageName = rValue;
+            m_bHasMasterPageName = true;
         }
         else if( IsXMLToken( rLocalName, XML_DATA_STYLE_NAME ) )
         {
-            sDataStyleName = rValue;
+            m_sDataStyleName = rValue;
         }
         else if( IsXMLToken( rLocalName, XML_CLASS ) )
         {
-            sCategoryVal = rValue;
+            m_sCategoryVal = rValue;
         }
         else if( IsXMLToken( rLocalName, XML_DEFAULT_OUTLINE_LEVEL ) )
         {
             sal_Int32 nTmp;
             if (::sax::Converter::convertNumber( nTmp, rValue ) &&
                 0 <= nTmp && nTmp <= 10 )
-                nOutlineLevel = static_cast< sal_Int8 >( nTmp );
+            {
+                m_nOutlineLevel = static_cast<sal_Int8>(nTmp);
+            }
         }
         else
         {
@@ -132,32 +137,24 @@ XMLTextStyleContext::XMLTextStyleContext( SvXMLImport& rImport,
         SvXMLStylesContext& rStyles, sal_uInt16 nFamily,
         bool bDefaultStyle )
 :   XMLPropStyleContext( rImport, nPrfx, rLName, xAttrList, rStyles, nFamily, bDefaultStyle )
-,   sIsAutoUpdate( "IsAutoUpdate" )
-,   sCategory( "Category" )
-,   sNumberingStyleName( "NumberingStyleName" )
-,       sOutlineLevel("OutlineLevel" )
-,   sDropCapCharStyleName( "DropCapCharStyleName" )
-,   sPageDescName( "PageDescName" )
-,   nOutlineLevel( -1 )
-,   bAutoUpdate( false )
-,   bHasMasterPageName( false )
-,   bHasCombinedCharactersLetter( false )
+,   m_nOutlineLevel( -1 )
+,   m_isAutoUpdate( false )
+,   m_bHasMasterPageName( false )
+,   m_bHasCombinedCharactersLetter( false )
 // Inherited paragraph style lost information about unset numbering (#i69523#)
-,   mbListStyleSet( false )
-,   pEventContext( nullptr )
+,   m_bListStyleSet( false )
 {
 }
 
 XMLTextStyleContext::~XMLTextStyleContext()
-{
-}
+{}
 
-SvXMLImportContext *XMLTextStyleContext::CreateChildContext(
+SvXMLImportContextRef XMLTextStyleContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if( XML_NAMESPACE_STYLE == nPrefix )
     {
@@ -177,12 +174,12 @@ SvXMLImportContext *XMLTextStyleContext::CreateChildContext(
             rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap =
                 GetStyles()->GetImportPropertyMapper( GetFamily() );
             if( xImpPrMap.is() )
-                pContext = new XMLTextPropertySetContext( GetImport(), nPrefix,
+                xContext = new XMLTextPropertySetContext( GetImport(), nPrefix,
                                                         rLocalName, xAttrList,
                                                         nFamily,
                                                         GetProperties(),
                                                         xImpPrMap,
-                                                        sDropCapTextStyleName );
+                                                        m_sDropCapTextStyleName);
         }
     }
     else if ( (XML_NAMESPACE_OFFICE == nPrefix) &&
@@ -190,17 +187,16 @@ SvXMLImportContext *XMLTextStyleContext::CreateChildContext(
     {
         // create and remember events import context
         // (for delayed processing of events)
-        pEventContext = new XMLEventsImportContext( GetImport(), nPrefix,
-                                                   rLocalName);
-        pEventContext->AddFirstRef();
-        pContext = pEventContext;
+        m_xEventContext.set(new XMLEventsImportContext( GetImport(), nPrefix,
+                                                   rLocalName));
+        xContext = m_xEventContext.get();
     }
 
-    if( !pContext )
-        pContext = XMLPropStyleContext::CreateChildContext( nPrefix, rLocalName,
+    if (!xContext)
+        xContext = XMLPropStyleContext::CreateChildContext( nPrefix, rLocalName,
                                                           xAttrList );
 
-    return pContext;
+    return xContext;
 }
 
 void XMLTextStyleContext::CreateAndInsert( bool bOverwrite )
@@ -213,38 +209,35 @@ void XMLTextStyleContext::CreateAndInsert( bool bOverwrite )
     Reference < XPropertySet > xPropSet( xStyle, UNO_QUERY );
     Reference< XPropertySetInfo > xPropSetInfo =
                 xPropSet->getPropertySetInfo();
+
+    OUString const sIsAutoUpdate("IsAutoUpdate");
     if( xPropSetInfo->hasPropertyByName( sIsAutoUpdate ) )
     {
-        Any aAny;
-        sal_Bool bTmp = bAutoUpdate;
-        aAny.setValue( &bTmp, cppu::UnoType<bool>::get() );
-        xPropSet->setPropertyValue( sIsAutoUpdate, aAny );
+        xPropSet->setPropertyValue( sIsAutoUpdate, Any(m_isAutoUpdate) );
     }
 
     sal_uInt16 nCategory = ParagraphStyleCategory::TEXT;
     if(  XML_STYLE_FAMILY_TEXT_PARAGRAPH == GetFamily() &&
-         !sCategoryVal.isEmpty() && xStyle->isUserDefined() &&
-         xPropSetInfo->hasPropertyByName( sCategory ) &&
-          SvXMLUnitConverter::convertEnum( nCategory, sCategoryVal, aCategoryMap ) )
+         !m_sCategoryVal.isEmpty() && xStyle->isUserDefined() &&
+         xPropSetInfo->hasPropertyByName("Category") &&
+        SvXMLUnitConverter::convertEnum( nCategory, m_sCategoryVal, aCategoryMap))
     {
-        Any aAny;
-        aAny <<= (sal_Int16)nCategory;
-        xPropSet->setPropertyValue( sCategory, aAny );
+        xPropSet->setPropertyValue("Category", Any(static_cast<sal_Int16>(nCategory)));
     }
 
     // tell the style about it's events (if applicable)
-    if (nullptr != pEventContext)
+    if (m_xEventContext.is())
     {
-        // set event suppplier and release reference to context
+        // pass events into event suppplier
         Reference<document::XEventsSupplier> xEventsSupplier(xStyle,UNO_QUERY);
-        pEventContext->SetEvents(xEventsSupplier);
-        pEventContext->ReleaseRef();
+        m_xEventContext->SetEvents(xEventsSupplier);
+        m_xEventContext.clear();
     }
 
     // XML import: reconstrution of assignment of paragraph style to outline levels (#i69629#)
-    if ( nOutlineLevel > 0 )
+    if (m_nOutlineLevel > 0)
     {
-        GetImport().GetTextImport()->AddOutlineStyleCandidate( nOutlineLevel,
+        GetImport().GetTextImport()->AddOutlineStyleCandidate(m_nOutlineLevel,
                                                       GetDisplayName() );
     }
 }
@@ -272,10 +265,10 @@ void XMLTextStyleContext::Finish( bool bOverwrite )
 
     Reference < XStyle > xStyle = GetStyle();
     // Consider set empty list style (#i69523#)
-    if ( !( mbListStyleSet ||
-            nOutlineLevel >= 0 ||
-            !sDropCapTextStyleName.isEmpty() ||
-            bHasMasterPageName ) ||
+    if ( !( m_bListStyleSet ||
+            m_nOutlineLevel >= 0 ||
+            !m_sDropCapTextStyleName.isEmpty() ||
+            m_bHasMasterPageName ) ||
          !xStyle.is() ||
          !( bOverwrite || IsNew() ) )
         return;
@@ -284,18 +277,18 @@ void XMLTextStyleContext::Finish( bool bOverwrite )
     Reference< XPropertySetInfo > xPropSetInfo =
                 xPropSet->getPropertySetInfo();
 
+    OUString const sOutlineLevel("OutlineLevel");
     if( xPropSetInfo->hasPropertyByName( sOutlineLevel ))
     {
-        Any aAny;
-        if( nOutlineLevel >= 0 )
+        if (m_nOutlineLevel >= 0)
         {
-            aAny <<= nOutlineLevel;
-            xPropSet->setPropertyValue( sOutlineLevel, aAny );
+            xPropSet->setPropertyValue( sOutlineLevel, Any(m_nOutlineLevel) );
         }
     }
 
     // Consider set empty list style (#i69523#)
-    if ( mbListStyleSet &&
+    OUString const sNumberingStyleName("NumberingStyleName");
+    if (m_bListStyleSet &&
          xPropSetInfo->hasPropertyByName( sNumberingStyleName ) )
     {
         /* Only for text document from version prior OOo 2.1 resp. SO 8 PU5:
@@ -304,7 +297,7 @@ void XMLTextStyleContext::Finish( bool bOverwrite )
              level of the outline style. (#i70223#)
         */
         bool bApplyListStyle( true );
-        if ( nOutlineLevel > 0 )
+        if (m_nOutlineLevel > 0)
         {
             if ( GetImport().IsTextDocInOOoFileFormat() )
             {
@@ -326,18 +319,16 @@ void XMLTextStyleContext::Finish( bool bOverwrite )
 
         if ( bApplyListStyle )
         {
-            if ( sListStyleName.isEmpty() )
+            if (m_sListStyleName.isEmpty())
             {
-                Any aAny;
-                aAny <<= sListStyleName /* empty string */;
-                xPropSet->setPropertyValue( sNumberingStyleName, aAny );
+                xPropSet->setPropertyValue(sNumberingStyleName, Any(m_sListStyleName)); /* empty string */
             }
             else
             {
                 // change list style name to display name
                 OUString sDisplayListStyleName(
-                    GetImport().GetStyleDisplayName( XML_STYLE_FAMILY_TEXT_LIST,
-                                                  sListStyleName ) );
+                    GetImport().GetStyleDisplayName(XML_STYLE_FAMILY_TEXT_LIST,
+                                                  m_sListStyleName));
                 // The families container must exist
                 const Reference < XNameContainer >& rNumStyles =
                     GetImport().GetTextImport()->GetNumberingStyles();
@@ -346,49 +337,45 @@ void XMLTextStyleContext::Finish( bool bOverwrite )
                 if ( rNumStyles.is() &&
                      rNumStyles->hasByName( sDisplayListStyleName ) )
                 {
-                    Any aAny;
-                    aAny <<= sDisplayListStyleName;
-                    xPropSet->setPropertyValue( sNumberingStyleName, aAny );
+                    xPropSet->setPropertyValue( sNumberingStyleName, Any(sDisplayListStyleName) );
                 }
             }
         }
     }
 
-    if( !sDropCapTextStyleName.isEmpty() )
+    if (!m_sDropCapTextStyleName.isEmpty())
     {
         // change list style name to display name
         OUString sDisplayDropCapTextStyleName(
             GetImport().GetStyleDisplayName( XML_STYLE_FAMILY_TEXT_TEXT,
-                                          sDropCapTextStyleName ) );
-        // The families cointaner must exist
+                                          m_sDropCapTextStyleName));
+        // The families container must exist
         const Reference < XNameContainer >& rTextStyles =
             GetImport().GetTextImport()->GetTextStyles();
         if( rTextStyles.is() &&
             rTextStyles->hasByName( sDisplayDropCapTextStyleName ) &&
-            xPropSetInfo->hasPropertyByName( sDropCapCharStyleName ) )
+            xPropSetInfo->hasPropertyByName("DropCapCharStyleName"))
         {
-            Any aAny;
-            aAny <<= sDisplayDropCapTextStyleName;
-            xPropSet->setPropertyValue( sDropCapCharStyleName, aAny );
+            xPropSet->setPropertyValue("DropCapCharStyleName", Any(sDisplayDropCapTextStyleName));
         }
     }
 
-    if( bHasMasterPageName )
+    if (m_bHasMasterPageName)
     {
         OUString sDisplayName(
             GetImport().GetStyleDisplayName(
-                            XML_STYLE_FAMILY_MASTER_PAGE, sMasterPageName ) );
-        // The families cointaner must exist
+                            XML_STYLE_FAMILY_MASTER_PAGE, m_sMasterPageName));
+        // The families container must exist
         const Reference < XNameContainer >& rPageStyles =
             GetImport().GetTextImport()->GetPageStyles();
+
+        OUString const sPageDescName("PageDescName");
         if( ( sDisplayName.isEmpty() ||
               (rPageStyles.is() &&
                rPageStyles->hasByName( sDisplayName )) ) &&
             xPropSetInfo->hasPropertyByName( sPageDescName ) )
         {
-            Any aAny;
-            aAny <<= sDisplayName;
-            xPropSet->setPropertyValue( sPageDescName, aAny );
+            xPropSet->setPropertyValue( sPageDescName, Any(sDisplayName) );
         }
     }
 }
@@ -400,183 +387,230 @@ void XMLTextStyleContext::FillPropertySet(
     // catch the combined characters attribute
 
     // imitate XMLPropStyleContext::FillPropertySet(...)
-    SvXMLStylesContext* pSvXMLStylesContext = static_cast< SvXMLStylesContext* >(GetStyles());
+    SvXMLStylesContext* pSvXMLStylesContext = GetStyles();
     rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap = pSvXMLStylesContext->GetImportPropertyMapper(GetFamily());
     DBG_ASSERT(xImpPrMap.is(),"Where is the import prop mapper?");
 
-    if(xImpPrMap.is())
+    if(!xImpPrMap.is())
+        return;
+
+    // imitate SvXMLImportPropertyMapper::FillPropertySet(...)
+    // The reason for this is that we have no other way to
+    // efficiently intercept the value of combined characters. To
+    // get that value, we could iterate through the map once more,
+    // but instead we chose to insert the code into this
+    // iteration. I haven't been able to come up with a much more
+    // intelligent solution.
+    struct ContextID_Index_Pair aContextIDs[] =
     {
-        // imitate SvXMLImportPropertyMapper::FillPropertySet(...)
-        // The reason for this is that we have no other way to
-        // efficiently intercept the value of combined characters. To
-        // get that value, we could iterate through the map once more,
-        // but instead we chose to insert the code into this
-        // iteration. I haven't been able to come up with a much more
-        // intelligent solution.
-        struct ContextID_Index_Pair aContextIDs[] =
+        { CTF_COMBINED_CHARACTERS_FIELD, -1 },
+        { CTF_KEEP_TOGETHER, -1 },
+        { CTF_BORDER_MODEL, -1 },
+        { CTF_TEXT_DISPLAY, -1 },
+        { CTF_FONTFAMILYNAME, -1 },
+        { CTF_FONTFAMILYNAME_CJK, -1 },
+        { CTF_FONTFAMILYNAME_CTL, -1 },
+
+        //UUU need special handling for DrawingLayer FillStyle names
+        { CTF_FILLGRADIENTNAME, -1 },
+        { CTF_FILLTRANSNAME, -1 },
+        { CTF_FILLHATCHNAME, -1 },
+        { CTF_FILLBITMAPNAME, -1 },
+
+        { -1, -1 }
+    };
+
+    // the style families associated with the same index modulo 4
+    static const sal_uInt16 aFamilies[] =
+    {
+        XML_STYLE_FAMILY_SD_GRADIENT_ID,
+        XML_STYLE_FAMILY_SD_GRADIENT_ID,
+        XML_STYLE_FAMILY_SD_HATCH_ID,
+        XML_STYLE_FAMILY_SD_FILL_IMAGE_ID
+    };
+
+    // get property set info
+    Reference< XPropertySetInfo > xInfo;
+    rtl::Reference< XMLPropertySetMapper > rPropMapper;
+    bool bAutomatic = false;
+
+    if(pSvXMLStylesContext->IsAutomaticStyle() &&
+        (XML_STYLE_FAMILY_TEXT_TEXT == GetFamily() || XML_STYLE_FAMILY_TEXT_PARAGRAPH == GetFamily()))
+    {
+        bAutomatic = true;
+
+        if( !GetAutoName().isEmpty() )
         {
-            { CTF_COMBINED_CHARACTERS_FIELD, -1 },
-            { CTF_KEEP_TOGETHER, -1 },
-            { CTF_BORDER_MODEL, -1 },
-            { CTF_TEXT_DISPLAY, -1 },
-            { CTF_FONTFAMILYNAME, -1 },
-            { CTF_FONTFAMILYNAME_CJK, -1 },
-            { CTF_FONTFAMILYNAME_CTL, -1 },
+            OUString sAutoProp = ( GetFamily() == XML_STYLE_FAMILY_TEXT_TEXT ) ?
+                OUString( "CharAutoStyleName" ):
+                OUString( "ParaAutoStyleName" );
 
-            //UUU need special handling for DrawingLayer FillStyle names
-            { CTF_FILLGRADIENTNAME, -1 },
-            { CTF_FILLTRANSNAME, -1 },
-            { CTF_FILLHATCHNAME, -1 },
-            { CTF_FILLBITMAPNAME, -1 },
-
-            { -1, -1 }
-        };
-
-        // the style families associated with the same index modulo 4
-        static sal_uInt16 aFamilies[] =
-        {
-            XML_STYLE_FAMILY_SD_GRADIENT_ID,
-            XML_STYLE_FAMILY_SD_GRADIENT_ID,
-            XML_STYLE_FAMILY_SD_HATCH_ID,
-            XML_STYLE_FAMILY_SD_FILL_IMAGE_ID
-        };
-
-        // get property set info
-        Reference< XPropertySetInfo > xInfo;
-        rtl::Reference< XMLPropertySetMapper > rPropMapper;
-        bool bAutomatic = false;
-
-        if(pSvXMLStylesContext->IsAutomaticStyle() &&
-            (XML_STYLE_FAMILY_TEXT_TEXT == GetFamily() || XML_STYLE_FAMILY_TEXT_PARAGRAPH == GetFamily()))
-        {
-            bAutomatic = true;
-
-            if( !GetAutoName().isEmpty() )
+            try
             {
-                OUString sAutoProp = ( GetFamily() == XML_STYLE_FAMILY_TEXT_TEXT ) ?
-                    OUString( "CharAutoStyleName" ):
-                    OUString( "ParaAutoStyleName" );
-
-                try
+                if(!xInfo.is())
                 {
-                    if(!xInfo.is())
-                    {
-                        xInfo = rPropSet->getPropertySetInfo();
-                    }
-
-                    if ( xInfo->hasPropertyByName( sAutoProp ) )
-                    {
-                        rPropSet->setPropertyValue( sAutoProp, makeAny(GetAutoName()) );
-                    }
-                    else
-                    {
-                        bAutomatic = false;
-                    }
+                    xInfo = rPropSet->getPropertySetInfo();
                 }
-                catch( const RuntimeException& ) { throw; }
-                catch( const Exception& )
+
+                if ( xInfo->hasPropertyByName( sAutoProp ) )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    rPropSet->setPropertyValue( sAutoProp, makeAny(GetAutoName()) );
+                }
+                else
+                {
                     bAutomatic = false;
                 }
             }
+            catch( const RuntimeException& ) { throw; }
+            catch( const Exception& )
+            {
+                DBG_UNHANDLED_EXCEPTION("xmloff.text");
+                bAutomatic = false;
+            }
         }
+    }
 
-        if( bAutomatic )
-        {
-            xImpPrMap->CheckSpecialContext( GetProperties(), rPropSet, aContextIDs );
-        }
-        else
-        {
-            xImpPrMap->FillPropertySet( GetProperties(), rPropSet, aContextIDs );
-        }
+    if( bAutomatic )
+    {
+        xImpPrMap->CheckSpecialContext( GetProperties(), rPropSet, aContextIDs );
+    }
+    else
+    {
+        xImpPrMap->FillPropertySet( GetProperties(), rPropSet, aContextIDs );
+    }
 
-        sal_Int32 nIndex = aContextIDs[0].nIndex;
+    sal_Int32 nIndex = aContextIDs[0].nIndex;
 
-        // have we found a combined characters
+    // have we found a combined characters
+    if ( nIndex != -1 )
+    {
+        Any& rAny = GetProperties()[nIndex].maValue;
+        bool bVal = *o3tl::doAccess<bool>(rAny);
+        m_bHasCombinedCharactersLetter = bVal;
+    }
+
+    // keep-together: the application default is different from
+    // the file format default. Hence, if we always set this
+    // value; if we didn't find one, we'll set to false, the file
+    // format default.
+    // border-model: same
+    if(IsDefaultStyle() && XML_STYLE_FAMILY_TABLE_ROW == GetFamily())
+    {
+        OUString sIsSplitAllowed("IsSplitAllowed");
+        SAL_WARN_IF( !rPropSet->getPropertySetInfo()->hasPropertyByName( sIsSplitAllowed ), "xmloff", "property missing?" );
+        rPropSet->setPropertyValue(
+            sIsSplitAllowed,
+            (aContextIDs[1].nIndex == -1) ? makeAny( false ) : GetProperties()[aContextIDs[1].nIndex].maValue );
+    }
+
+    if(IsDefaultStyle() && XML_STYLE_FAMILY_TABLE_TABLE == GetFamily())
+    {
+        OUString sCollapsingBorders("CollapsingBorders");
+        SAL_WARN_IF( !rPropSet->getPropertySetInfo()->hasPropertyByName( sCollapsingBorders ), "xmloff", "property missing?" );
+        rPropSet->setPropertyValue(
+            sCollapsingBorders,
+            (aContextIDs[2].nIndex == -1)
+            ? makeAny( false )
+            : GetProperties()[aContextIDs[2].nIndex].maValue );
+    }
+
+
+    // iterate over aContextIDs entries, start with 3, prev ones are already used above
+    for(sal_uInt16 i(3); aContextIDs[i].nContextID != -1; i++)
+    {
+        nIndex = aContextIDs[i].nIndex;
+
         if ( nIndex != -1 )
         {
-            Any& rAny = GetProperties()[nIndex].maValue;
-            bool bVal = *static_cast<sal_Bool const *>(rAny.getValue());
-            bHasCombinedCharactersLetter = bVal;
-        }
+            // Found!
+            struct XMLPropertyState& rState = GetProperties()[nIndex];
 
-        // keep-together: the application default is different from
-        // the file format default. Hence, if we always set this
-        // value; if we didn't find one, we'll set to false, the file
-        // format default.
-        // border-model: same
-        if(IsDefaultStyle() && XML_STYLE_FAMILY_TABLE_ROW == GetFamily())
-        {
-            OUString sIsSplitAllowed("IsSplitAllowed");
-            DBG_ASSERT( rPropSet->getPropertySetInfo()->hasPropertyByName( sIsSplitAllowed ), "property missing?" );
-            rPropSet->setPropertyValue(
-                sIsSplitAllowed,
-                (aContextIDs[1].nIndex == -1) ? makeAny( false ) : GetProperties()[aContextIDs[1].nIndex].maValue );
-        }
-
-        if(IsDefaultStyle() && XML_STYLE_FAMILY_TABLE_TABLE == GetFamily())
-        {
-            OUString sCollapsingBorders("CollapsingBorders");
-            DBG_ASSERT( rPropSet->getPropertySetInfo()->hasPropertyByName( sCollapsingBorders ), "property missing?" );
-            rPropSet->setPropertyValue(
-                sCollapsingBorders,
-                (aContextIDs[2].nIndex == -1)
-                ? makeAny( false )
-                : GetProperties()[aContextIDs[2].nIndex].maValue );
-        }
-
-
-        // iterate over aContextIDs entries, start with 3, prev ones are already used above
-        for(sal_uInt16 i(3); aContextIDs[i].nContextID != -1; i++)
-        {
-            nIndex = aContextIDs[i].nIndex;
-
-            if ( nIndex != -1 )
+            switch(aContextIDs[i].nContextID)
             {
-                // Found!
-                struct XMLPropertyState& rState = GetProperties()[nIndex];
-
-                switch(aContextIDs[i].nContextID)
+                case CTF_FILLGRADIENTNAME:
+                case CTF_FILLTRANSNAME:
+                case CTF_FILLHATCHNAME:
+                case CTF_FILLBITMAPNAME:
                 {
-                    case CTF_FILLGRADIENTNAME:
-                    case CTF_FILLTRANSNAME:
-                    case CTF_FILLHATCHNAME:
-                    case CTF_FILLBITMAPNAME:
+                    // DrawingLayer FillStyle name needs to be mapped to DisplayName
+                    OUString sStyleName;
+                    rState.maValue >>= sStyleName;
+
+                    // translate the used name from ODF intern to the name used in the Model
+                    sStyleName = GetImport().GetStyleDisplayName(aFamilies[i - 7], sStyleName);
+
+                    if(bAutomatic)
                     {
-                        // DrawingLayer FillStyle name needs to be mapped to DisplayName
-                        rtl::OUString sStyleName;
-                        rState.maValue >>= sStyleName;
+                        // in this case the rPropSet got not really filled since above the call to
+                        // CheckSpecialContext was used and not FillPropertySet, thus the below call to
+                        // setPropertyValue can fail/will not be useful (e.g. when the rPropSet
+                        // is a SwXTextCursor).
+                        // This happens for AutoStyles which are already filled in XMLPropStyleContext::CreateAndInsert,
+                        // thus the whole mechanism based on _ContextID_Index_Pair will not work
+                        // in that case. Thus the slots which need to be converted already get
+                        // converted there (its called first) and not here (see
+                        // translateNameBasedDrawingLayerFillStyleDefinitionsToStyleDisplayNames)
+                        // For convenience, still Write back the corrected value to the XMLPropertyState entry
+                        rState.maValue <<= sStyleName;
+                        break;
+                    }
 
-                        //UUUU translate the used name from ODF intern to the name used in the Model
-                        sStyleName = GetImport().GetStyleDisplayName(aFamilies[i - 7], sStyleName);
-
-                        if(bAutomatic)
+                    // Still needed if it's not an AutomaticStyle (!)
+                    try
+                    {
+                        if(!rPropMapper.is())
                         {
-                            // in this case the rPropSet got not really filled since above the call to
-                            // CheckSpecialContext was used and not FillPropertySet, thus the below call to
-                            // setPropertyValue can fail/will not be useful (e.g. when the rPropSet
-                            // is a SwXTextCursor).
-                            // This happens for AutoStyles which are already filled in XMLPropStyleContext::CreateAndInsert,
-                            // thus the whole mechanism based on _ContextID_Index_Pair will not work
-                            // in that case. Thus the slots which need to be converted already get
-                            // converted there (its called first) and not here (see
-                            // translateNameBasedDrawingLayerFillStyleDefinitionsToStyleDisplayNames)
-                            // For convenience, still Write back the corrected value to the XMLPropertyState entry
-                            rState.maValue <<= sStyleName;
-                            break;
+                            rPropMapper = xImpPrMap->getPropertySetMapper();
                         }
 
-                        // Still needed if it's not an AutomaticStyle (!)
-                        try
+                        // set property
+                        const OUString& rPropertyName = rPropMapper->GetEntryAPIName(rState.mnIndex);
+
+                        if(!xInfo.is())
                         {
+                            xInfo = rPropSet->getPropertySetInfo();
+                        }
+
+                        if(xInfo->hasPropertyByName(rPropertyName))
+                        {
+                            rPropSet->setPropertyValue(rPropertyName,Any(sStyleName));
+                        }
+                    }
+                    catch(css::lang::IllegalArgumentException& e)
+                    {
+                        Sequence<OUString> aSeq { sStyleName };
+                        GetImport().SetError(XMLERROR_STYLE_PROP_VALUE | XMLERROR_FLAG_WARNING, aSeq, e.Message, nullptr);
+                    }
+                    break;
+                }
+                default:
+                {
+                    // check for StarBats and StarMath fonts
+                    Any rAny = rState.maValue;
+                    sal_Int32 nMapperIndex = rState.mnIndex;
+
+                    // Now check for font name in rState and set corrected value,
+                    // if necessary.
+                    OUString sFontName;
+                    rAny >>= sFontName;
+
+                    if ( !sFontName.isEmpty() )
+                    {
+                        if ( sFontName.equalsIgnoreAsciiCase( "StarBats" ) ||
+                             sFontName.equalsIgnoreAsciiCase( "StarMath" ) )
+                        {
+                            // construct new value
+                            sFontName = "StarSymbol";
+                            Any aAny(rAny);
+                            aAny <<= sFontName;
+
                             if(!rPropMapper.is())
                             {
                                 rPropMapper = xImpPrMap->getPropertySetMapper();
                             }
 
                             // set property
-                            const rtl::OUString& rPropertyName = rPropMapper->GetEntryAPIName(rState.mnIndex);
+                            OUString rPropertyName(rPropMapper->GetEntryAPIName(nMapperIndex));
 
                             if(!xInfo.is())
                             {
@@ -585,63 +619,17 @@ void XMLTextStyleContext::FillPropertySet(
 
                             if(xInfo->hasPropertyByName(rPropertyName))
                             {
-                                rPropSet->setPropertyValue(rPropertyName,Any(sStyleName));
+                                rPropSet->setPropertyValue(rPropertyName,aAny);
                             }
                         }
-                        catch(css::lang::IllegalArgumentException& e)
-                        {
-                            Sequence<OUString> aSeq { sStyleName };
-                            GetImport().SetError(XMLERROR_STYLE_PROP_VALUE | XMLERROR_FLAG_WARNING, aSeq, e.Message, nullptr);
-                        }
-                        break;
+                        // else: "normal" style name -> no correction is necessary
                     }
-                    default:
-                    {
-                        // check for StarBats and StarMath fonts
-                        Any rAny = rState.maValue;
-                        sal_Int32 nMapperIndex = rState.mnIndex;
-
-                        // Now check for font name in rState and set corrected value,
-                        // if necessary.
-                        OUString sFontName;
-                        rAny >>= sFontName;
-
-                        if ( !sFontName.isEmpty() )
-                        {
-                            if ( sFontName.equalsIgnoreAsciiCase( "StarBats" ) ||
-                                 sFontName.equalsIgnoreAsciiCase( "StarMath" ) )
-                            {
-                                // construct new value
-                                sFontName = "StarSymbol";
-                                Any aAny(rAny);
-                                aAny <<= sFontName;
-
-                                if(!rPropMapper.is())
-                                {
-                                    rPropMapper = xImpPrMap->getPropertySetMapper();
-                                }
-
-                                // set property
-                                OUString rPropertyName(rPropMapper->GetEntryAPIName(nMapperIndex));
-
-                                if(!xInfo.is())
-                                {
-                                    xInfo = rPropSet->getPropertySetInfo();
-                                }
-
-                                if(xInfo->hasPropertyByName(rPropertyName))
-                                {
-                                    rPropSet->setPropertyValue(rPropertyName,aAny);
-                                }
-                            }
-                            // else: "normal" style name -> no correction is necessary
-                        }
-                        // else: no style name found -> illegal value -> ignore
-                    }
+                    // else: no style name found -> illegal value -> ignore
                 }
             }
         }
     }
+
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

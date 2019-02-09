@@ -20,9 +20,7 @@
 #include "VPolarAxis.hxx"
 #include "VPolarAngleAxis.hxx"
 #include "VPolarRadiusAxis.hxx"
-#include "macros.hxx"
-#include "Tickmarks.hxx"
-#include "ShapeFactory.hxx"
+#include <PlottingPositionHelper.hxx>
 
 namespace chart
 {
@@ -33,7 +31,7 @@ VPolarAxis* VPolarAxis::createAxis( const AxisProperties& rAxisProperties
            , const uno::Reference< util::XNumberFormatsSupplier >& xNumberFormatsSupplier
            , sal_Int32 nDimensionIndex, sal_Int32 nDimensionCount )
 {
-    if( 0==nDimensionIndex )
+    if( nDimensionIndex==0 )
         return new VPolarAngleAxis( rAxisProperties, xNumberFormatsSupplier, nDimensionCount );
     return new VPolarRadiusAxis( rAxisProperties, xNumberFormatsSupplier, nDimensionCount );
 }
@@ -45,13 +43,11 @@ VPolarAxis::VPolarAxis( const AxisProperties& rAxisProperties
             , m_pPosHelper( new PolarPlottingPositionHelper() )
             , m_aIncrements()
 {
-    PlotterBase::m_pPosHelper = m_pPosHelper;
+    PlotterBase::m_pPosHelper = m_pPosHelper.get();
 }
 
 VPolarAxis::~VPolarAxis()
 {
-    delete m_pPosHelper;
-    m_pPosHelper = nullptr;
 }
 
 void VPolarAxis::setIncrements( const std::vector< ExplicitIncrementData >& rIncrements )
@@ -61,7 +57,7 @@ void VPolarAxis::setIncrements( const std::vector< ExplicitIncrementData >& rInc
 
 bool VPolarAxis::isAnythingToDraw()
 {
-    return ( 2==m_nDimension && VAxisBase::isAnythingToDraw() );
+    return ( m_nDimension==2 && VAxisBase::isAnythingToDraw() );
 }
 
 } //namespace chart

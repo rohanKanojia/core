@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dp_misc.h"
+#include <dp_misc.h>
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/deployment/XPackage.hpp>
-#include <tools/resmgr.hxx>
+#include <osl/diagnose.h>
+#include <unotools/resmgr.hxx>
 #include <rtl/ustring.hxx>
 #include <unotools/configmgr.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -30,14 +31,6 @@
 #define APP_NAME "unopkg"
 
 namespace unopkg {
-
-struct DeploymentResMgr :  public rtl::StaticWithInit< ResMgr *, DeploymentResMgr >
-{
-    ResMgr * operator () () {
-        return ResMgr::CreateResMgr(
-            "deployment", LanguageTag( utl::ConfigManager::getLocale() ) );
-    }
-};
 
 struct OptionInfo
 {
@@ -74,7 +67,7 @@ inline bool readOption(
     bool * flag, OptionInfo const * option_info, sal_uInt32 * pIndex )
 {
     if (isOption( option_info, pIndex )) {
-        OSL_ASSERT( flag != NULL );
+        OSL_ASSERT( flag != nullptr );
         *flag = true;
         return true;
     }
@@ -101,15 +94,14 @@ OUString makeAbsoluteFileUrl(
 
 css::uno::Reference<css::ucb::XCommandEnvironment> createCmdEnv(
     css::uno::Reference<css::uno::XComponentContext> const & xContext,
-    OUString const & logFile,
     bool option_force_overwrite,
     bool option_verbose,
     bool option_suppressLicense);
 
 void printf_packages(
-    ::std::vector<
+    std::vector<
     css::uno::Reference<css::deployment::XPackage> > const & allExtensions,
-    ::std::vector<bool> const & vecUnaccepted,
+    std::vector<bool> const & vecUnaccepted,
     css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv,
     sal_Int32 level = 0 );
 

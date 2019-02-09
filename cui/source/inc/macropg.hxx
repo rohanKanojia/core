@@ -27,7 +27,6 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 #include <svl/macitem.hxx>
-#include <vcl/lstbox.hxx>
 #include <rtl/ustring.hxx>
 
 #include <unordered_map>
@@ -35,55 +34,53 @@
 
 class SvTreeListBox;
 
-typedef std::unordered_map< OUString, std::pair< OUString, OUString >,
-                            OUStringHash > EventsHash;
+typedef std::unordered_map< OUString, std::pair< OUString, OUString > > EventsHash;
 
 struct EventDisplayName
 {
     const sal_Char* pAsciiEventName;
-    sal_uInt16          nEventResourceID;
-    EventDisplayName() : pAsciiEventName( nullptr ), nEventResourceID(0) { }
-    EventDisplayName( const sal_Char* _pAsciiName, const sal_uInt16 _nResId )
-        : pAsciiEventName( _pAsciiName )
-        , nEventResourceID( _nResId )
+    const char*     pEventResourceID;
+    EventDisplayName(const sal_Char* pAsciiName, const char* pResId)
+        : pAsciiEventName(pAsciiName)
+        , pEventResourceID(pResId)
     {
     }
 };
-typedef ::std::vector< EventDisplayName >   EventDisplayNames;
+typedef std::vector< EventDisplayName >   EventDisplayNames;
 
-class _SvxMacroTabPage;
+class SvxMacroTabPage_;
 class SvTabListBox;
 
-class _SvxMacroTabPage_Impl;
+class SvxMacroTabPage_Impl;
 
 
-class _SvxMacroTabPage : public SfxTabPage
+class SvxMacroTabPage_ : public SfxTabPage
 {
-    DECL_LINK_TYPED( SelectEvent_Impl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( AssignDeleteHdl_Impl, Button *, void );
-    DECL_LINK_TYPED( DoubleClickHdl_Impl, SvTreeListBox*, bool );
+    DECL_LINK( SelectEvent_Impl, SvTreeListBox*, void );
+    DECL_LINK( AssignDeleteHdl_Impl, Button *, void );
+    DECL_LINK( DoubleClickHdl_Impl, SvTreeListBox*, bool );
 
-    static long GenericHandler_Impl( _SvxMacroTabPage* pThis, PushButton* pBtn );
+    static void GenericHandler_Impl( SvxMacroTabPage_* pThis, PushButton* pBtn );
 
-protected:
-    _SvxMacroTabPage_Impl*      mpImpl;
     css::uno::Reference< css::container::XNameReplace > m_xAppEvents;
+protected:
+    std::unique_ptr<SvxMacroTabPage_Impl> mpImpl;
     css::uno::Reference< css::container::XNameReplace > m_xDocEvents;
     css::uno::Reference< css::util::XModifiable > m_xModifiable;
     EventsHash m_appEventsHash;
     EventsHash m_docEventsHash;
-    bool bReadOnly, bDocModified, bAppEvents, bInitialized;
+    bool bDocModified, bAppEvents, bInitialized;
     EventDisplayNames aDisplayNames;
 
-    _SvxMacroTabPage( vcl::Window* pParent, const OString& rID, const OUString& rUIXMLDescription, const SfxItemSet& rItemSet );
+    SvxMacroTabPage_( vcl::Window* pParent, const OString& rID, const OUString& rUIXMLDescription, const SfxItemSet& rItemSet );
 
     void                        EnableButtons();
     static css::uno::Any  GetPropsByName( const OUString& eventName, EventsHash& eventsHash );
-    static ::std::pair< OUString, OUString > GetPairFromAny( const css::uno::Any& aAny );
+    static std::pair< OUString, OUString > GetPairFromAny( const css::uno::Any& aAny );
 
 public:
 
-    virtual                     ~_SvxMacroTabPage();
+    virtual                     ~SvxMacroTabPage_() override;
     virtual void                dispose() override;
     void                        InitResources();
 
@@ -97,14 +94,14 @@ public:
     bool                        IsReadOnly() const override;
 };
 
-class SvxMacroTabPage : public _SvxMacroTabPage
+class SvxMacroTabPage : public SvxMacroTabPage_
 {
 public:
     SvxMacroTabPage(
         vcl::Window* pParent,
         const css::uno::Reference< css::frame::XFrame >& _rxDocumentFrame,
         const SfxItemSet& rSet,
-        css::uno::Reference< css::container::XNameReplace > xNameReplace,
+        css::uno::Reference< css::container::XNameReplace > const & xNameReplace,
         sal_uInt16 nSelectedIndex
     );
 };
@@ -119,7 +116,7 @@ public:
     SvxMacroAssignSingleTabDialog(vcl::Window* pParent, const SfxItemSet& rOptionsSet);
 
 private:
-    DECL_DLLPRIVATE_LINK_TYPED( OKHdl_Impl, Button *, void );
+    DECL_LINK( OKHdl_Impl, Button *, void );
 };
 
 

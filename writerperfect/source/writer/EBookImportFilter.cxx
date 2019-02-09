@@ -10,22 +10,25 @@
  */
 
 #include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <sal/log.hxx>
 
 #include <libe-book/libe-book.h>
 
 #include "EBookImportFilter.hxx"
 
-using com::sun::star::uno::Sequence;
-using com::sun::star::uno::XInterface;
-using com::sun::star::uno::Exception;
 using com::sun::star::uno::RuntimeException;
+using com::sun::star::uno::Sequence;
 using com::sun::star::uno::XComponentContext;
+using com::sun::star::uno::XInterface;
 
 using libebook::EBOOKDocument;
 
-bool EBookImportFilter::doImportDocument(librevenge::RVNGInputStream &rInput, OdtGenerator &rGenerator, utl::MediaDescriptor &rDescriptor)
+bool EBookImportFilter::doImportDocument(weld::Window*, librevenge::RVNGInputStream& rInput,
+                                         OdtGenerator& rGenerator,
+                                         utl::MediaDescriptor& rDescriptor)
 {
-    rtl::OUString aFilterName;
+    OUString aFilterName;
 
     rDescriptor[utl::MediaDescriptor::PROP_FILTERNAME()] >>= aFilterName;
     assert(!aFilterName.isEmpty());
@@ -54,7 +57,7 @@ bool EBookImportFilter::doImportDocument(librevenge::RVNGInputStream &rInput, Od
     return false;
 }
 
-bool EBookImportFilter::doDetectFormat(librevenge::RVNGInputStream &rInput, OUString &rTypeName)
+bool EBookImportFilter::doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName)
 {
     rTypeName.clear();
 
@@ -64,25 +67,27 @@ bool EBookImportFilter::doDetectFormat(librevenge::RVNGInputStream &rInput, OUSt
     {
         switch (type)
         {
-        case EBOOKDocument::TYPE_BBEB :
-            rTypeName = "writer_BroadBand_eBook";
-            break;
-        case EBOOKDocument::TYPE_FICTIONBOOK2 :
-            rTypeName = "writer_FictionBook_2";
-            break;
-        case EBOOKDocument::TYPE_PALMDOC :
-            rTypeName = "writer_PalmDoc";
-            break;
-        case EBOOKDocument::TYPE_PLUCKER :
-            rTypeName = "writer_Plucker_eBook";
-            break;
-        case EBOOKDocument::TYPE_PEANUTPRESS :
-        case EBOOKDocument::TYPE_TEALDOC :
-        case EBOOKDocument::TYPE_ZTXT :
-            rTypeName = "Palm_Text_Document";
-            break;
-        default :
-            SAL_WARN_IF(type != EBOOKDocument::TYPE_UNKNOWN, "writerperfect", "EBookImportFilter::doDetectFormat: document type " << type << " detected, but ignored");
+            case EBOOKDocument::TYPE_BBEB:
+                rTypeName = "writer_BroadBand_eBook";
+                break;
+            case EBOOKDocument::TYPE_FICTIONBOOK2:
+                rTypeName = "writer_FictionBook_2";
+                break;
+            case EBOOKDocument::TYPE_PALMDOC:
+                rTypeName = "writer_PalmDoc";
+                break;
+            case EBOOKDocument::TYPE_PLUCKER:
+                rTypeName = "writer_Plucker_eBook";
+                break;
+            case EBOOKDocument::TYPE_PEANUTPRESS:
+            case EBOOKDocument::TYPE_TEALDOC:
+            case EBOOKDocument::TYPE_ZTXT:
+                rTypeName = "Palm_Text_Document";
+                break;
+            default:
+                SAL_WARN_IF(type != EBOOKDocument::TYPE_UNKNOWN, "writerperfect",
+                            "EBookImportFilter::doDetectFormat: document type "
+                                << type << " detected, but ignored");
         }
     }
 
@@ -91,32 +96,27 @@ bool EBookImportFilter::doDetectFormat(librevenge::RVNGInputStream &rInput, OUSt
 
 // XServiceInfo
 OUString SAL_CALL EBookImportFilter::getImplementationName()
-throw (RuntimeException, std::exception)
 {
     return OUString("org.libreoffice.comp.Writer.EBookImportFilter");
 }
 
-sal_Bool SAL_CALL EBookImportFilter::supportsService(const OUString &rServiceName)
-throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL EBookImportFilter::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence< OUString > SAL_CALL EBookImportFilter::getSupportedServiceNames()
-throw (RuntimeException, std::exception)
+Sequence<OUString> SAL_CALL EBookImportFilter::getSupportedServiceNames()
 {
-    Sequence < OUString > aRet(2);
-    OUString *pArray = aRet.getArray();
-    pArray[0] =  "com.sun.star.document.ImportFilter";
-    pArray[1] =  "com.sun.star.document.ExtendedTypeDetection";
+    Sequence<OUString> aRet(2);
+    OUString* pArray = aRet.getArray();
+    pArray[0] = "com.sun.star.document.ImportFilter";
+    pArray[1] = "com.sun.star.document.ExtendedTypeDetection";
     return aRet;
 }
 
-extern "C"
-SAL_DLLPUBLIC_EXPORT css::uno::XInterface *SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 org_libreoffice_comp_Writer_EBookImportFilter_get_implementation(
-    css::uno::XComponentContext *const context,
-    const css::uno::Sequence<css::uno::Any> &)
+    css::uno::XComponentContext* const context, const css::uno::Sequence<css::uno::Any>&)
 {
     return cppu::acquire(new EBookImportFilter(context));
 }

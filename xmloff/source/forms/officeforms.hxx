@@ -22,6 +22,7 @@
 
 #include "formattributes.hxx"
 #include <xmloff/xmlictxt.hxx>
+#include <memory>
 #include "logging.hxx"
 
 class SvXMLElementExport;
@@ -38,15 +39,15 @@ namespace xmloff
     public:
 
         OFormsRootImport( SvXMLImport& _rImport, sal_uInt16 _nPrfx, const OUString& _rLocalName);
-        virtual ~OFormsRootImport();
+        virtual ~OFormsRootImport() override;
 
         // SvXMLImportContext overridable
-        virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+        virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
         virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttrList ) override;
         virtual void EndElement() override;
 
-    protected:
+    private:
         void implImportBool(
             const css::uno::Reference< css::xml::sax::XAttributeList >& _rxAttributes,
             OfficeFormsAttributes _eAttribute,
@@ -61,7 +62,7 @@ namespace xmloff
     class OFormsRootExport
     {
     private:
-        SvXMLElementExport*     m_pImplElement;
+        std::unique_ptr<SvXMLElementExport>     m_pImplElement;
 
     public:
         explicit OFormsRootExport( SvXMLExport& _rExp );
@@ -78,6 +79,9 @@ namespace xmloff
             const OUString& _rPropName,
             bool _bDefault
             );
+
+        OFormsRootExport(const OFormsRootExport&) = delete;
+        OFormsRootExport& operator=(const OFormsRootExport&) = delete;
     };
 
 }   // namespace xmloff

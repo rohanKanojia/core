@@ -19,14 +19,14 @@
 
 #include "ImageControl.hxx"
 
-#include "property.hrc"
-#include "frm_resource.hrc"
-#include "frm_resource.hxx"
-#include "services.hxx"
-#include "componenttools.hxx"
+#include <strings.hrc>
+#include <frm_resource.hxx>
+#include <services.hxx>
+#include <componenttools.hxx>
 
 #include <svtools/imageresourceaccess.hxx>
 #include <sfx2/filedlghelper.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/awt/PopupMenu.hpp>
 #include <com/sun/star/awt/XPopupMenu.hpp>
 #include <com/sun/star/awt/PopupMenuDirection.hpp>
@@ -48,9 +48,11 @@
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/svapp.hxx>
+#include <vcl/window.hxx>
 #include <unotools/streamhelper.hxx>
 #include <comphelper/guarding.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/property.hxx>
+#include <comphelper/types.hxx>
 #include <unotools/ucbstreamhelper.hxx>
 #include <svl/urihelper.hxx>
 
@@ -130,7 +132,6 @@ Sequence<Type> OImageControlModel::_getTypes()
 OImageControlModel::OImageControlModel(const Reference<XComponentContext>& _rxFactory)
     :OBoundControlModel( _rxFactory, VCL_CONTROLMODEL_IMAGECONTROL, FRM_SUN_CONTROL_IMAGECONTROL, false, false, false )
                     // use the old control name for compytibility reasons
-    ,m_pImageProducer( nullptr )
     ,m_bExternalGraphic( true )
     ,m_bReadOnly( false )
     ,m_sImageURL()
@@ -146,7 +147,6 @@ OImageControlModel::OImageControlModel(const Reference<XComponentContext>& _rxFa
 OImageControlModel::OImageControlModel( const OImageControlModel* _pOriginal, const Reference< XComponentContext >& _rxFactory )
     :OBoundControlModel( _pOriginal, _rxFactory )
                 // use the old control name for compytibility reasons
-    ,m_pImageProducer( nullptr )
     ,m_bExternalGraphic( true )
     ,m_bReadOnly( _pOriginal->m_bReadOnly )
     ,m_sImageURL( _pOriginal->m_sImageURL )
@@ -166,9 +166,8 @@ OImageControlModel::OImageControlModel( const OImageControlModel* _pOriginal, co
 
 void OImageControlModel::implConstruct()
 {
-    m_pImageProducer = new ImageProducer;
-    m_xImageProducer = m_pImageProducer;
-    m_pImageProducer->SetDoneHdl( LINK( this, OImageControlModel, OnImageImportDone ) );
+    m_xImageProducer = new ImageProducer;
+    m_xImageProducer->SetDoneHdl( LINK( this, OImageControlModel, OnImageImportDone ) );
 }
 
 
@@ -188,7 +187,7 @@ IMPLEMENT_DEFAULT_CLONING( OImageControlModel )
 
 // XServiceInfo
 
-css::uno::Sequence<OUString>  OImageControlModel::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString>  OImageControlModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControlModel::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -200,7 +199,7 @@ css::uno::Sequence<OUString>  OImageControlModel::getSupportedServiceNames() thr
 }
 
 
-Any SAL_CALL OImageControlModel::queryAggregation(const Type& _rType) throw (RuntimeException, std::exception)
+Any SAL_CALL OImageControlModel::queryAggregation(const Type& _rType)
 {
     // Order matters: we want to "override" the XImageProducer interface of the aggregate without
     // own XImageProducer interface, thus we need to query OImageControlModel_Base first
@@ -242,7 +241,7 @@ void OImageControlModel::getFastPropertyValue(Any& rValue, sal_Int32 nHandle) co
 }
 
 
-void OImageControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const Any& rValue) throw ( css::uno::Exception, std::exception)
+void OImageControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const Any& rValue)
 {
     switch (nHandle)
     {
@@ -276,15 +275,7 @@ void OImageControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, con
 
             if ( m_bExternalGraphic )
             {
-                // if that's an external graphic, i.e. one which has not been loaded by ourselves in response to a
-                // new image URL, then also adjust our ImageURL.
-                OUString sNewImageURL;
-                if ( m_xGraphicObject.is() )
-                {
-                    sNewImageURL = "vnd.sun.star.GraphicObject:";
-                    sNewImageURL = sNewImageURL + m_xGraphicObject->getUniqueID();
-                }
-                m_sImageURL = sNewImageURL;
+                m_sImageURL = OUString();
                 // TODO: speaking strictly, this would need to be notified, since ImageURL is a bound property. However,
                 // this method here is called with a locked mutex, so we cannot simply call listeners ...
                 // I think the missing notification (and thus clients which potentially cannot observe the change)
@@ -301,7 +292,6 @@ void OImageControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, con
 
 
 sal_Bool OImageControlModel::convertFastPropertyValue(Any& rConvertedValue, Any& rOldValue, sal_Int32 nHandle, const Any& rValue)
-                                throw( IllegalArgumentException )
 {
     switch (nHandle)
     {
@@ -345,13 +335,13 @@ void OImageControlModel::describeAggregateProperties( Sequence< Property >& /* [
 }
 
 
-OUString OImageControlModel::getServiceName() throw ( css::uno::RuntimeException, std::exception)
+OUString OImageControlModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_IMAGECONTROL);  // old (non-sun) name for compatibility !
 }
 
 
-void OImageControlModel::write(const Reference<XObjectOutputStream>& _rxOutStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OImageControlModel::write(const Reference<XObjectOutputStream>& _rxOutStream)
 {
     // Base class
     OBoundControlModel::write(_rxOutStream);
@@ -365,7 +355,7 @@ void OImageControlModel::write(const Reference<XObjectOutputStream>& _rxOutStrea
 }
 
 
-void OImageControlModel::read(const Reference<XObjectInputStream>& _rxInStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OImageControlModel::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     OBoundControlModel::read(_rxInStream);
 
@@ -412,8 +402,8 @@ bool OImageControlModel::impl_updateStreamForURL_lck( const OUString& _rURL, Val
     }
     else
     {
-        pImageStream.reset( ::utl::UcbStreamHelper::CreateStream( _rURL, StreamMode::READ ) );
-        bool bSetNull = ( pImageStream.get() == nullptr ) || ( ERRCODE_NONE != pImageStream->GetErrorCode() );
+        pImageStream = ::utl::UcbStreamHelper::CreateStream( _rURL, StreamMode::READ );
+        bool bSetNull = (pImageStream == nullptr) || (ERRCODE_NONE != pImageStream->GetErrorCode());
 
         if ( !bSetNull )
         {
@@ -441,13 +431,13 @@ bool OImageControlModel::impl_updateStreamForURL_lck( const OUString& _rURL, Val
 }
 
 
-bool OImageControlModel::impl_handleNewImageURL_lck( ValueChangeInstigator _eInstigator )
+void OImageControlModel::impl_handleNewImageURL_lck( ValueChangeInstigator _eInstigator )
 {
     switch ( lcl_getImageStoreType( getFieldType() ) )
     {
     case ImageStoreBinary:
         if ( impl_updateStreamForURL_lck( m_sImageURL, _eInstigator ) )
-            return true;
+            return;
         break;
 
     case ImageStoreLink:
@@ -459,7 +449,7 @@ bool OImageControlModel::impl_handleNewImageURL_lck( ValueChangeInstigator _eIns
         if ( m_xColumnUpdate.is() )
         {
             m_xColumnUpdate->updateString( sCommitURL );
-            return true;
+            return;
         }
     }
     break;
@@ -475,8 +465,6 @@ bool OImageControlModel::impl_handleNewImageURL_lck( ValueChangeInstigator _eIns
         m_xColumnUpdate->updateNull();
     else
         setControlValue( Any(), _eInstigator );
-
-    return true;
 }
 
 
@@ -492,7 +480,7 @@ bool OImageControlModel::commitControlValueToDbColumn( bool _bPostReset )
     else
     {
         ::osl::MutexGuard aGuard(m_aMutex);
-        return impl_handleNewImageURL_lck( eDbColumnBinding );
+        impl_handleNewImageURL_lck( eDbColumnBinding );
     }
 
     return true;
@@ -533,7 +521,7 @@ void OImageControlModel::onConnectedDbColumn( const Reference< XInterface >& _rx
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.component");
     }
 }
 
@@ -615,7 +603,7 @@ void OImageControlModel::doSetControlValue( const Any& _rValue )
     if ( bStartProduction )
     {
         // start production
-        Reference< XImageProducer > xProducer = m_xImageProducer;
+        rtl::Reference< ImageProducer > xProducer = m_xImageProducer;
         {
             // release our mutex once (it's acquired in the calling method!), as starting the image production may
             // result in the locking of the solar mutex (unfortunately the default implementation of our aggregate,
@@ -626,14 +614,6 @@ void OImageControlModel::doSetControlValue( const Any& _rValue )
     }
 }
 
-// OComponentHelper
-
-void SAL_CALL OImageControlModel::disposing()
-{
-    OBoundControlModel::disposing();
-}
-
-
 void OImageControlModel::resetNoBroadcast()
 {
     if ( hasField() )          // only reset when we are connected to a column
@@ -641,33 +621,33 @@ void OImageControlModel::resetNoBroadcast()
 }
 
 
-Reference< XImageProducer > SAL_CALL OImageControlModel::getImageProducer() throw ( RuntimeException, std::exception)
+Reference< XImageProducer > SAL_CALL OImageControlModel::getImageProducer()
 {
     return this;
 }
 
 
-void SAL_CALL OImageControlModel::addConsumer( const Reference< XImageConsumer >& _rxConsumer ) throw (RuntimeException, std::exception)
+void SAL_CALL OImageControlModel::addConsumer( const Reference< XImageConsumer >& _rxConsumer )
 {
     GetImageProducer()->addConsumer( _rxConsumer );
 }
 
 
-void SAL_CALL OImageControlModel::removeConsumer( const Reference< XImageConsumer >& _rxConsumer ) throw (RuntimeException, std::exception)
+void SAL_CALL OImageControlModel::removeConsumer( const Reference< XImageConsumer >& _rxConsumer )
 {
     GetImageProducer()->removeConsumer( _rxConsumer );
 }
 
 
-void SAL_CALL OImageControlModel::startProduction(  ) throw (RuntimeException, std::exception)
+void SAL_CALL OImageControlModel::startProduction(  )
 {
     GetImageProducer()->startProduction();
 }
 
 
-IMPL_LINK_TYPED( OImageControlModel, OnImageImportDone, ::Graphic*, i_pGraphic, void )
+IMPL_LINK( OImageControlModel, OnImageImportDone, ::Graphic*, i_pGraphic, void )
 {
-    const Reference< XGraphic > xGraphic( i_pGraphic != nullptr ? Image( i_pGraphic->GetBitmapEx() ).GetXGraphic() : nullptr );
+    const Reference< XGraphic > xGraphic(i_pGraphic != nullptr ? i_pGraphic->GetXGraphic() : nullptr);
     m_bExternalGraphic = false;
     try
     {
@@ -675,7 +655,7 @@ IMPL_LINK_TYPED( OImageControlModel, OnImageImportDone, ::Graphic*, i_pGraphic, 
     }
     catch ( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.component");
     }
     m_bExternalGraphic = true;
 }
@@ -708,7 +688,7 @@ OImageControlControl::OImageControlControl(const Reference<XComponentContext>& _
 }
 
 
-Any SAL_CALL OImageControlControl::queryAggregation(const Type& _rType) throw (RuntimeException, std::exception)
+Any SAL_CALL OImageControlControl::queryAggregation(const Type& _rType)
 {
     Any aReturn = OBoundControl::queryAggregation( _rType );
     if ( !aReturn.hasValue() )
@@ -722,7 +702,7 @@ Any SAL_CALL OImageControlControl::queryAggregation(const Type& _rType) throw (R
 }
 
 
-css::uno::Sequence<OUString>  OImageControlControl::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString>  OImageControlControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -734,15 +714,15 @@ css::uno::Sequence<OUString>  OImageControlControl::getSupportedServiceNames() t
 }
 
 
-void SAL_CALL OImageControlControl::addModifyListener( const Reference< XModifyListener >& _Listener ) throw (RuntimeException, std::exception)
+void SAL_CALL OImageControlControl::addModifyListener( const Reference< XModifyListener >& Listener )
 {
-    m_aModifyListeners.addInterface( _Listener );
+    m_aModifyListeners.addInterface( Listener );
 }
 
 
-void SAL_CALL OImageControlControl::removeModifyListener( const Reference< XModifyListener >& _Listener ) throw (RuntimeException, std::exception)
+void SAL_CALL OImageControlControl::removeModifyListener( const Reference< XModifyListener >& Listener )
 {
-    m_aModifyListeners.removeInterface( _Listener );
+    m_aModifyListeners.removeInterface( Listener );
 }
 
 
@@ -755,9 +735,9 @@ void SAL_CALL OImageControlControl::disposing()
 }
 
 
-void SAL_CALL OImageControlControl::disposing( const EventObject& _Event ) throw(RuntimeException, std::exception)
+void SAL_CALL OImageControlControl::disposing( const EventObject& Event )
 {
-    OBoundControl::disposing( _Event );
+    OBoundControl::disposing( Event );
 }
 
 
@@ -794,7 +774,10 @@ bool OImageControlControl::implInsertGraphics()
     // build some arguments for the upcoming dialog
     try
     {
-        ::sfx2::FileDialogHelper aDialog( TemplateDescription::FILEOPEN_LINK_PREVIEW, SFXWB_GRAPHIC );
+        Reference< XWindowPeer > xWindowPeer = getPeer();
+        VclPtr<vcl::Window> xWin = VCLUnoHelper::GetWindow(xWindowPeer);
+        ::sfx2::FileDialogHelper aDialog(TemplateDescription::FILEOPEN_LINK_PREVIEW, FileDialogFlags::Graphic,
+                                         xWin ? xWin->GetFrameWeld() : nullptr);
         aDialog.SetTitle( sTitle );
 
         Reference< XFilePickerControlAccess > xController( aDialog.GetFilePicker(), UNO_QUERY_THROW );
@@ -837,7 +820,7 @@ bool OImageControlControl::implInsertGraphics()
                  xSet->setPropertyValue( PROPERTY_GRAPHIC, makeAny( aGraphic.GetXGraphic() ) );
             }
             else
-                xSet->setPropertyValue( PROPERTY_IMAGE_URL, makeAny( OUString( aDialog.GetPath() ) ) );
+                xSet->setPropertyValue( PROPERTY_IMAGE_URL, makeAny( aDialog.GetPath() ) );
 
             return true;
         }
@@ -863,7 +846,7 @@ bool OImageControlControl::impl_isEmptyGraphics_nothrow() const
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.component");
     }
 
     return bIsEmpty;
@@ -871,7 +854,7 @@ bool OImageControlControl::impl_isEmptyGraphics_nothrow() const
 
 // MouseListener
 
-void OImageControlControl::mousePressed(const css::awt::MouseEvent& e) throw ( css::uno::RuntimeException, std::exception)
+void OImageControlControl::mousePressed(const css::awt::MouseEvent& e)
 {
     SolarMutexGuard aGuard;
 
@@ -895,7 +878,7 @@ void OImageControlControl::mousePressed(const css::awt::MouseEvent& e) throw ( c
 
             // check if the ImageURL is empty
             if ( impl_isEmptyGraphics_nothrow() )
-                xMenu->enableItem( ID_CLEAR_GRAPHICS, sal_False );
+                xMenu->enableItem( ID_CLEAR_GRAPHICS, false );
 
             awt::Rectangle aRect( e.X, e.Y, 0, 0 );
             if ( ( e.X < 0 ) || ( e.Y < 0 ) )
@@ -970,30 +953,30 @@ void OImageControlControl::mousePressed(const css::awt::MouseEvent& e) throw ( c
 }
 
 
-void SAL_CALL OImageControlControl::mouseReleased(const awt::MouseEvent& /*e*/) throw ( RuntimeException, std::exception )
+void SAL_CALL OImageControlControl::mouseReleased(const awt::MouseEvent& /*e*/)
 {
 }
 
 
-void SAL_CALL OImageControlControl::mouseEntered(const awt::MouseEvent& /*e*/) throw ( RuntimeException, std::exception )
+void SAL_CALL OImageControlControl::mouseEntered(const awt::MouseEvent& /*e*/)
 {
 }
 
 
-void SAL_CALL OImageControlControl::mouseExited(const awt::MouseEvent& /*e*/) throw ( RuntimeException, std::exception )
+void SAL_CALL OImageControlControl::mouseExited(const awt::MouseEvent& /*e*/)
 {
 }
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OImageControlModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new frm::OImageControlModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OImageControlControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

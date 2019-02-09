@@ -26,7 +26,7 @@
 
 #define DFF_COMMON_RECORD_HEADER_SIZE           8
 
-const sal_uInt32 nMaxLegalDffRecordLength = \
+const sal_uInt32 nMaxLegalDffRecordLength =
     SAL_MAX_UINT32 - DFF_COMMON_RECORD_HEADER_SIZE;
 
 #define DFF_PSFLAG_CONTAINER 0x0F         // If the version field of a record
@@ -268,7 +268,6 @@ enum DFF_TextHeader {
 #define DFF_Prop_tableRowProperties          928  //  LONG*
 #define DFF_Prop_fHidden                     958  //  sal_Bool              Do not display
 #define DFF_Prop_fPrint                      959  //  sal_Bool              Print this shape
-// entsprechende BitFlags
 
 // properties of the second property set
 #define DFF_Prop_metroBlob                   937  // XML ZipPackage*
@@ -613,7 +612,7 @@ enum MSO_BlipFlags {
    /* Or the following flags with any of the above. */
    mso_blipflagDontSave = 4,  // A "dont" is the depression in the metal
                               // body work of an automobile caused when a
-                              // cyclist violently thrusts his or her nose
+                              // cyclist violently trusts his or her nose
                               // at it, thus a DontSave is another name for
                               // a cycle lane.
    mso_blipflagDoNotSave = 4, // For those who prefer English
@@ -844,6 +843,15 @@ enum MSO_SYSCOLORINDEX {
     mso_colorGray             =0x8000,  // Make the color gray (before the above!)
     mso_colorBParamMask       =0xFF0000,// Parameter used as above
     mso_colorBParamShift = 16           // To extract the parameter value
+};
+
+enum MSO_TextGeometryProperties {
+    use_gtextFBestFit   = 0x00000100,
+    use_gtextFShrinkFit = 0x00000200,
+    use_gtextFStretch   = 0x00000400,
+    gtextFBestFit       = 0x01000000,
+    gtextFShrinkFit     = 0x02000000,
+    gtextFStretch       = 0x04000000
 };
 
 //ALT_TXT_MSINTEROP

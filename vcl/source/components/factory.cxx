@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <uno/dispatcher.h>
 #include <uno/mapping.hxx>
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <vcl/dllapi.h>
 
 #include <factory.hxx>
@@ -32,7 +32,7 @@ using namespace com::sun::star::lang;
 
 extern "C" {
 
-    VCL_DLLPUBLIC void* SAL_CALL vcl_component_getFactory(
+    VCL_DLLPUBLIC void* vcl_component_getFactory(
         const sal_Char* pImplementationName,
         void* pXUnoSMgr,
         void* /*pXUnoKey*/
@@ -60,7 +60,7 @@ extern "C" {
             }
             else if( vcl::Clipboard_getImplementationName().equalsAscii( pImplementationName ) )
             {
-                xFactory = vcl::Clipboard_createFactory( xMgr );
+                xFactory = vcl::Clipboard_createFactory();
             }
             else if( vcl::DragSource_getImplementationName().equalsAscii( pImplementationName ) )
             {

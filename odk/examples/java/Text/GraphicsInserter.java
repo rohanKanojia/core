@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -66,7 +67,7 @@ public class GraphicsInserter {
 
             /* A desktop environment contains tasks with one or more
                frames in which components can be loaded. Desktop is the
-               environment for components which can instanciate within
+               environment for components which can instantiate within
                frames. */
             com.sun.star.frame.XDesktop xDesktop = UnoRuntime.queryInterface(com.sun.star.frame.XDesktop.class,
                 xMCF.createInstanceWithContext("com.sun.star.frame.Desktop",
@@ -98,8 +99,8 @@ public class GraphicsInserter {
             Object oGraphic = null;
             try {
                 // Creating the service GraphicObject
-                oGraphic =
-                    xMSFDoc.createInstance("com.sun.star.text.TextGraphicObject");
+                oGraphic =xMSFDoc
+                    .createInstance("com.sun.star.text.TextGraphicObject");
             }
             catch ( Exception exception ) {
                 System.out.println( "Could not create instance" );
@@ -141,12 +142,26 @@ public class GraphicsInserter {
                 sUrl.append(sourceFile.getCanonicalPath().replace('\\', '/'));
                 System.out.println( "insert graphic \"" + sUrl + "\"");
 
+                com.sun.star.graphic.XGraphicProvider xGraphicProvider =
+                    UnoRuntime.queryInterface(com.sun.star.graphic.XGraphicProvider.class,
+                        xMCF.createInstanceWithContext("com.sun.star.graphic.GraphicProvider",
+                        xContext));
+
+
+                com.sun.star.beans.PropertyValue[] aMediaProps = new com.sun.star.beans.PropertyValue[] { new com.sun.star.beans.PropertyValue() };
+                aMediaProps[0].Name = "URL";
+                aMediaProps[0].Value = sUrl;
+
+                com.sun.star.graphic.XGraphic xGraphic =
+                    UnoRuntime.queryInterface(com.sun.star.graphic.XGraphic.class,
+                                xGraphicProvider.queryGraphic(aMediaProps));
+
                 // Setting the anchor type
                 xPropSet.setPropertyValue("AnchorType",
                            com.sun.star.text.TextContentAnchorType.AT_PARAGRAPH );
 
                 // Setting the graphic url
-                xPropSet.setPropertyValue( "GraphicURL", sUrl.toString() );
+                xPropSet.setPropertyValue( "Graphic", xGraphic );
 
                 // Setting the horizontal position
                 xPropSet.setPropertyValue( "HoriOrientPosition",
@@ -176,3 +191,5 @@ public class GraphicsInserter {
         }
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

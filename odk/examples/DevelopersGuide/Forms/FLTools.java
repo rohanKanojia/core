@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -129,7 +130,7 @@ public class FLTools
     }
 
     /* ------------------------------------------------------------------ */
-    /** get's the XControlModel for a control
+    /** gets the XControlModel for a control
     */
     public static <T> T getModel( Object aControl, Class<T> aInterfaceClass )
     {
@@ -211,3 +212,5 @@ public class FLTools
     }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

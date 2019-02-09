@@ -236,7 +236,7 @@ public class ComponentContext implements XComponentContext, XComponent
         m_eventListener.clear();
 
         XComponent tdmgr = null;
-        // dispose values, then service manager, then typdescription manager
+        // dispose values, then service manager, then typedescription manager
         for (Map.Entry<String, Object> entry : m_table.entrySet())
         {
             String name = entry.getKey();
@@ -291,7 +291,7 @@ public class ComponentContext implements XComponentContext, XComponent
         if (xListener == null)
             throw new com.sun.star.uno.RuntimeException( "Listener must not be null" );
           if (m_eventListener.contains( xListener ))
-              throw new com.sun.star.uno.RuntimeException( "Listener already registred." );
+              throw new com.sun.star.uno.RuntimeException( "Listener already registered." );
 
            m_eventListener.add( xListener );
     }

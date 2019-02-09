@@ -18,6 +18,7 @@
  */
 
 #include <dispatch/loaddispatcher.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/frame/DispatchResultState.hpp>
 
@@ -27,8 +28,7 @@ LoadDispatcher::LoadDispatcher(const css::uno::Reference< css::uno::XComponentCo
                                const css::uno::Reference< css::frame::XFrame >&          xOwnerFrame ,
                                const OUString&                                           sTargetName ,
                                      sal_Int32                                           nSearchFlags)
-    : m_xContext    (xContext    )
-    , m_xOwnerFrame (xOwnerFrame )
+    : m_xOwnerFrame (xOwnerFrame )
     , m_sTarget     (sTargetName )
     , m_nSearchFlags(nSearchFlags)
     , m_aLoader     (xContext    )
@@ -37,40 +37,34 @@ LoadDispatcher::LoadDispatcher(const css::uno::Reference< css::uno::XComponentCo
 
 LoadDispatcher::~LoadDispatcher()
 {
-    m_xContext.clear();
 }
 
 void SAL_CALL LoadDispatcher::dispatchWithNotification(const css::util::URL&                                             aURL      ,
                                                        const css::uno::Sequence< css::beans::PropertyValue >&            lArguments,
                                                        const css::uno::Reference< css::frame::XDispatchResultListener >& xListener )
-    throw(css::uno::RuntimeException, std::exception)
 {
     impl_dispatch( aURL, lArguments, xListener );
 }
 
 void SAL_CALL LoadDispatcher::dispatch(const css::util::URL&                                  aURL      ,
                                        const css::uno::Sequence< css::beans::PropertyValue >& lArguments)
-    throw(css::uno::RuntimeException, std::exception)
 {
     impl_dispatch( aURL, lArguments, css::uno::Reference< css::frame::XDispatchResultListener >() );
 }
 
 css::uno::Any SAL_CALL LoadDispatcher::dispatchWithReturnValue( const css::util::URL& rURL,
                                                                 const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return impl_dispatch( rURL, lArguments, css::uno::Reference< css::frame::XDispatchResultListener >());
 }
 
 void SAL_CALL LoadDispatcher::addStatusListener(const css::uno::Reference< css::frame::XStatusListener >& /*xListener*/,
                                                 const css::util::URL&                                     /*aURL*/     )
-    throw(css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL LoadDispatcher::removeStatusListener(const css::uno::Reference< css::frame::XStatusListener >& /*xListener*/,
                                                    const css::util::URL&                                     /*aURL*/     )
-    throw(css::uno::RuntimeException, std::exception)
 {
 }
 
@@ -89,7 +83,7 @@ css::uno::Any LoadDispatcher::impl_dispatch( const css::util::URL& rURL,
     // may a dispatch request before is still in progress (?!).
     // Then we should wait a little bit and block this new request.
     // In case we run into the timeout, we should reject this new request
-    // and return "FAILED" as result. Otherwhise we can start this new operation.
+    // and return "FAILED" as result. Otherwise we can start this new operation.
     if (!m_aLoader.waitWhileLoading(2000)) // => 2 sec.
     {
         if (xListener.is())
@@ -98,20 +92,17 @@ css::uno::Any LoadDispatcher::impl_dispatch( const css::util::URL& rURL,
     }
 
     css::uno::Reference< css::frame::XFrame > xBaseFrame(m_xOwnerFrame.get(), css::uno::UNO_QUERY);
-    if (!xBaseFrame.is())
-    {
-        if (xListener.is())
-            xListener->dispatchFinished(
-                css::frame::DispatchResultEvent(xThis, css::frame::DispatchResultState::FAILURE, css::uno::Any()));
-    }
+    if (!xBaseFrame.is() && xListener.is())
+        xListener->dispatchFinished(
+            css::frame::DispatchResultEvent(xThis, css::frame::DispatchResultState::FAILURE, css::uno::Any()));
 
-    // OK ... now the internal loader seems to be useable for new requests
+    // OK ... now the internal loader seems to be usable for new requests
     // and our owner frame seems to be valid for such operations.
     // Initialize it with all new but needed properties and start the loading.
     css::uno::Reference< css::lang::XComponent > xComponent;
     try
     {
-        m_aLoader.initializeLoading( rURL.Complete, lArguments, xBaseFrame, m_sTarget, m_nSearchFlags, (LoadEnv::EFeature)(LoadEnv::E_ALLOW_CONTENTHANDLER | LoadEnv::E_WORK_WITH_UI));
+        m_aLoader.initializeLoading( rURL.Complete, lArguments, xBaseFrame, m_sTarget, m_nSearchFlags, LoadEnvFeatures::AllowContentHandler | LoadEnvFeatures::WorkWithUI);
         m_aLoader.startLoading();
         m_aLoader.waitWhileLoading(); // wait for ever!
         xComponent = m_aLoader.getTargetComponent();
@@ -146,7 +137,7 @@ css::uno::Any LoadDispatcher::impl_dispatch( const css::util::URL& rURL,
     // return the model - like loadComponentFromURL()
     css::uno::Any aRet;
     if ( xComponent.is () )
-        aRet = css::uno::makeAny( xComponent );
+        aRet <<= xComponent;
 
     return aRet;
 }

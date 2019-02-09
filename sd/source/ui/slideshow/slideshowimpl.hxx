@@ -20,74 +20,38 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESHOW_SLIDESHOWIMPL_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESHOW_SLIDESHOWIMPL_HXX
 
-#include "sal/config.h"
-#include "com/sun/star/uno/XComponentContext.hpp"
+#include <memory>
+#include <sal/config.h>
 #include <cppuhelper/compbase.hxx>
 #include <cppuhelper/implbase.hxx>
-#include "cppuhelper/basemutex.hxx"
-#include "cppuhelper/propertysetmixin.hxx"
+#include <cppuhelper/basemutex.hxx>
 #include <comphelper/interfacecontainer2.hxx>
-#include <com/sun/star/awt/XActivateListener.hpp>
-#include <com/sun/star/presentation/XSlideShow.hpp>
-#include <com/sun/star/presentation/XSlideShowView.hpp>
+#include <com/sun/star/presentation/ClickAction.hpp>
 #include <com/sun/star/presentation/XSlideShowListener.hpp>
 #include <com/sun/star/presentation/XSlideShowController.hpp>
-#include "com/sun/star/presentation/XShapeEventListener.hpp"
-#include <com/sun/star/awt/WindowEvent.hpp>
-#include <com/sun/star/awt/XWindowListener.hpp>
-#include <com/sun/star/awt/XWindow.hpp>
-#include <com/sun/star/awt/XWindowPeer.hpp>
-#include <com/sun/star/util/XModifyListener.hpp>
-#include <com/sun/star/awt/XPaintListener.hpp>
-#include <com/sun/star/awt/XPointer.hpp>
-#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
-#include <com/sun/star/animations/XAnimationNodeSupplier.hpp>
-#include <com/sun/star/presentation/ClickAction.hpp>
-#include <com/sun/star/media/XManager.hpp>
-#include <com/sun/star/media/XPlayer.hpp>
+#include <com/sun/star/presentation/XShapeEventListener.hpp>
 
-#include <toolkit/helper/vclunohelper.hxx>
-
-#include <basegfx/matrix/b2dhommatrix.hxx>
-#include <basegfx/tools/canvastools.hxx>
-#include <vcl/help.hxx>
-#include <unotools/pathoptions.hxx>
-#include <unotools/saveopt.hxx>
-#include <sfx2/bindings.hxx>
-#include <sfx2/dispatch.hxx>
-#include <sfx2/viewfrm.hxx>
-#include <basic/sbstar.hxx>
-#include <svx/svdpagv.hxx>
-#include <svx/fmshell.hxx>
-
-#include <svx/svxids.hrc>
-#include "sdmod.hxx"
-#include "cusshow.hxx"
-#include "ViewShellBase.hxx"
-#include "PresentationViewShell.hxx"
-#include "ViewShell.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
+#include <drawdoc.hxx>
 
 #include "showwindow.hxx"
 
-#include "optsitem.hxx"
-#include "FrameView.hxx"
-#include "DrawDocShell.hxx"
+#include <slideshow.hxx>
 
-#include "app.hrc"
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace media { class XPlayer; } } } }
+namespace sd { class DrawDocShell; }
+namespace sd { class ViewShell; }
 
-#include "slideshow.hxx"
-
+class SfxBindings;
+class SfxDispatcher;
 class SfxViewFrame;
-class SfxRequest;
+class StarBASIC;
 
 namespace sd
 {
 class SlideShowView;
 class AnimationSlideController;
 class PaneHider;
-class ShowWindow;
 
 struct PresentationSettingsEx : public PresentationSettings
 {
@@ -98,11 +62,13 @@ struct PresentationSettingsEx : public PresentationSettings
     css::uno::Reference< css::animations::XAnimationNode > mxAnimationNode;
 
     PresentationSettingsEx( const PresentationSettingsEx& );
-    explicit PresentationSettingsEx( PresentationSettings& );
+    explicit PresentationSettingsEx( PresentationSettings const & );
 
-    void SetArguments( const css::uno::Sequence< css::beans::PropertyValue >& rArguments ) throw (css::lang::IllegalArgumentException, std::exception);
+    /// @throws css::lang::IllegalArgumentException
+    void SetArguments( const css::uno::Sequence< css::beans::PropertyValue >& rArguments );
 
-    void SetPropertyValue( const OUString& rProperty, const css::uno::Any& rValue ) throw (css::lang::IllegalArgumentException, std::exception);
+    /// @throws css::lang::IllegalArgumentException
+    void SetPropertyValue( const OUString& rProperty, const css::uno::Any& rValue );
 };
 
 struct WrappedShapeEventImpl
@@ -121,7 +87,7 @@ class SlideShowListenerProxy : private ::cppu::BaseMutex,
 {
 public:
     SlideShowListenerProxy( const rtl::Reference< SlideshowImpl >& xController, const css::uno::Reference< css::presentation::XSlideShow >& xSlideShow );
-    virtual ~SlideShowListenerProxy();
+    virtual ~SlideShowListenerProxy() override;
 
     void addAsSlideShowListener();
     void removeAsSlideShowListener();
@@ -133,24 +99,24 @@ public:
     void removeShapeEventListener( const css::uno::Reference< css::drawing::XShape >& xShape );
 
     // css::animations::XAnimationListener
-    virtual void SAL_CALL beginEvent( const css::uno::Reference< css::animations::XAnimationNode >& Node ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL endEvent( const css::uno::Reference< css::animations::XAnimationNode >& Node ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL repeat( const css::uno::Reference< css::animations::XAnimationNode >& Node, ::sal_Int32 Repeat ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL beginEvent( const css::uno::Reference< css::animations::XAnimationNode >& Node ) override;
+    virtual void SAL_CALL endEvent( const css::uno::Reference< css::animations::XAnimationNode >& Node ) override;
+    virtual void SAL_CALL repeat( const css::uno::Reference< css::animations::XAnimationNode >& Node, ::sal_Int32 Repeat ) override;
 
     // css::presentation::XSlideShowListener:
-    virtual void SAL_CALL paused() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL resumed() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL slideTransitionStarted() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL slideTransitionEnded() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL slideAnimationsEnded() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL slideEnded(sal_Bool bReverse) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL hyperLinkClicked(const OUString & hyperLink) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL paused() override;
+    virtual void SAL_CALL resumed() override;
+    virtual void SAL_CALL slideTransitionStarted() override;
+    virtual void SAL_CALL slideTransitionEnded() override;
+    virtual void SAL_CALL slideAnimationsEnded() override;
+    virtual void SAL_CALL slideEnded(sal_Bool bReverse) override;
+    virtual void SAL_CALL hyperLinkClicked(const OUString & hyperLink) override;
 
     // css::lang::XEventListener:
-    virtual void SAL_CALL disposing(const css::lang::EventObject & Source) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(const css::lang::EventObject & Source) override;
 
     // css::presentation::XShapeEventListener:
-    virtual void SAL_CALL click(const css::uno::Reference< css::drawing::XShape > & xShape, const css::awt::MouseEvent & aOriginalEvent) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL click(const css::uno::Reference< css::drawing::XShape > & xShape, const css::awt::MouseEvent & aOriginalEvent) override;
 
     ::comphelper::OInterfaceContainerHelper2 maListeners;
 
@@ -169,56 +135,58 @@ public:
     explicit SlideshowImpl( const css::uno::Reference< css::presentation::XPresentation2 >& xPresentation, ViewShell* pViewSh, ::sd::View* pView, SdDrawDocument* pDoc, vcl::Window* pParentWindow);
 
     // css::presentation::XSlideShowController:
-    virtual sal_Bool SAL_CALL getAlwaysOnTop() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setAlwaysOnTop( sal_Bool _alwaysontop ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL getMouseVisible() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setMouseVisible( sal_Bool _mousevisible ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL getUsePen() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setUsePen( sal_Bool _usepen ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL getPenColor() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPenColor( ::sal_Int32 _pencolor ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual double SAL_CALL getPenWidth() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setPenWidth( double dStrokeWidth ) throw (css::uno::RuntimeException, std::exception) override;
-    void SAL_CALL setEraseAllInk( bool bEraseAllInk ) throw (css::uno::RuntimeException);
-    virtual sal_Bool SAL_CALL isRunning(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL getSlideCount(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::drawing::XDrawPage > SAL_CALL getSlideByIndex( ::sal_Int32 Index ) throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addSlideShowListener( const css::uno::Reference< css::presentation::XSlideShowListener >& Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeSlideShowListener( const css::uno::Reference< css::presentation::XSlideShowListener >& Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoNextEffect(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoPreviousEffect(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoFirstSlide(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoNextSlide(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoPreviousSlide(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoLastSlide(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoBookmark( const OUString& Bookmark ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoSlide( const css::uno::Reference< css::drawing::XDrawPage >& Page ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL gotoSlideIndex( ::sal_Int32 Index ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL stopSound(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL pause(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL resume(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isPaused(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL blankScreen( ::sal_Int32 Color ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL activate(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL deactivate(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isActive(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::drawing::XDrawPage > SAL_CALL getCurrentSlide(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL getCurrentSlideIndex(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL getNextSlideIndex(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isEndless(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isFullScreen(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::presentation::XSlideShow > SAL_CALL getSlideShow(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL getAlwaysOnTop() override;
+    virtual void SAL_CALL setAlwaysOnTop( sal_Bool _alwaysontop ) override;
+    virtual sal_Bool SAL_CALL getMouseVisible() override;
+    virtual void SAL_CALL setMouseVisible( sal_Bool _mousevisible ) override;
+    virtual sal_Bool SAL_CALL getUsePen() override;
+    virtual void SAL_CALL setUsePen( sal_Bool _usepen ) override;
+    virtual ::sal_Int32 SAL_CALL getPenColor() override;
+    virtual void SAL_CALL setPenColor( ::sal_Int32 _pencolor ) override;
+    virtual double SAL_CALL getPenWidth() override;
+    virtual void SAL_CALL setPenWidth( double dStrokeWidth ) override;
+    /// @throws css::uno::RuntimeException
+    void setEraseAllInk( bool bEraseAllInk );
+    virtual sal_Bool SAL_CALL isRunning(  ) override;
+    virtual ::sal_Int32 SAL_CALL getSlideCount(  ) override;
+    virtual css::uno::Reference< css::drawing::XDrawPage > SAL_CALL getSlideByIndex( ::sal_Int32 Index ) override;
+    virtual void SAL_CALL addSlideShowListener( const css::uno::Reference< css::presentation::XSlideShowListener >& Listener ) override;
+    virtual void SAL_CALL removeSlideShowListener( const css::uno::Reference< css::presentation::XSlideShowListener >& Listener ) override;
+    virtual void SAL_CALL gotoNextEffect(  ) override;
+    virtual void SAL_CALL gotoPreviousEffect(  ) override;
+    virtual void SAL_CALL gotoFirstSlide(  ) override;
+    virtual void SAL_CALL gotoNextSlide(  ) override;
+    virtual void SAL_CALL gotoPreviousSlide(  ) override;
+    virtual void SAL_CALL gotoLastSlide(  ) override;
+    virtual void SAL_CALL gotoBookmark( const OUString& Bookmark ) override;
+    virtual void SAL_CALL gotoSlide( const css::uno::Reference< css::drawing::XDrawPage >& Page ) override;
+    virtual void SAL_CALL gotoSlideIndex( ::sal_Int32 Index ) override;
+    virtual void SAL_CALL stopSound(  ) override;
+    virtual void SAL_CALL pause(  ) override;
+    virtual void SAL_CALL resume(  ) override;
+    virtual sal_Bool SAL_CALL isPaused(  ) override;
+    virtual void SAL_CALL blankScreen( ::sal_Int32 Color ) override;
+    virtual void SAL_CALL activate(  ) override;
+    virtual void SAL_CALL deactivate(  ) override;
+    virtual sal_Bool SAL_CALL isActive(  ) override;
+    virtual css::uno::Reference< css::drawing::XDrawPage > SAL_CALL getCurrentSlide(  ) override;
+    virtual ::sal_Int32 SAL_CALL getCurrentSlideIndex(  ) override;
+    virtual ::sal_Int32 SAL_CALL getNextSlideIndex(  ) override;
+    virtual sal_Bool SAL_CALL isEndless(  ) override;
+    virtual sal_Bool SAL_CALL isFullScreen(  ) override;
+    virtual css::uno::Reference< css::presentation::XSlideShow > SAL_CALL getSlideShow(  ) override;
 
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) throw (css::lang::IndexOutOfBoundsException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Type SAL_CALL getElementType(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual ::sal_Int32 SAL_CALL getCount(  ) override;
+    virtual css::uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override;
+    virtual css::uno::Type SAL_CALL getElementType(  ) override;
+    virtual sal_Bool SAL_CALL hasElements(  ) override;
 
     // will be called from the SlideShowListenerProxy when this event is fired from the XSlideShow
     void slideEnded(const bool bReverse);
-    void hyperLinkClicked(const OUString & hyperLink) throw (css::uno::RuntimeException, std::exception);
-    void click(const css::uno::Reference< css::drawing::XShape > & xShape, const css::awt::MouseEvent & aOriginalEvent);
+    /// @throws css::uno::RuntimeException
+    void hyperLinkClicked(const OUString & hyperLink);
+    void click(const css::uno::Reference< css::drawing::XShape > & xShape);
     bool swipe(const CommandSwipeData &rSwipeData);
     bool longpress(const CommandLongPressData& rLongPressData);
 
@@ -227,15 +195,15 @@ public:
 
     ViewShell* getViewShell() const { return mpViewShell; }
 
-    void paint( const Rectangle& rRect );
+    void paint();
     bool keyInput(const KeyEvent& rKEvt);
     void mouseButtonUp(const MouseEvent& rMEvt);
 
 private:
-    SlideshowImpl(SlideshowImpl &) = delete;
-    void operator =(SlideshowImpl &) = delete;
+    SlideshowImpl(SlideshowImpl const &) = delete;
+    void operator =(SlideshowImpl const &) = delete;
 
-    virtual ~SlideshowImpl();
+    virtual ~SlideshowImpl() override;
 
     // override WeakComponentImplHelperBase::disposing()
     // This function is called upon disposing the component,
@@ -244,7 +212,7 @@ private:
     virtual void SAL_CALL disposing() override;
 
     // internal
-    bool startShow( PresentationSettingsEx* pPresSettings );
+    bool startShow( PresentationSettingsEx const * pPresSettings );
     bool startPreview(
         const css::uno::Reference< css::drawing::XDrawPage >& xDrawPage,
         const css::uno::Reference< css::animations::XAnimationNode >& xAnimationNode,
@@ -262,9 +230,7 @@ private:
     void displaySlideNumber( sal_Int32 nSlide );
     void displaySlideIndex( sal_Int32 nIndex );
     sal_Int32 getCurrentSlideNumber();
-    sal_Int32 getFirstSlideNumber();
-    sal_Int32 getLastSlideNumber();
-    inline bool isInputFreezed() const { return mbInputFreeze; }
+    bool isInputFreezed() const { return mbInputFreeze; }
 
     void jumpToBookmark( const OUString& sBookmark );
 
@@ -275,13 +241,13 @@ private:
 
     void setActiveXToolbarsVisible( bool bVisible );
 
-    DECL_LINK_TYPED( updateHdl, Timer *, void );
-    DECL_LINK_TYPED( ReadyForNextInputHdl, Timer *, void );
-    DECL_LINK_TYPED( endPresentationHdl, void*, void );
-    DECL_LINK_TYPED( ContextMenuSelectHdl, Menu *, bool );
-    DECL_LINK_TYPED( ContextMenuHdl, void*, void );
-    DECL_LINK_TYPED( deactivateHdl, Timer *, void );
-    DECL_LINK_TYPED( EventListenerHdl, VclSimpleEvent&, void );
+    DECL_LINK( updateHdl, Timer *, void );
+    DECL_LINK( ReadyForNextInputHdl, Timer *, void );
+    DECL_LINK( endPresentationHdl, void*, void );
+    DECL_LINK( ContextMenuSelectHdl, Menu *, bool );
+    DECL_LINK( ContextMenuHdl, void*, void );
+    DECL_LINK( deactivateHdl, Timer *, void );
+    DECL_LINK( EventListenerHdl, VclSimpleEvent&, void );
 
     /** called only by the slideshow view when the first paint event occurs.
         This actually starts the slideshow. */
@@ -301,7 +267,8 @@ private:
 
     void removeShapeEvents();
     void registerShapeEvents( sal_Int32 nSlideNumber );
-    void registerShapeEvents( css::uno::Reference< css::drawing::XShapes >& xShapes ) throw (css::uno::Exception, std::exception);
+    /// @throws css::uno::Exception
+    void registerShapeEvents( css::uno::Reference< css::drawing::XShapes > const & xShapes );
 
     static css::uno::Reference< css::presentation::XSlideShow > createSlideShow();
 
@@ -330,7 +297,6 @@ private:
 
     VclPtr<vcl::Window>    mpParentWindow;
     VclPtr<sd::ShowWindow>     mpShowWindow;
-    VclPtr<PushButton>     mpTimeButton;
 
     std::shared_ptr< AnimationSlideController > mpSlideController;
 
@@ -357,10 +323,6 @@ private:
     double          mdUserPaintStrokeWidth;
 
     WrappedShapeEventImplMap    maShapeEventMap;
-
-    OUString msOnClick;
-    OUString msBookmark;
-    OUString msVerb;
 
     css::uno::Reference< css::drawing::XDrawPage > mxPreviewDrawPage;
     css::uno::Reference< css::animations::XAnimationNode > mxPreviewAnimationNode;

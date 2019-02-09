@@ -17,11 +17,10 @@
 #include <sal/config.h>
 
 #include "jinclude.h"
-#include "jerror.h"
-#include "jpeglib.h"
+#include <jerror.h>
+#include <jpeglib.h>
 #include "transupp.h"       /* My own external interface */
 #include "jpegcomp.h"
-#include <ctype.h>      /* to declare isdigit() */
 
 /* Definition of jdiv_round_up is copied here from jutils.c in jpeg-8c.tar.gz,
    just as the rest of this file appears to be copied here from transupp.c in
@@ -31,7 +30,7 @@ jdiv_round_up (long a, long b)
 /* Compute a/b rounded up to next integer, ie, ceil(a/b) */
 /* Assumes a >= 0, b > 0 */
 {
-  return (a + b - 1L) / b;
+  return (a + b - 1) / b;
 }
 
 #if JPEG_LIB_VERSION >= 70
@@ -1534,7 +1533,7 @@ jcopy_markers_execute (j_decompress_ptr srcinfo, j_compress_ptr dstinfo,
    * But to avoid confusion, we do not output JFIF and Adobe APP14 markers
    * if the encoder library already wrote one.
    */
-   if (option) {}
+  (void)option;
 
   for (marker = srcinfo->marker_list; marker != NULL; marker = marker->next) {
     if (dstinfo->write_JFIF_header &&

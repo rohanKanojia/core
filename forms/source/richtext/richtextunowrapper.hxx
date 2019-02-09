@@ -20,6 +20,7 @@
 #ifndef INCLUDED_FORMS_SOURCE_RICHTEXT_RICHTEXTUNOWRAPPER_HXX
 #define INCLUDED_FORMS_SOURCE_RICHTEXT_RICHTEXTUNOWRAPPER_HXX
 
+#include <memory>
 #include <editeng/unotext.hxx>
 #include <editeng/unoedsrc.hxx>
 
@@ -42,7 +43,7 @@ namespace frm
         ORichTextUnoWrapper( EditEngine& _rEngine, IEngineTextChangeListener* _pTextChangeListener );
 
     protected:
-        virtual ~ORichTextUnoWrapper() throw();
+        virtual ~ORichTextUnoWrapper() throw() override;
 
 
     private:
@@ -54,19 +55,20 @@ namespace frm
     {
     private:
         EditEngine&                 m_rEngine;
-        SvxTextForwarder*           m_pTextForwarder;
+        std::unique_ptr<SvxTextForwarder>
+                                    m_pTextForwarder;
         IEngineTextChangeListener*  m_pTextChangeListener;
 
     public:
         RichTextEditSource( EditEngine& _rEngine, IEngineTextChangeListener* _pTextChangeListener );
 
         // SvxEditSource
-        virtual SvxEditSource*      Clone() const override;
+        virtual std::unique_ptr<SvxEditSource> Clone() const override;
         virtual SvxTextForwarder*   GetTextForwarder() override;
         virtual void                UpdateData() override;
 
     protected:
-        virtual ~RichTextEditSource();
+        virtual ~RichTextEditSource() override;
 
     private:
         RichTextEditSource( const RichTextEditSource& _rSource ) = delete;

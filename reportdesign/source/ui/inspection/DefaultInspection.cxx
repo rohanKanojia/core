@@ -16,17 +16,16 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "DefaultInspection.hxx"
+#include <DefaultInspection.hxx>
 #include <com/sun/star/ucb/AlreadyInitializedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <RptResId.hrc>
-#include "ModuleHelper.hxx"
-#include "helpids.hrc"
+#include <strings.hrc>
+#include <core_resource.hxx>
+#include <helpids.h>
 #include <cppuhelper/supportsservice.hxx>
-#include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <tools/debug.hxx>
-#include "metadata.hxx"
+#include <metadata.hxx>
 #include <tools/urlobj.hxx>
 
 
@@ -34,12 +33,9 @@ namespace rptui
 {
     OUString HelpIdUrl::getHelpURL( const OString& sHelpId )
     {
-        OUStringBuffer aBuffer;
         OUString aTmp( OStringToOUString(sHelpId, RTL_TEXTENCODING_UTF8) );
         DBG_ASSERT( INetURLObject( aTmp ).GetProtocol() == INetProtocol::NotValid, "Wrong HelpId!" );
-        aBuffer.append( INET_HID_SCHEME );
-        aBuffer.append( aTmp.getStr() );
-        return aBuffer.makeStringAndClear();
+        return INET_HID_SCHEME + aTmp;
     }
 
     using namespace com::sun::star::uno;
@@ -64,102 +60,82 @@ namespace rptui
     {
     }
 
-    OUString SAL_CALL DefaultComponentInspectorModel::getImplementationName(  ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL DefaultComponentInspectorModel::getImplementationName(  )
     {
         return getImplementationName_Static();
     }
 
-    sal_Bool SAL_CALL DefaultComponentInspectorModel::supportsService( const OUString& ServiceName ) throw(RuntimeException, std::exception)
+    sal_Bool SAL_CALL DefaultComponentInspectorModel::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    Sequence< OUString > SAL_CALL DefaultComponentInspectorModel::getSupportedServiceNames(  ) throw(RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL DefaultComponentInspectorModel::getSupportedServiceNames(  )
     {
         return getSupportedServiceNames_static();
     }
 
-    OUString DefaultComponentInspectorModel::getImplementationName_Static(  ) throw(RuntimeException)
+    OUString DefaultComponentInspectorModel::getImplementationName_Static(  )
     {
         return OUString("com.sun.star.comp.report.DefaultComponentInspectorModel");
     }
 
-    Sequence< OUString > DefaultComponentInspectorModel::getSupportedServiceNames_static(  ) throw(RuntimeException)
+    Sequence< OUString > DefaultComponentInspectorModel::getSupportedServiceNames_static(  )
     {
         Sequence< OUString > aSupported { "com.sun.star.report.inspection.DefaultComponentInspectorModel" };
         return aSupported;
     }
 
-    Reference< XInterface > SAL_CALL DefaultComponentInspectorModel::create( const Reference< XComponentContext >& _rxContext )
+    Reference< XInterface > DefaultComponentInspectorModel::create( const Reference< XComponentContext >& _rxContext )
     {
         return *(new DefaultComponentInspectorModel( _rxContext ));
     }
 
 
-    Sequence< Any > SAL_CALL DefaultComponentInspectorModel::getHandlerFactories() throw (RuntimeException, std::exception)
+    Sequence< Any > SAL_CALL DefaultComponentInspectorModel::getHandlerFactories()
     {
-        ::osl::MutexGuard aGuard( m_aMutex );
-
-
         // service names for all our handlers
-        const struct
-        {
-            const sal_Char* serviceName;
-        } aFactories[] = {
-
-            { "com.sun.star.report.inspection.ReportComponentHandler"},
-            { "com.sun.star.form.inspection.EditPropertyHandler"},
-            { "com.sun.star.report.inspection.DataProviderHandler"},
-            { "com.sun.star.report.inspection.GeometryHandler"}
-
-            // generic virtual edit properties
-
+        return Sequence<Any> {
+            Any(OUString( "com.sun.star.report.inspection.ReportComponentHandler")),
+            Any(OUString( "com.sun.star.form.inspection.EditPropertyHandler")),
+            Any(OUString( "com.sun.star.report.inspection.DataProviderHandler")),
+            Any(OUString( "com.sun.star.report.inspection.GeometryHandler"))
         };
-
-        const size_t nFactories = SAL_N_ELEMENTS( aFactories );
-        Sequence< Any > aReturn( nFactories );
-        Any* pReturn = aReturn.getArray();
-        for ( size_t i = 0; i < nFactories; ++i )
-        {
-            *pReturn++ <<= OUString::createFromAscii( aFactories[i].serviceName );
-        }
-
-        return aReturn;
     }
 
-    sal_Bool SAL_CALL DefaultComponentInspectorModel::getHasHelpSection() throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL DefaultComponentInspectorModel::getHasHelpSection()
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         return m_bHasHelpSection;
     }
 
 
-    ::sal_Int32 SAL_CALL DefaultComponentInspectorModel::getMinHelpTextLines() throw (RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL DefaultComponentInspectorModel::getMinHelpTextLines()
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         return m_nMinHelpTextLines;
     }
 
-    sal_Bool SAL_CALL DefaultComponentInspectorModel::getIsReadOnly() throw (css::uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL DefaultComponentInspectorModel::getIsReadOnly()
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         return m_bIsReadOnly;
     }
 
-    void SAL_CALL DefaultComponentInspectorModel::setIsReadOnly( sal_Bool _isreadonly ) throw (css::uno::RuntimeException, std::exception)
+    void SAL_CALL DefaultComponentInspectorModel::setIsReadOnly( sal_Bool _isreadonly )
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         m_bIsReadOnly = _isreadonly;
     }
 
 
-    ::sal_Int32 SAL_CALL DefaultComponentInspectorModel::getMaxHelpTextLines() throw (RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL DefaultComponentInspectorModel::getMaxHelpTextLines()
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         return m_nMaxHelpTextLines;
     }
 
-    void SAL_CALL DefaultComponentInspectorModel::initialize( const Sequence< Any >& _arguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL DefaultComponentInspectorModel::initialize( const Sequence< Any >& _arguments )
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         if ( m_bConstructed )
@@ -167,7 +143,7 @@ namespace rptui
 
         if ( !_arguments.hasElements() )
         {   // constructor: "createDefault()"
-            createDefault();
+            m_bConstructed = true;
             return;
         }
 
@@ -184,11 +160,6 @@ namespace rptui
     }
 
 
-    void DefaultComponentInspectorModel::createDefault()
-    {
-        m_bConstructed = true;
-    }
-
     void DefaultComponentInspectorModel::createWithHelpSection( sal_Int32 _nMinHelpTextLines, sal_Int32 _nMaxHelpTextLines )
     {
         if ( ( _nMinHelpTextLines <= 0 ) || ( _nMaxHelpTextLines <= 0 ) || ( _nMinHelpTextLines > _nMaxHelpTextLines ) )
@@ -200,15 +171,15 @@ namespace rptui
         m_bConstructed = true;
     }
 
-    Sequence< PropertyCategoryDescriptor > SAL_CALL DefaultComponentInspectorModel::describeCategories(  ) throw (RuntimeException, std::exception)
+    Sequence< PropertyCategoryDescriptor > SAL_CALL DefaultComponentInspectorModel::describeCategories(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
         const struct
         {
             const sal_Char* programmaticName;
-            sal_uInt16          uiNameResId;
-            OString    helpId;
+            const char* uiNameResId;
+            OString const helpId;
         } aCategories[] = {
             { "General",    RID_STR_PROPPAGE_DEFAULT,   HID_RPT_PROPDLG_TAB_GENERAL },
             { "Data",       RID_STR_PROPPAGE_DATA,      HID_RPT_PROPDLG_TAB_DATA },
@@ -220,7 +191,7 @@ namespace rptui
         for ( size_t i=0; i<nCategories; ++i, ++pReturn )
         {
             pReturn->ProgrammaticName = OUString::createFromAscii( aCategories[i].programmaticName );
-            pReturn->UIName = ModuleRes( aCategories[i].uiNameResId );
+            pReturn->UIName = RptResId( aCategories[i].uiNameResId );
             pReturn->HelpURL = HelpIdUrl::getHelpURL( aCategories[i].helpId );
         }
 
@@ -228,7 +199,7 @@ namespace rptui
     }
 
 
-    ::sal_Int32 SAL_CALL DefaultComponentInspectorModel::getPropertyOrderIndex( const OUString& _rPropertyName ) throw (RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL DefaultComponentInspectorModel::getPropertyOrderIndex( const OUString& _rPropertyName )
     {
         ::osl::MutexGuard aGuard(m_aMutex);
         const sal_Int32 nPropertyId( OPropertyInfoService::getPropertyId( _rPropertyName ) );

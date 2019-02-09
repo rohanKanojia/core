@@ -19,11 +19,10 @@
 
 #include <com/sun/star/drawing/XDrawPage.hpp>
 #include <com/sun/star/animations/XAnimationNode.hpp>
-#include "slideshow.hxx"
+#include <slideshow.hxx>
 #include <sfx2/objsh.hxx>
 #include <vcl/gdimtf.hxx>
 #include <vcl/virdev.hxx>
-#include <com/sun/star/presentation/FadeEffect.hpp>
 #include <fadedef.h>
 #include <vcl/ctrl.hxx>
 #include <vcl/builder.hxx>
@@ -32,14 +31,14 @@
 #include <svx/svdpagv.hxx>
 #include <svx/svdorect.hxx>
 
-#include "docprev.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "ViewShell.hxx"
-#include "ViewShellBase.hxx"
-#include "drawview.hxx"
-#include "sdpage.hxx"
-#include "sfx2/viewfrm.hxx"
+#include <docprev.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <ViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <drawview.hxx>
+#include <sdpage.hxx>
+#include <sfx2/viewfrm.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/builderfactory.hxx>
 
@@ -50,31 +49,10 @@ using namespace ::com::sun::star::uno;
 
 const int SdDocPreviewWin::FRAME = 4;
 
-void SdDocPreviewWin::SetObjectShell( SfxObjectShell* pObj, sal_uInt16 nShowPage )
-{
-    mpObj = pObj;
-    mnShowPage = nShowPage;
-    if (mxSlideShow.is())
-    {
-        mxSlideShow->end();
-        mxSlideShow.clear();
-    }
-    updateViewSettings();
-}
-
-VCL_BUILDER_DECL_FACTORY(SdDocPreviewWin)
-{
-    WinBits nWinStyle = 0;
-
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-
-    rRet = VclPtr<SdDocPreviewWin>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SdDocPreviewWin, 0)
 
 SdDocPreviewWin::SdDocPreviewWin( vcl::Window* pParent, const WinBits nStyle )
-: Control(pParent, nStyle), pMetaFile( nullptr ), mpObj(nullptr), mnShowPage(0)
+: Control(pParent, nStyle)
 {
     SetBorderStyle( WindowBorderStyle::MONO );
     svtools::ColorConfig aColorConfig;
@@ -89,13 +67,17 @@ SdDocPreviewWin::~SdDocPreviewWin()
 
 void SdDocPreviewWin::dispose()
 {
-    delete pMetaFile;
+    if (mxSlideShow.is())
+    {
+        mxSlideShow->end();
+        mxSlideShow.clear();
+    }
     Control::dispose();
 }
 
 Size SdDocPreviewWin::GetOptimalSize() const
 {
-    return LogicToPixel(Size(122, 96), MAP_APPFONT);
+    return LogicToPixel(Size(122, 96), MapMode(MapUnit::MapAppFont));
 }
 
 void SdDocPreviewWin::Resize()
@@ -105,53 +87,16 @@ void SdDocPreviewWin::Resize()
         mxSlideShow->resize( GetSizePixel() );
 }
 
-void SdDocPreviewWin::CalcSizeAndPos( GDIMetaFile* pFile, Size& rSize, Point& rPoint )
+void SdDocPreviewWin::ImpPaint( OutputDevice* pVDev )
 {
-    Size aTmpSize = pFile ? pFile->GetPrefSize() : Size(1,1 );
-    long nWidth = rSize.Width() - 2*FRAME;
-    long nHeight = rSize.Height() - 2*FRAME;
-    if( nWidth < 0 ) nWidth = 0;
-    if( nHeight < 0 ) nHeight = 0;
-
-    double dRatio=((double)aTmpSize.Width())/aTmpSize.Height();
-    double dRatioPreV = nHeight ? (((double) nWidth ) / nHeight) : 0.0;
-
-    if (dRatio > dRatioPreV)
-    {
-        rSize=Size(nWidth, (sal_uInt16)(nWidth/dRatio));
-        rPoint=Point( 0, (sal_uInt16)((nHeight-rSize.Height())/2));
-    }
-    else
-    {
-        rSize=Size((sal_uInt16)(nHeight*dRatio), nHeight);
-        rPoint=Point((sal_uInt16)((nWidth-rSize.Width())/2),0);
-    }
-}
-
-void SdDocPreviewWin::ImpPaint( GDIMetaFile* pFile, OutputDevice* pVDev )
-{
-    Point aPoint;
-    Size aSize = pVDev->GetOutputSize();
-    Point bPoint(aSize.Width()-2*FRAME, aSize.Height()-2*FRAME );
-    CalcSizeAndPos( pFile, aSize, aPoint );
-    bPoint -= aPoint;
-    aPoint += Point( FRAME, FRAME );
-
     svtools::ColorConfig aColorConfig;
 
     pVDev->SetLineColor();
-    pVDev->SetFillColor( Color( aColorConfig.GetColorValue( svtools::APPBACKGROUND ).nColor ) );
-    pVDev->DrawRect(Rectangle( Point(0,0 ), pVDev->GetOutputSize()));
-    if( pFile )
-    {
-        pVDev->SetFillColor( maDocumentColor );
-        pVDev->DrawRect(Rectangle(aPoint, aSize));
-        pFile->WindStart();
-        pFile->Play( pVDev, aPoint, aSize  );
-    }
+    pVDev->SetFillColor( aColorConfig.GetColorValue( svtools::APPBACKGROUND ).nColor );
+    pVDev->DrawRect(::tools::Rectangle( Point(0,0 ), pVDev->GetOutputSize()));
 }
 
-void SdDocPreviewWin::Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect )
+void SdDocPreviewWin::Paint( vcl::RenderContext& /*rRenderContext*/, const ::tools::Rectangle& /*rRect*/ )
 {
     if( (!mxSlideShow.is()) || (!mxSlideShow->isRunning() ) )
     {
@@ -161,146 +106,34 @@ void SdDocPreviewWin::Paint( vcl::RenderContext& /*rRenderContext*/, const Recta
             ? ::sd::OUTPUT_DRAWMODE_CONTRAST
             : ::sd::OUTPUT_DRAWMODE_COLOR );
 
-        ImpPaint( pMetaFile, this );
+        ImpPaint( this );
     }
     else
     {
-        mxSlideShow->paint( rRect );
+        mxSlideShow->paint();
     }
-}
-
-void SdDocPreviewWin::startPreview()
-{
-    ::sd::DrawDocShell* pDocShell = dynamic_cast< ::sd::DrawDocShell * >( mpObj );
-    if( pDocShell )
-    {
-        SdDrawDocument* pDoc = pDocShell->GetDoc();
-
-        if( pDoc )
-        {
-            SdPage* pPage = pDoc->GetSdPage( mnShowPage, PK_STANDARD );
-
-            if( pPage && (pPage->getTransitionType() != 0) )
-            {
-                if( !mxSlideShow.is() )
-                    mxSlideShow = sd::SlideShow::Create( pDoc );
-
-                Reference< XDrawPage > xDrawPage( pPage->getUnoPage(), UNO_QUERY );
-                Reference< XAnimationNode > xAnimationNode;
-
-                mxSlideShow->startPreview( xDrawPage, xAnimationNode, this );
-            }
-        }
-    }
-}
-
-bool SdDocPreviewWin::Notify( NotifyEvent& rNEvt )
-{
-    if ( rNEvt.GetType() == MouseNotifyEvent::MOUSEBUTTONDOWN )
-    {
-        const MouseEvent* pMEvt = rNEvt.GetMouseEvent();
-        if ( pMEvt->IsLeft() )
-        {
-            if( rNEvt.GetWindow() == this )
-            {
-                aClickHdl.Call(*this);
-            }
-        }
-    }
-
-    return Control::Notify( rNEvt );
 }
 
 void SdDocPreviewWin::updateViewSettings()
 {
-    ::sd::DrawDocShell* pDocShell = dynamic_cast< ::sd::DrawDocShell *>( mpObj );
-    SdDrawDocument* pDoc = pDocShell?pDocShell->GetDoc():nullptr;
-
     SvtAccessibilityOptions aAccOptions;
     bool bUseWhiteColor = !aAccOptions.GetIsForPagePreviews() && GetSettings().GetStyleSettings().GetHighContrastMode();
     if( bUseWhiteColor )
     {
-        maDocumentColor = Color( COL_WHITE );
+        maDocumentColor = COL_WHITE;
     }
     else
     {
         svtools::ColorConfig aColorConfig;
-        maDocumentColor = Color( aColorConfig.GetColorValue( svtools::DOCCOLOR ).nColor );
+        maDocumentColor = aColorConfig.GetColorValue( svtools::DOCCOLOR ).nColor;
     }
-
-    GDIMetaFile* pMtf = nullptr;
-
-    if(pDoc)
-    {
-        SdPage * pPage = pDoc->GetSdPage( mnShowPage, PK_STANDARD );
-        if( pPage )
-        {
-            SdrOutliner& rOutl = pDoc->GetDrawOutliner();
-            Color aOldBackgroundColor = rOutl.GetBackgroundColor();
-            rOutl.SetBackgroundColor( maDocumentColor );
-
-            pMtf = new GDIMetaFile;
-
-            ScopedVclPtrInstance< VirtualDevice > pVDev;
-
-            const Fraction      aFrac( pDoc->GetScaleFraction() );
-            const MapMode       aMap( pDoc->GetScaleUnit(), Point(), aFrac, aFrac );
-
-            pVDev->SetMapMode( aMap );
-
-            // Disable output, as we only want to record a metafile
-            pVDev->EnableOutput( false );
-
-            pMtf->Record( pVDev );
-
-            ::sd::DrawView* pView = new ::sd::DrawView(pDocShell, this, nullptr);
-
-            const Size aSize( pPage->GetSize() );
-
-            pView->SetBordVisible( false );
-            pView->SetPageVisible( false );
-            pView->ShowSdrPage( pPage );
-
-            const Point aNewOrg( pPage->GetLftBorder(), pPage->GetUppBorder() );
-            const Size aNewSize( aSize.Width() - pPage->GetLftBorder() - pPage->GetRgtBorder(),
-                                  aSize.Height() - pPage->GetUppBorder() - pPage->GetLwrBorder() );
-            const Rectangle aClipRect( aNewOrg, aNewSize );
-            MapMode         aVMap( aMap );
-
-            pVDev->Push();
-            aVMap.SetOrigin( Point( -aNewOrg.X(), -aNewOrg.Y() ) );
-            pVDev->SetRelativeMapMode( aVMap );
-            pVDev->IntersectClipRegion( aClipRect );
-
-        // Use new StandardCheckVisisbilityRedirector
-        StandardCheckVisisbilityRedirector aRedirector;
-        const Rectangle aRedrawRectangle( Point(), aNewSize );
-        vcl::Region aRedrawRegion(aRedrawRectangle);
-        pView->SdrPaintView::CompleteRedraw(pVDev,aRedrawRegion,&aRedirector);
-
-            pVDev->Pop();
-
-            pMtf->Stop();
-            pMtf->WindStart();
-            pMtf->SetPrefMapMode( aMap );
-            pMtf->SetPrefSize( aNewSize );
-
-            rOutl.SetBackgroundColor( aOldBackgroundColor );
-
-            delete pView;
-        }
-    }
-
-    delete pMetaFile;
-    pMetaFile = pMtf;
 
     Invalidate();
 }
 
 void SdDocPreviewWin::Notify(SfxBroadcaster&, const SfxHint& rHint)
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_COLORS_CHANGED )
+    if( rHint.GetId() == SfxHintId::ColorsChanged )
     {
         updateViewSettings();
     }

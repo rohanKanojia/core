@@ -19,11 +19,11 @@
 
 
 #include <osl/diagnose.h>
-#include "odbc/OStatement.hxx"
-#include "odbc/OConnection.hxx"
-#include "odbc/OResultSet.hxx"
+#include <odbc/OStatement.hxx>
+#include <odbc/OConnection.hxx>
+#include <odbc/OResultSet.hxx>
 #include <comphelper/property.hxx>
-#include "odbc/OTools.hxx"
+#include <odbc/OTools.hxx>
 #include <osl/thread.h>
 #include <com/sun/star/sdbc/ResultSetConcurrency.hpp>
 #include <com/sun/star/sdbc/ResultSetType.hpp>
@@ -32,16 +32,16 @@
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/queryinterface.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/types.hxx>
+#include <rtl/strbuf.hxx>
 #include <algorithm>
-#include "resource/common_res.hrc"
+#include <strings.hrc>
 #include <connectivity/dbexception.hxx>
 
 using namespace ::comphelper;
 
 #define THROW_SQL(x) \
-    OTools::ThrowException(m_pConnection,x,m_aStatementHandle,SQL_HANDLE_STMT,*this)
+    OTools::ThrowException(m_pConnection.get(),x,m_aStatementHandle,SQL_HANDLE_STMT,*this)
 
 
 using namespace connectivity::odbc;
@@ -63,7 +63,6 @@ OStatement_Base::OStatement_Base(OConnection* _pConnection )
     ,m_pRowStatusArray(nullptr)
 {
     osl_atomic_increment( &m_refCount );
-    m_pConnection->acquire();
     m_aStatementHandle = m_pConnection->createStatementHandle();
 
     //setMaxFieldSize(0);
@@ -101,11 +100,10 @@ void SAL_CALL OStatement_Base::disposing()
     ::comphelper::disposeComponent(m_xGeneratedStatement);
 
     OSL_ENSURE(m_aStatementHandle,"OStatement_BASE2::disposing: StatementHandle is null!");
-    if (m_pConnection)
+    if (m_pConnection.is())
     {
         m_pConnection->freeStatementHandle(m_aStatementHandle);
-        m_pConnection->release();
-        m_pConnection = nullptr;
+        m_pConnection.clear();
     }
     OSL_ENSURE(!m_aStatementHandle,"Sohould ne null here!");
 
@@ -114,46 +112,39 @@ void SAL_CALL OStatement_Base::disposing()
 
 void OStatement_BASE2::disposing()
 {
-    ::osl::MutexGuard aGuard(m_aMutex);
-
-    dispose_ChildImpl();
+    ::osl::MutexGuard aGuard1(m_aMutex);
     OStatement_Base::disposing();
 }
 
-void SAL_CALL OStatement_BASE2::release() throw()
+Any SAL_CALL OStatement_Base::queryInterface( const Type & rType )
 {
-    relase_ChildImpl();
-}
-
-Any SAL_CALL OStatement_Base::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
-{
-    if ( m_pConnection && !m_pConnection->isAutoRetrievingEnabled() && rType == cppu::UnoType<XGeneratedResultSet>::get())
+    if ( m_pConnection.is() && !m_pConnection->isAutoRetrievingEnabled() && rType == cppu::UnoType<XGeneratedResultSet>::get())
         return Any();
     Any aRet = OStatement_BASE::queryInterface(rType);
     return aRet.hasValue() ? aRet : OPropertySetHelper::queryInterface(rType);
 }
 
-Sequence< Type > SAL_CALL OStatement_Base::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OStatement_Base::getTypes(  )
 {
     ::cppu::OTypeCollection aTypes( cppu::UnoType<XMultiPropertySet>::get(),
                                     cppu::UnoType<XFastPropertySet>::get(),
                                     cppu::UnoType<XPropertySet>::get());
     Sequence< Type > aOldTypes = OStatement_BASE::getTypes();
-    if ( m_pConnection && !m_pConnection->isAutoRetrievingEnabled() )
+    if ( m_pConnection.is() && !m_pConnection->isAutoRetrievingEnabled() )
     {
-        ::std::remove(aOldTypes.getArray(),aOldTypes.getArray() + aOldTypes.getLength(),
-                        cppu::UnoType<XGeneratedResultSet>::get());
-        aOldTypes.realloc(aOldTypes.getLength() - 1);
+        auto newEnd = std::remove(aOldTypes.begin(), aOldTypes.end(),
+                                  cppu::UnoType<XGeneratedResultSet>::get());
+        aOldTypes.realloc(std::distance(aOldTypes.begin(), newEnd));
     }
 
     return ::comphelper::concatSequences(aTypes.getTypes(),aOldTypes);
 }
 
-Reference< XResultSet > SAL_CALL OStatement_Base::getGeneratedValues(  ) throw (SQLException, RuntimeException, std::exception)
+Reference< XResultSet > SAL_CALL OStatement_Base::getGeneratedValues(  )
 {
-    OSL_ENSURE( m_pConnection && m_pConnection->isAutoRetrievingEnabled(),"Illegal call here. isAutoRetrievingEnabled is false!");
+    OSL_ENSURE( m_pConnection.is() && m_pConnection->isAutoRetrievingEnabled(),"Illegal call here. isAutoRetrievingEnabled is false!");
     Reference< XResultSet > xRes;
-    if ( m_pConnection )
+    if ( m_pConnection.is() )
     {
         OUString sStmt = m_pConnection->getTransformedGeneratedStatement(m_sSqlStatement);
         if ( !sStmt.isEmpty() )
@@ -166,7 +157,7 @@ Reference< XResultSet > SAL_CALL OStatement_Base::getGeneratedValues(  ) throw (
     return xRes;
 }
 
-void SAL_CALL OStatement_Base::cancel(  ) throw(RuntimeException, std::exception)
+void SAL_CALL OStatement_Base::cancel(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -176,7 +167,7 @@ void SAL_CALL OStatement_Base::cancel(  ) throw(RuntimeException, std::exception
 }
 
 
-void SAL_CALL OStatement_Base::close(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OStatement_Base::close(  )
 {
     {
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -187,13 +178,12 @@ void SAL_CALL OStatement_Base::close(  ) throw(SQLException, RuntimeException, s
 }
 
 
-void SAL_CALL OStatement::clearBatch(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OStatement::clearBatch(  )
 {
 
 }
 
 void OStatement_Base::reset()
-    throw (SQLException, RuntimeException)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -214,7 +204,6 @@ void OStatement_Base::reset()
 // clearMyResultSet
 // If a ResultSet was created for this Statement, close it
 void OStatement_Base::clearMyResultSet()
-    throw (SQLException, RuntimeException)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -232,7 +221,6 @@ void OStatement_Base::clearMyResultSet()
 }
 
 SQLLEN OStatement_Base::getRowCount()
-    throw (SQLException, RuntimeException)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -253,7 +241,7 @@ SQLLEN OStatement_Base::getRowCount()
 // If the given SQL statement contains a 'FOR UPDATE' clause, change
 // the concurrency to lock so that the row can then be updated.  Returns
 // true if the concurrency has been changed
-bool OStatement_Base::lockIfNecessary (const OUString& sql) throw (SQLException, RuntimeException)
+bool OStatement_Base::lockIfNecessary (const OUString& sql)
 {
     bool rc = false;
 
@@ -292,7 +280,6 @@ bool OStatement_Base::lockIfNecessary (const OUString& sql) throw (SQLException,
 
 
 void OStatement_Base::setWarning (const SQLWarning &ex)
-    throw (SQLException, RuntimeException)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -305,7 +292,6 @@ void OStatement_Base::setWarning (const SQLWarning &ex)
 // getColumnCount
 // Return the number of columns in the ResultSet
 sal_Int32 OStatement_Base::getColumnCount()
-    throw (SQLException, RuntimeException)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -324,7 +310,7 @@ sal_Int32 OStatement_Base::getColumnCount()
 }
 
 
-sal_Bool SAL_CALL OStatement_Base::execute( const OUString& sql ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatement_Base::execute( const OUString& sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -376,7 +362,6 @@ sal_Bool SAL_CALL OStatement_Base::execute( const OUString& sql ) throw(SQLExcep
 // returns NULL if the current result is not a ResultSet.
 
 Reference< XResultSet > OStatement_Base::getResultSet(bool checkCount)
-    throw (SQLException, css::uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -435,13 +420,13 @@ template < typename T, SQLINTEGER BufferLength > SQLRETURN OStatement_Base::setS
 }
 
 
-Reference< XResultSet > SAL_CALL OStatement_Base::executeQuery( const OUString& sql ) throw(SQLException, RuntimeException, std::exception)
+Reference< XResultSet > SAL_CALL OStatement_Base::executeQuery( const OUString& sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
 
 
-    Reference< XResultSet > xRS = nullptr;
+    Reference< XResultSet > xRS;
 
     // Execute the statement.  If execute returns true, a result
     // set exists.
@@ -460,47 +445,48 @@ Reference< XResultSet > SAL_CALL OStatement_Base::executeQuery( const OUString& 
 }
 
 
-Reference< XConnection > SAL_CALL OStatement_Base::getConnection(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XConnection > SAL_CALL OStatement_Base::getConnection(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
 
-    return Reference< XConnection >(m_pConnection);
+    return Reference< XConnection >(m_pConnection.get());
 }
 
 
-Any SAL_CALL OStatement::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OStatement::queryInterface( const Type & rType )
 {
     Any aRet = ::cppu::queryInterface(rType,static_cast< XBatchExecution*> (this));
     return aRet.hasValue() ? aRet : OStatement_Base::queryInterface(rType);
 }
 
 
-void SAL_CALL OStatement::addBatch( const OUString& sql ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OStatement::addBatch( const OUString& sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
 
 
-    m_aBatchList.push_back(sql);
+    m_aBatchVector.push_back(sql);
 }
 
-Sequence< sal_Int32 > SAL_CALL OStatement::executeBatch(  ) throw(SQLException, RuntimeException, std::exception)
+Sequence< sal_Int32 > SAL_CALL OStatement::executeBatch(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
 
+    OStringBuffer aBatchSql;
+    sal_Int32 nLen = m_aBatchVector.size();
 
-    OString aBatchSql;
-    sal_Int32 nLen = 0;
-    for(::std::list< OUString>::const_iterator i=m_aBatchList.begin();i != m_aBatchList.end();++i,++nLen)
+    for (auto const& elem : m_aBatchVector)
     {
-        aBatchSql += OUStringToOString(*i,getOwnConnection()->getTextEncoding());
-        aBatchSql += ";";
+        aBatchSql.append(OUStringToOString(elem,getOwnConnection()->getTextEncoding()));
+        aBatchSql.append(";");
     }
 
     OSL_ENSURE(m_aStatementHandle,"StatementHandle is null!");
-    THROW_SQL(N3SQLExecDirect(m_aStatementHandle, reinterpret_cast<SDB_ODBC_CHAR *>(const_cast<char *>(aBatchSql.getStr())), aBatchSql.getLength()));
+    auto s = aBatchSql.makeStringAndClear();
+    THROW_SQL(N3SQLExecDirect(m_aStatementHandle, reinterpret_cast<SDB_ODBC_CHAR *>(const_cast<char *>(s.getStr())), s.getLength()));
 
     Sequence< sal_Int32 > aRet(nLen);
     sal_Int32* pArray = aRet.getArray();
@@ -518,7 +504,7 @@ Sequence< sal_Int32 > SAL_CALL OStatement::executeBatch(  ) throw(SQLException, 
 }
 
 
-sal_Int32 SAL_CALL OStatement_Base::executeUpdate( const OUString& sql ) throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OStatement_Base::executeUpdate( const OUString& sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -546,7 +532,7 @@ sal_Int32 SAL_CALL OStatement_Base::executeUpdate( const OUString& sql ) throw(S
 }
 
 
-Reference< XResultSet > SAL_CALL OStatement_Base::getResultSet(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XResultSet > SAL_CALL OStatement_Base::getResultSet(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -557,7 +543,7 @@ Reference< XResultSet > SAL_CALL OStatement_Base::getResultSet(  ) throw(SQLExce
 }
 
 
-sal_Int32 SAL_CALL OStatement_Base::getUpdateCount(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OStatement_Base::getUpdateCount(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -575,7 +561,7 @@ sal_Int32 SAL_CALL OStatement_Base::getUpdateCount(  ) throw(SQLException, Runti
 }
 
 
-sal_Bool SAL_CALL OStatement_Base::getMoreResults(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatement_Base::getMoreResults(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -626,7 +612,7 @@ sal_Bool SAL_CALL OStatement_Base::getMoreResults(  ) throw(SQLException, Runtim
 }
 
 
-Any SAL_CALL OStatement_Base::getWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+Any SAL_CALL OStatement_Base::getWarnings(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -636,7 +622,7 @@ Any SAL_CALL OStatement_Base::getWarnings(  ) throw(SQLException, RuntimeExcepti
 }
 
 
-void SAL_CALL OStatement_Base::clearWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OStatement_Base::clearWarnings(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OStatement_BASE::rBHelper.bDisposed);
@@ -836,8 +822,7 @@ void OStatement_Base::setFetchSize(sal_Int32 _par0)
     {
         setStmtOption<SQLULEN, SQL_IS_UINTEGER>(SQL_ATTR_ROW_ARRAY_SIZE, _par0);
 
-        if (m_pRowStatusArray)
-            delete[] m_pRowStatusArray;
+        delete[] m_pRowStatusArray;
         m_pRowStatusArray = new SQLUSMALLINT[_par0];
         setStmtOption<SQLUSMALLINT*, SQL_IS_POINTER>(SQL_ATTR_ROW_STATUS_PTR, m_pRowStatusArray);
     }
@@ -853,7 +838,7 @@ void OStatement_Base::setCursorName(const OUString &_par0)
 {
     OSL_ENSURE(m_aStatementHandle,"StatementHandle is null!");
     OString aName(OUStringToOString(_par0,getOwnConnection()->getTextEncoding()));
-    N3SQLSetCursorName(m_aStatementHandle, reinterpret_cast<SDB_ODBC_CHAR *>(const_cast<char *>(aName.getStr())), (SQLSMALLINT)aName.getLength());
+    N3SQLSetCursorName(m_aStatementHandle, reinterpret_cast<SDB_ODBC_CHAR *>(const_cast<char *>(aName.getStr())), static_cast<SQLSMALLINT>(aName.getLength()));
 }
 
 bool OStatement_Base::isUsingBookmarks() const
@@ -880,25 +865,25 @@ void OStatement_Base::setUsingBookmarks(bool _bUseBookmark)
     Sequence< Property > aProps(10);
     Property* pProperties = aProps.getArray();
     sal_Int32 nPos = 0;
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_CURSORNAME),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_CURSORNAME),
         PROPERTY_ID_CURSORNAME, cppu::UnoType<OUString>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ESCAPEPROCESSING),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ESCAPEPROCESSING),
         PROPERTY_ID_ESCAPEPROCESSING, cppu::UnoType<bool>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHDIRECTION),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHDIRECTION),
         PROPERTY_ID_FETCHDIRECTION, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHSIZE),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHSIZE),
         PROPERTY_ID_FETCHSIZE, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXFIELDSIZE),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXFIELDSIZE),
         PROPERTY_ID_MAXFIELDSIZE, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXROWS),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXROWS),
         PROPERTY_ID_MAXROWS, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_QUERYTIMEOUT),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_QUERYTIMEOUT),
         PROPERTY_ID_QUERYTIMEOUT, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETCONCURRENCY),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETCONCURRENCY),
         PROPERTY_ID_RESULTSETCONCURRENCY, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETTYPE),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETTYPE),
         PROPERTY_ID_RESULTSETTYPE, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_USEBOOKMARKS),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_USEBOOKMARKS),
         PROPERTY_ID_USEBOOKMARKS, cppu::UnoType<bool>::get(), 0);
 
     return new ::cppu::OPropertyArrayHelper(aProps);
@@ -915,7 +900,6 @@ sal_Bool OStatement_Base::convertFastPropertyValue(
                             Any & rOldValue,
                             sal_Int32 nHandle,
                             const Any& rValue )
-                                throw (::com::sun::star::lang::IllegalArgumentException)
 {
     bool bConverted = false;
     try
@@ -971,7 +955,7 @@ sal_Bool OStatement_Base::convertFastPropertyValue(
     return bConverted;
 }
 
-void OStatement_Base::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue) throw (Exception, std::exception)
+void OStatement_Base::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue)
 {
     try
     {
@@ -1085,7 +1069,7 @@ OResultSet* OStatement_Base::createResulSet()
     return new OResultSet(m_aStatementHandle,this);
 }
 
-Reference< ::com::sun::star::beans::XPropertySetInfo > SAL_CALL OStatement_Base::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+Reference< css::beans::XPropertySetInfo > SAL_CALL OStatement_Base::getPropertySetInfo(  )
 {
     return ::cppu::OPropertySetHelper::createPropertySetInfo(getInfoHelper());
 }

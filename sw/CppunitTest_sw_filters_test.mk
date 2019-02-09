@@ -37,7 +37,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_filters_test, \
     cppu \
     cppuhelper \
     sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sw_filters_test,\
@@ -46,8 +45,9 @@ $(eval $(call gb_CppunitTest_set_include,sw_filters_test,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_filters_test,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_filters_test))
@@ -59,6 +59,7 @@ $(eval $(call gb_CppunitTest_use_components,sw_filters_test,\
     configmgr/source/configmgr \
     dbaccess/util/dba \
     embeddedobj/util/embobj \
+    emfio/emfio \
     filter/source/config/cache/filterconfig1 \
     filter/source/t602/t602filter \
     forms/util/frm \
@@ -71,6 +72,7 @@ $(eval $(call gb_CppunitTest_use_components,sw_filters_test,\
     sax/source/expatwrap/expwrap \
     sfx2/util/sfx \
 	starmath/util/sm \
+    svl/source/fsstor/fsstorage \
     svtools/util/svt \
     sw/util/msword \
     sw/util/sw \
@@ -84,10 +86,14 @@ $(eval $(call gb_CppunitTest_use_components,sw_filters_test,\
     unoxml/source/service/unoxml \
     writerfilter/util/writerfilter \
 	$(if $(filter DESKTOP,$(BUILD_TYPE)),xmlhelp/util/ucpchelp1) \
+    vcl/vcl.common \
 	xmloff/source/transform/xof \
     xmloff/util/xo \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_filters_test))
+
+$(call gb_CppunitTest_get_target,sw_filters_test): \
+    $(call gb_Package_get_target,extras_tplwizdesktop)
 
 # vim: set noet sw=4 ts=4:

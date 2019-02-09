@@ -20,11 +20,13 @@
 #ifndef INCLUDED_STORE_SOURCE_STORTREE_HXX
 #define INCLUDED_STORE_SOURCE_STORTREE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "sal/types.h"
+#include <memory>
 
-#include "store/types.h"
+#include <sal/types.h>
+
+#include <store/types.h>
 
 #include "storbase.hxx"
 
@@ -33,11 +35,6 @@ namespace store
 
 class OStorePageBIOS;
 
-/*========================================================================
- *
- * OStoreBTreeEntry.
- *
- *======================================================================*/
 struct OStoreBTreeEntry
 {
     typedef OStorePageKey  K;
@@ -59,20 +56,6 @@ struct OStoreBTreeEntry
           m_nAttrib (store::htonl(0))
     {}
 
-    OStoreBTreeEntry (const OStoreBTreeEntry & rhs)
-        : m_aKey    (rhs.m_aKey),
-          m_aLink   (rhs.m_aLink),
-          m_nAttrib (rhs.m_nAttrib)
-    {}
-
-    OStoreBTreeEntry& operator= (const OStoreBTreeEntry & rhs)
-    {
-        m_aKey    = rhs.m_aKey;
-        m_aLink   = rhs.m_aLink;
-        m_nAttrib = rhs.m_nAttrib;
-        return *this;
-    }
-
     /** Comparison.
     */
     enum CompareResult
@@ -93,16 +76,11 @@ struct OStoreBTreeEntry
     }
 };
 
-/*========================================================================
- *
- * OStoreBTreeNodeData.
- *
- *======================================================================*/
 #define STORE_MAGIC_BTREENODE sal_uInt32(0x58190322)
 
-struct OStoreBTreeNodeData : public store::OStorePageData
+struct OStoreBTreeNodeData : public store::PageData
 {
-    typedef OStorePageData      base;
+    typedef PageData      base;
     typedef OStoreBTreeNodeData self;
 
     typedef OStorePageGuard     G;
@@ -158,7 +136,7 @@ struct OStoreBTreeNodeData : public store::OStorePageData
 
     /** Construction.
     */
-    explicit OStoreBTreeNodeData (sal_uInt16 nPageSize = self::thePageSize);
+    explicit OStoreBTreeNodeData (sal_uInt16 nPageSize);
 
     /** guard (external representation).
     */
@@ -198,7 +176,7 @@ struct OStoreBTreeNodeData : public store::OStorePageData
     */
     bool querySplit() const
     {
-        return (!(usageCount() < capacityCount()));
+        return usageCount() >= capacityCount();
     }
 
     /** Operation.
@@ -216,11 +194,6 @@ struct OStoreBTreeNodeData : public store::OStorePageData
     void truncate (sal_uInt16 n);
 };
 
-/*========================================================================
- *
- * OStoreBTreeNodeObject.
- *
- *======================================================================*/
 class OStoreBTreeNodeObject : public store::OStorePageObject
 {
     typedef OStorePageObject      base;
@@ -232,7 +205,7 @@ class OStoreBTreeNodeObject : public store::OStorePageObject
 public:
     /** Construction.
     */
-    explicit OStoreBTreeNodeObject (PageHolder const & rxPage = PageHolder())
+    explicit OStoreBTreeNodeObject (std::shared_ptr<PageData> const & rxPage = std::shared_ptr<PageData>())
         : OStorePageObject (rxPage)
     {}
 
@@ -258,11 +231,6 @@ public:
         OStorePageBIOS &   rBIOS);
 };
 
-/*========================================================================
- *
- * OStoreBTreeRootObject.
- *
- *======================================================================*/
 class OStoreBTreeRootObject : public store::OStoreBTreeNodeObject
 {
     typedef OStoreBTreeNodeObject base;
@@ -273,7 +241,7 @@ class OStoreBTreeRootObject : public store::OStoreBTreeNodeObject
 public:
     /** Construction.
      */
-    explicit OStoreBTreeRootObject (PageHolder const & rxPage = PageHolder())
+    explicit OStoreBTreeRootObject (std::shared_ptr<PageData> const & rxPage = std::shared_ptr<PageData>())
         : OStoreBTreeNodeObject (rxPage)
     {}
 
@@ -288,7 +256,7 @@ public:
         OStoreBTreeNodeObject & rNode,  // [out]
         sal_uInt16 &            rIndex, // [out]
         OStorePageKey const &   rKey,
-        OStorePageBIOS &        rBIOS);
+        OStorePageBIOS &        rBIOS) const;
 
     /** find_insert (possibly with split()).
      *  Precond: root node page loaded.
@@ -303,7 +271,7 @@ private:
     /** testInvariant.
      *  Precond: root node page loaded.
      */
-    void testInvariant (char const * message);
+    void testInvariant (char const * message) const;
 
     /** change (Root).
      *
@@ -313,12 +281,6 @@ private:
         PageHolderObject< page > & rxPageL,
         OStorePageBIOS &           rBIOS);
 };
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

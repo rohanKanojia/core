@@ -17,24 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlgsave.hxx"
-#include <vcl/msgbox.hxx>
-#include "dbu_dlg.hrc"
+#include <dlgsave.hxx>
+#include <core_resource.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
-#include "sqlmessage.hxx"
+#include <sqlmessage.hxx>
 #include <connectivity/dbtools.hxx>
-#include "UITools.hxx"
-#include "dbaccess_helpid.hrc"
-#include "SqlNameEdit.hxx"
+#include <UITools.hxx>
+#include <SqlNameEdit.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/edit.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
-#include "moduledbu.hxx"
-#include "objectnamecheck.hxx"
+#include <objectnamecheck.hxx>
 #include <tools/diagnose_ex.h>
 
 using namespace dbaui;
@@ -62,29 +61,29 @@ public:
     const IObjectNameCheck&    m_rObjectNameCheck;
     css::uno::Reference< css::sdbc::XDatabaseMetaData>            m_xMetaData;
     sal_Int32                  m_nType;
-    sal_Int32                  m_nFlags;
+    SADFlags                   m_nFlags;
 
-    OSaveAsDlgImpl( OSaveAsDlg* pParent,const sal_Int32& _rType,
+    OSaveAsDlgImpl( OSaveAsDlg* pParent, sal_Int32 _rType,
                     const css::uno::Reference< css::sdbc::XConnection>& _xConnection,
                     const OUString& rDefault,
                     const IObjectNameCheck& _rObjectNameCheck,
-                    sal_Int32 _nFlags);
+                    SADFlags _nFlags);
     OSaveAsDlgImpl( OSaveAsDlg* pParent,
                     const OUString& rDefault,
                     const IObjectNameCheck& _rObjectNameCheck,
-                    sal_Int32 _nFlags);
+                    SADFlags _nFlags);
 };
 
 } // dbaui
 
 OSaveAsDlgImpl::OSaveAsDlgImpl(OSaveAsDlg* pParent,
-                               const sal_Int32& _rType,
+                               sal_Int32 _rType,
                                const Reference< XConnection>& _xConnection,
                                const OUString& rDefault,
                                const IObjectNameCheck& _rObjectNameCheck,
-                               sal_Int32 _nFlags)
-    : m_aQryLabel(ModuleRes(STR_QRY_LABEL))
-    , m_sTblLabel(ModuleRes(STR_TBL_LABEL))
+                               SADFlags _nFlags)
+    : m_aQryLabel(DBA_RES(STR_QRY_LABEL))
+    , m_sTblLabel(DBA_RES(STR_TBL_LABEL))
     , m_aName(rDefault)
     , m_rObjectNameCheck( _rObjectNameCheck )
     , m_nType(_rType)
@@ -116,9 +115,9 @@ OSaveAsDlgImpl::OSaveAsDlgImpl(OSaveAsDlg* pParent,
 OSaveAsDlgImpl::OSaveAsDlgImpl(OSaveAsDlg* pParent,
                                const OUString& rDefault,
                                const IObjectNameCheck& _rObjectNameCheck,
-                               sal_Int32 _nFlags)
-    : m_aQryLabel(ModuleRes(STR_QRY_LABEL))
-    , m_sTblLabel(ModuleRes(STR_TBL_LABEL))
+                               SADFlags _nFlags)
+    : m_aQryLabel(DBA_RES(STR_QRY_LABEL))
+    , m_sTblLabel(DBA_RES(STR_TBL_LABEL))
     , m_aName(rDefault)
     , m_rObjectNameCheck( _rObjectNameCheck )
     , m_nType(CommandType::COMMAND)
@@ -144,12 +143,12 @@ namespace
 typedef Reference< XResultSet > (SAL_CALL XDatabaseMetaData::*FGetMetaStrings)();
 
 void lcl_fillComboList( ComboBox& _rList, const Reference< XConnection >& _rxConnection,
-                        FGetMetaStrings _GetAll, const OUString& _rCurrent )
+                        FGetMetaStrings GetAll, const OUString& _rCurrent )
 {
     try {
         Reference< XDatabaseMetaData > xMetaData( _rxConnection->getMetaData(), UNO_QUERY_THROW );
 
-        Reference< XResultSet > xRes = (xMetaData.get()->*_GetAll)();
+        Reference< XResultSet > xRes = (xMetaData.get()->*GetAll)();
         Reference< XRow > xRow( xRes, UNO_QUERY_THROW );
         OUString sValue;
         while ( xRes->next() ) {
@@ -158,28 +157,28 @@ void lcl_fillComboList( ComboBox& _rList, const Reference< XConnection >& _rxCon
                 _rList.InsertEntry( sValue );
         }
 
-        sal_Int32 nPos = _rList.GetEntryPos( OUString( _rCurrent ) );
+        sal_Int32 nPos = _rList.GetEntryPos( _rCurrent );
         if ( nPos != COMBOBOX_ENTRY_NOTFOUND )
             _rList.SelectEntryPos( nPos );
         else
             _rList.SelectEntryPos( 0 );
     } catch( const Exception& ) {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 }
 
 OSaveAsDlg::OSaveAsDlg( vcl::Window * pParent,
-                        const sal_Int32& _rType,
+                        sal_Int32 _rType,
                         const Reference< XComponentContext >& _rxContext,
                         const Reference< XConnection>& _xConnection,
                         const OUString& rDefault,
                         const IObjectNameCheck& _rObjectNameCheck,
-                        sal_Int32 _nFlags)
+                        SADFlags _nFlags)
     : ModalDialog(pParent, "SaveDialog", "dbaccess/ui/savedialog.ui")
     , m_xContext( _rxContext )
 {
-    m_pImpl = new OSaveAsDlgImpl(this,_rType,_xConnection,rDefault,_rObjectNameCheck,_nFlags);
+    m_pImpl.reset( new OSaveAsDlgImpl(this,_rType,_xConnection,rDefault,_rObjectNameCheck,_nFlags) );
 
     switch (_rType) {
     case CommandType::QUERY:
@@ -217,12 +216,12 @@ OSaveAsDlg::OSaveAsDlg( vcl::Window * pParent,
                                                    sTable,
                                                    ::dbtools::EComposeRule::InDataManipulation);
 
-                sal_Int32 nPos = m_pImpl->m_pCatalog->GetEntryPos(OUString(sCatalog));
+                sal_Int32 nPos = m_pImpl->m_pCatalog->GetEntryPos(sCatalog);
                 if ( nPos != COMBOBOX_ENTRY_NOTFOUND )
                     m_pImpl->m_pCatalog->SelectEntryPos(nPos);
 
                 if ( !sSchema.isEmpty() ) {
-                    nPos = m_pImpl->m_pSchema->GetEntryPos(OUString(sSchema));
+                    nPos = m_pImpl->m_pSchema->GetEntryPos(sSchema);
                     if ( nPos != COMBOBOX_ENTRY_NOTFOUND )
                         m_pImpl->m_pSchema->SelectEntryPos(nPos);
                 }
@@ -257,11 +256,11 @@ OSaveAsDlg::OSaveAsDlg( vcl::Window * pParent,
                         const OUString& rDefault,
                         const OUString& _sLabel,
                         const IObjectNameCheck& _rObjectNameCheck,
-                        sal_Int32 _nFlags)
+                        SADFlags _nFlags)
     : ModalDialog(pParent, "SaveDialog", "dbaccess/ui/savedialog.ui")
     , m_xContext( _rxContext )
 {
-    m_pImpl = new OSaveAsDlgImpl(this,rDefault,_rObjectNameCheck,_nFlags);
+    m_pImpl.reset( new OSaveAsDlgImpl(this,rDefault,_rObjectNameCheck,_nFlags) );
     implInitOnlyTitle(_sLabel);
     implInit();
 }
@@ -273,11 +272,11 @@ OSaveAsDlg::~OSaveAsDlg()
 
 void OSaveAsDlg::dispose()
 {
-    DELETEZ(m_pImpl);
+    m_pImpl.reset();
     ModalDialog::dispose();
 }
 
-IMPL_LINK_TYPED(OSaveAsDlg, ButtonClickHdl, Button *, pButton, void)
+IMPL_LINK(OSaveAsDlg, ButtonClickHdl, Button *, pButton, void)
 {
     if (pButton == m_pImpl->m_pPB_OK) {
         m_pImpl->m_aName = m_pImpl->m_pTitle->GetText();
@@ -299,12 +298,12 @@ IMPL_LINK_TYPED(OSaveAsDlg, ButtonClickHdl, Button *, pButton, void)
         if ( m_pImpl->m_rObjectNameCheck.isNameValid( sNameToCheck, aNameError ) )
             EndDialog( RET_OK );
 
-        showError( aNameError, this, m_xContext );
+        showError( aNameError, VCLUnoHelper::GetInterface(this), m_xContext );
         m_pImpl->m_pTitle->GrabFocus();
     }
 }
 
-IMPL_LINK_TYPED(OSaveAsDlg, EditModifyHdl, Edit&, rEdit, void )
+IMPL_LINK(OSaveAsDlg, EditModifyHdl, Edit&, rEdit, void )
 {
     if (&rEdit == m_pImpl->m_pTitle)
         m_pImpl->m_pPB_OK->Enable(!m_pImpl->m_pTitle->GetText().isEmpty());
@@ -324,15 +323,15 @@ void OSaveAsDlg::implInitOnlyTitle(const OUString& _rLabel)
 
 void OSaveAsDlg::implInit()
 {
-    if ( 0 == ( m_pImpl->m_nFlags & SAD_ADDITIONAL_DESCRIPTION ) ) {
+    if ( !( m_pImpl->m_nFlags & SADFlags::AdditionalDescription ) ) {
         // hide the description window
         m_pImpl->m_pDescription->Hide();
     }
 
-    if ( SAD_TITLE_PASTE_AS == ( m_pImpl->m_nFlags & SAD_TITLE_PASTE_AS ) )
-        SetText( ModuleRes( STR_TITLE_PASTE_AS ) );
-    else if ( SAD_TITLE_RENAME == ( m_pImpl->m_nFlags & SAD_TITLE_RENAME ) )
-        SetText( ModuleRes( STR_TITLE_RENAME ) );
+    if ( SADFlags::TitlePasteAs == ( m_pImpl->m_nFlags & SADFlags::TitlePasteAs ) )
+        SetText( DBA_RES( STR_TITLE_PASTE_AS ) );
+    else if ( SADFlags::TitleRename == ( m_pImpl->m_nFlags & SADFlags::TitleRename ) )
+        SetText( DBA_RES( STR_TITLE_RENAME ) );
 
     m_pImpl->m_pPB_OK->SetClickHdl(LINK(this,OSaveAsDlg,ButtonClickHdl));
     m_pImpl->m_pTitle->SetModifyHdl(LINK(this,OSaveAsDlg,EditModifyHdl));

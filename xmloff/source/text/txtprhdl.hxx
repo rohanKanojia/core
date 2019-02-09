@@ -21,20 +21,15 @@
 
 
 #include <xmloff/prhdlfac.hxx>
-#include <memory>
-
-class XMLTextPropertyHandlerFactory_Impl;
 
 class XMLTextPropertyHandlerFactory : public XMLPropertyHandlerFactory
 {
 public:
 
     XMLTextPropertyHandlerFactory();
-    virtual ~XMLTextPropertyHandlerFactory();
 
     virtual const XMLPropertyHandler* GetPropertyHandler( sal_Int32 nType ) const override ;
 };
-
 
 #endif
 

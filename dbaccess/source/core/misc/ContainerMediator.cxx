@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ContainerMediator.hxx"
-#include "dbastrings.hrc"
-#include "PropertyForward.hxx"
+#include <ContainerMediator.hxx>
+#include <stringconstants.hxx>
+#include <PropertyForward.hxx>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
@@ -91,11 +91,11 @@ void OContainerMediator::impl_cleanup_nothrow()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-void SAL_CALL OContainerMediator::elementInserted( const ContainerEvent& _rEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL OContainerMediator::elementInserted( const ContainerEvent& _rEvent )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     if ( _rEvent.Source == m_xSettings && m_xSettings.is() )
@@ -111,7 +111,7 @@ void SAL_CALL OContainerMediator::elementInserted( const ContainerEvent& _rEvent
     }
 }
 
-void SAL_CALL OContainerMediator::elementRemoved( const ContainerEvent& _rEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL OContainerMediator::elementRemoved( const ContainerEvent& _rEvent )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     Reference< XContainer > xContainer = m_xContainer;
@@ -128,12 +128,12 @@ void SAL_CALL OContainerMediator::elementRemoved( const ContainerEvent& _rEvent 
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 }
 
-void SAL_CALL OContainerMediator::elementReplaced( const ContainerEvent& _rEvent ) throw(RuntimeException, std::exception)
+void SAL_CALL OContainerMediator::elementReplaced( const ContainerEvent& _rEvent )
 {
     Reference< XContainer > xContainer = m_xContainer;
     if ( _rEvent.Source == xContainer && xContainer.is() )
@@ -157,7 +157,7 @@ void SAL_CALL OContainerMediator::elementReplaced( const ContainerEvent& _rEvent
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
 
             aFind->second->setName(sNewName);
@@ -165,7 +165,7 @@ void SAL_CALL OContainerMediator::elementReplaced( const ContainerEvent& _rEvent
     }
 }
 
-void SAL_CALL OContainerMediator::disposing( const EventObject& /*Source*/ ) throw(RuntimeException, std::exception)
+void SAL_CALL OContainerMediator::disposing( const EventObject& /*Source*/ )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -184,7 +184,7 @@ void OContainerMediator::impl_initSettings_nothrow( const OUString& _rName, cons
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -202,7 +202,7 @@ void OContainerMediator::notifyElementCreated( const OUString& _sName, const Ref
         return;
     }
 
-    ::std::vector< OUString > aPropertyList;
+    std::vector< OUString > aPropertyList;
     try
     {
         // initially copy from the settings object (if existent) to the newly created object
@@ -211,21 +211,19 @@ void OContainerMediator::notifyElementCreated( const OUString& _sName, const Ref
         // collect the to-be-monitored properties
         Reference< XPropertySetInfo > xPSI( _xDest->getPropertySetInfo(), UNO_QUERY_THROW );
         Sequence< Property > aProperties( xPSI->getProperties() );
-        const Property* property = aProperties.getConstArray();
-        const Property* propertyEnd = aProperties.getConstArray() + aProperties.getLength();
-        for ( ; property != propertyEnd; ++property )
+        for ( auto const & property : aProperties )
         {
-            if ( ( property->Attributes & PropertyAttribute::READONLY ) != 0 )
+            if ( ( property.Attributes & PropertyAttribute::READONLY ) != 0 )
                 continue;
-            if ( ( property->Attributes & PropertyAttribute::BOUND ) == 0 )
+            if ( ( property.Attributes & PropertyAttribute::BOUND ) == 0 )
                 continue;
 
-            aPropertyList.push_back( property->Name );
+            aPropertyList.push_back( property.Name );
         }
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 
     ::rtl::Reference< OPropertyForward > pForward( new OPropertyForward( _xDest, m_xSettings, _sName, aPropertyList ) );

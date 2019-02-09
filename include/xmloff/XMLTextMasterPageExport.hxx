@@ -22,8 +22,6 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <rtl/ustring.hxx>
-#include <xmloff/attrlist.hxx>
 #include <xmloff/XMLPageExport.hxx>
 
 namespace com { namespace sun { namespace star {
@@ -32,20 +30,6 @@ namespace com { namespace sun { namespace star {
 
 class XMLOFF_DLLPUBLIC XMLTextMasterPageExport : public XMLPageExport
 {
-    const OUString sHeaderText;
-    const OUString sHeaderOn;
-    const OUString sHeaderShareContent;
-    const OUString sHeaderTextFirst;
-    const OUString sHeaderTextLeft;
-
-    const OUString sFirstShareContent;
-
-    const OUString sFooterText;
-    const OUString sFooterOn;
-    const OUString sFooterShareContent;
-    const OUString sFooterTextFirst;
-    const OUString sFooterTextLeft;
-
 protected:
 
     virtual void exportHeaderFooterContent(
@@ -58,7 +42,7 @@ protected:
 
 public:
     XMLTextMasterPageExport( SvXMLExport& rExp );
-    virtual ~XMLTextMasterPageExport();
+    virtual ~XMLTextMasterPageExport() override;
 };
 
 #endif // INCLUDED_XMLOFF_XMLTEXTMASTERPAGEEXPORT_HXX

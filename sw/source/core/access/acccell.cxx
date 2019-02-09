@@ -18,24 +18,24 @@
  */
 
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <unotools/accessiblestatesethelper.hxx>
-#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/svapp.hxx>
 #include <cellfrm.hxx>
 #include <tabfrm.hxx>
 #include <swtable.hxx>
-#include "crsrsh.hxx"
-#include "viscrs.hxx"
-#include <accfrmobj.hxx>
-#include <accfrmobjslist.hxx>
-#include "frmfmt.hxx"
-#include "cellatr.hxx"
-#include "accmap.hxx"
-#include <acccell.hxx>
+#include <crsrsh.hxx>
+#include <viscrs.hxx>
+#include "accfrmobj.hxx"
+#include "accfrmobjslist.hxx"
+#include <frmfmt.hxx>
+#include <cellatr.hxx>
+#include <accmap.hxx>
+#include "acccell.hxx"
 
 #include <cfloat>
 #include <limits.h>
@@ -50,7 +50,6 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
 using namespace sw::access;
 
-const sal_Char sServiceName[] = "com.sun.star.table.AccessibleCellView";
 const sal_Char sImplementationName[] = "com.sun.star.comp.Writer.SwAccessibleCellView";
 
 bool SwAccessibleCell::IsSelected()
@@ -60,9 +59,8 @@ bool SwAccessibleCell::IsSelected()
     assert(GetMap());
     const SwViewShell *pVSh = GetMap()->GetShell();
     assert(pVSh);
-    if( dynamic_cast<const SwCursorShell*>( pVSh) !=  nullptr )
+    if( auto pCSh = dynamic_cast<const SwCursorShell*>(pVSh) )
     {
-        const SwCursorShell *pCSh = static_cast< const SwCursorShell * >( pVSh );
         if( pCSh->IsTableMode() )
         {
             const SwCellFrame *pCFrame =
@@ -93,26 +91,25 @@ void SwAccessibleCell::GetStates( ::utl::AccessibleStateSetHelper& rStateSet )
     if( IsSelected() )
     {
         rStateSet.AddState( AccessibleStateType::SELECTED );
-        assert(bIsSelected && "bSelected out of sync");
+        SAL_WARN_IF(!m_bIsSelected, "sw.a11y", "bSelected out of sync");
         ::rtl::Reference < SwAccessibleContext > xThis( this );
         GetMap()->SetCursorContext( xThis );
     }
 }
 
-SwAccessibleCell::SwAccessibleCell( SwAccessibleMap *pInitMap,
+SwAccessibleCell::SwAccessibleCell(std::shared_ptr<SwAccessibleMap> const& pInitMap,
                                     const SwCellFrame *pCellFrame )
     : SwAccessibleContext( pInitMap, AccessibleRole::TABLE_CELL, pCellFrame )
-    , aSelectionHelper( *this )
-    , bIsSelected( false )
+    , m_aSelectionHelper( *this )
+    , m_bIsSelected( false )
 {
-    SolarMutexGuard aGuard;
     OUString sBoxName( pCellFrame->GetTabBox()->GetName() );
     SetName( sBoxName );
 
-    bIsSelected = IsSelected();
+    m_bIsSelected = IsSelected();
 
     css::uno::Reference<css::accessibility::XAccessible> xTableReference(
-        getAccessibleParent());
+        getAccessibleParentImpl());
     css::uno::Reference<css::accessibility::XAccessibleContext> xContextTable(
         xTableReference, css::uno::UNO_QUERY);
     SAL_WARN_IF(
@@ -122,14 +119,14 @@ SwAccessibleCell::SwAccessibleCell( SwAccessibleMap *pInitMap,
     m_pAccTable = static_cast<SwAccessibleTable *>(xTableReference.get());
 }
 
-bool SwAccessibleCell::_InvalidateMyCursorPos()
+bool SwAccessibleCell::InvalidateMyCursorPos()
 {
     bool bNew = IsSelected();
     bool bOld;
     {
         osl::MutexGuard aGuard( m_Mutex );
-        bOld = bIsSelected;
-        bIsSelected = bNew;
+        bOld = m_bIsSelected;
+        m_bIsSelected = bNew;
     }
     if( bNew )
     {
@@ -151,7 +148,7 @@ bool SwAccessibleCell::_InvalidateMyCursorPos()
     return bChanged;
 }
 
-bool SwAccessibleCell::_InvalidateChildrenCursorPos( const SwFrame *pFrame )
+bool SwAccessibleCell::InvalidateChildrenCursorPos( const SwFrame *pFrame )
 {
     bool bChanged = false;
 
@@ -171,7 +168,7 @@ bool SwAccessibleCell::_InvalidateChildrenCursorPos( const SwFrame *pFrame )
                 {
                     assert(xAccImpl->GetFrame()->IsCellFrame());
                     bChanged = static_cast< SwAccessibleCell *>(
-                            xAccImpl.get() )->_InvalidateMyCursorPos();
+                            xAccImpl.get() )->InvalidateMyCursorPos();
                 }
                 else
                     bChanged = true; // If the context is not know we
@@ -181,7 +178,7 @@ bool SwAccessibleCell::_InvalidateChildrenCursorPos( const SwFrame *pFrame )
             else
             {
                 // This is a box with sub rows.
-                bChanged |= _InvalidateChildrenCursorPos( pLower );
+                bChanged |= InvalidateChildrenCursorPos( pLower );
             }
         }
         ++aIter;
@@ -190,7 +187,7 @@ bool SwAccessibleCell::_InvalidateChildrenCursorPos( const SwFrame *pFrame )
     return bChanged;
 }
 
-void SwAccessibleCell::_InvalidateCursorPos()
+void SwAccessibleCell::InvalidateCursorPos_()
 {
     if (IsSelected())
     {
@@ -216,7 +213,7 @@ void SwAccessibleCell::_InvalidateCursorPos()
 
     while( pTabFrame )
     {
-        _InvalidateChildrenCursorPos( pTabFrame );
+        InvalidateChildrenCursorPos( pTabFrame );
         pTabFrame = pTabFrame->GetFollow();
     }
     if (m_pAccTable.is())
@@ -228,7 +225,7 @@ void SwAccessibleCell::_InvalidateCursorPos()
 bool SwAccessibleCell::HasCursor()
 {
     osl::MutexGuard aGuard( m_Mutex );
-    return bIsSelected;
+    return m_bIsSelected;
 }
 
 SwAccessibleCell::~SwAccessibleCell()
@@ -236,40 +233,36 @@ SwAccessibleCell::~SwAccessibleCell()
 }
 
 OUString SAL_CALL SwAccessibleCell::getAccessibleDescription()
-        throw (uno::RuntimeException, std::exception)
 {
     return GetName();
 }
 
 OUString SAL_CALL SwAccessibleCell::getImplementationName()
-        throw( uno::RuntimeException, std::exception )
 {
     return OUString(sImplementationName);
 }
 
 sal_Bool SAL_CALL SwAccessibleCell::supportsService(const OUString& sTestServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sTestServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL SwAccessibleCell::getSupportedServiceNames()
-        throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
-    pArray[0] = sServiceName;
+    pArray[0] = "com.sun.star.table.AccessibleCellView";
     pArray[1] = sAccessibleServiceName;
     return aRet;
 }
 
-void SwAccessibleCell::Dispose( bool bRecursive )
+void SwAccessibleCell::Dispose(bool bRecursive, bool bCanSkipInvisible)
 {
     const SwFrame *pParent = GetParent( SwAccessibleChild(GetFrame()), IsInPagePreview() );
     ::rtl::Reference< SwAccessibleContext > xAccImpl(
             GetMap()->GetContextImpl( pParent, false ) );
     if( xAccImpl.is() )
-        xAccImpl->DisposeChild( SwAccessibleChild(GetFrame()), bRecursive );
+        xAccImpl->DisposeChild(SwAccessibleChild(GetFrame()), bRecursive, bCanSkipInvisible);
     SwAccessibleContext::Dispose( bRecursive );
 }
 
@@ -286,7 +279,6 @@ void SwAccessibleCell::InvalidatePosOrSize( const SwRect& rOldBox )
 // XAccessibleInterface
 
 uno::Any SwAccessibleCell::queryInterface( const uno::Type& rType )
-    throw( uno::RuntimeException, std::exception )
 {
     if (rType == cppu::UnoType<XAccessibleExtendedAttributes>::get())
     {
@@ -316,7 +308,6 @@ uno::Any SwAccessibleCell::queryInterface( const uno::Type& rType )
 
 // XTypeProvider
 uno::Sequence< uno::Type > SAL_CALL SwAccessibleCell::getTypes()
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Sequence< uno::Type > aTypes( SwAccessibleContext::getTypes() );
 
@@ -330,7 +321,6 @@ uno::Sequence< uno::Type > SAL_CALL SwAccessibleCell::getTypes()
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL SwAccessibleCell::getImplementationId()
-        throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -348,21 +338,19 @@ SwFrameFormat* SwAccessibleCell::GetTableBoxFormat() const
 
 //Implement TableCell currentValue
 uno::Any SwAccessibleCell::getCurrentValue( )
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC( XAccessibleValue );
 
-    uno::Any aAny;
-    aAny <<= GetTableBoxFormat()->GetTableBoxValue().GetValue();
-    return aAny;
+    ThrowIfDisposed();
+
+    return uno::Any( GetTableBoxFormat()->GetTableBoxValue().GetValue() );
 }
 
 sal_Bool SwAccessibleCell::setCurrentValue( const uno::Any& aNumber )
-    throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
-    CHECK_FOR_DEFUNC( XAccessibleValue );
+
+    ThrowIfDisposed();
 
     double fValue = 0;
     bool bValid = (aNumber >>= fValue);
@@ -375,19 +363,13 @@ sal_Bool SwAccessibleCell::setCurrentValue( const uno::Any& aNumber )
 }
 
 uno::Any SwAccessibleCell::getMaximumValue( )
-    throw( uno::RuntimeException, std::exception )
 {
-    uno::Any aAny;
-    aAny <<= DBL_MAX;
-    return aAny;
+    return uno::Any(DBL_MAX);
 }
 
 uno::Any SwAccessibleCell::getMinimumValue(  )
-    throw( uno::RuntimeException, std::exception )
 {
-    uno::Any aAny;
-    aAny <<= -DBL_MAX;
-    return aAny;
+    return uno::Any(-DBL_MAX);
 }
 
 static OUString ReplaceOneChar(const OUString& oldOUString, const OUString& replacedChar, const OUString& replaceStr)
@@ -413,7 +395,6 @@ static OUString ReplaceFourChar(const OUString& oldOUString)
 }
 
 css::uno::Any SAL_CALL SwAccessibleCell::getExtendedAttributes()
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -433,72 +414,64 @@ css::uno::Any SAL_CALL SwAccessibleCell::getExtendedAttributes()
 }
 
 sal_Int32 SAL_CALL SwAccessibleCell::getBackground()
-        throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     const SvxBrushItem &rBack = GetFrame()->GetAttrSet()->GetBackground();
-    sal_uInt32 crBack = rBack.GetColor().GetColor();
+    Color crBack = rBack.GetColor();
 
     if (COL_AUTO == crBack)
     {
         uno::Reference<XAccessible> xAccDoc = getAccessibleParent();
         if (xAccDoc.is())
         {
-            uno::Reference<XAccessibleComponent> xCompoentDoc(xAccDoc, uno::UNO_QUERY);
-            if (xCompoentDoc.is())
+            uno::Reference<XAccessibleComponent> xComponentDoc(xAccDoc, uno::UNO_QUERY);
+            if (xComponentDoc.is())
             {
-                crBack = (sal_uInt32)xCompoentDoc->getBackground();
+                crBack = Color(xComponentDoc->getBackground());
             }
         }
     }
-    return crBack;
+    return sal_Int32(crBack);
 }
 
 // XAccessibleSelection
 void SwAccessibleCell::selectAccessibleChild(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception )
 {
-    aSelectionHelper.selectAccessibleChild(nChildIndex);
+    m_aSelectionHelper.selectAccessibleChild(nChildIndex);
 }
 
 sal_Bool SwAccessibleCell::isAccessibleChildSelected(
     sal_Int32 nChildIndex )
-    throw ( lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception )
 {
-    return aSelectionHelper.isAccessibleChildSelected(nChildIndex);
+    return m_aSelectionHelper.isAccessibleChildSelected(nChildIndex);
 }
 
 void SwAccessibleCell::clearAccessibleSelection(  )
-    throw ( uno::RuntimeException, std::exception )
 {
 }
 
 void SwAccessibleCell::selectAllAccessibleChildren(  )
-    throw ( uno::RuntimeException, std::exception )
 {
-    aSelectionHelper.selectAllAccessibleChildren();
+    m_aSelectionHelper.selectAllAccessibleChildren();
 }
 
 sal_Int32 SwAccessibleCell::getSelectedAccessibleChildCount(  )
-    throw ( uno::RuntimeException, std::exception )
 {
-    return aSelectionHelper.getSelectedAccessibleChildCount();
+    return m_aSelectionHelper.getSelectedAccessibleChildCount();
 }
 
 uno::Reference<XAccessible> SwAccessibleCell::getSelectedAccessibleChild(
     sal_Int32 nSelectedChildIndex )
-    throw ( lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
-    return aSelectionHelper.getSelectedAccessibleChild(nSelectedChildIndex);
+    return m_aSelectionHelper.getSelectedAccessibleChild(nSelectedChildIndex);
 }
 
 void SwAccessibleCell::deselectAccessibleChild(
     sal_Int32 nSelectedChildIndex )
-    throw ( lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception )
 {
-    aSelectionHelper.deselectAccessibleChild(nSelectedChildIndex);
+    m_aSelectionHelper.deselectAccessibleChild(nSelectedChildIndex);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

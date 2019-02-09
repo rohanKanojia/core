@@ -10,7 +10,7 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_FRAMECONTROLSMANAGER_HXX
 
 #include <viewsh.hxx>
-#include <FrameControl.hxx>
+#include "FrameControl.hxx"
 
 #include <tools/gen.hxx>
 
@@ -38,9 +38,6 @@ class SwFrameControlsManager
         ~SwFrameControlsManager();
         void dispose();
 
-        SwFrameControlsManager( const SwFrameControlsManager& rCopy );
-        const SwFrameControlsManager& operator=( const SwFrameControlsManager& rCopy );
-
         SwFrameControlPtr GetControl( FrameControlType eType, const SwFrame* pFrame );
         void RemoveControls( const SwFrame* pFrame );
         void RemoveControlsByType( FrameControlType eType, const SwFrame* pFrame );
@@ -50,6 +47,7 @@ class SwFrameControlsManager
         // Helper methods
         void SetHeaderFooterControl( const SwPageFrame* pPageFrame, FrameControlType eType, Point aOffset );
         void SetPageBreakControl( const SwPageFrame* pPageFrame );
+        void SetUnfloatTableButton( const SwFlyFrame* pFlyFrame, bool bShow, Point aTopLeftPixel = Point() );
 };
 
 #endif

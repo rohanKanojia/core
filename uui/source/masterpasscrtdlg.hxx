@@ -21,35 +21,25 @@
 #define INCLUDED_UUI_SOURCE_MASTERPASSCRTDLG_HXX
 
 #include <com/sun/star/task/PasswordRequestMode.hpp>
-#include <svtools/stdctrl.hxx>
-#include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/group.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 
-
-class MasterPasswordCreateDialog : public ModalDialog
+class MasterPasswordCreateDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<Edit>     m_pEDMasterPasswordCrt;
-    VclPtr<Edit>     m_pEDMasterPasswordRepeat;
-    VclPtr<OKButton> m_pOKBtn;
+    const std::locale& rResLocale;
 
+    std::unique_ptr<weld::Entry> m_xEDMasterPasswordCrt;
+    std::unique_ptr<weld::Entry> m_xEDMasterPasswordRepeat;
+    std::unique_ptr<weld::Button> m_xOKBtn;
 
-    DECL_LINK_TYPED(OKHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(EditHdl_Impl, Edit&, void);
+    DECL_LINK(OKHdl_Impl, weld::Button&, void);
+    DECL_LINK(EditHdl_Impl, weld::Entry&, void);
 
 public:
-    MasterPasswordCreateDialog( vcl::Window* pParent, ResMgr * pResMgr );
-    virtual ~MasterPasswordCreateDialog();
-    virtual void dispose() override;
+    MasterPasswordCreateDialog(weld::Window* pParent, const std::locale& rLocale);
+    virtual ~MasterPasswordCreateDialog() override;
 
-    OUString GetMasterPassword() const { return m_pEDMasterPasswordCrt->GetText(); }
-
-private:
-    ResMgr*                                         pResourceMgr;
-    sal_uInt16                                      nMinLen;
+    OUString GetMasterPassword() const { return m_xEDMasterPasswordCrt->get_text(); }
 };
 
 #endif // INCLUDED_UUI_SOURCE_MASTERPASSCRTDLG_HXX

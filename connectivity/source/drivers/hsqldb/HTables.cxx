@@ -17,22 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hsqldb/HTables.hxx"
-#include "hsqldb/HViews.hxx"
-#include "hsqldb/HTable.hxx"
+#include <hsqldb/HTables.hxx>
+#include <hsqldb/HViews.hxx>
+#include <hsqldb/HTable.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbcx/Privilege.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
-#include "hsqldb/HCatalog.hxx"
-#include <comphelper/extract.hxx>
+#include <hsqldb/HCatalog.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbexception.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <comphelper/types.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
 using namespace ::comphelper;
 using namespace connectivity;
@@ -51,21 +50,17 @@ sdbcx::ObjectType OTables::createObject(const OUString& _rName)
     OUString sCatalog,sSchema,sTable;
     ::dbtools::qualifiedNameComponents(m_xMetaData,_rName,sCatalog,sSchema,sTable,::dbtools::EComposeRule::InDataManipulation);
 
-    static const char s_sTableTypeView[] = "VIEW";
-    static const char s_sTableTypeTable[] = "TABLE";
-    static const char s_sAll[] = "%";
-
     Sequence< OUString > sTableTypes(3);
-    sTableTypes[0] = s_sTableTypeView;
-    sTableTypes[1] = s_sTableTypeTable;
-    sTableTypes[2] = s_sAll;    // just to be sure to include anything else ....
+    sTableTypes[0] = "VIEW";
+    sTableTypes[1] = "TABLE";
+    sTableTypes[2] = "%";    // just to be sure to include anything else ....
 
     Any aCatalog;
     if ( !sCatalog.isEmpty() )
         aCatalog <<= sCatalog;
     Reference< XResultSet > xResult = m_xMetaData->getTables(aCatalog,sSchema,sTable,sTableTypes);
 
-    sdbcx::ObjectType xRet = nullptr;
+    sdbcx::ObjectType xRet;
     if ( xResult.is() )
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
@@ -92,14 +87,14 @@ sdbcx::ObjectType OTables::createObject(const OUString& _rName)
     return xRet;
 }
 
-void OTables::impl_refresh(  ) throw(RuntimeException)
+void OTables::impl_refresh(  )
 {
     static_cast<OHCatalog&>(m_rParent).refreshTables();
 }
 
 void OTables::disposing()
 {
-m_xMetaData.clear();
+    m_xMetaData.clear();
     OCollection::disposing();
 }
 
@@ -183,7 +178,7 @@ void OTables::appendNew(const OUString& _rsNewTable)
 OUString OTables::getNameForObject(const sdbcx::ObjectType& _xObject)
 {
     OSL_ENSURE(_xObject.is(),"OTables::getNameForObject: Object is NULL!");
-    return ::dbtools::composeTableName( m_xMetaData, _xObject, ::dbtools::EComposeRule::InDataManipulation, false, false, false );
+    return ::dbtools::composeTableName( m_xMetaData, _xObject, ::dbtools::EComposeRule::InDataManipulation, false );
 }
 
 

@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rtl/textcvt.h"
+#include <rtl/textcvt.h>
+#include <sal/log.hxx>
 #include "xlat.hxx"
-#include <tools/debug.hxx>
 
 namespace {
 
@@ -31,10 +31,8 @@ public:
     explicit    ConverterCache();
                 ~ConverterCache();
     sal_uInt16  convertOne( int nSelect, sal_Unicode );
-    void        convertStr( int nSelect, const sal_Unicode* pSrc, sal_uInt16* pDst, int nCount );
-protected:
-    void        ensureConverter( int nSelect );
 private:
+    void        ensureConverter( int nSelect );
     rtl_UnicodeToTextConverter maConverterCache[ MAX_CVT_SELECT+1 ];
     rtl_UnicodeToTextContext maContexts[ MAX_CVT_SELECT+1 ];
 };
@@ -61,14 +59,14 @@ ConverterCache::~ConverterCache()
 
 void ConverterCache::ensureConverter( int nSelect )
 {
-    // DBG_ASSERT( (2<=nSelect) && (nSelect<=MAX_CVT_SELECT)), "invalid XLAT.Converter requested" );
+    // SAL_WARN_IF( (2>nSelect) || (nSelect>MAX_CVT_SELECT)), "vcl", "invalid XLAT.Converter requested" );
     rtl_UnicodeToTextContext aContext = maContexts[ nSelect ];
     if( !aContext )
     {
         rtl_TextEncoding eRecodeFrom = RTL_TEXTENCODING_UNICODE;
         switch( nSelect )
         {
-            default: nSelect = 1; // fall through to unicode recoding
+            default: nSelect = 1; [[fallthrough]]; // to unicode recoding
             case 1: eRecodeFrom = RTL_TEXTENCODING_UNICODE; break;
             case 2: eRecodeFrom = RTL_TEXTENCODING_SHIFT_JIS; break;
             case 3: eRecodeFrom = RTL_TEXTENCODING_GB_2312; break;
@@ -109,34 +107,6 @@ sal_uInt16 ConverterCache::convertOne( int nSelect, sal_Unicode aChar )
     return aCode;
 }
 
-void ConverterCache::convertStr( int nSelect, const sal_Unicode* pSrc, sal_uInt16* pDst, int nCount )
-{
-    ensureConverter( nSelect );
-
-    for( int n = 0; n < nCount; ++n )
-    {
-        sal_Unicode aUCS2Char = pSrc[n];
-
-        sal_Char aTempArray[8];
-        sal_Size nTempSize;
-        sal_uInt32 nCvtInfo;
-
-        // assume that non-unicode-fonts do not support codepoints >U+FFFF
-        // TODO: use direct unicode->mbcs converter should there ever be one
-        int nCodeLen = rtl_convertUnicodeToText(
-            maConverterCache[ nSelect ], maContexts[ nSelect ],
-            &aUCS2Char, 1, aTempArray, sizeof(aTempArray),
-            RTL_UNICODETOTEXT_FLAGS_UNDEFINED_0
-            | RTL_UNICODETOTEXT_FLAGS_INVALID_0,
-            &nCvtInfo, &nTempSize );
-
-        sal_uInt16 aCode = aTempArray[0];
-        for( int i = 1; i < nCodeLen; ++i )
-            aCode = (aCode << 8) + (aTempArray[i] & 0xFF);
-        pDst[n] = aCode;
-    }
-}
-
 } // anonymous namespace
 
 namespace vcl
@@ -169,30 +139,6 @@ sal_uInt16 TranslateChar16(sal_uInt16 src)
     return aCC.convertOne( 6, src);
 }
 
-void TranslateString12(sal_uInt16 *src, sal_uInt16 *dst, sal_uInt32 n)
-{
-    aCC.convertStr( 2, reinterpret_cast<sal_Unicode *>(src), dst, n);
-}
-
-void TranslateString13(sal_uInt16 *src, sal_uInt16 *dst, sal_uInt32 n)
-{
-    aCC.convertStr( 3, reinterpret_cast<sal_Unicode *>(src), dst, n);
-}
-
-void TranslateString14(sal_uInt16 *src, sal_uInt16 *dst, sal_uInt32 n)
-{
-    aCC.convertStr( 4, reinterpret_cast<sal_Unicode *>(src), dst, n);
-}
-
-void TranslateString15(sal_uInt16 *src, sal_uInt16 *dst, sal_uInt32 n)
-{
-    aCC.convertStr( 5, reinterpret_cast<sal_Unicode *>(src), dst, n);
-}
-
-void TranslateString16(sal_uInt16 *src, sal_uInt16 *dst, sal_uInt32 n)
-{
-    aCC.convertStr( 6, reinterpret_cast<sal_Unicode *>(src), dst, n);
-}
 
 } // namespace vcl
 

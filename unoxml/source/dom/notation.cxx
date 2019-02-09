@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <notation.hxx>
+#include "notation.hxx"
 
 #include <string.h>
 
@@ -35,7 +35,7 @@ namespace DOM
     {
     }
 
-    OUString SAL_CALL CNotation::getPublicId() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CNotation::getPublicId()
     {
         OSL_ENSURE(false,
             "CNotation::getPublicId: not implemented (#i113683#)");
@@ -45,7 +45,7 @@ namespace DOM
     /**
     The system identifier of this notation.
     */
-    OUString SAL_CALL CNotation::getSystemId() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CNotation::getSystemId()
     {
         OSL_ENSURE(false,
             "CNotation::getSystemId: not implemented (#i113683#)");
@@ -53,20 +53,20 @@ namespace DOM
     }
 
 
-    OUString SAL_CALL CNotation::getNodeName()throw (RuntimeException, std::exception)
+    OUString SAL_CALL CNotation::getNodeName()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
        OUString aName;
         if (m_aNodePtr != nullptr)
         {
-            const xmlChar* xName = m_aNodePtr->name;
-            aName = OUString(reinterpret_cast<char const *>(xName), strlen(reinterpret_cast<char const *>(xName)), RTL_TEXTENCODING_UTF8);
+            const xmlChar* pName = m_aNodePtr->name;
+            aName = OUString(reinterpret_cast<char const *>(pName), strlen(reinterpret_cast<char const *>(pName)), RTL_TEXTENCODING_UTF8);
         }
         return aName;
     }
 
-    OUString SAL_CALL CNotation::getNodeValue() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CNotation::getNodeValue()
     {
         return OUString();
     }

@@ -20,16 +20,15 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_DATAPOINTSYMBOLSUPPLIER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_DATAPOINTSYMBOLSUPPLIER_HXX
 
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/drawing/Direction3D.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
-#include "chartviewdllapi.hxx"
+#include <chartview/chartviewdllapi.hxx>
+#include <com/sun/star/uno/Reference.h>
+
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { struct Direction3D; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
 
 namespace chart
 {
-
-/**
-*/
 
 class OOO_DLLPUBLIC_CHARTVIEW DataPointSymbolSupplier
 {

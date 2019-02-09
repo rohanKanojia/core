@@ -17,23 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartWindow.hxx"
-#include "ChartController.hxx"
-#include "HelpIds.hrc"
+#include <ChartWindow.hxx>
+#include <ChartController.hxx>
+#include <helpids.h>
+#include <uiobject.hxx>
 
 #include <vcl/help.hxx>
-#include <vcl/openglwin.hxx>
 #include <vcl/settings.hxx>
-#include <config_features.h>
-#include <com/sun/star/chart2/X3DChartWindowProvider.hpp>
+
+#include <sfx2/ipclient.hxx>
+#include <sfx2/viewsh.hxx>
+#include <sfx2/lokhelper.hxx>
+#include <comphelper/lok.hxx>
+
+#define TWIPS_PER_PIXEL 15
 
 using namespace ::com::sun::star;
 
 namespace
 {
-::Rectangle lcl_AWTRectToVCLRect( const css::awt::Rectangle & rAWTRect )
+::tools::Rectangle lcl_AWTRectToVCLRect( const css::awt::Rectangle & rAWTRect )
 {
-    ::Rectangle aResult;
+    ::tools::Rectangle aResult;
     aResult.setX( rAWTRect.X );
     aResult.setY( rAWTRect.Y );
     aResult.setWidth( rAWTRect.Width );
@@ -49,31 +54,17 @@ ChartWindow::ChartWindow( ChartController* pController, vcl::Window* pParent, Wi
         : Window(pParent, nStyle)
         , m_pWindowController( pController )
         , m_bInPaint(false)
-#if HAVE_FEATURE_OPENGL
-        , m_pOpenGLWindow(VclPtr<OpenGLWindow>::Create(this))
-#else
-        , m_pOpenGLWindow(nullptr)
-#endif
+        , m_pViewShellWindow( nullptr )
 {
-    this->SetHelpId( HID_SCH_WIN_DOCUMENT );
-    this->SetMapMode( MapMode(MAP_100TH_MM) );
+    set_id("chart_window");
+    SetHelpId( HID_SCH_WIN_DOCUMENT );
+    SetMapMode( MapMode(MapUnit::Map100thMM) );
     adjustHighContrastMode();
     // chart does not depend on exact pixel painting => enable antialiased drawing
     SetAntialiasing( AntialiasingFlags::EnableB2dDraw | GetAntialiasing() );
     EnableRTL( false );
     if( pParent )
         pParent->EnableRTL( false );// #i96215# necessary for a correct position of the context menu in rtl mode
-
-    if( m_pOpenGLWindow )
-    {
-        m_pOpenGLWindow->Show();
-        uno::Reference< chart2::X3DChartWindowProvider > x3DWindowProvider(pController->getModel(), uno::UNO_QUERY_THROW);
-        sal_uInt64 nWindowPtr = reinterpret_cast<sal_uInt64>(m_pOpenGLWindow.get());
-        x3DWindowProvider->setWindow(nWindowPtr);
-        uno::Reference<util::XUpdatable> const xUpdatable(x3DWindowProvider,
-                uno::UNO_QUERY_THROW);
-        xUpdatable->update();
-    }
 }
 
 ChartWindow::~ChartWindow()
@@ -83,41 +74,26 @@ ChartWindow::~ChartWindow()
 
 void ChartWindow::dispose()
 {
-    if (m_pWindowController && m_pWindowController->getModel().is())
-    {
-        uno::Reference< chart2::X3DChartWindowProvider > x3DWindowProvider(m_pWindowController->getModel(), uno::UNO_QUERY_THROW);
-        x3DWindowProvider->setWindow(0);
-        uno::Reference<util::XUpdatable> const xUpdatable(x3DWindowProvider,
-                uno::UNO_QUERY_THROW);
-        xUpdatable->update();
-    }
-    m_pOpenGLWindow.disposeAndClear();
+    m_pViewShellWindow.clear();
     vcl::Window::dispose();
 }
 
-void ChartWindow::clear()
-{
-    m_pWindowController=nullptr;
-    this->ReleaseMouse();
-}
-
-void ChartWindow::PrePaint(vcl::RenderContext& rRenderContext)
+void ChartWindow::PrePaint(vcl::RenderContext& )
 {
     // forward VCLs PrePaint window event to DrawingLayer
     if (m_pWindowController)
     {
-       m_pWindowController->PrePaint(rRenderContext);
+       m_pWindowController->PrePaint();
     }
 }
 
-void ChartWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ChartWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
+    if (comphelper::LibreOfficeKit::isActive() && !rRenderContext.IsVirtual())
+        return;
+
     m_bInPaint = true;
-    if (m_pOpenGLWindow && m_pOpenGLWindow->IsVisible())
-    {
-        m_pOpenGLWindow->Paint(rRenderContext, rRect);
-    }
-    else if (m_pWindowController)
+    if (m_pWindowController)
     {
         m_pWindowController->execute_Paint(rRenderContext, rRect);
     }
@@ -164,9 +140,6 @@ void ChartWindow::Resize()
         m_pWindowController->execute_Resize();
     else
         Window::Resize();
-
-    if( m_pOpenGLWindow )
-        m_pOpenGLWindow->SetSizePixel(GetSizePixel());
 }
 
 void ChartWindow::Activate()
@@ -256,6 +229,21 @@ void ChartWindow::RequestHelp( const HelpEvent& rHEvt )
         vcl::Window::RequestHelp( rHEvt );
 }
 
+void ChartWindow::LogicMouseButtonDown(const MouseEvent& rEvent)
+{
+    MouseButtonDown(rEvent);
+}
+
+void ChartWindow::LogicMouseButtonUp(const MouseEvent& rEvent)
+{
+    MouseButtonUp(rEvent);
+}
+
+void ChartWindow::LogicMouseMove(const MouseEvent& rEvent)
+{
+    MouseMove(rEvent);
+}
+
 void ChartWindow::adjustHighContrastMode()
 {
     static const DrawModeFlags nContrastMode =
@@ -269,40 +257,133 @@ void ChartWindow::adjustHighContrastMode()
 void ChartWindow::ForceInvalidate()
 {
     vcl::Window::Invalidate();
-    if(m_pOpenGLWindow)
-    {
-        m_pOpenGLWindow->Invalidate();
-    }
 }
 void ChartWindow::Invalidate( InvalidateFlags nFlags )
 {
     if( m_bInPaint ) // #i101928# superfluous paint calls while entering and editing charts"
         return;
     vcl::Window::Invalidate( nFlags );
-    if(m_pOpenGLWindow)
-    {
-        m_pOpenGLWindow->Invalidate( nFlags );
-    }
 }
-void ChartWindow::Invalidate( const Rectangle& rRect, InvalidateFlags nFlags )
+void ChartWindow::Invalidate( const tools::Rectangle& rRect, InvalidateFlags nFlags )
 {
     if( m_bInPaint ) // #i101928# superfluous paint calls while entering and editing charts"
         return;
     vcl::Window::Invalidate( rRect, nFlags );
-    if(m_pOpenGLWindow)
-    {
-        m_pOpenGLWindow->Invalidate( rRect, nFlags );
-    }
 }
 void ChartWindow::Invalidate( const vcl::Region& rRegion, InvalidateFlags nFlags )
 {
     if( m_bInPaint ) // #i101928# superfluous paint calls while entering and editing charts"
         return;
     vcl::Window::Invalidate( rRegion, nFlags );
-    if(m_pOpenGLWindow)
+}
+
+void ChartWindow::LogicInvalidate(const tools::Rectangle* pRectangle)
+{
+    SfxViewShell* pCurrentShell = SfxViewShell::Current();
+    if ( nullptr == pCurrentShell )
+        return;
+    OString sRectangle;
+    if (!pRectangle)
     {
-        m_pOpenGLWindow->Invalidate( rRegion, nFlags );
+        // we have to invalidate the whole chart area not the whole document
+        sRectangle = GetBoundingBox().toString();
     }
+    else
+    {
+        tools::Rectangle aRectangle(*pRectangle);
+        // When dragging shapes the map mode is disabled.
+        if (IsMapModeEnabled())
+        {
+            if (GetMapMode().GetMapUnit() == MapUnit::Map100thMM)
+                aRectangle = OutputDevice::LogicToLogic(aRectangle, MapMode(MapUnit::Map100thMM), MapMode(MapUnit::MapTwip));
+        }
+        else
+        {
+            aRectangle = PixelToLogic(aRectangle, MapMode(MapUnit::MapTwip));
+        }
+
+        vcl::Window* pEditWin = GetParentEditWin();
+        if (pEditWin)
+        {
+            MapMode aCWMapMode = GetMapMode();
+            double fXScale( aCWMapMode.GetScaleX() );
+            double fYScale( aCWMapMode.GetScaleY() );
+
+            if (!IsMapModeEnabled())
+            {
+                aRectangle.SetLeft( aRectangle.Left() / fXScale );
+                aRectangle.SetRight( aRectangle.Right() / fXScale );
+                aRectangle.SetTop( aRectangle.Top() / fYScale );
+                aRectangle.SetBottom( aRectangle.Bottom() / fYScale );
+            }
+
+            Point aOffset = this->GetOffsetPixelFrom(*pEditWin);
+            aOffset.setX( aOffset.X() * (TWIPS_PER_PIXEL / fXScale) );
+            aOffset.setY( aOffset.Y() * (TWIPS_PER_PIXEL / fYScale) );
+
+            aRectangle = tools::Rectangle(aRectangle.TopLeft() + aOffset, aRectangle.GetSize());
+        }
+
+        sRectangle = aRectangle.toString();
+    }
+    SfxLokHelper::notifyInvalidation(pCurrentShell, sRectangle);
+}
+
+FactoryFunction ChartWindow::GetUITestFactory() const
+{
+    return ChartWindowUIObject::create;
+}
+
+ChartController* ChartWindow::GetController()
+{
+    return m_pWindowController;
+}
+
+vcl::Window* ChartWindow::GetParentEditWin()
+{
+    if (m_pViewShellWindow)
+        return m_pViewShellWindow.get();
+
+    // So, you are thinking, why do not invoke pCurrentShell->GetWindow() ?
+    // Because in Impress the parent edit win is not view shell window.
+    SfxViewShell* pCurrentShell = SfxViewShell::Current();
+    if( pCurrentShell )
+    {
+        SfxInPlaceClient* pIPClient = pCurrentShell->GetIPClient();
+        if (pIPClient)
+        {
+            vcl::Window* pRootWin = pIPClient->GetEditWin();
+            if(pRootWin && pRootWin->IsAncestorOf(*this))
+            {
+                m_pViewShellWindow = pRootWin;
+                return m_pViewShellWindow.get();
+            }
+        }
+    }
+    return nullptr;
+}
+
+tools::Rectangle ChartWindow::GetBoundingBox()
+{
+    tools::Rectangle aBBox;
+
+    vcl::Window* pRootWin = GetParentEditWin();
+    if (pRootWin)
+    {
+        // In all cases, the following code fragment
+        // returns the chart bounding box in twips.
+        MapMode aCWMapMode = GetMapMode();
+        double fXScale( aCWMapMode.GetScaleX() );
+        double fYScale( aCWMapMode.GetScaleY() );
+        Point aOffset = GetOffsetPixelFrom(*pRootWin);
+        aOffset.setX( aOffset.X() * (TWIPS_PER_PIXEL / fXScale) );
+        aOffset.setY( aOffset.Y() * (TWIPS_PER_PIXEL / fYScale) );
+        Size aSize = GetSizePixel();
+        aSize.setWidth( aSize.Width() * (TWIPS_PER_PIXEL / fXScale) );
+        aSize.setHeight( aSize.Height() * (TWIPS_PER_PIXEL / fYScale) );
+        aBBox = tools::Rectangle(aOffset, aSize);
+    }
+    return aBBox;
 }
 
 } //namespace chart

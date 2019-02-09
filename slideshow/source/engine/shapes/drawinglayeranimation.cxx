@@ -27,6 +27,7 @@
 #include <cppuhelper/exc_hlp.hxx>
 
 #include <rtl/math.hxx>
+#include <sal/log.hxx>
 #include <vcl/metric.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/metaact.hxx>
@@ -38,20 +39,20 @@
 #include <com/sun/star/drawing/HomogenMatrix3.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 
-#include "activity.hxx"
-#include "wakeupevent.hxx"
-#include "eventqueue.hxx"
+#include <activity.hxx>
+#include <wakeupevent.hxx>
+#include <eventqueue.hxx>
 #include "drawinglayeranimation.hxx"
 #include "drawshapesubsetting.hxx"
 #include "drawshape.hxx"
-#include "shapesubset.hxx"
-#include "shapeattributelayerholder.hxx"
-#include "slideshowcontext.hxx"
-#include "tools.hxx"
+#include <shapesubset.hxx>
+#include <shapeattributelayerholder.hxx>
+#include <slideshowcontext.hxx>
+#include <tools.hxx>
 #include "gdimtftools.hxx"
-#include "eventmultiplexer.hxx"
+#include <eventmultiplexer.hxx>
 #include "intrinsicanimationactivity.hxx"
-#include "intrinsicanimationeventhandler.hxx"
+#include <intrinsicanimationeventhandler.hxx>
 
 #include <vector>
 #include <memory>
@@ -63,13 +64,13 @@ namespace {
 
 class ScrollTextAnimNode
 {
-    sal_uInt32  mnDuration; // single duration
-    sal_uInt32  mnRepeat; // 0 -> endless
-    double      mfStart;
-    double      mfStop;
-    sal_uInt32  mnFrequency; // in ms
+    sal_uInt32 const  mnDuration; // single duration
+    sal_uInt32 const  mnRepeat; // 0 -> endless
+    double const      mfStart;
+    double const      mfStop;
+    sal_uInt32 const  mnFrequency; // in ms
     // forth and back change at mnRepeat%2:
-    bool        mbAlternate;
+    bool const        mbAlternate;
 
 public:
     ScrollTextAnimNode(
@@ -105,7 +106,7 @@ double ScrollTextAnimNode::GetStateAtRelativeTime(
         const sal_uInt32 nRepeatCount(nRelativeTime / mnDuration);
         sal_uInt32 nFrameTime(nRelativeTime - (nRepeatCount * mnDuration));
 
-        if(DoAlternate() && (nRepeatCount + 1L) % 2L)
+        if(DoAlternate() && (nRepeatCount + 1) % 2L)
             nFrameTime = mnDuration - nFrameTime;
 
         return mfStart + ((mfStop - mfStart) *
@@ -120,7 +121,7 @@ double ScrollTextAnimNode::GetStateAtRelativeTime(
         {
             const sal_uInt32 nRepeatCount(nRelativeTime / mnDuration);
 
-            if((nRepeatCount + 1L) % 2L)
+            if((nRepeatCount + 1) % 2L)
                 nFrameTime = mnDuration - nFrameTime;
         }
 
@@ -131,8 +132,6 @@ double ScrollTextAnimNode::GetStateAtRelativeTime(
 class ActivityImpl : public Activity
 {
 public:
-    virtual ~ActivityImpl();
-
     ActivityImpl(
         SlideShowContext const& rContext,
         std::shared_ptr<WakeupEvent> const& pWakeupEvent,
@@ -155,10 +154,6 @@ public:
 private:
     void updateShapeAttributes( double fTime,
                                 basegfx::B2DRectangle const& parentBounds );
-
-    // Access to VisibleWhenSTarted flags
-    bool IsVisibleWhenStarted() const { return mbVisibleWhenStarted; }
-    bool IsVisibleWhenStopped() const { return mbVisibleWhenStopped; }
 
     // scroll horizontal? if sal_False, scroll is vertical.
     bool ScrollHorizontal() const {
@@ -198,7 +193,7 @@ private:
     DrawShapeSharedPtr                          mpDrawShape;
     ShapeAttributeLayerHolder                   maShapeAttrLayer;
     GDIMetaFileSharedPtr                        mpMetaFile;
-    IntrinsicAnimationEventHandlerSharedPtr     mpListener;
+    IntrinsicAnimationEventHandlerSharedPtr const mpListener;
     canvas::tools::ElapsedTime                  maTimer;
     double                                      mfRotationAngle;
     bool                                        mbIsShapeAnimated;
@@ -222,9 +217,6 @@ private:
     // Flag to remember if this is a simple scrolling text
     bool                                        mbScrollIn;
 
-    // start time for this animation
-    sal_uInt32                                  mnStartTime;
-
     // The AnimationDirection
     drawing::TextAnimationDirection             meDirection;
 
@@ -235,10 +227,10 @@ private:
     std::vector< ScrollTextAnimNode >           maVector;
 
     // the scroll rectangle
-    Rectangle                                   maScrollRectangleLogic;
+    tools::Rectangle                                   maScrollRectangleLogic;
 
     // the paint rectangle
-    Rectangle                                   maPaintRectangleLogic;
+    tools::Rectangle                                   maPaintRectangleLogic;
 };
 
 
@@ -313,7 +305,7 @@ double ActivityImpl::GetMixerState( sal_uInt32 nTime )
             else
             {
                 // end of animation, take last entry's end
-                fRetval = maVector[maVector.size() - 1L].GetStop();
+                fRetval = maVector[maVector.size() - 1].GetStop();
             }
         }
 
@@ -327,27 +319,27 @@ sal_uInt32 ActivityImpl::GetStepWidthLogic() const
     // #i69847# Assuming higher DPI
     sal_uInt32 const PIXEL_TO_LOGIC = 30;
 
-    sal_uInt32 nRetval(0L);
+    sal_uInt32 nRetval(0);
 
-    if(mnStepWidth < 0L)
+    if(mnStepWidth < 0)
     {
         // is in pixels, convert to logical units
         nRetval = (-mnStepWidth * PIXEL_TO_LOGIC);
     }
-    else if(mnStepWidth > 0L)
+    else if(mnStepWidth > 0)
     {
         // is in logical units
         nRetval = mnStepWidth;
     }
 
-    if(0L == nRetval)
+    if(0 == nRetval)
     {
         // step 1 pixel, canned value
 
         // with very high DPIs like in PDF export, this can
         // still get zero.  for that cases, set a default, too (taken
         // from ainfoscrolltext.cxx)
-        nRetval = 100L;
+        nRetval = 100;
     }
 
     return nRetval;
@@ -355,186 +347,178 @@ sal_uInt32 ActivityImpl::GetStepWidthLogic() const
 
 void ActivityImpl::ImpForceScrollTextAnimNodes()
 {
-    if(maVector.empty())
+    if(!maVector.empty())
+        return;
+
+    // prepare values
+    sal_uInt32 nLoopTime;
+    double fZeroLogic, fOneLogic, fInitLogic, fDistanceLogic;
+    double fZeroLogicAlternate = 0.0, fOneLogicAlternate = 0.0;
+    double fZeroRelative, fOneRelative, fInitRelative;
+
+    if(ScrollHorizontal())
     {
-        // prepare values
-        sal_uInt32 nLoopTime;
-        double fZeroLogic, fOneLogic, fInitLogic, fDistanceLogic;
-        double fZeroLogicAlternate = 0.0, fOneLogicAlternate = 0.0;
-        double fZeroRelative, fOneRelative, fInitRelative;
-
-        if(ScrollHorizontal())
-        {
-            if(DoAlternate())
-            {
-                if(maPaintRectangleLogic.GetWidth() >
-                   maScrollRectangleLogic.GetWidth())
-                {
-                    fZeroLogicAlternate = maScrollRectangleLogic.Right() - maPaintRectangleLogic.GetWidth();
-                    fOneLogicAlternate = maScrollRectangleLogic.Left();
-                }
-                else
-                {
-                    fZeroLogicAlternate = maScrollRectangleLogic.Left();
-                    fOneLogicAlternate = maScrollRectangleLogic.Right() - maPaintRectangleLogic.GetWidth();
-                }
-            }
-
-            fZeroLogic = maScrollRectangleLogic.Left() - maPaintRectangleLogic.GetWidth();
-            fOneLogic = maScrollRectangleLogic.Right();
-            fInitLogic = maPaintRectangleLogic.Left();
-        }
-        else
-        {
-            if(DoAlternate())
-            {
-                if(maPaintRectangleLogic.GetHeight() > maScrollRectangleLogic.GetHeight())
-                {
-                    fZeroLogicAlternate = maScrollRectangleLogic.Bottom() - maPaintRectangleLogic.GetHeight();
-                    fOneLogicAlternate = maScrollRectangleLogic.Top();
-                }
-                else
-                {
-                    fZeroLogicAlternate = maScrollRectangleLogic.Top();
-                    fOneLogicAlternate = maScrollRectangleLogic.Bottom() - maPaintRectangleLogic.GetHeight();
-                }
-            }
-
-            fZeroLogic = maScrollRectangleLogic.Top() - maPaintRectangleLogic.GetHeight();
-            fOneLogic = maScrollRectangleLogic.Bottom();
-            fInitLogic = maPaintRectangleLogic.Top();
-        }
-
-        fDistanceLogic = fOneLogic - fZeroLogic;
-        fInitRelative = (fInitLogic - fZeroLogic) / fDistanceLogic;
-
         if(DoAlternate())
         {
-            fZeroRelative =
-                (fZeroLogicAlternate - fZeroLogic) / fDistanceLogic;
-            fOneRelative =
-                (fOneLogicAlternate - fZeroLogic) / fDistanceLogic;
+            if(maPaintRectangleLogic.GetWidth() >
+               maScrollRectangleLogic.GetWidth())
+            {
+                fZeroLogicAlternate = maScrollRectangleLogic.Right() - maPaintRectangleLogic.GetWidth();
+                fOneLogicAlternate = maScrollRectangleLogic.Left();
+            }
+            else
+            {
+                fZeroLogicAlternate = maScrollRectangleLogic.Left();
+                fOneLogicAlternate = maScrollRectangleLogic.Right() - maPaintRectangleLogic.GetWidth();
+            }
+        }
+
+        fZeroLogic = maScrollRectangleLogic.Left() - maPaintRectangleLogic.GetWidth();
+        fOneLogic = maScrollRectangleLogic.Right();
+        fInitLogic = maPaintRectangleLogic.Left();
+    }
+    else
+    {
+        if(DoAlternate())
+        {
+            if(maPaintRectangleLogic.GetHeight() > maScrollRectangleLogic.GetHeight())
+            {
+                fZeroLogicAlternate = maScrollRectangleLogic.Bottom() - maPaintRectangleLogic.GetHeight();
+                fOneLogicAlternate = maScrollRectangleLogic.Top();
+            }
+            else
+            {
+                fZeroLogicAlternate = maScrollRectangleLogic.Top();
+                fOneLogicAlternate = maScrollRectangleLogic.Bottom() - maPaintRectangleLogic.GetHeight();
+            }
+        }
+
+        fZeroLogic = maScrollRectangleLogic.Top() - maPaintRectangleLogic.GetHeight();
+        fOneLogic = maScrollRectangleLogic.Bottom();
+        fInitLogic = maPaintRectangleLogic.Top();
+    }
+
+    fDistanceLogic = fOneLogic - fZeroLogic;
+    fInitRelative = (fInitLogic - fZeroLogic) / fDistanceLogic;
+
+    if(DoAlternate())
+    {
+        fZeroRelative =
+            (fZeroLogicAlternate - fZeroLogic) / fDistanceLogic;
+        fOneRelative =
+            (fOneLogicAlternate - fZeroLogic) / fDistanceLogic;
+    }
+    else
+    {
+        fZeroRelative = 0.0;
+        fOneRelative = 1.0;
+    }
+
+    if(mbVisibleWhenStarted)
+    {
+        double fRelativeStartValue, fRelativeEndValue,fRelativeDistance;
+
+        if(DoScrollForward())
+        {
+            fRelativeStartValue = fInitRelative;
+            fRelativeEndValue = fOneRelative;
+            fRelativeDistance = fRelativeEndValue - fRelativeStartValue;
         }
         else
         {
-            fZeroRelative = 0.0;
-            fOneRelative = 1.0;
+            fRelativeStartValue = fInitRelative;
+            fRelativeEndValue = fZeroRelative;
+            fRelativeDistance = fRelativeStartValue - fRelativeEndValue;
         }
 
-        if(mnStartTime)
+        const double fNumberSteps =
+            (fRelativeDistance * fDistanceLogic) / GetStepWidthLogic();
+        nLoopTime = FRound(fNumberSteps * mnFrequency);
+
+        // init loop
+        ScrollTextAnimNode aInitNode(
+            nLoopTime, 1,
+            fRelativeStartValue, fRelativeEndValue,
+            mnFrequency, false);
+        maVector.push_back(aInitNode);
+    }
+
+    // prepare main loop values
+    {
+        double fRelativeStartValue, fRelativeEndValue, fRelativeDistance;
+
+        if(DoScrollForward())
         {
-            // Start time loop
-            ScrollTextAnimNode aStartNode(
-                mnStartTime, 1L, 0.0, 0.0, mnStartTime, false);
-            maVector.push_back(aStartNode);
+            fRelativeStartValue = fZeroRelative;
+            fRelativeEndValue = fOneRelative;
+            fRelativeDistance = fRelativeEndValue - fRelativeStartValue;
+        }
+        else
+        {
+            fRelativeStartValue = fOneRelative;
+            fRelativeEndValue = fZeroRelative;
+            fRelativeDistance = fRelativeStartValue - fRelativeEndValue;
         }
 
-        if(IsVisibleWhenStarted())
+        const double fNumberSteps =
+            (fRelativeDistance * fDistanceLogic) / GetStepWidthLogic();
+        nLoopTime = FRound(fNumberSteps * mnFrequency);
+
+        if(0 == mnRepeat)
         {
-            double fRelativeStartValue, fRelativeEndValue,fRelativeDistance;
-
-            if(DoScrollForward())
+            if(!DoScrollIn())
             {
-                fRelativeStartValue = fInitRelative;
-                fRelativeEndValue = fOneRelative;
-                fRelativeDistance = fRelativeEndValue - fRelativeStartValue;
-            }
-            else
-            {
-                fRelativeStartValue = fInitRelative;
-                fRelativeEndValue = fZeroRelative;
-                fRelativeDistance = fRelativeStartValue - fRelativeEndValue;
-            }
-
-            const double fNumberSteps =
-                (fRelativeDistance * fDistanceLogic) / GetStepWidthLogic();
-            nLoopTime = FRound(fNumberSteps * mnFrequency);
-
-            // init loop
-            ScrollTextAnimNode aInitNode(
-                nLoopTime, 1L,
-                fRelativeStartValue, fRelativeEndValue,
-                mnFrequency, false);
-            maVector.push_back(aInitNode);
-        }
-
-        // prepare main loop values
-        {
-            double fRelativeStartValue, fRelativeEndValue, fRelativeDistance;
-
-            if(DoScrollForward())
-            {
-                fRelativeStartValue = fZeroRelative;
-                fRelativeEndValue = fOneRelative;
-                fRelativeDistance = fRelativeEndValue - fRelativeStartValue;
-            }
-            else
-            {
-                fRelativeStartValue = fOneRelative;
-                fRelativeEndValue = fZeroRelative;
-                fRelativeDistance = fRelativeStartValue - fRelativeEndValue;
-            }
-
-            const double fNumberSteps =
-                (fRelativeDistance * fDistanceLogic) / GetStepWidthLogic();
-            nLoopTime = FRound(fNumberSteps * mnFrequency);
-
-            if(0L == mnRepeat)
-            {
-                if(!DoScrollIn())
-                {
-                    // endless main loop
-                    ScrollTextAnimNode aMainNode(
-                        nLoopTime, 0L,
-                        fRelativeStartValue, fRelativeEndValue,
-                        mnFrequency, DoAlternate());
-                    maVector.push_back(aMainNode);
-                }
-            }
-            else
-            {
-                sal_uInt32 nNumRepeat(mnRepeat);
-
-                if(DoAlternate() && (nNumRepeat + 1L) % 2L)
-                    nNumRepeat += 1L;
-
-                // ending main loop
+                // endless main loop
                 ScrollTextAnimNode aMainNode(
-                    nLoopTime, nNumRepeat,
+                    nLoopTime, 0,
                     fRelativeStartValue, fRelativeEndValue,
                     mnFrequency, DoAlternate());
                 maVector.push_back(aMainNode);
             }
         }
-
-        if(IsVisibleWhenStopped())
+        else
         {
-            double fRelativeStartValue, fRelativeEndValue, fRelativeDistance;
+            sal_uInt32 nNumRepeat(mnRepeat);
 
-            if(DoScrollForward())
-            {
-                fRelativeStartValue = fZeroRelative;
-                fRelativeEndValue = fInitRelative;
-                fRelativeDistance = fRelativeEndValue - fRelativeStartValue;
-            }
-            else
-            {
-                fRelativeStartValue = fOneRelative;
-                fRelativeEndValue = fInitRelative;
-                fRelativeDistance = fRelativeStartValue - fRelativeEndValue;
-            }
+            if(DoAlternate() && (nNumRepeat + 1) % 2L)
+                nNumRepeat += 1;
 
-            const double fNumberSteps =
-                (fRelativeDistance * fDistanceLogic) / GetStepWidthLogic();
-            nLoopTime = FRound(fNumberSteps * mnFrequency);
-
-            // exit loop
-            ScrollTextAnimNode aExitNode(
-                nLoopTime, 1L,
-                fRelativeStartValue, fRelativeEndValue, mnFrequency, false);
-            maVector.push_back(aExitNode);
+            // ending main loop
+            ScrollTextAnimNode aMainNode(
+                nLoopTime, nNumRepeat,
+                fRelativeStartValue, fRelativeEndValue,
+                mnFrequency, DoAlternate());
+            maVector.push_back(aMainNode);
         }
     }
+
+    if(!mbVisibleWhenStopped)
+        return;
+
+    double fRelativeStartValue, fRelativeEndValue, fRelativeDistance;
+
+    if(DoScrollForward())
+    {
+        fRelativeStartValue = fZeroRelative;
+        fRelativeEndValue = fInitRelative;
+        fRelativeDistance = fRelativeEndValue - fRelativeStartValue;
+    }
+    else
+    {
+        fRelativeStartValue = fOneRelative;
+        fRelativeEndValue = fInitRelative;
+        fRelativeDistance = fRelativeStartValue - fRelativeEndValue;
+    }
+
+    const double fNumberSteps =
+        (fRelativeDistance * fDistanceLogic) / GetStepWidthLogic();
+    nLoopTime = FRound(fNumberSteps * mnFrequency);
+
+    // exit loop
+    ScrollTextAnimNode aExitNode(
+        nLoopTime, 1,
+        fRelativeStartValue, fRelativeEndValue, mnFrequency, false);
+    maVector.push_back(aExitNode);
 }
 
 ScrollTextAnimNode* ActivityImpl::ImpGetScrollTextAnimNode(
@@ -547,9 +531,8 @@ ScrollTextAnimNode* ActivityImpl::ImpGetScrollTextAnimNode(
     {
         rRelativeTime = nTime;
 
-        for(sal_uInt32 a(0L); !pRetval && a < maVector.size(); a++)
+        for(ScrollTextAnimNode & rNode: maVector)
         {
-            ScrollTextAnimNode & rNode = maVector[a];
             if(!rNode.GetRepeat())
             {
                 // endless loop, use it
@@ -573,7 +556,7 @@ ScrollTextAnimNode* ActivityImpl::ImpGetScrollTextAnimNode(
 
 sal_uInt32 ActivityImpl::ImpRegisterAgainScrollTextMixerState(sal_uInt32 nTime)
 {
-    sal_uInt32 nRetval(0L);
+    sal_uInt32 nRetval(0);
     ImpForceScrollTextAnimNodes();
 
     if(!maVector.empty())
@@ -657,7 +640,7 @@ void ActivityImpl::updateShapeAttributes(
         }
 
         basegfx::B2DPolygon clipPoly(
-            basegfx::tools::createPolygonFromRect(
+            basegfx::utils::createPolygonFromRect(
                 basegfx::B2DRectangle( clipPos.getX(),
                                        clipPos.getY(),
                                        clipPos.getX() + fScrollWidth,
@@ -666,7 +649,7 @@ void ActivityImpl::updateShapeAttributes(
         if( !::basegfx::fTools::equalZero( mfRotationAngle ))
         {
             maShapeAttrLayer.get()->setRotationAngle( mfRotationAngle );
-            double const fRotate = (mfRotationAngle * M_PI / 180.0);
+            double const fRotate = basegfx::deg2rad(mfRotationAngle);
             basegfx::B2DHomMatrix aTransform;
             // position:
             aTransform.rotate( fRotate );
@@ -751,22 +734,21 @@ ActivityImpl::ActivityImpl(
       meAnimKind(drawing::TextAnimationKind_NONE),
       mbVisibleWhenStopped(false),
       mbVisibleWhenStarted(false),
-      mnStartTime(0L),
       mnStepWidth(0)
 {
     // get doctreenode:
     sal_Int32 const nNodes = pParentDrawShape->getNumberOfTreeNodes(
-        DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH );
+        DocTreeNode::NodeType::LogicalParagraph );
 
     DocTreeNode scrollTextNode(
         pParentDrawShape->getTreeNode(
-            0, DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH ));
+            0, DocTreeNode::NodeType::LogicalParagraph ));
     // xxx todo: remove this hack
     if( nNodes > 1 )
         scrollTextNode.setEndIndex(
             pParentDrawShape->getTreeNode(
                 nNodes - 1,
-                DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH ).getEndIndex());
+                DocTreeNode::NodeType::LogicalParagraph ).getEndIndex());
 
     // TODO(Q3): Doing this manually, instead of using
     // ShapeSubset. This is because of lifetime issues (ShapeSubset
@@ -835,7 +817,7 @@ ActivityImpl::ActivityImpl(
     mnFrequency = (nDelay ? nDelay :
                    // default:
                    meAnimKind == drawing::TextAnimationKind_BLINK
-                   ? 250L : 50L );
+                   ? 250 : 50 );
 
     // adopted from in AInfoScrollText::ImplInit():
 
@@ -843,10 +825,10 @@ ActivityImpl::ActivityImpl(
     if( DoScrollIn() )
     {
         // most parameters are set correctly from the dialog logic, but
-        // eg VisisbleWhenStopped is grayed out and needs to be corrected here.
+        // eg VisibleWhenStopped is grayed out and needs to be corrected here.
         mbVisibleWhenStopped = true;
         mbVisibleWhenStarted = false;
-        mnRepeat = 0L;
+        mnRepeat = 0;
     }
 
     // Get animation direction
@@ -865,43 +847,39 @@ bool ActivityImpl::enableAnimations()
     return maContext.mrActivitiesQueue.addActivity( std::dynamic_pointer_cast<Activity>(shared_from_this()) );
 }
 
-ActivityImpl::~ActivityImpl()
-{
-}
-
 void ActivityImpl::dispose()
 {
-    if( !mbIsDisposed )
+    if( mbIsDisposed )
+        return;
+
+    end();
+
+    // only remove subset here, since end() is called on slide end
+    // (and we must not spoil the slide preview bitmap with scroll
+    // text)
+    maShapeAttrLayer.reset();
+    if( mpDrawShape )
     {
-        end();
-
-        // only remove subset here, since end() is called on slide end
-        // (and we must not spoil the slide preview bitmap with scroll
-        // text)
-        maShapeAttrLayer.reset();
-        if( mpDrawShape )
-        {
-            // TODO(Q3): Doing this manually, instead of using
-            // ShapeSubset. This is because of lifetime issues
-            // (ShapeSubset generates circular references to parent
-            // shape)
-            DrawShapeSharedPtr pParent( mpParentDrawShape.lock() );
-            if( pParent )
-                maContext.mpSubsettableShapeManager->revokeSubset(
-                    pParent,
-                    mpDrawShape );
-        }
-
-        mpMetaFile.reset();
-        mpDrawShape.reset();
-        mpParentDrawShape.reset();
-        mpWakeupEvent.reset();
-        maContext.dispose();
-        mbIsDisposed = true;
-
-        maContext.mpSubsettableShapeManager->removeIntrinsicAnimationHandler(
-            mpListener );
+        // TODO(Q3): Doing this manually, instead of using
+        // ShapeSubset. This is because of lifetime issues
+        // (ShapeSubset generates circular references to parent
+        // shape)
+        DrawShapeSharedPtr pParent( mpParentDrawShape.lock() );
+        if( pParent )
+            maContext.mpSubsettableShapeManager->revokeSubset(
+                pParent,
+                mpDrawShape );
     }
+
+    mpMetaFile.reset();
+    mpDrawShape.reset();
+    mpParentDrawShape.reset();
+    mpWakeupEvent.reset();
+    maContext.dispose();
+    mbIsDisposed = true;
+
+    maContext.mpSubsettableShapeManager->removeIntrinsicAnimationHandler(
+        mpListener );
 }
 
 double ActivityImpl::calcTimeLag() const
@@ -957,9 +935,7 @@ std::shared_ptr<Activity> createDrawingLayerAnimActivity(
     catch( uno::Exception& )
     {
         // translate any error into empty factory product.
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString( cppu::getCaughtException() ),
-                        RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
     }
 
     return pActivity;

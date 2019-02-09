@@ -22,6 +22,7 @@
 
 #include "attributeoutputbase.hxx"
 #include "wrtww8.hxx"
+#include <editeng/boxitem.hxx>
 
 class WW8AttributeOutput : public AttributeOutputBase
 {
@@ -49,14 +50,14 @@ public:
 
     /// Start of the text run.
     ///
-    virtual void StartRun( const SwRedlineData* pRedlineData, bool bSingleEmptyRun = false ) override;
+    virtual void StartRun( const SwRedlineData* pRedlineData, sal_Int32 nPos, bool bSingleEmptyRun = false ) override;
 
     virtual void OnTOXEnding() override;
 
     /// End of the text run.
     ///
     /// No-op for binary filters.
-    virtual void EndRun() override {}
+    virtual void EndRun(const SwTextNode* pNode, sal_Int32 nPos, bool bLastRun = false) override;
 
     /// Before we start outputting the attributes.
     virtual void StartRunProperties() override;
@@ -65,7 +66,7 @@ public:
     virtual void EndRunProperties( const SwRedlineData* pRedlineData ) override;
 
     /// Output text.
-    virtual void RunText( const OUString& rText, rtl_TextEncoding eCharSet ) override;
+    virtual void RunText( const OUString& rText, rtl_TextEncoding eCharSet = RTL_TEXTENCODING_UTF8 ) override;
 
     /// Output text (without markup).
     virtual void RawText(const OUString& rText, rtl_TextEncoding eCharSet) override;
@@ -74,7 +75,7 @@ public:
     virtual void StartRuby( const SwTextNode& rNode, sal_Int32 nPos, const SwFormatRuby& rRuby ) override;
 
     /// Output ruby end.
-    virtual void EndRuby() override;
+    virtual void EndRuby(const SwTextNode& rNode, sal_Int32 nPos) override;
 
     /// Output URL start.
     virtual bool StartURL( const OUString &rUrl, const OUString &rTarget ) override;
@@ -92,7 +93,7 @@ public:
     /// Output FKP (Formatted disK Page) - necessary for binary formats only.
     /// FIXME having it in AttributeOutputBase is probably a hack, it
     /// should be in WW8AttributeOutput only...
-    virtual void OutputFKP(bool bForce = false) override;
+    virtual void OutputFKP(bool bForce) override;
 
     /// Output style.
     virtual void ParagraphStyle( sal_uInt16 nStyle ) override;
@@ -111,7 +112,7 @@ public:
     virtual void TableNodeInfoInner( ww8::WW8TableNodeInfoInner::Pointer_t pNodeInfoInner ) override;
     virtual void TableOrientation( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
     virtual void TableSpacing( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
-    virtual void TableRowEnd( sal_uInt32 nDepth = 1 ) override;
+    virtual void TableRowEnd( sal_uInt32 nDepth ) override;
 
     /// Start of the styles table.
     virtual void StartStyles() override;
@@ -120,7 +121,7 @@ public:
     virtual void EndStyles( sal_uInt16 nNumberOfStyles ) override;
 
     /// Write default style.
-    virtual void DefaultStyle( sal_uInt16 nStyle ) override;
+    virtual void DefaultStyle() override;
 
     /// Start of a style in the styles table.
     virtual void StartStyle( const OUString& rName, StyleType eType,
@@ -148,10 +149,13 @@ public:
     virtual void SectionBreak( sal_uInt8 nC, const WW8_SepInfo* pSectionInfo = nullptr ) override;
 
     // preserve DOC page vertical alignment
-    virtual void TextVerticalAdjustment( const css::drawing::TextVerticalAdjust ) SAL_OVERRIDE;
+    virtual void TextVerticalAdjustment( const css::drawing::TextVerticalAdjust ) override;
 
     /// Start of the section properties.
     virtual void StartSection() override;
+
+    // footnote / endnote section properties
+    virtual void SectFootnoteEndnotePr() override;
 
     /// End of the section properties.
     ///
@@ -196,7 +200,7 @@ public:
         sal_Int16 nFirstLineIndex,
         sal_Int16 nListTabPos,
         const OUString &rNumberingString,
-        const SvxBrushItem* pBrush = nullptr) override; //For i120928,transfer graphic of bullet
+        const SvxBrushItem* pBrush) override; //For i120928,transfer graphic of bullet
 
 protected:
     /// Output frames - the implementation.
@@ -427,6 +431,8 @@ protected:
 
     virtual bool AnalyzeURL( const OUString& rURL, const OUString& rTarget, OUString* pLinkURL, OUString* pMark ) override;
 
+    virtual void WriteBookmarkInActParagraph( const OUString& rName, sal_Int32 nFirstRunPos, sal_Int32 nLastRunPos ) override;
+
     /// Reference to the export, where to get the data from
     WW8Export &m_rWW8Export;
 
@@ -445,7 +451,7 @@ protected:
     /// For output of styles.
     ///
     /// Used between StartStyles() and EndStyles().
-    sal_uLong m_nStyAnzPos;
+    sal_uLong m_nStyleCountPos;
 
     /// For output of run properties.
     ///
@@ -455,6 +461,10 @@ protected:
 
     bool mbOnTOXEnding;
 
+    /// Bookmarks of the current paragraph
+    std::multimap<sal_Int32, OUString> m_aBookmarksOfParagraphStart;
+    std::multimap<sal_Int32, OUString> m_aBookmarksOfParagraphEnd;
+
 public:
     explicit WW8AttributeOutput( WW8Export &rWW8Export )
         : AttributeOutputBase()
@@ -463,13 +473,11 @@ public:
         , nPOPosStdLen2(0)
         , m_nStyleStartSize(0)
         , m_nStyleLenPos(0)
-        , m_nStyAnzPos(0)
+        , m_nStyleCountPos(0)
         , m_nFieldResults(0)
         , mbOnTOXEnding(false)
     {
     }
-
-    virtual ~WW8AttributeOutput() {}
 
     /// Return the right export class.
     virtual WW8Export& GetExport() override { return m_rWW8Export; }
@@ -482,7 +490,12 @@ protected:
     void OutputWW8AttributeCTL( sal_uInt8 nId, bool bVal );
 
     void TableCellBorders(
-        ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
+        ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
+
+private:
+
+    editeng::WordPageMargins m_pageMargins;
+    bool m_bFromEdge = false;
 
 };
 

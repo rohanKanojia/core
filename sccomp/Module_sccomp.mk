@@ -20,15 +20,16 @@
 $(eval $(call gb_Module_Module,sccomp))
 
 $(eval $(call gb_Module_add_targets,sccomp,\
-	$(if $(ENABLE_COINMP)$(ENABLE_LPSOLVE), Library_solver) \
+	Library_solver \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,sccomp,\
-	$(if $(ENABLE_COINMP)$(ENABLE_LPSOLVE), AllLangResTarget_solver) \
+	AllLangMoTarget_scc \
 ))
 
 $(eval $(call gb_Module_add_check_targets,sccomp,\
-	CppunitTest_sccomp_lpsolver \
+	CppunitTest_sccomp_solver \
+	$(if $(and $(filter INTEL,$(CPUNAME)),$(filter -fsanitize=%,$(gb_CXX))),,CppunitTest_sccomp_swarmsolvertest) \
 ))
 
 # vim: set noet sw=4 ts=4:

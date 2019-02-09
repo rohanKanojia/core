@@ -40,9 +40,7 @@
 #include <cppuhelper/queryinterface.hxx>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-
-#include <com/sun/star/sdbc/XRow.hpp>
-#include <com/sun/star/sdbc/XParameters.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 
 #include "pq_xview.hxx"
 #include "pq_xviews.hxx"
@@ -50,43 +48,24 @@
 #include "pq_tools.hxx"
 
 using osl::MutexGuard;
-using osl::Mutex;
-
-using com::sun::star::container::XNameAccess;
-using com::sun::star::container::XIndexAccess;
-using com::sun::star::container::ElementExistException;
-using com::sun::star::container::NoSuchElementException;
 
 using com::sun::star::uno::Reference;
-using com::sun::star::uno::Exception;
-using com::sun::star::uno::XInterface;
 using com::sun::star::uno::Sequence;
 using com::sun::star::uno::Any;
 using com::sun::star::uno::makeAny;
 using com::sun::star::uno::Type;
 using com::sun::star::uno::RuntimeException;
 
-using com::sun::star::lang::IllegalArgumentException;
-using com::sun::star::lang::IndexOutOfBoundsException;
-
-using com::sun::star::beans::XPropertySetInfo;
-using com::sun::star::beans::XFastPropertySet;
-using com::sun::star::beans::XMultiPropertySet;
 using com::sun::star::beans::XPropertySet;
-using com::sun::star::beans::Property;
 
-using com::sun::star::sdbc::XResultSet;
-using com::sun::star::sdbc::XPreparedStatement;
 using com::sun::star::sdbc::XStatement;
-using com::sun::star::sdbc::XParameters;
-using com::sun::star::sdbc::XRow;
 using com::sun::star::sdbc::SQLException;
 
 namespace pq_sdbc_driver
 {
 
-View::View( const ::rtl::Reference< RefCountedMutex > & refMutex,
-            const Reference< com::sun::star::sdbc::XConnection > & connection,
+View::View( const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+            const Reference< css::sdbc::XConnection > & connection,
             ConnectionSettings *pSettings)
     : ReflectionBase(
         getStatics().refl.view.implName,
@@ -97,21 +76,18 @@ View::View( const ::rtl::Reference< RefCountedMutex > & refMutex,
         * getStatics().refl.view.pProps )
 {}
 
-Reference< XPropertySet > View::createDataDescriptor(  ) throw (RuntimeException, std::exception)
+Reference< XPropertySet > View::createDataDescriptor(  )
 {
     ViewDescriptor * pView = new ViewDescriptor(
-        m_refMutex, m_conn, m_pSettings );
+        m_xMutex, m_conn, m_pSettings );
     pView->copyValuesFrom( this );
 
     return Reference< XPropertySet > ( pView );
 }
 
 void View::rename( const OUString& newName )
-        throw (::com::sun::star::sdbc::SQLException,
-               ::com::sun::star::container::ElementExistException,
-               ::com::sun::star::uno::RuntimeException, std::exception)
 {
-    MutexGuard guard( m_refMutex->mutex );
+    MutexGuard guard( m_xMutex->GetMutex() );
 
     Statics & st = getStatics();
 
@@ -135,7 +111,7 @@ void View::rename( const OUString& newName )
     }
     OUString fullNewName = concatQualified( newSchemaName, newTableName );
 
-    if( ! schema.equals( newSchemaName ) )
+    if( schema != newSchemaName )
     {
         try
         {
@@ -150,7 +126,7 @@ void View::rename( const OUString& newName )
             disposeNoThrow( statement );
             schema = newSchemaName;
         }
-        catch( com::sun::star::sdbc::SQLException &e )
+        catch( css::sdbc::SQLException &e )
         {
             OUString buf( e.Message + "(NOTE: Only postgresql server >= V8.1 support changing a table's schema)" );
             e.Message = buf;
@@ -158,7 +134,7 @@ void View::rename( const OUString& newName )
         }
 
     }
-    if( ! oldName.equals( newTableName ) )
+    if( oldName != newTableName )
     {
         OUStringBuffer buf(128);
         buf.append( "ALTER TABLE" );
@@ -177,29 +153,21 @@ void View::rename( const OUString& newName )
     }
 }
 
-Sequence<Type > View::getTypes() throw( RuntimeException, std::exception )
+Sequence<Type > View::getTypes()
 {
-    static cppu::OTypeCollection *pCollection;
-    if( ! pCollection )
-    {
-        MutexGuard guard( osl::Mutex::getGlobalMutex() );
-        if( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
-                cppu::UnoType<com::sun::star::sdbcx::XRename>::get(),
-                ReflectionBase::getTypes());
-            pCollection = &collection;
-        }
-    }
-    return pCollection->getTypes();
+    static cppu::OTypeCollection collection(
+        cppu::UnoType<css::sdbcx::XRename>::get(),
+        ReflectionBase::getTypes());
+
+    return collection.getTypes();
 }
 
-Sequence< sal_Int8> View::getImplementationId() throw( RuntimeException, std::exception )
+Sequence< sal_Int8> View::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-Any View::queryInterface( const Type & reqType ) throw (RuntimeException, std::exception)
+Any View::queryInterface( const Type & reqType )
 {
     Any ret;
 
@@ -207,12 +175,12 @@ Any View::queryInterface( const Type & reqType ) throw (RuntimeException, std::e
     if( ! ret.hasValue() )
         ret = ::cppu::queryInterface(
             reqType,
-            static_cast< com::sun::star::sdbcx::XRename * > ( this )
+            static_cast< css::sdbcx::XRename * > ( this )
             );
     return ret;
 }
 
-OUString View::getName(  ) throw (::com::sun::star::uno::RuntimeException, std::exception)
+OUString View::getName(  )
 {
     Statics & st = getStatics();
     return concatQualified(
@@ -220,15 +188,15 @@ OUString View::getName(  ) throw (::com::sun::star::uno::RuntimeException, std::
         extractStringProperty( this, st.NAME ) );
 }
 
-void View::setName( const OUString& aName ) throw (::com::sun::star::uno::RuntimeException, std::exception)
+void View::setName( const OUString& aName )
 {
     rename( aName );
 }
 
 
 ViewDescriptor::ViewDescriptor(
-    const ::rtl::Reference< RefCountedMutex > & refMutex,
-    const Reference< com::sun::star::sdbc::XConnection > & connection,
+    const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+    const Reference< css::sdbc::XConnection > & connection,
     ConnectionSettings *pSettings)
     : ReflectionBase(
         getStatics().refl.viewDescriptor.implName,
@@ -239,10 +207,10 @@ ViewDescriptor::ViewDescriptor(
         * getStatics().refl.viewDescriptor.pProps )
 {}
 
-Reference< XPropertySet > ViewDescriptor::createDataDescriptor(  ) throw (RuntimeException, std::exception)
+Reference< XPropertySet > ViewDescriptor::createDataDescriptor(  )
 {
     ViewDescriptor * pView = new ViewDescriptor(
-        m_refMutex, m_conn, m_pSettings );
+        m_xMutex, m_conn, m_pSettings );
     pView->copyValuesFrom( this );
 
     return Reference< XPropertySet > ( pView );

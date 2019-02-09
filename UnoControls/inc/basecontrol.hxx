@@ -83,9 +83,9 @@
 #include <com/sun/star/awt/XView.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <osl/mutex.hxx>
-#include <tools/colordata.hxx>
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/component.hxx>
+#include <rtl/ref.hxx>
 
 #include "multiplexer.hxx"
 
@@ -93,15 +93,11 @@ namespace com { namespace sun { namespace star { namespace uno {
     class XComponentContext;
 } } } }
 
-//  "namespaces"
-
-namespace unocontrols{
-
-//  structs
+namespace unocontrols {
 
 struct IMPL_MutexContainer
 {
-    // Is necassery to initialize "BaseControl" and make this class thread-safe.
+    // Is necessary to initialize "BaseControl" and make this class thread-safe.
     ::osl::Mutex m_aMutex;
 };
 
@@ -114,16 +110,14 @@ class BaseControl   : public css::lang::XServiceInfo
                     , public IMPL_MutexContainer
                     , public ::cppu::OComponentHelper
 {
-
 public:
-
     BaseControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
-    virtual ~BaseControl();
+    virtual ~BaseControl() override;
 
     //  XInterface
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      give answer, if interface is supported
         @descr      The interfaces are searched by type.
 
@@ -138,9 +132,9 @@ public:
 
     virtual css::uno::Any SAL_CALL queryInterface(
         const css::uno::Type& aType
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      increment refcount
         @seealso    XInterface
         @seealso    release()
@@ -149,7 +143,7 @@ public:
 
     virtual void SAL_CALL acquire() throw() override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      decrement refcount
         @seealso    XInterface
         @seealso    acquire()
@@ -160,7 +154,7 @@ public:
 
     //  XTypeProvider
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      get information about supported interfaces
         @seealso    XTypeProvider
         @return     Sequence of types of all supported interfaces
@@ -168,10 +162,9 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      get implementation id
         @descr      This ID is necessary for UNO-caching. If there no ID, cache is disabled.
                     Another way, cache is enabled.
@@ -182,75 +175,68 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId() override;
 
     //  XAggregation
 
     virtual void SAL_CALL setDelegator(
         const css::uno::Reference< css::uno::XInterface >& xDelegator
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual css::uno::Any SAL_CALL queryAggregation(
         const css::uno::Type& aType
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XServiceInfo
 
     virtual sal_Bool SAL_CALL supportsService(
         const OUString& sServiceName
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     //  XComponent
 
-    virtual void SAL_CALL dispose() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL dispose() override;
 
     virtual void SAL_CALL addEventListener(
         const css::uno::Reference< css::lang::XEventListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeEventListener(
         const css::uno::Reference< css::lang::XEventListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XControl
 
     virtual void SAL_CALL createPeer(
         const css::uno::Reference< css::awt::XToolkit >& xToolkit,
         const css::uno::Reference< css::awt::XWindowPeer >& xParent
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL setContext(
         const css::uno::Reference< css::uno::XInterface >& xContext
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual sal_Bool SAL_CALL setModel(
         const css::uno::Reference< css::awt::XControlModel >& xModel
-    ) throw( css::uno::RuntimeException, std::exception ) override = 0;
+    ) override = 0;
 
-    virtual void SAL_CALL setDesignMode( sal_Bool bOn ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setDesignMode( sal_Bool bOn ) override;
 
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getContext()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getContext() override;
 
-    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel()
-        throw( css::uno::RuntimeException, std::exception ) override = 0;
+    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel() override = 0;
 
-    virtual css::uno::Reference< css::awt::XWindowPeer > SAL_CALL getPeer()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::awt::XWindowPeer > SAL_CALL getPeer() override;
 
-    virtual css::uno::Reference< css::awt::XView > SAL_CALL getView()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::awt::XView > SAL_CALL getView() override;
 
-    virtual sal_Bool SAL_CALL isDesignMode() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Bool SAL_CALL isDesignMode() override;
 
-    virtual sal_Bool SAL_CALL isTransparent() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Bool SAL_CALL isTransparent() override;
 
     //  XWindow
 
@@ -258,120 +244,112 @@ public:
                                         sal_Int32   nY      ,
                                         sal_Int32   nWidth  ,
                                         sal_Int32   nHeight ,
-                                        sal_Int16   nFlags  ) throw( css::uno::RuntimeException, std::exception ) override;
+                                        sal_Int16   nFlags  ) override;
 
-    virtual void SAL_CALL setVisible( sal_Bool bVisible ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setVisible( sal_Bool bVisible ) override;
 
-    virtual void SAL_CALL setEnable( sal_Bool bEnable ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setEnable( sal_Bool bEnable ) override;
 
-    virtual void SAL_CALL setFocus() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setFocus() override;
 
-    virtual css::awt::Rectangle SAL_CALL getPosSize() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Rectangle SAL_CALL getPosSize() override;
 
     virtual void SAL_CALL addWindowListener(
         const css::uno::Reference< css::awt::XWindowListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL addFocusListener(
         const css::uno::Reference< css::awt::XFocusListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL addKeyListener(
-        const css::uno::Reference< css::awt::XKeyListener >& xListener )
-    throw( css::uno::RuntimeException, std::exception ) override;
+        const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
 
     virtual void SAL_CALL addMouseListener(
         const css::uno::Reference< css::awt::XMouseListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL addMouseMotionListener(
         const css::uno::Reference< css::awt::XMouseMotionListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL addPaintListener(
         const css::uno::Reference< css::awt::XPaintListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeWindowListener(
         const css::uno::Reference< css::awt::XWindowListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeFocusListener(
         const css::uno::Reference< css::awt::XFocusListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeKeyListener(
         const css::uno::Reference< css::awt::XKeyListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeMouseListener(
         const css::uno::Reference< css::awt::XMouseListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeMouseMotionListener(
         const css::uno::Reference< css::awt::XMouseMotionListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removePaintListener(
         const css::uno::Reference< css::awt::XPaintListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XView
 
     virtual void SAL_CALL draw( sal_Int32   nX  ,
-                                sal_Int32   nY  ) throw( css::uno::RuntimeException, std::exception ) override;
+                                sal_Int32   nY  ) override;
 
     virtual sal_Bool SAL_CALL setGraphics(
         const css::uno::Reference< css::awt::XGraphics >& xDevice
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL setZoom(  float   fZoomX  ,
-                                    float   fZoomY  ) throw( css::uno::RuntimeException, std::exception ) override;
+                                    float   fZoomY  ) override;
 
-    virtual css::uno::Reference< css::awt::XGraphics > SAL_CALL getGraphics()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::awt::XGraphics > SAL_CALL getGraphics() override;
 
-    virtual css::awt::Size SAL_CALL getSize() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Size SAL_CALL getSize() override;
 
     //  css::lang::XEventListener
 
     virtual void SAL_CALL disposing(
         const css::lang::EventObject& rSource
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XPaintListener
 
     virtual void SAL_CALL windowPaint(
         const css::awt::PaintEvent& rEvent
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XWindowListener
 
-    virtual void SAL_CALL windowResized( const css::awt::WindowEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL windowMoved( const css::awt::WindowEvent& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL windowShown( const css::lang::EventObject& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL windowHidden( const css::lang::EventObject& aEvent ) throw( css::uno::RuntimeException, std::exception ) override;
-
-    //  impl but public method to register service
-
-    static const css::uno::Sequence< OUString > impl_getStaticSupportedServiceNames();
-
-    static const OUString impl_getStaticImplementationName();
+    virtual void SAL_CALL windowResized( const css::awt::WindowEvent& aEvent ) override;
+    virtual void SAL_CALL windowMoved( const css::awt::WindowEvent& aEvent ) override;
+    virtual void SAL_CALL windowShown( const css::lang::EventObject& aEvent ) override;
+    virtual void SAL_CALL windowHidden( const css::lang::EventObject& aEvent ) override;
 
 protected:
     using OComponentHelper::disposing;
 
-    const css::uno::Reference< css::uno::XComponentContext > impl_getComponentContext() { return m_xComponentContext;}
+    const css::uno::Reference< css::uno::XComponentContext >& impl_getComponentContext() const { return m_xComponentContext;}
 
-    const css::uno::Reference< css::awt::XWindow > impl_getPeerWindow() { return m_xPeerWindow;}
+    const css::uno::Reference< css::awt::XWindow >& impl_getPeerWindow() const { return m_xPeerWindow;}
 
-    const css::uno::Reference< css::awt::XGraphics > impl_getGraphicsPeer() { return m_xGraphicsPeer;}
+    const css::uno::Reference< css::awt::XGraphics >& impl_getGraphicsPeer() const { return m_xGraphicsPeer;}
 
-    const sal_Int32& impl_getWidth() { return m_nWidth;}
+    sal_Int32 impl_getWidth() const { return m_nWidth;}
 
-    const sal_Int32& impl_getHeight() { return m_nHeight;}
+    sal_Int32 impl_getHeight() const { return m_nHeight;}
 
-    virtual css::awt::WindowDescriptor* impl_getWindowDescriptor(
+    virtual css::awt::WindowDescriptor impl_getWindowDescriptor(
         const css::uno::Reference< css::awt::XWindowPeer >& xParentPeer
     );
 
@@ -381,18 +359,14 @@ protected:
 
     virtual void impl_recalcLayout( const css::awt::WindowEvent& aEvent );
 
-    css::uno::Reference< css::uno::XInterface > impl_getDelegator() { return m_xDelegator;}
+    const css::uno::Reference< css::uno::XInterface >& impl_getDelegator() const { return m_xDelegator;}
 
 private:
-
-    void impl_releasePeer();
-
     OMRCListenerMultiplexerHelper* impl_getMultiplexer();
 
     css::uno::Reference< css::uno::XComponentContext >        m_xComponentContext;
     css::uno::Reference< css::uno::XInterface >               m_xDelegator;
-    OMRCListenerMultiplexerHelper*                            m_pMultiplexer;   // multiplex events
-    css::uno::Reference< css::uno::XInterface >               m_xMultiplexer;
+    rtl::Reference<OMRCListenerMultiplexerHelper>             m_xMultiplexer;   // multiplex events
     css::uno::Reference< css::uno::XInterface >               m_xContext;
     css::uno::Reference< css::awt::XWindowPeer >              m_xPeer;
     css::uno::Reference< css::awt::XWindow >                  m_xPeerWindow;
@@ -405,10 +379,9 @@ private:
     bool                                        m_bVisible;   // Some state flags
     bool                                        m_bInDesignMode;
     bool                                        m_bEnable;
+};
 
-};  // class BaseControl
-
-}   // namespace unocontrols
+}
 
 #endif // INCLUDED_UNOCONTROLS_INC_BASECONTROL_HXX
 

@@ -12,7 +12,7 @@
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/frame/XController.hpp>
 
-#include "ObjectIdentifier.hxx"
+#include <ObjectIdentifier.hxx>
 
 namespace chart {
 namespace sidebar {
@@ -40,7 +40,6 @@ ChartSidebarSelectionListener::~ChartSidebarSelectionListener()
 }
 
 void ChartSidebarSelectionListener::selectionChanged(const css::lang::EventObject& rEvent)
-        throw (::css::uno::RuntimeException, ::std::exception)
 {
     bool bCorrectObjectSelected = false;
 
@@ -66,7 +65,6 @@ void ChartSidebarSelectionListener::selectionChanged(const css::lang::EventObjec
 }
 
 void ChartSidebarSelectionListener::disposing(const css::lang::EventObject& /*rEvent*/)
-        throw (::css::uno::RuntimeException, ::std::exception)
 {
     mpParent->SelectionInvalid();
 }

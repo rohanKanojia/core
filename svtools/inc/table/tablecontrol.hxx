@@ -22,8 +22,8 @@
 
 #include <svtools/svtdllapi.h>
 #include <svtools/table/tablemodel.hxx>
-#include <svtools/accessibletable.hxx>
-#include <svtools/accessiblefactory.hxx>
+#include <vcl/accessibletable.hxx>
+#include <vcl/accessiblefactory.hxx>
 
 #include <vcl/ctrl.hxx>
 #include <vcl/seleng.hxx>
@@ -32,8 +32,6 @@
 
 namespace svt { namespace table
 {
-
-
     class TableControl_Impl;
 
 
@@ -55,7 +53,7 @@ namespace svt { namespace table
         cell).
         The control supports accessibility, this is encapsulated in IAccessibleTable
     */
-    class SVT_DLLPUBLIC TableControl : public Control, public IAccessibleTable
+    class SVT_DLLPUBLIC TableControl : public Control, public vcl::table::IAccessibleTable
     {
     private:
         std::shared_ptr<TableControl_Impl>            m_pImpl;
@@ -63,7 +61,7 @@ namespace svt { namespace table
 
     public:
         TableControl( vcl::Window* _pParent, WinBits _nStyle );
-        virtual ~TableControl();
+        virtual ~TableControl() override;
         virtual void dispose() override;
 
         /// sets a new table model
@@ -118,10 +116,10 @@ namespace svt { namespace table
         /** Creates and returns the accessible object of the whole GridControl. */
         SVT_DLLPRIVATE virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
         SVT_DLLPRIVATE virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessibleControl( sal_Int32 _nIndex ) override;
-        SVT_DLLPRIVATE virtual OUString GetAccessibleObjectName(AccessibleTableControlObjType eObjType, sal_Int32 _nRow, sal_Int32 _nCol) const override;
+        SVT_DLLPRIVATE virtual OUString GetAccessibleObjectName(vcl::table::AccessibleTableControlObjType eObjType, sal_Int32 _nRow, sal_Int32 _nCol) const override;
         SVT_DLLPRIVATE virtual void GoToCell( sal_Int32 _nColumnPos, sal_Int32 _nRow ) override;
-        SVT_DLLPRIVATE virtual OUString GetAccessibleObjectDescription(AccessibleTableControlObjType eObjType) const override;
-        SVT_DLLPRIVATE virtual void FillAccessibleStateSet( ::utl::AccessibleStateSetHelper& rStateSet, AccessibleTableControlObjType eObjType ) const override;
+        SVT_DLLPRIVATE virtual OUString GetAccessibleObjectDescription(vcl::table::AccessibleTableControlObjType eObjType) const override;
+        SVT_DLLPRIVATE virtual void FillAccessibleStateSet( ::utl::AccessibleStateSetHelper& rStateSet, vcl::table::AccessibleTableControlObjType eObjType ) const override;
 
         // temporary methods
         // Those do not really belong into the public API - they're intended for firing A11Y-related events. However,
@@ -132,7 +130,7 @@ namespace svt { namespace table
 
 
         // IAccessibleTable
-        virtual Rectangle GetWindowExtentsRelative( vcl::Window *pRelativeWindow ) const override;
+        virtual tools::Rectangle GetWindowExtentsRelative( vcl::Window *pRelativeWindow ) const override;
         virtual void GrabFocus() override;
         virtual css::uno::Reference< css::accessibility::XAccessible > GetAccessible() override;
         virtual vcl::Window* GetAccessibleParentWindow() const override;
@@ -142,11 +140,11 @@ namespace svt { namespace table
         virtual long GetRowCount() const override;
         virtual long GetColumnCount() const override;
         virtual bool ConvertPointToCellAddress( sal_Int32& _rnRow, sal_Int32& _rnColPos, const Point& _rPoint ) override;
-        virtual Rectangle calcHeaderRect( bool _bIsColumnBar ) override;
-        virtual Rectangle calcHeaderCellRect( bool _bIsColumnBar, sal_Int32 nPos) override;
-        virtual Rectangle calcTableRect() override;
-        virtual Rectangle calcCellRect( sal_Int32 _nRowPos, sal_Int32 _nColPos ) override;
-        virtual Rectangle GetFieldCharacterBounds(sal_Int32 _nRow,sal_Int32 _nColumnPos,sal_Int32 nIndex) override;
+        virtual tools::Rectangle calcHeaderRect( bool _bIsColumnBar ) override;
+        virtual tools::Rectangle calcHeaderCellRect( bool _bIsColumnBar, sal_Int32 nPos) override;
+        virtual tools::Rectangle calcTableRect() override;
+        virtual tools::Rectangle calcCellRect( sal_Int32 _nRowPos, sal_Int32 _nColPos ) override;
+        virtual tools::Rectangle GetFieldCharacterBounds(sal_Int32 _nRow,sal_Int32 _nColumnPos,sal_Int32 nIndex) override;
         virtual sal_Int32 GetFieldIndexAtPoint(sal_Int32 _nRow,sal_Int32 _nColumnPos,const Point& _rPoint) override;
         virtual void FillAccessibleStateSetForCell( ::utl::AccessibleStateSetHelper& _rStateSet, sal_Int32 _nRow, sal_uInt16 _nColumnPos ) const override;
         virtual OUString GetRowDescription( sal_Int32 _nRow ) const override;
@@ -165,7 +163,7 @@ namespace svt { namespace table
 
 
     private:
-        DECL_DLLPRIVATE_LINK_TYPED( ImplSelectHdl, LinkParamNone*, void );
+        DECL_DLLPRIVATE_LINK( ImplSelectHdl, LinkParamNone*, void );
 
     private:
         TableControl( const TableControl& ) = delete;

@@ -33,8 +33,8 @@ public:
     HWND                    mhWnd;                  // Window handle
     HCURSOR                 mhCursor;               // cursor handle
     HIMC                    mhDefIMEContext;        // default IME-Context
-    WinSalGraphics*         mpGraphics;             // current frame graphics
-    WinSalGraphics*         mpGraphics2;            // current frame graphics for other threads
+    WinSalGraphics*         mpLocalGraphics;        // current main thread frame graphics
+    WinSalGraphics*         mpThreadGraphics;       // current frame graphics for other threads (DCX_CACHE)
     WinSalFrame*            mpNextFrame;            // pointer to next frame
     HMENU                   mSelectedhMenu;         // the menu where highlighting is currently going on
     HMENU                   mLastActivatedhMenu;    // the menu that was most recently opened
@@ -57,22 +57,22 @@ public:
     bool                    mbBorder;               // has window a border
     bool                    mbFixBorder;            // has window a fixed border
     bool                    mbSizeBorder;           // has window a sizeable border
-    bool                    mbNoIcon;               // is an window without an icon
+    bool                    mbNoIcon;               // is a window without an icon
     bool                    mbFloatWin;             // is a FloatingWindow
     bool                    mbFullScreen;           // TRUE: in full screen mode
     bool                    mbPresentation;         // TRUE: Presentation Mode running
-    bool                    mbInShow;               // innerhalb eines Show-Aufrufs
+    bool                    mbInShow;               // inside a show call
     bool                    mbRestoreMaximize;      // Restore-Maximize
-    bool                    mbInMoveMsg;            // Move-Message wird verarbeitet
-    bool                    mbInSizeMsg;            // Size-Message wird verarbeitet
+    bool                    mbInMoveMsg;            // Move-Message is being processed
+    bool                    mbInSizeMsg;            // Size-Message is being processed
     bool                    mbFullScreenToolWin;    // WS_EX_TOOLWINDOW reset in FullScreenMode
     bool                    mbDefPos;               // default-position
-    bool                    mbOverwriteState;       // TRUE: WindowState darf umgesetzt werden
+    bool                    mbOverwriteState;       // TRUE: possible to change WindowState
     bool                    mbIME;                  // TRUE: We are in IME Mode
-    bool                    mbHandleIME;            // TRUE: Wir handeln die IME-Messages
-    bool                    mbSpezIME;              // TRUE: Spez IME
-    bool                    mbAtCursorIME;          // TRUE: Wir behandeln nur einige IME-Messages
-    bool                    mbCandidateMode;        // TRUE: Wir befinden uns im Candidate-Modus
+    bool                    mbHandleIME;            // TRUE: We are handling the IME-Messages
+    bool                    mbSpezIME;              // TRUE: special IME
+    bool                    mbAtCursorIME;          // TRUE: We are only handling some IME-Messages
+    bool                    mbCandidateMode;        // TRUE: We are in Candidate-Mode
     static bool             mbInReparent;           // TRUE: ignore focus lost and gain due to reparenting
 
     RGNDATA*                mpClipRgnData;
@@ -82,13 +82,19 @@ public:
     bool                    mbPropertiesStored;     // has values stored in the window property store
 
     void updateScreenNumber();
+
+private:
+    void ImplSetParentFrame( HWND hNewParentWnd, bool bAsChild );
+    bool InitFrameGraphicsDC( WinSalGraphics *pGraphics, HDC hDC, HWND hWnd );
+    bool ReleaseFrameGraphicsDC( WinSalGraphics* pGraphics );
+
 public:
     WinSalFrame();
-    virtual ~WinSalFrame();
+    virtual ~WinSalFrame() override;
 
     virtual SalGraphics*        AcquireGraphics() override;
     virtual void                ReleaseGraphics( SalGraphics* pGraphics ) override;
-    virtual bool                PostEvent(ImplSVEvent* pData) override;
+    virtual bool                PostEvent(std::unique_ptr<ImplSVEvent> pData) override;
     virtual void                SetTitle( const OUString& rTitle ) override;
     virtual void                SetIcon( sal_uInt16 nIcon ) override;
     virtual void                SetMenu( SalMenu* pSalMenu ) override;
@@ -99,14 +105,14 @@ public:
     virtual void                SetMaxClientSize( long nWidth, long nHeight ) override;
     virtual void                SetPosSize( long nX, long nY, long nWidth, long nHeight, sal_uInt16 nFlags ) override;
     virtual void                GetClientSize( long& rWidth, long& rHeight ) override;
-    virtual void                GetWorkArea( Rectangle& rRect ) override;
+    virtual void                GetWorkArea( tools::Rectangle& rRect ) override;
     virtual SalFrame*           GetParent() const override;
     virtual void                SetWindowState( const SalFrameState* pState ) override;
     virtual bool                GetWindowState( SalFrameState* pState ) override;
     virtual void                ShowFullScreen( bool bFullScreen, sal_Int32 nDisplay ) override;
     virtual void                StartPresentation( bool bStart ) override;
     virtual void                SetAlwaysOnTop( bool bOnTop ) override;
-    virtual void                ToTop( sal_uInt16 nFlags ) override;
+    virtual void                ToTop( SalFrameToTop nFlags ) override;
     virtual void                SetPointer( PointerStyle ePointerStyle ) override;
     virtual void                CaptureMouse( bool bMouse ) override;
     virtual void                SetPointerPos( long nX, long nY ) override;
@@ -138,7 +144,7 @@ void ImplSalGetWorkArea( HWND hWnd, RECT *pRect, const RECT *pParentRect );
 // get foreign key names
 namespace vcl_sal {
     OUString getKeysReplacementName(
-        OUString pLang,
+        OUString const & pLang,
         LONG nSymbol );
 }
 

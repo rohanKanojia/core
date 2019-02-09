@@ -18,30 +18,31 @@
  */
 
 #include "quickstarter.hxx"
+
 #include <systools/win32/qswin32.h>
 
 static BOOL CALLBACK EnumWindowsProc( HWND hWnd, LPARAM lParam )
 {
     MSIHANDLE   hMSI = static_cast< MSIHANDLE >( lParam );
-    CHAR    szClassName[sizeof(QUICKSTART_CLASSNAMEA) + 1];
+    WCHAR szClassName[sizeof(QUICKSTART_CLASSNAME)/sizeof(WCHAR) + 1];
 
-    int nCharsCopied = GetClassName( hWnd, szClassName, sizeof( szClassName ) );
+    int nCharsCopied = GetClassNameW( hWnd, szClassName, sizeof(szClassName)/sizeof(szClassName[0]) );
 
-    if ( nCharsCopied && !_stricmp( QUICKSTART_CLASSNAMEA, szClassName ) )
+    if ( nCharsCopied && !_wcsicmp( QUICKSTART_CLASSNAME, szClassName ) )
     {
         DWORD   dwProcessId;
 
         if ( GetWindowThreadProcessId( hWnd, &dwProcessId ) )
         {
-            std::string sImagePath = GetProcessImagePath( dwProcessId );
-            std::string sOfficeImageDir = GetOfficeInstallationPath( hMSI ) + "program\\";
+            std::wstring sImagePath = GetProcessImagePathW( dwProcessId );
+            std::wstring sOfficeImageDir = GetOfficeInstallationPathW( hMSI ) + L"program\\";
 
-            if ( !_strnicmp( sImagePath.c_str(), sOfficeImageDir.c_str(), sOfficeImageDir.length() ) )
+            if ( !_wcsnicmp( sImagePath.c_str(), sOfficeImageDir.c_str(), sOfficeImageDir.length() ) )
             {
-                UINT    uMsgShutdownQuickstart = RegisterWindowMessageA( SHUTDOWN_QUICKSTART_MESSAGEA );
+                UINT uMsgShutdownQuickstart = RegisterWindowMessageW( SHUTDOWN_QUICKSTART_MESSAGE );
 
                 if ( uMsgShutdownQuickstart )
-                    SendMessageA( hWnd, uMsgShutdownQuickstart, 0, 0 );
+                    SendMessageW( hWnd, uMsgShutdownQuickstart, 0, 0 );
 
 
                 HANDLE  hProcess = OpenProcess( SYNCHRONIZE, FALSE, dwProcessId );
@@ -62,7 +63,7 @@ static BOOL CALLBACK EnumWindowsProc( HWND hWnd, LPARAM lParam )
 }
 
 
-extern "C" UINT __stdcall ShutDownQuickstarter( MSIHANDLE hMSI )
+extern "C" __declspec(dllexport) UINT __stdcall ShutDownQuickstarter( MSIHANDLE hMSI )
 {
     EnumWindows( EnumWindowsProc, hMSI );
 

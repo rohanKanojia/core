@@ -24,7 +24,7 @@
 template <class T> class VclStatusListener : public cppu::WeakImplHelper < css::frame::XStatusListener>
 {
 public:
-    VclStatusListener<T>(T* widget, const rtl::OUString& aCommand);
+    VclStatusListener<T>(T* widget, const OUString& aCommand);
 
 private:
     VclPtr<T> mWidget; /** The widget on which actions are performed */
@@ -32,19 +32,22 @@ private:
     /** Dispatcher. Need to keep a reference to it as long as this StatusListener exists. */
     css::uno::Reference<css::frame::XDispatch> mxDispatch;
     css::util::URL maCommandURL;
+    css::uno::Reference<css::frame::XFrame> mxFrame;
 
 public:
-    void SAL_CALL statusChanged(const css::frame::FeatureStateEvent& rEvent)
-        throw(css::uno::RuntimeException, std::exception) override;
+    void SAL_CALL statusChanged(const css::frame::FeatureStateEvent& rEvent) override;
 
-    void SAL_CALL disposing(const css::lang::EventObject& /*Source*/)
-        throw( css::uno::RuntimeException, std::exception ) override;
+    void SAL_CALL disposing(const css::lang::EventObject& /*Source*/) override;
+
+    const css::uno::Reference<css::frame::XFrame>& getFrame() { return mxFrame; }
+
+    void startListening();
 
     void dispose();
 };
 
 template<class T>
-VclStatusListener<T>::VclStatusListener(T* widget, const rtl::OUString& aCommand) {
+VclStatusListener<T>::VclStatusListener(T* widget, const OUString& aCommand) {
     mWidget = widget;
 
     css::uno::Reference<css::uno::XComponentContext> xContext = ::comphelper::getProcessComponentContext();
@@ -54,31 +57,36 @@ VclStatusListener<T>::VclStatusListener(T* widget, const rtl::OUString& aCommand
     if (!xFrame.is())
         xFrame = css::uno::Reference<css::frame::XFrame>(xDesktop, css::uno::UNO_QUERY);
 
-    css::uno::Reference<css::frame::XDispatchProvider> xDispatchProvider(xFrame, css::uno::UNO_QUERY);
-    if (!xDispatchProvider.is())
-        return;
+    mxFrame = xFrame;
 
     maCommandURL.Complete = aCommand;
     css::uno::Reference<css::util::XURLTransformer> xParser = css::util::URLTransformer::create(xContext);
     xParser->parseStrict(maCommandURL);
+}
 
-    mxDispatch = xDispatchProvider->queryDispatch(maCommandURL, "", 0);
-    if (!mxDispatch.is())
+template<class T>
+void VclStatusListener<T>::startListening()
+{
+    if (mxDispatch.is())
+        mxDispatch->removeStatusListener(this, maCommandURL);
+
+    css::uno::Reference<css::frame::XDispatchProvider> xDispatchProvider(mxFrame, css::uno::UNO_QUERY);
+    if (!xDispatchProvider.is())
         return;
 
-    mxDispatch->addStatusListener(this, maCommandURL);
+    mxDispatch = xDispatchProvider->queryDispatch(maCommandURL, "", 0);
+    if (mxDispatch.is())
+        mxDispatch->addStatusListener(this, maCommandURL);
 }
 
 template<class T>
 void VclStatusListener<T>::statusChanged(const css::frame::FeatureStateEvent& rEvent)
-            throw(css::uno::RuntimeException, std::exception)
 {
     mWidget->statusChanged(rEvent);
 }
 
 template<class T>
 void VclStatusListener<T>::disposing(const css::lang::EventObject& /*Source*/)
-            throw( css::uno::RuntimeException, std::exception )
 {
     mxDispatch.clear();
 }
@@ -90,6 +98,7 @@ void VclStatusListener<T>::dispose()
         mxDispatch->removeStatusListener(this, maCommandURL);
         mxDispatch.clear();
     }
+    mxFrame.clear();
     mWidget.clear();
 }
 

@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <ZipPackageStream.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/packages/NoRawFormatException.hpp>
 #include <com/sun/star/packages/zip/ZipConstants.hpp>
 #include <com/sun/star/embed/StorageFormats.hpp>
 #include <com/sun/star/packages/zip/ZipIOException.hpp>
@@ -43,7 +45,6 @@
 #include <osl/diagnose.h>
 #include "wrapstreamforshare.hxx"
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/seekableinput.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <cppuhelper/exc_hlp.hxx>
@@ -52,6 +53,7 @@
 
 #include <rtl/instance.hxx>
 #include <rtl/random.h>
+#include <sal/log.hxx>
 
 #include <PackageConstants.hxx>
 
@@ -139,17 +141,7 @@ void ZipPackageStream::setZipEntryOnLoading( const ZipEntry &rInEntry )
         m_bToBeCompressed = false;
 }
 
-void ZipPackageStream::CloseOwnStreamIfAny()
-{
-    if ( m_xStream.is() )
-    {
-        m_xStream->closeInput();
-        m_xStream.clear();
-        m_bHasSeekable = false;
-    }
-}
-
-uno::Reference< io::XInputStream > ZipPackageStream::GetOwnSeekStream()
+uno::Reference< io::XInputStream > const & ZipPackageStream::GetOwnSeekStream()
 {
     if ( !m_bHasSeekable && m_xStream.is() )
     {
@@ -158,9 +150,7 @@ uno::Reference< io::XInputStream > ZipPackageStream::GetOwnSeekStream()
         // is accessed before commit it MUST be wrapped.
         // Wrap the stream in case it is not seekable
         m_xStream = ::comphelper::OSeekableInputWrapper::CheckSeekableCanWrap( m_xStream, m_xContext );
-        uno::Reference< io::XSeekable > xSeek( m_xStream, UNO_QUERY );
-        if ( !xSeek.is() )
-            throw RuntimeException( THROW_WHERE "The stream must support XSeekable!" );
+        uno::Reference< io::XSeekable > xSeek( m_xStream, UNO_QUERY_THROW );
 
         m_bHasSeekable = true;
     }
@@ -187,7 +177,7 @@ uno::Reference< io::XInputStream > ZipPackageStream::GetRawEncrStreamNoHeaderCop
     // create temporary stream
     uno::Reference < io::XTempFile > xTempFile = io::TempFile::create(m_xContext);
     uno::Reference < io::XOutputStream > xTempOut = xTempFile->getOutputStream();
-    uno::Reference < io::XInputStream > xTempIn = xTempFile->getInputStream();;
+    uno::Reference < io::XInputStream > xTempIn = xTempFile->getInputStream();
     uno::Reference < io::XSeekable > xTempSeek( xTempOut, UNO_QUERY_THROW );
 
     // copy the raw stream to the temporary file starting from the current position
@@ -208,26 +198,27 @@ sal_Int32 ZipPackageStream::GetBlockSize() const
     return GetEncryptionAlgorithm() == css::xml::crypto::CipherID::AES_CBC_W3C_PADDING ? 16 : 8;
 }
 
-::rtl::Reference< EncryptionData > ZipPackageStream::GetEncryptionData( bool bUseWinEncoding )
+::rtl::Reference<EncryptionData> ZipPackageStream::GetEncryptionData(Bugs const bugs)
 {
     ::rtl::Reference< EncryptionData > xResult;
     if ( m_xBaseEncryptionData.is() )
         xResult = new EncryptionData(
             *m_xBaseEncryptionData,
-            GetEncryptionKey( bUseWinEncoding ),
+            GetEncryptionKey(bugs),
             GetEncryptionAlgorithm(),
             m_nImportedChecksumAlgorithm ? m_nImportedChecksumAlgorithm : m_rZipPackage.GetChecksumAlgID(),
             m_nImportedDerivedKeySize ? m_nImportedDerivedKeySize : m_rZipPackage.GetDefaultDerivedKeySize(),
-            GetStartKeyGenID() );
+            GetStartKeyGenID(),
+            bugs != Bugs::None);
 
     return xResult;
 }
 
-uno::Sequence< sal_Int8 > ZipPackageStream::GetEncryptionKey( bool bUseWinEncoding )
+uno::Sequence<sal_Int8> ZipPackageStream::GetEncryptionKey(Bugs const bugs)
 {
     uno::Sequence< sal_Int8 > aResult;
     sal_Int32 nKeyGenID = GetStartKeyGenID();
-    bUseWinEncoding = ( bUseWinEncoding || m_bUseWinEncoding );
+    bool const bUseWinEncoding = (bugs == Bugs::WinEncodingWrongSHA1 || m_bUseWinEncoding);
 
     if ( m_bHaveOwnKey && m_aStorageEncryptionKeys.getLength() )
     {
@@ -236,13 +227,17 @@ uno::Sequence< sal_Int8 > ZipPackageStream::GetEncryptionKey( bool bUseWinEncodi
             aNameToFind = PACKAGE_ENCRYPTIONDATA_SHA256UTF8;
         else if ( nKeyGenID == xml::crypto::DigestID::SHA1 )
         {
-            aNameToFind = bUseWinEncoding ? OUString(PACKAGE_ENCRYPTIONDATA_SHA1MS1252) : OUString(PACKAGE_ENCRYPTIONDATA_SHA1UTF8);
+            aNameToFind = bUseWinEncoding
+                ? OUString(PACKAGE_ENCRYPTIONDATA_SHA1MS1252)
+                : (bugs == Bugs::WrongSHA1)
+                    ? OUString(PACKAGE_ENCRYPTIONDATA_SHA1UTF8)
+                    : OUString(PACKAGE_ENCRYPTIONDATA_SHA1CORRECT);
         }
         else
             throw uno::RuntimeException(THROW_WHERE "No expected key is provided!" );
 
         for ( sal_Int32 nInd = 0; nInd < m_aStorageEncryptionKeys.getLength(); nInd++ )
-            if ( m_aStorageEncryptionKeys[nInd].Name.equals( aNameToFind ) )
+            if ( m_aStorageEncryptionKeys[nInd].Name == aNameToFind )
                 m_aStorageEncryptionKeys[nInd].Value >>= aResult;
 
         // empty keys are not allowed here
@@ -298,16 +293,11 @@ uno::Reference< io::XInputStream > ZipPackageStream::TryToGetRawFromDataStream( 
         pPackage->initialize( aArgs );
 
         // create a new package stream
-        uno::Reference< XDataSinkEncrSupport > xNewPackStream( xPackageAsFactory->createInstance(), UNO_QUERY );
-        if ( !xNewPackStream.is() )
-            throw RuntimeException(THROW_WHERE );
-
+        uno::Reference< XDataSinkEncrSupport > xNewPackStream( xPackageAsFactory->createInstance(), UNO_QUERY_THROW );
         xNewPackStream->setDataStream( static_cast< io::XInputStream* >(
                                                     new WrapStreamForShare( GetOwnSeekStream(), m_rZipPackage.GetSharedMutexRef() ) ) );
 
-        uno::Reference< XPropertySet > xNewPSProps( xNewPackStream, UNO_QUERY );
-        if ( !xNewPSProps.is() )
-            throw RuntimeException(THROW_WHERE );
+        uno::Reference< XPropertySet > xNewPSProps( xNewPackStream, UNO_QUERY_THROW );
 
         // copy all the properties of this stream to the new stream
         xNewPSProps->setPropertyValue("MediaType", makeAny( msMediaType ) );
@@ -322,9 +312,7 @@ uno::Reference< io::XInputStream > ZipPackageStream::TryToGetRawFromDataStream( 
         uno::Reference< XUnoTunnel > xTunnel;
         Any aRoot = pPackage->getByHierarchicalName("/");
         aRoot >>= xTunnel;
-        uno::Reference< container::XNameContainer > xRootNameContainer( xTunnel, UNO_QUERY );
-        if ( !xRootNameContainer.is() )
-            throw RuntimeException(THROW_WHERE );
+        uno::Reference< container::XNameContainer > xRootNameContainer( xTunnel, UNO_QUERY_THROW );
 
         uno::Reference< XUnoTunnel > xNPSTunnel( xNewPackStream, UNO_QUERY );
         xRootNameContainer->insertByName("dummy", makeAny( xNPSTunnel ) );
@@ -375,7 +363,7 @@ uno::Reference< io::XInputStream > ZipPackageStream::TryToGetRawFromDataStream( 
 
 bool ZipPackageStream::ParsePackageRawStream()
 {
-    OSL_ENSURE( GetOwnSeekStream().is(), "A stream must be provided!\n" );
+    OSL_ENSURE( GetOwnSeekStream().is(), "A stream must be provided!" );
 
     if ( !GetOwnSeekStream().is() )
         return false;
@@ -466,9 +454,10 @@ class DeflateThread: public comphelper::ThreadTask
     uno::Reference< io::XInputStream > mxInStream;
 
 public:
-    DeflateThread( ZipOutputEntry *pEntry,
+    DeflateThread( const std::shared_ptr<comphelper::ThreadTaskTag>& pTag, ZipOutputEntry *pEntry,
                    const uno::Reference< io::XInputStream >& xInStream )
-        : mpEntry(pEntry)
+        : comphelper::ThreadTask(pTag)
+        , mpEntry(pEntry)
         , mxInStream(xInStream)
     {}
 
@@ -483,14 +472,25 @@ private:
             mpEntry->closeBufferFile();
             mpEntry->setFinished();
         }
-        catch (const uno::Exception&)
+        catch (...)
         {
-            mpEntry->setParallelDeflateException(::cppu::getCaughtException());
+            mpEntry->setParallelDeflateException(std::current_exception());
+            try
+            {
+                if (mpEntry->m_xOutStream.is())
+                    mpEntry->closeBufferFile();
+                if (!mpEntry->m_aTempURL.isEmpty())
+                    mpEntry->deleteBufferFile();
+            }
+            catch (uno::Exception const&)
+            {
+            }
+            mpEntry->setFinished();
         }
     }
 };
 
-static void ImplSetStoredData( ZipEntry & rEntry, uno::Reference< io::XInputStream> & rStream )
+static void ImplSetStoredData( ZipEntry & rEntry, uno::Reference< io::XInputStream> const & rStream )
 {
     // It's very annoying that we have to do this, but lots of zip packages
     // don't allow data descriptors for STORED streams, meaning we have to
@@ -507,6 +507,7 @@ bool ZipPackageStream::saveChild(
         std::vector < uno::Sequence < beans::PropertyValue > > &rManList,
         ZipOutputStream & rZipOut,
         const uno::Sequence < sal_Int8 >& rEncryptionKey,
+        sal_Int32 nPBKDF2IterationCount,
         const rtlRandomPool &rRandomPool)
 {
     bool bSuccess = true;
@@ -526,17 +527,16 @@ bool ZipPackageStream::saveChild(
 
     uno::Sequence < beans::PropertyValue > aPropSet (PKG_SIZE_NOENCR_MNFST);
 
-    // if pTempEntry is necessary, it will be released and passed to the ZipOutputStream
-    // and be deleted in the ZipOutputStream destructor
-    std::unique_ptr < ZipEntry > pAutoTempEntry ( new ZipEntry );
-    ZipEntry* pTempEntry = pAutoTempEntry.get();
-
     // In case the entry we are reading is also the entry we are writing, we will
     // store the ZipEntry data in pTempEntry
 
-    ZipPackageFolder::copyZipEntry ( *pTempEntry, aEntry );
+    // if pTempEntry is necessary, it will be released and passed to the ZipOutputStream
+    // and be deleted in the ZipOutputStream destructor
+    std::unique_ptr < ZipEntry > pAutoTempEntry ( new ZipEntry(aEntry) );
+    ZipEntry* pTempEntry = pAutoTempEntry.get();
+
     pTempEntry->sPath = rPath;
-    pTempEntry->nPathLen = (sal_Int16)( OUStringToOString( pTempEntry->sPath, RTL_TEXTENCODING_UTF8 ).getLength() );
+    pTempEntry->nPathLen = static_cast<sal_Int16>( OUStringToOString( pTempEntry->sPath, RTL_TEXTENCODING_UTF8 ).getLength() );
 
     const bool bToBeEncrypted = m_bToBeEncrypted && (rEncryptionKey.getLength() || m_bHaveOwnKey);
     const bool bToBeCompressed = bToBeEncrypted || m_bToBeCompressed;
@@ -597,7 +597,7 @@ bool ZipPackageStream::saveChild(
                 if ( !bToBeCompressed || m_bRawStream )
                 {
                     // The raw stream can neither be encrypted nor connected
-                    OSL_ENSURE( !m_bRawStream || !(bToBeCompressed || bToBeEncrypted), "The stream is already encrypted!\n" );
+                    OSL_ENSURE( !m_bRawStream || !(bToBeCompressed || bToBeEncrypted), "The stream is already encrypted!" );
                     xSeek->seek ( m_bRawStream ? m_nMagicalHackPos : 0 );
                     ImplSetStoredData ( *pTempEntry, xStream );
 
@@ -620,7 +620,7 @@ bool ZipPackageStream::saveChild(
                 // at position zero...otherwise, assert and skip this stream...
                 if ( IsPackageMember() )
                 {
-                    // if the password has been changed than the stream should not be package member any more
+                    // if the password has been changed then the stream should not be package member any more
                     if ( m_bIsEncrypted && m_bToBeEncrypted )
                     {
                         // Should be handled close to the raw stream handling
@@ -653,8 +653,6 @@ bool ZipPackageStream::saveChild(
                 uno::Sequence < sal_Int8 > aSalt( 16 ), aVector( GetBlockSize() );
                 rtl_random_getBytes ( rRandomPool, aSalt.getArray(), 16 );
                 rtl_random_getBytes ( rRandomPool, aVector.getArray(), aVector.getLength() );
-                sal_Int32 nIterationCount = 1024;
-
                 if ( !m_bHaveOwnKey )
                 {
                     m_aEncryptionKey = rEncryptionKey;
@@ -663,7 +661,7 @@ bool ZipPackageStream::saveChild(
 
                 setInitialisationVector ( aVector );
                 setSalt ( aSalt );
-                setIterationCount ( nIterationCount );
+                setIterationCount(nPBKDF2IterationCount);
             }
 
             // last property is digest, which is inserted later if we didn't have
@@ -678,7 +676,7 @@ bool ZipPackageStream::saveChild(
             aPropSet[PKG_MNFST_ITERATION].Value <<= m_xBaseEncryptionData->m_nIterationCount;
 
             // Need to store the uncompressed size in the manifest
-            OSL_ENSURE( m_nOwnStreamOrigSize >= 0, "The stream size was not correctly initialized!\n" );
+            OSL_ENSURE( m_nOwnStreamOrigSize >= 0, "The stream size was not correctly initialized!" );
             aPropSet[PKG_MNFST_UCOMPSIZE].Name = sSizeProperty;
             aPropSet[PKG_MNFST_UCOMPSIZE].Value <<= m_nOwnStreamOrigSize;
 
@@ -759,7 +757,7 @@ bool ZipPackageStream::saveChild(
     }
     else
     {
-        // This stream is defenitly not a raw stream
+        // This stream is definitely not a raw stream
 
         // If nonseekable access is used the stream should be at the beginning and
         // is useless after the storing. Thus if the storing fails the package should
@@ -790,7 +788,7 @@ bool ZipPackageStream::saveChild(
         uno::Reference< io::XSeekable > xSeek(xStream, uno::UNO_QUERY);
         // It's not worth to deflate jpegs to save ~1% in a slow process
         // Unfortunately, does not work for streams protected by password
-        if (xSeek.is() && msMediaType.endsWith("/jpeg") && !m_bToBeEncrypted)
+        if (xSeek.is() && msMediaType.endsWith("/jpeg") && !m_bToBeEncrypted && !m_bToBeCompressed)
         {
             ImplSetStoredData(*pTempEntry, xStream);
             xSeek->seek(0);
@@ -830,15 +828,15 @@ bool ZipPackageStream::saveChild(
                 {
                     // tdf#93553 limit to a useful amount of threads. Taking number of available
                     // cores and allow 4-times the amount for having the queue well filled. The
-                    // 2nd pparameter is the time to wait beweeen cleanups in 10th of a second.
+                    // 2nd parameter is the time to wait between cleanups in 10th of a second.
                     // Both values may be added to the configuration settings if needed.
-                    static sal_Int32 nAllowedThreads(std::max(std::thread::hardware_concurrency(), 1U) * 4);
-                    rZipOut.reduceScheduledThreadsToGivenNumberOrLess(nAllowedThreads, 1);
+                    static sal_Int32 nAllowedThreads(comphelper::ThreadPool::getPreferredConcurrency() * 4);
+                    rZipOut.reduceScheduledThreadsToGivenNumberOrLess(nAllowedThreads);
 
                     // Start a new thread deflating this zip entry
                     ZipOutputEntry *pZipEntry = new ZipOutputEntry(
                             m_xContext, *pTempEntry, this, bToBeEncrypted);
-                    rZipOut.addDeflatingThread( pZipEntry, new DeflateThread(pZipEntry, xStream) );
+                    rZipOut.addDeflatingThread( pZipEntry, std::make_unique<DeflateThread>(rZipOut.getThreadTaskTag(), pZipEntry, xStream) );
                 }
                 else
                 {
@@ -889,11 +887,16 @@ bool ZipPackageStream::saveChild(
     return bSuccess;
 }
 
-void ZipPackageStream::successfullyWritten( ZipEntry *pEntry )
+void ZipPackageStream::successfullyWritten( ZipEntry const *pEntry )
 {
     if ( !IsPackageMember() )
     {
-        CloseOwnStreamIfAny();
+        if ( m_xStream.is() )
+        {
+            m_xStream->closeInput();
+            m_xStream.clear();
+            m_bHasSeekable = false;
+        }
         SetPackageMember ( true );
     }
 
@@ -905,10 +908,10 @@ void ZipPackageStream::successfullyWritten( ZipEntry *pEntry )
     }
 
     // Then copy it back afterwards...
-    ZipPackageFolder::copyZipEntry( aEntry, *pEntry );
+    aEntry = *pEntry;
 
     // TODO/LATER: get rid of this hack ( the encrypted stream size property is changed during saving )
-    if ( IsEncrypted() )
+    if ( m_bIsEncrypted )
         setSize( m_nOwnStreamOrigSize );
 
     aEntry.nOffset *= -1;
@@ -928,7 +931,6 @@ void ZipPackageStream::SetPackageMember( bool bNewValue )
 
 // XActiveDataSink
 void SAL_CALL ZipPackageStream::setInputStream( const uno::Reference< io::XInputStream >& aStream )
-        throw( RuntimeException, std::exception )
 {
     // if seekable access is required the wrapping will be done on demand
     m_xStream = aStream;
@@ -939,14 +941,13 @@ void SAL_CALL ZipPackageStream::setInputStream( const uno::Reference< io::XInput
     m_nStreamMode = PACKAGE_STREAM_DETECT;
 }
 
-uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getRawData()
-        throw( RuntimeException )
+uno::Reference< io::XInputStream > ZipPackageStream::getRawData()
 {
     try
     {
         if ( IsPackageMember() )
         {
-            return m_rZipPackage.getZipFile().getRawData( aEntry, GetEncryptionData(), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef() );
+            return m_rZipPackage.getZipFile().getRawData( aEntry, GetEncryptionData(), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef(), false/*bUseBufferedStream*/ );
         }
         else if ( GetOwnSeekStream().is() )
         {
@@ -962,13 +963,12 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getRawData()
     }
     catch ( Exception & )
     {
-        OSL_FAIL( "Exception is thrown during stream wrapping!\n" );
+        OSL_FAIL( "Exception is thrown during stream wrapping!" );
         return uno::Reference < io::XInputStream > ();
     }
 }
 
 uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getInputStream()
-        throw( RuntimeException, std::exception )
 {
     try
     {
@@ -990,18 +990,13 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getInputStream()
     }
     catch ( Exception &ex )
     {
-        OSL_FAIL( "Exception is thrown during stream wrapping!\n" );
-        OSL_FAIL(OUStringToOString(ex.Message, RTL_TEXTENCODING_UTF8).getStr());
-        (void)ex;
+        SAL_WARN( "package", "Exception is thrown during stream wrapping!" << ex);
         return uno::Reference < io::XInputStream > ();
     }
 }
 
 // XDataSinkEncrSupport
 uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
-        throw ( packages::WrongPasswordException, ZipException,
-                io::IOException,
-                RuntimeException, std::exception )
 {
     // There is no stream attached to this object
     if ( m_nStreamMode == PACKAGE_STREAM_NOTSET )
@@ -1016,12 +1011,23 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
         uno::Reference< io::XInputStream > xResult;
         try
         {
-            xResult = m_rZipPackage.getZipFile().getDataStream( aEntry, GetEncryptionData(), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef() );
+            xResult = m_rZipPackage.getZipFile().getDataStream( aEntry, GetEncryptionData(Bugs::None), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef() );
         }
         catch( const packages::WrongPasswordException& )
         {
             if ( m_rZipPackage.GetStartKeyGenID() == xml::crypto::DigestID::SHA1 )
             {
+                SAL_WARN("package", "ZipPackageStream::getDataStream(): SHA1 mismatch, trying fallbacks...");
+                try
+                {   // tdf#114939 try with legacy StarOffice SHA1 bug
+                    xResult = m_rZipPackage.getZipFile().getDataStream( aEntry, GetEncryptionData(Bugs::WrongSHA1), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef() );
+                    return xResult;
+                }
+                catch (const packages::WrongPasswordException&)
+                {
+                    /* ignore and try next... */
+                }
+
                 try
                 {
                     // rhbz#1013844 / fdo#47482 workaround for the encrypted
@@ -1044,7 +1050,7 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
                 // workaround for the encrypted documents generated with the old OOo1.x bug.
                 if ( !m_bUseWinEncoding )
                 {
-                    xResult = m_rZipPackage.getZipFile().getDataStream( aEntry, GetEncryptionData( true ), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef() );
+                    xResult = m_rZipPackage.getZipFile().getDataStream( aEntry, GetEncryptionData(Bugs::WinEncodingWrongSHA1), m_bIsEncrypted, m_rZipPackage.GetSharedMutexRef() );
                     m_bUseWinEncoding = true;
                 }
                 else
@@ -1056,7 +1062,7 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
         return xResult;
     }
     else if ( m_nStreamMode == PACKAGE_STREAM_RAW )
-        return ZipFile::StaticGetDataFromRawStream( m_xContext, GetOwnSeekStream(), GetEncryptionData() );
+        return ZipFile::StaticGetDataFromRawStream( m_rZipPackage.GetSharedMutexRef(), m_xContext, GetOwnSeekStream(), GetEncryptionData() );
     else if ( GetOwnSeekStream().is() )
     {
         return new WrapStreamForShare( GetOwnSeekStream(), m_rZipPackage.GetSharedMutexRef() );
@@ -1066,9 +1072,6 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getDataStream()
 }
 
 uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getRawStream()
-        throw ( packages::NoEncryptionException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     // There is no stream attached to this object
     if ( m_nStreamMode == PACKAGE_STREAM_NOTSET )
@@ -1099,25 +1102,16 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getRawStream()
 }
 
 void SAL_CALL ZipPackageStream::setDataStream( const uno::Reference< io::XInputStream >& aStream )
-        throw ( io::IOException,
-                RuntimeException, std::exception )
 {
     setInputStream( aStream );
     m_nStreamMode = PACKAGE_STREAM_DATA;
 }
 
 void SAL_CALL ZipPackageStream::setRawStream( const uno::Reference< io::XInputStream >& aStream )
-        throw ( packages::EncryptionNotAllowedException,
-                packages::NoRawFormatException,
-                io::IOException,
-                RuntimeException, std::exception )
 {
     // wrap the stream in case it is not seekable
     uno::Reference< io::XInputStream > xNewStream = ::comphelper::OSeekableInputWrapper::CheckSeekableCanWrap( aStream, m_xContext );
-    uno::Reference< io::XSeekable > xSeek( xNewStream, UNO_QUERY );
-    if ( !xSeek.is() )
-        throw RuntimeException(THROW_WHERE "The stream must support XSeekable!" );
-
+    uno::Reference< io::XSeekable > xSeek( xNewStream, UNO_QUERY_THROW );
     xSeek->seek( 0 );
     uno::Reference< io::XInputStream > xOldStream = m_xStream;
     m_xStream = xNewStream;
@@ -1136,8 +1130,6 @@ void SAL_CALL ZipPackageStream::setRawStream( const uno::Reference< io::XInputSt
 }
 
 uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getPlainRawStream()
-        throw ( io::IOException, packages::NoEncryptionException,
-                uno::RuntimeException, std::exception )
 {
     // There is no stream attached to this object
     if ( m_nStreamMode == PACKAGE_STREAM_NOTSET )
@@ -1168,7 +1160,6 @@ uno::Reference< io::XInputStream > SAL_CALL ZipPackageStream::getPlainRawStream(
 // XUnoTunnel
 
 sal_Int64 SAL_CALL ZipPackageStream::getSomething( const Sequence< sal_Int8 >& aIdentifier )
-    throw( RuntimeException, std::exception )
 {
     sal_Int64 nMe = 0;
     if ( aIdentifier.getLength() == 16 &&
@@ -1179,29 +1170,25 @@ sal_Int64 SAL_CALL ZipPackageStream::getSomething( const Sequence< sal_Int8 >& a
 
 // XPropertySet
 void SAL_CALL ZipPackageStream::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
-        throw( beans::UnknownPropertyException, beans::PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception )
 {
     if ( aPropertyName == "MediaType" )
     {
         if ( m_rZipPackage.getFormat() != embed::StorageFormats::PACKAGE && m_rZipPackage.getFormat() != embed::StorageFormats::OFOPXML )
             throw beans::PropertyVetoException(THROW_WHERE );
 
-        if ( aValue >>= msMediaType )
-        {
-            if ( !msMediaType.isEmpty() )
-            {
-                if ( msMediaType.indexOf ( "text" ) != -1
-                 || msMediaType == "application/vnd.sun.star.oleobject" )
-                    m_bToBeCompressed = true;
-                else if ( !m_bCompressedIsSetFromOutside )
-                    m_bToBeCompressed = false;
-            }
-        }
-        else
+        if ( !(aValue >>= msMediaType) )
             throw IllegalArgumentException(THROW_WHERE "MediaType must be a string!",
                                             uno::Reference< XInterface >(),
                                             2 );
 
+        if ( !msMediaType.isEmpty() )
+        {
+            if ( msMediaType.indexOf ( "text" ) != -1
+             || msMediaType == "application/vnd.sun.star.oleobject" )
+                m_bToBeCompressed = true;
+            else if ( !m_bCompressedIsSetFromOutside )
+                m_bToBeCompressed = false;
+        }
     }
     else if ( aPropertyName == "Size" )
     {
@@ -1216,22 +1203,20 @@ void SAL_CALL ZipPackageStream::setPropertyValue( const OUString& aPropertyName,
             throw beans::PropertyVetoException(THROW_WHERE );
 
         bool bEnc = false;
-        if ( aValue >>= bEnc )
-        {
-            // In case of new raw stream, the stream must not be encrypted on storing
-            if ( bEnc && m_nStreamMode == PACKAGE_STREAM_RAW )
-                throw IllegalArgumentException(THROW_WHERE "Raw stream can not be encrypted on storing",
-                                                uno::Reference< XInterface >(),
-                                                2 );
-
-            m_bToBeEncrypted = bEnc;
-            if ( m_bToBeEncrypted && !m_xBaseEncryptionData.is() )
-                m_xBaseEncryptionData = new BaseEncryptionData;
-        }
-        else
+        if ( !(aValue >>= bEnc) )
             throw IllegalArgumentException(THROW_WHERE "Wrong type for Encrypted property!",
                                             uno::Reference< XInterface >(),
                                             2 );
+
+        // In case of new raw stream, the stream must not be encrypted on storing
+        if ( bEnc && m_nStreamMode == PACKAGE_STREAM_RAW )
+            throw IllegalArgumentException(THROW_WHERE "Raw stream can not be encrypted on storing",
+                                            uno::Reference< XInterface >(),
+                                            2 );
+
+        m_bToBeEncrypted = bEnc;
+        if ( m_bToBeEncrypted && !m_xBaseEncryptionData.is() )
+            m_xBaseEncryptionData = new BaseEncryptionData;
 
     }
     else if ( aPropertyName == ENCRYPTION_KEY_PROPERTY )
@@ -1244,20 +1229,18 @@ void SAL_CALL ZipPackageStream::setPropertyValue( const OUString& aPropertyName,
         if ( !( aValue >>= aNewKey ) )
         {
             OUString sTempString;
-            if ( ( aValue >>= sTempString ) )
-            {
-                sal_Int32 nPathLength = sTempString.getLength();
-                Sequence < sal_Int8 > aSequence ( nPathLength );
-                sal_Int8 *pArray = aSequence.getArray();
-                const sal_Unicode *pChar = sTempString.getStr();
-                for ( sal_Int32 i = 0; i < nPathLength; i++ )
-                    pArray[i] = static_cast < const sal_Int8 > ( pChar[i] );
-                aNewKey = aSequence;
-            }
-            else
+            if ( !(aValue >>= sTempString) )
                 throw IllegalArgumentException(THROW_WHERE "Wrong type for EncryptionKey property!",
                                                 uno::Reference< XInterface >(),
                                                 2 );
+
+            sal_Int32 nPathLength = sTempString.getLength();
+            Sequence < sal_Int8 > aSequence ( nPathLength );
+            sal_Int8 *pArray = aSequence.getArray();
+            const sal_Unicode *pChar = sTempString.getStr();
+            for ( sal_Int32 i = 0; i < nPathLength; i++ )
+                pArray[i] = static_cast < sal_Int8 > ( pChar[i] );
+            aNewKey = aSequence;
         }
 
         if ( aNewKey.getLength() )
@@ -1316,64 +1299,53 @@ void SAL_CALL ZipPackageStream::setPropertyValue( const OUString& aPropertyName,
     {
         bool bCompr = false;
 
-        if ( aValue >>= bCompr )
-        {
-            // In case of new raw stream, the stream must not be encrypted on storing
-            if ( bCompr && m_nStreamMode == PACKAGE_STREAM_RAW )
-                throw IllegalArgumentException(THROW_WHERE "Raw stream can not be encrypted on storing",
-                                                uno::Reference< XInterface >(),
-                                                2 );
-
-            m_bToBeCompressed = bCompr;
-            m_bCompressedIsSetFromOutside = true;
-        }
-        else
+        if ( !(aValue >>= bCompr) )
             throw IllegalArgumentException(THROW_WHERE "Wrong type for Compressed property!",
                                             uno::Reference< XInterface >(),
                                             2 );
+
+        // In case of new raw stream, the stream must not be encrypted on storing
+        if ( bCompr && m_nStreamMode == PACKAGE_STREAM_RAW )
+            throw IllegalArgumentException(THROW_WHERE "Raw stream can not be encrypted on storing",
+                                            uno::Reference< XInterface >(),
+                                            2 );
+
+        m_bToBeCompressed = bCompr;
+        m_bCompressedIsSetFromOutside = true;
     }
     else
         throw beans::UnknownPropertyException(THROW_WHERE );
 }
 
 Any SAL_CALL ZipPackageStream::getPropertyValue( const OUString& PropertyName )
-        throw( beans::UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception )
 {
-    Any aAny;
     if ( PropertyName == "MediaType" )
     {
-        aAny <<= msMediaType;
-        return aAny;
+        return Any(msMediaType);
     }
     else if ( PropertyName == "Size" )
     {
-        aAny <<= aEntry.nSize;
-        return aAny;
+        return Any(aEntry.nSize);
     }
     else if ( PropertyName == "Encrypted" )
     {
-        aAny <<= ((m_nStreamMode == PACKAGE_STREAM_RAW) || m_bToBeEncrypted);
-        return aAny;
+        return Any((m_nStreamMode == PACKAGE_STREAM_RAW) || m_bToBeEncrypted);
     }
     else if ( PropertyName == "WasEncrypted" )
     {
-        aAny <<= m_bIsEncrypted;
-        return aAny;
+        return Any(m_bIsEncrypted);
     }
     else if ( PropertyName == "Compressed" )
     {
-        aAny <<= m_bToBeCompressed;
-        return aAny;
+        return Any(m_bToBeCompressed);
     }
     else if ( PropertyName == ENCRYPTION_KEY_PROPERTY )
     {
-        aAny <<= m_aEncryptionKey;
-        return aAny;
+        return Any(m_aEncryptionKey);
     }
     else if ( PropertyName == STORAGE_ENCRYPTION_KEYS_PROPERTY )
     {
-        aAny <<= m_aStorageEncryptionKeys;
-        return aAny;
+        return Any(m_aStorageEncryptionKeys);
     }
     else
         throw beans::UnknownPropertyException(THROW_WHERE );
@@ -1386,20 +1358,17 @@ void ZipPackageStream::setSize ( const sal_Int64 nNewSize )
     aEntry.nSize = nNewSize;
 }
 OUString ZipPackageStream::getImplementationName()
-    throw ( RuntimeException, std::exception )
 {
     return OUString ("ZipPackageStream");
 }
 
 Sequence< OUString > ZipPackageStream::getSupportedServiceNames()
-    throw ( RuntimeException, std::exception )
 {
     Sequence<OUString> aNames { "com.sun.star.packages.PackageStream" };
     return aNames;
 }
 
 sal_Bool SAL_CALL ZipPackageStream::supportsService( OUString const & rServiceName )
-    throw ( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }

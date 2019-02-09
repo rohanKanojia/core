@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/axisconverter.hxx"
+#include <drawingml/chart/axisconverter.hxx>
 
 #include <com/sun/star/chart/ChartAxisArrangeOrderType.hpp>
 #include <com/sun/star/chart/ChartAxisLabelPosition.hpp>
@@ -32,11 +32,14 @@
 #include <com/sun/star/chart2/XAxis.hpp>
 #include <com/sun/star/chart2/XCoordinateSystem.hpp>
 #include <com/sun/star/chart2/XTitled.hpp>
-#include "drawingml/chart/axismodel.hxx"
-#include "drawingml/chart/titleconverter.hxx"
-#include "drawingml/chart/typegroupconverter.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "comphelper/processfactory.hxx"
+#include <drawingml/chart/axismodel.hxx>
+#include <drawingml/chart/titleconverter.hxx>
+#include <drawingml/chart/typegroupconverter.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
+#include <comphelper/processfactory.hxx>
 #include <osl/diagnose.h>
 
 namespace oox {
@@ -49,7 +52,7 @@ using namespace ::com::sun::star::uno;
 
 namespace {
 
-inline void lclSetValueOrClearAny( Any& orAny, const OptValue< double >& rofValue )
+void lclSetValueOrClearAny( Any& orAny, const OptValue< double >& rofValue )
 {
     if( rofValue.has() ) orAny <<= rofValue.get(); else orAny.clear();
 }
@@ -113,10 +116,9 @@ bool isPercent( const RefVector<TypeGroupConverter>& rTypeGroups )
     if (rTypeGroups.empty())
         return false;
 
-    RefVector<TypeGroupConverter>::const_iterator it = rTypeGroups.begin(), itEnd = rTypeGroups.end();
-    for (; it != itEnd; ++it)
+    for (auto const& typeGroup : rTypeGroups)
     {
-        TypeGroupConverter& rConv = **it;
+        TypeGroupConverter& rConv = *typeGroup;
         if (!rConv.isPercent())
             return false;
     }
@@ -258,8 +260,8 @@ void AxisConverter::convertFromModel(
                 {
                     // do not overlap text unless all labels are visible
                     aAxisProp.setProperty( PROP_TextOverlap, mrModel.mnTickLabelSkip == 1 );
-                    // do not break text into several lines
-                    aAxisProp.setProperty( PROP_TextBreak, false );
+                    // do not break text into several lines unless the rotation is 0 degree
+                    aAxisProp.setProperty( PROP_TextBreak, ObjectFormatter::getTextRotation( mrModel.mxTextProp ) );
                     // do not stagger labels in two lines
                     aAxisProp.setProperty( PROP_ArrangeOrder, cssc::ChartAxisArrangeOrderType_SIDE_BY_SIDE );
                     //! TODO #i58731# show n-th category
@@ -270,7 +272,7 @@ void AxisConverter::convertFromModel(
             case cssc2::AxisType::PERCENT:
             {
                 // scaling algorithm
-                bool bLogScale = lclIsLogarithmicScale( mrModel );
+                const bool bLogScale = lclIsLogarithmicScale( mrModel );
                 if( bLogScale )
                     aScaleData.Scaling = LogarithmicScaling::create( comphelper::getProcessComponentContext() );
                 else
@@ -299,6 +301,11 @@ void AxisConverter::convertFromModel(
                     double fCount = mrModel.mofMajorUnit.get() / mrModel.mofMinorUnit.get() + 0.5;
                     if( (1.0 <= fCount) && (fCount < 1001.0) )
                         rIntervalCount <<= static_cast< sal_Int32 >( fCount );
+                }
+                else if( !mrModel.mofMinorUnit.has() )
+                {
+                    // tdf#114168 If minor unit is not set then set interval to 5, as MS Excel do.
+                    rIntervalCount <<= static_cast< sal_Int32 >( 5 );
                 }
             }
             break;
@@ -387,7 +394,7 @@ AxisDispUnitsConverter::~AxisDispUnitsConverter()
 void AxisDispUnitsConverter::convertFromModel( const Reference< XAxis >& rxAxis )
 {
     PropertySet aPropSet( rxAxis );
-    if (!(mrModel.mnBuiltInUnit).isEmpty() )
+    if (!mrModel.mnBuiltInUnit.isEmpty() )
     {
         aPropSet.setProperty(PROP_DisplayUnits, true);
         aPropSet.setProperty( PROP_BuiltInUnit, mrModel.mnBuiltInUnit );

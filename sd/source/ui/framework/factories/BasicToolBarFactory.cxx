@@ -19,13 +19,14 @@
 
 #include "BasicToolBarFactory.hxx"
 
-#include "ViewTabBar.hxx"
-#include "facreg.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <ViewTabBar.hxx>
+#include <facreg.hxx>
+#include <framework/FrameworkHelper.hxx>
 #include <unotools/mediadescriptor.hxx>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include "DrawController.hxx"
+#include <com/sun/star/lang/XUnoTunnel.hpp>
+#include <DrawController.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -36,14 +37,11 @@ namespace sd { namespace framework {
 
 //===== BasicToolBarFactory ===================================================
 
-BasicToolBarFactory::BasicToolBarFactory (
-    const Reference<XComponentContext>& rxContext)
+BasicToolBarFactory::BasicToolBarFactory ()
     : BasicToolBarFactoryInterfaceBase(m_aMutex),
       mxConfigurationController(),
-      mxController(),
-      mpViewShellBase(nullptr)
+      mxController()
 {
-    (void)rxContext;
 }
 
 BasicToolBarFactory::~BasicToolBarFactory()
@@ -57,7 +55,6 @@ void SAL_CALL BasicToolBarFactory::disposing()
 
 void BasicToolBarFactory::Shutdown()
 {
-    mpViewShellBase = nullptr;
     Reference<lang::XComponent> xComponent (mxConfigurationController, UNO_QUERY);
     if (xComponent.is())
         xComponent->removeEventListener(static_cast<lang::XEventListener*>(this));
@@ -71,7 +68,6 @@ void BasicToolBarFactory::Shutdown()
 //----- XInitialization -------------------------------------------------------
 
 void SAL_CALL BasicToolBarFactory::initialize (const Sequence<Any>& aArguments)
-    throw (Exception, RuntimeException, std::exception)
 {
     if (aArguments.getLength() > 0)
     {
@@ -79,13 +75,6 @@ void SAL_CALL BasicToolBarFactory::initialize (const Sequence<Any>& aArguments)
         {
             // Get the XController from the first argument.
             mxController.set(aArguments[0], UNO_QUERY_THROW);
-
-            // Tunnel through the controller to obtain a ViewShellBase.
-            Reference<lang::XUnoTunnel> xTunnel (mxController, UNO_QUERY_THROW);
-            ::sd::DrawController* pController = reinterpret_cast<sd::DrawController*>(
-                xTunnel->getSomething(sd::DrawController::getUnoTunnelId()));
-            if (pController != nullptr)
-                mpViewShellBase = pController->GetViewShellBase();
 
             utl::MediaDescriptor aDescriptor (mxController->getModel()->getArgs());
             if ( ! aDescriptor.getUnpackedValueOrDefault(
@@ -124,7 +113,6 @@ void SAL_CALL BasicToolBarFactory::initialize (const Sequence<Any>& aArguments)
 
 void SAL_CALL BasicToolBarFactory::disposing (
     const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
 {
     if (rEventObject.Source == mxConfigurationController)
         mxConfigurationController = nullptr;
@@ -134,25 +122,18 @@ void SAL_CALL BasicToolBarFactory::disposing (
 
 Reference<XResource> SAL_CALL BasicToolBarFactory::createResource (
     const Reference<XResourceId>& rxToolBarId)
-    throw (RuntimeException, IllegalArgumentException, WrappedTargetException, std::exception)
 {
     ThrowIfDisposed();
 
-    Reference<XResource> xToolBar;
-
-    if (rxToolBarId->getResourceURL().equals(FrameworkHelper::msViewTabBarURL))
-    {
-        xToolBar = new ViewTabBar(rxToolBarId, mxController);
-    }
-    else
+    if (rxToolBarId->getResourceURL() != FrameworkHelper::msViewTabBarURL)
         throw lang::IllegalArgumentException();
 
+    Reference<XResource> xToolBar = new ViewTabBar(rxToolBarId, mxController);
     return xToolBar;
 }
 
 void SAL_CALL BasicToolBarFactory::releaseResource (
     const Reference<XResource>& rxToolBar)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -162,7 +143,6 @@ void SAL_CALL BasicToolBarFactory::releaseResource (
 }
 
 void BasicToolBarFactory::ThrowIfDisposed() const
-    throw (lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
@@ -173,11 +153,11 @@ void BasicToolBarFactory::ThrowIfDisposed() const
 
 } } // end of namespace sd::framework
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_Draw_framework_BasicToolBarFactory_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_Draw_framework_BasicToolBarFactory_get_implementation(css::uno::XComponentContext*,
                                                                         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new sd::framework::BasicToolBarFactory(context));
+    return cppu::acquire(new sd::framework::BasicToolBarFactory);
 }
 
 

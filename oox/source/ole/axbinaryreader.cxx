@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/axbinaryreader.hxx"
+#include <oox/ole/axbinaryreader.hxx>
 
-#include "oox/ole/olehelper.hxx"
+#include <oox/ole/axfontdata.hxx>
+#include <oox/ole/olehelper.hxx>
 
 #include <osl/diagnose.h>
 
@@ -148,7 +149,7 @@ bool AxBinaryPropertyReader::ArrayStringProperty::readProperty( AxAlignedInputSt
         if( !lclReadString( rInStrm, aString, rInStrm.readuInt32(), true ) )
             return false;
         mrArray.push_back( aString );
-        // every array string is aligned on 4 byte boundries
+        // every array string is aligned on 4 byte boundaries
         rInStrm.align( 4 );
     }
     return true;
@@ -167,7 +168,7 @@ bool AxBinaryPropertyReader::FontProperty::readProperty( AxAlignedInputStream& r
 
 bool AxBinaryPropertyReader::PictureProperty::readProperty( AxAlignedInputStream& rInStrm )
 {
-    return OleHelper::importStdPic( mrPicData, rInStrm, true );
+    return OleHelper::importStdPic( mrPicData, rInStrm );
 }
 
 AxBinaryPropertyReader::AxBinaryPropertyReader( BinaryInputStream& rInStrm, bool b64BitPropFlags ) :
@@ -246,20 +247,28 @@ bool AxBinaryPropertyReader::finalizeImport()
 {
     // read large properties
     maInStrm.align( 4 );
-    if( ensureValid( mnPropFlags == 0 ) && !maLargeProps.empty() )
+    if( ensureValid( mnPropFlags == 0 ) )
     {
-        for( ComplexPropVector::iterator aIt = maLargeProps.begin(), aEnd = maLargeProps.end(); ensureValid() && (aIt != aEnd); ++aIt )
+        for (auto const& largeProp : maLargeProps)
         {
-            ensureValid( (*aIt)->readProperty( maInStrm ) );
+            if (!ensureValid())
+                break;
+            ensureValid( largeProp->readProperty( maInStrm ) );
             maInStrm.align( 4 );
         }
     }
     maInStrm.seek( mnPropsEnd );
 
     // read stream properties (no stream alignment between properties!)
-    if( ensureValid() && !maStreamProps.empty() )
-        for( ComplexPropVector::iterator aIt = maStreamProps.begin(), aEnd = maStreamProps.end(); ensureValid() && (aIt != aEnd); ++aIt )
-            ensureValid( (*aIt)->readProperty( maInStrm ) );
+    if( ensureValid() )
+    {
+        for (auto const& streamProp : maStreamProps)
+        {
+            if (!ensureValid())
+                break;
+            ensureValid( streamProp->readProperty( maInStrm ) );
+        }
+    }
 
     return mbValid;
 }

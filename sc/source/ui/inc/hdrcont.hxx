@@ -21,8 +21,8 @@
 #define INCLUDED_SC_SOURCE_UI_INC_HDRCONT_HXX
 
 #include <vcl/window.hxx>
-#include <vcl/seleng.hxx>
-#include "address.hxx"
+#include <scdllapi.h>
+#include <types.hxx>
 
 #define HDR_SIZE_OPTIMUM    0xFFFF
 
@@ -30,8 +30,9 @@
 #define HDR_SLIDERSIZE      2
 
 class ScTabView;
+class SelectionEngine;
 
-class ScHeaderControl : public vcl::Window
+class SC_DLLPUBLIC ScHeaderControl : public vcl::Window
 {
 private:
     SelectionEngine*    pSelEngine;
@@ -39,13 +40,13 @@ private:
     vcl::Font           aBoldFont;
     bool                bBoldSet;
 
-    bool            bVertical;              // Vertical = Row header
+    bool const          bVertical;              // Vertical = Row header
 
     long            nWidth;
     long            nSmallWidth;
     long            nBigWidth;
 
-    SCCOLROW        nSize;
+    SCCOLROW const  nSize;
 
     SCCOLROW        nMarkStart;
     SCCOLROW        nMarkEnd;
@@ -75,7 +76,7 @@ protected:
 
                     // Window overrides
 
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
 
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonUp( const MouseEvent& rMEvt ) override;
@@ -109,7 +110,7 @@ protected:
 public:
             ScHeaderControl( vcl::Window* pParent, SelectionEngine* pSelectionEngine,
                              SCCOLROW nNewSize, bool bNewVertical, ScTabView* pTab );
-            virtual ~ScHeaderControl();
+            virtual ~ScHeaderControl() override;
 
     void    SetIgnoreMove(bool bSet)            { bIgnoreMove = bSet; }
 
@@ -121,6 +122,7 @@ public:
     long    GetSmallWidth() const               { return nSmallWidth; }
     long    GetBigWidth() const                 { return nBigWidth; }
     void    SetWidth( long nNew );
+    void    GetMarkRange(SCCOLROW& rStart, SCCOLROW& rEnd) const;
 };
 
 #endif

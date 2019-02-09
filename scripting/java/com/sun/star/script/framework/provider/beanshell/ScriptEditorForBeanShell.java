@@ -45,6 +45,9 @@ import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
+import javax.swing.JToolBar;
+import javax.swing.BorderFactory;
+
 public class ScriptEditorForBeanShell implements ScriptEditor, ActionListener {
 
     private JFrame frame;
@@ -69,24 +72,25 @@ public class ScriptEditorForBeanShell implements ScriptEditor, ActionListener {
 
     // try to load the template for BeanShell scripts
     static {
+        BSHTEMPLATE = "// BeanShell script";
         try {
             URL url = ScriptEditorForBeanShell.class.getResource("template.bsh");
-            InputStream in = url.openStream();
-            StringBuilder buf = new StringBuilder();
-            byte[] b = new byte[1024];
-            int len;
+            if (url != null) {
+                InputStream in = url.openStream();
+                StringBuilder buf = new StringBuilder();
+                byte[] b = new byte[1024];
+                int len;
 
-            while ((len = in.read(b)) != -1) {
-                buf.append(new String(b, 0, len));
+                while ((len = in.read(b)) != -1) {
+                    buf.append(new String(b, 0, len));
+                }
+
+                in.close();
+
+                BSHTEMPLATE = buf.toString();
             }
-
-            in.close();
-
-            BSHTEMPLATE = buf.toString();
         } catch (IOException ioe) {
-            BSHTEMPLATE = "// BeanShell script";
         } catch (Exception e) {
-            BSHTEMPLATE = "// BeanShell script";
         }
     }
 
@@ -269,21 +273,21 @@ public class ScriptEditorForBeanShell implements ScriptEditor, ActionListener {
         );
 
         String[] labels = {"Run", "Clear", "Save", "Close","Undo","Redo"};
-        JPanel p = new JPanel();
-        p.setLayout(new FlowLayout());
-
+        JToolBar toolbar = new JToolBar();
+        toolbar.setRollover(true);
         for (String label : labels) {
             JButton b = new JButton(label);
+            b.setToolTipText(label);
             b.addActionListener(this);
-            p.add(b);
-
+            toolbar.add(b);
+            toolbar.addSeparator();
             if (label.equals("Save") && filename == null) {
                 b.setEnabled(false);
             }
         }
 
         frame.getContentPane().add((JComponent)view, BorderLayout.CENTER);
-        frame.add(p, BorderLayout.NORTH);
+        frame.add(toolbar, BorderLayout.NORTH);
         frame.pack();
         frame.setSize(590, 480);
         frame.setLocation(300, 200);
@@ -343,6 +347,9 @@ public class ScriptEditorForBeanShell implements ScriptEditor, ActionListener {
             if (fos != null) {
                 try {
                     fos.flush();
+                } catch (IOException ignore) {
+                }
+                try {
                     fos.close();
                 } catch (IOException ignore) {
                 }

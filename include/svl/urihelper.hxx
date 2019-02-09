@@ -21,7 +21,6 @@
 #define INCLUDED_SVL_URIHELPER_HXX
 
 #include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
 #include <rtl/textenc.h>
 #include <svl/svldllapi.h>
 #include <tools/link.hxx>
@@ -54,15 +53,14 @@ SVL_DLLPUBLIC OUString SmartRel2Abs(INetURLObject const & rTheBaseURIRef,
                                     Link<OUString *, bool> const & rMaybeFileHdl = Link<OUString *, bool>(),
                                     bool bCheckFileExists = true,
                                     bool bIgnoreFragment = false,
-                                    INetURLObject::EncodeMechanism eEncodeMechanism = INetURLObject::WAS_ENCODED,
-                                    INetURLObject::DecodeMechanism eDecodeMechanism = INetURLObject::DECODE_TO_IURI,
+                                    INetURLObject::EncodeMechanism eEncodeMechanism = INetURLObject::EncodeMechanism::WasEncoded,
+                                    INetURLObject::DecodeMechanism eDecodeMechanism = INetURLObject::DecodeMechanism::ToIUri,
                                     rtl_TextEncoding eCharset = RTL_TEXTENCODING_UTF8,
-                                    bool bRelativeNonURIs = false,
-                                    INetURLObject::FSysStyle eStyle = INetURLObject::FSYS_DETECT);
+                                    FSysStyle eStyle = FSysStyle::Detect);
 
 SVL_DLLPUBLIC void SetMaybeFileHdl(Link<OUString *, bool> const & rTheMaybeFileHdl);
 
-SVL_DLLPUBLIC Link<OUString *, bool> GetMaybeFileHdl();
+SVL_DLLPUBLIC Link<OUString *, bool> const & GetMaybeFileHdl();
 
 /**
    Converts a URI reference to a relative one, ignoring certain differences (for
@@ -119,7 +117,7 @@ SVL_DLLPUBLIC OUString FindFirstURLInText(OUString const & rText,
                                           sal_Int32 & rBegin,
                                           sal_Int32 & rEnd,
                                           CharClass const & rCharClass,
-                                          INetURLObject::EncodeMechanism eMechanism = INetURLObject::WAS_ENCODED,
+                                          INetURLObject::EncodeMechanism eMechanism = INetURLObject::EncodeMechanism::WasEncoded,
                                           rtl_TextEncoding eCharset = RTL_TEXTENCODING_UTF8);
 
 /** Remove any password component from both absolute and relative URLs.
@@ -148,8 +146,8 @@ SVL_DLLPUBLIC OUString FindFirstURLInText(OUString const & rText,
     @return  The input URI with any password component removed.
  */
 SVL_DLLPUBLIC OUString removePassword(OUString const & rURI,
-                                      INetURLObject::EncodeMechanism eEncodeMechanism = INetURLObject::WAS_ENCODED,
-                                      INetURLObject::DecodeMechanism eDecodeMechanism = INetURLObject::DECODE_TO_IURI,
+                                      INetURLObject::EncodeMechanism eEncodeMechanism,
+                                      INetURLObject::DecodeMechanism eDecodeMechanism = INetURLObject::DecodeMechanism::ToIUri,
                                       rtl_TextEncoding eCharset = RTL_TEXTENCODING_UTF8);
 
 /** Resolve a URL's host component domain name in IDNA syntax to plain DNS

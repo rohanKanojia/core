@@ -21,12 +21,12 @@
 
 #include <com/sun/star/animations/XAnimate.hpp>
 
-#include "basecontainernode.hxx"
-#include "activitiesfactory.hxx"
-#include "shapeattributelayer.hxx"
-#include "shapeattributelayerholder.hxx"
-#include "attributableshape.hxx"
-#include "shapesubset.hxx"
+#include <basecontainernode.hxx>
+#include <activitiesfactory.hxx>
+#include <shapeattributelayer.hxx>
+#include <shapeattributelayerholder.hxx>
+#include <attributableshape.hxx>
+#include <shapesubset.hxx>
 
 namespace slideshow {
 namespace internal {
@@ -56,7 +56,7 @@ protected:
     /// Create parameter struct for ActivitiesFactory
     ActivitiesFactory::CommonParameters fillCommonParameters() const;
     ::basegfx::B2DVector const&         getSlideSize() const { return maSlideSize; }
-    AttributableShapeSharedPtr          getShape() const;
+    AttributableShapeSharedPtr const &  getShape() const;
 
 private:
     virtual bool hasPendingAnimation() const override;
@@ -79,14 +79,14 @@ private:
 private:
     css::uno::Reference<css::animations::XAnimate>  mxAnimateNode;
     ShapeAttributeLayerHolder                       maAttributeLayerHolder;
-    ::basegfx::B2DVector                            maSlideSize;
+    ::basegfx::B2DVector const                      maSlideSize;
     AnimationActivitySharedPtr                      mpActivity;
 
     /// When valid, this node has a plain target shape
     AttributableShapeSharedPtr                      mpShape;
     /// When valid, this is a subsetted target shape
     ShapeSubsetSharedPtr                            mpShapeSubset;
-    SubsettableShapeManagerSharedPtr                mpSubsetManager;
+    SubsettableShapeManagerSharedPtr const          mpSubsetManager;
     bool                                            mbIsIndependentSubset;
 };
 

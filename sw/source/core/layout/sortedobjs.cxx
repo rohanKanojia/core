@@ -64,9 +64,9 @@ namespace
 {
     int GetAnchorWeight(RndStdIds eAnchor)
     {
-        if (eAnchor == FLY_AT_CHAR)
+        if (eAnchor == RndStdIds::FLY_AT_CHAR)
             return 0;
-        if (eAnchor == FLY_AS_CHAR)
+        if (eAnchor == RndStdIds::FLY_AS_CHAR)
             return 1;
         return 2;
     }
@@ -86,36 +86,36 @@ struct ObjAnchorOrder
         const SwFormatAnchor* pAnchorNew = &(rFormatNew.GetAnchor());
 
         // check for to-page anchored objects
-        if ((pAnchorListed->GetAnchorId() == FLY_AT_PAGE) &&
-            (pAnchorNew   ->GetAnchorId() != FLY_AT_PAGE))
+        if ((pAnchorListed->GetAnchorId() == RndStdIds::FLY_AT_PAGE) &&
+            (pAnchorNew   ->GetAnchorId() != RndStdIds::FLY_AT_PAGE))
         {
             return true;
         }
-        else if ((pAnchorListed->GetAnchorId() != FLY_AT_PAGE) &&
-                 (pAnchorNew   ->GetAnchorId() == FLY_AT_PAGE))
+        else if ((pAnchorListed->GetAnchorId() != RndStdIds::FLY_AT_PAGE) &&
+                 (pAnchorNew   ->GetAnchorId() == RndStdIds::FLY_AT_PAGE))
         {
             return false;
         }
-        else if ((pAnchorListed->GetAnchorId() == FLY_AT_PAGE) &&
-                 (pAnchorNew   ->GetAnchorId() == FLY_AT_PAGE))
+        else if ((pAnchorListed->GetAnchorId() == RndStdIds::FLY_AT_PAGE) &&
+                 (pAnchorNew   ->GetAnchorId() == RndStdIds::FLY_AT_PAGE))
         {
             return pAnchorListed->GetOrder() < pAnchorNew->GetOrder();
         }
 
         // Both objects aren't anchored to page.
         // Thus, check for to-fly anchored objects
-        if ((pAnchorListed->GetAnchorId() == FLY_AT_FLY) &&
-            (pAnchorNew   ->GetAnchorId() != FLY_AT_FLY))
+        if ((pAnchorListed->GetAnchorId() == RndStdIds::FLY_AT_FLY) &&
+            (pAnchorNew   ->GetAnchorId() != RndStdIds::FLY_AT_FLY))
         {
             return true;
         }
-        else if ((pAnchorListed->GetAnchorId() != FLY_AT_FLY) &&
-                 (pAnchorNew   ->GetAnchorId() == FLY_AT_FLY))
+        else if ((pAnchorListed->GetAnchorId() != RndStdIds::FLY_AT_FLY) &&
+                 (pAnchorNew   ->GetAnchorId() == RndStdIds::FLY_AT_FLY))
         {
             return false;
         }
-        else if ((pAnchorListed->GetAnchorId() == FLY_AT_FLY) &&
-                 (pAnchorNew   ->GetAnchorId() == FLY_AT_FLY))
+        else if ((pAnchorListed->GetAnchorId() == RndStdIds::FLY_AT_FLY) &&
+                 (pAnchorNew   ->GetAnchorId() == RndStdIds::FLY_AT_FLY))
         {
             return pAnchorListed->GetOrder() < pAnchorNew->GetOrder();
         }
@@ -136,9 +136,9 @@ struct ObjAnchorOrder
         // if not anchored at-paragraph
         if (pContentAnchorListed && pContentAnchorNew)
         {
-            sal_Int32 nListedIndex = pAnchorListed->GetAnchorId() != FLY_AT_PARA ?
+            sal_Int32 nListedIndex = pAnchorListed->GetAnchorId() != RndStdIds::FLY_AT_PARA ?
                 pContentAnchorListed->nContent.GetIndex() : 0;
-            sal_Int32 nNewIndex = pAnchorNew->GetAnchorId() != FLY_AT_PARA ?
+            sal_Int32 nNewIndex = pAnchorNew->GetAnchorId() != RndStdIds::FLY_AT_PARA ?
                 pContentAnchorNew->nContent.GetIndex() : 0;
             if (nListedIndex != nNewIndex)
             {
@@ -160,19 +160,16 @@ struct ObjAnchorOrder
         const SdrLayerID nHellId = rIDDMA.GetHellId();
         const SdrLayerID nInvisibleHellId = rIDDMA.GetInvisibleHellId();
         const bool bWrapThroughOrHellListed =
-                    rFormatListed.GetSurround().GetSurround() == SURROUND_THROUGHT ||
+                    rFormatListed.GetSurround().GetSurround() == css::text::WrapTextMode_THROUGH ||
                     _pListedAnchoredObj->GetDrawObj()->GetLayer() == nHellId ||
                     _pListedAnchoredObj->GetDrawObj()->GetLayer() == nInvisibleHellId;
         const bool bWrapThroughOrHellNew =
-                    rFormatNew.GetSurround().GetSurround() == SURROUND_THROUGHT ||
+                    rFormatNew.GetSurround().GetSurround() == css::text::WrapTextMode_THROUGH ||
                     _pNewAnchoredObj->GetDrawObj()->GetLayer() == nHellId ||
                     _pNewAnchoredObj->GetDrawObj()->GetLayer() == nInvisibleHellId;
         if ( bWrapThroughOrHellListed != bWrapThroughOrHellNew )
         {
-            if ( bWrapThroughOrHellListed )
-                return false;
-            else
-                return true;
+            return !bWrapThroughOrHellListed;
         }
         else if ( bWrapThroughOrHellListed && bWrapThroughOrHellNew )
         {
@@ -190,11 +187,8 @@ struct ObjAnchorOrder
                 pWrapInfluenceOnObjPosNew->GetWrapInfluenceOnObjPos( true ) )
         {
             // #i35017# - constant name has changed
-            if ( pWrapInfluenceOnObjPosListed->GetWrapInfluenceOnObjPos( true )
-                            == text::WrapInfluenceOnPosition::ONCE_SUCCESSIVE )
-                return true;
-            else
-                return false;
+            return pWrapInfluenceOnObjPosListed->GetWrapInfluenceOnObjPos( true )
+                            == text::WrapInfluenceOnPosition::ONCE_SUCCESSIVE;
         }
 
         // objects anchored at the same content position/page/fly with same
@@ -230,25 +224,20 @@ bool SwSortedObjs::Insert( SwAnchoredObject& _rAnchoredObj )
     return Contains( _rAnchoredObj );
 }
 
-bool SwSortedObjs::Remove( SwAnchoredObject& _rAnchoredObj )
+void SwSortedObjs::Remove( SwAnchoredObject& _rAnchoredObj )
 {
-    bool bRet = true;
-
     std::vector< SwAnchoredObject* >::iterator aDelPosIter =
         std::find( maSortedObjLst.begin(), maSortedObjLst.end(), &_rAnchoredObj );
 
     if ( aDelPosIter == maSortedObjLst.end() )
     {
         // object not found.
-        bRet = false;
         OSL_FAIL( "<SwSortedObjs::Remove()> - object not found" );
     }
     else
     {
         maSortedObjLst.erase( aDelPosIter );
     }
-
-    return bRet;
 }
 
 bool SwSortedObjs::Contains( const SwAnchoredObject& _rAnchoredObj ) const
@@ -259,25 +248,23 @@ bool SwSortedObjs::Contains( const SwAnchoredObject& _rAnchoredObj ) const
     return aIter != maSortedObjLst.end();
 }
 
-bool SwSortedObjs::Update( SwAnchoredObject& _rAnchoredObj )
+void SwSortedObjs::Update( SwAnchoredObject& _rAnchoredObj )
 {
     if ( !Contains( _rAnchoredObj ) )
     {
         // given anchored object not found in list
         OSL_FAIL( "<SwSortedObjs::Update(..) - sorted list doesn't contain given anchored object" );
-        return false;
+        return;
     }
 
     if ( size() == 1 )
     {
         // given anchored object is the only one in the list.
-        return true;
+        return;
     }
 
     Remove( _rAnchoredObj );
     Insert( _rAnchoredObj );
-
-    return Contains( _rAnchoredObj );
 }
 
 void SwSortedObjs::UpdateAll()

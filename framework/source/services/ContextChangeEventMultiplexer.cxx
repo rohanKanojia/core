@@ -18,7 +18,7 @@
  */
 
 #include <helper/mischelper.hxx>
-
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -53,7 +53,6 @@ class ContextChangeEventMultiplexer
 {
 public:
     ContextChangeEventMultiplexer();
-    virtual ~ContextChangeEventMultiplexer();
     ContextChangeEventMultiplexer(const ContextChangeEventMultiplexer&) = delete;
     ContextChangeEventMultiplexer& operator=(const ContextChangeEventMultiplexer&) = delete;
 
@@ -62,41 +61,33 @@ public:
     // XContextChangeEventMultiplexer
     virtual void SAL_CALL addContextChangeEventListener (
         const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener,
-        const cssu::Reference<cssu::XInterface>& rxEventFocus)
-        throw(cssu::RuntimeException, cssl::IllegalArgumentException, std::exception) override;
+        const cssu::Reference<cssu::XInterface>& rxEventFocus) override;
     virtual void SAL_CALL removeContextChangeEventListener (
         const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener,
-        const cssu::Reference<cssu::XInterface>& rxEventFocus)
-        throw(cssu::RuntimeException, cssl::IllegalArgumentException, std::exception) override;
+        const cssu::Reference<cssu::XInterface>& rxEventFocus) override;
     virtual void SAL_CALL removeAllContextChangeEventListeners (
-        const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener)
-        throw(cssu::RuntimeException, cssl::IllegalArgumentException, std::exception) override;
+        const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener) override;
     virtual void SAL_CALL broadcastContextChangeEvent (
         const css::ui::ContextChangeEventObject& rContextChangeEventObject,
-        const cssu::Reference<cssu::XInterface>& rxEventFocus)
-        throw(cssu::RuntimeException, std::exception) override;
+        const cssu::Reference<cssu::XInterface>& rxEventFocus) override;
 
     // XServiceInfo
-    virtual ::rtl::OUString SAL_CALL getImplementationName()
-        throw (cssu::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL supportsService  (
-        const ::rtl::OUString& rsServiceName)
-        throw (cssu::RuntimeException, std::exception) override;
-    virtual cssu::Sequence< ::rtl::OUString> SAL_CALL getSupportedServiceNames()
-        throw (cssu::RuntimeException, std::exception) override;
+        const OUString& rsServiceName) override;
+    virtual cssu::Sequence< OUString> SAL_CALL getSupportedServiceNames() override;
 
     // XEventListener
     virtual void SAL_CALL disposing (
-        const css::lang::EventObject& rEvent)
-        throw (cssu::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
     typedef ::std::vector<cssu::Reference<css::ui::XContextChangeEventListener> > ListenerContainer;
     class FocusDescriptor
     {
     public:
         ListenerContainer maListeners;
-        ::rtl::OUString msCurrentApplicationName;
-        ::rtl::OUString msCurrentContextName;
+        OUString msCurrentApplicationName;
+        OUString msCurrentContextName;
     };
     typedef ::std::map<cssu::Reference<cssu::XInterface>, FocusDescriptor> ListenerMap;
     ListenerMap maListeners;
@@ -121,10 +112,6 @@ ContextChangeEventMultiplexer::ContextChangeEventMultiplexer()
 {
 }
 
-ContextChangeEventMultiplexer::~ContextChangeEventMultiplexer()
-{
-}
-
 void SAL_CALL ContextChangeEventMultiplexer::disposing()
 {
     ListenerMap aListeners;
@@ -132,24 +119,18 @@ void SAL_CALL ContextChangeEventMultiplexer::disposing()
 
     cssu::Reference<cssu::XInterface> xThis (static_cast<XWeak*>(this));
     css::lang::EventObject aEvent (xThis);
-    for (ListenerMap::const_iterator iContainer(aListeners.begin()), iEnd(aListeners.end());
-         iContainer!=iEnd;
-         ++iContainer)
+    for (auto const& container : aListeners)
     {
         // Unregister from the focus object.
-        Reference<lang::XComponent> xComponent (iContainer->first, UNO_QUERY);
+        Reference<lang::XComponent> xComponent (container.first, UNO_QUERY);
         if (xComponent.is())
             xComponent->removeEventListener(this);
 
         // Tell all listeners that we are being disposed.
-        const FocusDescriptor& rFocusDescriptor (iContainer->second);
-        for (ListenerContainer::const_iterator
-                 iListener(rFocusDescriptor.maListeners.begin()),
-                 iContainerEnd(rFocusDescriptor.maListeners.end());
-             iListener!=iContainerEnd;
-             ++iListener)
+        const FocusDescriptor& rFocusDescriptor (container.second);
+        for (auto const& listener : rFocusDescriptor.maListeners)
         {
-            (*iListener)->disposing(aEvent);
+            listener->disposing(aEvent);
         }
     }
 }
@@ -158,7 +139,6 @@ void SAL_CALL ContextChangeEventMultiplexer::disposing()
 void SAL_CALL ContextChangeEventMultiplexer::addContextChangeEventListener (
     const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener,
     const cssu::Reference<cssu::XInterface>& rxEventFocus)
-    throw(cssu::RuntimeException,cssl::IllegalArgumentException, std::exception)
 {
     if ( ! rxListener.is())
         throw css::lang::IllegalArgumentException(
@@ -170,14 +150,13 @@ void SAL_CALL ContextChangeEventMultiplexer::addContextChangeEventListener (
     if (pFocusDescriptor != nullptr)
     {
         ListenerContainer& rContainer (pFocusDescriptor->maListeners);
-        if (::std::find(rContainer.begin(), rContainer.end(), rxListener) == rContainer.end())
-            rContainer.push_back(rxListener);
-        else
+        if (::std::find(rContainer.begin(), rContainer.end(), rxListener) != rContainer.end())
         {
             // The listener was added for the same event focus
             // previously.  That is an error.
             throw cssl::IllegalArgumentException("listener added twice", static_cast<XWeak*>(this), 0);
         }
+        rContainer.push_back(rxListener);
     }
 
     // Send out an initial event that informs the new listener about
@@ -195,7 +174,6 @@ void SAL_CALL ContextChangeEventMultiplexer::addContextChangeEventListener (
 void SAL_CALL ContextChangeEventMultiplexer::removeContextChangeEventListener (
     const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener,
     const cssu::Reference<cssu::XInterface>& rxEventFocus)
-    throw(cssu::RuntimeException,cssl::IllegalArgumentException, std::exception)
 {
     if ( ! rxListener.is())
         throw cssl::IllegalArgumentException(
@@ -221,7 +199,6 @@ void SAL_CALL ContextChangeEventMultiplexer::removeContextChangeEventListener (
 
 void SAL_CALL ContextChangeEventMultiplexer::removeAllContextChangeEventListeners (
     const cssu::Reference<css::ui::XContextChangeEventListener>& rxListener)
-    throw(cssu::RuntimeException,cssl::IllegalArgumentException, std::exception)
 {
     if ( ! rxListener.is())
         throw cssl::IllegalArgumentException(
@@ -249,7 +226,6 @@ void SAL_CALL ContextChangeEventMultiplexer::removeAllContextChangeEventListener
 void SAL_CALL ContextChangeEventMultiplexer::broadcastContextChangeEvent (
     const css::ui::ContextChangeEventObject& rEventObject,
     const cssu::Reference<cssu::XInterface>& rxEventFocus)
-    throw(cssu::RuntimeException, std::exception)
 {
     // Remember the current context.
     if (rxEventFocus.is())
@@ -277,13 +253,9 @@ void ContextChangeEventMultiplexer::BroadcastEventToSingleContainer (
         // Create a copy of the listener container to avoid problems
         // when one of the called listeners calls add... or remove...
         ListenerContainer aContainer (pFocusDescriptor->maListeners);
-        for (ListenerContainer::const_iterator
-                 iListener(aContainer.begin()),
-                 iEnd(aContainer.end());
-             iListener!=iEnd;
-             ++iListener)
+        for (auto const& listener : aContainer)
         {
-            (*iListener)->notifyContextChangeEvent(rEventObject);
+            listener->notifyContextChangeEvent(rEventObject);
         }
     }
 }
@@ -301,10 +273,9 @@ ContextChangeEventMultiplexer::FocusDescriptor* ContextChangeEventMultiplexer::G
             xComponent->addEventListener(this);
 
         // Create a new listener container for the event focus.
-        iDescriptor = maListeners.insert(
-            ListenerMap::value_type(
+        iDescriptor = maListeners.emplace(
                 rxEventFocus,
-                FocusDescriptor())).first;
+                FocusDescriptor()).first;
     }
     if (iDescriptor != maListeners.end())
         return &iDescriptor->second;
@@ -313,26 +284,22 @@ ContextChangeEventMultiplexer::FocusDescriptor* ContextChangeEventMultiplexer::G
 }
 
 OUString SAL_CALL ContextChangeEventMultiplexer::getImplementationName()
-    throw(cssu::RuntimeException, std::exception)
 {
     return OUString("org.apache.openoffice.comp.framework.ContextChangeEventMultiplexer");
 }
 
-sal_Bool SAL_CALL ContextChangeEventMultiplexer::supportsService ( const ::rtl::OUString& rsServiceName)
-    throw (cssu::RuntimeException, std::exception)
+sal_Bool SAL_CALL ContextChangeEventMultiplexer::supportsService ( const OUString& rsServiceName)
 {
     return cppu::supportsService(this, rsServiceName);
 }
 
 css::uno::Sequence<OUString> SAL_CALL ContextChangeEventMultiplexer::getSupportedServiceNames()
-    throw (cssu::RuntimeException, std::exception)
 {
     // it's a singleton, not a service
     return css::uno::Sequence<OUString>();
 }
 
 void SAL_CALL ContextChangeEventMultiplexer::disposing ( const css::lang::EventObject& rEvent)
-    throw (cssu::RuntimeException, std::exception)
 {
     ListenerMap::iterator iDescriptor (maListeners.find(rEvent.Source));
 
@@ -366,7 +333,7 @@ struct Singleton:
 namespace framework {
 
 // right now we assume there's one matching listener
-uno::Reference<ui::XContextChangeEventListener> GetFirstListenerWith_ImplImpl(
+static uno::Reference<ui::XContextChangeEventListener> GetFirstListenerWith_ImplImpl(
     uno::Reference<uno::XInterface> const& xEventFocus,
     std::function<bool (uno::Reference<ui::XContextChangeEventListener> const&)> const& rPredicate)
 {
@@ -407,7 +374,7 @@ static Hook g_hook;
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 org_apache_openoffice_comp_framework_ContextChangeEventMultiplexer_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)

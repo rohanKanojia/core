@@ -24,29 +24,15 @@
 #include <com/sun/star/drawing/XDrawPage.hpp>
 #include <com/sun/star/drawing/XGraphicExportFilter.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/presentation/AnimationEffect.hpp>
-#include <com/sun/star/presentation/AnimationSpeed.hpp>
-#include <com/sun/star/presentation/ClickAction.hpp>
-#include <com/sun/star/presentation/FadeEffect.hpp>
-#include <osl/file.hxx>
 #include <vcl/checksum.hxx>
 
 #include <vector>
 #include <map>
+#include <memory>
 
 typedef ::std::map<BitmapChecksum, sal_uInt16> ChecksumCache;
 
 class GDIMetaFile;
-
-inline OUString STR(const sal_Char * in)
-{
-    return OUString::createFromAscii(in);
-}
-
-inline OUString VAL(sal_Int32 in)
-{
-    return OUString::number(in);
-}
 
 namespace swf {
 
@@ -64,36 +50,8 @@ public:
     sal_Int32       mnWidth;
     sal_Int32       mnHeight;
 
-    css::presentation::AnimationEffect meEffect;
-    css::presentation::AnimationEffect meTextEffect;
-    css::presentation::AnimationSpeed  meEffectSpeed;
-
-    sal_Int32       mnPresOrder;
-
-    OUString        maBookmark;
-
-    sal_Int32       mnDimColor;
-    bool            mbDimHide;
-    bool            mbDimPrev;
-
-    bool            mbSoundOn;
-    bool            mbPlayFull;
-    OUString        maSoundURL;
-
-    sal_Int32       mnBlueScreenColor;
-
     ShapeInfo() :
-        mnID(0), mnX(0), mnY(0), mnWidth(0), mnHeight(0),
-        meEffect( css::presentation::AnimationEffect_NONE ),
-        meTextEffect( css::presentation::AnimationEffect_NONE ),
-        meEffectSpeed( css::presentation::AnimationSpeed_MEDIUM ),
-        mnPresOrder( 0 ),
-        mnDimColor( 0 ),
-        mbDimHide( false ),
-        mbDimPrev( false ),
-        mbSoundOn( false ),
-        mbPlayFull( false ),
-        mnBlueScreenColor( 0 ) {}
+        mnID(0), mnX(0), mnY(0), mnWidth(0), mnHeight(0) {}
 };
 
 
@@ -103,12 +61,8 @@ struct PageInfo
     sal_uInt16      mnObjectsID;
     sal_uInt16      mnForegroundID;
 
-    ::std::vector<ShapeInfo*>
-                    maShapesVector;
-
     PageInfo();
     ~PageInfo();
-
 };
 
 
@@ -122,16 +76,16 @@ public:
         const css::uno::Reference< css::drawing::XShapes >& rxSelectedShapes,
         const css::uno::Reference< css::drawing::XDrawPage >& rxSelectedDrawPage,
 
-        sal_Int32 nJPEGCompressMode = -1,
-        bool bExportOLEAsJPEG = false);
+        sal_Int32 nJPEGCompressMode,
+        bool bExportOLEAsJPEG);
     ~FlashExporter();
 
     void Flush();
 
-    bool exportAll( const css::uno::Reference< css::lang::XComponent >& xDoc, css::uno::Reference< css::io::XOutputStream > &xOutputStream,    css::uno::Reference< css::task::XStatusIndicator> &xStatusIndicator );
-    bool exportSlides( const css::uno::Reference< css::drawing::XDrawPage >& xDrawPage, css::uno::Reference< css::io::XOutputStream > &xOutputStream, sal_uInt16 nPage);
-    sal_uInt16 exportBackgrounds( const css::uno::Reference< css::drawing::XDrawPage >& xDrawPage, css::uno::Reference< css::io::XOutputStream > &xOutputStream, sal_uInt16 nPage, bool bExportObjects );
-    sal_uInt16 exportBackgrounds( css::uno::Reference< css::drawing::XDrawPage > xDrawPage, sal_uInt16 nPage, bool bExportObjects );
+    bool exportAll( const css::uno::Reference< css::lang::XComponent >& xDoc, css::uno::Reference< css::io::XOutputStream > const &xOutputStream,    css::uno::Reference< css::task::XStatusIndicator> const &xStatusIndicator );
+    bool exportSlides( const css::uno::Reference< css::drawing::XDrawPage >& xDrawPage, css::uno::Reference< css::io::XOutputStream > const &xOutputStream);
+    sal_uInt16 exportBackgrounds( const css::uno::Reference< css::drawing::XDrawPage >& xDrawPage, css::uno::Reference< css::io::XOutputStream > const &xOutputStream, sal_uInt16 nPage, bool bExportObjects );
+    sal_uInt16 exportBackgrounds( css::uno::Reference< css::drawing::XDrawPage > const & xDrawPage, sal_uInt16 nPage, bool bExportObjects );
 
     ChecksumCache gMasterCache;
     ChecksumCache gPrivateCache;
@@ -150,19 +104,19 @@ private:
 
     ::std::map<sal_uInt32, PageInfo> maPagesMap;
 
-    sal_uInt16 exportDrawPageBackground(sal_uInt16 nPage, css::uno::Reference< css::drawing::XDrawPage >& xPage);
-    sal_uInt16 exportMasterPageObjects(sal_uInt16 nPage, css::uno::Reference< css::drawing::XDrawPage >& xMasterPage);
+    sal_uInt16 exportDrawPageBackground(sal_uInt16 nPage, css::uno::Reference< css::drawing::XDrawPage > const & xPage);
+    sal_uInt16 exportMasterPageObjects(sal_uInt16 nPage, css::uno::Reference< css::drawing::XDrawPage > const & xMasterPage);
 
     void exportDrawPageContents( const css::uno::Reference< css::drawing::XDrawPage >& xPage, bool bStream, bool bMaster  );
     void exportShapes( const css::uno::Reference< css::drawing::XShapes >& xShapes, bool bStream, bool bMaster );
     void exportShape( const css::uno::Reference< css::drawing::XShape >& xShape, bool bMaster);
 
-    BitmapChecksum ActionSummer(css::uno::Reference< css::drawing::XShape >& xShape);
-    BitmapChecksum ActionSummer(css::uno::Reference< css::drawing::XShapes >& xShapes);
+    BitmapChecksum ActionSummer(css::uno::Reference< css::drawing::XShape > const & xShape);
+    BitmapChecksum ActionSummer(css::uno::Reference< css::drawing::XShapes > const & xShapes);
 
-    bool getMetaFile( css::uno::Reference< css::lang::XComponent >&xComponent, GDIMetaFile& rMtf, bool bOnlyBackground = false, bool bExportAsJPEG = false );
+    bool getMetaFile( css::uno::Reference< css::lang::XComponent > const &xComponent, GDIMetaFile& rMtf, bool bOnlyBackground = false, bool bExportAsJPEG = false );
 
-    Writer* mpWriter;
+    std::unique_ptr<Writer> mpWriter;
 
     sal_Int32 mnDocWidth;
     sal_Int32 mnDocHeight;

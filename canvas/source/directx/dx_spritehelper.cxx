@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/numeric/ftools.hxx>
@@ -26,7 +27,7 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolygontriangulator.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -120,7 +121,7 @@ namespace dxcanvas
             // background buffer.
 
             // log output pos in device pixel
-            SAL_INFO("canva.directx", "SpriteHelper::redraw(): output pos is (" <<
+            SAL_INFO("canvas.directx", "SpriteHelper::redraw(): output pos is (" <<
                      rPos.getX() << "," << rPos.getY() << ")" );
 
             const ::basegfx::B2DVector&                        rSize( getSizePixel() );
@@ -150,7 +151,7 @@ namespace dxcanvas
 
                     // check whether the clip is rectangular
                     if( nNumClipPolygons == 1 )
-                        if( ::basegfx::tools::isRectangle( aClipPath.getB2DPolygon( 0 ) ) )
+                        if( ::basegfx::utils::isRectangle( aClipPath.getB2DPolygon( 0 ) ) )
                             bIsClipRectangular = true;
                 }
             }
@@ -171,7 +172,7 @@ namespace dxcanvas
                 // ========================
 
                 ::basegfx::B2DRectangle aClipBounds(
-                    ::basegfx::tools::getRange( aClipPath ) );
+                    ::basegfx::utils::getRange( aClipPath ) );
                 aClipBounds.intersect( aSourceRect );
 
                 mpBitmap->draw(fAlpha,rPos,aClipBounds,rTransform);

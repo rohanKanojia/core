@@ -18,13 +18,15 @@
  */
 
 
+#include <tools/stream.hxx>
+#include <tools/debug.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/window.hxx>
 #include <svl/solar.hrc>
 #include <vcl/fltcall.hxx>
 #include <vcl/FilterConfigItem.hxx>
+#include <com/sun/star/task/XStatusIndicator.hpp>
 #include "giflzwc.hxx"
 #include <memory>
 
@@ -34,16 +36,16 @@ class GIFWriter
     Bitmap              aAccBmp;
     SvStream& m_rGIF;
     BitmapReadAccess*   m_pAcc;
-    sal_uLong           nMinPercent;
-    sal_uLong           nMaxPercent;
-    sal_uLong           nLastPercent;
+    sal_uInt32          nMinPercent;
+    sal_uInt32          nMaxPercent;
+    sal_uInt32          nLastPercent;
     long                nActX;
     long                nActY;
     sal_Int32           nInterlaced;
     bool                bStatus;
     bool                bTransparent;
 
-    void                MayCallback( sal_uLong nPercent );
+    void                MayCallback(sal_uInt32 nPercent);
     void                WriteSignature( bool bGIF89a );
     void                WriteGlobalHeader( const Size& rSize );
     void                WriteLoopExtension( const Animation& rAnimation );
@@ -59,14 +61,13 @@ class GIFWriter
 
     void                WriteAnimation( const Animation& rAnimation );
     void                WriteBitmapEx( const BitmapEx& rBmpEx, const Point& rPoint, bool bExtended,
-                                       long nTimer = 0, Disposal eDisposal = DISPOSE_NOT );
+                                       long nTimer = 0, Disposal eDisposal = Disposal::Not );
 
     css::uno::Reference< css::task::XStatusIndicator > xStatusIndicator;
 
 public:
 
     explicit GIFWriter(SvStream &rStream);
-    ~GIFWriter() {}
 
     bool WriteGIF( const Graphic& rGraphic, FilterConfigItem* pConfigItem );
 };
@@ -94,17 +95,16 @@ bool GIFWriter::WriteGIF(const Graphic& rGraphic, FilterConfigItem* pFilterConfi
         xStatusIndicator = pFilterConfigItem->GetStatusIndicator();
         if ( xStatusIndicator.is() )
         {
-            OUString aMsg;
-            xStatusIndicator->start( aMsg, 100 );
+            xStatusIndicator->start( OUString(), 100 );
         }
     }
 
     Size            aSize100;
     const MapMode   aMap( rGraphic.GetPrefMapMode() );
-    bool            bLogSize = ( aMap.GetMapUnit() != MAP_PIXEL );
+    bool            bLogSize = ( aMap.GetMapUnit() != MapUnit::MapPixel );
 
     if( bLogSize )
-        aSize100 = OutputDevice::LogicToLogic( rGraphic.GetPrefSize(), aMap, MAP_100TH_MM );
+        aSize100 = OutputDevice::LogicToLogic(rGraphic.GetPrefSize(), aMap, MapMode(MapUnit::Map100thMM));
 
     bStatus = true;
     nLastPercent = 0;
@@ -139,12 +139,7 @@ bool GIFWriter::WriteGIF(const Graphic& rGraphic, FilterConfigItem* pFilterConfi
     {
         const bool bGrafTrans = rGraphic.IsTransparent();
 
-        BitmapEx aBmpEx;
-
-        if( bGrafTrans )
-            aBmpEx = rGraphic.GetBitmapEx();
-        else
-            aBmpEx = BitmapEx( rGraphic.GetBitmap() );
+        BitmapEx aBmpEx = rGraphic.GetBitmapEx();
 
         nMinPercent = 0;
         nMaxPercent = 100;
@@ -212,8 +207,8 @@ void GIFWriter::WriteAnimation( const Animation& rAnimation )
     {
         const double fStep = 100. / nCount;
 
-        nMinPercent = 0L;
-        nMaxPercent = (sal_uLong) fStep;
+        nMinPercent = 0;
+        nMaxPercent = static_cast<sal_uInt32>(fStep);
 
         for( sal_uInt16 i = 0; i < nCount; i++ )
         {
@@ -222,13 +217,13 @@ void GIFWriter::WriteAnimation( const Animation& rAnimation )
             WriteBitmapEx( rAnimBmp.aBmpEx, rAnimBmp.aPosPix, true,
                            rAnimBmp.nWait, rAnimBmp.eDisposal );
             nMinPercent = nMaxPercent;
-            nMaxPercent = (sal_uLong) ( nMaxPercent + fStep );
+            nMaxPercent = static_cast<sal_uInt32>(nMaxPercent + fStep);
         }
     }
 }
 
 
-void GIFWriter::MayCallback( sal_uLong nPercent )
+void GIFWriter::MayCallback(sal_uInt32 nPercent)
 {
     if ( xStatusIndicator.is() )
     {
@@ -253,17 +248,17 @@ bool GIFWriter::CreateAccess( const BitmapEx& rBmpEx )
 
         if( !!aMask )
         {
-            if( aAccBmp.Convert( BMP_CONVERSION_8BIT_TRANS ) )
+            if( aAccBmp.Convert( BmpConversion::N8BitTrans ) )
             {
-                aMask.Convert( BMP_CONVERSION_1BIT_THRESHOLD );
+                aMask.Convert( BmpConversion::N1BitThreshold );
                 aAccBmp.Replace( aMask, BMP_COL_TRANS );
                 bTransparent = true;
             }
             else
-                aAccBmp.Convert( BMP_CONVERSION_8BIT_COLORS );
+                aAccBmp.Convert( BmpConversion::N8BitColors );
         }
         else
-            aAccBmp.Convert( BMP_CONVERSION_8BIT_COLORS );
+            aAccBmp.Convert( BmpConversion::N8BitColors );
 
         m_pAcc = aAccBmp.AcquireReadAccess();
 
@@ -286,7 +281,7 @@ void GIFWriter::WriteSignature( bool bGIF89a )
 {
     if( bStatus )
     {
-        m_rGIF.Write( bGIF89a ? "GIF89a" : "GIF87a" , 6 );
+        m_rGIF.WriteBytes(bGIF89a ? "GIF89a" : "GIF87a" , 6);
 
         if( m_rGIF.GetError() )
             bStatus = false;
@@ -299,8 +294,8 @@ void GIFWriter::WriteGlobalHeader( const Size& rSize )
     if( bStatus )
     {
         // 256 colors
-        const sal_uInt16    nWidth = (sal_uInt16) rSize.Width();
-        const sal_uInt16    nHeight = (sal_uInt16) rSize.Height();
+        const sal_uInt16    nWidth = static_cast<sal_uInt16>(rSize.Width());
+        const sal_uInt16    nHeight = static_cast<sal_uInt16>(rSize.Height());
         const sal_uInt8     cFlags = 128 | ( 7 << 4 );
 
         // write values
@@ -327,7 +322,7 @@ void GIFWriter::WriteLoopExtension( const Animation& rAnimation )
 {
     DBG_ASSERT( rAnimation.Count() > 0, "Animation has no bitmaps!" );
 
-    sal_uInt16 nLoopCount = (sal_uInt16) rAnimation.GetLoopCount();
+    sal_uInt16 nLoopCount = static_cast<sal_uInt16>(rAnimation.GetLoopCount());
 
     // if only one run should take place
     // the LoopExtension won't be written
@@ -339,13 +334,13 @@ void GIFWriter::WriteLoopExtension( const Animation& rAnimation )
         if( nLoopCount )
             nLoopCount--;
 
-        const sal_uInt8 cLoByte = (const sal_uInt8) nLoopCount;
-        const sal_uInt8 cHiByte = (const sal_uInt8) ( nLoopCount >> 8 );
+        const sal_uInt8 cLoByte = static_cast<sal_uInt8>(nLoopCount);
+        const sal_uInt8 cHiByte = static_cast<sal_uInt8>( nLoopCount >> 8 );
 
         m_rGIF.WriteUChar( 0x21 );
         m_rGIF.WriteUChar( 0xff );
         m_rGIF.WriteUChar( 0x0b );
-        m_rGIF.Write( "NETSCAPE2.0", 11 );
+        m_rGIF.WriteBytes( "NETSCAPE2.0", 11 );
         m_rGIF.WriteUChar( 0x03 );
         m_rGIF.WriteUChar( 0x01 );
         m_rGIF.WriteUChar( cLoByte );
@@ -363,7 +358,7 @@ void GIFWriter::WriteLogSizeExtension( const Size& rSize100 )
         m_rGIF.WriteUChar( 0x21 );
         m_rGIF.WriteUChar( 0xff );
         m_rGIF.WriteUChar( 0x0b );
-        m_rGIF.Write( "STARDIV 5.0", 11 );
+        m_rGIF.WriteBytes( "STARDIV 5.0", 11 );
         m_rGIF.WriteUChar( 0x09 );
         m_rGIF.WriteUChar( 0x01 );
         m_rGIF.WriteUInt32( rSize100.Width() );
@@ -377,7 +372,7 @@ void GIFWriter::WriteImageExtension( long nTimer, Disposal eDisposal )
 {
     if( bStatus )
     {
-        const sal_uInt16    nDelay = (sal_uInt16) nTimer;
+        const sal_uInt16    nDelay = static_cast<sal_uInt16>(nTimer);
         sal_uInt8           cFlags = 0;
 
         // set Transparency-Flag
@@ -385,9 +380,9 @@ void GIFWriter::WriteImageExtension( long nTimer, Disposal eDisposal )
             cFlags |= 1;
 
         // set Disposal-value
-        if( eDisposal == DISPOSE_BACK )
+        if( eDisposal == Disposal::Back )
             cFlags |= ( 2 << 2 );
-        else if( eDisposal == DISPOSE_PREVIOUS )
+        else if( eDisposal == Disposal::Previous )
             cFlags |= ( 3 << 2 );
 
         m_rGIF.WriteUChar( 0x21 );
@@ -408,11 +403,11 @@ void GIFWriter::WriteLocalHeader()
 {
     if( bStatus )
     {
-        const sal_uInt16    nPosX = (sal_uInt16) nActX;
-        const sal_uInt16    nPosY = (sal_uInt16) nActY;
-        const sal_uInt16    nWidth = (sal_uInt16) m_pAcc->Width();
-        const sal_uInt16    nHeight = (sal_uInt16) m_pAcc->Height();
-        sal_uInt8       cFlags = (sal_uInt8) ( m_pAcc->GetBitCount() - 1 );
+        const sal_uInt16    nPosX = static_cast<sal_uInt16>(nActX);
+        const sal_uInt16    nPosY = static_cast<sal_uInt16>(nActY);
+        const sal_uInt16    nWidth = static_cast<sal_uInt16>(m_pAcc->Width());
+        const sal_uInt16    nHeight = static_cast<sal_uInt16>(m_pAcc->Height());
+        sal_uInt8       cFlags = static_cast<sal_uInt8>( m_pAcc->GetBitCount() - 1 );
 
         // set Interlaced-Flag
         if( nInterlaced )
@@ -421,7 +416,6 @@ void GIFWriter::WriteLocalHeader()
         // set Flag for the local color palette
         cFlags |= 0x80;
 
-        // alles rausschreiben
         m_rGIF.WriteUChar( 0x2c );
         m_rGIF.WriteUInt16( nPosX );
         m_rGIF.WriteUInt16( nPosY );
@@ -467,8 +461,7 @@ void GIFWriter::WriteAccess()
     const long          nWidth = m_pAcc->Width();
     const long          nHeight = m_pAcc->Height();
     std::unique_ptr<sal_uInt8[]> pBuffer;
-    const sal_uLong         nFormat = m_pAcc->GetScanlineFormat();
-    bool                bNative = ( BMP_FORMAT_8BIT_PAL == nFormat );
+    bool                bNative = m_pAcc->GetScanlineFormat() == ScanlineFormat::N8BitPal;
 
     if( !bNative )
         pBuffer.reset(new sal_uInt8[ nWidth ]);
@@ -510,8 +503,9 @@ void GIFWriter::WriteAccess()
                 aCompressor.Compress( m_pAcc->GetScanline( nY ), nWidth );
             else
             {
-                for( long nX = 0L; nX < nWidth; nX++ )
-                    pBuffer[ nX ] = m_pAcc->GetPixelIndex( nY, nX );
+                Scanline pScanline = m_pAcc->GetScanline( nY );
+                for( long nX = 0; nX < nWidth; nX++ )
+                    pBuffer[ nX ] = m_pAcc->GetIndexFromData( pScanline, nX );
 
                 aCompressor.Compress( pBuffer.get(), nWidth );
             }
@@ -545,7 +539,7 @@ void GIFWriter::WriteTerminator()
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT bool
 egiGraphicExport( SvStream& rStream, Graphic& rGraphic, FilterConfigItem* pConfigItem )
 {
     GIFWriter aWriter(rStream);

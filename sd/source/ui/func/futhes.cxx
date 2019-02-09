@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "futhes.hxx"
+#include <futhes.hxx>
 
 #include <editeng/outliner.hxx>
 #include <vcl/layout.hxx>
@@ -29,17 +29,14 @@
 #include <svx/svxerr.hxx>
 #include <svx/dialmgr.hxx>
 #include <editeng/unolingu.hxx>
-#include <comphelper/processfactory.hxx>
-#include "app.hrc"
-#include "strings.hrc"
-#include "drawdoc.hxx"
-#include "sdmod.hxx"
-#include "View.hxx"
-#include "Outliner.hxx"
-#include "DrawViewShell.hxx"
-#include "OutlineViewShell.hxx"
-#include "Window.hxx"
-#include "sdresid.hxx"
+#include <app.hrc>
+#include <drawdoc.hxx>
+#include <sdmod.hxx>
+#include <View.hxx>
+#include <Outliner.hxx>
+#include <DrawViewShell.hxx>
+#include <OutlineViewShell.hxx>
+#include <Window.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -67,9 +64,9 @@ rtl::Reference<FuPoor> FuThesaurus::Create( ViewShell* pViewSh, ::sd::Window* pW
 void FuThesaurus::DoExecute( SfxRequest& )
 {
     SfxErrorContext aContext(ERRCTX_SVX_LINGU_THESAURUS, OUString(),
-                             mpWindow, RID_SVXERRCTX, &DIALOG_MGR() );
+                             mpWindow->GetFrameWeld(), RID_SVXERRCTX, SvxResLocale());
 
-    if (mpViewShell && dynamic_cast< DrawViewShell *>( mpViewShell ) !=  nullptr)
+    if (dynamic_cast< DrawViewShell *>( mpViewShell ))
     {
         SdrTextObj* pTextObj = nullptr;
 
@@ -108,15 +105,10 @@ void FuThesaurus::DoExecute( SfxRequest& )
             }
 
             EESpellState eState = const_cast<OutlinerView*>(pOutlView)->StartThesaurus();
-            DBG_ASSERT(eState != EE_SPELL_NOSPELLER, "No SpellChecker");
-
-            if (eState == EE_SPELL_NOLANGUAGE)
-            {
-                ScopedVclPtrInstance<MessageDialog>::Create(mpWindow, SD_RESSTR(STR_NOLANGUAGE))->Execute();
-            }
+            DBG_ASSERT(eState != EESpellState::NoSpeller, "No SpellChecker");
         }
     }
-    else if (mpViewShell && dynamic_cast< OutlineViewShell *>( mpViewShell ) !=  nullptr)
+    else if (dynamic_cast< OutlineViewShell *>( mpViewShell ))
     {
         Outliner* pOutliner = mpDoc->GetOutliner();
         OutlinerView* pOutlView = pOutliner->GetView(0);
@@ -135,12 +127,7 @@ void FuThesaurus::DoExecute( SfxRequest& )
         }
 
         EESpellState eState = pOutlView->StartThesaurus();
-        DBG_ASSERT(eState != EE_SPELL_NOSPELLER, "No SpellChecker");
-
-        if (eState == EE_SPELL_NOLANGUAGE)
-        {
-            ScopedVclPtrInstance<MessageDialog>::Create(mpWindow, SD_RESSTR(STR_NOLANGUAGE))->Execute();
-        }
+        DBG_ASSERT(eState != EESpellState::NoSpeller, "No SpellChecker");
     }
 }
 

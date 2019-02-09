@@ -20,11 +20,11 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_SHAPES_INTRINSICANIMATIONACTIVITY_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_SHAPES_INTRINSICANIMATIONACTIVITY_HXX
 
-#include "wakeupevent.hxx"
-#include "activity.hxx"
-#include "slideshowcontext.hxx"
+#include <wakeupevent.hxx>
+#include <activity.hxx>
+#include <slideshowcontext.hxx>
 #include "drawshape.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 /* Definition of IntrinsicAnimationActivity class */
 
@@ -60,8 +60,7 @@ namespace slideshow
             const DrawShapeSharedPtr&       rDrawShape,
             const WakeupEventSharedPtr&     rWakeupEvent,
             const ::std::vector<double>&    rTimeouts,
-            ::std::size_t                   nNumLoops,
-            CycleMode                       eCycleMode );
+            sal_uInt32                      nNumLoops);
     }
 }
 

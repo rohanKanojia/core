@@ -19,13 +19,13 @@
 
 
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
-#include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/range/b2irange.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 
 #include <cppcanvas/spritecanvas.hxx>
 #include <canvas/canvastools.hxx>
@@ -48,7 +48,7 @@
 #include <com/sun/star/frame/XSynchronousFrameLoader.hpp>
 
 #include "viewappletshape.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 
 using namespace ::com::sun::star;
@@ -61,7 +61,7 @@ namespace slideshow
                                           const uno::Reference< drawing::XShape >&        rxShape,
                                           const OUString&                          rServiceName,
                                           const char**                                    pPropCopyTable,
-                                          sal_Size                                        nNumPropEntries,
+                                          std::size_t                                     nNumPropEntries,
                                           const uno::Reference< uno::XComponentContext >& rxContext ) :
             mpViewLayer( rViewLayer ),
             mxViewer(),
@@ -83,20 +83,19 @@ namespace slideshow
 
             uno::Reference< beans::XPropertySet > xShapePropSet( rxShape,
                                                                  uno::UNO_QUERY_THROW );
-            uno::Reference< beans::XPropertySet > mxViewerPropSet( mxViewer,
+            uno::Reference< beans::XPropertySet > xViewerPropSet( mxViewer,
                                                                    uno::UNO_QUERY_THROW );
 
             // copy shape properties to applet viewer
             OUString aPropName;
-            for( sal_Size i=0; i<nNumPropEntries; ++i )
+            for( std::size_t i=0; i<nNumPropEntries; ++i )
             {
                 aPropName = OUString::createFromAscii( pPropCopyTable[i] );
-                mxViewerPropSet->setPropertyValue( aPropName,
-                                                   xShapePropSet->getPropertyValue(
-                                                       aPropName ));
+                xViewerPropSet->setPropertyValue( aPropName,
+                                                  xShapePropSet->getPropertyValue(
+                                                  aPropName ));
             }
         }
-
 
         ViewAppletShape::~ViewAppletShape()
         {
@@ -104,21 +103,16 @@ namespace slideshow
             {
                 endApplet();
             }
-            catch (uno::Exception &)
+            catch (const uno::Exception &e)
             {
-                OSL_FAIL( OUStringToOString(
-                                comphelper::anyToString(
-                                    cppu::getCaughtException() ),
-                                RTL_TEXTENCODING_UTF8 ).getStr() );
+                SAL_WARN("slideshow", e);
             }
         }
 
-
-        ViewLayerSharedPtr ViewAppletShape::getViewLayer() const
+        const ViewLayerSharedPtr& ViewAppletShape::getViewLayer() const
         {
             return mpViewLayer;
         }
-
 
         void ViewAppletShape::startApplet( const ::basegfx::B2DRectangle& rBounds )
         {
@@ -184,8 +178,8 @@ namespace slideshow
 
                     uno::Reference< awt::XWindow > xSurroundingWindow( mxFrame->getContainerWindow() );
                     if( xSurroundingWindow.is() )
-                        xSurroundingWindow->setPosSize( static_cast<sal_Int32>(rPixelBounds.getMinX()),
-                                                        static_cast<sal_Int32>(rPixelBounds.getMinY()),
+                        xSurroundingWindow->setPosSize( rPixelBounds.getMinX(),
+                                                        rPixelBounds.getMinY(),
                                                         static_cast<sal_Int32>(rPixelBounds.getWidth()),
                                                         static_cast<sal_Int32>(rPixelBounds.getHeight()),
                                                         awt::PosSize::POSSIZE );
@@ -212,7 +206,7 @@ namespace slideshow
 
             if( xCloseable.is() )
             {
-                xCloseable->close( sal_True );
+                xCloseable->close( true );
                 mxFrame.clear();
             }
         }
@@ -250,8 +244,8 @@ namespace slideshow
 
             uno::Reference< awt::XWindow > xFrameWindow( mxFrame->getContainerWindow() );
             if( xFrameWindow.is() )
-                xFrameWindow->setPosSize( static_cast<sal_Int32>(rPixelBounds.getMinX()),
-                                          static_cast<sal_Int32>(rPixelBounds.getMinY()),
+                xFrameWindow->setPosSize( rPixelBounds.getMinX(),
+                                          rPixelBounds.getMinY(),
                                           static_cast<sal_Int32>(rPixelBounds.getWidth()),
                                           static_cast<sal_Int32>(rPixelBounds.getHeight()),
                                           awt::PosSize::POSSIZE );

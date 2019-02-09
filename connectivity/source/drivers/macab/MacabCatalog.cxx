@@ -34,14 +34,13 @@ using namespace ::cppu;
 
 MacabCatalog::MacabCatalog(MacabConnection* _pCon)
         : connectivity::sdbcx::OCatalog(_pCon),
-          m_pConnection(_pCon),
-          m_xMetaData(m_pConnection->getMetaData())
+          m_pConnection(_pCon)
 {
 }
 
 void MacabCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes { "%" };
     Reference< XResultSet > xResult = m_xMetaData->getTables(
         Any(), "%", "%", aTypes);
@@ -63,7 +62,7 @@ void MacabCatalog::refreshTables()
     if (m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new MacabTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new MacabTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 
 void MacabCatalog::refreshViews()
@@ -86,7 +85,7 @@ const OUString& MacabCatalog::getDot()
 
 
 // XTablesSupplier
-Reference< XNameAccess > SAL_CALL MacabCatalog::getTables(  ) throw(RuntimeException)
+Reference< XNameAccess > SAL_CALL MacabCatalog::getTables(  )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(rBHelper.bDisposed);
@@ -106,7 +105,7 @@ Reference< XNameAccess > SAL_CALL MacabCatalog::getTables(  ) throw(RuntimeExcep
         // allowed
     }
 
-    return m_pTables;
+    return m_pTables.get();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

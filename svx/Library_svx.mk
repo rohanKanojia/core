@@ -41,6 +41,7 @@ $(eval $(call gb_Library_add_defs,svx,\
 $(eval $(call gb_Library_set_precompiled_header,svx,$(SRCDIR)/svx/inc/pch/precompiled_svx))
 
 $(eval $(call gb_Library_use_libraries,svx,\
+    $(call gb_Helper_optional,AVMEDIA,avmedia) \
     basegfx \
     sb \
     comphelper \
@@ -69,11 +70,12 @@ $(eval $(call gb_Library_use_libraries,svx,\
     vcl \
     xo \
     xmlscript \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,svx,\
 	boost_headers \
+    $(call gb_Helper_optional,BREAKPAD, \
+		curl) \
 	icuuc \
 	icu_headers \
 ))
@@ -106,6 +108,7 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/customshapes/EnhancedCustomShapeHandle \
     svx/source/dialog/_bmpmask \
     svx/source/dialog/charmap \
+    svx/source/dialog/searchcharmap \
     svx/source/dialog/connctrl \
     svx/source/dialog/_contdlg \
     svx/source/dialog/contwnd \
@@ -114,6 +117,9 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
 		svx/source/dialog/crashreportdlg \
 		svx/source/dialog/crashreportui) \
     svx/source/dialog/ctredlin \
+    svx/source/dialog/ClassificationCommon \
+    svx/source/dialog/ClassificationDialog \
+    svx/source/dialog/ClassificationEditView \
     svx/source/dialog/databaseregistrationui \
     svx/source/dialog/dialcontrol \
     svx/source/dialog/dlgctl3d \
@@ -122,7 +128,6 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/dialog/fntctrl \
     svx/source/dialog/fontlb \
     svx/source/dialog/fontwork \
-    svx/source/dialog/framelinkarray \
     svx/source/dialog/frmdirlbox \
     svx/source/dialog/frmsel \
     svx/source/dialog/graphctl \
@@ -134,15 +139,15 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/dialog/linkwarn \
     svx/source/dialog/measctrl \
     svx/source/dialog/optgrid \
-    svx/source/dialog/orienthelper \
     svx/source/dialog/pagectrl \
     svx/source/dialog/paraprev \
     svx/source/dialog/passwd \
-    svx/source/dialog/prtqry \
     svx/source/dialog/relfld \
     svx/source/dialog/rlrcitem \
     svx/source/dialog/rubydialog \
     svx/source/dialog/rulritem \
+    svx/source/dialog/SafeModeDialog \
+    svx/source/dialog/SafeModeUI \
     svx/source/dialog/SpellDialogChildWindow \
     svx/source/dialog/srchctrl \
     svx/source/dialog/srchdlg \
@@ -186,9 +191,10 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/sidebar/paragraph/ParaLineSpacingControl \
     svx/source/sidebar/paragraph/ParaLineSpacingPopup \
     svx/source/sidebar/paragraph/ParaPropertyPanel \
+    svx/source/sidebar/paragraph/ParaSpacingWindow \
+    svx/source/sidebar/paragraph/ParaSpacingControl \
     svx/source/sidebar/area/AreaPropertyPanel \
     svx/source/sidebar/area/AreaPropertyPanelBase \
-    svx/source/sidebar/area/AreaTransparencyGradientControl \
     svx/source/sidebar/area/AreaTransparencyGradientPopup \
     svx/source/sidebar/shadow/ShadowPropertyPanel \
     svx/source/sidebar/graphic/GraphicPropertyPanel \
@@ -196,11 +202,11 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/sidebar/line/LinePropertyPanelBase \
     svx/source/sidebar/line/LineWidthValueSet \
     svx/source/sidebar/line/LineWidthPopup \
+    svx/source/sidebar/media/MediaPlaybackPanel \
     svx/source/sidebar/possize/PosSizePropertyPanel \
     svx/source/sidebar/possize/SidebarDialControl \
-    svx/source/sidebar/tools/PopupControl \
-    svx/source/sidebar/tools/PopupContainer \
-    svx/source/sidebar/tools/Popup \
+    svx/source/sidebar/shapes/DefaultShapesPanel \
+    svx/source/sidebar/shapes/ShapesUtil \
     svx/source/sidebar/tools/ValueSetWithTextControl \
     svx/source/stbctrls/pszctrl \
     svx/source/stbctrls/insctrl \
@@ -231,6 +237,7 @@ $(eval $(call gb_Library_add_exception_objects,svx,\
     svx/source/tbxctrls/tbxcolor \
     svx/source/tbxctrls/tbxdrctl \
     svx/source/tbxctrls/verttexttbxctrl \
+    svx/source/uitest/uiobject \
     svx/source/unodraw/recoveryui \
     svx/source/unodraw/unoctabl \
     svx/source/unodraw/UnoNamespaceMap \

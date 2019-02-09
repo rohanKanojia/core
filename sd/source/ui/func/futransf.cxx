@@ -17,24 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "futransf.hxx"
+#include <futransf.hxx>
 
+#include <comphelper/scopeguard.hxx>
 #include <svx/dialogs.hrc>
-#include <svx/polysc3d.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/request.hxx>
 
-#include "strings.hrc"
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
+#include <strings.hrc>
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <sdresid.hxx>
+#include <drawdoc.hxx>
 #include <svx/svxdlg.hxx>
 
 #include <memory>
 
-namespace sd {
-
+using namespace sd;
 
 FuTransform::FuTransform(ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView,
                          SdDrawDocument* pDoc, SfxRequest& rReq)
@@ -49,74 +48,85 @@ rtl::Reference<FuPoor> FuTransform::Create( ViewShell* pViewSh, ::sd::Window* pW
     return xFunc;
 }
 
-void FuTransform::DoExecute( SfxRequest& rReq )
+namespace {
+
+void setUndo(::sd::View* pView, const SfxItemSet* pArgs)
 {
-    if( mpView->AreObjectsMarked() )
-    {
-        const SfxItemSet* pArgs = rReq.GetArgs();
+    // Undo
+    OUString aString(pView->GetDescriptionOfMarkedObjects());
+    aString += " " + SdResId(STR_TRANSFORM);
+    pView->BegUndo(aString);
 
-        if( !pArgs )
-        {
-            // --------- itemset for size and position --------
-            SfxItemSet aSet( mpView->GetGeoAttrFromMarked() );
-
-            const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
-            SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
-            if( rMarkList.GetMarkCount() == 1 &&
-                pObj->GetObjInventor() == SdrInventor &&
-                pObj->GetObjIdentifier() == OBJ_CAPTION )
-            {
-                // --------- itemset for caption --------
-                SfxItemSet aNewAttr( mpDoc->GetPool() );
-                mpView->GetAttributes( aNewAttr );
-
-                SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                if ( pFact )
-                {
-                    std::unique_ptr< SfxAbstractTabDialog > pDlg( pFact->CreateCaptionDialog( nullptr, mpView ) );
-
-                    const sal_uInt16* pRange = pDlg->GetInputRanges( *aNewAttr.GetPool() );
-                    SfxItemSet aCombSet( *aNewAttr.GetPool(), pRange );
-                    aCombSet.Put( aNewAttr );
-                    aCombSet.Put( aSet );
-                    pDlg->SetInputSet( &aCombSet );
-
-                    if( pDlg.get() && (pDlg->Execute() == RET_OK) )
-                    {
-                        rReq.Done( *( pDlg->GetOutputItemSet() ) );
-                        pArgs = rReq.GetArgs();
-                    }
-                }
-            }
-            else
-            {
-                SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                if(pFact)
-                {
-                    std::unique_ptr< SfxAbstractTabDialog > pDlg( pFact->CreateSvxTransformTabDialog( nullptr, &aSet, mpView ) );
-                    if( pDlg.get() && (pDlg->Execute() == RET_OK) )
-                    {
-                        rReq.Done( *( pDlg->GetOutputItemSet() ) );
-                        pArgs = rReq.GetArgs();
-                    }
-                }
-            }
-        }
-
-        if( pArgs )
-        {
-            // Undo
-            OUString aString( mpView->GetDescriptionOfMarkedObjects() );
-            aString += " " + SD_RESSTR( STR_TRANSFORM );
-            mpView->BegUndo( aString );
-
-            mpView->SetGeoAttrToMarked( *pArgs );
-            mpView->SetAttributes( *pArgs );
-            mpView->EndUndo();
-        }
-    }
+    pView->SetGeoAttrToMarked(*pArgs);
+    pView->SetAttributes(*pArgs);
+    pView->EndUndo();
 }
 
-} // end of namespace sd
+}
+
+void FuTransform::DoExecute( SfxRequest& rReq )
+{
+    if (!mpView->AreObjectsMarked())
+        return;
+
+    const SfxItemSet* pArgs = rReq.GetArgs();
+
+    if (pArgs)
+    {
+        setUndo(mpView, pArgs);
+        return;
+    }
+
+    // --------- itemset for size and position --------
+    SfxItemSet aSet( mpView->GetGeoAttrFromMarked() );
+    VclPtr<SfxAbstractTabDialog> pDlg;
+
+    bool bWelded = false;
+    const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
+    SdrObject* pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
+    if( rMarkList.GetMarkCount() == 1 &&
+        pObj->GetObjInventor() == SdrInventor::Default &&
+        pObj->GetObjIdentifier() == OBJ_CAPTION )
+    {
+        // --------- itemset for caption --------
+        SfxItemSet aNewAttr( mpDoc->GetPool() );
+        mpView->GetAttributes( aNewAttr );
+
+        SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
+        pDlg.reset(pFact->CreateCaptionDialog(mpViewShell->GetFrameWeld(), mpView));
+
+        const sal_uInt16* pRange = pDlg->GetInputRanges( *aNewAttr.GetPool() );
+        SfxItemSet aCombSet( *aNewAttr.GetPool(), pRange );
+        aCombSet.Put( aNewAttr );
+        aCombSet.Put( aSet );
+        pDlg->SetInputSet( &aCombSet );
+    }
+    else
+    {
+        SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
+        pDlg.reset(pFact->CreateSvxTransformTabDialog(mpViewShell->GetFrameWeld(), &aSet, mpView));
+        bWelded = true;
+    }
+
+    if (!pDlg)
+        return;
+
+    std::shared_ptr<SfxRequest> pRequest(new SfxRequest(rReq));
+    rReq.Ignore(); // the 'old' request is not relevant any more
+
+    pDlg->StartExecuteAsync([bWelded, pDlg, pRequest, this](sal_Int32 nResult){
+        if (nResult == RET_OK)
+        {
+            pRequest->Done(*(pDlg->GetOutputItemSet()));
+            setUndo(mpView, pRequest->GetArgs());
+        }
+
+        // deferred until the dialog ends
+        mpViewShell->Invalidate(SID_RULER_OBJECT);
+        mpViewShell->Cancel();
+        if (bWelded)
+            pDlg->disposeOnce();
+    });
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

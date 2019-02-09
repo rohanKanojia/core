@@ -28,9 +28,6 @@
 #endif
 
 #define STRICT
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0502
-#endif
 #define _ATL_APARTMENT_THREADED
 
 #include <stdio.h>
@@ -39,7 +36,6 @@
 //something, but do not change the name of _Module
 extern CComModule _Module;
 #include <atlcom.h>
-#include <tchar.h>
 
 //{{AFX_INSERT_LOCATION}}
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.

@@ -19,24 +19,24 @@
 #ifndef INCLUDED_SVX_PARAPREV_HXX
 #define INCLUDED_SVX_PARAPREV_HXX
 
+#include <vcl/customweld.hxx>
 #include <vcl/window.hxx>
 #include <editeng/svxenum.hxx>
 #include <svx/svxdllapi.h>
 
-enum SvxPrevLineSpace
+enum class SvxPrevLineSpace
 {
-    SVX_PREV_LINESPACE_1 = 0,
-    SVX_PREV_LINESPACE_15,
-    SVX_PREV_LINESPACE_2,
-    SVX_PREV_LINESPACE_PROP,
-    SVX_PREV_LINESPACE_MIN,
-    SVX_PREV_LINESPACE_DURCH
+    N1 = 0,
+    N115,
+    N15,
+    N2,
+    Prop,
+    Min,
+    Leading
 };
 
-class SVX_DLLPUBLIC SvxParaPrevWindow : public vcl::Window
+class SVX_DLLPUBLIC SvxParaPrevWindow final : public weld::CustomWidgetController
 {
-    using Window::Draw;
-private:
     Size                aSize;
 
     // indentation
@@ -52,19 +52,15 @@ private:
     SvxAdjust           eLastLine;
     // line distance
     SvxPrevLineSpace    eLine;
-    sal_uInt16          nLineVal;
 
-    OUString            aText;
-    Rectangle           Lines[9];
+    tools::Rectangle    Lines[9];
 
-protected:
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
-    virtual Size GetOptimalSize() const override;
-
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
     void DrawParagraph(vcl::RenderContext& rRenderContext);
 
 public:
-    SvxParaPrevWindow( vcl::Window* pParent, WinBits nBits);
+    SvxParaPrevWindow();
 
     void SetFirstLineOfst( short nNew )
     {
@@ -94,23 +90,16 @@ public:
     {
         eLastLine = eNew;
     }
-    void SetLineSpace( SvxPrevLineSpace eNew, sal_uInt16 nNew = 0 )
+    void SetLineSpace( SvxPrevLineSpace eNew )
     {
-        eLine = eNew; nLineVal = nNew;
-    }
-    void SetText( const OUString& rStr ) override
-    {
-        aText = rStr;
+        eLine = eNew;
     }
     void SetSize( Size aNew )
     {
         aSize = aNew;
     }
-    OUString GetText() const override
-    {
-        return aText;
-    }
 };
+
 
 #endif
 

@@ -32,8 +32,8 @@
 #include <com/sun/star/rendering/TextDirection.hpp>
 #include <com/sun/star/util/Color.hpp>
 #include <algorithm>
+#include <numeric>
 #include <vector>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -152,7 +152,7 @@ PresenterHelpView::PresenterHelpView (
         Reference<awt::XWindowPeer> xPeer (mxWindow, UNO_QUERY);
         if (xPeer.is())
             xPeer->setBackground(util::Color(0xff000000));
-        mxWindow->setVisible(sal_True);
+        mxWindow->setVisible(true);
 
         if (mpPresenterController.is())
         {
@@ -210,7 +210,6 @@ void SAL_CALL PresenterHelpView::disposing()
 //----- lang::XEventListener --------------------------------------------------
 
 void SAL_CALL PresenterHelpView::disposing (const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
 {
     if (rEventObject.Source == mxCanvas)
     {
@@ -225,40 +224,31 @@ void SAL_CALL PresenterHelpView::disposing (const lang::EventObject& rEventObjec
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL PresenterHelpView::windowResized (const awt::WindowEvent& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterHelpView::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     Resize();
 }
 
-void SAL_CALL PresenterHelpView::windowMoved (const awt::WindowEvent& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterHelpView::windowMoved (const awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
-void SAL_CALL PresenterHelpView::windowShown (const lang::EventObject& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterHelpView::windowShown (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     Resize();
 }
 
-void SAL_CALL PresenterHelpView::windowHidden (const lang::EventObject& rEvent)
-    throw (uno::RuntimeException, std::exception)
+void SAL_CALL PresenterHelpView::windowHidden (const lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterHelpView::windowPaint (const css::awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     Paint(rEvent.UpdateRect);
 }
@@ -306,9 +296,7 @@ void PresenterHelpView::Paint (const awt::Rectangle& rUpdateBox)
 
     // Paint text.
     double nY (gnVerticalBorder);
-    TextContainer::const_iterator iBlock (mpTextContainer->begin());
-    TextContainer::const_iterator iBlockEnd (mpTextContainer->end());
-    for ( ; iBlock!=iBlockEnd; ++iBlock)
+    for (const auto& rxBlock : *mpTextContainer)
     {
         sal_Int32 LeftX1 = gnHorizontalGap;
         sal_Int32 LeftX2 = aWindowBox.Width/2 - gnHorizontalGap;
@@ -324,7 +312,7 @@ void PresenterHelpView::Paint (const awt::Rectangle& rUpdateBox)
             RightX2 = aWindowBox.Width/2 - gnHorizontalGap;
         }
         const double nLeftHeight (
-            (*iBlock)->maLeft.Paint(mxCanvas,
+            rxBlock->maLeft.Paint(mxCanvas,
                 geometry::RealRectangle2D(
                         LeftX1,
                         nY,
@@ -335,7 +323,7 @@ void PresenterHelpView::Paint (const awt::Rectangle& rUpdateBox)
                 aRenderState,
                 mpFont->mxFont));
         const double nRightHeight (
-            (*iBlock)->maRight.Paint(mxCanvas,
+            rxBlock->maRight.Paint(mxCanvas,
                 geometry::RealRectangle2D(
                         RightX1,
                         nY,
@@ -351,22 +339,25 @@ void PresenterHelpView::Paint (const awt::Rectangle& rUpdateBox)
 
     Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
     if (xSpriteCanvas.is())
-        xSpriteCanvas->updateScreen(sal_False);
+        xSpriteCanvas->updateScreen(false);
 }
 
 void PresenterHelpView::ReadHelpStrings()
 {
-    mpTextContainer.reset(new TextContainer());
+    mpTextContainer.reset(new TextContainer);
     PresenterConfigurationAccess aConfiguration (
         mxComponentContext,
-        OUString("/org.openoffice.Office.PresenterScreen/"),
+        "/org.openoffice.Office.PresenterScreen/",
         PresenterConfigurationAccess::READ_ONLY);
     Reference<container::XNameAccess> xStrings (
         aConfiguration.GetConfigurationNode("PresenterScreenSettings/HelpView/HelpStrings"),
         UNO_QUERY);
     PresenterConfigurationAccess::ForAll(
         xStrings,
-        ::boost::bind(&PresenterHelpView::ProcessString, this, _2));
+        [this](OUString const&, uno::Reference<beans::XPropertySet> const& xProps)
+        {
+            return this->ProcessString(xProps);
+        });
 }
 
 void PresenterHelpView::ProcessString (
@@ -380,8 +371,8 @@ void PresenterHelpView::ProcessString (
     OUString sRightText;
     PresenterConfigurationAccess::GetProperty(rsProperties, "Right") >>= sRightText;
     mpTextContainer->push_back(
-        std::shared_ptr<Block>(
-            new Block(sLeftText, sRightText, mpFont->mxFont, mnMaximalWidth)));
+        std::make_shared<Block>(
+            sLeftText, sRightText, mpFont->mxFont, mnMaximalWidth));
 }
 
 void PresenterHelpView::CheckFontSize()
@@ -396,13 +387,12 @@ void PresenterHelpView::CheckFontSize()
     // small enough.  Restrict the number of loops.
     for (int nLoopCount=0; nLoopCount<5; ++nLoopCount)
     {
-        double nY (0.0);
-        TextContainer::iterator iBlock (mpTextContainer->begin());
-        TextContainer::const_iterator iBlockEnd (mpTextContainer->end());
-        for ( ; iBlock!=iBlockEnd; ++iBlock)
-            nY += ::std::max(
-                (*iBlock)->maLeft.GetHeight(),
-                (*iBlock)->maRight.GetHeight());
+        double nY = std::accumulate(mpTextContainer->begin(), mpTextContainer->end(), double(0),
+            [](const double& sum, const std::shared_ptr<Block>& rxBlock) {
+                return sum + std::max(
+                    rxBlock->maLeft.GetHeight(),
+                    rxBlock->maRight.GetHeight());
+            });
 
         const double nHeightDifference (nY - (mnSeparatorY-gnVerticalBorder));
         if (nHeightDifference <= 0 && nHeightDifference > -50)
@@ -426,8 +416,8 @@ void PresenterHelpView::CheckFontSize()
         mpFont->PrepareFont(mxCanvas);
 
         // Reformat blocks.
-        for (iBlock=mpTextContainer->begin(); iBlock!=iBlockEnd; ++iBlock)
-            (*iBlock)->Update(mpFont->mxFont, mnMaximalWidth);
+        for (auto& rxBlock : *mpTextContainer)
+            rxBlock->Update(mpFont->mxFont, mnMaximalWidth);
     }
 
     if (nBestSize != mpFont->mnSize)
@@ -437,13 +427,9 @@ void PresenterHelpView::CheckFontSize()
         mpFont->PrepareFont(mxCanvas);
 
         // Reformat blocks.
-        for (TextContainer::iterator
-                 iBlock (mpTextContainer->begin()),
-                 iEnd (mpTextContainer->end());
-             iBlock!=iEnd;
-             ++iBlock)
+        for (auto& rxBlock : *mpTextContainer)
         {
-            (*iBlock)->Update(mpFont->mxFont, mnMaximalWidth);
+            rxBlock->Update(mpFont->mxFont, mnMaximalWidth);
         }
     }
 }
@@ -451,14 +437,12 @@ void PresenterHelpView::CheckFontSize()
 //----- XResourceId -----------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL PresenterHelpView::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return mxViewId;
 }
 
 sal_Bool SAL_CALL PresenterHelpView::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
     return false;
 }
@@ -500,17 +484,16 @@ void PresenterHelpView::Resize()
 }
 
 void PresenterHelpView::ThrowIfDisposed()
-    throw (lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
         throw lang::DisposedException (
-            OUString( "PresenterHelpView has been already disposed"),
-            const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
+            "PresenterHelpView has been already disposed",
+            static_cast<uno::XWeak*>(this));
     }
 }
 
-//===== LineDescritor =========================================================
+//===== LineDescriptor =========================================================
 
 namespace {
 
@@ -575,9 +558,7 @@ double LineDescriptorList::Paint(
         return 0;
 
     double nY (rBBox.Y1);
-    vector<LineDescriptor>::const_iterator iLine (mpLineDescriptors->begin());
-    vector<LineDescriptor>::const_iterator iEnd (mpLineDescriptors->end());
-    for ( ; iLine!=iEnd; ++iLine)
+    for (const auto& rLine : *mpLineDescriptors)
     {
         double nX;
         /// check whether RTL interface or not
@@ -585,18 +566,18 @@ double LineDescriptorList::Paint(
         {
             nX = rBBox.X1;
             if ( ! bFlushLeft)
-                nX = rBBox.X2 - iLine->maSize.Width;
+                nX = rBBox.X2 - rLine.maSize.Width;
         }
         else
         {
-            nX=rBBox.X2 - iLine->maSize.Width;
+            nX=rBBox.X2 - rLine.maSize.Width;
             if ( ! bFlushLeft)
                 nX = rBBox.X1;
         }
         rRenderState.AffineTransform.m02 = nX;
-        rRenderState.AffineTransform.m12 = nY + iLine->maSize.Height - iLine->mnVerticalOffset;
+        rRenderState.AffineTransform.m12 = nY + rLine.maSize.Height - rLine.mnVerticalOffset;
 
-        const rendering::StringContext aContext (iLine->msLine, 0, iLine->msLine.getLength());
+        const rendering::StringContext aContext (rLine.msLine, 0, rLine.msLine.getLength());
         Reference<rendering::XTextLayout> xLayout (
         rxFont->createTextLayout(aContext, rendering::TextDirection::WEAK_LEFT_TO_RIGHT, 0));
         rxCanvas->drawTextLayout (
@@ -604,7 +585,7 @@ double LineDescriptorList::Paint(
             rViewState,
             rRenderState);
 
-        nY += iLine->maSize.Height * 1.2;
+        nY += rLine.maSize.Height * 1.2;
     }
 
     return nY - rBBox.Y1;
@@ -612,13 +593,10 @@ double LineDescriptorList::Paint(
 
 double LineDescriptorList::GetHeight() const
 {
-    double nHeight (0);
-    vector<LineDescriptor>::const_iterator iLine (mpLineDescriptors->begin());
-    vector<LineDescriptor>::const_iterator iEnd (mpLineDescriptors->end());
-    for ( ; iLine!=iEnd; ++iLine)
-        nHeight += iLine->maSize.Height * 1.2;
-
-    return nHeight;
+    return std::accumulate(mpLineDescriptors->begin(), mpLineDescriptors->end(), double(0),
+        [](const double& nHeight, const LineDescriptor& rLine) {
+            return nHeight + rLine.maSize.Height * 1.2;
+        });
 }
 
 void LineDescriptorList::Update (
@@ -675,7 +653,7 @@ void LineDescriptorList::FormatText (
 {
     LineDescriptor aLineDescriptor;
 
-    mpLineDescriptors.reset(new vector<LineDescriptor>());
+    mpLineDescriptors.reset(new vector<LineDescriptor>);
 
     vector<OUString>::const_iterator iPart (rTextParts.begin());
     vector<OUString>::const_iterator iEnd (rTextParts.end());

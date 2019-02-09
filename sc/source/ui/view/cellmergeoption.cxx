@@ -7,8 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "cellmergeoption.hxx"
-#include "address.hxx"
+#include <cellmergeoption.hxx>
+#include <address.hxx>
 
 ScCellMergeOption::ScCellMergeOption(const ScRange& rRange) :
     mnStartCol(rRange.aStart.Col()),
@@ -29,16 +29,6 @@ ScCellMergeOption::ScCellMergeOption(SCCOL nStartCol, SCROW nStartRow, SCCOL nEn
     mnEndCol(nEndCol),
     mnEndRow(nEndRow),
     mbCenter(bCenter)
-{
-}
-
-ScCellMergeOption::ScCellMergeOption(const ScCellMergeOption& r) :
-    maTabs(r.maTabs),
-    mnStartCol(r.mnStartCol),
-    mnStartRow(r.mnStartRow),
-    mnEndCol(r.mnEndCol),
-    mnEndRow(r.mnEndRow),
-    mbCenter(r.mbCenter)
 {
 }
 

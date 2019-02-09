@@ -26,49 +26,45 @@
 namespace frm
 {
 
-class ORadioButtonModel     :public OReferenceValueComponent
+class ORadioButtonModel final : public OReferenceValueComponent
 {
 public:
     DECLARE_DEFAULT_LEAF_XTOR( ORadioButtonModel );
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    OUString SAL_CALL getImplementationName() override
     { return OUString("com.sun.star.form.ORadioButtonModel"); }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
     // OPropertySetHelper
-    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue )
-                throw (css::uno::Exception, std::exception) override;
+    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue ) override;
 
     // XPersistObject
-    virtual OUString SAL_CALL    getServiceName() throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL    getServiceName() override;
     virtual void SAL_CALL
-        write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) throw(css::io::IOException, css::uno::RuntimeException, std::exception) override;
+        write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
     virtual void SAL_CALL
-        read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) throw(css::io::IOException, css::uno::RuntimeException, std::exception) override;
+        read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
 
     // OPropertyChangeListener
-    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException) override;
+    virtual void _propertyChanged(const css::beans::PropertyChangeEvent& evt) override;
 
     // OControlModel's property handling
     virtual void describeFixedProperties(
         css::uno::Sequence< css::beans::Property >& /* [out] */ _rProps
     ) const override;
 
-protected:
+private:
     // OBoundControlModel overridables
     virtual css::uno::Any   translateDbColumnToControlValue( ) override;
     virtual bool            commitControlValueToDbColumn( bool _bPostReset ) override;
     virtual css::uno::Any   translateExternalValueToControlValue( const css::uno::Any& _rExternalValue ) const override;
 
-protected:
     void SetSiblingPropsTo(const OUString& rPropName, const css::uno::Any& rValue);
 
-    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) override;
 
-private:
     void setControlSource();
 };
 
@@ -78,15 +74,10 @@ public:
     explicit ORadioButtonControl(const css::uno::Reference< css::uno::XComponentContext>& _rxFactory);
 
     // XServiceInfo
-    OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    OUString SAL_CALL getImplementationName() override
     { return OUString("com.sun.star.form.ORadioButtonControl"); }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
-
-protected:
-    // XControl
-    virtual void SAL_CALL createPeer(const css::uno::Reference<css::awt::XToolkit>& Toolkit, const css::uno::Reference<css::awt::XWindowPeer>& Parent) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 };
 
 

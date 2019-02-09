@@ -17,10 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableRow.hxx"
-#include <tools/debug.hxx>
+#include <TableRow.hxx>
 #include <tools/stream.hxx>
-#include "FieldDescriptions.hxx"
+#include <FieldDescriptions.hxx>
 #include <algorithm>
 #include <comphelper/types.hxx>
 
@@ -128,7 +127,7 @@ namespace dbaui
             _rStr.WriteInt32( pFieldDesc->GetScale() );
             _rStr.WriteInt32( pFieldDesc->GetIsNullable() );
             _rStr.WriteInt32( pFieldDesc->GetFormatKey() );
-            _rStr.WriteInt32( pFieldDesc->GetHorJustify() );
+            _rStr.WriteInt32( static_cast<sal_Int32>(pFieldDesc->GetHorJustify()) );
             _rStr.WriteInt32( pFieldDesc->IsAutoIncrement() ? 1 : 0 );
             _rStr.WriteInt32( pFieldDesc->IsPrimaryKey() ? 1 : 0 );
             _rStr.WriteInt32( pFieldDesc->IsCurrency() ? 1 : 0 );
@@ -146,13 +145,9 @@ namespace dbaui
         {
             OFieldDescription* pFieldDesc = new OFieldDescription();
             _rRow.m_pActFieldDescr = pFieldDesc;
-            OUString sValue = _rStr.ReadUniOrByteString(_rStr.GetStreamCharSet());
-            pFieldDesc->SetName(sValue);
-
-            sValue = _rStr.ReadUniOrByteString(_rStr.GetStreamCharSet());
-            pFieldDesc->SetDescription(sValue);
-            sValue = _rStr.ReadUniOrByteString(_rStr.GetStreamCharSet());
-            pFieldDesc->SetHelpText(sValue);
+            pFieldDesc->SetName(_rStr.ReadUniOrByteString(_rStr.GetStreamCharSet()));
+            pFieldDesc->SetDescription(_rStr.ReadUniOrByteString(_rStr.GetStreamCharSet()));
+            pFieldDesc->SetHelpText(_rStr.ReadUniOrByteString(_rStr.GetStreamCharSet()));
 
             _rStr.ReadInt32( nValue );
             Any aControlDefault;
@@ -166,8 +161,7 @@ namespace dbaui
                     break;
                 }
                 case 2:
-                    sValue = _rStr.ReadUniOrByteString(_rStr.GetStreamCharSet());
-                    aControlDefault <<= OUString(sValue);
+                    aControlDefault <<= _rStr.ReadUniOrByteString(_rStr.GetStreamCharSet());
                     break;
             }
 
@@ -185,7 +179,7 @@ namespace dbaui
             _rStr.ReadInt32( nValue );
             pFieldDesc->SetFormatKey(nValue);
             _rStr.ReadInt32( nValue );
-            pFieldDesc->SetHorJustify((SvxCellHorJustify)nValue);
+            pFieldDesc->SetHorJustify(static_cast<SvxCellHorJustify>(nValue));
 
             _rStr.ReadInt32( nValue );
             pFieldDesc->SetAutoIncrement(nValue != 0);

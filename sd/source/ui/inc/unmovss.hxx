@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_UNMOVSS_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_UNMOVSS_HXX
 
-#include "sdundo.hxx"
+#include <sdundo.hxx>
 #include <stlsheet.hxx>
 #include <vector>
 
@@ -28,14 +28,14 @@ class SdDrawDocument;
 
 class SdMoveStyleSheetsUndoAction : public SdUndoAction
 {
-    SdStyleSheetVector                  maStyles;
+    StyleSheetCopyResultVector          maStyles;
     std::vector< SdStyleSheetVector >   maListOfChildLists;
     bool                                mbMySheets;
 
 public:
-    SdMoveStyleSheetsUndoAction(SdDrawDocument* pTheDoc, SdStyleSheetVector& rTheStyles, bool bInserted);
+    SdMoveStyleSheetsUndoAction(SdDrawDocument* pTheDoc, StyleSheetCopyResultVector& rTheStyles, bool bInserted);
 
-    virtual ~SdMoveStyleSheetsUndoAction();
+    virtual ~SdMoveStyleSheetsUndoAction() override;
     virtual void Undo() override;
     virtual void Redo() override;
 

@@ -23,20 +23,20 @@
 #undef _LINUX_SOURCE_COMPAT
 #endif
 
+#include <com/sun/star/frame/TerminationVetoException.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/uri/ExternalUriReferenceTranslator.hpp>
 #include <com/sun/star/accessibility/XAccessibleContext.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
-#include <comphelper/processfactory.hxx>
 #include <rtl/process.h>
 #include <osl/diagnose.h>
-#include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 #include <tools/urlobj.hxx>
 
 #include <vcl/window.hxx>
-#include "unx/gtk/gtkframe.hxx"
-#include "gtk/fpicker/SalGtkPicker.hxx"
+#include <unx/gtk/gtkframe.hxx>
+#include <gtk/fpicker/SalGtkPicker.hxx>
 
 using namespace ::rtl;
 using namespace ::com::sun::star;
@@ -62,7 +62,7 @@ OUString SalGtkPicker::uritounicode(const gchar* pIn)
             OUString sEncoded(pEncodedFileName, strlen(pEncodedFileName),
                 osl_getThreadTextEncoding());
             g_free (pEncodedFileName);
-            INetURLObject aCurrentURL(sEncoded, INetURLObject::FSYS_UNX);
+            INetURLObject aCurrentURL(sEncoded, FSysStyle::Unix);
             aCurrentURL.SetHost(aURL.GetHost());
             sURL = aCurrentURL.getExternalURL();
         }
@@ -120,9 +120,13 @@ GtkWindow* RunDialog::GetTransientFor()
     return pParent;
 }
 
-RunDialog::RunDialog( GtkWidget *pDialog, uno::Reference< awt::XExtendedToolkit >& rToolkit ) :
-    cppu::WeakComponentImplHelper< awt::XTopWindowListener, frame::XTerminateListener >( maLock ),
-    mpDialog(pDialog), mxToolkit(rToolkit)
+RunDialog::RunDialog(GtkWidget *pDialog, const uno::Reference<awt::XExtendedToolkit>& rToolkit,
+                                         const uno::Reference<frame::XDesktop>& rDesktop)
+    : cppu::WeakComponentImplHelper<awt::XTopWindowListener, frame::XTerminateListener>(maLock)
+    , mpDialog(pDialog)
+    , mbTerminateDesktop(false)
+    , mxToolkit(rToolkit)
+    , mxDesktop(rDesktop)
 {
 }
 
@@ -134,7 +138,6 @@ RunDialog::~RunDialog()
 }
 
 void SAL_CALL RunDialog::windowOpened(const css::lang::EventObject& e)
-    throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -154,16 +157,18 @@ void SAL_CALL RunDialog::windowOpened(const css::lang::EventObject& e)
 }
 
 void SAL_CALL RunDialog::queryTermination( const css::lang::EventObject& )
-        throw(css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception)
-{
-}
-
-void SAL_CALL RunDialog::notifyTermination( const css::lang::EventObject& )
-        throw(css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
     g_timeout_add_full(G_PRIORITY_HIGH_IDLE, 0, reinterpret_cast<GSourceFunc>(canceldialog), this, nullptr);
+
+    mbTerminateDesktop = true;
+
+    throw css::frame::TerminationVetoException();
+}
+
+void SAL_CALL RunDialog::notifyTermination( const css::lang::EventObject& )
+{
 }
 
 void RunDialog::cancel()
@@ -172,20 +177,50 @@ void RunDialog::cancel()
     gtk_widget_hide( mpDialog );
 }
 
+namespace
+{
+    class ExecuteInfo
+    {
+    private:
+        css::uno::Reference<css::frame::XDesktop> mxDesktop;
+    public:
+        ExecuteInfo(const css::uno::Reference<css::frame::XDesktop>& rDesktop)
+            : mxDesktop(rDesktop)
+        {
+        }
+        void terminate()
+        {
+            mxDesktop->terminate();
+        }
+    };
+}
+
 gint RunDialog::run()
 {
     if (mxToolkit.is())
         mxToolkit->addTopWindowListener(this);
 
-    gint nStatus = gtk_dialog_run( GTK_DIALOG( mpDialog ) );
+    mxDesktop->addTerminateListener(this);
+    gint nStatus = gtk_dialog_run(GTK_DIALOG(mpDialog));
+    mxDesktop->removeTerminateListener(this);
 
     if (mxToolkit.is())
         mxToolkit->removeTopWindowListener(this);
 
-    if (nStatus != 1)   //PLAY
-        gtk_widget_hide( mpDialog );
+    if (mbTerminateDesktop)
+    {
+        ExecuteInfo* pExecuteInfo = new ExecuteInfo(mxDesktop);
+        Application::PostUserEvent(LINK(nullptr, RunDialog, TerminateDesktop), pExecuteInfo);
+    }
 
     return nStatus;
+}
+
+IMPL_STATIC_LINK(RunDialog, TerminateDesktop, void*, p, void)
+{
+    ExecuteInfo* pExecuteInfo = static_cast<ExecuteInfo*>(p);
+    pExecuteInfo->terminate();
+    delete pExecuteInfo;
 }
 
 SalGtkPicker::SalGtkPicker( const uno::Reference<uno::XComponentContext>& xContext )
@@ -203,8 +238,7 @@ SalGtkPicker::~SalGtkPicker()
     }
 }
 
-void SAL_CALL SalGtkPicker::implsetDisplayDirectory( const OUString& aDirectory )
-    throw( lang::IllegalArgumentException, uno::RuntimeException )
+void SalGtkPicker::implsetDisplayDirectory( const OUString& aDirectory )
 {
     OSL_ASSERT( m_pDialog != nullptr );
 
@@ -216,13 +250,13 @@ void SAL_CALL SalGtkPicker::implsetDisplayDirectory( const OUString& aDirectory 
     if( aTxt.endsWith("/") )
         aTxt = aTxt.copy( 0, aTxt.getLength() - 1 );
 
-    OSL_TRACE( "setting path to %s", aTxt.getStr() );
+    SAL_INFO( "vcl", "setting path to " << aTxt );
 
     gtk_file_chooser_set_current_folder_uri( GTK_FILE_CHOOSER( m_pDialog ),
         aTxt.getStr() );
 }
 
-OUString SAL_CALL SalGtkPicker::implgetDisplayDirectory() throw( uno::RuntimeException )
+OUString SalGtkPicker::implgetDisplayDirectory()
 {
     OSL_ASSERT( m_pDialog != nullptr );
 
@@ -234,7 +268,7 @@ OUString SAL_CALL SalGtkPicker::implgetDisplayDirectory() throw( uno::RuntimeExc
     return aCurrentFolderName;
 }
 
-void SAL_CALL SalGtkPicker::implsetTitle( const OUString& aTitle ) throw( uno::RuntimeException )
+void SalGtkPicker::implsetTitle( const OUString& aTitle )
 {
     OSL_ASSERT( m_pDialog != nullptr );
 

@@ -18,22 +18,14 @@
  */
 
 
-#define UNICODE
-
 #include "ddeimp.hxx"
 #include <svl/svdde.hxx>
-
-DdeString::DdeString( DWORD hDdeInst, const sal_Unicode* p )
-    : m_aString(p)
-{
-    hString = DdeCreateStringHandle( hDdeInst, (LPTSTR)p, CP_WINUNICODE );
-    hInst = hDdeInst;
-}
+#include <o3tl/char16_t2wchar_t.hxx>
 
 DdeString::DdeString( DWORD hDdeInst, const OUString& r)
     : m_aString(r)
 {
-    hString = DdeCreateStringHandle( hDdeInst, (LPTSTR)r.getStr(), CP_WINUNICODE );
+    hString = DdeCreateStringHandleW( hDdeInst, o3tl::toW(r.getStr()), CP_WINUNICODE );
     hInst = hDdeInst;
 }
 
@@ -43,12 +35,12 @@ DdeString::~DdeString()
         DdeFreeStringHandle( hInst, hString );
 }
 
-int DdeString::operator==( HSZ h )
+bool DdeString::operator==( HSZ h )
 {
     return( !DdeCmpStringHandles( hString, h ) );
 }
 
-DdeString::operator HSZ()
+HSZ DdeString::getHSZ()
 {
     return hString;
 }

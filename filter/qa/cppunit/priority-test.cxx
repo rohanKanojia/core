@@ -50,7 +50,7 @@ void PriorityFilterTest::testPriority()
     static struct {
         const char *pURL;
         const char *pFormat;
-    } aToCheck[] = {
+    } const aToCheck[] = {
         { "file:///tmp/foo.xls", "calc_MS_Excel_97" }
         // TODO: expand this to check more of these priorities
     };
@@ -69,9 +69,9 @@ void PriorityFilterTest::testPriority()
             aMsg.append("' should be '");
             aMsg.append(aFormatCorrect);
             aMsg.append("'");
-            CPPUNIT_ASSERT_MESSAGE(rtl::OUStringToOString(aMsg.makeStringAndClear(),
+            CPPUNIT_ASSERT_EQUAL_MESSAGE(OUStringToOString(aMsg.makeStringAndClear(),
                                                           RTL_TEXTENCODING_UTF8).getStr(),
-                                   aTypeName == aFormatCorrect);
+                                   aFormatCorrect, aTypeName);
         }
         catch (const uno::Exception &e)
         {
@@ -79,7 +79,7 @@ void PriorityFilterTest::testPriority()
             aMsg.append("'");
             aMsg.append(e.Message);
             aMsg.append("'");
-            CPPUNIT_FAIL(rtl::OUStringToOString(aMsg.makeStringAndClear(),
+            CPPUNIT_FAIL(OUStringToOString(aMsg.makeStringAndClear(),
                                                 RTL_TEXTENCODING_UTF8).getStr());
         }
     }

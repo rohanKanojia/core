@@ -16,10 +16,7 @@ $(eval $(call gb_CppunitTest_set_include,starmath_qa_cppunit,\
 
 $(eval $(call gb_CppunitTest_use_external,starmath_qa_cppunit,boost_headers))
 
-$(eval $(call gb_CppunitTest_use_api,starmath_qa_cppunit,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,starmath_qa_cppunit))
 
 $(eval $(call gb_CppunitTest_use_library_objects,starmath_qa_cppunit,\
     sm \
@@ -49,11 +46,13 @@ $(eval $(call gb_CppunitTest_use_libraries,starmath_qa_cppunit,\
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,starmath_qa_cppunit,\
+    starmath/qa/cppunit/test_cursor \
+    starmath/qa/cppunit/test_node \
     starmath/qa/cppunit/test_nodetotextvisitors \
+    starmath/qa/cppunit/test_parse \
     starmath/qa/cppunit/test_starmath \
 ))
 

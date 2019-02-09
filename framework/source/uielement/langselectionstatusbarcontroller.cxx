@@ -19,44 +19,38 @@
 
 #include <classes/fwkresid.hxx>
 #include <services.h>
-#include <classes/resource.hrc>
-#include <osl/mutex.hxx>
+#include <strings.hrc>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <vcl/status.hxx>
 #include <toolkit/helper/convert.hxx>
 
 #include <cppuhelper/supportsservice.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/awt/PopupMenu.hpp>
 #include <com/sun/star/awt/PopupMenuDirection.hpp>
 #include <svtools/langtab.hxx>
 #include <svtools/statusbarcontroller.hxx>
 #include <sal/types.h>
+#include <sal/log.hxx>
 #include <com/sun/star/awt/MenuItemStyle.hpp>
 #include <com/sun/star/document/XDocumentLanguages.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/frame/ModuleManager.hpp>
 #include <i18nlangtag/mslangid.hxx>
 #include <com/sun/star/i18n/ScriptType.hpp>
-#include <com/sun/star/frame/XModule.hpp>
-#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/ui/XStatusbarItem.hpp>
 
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <comphelper/processfactory.hxx>
 
 #include <tools/gen.hxx>
 #include <com/sun/star/awt/Command.hpp>
 #include <svl/languageoptions.hxx>
 
-#include "helper/mischelper.hxx"
+#include <helper/mischelper.hxx>
 
 #include <rtl/ustrbuf.hxx>
 #include <rtl/ref.hxx>
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
-#include <macros/xserviceinfo.hxx>
 #include <stdtypes.h>
 
 #include <map>
@@ -82,20 +76,20 @@ public:
     LangSelectionStatusbarController& operator=(const LangSelectionStatusbarController&) = delete;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
     // XStatusbarController
     virtual void SAL_CALL command( const css::awt::Point& aPos,
                                    ::sal_Int32 nCommand,
                                    sal_Bool bMouseEvent,
-                                   const css::uno::Any& aData ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL click( const css::awt::Point& aPos ) throw (css::uno::RuntimeException, std::exception) override;
+                                   const css::uno::Any& aData ) override;
+    virtual void SAL_CALL click( const css::awt::Point& aPos ) override;
 
 private:
-    virtual ~LangSelectionStatusbarController() {}
+    virtual ~LangSelectionStatusbarController() override {}
 
     bool            m_bShowMenu;        // if the menu is to be displayed or not (depending on the selected object/text)
     SvtScriptType   m_nScriptType;      // the flags for the different script types available in the selection, LATIN = 0x0001, ASIAN = 0x0002, COMPLEX = 0x0004
@@ -104,7 +98,8 @@ private:
     OUString        m_aGuessedTextLang;     // the 'guessed' language for the selection, "" if none could be guessed
     LanguageGuessingHelper      m_aLangGuessHelper;
 
-    void LangMenu( const css::awt::Point& aPos ) throw (css::uno::RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    void LangMenu( const css::awt::Point& aPos );
 };
 
 LangSelectionStatusbarController::LangSelectionStatusbarController( const uno::Reference< uno::XComponentContext >& xContext ) :
@@ -116,7 +111,6 @@ LangSelectionStatusbarController::LangSelectionStatusbarController( const uno::R
 }
 
 void SAL_CALL LangSelectionStatusbarController::initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -124,18 +118,19 @@ throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
 
     if ( m_xStatusbarItem.is() )
     {
-        m_xStatusbarItem->setText( FWK_RESSTR(STR_LANGSTATUS_MULTIPLE_LANGUAGES) );
-        m_xStatusbarItem->setQuickHelpText(FWK_RESSTR(STR_LANGSTATUS_HINT));
+        m_xStatusbarItem->setText( FwkResId(STR_LANGSTATUS_MULTIPLE_LANGUAGES) );
+        m_xStatusbarItem->setQuickHelpText(FwkResId(STR_LANGSTATUS_HINT));
     }
 }
 
 void LangSelectionStatusbarController::LangMenu(
     const css::awt::Point& aPos )
-throw (css::uno::RuntimeException, std::exception)
 {
     if (!m_bShowMenu)
         return;
 
+    const Reference<XServiceInfo> xService(m_xFrame->getController()->getModel(), UNO_QUERY);
+    bool bWriter = xService.is() && xService->supportsService("com.sun.star.text.GenericTextDocument");
     //add context menu
     Reference< awt::XPopupMenu > xPopupMenu( awt::PopupMenu::create( m_xContext ) );
     //sub menu that contains all items except the last two items: Separator + Set Language for Paragraph
@@ -151,57 +146,65 @@ throw (css::uno::RuntimeException, std::exception)
     const OUString sAsterisk("*");  // multiple languages in current selection
     const OUString sNone( SvtLanguageTable::GetLanguageString( LANGUAGE_NONE ));
     std::map< sal_Int16, OUString > aLangMap;
-    std::set< OUString >::const_iterator it;
-    for (it = aLangItems.begin(); it != aLangItems.end(); ++it)
+    for (auto const& langItem : aLangItems)
     {
-        const OUString & rStr( *it );
-        if ( rStr != sNone &&
-             rStr != sAsterisk &&
-             !rStr.isEmpty()) // 'no language found' from language guessing
+        if ( langItem != sNone &&
+             langItem != sAsterisk &&
+             !langItem.isEmpty()) // 'no language found' from language guessing
         {
             SAL_WARN_IF( MID_LANG_SEL_1 > nItemId || nItemId > MID_LANG_SEL_9,
                     "fwk.uielement", "nItemId outside of expected range!" );
-            xPopupMenu->insertItem( nItemId, rStr, 0, nItemId );
-            if ( rStr == m_aCurLang )
+            xPopupMenu->insertItem( nItemId, langItem, 0, nItemId );
+            if ( langItem == m_aCurLang )
             {
                 //make a sign for the current language
-                xPopupMenu->checkItem( nItemId, sal_True );
+                xPopupMenu->checkItem( nItemId, true );
             }
-            aLangMap[ nItemId ] = rStr;
+            aLangMap[ nItemId ] = langItem;
             ++nItemId;
         }
     }
 
-    xPopupMenu->insertItem( MID_LANG_SEL_NONE,  FWK_RESSTR(STR_LANGSTATUS_NONE), 0, MID_LANG_SEL_NONE );
-    if ( sNone == m_aCurLang )
-        xPopupMenu->checkItem( MID_LANG_SEL_NONE, sal_True );
-    xPopupMenu->insertItem( MID_LANG_SEL_RESET, FWK_RESSTR(STR_RESET_TO_DEFAULT_LANGUAGE), 0, MID_LANG_SEL_RESET );
-    xPopupMenu->insertItem( MID_LANG_SEL_MORE,  FWK_RESSTR(STR_LANGSTATUS_MORE), 0, MID_LANG_SEL_MORE );
-
-    // add entries to submenu ('set language for paragraph')
-    nItemId = static_cast< sal_Int16 >(MID_LANG_PARA_1);
-    for (it = aLangItems.begin(); it != aLangItems.end(); ++it)
+    if (bWriter)
     {
-        const OUString & rStr( *it );
-        if( rStr != sNone &&
-            rStr != sAsterisk &&
-            !rStr.isEmpty()) // 'no language found' from language guessing
-        {
-            SAL_WARN_IF( MID_LANG_PARA_1 > nItemId || nItemId > MID_LANG_PARA_9,
-                    "fwk.uielement", "nItemId outside of expected range!" );
-            subPopupMenu->insertItem( nItemId, rStr, 0, nItemId );
-            aLangMap[nItemId] = rStr;
-            ++nItemId;
-        }
-    }
-    subPopupMenu->insertItem( MID_LANG_PARA_NONE,  FWK_RESSTR(STR_LANGSTATUS_NONE), 0, MID_LANG_PARA_NONE );
-    subPopupMenu->insertItem( MID_LANG_PARA_RESET, FWK_RESSTR(STR_RESET_TO_DEFAULT_LANGUAGE), 0, MID_LANG_PARA_RESET );
-    subPopupMenu->insertItem( MID_LANG_PARA_MORE,  FWK_RESSTR(STR_LANGSTATUS_MORE), 0, MID_LANG_PARA_MORE );
+        xPopupMenu->insertItem( MID_LANG_SEL_NONE,  FwkResId(STR_LANGSTATUS_NONE), 0, MID_LANG_SEL_NONE );
+        if ( sNone == m_aCurLang )
+            xPopupMenu->checkItem( MID_LANG_SEL_NONE, true );
+        xPopupMenu->insertItem( MID_LANG_SEL_RESET, FwkResId(STR_RESET_TO_DEFAULT_LANGUAGE), 0, MID_LANG_SEL_RESET );
+        xPopupMenu->insertItem( MID_LANG_SEL_MORE,  FwkResId(STR_LANGSTATUS_MORE), 0, MID_LANG_SEL_MORE );
 
-    // add last two entries to main menu
-    xPopupMenu->insertSeparator( MID_LANG_PARA_SEPARATOR );
-    xPopupMenu->insertItem( MID_LANG_PARA_STRING, FWK_RESSTR(STR_SET_LANGUAGE_FOR_PARAGRAPH), 0, MID_LANG_PARA_STRING );
-    xPopupMenu->setPopupMenu( MID_LANG_PARA_STRING, subPopupMenu );
+        // add entries to submenu ('set language for paragraph')
+        nItemId = static_cast< sal_Int16 >(MID_LANG_PARA_1);
+        for (auto const& langItem : aLangItems)
+        {
+            if( langItem != sNone &&
+                langItem != sAsterisk &&
+                !langItem.isEmpty()) // 'no language found' from language guessing
+            {
+                SAL_WARN_IF( MID_LANG_PARA_1 > nItemId || nItemId > MID_LANG_PARA_9,
+                        "fwk.uielement", "nItemId outside of expected range!" );
+                subPopupMenu->insertItem( nItemId, langItem, 0, nItemId );
+                aLangMap[nItemId] = langItem;
+                ++nItemId;
+            }
+        }
+        subPopupMenu->insertItem( MID_LANG_PARA_NONE,  FwkResId(STR_LANGSTATUS_NONE), 0, MID_LANG_PARA_NONE );
+        subPopupMenu->insertItem( MID_LANG_PARA_RESET, FwkResId(STR_RESET_TO_DEFAULT_LANGUAGE), 0, MID_LANG_PARA_RESET );
+        subPopupMenu->insertItem( MID_LANG_PARA_MORE,  FwkResId(STR_LANGSTATUS_MORE), 0, MID_LANG_PARA_MORE );
+
+        // add last two entries to main menu
+        xPopupMenu->insertSeparator( MID_LANG_PARA_SEPARATOR );
+        xPopupMenu->insertItem( MID_LANG_PARA_STRING, FwkResId(STR_SET_LANGUAGE_FOR_PARAGRAPH), 0, MID_LANG_PARA_STRING );
+        xPopupMenu->setPopupMenu( MID_LANG_PARA_STRING, subPopupMenu );
+    }
+    else
+    {
+        xPopupMenu->insertItem( MID_LANG_DEF_NONE,  FwkResId(STR_LANGSTATUS_NONE), 0, MID_LANG_DEF_NONE );
+        if ( sNone == m_aCurLang )
+            xPopupMenu->checkItem( MID_LANG_DEF_NONE, true );
+        xPopupMenu->insertItem( MID_LANG_DEF_RESET, FwkResId(STR_RESET_TO_DEFAULT_LANGUAGE), 0, MID_LANG_DEF_RESET );
+        xPopupMenu->insertItem( MID_LANG_DEF_MORE,  FwkResId(STR_LANGSTATUS_MORE), 0, MID_LANG_DEF_MORE );
+    }
 
     // now display the popup menu and execute every command ...
 
@@ -217,7 +220,11 @@ throw (css::uno::RuntimeException, std::exception)
 
         if (MID_LANG_SEL_1 <= nId && nId <= MID_LANG_SEL_9)
         {
-            aBuff.append( ".uno:LanguageStatus?Language:string=Current_" );
+            if (bWriter)
+                aBuff.append( ".uno:LanguageStatus?Language:string=Current_" );
+            else
+                aBuff.append( ".uno:LanguageStatus?Language:string=Default_" );
+
             aBuff.append( aSelectedLang );
         }
         else if (nId == MID_LANG_SEL_NONE)
@@ -234,6 +241,18 @@ throw (css::uno::RuntimeException, std::exception)
         {
             //open the dialog "format/character" for current selection
             aBuff.append( ".uno:FontDialog?Page:string=font" );
+        }
+        else if (nId == MID_LANG_DEF_NONE)
+        {
+             aBuff.append( ".uno:LanguageStatus?Language:string=Default_LANGUAGE_NONE" );
+        }
+        else if (nId == MID_LANG_DEF_RESET)
+        {
+             aBuff.append( ".uno:LanguageStatus?Language:string=Default_RESET_LANGUAGES" );
+        }
+        else if (nId == MID_LANG_DEF_MORE)
+        {
+            aBuff.append( ".uno:LanguageStatus?Language:string=*" );
         }
         else if (MID_LANG_PARA_1 <= nId && nId <= MID_LANG_PARA_9)
         {
@@ -266,7 +285,6 @@ void SAL_CALL LangSelectionStatusbarController::command(
     ::sal_Int32 nCommand,
     sal_Bool /*bMouseEvent*/,
     const css::uno::Any& /*aData*/ )
-throw (css::uno::RuntimeException, std::exception)
 {
     if ( nCommand & ::awt::Command::CONTEXTMENU )
     {
@@ -276,14 +294,12 @@ throw (css::uno::RuntimeException, std::exception)
 
 void SAL_CALL LangSelectionStatusbarController::click(
     const css::awt::Point& aPos )
-throw (css::uno::RuntimeException, std::exception)
 {
     LangMenu( aPos );
 }
 
 // XStatusListener
 void SAL_CALL LangSelectionStatusbarController::statusChanged( const FeatureStateEvent& Event )
-throw ( RuntimeException, std::exception )
 {
     // This function will be called when observed data changes,
     // for example the selection or keyboard language.
@@ -306,7 +322,10 @@ throw ( RuntimeException, std::exception )
         Sequence< OUString > aSeq;
 
         if ( Event.State >>= aStrValue )
+        {
             m_xStatusbarItem->setText( aStrValue );
+            m_aCurLang = aStrValue;
+        }
         else if ( Event.State >>= aSeq )
         {
             if ( aSeq.getLength() == 4 )
@@ -314,7 +333,7 @@ throw ( RuntimeException, std::exception )
                 OUString aStatusText = aSeq[0];
                 if (aStatusText == "*")
                 {
-                    aStatusText = FWK_RESSTR(STR_LANGSTATUS_MULTIPLE_LANGUAGES);
+                    aStatusText = FwkResId(STR_LANGSTATUS_MULTIPLE_LANGUAGES);
                 }
                 m_xStatusbarItem->setText( aStatusText );
 
@@ -336,7 +355,7 @@ throw ( RuntimeException, std::exception )
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_LangSelectionStatusbarController_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

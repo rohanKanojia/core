@@ -17,37 +17,45 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unosrch.hxx"
+#include <unosrch.hxx>
 #include <doc.hxx>
 #include <hints.hxx>
 #include <unomap.hxx>
 #include <unobaseclass.hxx>
 #include <unomid.h>
+#include <fchrfmt.hxx>
 
-#include <osl/mutex.hxx>
+#include <osl/diagnose.h>
+#include <i18nlangtag/languagetag.hxx>
+#include <i18nutil/searchopt.hxx>
+#include <o3tl/any.hxx>
 #include <vcl/svapp.hxx>
 #include <editeng/unolingu.hxx>
-#include <com/sun/star/util/SearchOptions2.hpp>
 #include <com/sun/star/util/SearchAlgorithms2.hpp>
 #include <com/sun/star/util/SearchFlags.hpp>
-#include <com/sun/star/i18n/TransliterationModules.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <svl/itemprop.hxx>
+#include <memory>
 
 using namespace ::com::sun::star;
 
 class SwSearchProperties_Impl
 {
-    beans::PropertyValue**          pValueArr;
-    sal_uInt32                      nArrLen;
-    const PropertyEntryVector_t     aPropertyEntries;
+    std::unique_ptr<std::unique_ptr<beans::PropertyValue>[]> pValueArr;
+    const PropertyEntryVector_t                              aPropertyEntries;
+
+    SwSearchProperties_Impl(const SwSearchProperties_Impl&) = delete;
+    SwSearchProperties_Impl& operator=(const SwSearchProperties_Impl&) = delete;
+
 public:
     SwSearchProperties_Impl();
-    ~SwSearchProperties_Impl();
 
-    void    SetProperties(const uno::Sequence< beans::PropertyValue >& aSearchAttribs)
-        throw( beans::UnknownPropertyException, lang::IllegalArgumentException, uno::RuntimeException );
+    /// @throws beans::UnknownPropertyException
+    /// @throws lang::IllegalArgumentException
+    /// @throws uno::RuntimeException
+    void    SetProperties(const uno::Sequence< beans::PropertyValue >& aSearchAttribs);
     const uno::Sequence< beans::PropertyValue > GetProperties() const;
 
     void    FillItemSet(SfxItemSet& rSet, bool bIsValueSearch) const;
@@ -55,62 +63,46 @@ public:
 };
 
 SwSearchProperties_Impl::SwSearchProperties_Impl() :
-    nArrLen(0),
-    aPropertyEntries( aSwMapProvider.GetPropertySet(PROPERTY_MAP_TEXT_CURSOR)->getPropertyMap().getPropertyEntries())
+    aPropertyEntries( aSwMapProvider.GetPropertySet(PROPERTY_MAP_TEXT_CURSOR)->getPropertyMap().getPropertyEntries() )
 {
-    nArrLen = aPropertyEntries.size();
-    pValueArr = new beans::PropertyValue*[nArrLen];
-    for(sal_uInt32 i = 0; i < nArrLen; i++)
-        pValueArr[i] = nullptr;
+    size_t nArrLen = aPropertyEntries.size();
+    pValueArr.reset( new std::unique_ptr<beans::PropertyValue>[nArrLen] );
 }
 
-SwSearchProperties_Impl::~SwSearchProperties_Impl()
-{
-    for(sal_uInt32 i = 0; i < nArrLen; i++)
-        delete pValueArr[i];
-    delete[] pValueArr;
-}
-
-void    SwSearchProperties_Impl::SetProperties(const uno::Sequence< beans::PropertyValue >& aSearchAttribs)
-                throw( beans::UnknownPropertyException, lang::IllegalArgumentException, uno::RuntimeException )
+void SwSearchProperties_Impl::SetProperties(const uno::Sequence< beans::PropertyValue >& aSearchAttribs)
 {
     const beans::PropertyValue* pProps = aSearchAttribs.getConstArray();
 
     //delete all existing values
-    for(sal_uInt32 i = 0; i < nArrLen; ++i)
+    for(size_t i = 0; i < aPropertyEntries.size(); ++i)
     {
-        delete pValueArr[i];
-        pValueArr[i] = nullptr;
+        pValueArr[i].reset();
     }
 
     const sal_uInt32 nLen = aSearchAttribs.getLength();
     for(sal_uInt32 i = 0; i < nLen; ++i)
     {
-        sal_uInt32 nIndex = 0;
-        PropertyEntryVector_t::const_iterator aIt = aPropertyEntries.begin();
-        while(pProps[i].Name != aIt->sName)
-        {
-            ++aIt;
-            nIndex++;
-            if( aIt == aPropertyEntries.end() )
-                throw beans::UnknownPropertyException();
-        }
-        pValueArr[nIndex] = new beans::PropertyValue(pProps[i]);
+        const OUString& sName = pProps[i].Name;
+        auto aIt = std::find_if(aPropertyEntries.begin(), aPropertyEntries.end(),
+            [&sName](const SfxItemPropertyNamedEntry& rProp) { return rProp.sName == sName; });
+        if( aIt == aPropertyEntries.end() )
+            throw beans::UnknownPropertyException();
+        auto nIndex = static_cast<sal_uInt32>(std::distance(aPropertyEntries.begin(), aIt));
+        pValueArr[nIndex].reset( new beans::PropertyValue(pProps[i]) );
     }
 }
 
 const uno::Sequence< beans::PropertyValue > SwSearchProperties_Impl::GetProperties() const
 {
     sal_uInt32 nPropCount = 0;
-    sal_uInt32 i;
-    for( i = 0; i < nArrLen; i++)
+    for( size_t i = 0; i < aPropertyEntries.size(); i++)
         if(pValueArr[i])
             nPropCount++;
 
     uno::Sequence< beans::PropertyValue > aRet(nPropCount);
     beans::PropertyValue* pProps = aRet.getArray();
     nPropCount = 0;
-    for(i = 0; i < nArrLen; i++)
+    for(size_t i = 0; i < aPropertyEntries.size(); i++)
     {
         if(pValueArr[i])
         {
@@ -123,56 +115,56 @@ const uno::Sequence< beans::PropertyValue > SwSearchProperties_Impl::GetProperti
 void SwSearchProperties_Impl::FillItemSet(SfxItemSet& rSet, bool bIsValueSearch) const
 {
 
-    SfxPoolItem* pBoxItem = nullptr,
-    *pCharBoxItem = nullptr,
-    *pBreakItem = nullptr,
-    *pAutoKernItem  = nullptr,
-    *pWLineItem   = nullptr,
-    *pTabItem  = nullptr,
-    *pSplitItem  = nullptr,
-    *pRegItem  = nullptr,
-    *pLineSpaceItem  = nullptr,
-    *pLineNumItem  = nullptr,
-    *pKeepItem  = nullptr,
-    *pLRItem  = nullptr,
-    *pULItem  = nullptr,
-    *pBackItem  = nullptr,
-    *pAdjItem  = nullptr,
-    *pDescItem  = nullptr,
-    *pInetItem  = nullptr,
-    *pDropItem  = nullptr,
-    *pWeightItem  = nullptr,
-    *pULineItem  = nullptr,
-    *pOLineItem  = nullptr,
-    *pCharFormatItem  = nullptr,
-    *pShadItem  = nullptr,
-    *pPostItem  = nullptr,
-    *pNHyphItem  = nullptr,
-    *pLangItem  = nullptr,
-    *pKernItem  = nullptr,
-    *pFontSizeItem  = nullptr,
-    *pFontItem  = nullptr,
-    *pBlinkItem  = nullptr,
-    *pEscItem  = nullptr,
-    *pCrossedOutItem  = nullptr,
-    *pContourItem  = nullptr,
-    *pCharColorItem  = nullptr,
-    *pCasemapItem  = nullptr,
-    *pBrushItem  = nullptr,
-    *pFontCJKItem = nullptr,
-    *pFontSizeCJKItem = nullptr,
-    *pCJKLangItem = nullptr,
-    *pCJKPostureItem = nullptr,
-    *pCJKWeightItem = nullptr,
-    *pFontCTLItem = nullptr,
-    *pFontSizeCTLItem = nullptr,
-    *pCTLLangItem = nullptr,
-    *pCTLPostureItem = nullptr,
-    *pCTLWeightItem = nullptr,
-    *pShadowItem  = nullptr;
+    std::unique_ptr<SfxPoolItem> pBoxItem,
+    pCharBoxItem,
+    pBreakItem,
+    pAutoKernItem ,
+    pWLineItem  ,
+    pTabItem ,
+    pSplitItem ,
+    pRegItem ,
+    pLineSpaceItem ,
+    pLineNumItem ,
+    pKeepItem ,
+    pLRItem ,
+    pULItem ,
+    pBackItem ,
+    pAdjItem ,
+    pDescItem ,
+    pInetItem ,
+    pDropItem ,
+    pWeightItem ,
+    pULineItem ,
+    pOLineItem ,
+    pCharFormatItem ,
+    pShadItem ,
+    pPostItem ,
+    pNHyphItem ,
+    pLangItem ,
+    pKernItem ,
+    pFontSizeItem ,
+    pFontItem ,
+    pBlinkItem ,
+    pEscItem ,
+    pCrossedOutItem ,
+    pContourItem ,
+    pCharColorItem ,
+    pCasemapItem ,
+    pBrushItem ,
+    pFontCJKItem,
+    pFontSizeCJKItem,
+    pCJKLangItem,
+    pCJKPostureItem,
+    pCJKWeightItem,
+    pFontCTLItem,
+    pFontSizeCTLItem,
+    pCTLLangItem,
+    pCTLPostureItem,
+    pCTLWeightItem,
+    pShadowItem ;
 
     PropertyEntryVector_t::const_iterator aIt = aPropertyEntries.begin();
-    for(sal_uInt32 i = 0; i < nArrLen; i++, ++aIt)
+    for(size_t i = 0; i < aPropertyEntries.size(); i++, ++aIt)
     {
         if(pValueArr[i])
         {
@@ -181,238 +173,238 @@ void SwSearchProperties_Impl::FillItemSet(SfxItemSet& rSet, bool bIsValueSearch)
             {
                 case  RES_BOX:
                     if(!pBoxItem)
-                        pBoxItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pBoxItem;
+                        pBoxItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pBoxItem.get();
                 break;
                 case  RES_CHRATR_BOX:
                     if(!pCharBoxItem)
-                        pCharBoxItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCharBoxItem;
+                        pCharBoxItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCharBoxItem.get();
                 break;
                 case  RES_BREAK:
                     if(!pBreakItem)
-                        pBreakItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pBreakItem;
+                        pBreakItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pBreakItem.get();
                 break;
                 case  RES_CHRATR_AUTOKERN:
                     if(!pAutoKernItem)
-                        pAutoKernItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pAutoKernItem;
+                        pAutoKernItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pAutoKernItem.get();
                     break;
                 case  RES_CHRATR_BACKGROUND:
                     if(!pBrushItem)
-                        pBrushItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pBrushItem;
+                        pBrushItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pBrushItem.get();
                 break;
                 case  RES_CHRATR_CASEMAP:
                     if(!pCasemapItem)
-                        pCasemapItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCasemapItem;
+                        pCasemapItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCasemapItem.get();
                 break;
                 case  RES_CHRATR_COLOR:
                     if(!pCharColorItem)
-                        pCharColorItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCharColorItem;
+                        pCharColorItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCharColorItem.get();
                 break;
                 case  RES_CHRATR_CONTOUR:
                     if(!pContourItem)
-                        pContourItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pContourItem;
+                        pContourItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pContourItem.get();
                 break;
                 case  RES_CHRATR_CROSSEDOUT:
                     if(!pCrossedOutItem)
-                        pCrossedOutItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCrossedOutItem;
+                        pCrossedOutItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCrossedOutItem.get();
                 break;
                 case  RES_CHRATR_ESCAPEMENT:
                     if(!pEscItem)
-                        pEscItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pEscItem;
+                        pEscItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pEscItem.get();
                 break;
                 case  RES_CHRATR_BLINK:
                     if(!pBlinkItem)
-                        pBlinkItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pBlinkItem;
+                        pBlinkItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pBlinkItem.get();
                 break;
                 case  RES_CHRATR_FONT:
                     if(!pFontItem)
-                        pFontItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pFontItem;
+                        pFontItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pFontItem.get();
                 break;
                 case  RES_CHRATR_FONTSIZE:
                     if(!pFontSizeItem)
-                        pFontSizeItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pFontSizeItem;
+                        pFontSizeItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pFontSizeItem.get();
                 break;
                 case  RES_CHRATR_KERNING:
                     if(!pKernItem)
-                        pKernItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pKernItem;
+                        pKernItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pKernItem.get();
                 break;
                 case  RES_CHRATR_LANGUAGE:
                     if(!pLangItem)
-                        pLangItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pLangItem;
+                        pLangItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pLangItem.get();
                 break;
                 case  RES_CHRATR_NOHYPHEN:
                     if(!pNHyphItem)
-                        pNHyphItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pNHyphItem;
+                        pNHyphItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pNHyphItem.get();
                 break;
                 case  RES_CHRATR_POSTURE:
                     if(!pPostItem)
-                        pPostItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pPostItem;
+                        pPostItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pPostItem.get();
                 break;
                 case  RES_CHRATR_SHADOWED:
                     if(!pShadItem)
-                        pShadItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pShadItem;
+                        pShadItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pShadItem.get();
                 break;
                 case  RES_TXTATR_CHARFMT:
                     if(!pCharFormatItem)
-                        pCharFormatItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCharFormatItem;
+                        pCharFormatItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCharFormatItem.get();
                 break;
                 case  RES_CHRATR_UNDERLINE:
                     if(!pULineItem)
-                        pULineItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pULineItem;
+                        pULineItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pULineItem.get();
                 break;
                 case  RES_CHRATR_OVERLINE:
                     if(!pOLineItem)
-                        pOLineItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pOLineItem;
+                        pOLineItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pOLineItem.get();
                 break;
                 case  RES_CHRATR_WEIGHT:
                     if(!pWeightItem)
-                        pWeightItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pWeightItem;
+                        pWeightItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pWeightItem.get();
                 break;
                 case  RES_PARATR_DROP:
                     if(!pDropItem)
-                        pDropItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pDropItem;
+                        pDropItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pDropItem.get();
                 break;
                 case  RES_TXTATR_INETFMT:
                     if(!pInetItem)
-                        pInetItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pInetItem;
+                        pInetItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pInetItem.get();
                 break;
                 case  RES_PAGEDESC:
                     if(!pDescItem)
-                        pDescItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pDescItem;
+                        pDescItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pDescItem.get();
                 break;
                 case  RES_PARATR_ADJUST:
                     if(!pAdjItem)
-                        pAdjItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pAdjItem;
+                        pAdjItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pAdjItem.get();
                 break;
                 case  RES_BACKGROUND:
                     if(!pBackItem)
-                        pBackItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pBackItem;
+                        pBackItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pBackItem.get();
                 break;
                 case  RES_UL_SPACE:
                     if(!pULItem)
-                        pULItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pULItem;
+                        pULItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pULItem.get();
                 break;
                 case  RES_LR_SPACE:
                     if(!pLRItem)
-                        pLRItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pLRItem;
+                        pLRItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pLRItem.get();
                 break;
                 case  RES_KEEP:
                     if(!pKeepItem)
-                        pKeepItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pKeepItem;
+                        pKeepItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pKeepItem.get();
                 break;
                 case  RES_LINENUMBER:
                     if(!pLineNumItem)
-                        pLineNumItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pLineNumItem;
+                        pLineNumItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pLineNumItem.get();
                 break;
                 case  RES_PARATR_LINESPACING:
                     if(!pLineSpaceItem)
-                        pLineSpaceItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pLineSpaceItem;
+                        pLineSpaceItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pLineSpaceItem.get();
                 break;
                 case  RES_PARATR_REGISTER:
                     if(!pRegItem)
-                        pRegItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pRegItem;
+                        pRegItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pRegItem.get();
                 break;
                 case  RES_PARATR_SPLIT:
                     if(!pSplitItem)
-                        pSplitItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pSplitItem;
+                        pSplitItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pSplitItem.get();
                 break;
                 case  RES_PARATR_TABSTOP:
                     if(!pTabItem)
-                        pTabItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pTabItem;
+                        pTabItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pTabItem.get();
                 break;
                 case  RES_CHRATR_WORDLINEMODE:
                     if(!pWLineItem)
-                        pWLineItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pWLineItem;
+                        pWLineItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pWLineItem.get();
                 break;
                 case RES_CHRATR_CJK_FONT:
                     if(!pFontCJKItem )
-                        pFontCJKItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pFontCJKItem;
+                        pFontCJKItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pFontCJKItem.get();
                 break;
                 case RES_CHRATR_CJK_FONTSIZE:
                     if(!pFontSizeCJKItem )
-                        pFontSizeCJKItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pFontSizeCJKItem;
+                        pFontSizeCJKItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pFontSizeCJKItem.get();
                 break;
                 case RES_CHRATR_CJK_LANGUAGE:
                     if(!pCJKLangItem )
-                        pCJKLangItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCJKLangItem;
+                        pCJKLangItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCJKLangItem.get();
                 break;
                 case RES_CHRATR_CJK_POSTURE:
                     if(!pCJKPostureItem )
-                        pCJKPostureItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCJKPostureItem;
+                        pCJKPostureItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCJKPostureItem.get();
                 break;
                 case RES_CHRATR_CJK_WEIGHT:
                     if(!pCJKWeightItem )
-                        pCJKWeightItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCJKWeightItem;
+                        pCJKWeightItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCJKWeightItem.get();
                 break;
                 case RES_CHRATR_CTL_FONT:
                     if(!pFontCTLItem )
-                        pFontCTLItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pFontCTLItem;
+                        pFontCTLItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pFontCTLItem.get();
                 break;
                 case RES_CHRATR_CTL_FONTSIZE:
                     if(!pFontSizeCTLItem )
-                        pFontSizeCTLItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pFontSizeCTLItem;
+                        pFontSizeCTLItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pFontSizeCTLItem.get();
                 break;
                 case RES_CHRATR_CTL_LANGUAGE:
                     if(!pCTLLangItem )
-                        pCTLLangItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCTLLangItem;
+                        pCTLLangItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCTLLangItem.get();
                 break;
                 case RES_CHRATR_CTL_POSTURE:
                     if(!pCTLPostureItem )
-                        pCTLPostureItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCTLPostureItem;
+                        pCTLPostureItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCTLPostureItem.get();
                 break;
                 case RES_CHRATR_CTL_WEIGHT:
                     if(!pCTLWeightItem )
-                        pCTLWeightItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pCTLWeightItem;
+                        pCTLWeightItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pCTLWeightItem.get();
                 break;
                 case RES_CHRATR_SHADOW:
                     if(!pShadowItem )
-                        pShadowItem = rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone();
-                    pTempItem = pShadowItem;
+                        pShadowItem.reset(rSet.GetPool()->GetDefaultItem(aIt->nWID).Clone());
+                    pTempItem = pShadowItem.get();
                 break;
             }
             if(pTempItem)
@@ -427,76 +419,39 @@ void SwSearchProperties_Impl::FillItemSet(SfxItemSet& rSet, bool bIsValueSearch)
             }
         }
     }
-    delete pBoxItem;
-    delete pCharBoxItem;
-    delete pBreakItem;
-    delete pAutoKernItem ;
-    delete pWLineItem;
-    delete pTabItem;
-    delete pSplitItem;
-    delete pRegItem;
-    delete pLineSpaceItem ;
-    delete pLineNumItem  ;
-    delete pKeepItem;
-    delete pLRItem  ;
-    delete pULItem  ;
-    delete pBackItem;
-    delete pAdjItem;
-    delete pDescItem;
-    delete pInetItem;
-    delete pDropItem;
-    delete pWeightItem;
-    delete pULineItem;
-    delete pOLineItem;
-    delete pCharFormatItem  ;
-    delete pShadItem;
-    delete pPostItem;
-    delete pNHyphItem;
-    delete pLangItem;
-    delete pKernItem;
-    delete pFontSizeItem ;
-    delete pFontItem;
-    delete pBlinkItem;
-    delete pEscItem;
-    delete pCrossedOutItem;
-    delete pContourItem  ;
-    delete pCharColorItem;
-    delete pCasemapItem  ;
-    delete pBrushItem  ;
-    delete pShadowItem;
 }
 
-bool    SwSearchProperties_Impl::HasAttributes() const
+bool SwSearchProperties_Impl::HasAttributes() const
 {
-    for(sal_uInt32 i = 0; i < nArrLen; i++)
+    for(size_t i = 0; i < aPropertyEntries.size(); i++)
         if(pValueArr[i])
             return true;
     return false;
 }
 
 SwXTextSearch::SwXTextSearch() :
-    pSearchProperties( new SwSearchProperties_Impl),
-    pReplaceProperties( new SwSearchProperties_Impl),
+    m_pSearchProperties( new SwSearchProperties_Impl),
+    m_pReplaceProperties( new SwSearchProperties_Impl),
     m_pPropSet(aSwMapProvider.GetPropertySet(PROPERTY_MAP_TEXT_SEARCH)),
-    bAll(false),
-    bWord(false),
-    bBack(false),
-    bExpr(false),
-    bCase(false),
-    bStyles(false),
-    bSimilarity(false),
-    bLevRelax(false),
-    nLevExchange(2),
-    nLevAdd(2),
-    nLevRemove(2),
-    bIsValueSearch(true)
+    m_bAll(false),
+    m_bWord(false),
+    m_bBack(false),
+    m_bExpr(false),
+    m_bCase(false),
+    m_bStyles(false),
+    m_bSimilarity(false),
+    m_bLevRelax(false),
+    m_nLevExchange(2),
+    m_nLevAdd(2),
+    m_nLevRemove(2),
+    m_bIsValueSearch(true)
 {
 }
 
 SwXTextSearch::~SwXTextSearch()
 {
-    delete pSearchProperties;
-    delete pReplaceProperties;
+    m_pSearchProperties.reset();
+    m_pReplaceProperties.reset();
 }
 
 namespace
@@ -510,7 +465,6 @@ const uno::Sequence< sal_Int8 > & SwXTextSearch::getUnoTunnelId()
 }
 
 sal_Int64 SAL_CALL SwXTextSearch::getSomething( const uno::Sequence< sal_Int8 >& rId )
-    throw(uno::RuntimeException, std::exception)
 {
     if( rId.getLength() == 16
         && 0 == memcmp( getUnoTunnelId().getConstArray(),
@@ -521,193 +475,185 @@ sal_Int64 SAL_CALL SwXTextSearch::getSomething( const uno::Sequence< sal_Int8 >&
     return 0;
 }
 
-OUString SwXTextSearch::getSearchString() throw( uno::RuntimeException, std::exception )
+OUString SwXTextSearch::getSearchString()
 {
     SolarMutexGuard aGuard;
-    return sSearchText;
+    return m_sSearchText;
 }
 
 void SwXTextSearch::setSearchString(const OUString& rString)
-                                        throw( uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
-    sSearchText = rString;
+    m_sSearchText = rString;
 }
 
-OUString SwXTextSearch::getReplaceString() throw( uno::RuntimeException, std::exception )
+OUString SwXTextSearch::getReplaceString()
 {
     SolarMutexGuard aGuard;
-    return sReplaceText;
+    return m_sReplaceText;
 }
 
-void SwXTextSearch::setReplaceString(const OUString& rReplaceString) throw( uno::RuntimeException, std::exception )
+void SwXTextSearch::setReplaceString(const OUString& rReplaceString)
 {
     SolarMutexGuard aGuard;
-    sReplaceText = rReplaceString;
+    m_sReplaceText = rReplaceString;
 }
 
-uno::Reference< beans::XPropertySetInfo >  SwXTextSearch::getPropertySetInfo() throw( uno::RuntimeException, std::exception )
+uno::Reference< beans::XPropertySetInfo >  SwXTextSearch::getPropertySetInfo()
 {
     static uno::Reference< beans::XPropertySetInfo >  aRef = m_pPropSet->getPropertySetInfo();
     return aRef;
 }
 
 void SwXTextSearch::setPropertyValue(const OUString& rPropertyName, const uno::Any& aValue)
-    throw( beans::UnknownPropertyException, beans::PropertyVetoException,
-        lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
     const SfxItemPropertySimpleEntry*  pEntry = m_pPropSet->getPropertyMap().getByName(rPropertyName);
-    if(pEntry)
-    {
-        if ( pEntry->nFlags & beans::PropertyAttribute::READONLY)
-            throw beans::PropertyVetoException ("Property is read-only: " + rPropertyName, static_cast < cppu::OWeakObject * > ( this ) );
-        bool bVal = false;
-        if(aValue.getValueType() == cppu::UnoType<bool>::get())
-            bVal = *static_cast<sal_Bool const *>(aValue.getValue());
-        switch(pEntry->nWID)
-        {
-            case WID_SEARCH_ALL :           bAll        = bVal; break;
-            case WID_WORDS:                 bWord       = bVal; break;
-            case WID_BACKWARDS :            bBack       = bVal; break;
-            case WID_REGULAR_EXPRESSION :   bExpr       = bVal; break;
-            case WID_CASE_SENSITIVE  :      bCase       = bVal; break;
-            //case WID_IN_SELECTION  :      bInSel      = bVal; break;
-            case WID_STYLES          :      bStyles     = bVal; break;
-            case WID_SIMILARITY      :      bSimilarity = bVal; break;
-            case WID_SIMILARITY_RELAX:      bLevRelax   = bVal; break;
-            case WID_SIMILARITY_EXCHANGE:   aValue >>= nLevExchange; break;
-            case WID_SIMILARITY_ADD:        aValue >>= nLevAdd; break;
-            case WID_SIMILARITY_REMOVE :    aValue >>= nLevRemove;break;
-        };
-    }
-    else
+    if(!pEntry)
         throw beans::UnknownPropertyException("Unknown property: " + rPropertyName, static_cast < cppu::OWeakObject * > ( this ) );
+
+    if ( pEntry->nFlags & beans::PropertyAttribute::READONLY)
+        throw beans::PropertyVetoException ("Property is read-only: " + rPropertyName, static_cast < cppu::OWeakObject * > ( this ) );
+    bool bVal = false;
+    if(auto b = o3tl::tryAccess<bool>(aValue))
+        bVal = *b;
+    switch(pEntry->nWID)
+    {
+        case WID_SEARCH_ALL :           m_bAll        = bVal; break;
+        case WID_WORDS:                 m_bWord       = bVal; break;
+        case WID_BACKWARDS :            m_bBack       = bVal; break;
+        case WID_REGULAR_EXPRESSION :   m_bExpr       = bVal; break;
+        case WID_CASE_SENSITIVE  :      m_bCase       = bVal; break;
+        //case WID_IN_SELECTION  :      bInSel      = bVal; break;
+        case WID_STYLES          :      m_bStyles     = bVal; break;
+        case WID_SIMILARITY      :      m_bSimilarity = bVal; break;
+        case WID_SIMILARITY_RELAX:      m_bLevRelax   = bVal; break;
+        case WID_SIMILARITY_EXCHANGE:   aValue >>= m_nLevExchange; break;
+        case WID_SIMILARITY_ADD:        aValue >>= m_nLevAdd; break;
+        case WID_SIMILARITY_REMOVE :    aValue >>= m_nLevRemove;break;
+    };
+
 }
 
-uno::Any SwXTextSearch::getPropertyValue(const OUString& rPropertyName) throw( beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
+uno::Any SwXTextSearch::getPropertyValue(const OUString& rPropertyName)
 {
     SolarMutexGuard aGuard;
     uno::Any aRet;
 
     const SfxItemPropertySimpleEntry*  pEntry = m_pPropSet->getPropertyMap().getByName(rPropertyName);
     bool bSet = false;
-    if(pEntry)
-    {
-        sal_Int16 nSet = 0;
-        switch(pEntry->nWID)
-        {
-            case WID_SEARCH_ALL :           bSet = bAll; goto SET_BOOL;
-            case WID_WORDS:                 bSet = bWord; goto SET_BOOL;
-            case WID_BACKWARDS :            bSet = bBack; goto SET_BOOL;
-            case WID_REGULAR_EXPRESSION :   bSet = bExpr; goto SET_BOOL;
-            case WID_CASE_SENSITIVE  :      bSet = bCase; goto SET_BOOL;
-            //case WID_IN_SELECTION  :      bSet = bInSel; goto SET_BOOL;
-            case WID_STYLES          :      bSet = bStyles; goto SET_BOOL;
-            case WID_SIMILARITY      :      bSet = bSimilarity; goto SET_BOOL;
-            case WID_SIMILARITY_RELAX:      bSet = bLevRelax;
-SET_BOOL:
-            aRet <<= bSet;
-            break;
-            case WID_SIMILARITY_EXCHANGE:   nSet = nLevExchange; goto SET_UINT16;
-            case WID_SIMILARITY_ADD:        nSet = nLevAdd; goto SET_UINT16;
-            case WID_SIMILARITY_REMOVE :    nSet = nLevRemove;
-SET_UINT16:
-            aRet <<= nSet;
-            break;
-        };
-    }
-    else
+    if(!pEntry)
         throw beans::UnknownPropertyException("Unknown property: " + rPropertyName, static_cast < cppu::OWeakObject * > ( this ) );
+
+    sal_Int16 nSet = 0;
+    switch(pEntry->nWID)
+    {
+        case WID_SEARCH_ALL :           bSet = m_bAll; goto SET_BOOL;
+        case WID_WORDS:                 bSet = m_bWord; goto SET_BOOL;
+        case WID_BACKWARDS :            bSet = m_bBack; goto SET_BOOL;
+        case WID_REGULAR_EXPRESSION :   bSet = m_bExpr; goto SET_BOOL;
+        case WID_CASE_SENSITIVE  :      bSet = m_bCase; goto SET_BOOL;
+        //case WID_IN_SELECTION  :      bSet = bInSel; goto SET_BOOL;
+        case WID_STYLES          :      bSet = m_bStyles; goto SET_BOOL;
+        case WID_SIMILARITY      :      bSet = m_bSimilarity; goto SET_BOOL;
+        case WID_SIMILARITY_RELAX:      bSet = m_bLevRelax;
+SET_BOOL:
+        aRet <<= bSet;
+        break;
+        case WID_SIMILARITY_EXCHANGE:   nSet = m_nLevExchange; goto SET_UINT16;
+        case WID_SIMILARITY_ADD:        nSet = m_nLevAdd; goto SET_UINT16;
+        case WID_SIMILARITY_REMOVE :    nSet = m_nLevRemove;
+SET_UINT16:
+        aRet <<= nSet;
+        break;
+    };
+
     return aRet;
 }
 
-void SwXTextSearch::addPropertyChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XPropertyChangeListener > & /*xListener*/) throw(beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception )
+void SwXTextSearch::addPropertyChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XPropertyChangeListener > & /*xListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
-void SwXTextSearch::removePropertyChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XPropertyChangeListener > & /*xListener*/) throw(beans::UnknownPropertyException, lang::WrappedTargetException,uno::RuntimeException, std::exception )
+void SwXTextSearch::removePropertyChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XPropertyChangeListener > & /*xListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
-void SwXTextSearch::addVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*xListener*/) throw(beans::UnknownPropertyException, lang::WrappedTargetException,uno::RuntimeException, std::exception )
+void SwXTextSearch::addVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*xListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
-void SwXTextSearch::removeVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*xListener*/) throw(beans::UnknownPropertyException, lang::WrappedTargetException,uno::RuntimeException, std::exception )
+void SwXTextSearch::removeVetoableChangeListener(const OUString& /*rPropertyName*/, const uno::Reference< beans::XVetoableChangeListener > & /*xListener*/)
 {
     OSL_FAIL("not implemented");
 }
 
-sal_Bool SwXTextSearch::getValueSearch() throw( uno::RuntimeException, std::exception )
+sal_Bool SwXTextSearch::getValueSearch()
 {
     SolarMutexGuard aGuard;
-    return bIsValueSearch;
+    return m_bIsValueSearch;
 }
 
-void SwXTextSearch::setValueSearch(sal_Bool ValueSearch_) throw( uno::RuntimeException, std::exception )
+void SwXTextSearch::setValueSearch(sal_Bool ValueSearch_)
 {
     SolarMutexGuard aGuard;
-    bIsValueSearch = ValueSearch_;
+    m_bIsValueSearch = ValueSearch_;
 }
 
-uno::Sequence< beans::PropertyValue > SwXTextSearch::getSearchAttributes() throw( uno::RuntimeException, std::exception )
+uno::Sequence< beans::PropertyValue > SwXTextSearch::getSearchAttributes()
 {
-    return  pSearchProperties->GetProperties();
+    return  m_pSearchProperties->GetProperties();
 }
 
 void SwXTextSearch::setSearchAttributes(const uno::Sequence< beans::PropertyValue >& rSearchAttribs)
-    throw( beans::UnknownPropertyException, lang::IllegalArgumentException, uno::RuntimeException, std::exception )
 {
-    pSearchProperties->SetProperties(rSearchAttribs);
+    m_pSearchProperties->SetProperties(rSearchAttribs);
 }
 
 uno::Sequence< beans::PropertyValue > SwXTextSearch::getReplaceAttributes()
-    throw( uno::RuntimeException, std::exception )
 {
-    return pReplaceProperties->GetProperties();
+    return m_pReplaceProperties->GetProperties();
 }
 
 void SwXTextSearch::setReplaceAttributes(const uno::Sequence< beans::PropertyValue >& rReplaceAttribs)
-    throw( beans::UnknownPropertyException, lang::IllegalArgumentException, uno::RuntimeException, std::exception )
 {
-    pReplaceProperties->SetProperties(rReplaceAttribs);
+    m_pReplaceProperties->SetProperties(rReplaceAttribs);
 }
 
 void    SwXTextSearch::FillSearchItemSet(SfxItemSet& rSet) const
 {
-    pSearchProperties->FillItemSet(rSet, bIsValueSearch);
+    m_pSearchProperties->FillItemSet(rSet, m_bIsValueSearch);
 }
 
 void    SwXTextSearch::FillReplaceItemSet(SfxItemSet& rSet) const
 {
-    pReplaceProperties->FillItemSet(rSet, bIsValueSearch);
+    m_pReplaceProperties->FillItemSet(rSet, m_bIsValueSearch);
 }
 
 bool    SwXTextSearch::HasSearchAttributes() const
 {
-    return pSearchProperties->HasAttributes();
+    return m_pSearchProperties->HasAttributes();
 }
 
 bool    SwXTextSearch::HasReplaceAttributes() const
 {
-    return pReplaceProperties->HasAttributes();
+    return m_pReplaceProperties->HasAttributes();
 }
 
-OUString SwXTextSearch::getImplementationName() throw( uno::RuntimeException, std::exception )
+OUString SwXTextSearch::getImplementationName()
 {
     return OUString("SwXTextSearch");
 }
 
-sal_Bool SwXTextSearch::supportsService(const OUString& rServiceName) throw( uno::RuntimeException, std::exception )
+sal_Bool SwXTextSearch::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-uno::Sequence< OUString > SwXTextSearch::getSupportedServiceNames() throw( uno::RuntimeException, std::exception )
+uno::Sequence< OUString > SwXTextSearch::getSupportedServiceNames()
 {
     uno::Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
@@ -716,19 +662,19 @@ uno::Sequence< OUString > SwXTextSearch::getSupportedServiceNames() throw( uno::
     return aRet;
 }
 
-void SwXTextSearch::FillSearchOptions( util::SearchOptions2& rSearchOpt ) const
+void SwXTextSearch::FillSearchOptions( i18nutil::SearchOptions2& rSearchOpt ) const
 {
-    if( bSimilarity )
+    if( m_bSimilarity )
     {
         rSearchOpt.algorithmType = util::SearchAlgorithms_APPROXIMATE;
         rSearchOpt.AlgorithmType2 = util::SearchAlgorithms2::APPROXIMATE;
-        rSearchOpt.changedChars = nLevExchange;
-        rSearchOpt.deletedChars = nLevRemove;
-        rSearchOpt.insertedChars = nLevAdd;
-        if( bLevRelax )
+        rSearchOpt.changedChars = m_nLevExchange;
+        rSearchOpt.deletedChars = m_nLevRemove;
+        rSearchOpt.insertedChars = m_nLevAdd;
+        if( m_bLevRelax )
             rSearchOpt.searchFlag |= util::SearchFlags::LEV_RELAXED;
     }
-    else if( bExpr )
+    else if( m_bExpr )
     {
         rSearchOpt.algorithmType = util::SearchAlgorithms_REGEXP;
         rSearchOpt.AlgorithmType2 = util::SearchAlgorithms2::REGEXP;
@@ -740,15 +686,15 @@ void SwXTextSearch::FillSearchOptions( util::SearchOptions2& rSearchOpt ) const
     }
 
     rSearchOpt.Locale = GetAppLanguageTag().getLocale();
-    rSearchOpt.searchString = sSearchText;
-    rSearchOpt.replaceString = sReplaceText;
+    rSearchOpt.searchString = m_sSearchText;
+    rSearchOpt.replaceString = m_sReplaceText;
 
-    if( !bCase )
-        rSearchOpt.transliterateFlags |= i18n::TransliterationModules_IGNORE_CASE;
-    if( bWord )
+    if( !m_bCase )
+        rSearchOpt.transliterateFlags |= TransliterationFlags::IGNORE_CASE;
+    if( m_bWord )
         rSearchOpt.searchFlag |= util::SearchFlags::NORM_WORD_ONLY;
 
-//  bInSel: 1;  // wie geht das?
+//  bInSel: 1;  // How is that possible?
 //  TODO: pSearch->bStyles!
 //      inSelection??
 //      aSrchParam.SetSrchInSelection(TypeConversion::toBOOL(aVal));

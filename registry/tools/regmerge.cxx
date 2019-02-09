@@ -18,12 +18,12 @@
  */
 
 
-#include "registry/registry.hxx"
+#include <registry/registry.hxx>
 #include "fileurl.hxx"
 #include "options.hxx"
 
-#include "rtl/ustring.hxx"
-#include "osl/diagnose.h"
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <stdio.h>
 #include <string.h>
@@ -133,7 +133,7 @@ int __cdecl main( int argc, char * argv[] )
         for (size_t i = 2; i < args.size(); i++)
         {
             OUString targetRegName( convertToFileUrl(args[i].c_str(), args[i].size()) );
-            RegError _ret = reg.mergeKey(rootKey, mergeKeyName, targetRegName, false, options.isVerbose());
+            RegError _ret = reg.mergeKey(rootKey, mergeKeyName, targetRegName, options.isVerbose());
             if (_ret != RegError::NO_ERROR)
             {
                 if (_ret == RegError::MERGE_CONFLICT)

@@ -13,6 +13,8 @@ $(eval $(call gb_UnpackedTarball_set_tarball,libmwaw,$(MWAW_TARBALL)))
 
 $(eval $(call gb_UnpackedTarball_set_patchlevel,libmwaw,0))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,libmwaw))
+
 ifeq ($(COM_IS_CLANG),TRUE)
 ifneq ($(filter -fsanitize=%,$(CC)),)
 $(eval $(call gb_UnpackedTarball_add_patches,libmwaw, \
@@ -35,8 +37,8 @@ $(eval $(call gb_UnpackedTarball_add_patches,libmwaw, \
 ))
 endif
 
-$(eval $(call gb_UnpackedTarball_add_patches,libmwaw, \
-	external/libmwaw/0001-if-ptr-to-member-var.-is-defined-ensure-the-class-is.patch.1 \
+$(eval $(call gb_UnpackedTarball_add_patches,libmwaw,\
+	external/libmwaw/0001-ssize_t-is-not-std-type.patch.1 \
 ))
 
 # vim: set noet sw=4 ts=4:

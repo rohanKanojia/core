@@ -22,6 +22,7 @@
 
 #include <svx/svddrgv.hxx>
 #include <svx/svxdllapi.h>
+#include <memory>
 
 class XLineAttrSetItem;
 class XFillAttrSetItem;
@@ -31,30 +32,28 @@ class SdrObjConnection;
 class ImplConnectMarkerOverlay;
 class ImpSdrCreateViewExtraData;
 
-class SVX_DLLPUBLIC SdrCreateView: public SdrDragView
+class SVX_DLLPUBLIC SdrCreateView : public SdrDragView
 {
     friend class                SdrPageView;
 
 protected:
-    SdrObject*                  pAktCreate;   // Currently in creation of the located object
+    SdrObject*                  pCurrentCreate;   // The currently being created object
     SdrPageView*                pCreatePV;    // Here, the creation is started
-    ImplConnectMarkerOverlay*   mpCoMaOverlay;
+    std::unique_ptr<ImplConnectMarkerOverlay> mpCoMaOverlay;
 
     // for migrating stuff from XOR, use ImpSdrCreateViewExtraData ATM to not need to
     // compile the apps all the time
-    ImpSdrCreateViewExtraData*  mpCreateViewExtraData;
+    std::unique_ptr<ImpSdrCreateViewExtraData> mpCreateViewExtraData;
 
-    Pointer                     aAktCreatePointer;
+    Pointer                     aCurrentCreatePointer;
 
     sal_Int32                   nAutoCloseDistPix;
     sal_Int32                   nFreeHandMinDistPix;
-    sal_uInt32                  nAktInvent;     // set the current ones
-    sal_uInt16                  nAktIdent;      // Obj for re-creating
+    SdrInventor                 nCurrentInvent;     // set the current ones
+    sal_uInt16                  nCurrentIdent;      // Obj for re-creating
 
-    bool                        bAutoTextEdit : 1; // Textedit after we start the creation of a text frame
     bool                        b1stPointAsCenter : 1;
     bool                        bUseIncompatiblePathCreateInterface : 1;
-    bool                        bAutoClosePolys : 1;
 
     void ImpClearConnectMarker();
 
@@ -62,8 +61,8 @@ private:
     SVX_DLLPRIVATE void ImpClearVars();
 
 protected:
-    bool ImpBegCreateObj(sal_uInt32 nInvent, sal_uInt16 nIdent, const Point& rPnt, OutputDevice* pOut,
-        sal_Int16 nMinMov, SdrPageView* pPV, const Rectangle& rLogRect, SdrObject* pPreparedFactoryObject);
+    bool ImpBegCreateObj(SdrInventor nInvent, sal_uInt16 nIdent, const Point& rPnt, OutputDevice* pOut,
+        sal_Int16 nMinMov, const tools::Rectangle& rLogRect, SdrObject* pPreparedFactoryObject);
 
     void ShowCreateObj(/*OutputDevice* pOut, bool bFull*/);
     void HideCreateObj(/*OutputDevice* pOut, bool bFull*/);
@@ -71,8 +70,11 @@ protected:
 
 protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrCreateView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrCreateView();
+    SdrCreateView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
+
+    virtual ~SdrCreateView() override;
 
 public:
     virtual bool IsAction() const override;
@@ -80,7 +82,7 @@ public:
     virtual void EndAction() override;
     virtual void BckAction() override;
     virtual void BrkAction() override;
-    virtual void TakeActionRect(Rectangle& rRect) const override;
+    virtual void TakeActionRect(tools::Rectangle& rRect) const override;
 
     virtual bool MouseMove(const MouseEvent& rMEvt, vcl::Window* pWin) override;
 
@@ -101,31 +103,28 @@ public:
     // Determine whether a measurement tool activated
     bool IsMeasureTool() const;
 
-    void SetCurrentObj(sal_uInt16 nIdent, sal_uInt32 nInvent=SdrInventor);
-    void TakeCurrentObj(sal_uInt16& nIdent, sal_uInt32& nInvent) const  { nInvent=nAktInvent; nIdent=nAktIdent; }
-    sal_uInt32 GetCurrentObjInventor() const { return nAktInvent; }
-    sal_uInt16 GetCurrentObjIdentifier() const { return nAktIdent; }
+    void SetCurrentObj(sal_uInt16 nIdent, SdrInventor nInvent=SdrInventor::Default);
+    void TakeCurrentObj(sal_uInt16& nIdent, SdrInventor& nInvent) const  { nInvent=nCurrentInvent; nIdent=nCurrentIdent; }
+    SdrInventor GetCurrentObjInventor() const { return nCurrentInvent; }
+    sal_uInt16  GetCurrentObjIdentifier() const { return nCurrentIdent; }
 
     // Beginning the regular Create
-    bool BegCreateObj(const Point& rPnt, OutputDevice* pOut=nullptr, short nMinMov=-3, SdrPageView* pPV=nullptr);
+    bool BegCreateObj(const Point& rPnt, OutputDevice* pOut=nullptr, short nMinMov=-3);
     bool BegCreatePreparedObject(const Point& rPnt, sal_Int16 nMinMov, SdrObject* pPreparedFactoryObject);
     void MovCreateObj(const Point& rPnt);
     bool EndCreateObj(SdrCreateCmd eCmd);
     void BckCreateObj();  // go back one polygon point
     void BrkCreateObj();
-    bool IsCreateObj() const { return pAktCreate!=nullptr; }
-    SdrObject* GetCreateObj() const { return pAktCreate; }
+    bool IsCreateObj() const { return pCurrentCreate!=nullptr; }
+    SdrObject* GetCreateObj() const { return pCurrentCreate; }
+
+    /// Setup layer (eg. foreground / background) of the given object.
+    static void SetupObjLayer(const SdrPageView* pPageView, const OUString& aActiveLayer, SdrObject* pObj);
 
     // BegCreateCaptionObj() creates a SdrCaptionObj (legend item).
     // rObjSiz is the initial size of the legend text frame.
     // Only the length of the tip is dragged
-    bool BegCreateCaptionObj(const Point& rPnt, const Size& rObjSiz, OutputDevice* pOut=nullptr, short nMinMov=-3, SdrPageView* pPV=nullptr);
-
-    // If TextEditAfterCreate is sal_True (the default),
-    // then after the creation of a TextFrame object (OBJ_TEXT,
-    // OBJ_TEXTEXT, OBJ_OUTLINERTEXT, OBJ_TITLETEXT, OBJ_CAPTION)
-    // automatically start a TextEdit (SdrObjEditView: SdrBeginTextEdit)
-    bool IsTextEditAfterCreate() const { return bAutoTextEdit; }
+    bool BegCreateCaptionObj(const Point& rPnt, const Size& rObjSiz, OutputDevice* pOut=nullptr, short nMinMov=-3);
 
     // Create a circle/rectangle/text frame with the first Point being
     // the center of the object instead of the upper-left corner.
@@ -133,18 +132,10 @@ public:
     bool IsCreate1stPointAsCenter() const { return b1stPointAsCenter; }
     void SetCreate1stPointAsCenter(bool bOn) { b1stPointAsCenter = bOn; }
 
-    // For polylines (OBJ_PLIN) and freehand lines (OBJ_FREELINE). If this
-    // Flag is sal_True, these two types of objects are implicitly closed, and
-    // converted to Polygon (OBJ_POLY) or freehand fill (OBJ_FREEFILL) if
-    // the distance between the start point and end point of the
-    // Object <= nAutoCloseDistPix pixels.
-    // Default = TRUE.
-    bool IsAutoClosePolys() const { return bAutoClosePolys; }
-
     // Default = 5 Pixel
     sal_uInt16 GetAutoCloseDistPix() const { return sal_uInt16(nAutoCloseDistPix); }
 
-    // Setting for the minimum distantce in pixels between 2 bezier points when
+    // Setting for the minimum distance in pixels between 2 bezier points when
     // creating a freehand line.
     // Default = 10 Pixel
     sal_uInt16 GetFreeHandMinDistPix() const { return sal_uInt16(nFreeHandMinDistPix); }
@@ -159,16 +150,16 @@ public:
     // Default = sal_False;
     bool IsUseIncompatiblePathCreateInterface() const { return bUseIncompatiblePathCreateInterface; }
     void SetUseIncompatiblePathCreateInterface(bool bOn) { bUseIncompatiblePathCreateInterface = bOn; }
-    void SetConnectMarker(const SdrObjConnection& rCon, const SdrPageView& rPV);
+    void SetConnectMarker(const SdrObjConnection& rCon);
     void HideConnectMarker();
 
     // Attributes of the object that is in the process of being created
     /* new interface src537 */
-    bool GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr=false) const;
+    void GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr) const;
 
     bool SetAttributes(const SfxItemSet& rSet, bool bReplaceAll);
     SfxStyleSheet* GetStyleSheet() const; // SfxStyleSheet* GetStyleSheet(bool& rOk) const;
-    bool SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
+    void SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
 };
 
 #endif // INCLUDED_SVX_SVDCRTV_HXX

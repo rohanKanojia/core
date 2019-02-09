@@ -18,12 +18,13 @@
  */
 
 #include "fpinteraction.hxx"
-#include <tools/debug.hxx>
 #include <com/sun/star/ucb/InteractiveIOException.hpp>
 #include <com/sun/star/task/XInteractionAbort.hpp>
 #include <com/sun/star/task/XInteractionApprove.hpp>
 #include <com/sun/star/task/XInteractionDisapprove.hpp>
 #include <com/sun/star/task/XInteractionRetry.hpp>
+
+#include <sal/log.hxx>
 
 
 namespace svt
@@ -47,7 +48,7 @@ namespace svt
     }
 
 
-    void SAL_CALL OFilePickerInteractionHandler::handle( const Reference< XInteractionRequest >& _rxRequest ) throw (RuntimeException, std::exception)
+    void SAL_CALL OFilePickerInteractionHandler::handle( const Reference< XInteractionRequest >& _rxRequest )
     {
         if (!_rxRequest.is())
             return;
@@ -130,14 +131,8 @@ namespace svt
     bool OFilePickerInteractionHandler::wasAccessDenied() const
     {
         InteractiveIOException aIoException;
-        if (
-            (m_aException              >>= aIoException     ) &&
-            (IOErrorCode_ACCESS_DENIED  == aIoException.Code)
-           )
-        {
-            return true;
-        }
-        return false;
+        return (m_aException              >>= aIoException     ) &&
+               (IOErrorCode_ACCESS_DENIED  == aIoException.Code);
     }
 
 

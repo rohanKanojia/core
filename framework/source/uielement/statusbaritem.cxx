@@ -24,8 +24,6 @@
 #include <com/sun/star/ui/ItemStyle.hpp>
 
 using namespace com::sun::star::ui;
-
-using rtl::OUString;
 using com::sun::star::uno::RuntimeException;
 
 namespace framework
@@ -33,28 +31,28 @@ namespace framework
 
 namespace
 {
-sal_uInt16 impl_convertItemBitsToItemStyle( sal_Int16 nItemBits )
+sal_uInt16 impl_convertItemBitsToItemStyle( StatusBarItemBits nItemBits )
 {
     sal_uInt16 nStyle( 0 );
 
-    if ( ( nItemBits & SIB_RIGHT ) == SIB_RIGHT )
+    if ( nItemBits & StatusBarItemBits::Right )
         nStyle |= ItemStyle::ALIGN_RIGHT;
-    else if ( ( nItemBits & SIB_LEFT ) == SIB_LEFT )
+    else if ( nItemBits & StatusBarItemBits::Left )
         nStyle |= ItemStyle::ALIGN_LEFT;
     else
         nStyle |= ItemStyle::ALIGN_CENTER;
 
-    if ( ( nItemBits & SIB_FLAT ) == SIB_FLAT )
+    if ( nItemBits & StatusBarItemBits::Flat )
         nStyle |= ItemStyle::DRAW_FLAT;
-    else if ( ( nItemBits & SIB_OUT ) == SIB_OUT )
+    else if ( nItemBits & StatusBarItemBits::Out )
         nStyle |= ItemStyle::DRAW_OUT3D;
     else
         nStyle |= ItemStyle::DRAW_IN3D;
 
-    if ( ( nItemBits & SIB_AUTOSIZE ) == SIB_AUTOSIZE )
+    if ( nItemBits & StatusBarItemBits::AutoSize )
         nStyle |= ItemStyle::AUTO_SIZE;
 
-    if ( ( nItemBits & SIB_USERDRAW ) == SIB_USERDRAW )
+    if ( nItemBits & StatusBarItemBits::UserDraw )
         nStyle |= ItemStyle::OWNER_DRAW;
 
     return nStyle;
@@ -63,12 +61,10 @@ sal_uInt16 impl_convertItemBitsToItemStyle( sal_Int16 nItemBits )
 
 StatusbarItem::StatusbarItem(
     StatusBar              *pStatusBar,
-    AddonStatusbarItemData *pItemData,
     sal_uInt16              nId,
-    const rtl::OUString&    aCommand )
+    const OUString&    aCommand )
     : StatusbarItem_Base( m_aMutex )
     , m_pStatusBar( pStatusBar )
-    , m_pItemData( pItemData )
     , m_nId( nId )
     , m_nStyle( 0 )
     , m_aCommand( aCommand )
@@ -85,26 +81,22 @@ StatusbarItem::~StatusbarItem()
 void SAL_CALL StatusbarItem::disposing()
 {
     osl::MutexGuard aGuard( m_aMutex );
-    m_pItemData = nullptr;
     m_pStatusBar = nullptr;
 }
 
 OUString SAL_CALL StatusbarItem::getCommand()
-throw (RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard( m_aMutex );
     return m_aCommand;
 }
 
 ::sal_uInt16 SAL_CALL StatusbarItem::getItemId()
-throw (RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard( m_aMutex );
     return m_nId;
 }
 
 ::sal_uInt32 SAL_CALL StatusbarItem::getWidth()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -114,30 +106,27 @@ throw (RuntimeException, std::exception)
 }
 
 ::sal_uInt16 SAL_CALL StatusbarItem::getStyle()
-throw (RuntimeException, std::exception)
 {
     osl::MutexGuard aGuard( m_aMutex );
     return m_nStyle;
 }
 
 ::sal_Int32 SAL_CALL StatusbarItem::getOffset()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
         return m_pStatusBar->GetItemOffset( m_nId );
 
-    return ::sal_Int32(0);
+    return 0;
 }
 
 css::awt::Rectangle SAL_CALL StatusbarItem::getItemRect()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     css::awt::Rectangle aAWTRect;
     if ( m_pStatusBar )
     {
-        Rectangle aRect = m_pStatusBar->GetItemRect( m_nId );
+        tools::Rectangle aRect = m_pStatusBar->GetItemRect( m_nId );
         return css::awt::Rectangle( aRect.Left(),
                                                  aRect.Top(),
                                                  aRect.GetWidth(),
@@ -148,7 +137,6 @@ throw (RuntimeException, std::exception)
 }
 
 OUString SAL_CALL StatusbarItem::getText()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -158,7 +146,6 @@ throw (RuntimeException, std::exception)
 }
 
 void SAL_CALL StatusbarItem::setText( const OUString& rText )
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -166,7 +153,6 @@ throw (RuntimeException, std::exception)
 }
 
 OUString SAL_CALL StatusbarItem::getHelpText()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -176,7 +162,6 @@ throw (RuntimeException, std::exception)
 }
 
 void SAL_CALL StatusbarItem::setHelpText( const OUString& rHelpText )
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -184,7 +169,6 @@ throw (RuntimeException, std::exception)
 }
 
 OUString SAL_CALL StatusbarItem::getQuickHelpText()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -194,7 +178,6 @@ throw (RuntimeException, std::exception)
 }
 
 void SAL_CALL StatusbarItem::setQuickHelpText( const OUString& rQuickHelpText )
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -202,7 +185,6 @@ throw (RuntimeException, std::exception)
 }
 
 OUString SAL_CALL StatusbarItem::getAccessibleName()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -212,7 +194,6 @@ throw (RuntimeException, std::exception)
 }
 
 void SAL_CALL StatusbarItem::setAccessibleName( const OUString& rAccessibleName )
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
@@ -220,17 +201,15 @@ throw (RuntimeException, std::exception)
 }
 
 sal_Bool SAL_CALL StatusbarItem::getVisible()
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )
         return m_pStatusBar->IsItemVisible( m_nId );
 
-    return sal_False;
+    return false;
 }
 
 void SAL_CALL StatusbarItem::setVisible( sal_Bool bVisible )
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( !m_pStatusBar )
@@ -246,7 +225,6 @@ throw (RuntimeException, std::exception)
 }
 
 void SAL_CALL StatusbarItem::repaint(  )
-throw (RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if ( m_pStatusBar )

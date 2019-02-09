@@ -17,12 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/printerinfomanager.hxx>
+#include <memory>
+#include "printerinfomanager.hxx"
 
 #include "unx/gendata.hxx"
 
+// needed since we declare a std::unique_ptr<SystemQueueInfo>
+namespace psp
+{
+    class SystemQueueInfo
+    {
+    };
+}
+
 using namespace psp;
 using namespace osl;
+
 
 PrinterInfoManager& PrinterInfoManager::get()
 {
@@ -36,11 +46,11 @@ void PrinterInfoManager::release()
 {
     SalData* pSalData = GetSalData();
     delete pSalData->m_pPIManager;
-    pSalData->m_pPIManager = NULL;
+    pSalData->m_pPIManager = nullptr;
 }
 
 PrinterInfoManager::PrinterInfoManager( Type eType ) :
-    m_pQueueInfo( NULL ),
+    m_pQueueInfo( nullptr ),
     m_eType( eType ),
     m_bUseIncludeFeature( false ),
     m_bUseJobPatch( true ),
@@ -64,56 +74,32 @@ void PrinterInfoManager::initialize()
     // ???
 }
 
-void PrinterInfoManager::listPrinters( ::std::list< OUString >& rList ) const
+void PrinterInfoManager::listPrinters( ::std::vector< OUString >& rVector ) const
 {
-    rList.clear();
+    (void) this;
+
+    rVector.clear();
 }
 
 const PrinterInfo& PrinterInfoManager::getPrinterInfo( const OUString& /* rPrinter */ ) const
 {
     static PrinterInfo aEmptyInfo;
 
+    (void) this;
+
     return aEmptyInfo;
-}
-
-void PrinterInfoManager::changePrinterInfo( const OUString& /* rPrinter */, const PrinterInfo& /* rNewInfo */ )
-{
-
-}
-
-bool PrinterInfoManager::writePrinterConfig()
-{
-    return false;
-}
-
-bool PrinterInfoManager::addPrinter( const OUString& /* rPrinterName */, const OUString& /* rDriverName */ )
-{
-    return false;
-}
-
-bool PrinterInfoManager::removePrinter( const OUString& /* rPrinterName */, bool /* bCheckOnly */ )
-{
-    return false;
-}
-
-bool PrinterInfoManager::setDefaultPrinter( const OUString& /* rPrinterName */ )
-{
-    return false;
-}
-
-const std::list< PrinterInfoManager::SystemPrintQueue >& PrinterInfoManager::getSystemPrintQueues()
-{
-    return m_aSystemPrintQueues;
 }
 
 bool PrinterInfoManager::checkFeatureToken( const OUString& /* rPrinterName */, const char* /* pToken */ ) const
 {
+    (void) this;
+
     return false;
 }
 
 FILE* PrinterInfoManager::startSpool( const OUString& /* rPrintername */, bool /* bQuickCommand */ )
 {
-    return NULL;
+    return nullptr;
 }
 
 bool PrinterInfoManager::endSpool( const OUString& /*rPrintername*/, const OUString& /*rJobTitle*/, FILE* /* pFile */, const JobData& /*rDocumentJobData*/, bool /*bBanner*/, const OUString& /*rFaxNumber*/ )
@@ -128,7 +114,7 @@ void PrinterInfoManager::setupJobContextData( JobData& /* rData */ )
 
 void PrinterInfoManager::setDefaultPaper( PPDContext& /* rContext */ ) const
 {
-
+    (void) this;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -25,28 +25,30 @@
 #include <memory>
 
 #include <svx/framelinkarray.hxx>
-#include "global.hxx"
 #include "colorscale.hxx"
 #include "cellvalue.hxx"
+#include <o3tl/typed_flags_set.hxx>
+#include <boost/optional.hpp>
 
 class SfxItemSet;
 class SvxBrushItem;
 class SvxBoxItem;
 class SvxLineItem;
 class SvxShadowItem;
-class Color;
 
 class ScPatternAttr;
 
-const sal_uInt8 SC_ROTDIR_NONE       = 0;
-const sal_uInt8 SC_ROTDIR_STANDARD   = 1;
-const sal_uInt8 SC_ROTDIR_LEFT       = 2;
-const sal_uInt8 SC_ROTDIR_RIGHT      = 3;
-const sal_uInt8 SC_ROTDIR_CENTER     = 4;
+enum class ScRotateDir : sal_uInt8 {
+    NONE, Standard, Left, Right, Center
+};
 
-const sal_uInt8 SC_CLIPMARK_NONE     = 0;
-const sal_uInt8 SC_CLIPMARK_LEFT     = 1;
-const sal_uInt8 SC_CLIPMARK_RIGHT    = 2;
+enum class ScClipMark : sal_uInt8 {
+    NONE = 0x00, Left = 0x01, Right = 0x02
+};
+namespace o3tl {
+    template<> struct typed_flags<ScClipMark> : is_typed_flags<ScClipMark, 0x03> {};
+}
+
 const sal_uInt8 SC_CLIPMARK_SIZE     = 64;
 
 enum ScShadowPart
@@ -108,10 +110,9 @@ struct CellInfo
         , pVShadowOrigin(nullptr)
         , eHShadowPart(SC_SHADOW_HSTART)
         , eVShadowPart(SC_SHADOW_HSTART)
-        , nClipMark(SC_CLIPMARK_NONE)
+        , nClipMark(ScClipMark::NONE)
         , nWidth(0)
-        , nRotateDir(SC_ROTDIR_NONE)
-        , bMarked(false)
+        , nRotateDir(ScRotateDir::NONE)
         , bEmptyCellText(false)
         , bMerged(false)
         , bHOverlapped(false)
@@ -126,7 +127,6 @@ struct CellInfo
     {
     }
 
-    ~CellInfo() = default;
     CellInfo(const CellInfo&) = delete;
     const CellInfo& operator=(const CellInfo&) = delete;
 
@@ -134,7 +134,7 @@ struct CellInfo
 
     const ScPatternAttr*        pPatternAttr;
     const SfxItemSet*           pConditionSet;
-    std::unique_ptr<const Color> pColorScale;
+    boost::optional<Color>      mxColorScale;
     std::unique_ptr<const ScDataBarInfo> pDataBar;
     std::unique_ptr<const ScIconSetInfo> pIconSet;
 
@@ -151,11 +151,10 @@ struct CellInfo
 
     ScShadowPart                eHShadowPart : 4;           // shadow effective for drawing
     ScShadowPart                eVShadowPart : 4;
-    sal_uInt8                        nClipMark;
-    sal_uInt16                      nWidth;
-    sal_uInt8                        nRotateDir;
+    ScClipMark                  nClipMark;
+    sal_uInt16                  nWidth;
+    ScRotateDir                 nRotateDir;
 
-    bool                        bMarked : 1;
     bool                        bEmptyCellText : 1;
     bool                        bMerged : 1;
     bool                        bHOverlapped : 1;
@@ -174,7 +173,6 @@ const SCCOL SC_ROTMAX_NONE = SCCOL_MAX;
 struct RowInfo
 {
     RowInfo() = default;
-    ~RowInfo() = default;
     RowInfo(const RowInfo&) = delete;
     const RowInfo& operator=(const RowInfo&) = delete;
 
@@ -185,7 +183,6 @@ struct RowInfo
     SCCOL               nRotMaxCol;         // SC_ROTMAX_NONE, if nothing
 
     bool                bEmptyBack:1;
-    bool                bEmptyText:1;
     bool                bAutoFilter:1;
     bool                bPivotButton:1;
     bool                bChanged:1;           // TRUE, if not tested
@@ -194,11 +191,13 @@ struct RowInfo
 struct ScTableInfo
 {
     svx::frame::Array   maArray;
-    RowInfo*            mpRowInfo;
-    sal_uInt16              mnArrCount;
+    std::unique_ptr<RowInfo[]>
+                        mpRowInfo;
+    SCSIZE              mnArrCount;
+    SCSIZE const              mnArrCapacity;
     bool                mbPageMode;
 
-    explicit            ScTableInfo();
+    explicit            ScTableInfo(const SCSIZE capacity = 1024);
                         ~ScTableInfo();
     ScTableInfo(const ScTableInfo&) = delete;
     const ScTableInfo& operator=(const ScTableInfo&) = delete;

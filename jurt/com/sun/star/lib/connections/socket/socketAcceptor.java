@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -143,7 +144,7 @@ public final class socketAcceptor implements XAcceptor {
             }
             serv = server;
         }
-        Socket socket;
+        Socket socket = null;
         try {
             socket = serv.accept();
             if (DEBUG) {
@@ -164,6 +165,12 @@ public final class socketAcceptor implements XAcceptor {
             return new SocketConnection(acceptingDescription, socket);
         }
         catch(IOException e) {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch(IOException ioException) {
+                }
+            }
             throw new ConnectionSetupException(e);
         }
     }
@@ -191,3 +198,5 @@ public final class socketAcceptor implements XAcceptor {
     private String acceptingDescription;
     private Boolean tcpNoDelay;
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -73,14 +73,14 @@ void  CSerializationURLEncoded::encode_and_append(const OUString& aString, OStri
 {
     OString utf8String = OUStringToOString(aString, RTL_TEXTENCODING_UTF8);
     const sal_uInt8 *pString = reinterpret_cast< const sal_uInt8 * >( utf8String.getStr() );
-    sal_Char tmpChar[4]; tmpChar[3] = 0;
+    sal_Char tmpChar[4];
 
     while( *pString != 0)
     {
         if( *pString < 0x80 )
         {
             if ( is_unreserved(*pString) ) {
-                aBuffer.append(*pString);
+                aBuffer.append(char(*pString));
             } else if (*pString == 0x20) {
                 aBuffer.append('+');
             } else if (*pString == 0x0d && *(pString+1) == 0x0a) {
@@ -89,16 +89,16 @@ void  CSerializationURLEncoded::encode_and_append(const OUString& aString, OStri
             } else if (*pString == 0x0a) {
                 aBuffer.append("%0D%0A");
             } else {
-                snprintf(tmpChar, 3, "%%%X", *pString % 0x100);
+                snprintf(tmpChar, 4, "%%%X", *pString % 0x100);
                 aBuffer.append(tmpChar);
             }
         } else {
-            snprintf(tmpChar, 3, "%%%X", *pString % 0x100);
+            snprintf(tmpChar, 4, "%%%X", *pString % 0x100);
             aBuffer.append(tmpChar);
             while (*pString >= 0x80) {
                 // continuation...
                 pString++;
-                snprintf(tmpChar, 3, "%%%X", *pString % 0x100);
+                snprintf(tmpChar, 4, "%%%X", *pString % 0x100);
                 aBuffer.append(tmpChar);
             }
         }
@@ -161,7 +161,6 @@ void CSerializationURLEncoded::serialize()
 {
 
     // output stream to the pipe buffer
-    Reference< XOutputStream > out(m_aPipe, UNO_QUERY);
 
     css::uno::Reference< css::xml::dom::XNode > cur = m_aFragment->getFirstChild();
     while (cur.is())

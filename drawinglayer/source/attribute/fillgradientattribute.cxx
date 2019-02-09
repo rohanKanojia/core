@@ -60,7 +60,7 @@ namespace drawinglayer
             }
 
             ImpFillGradientAttribute()
-            :   meStyle(GRADIENTSTYLE_LINEAR),
+            :   meStyle(GradientStyle::Linear),
                 mfBorder(0.0),
                 mfOffsetX(0.0),
                 mfOffsetY(0.0),
@@ -119,25 +119,20 @@ namespace drawinglayer
         {
         }
 
-        FillGradientAttribute::FillGradientAttribute(const FillGradientAttribute& rCandidate)
-        :   mpFillGradientAttribute(rCandidate.mpFillGradientAttribute)
-        {
-        }
+        FillGradientAttribute::FillGradientAttribute(const FillGradientAttribute&) = default;
 
-        FillGradientAttribute::~FillGradientAttribute()
-        {
-        }
+        FillGradientAttribute::FillGradientAttribute(FillGradientAttribute&&) = default;
+
+        FillGradientAttribute::~FillGradientAttribute() = default;
 
         bool FillGradientAttribute::isDefault() const
         {
             return mpFillGradientAttribute.same_object(theGlobalDefault::get());
         }
 
-        FillGradientAttribute& FillGradientAttribute::operator=(const FillGradientAttribute& rCandidate)
-        {
-            mpFillGradientAttribute = rCandidate.mpFillGradientAttribute;
-            return *this;
-        }
+        FillGradientAttribute& FillGradientAttribute::operator=(const FillGradientAttribute&) = default;
+
+        FillGradientAttribute& FillGradientAttribute::operator=(FillGradientAttribute&&) = default;
 
         bool FillGradientAttribute::operator==(const FillGradientAttribute& rCandidate) const
         {

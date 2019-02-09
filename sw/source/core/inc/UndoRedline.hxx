@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_UNDOREDLINE_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_UNDOREDLINE_HXX
 
+#include <memory>
 #include <undobj.hxx>
 
 struct SwSortOptions;
@@ -30,9 +31,9 @@ class SwUndoDelete;
 class SwUndoRedline : public SwUndo, public SwUndRng
 {
 protected:
-    SwRedlineData* mpRedlData;
-    SwRedlineSaveDatas* mpRedlSaveData;
-    SwUndoId mnUserId;
+    std::unique_ptr<SwRedlineData> mpRedlData;
+    std::unique_ptr<SwRedlineSaveDatas> mpRedlSaveData;
+    SwUndoId const mnUserId;
     bool mbHiddenRedlines;
 
     virtual void UndoRedlineImpl(SwDoc & rDoc, SwPaM & rPam);
@@ -41,7 +42,7 @@ protected:
 public:
     SwUndoRedline( SwUndoId nUserId, const SwPaM& rRange );
 
-    virtual ~SwUndoRedline();
+    virtual ~SwUndoRedline() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -55,23 +56,28 @@ class SwUndoRedlineDelete : public SwUndoRedline
     bool bIsDelim : 1;
     bool bIsBackspace : 1;
 
+    OUString m_sRedlineText;
+
     virtual void UndoRedlineImpl(SwDoc & rDoc, SwPaM & rPam) override;
     virtual void RedoRedlineImpl(SwDoc & rDoc, SwPaM & rPam) override;
 
 public:
-    SwUndoRedlineDelete( const SwPaM& rRange, SwUndoId nUserId = UNDO_EMPTY );
+    SwUndoRedlineDelete( const SwPaM& rRange, SwUndoId nUserId );
+    virtual SwRewriter GetRewriter() const override;
 
     bool CanGrouping( const SwUndoRedlineDelete& rPrev );
 
     // SwUndoTableCpyTable needs this information:
     long NodeDiff() const { return nSttNode - nEndNode; }
     sal_Int32 ContentStart() const { return nSttContent; }
+
+    void SetRedlineText(const OUString & rText);
 };
 
 class SwUndoRedlineSort : public SwUndoRedline
 {
-    SwSortOptions* pOpt;
-    sal_uLong nSaveEndNode, nOffset;
+    std::unique_ptr<SwSortOptions> pOpt;
+    sal_uLong nSaveEndNode;
     sal_Int32 nSaveEndContent;
 
     virtual void UndoRedlineImpl(SwDoc & rDoc, SwPaM & rPam) override;
@@ -80,12 +86,11 @@ class SwUndoRedlineSort : public SwUndoRedline
 public:
     SwUndoRedlineSort( const SwPaM& rRange, const SwSortOptions& rOpt );
 
-    virtual ~SwUndoRedlineSort();
+    virtual ~SwUndoRedlineSort() override;
 
     virtual void RepeatImpl( ::sw::RepeatContext & ) override;
 
     void SetSaveRange( const SwPaM& rRange );
-    void SetOffset( const SwNodeIndex& rIdx );
 };
 
 class SwUndoAcceptRedline : public SwUndoRedline
@@ -112,16 +117,16 @@ public:
 
 class SwUndoCompDoc : public SwUndo, public SwUndRng
 {
-    SwRedlineData* pRedlData;
-    SwUndoDelete* pUnDel, *pUnDel2;
-    SwRedlineSaveDatas* pRedlSaveData;
-    bool bInsert;
+    std::unique_ptr<SwRedlineData> pRedlData;
+    std::unique_ptr<SwUndoDelete> pUnDel, pUnDel2;
+    std::unique_ptr<SwRedlineSaveDatas> pRedlSaveData;
+    bool const bInsert;
 
 public:
     SwUndoCompDoc( const SwPaM& rRg, bool bIns );
     SwUndoCompDoc( const SwRangeRedline& rRedl );
 
-    virtual ~SwUndoCompDoc();
+    virtual ~SwUndoCompDoc() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;

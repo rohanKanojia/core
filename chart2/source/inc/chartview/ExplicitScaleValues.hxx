@@ -19,14 +19,15 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_EXPLICITSCALEVALUES_HXX
 #define INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_EXPLICITSCALEVALUES_HXX
 
-#include "chartviewdllapi.hxx"
+#include <chartview/chartviewdllapi.hxx>
 #include <com/sun/star/chart/TimeInterval.hpp>
-#include <com/sun/star/chart/TimeUnit.hpp>
 #include <com/sun/star/chart2/AxisOrientation.hpp>
-#include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart2/XScaling.hpp>
 #include <tools/date.hxx>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace chart2 { class XScaling; } } } }
+
 namespace chart
 {
 
@@ -144,7 +145,7 @@ struct OOO_DLLPUBLIC_CHARTVIEW ExplicitIncrementData
     positions of subsequent tickmarks in relation to their parent tickmarks
     given by the preceding SubIncrement.</p>
     */
-    ::std::vector< ExplicitSubIncrement > SubIncrements;
+    std::vector< ExplicitSubIncrement > SubIncrements;
 };
 
 } //namespace chart

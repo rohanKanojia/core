@@ -20,6 +20,10 @@
 #ifndef INCLUDED_HWPFILTER_SOURCE_NODES_H
 #define INCLUDED_HWPFILTER_SOURCE_NODES_H
 
+#include <sal/config.h>
+
+#include <memory>
+#include <vector>
 #include <stdio.h>
 #include <stdlib.h>
 #include <osl/diagnose.h>
@@ -57,16 +61,16 @@ enum IDLIST {
      ID_NUMBER,
      ID_OPERATOR,
      ID_SPACE,
-     ID_DELIMETER
+     ID_DELIMITER
 };
 
 class Node{
 public:
      explicit Node(int _id) : id(_id)
      {
-          value = NULL;
-          child = NULL;
-          next = NULL;
+          value = nullptr;
+          child = nullptr;
+          next = nullptr;
 #ifdef NODE_DEBUG
           count++;
           printf("Node count : [%d]\n",count);
@@ -77,8 +81,8 @@ public:
           if( value ) free( value );
          // if( child ) delete child;
          // if( next ) delete next;
-          next = NULL;
-          child = NULL;
+          next = nullptr;
+          child = nullptr;
 #ifdef NODE_DEBUG
           count--;
           printf("Node count : [%d]\n",count);
@@ -91,8 +95,7 @@ public:
      Node *child;
      Node *next;
 };
-
-//static LinkedList<Node> nodelist;
+extern std::vector<std::unique_ptr<Node>> nodelist;
 
 #endif
 

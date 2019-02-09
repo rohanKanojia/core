@@ -29,6 +29,7 @@
 #include <config_lgpl.h>
 #include <string.h>
 #include <ne_xml.h>
+#include <memory>
 
 #include "LinkSequence.hxx"
 
@@ -38,13 +39,12 @@ using namespace com::sun::star;
 
 struct LinkSequenceParseContext
 {
-    ucb::Link * pLink;
+    std::unique_ptr<ucb::Link> pLink;
     bool hasSource;
     bool hasDestination;
 
     LinkSequenceParseContext()
-    : pLink( nullptr ), hasSource( false ), hasDestination( false ) {}
-    ~LinkSequenceParseContext() { delete pLink; }
+    : hasSource( false ), hasDestination( false ) {}
 };
 
 #define STATE_TOP (1)
@@ -54,7 +54,9 @@ struct LinkSequenceParseContext
 #define STATE_SRC  (STATE_TOP + 2)
 
 
-extern "C" int LinkSequence_startelement_callback(
+extern "C" {
+
+static int LinkSequence_startelement_callback(
     void *,
     int parent,
     const char * /*nspace*/,
@@ -82,7 +84,7 @@ extern "C" int LinkSequence_startelement_callback(
 }
 
 
-extern "C" int LinkSequence_chardata_callback(
+static int LinkSequence_chardata_callback(
     void *userdata,
     int state,
     const char *buf,
@@ -91,7 +93,7 @@ extern "C" int LinkSequence_chardata_callback(
     LinkSequenceParseContext * pCtx
                     = static_cast< LinkSequenceParseContext * >( userdata );
     if ( !pCtx->pLink )
-        pCtx->pLink = new ucb::Link;
+        pCtx->pLink.reset( new ucb::Link );
 
     switch ( state )
     {
@@ -111,7 +113,7 @@ extern "C" int LinkSequence_chardata_callback(
 }
 
 
-extern "C" int LinkSequence_endelement_callback(
+static int LinkSequence_endelement_callback(
     void *userdata,
     int state,
     const char *,
@@ -120,7 +122,7 @@ extern "C" int LinkSequence_endelement_callback(
     LinkSequenceParseContext * pCtx
                     = static_cast< LinkSequenceParseContext * >( userdata );
     if ( !pCtx->pLink )
-        pCtx->pLink = new ucb::Link;
+        pCtx->pLink.reset( new ucb::Link );
 
     switch ( state )
     {
@@ -132,6 +134,7 @@ extern "C" int LinkSequence_endelement_callback(
     return 0; // zero to continue, non-zero to abort parsing
 }
 
+}
 
 // static
 bool LinkSequence::createFromXML( const OString & rInData,
@@ -197,17 +200,13 @@ bool LinkSequence::toXML( const uno::Sequence< ucb::Link > & rInData,
     sal_Int32 nCount = rInData.getLength();
     if ( nCount )
     {
-        OUString aPre( "<link><src>" );
-        OUString aMid( "</src><dst>" );
-        OUString aEnd( "</dst></link>" );
-
         for ( sal_Int32 n = 0; n < nCount; ++n )
         {
-                rOutData += aPre;
+                rOutData += "<link><src>";
                 rOutData += rInData[ n ].Source;
-                rOutData += aMid;
+                rOutData += "</src><dst>";
                 rOutData += rInData[ n ].Destination;
-                rOutData += aEnd;
+                rOutData += "</dst></link>";
         }
         return true;
     }

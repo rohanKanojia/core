@@ -25,15 +25,31 @@
 
 #include <basegfx/range/b2drectangle.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
+#include <o3tl/typed_flags_set.hxx>
 
-#include "tools.hxx"
-#include "shapeattributelayer.hxx"
-#include "animatedsprite.hxx"
-#include "viewlayer.hxx"
-#include "doctreenode.hxx"
+#include <tools.hxx>
+#include <shapeattributelayer.hxx>
+#include <animatedsprite.hxx>
+#include <viewlayer.hxx>
+#include <doctreenode.hxx>
 
 #include <vector>
 #include <memory>
+
+enum class UpdateFlags
+{
+    NONE           = 0x00,
+    Transformation = 0x01,
+    Clip           = 0x02,
+    Alpha          = 0x04,
+    Position       = 0x08,
+    Content        = 0x10,
+    Force          = 0x20,
+};
+namespace o3tl {
+    template<> struct typed_flags<UpdateFlags> : is_typed_flags<UpdateFlags, 0x3f> {};
+}
+
 
 
 namespace slideshow
@@ -63,7 +79,7 @@ namespace slideshow
 
             /** Query the associated view layer of this shape
              */
-            ViewLayerSharedPtr getViewLayer() const;
+            const ViewLayerSharedPtr& getViewLayer() const;
 
             /** Query dimension of a safety border around the shape for AA
 
@@ -83,10 +99,8 @@ namespace slideshow
                 This method enters animation mode on the associate
                 target view. The shape can be animated in parallel on
                 different views.
-
-                @return whether the mode change finished successfully.
              */
-            bool enterAnimationMode();
+            void enterAnimationMode();
 
             /** Notify the ViewShape that it is no longer animated
 
@@ -95,27 +109,9 @@ namespace slideshow
              */
             void leaveAnimationMode();
 
-            /** Query whether the ViewShape is currently animated
-
-                This method checks whether the ViewShape is currently in
-                animation mode.
-             */
-            bool isBackgroundDetached() const { return mbAnimationMode; }
-
 
             // render methods
 
-
-            enum UpdateFlags
-            {
-                NONE=           0,
-                TRANSFORMATION= 1,
-                CLIP=           2,
-                ALPHA=          4,
-                POSITION=       8,
-                CONTENT=        16,
-                FORCE=          32
-            };
 
             struct RenderArgs
             {
@@ -194,7 +190,7 @@ namespace slideshow
             */
             bool update( const GDIMetaFileSharedPtr&    rMtf,
                          const RenderArgs&              rArgs,
-                         int                            nUpdateFlags,
+                         UpdateFlags                    nUpdateFlags,
                          bool                           bIsVisible ) const;
 
             /** Retrieve renderer for given canvas and metafile.
@@ -222,7 +218,7 @@ namespace slideshow
                 {
                 }
 
-                ::cppcanvas::CanvasSharedPtr getDestinationCanvas() const
+                const ::cppcanvas::CanvasSharedPtr& getDestinationCanvas() const
                 {
                     return mpDestinationCanvas;
                 }
@@ -263,7 +259,7 @@ namespace slideshow
                                const ::basegfx::B2DRectangle&       rOrigBounds,
                                const ::basegfx::B2DRectangle&       rBounds,
                                const ::basegfx::B2DRectangle&       rUnitBounds,
-                               int                                  nUpdateFlags,
+                               UpdateFlags                          nUpdateFlags,
                                const ShapeAttributeLayerSharedPtr&  pAttr,
                                const VectorOfDocTreeNodes&          rSubsets,
                                double                               nPrio,
@@ -275,7 +271,7 @@ namespace slideshow
                          const GDIMetaFileSharedPtr&            rMtf,
                          const ::basegfx::B2DRectangle&         rBounds,
                          const ::basegfx::B2DRectangle&         rUpdateBounds,
-                         int                                    nUpdateFlags,
+                         UpdateFlags                            nUpdateFlags,
                          const ShapeAttributeLayerSharedPtr&    pAttr,
                          const VectorOfDocTreeNodes&            rSubsets,
                          bool                                   bIsVisible ) const;
@@ -302,7 +298,7 @@ namespace slideshow
 
                 Needed for sprite creation
             */
-            ViewLayerSharedPtr                          mpViewLayer;
+            ViewLayerSharedPtr const                    mpViewLayer;
 
             /// A set of cached mtf/canvas combinations
             mutable RendererCacheVector                 maRenderers;

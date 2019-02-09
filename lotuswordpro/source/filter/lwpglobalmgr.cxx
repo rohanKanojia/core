@@ -53,54 +53,26 @@
  *
  *
  ************************************************************************/
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 #include <osl/thread.hxx>
 std::map< sal_uInt32,LwpGlobalMgr* > LwpGlobalMgr::m_ThreadMap;
 LwpGlobalMgr::LwpGlobalMgr(LwpSvStream* pSvStream)
 {
     if (pSvStream)
-        m_pObjFactory = new LwpObjectFactory(pSvStream);
-    else
-        m_pObjFactory = nullptr;
-    m_pBookmarkMgr = new LwpBookmarkMgr;
-    m_pChangeMgr = new LwpChangeMgr;
-    m_pXFFontFactory = new XFFontFactory;
-    m_pXFStyleManager = new XFStyleManager;
+        m_pObjFactory.reset( new LwpObjectFactory(pSvStream) );
+    m_pBookmarkMgr.reset( new LwpBookmarkMgr );
+    m_pChangeMgr.reset( new LwpChangeMgr );
+    m_pXFFontFactory.reset( new XFFontFactory );
+    m_pXFStyleManager.reset( new XFStyleManager );
 }
 
 LwpGlobalMgr::~LwpGlobalMgr()
 {
-    if (m_pObjFactory)
-    {
-        delete m_pObjFactory;
-        m_pObjFactory = nullptr;
-    }
-    if (m_pBookmarkMgr)
-    {
-        delete m_pBookmarkMgr;
-        m_pBookmarkMgr = nullptr;
-    }
-    if (m_pChangeMgr)
-    {
-        delete m_pChangeMgr;
-        m_pChangeMgr = nullptr;
-    }
-    if (m_pXFFontFactory)
-    {
-        delete m_pXFFontFactory;
-        m_pXFFontFactory = nullptr;
-    }
-    if (m_pXFStyleManager)
-    {
-        delete m_pXFStyleManager;
-        m_pXFStyleManager = nullptr;
-    }
-    std::map<sal_uInt16,LwpEditorAttr*>::iterator iter;
-    for (iter =m_EditorAttrMap.begin();iter != m_EditorAttrMap.end(); ++iter)
-    {
-        delete iter->second;
-        iter->second = nullptr;
-    }
+    m_pObjFactory.reset();
+    m_pBookmarkMgr.reset();
+    m_pChangeMgr.reset();
+    m_pXFFontFactory.reset();
+    m_pXFStyleManager.reset();
     m_EditorAttrMap.clear();
 }
 
@@ -134,23 +106,20 @@ void LwpGlobalMgr::DeleteInstance()
 
 void LwpGlobalMgr::SetEditorAttrMap(sal_uInt16 nID, LwpEditorAttr* pAttr)
 {
-    m_EditorAttrMap[nID] = pAttr;
+    m_EditorAttrMap[nID].reset(pAttr);
 }
 
 OUString LwpGlobalMgr::GetEditorName(sal_uInt8 nID)
 {
-    std::map<sal_uInt16,LwpEditorAttr*>::iterator iter;
-    iter = m_EditorAttrMap.find(nID);
+    auto iter = m_EditorAttrMap.find(nID);
     if (iter != m_EditorAttrMap.end())
         return iter->second->cName.str();
-    return OUString("");
+    return OUString();
 }
 
 XFColor LwpGlobalMgr::GetHighlightColor(sal_uInt8 nID)
 {
-    std::map<sal_uInt16,LwpEditorAttr*>::iterator iter;
-
-    iter = m_EditorAttrMap.find(nID);
+    auto iter = m_EditorAttrMap.find(nID);
     if (iter != m_EditorAttrMap.end())
     {
         LwpColor aLwpColor = iter->second->cHiLiteColor;

@@ -30,27 +30,39 @@
 class SVX_DLLPUBLIC SdrMeasureTextIsFixedAngleItem: public SdrYesNoItem {
 public:
     SdrMeasureTextIsFixedAngleItem(bool bOn=false): SdrYesNoItem(SDRATTR_MEASURETEXTISFIXEDANGLE,bOn) {}
-    SdrMeasureTextIsFixedAngleItem(SvStream& rIn): SdrYesNoItem(SDRATTR_MEASURETEXTISFIXEDANGLE,rIn) {}
-    virtual ~SdrMeasureTextIsFixedAngleItem();
+    virtual ~SdrMeasureTextIsFixedAngleItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrMeasureTextIsFixedAngleItem(SdrMeasureTextIsFixedAngleItem const &) = default;
+    SdrMeasureTextIsFixedAngleItem(SdrMeasureTextIsFixedAngleItem &&) = default;
+    SdrMeasureTextIsFixedAngleItem & operator =(SdrMeasureTextIsFixedAngleItem const &) = delete; // due to SdrYesNoItem
+    SdrMeasureTextIsFixedAngleItem & operator =(SdrMeasureTextIsFixedAngleItem &&) = delete; // due to SdrYesNoItem
 };
 
 //Angle of the text in 1/100deg. 0=horizontal; read from left to right. (n.i.)
 class SVX_DLLPUBLIC SdrMeasureTextFixedAngleItem: public SdrAngleItem {
 public:
     SdrMeasureTextFixedAngleItem(long nVal=0): SdrAngleItem(SDRATTR_MEASURETEXTFIXEDANGLE,nVal)  {}
-    SdrMeasureTextFixedAngleItem(SvStream& rIn): SdrAngleItem(SDRATTR_MEASURETEXTFIXEDANGLE,rIn) {}
-    virtual ~SdrMeasureTextFixedAngleItem();
+    virtual ~SdrMeasureTextFixedAngleItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrMeasureTextFixedAngleItem(SdrMeasureTextFixedAngleItem const &) = default;
+    SdrMeasureTextFixedAngleItem(SdrMeasureTextFixedAngleItem &&) = default;
+    SdrMeasureTextFixedAngleItem & operator =(SdrMeasureTextFixedAngleItem const &) = delete; // due to SdrAngleItem
+    SdrMeasureTextFixedAngleItem & operator =(SdrMeasureTextFixedAngleItem &&) = delete; // due to SdrAngleItem
 };
 
 // The decimal places used for the measure value
 class SVX_DLLPUBLIC SdrMeasureDecimalPlacesItem: public SfxInt16Item {
 public:
     SdrMeasureDecimalPlacesItem(sal_Int16 nVal=2): SfxInt16Item(SDRATTR_MEASUREDECIMALPLACES,nVal)  {}
-    SdrMeasureDecimalPlacesItem(SvStream& rIn): SfxInt16Item(SDRATTR_MEASUREDECIMALPLACES,rIn) {}
-    virtual ~SdrMeasureDecimalPlacesItem();
+    virtual ~SdrMeasureDecimalPlacesItem() override;
     virtual SfxPoolItem* Clone(SfxItemPool* pPool=nullptr) const override;
+
+    SdrMeasureDecimalPlacesItem(SdrMeasureDecimalPlacesItem const &) = default;
+    SdrMeasureDecimalPlacesItem(SdrMeasureDecimalPlacesItem &&) = default;
+    SdrMeasureDecimalPlacesItem & operator =(SdrMeasureDecimalPlacesItem const &) = delete; // due to SfxInt16Item
+    SdrMeasureDecimalPlacesItem & operator =(SdrMeasureDecimalPlacesItem &&) = delete; // due to SfxInt16Item
 };
 
 #endif

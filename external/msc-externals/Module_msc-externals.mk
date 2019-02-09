@@ -9,9 +9,21 @@
 
 $(eval $(call gb_Module_Module,msc-externals))
 
+ifneq ($(BUILD_X64),)
+
 $(eval $(call gb_Module_add_targets,msc-externals,\
-	$(if $(ENABLE_CRASHDUMP),Package_dbghelp) \
 	Package_msvc_dlls \
 ))
+
+endif
+
+# Install the universal crts (tdf#108580)
+ifneq ($(UCRT_REDISTDIR),)
+
+$(eval $(call gb_Module_add_targets,msc-externals,\
+	Package_ucrt \
+))
+
+endif
 
 # vim: set noet sw=4 ts=4:

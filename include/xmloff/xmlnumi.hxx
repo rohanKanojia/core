@@ -22,32 +22,26 @@
 
 #include <sal/config.h>
 
+#include <memory>
 #include <vector>
 
-#include <com/sun/star/container/XIndexReplace.hpp>
-
 #include <xmloff/xmlstyle.hxx>
-#include <com/sun/star/style/NumberingType.hpp>
 
 namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace container { class XIndexReplace; } } } }
 
 class SvxXMLListLevelStyleContext_Impl;
-typedef std::vector<SvxXMLListLevelStyleContext_Impl *> SvxXMLListStyle_Impl;
+typedef std::vector<rtl::Reference<SvxXMLListLevelStyleContext_Impl>> SvxXMLListStyle_Impl;
 
 class XMLOFF_DLLPUBLIC SvxXMLListStyleContext
     : public SvXMLStyleContext
 {
-    const OUString       sIsPhysical;
-    const OUString       sNumberingRules;
-    const OUString       sIsContinuousNumbering;
-
     css::uno::Reference< css::container::XIndexReplace > xNumRules;
 
-    SvxXMLListStyle_Impl        *pLevelStyles;
+    std::unique_ptr<SvxXMLListStyle_Impl> pLevelStyles;
 
-    sal_Int32                   nLevels;
     bool                        bConsecutive : 1;
-    bool                        bOutline : 1;
+    bool const                  bOutline : 1;
 
 protected:
 
@@ -65,9 +59,9 @@ public:
             const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
             bool bOutl = false );
 
-    virtual ~SvxXMLListStyleContext();
+    ~SvxXMLListStyleContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;

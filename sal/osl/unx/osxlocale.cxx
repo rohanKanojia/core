@@ -29,7 +29,7 @@
 
 #include <rtl/ustrbuf.hxx>
 
-#include <nlsupport.hxx>
+#include "nlsupport.hxx"
 
 namespace
 {
@@ -62,7 +62,7 @@ namespace
         return CFLocaleCreateCanonicalLocaleIdentifierFromString(kCFAllocatorDefault, sref);
     }
 
-    void append(rtl::OUStringBuffer & buffer, CFStringRef string) {
+    void append(OUStringBuffer & buffer, CFStringRef string) {
         CFIndex n = CFStringGetLength(string);
         CFStringGetCharacters(
             string, CFRangeMake(0, n),
@@ -72,7 +72,7 @@ namespace
 
 /** Grab current locale from system.
 */
-rtl::OUString macosx_getLocale()
+OUString macosx_getLocale()
 {
     CFStringRef sref = getProcessLocale();
     CFStringGuard sGuard(sref);
@@ -84,7 +84,7 @@ rtl::OUString macosx_getLocale()
     CFArrayRef subs = CFStringCreateArrayBySeparatingStrings(nullptr, sref, CFSTR("-"));
     CFArrayGuard arrGuard(subs);
 
-    rtl::OUStringBuffer buf;
+    OUStringBuffer buf;
     append(buf, static_cast<CFStringRef>(CFArrayGetValueAtIndex(subs, 0)));
 
     // country also available? Assumption: if the array contains more than one
@@ -94,7 +94,7 @@ rtl::OUString macosx_getLocale()
         buf.append("_");
         append(buf, static_cast<CFStringRef>(CFArrayGetValueAtIndex(subs, 1)));
     }
-    // Append 'UTF-8' to the locale because the Mac OS X file
+    // Append 'UTF-8' to the locale because the macOS file
     // system interface is UTF-8 based and sal tries to determine
     // the file system locale from the locale information
     buf.append(".UTF-8");

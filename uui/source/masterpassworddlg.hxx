@@ -21,30 +21,23 @@
 #define INCLUDED_UUI_SOURCE_MASTERPASSWORDDLG_HXX
 
 #include <com/sun/star/task/PasswordRequestMode.hpp>
-#include <svtools/stdctrl.hxx>
-#include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/group.hxx>
+#include <vcl/weld.hxx>
 
-
-class MasterPasswordDialog : public ModalDialog
+class MasterPasswordDialog : public weld::GenericDialogController
 {
-    VclPtr<Edit>     m_pEDMasterPassword;
-    VclPtr<OKButton> m_pOKBtn;
+private:
+    const std::locale&                 rResLocale;
 
-    DECL_LINK_TYPED(OKHdl_Impl, Button*, void);
+    std::unique_ptr<weld::Entry> m_xEDMasterPassword;
+    std::unique_ptr<weld::Button> m_xOKBtn;
+
+    DECL_LINK(OKHdl_Impl, weld::Button&, void);
 
 public:
-    MasterPasswordDialog( vcl::Window* pParent, css::task::PasswordRequestMode nDlgMode, ResMgr * pResMgr );
-    virtual ~MasterPasswordDialog();
-    virtual void dispose() override;
+    MasterPasswordDialog(weld::Window* pParent, css::task::PasswordRequestMode nDlgMode, const std::locale& rLocale);
+    virtual ~MasterPasswordDialog() override;
 
-    OUString        GetMasterPassword() const { return m_pEDMasterPassword->GetText(); }
-
-private:
-    css::task::PasswordRequestMode     nDialogMode;
-    ResMgr*                            pResourceMgr;
+    OUString        GetMasterPassword() const { return m_xEDMasterPassword->get_text(); }
 };
 
 #endif // INCLUDED_UUI_SOURCE_MASTERPASSWORDDLG_HXX

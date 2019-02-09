@@ -20,6 +20,10 @@
 #ifndef INCLUDED_SVL_SOURCE_INC_STRINGIO_HXX
 #define INCLUDED_SVL_SOURCE_INC_STRINGIO_HXX
 
+#include <rtl/ustring.hxx>
+
+class SvStream;
+
 /** Read in a Unicode string from a streamed byte string representation.
 
     @param rStream  Some (input) stream.  Its Stream/TargetCharSets must
@@ -37,28 +41,6 @@ OUString readByteString(SvStream & rStream);
     @param rString  Some Unicode string.
  */
 void writeByteString(SvStream & rStream, const OUString& rString);
-
-/** Read in a Unicode string from either a streamed Unicode or byte string
-    representation.
-
-    @param rStream  Some (input) stream.  If bUnicode is false, its
-    Stream/TargetCharSets must be set to correct values!
-
-    @param bUnicode  Whether to read in a stream Unicode (true) or byte
-    string (false) representation.
-
-    @return          On success, returns the reconstructed Unicode string.
- */
-OUString readUnicodeString(SvStream & rStream, bool bUnicode);
-
-/** Write a Unicode string representation of a Unicode string into a
-    stream.
-
-    @param rStream  Some (output) stream.
-
-    @param rString  Some Unicode string.
- */
-void writeUnicodeString(SvStream & rStream, const OUString& rString);
 
 
 #endif // INCLUDED_SVL_SOURCE_INC_STRINGIO_HXX

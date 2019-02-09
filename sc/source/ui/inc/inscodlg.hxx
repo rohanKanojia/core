@@ -20,21 +20,17 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_INSCODLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_INSCODLG_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include "global.hxx"
+#include <vcl/weld.hxx>
+#include <global.hxx>
 
 #include "scui_def.hxx"
 
-class ScInsertContentsDlg : public ModalDialog
+class ScInsertContentsDlg : public weld::GenericDialogController
 {
 public:
-            ScInsertContentsDlg( vcl::Window*          pParent,
-                                 InsertDeleteFlags nCheckDefaults = InsertDeleteFlags::NONE,
-                                 const OUString*  pStrTitle = nullptr );
-            virtual ~ScInsertContentsDlg();
-    virtual void dispose() override;
+            ScInsertContentsDlg( weld::Window*      pParent,
+                                 const OUString*   pStrTitle );
+    virtual ~ScInsertContentsDlg() override;
 
     InsertDeleteFlags GetInsContentsCmdBits() const;
     ScPasteFunc       GetFormulaCmdBits() const;
@@ -46,36 +42,9 @@ public:
     void    SetOtherDoc( bool bSet );
     void    SetFillMode( bool bSet );
     void    SetChangeTrack( bool bSet );
-    void    SetCellShiftDisabled( int nDisable );
+    void    SetCellShiftDisabled( CellShiftDisabledFlags nDisable );
 
 private:
-    VclPtr<CheckBox>        mpBtnInsAll;
-    VclPtr<CheckBox>        mpBtnInsStrings;
-    VclPtr<CheckBox>        mpBtnInsNumbers;
-    VclPtr<CheckBox>        mpBtnInsDateTime;
-    VclPtr<CheckBox>        mpBtnInsFormulas;
-    VclPtr<CheckBox>        mpBtnInsNotes;
-    VclPtr<CheckBox>        mpBtnInsAttrs;
-    VclPtr<CheckBox>        mpBtnInsObjects;
-
-    VclPtr<CheckBox>        mpBtnSkipEmptyCells;
-    VclPtr<CheckBox>        mpBtnTranspose;
-    VclPtr<CheckBox>        mpBtnLink;
-
-    VclPtr<RadioButton>     mpRbNoOp;
-    VclPtr<RadioButton>     mpRbAdd;
-    VclPtr<RadioButton>     mpRbSub;
-    VclPtr<RadioButton>     mpRbMul;
-    VclPtr<RadioButton>     mpRbDiv;
-
-    VclPtr<RadioButton>     mpRbMoveNone;
-    VclPtr<RadioButton>     mpRbMoveDown;
-    VclPtr<RadioButton>     mpRbMoveRight;
-
-    VclPtr<PushButton>      mpBtnShortCutPasteValuesOnly;
-    VclPtr<PushButton>      mpBtnShortCutPasteValuesFormats;
-    VclPtr<PushButton>      mpBtnShortCutPasteTranspose;
-
     bool              bOtherDoc;
     bool              bFillMode;
     bool              bChangeTrack;
@@ -84,25 +53,49 @@ private:
     bool              bUsedShortCut;
 
     InsertDeleteFlags nShortCutInsContentsCmdBits;
-    ScPasteFunc       nShortCutFormulaCmdBits;
-    bool              bShortCutSkipEmptyCells;
     bool              bShortCutTranspose;
-    bool              bShortCutIsLink;
-    InsCellCmd        nShortCutMoveMode;
+
+
+    std::unique_ptr<weld::CheckButton>        mxBtnInsAll;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsStrings;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsNumbers;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsDateTime;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsFormulas;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsNotes;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsAttrs;
+    std::unique_ptr<weld::CheckButton>        mxBtnInsObjects;
+
+    std::unique_ptr<weld::CheckButton>        mxBtnSkipEmptyCells;
+    std::unique_ptr<weld::CheckButton>        mxBtnTranspose;
+    std::unique_ptr<weld::CheckButton>        mxBtnLink;
+
+    std::unique_ptr<weld::RadioButton>     mxRbNoOp;
+    std::unique_ptr<weld::RadioButton>     mxRbAdd;
+    std::unique_ptr<weld::RadioButton>     mxRbSub;
+    std::unique_ptr<weld::RadioButton>     mxRbMul;
+    std::unique_ptr<weld::RadioButton>     mxRbDiv;
+
+    std::unique_ptr<weld::RadioButton>     mxRbMoveNone;
+    std::unique_ptr<weld::RadioButton>     mxRbMoveDown;
+    std::unique_ptr<weld::RadioButton>     mxRbMoveRight;
+
+    std::unique_ptr<weld::Button>      mxBtnShortCutPasteValuesOnly;
+    std::unique_ptr<weld::Button>      mxBtnShortCutPasteValuesFormats;
+    std::unique_ptr<weld::Button>      mxBtnShortCutPasteTranspose;
 
     static bool         bPreviousAllCheck;
     static InsertDeleteFlags nPreviousChecks;
-    static sal_uInt16   nPreviousChecks2;
+    static InsertContentsFlags nPreviousChecks2;
     static ScPasteFunc  nPreviousFormulaChecks;
     static sal_uInt16   nPreviousMoveMode;          // enum InsCellCmd
 
-    void DisableChecks( bool bInsAllChecked = true );
+    void DisableChecks( bool bInsAllChecked );
     void TestModes();
 
     // Handler
-    DECL_LINK_TYPED( InsAllHdl, Button*, void );
-    DECL_LINK_TYPED( LinkBtnHdl, Button*, void );
-    DECL_LINK_TYPED( ShortCutHdl, Button*, void );
+    DECL_LINK( InsAllHdl, weld::ToggleButton&, void );
+    DECL_LINK( LinkBtnHdl, weld::ToggleButton&, void );
+    DECL_LINK( ShortCutHdl, weld::Button&, void );
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_INSCODLG_HXX

@@ -40,6 +40,8 @@ class VCL_DLLPUBLIC FixedHyperlink : public FixedText
         /** is position X position hitting text */
         SAL_DLLPRIVATE bool ImplIsOverText(Point rPosition);
 
+        DECL_LINK(HandleClick, FixedHyperlink&, void);
+
     protected:
         /** overwrites Window::MouseMove().
 
@@ -62,7 +64,7 @@ class VCL_DLLPUBLIC FixedHyperlink : public FixedText
     public:
         /** ctors
 
-            With ResId or WinBits.
+            With WinBits.
         */
         FixedHyperlink( vcl::Window* pParent, WinBits nWinStyle = 0 );
 
@@ -84,14 +86,14 @@ class VCL_DLLPUBLIC FixedHyperlink : public FixedText
         */
         virtual void        KeyInput( const KeyEvent& rKEvt ) override;
 
-        virtual bool        set_property(const OString &rKey, const OString &rValue) override;
+        virtual bool        set_property(const OString &rKey, const OUString &rValue) override;
 
 
         /** sets m_aClickHdl with rLink.
 
             m_aClickHdl is called if the text is clicked.
         */
-        inline void         SetClickHdl( const Link<FixedHyperlink&,void>& rLink ) { m_aClickHdl = rLink; }
+        void         SetClickHdl( const Link<FixedHyperlink&,void>& rLink ) { m_aClickHdl = rLink; }
 
         // ::FixedHyperbaseLink
 

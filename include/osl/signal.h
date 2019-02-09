@@ -20,10 +20,10 @@
 #ifndef INCLUDED_OSL_SIGNAL_H
 #define INCLUDED_OSL_SIGNAL_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,7 +58,7 @@ typedef enum
     osl_Signal_Act_FORCE_EQUAL_SIZE = SAL_MAX_ENUM
 } oslSignalAction;
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #   pragma pack(push, 8)
 #endif
 
@@ -69,11 +69,11 @@ typedef struct
     void*       UserData;
 } oslSignalInfo;
 
-#if defined( SAL_W32)
+#if defined( _WIN32)
 #   pragma pack(pop)
 #endif
 
-/** the function-ptr. representing the signal handler-function.
+/** The function-ptr representing the signal handler-function.
 */
 typedef oslSignalAction (SAL_CALL *oslSignalHandlerFunction)(void* pData, oslSignalInfo* pInfo);
 
@@ -90,12 +90,10 @@ SAL_DLLPUBLIC oslSignalAction SAL_CALL osl_raiseSignal(
 
     On default error reporting is enabled after process startup.
 
-    @param  bEnable [in]
-    Enables or disables error reporting.
+    @param[in]  bEnable Enables or disables error reporting.
 
-    @return
-    sal_True if previous state of error reporting was enabled<br>
-    sal_False if previous state of error reporting was disbaled<br>
+    @retval sal_True if previous state of error reporting was enabled
+    @retval sal_False if previous state of error reporting was disabled
 */
 
 SAL_DLLPUBLIC sal_Bool SAL_CALL osl_setErrorReporting(

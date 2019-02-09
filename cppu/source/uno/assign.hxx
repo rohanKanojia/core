@@ -19,8 +19,6 @@
 #ifndef INCLUDED_CPPU_SOURCE_UNO_ASSIGN_HXX
 #define INCLUDED_CPPU_SOURCE_UNO_ASSIGN_HXX
 
-#include <string.h>
-
 #include "prim.hxx"
 #include "destr.hxx"
 #include "constr.hxx"
@@ -138,7 +136,7 @@ inline bool _assignData(
         switch (pSourceType->eTypeClass)
         {
         case typelib_TypeClass_BOOLEAN:
-            *static_cast<sal_Bool *>(pDest) = (*static_cast<sal_Bool *>(pSource) != sal_False);
+            *static_cast<sal_Bool *>(pDest) = bool(*static_cast<sal_Bool *>(pSource));
             return true;
         default:
             return false;
@@ -425,7 +423,7 @@ inline bool _assignData(
                 typelib_TypeDescription * pTD = pSourceTypeDescr;
                 while (pTD && !_type_equals( pTD->pWeakRef, pDestType ))
                 {
-                    pTD = &(reinterpret_cast<typelib_InterfaceTypeDescription *>(pTD))->pBaseTypeDescription->aBase;
+                    pTD = &reinterpret_cast<typelib_InterfaceTypeDescription *>(pTD)->pBaseTypeDescription->aBase;
                 }
                 if (pTD) // is base of dest
                 {

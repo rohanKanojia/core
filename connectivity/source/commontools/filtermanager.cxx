@@ -20,7 +20,7 @@
 #include <connectivity/filtermanager.hxx>
 
 #include <com/sun/star/sdb/XSQLQueryComposerFactory.hpp>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <osl/diagnose.h>
 #include <connectivity/dbtools.hxx>
 #include <tools/diagnose_ex.h>
@@ -62,24 +62,68 @@ namespace dbtools
 
     const OUString& FilterManager::getFilterComponent( FilterComponent _eWhich ) const
     {
-        return _eWhich == FilterComponent::PublicFilter ? m_aPublicFilterComponent : m_aLinkFilterComponent;
+        switch (_eWhich)
+        {
+        case FilterComponent::PublicFilter:
+            return m_aPublicFilterComponent;
+        case FilterComponent::PublicHaving:
+            return m_aPublicHavingComponent;
+        case FilterComponent::LinkFilter:
+            return m_aLinkFilterComponent;
+        case FilterComponent::LinkHaving:
+            return m_aLinkHavingComponent;
+        }
+        assert(false);
+
+        static const OUString sErr("#FilterManager::getFilterComponent unknown component#");
+        return sErr;
     }
 
 
     void FilterManager::setFilterComponent( FilterComponent _eWhich, const OUString& _rComponent )
     {
-        if (_eWhich == FilterComponent::PublicFilter)
+        switch (_eWhich)
+        {
+        case FilterComponent::PublicFilter:
             m_aPublicFilterComponent = _rComponent;
-        else
+            break;
+        case FilterComponent::PublicHaving:
+            m_aPublicHavingComponent = _rComponent;
+            break;
+        case FilterComponent::LinkFilter:
             m_aLinkFilterComponent = _rComponent;
+            break;
+        case FilterComponent::LinkHaving:
+            m_aLinkHavingComponent = _rComponent;
+            break;
+        }
         try
         {
-            if ( m_xComponentAggregate.is() && (( _eWhich != FilterComponent::PublicFilter ) || m_bApplyPublicFilter ) )
-                m_xComponentAggregate->setPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FILTER), makeAny( getComposedFilter() ) );
+            if ( m_xComponentAggregate.is() )
+            {
+                bool propagate(true);
+                switch (_eWhich)
+                {
+                case FilterComponent::PublicFilter:
+                    propagate = propagate && m_bApplyPublicFilter;
+                    [[fallthrough]];
+                case FilterComponent::LinkFilter:
+                    if (propagate)
+                        m_xComponentAggregate->setPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FILTER), makeAny( getComposedFilter() ) );
+                    break;
+                case FilterComponent::PublicHaving:
+                    propagate = propagate && m_bApplyPublicFilter;
+                    [[fallthrough]];
+                case FilterComponent::LinkHaving:
+                    if (propagate)
+                        m_xComponentAggregate->setPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_HAVINGCLAUSE), makeAny( getComposedHaving() ) );
+                    break;
+                }
+            }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
     }
 
@@ -93,14 +137,18 @@ namespace dbtools
 
         try
         {
-            if ( m_xComponentAggregate.is() && !getFilterComponent( FilterComponent::PublicFilter ).isEmpty() )
-            {   // only if there changed something
-                m_xComponentAggregate->setPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FILTER), makeAny( getComposedFilter() ) );
+            if ( m_xComponentAggregate.is())
+            {
+                // only where/if something changed
+                if (!getFilterComponent( FilterComponent::PublicFilter ).isEmpty())
+                    m_xComponentAggregate->setPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FILTER), makeAny( getComposedFilter() ) );
+                if (!getFilterComponent( FilterComponent::PublicHaving ).isEmpty())
+                    m_xComponentAggregate->setPropertyValue( OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_HAVINGCLAUSE), makeAny( getComposedHaving() ) );
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
     }
 
@@ -120,7 +168,7 @@ namespace dbtools
     }
 
 
-    bool FilterManager::isThereAtMostOneComponent( OUStringBuffer& o_singleComponent ) const
+    bool FilterManager::isThereAtMostOneFilterComponent( OUString& o_singleComponent ) const
     {
         if (m_bApplyPublicFilter) {
             if (!m_aPublicFilterComponent.isEmpty() && !m_aLinkFilterComponent.isEmpty())
@@ -130,15 +178,38 @@ namespace dbtools
             else if (!m_aLinkFilterComponent.isEmpty())
                 o_singleComponent = m_aLinkFilterComponent;
             else
-                o_singleComponent.makeStringAndClear();
+                o_singleComponent.clear();
             return true;
         }
         else
         {
             if (m_aLinkFilterComponent.isEmpty())
-                o_singleComponent.makeStringAndClear();
+                o_singleComponent.clear();
             else
                 o_singleComponent = m_aLinkFilterComponent;
+            return true;
+        }
+    }
+
+    bool FilterManager::isThereAtMostOneHavingComponent( OUString& o_singleComponent ) const
+    {
+        if (m_bApplyPublicFilter) {
+            if (!m_aPublicHavingComponent.isEmpty() && !m_aLinkHavingComponent.isEmpty())
+                return false;
+            if (!m_aPublicHavingComponent.isEmpty())
+                o_singleComponent = m_aPublicHavingComponent;
+            else if (!m_aLinkHavingComponent.isEmpty())
+                o_singleComponent = m_aLinkHavingComponent;
+            else
+                o_singleComponent.clear();
+            return true;
+        }
+        else
+        {
+            if (m_aLinkHavingComponent.isEmpty())
+                o_singleComponent.clear();
+            else
+                o_singleComponent = m_aLinkHavingComponent;
             return true;
         }
     }
@@ -146,17 +217,34 @@ namespace dbtools
 
     OUString FilterManager::getComposedFilter( ) const
     {
-        OUStringBuffer aComposedFilter;
-
         // if we have only one non-empty component, then there's no need to compose anything
-        if ( !isThereAtMostOneComponent( aComposedFilter ) )
+        OUString singleComponent;
+        if ( isThereAtMostOneFilterComponent( singleComponent ) )
         {
-            // append the single components
-            if (m_bApplyPublicFilter)
-                appendFilterComponent( aComposedFilter, m_aPublicFilterComponent );
-            appendFilterComponent( aComposedFilter, m_aLinkFilterComponent );
+            return singleComponent;
         }
+        // append the single components
+        OUStringBuffer aComposedFilter(singleComponent);
+        if (m_bApplyPublicFilter)
+            appendFilterComponent( aComposedFilter, m_aPublicFilterComponent );
+        appendFilterComponent( aComposedFilter, m_aLinkFilterComponent );
+        return aComposedFilter.makeStringAndClear();
+    }
 
+
+    OUString FilterManager::getComposedHaving( ) const
+    {
+        // if we have only one non-empty component, then there's no need to compose anything
+        OUString singleComponent;
+        if ( isThereAtMostOneHavingComponent( singleComponent ) )
+        {
+            return singleComponent;
+        }
+        // append the single components
+        OUStringBuffer aComposedFilter(singleComponent);
+        if (m_bApplyPublicFilter)
+            appendFilterComponent( aComposedFilter, m_aPublicHavingComponent );
+        appendFilterComponent( aComposedFilter, m_aLinkHavingComponent );
         return aComposedFilter.makeStringAndClear();
     }
 

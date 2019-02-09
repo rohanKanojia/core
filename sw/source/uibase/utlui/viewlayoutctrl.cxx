@@ -19,11 +19,14 @@
 
 #include <viewlayoutctrl.hxx>
 
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <vcl/event.hxx>
 #include <vcl/status.hxx>
 #include <vcl/image.hxx>
 #include <svl/eitem.hxx>
 #include <svx/viewlayoutitem.hxx>
-#include <utlui.hrc>
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include <swtypes.hxx>
 
 SFX_IMPL_STATUSBAR_CONTROL( SwViewLayoutControl, SvxViewLayoutItem );
@@ -45,36 +48,12 @@ SwViewLayoutControl::SwViewLayoutControl( sal_uInt16 _nSlotId, sal_uInt16 _nId, 
 {
     mpImpl->mnState = 1;
 
-    mpImpl->maImageSingleColumn         = Image( SW_RES(IMG_VIEWLAYOUT_SINGLECOLUMN) );
-    mpImpl->maImageSingleColumn_Active  = Image( SW_RES(IMG_VIEWLAYOUT_SINGLECOLUMN_ACTIVE) );
-    mpImpl->maImageAutomatic            = Image( SW_RES(IMG_VIEWLAYOUT_AUTOMATIC) );
-    mpImpl->maImageAutomatic_Active     = Image( SW_RES(IMG_VIEWLAYOUT_AUTOMATIC_ACTIVE) );
-    mpImpl->maImageBookMode             = Image( SW_RES(IMG_VIEWLAYOUT_BOOKMODE) );
-    mpImpl->maImageBookMode_Active      = Image( SW_RES(IMG_VIEWLAYOUT_BOOKMODE_ACTIVE) );
-
-    sal_Int32 nScaleFactor = rStatusBar.GetDPIScaleFactor();
-    if (nScaleFactor != 1)
-    {
-        Image arr[6] = {mpImpl->maImageSingleColumn, mpImpl->maImageSingleColumn_Active,
-                        mpImpl->maImageAutomatic, mpImpl->maImageAutomatic_Active,
-                        mpImpl->maImageBookMode, mpImpl->maImageBookMode_Active};
-
-        for (int i = 0; i < 6; i++)
-        {
-            BitmapEx aBitmap = arr[i].GetBitmapEx();
-            aBitmap.Scale(nScaleFactor, nScaleFactor, BmpScaleFlag::Fast);
-            arr[i] = Image(aBitmap);
-        }
-
-        mpImpl->maImageSingleColumn = arr[0];
-        mpImpl->maImageSingleColumn_Active = arr[1];
-
-        mpImpl->maImageAutomatic = arr[2];
-        mpImpl->maImageAutomatic_Active = arr[3];
-
-        mpImpl->maImageBookMode = arr[4];
-        mpImpl->maImageBookMode_Active = arr[5];
-    }
+    mpImpl->maImageSingleColumn         = Image(StockImage::Yes, RID_BMP_VIEWLAYOUT_SINGLECOLUMN);
+    mpImpl->maImageSingleColumn_Active  = Image(StockImage::Yes, RID_BMP_VIEWLAYOUT_SINGLECOLUMN_ACTIVE);
+    mpImpl->maImageAutomatic            = Image(StockImage::Yes, RID_BMP_VIEWLAYOUT_AUTOMATIC);
+    mpImpl->maImageAutomatic_Active     = Image(StockImage::Yes, RID_BMP_VIEWLAYOUT_AUTOMATIC_ACTIVE);
+    mpImpl->maImageBookMode             = Image(StockImage::Yes, RID_BMP_VIEWLAYOUT_BOOKMODE);
+    mpImpl->maImageBookMode_Active      = Image(StockImage::Yes, RID_BMP_VIEWLAYOUT_BOOKMODE_ACTIVE);
 }
 
 SwViewLayoutControl::~SwViewLayoutControl()
@@ -83,7 +62,7 @@ SwViewLayoutControl::~SwViewLayoutControl()
 
 void SwViewLayoutControl::StateChanged( sal_uInt16 /*nSID*/, SfxItemState eState, const SfxPoolItem* pState )
 {
-    if ( SfxItemState::DEFAULT != eState || dynamic_cast< const SfxVoidItem *>( pState ) !=  nullptr )
+    if ( SfxItemState::DEFAULT != eState || pState->IsVoidItem() )
         GetStatusBar().SetItemText( GetId(), OUString() );
     else
     {
@@ -104,16 +83,15 @@ void SwViewLayoutControl::StateChanged( sal_uInt16 /*nSID*/, SfxItemState eState
             mpImpl->mnState = 3;
     }
 
-    if ( GetStatusBar().AreItemsVisible() )
-        GetStatusBar().SetItemData( GetId(), nullptr );    // force repaint
+    GetStatusBar().SetItemData( GetId(), nullptr );    // force repaint
 }
 
 void SwViewLayoutControl::Paint( const UserDrawEvent& rUsrEvt )
 {
     vcl::RenderContext* pDev = rUsrEvt.GetRenderContext();
-    Rectangle aRect(rUsrEvt.GetRect());
+    tools::Rectangle aRect(rUsrEvt.GetRect());
 
-    const Rectangle aControlRect = getControlRect();
+    const tools::Rectangle aControlRect = getControlRect();
 
     const bool bSingleColumn    = 0 == mpImpl->mnState;
     const bool bAutomatic       = 1 == mpImpl->mnState;
@@ -126,24 +104,24 @@ void SwViewLayoutControl::Paint( const UserDrawEvent& rUsrEvt )
     const long nXOffset = (aRect.GetWidth() - nImageWidthSum) / 2;
     const long nYOffset = (aControlRect.GetHeight() - mpImpl->maImageSingleColumn.GetSizePixel().Height()) / 2;
 
-    aRect.Left() = aRect.Left() + nXOffset;
-    aRect.Top()  = aRect.Top() + nYOffset;
+    aRect.SetLeft( aRect.Left() + nXOffset );
+    aRect.SetTop( aRect.Top() + nYOffset );
 
     // draw single column image:
     pDev->DrawImage( aRect.TopLeft(), bSingleColumn ? mpImpl->maImageSingleColumn_Active : mpImpl->maImageSingleColumn );
 
     // draw automatic image:
-    aRect.Left() += mpImpl->maImageSingleColumn.GetSizePixel().Width();
+    aRect.AdjustLeft(mpImpl->maImageSingleColumn.GetSizePixel().Width() );
     pDev->DrawImage( aRect.TopLeft(), bAutomatic ? mpImpl->maImageAutomatic_Active       : mpImpl->maImageAutomatic );
 
     // draw bookmode image:
-    aRect.Left() += mpImpl->maImageAutomatic.GetSizePixel().Width();
+    aRect.AdjustLeft(mpImpl->maImageAutomatic.GetSizePixel().Width() );
     pDev->DrawImage( aRect.TopLeft(), bBookMode ? mpImpl->maImageBookMode_Active         : mpImpl->maImageBookMode );
 }
 
 bool SwViewLayoutControl::MouseButtonDown( const MouseEvent & rEvt )
 {
-    const Rectangle aRect = getControlRect();
+    const tools::Rectangle aRect = getControlRect();
     const Point aPoint = rEvt.GetPosPixel();
     const long nXDiff = aPoint.X() - aRect.Left();
 
@@ -191,7 +169,7 @@ bool SwViewLayoutControl::MouseButtonDown( const MouseEvent & rEvt )
 
 bool SwViewLayoutControl::MouseMove( const MouseEvent & rEvt )
 {
-    const Rectangle aRect = getControlRect();
+    const tools::Rectangle aRect = getControlRect();
     const Point aPoint = rEvt.GetPosPixel();
     const long nXDiff = aPoint.X() - aRect.Left();
 
@@ -204,15 +182,15 @@ bool SwViewLayoutControl::MouseMove( const MouseEvent & rEvt )
 
     if ( nXDiff < nXOffset + nImageWidthSingle )
     {
-        GetStatusBar().SetQuickHelpText(GetId(), SW_RESSTR(STR_VIEWLAYOUT_ONE));
+        GetStatusBar().SetQuickHelpText(GetId(), SwResId(STR_VIEWLAYOUT_ONE));
     }
     else if ( nXDiff < nXOffset + nImageWidthSingle + nImageWidthAuto )
     {
-        GetStatusBar().SetQuickHelpText(GetId(), SW_RESSTR(STR_VIEWLAYOUT_MULTI));
+        GetStatusBar().SetQuickHelpText(GetId(), SwResId(STR_VIEWLAYOUT_MULTI));
     }
     else
     {
-        GetStatusBar().SetQuickHelpText(GetId(), SW_RESSTR(STR_VIEWLAYOUT_BOOK));
+        GetStatusBar().SetQuickHelpText(GetId(), SwResId(STR_VIEWLAYOUT_BOOK));
     }
     return true;
 }

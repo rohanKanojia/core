@@ -22,12 +22,10 @@
 
 #include <vcl/dllapi.h>
 #include <sal/types.h>
-#include <rtl/string.hxx>
 #include <tools/color.hxx>
 #include <tools/poly.hxx>
 #include <vcl/graph.hxx>
 
-#include <memory>
 #include <vector>
 
 class SvStream;
@@ -70,11 +68,6 @@ public:
         joinBevel,
         /// Perform no join, leads to visible gaps between thick line segments
         joinNone
-    };
-    enum
-    {
-        /// Width of stroke start/end arrow to exactly fit the joining stroke
-        normalizedArrowWidth=65536
     };
     typedef ::std::vector< double > DashArray;
 
@@ -244,7 +237,7 @@ public:
     {
         /// horizontal parallel lines, one unit apart
         hatchSingle=0,
-        /// horizontal and verticall orthogonally crossing lines, one unit apart
+        /// horizontal and vertical orthogonally crossing lines, one unit apart
         hatchDouble,
         /// three crossing lines, like HatchType::hatchDouble, but
         /// with an additional diagonal line, rising to the upper
@@ -253,7 +246,7 @@ public:
         hatchTriple
     };
     /// Type of gradient used
-    enum GradientType {gradientLinear=0, gradientRadial, gradientRectangular};
+    enum class GradientType {Linear, Radial, Rectangular};
     /// Special values for gradient step count
     enum { gradientStepsInfinite=0 };
     /** Homogeneous 2D transformation matrix

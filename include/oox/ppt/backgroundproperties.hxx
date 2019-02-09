@@ -20,19 +20,23 @@
 #ifndef INCLUDED_OOX_PPT_BACKGROUNDPROPERTIES_HXX
 #define INCLUDED_OOX_PPT_BACKGROUNDPROPERTIES_HXX
 
+#include <oox/core/contexthandler.hxx>
 #include <oox/core/fragmenthandler2.hxx>
-#include <oox/drawingml/fillproperties.hxx>
+#include <sal/types.h>
+
+namespace oox { class AttributeList; }
+namespace oox { namespace drawingml { struct FillProperties; } }
 
 namespace oox { namespace ppt {
 
 
-class BackgroundPropertiesContext : public ::oox::core::FragmentHandler2
+class BackgroundPropertiesContext final : public ::oox::core::FragmentHandler2
 {
 public:
-    BackgroundPropertiesContext( ::oox::core::FragmentHandler2& rParent, ::oox::drawingml::FillProperties& rFillProperties );
+    BackgroundPropertiesContext( ::oox::core::FragmentHandler2 const & rParent, ::oox::drawingml::FillProperties& rFillProperties );
     virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs ) override;
 
-protected:
+private:
     ::oox::drawingml::FillProperties& mrFillProperties;
 };
 

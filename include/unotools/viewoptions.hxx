@@ -21,13 +21,12 @@
 
 #include <unotools/unotoolsdllapi.h>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/beans/NamedValue.hpp>
-#include <unotools/configmgr.hxx>
-#include <unotools/configitem.hxx>
 #include <sal/types.h>
-#include <osl/mutex.hxx>
 #include <rtl/ustring.hxx>
 #include <unotools/options.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { struct NamedValue; } } } }
+namespace osl { class Mutex; }
 
 class SvtViewOptionsBase_Impl;
 
@@ -35,12 +34,12 @@ class SvtViewOptionsBase_Impl;
     @descr          Use these enum values to specify right list in configuration in which your view data are saved.
 *//*-*************************************************************************************************************/
 
-enum EViewType
+enum class EViewType
 {
-    E_DIALOG    =   0,
-    E_TABDIALOG =   1,
-    E_TABPAGE   =   2,
-    E_WINDOW    =   3
+    Dialog    =   0,
+    TabDialog =   1,
+    TabPage   =   2,
+    Window    =   3
 };
 
 /*-************************************************************************************************************
@@ -119,7 +118,7 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtViewOptions : public utl::detail::Op
 
          SvtViewOptions(       EViewType        eType     ,
                          const OUString& sViewName );
-        virtual ~SvtViewOptions();
+        virtual ~SvtViewOptions() override;
 
         /*-****************************************************************************************************
             @short      support preload of these config item
@@ -174,8 +173,8 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtViewOptions : public utl::detail::Op
             @onerror    An assertion is thrown in debug version. Otherwise we do nothing!
         *//*-*****************************************************************************************************/
 
-        sal_Int32 GetPageID(               ) const;
-        void      SetPageID( sal_Int32 nID );
+        OString GetPageID() const;
+        void      SetPageID(const OString& rID);
 
         /*-****************************************************************************************************
             @short      use it to set/get the visual state of a window
@@ -235,8 +234,8 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtViewOptions : public utl::detail::Op
 
         /// specify which list of views in configuration is used! This can't be a static value!!!
         /// ... because we need this value to work with right static data container.
-        EViewType           m_eViewType;
-        OUString     m_sViewName;
+        EViewType const           m_eViewType;
+        OUString const     m_sViewName;
 
         /*Attention
 

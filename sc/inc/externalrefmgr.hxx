@@ -20,40 +20,30 @@
 #ifndef INCLUDED_SC_INC_EXTERNALREFMGR_HXX
 #define INCLUDED_SC_INC_EXTERNALREFMGR_HXX
 
-#include "global.hxx"
 #include "address.hxx"
 #include <sfx2/objsh.hxx>
 #include <sfx2/lnkbase.hxx>
-#include <sfx2/event.hxx>
 #include <tools/time.hxx>
 #include <vcl/timer.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/lstner.hxx>
 #include "types.hxx"
 #include "rangelst.hxx"
-#include <formula/token.hxx>
 #include <osl/mutex.hxx>
+#include <formula/types.hxx>
 
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <list>
 #include <set>
 #include <formula/ExternalReferenceHelper.hxx>
 
 class ScDocument;
 class ScTokenArray;
-namespace vcl { class Window; }
+namespace weld { class Window; }
+
 class ScFormulaCell;
-
-class ScExternalRefCache;
-
-namespace svl {
-
-class SharedStringPool;
-
-}
 
 namespace sc {
 
@@ -65,12 +55,12 @@ class ScExternalRefLink : public ::sfx2::SvBaseLink
 {
 public:
     ScExternalRefLink(ScDocument* pDoc, sal_uInt16 nFileId, const OUString& rFilter);
-    virtual ~ScExternalRefLink();
+    virtual ~ScExternalRefLink() override;
 
     virtual void Closed() override;
     virtual ::sfx2::SvBaseLink::UpdateResult DataChanged(
         const OUString& rMimeType, const css::uno::Any & rValue) override;
-    virtual void Edit(vcl::Window* pParent, const Link<SvBaseLink&,void>& rEndEditHdl) override;
+    virtual void Edit(weld::Window* pParent, const Link<SvBaseLink&,void>& rEndEditHdl) override;
 
     void SetDoReferesh(bool b);
 
@@ -78,9 +68,9 @@ private:
     ScExternalRefLink() = delete;
     ScExternalRefLink(const ScExternalRefLink&) = delete;
 
-    sal_uInt16  mnFileId;
+    sal_uInt16 const  mnFileId;
     OUString    maFilterName;
-    ScDocument* mpDoc;
+    ScDocument* const mpDoc;
     bool        mbDoRefresh;
 };
 
@@ -104,7 +94,7 @@ public:
     struct CellFormat
     {
         bool      mbIsSet;
-        short     mnType;
+        SvNumFormatType mnType;
         sal_uLong mnIndex;
 
         explicit CellFormat();
@@ -134,13 +124,6 @@ public:
     {
     public:
 
-        enum ReferencedFlag
-        {
-            UNREFERENCED,
-            REFERENCED_MARKED,      // marked as referenced during store to file
-            REFERENCED_PERMANENT    // permanently marked, e.g. from within interpreter
-        };
-
         Table();
         ~Table();
 
@@ -153,15 +136,12 @@ public:
          *                       false _only when_ adding a range of cell
          *                       values, for performance reasons.
          */
-        SC_DLLPUBLIC void setCell(SCCOL nCol, SCROW nRow, TokenRef pToken, sal_uLong nFmtIndex = 0, bool bSetCacheRange = true);
+        SC_DLLPUBLIC void setCell(SCCOL nCol, SCROW nRow, TokenRef const & pToken, sal_uLong nFmtIndex = 0, bool bSetCacheRange = true);
         SC_DLLPUBLIC TokenRef getCell(SCCOL nCol, SCROW nRow, sal_uInt32* pnFmtIndex = nullptr) const;
         bool hasRow( SCROW nRow ) const;
         /** Set/clear referenced status flag only if current status is not
             REFERENCED_PERMANENT. */
         void setReferenced( bool bReferenced );
-        /// Unconditionally set the reference status flag.
-        void setReferencedFlag( ReferencedFlag eFlag );
-        ReferencedFlag getReferencedFlag() const { return meReferenced;}
         bool isReferenced() const;
         /// Obtain a sorted vector of rows.
         void getAllRows(::std::vector<SCROW>& rRows, SCROW nLow = 0, SCROW nHigh = MAXROW) const;
@@ -195,11 +175,11 @@ public:
         /** Collection of individual cached ranges.  The table ranges are
          *  not used & always zero. */
         ScRangeList                     maCachedRanges;
-        ReferencedFlag                  meReferenced;
+        bool                            mbReferenced;
     };
 
     typedef std::shared_ptr<Table> TableTypeRef;
-    typedef std::unordered_map< OUString, size_t, OUStringHash>
+    typedef std::unordered_map< OUString, size_t>
         TableNameIndexMap;
 
     ScExternalRefCache();
@@ -237,7 +217,7 @@ public:
     void setRangeName(sal_uInt16 nFileId, const OUString& rName);
 
     void setCellData(sal_uInt16 nFileId, const OUString& rTabName,
-                     SCCOL nCol, SCROW nRow, TokenRef pToken, sal_uLong nFmtIndex);
+                     SCCOL nCol, SCROW nRow, TokenRef const & pToken, sal_uLong nFmtIndex);
 
     struct SingleRangeData
     {
@@ -249,10 +229,10 @@ public:
                           const TokenArrayRef& pArray);
 
     bool isDocInitialized(sal_uInt16 nFileId);
-    void initializeDoc(sal_uInt16 nFileId, const ::std::vector<OUString>& rTabNames);
+    void initializeDoc(sal_uInt16 nFileId, const ::std::vector<OUString>& rTabNames, const OUString& rBaseName);
     OUString getTableName(sal_uInt16 nFileId, size_t nCacheId) const;
     void getAllTableNames(sal_uInt16 nFileId, ::std::vector<OUString>& rTabNames) const;
-    SCsTAB getTabSpan( sal_uInt16 nFileId, const OUString& rStartTabName, const OUString& rEndTabName ) const;
+    SCTAB getTabSpan( sal_uInt16 nFileId, const OUString& rStartTabName, const OUString& rEndTabName ) const;
     void getAllNumberFormats(::std::vector<sal_uInt32>& rNumFmts) const;
 
     /**
@@ -276,6 +256,8 @@ public:
      * Table.
      */
     void getAllCachedDataSpans( sal_uInt16 nFileId, sc::ColumnSpanSet& rSet ) const;
+
+    bool getSrcDocTable( const ScDocument& rSrcDoc, const OUString& rTabName, SCTAB& rTab, sal_uInt16 nFileId ) const;
 
 private:
     struct ReferencedStatus
@@ -302,7 +284,8 @@ private:
 public:
 
     ScExternalRefCache::TableTypeRef getCacheTable(sal_uInt16 nFileId, size_t nTabIndex) const;
-    ScExternalRefCache::TableTypeRef getCacheTable(sal_uInt16 nFileId, const OUString& rTabName, bool bCreateNew, size_t* pnIndex);
+    ScExternalRefCache::TableTypeRef getCacheTable(sal_uInt16 nFileId, const OUString& rTabName, bool bCreateNew,
+            size_t* pnIndex, const OUString* pExtUrl);
 
     /**
      * Clear all caches including the cache tables.
@@ -326,9 +309,9 @@ private:
         }
     };
 
-    typedef std::unordered_map<OUString, TokenArrayRef, OUStringHash> RangeNameMap;
+    typedef std::unordered_map<OUString, TokenArrayRef> RangeNameMap;
     typedef std::unordered_map<ScRange, TokenArrayRef, RangeHash> RangeArrayMap;
-    typedef std::unordered_map<OUString, OUString, OUStringHash> NamePairMap;
+    typedef std::unordered_map<OUString, OUString> NamePairMap;
 
     /** Represents data cached for a single external document. */
     struct DocItem
@@ -346,9 +329,18 @@ private:
         /** Upper- to real-case mapping for range names. */
         NamePairMap                 maRealRangeNameMap;
 
+        /** Either the base name that was stored as sheet name for CSV files if
+            sheet name is Sheet1, or Sheet1 name if sheet name is base name.
+         */
+        OUString                    maSingleTableNameAlias;
+
         bool mbInitFromSource;
 
         DocItem() : mbInitFromSource(false) {}
+
+        TableNameIndexMap::const_iterator findTableNameIndex( const OUString& rTabName ) const;
+        bool getTableDataIndex( const OUString& rTabName, size_t& rIndex ) const;
+        bool getSingleTableNameAlternative( OUString& rTabName ) const;
     };
     typedef std::unordered_map<sal_uInt16, DocItem>  DocDataType;
     DocItem* getDocItem(sal_uInt16 nFileId) const;
@@ -396,11 +388,11 @@ public:
     class SC_DLLPUBLIC ApiGuard
     {
     public:
-        ApiGuard(ScDocument* pDoc);
+        ApiGuard(const ScDocument* pDoc);
         ~ApiGuard();
     private:
         ScExternalRefManager* mpMgr;
-        bool mbOldInteractionEnabled;
+        bool const mbOldInteractionEnabled;
     };
 
 private:
@@ -436,7 +428,7 @@ public:
 
 public:
     explicit ScExternalRefManager(ScDocument* pDoc);
-    virtual ~ScExternalRefManager();
+    virtual ~ScExternalRefManager() override;
 
     virtual OUString getCacheTableName(sal_uInt16 nFileId, size_t nTabIndex) const override;
 
@@ -460,7 +452,8 @@ public:
      * table orders are critical.</I>
      *
      * Excel filter calls this method to populate the cache table from the
-     * XCT/CRN records.
+     * XCT/CRN records. ODF import calls it for cached tables for external
+     * references.
      *
      * @param nFileId file ID
      * @param rTabName table name
@@ -469,10 +462,14 @@ public:
      *                   specified table's cache doesn't exist.
      * @param pnIndex if non-NULL pointer is passed, it stores the internal
      *                index of a cache table instance.
+     * @param pExtUrl if non-NULL and bCreateNew==true, the base name will be
+     *                propagated as an alias for the first table (and removed
+     *                later if further tables are created).
      *
      * @return shared_ptr to the cache table instance
      */
-    ScExternalRefCache::TableTypeRef getCacheTable(sal_uInt16 nFileId, const OUString& rTabName, bool bCreateNew, size_t* pnIndex = nullptr);
+    ScExternalRefCache::TableTypeRef getCacheTable(sal_uInt16 nFileId, const OUString& rTabName, bool bCreateNew,
+            size_t* pnIndex = nullptr, const OUString* pExtUrl = nullptr);
 
     /** Returns a vector containing all (real) table names and cache tables of
         the specified file.
@@ -497,7 +494,7 @@ public:
      *        -1 if nFileId or rStartTabName not found
      *         0 if rEndTabName not found
      */
-    SCsTAB getCachedTabSpan(
+    SCTAB getCachedTabSpan(
         sal_uInt16 nFileId, const OUString& rStartTabName, const OUString& rEndTabName) const;
 
     /**
@@ -707,12 +704,17 @@ public:
 
     void enableDocTimer( bool bEnable );
 
+    /** Add all known external files to the LinkManager. */
+    void addFilesToLinkManager();
+
 private:
     ScExternalRefManager(const ScExternalRefManager&) = delete;
 
     void refreshAllRefCells(sal_uInt16 nFileId);
 
     void fillCellFormat(sal_uLong nFmtIndex, ScExternalRefCache::CellFormat* pFmt) const;
+
+    bool getSrcDocTable( const ScDocument& rSrcDoc, const OUString& rTabName, SCTAB& rTab, sal_uInt16 nFileId ) const;
 
     ScExternalRefCache::TokenRef getSingleRefTokenFromSrcDoc(
         sal_uInt16 nFileId, ScDocument* pSrcDoc, const ScAddress& rPos,
@@ -733,7 +735,7 @@ private:
      * @return range token array
      */
     ScExternalRefCache::TokenArrayRef getDoubleRefTokensFromSrcDoc(
-        ScDocument* pSrcDoc, const OUString& rTabName, ScRange& rRange,
+        const ScDocument* pSrcDoc, const OUString& rTabName, ScRange& rRange,
         ::std::vector<ScExternalRefCache::SingleRangeData>& rCacheData);
 
     /**
@@ -749,7 +751,7 @@ private:
      * @return range name token array
      */
     static ScExternalRefCache::TokenArrayRef getRangeNameTokensFromSrcDoc(
-        sal_uInt16 nFileId, ScDocument* pSrcDoc, OUString& rName);
+        sal_uInt16 nFileId, const ScDocument* pSrcDoc, OUString& rName);
 
     ScDocument* getInMemorySrcDocument(sal_uInt16 nFileId);
     ScDocument* getSrcDocument(sal_uInt16 nFileId);
@@ -760,7 +762,7 @@ private:
      */
     ScDocument& cacheNewDocShell( sal_uInt16 nFileId, SrcShell& rSrcShell );
 
-    void maybeLinkExternalFile(sal_uInt16 nFileId);
+    void maybeLinkExternalFile( sal_uInt16 nFileId, bool bDeferFilterDetection = false );
 
     /**
      * Try to create a "real" file name from the relative path.  The original
@@ -842,7 +844,7 @@ private:
     bool mbDocTimerEnabled:1;
 
     AutoTimer maSrcDocTimer;
-    DECL_LINK_TYPED(TimeOutHdl, Timer*, void);
+    DECL_LINK(TimeOutHdl, Timer*, void);
 };
 
 #endif

@@ -24,7 +24,6 @@
 
 #include <cassert>
 
-#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/script/XLibraryContainer.hpp>
 #include <basic/basrdll.hxx>
 #include <officecfg/Office/Common.hxx>
@@ -40,16 +39,15 @@
 #include <basic/sbmeth.hxx>
 #include <basic/sbstar.hxx>
 #include <vcl/wrkwin.hxx>
-#include <vcl/msgbox.hxx>
 #include <basic/sbuno.hxx>
 #include <svtools/sfxecode.hxx>
 #include <svtools/ehdl.hxx>
 
+#include <sfx2/dinfdlg.hxx>
 #include <sfx2/module.hxx>
-#include "arrdecl.hxx"
+#include <arrdecl.hxx>
 #include <sfx2/app.hxx>
-#include "sfxtypes.hxx"
-#include <sfx2/sfxresid.hxx>
+#include <sfxtypes.hxx>
 #include <sfx2/msg.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/progress.hxx>
@@ -60,28 +58,24 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/tplpitem.hxx>
 #include <sfx2/minfitem.hxx>
-#include "app.hrc"
 #include <sfx2/evntconf.hxx>
 #include <sfx2/request.hxx>
-#include <sfx2/dinfdlg.hxx>
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/sfxhelp.hxx>
 #include <basic/basmgr.hxx>
-#include <svtools/svtools.hrc>
 #include <unotools/configmgr.hxx>
-#include "sorgitm.hxx"
-#include "appbaslib.hxx"
+#include <sorgitm.hxx>
+#include <appbaslib.hxx>
 #include <basic/basicmanagerrepository.hxx>
 
 #include <svl/srchitem.hxx>
 #include <osl/socket.hxx>
 
 #define SFX_TYPEMAP
-#include "sfxslots.hxx"
+#include <sfxslots.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::script;
 
 using ::basic::BasicManagerRepository;
@@ -89,8 +83,8 @@ using ::basic::BasicManagerRepository;
 
 void SfxApplication::SaveBasicAndDialogContainer() const
 {
-    if ( pAppData_Impl->pBasicManager->isValid() )
-        pAppData_Impl->pBasicManager->storeAllLibraries();
+    if ( pImpl->pBasicManager->isValid() )
+        pImpl->pBasicManager->storeAllLibraries();
 }
 
 BasicManager* SfxApplication::GetBasicManager()
@@ -98,7 +92,7 @@ BasicManager* SfxApplication::GetBasicManager()
 #if !HAVE_FEATURE_SCRIPTING
     return 0;
 #else
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return nullptr;
     return BasicManagerRepository::getApplicationBasicManager();
 #endif
@@ -109,11 +103,11 @@ XLibraryContainer * SfxApplication::GetDialogContainer()
 #if !HAVE_FEATURE_SCRIPTING
     return NULL;
 #else
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return nullptr;
-    if ( !pAppData_Impl->pBasicManager->isValid() )
+    if ( !pImpl->pBasicManager->isValid() )
         GetBasicManager();
-    return pAppData_Impl->pBasicManager->getLibraryContainer( SfxBasicManagerHolder::DIALOGS );
+    return pImpl->pBasicManager->getLibraryContainer( SfxBasicManagerHolder::DIALOGS );
 #endif
 }
 
@@ -123,11 +117,11 @@ XLibraryContainer * SfxApplication::GetBasicContainer()
 #if !HAVE_FEATURE_SCRIPTING
     return NULL;
 #else
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return nullptr;
-    if ( !pAppData_Impl->pBasicManager->isValid() )
+    if ( !pImpl->pBasicManager->isValid() )
         GetBasicManager();
-    return pAppData_Impl->pBasicManager->getLibraryContainer( SfxBasicManagerHolder::SCRIPTS );
+    return pImpl->pBasicManager->getLibraryContainer( SfxBasicManagerHolder::SCRIPTS );
 #endif
 }
 
@@ -136,13 +130,13 @@ StarBASIC* SfxApplication::GetBasic()
 #if !HAVE_FEATURE_SCRIPTING
     return 0;
 #else
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return nullptr;
     return GetBasicManager()->GetLib(0);
 #endif
 }
 
-void SfxApplication::PropExec_Impl( SfxRequest &rReq )
+void SfxApplication::PropExec_Impl( SfxRequest const &rReq )
 {
     sal_uInt16 nSID = rReq.GetSlot();
     switch ( nSID )

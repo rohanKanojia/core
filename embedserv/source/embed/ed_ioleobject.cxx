@@ -17,17 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "embeddoc.hxx"
+#include <embeddoc.hxx>
 #include <osl/diagnose.h>
-#include <com/sun/star/frame/XController.hpp>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
 
 using namespace ::com::sun::star;
-
-
-extern OUString  getFilterNameFromGUID_Impl( GUID* );
-
 
 // IOleObject
 
@@ -49,12 +45,8 @@ STDMETHODIMP EmbedDocument_Impl::SetHostNames( LPCOLESTR szContainerApp, LPCOLES
     // the code should be ignored for links
     if ( !m_aFileName.getLength() )
     {
-        m_pDocHolder->setTitle(
-            OUString(
-                (sal_Unicode*)szContainerObj));
-        m_pDocHolder->setContainerName(
-            OUString(
-                (sal_Unicode*)szContainerApp));
+        m_pDocHolder->setTitle(o3tl::toU(szContainerObj));
+        m_pDocHolder->setContainerName(o3tl::toU(szContainerApp));
     }
 
     return S_OK;
@@ -96,18 +88,15 @@ STDMETHODIMP EmbedDocument_Impl::Close( DWORD dwSaveOption )
 
 HRESULT EmbedDocument_Impl::OLENotifyClosing()
 {
-    HRESULT hr = S_OK;
-
     AdviseSinkHashMap aAHM(m_aAdviseHashMap);
 
-    for ( AdviseSinkHashMapIterator iAdvise = aAHM.begin();
-          iAdvise != aAHM.end(); iAdvise++ )
+    for (auto const& advise : aAHM)
     {
-        if ( iAdvise->second )
-            iAdvise->second->OnClose();
+        if (advise.second)
+            advise.second->OnClose();
     }
 
-    return hr;
+    return S_OK;
 
 }
 
@@ -149,7 +138,7 @@ STDMETHODIMP EmbedDocument_Impl::DoVerb(
         return OLEOBJ_S_CANNOT_DOVERB_NOW;
 
     // an object can not handle any Verbs in Hands off mode
-    if ( m_pMasterStorage == NULL || m_pOwnStream == NULL )
+    if ( m_pMasterStorage == nullptr || m_pOwnStream == nullptr )
         return OLE_E_CANT_BINDTOSOURCE;
 
 
@@ -192,7 +181,7 @@ STDMETHODIMP EmbedDocument_Impl::DoVerb(
                         pActiveSite,TRUE)))
                     return NOERROR;
 
-                // intended fall through
+                [[fallthrough]];
             case OLEIVERB_OPEN:
                 OSL_ENSURE(m_pDocHolder,"no document to open");
 
@@ -302,7 +291,7 @@ STDMETHODIMP EmbedDocument_Impl::Advise( IAdviseSink *pAdvSink, DWORD *pdwConnec
         return E_OUTOFMEMORY;
 
     pAdvSink->AddRef();
-    m_aAdviseHashMap.insert( ::std::pair< DWORD, IAdviseSink* >( m_nAdviseNum, pAdvSink ) );
+    m_aAdviseHashMap.insert( std::pair< DWORD, IAdviseSink* >( m_nAdviseNum, pAdvSink ) );
     *pdwConnection = m_nAdviseNum++;
 
     return S_OK;
@@ -310,7 +299,7 @@ STDMETHODIMP EmbedDocument_Impl::Advise( IAdviseSink *pAdvSink, DWORD *pdwConnec
 
 STDMETHODIMP EmbedDocument_Impl::Unadvise( DWORD dwConnection )
 {
-    AdviseSinkHashMapIterator iAdvise = m_aAdviseHashMap.find( dwConnection );
+    auto iAdvise = m_aAdviseHashMap.find( dwConnection );
     if ( iAdvise != m_aAdviseHashMap.end() )
     {
         iAdvise->second->Release();
@@ -415,20 +404,17 @@ HRESULT EmbedDocument_Impl::SaveObject()
     if(m_pClientSite) {
         hr = m_pClientSite->SaveObject();
 
-        for ( AdviseSinkHashMapIterator iAdvise =
-                  m_aAdviseHashMap.begin();
-              iAdvise != m_aAdviseHashMap.end();
-              iAdvise++ )
-            if ( iAdvise->second )
-                iAdvise->second->OnSave( );
+        for (auto const& advise : m_aAdviseHashMap)
+            if (advise.second)
+                advise.second->OnSave();
     }
     else if ( m_aFileName.getLength() && IsDirty() == S_OK )
     {
         OUString aPreservFileName = m_aFileName;
 
         // in case of links the containers does not provide client site sometimes
-        hr = Save( (LPCOLESTR)NULL, FALSE ); // triggers saving to the link location
-        SaveCompleted( (LPCOLESTR)aPreservFileName.getStr() );
+        hr = Save( static_cast<LPCOLESTR>(nullptr), FALSE ); // triggers saving to the link location
+        SaveCompleted(o3tl::toW(aPreservFileName.getStr()));
     }
 
     notify( false );
@@ -450,15 +436,12 @@ HRESULT EmbedDocument_Impl::ShowObject()
 
 void EmbedDocument_Impl::notify( bool bDataChanged )
 {
-    for ( AdviseSinkHashMapIterator iAdvise =
-              m_aAdviseHashMap.begin();
-          iAdvise != m_aAdviseHashMap.end();
-          iAdvise++ )
-        if ( iAdvise->second )
-            iAdvise->second->OnViewChange( DVASPECT_CONTENT, -1 );
+    for (auto const& advise : m_aAdviseHashMap)
+        if (advise.second)
+            advise.second->OnViewChange( DVASPECT_CONTENT, -1 );
 
     if ( m_pDAdviseHolder && bDataChanged )
-        m_pDAdviseHolder->SendOnDataChange( (IDataObject*)this, 0, 0 );
+        m_pDAdviseHolder->SendOnDataChange( static_cast<IDataObject*>(this), 0, 0 );
 }
 
 void EmbedDocument_Impl::Deactivate()

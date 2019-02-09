@@ -26,12 +26,12 @@ class TextUndoDelPara : public TextUndo
 {
 private:
     bool            mbDelObject;
-    sal_uInt32      mnPara;
+    sal_uInt32 const mnPara;
     TextNode*       mpNode; // points at the valid not-destroyed object
 
 public:
                     TextUndoDelPara( TextEngine* pTextEngine, TextNode* pNode, sal_uInt32 nPara );
-                    virtual ~TextUndoDelPara();
+                    virtual ~TextUndoDelPara() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -42,12 +42,12 @@ public:
 class TextUndoConnectParas : public TextUndo
 {
 private:
-    sal_uInt32          mnPara;
-    sal_Int32           mnSepPos;
+    sal_uInt32 const          mnPara;
+    sal_Int32 const           mnSepPos;
 
 public:
                     TextUndoConnectParas( TextEngine* pTextEngine, sal_uInt32 nPara, sal_Int32 nSepPos );
-                    virtual ~TextUndoConnectParas();
+                    virtual ~TextUndoConnectParas() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -58,12 +58,12 @@ public:
 class TextUndoSplitPara : public TextUndo
 {
 private:
-    sal_uInt32          mnPara;
-    sal_Int32           mnSepPos;
+    sal_uInt32 const          mnPara;
+    sal_Int32 const           mnSepPos;
 
 public:
                     TextUndoSplitPara( TextEngine* pTextEngine, sal_uInt32 nPara, sal_Int32 nSepPos );
-                    virtual ~TextUndoSplitPara();
+                    virtual ~TextUndoSplitPara() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -91,26 +91,14 @@ public:
 class TextUndoRemoveChars : public TextUndo
 {
 private:
-    TextPaM         maTextPaM;
-    OUString        maText;
+    TextPaM const         maTextPaM;
+    OUString const        maText;
 
 public:
                     TextUndoRemoveChars( TextEngine* pTextEngine, const TextPaM& rTextPaM, const OUString& rStr );
 
     virtual void    Undo() override;
     virtual void    Redo() override;
-
-    virtual OUString GetComment () const override;
-};
-
-class TextUndoSetAttribs: public TextUndo
-{
-public:
-                        TextUndoSetAttribs( TextEngine* pTextEngine, const TextSelection& rESel );
-                        virtual ~TextUndoSetAttribs();
-
-    virtual void        Undo() override;
-    virtual void        Redo() override;
 
     virtual OUString GetComment () const override;
 };

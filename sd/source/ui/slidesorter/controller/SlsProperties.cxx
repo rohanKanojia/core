@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsProperties.hxx"
+#include <controller/SlsProperties.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
@@ -34,10 +34,7 @@ Properties::Properties()
       maTextColor(Application::GetSettings().GetStyleSettings().GetActiveTextColor()),
       maSelectionColor(Application::GetSettings().GetStyleSettings().GetHighlightColor()),
       maHighlightColor(Application::GetSettings().GetStyleSettings().GetMenuHighlightColor()),
-      mbIsUIReadOnly(false),
-      mbIsOnlyPreviewTriggersMouseOver(true),
-      mbIsHighContrastModeActive(
-          Application::GetSettings().GetStyleSettings().GetHighContrastMode())
+      mbIsUIReadOnly(false)
 {
 }
 
@@ -51,8 +48,6 @@ void Properties::HandleDataChangeEvent()
     maTextColor = Application::GetSettings().GetStyleSettings().GetActiveTextColor();
     maSelectionColor = Application::GetSettings().GetStyleSettings().GetHighlightColor();
     maHighlightColor = Application::GetSettings().GetStyleSettings().GetMenuHighlightColor();
-    mbIsHighContrastModeActive
-        = Application::GetSettings().GetStyleSettings().GetHighContrastMode();
 }
 
 void Properties::SetHighlightCurrentSlide (const bool bIsHighlightCurrentSlide)

@@ -24,7 +24,6 @@
 #include "chartpos.hxx"
 
 #include <memory>
-#include <vector>
 
 class ScDocument;
 
@@ -36,9 +35,9 @@ class ScMemChart
 {
     SCROW nRowCnt;
     SCCOL nColCnt;
-    double* pData;
-    OUString* pColText;
-    OUString* pRowText;
+    std::unique_ptr<double[]> pData;
+    std::unique_ptr<OUString[]> pColText;
+    std::unique_ptr<OUString[]> pRowText;
 
     ScMemChart(const ScMemChart& rMemChart) = delete;
 
@@ -58,22 +57,14 @@ public:
 
 class SC_DLLPUBLIC ScChartArray             // only parameter-struct
 {
-    OUString aName;
     ScDocument* pDocument;
     ScChartPositioner aPositioner;
 
 private:
-    ScMemChart* CreateMemChartSingle();
-    ScMemChart* CreateMemChartMulti();
+    std::unique_ptr<ScMemChart> CreateMemChartSingle();
+    std::unique_ptr<ScMemChart> CreateMemChartMulti();
 public:
-    ScChartArray( ScDocument* pDoc, SCTAB nTab,
-                  SCCOL nStartColP, SCROW nStartRowP,
-                  SCCOL nEndColP, SCROW nEndRowP,
-                  const OUString& rChartName );
-    ScChartArray( ScDocument* pDoc, const ScRangeListRef& rRangeList,
-                  const OUString& rChartName );
-    ScChartArray( const ScChartArray& rArr );
-    ~ScChartArray();
+    ScChartArray( ScDocument* pDoc, const ScRangeListRef& rRangeList );
 
     const ScRangeListRef&   GetRangeList() const { return aPositioner.GetRangeList(); }
     const   ScChartPositionMap* GetPositionMap() { return aPositioner.GetPositionMap(); }
@@ -81,26 +72,8 @@ public:
     void    SetHeaders(bool bCol, bool bRow) { aPositioner.SetHeaders(bCol, bRow); }
     bool    HasColHeaders() const { return aPositioner.HasColHeaders(); }
     bool    HasRowHeaders() const { return aPositioner.HasRowHeaders(); }
-    const OUString& GetName() const { return aName; }
 
-    ScMemChart* CreateMemChart();
-};
-
-class ScChartCollection
-{
-    typedef ::std::vector<std::unique_ptr<ScChartArray>> DataType;
-    DataType m_Data;
-
-public:
-    ScChartCollection();
-    ScChartCollection(const ScChartCollection& rColl);
-
-    SC_DLLPUBLIC void push_back(ScChartArray* p);
-    void clear();
-    size_t size() const;
-    bool empty() const;
-    ScChartArray* operator[](size_t nIndex);
-    const ScChartArray* operator[](size_t nIndex) const;
+    std::unique_ptr<ScMemChart> CreateMemChart();
 };
 
 #endif

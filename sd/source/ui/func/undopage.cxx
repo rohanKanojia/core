@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "undopage.hxx"
+#include <undopage.hxx>
 
 #include <svx/svxids.hrc>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 
-#include "sdpage.hxx"
-#include "DrawViewShell.hxx"
-#include "drawview.hxx"
+#include <sdpage.hxx>
+#include <DrawViewShell.hxx>
+#include <drawview.hxx>
 #include <svx/svdpagv.hxx>
 
 
@@ -36,13 +36,13 @@ SdPageFormatUndoAction::~SdPageFormatUndoAction()
 
 void SdPageFormatUndoAction::Undo()
 {
-    Rectangle aOldBorderRect(mnOldLeft, mnOldUpper, mnOldRight, mnOldLower);
+    ::tools::Rectangle aOldBorderRect(mnOldLeft, mnOldUpper, mnOldRight, mnOldLower);
     mpPage->ScaleObjects(maOldSize, aOldBorderRect, mbNewScale);
     mpPage->SetSize(maOldSize);
-    mpPage->SetLftBorder(mnOldLeft);
-    mpPage->SetRgtBorder(mnOldRight);
-    mpPage->SetUppBorder(mnOldUpper);
-    mpPage->SetLwrBorder(mnOldLower);
+    mpPage->SetLeftBorder(mnOldLeft);
+    mpPage->SetRightBorder(mnOldRight);
+    mpPage->SetUpperBorder(mnOldUpper);
+    mpPage->SetLowerBorder(mnOldLower);
     mpPage->SetOrientation(meOldOrientation);
     mpPage->SetPaperBin( mnOldPaperBin );
 
@@ -54,13 +54,13 @@ void SdPageFormatUndoAction::Undo()
 
 void SdPageFormatUndoAction::Redo()
 {
-    Rectangle aNewBorderRect(mnNewLeft, mnNewUpper, mnNewRight, mnNewLower);
+    ::tools::Rectangle aNewBorderRect(mnNewLeft, mnNewUpper, mnNewRight, mnNewLower);
     mpPage->ScaleObjects(maNewSize, aNewBorderRect, mbNewScale);
     mpPage->SetSize(maNewSize);
-    mpPage->SetLftBorder(mnNewLeft);
-    mpPage->SetRgtBorder(mnNewRight);
-    mpPage->SetUppBorder(mnNewUpper);
-    mpPage->SetLwrBorder(mnNewLower);
+    mpPage->SetLeftBorder(mnNewLeft);
+    mpPage->SetRightBorder(mnNewRight);
+    mpPage->SetUpperBorder(mnNewUpper);
+    mpPage->SetLowerBorder(mnNewLower);
     mpPage->SetOrientation(meNewOrientation);
     mpPage->SetPaperBin( mnNewPaperBin );
 
@@ -76,14 +76,14 @@ SdPageLRUndoAction::~SdPageLRUndoAction()
 
 void SdPageLRUndoAction::Undo()
 {
-    mpPage->SetLftBorder(mnOldLeft);
-    mpPage->SetRgtBorder(mnOldRight);
+    mpPage->SetLeftBorder(mnOldLeft);
+    mpPage->SetRightBorder(mnOldRight);
 }
 
 void SdPageLRUndoAction::Redo()
 {
-    mpPage->SetLftBorder(mnNewLeft);
-    mpPage->SetRgtBorder(mnNewRight);
+    mpPage->SetLeftBorder(mnNewLeft);
+    mpPage->SetRightBorder(mnNewRight);
 }
 
 SdPageULUndoAction::~SdPageULUndoAction()
@@ -92,8 +92,8 @@ SdPageULUndoAction::~SdPageULUndoAction()
 
 void SdPageULUndoAction::Undo()
 {
-    mpPage->SetUppBorder(mnOldUpper);
-    mpPage->SetLwrBorder(mnOldLower);
+    mpPage->SetUpperBorder(mnOldUpper);
+    mpPage->SetLowerBorder(mnOldLower);
 }
 
 /**
@@ -101,8 +101,8 @@ void SdPageULUndoAction::Undo()
  */
 void SdPageULUndoAction::Redo()
 {
-    mpPage->SetUppBorder(mnNewUpper);
-    mpPage->SetLwrBorder(mnNewLower);
+    mpPage->SetUpperBorder(mnNewUpper);
+    mpPage->SetLowerBorder(mnNewLower);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

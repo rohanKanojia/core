@@ -21,7 +21,6 @@
 #define INCLUDED_SD_SOURCE_UI_SIDEBAR_CURRENTMASTERPAGESSELECTOR_HXX
 
 #include "MasterPagesSelector.hxx"
-#include <com/sun/star/lang/XComponent.hpp>
 
 
 namespace sd { namespace tools { class EventMultiplexerEvent; } }
@@ -45,7 +44,7 @@ public:
         used by the currently selected page of the document in the
         center pane.
     */
-    virtual void UpdateSelection() override;
+    void UpdateSelection();
 
     /** Copy all master pages that are to be shown into the given list.
     */
@@ -54,10 +53,10 @@ public:
     using MasterPagesSelector::Fill;
 
 protected:
-    virtual ResId GetContextMenuResId() const override;
+    virtual OUString GetContextMenuUIFile() const override;
 
     virtual void ProcessPopupMenu (Menu& rMenu) override;
-    virtual void ExecuteCommand (const sal_Int32 nCommandId) override;
+    virtual void ExecuteCommand(const OString &rIdent) override;
 
 private:
     CurrentMasterPagesSelector (
@@ -66,12 +65,12 @@ private:
         ViewShellBase& rBase,
         const std::shared_ptr<MasterPageContainer>& rpContainer,
         const css::uno::Reference<css::ui::XSidebar>& rxSidebar);
-    virtual ~CurrentMasterPagesSelector();
+    virtual ~CurrentMasterPagesSelector() override;
     virtual void dispose() override;
 
     virtual void LateInit() override;
 
-    DECL_LINK_TYPED(EventMultiplexerListener,sd::tools::EventMultiplexerEvent&, void);
+    DECL_LINK(EventMultiplexerListener,sd::tools::EventMultiplexerEvent&, void);
 };
 
 } } // end of namespace sd::sidebar

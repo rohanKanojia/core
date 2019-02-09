@@ -20,49 +20,67 @@
 #ifndef INCLUDED_SAL_OSL_W32_PATH_HELPER_HXX
 #define INCLUDED_SAL_OSL_W32_PATH_HELPER_HXX
 
-#include "path_helper.h"
+#include <sal/config.h>
+
 #include <osl/diagnose.h>
+#include <osl/file.h>
 #include <rtl/alloc.h>
+#include <rtl/ustring.h>
 #include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+/**
+ Adds a trailing path separator to the given system path if not
+ already there and if the path is not the root path or a logical
+ drive alone
+*/
+
+void osl_systemPathEnsureSeparator(/*inout*/ rtl_uString** ppustrPath);
+
+/**
+ Removes the last separator from the given system path if any and
+ if the path is not the root path '\'
+*/
+
+void osl_systemPathRemoveSeparator(/*inout*/ rtl_uString** ppustrPath);
+
+/**
+ Returns whether a given path is only a logical drive pattern or not.
+ A logical drive pattern is something like "a:\", "c:\".
+ No logical drive pattern is something like "c:\test"
+*/
+
+bool osl_systemPathIsLogicalDrivePattern(/*in*/ const rtl_uString* pustrPath);
 
 namespace osl
 {
 
-/*******************************************************************
- osl_systemPathEnsureSeparator
+/**
  Adds a trailing path separator to the given system path if not
  already there and if the path is not the root path or a logical
  drive alone
- ******************************************************************/
+*/
 
-inline void systemPathEnsureSeparator(/*inout*/ rtl::OUString& Path)
+inline void systemPathEnsureSeparator(/*inout*/ OUString& Path)
 {
     osl_systemPathEnsureSeparator(&Path.pData);
 }
 
-/*******************************************************************
- osl_systemPathRemoveSeparator
+/**
  Removes the last separator from the given system path if any and
  if the path is not the root path '\'
- ******************************************************************/
+*/
 
-inline void systemPathRemoveSeparator(/*inout*/ rtl::OUString& Path)
+inline void systemPathRemoveSeparator(/*inout*/ OUString& Path)
 {
     osl_systemPathRemoveSeparator(&Path.pData);
 }
 
-/*******************************************************************
- osl_systemPathIsLogicalDrivePattern
- ******************************************************************/
-
-inline bool systemPathIsLogicalDrivePattern(/*in*/ const rtl::OUString& path)
+inline bool systemPathIsLogicalDrivePattern(/*in*/ const OUString& path)
 {
     return osl_systemPathIsLogicalDrivePattern(path.pData);
 }
 
-/*******************************************************************
- LongPathBuffer
- ******************************************************************/
 template< class T >
 class LongPathBuffer
 {
@@ -75,7 +93,7 @@ class LongPathBuffer
 
 public:
     explicit LongPathBuffer( sal_uInt32 nCharNum )
-    : m_pBuffer( reinterpret_cast<T*>( rtl_allocateMemory( nCharNum * sizeof( T ) ) ) )
+    : m_pBuffer( static_cast<T*>( malloc( nCharNum * sizeof( T ) ) ) )
     , m_nCharNum( nCharNum )
     {
         OSL_ENSURE( m_pBuffer, "Can not allocate the buffer!" );
@@ -84,8 +102,8 @@ public:
     ~LongPathBuffer()
     {
         if ( m_pBuffer )
-            rtl_freeMemory( m_pBuffer );
-        m_pBuffer = 0;
+            free( m_pBuffer );
+        m_pBuffer = nullptr;
     }
 
     sal_uInt32 getBufSizeInSymbols()
@@ -99,8 +117,6 @@ public:
     }
 
 };
-
-    template< class U, class T > U mingw_reinterpret_cast(LongPathBuffer<T>& a) { return reinterpret_cast<U>(static_cast<T*>(a)); }
 
 } // end namespace osl
 

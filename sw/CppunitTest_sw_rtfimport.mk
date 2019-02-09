@@ -20,6 +20,7 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_rtfimport, \
     cppu \
     cppuhelper \
     sal \
+    sfx \
 	i18nlangtag \
 	sw \
     test \
@@ -27,7 +28,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_rtfimport, \
     vcl \
     tl \
     utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_rtfimport,\
@@ -42,9 +42,16 @@ $(eval $(call gb_CppunitTest_set_include,sw_rtfimport,\
     $$(INCLUDE) \
 ))
 
+ifeq ($(OS),WNT)
+$(eval $(call gb_CppunitTest_add_cxxflags,sw_rtfimport,\
+	-bigobj \
+))
+endif
+
 $(eval $(call gb_CppunitTest_use_api,sw_rtfimport,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_rtfimport))
@@ -56,6 +63,7 @@ $(eval $(call gb_CppunitTest_use_components,sw_rtfimport,\
 	comphelper/util/comphelp \
     configmgr/source/configmgr \
     embeddedobj/util/embobj \
+    emfio/emfio \
     filter/source/config/cache/filterconfig1 \
     filter/source/storagefilterdetect/storagefd \
     framework/util/fwk \
@@ -75,10 +83,18 @@ $(eval $(call gb_CppunitTest_use_components,sw_rtfimport,\
     ucb/source/ucp/file/ucpfile1 \
     unotools/util/utl \
     unoxml/source/service/unoxml \
-	writerfilter/util/writerfilter \
+    uui/util/uui \
+    writerfilter/util/writerfilter \
+    vcl/vcl.common \
     xmloff/util/xo \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_rtfimport))
+
+$(eval $(call gb_CppunitTest_use_uiconfigs,sw_rtfimport,\
+    modules/swriter \
+))
+
+$(eval $(call gb_CppunitTest_use_more_fonts,sw_rtfimport))
 
 # vim: set noet sw=4 ts=4:

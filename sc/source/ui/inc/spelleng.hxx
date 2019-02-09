@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_SPELLENG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_SPELLENG_HXX
 
-#include "editutil.hxx"
+#include <editutil.hxx>
 #include "selectionstate.hxx"
 #include "spellparam.hxx"
 
@@ -36,15 +36,15 @@ public:
                             SfxItemPool* pEnginePool, ScViewData& rViewData,
                             ScDocument* pUndoDoc, ScDocument* pRedoDoc );
 
-    virtual             ~ScConversionEngineBase();
+    virtual             ~ScConversionEngineBase() override;
 
     /** Derived classes implement to convert all cells in the selection or sheet. */
     virtual void        ConvertAll( EditView& rEditView ) = 0;
 
     /** Returns true, if at least one cell has been modified. */
-    inline bool         IsAnyModified() const { return mbIsAnyModified; }
+    bool         IsAnyModified() const { return mbIsAnyModified; }
     /** Returns true, if the entire document/selection has been finished. */
-    inline bool         IsFinished() const { return mbFinished; }
+    bool         IsFinished() const { return mbFinished; }
 
 protected:
     /** Implementation of cell iteration. Finds a cell that needs conversion.
@@ -75,7 +75,7 @@ protected:  // for usage in derived classes
     ScDocument&         mrDoc;
 
 private:
-    ScSelectionState    maSelState;         /// Selection data of the document.
+    ScSelectionState const    maSelState;         /// Selection data of the document.
     ScDocument*         mpUndoDoc;          /// Document stores all old cells for UNDO action.
     ScDocument*         mpRedoDoc;          /// Document stores all new cells for REDO action.
     LanguageType        meCurrLang;         /// Current cell language.
@@ -99,7 +99,7 @@ public:
                             ScViewData& rViewData,
                             ScDocument* pUndoDoc,
                             ScDocument* pRedoDoc,
-                            css::uno::Reference< css::linguistic2::XSpellChecker1 > xSpeller );
+                            css::uno::Reference< css::linguistic2::XSpellChecker1 > const & xSpeller );
 
     /** Checks spelling of all cells in the selection or sheet. */
     virtual void        ConvertAll( EditView& rEditView ) override;
@@ -144,7 +144,7 @@ protected:
     virtual bool        NeedsConversion() override;
 
 private:
-    ScConversionParam   maConvParam;        /// Conversion parameters.
+    ScConversionParam const   maConvParam;        /// Conversion parameters.
 };
 
 #endif

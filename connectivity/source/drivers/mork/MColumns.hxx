@@ -29,17 +29,16 @@ namespace connectivity
 {
     namespace mork
     {
-        class OColumns : public sdbcx::OCollection
+        class OColumns final : public sdbcx::OCollection
         {
-        protected:
             OTable* m_pTable;
 
             virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
-            virtual void impl_refresh() throw(::com::sun::star::uno::RuntimeException) override;
+            virtual void impl_refresh() override;
         public:
             OColumns(   OTable* _pTable,
                         ::osl::Mutex& _rMutex,
-                        const TStringVector &_rVector
+                        const ::std::vector< OUString> &_rVector
                         ) : sdbcx::OCollection(*_pTable, true, _rMutex, _rVector)
                 ,m_pTable(_pTable)
             {}

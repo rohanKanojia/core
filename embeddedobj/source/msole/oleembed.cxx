@@ -21,6 +21,7 @@
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/EmbedVerbs.hpp>
 #include <com/sun/star/embed/EntryInitModes.hpp>
+#include <com/sun/star/embed/UnreachableStateException.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/EmbedUpdateModes.hpp>
@@ -32,6 +33,7 @@
 #include <com/sun/star/io/TempFile.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/XLoadable.hpp>
@@ -42,10 +44,11 @@
 #include <com/sun/star/system/SystemShellExecute.hpp>
 #include <com/sun/star/system/SystemShellExecuteFlags.hpp>
 
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/mimeconfighelper.hxx>
-#include <comphelper/storagehelper.hxx>
+#include <sal/log.hxx>
 
 
 #include <targetstatecontrol.hxx>
@@ -53,7 +56,7 @@
 #include "ownview.hxx"
 
 #if defined(_WIN32)
-#include <olecomponent.hxx>
+#include "olecomponent.hxx"
 #endif
 
 using namespace ::com::sun::star;
@@ -62,26 +65,23 @@ using namespace ::com::sun::star;
 
 void OleEmbeddedObject::SwitchComponentToRunningState_Impl()
 {
-    if ( m_pOleComponent )
-    {
-        try
-        {
-            m_pOleComponent->RunObject();
-        }
-        catch( const embed::UnreachableStateException& )
-        {
-            GetRidOfComponent();
-            throw;
-        }
-        catch( const embed::WrongStateException& )
-        {
-            GetRidOfComponent();
-            throw;
-        }
-    }
-    else
+    if ( !m_pOleComponent )
     {
         throw embed::UnreachableStateException();
+    }
+    try
+    {
+        m_pOleComponent->RunObject();
+    }
+    catch( const embed::UnreachableStateException& )
+    {
+        GetRidOfComponent();
+        throw;
+    }
+    catch( const embed::WrongStateException& )
+    {
+        GetRidOfComponent();
+        throw;
     }
 }
 
@@ -197,8 +197,7 @@ void OleEmbeddedObject::MoveListeners()
             }
         }
 
-        delete m_pInterfaceContainer;
-        m_pInterfaceContainer = nullptr;
+        m_pInterfaceContainer.reset();
     }
 }
 
@@ -247,7 +246,7 @@ OUString OleEmbeddedObject::MoveToTemporarySubstream()
 }
 
 
-bool OleEmbeddedObject::TryToConvertToOOo()
+bool OleEmbeddedObject::TryToConvertToOOo( const uno::Reference< io::XStream >& xStream )
 {
     bool bResult = false;
 
@@ -263,13 +262,13 @@ bool OleEmbeddedObject::TryToConvertToOOo()
         changeState( embed::EmbedStates::LOADED );
 
         // the stream must be seekable
-        uno::Reference< io::XSeekable > xSeekable( m_xObjectStream, uno::UNO_QUERY_THROW );
+        uno::Reference< io::XSeekable > xSeekable( xStream, uno::UNO_QUERY_THROW );
         xSeekable->seek( 0 );
-        m_aFilterName = OwnView_Impl::GetFilterNameFromExtentionAndInStream( m_xFactory, OUString(), m_xObjectStream->getInputStream() );
+        m_aFilterName = OwnView_Impl::GetFilterNameFromExtentionAndInStream( m_xFactory, OUString(), xStream->getInputStream() );
 
-        // use the solution only for OOXML format currently
         if ( !m_aFilterName.isEmpty()
-          && ( m_aFilterName == "Calc MS Excel 2007 XML" || m_aFilterName == "Impress MS PowerPoint 2007 XML" || m_aFilterName == "MS Word 2007 XML" ) )
+          && ( m_aFilterName == "Calc MS Excel 2007 XML" || m_aFilterName == "Impress MS PowerPoint 2007 XML" || m_aFilterName == "MS Word 2007 XML"
+              || m_aFilterName == "MS Excel 97 Vorlage/Template" || m_aFilterName == "MS Word 97 Vorlage" ) )
         {
             uno::Reference< container::XNameAccess > xFilterFactory(
                 m_xFactory->createInstance("com.sun.star.document.FilterFactory"),
@@ -289,7 +288,7 @@ bool OleEmbeddedObject::TryToConvertToOOo()
             {
                 // create the model
                 uno::Sequence< uno::Any > aArguments(1);
-                aArguments[0] <<= beans::NamedValue( OUString( "EmbeddedObject" ), uno::makeAny( true ));
+                aArguments[0] <<= beans::NamedValue( "EmbeddedObject", uno::makeAny( true ));
 
                 uno::Reference< util::XCloseable > xDocument( m_xFactory->createInstanceWithArguments( aDocServiceName, aArguments ), uno::UNO_QUERY_THROW );
                 uno::Reference< frame::XLoadable > xLoadable( xDocument, uno::UNO_QUERY_THROW );
@@ -299,7 +298,7 @@ bool OleEmbeddedObject::TryToConvertToOOo()
                 uno::Reference< frame::XModel > xModel( xDocument, uno::UNO_QUERY_THROW );
                 uno::Sequence< beans::PropertyValue > aSeq( 1 );
                 aSeq[0].Name = "SetEmbedded";
-                aSeq[0].Value <<= sal_True;
+                aSeq[0].Value <<= true;
                 xModel->attachResource( OUString(), aSeq );
 
                 // load the model from the stream
@@ -307,13 +306,13 @@ bool OleEmbeddedObject::TryToConvertToOOo()
                 aArgs[0].Name = "HierarchicalDocumentName";
                 aArgs[0].Value <<= m_aEntryName;
                 aArgs[1].Name = "ReadOnly";
-                aArgs[1].Value <<= sal_True;
+                aArgs[1].Value <<= true;
                 aArgs[2].Name = "FilterName";
                 aArgs[2].Value <<= m_aFilterName;
                 aArgs[3].Name = "URL";
                 aArgs[3].Value <<= OUString( "private:stream" );
                 aArgs[4].Name = "InputStream";
-                aArgs[4].Value <<= m_xObjectStream->getInputStream();
+                aArgs[4].Value <<= xStream->getInputStream();
 
                 xSeekable->seek( 0 );
                 xLoadable->load( aArgs );
@@ -321,7 +320,7 @@ bool OleEmbeddedObject::TryToConvertToOOo()
                 // the model is successfully loaded, create a new storage and store the model to the storage
                 uno::Reference< embed::XStorage > xTmpStorage = CreateTemporarySubstorage( aStorageName );
                 xStorDoc->storeToStorage( xTmpStorage, uno::Sequence< beans::PropertyValue >() );
-                xDocument->close( sal_True );
+                xDocument->close( true );
                 uno::Reference< beans::XPropertySet > xStorProps( xTmpStorage, uno::UNO_QUERY_THROW );
                 OUString aMediaType;
                 xStorProps->getPropertyValue("MediaType") >>= aMediaType;
@@ -356,6 +355,9 @@ bool OleEmbeddedObject::TryToConvertToOOo()
                 nStep = 4;
                 m_xWrappedObject.set( xEmbCreator->createInstanceInitFromEntry( m_xParentStorage, m_aEntryName, uno::Sequence< beans::PropertyValue >(), uno::Sequence< beans::PropertyValue >() ), uno::UNO_QUERY_THROW );
 
+                // remember parent document name to show in the title bar
+                m_xWrappedObject->setContainerName( m_aContainerName );
+
                 bResult = true; // the change is no more revertable
                 try
                 {
@@ -382,30 +384,35 @@ bool OleEmbeddedObject::TryToConvertToOOo()
                         m_xParentStorage->removeElement( m_aEntryName );
                     m_xParentStorage->renameElement( aTmpStreamName, m_aEntryName );
                 }
-                catch ( const uno::Exception& )
+                catch ( const uno::Exception& ex )
                 {
+                    css::uno::Any anyEx = cppu::getCaughtException();
                     try {
-                        close( sal_True );
+                        close( true );
                     } catch( const uno::Exception& ) {}
 
                     m_xParentStorage->dispose(); // ??? the storage has information loss, it should be closed without committing!
-                    throw uno::RuntimeException(); // the repairing is not possible
+                    throw css::lang::WrappedTargetRuntimeException( ex.Message,
+                                    nullptr, anyEx ); // the repairing is not possible
                 }
+            [[fallthrough]];
             case 2:
                 try
                 {
                     m_xObjectStream = m_xParentStorage->openStreamElement( m_aEntryName, m_bReadOnly ? embed::ElementModes::READ : embed::ElementModes::READWRITE );
                     m_nObjectState = embed::EmbedStates::LOADED;
                 }
-                catch( const uno::Exception& )
+                catch( const uno::Exception& ex )
                 {
+                    css::uno::Any anyEx = cppu::getCaughtException();
                     try {
-                        close( sal_True );
+                        close( true );
                     } catch( const uno::Exception& ) {}
 
-                    throw uno::RuntimeException(); // the repairing is not possible
+                    throw css::lang::WrappedTargetRuntimeException( ex.Message,
+                                    nullptr, anyEx ); // the repairing is not possible
                 }
-                // no break as designed!
+                [[fallthrough]];
 
             case 1:
             case 0:
@@ -437,10 +444,6 @@ bool OleEmbeddedObject::TryToConvertToOOo()
 
 
 void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
-        throw ( embed::UnreachableStateException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -483,7 +486,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
 
         sal_Int32 nOldState = m_nObjectState;
         aGuard.clear();
-        StateChangeNotification_Impl( sal_True, nOldState, nNewState );
+        StateChangeNotification_Impl( true, nOldState, nNewState );
         aGuard.reset();
 
         try
@@ -505,7 +508,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
                 }
 
                 aGuard.clear();
-                StateChangeNotification_Impl( sal_False, nOldState, m_nObjectState );
+                StateChangeNotification_Impl( false, nOldState, m_nObjectState );
                 aGuard.reset();
             }
             else if ( nNewState == embed::EmbedStates::RUNNING || nNewState == embed::EmbedStates::ACTIVE )
@@ -522,7 +525,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
                     SwitchComponentToRunningState_Impl();
                     m_nObjectState = embed::EmbedStates::RUNNING;
                     aGuard.clear();
-                    StateChangeNotification_Impl( sal_False, nOldState, m_nObjectState );
+                    StateChangeNotification_Impl( false, nOldState, m_nObjectState );
                     aGuard.reset();
 
                     if ( m_pOleComponent && m_bHasSizeToSet )
@@ -530,7 +533,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
                         aGuard.clear();
                         try {
                             m_pOleComponent->SetExtent( m_aSizeToSet, m_nAspectToSet );
-                            m_bHasSizeToSet = sal_False;
+                            m_bHasSizeToSet = false;
                         }
                         catch( const uno::Exception& ) {}
                         aGuard.reset();
@@ -540,7 +543,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
                         return;
                 }
 
-                // so now the object is either switched from Active to Running state or vise versa
+                // so now the object is either switched from Active to Running state or viceversa
                 // the notification about object state change will be done asynchronously
                 if ( m_nObjectState == embed::EmbedStates::RUNNING && nNewState == embed::EmbedStates::ACTIVE )
                 {
@@ -555,7 +558,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
                         aGuard.clear();
                         try {
                             m_pOleComponent->SetExtent( m_aSizeToSet, m_nAspectToSet );
-                            m_bHasSizeToSet = sal_False;
+                            m_bHasSizeToSet = false;
                         }
                         catch( uno::Exception& ) {}
                         aGuard.reset();
@@ -582,7 +585,7 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
         catch( uno::Exception& )
         {
             aGuard.clear();
-            StateChangeNotification_Impl( sal_False, nOldState, m_nObjectState );
+            StateChangeNotification_Impl( false, nOldState, m_nObjectState );
             throw;
         }
     }
@@ -595,8 +598,6 @@ void SAL_CALL OleEmbeddedObject::changeState( sal_Int32 nNewState )
 
 
 uno::Sequence< sal_Int32 > SAL_CALL OleEmbeddedObject::getReachableStates()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -637,8 +638,6 @@ uno::Sequence< sal_Int32 > SAL_CALL OleEmbeddedObject::getReachableStates()
 
 
 sal_Int32 SAL_CALL OleEmbeddedObject::getCurrentState()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -663,33 +662,32 @@ sal_Int32 SAL_CALL OleEmbeddedObject::getCurrentState()
 
 namespace
 {
-#ifndef _WIN32
-    bool lcl_CopyStream(uno::Reference<io::XInputStream> xIn, uno::Reference<io::XOutputStream> xOut)
+    bool lcl_CopyStream(const uno::Reference<io::XInputStream>& xIn, const uno::Reference<io::XOutputStream>& xOut, sal_Int32 nMaxCopy = SAL_MAX_INT32)
     {
+        if (nMaxCopy <= 0)
+            return false;
+
         const sal_Int32 nChunkSize = 4096;
         uno::Sequence< sal_Int8 > aData(nChunkSize);
         sal_Int32 nTotalRead = 0;
         sal_Int32 nRead;
         do
         {
-            nRead = xIn->readBytes(aData, nChunkSize);
+            if (nTotalRead + aData.getLength() > nMaxCopy)
+            {
+                aData.realloc(nMaxCopy - nTotalRead);
+            }
+            nRead = xIn->readBytes(aData, aData.getLength());
             nTotalRead += nRead;
             xOut->writeBytes(aData);
-        } while (nRead == nChunkSize);
+        } while (nRead == nChunkSize && nTotalRead <= nMaxCopy);
         return nTotalRead != 0;
     }
-#endif
 
-    //Dump the objects content to a tempfile, just the "CONTENTS" stream if
-    //there is one for non-compound documents, otherwise the whole content.
-    //On success a file is returned which must be removed by the caller
-    OUString lcl_ExtractObject(css::uno::Reference< css::lang::XMultiServiceFactory > xFactory,
-        css::uno::Reference< css::io::XStream > xObjectStream)
+    uno::Reference < io::XStream > lcl_GetExtractedStream( OUString& rUrl,
+        const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory,
+        const css::uno::Reference< css::io::XStream >& xObjectStream )
     {
-        OUString sUrl;
-
-        // the solution is only active for Unix systems
-#ifndef _WIN32
         uno::Reference <beans::XPropertySet> xNativeTempFile(
             io::TempFile::create(comphelper::getComponentContext(xFactory)),
             uno::UNO_QUERY_THROW);
@@ -703,17 +701,78 @@ namespace
                 "com.sun.star.embed.OLESimpleStorage",
                 aArgs ), uno::UNO_QUERY_THROW );
 
-        uno::Reference< io::XStream > xCONTENTS;
-        try
+        //various stream names that can contain the real document contents for
+        //this object in a straightforward direct way
+        static const OUStringLiteral aStreamNames[] =
         {
-            xNameContainer->getByName("CONTENTS") >>= xCONTENTS;
-        }
-        catch (container::NoSuchElementException const&)
+            "CONTENTS",
+            "Package",
+            "EmbeddedOdf",
+            "WordDocument",
+            "Workbook",
+            "PowerPoint Document"
+        };
+
+        bool bCopied = false;
+        for (size_t i = 0; i < SAL_N_ELEMENTS(aStreamNames) && !bCopied; ++i)
         {
-            // ignore
+            uno::Reference<io::XStream> xEmbeddedFile;
+            try
+            {
+                xNameContainer->getByName(aStreamNames[i]) >>= xEmbeddedFile;
+            }
+            catch (const container::NoSuchElementException&)
+            {
+                // ignore
+            }
+            bCopied = xEmbeddedFile.is() && lcl_CopyStream(xEmbeddedFile->getInputStream(), xStream->getOutputStream());
         }
 
-        bool bCopied = xCONTENTS.is() && lcl_CopyStream(xCONTENTS->getInputStream(), xStream->getOutputStream());
+        if (!bCopied)
+        {
+            uno::Reference< io::XStream > xOle10Native;
+            try
+            {
+                xNameContainer->getByName("\1Ole10Native") >>= xOle10Native;
+            }
+            catch (container::NoSuchElementException const&)
+            {
+                // ignore
+            }
+            if (xOle10Native.is())
+            {
+                const uno::Reference<io::XInputStream> xIn = xOle10Native->getInputStream();
+                xIn->skipBytes(4); //size of the entire stream minus 4 bytes
+                xIn->skipBytes(2); //word that represent the directory type
+                uno::Sequence< sal_Int8 > aData(1);
+                sal_Int32 nRead;
+                do
+                {
+                    nRead = xIn->readBytes(aData, 1);
+                } while (nRead == 1 && aData[0] != 0);  // file name plus extension of the attachment null terminated
+                do
+                {
+                    nRead = xIn->readBytes(aData, 1);
+                } while (nRead == 1 && aData[0] != 0);  // Fully Qualified File name with extension
+                xIn->skipBytes(1); //single byte
+                xIn->skipBytes(1); //single byte
+                xIn->skipBytes(2); //Word that represent the directory type
+                xIn->skipBytes(4); //len of string
+                do
+                {
+                    nRead = xIn->readBytes(aData, 1);
+                } while (nRead == 1 && aData[0] != 0);  // Actual string representing the file path
+                uno::Sequence< sal_Int8 > aLenData(4);
+                xIn->readBytes(aLenData, 4); //len of attachment
+                sal_uInt32 nLen = static_cast<sal_uInt32>(
+                                              (aLenData[0] & 0xFF) |
+                                              ((aLenData[1] & 0xFF) <<  8) |
+                                              ((aLenData[2] & 0xFF) << 16) |
+                                              ((aLenData[3] & 0xFF) << 24));
+
+                bCopied = lcl_CopyStream(xIn, xStream->getOutputStream(), nLen);
+            }
+        }
 
         uno::Reference< io::XSeekable > xSeekableStor(xObjectStream, uno::UNO_QUERY);
         if (xSeekableStor.is())
@@ -725,44 +784,61 @@ namespace
         if (bCopied)
         {
             xNativeTempFile->setPropertyValue("RemoveFile",
-                uno::makeAny(sal_False));
+                uno::makeAny(false));
             uno::Any aUrl = xNativeTempFile->getPropertyValue("Uri");
-            aUrl >>= sUrl;
+            aUrl >>= rUrl;
 
             xNativeTempFile.clear();
 
             uno::Reference < ucb::XSimpleFileAccess3 > xSimpleFileAccess(
                     ucb::SimpleFileAccess::create( comphelper::getComponentContext(xFactory) ) );
 
-            xSimpleFileAccess->setReadOnly(sUrl, sal_True);
+            xSimpleFileAccess->setReadOnly(rUrl, true);
         }
         else
         {
             xNativeTempFile->setPropertyValue("RemoveFile",
-                uno::makeAny(sal_True));
+                uno::makeAny(true));
         }
+
+        return xStream;
+    }
+
+    //Dump the objects content to a tempfile, just the "CONTENTS" stream if
+    //there is one for non-compound documents, otherwise the whole content.
+    //On success a file is returned which must be removed by the caller
+    OUString lcl_ExtractObject(const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory,
+        const css::uno::Reference< css::io::XStream >& xObjectStream)
+    {
+        OUString sUrl;
+
+        // the solution is only active for Unix systems
+#ifndef _WIN32
+        lcl_GetExtractedStream(sUrl, xFactory, xObjectStream);
 #else
         (void) xFactory;
         (void) xObjectStream;
 #endif
         return sUrl;
     }
+
+    uno::Reference < io::XStream > lcl_ExtractObjectStream( const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory,
+        const css::uno::Reference< css::io::XStream >& xObjectStream )
+    {
+        OUString sUrl;
+        return lcl_GetExtractedStream( sUrl, xFactory, xObjectStream );
+    }
 }
 
 
 void SAL_CALL OleEmbeddedObject::doVerb( sal_Int32 nVerbID )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                embed::UnreachableStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
     if ( xWrappedObject.is() )
     {
         // the object was converted to OOo embedded object, the current implementation is now only a wrapper
-        xWrappedObject->doVerb( nVerbID );
+        xWrappedObject->doVerb(embed::EmbedVerbs::MS_OLEVERB_OPEN); // open content in the window not in-place
         return;
     }
     // end wrapping related part ====================
@@ -800,9 +876,10 @@ void SAL_CALL OleEmbeddedObject::doVerb( sal_Int32 nVerbID )
 
 
             m_pOleComponent->ExecuteVerb( nVerbID );
+            m_pOleComponent->SetHostName( OUString(), m_aContainerName );
 
             // ==== the STAMPIT related solution =============================
-            sal_Bool bModifiedOnExecution = m_aVerbExecutionController.EndControlExecution_WasModified();
+            bool bModifiedOnExecution = m_aVerbExecutionController.EndControlExecution_WasModified();
 
             // this workaround is implemented for STAMPIT object
             // if object was modified during verb execution it is saved here
@@ -817,7 +894,7 @@ void SAL_CALL OleEmbeddedObject::doVerb( sal_Int32 nVerbID )
 
 
             aGuard.clear();
-            StateChangeNotification_Impl( sal_False, nOldState, m_nObjectState );
+            StateChangeNotification_Impl( false, nOldState, m_nObjectState );
             throw;
         }
 
@@ -825,71 +902,77 @@ void SAL_CALL OleEmbeddedObject::doVerb( sal_Int32 nVerbID )
     else
 #endif
     {
-        if ( nVerbID == -9 )
-        {
-            // the workaround verb to show the object in case no server is available
-
-            // if it is possible, the object will be converted to OOo format
-            if ( !m_bTriedConversion )
-            {
-                m_bTriedConversion = true;
-                if ( TryToConvertToOOo() )
-                {
-                    changeState( embed::EmbedStates::UI_ACTIVE );
-                    return;
-                }
-            }
-
-            if ( !m_pOwnView && m_xObjectStream.is() && m_aFilterName != "Text" )
-            {
-                try {
-                    uno::Reference< io::XSeekable > xSeekable( m_xObjectStream, uno::UNO_QUERY );
-                    if ( xSeekable.is() )
-                        xSeekable->seek( 0 );
-
-                    m_pOwnView = new OwnView_Impl( m_xFactory, m_xObjectStream->getInputStream() );
-                    m_pOwnView->acquire();
-                }
-                catch( uno::RuntimeException& )
-                {
-                    throw;
-                }
-                catch (uno::Exception const& e)
-                {
-                    SAL_WARN("embeddedobj.ole", "OleEmbeddedObject::doVerb: "
-                        "-9 fallback path: exception caught: " << e.Message);
-                }
-            }
-
-            if ( m_aFilterName != "Text" && (!m_pOwnView || !m_pOwnView->Open()) )
-            {
-                //Make a RO copy and see if the OS can find something to at
-                //least display the content for us
-                if (m_aTempDumpURL.isEmpty())
-                    m_aTempDumpURL = lcl_ExtractObject(m_xFactory, m_xObjectStream);
-
-                if (!m_aTempDumpURL.isEmpty())
-                {
-                    uno::Reference< css::system::XSystemShellExecute > xSystemShellExecute(
-                        css::system::SystemShellExecute::create(comphelper::getComponentContext(m_xFactory)) );
-                    xSystemShellExecute->execute(m_aTempDumpURL, OUString(), css::system::SystemShellExecuteFlags::URIS_ONLY);
-                }
-                else
-                    throw embed::UnreachableStateException();
-            }
-        }
-        else
+        if ( nVerbID != -9 )
         {
 
             throw embed::UnreachableStateException();
         }
+
+        // the workaround verb to show the object in case no server is available
+
+        // if it is possible, the object will be converted to OOo format
+        if ( !m_bTriedConversion )
+        {
+            m_bTriedConversion = true;
+            if ( TryToConvertToOOo( m_xObjectStream ) )
+            {
+                changeState( embed::EmbedStates::ACTIVE );
+                return;
+            }
+        }
+
+        if ( !m_xOwnView.is() && m_xObjectStream.is() && m_aFilterName != "Text" )
+        {
+            try {
+                uno::Reference< io::XSeekable > xSeekable( m_xObjectStream, uno::UNO_QUERY );
+                if ( xSeekable.is() )
+                    xSeekable->seek( 0 );
+
+                m_xOwnView = new OwnView_Impl( m_xFactory, m_xObjectStream->getInputStream() );
+            }
+            catch( uno::RuntimeException& )
+            {
+                throw;
+            }
+            catch (uno::Exception const& e)
+            {
+                SAL_WARN("embeddedobj.ole", "OleEmbeddedObject::doVerb: -9 fallback path: " << e);
+            }
+        }
+
+        // it may be the OLE Storage, try to extract stream
+        if ( !m_xOwnView.is() && m_xObjectStream.is() && m_aFilterName == "Text" )
+        {
+            uno::Reference< io::XStream > xStream = lcl_ExtractObjectStream( m_xFactory, m_xObjectStream );
+
+            if ( TryToConvertToOOo( xStream ) )
+            {
+                changeState( embed::EmbedStates::ACTIVE );
+                return;
+            }
+        }
+
+        if (!m_xOwnView.is() || !m_xOwnView->Open())
+        {
+            //Make a RO copy and see if the OS can find something to at
+            //least display the content for us
+            if (m_aTempDumpURL.isEmpty())
+                m_aTempDumpURL = lcl_ExtractObject(m_xFactory, m_xObjectStream);
+
+            if (m_aTempDumpURL.isEmpty())
+                throw embed::UnreachableStateException();
+
+            uno::Reference< css::system::XSystemShellExecute > xSystemShellExecute(
+                css::system::SystemShellExecute::create(comphelper::getComponentContext(m_xFactory)) );
+            xSystemShellExecute->execute(m_aTempDumpURL, OUString(), css::system::SystemShellExecuteFlags::URIS_ONLY);
+
+        }
+
     }
 }
 
 
 uno::Sequence< embed::VerbDescriptor > SAL_CALL OleEmbeddedObject::getSupportedVerbs()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -929,8 +1012,6 @@ uno::Sequence< embed::VerbDescriptor > SAL_CALL OleEmbeddedObject::getSupportedV
 
 void SAL_CALL OleEmbeddedObject::setClientSite(
                 const uno::Reference< embed::XEmbeddedClient >& xClient )
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -959,8 +1040,6 @@ void SAL_CALL OleEmbeddedObject::setClientSite(
 
 
 uno::Reference< embed::XEmbeddedClient > SAL_CALL OleEmbeddedObject::getClientSite()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -984,9 +1063,6 @@ uno::Reference< embed::XEmbeddedClient > SAL_CALL OleEmbeddedObject::getClientSi
 
 
 void SAL_CALL OleEmbeddedObject::update()
-        throw ( embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -1019,8 +1095,6 @@ void SAL_CALL OleEmbeddedObject::update()
 
 
 void SAL_CALL OleEmbeddedObject::setUpdateMode( sal_Int32 nMode )
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -1042,7 +1116,7 @@ void SAL_CALL OleEmbeddedObject::setUpdateMode( sal_Int32 nMode )
 
     OSL_ENSURE( nMode == embed::EmbedUpdateModes::ALWAYS_UPDATE
                     || nMode == embed::EmbedUpdateModes::EXPLICIT_UPDATE,
-                "Unknown update mode!\n" );
+                "Unknown update mode!" );
     m_nUpdateMode = nMode;
 }
 
@@ -1050,8 +1124,6 @@ void SAL_CALL OleEmbeddedObject::setUpdateMode( sal_Int32 nMode )
 sal_Int64 SAL_CALL OleEmbeddedObject::getStatus( sal_Int64
     nAspect
 )
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;
@@ -1080,7 +1152,7 @@ sal_Int64 SAL_CALL OleEmbeddedObject::getStatus( sal_Int64
 
         m_nStatus = m_pOleComponent->GetMiscStatus( nAspect );
         m_nStatusAspect = nAspect;
-        m_bGotStatus = sal_True;
+        m_bGotStatus = true;
         nResult = m_nStatus;
     }
 #endif
@@ -1091,7 +1163,6 @@ sal_Int64 SAL_CALL OleEmbeddedObject::getStatus( sal_Int64
 
 
 void SAL_CALL OleEmbeddedObject::setContainerName( const OUString& sName )
-        throw ( uno::RuntimeException, std::exception )
 {
     // begin wrapping related part ====================
     uno::Reference< embed::XEmbeddedObject > xWrappedObject = m_xWrappedObject;

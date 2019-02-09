@@ -23,17 +23,16 @@
 
 #include <rtl/alloc.h>
 #include <sal/log.hxx>
-#include <osl/mutex.hxx>
 
 #include <com/sun/star/uno/genfunc.hxx>
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include <bridge.hxx>
+#include <cppinterfaceproxy.hxx>
+#include <types.hxx>
+#include <vtablefactory.hxx>
 
 #include "abi.hxx"
 #include "call.hxx"
@@ -110,7 +109,7 @@ static typelib_TypeClass cpp2uno_call(
 
         int nUsedGPR = 0;
         int nUsedSSE = 0;
-#if OSL_DEBUG_LEVEL > 0
+#ifndef NDEBUG
         bool bFitsRegisters =
 #endif
             x86_64::examine_argument( rParam.pTypeRef, false, nUsedGPR, nUsedSSE );
@@ -241,7 +240,7 @@ static typelib_TypeClass cpp2uno_call(
         }
         if ( pReturnTypeDescr )
         {
-            typelib_TypeClass eRet = (typelib_TypeClass)pReturnTypeDescr->eTypeClass;
+            typelib_TypeClass eRet = pReturnTypeDescr->eTypeClass;
             TYPELIB_DANGER_RELEASE( pReturnTypeDescr );
             return eRet;
         }
@@ -315,8 +314,8 @@ typelib_TypeClass cpp_vtable_call(
                 // is SET method
                 typelib_MethodParameter aParam;
                 aParam.pTypeRef = pAttrTypeRef;
-                aParam.bIn      = sal_True;
-                aParam.bOut     = sal_False;
+                aParam.bIn      = true;
+                aParam.bOut     = false;
 
                 eRet = cpp2uno_call( pCppI, aMemberDescr.get(),
                         nullptr, // indicates void return
@@ -365,7 +364,8 @@ typelib_TypeClass cpp_vtable_call(
                         }
                         TYPELIB_DANGER_RELEASE( pTD );
                     }
-                } // else perform queryInterface()
+                    [[fallthrough]]; // else perform queryInterface()
+                }
                 default:
                 {
                     typelib_InterfaceMethodTypeDescription *pMethodTD =
@@ -402,22 +402,27 @@ const int codeSnippetSize = 24;
 // Note: The code snippet we build here must not create a stack frame,
 // otherwise the UNO exceptions stop working thanks to non-existing
 // unwinding info.
-unsigned char * codeSnippet( unsigned char * code,
+static unsigned char * codeSnippet( unsigned char * code,
         sal_Int32 nFunctionIndex, sal_Int32 nVtableOffset,
         bool bHasHiddenParam )
 {
-    sal_uInt64 nOffsetAndIndex = ( ( (sal_uInt64) nVtableOffset ) << 32 ) | ( (sal_uInt64) nFunctionIndex );
+    sal_uInt64 nOffsetAndIndex = ( static_cast<sal_uInt64>(nVtableOffset) << 32 ) | static_cast<sal_uInt64>(nFunctionIndex);
 
     if ( bHasHiddenParam )
         nOffsetAndIndex |= 0x80000000;
 
     // movq $<nOffsetAndIndex>, %r10
     *reinterpret_cast<sal_uInt16 *>( code ) = 0xba49;
-    *reinterpret_cast<sal_uInt64 *>( code + 2 ) = nOffsetAndIndex;
+    *reinterpret_cast<sal_uInt16 *>( code + 2 ) = nOffsetAndIndex & 0xFFFF;
+    *reinterpret_cast<sal_uInt32 *>( code + 4 ) = nOffsetAndIndex >> 16;
+    *reinterpret_cast<sal_uInt16 *>( code + 8 ) = nOffsetAndIndex >> 48;
 
     // movq $<address of the privateSnippetExecutor>, %r11
     *reinterpret_cast<sal_uInt16 *>( code + 10 ) = 0xbb49;
-    *reinterpret_cast<sal_uInt64 *>( code + 12 ) = reinterpret_cast<sal_uInt64>( privateSnippetExecutor );
+    *reinterpret_cast<sal_uInt32 *>( code + 12 )
+        = reinterpret_cast<sal_uInt64>(privateSnippetExecutor);
+    *reinterpret_cast<sal_uInt32 *>( code + 16 )
+        = reinterpret_cast<sal_uInt64>(privateSnippetExecutor) >> 32;
 
     // jmpq *%r11
     *reinterpret_cast<sal_uInt32 *>( code + 20 ) = 0x00e3ff49;
@@ -439,7 +444,7 @@ bridges::cpp_uno::shared::VtableFactory::mapBlockToVtable(void * block)
     return static_cast< Slot * >(block) + 2;
 }
 
-sal_Size bridges::cpp_uno::shared::VtableFactory::getBlockSize(
+std::size_t bridges::cpp_uno::shared::VtableFactory::getBlockSize(
     sal_Int32 slotCount)
 {
     return (slotCount + 2) * sizeof (Slot) + slotCount * codeSnippetSize;

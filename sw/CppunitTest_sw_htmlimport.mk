@@ -19,9 +19,11 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_htmlimport, \
 	comphelper \
 	cppu \
 	cppuhelper \
+	editeng \
 	i18nlangtag \
 	sal \
 	sfx \
+	svl \
 	svt \
 	sw \
 	test \
@@ -29,7 +31,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_htmlimport, \
 	unotest \
 	utl \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_htmlimport,\
@@ -45,7 +46,11 @@ $(eval $(call gb_CppunitTest_set_include,sw_htmlimport,\
 	$$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_sdk_api,sw_htmlimport))
+$(eval $(call gb_CppunitTest_use_api,sw_htmlimport,\
+	udkapi \
+	offapi \
+	oovbaapi \
+))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_htmlimport))
 $(eval $(call gb_CppunitTest_use_vcl,sw_htmlimport))

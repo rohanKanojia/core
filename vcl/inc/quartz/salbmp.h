@@ -20,17 +20,17 @@
 #ifndef INCLUDED_VCL_INC_QUARTZ_SALBMP_H
 #define INCLUDED_VCL_INC_QUARTZ_SALBMP_H
 
-#include "tools/gen.hxx"
+#include <tools/gen.hxx>
 
 #include <vcl/salbtype.hxx>
 
-#include "quartz/salgdi.h"
+#include <quartz/salgdi.h>
 
-#include "salinst.hxx"
-#include "salvd.hxx"
-#include "salbmp.hxx"
+#include <salinst.hxx>
+#include <salvd.hxx>
+#include <salbmp.hxx>
 
-#include <boost/shared_array.hpp>
+#include <memory>
 
 
 struct  BitmapBuffer;
@@ -42,8 +42,8 @@ public:
     CGContextRef                    mxGraphicContext;
     mutable CGImageRef              mxCachedImage;
     BitmapPalette                   maPalette;
-    boost::shared_array<sal_uInt8>  maUserBuffer;
-    boost::shared_array<sal_uInt8>  maContextBuffer;
+    std::shared_ptr<sal_uInt8> m_pUserBuffer;
+    std::shared_ptr<sal_uInt8> m_pContextBuffer;
     sal_uInt16                      mnBits;
     int                             mnWidth;
     int                             mnHeight;
@@ -51,7 +51,7 @@ public:
 
 public:
     QuartzSalBitmap();
-    virtual ~QuartzSalBitmap();
+    virtual ~QuartzSalBitmap() override;
 
 public:
 
@@ -74,8 +74,9 @@ public:
 
     bool            GetSystemData( BitmapSystemData& rData ) override;
 
+    bool            ScalingSupported() const override;
     bool            Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag ) override;
-    bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uLong nTol ) override;
+    bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uInt8 nTol ) override;
 
 private:
     // quartz helper
@@ -88,11 +89,11 @@ private:
                                        sal_uInt16 nSrcBits, sal_uInt32 nSrcBytesPerRow, const BitmapPalette& rSrcPalette, sal_uInt8* pSrcData );
 
 public:
-    bool            Create( CGLayerRef xLayer, int nBitCount, int nX, int nY, int nWidth, int nHeight );
+    bool            Create( CGLayerRef xLayer, int nBitCount, int nX, int nY, int nWidth, int nHeight, bool bFlipped );
 
 public:
     CGImageRef      CreateWithMask( const QuartzSalBitmap& rMask, int nX, int nY, int nWidth, int nHeight ) const;
-    CGImageRef      CreateColorMask( int nX, int nY, int nWidth, int nHeight, SalColor nMaskColor ) const;
+    CGImageRef      CreateColorMask( int nX, int nY, int nWidth, int nHeight, Color nMaskColor ) const;
     CGImageRef      CreateCroppedImage( int nX, int nY, int nWidth, int nHeight ) const;
 };
 

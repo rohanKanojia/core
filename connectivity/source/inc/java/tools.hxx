@@ -24,8 +24,7 @@
 #include <com/sun/star/uno/Sequence.h>
 
 #include <jni.h>
-#include "java/sql/SQLException.hxx"
-#include <comphelper/uno3.hxx>
+#include <java/sql/SQLException.hxx>
 
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
@@ -41,22 +40,21 @@ namespace connectivity
     OUString JavaString2String(JNIEnv *pEnv,jstring Str);
     class java_util_Properties;
 
-    java_util_Properties* createStringPropertyArray(const ::com::sun::star::uno::Sequence< ::com::sun::star::beans::PropertyValue >& info ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException);
+    /// @throws css::sdbc::SQLException
+    /// @throws css::uno::RuntimeException
+    std::unique_ptr<java_util_Properties> createStringPropertyArray(const css::uno::Sequence< css::beans::PropertyValue >& info );
 
-    jobject convertTypeMapToJavaMap(JNIEnv *pEnv,const ::com::sun::star::uno::Reference< ::com::sun::star::container::XNameAccess > & _rMap);
+    jobject convertTypeMapToJavaMap(const css::uno::Reference< css::container::XNameAccess > & _rMap);
 
     /** return if a exception occurred
+        the exception will be cleared.
         @param  pEnv
             The native java env
-        @param  _bClear
-            <TRUE/> if the exception should be cleared
-        @return
-            <TRUE/> if an exception is occurred
     */
-    bool isExceptionOccurred(JNIEnv *pEnv,bool _bClear);
+    bool isExceptionOccurred(JNIEnv *pEnv);
 
-    jobject createByteInputStream(const ::com::sun::star::uno::Reference< ::com::sun::star::io::XInputStream >& x,sal_Int32 length);
-    jobject createCharArrayReader(const ::com::sun::star::uno::Reference< ::com::sun::star::io::XInputStream >& x,sal_Int32 length);
+    jobject createByteInputStream(const css::uno::Reference< css::io::XInputStream >& x,sal_Int32 length);
+    jobject createCharArrayReader(const css::uno::Reference< css::io::XInputStream >& x,sal_Int32 length);
 }
 
 #endif // INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_TOOLS_HXX

@@ -18,17 +18,16 @@
  */
 
 #include "ximpnote.hxx"
-#include <com/sun/star/presentation/XPresentationPage.hpp>
 
 using namespace ::com::sun::star;
 
 SdXMLNotesContext::SdXMLNotesContext( SdXMLImport& rImport,
     sal_uInt16 nPrfx, const OUString& rLocalName,
     const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-    uno::Reference< drawing::XShapes >& rShapes)
+    uno::Reference< drawing::XShapes > const & rShapes)
 :   SdXMLGenericPageContext( rImport, nPrfx, rLocalName, xAttrList, rShapes )
 {
-    OUString sStyleName;
+    OUString sStyleName, sPageMasterName;
 
     const sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
     for(sal_Int16 i=0; i < nAttrCount; i++)
@@ -43,7 +42,7 @@ SdXMLNotesContext::SdXMLNotesContext( SdXMLImport& rImport,
         {
             case XML_TOK_MASTERPAGE_PAGE_MASTER_NAME:
             {
-                msPageMasterName = sValue;
+                sPageMasterName = sValue;
                 break;
             }
             case XML_TOK_MASTERPAGE_STYLE_NAME:
@@ -76,33 +75,20 @@ SdXMLNotesContext::SdXMLNotesContext( SdXMLImport& rImport,
     uno::Reference< drawing::XShape > xShape;
     while(rShapes->getCount())
     {
-        rShapes->getByIndex(0L) >>= xShape;
+        rShapes->getByIndex(0) >>= xShape;
         if(xShape.is())
             rShapes->remove(xShape);
     }
 
     // set page-master?
-    if(!msPageMasterName.isEmpty())
+    if(!sPageMasterName.isEmpty())
     {
-        SetPageMaster( msPageMasterName );
+        SetPageMaster( sPageMasterName );
     }
 }
 
 SdXMLNotesContext::~SdXMLNotesContext()
 {
-}
-
-SvXMLImportContext *SdXMLNotesContext::CreateChildContext( sal_uInt16 nPrefix,
-    const OUString& rLocalName,
-    const uno::Reference< xml::sax::XAttributeList>& xAttrList )
-{
-    // no own context in notes, call parent
-    return SdXMLGenericPageContext::CreateChildContext(nPrefix, rLocalName, xAttrList);
-}
-
-void SdXMLNotesContext::EndElement()
-{
-    SdXMLGenericPageContext::EndElement();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

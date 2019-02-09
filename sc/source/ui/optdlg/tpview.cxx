@@ -19,26 +19,28 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "scitems.hxx"
-#include "tpview.hxx"
-#include "global.hxx"
-#include "viewopti.hxx"
-#include "tabvwsh.hxx"
-#include "uiitems.hxx"
-#include "scresid.hxx"
-#include "docsh.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
+#include <scitems.hxx>
+#include <tpview.hxx>
+#include <global.hxx>
+#include <viewopti.hxx>
+#include <tabvwsh.hxx>
+#include <uiitems.hxx>
+#include <scresid.hxx>
+#include <docsh.hxx>
+#include <sc.hrc>
+#include <strings.hrc>
+#include <globstr.hrc>
+#include <units.hrc>
 #include <appoptio.hxx>
 #include <scmod.hxx>
+#include <svx/colorbox.hxx>
 #include <svx/dlgutil.hxx>
 #include <svx/drawitem.hxx>
 #include <svx/xtable.hxx>
 
 ScTpContentOptions::ScTpContentOptions( vcl::Window*         pParent,
                              const SfxItemSet&  rArgSet ) :
-    SfxTabPage(pParent, "TpViewPage", "modules/scalc/ui/tpviewpage.ui", &rArgSet),
-    pLocalOptions(nullptr)
+    SfxTabPage(pParent, "TpViewPage", "modules/scalc/ui/tpviewpage.ui", &rArgSet)
 {
     get(pGridLB,"grid");
     get(pColorFT,"color_label");
@@ -89,6 +91,8 @@ ScTpContentOptions::ScTpContentOptions( vcl::Window*         pParent,
     pGuideLineCB->SetClickHdl(aCBHdl);
     pRowColHeaderCB->SetClickHdl(aCBHdl);
 
+    pColorLB->SetSlotId(SID_ATTR_CHAR_COLOR);
+    pColorLB->SetAutoDisplayColor(SC_STD_GRIDCOLOR);
 }
 
 ScTpContentOptions::~ScTpContentOptions()
@@ -98,7 +102,7 @@ ScTpContentOptions::~ScTpContentOptions()
 
 void ScTpContentOptions::dispose()
 {
-    delete pLocalOptions;
+    pLocalOptions.reset();
     pGridLB.clear();
     pColorFT.clear();
     pColorLB.clear();
@@ -123,10 +127,10 @@ void ScTpContentOptions::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> ScTpContentOptions::Create( vcl::Window*     pParent,
+VclPtr<SfxTabPage> ScTpContentOptions::Create( TabPageParent pParent,
                                                const SfxItemSet*     rCoreSet )
 {
-    return VclPtr<ScTpContentOptions>::Create(pParent, *rCoreSet);
+    return VclPtr<ScTpContentOptions>::Create(pParent.pParent, *rCoreSet);
 }
 
 bool    ScTpContentOptions::FillItemSet( SfxItemSet* rCoreSet )
@@ -151,9 +155,14 @@ bool    ScTpContentOptions::FillItemSet( SfxItemSet* rCoreSet )
         pBreakCB       ->IsValueChangedFromSaved() ||
         pGuideLineCB   ->IsValueChangedFromSaved())
     {
-        pLocalOptions->SetGridColor( pColorLB->GetSelectEntryColor(),
-                                     pColorLB->GetSelectEntry() );
-        rCoreSet->Put(ScTpViewItem(SID_SCVIEWOPTIONS, *pLocalOptions));
+        NamedColor aNamedColor = pColorLB->GetSelectedEntry();
+        if (aNamedColor.first == COL_AUTO)
+        {
+            aNamedColor.first = SC_STD_GRIDCOLOR;
+            aNamedColor.second.clear();
+        }
+        pLocalOptions->SetGridColor(aNamedColor.first, aNamedColor.second);
+        rCoreSet->Put(ScTpViewItem(*pLocalOptions));
         bRet = true;
     }
     if(pRangeFindCB->IsValueChangedFromSaved())
@@ -174,10 +183,10 @@ void    ScTpContentOptions::Reset( const SfxItemSet* rCoreSet )
 {
     const SfxPoolItem* pItem;
     if(SfxItemState::SET == rCoreSet->GetItemState(SID_SCVIEWOPTIONS, false , &pItem))
-        pLocalOptions  = new ScViewOptions(
-                            static_cast<const ScTpViewItem*>(pItem)->GetViewOptions() );
+        pLocalOptions.reset( new ScViewOptions(
+                            static_cast<const ScTpViewItem*>(pItem)->GetViewOptions() ) );
     else
-        pLocalOptions = new ScViewOptions;
+        pLocalOptions.reset( new ScViewOptions );
     pFormulaCB ->Check(pLocalOptions->GetOption(VOPT_FORMULAS));
     pNilCB     ->Check(pLocalOptions->GetOption(VOPT_NULLVALS));
     pAnnotCB   ->Check(pLocalOptions->GetOption(VOPT_NOTES));
@@ -185,9 +194,9 @@ void    ScTpContentOptions::Reset( const SfxItemSet* rCoreSet )
     pAnchorCB  ->Check(pLocalOptions->GetOption(VOPT_ANCHOR));
     pClipMarkCB->Check(pLocalOptions->GetOption(VOPT_CLIPMARKS));
 
-    pObjGrfLB  ->SelectEntryPos( (sal_uInt16)pLocalOptions->GetObjMode(VOBJ_TYPE_OLE) );
-    pDiagramLB ->SelectEntryPos( (sal_uInt16)pLocalOptions->GetObjMode(VOBJ_TYPE_CHART) );
-    pDrawLB    ->SelectEntryPos( (sal_uInt16)pLocalOptions->GetObjMode(VOBJ_TYPE_DRAW) );
+    pObjGrfLB  ->SelectEntryPos( static_cast<sal_uInt16>(pLocalOptions->GetObjMode(VOBJ_TYPE_OLE)) );
+    pDiagramLB ->SelectEntryPos( static_cast<sal_uInt16>(pLocalOptions->GetObjMode(VOBJ_TYPE_CHART)) );
+    pDrawLB    ->SelectEntryPos( static_cast<sal_uInt16>(pLocalOptions->GetObjMode(VOBJ_TYPE_DRAW)) );
 
     pRowColHeaderCB->Check( pLocalOptions->GetOption(VOPT_HEADER) );
     pHScrollCB->Check( pLocalOptions->GetOption(VOPT_HSCROLL) );
@@ -235,16 +244,16 @@ void ScTpContentOptions::ActivatePage( const SfxItemSet& rSet)
         *pLocalOptions = static_cast<const ScTpViewItem*>(pItem)->GetViewOptions();
 }
 
-SfxTabPage::sfxpg ScTpContentOptions::DeactivatePage( SfxItemSet* pSetP )
+DeactivateRC ScTpContentOptions::DeactivatePage( SfxItemSet* pSetP )
 {
     if(pSetP)
         FillItemSet(pSetP);
-    return SfxTabPage::LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
 
-IMPL_LINK_TYPED( ScTpContentOptions, SelLbObjHdl, ListBox&, rLb, void )
+IMPL_LINK( ScTpContentOptions, SelLbObjHdl, ListBox&, rLb, void )
 {
-    const sal_Int32 nSelPos = rLb.GetSelectEntryPos();
+    const sal_Int32 nSelPos = rLb.GetSelectedEntryPos();
     ScVObjMode  eMode   = ScVObjMode(nSelPos);
     ScVObjType  eType   = VOBJ_TYPE_OLE;
 
@@ -256,7 +265,7 @@ IMPL_LINK_TYPED( ScTpContentOptions, SelLbObjHdl, ListBox&, rLb, void )
     pLocalOptions->SetObjMode( eType, eMode );
 }
 
-IMPL_LINK_TYPED( ScTpContentOptions, CBHdl, Button*, pBtn, void )
+IMPL_LINK( ScTpContentOptions, CBHdl, Button*, pBtn, void )
 {
     ScViewOption eOption = VOPT_FORMULAS;
     bool         bChecked = static_cast<CheckBox*>(pBtn)->IsChecked();
@@ -302,63 +311,19 @@ void ScTpContentOptions::InitGridOpt()
 
     pGridLB->SelectEntryPos (nSelPos);
 
-    if ( pColorLB->GetEntryCount() == 0 )
-    {
-        SfxObjectShell* pDocSh = SfxObjectShell::Current();
-        // there might be another DocShell here
-        pDocSh = dynamic_cast<ScDocShell*>( pDocSh );
-
-        XColorListRef pColorList;
-        if ( pDocSh  )
-        {
-            const SfxPoolItem* pItem = pDocSh->GetItem( SID_COLOR_TABLE );
-            if ( pItem )
-                pColorList = static_cast<const SvxColorListItem*>(pItem)->GetColorList();
-        }
-        else
-            pColorList = XColorList::GetStdColorList();
-
-        if ( !pColorList.is() )
-            return;
-
-        pColorLB->SetUpdateMode( false );
-
-        // items from ColorTable
-
-        long nCount = pColorList->Count();
-        for ( long n=0; n<nCount; n++ )
-        {
-            XColorEntry* pEntry = pColorList->GetColor(n);
-            pColorLB->InsertEntry( pEntry->GetColor(), pEntry->GetName() );
-        }
-
-        // default GridColor
-
-        Color aStdCol( SC_STD_GRIDCOLOR );          // same default as in ScViewOptions
-        if ( LISTBOX_ENTRY_NOTFOUND ==
-                pColorLB->GetEntryPos( aStdCol ) )
-            pColorLB->InsertEntry( aStdCol, ScGlobal::GetRscString( STR_GRIDCOLOR ) );
-
-        pColorLB->SetUpdateMode( true );
-
-        Invalidate();
-    }
-
-    //  also select grid color entry on subsequent calls
-
+    //  select grid color entry
     OUString  aName;
     Color     aCol    = pLocalOptions->GetGridColor( &aName );
-    nSelPos = pColorLB->GetEntryPos( aCol );
 
-    if ( LISTBOX_ENTRY_NOTFOUND != nSelPos )
-        pColorLB->SelectEntryPos( nSelPos );
-    else
-        pColorLB->SelectEntryPos( pColorLB->InsertEntry( aCol, aName ) );
+    if (aName.trim().isEmpty() && aCol == SC_STD_GRIDCOLOR)
+        aCol = COL_AUTO;
+
+    pColorLB->SelectEntry(std::make_pair(aCol, aName));
 }
 
-IMPL_LINK_TYPED( ScTpContentOptions, GridHdl, ListBox&, rLb, void )
+IMPL_LINK( ScTpContentOptions, GridHdl, ListBox&, rLb, void )
 {
-    sal_Int32   nSelPos = rLb.GetSelectEntryPos();
+    sal_Int32   nSelPos = rLb.GetSelectedEntryPos();
     bool    bGrid = ( nSelPos <= 1 );
     bool    bGridOnTop = ( nSelPos == 1 );
 
@@ -372,7 +337,6 @@ ScTpLayoutOptions::ScTpLayoutOptions(   vcl::Window* pParent,
                                         const SfxItemSet&   rArgSet ) :
     SfxTabPage( pParent, "ScGeneralPage",
                 "modules/scalc/ui/scgeneralpage.ui", &rArgSet),
-    aUnitArr(               ScResId(SCSTR_UNIT           )),
     pDoc(nullptr)
 {
     get( m_pUnitLB, "unitlb");
@@ -399,22 +363,22 @@ ScTpLayoutOptions::ScTpLayoutOptions(   vcl::Window* pParent,
 
     m_pAlignCB->SetClickHdl(LINK(this, ScTpLayoutOptions, AlignHdl));
 
-    for ( sal_uInt32 i = 0; i < aUnitArr.Count(); ++i )
+    for (size_t i = 0; i < SAL_N_ELEMENTS(SCSTR_UNIT); ++i)
     {
-        OUString sMetric = aUnitArr.GetStringByPos( i );
-        FieldUnit eFUnit = (FieldUnit)aUnitArr.GetValue( i );
+        OUString sMetric = ScResId(SCSTR_UNIT[i].first);
+        FieldUnit eFUnit = SCSTR_UNIT[i].second;
 
         switch ( eFUnit )
         {
-            case FUNIT_MM:
-            case FUNIT_CM:
-            case FUNIT_POINT:
-            case FUNIT_PICA:
-            case FUNIT_INCH:
+            case FieldUnit::MM:
+            case FieldUnit::CM:
+            case FieldUnit::POINT:
+            case FieldUnit::PICA:
+            case FieldUnit::INCH:
             {
-                // nur diese Metriken benutzen
+                // only use these metrics
                 sal_Int32 nPos = m_pUnitLB->InsertEntry( sMetric );
-                m_pUnitLB->SetEntryData( nPos, reinterpret_cast<void*>((sal_IntPtr)eFUnit) );
+                m_pUnitLB->SetEntryData( nPos, reinterpret_cast<void*>(static_cast<sal_IntPtr>(eFUnit)) );
             }
             break;
             default:
@@ -423,7 +387,6 @@ ScTpLayoutOptions::ScTpLayoutOptions(   vcl::Window* pParent,
             }
         }
     }
-
 }
 
 ScTpLayoutOptions::~ScTpLayoutOptions()
@@ -452,33 +415,32 @@ void ScTpLayoutOptions::dispose()
 }
 
 
-VclPtr<SfxTabPage> ScTpLayoutOptions::Create( vcl::Window*          pParent,
+VclPtr<SfxTabPage> ScTpLayoutOptions::Create( TabPageParent pParent,
                                               const SfxItemSet*   rCoreSet )
 {
-    VclPtrInstance<ScTpLayoutOptions> pNew( pParent, *rCoreSet );
+    VclPtrInstance<ScTpLayoutOptions> pNew( pParent.pParent, *rCoreSet );
     ScDocShell* pDocSh = dynamic_cast< ScDocShell *>( SfxObjectShell::Current() );
 
     if(pDocSh!=nullptr)
-        pNew->SetDocument(&pDocSh->GetDocument());
+        pNew->pDoc = &pDocSh->GetDocument();
     return pNew;
 }
 
 bool    ScTpLayoutOptions::FillItemSet( SfxItemSet* rCoreSet )
 {
     bool bRet = true;
-    const sal_Int32 nMPos = m_pUnitLB->GetSelectEntryPos();
+    const sal_Int32 nMPos = m_pUnitLB->GetSelectedEntryPos();
     if ( m_pUnitLB->IsValueChangedFromSaved() )
     {
-        sal_uInt16 nFieldUnit = (sal_uInt16)reinterpret_cast<sal_IntPtr>(m_pUnitLB->GetEntryData( nMPos ));
-        rCoreSet->Put( SfxUInt16Item( SID_ATTR_METRIC,
-                                     (sal_uInt16)nFieldUnit ) );
+        sal_uInt16 nFieldUnit = static_cast<sal_uInt16>(reinterpret_cast<sal_IntPtr>(m_pUnitLB->GetEntryData( nMPos )));
+        rCoreSet->Put( SfxUInt16Item( SID_ATTR_METRIC, nFieldUnit ) );
         bRet = true;
     }
 
     if(m_pTabMF->IsValueChangedFromSaved())
     {
         rCoreSet->Put(SfxUInt16Item(SID_ATTR_DEFTABSTOP,
-                    sal::static_int_cast<sal_uInt16>( m_pTabMF->Denormalize(m_pTabMF->GetValue(FUNIT_TWIP)) )));
+                    sal::static_int_cast<sal_uInt16>( m_pTabMF->Denormalize(m_pTabMF->GetValue(FieldUnit::TWIP)) )));
         bRet = true;
     }
 
@@ -511,7 +473,7 @@ bool    ScTpLayoutOptions::FillItemSet( SfxItemSet* rCoreSet )
 
     if(m_pAlignLB->IsValueChangedFromSaved())
     {
-        rCoreSet->Put(SfxUInt16Item(SID_SC_INPUT_SELECTIONPOS, m_pAlignLB->GetSelectEntryPos()));
+        rCoreSet->Put(SfxUInt16Item(SID_SC_INPUT_SELECTIONPOS, m_pAlignLB->GetSelectedEntryPos()));
         bRet = true;
     }
 
@@ -571,12 +533,12 @@ void    ScTpLayoutOptions::Reset( const SfxItemSet* rCoreSet )
     m_pUnitLB->SetNoSelection();
     if ( rCoreSet->GetItemState( SID_ATTR_METRIC ) >= SfxItemState::DEFAULT )
     {
-        const SfxUInt16Item& rItem = static_cast<const SfxUInt16Item&>(rCoreSet->Get( SID_ATTR_METRIC ));
-        FieldUnit eFieldUnit = (FieldUnit)rItem.GetValue();
+        const SfxUInt16Item& rItem = rCoreSet->Get( SID_ATTR_METRIC );
+        FieldUnit eFieldUnit = static_cast<FieldUnit>(rItem.GetValue());
 
         for ( sal_Int32 i = 0; i < m_pUnitLB->GetEntryCount(); ++i )
         {
-            if ( (FieldUnit)reinterpret_cast<sal_IntPtr>(m_pUnitLB->GetEntryData( i )) == eFieldUnit )
+            if ( static_cast<FieldUnit>(reinterpret_cast<sal_IntPtr>(m_pUnitLB->GetEntryData( i ))) == eFieldUnit )
             {
                 m_pUnitLB->SelectEntryPos( i );
                 break;
@@ -588,7 +550,7 @@ void    ScTpLayoutOptions::Reset( const SfxItemSet* rCoreSet )
 
     const SfxPoolItem* pItem;
     if(SfxItemState::SET == rCoreSet->GetItemState(SID_ATTR_DEFTABSTOP, false, &pItem))
-        m_pTabMF->SetValue(m_pTabMF->Normalize(static_cast<const SfxUInt16Item*>(pItem)->GetValue()), FUNIT_TWIP);
+        m_pTabMF->SetValue(m_pTabMF->Normalize(static_cast<const SfxUInt16Item*>(pItem)->GetValue()), FieldUnit::TWIP);
     m_pTabMF->SaveValue();
 
     m_pUnitLB       ->SaveValue();
@@ -671,27 +633,27 @@ void    ScTpLayoutOptions::ActivatePage( const SfxItemSet& /* rCoreSet */ )
 {
 }
 
-SfxTabPage::sfxpg ScTpLayoutOptions::DeactivatePage( SfxItemSet* pSetP )
+DeactivateRC ScTpLayoutOptions::DeactivatePage( SfxItemSet* pSetP )
 {
     if(pSetP)
         FillItemSet(pSetP);
-    return SfxTabPage::LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
 
-IMPL_LINK_NOARG_TYPED(ScTpLayoutOptions, MetricHdl, ListBox&, void)
+IMPL_LINK_NOARG(ScTpLayoutOptions, MetricHdl, ListBox&, void)
 {
-    const sal_Int32 nMPos = m_pUnitLB->GetSelectEntryPos();
+    const sal_Int32 nMPos = m_pUnitLB->GetSelectedEntryPos();
     if(nMPos != LISTBOX_ENTRY_NOTFOUND)
     {
-        FieldUnit eFieldUnit = (FieldUnit)reinterpret_cast<sal_IntPtr>(m_pUnitLB->GetEntryData( nMPos ));
+        FieldUnit eFieldUnit = static_cast<FieldUnit>(reinterpret_cast<sal_IntPtr>(m_pUnitLB->GetEntryData( nMPos )));
         sal_Int64 nVal =
-            m_pTabMF->Denormalize( m_pTabMF->GetValue( FUNIT_TWIP ) );
+            m_pTabMF->Denormalize( m_pTabMF->GetValue( FieldUnit::TWIP ) );
         ::SetFieldUnit( *m_pTabMF, eFieldUnit );
-        m_pTabMF->SetValue( m_pTabMF->Normalize( nVal ), FUNIT_TWIP );
+        m_pTabMF->SetValue( m_pTabMF->Normalize( nVal ), FieldUnit::TWIP );
     }
 }
 
-IMPL_LINK_TYPED( ScTpLayoutOptions, AlignHdl, Button*, pBox, void )
+IMPL_LINK( ScTpLayoutOptions, AlignHdl, Button*, pBox, void )
 {
     m_pAlignLB->Enable(static_cast<CheckBox*>(pBox)->IsChecked());
 }

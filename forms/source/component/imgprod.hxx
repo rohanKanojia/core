@@ -26,6 +26,7 @@
 #include <com/sun/star/awt/XImageProducer.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <cppuhelper/weak.hxx>
+#include <memory>
 #include <vector>
 
 
@@ -47,8 +48,10 @@ private:
 
     OUString        maURL;
     ConsumerList_t  maConsList;
-    Graphic*        mpGraphic;
-    SvStream*       mpStm;
+    std::unique_ptr<Graphic>
+                    mpGraphic;
+    std::unique_ptr<SvStream>
+                    mpStm;
     sal_uInt32      mnTransIndex;
     bool            mbConsInit;
     Link<Graphic*,void> maDoneHdl;
@@ -61,7 +64,7 @@ private:
 public:
 
                     ImageProducer();
-                    virtual ~ImageProducer();
+                    virtual ~ImageProducer() override;
 
     void            SetImage( const OUString& rPath );
     void            SetImage( SvStream& rStm );
@@ -71,22 +74,20 @@ public:
     void            SetDoneHdl( const Link<Graphic*,void>& i_rHdl ) { maDoneHdl = i_rHdl; }
 
     // css::uno::XInterface
-    css::uno::Any   SAL_CALL queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception) override;
+    css::uno::Any   SAL_CALL queryInterface( const css::uno::Type & rType ) override;
     void            SAL_CALL acquire() throw() override  { OWeakObject::acquire(); }
     void            SAL_CALL release() throw() override  { OWeakObject::release(); }
 
     // MT: ???
-    void            setImage( css::uno::Reference< css::io::XInputStream > & rStmRef );
+    void            setImage( css::uno::Reference< css::io::XInputStream > const & rStmRef );
 
     // css::awt::XImageProducer
-    void SAL_CALL addConsumer( const css::uno::Reference< css::awt::XImageConsumer >& rxConsumer )
-        throw(css::uno::RuntimeException,
-              std::exception) override;
-    void SAL_CALL removeConsumer( const css::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) throw(css::uno::RuntimeException, std::exception) override;
-    void SAL_CALL startProduction(  ) throw(css::uno::RuntimeException, std::exception) override;
+    void SAL_CALL addConsumer( const css::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) override;
+    void SAL_CALL removeConsumer( const css::uno::Reference< css::awt::XImageConsumer >& rxConsumer ) override;
+    void SAL_CALL startProduction(  ) override;
 
     // css::lang::XInitialization
-    void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
 };
 

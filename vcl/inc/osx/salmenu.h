@@ -20,11 +20,11 @@
 #ifndef INCLUDED_VCL_INC_OSX_SALMENU_H
 #define INCLUDED_VCL_INC_OSX_SALMENU_H
 
-#include "premac.h"
+#include <premac.h>
 #include <Cocoa/Cocoa.h>
-#include "postmac.h"
+#include <postmac.h>
 
-#include "salmenu.hxx"
+#include <salmenu.hxx>
 
 #include <vector>
 
@@ -53,11 +53,9 @@ private:
     static void statusLayout();
 public:
     AquaSalMenu( bool bMenuBar );
-    virtual ~AquaSalMenu();
+    virtual ~AquaSalMenu() override;
 
     virtual bool VisibleMenuBar() override;
-    // must return true to actually display native menu bars
-    // otherwise only menu messages are processed (eg, OLE on Windows)
 
     virtual void InsertItem( SalMenuItem* pSalMenuItem, unsigned nPos ) override;
     virtual void RemoveItem( unsigned nPos ) override;
@@ -69,10 +67,10 @@ public:
     virtual void SetItemImage( unsigned nPos, SalMenuItem* pSalMenuItem, const Image& rImage) override;
     virtual void SetAccelerator( unsigned nPos, SalMenuItem* pSalMenuItem, const vcl::KeyCode& rKeyCode, const OUString& rKeyName ) override;
     virtual void GetSystemMenuData( SystemMenuData* pData ) override;
-    virtual bool ShowNativePopupMenu(FloatingWindow * pWin, const Rectangle& rRect, FloatWinPopupFlags nFlags) override;
+    virtual bool ShowNativePopupMenu(FloatingWindow * pWin, const tools::Rectangle& rRect, FloatWinPopupFlags nFlags) override;
     virtual bool AddMenuBarButton( const SalMenuButtonItem& ) override;
     virtual void RemoveMenuBarButton( sal_uInt16 nId ) override;
-    virtual Rectangle GetMenuBarButtonRectPixel( sal_uInt16 i_nItemId, SalFrame* i_pReferenceFrame ) override;
+    virtual tools::Rectangle GetMenuBarButtonRectPixel( sal_uInt16 i_nItemId, SalFrame* i_pReferenceFrame ) override;
 
     int getItemIndexByPos( sal_uInt16 nPos ) const;
     const AquaSalFrame* getFrame() const;
@@ -88,7 +86,7 @@ public:
 
     bool                    mbMenuBar;          // true - Menubar, false - Menu
     NSMenu*                 mpMenu;             // The Carbon reference to this menu
-    Menu*                   mpVCLMenu;          // the corresponding vcl Menu object
+    VclPtr<Menu>            mpVCLMenu;          // the corresponding vcl Menu object
     const AquaSalFrame*     mpFrame;            // the frame to dispatch the menu events to
     AquaSalMenu*            mpParentSalMenu;    // the parent menu that contains us (and perhaps has a frame)
 
@@ -100,10 +98,10 @@ class AquaSalMenuItem : public SalMenuItem
 {
 public:
     AquaSalMenuItem( const SalItemParams* );
-    virtual ~AquaSalMenuItem();
+    virtual ~AquaSalMenuItem() override;
 
     sal_uInt16          mnId;                 // Item ID
-    Menu*               mpVCLMenu;            // VCL Menu into which this MenuItem is inserted
+    VclPtr<Menu>        mpVCLMenu;            // VCL Menu into which this MenuItem is inserted
     AquaSalMenu*        mpParentMenu;         // The menu in which this menu item is inserted
     AquaSalMenu*        mpSubMenu;            // Sub menu of this item (if defined)
     NSMenuItem*         mpMenuItem;           // The NSMenuItem

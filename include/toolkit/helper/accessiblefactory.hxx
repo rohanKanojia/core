@@ -21,7 +21,6 @@
 #define INCLUDED_TOOLKIT_HELPER_ACCESSIBLEFACTORY_HXX
 
 #include <com/sun/star/uno/Reference.hxx>
-#include <rtl/ref.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 
 namespace com { namespace sun { namespace star { namespace accessibility {
@@ -38,6 +37,7 @@ class VCLXScrollBar;
 class VCLXEdit;
 class VCLXComboBox;
 class VCLXToolBox;
+class VCLXHeaderBar;
 class VCLXWindow;
 class Menu;
 
@@ -53,7 +53,7 @@ namespace toolkit
         <em>once</em>. The caller is responsible for holding this reference as long as it needs the
         factory, and release it afterwards.
     */
-    typedef void* (SAL_CALL * GetStandardAccComponentFactory)( );
+    typedef void* (* GetStandardAccComponentFactory)( );
 
 
     //= IAccessibleFactory
@@ -111,6 +111,11 @@ namespace toolkit
         virtual css::uno::Reference< css::accessibility::XAccessibleContext >
             createAccessibleContext( VCLXToolBox* _pXWindow ) = 0;
 
+        /** creates an accessible context for a headerbar window
+        */
+        virtual css::uno::Reference< css::accessibility::XAccessibleContext >
+            createAccessibleContext( VCLXHeaderBar* _pXWindow ) = 0;
+
         /** creates an accessible context for a generic window
         */
         virtual css::uno::Reference< css::accessibility::XAccessibleContext >
@@ -122,7 +127,7 @@ namespace toolkit
             createAccessible( Menu* _pMenu, bool _bIsMenuBar ) = 0;
 
     protected:
-        virtual ~IAccessibleFactory() {}
+        virtual ~IAccessibleFactory() override {}
     };
 
 

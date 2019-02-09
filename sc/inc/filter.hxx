@@ -22,9 +22,10 @@
 
 #include <rtl/textenc.h>
 #include <rtl/ustring.hxx>
-#include <tools/solar.h>
+#include <vcl/errcode.hxx>
 
 #include "scdllapi.h"
+#include <memory>
 
 class SfxMedium;
 class SvStream;
@@ -35,44 +36,18 @@ class ScRange;
 class SvNumberFormatter;
 class ScOrcusFilters;
 
-// return values im-/export filter  (sal_uLong)
-
-typedef sal_uLong FltError;
-
-#define eERR_OK         ERRCODE_NONE                // no error
-#define eERR_OPEN       SCERR_IMPORT_OPEN
-#define eERR_NOMEM      SCERR_IMPORT_OUTOFMEM       // out of memory
-#define eERR_UNKN_WK    SCERR_IMPORT_UNKNOWN_WK     // unknown WK? format (Lotus 1-2-3)
-#define eERR_FORMAT     SCERR_IMPORT_FORMAT         // format error during reading (no formula error!)
-#define eERR_NI         SCERR_IMPORT_NI             // filter not implemented
-#define eERR_UNKN_BIFF  SCERR_IMPORT_UNKNOWN_BIFF   // unknown BIFF format (Excel)
-#define eERR_FILEPASSWD SCERR_IMPORT_FILEPASSWD     // file password protected
-#define eERR_INTERN     SCERR_IMPORT_INTERNAL       // internal error
-#define eERR_RNGOVRFLW  SCWARN_IMPORT_RANGE_OVERFLOW// overflow of cell coordinates
-                                                    // table restricted to valid area (?)
-// more error codes: s. scerrors.hxx
-
 // for import
 enum EXCIMPFORMAT { EIF_AUTO, EIF_BIFF5, EIF_BIFF8, EIF_BIFF_LE4 };
 
 // for export
-enum ExportFormatLotus { ExpWK1, ExpWK3, ExpWK4 };
-enum ExportFormatExcel { ExpBiff2, ExpBiff3, ExpBiff4, ExpBiff4W, ExpBiff5, ExpBiff8, Exp2007Xml };
-
-// options for DIF im-/export (combine with '|')
-#define SC_DIFOPT_PLAIN     0x00000000
-#define SC_DIFOPT_DATE      0x00000001
-#define SC_DIFOPT_TIME      0x00000002
-#define SC_DIFOPT_CURRENCY  0x00000004
-
-#define SC_DIFOPT_EXCEL     (SC_DIFOPT_DATE|SC_DIFOPT_TIME|SC_DIFOPT_CURRENCY)
+enum ExportFormatExcel { ExpBiff5, ExpBiff8 };
 
 // These are implemented inside the scfilt library and lazy loaded
 
 class ScEEAbsImport {
   public:
     virtual ~ScEEAbsImport() {}
-    virtual sal_uLong   Read( SvStream& rStream, const OUString& rBaseURL ) = 0;
+    virtual ErrCode Read( SvStream& rStream, const OUString& rBaseURL ) = 0;
     virtual ScRange GetRange() = 0;
     virtual void    WriteToDocument(
         bool bSizeColsRows = false, double nOutputFactor = 1.0,
@@ -82,29 +57,28 @@ class ScEEAbsImport {
 class SAL_DLLPUBLIC_RTTI ScFormatFilterPlugin {
   public:
     // various import filters
-    virtual FltError ScImportLotus123( SfxMedium&, ScDocument*, rtl_TextEncoding eSrc = RTL_TEXTENCODING_DONTKNOW ) = 0;
-    virtual FltError ScImportQuattroPro( SfxMedium &rMedium, ScDocument *pDoc ) = 0;
-    virtual FltError ScImportExcel( SfxMedium&, ScDocument*, const EXCIMPFORMAT ) = 0;
+    virtual ErrCode ScImportLotus123( SfxMedium&, ScDocument*, rtl_TextEncoding eSrc ) = 0;
+    virtual ErrCode ScImportQuattroPro(SvStream* pStream, ScDocument *pDoc) = 0;
+    virtual ErrCode ScImportExcel( SfxMedium&, ScDocument*, const EXCIMPFORMAT ) = 0;
         // eFormat == EIF_AUTO  -> matching filter is used automatically
         // eFormat == EIF_BIFF5 -> only Biff5 stream is read successfully (in an Excel97 doc, too)
         // eFormat == EIF_BIFF8 -> only Biff8 stream is read successfully (only in Excel97 docs)
         // eFormat == EIF_BIFF_LE4 -> only non storage files _might_ be read successfully
-    virtual FltError ScImportStarCalc10( SvStream&, ScDocument* ) = 0;
-    virtual FltError ScImportDif( SvStream&, ScDocument*, const ScAddress& rInsPos,
-                 const rtl_TextEncoding eSrc = RTL_TEXTENCODING_DONTKNOW, sal_uInt32 nDifOption = SC_DIFOPT_EXCEL ) = 0;
-    virtual FltError ScImportRTF( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange ) = 0;
-    virtual FltError ScImportHTML( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange, double nOutputFactor = 1.0,
-                                   bool bCalcWidthHeight = true, SvNumberFormatter* pFormatter = nullptr, bool bConvertDate = true ) = 0;
+    virtual ErrCode ScImportDif( SvStream&, ScDocument*, const ScAddress& rInsPos,
+                 const rtl_TextEncoding eSrc ) = 0;
+    virtual ErrCode ScImportRTF( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange ) = 0;
+    virtual ErrCode ScImportHTML( SvStream&, const OUString& rBaseURL, ScDocument*, ScRange& rRange, double nOutputFactor,
+                                   bool bCalcWidthHeight, SvNumberFormatter* pFormatter, bool bConvertDate ) = 0;
 
     // various import helpers
-    virtual ScEEAbsImport *CreateRTFImport( ScDocument* pDoc, const ScRange& rRange ) = 0;
-    virtual ScEEAbsImport *CreateHTMLImport( ScDocument* pDocP, const OUString& rBaseURL, const ScRange& rRange ) = 0;
+    virtual std::unique_ptr<ScEEAbsImport> CreateRTFImport( ScDocument* pDoc, const ScRange& rRange ) = 0;
+    virtual std::unique_ptr<ScEEAbsImport> CreateHTMLImport( ScDocument* pDocP, const OUString& rBaseURL, const ScRange& rRange ) = 0;
     virtual OUString       GetHTMLRangeNameList( ScDocument* pDoc, const OUString& rOrigName ) = 0;
 
     // various export filters
-    virtual FltError ScExportExcel5( SfxMedium&, ScDocument*, ExportFormatExcel eFormat, rtl_TextEncoding eDest ) = 0;
+    virtual ErrCode ScExportExcel5( SfxMedium&, ScDocument*, ExportFormatExcel eFormat, rtl_TextEncoding eDest ) = 0;
     virtual void ScExportDif( SvStream&, ScDocument*, const ScAddress& rOutPos, const rtl_TextEncoding eDest ) = 0;
-    virtual FltError ScExportDif( SvStream&, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest ) = 0;
+    virtual void ScExportDif( SvStream&, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest ) = 0;
     virtual void ScExportHTML( SvStream&, const OUString& rBaseURL, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest, bool bAll,
                   const OUString& rStreamPath, OUString& rNonConvertibleChars, const OUString& rFilterOptions ) = 0;
     virtual void ScExportRTF( SvStream&, ScDocument*, const ScRange& rRange, const rtl_TextEncoding eDest ) = 0;
@@ -117,7 +91,7 @@ protected:
 
 // scfilt plugin symbol
 extern "C" {
-  SAL_DLLPUBLIC_EXPORT ScFormatFilterPlugin * SAL_CALL ScFilterCreate();
+  SAL_DLLPUBLIC_EXPORT ScFormatFilterPlugin * ScFilterCreate();
 }
 
 class ScFormatFilter {
@@ -127,7 +101,7 @@ class ScFormatFilter {
 
 struct LotusContext;
 
-FltError ScImportLotus123old(LotusContext& rContext, SvStream&, ScDocument*, rtl_TextEncoding eSrc);
+ErrCode ScImportLotus123old(LotusContext& rContext, SvStream&, ScDocument*, rtl_TextEncoding eSrc);
 
 #endif
 

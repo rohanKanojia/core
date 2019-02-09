@@ -22,13 +22,10 @@
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
-#include <com/sun/star/frame/XModuleManager.hpp>
 #include <com/sun/star/ui/XUIConfigurationManager.hpp>
 #include <com/sun/star/ui/XAcceleratorConfiguration.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XSingleComponentFactory.hpp>
-#include <com/sun/star/script/browse/XBrowseNode.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 
@@ -36,13 +33,11 @@
 
 #include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/group.hxx>
-#include <svtools/svtabbx.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/svtabbx.hxx>
+#include <vcl/treelistbox.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <sfx2/basedlgs.hxx>
+#include <i18nutil/searchopt.hxx>
 #include "cfgutil.hxx"
 
 class SfxMacroInfoItem;
@@ -57,17 +52,13 @@ class SfxAccCfgTabListBox_Impl : public SvTabListBox
 
     void                        KeyInput( const KeyEvent &rKEvt ) override;
 
-protected:
-    virtual void                InitEntry(SvTreeListEntry*, const OUString&, const Image&,
-                                          const Image&, SvLBoxButtonKind eButtonKind) override;
-
 public:
     SfxAccCfgTabListBox_Impl(vcl::Window *pParent, WinBits nStyle)
         : SvTabListBox(pParent, nStyle)
         , m_pAccelConfigPage(nullptr)
     {
     }
-    virtual ~SfxAccCfgTabListBox_Impl();
+    virtual ~SfxAccCfgTabListBox_Impl() override;
     virtual void dispose() override;
 
     void SetAccelConfigPage(SfxAcceleratorConfigPage* pAccelConfigPage)
@@ -86,8 +77,8 @@ struct TAccInfo
                  const vcl::KeyCode& aKey )
             : m_nKeyPos        (nKeyPos  )
             , m_nListPos       (nListPos )
-            , m_bIsConfigurable(true ) /**< its important to set sal_True as default -
-                                                because only fix entries will be disabled later ... */
+            , m_bIsConfigurable(true ) /**< it's important to set true as default -
+                                                because only fix entries will be disabled later... */
             , m_sCommand       (         )
             , m_aKey           (aKey     )
         {}
@@ -109,60 +100,65 @@ namespace sfx2
     class FileDialogHelper;
 }
 
+enum class StartFileDialogType { Open, SaveAs };
+
 class SfxAcceleratorConfigPage : public SfxTabPage
 {
     friend class SfxAccCfgTabListBox_Impl;
 private:
     const SfxMacroInfoItem*         m_pMacroInfoItem;
-    const SfxStringItem*            m_pStringItem;
-    const SfxStringItem*            m_pFontItem;
-    sfx2::FileDialogHelper*         m_pFileDlg;
+    std::unique_ptr<sfx2::FileDialogHelper> m_pFileDlg;
 
-    VclPtr<SfxAccCfgTabListBox_Impl>       m_pEntriesBox;
-    VclPtr<RadioButton>                    m_pOfficeButton;
-    VclPtr<RadioButton>                    m_pModuleButton;
-    VclPtr<PushButton>                     m_pChangeButton;
-    VclPtr<PushButton>                     m_pRemoveButton;
-    VclPtr<SfxConfigGroupListBox>          m_pGroupLBox;
-    VclPtr<SfxConfigFunctionListBox>       m_pFunctionBox;
-    VclPtr<SvTreeListBox>                  m_pKeyBox;
-    VclPtr<PushButton>                     m_pLoadButton;
-    VclPtr<PushButton>                     m_pSaveButton;
-    VclPtr<PushButton>                     m_pResetButton;
-    OUString                        aLoadAccelConfigStr;
-    OUString                        aSaveAccelConfigStr;
-    OUString                        aFilterAllStr;
-    OUString                        aFilterCfgStr;
-    SfxStylesInfo_Impl              m_aStylesInfo;
-    bool                        m_bStylesInfoInitialized;
+    VclPtr<SfxAccCfgTabListBox_Impl>    m_pEntriesBox;
+    VclPtr<RadioButton>                 m_pOfficeButton;
+    VclPtr<RadioButton>                 m_pModuleButton;
+    VclPtr<PushButton>                  m_pChangeButton;
+    VclPtr<PushButton>                  m_pRemoveButton;
+    VclPtr<SfxConfigGroupListBox>       m_pGroupLBox;
+    VclPtr<SfxConfigFunctionListBox>    m_pFunctionBox;
+    VclPtr<SvTreeListBox>               m_pKeyBox;
+    VclPtr<Edit>                        m_pSearchEdit;
+    VclPtr<PushButton>                  m_pLoadButton;
+    VclPtr<PushButton>                  m_pSaveButton;
+    VclPtr<PushButton>                  m_pResetButton;
+    OUString                            aLoadAccelConfigStr;
+    OUString                            aSaveAccelConfigStr;
+    OUString                            aFilterAllStr;
+    OUString                            aFilterCfgStr;
+    SfxStylesInfo_Impl                  m_aStylesInfo;
+    bool                                m_bStylesInfoInitialized;
 
-    css::uno::Reference< css::uno::XComponentContext >     m_xContext;
-    css::uno::Reference< css::ui::XAcceleratorConfiguration > m_xGlobal;
-    css::uno::Reference< css::ui::XAcceleratorConfiguration > m_xModule;
-    css::uno::Reference< css::ui::XAcceleratorConfiguration > m_xAct;
-    css::uno::Reference< css::container::XNameAccess > m_xUICmdDescription;
-    css::uno::Reference< css::frame::XFrame > m_xFrame;
+    css::uno::Reference< css::uno::XComponentContext >          m_xContext;
+    css::uno::Reference< css::ui::XAcceleratorConfiguration >   m_xGlobal;
+    css::uno::Reference< css::ui::XAcceleratorConfiguration >   m_xModule;
+    css::uno::Reference< css::ui::XAcceleratorConfiguration >   m_xAct;
+    css::uno::Reference< css::container::XNameAccess >          m_xUICmdDescription;
+    css::uno::Reference< css::frame::XFrame >                   m_xFrame;
 
     OUString m_sModuleLongName;
     OUString m_sModuleShortName;
     OUString m_sModuleUIName;
 
-    DECL_LINK_TYPED(ChangeHdl, Button *, void);
-    DECL_LINK_TYPED(RemoveHdl, Button *, void);
-    DECL_LINK_TYPED(SelectHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED(Save, Button *, void);
-    DECL_LINK_TYPED(Load, Button *, void);
-    DECL_LINK_TYPED(Default, Button *, void);
-    DECL_LINK_TYPED(RadioHdl, Button *, void);
+    // For search
+    i18nutil::SearchOptions2 m_options;
 
-    DECL_LINK_TYPED(LoadHdl, sfx2::FileDialogHelper *, void);
-    DECL_LINK_TYPED(SaveHdl, sfx2::FileDialogHelper *, void);
+    DECL_LINK(ChangeHdl,            Button *,       void);
+    DECL_LINK(RemoveHdl,            Button *,       void);
+    DECL_LINK(SelectHdl,            SvTreeListBox*, void);
+    DECL_LINK(SearchUpdateHdl,      Edit&,          void);
+    DECL_LINK(Save,                 Button *,       void);
+    DECL_LINK(Load,                 Button *,       void);
+    DECL_LINK(Default,              Button *,       void);
+    DECL_LINK(RadioHdl,             Button *,       void);
+
+    DECL_LINK(LoadHdl, sfx2::FileDialogHelper *, void);
+    DECL_LINK(SaveHdl, sfx2::FileDialogHelper *, void);
 
     OUString                    GetLabel4Command(const OUString& rCommand);
+    SvTreeListEntry*            applySearchFilter(OUString const & rSearchTerm, SvTreeListBox* rListBox);
     void                        InitAccCfg();
-    sal_uLong                   MapKeyCodeToPos( const vcl::KeyCode &rCode ) const;
-    static css::uno::Reference< css::frame::XModel > SearchForAlreadyLoadedDoc(const OUString& sName);
-    void                        StartFileDialog( WinBits nBits, const OUString& rTitle );
+    sal_Int32                   MapKeyCodeToPos(const vcl::KeyCode &rCode) const;
+    void                        StartFileDialog( StartFileDialogType nType, const OUString& rTitle );
 
     void                        Init(const css::uno::Reference< css::ui::XAcceleratorConfiguration >& pAccMgr);
     void                        ResetConfig();
@@ -171,7 +167,7 @@ private:
 
 public:
                                 SfxAcceleratorConfigPage( vcl::Window *pParent, const SfxItemSet& rItemSet );
-    virtual                     ~SfxAcceleratorConfigPage();
+    virtual                     ~SfxAcceleratorConfigPage() override;
     virtual void                dispose() override;
 
     virtual bool                FillItemSet( SfxItemSet* ) override;

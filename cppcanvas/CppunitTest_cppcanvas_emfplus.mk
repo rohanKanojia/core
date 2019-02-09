@@ -30,10 +30,7 @@ $(eval $(call gb_CppunitTest_use_libraries,cppcanvas_emfplus, \
 
 $(eval $(call gb_CppunitTest_use_external,cppcanvas_emfplus,boost_headers))
 
-$(eval $(call gb_CppunitTest_use_api,cppcanvas_emfplus,\
-	offapi \
-	udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,cppcanvas_emfplus))
 
 $(eval $(call gb_CppunitTest_use_ure,cppcanvas_emfplus))
 $(eval $(call gb_CppunitTest_use_vcl_non_headless,cppcanvas_emfplus))
@@ -43,6 +40,7 @@ $(eval $(call gb_CppunitTest_use_components,cppcanvas_emfplus,\
 	canvas/source/factory/canvasfactory \
 	cppcanvas/source/uno/mtfrenderer \
 	configmgr/source/configmgr \
+	emfio/emfio \
 	extensions/source/scanner/scn \
 	filter/source/config/cache/filterconfig1 \
 	framework/util/fwk \
@@ -54,16 +52,14 @@ $(eval $(call gb_CppunitTest_use_components,cppcanvas_emfplus,\
 	sd/util/sdd \
 	svl/source/fsstor/fsstorage \
 	toolkit/util/tk \
+	vcl/vcl.common \
 	ucb/source/core/ucb1 \
 	ucb/source/ucp/file/ucpfile1 \
 	unoxml/source/service/unoxml \
+	uui/util/uui \
 	svtools/util/svt \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,cppcanvas_emfplus))
-
-$(call gb_CppunitTest_get_target,cppcanvas_emfplus): \
-    $(call gb_AllLangResTarget_get_target,ofa) \
-    $(call gb_AllLangResTarget_get_target,sd)
 
 # vim: set noet sw=4 ts=4:

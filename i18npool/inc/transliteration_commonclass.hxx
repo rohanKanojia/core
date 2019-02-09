@@ -26,7 +26,7 @@
 #include <rtl/ustrbuf.h>
 #include <rtl/ustring.hxx>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 class transliteration_commonclass : public cppu::WeakImplHelper<
                                                                   css::i18n::XExtendedTransliteration,
@@ -38,81 +38,70 @@ public:
 
         // Methods which are shared.
         void SAL_CALL
-        loadModule( TransliterationModules modName, const css::lang::Locale& rLocale )
-            throw(css::uno::RuntimeException, std::exception) override;
+        loadModule( css::i18n::TransliterationModules modName, const css::lang::Locale& rLocale ) override;
 
         void SAL_CALL
-        loadModuleNew( const css::uno::Sequence< TransliterationModulesNew >& modName, const css::lang::Locale& rLocale )
-            throw(css::uno::RuntimeException, std::exception) override;
+        loadModuleNew( const css::uno::Sequence< css::i18n::TransliterationModulesNew >& modName, const css::lang::Locale& rLocale ) override;
 
         void SAL_CALL
-        loadModuleByImplName( const OUString& implName, const css::lang::Locale& rLocale )
-            throw(css::uno::RuntimeException, std::exception) override;
+        loadModuleByImplName( const OUString& implName, const css::lang::Locale& rLocale ) override;
 
         void SAL_CALL
-        loadModulesByImplNames(const css::uno::Sequence< OUString >& modNamelist, const css::lang::Locale& rLocale)
-            throw(css::uno::RuntimeException, std::exception) override;
+        loadModulesByImplNames(const css::uno::Sequence< OUString >& modNamelist, const css::lang::Locale& rLocale) override;
 
         css::uno::Sequence< OUString > SAL_CALL
-        getAvailableModules( const css::lang::Locale& rLocale, sal_Int16 sType )
-            throw(css::uno::RuntimeException, std::exception) override;
+        getAvailableModules( const css::lang::Locale& rLocale, sal_Int16 sType ) override;
 
         // Methods which should be implemented in each transliteration module.
-        virtual OUString SAL_CALL getName() throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getName() override;
 
-        virtual sal_Int16 SAL_CALL getType(  ) throw(css::uno::RuntimeException, std::exception) override = 0;
-
-        virtual OUString SAL_CALL
-        transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset  )
-            throw(css::uno::RuntimeException, std::exception) override = 0;
+        virtual sal_Int16 SAL_CALL getType(  ) override = 0;
 
         virtual OUString SAL_CALL
-        folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset)
-            throw(css::uno::RuntimeException, std::exception) override = 0;
+        transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset ) override final
+            { return transliterateImpl( inStr, startPos, nCount, offset, true ); }
+
+        virtual OUString SAL_CALL
+        folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset) override final
+            { return foldingImpl( inStr, startPos, nCount, offset, true ); }
 
         // Methods in XExtendedTransliteration
         virtual OUString SAL_CALL
-        transliterateString2String( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount )
-            throw(css::uno::RuntimeException, std::exception) override;
+        transliterateString2String( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount ) override;
         virtual OUString SAL_CALL
-        transliterateChar2String( sal_Unicode inChar)
-            throw(css::uno::RuntimeException, std::exception) override;
+        transliterateChar2String( sal_Unicode inChar) override;
         virtual sal_Unicode SAL_CALL
-        transliterateChar2Char( sal_Unicode inChar )
-            throw(css::i18n::MultipleCharsOutputException,
-                css::uno::RuntimeException, std::exception) override = 0;
+        transliterateChar2Char( sal_Unicode inChar ) override = 0;
 
         virtual sal_Bool SAL_CALL
-        equals( const OUString& str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32& nMatch1, const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 )
-            throw(css::uno::RuntimeException, std::exception) override = 0;
+        equals( const OUString& str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32& nMatch1, const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 ) override = 0;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        transliterateRange( const OUString& str1, const OUString& str2 )
-            throw(css::uno::RuntimeException, std::exception) override = 0;
+        transliterateRange( const OUString& str1, const OUString& str2 ) override = 0;
 
         virtual sal_Int32 SAL_CALL
-        compareSubstring( const OUString& s1, sal_Int32 off1, sal_Int32 len1, const OUString& s2, sal_Int32 off2, sal_Int32 len2)
-            throw(css::uno::RuntimeException, std::exception) override;
+        compareSubstring( const OUString& s1, sal_Int32 off1, sal_Int32 len1, const OUString& s2, sal_Int32 off2, sal_Int32 len2) override;
 
         virtual sal_Int32 SAL_CALL
-        compareString( const OUString& s1, const OUString& s2)
-            throw(css::uno::RuntimeException, std::exception) override;
+        compareString( const OUString& s1, const OUString& s2) override;
 
         //XServiceInfo
-        virtual OUString SAL_CALL getImplementationName()
-            throw( css::uno::RuntimeException, std::exception ) override;
-        virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName)
-            throw( css::uno::RuntimeException, std::exception ) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 protected:
+        virtual OUString
+        transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) = 0;
+
+        virtual OUString
+        foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) = 0;
+
         css::lang::Locale   aLocale;
         const sal_Char* transliterationName;
         const sal_Char* implementationName;
-        bool useOffset;
 };
 
-} } } }
+}
 
 #endif // INCLUDED_I18NPOOL_INC_TRANSLITERATION_COMMONCLASS_HXX
 

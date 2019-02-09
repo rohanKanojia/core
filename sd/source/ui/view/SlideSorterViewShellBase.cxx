@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SlideSorterViewShellBase.hxx"
-#include "sdresid.hxx"
-#include "DrawDocShell.hxx"
-#include "strings.hrc"
-#include "framework/FrameworkHelper.hxx"
+#include <SlideSorterViewShellBase.hxx>
+#include <DrawDocShell.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <sfx2/viewfac.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/viewsh.hxx>
 
@@ -42,7 +41,7 @@ SfxViewShell* SlideSorterViewShellBase::CreateInstance (
     return pBase;
 }
 
-void SlideSorterViewShellBase::RegisterFactory( sal_uInt16 nPrio )
+void SlideSorterViewShellBase::RegisterFactory( SfxInterfaceId nPrio )
 {
     pFactory = new SfxViewFactory(&CreateInstance,nPrio,"SlideSorter");
     InitFactory();

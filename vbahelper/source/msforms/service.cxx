@@ -16,9 +16,11 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "cppuhelper/implementationentry.hxx"
-#include "comphelper/servicedecl.hxx"
+#include <cppuhelper/implementationentry.hxx>
+#include <comphelper/servicedecl.hxx>
+#include <sal/log.hxx>
 
+#include "service.hxx"
 
 // component exports
 
@@ -27,20 +29,9 @@ using namespace ::com::sun::star::uno;
 
 namespace sdecl = comphelper::service_decl;
 
-// reference service helper(s)
-namespace  controlprovider
-{
-extern sdecl::ServiceDecl const serviceDecl;
-}
-
-namespace  userform
-{
-extern sdecl::ServiceDecl const serviceDecl;
-}
-
 extern "C"
 {
-    SAL_DLLPUBLIC_EXPORT void * SAL_CALL msforms_component_getFactory(
+    SAL_DLLPUBLIC_EXPORT void * msforms_component_getFactory(
         const sal_Char * pImplName, void *, void *)
     {
         SAL_INFO("vbahelper", "In component_getFactory for " << pImplName );

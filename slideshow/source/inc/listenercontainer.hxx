@@ -20,9 +20,9 @@
 #define INCLUDED_SLIDESHOW_SOURCE_INC_LISTENERCONTAINER_HXX
 
 #include <osl/mutex.hxx>
-#include <boost/next_prior.hpp>
 #include <algorithm>
 #include <vector>
+#include <iterator>
 
 namespace slideshow {
 namespace internal {
@@ -38,25 +38,6 @@ struct EmptyBase
 
     typedef EmptyGuard           Guard;
     typedef EmptyClearableGuard ClearableGuard;
-};
-
-class MutexBase
-{
-public:
-    struct Guard : public osl::MutexGuard
-    {
-        explicit Guard(MutexBase const& rBase) :
-            osl::MutexGuard(rBase.maMutex)
-        {}
-    };
-    struct ClearableGuard : public osl::ClearableMutexGuard
-    {
-        explicit ClearableGuard(MutexBase const& rBase) :
-            osl::ClearableMutexGuard(rBase.maMutex)
-        {}
-    };
-
-    mutable osl::Mutex maMutex;
 };
 
 template< typename result_type, typename ListenerTargetT > struct FunctionApply
@@ -155,7 +136,7 @@ struct ListenerOperations< std::weak_ptr<ListenerTargetT> >
             std::shared_ptr<ListenerTargetT> pListener( rCurr.lock() );
 
             if( pListener.get() &&
-                FunctionApply< typename ::std::result_of< FuncT( const typename ContainerT::value_type& ) >::type,
+                FunctionApply<typename ::std::result_of<FuncT (std::shared_ptr<ListenerTargetT> const&)>::type,
                                std::shared_ptr<ListenerTargetT> >::apply(func,pListener) )
             {
                 bRet = true;
@@ -215,7 +196,6 @@ template< typename ListenerT,
 public:
     typedef ListenerT        listener_type;
     typedef ContainerT       container_type;
-    typedef MutexHolderBaseT mutex_type;
 
     /** Check whether listener container is empty
 
@@ -297,7 +277,7 @@ public:
         {
             std::inplace_merge(
                 maListeners.begin(),
-                boost::prior(maListeners.end()),
+                std::prev(maListeners.end()),
                 maListeners.end() );
         }
 
@@ -416,22 +396,6 @@ public:
 
 private:
     ContainerT  maListeners;
-};
-
-
-/** ListenerContainer variant that serialized access
-
-    This ListenerContainer is safe to use in a multi-threaded
-    context. It serializes access to the object, and avoids
-    dead-locking by releasing the object mutex before calling
-    listeners.
- */
-template< typename ListenerT,
-          typename ContainerT=std::vector<ListenerT> >
-class ThreadSafeListenerContainer : public ListenerContainerBase<ListenerT,
-                                                                 MutexBase,
-                                                                 ContainerT>
-{
 };
 
 

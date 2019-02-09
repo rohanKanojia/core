@@ -23,13 +23,7 @@
 #include <wchar.h>
 
 #define WIN32_LEAN_AND_MEAN
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include <tools/pathutils.hxx>
 
@@ -39,7 +33,7 @@
 namespace {
 
 wchar_t * getBrandPath(wchar_t * path) {
-    DWORD n = GetModuleFileNameW(NULL, path, MAX_PATH);
+    DWORD n = GetModuleFileNameW(nullptr, path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) {
         exit(EXIT_FAILURE);
     }
@@ -59,7 +53,7 @@ void writePath(
     wchar_t path[MAX_PATH];
     wchar_t * end = tools::buildPath(
         path, frontBegin, frontEnd, backBegin, backLength);
-    if (end == NULL) {
+    if (end == nullptr) {
         exit(EXIT_FAILURE);
     }
     std::size_t n = (end - path) * sizeof (wchar_t);
@@ -70,21 +64,12 @@ void writePath(
 
 }
 
-#ifdef __MINGW32__
-int main(int argc, char ** argv, char **) {
-    if (argc == 2 && strcmp(argv[1], "c++") == 0) {
-#else
 int wmain(int argc, wchar_t ** argv, wchar_t **) {
     if (argc == 2 && wcscmp(argv[1], L"c++") == 0) {
-#endif
         wchar_t path[MAX_PATH];
         wchar_t * pathEnd = getBrandPath(path);
         writePath(path, pathEnd, MY_STRING(L""));
-#ifdef __MINGW32__
-    } else if (argc == 2 && strcmp(argv[1], "java") == 0) {
-#else
     } else if (argc == 2 && wcscmp(argv[1], L"java") == 0) {
-#endif
         if (fwrite("1", 1, 1, stdout) != 1) {
             exit(EXIT_FAILURE);
         }

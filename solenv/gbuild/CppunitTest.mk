@@ -24,13 +24,24 @@ gb_CppunitTest_PYTHONDEPS ?= $(call gb_Library_get_target,pyuno_wrapper) $(if $(
 
 ifeq ($(strip $(gb_CppunitTest_GDBTRACE)),)
 ifneq ($(strip $(CPPUNITTRACE)),)
+ifneq ($(filter gdb,$(CPPUNITTRACE)),)
+gb_CppunitTest_GDBTRACE := $(subst gdb,gdb -ex "set environment $(subst =, ,$(gb_CppunitTest_CPPTESTPRECOMMAND))",$(CPPUNITTRACE))
+else ifneq ($(filter lldb,$(CPPUNITTRACE)),)
+gb_CppunitTest_PREGDBTRACE := lo_dyldpathfile=$(call var2file,$(shell $(gb_MKTEMP)),500,settings set target.env-vars $(gb_CppunitTest_CPPTESTPRECOMMAND))
+gb_CppunitTest_GDBTRACE := $(subst lldb,lldb -s $$lo_dyldpathfile,$(CPPUNITTRACE))
+gb_CppunitTest_POSTGDBTRACE := rm $$lo_dyldpathfile
+else
 gb_CppunitTest_GDBTRACE := $(CPPUNITTRACE)
+endif
 gb_CppunitTest__interactive := $(true)
 endif
 endif
 
 ifneq ($(strip $(VALGRIND)),)
 gb_CppunitTest_VALGRINDTOOL := valgrind --tool=$(VALGRIND) --num-callers=50 --error-exitcode=1 --trace-children=yes --trace-children-skip='*/java,*/gij'
+ifneq ($(strip $(VALGRIND_GDB)),)
+gb_CppunitTest_VALGRINDTOOL += --vgdb=yes --vgdb-error=0
+endif
 ifeq ($(strip $(VALGRIND)),memcheck)
 G_SLICE := always-malloc
 GLIBCXX_FORCE_NEW := 1
@@ -38,8 +49,15 @@ endif
 endif
 
 ifneq (,$(filter perfcheck,$(MAKECMDGOALS)))
-$(if $(ENABLE_VALGRIND),,$(call gb_Output_error,Running performance tests with empty $$(ENABLE_VALGRIND) does not make sense))
+$(if $(ENABLE_VALGRIND),,$(call gb_Output_error,Running performance tests with empty $$(ENABLE_VALGRIND) does not make sense. Please install valgrind-dev and re-run autogen.))
 gb_CppunitTest_VALGRINDTOOL := valgrind --tool=callgrind --dump-instr=yes --instr-atstart=no --simulate-cache=yes --dump-instr=yes --collect-bus=yes --branch-sim=yes
+ifneq ($(strip $(VALGRIND_GDB)),)
+gb_CppunitTest_VALGRINDTOOL += --vgdb=yes --vgdb-error=0
+endif
+endif
+
+ifneq ($(strip $(RR)),)
+gb_CppunitTest_RR := rr record
 endif
 
 # defined by platform
@@ -53,11 +71,13 @@ gb_CppunitTest_RUNTIMEDEPS += \
 	$(call gb_Library_get_target,localedata_es) \
 	$(call gb_Library_get_target,localedata_euro) \
 	$(call gb_Library_get_target,localedata_others) \
+	$(call gb_Package_get_target,test_unittest) \
 
 define gb_CppunitTest__make_args
 $(HEADLESS) \
 "-env:BRAND_BASE_DIR=$(call gb_Helper_make_url,$(INSTROOT))" \
 "-env:BRAND_SHARE_SUBDIR=$(LIBO_SHARE_FOLDER)" \
+"-env:BRAND_SHARE_RESOURCE_SUBDIR=$(LIBO_SHARE_RESOURCE_FOLDER)" \
 "-env:UserInstallation=$(call gb_Helper_make_url,$(call gb_CppunitTest_get_target,$*).user)" \
 $(if $(URE),\
     $(if $(strip $(CONFIGURATION_LAYERS)),\
@@ -87,39 +107,63 @@ $(call gb_CppunitTest_get_clean_target,%) :
 
 .PHONY : $(call gb_CppunitTest_get_target,%)
 $(call gb_CppunitTest_get_target,%) :| $(gb_CppunitTest_RUNTIMEDEPS)
+ifneq ($(gb_SUPPRESS_TESTS),)
+	@true
+else
 	$(call gb_Output_announce,$*,$(true),CUT,2)
 	$(call gb_Helper_abbreviate_dirs,\
 		mkdir -p $(dir $@) && \
-		rm -fr $@.user && mkdir $@.user && \
+		rm -fr $@.user && cp -r $(WORKDIR)/unittest $@.user && \
 		$(if $(gb_CppunitTest__use_confpreinit), \
 		    $(INSTDIR)/program/lokconf_init $(call gb_CppunitTest__make_args) &&) \
 		$(if $(gb_CppunitTest__interactive),, \
 			$(if $(value gb_CppunitTest_postprocess), \
 				rm -fr $@.core && mkdir $@.core && cd $@.core &&)) \
-		($(gb_CppunitTest_CPPTESTPRECOMMAND) \
+		( \
+		$(if $(gb_CppunitTest_localized),for l in $(WITH_LANG_LIST) ; do LO_TEST_LOCALE="$$l" ) \
+		$(if $(gb_CppunitTest_PREGDBTRACE),$(gb_CppunitTest_PREGDBTRACE) &&) \
+		$(if $(gb_CppunitTest__vcl_no_svp), \
+			$(filter SAL_USE_VCLPLUGIN=svp,$(gb_TEST_ENV_VARS)),$(gb_TEST_ENV_VARS)) \
+		$(EXTRA_ENV_VARS) \
+		$(if $(filter gdb,$(gb_CppunitTest_GDBTRACE)),,$(gb_CppunitTest_CPPTESTPRECOMMAND)) \
 		$(if $(G_SLICE),G_SLICE=$(G_SLICE)) \
 		$(if $(GLIBCXX_FORCE_NEW),GLIBCXX_FORCE_NEW=$(GLIBCXX_FORCE_NEW)) \
-		$(if $(HEADLESS),,VCL_HIDE_WINDOWS=1) \
 		$(gb_CppunitTest_malloc_check) \
 		$(if $(strip $(PYTHON_URE)),\
 			PYTHONDONTWRITEBYTECODE=1) \
-		$(ICECREAM_RUN) $(gb_CppunitTest_GDBTRACE) $(gb_CppunitTest_VALGRINDTOOL) $(gb_CppunitTest_CPPTESTCOMMAND) \
+		$(ICECREAM_RUN) $(gb_CppunitTest_GDBTRACE) $(gb_CppunitTest_VALGRINDTOOL) $(gb_CppunitTest_RR) \
+			$(gb_CppunitTest_CPPTESTCOMMAND) \
 		$(call gb_LinkTarget_get_target,$(call gb_CppunitTest_get_linktarget,$*)) \
 		$(call gb_CppunitTest__make_args) "-env:CPPUNITTESTTARGET=$@" \
+		$(if $(gb_CppunitTest_POSTGDBTRACE), \
+			; RET=$$? && $(gb_CppunitTest_POSTGDBTRACE) && (exit $$RET)) \
+		$(if $(gb_CppunitTest_localized),|| exit $$?; done) \
+		) \
 		$(if $(gb_CppunitTest__interactive),, \
 			> $@.log 2>&1 \
 			|| ($(if $(value gb_CppunitTest_postprocess), \
 					RET=$$?; \
 					$(call gb_CppunitTest_postprocess,$(gb_CppunitTest_CPPTESTCOMMAND),$@.core,$$RET) >> $@.log 2>&1;) \
-				cat $@.log; $(gb_CppunitTest_UNITTESTFAILED) Cppunit $*))))
+				cat $@.log; $(gb_CppunitTest_UNITTESTFAILED) Cppunit $*)))
+endif
 
 define gb_CppunitTest_CppunitTest
 $(call gb_CppunitTest__CppunitTest_impl,$(1),$(call gb_CppunitTest_get_linktarget,$(1)))
 
 endef
 
+define gb_CppunitTest_CppunitScreenShot
+$(call gb_CppunitTest_get_target,$(1)) : gb_CppunitTest_localized := $(true)
+$(call gb_CppunitTest__CppunitTest_impl,$(1),$(call gb_CppunitTest_get_linktarget,$(1)))
+
+endef
+
+define gb_CppunitTest_register_target
+endef
+
 # call gb_CppunitTest__CppunitTest_impl,cppunittest,linktarget
 define gb_CppunitTest__CppunitTest_impl
+$(call gb_CppunitTest_register_target, $(1), $(2), "test")
 $(call gb_LinkTarget_LinkTarget,$(2),CppunitTest_$(1),NONE)
 $(call gb_LinkTarget_set_targettype,$(2),CppunitTest)
 $(call gb_LinkTarget_add_libs,$(2),$(gb_STDLIBS))
@@ -147,6 +191,7 @@ $(call gb_CppunitTest_get_target,$(1)) : VCL := $(false)
 $(call gb_CppunitTest_get_target,$(1)) : UNO_SERVICES :=
 $(call gb_CppunitTest_get_target,$(1)) : UNO_TYPES :=
 $(call gb_CppunitTest_get_target,$(1)) : HEADLESS := --headless
+$(call gb_CppunitTest_get_target,$(1)) : EXTRA_ENV_VARS :=
 $$(eval $$(call gb_Module_register_target,$(call gb_CppunitTest_get_target,$(1)),$(call gb_CppunitTest_get_clean_target,$(1))))
 $(call gb_Helper_make_userfriendly_targets,$(1),CppunitTest)
 
@@ -181,8 +226,12 @@ $(call gb_CppunitTest_get_target,$(1)) : $(if $(filter $(2),$(true)),, \
     $(call gb_Library_get_target,vclplug_gen) \
         $(if $(ENABLE_GTK),$(call gb_Library_get_target,vclplug_gtk)) \
         $(if $(ENABLE_GTK3),$(call gb_Library_get_target,vclplug_gtk3)) \
-        $(if $(ENABLE_KDE4),$(call gb_Library_get_target,vclplug_kde4)) \
-        $(if $(ENABLE_TDE),$(call gb_Library_get_target,vclplug_tde)))
+        $(if $(ENABLE_QT5),$(call gb_Library_get_target,vclplug_qt5)) \
+	 )
+else ifeq ($(OS),MACOSX)
+$(call gb_CppunitTest_get_target,$(1)): $(call gb_Library_get_target,vclplug_osx)
+else ifeq ($(OS),WNT)
+$(call gb_CppunitTest_get_target,$(1)): $(call gb_Library_get_target,vclplug_win)
 endif
 
 endef
@@ -199,8 +248,20 @@ $(call gb_CppunitTest__use_vcl,$(1),$(true))
 endef
 
 define gb_CppunitTest_use_vcl_non_headless
-$(call gb_CppunitTest_get_target,$(1)) : HEADLESS :=
+$(call gb_CppunitTest_get_target,$(1)) : gb_CppunitTest__vcl_no_svp := $(true)
 $(call gb_CppunitTest__use_vcl,$(1),$(false))
+
+endef
+
+define gb_CppunitTest_use_vcl_non_headless_with_windows
+$(call gb_CppunitTest_get_target,$(1)) : HEADLESS :=
+$(call gb_CppunitTest_get_target,$(1)) : gb_CppunitTest__vcl_no_svp := $(true)
+$(call gb_CppunitTest__use_vcl,$(1),$(false))
+
+endef
+
+define gb_CppunitTest_localized_run
+$(call gb_CppunitTest_get_target,$(1)) : gb_CppunitTest_localized := $(true)
 
 endef
 
@@ -307,6 +368,14 @@ $(call gb_CppunitTest_get_target,$(1)) : $(call gb_Executable_get_target,$(2))
 
 endef
 
+define gb_CppunitTest_use_more_fonts
+ifneq ($(filter MORE_FONTS,$(BUILD_TYPE)),)
+$(call gb_CppunitTest_get_target,$(1)) : \
+    $(foreach font,$(gb_Package_MODULE_ooo_fonts),$(call gb_Package_get_target,$(font)))
+endif
+
+endef
+
 define gb_CppunitTest_use_java_ure
 $(call gb_CppunitTest_get_target,$(1)) : JAVA_URE := $(true)
 $(call gb_CppunitTest_get_target,$(1)) : \
@@ -344,58 +413,71 @@ $(call gb_CppunitTest_get_target,$(1)) :\
 
 endef
 
-define gb_CppunitTest__forward_to_Linktarget
-gb_CppunitTest_$(1) = $$(call gb_LinkTarget_$(1),$$(call gb_CppunitTest_get_linktarget,$$(1)),$$(2),$$(3),CppunitTest_$$(1))
+define gb_CppunitTest_use_uiconfig
+$(call gb_CppunitTest_get_target,$(1)) : $(call gb_UIConfig_get_target,$(2))
 
 endef
 
-$(eval $(foreach method,\
-	add_cobject \
-	add_cobjects \
-	add_cxxobject \
-	add_cxxobjects \
-	add_exception_objects \
-	use_executable_objects \
-	use_library_objects \
-	use_libraries \
-	use_static_libraries \
-	add_objcobject \
-	add_objcobjects \
-	add_objcxxobject \
-	add_objcxxobjects \
-	add_asmobject \
-	add_asmobjects \
-	use_package \
-	use_packages \
-	set_precompiled_header \
-	add_sdi_headers \
-	add_cflags \
-	set_cflags \
-	add_cxxflags \
-	set_yaccflags \
-	add_objcflags \
-	add_objcxxflags \
-	add_defs \
-	set_include \
-	add_ldflags \
-	set_ldflags \
-	add_libs \
-	disable_standard_system_libs \
-	use_system_darwin_frameworks \
-	use_system_win32_libs \
-	use_internal_api \
-	use_internal_bootstrap_api \
-	use_internal_comprehensive_api \
-	set_library_path_flags \
-	use_external \
-	use_externals \
-	use_custom_headers \
-	set_visibility_default \
-	set_warnings_not_errors \
-	set_external_code \
-	set_generated_cxx_suffix \
-,\
-	$(call gb_CppunitTest__forward_to_Linktarget,$(method))\
-))
+define gb_CppunitTest_use_uiconfigs
+$(foreach uiconfig,$(2),$(call gb_CppunitTest_use_uiconfig,$(1),$(uiconfig)))
+
+endef
+
+# forward the call to the gb_LinkTarget implementation
+# (note: because the function name is in $(1), the other args are shifted by 1)
+define gb_CppunitTest__forward_to_Linktarget
+$(call gb_LinkTarget_$(1),$(call gb_CppunitTest_get_linktarget,$(2)),$(3),$(4),CppunitTest_$(2))
+
+endef
+
+# copy pasta for forwarding: this could be (and was) done more elegantly, but
+# these here can be found by both git grep and ctags
+gb_CppunitTest_add_cobject = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cobjects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cxxobject = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cxxobjects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_exception_objects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_executable_objects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_library_objects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_libraries = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_static_libraries = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_objcobject = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_objcobjects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_objcxxobject = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_objcxxobjects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cxxclrobject = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cxxclrobjects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_asmobject = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_asmobjects = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_package = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_packages = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_precompiled_header = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_sdi_headers = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_cflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cxxflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_yaccflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_objcflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_objcxxflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_cxxclrflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_defs = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_include = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_ldflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_ldflags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_add_libs = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_disable_standard_system_libs = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_system_darwin_frameworks = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_system_win32_libs = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_internal_api = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_internal_bootstrap_api = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_internal_comprehensive_api = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_library_path_flags = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_external = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_externals = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_use_custom_headers = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_visibility_default = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_warnings_not_errors = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_external_code = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
+gb_CppunitTest_set_generated_cxx_suffix = $(call gb_CppunitTest__forward_to_Linktarget,$(subst gb_CppunitTest_,,$(0)),$(1),$(2),$(3))
 
 # vim: set noet sw=4:

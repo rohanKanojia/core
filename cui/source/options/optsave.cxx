@@ -19,16 +19,10 @@
 
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
-
-#include "optsave.hrc"
-#include <cuires.hrc>
-
 #include "optsave.hxx"
-#include <dialmgr.hxx>
 #include <comphelper/processfactory.hxx>
 #include <unotools/moduleoptions.hxx>
 #include <unotools/saveopt.hxx>
-#include <comphelper/sequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -36,13 +30,15 @@
 #include <com/sun/star/container/XEnumeration.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/util/XFlushable.hpp>
+#include <sfx2/sfxsids.hrc>
 #include <sfx2/docfilt.hxx>
-#include <svtools/stdctrl.hxx>
 #include <vcl/fixed.hxx>
 #include <unotools/configitem.hxx>
 #include <unotools/optionsdlg.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
-#include <vcl/msgbox.hxx>
+#include <sfx2/fcontnr.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::util;
@@ -57,23 +53,17 @@ using namespace comphelper;
 struct SvxSaveTabPage_Impl
 {
     Reference< XNameContainer > xFact;
-    Sequence< OUString >        aFilterArr[APP_COUNT];
-    Sequence< sal_Bool >        aAlienArr[APP_COUNT];
-    Sequence< sal_Bool >        aODFArr[APP_COUNT];
-    Sequence< OUString >        aUIFilterArr[APP_COUNT];
+    std::vector< OUString >     aFilterArr[APP_COUNT];
+    std::vector< bool >         aODFArr[APP_COUNT];
+    std::vector< OUString >     aUIFilterArr[APP_COUNT];
     OUString                    aDefaultArr[APP_COUNT];
-    sal_Bool                    aDefaultReadonlyArr[APP_COUNT];
+    bool                    aDefaultReadonlyArr[APP_COUNT];
     bool                    bInitialized;
 
     SvxSaveTabPage_Impl();
-    ~SvxSaveTabPage_Impl();
 };
 
 SvxSaveTabPage_Impl::SvxSaveTabPage_Impl() : bInitialized( false )
-{
-}
-
-SvxSaveTabPage_Impl::~SvxSaveTabPage_Impl()
 {
 }
 
@@ -81,7 +71,7 @@ SvxSaveTabPage_Impl::~SvxSaveTabPage_Impl()
 
 SvxSaveTabPage::SvxSaveTabPage( vcl::Window* pParent, const SfxItemSet& rCoreSet ) :
     SfxTabPage( pParent, "OptSavePage", "cui/ui/optsavepage.ui", &rCoreSet ),
-    pImpl               ( new SvxSaveTabPage_Impl )
+    pImpl( new SvxSaveTabPage_Impl )
 {
     get(aLoadUserSettingsCB, "load_settings");
     get(aLoadDocPrinterCB,  "load_docprinter");
@@ -201,8 +191,7 @@ SvxSaveTabPage::~SvxSaveTabPage()
 
 void SvxSaveTabPage::dispose()
 {
-    delete pImpl;
-    pImpl = nullptr;
+    pImpl.reset();
     aLoadUserSettingsCB.clear();
     aLoadDocPrinterCB.clear();
     aDocInfoCB.clear();
@@ -223,10 +212,10 @@ void SvxSaveTabPage::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> SvxSaveTabPage::Create( vcl::Window* pParent,
+VclPtr<SfxTabPage> SvxSaveTabPage::Create( TabPageParent pParent,
                                            const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxSaveTabPage>::Create( pParent, *rAttrSet );
+    return VclPtr<SvxSaveTabPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 void SvxSaveTabPage::DetectHiddenControls()
@@ -269,7 +258,7 @@ bool SvxSaveTabPage::FillItemSet( SfxItemSet* rSet )
 
     if ( aODFVersionLB->IsValueChangedFromSaved() )
     {
-        sal_IntPtr nVersion = sal_IntPtr( aODFVersionLB->GetSelectEntryData() );
+        sal_IntPtr nVersion = sal_IntPtr( aODFVersionLB->GetSelectedEntryData() );
         aSaveOpt.SetODFDefaultVersion( SvtSaveOptions::ODFDefaultVersion( nVersion ) );
     }
 
@@ -303,7 +292,7 @@ bool SvxSaveTabPage::FillItemSet( SfxItemSet* rSet )
     if ( aAutoSaveEdit->IsValueChangedFromSaved() )
     {
         rSet->Put( SfxUInt16Item( GetWhich( SID_ATTR_AUTOSAVEMINUTE ),
-                                 (sal_uInt16)aAutoSaveEdit->GetValue() ) );
+                                 static_cast<sal_uInt16>(aAutoSaveEdit->GetValue()) ) );
         bModified = true;
     }
 
@@ -360,7 +349,7 @@ bool SvxSaveTabPage::FillItemSet( SfxItemSet* rSet )
     return bModified;
 }
 
-bool isODFFormat( const OUString& sFilter )
+static bool isODFFormat( const OUString& sFilter )
 {
     static const char* aODFFormats[] =
     {
@@ -399,8 +388,10 @@ void SvxSaveTabPage::Reset( const SfxItemSet* )
     SvtSaveOptions aSaveOpt;
     aLoadUserSettingsCB->Check(aSaveOpt.IsLoadUserSettings());
     aLoadUserSettingsCB->SaveValue();
+    aLoadUserSettingsCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::UseUserData));
     aLoadDocPrinterCB->Check( aSaveOpt.IsLoadDocumentPrinter() );
     aLoadDocPrinterCB->SaveValue();
+    aLoadDocPrinterCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::LoadDocPrinter));
 
     if ( !pImpl->bInitialized )
     {
@@ -417,11 +408,10 @@ void SvxSaveTabPage::Reset( const SfxItemSet* )
                 {
                     sal_IntPtr nData = reinterpret_cast<sal_IntPtr>(aDocTypeLB->GetEntryData(n));
                     OUString sCommand;
-                    sCommand = "matchByDocumentService=%1:iflags=" +
+                    sCommand = "getSortedFilterList():module=%1:iflags=" +
                                OUString::number(static_cast<int>(SfxFilterFlags::IMPORT|SfxFilterFlags::EXPORT)) +
                                ":eflags=" +
-                               OUString::number(static_cast<int>(SfxFilterFlags::NOTINFILEDLG)) +
-                               ":default_first";
+                               OUString::number(static_cast<int>(SfxFilterFlags::NOTINFILEDLG));
                     OUString sReplace;
                     switch(nData)
                     {
@@ -437,23 +427,19 @@ void SvxSaveTabPage::Reset( const SfxItemSet* )
                     sCommand = sCommand.replaceFirst("%1", sReplace);
                     Reference< XEnumeration > xList = xQuery->createSubSetEnumerationByQuery(sCommand);
                     std::vector< OUString > lList;
-                    std::vector< sal_Bool > lAlienList;
-                    std::vector< sal_Bool > lODFList;
+                    std::vector<bool> lODFList;
                     while(xList->hasMoreElements())
                     {
                         SequenceAsHashMap aFilter(xList->nextElement());
                         OUString sFilter = aFilter.getUnpackedValueOrDefault("Name",OUString());
                         if (!sFilter.isEmpty())
                         {
-                            SfxFilterFlags nFlags = static_cast<SfxFilterFlags>(aFilter.getUnpackedValueOrDefault("Flags",sal_Int32()));
                             lList.push_back(sFilter);
-                            lAlienList.push_back(bool(nFlags & SfxFilterFlags::ALIEN));
                             lODFList.push_back( isODFFormat( sFilter ) );
                         }
                     }
-                    pImpl->aFilterArr[nData] = comphelper::containerToSequence(lList);
-                    pImpl->aAlienArr[nData] = comphelper::containerToSequence(lAlienList);
-                    pImpl->aODFArr[nData] = comphelper::containerToSequence(lODFList);
+                    pImpl->aFilterArr[nData] = lList;
+                    pImpl->aODFArr[nData] = lODFList;
                 }
             }
             aDocTypeLB->SelectEntryPos(0);
@@ -461,37 +447,40 @@ void SvxSaveTabPage::Reset( const SfxItemSet* )
         }
         catch(Exception& e)
         {
-            (void) e;
-            OSL_FAIL(
-                OUStringToOString(
-                    "exception in FilterFactory access: " + e.Message,
-                    RTL_TEXTENCODING_UTF8).
-                getStr());
+            SAL_WARN( "cui.options", "exception in FilterFactory access: " << e );
         }
 
         pImpl->bInitialized = true;
     }
 
     aDocInfoCB->Check(aSaveOpt.IsDocInfoSave());
+    aDocInfoCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::DocInfSave));
 
     aBackupCB->Check(aSaveOpt.IsBackup());
-    bool bBackupRO = aSaveOpt.IsReadOnly(SvtSaveOptions::E_BACKUP);
-    aBackupCB->Enable(!bBackupRO);
+    aBackupCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::Backup));
 
     aAutoSaveCB->Check(aSaveOpt.IsAutoSave());
-    aUserAutoSaveCB->Check(aSaveOpt.IsUserAutoSave());
-    aWarnAlienFormatCB->Check(aSaveOpt.IsWarnAlienFormat());
-    aWarnAlienFormatCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::E_WARNALIENFORMAT));
+    aAutoSaveCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::AutoSave));
 
-    aAutoSaveEdit->SetValue( aSaveOpt.GetAutoSaveTime() );
+    aUserAutoSaveCB->Check(aSaveOpt.IsUserAutoSave());
+    aUserAutoSaveCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::UserAutoSave));
+
+    aWarnAlienFormatCB->Check(aSaveOpt.IsWarnAlienFormat());
+    aWarnAlienFormatCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::WarnAlienFormat));
+
+    aAutoSaveEdit->SetValue(aSaveOpt.GetAutoSaveTime());
+    aAutoSaveEdit->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::AutoSaveTime));
 
     // save relatively
-    aRelativeFsysCB->Check( aSaveOpt.IsSaveRelFSys() );
+    aRelativeFsysCB->Check(aSaveOpt.IsSaveRelFSys());
+    aRelativeFsysCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::SaveRelFsys));
 
-    aRelativeInetCB->Check( aSaveOpt.IsSaveRelINet() );
+    aRelativeInetCB->Check(aSaveOpt.IsSaveRelINet());
+    aRelativeInetCB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::SaveRelInet));
 
     void* pDefaultVersion = reinterpret_cast<void*>( aSaveOpt.GetODFDefaultVersion() );
     aODFVersionLB->SelectEntryPos( aODFVersionLB->GetEntryPos( pDefaultVersion ) );
+    aODFVersionLB->Enable(!aSaveOpt.IsReadOnly(SvtSaveOptions::EOption::OdfDefaultVersion));
 
     AutoClickHdl_Impl( aAutoSaveCB );
     ODFVersionHdl_Impl( *aODFVersionLB );
@@ -510,7 +499,7 @@ void SvxSaveTabPage::Reset( const SfxItemSet* )
 }
 
 
-IMPL_LINK_TYPED( SvxSaveTabPage, AutoClickHdl_Impl, Button*, pBox, void )
+IMPL_LINK( SvxSaveTabPage, AutoClickHdl_Impl, Button*, pBox, void )
 {
     if ( pBox == aAutoSaveCB )
     {
@@ -529,7 +518,7 @@ IMPL_LINK_TYPED( SvxSaveTabPage, AutoClickHdl_Impl, Button*, pBox, void )
     }
 }
 
-static OUString lcl_ExtracUIName(const Sequence<PropertyValue> &rProperties)
+static OUString lcl_ExtracUIName(const Sequence<PropertyValue> &rProperties, const OUString& rExtension)
 {
     OUString sName;
     const PropertyValue* pPropVal = rProperties.getConstArray();
@@ -541,7 +530,16 @@ static OUString lcl_ExtracUIName(const Sequence<PropertyValue> &rProperties)
         {
             OUString sUIName;
             if ( ( pPropVal->Value >>= sUIName ) && sUIName.getLength() )
-                return sUIName;
+            {
+                if (!rExtension.isEmpty())
+                {
+                    return sUIName + " (" + rExtension + ")";
+                }
+                else
+                {
+                    return sUIName;
+                }
+            }
         }
         else if (rName == "Name")
         {
@@ -554,9 +552,9 @@ static OUString lcl_ExtracUIName(const Sequence<PropertyValue> &rProperties)
     return sName;
 }
 
-IMPL_LINK_TYPED( SvxSaveTabPage, FilterHdl_Impl, ListBox&, rBox, void )
+IMPL_LINK( SvxSaveTabPage, FilterHdl_Impl, ListBox&, rBox, void )
 {
-    const sal_Int32 nCurPos = aDocTypeLB->GetSelectEntryPos();
+    const sal_Int32 nCurPos = aDocTypeLB->GetSelectedEntryPos();
 
     sal_IntPtr nData = -1;
     if(nCurPos < APP_COUNT)
@@ -567,28 +565,36 @@ IMPL_LINK_TYPED( SvxSaveTabPage, FilterHdl_Impl, ListBox&, rBox, void )
         if(aDocTypeLB == &rBox)
         {
             aSaveAsLB->Clear();
-            const OUString* pFilters = pImpl->aFilterArr[nData].getConstArray();
-            if(!pImpl->aUIFilterArr[nData].getLength())
+            auto & rFilters = pImpl->aFilterArr[nData];
+            if(pImpl->aUIFilterArr[nData].empty())
             {
-                pImpl->aUIFilterArr[nData].realloc(pImpl->aFilterArr[nData].getLength());
-                OUString* pUIFilters = pImpl->aUIFilterArr[nData].getArray();
-                for(int nFilter = 0; nFilter < pImpl->aFilterArr[nData].getLength(); nFilter++)
+                pImpl->aUIFilterArr[nData].resize(pImpl->aFilterArr[nData].size());
+                auto & rUIFilters = pImpl->aUIFilterArr[nData];
+                for(size_t nFilter = 0; nFilter < pImpl->aFilterArr[nData].size(); nFilter++)
                 {
-                    Any aProps = pImpl->xFact->getByName(pFilters[nFilter]);
+                    Any aProps = pImpl->xFact->getByName(rFilters[nFilter]);
+                    // get the extension of the filter
+                    OUString extension;
+                    SfxFilterMatcher matcher;
+                    std::shared_ptr<const SfxFilter> pFilter = matcher.GetFilter4FilterName(rFilters[nFilter]);
+                    if (pFilter)
+                    {
+                        extension = pFilter->GetWildcard().getGlob().getToken(0, ';');
+                    }
                     Sequence<PropertyValue> aProperties;
                     aProps >>= aProperties;
-                    pUIFilters[nFilter] = lcl_ExtracUIName(aProperties);
+                    rUIFilters[nFilter] = lcl_ExtracUIName(aProperties, extension);
                 }
             }
-            const OUString* pUIFilters = pImpl->aUIFilterArr[nData].getConstArray();
+            auto const & rUIFilters = pImpl->aUIFilterArr[nData];
             OUString sSelect;
-            for(int i = 0; i < pImpl->aUIFilterArr[nData].getLength(); i++)
+            for(size_t i = 0; i < pImpl->aUIFilterArr[nData].size(); i++)
             {
-                const sal_Int32 nEntryPos = aSaveAsLB->InsertEntry(pUIFilters[i]);
+                const sal_Int32 nEntryPos = aSaveAsLB->InsertEntry(rUIFilters[i]);
                 if ( pImpl->aODFArr[nData][i] )
-                    aSaveAsLB->SetEntryData( nEntryPos, static_cast<void*>(pImpl) );
-                if(pFilters[i] == pImpl->aDefaultArr[nData])
-                    sSelect = pUIFilters[i];
+                    aSaveAsLB->SetEntryData( nEntryPos, static_cast<void*>(pImpl.get()) );
+                if(rFilters[i] == pImpl->aDefaultArr[nData])
+                    sSelect = rUIFilters[i];
             }
             if(!sSelect.isEmpty())
             {
@@ -600,13 +606,13 @@ IMPL_LINK_TYPED( SvxSaveTabPage, FilterHdl_Impl, ListBox&, rBox, void )
         }
         else
         {
-            OUString sSelect = rBox.GetSelectEntry();
-            const OUString* pFilters = pImpl->aFilterArr[nData].getConstArray();
-            OUString* pUIFilters = pImpl->aUIFilterArr[nData].getArray();
-            for(int i = 0; i < pImpl->aUIFilterArr[nData].getLength(); i++)
-                if(pUIFilters[i] == sSelect)
+            OUString sSelect = rBox.GetSelectedEntry();
+            auto const & rFilters = pImpl->aFilterArr[nData];
+            auto const & rUIFilters = pImpl->aUIFilterArr[nData];
+            for(size_t i = 0; i < pImpl->aUIFilterArr[nData].size(); i++)
+                if(rUIFilters[i] == sSelect)
                 {
-                    sSelect = pFilters[i];
+                    sSelect = rFilters[i];
                     break;
                 }
 
@@ -617,9 +623,9 @@ IMPL_LINK_TYPED( SvxSaveTabPage, FilterHdl_Impl, ListBox&, rBox, void )
     ODFVersionHdl_Impl( *aSaveAsLB );
 };
 
-IMPL_LINK_NOARG_TYPED(SvxSaveTabPage, ODFVersionHdl_Impl, ListBox&, void)
+IMPL_LINK_NOARG(SvxSaveTabPage, ODFVersionHdl_Impl, ListBox&, void)
 {
-    sal_IntPtr nVersion = sal_IntPtr( aODFVersionLB->GetSelectEntryData() );
+    sal_IntPtr nVersion = sal_IntPtr( aODFVersionLB->GetSelectedEntryData() );
     bool bShown = SvtSaveOptions::ODFDefaultVersion( nVersion ) != SvtSaveOptions::ODFVER_LATEST;
     if ( bShown )
     {
@@ -635,7 +641,7 @@ IMPL_LINK_NOARG_TYPED(SvxSaveTabPage, ODFVersionHdl_Impl, ListBox&, void)
         }
 
         bShown = !bHasODFFormat
-                || ( aSaveAsLB->GetSelectEntryData() != nullptr );
+                || ( aSaveAsLB->GetSelectedEntryData() != nullptr );
     }
 
     aODFWarningFI->Show( bShown );

@@ -19,18 +19,16 @@
 
 #include "conditioncontext.hxx"
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
-#include <osl/diagnose.h>
+#include <cppuhelper/exc_hlp.hxx>
 
-#include <com/sun/star/animations/XTimeContainer.hpp>
-#include <com/sun/star/animations/XAnimationNode.hpp>
 #include <com/sun/star/animations/AnimationEndSync.hpp>
 #include <com/sun/star/animations/EventTrigger.hpp>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/ppt/animationspersist.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/ppt/animationspersist.hxx>
 #include "animationtypes.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 #include "timetargetelementcontext.hxx"
 
@@ -41,9 +39,9 @@ using namespace ::com::sun::star::animations;
 
 namespace oox { namespace ppt {
 
-    CondContext::CondContext( FragmentHandler2& rParent, const Reference< XFastAttributeList >& xAttribs,
+    CondContext::CondContext( FragmentHandler2 const & rParent, const Reference< XFastAttributeList >& xAttribs,
                 const TimeNodePtr & pNode, AnimationCondition & aValue )
-        :  TimeNodeContext( rParent, PPT_TOKEN( cond ), xAttribs, pNode )
+        :  TimeNodeContext( rParent, PPT_TOKEN( cond ), pNode )
         , maCond( aValue )
     {
         maEvent.Trigger =  EventTrigger::NONE;
@@ -131,14 +129,14 @@ namespace oox { namespace ppt {
                 break;
             }
             maCond.mnType = aElementToken;
-            maCond.maValue = makeAny( nEnum );
+            maCond.maValue <<= nEnum;
             return this;
         }
         case PPT_TOKEN( tn ):
         {
             maCond.mnType = aElementToken;
             sal_uInt32 nId = rAttribs.getUnsigned( XML_val, 0 );
-            maCond.maValue = makeAny( nId );
+            maCond.maValue <<= nId;
             return this;
         }
         case PPT_TOKEN( tgtEl ):
@@ -154,11 +152,10 @@ namespace oox { namespace ppt {
 
     /** CT_TLTimeConditionList */
     CondListContext::CondListContext(
-            FragmentHandler2& rParent, sal_Int32  aElement,
-            const Reference< XFastAttributeList >& xAttribs,
+            FragmentHandler2 const & rParent, sal_Int32  aElement,
             const TimeNodePtr & pNode,
             AnimationConditionList & aCond )
-        : TimeNodeContext( rParent, aElement, xAttribs, pNode )
+        : TimeNodeContext( rParent, aElement, pNode )
         , maConditions( aCond )
     {
     }
@@ -174,7 +171,7 @@ namespace oox { namespace ppt {
         {
         case PPT_TOKEN( cond ):
             // add a condition to the list
-            maConditions.push_back( AnimationCondition() );
+            maConditions.emplace_back( );
             return new CondContext( *this, rAttribs.getFastAttributeList(), mpNode, maConditions.back() );
         default:
             break;

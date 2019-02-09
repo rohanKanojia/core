@@ -21,7 +21,7 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/range/b2drange.hxx>
 #include <vcl/gdimtf.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/processor2d/processorfromoutputdevice.hxx>
 #include "vclmetafileprocessor2d.hxx"
 #include "vclpixelprocessor2d.hxx"
@@ -33,7 +33,7 @@ namespace drawinglayer
 {
     namespace processor2d
     {
-        drawinglayer::processor2d::BaseProcessor2D* createBaseProcessor2DFromOutputDevice(
+        std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> createBaseProcessor2DFromOutputDevice(
             OutputDevice& rTargetOutDev,
             const drawinglayer::geometry::ViewInformation2D& rViewInformation2D)
         {
@@ -43,12 +43,12 @@ namespace drawinglayer
             if(bOutputToRecordingMetaFile)
             {
                 // create MetaFile Vcl-Processor and process
-                return new drawinglayer::processor2d::VclMetafileProcessor2D(rViewInformation2D, rTargetOutDev);
+                return std::make_unique<drawinglayer::processor2d::VclMetafileProcessor2D>(rViewInformation2D, rTargetOutDev);
             }
             else
             {
                 // create Pixel Vcl-Processor
-                return new drawinglayer::processor2d::VclPixelProcessor2D(rViewInformation2D, rTargetOutDev);
+                return std::make_unique<drawinglayer::processor2d::VclPixelProcessor2D>(rViewInformation2D, rTargetOutDev);
             }
         }
     } // end of namespace processor2d

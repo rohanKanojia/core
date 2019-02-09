@@ -10,7 +10,7 @@
 #include <com/sun/star/util/XSearchable.hpp>
 #include <com/sun/star/util/XSearchDescriptor.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 #include <test/util/xsearchable.hxx>
 
@@ -27,7 +27,7 @@ void XSearchable::testFindAll()
 
     uno::Reference< container::XIndexAccess > xIndex = xSearchable->findAll(xSearchDescr);
     CPPUNIT_ASSERT(xIndex.is());
-    CPPUNIT_ASSERT(xIndex->getCount() == mnCount);
+    CPPUNIT_ASSERT_EQUAL(mnCount, xIndex->getCount());
 }
 
 void XSearchable::testFindFirst()

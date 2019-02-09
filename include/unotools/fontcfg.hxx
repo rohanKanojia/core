@@ -19,18 +19,20 @@
 #ifndef INCLUDED_UNOTOOLS_FONTCFG_HXX
 #define INCLUDED_UNOTOOLS_FONTCFG_HXX
 
-#include <i18nlangtag/languagetag.hxx>
 #include <unotools/unotoolsdllapi.h>
 #include <tools/solar.h>
 #include <tools/fontenum.hxx>
-#include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace container { class XNameAccess; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+
+class LanguageTag;
 
 enum class DefaultFontType;
 
@@ -77,7 +79,7 @@ enum class ImplFontAttrs : sal_uLong
     BrushScript   = 0x10000000, ///< More Script
     Gothic        = 0x20000000,
     Schoolbook    = 0x40000000,
-    OtherStyle    = 0x80000000, ///< OldStyle, ... so negativ points
+    OtherStyle    = 0x80000000, ///< OldStyle, ... so negative points
     CJK_AllLang   = CJK_JP | CJK_SC | CJK_TC | CJK_KR,
     AllScript     = Script | Handwriting | Chancery | Comic | BrushScript,
     AllSubscript  = Handwriting | Chancery | Comic | BrushScript,
@@ -108,7 +110,7 @@ class UNOTOOLS_DLLPUBLIC DefaultFontConfiguration
         mutable css::uno::Reference< css::container::XNameAccess > xAccess;
     };
 
-    std::unordered_map< OUString, LocaleAccess, OUStringHash > m_aConfig;
+    std::unordered_map< OUString, LocaleAccess > m_aConfig;
 
     OUString tryLocale( const OUString& rBcp47, const OUString& rType ) const;
 
@@ -127,8 +129,6 @@ struct UNOTOOLS_DLLPUBLIC FontNameAttr
     OUString                            Name;
     ::std::vector< OUString >           Substitutions;
     ::std::vector< OUString >           MSSubstitutions;
-    ::std::vector< OUString >           PSSubstitutions;
-    ::std::vector< OUString >           HTMLSubstitutions;
     FontWeight                          Weight;
     FontWidth                           Width;
     ImplFontAttrs                       Type;
@@ -153,8 +153,8 @@ private:
 
         LocaleSubst() : bConfigRead( false ) {}
     };
-    std::unordered_map< OUString, LocaleSubst, OUStringHash > m_aSubst;
-    typedef std::unordered_set< OUString, OUStringHash > UniqueSubstHash;
+    std::unordered_map< OUString, LocaleSubst > m_aSubst;
+    typedef std::unordered_set< OUString > UniqueSubstHash;
     mutable UniqueSubstHash maSubstHash;
 
     void fillSubstVector( const css::uno::Reference< css::container::XNameAccess >& rFont,

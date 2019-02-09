@@ -19,16 +19,15 @@
 
 
 #include <sal/macros.h>
-#include "formcontrolling.hxx"
-#include "fmurl.hxx"
-#include "svx/svxids.hrc"
-#include "fmprop.hrc"
-#include "svx/fmtools.hxx"
+#include <formcontrolling.hxx>
+#include <fmurl.hxx>
+#include <svx/svxids.hrc>
+#include <fmprop.hxx>
+#include <svx/fmtools.hxx>
 
 #include <com/sun/star/form/runtime/FormOperations.hpp>
 #include <com/sun/star/form/runtime/FormFeature.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/sdb/XSQLErrorBroadcaster.hpp>
 
 #include <tools/diagnose_ex.h>
 #include <comphelper/anytostring.hxx>
@@ -36,7 +35,6 @@
 #include <cppuhelper/exc_hlp.hxx>
 #include <osl/diagnose.h>
 
-#include <functional>
 #include <algorithm>
 
 
@@ -45,9 +43,7 @@ namespace svx
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::form::runtime::XFormController;
-    using ::com::sun::star::form::XForm;
     using ::com::sun::star::form::runtime::FormOperations;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::sdbc::XRowSet;
@@ -59,7 +55,6 @@ namespace svx
     using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::sdbc::SQLException;
-    using ::com::sun::star::sdb::XSQLErrorBroadcaster;
     using ::com::sun::star::sdb::SQLErrorEvent;
     using ::com::sun::star::lang::EventObject;
 
@@ -72,47 +67,37 @@ namespace svx
     {
         struct FeatureDescription
         {
-            OUString sURL;           // the URL
-            sal_Int32       nSlotId;        // the SFX-compatible slot ID
-            sal_Int16       nFormFeature;   // the css.form.runtime.FormFeature ID
+            OUString const   sURL;           // the URL
+            sal_Int32 const  nSlotId;        // the SFX-compatible slot ID
+            sal_Int16 const  nFormFeature;   // the css.form.runtime.FormFeature ID
         };
         typedef ::std::vector< FeatureDescription > FeatureDescriptions;
 
 
         const FeatureDescriptions& getFeatureDescriptions()
         {
-            static FeatureDescriptions s_aFeatureDescriptions;
-            if ( s_aFeatureDescriptions.empty() )
-            {
-                ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-                if ( s_aFeatureDescriptions.empty() )
-                {
-                    FeatureDescription aDescriptions[] = {
-                        { OUString(FMURL_FORM_POSITION),        SID_FM_RECORD_ABSOLUTE,     FormFeature::MoveAbsolute },
-                        { OUString(FMURL_FORM_RECORDCOUNT),     SID_FM_RECORD_TOTAL,        FormFeature::TotalRecords },
-                        { OUString(FMURL_RECORD_MOVEFIRST),     SID_FM_RECORD_FIRST,        FormFeature::MoveToFirst },
-                        { OUString(FMURL_RECORD_MOVEPREV),      SID_FM_RECORD_PREV,         FormFeature::MoveToPrevious },
-                        { OUString(FMURL_RECORD_MOVENEXT),      SID_FM_RECORD_NEXT,         FormFeature::MoveToNext },
-                        { OUString(FMURL_RECORD_MOVELAST),      SID_FM_RECORD_LAST,         FormFeature::MoveToLast },
-                        { OUString(FMURL_RECORD_MOVETONEW),     SID_FM_RECORD_NEW,          FormFeature::MoveToInsertRow },
-                        { OUString(FMURL_RECORD_SAVE),          SID_FM_RECORD_SAVE,         FormFeature::SaveRecordChanges },
-                        { OUString(FMURL_RECORD_DELETE),        SID_FM_RECORD_DELETE,       FormFeature::DeleteRecord },
-                        { OUString(FMURL_FORM_REFRESH),         SID_FM_REFRESH,             FormFeature::ReloadForm },
-                        { OUString(FMURL_FORM_REFRESH_CURRENT_CONTROL),
-                                                      SID_FM_REFRESH_FORM_CONTROL,FormFeature::RefreshCurrentControl },
-                        { OUString(FMURL_RECORD_UNDO),          SID_FM_RECORD_UNDO,         FormFeature::UndoRecordChanges },
-                        { OUString(FMURL_FORM_SORT_UP),         SID_FM_SORTUP,              FormFeature::SortAscending },
-                        { OUString(FMURL_FORM_SORT_DOWN),       SID_FM_SORTDOWN,            FormFeature::SortDescending },
-                        { OUString(FMURL_FORM_SORT),            SID_FM_ORDERCRIT,           FormFeature::InteractiveSort },
-                        { OUString(FMURL_FORM_AUTO_FILTER),     SID_FM_AUTOFILTER,          FormFeature::AutoFilter },
-                        { OUString(FMURL_FORM_FILTER),          SID_FM_FILTERCRIT,          FormFeature::InteractiveFilter },
-                        { OUString(FMURL_FORM_APPLY_FILTER),    SID_FM_FORM_FILTERED,       FormFeature::ToggleApplyFilter },
-                        { OUString(FMURL_FORM_REMOVE_FILTER),   SID_FM_REMOVE_FILTER_SORT,  FormFeature::RemoveFilterAndSort }
-                    };
-                    for ( size_t i=0; i<SAL_N_ELEMENTS(aDescriptions); ++i )
-                        s_aFeatureDescriptions.push_back( aDescriptions[i] );
-                }
-            };
+            static const FeatureDescriptions s_aFeatureDescriptions({
+                    { OUString(FMURL_FORM_POSITION),        SID_FM_RECORD_ABSOLUTE,     FormFeature::MoveAbsolute },
+                    { OUString(FMURL_FORM_RECORDCOUNT),     SID_FM_RECORD_TOTAL,        FormFeature::TotalRecords },
+                    { OUString(FMURL_RECORD_MOVEFIRST),     SID_FM_RECORD_FIRST,        FormFeature::MoveToFirst },
+                    { OUString(FMURL_RECORD_MOVEPREV),      SID_FM_RECORD_PREV,         FormFeature::MoveToPrevious },
+                    { OUString(FMURL_RECORD_MOVENEXT),      SID_FM_RECORD_NEXT,         FormFeature::MoveToNext },
+                    { OUString(FMURL_RECORD_MOVELAST),      SID_FM_RECORD_LAST,         FormFeature::MoveToLast },
+                    { OUString(FMURL_RECORD_MOVETONEW),     SID_FM_RECORD_NEW,          FormFeature::MoveToInsertRow },
+                    { OUString(FMURL_RECORD_SAVE),          SID_FM_RECORD_SAVE,         FormFeature::SaveRecordChanges },
+                    { OUString(FMURL_RECORD_DELETE),        SID_FM_RECORD_DELETE,       FormFeature::DeleteRecord },
+                    { OUString(FMURL_FORM_REFRESH),         SID_FM_REFRESH,             FormFeature::ReloadForm },
+                    { OUString(FMURL_FORM_REFRESH_CURRENT_CONTROL),
+                                                            SID_FM_REFRESH_FORM_CONTROL,FormFeature::RefreshCurrentControl },
+                    { OUString(FMURL_RECORD_UNDO),          SID_FM_RECORD_UNDO,         FormFeature::UndoRecordChanges },
+                    { OUString(FMURL_FORM_SORT_UP),         SID_FM_SORTUP,              FormFeature::SortAscending },
+                    { OUString(FMURL_FORM_SORT_DOWN),       SID_FM_SORTDOWN,            FormFeature::SortDescending },
+                    { OUString(FMURL_FORM_SORT),            SID_FM_ORDERCRIT,           FormFeature::InteractiveSort },
+                    { OUString(FMURL_FORM_AUTO_FILTER),     SID_FM_AUTOFILTER,          FormFeature::AutoFilter },
+                    { OUString(FMURL_FORM_FILTER),          SID_FM_FILTERCRIT,          FormFeature::InteractiveFilter },
+                    { OUString(FMURL_FORM_APPLY_FILTER),    SID_FM_FORM_FILTERED,       FormFeature::ToggleApplyFilter },
+                    { OUString(FMURL_FORM_REMOVE_FILTER),   SID_FM_REMOVE_FILTER_SORT,  FormFeature::RemoveFilterAndSort }
+                });
             return s_aFeatureDescriptions;
         }
     }
@@ -121,7 +106,7 @@ namespace svx
     namespace
     {
 
-        struct MatchFeatureDescriptionByURL : public ::std::unary_function< FeatureDescription, bool >
+        struct MatchFeatureDescriptionByURL
         {
             const OUString&  m_rURL;
             explicit MatchFeatureDescriptionByURL( const OUString& _rURL ) :m_rURL( _rURL ) { }
@@ -133,9 +118,9 @@ namespace svx
         };
 
 
-        struct MatchFeatureDescriptionBySlotId : public ::std::unary_function< FeatureDescription, bool >
+        struct MatchFeatureDescriptionBySlotId
         {
-            sal_Int32   m_nSlotId;
+            sal_Int32 const   m_nSlotId;
             explicit MatchFeatureDescriptionBySlotId( sal_Int32 _nSlotId ) :m_nSlotId( _nSlotId ) { }
 
             bool operator()( const FeatureDescription& _compare )
@@ -145,9 +130,9 @@ namespace svx
         };
 
 
-        struct MatchFeatureDescriptionByFormFeature : public ::std::unary_function< FeatureDescription, bool >
+        struct MatchFeatureDescriptionByFormFeature
         {
-            sal_Int32   m_nFormFeature;
+            sal_Int32 const   m_nFormFeature;
             explicit MatchFeatureDescriptionByFormFeature( sal_Int32 _nFormFeature ) :m_nFormFeature( _nFormFeature ) { }
 
             bool operator()( const FeatureDescription& _compare )
@@ -157,11 +142,11 @@ namespace svx
         };
 
 
-        struct FormFeatureToSlotId : public ::std::unary_function< sal_Int16, sal_Int32 >
+        struct FormFeatureToSlotId
         {
-            sal_Int32 operator()( sal_Int16 _FormFeature )
+            sal_Int32 operator()( sal_Int16 FormFeature )
             {
-                return FeatureSlotTranslation::getSlotIdForFormFeature( _FormFeature );
+                return FeatureSlotTranslation::getSlotIdForFormFeature( FormFeature );
             }
         };
     }
@@ -194,14 +179,12 @@ namespace svx
 
     ControllerFeatures::ControllerFeatures( IControllerFeatureInvalidation* _pInvalidationCallback )
         :m_pInvalidationCallback( _pInvalidationCallback )
-        ,m_pImpl( nullptr )
     {
     }
 
 
-    ControllerFeatures::ControllerFeatures( const Reference< XFormController >& _rxController, IControllerFeatureInvalidation* _pInvalidationCallback )
-        :m_pInvalidationCallback( _pInvalidationCallback )
-        ,m_pImpl( nullptr )
+    ControllerFeatures::ControllerFeatures( const Reference< XFormController >& _rxController )
+        :m_pInvalidationCallback( nullptr )
     {
         assign( _rxController );
     }
@@ -211,7 +194,6 @@ namespace svx
     {
         dispose();
         m_pImpl = new FormControllerHelper( _rxController, m_pInvalidationCallback );
-        m_pImpl->acquire();
     }
 
 
@@ -223,11 +205,10 @@ namespace svx
 
     void ControllerFeatures::dispose()
     {
-        if ( m_pImpl )
+        if ( m_pImpl.is() )
         {
             m_pImpl->dispose();
-            m_pImpl->release();
-            m_pImpl = nullptr;
+            m_pImpl.clear();
         }
     }
 
@@ -243,7 +224,7 @@ namespace svx
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
         osl_atomic_decrement( &m_refCount );
     }
@@ -258,7 +239,7 @@ namespace svx
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
@@ -389,16 +370,16 @@ namespace svx
     }
 
 
-    void SAL_CALL FormControllerHelper::invalidateFeatures( const Sequence< ::sal_Int16 >& _Features ) throw (RuntimeException, std::exception)
+    void SAL_CALL FormControllerHelper::invalidateFeatures( const Sequence< ::sal_Int16 >& Features )
     {
         if ( !m_pInvalidationCallback )
             // nobody's interested in ...
             return;
 
-        ::std::vector< sal_Int32 > aFeatures( _Features.getLength() );
+        ::std::vector< sal_Int32 > aFeatures( Features.getLength() );
         ::std::transform(
-            _Features.getConstArray(),
-            _Features.getConstArray() + _Features.getLength(),
+            Features.begin(),
+            Features.end(),
             aFeatures.begin(),
             FormFeatureToSlotId()
         );
@@ -407,7 +388,7 @@ namespace svx
     }
 
 
-    void SAL_CALL FormControllerHelper::invalidateAllFeatures() throw (RuntimeException, std::exception)
+    void SAL_CALL FormControllerHelper::invalidateAllFeatures()
     {
         if ( !m_pInvalidationCallback )
             // nobody's interested in ...
@@ -450,14 +431,14 @@ namespace svx
     }
 
 
-    void SAL_CALL FormControllerHelper::errorOccured( const SQLErrorEvent& _Event ) throw (RuntimeException, std::exception)
+    void SAL_CALL FormControllerHelper::errorOccured( const SQLErrorEvent& Event )
     {
         OSL_ENSURE( !m_aOperationError.hasValue(), "FormControllerHelper::errorOccurred: two errors during one operation?" );
-        m_aOperationError = _Event.Reason;
+        m_aOperationError = Event.Reason;
     }
 
 
-    void SAL_CALL FormControllerHelper::disposing( const EventObject& /*_Source*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FormControllerHelper::disposing( const EventObject& /*_Source*/ )
     {
         // not interested in
     }
@@ -503,7 +484,7 @@ namespace svx
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
         return bCanDo;
     }

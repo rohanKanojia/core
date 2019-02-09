@@ -18,18 +18,19 @@
  */
 #ifndef INCLUDED_SW_INC_SWMODULE_HXX
 #define INCLUDED_SW_INC_SWMODULE_HXX
+
+#include <sal/config.h>
+
+#include <cstddef>
+
 #include <tools/fldunit.hxx>
 #include <svl/lstner.hxx>
 #include <unotools/options.hxx>
 #include <sfx2/module.hxx>
 
-#include <tools/shl.hxx>
 #include "swdllapi.h"
 #include "shellid.hxx"
-#include <fldupde.hxx>
-#include <com/sun/star/linguistic2/XLinguServiceEventListener.hpp>
-#include <com/sun/star/linguistic2/XLanguageGuessing.hpp>
-#include <editeng/svxenum.hxx>
+#include "fldupde.hxx"
 
 class Color;
 class SfxItemSet;
@@ -52,7 +53,7 @@ namespace svtools{ class ColorConfig;}
 class SvtAccessibilityOptions;
 class SvtCTLOptions;
 class SvtUserOptions;
-
+enum class SwCompareMode;
 struct SwDBData;
 
 enum class SvViewOpt {
@@ -65,29 +66,32 @@ enum class SvViewOpt {
 namespace com{ namespace sun{ namespace star{ namespace scanner{
     class XScannerManager2;
 }}}}
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XLanguageGuessing; } } } }
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XLinguServiceEventListener; } } } }
+namespace ooo { namespace vba { class XSinkCaller; } }
 
-class SW_DLLPUBLIC SwModule: public SfxModule, public SfxListener, public utl::ConfigurationListener
+class SW_DLLPUBLIC SwModule final : public SfxModule, public SfxListener, public utl::ConfigurationListener
 {
     OUString            m_sActAuthor;
 
     // ConfigItems
-    SwModuleOptions*    m_pModuleConfig;
-    SwMasterUsrPref*    m_pUsrPref;
-    SwMasterUsrPref*    m_pWebUsrPref;
-    SwPrintOptions*     m_pPrintOptions;
-    SwPrintOptions*     m_pWebPrintOptions;
-    SwChapterNumRules*  m_pChapterNumRules;
-    SwStdFontConfig*    m_pStdFontConfig;
-    SwNavigationConfig* m_pNavigationConfig;
-    SwToolbarConfigItem*m_pToolbarConfig;     //For stacked toolbars. Which one was visible?
-    SwToolbarConfigItem*m_pWebToolbarConfig;
-    SwDBConfig*         m_pDBConfig;
-    svtools::ColorConfig*   m_pColorConfig;
-    SvtAccessibilityOptions* m_pAccessibilityOptions;
-    SvtCTLOptions*      m_pCTLOptions;
-    SvtUserOptions*     m_pUserOptions;
+    std::unique_ptr<SwModuleOptions>     m_pModuleConfig;
+    std::unique_ptr<SwMasterUsrPref>     m_pUsrPref;
+    std::unique_ptr<SwMasterUsrPref>     m_pWebUsrPref;
+    std::unique_ptr<SwPrintOptions>      m_pPrintOptions;
+    std::unique_ptr<SwPrintOptions>      m_pWebPrintOptions;
+    std::unique_ptr<SwChapterNumRules>   m_pChapterNumRules;
+    std::unique_ptr<SwStdFontConfig>     m_pStdFontConfig;
+    std::unique_ptr<SwNavigationConfig>  m_pNavigationConfig;
+    std::unique_ptr<SwToolbarConfigItem> m_pToolbarConfig;     //For stacked toolbars. Which one was visible?
+    std::unique_ptr<SwToolbarConfigItem> m_pWebToolbarConfig;
+    std::unique_ptr<SwDBConfig>          m_pDBConfig;
+    std::unique_ptr<svtools::ColorConfig>   m_pColorConfig;
+    std::unique_ptr<SvtAccessibilityOptions> m_pAccessibilityOptions;
+    std::unique_ptr<SvtCTLOptions>       m_pCTLOptions;
+    std::unique_ptr<SvtUserOptions>      m_pUserOptions;
 
-    SfxErrorHandler*    m_pErrorHandler;
+    std::unique_ptr<SfxErrorHandler> m_pErrorHandler;
 
     SwAttrPool          *m_pAttrPool;
 
@@ -97,7 +101,7 @@ class SW_DLLPUBLIC SwModule: public SfxModule, public SfxListener, public utl::C
     SwView*             m_pView;
 
     // List of all Redline-authors.
-    std::vector<OUString>* m_pAuthorNames;
+    std::vector<OUString> m_pAuthorNames;
 
     // DictionaryList listener to trigger spellchecking or hyphenation
     css::uno::Reference< css::linguistic2::XLinguServiceEventListener > m_xLinguServiceEventListener;
@@ -110,12 +114,13 @@ class SW_DLLPUBLIC SwModule: public SfxModule, public SfxListener, public utl::C
     // Catch hint for DocInfo.
     virtual void        Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
-    virtual void        ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 ) override;
+    virtual void        ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints ) override;
 
-protected:
     // Envelopes, labels.
     void                InsertEnv(SfxRequest&);
     void                InsertLab(SfxRequest&, bool bLabel);
+
+    css::uno::Reference< ooo::vba::XSinkCaller > mxAutomationApplicationEventsCaller;
 
 public:
     // public Data - used for internal Clipboard / Drag & Drop / XSelection
@@ -133,11 +138,11 @@ public:
                 SfxObjectFactory* pWebFact,
                     SfxObjectFactory* pGlobalFact );
 
-    virtual ~SwModule();
+    virtual ~SwModule() override;
 
     // Set view for internal use only. It is public only for technical reasons.
-    inline  void        SetView(SwView* pVw) { m_pView = pVw; }
-    inline  SwView*     GetView() { return m_pView; }
+    void        SetView(SwView* pVw) { m_pView = pVw; }
+    SwView*     GetView() { return m_pView; }
 
     // Handler for slots.
     void                StateOther(SfxItemSet &);
@@ -160,13 +165,13 @@ public:
     void ApplyUserCharUnit(bool bApplyChar, bool bWeb);  // apply_char_unit
 
     // Create ConfigItems.
-    SwModuleOptions*    GetModuleConfig()       { return m_pModuleConfig;}
+    SwModuleOptions*    GetModuleConfig()       { return m_pModuleConfig.get();}
     SwPrintOptions*     GetPrtOptions(bool bWeb);
     SwChapterNumRules*  GetChapterNumRules();
-    SwStdFontConfig*    GetStdFontConfig()      { return m_pStdFontConfig; }
+    SwStdFontConfig*    GetStdFontConfig()      { return m_pStdFontConfig.get(); }
     SwNavigationConfig* GetNavigationConfig();
-    SwToolbarConfigItem*GetToolbarConfig()      { return m_pToolbarConfig;    }
-    SwToolbarConfigItem*GetWebToolbarConfig()   { return m_pWebToolbarConfig; }
+    SwToolbarConfigItem*GetToolbarConfig()      { return m_pToolbarConfig.get();    }
+    SwToolbarConfigItem*GetWebToolbarConfig()   { return m_pWebToolbarConfig.get(); }
     SwDBConfig*         GetDBConfig();
     svtools::ColorConfig&   GetColorConfig();
     SvtAccessibilityOptions&    GetAccessibilityOptions();
@@ -175,12 +180,12 @@ public:
 
     // Iterate over views.
     static SwView*      GetFirstView();
-    static SwView*      GetNextView(SwView*);
+    static SwView*      GetNextView(SwView const *);
 
     bool IsEmbeddedLoadSave() const         { return m_bEmbeddedLoadSave; }
     void SetEmbeddedLoadSave( bool bFlag )  { m_bEmbeddedLoadSave = bFlag; }
 
-    static void ShowDBObj( SwView& rView, const SwDBData& rData);
+    static void ShowDBObj( SwView const & rView, const SwDBData& rData);
 
     // Table modi.
     bool            IsInsTableFormatNum(bool bHTML) const;
@@ -188,37 +193,40 @@ public:
     bool            IsInsTableAlignNum(bool bHTML) const;
 
     // Redlining.
-    sal_uInt16          GetRedlineAuthor();
-    OUString            GetRedlineAuthor(sal_uInt16 nPos);
-    sal_uInt16          InsertRedlineAuthor(const OUString& rAuthor);
+    std::size_t         GetRedlineAuthor();
+    OUString const &    GetRedlineAuthor(std::size_t nPos);
+    /// See SwXTextDocument::getTrackedChangeAuthors().
+    OUString GetRedlineAuthorInfo();
+    std::size_t         InsertRedlineAuthor(const OUString& rAuthor);
     void                SetRedlineAuthor(const OUString& rAuthor); // for unit tests
 
-    void                GetInsertAuthorAttr(sal_uInt16 nAuthor, SfxItemSet &rSet);
-    void                GetDeletedAuthorAttr(sal_uInt16 nAuthor, SfxItemSet &rSet);
-    void                GetFormatAuthorAttr(sal_uInt16 nAuthor, SfxItemSet &rSet);
+    void                GetInsertAuthorAttr(std::size_t nAuthor, SfxItemSet &rSet);
+    void                GetDeletedAuthorAttr(std::size_t nAuthor, SfxItemSet &rSet);
+    void                GetFormatAuthorAttr(std::size_t nAuthor, SfxItemSet &rSet);
 
     sal_uInt16              GetRedlineMarkPos();
     const Color&            GetRedlineMarkColor();
 
-    SvxCompareMode      GetCompareMode() const;
+    SwCompareMode      GetCompareMode() const;
     bool            IsUseRsid() const;
     bool            IsIgnorePieces() const;
     sal_uInt16          GetPieceLen() const;
 
     // Return defined DocStat - WordDelimiter.
-    OUString            GetDocStatWordDelim() const;
+    OUString const & GetDocStatWordDelim() const;
 
     // Pass metric of ModuleConfig (for HTML-export).
     FieldUnit GetMetric( bool bWeb ) const;
 
     // Pass update-statuses.
-    sal_uInt16 GetLinkUpdMode( bool bWeb ) const;
-    SwFieldUpdateFlags GetFieldUpdateFlags( bool bWeb ) const;
+    sal_uInt16 GetLinkUpdMode() const;
+    SwFieldUpdateFlags GetFieldUpdateFlags() const;
 
     // Virtual methods for options dialog.
-    virtual SfxItemSet*  CreateItemSet( sal_uInt16 nId ) override;
+    virtual std::unique_ptr<SfxItemSet> CreateItemSet( sal_uInt16 nId ) override;
     virtual void         ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet ) override;
-    virtual VclPtr<SfxTabPage> CreateTabPage( sal_uInt16 nId, vcl::Window* pParent, const SfxItemSet& rSet ) override;
+    virtual VclPtr<SfxTabPage> CreateTabPage( sal_uInt16 nId, TabPageParent pParent, const SfxItemSet& rSet ) override;
+    virtual std::unique_ptr<SfxStyleFamilies> CreateStyleFamilies() override;
 
     // Pool is created here and set at SfxShell.
     void    InitAttrPool();
@@ -229,26 +237,19 @@ public:
     static void  CheckSpellChanges( bool bOnlineSpelling,
                     bool bIsSpellWrongAgain, bool bIsSpellAllAgain, bool bSmartTags );
 
-    inline css::uno::Reference< css::linguistic2::XLinguServiceEventListener >
-            GetLngSvcEvtListener();
-    void    CreateLngSvcEvtListener();
-
-    css::uno::Reference< css::scanner::XScannerManager2 >
+    css::uno::Reference< css::scanner::XScannerManager2 > const &
             GetScannerManager();
 
-    css::uno::Reference< css::linguistic2::XLanguageGuessing >
+    css::uno::Reference< css::linguistic2::XLanguageGuessing > const &
             GetLanguageGuesser();
-};
 
-inline css::uno::Reference< css::linguistic2::XLinguServiceEventListener >
-        SwModule::GetLngSvcEvtListener()
-{
-    return m_xLinguServiceEventListener;
-}
+    void RegisterAutomationApplicationEventsCaller(css::uno::Reference< ooo::vba::XSinkCaller > const& xCaller);
+    void CallAutomationApplicationEventSinks(const OUString& Method, css::uno::Sequence< css::uno::Any >& Arguments);
+};
 
 //    Access to SwModule, the View and the shell.
 
-#define SW_MOD() ( *reinterpret_cast<SwModule**>(GetAppData(SHL_WRITER)))
+#define SW_MOD() ( static_cast<SwModule*>(SfxApplication::GetModule(SfxToolsModule::Writer)))
 
 SW_DLLPUBLIC SwView*    GetActiveView();
 SW_DLLPUBLIC SwWrtShell* GetActiveWrtShell();
@@ -257,6 +258,8 @@ namespace sw
 {
 SW_DLLPUBLIC Color* GetActiveRetoucheColor();
 }
+
+extern bool g_bNoInterrupt;
 
 #endif
 

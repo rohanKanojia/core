@@ -21,10 +21,11 @@
 
 #include <sax/tools/converter.hxx>
 
-#include <xmloff/nmspmap.hxx>
 #include "xmlimprt.hxx"
+#include <xmloff/xmlnmspe.hxx>
 
 using namespace ::com::sun::star;
+using namespace xmloff::token;
 
 ScMyImpCellRangeSource::ScMyImpCellRangeSource() :
     nColumns( 0 ),
@@ -35,80 +36,59 @@ ScMyImpCellRangeSource::ScMyImpCellRangeSource() :
 
 ScXMLCellRangeSourceContext::ScXMLCellRangeSourceContext(
         ScXMLImport& rImport,
-        sal_uInt16 nPrfx,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList >& xAttrList,
+        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
         ScMyImpCellRangeSource* pCellRangeSource ) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
-    if( !xAttrList.is() ) return;
-
-    sal_Int16               nAttrCount      = xAttrList->getLength();
-    const SvXMLTokenMap&    rAttrTokenMap   = GetScImport().GetTableCellRangeSourceAttrTokenMap();
-
-    for( sal_Int16 nIndex = 0; nIndex < nAttrCount; ++nIndex )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( nIndex ));
-        const OUString& sValue(xAttrList->getValueByIndex( nIndex ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix      = GetScImport().GetNamespaceMap().GetKeyByAttrName( sAttrName, &aLocalName );
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_NAME:
-                pCellRangeSource->sSourceStr = sValue;
-            break;
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_FILTER_NAME:
-                pCellRangeSource->sFilterName = sValue;
-            break;
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_FILTER_OPTIONS:
-                pCellRangeSource->sFilterOptions = sValue;
-            break;
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_HREF:
-                pCellRangeSource->sURL = GetScImport().GetAbsoluteReference(sValue);
-            break;
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_LAST_COLUMN:
+            switch (aIter.getToken())
             {
-                sal_Int32 nValue;
-                if (::sax::Converter::convertNumber( nValue, sValue, 1 ))
-                    pCellRangeSource->nColumns = nValue;
-                else
-                    pCellRangeSource->nColumns = 1;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    pCellRangeSource->sSourceStr = aIter.toString();
+                break;
+                case XML_ELEMENT( TABLE, XML_FILTER_NAME ):
+                    pCellRangeSource->sFilterName = aIter.toString();
+                break;
+                case XML_ELEMENT( TABLE, XML_FILTER_OPTIONS ):
+                    pCellRangeSource->sFilterOptions = aIter.toString();
+                break;
+                case XML_ELEMENT( XLINK, XML_HREF ):
+                    pCellRangeSource->sURL = GetScImport().GetAbsoluteReference(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_LAST_COLUMN_SPANNED ):
+                {
+                    sal_Int32 nValue;
+                    if (::sax::Converter::convertNumber( nValue, aIter.toString(), 1 ))
+                        pCellRangeSource->nColumns = nValue;
+                    else
+                        pCellRangeSource->nColumns = 1;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_LAST_ROW_SPANNED ):
+                {
+                    sal_Int32 nValue;
+                    if (::sax::Converter::convertNumber( nValue, aIter.toString(), 1 ))
+                        pCellRangeSource->nRows = nValue;
+                    else
+                        pCellRangeSource->nRows = 1;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_REFRESH_DELAY ):
+                {
+                    double fTime;
+                    if (::sax::Converter::convertDuration( fTime, aIter.toString() ))
+                        pCellRangeSource->nRefresh = std::max( static_cast<sal_Int32>(fTime * 86400.0), sal_Int32(0) );
+                }
+                break;
             }
-            break;
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_LAST_ROW:
-            {
-                sal_Int32 nValue;
-                if (::sax::Converter::convertNumber( nValue, sValue, 1 ))
-                    pCellRangeSource->nRows = nValue;
-                else
-                    pCellRangeSource->nRows = 1;
-            }
-            break;
-            case XML_TOK_TABLE_CELL_RANGE_SOURCE_ATTR_REFRESH_DELAY:
-            {
-                double fTime;
-                if (::sax::Converter::convertDuration( fTime, sValue ))
-                    pCellRangeSource->nRefresh = std::max( (sal_Int32)(fTime * 86400.0), (sal_Int32)0 );
-            }
-            break;
         }
     }
 }
 
 ScXMLCellRangeSourceContext::~ScXMLCellRangeSourceContext()
-{
-}
-
-SvXMLImportContext *ScXMLCellRangeSourceContext::CreateChildContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLCellRangeSourceContext::EndElement()
 {
 }
 

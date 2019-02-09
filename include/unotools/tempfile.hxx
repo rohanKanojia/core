@@ -22,6 +22,7 @@
 
 #include <unotools/unotoolsdllapi.h>
 #include <tools/stream.hxx>
+#include <memory>
 
 namespace utl
 {
@@ -45,12 +46,10 @@ namespace utl
 class UNOTOOLS_DLLPUBLIC TempFile
 {
     OUString    aName;
-    SvStream*   pStream;
-    bool        bIsDirectory;
+    std::unique_ptr<SvStream>
+                pStream;
+    bool const        bIsDirectory;
     bool        bKillingFileEnabled;
-
-    TempFile( const TempFile& ) = delete;
-    TempFile& operator=(const TempFile&) = delete;
 
 public:
                     /**
@@ -66,8 +65,13 @@ public:
                     rLeadingChars="abc" means "abc0","abc1" and so on, depending on existing files in the folder ).
                     The extension string may be f.e. ".txt" or "", if no extension string is given, ".tmp" is used
                         @param  _bStartWithZero If set to false names will be generated like "abc","abc0","abc1"
+                        @param  bCreateParentDirs If rLeadingChars contains a slash, this will create the required
+                                parent directories.
                     */
-                    TempFile( const OUString& rLeadingChars, bool _bStartWithZero=true, const OUString* pExtension=nullptr, const OUString* pParent=nullptr);
+                    TempFile( const OUString& rLeadingChars, bool _bStartWithZero=true, const OUString* pExtension=nullptr,
+                              const OUString* pParent=nullptr, bool bCreateParentDirs=false );
+
+                    TempFile(TempFile && other);
 
                     /**
                     TempFile will be removed from disk in dtor if EnableKillingFile(true) was called before.
@@ -84,7 +88,7 @@ public:
                     Returns the URL of the tempfile object.
                     If you want to have the system path file name, use the GetFileName() method of this object
                     */
-    OUString        GetURL();
+    OUString const & GetURL() const;
 
                     /**
                     Returns the system path name of the tempfile in host notation
@@ -125,7 +129,7 @@ public:
                     that does not belong to the local file system.
                     The caller of the SetTempNameBase is responsible for deleting this folder and all temporary files in it.
                     The return value of both methods is the complete "physical" name of the tempname base folder.
-                    It is not a URL because alle URLs must be "UCB compatible", so there may be no suitable URL at all.
+                    It is not a URL because all URLs must be "UCB compatible", so there may be no suitable URL at all.
                     */
     static OUString SetTempNameBaseDirectory( const OUString &rBaseName );
 };

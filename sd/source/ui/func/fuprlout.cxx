@@ -17,41 +17,37 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuprlout.hxx"
+#include <fuprlout.hxx>
 #include <vcl/wrkwin.hxx>
 #include <sfx2/dispatch.hxx>
-#include <svl/smplhint.hxx>
 #include <svl/itempool.hxx>
 #include <sot/storage.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/svdundo.hxx>
 
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/request.hxx>
 
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
-#include "pres.hxx"
-#include "DrawViewShell.hxx"
-#include "FrameView.hxx"
-#include "stlpool.hxx"
-#include "View.hxx"
-#include "glob.hrc"
-#include "glob.hxx"
-#include "strings.hrc"
-#include "strmname.h"
-#include "app.hrc"
-#include "DrawDocShell.hxx"
-#include "SlideSorterViewShell.hxx"
-#include "unprlout.hxx"
-#include "unchss.hxx"
-#include "unmovss.hxx"
-#include "sdattr.hxx"
-#include "sdresid.hxx"
-#include "drawview.hxx"
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <pres.hxx>
+#include <DrawViewShell.hxx>
+#include <FrameView.hxx>
+#include <stlpool.hxx>
+#include <View.hxx>
+#include <glob.hxx>
+#include <strmname.h>
+#include <app.hrc>
+#include <DrawDocShell.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <Window.hxx>
+#include <unprlout.hxx>
+#include <unchss.hxx>
+#include <unmovss.hxx>
+#include <sdattr.hxx>
+#include <drawview.hxx>
 #include <editeng/outliner.hxx>
 #include <editeng/editdata.hxx>
-#include "sdabstdlg.hxx"
+#include <sdabstdlg.hxx>
 #include <memory>
 
 namespace sd
@@ -95,7 +91,7 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
     if (DrawViewShell *pShell = dynamic_cast<DrawViewShell*>(mpViewShell))
     {
         EditMode eEditMode = pShell->GetEditMode();
-        if (eEditMode == EM_MASTERPAGE)
+        if (eEditMode == EditMode::MasterPage)
             bOnMaster = true;
     }
 
@@ -112,10 +108,9 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
                 pSlideSorterViewShell->GetPageSelection());
             if (xSelection)
             {
-                for (auto it = xSelection->begin(); it != xSelection->end(); ++it)
+                for (SdPage *pPage : *xSelection)
                 {
-                    SdPage *pPage = *it;
-                    if (pPage->IsSelected() || pPage->GetPageKind() != PK_STANDARD)
+                    if (pPage->IsSelected() || pPage->GetPageKind() != PageKind::Standard)
                         continue;
                     mpDoc->SetSelected(pPage, true);
                     aUnselect.push_back(pPage);
@@ -127,21 +122,15 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
     std::vector<SdPage*> aSelectedPages;
     std::vector<sal_uInt16> aSelectedPageNums;
     // determine the active pages
-    for (sal_uInt16 nPage = 0; nPage < mpDoc->GetSdPageCount(PK_STANDARD); nPage++)
+    for (sal_uInt16 nPage = 0; nPage < mpDoc->GetSdPageCount(PageKind::Standard); nPage++)
     {
-        SdPage* pPage = mpDoc->GetSdPage(nPage, PK_STANDARD);
+        SdPage* pPage = mpDoc->GetSdPage(nPage, PageKind::Standard);
         if (pPage->IsSelected())
         {
             aSelectedPages.push_back(pPage);
             aSelectedPageNums.push_back(nPage);
         }
     }
-
-    assert(!aSelectedPages.empty() && "no selected page");
-    OUString aOldLayoutName(aSelectedPages.back()->GetLayoutName());
-    sal_Int32 nPos = aOldLayoutName.indexOf(SD_LT_SEPARATOR);
-    if (nPos != -1)
-        aOldLayoutName = aOldLayoutName.copy(0, nPos);
 
     bool bMasterPage = bOnMaster;
     bool bCheckMasters = false;
@@ -150,12 +139,20 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
     bool   bLoad = false;           // appear the new master pages?
     OUString aFile;
 
-    SfxItemSet aSet(mpDoc->GetPool(), ATTR_PRESLAYOUT_START, ATTR_PRESLAYOUT_END);
+    SfxItemSet aSet(mpDoc->GetPool(), svl::Items<ATTR_PRESLAYOUT_START, ATTR_PRESLAYOUT_END>{});
 
     aSet.Put( SfxBoolItem( ATTR_PRESLAYOUT_LOAD, bLoad));
     aSet.Put( SfxBoolItem( ATTR_PRESLAYOUT_MASTER_PAGE, bMasterPage ) );
     aSet.Put( SfxBoolItem( ATTR_PRESLAYOUT_CHECK_MASTERS, bCheckMasters ) );
-    aSet.Put( SfxStringItem( ATTR_PRESLAYOUT_NAME, aOldLayoutName));
+
+    if (!aSelectedPages.empty())
+    {
+        OUString aOldLayoutName(aSelectedPages.back()->GetLayoutName());
+        sal_Int32 nPos = aOldLayoutName.indexOf(SD_LT_SEPARATOR);
+        if (nPos != -1)
+            aOldLayoutName = aOldLayoutName.copy(0, nPos);
+        aSet.Put(SfxStringItem(ATTR_PRESLAYOUT_NAME, aOldLayoutName));
+    }
 
     const SfxItemSet *pArgs = rReq.GetArgs ();
 
@@ -173,9 +170,9 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
     else
     {
         SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-        std::unique_ptr<AbstractSdPresLayoutDlg> pDlg(pFact ? pFact->CreateSdPresLayoutDlg(mpDocSh, nullptr, aSet ) : nullptr);
+        ScopedVclPtr<AbstractSdPresLayoutDlg> pDlg(pFact->CreateSdPresLayoutDlg(mpWindow ? mpWindow->GetFrameWeld() : nullptr, mpDocSh, aSet));
 
-        sal_uInt16 nResult = pDlg ? pDlg->Execute() : static_cast<short>(RET_CANCEL);
+        sal_uInt16 nResult = pDlg->Execute();
 
         switch (nResult)
         {
@@ -238,7 +235,7 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
             static_cast<DrawView*>(mpView)->BlockPageOrderChangedHint(false);
 
         // if the master page was visible, show it again
-        if (!bError)
+        if (!aSelectedPages.empty())
         {
             if (bOnMaster)
             {
@@ -250,7 +247,7 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
                     {
                         sal_uInt16 nPgNum = pSelectedPage->TRG_GetMasterPage().GetPageNum();
 
-                        if (static_cast<DrawViewShell*>(mpViewShell)->GetPageKind() == PK_NOTES)
+                        if (static_cast<DrawViewShell*>(mpViewShell)->GetPageKind() == PageKind::Notes)
                             nPgNum++;
 
                         pView->HideSdrPage();
@@ -274,10 +271,8 @@ void FuPresentationLayout::DoExecute( SfxRequest& rReq )
 
 
         // fake a mode change to repaint the page tab bar
-        if( mpViewShell && dynamic_cast< const DrawViewShell *>( mpViewShell ) !=  nullptr )
+        if( auto pDrawViewSh = dynamic_cast<DrawViewShell *>( mpViewShell ) )
         {
-            DrawViewShell* pDrawViewSh =
-                static_cast<DrawViewShell*>(mpViewShell);
             EditMode eMode = pDrawViewSh->GetEditMode();
             bool bLayer = pDrawViewSh->IsLayerModeActive();
             pDrawViewSh->ChangeEditMode( eMode, !bLayer );

@@ -20,6 +20,7 @@
 #include <vcl/GraphicNativeMetadata.hxx>
 
 #include <vcl/gfxlink.hxx>
+#include <tools/stream.hxx>
 
 #include "jpeg/Exif.hxx"
 #include <memory>
@@ -32,12 +33,16 @@ GraphicNativeMetadata::~GraphicNativeMetadata()
 {}
 
 
-bool GraphicNativeMetadata::read(Graphic& rGraphic)
+bool GraphicNativeMetadata::read(Graphic const & rGraphic)
 {
-    GfxLink aLink = rGraphic.GetLink();
-    if ( aLink.GetType() != GFX_LINK_TYPE_NATIVE_JPG )
+    GfxLink aLink = rGraphic.GetGfxLink();
+    if ( aLink.GetType() != GfxLinkType::NativeJpg )
         return false;
+
     sal_uInt32 aDataSize = aLink.GetDataSize();
+    if (!aDataSize)
+        return false;
+
     std::unique_ptr<sal_uInt8[]> aBuffer(new sal_uInt8[aDataSize]);
 
     memcpy(aBuffer.get(), aLink.GetData(), aDataSize);

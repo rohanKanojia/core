@@ -27,8 +27,8 @@ class StgAvlNode
 {
     friend class StgAvlIterator;
 private:
-    short Locate( StgAvlNode*, StgAvlNode**, StgAvlNode**, StgAvlNode** );
-    short Adjust( StgAvlNode**, StgAvlNode* );
+    sal_Int32 Locate( StgAvlNode const *, StgAvlNode**, StgAvlNode**, StgAvlNode** );
+    short Adjust( StgAvlNode**, StgAvlNode const * );
     StgAvlNode* RotLL();
     StgAvlNode* RotLR();
     StgAvlNode* RotRR();
@@ -42,17 +42,16 @@ protected:
     StgAvlNode();
 public:
     virtual ~StgAvlNode();
-    StgAvlNode* Find( StgAvlNode* );
+    StgAvlNode* Find( StgAvlNode const * );
     static bool Insert( StgAvlNode**, StgAvlNode* );
-    static bool Remove( StgAvlNode**, StgAvlNode*, bool bDel = true );
-    virtual short Compare( const StgAvlNode* ) const = 0;
+    static bool Remove( StgAvlNode**, StgAvlNode*, bool bDel );
+    virtual sal_Int32 Compare( const StgAvlNode* ) const = 0;
 };
 
 // The iterator class provides single stepping through an AVL tree.
 
 class StgAvlIterator {
     StgAvlNode* m_pRoot;                  // root entry (parent)
-    short       m_nCount;                 // tree size
     short       m_nCur;                   // current element
     StgAvlNode* Find( short );
 public:

@@ -18,36 +18,24 @@
  */
 
 #include "xmlsubti.hxx"
-#include "global.hxx"
 #include "xmlstyli.hxx"
 #include "xmlimprt.hxx"
-#include "document.hxx"
-#include "markdata.hxx"
+#include <document.hxx>
 #include "XMLConverter.hxx"
-#include "docuno.hxx"
-#include "cellsuno.hxx"
+#include <docuno.hxx>
 #include "XMLStylesImportHelper.hxx"
-#include "sheetdata.hxx"
-#include "tabprotection.hxx"
-#include "tokenarray.hxx"
-#include "convuno.hxx"
-#include "documentimport.hxx"
+#include <sheetdata.hxx>
+#include <tabprotection.hxx>
+#include <tokenarray.hxx>
+#include <documentimport.hxx>
 
-#include <svx/svdpage.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
-#include <sax/tools/converter.hxx>
-#include <xmloff/xmltkmap.hxx>
-#include <xmloff/nmspmap.hxx>
-#include <xmloff/xmlerror.hxx>
+#include <comphelper/base64.hxx>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/sheet/XSheetCellRange.hpp>
-#include <com/sun/star/sheet/XCellRangeAddressable.hpp>
-#include <com/sun/star/sheet/CellInsertMode.hpp>
-#include <com/sun/star/sheet/XCellRangeMovement.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
-#include <com/sun/star/container/XNamed.hpp>
-#include <com/sun/star/util/XProtectable.hpp>
-#include <com/sun/star/sheet/XArrayFormulaRange.hpp>
 
 #include <memory>
 
@@ -58,7 +46,11 @@ ScXMLTabProtectionData::ScXMLTabProtectionData() :
     meHash2(PASSHASH_UNSPECIFIED),
     mbProtected(false),
     mbSelectProtectedCells(true),
-    mbSelectUnprotectedCells(true)
+    mbSelectUnprotectedCells(true),
+    mbInsertColumns(false),
+    mbInsertRows(false),
+    mbDeleteColumns(false),
+    mbDeleteRows(false)
 {
 }
 
@@ -121,7 +113,6 @@ void ScMyTables::NewSheet(const OUString& sTableName, const OUString& sStyleName
         else
             pDoc->SetTabNameOnLoad(maCurrentCellPos.Tab(), sTableName);
 
-        rImport.SetTableStyle(sStyleName);
         xCurrentSheet = getCurrentSheet(rImport.GetModel(), maCurrentCellPos.Tab());
         if (xCurrentSheet.is())
         {
@@ -188,7 +179,7 @@ void ScMyTables::AddColumn(bool bIsCovered)
     //here only need to set column style if this is the first row and
     //the cell is not covered.
     if(maCurrentCellPos.Row() == 0 && !bIsCovered)
-        rImport.GetStylesImportHelper()->InsertCol(maCurrentCellPos.Col(), maCurrentCellPos.Tab(), rImport.GetDocument());
+        rImport.GetStylesImportHelper()->InsertCol(maCurrentCellPos.Col(), maCurrentCellPos.Tab());
 }
 
 void ScMyTables::DeleteTable()
@@ -203,13 +194,17 @@ void ScMyTables::DeleteTable()
     if (rImport.GetDocument() && maProtectionData.mbProtected)
     {
         uno::Sequence<sal_Int8> aHash;
-        ::sax::Converter::decodeBase64(aHash, maProtectionData.maPassword);
+        ::comphelper::Base64::decode(aHash, maProtectionData.maPassword);
 
         std::unique_ptr<ScTableProtection> pProtect(new ScTableProtection);
         pProtect->setProtected(maProtectionData.mbProtected);
         pProtect->setPasswordHash(aHash, maProtectionData.meHash1, maProtectionData.meHash2);
         pProtect->setOption(ScTableProtection::SELECT_LOCKED_CELLS,   maProtectionData.mbSelectProtectedCells);
         pProtect->setOption(ScTableProtection::SELECT_UNLOCKED_CELLS, maProtectionData.mbSelectUnprotectedCells);
+        pProtect->setOption(ScTableProtection::INSERT_COLUMNS, maProtectionData.mbInsertColumns);
+        pProtect->setOption(ScTableProtection::INSERT_ROWS,    maProtectionData.mbInsertRows);
+        pProtect->setOption(ScTableProtection::DELETE_COLUMNS, maProtectionData.mbDeleteColumns);
+        pProtect->setOption(ScTableProtection::DELETE_ROWS,    maProtectionData.mbDeleteRows);
         rImport.GetDocument()->SetTabProtection(maCurrentCellPos.Tab(), pProtect.get());
     }
 }
@@ -222,7 +217,7 @@ void ScMyTables::AddColStyle(const sal_Int32 nRepeat, const OUString& rCellStyle
     nCurrentColCount = std::min<sal_Int32>( nCurrentColCount, MAXCOLCOUNT );
 }
 
-uno::Reference< drawing::XDrawPage > ScMyTables::GetCurrentXDrawPage()
+uno::Reference< drawing::XDrawPage > const & ScMyTables::GetCurrentXDrawPage()
 {
     if( (maCurrentCellPos.Tab() != nCurrentDrawPage) || !xDrawPage.is() )
     {
@@ -234,7 +229,7 @@ uno::Reference< drawing::XDrawPage > ScMyTables::GetCurrentXDrawPage()
     return xDrawPage;
 }
 
-uno::Reference< drawing::XShapes > ScMyTables::GetCurrentXShapes()
+uno::Reference< drawing::XShapes > const & ScMyTables::GetCurrentXShapes()
 {
     if( (maCurrentCellPos.Tab() != nCurrentXShapes) || !xShapes.is() )
     {
@@ -242,10 +237,8 @@ uno::Reference< drawing::XShapes > ScMyTables::GetCurrentXShapes()
         rImport.GetShapeImport()->startPage(xShapes);
         rImport.GetShapeImport()->pushGroupForSorting ( xShapes );
         nCurrentXShapes = sal::static_int_cast<sal_Int16>(maCurrentCellPos.Tab());
-        return xShapes;
     }
-    else
-        return xShapes;
+    return xShapes;
 }
 
 bool ScMyTables::HasDrawPage()
@@ -258,7 +251,7 @@ bool ScMyTables::HasXShapes()
     return !((maCurrentCellPos.Tab() != nCurrentXShapes) || !xShapes.is());
 }
 
-void ScMyTables::AddOLE(uno::Reference <drawing::XShape>& rShape,
+void ScMyTables::AddOLE(const uno::Reference <drawing::XShape>& rShape,
       const OUString &rRangeList)
 {
       aFixupOLEs.AddOLE(rShape, rRangeList);
@@ -275,14 +268,13 @@ void ScMyTables::AddMatrixRange(
         nEndColumn, nEndRow, maCurrentCellPos.Tab()
     );
 
-    maMatrixRangeList.Append(aScRange);
+    maMatrixRangeList.push_back(aScRange);
 
     ScDocumentImport& rDoc = rImport.GetDoc();
-    std::unique_ptr<ScTokenArray> pCode(new ScTokenArray);
-    pCode->AddStringXML( rFormula );
-    if( (eGrammar == formula::FormulaGrammar::GRAM_EXTERNAL) && !rFormulaNmsp.isEmpty() )
-        pCode->AddStringXML( rFormulaNmsp );
-    rDoc.setMatrixCells(aScRange, *pCode, eGrammar);
+    ScTokenArray aCode;
+    aCode.AssignXMLString( rFormula,
+            ((eGrammar == formula::FormulaGrammar::GRAM_EXTERNAL) ? rFormulaNmsp : OUString()));
+    rDoc.setMatrixCells(aScRange, aCode, eGrammar);
     rDoc.getDoc().IncXMLImportedFormulaCount( rFormula.getLength() );
 }
 

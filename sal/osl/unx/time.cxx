@@ -22,7 +22,6 @@
 #include "saltime.hxx"
 #include "system.hxx"
 
-#include <osl/diagnose.h>
 #include <osl/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -37,7 +36,7 @@
     defined(LINUX) || defined(OPENBSD) || defined(DRAGONFLY)
 #define STRUCT_TM_HAS_GMTOFF 1
 
-#elif defined(SOLARIS)
+#elif defined(__sun)
 #define HAS_ALTZONE 1
 #endif
 
@@ -76,7 +75,7 @@ sal_Bool SAL_CALL osl_getSystemTime(TimeValue* tv)
 
     if (res != 0)
     {
-        return sal_False;
+        return false;
     }
 
     tv->Seconds = tp.tv_sec;
@@ -86,7 +85,7 @@ sal_Bool SAL_CALL osl_getSystemTime(TimeValue* tv)
     tv->Nanosec = tp.tv_usec * 1000;
     #endif
 #endif
-    return sal_True;
+    return true;
 }
 
 sal_Bool SAL_CALL osl_getDateTimeFromTimeValue( const TimeValue* pTimeVal, oslDateTime* pDateTime )
@@ -95,7 +94,7 @@ sal_Bool SAL_CALL osl_getDateTimeFromTimeValue( const TimeValue* pTimeVal, oslDa
     struct tm tmBuf;
     time_t atime;
 
-    atime = (time_t)pTimeVal->Seconds;
+    atime = static_cast<time_t>(pTimeVal->Seconds);
 
     /* Convert time from type time_t to struct tm */
     pSystemTime = gmtime_r( &atime, &tmBuf );
@@ -112,10 +111,10 @@ sal_Bool SAL_CALL osl_getDateTimeFromTimeValue( const TimeValue* pTimeVal, oslDa
         pDateTime->Month        =   pSystemTime->tm_mon + 1;
         pDateTime->Year         =   pSystemTime->tm_year  + 1900;
 
-        return sal_True;
+        return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL osl_getTimeValueFromDateTime( const oslDateTime* pDateTime, TimeValue* pTimeVal )
@@ -133,7 +132,7 @@ sal_Bool SAL_CALL osl_getTimeValueFromDateTime( const oslDateTime* pDateTime, Ti
     if ( pDateTime->Month > 0 )
         aTime.tm_mon = pDateTime->Month - 1;
     else
-        return sal_False;
+        return false;
 
     aTime.tm_year = pDateTime->Year - 1900;
 
@@ -153,7 +152,7 @@ sal_Bool SAL_CALL osl_getTimeValueFromDateTime( const oslDateTime* pDateTime, Ti
      * the returned value to be timezone neutral.
      */
 
-    if ( nSeconds != (time_t) -1 )
+    if ( nSeconds != time_t(-1) )
     {
         time_t bias;
 
@@ -178,10 +177,10 @@ sal_Bool SAL_CALL osl_getTimeValueFromDateTime( const oslDateTime* pDateTime, Ti
         if ( nSeconds > bias )
             pTimeVal->Seconds -= bias;
 
-        return sal_True;
+        return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL osl_getLocalTimeFromSystemTime( const TimeValue* pSystemTimeVal, TimeValue* pLocalTimeVal )
@@ -191,7 +190,7 @@ sal_Bool SAL_CALL osl_getLocalTimeFromSystemTime( const TimeValue* pSystemTimeVa
     time_t bias;
     time_t atime;
 
-    atime = (time_t) pSystemTimeVal->Seconds;
+    atime = static_cast<time_t>(pSystemTimeVal->Seconds);
     pLocalTime = localtime_r( &atime, &tmBuf );
 
 #if defined(STRUCT_TM_HAS_GMTOFF)
@@ -206,15 +205,15 @@ sal_Bool SAL_CALL osl_getLocalTimeFromSystemTime( const TimeValue* pSystemTimeVa
     bias = pLocalTime->tm_isdst > 0 ? timezone - 3600 : timezone;
 #endif
 
-    if ( (sal_Int64) pSystemTimeVal->Seconds > bias )
+    if ( static_cast<sal_Int64>(pSystemTimeVal->Seconds) > bias )
     {
         pLocalTimeVal->Seconds = pSystemTimeVal->Seconds - bias;
         pLocalTimeVal->Nanosec = pSystemTimeVal->Nanosec;
 
-        return sal_True;
+        return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL osl_getSystemTimeFromLocalTime( const TimeValue* pLocalTimeVal, TimeValue* pSystemTimeVal )
@@ -224,7 +223,7 @@ sal_Bool SAL_CALL osl_getSystemTimeFromLocalTime( const TimeValue* pLocalTimeVal
     time_t bias;
     time_t atime;
 
-    atime = (time_t) pLocalTimeVal->Seconds;
+    atime = static_cast<time_t>(pLocalTimeVal->Seconds);
 
     /* Convert atime, which is a local time, to its GMT equivalent. Then, get
      * the timezone offset for the local time for the GMT equivalent time. Note
@@ -248,15 +247,15 @@ sal_Bool SAL_CALL osl_getSystemTimeFromLocalTime( const TimeValue* pLocalTimeVal
     bias = pLocalTime->tm_isdst > 0 ? timezone - 3600 : timezone;
 #endif
 
-    if ( (sal_Int64) pLocalTimeVal->Seconds + bias > 0 )
+    if ( static_cast<sal_Int64>(pLocalTimeVal->Seconds) + bias > 0 )
     {
         pSystemTimeVal->Seconds = pLocalTimeVal->Seconds + bias;
         pSystemTimeVal->Nanosec = pLocalTimeVal->Nanosec;
 
-        return sal_True;
+        return true;
     }
 
-    return sal_False;
+    return false;
 }
 
 void sal_initGlobalTimer()
@@ -289,7 +288,7 @@ sal_uInt32 SAL_CALL osl_getGlobalTimer()
     mach_port_deallocate(mach_task_self(), cclock);
 
     nSeconds = ( currentTime.tv_sec - startTime.tv_sec );
-    nSeconds = ( nSeconds * 1000 ) + (long) (( currentTime.tv_nsec - startTime.tv_nsec) / 1000000 );
+    nSeconds = ( nSeconds * 1000 ) + static_cast<long>(( currentTime.tv_nsec - startTime.tv_nsec) / 1000000 );
 #else
     osl_time_t currentTime;
 
@@ -299,9 +298,9 @@ sal_uInt32 SAL_CALL osl_getGlobalTimer()
     gettimeofday( &currentTime, NULL );
 #endif
 
-    nSeconds = (sal_uInt32)( currentTime.tv_sec - startTime.tv_sec );
+    nSeconds = static_cast<sal_uInt32>( currentTime.tv_sec - startTime.tv_sec );
 #if defined(USE_CLOCK_GETTIME)
-    nSeconds = ( nSeconds * 1000 ) + (long) (( currentTime.tv_nsec - startTime.tv_nsec) / 1000000 );
+    nSeconds = ( nSeconds * 1000 ) + static_cast<long>(( currentTime.tv_nsec - startTime.tv_nsec) / 1000000 );
 #else
     nSeconds = ( nSeconds * 1000 ) + (long) (( currentTime.tv_usec - startTime.tv_usec) / 1000 );
 #endif

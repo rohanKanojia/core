@@ -20,7 +20,12 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_TREEOPT_HXX
 #define INCLUDED_CUI_SOURCE_INC_TREEOPT_HXX
 
-#include <tools/resary.hxx>
+#include <sal/config.h>
+
+#include <memory>
+
+#include <sfx2/basedlgs.hxx>
+#include <svtools/restartdialog.hxx>
 #include <vcl/fixed.hxx>
 
 class SfxModule;
@@ -43,7 +48,7 @@ struct OrderedEntry
 struct Module
 {
     bool                          m_bActive;
-    std::vector< OrderedEntry* >  m_aNodeList;
+    std::vector< std::unique_ptr<OrderedEntry> >  m_aNodeList;
 
     Module() : m_bActive( false ) {}
 };
@@ -70,8 +75,6 @@ struct OptionsLeaf
         m_nGroupIndex( nGroupIndex ) {}
 };
 
-typedef ::std::vector< OptionsLeaf* > VectorOfLeaves;
-
 // struct OptionsNode ----------------------------------------------------
 
 struct OptionsNode
@@ -80,8 +83,8 @@ struct OptionsNode
     OUString                m_sLabel;
     OUString                m_sPageURL;
     bool                    m_bAllModules;
-    VectorOfLeaves          m_aLeaves;
-    ::std::vector< VectorOfLeaves >
+    std::vector< std::unique_ptr<OptionsLeaf> > m_aLeaves;
+    std::vector< std::vector< std::unique_ptr<OptionsLeaf> > >
                             m_aGroupedLeaves;
 
     OptionsNode(    const OUString& rId,
@@ -92,17 +95,9 @@ struct OptionsNode
         m_sLabel( rLabel ),
         m_sPageURL( rPageURL ),
         m_bAllModules( bAllModules ) {}
-
-    ~OptionsNode()
-    {
-        for ( size_t i = 0; i < m_aLeaves.size(); ++i )
-            delete m_aLeaves[i];
-        m_aLeaves.clear();
-        m_aGroupedLeaves.clear();
-    }
 };
 
-typedef ::std::vector< OptionsNode* > VectorOfNodes;
+typedef std::vector< std::unique_ptr<OptionsNode> > VectorOfNodes;
 
 struct LastPageSaver
 {
@@ -123,23 +118,21 @@ struct Module;
 class ExtensionsTabPage;
 class SvxColorTabPage;
 
-class OfaTreeOptionsDialog : public SfxModalDialog
+class OfaTreeOptionsDialog final: public SfxModalDialog
 {
 private:
-    SvTreeListEntry*    pCurrentPageEntry;
-
     VclPtr<OKButton>       pOkPB;
+    VclPtr<PushButton>     pApplyPB;
     VclPtr<PushButton>     pBackPB;
 
     VclPtr<SvTreeListBox>  pTreeLB;
     VclPtr<VclBox>         pTabBox;
 
-    OUString               sTitle;
-    OUString               sNotLoadedError;
+    VclPtr<vcl::Window>    m_pParent;
 
-    // for the ColorTabPage
-    SfxItemSet*            pColorPageItemSet;
-    VclPtr<SvxColorTabPage> mpColorPage;
+    SvTreeListEntry*       pCurrentPageEntry;
+
+    OUString               sTitle;
 
     bool                   bForgetSelection;
     bool                   bIsFromExtensionManager;
@@ -147,12 +140,15 @@ private:
     // check "for the current document only" and set focus to "Western" languages box
     bool                   bIsForSetDocumentLanguage;
 
+    bool                   bNeedsRestart;
+    svtools::RestartReason eRestartReason;
+
     css::uno::Reference < css::awt::XContainerWindowProvider >
                     m_xContainerWinProvider;
 
     static LastPageSaver*   pLastPageSaver;
 
-    SfxItemSet*     CreateItemSet( sal_uInt16 nId );
+    std::unique_ptr<SfxItemSet> CreateItemSet( sal_uInt16 nId );
     static void     ApplyItemSet( sal_uInt16 nId, const SfxItemSet& rSet );
     void            InitTreeAndHandler();
     void            Initialize( const css::uno::Reference< css::frame::XFrame >& _xFrame );
@@ -161,26 +157,28 @@ private:
     void            LoadExtensionOptions( const OUString& rExtensionId );
     static OUString GetModuleIdentifier( const css::uno::Reference<
                                             css::frame::XFrame >& xFrame );
-    static Module*  LoadModule( const OUString& rModuleIdentifier );
+    static std::unique_ptr<Module>  LoadModule( const OUString& rModuleIdentifier );
     static VectorOfNodes LoadNodes( Module* pModule, const OUString& rExtensionId );
     void            InsertNodes( const VectorOfNodes& rNodeList );
 
-protected:
-    DECL_STATIC_LINK_TYPED(OfaTreeOptionsDialog, ExpandedHdl_Impl, SvTreeListBox*, void );
-    DECL_LINK_TYPED(ShowPageHdl_Impl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(BackHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(OKHdl_Impl, Button*, void);
+    void            ApplyOptions( bool deactivate );
+
+    DECL_STATIC_LINK(OfaTreeOptionsDialog, ExpandedHdl_Impl, SvTreeListBox*, void );
+    DECL_LINK(ShowPageHdl_Impl, SvTreeListBox*, void);
+    DECL_LINK(BackHdl_Impl, Button*, void);
+    DECL_LINK(ApplyHdl_Impl, Button*, void);
+    DECL_LINK(OKHdl_Impl, Button*, void);
     void SelectHdl_Impl();
 
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
     virtual short   Execute() override;
 
 public:
     OfaTreeOptionsDialog( vcl::Window* pParent,
         const css::uno::Reference< css::frame::XFrame >& _xFrame,
-        bool bActivateLastSelection = true );
+        bool bActivateLastSelection );
     OfaTreeOptionsDialog( vcl::Window* pParent, const OUString& rExtensionId );
-    virtual ~OfaTreeOptionsDialog();
+    virtual ~OfaTreeOptionsDialog() override;
     virtual void dispose() override;
 
     OptionsPageInfo*    AddTabPage( sal_uInt16 nId, const OUString& rPageName, sal_uInt16 nGroup );
@@ -194,40 +192,8 @@ public:
 
     // helper functions to call the language settings TabPage from the SpellDialog
     static void         ApplyLanguageOptions(const SfxItemSet& rSet);
-};
 
-// class OfaPageResource -------------------------------------------------
-
-class OfaPageResource : public Resource
-{
-    ResStringArray      aGeneralDlgAry;
-    ResStringArray      aInetDlgAry;
-    ResStringArray      aLangDlgAry;
-    ResStringArray      aTextDlgAry;
-    ResStringArray      aHTMLDlgAry;
-    ResStringArray      aCalcDlgAry;
-    ResStringArray      aStarMathDlgAry;
-    ResStringArray      aImpressDlgAry;
-    ResStringArray      aDrawDlgAry;
-    ResStringArray      aChartDlgAry;
-    ResStringArray      aFilterDlgAry;
-    ResStringArray      aDatasourcesDlgAry;
-
-public:
-    OfaPageResource();
-
-    ResStringArray& GetGeneralArray()       {return aGeneralDlgAry;}
-    ResStringArray& GetInetArray()          {return aInetDlgAry;}
-    ResStringArray& GetLangArray()          {return aLangDlgAry;}
-    ResStringArray& GetTextArray()          {return aTextDlgAry;}
-    ResStringArray& GetHTMLArray()          {return aHTMLDlgAry;}
-    ResStringArray& GetCalcArray()          {return aCalcDlgAry;}
-    ResStringArray& GetStarMathArray()      {return aStarMathDlgAry;}
-    ResStringArray& GetImpressArray()       {return aImpressDlgAry;}
-    ResStringArray& GetDrawArray()          {return aDrawDlgAry;}
-    ResStringArray& GetChartArray()         {return aChartDlgAry;}
-    ResStringArray& GetFilterArray()        {return aFilterDlgAry;}
-    ResStringArray& GetDatasourcesArray()   {return aDatasourcesDlgAry;}
+    void                SetNeedsRestart( svtools::RestartReason eReason );
 };
 
 // class ExtensionsTabPage -----------------------------------------------
@@ -246,7 +212,6 @@ private:
                         m_xEventHdl;
     css::uno::Reference< css::awt::XContainerWindowProvider >
                         m_xWinProvider;
-    bool                m_bIsWindowHidden;
 
     void                CreateDialogWithHandler();
     bool                DispatchAction( const OUString& rAction );
@@ -258,7 +223,7 @@ public:
         const css::uno::Reference<
             css::awt::XContainerWindowProvider >& rProvider );
 
-    virtual ~ExtensionsTabPage();
+    virtual ~ExtensionsTabPage() override;
     virtual void dispose() override;
 
     virtual void    ActivatePage() override;

@@ -21,7 +21,7 @@
 
 #include "MasterPageDescriptor.hxx"
 #include "MasterPageContainerProviders.hxx"
-#include "TemplateScanner.hxx"
+#include <TemplateScanner.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -85,11 +85,12 @@ void MasterPageContainerFiller::RunNextStep()
     {
         case DONE:
         case ERROR:
-            if (mpScannerTask.get() != nullptr)
+            if (mpScannerTask != nullptr)
             {
                 mrContainerAdapter.FillingDone();
                 mpScannerTask.reset();
             }
+            break;
         default:
             break;
     }
@@ -112,7 +113,7 @@ MasterPageContainerFiller::State MasterPageContainerFiller::ScanTemplate()
 {
     State eState (ERROR);
 
-    if (mpScannerTask.get() != nullptr)
+    if (mpScannerTask != nullptr)
     {
         if (mpScannerTask->HasNextStep())
         {

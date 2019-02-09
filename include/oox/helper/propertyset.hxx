@@ -20,10 +20,19 @@
 #ifndef INCLUDED_OOX_HELPER_PROPERTYSET_HXX
 #define INCLUDED_OOX_HELPER_PROPERTYSET_HXX
 
-#include <com/sun/star/beans/XMultiPropertySet.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/uno/Any.hxx>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 #include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <tools/color.hxx>
+
+namespace com { namespace sun { namespace star {
+    namespace beans { class XMultiPropertySet; }
+    namespace beans { class XPropertySet; }
+    namespace beans { class XPropertySetInfo; }
+} } }
 
 namespace oox {
 
@@ -70,10 +79,6 @@ public:
     /** Returns true, if the contained XPropertySet interface is valid. */
     bool         is() const { return mxPropSet.is(); }
 
-    /** Returns the contained XPropertySet interface. */
-    const css::uno::Reference< css::beans::XPropertySet >&
-                        getXPropertySet() const { return mxPropSet; }
-
     /** Returns true, if the specified property is supported by the property set. */
     bool                hasProperty( sal_Int32 nPropId ) const;
 
@@ -102,6 +107,8 @@ public:
     template< typename Type >
     bool         setProperty( sal_Int32 nPropId, const Type& rValue )
                             { return setAnyProperty( nPropId, css::uno::Any( rValue ) ); }
+    bool         setProperty( sal_Int32 nPropId, ::Color rValue )
+                            { return setAnyProperty( nPropId, css::uno::makeAny( rValue ) ); }
 
     /** Puts the passed properties into the property set. Tries to use the XMultiPropertySet interface.
         @param rPropNames  The property names. MUST be ordered alphabetically.

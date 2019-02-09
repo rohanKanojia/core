@@ -18,34 +18,28 @@
  */
 
 #include "GridWrapper.hxx"
-#include "macros.hxx"
-#include "AxisHelper.hxx"
+#include <AxisHelper.hxx>
 #include "Chart2ModelContact.hxx"
-#include "ContainerHelper.hxx"
-#include "AxisIndexDefines.hxx"
-#include <comphelper/InlineContainer.hxx>
-#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <AxisIndexDefines.hxx>
 
-#include "LinePropertiesHelper.hxx"
-#include "UserDefinedProperties.hxx"
-#include "WrappedDefaultProperty.hxx"
+#include <LinePropertiesHelper.hxx>
+#include <UserDefinedProperties.hxx>
+#include <WrappedDefaultProperty.hxx>
 
+#include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <algorithm>
-#include <rtl/ustrbuf.hxx>
-#include <rtl/math.hxx>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 
 using ::com::sun::star::beans::Property;
-using ::osl::MutexGuard;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 
 namespace
 {
-static const char lcl_aServiceName[] = "com.sun.star.comp.chart.Grid";
 
 struct StaticGridWrapperPropertyArray_Initializer
 {
@@ -57,11 +51,11 @@ struct StaticGridWrapperPropertyArray_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
         ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -79,11 +73,10 @@ namespace chart
 namespace wrapper
 {
 
-GridWrapper::GridWrapper(
-    tGridType eType, std::shared_ptr< Chart2ModelContact > spChart2ModelContact ) :
-        m_spChart2ModelContact( spChart2ModelContact ),
-        m_aEventListenerContainer( m_aMutex ),
-        m_eType( eType )
+GridWrapper::GridWrapper(tGridType eType, const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
+    : m_spChart2ModelContact(spChart2ModelContact)
+    , m_aEventListenerContainer(m_aMutex)
+    , m_eType(eType)
 {
 }
 
@@ -114,7 +107,6 @@ void GridWrapper::getDimensionAndSubGridBool( tGridType eType, sal_Int32& rnDime
 
 // ____ XComponent ____
 void SAL_CALL GridWrapper::dispose()
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< uno::XInterface > xSource( static_cast< ::cppu::OWeakObject* >( this ) );
     m_aEventListenerContainer.disposeAndClear( lang::EventObject( xSource ) );
@@ -124,14 +116,12 @@ void SAL_CALL GridWrapper::dispose()
 
 void SAL_CALL GridWrapper::addEventListener(
     const Reference< lang::XEventListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     m_aEventListenerContainer.addInterface( xListener );
 }
 
 void SAL_CALL GridWrapper::removeEventListener(
     const Reference< lang::XEventListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     m_aEventListenerContainer.removeInterface( aListener );
 }
@@ -153,9 +143,9 @@ Reference< beans::XPropertySet > GridWrapper::getInnerPropertySet()
         sal_Int32 nSubGridIndex = bSubGrid ? 0 : -1;
         xRet.set( AxisHelper::getGridProperties( xCooSys , nDimensionIndex, MAIN_AXIS_INDEX, nSubGridIndex ) );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return xRet;
 }
@@ -165,48 +155,33 @@ const Sequence< beans::Property >& GridWrapper::getPropertySequence()
     return *StaticGridWrapperPropertyArray::get();
 }
 
-const std::vector< WrappedProperty* > GridWrapper::createWrappedProperties()
+std::vector< std::unique_ptr<WrappedProperty> > GridWrapper::createWrappedProperties()
 {
-    ::std::vector< ::chart::WrappedProperty* > aWrappedProperties;
+    std::vector< std::unique_ptr<WrappedProperty> > aWrappedProperties;
 
-    aWrappedProperties.push_back( new WrappedDefaultProperty( "LineColor", "LineColor", uno::makeAny( sal_Int32( 0x000000) ) ) ); // black
+    aWrappedProperties.emplace_back( new WrappedDefaultProperty( "LineColor", "LineColor", uno::Any( sal_Int32( 0x000000) ) ) ); // black
 
     return aWrappedProperties;
 }
 
-Sequence< OUString > GridWrapper::getSupportedServiceNames_Static()
-{
-    Sequence< OUString > aServices( 4 );
-    aServices[ 0 ] = "com.sun.star.chart.ChartGrid";
-    aServices[ 1 ] = "com.sun.star.xml.UserDefinedAttributesSupplier";
-    aServices[ 2 ] = "com.sun.star.drawing.LineProperties";
-    aServices[ 3 ] = "com.sun.star.beans.PropertySet";
-
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL GridWrapper::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getImplementationName_Static();
-}
-
-OUString GridWrapper::getImplementationName_Static()
-{
-    return OUString(lcl_aServiceName);
+    return OUString("com.sun.star.comp.chart.Grid");
 }
 
 sal_Bool SAL_CALL GridWrapper::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL GridWrapper::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        "com.sun.star.chart.ChartGrid",
+        "com.sun.star.xml.UserDefinedAttributesSupplier",
+        "com.sun.star.drawing.LineProperties",
+        "com.sun.star.beans.PropertySet"
+    };
 }
 
 } //  namespace wrapper

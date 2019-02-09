@@ -17,20 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RegressionEquationItemConverter.hxx"
+#include <RegressionEquationItemConverter.hxx>
 #include "SchWhichPairs.hxx"
-#include "macros.hxx"
-#include "ItemPropertyMap.hxx"
-#include "GraphicPropertyItemConverter.hxx"
-#include "CharacterPropertyItemConverter.hxx"
-#include "MultipleItemConverter.hxx"
+#include <ItemPropertyMap.hxx>
+#include <GraphicPropertyItemConverter.hxx>
+#include <CharacterPropertyItemConverter.hxx>
 #include <unonames.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <svl/intitem.hxx>
-#include <rtl/math.hxx>
 
-#include <functional>
-#include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -56,18 +52,17 @@ RegressionEquationItemConverter::RegressionEquationItemConverter(
     const awt::Size* pRefSize ) :
         ItemConverter( rPropertySet, rItemPool )
 {
-    m_aConverters.push_back( new GraphicPropertyItemConverter(
+    m_aConverters.emplace_back( new GraphicPropertyItemConverter(
                                  rPropertySet, rItemPool, rDrawModel,
                                  xNamedPropertyContainerFactory,
-                                 GraphicPropertyItemConverter::LINE_AND_FILL_PROPERTIES ));
+                                 GraphicObjectType::LineAndFillProperties ));
 
-    m_aConverters.push_back(
+    m_aConverters.emplace_back(
         new CharacterPropertyItemConverter(rPropertySet, rItemPool, pRefSize, "ReferencePageSize"));
 }
 
 RegressionEquationItemConverter::~RegressionEquationItemConverter()
 {
-    ::std::for_each(m_aConverters.begin(), m_aConverters.end(), std::default_delete<ItemConverter>());
 }
 
 void RegressionEquationItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
@@ -110,7 +105,6 @@ bool RegressionEquationItemConverter::GetItemProperty( tWhichIdType nWhichId, tP
 
 bool RegressionEquationItemConverter::ApplySpecialItem(
     sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-    throw( uno::Exception )
 {
     bool bChanged = false;
 
@@ -135,7 +129,6 @@ bool RegressionEquationItemConverter::ApplySpecialItem(
 
 void RegressionEquationItemConverter::FillSpecialItem(
     sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-    throw( uno::Exception )
 {
     switch( nWhichId )
     {

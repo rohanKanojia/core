@@ -12,7 +12,6 @@
 
 #include <sfx2/dllapi.h>
 #include <vcl/outdev.hxx>
-#include <rsc/rscsfx.hxx>
 #include <svl/style.hxx>
 #include <sfx2/objsh.hxx>
 
@@ -25,24 +24,22 @@ protected:
     const SfxObjectShell& mrShell;
     OutputDevice& mrOutputDev;
     SfxStyleSheetBase* mpStyle;
-    long mnMaxHeight;
-    OUString msRenderText;
+    long const mnMaxHeight;
 
 public:
     enum class RenderAlign
     {
-        TOP, CENTER, BOTTOM
+        TOP, CENTER
     };
 
     StylePreviewRenderer(const SfxObjectShell& rShell,
                          OutputDevice& rOutputDev,
                          SfxStyleSheetBase* pStyle,
-                         long nMaxHeight = 32)
+                         long nMaxHeight)
         : mrShell(rShell)
         , mrOutputDev(rOutputDev)
         , mpStyle(pStyle)
         , mnMaxHeight(nMaxHeight)
-        , msRenderText()
     {}
 
     virtual ~StylePreviewRenderer()
@@ -50,7 +47,7 @@ public:
 
     virtual bool recalculate() = 0;
     virtual Size getRenderSize() = 0;
-    virtual bool render(const Rectangle& aRectangle, RenderAlign eRenderAlign = RenderAlign::CENTER) = 0;
+    virtual bool render(const tools::Rectangle& aRectangle, RenderAlign eRenderAlign = RenderAlign::CENTER) = 0;
 };
 
 } // end namespace sfx2

@@ -24,21 +24,16 @@
 
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/uno/Exception.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/Property.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <comphelper/processfactory.hxx>
 
 
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::Sequence;
 using com::sun::star::uno::Exception;
-using com::sun::star::uno::XInterface;
-using com::sun::star::lang::XMultiServiceFactory;
 using com::sun::star::beans::Property;
 using com::sun::star::beans::XPropertySet;
 using com::sun::star::beans::XPropertySetInfo;
@@ -46,7 +41,7 @@ using com::sun::star::beans::PropertyAttribute::READONLY;
 
 
 void xforms::copy( const Reference<XPropertySet>& xFrom,
-                   Reference<XPropertySet>& xTo )
+                   Reference<XPropertySet> const & xTo )
 {
     OSL_ENSURE( xFrom.is(), "no source" );
     OSL_ENSURE( xTo.is(), "no target" );

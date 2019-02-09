@@ -17,109 +17,86 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cmdid.h"
-#include "swmodule.hxx"
-#include "view.hxx"
-#include "wrtsh.hxx"
-#include "globals.hrc"
-#include "helpid.h"
+#include <memory>
+#include <cmdid.h>
+#include <swmodule.hxx>
+#include <view.hxx>
+#include <wrtsh.hxx>
+#include <globals.hrc>
 
 #include <sfx2/styfitem.hxx>
 
-#include "uitool.hxx"
-#include "ccoll.hxx"
-#include "fmtcol.hxx"
-#include "hintids.hxx"
-#include "docsh.hxx"
-#include "docstyle.hxx"
-#include "hints.hxx"
+#include <uitool.hxx>
+#include <ccoll.hxx>
+#include <fmtcol.hxx>
+#include <hintids.hxx>
+#include <docsh.hxx>
+#include <docstyle.hxx>
+#include <hints.hxx>
 
-#include "chrdlg.hrc"
 #include <vcl/svapp.hxx>
 
-#include "swuiccoll.hxx"
+#include <swuiccoll.hxx>
 
 const sal_uInt16 SwCondCollPage::m_aPageRg[] = {
     FN_COND_COLL, FN_COND_COLL,
     0
 };
 
-// Warning! This table is indicated directly in code (0, 1, ...)
-static long nTabs[] =
-    {   2, // Number of Tabs
-        0, 100
-    };
-
-SwCondCollPage::SwCondCollPage(vcl::Window *pParent, const SfxItemSet &rSet)
-    : SfxTabPage(pParent, "ConditionPage",
-        "modules/swriter/ui/conditionpage.ui", &rSet)
-    ,
-    m_rSh(::GetActiveView()->GetWrtShell()),
-    m_pCmds( SwCondCollItem::GetCmds() ),
-    m_pFormat(nullptr),
-
-    m_bNewTemplate(false)
+SwCondCollPage::SwCondCollPage(TabPageParent pParent, const SfxItemSet &rSet)
+    : SfxTabPage(pParent, "modules/swriter/ui/conditionpage.ui", "ConditionPage", &rSet)
+    , m_rSh(::GetActiveView()->GetWrtShell())
+    , m_pCmds(SwCondCollItem::GetCmds())
+    , m_pFormat(nullptr)
+    , m_bNewTemplate(false)
+    , m_xConditionCB(m_xBuilder->weld_check_button("condstyle"))
+    , m_xTbLinks(m_xBuilder->weld_tree_view("links"))
+    , m_xStyleLB(m_xBuilder->weld_tree_view("styles"))
+    , m_xFilterLB(m_xBuilder->weld_combo_box("filter"))
+    , m_xRemovePB(m_xBuilder->weld_button("remove"))
+    , m_xAssignPB(m_xBuilder->weld_button("apply"))
 {
-    get(m_pConditionCB, "condstyle");
-    get(m_pContextFT, "contextft");
-    get(m_pUsedFT, "usedft");
-    get(m_pStyleFT, "styleft");
-    get(m_pTbLinks, "links");
-    get(m_pStyleLB, "styles");
-    m_pStyleLB->SetStyle(m_pStyleLB->GetStyle() | WB_SORT);
-    m_pStyleLB->SetDropDownLineCount(12);
-    m_pTbLinks->set_height_request(m_pStyleLB->GetOptimalSize().Height());
-    get(m_pFilterLB, "filter");
-    get(m_pRemovePB, "remove");
-    get(m_pAssignPB, "apply");
+    m_xStyleLB->make_sorted();
+    const auto nHeightRequest = m_xStyleLB->get_height_rows(12);
+    m_xStyleLB->set_size_request(-1, nHeightRequest);
+    m_xTbLinks->set_size_request(-1, nHeightRequest);
+    std::vector<int> aWidths;
+    aWidths.push_back(m_xTbLinks->get_approximate_digit_width() * 40);
+    m_xTbLinks->set_column_fixed_widths(aWidths);
 
-    const sal_Int32 nStrCount = m_pFilterLB->GetEntryCount();
+    const sal_Int32 nStrCount = m_xFilterLB->get_count();
     for (sal_Int32 i = 0; i < nStrCount; ++i)
-        m_aStrArr.push_back(m_pFilterLB->GetEntry(i));
-    m_pFilterLB->Clear();
+        m_aStrArr.push_back(m_xFilterLB->get_text(i));
+    m_xFilterLB->clear();
 
     SetExchangeSupport();
 
     // Install handlers
-    m_pConditionCB->SetClickHdl(   LINK(this, SwCondCollPage, OnOffHdl));
-    m_pTbLinks->SetDoubleClickHdl( LINK(this, SwCondCollPage, AssignRemoveTreeListBoxHdl ));
-    m_pStyleLB->SetDoubleClickHdl( LINK(this, SwCondCollPage, AssignRemoveHdl ));
-    m_pRemovePB->SetClickHdl(      LINK(this, SwCondCollPage, AssignRemoveClickHdl ));
-    m_pAssignPB->SetClickHdl(      LINK(this, SwCondCollPage, AssignRemoveClickHdl ));
-    m_pTbLinks->SetSelectHdl(      LINK(this, SwCondCollPage, SelectTreeListBoxHdl));
-    m_pStyleLB->SetSelectHdl(      LINK(this, SwCondCollPage, SelectListBoxHdl));
-    m_pFilterLB->SetSelectHdl(     LINK(this, SwCondCollPage, SelectListBoxHdl));
+    m_xConditionCB->connect_toggled(LINK(this, SwCondCollPage, OnOffHdl));
+    m_xTbLinks->connect_row_activated(LINK(this, SwCondCollPage, AssignRemoveTreeListBoxHdl));
+    m_xStyleLB->connect_row_activated(LINK(this, SwCondCollPage, AssignRemoveTreeListBoxHdl));
+    m_xRemovePB->connect_clicked(LINK(this, SwCondCollPage, AssignRemoveClickHdl));
+    m_xAssignPB->connect_clicked(LINK(this, SwCondCollPage, AssignRemoveClickHdl));
+    m_xTbLinks->connect_changed(LINK(this, SwCondCollPage, SelectTreeListBoxHdl));
+    m_xStyleLB->connect_changed(LINK(this, SwCondCollPage, SelectTreeListBoxHdl));
+    m_xFilterLB->connect_changed(LINK(this, SwCondCollPage, SelectListBoxHdl));
 
-    m_pTbLinks->SetStyle(m_pTbLinks->GetStyle()|WB_HSCROLL|WB_CLIPCHILDREN);
-    m_pTbLinks->SetSelectionMode( SINGLE_SELECTION );
-    m_pTbLinks->SetTabs( &nTabs[0] );
-    m_pTbLinks->Resize();  // OS: Hack for the right selection
-    m_pTbLinks->SetSpaceBetweenEntries( 0 );
-
-    SfxStyleFamilies aFamilies(SW_RES(DLG_STYLE_DESIGNER));
-    const SfxStyleFamilyItem* pFamilyItem = nullptr;
-
-    size_t nCount = aFamilies.size();
-    for( size_t i = 0; i < nCount; ++i )
+    std::unique_ptr<SfxStyleFamilies> xFamilies(SW_MOD()->CreateStyleFamilies());
+    size_t nCount = xFamilies->size();
+    for (size_t j = 0; j < nCount; ++j)
     {
-        if(SFX_STYLE_FAMILY_PARA == (pFamilyItem = aFamilies.at( i ))->GetFamily())
-            break;
-    }
-
-    if (pFamilyItem)
-    {
-        const SfxStyleFilter& rFilterList = pFamilyItem->GetFilterList();
-        for( size_t i = 0; i < rFilterList.size(); ++i )
+        const SfxStyleFamilyItem &rFamilyItem = xFamilies->at(j);
+        if (SfxStyleFamily::Para == rFamilyItem.GetFamily())
         {
-            m_pFilterLB->InsertEntry( rFilterList[ i ]->aName);
-            sal_uInt16* pFilter = new sal_uInt16(rFilterList[i]->nFlags);
-            m_pFilterLB->SetEntryData(i, pFilter);
+            const SfxStyleFilter& rFilterList = rFamilyItem.GetFilterList();
+            for (size_t i = 0; i < rFilterList.size(); ++i)
+                m_xFilterLB->append(OUString::number(int(rFilterList[i].nFlags)), rFilterList[i].aName);
+            break;
         }
     }
-    m_pFilterLB->SelectEntryPos(1);
 
-    m_pTbLinks->Show();
-
+    m_xFilterLB->set_active(1);
+    m_xTbLinks->show();
 }
 
 SwCondCollPage::~SwCondCollPage()
@@ -127,75 +104,56 @@ SwCondCollPage::~SwCondCollPage()
     disposeOnce();
 }
 
-void SwCondCollPage::dispose()
-{
-    for(sal_Int32 i = 0; i < m_pFilterLB->GetEntryCount(); ++i)
-        delete static_cast<sal_uInt16*>(m_pFilterLB->GetEntryData(i));
-
-    m_pConditionCB.clear();
-    m_pContextFT.clear();
-    m_pUsedFT.clear();
-    m_pTbLinks.clear();
-    m_pStyleFT.clear();
-    m_pStyleLB.clear();
-    m_pFilterLB.clear();
-    m_pRemovePB.clear();
-    m_pAssignPB.clear();
-
-    SfxTabPage::dispose();
-}
-
-SfxTabPage::sfxpg SwCondCollPage::DeactivatePage(SfxItemSet * _pSet)
+DeactivateRC SwCondCollPage::DeactivatePage(SfxItemSet * _pSet)
 {
     if( _pSet )
         FillItemSet(_pSet);
 
-    return LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
 
-VclPtr<SfxTabPage> SwCondCollPage::Create(vcl::Window *pParent, const SfxItemSet *rSet)
+VclPtr<SfxTabPage> SwCondCollPage::Create(TabPageParent pParent, const SfxItemSet *rSet)
 {
     return VclPtr<SwCondCollPage>::Create(pParent, *rSet);
 }
 
 bool SwCondCollPage::FillItemSet(SfxItemSet *rSet)
 {
-    bool bModified = true;
     SwCondCollItem aCondItem;
     for (size_t i = 0; i < m_aStrArr.size(); ++i)
     {
-        const OUString sEntry = m_pTbLinks->GetEntryText(i, 1);
+        const OUString sEntry = m_xTbLinks->get_text(i, 1);
         aCondItem.SetStyle( &sEntry, i);
     }
     rSet->Put(aCondItem);
-    return bModified;
+    return true;
 }
 
 void SwCondCollPage::Reset(const SfxItemSet *)
 {
-    if(m_bNewTemplate)
-        m_pConditionCB->Enable();
-    if(RES_CONDTXTFMTCOLL == m_pFormat->Which())
-        m_pConditionCB->Check();
-    OnOffHdl(m_pConditionCB);
+    if (m_bNewTemplate)
+        m_xConditionCB->set_sensitive(true);
+    if (RES_CONDTXTFMTCOLL == m_pFormat->Which())
+        m_xConditionCB->set_active(true);
+    OnOffHdl(*m_xConditionCB);
 
-    m_pTbLinks->Clear();
+    m_xTbLinks->clear();
 
     SfxStyleSheetBasePool* pPool = m_rSh.GetView().GetDocShell()->GetStyleSheetPool();
-    pPool->SetSearchMask(SFX_STYLE_FAMILY_PARA);
-    m_pStyleLB->Clear();
+    pPool->SetSearchMask(SfxStyleFamily::Para);
+    m_xStyleLB->clear();
     const SfxStyleSheetBase* pBase = pPool->First();
-    while( pBase )
+    while (pBase)
     {
-        if(!m_pFormat || pBase->GetName() != m_pFormat->GetName())
-            m_pStyleLB->InsertEntry(pBase->GetName());
+        if (!m_pFormat || pBase->GetName() != m_pFormat->GetName())
+            m_xStyleLB->append_text(pBase->GetName());
         pBase = pPool->Next();
     }
-    m_pStyleLB->SelectEntryPos(0);
+    m_xStyleLB->select(0);
 
     for (size_t n = 0; n < m_aStrArr.size(); ++n)
     {
-        OUString aEntry( m_aStrArr[n] + "\t" );
+        m_xTbLinks->append_text(m_aStrArr[n]);
 
         const SwCollCondition* pCond = nullptr;
         if( m_pFormat && RES_CONDTXTFMTCOLL == m_pFormat->Which() &&
@@ -203,112 +161,102 @@ void SwCondCollPage::Reset(const SfxItemSet *)
             HasCondition( SwCollCondition( nullptr, m_pCmds[n].nCnd, m_pCmds[n].nSubCond ) ) )
             && pCond->GetTextFormatColl() )
         {
-            aEntry += pCond->GetTextFormatColl()->GetName();
+            m_xTbLinks->set_text(n, pCond->GetTextFormatColl()->GetName(), 1);
         }
 
-        SvTreeListEntry* pE = m_pTbLinks->InsertEntryToColumn( aEntry, n );
-        if(0 == n)
-            m_pTbLinks->Select(pE);
+        if (0 == n)
+        {
+            m_xTbLinks->select(0);
+            SelectTreeListBoxHdl(*m_xTbLinks);
+        }
     }
-
 }
 
-IMPL_LINK_TYPED( SwCondCollPage, OnOffHdl, Button*, pBox, void )
+IMPL_LINK(SwCondCollPage, OnOffHdl, weld::ToggleButton&, rBox, void)
 {
-    const bool bEnable = static_cast<CheckBox*>(pBox)->IsChecked();
-    m_pContextFT->Enable( bEnable );
-    m_pUsedFT->Enable( bEnable );
-    m_pTbLinks->EnableList( bEnable );
-    m_pStyleFT->Enable( bEnable );
-    m_pStyleLB->Enable( bEnable );
-    m_pFilterLB->Enable( bEnable );
-    m_pRemovePB->Enable( bEnable );
-    m_pAssignPB->Enable( bEnable );
-    if( bEnable )
+    const bool bEnable = rBox.get_active();
+    m_xTbLinks->set_sensitive(bEnable);
+    m_xStyleLB->set_sensitive(bEnable);
+    m_xFilterLB->set_sensitive(bEnable);
+    m_xRemovePB->set_sensitive(bEnable);
+    m_xAssignPB->set_sensitive(bEnable);
+    if (bEnable)
         SelectHdl(nullptr);
 }
 
-IMPL_LINK_TYPED( SwCondCollPage, AssignRemoveClickHdl, Button*, pBtn, void)
+IMPL_LINK(SwCondCollPage, AssignRemoveClickHdl, weld::Button&, rBtn, void)
 {
-    AssignRemove(pBtn);
+    AssignRemove(&rBtn);
 }
-IMPL_LINK_TYPED( SwCondCollPage, AssignRemoveTreeListBoxHdl, SvTreeListBox*, pBtn, bool)
+
+IMPL_LINK(SwCondCollPage, AssignRemoveTreeListBoxHdl, weld::TreeView&, rBtn, void)
 {
-    AssignRemove(pBtn);
-    return false;
+    AssignRemove(&rBtn);
 }
-IMPL_LINK_TYPED( SwCondCollPage, AssignRemoveHdl, ListBox&, rBox, void)
+
+void SwCondCollPage::AssignRemove(const weld::Widget* pBtn)
 {
-    AssignRemove(&rBox);
-}
-void SwCondCollPage::AssignRemove(void* pBtn)
-{
-    SvTreeListEntry* pE = m_pTbLinks->FirstSelected();
-    sal_uLong nPos;
-    if( !pE || LISTBOX_ENTRY_NOTFOUND ==
-        ( nPos = m_pTbLinks->GetModel()->GetAbsPos( pE ) ) )
+    int nPos = m_xTbLinks->get_selected_index();
+    if (nPos == -1)
     {
-        OSL_ENSURE( pE, "where's the empty entry from?" );
         return;
     }
 
-    OUString sSel = m_aStrArr[nPos] + "\t";
-
-    const bool bAssEnabled = pBtn != m_pRemovePB && m_pAssignPB->IsEnabled();
-    m_pAssignPB->Enable( !bAssEnabled );
-    m_pRemovePB->Enable(  bAssEnabled );
-    if ( bAssEnabled )
-        sSel += m_pStyleLB->GetSelectEntry();
-
-    m_pTbLinks->SetUpdateMode(false);
-    m_pTbLinks->GetModel()->Remove(pE);
-    pE = m_pTbLinks->InsertEntryToColumn(sSel, nPos);
-    m_pTbLinks->Select(pE);
-    m_pTbLinks->MakeVisible(pE);
-    m_pTbLinks->SetUpdateMode(true);
+    const bool bAssEnabled = pBtn != m_xRemovePB.get() && m_xAssignPB->get_sensitive();
+    m_xAssignPB->set_sensitive(!bAssEnabled);
+    m_xRemovePB->set_sensitive(bAssEnabled);
+    if (bAssEnabled)
+        m_xTbLinks->set_text(nPos, m_xStyleLB->get_selected_text(), 1);
+    else
+        m_xTbLinks->set_text(nPos, "", 1);
 }
 
-IMPL_LINK_TYPED( SwCondCollPage, SelectTreeListBoxHdl, SvTreeListBox*, pBox, void)
-{
-    SelectHdl(pBox);
-}
-IMPL_LINK_TYPED( SwCondCollPage, SelectListBoxHdl, ListBox&, rBox, void)
+IMPL_LINK(SwCondCollPage, SelectTreeListBoxHdl, weld::TreeView&, rBox, void)
 {
     SelectHdl(&rBox);
 }
-void SwCondCollPage::SelectHdl(void* pBox)
+
+IMPL_LINK(SwCondCollPage, SelectListBoxHdl, weld::ComboBox&, rBox, void)
 {
-    if (pBox == m_pFilterLB)
+    SelectHdl(&rBox);
+}
+
+void SwCondCollPage::SelectHdl(const weld::Widget* pBox)
+{
+    if (pBox == m_xFilterLB.get())
     {
-        m_pStyleLB->Clear();
-        const sal_Int32 nSelPos = static_cast<ListBox*>(pBox)->GetSelectEntryPos();
-        const sal_uInt16 nSearchFlags = *static_cast<sal_uInt16*>(m_pFilterLB->GetEntryData(nSelPos));
+        m_xStyleLB->clear();
+        const sal_Int32 nSelPos = m_xFilterLB->get_active();
+        const SfxStyleSearchBits nSearchFlags = static_cast<SfxStyleSearchBits>(m_xFilterLB->get_id(nSelPos).toInt32());
         SfxStyleSheetBasePool* pPool = m_rSh.GetView().GetDocShell()->GetStyleSheetPool();
-        pPool->SetSearchMask(SFX_STYLE_FAMILY_PARA, nSearchFlags);
+        pPool->SetSearchMask(SfxStyleFamily::Para, nSearchFlags);
         const SfxStyleSheetBase* pBase = pPool->First();
 
-        while( pBase )
+        bool bEmpty = true;
+        while (pBase)
         {
-            if(!m_pFormat || pBase->GetName() != m_pFormat->GetName())
-                m_pStyleLB->InsertEntry(pBase->GetName());
+            if (!m_pFormat || pBase->GetName() != m_pFormat->GetName())
+            {
+                m_xStyleLB->append_text(pBase->GetName());
+                bEmpty = false;
+            }
             pBase = pPool->Next();
         }
-        m_pStyleLB->SelectEntryPos(0);
-        SelectHdl(m_pStyleLB);
-
+        m_xStyleLB->select(bEmpty ? -1 : 0);
+        SelectHdl(m_xStyleLB.get());
     }
     else
     {
-        SvTreeListEntry* pE = m_pTbLinks->FirstSelected();
-        const OUString sTbEntry = pE
-            ? m_pTbLinks->GetEntryText(pE).getToken(1, '\t')
+        int nSelected = m_xTbLinks->get_selected_index();
+        const OUString sTbEntry = nSelected != -1
+            ? m_xTbLinks->get_text(nSelected, 1)
             : OUString();
-        const OUString sStyle = m_pStyleLB->GetSelectEntry();
+        const OUString sStyle = m_xStyleLB->get_selected_text();
 
-        m_pAssignPB->Enable( sStyle != sTbEntry && m_pConditionCB->IsChecked() );
+        m_xAssignPB->set_sensitive(sStyle != sTbEntry && m_xConditionCB->get_active());
 
-        if(pBox != m_pStyleLB)
-            m_pRemovePB->Enable( m_pConditionCB->IsChecked() && !sTbEntry.isEmpty() );
+        if (pBox != m_xStyleLB.get())
+            m_xRemovePB->set_sensitive(m_xConditionCB->get_active() && !sTbEntry.isEmpty());
     }
 }
 

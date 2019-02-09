@@ -66,8 +66,7 @@ APP1_JAVAFILES  = \
 APP1_CLASSFILES = $(patsubst %.java,$(OUT_APP_CLASS)/%.class,$(APP1_JAVAFILES))
 APP1_CLASSNAMES = $(patsubst %.java,%.class,$(APP1_JAVAFILES)) \
 		CustomizeView$(QUOTE)$$ClickListener.class \
-		DocumentView$(QUOTE)$$1.class \
-		DocumentView$(QUOTE)$$Reactor.class
+		DocumentView$(QUOTE)$$*.class
 
 
 SDK_CLASSPATH = $(subst $(EMPTYSTRING) $(PATH_SEPARATOR),$(PATH_SEPARATOR),$(CLASSPATH)\
@@ -83,7 +82,7 @@ endif
 .PHONY: ALL
 ifeq "$(OS)" "MACOSX"
 ALL :
-	@printf 'This example does not work on Mac OS X\n'
+	@printf 'This example does not work on macOS\n'
 else
 ALL : $(SUBDIR) \
 	$(EXAMPLE_NAME)

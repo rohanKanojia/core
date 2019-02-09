@@ -20,12 +20,10 @@
 #define INCLUDED_SC_SOURCE_UI_VBA_VBAPIVOTTABLES_HXX
 
 #include <ooo/vba/excel/XPivotTables.hpp>
-#include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
-#include "excelvbahelper.hxx"
-#include <vbahelper/vbahelperinterface.hxx>
 #include <vbahelper/vbacollectionimpl.hxx>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 typedef CollTestImplHelper< ov::excel::XPivotTables > ScVbaPivotTables_BASE;
 
@@ -35,11 +33,10 @@ class ScVbaPivotTables : public ScVbaPivotTables_BASE
 
 public:
     ScVbaPivotTables( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, const css::uno::Reference< css::container::XIndexAccess >& xIndexAccess );
-    virtual ~ScVbaPivotTables() {}
 
     // XEnumerationAccess
-    virtual css::uno::Type SAL_CALL getElementType() throw (css::uno::RuntimeException) override;
-    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() throw (css::uno::RuntimeException) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
 
     // XPivotTables
 

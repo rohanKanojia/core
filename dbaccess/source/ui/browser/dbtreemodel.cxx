@@ -18,8 +18,6 @@
  */
 
 #include "dbtreemodel.hxx"
-#include "dbu_resource.hrc"
-#include <osl/diagnose.h>
 
 namespace dbaui
 {

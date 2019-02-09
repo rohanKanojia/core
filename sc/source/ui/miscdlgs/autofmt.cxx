@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svx/algitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/brushitem.hxx>
@@ -31,25 +31,26 @@
 #include <editeng/wghtitem.hxx>
 #include <vcl/svapp.hxx>
 #include <svl/zforlist.hxx>
-#include <vcl/msgbox.hxx>
+#include <svtools/scriptedtext.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/virdev.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <comphelper/processfactory.hxx>
+#include <drawinglayer/processor2d/processor2dtools.hxx>
 
-#include "sc.hrc"
-#include "scmod.hxx"
-#include "attrib.hxx"
-#include "zforauto.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
-#include "autoform.hxx"
-#include "miscdlgs.hrc"
-#include "autofmt.hxx"
-#include "scresid.hxx"
-#include "document.hxx"
-#include "docsh.hxx"
-#include "tabvwsh.hxx"
+#include <strings.hrc>
+#include <scmod.hxx>
+#include <attrib.hxx>
+#include <zforauto.hxx>
+#include <global.hxx>
+#include <autoform.hxx>
+#include <autofmt.hxx>
+#include <scresid.hxx>
+#include <document.hxx>
+#include <docsh.hxx>
+#include <tabvwsh.hxx>
+#include <viewdata.hxx>
 
 #define FRAME_OFFSET 4
 
@@ -92,7 +93,7 @@ ScAutoFmtPreview::~ScAutoFmtPreview()
 
 void ScAutoFmtPreview::dispose()
 {
-    delete pNumFmt;
+    pNumFmt.reset();
     vcl::Window::dispose();
 }
 
@@ -107,8 +108,8 @@ static void lcl_SetFontProperties(
     rFont.SetStyleName  ( rFontItem.GetStyleName() );
     rFont.SetCharSet    ( rFontItem.GetCharSet() );
     rFont.SetPitch      ( rFontItem.GetPitch() );
-    rFont.SetWeight     ( (FontWeight)rWeightItem.GetValue() );
-    rFont.SetItalic     ( (FontItalic)rPostureItem.GetValue() );
+    rFont.SetWeight     ( rWeightItem.GetValue() );
+    rFont.SetItalic     ( rPostureItem.GetValue() );
 }
 
 void ScAutoFmtPreview::MakeFonts( sal_uInt16 nIndex, vcl::Font& rFont, vcl::Font& rCJKFont, vcl::Font& rCTLFont )
@@ -118,36 +119,36 @@ void ScAutoFmtPreview::MakeFonts( sal_uInt16 nIndex, vcl::Font& rFont, vcl::Font
         rFont = rCJKFont = rCTLFont = GetFont();
         Size aFontSize( rFont.GetFontSize().Width(), 10 * GetDPIScaleFactor() );
 
-        const SvxFontItem*        pFontItem       = static_cast<const SvxFontItem*>      (pCurData->GetItem( nIndex, ATTR_FONT ));
-        const SvxWeightItem*      pWeightItem     = static_cast<const SvxWeightItem*>    (pCurData->GetItem( nIndex, ATTR_FONT_WEIGHT ));
-        const SvxPostureItem*     pPostureItem    = static_cast<const SvxPostureItem*>   (pCurData->GetItem( nIndex, ATTR_FONT_POSTURE ));
-        const SvxFontItem*        pCJKFontItem    = static_cast<const SvxFontItem*>      (pCurData->GetItem( nIndex, ATTR_CJK_FONT ));
-        const SvxWeightItem*      pCJKWeightItem  = static_cast<const SvxWeightItem*>    (pCurData->GetItem( nIndex, ATTR_CJK_FONT_WEIGHT ));
-        const SvxPostureItem*     pCJKPostureItem = static_cast<const SvxPostureItem*>   (pCurData->GetItem( nIndex, ATTR_CJK_FONT_POSTURE ));
-        const SvxFontItem*        pCTLFontItem    = static_cast<const SvxFontItem*>      (pCurData->GetItem( nIndex, ATTR_CTL_FONT ));
-        const SvxWeightItem*      pCTLWeightItem  = static_cast<const SvxWeightItem*>    (pCurData->GetItem( nIndex, ATTR_CTL_FONT_WEIGHT ));
-        const SvxPostureItem*     pCTLPostureItem = static_cast<const SvxPostureItem*>   (pCurData->GetItem( nIndex, ATTR_CTL_FONT_POSTURE ));
-        const SvxUnderlineItem*   pUnderlineItem  = static_cast<const SvxUnderlineItem*> (pCurData->GetItem( nIndex, ATTR_FONT_UNDERLINE ));
-        const SvxOverlineItem*    pOverlineItem   = static_cast<const SvxOverlineItem*>  (pCurData->GetItem( nIndex, ATTR_FONT_OVERLINE ));
-        const SvxCrossedOutItem*  pCrossedOutItem = static_cast<const SvxCrossedOutItem*>(pCurData->GetItem( nIndex, ATTR_FONT_CROSSEDOUT ));
-        const SvxContourItem*     pContourItem    = static_cast<const SvxContourItem*>   (pCurData->GetItem( nIndex, ATTR_FONT_CONTOUR ));
-        const SvxShadowedItem*    pShadowedItem   = static_cast<const SvxShadowedItem*>  (pCurData->GetItem( nIndex, ATTR_FONT_SHADOWED ));
-        const SvxColorItem*       pColorItem      = static_cast<const SvxColorItem*>     (pCurData->GetItem( nIndex, ATTR_FONT_COLOR ));
+        const SvxFontItem*        pFontItem       = pCurData->GetItem( nIndex, ATTR_FONT );
+        const SvxWeightItem*      pWeightItem     = pCurData->GetItem( nIndex, ATTR_FONT_WEIGHT );
+        const SvxPostureItem*     pPostureItem    = pCurData->GetItem( nIndex, ATTR_FONT_POSTURE );
+        const SvxFontItem*        pCJKFontItem    = pCurData->GetItem( nIndex, ATTR_CJK_FONT );
+        const SvxWeightItem*      pCJKWeightItem  = pCurData->GetItem( nIndex, ATTR_CJK_FONT_WEIGHT );
+        const SvxPostureItem*     pCJKPostureItem = pCurData->GetItem( nIndex, ATTR_CJK_FONT_POSTURE );
+        const SvxFontItem*        pCTLFontItem    = pCurData->GetItem( nIndex, ATTR_CTL_FONT );
+        const SvxWeightItem*      pCTLWeightItem  = pCurData->GetItem( nIndex, ATTR_CTL_FONT_WEIGHT );
+        const SvxPostureItem*     pCTLPostureItem = pCurData->GetItem( nIndex, ATTR_CTL_FONT_POSTURE );
+        const SvxUnderlineItem*   pUnderlineItem  = pCurData->GetItem( nIndex, ATTR_FONT_UNDERLINE );
+        const SvxOverlineItem*    pOverlineItem   = pCurData->GetItem( nIndex, ATTR_FONT_OVERLINE );
+        const SvxCrossedOutItem*  pCrossedOutItem = pCurData->GetItem( nIndex, ATTR_FONT_CROSSEDOUT );
+        const SvxContourItem*     pContourItem    = pCurData->GetItem( nIndex, ATTR_FONT_CONTOUR );
+        const SvxShadowedItem*    pShadowedItem   = pCurData->GetItem( nIndex, ATTR_FONT_SHADOWED );
+        const SvxColorItem*       pColorItem      = pCurData->GetItem( nIndex, ATTR_FONT_COLOR );
 
         lcl_SetFontProperties( rFont, *pFontItem, *pWeightItem, *pPostureItem );
         lcl_SetFontProperties( rCJKFont, *pCJKFontItem, *pCJKWeightItem, *pCJKPostureItem );
         lcl_SetFontProperties( rCTLFont, *pCTLFontItem, *pCTLWeightItem, *pCTLPostureItem );
 
         Color aColor( pColorItem->GetValue() );
-        if( aColor.GetColor() == COL_TRANSPARENT )
+        if( aColor == COL_TRANSPARENT )
             aColor = GetSettings().GetStyleSettings().GetWindowTextColor();
 
 #define SETONALLFONTS( MethodName, Value ) \
 rFont.MethodName( Value ); rCJKFont.MethodName( Value ); rCTLFont.MethodName( Value );
 
-        SETONALLFONTS( SetUnderline,        (FontLineStyle)pUnderlineItem->GetValue() )
-        SETONALLFONTS( SetOverline,         (FontLineStyle)pOverlineItem->GetValue() )
-        SETONALLFONTS( SetStrikeout,        (FontStrikeout)pCrossedOutItem->GetValue() )
+        SETONALLFONTS( SetUnderline,        pUnderlineItem->GetValue() )
+        SETONALLFONTS( SetOverline,         pOverlineItem->GetValue() )
+        SETONALLFONTS( SetStrikeout,        pCrossedOutItem->GetValue() )
         SETONALLFONTS( SetOutline,          pContourItem->GetValue() )
         SETONALLFONTS( SetShadow,           pShadowedItem->GetValue() )
         SETONALLFONTS( SetColor,            aColor )
@@ -174,13 +175,13 @@ sal_uInt16 ScAutoFmtPreview::GetFormatIndex( size_t nCol, size_t nRow ) const
 const SvxBoxItem& ScAutoFmtPreview::GetBoxItem( size_t nCol, size_t nRow ) const
 {
     OSL_ENSURE( pCurData, "ScAutoFmtPreview::GetBoxItem - no format data found" );
-    return *static_cast< const SvxBoxItem* >( pCurData->GetItem( GetFormatIndex( nCol, nRow ), ATTR_BORDER ) );
+    return * pCurData->GetItem( GetFormatIndex( nCol, nRow ), ATTR_BORDER );
 }
 
 const SvxLineItem& ScAutoFmtPreview::GetDiagItem( size_t nCol, size_t nRow, bool bTLBR ) const
 {
     OSL_ENSURE( pCurData, "ScAutoFmtPreview::GetDiagItem - no format data found" );
-    return *static_cast< const SvxLineItem* >( pCurData->GetItem( GetFormatIndex( nCol, nRow ), bTLBR ? ATTR_BORDER_TLBR : ATTR_BORDER_BLTR ) );
+    return * pCurData->GetItem( GetFormatIndex( nCol, nRow ), bTLBR ? ATTR_BORDER_TLBR : ATTR_BORDER_BLTR );
 }
 
 void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCol, size_t nRow)
@@ -236,7 +237,7 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
         mknum:
             if (bNumFormat)
             {
-                ScNumFormatAbbrev& rNumFormat = (ScNumFormatAbbrev&) pCurData->GetNumFormat(sal_uInt16(nNum));
+                ScNumFormatAbbrev& rNumFormat = const_cast<ScNumFormatAbbrev&>(pCurData->GetNumFormat(sal_uInt16(nNum)));
                 nNum = rNumFormat.GetFormatIndex(*pNumFmt);
             }
             else
@@ -250,20 +251,19 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
 
         Size aStrSize;
         sal_uInt16 nFmtIndex = GetFormatIndex( nCol, nRow );
-        Rectangle cellRect = maArray.GetCellRect( nCol, nRow );
-        Point aPos = cellRect.TopLeft();
+        const basegfx::B2DRange cellRange(maArray.GetCellRange( nCol, nRow, true ));
+        Point aPos = Point(basegfx::fround(cellRange.getMinX()), basegfx::fround(cellRange.getMinY()));
         sal_uInt16 nRightX = 0;
         bool bJustify = pCurData->GetIncludeJustify();
-        SvxHorJustifyItem aHorJustifyItem( SVX_HOR_JUSTIFY_STANDARD, ATTR_HOR_JUSTIFY );
         SvxCellHorJustify eJustification;
 
         SvtScriptedTextHelper aScriptedText(rRenderContext);
 
         // Justification:
 
-        eJustification  = mbRTL ? SVX_HOR_JUSTIFY_RIGHT : bJustify ?
-            (SvxCellHorJustify) (static_cast<const SvxHorJustifyItem*>(pCurData->GetItem(nFmtIndex, ATTR_HOR_JUSTIFY))->GetValue()) :
-            SVX_HOR_JUSTIFY_STANDARD;
+        eJustification  = mbRTL ? SvxCellHorJustify::Right : bJustify ?
+            pCurData->GetItem(nFmtIndex, ATTR_HOR_JUSTIFY)->GetValue() :
+            SvxCellHorJustify::Standard;
 
         if (pCurData->GetIncludeFont())
         {
@@ -272,9 +272,9 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
 
             MakeFonts( nFmtIndex, aFont, aCJKFont, aCTLFont );
 
-            theMaxStrSize           = cellRect.GetSize();
-            theMaxStrSize.Width()  -= FRAME_OFFSET;
-            theMaxStrSize.Height() -= FRAME_OFFSET;
+            theMaxStrSize = Size(basegfx::fround(cellRange.getWidth()), basegfx::fround(cellRange.getHeight()));
+            theMaxStrSize.AdjustWidth( -(FRAME_OFFSET) );
+            theMaxStrSize.AdjustHeight( -(FRAME_OFFSET) );
 
             aScriptedText.SetFonts( &aFont, &aCJKFont, &aCTLFont );
             aScriptedText.SetText(cellString, xBreakIter);
@@ -289,7 +289,7 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
             }
             while((theMaxStrSize.Width() <= aStrSize.Width()) && (cellString.getLength() > 1))
             {
-                if( eJustification == SVX_HOR_JUSTIFY_RIGHT )
+                if( eJustification == SvxCellHorJustify::Right )
                     cellString = cellString.copy(1);
                 else
                     cellString = cellString.copy(0, cellString.getLength() - 1 );
@@ -305,33 +305,34 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
             aStrSize = aScriptedText.GetTextSize();
         }
 
-        nRightX  = sal_uInt16(cellRect.GetWidth() - aStrSize.Width() - FRAME_OFFSET);
+        nRightX  = sal_uInt16(basegfx::fround(cellRange.getWidth()) - aStrSize.Width() - FRAME_OFFSET);
 
         // vertical (always center):
 
-        aPos.Y() += (mnRowHeight - (sal_uInt16)aStrSize.Height()) / 2;
+        aPos.AdjustY((mnRowHeight - static_cast<sal_uInt16>(aStrSize.Height())) / 2 );
 
         // horizontal
 
-        if (eJustification != SVX_HOR_JUSTIFY_STANDARD)
+        if (eJustification != SvxCellHorJustify::Standard)
         {
-            sal_uInt16 nHorPos = sal_uInt16((cellRect.GetWidth()-aStrSize.Width()) / 2);
+            sal_uInt16 nHorPos = sal_uInt16((basegfx::fround(cellRange.getWidth())-aStrSize.Width()) / 2);
+            //sal_uInt16 nHorPos = sal_uInt16((basegfx::fround(cellRange.getWidth())-aStrSize.Width()) / 2);
 
             switch (eJustification)
             {
-                case SVX_HOR_JUSTIFY_LEFT:
-                    aPos.X() += FRAME_OFFSET;
+                case SvxCellHorJustify::Left:
+                    aPos.AdjustX(FRAME_OFFSET );
                     break;
-                case SVX_HOR_JUSTIFY_RIGHT:
-                    aPos.X() += nRightX;
+                case SvxCellHorJustify::Right:
+                    aPos.AdjustX(nRightX );
                     break;
-                case SVX_HOR_JUSTIFY_BLOCK:
-                case SVX_HOR_JUSTIFY_REPEAT:
-                case SVX_HOR_JUSTIFY_CENTER:
-                    aPos.X() += nHorPos;
+                case SvxCellHorJustify::Block:
+                case SvxCellHorJustify::Repeat:
+                case SvxCellHorJustify::Center:
+                    aPos.AdjustX(nHorPos );
                     break;
                 // coverity[dead_error_line] - following conditions exist to avoid compiler warning
-                case SVX_HOR_JUSTIFY_STANDARD:
+                case SvxCellHorJustify::Standard:
                 default:
                     // Standard is not handled here
                     break;
@@ -345,12 +346,12 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
             if (nCol == 0 || nRow == 0)
             {
                 // Text label to the left or sum left adjusted
-                aPos.X() += FRAME_OFFSET;
+                aPos.AdjustX(FRAME_OFFSET );
             }
             else
             {
                  // Numbers/Dates right adjusted
-                aPos.X() += nRightX;
+                aPos.AdjustX(nRightX );
             }
         }
         aScriptedText.DrawText(aPos);
@@ -358,13 +359,6 @@ void ScAutoFmtPreview::DrawString(vcl::RenderContext& rRenderContext, size_t nCo
 }
 
 #undef FRAME_OFFSET
-
-void ScAutoFmtPreview::DrawStrings(vcl::RenderContext& rRenderContext)
-{
-    for(size_t nRow = 0; nRow < 5; ++nRow)
-        for(size_t nCol = 0; nCol < 5; ++nCol)
-            DrawString(rRenderContext, nCol, nRow);
-}
 
 void ScAutoFmtPreview::DrawBackground(vcl::RenderContext& rRenderContext)
 {
@@ -374,13 +368,19 @@ void ScAutoFmtPreview::DrawBackground(vcl::RenderContext& rRenderContext)
         {
             for(size_t nCol = 0; nCol < 5; ++nCol)
             {
-                const SvxBrushItem* pItem = static_cast< const SvxBrushItem* >(
-                    pCurData->GetItem( GetFormatIndex( nCol, nRow ), ATTR_BACKGROUND ) );
+                const SvxBrushItem* pItem =
+                    pCurData->GetItem( GetFormatIndex( nCol, nRow ), ATTR_BACKGROUND );
 
                 rRenderContext.Push( PushFlags::LINECOLOR | PushFlags::FILLCOLOR );
                 rRenderContext.SetLineColor();
                 rRenderContext.SetFillColor( pItem->GetColor() );
-                rRenderContext.DrawRect( maArray.GetCellRect( nCol, nRow ) );
+
+                const basegfx::B2DRange aCellRange(maArray.GetCellRange( nCol, nRow, true ));
+                rRenderContext.DrawRect(
+                    tools::Rectangle(
+                        basegfx::fround(aCellRange.getMinX()), basegfx::fround(aCellRange.getMinY()),
+                        basegfx::fround(aCellRange.getMaxX()), basegfx::fround(aCellRange.getMaxY())));
+
                 rRenderContext.Pop();
             }
         }
@@ -396,11 +396,25 @@ void ScAutoFmtPreview::PaintCells(vcl::RenderContext& rRenderContext)
             DrawBackground(rRenderContext);
 
         // 2) values
-        DrawStrings(rRenderContext);
+        for(size_t nRow = 0; nRow < 5; ++nRow)
+            for(size_t nCol = 0; nCol < 5; ++nCol)
+                DrawString(rRenderContext, nCol, nRow);
 
         // 3) border
         if (pCurData->GetIncludeFrame())
-            maArray.DrawArray(rRenderContext);
+        {
+            const drawinglayer::geometry::ViewInformation2D aNewViewInformation2D;
+            std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> pProcessor2D(
+                drawinglayer::processor2d::createPixelProcessor2DFromOutputDevice(
+                    rRenderContext,
+                    aNewViewInformation2D));
+
+            if (pProcessor2D)
+            {
+                pProcessor2D->process(maArray.CreateB2DPrimitiveArray());
+                pProcessor2D.reset();
+            }
+        }
     }
 }
 
@@ -408,12 +422,16 @@ void ScAutoFmtPreview::Init()
 {
     SetBorderStyle( WindowBorderStyle::MONO );
     maArray.Initialize( 5, 5 );
-    maArray.SetUseDiagDoubleClipping( false );
+//    maArray.SetUseDiagDoubleClipping( false );
+    mnLabelColWidth = 0;
+    mnDataColWidth1 = 0;
+    mnDataColWidth2 = 0;
+    mnRowHeight = 0;
     CalcCellArray( false );
     CalcLineMap();
 }
 
-void ScAutoFmtPreview::DetectRTL(ScViewData *pViewData)
+void ScAutoFmtPreview::DetectRTL(const ScViewData *pViewData)
 {
     SCTAB nCurrentTab = pViewData->GetTabNo();
     ScDocument* pDoc = pViewData->GetDocument();
@@ -431,11 +449,11 @@ void ScAutoFmtPreview::CalcCellArray( bool bFitWidthP )
     maArray.SetYOffset( 2 );
     maArray.SetAllRowHeights( mnRowHeight );
 
-    aPrvSize.Width() = maArray.GetWidth() + 4;
-    aPrvSize.Height() = maArray.GetHeight() + 4;
+    aPrvSize.setWidth( maArray.GetWidth() + 4 );
+    aPrvSize.setHeight( maArray.GetHeight() + 4 );
 }
 
-inline void lclSetStyleFromBorder( svx::frame::Style& rStyle, const ::editeng::SvxBorderLine* pBorder )
+static void lclSetStyleFromBorder( svx::frame::Style& rStyle, const ::editeng::SvxBorderLine* pBorder )
 {
     rStyle.Set( pBorder, 1.0 / TWIPS_PER_POINT, 5 );
 }
@@ -480,18 +498,17 @@ void ScAutoFmtPreview::NotifyChange( ScAutoFormatData* pNewData )
     CalcCellArray( bFitWidth );
     CalcLineMap();
 
-    Invalidate(Rectangle(Point(0,0), GetSizePixel()));
+    Invalidate(tools::Rectangle(Point(0,0), GetSizePixel()));
 }
 
-void ScAutoFmtPreview::DoPaint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void ScAutoFmtPreview::DoPaint(vcl::RenderContext& rRenderContext)
 {
     DrawModeFlags nOldDrawMode = aVD->GetDrawMode();
 
     Size aWndSize(GetSizePixel());
     vcl::Font aFont(aVD->GetFont());
     Color aBackCol(rRenderContext.GetSettings().GetStyleSettings().GetWindowColor());
-    Point aTmpPoint;
-    Rectangle aRect(aTmpPoint, aWndSize);
+    tools::Rectangle aRect(Point(), aWndSize);
 
     aFont.SetTransparent( true );
     aVD->SetFont(aFont);
@@ -500,7 +517,7 @@ void ScAutoFmtPreview::DoPaint(vcl::RenderContext& rRenderContext, const Rectang
     aVD->SetOutputSize(aWndSize);
     aVD->DrawRect(aRect);
 
-    PaintCells(*aVD.get());
+    PaintCells(*aVD);
 
     rRenderContext.SetLineColor();
     rRenderContext.SetFillColor(aBackCol);
@@ -508,14 +525,14 @@ void ScAutoFmtPreview::DoPaint(vcl::RenderContext& rRenderContext, const Rectang
 
     Point aPos((aWndSize.Width() - aPrvSize.Width()) / 2, (aWndSize.Height() - aPrvSize.Height()) / 2);
     if (AllSettings::GetLayoutRTL())
-       aPos.X() = -aPos.X();
-    rRenderContext.DrawOutDev(aPos, aWndSize, Point(), aWndSize, *aVD.get());
+       aPos.setX( -aPos.X() );
+    rRenderContext.DrawOutDev(aPos, aWndSize, Point(), aWndSize, *aVD);
     aVD->SetDrawMode(nOldDrawMode);
 }
 
-void ScAutoFmtPreview::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ScAutoFmtPreview::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
-    DoPaint(rRenderContext, rRect);
+    DoPaint(rRenderContext);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

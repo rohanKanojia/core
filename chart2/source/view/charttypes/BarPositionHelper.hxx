@@ -20,25 +20,22 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_BARPOSITIONHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_CHARTTYPES_BARPOSITIONHELPER_HXX
 
-#include "PlottingPositionHelper.hxx"
+#include <PlottingPositionHelper.hxx>
 #include "CategoryPositionHelper.hxx"
 
 namespace chart
 {
 
-/**
-*/
-
 class BarPositionHelper : public CategoryPositionHelper, public PlottingPositionHelper
 {
 public:
-    explicit BarPositionHelper( bool bSwapXAndY=true );
+    explicit BarPositionHelper();
     BarPositionHelper( const BarPositionHelper& rSource );
-    virtual ~BarPositionHelper();
+    virtual ~BarPositionHelper() override;
 
-    virtual PlottingPositionHelper* clone() const override;
+    virtual std::unique_ptr<PlottingPositionHelper> clone() const override;
 
-    void                updateSeriesCount( double fSeriesCount ); /*only enter the size of x stacked series*/
+    void updateSeriesCount( double fSeriesCount ); /*only enter the size of x stacked series*/
 
     virtual double getScaledSlotPos( double fCategoryX, double fSeriesNumber ) const override;
     virtual void setScaledCategoryWidth( double fScaledCategoryWidth ) override;

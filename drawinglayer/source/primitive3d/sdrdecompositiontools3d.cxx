@@ -45,55 +45,53 @@ namespace drawinglayer
 {
     namespace primitive3d
     {
-        basegfx::B3DRange getRangeFrom3DGeometry(::std::vector< basegfx::B3DPolyPolygon >& rFill)
+        basegfx::B3DRange getRangeFrom3DGeometry(std::vector< basegfx::B3DPolyPolygon >& rFill)
         {
             basegfx::B3DRange aRetval;
 
-            for(size_t a(0); a < rFill.size(); a++)
+            for(basegfx::B3DPolyPolygon & a : rFill)
             {
-                aRetval.expand(basegfx::tools::getRange(rFill[a]));
+                aRetval.expand(basegfx::utils::getRange(a));
             }
 
             return aRetval;
         }
 
-        void applyNormalsKindSphereTo3DGeometry(::std::vector< basegfx::B3DPolyPolygon >& rFill, const basegfx::B3DRange& rRange)
+        void applyNormalsKindSphereTo3DGeometry(std::vector< basegfx::B3DPolyPolygon >& rFill, const basegfx::B3DRange& rRange)
         {
             // create sphere normals
             const basegfx::B3DPoint aCenter(rRange.getCenter());
 
-            for(size_t a(0); a < rFill.size(); a++)
+            for(basegfx::B3DPolyPolygon & a : rFill)
             {
-                rFill[a] = basegfx::tools::applyDefaultNormalsSphere(rFill[a], aCenter);
+                a = basegfx::utils::applyDefaultNormalsSphere(a, aCenter);
             }
         }
 
-        void applyNormalsKindFlatTo3DGeometry(::std::vector< basegfx::B3DPolyPolygon >& rFill)
+        void applyNormalsKindFlatTo3DGeometry(std::vector< basegfx::B3DPolyPolygon >& rFill)
         {
-            for(size_t a(0); a < rFill.size(); a++)
+            for(basegfx::B3DPolyPolygon & a : rFill)
             {
-                rFill[a].clearNormals();
+                a.clearNormals();
             }
         }
 
-        void applyNormalsInvertTo3DGeometry(::std::vector< basegfx::B3DPolyPolygon >& rFill)
+        void applyNormalsInvertTo3DGeometry(std::vector< basegfx::B3DPolyPolygon >& rFill)
         {
             // invert normals
-            for(size_t a(0); a < rFill.size(); a++)
+            for(basegfx::B3DPolyPolygon & a : rFill)
             {
-                rFill[a] = basegfx::tools::invertNormals(rFill[a]);
+                a = basegfx::utils::invertNormals(a);
             }
         }
 
         void applyTextureTo3DGeometry(
             css::drawing::TextureProjectionMode eModeX,
             css::drawing::TextureProjectionMode eModeY,
-            ::std::vector< basegfx::B3DPolyPolygon >& rFill,
+            std::vector< basegfx::B3DPolyPolygon >& rFill,
             const basegfx::B3DRange& rRange,
             const basegfx::B2DVector& rTextureSize)
         {
-            sal_uInt32 a;
-
             // handle texture coordinates X
             const bool bParallelX(css::drawing::TextureProjectionMode_PARALLEL == eModeX);
             const bool bSphereX(!bParallelX && (css::drawing::TextureProjectionMode_SPHERE == eModeX));
@@ -105,9 +103,9 @@ namespace drawinglayer
             if(bParallelX || bParallelY)
             {
                 // apply parallel texture coordinates in X and/or Y
-                for(a = 0; a < rFill.size(); a++)
+                for(auto & a: rFill)
                 {
-                    rFill[a] = basegfx::tools::applyDefaultTextureCoordinatesParallel(rFill[a], rRange, bParallelX, bParallelY);
+                    a = basegfx::utils::applyDefaultTextureCoordinatesParallel(a, rRange, bParallelX, bParallelY);
                 }
             }
 
@@ -116,9 +114,9 @@ namespace drawinglayer
                 // apply spherical texture coordinates in X and/or Y
                 const basegfx::B3DPoint aCenter(rRange.getCenter());
 
-                for(a = 0; a < rFill.size(); a++)
+                for(auto & a: rFill)
                 {
-                    rFill[a] = basegfx::tools::applyDefaultTextureCoordinatesSphere(rFill[a], aCenter, bSphereX, bSphereY);
+                    a = basegfx::utils::applyDefaultTextureCoordinatesSphere(a, aCenter, bSphereX, bSphereY);
                 }
             }
 
@@ -126,9 +124,9 @@ namespace drawinglayer
             basegfx::B2DHomMatrix aTexMatrix;
             aTexMatrix.scale(rTextureSize.getX(), rTextureSize.getY());
 
-            for(a = 0; a < rFill.size(); a++)
+            for(auto & a: rFill)
             {
-                rFill[a].transformTextureCoordinates(aTexMatrix);
+                a.transformTextureCoordinates(aTexMatrix);
             }
         }
 
@@ -148,7 +146,7 @@ namespace drawinglayer
             // create primitives
             Primitive3DContainer aRetval(aScaledPolyPolygon.count());
 
-            for(sal_uInt32 a(0L); a < aScaledPolyPolygon.count(); a++)
+            for(sal_uInt32 a(0); a < aScaledPolyPolygon.count(); a++)
             {
                 const Primitive3DReference xRef(new PolygonStrokePrimitive3D(aScaledPolyPolygon.getB3DPolygon(a), aLineAttribute, aStrokeAttribute));
                 aRetval[a] = xRef;
@@ -165,7 +163,7 @@ namespace drawinglayer
         }
 
         Primitive3DContainer create3DPolyPolygonFillPrimitives(
-            const ::std::vector< basegfx::B3DPolyPolygon >& r3DPolyPolygonVector,
+            const std::vector< basegfx::B3DPolyPolygon >& r3DPolyPolygonVector,
             const basegfx::B3DHomMatrix& rObjectTransform,
             const basegfx::B2DVector& rTextureSize,
             const attribute::Sdr3DObjectAttribute& aSdr3DObjectAttribute,
@@ -174,7 +172,7 @@ namespace drawinglayer
         {
             Primitive3DContainer aRetval;
 
-            if(r3DPolyPolygonVector.size())
+            if(!r3DPolyPolygonVector.empty())
             {
                 // create list of simple fill primitives
                 aRetval.resize(r3DPolyPolygonVector.size());
@@ -298,7 +296,7 @@ namespace drawinglayer
         }
 
         Primitive3DContainer createHiddenGeometryPrimitives3D(
-            const ::std::vector< basegfx::B3DPolyPolygon >& r3DPolyPolygonVector,
+            const std::vector< basegfx::B3DPolyPolygon >& r3DPolyPolygonVector,
             const basegfx::B3DHomMatrix& rObjectTransform,
             const basegfx::B2DVector& rTextureSize,
             const attribute::Sdr3DObjectAttribute& aSdr3DObjectAttribute)

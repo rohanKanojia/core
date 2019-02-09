@@ -26,7 +26,7 @@
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/sdbcx/XRename.hpp>
-#include "ContentHelper.hxx"
+#include <ContentHelper.hxx>
 
 #include <map>
 
@@ -55,11 +55,7 @@ class OQuery    :public OContentHelper
 {
     friend struct TRelease;
 
-public:
-    typedef ::std::map< OUString,OColumn*,::comphelper::UStringMixLess> TNameColumnMap;
-
 protected:
-//  TNameColumnMap      m_aColumnMap; // contains all columnnames to columns
     css::uno::Reference< css::beans::XPropertySet >           m_xCommandDefinition;
     css::uno::Reference< css::sdbc::XConnection >             m_xConnection;
     css::uno::Reference< css::beans::XPropertySetInfo >       m_xCommandPropInfo;
@@ -67,8 +63,8 @@ protected:
     ::dbtools::WarningsContainer*                             m_pWarnings;
 
     // possible actions on our "aggregate"
-    enum AGGREGATE_ACTION { NONE, SETTING_PROPERTIES, FLUSHING };
-    AGGREGATE_ACTION    m_eDoingCurrently;
+    enum class AggregateAction { NONE, SettingProperties };
+    AggregateAction    m_eDoingCurrently;
 
     /** a class which automatically resets m_eDoingCurrently in its destructor
     */
@@ -76,18 +72,18 @@ protected:
     friend class OAutoActionReset;
     class OAutoActionReset
     {
-        OQuery*             m_pActor;
+        OQuery&             m_rActor;
     public:
-        explicit OAutoActionReset(OQuery* _pActor) : m_pActor(_pActor) { }
-        ~OAutoActionReset() { m_pActor->m_eDoingCurrently = NONE; }
+        explicit OAutoActionReset(OQuery& _rActor) : m_rActor(_rActor) { }
+        ~OAutoActionReset() { m_rActor.m_eDoingCurrently = AggregateAction::NONE; }
     };
 
 protected:
-    virtual ~OQuery();
+    virtual ~OQuery() override;
 
 // OPropertyArrayUsageHelper
     virtual ::cppu::IPropertyArrayHelper* createArrayHelper( ) const override;
-    ::cppu::IPropertyArrayHelper*   getArrayHelper() { return OQuery_ArrayHelperBase::getArrayHelper(); }
+    using OQuery_ArrayHelperBase::getArrayHelper;
 
 public:
     OQuery(
@@ -96,16 +92,14 @@ public:
             const css::uno::Reference< css::uno::XComponentContext >& _xORB
         );
 
-    virtual css::uno::Sequence<css::uno::Type> SAL_CALL getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<css::uno::Type> SAL_CALL getTypes() override;
+    virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId() override;
 
 // css::uno::XInterface
     DECLARE_XINTERFACE( )
 
 // css::beans::XPropertySet
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
 
 // OPropertySetHelper
     virtual ::cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
@@ -114,26 +108,25 @@ public:
     DECLARE_SERVICE_INFO();
 
 // css::sdbcx::XDataDescriptorFactory
-    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
 
 // css::beans::XPropertyChangeListener
-    virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& evt ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& evt ) override;
 
 // css::lang::XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& _rSource ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& _rSource ) override;
 
 // OPropertySetHelper
     virtual void SAL_CALL setFastPropertyValue_NoBroadcast(
                     sal_Int32 nHandle,
-                    const css::uno::Any& rValue )
-            throw (css::uno::Exception, std::exception) override;
+                    const css::uno::Any& rValue ) override;
 
 public:
     // the caller is responsible for the lifetime!
     void                            setWarningsContainer( ::dbtools::WarningsContainer* _pWarnings )   { m_pWarnings = _pWarnings; }
 
     // XRename
-    virtual void SAL_CALL rename( const OUString& newName ) throw (css::sdbc::SQLException, css::container::ElementExistException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL rename( const OUString& newName ) override;
 
 protected:
     virtual void SAL_CALL disposing() override;

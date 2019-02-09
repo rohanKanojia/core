@@ -26,11 +26,9 @@
 #include <xmloff/xmltoken.hxx>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
-#include <comphelper/extract.hxx>
 #include <xmloff/xmlprcon.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/XMLGraphicsDefaultStyle.hxx>
-#include <tools/debug.hxx>
 #include "xmlfilter.hxx"
 #include "xmlHelper.hxx"
 #include <osl/diagnose.h>
@@ -42,7 +40,6 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::style;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
 using namespace xmloff::token;
@@ -128,7 +125,7 @@ void OControlStyleContext::AddProperty(const sal_Int16 nContextID, const uno::An
     sal_Int32 nIndex(static_cast<OReportStylesContext *>(pStyles)->GetIndex(nContextID));
     OSL_ENSURE(nIndex != -1, "Property not found in Map");
     XMLPropertyState aPropState(nIndex, rValue);
-    GetProperties().push_back(aPropState); // has to be insertes in a sort order later
+    GetProperties().push_back(aPropState); // has to be inserted in a sort order later
 }
 
 void OControlStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
@@ -145,16 +142,17 @@ void OControlStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
 }
 
 
+static const OUStringLiteral g_sTableStyleFamilyName( XML_STYLE_FAMILY_TABLE_TABLE_STYLES_NAME );
+static const OUStringLiteral g_sColumnStyleFamilyName( XML_STYLE_FAMILY_TABLE_COLUMN_STYLES_NAME );
+static const OUStringLiteral g_sRowStyleFamilyName( XML_STYLE_FAMILY_TABLE_ROW_STYLES_NAME );
+static const OUStringLiteral g_sCellStyleFamilyName( XML_STYLE_FAMILY_TABLE_CELL_STYLES_NAME );
+
 OReportStylesContext::OReportStylesContext( ORptFilter& rImport,
         sal_uInt16 nPrfx ,
         const OUString& rLName ,
         const Reference< XAttributeList > & xAttrList,
         const bool bTempAutoStyles ) :
     SvXMLStylesContext( rImport, nPrfx, rLName, xAttrList ),
-    m_sTableStyleFamilyName( OUString( XML_STYLE_FAMILY_TABLE_TABLE_STYLES_NAME )),
-    m_sColumnStyleFamilyName( OUString( XML_STYLE_FAMILY_TABLE_COLUMN_STYLES_NAME )),
-    m_sRowStyleFamilyName( OUString( XML_STYLE_FAMILY_TABLE_ROW_STYLES_NAME )),
-    m_sCellStyleFamilyName( OUString( XML_STYLE_FAMILY_TABLE_CELL_STYLES_NAME )),
     m_rImport(rImport),
     m_nNumberFormatIndex(-1),
     bAutoStyles(bTempAutoStyles)
@@ -292,7 +290,7 @@ Reference < XNameContainer >
     Reference < XNameContainer > xStyles(SvXMLStylesContext::GetStylesContainer(nFamily));
     if (!xStyles.is())
     {
-     OUString sName;
+        OUString sName;
         switch( nFamily )
         {
             case XML_STYLE_FAMILY_TABLE_TABLE:
@@ -300,8 +298,7 @@ Reference < XNameContainer >
                 if( m_xTableStyles.is() )
                     xStyles.set(m_xTableStyles);
                 else
-                    sName =
-                     OUString( OUString( "TableStyles" ));
+                    sName = "TableStyles";
             }
             break;
             case XML_STYLE_FAMILY_TABLE_CELL:
@@ -309,8 +306,7 @@ Reference < XNameContainer >
                 if( m_xCellStyles.is() )
                     xStyles.set(m_xCellStyles);
                 else
-                    sName =
-                     OUString( OUString( "CellStyles" ));
+                    sName = "CellStyles";
             }
             break;
             case XML_STYLE_FAMILY_TABLE_COLUMN:
@@ -318,8 +314,7 @@ Reference < XNameContainer >
                 if( m_xColumnStyles.is() )
                     xStyles.set(m_xColumnStyles);
                 else
-                    sName =
-                     OUString( OUString( "ColumnStyles" ));
+                    sName = "ColumnStyles";
             }
             break;
             case XML_STYLE_FAMILY_TABLE_ROW:
@@ -327,8 +322,7 @@ Reference < XNameContainer >
                 if( m_xRowStyles.is() )
                     xStyles.set(m_xRowStyles);
                 else
-                    sName =
-                     OUString( OUString( "RowStyles" ));
+                    sName = "RowStyles";
             }
             break;
             case XML_STYLE_FAMILY_SD_GRAPHICS_ID:
@@ -380,16 +374,16 @@ OUString OReportStylesContext::GetServiceName( sal_uInt16 nFamily ) const
         switch( nFamily )
         {
             case XML_STYLE_FAMILY_TABLE_TABLE:
-                sServiceName = m_sTableStyleFamilyName;
+                sServiceName = g_sTableStyleFamilyName;
                 break;
             case XML_STYLE_FAMILY_TABLE_COLUMN:
-                sServiceName = m_sColumnStyleFamilyName;
+                sServiceName = g_sColumnStyleFamilyName;
                 break;
             case XML_STYLE_FAMILY_TABLE_ROW:
-                sServiceName = m_sRowStyleFamilyName;
+                sServiceName = g_sRowStyleFamilyName;
                 break;
             case XML_STYLE_FAMILY_TABLE_CELL:
-                sServiceName = m_sCellStyleFamilyName;
+                sServiceName = g_sCellStyleFamilyName;
                 break;
             default:
                 break;

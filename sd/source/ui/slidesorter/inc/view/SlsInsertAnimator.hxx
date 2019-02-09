@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSINSERTANIMATOR_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSINSERTANIMATOR_HXX
 
-#include "controller/SlsAnimator.hxx"
+#include <controller/SlsAnimator.hxx>
 #include <memory>
 
 namespace sd { namespace slidesorter { namespace view {
@@ -42,7 +42,6 @@ public:
     */
     void SetInsertPosition (const InsertPosition& rInsertPosition);
 
-    enum ResetMode { RM_Normal, RM_AbortAnimations };
     /** Restore the normal position of all page objects.
         @param eMode
             This flag controls whether to start an animation that ends in the

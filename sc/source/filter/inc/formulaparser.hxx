@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_FORMULAPARSER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_FORMULAPARSER_HXX
 
+#include <memory>
 #include "formulabase.hxx"
 
 namespace oox {
@@ -101,23 +102,14 @@ class FormulaParser : public FormulaProcessorBase
 {
 public:
     explicit            FormulaParser( const WorkbookHelper& rHelper );
-    virtual             ~FormulaParser();
+    virtual             ~FormulaParser() override;
 
     /** Converts an OOXML formula string. */
-    ApiTokenSequence    importFormula(
-                            const css::table::CellAddress& rBaseAddr,
-                            const OUString& rFormulaString ) const;
-
     ApiTokenSequence    importFormula(
                             const ScAddress& rBaseAddr,
                             const OUString& rFormulaString ) const;
 
     /** Imports and converts a BIFF12 token array from the passed stream. */
-    ApiTokenSequence    importFormula(
-                            const css::table::CellAddress& rBaseAddr,
-                            FormulaType eType,
-                            SequenceInputStream& rStrm ) const;
-
     ApiTokenSequence    importFormula(
                             const ScAddress& rBaseAddr,
                             FormulaType eType,

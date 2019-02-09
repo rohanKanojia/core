@@ -18,22 +18,23 @@
  */
 
 
-#include "pdfiprocessor.hxx"
-#include "xmlemitter.hxx"
-#include "pdfihelper.hxx"
-#include "imagecontainer.hxx"
-#include "genericelements.hxx"
+#include <pdfiprocessor.hxx>
+#include <xmlemitter.hxx>
+#include <pdfihelper.hxx>
+#include <imagecontainer.hxx>
+#include <genericelements.hxx>
 #include "style.hxx"
-#include "treevisiting.hxx"
+#include <treevisiting.hxx>
 
 #include <rtl/string.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 
 #include <comphelper/sequence.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/range/b2irange.hxx>
 #include <basegfx/range/b2drectangle.hxx>
@@ -45,7 +46,6 @@
 #include <com/sun/star/geometry/RealPoint2D.hpp>
 #include <com/sun/star/geometry/RealRectangle2D.hpp>
 
-
 using namespace com::sun::star;
 
 
@@ -53,7 +53,7 @@ namespace pdfi
 {
 
  PDFIProcessor::PDFIProcessor( const uno::Reference< task::XStatusIndicator >& xStat ,
-            css::uno::Reference< css::uno::XComponentContext >  xContext) :
+            css::uno::Reference< css::uno::XComponentContext > const & xContext) :
 
     m_xContext(xContext),
     prevCharWidth(0),
@@ -65,14 +65,11 @@ namespace pdfi
     m_aFontToId(),
     m_aGCStack(),
     m_nNextGCId( 1 ),
-    m_aIdToGC(),
     m_aGCToId(),
     m_aImages(),
-    m_eTextDirection( LrTb ),
     m_nPages(0),
     m_nNextZOrder( 1 ),
-    m_xStatusIndicator( xStat ),
-    m_bHaveTextOnDocLevel(false)
+    m_xStatusIndicator( xStat )
 {
     FontAttributes aDefFont;
     aDefFont.familyName = "Helvetica";
@@ -84,13 +81,7 @@ namespace pdfi
 
     GraphicsContext aDefGC;
     m_aGCStack.push_back( aDefGC );
-    m_aIdToGC[ 0 ] = aDefGC;
-    m_aGCToId[ aDefGC ] = 0;
-}
-
-void PDFIProcessor::enableToplevelText()
-{
-    m_bHaveTextOnDocLevel = true;
+    m_aGCToId.insert(GCToIdBiMap::relation(aDefGC, 0));
 }
 
 void PDFIProcessor::setPageNum( sal_Int32 nPages )
@@ -142,7 +133,7 @@ void PDFIProcessor::setLineCap(sal_Int8 nCap)
 
 void PDFIProcessor::setMiterLimit(double)
 {
-    OSL_TRACE("PDFIProcessor::setMiterLimit(): not supported by ODF");
+    SAL_WARN("sdext.pdfimport", "PDFIProcessor::setMiterLimit(): not supported by ODF");
 }
 
 void PDFIProcessor::setLineWidth(double nWidth)
@@ -206,9 +197,9 @@ void PDFIProcessor::processGlyphLine()
     double spaceDetectBoundary = 0.0;
 
     // Try to find space glyph and its width
-    for (size_t i = 0; i < m_GlyphsList.size(); i++)
+    for (CharGlyph & i : m_GlyphsList)
     {
-        OUString& glyph = m_GlyphsList[i].getGlyph();
+        OUString& glyph = i.getGlyph();
 
         sal_Unicode ch = '\0';
         if (!glyph.isEmpty())
@@ -216,7 +207,7 @@ void PDFIProcessor::processGlyphLine()
 
         if ((ch == 0x20) || (ch == 0xa0))
         {
-            double spaceWidth = m_GlyphsList[i].getWidth();
+            double spaceWidth = i.getWidth();
             spaceDetectBoundary = spaceWidth * 0.5;
             break;
         }
@@ -226,8 +217,8 @@ void PDFIProcessor::processGlyphLine()
     if (spaceDetectBoundary == 0.0)
     {
         double avgGlyphWidth = 0.0;
-        for (size_t i = 0; i < m_GlyphsList.size(); i++)
-            avgGlyphWidth += m_GlyphsList[i].getWidth();
+        for (CharGlyph & i : m_GlyphsList)
+            avgGlyphWidth += i.getWidth();
         avgGlyphWidth /= m_GlyphsList.size();
         spaceDetectBoundary = avgGlyphWidth * 0.2;
     }
@@ -350,8 +341,12 @@ void PDFIProcessor::setupImage(ImageId nImage)
     pFrame->h = pImageElement->h = aScale.getY();
     pFrame->ZOrder = m_nNextZOrder++;
 
-    if (aScale.getY() < 0)
-        pFrame->MirrorVertical = pImageElement->MirrorVertical = true;
+    // Poppler wrapper takes into account that vertical axes of PDF and ODF are opposite,
+    // and it flips matrix vertically (see poppler's GfxState::GfxState()).
+    // But image internal vertical axis is independent of PDF vertical axis direction,
+    // so arriving matrix is extra-flipped relative to image.
+    // We force vertical flip here to compensate that.
+    pFrame->MirrorVertical = true;
 }
 
 void PDFIProcessor::drawMask(const uno::Sequence<beans::PropertyValue>& xBitmap,
@@ -440,7 +435,7 @@ void PDFIProcessor::intersectClip(const uno::Reference< rendering::XPolyPolygon2
     basegfx::B2DPolyPolygon aCurClip = getCurrentContext().Clip;
 
     if( aCurClip.count() )  // #i92985# adapted API from (..., false, false) to (..., true, false)
-        aNewClip = basegfx::tools::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
+        aNewClip = basegfx::utils::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
 
     getCurrentContext().Clip = aNewClip;
 }
@@ -453,7 +448,7 @@ void PDFIProcessor::intersectEoClip(const uno::Reference< rendering::XPolyPolygo
     basegfx::B2DPolyPolygon aCurClip = getCurrentContext().Clip;
 
     if( aCurClip.count() )  // #i92985# adapted API from (..., false, false) to (..., true, false)
-        aNewClip = basegfx::tools::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
+        aNewClip = basegfx::utils::clipPolyPolygonOnPolyPolygon( aCurClip, aNewClip, true, false );
 
     getCurrentContext().Clip = aNewClip;
 }
@@ -484,13 +479,12 @@ const FontAttributes& PDFIProcessor::getFont( sal_Int32 nFontId ) const
 sal_Int32 PDFIProcessor::getGCId( const GraphicsContext& rGC )
 {
     sal_Int32 nGCId = 0;
-    GCToIdMap::const_iterator it = m_aGCToId.find( rGC );
-    if( it != m_aGCToId.end() )
+    auto it = m_aGCToId.left.find( rGC );
+    if( it != m_aGCToId.left.end() )
         nGCId = it->second;
     else
     {
-        m_aGCToId[ rGC ] = m_nNextGCId;
-        m_aIdToGC[ m_nNextGCId ] = rGC;
+        m_aGCToId.insert(GCToIdBiMap::relation(rGC, m_nNextGCId));
         nGCId = m_nNextGCId;
         m_nNextGCId++;
     }
@@ -500,9 +494,9 @@ sal_Int32 PDFIProcessor::getGCId( const GraphicsContext& rGC )
 
 const GraphicsContext& PDFIProcessor::getGraphicsContext( sal_Int32 nGCId ) const
 {
-    IdToGCMap::const_iterator it = m_aIdToGC.find( nGCId );
-    if( it == m_aIdToGC.end() )
-        it = m_aIdToGC.find( 0 );
+    auto it = m_aGCToId.right.find( nGCId );
+    if( it == m_aGCToId.right.end() )
+        it = m_aGCToId.right.find( 0 );
     return it->second;
 }
 
@@ -520,7 +514,7 @@ void PDFIProcessor::startPage( const geometry::RealSize2D& rSize )
 {
     // initial clip is to page bounds
     getCurrentContext().Clip = basegfx::B2DPolyPolygon(
-        basegfx::tools::createPolygonFromRect(
+        basegfx::utils::createPolygonFromRect(
             basegfx::B2DRange( 0, 0, rSize.Width, rSize.Height )));
 
     sal_Int32 nNextPageNr = m_pCurPage ? m_pCurPage->PageNumber+1 : 1;
@@ -550,7 +544,7 @@ void PDFIProcessor::emit( XmlEmitter&               rEmitter,
         rVisitorFactory.createOptimizingVisitor(*this));
     // FIXME: localization
     startIndicator( " " );
-    m_pDocument->visitedBy( *optimizingVisitor, std::list<Element*>::const_iterator());
+    m_pDocument->visitedBy( *optimizingVisitor, std::list<std::unique_ptr<Element>>::const_iterator());
 
 #if OSL_DEBUG_LEVEL > 0
     m_pDocument->emitStructure( 0 );
@@ -562,7 +556,7 @@ void PDFIProcessor::emit( XmlEmitter&               rEmitter,
         rVisitorFactory.createStyleCollectingVisitor(aStyles,*this));
     // FIXME: localization
 
-    m_pDocument->visitedBy( *finalizingVisitor, std::list<Element*>::const_iterator() );
+    m_pDocument->visitedBy( *finalizingVisitor, std::list<std::unique_ptr<Element>>::const_iterator() );
 
     EmitContext aContext( rEmitter, aStyles, m_aImages, *this, m_xStatusIndicator, m_xContext );
     ElementTreeVisitorSharedPtr aEmittingVisitor(
@@ -596,7 +590,7 @@ void PDFIProcessor::emit( XmlEmitter&               rEmitter,
     // emit style list
     aStyles.emit( aContext, *aEmittingVisitor );
 
-    m_pDocument->visitedBy( *aEmittingVisitor, std::list<Element*>::const_iterator() );
+    m_pDocument->visitedBy( *aEmittingVisitor, std::list<std::unique_ptr<Element>>::const_iterator() );
     aContext.rEmitter.endTag( "office:document" );
     endIndicator();
 }
@@ -606,12 +600,12 @@ void PDFIProcessor::startIndicator( const OUString& rText  )
     sal_Int32 nElements = m_nPages;
     if( m_xStatusIndicator.is() )
     {
-        sal_Int32 nUnicodes = rText.getLength();
-        OUStringBuffer aStr( nUnicodes*2 );
+        sal_Int32 nLength = rText.getLength();
+        OUStringBuffer aStr( nLength*2 );
         const sal_Unicode* pText = rText.getStr();
-        for( int i = 0; i < nUnicodes; i++ )
+        for( int i = 0; i < nLength; i++ )
         {
-            if( nUnicodes-i > 1&&
+            if( nLength-i > 1&&
                 pText[i]   == '%' &&
                 pText[i+1] == 'd'
             )
@@ -632,7 +626,7 @@ void PDFIProcessor::endIndicator()
         m_xStatusIndicator->end();
 }
 
-static bool lr_tb_sort( Element* pLeft, Element* pRight )
+static bool lr_tb_sort( std::unique_ptr<Element> const & pLeft, std::unique_ptr<Element> const & pRight )
 {
     // Ensure irreflexivity (which could be compromised if h or w is negative):
     if (pLeft == pRight)
@@ -643,29 +637,41 @@ static bool lr_tb_sort( Element* pLeft, Element* pRight )
     // Note: allow for 10% overlap on text lines since text lines are usually
     // of the same order as font height whereas the real paint area
     // of text is usually smaller
-    double fudge_factor = 1.0;
-    if( dynamic_cast< TextElement* >(pLeft) || dynamic_cast< TextElement* >(pRight) )
-        fudge_factor = 0.9;
+    double fudge_factor_left = 0.0, fudge_factor_right = 0.0;
+    if( dynamic_cast< TextElement* >(pLeft.get()) )
+        fudge_factor_left = 0.1;
+    if (dynamic_cast< TextElement* >(pRight.get()))
+        fudge_factor_right = 0.1;
 
+    // Allow negative height
+    double lower_boundary_left  = pLeft->y  + std::max(pLeft->h, 0.0)  - fabs(pLeft->h)  * fudge_factor_left;
+    double lower_boundary_right = pRight->y + std::max(pRight->h, 0.0) - fabs(pRight->h) * fudge_factor_right;
+    double upper_boundary_left  = pLeft->y  + std::min(pLeft->h, 0.0);
+    double upper_boundary_right = pRight->y + std::min(pRight->h, 0.0);
     // if left's lower boundary is above right's upper boundary
     // then left is smaller
-    if( pLeft->y+pLeft->h*fudge_factor < pRight->y )
+    if( lower_boundary_left < upper_boundary_right )
         return true;
     // if right's lower boundary is above left's upper boundary
     // then left is definitely not smaller
-    if( pRight->y+pRight->h*fudge_factor < pLeft->y )
+    if( lower_boundary_right < upper_boundary_left )
         return false;
 
+    // Allow negative width
+    double left_boundary_left   = pLeft->y  + std::min(pLeft->w, 0.0);
+    double left_boundary_right  = pRight->y + std::min(pRight->w, 0.0);
+    double right_boundary_left  = pLeft->y  + std::max(pLeft->w, 0.0);
+    double right_boundary_right = pRight->y + std::max(pRight->w, 0.0);
     // by now we have established that left and right are inside
     // a "line", that is they have vertical overlap
     // second: left-right sorting
     // if left's right boundary is left to right's left boundary
     // then left is smaller
-    if( pLeft->x+pLeft->w < pRight->x )
+    if( right_boundary_left < left_boundary_right )
         return true;
     // if right's right boundary is left to left's left boundary
     // then left is definitely not smaller
-    if( pRight->x+pRight->w < pLeft->x )
+    if( right_boundary_right < left_boundary_left )
         return false;
 
     // here we have established vertical and horizontal overlap
@@ -680,42 +686,14 @@ static bool lr_tb_sort( Element* pLeft, Element* pRight )
     return false;
 }
 
-void PDFIProcessor::sortElements( Element* pEle, bool bDeep )
+void PDFIProcessor::sortElements(Element* pEle)
 {
     if( pEle->Children.empty() )
         return;
 
-    if( bDeep )
-    {
-        for( std::list< Element* >::iterator it = pEle->Children.begin();
-             it != pEle->Children.end(); ++it )
-        {
-            sortElements( *it, bDeep );
-        }
-    }
-    // HACK: the stable sort member on std::list that takes a
-    // strict weak ordering requires member templates - which we
-    // do not have on all compilers. so we need to use std::stable_sort
-    // here - which does need random access iterators which the
-    // list iterators are not.
-    // so we need to copy the Element* to an array, stable sort that and
-    // copy them back.
-    std::vector<Element*> aChildren;
-    while( ! pEle->Children.empty() )
-    {
-        aChildren.push_back( pEle->Children.front() );
-        pEle->Children.pop_front();
-    }
-    switch( m_eTextDirection )
-    {
-        case LrTb:
-        default:
-        std::stable_sort( aChildren.begin(), aChildren.end(), lr_tb_sort );
-        break;
-    }
-    int nChildren = aChildren.size();
-    for( int i = 0; i < nChildren; i++ )
-        pEle->Children.push_back( aChildren[i] );
+    // sort method from std::list is equivalent to stable_sort
+    // See S Meyers, Effective STL
+    pEle->Children.sort(lr_tb_sort);
 }
 
 // helper method: get a mirrored string

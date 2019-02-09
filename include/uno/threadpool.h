@@ -20,8 +20,8 @@
 #ifndef INCLUDED_UNO_THREADPOOL_H
 #define INCLUDED_UNO_THREADPOOL_H
 
-#include <cppu/cppudllapi.h>
-#include <sal/types.h>
+#include "cppu/cppudllapi.h"
+#include "sal/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,7 +86,7 @@ uno_threadpool_create() SAL_THROW_EXTERN_C();
   called, BEFORE uno_threadpool_enter() is called and BEFORE a job for this
   thread is put into the threadpool (avoid a race between this thread and
   an incoming request/reply).
-  For every call to uno_threadpool_attach, a corrosponding call to
+  For every call to uno_threadpool_attach, a corresponding call to
   uno_threadpool_detach must be done.
 
   @param hPool The bridge threadpool handle previously created by uno_threadpool_create.
@@ -159,7 +159,7 @@ uno_threadpool_putJob(
   The threads waiting with uno_threadpool_enter() will return with *ppJob == 0
 
   Later calls to uno_threadpool_enter() using the hPool handle will also
-  return immeadiatly with *ppJob == 0.
+  return immediately with *ppJob == 0.
 
   @param hPool The handle to be disposed.
 

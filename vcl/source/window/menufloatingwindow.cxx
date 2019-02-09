@@ -21,84 +21,97 @@
 #include "menuitemlist.hxx"
 #include "menubarwindow.hxx"
 
+#include <sal/log.hxx>
+#include <salmenu.hxx>
+#include <salframe.hxx>
 #include <svdata.hxx>
 #include <vcl/decoview.hxx>
 #include <vcl/settings.hxx>
 #include <window.h>
 
 MenuFloatingWindow::MenuFloatingWindow( Menu* pMen, vcl::Window* pParent, WinBits nStyle ) :
-    FloatingWindow( pParent, nStyle )
+    FloatingWindow( pParent, nStyle ),
+    pMenu(pMen),
+    nHighlightedItem(ITEMPOS_INVALID),
+    nMBDownPos(ITEMPOS_INVALID),
+    nScrollerHeight(0),
+    nFirstEntry(0),
+    nPosInParent(ITEMPOS_INVALID),
+    bInExecute(false),
+    bScrollMenu(false),
+    bScrollUp(false),
+    bScrollDown(false),
+    bIgnoreFirstMove(true),
+    bKeyInput(false)
 {
     mpWindowImpl->mbMenuFloatingWindow= true;
-    pMenu               = pMen;
-    pActivePopup        = nullptr;
-    bInExecute          = false;
-    bScrollMenu         = false;
-    nHighlightedItem    = ITEMPOS_INVALID;
-    nMBDownPos          = ITEMPOS_INVALID;
-    nPosInParent        = ITEMPOS_INVALID;
-    nScrollerHeight     = 0;
-    nBorder             = EXTRASPACEY;
-    nFirstEntry         = 0;
-    bScrollUp           = false;
-    bScrollDown         = false;
-    bIgnoreFirstMove    = true;
-    bKeyInput           = false;
 
     ApplySettings(*this);
 
     SetPopupModeEndHdl( LINK( this, MenuFloatingWindow, PopupEnd ) );
 
-    aHighlightChangedTimer.SetTimeoutHdl( LINK( this, MenuFloatingWindow, HighlightChanged ) );
+    aHighlightChangedTimer.SetInvokeHandler( LINK( this, MenuFloatingWindow, HighlightChanged ) );
     aHighlightChangedTimer.SetTimeout( GetSettings().GetMouseSettings().GetMenuDelay() );
+    aHighlightChangedTimer.SetDebugName( "vcl::MenuFloatingWindow aHighlightChangedTimer" );
+
     aSubmenuCloseTimer.SetTimeout( GetSettings().GetMouseSettings().GetMenuDelay() );
-    aSubmenuCloseTimer.SetTimeoutHdl( LINK( this, MenuFloatingWindow, SubmenuClose ) );
-    aScrollTimer.SetTimeoutHdl( LINK( this, MenuFloatingWindow, AutoScroll ) );
+    aSubmenuCloseTimer.SetInvokeHandler( LINK( this, MenuFloatingWindow, SubmenuClose ) );
+    aSubmenuCloseTimer.SetDebugName( "vcl::MenuFloatingWindow aSubmenuCloseTimer" );
+
+    aScrollTimer.SetInvokeHandler( LINK( this, MenuFloatingWindow, AutoScroll ) );
+    aScrollTimer.SetDebugName( "vcl::MenuFloatingWindow aScrollTimer" );
 
     AddEventListener( LINK( this, MenuFloatingWindow, ShowHideListener ) );
 }
 
 void MenuFloatingWindow::doShutdown()
 {
-    if( pMenu )
+    if( !pMenu )
+        return;
+
+    // #105373# notify toolkit that highlight was removed
+    // otherwise the entry will not be read when the menu is opened again
+    if( nHighlightedItem != ITEMPOS_INVALID )
+        pMenu->ImplCallEventListeners( VclEventId::MenuDehighlight, nHighlightedItem );
+    if (!bKeyInput && pMenu && pMenu->pStartedFrom && !pMenu->pStartedFrom->IsMenuBar())
     {
-        // #105373# notify toolkit that highlight was removed
-        // otherwise the entry will not be read when the menu is opened again
-        if( nHighlightedItem != ITEMPOS_INVALID )
-            pMenu->ImplCallEventListeners( VCLEVENT_MENU_DEHIGHLIGHT, nHighlightedItem );
-        if (!bKeyInput && pMenu && pMenu->pStartedFrom && !pMenu->pStartedFrom->IsMenuBar())
+        // #102461# remove highlight in parent
+        size_t i, nCount = pMenu->pStartedFrom->pItemList->size();
+        for(i = 0; i < nCount; i++)
         {
-            // #102461# remove highlight in parent
-            size_t i, nCount = pMenu->pStartedFrom->pItemList->size();
-            for(i = 0; i < nCount; i++)
-            {
-                MenuItemData* pData = pMenu->pStartedFrom->pItemList->GetDataFromPos( i );
-                if( pData && ( pData->pSubMenu == pMenu ) )
-                    break;
-            }
-            if( i < nCount )
-            {
-                MenuFloatingWindow* pPWin = static_cast<MenuFloatingWindow*>(pMenu->pStartedFrom->ImplGetWindow());
-                if (pPWin)
-                    pPWin->InvalidateItem(i);
-            }
+            MenuItemData* pData = pMenu->pStartedFrom->pItemList->GetDataFromPos( i );
+            if( pData && ( pData->pSubMenu == pMenu ) )
+                break;
         }
-
-        // free the reference to the accessible component
-        SetAccessible( css::uno::Reference< css::accessibility::XAccessible >() );
-
-        aHighlightChangedTimer.Stop();
-
-        // #95056# invalidate screen area covered by system window
-        // so this can be taken into account if the commandhandler performs a scroll operation
-        if( GetParent() )
+        if( i < nCount )
         {
-            Rectangle aInvRect( GetWindowExtentsRelative( GetParent() ) );
-            GetParent()->Invalidate( aInvRect );
+            MenuFloatingWindow* pPWin = static_cast<MenuFloatingWindow*>(pMenu->pStartedFrom->ImplGetWindow());
+            if (pPWin)
+                pPWin->InvalidateItem(i);
         }
-        pMenu = nullptr;
-        RemoveEventListener( LINK( this, MenuFloatingWindow, ShowHideListener ) );
     }
+
+    // free the reference to the accessible component
+    SetAccessible( css::uno::Reference< css::accessibility::XAccessible >() );
+
+    aHighlightChangedTimer.Stop();
+
+    // #95056# invalidate screen area covered by system window
+    // so this can be taken into account if the commandhandler performs a scroll operation
+    if( GetParent() )
+    {
+        tools::Rectangle aInvRect( GetWindowExtentsRelative( GetParent() ) );
+        GetParent()->Invalidate( aInvRect );
+    }
+    pMenu = nullptr;
+    RemoveEventListener( LINK( this, MenuFloatingWindow, ShowHideListener ) );
+
+    aScrollTimer.Stop();
+    aSubmenuCloseTimer.Stop();
+    aSubmenuCloseTimer.Stop();
+    aHighlightChangedTimer.Stop();
+    aHighlightChangedTimer.Stop();
+
 }
 
 MenuFloatingWindow::~MenuFloatingWindow()
@@ -109,7 +122,9 @@ MenuFloatingWindow::~MenuFloatingWindow()
 void MenuFloatingWindow::dispose()
 {
     doShutdown();
-
+    pMenu.clear();
+    pActivePopup.clear();
+    xSaveFocusId.clear();
     FloatingWindow::dispose();
 }
 
@@ -122,11 +137,25 @@ void MenuFloatingWindow::ApplySettings(vcl::RenderContext& rRenderContext)
 {
     FloatingWindow::ApplySettings(rRenderContext);
 
-    const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
+    if (IsNativeControlSupported(ControlType::MenuPopup, ControlPart::MenuItem) &&
+        IsNativeControlSupported(ControlType::MenuPopup, ControlPart::Entire))
+    {
+        AllSettings aSettings(GetSettings());
+        ImplGetFrame()->UpdateSettings(aSettings); // Update theme colors.
+        StyleSettings aStyle(aSettings.GetStyleSettings());
+        Color aHighlightTextColor = ImplGetSVData()->maNWFData.maMenuBarHighlightTextColor;
+        if (aHighlightTextColor != COL_TRANSPARENT)
+        {
+            aStyle.SetMenuHighlightTextColor(aHighlightTextColor);
+        }
+        aSettings.SetStyleSettings(aStyle);
+        OutputDevice::SetSettings(aSettings);
+    }
 
+    const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
     SetPointFont(rRenderContext, rStyleSettings.GetMenuFont());
 
-    if (rRenderContext.IsNativeControlSupported(CTRL_MENU_POPUP, PART_ENTIRE_CONTROL))
+    if (rRenderContext.IsNativeControlSupported(ControlType::MenuPopup, ControlPart::Entire))
     {
         rRenderContext.SetBackground(); // background will be drawn by NWF
     }
@@ -144,6 +173,12 @@ long MenuFloatingWindow::ImplGetStartY() const
     long nY = 0;
     if( pMenu )
     {
+        // avoid crash if somehow menu got disposed, and MenuItemList is empty (workaround for tdf#104686)
+        if ( nFirstEntry > 0 && !pMenu->GetItemList()->GetDataFromPos(nFirstEntry - 1) )
+        {
+            return 0;
+        }
+
         for ( sal_uInt16 n = 0; n < nFirstEntry; n++ )
             nY += pMenu->GetItemList()->GetDataFromPos( n )->aSz.Height();
         nY -= pMenu->GetTitleHeight();
@@ -151,20 +186,14 @@ long MenuFloatingWindow::ImplGetStartY() const
     return -nY;
 }
 
-vcl::Region MenuFloatingWindow::ImplCalcClipRegion( bool bIncludeLogo ) const
+vcl::Region MenuFloatingWindow::ImplCalcClipRegion() const
 {
     Size aOutSz = GetOutputSizePixel();
-    Point aPos;
-    Rectangle aRect( aPos, aOutSz );
-    aRect.Top() += nScrollerHeight;
-    aRect.Bottom() -= nScrollerHeight;
-
-    if ( pMenu && pMenu->pLogo && !bIncludeLogo )
-        aRect.Left() += pMenu->pLogo->aBitmap.GetSizePixel().Width();
+    tools::Rectangle aRect( Point(), aOutSz );
+    aRect.AdjustTop(nScrollerHeight );
+    aRect.AdjustBottom( -(nScrollerHeight) );
 
     vcl::Region aRegion(aRect);
-    if ( pMenu && pMenu->pLogo && bIncludeLogo && nScrollerHeight )
-        aRegion.Union( Rectangle( Point(), Size( pMenu->pLogo->aBitmap.GetSizePixel().Width(), aOutSz.Height() ) ) );
 
     return aRegion;
 }
@@ -189,7 +218,7 @@ void MenuFloatingWindow::ImplHighlightItem( const MouseEvent& rMEvt, bool bMBDow
     long nY = GetInitialItemY();
     long nMouseY = rMEvt.GetPosPixel().Y();
     Size aOutSz = GetOutputSizePixel();
-    if ( ( nMouseY >= nY ) && ( nMouseY < ( aOutSz.Height() - nY ) ) )
+    if ( ( nMouseY >= nY ) && ( nMouseY < aOutSz.Height() ) )
     {
         bool bHighlighted = false;
         size_t nCount = pMenu->pItemList->size();
@@ -215,7 +244,7 @@ void MenuFloatingWindow::ImplHighlightItem( const MouseEvent& rMEvt, bool bMBDow
                     {
                         if ( n != nHighlightedItem )
                         {
-                            ChangeHighlightItem( (sal_uInt16)n, false );
+                            ChangeHighlightItem( static_cast<sal_uInt16>(n), false );
                         }
 
                         bool bAllowNewPopup = true;
@@ -236,7 +265,7 @@ void MenuFloatingWindow::ImplHighlightItem( const MouseEvent& rMEvt, bool bMBDow
                     {
                         if ( n != nHighlightedItem )
                         {
-                            ChangeHighlightItem( (sal_uInt16)n, true );
+                            ChangeHighlightItem( static_cast<sal_uInt16>(n), true );
                         }
                         else if ( pItemData->nBits & MenuItemBits::POPUPSELECT )
                         {
@@ -258,19 +287,18 @@ void MenuFloatingWindow::ImplHighlightItem( const MouseEvent& rMEvt, bool bMBDow
     }
 }
 
-IMPL_LINK_NOARG_TYPED(MenuFloatingWindow, PopupEnd, FloatingWindow*, void)
+IMPL_LINK_NOARG(MenuFloatingWindow, PopupEnd, FloatingWindow*, void)
 {
     // "this" will be deleted before the end of this method!
     Menu* pM = pMenu;
     if ( bInExecute )
     {
+        End();
         if ( pActivePopup )
         {
-            //DBG_ASSERT( !pActivePopup->ImplGetWindow(), "PopupEnd, obwohl pActivePopup MIT Window!" );
             KillActivePopup(); // should be ok to just remove it
             //pActivePopup->bCanceled = true;
         }
-        bInExecute = false;
         pMenu->bInCallback = true;
         pMenu->Deactivate();
         pMenu->bInCallback = false;
@@ -285,12 +313,12 @@ IMPL_LINK_NOARG_TYPED(MenuFloatingWindow, PopupEnd, FloatingWindow*, void)
         pM->pStartedFrom = nullptr;
 }
 
-IMPL_LINK_NOARG_TYPED(MenuFloatingWindow, AutoScroll, Timer *, void)
+IMPL_LINK_NOARG(MenuFloatingWindow, AutoScroll, Timer *, void)
 {
     ImplScroll( GetPointerPosPixel() );
 }
 
-IMPL_LINK_TYPED( MenuFloatingWindow, HighlightChanged, Timer*, pTimer, void )
+IMPL_LINK( MenuFloatingWindow, HighlightChanged, Timer*, pTimer, void )
 {
     if( ! pMenu )
         return;
@@ -307,7 +335,7 @@ IMPL_LINK_TYPED( MenuFloatingWindow, HighlightChanged, Timer*, pTimer, void )
         }
         if ( pItemData->bEnabled && pItemData->pSubMenu && pItemData->pSubMenu->GetItemCount() && ( pItemData->pSubMenu != pActivePopup ) )
         {
-            pActivePopup = static_cast<PopupMenu*>(pItemData->pSubMenu);
+            pActivePopup = static_cast<PopupMenu*>(pItemData->pSubMenu.get());
             long nY = nScrollerHeight+ImplGetStartY();
             MenuItemData* pData = nullptr;
             for ( sal_uLong n = 0; n < nHighlightedItem; n++ )
@@ -319,19 +347,19 @@ IMPL_LINK_TYPED( MenuFloatingWindow, HighlightChanged, Timer*, pTimer, void )
             Size MySize = GetOutputSizePixel();
             Point aItemTopLeft( 0, nY );
             Point aItemBottomRight( aItemTopLeft );
-            aItemBottomRight.X() += MySize.Width();
-            aItemBottomRight.Y() += pData->aSz.Height();
+            aItemBottomRight.AdjustX(MySize.Width() );
+            aItemBottomRight.AdjustY(pData->aSz.Height() );
 
             // shift the popups a little
-            aItemTopLeft.X() += 2;
-            aItemBottomRight.X() -= 2;
+            aItemTopLeft.AdjustX(2 );
+            aItemBottomRight.AdjustX( -2 );
             if ( nHighlightedItem )
-                aItemTopLeft.Y() -= 2;
+                aItemTopLeft.AdjustY( -2 );
             else
             {
                 sal_Int32 nL, nT, nR, nB;
                 GetBorder( nL, nT, nR, nB );
-                aItemTopLeft.Y() -= nT;
+                aItemTopLeft.AdjustY( -nT );
             }
 
             // pTest: crash due to Reschedule() in call of Activate()
@@ -341,17 +369,17 @@ IMPL_LINK_TYPED( MenuFloatingWindow, HighlightChanged, Timer*, pTimer, void )
             Menu* pTest = pActivePopup;
             FloatWinPopupFlags nOldFlags = GetPopupModeFlags();
             SetPopupModeFlags( GetPopupModeFlags() | FloatWinPopupFlags::NoAppFocusClose );
-            sal_uInt16 nRet = pActivePopup->ImplExecute( this, Rectangle( aItemTopLeft, aItemBottomRight ), FloatWinPopupFlags::Right, pMenu, pTimer == nullptr );
+            sal_uInt16 nRet = pActivePopup->ImplExecute( this, tools::Rectangle( aItemTopLeft, aItemBottomRight ), FloatWinPopupFlags::Right, pMenu, pTimer == nullptr );
             SetPopupModeFlags( nOldFlags );
 
-            // nRet != 0, wenn es waerend Activate() abgeschossen wurde...
+            // nRet != 0, if it was stopped during Activate()...
             if ( !nRet && ( pActivePopup == pTest ) && pActivePopup->ImplGetWindow() )
                 pActivePopup->ImplGetFloatingWindow()->AddPopupModeWindow( this );
         }
     }
 }
 
-IMPL_LINK_NOARG_TYPED(MenuFloatingWindow, SubmenuClose, Timer *, void)
+IMPL_LINK_NOARG(MenuFloatingWindow, SubmenuClose, Timer *, void)
 {
     if( pMenu && pMenu->pStartedFrom )
     {
@@ -361,65 +389,92 @@ IMPL_LINK_NOARG_TYPED(MenuFloatingWindow, SubmenuClose, Timer *, void)
     }
 }
 
-IMPL_LINK_TYPED( MenuFloatingWindow, ShowHideListener, VclWindowEvent&, rEvent, void )
+IMPL_LINK( MenuFloatingWindow, ShowHideListener, VclWindowEvent&, rEvent, void )
 {
     if( ! pMenu )
         return;
 
-    if( rEvent.GetId() == VCLEVENT_WINDOW_SHOW )
-        pMenu->ImplCallEventListeners( VCLEVENT_MENU_SHOW, ITEMPOS_INVALID );
-    else if( rEvent.GetId() == VCLEVENT_WINDOW_HIDE )
-        pMenu->ImplCallEventListeners( VCLEVENT_MENU_HIDE, ITEMPOS_INVALID );
+    if( rEvent.GetId() == VclEventId::WindowShow )
+        pMenu->ImplCallEventListeners( VclEventId::MenuShow, ITEMPOS_INVALID );
+    else if( rEvent.GetId() == VclEventId::WindowHide )
+        pMenu->ImplCallEventListeners( VclEventId::MenuHide, ITEMPOS_INVALID );
 }
 
 void MenuFloatingWindow::EnableScrollMenu( bool b )
 {
     bScrollMenu = b;
-    nScrollerHeight = b ? (sal_uInt16) GetSettings().GetStyleSettings().GetScrollBarSize() /2 : 0;
+    nScrollerHeight = b ? static_cast<sal_uInt16>(GetSettings().GetStyleSettings().GetScrollBarSize()) /2 : 0;
     bScrollDown = true;
     InitMenuClipRegion(*this);
+}
+
+void MenuFloatingWindow::Start()
+{
+    if (bInExecute)
+        return;
+    bInExecute = true;
+    if (GetParent())
+        GetParent()->IncModalCount();
+}
+
+bool MenuFloatingWindow::MenuInHierarchyHasFocus() const
+{
+    if (HasChildPathFocus())
+        return true;
+    PopupMenu* pSub = GetActivePopup();
+    if (!pSub)
+        return false;
+    return pSub->ImplGetFloatingWindow()->HasChildPathFocus();
+}
+
+void MenuFloatingWindow::End()
+{
+    if (!bInExecute)
+        return;
+
+    if (GetParent() && !GetParent()->IsDisposed())
+        GetParent()->DecModalCount();
+
+    // restore focus to previous window if we still have the focus
+    VclPtr<vcl::Window> xFocusId(xSaveFocusId);
+    xSaveFocusId = nullptr;
+    if (xFocusId != nullptr && MenuInHierarchyHasFocus())
+    {
+        ImplGetSVData()->maWinData.mbNoDeactivate = false;
+        Window::EndSaveFocus(xFocusId);
+    }
+
+    bInExecute = false;
 }
 
 void MenuFloatingWindow::Execute()
 {
     ImplSVData* pSVData = ImplGetSVData();
 
-    pSVData->maAppData.mpActivePopupMenu = static_cast<PopupMenu*>(pMenu);
+    pSVData->maAppData.mpActivePopupMenu = static_cast<PopupMenu*>(pMenu.get());
 
-    bInExecute = true;
-//  bCallingSelect = false;
+    Start();
 
-    while ( bInExecute )
+    while (bInExecute)
         Application::Yield();
 
     pSVData->maAppData.mpActivePopupMenu = nullptr;
 }
 
-void MenuFloatingWindow::StopExecute( VclPtr<vcl::Window> xFocusId )
+void MenuFloatingWindow::StopExecute()
 {
-    // restore focus
-    // (could have been restored in Select)
-    if ( xSaveFocusId != nullptr )
-    {
-        Window::EndSaveFocus( xFocusId, false );
-        xFocusId = xSaveFocusId;
-        if ( xFocusId != nullptr )
-        {
-            xSaveFocusId = nullptr;
-            ImplGetSVData()->maWinData.mbNoDeactivate = false;
-        }
-    }
-    ImplEndPopupMode( FloatWinPopupEndFlags::NONE, xFocusId );
+    End();
+
+    ImplEndPopupMode(FloatWinPopupEndFlags::NONE, xSaveFocusId);
 
     aHighlightChangedTimer.Stop();
-    bInExecute = false;
-    if ( pActivePopup )
+    if (pActivePopup)
     {
         KillActivePopup();
     }
     // notify parent, needed for accessibility
     if( pMenu && pMenu->pStartedFrom )
-        pMenu->pStartedFrom->ImplCallEventListeners( VCLEVENT_MENU_SUBMENUDEACTIVATE, nPosInParent );
+        pMenu->pStartedFrom->ImplCallEventListeners( VclEventId::MenuSubmenuDeactivate, nPosInParent );
 }
 
 void MenuFloatingWindow::KillActivePopup( PopupMenu* pThisOnly )
@@ -443,8 +498,8 @@ void MenuFloatingWindow::KillActivePopup( PopupMenu* pThisOnly )
         {
             pPopup->ImplGetFloatingWindow()->StopExecute();
             pPopup->ImplGetFloatingWindow()->doShutdown();
-            pPopup->pWindow->doLazyDelete();
-            pPopup->pWindow = nullptr;
+            pPopup->pWindow->SetParentToDefaultWindow();
+            pPopup->pWindow.disposeAndClear();
 
             Update();
         }
@@ -454,7 +509,6 @@ void MenuFloatingWindow::KillActivePopup( PopupMenu* pThisOnly )
 void MenuFloatingWindow::EndExecute()
 {
     Menu* pStart = pMenu ? pMenu->ImplGetStartMenu() : nullptr;
-    VclPtr<vcl::Window> xFocusId;
 
     // if started elsewhere, cleanup there as well
     MenuFloatingWindow* pCleanUpFrom = this;
@@ -462,7 +516,7 @@ void MenuFloatingWindow::EndExecute()
     while (pWin && !pWin->bInExecute &&
         pWin->pMenu->pStartedFrom && !pWin->pMenu->pStartedFrom->IsMenuBar())
     {
-        pWin = static_cast<PopupMenu*>(pWin->pMenu->pStartedFrom)->ImplGetFloatingWindow();
+        pWin = static_cast<PopupMenu*>(pWin->pMenu->pStartedFrom.get())->ImplGetFloatingWindow();
     }
     if ( pWin )
         pCleanUpFrom = pWin;
@@ -471,7 +525,7 @@ void MenuFloatingWindow::EndExecute()
     Menu* pM = pMenu;
     sal_uInt16 nItem = nHighlightedItem;
 
-    pCleanUpFrom->StopExecute( xFocusId );
+    pCleanUpFrom->StopExecute();
 
     if ( nItem != ITEMPOS_INVALID && pM )
     {
@@ -479,8 +533,12 @@ void MenuFloatingWindow::EndExecute()
         if ( pItemData && !pItemData->bIsTemporary )
         {
             pM->nSelectedId = pItemData->nId;
-            if ( pStart )
+            pM->sSelectedIdent = pItemData->sIdent;
+            if (pStart)
+            {
                 pStart->nSelectedId = pItemData->nId;
+                pStart->sSelectedIdent = pItemData->sIdent;
+            }
 
             pM->ImplSelect();
         }
@@ -580,47 +638,57 @@ void MenuFloatingWindow::ImplScroll( bool bUp )
     if ( bScrollUp && bUp )
     {
         nFirstEntry = pMenu->ImplGetPrevVisible( nFirstEntry );
-        DBG_ASSERT( nFirstEntry != ITEMPOS_INVALID, "Scroll?!" );
+        SAL_WARN_IF( nFirstEntry == ITEMPOS_INVALID, "vcl", "Scroll?!" );
 
-        long nScrollEntryHeight = pMenu->GetItemList()->GetDataFromPos( nFirstEntry )->aSz.Height();
-
-        if ( !bScrollDown )
+        // avoid crash if somehow menu got disposed, and MenuItemList is empty (workaround for tdf#104686)
+        const auto pItemData = pMenu->GetItemList()->GetDataFromPos( nFirstEntry );
+        if ( pItemData )
         {
-            bScrollDown = true;
-            Invalidate();
-        }
+            long nScrollEntryHeight = pItemData->aSz.Height();
 
-        if ( pMenu->ImplGetPrevVisible( nFirstEntry ) == ITEMPOS_INVALID )
-        {
-            bScrollUp = false;
-            Invalidate();
-        }
+            if ( !bScrollDown )
+            {
+                bScrollDown = true;
+                Invalidate();
+            }
 
-        Scroll( 0, nScrollEntryHeight, ImplCalcClipRegion( false ).GetBoundRect(), ScrollFlags::Clip );
+            if ( pMenu->ImplGetPrevVisible( nFirstEntry ) == ITEMPOS_INVALID )
+            {
+                bScrollUp = false;
+                Invalidate();
+            }
+
+            Scroll( 0, nScrollEntryHeight, ImplCalcClipRegion().GetBoundRect(), ScrollFlags::Clip );
+        }
     }
     else if ( bScrollDown && !bUp )
     {
-        long nScrollEntryHeight = pMenu->GetItemList()->GetDataFromPos( nFirstEntry )->aSz.Height();
-
-        nFirstEntry = pMenu->ImplGetNextVisible( nFirstEntry );
-        DBG_ASSERT( nFirstEntry != ITEMPOS_INVALID, "Scroll?!" );
-
-        if ( !bScrollUp )
+        // avoid crash if somehow menu got disposed, and MenuItemList is empty (workaround for tdf#104686)
+        const auto pItemData = pMenu->GetItemList()->GetDataFromPos( nFirstEntry );
+        if ( pItemData )
         {
-            bScrollUp = true;
-            Invalidate();
-        }
+            long nScrollEntryHeight = pItemData->aSz.Height();
 
-        long nHeight = GetOutputSizePixel().Height();
-        sal_uInt16 nLastVisible;
-        static_cast<PopupMenu*>(pMenu)->ImplCalcVisEntries( nHeight, nFirstEntry, &nLastVisible );
-        if ( pMenu->ImplGetNextVisible( nLastVisible ) == ITEMPOS_INVALID )
-        {
-            bScrollDown = false;
-            Invalidate();
-        }
+            nFirstEntry = pMenu->ImplGetNextVisible( nFirstEntry );
+            SAL_WARN_IF( nFirstEntry == ITEMPOS_INVALID, "vcl", "Scroll?!" );
 
-        Scroll( 0, -nScrollEntryHeight, ImplCalcClipRegion( false ).GetBoundRect(), ScrollFlags::Clip );
+            if ( !bScrollUp )
+            {
+                bScrollUp = true;
+                Invalidate();
+            }
+
+            long nHeight = GetOutputSizePixel().Height();
+            sal_uInt16 nLastVisible;
+            static_cast<PopupMenu*>(pMenu.get())->ImplCalcVisEntries( nHeight, nFirstEntry, &nLastVisible );
+            if ( pMenu->ImplGetNextVisible( nLastVisible ) == ITEMPOS_INVALID )
+            {
+                bScrollDown = false;
+                Invalidate();
+            }
+
+            Scroll( 0, -nScrollEntryHeight, ImplCalcClipRegion().GetBoundRect(), ScrollFlags::Clip );
+        }
     }
 
     Invalidate();
@@ -665,7 +733,7 @@ void MenuFloatingWindow::ImplScroll( const Point& rMousePos )
 }
 void MenuFloatingWindow::ChangeHighlightItem( sal_uInt16 n, bool bStartPopupTimer )
 {
-    // #57934# ggf. immediately close the active, as TH's backgroundstorage works.
+    // #57934# if necessary, immediately close the active, as TH's backgroundstorage works.
     // #65750# we prefer to refrain from the background storage of small lines.
     //         otherwise the menus are difficult to operate.
     //  MenuItemData* pNextData = pMenu->pItemList->GetDataFromPos( n );
@@ -679,11 +747,11 @@ void MenuFloatingWindow::ChangeHighlightItem( sal_uInt16 n, bool bStartPopupTime
     if ( nHighlightedItem != ITEMPOS_INVALID )
     {
         InvalidateItem(nHighlightedItem);
-        pMenu->ImplCallEventListeners( VCLEVENT_MENU_DEHIGHLIGHT, nHighlightedItem );
+        pMenu->ImplCallEventListeners( VclEventId::MenuDehighlight, nHighlightedItem );
     }
 
-    nHighlightedItem = (sal_uInt16)n;
-    DBG_ASSERT( pMenu->ImplIsVisible( nHighlightedItem ) || nHighlightedItem == ITEMPOS_INVALID, "ChangeHighlightItem: Not visible!" );
+    nHighlightedItem = n;
+    SAL_WARN_IF( !pMenu->ImplIsVisible( nHighlightedItem ) && nHighlightedItem != ITEMPOS_INVALID, "vcl", "ChangeHighlightItem: Not visible!" );
     if( nHighlightedItem != ITEMPOS_INVALID )
     {
         if (pMenu->pStartedFrom && !pMenu->pStartedFrom->IsMenuBar())
@@ -710,7 +778,10 @@ void MenuFloatingWindow::ChangeHighlightItem( sal_uInt16 n, bool bStartPopupTime
         pMenu->ImplCallHighlight( nHighlightedItem );
     }
     else
+    {
         pMenu->nSelectedId = 0;
+        pMenu->sSelectedIdent.clear();
+    }
 
     if ( bStartPopupTimer )
     {
@@ -751,7 +822,7 @@ void MenuFloatingWindow::InvalidateItem(sal_uInt16 nPos)
         if (n == nPos)
         {
             Size aWidth( GetSizePixel() );
-            Rectangle aRect(Point(0, nY), Size(aWidth.Width(), nHeight));
+            tools::Rectangle aRect(Point(0, nY), Size(aWidth.Width(), nHeight));
             Invalidate( aRect );
         }
         nY += nHeight;
@@ -769,9 +840,6 @@ void MenuFloatingWindow::RenderHighlightItem(vcl::RenderContext& rRenderContext,
     long nStartY;
     long nY = GetInitialItemY(&nStartY);
 
-    if (pMenu->pLogo)
-        nX = pMenu->pLogo->aBitmap.GetSizePixel().Width();
-
     int nOuterSpaceX = ImplGetSVData()->maNWFData.mnMenuFormatBorderX;
 
     size_t nCount = pMenu->pItemList->size();
@@ -780,33 +848,33 @@ void MenuFloatingWindow::RenderHighlightItem(vcl::RenderContext& rRenderContext,
         MenuItemData* pData = pMenu->pItemList->GetDataFromPos( n );
         if (n == nPos)
         {
-            DBG_ASSERT(pMenu->ImplIsVisible(n), "Highlight: Item not visible!");
+            SAL_WARN_IF(!pMenu->ImplIsVisible(n), "vcl", "Highlight: Item not visible!");
             if (pData->eType != MenuItemType::SEPARATOR)
             {
                 bool bRestoreLineColor = false;
                 Color oldLineColor;
                 bool bDrawItemRect = true;
 
-                Rectangle aItemRect(Point(nX + nOuterSpaceX, nY), Size(aSz.Width() - 2 * nOuterSpaceX, pData->aSz.Height()));
+                tools::Rectangle aItemRect(Point(nX + nOuterSpaceX, nY), Size(aSz.Width() - 2 * nOuterSpaceX, pData->aSz.Height()));
                 if (pData->nBits & MenuItemBits::POPUPSELECT)
                 {
                     long nFontHeight = GetTextHeight();
-                    aItemRect.Right() -= nFontHeight + nFontHeight / 4;
+                    aItemRect.AdjustRight( -(nFontHeight + nFontHeight / 4) );
                 }
 
-                if (rRenderContext.IsNativeControlSupported(CTRL_MENU_POPUP, PART_ENTIRE_CONTROL))
+                if (rRenderContext.IsNativeControlSupported(ControlType::MenuPopup, ControlPart::Entire))
                 {
                     Size aPxSize(GetOutputSizePixel());
                     rRenderContext.Push(PushFlags::CLIPREGION);
-                    rRenderContext.IntersectClipRegion(Rectangle(Point(nX, nY), Size(aSz.Width(), pData->aSz.Height())));
-                    Rectangle aCtrlRect(Point(nX, 0), Size(aPxSize.Width()-nX, aPxSize.Height()));
+                    rRenderContext.IntersectClipRegion(tools::Rectangle(Point(nX, nY), Size(aSz.Width(), pData->aSz.Height())));
+                    tools::Rectangle aCtrlRect(Point(nX, 0), Size(aPxSize.Width()-nX, aPxSize.Height()));
                     MenupopupValue aVal(pMenu->nTextPos-GUTTERBORDER, aItemRect);
-                    rRenderContext.DrawNativeControl(CTRL_MENU_POPUP, PART_ENTIRE_CONTROL,
+                    rRenderContext.DrawNativeControl(ControlType::MenuPopup, ControlPart::Entire,
                                                      aCtrlRect, ControlState::ENABLED, aVal, OUString());
-                    if (rRenderContext.IsNativeControlSupported(CTRL_MENU_POPUP, PART_MENU_ITEM))
+                    if (rRenderContext.IsNativeControlSupported(ControlType::MenuPopup, ControlPart::MenuItem))
                     {
                         bDrawItemRect = false;
-                        if (!rRenderContext.DrawNativeControl(CTRL_MENU_POPUP, PART_MENU_ITEM, aItemRect,
+                        if (!rRenderContext.DrawNativeControl(ControlType::MenuPopup, ControlPart::MenuItem, aItemRect,
                                                               ControlState::SELECTED | (pData->bEnabled
                                                                                             ? ControlState::ENABLED
                                                                                             : ControlState::NONE),
@@ -833,7 +901,7 @@ void MenuFloatingWindow::RenderHighlightItem(vcl::RenderContext& rRenderContext,
 
                     rRenderContext.DrawRect(aItemRect);
                 }
-                pMenu->ImplPaint(rRenderContext, nScrollerHeight, nStartY, pData, true/*bHighlight*/);
+                pMenu->ImplPaint(rRenderContext, GetOutputSizePixel(), nScrollerHeight, nStartY, pData, true/*bHighlight*/);
                 if (bRestoreLineColor)
                     rRenderContext.SetLineColor(oldLineColor);
             }
@@ -844,19 +912,15 @@ void MenuFloatingWindow::RenderHighlightItem(vcl::RenderContext& rRenderContext,
     }
 }
 
-Rectangle MenuFloatingWindow::ImplGetItemRect( sal_uInt16 nPos )
+tools::Rectangle MenuFloatingWindow::ImplGetItemRect( sal_uInt16 nPos )
 {
     if( ! pMenu )
-        return Rectangle();
+        return tools::Rectangle();
 
-    Rectangle aRect;
+    tools::Rectangle aRect;
     Size    aSz = GetOutputSizePixel();
     long    nStartY = ImplGetStartY();
     long    nY = nScrollerHeight+nStartY;
-    long    nX = 0;
-
-    if ( pMenu->pLogo )
-        nX = pMenu->pLogo->aBitmap.GetSizePixel().Width();
 
     size_t nCount = pMenu->pItemList->size();
     for ( size_t n = 0; n < nCount; n++ )
@@ -864,14 +928,14 @@ Rectangle MenuFloatingWindow::ImplGetItemRect( sal_uInt16 nPos )
         MenuItemData* pData = pMenu->pItemList->GetDataFromPos( n );
         if ( n == nPos )
         {
-            DBG_ASSERT( pMenu->ImplIsVisible( n ), "ImplGetItemRect: Item not visible!" );
+            SAL_WARN_IF( !pMenu->ImplIsVisible( n ), "vcl", "ImplGetItemRect: Item not visible!" );
             if ( pData->eType != MenuItemType::SEPARATOR )
             {
-                aRect = Rectangle( Point( nX, nY ), Size( aSz.Width(), pData->aSz.Height() ) );
+                aRect = tools::Rectangle( Point( 0, nY ), Size( aSz.Width(), pData->aSz.Height() ) );
                 if ( pData->nBits & MenuItemBits::POPUPSELECT )
                 {
                     long nFontHeight = GetTextHeight();
-                    aRect.Right() -= nFontHeight + nFontHeight/4;
+                    aRect.AdjustRight( -(nFontHeight + nFontHeight/4) );
                 }
             }
             break;
@@ -909,7 +973,7 @@ void MenuFloatingWindow::ImplCursorUpDown( bool bUp, bool bHomeEnd )
         }
         else
         {
-            n = (sal_uInt16)-1;
+            n = sal_uInt16(-1);
             nLoop = n+1;
         }
     }
@@ -952,11 +1016,11 @@ void MenuFloatingWindow::ImplCursorUpDown( bool bUp, bool bHomeEnd )
 
                 Size aOutSz = GetOutputSizePixel();
                 sal_uInt16 nLastVisible;
-                static_cast<PopupMenu*>(pMenu)->ImplCalcVisEntries( aOutSz.Height(), nFirstEntry, &nLastVisible );
+                static_cast<PopupMenu*>(pMenu.get())->ImplCalcVisEntries( aOutSz.Height(), nFirstEntry, &nLastVisible );
                 while ( n > nLastVisible )
                 {
                     ImplScroll( false );
-                    static_cast<PopupMenu*>(pMenu)->ImplCalcVisEntries( aOutSz.Height(), nFirstEntry, &nLastVisible );
+                    static_cast<PopupMenu*>(pMenu.get())->ImplCalcVisEntries( aOutSz.Height(), nFirstEntry, &nLastVisible );
                 }
             }
             ChangeHighlightItem( n, false );
@@ -969,6 +1033,8 @@ void MenuFloatingWindow::KeyInput( const KeyEvent& rKEvent )
 {
     VclPtr<vcl::Window> xWindow = this;
 
+    bool accel = ImplGetSVData()->maNWFData.mbEnableAccel;
+    bool autoacc = ImplGetSVData()->maNWFData.mbAutoAccel;
     sal_uInt16 nCode = rKEvent.GetKeyCode().GetCode();
     bKeyInput = true;
     switch ( nCode )
@@ -1005,7 +1071,7 @@ void MenuFloatingWindow::KeyInput( const KeyEvent& rKEvent )
                 else
                 {
                     StopExecute();
-                    PopupMenu* pPopupMenu = static_cast<PopupMenu*>(pMenu->pStartedFrom);
+                    PopupMenu* pPopupMenu = static_cast<PopupMenu*>(pMenu->pStartedFrom.get());
                     MenuFloatingWindow* pFloat = pPopupMenu->ImplGetFloatingWindow();
                     pFloat->GrabFocus();
                     pFloat->KillActivePopup();
@@ -1025,7 +1091,7 @@ void MenuFloatingWindow::KeyInput( const KeyEvent& rKEvent )
                 }
                 else
                 {
-                    MenuFloatingWindow* pFloat = static_cast<PopupMenu*>(pMenu->pStartedFrom)->ImplGetFloatingWindow();
+                    MenuFloatingWindow* pFloat = static_cast<PopupMenu*>(pMenu->pStartedFrom.get())->ImplGetFloatingWindow();
                     pFloat->GrabFocus();
                     pFloat->KillActivePopup();
                     sal_uInt16 highlightItem = pFloat->GetHighlightedItem();
@@ -1093,20 +1159,11 @@ void MenuFloatingWindow::KeyInput( const KeyEvent& rKEvent )
         default:
         {
             sal_Unicode nCharCode = rKEvent.GetCharCode();
-            sal_uInt16 nPos = 0;
-            sal_uInt16 nDuplicates = 0;
-            MenuItemData* pData = (nCharCode && pMenu) ?
+            size_t nPos = 0;
+            size_t nDuplicates = 0;
+            MenuItemData* pData = (nCharCode && pMenu && accel) ?
                 pMenu->GetItemList()->SearchItem(nCharCode, rKEvent.GetKeyCode(), nPos, nDuplicates, nHighlightedItem) : nullptr;
-            bool bConsume = false;
-            bool accel = ImplGetSVData()->maNWFData.mbEnableAccel;
-            if (pData && accel)
-            {
-                Menu *men = pMenu;
-                while (men && !men->IsMenuBar())
-                    men = men->pStartedFrom;
-                bConsume = !men || (static_cast<MenuBarWindow*>(men->pWindow.get()))->GetMBWMenuKey();
-            }
-            if (bConsume)
+            if (pData)
             {
                 if ( pData->pSubMenu || nDuplicates > 1 )
                 {
@@ -1123,6 +1180,20 @@ void MenuFloatingWindow::KeyInput( const KeyEvent& rKEvent )
                 FloatingWindow::KeyInput( rKEvent );
         }
     }
+
+    if (pMenu && pMenu->pStartedFrom && pMenu->pStartedFrom->IsMenuBar())
+    {
+        MenuBar *pMenuBar = static_cast<MenuBar*>(pMenu->pStartedFrom.get());
+        const bool bShowAccels = nCode != KEY_ESCAPE;
+        if (pMenuBar->getMenuBarWindow()->GetMBWMenuKey() != bShowAccels)
+        {
+            pMenuBar->getMenuBarWindow()->SetMBWMenuKey(bShowAccels);
+            pMenuBar->getMenuBarWindow()->SetMBWHideAccel(!bShowAccels);
+            if (accel && autoacc)
+                Invalidate(InvalidateFlags::Update);
+        }
+    }
+
     // #105474# check if menu window was not destroyed
     if ( !xWindow->IsDisposed() )
     {
@@ -1130,7 +1201,7 @@ void MenuFloatingWindow::KeyInput( const KeyEvent& rKEvent )
     }
 }
 
-void MenuFloatingWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle &rPaintRect)
+void MenuFloatingWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle &rPaintRect)
 {
     if (!pMenu)
         return;
@@ -1138,15 +1209,15 @@ void MenuFloatingWindow::Paint(vcl::RenderContext& rRenderContext, const Rectang
     rRenderContext.Push( PushFlags::CLIPREGION );
     rRenderContext.SetClipRegion(vcl::Region(rPaintRect));
 
-    if (rRenderContext.IsNativeControlSupported(CTRL_MENU_POPUP, PART_ENTIRE_CONTROL))
+    if (rRenderContext.IsNativeControlSupported(ControlType::MenuPopup, ControlPart::Entire))
     {
         rRenderContext.SetClipRegion();
-        long nX = pMenu->pLogo ? pMenu->pLogo->aBitmap.GetSizePixel().Width() : 0;
+        long nX = 0;
         Size aPxSize(GetOutputSizePixel());
-        aPxSize.Width() -= nX;
+        aPxSize.AdjustWidth( -nX );
         ImplControlValue aVal(pMenu->nTextPos - GUTTERBORDER);
-        rRenderContext.DrawNativeControl(CTRL_MENU_POPUP, PART_ENTIRE_CONTROL,
-                                         Rectangle(Point(nX, 0), aPxSize),
+        rRenderContext.DrawNativeControl(ControlType::MenuPopup, ControlPart::Entire,
+                                         tools::Rectangle(Point(nX, 0), aPxSize),
                                          ControlState::ENABLED, aVal, OUString());
         InitMenuClipRegion(rRenderContext);
     }
@@ -1156,7 +1227,7 @@ void MenuFloatingWindow::Paint(vcl::RenderContext& rRenderContext, const Rectang
         ImplDrawScroller(rRenderContext, false);
     }
     rRenderContext.SetFillColor(rRenderContext.GetSettings().GetStyleSettings().GetMenuColor());
-    pMenu->ImplPaint(rRenderContext, nScrollerHeight, ImplGetStartY());
+    pMenu->ImplPaint(rRenderContext, GetOutputSizePixel(), nScrollerHeight, ImplGetStartY());
     if (nHighlightedItem != ITEMPOS_INVALID)
         RenderHighlightItem(rRenderContext, nHighlightedItem);
 
@@ -1172,8 +1243,8 @@ void MenuFloatingWindow::ImplDrawScroller(vcl::RenderContext& rRenderContext, bo
 
     Size aOutSz(GetOutputSizePixel());
     long nY = bUp ? 0 : (aOutSz.Height() - nScrollerHeight);
-    long nX = pMenu->pLogo ? pMenu->pLogo->aBitmap.GetSizePixel().Width() : 0;
-    Rectangle aRect(Point(nX, nY), Size(aOutSz.Width() - nX, nScrollerHeight));
+    long nX = 0;
+    tools::Rectangle aRect(Point(nX, nY), Size(aOutSz.Width() - nX, nScrollerHeight));
 
     DecorationView aDecoView(&rRenderContext);
     SymbolType eSymbol = bUp ? SymbolType::SPIN_UP : SymbolType::SPIN_DOWN;
@@ -1194,9 +1265,9 @@ void MenuFloatingWindow::RequestHelp( const HelpEvent& rHEvt )
     vcl::Window* pW = this;
 
     // #102618# Get item rect before destroying the window in EndExecute() call
-    Rectangle aHighlightRect( ImplGetItemRect( nHighlightedItem ) );
+    tools::Rectangle aHighlightRect( ImplGetItemRect( nHighlightedItem ) );
 
-    if ( rHEvt.GetMode() & (HelpEventMode::CONTEXT | HelpEventMode::EXTENDED) )
+    if ( rHEvt.GetMode() & HelpEventMode::CONTEXT )
     {
         nHighlightedItem = ITEMPOS_INVALID;
         EndExecute();
@@ -1239,7 +1310,7 @@ void MenuFloatingWindow::Command( const CommandEvent& rCEvt )
         const CommandWheelData* pData = rCEvt.GetWheelData();
         if( !pData->GetModifier() && ( pData->GetMode() == CommandWheelMode::SCROLL ) )
         {
-            ImplScroll( pData->GetDelta() > 0L );
+            ImplScroll( pData->GetDelta() > 0 );
             MouseMove( MouseEvent( GetPointerPosPixel(), 0 ) );
         }
     }

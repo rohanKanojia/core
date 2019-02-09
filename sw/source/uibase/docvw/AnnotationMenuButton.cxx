@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <AnnotationMenuButton.hxx>
+#include "AnnotationMenuButton.hxx"
 
-#include <annotation.hrc>
 #include <app.hrc>
-#include <access.hrc>
+#include <strings.hrc>
 
 #include <unotools/useroptions.hxx>
 
@@ -30,27 +29,29 @@
 #include <vcl/decoview.hxx>
 #include <vcl/gradient.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/event.hxx>
 
 #include <cmdid.h>
-#include <SidebarWin.hxx>
+#include <AnnotationWin.hxx>
+#include <swtypes.hxx>
 
 namespace sw { namespace annotation {
 
-Color ColorFromAlphaColor(const sal_uInt8 aTransparency, const Color& aFront, const Color& aBack)
+static Color ColorFromAlphaColor(const sal_uInt8 aTransparency, const Color& aFront, const Color& aBack)
 {
     return Color(sal_uInt8(aFront.GetRed()   * aTransparency / 255.0 + aBack.GetRed()   * (1 - aTransparency / 255.0)),
                  sal_uInt8(aFront.GetGreen() * aTransparency / 255.0 + aBack.GetGreen() * (1 - aTransparency / 255.0)),
                  sal_uInt8(aFront.GetBlue()  * aTransparency / 255.0 + aBack.GetBlue()  * (1 - aTransparency / 255.0)));
 }
 
-AnnotationMenuButton::AnnotationMenuButton(sw::sidebarwindows::SwSidebarWin& rSidebarWin)
+AnnotationMenuButton::AnnotationMenuButton(sw::annotation::SwAnnotationWin& rSidebarWin)
     : MenuButton(&rSidebarWin)
     , mrSidebarWin(rSidebarWin)
 {
-    AddEventListener(LINK(&mrSidebarWin, sw::sidebarwindows::SwSidebarWin, WindowEventListener));
+    AddEventListener(LINK(&mrSidebarWin, sw::annotation::SwAnnotationWin, WindowEventListener));
 
-    SetAccessibleName(SW_RES(STR_ACCESS_ANNOTATION_BUTTON_NAME));
-    SetAccessibleDescription(SW_RES(STR_ACCESS_ANNOTATION_BUTTON_DESC));
+    SetAccessibleName(SwResId(STR_ACCESS_ANNOTATION_BUTTON_NAME));
+    SetAccessibleDescription(SwResId(STR_ACCESS_ANNOTATION_BUTTON_DESC));
     SetQuickHelpText(GetAccessibleDescription());
 }
 
@@ -61,13 +62,23 @@ AnnotationMenuButton::~AnnotationMenuButton()
 
 void AnnotationMenuButton::dispose()
 {
-    RemoveEventListener(LINK(&mrSidebarWin, sw::sidebarwindows::SwSidebarWin, WindowEventListener));
+    RemoveEventListener(LINK(&mrSidebarWin, sw::annotation::SwAnnotationWin, WindowEventListener));
     MenuButton::dispose();
 }
 
 void AnnotationMenuButton::Select()
 {
-    mrSidebarWin.ExecuteCommand( GetCurItemId() );
+    OString sIdent = GetCurItemIdent();
+    if (sIdent == "reply")
+        mrSidebarWin.ExecuteCommand(FN_REPLY);
+    else if (sIdent == "delete")
+        mrSidebarWin.ExecuteCommand(FN_DELETE_COMMENT);
+    else if (sIdent == "deleteby")
+        mrSidebarWin.ExecuteCommand(FN_DELETE_NOTE_AUTHOR);
+    else if (sIdent == "deleteall")
+        mrSidebarWin.ExecuteCommand(FN_DELETE_ALL_NOTES);
+    else if (sIdent == "formatall")
+        mrSidebarWin.ExecuteCommand(FN_FORMAT_ALL_NOTES);
 }
 
 void AnnotationMenuButton::MouseButtonDown( const MouseEvent& rMEvt )
@@ -75,18 +86,18 @@ void AnnotationMenuButton::MouseButtonDown( const MouseEvent& rMEvt )
     PopupMenu* pButtonPopup(GetPopupMenu());
     if (mrSidebarWin.IsReadOnly())
     {
-        pButtonPopup->EnableItem(FN_REPLY, false );
-        pButtonPopup->EnableItem(FN_DELETE_COMMENT, false );
-        pButtonPopup->EnableItem(FN_DELETE_NOTE_AUTHOR, false );
-        pButtonPopup->EnableItem(FN_DELETE_ALL_NOTES, false );
-        pButtonPopup->EnableItem(FN_FORMAT_ALL_NOTES, false );
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("reply"), false);
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("delete"), false );
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("deleteby"), false );
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("deleteall"), false );
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("formatall"), false );
     }
     else
     {
-        pButtonPopup->EnableItem(FN_DELETE_COMMENT, !mrSidebarWin.IsProtected() );
-        pButtonPopup->EnableItem(FN_DELETE_NOTE_AUTHOR);
-        pButtonPopup->EnableItem(FN_DELETE_ALL_NOTES);
-        pButtonPopup->EnableItem(FN_FORMAT_ALL_NOTES);
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("delete"), !mrSidebarWin.IsProtected());
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("deleteby"));
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("deleteall"));
+        pButtonPopup->EnableItem(pButtonPopup->GetItemId("formatall"));
     }
 
     if (mrSidebarWin.IsProtected())
@@ -101,7 +112,7 @@ void AnnotationMenuButton::MouseButtonDown( const MouseEvent& rMEvt )
         {
             if ((sAuthor = aUserOpt.GetID()).isEmpty())
             {
-                sAuthor = SW_RES(STR_REDLINE_UNKNOWN_AUTHOR);
+                sAuthor = SwResId(STR_REDLINE_UNKNOWN_AUTHOR);
             }
         }
         // do not allow to reply to ourself and no answer possible if this note is in a protected section
@@ -118,7 +129,7 @@ void AnnotationMenuButton::MouseButtonDown( const MouseEvent& rMEvt )
     MenuButton::MouseButtonDown(rMEvt);
 }
 
-void AnnotationMenuButton::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void AnnotationMenuButton::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
     bool bHighContrast = rRenderContext.GetSettings().GetStyleSettings().GetHighContrastMode();
 
@@ -127,7 +138,7 @@ void AnnotationMenuButton::Paint(vcl::RenderContext& rRenderContext, const Recta
     else
         rRenderContext.SetFillColor(mrSidebarWin.ColorDark());
     rRenderContext.SetLineColor();
-    const Rectangle aRect(Rectangle(Point(0, 0), rRenderContext.PixelToLogic(GetSizePixel())));
+    const tools::Rectangle aRect(tools::Rectangle(Point(0, 0), rRenderContext.PixelToLogic(GetSizePixel())));
     rRenderContext.DrawRect(aRect);
 
     if (bHighContrast)
@@ -141,11 +152,11 @@ void AnnotationMenuButton::Paint(vcl::RenderContext& rRenderContext, const Recta
         //draw button
         Gradient aGradient;
         if (IsMouseOver())
-            aGradient = Gradient(GradientStyle_LINEAR,
+            aGradient = Gradient(GradientStyle::Linear,
                                  ColorFromAlphaColor(80, mrSidebarWin.ColorAnchor(), mrSidebarWin.ColorDark()),
                                  ColorFromAlphaColor(15, mrSidebarWin.ColorAnchor(), mrSidebarWin.ColorDark()));
         else
-            aGradient = Gradient(GradientStyle_LINEAR,
+            aGradient = Gradient(GradientStyle::Linear,
                                  ColorFromAlphaColor(15, mrSidebarWin.ColorAnchor(), mrSidebarWin.ColorDark()),
                                  ColorFromAlphaColor(80, mrSidebarWin.ColorAnchor(), mrSidebarWin.ColorDark()));
         rRenderContext.DrawGradient(aRect, aGradient);
@@ -156,34 +167,19 @@ void AnnotationMenuButton::Paint(vcl::RenderContext& rRenderContext, const Recta
     }
     rRenderContext.DrawRect(aRect);
 
-    if (mrSidebarWin.IsPreview())
-    {
-        vcl::Font aOldFont(mrSidebarWin.GetFont());
-        vcl::Font aFont(aOldFont);
-        Color aCol(COL_BLACK);
-        aFont.SetColor(aCol);
-        aFont.SetFontHeight(200);
-        aFont.SetWeight(WEIGHT_MEDIUM);
-        rRenderContext.SetFont(aFont);
-        rRenderContext.DrawText(aRect, OUString("Edit Note"), DrawTextFlags::Center);
-        rRenderContext.SetFont(aOldFont);
-    }
-    else
-    {
-        Rectangle aSymbolRect(aRect);
-        // 25% distance to the left and right button border
-        const long nBorderDistanceLeftAndRight = ((aSymbolRect.GetWidth() * 250) + 500) / 1000;
-        aSymbolRect.Left() += nBorderDistanceLeftAndRight;
-        aSymbolRect.Right() -= nBorderDistanceLeftAndRight;
-        // 40% distance to the top button border
-        const long nBorderDistanceTop = ((aSymbolRect.GetHeight() * 400) + 500) / 1000;
-        aSymbolRect.Top()+=nBorderDistanceTop;
-        // 15% distance to the bottom button border
-        const long nBorderDistanceBottom = ((aSymbolRect.GetHeight() * 150) + 500) / 1000;
-        aSymbolRect.Bottom() -= nBorderDistanceBottom;
-        DecorationView aDecoView(&rRenderContext);
-        aDecoView.DrawSymbol(aSymbolRect, SymbolType::SPIN_DOWN, (bHighContrast ? Color(COL_WHITE) : Color(COL_BLACK)));
-    }
+    tools::Rectangle aSymbolRect(aRect);
+    // 25% distance to the left and right button border
+    const long nBorderDistanceLeftAndRight = ((aSymbolRect.GetWidth() * 250) + 500) / 1000;
+    aSymbolRect.AdjustLeft(nBorderDistanceLeftAndRight );
+    aSymbolRect.AdjustRight( -nBorderDistanceLeftAndRight );
+    // 40% distance to the top button border
+    const long nBorderDistanceTop = ((aSymbolRect.GetHeight() * 400) + 500) / 1000;
+    aSymbolRect.AdjustTop(nBorderDistanceTop );
+    // 15% distance to the bottom button border
+    const long nBorderDistanceBottom = ((aSymbolRect.GetHeight() * 150) + 500) / 1000;
+    aSymbolRect.AdjustBottom( -nBorderDistanceBottom );
+    DecorationView aDecoView(&rRenderContext);
+    aDecoView.DrawSymbol(aSymbolRect, SymbolType::SPIN_DOWN, (bHighContrast ? COL_WHITE : COL_BLACK));
 }
 
 void AnnotationMenuButton::KeyInput(const KeyEvent& rKeyEvt)

@@ -11,6 +11,8 @@
 
 #include <filter/msfilter/mstoolbar.hxx>
 
+namespace com { namespace sun { namespace star { namespace container { class XIndexContainer; } } } }
+
 class ScCTBWrapper;
 // hmm I don't normally use these packed structures
 // but.. hey always good to do something different
@@ -38,7 +40,6 @@ class ScTBC : public TBBase
     std::shared_ptr<TBCData> tbcd;
 public:
     ScTBC();
-    virtual ~ScTBC(){}
 #ifdef DEBUG_SC_EXCEL
     virtual void Print( FILE* ) override;
 #endif
@@ -48,14 +49,13 @@ public:
 
 class ScCTB : public TBBase
 {
-    sal_uInt16 nViews;
+    sal_uInt16 const nViews;
     TB tb;
     std::vector<TBVisualData> rVisualData;
     sal_uInt32 ectbid;
     std::vector< ScTBC > rTBC;
 public:
     explicit ScCTB(sal_uInt16);
-    virtual ~ScCTB(){}
 #ifdef DEBUG_SC_EXCEL
     virtual void Print( FILE* ) override;
 #endif
@@ -63,7 +63,7 @@ public:
     bool IsMenuToolbar();
     bool ImportCustomToolBar( ScCTBWrapper&, CustomToolBarImportHelper& );
     bool ImportMenuTB( ScCTBWrapper&, const css::uno::Reference< css::container::XIndexContainer >&, CustomToolBarImportHelper& );
-    OUString GetName() { return tb.getName().getString(); }
+    const OUString& GetName() { return tb.getName().getString(); }
 
 };
 
@@ -81,7 +81,6 @@ public:
     CTBS(const CTBS&);
     CTBS& operator = ( const CTBS&);
     CTBS();
-    virtual ~CTBS(){}
 #ifdef DEBUG_SC_EXCEL
     virtual void Print( FILE* ) override;
 #endif
@@ -96,7 +95,7 @@ class ScCTBWrapper : public TBBase
 
 public:
     ScCTBWrapper();
-    virtual ~ScCTBWrapper();
+    virtual ~ScCTBWrapper() override;
     bool Read(SvStream &rS) override;
 #ifdef DEBUG_SC_EXCEL
     virtual void Print( FILE* ) override;

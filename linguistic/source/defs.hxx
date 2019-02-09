@@ -21,7 +21,6 @@
 #define INCLUDED_LINGUISTIC_SOURCE_DEFS_HXX
 
 #include <com/sun/star/linguistic2/XSpellChecker.hpp>
-#include <com/sun/star/linguistic2/XProofreader.hpp>
 #include <com/sun/star/linguistic2/XHyphenator.hpp>
 #include <com/sun/star/linguistic2/XThesaurus.hpp>
 
@@ -36,30 +35,24 @@ struct LangSvcEntries
     css::uno::Sequence< OUString >   aSvcImplNames;
 
     sal_Int16   nLastTriedSvcIndex;
-    bool        bAlreadyWarned;
-    bool        bDoWarnAgain;
-
-    LangSvcEntries() : nLastTriedSvcIndex(-1), bAlreadyWarned(false), bDoWarnAgain(false) {}
 
     explicit LangSvcEntries( const css::uno::Sequence< OUString > &rSvcImplNames ) :
         aSvcImplNames(rSvcImplNames),
-        nLastTriedSvcIndex(-1), bAlreadyWarned(false), bDoWarnAgain(false)
+        nLastTriedSvcIndex(-1)
     {
     }
 
     explicit LangSvcEntries( const OUString &rSvcImplName ) :
-        nLastTriedSvcIndex(-1), bAlreadyWarned(false), bDoWarnAgain(false)
+        nLastTriedSvcIndex(-1)
     {
         aSvcImplNames.realloc(1);
         aSvcImplNames[0] = rSvcImplName;
     }
 
-    inline void Clear()
+    void Clear()
     {
         aSvcImplNames.realloc(0);
         nLastTriedSvcIndex  = -1;
-        bAlreadyWarned      = false;
-        bDoWarnAgain        = false;
     }
 };
 
@@ -67,21 +60,13 @@ struct LangSvcEntries_Spell : public LangSvcEntries
 {
     css::uno::Sequence< css::uno::Reference< css::linguistic2::XSpellChecker > >  aSvcRefs;
 
-    LangSvcEntries_Spell() : LangSvcEntries() {}
     explicit LangSvcEntries_Spell( const css::uno::Sequence< OUString > &rSvcImplNames ) : LangSvcEntries( rSvcImplNames ) {}
-};
-
-struct LangSvcEntries_Grammar : public LangSvcEntries
-{
-    LangSvcEntries_Grammar() : LangSvcEntries() {}
-    explicit LangSvcEntries_Grammar( const OUString &rSvcImplName ) : LangSvcEntries( rSvcImplName ) {}
 };
 
 struct LangSvcEntries_Hyph : public LangSvcEntries
 {
     css::uno::Sequence< css::uno::Reference< css::linguistic2::XHyphenator > >  aSvcRefs;
 
-    LangSvcEntries_Hyph() : LangSvcEntries() {}
     explicit LangSvcEntries_Hyph( const OUString &rSvcImplName ) : LangSvcEntries( rSvcImplName ) {}
 };
 
@@ -89,7 +74,6 @@ struct LangSvcEntries_Thes : public LangSvcEntries
 {
     css::uno::Sequence< css::uno::Reference< css::linguistic2::XThesaurus > >  aSvcRefs;
 
-    LangSvcEntries_Thes() : LangSvcEntries() {}
     explicit LangSvcEntries_Thes( const css::uno::Sequence< OUString > &rSvcImplNames ) : LangSvcEntries( rSvcImplNames ) {}
 };
 
@@ -98,8 +82,6 @@ struct LangSvcEntries_Thes : public LangSvcEntries
 class LinguDispatcher
 {
 public:
-    enum DspType    { DSP_SPELL, DSP_HYPH, DSP_THES, DSP_GRAMMAR };
-
     virtual void SetServiceList( const css::lang::Locale &rLocale, const css::uno::Sequence< OUString > &rSvcImplNames ) = 0;
     virtual css::uno::Sequence< OUString > GetServiceList( const css::lang::Locale &rLocale ) const = 0;
 

@@ -21,8 +21,8 @@
 
 #include <algorithm>
 
-#include "simplerangelist.hxx"
-#include "rangelst.hxx"
+#include <simplerangelist.hxx>
+#include <rangelst.hxx>
 
 using ::std::list;
 using ::std::pair;
@@ -132,10 +132,8 @@ void ScSimpleRangeList::insertCol(SCCOL nCol, SCTAB nTab)
         // This should never happen!
         return;
 
-    list<Range>::iterator itr = pRef->begin(), itrEnd = pRef->end();
-    for (; itr != itrEnd; ++itr)
+    for (Range& r : *pRef)
     {
-        Range& r = *itr;
         if (r.mnCol2 < nCol)
             // insertion point to the right of the range.
             continue;
@@ -157,15 +155,11 @@ void ScSimpleRangeList::insertCol(SCCOL nCol, SCTAB nTab)
 void ScSimpleRangeList::getRangeList(list<ScRange>& rList) const
 {
     list<ScRange> aList;
-    for (TabType::const_iterator itrTab = maTabs.begin(), itrTabEnd = maTabs.end(); itrTab != itrTabEnd; ++itrTab)
+    for (const auto& [nTab, pRanges] : maTabs)
     {
-        SCTAB nTab = itrTab->first;
-        const RangeListRef& pRanges = itrTab->second;
-        list<Range>::const_iterator itr = pRanges->begin(), itrEnd = pRanges->end();
-        for (; itr != itrEnd; ++itr)
+        for (const Range& r : *pRanges)
         {
-            const Range& r = *itr;
-            aList.push_back(ScRange(r.mnCol1, r.mnRow1, nTab, r.mnCol2, r.mnRow2, nTab));
+            aList.emplace_back(r.mnCol1, r.mnRow1, nTab, r.mnCol2, r.mnRow2, nTab);
         }
     }
     rList.swap(aList);
@@ -182,7 +176,7 @@ ScSimpleRangeList::RangeListRef ScSimpleRangeList::findTab(SCTAB nTab)
     if (itr == maTabs.end())
     {
         RangeListRef p(new list<Range>);
-        pair<TabType::iterator, bool> r = maTabs.insert(TabType::value_type(nTab, p));
+        pair<TabType::iterator, bool> r = maTabs.emplace(nTab, p);
         if (!r.second)
             return RangeListRef();
         itr = r.first;

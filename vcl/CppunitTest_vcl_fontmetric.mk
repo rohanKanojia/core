@@ -31,13 +31,9 @@ $(eval $(call gb_CppunitTest_use_libraries,vcl_fontmetric, \
 	tk \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,vcl_fontmetric,\
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,vcl_fontmetric))
 
 $(eval $(call gb_CppunitTest_use_ure,vcl_fontmetric))
 $(eval $(call gb_CppunitTest_use_vcl,vcl_fontmetric))
@@ -49,5 +45,9 @@ $(eval $(call gb_CppunitTest_use_components,vcl_fontmetric,\
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,vcl_fontmetric))
+
+$(eval $(call gb_CppunitTest_use_externals,vcl_fontmetric,\
+    harfbuzz \
+))
 
 # vim: set noet sw=4 ts=4:

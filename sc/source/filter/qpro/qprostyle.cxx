@@ -18,30 +18,22 @@
  */
 
 #include <sal/config.h>
-#include <sfx2/docfile.hxx>
 
-#include "qproform.hxx"
-#include "qpro.hxx"
-#include "qprostyle.hxx"
+#include <qprostyle.hxx>
 
 #include <scitems.hxx>
 #include <svx/algitem.hxx>
 #include <editeng/udlnitem.hxx>
 #include <editeng/wghtitem.hxx>
 #include <editeng/postitem.hxx>
-#include <editeng/crossedoutitem.hxx>
 #include <editeng/fhgtitem.hxx>
 #include <editeng/fontitem.hxx>
 #include <editeng/justifyitem.hxx>
-#include <map>
 
-#include "global.hxx"
-#include "scerrors.hxx"
-#include "docpool.hxx"
-#include "patattr.hxx"
-#include "filter.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
+#include <global.hxx>
+#include <docpool.hxx>
+#include <patattr.hxx>
+#include <document.hxx>
 
 ScQProStyle::ScQProStyle()
 {
@@ -65,56 +57,56 @@ void ScQProStyle::SetFormat( ScDocument *pDoc, sal_uInt8 nCol, sal_uInt16 nRow, 
     sal_uInt8 nOrient = ( nTmp & 0x60 );
 
     // Horizontal Alignment
-    SvxCellHorJustify eJustify = SVX_HOR_JUSTIFY_STANDARD;
+    SvxCellHorJustify eJustify = SvxCellHorJustify::Standard;
     switch( nHor )
     {
         case 0x00:
-            eJustify = SVX_HOR_JUSTIFY_STANDARD;
+            eJustify = SvxCellHorJustify::Standard;
             break;
 
         case 0x01:
-            eJustify = SVX_HOR_JUSTIFY_LEFT;
+            eJustify = SvxCellHorJustify::Left;
             break;
 
         case 0x02:
-            eJustify = SVX_HOR_JUSTIFY_CENTER;
+            eJustify = SvxCellHorJustify::Center;
             break;
 
         case 0x03:
-            eJustify = SVX_HOR_JUSTIFY_RIGHT;
+            eJustify = SvxCellHorJustify::Right;
             break;
 
         case 0x04:
-            eJustify = SVX_HOR_JUSTIFY_BLOCK;
+            eJustify = SvxCellHorJustify::Block;
             break;
     }
     rItemSet.Put( SvxHorJustifyItem( eJustify, ATTR_HOR_JUSTIFY ) );
 
     // Vertical Alignment
-    SvxCellVerJustify eVerJustify = SVX_VER_JUSTIFY_STANDARD;
+    SvxCellVerJustify eVerJustify = SvxCellVerJustify::Standard;
     switch( nVer )
     {
         case 0x00:
-            eVerJustify = SVX_VER_JUSTIFY_BOTTOM;
+            eVerJustify = SvxCellVerJustify::Bottom;
             break;
 
         case 0x08:
-            eVerJustify = SVX_VER_JUSTIFY_CENTER;
+            eVerJustify = SvxCellVerJustify::Center;
             break;
 
         case 0x10:
-            eVerJustify = SVX_VER_JUSTIFY_TOP;
+            eVerJustify = SvxCellVerJustify::Top;
             break;
     }
 
     rItemSet.Put(SvxVerJustifyItem( eVerJustify, ATTR_VER_JUSTIFY ) );
 
     // Orientation
-    SvxCellOrientation eOrient = SVX_ORIENTATION_STANDARD;
+    SvxCellOrientation eOrient = SvxCellOrientation::Standard;
     switch( nOrient )
     {
         case 0x20:
-            eOrient = SVX_ORIENTATION_TOPBOTTOM;
+            eOrient = SvxCellOrientation::TopBottom;
             break;
 
     }
@@ -145,7 +137,7 @@ void ScQProStyle::SetFormat( ScDocument *pDoc, sal_uInt8 nCol, sal_uInt16 nRow, 
         rItemSet.Put( SvxUnderlineItem( LINESTYLE_SINGLE, ATTR_FONT_UNDERLINE ) );
 
     if (maFontHeight[ maFont [ nStyle ] ])
-        rItemSet.Put( SvxFontHeightItem( (sal_uLong) (20 * maFontHeight[ maFont[ nStyle ] ] ), 100, ATTR_FONT_HEIGHT ) );
+        rItemSet.Put( SvxFontHeightItem( static_cast<sal_uLong>(20 * maFontHeight[ maFont[ nStyle ] ] ), 100, ATTR_FONT_HEIGHT ) );
 
     OUString fntName = maFontType[ maFont[ nStyle ] ];
     rItemSet.Put( SvxFontItem( FAMILY_SYSTEM, fntName, EMPTY_OUSTRING, PITCH_DONTKNOW, RTL_TEXTENCODING_DONTKNOW, ATTR_FONT ) );

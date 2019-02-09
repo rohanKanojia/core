@@ -37,8 +37,6 @@ namespace com { namespace sun { namespace star { namespace frame {
     class XController;
 } } } }
 
-// class SvxSmartTagItem -----------------------------------------------------
-
 class SVX_DLLPUBLIC SvxSmartTagItem : public SfxPoolItem
 {
     const css::uno::Sequence < css::uno::Sequence< css::uno::Reference< css::smarttags::XSmartTagAction > > > maActionComponentsSequence;
@@ -63,11 +61,9 @@ public:
                      const OUString& rApplicationName,
                      const OUString& rRangeText );
 
-    // "pure virtual Methoden" vom SfxPoolItem
+    // "purely virtual methods" from the SfxPoolItem
     virtual bool             operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*     Create(SvStream &, sal_uInt16) const override; // leer
-    virtual SvStream&        Store(SvStream &, sal_uInt16 nItemVersion) const override; // leer
     virtual bool             QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
@@ -77,8 +73,8 @@ public:
     const css::uno::Reference<css::text::XTextRange>& GetTextRange() const { return mxRange; }
     const css::uno::Reference<css::frame::XController>& GetController() const { return mxController; }
     const css::lang::Locale& GetLocale() const { return maLocale; }
-    const OUString GetApplicationName() const { return maApplicationName; }
-    const OUString GetRangeText() const { return maRangeText; }
+    const OUString& GetApplicationName() const { return maApplicationName; }
+    const OUString& GetRangeText() const { return maRangeText; }
 };
 
 #endif // INCLUDED_SVX_SMARTTAGITEM_HXX

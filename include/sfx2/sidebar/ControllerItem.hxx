@@ -21,16 +21,7 @@
 
 #include <sfx2/ctrlitem.hxx>
 
-#include <cppuhelper/compbase1.hxx>
-#include <cppuhelper/basemutex.hxx>
-#include <unotools/cmdoptions.hxx>
-#include <vcl/image.hxx>
-
-#include <com/sun/star/frame/XFrame.hpp>
-
-
-class SfxViewFrame;
-class ToolBox;
+#include <com/sun/star/lang/XComponent.hpp>
 
 
 namespace sfx2 { namespace sidebar {
@@ -58,17 +49,6 @@ public:
         virtual ~ItemUpdateReceiverInterface();
     };
 
-    /** This is the preferred constructor that allows the created
-        controller item to return non-empty values for GetLabel() and
-        GetIcon() calls.
-    */
-    ControllerItem (
-        const sal_uInt16 nSlotId,
-        SfxBindings &rBindings,
-        ItemUpdateReceiverInterface& rItemUpdateReceiver,
-        const ::rtl::OUString& rsCommandName,
-        const css::uno::Reference<css::frame::XFrame>& rxFrame);
-
     /** This is the simpler constructor variant that still exists for
         compatibility resons.  Note that GetLabel() and GetIcon() will
         return empty strings/images.
@@ -81,42 +61,18 @@ public:
     /// releases our action listener
     virtual void dispose() override;
 
-    virtual ~ControllerItem();
+    virtual ~ControllerItem() override;
 
     /** Returns </TRUE> when the slot/command has not been disabled.
         Changes of this state are notified via the
         ItemUpdateReceiverInterface::NotifyContextChang() method.
     */
-    bool IsEnabled (const SfxItemState eState) const;
+    static bool IsEnabled (const SfxItemState eState);
 
     /** Force the controller item to call its NotifyItemUpdate
         callback with up-to-date data.
     */
     void RequestUpdate();
-
-    /** Return the extended help text for the command.
-        Returns an empty string when the UNO command name is not available.
-    */
-    ::rtl::OUString GetHelpText() const;
-
-    /** Return the icon for the command.
-    */
-    Image GetIcon() const;
-
-    /** Convenience method for setting all relevant properties for the
-        slot/command represented by the called object at the given tool
-        box.
-    */
-    void SetupToolBoxItem (ToolBox& rToolBox, const sal_uInt16 nIndex);
-
-    /** Do not call.  Used by local class only.  Should be a member of
-        a local and hidden interface.
-    */
-    void NotifyFrameContextChange();
-    /** Do not call.  Used by local class only.  Should be a member of
-        a local and hidden interface.
-    */
-    void ResetFrame();
 
 protected:
 
@@ -124,9 +80,7 @@ protected:
 
 private:
     ItemUpdateReceiverInterface& mrItemUpdateReceiver;
-    css::uno::Reference<css::frame::XFrame> mxFrame;
     css::uno::Reference<css::lang::XComponent> mxFrameActionListener;
-    const ::rtl::OUString msCommandName;
 };
 
 } } // end of namespace sfx2::sidebar

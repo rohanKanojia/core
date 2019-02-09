@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "limitedformats.hxx"
-#include "services.hxx"
+#include <limitedformats.hxx>
+#include <services.hxx>
 #include <osl/diagnose.h>
 #include <comphelper/types.hxx>
 #include <comphelper/extract.hxx>
@@ -54,10 +54,9 @@ namespace frm
 
     static const Locale& getLocale(LocaleType _eType)
     {
-        static const Locale s_aEnglishUS( OUString("en"), OUString("us"), OUString() );
-        static const Locale s_aGerman( OUString("de"), OUString("DE"), OUString() );
-        static const OUString s_sEmptyString;
-        static const Locale s_aSystem( s_sEmptyString, s_sEmptyString, s_sEmptyString );
+        static const Locale s_aEnglishUS( "en", "us", OUString() );
+        static const Locale s_aGerman( "de", "DE", OUString() );
+        static const Locale s_aSystem( "", "", "" );
 
         switch (_eType)
         {
@@ -167,7 +166,7 @@ namespace frm
                         pLoopFormats->nKey = xStandardFormats->queryKey(
                             OUString::createFromAscii(pLoopFormats->pDescription),
                             getLocale(pLoopFormats->eLocale),
-                            sal_False
+                            false
                         );
 
                         if (-1 == pLoopFormats->nKey)
@@ -302,7 +301,7 @@ namespace frm
             bool bModified = false;
             if (bFoundIt)
             {
-                _rConvertedValue <<= (sal_Int16)nTablePosition;
+                _rConvertedValue <<= static_cast<sal_Int16>(nTablePosition);
                 bModified = nTablePosition != nOldEnumValue;
             }
 
@@ -326,8 +325,7 @@ namespace frm
 
             if (!bFoundIt)
             {   // somebody gave us a format which we can't translate
-                OUString sMessage ("This control supports only a very limited number of formats.");
-                throw IllegalArgumentException(sMessage, nullptr, 2);
+                throw IllegalArgumentException("This control supports only a very limited number of formats.", nullptr, 2);
             }
 
             return bModified;

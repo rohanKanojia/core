@@ -23,14 +23,16 @@
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/range/b2drectangle.hxx>
-#include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b3dpolygon.hxx>
+#include <basegfx/polygon/b2dpolygontriangulator.hxx>
 #include <com/sun/star/drawing/PointSequence.hpp>
 #include <com/sun/star/drawing/FlagSequence.hpp>
 #include <vector>
 #include <basegfx/basegfxdllapi.h>
 #include <o3tl/typed_flags_set.hxx>
 
+
+namespace basegfx { class B2DPolyPolygon; }
 
 // Definitions for the cut flags used from the findCut methods
 enum class CutFlagValue
@@ -55,7 +57,7 @@ namespace basegfx
     class B2DPolygon;
     class B2DRange;
 
-    namespace tools
+    namespace utils
     {
         // B2DPolygon tools
 
@@ -132,13 +134,10 @@ namespace basegfx
         BASEGFX_DLLPUBLIC B2VectorContinuity getContinuityInPoint(const B2DPolygon& rCandidate, sal_uInt32 nIndex);
 
         // Subdivide all contained curves. Use distanceBound value if given.
-        BASEGFX_DLLPUBLIC B2DPolygon adaptiveSubdivideByDistance(const B2DPolygon& rCandidate, double fDistanceBound = 0.0);
+        BASEGFX_DLLPUBLIC B2DPolygon adaptiveSubdivideByDistance(const B2DPolygon& rCandidate, double fDistanceBound);
 
         // Subdivide all contained curves. Use angleBound value if given.
         BASEGFX_DLLPUBLIC B2DPolygon adaptiveSubdivideByAngle(const B2DPolygon& rCandidate, double fAngleBound = 0.0);
-
-        // #i37443# Subdivide all contained curves.
-        BASEGFX_DLLPUBLIC B2DPolygon adaptiveSubdivideByCount(const B2DPolygon& rCandidate, sal_uInt32 nCount = 0L);
 
         // This version works with two points and vectors to define the
         // edges for the cut test.
@@ -227,12 +226,12 @@ namespace basegfx
 
         /** Create the unit polygon
          */
-        BASEGFX_DLLPUBLIC B2DPolygon createUnitPolygon();
+        BASEGFX_DLLPUBLIC B2DPolygon const & createUnitPolygon();
 
         /** Create a circle polygon with given radius.
 
             This method creates a circle approximation consisting of
-            four cubic bezier segments, which approximate the given
+            12 cubic bezier segments, which approximate the given
             circle with an error of less than 0.5 percent.
 
             @param rCenter
@@ -244,7 +243,7 @@ namespace basegfx
         BASEGFX_DLLPUBLIC B2DPolygon createPolygonFromCircle( const B2DPoint& rCenter, double fRadius );
 
         /// create half circle centered on (0,0) from [0 .. F_PI]
-        B2DPolygon createHalfUnitCircle();
+        B2DPolygon const & createHalfUnitCircle();
 
         /** create a polygon which describes the unit circle and close it
 
@@ -256,12 +255,12 @@ namespace basegfx
             this is the lowest one). This is needed since when lines are dashed, toe old
             geometry started at bottom point, else it would look different.
          */
-        BASEGFX_DLLPUBLIC B2DPolygon createPolygonFromUnitCircle(sal_uInt32 nStartQuadrant = 0);
+        BASEGFX_DLLPUBLIC B2DPolygon const & createPolygonFromUnitCircle(sal_uInt32 nStartQuadrant = 0);
 
         /** Create an ellipse polygon with given radii.
 
             This method creates an ellipse approximation consisting of
-            four cubic bezier segments, which approximate the given
+            12 cubic bezier segments, which approximate the given
             ellipse with an error of less than 0.5 percent.
 
             @param rCenter
@@ -272,8 +271,11 @@ namespace basegfx
 
             @param fRadiusY
             Radius of the ellipse in Y direction
+
+            @param nStartQuadrant
+            With Y down on screens, 0 = 3 o'clock, 1 = 6 o'clock, 2 = 9 o'clock, 3 = 12 o'clock
          */
-        BASEGFX_DLLPUBLIC B2DPolygon createPolygonFromEllipse( const B2DPoint& rCenter, double fRadiusX, double fRadiusY );
+        BASEGFX_DLLPUBLIC B2DPolygon createPolygonFromEllipse( const B2DPoint& rCenter, double fRadiusX, double fRadiusY, sal_uInt32 nStartQuadrant = 0);
 
         /** Create an unit ellipse polygon with the given angles, from start to end
          */
@@ -344,22 +346,24 @@ namespace basegfx
         BASEGFX_DLLPUBLIC B2VectorOrientation getOrientationForIndex(const B2DPolygon& rCandidate, sal_uInt32 nIndex);
 
         // calculates if given point is on given line, taking care of the numerical epsilon
-        BASEGFX_DLLPUBLIC bool isPointOnLine(const B2DPoint& rStart, const B2DPoint& rEnd, const B2DPoint& rCandidate, bool bWithPoints = false);
+        BASEGFX_DLLPUBLIC bool isPointOnLine(const B2DPoint& rStart, const B2DPoint& rEnd, const B2DPoint& rCandidate, bool bWithPoints);
 
         // calculates if given point is on given polygon, taking care of the numerical epsilon. Uses
         // isPointOnLine internally
         BASEGFX_DLLPUBLIC bool isPointOnPolygon(const B2DPolygon& rCandidate, const B2DPoint& rPoint, bool bWithPoints = true);
 
         // test if candidate is inside triangle
-        BASEGFX_DLLPUBLIC bool isPointInTriangle(const B2DPoint& rA, const B2DPoint& rB, const B2DPoint& rC, const B2DPoint& rCandidate, bool bWithBorder = false);
+        BASEGFX_DLLPUBLIC bool isPointInTriangle(const B2DPoint& rA, const B2DPoint& rB, const B2DPoint& rC, const B2DPoint& rCandidate, bool bWithBorder);
 
         // test if candidateA and candidateB are on the same side of the given line
-        BASEGFX_DLLPUBLIC bool arePointsOnSameSideOfLine(const B2DPoint& rStart, const B2DPoint& rEnd, const B2DPoint& rCandidateA, const B2DPoint& rCandidateB, bool bWithLine = false);
+        BASEGFX_DLLPUBLIC bool arePointsOnSameSideOfLine(const B2DPoint& rStart, const B2DPoint& rEnd, const B2DPoint& rCandidateA, const B2DPoint& rCandidateB, bool bWithLine);
 
         // add triangles for given rCandidate to rTarget. For each triangle, 3 points will be added to rCandidate.
         // All triangles will go from the start point of rCandidate to two consecutive points, building (rCandidate.count() - 2)
         // triangles.
-        BASEGFX_DLLPUBLIC void addTriangleFan(const B2DPolygon& rCandidate, B2DPolygon& rTarget);
+        BASEGFX_DLLPUBLIC void addTriangleFan(
+            const B2DPolygon& rCandidate,
+            triangulator::B2DTriangleVector& rTarget);
 
         // grow for polygon. Move all geometry in each point in the direction of the normal in that point
         // with the given amount. Value may be negative.
@@ -451,8 +455,7 @@ namespace basegfx
 
         /// converters for css::drawing::PointSequence
         BASEGFX_DLLPUBLIC B2DPolygon UnoPointSequenceToB2DPolygon(
-            const css::drawing::PointSequence& rPointSequenceSource,
-            bool bCheckClosed = true);
+            const css::drawing::PointSequence& rPointSequenceSource);
         BASEGFX_DLLPUBLIC void B2DPolygonToUnoPointSequence(
             const B2DPolygon& rPolygon,
             css::drawing::PointSequence& rPointSequenceRetval);
@@ -462,8 +465,7 @@ namespace basegfx
          */
         B2DPolygon UnoPolygonBezierCoordsToB2DPolygon(
             const css::drawing::PointSequence& rPointSequenceSource,
-            const css::drawing::FlagSequence& rFlagSequenceSource,
-            bool bCheckClosed = true);
+            const css::drawing::FlagSequence& rFlagSequenceSource);
         void B2DPolygonToUnoPolygonBezierCoords(
             const B2DPolygon& rPolyPolygon,
             css::drawing::PointSequence& rPointSequenceRetval,
@@ -501,7 +503,7 @@ namespace basegfx
          */
         BASEGFX_DLLPUBLIC OUString exportToSvgPoints( const B2DPolygon& rPoly );
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_POLYGON_B2DPOLYGONTOOLS_HXX

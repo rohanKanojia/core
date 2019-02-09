@@ -83,7 +83,7 @@ public class SdXCustomPresentationAccess extends TestCase {
     * Creating a TestEnvironment for the interfaces to be tested.
     * Retrieves the collection of the CustomPresentation from the document
     * using the interface <code>XCustomPresentationSupplier</code>.
-    * The retrieved collection is the instance of the servcie
+    * The retrieved collection is the instance of the service
     * <code>com.sun.star.presentation.CustomPresentationAccess</code>.
     * Creates two new instances of the custom presentation using the interface
     * <code>XSingleServiceFactory</code>. Inserts one of them to the
@@ -159,7 +159,7 @@ public class SdXCustomPresentationAccess extends TestCase {
                 tEnv.addObjRelation("INSTANCE" + n, oInstance);
             }
         } catch (com.sun.star.uno.Exception e) {
-            log.println("Could't adding INSTANCEn: " + e);
+            log.println("Couldn't adding INSTANCEn: " + e);
         }
 
         return tEnv;

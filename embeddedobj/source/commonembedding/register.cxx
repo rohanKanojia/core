@@ -19,17 +19,18 @@
 
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/registry/InvalidRegistryException.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <cppuhelper/factory.hxx>
 
 #include "xfactory.hxx"
-#include "xcreator.hxx"
+#include <xcreator.hxx>
 
 using namespace ::com::sun::star;
 
 
 extern "C" {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL embobj_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * embobj_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager,
     SAL_UNUSED_PARAMETER void * /*pRegistryKey*/ )
 {
@@ -40,21 +41,21 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL embobj_component_getFactory(
 
     if ( pServiceManager )
     {
-        if ( aImplName.equals( OOoEmbeddedObjectFactory::impl_staticGetImplementationName() ) )
+        if ( aImplName == OOoEmbeddedObjectFactory::impl_staticGetImplementationName() )
         {
             xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>( pServiceManager ),
                                                 OOoEmbeddedObjectFactory::impl_staticGetImplementationName(),
                                                 OOoEmbeddedObjectFactory::impl_staticCreateSelfInstance,
                                                 OOoEmbeddedObjectFactory::impl_staticGetSupportedServiceNames() );
         }
-        else if ( aImplName.equals( OOoSpecialEmbeddedObjectFactory::impl_staticGetImplementationName() ) )
+        else if ( aImplName == OOoSpecialEmbeddedObjectFactory::impl_staticGetImplementationName() )
         {
             xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>( pServiceManager ),
                                                 OOoSpecialEmbeddedObjectFactory::impl_staticGetImplementationName(),
                                                 OOoSpecialEmbeddedObjectFactory::impl_staticCreateSelfInstance,
                                                 OOoSpecialEmbeddedObjectFactory::impl_staticGetSupportedServiceNames() );
         }
-        else if ( aImplName.equals( UNOEmbeddedObjectCreator::impl_staticGetImplementationName() ) )
+        else if ( aImplName == UNOEmbeddedObjectCreator::impl_staticGetImplementationName() )
         {
             xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>( pServiceManager ),
                                                 UNOEmbeddedObjectCreator::impl_staticGetImplementationName(),

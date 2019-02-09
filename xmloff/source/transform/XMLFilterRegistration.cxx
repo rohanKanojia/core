@@ -20,9 +20,10 @@
 #include <string.h>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <osl/diagnose.h>
 
-#include <XMLFilterRegistration.hxx>
+#include "XMLFilterRegistration.hxx"
 
 using namespace ::com::sun::star;
 
@@ -31,16 +32,16 @@ using namespace ::com::sun::star;
 
 namespace
 {
-    typedef OUString (SAL_CALL * GetImplementationName)();
-    typedef uno::Sequence< OUString > (SAL_CALL * GetSupportedServiceNames)();
-    typedef uno::Reference< ::uno::XInterface > (SAL_CALL * CreateInstance)(
+    typedef OUString (* GetImplementationName)();
+    typedef uno::Sequence< OUString > (* GetSupportedServiceNames)();
+    typedef uno::Reference< ::uno::XInterface > (* CreateInstance)(
         const uno::Reference< lang::XMultiServiceFactory >& );
 
     struct ServiceDescriptor
     {
-        GetImplementationName       getImplementationName;
-        GetSupportedServiceNames    getSupportedServiceNames;
-        CreateInstance              createInstance;
+        GetImplementationName const    getImplementationName;
+        GetSupportedServiceNames const getSupportedServiceNames;
+        CreateInstance const           createInstance;
     };
 
     const ServiceDescriptor* getServiceDescriptors()
@@ -83,12 +84,10 @@ namespace
     };
 }
 
-#ifdef __cplusplus
 extern "C"
 {
-#endif
 
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL xof_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
+SAL_DLLPUBLIC_EXPORT void* xof_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
     void * pRet = nullptr;
     if( pServiceManager )
@@ -131,8 +130,6 @@ SAL_DLLPUBLIC_EXPORT void* SAL_CALL xof_component_getFactory( const sal_Char * p
     return pRet;
 }
 
-#ifdef __cplusplus
 }
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

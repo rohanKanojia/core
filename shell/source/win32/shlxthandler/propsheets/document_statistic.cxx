@@ -18,20 +18,17 @@
  */
 
 
-#ifdef _MSC_VER
-#pragma warning (disable : 4786 4503)
-#endif
 #include "document_statistic.hxx"
-#include "utilities.hxx"
-#include "metainforeader.hxx"
-#include "resource.h"
-#include "fileextensions.hxx"
-#include "config.hxx"
-#include "iso8601_converter.hxx"
+#include <utilities.hxx>
+#include <metainforeader.hxx>
+#include <resource.h>
+#include <fileextensions.hxx>
+#include <config.hxx>
+#include <iso8601_converter.hxx>
 
 const bool READONLY  = false;
 
-document_statistic_reader_ptr create_document_statistic_reader(const std::string& document_name, CMetaInfoReader* meta_info_accessor)
+document_statistic_reader_ptr create_document_statistic_reader(const std::wstring& document_name, CMetaInfoReader* meta_info_accessor)
 {
     File_Type_t file_type = get_file_type(document_name);
 
@@ -44,7 +41,7 @@ document_statistic_reader_ptr create_document_statistic_reader(const std::string
 }
 
 
-document_statistic_reader::document_statistic_reader(const std::string& document_name, CMetaInfoReader* meta_info_accessor) :
+document_statistic_reader::document_statistic_reader(const std::wstring& document_name, CMetaInfoReader* meta_info_accessor) :
     document_name_(document_name),
     meta_info_accessor_(meta_info_accessor)
 {}
@@ -59,7 +56,7 @@ void document_statistic_reader::read(statistic_group_list_t* group_list)
     fill_origin_section(meta_info_accessor_, group_list);
 }
 
-std::string document_statistic_reader::get_document_name() const
+std::wstring document_statistic_reader::get_document_name() const
 {
     return document_name_;
 }
@@ -81,7 +78,7 @@ void document_statistic_reader::fill_origin_section(CMetaInfoReader *meta_info_a
     group_list->push_back(statistic_group_t(GetResString(IDS_ORIGIN), il));
 }
 
-writer_document_statistic_reader::writer_document_statistic_reader(const std::string& document_name, CMetaInfoReader* meta_info_accessor) :
+writer_document_statistic_reader::writer_document_statistic_reader(const std::wstring& document_name, CMetaInfoReader* meta_info_accessor) :
     document_statistic_reader(document_name, meta_info_accessor)
 {}
 
@@ -105,7 +102,7 @@ void writer_document_statistic_reader::fill_description_section(CMetaInfoReader 
 }
 
 calc_document_statistic_reader::calc_document_statistic_reader(
-    const std::string& document_name, CMetaInfoReader* meta_info_accessor) :
+    const std::wstring& document_name, CMetaInfoReader* meta_info_accessor) :
     document_statistic_reader(document_name, meta_info_accessor)
 {}
 
@@ -126,7 +123,7 @@ void calc_document_statistic_reader::fill_description_section(
 }
 
 draw_impress_math_document_statistic_reader::draw_impress_math_document_statistic_reader(
-    const std::string& document_name, CMetaInfoReader* meta_info_accessor) :
+    const std::wstring& document_name, CMetaInfoReader* meta_info_accessor) :
     document_statistic_reader(document_name, meta_info_accessor)
 {}
 

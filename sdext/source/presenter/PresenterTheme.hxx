@@ -60,7 +60,6 @@ class PresenterTheme
 public:
     PresenterTheme (
         const css::uno::Reference<css::uno::XComponentContext>& rxContext,
-        const OUString& rsThemeName,
         const css::uno::Reference<css::rendering::XCanvas>& rxCanvas);
     ~PresenterTheme();
 
@@ -113,7 +112,6 @@ public:
 
     static SharedFontDescriptor ReadFont (
         const css::uno::Reference<css::container::XHierarchicalNameAccess>& rxNode,
-        const OUString& rsFontPath,
         const SharedFontDescriptor& rDefaultFount);
 
     static bool ConvertToColor (
@@ -125,7 +123,6 @@ public:
 
 private:
     css::uno::Reference<css::uno::XComponentContext> mxContext;
-    const OUString msThemeName;
     std::shared_ptr<Theme> mpTheme;
     css::uno::Reference<css::rendering::XCanvas> mxCanvas;
 

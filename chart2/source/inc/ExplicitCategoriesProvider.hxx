@@ -19,12 +19,18 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_EXPLICITCATEGORIESPROVIDER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_EXPLICITCATEGORIESPROVIDER_HXX
 
-#include <com/sun/star/chart2/XCoordinateSystem.hpp>
-#include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
 #include "charttoolsdllapi.hxx"
-#include "ChartModel.hxx"
+#include <cppuhelper/weakref.hxx>
+#include <com/sun/star/uno/Reference.h>
+#include <com/sun/star/uno/Sequence.h>
 
 #include <vector>
+
+namespace chart { class ChartModel; }
+namespace com { namespace sun { namespace star { namespace chart2 { class XCoordinateSystem; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XLabeledDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
 
 namespace chart
 {
@@ -47,19 +53,19 @@ public:
     virtual css::uno::Sequence< OUString > getStringsForLevel( sal_Int32 nIndex ) const = 0;
 };
 
-class OOO_DLLPUBLIC_CHARTTOOLS ExplicitCategoriesProvider
+class OOO_DLLPUBLIC_CHARTTOOLS ExplicitCategoriesProvider final
 {
 public:
     ExplicitCategoriesProvider( const css::uno::Reference< css::chart2::XCoordinateSystem >& xCooSysModel
                        , ChartModel& rChartModel
                        );
-    virtual ~ExplicitCategoriesProvider();
+    ~ExplicitCategoriesProvider();
 
     void init();
 
     css::uno::Reference< css::chart2::data::XDataSequence > getOriginalCategories();
 
-    css::uno::Sequence< OUString > getSimpleCategories();
+    css::uno::Sequence< OUString > const & getSimpleCategories();
     const std::vector<ComplexCategory>* getCategoriesByLevel( sal_Int32 nLevel );
 
     static OUString getCategoryByIndex(
@@ -83,7 +89,10 @@ public:
     bool isDateAxis();
     const std::vector< double >&  getDateCategories();
 
-private: //member
+private:
+    ExplicitCategoriesProvider(ExplicitCategoriesProvider const &) = delete;
+    ExplicitCategoriesProvider& operator =(ExplicitCategoriesProvider const &) = delete;
+
     bool volatile m_bDirty;
     css::uno::WeakReference< css::chart2::XCoordinateSystem >   m_xCooSysModel;
     ChartModel& mrModel;
@@ -91,7 +100,7 @@ private: //member
 
     bool m_bIsExplicitCategoriesInited;
     css::uno::Sequence< OUString >  m_aExplicitCategories;
-    ::std::vector< ::std::vector< ComplexCategory > >   m_aComplexCats;
+    std::vector< std::vector< ComplexCategory > >   m_aComplexCats;
     css::uno::Sequence< css::uno::Reference<
         css::chart2::data::XLabeledDataSequence> > m_aSplitCategoriesList;
 

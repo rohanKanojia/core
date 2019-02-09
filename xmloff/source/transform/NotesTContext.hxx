@@ -25,8 +25,8 @@
 class XMLNotesTransformerContext : public XMLPersElemContentTContext
 {
     bool m_bEndNote;
-    bool m_bPersistent;
-    ::xmloff::token::XMLTokenEnum m_eTypeToken;
+    bool const m_bPersistent;
+    ::xmloff::token::XMLTokenEnum const m_eTypeToken;
 
 public:
     XMLNotesTransformerContext( XMLTransformerBase& rTransformer,
@@ -34,7 +34,7 @@ public:
                               ::xmloff::token::XMLTokenEnum m_eToken,
                               bool bPersistent  );
 
-    virtual ~XMLNotesTransformerContext();
+    virtual ~XMLNotesTransformerContext() override;
 
     virtual rtl::Reference<XMLTransformerContext> CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,

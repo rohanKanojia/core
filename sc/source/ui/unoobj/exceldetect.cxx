@@ -11,6 +11,7 @@
 
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 #include <svl/itemset.hxx>
@@ -20,24 +21,25 @@
 #include <sfx2/sfxsids.hrc>
 #include <unotools/mediadescriptor.hxx>
 #include <sot/storage.hxx>
+#include <sal/log.hxx>
 
 using namespace com::sun::star;
 using utl::MediaDescriptor;
 
-ScExcelBiffDetect::ScExcelBiffDetect( const uno::Reference<uno::XComponentContext>& /*xContext*/ ) {}
+ScExcelBiffDetect::ScExcelBiffDetect() {}
 ScExcelBiffDetect::~ScExcelBiffDetect() {}
 
-OUString ScExcelBiffDetect::getImplementationName() throw (uno::RuntimeException, std::exception)
+OUString ScExcelBiffDetect::getImplementationName()
 {
     return OUString("com.sun.star.comp.calc.ExcelBiffFormatDetector");
 }
 
-sal_Bool ScExcelBiffDetect::supportsService( const OUString& aName ) throw (uno::RuntimeException, std::exception)
+sal_Bool ScExcelBiffDetect::supportsService( const OUString& aName )
 {
     return cppu::supportsService(this, aName);
 }
 
-uno::Sequence<OUString> ScExcelBiffDetect::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+uno::Sequence<OUString> ScExcelBiffDetect::getSupportedServiceNames()
 {
     uno::Sequence<OUString> aNames { "com.sun.star.frame.ExtendedTypeDetection" };
     return aNames;
@@ -54,8 +56,7 @@ bool hasStream(const uno::Reference<io::XInputStream>& xInStream, const OUString
     if (!pStream)
         return false;
 
-    pStream->Seek(STREAM_SEEK_TO_END);
-    sal_Size nSize = pStream->Tell();
+    sal_uInt64 const nSize = pStream->TellEnd();
     pStream->Seek(0);
 
     if (!nSize)
@@ -67,13 +68,13 @@ bool hasStream(const uno::Reference<io::XInputStream>& xInStream, const OUString
     try
     {
         tools::SvRef<SotStorage> xStorage = new SotStorage(pStream, false);
-        if (!xStorage.Is() || xStorage->GetError())
+        if (!xStorage.is() || xStorage->GetError())
             return false;
         return xStorage->IsStream(rName);
     }
     catch (const css::ucb::ContentCreationException &e)
     {
-        SAL_WARN("sc", "hasStream caught " << e.Message);
+        SAL_WARN("sc", "hasStream caught " << e);
     }
 
     return false;
@@ -92,8 +93,7 @@ bool isExcel40(const uno::Reference<io::XInputStream>& xInStream)
     if (!pStream)
         return false;
 
-    pStream->Seek(STREAM_SEEK_TO_END);
-    sal_Size nSize = pStream->Tell();
+    sal_uInt64 const nSize = pStream->TellEnd();
     pStream->Seek(0);
 
     if (nSize < 4)
@@ -117,7 +117,7 @@ bool isExcel40(const uno::Reference<io::XInputStream>& xInStream)
         // BOF record must be sized between 4 and 16 for BIFF 2, 3 and 4.
         return false;
 
-    sal_Size nPos = pStream->Tell();
+    sal_uInt64 const nPos = pStream->Tell();
     if (nSize - nPos < nBofSize)
         // BOF record doesn't have required bytes.
         return false;
@@ -133,7 +133,6 @@ bool isTemplate(const OUString& rType)
 }
 
 OUString ScExcelBiffDetect::detect( uno::Sequence<beans::PropertyValue>& lDescriptor )
-    throw (uno::RuntimeException, std::exception)
 {
     MediaDescriptor aMediaDesc(lDescriptor);
     OUString aType;
@@ -193,11 +192,11 @@ OUString ScExcelBiffDetect::detect( uno::Sequence<beans::PropertyValue>& lDescri
     return aType;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_calc_ExcelBiffFormatDetector_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_calc_ExcelBiffFormatDetector_get_implementation(css::uno::XComponentContext* /*context*/,
                                                                   css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ScExcelBiffDetect(context));
+    return cppu::acquire(new ScExcelBiffDetect);
 }
 
 

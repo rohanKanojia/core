@@ -24,11 +24,11 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlDatabaseDescription.hxx"
 #include "xmlConnectionResource.hxx"
-#include "xmlstrings.hrc"
-#include <tools/debug.hxx>
+#include <stringconstants.hxx>
 #include <tools/diagnose_ex.h>
 
 namespace dbaxml
@@ -49,7 +49,7 @@ OXMLConnectionData::~OXMLConnectionData()
 
 }
 
-SvXMLImportContext* OXMLConnectionData::CreateChildContext(
+SvXMLImportContextRef OXMLConnectionData::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

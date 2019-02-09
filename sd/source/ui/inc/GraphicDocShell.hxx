@@ -23,16 +23,15 @@
 #include <sfx2/docfac.hxx>
 #include <sfx2/objsh.hxx>
 #include "DrawDocShell.hxx"
-#include "glob.hxx"
-#include "sdmod.hxx"
-#include "pres.hxx"
+#include <glob.hxx>
+#include <sddllapi.h>
 
 namespace sd {
 
 /**
  * document shell for draw documents
  */
-class GraphicDocShell
+class SD_DLLPUBLIC GraphicDocShell
     : public DrawDocShell
 {
 public:
@@ -45,17 +44,11 @@ private:
 public:
     SFX_DECL_OBJECTFACTORY();
 
-    GraphicDocShell (
-        SfxObjectCreateMode eMode = SfxObjectCreateMode::EMBEDDED,
-        bool bSdDataObj=false,
-        DocumentType=DOCUMENT_TYPE_DRAW);
+    GraphicDocShell(SfxObjectCreateMode eMode);
 
-    GraphicDocShell (
-        SfxModelFlags nModelCreationFlags,
-        bool bSdDataObj=false,
-        DocumentType=DOCUMENT_TYPE_DRAW);
+    GraphicDocShell(SfxModelFlags nModelCreationFlags);
 
-    virtual ~GraphicDocShell();
+    virtual ~GraphicDocShell() override;
 };
 
 } // end of namespace sd

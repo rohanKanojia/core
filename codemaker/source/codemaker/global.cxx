@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/process.h"
-#include "rtl/strbuf.hxx"
-#include "rtl/ustring.hxx"
-#include "osl/thread.h"
-#include "osl/file.hxx"
+#include <osl/process.h>
+#include <rtl/strbuf.hxx>
+#include <rtl/ustring.hxx>
+#include <osl/thread.h>
+#include <osl/file.hxx>
 
 #include <string.h>
 #include <errno.h>
 
-#if defined(SAL_W32)
+#if defined(_WIN32)
 #   include <io.h>
 #   include <direct.h>
 #endif
@@ -36,7 +36,7 @@
 #   include <unistd.h>
 #endif
 
-#include "codemaker/global.hxx"
+#include <codemaker/global.hxx>
 
 #ifdef SAL_UNX
 #define SEPARATOR '/'
@@ -62,15 +62,9 @@ OString getTempDir(const OString& sFileName)
 
 OString createFileNameFromType( const OString& destination,
                                 const OString& typeName,
-                                const OString& postfix,
-                                bool bLowerCase )
+                                const OString& postfix )
 {
     OString type(typeName.replace('.', '/'));
-
-    if (bLowerCase)
-    {
-        type = typeName.toAsciiLowerCase();
-    }
 
     sal_uInt32 length = destination.getLength();
 
@@ -96,13 +90,13 @@ OString createFileNameFromType( const OString& destination,
     if (bWithPoint)
         fileNameBuf.append('.');
     else
-        fileNameBuf.append(destination.getStr(), destination.getLength());
+        fileNameBuf.append(destination);
 
     if (bWithSeparator)
-        fileNameBuf.append("/", 1);
+        fileNameBuf.append("/");
 
-    fileNameBuf.append(type.getStr(), type.getLength());
-    fileNameBuf.append(postfix.getStr(), postfix.getLength());
+    fileNameBuf.append(type);
+    fileNameBuf.append(postfix);
 
     OString fileName(fileNameBuf.makeStringAndClear());
 
@@ -120,7 +114,7 @@ OString createFileNameFromType( const OString& destination,
     sal_Int32 nIndex = 0;
     do
     {
-        buffer.append(fileName.getToken(0, token, nIndex).getStr());
+        buffer.append(fileName.getToken(0, token, nIndex));
         if( nIndex == -1 )
             break;
 
@@ -133,7 +127,7 @@ OString createFileNameFromType( const OString& destination,
 #if defined(SAL_UNX)
         if (mkdir(buffer.getStr(), 0777) == -1)
 #else
-        if (mkdir((char*)buffer.getStr()) == -1)
+        if (mkdir(buffer.getStr()) == -1)
 #endif
         {
             if ( errno == ENOENT )
@@ -141,7 +135,7 @@ OString createFileNameFromType( const OString& destination,
         }
 
         buffer.append(token);
-    } while( nIndex != -1 );
+    } while(true);
 
     OUString uSysFileName;
     OSL_VERIFY( FileBase::getSystemPathFromFileURL(
@@ -162,7 +156,7 @@ bool fileExists(const OString& fileName)
     return false;
 }
 
-bool checkFileContent(const OString& targetFileName, const OString& tmpFileName)
+static bool checkFileContent(const OString& targetFileName, const OString& tmpFileName)
 {
     FILE  *target = fopen(targetFileName.getStr(), "r");
     FILE  *tmp = fopen(tmpFileName.getStr(), "r");
@@ -220,10 +214,7 @@ bool makeValidTypeFile(const OString& targetFileName, const OString& tmpFileName
 
 bool removeTypeFile(const OString& fileName)
 {
-    if ( !unlink(fileName.getStr()) )
-        return true;
-
-    return false;
+    return unlink(fileName.getStr()) == 0;
 }
 
 OUString convertToFileUrl(const OString& fileName)
@@ -273,12 +264,9 @@ FileStream::~FileStream()
         osl_closeFile(m_file);
 }
 
-bool FileStream::isValid()
+bool FileStream::isValid() const
 {
-    if ( m_file )
-        return true;
-
-    return false;
+    return m_file != nullptr;
 }
 
 void FileStream::createTempFile(const OString& sPath)
@@ -294,7 +282,7 @@ void FileStream::createTempFile(const OString& sPath)
 
     if (osl_createTempFile(sTmpPath.pData, &m_file, &sTmpName.pData) == osl_File_E_None) {
 #ifdef SAL_UNX
-        sal_uInt64 uAttr = osl_File_Attribute_OwnWrite |
+        sal_uInt64 const uAttr = osl_File_Attribute_OwnWrite |
                            osl_File_Attribute_OwnRead |
                            osl_File_Attribute_GrpWrite |
                            osl_File_Attribute_GrpRead |
@@ -336,7 +324,7 @@ bool FileStream::write(void const * buffer, sal_uInt64 size) {
 
 FileStream &operator<<(FileStream& o, sal_uInt32 i) {
     sal_uInt64 writtenBytes;
-    OString s = OString::number((sal_Int32)i);
+    OString s = OString::number(static_cast<sal_Int32>(i));
     osl_writeFile(o.m_file, s.getStr(), s.getLength() * sizeof(sal_Char), &writtenBytes);
     return o;
 }
@@ -345,30 +333,30 @@ FileStream &operator<<(FileStream& o, char const * s) {
     osl_writeFile(o.m_file, s, strlen(s), &writtenBytes);
     return o;
 }
-FileStream &operator<<(FileStream& o, ::rtl::OString* s) {
+FileStream &operator<<(FileStream& o, OString const * s) {
     sal_uInt64 writtenBytes;
     osl_writeFile(o.m_file, s->getStr(), s->getLength() * sizeof(sal_Char), &writtenBytes);
     return o;
 }
-FileStream &operator<<(FileStream& o, const ::rtl::OString& s) {
+FileStream &operator<<(FileStream& o, const OString& s) {
     sal_uInt64 writtenBytes;
     osl_writeFile(o.m_file, s.getStr(), s.getLength() * sizeof(sal_Char), &writtenBytes);
     return o;
 
 }
-FileStream &operator<<(FileStream& o, ::rtl::OStringBuffer* s) {
+FileStream &operator<<(FileStream& o, OStringBuffer const * s) {
     sal_uInt64 writtenBytes;
     osl_writeFile(o.m_file, s->getStr(), s->getLength() * sizeof(sal_Char), &writtenBytes);
     return o;
 }
-FileStream &operator<<(FileStream& o, const ::rtl::OStringBuffer& s) {
+FileStream &operator<<(FileStream& o, const OStringBuffer& s) {
     sal_uInt64 writtenBytes;
     osl_writeFile(
         o.m_file, s.getStr(), s.getLength() * sizeof(sal_Char), &writtenBytes);
     return o;
 }
 
-FileStream & operator <<(FileStream & out, rtl::OUString const & s) {
+FileStream & operator <<(FileStream & out, OUString const & s) {
     return out << OUStringToOString(s, RTL_TEXTENCODING_UTF8);
 }
 

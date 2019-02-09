@@ -22,23 +22,17 @@
 
 #include <sfx2/dockwin.hxx>
 #include <vcl/fixed.hxx>
-#include <svtools/stdctrl.hxx>
 #include <tools/fract.hxx>
-#include <vcl/group.hxx>
 #include <sfx2/ctrlitem.hxx>
 
 #include <vcl/button.hxx>
 #include <vcl/field.hxx>
-#include <svx/dlgctrl.hxx>
-#include <sfx2/progress.hxx>
 
 #include <vcl/lstbox.hxx>
 
-#include "sdresid.hxx"
-#include "misc/scopelock.hxx"
+#include <misc/scopelock.hxx>
 
 class SdDrawDocument;
-class BitmapEx;
 
 namespace sd {
 
@@ -66,11 +60,11 @@ private:
 
 public:
     SdDisplay(vcl::Window* pWin);
-    virtual ~SdDisplay();
+    virtual ~SdDisplay() override;
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect ) override;
 
-    void    SetBitmapEx( BitmapEx* pBmpEx );
+    void    SetBitmapEx( BitmapEx const * pBmpEx );
     void    SetScale( const Fraction& rFrac );
 
     virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
@@ -84,7 +78,7 @@ class AnimationWindow : public SfxDockingWindow
 
 public:
     AnimationWindow(SfxBindings* pBindings, SfxChildWindow *pCW, vcl::Window* pParent);
-    virtual ~AnimationWindow();
+    virtual ~AnimationWindow() override;
     virtual void dispose() override;
 
     void    AddObj( ::sd::View& rView );
@@ -95,7 +89,6 @@ public:
 protected:
     virtual bool    Close() override;
     virtual void    Resize() override;
-    virtual void    FillInfo( SfxChildWinInfo& ) const override;
 
 private:
     VclPtr<SdDisplay>      m_pCtlDisplay;
@@ -119,30 +112,28 @@ private:
     VclPtr<ListBox>        m_pLbAdjustment;
     VclPtr<PushButton>     m_pBtnCreateGroup;
 
-    VclPtr<vcl::Window>    pWin;
-    ::std::vector< ::std::pair<BitmapEx*, ::tools::Time*> > m_FrameList;
+    ::std::vector< ::std::pair<BitmapEx, ::tools::Time> > m_FrameList;
     static const size_t EMPTY_FRAMELIST;
     size_t          m_nCurrentFrame;
-    SdDrawDocument* pMyDoc;
+    std::unique_ptr<SdDrawDocument> pMyDoc;
 
     bool            bMovie;
     bool            bAllObjects;
 
-    SfxBindings*                pBindings;
-    AnimationControllerItem*    pControllerItem;
+    std::unique_ptr<AnimationControllerItem> pControllerItem;
 
     ScopeLock       maPlayLock;
 
-    DECL_LINK_TYPED( ClickFirstHdl, Button*, void );
-    DECL_LINK_TYPED( ClickStopHdl, Button*, void );
-    DECL_LINK_TYPED( ClickPlayHdl, Button*, void );
-    DECL_LINK_TYPED( ClickLastHdl, Button*, void );
-    DECL_LINK_TYPED( ClickGetObjectHdl, Button*, void );
-    DECL_LINK_TYPED( ClickRemoveBitmapHdl, Button*, void );
-    DECL_LINK_TYPED( ClickRbtHdl, Button*, void );
-    DECL_LINK_TYPED( ClickCreateGroupHdl, Button*, void );
-    DECL_LINK_TYPED( ModifyBitmapHdl, Edit&, void );
-    DECL_LINK_TYPED( ModifyTimeHdl, Edit&, void );
+    DECL_LINK( ClickFirstHdl, Button*, void );
+    DECL_LINK( ClickStopHdl, Button*, void );
+    DECL_LINK( ClickPlayHdl, Button*, void );
+    DECL_LINK( ClickLastHdl, Button*, void );
+    DECL_LINK( ClickGetObjectHdl, Button*, void );
+    DECL_LINK( ClickRemoveBitmapHdl, Button*, void );
+    DECL_LINK( ClickRbtHdl, Button*, void );
+    DECL_LINK( ClickCreateGroupHdl, Button*, void );
+    DECL_LINK( ModifyBitmapHdl, Edit&, void );
+    DECL_LINK( ModifyTimeHdl, Edit&, void );
 
     void            UpdateControl(bool bDisableCtrls = false);
     void            ResetAttrs();

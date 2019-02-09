@@ -21,7 +21,7 @@
 
 #include <svl/poolitem.hxx>
 #include <rtl/ustring.hxx>
-#include <com/sun/star/uno/Sequence.h>
+#include <com/sun/star/uno/Sequence.hxx>
 #include <editeng/editengdllapi.h>
 
 // class SvxFontListItem -------------------------------------------------
@@ -42,11 +42,8 @@ private:
     css::uno::Sequence< OUString >  aFontNameSeq;
 
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxFontListItem( const FontList* pFontLst,
                      const sal_uInt16 nId  );
-    SvxFontListItem( const SvxFontListItem& rItem );
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
@@ -54,9 +51,9 @@ public:
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     const FontList*         GetFontList() const { return pFontList; }
 };

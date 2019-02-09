@@ -22,7 +22,6 @@
 
 #include <sal/types.h>
 #include <basegfx/numeric/ftools.hxx>
-#include <algorithm>
 #include <basegfx/basegfxdllapi.h>
 
 namespace basegfx
@@ -68,25 +67,12 @@ namespace basegfx
             mfY( fY )
         {}
 
-        /** Create a copy of a 2D Tuple
-
-            @param rTup
-            The 2D Tuple which will be copied.
-        */
-        B2DTuple(const B2DTuple& rTup)
-        :   mfX( rTup.mfX ),
-            mfY( rTup.mfY )
-        {}
-
         /** Create a copy of a 2D integer Tuple
 
             @param rTup
             The 2D Tuple which will be copied.
         */
         BASEGFX_DLLPUBLIC explicit B2DTuple(const B2ITuple& rTup);
-
-        ~B2DTuple()
-        {}
 
         /// Get X-Coordinate of 2D Tuple
         double getX() const
@@ -206,13 +192,6 @@ namespace basegfx
         bool operator!=( const B2DTuple& rTup ) const
         {
             return mfX != rTup.mfX || mfY != rTup.mfY;
-        }
-
-        B2DTuple& operator=( const B2DTuple& rTup )
-        {
-            mfX = rTup.mfX;
-            mfY = rTup.mfY;
-            return *this;
         }
 
         BASEGFX_DLLPUBLIC static const B2DTuple& getEmptyTuple();

@@ -17,11 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/core/relationshandler.hxx"
+#include <sal/config.h>
+
+#include <string_view>
+
+#include <oox/core/relationshandler.hxx>
 
 #include <rtl/ustrbuf.hxx>
-#include <osl/diagnose.h>
-#include "oox/helper/attributelist.hxx"
+#include <sal/log.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 namespace core {
@@ -42,21 +48,21 @@ OUString lclGetRelationsPath( const OUString& rFragmentPath )
     return
         OUStringBuffer( rFragmentPath.copy( 0, nPathLen ) ).    // file path including slash
         append( "_rels/" ).                                // additional '_rels/' path
-        append( rFragmentPath.copy( nPathLen ) ).               // file name after path
+        append( std::u16string_view(rFragmentPath).substr(nPathLen) ).               // file name after path
         append( ".rels" ).                                 // '.rels' suffix
         makeStringAndClear();
 }
 
 } // namespace
 
-RelationsFragment::RelationsFragment( XmlFilterBase& rFilter, RelationsRef xRelations ) :
+RelationsFragment::RelationsFragment( XmlFilterBase& rFilter, const RelationsRef& xRelations ) :
     FragmentHandler( rFilter, lclGetRelationsPath( xRelations->getFragmentPath() ), xRelations ),
     mxRelations( xRelations )
 {
 }
 
 Reference< XFastContextHandler > RelationsFragment::createFastChildContext(
-        sal_Int32 nElement, const Reference< XFastAttributeList >& rxAttribs ) throw (SAXException, RuntimeException, std::exception)
+        sal_Int32 nElement, const Reference< XFastAttributeList >& rxAttribs )
 {
     Reference< XFastContextHandler > xRet;
     AttributeList aAttribs( rxAttribs );
@@ -71,13 +77,13 @@ Reference< XFastContextHandler > RelationsFragment::createFastChildContext(
             if( !aRelation.maId.isEmpty() && !aRelation.maType.isEmpty() && !aRelation.maTarget.isEmpty() )
             {
                 sal_Int32 nTargetMode = aAttribs.getToken( XML_TargetMode, XML_Internal );
-                OSL_ENSURE( (nTargetMode == XML_Internal) || (nTargetMode == XML_External),
+                SAL_WARN_IF( (nTargetMode != XML_Internal) && (nTargetMode != XML_External), "oox",
                     "RelationsFragment::createFastChildContext - unexpected target mode, assuming external" );
                 aRelation.mbExternal = nTargetMode != XML_Internal;
 
-                OSL_ENSURE( mxRelations->count( aRelation.maId ) == 0,
+                SAL_WARN_IF( mxRelations->count( aRelation.maId ) != 0, "oox",
                     "RelationsFragment::createFastChildContext - relation identifier exists already" );
-                mxRelations->insert( ::std::map< OUString, Relation >::value_type( aRelation.maId, aRelation ) );
+                mxRelations->emplace( aRelation.maId, aRelation );
             }
         }
         break;

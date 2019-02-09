@@ -32,7 +32,7 @@ class SwTextPainter : public SwTextCursor
                                 long nAdjustBaseLine = 0 );
 protected:
     void CtorInitTextPainter( SwTextFrame *pFrame, SwTextPaintInfo *pInf );
-    explicit SwTextPainter(SwTextNode* pTextNode)
+    explicit SwTextPainter(SwTextNode const * pTextNode)
         : SwTextCursor(pTextNode)
         , bPaintDrop(false)
     {
@@ -40,7 +40,7 @@ protected:
 
 public:
     SwTextPainter(SwTextFrame *pTextFrame, SwTextPaintInfo *pTextPaintInf)
-        : SwTextCursor(pTextFrame->GetTextNode())
+        : SwTextCursor(pTextFrame->GetTextNodeFirst())
     {
         CtorInitTextPainter( pTextFrame, pTextPaintInf );
     }
@@ -51,11 +51,11 @@ public:
     // surrounding SwBidiPortion
     void PaintMultiPortion( const SwRect &rPaint, SwMultiPortion& rMulti,
                             const SwMultiPortion* pEnvPor = nullptr );
-    inline void SetPaintDrop( const bool bNew ) { bPaintDrop = bNew; }
-    inline bool IsPaintDrop() const { return bPaintDrop; }
-    inline SwTextPaintInfo &GetInfo()
+    void SetPaintDrop( const bool bNew ) { bPaintDrop = bNew; }
+    bool IsPaintDrop() const { return bPaintDrop; }
+    SwTextPaintInfo &GetInfo()
         { return static_cast<SwTextPaintInfo&>(SwTextIter::GetInfo()); }
-    inline const SwTextPaintInfo &GetInfo() const
+    const SwTextPaintInfo &GetInfo() const
         { return static_cast<const SwTextPaintInfo&>(SwTextIter::GetInfo()); }
 };
 

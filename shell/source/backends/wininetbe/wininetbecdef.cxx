@@ -18,7 +18,7 @@
  */
 
 
-#include <wininetbackend.hxx>
+#include "wininetbackend.hxx"
 #include <com/sun/star/registry/XRegistryKey.hpp>
 
 #include <cppuhelper/implementationentry.hxx>
@@ -27,7 +27,7 @@
 namespace uno = com::sun::star::uno ;
 
 
-static uno::Reference<uno::XInterface> SAL_CALL createWinInetBackend(
+static uno::Reference<uno::XInterface> createWinInetBackend(
     const uno::Reference<uno::XComponentContext>&){
 
     return * WinInetBackend::createInstance();
@@ -41,14 +41,14 @@ static const cppu::ImplementationEntry kImplementations_entries[] =
         WinInetBackend::getBackendName,
         WinInetBackend::getBackendServiceNames,
         cppu::createSingleComponentFactory,
-        NULL,
+        nullptr,
         0
     },
-    { NULL, NULL, NULL, NULL, NULL, 0 }
+    { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
 } ;
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL wininetbe1_component_getFactory( const sal_Char *aImplementationName,
+extern "C" SAL_DLLPUBLIC_EXPORT void * wininetbe1_component_getFactory( const sal_Char *aImplementationName,
     void *aServiceManager,
     void *aRegistryKey) {
 

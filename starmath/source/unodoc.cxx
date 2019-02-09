@@ -17,30 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <sfx2/docfac.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include "register.hxx"
-#include "smdll.hxx"
-#include "document.hxx"
-#include <osl/mutex.hxx>
+#include <smdll.hxx>
+#include <document.hxx>
 #include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
 
-OUString SAL_CALL SmDocument_getImplementationName() throw()
+OUString SmDocument_getImplementationName() throw()
 {
     return OUString( "com.sun.star.comp.Math.FormulaDocument" );
 }
 
-uno::Sequence< OUString > SAL_CALL SmDocument_getSupportedServiceNames() throw()
+uno::Sequence< OUString > SmDocument_getSupportedServiceNames() throw()
 {
     return uno::Sequence<OUString>{ "com.sun.star.formula.FormulaProperties" };
 }
 
-uno::Reference< uno::XInterface > SAL_CALL SmDocument_createInstance(
-                const uno::Reference< lang::XMultiServiceFactory > & /*rSMgr*/, SfxModelFlags _nCreationFlags ) throw( uno::Exception )
+uno::Reference< uno::XInterface > SmDocument_createInstance(
+                const uno::Reference< lang::XMultiServiceFactory > & /*rSMgr*/, SfxModelFlags _nCreationFlags )
 {
     SolarMutexGuard aGuard;
     SmGlobals::ensure();

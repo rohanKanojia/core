@@ -18,17 +18,16 @@
  */
 #include <sal/types.h>
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
 #include <cppuhelper/implementationentry.hxx>
-#include "ReportDefinition.hxx"
-#include "FormattedField.hxx"
-#include "FixedText.hxx"
-#include "ImageControl.hxx"
-#include "FormatCondition.hxx"
-#include "ReportEngineJFree.hxx"
-#include "Function.hxx"
-#include "Shape.hxx"
-#include "FixedLine.hxx"
+#include <ReportDefinition.hxx>
+#include <FormattedField.hxx>
+#include <FixedText.hxx>
+#include <ImageControl.hxx>
+#include <FormatCondition.hxx>
+#include <ReportEngineJFree.hxx>
+#include <Function.hxx>
+#include <Shape.hxx>
+#include <FixedLine.hxx>
 
 /********************************************************************************************/
 
@@ -42,7 +41,7 @@ using namespace ::com::sun::star::registry;
 namespace
 {
 
-cppu::ImplementationEntry entries[] = {
+cppu::ImplementationEntry const entries[] = {
     { &OReportDefinition::create, &OReportDefinition::getImplementationName_Static, &OReportDefinition::getSupportedServiceNames_Static,
         &cppu::createSingleComponentFactory, nullptr, 0 },
     { &OFormattedField::create, &OFormattedField::getImplementationName_Static, &OFormattedField::getSupportedServiceNames_Static,
@@ -67,7 +66,7 @@ cppu::ImplementationEntry entries[] = {
 
 extern "C"
 {
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL rpt_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * rpt_component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return cppu::component_getFactoryHelper(

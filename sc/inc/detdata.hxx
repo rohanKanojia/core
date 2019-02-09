@@ -37,7 +37,7 @@ enum ScDetOpType
 class ScDetOpData
 {
     ScAddress       aPos;
-    ScDetOpType     eOperation;
+    ScDetOpType const eOperation;
 
 public:
                         ScDetOpData( const ScAddress& rP, ScDetOpType eOp ) :
@@ -65,11 +65,10 @@ class ScDetOpList
 public:
         ScDetOpList() : bHasAddError(false) {}
         ScDetOpList(const ScDetOpList& rList);
-        ~ScDetOpList() {}
 
     void    DeleteOnTab( SCTAB nTab );
-    void    UpdateReference( ScDocument* pDoc, UpdateRefMode eUpdateRefMode,
-                                const ScRange& rRange, SCsCOL nDx, SCsROW nDy, SCsTAB nDz );
+    void    UpdateReference( const ScDocument* pDoc, UpdateRefMode eUpdateRefMode,
+                             const ScRange& rRange, SCCOL nDx, SCROW nDy, SCTAB nDz );
 
     bool        operator==( const ScDetOpList& r ) const;       // for ref-undo
 

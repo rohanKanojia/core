@@ -19,14 +19,16 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_CUICHARMAP_HXX
 #define INCLUDED_CUI_SOURCE_INC_CUICHARMAP_HXX
 
-#include <vcl/ctrl.hxx>
-#include <vcl/metric.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/virdev.hxx>
 #include <sfx2/basedlgs.hxx>
+#include <svl/itemset.hxx>
 #include <svx/charmap.hxx>
+#include <svx/searchcharmap.hxx>
+#include <sfx2/charwin.hxx>
 
+using namespace ::com::sun::star;
 class SubsetMap;
 
 #define CHARMAP_MAXLEN  32
@@ -36,70 +38,110 @@ namespace svx
     struct SvxShowCharSetItem;
 }
 
-class SvxShowText : public Control
+class SvxShowText : public weld::CustomWidgetController
 {
-public:
-    SvxShowText(vcl::Window* pParent);
+private:
+    ScopedVclPtr<VirtualDevice> m_xVirDev;
+    OUString m_sText;
+    long mnY;
+    bool mbCenter;
+    vcl::Font m_aFont;
 
-    void            SetFont( const vcl::Font& rFont );
-    void            SetText( const OUString& rText ) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
+    virtual void Resize() override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+public:
+    SvxShowText(const VclPtr<VirtualDevice>& rVirDev);
+
+    void            SetFont(const vcl::Font& rFont);
+    vcl::Font const & GetFont() const { return m_aFont; }
+    void            SetText(const OUString& rText);
+    OUString const & GetText() const { return m_sText; }
     void            SetCentered(bool bCenter) { mbCenter = bCenter; }
 
-    virtual void    Resize() override;
-
-    virtual Size    GetOptimalSize() const override;
-
-protected:
-    virtual void    Paint(vcl::RenderContext& rRenderContext, const Rectangle&) override;
-
-private:
-    long            mnY;
-    bool            mbCenter;
-    vcl::Font       maFont;
-
+    Size            get_preferred_size() const { return GetDrawingArea()->get_preferred_size(); }
 };
 
 /** The main purpose of this dialog is to enable the use of characters
     that are not easily accessible from the keyboard. */
-class SvxCharacterMap : public SfxModalDialog
+class SvxCharacterMap : public SfxDialogController
 {
 private:
 
     void            init();
 
-    VclPtr<SvxShowCharSet> m_pShowSet;
-    VclPtr<Edit>           m_pShowText;
-    VclPtr<PushButton>     m_pOKBtn;
-    VclPtr<FixedText>      m_pFontText;
-    VclPtr<ListBox>        m_pFontLB;
-    VclPtr<FixedText>      m_pSubsetText;
-    VclPtr<ListBox>        m_pSubsetLB;
-    VclPtr<FixedText>      m_pSymbolText;
-    VclPtr<SvxShowText>    m_pShowChar;
-    VclPtr<Edit>           m_pHexCodeText;
-    VclPtr<Edit>           m_pDecimalCodeText;
-    vcl::Font       aFont;
-    bool            bOne;
-    const SubsetMap* pSubsetMap;
+    ScopedVclPtr<VirtualDevice> m_xVirDev;
+    vcl::Font           aFont;
+    std::unique_ptr<const SubsetMap> pSubsetMap;
+    bool                isSearchMode;
+    bool                m_bHasInsert;
+    std::deque<OUString> maRecentCharList;
+    std::deque<OUString> maRecentCharFontList;
+    std::deque<OUString> maFavCharList;
+    std::deque<OUString> maFavCharFontList;
+    uno::Reference< uno::XComponentContext > mxContext;
+
+    SvxCharView m_aRecentCharView[16];
+    SvxCharView m_aFavCharView[16];
+    SvxShowText m_aShowChar;
+
+    std::unique_ptr<weld::Button>   m_xOKBtn;
+    std::unique_ptr<weld::Label>    m_xFontText;
+    std::unique_ptr<weld::ComboBox> m_xFontLB;
+    std::unique_ptr<weld::Label>    m_xSubsetText;
+    std::unique_ptr<weld::ComboBox> m_xSubsetLB;
+    std::unique_ptr<weld::Entry>    m_xSearchText;
+    std::unique_ptr<weld::Entry>    m_xHexCodeText;
+    std::unique_ptr<weld::Entry>    m_xDecimalCodeText;
+    std::unique_ptr<weld::Button>   m_xFavouritesBtn;
+    std::unique_ptr<weld::Label>    m_xCharName;
+    std::unique_ptr<weld::Widget>   m_xRecentGrid;
+    std::unique_ptr<weld::Widget>   m_xFavGrid;
+    std::unique_ptr<weld::CustomWeld> m_xShowChar;
+    std::unique_ptr<weld::CustomWeld> m_xRecentCharView[16];
+    std::unique_ptr<weld::CustomWeld>    m_xFavCharView[16];
+    std::unique_ptr<SvxShowCharSet> m_xShowSet;
+    std::unique_ptr<weld::CustomWeld> m_xShowSetArea;
+    std::unique_ptr<SvxSearchCharSet> m_xSearchSet;
+    std::unique_ptr<weld::CustomWeld> m_xSearchSetArea;
+
+    std::unique_ptr<SfxAllItemSet>  m_xOutputSet;
+
     enum class Radix : sal_Int16 {decimal = 10, hexadecimal=16};
 
-    DECL_LINK_TYPED(OKHdl, Button*, void);
-    DECL_LINK_TYPED(FontSelectHdl, ListBox&, void);
-    DECL_LINK_TYPED(SubsetSelectHdl, ListBox&, void);
-    DECL_LINK_TYPED(CharDoubleClickHdl, SvxShowCharSet*,void);
-    DECL_LINK_TYPED(CharSelectHdl, SvxShowCharSet*, void);
-    DECL_LINK_TYPED(CharHighlightHdl, SvxShowCharSet*, void);
-    DECL_LINK_TYPED(CharPreSelectHdl, SvxShowCharSet*, void);
-    DECL_LINK_TYPED(DecimalCodeChangeHdl, Edit&, void);
-    DECL_LINK_TYPED(HexCodeChangeHdl, Edit&, void);
+    DECL_LINK(FontSelectHdl, weld::ComboBox&, void);
+    DECL_LINK(SubsetSelectHdl, weld::ComboBox&, void);
+    DECL_LINK(CharDoubleClickHdl, SvxShowCharSet*,void);
+    DECL_LINK(CharSelectHdl, SvxShowCharSet*, void);
+    DECL_LINK(CharHighlightHdl, SvxShowCharSet*, void);
+    DECL_LINK(CharPreSelectHdl, SvxShowCharSet*, void);
+    DECL_LINK(FavClickHdl, SvxShowCharSet*,void);
+    DECL_LINK(SearchCharDoubleClickHdl, SvxShowCharSet*,void);
+    DECL_LINK(SearchCharSelectHdl, SvxShowCharSet*, void);
+    DECL_LINK(SearchCharHighlightHdl, SvxShowCharSet*, void);
+    DECL_LINK(SearchCharPreSelectHdl, SvxShowCharSet*, void);
+    DECL_LINK(DecimalCodeChangeHdl, weld::Entry&, void);
+    DECL_LINK(HexCodeChangeHdl, weld::Entry&, void);
+    DECL_LINK(CharClickHdl, SvxCharView*, void);
+    DECL_LINK(RecentClearClickHdl, SvxCharView*, void);
+    DECL_LINK(FavClearClickHdl, SvxCharView*, void);
+    DECL_LINK(RecentClearAllClickHdl, SvxCharView*, void);
+    DECL_LINK(FavClearAllClickHdl, SvxCharView*, void);
+    DECL_LINK(InsertClickHdl, weld::Button&, void);
+    DECL_LINK(FavSelectHdl, weld::Button&, void);
+    DECL_LINK(SearchUpdateHdl, weld::Entry&, void);
+    DECL_LINK(SearchFieldGetFocusHdl, weld::Widget&, void);
 
-    static void fillAllSubsets(ListBox &rListBox);
+    static void fillAllSubsets(weld::ComboBox& rListBox);
     void selectCharByCode(Radix radix);
 
 public:
-                    SvxCharacterMap( vcl::Window* pParent, bool bOne=true, const SfxItemSet* pSet=nullptr );
-    virtual         ~SvxCharacterMap();
-    virtual void    dispose() override;
+    SvxCharacterMap(weld::Window* pParent, const SfxItemSet* pSet, const bool bInsert=true);
+    virtual short run() override;
+
+    void set_title(const OUString& rTitle) { m_xDialog->set_title(rTitle); }
+
+    const SfxItemSet* GetOutputItemSet() const { return m_xOutputSet.get(); }
 
     void            DisableFontSelection();
 
@@ -109,9 +151,23 @@ public:
     void            SetChar( sal_UCS4 );
     sal_UCS4        GetChar() const;
 
-    OUString        GetCharacters() const;
+    void            getRecentCharacterList(); //gets both recent char and recent char font list
+    void            updateRecentCharacterList(const OUString& rChar, const OUString& rFont);
 
-    virtual short   Execute() override;
+    void            getFavCharacterList(); //gets both Fav char and Fav char font list
+    void            updateFavCharacterList(const OUString& rChar, const OUString& rFont);
+    void            deleteFavCharacterFromList(const OUString& rChar, const OUString& rFont);
+    bool            isFavChar(const OUString& sTitle, const OUString& rFont);
+
+    void            updateRecentCharControl();
+    void            insertCharToDoc(const OUString& sChar);
+
+    void            updateFavCharControl();
+    void            setFavButtonState(const OUString& sTitle, const OUString& rFont);
+
+    void            setCharName(sal_UCS4 nDecimalValue);
+
+    void            toggleSearchView(bool state);
 };
 
 #endif

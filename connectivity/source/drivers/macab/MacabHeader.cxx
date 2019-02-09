@@ -36,7 +36,7 @@ MacabHeader::MacabHeader(const sal_Int32 _size, macabfield **_fields)
 {
     sal_Int32 i;
     size = _size;
-    fields = new macabfield *[size];
+    fields = std::make_unique<macabfield *[]>(size);
     for(i = 0; i < size; i++)
     {
         if(_fields[i] == nullptr)
@@ -86,7 +86,7 @@ void MacabHeader::operator+= (const MacabHeader *r)
         {
             sal_Int32 i;
             size = rSize;
-            fields = new macabfield *[size];
+            fields = std::make_unique<macabfield *[]>(size);
             for(i = 0; i < size; i++)
             {
                 fields[i] = r->copy(i);
@@ -132,9 +132,8 @@ void MacabHeader::operator+= (const MacabHeader *r)
             }
 
             releaseFields();
-            delete [] fields;
             size += numAdded;
-            fields = newFields;
+            fields.reset(newFields);
         }
     }
 }
@@ -230,7 +229,7 @@ macabfield **MacabHeader::sortRecord(const sal_Int32 _start, const sal_Int32 _le
         }
         if(_length == size)
         {
-            fields = sorted;
+            fields.reset(sorted);
         }
         delete firstHalf;
         delete lastHalf;
@@ -260,7 +259,7 @@ sal_Int32 MacabHeader::compareFields(const macabfield *_field1, const macabfield
         static_cast<CFStringRef>(_field2->value),
         0); // 0 = no options (like ignore case)
 
-    return (sal_Int32) result;
+    return static_cast<sal_Int32>(result);
 }
 
 

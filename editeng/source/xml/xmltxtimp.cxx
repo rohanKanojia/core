@@ -24,6 +24,7 @@
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/text/XText.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <comphelper/processfactory.hxx>
 #include <unotools/streamwrap.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -36,11 +37,14 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmlstyle.hxx>
 #include "editsource.hxx"
-#include "editxml.hxx"
+#include <editxml.hxx>
+#include <editdoc.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/unotext.hxx>
 #include <editeng/unoprnms.hxx>
 #include <editeng/unoipset.hxx>
+#include <cassert>
+#include <unomodel.hxx>
 
 using namespace com::sun::star;
 using namespace com::sun::star::document;
@@ -55,33 +59,26 @@ using namespace xmloff::token;
 class SvxXMLTextImportContext : public SvXMLImportContext
 {
 public:
-    SvxXMLTextImportContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName, const uno::Reference< XAttributeList >& xAttrList, const uno::Reference< XText >& xText );
-    virtual ~SvxXMLTextImportContext();
+    SvxXMLTextImportContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName, const uno::Reference< XText >& xText );
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const uno::Reference< XAttributeList >& xAttrList ) override;
-
-//  SvxXMLXTableImport& getImport() const { return *(SvxXMLXTableImport*)&GetImport(); }
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const uno::Reference< XAttributeList >& xAttrList ) override;
 
 private:
     const uno::Reference< XText > mxText;
 };
 
 
-SvxXMLTextImportContext::SvxXMLTextImportContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName, const uno::Reference< XAttributeList >&, const uno::Reference< XText >& xText )
+SvxXMLTextImportContext::SvxXMLTextImportContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLName, const uno::Reference< XText >& xText )
 : SvXMLImportContext( rImport, nPrfx, rLName ), mxText( xText )
 {
 }
 
-SvxXMLTextImportContext::~SvxXMLTextImportContext()
-{
-}
-
-SvXMLImportContext *SvxXMLTextImportContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const uno::Reference< XAttributeList >& xAttrList )
+SvXMLImportContextRef SvxXMLTextImportContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const uno::Reference< XAttributeList >& xAttrList )
 {
     SvXMLImportContext* pContext = nullptr;
     if(XML_NAMESPACE_OFFICE == nPrefix && IsXMLToken( rLocalName, XML_BODY ) )
     {
-        pContext = new SvxXMLTextImportContext( GetImport(), nPrefix, rLocalName, xAttrList, mxText );
+        pContext = new SvxXMLTextImportContext( GetImport(), nPrefix, rLocalName, mxText );
     }
     else if( XML_NAMESPACE_OFFICE == nPrefix && IsXMLToken( rLocalName, XML_AUTOMATIC_STYLES ) )
     {
@@ -108,12 +105,29 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         const uno::Reference< XText > & rText );
 
-    virtual ~SvxXMLXTextImportComponent() throw ();
+    virtual SvXMLImportContext *CreateDocumentContext( sal_uInt16 nPrefix,
+        const OUString& rLocalName, const uno::Reference< xml::sax::XAttributeList >& xAttrList )  override;
 
 private:
     const uno::Reference< XText > mxText;
 };
 
+SvXMLImportContext *SvxXMLXTextImportComponent::CreateDocumentContext(
+        sal_uInt16 const nPrefix, const OUString& rLocalName,
+        const uno::Reference< xml::sax::XAttributeList >& /*xAttrList*/)
+{
+    SvXMLImportContext* pContext = nullptr;
+
+    if(XML_NAMESPACE_OFFICE == nPrefix && IsXMLToken( rLocalName, XML_DOCUMENT_CONTENT ) )
+    {
+        pContext = new SvxXMLTextImportContext( *this, nPrefix, rLocalName, mxText );
+    }
+
+    if( nullptr == pContext )
+        pContext = new SvXMLImportContext( *this, nPrefix, rLocalName );
+
+    return pContext;
+}
 
 SvxXMLXTextImportComponent::SvxXMLXTextImportComponent(
     const css::uno::Reference< css::uno::XComponentContext >& xContext,
@@ -122,13 +136,10 @@ SvxXMLXTextImportComponent::SvxXMLXTextImportComponent(
     mxText( xText )
 {
     GetTextImport()->SetCursor( mxText->createTextCursor() );
+    SvXMLImport::setTargetDocument(new SvxSimpleUnoModel);
 }
 
-SvxXMLXTextImportComponent::~SvxXMLXTextImportComponent() throw ()
-{
-}
-
-void SvxReadXML( EditEngine& rEditEngine, SvStream& rStream, const ESelection& rSel )
+EditPaM SvxReadXML( EditEngine& rEditEngine, SvStream& rStream, const ESelection& rSel )
 {
     SvxEditEngineSource aEditSource( &rEditEngine );
 
@@ -142,9 +153,20 @@ void SvxReadXML( EditEngine& rEditEngine, SvStream& rStream, const ESelection& r
     };
     static SvxItemPropertySet aSvxXMLTextImportComponentPropertySet( SvxXMLTextImportComponentPropertyMap, EditEngine::GetGlobalItemPool() );
 
+    assert(!rSel.HasRange());
+    //get the initial para count before paste
+    sal_uInt32 initialParaCount = rEditEngine.GetEditDoc().Count();
+    //insert para breaks before inserting the copied text
+    rEditEngine.InsertParaBreak( rEditEngine.CreateSelection( rSel ).Max() );
+    rEditEngine.InsertParaBreak( rEditEngine.CreateSelection( rSel ).Max() );
+
+    // Init return PaM.
+    EditPaM aPaM( rEditEngine.CreateSelection( rSel ).Max());
+
+    ESelection aSel(rSel.nStartPara+1, 0, rSel.nEndPara+1, 0);
     uno::Reference<text::XText > xParent;
     SvxUnoText* pUnoText = new SvxUnoText( &aEditSource, &aSvxXMLTextImportComponentPropertySet, xParent );
-    pUnoText->SetSelection( rSel );
+    pUnoText->SetSelection( aSel );
     uno::Reference<text::XText > xText( pUnoText );
 
     try
@@ -200,10 +222,25 @@ void SvxReadXML( EditEngine& rEditEngine, SvStream& rStream, const ESelection& r
             xParser->parseStream( aParserInput );
         }
         while(false);
+
+        //remove the extra para breaks
+        EditDoc& pDoc = rEditEngine.GetEditDoc();
+        rEditEngine.ParaAttribsToCharAttribs( pDoc.GetObject( rSel.nEndPara ) );
+        rEditEngine.ConnectParagraphs( pDoc.GetObject( rSel.nEndPara ),
+            pDoc.GetObject( rSel.nEndPara + 1 ), true );
+        rEditEngine.ParaAttribsToCharAttribs( pDoc.GetObject( pDoc.Count() - initialParaCount + aSel.nEndPara - 2 ) );
+        rEditEngine.ConnectParagraphs( pDoc.GetObject( pDoc.Count() - initialParaCount + aSel.nEndPara - 2 ),
+            pDoc.GetObject( pDoc.Count() - initialParaCount + aSel.nEndPara -1 ), true );
+
+        // The final join is to be returned.
+        aPaM = rEditEngine.ConnectParagraphs( pDoc.GetObject( pDoc.Count() - initialParaCount + aSel.nEndPara - 2 ),
+            pDoc.GetObject( pDoc.Count() - initialParaCount + aSel.nEndPara -1 ), true );
     }
     catch( const uno::Exception& )
     {
     }
+
+    return aPaM;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

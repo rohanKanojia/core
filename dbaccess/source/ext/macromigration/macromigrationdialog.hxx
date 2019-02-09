@@ -21,6 +21,7 @@
 #define INCLUDED_DBACCESS_SOURCE_EXT_MACROMIGRATION_MACROMIGRATIONDIALOG_HXX
 
 #include <com/sun/star/sdb/XOfficeDatabaseDocument.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <svtools/roadmapwizard.hxx>
 
@@ -50,9 +51,6 @@ namespace dbmm
         // OWizardMachine overridables
         virtual void            enterState( WizardState _nState ) override;
         virtual bool            prepareLeaveCurrentState( CommitPageReason _eReason ) override;
-        virtual bool            leaveState( WizardState _nState ) override;
-        virtual WizardState     determineNextState( WizardState _nCurrentState ) const override;
-        virtual bool            onFinish() override;
 
         // Dialog overridables
         virtual bool    Close() override;
@@ -65,10 +63,10 @@ namespace dbmm
         void    impl_reloadDocument_nothrow( bool _bMigrationSuccess );
 
     private:
-        DECL_LINK_TYPED( OnStartMigration, void*, void );
+        DECL_LINK( OnStartMigration, void*, void );
 
     private:
-        ::std::unique_ptr< MacroMigrationDialog_Data >    m_pData;
+        std::unique_ptr< MacroMigrationDialog_Data >    m_pData;
     };
 
 } // namespace dbmm

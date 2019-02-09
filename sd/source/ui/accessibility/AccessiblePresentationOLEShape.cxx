@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessiblePresentationOLEShape.hxx"
+#include <AccessiblePresentationOLEShape.hxx>
+#include <com/sun/star/accessibility/AccessibleRole.hpp>
 
-#include "SdShapeTypes.hxx"
+#include <SdShapeTypes.hxx>
 
 #include <svx/DescriptionGenerator.hxx>
+#include <svx/ShapeTypeHandler.hxx>
 #include <rtl/ustring.h>
 
 using namespace ::com::sun::star;
@@ -46,7 +48,6 @@ AccessiblePresentationOLEShape::~AccessiblePresentationOLEShape()
 
 OUString SAL_CALL
     AccessiblePresentationOLEShape::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("AccessiblePresentationOLEShape");
 }
@@ -54,7 +55,6 @@ OUString SAL_CALL
 /// Set this object's name if it is different to the current name.
 OUString
     AccessiblePresentationOLEShape::CreateAccessibleBaseName()
-    throw (css::uno::RuntimeException)
 {
     OUString sName;
 
@@ -82,7 +82,6 @@ OUString
 
 OUString
     AccessiblePresentationOLEShape::CreateAccessibleDescription()
-    throw (css::uno::RuntimeException, std::exception)
 {
     //    return createAccessibleName();
     DescriptionGenerator aDG (mxShape);
@@ -91,18 +90,18 @@ OUString
     {
         case PRESENTATION_OLE:
             aDG.Initialize ("PresentationOLEShape");
-            //SVX_RESSTR(RID_SVXSTR_A11Y_ST_RECTANGLE));
-            aDG.AddProperty ("CLSID" ,DescriptionGenerator::STRING);
+            //SvxResId(RID_SVXSTR_A11Y_ST_RECTANGLE));
+            aDG.AddProperty ("CLSID" ,DescriptionGenerator::PropertyType::String);
             break;
         case PRESENTATION_CHART:
             aDG.Initialize ("PresentationChartShape");
-            //SVX_RESSTR(RID_SVXSTR_A11Y_ST_RECTANGLE));
-            aDG.AddProperty ( "CLSID" , DescriptionGenerator::STRING);
+            //SvxResId(RID_SVXSTR_A11Y_ST_RECTANGLE));
+            aDG.AddProperty ( "CLSID" , DescriptionGenerator::PropertyType::String);
             break;
         case PRESENTATION_TABLE:
             aDG.Initialize ("PresentationTableShape");
-            //SVX_RESSTR(RID_SVXSTR_A11Y_ST_RECTANGLE));
-            aDG.AddProperty ("CLSID" , DescriptionGenerator::STRING);
+            //SvxResId(RID_SVXSTR_A11Y_ST_RECTANGLE));
+            aDG.AddProperty ("CLSID" , DescriptionGenerator::PropertyType::String);
             break;
         default:
             aDG.Initialize ("Unknown accessible presentation OLE shape");
@@ -119,7 +118,6 @@ OUString
 
 //  Return this object's role.
 sal_Int16 SAL_CALL AccessiblePresentationOLEShape::getAccessibleRole ()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return  AccessibleRole::EMBEDDED_OBJECT ;
 }

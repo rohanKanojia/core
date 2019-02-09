@@ -18,18 +18,14 @@
  */
 
 #include <sot/formats.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/sdbc/XDataSource.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/sdb/DatabaseContext.hpp>
 #include <com/sun/star/sdb/XQueriesSupplier.hpp>
-#include <com/sun/star/sdb/XDatabaseAccess.hpp>
-#include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/processfactory.hxx>
-#include <com/sun/star/sdb/XCompletedConnection.hpp>
+#include <comphelper/string.hxx>
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/container/XContainer.hpp>
 #include <cppuhelper/implbase.hxx>
@@ -40,13 +36,11 @@
 #include <view.hxx>
 #include <wrtsh.hxx>
 #include <dbtree.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/builderfactory.hxx>
 #include <vcl/svapp.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
-#include <helpid.h>
-#include <utlui.hrc>
+#include <bitmaps.hlst>
 
 #include <unomid.h>
 
@@ -67,21 +61,21 @@ class SwDBTreeList_Impl : public cppu::WeakImplHelper < XContainerListener >
     SwWrtShell* m_pWrtShell;
 
     public:
-        explicit SwDBTreeList_Impl(SwWrtShell* pShell)
-            : m_pWrtShell(pShell)
+        explicit SwDBTreeList_Impl()
+            : m_pWrtShell(nullptr)
         {
         }
-        virtual ~SwDBTreeList_Impl();
+        virtual ~SwDBTreeList_Impl() override;
 
-    virtual void SAL_CALL elementInserted( const ContainerEvent& Event ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL elementRemoved( const ContainerEvent& Event ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL elementReplaced( const ContainerEvent& Event ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL disposing( const EventObject& Source ) throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL elementInserted( const ContainerEvent& Event ) override;
+    virtual void SAL_CALL elementRemoved( const ContainerEvent& Event ) override;
+    virtual void SAL_CALL elementReplaced( const ContainerEvent& Event ) override;
+    virtual void SAL_CALL disposing( const EventObject& Source ) override;
 
     bool                        HasContext();
     SwWrtShell*                 GetWrtShell() { return m_pWrtShell;}
     void                        SetWrtShell(SwWrtShell& rSh) { m_pWrtShell = &rSh;}
-    Reference<XDatabaseContext>    GetContext() const {return m_xDatabaseContext;}
+    const Reference<XDatabaseContext>& GetContext() const {return m_xDatabaseContext;}
     Reference<XConnection>      GetConnection(const OUString& rSourceName);
 };
 
@@ -99,24 +93,24 @@ SwDBTreeList_Impl::~SwDBTreeList_Impl()
     }
 }
 
-void SwDBTreeList_Impl::elementInserted( const ContainerEvent&  ) throw (RuntimeException, std::exception)
+void SwDBTreeList_Impl::elementInserted( const ContainerEvent&  )
 {
     // information not needed
 }
 
-void SwDBTreeList_Impl::elementRemoved( const ContainerEvent& rEvent ) throw (RuntimeException, std::exception)
+void SwDBTreeList_Impl::elementRemoved( const ContainerEvent& rEvent )
 {
     SolarMutexGuard aGuard;
     OUString sSource;
     rEvent.Accessor >>= sSource;
 }
 
-void SwDBTreeList_Impl::disposing( const EventObject&  ) throw (RuntimeException, std::exception)
+void SwDBTreeList_Impl::disposing( const EventObject&  )
 {
     m_xDatabaseContext = nullptr;
 }
 
-void SwDBTreeList_Impl::elementReplaced( const ContainerEvent& rEvent ) throw (RuntimeException, std::exception)
+void SwDBTreeList_Impl::elementReplaced( const ContainerEvent& rEvent )
 {
     elementRemoved(rEvent);
 }
@@ -144,27 +138,19 @@ Reference<XConnection>  SwDBTreeList_Impl::GetConnection(const OUString& rSource
 
 SwDBTreeList::SwDBTreeList(vcl::Window *pParent, WinBits nStyle)
     : SvTreeListBox(pParent, nStyle)
-    , aImageList(SW_RES(ILIST_DB_DLG))
     , bInitialized(false)
     , bShowColumns(false)
-    , pImpl(new SwDBTreeList_Impl(nullptr))
+    , pImpl(new SwDBTreeList_Impl)
 {
     if (IsVisible())
         InitTreeList();
 }
 
-VCL_BUILDER_DECL_FACTORY(SwDBTreeList)
-{
-    WinBits nStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nStyle |= WB_BORDER;
-    rRet = VclPtr<SwDBTreeList>::Create(pParent, nStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SwDBTreeList, WB_TABSTOP)
 
 Size SwDBTreeList::GetOptimalSize() const
 {
-    return LogicToPixel(Size(100, 62), MapMode(MAP_APPFONT));
+    return LogicToPixel(Size(100, 62), MapMode(MapUnit::MapAppFont));
 }
 
 SwDBTreeList::~SwDBTreeList()
@@ -174,7 +160,6 @@ SwDBTreeList::~SwDBTreeList()
 
 void SwDBTreeList::dispose()
 {
-    delete pImpl;
     pImpl = nullptr;
     SvTreeListBox::dispose();
 }
@@ -183,38 +168,46 @@ void SwDBTreeList::InitTreeList()
 {
     if(!pImpl->HasContext() && pImpl->GetWrtShell())
         return;
-    SetSelectionMode(SINGLE_SELECTION);
+    SetSelectionMode(SelectionMode::Single);
     SetStyle(GetStyle()|WB_HASLINES|WB_CLIPCHILDREN|WB_HASBUTTONS|WB_HASBUTTONSATROOT|WB_HSCROLL);
     // don't set font, so that the Control's font is being applied!
     SetSpaceBetweenEntries(0);
-    SetNodeBitmaps( aImageList.GetImage(IMG_COLLAPSE),
-                    aImageList.GetImage(IMG_EXPAND  ) );
+    SetNodeBitmaps(Image(StockImage::Yes, RID_BMP_COLLAPSE),
+                   Image(StockImage::Yes, RID_BMP_EXPAND));
 
     SetDragDropMode(DragDropMode::APP_COPY);
 
     GetModel()->SetCompareHdl(LINK(this, SwDBTreeList, DBCompare));
 
     Sequence< OUString > aDBNames = pImpl->GetContext()->getElementNames();
+    auto const sort = comphelper::string::NaturalStringSorter(
+        comphelper::getProcessComponentContext(),
+        Application::GetSettings().GetUILanguageTag().getLocale());
+    std::sort(
+        aDBNames.begin(), aDBNames.end(),
+        [&sort](OUString const & x, OUString const & y)
+        { return sort.compare(x, y) < 0; });
     const OUString* pDBNames = aDBNames.getConstArray();
     long nCount = aDBNames.getLength();
 
-    Image aImg = aImageList.GetImage(IMG_DB);
+    Image aImg(StockImage::Yes, RID_BMP_DB);
     for(long i = 0; i < nCount; i++)
     {
         OUString sDBName(pDBNames[i]);
-        InsertEntry(sDBName, aImg, aImg, nullptr, true);
+        Reference<XConnection> xConnection = pImpl->GetConnection(sDBName);
+        if (xConnection.is())
+        {
+            InsertEntry(sDBName, aImg, aImg, nullptr, true);
+        }
     }
-    OUString sDBName(sDefDBName.getToken(0, DB_DELIM));
-    OUString sTableName(sDefDBName.getToken(1, DB_DELIM));
-    OUString sColumnName(sDefDBName.getToken(2, DB_DELIM));
-    Select(sDBName, sTableName, sColumnName);
+    Select(OUString(), OUString(), OUString());
 
     bInitialized = true;
 }
 
-void    SwDBTreeList::AddDataSource(const OUString& rSource)
+void SwDBTreeList::AddDataSource(const OUString& rSource)
 {
-    Image aImg = aImageList.GetImage(IMG_DB);
+    Image aImg(StockImage::Yes, RID_BMP_DB);
     SvTreeListEntry* pEntry = InsertEntry(rSource, aImg, aImg, nullptr, true);
     SvTreeListBox::Select(pEntry);
 }
@@ -343,7 +336,7 @@ void  SwDBTreeList::RequestingChildren(SvTreeListEntry* pParent)
                         OUString sTableName;
                         long nCount = aTableNames.getLength();
                         const OUString* pTableNames = aTableNames.getConstArray();
-                        Image aImg = aImageList.GetImage(IMG_DBTABLE);
+                        Image aImg(StockImage::Yes, RID_BMP_DBTABLE);
                         for (long i = 0; i < nCount; i++)
                         {
                             sTableName = pTableNames[i];
@@ -361,7 +354,7 @@ void  SwDBTreeList::RequestingChildren(SvTreeListEntry* pParent)
                         OUString sQueryName;
                         long nCount = aQueryNames.getLength();
                         const OUString* pQueryNames = aQueryNames.getConstArray();
-                        Image aImg = aImageList.GetImage(IMG_DBQUERY);
+                        Image aImg(StockImage::Yes, RID_BMP_DBQUERY);
                         for (long i = 0; i < nCount; i++)
                         {
                             sQueryName = pQueryNames[i];
@@ -378,7 +371,7 @@ void  SwDBTreeList::RequestingChildren(SvTreeListEntry* pParent)
     }
 }
 
-IMPL_LINK_TYPED( SwDBTreeList, DBCompare, const SvSortData&, rData, sal_Int32 )
+IMPL_LINK( SwDBTreeList, DBCompare, const SvSortData&, rData, sal_Int32 )
 {
     SvTreeListEntry* pRight = const_cast<SvTreeListEntry*>(rData.pRight);
 
@@ -460,18 +453,16 @@ void SwDBTreeList::StartDrag( sal_Int8 /*nAction*/, const Point& /*rPosPixel*/ )
     OUString sDBName( GetDBName( sTableName, sColumnName ));
     if (!sDBName.isEmpty())
     {
-        TransferDataContainer* pContainer = new TransferDataContainer;
-        css::uno::Reference< css::datatransfer::XTransferable > xRef( pContainer );
+        rtl::Reference<TransferDataContainer> pContainer = new TransferDataContainer;
         if( !sColumnName.isEmpty() )
         {
             // drag database field
-            uno::Reference< svx::OColumnTransferable > xColTransfer( new svx::OColumnTransferable(
+            rtl::Reference< svx::OColumnTransferable > xColTransfer( new svx::OColumnTransferable(
                             sDBName,
-                            OUString(),
                             sTableName,
                             sColumnName,
                             (ColumnTransferFormatFlags::FIELD_DESCRIPTOR|ColumnTransferFormatFlags::COLUMN_DESCRIPTOR) ) );
-            xColTransfer->addDataToContainer( pContainer );
+            xColTransfer->addDataToContainer( pContainer.get() );
         }
 
         sDBName += "." + sTableName;

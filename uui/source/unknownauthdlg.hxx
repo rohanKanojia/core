@@ -19,8 +19,7 @@
 #ifndef INCLUDED_UUI_SOURCE_UNKNOWNAUTHDLG_HXX
 #define INCLUDED_UUI_SOURCE_UNKNOWNAUTHDLG_HXX
 
-#include <vcl/button.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <com/sun/star/security/XCertificate.hpp>
 #include <com/sun/star/xml/crypto/XSecurityEnvironment.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -28,35 +27,28 @@
 
 //= Https_UADialog
 
-class UnknownAuthDialog : public MessageDialog
+class UnknownAuthDialog : public weld::MessageDialogController
 {
 private:
-    VclPtr<PushButton> m_pCommandButtonOK;
-    VclPtr<PushButton> m_pView_Certificate;
-    VclPtr<RadioButton> m_pOptionButtonAccept;
-    VclPtr<RadioButton> m_pOptionButtonDontAccept;
+    std::unique_ptr<weld::Button> m_xCommandButtonOK;
+    std::unique_ptr<weld::Button> m_xView_Certificate;
+    std::unique_ptr<weld::RadioButton> m_xOptionButtonAccept;
+    std::unique_ptr<weld::RadioButton> m_xOptionButtonDontAccept;
 
     const css::uno::Reference< css::uno::XComponentContext >& m_xContext;
     const css::uno::Reference< css::security::XCertificate >& m_rXCert;
 
-    DECL_LINK_TYPED(OKHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(ViewCertHdl_Impl, Button*, void);
+    DECL_LINK(OKHdl_Impl, weld::Button&, void);
+    DECL_LINK(ViewCertHdl_Impl, weld::Button&, void);
 
 public:
-    UnknownAuthDialog(vcl::Window* pParent,
+    UnknownAuthDialog(weld::Window* pParent,
         const css::uno::Reference< css::security::XCertificate >& rXCert,
         const css::uno::Reference< css::uno::XComponentContext >& xContext);
-    virtual ~UnknownAuthDialog();
-    virtual void dispose() override;
-
-    css::uno::Reference< css::security::XCertificate > getCert()
-    {
-        return m_rXCert;
-    }
 
     void setDescriptionText(const OUString &rText)
     {
-        set_primary_text(rText);
+        m_xDialog->set_primary_text(rText);
     }
 };
 

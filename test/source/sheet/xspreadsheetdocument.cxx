@@ -11,7 +11,7 @@
 #include <com/sun/star/sheet/XSpreadsheets.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 using namespace css;
 using namespace css::uno;
@@ -25,7 +25,7 @@ void XSpreadsheetDocument::testGetSheets()
     CPPUNIT_ASSERT(xSheets.is());
 
     uno::Reference< container::XIndexAccess > xIA(xSheets, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT( xIA->getCount() == mnSheets );
+    CPPUNIT_ASSERT_EQUAL( mnSheets, xIA->getCount() );
 }
 
 }

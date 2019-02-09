@@ -26,6 +26,7 @@
 #include <vector>
 #include <com/sun/star/lang/Locale.hpp>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <vcl/svapp.hxx>
 
 // predefines
 class VirtualDevice;
@@ -35,7 +36,7 @@ namespace rtl {
 };
 class OutputDevice;
 class GDIMetaFile;
-class Rectangle;
+namespace tools { class Rectangle; }
 enum class DrawTextFlags;
 namespace drawinglayer { namespace attribute {
     class FontAttribute;
@@ -57,12 +58,13 @@ namespace drawinglayer
         class DRAWINGLAYER_DLLPUBLIC TextLayouterDevice
         {
             /// internally used VirtualDevice
+            SolarMutexGuard                 maSolarGuard;
             VirtualDevice&                  mrDevice;
 
         public:
             /// constructor/destructor
             TextLayouterDevice();
-            ~TextLayouterDevice();
+            ~TextLayouterDevice() COVERITY_NOEXCEPT_FALSE;
 
             /// tooling methods
             void setFont(const vcl::Font& rFont);
@@ -80,19 +82,19 @@ namespace drawinglayer
             double getStrikeoutOffset() const;
 
             double getTextWidth(
-                const rtl::OUString& rText,
+                const OUString& rText,
                 sal_uInt32 nIndex,
                 sal_uInt32 nLength) const;
 
-            bool getTextOutlines(
+            void getTextOutlines(
                 basegfx::B2DPolyPolygonVector&,
-                const rtl::OUString& rText,
+                const OUString& rText,
                 sal_uInt32 nIndex,
                 sal_uInt32 nLength,
                 const ::std::vector< double >& rDXArray) const;
 
             basegfx::B2DRange getTextBoundRect(
-                const rtl::OUString& rText,
+                const OUString& rText,
                 sal_uInt32 nIndex,
                 sal_uInt32 nLength) const;
 
@@ -100,13 +102,13 @@ namespace drawinglayer
             double getFontDescent() const;
 
             void addTextRectActions(
-                const Rectangle& rRectangle,
-                const rtl::OUString& rText,
+                const tools::Rectangle& rRectangle,
+                const OUString& rText,
                 DrawTextFlags nStyle,
                 GDIMetaFile& rGDIMetaFile) const;
 
             ::std::vector< double > getTextArray(
-                const rtl::OUString& rText,
+                const OUString& rText,
                 sal_uInt32 nIndex,
                 sal_uInt32 nLength) const;
         };

@@ -20,11 +20,11 @@
 #ifndef INCLUDED_OSL_PROFILE_H
 #define INCLUDED_OSL_PROFILE_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <rtl/ustring.h>
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "rtl/ustring.h"
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,7 +43,7 @@ typedef void* oslProfile;
 
 /** Deprecated API.
     Open or create a configuration profile.
-    @return 0 if the profile could not be created, otherwise a handle to the profile.
+    @retval 0 if the profile could not be created, otherwise a handle to the profile.
     @deprecated
 */
 SAL_DLLPUBLIC oslProfile SAL_CALL osl_openProfile(
@@ -57,10 +57,10 @@ SAL_DLLPUBLIC oslProfile SAL_CALL osl_openProfile(
 SAL_DLLPUBLIC sal_Bool SAL_CALL osl_closeProfile(
         oslProfile Profile) SAL_COLD;
 
-
 /** Deprecated API.
     @deprecated
 */
+
 SAL_DLLPUBLIC sal_Bool SAL_CALL osl_flushProfile(
         oslProfile Profile) SAL_COLD;
 /** Deprecated API.
@@ -94,6 +94,7 @@ SAL_DLLPUBLIC sal_Bool SAL_CALL osl_writeProfileString(
                                oslProfile Profile,
                                const sal_Char* pszSection, const sal_Char* pszEntry,
                                const sal_Char* pszString) SAL_COLD;
+
 /** Deprecated API.
     @deprecated
 */
@@ -101,6 +102,7 @@ SAL_DLLPUBLIC sal_Bool SAL_CALL osl_writeProfileBool(
                              oslProfile Profile,
                              const sal_Char* pszSection, const sal_Char* pszEntry,
                              sal_Bool Value) SAL_COLD;
+
 /** Deprecated API.
     @deprecated
 */
@@ -112,7 +114,7 @@ SAL_DLLPUBLIC sal_Bool SAL_CALL osl_writeProfileIdent(
 
 /** Deprecated API.
     Acquire the mutex, block if already acquired by another thread.
-    @return False if section or entry could not be found.
+    @retval False if section or entry could not be found.
     @deprecated
 */
 SAL_DLLPUBLIC sal_Bool SAL_CALL osl_removeProfileEntry(
@@ -121,7 +123,7 @@ SAL_DLLPUBLIC sal_Bool SAL_CALL osl_removeProfileEntry(
 
 /** Deprecated API.
     Get all entries belonging to the specified section.
-    @return Pointer to a array of pointers.
+    @returns Pointer to a array of pointers.
     @deprecated
 */
 SAL_DLLPUBLIC sal_uInt32 SAL_CALL osl_getProfileSectionEntries(
@@ -130,7 +132,7 @@ SAL_DLLPUBLIC sal_uInt32 SAL_CALL osl_getProfileSectionEntries(
 
 /** Deprecated API.
     Get all section entries
-    @return Pointer to a array of pointers.
+    @retval Pointer to a array of pointers.
     @deprecated
 */
 SAL_DLLPUBLIC sal_uInt32 SAL_CALL osl_getProfileSections(

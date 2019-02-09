@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
+<interface domain="vcl">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="dialog1">
     <property name="can_focus">False</property>
     <property name="border_width">5</property>
@@ -15,13 +15,11 @@
             <property name="can_focus">False</property>
             <property name="layout_style">end</property>
             <child>
-              <object class="GtkButton" id="button2">
+              <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="use_action_appearance">False</property>
                 <property name="use_stock">True</property>
               </object>
               <packing>
@@ -31,13 +29,11 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="button1">
+              <object class="GtkButton" id="ok">
                 <property name="label">gtk-ok</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="use_action_appearance">False</property>
                 <property name="use_stock">True</property>
               </object>
               <packing>
@@ -138,8 +134,6 @@
                       <object class="GtkSpinButton" id="spinbutton1">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">●</property>
-                        <property name="invisible_char_set">True</property>
                         <property name="numeric">True</property>
                       </object>
                       <packing>
@@ -173,12 +167,10 @@
                     <child>
                       <object class="GtkButton" id="button4">
                         <property name="label" translatable="no">EXPAND</property>
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
                         <property name="tooltip_text" translatable="no">A tooltip example</property>
-                        <property name="use_action_appearance">False</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
@@ -189,11 +181,9 @@
                     <child>
                       <object class="GtkButton" id="button5">
                         <property name="label" translatable="no">FILL</property>
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
-                        <property name="use_action_appearance">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -215,11 +205,9 @@
                     <child>
                       <object class="GtkButton" id="button3">
                         <property name="label" translatable="no">button</property>
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
-                        <property name="use_action_appearance">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -230,11 +218,10 @@
                     <child>
                       <object class="GtkRadioButton" id="radiobutton1">
                         <property name="label" translatable="no">radiobutton</property>
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="active">True</property>
                         <property name="draw_indicator">True</property>
@@ -248,11 +235,10 @@
                     <child>
                       <object class="GtkCheckButton" id="checkbutton1">
                         <property name="label" translatable="no">checkbutton</property>
-                        <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="use_underline">True</property>
                         <property name="xalign">0</property>
                         <property name="draw_indicator">True</property>
                       </object>
@@ -329,9 +315,7 @@
                               <object class="GtkEntry" id="entry1">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
                                 <property name="text" translatable="no">an edit control</property>
-                                <property name="invisible_char_set">True</property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -397,7 +381,9 @@
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="xalign">0</property>
-                                <property name="label" translatable="no">Number of title pages</property>
+                                <property name="label" translatable="no">_Number of title pages</property>
+                                <property name="use_underline">True</property>
+                                <property name="mnemonic_widget">NF_PAGE_COUNT</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -438,8 +424,6 @@
                               <object class="GtkSpinButton" id="NF_PAGE_COUNT">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
-                                <property name="invisible_char_set">True</property>
                                 <property name="numeric">True</property>
                               </object>
                               <packing>
@@ -454,12 +438,13 @@
                                 <property name="visible">True</property>
                                 <property name="sensitive">False</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
-                                <property name="invisible_char_set">True</property>
                                 <property name="progress_fraction">0.040000000000000001</property>
                                 <property name="progress_pulse_step">1</property>
                                 <property name="climb_rate">1</property>
                                 <property name="numeric">True</property>
+                                <accessibility>
+                                  <relation type="labelled-by" target="RB_PAGE_START"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">2</property>
@@ -471,11 +456,10 @@
                             <child>
                               <object class="GtkRadioButton" id="RB_USE_EXISTING_PAGES">
                                 <property name="label" translatable="no">Converting existing pages to title pages</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">RB_INSERT_NEW_PAGES</property>
@@ -490,11 +474,10 @@
                             <child>
                               <object class="GtkRadioButton" id="RB_INSERT_NEW_PAGES">
                                 <property name="label" translatable="no">Insert new title pages</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">RB_USE_EXISTING_PAGES</property>
@@ -509,11 +492,10 @@
                             <child>
                               <object class="GtkRadioButton" id="RB_DOCUMENT_START">
                                 <property name="label" translatable="no">Document Start</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">RB_PAGE_START</property>
@@ -528,14 +510,16 @@
                             <child>
                               <object class="GtkRadioButton" id="RB_PAGE_START">
                                 <property name="label" translatable="no">Page</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">RB_DOCUMENT_START</property>
+                                <accessibility>
+                                  <relation type="label-for" target="NF_PAGE_START"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
@@ -585,11 +569,10 @@
                             <child>
                               <object class="GtkCheckButton" id="CB_RESTART_NUMBERING">
                                 <property name="label" translatable="no">Reset Page Numbering after title pages</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                               </object>
@@ -608,6 +591,9 @@
                                     <property name="visible">True</property>
                                     <property name="can_focus">False</property>
                                     <property name="label" translatable="no">Page number</property>
+                                    <accessibility>
+                                      <relation type="label-for" target="NF_RESTART_NUMBERING"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -620,9 +606,10 @@
                                     <property name="visible">True</property>
                                     <property name="sensitive">False</property>
                                     <property name="can_focus">True</property>
-                                    <property name="invisible_char">●</property>
-                                    <property name="invisible_char_set">True</property>
                                     <property name="numeric">True</property>
+                                    <accessibility>
+                                      <relation type="labelled-by" target="FT_PAGE_COUNT"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -640,11 +627,10 @@
                             <child>
                               <object class="GtkCheckButton" id="CB_SET_PAGE_NUMBER">
                                 <property name="label" translatable="no">Set Page Number for first title page</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                               </object>
@@ -663,6 +649,9 @@
                                     <property name="visible">True</property>
                                     <property name="can_focus">False</property>
                                     <property name="label" translatable="no">Page number</property>
+                                    <accessibility>
+                                      <relation type="label-for" target="NF_SET_PAGE_NUMBER"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -675,9 +664,10 @@
                                     <property name="visible">True</property>
                                     <property name="sensitive">False</property>
                                     <property name="can_focus">True</property>
-                                    <property name="invisible_char">●</property>
-                                    <property name="invisible_char_set">True</property>
                                     <property name="numeric">True</property>
+                                    <accessibility>
+                                      <relation type="labelled-by" target="FT_PAGE_PAGES"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -739,11 +729,9 @@
                             <child>
                               <object class="GtkButton" id="PB_PAGE_PROPERTIES">
                                 <property name="label" translatable="no">Edit...</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
-                                <property name="use_action_appearance">False</property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -804,11 +792,10 @@
                         <child>
                           <object class="GtkRadioButton" id="2">
                             <property name="label" translatable="no">Line break</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
-                            <property name="use_action_appearance">False</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="active">True</property>
                             <property name="draw_indicator">True</property>
@@ -822,11 +809,10 @@
                         <child>
                           <object class="GtkRadioButton" id="3">
                             <property name="label" translatable="no">Column break</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
-                            <property name="use_action_appearance">False</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">2</property>
@@ -840,11 +826,10 @@
                         <child>
                           <object class="GtkRadioButton" id="1">
                             <property name="label" translatable="no">Page break</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
-                            <property name="use_action_appearance">False</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
                             <property name="group">2</property>
@@ -861,6 +846,7 @@
                             <property name="can_focus">False</property>
                             <property name="xalign">0</property>
                             <property name="label" translatable="no">Style</property>
+                            <property name="mnemonic_widget">5</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -883,13 +869,15 @@
                         <child>
                           <object class="GtkCheckButton" id="7">
                             <property name="label" translatable="no">Change page number</property>
-                            <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
-                            <property name="use_action_appearance">False</property>
+                            <property name="use_underline">True</property>
                             <property name="xalign">0</property>
                             <property name="draw_indicator">True</property>
+                            <accessibility>
+                              <relation type="label-for" target="8"/>
+                            </accessibility>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -905,8 +893,9 @@
                               <object class="GtkSpinButton" id="8">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
-                                <property name="invisible_char_set">True</property>
+                                <accessibility>
+                                  <relation type="labelled-by" target="7"/>
+                                </accessibility>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -975,11 +964,10 @@
                             <child>
                               <object class="GtkRadioButton" id="15">
                                 <property name="label" translatable="no">Optimal</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
@@ -993,11 +981,10 @@
                             <child>
                               <object class="GtkRadioButton" id="16">
                                 <property name="label" translatable="no">Fit width and height</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">15</property>
@@ -1011,11 +998,10 @@
                             <child>
                               <object class="GtkRadioButton" id="17">
                                 <property name="label" translatable="no">Fit width</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">15</property>
@@ -1029,11 +1015,10 @@
                             <child>
                               <object class="GtkRadioButton" id="18">
                                 <property name="label" translatable="no">100%</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">15</property>
@@ -1051,14 +1036,16 @@
                                 <child>
                                   <object class="GtkRadioButton" id="19">
                                     <property name="label" translatable="no">Variable</property>
-                                    <property name="use_action_appearance">False</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
-                                    <property name="use_action_appearance">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                     <property name="group">15</property>
+                                    <accessibility>
+                                      <relation type="label-for" target="20"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -1070,8 +1057,9 @@
                                   <object class="GtkSpinButton" id="20">
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
-                                    <property name="invisible_char">●</property>
-                                    <property name="invisible_char_set">True</property>
+                                    <accessibility>
+                                      <relation type="labelled-by" target="19"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -1123,11 +1111,10 @@
                             <child>
                               <object class="GtkRadioButton" id="22">
                                 <property name="label" translatable="no">Automatic</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
@@ -1141,11 +1128,10 @@
                             <child>
                               <object class="GtkRadioButton" id="23">
                                 <property name="label" translatable="no">Single page</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
-                                <property name="use_action_appearance">False</property>
+                                <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
                                 <property name="group">22</property>
@@ -1163,14 +1149,16 @@
                                 <child>
                                   <object class="GtkRadioButton" id="24">
                                     <property name="label" translatable="no">Columns</property>
-                                    <property name="use_action_appearance">False</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
-                                    <property name="use_action_appearance">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                     <property name="group">22</property>
+                                    <accessibility>
+                                      <relation type="label-for" target="25"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -1182,8 +1170,9 @@
                                   <object class="GtkSpinButton" id="25">
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
-                                    <property name="invisible_char">●</property>
-                                    <property name="invisible_char_set">True</property>
+                                    <accessibility>
+                                      <relation type="labelled-by" target="24"/>
+                                    </accessibility>
                                   </object>
                                   <packing>
                                     <property name="expand">False</property>
@@ -1206,11 +1195,10 @@
                                 <child>
                                   <object class="GtkCheckButton" id="26">
                                     <property name="label" translatable="no">Book mode</property>
-                                    <property name="use_action_appearance">False</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">False</property>
-                                    <property name="use_action_appearance">False</property>
+                                    <property name="use_underline">True</property>
                                     <property name="xalign">0</property>
                                     <property name="draw_indicator">True</property>
                                   </object>
@@ -1333,6 +1321,7 @@
                                         <property name="can_focus">False</property>
                                         <property name="xalign">0</property>
                                         <property name="label" translatable="no">Paragraph Style</property>
+                                        <property name="mnemonic_widget">combobox2</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">0</property>
@@ -1359,6 +1348,7 @@
                                         <property name="can_focus">False</property>
                                         <property name="xalign">0</property>
                                         <property name="label" translatable="no">Number</property>
+                                        <property name="mnemonic_widget">combobox3</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">0</property>
@@ -1373,6 +1363,7 @@
                                         <property name="can_focus">False</property>
                                         <property name="xalign">0</property>
                                         <property name="label" translatable="no">Character Style</property>
+                                        <property name="mnemonic_widget">combobox4</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">0</property>
@@ -1387,6 +1378,7 @@
                                         <property name="can_focus">False</property>
                                         <property name="xalign">0</property>
                                         <property name="label" translatable="no">Show sublevels</property>
+                                        <property name="mnemonic_widget">spinbutton2</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">0</property>
@@ -1437,8 +1429,6 @@
                                       <object class="GtkSpinButton" id="spinbutton2">
                                         <property name="visible">True</property>
                                         <property name="can_focus">True</property>
-                                        <property name="invisible_char">●</property>
-                                        <property name="invisible_char_set">True</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">1</property>
@@ -1451,8 +1441,6 @@
                                       <object class="GtkEntry" id="entry2">
                                         <property name="visible">True</property>
                                         <property name="can_focus">True</property>
-                                        <property name="invisible_char">●</property>
-                                        <property name="invisible_char_set">True</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">1</property>
@@ -1465,8 +1453,6 @@
                                       <object class="GtkEntry" id="entry3">
                                         <property name="visible">True</property>
                                         <property name="can_focus">True</property>
-                                        <property name="invisible_char">●</property>
-                                        <property name="invisible_char_set">True</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">1</property>
@@ -1479,8 +1465,6 @@
                                       <object class="GtkSpinButton" id="spinbutton3">
                                         <property name="visible">True</property>
                                         <property name="can_focus">True</property>
-                                        <property name="invisible_char">●</property>
-                                        <property name="invisible_char_set">True</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">1</property>
@@ -1500,6 +1484,7 @@
                                             <property name="can_focus">False</property>
                                             <property name="xalign">0</property>
                                             <property name="label" translatable="no">Before</property>
+                                            <property name="mnemonic_widget">entry2</property>
                                           </object>
                                         </child>
                                       </object>
@@ -1521,6 +1506,7 @@
                                             <property name="can_focus">False</property>
                                             <property name="xalign">0</property>
                                             <property name="label" translatable="no">After</property>
+                                            <property name="mnemonic_widget">entry3</property>
                                           </object>
                                         </child>
                                       </object>
@@ -1537,6 +1523,7 @@
                                         <property name="can_focus">False</property>
                                         <property name="xalign">0</property>
                                         <property name="label" translatable="no">Start at</property>
+                                        <property name="mnemonic_widget">spinbutton3</property>
                                       </object>
                                       <packing>
                                         <property name="left_attach">0</property>
@@ -1674,6 +1661,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="xalign">0</property>
                                 <property name="label" translatable="no">Numbering followed by</property>
+                                <property name="mnemonic_widget">combobox5</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -1688,6 +1676,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="xalign">0</property>
                                 <property name="label" translatable="no">Numbering Alignment</property>
+                                <property name="mnemonic_widget">combobox6</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -1702,6 +1691,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="xalign">0</property>
                                 <property name="label" translatable="no">Aligned at</property>
+                                <property name="mnemonic_widget">spinbutton6</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -1716,6 +1706,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="xalign">0</property>
                                 <property name="label" translatable="no">Indent at</property>
+                                <property name="mnemonic_widget">spinbutton4</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -1740,8 +1731,6 @@
                               <object class="GtkSpinButton" id="spinbutton4">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
-                                <property name="invisible_char_set">True</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
@@ -1756,6 +1745,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="xalign">1</property>
                                 <property name="label" translatable="no">at</property>
+                                <property name="mnemonic_widget">spinbutton5</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -1768,8 +1758,6 @@
                               <object class="GtkSpinButton" id="spinbutton5">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
-                                <property name="invisible_char_set">True</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
@@ -1782,8 +1770,6 @@
                               <object class="GtkSpinButton" id="spinbutton6">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
-                                <property name="invisible_char">●</property>
-                                <property name="invisible_char_set">True</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
@@ -1821,12 +1807,10 @@
                             <child>
                               <object class="GtkButton" id="button6">
                                 <property name="label" translatable="no">Default</property>
-                                <property name="use_action_appearance">False</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
                                 <property name="valign">end</property>
-                                <property name="use_action_appearance">False</property>
                               </object>
                               <packing>
                                 <property name="left_attach">1</property>
@@ -1993,8 +1977,8 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">button2</action-widget>
-      <action-widget response="0">button1</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-5">ok</action-widget>
     </action-widgets>
   </object>
   <object class="GtkListStore" id="liststore1">

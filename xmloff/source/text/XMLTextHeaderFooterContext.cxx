@@ -20,9 +20,11 @@
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/text/XParagraphAppend.hpp>
 #include <com/sun/star/text/XRelativeTextContentRemove.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <o3tl/any.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
-#include "XMLTextHeaderFooterContext.hxx"
+#include <XMLTextHeaderFooterContext.hxx>
 #include <xmloff/XMLTextTableContext.hxx>
 #include <xmloff/xmlimp.hxx>
 
@@ -44,7 +46,6 @@ XMLTextHeaderFooterContext::XMLTextHeaderFooterContext( SvXMLImport& rImport, sa
     xPropSet( rPageStylePropSet ),
     sOn( bFooter ? OUString("FooterIsOn") : OUString("HeaderIsOn") ),
     sShareContent( bFooter ? OUString("FooterIsShared") : OUString("HeaderIsShared") ),
-    sShareContentFirst( "FirstIsShared" ),
     sText( bFooter ? OUString("FooterText") : OUString("HeaderText") ),
     sTextFirst(bFooter ? OUString("FooterTextFirst") : OUString("HeaderTextFirst")),
     sTextLeft( bFooter ?  OUString("FooterTextLeft") : OUString("HeaderTextLeft") ),
@@ -52,42 +53,39 @@ XMLTextHeaderFooterContext::XMLTextHeaderFooterContext( SvXMLImport& rImport, sa
     bLeft( bLft ),
     bFirst( bFrst )
 {
+    const OUString sShareContentFirst( "FirstIsShared" );
     // NOTE: if this ever handles XML_DISPLAY attr then beware of fdo#72850 !
     if( bLeft || bFirst )
     {
         Any aAny;
 
         aAny = xPropSet->getPropertyValue( sOn );
-        bool bOn = *static_cast<sal_Bool const *>(aAny.getValue());
+        bool bOn = *o3tl::doAccess<bool>(aAny);
 
         if( bOn )
         {
             if (bLeft)
             {
                 aAny = xPropSet->getPropertyValue( sShareContent );
-                bool bShared;
+                bool bShared = bool();
                 if (!(aAny >>= bShared))
                     assert(false); // should return a value!
                 if( bShared )
                 {
                     // Don't share headers any longer
-                    bShared = false;
-                    aAny.setValue( &bShared, cppu::UnoType<bool>::get() );
-                    xPropSet->setPropertyValue( sShareContent, aAny );
+                    xPropSet->setPropertyValue( sShareContent, Any(false) );
                 }
             }
             if (bFirst)
             {
                 aAny = xPropSet->getPropertyValue( sShareContentFirst );
-                bool bSharedFirst;
+                bool bSharedFirst = bool();
                 if (!(aAny >>= bSharedFirst))
                     assert(false); // should return a value!
                 if( bSharedFirst )
                 {
                     // Don't share first/right headers any longer
-                    bSharedFirst = false;
-                    aAny.setValue( &bSharedFirst, cppu::UnoType<bool>::get() );
-                    xPropSet->setPropertyValue( sShareContentFirst, aAny );
+                    xPropSet->setPropertyValue( sShareContentFirst, Any(false) );
                 }
             }
         }
@@ -104,7 +102,7 @@ XMLTextHeaderFooterContext::~XMLTextHeaderFooterContext()
 {
 }
 
-SvXMLImportContext *XMLTextHeaderFooterContext::CreateChildContext(
+SvXMLImportContextRef XMLTextHeaderFooterContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList > & xAttrList )
@@ -128,14 +126,12 @@ SvXMLImportContext *XMLTextHeaderFooterContext::CreateChildContext(
             else
             {
                 aAny = xPropSet->getPropertyValue( sOn );
-                sal_Bool bOn = *static_cast<sal_Bool const *>(aAny.getValue());
+                bool bOn = *o3tl::doAccess<bool>(aAny);
 
                 if( !bOn )
                 {
                     // Switch header on
-                    bOn = sal_True;
-                    aAny.setValue( &bOn, cppu::UnoType<bool>::get() );
-                    xPropSet->setPropertyValue( sOn, aAny );
+                    xPropSet->setPropertyValue( sOn, Any(true) );
 
                     // The content has not to be removed, because the header
                     // or footer is empty already.
@@ -144,12 +140,10 @@ SvXMLImportContext *XMLTextHeaderFooterContext::CreateChildContext(
 
                 // If a header or footer is not shared, share it now.
                 aAny = xPropSet->getPropertyValue( sShareContent );
-                sal_Bool bShared = *static_cast<sal_Bool const *>(aAny.getValue());
+                bool bShared = *o3tl::doAccess<bool>(aAny);
                 if( !bShared )
                 {
-                    bShared = sal_True;
-                    aAny.setValue( &bShared, cppu::UnoType<bool>::get() );
-                    xPropSet->setPropertyValue( sShareContent, aAny );
+                    xPropSet->setPropertyValue( sShareContent, Any(true) );
                 }
 
                 aAny = xPropSet->getPropertyValue( sText );
@@ -182,7 +176,7 @@ SvXMLImportContext *XMLTextHeaderFooterContext::CreateChildContext(
         pContext =
             GetImport().GetTextImport()->CreateTextChildContext(
                 GetImport(), nPrefix, rLocalName, xAttrList,
-                XML_TEXT_TYPE_HEADER_FOOTER );
+                XMLTextType::HeaderFooter );
     }
     if( !pContext )
         pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
@@ -201,10 +195,7 @@ void XMLTextHeaderFooterContext::EndElement()
     {
         // If no content has been inserted into the header or footer,
         // switch it off.
-        sal_Bool bOn = sal_False;
-        Any aAny;
-        aAny.setValue( &bOn, cppu::UnoType<bool>::get() );
-        xPropSet->setPropertyValue( sOn, aAny );
+        xPropSet->setPropertyValue( sOn, Any(false) );
     }
 }
 

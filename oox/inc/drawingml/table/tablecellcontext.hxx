@@ -28,9 +28,9 @@ namespace oox { namespace drawingml { namespace table {
 class TableCellContext : public ::oox::core::ContextHandler2
 {
 public:
-    TableCellContext( ::oox::core::ContextHandler2Helper& rParent,
+    TableCellContext( ::oox::core::ContextHandler2Helper const & rParent,
         const ::oox::AttributeList& rAttribs, TableCell& rTableCell );
-    virtual ~TableCellContext();
+    virtual ~TableCellContext() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 

@@ -27,6 +27,7 @@
 #include <svtools/accessibilityoptions.hxx>
 #include <svx/svxdllapi.h>
 #include <svx/svdcrtv.hxx>
+#include <vcl/event.hxx>
 #include <unotools/options.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
@@ -50,37 +51,41 @@
 //         SdrView         View
 
 class SvxURLField;
+namespace sdr { namespace contact { class ObjectContact; }}
 
-enum SdrViewContext {SDRCONTEXT_STANDARD,
-                     SDRCONTEXT_POINTEDIT,
-                     SDRCONTEXT_GLUEPOINTEDIT,
-                     SDRCONTEXT_GRAPHIC,
-                     SDRCONTEXT_MEDIA,
-                     SDRCONTEXT_TABLE};
+enum class SdrViewContext {
+    Standard,
+    PointEdit,
+    GluePointEdit,
+    Graphic,
+    Media,
+    Table
+};
 
-enum SdrEventKind  {SDREVENT_NONE,
-                    SDREVENT_TEXTEDIT,
-                    SDREVENT_MOVACTION,
-                    SDREVENT_ENDACTION,
-                    SDREVENT_BCKACTION,
-                    SDREVENT_BRKACTION,
-                    SDREVENT_ENDCREATE,
-                    SDREVENT_ENDDRAG,
-                    SDREVENT_MARKOBJ,
-                    SDREVENT_MARKPOINT,
-                    SDREVENT_MARKGLUEPOINT,
-                    SDREVENT_BEGMARK,
-                    SDREVENT_BEGINSOBJPOINT,
-                    SDREVENT_ENDINSOBJPOINT,
-                    SDREVENT_BEGINSGLUEPOINT,
-                    SDREVENT_BEGDRAGHELPLINE,
-                    SDREVENT_BEGDRAGOBJ,
-                    SDREVENT_BEGCREATEOBJ,
-                    SDREVENT_BEGMACROOBJ,
-                    SDREVENT_BEGTEXTEDIT,
-                    SDREVENT_ENDMARK,
-                    SDREVENT_BRKMARK,
-                    SDREVENT_EXECUTEURL};
+enum class SdrEventKind {
+    NONE,
+    TextEdit,
+    MoveAction,
+    EndAction,
+    BackAction,
+    EndCreate,
+    EndDrag,
+    MarkObj,
+    MarkPoint,
+    MarkGluePoint,
+    BeginMark,
+    BeginInsertObjPoint,
+    EndInsertObjPoint,
+    BeginInsertGluePoint,
+    BeginDragHelpline,
+    BeginDragObj,
+    BeginCreateObj,
+    BeginMacroObj,
+    BeginTextEdit,
+    EndMark,
+    BrkMark,
+    ExecuteUrl
+};
 
 /* for PickAnything() */
 enum class SdrMouseEventKind
@@ -102,7 +107,6 @@ struct SVX_DLLPUBLIC SdrViewEvent
     Point                       aLogicPos;
     SdrHitKind                  eHit;
     SdrEventKind                eEvent;
-    SdrCreateCmd                eEndCreateCmd;   // for EndInsPoint too
 
     sal_uInt16                  nMouseClicks;
     MouseEventModifiers         nMouseMode;
@@ -114,15 +118,10 @@ struct SVX_DLLPUBLIC SdrViewEvent
     bool                        bMouseUp : 1;
     bool                        bIsAction : 1;       // Action is active
     bool                        bIsTextEdit : 1;     // TextEdit runs currently
-    bool                        bTextEditHit : 1;    // hit open OutlinerView?
     bool                        bAddMark : 1;
     bool                        bUnmark : 1;
     bool                        bPrevNextMark : 1;
     bool                        bMarkPrev : 1;
-    bool                        bInsPointNewObj : 1;
-    bool                        bDragWithCopy : 1;
-    bool                        bCaptureMouse : 1;
-    bool                        bReleaseMouse : 1;
 
 public:
     SdrViewEvent();
@@ -141,39 +140,37 @@ class SVX_DLLPUBLIC SdrDropMarkerOverlay
 
 public:
     SdrDropMarkerOverlay(const SdrView& rView, const SdrObject& rObject);
-    SdrDropMarkerOverlay(const SdrView& rView, const Rectangle& rRectangle);
+    SdrDropMarkerOverlay(const SdrView& rView, const tools::Rectangle& rRectangle);
     SdrDropMarkerOverlay(const SdrView& rView, const Point& rStart, const Point& rEnd);
     ~SdrDropMarkerOverlay();
 };
 
 
-/*
- * View
- */
-class SVX_DLLPUBLIC SdrView: public SdrCreateView, public tools::WeakBase< SdrView >
+class SVX_DLLPUBLIC SdrView : public SdrCreateView, public virtual tools::WeakBase
 {
     friend class                SdrPageView;
 
     bool                        bNoExtendedMouseDispatcher : 1;
     bool                        bNoExtendedKeyDispatcher : 1;
-    bool                        bNoExtendedCommandDispatcher : 1;
-    bool                        bTextEditOnObjectsWithoutTextIfTextTool : 1;
     bool                        mbMasterPagePaintCaching : 1;
 
 protected:
     SvtAccessibilityOptions maAccessibilityOptions;
 
 public:
-    explicit SdrView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrView();
+    explicit SdrView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut = nullptr);
+
+    virtual ~SdrView() override;
 
     // The default value for all dispatchers is activated. If the app for example
     // wants to intervene in MouseDispatcher for special treatment, you have to
-    // deactivate the MouseDispatcher with the help of the methode below and you have
+    // deactivate the MouseDispatcher with the help of the method below and you have
     // to implement it yourself. Example for MouseButtonDown:
     //      SdrViewEvent aVEvt;
     //      SdrHitKind eHit=pSdrView->PickAnything(rMEvt,SdrMouseEventKind::BUTTONDOWN,aVEvt);
-    //      ... hier Applikationsspezifischer Eingriff ...
+    //      ... here application-specific intervention ...
     //      pSdrView->DoMouseEvent(aVEvt);
     //      SetPointer(GetPreferredPointer(...))
     //      CaptureMouse(...)
@@ -183,10 +180,6 @@ public:
     void EnableExtendedKeyInputDispatcher(bool bOn) { bNoExtendedKeyDispatcher=!bOn; }
     bool IsExtendedKeyInputDispatcherEnabled() const { return bNoExtendedKeyDispatcher; }
 
-    void EnableExtendedCommandEventDispatcher(bool bOn) { bNoExtendedCommandDispatcher=!bOn; }
-
-    void EnableTextEditOnObjectsWithoutTextIfTextTool(bool bOn) { bTextEditOnObjectsWithoutTextIfTextTool=bOn; }
-
     void SetMasterPagePaintCaching(bool bOn);
     bool IsMasterPagePaintCaching() const { return mbMasterPagePaintCaching; }
 
@@ -194,17 +187,15 @@ public:
     virtual bool MouseButtonDown(const MouseEvent& rMEvt, vcl::Window* pWin) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt, vcl::Window* pWin) override;
     virtual bool MouseMove(const MouseEvent& rMEvt, vcl::Window* pWin) override;
+    using SdrCreateView::RequestHelp;
     virtual bool Command(const CommandEvent& rCEvt, vcl::Window* pWin) override;
 
-    virtual void ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 ) override;
+    virtual void ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints ) override;
 
     bool SetAttributes(const SfxItemSet& rSet, bool bReplaceAll=false) { return SdrCreateView::SetAttributes(rSet,bReplaceAll); }
-    bool SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr=false) { return SdrCreateView::SetStyleSheet(pStyleSheet,bDontRemoveHardAttr); }
 
     /* new interface src537 */
-    bool GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr=false) const;
-
-    SfxStyleSheet* GetStyleSheet() const;
+    void GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr=false) const;
 
     // incomplete implementation:
     // OutputDevice is necessary to determine HandleSize.
@@ -224,7 +215,7 @@ public:
     void MarkAll();
     void UnmarkAll();
 
-    const Rectangle& GetMarkedRect() const;
+    const tools::Rectangle& GetMarkedRect() const;
 
     virtual void DeleteMarked();
 
@@ -233,7 +224,7 @@ public:
     //   bAddMark=TRUE: add to existing selection (->Shift)
     //   bUnmark=TRUE: remove objects from selection which are inside of
     //                 the enveloped frame.
-    bool BegMark(const Point& rPnt, bool bAddMark=false, bool bUnmark=false);
+    bool BegMark(const Point& rPnt, bool bAddMark, bool bUnmark);
 
     // The following actions are possible:
     //   - ObjectCreating
@@ -246,9 +237,13 @@ public:
     SvtAccessibilityOptions& getAccessibilityOptions() { return maAccessibilityOptions;}
 
     virtual void onAccessibilityOptionsChanged();
-};
 
-#endif // INCLUDED_SVX_SVDVIEW_HXX
+    // Do not create ObjectContact locally, but offer a call to allow override
+    // and to create own derivations of ObjectContact
+    virtual sdr::contact::ObjectContact* createViewSpecificObjectContact(
+        SdrPageWindow& rPageWindow,
+        const sal_Char* pDebugName) const;
+};
 
 // First of all the app creates a SdrModel.
 // Then it opens a Win and creates a SdrView.
@@ -271,12 +266,6 @@ public:
 //     bool MouseMove(const MouseEvent& rMEvt, vcl::Window* pWin);
 //     bool Command(const CommandEvent& rCEvt, vcl::Window* pWin);
 //
-//   Exchange (Clipboard derzeit noch ohne SdrPrivateData):
-//   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//     sal_Bool Cut(sal_uIntPtr nFormat=SDR_ANYFORMAT);
-//     sal_Bool Yank(sal_uIntPtr nFormat=SDR_ANYFORMAT);
-//     sal_Bool Paste(vcl::Window* pWin=NULL, sal_uIntPtr nFormat=SDR_ANYFORMAT);
-//
 //   SfxItems:
 //   ~~~~~~~~~
 //     sal_Bool GetAttributes(SfxItemSet& rTargetSet, sal_Bool bOnlyHardAttr=sal_False) const;
@@ -288,5 +277,7 @@ public:
 //   ~~~~~~~~~~
 //     Pointer GetPreferredPointer(const Point& rMousePos, const OutputDevice* pOut, sal_uInt16 nTol=0) const;
 //     OUString GetStatusText();
+
+#endif // INCLUDED_SVX_SVDVIEW_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

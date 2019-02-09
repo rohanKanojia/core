@@ -80,7 +80,7 @@ enum class CapType
 
 LNG_DLLPUBLIC ::osl::Mutex& GetLinguMutex();
 
-LocaleDataWrapper & GetLocaleDataWrapper( sal_Int16 nLang );
+const LocaleDataWrapper & GetLocaleDataWrapper( LanguageType nLang );
 
 sal_Int32 LevDistance( const OUString &rTxt1, const OUString &rTxt2 );
 
@@ -106,8 +106,10 @@ LNG_DLLPUBLIC bool LinguIsUnspecified( LanguageType nLanguage );
     tag string instead. */
 LNG_DLLPUBLIC bool LinguIsUnspecified( const OUString & rBcp47 );
 
-css::uno::Sequence< sal_Int16 >
-    LocaleSeqToLangSeq( css::uno::Sequence< css::lang::Locale > &rLocaleSeq );
+std::vector< LanguageType >
+    LocaleSeqToLangVec( css::uno::Sequence< css::lang::Locale > const &rLocaleSeq );
+css::uno::Sequence<sal_Int16>
+    LocaleSeqToLangSeq( css::uno::Sequence< css::lang::Locale > const &rLocaleSeq );
 
 // checks if file pointed to by rURL is readonly
 // and may also check return if such a file exists or not
@@ -129,15 +131,15 @@ LNG_DLLPUBLIC sal_Int32 GetPosInWordToCheck( const OUString &rTxt, sal_Int32 nPo
 css::uno::Reference< css::linguistic2::XHyphenatedWord >
             RebuildHyphensAndControlChars(
                 const OUString &rOrigWord,
-                css::uno::Reference< css::linguistic2::XHyphenatedWord > &rxHyphWord );
+                css::uno::Reference< css::linguistic2::XHyphenatedWord > const &rxHyphWord );
 
 
-LNG_DLLPUBLIC bool        IsUpper( const OUString &rText, sal_Int32 nPos, sal_Int32 nLen, sal_Int16 nLanguage );
+LNG_DLLPUBLIC bool        IsUpper( const OUString &rText, sal_Int32 nPos, sal_Int32 nLen, LanguageType nLanguage );
 
-inline bool        IsUpper( const OUString &rText, sal_Int16 nLanguage )     { return IsUpper( rText, 0, rText.getLength(), nLanguage ); }
-LNG_DLLPUBLIC CapType SAL_CALL capitalType(const OUString&, CharClass *);
+inline bool        IsUpper( const OUString &rText, LanguageType nLanguage )     { return IsUpper( rText, 0, rText.getLength(), nLanguage ); }
+LNG_DLLPUBLIC CapType capitalType(const OUString&, CharClass const *);
 
-OUString      ToLower( const OUString &rText, sal_Int16 nLanguage );
+OUString      ToLower( const OUString &rText, LanguageType nLanguage );
 LNG_DLLPUBLIC bool      HasDigits( const OUString &rText );
 LNG_DLLPUBLIC bool      IsNumeric( const OUString &rText );
 
@@ -157,13 +159,13 @@ css::uno::Reference<
     css::linguistic2::XDictionaryEntry >
         SearchDicList(
             const css::uno::Reference< css::linguistic2::XSearchableDictionaryList >& rDicList,
-            const OUString& rWord, sal_Int16 nLanguage,
+            const OUString& rWord, LanguageType nLanguage,
             bool bSearchPosDics, bool bSearchSpellEntry );
 
 LNG_DLLPUBLIC DictionaryError AddEntryToDic(
-    css::uno::Reference< css::linguistic2::XDictionary >  &rxDic,
+    css::uno::Reference< css::linguistic2::XDictionary > const &rxDic,
     const OUString &rWord, bool bIsNeg,
-    const OUString &rRplcTxt, sal_Int16 nRplcLang,
+    const OUString &rRplcTxt,
     bool bStripDot = true );
 
 LNG_DLLPUBLIC bool SaveDictionaries( const css::uno::Reference< css::linguistic2::XSearchableDictionaryList > &xDicList );
@@ -179,7 +181,7 @@ class AppExitListener :
 
 public:
     AppExitListener();
-    virtual ~AppExitListener();
+    virtual ~AppExitListener() override;
 
     virtual void    AtExit() = 0;
 
@@ -187,11 +189,11 @@ public:
     void            Deactivate();
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
     // XTerminateListener
-    virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) throw(css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
+    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
 };
 
 }   // namespace linguistic

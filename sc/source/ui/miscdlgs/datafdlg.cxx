@@ -9,12 +9,12 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "datafdlg.hxx"
-#include "scresid.hxx"
-#include "viewdata.hxx"
-#include "docsh.hxx"
-#include "refundo.hxx"
-#include "undodat.hxx"
+#include <datafdlg.hxx>
+#include <viewdata.hxx>
+#include <docsh.hxx>
+#include <refundo.hxx>
+#include <undodat.hxx>
+#include <tabvwsh.hxx>
 
 #include <rtl/ustrbuf.hxx>
 
@@ -30,7 +30,6 @@ ScDataFormDlg::ScDataFormDlg(vcl::Window* pParent, ScTabViewShell* pTabViewShell
     , nStartRow(0)
     , nEndRow(0)
     , nTab(0)
-    , bNoSelection(false)
 {
     get(m_pBtnNew, "new");
     get(m_pBtnDelete, "delete");
@@ -61,6 +60,7 @@ ScDataFormDlg::ScDataFormDlg(vcl::Window* pParent, ScTabViewShell* pTabViewShell
         nEndRow = aEnd.Row();
 
         nTab = rViewData.GetTabNo();
+        bool bNoSelection(false);
         //if there is no selection
         if ((nStartCol == nEndCol) && (nStartRow == nEndRow))
             bNoSelection = true;
@@ -173,15 +173,15 @@ ScDataFormDlg::ScDataFormDlg(vcl::Window* pParent, ScTabViewShell* pTabViewShell
             }
             else
             {
-                maFixedTexts.push_back( nullptr );
-                maEdits.push_back( nullptr );
+                maFixedTexts.emplace_back(nullptr );
+                maEdits.emplace_back(nullptr );
             }
             if (maEdits[nIndex] != nullptr)
                 maEdits[nIndex]->SetModifyHdl( HDL(Impl_DataModifyHdl) );
         }
     }
 
-    FillCtrls(nCurrentRow);
+    FillCtrls();
 
     m_pSlider->SetPageSize( 10 );
     m_pSlider->SetVisibleSize( 1 );
@@ -216,12 +216,18 @@ void ScDataFormDlg::dispose()
     m_pBtnNext.clear();
     m_pBtnClose.clear();
     m_pSlider.clear();
-    m_pGrid.clear();
     m_pFixedText.clear();
+    for ( auto& rxFTIter : maFixedTexts )
+        rxFTIter.disposeAndClear();
+    for ( auto& rxEdit : maEdits )
+        rxEdit.disposeAndClear();
+    maFixedTexts.clear();
+    maEdits.clear();
+    m_pGrid.clear();
     ModalDialog::dispose();
 }
 
-void ScDataFormDlg::FillCtrls(SCROW /*nCurrentRow*/)
+void ScDataFormDlg::FillCtrls()
 {
     for (sal_uInt16 i = 0; i < aColLength; ++i)
     {
@@ -251,27 +257,20 @@ void ScDataFormDlg::FillCtrls(SCROW /*nCurrentRow*/)
     m_pSlider->SetThumbPos(nCurrentRow-nStartRow-1);
 }
 
-IMPL_LINK_TYPED( ScDataFormDlg, Impl_DataModifyHdl, Edit&, rEdit, void)
+IMPL_LINK( ScDataFormDlg, Impl_DataModifyHdl, Edit&, rEdit, void)
 {
     if ( rEdit.IsModified() )
         m_pBtnRestore->Enable();
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_NewHdl, Button*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_NewHdl, Button*, void)
 {
     ScViewData& rViewData = pTabViewShell->GetViewData();
     ScDocShell* pDocSh = rViewData.GetDocShell();
     if ( pDoc )
     {
-        bool bHasData = false;
-        auto itr = maEdits.begin(), itrEnd = maEdits.end();
-        for(; itr != itrEnd; ++itr)
-            if ((*itr) != nullptr)
-                if ( !(*itr)->GetText().isEmpty() )
-                {
-                    bHasData = true;
-                    break;
-                }
+        bool bHasData = std::any_of(maEdits.begin(), maEdits.end(),
+            [](const VclPtr<Edit>& rxEdit) { return (rxEdit != nullptr) && (!rxEdit->GetText().isEmpty()); });
 
         if ( bHasData )
         {
@@ -283,14 +282,14 @@ IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_NewHdl, Button*, void)
                     m_pSlider->SetRange( Range( 0, nEndRow - nStartRow + 1) );
             }
             SetButtonState();
-            FillCtrls(nCurrentRow);
+            FillCtrls();
             pDocSh->SetDocumentModified();
             pDocSh->PostPaintGridAll();
-            }
+        }
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_PrevHdl, Button*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_PrevHdl, Button*, void)
 {
     if (pDoc)
     {
@@ -298,11 +297,11 @@ IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_PrevHdl, Button*, void)
             nCurrentRow--;
 
         SetButtonState();
-        FillCtrls(nCurrentRow);
+        FillCtrls();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_NextHdl, Button*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_NextHdl, Button*, void)
 {
     if (pDoc)
     {
@@ -310,19 +309,19 @@ IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_NextHdl, Button*, void)
             nCurrentRow++;
 
         SetButtonState();
-        FillCtrls(nCurrentRow);
+        FillCtrls();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_RestoreHdl, Button*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_RestoreHdl, Button*, void)
 {
     if (pDoc)
     {
-        FillCtrls(nCurrentRow);
+        FillCtrls();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_DeleteHdl, Button*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_DeleteHdl, Button*, void)
 {
     ScViewData& rViewData = pTabViewShell->GetViewData();
     ScDocShell* pDocSh = rViewData.GetDocShell();
@@ -335,23 +334,23 @@ IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_DeleteHdl, Button*, void)
         SetButtonState();
         pDocSh->GetUndoManager()->Clear();
 
-        FillCtrls(nCurrentRow);
+        FillCtrls();
         pDocSh->SetDocumentModified();
         pDocSh->PostPaintGridAll();
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_CloseHdl, Button*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_CloseHdl, Button*, void)
 {
     EndDialog( );
 }
 
-IMPL_LINK_NOARG_TYPED(ScDataFormDlg, Impl_ScrollHdl, ScrollBar*, void)
+IMPL_LINK_NOARG(ScDataFormDlg, Impl_ScrollHdl, ScrollBar*, void)
 {
     long nOffset = m_pSlider->GetThumbPos();
     nCurrentRow = nStartRow + nOffset + 1;
     SetButtonState();
-    FillCtrls(nCurrentRow);
+    FillCtrls();
 }
 
 void ScDataFormDlg::SetButtonState()
@@ -373,7 +372,7 @@ void ScDataFormDlg::SetButtonState()
         m_pBtnPrev->Enable();
 
     m_pBtnRestore->Enable( false );
-    if ( maEdits.size()>=1 && maEdits[0] != nullptr )
+    if ( !maEdits.empty() && maEdits[0] != nullptr )
         maEdits[0]->GrabFocus();
 }
 

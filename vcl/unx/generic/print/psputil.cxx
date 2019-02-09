@@ -28,20 +28,20 @@ namespace psp {
  */
 
 sal_Int32
-getHexValueOf (sal_Int32 nValue, sal_Char* pBuffer)
+getHexValueOf (sal_Int32 nValue, OStringBuffer& pBuffer)
 {
     const static sal_Char pHex [0x10] = {
         '0', '1', '2', '3', '4', '5', '6', '7',
         '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
-    pBuffer[0] = pHex [(nValue & 0xF0) >> 4];
-    pBuffer[1] = pHex [(nValue & 0x0F)     ];
+    pBuffer.append(pHex [(nValue & 0xF0) >> 4]);
+    pBuffer.append(pHex [(nValue & 0x0F)     ]);
 
     return 2;
 }
 
 sal_Int32
-getAlignedHexValueOf (sal_Int32 nValue, sal_Char* pBuffer)
+getAlignedHexValueOf (sal_Int32 nValue, OStringBuffer& pBuffer)
 {
     // get sign
     bool bNegative = nValue < 0;
@@ -62,25 +62,28 @@ getAlignedHexValueOf (sal_Int32 nValue, sal_Char* pBuffer)
 
     // convert the int into its hex representation, write it into the buffer
     sal_Int32 nRet = nPrecision;
+    auto const start = pBuffer.getLength();
     while (nPrecision)
     {
-        nPrecision -= getHexValueOf (nValue % 256, pBuffer + nPrecision - 2 );
+        OStringBuffer scratch;
+        nPrecision -= getHexValueOf (nValue % 256, scratch );
+        pBuffer.insert(start, scratch.makeStringAndClear());
         nValue /= 256;
     }
 
     // set sign bit
     if (bNegative)
     {
-        switch (pBuffer[0])
+        switch (pBuffer[start])
         {
-            case '0' : pBuffer[0] = '8'; break;
-            case '1' : pBuffer[0] = '9'; break;
-            case '2' : pBuffer[0] = 'A'; break;
-            case '3' : pBuffer[0] = 'B'; break;
-            case '4' : pBuffer[0] = 'C'; break;
-            case '5' : pBuffer[0] = 'D'; break;
-            case '6' : pBuffer[0] = 'E'; break;
-            case '7' : pBuffer[0] = 'F'; break;
+            case '0' : pBuffer[start] = '8'; break;
+            case '1' : pBuffer[start] = '9'; break;
+            case '2' : pBuffer[start] = 'A'; break;
+            case '3' : pBuffer[start] = 'B'; break;
+            case '4' : pBuffer[start] = 'C'; break;
+            case '5' : pBuffer[start] = 'D'; break;
+            case '6' : pBuffer[start] = 'E'; break;
+            case '7' : pBuffer[start] = 'F'; break;
             default: OSL_FAIL("Already a signed value");
         }
     }
@@ -90,18 +93,20 @@ getAlignedHexValueOf (sal_Int32 nValue, sal_Char* pBuffer)
 }
 
 sal_Int32
-getValueOf (sal_Int32 nValue, sal_Char* pBuffer)
+getValueOf (sal_Int32 nValue, OStringBuffer& pBuffer)
 {
     sal_Int32 nChar = 0;
     if (nValue < 0)
     {
-        pBuffer [nChar++] = '-';
+        pBuffer.append('-');
+        ++nChar;
         nValue *= -1;
     }
     else
         if (nValue == 0)
         {
-            pBuffer [nChar++] = '0';
+            pBuffer.append('0');
+            ++nChar;
             return nChar;
         }
 
@@ -114,17 +119,18 @@ getValueOf (sal_Int32 nValue, sal_Char* pBuffer)
     }
     while (nInvChar > 0)
     {
-        pBuffer [nChar++] = pInvBuffer [--nInvChar];
+        pBuffer.append(pInvBuffer [--nInvChar]);
+        ++nChar;
     }
 
     return nChar;
 }
 
 sal_Int32
-appendStr (const sal_Char* pSrc, sal_Char* pDst)
+appendStr (const sal_Char* pSrc, OStringBuffer& pDst)
 {
     sal_Int32 nBytes = strlen (pSrc);
-    strncpy (pDst, pSrc, nBytes + 1);
+    pDst.append(pSrc, nBytes);
 
     return nBytes;
 }
@@ -172,76 +178,6 @@ bool
 WritePS (osl::File* pFile, const OUString &rString)
 {
     return WritePS (pFile, OUStringToOString(rString, RTL_TEXTENCODING_ASCII_US));
-}
-
-/*
- * cache converter for use in postscript drawing routines
- */
-
-ConverterFactory::ConverterFactory()
-{
-}
-
-ConverterFactory::~ConverterFactory ()
-{
-    for( std::map< rtl_TextEncoding, rtl_UnicodeToTextConverter >::const_iterator it = m_aConverters.begin(); it != m_aConverters.end(); ++it )
-            rtl_destroyUnicodeToTextConverter (it->second);
-}
-
-rtl_UnicodeToTextConverter
-ConverterFactory::Get (rtl_TextEncoding nEncoding)
-{
-    if (rtl_isOctetTextEncoding( nEncoding ))
-    {
-        std::map< rtl_TextEncoding, rtl_UnicodeToTextConverter >::const_iterator it =
-            m_aConverters.find( nEncoding );
-        rtl_UnicodeToTextConverter aConverter;
-        if (it == m_aConverters.end())
-        {
-            aConverter = rtl_createUnicodeToTextConverter (nEncoding);
-            m_aConverters[nEncoding] = aConverter;
-        }
-        else
-            aConverter = it->second;
-        return aConverter;
-    }
-    return nullptr;
-}
-
-// wrapper for rtl_convertUnicodeToText that handles the usual cases for
-// textconversion in drawtext
-sal_Size
-ConverterFactory::Convert (const sal_Unicode *pText, int nTextLen,
-                           unsigned char *pBuffer, sal_Size nBufferSize, rtl_TextEncoding nEncoding)
-{
-    const sal_uInt32 nCvtFlags =  RTL_UNICODETOTEXT_FLAGS_UNDEFINED_QUESTIONMARK
-        | RTL_UNICODETOTEXT_FLAGS_INVALID_QUESTIONMARK ;
-    sal_uInt32  nCvtInfo;
-    sal_Size    nCvtChars;
-
-    rtl_UnicodeToTextConverter aConverter = Get (nEncoding);
-    rtl_UnicodeToTextContext   aContext   = rtl_createUnicodeToTextContext (aConverter);
-
-    sal_Size nSize = rtl_convertUnicodeToText (aConverter, aContext,
-                                               pText, nTextLen, reinterpret_cast<char*>(pBuffer), nBufferSize,
-                                               nCvtFlags, &nCvtInfo, &nCvtChars);
-
-    rtl_destroyUnicodeToTextContext (aConverter, aContext);
-
-    return nSize;
-}
-
-namespace
-{
-    class theConverterFactory
-        : public rtl::Static<ConverterFactory, theConverterFactory>
-    {
-    };
-}
-
-ConverterFactory& GetConverterFactory()
-{
-    return theConverterFactory::get();
 }
 
 } /* namespace psp */

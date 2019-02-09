@@ -20,7 +20,7 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_DRWTXTSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellid.hxx"
+#include <shellid.hxx>
 #include <unotools/caserotate.hxx>
 
 class SdrView;
@@ -50,9 +50,9 @@ public:
     SwWrtShell &GetShell();
 
                 SwDrawTextShell(SwView &rView);
-    virtual     ~SwDrawTextShell();
+    virtual     ~SwDrawTextShell() override;
 
-    virtual ::svl::IUndoManager*
+    virtual SfxUndoManager*
                 GetUndoManager() override;
 
     static void StateDisableItems(SfxItemSet &);
@@ -63,18 +63,18 @@ public:
     void        GetState(SfxItemSet &);
     void        GetDrawTextCtrlState(SfxItemSet&);
 
-    void        ExecFontWork(SfxRequest& rReq);
+    void        ExecFontWork(SfxRequest const & rReq);
     void        StateFontWork(SfxItemSet& rSet);
-    void        ExecFormText(SfxRequest& rReq);
+    void        ExecFormText(SfxRequest const & rReq);
     void        GetFormTextState(SfxItemSet& rSet);
-    void        ExecDrawLingu(SfxRequest &rReq);
+    void        ExecDrawLingu(SfxRequest const &rReq);
     void        ExecUndo(SfxRequest &rReq);
     void        StateUndo(SfxItemSet &rSet);
-    void        ExecClpbrd(SfxRequest &rReq);
+    void        ExecClpbrd(SfxRequest const &rReq);
     void        StateClpbrd(SfxItemSet &rSet);
     void        StateInsert(SfxItemSet &rSet);
-    void        ExecTransliteration(SfxRequest &);
-    void        ExecRotateTransliteration(SfxRequest &);
+    void        ExecTransliteration(SfxRequest const &);
+    void        ExecRotateTransliteration(SfxRequest const &);
 
     void        Init();
 };

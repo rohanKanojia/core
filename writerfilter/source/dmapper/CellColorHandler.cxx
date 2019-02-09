@@ -16,16 +16,17 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <CellColorHandler.hxx>
-#include <PropertyMap.hxx>
-#include <ConversionHelper.hxx>
-#include <TDefTableHandler.hxx>
+#include "CellColorHandler.hxx"
+#include "PropertyMap.hxx"
+#include "ConversionHelper.hxx"
+#include "TDefTableHandler.hxx"
 #include <ooxml/resourceids.hxx>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/ShadingPattern.hpp>
 #include <sal/macros.h>
 #include <filter/msfilter/util.hxx>
 #include <comphelper/sequence.hxx>
+#include <tools/color.hxx>
 
 namespace writerfilter {
 namespace dmapper {
@@ -37,6 +38,8 @@ LoggedProperties("CellColorHandler"),
 m_nShadingPattern( drawing::ShadingPattern::CLEAR ),
 m_nColor( 0xffffffff ),
 m_nFillColor( 0xffffffff ),
+m_bAutoFillColor( true ),
+m_bFillSpecified( false ),
     m_OutputFormat( Form )
 {
 }
@@ -47,7 +50,7 @@ CellColorHandler::~CellColorHandler()
 
 // ST_Shd strings are converted to integers by the tokenizer, store strings in
 // the InteropGrabBag
-uno::Any lcl_ConvertShd(sal_Int32 nIntValue)
+static uno::Any lcl_ConvertShd(sal_Int32 nIntValue)
 {
     OUString aRet;
     // This should be in sync with the ST_Shd list in ooxml's model.xml.
@@ -107,14 +110,18 @@ void CellColorHandler::lcl_attribute(Id rName, Value & rVal)
         }
         break;
         case NS_ooxml::LN_CT_Shd_fill:
-            createGrabBag("fill", uno::makeAny(OUString::fromUtf8(msfilter::util::ConvertColor(nIntValue, /*bAutoColor=*/true))));
-            if( nIntValue == OOXML_COLOR_AUTO )
+            createGrabBag("fill", uno::makeAny(OUString::fromUtf8(msfilter::util::ConvertColor(nIntValue))));
+            if( nIntValue == sal_Int32(COL_AUTO) )
                 nIntValue = 0xffffff; //fill color auto means white
+            else
+                m_bAutoFillColor = false;
+
             m_nFillColor = nIntValue;
+            m_bFillSpecified = true;
         break;
         case NS_ooxml::LN_CT_Shd_color:
-            createGrabBag("color", uno::makeAny(OUString::fromUtf8(msfilter::util::ConvertColor(nIntValue, /*bAutoColor=*/true))));
-            if( nIntValue == OOXML_COLOR_AUTO )
+            createGrabBag("color", uno::makeAny(OUString::fromUtf8(msfilter::util::ConvertColor(nIntValue))));
+            if( nIntValue == sal_Int32(COL_AUTO) )
                 nIntValue = 0; //shading color auto means black
             //color of the shading
             m_nColor = nIntValue;
@@ -142,10 +149,7 @@ void CellColorHandler::lcl_attribute(Id rName, Value & rVal)
     }
 }
 
-void CellColorHandler::lcl_sprm(Sprm & rSprm)
-{
-    (void)rSprm;
-}
+void CellColorHandler::lcl_sprm(Sprm &) {}
 
 TablePropertyMapPtr  CellColorHandler::getProperties()
 {
@@ -203,7 +207,10 @@ TablePropertyMapPtr  CellColorHandler::getProperties()
     if( !nWW8BrushStyle )
     {
         // Clear-Brush
-        nApplyColor = m_nFillColor;
+        if ( m_bFillSpecified && m_bAutoFillColor )
+            nApplyColor = sal_Int32(COL_AUTO);
+        else
+            nApplyColor = m_nFillColor;
     }
     else
     {
@@ -271,14 +278,18 @@ TablePropertyMapPtr  CellColorHandler::getProperties()
 
     if (m_OutputFormat == Paragraph)
     {
-        pPropertyMap->Insert(PROP_FILL_STYLE, uno::makeAny(drawing::FillStyle_SOLID));
+        if (nWW8BrushStyle || !m_bAutoFillColor)
+            pPropertyMap->Insert(PROP_FILL_STYLE, uno::makeAny(drawing::FillStyle_SOLID));
+        else if (m_bFillSpecified) // m_bAutoFillColor == true
+            pPropertyMap->Insert(PROP_FILL_STYLE, uno::makeAny(drawing::FillStyle_NONE));
+
         pPropertyMap->Insert(PROP_FILL_COLOR, uno::makeAny(nApplyColor));
     }
-    else
+    else if ( nWW8BrushStyle || !m_bAutoFillColor || m_bFillSpecified )
         pPropertyMap->Insert( m_OutputFormat == Form ? PROP_BACK_COLOR
                             : PROP_CHAR_BACK_COLOR, uno::makeAny( nApplyColor ));
 
-    createGrabBag("originalColor", uno::makeAny(OUString::fromUtf8(msfilter::util::ConvertColor(nApplyColor, true))));
+    createGrabBag("originalColor", uno::makeAny(OUString::fromUtf8(msfilter::util::ConvertColor(nApplyColor))));
 
     return pPropertyMap;
 }
@@ -303,7 +314,7 @@ beans::PropertyValue CellColorHandler::getInteropGrabBag()
 {
     beans::PropertyValue aRet;
     aRet.Name = m_aInteropGrabBagName;
-    aRet.Value = uno::makeAny(comphelper::containerToSequence(m_aInteropGrabBag));
+    aRet.Value <<= comphelper::containerToSequence(m_aInteropGrabBag);
     return aRet;
 }
 

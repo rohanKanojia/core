@@ -20,7 +20,6 @@
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/registry/InvalidRegistryException.hpp>
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
 
 #include "xfactory.hxx"
 
@@ -28,14 +27,14 @@ using namespace ::com::sun::star;
 
 extern "C" {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL xstor_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
+SAL_DLLPUBLIC_EXPORT void * xstor_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
     void * pRet = nullptr;
 
     OUString aImplName( OUString::createFromAscii( pImplName ) );
     uno::Reference< lang::XSingleServiceFactory > xFactory;
 
-    if ( pServiceManager && aImplName.equals( OStorageFactory::impl_staticGetImplementationName() ) )
+    if ( pServiceManager && aImplName == OStorageFactory::impl_staticGetImplementationName() )
     {
         xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>( pServiceManager ),
                                             OStorageFactory::impl_staticGetImplementationName(),

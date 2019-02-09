@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_NOTXTFRM_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_NOTXTFRM_HXX
 
-#include <cntfrm.hxx>
+#include "cntfrm.hxx"
 
 class SwNoTextNode;
 class OutputDevice;
@@ -28,37 +28,67 @@ struct SwCursorMoveState;
 
 class SwNoTextFrame: public SwContentFrame
 {
-    friend void _FrameFinit();
-
+private:
+    friend void FrameFinit();
     const Size& GetSize() const;
-
-    void InitCtor();
 
     void Format ( vcl::RenderContext* pRenderContext, const SwBorderAttrs *pAttrs = nullptr ) override;
     void PaintPicture( vcl::RenderContext*, const SwRect& ) const;
 
     virtual void DestroyImpl() override;
-    virtual ~SwNoTextFrame();
+    virtual ~SwNoTextFrame() override;
+
+    // RotateFlyFrame3 add TransformableSwFrame
+    std::unique_ptr< TransformableSwFrame >     mpTransformableSwFrame;
+
+    // RotateFlyFrame3 - Support for inner frame of a SwGrfNode.
+    // Only for local data extraction. To uniquely access information
+    // for local transformation, use getFrameArea(Print)Transformation.
+    friend double getLocalFrameRotation_from_SwNoTextFrame(const SwNoTextFrame& rNoTextFrame);
+    double getLocalFrameRotation() const;
+
+    void ClearCache();
 
 protected:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
     virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
+
 public:
     SwNoTextFrame( SwNoTextNode * const, SwFrame* );
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, SwRect const&,
+    const SwContentNode *GetNode() const
+        { return static_cast<SwContentNode const*>(GetDep()); }
+          SwContentNode *GetNode()
+        { return static_cast<SwContentNode      *>(GetDep()); }
+
+    virtual bool LeftMargin(SwPaM *) const override;
+    virtual bool RightMargin(SwPaM *, bool bAPI = false) const override;
+
+    virtual void PaintSwFrame( vcl::RenderContext& rRenderContext, SwRect const&,
                         SwPrintData const*const pPrintData = nullptr ) const override;
     virtual bool GetCharRect( SwRect &, const SwPosition&,
-                              SwCursorMoveState* = nullptr) const override;
+                              SwCursorMoveState* = nullptr, bool bAllowFarAway = true ) const override;
     virtual bool GetCursorOfst(SwPosition* pPos, Point& aPoint,
                      SwCursorMoveState* = nullptr, bool bTestBackground = false) const override;
 
-    void GetGrfArea( SwRect &rRect, SwRect * = nullptr ) const;
+    void GetGrfArea( SwRect &rRect, SwRect * ) const;
 
     bool IsTransparent() const;
 
     void StopAnimation( OutputDevice* = nullptr ) const;
     bool HasAnimation()  const;
+
+    // RotateFlyFrame3 - Support for Transformations
+    bool isTransformableSwFrame() const { return bool(mpTransformableSwFrame); }
+    TransformableSwFrame* getTransformableSwFrame() { return mpTransformableSwFrame.get(); }
+    const TransformableSwFrame* getTransformableSwFrame() const { return mpTransformableSwFrame.get(); }
+
+    // RotateFlyFrame3 - Support for Transformations
+    virtual basegfx::B2DHomMatrix getFrameAreaTransformation() const override;
+    virtual basegfx::B2DHomMatrix getFramePrintAreaTransformation() const override;
+
+    // RotateFlyFrame3 - Support for Transformations
+    virtual void transform_translate(const Point& rOffset) override;
 };
 
 #endif

@@ -19,25 +19,15 @@
 
 #include <com/sun/star/uno/Sequence.hxx>
 #include <tools/stream.hxx>
+#include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include "cfgchart.hxx"
 #include <dialmgr.hxx>
-#include <cuires.hrc>
+#include <strings.hrc>
 
 #define ROW_COLOR_COUNT 12
 
 using namespace com::sun::star;
-
-
-SvxChartColorTable::SvxChartColorTable()
-    : nNextElementNumber(0)
-{
-}
-
-SvxChartColorTable::SvxChartColorTable(const SvxChartColorTable & _rSource)
-    : m_aColorEntries(_rSource.m_aColorEntries)
-    , nNextElementNumber(m_aColorEntries.size() + 1)
-{
-}
 
 // accessors
 size_t SvxChartColorTable::size() const
@@ -56,7 +46,7 @@ const XColorEntry & SvxChartColorTable::operator[]( size_t _nIndex ) const
     return m_aColorEntries[ _nIndex ];
 }
 
-ColorData SvxChartColorTable::getColorData( size_t _nIndex ) const
+Color SvxChartColorTable::getColor( size_t _nIndex ) const
 {
     if ( _nIndex >= m_aColorEntries.size() )
     {
@@ -71,7 +61,6 @@ ColorData SvxChartColorTable::getColorData( size_t _nIndex ) const
 void SvxChartColorTable::clear()
 {
     m_aColorEntries.clear();
-    nNextElementNumber = 1;
 }
 
 void SvxChartColorTable::append( const XColorEntry & _rEntry )
@@ -81,7 +70,7 @@ void SvxChartColorTable::append( const XColorEntry & _rEntry )
 
 void SvxChartColorTable::remove( size_t _nIndex )
 {
-    if (m_aColorEntries.size() > 0)
+    if (!m_aColorEntries.empty())
         m_aColorEntries.erase( m_aColorEntries.begin() + _nIndex);
 
     for (size_t i=0 ; i<m_aColorEntries.size(); i++)
@@ -100,19 +89,19 @@ void SvxChartColorTable::replace( size_t _nIndex, const XColorEntry & _rEntry )
 
 void SvxChartColorTable::useDefault()
 {
-    ColorData aColors[] = {
-        RGB_COLORDATA( 0x00, 0x45, 0x86 ),
-        RGB_COLORDATA( 0xff, 0x42, 0x0e ),
-        RGB_COLORDATA( 0xff, 0xd3, 0x20 ),
-        RGB_COLORDATA( 0x57, 0x9d, 0x1c ),
-        RGB_COLORDATA( 0x7e, 0x00, 0x21 ),
-        RGB_COLORDATA( 0x83, 0xca, 0xff ),
-        RGB_COLORDATA( 0x31, 0x40, 0x04 ),
-        RGB_COLORDATA( 0xae, 0xcf, 0x00 ),
-        RGB_COLORDATA( 0x4b, 0x1f, 0x6f ),
-        RGB_COLORDATA( 0xff, 0x95, 0x0e ),
-        RGB_COLORDATA( 0xc5, 0x00, 0x0b ),
-        RGB_COLORDATA( 0x00, 0x84, 0xd1 )
+    static const Color aColors[] = {
+        Color( 0x00, 0x45, 0x86 ),
+        Color( 0xff, 0x42, 0x0e ),
+        Color( 0xff, 0xd3, 0x20 ),
+        Color( 0x57, 0x9d, 0x1c ),
+        Color( 0x7e, 0x00, 0x21 ),
+        Color( 0x83, 0xca, 0xff ),
+        Color( 0x31, 0x40, 0x04 ),
+        Color( 0xae, 0xcf, 0x00 ),
+        Color( 0x4b, 0x1f, 0x6f ),
+        Color( 0xff, 0x95, 0x0e ),
+        Color( 0xc5, 0x00, 0x0b ),
+        Color( 0x00, 0x84, 0xd1 )
     };
 
     clear();
@@ -127,23 +116,21 @@ OUString SvxChartColorTable::getDefaultName( size_t _nIndex )
 {
     OUString aName;
 
-    if (sDefaultNamePrefix.getLength() == 0)
+    OUString sDefaultNamePrefix;
+    OUString sDefaultNamePostfix;
+    OUString aResName( CuiResId( RID_SVXSTR_DIAGRAM_ROW ) );
+    sal_Int32 nPos = aResName.indexOf( "$(ROW)" );
+    if( nPos != -1 )
     {
-        OUString aResName( CUI_RES( RID_SVXSTR_DIAGRAM_ROW ) );
-        sal_Int32 nPos = aResName.indexOf( "$(ROW)" );
-        if( nPos != -1 )
-        {
-            sDefaultNamePrefix = aResName.copy( 0, nPos );
-            sDefaultNamePostfix = aResName.copy( nPos + sizeof( "$(ROW)" ) - 1 );
-        }
-        else
-        {
-            sDefaultNamePrefix = aResName;
-        }
+        sDefaultNamePrefix = aResName.copy( 0, nPos );
+        sDefaultNamePostfix = aResName.copy( nPos + sizeof( "$(ROW)" ) - 1 );
+    }
+    else
+    {
+        sDefaultNamePrefix = aResName;
     }
 
     aName = sDefaultNamePrefix + OUString::number(_nIndex + 1) + sDefaultNamePostfix;
-    nNextElementNumber++;
 
     return aName;
 }
@@ -152,13 +139,13 @@ OUString SvxChartColorTable::getDefaultName( size_t _nIndex )
 bool SvxChartColorTable::operator==( const SvxChartColorTable & _rOther ) const
 {
     // note: XColorEntry has no operator ==
-    bool bEqual = ( this->m_aColorEntries.size() == _rOther.m_aColorEntries.size() );
+    bool bEqual = ( m_aColorEntries.size() == _rOther.m_aColorEntries.size() );
 
     if( bEqual )
     {
         for( size_t i = 0; i < m_aColorEntries.size(); ++i )
         {
-            if( getColorData( i ) != _rOther.getColorData( i ))
+            if( getColor( i ) != _rOther.getColor( i ))
             {
                 bEqual = false;
                 break;
@@ -174,7 +161,7 @@ bool SvxChartColorTable::operator==( const SvxChartColorTable & _rOther ) const
 
 
 SvxChartOptions::SvxChartOptions() :
-    ::utl::ConfigItem( OUString("Office.Chart") ),
+    ::utl::ConfigItem( "Office.Chart" ),
     mbIsInitialized( false )
 {
     maPropertyNames.realloc( 1 );
@@ -217,14 +204,14 @@ bool SvxChartOptions::RetrieveOptions()
         Color aCol;
 
         // create strings for entry names
-        OUString aResName( CUI_RES( RID_SVXSTR_DIAGRAM_ROW ) );
+        OUString aResName( CuiResId( RID_SVXSTR_DIAGRAM_ROW ) );
         OUString aPrefix, aPostfix, aName;
         sal_Int32 nPos = aResName.indexOf( "$(ROW)" );
         if( nPos != -1 )
         {
             aPrefix = aResName.copy( 0, nPos );
             sal_Int32 idx = nPos + sizeof( "$(ROW)" ) - 1;
-            aPostfix = aResName.copy( idx, aResName.getLength()-idx );
+            aPostfix = aResName.copy( idx );
         }
         else
             aPrefix = aResName;
@@ -232,7 +219,7 @@ bool SvxChartOptions::RetrieveOptions()
         // set color values
         for( sal_Int32 i=0; i < nCount; i++ )
         {
-            aCol.SetColor( (static_cast< ColorData >(aColorSeq[ i ] )));
+            aCol = Color(aColorSeq[ i ]);
 
             aName = aPrefix + OUString::number(i + 1) + aPostfix;
 
@@ -256,8 +243,8 @@ void SvxChartOptions::ImplCommit()
         uno::Sequence< sal_Int64 > aColors( nCount );
         for( size_t i=0; i < nCount; i++ )
         {
-            ColorData aData = maDefColors.getColorData( i );
-            aColors[ i ] = aData;
+            Color aData = maDefColors.getColor( i );
+            aColors[ i ] = sal_uInt32(aData);
         }
 
         aValues[ 0 ] <<= aColors;
@@ -280,12 +267,6 @@ SvxChartColorTableItem::SvxChartColorTableItem( sal_uInt16 nWhich_, const SvxCha
 {
 }
 
-SvxChartColorTableItem::SvxChartColorTableItem( const SvxChartColorTableItem& rOther ) :
-    SfxPoolItem( rOther ),
-    m_aColorTable( rOther.m_aColorTable )
-{
-}
-
 SfxPoolItem* SvxChartColorTableItem::Clone( SfxItemPool * ) const
 {
     return new SvxChartColorTableItem( *this );
@@ -293,12 +274,12 @@ SfxPoolItem* SvxChartColorTableItem::Clone( SfxItemPool * ) const
 
 bool SvxChartColorTableItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rAttr ), "SvxChartColorTableItem::operator== : types differ" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SvxChartColorTableItem * rCTItem( dynamic_cast<const SvxChartColorTableItem * >( & rAttr ));
     if( rCTItem )
     {
-        return (this->m_aColorTable == rCTItem->GetColorList());
+        return (m_aColorTable == rCTItem->GetColorList());
     }
 
     return false;

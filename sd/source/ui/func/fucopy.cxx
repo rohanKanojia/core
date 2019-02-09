@@ -17,27 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fucopy.hxx"
+#include <fucopy.hxx>
 #include <sfx2/progress.hxx>
 #include <svx/svxids.hrc>
 
-#include "sdresid.hxx"
-#include "sdattr.hxx"
-#include "strings.hrc"
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
+#include <sdresid.hxx>
+#include <sdattr.hxx>
+#include <strings.hrc>
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
 #include <vcl/wrkwin.hxx>
 #include <svx/svdobj.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/app.hxx>
 #include <svx/xcolit.hxx>
 #include <svx/xflclit.hxx>
 #include <svx/xdef.hxx>
 #include <svx/xfillit0.hxx>
 #include <sfx2/request.hxx>
-#include "sdabstdlg.hxx"
+#include <sdabstdlg.hxx>
 #include <memory>
 
 using namespace com::sun::star;
@@ -68,7 +68,7 @@ void FuCopy::DoExecute( SfxRequest& rReq )
     {
         // Undo
         OUString aString( mpView->GetDescriptionOfMarkedObjects() );
-        aString += " " + SD_RESSTR( STR_UNDO_COPYOBJECTS );
+        aString += " " + SdResId( STR_UNDO_COPYOBJECTS );
         mpView->BegUndo( aString );
 
         const SfxItemSet* pArgs = rReq.GetArgs();
@@ -76,7 +76,7 @@ void FuCopy::DoExecute( SfxRequest& rReq )
         if( !pArgs )
         {
             SfxItemSet aSet( mpViewShell->GetPool(),
-                                ATTR_COPY_START, ATTR_COPY_END, 0 );
+                                svl::Items<ATTR_COPY_START, ATTR_COPY_END>{} );
 
             // indicate color attribute
             SfxItemSet aAttr( mpDoc->GetPool() );
@@ -99,34 +99,29 @@ void FuCopy::DoExecute( SfxRequest& rReq )
             }
 
             SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-            if( pFact )
+            ScopedVclPtr<AbstractCopyDlg> pDlg(pFact->CreateCopyDlg(mpViewShell->GetFrameWeld(), aSet, mpView ));
+
+            sal_uInt16 nResult = pDlg->Execute();
+
+            switch( nResult )
             {
-                std::unique_ptr<AbstractCopyDlg> pDlg(pFact->CreateCopyDlg(aSet, mpDoc->GetColorList(), mpView ));
-                if (!pDlg)
-                    return;
+                case RET_OK:
+                    pDlg->GetAttr( aSet );
+                    rReq.Done( aSet );
+                    pArgs = rReq.GetArgs();
+                break;
 
-                sal_uInt16 nResult = pDlg->Execute();
-
-                switch( nResult )
+                default:
                 {
-                    case RET_OK:
-                        pDlg->GetAttr( aSet );
-                        rReq.Done( aSet );
-                        pArgs = rReq.GetArgs();
-                    break;
-
-                    default:
-                    {
-                        pDlg.reset();
-                        mpView->EndUndo();
-                    }
+                    pDlg.disposeAndClear();
+                    mpView->EndUndo();
                     return; // Cancel
                 }
             }
         }
 
-        Rectangle           aRect;
-        sal_Int32               lWidth = 0, lHeight = 0, lSizeX = 0L, lSizeY = 0L, lAngle = 0L;
+        ::tools::Rectangle           aRect;
+        sal_Int32               lWidth = 0, lHeight = 0, lSizeX = 0, lSizeY = 0, lAngle = 0;
         sal_uInt16              nNumber = 0;
         Color               aStartColor, aEndColor;
         bool                bColor = false;
@@ -173,8 +168,8 @@ void FuCopy::DoExecute( SfxRequest& rReq )
 
         if( nNumber > 1 )
         {
-            OUString aStr( SD_RESSTR( STR_OBJECTS ) );
-            aStr += " " + SD_RESSTR( STR_UNDO_COPYOBJECTS );
+            OUString aStr( SdResId( STR_OBJECTS ) );
+            aStr += " " + SdResId( STR_UNDO_COPYOBJECTS );
 
             pProgress.reset(new SfxProgress( mpDocSh, aStr, nNumber ));
             mpDocSh->SetWaitCursor( true );
@@ -188,16 +183,16 @@ void FuCopy::DoExecute( SfxRequest& rReq )
         // calculate number of possible copies
         aRect = mpView->GetAllMarkedRect();
 
-        if( lWidth < 0L )
+        if( lWidth < 0 )
         {
             long nTmp = ( aRect.Right() - aRect.Left() ) / -lWidth;
-            nNumber = (sal_uInt16) std::min( nTmp, (long)nNumber );
+            nNumber = static_cast<sal_uInt16>(std::min( nTmp, static_cast<long>(nNumber) ));
         }
 
-        if( lHeight < 0L )
+        if( lHeight < 0 )
         {
             long nTmp = ( aRect.Bottom() - aRect.Top() ) / -lHeight;
-            nNumber = (sal_uInt16) std::min( nTmp, (long)nNumber );
+            nNumber = static_cast<sal_uInt16>(std::min( nTmp, static_cast<long>(nNumber) ));
         }
 
         for( sal_uInt16 i = 1; i <= nNumber; i++ )
@@ -209,7 +204,7 @@ void FuCopy::DoExecute( SfxRequest& rReq )
 
             if( ( 1 == i ) && bColor )
             {
-                SfxItemSet aNewSet( mpViewShell->GetPool(), XATTR_FILLSTYLE, XATTR_FILLCOLOR, 0L );
+                SfxItemSet aNewSet( mpViewShell->GetPool(), svl::Items<XATTR_FILLSTYLE, XATTR_FILLCOLOR>{} );
                 aNewSet.Put( XFillStyleItem( drawing::FillStyle_SOLID ) );
                 aNewSet.Put( XFillColorItem( OUString(), aStartColor ) );
                 mpView->SetAttributes( aNewSet );
@@ -241,7 +236,7 @@ void FuCopy::DoExecute( SfxRequest& rReq )
                 mpView->ResizeAllMarked( aRect.TopLeft(), aWidth, aHeight );
 
             if( mpView->IsRotateAllowed() )
-                mpView->RotateAllMarked( aRect.Center(), lAngle * 100 );
+                mpView->RotateAllMarked( aRect.Center(), lAngle );
 
             if( mpView->IsMoveAllowed() )
                 mpView->MoveAllMarked( Size( lSizeX, lSizeY ) );
@@ -267,11 +262,11 @@ void FuCopy::DoExecute( SfxRequest& rReq )
             if( bColor )
             {
                 // probably room for optimizations, but may can lead to rounding errors
-                sal_uInt8 nRed = aStartColor.GetRed() + (sal_uInt8) ( ( (long) aEndColor.GetRed() - (long) aStartColor.GetRed() ) * (long) i / (long) nNumber  );
-                sal_uInt8 nGreen = aStartColor.GetGreen() + (sal_uInt8) ( ( (long) aEndColor.GetGreen() - (long) aStartColor.GetGreen() ) *  (long) i / (long) nNumber );
-                sal_uInt8 nBlue = aStartColor.GetBlue() + (sal_uInt8) ( ( (long) aEndColor.GetBlue() - (long) aStartColor.GetBlue() ) * (long) i / (long) nNumber );
+                sal_uInt8 nRed = aStartColor.GetRed() + static_cast<sal_uInt8>( ( static_cast<long>(aEndColor.GetRed()) - static_cast<long>(aStartColor.GetRed()) ) * static_cast<long>(i) / static_cast<long>(nNumber)  );
+                sal_uInt8 nGreen = aStartColor.GetGreen() + static_cast<sal_uInt8>( ( static_cast<long>(aEndColor.GetGreen()) - static_cast<long>(aStartColor.GetGreen()) ) *  static_cast<long>(i) / static_cast<long>(nNumber) );
+                sal_uInt8 nBlue = aStartColor.GetBlue() + static_cast<sal_uInt8>( ( static_cast<long>(aEndColor.GetBlue()) - static_cast<long>(aStartColor.GetBlue()) ) * static_cast<long>(i) / static_cast<long>(nNumber) );
                 Color aNewColor( nRed, nGreen, nBlue );
-                SfxItemSet aNewSet( mpViewShell->GetPool(), XATTR_FILLSTYLE, XATTR_FILLCOLOR, 0L );
+                SfxItemSet aNewSet( mpViewShell->GetPool(), svl::Items<XATTR_FILLSTYLE, XATTR_FILLCOLOR>{} );
                 aNewSet.Put( XFillStyleItem( drawing::FillStyle_SOLID ) );
                 aNewSet.Put( XFillColorItem( OUString(), aNewColor ) );
                 mpView->SetAttributes( aNewSet );

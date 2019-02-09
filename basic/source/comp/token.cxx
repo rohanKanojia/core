@@ -18,14 +18,14 @@
  */
 
 
-#include "basiccharclass.hxx"
-#include "token.hxx"
+#include <array>
+
+#include <basic/sberrors.hxx>
+#include <sal/macros.h>
+#include <basiccharclass.hxx>
+#include <token.hxx>
 
 struct TokenTable { SbiToken t; const char *s; };
-
-static short nToken;                    // number of tokens
-
-static const TokenTable* pTokTable;
 
 static const TokenTable aTokTable_Basic [] = {
     { CAT,      "&" },
@@ -138,6 +138,7 @@ static const TokenTable aTokTable_Basic [] = {
     { PRINT,    "Print" },
     { PRIVATE,  "Private" },
     { PROPERTY, "Property" },
+    { PTRSAFE,  "PtrSafe" },
     { PUBLIC,   "Public" },
     { RANDOM,   "Random" },
     { READ,     "Read" },
@@ -148,15 +149,7 @@ static const TokenTable aTokTable_Basic [] = {
     { RSET,     "RSet" }, // JSM
     { SELECT,   "Select" },
     { SET,      "Set" },
-#ifdef SHARED
-#undef SHARED
-#define tmpSHARED
-#endif
     { SHARED,   "Shared" },
-#ifdef tmpSHARED
-#define SHARED
-#undef tmpSHARED
-#endif
     { TSINGLE,  "Single" },
     { STATIC,   "Static" },
     { STEP,     "Step" },
@@ -178,36 +171,37 @@ static const TokenTable aTokTable_Basic [] = {
     { WITHEVENTS,   "WithEvents" },
     { WRITE,    "Write" },              // also WRITE #
     { XOR,      "Xor" },
-    { NIL,      "" }
 };
 
+// #i109076
+class TokenLabelInfo
+{
+    std::array<bool,VBASUPPORT+1> m_pTokenCanBeLabelTab;
+
+public:
+    TokenLabelInfo();
+
+    bool canTokenBeLabel( SbiToken eTok )
+        { return m_pTokenCanBeLabelTab[eTok]; }
+};
+
+class StaticTokenLabelInfo: public ::rtl::Static< TokenLabelInfo, StaticTokenLabelInfo >{};
 
 // #i109076
 TokenLabelInfo::TokenLabelInfo()
 {
-    m_pTokenCanBeLabelTab = new bool[VBASUPPORT+1];
-    for( int i = 0 ; i <= VBASUPPORT ; ++i )
-    {
-        m_pTokenCanBeLabelTab[i] = false;
-    }
+    m_pTokenCanBeLabelTab.fill(false);
+
     // Token accepted as label by VBA
-    SbiToken eLabelToken[] = { ACCESS, ALIAS, APPEND, BASE, BINARY, CLASSMODULE,
+    static const SbiToken eLabelToken[] = { ACCESS, ALIAS, APPEND, BASE, BINARY, CLASSMODULE,
                                COMPARE, COMPATIBLE, DEFERR, ERROR_, BASIC_EXPLICIT, LIB, LINE, LPRINT, NAME,
-                               TOBJECT, OUTPUT, PROPERTY, RANDOM, READ, STEP, STOP, TEXT, VBASUPPORT, NIL };
-    SbiToken eTok;
-    for( SbiToken* pTok = eLabelToken ; (eTok = *pTok) != NIL ; ++pTok )
+                               TOBJECT, OUTPUT, PROPERTY, RANDOM, READ, STEP, STOP, TEXT, VBASUPPORT };
+    for( SbiToken eTok : eLabelToken )
     {
         m_pTokenCanBeLabelTab[eTok] = true;
     }
 }
 
-TokenLabelInfo::~TokenLabelInfo()
-{
-    delete[] m_pTokenCanBeLabelTab;
-}
-
-
-// the constructor detects the length of the token table
 
 SbiTokenizer::SbiTokenizer( const OUString& rSrc, StarBASIC* pb )
     : SbiScanner(rSrc, pb)
@@ -218,23 +212,10 @@ SbiTokenizer::SbiTokenizer( const OUString& rSrc, StarBASIC* pb )
     , nPCol2(0)
     , bEof(false)
     , bEos(true)
-    , bKeywords(true)
     , bAs(false)
     , bErrorIsSymbol(true)
 {
-    pTokTable = aTokTable_Basic;
-    if( !nToken )
-    {
-        const TokenTable *tp;
-        for( nToken = 0, tp = pTokTable; tp->t; nToken++, tp++ )
-        {}
-    }
 }
-
-SbiTokenizer::~SbiTokenizer()
-{
-}
-
 
 void SbiTokenizer::Push( SbiToken t )
 {
@@ -243,19 +224,13 @@ void SbiTokenizer::Push( SbiToken t )
     else ePush = t;
 }
 
-void SbiTokenizer::Error( SbError code, const char* pMsg )
-{
-    aError = OUString::createFromAscii( pMsg );
-    Error( code );
-}
-
-void SbiTokenizer::Error( SbError code, const OUString &aMsg )
+void SbiTokenizer::Error( ErrCode code, const OUString &aMsg )
 {
     aError = aMsg;
     Error( code );
 }
 
-void SbiTokenizer::Error( SbError code, SbiToken tok )
+void SbiTokenizer::Error( ErrCode code, SbiToken tok )
 {
     aError = Symbol( tok );
     Error( code );
@@ -302,12 +277,11 @@ const OUString& SbiTokenizer::Symbol( SbiToken t )
     default:
         break;
     }
-    const TokenTable* tp = pTokTable;
-    for( short i = 0; i < nToken; i++, tp++ )
+    for( auto& rTok : aTokTable_Basic )
     {
-        if( tp->t == t )
+        if( rTok.t == t )
         {
-            aSym = OStringToOUString(tp->s, RTL_TEXTENCODING_ASCII_US);
+            aSym = OStringToOUString(rTok.s, RTL_TEXTENCODING_ASCII_US);
             return aSym;
         }
     }
@@ -382,17 +356,16 @@ SbiToken SbiTokenizer::Next()
     }
     else
     {
-        if( eScanType != SbxVARIANT
-         || ( !bKeywords && bSymbol ) )
+        if( eScanType != SbxVARIANT )
             return eCurTok = SYMBOL;
         // valid token?
         short lb = 0;
-        short ub = nToken-1;
+        short ub = SAL_N_ELEMENTS(aTokTable_Basic)-1;
         short delta;
         do
         {
             delta = (ub - lb) >> 1;
-            tp = &pTokTable[ lb + delta ];
+            tp = &aTokTable_Basic[ lb + delta ];
             sal_Int32 res = aSym.compareToIgnoreAsciiCaseAscii( tp->s );
 
             if( res == 0 )
@@ -427,7 +400,7 @@ SbiToken SbiTokenizer::Next()
         sal_Unicode ch = aSym[0];
         if( !BasicCharClass::isAlpha( ch, bCompatible ) && !bSymbol )
         {
-            return eCurTok = (SbiToken) (ch & 0x00FF);
+            return eCurTok = static_cast<SbiToken>(ch & 0x00FF);
         }
         return eCurTok = SYMBOL;
     }
@@ -548,7 +521,7 @@ special:
 
 bool SbiTokenizer::MayBeLabel( bool bNeedsColon )
 {
-    if( eCurTok == SYMBOL || m_aTokenLabelInfo.canTokenBeLabel( eCurTok ) )
+    if( eCurTok == SYMBOL || StaticTokenLabelInfo::get().canTokenBeLabel( eCurTok ) )
     {
         return !bNeedsColon || DoesColonFollow();
     }
@@ -563,22 +536,12 @@ bool SbiTokenizer::MayBeLabel( bool bNeedsColon )
 
 OUString SbiTokenizer::GetKeywordCase( const OUString& sKeyword )
 {
-    if( !nToken )
+    for( auto& rTok : aTokTable_Basic )
     {
-        const TokenTable *tp;
-        for( nToken = 0, tp = pTokTable; tp->t; nToken++, tp++ )
-        {}
+        if( sKeyword.equalsIgnoreAsciiCaseAscii(rTok.s) )
+            return OStringToOUString(rTok.s, RTL_TEXTENCODING_ASCII_US);
     }
-    const TokenTable* tp = pTokTable;
-    for( short i = 0; i < nToken; i++, tp++ )
-    {
-        OUString sStr = OStringToOUString(tp->s, RTL_TEXTENCODING_ASCII_US);
-        if( sStr.equalsIgnoreAsciiCase(sKeyword) )
-        {
-            return sStr;
-        }
-    }
-    return OUString("");
+    return OUString();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

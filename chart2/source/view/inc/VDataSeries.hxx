@@ -21,21 +21,20 @@
 
 #include "PropertyMapper.hxx"
 
-#include <com/sun/star/chart2/DataPointLabel.hpp>
-#include <com/sun/star/chart2/Symbol.hpp>
 #include <com/sun/star/chart2/StackingDirection.hpp>
-#include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
-#include <com/sun/star/chart2/XChartType.hpp>
-#include <com/sun/star/chart2/XDataSeries.hpp>
-#include <com/sun/star/drawing/HomogenMatrix.hpp>
 #include <com/sun/star/drawing/PolyPolygonShape3D.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
-#include <cppuhelper/weakref.hxx>
+#include <com/sun/star/awt/Size.hpp>
 
 #include <memory>
-#include <vector>
 #include <map>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartType; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XDataSequence; } } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { struct DataPointLabel; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { struct Symbol; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
 
 namespace chart
 {
@@ -65,7 +64,7 @@ public:
     VDataSeries(const VDataSeries&) = delete;
     const VDataSeries& operator=(const VDataSeries&) = delete;
 
-    css::uno::Reference<css::chart2::XDataSeries> getModel() const;
+    const css::uno::Reference<css::chart2::XDataSeries>& getModel() const;
 
     void setCategoryXAxis();
     void setXValues( const css::uno::Reference<css::chart2::data::XDataSequence>& xValues );
@@ -94,8 +93,8 @@ public:
 
     bool        hasPropertyMapping( const OUString& rPropName ) const;
 
-    css::uno::Sequence< double > getAllX() const;
-    css::uno::Sequence< double > getAllY() const;
+    css::uno::Sequence< double > const & getAllX() const;
+    css::uno::Sequence< double > const & getAllY() const;
 
     double getXMeanValue() const;
     double getYMeanValue() const;
@@ -107,7 +106,7 @@ public:
 
     sal_Int32 getLabelPlacement(
         sal_Int32 nPointIndex, const css::uno::Reference<css::chart2::XChartType>& xChartType,
-        sal_Int32 nDimensionCount, bool bSwapXAndY ) const;
+        bool bSwapXAndY ) const;
 
     css::uno::Reference<css::beans::XPropertySet> getPropertiesOfPoint( sal_Int32 index ) const;
 
@@ -147,12 +146,12 @@ public:
     //this is here for deep stacking:
     double m_fLogicZPos;//from 0 to series count -1
 
-    OUString       getCID() const { return m_aCID;}
-    OUString       getSeriesParticle() const { return m_aSeriesParticle;}
-    OUString       getPointCID_Stub() const { return m_aPointCID_Stub;}
+    const OUString& getCID() const { return m_aCID;}
+    const OUString& getSeriesParticle() const { return m_aSeriesParticle;}
+    const OUString& getPointCID_Stub() const { return m_aPointCID_Stub;}
     OUString       getErrorBarsCID( bool bYError ) const;
     OUString       getLabelsCID() const;
-    OUString       getLabelCID_Stub() const { return m_aLabelCID_Stub;}
+    const OUString& getLabelCID_Stub() const { return m_aLabelCID_Stub;}
     OUString       getDataCurveCID( sal_Int32 nCurveIndex, bool bAverageLine ) const;
 
     css::chart2::DataPointLabel* getDataPointLabelIfLabel( sal_Int32 index ) const;

@@ -13,11 +13,11 @@
  manual changes will be rewritten by the next run of update_pch.sh (which presumably
  also fixes all possible problems, so it's usually better to use it).
 
- Generated on 2015-11-14 14:16:36 using:
+ Generated on 2017-09-20 22:53:36 using:
  ./bin/update_pch sc scui --cutoff=1 --exclude:system --exclude:module --include:local
 
  If after updating build fails, use the following command to locate conflicting headers:
- ./bin/update_pch_bisect ./sc/inc/pch/precompiled_scui.hxx "/opt/lo/bin/make sc.build" --find-conflicts
+ ./bin/update_pch_bisect ./sc/inc/pch/precompiled_scui.hxx "make sc.build" --find-conflicts
 */
 
 #include <algorithm>
@@ -41,22 +41,17 @@
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/waitobj.hxx>
 #include <vcl/window.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/GraphicNativeTransform.hxx>
+#include <vcl/GraphicNativeMetadata.hxx>
 #include <appoptio.hxx>
 #include <attrib.hxx>
 #include <autoform.hxx>
-#include <basic/sbmeth.hxx>
-#include <basic/sbmod.hxx>
-#include <basic/sbstar.hxx>
 #include <calcconfig.hxx>
-#include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XDesktop2.hpp>
-#include <com/sun/star/i18n/LocaleDataItem.hpp>
-#include <com/sun/star/lang/Locale.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdb/DatabaseContext.hpp>
 #include <com/sun/star/sdb/XCompletedConnection.hpp>
@@ -75,7 +70,6 @@
 #include <comphelper/processfactory.hxx>
 #include <comphelper/random.hxx>
 #include <comphelper/string.hxx>
-#include <compiler.hxx>
 #include <defaultsoptions.hxx>
 #include <docoptio.hxx>
 #include <document.hxx>
@@ -101,14 +95,15 @@
 #include <editeng/udlnitem.hxx>
 #include <editeng/wghtitem.hxx>
 #include <editutil.hxx>
+#include <filterentries.hxx>
+#include <formula/compiler.hxx>
 #include <formula/grammar.hxx>
-#include <formula/opcode.hxx>
 #include <formulaopt.hxx>
 #include <global.hxx>
 #include <globalnames.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <miscuno.hxx>
-#include <o3tl/make_unique.hxx>
+#include <officecfg/Office/Calc.hxx>
 #include <optutil.hxx>
 #include <patattr.hxx>
 #include <printopt.hxx>
@@ -122,22 +117,20 @@
 #include <scresid.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/basedlgs.hxx>
-#include <sfx2/childwin.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/docinsert.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <sfx2/objsh.hxx>
-#include <sfx2/sfxcommands.h>
 #include <sfx2/sfxresid.hxx>
 #include <sfx2/tabdlg.hxx>
-#include <sfx2/viewfrm.hxx>
-#include <stringutil.hxx>
+#include <strings.hxx>
 #include <svl/aeitem.hxx>
 #include <svl/cjkoptions.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
+#include <svl/memberid.h>
 #include <svl/sharedstringpool.hxx>
 #include <svl/stritem.hxx>
 #include <svl/style.hxx>
@@ -145,9 +138,8 @@
 #include <svtools/collatorres.hxx>
 #include <svtools/ehdl.hxx>
 #include <svtools/sfxecode.hxx>
-#include <svtools/svlbitm.hxx>
-#include <svtools/treelistentry.hxx>
 #include <svx/algitem.hxx>
+#include <svx/colorbox.hxx>
 #include <svx/dlgutil.hxx>
 #include <svx/drawitem.hxx>
 #include <svx/flagsdef.hxx>
@@ -159,17 +151,15 @@
 #include <svx/xtable.hxx>
 #include <tablink.hxx>
 #include <tools/color.hxx>
-#include <tools/resary.hxx>
-#include <tools/resid.hxx>
 #include <tools/urlobj.hxx>
-#include <typedstrdata.hxx>
 #include <unotools/collatorwrapper.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/transliterationwrapper.hxx>
 #include <unotools/useroptions.hxx>
 #include <userlist.hxx>
-#include <validat.hxx>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
 #include <viewopti.hxx>
 #include <zforauto.hxx>
 

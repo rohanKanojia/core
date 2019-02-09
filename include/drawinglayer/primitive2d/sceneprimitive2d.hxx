@@ -73,7 +73,6 @@ namespace drawinglayer
             /// the primitiveSequence for on-demand created shadow primitives (see mbShadow3DChecked)
             Primitive2DContainer                                   maShadowPrimitives;
 
-            /// bitfield
             /** flag if given 3D geometry is already cheched for shadow definitions and 2d shadows
                 are created in maShadowPrimitives
              */
@@ -90,7 +89,7 @@ namespace drawinglayer
             BitmapEx                                            maOldRenderedBitmap;
 
             /// private helpers
-            bool impGetShadow3D(const geometry::ViewInformation2D& rViewInformation) const;
+            bool impGetShadow3D() const;
             void calculateDiscreteSizes(
                 const geometry::ViewInformation2D& rViewInformation,
                 basegfx::B2DRange& rDiscreteRange,
@@ -99,7 +98,7 @@ namespace drawinglayer
 
         protected:
             /// local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             /// public helpers
@@ -108,7 +107,7 @@ namespace drawinglayer
                 helper is useful e.g. for Contour extraction or HitTests.
               */
             Primitive2DContainer getGeometry2D() const;
-            Primitive2DContainer getShadow2D(const geometry::ViewInformation2D& rViewInformation) const;
+            Primitive2DContainer getShadow2D() const;
 
             /** Fast HitTest which uses the last buffered BitmapEx from the last
                 rendered area if available. The return value describes if the check
@@ -146,7 +145,7 @@ namespace drawinglayer
             DeclPrimitive2DIDBlock()
 
             /// get local decomposition. Override since this decomposition is view-dependent
-            virtual Primitive2DContainer get2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void get2DDecomposition(Primitive2DDecompositionVisitor& rVisitor, const geometry::ViewInformation2D& rViewInformation) const override;
         };
     } // end of namespace primitive2d
 } // end of namespace drawinglayer

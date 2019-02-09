@@ -20,13 +20,14 @@
 #include <hintids.hxx>
 #include <editeng/unolingu.hxx>
 #include <com/sun/star/i18n/WordType.hpp>
+#include <com/sun/star/i18n/XBreakIterator.hpp>
 #include <viewopt.hxx>
 #include <viewsh.hxx>
 #include <SwPortionHandler.hxx>
-#include <porhyph.hxx>
-#include <inftxt.hxx>
-#include <itrform2.hxx>
-#include <guess.hxx>
+#include "porhyph.hxx"
+#include "inftxt.hxx"
+#include "itrform2.hxx"
+#include "guess.hxx"
 #include <splargs.hxx>
 #include <rootfrm.hxx>
 
@@ -55,13 +56,12 @@ Reference< XHyphenatedWord >  SwTextFormatInfo::HyphWord(
 /**
  * We format a row for interactive hyphenation
  */
-bool SwTextFrame::Hyphenate( SwInterHyphInfo &rHyphInf )
+bool SwTextFrame::Hyphenate(SwInterHyphInfoTextFrame & rHyphInf)
 {
     vcl::RenderContext* pRenderContext = getRootFrame()->GetCurrShell()->GetOut();
     OSL_ENSURE( ! IsVertical() || ! IsSwapped(),"swapped frame at SwTextFrame::Hyphenate" );
 
-    if( !g_pBreakIt->GetBreakIter().is() )
-        return false;
+    assert(g_pBreakIt && g_pBreakIt->GetBreakIter().is());
 
     // We lock it, to start with
     OSL_ENSURE( !IsLocked(), "SwTextFrame::Hyphenate: this is locked" );
@@ -82,7 +82,7 @@ bool SwTextFrame::Hyphenate( SwInterHyphInfo &rHyphInf )
 
         SwTextFormatInfo aInf( getRootFrame()->GetCurrShell()->GetOut(), this, true ); // true for interactive hyph!
         SwTextFormatter aLine( this, &aInf );
-        aLine.CharToLine( rHyphInf.nStart );
+        aLine.CharToLine( rHyphInf.m_nStart );
 
         // If we're within the first word of a row, it could've been hyphenated
         // in the row earlier.
@@ -90,14 +90,14 @@ bool SwTextFrame::Hyphenate( SwInterHyphInfo &rHyphInf )
         if( aLine.Prev() )
         {
             SwLinePortion *pPor = aLine.GetCurr()->GetFirstPortion();
-            while( pPor->GetPortion() )
-                pPor = pPor->GetPortion();
-            if( pPor->GetWhichPor() == POR_SOFTHYPH ||
-                pPor->GetWhichPor() == POR_SOFTHYPHSTR )
+            while( pPor->GetNextPortion() )
+                pPor = pPor->GetNextPortion();
+            if( pPor->GetWhichPor() == PortionType::SoftHyphen ||
+                pPor->GetWhichPor() == PortionType::SoftHyphenStr )
                 aLine.Next();
         }
 
-        const sal_Int32 nEnd = rHyphInf.GetEnd();
+        const TextFrameIndex nEnd = rHyphInf.m_nEnd;
         while( !bRet && aLine.GetStart() < nEnd )
         {
             bRet = aLine.Hyphenate( rHyphInf );
@@ -124,7 +124,7 @@ void SetParaPortion( SwTextInfo *pInf, SwParaPortion *pRoot )
     pInf->m_pPara = pRoot;
 }
 
-bool SwTextFormatter::Hyphenate( SwInterHyphInfo &rHyphInf )
+bool SwTextFormatter::Hyphenate(SwInterHyphInfoTextFrame & rHyphInf)
 {
     SwTextFormatInfo &rInf = GetInfo();
 
@@ -134,7 +134,7 @@ bool SwTextFormatter::Hyphenate( SwInterHyphInfo &rHyphInf )
     if( !GetNext() && !rInf.GetTextFly().IsOn() && !m_pFrame->GetFollow() )
         return false;
 
-    sal_Int32 nWrdStart = m_nStart;
+    TextFrameIndex nWrdStart = m_nStart;
 
     // We need to retain the old row
     // E.g.: The attribute for hyphenation was not set, but
@@ -144,9 +144,9 @@ bool SwTextFormatter::Hyphenate( SwInterHyphInfo &rHyphInf )
 
     InitCntHyph();
 
-    // 5298: IsParaLine() (ex.IsFirstLine) fragt auf GetParaPortion() ab.
-    // wir muessen gleiche Bedingungen schaffen: in der ersten
-    // Zeile formatieren wir SwParaPortions...
+    // 5298: IsParaLine() (ex.IsFirstLine) calls GetParaPortion().
+    // We have to create the same conditions: in the first line
+    // we format SwParaPortions...
     if( pOldCurr->IsParaPortion() )
     {
         SwParaPortion *pPara = new SwParaPortion();
@@ -159,26 +159,25 @@ bool SwTextFormatter::Hyphenate( SwInterHyphInfo &rHyphInf )
 
     nWrdStart = FormatLine( nWrdStart );
 
-    // Man muss immer im Hinterkopf behalten, dass es z.B.
-    // Felder gibt, die aufgetrennt werden koennen ...
+    // You always should keep in mind that for example there are fields
+    // which can be hyphenated
     if( m_pCurr->PrtWidth() && m_pCurr->GetLen() )
     {
-        // Wir muessen uns darauf einstellen, dass in der Zeile
-        // FlyFrames haengen, an denen auch umgebrochen werden darf.
-        // Wir suchen also die erste HyphPortion in dem angegebenen
-        // Bereich.
+        // We must be prepared that there are FlyFrames in the line,
+        // at which line breaking is possible. So we search for the first
+        // HyphPortion in the specified range.
 
-        SwLinePortion *pPos = m_pCurr->GetPortion();
-        const sal_Int32 nPamStart = rHyphInf.nStart;
+        SwLinePortion *pPos = m_pCurr->GetNextPortion();
+        const TextFrameIndex nPamStart = rHyphInf.m_nStart;
         nWrdStart = m_nStart;
-        const sal_Int32 nEnd = rHyphInf.GetEnd();
+        const TextFrameIndex nEnd = rHyphInf.m_nEnd;
         while( pPos )
         {
-            // Entweder wir liegen drueber oder wir laufen gerade auf eine
-            // Hyphportion die am Ende der Zeile oder vor einem Flys steht.
+            // Either we are above or we are running into a HyphPortion
+            // at the end of line or before a Fly.
             if( nWrdStart >= nEnd )
             {
-                nWrdStart = 0;
+                nWrdStart = TextFrameIndex(0);
                 break;
             }
 
@@ -191,14 +190,19 @@ bool SwTextFormatter::Hyphenate( SwInterHyphInfo &rHyphInf )
             }
 
             nWrdStart = nWrdStart + pPos->GetLen();
-            pPos = pPos->GetPortion();
+            pPos = pPos->GetNextPortion();
         }
-        // Wenn pPos 0 ist, wurde keine Trennstelle ermittelt.
+        // When pPos is null, no hyphen position was found.
         if( !pPos )
-            nWrdStart = 0;
+            nWrdStart = TextFrameIndex(0);
     }
+    else
+        // In case the whole line is zero-length, that's the same situation as
+        // above when the portion iteration ends without explicitly breaking
+        // from the loop.
+        nWrdStart = TextFrameIndex(0);
 
-    // Das alte LineLayout wird wieder eingestellt ...
+    // the old LineLayout is set again ...
     delete m_pCurr;
     m_pCurr = pOldCurr;
 
@@ -208,65 +212,60 @@ bool SwTextFormatter::Hyphenate( SwInterHyphInfo &rHyphInf )
         OSL_ENSURE( IsParaLine(), "SwTextFormatter::Hyphenate: even not the first" );
     }
 
-    if( nWrdStart==0 )
+    if (nWrdStart == TextFrameIndex(0))
         return false;
 
-    // nWrdStart bezeichnet nun die Position im String, der
-    // fuer eine Trennung zur Debatte steht.
-    // Start() hangelt sich zum End()
-    rHyphInf.nWordStart = nWrdStart;
+    // nWrdStart contains the position in string that should be hyphenated
+    rHyphInf.m_nWordStart = nWrdStart;
 
-    sal_Int32 nLen = 0;
-    const sal_Int32 nEnd = nWrdStart;
+    TextFrameIndex nLen(0);
+    const TextFrameIndex nEnd = nWrdStart;
 
-    // Wir suchen vorwaerts
+    // we search forwards
     Reference< XHyphenatedWord > xHyphWord;
 
-    Boundary aBound =
-        g_pBreakIt->GetBreakIter()->getWordBoundary( rInf.GetText(), nWrdStart,
+    Boundary const aBound = g_pBreakIt->GetBreakIter()->getWordBoundary(
+        rInf.GetText(), sal_Int32(nWrdStart),
         g_pBreakIt->GetLocale( rInf.GetFont()->GetLanguage() ), WordType::DICTIONARY_WORD, true );
-    nWrdStart = aBound.startPos;
-    nLen = aBound.endPos - nWrdStart;
-    if ( nLen == 0 )
+    nWrdStart = TextFrameIndex(aBound.startPos);
+    nLen = TextFrameIndex(aBound.endPos) - nWrdStart;
+    if (nLen == TextFrameIndex(0))
         return false;
 
-    OUString aSelText( rInf.GetText().copy(nWrdStart, nLen) );
-    const sal_Int32 nMinTrail = ( nWrdStart + nLen > nEnd ) ? nWrdStart + nLen - nEnd - 1 : 0;
+    OUString const aSelText(rInf.GetText().copy(sal_Int32(nWrdStart), sal_Int32(nLen)));
+    const sal_Int32 nMinTrail = (nWrdStart + nLen > nEnd)
+            ? sal_Int32(nWrdStart + nLen - nEnd) - 1
+            : 0;
 
-    //!! rHyphInf.SetHyphWord( ... ) mu??? hier geschehen
+    //!! rHyphInf.SetHyphWord( ... ) must done here
     xHyphWord = rInf.HyphWord( aSelText, nMinTrail );
     if ( xHyphWord.is() )
     {
         rHyphInf.SetHyphWord( xHyphWord );
-        rHyphInf.nWordStart = nWrdStart;
-        rHyphInf.nWordLen = nLen;
-        rHyphInf.SetNoLang( false );
-        rHyphInf.SetCheck( true );
+        rHyphInf.m_nWordStart = nWrdStart;
+        rHyphInf.m_nWordLen = nLen;
         return true;
     }
-
-    if ( !rHyphInf.IsCheck() )
-        rHyphInf.SetNoLang( true );
 
     return false;
 }
 
-bool SwTextPortion::CreateHyphen( SwTextFormatInfo &rInf, SwTextGuess &rGuess )
+bool SwTextPortion::CreateHyphen( SwTextFormatInfo &rInf, SwTextGuess const &rGuess )
 {
-    Reference< XHyphenatedWord >  xHyphWord = rGuess.HyphWord();
+    const Reference< XHyphenatedWord >&  xHyphWord = rGuess.HyphWord();
 
-    OSL_ENSURE( !pPortion, "SwTextPortion::CreateHyphen(): another portion, another planet..." );
+    OSL_ENSURE( !mpNextPortion, "SwTextPortion::CreateHyphen(): another portion, another planet..." );
     OSL_ENSURE( xHyphWord.is(), "SwTextPortion::CreateHyphen(): You are lucky! The code is robust here." );
 
     if( rInf.IsHyphForbud() ||
-        pPortion || // robust
+        mpNextPortion || // robust
         !xHyphWord.is() || // more robust
-        // Mehrzeilige Felder duerfen nicht interaktiv getrennt werden.
+        // multi-line fields can't be hyphenated interactively
         ( rInf.IsInterHyph() && InFieldGrp() ) )
         return false;
 
-    SwHyphPortion *pHyphPor;
-    sal_Int32 nPorEnd;
+    std::unique_ptr<SwHyphPortion> pHyphPor;
+    TextFrameIndex nPorEnd;
     SwTextSizeInfo aInf( rInf );
 
     // first case: hyphenated word has alternative spelling
@@ -277,49 +276,49 @@ bool SwTextPortion::CreateHyphen( SwTextFormatInfo &rInf, SwTextGuess &rGuess )
         OSL_ENSURE( aAltSpell.bIsAltSpelling, "no alternative spelling" );
 
         OUString aAltText = aAltSpell.aReplacement;
-        nPorEnd = aAltSpell.nChangedPos + rGuess.BreakStart() - rGuess.FieldDiff();
+        nPorEnd = TextFrameIndex(aAltSpell.nChangedPos) + rGuess.BreakStart() - rGuess.FieldDiff();
         sal_Int32 nTmpLen = 0;
 
         // soft hyphen at alternative spelling position?
-        if( rInf.GetText()[ rInf.GetSoftHyphPos() ] == CHAR_SOFTHYPHEN )
+        if( rInf.GetText()[sal_Int32(rInf.GetSoftHyphPos())] == CHAR_SOFTHYPHEN )
         {
-            pHyphPor = new SwSoftHyphStrPortion( aAltText );
+            pHyphPor.reset(new SwSoftHyphStrPortion( aAltText ));
             nTmpLen = 1;
         }
         else {
-            pHyphPor = new SwHyphStrPortion( aAltText );
+            pHyphPor.reset(new SwHyphStrPortion( aAltText ));
         }
 
         // length of pHyphPor is adjusted
-        pHyphPor->SetLen( aAltText.getLength() + 1 );
-        (SwPosSize&)(*pHyphPor) = pHyphPor->GetTextSize( rInf );
-        pHyphPor->SetLen( aAltSpell.nChangedLength + nTmpLen );
+        pHyphPor->SetLen( TextFrameIndex(aAltText.getLength() + 1) );
+        static_cast<SwPosSize&>(*pHyphPor) = pHyphPor->GetTextSize( rInf );
+        pHyphPor->SetLen( TextFrameIndex(aAltSpell.nChangedLength + nTmpLen) );
     }
     else
     {
         // second case: no alternative spelling
-        pHyphPor = new SwHyphPortion;
-        pHyphPor->SetLen( 1 );
+        pHyphPor.reset(new SwHyphPortion);
+        pHyphPor->SetLen(TextFrameIndex(1));
 
-        static const void* pLastMagicNo = nullptr;
+        static const void* nLastFontCacheId = nullptr;
         static sal_uInt16 aMiniCacheH = 0, aMiniCacheW = 0;
-        const void* pTmpMagic;
+        const void* nTmpFontCacheId;
         sal_uInt16 nFntIdx;
-        rInf.GetFont()->GetMagic( pTmpMagic, nFntIdx, rInf.GetFont()->GetActual() );
-        if( !pLastMagicNo || pLastMagicNo != pTmpMagic ) {
-            pLastMagicNo = pTmpMagic;
-            (SwPosSize&)(*pHyphPor) = pHyphPor->GetTextSize( rInf );
+        rInf.GetFont()->GetFontCacheId( nTmpFontCacheId, nFntIdx, rInf.GetFont()->GetActual() );
+        if( !nLastFontCacheId || nLastFontCacheId != nTmpFontCacheId ) {
+            nLastFontCacheId = nTmpFontCacheId;
+            static_cast<SwPosSize&>(*pHyphPor) = pHyphPor->GetTextSize( rInf );
             aMiniCacheH = pHyphPor->Height();
             aMiniCacheW = pHyphPor->Width();
         } else {
             pHyphPor->Height( aMiniCacheH );
             pHyphPor->Width( aMiniCacheW );
         }
-        pHyphPor->SetLen( 0 );
+        pHyphPor->SetLen(TextFrameIndex(0));
 
         // values required for this
-        nPorEnd = xHyphWord->getHyphenPos() + 1 + rGuess.BreakStart()
-                - rGuess.FieldDiff();
+        nPorEnd = TextFrameIndex(xHyphWord->getHyphenPos() + 1)
+                + rGuess.BreakStart() - rGuess.FieldDiff();
     }
 
     // portion end must be in front of us
@@ -332,7 +331,7 @@ bool SwTextPortion::CreateHyphen( SwTextFormatInfo &rInf, SwTextGuess &rGuess )
         SetLen( aInf.GetLen() );
         CalcTextSize( aInf );
 
-        Insert( pHyphPor );
+        Insert( pHyphPor.release() );
 
         short nKern = rInf.GetFont()->CheckKerning();
         if( nKern )
@@ -342,7 +341,7 @@ bool SwTextPortion::CreateHyphen( SwTextFormatInfo &rInf, SwTextGuess &rGuess )
     }
 
     // last exit for the lost
-    delete pHyphPor;
+    pHyphPor.reset();
     BreakCut( rInf, rGuess );
     return false;
 }
@@ -392,10 +391,10 @@ void SwHyphStrPortion::HandlePortion( SwPortionHandler& rPH ) const
 SwLinePortion *SwSoftHyphPortion::Compress() { return this; }
 
 SwSoftHyphPortion::SwSoftHyphPortion() :
-    bExpand(false), nViewWidth(0), nHyphWidth(0)
+    bExpand(false), nViewWidth(0)
 {
-    SetLen(1);
-    SetWhichPor( POR_SOFTHYPH );
+    SetLen(TextFrameIndex(1));
+    SetWhichPor( PortionType::SoftHyphen );
 }
 
 sal_uInt16 SwSoftHyphPortion::GetViewWidth( const SwTextSizeInfo &rInf ) const
@@ -420,14 +419,14 @@ sal_uInt16 SwSoftHyphPortion::GetViewWidth( const SwTextSizeInfo &rInf ) const
  *     -> invisible, neighbors unchanged
  *  2) SoftHyph is in the line, ViewOpt on
  *     -> visible, neighbors unchanged
- *  3) SoftHyph is at the end of the line, ViewOpt or or off
+ *  3) SoftHyph is at the end of the line, ViewOpt on or off
  *     -> always visible, neighbors unchanged
  */
 void SwSoftHyphPortion::Paint( const SwTextPaintInfo &rInf ) const
 {
     if( Width() )
     {
-        rInf.DrawViewOpt( *this, POR_SOFTHYPH );
+        rInf.DrawViewOpt( *this, PortionType::SoftHyphen );
         SwExpandPortion::Paint( rInf );
     }
 }
@@ -453,7 +452,7 @@ bool SwSoftHyphPortion::Format( SwTextFormatInfo &rInf )
 {
     bool bFull = true;
 
-    // special case for old german spelling
+    // special case for old German spelling
     if( rInf.IsUnderflow()  )
     {
         if( rInf.GetSoftHyphPos() )
@@ -464,18 +463,18 @@ bool SwSoftHyphPortion::Format( SwTextFormatInfo &rInf )
         {
             rInf.SetSoftHyphPos( rInf.GetIdx() );
             Width(0);
-            // if the soft hyphend word has an alternative spelling
-            // when hyphenated (old german spelling), the soft hyphen
+            // if the soft hyphened word has an alternative spelling
+            // when hyphenated (old German spelling), the soft hyphen
             // portion has to trigger an underflow
             SwTextGuess aGuess;
             bFull = rInf.IsInterHyph() ||
-                    !aGuess.AlternativeSpelling( rInf, rInf.GetIdx() - 1 );
+                    !aGuess.AlternativeSpelling(rInf, rInf.GetIdx() - TextFrameIndex(1));
         }
         rInf.ChgHyph( bHyph );
 
         if( bFull && !rInf.IsHyphForbud() )
         {
-            rInf.SetSoftHyphPos(0);
+            rInf.SetSoftHyphPos(TextFrameIndex(0));
             FormatEOL( rInf );
             if ( rInf.GetFly() )
                 rInf.GetRoot()->SetMidHyph( true );
@@ -491,14 +490,13 @@ bool SwSoftHyphPortion::Format( SwTextFormatInfo &rInf )
         return true;
     }
 
-    rInf.SetSoftHyphPos(0);
+    rInf.SetSoftHyphPos(TextFrameIndex(0));
     SetExpand( true );
     bFull = SwHyphPortion::Format( rInf );
     SetExpand( false );
     if( !bFull )
     {
         // By default, we do not have a width, but we do have a height
-        nHyphWidth = Width();
         Width(0);
     }
     return bFull;
@@ -517,11 +515,10 @@ void SwSoftHyphPortion::FormatEOL( SwTextFormatInfo &rInf )
 
         // We need to reset the old values
         const SwTwips nOldX  = rInf.X();
-        const sal_Int32 nOldIdx = rInf.GetIdx();
+        TextFrameIndex const nOldIdx = rInf.GetIdx();
         rInf.X( rInf.X() - PrtWidth() );
         rInf.SetIdx( rInf.GetIdx() - GetLen() );
         const bool bFull = SwHyphPortion::Format( rInf );
-        nHyphWidth = Width();
 
         // Shady business: We're allowed to get wider, but a Fly is also
         // being processed, which needs a correct X position
@@ -542,9 +539,9 @@ void SwSoftHyphPortion::FormatEOL( SwTextFormatInfo &rInf )
 bool SwSoftHyphPortion::GetExpText( const SwTextSizeInfo &rInf, OUString &rText ) const
 {
     if( IsExpand() || ( rInf.OnWin() && rInf.GetOpt().IsSoftHyph() ) ||
-        ( GetPortion() && ( GetPortion()->InFixGrp() ||
-          GetPortion()->IsDropPortion() || GetPortion()->IsLayPortion() ||
-          GetPortion()->IsParaPortion() || GetPortion()->IsBreakPortion() ) ) )
+        ( GetNextPortion() && ( GetNextPortion()->InFixGrp() ||
+          GetNextPortion()->IsDropPortion() || GetNextPortion()->IsLayPortion() ||
+          GetNextPortion()->IsParaPortion() || GetNextPortion()->IsBreakPortion() ) ) )
     {
         return SwHyphPortion::GetExpText( rInf, rText );
     }
@@ -553,8 +550,8 @@ bool SwSoftHyphPortion::GetExpText( const SwTextSizeInfo &rInf, OUString &rText 
 
 void SwSoftHyphPortion::HandlePortion( SwPortionHandler& rPH ) const
 {
-    const sal_uInt16 nWhich = ! Width() ?
-                          POR_SOFTHYPH_COMP :
+    const PortionType nWhich = ! Width() ?
+                          PortionType::SoftHyphenComp :
                           GetWhichPor();
     rPH.Special( GetLen(), OUString('-'), nWhich );
 }
@@ -563,15 +560,15 @@ void SwSoftHyphStrPortion::Paint( const SwTextPaintInfo &rInf ) const
 {
     // Bug or feature?:
     // {Zu}{k-}{ker}, {k-} will be gray instead of {-}
-    rInf.DrawViewOpt( *this, POR_SOFTHYPH );
+    rInf.DrawViewOpt( *this, PortionType::SoftHyphen );
     SwHyphStrPortion::Paint( rInf );
 }
 
 SwSoftHyphStrPortion::SwSoftHyphStrPortion( const OUString &rStr )
     : SwHyphStrPortion( rStr )
 {
-    SetLen( 1 );
-    SetWhichPor( POR_SOFTHYPHSTR );
+    SetLen(TextFrameIndex(1));
+    SetWhichPor( PortionType::SoftHyphenStr );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

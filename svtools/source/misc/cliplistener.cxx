@@ -22,10 +22,9 @@
 
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
-#include <osl/mutex.hxx>
 
 #include <svtools/cliplistener.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 using namespace ::com::sun::star;
 
@@ -40,13 +39,11 @@ TransferableClipboardListener::~TransferableClipboardListener()
 }
 
 void SAL_CALL TransferableClipboardListener::disposing( const lang::EventObject& )
-                                                        throw(uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL TransferableClipboardListener::changedContents(
                             const datatransfer::clipboard::ClipboardEvent& rEventObject )
-                                                        throw(uno::RuntimeException, std::exception)
 {
     if ( aLink.IsSet() )
     {

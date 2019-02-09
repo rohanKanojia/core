@@ -28,7 +28,6 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/XModuleManager2.hpp>
 
-#include <comphelper/sequenceashashmap.hxx>
 #include <sfx2/signaturestate.hxx>
 
 
@@ -50,9 +49,9 @@ private:
     css::uno::Reference< css::container::XContainerQuery > m_xFilterQuery;
     css::uno::Reference< css::frame::XModuleManager2 >     m_xModuleManager;
 
-    css::uno::Reference< css::container::XNameAccess > GetFilterConfiguration();
-    css::uno::Reference< css::container::XContainerQuery > GetFilterQuery();
-    css::uno::Reference< css::frame::XModuleManager2 > GetModuleManager();
+    css::uno::Reference< css::container::XNameAccess > const & GetFilterConfiguration();
+    css::uno::Reference< css::container::XContainerQuery > const & GetFilterQuery();
+    css::uno::Reference< css::frame::XModuleManager2 > const & GetModuleManager();
 
 public:
     SfxStoringHelper();
@@ -62,27 +61,24 @@ public:
                     const OUString& aSlotName,
                     css::uno::Sequence< css::beans::PropertyValue >& aArgsSequence,
                     bool bPreselectPassword,
-                    const OUString& aUserSelectedName,
-                    SignatureState nDocumentSignatureState = SignatureState::NOSIGNATURES );
+                    SignatureState nDocumentSignatureState );
 
-    static bool CheckFilterOptionsAppearence(
+    static bool CheckFilterOptionsAppearance(
                     const css::uno::Reference< css::container::XNameAccess >& xFilterCFG,
                     const OUString& aFilterName );
 
 
     static void SetDocInfoState(
         const css::uno::Reference< css::frame::XModel >& xModel,
-        const css::uno::Reference< css::document::XDocumentProperties>& i_xOldDocInfo,
-        bool bNoModify );
+        const css::uno::Reference< css::document::XDocumentProperties>& i_xOldDocInfo );
 
     static bool WarnUnacceptableFormat(
                                     const css::uno::Reference< css::frame::XModel >& xModel,
                                     const OUString& aOldUIName,
-                                    const OUString& aDefUIName,
                                     const OUString& aDefExtension,
-                                    bool bCanProceedFurther,
                                     bool rDefaultIsAlien );
 
+    static css::uno::Reference<css::awt::XWindow> GetModelXWindow(const css::uno::Reference<css::frame::XModel>& rModel);
     static vcl::Window* GetModelWindow( const css::uno::Reference< css::frame::XModel >& xModel );
 
 };

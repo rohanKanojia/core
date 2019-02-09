@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgsymbolnode.hxx>
+#include <svgsymbolnode.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 
@@ -30,14 +30,12 @@ namespace svgio
             SvgNode* pParent)
         :   SvgNode(SVGTokenSvg, rDocument, pParent),
             maSvgStyleAttributes(*this),
-            mpViewBox(nullptr),
             maSvgAspectRatio()
         {
         }
 
         SvgSymbolNode::~SvgSymbolNode()
         {
-            delete mpViewBox;
         }
 
         const SvgStyleAttributes* SvgSymbolNode::getSvgStyleAttributes() const
@@ -51,7 +49,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -73,7 +71,7 @@ namespace svgio
                 }
                 case SVGTokenPreserveAspectRatio:
                 {
-                    setSvgAspectRatio(readSvgAspectRatio(aContent));
+                    maSvgAspectRatio = readSvgAspectRatio(aContent);
                     break;
                 }
                 default:

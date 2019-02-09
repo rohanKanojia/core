@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <string_view>
+
 #include "PresenterController.hxx"
 
 #include "PresenterAccessibility.hxx"
@@ -266,11 +270,7 @@ void PresenterController::UpdateCurrentSlide (const sal_Int32 nOffset)
     // Update the accessibility object.
     if (IsAccessibilityActive())
     {
-        sal_Int32 nSlideCount (0);
-        Reference<container::XIndexAccess> xIndexAccess(mxSlideShowController, UNO_QUERY);
-        if (xIndexAccess.is())
-            nSlideCount = xIndexAccess->getCount();
-        mpAccessibleObject->NotifyCurrentSlideChange(mnCurrentSlideIndex, nSlideCount);
+        mpAccessibleObject->NotifyCurrentSlideChange();
     }
 }
 
@@ -365,14 +365,13 @@ void PresenterController::UpdatePaneTitles()
     }
 
     // Replace the placeholders with their current values.
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=mpPaneContainer->maPanes.end(); ++iPane)
+    for (auto& rxPane : mpPaneContainer->maPanes)
     {
-        OSL_ASSERT((*iPane).get() != nullptr);
+        OSL_ASSERT(rxPane != nullptr);
 
         OUString sTemplate (IsAccessibilityActive()
-            ? (*iPane)->msAccessibleTitleTemplate
-            : (*iPane)->msTitleTemplate);
+            ? rxPane->msAccessibleTitleTemplate
+            : rxPane->msTitleTemplate);
         if (sTemplate.isEmpty())
             continue;
 
@@ -386,13 +385,13 @@ void PresenterController::UpdatePaneTitles()
             if (nStartIndex < 0)
             {
                 // Add the remaining part of the string.
-                sResult.append(sTemplate.copy(nIndex, sTemplate.getLength()-nIndex));
+                sResult.append(std::u16string_view(sTemplate).substr(nIndex));
                 break;
             }
             else
             {
                 // Add the part preceding the next %.
-                sResult.append(sTemplate.copy(nIndex, nStartIndex-nIndex));
+                sResult.append(std::u16string_view(sTemplate).substr(nIndex, nStartIndex-nIndex));
 
                 // Get the placeholder
                 ++nStartIndex;
@@ -410,19 +409,18 @@ void PresenterController::UpdatePaneTitles()
             }
         }
 
-        (*iPane)->msTitle = sResult.makeStringAndClear();
-        if ((*iPane)->mxPane.is())
-            (*iPane)->mxPane->SetTitle((*iPane)->msTitle);
+        rxPane->msTitle = sResult.makeStringAndClear();
+        if (rxPane->mxPane.is())
+            rxPane->mxPane->SetTitle(rxPane->msTitle);
     }
 }
 
 void PresenterController::UpdateViews()
 {
     // Tell all views about the slides they should display.
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=mpPaneContainer->maPanes.end(); ++iPane)
+    for (const auto& rxPane : mpPaneContainer->maPanes)
     {
-        Reference<drawing::XDrawView> xDrawView ((*iPane)->mxView, UNO_QUERY);
+        Reference<drawing::XDrawView> xDrawView (rxPane->mxView, UNO_QUERY);
         if (xDrawView.is())
             xDrawView->setCurrentPage(mxCurrentSlide);
     }
@@ -431,7 +429,7 @@ void PresenterController::UpdateViews()
 SharedBitmapDescriptor
     PresenterController::GetViewBackground (const OUString& rsViewURL) const
 {
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
     {
         const OUString sStyleName (mpTheme->GetStyleName(rsViewURL));
         return mpTheme->GetBitmap(sStyleName, "Background");
@@ -442,7 +440,7 @@ SharedBitmapDescriptor
 PresenterTheme::SharedFontDescriptor
     PresenterController::GetViewFont (const OUString& rsViewURL) const
 {
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
     {
         const OUString sStyleName (mpTheme->GetStyleName(rsViewURL));
         return mpTheme->GetFont(sStyleName);
@@ -450,43 +448,43 @@ PresenterTheme::SharedFontDescriptor
     return PresenterTheme::SharedFontDescriptor();
 }
 
-std::shared_ptr<PresenterTheme> PresenterController::GetTheme() const
+const std::shared_ptr<PresenterTheme>& PresenterController::GetTheme() const
 {
     return mpTheme;
 }
 
-::rtl::Reference<PresenterWindowManager> PresenterController::GetWindowManager() const
+const ::rtl::Reference<PresenterWindowManager>& PresenterController::GetWindowManager() const
 {
     return mpWindowManager;
 }
 
-Reference<presentation::XSlideShowController>
+const Reference<presentation::XSlideShowController>&
     PresenterController::GetSlideShowController() const
 {
     return mxSlideShowController;
 }
 
-rtl::Reference<PresenterPaneContainer> PresenterController::GetPaneContainer() const
+const rtl::Reference<PresenterPaneContainer>& PresenterController::GetPaneContainer() const
 {
     return mpPaneContainer;
 }
 
-::rtl::Reference<PresenterPaneBorderPainter> PresenterController::GetPaneBorderPainter() const
+const ::rtl::Reference<PresenterPaneBorderPainter>& PresenterController::GetPaneBorderPainter() const
 {
     return mpPaneBorderPainter;
 }
 
-std::shared_ptr<PresenterCanvasHelper> PresenterController::GetCanvasHelper() const
+const std::shared_ptr<PresenterCanvasHelper>& PresenterController::GetCanvasHelper() const
 {
     return mpCanvasHelper;
 }
 
-Reference<drawing::XPresenterHelper> PresenterController::GetPresenterHelper() const
+const Reference<drawing::XPresenterHelper>& PresenterController::GetPresenterHelper() const
 {
     return mxPresenterHelper;
 }
 
-std::shared_ptr<PresenterPaintManager> PresenterController::GetPaintManager() const
+const std::shared_ptr<PresenterPaintManager>& PresenterController::GetPaintManager() const
 {
     return mpPaintManager;
 }
@@ -568,18 +566,18 @@ util::URL PresenterController::CreateURLFromString (const OUString& rsURL) const
     return aURL;
 }
 
-Reference<drawing::framework::XConfigurationController>
+const Reference<drawing::framework::XConfigurationController>&
     PresenterController::GetConfigurationController() const
 {
     return mxConfigurationController;
 }
 
-Reference<drawing::XDrawPage> PresenterController::GetCurrentSlide() const
+const Reference<drawing::XDrawPage>& PresenterController::GetCurrentSlide() const
 {
     return mxCurrentSlide;
 }
 
-bool PresenterController::HasTransition (Reference<drawing::XDrawPage>& rxPage)
+bool PresenterController::HasTransition (Reference<drawing::XDrawPage> const & rxPage)
 {
     bool bTransition = false;
     sal_uInt16 aTransitionType = 0;
@@ -601,7 +599,7 @@ bool PresenterController::HasTransition (Reference<drawing::XDrawPage>& rxPage)
     return bTransition;
 }
 
-bool PresenterController::HasCustomAnimation (Reference<drawing::XDrawPage>& rxPage)
+bool PresenterController::HasCustomAnimation (Reference<drawing::XDrawPage> const & rxPage)
 {
     bool bCustomAnimation = false;
     if( rxPage.is() )
@@ -671,12 +669,10 @@ void PresenterController::RequestViews (
     const bool bIsNotesViewActive,
     const bool bIsHelpViewActive)
 {
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    PresenterPaneContainer::PaneList::const_iterator iEnd (mpPaneContainer->maPanes.end());
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=iEnd; ++iPane)
+    for (const auto& rxPane : mpPaneContainer->maPanes)
     {
         bool bActivate (true);
-        const OUString sViewURL ((*iPane)->msViewURL);
+        const OUString sViewURL (rxPane->msViewURL);
         if (sViewURL == PresenterViewFactory::msNotesViewURL)
         {
             bActivate = bIsNotesViewActive && !bIsSlideSorterActive && !bIsHelpViewActive;
@@ -720,9 +716,13 @@ IPresentationTime* PresenterController::GetPresentationTime()
 
 void SAL_CALL PresenterController::notifyConfigurationChange (
     const ConfigurationChangeEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    ThrowIfDisposed();
+    if (rBHelper.bDisposed || rBHelper.bInDispose)
+    {
+        throw lang::DisposedException (
+            "PresenterController object has already been disposed",
+            static_cast<uno::XWeak*>(this));
+    }
 
     sal_Int32 nType (0);
     if ( ! (rEvent.UserData >>= nType))
@@ -744,12 +744,6 @@ void SAL_CALL PresenterController::notifyConfigurationChange (
                 {
                     PresenterPaneContainer::SharedPaneDescriptor pDescriptor (
                         mpPaneContainer->FindPaneId(xPane->getResourceId()));
-
-                    // When there is a call out anchor location set then tell the
-                    // window about it.
-                    if (pDescriptor->mbHasCalloutAnchor)
-                        pDescriptor->mxPane->SetCalloutAnchor(
-                            pDescriptor->maCalloutAnchorLocation);
                 }
             }
             else if (rEvent.ResourceId->isBoundTo(mxMainPaneId,AnchorBindingMode_INDIRECT))
@@ -803,7 +797,6 @@ void SAL_CALL PresenterController::notifyConfigurationChange (
 
 void SAL_CALL PresenterController::disposing (
     const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source == mxController)
         mxController = nullptr;
@@ -819,7 +812,6 @@ void SAL_CALL PresenterController::disposing (
 
 void SAL_CALL PresenterController::frameAction (
     const frame::FrameActionEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Action == frame::FrameAction_FRAME_ACTIVATED)
     {
@@ -831,23 +823,20 @@ void SAL_CALL PresenterController::frameAction (
 //----- XKeyListener ----------------------------------------------------------
 
 void SAL_CALL PresenterController::keyPressed (const awt::KeyEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     // Tell all views about the unhandled key event.
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=mpPaneContainer->maPanes.end(); ++iPane)
+    for (const auto& rxPane : mpPaneContainer->maPanes)
     {
-        if ( ! (*iPane)->mbIsActive)
+        if ( ! rxPane->mbIsActive)
             continue;
 
-        Reference<awt::XKeyListener> xKeyListener ((*iPane)->mxView, UNO_QUERY);
+        Reference<awt::XKeyListener> xKeyListener (rxPane->mxView, UNO_QUERY);
         if (xKeyListener.is())
             xKeyListener->keyPressed(rEvent);
     }
 }
 
 void SAL_CALL PresenterController::keyReleased (const awt::KeyEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source != mxMainWindow)
         return;
@@ -988,13 +977,12 @@ void SAL_CALL PresenterController::keyReleased (const awt::KeyEvent& rEvent)
 
         default:
             // Tell all views about the unhandled key event.
-            PresenterPaneContainer::PaneList::const_iterator iPane;
-            for (iPane=mpPaneContainer->maPanes.begin(); iPane!=mpPaneContainer->maPanes.end(); ++iPane)
+            for (const auto& rxPane : mpPaneContainer->maPanes)
             {
-                if ( ! (*iPane)->mbIsActive)
+                if ( ! rxPane->mbIsActive)
                     continue;
 
-                Reference<awt::XKeyListener> xKeyListener ((*iPane)->mxView, UNO_QUERY);
+                Reference<awt::XKeyListener> xKeyListener (rxPane->mxView, UNO_QUERY);
                 if (xKeyListener.is())
                     xKeyListener->keyReleased(rEvent);
             }
@@ -1038,6 +1026,7 @@ void PresenterController::HandleNumericKeyPress (
                     // Ignore unsupported key.
                     break;
             }
+            break;
 
         default:
             // Ignore unsupported modifiers.
@@ -1047,59 +1036,29 @@ void PresenterController::HandleNumericKeyPress (
 
 //----- XFocusListener --------------------------------------------------------
 
-void SAL_CALL PresenterController::focusGained (const css::awt::FocusEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::focusGained (const css::awt::FocusEvent&) {}
 
-void SAL_CALL PresenterController::focusLost (const css::awt::FocusEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::focusLost (const css::awt::FocusEvent&) {}
 
 //----- XMouseListener --------------------------------------------------------
 
-void SAL_CALL PresenterController::mousePressed (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterController::mousePressed (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     if (mxMainWindow.is())
         mxMainWindow->setFocus();
 }
 
-void SAL_CALL PresenterController::mouseReleased (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::mouseReleased (const css::awt::MouseEvent&) {}
 
-void SAL_CALL PresenterController::mouseEntered (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::mouseEntered (const css::awt::MouseEvent&) {}
 
-void SAL_CALL PresenterController::mouseExited (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::mouseExited (const css::awt::MouseEvent&) {}
 
 //----- XMouseMotionListener --------------------------------------------------
 
-void SAL_CALL PresenterController::mouseMoved (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::mouseMoved (const css::awt::MouseEvent&) {}
 
-void SAL_CALL PresenterController::mouseDragged (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterController::mouseDragged (const css::awt::MouseEvent&) {}
 
 
 void PresenterController::InitializeMainPane (const Reference<XPane>& rxPane)
@@ -1133,7 +1092,7 @@ void PresenterController::InitializeMainPane (const Reference<XPane>& rxPane)
     }
     Reference<XPane2> xPane2 (rxPane, UNO_QUERY);
     if (xPane2.is())
-        xPane2->setVisible(sal_True);
+        xPane2->setVisible(true);
 
     mpPaintManager.reset(new PresenterPaintManager(mxMainWindow, mxPresenterHelper, mpPaneContainer));
 
@@ -1149,7 +1108,7 @@ void PresenterController::LoadTheme (const Reference<XPane>& rxPane)
 {
     // Create (load) the current theme.
     if (rxPane.is())
-        mpTheme.reset(new PresenterTheme(mxComponentContext, OUString(), rxPane->getCanvas()));
+        mpTheme.reset(new PresenterTheme(mxComponentContext, rxPane->getCanvas()));
 }
 
 double PresenterController::GetSlideAspectRatio() const
@@ -1189,7 +1148,7 @@ void PresenterController::UpdatePendingSlideNumber (const sal_Int32 nPendingSlid
 {
     mnPendingSlideNumber = nPendingSlideNumber;
 
-    if (mpTheme.get() == nullptr)
+    if (mpTheme == nullptr)
         return;
 
     if ( ! mxMainWindow.is())
@@ -1206,22 +1165,10 @@ void PresenterController::UpdatePendingSlideNumber (const sal_Int32 nPendingSlid
 
     const OUString sText (OUString::number(mnPendingSlideNumber));
     rendering::StringContext aContext (sText, 0, sText.getLength());
-    Reference<rendering::XTextLayout> xLayout (
-        pFont->mxFont->createTextLayout(
+    pFont->mxFont->createTextLayout(
             aContext,
             rendering::TextDirection::WEAK_LEFT_TO_RIGHT,
-            0));
-}
-
-void PresenterController::ThrowIfDisposed() const
-    throw (css::lang::DisposedException)
-{
-    if (rBHelper.bDisposed || rBHelper.bInDispose)
-    {
-        throw lang::DisposedException (
-            OUString( "PresenterController object has already been disposed"),
-            const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
-    }
+            0);
 }
 
 void PresenterController::SwitchMonitors()

@@ -61,11 +61,11 @@ namespace svxform
         void    CancelPendingCall();
 
     private:
-        Link<void*,void>  m_aHandler;
+        Link<void*,void> const  m_aHandler;
         ImplSVEvent * m_nEventId;
 
     private:
-        DECL_LINK_TYPED( OnCall, void*, void );
+        DECL_LINK( OnCall, void*, void );
 
     private:
         DelayedEvent( const DelayedEvent& ) = delete;

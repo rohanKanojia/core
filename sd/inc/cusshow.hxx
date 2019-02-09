@@ -24,34 +24,30 @@
 #include <cppuhelper/weakref.hxx>
 #include "sddllapi.h"
 
-class SdDrawDocument;
 class SdPage;
 
-class SD_DLLPUBLIC SdCustomShow
+class SD_DLLPUBLIC SdCustomShow final
 {
 public:
     typedef ::std::vector<const SdPage*> PageVec;
 
 private:
-    PageVec       maPages;
+    PageVec         maPages;
     OUString        aName;
-    SdDrawDocument* pDoc;
 
     // this is a weak reference to a possible living api wrapper for this custom show
     css::uno::WeakReference< css::uno::XInterface > mxUnoCustomShow;
 
-    // forbidden and not implemented
-    SdCustomShow();
-
 public:
-    // single argument ctors shall be explicit
-    explicit SdCustomShow(SdDrawDocument* pDrawDoc);
-    SdCustomShow(SdDrawDocument* pDrawDoc, css::uno::Reference< css::uno::XInterface > xShow );
+    SdCustomShow();
+    SdCustomShow(css::uno::Reference< css::uno::XInterface > const & xShow );
 
-    virtual ~SdCustomShow();
+    ~SdCustomShow();
 
     // @@@ copy ctor, but no copy assignment? @@@
     SdCustomShow( const SdCustomShow& rShow );
+
+    SdCustomShow& operator=( const SdCustomShow& rShow ) = delete;
 
     /** Provides a direct access to the collection of the SdPage objects. */
     PageVec& PagesVector() { return maPages;}
@@ -60,13 +56,9 @@ public:
      * If pNewPage is 0 then removes all occurrences of pOldPage.
      */
     void ReplacePage( const SdPage* pOldPage, const SdPage* pNewPage );
-    /** Removes all occurrences of pPage. */
-    void RemovePage( const SdPage* pPage );
 
     void   SetName(const OUString& rName);
     const OUString& GetName() const { return aName;}
-
-    SdDrawDocument* GetDoc() const { return pDoc; }
 
     css::uno::Reference< css::uno::XInterface > getUnoCustomShow();
 };

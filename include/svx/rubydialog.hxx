@@ -29,26 +29,19 @@
 #include <vcl/button.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/scrbar.hxx>
-#include <com/sun/star/uno/Reference.h>
 #include <svx/svxdllapi.h>
-
-namespace com{namespace sun{namespace star{
-    namespace view{
-        class XSelectionChangeListener;
-    }
-}}}
+#include <rtl/ref.hxx>
 
 
 class SvxRubyDialog;
-class RubyPreview : public vcl::Window
+class RubyPreview final : public vcl::Window
 {
-protected:
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     VclPtr<SvxRubyDialog> m_pParentDlg;
 
 public:
     RubyPreview(vcl::Window *pParent);
-    virtual ~RubyPreview();
+    virtual ~RubyPreview() override;
     virtual void dispose() override;
     void setRubyDialog(SvxRubyDialog* pParentDlg)
     {
@@ -61,7 +54,7 @@ class SVX_DLLPUBLIC SvxRubyChildWindow : public SfxChildWindow
 {
  public:
 
-    SvxRubyChildWindow( vcl::Window*, sal_uInt16, SfxBindings*, SfxChildWinInfo* );
+    SvxRubyChildWindow( vcl::Window*, sal_uInt16, SfxBindings*, SfxChildWinInfo const * );
 
     SFX_DECL_CHILDWINDOW( SvxRubyChildWindow );
 
@@ -74,16 +67,12 @@ class RubyEdit  : public Edit
     virtual void        GetFocus() override;
     virtual bool        PreNotify( NotifyEvent& rNEvt ) override;
 public:
-    RubyEdit(vcl::Window* pParent, const ResId& rResId)
-        : Edit(pParent, rResId)
-    {
-    }
     RubyEdit(vcl::Window* pParent)
         : Edit(pParent, WB_BORDER)
     {
     }
-    void    SetScrollHdl(Link<sal_Int32,bool>& rLink) {aScrollHdl = rLink;}
-    void    SetJumpHdl(Link<sal_Int32,void>& rLink) {aJumpHdl = rLink;}
+    void    SetScrollHdl(Link<sal_Int32,bool> const & rLink) {aScrollHdl = rLink;}
+    void    SetJumpHdl(Link<sal_Int32,void> const & rLink) {aJumpHdl = rLink;}
 };
 
 
@@ -124,20 +113,18 @@ class SvxRubyDialog : public SfxModelessDialog
 
     bool                bModified;
 
-    css::uno::Reference<css::view::XSelectionChangeListener> xImpl;
-    SfxBindings*    pBindings;
-    SvxRubyData_Impl* pImpl;
+    SfxBindings*        pBindings;
 
-    DECL_LINK_TYPED(ApplyHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(CloseHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(StylistHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(ScrollHdl_Impl, ScrollBar*, void);
-    DECL_LINK_TYPED(PositionHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(AdjustHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(CharStyleHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(EditModifyHdl_Impl, Edit&, void);
-    DECL_LINK_TYPED(EditScrollHdl_Impl, sal_Int32, bool);
-    DECL_LINK_TYPED(EditJumpHdl_Impl, sal_Int32, void);
+    DECL_LINK(ApplyHdl_Impl, Button*, void);
+    DECL_LINK(CloseHdl_Impl, Button*, void);
+    DECL_LINK(StylistHdl_Impl, Button*, void);
+    DECL_LINK(ScrollHdl_Impl, ScrollBar*, void);
+    DECL_LINK(PositionHdl_Impl, ListBox&, void);
+    DECL_LINK(AdjustHdl_Impl, ListBox&, void);
+    DECL_LINK(CharStyleHdl_Impl, ListBox&, void);
+    DECL_LINK(EditModifyHdl_Impl, Edit&, void);
+    DECL_LINK(EditScrollHdl_Impl, sal_Int32, bool);
+    DECL_LINK(EditJumpHdl_Impl, sal_Int32, void);
 
     void                SetRubyText(sal_Int32 nPos, Edit& rLeft, Edit& rRight);
     void                GetRubyText();
@@ -158,17 +145,20 @@ class SvxRubyDialog : public SfxModelessDialog
     void                GetCurrentText(OUString& rBase, OUString& rRuby);
 
     void                UpdateColors();
+
 protected:
     virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;
-public:
 
+public:
                         SvxRubyDialog(SfxBindings *pBindings, SfxChildWindow *pCW,
                                     vcl::Window* pParent);
-    virtual             ~SvxRubyDialog();
+    virtual             ~SvxRubyDialog() override;
     virtual void        dispose() override;
 
     virtual void        Activate() override;
-    virtual void        Deactivate() override;
+
+private:
+    rtl::Reference<SvxRubyData_Impl> m_pImpl;
 };
 
 #endif // INCLUDED_SVX_RUBYDIALOG_HXX

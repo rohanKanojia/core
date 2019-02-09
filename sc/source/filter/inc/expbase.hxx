@@ -20,9 +20,10 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_EXPBASE_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_EXPBASE_HXX
 
-#include "global.hxx"
-#include "address.hxx"
+#include <memory>
+#include <address.hxx>
 
+class SvNumberFormatter;
 class SvStream;
 class ScFieldEditEngine;
 
@@ -31,10 +32,11 @@ class ScExportBase
 protected:
 
     SvStream&           rStrm;
-    ScRange             aRange;
+    ScRange const       aRange;
     ScDocument*         pDoc;
     SvNumberFormatter*  pFormatter;
-    ScFieldEditEngine*  pEditEngine;
+    std::unique_ptr<ScFieldEditEngine>
+                        pEditEngine;
 
 public:
 

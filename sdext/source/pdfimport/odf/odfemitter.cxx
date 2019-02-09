@@ -18,14 +18,15 @@
  */
 
 
-#include "odfemitter.hxx"
+#include <odfemitter.hxx>
 
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
 #include <cppuhelper/exc_hlp.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
-#include <boost/bind.hpp>
+
+#include <comphelper/stl_types.hxx>
 
 using namespace com::sun::star;
 
@@ -70,29 +71,22 @@ void OdfEmitter::beginTag( const char* pTag, const PropertyMap& rProperties )
     aElement.append(" ");
 
     std::vector<OUString>        aAttributes;
-    PropertyMap::const_iterator       aCurr(rProperties.begin());
-    const PropertyMap::const_iterator aEnd(rProperties.end());
-    while( aCurr != aEnd )
+    for( const auto& rCurr : rProperties )
     {
         OUStringBuffer aAttribute;
-        aAttribute.append(aCurr->first);
+        aAttribute.append(rCurr.first);
         aAttribute.append("=\"");
-        aAttribute.append(aCurr->second);
+        aAttribute.append(rCurr.second);
         aAttribute.append("\" ");
         aAttributes.push_back(aAttribute.makeStringAndClear());
-        ++aCurr;
     }
 
     // since the hash map's sorting is undefined (and varies across
     // platforms, and even between different compile-time settings),
     // sort the attributes.
     std::sort(aAttributes.begin(), aAttributes.end());
-    std::for_each(aAttributes.begin(),
-                  aAttributes.end(),
-                  boost::bind( (OUStringBuffer& (OUStringBuffer::*)(const OUString&))
-                               (&OUStringBuffer::append),
-                               boost::ref(aElement),
-                               _1 ));
+    std::copy(aAttributes.begin(), aAttributes.end(),
+              comphelper::OUStringBufferAppender(aElement));
     aElement.append(">");
 
     write(aElement.makeStringAndClear());

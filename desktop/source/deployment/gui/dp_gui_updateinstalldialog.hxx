@@ -59,21 +59,21 @@ public:
     UpdateInstallDialog(vcl::Window * parent, std::vector<UpdateData> & aVecUpdateData,
         css::uno::Reference< css::uno::XComponentContext > const & xCtx);
 
-    virtual ~UpdateInstallDialog();
+    virtual ~UpdateInstallDialog() override;
     virtual void dispose() override;
 
     bool Close() override;
     virtual short Execute() override;
 
 private:
-    UpdateInstallDialog(UpdateInstallDialog &) = delete;
-    void operator =(UpdateInstallDialog &) = delete;
+    UpdateInstallDialog(UpdateInstallDialog const &) = delete;
+    UpdateInstallDialog& operator =(UpdateInstallDialog const &) = delete;
 
     class Thread;
     friend class Thread;
     friend class UpdateCommandEnv;
 
-    DECL_LINK_TYPED(cancelHandler, Button*, void);
+    DECL_LINK(cancelHandler, Button*, void);
 
     //signals in the dialog that we have finished.
     void updateDone();
@@ -86,7 +86,7 @@ private:
     };
     void setError(INSTALL_ERROR err, OUString const & sExtension, OUString const & exceptionMessage);
     void setError(OUString const & exceptionMessage);
-    css::uno::Reference< css::deployment::XExtensionManager > getExtensionManager() const
+    const css::uno::Reference< css::deployment::XExtensionManager >& getExtensionManager() const
             { return m_xExtensionManager; }
 
     rtl::Reference< Thread > m_thread;

@@ -63,24 +63,24 @@
 #include <boost/cast.hpp>
 
 #include "lwppara.hxx"
-#include "lwpglobalmgr.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpglobalmgr.hxx>
+#include <lwpfilehdr.hxx>
 #include "lwpparaproperty.hxx"
-#include "lwptools.hxx"
+#include <lwptools.hxx>
 #include "lwpparastyle.hxx"
-#include "xfilter/xffont.hxx"
-#include "xfilter/xftextstyle.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfparagraph.hxx"
-#include "xfilter/xftextcontent.hxx"
-#include "xfilter/xftextspan.hxx"
-#include "xfilter/xfmargins.hxx"
-#include "xfilter/xftabstop.hxx"
-#include "xfilter/xflinebreak.hxx"
-#include "xfilter/xfsection.hxx"
-#include "xfilter/xfsectionstyle.hxx"
-#include "xfilter/xfcolor.hxx"
-#include "xfilter/xfhyperlink.hxx"
+#include <xfilter/xffont.hxx>
+#include <xfilter/xftextstyle.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfparagraph.hxx>
+#include <xfilter/xftextcontent.hxx>
+#include <xfilter/xftextspan.hxx>
+#include <xfilter/xfmargins.hxx>
+#include <xfilter/xftabstop.hxx>
+#include <xfilter/xflinebreak.hxx>
+#include <xfilter/xfsection.hxx>
+#include <xfilter/xfsectionstyle.hxx>
+#include <xfilter/xfcolor.hxx>
+#include <xfilter/xfhyperlink.hxx>
 #include "lwpcharsetmgr.hxx"
 #include "lwpsection.hxx"
 #include "lwplayout.hxx"
@@ -89,32 +89,29 @@
 #include "lwpbulletstylemgr.hxx"
 #include "lwpstory.hxx"
 #include "lwpsilverbullet.hxx"
-#include "xfilter/xflist.hxx"
-#include "xfilter/xfframe.hxx"
+#include <xfilter/xflist.hxx>
+#include <xfilter/xfframe.hxx>
 
 #include "lwpdivinfo.hxx"
 #include "lwpdoc.hxx"
 #include "lwpholder.hxx"
 #include "lwppagehint.hxx"
 
-#include "lwpdropcapmgr.hxx"
+#include <lwpdropcapmgr.hxx>
 #include "lwptable.hxx"
 #include "lwpcelllayout.hxx"
+#include "lwpframelayout.hxx"
+
+#include <set>
 
 // boost::polymorphic_downcast checks and reports (using assert), if the
-// cast is incorrect. We want this in debug builds.
-#if OSL_DEBUG_LEVEL > 0
-#   undef NDEBUG
-#elif !defined(NDEBUG)
-#   define NDEBUG 1
-#endif
-
+// cast is incorrect (in debug builds).
 using boost::polymorphic_downcast;
 
 /**
  * @short   get text of paragraph
  */
-OUString LwpPara::GetContentText(bool bAllText)
+OUString const & LwpPara::GetContentText(bool bAllText)
 {
 //  rFont = m_FontID;
     if (bAllText)
@@ -154,11 +151,10 @@ XFParaStyle* LwpPara::GetXFParaStyle()
 /**
  * @short   get drop cap info
  */
-#include "lwpframelayout.hxx"
 void LwpPara::GatherDropcapInfo()
 {
-    SetDropcapLines(m_pDropcapLayout->GetLines());
-    SetDropcapChars(m_pDropcapLayout->GetChars());
+    m_nLines = m_pDropcapLayout->GetLines();
+    m_nChars = m_pDropcapLayout->GetChars();
 }
 /**
  * @short   get parent paragraph
@@ -172,12 +168,16 @@ LwpPara* LwpPara::GetParent()
     if (level != 1)
     {
         pPara = dynamic_cast<LwpPara*>(GetPrevious().obj().get());
+        std::set<LwpPara*> aSeen;
         while (pPara)
         {
+            aSeen.insert(pPara);
             otherlevel = pPara->GetLevel();
             if ((otherlevel < level) || (otherlevel && (level == 0)))
                 return pPara;
             pPara = dynamic_cast<LwpPara*>(pPara->GetPrevious().obj().get());
+            if (aSeen.find(pPara) != aSeen.end())
+                throw std::runtime_error("loop in conversion");
         }
     }
     return nullptr;
@@ -231,7 +231,8 @@ void LwpPara::GetParaNumber(sal_uInt16 nPosition, ParaNumbering* pParaNumbering)
                     pParaNumbering->nNumLevel = nHideLevels;
 
                     //get suffix text frib
-                    if ( (pFrib = pFrib->GetNext()) )
+                    pFrib = pFrib->GetNext();
+                    if ( pFrib )
                     {
                         if( pFrib->GetType() == FRIB_TAG_TEXT )
                         {
@@ -265,7 +266,8 @@ void LwpPara::GetParaNumber(sal_uInt16 nPosition, ParaNumbering* pParaNumbering)
                     pParaNumbering->pParaNumber = static_cast<LwpFribParaNumber*>(pFrib);
 
                     //get suffix text frib
-                    if ( (pFrib = pFrib->GetNext()) )
+                    pFrib = pFrib->GetNext();
+                    if ( pFrib )
                     {
                         if (pFrib->GetType() == FRIB_TAG_TEXT)
                         {
@@ -398,8 +400,7 @@ void LwpPara::OverrideParaBreaks(LwpParaProperty* pProps, XFParaStyle* pOverStyl
     }
 
     // save the breaks
-    delete m_pBreaks;
-    m_pBreaks = pFinalBreaks.release();
+    m_pBreaks.reset( pFinalBreaks.release() );
 
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
     if (m_pBreaks->IsKeepWithNext())
@@ -408,27 +409,27 @@ void LwpPara::OverrideParaBreaks(LwpParaProperty* pProps, XFParaStyle* pOverStyl
     }
     if (m_pBreaks->IsPageBreakBefore())
     {
-        XFParaStyle* pStyle = new XFParaStyle();
+        std::unique_ptr<XFParaStyle> pStyle(new XFParaStyle());
         pStyle->SetBreaks(enumXFBreakAftPage);
-        m_BefPageBreakName = pXFStyleManager->AddStyle(pStyle).m_pStyle->GetStyleName();
+        m_BefPageBreakName = pXFStyleManager->AddStyle(std::move(pStyle)).m_pStyle->GetStyleName();
     }
     if (m_pBreaks->IsPageBreakAfter())
     {
-        XFParaStyle* pStyle = new XFParaStyle();
+        std::unique_ptr<XFParaStyle> pStyle(new XFParaStyle());
         pStyle->SetBreaks(enumXFBreakAftPage);
-        m_AftPageBreakName = pXFStyleManager->AddStyle(pStyle).m_pStyle->GetStyleName();
+        m_AftPageBreakName = pXFStyleManager->AddStyle(std::move(pStyle)).m_pStyle->GetStyleName();
     }
     if (m_pBreaks->IsColumnBreakBefore())
     {
-        XFParaStyle* pStyle = new XFParaStyle();
+        std::unique_ptr<XFParaStyle> pStyle(new XFParaStyle());
         pStyle->SetBreaks(enumXFBreakAftColumn);//tmp after, should change when layout read
-        m_BefColumnBreakName = pXFStyleManager->AddStyle(pStyle).m_pStyle->GetStyleName();
+        m_BefColumnBreakName = pXFStyleManager->AddStyle(std::move(pStyle)).m_pStyle->GetStyleName();
     }
     if (m_pBreaks->IsColumnBreakAfter())
     {
-        XFParaStyle* pStyle = new XFParaStyle();
+        std::unique_ptr<XFParaStyle> pStyle(new XFParaStyle());
         pStyle->SetBreaks(enumXFBreakAftColumn);
-        m_AftColumnBreakName = pXFStyleManager->AddStyle(pStyle).m_pStyle->GetStyleName();
+        m_AftColumnBreakName = pXFStyleManager->AddStyle(std::move(pStyle)).m_pStyle->GetStyleName();
     }
 
 //  pParaStyle->ApplyBreaks(pOverStyle, &aFinalBreaks);
@@ -449,7 +450,7 @@ void LwpPara::OverrideParaBullet(LwpParaProperty* pProps)
 
     if (pProps)
     {
-        m_pBullOver = new LwpBulletOverride();
+        m_xBullOver.reset(new LwpBulletOverride);
         // get local bulletoverride
         LwpBulletOverride* pLocalBullet  = static_cast<LwpParaBulletProperty*>(pProps)->GetLocalParaBullet();
         if (!pLocalBullet)
@@ -466,19 +467,14 @@ void LwpPara::OverrideParaBullet(LwpParaProperty* pProps)
         {
             m_bHasBullet = true;
 
-            LwpOverride* pBullet= pParaStyle->GetBulletOverride();
-            std::unique_ptr<LwpBulletOverride> pFinalBullet(
-                pBullet
-                    ? polymorphic_downcast<LwpBulletOverride*>(pBullet->clone())
-                    : new LwpBulletOverride)
-                ;
+            const LwpBulletOverride& rBullet= pParaStyle->GetBulletOverride();
+            std::unique_ptr<LwpBulletOverride> xFinalBullet(rBullet.clone());
 
             std::unique_ptr<LwpBulletOverride> const pLocalBullet2(pLocalBullet->clone());
-            pLocalBullet2->Override(pFinalBullet.get());
+            pLocalBullet2->Override(xFinalBullet.get());
 
-            aSilverBulletID = pFinalBullet->GetSilverBullet();
-            delete m_pBullOver;
-            m_pBullOver = pFinalBullet.release();
+            aSilverBulletID = xFinalBullet->GetSilverBullet();
+            m_xBullOver = std::move(xFinalBullet);
             if (!aSilverBulletID.IsNull())
             {
                 m_pSilverBullet = dynamic_cast<LwpSilverBullet*>(aSilverBulletID.obj(VO_SILVERBULLET).get());
@@ -491,31 +487,25 @@ void LwpPara::OverrideParaBullet(LwpParaProperty* pProps)
     }
     else
     {
-//      m_pBullOver = pParaStyle->GetBulletOverride();
-        LwpBulletOverride* pBullOver = pParaStyle->GetBulletOverride();
-        if (pBullOver)
+        const LwpBulletOverride& rBullOver = pParaStyle->GetBulletOverride();
+        m_aSilverBulletID = rBullOver.GetSilverBullet();
+        if (!m_aSilverBulletID.IsNull())
         {
-            m_aSilverBulletID = pBullOver->GetSilverBullet();
-            if (!m_aSilverBulletID.IsNull())
-            {
-                m_bHasBullet = true;
+            m_bHasBullet = true;
 
-                m_pSilverBullet = dynamic_cast<LwpSilverBullet*>(m_aSilverBulletID.obj(VO_SILVERBULLET).get());
-                if (m_pSilverBullet)
-                    m_pSilverBullet->SetFoundry(m_pFoundry);
-            }
-
-            std::unique_ptr<LwpBulletOverride> pBulletOverride(pBullOver->clone());
-            delete m_pBullOver;
-            m_pBullOver = pBulletOverride.release();
+            m_pSilverBullet = dynamic_cast<LwpSilverBullet*>(m_aSilverBulletID.obj(VO_SILVERBULLET).get());
+            if (m_pSilverBullet)
+                m_pSilverBullet->SetFoundry(m_pFoundry);
         }
+
+        m_xBullOver.reset(rBullOver.clone());
     }
 }
 /**
  * @short:   Override paranumbering properties.
  * @param:   pProps pointer to the LwpParaProperty and we can get local paranumbering through it.
  */
-void LwpPara::OverrideParaNumbering(LwpParaProperty* pProps)
+void LwpPara::OverrideParaNumbering(LwpParaProperty const * pProps)
 {
     // get numbering override in parastyle
     LwpParaStyle* pParaStyle = GetParaStyle();
@@ -529,7 +519,7 @@ void LwpPara::OverrideParaNumbering(LwpParaProperty* pProps)
     //Override with the local numbering, if any
     if (pProps)
     {
-        LwpNumberingOverride* pPropNumbering = static_cast<LwpParaNumberingProperty*>(pProps)->GetLocalNumbering();
+        LwpNumberingOverride* pPropNumbering = static_cast<LwpParaNumberingProperty const *>(pProps)->GetLocalNumbering();
         if (pPropNumbering)
         {
             pOver.reset(pPropNumbering->clone());
@@ -548,18 +538,7 @@ void LwpPara::OverrideParaNumbering(LwpParaProperty* pProps)
         pOver->OverrideLevel(m_nLevel);
     }
 
-    m_pParaNumbering.reset(pOver.release());
-}
-
-void LwpPara::FindLayouts()
-{
-    m_Fribs.SetPara(this);
-    m_Fribs.FindLayouts();
-    LwpPara* pNextPara = dynamic_cast<LwpPara*>(GetNext().obj().get());
-    if(pNextPara)
-    {
-        pNextPara->FindLayouts();
-    }
+    m_xParaNumbering = std::move(pOver);
 }
 
 /**************************************************************************
@@ -567,16 +546,11 @@ void LwpPara::FindLayouts()
 **************************************************************************/
 LwpParaProperty* LwpPara::GetProperty(sal_uInt32 nPropType)
 {
-    LwpParaProperty* pProps = m_pProps;
-    while(pProps)
-    {
-        if(pProps->GetType() == nPropType)
+    for (auto & i : m_vProps)
+        if(i->GetType() == nPropType)
         {
-            return pProps;
+            return i.get();
         }
-        pProps = pProps->GetNext();
-
-    }
     return nullptr;
 }
 
@@ -597,16 +571,16 @@ LwpTabOverride* LwpPara::GetLocalTabOverride()
 * @descr:   Determined which para is earlier in position
 *
 */
-bool LwpPara::operator< (LwpPara& Other)
+bool LwpPara::operator< (LwpPara const & Other)
 {
-    return m_nOrdinal < Other.GetOrdinal();
+    return m_nOrdinal < Other.m_nOrdinal;
 }
 
 /**
 * @descr:  If the two layouts in the same para, compare which layout is earlied according to frib order
 *
 */
-bool LwpPara::ComparePagePosition(LwpVirtualLayout * pPreLayout, LwpVirtualLayout * pNextLayout)
+bool LwpPara::ComparePagePosition(LwpVirtualLayout const * pPreLayout, LwpVirtualLayout const * pNextLayout)
 {
     m_Fribs.SetPara(this);
     return m_Fribs.ComparePagePosition(pPreLayout, pNextLayout);
@@ -621,9 +595,7 @@ bool LwpPara::IsInCell()
     if (!pStory)
         return false;
     rtl::Reference<LwpVirtualLayout> xLayout(pStory->GetLayout(nullptr));
-    if (xLayout.is() && xLayout->IsCell())
-        return true;
-    return false;
+    return xLayout.is() && xLayout->IsCell();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

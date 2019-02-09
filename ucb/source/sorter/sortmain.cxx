@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <sortdynres.hxx>
+#include "sortdynres.hxx"
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
@@ -25,7 +25,7 @@ using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL srtrs1_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * srtrs1_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * )
 {
     void * pRet = nullptr;

@@ -35,12 +35,13 @@ else
 gb_AR := $(shell $(CC) -print-prog-name=ar)
 endif
 
+ifneq ($(USE_LD),)
+gb_LinkTarget_LDFLAGS += -fuse-ld=$(USE_LD)
+endif
+
 ifeq ($(strip $(gb_COMPILEROPTFLAGS)),)
 gb_COMPILEROPTFLAGS := -O2
 endif
-
-gb_SHORTSTDC3 := 1
-gb_SHORTSTDCPP3 := 6
 
 gb_CPPU_ENV := gcc3
 
@@ -57,7 +58,9 @@ gb_CFLAGS_COMMON := \
 	-Wextra \
 	-Wstrict-prototypes \
 	-Wundef \
-	-Wunused-macros \
+	-Wunreachable-code \
+	$(if $(and $(COM_IS_CLANG),$(or $(findstring icecc,$(CC)),$(findstring icecc,$(CCACHE_PREFIX)))),,-Wunused-macros) \
+	-finput-charset=UTF-8 \
 	-fmessage-length=0 \
 	-fno-common \
 	-pipe \
@@ -69,15 +72,23 @@ gb_CXXFLAGS_COMMON := \
 	-Wendif-labels \
 	-Wextra \
 	-Wundef \
-	-Wunused-macros \
+	-Wunreachable-code \
+	$(if $(and $(COM_IS_CLANG),$(or $(findstring icecc,$(CC)),$(findstring icecc,$(CCACHE_PREFIX)))),,-Wunused-macros) \
+	-finput-charset=UTF-8 \
 	-fmessage-length=0 \
 	-fno-common \
 	-pipe \
 
+ifeq ($(HAVE_BROKEN_GCC_WMAYBE_UNINITIALIZED),TRUE)
+gb_CXXFLAGS_COMMON += -Wno-maybe-uninitialized
+endif
+
 gb_CXXFLAGS_Wundef = -Wno-undef
 
-ifneq ($(HAVE_THREADSAFE_STATICS),TRUE)
-gb_CXXFLAGS_COMMON += -fno-threadsafe-statics
+ifeq ($(ENABLE_GDB_INDEX),TRUE)
+gb_LinkTarget_LDFLAGS += -Wl,--gdb-index
+gb_CFLAGS_COMMON += -ggnu-pubnames
+gb_CXXFLAGS_COMMON += -ggnu-pubnames
 endif
 
 ifeq ($(strip $(gb_GCOV)),YES)
@@ -87,23 +98,43 @@ gb_LinkTarget_LDFLAGS += -fprofile-arcs -lgcov
 gb_COMPILEROPTFLAGS := -O0
 endif
 
+ifeq ($(DISABLE_DYNLOADING),TRUE)
+gb_CFLAGS_COMMON += -ffunction-sections -fdata-sections
+gb_CXXFLAGS_COMMON += -ffunction-sections -fdata-sections
+gb_LinkTarget_LDFLAGS += -Wl,--gc-sections
+endif
 
-ifeq ($(HAVE_GCC_VISIBILITY_FEATURE),TRUE)
-gb_VISIBILITY_FLAGS := -DHAVE_GCC_VISIBILITY_FEATURE
+ifeq ($(COM_IS_CLANG),TRUE)
+gb_CXXFLAGS_COMMON += -Wimplicit-fallthrough
+else
+gb_CFLAGS_COMMON += \
+    -Wduplicated-cond \
+    -Wlogical-op \
+    -Wshift-overflow=2
+gb_CXXFLAGS_COMMON += \
+    -Wduplicated-cond \
+    -Wlogical-op \
+    -Wshift-overflow=2 \
+    -Wunused-const-variable=1
+endif
+
+# GCC 8 -Wcast-function-type (included in -Wextra) unhelpfully even warns on reinterpret_cast
+# between incompatible function types:
+ifeq ($(shell expr '$(GCC_VERSION)' '>=' 800),1)
+gb_CXXFLAGS_COMMON += \
+    -Wno-cast-function-type
+endif
+
 # If CC or CXX already include -fvisibility=hidden, don't duplicate it
 ifeq (,$(filter -fvisibility=hidden,$(CC)))
-gb__visibility_hidden := -fvisibility=hidden
+gb_VISIBILITY_FLAGS := -fvisibility=hidden
 ifeq ($(COM_IS_CLANG),TRUE)
 ifneq ($(filter -fsanitize=%,$(CC)),)
-gb__visibility_hidden := -fvisibility-ms-compat
+gb_VISIBILITY_FLAGS := -fvisibility-ms-compat
 endif
 endif
-gb_VISIBILITY_FLAGS += $(gb__visibility_hidden)
 endif
-ifneq ($(HAVE_GCC_VISIBILITY_BROKEN),TRUE)
 gb_VISIBILITY_FLAGS_CXX := -fvisibility-inlines-hidden
-endif
-endif
 gb_CXXFLAGS_COMMON += $(gb_VISIBILITY_FLAGS_CXX)
 
 ifeq ($(HAVE_GCC_STACK_PROTECTOR_STRONG),TRUE)
@@ -119,7 +150,7 @@ gb_CXXFLAGS_COMMON += -fpch-preprocess -Winvalid-pch
 endif
 endif
 
-gb_CFLAGS_WERROR := $(if $(ENABLE_WERROR),-Werror)
+gb_CFLAGS_WERROR = $(if $(ENABLE_WERROR),-Werror)
 
 # This is the default in non-C++11 mode
 ifeq ($(COM_IS_CLANG),TRUE)
@@ -160,34 +191,25 @@ gb_PrecompiledHeader_EXCEPTIONFLAGS := $(gb_LinkTarget_EXCEPTIONFLAGS)
 # optimization level
 gb_COMPILERNOOPTFLAGS := -O0 -fstrict-aliasing -fstrict-overflow
 
+ifeq ($(OS),ANDROID)
+gb_DEBUGINFO_FLAGS=-glldb
 # Clang does not know -ggdb2 or some other options
-ifeq ($(HAVE_GCC_GGDB2),TRUE)
+else ifeq ($(HAVE_GCC_GGDB2),TRUE)
 gb_DEBUGINFO_FLAGS=-ggdb2
 else
 gb_DEBUGINFO_FLAGS=-g2
 endif
 
-ifeq ($(HAVE_GCC_FINLINE_LIMIT),TRUE)
-FINLINE_LIMIT0=-finline-limit=0
+ifeq ($(HAVE_GCC_SPLIT_DWARF),TRUE)
+gb_DEBUGINFO_FLAGS+=-gsplit-dwarf
 endif
-
-ifeq ($(HAVE_GCC_FNO_INLINE),TRUE)
-FNO_INLINE=-fno-inline
-endif
-
-ifeq ($(HAVE_GCC_FNO_DEFAULT_INLINE),TRUE)
-FNO_DEFAULT_INLINE=-fno-default-inline
-endif
-
-gb_DEBUG_CFLAGS := $(gb_DEBUGINFO_FLAGS) $(FINLINE_LIMIT0) $(FNO_INLINE)
-gb_DEBUG_CXXFLAGS := $(FNO_DEFAULT_INLINE)
-
 
 gb_LinkTarget_INCLUDE :=\
-    $(subst -I. , ,$(SOLARINC)) \
+    $(SOLARINC) \
     -I$(BUILDDIR)/config_$(gb_Side) \
 
 ifeq ($(COM_IS_CLANG),TRUE)
+gb_COMPILER_TEST_FLAGS := -Xclang -plugin-arg-loplugin -Xclang --unit-test-mode
 ifeq ($(COMPILER_PLUGIN_TOOL),)
 gb_COMPILER_PLUGINS := -Xclang -load -Xclang $(BUILDDIR)/compilerplugins/obj/plugin.so -Xclang -add-plugin -Xclang loplugin
 ifneq ($(COMPILER_PLUGIN_WARNINGS_ONLY),)
@@ -200,11 +222,26 @@ ifneq ($(UPDATE_FILES),)
 gb_COMPILER_PLUGINS += -Xclang -plugin-arg-loplugin -Xclang --scope=$(UPDATE_FILES)
 endif
 endif
-# extra EF variable to make the command line shorter (just like is done with $(SRCDIR) etc.)
-gb_COMPILER_PLUGINS_SETUP := EF=$(SRCDIR)/include/sal/log-areas.dox && ICECC_EXTRAFILES=$$EF CCACHE_EXTRAFILES=$$EF
+ifeq ($(COMPILER_PLUGINS_DEBUG),TRUE)
+gb_COMPILER_PLUGINS += -Xclang -plugin-arg-loplugin -Xclang --debug
+endif
+# set CCACHE_CPP2=1 to prevent clang generating spurious warnings
+gb_COMPILER_SETUP := CCACHE_CPP2=1
+gb_COMPILER_PLUGINS_SETUP := ICECC_EXTRAFILES=$(SRCDIR)/include/sal/log-areas.dox CCACHE_EXTRAFILES=$(SRCDIR)/include/sal/log-areas.dox
+gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS := \
+    -Xclang -plugin-arg-loplugin -Xclang --warnings-as-errors
 else
+# Set CCACHE_CPP2 to prevent GCC -Werror=implicit-fallthrough= when ccache strips comments from C
+# code (which still needs /*fallthrough*/-style comments to silence that warning):
+ifeq ($(ENABLE_WERROR),TRUE)
+gb_COMPILER_SETUP := CCACHE_CPP2=1
+else
+gb_COMPILER_SETUP :=
+endif
+gb_COMPILER_TEST_FLAGS :=
 gb_COMPILER_PLUGINS :=
 gb_COMPILER_PLUGINS_SETUP :=
+gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS :=
 endif
 
 # Executable class
@@ -221,6 +258,8 @@ else ifeq ($(OS_FOR_BUILD),WNT)
 # In theory possible if cross-compiling to some Unix from Windows,
 # in practice strongly discouraged to even try that
 gb_Helper_LIBRARY_PATH_VAR := PATH
+else ifeq ($(OS_FOR_BUILD),HAIKU)
+gb_Helper_LIBRARY_PATH_VAR := LIBRARY_PATH
 else
 gb_Helper_LIBRARY_PATH_VAR := LD_LIBRARY_PATH
 endif

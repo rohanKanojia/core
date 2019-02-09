@@ -33,6 +33,8 @@
 
 #include <cppuhelper/compbase.hxx>
 #include <comphelper/uno3.hxx>
+#include <comphelper/types.hxx>
+#include <cppu/unotype.hxx>
 
 #include <canvas/base/basemutexhelper.hxx>
 #include <canvas/base/integerbitmapbase.hxx>
@@ -87,7 +89,7 @@ namespace vclcanvas
         void initialize();
 
         /// For resource tracking
-        virtual ~Canvas();
+        virtual ~Canvas() override;
 
         /// Dispose all internal references
         virtual void disposeThis() override;
@@ -100,7 +102,7 @@ namespace vclcanvas
         DECLARE_UNO3_XCOMPONENT_AGG_DEFAULTS( Canvas,   GraphicDeviceBase_Base, ::cppu::WeakComponentImplHelperBase )
 
         // XServiceName
-        virtual OUString SAL_CALL getServiceName(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getServiceName(  ) override;
 
         // RepaintTarget
         virtual bool repaint( const GraphicObjectSharedPtr&                 rGrf,
@@ -112,10 +114,7 @@ namespace vclcanvas
 
     private:
         css::uno::Sequence< css::uno::Any >                maArguments;
-        css::uno::Reference< css::uno::XComponentContext > mxComponentContext;
     };
-
-    typedef ::rtl::Reference< Canvas > CanvasRef;
 }
 
 #endif

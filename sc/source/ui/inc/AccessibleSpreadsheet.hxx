@@ -29,13 +29,12 @@
 
 #include <vector>
 
-#include "rangelst.hxx"
+#include <rangelst.hxx>
 #include <map>
 
 class ScMyAddress : public ScAddress
 {
 public:
-    ScMyAddress() : ScAddress() {}
     ScMyAddress(SCCOL nColP, SCROW nRowP, SCTAB nTabP) : ScAddress(nColP, nRowP, nTabP) {}
     ScMyAddress(const ScAddress& rAddress) : ScAddress(rAddress) {}
 
@@ -51,41 +50,24 @@ public:
 class ScTabViewShell;
 class ScAccessibleDocument;
 class ScAccessibleCell;
-class ScRangeList;
 
 /** @descr
         This base class provides an implementation of the
         <code>AccessibleTable</code> service.
 */
-class ScAccessibleSpreadsheet
+class ScAccessibleSpreadsheet final
     :   public  ScAccessibleTableBase
 {
 public:
-    //=====  internal  ========================================================
     ScAccessibleSpreadsheet(
         ScAccessibleDocument* pAccDoc,
         ScTabViewShell* pViewShell,
         SCTAB   nTab,
         ScSplitPos eSplitPos);
-protected:
-    ScAccessibleSpreadsheet(
-        ScAccessibleSpreadsheet& rParent,
-        const ScRange& rRange );
 
-    virtual ~ScAccessibleSpreadsheet();
-
-    void ConstructScAccessibleSpreadsheet(
-        ScAccessibleDocument* pAccDoc,
-        ScTabViewShell* pViewShell,
-        SCTAB nTab,
-        ScSplitPos eSplitPos);
-
-    using ScAccessibleTableBase::IsDefunc;
-
-public:
     using ScAccessibleTableBase::disposing;
 
-     virtual void SAL_CALL disposing() override;
+    virtual void SAL_CALL disposing() override;
 
     void CompleteSelectionChanged(bool bNewState);
 
@@ -96,6 +78,20 @@ public:
     void VisAreaChanged();
 
 private:
+    ScAccessibleSpreadsheet(
+        ScAccessibleSpreadsheet& rParent,
+        const ScRange& rRange );
+
+    virtual ~ScAccessibleSpreadsheet() override;
+
+    void ConstructScAccessibleSpreadsheet(
+        ScAccessibleDocument* pAccDoc,
+        ScTabViewShell* pViewShell,
+        SCTAB nTab,
+        ScSplitPos eSplitPos);
+
+    using ScAccessibleTableBase::IsDefunc;
+
     ///=====  SfxListener  =====================================================
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
@@ -103,130 +99,98 @@ private:
 
     /// Returns the row headers as an AccessibleTable.
     virtual css::uno::Reference< css::accessibility::XAccessibleTable > SAL_CALL
-                getAccessibleRowHeaders(  )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                getAccessibleRowHeaders(  ) override;
 
     /// Returns the column headers as an AccessibleTable.
     virtual css::uno::Reference< css::accessibility::XAccessibleTable > SAL_CALL
-                getAccessibleColumnHeaders(  )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                getAccessibleColumnHeaders(  ) override;
 
     /// Returns the selected rows in a table.
     virtual css::uno::Sequence< sal_Int32 > SAL_CALL
-                getSelectedAccessibleRows(  )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                getSelectedAccessibleRows(  ) override;
 
     /// Returns the selected columns in a table.
     virtual css::uno::Sequence< sal_Int32 > SAL_CALL
-                getSelectedAccessibleColumns(  )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                getSelectedAccessibleColumns(  ) override;
 
     /// Returns a boolean value indicating whether the specified row is selected.
     virtual sal_Bool SAL_CALL
-                isAccessibleRowSelected( sal_Int32 nRow )
-                    throw (css::uno::RuntimeException,
-                    css::lang::IndexOutOfBoundsException, std::exception) override;
+                isAccessibleRowSelected( sal_Int32 nRow ) override;
 
     /// Returns a boolean value indicating whether the specified column is selected.
     virtual sal_Bool SAL_CALL
-                isAccessibleColumnSelected( sal_Int32 nColumn )
-                    throw (css::uno::RuntimeException,
-                    css::lang::IndexOutOfBoundsException, std::exception) override;
+                isAccessibleColumnSelected( sal_Int32 nColumn ) override;
 
     /// Returns the Accessible at a specified row and column in the table.
     virtual css::uno::Reference< css::accessibility::XAccessible > SAL_CALL
-                getAccessibleCellAt( sal_Int32 nRow, sal_Int32 nColumn )
-                    throw (css::uno::RuntimeException,
-                            css::lang::IndexOutOfBoundsException, std::exception) override;
+                getAccessibleCellAt( sal_Int32 nRow, sal_Int32 nColumn ) override;
 
     rtl::Reference<ScAccessibleCell> GetAccessibleCellAt(sal_Int32 nRow, sal_Int32 nColumn);
 
     /// Returns a boolean value indicating whether the accessible at a specified row and column is selected.
     virtual sal_Bool SAL_CALL
-                isAccessibleSelected( sal_Int32 nRow, sal_Int32 nColumn )
-                    throw (css::uno::RuntimeException,
-                    css::lang::IndexOutOfBoundsException, std::exception) override;
+                isAccessibleSelected( sal_Int32 nRow, sal_Int32 nColumn ) override;
 
     ///=====  XAccessibleComponent  ============================================
 
     virtual css::uno::Reference< css::accessibility::XAccessible >
         SAL_CALL getAccessibleAtPoint(
-        const css::awt::Point& rPoint )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::awt::Point& rPoint ) override;
 
-    virtual void SAL_CALL grabFocus(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL grabFocus(  ) override;
 
-    virtual sal_Int32 SAL_CALL getForeground(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getForeground(  ) override;
 
-    virtual sal_Int32 SAL_CALL getBackground(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getBackground(  ) override;
 
     ///=====  XAccessibleContext  ==============================================
 
     /// Return NULL to indicate that an empty relation set.
     virtual css::uno::Reference<css::accessibility::XAccessibleRelationSet> SAL_CALL
-        getAccessibleRelationSet()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getAccessibleRelationSet() override;
 
     /// Return the set of current states.
     virtual css::uno::Reference<css::accessibility::XAccessibleStateSet> SAL_CALL
-        getAccessibleStateSet()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getAccessibleStateSet() override;
 
     ///=====  XAccessibleSelection  ===========================================
 
     virtual void SAL_CALL
-        selectAccessibleChild( sal_Int32 nChildIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-               css::uno::RuntimeException,
-               std::exception) override;
+        selectAccessibleChild( sal_Int32 nChildIndex ) override;
 
     virtual void SAL_CALL
-        clearAccessibleSelection(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+        clearAccessibleSelection(  ) override;
 
     virtual void SAL_CALL
-        selectAllAccessibleChildren(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+        selectAllAccessibleChildren(  ) override;
 
     virtual sal_Int32 SAL_CALL
-        getSelectedAccessibleChildCount(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSelectedAccessibleChildCount(  ) override;
 
     virtual css::uno::Reference<css::accessibility::XAccessible > SAL_CALL
-        getSelectedAccessibleChild( sal_Int32 nSelectedChildIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-        css::uno::RuntimeException, std::exception) override;
+        getSelectedAccessibleChild( sal_Int32 nSelectedChildIndex ) override;
 
     virtual void SAL_CALL
-        deselectAccessibleChild( sal_Int32 nChildIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-               css::uno::RuntimeException,
-               std::exception) override;
+        deselectAccessibleChild( sal_Int32 nChildIndex ) override;
 
     ///=====  XServiceInfo  ====================================================
 
     /** Returns an identifier for the implementation of this object.
     */
     virtual OUString SAL_CALL
-        getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationName() override;
 
     /** Returns a list of all supported services.
     */
     virtual css::uno::Sequence< OUString> SAL_CALL
-        getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedServiceNames() override;
 
     ///=====  XTypeProvider  ===================================================
 
     /** Returns a implementation id.
     */
     virtual css::uno::Sequence<sal_Int8> SAL_CALL
-        getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationId() override;
 
     ///=====  XAccessibleEventBroadcaster  =====================================
 
@@ -235,64 +199,48 @@ private:
     */
     virtual void SAL_CALL
         addAccessibleEventListener(
-            const css::uno::Reference<css::accessibility::XAccessibleEventListener>& xListener)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference<css::accessibility::XAccessibleEventListener>& xListener) override;
     //=====  XAccessibleTableSelection  ============================================
-    virtual sal_Bool SAL_CALL selectRow( sal_Int32 row )
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException,
-               std::exception) override;
-    virtual sal_Bool SAL_CALL selectColumn( sal_Int32 column )
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException,
-               std::exception) override;
-    virtual sal_Bool SAL_CALL unselectRow( sal_Int32 row )
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException,
-               std::exception) override;
-    virtual sal_Bool SAL_CALL unselectColumn( sal_Int32 column )
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException,
-               std::exception) override;
+    virtual sal_Bool SAL_CALL selectRow( sal_Int32 row ) override;
+    virtual sal_Bool SAL_CALL selectColumn( sal_Int32 column ) override;
+    virtual sal_Bool SAL_CALL unselectRow( sal_Int32 row ) override;
+    virtual sal_Bool SAL_CALL unselectColumn( sal_Int32 column ) override;
 
-protected:
     /// Return the object's current bounding box relative to the desktop.
-    virtual Rectangle GetBoundingBoxOnScreen() const
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual tools::Rectangle GetBoundingBoxOnScreen() const override;
 
     /// Return the object's current bounding box relative to the parent object.
-    virtual Rectangle GetBoundingBox() const
-        throw (css::uno::RuntimeException, std::exception) override;
-private:
+    virtual tools::Rectangle GetBoundingBox() const override;
+
     ScTabViewShell* mpViewShell;
-    ScRangeList*    mpMarkedRanges;
-    std::vector<ScMyAddress>* mpSortedMarkedCells;
+    std::unique_ptr<ScRangeList>  mpMarkedRanges;
     ScAccessibleDocument* mpAccDoc;
     rtl::Reference<ScAccessibleCell> mpAccCell;
-    Rectangle       maVisCells;
+    tools::Rectangle       maVisCells;
     ScSplitPos      meSplitPos;
     ScAddress       maActiveCell;
     SCTAB           mnTab;
-    bool            mbIsSpreadsheet;
-    bool            mbHasSelection;
+    bool const      mbIsSpreadsheet;
     bool            mbDelIns;
     bool            mbIsFocusSend;
 
     bool IsDefunc(
         const css::uno::Reference<css::accessibility::XAccessibleStateSet>& rxParentStates);
-    bool IsEditable(
-        const css::uno::Reference<css::accessibility::XAccessibleStateSet>& rxParentStates);
+    bool IsEditable();
     bool IsFocused();
     bool IsCompleteSheetSelected();
 
     void SelectCell(sal_Int32 nRow, sal_Int32 nCol, bool bDeselect);
 
     static ScDocument* GetDocument(ScTabViewShell* pViewShell);
-    static Rectangle   GetVisArea(ScTabViewShell* pViewShell, ScSplitPos eSplitPos);
-    Rectangle   GetVisCells(const Rectangle& rVisArea);
+    static tools::Rectangle   GetVisArea(ScTabViewShell* pViewShell, ScSplitPos eSplitPos);
+    tools::Rectangle   GetVisCells(const tools::Rectangle& rVisArea);
     typedef std::vector<ScMyAddress> VEC_MYADDR;
 
     typedef std::map<ScMyAddress,css::uno::Reference< css::accessibility::XAccessible > >
         MAP_ADDR_XACC;
     MAP_ADDR_XACC m_mapSelectionSend;
-    void RemoveSelection(ScMarkData &refScMarkData);
-    bool IsSameMarkCell();
+    void RemoveSelection(const ScMarkData &refScMarkData);
     void CommitFocusCell(const ScAddress &aNewCell);
 public:
     void FireFirstCellFocus();
@@ -320,7 +268,7 @@ public:
     ScRange       m_aLastWithInMarkRange;
     OUString      m_strCurCellValue;
     ScRangeList   m_LastMarkedRanges;
-    typedef std::vector<ScRange*> VEC_RANGE;
+    typedef std::vector<ScRange> VEC_RANGE;
     VEC_RANGE     m_vecTempRange;
     typedef std::pair<sal_uInt16,sal_uInt16> PAIR_COL;
     typedef std::vector<PAIR_COL> VEC_COL;
@@ -331,7 +279,7 @@ public:
     bool IsScAddrFormulaSel (const ScAddress &addr) const;
     bool IsFormulaMode();
     ScMyAddress CalcScAddressFromRangeList(ScRangeList *pMarkedRanges,sal_Int32 nSelectedChildIndex);
-    static bool CalcScRangeDifferenceMax(ScRange *pSrc,ScRange *pDest,int nMax,VEC_MYADDR &vecRet,int &nSize);
+    static bool CalcScRangeDifferenceMax(const ScRange & rSrc, const ScRange & rDest,int nMax,VEC_MYADDR &vecRet,int &nSize);
     static bool CalcScRangeListDifferenceMax(ScRangeList *pSrc,ScRangeList *pDest,int nMax,VEC_MYADDR &vecRet);
 };
 

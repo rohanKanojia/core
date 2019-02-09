@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -61,7 +62,7 @@ class JavaWindowPeerFake implements com.sun.star.awt.XSystemDependentWindowPeer,
         return aReturn;
     }
 
-    /** not really neaded.
+    /** not really needed.
      */
     public com.sun.star.awt.XToolkit getToolkit()
         throws com.sun.star.uno.RuntimeException
@@ -105,3 +106,4 @@ class JavaWindowPeerFake implements com.sun.star.awt.XSystemDependentWindowPeer,
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

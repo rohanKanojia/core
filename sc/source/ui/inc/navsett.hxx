@@ -22,9 +22,8 @@
 
 #include <tools/solar.h>
 
-#include <vector>
 #include <o3tl/enumarray.hxx>
-#include <content.hxx>
+#include "content.hxx"
 
 /** Contains settings of the navigator listbox. This includes the expand state
     of each listbox entry and the index of the selected entry and sub entry. */
@@ -38,14 +37,14 @@ private:
 public:
                                 ScNavigatorSettings();
 
-    inline void                 SetExpanded( ScContentId nIndex, bool bExpand ) { maExpandedVec[ nIndex ] = bExpand; }
-    inline bool                 IsExpanded( ScContentId nIndex ) const { return maExpandedVec[ nIndex ]; }
+    void                 SetExpanded( ScContentId nIndex, bool bExpand ) { maExpandedVec[ nIndex ] = bExpand; }
+    bool                 IsExpanded( ScContentId nIndex ) const { return maExpandedVec[ nIndex ]; }
 
-    inline void                 SetRootSelected( ScContentId nIndex ) { mnRootSelected = nIndex; }
-    inline ScContentId          GetRootSelected() const { return mnRootSelected; }
+    void                 SetRootSelected( ScContentId nIndex ) { mnRootSelected = nIndex; }
+    ScContentId          GetRootSelected() const { return mnRootSelected; }
 
-    inline void                 SetChildSelected( sal_uLong nIndex ) { mnChildSelected = nIndex; }
-    inline sal_uLong            GetChildSelected() const { return mnChildSelected; }
+    void                 SetChildSelected( sal_uLong nIndex ) { mnChildSelected = nIndex; }
+    sal_uLong            GetChildSelected() const { return mnChildSelected; }
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_NAVSETT_HXX

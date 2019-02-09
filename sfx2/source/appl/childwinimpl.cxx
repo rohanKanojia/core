@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "childwinimpl.hxx"
+#include <memory>
+#include <childwinimpl.hxx>
 
 size_t SfxChildWinContextArr_Impl::size() const
 {
@@ -34,9 +35,9 @@ SfxChildWinContextFactory& SfxChildWinContextArr_Impl::operator []( size_t i )
     return *maData[i].get();
 }
 
-void SfxChildWinContextArr_Impl::push_back( SfxChildWinContextFactory* p )
+void SfxChildWinContextArr_Impl::push_back( std::unique_ptr<SfxChildWinContextFactory> p )
 {
-    maData.push_back(std::unique_ptr<SfxChildWinContextFactory>(p));
+    maData.push_back(std::move(p));
 }
 
 size_t SfxChildWinFactArr_Impl::size() const
@@ -54,9 +55,9 @@ SfxChildWinFactory& SfxChildWinFactArr_Impl::operator []( size_t i )
     return *maData[i].get();
 }
 
-void SfxChildWinFactArr_Impl::push_back( SfxChildWinFactory* p )
+void SfxChildWinFactArr_Impl::push_back( std::unique_ptr<SfxChildWinFactory> p )
 {
-    maData.push_back(std::unique_ptr<SfxChildWinFactory>(p));
+    maData.push_back(std::move(p));
 }
 
 void SfxChildWinFactArr_Impl::erase( const iterator& it )
@@ -67,46 +68,6 @@ void SfxChildWinFactArr_Impl::erase( const iterator& it )
 SfxChildWinFactArr_Impl::iterator SfxChildWinFactArr_Impl::begin()
 {
     return maData.begin();
-}
-
-SfxFrameArr_Impl::iterator SfxFrameArr_Impl::begin()
-{
-    return maData.begin();
-}
-
-SfxFrameArr_Impl::iterator SfxFrameArr_Impl::end()
-{
-    return maData.end();
-}
-
-SfxFrame* SfxFrameArr_Impl::front()
-{
-    return maData.front();
-}
-
-void SfxFrameArr_Impl::erase( const iterator& it )
-{
-    maData.erase(it);
-}
-
-SfxFrame* SfxFrameArr_Impl::operator[] ( size_t i )
-{
-    return maData[i];
-}
-
-void SfxFrameArr_Impl::push_back( SfxFrame* p )
-{
-    maData.push_back(p);
-}
-
-size_t SfxFrameArr_Impl::size() const
-{
-    return maData.size();
-}
-
-bool SfxFrameArr_Impl::empty() const
-{
-    return maData.empty();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -8,12 +8,16 @@
  */
 #include <filter/msfilter/mstoolbar.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <stdarg.h>
+#include <com/sun/star/container/XIndexContainer.hpp>
+#include <com/sun/star/ui/XUIConfigurationManager.hpp>
+#include <com/sun/star/ui/XUIConfigurationManagerSupplier.hpp>
 #include <com/sun/star/ui/XUIConfigurationPersistence.hpp>
 #include <com/sun/star/ui/XImageManager.hpp>
+#include <com/sun/star/ui/ImageType.hpp>
 #include <com/sun/star/ui/ItemType.hpp>
 #include <com/sun/star/ui/ItemStyle.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
 #include <fstream>
 #include <vcl/dibtools.hxx>
 #include <vcl/graph.hxx>
@@ -37,12 +41,12 @@ void CustomToolBarImportHelper::ScaleImage( uno::Reference< graphic::XGraphic >&
     Size aSize = aGraphic.GetSizePixel();
     if ( aSize.Height() && ( aSize.Height() == aSize.Width() ) )
     {
-        Image aImage( xGraphic );
+        Graphic aImage(xGraphic);
         if ( aSize.Height() != nNewSize )
         {
             BitmapEx aBitmap = aImage.GetBitmapEx();
             BitmapEx aBitmapex = BitmapEx::AutoScaleBitmap(aBitmap, nNewSize );
-            aImage = Image( aBitmapex);
+            aImage = Graphic(aBitmapex);
             xGraphic = aImage.GetXGraphic();
         }
     }
@@ -50,19 +54,18 @@ void CustomToolBarImportHelper::ScaleImage( uno::Reference< graphic::XGraphic >&
 
 void CustomToolBarImportHelper::applyIcons()
 {
-    for ( std::vector< iconcontrolitem >::iterator it = iconcommands.begin(); it != iconcommands.end(); ++it )
+    for (auto const& concommand : iconcommands)
     {
-        uno::Sequence<OUString> commands { it->sCommand };
+        uno::Sequence<OUString> commands { concommand.sCommand };
         uno::Sequence< uno::Reference< graphic::XGraphic > > images(1);
-        images[ 0 ] = it->image;
+        images[ 0 ] = concommand.image;
 
-        OSL_TRACE("About to applyIcons for command %s, have image ? %s", OUStringToOString( commands[ 0 ], RTL_TEXTENCODING_UTF8 ).getStr(), images[ 0 ].is() ? "yes" : "no" );
         uno::Reference< ui::XImageManager > xImageManager( getCfgManager()->getImageManager(), uno::UNO_QUERY_THROW );
         sal_uInt16 nColor = ui::ImageType::COLOR_NORMAL;
 
         vcl::Window* topwin = Application::GetActiveTopWindow();
-    if ( topwin != nullptr && topwin->GetDisplayBackground().GetColor().IsDark() )
-            nColor = css::ui::ImageType::COLOR_HIGHCONTRAST;
+        if ( topwin != nullptr && topwin->GetDisplayBackground().GetColor().IsDark() )
+                nColor = css::ui::ImageType::COLOR_HIGHCONTRAST;
 
         ScaleImage( images[ 0 ], 16 );
         xImageManager->replaceImages( ui::ImageType::SIZE_DEFAULT | nColor,  commands, images );
@@ -95,18 +98,16 @@ CustomToolBarImportHelper::getCfgManager()
 uno::Any
 CustomToolBarImportHelper::createCommandFromMacro( const OUString& sCmd )
 {
-//"vnd.sun.star.script:Standard.Module1.Main?language=Basic&location=document"
-    static const char scheme[] = "vnd.sun.star.script:";
-    static const char part2 [] = "?language=Basic&location=document";
+    //"vnd.sun.star.script:Standard.Module1.Main?language=Basic&location=document"
     // create script url
-    OUString scriptURL = scheme + sCmd + part2;
+    OUString scriptURL = "vnd.sun.star.script:" + sCmd + "?language=Basic&location=document";
     return uno::makeAny( scriptURL );
 }
 
 OUString CustomToolBarImportHelper::MSOCommandToOOCommand( sal_Int16 msoCmd )
 {
     OUString result;
-    if ( pMSOCmdConvertor.get() )
+    if (pMSOCmdConvertor)
         result = pMSOCmdConvertor->MSOCommandToOOCommand( msoCmd );
     return result;
 }
@@ -114,13 +115,13 @@ OUString CustomToolBarImportHelper::MSOCommandToOOCommand( sal_Int16 msoCmd )
 OUString CustomToolBarImportHelper::MSOTCIDToOOCommand( sal_Int16 msoTCID )
 {
     OUString result;
-    if ( pMSOCmdConvertor.get() )
+    if (pMSOCmdConvertor)
         result = pMSOCmdConvertor->MSOTCIDToOOCommand( msoTCID );
     return result;
 }
 
 bool
-CustomToolBarImportHelper::createMenu( const OUString& rName, const uno::Reference< container::XIndexAccess >& xMenuDesc, bool bPersist )
+CustomToolBarImportHelper::createMenu( const OUString& rName, const uno::Reference< container::XIndexAccess >& xMenuDesc )
 {
     bool bRes = true;
     try
@@ -136,21 +137,18 @@ CustomToolBarImportHelper::createMenu( const OUString& rName, const uno::Referen
         {
             uno::Sequence< beans::PropertyValue > aPopupMenu( 4 );
             aPopupMenu[0].Name = "CommandURL";
-            aPopupMenu[0].Value = uno::makeAny( "vnd.openoffice.org:" + rName );
+            aPopupMenu[0].Value <<= "vnd.openoffice.org:" + rName;
             aPopupMenu[1].Name = "Label";
             aPopupMenu[1].Value <<= rName;
             aPopupMenu[2].Name = "ItemDescriptorContainer";
-            aPopupMenu[2].Value = uno::makeAny( xMenuDesc );
+            aPopupMenu[2].Value <<= xMenuDesc;
             aPopupMenu[3].Name = "Type";
             aPopupMenu[3].Value <<= sal_Int32( 0 );
 
             xPopup->insertByIndex( xPopup->getCount(), uno::makeAny( aPopupMenu ) );
-            if ( bPersist )
-            {
-                xCfgManager->insertSettings( sMenuBar, uno::Reference< container::XIndexAccess >( xPopup, uno::UNO_QUERY ) );
-                uno::Reference< ui::XUIConfigurationPersistence > xPersistence( xCfgManager, uno::UNO_QUERY_THROW );
-                xPersistence->store();
-            }
+            xCfgManager->insertSettings( sMenuBar, uno::Reference< container::XIndexAccess >( xPopup, uno::UNO_QUERY ) );
+            uno::Reference< ui::XUIConfigurationPersistence > xPersistence( xCfgManager, uno::UNO_QUERY_THROW );
+            xPersistence->store();
         }
     }
     catch( const uno::Exception& )
@@ -268,14 +266,14 @@ TBCMenuSpecific* TBCData::getMenuSpecific()
     TBCMenuSpecific* pMenu = dynamic_cast< TBCMenuSpecific* >( controlSpecificInfo.get() );
     return pMenu;
 }
-bool TBCData::ImportToolBarControl( CustomToolBarImportHelper& helper, std::vector< css::beans::PropertyValue >& props, bool& bBeginGroup, bool bIsMenuBar )
+void TBCData::ImportToolBarControl( CustomToolBarImportHelper& helper, std::vector< css::beans::PropertyValue >& props, bool& bBeginGroup, bool bIsMenuBar )
 {
     sal_uInt16  nStyle = 0;
     bBeginGroup = rHeader.isBeginGroup();
     controlGeneralInfo.ImportToolBarControlData( helper, props );
     beans::PropertyValue aProp;
     aProp.Name = "Visible";
-    aProp.Value = uno::makeAny( rHeader.isVisible() ); // where is the visible attribute stored
+    aProp.Value <<= rHeader.isVisible(); // where is the visible attribute stored
     props.push_back( aProp );
     if ( rHeader.getTct() == 0x01
     || rHeader.getTct() == 0x10 )
@@ -285,10 +283,11 @@ bool TBCData::ImportToolBarControl( CustomToolBarImportHelper& helper, std::vect
         {
             // if we have a icon then lets  set it for the command
             OUString sCommand;
-            for ( std::vector< css::beans::PropertyValue >::iterator it = props.begin(); it != props.end(); ++it )
+            for (auto const& property : props)
             {
-                if ( it->Name == "CommandURL" )
-                    it->Value >>= sCommand;
+                // TODO JNA : couldn't we break if we find CommandURL to avoid keeping on the loop?
+                if ( property.Name == "CommandURL" )
+                    property.Value >>= sCommand;
             }
             if ( TBCBitMap* pIcon = pSpecificInfo->getIcon() )
             {
@@ -296,11 +295,19 @@ bool TBCData::ImportToolBarControl( CustomToolBarImportHelper& helper, std::vect
                 if ( !sCommand.isEmpty() )
                 {
                     BitmapEx aBitEx( pIcon->getBitMap() );
-                    if ( pSpecificInfo->getIconMask() )
-                         // according to the spec:
-                         // "the iconMask is white in all the areas in which the icon is
-                         // displayed as transparent and is black in all other areas."
-                         aBitEx = BitmapEx( aBitEx.GetBitmap(), pSpecificInfo->getIconMask()->getBitMap().CreateMask( Color( COL_WHITE ) ) );
+                    TBCBitMap* pIconMask = pSpecificInfo->getIconMask();
+                    if (pIconMask)
+                    {
+                        Bitmap aMaskBase(pIconMask->getBitMap().GetBitmap());
+                        Size aMaskSize = aMaskBase.GetSizePixel();
+                        if (aMaskSize.Width() && aMaskSize.Height())
+                        {
+                            // according to the spec:
+                            // "the iconMask is white in all the areas in which the icon is
+                            // displayed as transparent and is black in all other areas."
+                            aBitEx = BitmapEx(aBitEx.GetBitmap(), aMaskBase.CreateMask(COL_WHITE));
+                        }
+                    }
 
                     Graphic aGraphic( aBitEx );
                     helper.addIcon( aGraphic.GetXGraphic(), sCommand );
@@ -329,7 +336,10 @@ bool TBCData::ImportToolBarControl( CustomToolBarImportHelper& helper, std::vect
 
         TBCMenuSpecific* pMenu = getMenuSpecific();
         if ( pMenu )
-            aProp.Value = uno::makeAny( sMenuBar += pMenu->Name() ); // name of popup
+        {
+            sMenuBar += pMenu->Name();
+            aProp.Value <<= sMenuBar; // name of popup
+        }
         nStyle |= ui::ItemStyle::DROP_DOWN;
         props.push_back( aProp );
     }
@@ -352,7 +362,6 @@ bool TBCData::ImportToolBarControl( CustomToolBarImportHelper& helper, std::vect
     }
     aProp.Value <<= nStyle;
     props.push_back( aProp );
-    return true; // just ignore
 }
 
 #ifdef DEBUG_FILTER_MSTOOLBAR
@@ -426,7 +435,7 @@ TBCExtraInfo::Print( FILE* fp )
 }
 #endif
 
-OUString
+OUString const &
 TBCExtraInfo::getOnAction()
 {
     return wstrOnAction.getString();
@@ -472,7 +481,7 @@ TBCGeneralInfo::Print( FILE* fp )
 void
 TBCGeneralInfo::ImportToolBarControlData( CustomToolBarImportHelper& helper, std::vector< beans::PropertyValue >& sControlData )
 {
-    if ( ( bFlags & 0x5 ) )
+    if ( bFlags & 0x5 )
     {
         beans::PropertyValue aProp;
         // probably access to the header would be a better test than seeing if there is an action, e.g.
@@ -489,15 +498,15 @@ TBCGeneralInfo::ImportToolBarControlData( CustomToolBarImportHelper& helper, std
         }
 
         aProp.Name = "Label";
-        aProp.Value = uno::makeAny( customText.getString().replace('&','~') );
+        aProp.Value <<= customText.getString().replace('&','~');
         sControlData.push_back( aProp );
 
         aProp.Name = "Type";
-        aProp.Value = uno::makeAny( ui::ItemType::DEFAULT );
+        aProp.Value <<= ui::ItemType::DEFAULT;
         sControlData.push_back( aProp );
 
         aProp.Name = "Tooltip";
-        aProp.Value = uno::makeAny( tooltip.getString() );
+        aProp.Value <<= tooltip.getString();
         sControlData.push_back( aProp );
 /*
 aToolbarItem(0).Name = "CommandURL" wstrOnAction
@@ -573,7 +582,7 @@ bool TBCBSpecific::Read( SvStream &rS)
     if ( bFlags & 0x10 )
     {
         iBtnFace.reset( new sal_uInt16 );
-        rS.ReadUInt16( *iBtnFace.get() );
+        rS.ReadUInt16( *iBtnFace );
     }
     // if bFlags.fAccelerator equals 1 ( 0x04 )
     if ( bFlags & 0x04 )
@@ -609,7 +618,7 @@ void TBCBSpecific::Print( FILE* fp )
     }
     if ( iBtnFace.get() )
     {
-        indent_printf( fp, "  iBtnFace 0x%x\n", *(iBtnFace.get()) );
+        indent_printf( fp, "  iBtnFace 0x%x\n", *iBtnFace );
     }
     bResult = ( wstrAcc.get() != NULL );
     indent_printf( fp, "  option string present? %s ->%s<-\n", bResult ? "true" : "false", bResult ? OUStringToOString( wstrAcc->getString(), RTL_TEXTENCODING_UTF8 ).getStr() : "N/A" );
@@ -722,7 +731,7 @@ bool TBCBitMap::Read( SvStream& rS)
     nOffSet = rS.Tell();
     rS.ReadInt32( cbDIB );
     // cbDIB = sizeOf(biHeader) + sizeOf(colors) + sizeOf(bitmapData) + 10
-    return ReadDIB(mBitMap, rS, false, true);
+    return ReadDIBBitmapEx(mBitMap, rS, false, true);
 }
 
 #ifdef DEBUG_FILTER_MSTOOLBAR

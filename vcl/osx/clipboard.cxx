@@ -22,9 +22,9 @@
 #include "DataFlavorMapping.hxx"
 #include "OSXTransferable.hxx"
 #include <com/sun/star/datatransfer/MimeContentTypeFactory.hpp>
-#include "comphelper/processfactory.hxx"
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <boost/assert.hpp>
 
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::datatransfer::clipboard;
@@ -66,12 +66,12 @@ using namespace comphelper;
 
 @end
 
-OUString clipboard_getImplementationName()
+static OUString clipboard_getImplementationName()
 {
   return OUString("com.sun.star.datatransfer.clipboard.AquaClipboard");
 }
 
-Sequence<OUString> clipboard_getSupportedServiceNames()
+static Sequence<OUString> clipboard_getSupportedServiceNames()
 {
   return { OUString("com.sun.star.datatransfer.clipboard.SystemClipboard") };
 }
@@ -93,8 +93,10 @@ AquaClipboard::AquaClipboard(NSPasteboard* pasteboard, bool bUseSystemPasteboard
     }
     else
     {
+      SAL_WNODEPRECATED_DECLARATIONS_PUSH //TODO: 10.13 NSDragPboard
       mPasteboard = bUseSystemPasteboard ? [NSPasteboard generalPasteboard] :
         [NSPasteboard pasteboardWithName: NSDragPboard];
+      SAL_WNODEPRECATED_DECLARATIONS_POP
 
       if (mPasteboard == nil)
         {
@@ -141,7 +143,7 @@ AquaClipboard::~AquaClipboard()
     [mPasteboard release];
 }
 
-Reference<XTransferable> SAL_CALL AquaClipboard::getContents() throw(RuntimeException, std::exception)
+Reference<XTransferable> SAL_CALL AquaClipboard::getContents()
 {
     MutexGuard aGuard(m_aMutex);
 
@@ -159,7 +161,6 @@ Reference<XTransferable> SAL_CALL AquaClipboard::getContents() throw(RuntimeExce
 
 void SAL_CALL AquaClipboard::setContents(const Reference<XTransferable>& xTransferable,
     const Reference<XClipboardOwner>& xClipboardOwner)
-        throw( RuntimeException, std::exception )
 {
     NSArray* types = xTransferable.is() ?
         mpDataFlavorMapper->flavorSequenceToTypesArray(xTransferable->getTransferDataFlavors()) :
@@ -187,18 +188,17 @@ void SAL_CALL AquaClipboard::setContents(const Reference<XTransferable>& xTransf
     fireClipboardChangedEvent();
 }
 
-OUString SAL_CALL AquaClipboard::getName() throw( RuntimeException, std::exception )
+OUString SAL_CALL AquaClipboard::getName()
 {
     return OUString();
 }
 
-sal_Int8 SAL_CALL AquaClipboard::getRenderingCapabilities() throw( RuntimeException, std::exception )
+sal_Int8 SAL_CALL AquaClipboard::getRenderingCapabilities()
 {
     return 0;
 }
 
 void SAL_CALL AquaClipboard::addClipboardListener(const Reference< XClipboardListener >& listener)
-  throw( RuntimeException, std::exception )
 {
   MutexGuard aGuard(m_aMutex);
 
@@ -210,7 +210,6 @@ void SAL_CALL AquaClipboard::addClipboardListener(const Reference< XClipboardLis
 }
 
 void SAL_CALL AquaClipboard::removeClipboardListener(const Reference< XClipboardListener >& listener)
-  throw( RuntimeException, std::exception )
 {
   MutexGuard aGuard(m_aMutex);
 
@@ -265,20 +264,19 @@ void AquaClipboard::fireClipboardChangedEvent()
 
     aGuard.clear();
 
-    while (!listeners.empty())
+    for (auto const& listener : listeners)
     {
-        if (listeners.front().is())
+        if (listener.is())
         {
-            try { listeners.front()->changedContents(aEvent); }
+            try { listener->changedContents(aEvent); }
             catch (RuntimeException&) { }
         }
-        listeners.pop_front();
     }
 }
 
-void AquaClipboard::fireLostClipboardOwnershipEvent(Reference<XClipboardOwner> oldOwner, Reference<XTransferable> oldContent)
+void AquaClipboard::fireLostClipboardOwnershipEvent(Reference<XClipboardOwner> const & oldOwner, Reference<XTransferable> const & oldContent)
 {
-    BOOST_ASSERT(oldOwner.is());
+    assert(oldOwner.is());
 
     try { oldOwner->lostOwnership(static_cast<XClipboardEx*>(this), oldContent); }
     catch(RuntimeException&) { }
@@ -293,14 +291,13 @@ void AquaClipboard::provideDataForType(NSPasteboard* sender, const NSString* typ
 
         if (dp.get() != nullptr)
         {
-            pBoardData = (NSData*)dp->getSystemData();
+            pBoardData = dp->getSystemData();
             [sender setData: pBoardData forType:const_cast<NSString*>(type)];
         }
     }
 }
 
 void SAL_CALL AquaClipboard::flushClipboard()
-  throw(RuntimeException, std::exception)
 {
     if (mXClipboardContent.is())
     {
@@ -326,17 +323,17 @@ NSPasteboard* AquaClipboard::getPasteboard() const
     return mPasteboard;
 }
 
-OUString SAL_CALL AquaClipboard::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL AquaClipboard::getImplementationName()
 {
     return clipboard_getImplementationName();
 }
 
-sal_Bool SAL_CALL AquaClipboard::supportsService( const OUString& ServiceName ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL AquaClipboard::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString > SAL_CALL AquaClipboard::getSupportedServiceNames() throw( RuntimeException, std::exception )
+Sequence< OUString > SAL_CALL AquaClipboard::getSupportedServiceNames()
 {
     return clipboard_getSupportedServiceNames();
 }

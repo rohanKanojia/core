@@ -40,11 +40,13 @@ class TextBody
 {
 public:
     TextBody();
-    TextBody( TextBodyPtr pBody );
+    TextBody( const TextBodyPtr& pBody );
     ~TextBody();
 
     const TextParagraphVector&          getParagraphs() const { return maParagraphs; }
     TextParagraph&                      addParagraph();
+    /// Appends an existing paragraph to this text body.
+    void appendParagraph(std::shared_ptr<TextParagraph> pTextParagraph);
 
     const TextListStyle&                getTextListStyle() const { return maTextListStyle; }
     TextListStyle&                      getTextListStyle() { return maTextListStyle; }
@@ -59,7 +61,13 @@ public:
                             const css::uno::Reference < css::text::XTextCursor > & xAt,
                             const TextCharacterProperties& rTextStyleProperties,
                             const TextListStylePtr& pMasterTextListStyle ) const;
-    bool isEmpty();
+    bool isEmpty() const;
+
+    void                ApplyStyleEmpty(
+                            const ::oox::core::XmlFilterBase& rFilterBase,
+                            const css::uno::Reference < css::text::XText > & xText,
+                            const TextCharacterProperties& rTextStyleProperties,
+                            const TextListStylePtr& pMasterTextListStylePtr) const;
 protected:
     TextParagraphVector maParagraphs;
     TextBodyProperties  maTextProperties;

@@ -17,47 +17,45 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "document.hxx"
-#include "stlsheet.hxx"
-#include "stlpool.hxx"
+#include <document.hxx>
+#include <stlsheet.hxx>
+#include <stlpool.hxx>
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/frmdiritem.hxx>
 #include <editeng/lrspitem.hxx>
 #include <svx/pageitem.hxx>
 #include <editeng/paperinf.hxx>
-#include <editeng/pbinitem.hxx>
+#include <editeng/shaditem.hxx>
 #include <editeng/sizeitem.hxx>
 #include <editeng/ulspitem.hxx>
-#include <sfx2/printer.hxx>
+#include <editeng/xmlcnitm.hxx>
 #include <svl/itempool.hxx>
 #include <svl/itemset.hxx>
-#include <svl/smplhint.hxx>
-#include "attrib.hxx"
+#include <svl/hint.hxx>
+#include <attrib.hxx>
 
-#include <vcl/svapp.hxx>
-
-#include "globstr.hrc"
-#include "sc.hrc"
-
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <sc.hrc>
 
 #define TWO_CM      1134
 #define HFDIST_CM   142
 
 ScStyleSheet::ScStyleSheet( const OUString&     rName,
-                            ScStyleSheetPool&   rPoolP,
+                            const ScStyleSheetPool& rPoolP,
                             SfxStyleFamily      eFamily,
-                            sal_uInt16          nMaskP )
+                            SfxStyleSearchBits  nMaskP )
 
     : SfxStyleSheet   ( rName, rPoolP, eFamily, nMaskP )
-    , eUsage( UNKNOWN )
+    , eUsage( Usage::UNKNOWN )
 {
 }
 
 ScStyleSheet::ScStyleSheet( const ScStyleSheet& rStyle )
     : SfxStyleSheet ( rStyle )
-    , eUsage( UNKNOWN )
+    , eUsage( Usage::UNKNOWN )
 {
 }
 
@@ -76,8 +74,8 @@ bool ScStyleSheet::HasParentSupport () const
 
     switch ( GetFamily() )
     {
-    case SFX_STYLE_FAMILY_PARA: bHasParentSupport = true;   break;
-    case SFX_STYLE_FAMILY_PAGE: bHasParentSupport = false;  break;
+    case SfxStyleFamily::Para: bHasParentSupport = true;   break;
+    case SfxStyleFamily::Page: bHasParentSupport = false;  break;
     default:
         {
             // added to avoid warnings
@@ -91,10 +89,10 @@ bool ScStyleSheet::SetParent( const OUString& rParentName )
 {
     bool bResult = false;
     OUString aEffName = rParentName;
-    SfxStyleSheetBase* pStyle = pPool->Find( aEffName, nFamily );
+    SfxStyleSheetBase* pStyle = m_pPool->Find( aEffName, nFamily );
     if (!pStyle)
     {
-        SfxStyleSheetIteratorPtr pIter = pPool->CreateIterator( nFamily, SFXSTYLEBIT_ALL );
+        std::unique_ptr<SfxStyleSheetIterator> pIter = m_pPool->CreateIterator( nFamily, SfxStyleSearchBits::All );
         pStyle = pIter->First();
         if (pStyle)
             aEffName = pStyle->GetName();
@@ -111,7 +109,7 @@ bool ScStyleSheet::SetParent( const OUString& rParentName )
             // #i113491# Drag&Drop in the stylist's hierarchical view doesn't execute a slot,
             // so the repaint has to come from here (after modifying the ItemSet).
             // RepaintRange checks the document's IsVisible flag and locked repaints.
-            ScDocument* pDoc = static_cast<ScStyleSheetPool&>(GetPool()).GetDocument();
+            ScDocument* pDoc = static_cast<ScStyleSheetPool*>(GetPool())->GetDocument();
             if (pDoc)
                 pDoc->RepaintRange( ScRange( 0,0,0, MAXCOL,MAXROW,MAXTAB ) );
         }
@@ -131,27 +129,28 @@ SfxItemSet& ScStyleSheet::GetItemSet()
     {
         switch ( GetFamily() )
         {
-            case SFX_STYLE_FAMILY_PAGE:
+            case SfxStyleFamily::Page:
                 {
                     // Page templates should not be derivable,
                     // therefore suitable values are set at this point.
                     // (== Standard page template)
 
-                    SfxItemPool& rItemPool = GetPool().GetPool();
-                    pSet = new SfxItemSet( rItemPool,
-                                           ATTR_BACKGROUND, ATTR_BACKGROUND,
-                                           ATTR_BORDER, ATTR_SHADOW,
-                                           ATTR_LRSPACE, ATTR_PAGE_SCALETO,
-                                           ATTR_WRITINGDIR, ATTR_WRITINGDIR,
-                                           ATTR_USERDEF, ATTR_USERDEF,
-                                           0 );
+                    SfxItemPool& rItemPool = GetPool()->GetPool();
+                    pSet = new SfxItemSet(
+                        rItemPool,
+                        svl::Items<
+                            ATTR_USERDEF, ATTR_USERDEF,
+                            ATTR_WRITINGDIR, ATTR_WRITINGDIR,
+                            ATTR_BACKGROUND, ATTR_BACKGROUND,
+                            ATTR_BORDER, ATTR_SHADOW,
+                            ATTR_LRSPACE, ATTR_PAGE_SCALETO>{} );
 
                     //  If being loaded also the set is then filled in from the file,
                     //  so the defaults do not need to be set.
                     //  GetPrinter would then also create a new printer,
                     //  because the stored Printer is not loaded yet!
 
-                    ScDocument* pDoc = static_cast<ScStyleSheetPool&>(GetPool()).GetDocument();
+                    ScDocument* pDoc = static_cast<ScStyleSheetPool*>(GetPool())->GetDocument();
                     if ( pDoc )
                     {
                         // Setting reasonable default values:
@@ -159,13 +158,12 @@ SfxItemSet& ScStyleSheet::GetItemSet()
                         SvxSizeItem     aPaperSizeItem( ATTR_PAGE_SIZE, SvxPaperInfo::GetDefaultPaperSize() );
 
                         SvxSetItem      aHFSetItem(
-                                            static_cast<const SvxSetItem&>(
-                                            rItemPool.GetDefaultItem(ATTR_PAGE_HEADERSET) ));
+                                            rItemPool.GetDefaultItem(ATTR_PAGE_HEADERSET) );
 
                         SfxItemSet&     rHFSet = aHFSetItem.GetItemSet();
                         SvxSizeItem     aHFSizeItem( // 0,5 cm + distance
                                             ATTR_PAGE_SIZE,
-                                            Size( 0, (long)( 500 / HMM_PER_TWIPS ) + HFDIST_CM ) );
+                                            Size( 0, long( 500 / HMM_PER_TWIPS ) + HFDIST_CM ) );
 
                         SvxULSpaceItem  aHFDistItem ( HFDIST_CM,// nUp
                                                       HFDIST_CM,// nLow
@@ -192,19 +190,21 @@ SfxItemSet& ScStyleSheet::GetItemSet()
                         rHFSet.Put( aHFDistItem );
                         rHFSet.Put( SvxLRSpaceItem( 0,0,0,0, ATTR_LRSPACE ) ); // Set border to Null
 
-                        pSet->Put( aHFSetItem, ATTR_PAGE_HEADERSET );
-                        pSet->Put( aHFSetItem, ATTR_PAGE_FOOTERSET );
+                        aHFSetItem.SetWhich(ATTR_PAGE_HEADERSET);
+                        pSet->Put( aHFSetItem );
+                        aHFSetItem.SetWhich(ATTR_PAGE_FOOTERSET);
+                        pSet->Put( aHFSetItem );
                         pSet->Put( aBoxInfoItem ); // Do not overwrite PoolDefault
                                                    // due to format templates
 
 
                         //  Writing direction: not as pool default because the default for cells
-                        //  must remain FRMDIR_ENVIRONMENT, and each page style's setting is
+                        //  must remain SvxFrameDirection::Environment, and each page style's setting is
                         //  supposed to be saved in the file format.
                         //  The page default depends on the system language.
                         SvxFrameDirection eDirection = ScGlobal::IsSystemRTL() ?
-                                        FRMDIR_HORI_RIGHT_TOP : FRMDIR_HORI_LEFT_TOP;
-                        pSet->Put( SvxFrameDirectionItem( eDirection, ATTR_WRITINGDIR ), ATTR_WRITINGDIR );
+                                        SvxFrameDirection::Horizontal_RL_TB : SvxFrameDirection::Horizontal_LR_TB;
+                        pSet->Put( SvxFrameDirectionItem( eDirection, ATTR_WRITINGDIR ) );
 
                         rItemPool.SetPoolDefaultItem( aPageItem );
                         rItemPool.SetPoolDefaultItem( aPaperSizeItem );
@@ -218,9 +218,9 @@ SfxItemSet& ScStyleSheet::GetItemSet()
                 }
                 break;
 
-            case SFX_STYLE_FAMILY_PARA:
+            case SfxStyleFamily::Para:
             default:
-                pSet = new SfxItemSet( GetPool().GetPool(), ATTR_PATTERN_START, ATTR_PATTERN_END );
+                pSet = new SfxItemSet( GetPool()->GetPool(), svl::Items<ATTR_PATTERN_START, ATTR_PATTERN_END>{} );
                 break;
         }
         bMySet = true;
@@ -233,12 +233,12 @@ SfxItemSet& ScStyleSheet::GetItemSet()
             // ~ScStyleSheetPool -> ~SfxStyleSheetPool, GetPool() is no longer
             // an ScStyleSheetPool:
             ScStyleSheetPool * pool = dynamic_cast<ScStyleSheetPool *>(
-                &GetPool());
+                GetPool());
             if (pool != nullptr) {
                 ScDocument* pDoc = pool->GetDocument();
                 if ( pDoc )
                 {
-                    sal_uLong nNumFmt = pDoc->GetFormatTable()->GetStandardFormat( css::util::NumberFormat::CURRENCY,ScGlobal::eLnge );
+                    sal_uInt32 nNumFmt = pDoc->GetFormatTable()->GetStandardFormat( SvNumFormatType::CURRENCY,ScGlobal::eLnge );
                     pSet->Put( SfxUInt32Item( ATTR_VALUE_FORMAT, nNumFmt ) );
                 }
             }
@@ -250,16 +250,16 @@ SfxItemSet& ScStyleSheet::GetItemSet()
 
 bool ScStyleSheet::IsUsed() const
 {
-    if ( GetFamily() == SFX_STYLE_FAMILY_PARA )
+    if ( GetFamily() == SfxStyleFamily::Para )
     {
         // Always query the document to let it decide if a rescan is necessary,
         // and store the state.
-        ScDocument* pDoc = static_cast<ScStyleSheetPool*>(pPool)->GetDocument();
+        ScDocument* pDoc = static_cast<ScStyleSheetPool*>(m_pPool)->GetDocument();
         if ( pDoc && pDoc->IsStyleSheetUsed( *this ) )
-            eUsage = USED;
+            eUsage = Usage::USED;
         else
-            eUsage = NOTUSED;
-        return eUsage == USED;
+            eUsage = Usage::NOTUSED;
+        return eUsage == Usage::USED;
     }
     else
         return true;
@@ -267,42 +267,8 @@ bool ScStyleSheet::IsUsed() const
 
 void ScStyleSheet::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
         GetItemSet().SetParent( nullptr );
-}
-
-// Dirty tricks, to always save the default template as "standard"
-// even though when shown to the user it is renamed:
-
-const OUString& ScStyleSheet::GetName() const
-{
-    const OUString& rBase = SfxStyleSheet::GetName();
-    const OUString* pForceStdName = static_cast<ScStyleSheetPool*>(pPool)->GetForceStdName();
-    if ( pForceStdName && rBase == ScGlobal::GetRscString(STR_STYLENAME_STANDARD) )
-        return *pForceStdName;
-    else
-        return rBase;
-}
-
-const OUString& ScStyleSheet::GetParent() const
-{
-    const OUString& rBase = SfxStyleSheet::GetParent();
-    const OUString* pForceStdName = static_cast<ScStyleSheetPool*>(pPool)->GetForceStdName();
-    if ( pForceStdName && rBase == ScGlobal::GetRscString(STR_STYLENAME_STANDARD) )
-        return *pForceStdName;
-    else
-        return rBase;
-}
-
-const OUString& ScStyleSheet::GetFollow() const
-{
-    const OUString& rBase = SfxStyleSheet::GetFollow();
-    const OUString* pForceStdName = static_cast<ScStyleSheetPool*>(pPool)->GetForceStdName();
-    if ( pForceStdName && rBase == ScGlobal::GetRscString(STR_STYLENAME_STANDARD) )
-        return *pForceStdName;
-    else
-        return rBase;
 }
 
 // Avoid creating a Style "Standard" if this is not the Standard-Name;
@@ -315,7 +281,7 @@ const OUString& ScStyleSheet::GetFollow() const
 bool ScStyleSheet::SetName(const OUString& rNew, bool bReindexNow)
 {
     OUString aFileStdName = STRING_STANDARD;
-    if ( rNew == aFileStdName && aFileStdName != ScGlobal::GetRscString(STR_STYLENAME_STANDARD) )
+    if ( rNew == aFileStdName && aFileStdName != ScResId(STR_STYLENAME_STANDARD) )
         return false;
     else
         return SfxStyleSheet::SetName(rNew, bReindexNow);

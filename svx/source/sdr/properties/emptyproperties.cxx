@@ -17,8 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/emptyproperties.hxx>
-#include <tools/debug.hxx>
 #include <svl/itemset.hxx>
 #include <svx/svddef.hxx>
 #include <svx/svdobj.hxx>
@@ -31,39 +33,21 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* EmptyProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> EmptyProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
             // Basic implementation; Basic object has NO attributes
             assert(!"EmptyProperties::CreateObjectSpecificItemSet() should never be called");
-            return new SfxItemSet(rPool);
+            return o3tl::make_unique<SfxItemSet>(rPool);
         }
 
         EmptyProperties::EmptyProperties(SdrObject& rObj)
-        :   BaseProperties(rObj),
-            mpEmptyItemSet(nullptr)
+        :   BaseProperties(rObj)
         {
         }
 
-        EmptyProperties::EmptyProperties(const EmptyProperties& rProps, SdrObject& rObj)
-        :   BaseProperties(rProps, rObj),
-            mpEmptyItemSet(nullptr)
+        std::unique_ptr<BaseProperties> EmptyProperties::Clone(SdrObject& rObj) const
         {
-            // do not gererate an assert, else derivations like PageProperties will generate an assert
-            // using the Clone() operator path.
-        }
-
-        EmptyProperties::~EmptyProperties()
-        {
-            if(mpEmptyItemSet)
-            {
-                delete mpEmptyItemSet;
-                mpEmptyItemSet = nullptr;
-            }
-        }
-
-        BaseProperties& EmptyProperties::Clone(SdrObject& rObj) const
-        {
-            return *(new EmptyProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new EmptyProperties(rObj));
         }
 
         const SfxItemSet& EmptyProperties::GetObjectItemSet() const

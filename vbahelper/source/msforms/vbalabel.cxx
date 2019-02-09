@@ -23,13 +23,14 @@
 using namespace com::sun::star;
 using namespace ooo::vba;
 
-ScVbaLabel::ScVbaLabel(  const css::uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, ov::AbstractGeometryAttributes* pGeomHelper ) : LabelImpl_BASE( xParent, xContext, xControl, xModel, pGeomHelper )
+ScVbaLabel::ScVbaLabel(  const css::uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+    : LabelImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
 OUString SAL_CALL
-ScVbaLabel::getCaption() throw (css::uno::RuntimeException, std::exception)
+ScVbaLabel::getCaption()
 {
     OUString Label;
     m_xProps->getPropertyValue( "Label" ) >>= Label;
@@ -37,18 +38,18 @@ ScVbaLabel::getCaption() throw (css::uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaLabel::setCaption( const OUString& _caption ) throw (css::uno::RuntimeException, std::exception)
+ScVbaLabel::setCaption( const OUString& _caption )
 {
     m_xProps->setPropertyValue( "Label", uno::makeAny( _caption ) );
 }
 uno::Any SAL_CALL
-ScVbaLabel::getValue() throw (css::uno::RuntimeException, std::exception)
+ScVbaLabel::getValue()
 {
     return uno::makeAny( getCaption() );
 }
 
 void SAL_CALL
-ScVbaLabel::setValue( const uno::Any& _value ) throw (css::uno::RuntimeException, std::exception)
+ScVbaLabel::setValue( const uno::Any& _value )
 {
     OUString sCaption;
     _value >>= sCaption;
@@ -56,19 +57,19 @@ ScVbaLabel::setValue( const uno::Any& _value ) throw (css::uno::RuntimeException
 }
 
 OUString SAL_CALL
-ScVbaLabel::getAccelerator() throw (css::uno::RuntimeException, std::exception)
+ScVbaLabel::getAccelerator()
 {
     // #STUB
     return OUString();
 }
 
 void SAL_CALL
-ScVbaLabel::setAccelerator( const OUString& /*_accelerator*/ ) throw (css::uno::RuntimeException, std::exception)
+ScVbaLabel::setAccelerator( const OUString& /*_accelerator*/ )
 {
     // #STUB
 }
 
-uno::Reference< msforms::XNewFont > SAL_CALL ScVbaLabel::getFont() throw (uno::RuntimeException, std::exception)
+uno::Reference< msforms::XNewFont > SAL_CALL ScVbaLabel::getFont()
 {
     return new VbaNewFont( m_xProps );
 }
@@ -78,22 +79,22 @@ OUString ScVbaLabel::getServiceImplName()
     return OUString( "ScVbaLabel" );
 }
 
-sal_Int32 SAL_CALL ScVbaLabel::getBackColor() throw (uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL ScVbaLabel::getBackColor()
 {
     return ScVbaControl::getBackColor();
 }
 
-void SAL_CALL ScVbaLabel::setBackColor( sal_Int32 nBackColor ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaLabel::setBackColor( sal_Int32 nBackColor )
 {
     ScVbaControl::setBackColor( nBackColor );
 }
 
-sal_Bool SAL_CALL ScVbaLabel::getAutoSize() throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ScVbaLabel::getAutoSize()
 {
     return ScVbaControl::getAutoSize();
 }
 
-void SAL_CALL ScVbaLabel::setAutoSize( sal_Bool bAutoSize ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaLabel::setAutoSize( sal_Bool bAutoSize )
 {
     ScVbaControl::setAutoSize( bAutoSize );
 }
@@ -101,12 +102,10 @@ void SAL_CALL ScVbaLabel::setAutoSize( sal_Bool bAutoSize ) throw (uno::RuntimeE
 uno::Sequence< OUString >
 ScVbaLabel::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.msforms.Label";
-    }
+        "ooo.vba.msforms.Label"
+    };
     return aServiceNames;
 }
 

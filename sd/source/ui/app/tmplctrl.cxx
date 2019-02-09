@@ -23,13 +23,14 @@
 #include <svl/stritem.hxx>
 #include <sfx2/dispatch.hxx>
 
-#include "tmplctrl.hxx"
-#include "ViewShellBase.hxx"
-#include "drawdoc.hxx"
-#include "sdattr.hrc"
-#include "app.hrc"
+#include <tmplctrl.hxx>
+#include <ViewShellBase.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <sdattr.hrc>
+#include <app.hrc>
 #include <sdresid.hxx>
-#include "strings.hrc"
+#include <strings.hrc>
 
 SFX_IMPL_STATUSBAR_CONTROL( SdTemplateControl, SfxStringItem );
 
@@ -66,7 +67,7 @@ SdTemplateControl::SdTemplateControl( sal_uInt16 _nSlotId,
                                       StatusBar& rStb ) :
     SfxStatusBarControl( _nSlotId, _nId, rStb )
 {
-    GetStatusBar().SetQuickHelpText(GetId(), SD_RESSTR(STR_STATUSBAR_MASTERPAGE));
+    GetStatusBar().SetQuickHelpText(GetId(), SdResId(STR_STATUSBAR_MASTERPAGE));
 }
 
 SdTemplateControl::~SdTemplateControl()
@@ -76,11 +77,11 @@ SdTemplateControl::~SdTemplateControl()
 void SdTemplateControl::StateChanged(
     sal_uInt16 /*nSID*/, SfxItemState eState, const SfxPoolItem* pState )
 {
-    if( eState != SfxItemState::DEFAULT || dynamic_cast< const SfxVoidItem *>( pState ) !=  nullptr )
+    if( eState != SfxItemState::DEFAULT || pState->IsVoidItem() )
         GetStatusBar().SetItemText( GetId(), OUString() );
-    else if ( dynamic_cast< const SfxStringItem *>( pState ) !=  nullptr )
+    else if ( auto pStringItem = dynamic_cast< const SfxStringItem *>( pState ) )
     {
-        msTemplate = static_cast<const SfxStringItem*>(pState)->GetValue();
+        msTemplate = pStringItem->GetValue();
         GetStatusBar().SetItemText( GetId(), msTemplate );
     }
 }
@@ -104,23 +105,23 @@ void SdTemplateControl::Command( const CommandEvent& rCEvt )
         if( !pDoc )
             return;
 
-        SdTemplatePopup_Impl aPop;
+        ScopedVclPtrInstance<SdTemplatePopup_Impl> aPop;
         {
-            const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PK_STANDARD);
+            const sal_uInt16 nMasterCount = pDoc->GetMasterSdPageCount(PageKind::Standard);
 
             sal_uInt16 nCount = 0;
             for( sal_uInt16 nPage = 0; nPage < nMasterCount; ++nPage )
             {
-                SdPage* pMaster = pDoc->GetMasterSdPage(nPage, PK_STANDARD);
+                SdPage* pMaster = pDoc->GetMasterSdPage(nPage, PageKind::Standard);
                 if( pMaster )
-                    aPop.InsertItem( ++nCount, pMaster->GetName() );
+                    aPop->InsertItem( ++nCount, pMaster->GetName() );
             }
-            aPop.Execute( &GetStatusBar(), rCEvt.GetMousePosPixel());
+            aPop->Execute( &GetStatusBar(), rCEvt.GetMousePosPixel());
 
-            sal_uInt16 nCurrId = aPop.GetCurId()-1;
+            sal_uInt16 nCurrId = aPop->GetCurId()-1;
             if( nCurrId < nMasterCount )
             {
-                SdPage* pMaster = pDoc->GetMasterSdPage(nCurrId, PK_STANDARD);
+                SdPage* pMaster = pDoc->GetMasterSdPage(nCurrId, PageKind::Standard);
                 SfxStringItem aStyle( ATTR_PRESLAYOUT_NAME, pMaster->GetName() );
                 pViewFrame->GetDispatcher()->ExecuteList(
                     SID_PRESENTATION_LAYOUT, SfxCallMode::SLOT, { &aStyle });

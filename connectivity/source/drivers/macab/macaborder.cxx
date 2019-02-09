@@ -28,7 +28,7 @@ MacabOrder::~MacabOrder()
 {
 }
 
-MacabSimpleOrder::MacabSimpleOrder(MacabHeader *header, OUString &sColumnName, bool bAscending)
+MacabSimpleOrder::MacabSimpleOrder(MacabHeader const *header, OUString const &sColumnName, bool bAscending)
     : MacabOrder(),
       m_nFieldNumber(header->getColumnNumber(sColumnName)),
       m_bAscending(bAscending)
@@ -54,18 +54,16 @@ MacabComplexOrder::MacabComplexOrder()
 
 MacabComplexOrder::~MacabComplexOrder()
 {
-    for (auto p: m_aOrders)
-        delete p;
 }
 
 void MacabComplexOrder::addOrder(MacabOrder *pOrder)
 {
-    m_aOrders.push_back(pOrder);
+    m_aOrders.emplace_back(pOrder);
 }
 
 sal_Int32 MacabComplexOrder::compare(const MacabRecord *record1, const MacabRecord *record2) const
 {
-    for (auto p: m_aOrders)
+    for (auto const & p: m_aOrders)
     {
         sal_Int32 result = p->compare(record1, record2);
 

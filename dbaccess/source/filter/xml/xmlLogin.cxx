@@ -23,7 +23,8 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <com/sun/star/sdbc/XDataSource.hpp>
@@ -71,7 +72,7 @@ OXMLLogin::OXMLLogin( ODBFilter& rImport,
                         }
                         catch(const Exception&)
                         {
-                            DBG_UNHANDLED_EXCEPTION();
+                            DBG_UNHANDLED_EXCEPTION("dbaccess");
                         }
                     }
                     break;
@@ -82,7 +83,7 @@ OXMLLogin::OXMLLogin( ODBFilter& rImport,
                     }
                     catch(const Exception&)
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("dbaccess");
                     }
                     break;
                 case XML_TOK_USE_SYSTEM_USER:
@@ -102,14 +103,14 @@ OXMLLogin::OXMLLogin( ODBFilter& rImport,
                     }
                     catch(const Exception&)
                     {
-                        DBG_UNHANDLED_EXCEPTION();
+                        DBG_UNHANDLED_EXCEPTION("dbaccess");
                     }
                     break;
             }
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 }

@@ -23,9 +23,9 @@
 #include <vcl/dllapi.h>
 #include <tools/link.hxx>
 #include <vcl/salctype.hxx>
+#include <vcl/errcode.hxx>
 
 
-struct  ConvertData;
 class   Graphic;
 
 class VCL_DLLPUBLIC GraphicConverter
@@ -39,8 +39,8 @@ public:
                         GraphicConverter();
                         ~GraphicConverter();
 
-    static sal_uLong        Import( SvStream& rIStm, Graphic& rGraphic, ConvertDataFormat nFormat = ConvertDataFormat::Unknown );
-    static sal_uLong        Export( SvStream& rOStm, const Graphic& rGraphic, ConvertDataFormat nFormat );
+    static ErrCode      Import( SvStream& rIStm, Graphic& rGraphic, ConvertDataFormat nFormat = ConvertDataFormat::Unknown );
+    static ErrCode      Export( SvStream& rOStm, const Graphic& rGraphic, ConvertDataFormat nFormat );
 
     void                SetFilterHdl( const Link<ConvertData&,bool>& rLink ) { maFilterHdl = rLink; }
     const Link<ConvertData&,bool>&  GetFilterHdl() const { return maFilterHdl; }

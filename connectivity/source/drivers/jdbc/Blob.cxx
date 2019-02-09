@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/sql/Blob.hxx"
-#include "java/tools.hxx"
-#include "java/io/InputStream.hxx"
+#include <java/sql/Blob.hxx>
+#include <java/tools.hxx>
+#include <java/io/InputStream.hxx>
 #include <connectivity/dbexception.hxx>
 
 #include <string.h>
@@ -48,32 +48,32 @@ jclass java_sql_Blob::getMyClass() const
     return theClass;
 }
 
-sal_Int64 SAL_CALL java_sql_Blob::length(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL java_sql_Blob::length(  )
 {
     jlong out(0);
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
 
     {
         // initialize temporary variable
-        static const char * cSignature = "()J";
-        static const char * cMethodName = "length";
+        static const char * const cSignature = "()J";
+        static const char * const cMethodName = "length";
         // submit Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwSQL(t.pEnv, cMethodName,cSignature, mID);
         out = t.pEnv->CallLongMethod( object, mID );
         ThrowSQLException(t.pEnv,*this);
     } //t.pEnv
-    return (sal_Int64)out;
+    return static_cast<sal_Int64>(out);
 }
-::com::sun::star::uno::Sequence< sal_Int8 > SAL_CALL java_sql_Blob::getBytes( sal_Int64 pos, sal_Int32 count ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Sequence< sal_Int8 > SAL_CALL java_sql_Blob::getBytes( sal_Int64 pos, sal_Int32 count )
 {
 
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
-    ::com::sun::star::uno::Sequence< sal_Int8 > aSeq;
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
+    css::uno::Sequence< sal_Int8 > aSeq;
     {
         // initialize temporary variable
-        static const char * cSignature = "(JI)[B";
-        static const char * cMethodName = "getBytes";
+        static const char * const cSignature = "(JI)[B";
+        static const char * const cMethodName = "getBytes";
         // submit Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwSQL(t.pEnv, cMethodName,cSignature, mID);
@@ -81,7 +81,7 @@ sal_Int64 SAL_CALL java_sql_Blob::length(  ) throw(::com::sun::star::sdbc::SQLEx
         ThrowSQLException(t.pEnv,*this);
         if(out)
         {
-            jboolean p = sal_False;
+            jboolean p = false;
             aSeq.realloc(t.pEnv->GetArrayLength(out));
             memcpy(aSeq.getArray(),t.pEnv->GetByteArrayElements(out,&p),aSeq.getLength());
             t.pEnv->DeleteLocalRef(out);
@@ -91,24 +91,24 @@ sal_Int64 SAL_CALL java_sql_Blob::length(  ) throw(::com::sun::star::sdbc::SQLEx
     return  aSeq;
 }
 
-::com::sun::star::uno::Reference< ::com::sun::star::io::XInputStream > SAL_CALL java_sql_Blob::getBinaryStream(  ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::io::XInputStream > SAL_CALL java_sql_Blob::getBinaryStream(  )
 {
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
     static jmethodID mID(nullptr);
     jobject out = callObjectMethod(t.pEnv,"getBinaryStream","()Ljava/io/InputStream;", mID);
     // WARNING: the caller becomes the owner of the returned pointer
     return out==nullptr ? nullptr : new java_io_InputStream( t.pEnv, out );
 }
 
-sal_Int64 SAL_CALL java_sql_Blob::position( const ::com::sun::star::uno::Sequence< sal_Int8 >& pattern, sal_Int64 start ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL java_sql_Blob::position( const css::uno::Sequence< sal_Int8 >& pattern, sal_Int64 start )
 {
     jlong out(0);
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
 
     {
         // initialize temporary variable
-        static const char * cSignature = "([BI)J";
-        static const char * cMethodName = "position";
+        static const char * const cSignature = "([BI)J";
+        static const char * const cMethodName = "position";
         // submit Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwSQL(t.pEnv, cMethodName,cSignature, mID);
@@ -127,10 +127,10 @@ sal_Int64 SAL_CALL java_sql_Blob::position( const ::com::sun::star::uno::Sequenc
         t.pEnv->DeleteLocalRef(pByteArray);
         ThrowSQLException(t.pEnv,*this);
     } //t.pEnv
-    return (sal_Int64)out;
+    return static_cast<sal_Int64>(out);
 }
 
-sal_Int64 SAL_CALL java_sql_Blob::positionOfBlob( const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XBlob >& /*pattern*/, sal_Int64 /*start*/ ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL java_sql_Blob::positionOfBlob( const css::uno::Reference< css::sdbc::XBlob >& /*pattern*/, sal_Int64 /*start*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XBlob::positionOfBlob", *this );
     // this was put here in CWS warnings01. The previous implementation was defective, as it did ignore

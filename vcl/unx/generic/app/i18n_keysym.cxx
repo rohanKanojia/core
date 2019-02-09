@@ -303,7 +303,7 @@ const unicode_t keymap255_map[] = {
 const keymap_t keymap255 = { 128, 189, keymap255_map };
 
 #define INITIAL_KEYMAPS 33
-const keymap_t* p_keymap[INITIAL_KEYMAPS] = {
+const keymap_t* const p_keymap[INITIAL_KEYMAPS] = {
     &keymap00, &keymap01, &keymap02, &keymap03,                         /* 00 -- 03 */
     &keymap04, &keymap05, &keymap06, &keymap07,                         /* 04 -- 07 */
     &keymap08, &keymap09, &keymap10, &keymap11,                         /* 08 -- 11 */
@@ -324,7 +324,7 @@ KeysymToUnicode (KeySym nKeySym)
         // strip off group indicator and iso10646 plane
         // FIXME can't handle chars from surrogate area.
         if (! (nKeySym & 0x00ff0000) )
-            return (sal_Unicode)(nKeySym & 0x0000ffff);
+            return static_cast<sal_Unicode>(nKeySym & 0x0000ffff);
     }
     // legacy keysyms, switch to appropriate codeset
     else

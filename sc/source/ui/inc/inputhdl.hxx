@@ -20,18 +20,20 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_INPUTHDL_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_INPUTHDL_HXX
 
-#include "global.hxx"
-#include "address.hxx"
-#include "typedstrdata.hxx"
+#include <global.hxx>
+#include <address.hxx>
+#include <tools/solar.h>
+#include <typedstrdata.hxx>
 
 #include <tools/fract.hxx>
 #include <tools/gen.hxx>
 #include <tools/link.hxx>
-#include <vcl/vclevent.hxx>
 #include <vcl/vclptr.hxx>
 #include <editeng/svxenum.hxx>
 
 #include <set>
+#include <memory>
+#include <vector>
 
 class ScDocument;
 class ScTabViewShell;
@@ -45,30 +47,30 @@ class ScRangeFindList;
 class Timer;
 class KeyEvent;
 class CommandEvent;
-
-struct ESelection;
+class VclWindowEvent;
+namespace vcl { class Window; }
 
 //  ScInputHandler
 
-class ScInputHandler
+class ScInputHandler final
 {
 private:
     VclPtr<ScInputWindow>          pInputWin;
 
-    ScEditEngineDefaulter*  pEngine;                    ///< Edited data in the sheet (when the user clicks into the sheet, and starts writing there).
+    std::unique_ptr<ScEditEngineDefaulter> mpEditEngine;     ///< Edited data in the sheet (when the user clicks into the sheet, and starts writing there).
     EditView*               pTableView;                 // associated active EditView
     EditView*               pTopView;                   // EditView in the input row
 
-    ScTypedCaseStrSet* pColumnData;
-    ScTypedCaseStrSet* pFormulaData;
-    ScTypedCaseStrSet* pFormulaDataPara;
+    std::unique_ptr<ScTypedCaseStrSet> pColumnData;
+    std::unique_ptr<ScTypedCaseStrSet> pFormulaData;
+    std::unique_ptr<ScTypedCaseStrSet> pFormulaDataPara;
     ScTypedCaseStrSet::const_iterator miAutoPosColumn;
     ScTypedCaseStrSet::const_iterator miAutoPosFormula;
 
     VclPtr<vcl::Window>     pTipVisibleParent;
-    sal_uLong               nTipVisible;
+    void*                   nTipVisible;
     VclPtr<vcl::Window>     pTipVisibleSecParent;
-    sal_uLong               nTipVisibleSec;
+    void*                   nTipVisibleSec;
     OUString                aManualTip;
     OUString                aAutoSearch;
 
@@ -108,12 +110,15 @@ private:
     ScTabViewShell*         pActiveViewSh;
 
     const ScPatternAttr*    pLastPattern;
-    SfxItemSet*             pEditDefaults;
+    std::unique_ptr<SfxItemSet>
+                            pEditDefaults;
 
-    ScInputHdlState*        pLastState;
-    Timer*                  pDelayTimer;
+    std::unique_ptr<ScInputHdlState>
+                            pLastState;
+    std::unique_ptr<Timer>  pDelayTimer;
 
-    ScRangeFindList*        pRangeFindList;
+    std::unique_ptr<ScRangeFindList>
+                            pRangeFindList;
 
     static bool             bAutoComplete;              // from app options
     static bool             bOptLoaded;
@@ -121,20 +126,24 @@ private:
 
 private:
     void            UpdateActiveView();
-    void            SyncViews( EditView* pSourceView = nullptr );
+    void            SyncViews( const EditView* pSourceView = nullptr );
     /**
      * @param cTyped typed character. If 0, look at existing document content
      *               for text or number.
      * @param bInputActivated true if the cell input mode is activated (via
      *                        F2), false otherwise.
+     * @param pTopEngine top window input line EditEngine. If not nullptr then
+     *                   some default attributes are merged to it from the
+     *                   table EditEngine.
      * @return true if the new edit mode has been started.
      */
-    bool            StartTable( sal_Unicode cTyped, bool bFromCommand, bool bInputActivated );
+    bool            StartTable( sal_Unicode cTyped, bool bFromCommand, bool bInputActivated,
+                                ScEditEngineDefaulter* pTopEngine );
     void            RemoveSelection();
     void            UpdateFormulaMode();
     static void     InvalidateAttribs();
     void            ImplCreateEditEngine();
-    DECL_LINK_TYPED( DelayTimer, Timer*, void );
+    DECL_LINK( DelayTimer, Timer*, void );
     void            GetColData();
     void            UseColData();
     void            NextAutoEntry( bool bBack );
@@ -156,18 +165,19 @@ private:
     void            SkipClosingPar();
     bool            GetFuncName( OUString& aStart, OUString& aResult );  // fdo75264
     void            ShowArgumentsTip( OUString& rSelText );
-    DECL_LINK_TYPED( ModifyHdl, LinkParamNone*, void );
-    DECL_LINK_TYPED( ShowHideTipVisibleParentListener, VclWindowEvent&, void );
-    DECL_LINK_TYPED( ShowHideTipVisibleSecParentListener, VclWindowEvent&, void );
+    DECL_LINK( ModifyHdl, LinkParamNone*, void );
+    DECL_LINK( ShowHideTipVisibleParentListener, VclWindowEvent&, void );
+    DECL_LINK( ShowHideTipVisibleSecParentListener, VclWindowEvent&, void );
 
 public:
     ScInputHandler(const ScInputHandler&) = delete;
     const ScInputHandler& operator=(const ScInputHandler&) = delete;
 
                     ScInputHandler();
-    virtual         ~ScInputHandler();
+                    ~ScInputHandler();
 
-    void SetMode( ScInputMode eNewMode, const OUString* pInitText = nullptr );
+    void            SetMode( ScInputMode eNewMode, const OUString* pInitText = nullptr,
+                             ScEditEngineDefaulter* pTopEngine = nullptr );
     bool            IsInputMode() const { return (eMode != SC_INPUT_NONE); }
     bool            IsEditMode() const  { return (eMode != SC_INPUT_NONE &&
                                                   eMode != SC_INPUT_TYPE); }
@@ -179,11 +189,12 @@ public:
     const ScAddress& GetCursorPos() const   { return aCursorPos; }
 
     bool            GetTextAndFields( ScEditEngineDefaulter& rDestEngine );
+    void            MergeLanguageAttributes( ScEditEngineDefaulter& rDestEngine ) const;
 
-    bool            KeyInput( const KeyEvent& rKEvt, bool bStartEdit = false );
+    bool            KeyInput( const KeyEvent& rKEvt, bool bStartEdit );
     void            EnterHandler( ScEnterMode nBlockMode = ScEnterMode::NORMAL );
     void            CancelHandler();
-    void            SetReference( const ScRange& rRef, ScDocument* pDoc );
+    void            SetReference( const ScRange& rRef, const ScDocument* pDoc );
     void            AddRefEntry();
 
     void            InputCommand( const CommandEvent& rCEvt );
@@ -191,10 +202,10 @@ public:
     void            InsertFunction( const OUString& rFuncName, bool bAddPar = true );
     void            ClearText();
 
-    void            InputSelection( EditView* pView );
-    void            InputChanged( EditView* pView, bool bFromNotify = false );
+    void            InputSelection( const EditView* pView );
+    void            InputChanged( const EditView* pView, bool bFromNotify );
 
-    void            ViewShellGone(ScTabViewShell* pViewSh);
+    void            ViewShellGone(const ScTabViewShell* pViewSh);
     void            SetRefViewShell(ScTabViewShell* pRefVsh) {pRefViewSh=pRefVsh;}
 
     void            NotifyChange( const ScInputHdlState* pState, bool bForce = false,
@@ -221,8 +232,9 @@ public:
     bool            DataChanging( sal_Unicode cTyped = 0, bool bFromCommand = false );
     void            DataChanged( bool bFromTopNotify = false, bool bSetModified = true );
 
-    bool            TakesReturn() const     { return ( nTipVisible != 0 ); }
+    bool            TakesReturn() const     { return ( nTipVisible != nullptr ); }
 
+    bool            GetModified() const { return bModified; }
     void            SetModified()       { bModified = true; }
 
     bool            GetSelIsRef() const     { return bSelIsRef; }
@@ -230,7 +242,7 @@ public:
 
     void            ShowRefFrame();
 
-    ScRangeFindList* GetRangeFindList()     { return pRangeFindList; }
+    ScRangeFindList* GetRangeFindList()     { return pRangeFindList.get(); }
 
     void            UpdateRange( sal_uInt16 nIndex, const ScRange& rNew );
 
@@ -248,7 +260,7 @@ public:
     bool            IsInEnterHandler() const                { return bInEnterHandler; }
     bool            IsInOwnChange() const                   { return bInOwnChange; }
 
-    bool            IsModalMode( SfxObjectShell* pDocSh );
+    bool            IsModalMode( const SfxObjectShell* pDocSh );
 
     void            ForgetLastPattern();
 
@@ -288,14 +300,14 @@ public:
     const ScAddress&        GetStartPos() const     { return aStartPos; }
     const ScAddress&        GetEndPos() const       { return aEndPos; }
     const OUString&         GetString() const       { return aString; }
-    const EditTextObject*   GetEditData() const     { return pEditData; }
+    const EditTextObject*   GetEditData() const     { return pEditData.get(); }
 
 private:
     ScAddress       aCursorPos;
     ScAddress       aStartPos;
     ScAddress       aEndPos;
     OUString        aString;
-    EditTextObject* pEditData;
+    std::unique_ptr<EditTextObject> pEditData;
 };
 
 #endif

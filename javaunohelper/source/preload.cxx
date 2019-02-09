@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "jni.h"
+#include <jni.h>
 
-#include "rtl/ustring.hxx"
-#include "osl/module.hxx"
+#include <rtl/ustring.hxx>
+#include <osl/module.hxx>
 
 #include "juhx-export-types.hxx"
 
@@ -43,7 +43,7 @@ static javaunohelper::detail::Func_getFactory * s_getFactory;
 static javaunohelper::detail::Func_bootstrap * s_bootstrap;
 static bool s_inited = false;
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 
 static bool inited_juhx( JNIEnv * jni_env )

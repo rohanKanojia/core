@@ -25,14 +25,14 @@ class AndroidSalInstance : public SvpSalInstance
     JNIEnv *m_pJNIEnv;
 
 public:
-    AndroidSalInstance( SalYieldMutex *pMutex );
+    AndroidSalInstance( std::unique_ptr<SalYieldMutex> pMutex );
     virtual ~AndroidSalInstance();
     static AndroidSalInstance *getInstance();
 
     virtual SalSystem* CreateSalSystem();
 
     // frame management
-    void GetWorkArea( Rectangle& rRect );
+    void GetWorkArea( tools::Rectangle& rRect );
     SalFrame* CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle );
     SalFrame* CreateChildFrame( SystemParentData* pParent, SalFrameStyleFlags nStyle );
 

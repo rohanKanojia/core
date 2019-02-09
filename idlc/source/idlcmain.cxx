@@ -18,7 +18,7 @@
  */
 
 
-#include "idlc/idlc.hxx"
+#include <idlc.hxx>
 #include <sal/main.h>
 
 #include <string.h>
@@ -72,21 +72,21 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             }
             idlc()->reset();
         }
-        StringVector const & files = options.getInputFiles();
+        std::vector< OString > const & files = options.getInputFiles();
         if ( options.verbose() )
         {
             fprintf( stdout, "%s: compiling %i source files ... \n",
-                options.getProgramName().getStr(), (int)files.size() );
+                options.getProgramName().getStr(), static_cast<int>(files.size()) );
             fflush( stdout );
         }
-        for (StringVector::const_iterator i(files.begin());
-             i != files.end() && nErrors == 0; ++i)
+        for (auto const& elem : files)
         {
-            OString sysFileName( convertToAbsoluteSystemPath(*i) );
+            if (nErrors)
+                break;
+            OString sysFileName( convertToAbsoluteSystemPath(elem) );
 
             if ( !options.quiet() )
-                fprintf(stdout, "Compiling: %s\n",
-                    (*i).getStr());
+                fprintf(stdout, "Compiling: %s\n", elem.getStr());
             nErrors = compileFile(&sysFileName);
 
             if ( idlc()->getWarningCount() && !options.quiet() )
@@ -94,7 +94,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
                         options.getProgramName().getStr(),
                         sal::static_int_cast< unsigned long >(
                             idlc()->getWarningCount()),
-                        (*i).getStr());
+                        elem.getStr());
 
             // prepare output file name
             OString const strippedFileName(
@@ -102,7 +102,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
             OString outputFile;
             if ( options.isValid("-O") )
             {
-                outputFile = (options.getOption("-O"));
+                outputFile = options.getOption("-O");
                 if (!outputFile.endsWith("/")) {
                     outputFile += OString('/');
                 }

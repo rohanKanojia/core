@@ -20,45 +20,14 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_PGGRID_HXX
 
 #include <sfx2/tabdlg.hxx>
-#include <colex.hxx>
-#include <vcl/field.hxx>
-#include <vcl/fixed.hxx>
-#include <svtools/ctrlbox.hxx>
+#include "colex.hxx"
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
+#include <svx/colorbox.hxx>
 
 // TabPage Format/(Styles/)Page/Text grid
 class SwTextGridPage: public SfxTabPage
 {
-    VclPtr<RadioButton>     m_pNoGridRB;
-    VclPtr<RadioButton>     m_pLinesGridRB;
-    VclPtr<RadioButton>     m_pCharsGridRB;
-    VclPtr<CheckBox>        m_pSnapToCharsCB;
-
-    VclPtr<SwPageGridExample>   m_pExampleWN;
-
-    VclPtr<VclFrame>        m_pLayoutFL;
-    VclPtr<NumericField>    m_pLinesPerPageNF;
-    VclPtr<FixedText>       m_pLinesRangeFT;
-
-    VclPtr<MetricField>     m_pTextSizeMF;
-
-    VclPtr<FixedText>       m_pCharsPerLineFT;
-    VclPtr<NumericField>    m_pCharsPerLineNF;
-    VclPtr<FixedText>       m_pCharsRangeFT;
-
-    VclPtr<FixedText>       m_pCharWidthFT;
-    VclPtr<MetricField>     m_pCharWidthMF;
-
-    VclPtr<FixedText>       m_pRubySizeFT;
-    VclPtr<MetricField>     m_pRubySizeMF;
-
-    VclPtr<CheckBox>        m_pRubyBelowCB;
-
-    VclPtr<VclFrame>        m_pDisplayFL;
-
-    VclPtr<CheckBox>        m_pDisplayCB;
-    VclPtr<CheckBox>        m_pPrintCB;
-    VclPtr<ColorListBox>    m_pColorLB;
-
     sal_Int32       m_nRubyUserValue;
     bool        m_bRubyUserValue;
     Size            m_aPageSize;
@@ -67,35 +36,58 @@ class SwTextGridPage: public SfxTabPage
     bool        m_bHRulerChanged;
     bool        m_bVRulerChanged;
 
+    SwPageGridExample m_aExampleWN;
+    std::unique_ptr<weld::RadioButton> m_xNoGridRB;
+    std::unique_ptr<weld::RadioButton> m_xLinesGridRB;
+    std::unique_ptr<weld::RadioButton> m_xCharsGridRB;
+    std::unique_ptr<weld::CheckButton> m_xSnapToCharsCB;
+    std::unique_ptr<weld::CustomWeld> m_xExampleWN;
+    std::unique_ptr<weld::Widget> m_xLayoutFL;
+    std::unique_ptr<weld::SpinButton> m_xLinesPerPageNF;
+    std::unique_ptr<weld::Label> m_xLinesRangeFT;
+    std::unique_ptr<weld::MetricSpinButton> m_xTextSizeMF;
+    std::unique_ptr<weld::Label> m_xCharsPerLineFT;
+    std::unique_ptr<weld::SpinButton> m_xCharsPerLineNF;
+    std::unique_ptr<weld::Label> m_xCharsRangeFT;
+    std::unique_ptr<weld::Label> m_xCharWidthFT;
+    std::unique_ptr<weld::MetricSpinButton> m_xCharWidthMF;
+    std::unique_ptr<weld::Label> m_xRubySizeFT;
+    std::unique_ptr<weld::MetricSpinButton> m_xRubySizeMF;
+    std::unique_ptr<weld::CheckButton> m_xRubyBelowCB;
+    std::unique_ptr<weld::Widget> m_xDisplayFL;
+    std::unique_ptr<weld::CheckButton> m_xDisplayCB;
+    std::unique_ptr<weld::CheckButton> m_xPrintCB;
+    std::unique_ptr<ColorListBox> m_xColorLB;
+
     void UpdatePageSize(const SfxItemSet& rSet);
     void PutGridItem(SfxItemSet& rSet);
-    static void SetLinesOrCharsRanges(FixedText & rField, const sal_Int32 nValue );
+    static void SetLinesOrCharsRanges(weld::Label& rField, const sal_Int32 nValue);
 
-    DECL_LINK_TYPED(GridTypeHdl, Button*, void);
-    DECL_LINK_TYPED(CharorLineChangedHdl, SpinField&, void);
-    DECL_LINK_TYPED(CharorLineLoseFocusdHdl, Control&, void);
-    DECL_LINK_TYPED(TextSizeChangedHdl, SpinField&, void);
-    DECL_LINK_TYPED(TextSizeLoseFocusHdl, Control&, void);
-    DECL_LINK_TYPED(GridModifyHdl, ListBox&, void);
-    DECL_LINK_TYPED(GridModifyClickHdl, Button*, void);
-    DECL_LINK_TYPED(DisplayGridHdl, Button*, void);
+    void GridModifyHdl();
+
+    DECL_LINK(GridTypeHdl, weld::ToggleButton&, void);
+    DECL_LINK(CharorLineChangedHdl, weld::SpinButton&, void);
+    DECL_LINK(TextSizeChangedHdl, weld::MetricSpinButton&, void);
+    DECL_LINK(ColorModifyHdl, ColorListBox&, void);
+    DECL_LINK(GridModifyClickHdl, weld::ToggleButton&, void);
+    DECL_LINK(DisplayGridHdl, weld::ToggleButton&, void);
 
     using SfxTabPage::ActivatePage;
     using SfxTabPage::DeactivatePage;
 
 public:
-    SwTextGridPage(vcl::Window *pParent, const SfxItemSet &rSet);
-    virtual ~SwTextGridPage();
+    SwTextGridPage(TabPageParent pParent, const SfxItemSet &rSet);
+    virtual ~SwTextGridPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage> Create(vcl::Window *pParent, const SfxItemSet *rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet *rSet);
     static const sal_uInt16* GetRanges();
 
     virtual bool    FillItemSet(SfxItemSet *rSet) override;
     virtual void    Reset(const SfxItemSet *rSet) override;
 
     virtual void    ActivatePage( const SfxItemSet& rSet ) override;
-    virtual sfxpg   DeactivatePage( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC   DeactivatePage( SfxItemSet* pSet ) override;
 };
 
 #endif

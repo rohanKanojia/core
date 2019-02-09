@@ -184,8 +184,13 @@ published service Settings
     [optional, property] boolean IsPrintBookletBack;
 
     // Draw and Impress
-    // Note: Define a constant group for that?
-    /**
+    /** how printing uses color.
+
+        <ul>
+        <li>0: Default</li>
+        <li>1: Grayscale</li>
+        <li>2: Black &amp; White (with grayscale images)</li>
+        </ul>
      */
     [optional, property] long PrintQuality;
 
@@ -255,6 +260,29 @@ published service Settings
      */
     [optional, property] boolean EmbedSystemFonts;
 
+    /** Whether to embed only the fonts that are used in the document.
+
+        @since LibreOffice 6.2
+     */
+     [optional, property] boolean EmbedOnlyUsedFonts;
+
+    /** Whether to embed Latin script fonts.
+
+        @since LibreOffice 6.2
+     */
+    [optional, property] boolean EmbedLatinScriptFonts;
+
+    /** Whether to embed Asian script fonts.
+
+        @since LibreOffice 6.2
+     */
+    [optional, property] boolean EmbedAsianScriptFonts;
+
+    /** Whether to embed Complex script fonts.
+
+        @since LibreOffice 6.2
+     */
+    [optional, property] boolean EmbedComplexScriptFonts;
 };
 
 

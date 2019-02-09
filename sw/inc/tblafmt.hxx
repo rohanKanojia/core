@@ -30,7 +30,6 @@
 
 #include <memory>
 
-#include "hintids.hxx"
 #include <svx/algitem.hxx>
 #include <editeng/fontitem.hxx>
 #include <editeng/fhgtitem.hxx>
@@ -52,15 +51,14 @@
 #include <svx/rotmodit.hxx>
 #include <svl/intitem.hxx>
 #include <editeng/lineitem.hxx>
-#include <fmtpdsc.hxx>
-#include <fmtlsplt.hxx>
-#include <fmtrowsplt.hxx>
-#include <fmtornt.hxx>
+#include "fmtpdsc.hxx"
+#include "fmtornt.hxx"
 #include "swdllapi.h"
 
 struct SwAfVersions;
 
 class SvNumberFormatter;
+class SwTable;
 
 class SwBoxAutoFormat
 {
@@ -110,12 +108,17 @@ class SwBoxAutoFormat
     OUString            m_sNumFormatString;
     LanguageType        m_eSysLanguage, m_eNumFormatLanguage;
 
+    css::uno::WeakReference<css::uno::XInterface> m_wXObject;
+    friend class SwDocTest;
+
 public:
     SwBoxAutoFormat();
     SwBoxAutoFormat( const SwBoxAutoFormat& rNew );
     ~SwBoxAutoFormat();
 
     SwBoxAutoFormat& operator=( const SwBoxAutoFormat& rNew );
+    /// Comparing based of boxes backgrounds.
+    bool operator==(const SwBoxAutoFormat& rRight);
 
     // The get-methods.
     const SvxFontItem       &GetFont() const        { return m_aFont; }
@@ -176,9 +179,19 @@ public:
     void SetValueFormat( const OUString& rFormat, LanguageType eLng, LanguageType eSys )
         { m_sNumFormatString = rFormat; m_eNumFormatLanguage = eLng; m_eSysLanguage = eSys; }
 
+    css::uno::WeakReference<css::uno::XInterface> const& GetXObject() const
+        { return m_wXObject; }
+    void SetXObject(css::uno::Reference<css::uno::XInterface> const& xObject)
+        { m_wXObject = xObject; }
+
     bool Load( SvStream& rStream, const SwAfVersions& rVersions, sal_uInt16 nVer );
     bool Save( SvStream& rStream, sal_uInt16 fileVersion ) const;
-    bool SaveVersionNo( SvStream& rStream, sal_uInt16 fileVersion ) const;
+    void SaveVersionNo( SvStream& rStream, sal_uInt16 fileVersion ) const;
+};
+
+enum class SwTableAutoFormatUpdateFlags { Char = 1, Box = 2 };
+namespace o3tl {
+    template<> struct typed_flags<SwTableAutoFormatUpdateFlags> : is_typed_flags<SwTableAutoFormatUpdateFlags, 0x03> {};
 };
 
 /*
@@ -227,23 +240,26 @@ properties are stored per-table, and are lossless.
 */
 class SW_DLLPUBLIC SwTableAutoFormat
 {
-    friend void _FinitCore();       // To destroy default pointer.
+    friend class SwDocTest;
+    friend void FinitCore();       // To destroy default pointer.
     static SwBoxAutoFormat* pDfltBoxAutoFormat;
 
+    css::uno::WeakReference<css::uno::XInterface> m_wXObject;
+
     OUString m_aName;
-    sal_uInt16 nStrResId;
+    sal_uInt16 m_nStrResId;
 
     // Common flags of Calc and Writer.
-    bool bInclFont : 1;
-    bool bInclJustify : 1;
-    bool bInclFrame : 1;
-    bool bInclBackground : 1;
-    bool bInclValueFormat : 1;
+    bool m_bInclFont : 1;
+    bool m_bInclJustify : 1;
+    bool m_bInclFrame : 1;
+    bool m_bInclBackground : 1;
+    bool m_bInclValueFormat : 1;
 
     // Calc specific flags.
-    bool bInclWidthHeight : 1;
+    bool m_bInclWidthHeight : 1;
 
-    SwBoxAutoFormat* aBoxAutoFormat[ 16 ];
+    SwBoxAutoFormat* m_aBoxAutoFormat[ 16 ];
 
     // Writer-specific options
     SvxFormatBreakItem m_aBreak;
@@ -255,6 +271,8 @@ class SW_DLLPUBLIC SwTableAutoFormat
     bool m_bCollapsingBorders;
     SvxShadowItem m_aShadow;
 
+    bool m_bHidden;
+    bool m_bUserDefined;
 public:
     SwTableAutoFormat( const OUString& rName );
     SwTableAutoFormat( const SwTableAutoFormat& rNew );
@@ -264,34 +282,67 @@ public:
 
     void SetBoxFormat( const SwBoxAutoFormat& rNew, sal_uInt8 nPos );
     const SwBoxAutoFormat& GetBoxFormat( sal_uInt8 nPos ) const;
+    SwBoxAutoFormat& GetBoxFormat( sal_uInt8 nPos );
+    static const SwBoxAutoFormat& GetDefaultBoxFormat();
 
-    void SetName( const OUString& rNew ) { m_aName = rNew; nStrResId = USHRT_MAX; }
-    OUString GetName() const { return m_aName; }
+    void SetName( const OUString& rNew ) { m_aName = rNew; m_nStrResId = USHRT_MAX; }
+    const OUString& GetName() const { return m_aName; }
 
-    enum UpdateFlags { UPDATE_CHAR = 1, UPDATE_BOX = 2, UPDATE_ALL = 3 };
     void UpdateFromSet( sal_uInt8 nPos, const SfxItemSet& rSet,
-                                UpdateFlags eFlags, SvNumberFormatter* );
-    void UpdateToSet( sal_uInt8 nPos, SfxItemSet& rSet, UpdateFlags eFlags,
+                                SwTableAutoFormatUpdateFlags eFlags, SvNumberFormatter const * );
+    void UpdateToSet( sal_uInt8 nPos, SfxItemSet& rSet, SwTableAutoFormatUpdateFlags eFlags,
                         SvNumberFormatter* ) const ;
 
     void RestoreTableProperties(SwTable &table) const;
     void StoreTableProperties(const SwTable &table);
 
-    bool IsFont() const         { return bInclFont; }
-    bool IsJustify() const      { return bInclJustify; }
-    bool IsFrame() const        { return bInclFrame; }
-    bool IsBackground() const   { return bInclBackground; }
-    bool IsValueFormat() const  { return bInclValueFormat; }
+    bool IsFont() const         { return m_bInclFont; }
+    bool IsJustify() const      { return m_bInclJustify; }
+    bool IsFrame() const        { return m_bInclFrame; }
+    bool IsBackground() const   { return m_bInclBackground; }
+    bool IsValueFormat() const  { return m_bInclValueFormat; }
 
-    void SetFont( const bool bNew )         { bInclFont = bNew; }
-    void SetJustify( const  bool bNew )     { bInclJustify = bNew; }
-    void SetFrame( const bool bNew )        { bInclFrame = bNew; }
-    void SetBackground( const bool bNew )   { bInclBackground = bNew; }
-    void SetValueFormat( const bool bNew )  { bInclValueFormat = bNew; }
-    void SetWidthHeight( const bool bNew )  { bInclWidthHeight = bNew; }
+    /// Check if style is hidden.
+    bool IsHidden() const       { return m_bHidden; }
+    /// Check if style is defined by user.
+    bool IsUserDefined() const  { return m_bUserDefined; }
+
+    void SetFont( const bool bNew )         { m_bInclFont = bNew; }
+    void SetJustify( const  bool bNew )     { m_bInclJustify = bNew; }
+    void SetFrame( const bool bNew )        { m_bInclFrame = bNew; }
+    void SetBackground( const bool bNew )   { m_bInclBackground = bNew; }
+    void SetValueFormat( const bool bNew )  { m_bInclValueFormat = bNew; }
+    void SetWidthHeight( const bool bNew )  { m_bInclWidthHeight = bNew; }
+
+    /// Set if style is hidden.
+    void SetHidden(bool bHidden)            { m_bHidden = bHidden; }
+    /// Set if style is user defined.
+    void SetUserDefined(bool bUserDefined)  { m_bUserDefined = bUserDefined; }
+
+    /// These methods returns what style (row or column) is applied first on given Cell
+    bool FirstRowEndColumnIsRow();
+    bool FirstRowStartColumnIsRow();
+    bool LastRowEndColumnIsRow();
+    bool LastRowStartColumnIsRow();
 
     bool Load( SvStream& rStream, const SwAfVersions& );
     bool Save( SvStream& rStream, sal_uInt16 fileVersion ) const;
+
+    css::uno::WeakReference<css::uno::XInterface> const& GetXObject() const
+        { return m_wXObject; }
+    void SetXObject(css::uno::Reference<css::uno::XInterface> const& xObject)
+        { m_wXObject = xObject; }
+
+    /// Returns the cell's name postfix. eg. ".1"
+    OUString GetTableTemplateCellSubName(const SwBoxAutoFormat& rBoxFormat) const;
+    /// Returns a vector of indexes in aBoxAutoFormat array. Returned indexes points to cells which are mapped to a table-template.
+    static const std::vector<sal_Int32>& GetTableTemplateMap();
+
+    /**
+     * Calculates the relevant position in the table autoformat for a given
+     * cell in a given table.
+     */
+    static sal_uInt8 CountPos(sal_uInt32 nCol, sal_uInt32 nCols, sal_uInt32 nRow, sal_uInt32 nRows);
 };
 
 class SW_DLLPUBLIC SwTableAutoFormatTable
@@ -315,13 +366,46 @@ public:
 
     void InsertAutoFormat(size_t i, std::unique_ptr<SwTableAutoFormat> pFormat);
     void EraseAutoFormat(size_t i);
+    void EraseAutoFormat(const OUString& rName);
     std::unique_ptr<SwTableAutoFormat> ReleaseAutoFormat(size_t i);
+    /// Removes an autoformat. Returns pointer to the removed autoformat or nullptr.
+    std::unique_ptr<SwTableAutoFormat> ReleaseAutoFormat(const OUString& rName);
 
     /// Find table style with the provided name, return nullptr when not found.
     SwTableAutoFormat* FindAutoFormat(const OUString& rName) const;
 
-    bool Load();
+    void Load();
     bool Save() const;
+};
+
+class SwCellStyleDescriptor
+{
+    const std::pair<OUString, std::unique_ptr<SwBoxAutoFormat>>& m_rCellStyleDesc;
+public:
+    SwCellStyleDescriptor(const std::pair<OUString, std::unique_ptr<SwBoxAutoFormat>>& rCellStyleDesc) : m_rCellStyleDesc(rCellStyleDesc) { }
+
+    const OUString&  GetName()   { return m_rCellStyleDesc.first; }
+};
+
+class SwCellStyleTable
+{
+    std::vector<std::pair<OUString, std::unique_ptr<SwBoxAutoFormat>>> m_aCellStyles;
+public:
+    SwCellStyleTable();
+    ~SwCellStyleTable();
+
+    size_t size() const;
+    SwCellStyleDescriptor operator[](size_t i) const;
+    void clear();
+
+    /// Add a copy of rBoxFormat
+    void AddBoxFormat(const SwBoxAutoFormat& rBoxFormat, const OUString& sName);
+    void RemoveBoxFormat(const OUString& sName);
+    void ChangeBoxFormatName(const OUString& sFromName, const OUString& sToName);
+    /// If found returns its name. If not found returns an empty OUString
+    OUString GetBoxFormatName(const SwBoxAutoFormat& rBoxFormat) const;
+    /// If found returns a ptr to a BoxFormat. If not found returns nullptr
+    SwBoxAutoFormat* GetBoxFormat(const OUString& sName) const;
 };
 
 #endif

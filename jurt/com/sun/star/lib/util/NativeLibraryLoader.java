@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -108,7 +109,7 @@ public final class NativeLibraryLoader {
                         if (path.exists()) {
                             return path;
                         }
-                        // On OS X, dir is now the Resources dir,
+                        // On macOS, dir is now the Resources dir,
                         // we want to look in Frameworks
                         if (System.getProperty("os.name").startsWith("Mac")
                             && dir.getName().equals("Resources")) {
@@ -127,3 +128,5 @@ public final class NativeLibraryLoader {
 
     private NativeLibraryLoader() {} // do not instantiate
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

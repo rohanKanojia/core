@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
 
-#include "drawingml/table/tablecellcontext.hxx"
-#include "drawingml/textbodycontext.hxx"
-#include "drawingml/linepropertiescontext.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "oox/helper/attributelist.hxx"
+#include <drawingml/table/tablecellcontext.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <drawingml/linepropertiescontext.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
 
 namespace oox { namespace drawingml { namespace table {
 
-TableCellContext::TableCellContext( ContextHandler2Helper& rParent, const AttributeList& rAttribs, TableCell& rTableCell )
+TableCellContext::TableCellContext( ContextHandler2Helper const & rParent, const AttributeList& rAttribs, TableCell& rTableCell )
 : ContextHandler2( rParent )
 , mrTableCell( rTableCell )
 {

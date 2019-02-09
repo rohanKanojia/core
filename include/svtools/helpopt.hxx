@@ -21,32 +21,31 @@
 
 #include <svtools/svtdllapi.h>
 
-#include <list>
 #include <rtl/ustring.hxx>
 #include <unotools/options.hxx>
+#include <memory>
 
 class SvtHelpOptions_Impl;
 
 class SVT_DLLPUBLIC SvtHelpOptions: public utl::detail::Options
 {
-    SvtHelpOptions_Impl*    pImp;
+    std::shared_ptr<SvtHelpOptions_Impl>    pImpl;
 
 public:
                     SvtHelpOptions();
-                    virtual ~SvtHelpOptions();
+                    virtual ~SvtHelpOptions() override;
 
     void            SetExtendedHelp( bool b );
     bool            IsExtendedHelp() const;
     void            SetHelpTips( bool b );
     bool            IsHelpTips() const;
+    void            SetOfflineHelpPopUp(bool b);
+    bool            IsOfflineHelpPopUp() const;
 
     const OUString& GetHelpStyleSheet()const;
     void            SetHelpStyleSheet(const OUString& rStyleSheet);
 
-    void            SetWelcomeScreen( bool b );
-    bool            IsWelcomeScreen() const;
-
-    OUString        GetSystem() const;
+    OUString const & GetSystem() const;
 };
 
 #endif

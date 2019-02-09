@@ -19,28 +19,32 @@
 #ifndef INCLUDED_SVX_CLIPFMTITEM_HXX
 #define INCLUDED_SVX_CLIPFMTITEM_HXX
 
+#include <climits>
+#include <memory>
+
+#include <com/sun/star/uno/Any.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/types.h>
 #include <sot/formats.hxx>
 #include <svl/poolitem.hxx>
 #include <svx/svxdllapi.h>
 
+class SfxItemPool;
 struct SvxClipboardFormatItem_Impl;
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxClipboardFormatItem : public SfxPoolItem
 {
-    SvxClipboardFormatItem_Impl* pImpl;
 protected:
-
     virtual bool             operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
 
 public:
     static SfxPoolItem* CreateDefault();
-    SvxClipboardFormatItem( sal_uInt16 nId = 0 );
+    SvxClipboardFormatItem( sal_uInt16 nId );
     SvxClipboardFormatItem( const SvxClipboardFormatItem& );
-    virtual ~SvxClipboardFormatItem();
+    virtual ~SvxClipboardFormatItem() override;
 
-    virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId ) const override;
+    virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     void AddClipbrdFormat( SotClipboardFormatId nId );
@@ -49,7 +53,10 @@ public:
     sal_uInt16 Count() const;
 
     SotClipboardFormatId GetClipbrdFormatId( sal_uInt16 nPos ) const;
-    const OUString GetClipbrdFormatName( sal_uInt16 nPos ) const;
+    OUString const & GetClipbrdFormatName( sal_uInt16 nPos ) const;
+
+private:
+    std::unique_ptr<SvxClipboardFormatItem_Impl> pImpl;
 };
 
 #endif

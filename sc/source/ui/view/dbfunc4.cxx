@@ -21,9 +21,9 @@
 #include <svx/svdoole2.hxx>
 #include <svx/svdpage.hxx>
 
-#include "dbfunc.hxx"
-#include "drwlayer.hxx"
-#include "document.hxx"
+#include <dbfunc.hxx>
+#include <drwlayer.hxx>
+#include <document.hxx>
 
 using namespace com::sun::star;
 
@@ -41,7 +41,7 @@ sal_uInt16 ScDBFunc::DoUpdateCharts( const ScAddress& rPos, ScDocument* pDoc, bo
         SdrPage* pPage = pModel->GetPage(nPageNo);
         OSL_ENSURE(pPage,"Page ?");
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject)
         {

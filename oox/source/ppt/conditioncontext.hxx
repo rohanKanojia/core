@@ -22,10 +22,10 @@
 
 #include <com/sun/star/animations/Event.hpp>
 
-#include "oox/core/fragmenthandler.hxx"
-#include "oox/ppt/timenode.hxx"
-#include "oox/ppt/timenodelistcontext.hxx"
-#include "oox/ppt/animationspersist.hxx"
+#include <oox/core/fragmenthandler.hxx>
+#include <oox/ppt/timenode.hxx>
+#include <oox/ppt/timenodelistcontext.hxx>
+#include <oox/ppt/animationspersist.hxx>
 
 namespace oox { namespace ppt {
 
@@ -34,10 +34,10 @@ namespace oox { namespace ppt {
         : public TimeNodeContext
     {
     public:
-        CondContext( ::oox::core::FragmentHandler2& rParent,
+        CondContext( ::oox::core::FragmentHandler2 const & rParent,
                      const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttribs,
                      const TimeNodePtr & pNode, AnimationCondition & aCond );
-        virtual ~CondContext( ) throw( );
+        virtual ~CondContext( ) throw( ) override;
         virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs ) override;
 
     private:
@@ -50,11 +50,10 @@ namespace oox { namespace ppt {
         : public TimeNodeContext
     {
     public:
-        CondListContext( ::oox::core::FragmentHandler2& rParent,
+        CondListContext( ::oox::core::FragmentHandler2 const & rParent,
              sal_Int32  aElement,
-             const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttribs,
              const TimeNodePtr & pNode, AnimationConditionList & aCondList );
-        virtual ~CondListContext( ) throw( );
+        virtual ~CondListContext( ) throw( ) override;
 
        virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs ) override;
 

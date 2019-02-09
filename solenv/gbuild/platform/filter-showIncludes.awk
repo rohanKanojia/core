@@ -40,10 +40,18 @@ BEGIN {
 }
 
 {
+    sub(/\r$/, "")
     sub(/^ */, "")
     if (index($0, showincludes_prefix) == 1) {
         $0 = substr($0, length(showincludes_prefix) + 1)
         sub(/^ */, "")
+
+        # The output from MSVC may contain a carriage return character at the
+        # end of filenames, in which case the translation unit will depend on a
+        # non-existing header, resulting in constant rebuild of all files,
+        # prevent that.
+        sub(//, "")
+
         gsub(/\\/, "/")
         gsub(/ /, "\\ ")
         if ($0 ~ whitelist) { # filter out system headers
@@ -53,9 +61,9 @@ BEGIN {
             }
         }
     } else {
-        # because MSVC stupidly prints the include files on stderr, it's
+        # because MSVC stupidly prints errors on stdout, it's
         # necessary to forward everything that isn't matched by the pattern
-        # so users get to see compiler errors
+        # so users get to see them.
         if (firstline) { # ignore the line that just prints name of sourcefile
             firstline = 0
         } else {

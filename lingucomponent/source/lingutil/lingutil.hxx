@@ -25,21 +25,12 @@
 #include <rtl/ustring.hxx>
 
 #include <vector>
-#include <list>
 
 #define OU2ENC(rtlOUString, rtlEncoding) \
     OString((rtlOUString).getStr(), (rtlOUString).getLength(), \
     rtlEncoding, RTL_UNICODETOTEXT_FLAGS_UNDEFINED_QUESTIONMARK).getStr()
 
 struct SvtLinguConfigDictionaryEntry;
-
-struct lt_rtl_OUString
-{
-    bool operator() (const OUString &r1, const OUString &r2) const
-    {
-        return r1 < r2;
-    }
-};
 
 #if defined(_WIN32)
 
@@ -52,7 +43,7 @@ OString Win_AddLongPathPrefix( const OString &rPathName );
 // temporary function, to be removed when new style dictionaries
 // using configuration entries are fully implemented and provided
 std::vector< SvtLinguConfigDictionaryEntry > GetOldStyleDics( const char * pDicType );
-void MergeNewStyleDicsAndOldStyleDics( std::list< SvtLinguConfigDictionaryEntry > &rNewStyleDics, const std::vector< SvtLinguConfigDictionaryEntry > &rOldStyleDics );
+void MergeNewStyleDicsAndOldStyleDics( std::vector< SvtLinguConfigDictionaryEntry > &rNewStyleDics, const std::vector< SvtLinguConfigDictionaryEntry > &rOldStyleDics );
 
 //Find an encoding from a charset string, using
 //rtl_getTextEncodingFromMimeCharset and falling back to

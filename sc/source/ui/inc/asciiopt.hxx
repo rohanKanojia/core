@@ -31,25 +31,24 @@ private:
     bool        bFixedLen;
     OUString    aFieldSeps;
     bool        bMergeFieldSeps;
+    bool        bRemoveSpace;
     bool        bQuotedFieldAsText;
     bool        bDetectSpecialNumber;
+    bool        bSkipEmptyCells;
+    bool        bSaveAsShown;
+    bool        bSaveFormulas;
     sal_Unicode cTextSep;
     rtl_TextEncoding eCharSet;
     LanguageType eLang;
     bool        bCharSetSystem;
     long        nStartRow;
-    sal_uInt16      nInfoCount;
-    sal_Int32* pColStart;  //! TODO replace with vector
-    sal_uInt8*       pColFormat; //! TODO replace with vector
+    std::vector<sal_Int32> mvColStart;
+    std::vector<sal_uInt8> mvColFormat;
 
 public:
                     ScAsciiOptions();
-                    ScAsciiOptions(const ScAsciiOptions& rOpt);
-                    ~ScAsciiOptions();
 
     static const sal_Unicode cDefaultTextSep = '"';
-
-    ScAsciiOptions& operator=( const ScAsciiOptions& rCpy );
 
     void            ReadFromString( const OUString& rString );
     OUString        WriteToString() const;
@@ -57,13 +56,15 @@ public:
     rtl_TextEncoding    GetCharSet() const      { return eCharSet; }
     const OUString&     GetFieldSeps() const    { return aFieldSeps; }
     bool                IsMergeSeps() const     { return bMergeFieldSeps; }
+    bool                IsRemoveSpace() const   { return bRemoveSpace; }
     bool                IsQuotedAsText() const  { return bQuotedFieldAsText; }
     bool                IsDetectSpecialNumber() const { return bDetectSpecialNumber; }
+    bool                IsSkipEmptyCells() const      { return bSkipEmptyCells; }
     sal_Unicode         GetTextSep() const      { return cTextSep; }
     bool                IsFixedLen() const      { return bFixedLen; }
-    sal_uInt16          GetInfoCount() const    { return nInfoCount; }
-    const sal_Int32*    GetColStart() const     { return pColStart; }
-    const sal_uInt8*    GetColFormat() const    { return pColFormat; }
+    sal_uInt16          GetInfoCount() const    { return mvColStart.size(); }
+    const sal_Int32*    GetColStart() const     { return mvColStart.data(); }
+    const sal_uInt8*    GetColFormat() const    { return mvColFormat.data(); }
     long                GetStartRow() const     { return nStartRow; }
     LanguageType        GetLanguage() const     { return eLang; }
 
@@ -72,13 +73,14 @@ public:
     void    SetFixedLen( bool bSet )            { bFixedLen = bSet; }
     void    SetFieldSeps( const OUString& rStr )  { aFieldSeps = rStr; }
     void    SetMergeSeps( bool bSet )           { bMergeFieldSeps = bSet; }
+    void    SetRemoveSpace( bool bSet )         { bRemoveSpace = bSet; }
     void    SetQuotedAsText(bool bSet)          { bQuotedFieldAsText = bSet; }
     void    SetDetectSpecialNumber(bool bSet)   { bDetectSpecialNumber = bSet; }
+    void    SetSkipEmptyCells(bool bSet)        { bSkipEmptyCells = bSet; }
     void    SetTextSep( sal_Unicode c )         { cTextSep = c; }
     void    SetStartRow( long nRow)             { nStartRow= nRow; }
     void    SetLanguage(LanguageType e)         { eLang = e; }
 
-    void    SetColInfo( sal_uInt16 nCount, const sal_Int32* pStart, const sal_uInt8* pFormat );
     void    SetColumnInfo( const ScCsvExpDataVec& rDataVec );
 
     /** From the import field separators obtain the one most likely to be used

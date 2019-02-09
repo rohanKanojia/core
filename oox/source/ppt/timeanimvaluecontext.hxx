@@ -20,8 +20,8 @@
 #ifndef INCLUDED_OOX_SOURCE_PPT_TIMEANIMVALUECONTEXT_HXX
 #define INCLUDED_OOX_SOURCE_PPT_TIMEANIMVALUECONTEXT_HXX
 
-#include "oox/core/fragmenthandler2.hxx"
-#include "oox/ppt/animationspersist.hxx"
+#include <oox/core/fragmenthandler2.hxx>
+#include <oox/ppt/animationspersist.hxx>
 
 namespace oox { namespace ppt {
 
@@ -30,11 +30,10 @@ namespace oox { namespace ppt {
         : public ::oox::core::FragmentHandler2
     {
     public:
-        TimeAnimValueListContext( ::oox::core::FragmentHandler2& rParent,
-            const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttribs,
+        TimeAnimValueListContext( ::oox::core::FragmentHandler2 const & rParent,
             TimeAnimationValueList & aTavList );
 
-        virtual ~TimeAnimValueListContext( );
+        virtual ~TimeAnimValueListContext( ) override;
 
         virtual void onEndElement() override;
 

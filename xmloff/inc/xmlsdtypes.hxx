@@ -67,6 +67,7 @@
 #define XML_SD_TYPE_CONTROL_BORDER_COLOR            (XML_SD_TYPES_START + 33 )
 #define XML_SD_TYPE_IMAGE_SCALE_MODE                (XML_SD_TYPES_START + 34 )
 #define XML_SD_TYPE_LINECAP                         (XML_SD_TYPES_START + 35 )
+#define XML_SD_TYPE_FITTOSIZE_AUTOFIT               (XML_SD_TYPES_START + 36 )
 
 //////////////////////////////////////////////////////////////////////////////
 // 3D property types
@@ -116,6 +117,8 @@
 #define XML_SD_TYPE_HEADER_FOOTER_VISIBILITY_TYPE   (XML_SD_TYPES_START + 78 )
 
 //////////////////////////////////////////////////////////////////////////////
+
+#define XML_SD_TYPE_CELL_ROTATION_ANGLE             (XML_SD_TYPES_START + 79 )
 
 #define CTF_NUMBERINGRULES          1000
 #define CTF_CONTROLWRITINGMODE      1001

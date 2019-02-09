@@ -17,25 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/bindings.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
+#include <unotools/charclass.hxx>
 
 #include <com/sun/star/sdbc/XResultSet.hpp>
 
-#include "dbfunc.hxx"
-#include "docsh.hxx"
-#include "attrib.hxx"
-#include "sc.hrc"
-#include "undodat.hxx"
-#include "dbdata.hxx"
-#include "globstr.hrc"
-#include "global.hxx"
-#include "dbdocfun.hxx"
-#include "editable.hxx"
-#include "queryentry.hxx"
-#include "markdata.hxx"
+#include <dbfunc.hxx>
+#include <docsh.hxx>
+#include <attrib.hxx>
+#include <sc.hrc>
+#include <undodat.hxx>
+#include <dbdata.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <global.hxx>
+#include <dbdocfun.hxx>
+#include <editable.hxx>
+#include <queryentry.hxx>
+#include <markdata.hxx>
+#include <tabvwsh.hxx>
+#include <sortparam.hxx>
 
 ScDBFunc::ScDBFunc( vcl::Window* pParent, ScDocShell& rDocSh, ScTabViewShell* pViewShell ) :
     ScViewFunc( pParent, rDocSh, pViewShell )
@@ -64,7 +68,7 @@ void ScDBFunc::GotoDBArea( const OUString& rDBName )
         pData->GetArea( nTab, nStartCol, nStartRow, nEndCol, nEndRow );
         SetTabNo( nTab );
 
-        MoveCursorAbs( nStartCol, nStartRow, ScFollowMode( SC_FOLLOW_JUMP ),
+        MoveCursorAbs( nStartCol, nStartRow, SC_FOLLOW_JUMP,
                        false, false );  // bShift,bControl
         DoneBlockMode();
         InitBlockMode( nStartCol, nStartRow, nTab );
@@ -84,7 +88,7 @@ ScDBData* ScDBFunc::GetDBData( bool bMark, ScGetDBMode eMode, ScGetDBSelection e
     if ( eMarkType == SC_MARK_SIMPLE || eMarkType == SC_MARK_SIMPLE_FILTERED )
     {
         bool bShrinkColumnsOnly = false;
-        if (eSel == SC_DBSEL_ROW_DOWN)
+        if (eSel == ScGetDBSelection::RowDown)
         {
             // Don't alter row range, additional rows may have been selected on
             // purpose to append data, or to have a fake header row.
@@ -95,7 +99,7 @@ ScDBData* ScDBFunc::GetDBData( bool bMark, ScGetDBMode eMode, ScGetDBSelection e
             {
                 // If an area is selected shrink that to the actual used
                 // columns, don't draw filter buttons for empty columns.
-                eSel = SC_DBSEL_SHRINK_TO_USED_DATA;
+                eSel = ScGetDBSelection::ShrinkToUsedData;
             }
             else if (aRange.aStart.Col() == aRange.aEnd.Col())
             {
@@ -103,28 +107,13 @@ ScDBData* ScDBFunc::GetDBData( bool bMark, ScGetDBMode eMode, ScGetDBSelection e
                 // area.
                 const ScMarkData& rMarkData = GetViewData().GetMarkData();
                 if (!(rMarkData.IsMarked() || rMarkData.IsMultiMarked()))
-                    eSel = SC_DBSEL_KEEP;
+                    eSel = ScGetDBSelection::Keep;
             }
         }
         switch (eSel)
         {
-            case SC_DBSEL_SHRINK_TO_SHEET_DATA:
-                {
-                    // Shrink the selection to sheet data area.
-                    ScDocument& rDoc = pDocSh->GetDocument();
-                    SCCOL nCol1 = aRange.aStart.Col(), nCol2 = aRange.aEnd.Col();
-                    SCROW nRow1 = aRange.aStart.Row(), nRow2 = aRange.aEnd.Row();
-                    if (rDoc.ShrinkToDataArea( aRange.aStart.Tab(), nCol1, nRow1, nCol2, nRow2))
-                    {
-                        aRange.aStart.SetCol(nCol1);
-                        aRange.aEnd.SetCol(nCol2);
-                        aRange.aStart.SetRow(nRow1);
-                        aRange.aEnd.SetRow(nRow2);
-                    }
-                }
-                break;
-            case SC_DBSEL_SHRINK_TO_USED_DATA:
-            case SC_DBSEL_ROW_DOWN:
+            case ScGetDBSelection::ShrinkToUsedData:
+            case ScGetDBSelection::RowDown:
                 {
                     // Shrink the selection to actual used area.
                     ScDocument& rDoc = pDocSh->GetDocument();
@@ -151,7 +140,7 @@ ScDBData* ScDBFunc::GetDBData( bool bMark, ScGetDBMode eMode, ScGetDBSelection e
         pData = pDocSh->GetDBData(
                     ScRange( GetViewData().GetCurX(), GetViewData().GetCurY(),
                              GetViewData().GetTabNo() ),
-                    eMode, SC_DBSEL_KEEP );
+                    eMode, ScGetDBSelection::Keep );
 
     if (!pData)
         return nullptr;
@@ -270,7 +259,7 @@ void ScDBFunc::Query( const ScQueryParam& rQueryParam, const ScRange* pAdvSource
 
         if (!bCopy)
         {
-            UpdateScrollBars();
+            UpdateScrollBars(ROW_HEADER);
             SelectionChanged();     // for attribute states (filtered rows are ignored)
         }
 
@@ -287,7 +276,7 @@ void ScDBFunc::ToggleAutoFilter()
 
     ScQueryParam    aParam;
     ScDocument*     pDoc    = GetViewData().GetDocument();
-    ScDBData*       pDBData = GetDBData(false, SC_DB_AUTOFILTER, SC_DBSEL_ROW_DOWN);
+    ScDBData*       pDBData = GetDBData(false, SC_DB_AUTOFILTER, ScGetDBSelection::RowDown);
 
     pDBData->SetByRow( true );              //! undo, retrieve beforehand ??
     pDBData->GetQueryParam( aParam );
@@ -295,19 +284,18 @@ void ScDBFunc::ToggleAutoFilter()
     SCCOL  nCol;
     SCROW  nRow = aParam.nRow1;
     SCTAB  nTab = GetViewData().GetTabNo();
-    sal_Int16   nFlag;
-    bool    bHasAuto = true;
-    bool    bHeader  = pDBData->HasHeader();
-    bool    bPaint   = false;
+    ScMF   nFlag;
+    bool   bHasAuto = true;
+    bool   bHeader  = pDBData->HasHeader();
+    bool   bPaint   = false;
 
     //!     instead retrieve from DB-range?
 
     for (nCol=aParam.nCol1; nCol<=aParam.nCol2 && bHasAuto; nCol++)
     {
-        nFlag = static_cast<const ScMergeFlagAttr*>( pDoc->
-                GetAttr( nCol, nRow, nTab, ATTR_MERGE_FLAG ))->GetValue();
+        nFlag = pDoc->GetAttr( nCol, nRow, nTab, ATTR_MERGE_FLAG )->GetValue();
 
-        if ( (nFlag & SC_MF_AUTO) == 0 )
+        if ( !(nFlag & ScMF::Auto) )
             bHasAuto = false;
     }
 
@@ -317,20 +305,19 @@ void ScDBFunc::ToggleAutoFilter()
 
         for (nCol=aParam.nCol1; nCol<=aParam.nCol2; nCol++)
         {
-            nFlag = static_cast<const ScMergeFlagAttr*>( pDoc->
-                    GetAttr( nCol, nRow, nTab, ATTR_MERGE_FLAG ))->GetValue();
-            pDoc->ApplyAttr( nCol, nRow, nTab, ScMergeFlagAttr( nFlag & ~SC_MF_AUTO ) );
+            nFlag = pDoc->GetAttr( nCol, nRow, nTab, ATTR_MERGE_FLAG )->GetValue();
+            pDoc->ApplyAttr( nCol, nRow, nTab, ScMergeFlagAttr( nFlag & ~ScMF::Auto ) );
         }
 
         // use a list action for the AutoFilter buttons (ScUndoAutoFilter) and the filter operation
 
-        OUString aUndo = ScGlobal::GetRscString( STR_UNDO_QUERY );
-        pDocSh->GetUndoManager()->EnterListAction( aUndo, aUndo );
+        OUString aUndo = ScResId( STR_UNDO_QUERY );
+        pDocSh->GetUndoManager()->EnterListAction( aUndo, aUndo, 0, GetViewData().GetViewShell()->GetViewShellId() );
 
         ScRange aRange;
         pDBData->GetArea( aRange );
         pDocSh->GetUndoManager()->AddUndoAction(
-            new ScUndoAutoFilter( pDocSh, aRange, pDBData->GetName(), false ) );
+            std::make_unique<ScUndoAutoFilter>( pDocSh, aRange, pDBData->GetName(), false ) );
 
         pDBData->SetAutoFilter(false);
 
@@ -354,10 +341,13 @@ void ScDBFunc::ToggleAutoFilter()
         {
             if (!bHeader)
             {
-                if ( ScopedVclPtr<MessBox>::Create( GetViewData().GetDialogParent(), WinBits(WB_YES_NO | WB_DEF_YES),
-                        ScGlobal::GetRscString( STR_MSSG_DOSUBTOTALS_0 ),       // "StarCalc"
-                        ScGlobal::GetRscString( STR_MSSG_MAKEAUTOFILTER_0 )     // header from first row?
-                    )->Execute() == RET_YES )
+                vcl::Window* pWin = GetViewData().GetDialogParent();
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                          VclMessageType::Question,
+                                                          VclButtonsType::YesNo, ScResId(STR_MSSG_MAKEAUTOFILTER_0))); // header from first row?
+                xBox->set_title(ScResId(STR_MSSG_DOSUBTOTALS_0)); // "StarCalc"
+                xBox->set_default_response(RET_YES);
+                if (xBox->run() == RET_YES)
                 {
                     pDBData->SetHeader( true );     //! Undo ??
                 }
@@ -366,25 +356,26 @@ void ScDBFunc::ToggleAutoFilter()
             ScRange aRange;
             pDBData->GetArea( aRange );
             pDocSh->GetUndoManager()->AddUndoAction(
-                new ScUndoAutoFilter( pDocSh, aRange, pDBData->GetName(), true ) );
+                std::make_unique<ScUndoAutoFilter>( pDocSh, aRange, pDBData->GetName(), true ) );
 
             pDBData->SetAutoFilter(true);
 
             for (nCol=aParam.nCol1; nCol<=aParam.nCol2; nCol++)
             {
-                nFlag = static_cast<const ScMergeFlagAttr*>( pDoc->
-                        GetAttr( nCol, nRow, nTab, ATTR_MERGE_FLAG ))->GetValue();
-                pDoc->ApplyAttr( nCol, nRow, nTab, ScMergeFlagAttr( nFlag | SC_MF_AUTO ) );
+                nFlag = pDoc->GetAttr( nCol, nRow, nTab, ATTR_MERGE_FLAG )->GetValue();
+                pDoc->ApplyAttr( nCol, nRow, nTab, ScMergeFlagAttr( nFlag | ScMF::Auto ) );
             }
             pDocSh->PostPaint(ScRange(aParam.nCol1, nRow, nTab, aParam.nCol2, nRow, nTab),
-                              PAINT_GRID);
+                              PaintPartFlags::Grid);
             bPaint = true;
         }
         else
         {
-            ScopedVclPtrInstance<MessageDialog> aErrorBox(GetViewData().GetDialogParent(),
-                                ScGlobal::GetRscString(STR_ERR_AUTOFILTER));
-            aErrorBox->Execute();
+            vcl::Window* pWin = GetViewData().GetDialogParent();
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                           VclMessageType::Warning, VclButtonsType::Ok,
+                                                           ScResId(STR_ERR_AUTOFILTER)));
+            xErrorBox->run();
         }
     }
 
@@ -417,19 +408,18 @@ void ScDBFunc::HideAutoFilter()
 
     for (SCCOL nCol=nCol1; nCol<=nCol2; nCol++)
     {
-        sal_Int16 nFlag = static_cast<const ScMergeFlagAttr*>( rDoc.
-                                GetAttr( nCol, nRow1, nTab, ATTR_MERGE_FLAG ))->GetValue();
-        rDoc.ApplyAttr( nCol, nRow1, nTab, ScMergeFlagAttr( nFlag & ~SC_MF_AUTO ) );
+        ScMF nFlag = rDoc.GetAttr( nCol, nRow1, nTab, ATTR_MERGE_FLAG )->GetValue();
+        rDoc.ApplyAttr( nCol, nRow1, nTab, ScMergeFlagAttr( nFlag & ~ScMF::Auto ) );
     }
 
     ScRange aRange;
     pDBData->GetArea( aRange );
     pDocSh->GetUndoManager()->AddUndoAction(
-        new ScUndoAutoFilter( pDocSh, aRange, pDBData->GetName(), false ) );
+        std::make_unique<ScUndoAutoFilter>( pDocSh, aRange, pDBData->GetName(), false ) );
 
     pDBData->SetAutoFilter(false);
 
-    pDocSh->PostPaint(ScRange(nCol1, nRow1, nTab, nCol2, nRow1, nTab), PAINT_GRID );
+    pDocSh->PostPaint(ScRange(nCol1, nRow1, nTab, nCol2, nRow1, nTab), PaintPartFlags::Grid );
     aModificator.SetDocumentModified();
 
     SfxBindings& rBindings = GetViewData().GetBindings();

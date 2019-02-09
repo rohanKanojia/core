@@ -19,7 +19,7 @@
 
 #include <drawinglayer/primitive3d/baseprimitive3d.hxx>
 #include <drawinglayer/geometry/viewinformation3d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <comphelper/sequence.hxx>
 
 
@@ -54,13 +54,13 @@ namespace drawinglayer
             return Primitive3DContainer();
         }
 
-        Primitive3DSequence SAL_CALL BasePrimitive3D::getDecomposition( const uno::Sequence< beans::PropertyValue >& rViewParameters ) throw ( uno::RuntimeException, std::exception )
+        Primitive3DSequence SAL_CALL BasePrimitive3D::getDecomposition( const uno::Sequence< beans::PropertyValue >& rViewParameters )
         {
             const geometry::ViewInformation3D aViewInformation(rViewParameters);
             return comphelper::containerToSequence(get3DDecomposition(aViewInformation));
         }
 
-        css::geometry::RealRectangle3D SAL_CALL BasePrimitive3D::getRange( const uno::Sequence< beans::PropertyValue >& rViewParameters ) throw ( uno::RuntimeException, std::exception )
+        css::geometry::RealRectangle3D SAL_CALL BasePrimitive3D::getRange( const uno::Sequence< beans::PropertyValue >& rViewParameters )
         {
             const geometry::ViewInformation3D aViewInformation(rViewParameters);
             return basegfx::unotools::rectangle3DFromB3DRectangle(getB3DRange(aViewInformation));
@@ -141,7 +141,7 @@ namespace drawinglayer
             {
                 const size_t nCount(size());
 
-                for(size_t a(0L); a < nCount; a++)
+                for(size_t a(0); a < nCount; a++)
                 {
                     aRetval.expand(getB3DRangeFromPrimitive3DReference((*this)[a], aViewInformation));
                 }
@@ -178,7 +178,7 @@ namespace drawinglayer
                 return false;
             }
 
-            return (pA->operator==(*pB));
+            return pA->operator==(*pB);
         }
 
         bool Primitive3DContainer::operator==(const Primitive3DContainer& rB) const
@@ -202,7 +202,7 @@ namespace drawinglayer
                 return false;
             }
 
-            for(size_t a(0L); a < nCount; a++)
+            for(size_t a(0); a < nCount; a++)
             {
                 if(!arePrimitive3DReferencesEqual((*this)[a], rB[a]))
                 {

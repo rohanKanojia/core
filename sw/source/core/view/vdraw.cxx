@@ -27,19 +27,23 @@
 
 #include <svx/svdoutl.hxx>
 
-#include "drawdoc.hxx"
-#include "fesh.hxx"
-#include "pagefrm.hxx"
-#include "rootfrm.hxx"
-#include "viewimp.hxx"
-#include "dflyobj.hxx"
-#include "viewopt.hxx"
-#include "printdata.hxx"
-#include "dcontact.hxx"
-#include "dview.hxx"
-#include "flyfrm.hxx"
+#include <drawdoc.hxx>
+#include <fesh.hxx>
+#include <pagefrm.hxx>
+#include <rootfrm.hxx>
+#include <viewimp.hxx>
+#include <dflyobj.hxx>
+#include <viewopt.hxx>
+#include <printdata.hxx>
+#include <dcontact.hxx>
+#include <dview.hxx>
+#include <flyfrm.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/canvastools.hxx>
+#include <sal/log.hxx>
+
+#include <basegfx/range/b2irectangle.hxx>
 
 #include <IDocumentDrawModelAccess.hxx>
 
@@ -84,72 +88,76 @@ void SwViewShellImp::UnlockPaint()
 
 void SwViewShellImp::PaintLayer( const SdrLayerID _nLayerID,
                             SwPrintData const*const pPrintData,
+                            SwPageFrame const& rPageFrame,
                             const SwRect& aPaintRect,
                             const Color* _pPageBackgrdColor,
                             const bool _bIsPageRightToLeft,
                             sdr::contact::ViewObjectContactRedirector* pRedirector )
 {
-    if ( HasDrawView() )
+    if ( !HasDrawView() )
+        return;
+
+    //change the draw mode in high contrast mode
+    OutputDevice* pOutDev = GetShell()->GetOut();
+    DrawModeFlags nOldDrawMode = pOutDev->GetDrawMode();
+    if( GetShell()->GetWin() &&
+        Application::GetSettings().GetStyleSettings().GetHighContrastMode() &&
+        (!GetShell()->IsPreview()||SW_MOD()->GetAccessibilityOptions().GetIsForPagePreviews()))
     {
-        //change the draw mode in high contrast mode
-        OutputDevice* pOutDev = GetShell()->GetOut();
-        DrawModeFlags nOldDrawMode = pOutDev->GetDrawMode();
-        if( GetShell()->GetWin() &&
-            Application::GetSettings().GetStyleSettings().GetHighContrastMode() &&
-            (!GetShell()->IsPreview()||SW_MOD()->GetAccessibilityOptions().GetIsForPagePreviews()))
-        {
-            pOutDev->SetDrawMode( nOldDrawMode | DrawModeFlags::SettingsLine | DrawModeFlags::SettingsFill |
-                                DrawModeFlags::SettingsText | DrawModeFlags::SettingsGradient );
-        }
-
-        // For correct handling of accessibility, high contrast, the
-        // page background color is set as the background color at the
-        // outliner of the draw view.  Only necessary for the layers
-        // hell and heaven
-        Color aOldOutlinerBackgrdColor;
-        // set default horizontal text direction on painting <hell> or
-        // <heaven>.
-        EEHorizontalTextDirection aOldEEHoriTextDir = EE_HTEXTDIR_L2R;
-        const IDocumentDrawModelAccess& rIDDMA = GetShell()->getIDocumentDrawModelAccess();
-        if ( (_nLayerID == rIDDMA.GetHellId()) ||
-             (_nLayerID == rIDDMA.GetHeavenId()) )
-        {
-            OSL_ENSURE( _pPageBackgrdColor,
-                    "incorrect usage of SwViewShellImp::PaintLayer: pPageBackgrdColor have to be set for painting layer <hell> or <heaven>");
-            if ( _pPageBackgrdColor )
-            {
-                aOldOutlinerBackgrdColor =
-                        GetDrawView()->GetModel()->GetDrawOutliner().GetBackgroundColor();
-                GetDrawView()->GetModel()->GetDrawOutliner().SetBackgroundColor( *_pPageBackgrdColor );
-            }
-
-            aOldEEHoriTextDir =
-                GetDrawView()->GetModel()->GetDrawOutliner().GetDefaultHorizontalTextDirection();
-            EEHorizontalTextDirection aEEHoriTextDirOfPage =
-                _bIsPageRightToLeft ? EE_HTEXTDIR_R2L : EE_HTEXTDIR_L2R;
-            GetDrawView()->GetModel()->GetDrawOutliner().SetDefaultHorizontalTextDirection( aEEHoriTextDirOfPage );
-        }
-
-        pOutDev->Push( PushFlags::LINECOLOR );
-        if (pPrintData)
-        {
-            // hide drawings but not form controls (form controls are handled elsewhere)
-            SdrView &rSdrView = const_cast< SdrView & >(GetPageView()->GetView());
-            rSdrView.setHideDraw( !pPrintData->IsPrintDraw() );
-        }
-        GetPageView()->DrawLayer( _nLayerID, pOutDev, pRedirector, aPaintRect.SVRect() );
-        pOutDev->Pop();
-
-        // reset background color of the outliner & default horiz. text dir.
-        if ( (_nLayerID == rIDDMA.GetHellId()) ||
-             (_nLayerID == rIDDMA.GetHeavenId()) )
-        {
-            GetDrawView()->GetModel()->GetDrawOutliner().SetBackgroundColor( aOldOutlinerBackgrdColor );
-            GetDrawView()->GetModel()->GetDrawOutliner().SetDefaultHorizontalTextDirection( aOldEEHoriTextDir );
-        }
-
-        pOutDev->SetDrawMode( nOldDrawMode );
+        pOutDev->SetDrawMode( nOldDrawMode | DrawModeFlags::SettingsLine | DrawModeFlags::SettingsFill |
+                            DrawModeFlags::SettingsText | DrawModeFlags::SettingsGradient );
     }
+
+    // For correct handling of accessibility, high contrast, the
+    // page background color is set as the background color at the
+    // outliner of the draw view.  Only necessary for the layers
+    // hell and heaven
+    Color aOldOutlinerBackgrdColor;
+    // set default horizontal text direction on painting <hell> or
+    // <heaven>.
+    EEHorizontalTextDirection aOldEEHoriTextDir = EEHorizontalTextDirection::L2R;
+    const IDocumentDrawModelAccess& rIDDMA = GetShell()->getIDocumentDrawModelAccess();
+    if ( (_nLayerID == rIDDMA.GetHellId()) ||
+         (_nLayerID == rIDDMA.GetHeavenId()) )
+    {
+        OSL_ENSURE( _pPageBackgrdColor,
+                "incorrect usage of SwViewShellImp::PaintLayer: pPageBackgrdColor have to be set for painting layer <hell> or <heaven>");
+        if ( _pPageBackgrdColor )
+        {
+            aOldOutlinerBackgrdColor =
+                    GetDrawView()->GetModel()->GetDrawOutliner().GetBackgroundColor();
+            GetDrawView()->GetModel()->GetDrawOutliner().SetBackgroundColor( *_pPageBackgrdColor );
+        }
+
+        aOldEEHoriTextDir =
+            GetDrawView()->GetModel()->GetDrawOutliner().GetDefaultHorizontalTextDirection();
+        EEHorizontalTextDirection aEEHoriTextDirOfPage =
+            _bIsPageRightToLeft ? EEHorizontalTextDirection::R2L : EEHorizontalTextDirection::L2R;
+        GetDrawView()->GetModel()->GetDrawOutliner().SetDefaultHorizontalTextDirection( aEEHoriTextDirOfPage );
+    }
+
+    pOutDev->Push( PushFlags::LINECOLOR );
+    if (pPrintData)
+    {
+        // hide drawings but not form controls (form controls are handled elsewhere)
+        SdrView &rSdrView = GetPageView()->GetView();
+        rSdrView.setHideDraw( !pPrintData->IsPrintDraw() );
+    }
+    basegfx::B2IRectangle const pageFrame(
+        vcl::unotools::b2IRectangleFromRectangle(rPageFrame.getFrameArea().SVRect()));
+    GetPageView()->DrawLayer(_nLayerID, pOutDev, pRedirector, aPaintRect.SVRect(), &pageFrame);
+    pOutDev->Pop();
+
+    // reset background color of the outliner & default horiz. text dir.
+    if ( (_nLayerID == rIDDMA.GetHellId()) ||
+         (_nLayerID == rIDDMA.GetHeavenId()) )
+    {
+        GetDrawView()->GetModel()->GetDrawOutliner().SetBackgroundColor( aOldOutlinerBackgrdColor );
+        GetDrawView()->GetModel()->GetDrawOutliner().SetDefaultHorizontalTextDirection( aOldEEHoriTextDir );
+    }
+
+    pOutDev->SetDrawMode( nOldDrawMode );
+
 }
 
 #define FUZZY_EDGE 400
@@ -174,7 +182,7 @@ bool SwViewShellImp::IsDragPossible( const Point &rPoint )
         aRect.Union( aTmp );
     }
     else
-        aRect = GetShell()->GetLayout()->Frame();
+        aRect = GetShell()->GetLayout()->getFrameArea();
 
     aRect.Top(    aRect.Top()    - FUZZY_EDGE );
     aRect.Bottom( aRect.Bottom() + FUZZY_EDGE );
@@ -192,8 +200,8 @@ void SwViewShellImp::NotifySizeChg( const Size &rNewSz )
         GetPageView()->GetPage()->SetSize( rNewSz );
 
     // Limitation of the work area
-    const Rectangle aDocRect( Point( DOCUMENTBORDER, DOCUMENTBORDER ), rNewSz );
-    const Rectangle &rOldWork = GetDrawView()->GetWorkArea();
+    const tools::Rectangle aDocRect( Point( DOCUMENTBORDER, DOCUMENTBORDER ), rNewSz );
+    const tools::Rectangle &rOldWork = GetDrawView()->GetWorkArea();
     bool bCheckDrawObjs = false;
     if ( aDocRect != rOldWork )
     {
@@ -221,9 +229,9 @@ void SwViewShellImp::NotifySizeChg( const Size &rNewSz )
                 continue;
 
             const SwFrame *pAnchor = static_cast<const SwDrawContact*>(pCont)->GetAnchorFrame();
-            if ( !pAnchor || pAnchor->IsInFly() || !pAnchor->IsValid() ||
+            if ( !pAnchor || pAnchor->IsInFly() || !pAnchor->isFrameAreaDefinitionValid() ||
                  !pAnchor->GetUpper() || !pAnchor->FindPageFrame() ||
-                 (FLY_AS_CHAR == pCont->GetFormat()->GetAnchor().GetAnchorId()) )
+                 (RndStdIds::FLY_AS_CHAR == pCont->GetFormat()->GetAnchor().GetAnchorId()) )
             {
                 continue;
             }
@@ -245,23 +253,24 @@ void SwViewShellImp::NotifySizeChg( const Size &rNewSz )
                 continue;
             }
 
-            const Rectangle aObjBound( pObj->GetCurrentBoundRect() );
+            const tools::Rectangle aObjBound( pObj->GetCurrentBoundRect() );
             if ( !aDocRect.IsInside( aObjBound ) )
             {
                 Size aSz;
                 if ( aObjBound.Left() > aDocRect.Right() )
-                    aSz.Width() = (aDocRect.Right() - aObjBound.Left()) - MINFLY;
+                    aSz.setWidth( (aDocRect.Right() - aObjBound.Left()) - MINFLY );
                 if ( aObjBound.Top() > aDocRect.Bottom() )
-                    aSz.Height() = (aDocRect.Bottom() - aObjBound.Top()) - MINFLY;
+                    aSz.setHeight( (aDocRect.Bottom() - aObjBound.Top()) - MINFLY );
                 if ( aSz.Width() || aSz.Height() )
                     pObj->Move( aSz );
 
                 // Don't let large objects disappear to the top
-                aSz.Width() = aSz.Height() = 0;
+                aSz.setWidth(0);
+                aSz.setHeight(0);
                 if ( aObjBound.Right() < aDocRect.Left() )
-                    aSz.Width() = (aDocRect.Left() - aObjBound.Right()) + MINFLY;
+                    aSz.setWidth( (aDocRect.Left() - aObjBound.Right()) + MINFLY );
                 if ( aObjBound.Bottom() < aDocRect.Top() )
-                    aSz.Height() = (aDocRect.Top() - aObjBound.Bottom()) + MINFLY;
+                    aSz.setHeight( (aDocRect.Top() - aObjBound.Bottom()) + MINFLY );
                 if ( aSz.Width() || aSz.Height() )
                     pObj->Move( aSz );
             }

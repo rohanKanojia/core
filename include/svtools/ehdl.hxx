@@ -20,56 +20,53 @@
 #ifndef INCLUDED_SVTOOLS_EHDL_HXX
 #define INCLUDED_SVTOOLS_EHDL_HXX
 
-#ifndef __RSC
-
 #include <svtools/svtdllapi.h>
+#include <svtools/svtresid.hxx>
+#include <vcl/errinf.hxx>
 
-#include <tools/errinf.hxx>
+typedef std::pair<const char*, ErrCode> ErrMsgCode;
+SVT_DLLPUBLIC extern const ErrMsgCode RID_ERRHDL[];
+SVT_DLLPUBLIC extern const ErrMsgCode RID_ERRCTX[];
 
-namespace vcl { class Window; }
-class ResMgr;
+namespace weld { class Window; }
 
 class SVT_DLLPUBLIC SfxErrorContext : private ErrorContext
 {
 public:
     SfxErrorContext(
-            sal_uInt16 nCtxIdP, vcl::Window *pWin=nullptr,
-            sal_uInt16 nResIdP=USHRT_MAX, ResMgr *pMgrP=nullptr);
+            sal_uInt16 nCtxIdP, weld::Window *pWin=nullptr,
+            const ErrMsgCode* pIds = nullptr, const std::locale& rResLocaleP = SvtResLocale());
     SfxErrorContext(
-            sal_uInt16 nCtxIdP, const OUString &aArg1, vcl::Window *pWin=nullptr,
-            sal_uInt16 nResIdP=USHRT_MAX, ResMgr *pMgrP=nullptr);
-    bool GetString(sal_uLong nErrId, OUString &rStr) override;
+            sal_uInt16 nCtxIdP, const OUString &aArg1, weld::Window *pWin=nullptr,
+            const ErrMsgCode* pIds = nullptr, const std::locale& rResLocaleP = SvtResLocale());
+    bool GetString(ErrCode nErrId, OUString &rStr) override;
 
 private:
-    sal_uInt16 nCtxId;
-    sal_uInt16 nResId;
-    ResMgr *pMgr;
-    OUString aArg1;
+    sal_uInt16 const nCtxId;
+    const ErrMsgCode* pIds;
+    std::locale const aResLocale;
+    OUString const aArg1;
 };
 
 class SVT_DLLPUBLIC SfxErrorHandler : private ErrorHandler
 {
 public:
-    SfxErrorHandler(sal_uInt16 nId, sal_uLong lStart, sal_uLong lEnd, ResMgr *pMgr=nullptr);
-    virtual ~SfxErrorHandler();
+    SfxErrorHandler(const ErrMsgCode* pIds, ErrCodeArea lStart, ErrCodeArea lEnd, const std::locale& rResLocale = SvtResLocale());
+    virtual ~SfxErrorHandler() override;
 
 protected:
-    bool     GetErrorString(sal_uLong lErrId, OUString &, sal_uInt16&) const;
-    bool     GetMessageString(sal_uLong lErrId, OUString &, sal_uInt16&) const;
+    bool     GetErrorString(ErrCode lErrId, OUString &) const;
 
 private:
 
-    sal_uLong            lStart;
-    sal_uLong            lEnd;
-    sal_uInt16           nId;
-    ResMgr              *pMgr;
-    ResMgr              *pFreeMgr;
+    ErrCodeArea const          lStart;
+    ErrCodeArea const          lEnd;
+    const ErrMsgCode*    pIds;
+    std::locale const aResLocale;
 
-    SVT_DLLPRIVATE void   GetClassString(sal_uLong lErrId, OUString &) const;
-    virtual bool          CreateString( const ErrorInfo *, OUString &, sal_uInt16 &) const override;
+    SVT_DLLPRIVATE static void GetClassString(ErrCodeClass lErrId, OUString &);
+    virtual bool          CreateString(const ErrorInfo *, OUString &) const override;
 };
-
-#endif
 
 #endif
 

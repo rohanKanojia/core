@@ -7,9 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "orcusxml.hxx"
+#include <orcusxml.hxx>
 
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
 ScOrcusXMLTreeParam::EntryData::EntryData(EntryType eType)
     : mnNamespaceID(0)
@@ -19,14 +19,9 @@ ScOrcusXMLTreeParam::EntryData::EntryData(EntryType eType)
     , mbLeafNode(true)
 {}
 
-ScOrcusXMLTreeParam::EntryData* ScOrcusXMLTreeParam::getUserData(SvTreeListEntry& rEntry)
+ScOrcusXMLTreeParam::EntryData* ScOrcusXMLTreeParam::getUserData(const SvTreeListEntry& rEntry)
 {
     return static_cast<ScOrcusXMLTreeParam::EntryData*>(rEntry.GetUserData());
-}
-
-const ScOrcusXMLTreeParam::EntryData* ScOrcusXMLTreeParam::getUserData(const SvTreeListEntry& rEntry)
-{
-    return static_cast<const ScOrcusXMLTreeParam::EntryData*>(rEntry.GetUserData());
 }
 
 ScOrcusImportXMLParam::CellLink::CellLink(const ScAddress& rPos, const OString& rPath) :

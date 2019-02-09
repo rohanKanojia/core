@@ -50,7 +50,7 @@
    OTHER DEALINGS IN THE SOFTWARE.
    ----------------------------------------------------------------------- */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include "abi.hxx"
 
@@ -61,9 +61,9 @@ using namespace x86_64;
 /* Register class used for passing given 64bit part of the argument.
    These represent classes as documented by the PS ABI, with the exception
    of SSESF, SSEDF classes, that are basically SSE class, just gcc will
-   use SF or DFmode move instead of DImode to avoid reformating penalties.
+   use SF or DFmode move instead of DImode to avoid reformatting penalties.
 
-   Similary we play games with INTEGERSI_CLASS to use cheaper SImode moves
+   Similarly we play games with INTEGERSI_CLASS to use cheaper SImode moves
    whenever possible (upper half does contain padding).
  */
 enum x86_64_reg_class

@@ -19,19 +19,20 @@
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <osl/diagnose.h>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/XMLBase64ImportContext.hxx>
-#include "XMLReplacementImageContext.hxx"
+#include <XMLReplacementImageContext.hxx>
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::makeAny;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::beans;
-
+using namespace css;
 
 XMLReplacementImageContext::XMLReplacementImageContext(
         SvXMLImport& rImport,
@@ -39,8 +40,7 @@ XMLReplacementImageContext::XMLReplacementImageContext(
         const Reference< XAttributeList > & rAttrList,
         const Reference< XPropertySet > & rPropSet ) :
     SvXMLImportContext( rImport, nPrfx, rLName ),
-    m_xPropSet( rPropSet ),
-    m_sGraphicURL("GraphicURL")
+    m_xPropSet( rPropSet )
 {
     rtl::Reference < XMLTextImportHelper > xTxtImport =
         GetImport().GetTextImport();
@@ -76,28 +76,32 @@ void XMLReplacementImageContext::EndElement()
                 "neither URL nor base64 image data given" );
     rtl::Reference < XMLTextImportHelper > xTxtImport =
         GetImport().GetTextImport();
-    OUString sHRef;
-    if( !m_sHRef.isEmpty() )
-    {
-        bool bForceLoad = xTxtImport->IsInsertMode() ||
-                              xTxtImport->IsBlockMode() ||
-                              xTxtImport->IsStylesOnlyMode() ||
-                              xTxtImport->IsOrganizerMode();
-        sHRef = GetImport().ResolveGraphicObjectURL( m_sHRef, !bForceLoad );
-    }
-    else if( m_xBase64Stream.is() )
-    {
-        sHRef = GetImport().ResolveGraphicObjectURLFromBase64( m_xBase64Stream );
-        m_xBase64Stream = nullptr;
-    }
+    uno::Reference<graphic::XGraphic> xGraphic;
 
-    Reference < XPropertySetInfo > xPropSetInfo =
-        m_xPropSet->getPropertySetInfo();
-    if( xPropSetInfo->hasPropertyByName( m_sGraphicURL ) )
-        m_xPropSet->setPropertyValue( m_sGraphicURL, makeAny( sHRef ) );
+    try
+    {
+        if( !m_sHRef.isEmpty() )
+        {
+            xGraphic = GetImport().loadGraphicByURL(m_sHRef);
+        }
+        else if( m_xBase64Stream.is() )
+        {
+            xGraphic = GetImport().loadGraphicFromBase64(m_xBase64Stream);
+            m_xBase64Stream = nullptr;
+        }
+    }
+    catch (uno::Exception const &)
+    {}
+
+    Reference < XPropertySetInfo > xPropSetInfo = m_xPropSet->getPropertySetInfo();
+
+    if (xGraphic.is() && xPropSetInfo->hasPropertyByName("Graphic"))
+    {
+        m_xPropSet->setPropertyValue("Graphic", uno::makeAny(xGraphic));
+    }
 }
 
-SvXMLImportContext *XMLReplacementImageContext::CreateChildContext(
+SvXMLImportContextRef XMLReplacementImageContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

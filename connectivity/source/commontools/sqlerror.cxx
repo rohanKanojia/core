@@ -18,25 +18,26 @@
  */
 
 
+#include <memory>
 #include <connectivity/sqlerror.hxx>
 
 #include <com/sun/star/sdbc/SQLException.hpp>
+#include <com/sun/star/sdb/ErrorCondition.hpp>
 
-#include <comphelper/officeresourcebundle.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <unotools/resmgr.hxx>
 #include <osl/diagnose.h>
 
+#include <strings.hrc>
+#include <strings.hxx>
 #include <string.h>
-
 
 namespace connectivity
 {
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::XComponentContext;
@@ -53,13 +54,11 @@ namespace connectivity
     class SQLError_Impl
     {
     public:
-        explicit SQLError_Impl( const Reference<XComponentContext> & _rxContext );
-        ~SQLError_Impl();
+        explicit SQLError_Impl();
 
         // versions of the public SQLError methods which are just delegated to this impl-class
         static const OUString& getMessagePrefix();
         OUString     getErrorMessage( const ErrorCondition _eCondition, const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 );
-        OUString     getSQLState( const ErrorCondition _eCondition );
         static ErrorCode    getErrorCode( const ErrorCondition _eCondition );
         void                raiseException( const ErrorCondition _eCondition, const Reference< XInterface >& _rxContext, const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 );
         void                raiseException( const ErrorCondition _eCondition, const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 );
@@ -69,46 +68,30 @@ namespace connectivity
     private:
         /// returns the basic error message associated with the given error condition, without any parameter replacements
         OUString
-                impl_getErrorMessage( const ErrorCondition& _eCondition );
+                impl_getErrorMessage( ErrorCondition _eCondition );
 
         /// returns the SQLState associated with the given error condition
-        OUString
-                impl_getSQLState( const ErrorCondition& _eCondition );
+        static OUString
+                impl_getSQLState( ErrorCondition _eCondition );
 
         /// returns an SQLException describing the given error condition
         SQLException
                 impl_buildSQLException( const ErrorCondition _eCondition, const Reference< XInterface >& _rxContext,
                     const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 );
-
-        /// initializes our resource bundle
-        bool    impl_initResources();
-
     private:
-        ::osl::Mutex                                            m_aMutex;
-        Reference<XComponentContext>                            m_aContext;
-        ::std::unique_ptr< ::comphelper::OfficeResourceBundle > m_pResources;
-        bool                                                    m_bAttemptedInit;
+        std::locale                                             m_aResources;
     };
 
-    SQLError_Impl::SQLError_Impl( const Reference<XComponentContext> & _rxContext )
-        :m_aContext( _rxContext )
-        ,m_pResources( )
-        ,m_bAttemptedInit( false )
+    SQLError_Impl::SQLError_Impl()
+        : m_aResources(Translate::Create("cnr"))
     {
     }
-
-
-    SQLError_Impl::~SQLError_Impl()
-    {
-    }
-
 
     const OUString& SQLError_Impl::getMessagePrefix()
     {
         static const OUString s_sMessagePrefix( "[OOoBase]" );
         return s_sMessagePrefix;
     }
-
 
     namespace
     {
@@ -128,15 +111,44 @@ namespace connectivity
                 _rMessage = _rMessage.replaceAt( nIndex, nPlaceholderLen, *rParamValue );
         }
 
-
-        sal_Int32   lcl_getResourceID( const ErrorCondition _eCondition, bool _bSQLState )
+        const char* lcl_getResourceErrorID(const ErrorCondition _eCondition)
         {
-            return  256
-                +   2 * ::sal::static_int_cast< sal_Int32, ErrorCondition >( _eCondition )
-                +   ( _bSQLState ? 1 : 0 );
+            switch (_eCondition)
+            {
+                case css::sdb::ErrorCondition::ROW_SET_OPERATION_VETOED:
+                    return STR_ROW_SET_OPERATION_VETOED;
+                case css::sdb::ErrorCondition::PARSER_CYCLIC_SUB_QUERIES:
+                    return STR_PARSER_CYCLIC_SUB_QUERIES;
+                case css::sdb::ErrorCondition::DB_OBJECT_NAME_WITH_SLASHES:
+                    return STR_DB_OBJECT_NAME_WITH_SLASHES;
+                case css::sdb::ErrorCondition::DB_INVALID_SQL_NAME:
+                    return STR_DB_INVALID_SQL_NAME;
+                case css::sdb::ErrorCondition::DB_QUERY_NAME_WITH_QUOTES:
+                    return STR_DB_QUERY_NAME_WITH_QUOTES;
+                case css::sdb::ErrorCondition::DB_OBJECT_NAME_IS_USED:
+                    return STR_DB_OBJECT_NAME_IS_USED;
+                case css::sdb::ErrorCondition::DB_NOT_CONNECTED:
+                    return STR_DB_NOT_CONNECTED;
+                case css::sdb::ErrorCondition::AB_ADDRESSBOOK_NOT_FOUND:
+                    return STR_AB_ADDRESSBOOK_NOT_FOUND;
+                case css::sdb::ErrorCondition::DATA_CANNOT_SELECT_UNFILTERED:
+                    return STR_DATA_CANNOT_SELECT_UNFILTERED;
+            }
+            return nullptr;
+        }
+
+        OUString lcl_getResourceState(const ErrorCondition _eCondition)
+        {
+            switch (_eCondition)
+            {
+                case css::sdb::ErrorCondition::DB_NOT_CONNECTED:
+                    return OUString(STR_DB_NOT_CONNECTED_STATE);
+                case css::sdb::ErrorCondition::DATA_CANNOT_SELECT_UNFILTERED:
+                    return OUString(STR_DATA_CANNOT_SELECT_UNFILTERED_STATE);
+            }
+            return OUString();
         }
     }
-
 
     OUString SQLError_Impl::getErrorMessage( const ErrorCondition _eCondition, const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 )
     {
@@ -147,12 +159,6 @@ namespace connectivity
         lcl_substitutePlaceholder( sErrorMessage, "$3$", _rParamValue3 );
 
         return sErrorMessage;
-    }
-
-
-    OUString SQLError_Impl::getSQLState( const ErrorCondition _eCondition )
-    {
-        return impl_getSQLState( _eCondition );
     }
 
 
@@ -187,12 +193,11 @@ namespace connectivity
         );
     }
 
-
     void SQLError_Impl::raiseTypedException( const ErrorCondition _eCondition, const Reference< XInterface >& _rxContext,
         const Type& _rExceptionType, const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 )
     {
         if ( !::cppu::UnoType< SQLException >::get().isAssignableFrom( _rExceptionType ) )
-            throw ::std::bad_cast();
+            throw std::bad_cast();
 
         // default-construct an exception of the desired type
         Any aException( nullptr, _rExceptionType );
@@ -205,13 +210,11 @@ namespace connectivity
         ::cppu::throwException( aException );
     }
 
-
     SQLException SQLError_Impl::getSQLException( const ErrorCondition _eCondition, const Reference< XInterface >& _rxContext,
         const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 )
     {
         return impl_buildSQLException( _eCondition, _rxContext, _rParamValue1, _rParamValue2, _rParamValue3 );
     }
-
 
     SQLException SQLError_Impl::impl_buildSQLException( const ErrorCondition _eCondition, const Reference< XInterface >& _rxContext,
         const ParamValue& _rParamValue1, const ParamValue& _rParamValue2, const ParamValue& _rParamValue3 )
@@ -219,62 +222,33 @@ namespace connectivity
         return SQLException(
             getErrorMessage( _eCondition, _rParamValue1, _rParamValue2, _rParamValue3 ),
             _rxContext,
-            getSQLState( _eCondition ),
+            impl_getSQLState( _eCondition ),
             getErrorCode( _eCondition ),
             Any()
         );
     }
 
-
-    OUString SQLError_Impl::impl_getErrorMessage( const ErrorCondition& _eCondition )
+    OUString SQLError_Impl::impl_getErrorMessage( ErrorCondition _eCondition )
     {
         OUStringBuffer aMessage;
 
-        if ( impl_initResources() )
-        {
-            OUString sResMessage( m_pResources->loadString( lcl_getResourceID( _eCondition, false ) ) );
-            OSL_ENSURE( !sResMessage.isEmpty(), "SQLError_Impl::impl_getErrorMessage: illegal error condition, or invalid resource!" );
-            aMessage.append( getMessagePrefix() ).append( " " ).append( sResMessage );
-        }
+        OUString sResMessage(Translate::get(lcl_getResourceErrorID(_eCondition), m_aResources));
+        OSL_ENSURE( !sResMessage.isEmpty(), "SQLError_Impl::impl_getErrorMessage: illegal error condition, or invalid resource!" );
+        aMessage.append( getMessagePrefix() ).append( " " ).append( sResMessage );
 
         return aMessage.makeStringAndClear();
     }
 
-
-    OUString SQLError_Impl::impl_getSQLState( const ErrorCondition& _eCondition )
+    OUString SQLError_Impl::impl_getSQLState( ErrorCondition _eCondition )
     {
-        OUString sState;
-
-        if ( impl_initResources() )
-        {
-            sal_Int32 nResourceId( lcl_getResourceID( _eCondition, true ) );
-            if ( m_pResources->hasString( nResourceId ) )
-                sState = m_pResources->loadString( nResourceId );
-        }
-
-        if ( sState.isEmpty() )
+        OUString sState = lcl_getResourceState(_eCondition);
+        if (sState.isEmpty())
             sState = OUString::intern( RTL_CONSTASCII_USTRINGPARAM( "S1000" ) );
-
         return sState;
     }
 
-
-    bool SQLError_Impl::impl_initResources()
-    {
-        if ( m_pResources.get() )
-            return true;
-        if ( m_bAttemptedInit )
-            return false;
-
-        ::osl::MutexGuard aGuard( m_aMutex );
-        m_bAttemptedInit = true;
-
-        m_pResources.reset( new ::comphelper::OfficeResourceBundle( m_aContext, "sdberr" ) );
-        return m_pResources.get() != nullptr;
-    }
-
-    SQLError::SQLError( const Reference<XComponentContext> & _rxContext )
-        :m_pImpl( new SQLError_Impl( _rxContext ) )
+    SQLError::SQLError()
+        :m_pImpl( new SQLError_Impl )
     {
     }
 

@@ -17,15 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "defaultobjectnamecheck.hxx"
+#include <core_resource.hxx>
+#include <defaultobjectnamecheck.hxx>
 
-#include "dbu_misc.hrc"
-
-#include "moduledbu.hxx"
+#include <strings.hrc>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/sdbcx/XTablesSupplier.hpp>
-#include <com/sun/star/sdb/XQueriesSupplier.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdb/tools/XConnectionTools.hpp>
 
@@ -44,14 +41,11 @@ namespace dbaui
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::container::XNameAccess;
     using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::container::XHierarchicalNameAccess;
     using ::com::sun::star::sdbc::SQLException;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::sdbc::XConnection;
-    using ::com::sun::star::sdbcx::XTablesSupplier;
-    using ::com::sun::star::sdb::XQueriesSupplier;
     using ::com::sun::star::sdb::tools::XObjectNames;
     using ::com::sun::star::sdb::tools::XConnectionTools;
     using ::com::sun::star::uno::UNO_QUERY;
@@ -66,7 +60,7 @@ namespace dbaui
         void lcl_fillNameExistsError( const OUString& _rObjectName, SQLExceptionInfo& _out_rErrorToDisplay )
         {
             SQLException aError;
-            OUString sErrorMessage = ModuleRes(STR_NAMED_OBJECT_ALREADY_EXISTS).toString();
+            OUString sErrorMessage = DBA_RES(STR_NAMED_OBJECT_ALREADY_EXISTS);
             aError.Message = sErrorMessage.replaceAll("$#$", _rObjectName);
             _out_rErrorToDisplay = aError;
         }
@@ -113,7 +107,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
 
         lcl_fillNameExistsError( _rObjectName, _out_rErrorToDisplay );

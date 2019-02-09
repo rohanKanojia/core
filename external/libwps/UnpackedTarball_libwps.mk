@@ -13,6 +13,8 @@ $(eval $(call gb_UnpackedTarball_set_tarball,libwps,$(WPS_TARBALL)))
 
 $(eval $(call gb_UnpackedTarball_set_patchlevel,libwps,1))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,libwps))
+
 $(eval $(call gb_UnpackedTarball_add_patches,libwps,\
 	$(if $(SYSTEM_REVENGE),,external/libwps/rpath.patch.0) \
 ))

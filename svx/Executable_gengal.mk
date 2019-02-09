@@ -33,6 +33,7 @@ $(eval $(call gb_Executable_use_libraries,gengal,\
     basegfx \
     sal \
     tl \
+    sfx \
     svl \
     svt \
     comphelper \
@@ -41,7 +42,6 @@ $(eval $(call gb_Executable_use_libraries,gengal,\
     utl \
     vcl \
     svxcore \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Executable_add_exception_objects,gengal,\
@@ -61,7 +61,7 @@ $(eval $(call gb_Executable_use_system_win32_libs,gengal,\
 ))
 endif
 
-ifeq ($(ENABLE_HEADLESS),TRUE)
+ifeq ($(DISABLE_GUI),TRUE)
 $(eval $(call gb_Executable_add_libs,gengal,\
 	$(DLOPEN_LIBS) \
 	-lpthread \
@@ -74,9 +74,11 @@ $(eval $(call gb_Executable_add_libs,gengal,\
     -lX11 \
 ))
 
+ifeq ($(USING_X11),TRUE)
 $(eval $(call gb_Executable_use_static_libraries,gengal,\
 	glxtest \
 ))
+endif
 endif
 endif
 

@@ -20,7 +20,7 @@
 #include <stdlib.h>
 
 #include <algorithm>
-
+#include <string_view>
 #include <unordered_map>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -28,7 +28,6 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/script/XDefaultMethod.hpp>
 #include <com/sun/star/uno/Any.hxx>
-#include <com/sun/star/util/SearchOptions2.hpp>
 #include <com/sun/star/util/SearchAlgorithms2.hpp>
 
 #include <comphelper/processfactory.hxx>
@@ -38,35 +37,34 @@
 
 #include <tools/wldcrd.hxx>
 
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
 #include <rtl/instance.hxx>
 #include <rtl/math.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <rtl/character.hxx>
 
 #include <svl/zforlist.hxx>
 
+#include <i18nutil/searchopt.hxx>
 #include <unotools/syslocale.hxx>
 #include <unotools/textsearch.hxx>
 
 #include <basic/sbuno.hxx>
 
-#include "basrid.hxx"
-#include "codegen.hxx"
+#include <codegen.hxx>
 #include "comenumwrapper.hxx"
 #include "ddectrl.hxx"
 #include "dllmgr.hxx"
-#include "errobject.hxx"
-#include "image.hxx"
-#include "iosys.hxx"
-#include "opcodes.hxx"
-#include "runtime.hxx"
-#include "sb.hrc"
-#include "sb.hxx"
-#include "sbintern.hxx"
-#include "sbunoobj.hxx"
+#include <errobject.hxx>
+#include <image.hxx>
+#include <iosys.hxx>
+#include <opcodes.hxx>
+#include <runtime.hxx>
+#include <sb.hxx>
+#include <sbintern.hxx>
+#include <sbunoobj.hxx>
 #include <basic/codecompletecache.hxx>
 #include <memory>
 
@@ -80,8 +78,8 @@ using namespace com::sun::star::script;
 
 using namespace ::com::sun::star;
 
-static void lcl_clearImpl( SbxVariableRef& refVar, SbxDataType& eType );
-static void lcl_eraseImpl( SbxVariableRef& refVar, bool bVBAEnabled );
+static void lcl_clearImpl( SbxVariableRef const & refVar, SbxDataType const & eType );
+static void lcl_eraseImpl( SbxVariableRef const & refVar, bool bVBAEnabled );
 
 bool SbiRuntime::isVBAEnabled()
 {
@@ -115,7 +113,7 @@ struct SbiArgv {                   // Argv stack:
     SbxArrayRef    refArgv;             // Argv
     short nArgc;                        // Argc
 
-    SbiArgv(SbxArrayRef refArgv_, short nArgc_) :
+    SbiArgv(SbxArrayRef const & refArgv_, short nArgc_) :
         refArgv(refArgv_),
         nArgc(nArgc_) {}
 };
@@ -172,7 +170,7 @@ SbiRuntime::pStep0 SbiRuntime::aStep0[] = { // all opcodes without operands
     &SbiRuntime::StepERASE,         // delete TOS
     // branch
     &SbiRuntime::StepSTOP,          // program end
-    &SbiRuntime::StepINITFOR,   // intitialize FOR-Variable
+    &SbiRuntime::StepINITFOR,   // initialize FOR-Variable
     &SbiRuntime::StepNEXT,      // increment FOR-Variable
     &SbiRuntime::StepCASE,      // beginning CASE
     &SbiRuntime::StepENDCASE,   // end CASE
@@ -203,7 +201,7 @@ SbiRuntime::pStep0 SbiRuntime::aStep0[] = { // all opcodes without operands
 SbiRuntime::pStep1 SbiRuntime::aStep1[] = { // all opcodes with one operand
     &SbiRuntime::StepLOADNC,        // loading a numeric constant (+ID)
     &SbiRuntime::StepLOADSC,        // loading a string constant (+ID)
-    &SbiRuntime::StepLOADI,     // Immediate Load (+Wert)
+    &SbiRuntime::StepLOADI,     // Immediate Load (+value)
     &SbiRuntime::StepARGN,      // save a named Args in Argv (+StringID)
     &SbiRuntime::StepPAD,       // bring string to a definite length (+length)
     // branches
@@ -234,11 +232,11 @@ SbiRuntime::pStep2 SbiRuntime::aStep2[] = {// all opcodes with two operands
     &SbiRuntime::StepFIND,      // load (+StringID+Typ)
     &SbiRuntime::StepELEM,          // load element (+StringID+Typ)
     &SbiRuntime::StepPARAM,     // Parameter (+Offset+Typ)
-    // Verzweigen
+    // branches
     &SbiRuntime::StepCALL,      // Declare-Call (+StringID+Typ)
     &SbiRuntime::StepCALLC,     // CDecl-Declare-Call (+StringID+Typ)
     &SbiRuntime::StepCASEIS,        // Case-Test (+Test-Opcode+False-Target)
-    // Verwaltung
+    // management
     &SbiRuntime::StepSTMNT,         // beginning of a statement (+Line+Col)
     // E/A
     &SbiRuntime::StepOPEN,          // (+StreamMode+Flags)
@@ -264,17 +262,12 @@ SbiRuntime::pStep2 SbiRuntime::aStep2[] = {// all opcodes with two operands
 
 SbiRTLData::SbiRTLData()
 {
-    pDir        = nullptr;
     nDirFlags   = SbAttributes::NONE;
     nCurDirPos  = 0;
-    pWildCard   = nullptr;
 }
 
 SbiRTLData::~SbiRTLData()
 {
-    delete pDir;
-    pDir = nullptr;
-    delete pWildCard;
 }
 
 //                              SbiInstance
@@ -288,26 +281,20 @@ SbiRTLData::~SbiRTLData()
 // (also have a look at: step2.cxx, SbiRuntime::StepSTMNT() )
 
 
-void SbiInstance::CalcBreakCallLevel( sal_uInt16 nFlags )
+void SbiInstance::CalcBreakCallLevel( BasicDebugFlags nFlags )
 {
 
-    nFlags &= ~((sal_uInt16)SbDEBUG_BREAK);
+    nFlags &= ~BasicDebugFlags::Break;
 
     sal_uInt16 nRet;
-    switch( nFlags )
-    {
-    case SbDEBUG_STEPINTO:
+    if (nFlags  == BasicDebugFlags::StepInto) {
         nRet = nCallLvl + 1;    // CallLevel+1 is also stopped
-        break;
-    case SbDEBUG_STEPOVER | SbDEBUG_STEPINTO:
+    } else if (nFlags == (BasicDebugFlags::StepOver | BasicDebugFlags::StepInto)) {
         nRet = nCallLvl;        // current CallLevel is stopped
-        break;
-    case SbDEBUG_STEPOUT:
+    } else if (nFlags == BasicDebugFlags::StepOut) {
         nRet = nCallLvl - 1;    // smaller CallLevel is stopped
-        break;
-    case SbDEBUG_CONTINUE:
-        // Basic-IDE returns 0 instead of SbDEBUG_CONTINUE, so also default=continue
-    default:
+    } else {
+        // Basic-IDE returns 0 instead of BasicDebugFlags::Continue, so also default=continue
         nRet = 0;               // CallLevel is always > 0 -> no StepPoint
     }
     nBreakCallLvl = nRet;           // take result
@@ -318,7 +305,7 @@ SbiInstance::SbiInstance( StarBASIC* p )
     , pDdeCtrl(new SbiDdeControl)
     , pBasic(p)
     , meFormatterLangType(LANGUAGE_DONTKNOW)
-    , meFormatterDateFormat(YMD)
+    , meFormatterDateOrder(DateOrder::YMD)
     , nStdDateIdx(0)
     , nStdTimeIdx(0)
     , nStdDateTimeIdx(0)
@@ -327,7 +314,6 @@ SbiInstance::SbiInstance( StarBASIC* p )
     , bReschedule(true)
     , bCompatibility(false)
     , pRun(nullptr)
-    , pNext(nullptr)
     , nCallLvl(0)
     , nBreakCallLvl(0)
 {
@@ -371,35 +357,34 @@ SbiDllMgr* SbiInstance::GetDllMgr()
 }
 
 // #39629 create NumberFormatter with the help of a static method now
-SvNumberFormatter* SbiInstance::GetNumberFormatter()
+std::shared_ptr<SvNumberFormatter> const & SbiInstance::GetNumberFormatter()
 {
     LanguageType eLangType = Application::GetSettings().GetLanguageTag().getLanguageType();
     SvtSysLocale aSysLocale;
-    DateFormat eDate = aSysLocale.GetLocaleData().getDateFormat();
+    DateOrder eDate = aSysLocale.GetLocaleData().getDateOrder();
     if( pNumberFormatter )
     {
         if( eLangType != meFormatterLangType ||
-            eDate != meFormatterDateFormat )
+            eDate != meFormatterDateOrder )
         {
-            pNumberFormatter.reset(nullptr);
+            pNumberFormatter.reset();
         }
     }
     meFormatterLangType = eLangType;
-    meFormatterDateFormat = eDate;
+    meFormatterDateOrder = eDate;
     if( !pNumberFormatter )
     {
-        pNumberFormatter.reset(PrepareNumberFormatter( nStdDateIdx, nStdTimeIdx, nStdDateTimeIdx,
-        &meFormatterLangType, &meFormatterDateFormat ));
+        pNumberFormatter = PrepareNumberFormatter( nStdDateIdx, nStdTimeIdx, nStdDateTimeIdx,
+                &meFormatterLangType, &meFormatterDateOrder);
     }
-    return pNumberFormatter.get();
+    return pNumberFormatter;
 }
 
 // #39629 offer NumberFormatter static too
-SvNumberFormatter* SbiInstance::PrepareNumberFormatter( sal_uInt32 &rnStdDateIdx,
+std::shared_ptr<SvNumberFormatter> SbiInstance::PrepareNumberFormatter( sal_uInt32 &rnStdDateIdx,
     sal_uInt32 &rnStdTimeIdx, sal_uInt32 &rnStdDateTimeIdx,
-    LanguageType* peFormatterLangType, DateFormat* peFormatterDateFormat )
+    LanguageType const * peFormatterLangType, DateOrder const * peFormatterDateOrder )
 {
-    SvNumberFormatter* pNumberFormater = nullptr;
     LanguageType eLangType;
     if( peFormatterLangType )
     {
@@ -409,21 +394,32 @@ SvNumberFormatter* SbiInstance::PrepareNumberFormatter( sal_uInt32 &rnStdDateIdx
     {
         eLangType = Application::GetSettings().GetLanguageTag().getLanguageType();
     }
-    DateFormat eDate;
-    if( peFormatterDateFormat )
+    DateOrder eDate;
+    if( peFormatterDateOrder )
     {
-        eDate = *peFormatterDateFormat;
+        eDate = *peFormatterDateOrder;
     }
     else
     {
         SvtSysLocale aSysLocale;
-        eDate = aSysLocale.GetLocaleData().getDateFormat();
+        eDate = aSysLocale.GetLocaleData().getDateOrder();
     }
 
-    pNumberFormater = new SvNumberFormatter( comphelper::getProcessComponentContext(), eLangType );
+    std::shared_ptr<SvNumberFormatter> pNumberFormatter(
+            new SvNumberFormatter( comphelper::getProcessComponentContext(), eLangType ));
 
-    sal_Int32 nCheckPos = 0; short nType;
-    rnStdTimeIdx = pNumberFormater->GetStandardFormat( css::util::NumberFormat::TIME, eLangType );
+    // Several parser methods pass SvNumberFormatter::IsNumberFormat() a number
+    // format index to parse against. Tell the formatter the proper date
+    // evaluation order, which also determines the date acceptance patterns to
+    // use if a format was passed. NF_EVALDATEFORMAT_FORMAT restricts to the
+    // format's locale's date patterns/order (no init/system locale match
+    // tried) and falls back to NF_EVALDATEFORMAT_INTL if no specific (i.e. 0)
+    // (or an unknown) format index was passed.
+    pNumberFormatter->SetEvalDateFormat( NF_EVALDATEFORMAT_FORMAT);
+
+    sal_Int32 nCheckPos = 0;
+    SvNumFormatType nType;
+    rnStdTimeIdx = pNumberFormatter->GetStandardFormat( SvNumFormatType::TIME, eLangType );
 
     // the formatter's standard templates have only got a two-digit date
     // -> registering an own format
@@ -437,24 +433,23 @@ SvNumberFormatter* SbiInstance::PrepareNumberFormatter( sal_uInt32 &rnStdDateIdx
     switch( eDate )
     {
         default:
-        case MDY: aDateStr = "MM/DD/YYYY"; break;
-        case DMY: aDateStr = "DD/MM/YYYY"; break;
-        case YMD: aDateStr = "YYYY/MM/DD"; break;
+        case DateOrder::MDY: aDateStr = "MM/DD/YYYY"; break;
+        case DateOrder::DMY: aDateStr = "DD/MM/YYYY"; break;
+        case DateOrder::YMD: aDateStr = "YYYY/MM/DD"; break;
     }
     OUString aStr( aDateStr );      // PutandConvertEntry() modifies string!
-    pNumberFormater->PutandConvertEntry( aStr, nCheckPos, nType,
-        rnStdDateIdx, LANGUAGE_ENGLISH_US, eLangType );
+    pNumberFormatter->PutandConvertEntry( aStr, nCheckPos, nType,
+        rnStdDateIdx, LANGUAGE_ENGLISH_US, eLangType, true);
     nCheckPos = 0;
-    OUString aStrHHMMSS(" HH:MM:SS");
-    aDateStr += aStrHHMMSS;
+    aDateStr += " HH:MM:SS";
     aStr = aDateStr;
-    pNumberFormater->PutandConvertEntry( aStr, nCheckPos, nType,
-        rnStdDateTimeIdx, LANGUAGE_ENGLISH_US, eLangType );
-    return pNumberFormater;
+    pNumberFormatter->PutandConvertEntry( aStr, nCheckPos, nType,
+        rnStdDateTimeIdx, LANGUAGE_ENGLISH_US, eLangType, true);
+    return pNumberFormatter;
 }
 
 
-// Let engine run. If Flags == SbDEBUG_CONTINUE, take Flags over
+// Let engine run. If Flags == BasicDebugFlags::Continue, take Flags over
 
 void SbiInstance::Stop()
 {
@@ -472,12 +467,12 @@ void setBasicWatchMode( bool bOn )
     bWatchMode = bOn;
 }
 
-void SbiInstance::Error( SbError n )
+void SbiInstance::Error( ErrCode n )
 {
     Error( n, OUString() );
 }
 
-void SbiInstance::Error( SbError n, const OUString& rMsg )
+void SbiInstance::Error( ErrCode n, const OUString& rMsg )
 {
     if( !bWatchMode )
     {
@@ -490,39 +485,38 @@ void SbiInstance::ErrorVB( sal_Int32 nVBNumber, const OUString& rMsg )
 {
     if( !bWatchMode )
     {
-        SbError n = StarBASIC::GetSfxFromVBError( static_cast< sal_uInt16 >( nVBNumber ) );
+        ErrCode n = StarBASIC::GetSfxFromVBError( static_cast< sal_uInt16 >( nVBNumber ) );
         if ( !n )
         {
-            n = nVBNumber; // force orig number, probably should have a specific table of vb ( localized ) errors
+            n = ErrCode(nVBNumber); // force orig number, probably should have a specific table of vb ( localized ) errors
         }
         aErrorMsg = rMsg;
         SbiRuntime::translateErrorToVba( n, aErrorMsg );
 
-        bool bVBATranslationAlreadyDone = true;
-        pRun->Error( ERRCODE_BASIC_COMPAT, bVBATranslationAlreadyDone );
+        pRun->Error( ERRCODE_BASIC_COMPAT, true/*bVBATranslationAlreadyDone*/ );
     }
 }
 
-void SbiInstance::setErrorVB( sal_Int32 nVBNumber, const OUString& rMsg )
+void SbiInstance::setErrorVB( sal_Int32 nVBNumber )
 {
-    SbError n = StarBASIC::GetSfxFromVBError( static_cast< sal_uInt16 >( nVBNumber ) );
+    ErrCode n = StarBASIC::GetSfxFromVBError( static_cast< sal_uInt16 >( nVBNumber ) );
     if( !n )
     {
-        n = nVBNumber; // force orig number, probably should have a specific table of vb ( localized ) errors
+        n = ErrCode(nVBNumber); // force orig number, probably should have a specific table of vb ( localized ) errors
     }
-    aErrorMsg = rMsg;
+    aErrorMsg = OUString();
     SbiRuntime::translateErrorToVba( n, aErrorMsg );
 
     nErr = n;
 }
 
 
-void SbiInstance::FatalError( SbError n )
+void SbiInstance::FatalError( ErrCode n )
 {
     pRun->FatalError( n );
 }
 
-void SbiInstance::FatalError( SbError _errCode, const OUString& _details )
+void SbiInstance::FatalError( ErrCode _errCode, const OUString& _details )
 {
     pRun->FatalError( _errCode, _details );
 }
@@ -576,9 +570,9 @@ SbMethod* SbiInstance::GetCaller( sal_uInt16 nLevel )
 
 SbiRuntime::SbiRuntime( SbModule* pm, SbMethod* pe, sal_uInt32 nStart )
          : rBasic( *static_cast<StarBASIC*>(pm->pParent) ), pInst( GetSbData()->pInst ),
-           pMod( pm ), pMeth( pe ), pImg( pMod->pImage ), mpExtCaller(nullptr), m_nLastTime(0)
+           pMod( pm ), pMeth( pe ), pImg( pMod->pImage.get() ), mpExtCaller(nullptr), m_nLastTime(0)
 {
-    nFlags    = pe ? pe->GetDebugFlags() : 0;
+    nFlags    = pe ? pe->GetDebugFlags() : BasicDebugFlags::NONE;
     pIosys    = pInst->GetIoSystem();
     pForStk   = nullptr;
     pError    = nullptr;
@@ -597,7 +591,7 @@ SbiRuntime::SbiRuntime( SbModule* pm, SbMethod* pe, sal_uInt32 nStart )
     nCol2     = 0;
     nExprLvl  = 0;
     nArgc     = 0;
-    nError    = 0;
+    nError    = ERRCODE_NONE;
     nForLvl   = 0;
     nOps      = 0;
     refExprStk = new SbxArray;
@@ -651,12 +645,12 @@ void SbiRuntime::SetParameters( SbxArray* pParams )
                 SbxDimArray* pArray = new SbxDimArray( SbxVARIANT );
                 sal_uInt16 nParamArrayParamCount = nParamCount - i;
                 pArray->unoAddDim( 0, nParamArrayParamCount - 1 );
-                for( sal_uInt16 j = i ; j < nParamCount ; j++ )
+                for (sal_uInt16 j = i; j < nParamCount ; ++j)
                 {
                     SbxVariable* v = pParams->Get( j );
-                    short nDimIndex = j - i;
-                    // coverity[callee_ptr_arith]
-                    pArray->Put( v, &nDimIndex );
+                    short aDimIndex[1];
+                    aDimIndex[0] = j - i;
+                    pArray->Put(v, aDimIndex);
                 }
                 SbxVariable* pArrayVar = new SbxVariable( SbxVARIANT );
                 pArrayVar->SetFlag( SbxFlagBits::ReadWrite );
@@ -676,10 +670,10 @@ void SbiRuntime::SetParameters( SbxArray* pParams )
             if( p )
             {
                 bByVal |= ( p->eType & SbxBYREF ) == 0;
-                t = (SbxDataType) ( p->eType & 0x0FFF );
+                t = static_cast<SbxDataType>( p->eType & 0x0FFF );
 
                 if( !bByVal && t != SbxVARIANT &&
-                    (!v->IsFixed() || (SbxDataType)(v->GetType() & 0x0FFF ) != t) )
+                    (!v->IsFixed() || static_cast<SbxDataType>(v->GetType() & 0x0FFF ) != t) )
                 {
                     bByVal = true;
                 }
@@ -763,7 +757,7 @@ bool SbiRuntime::Step()
             }
         }
 
-        SbiOpcode eOp = (SbiOpcode ) ( *pCode++ );
+        SbiOpcode eOp = static_cast<SbiOpcode>( *pCode++ );
         sal_uInt32 nOp1, nOp2;
         if (eOp <= SbiOpcode::SbOP0_END)
         {
@@ -786,11 +780,11 @@ bool SbiRuntime::Step()
             StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
         }
 
-        SbError nSbError = SbxBase::GetError();
-        Error( ERRCODE_TOERROR(nSbError) );
+        ErrCode nErrCode = SbxBase::GetError();
+        Error( nErrCode.IgnoreWarning() );
 
         // from 13.2.1997, new error handling:
-        // ATTENTION: nError can be set already even if !nSbError
+        // ATTENTION: nError can be set already even if !nErrCode
         // since nError can now also be set from other RT-instances
 
         if( nError )
@@ -802,9 +796,9 @@ bool SbiRuntime::Step()
         // (especially not after compiler errors at the runtime)
         if( nError && bRun )
         {
-            SbError err = nError;
+            ErrCode err = nError;
             ClearExprStack();
-            nError = 0;
+            nError = ERRCODE_NONE;
             pInst->nErr = err;
             pInst->nErl = nLine;
             pErrCode    = pCode;
@@ -845,7 +839,7 @@ bool SbiRuntime::Step()
                 // there's no error handler -> find one farther above
                 SbiRuntime* pRtErrHdl = nullptr;
                 SbiRuntime* pRt = this;
-                while( nullptr != (pRt = pRt->pNext) )
+                while( (pRt = pRt->pNext) != nullptr )
                 {
                     if( !pRt->bError || pRt->pError != nullptr )
                     {
@@ -885,7 +879,7 @@ bool SbiRuntime::Step()
     return bRun;
 }
 
-void SbiRuntime::Error( SbError n, bool bVBATranslationAlreadyDone )
+void SbiRuntime::Error( ErrCode n, bool bVBATranslationAlreadyDone )
 {
     if( n )
     {
@@ -894,7 +888,7 @@ void SbiRuntime::Error( SbError n, bool bVBATranslationAlreadyDone )
         {
             OUString aMsg = pInst->GetErrorMsg();
             sal_Int32 nVBAErrorNumber = translateErrorToVba( nError, aMsg );
-            SbxVariable* pSbxErrObjVar = SbxErrObject::getErrObject();
+            SbxVariable* pSbxErrObjVar = SbxErrObject::getErrObject().get();
             SbxErrObject* pGlobErr = static_cast< SbxErrObject* >( pSbxErrObjVar );
             if( pGlobErr != nullptr )
             {
@@ -906,7 +900,7 @@ void SbiRuntime::Error( SbError n, bool bVBATranslationAlreadyDone )
     }
 }
 
-void SbiRuntime::Error( SbError _errCode, const OUString& _details )
+void SbiRuntime::Error( ErrCode _errCode, const OUString& _details )
 {
     if ( _errCode )
     {
@@ -924,19 +918,19 @@ void SbiRuntime::Error( SbError _errCode, const OUString& _details )
     }
 }
 
-void SbiRuntime::FatalError( SbError n )
+void SbiRuntime::FatalError( ErrCode n )
 {
     StepSTDERROR();
     Error( n );
 }
 
-void SbiRuntime::FatalError( SbError _errCode, const OUString& _details )
+void SbiRuntime::FatalError( ErrCode _errCode, const OUString& _details )
 {
     StepSTDERROR();
     Error( _errCode, _details );
 }
 
-sal_Int32 SbiRuntime::translateErrorToVba( SbError nError, OUString& rMsg )
+sal_Int32 SbiRuntime::translateErrorToVba( ErrCode nError, OUString& rMsg )
 {
     // If a message is defined use that ( in preference to
     // the defined one for the error ) NB #TODO
@@ -945,12 +939,6 @@ sal_Int32 SbiRuntime::translateErrorToVba( SbError nError, OUString& rMsg )
     // we really need a new vba compatible error list
     if ( rMsg.isEmpty() )
     {
-        // TEST, has to be vb here always
-#ifdef DBG_UTIL
-        SbError nTmp = StarBASIC::GetSfxFromVBError( (sal_uInt16)nError );
-        SAL_WARN_IF( nTmp == 0, "basic", "No VB error!" );
-#endif
-
         StarBASIC::MakeErrorText( nError, rMsg );
         rMsg = StarBASIC::GetErrorText();
         if ( rMsg.isEmpty() ) // no message for err no, need localized resource here
@@ -960,7 +948,7 @@ sal_Int32 SbiRuntime::translateErrorToVba( SbError nError, OUString& rMsg )
     }
     // no num? most likely then it *is* really a vba err
     sal_uInt16 nVBErrorCode = StarBASIC::GetVBErrorCode( nError );
-    sal_Int32 nVBAErrorNumber = ( nVBErrorCode == 0 ) ? nError : nVBErrorCode;
+    sal_Int32 nVBAErrorNumber = ( nVBErrorCode == 0 ) ? sal_uInt32(nError) : nVBErrorCode;
     return nVBAErrorNumber;
 }
 
@@ -987,10 +975,7 @@ SbxVariableRef SbiRuntime::PopVar()
     }
 #endif
     SbxVariableRef xVar = refExprStk->Get( --nExprLvl );
-#ifdef DBG_UTIL
-    if ( xVar->GetName() == "Cells" )
-        SAL_INFO("basic", "PopVar: Name equals 'Cells'" );
-#endif
+    SAL_INFO_IF( xVar->GetName() == "Cells", "basic", "PopVar: Name equals 'Cells'" );
     // methods hold themselves in parameter 0
     if( dynamic_cast<const SbxMethod *>(xVar.get()) != nullptr )
     {
@@ -1022,7 +1007,7 @@ SbxVariable* SbiRuntime::GetTOS()
         return new SbxVariable;
     }
 #endif
-    return refExprStk->Get( (sal_uInt16) n );
+    return refExprStk->Get( static_cast<sal_uInt16>(n) );
 }
 
 
@@ -1031,16 +1016,16 @@ void SbiRuntime::TOSMakeTemp()
     SbxVariable* p = refExprStk->Get( nExprLvl - 1 );
     if ( p->GetType() == SbxEMPTY )
     {
-        p->Broadcast( SBX_HINT_DATAWANTED );
+        p->Broadcast( SfxHintId::BasicDataWanted );
     }
 
     SbxVariable* pDflt = nullptr;
     if ( bVBAEnabled &&  ( p->GetType() == SbxOBJECT || p->GetType() == SbxVARIANT  ) && ((pDflt = getDefaultProp(p)) != nullptr) )
     {
-        pDflt->Broadcast( SBX_HINT_DATAWANTED );
+        pDflt->Broadcast( SfxHintId::BasicDataWanted );
         // replacing new p on stack causes object pointed by
         // pDft->pParent to be deleted, when p2->Compute() is
-        // called below pParent is accessed ( but its deleted )
+        // called below pParent is accessed (but it's deleted)
         // so set it to NULL now
         pDflt->SetParent( nullptr );
         p = new SbxVariable( *pDflt );
@@ -1084,7 +1069,7 @@ void SbiRuntime::PushArgv()
 {
     pArgvStk.emplace_back(refArgv, nArgc);
     nArgc = 1;
-    refArgv.Clear();
+    refArgv.clear();
 }
 
 void SbiRuntime::PopArgv()
@@ -1131,7 +1116,7 @@ void SbiRuntime::PushForEach()
     pForStk = p;
 
     SbxVariableRef xObjVar = PopVar();
-    SbxBase* pObj = xObjVar.Is() ? xObjVar->GetObject() : nullptr;
+    SbxBase* pObj = xObjVar.is() ? xObjVar->GetObject() : nullptr;
     if( pObj == nullptr )
     {
         Error( ERRCODE_BASIC_NO_OBJECT );
@@ -1145,9 +1130,9 @@ void SbiRuntime::PushForEach()
         p->refEnd = reinterpret_cast<SbxVariable*>(pArray);
 
         short nDims = pArray->GetDims();
-        p->pArrayLowerBounds = new sal_Int32[nDims];
-        p->pArrayUpperBounds = new sal_Int32[nDims];
-        p->pArrayCurIndices  = new sal_Int32[nDims];
+        p->pArrayLowerBounds.reset( new sal_Int32[nDims] );
+        p->pArrayUpperBounds.reset( new sal_Int32[nDims] );
+        p->pArrayCurIndices.reset( new sal_Int32[nDims] );
         sal_Int32 lBound, uBound;
         for( short i = 0 ; i < nDims ; i++ )
         {
@@ -1167,7 +1152,7 @@ void SbiRuntime::PushForEach()
         // XEnumerationAccess?
         Any aAny = pUnoObj->getUnoAny();
         Reference< XEnumerationAccess > xEnumerationAccess;
-        if( (aAny >>= xEnumerationAccess) )
+        if( aAny >>= xEnumerationAccess )
         {
             p->xEnumeration = xEnumerationAccess->createEnumeration();
             p->eForType = ForType::EachXEnumeration;
@@ -1232,11 +1217,11 @@ void SbiRuntime::ClearForStack()
     }
 }
 
-SbiForStack* SbiRuntime::FindForStackItemForCollection( class BasicCollection* pCollection )
+SbiForStack* SbiRuntime::FindForStackItemForCollection( class BasicCollection const * pCollection )
 {
     for (SbiForStack *p = pForStk; p; p = p->pNext)
     {
-        SbxVariable* pVar = p->refEnd.Is() ? p->refEnd.get() : nullptr;
+        SbxVariable* pVar = p->refEnd.is() ? p->refEnd.get() : nullptr;
         if( p->eForType == ForType::EachCollection
          && pVar != nullptr
          && dynamic_cast<BasicCollection*>( pVar) == pCollection  )
@@ -1262,7 +1247,7 @@ void SbiRuntime::DllCall
 
     SbxVariable* pRes = new SbxVariable( eResType );
     SbiDllMgr* pDllMgr = pInst->GetDllMgr();
-    SbError nErr = pDllMgr->Call( aFuncName, aDLLName, pArgs, *pRes, bCDecl );
+    ErrCode nErr = pDllMgr->Call( aFuncName, aDLLName, pArgs, *pRes, bCDecl );
     if( nErr )
     {
         Error( nErr );
@@ -1313,12 +1298,12 @@ void SbiRuntime::StepCompare( SbxOperator eOp )
     SbxDataType p2Type = p2->GetType();
     if ( p1Type == SbxEMPTY )
     {
-        p1->Broadcast( SBX_HINT_DATAWANTED );
+        p1->Broadcast( SfxHintId::BasicDataWanted );
         p1Type = p1->GetType();
     }
     if ( p2Type == SbxEMPTY )
     {
-        p2->Broadcast( SBX_HINT_DATAWANTED );
+        p2->Broadcast( SfxHintId::BasicDataWanted );
         p2Type = p2->GetType();
     }
     if ( p1Type == p2Type )
@@ -1330,17 +1315,17 @@ void SbiRuntime::StepCompare( SbxOperator eOp )
         // Compare )
         if ( p1Type ==  SbxOBJECT )
         {
-            SbxVariable* pDflt = getDefaultProp( p1 );
+            SbxVariable* pDflt = getDefaultProp( p1.get() );
             if ( pDflt )
             {
                 p1 = pDflt;
-                p1->Broadcast( SBX_HINT_DATAWANTED );
+                p1->Broadcast( SfxHintId::BasicDataWanted );
             }
-            pDflt = getDefaultProp( p2 );
+            pDflt = getDefaultProp( p2.get() );
             if ( pDflt )
             {
                 p2 = pDflt;
-                p2->Broadcast( SBX_HINT_DATAWANTED );
+                p2->Broadcast( SfxHintId::BasicDataWanted );
             }
         }
 
@@ -1352,14 +1337,12 @@ void SbiRuntime::StepCompare( SbxOperator eOp )
     // I dumbly follow the pattern :-/
     if ( bVBAEnabled && ( p1->IsNull() || p2->IsNull() ) )
     {
-        static SbxVariable* pNULL = nullptr;
-
-        if( !pNULL )
-        {
-            pNULL = new SbxVariable;
-            pNULL->PutNull();
-            pNULL->AddFirstRef();
-        }
+        static SbxVariable* pNULL = [&]() {
+            SbxVariable* p = new SbxVariable;
+            p->PutNull();
+            p->AddFirstRef();
+            return p;
+        }();
         PushVar( pNULL );
     }
     else if( p2->Compare( eOp, *p1 ) )
@@ -1412,11 +1395,11 @@ namespace
 {
     bool NeedEsc(sal_Unicode cCode)
     {
-        if((cCode & 0xFF80))
+        if(!rtl::isAscii(cCode))
         {
             return false;
         }
-        switch((sal_uInt8)(cCode & 0x07F))
+        switch(cCode)
         {
         case '.':
         case '^':
@@ -1518,7 +1501,7 @@ void SbiRuntime::StepLIKE()
     OUString pattern = VBALikeToRegexp(refVar1->GetOUString());
     OUString value = refVar2->GetOUString();
 
-    css::util::SearchOptions2 aSearchOpt;
+    i18nutil::SearchOptions2 aSearchOpt;
 
     aSearchOpt.AlgorithmType2 = css::util::SearchAlgorithms2::REGEXP;
 
@@ -1533,7 +1516,7 @@ void SbiRuntime::StepLIKE()
     }
     if( bTextMode )
     {
-        aSearchOpt.transliterateFlags |= css::i18n::TransliterationModules_IGNORE_CASE;
+        aSearchOpt.transliterateFlags |= TransliterationFlags::IGNORE_CASE;
     }
     SbxVariable* pRes = new SbxVariable;
     utl::TextSearch aSearch( aSearchOpt);
@@ -1555,12 +1538,12 @@ void SbiRuntime::StepIS()
     SbxDataType eType2 = refVar2->GetType();
     if ( eType1 == SbxEMPTY )
     {
-        refVar1->Broadcast( SBX_HINT_DATAWANTED );
+        refVar1->Broadcast( SfxHintId::BasicDataWanted );
         eType1 = refVar1->GetType();
     }
     if ( eType2 == SbxEMPTY )
     {
-        refVar2->Broadcast( SBX_HINT_DATAWANTED );
+        refVar2->Broadcast( SfxHintId::BasicDataWanted );
         eType2 = refVar2->GetType();
     }
 
@@ -1580,11 +1563,11 @@ void SbiRuntime::StepIS()
 void SbiRuntime::StepGET()
 {
     SbxVariable* p = GetTOS();
-    p->Broadcast( SBX_HINT_DATAWANTED );
+    p->Broadcast( SfxHintId::BasicDataWanted );
 }
 
 // #67607 copy Uno-Structs
-inline bool checkUnoStructCopy( bool bVBA, SbxVariableRef& refVal, SbxVariableRef& refVar )
+static bool checkUnoStructCopy( bool bVBA, SbxVariableRef const & refVal, SbxVariableRef const & refVar )
 {
     SbxDataType eVarType = refVar->GetType();
     SbxDataType eValType = refVal->GetType();
@@ -1602,15 +1585,15 @@ inline bool checkUnoStructCopy( bool bVBA, SbxVariableRef& refVal, SbxVariableRe
             return false;
     }
     // #115826: Exclude ProcedureProperties to avoid call to Property Get procedure
-    else if( nullptr != dynamic_cast<const SbProcedureProperty*>( &refVar) )
+    else if( dynamic_cast<const SbProcedureProperty*>( refVar.get() ) != nullptr )
         return false;
 
     SbxObjectRef xValObj = static_cast<SbxObject*>(refVal->GetObject());
-    if( !xValObj.Is() || nullptr != dynamic_cast<const SbUnoAnyObject*>( &xValObj) )
+    if( !xValObj.is() || dynamic_cast<const SbUnoAnyObject*>( xValObj.get() ) != nullptr )
         return false;
 
-    SbUnoObject* pUnoVal =  dynamic_cast<SbUnoObject*>( static_cast<SbxObject*>(xValObj.get()) );
-    SbUnoStructRefObject* pUnoStructVal = dynamic_cast<SbUnoStructRefObject*>( static_cast<SbxObject*>(xValObj) );
+    SbUnoObject* pUnoVal =  dynamic_cast<SbUnoObject*>( xValObj.get() );
+    SbUnoStructRefObject* pUnoStructVal = dynamic_cast<SbUnoStructRefObject*>( xValObj.get() );
     Any aAny;
     // make doubly sure value is either an Uno object or
     // an uno struct
@@ -1621,18 +1604,18 @@ inline bool checkUnoStructCopy( bool bVBA, SbxVariableRef& refVal, SbxVariableRe
     if (  aAny.getValueType().getTypeClass() == TypeClass_STRUCT )
     {
         refVar->SetType( SbxOBJECT );
-        SbxError eOldErr = SbxBase::GetError();
+        ErrCode eOldErr = SbxBase::GetError();
         // There are some circumstances when calling GetObject
         // will trigger an error, we need to squash those here.
         // Alternatively it is possible that the same scenario
         // could overwrite and existing error. Lets prevent that
         SbxObjectRef xVarObj = static_cast<SbxObject*>(refVar->GetObject());
-        if ( eOldErr != ERRCODE_SBX_OK )
+        if ( eOldErr != ERRCODE_NONE )
             SbxBase::SetError( eOldErr );
         else
             SbxBase::ResetError();
 
-        SbUnoStructRefObject* pUnoStructObj = dynamic_cast<SbUnoStructRefObject*>( static_cast<SbxObject*>(xVarObj.get()) );
+        SbUnoStructRefObject* pUnoStructObj = dynamic_cast<SbUnoStructRefObject*>( xVarObj.get() );
 
         OUString sClassName = pUnoVal ? pUnoVal->GetClassName() : pUnoStructVal->GetClassName();
         OUString sName = pUnoVal ? pUnoVal->GetName() : pUnoStructVal->GetName();
@@ -1684,12 +1667,12 @@ void SbiRuntime::StepPUT()
         // aren't dealt with if the object is a member of some parent object
         bool bObjAssign = false;
         if ( refVar->GetType() == SbxEMPTY )
-            refVar->Broadcast( SBX_HINT_DATAWANTED );
+            refVar->Broadcast( SfxHintId::BasicDataWanted );
         if ( refVar->GetType() == SbxOBJECT )
         {
             if  ( dynamic_cast<const SbxMethod *>(refVar.get()) != nullptr || ! refVar->GetParent() )
             {
-                SbxVariable* pDflt = getDefaultProp( refVar );
+                SbxVariable* pDflt = getDefaultProp( refVar.get() );
 
                 if ( pDflt )
                     refVar = pDflt;
@@ -1699,7 +1682,7 @@ void SbiRuntime::StepPUT()
         }
         if (  refVal->GetType() == SbxOBJECT  && !bObjAssign && ( dynamic_cast<const SbxMethod *>(refVal.get()) != nullptr || ! refVal->GetParent() ) )
         {
-            SbxVariable* pDflt = getDefaultProp( refVal );
+            SbxVariable* pDflt = getDefaultProp( refVal.get() );
             if ( pDflt )
                 refVal = pDflt;
         }
@@ -1794,7 +1777,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
         {
             SbxVariableRef refObjVal = dynamic_cast<SbxObject*>( pObjVarObj );
 
-            if( refObjVal )
+            if( refObjVal.is() )
             {
                 refVal = refObjVal;
             }
@@ -1808,7 +1791,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
     // #52896 refVal can be invalid here, if uno-sequences - or more
     // general arrays - are assigned to variables that are declared
     // as an object!
-    if( !refVal )
+    if( !refVal.is() )
     {
         Error( ERRCODE_BASIC_INVALID_USAGE_OBJECT );
     }
@@ -1834,14 +1817,14 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
             // LHS try determine if a default prop exists
             // again like in StepPUT (see there too ) we are tweaking the
             // heuristics again for when to assign an object reference or
-            // use default memebers if they exists
+            // use default members if they exist
             // #FIXME we really need to get to the bottom of this mess
             bool bObjAssign = false;
             if ( refVar->GetType() == SbxOBJECT )
             {
                 if ( dynamic_cast<const SbxMethod *>(refVar.get()) != nullptr || ! refVar->GetParent() )
                 {
-                    SbxVariable* pDflt = getDefaultProp( refVar );
+                    SbxVariable* pDflt = getDefaultProp( refVar.get() );
                     if ( pDflt )
                     {
                         refVar = pDflt;
@@ -1855,13 +1838,10 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
             {
                 // check if lhs is a null object
                 // if it is then use the object not the default property
-                SbxObject* pObj = nullptr;
-
-
-                pObj = dynamic_cast<SbxObject*>( refVar.get() );
+                SbxObject* pObj = dynamic_cast<SbxObject*>( refVar.get() );
 
                 // calling GetObject on a SbxEMPTY variable raises
-                // object not set errors, make sure its an Object
+                // object not set errors, make sure it's an Object
                 if ( !pObj && refVar->GetType() == SbxOBJECT )
                 {
                     SbxBase* pObjVarObj = refVar->GetObject();
@@ -1871,7 +1851,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
                 if ( pObj && !bObjAssign )
                 {
                     // lhs is either a valid object || or has a defaultProp
-                    pDflt = getDefaultProp( refVal );
+                    pDflt = getDefaultProp( refVal.get() );
                 }
                 if ( pDflt )
                 {
@@ -1894,7 +1874,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
             Reference< XInterface > xComListener;
 
             SbxBase* pObj = refVal->GetObject();
-            SbUnoObject* pUnoObj = (pObj != nullptr) ? dynamic_cast<SbUnoObject*>( pObj ) : nullptr;
+            SbUnoObject* pUnoObj = dynamic_cast<SbUnoObject*>( pObj );
             if( pUnoObj != nullptr )
             {
                 Any aControlAny = pUnoObj->getUnoAny();
@@ -1911,7 +1891,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
 
         // lhs is a property who's value is currently (Empty e.g. no broadcast yet)
         // in this case if there is a default prop involved the value of the
-        // default property may infact be void so the type will also be SbxEMPTY
+        // default property may in fact be void so the type will also be SbxEMPTY
         // in this case we do not want to call checkUnoStructCopy 'cause that will
         // cause an error also
         if ( !checkUnoStructCopy( bHandleDefaultProp, refVal, refVar ) )
@@ -1920,16 +1900,16 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
         }
         if ( bDimAsNew )
         {
-            if( nullptr == dynamic_cast<const SbxObject*>( &refVar) )
+            if( dynamic_cast<const SbxObject*>( refVar.get() ) == nullptr )
             {
                 SbxBase* pValObjBase = refVal->GetObject();
                 if( pValObjBase == nullptr )
                 {
-                    if( xPrevVarObj.Is() )
+                    if( xPrevVarObj.is() )
                     {
                         // Object is overwritten with NULL, instantiate init object
                         DimAsNewRecoverHash &rDimAsNewRecoverHash = GaDimAsNewRecoverHash::get();
-                        DimAsNewRecoverHash::iterator it = rDimAsNewRecoverHash.find( refVar );
+                        DimAsNewRecoverHash::iterator it = rDimAsNewRecoverHash.find( refVar.get() );
                         if( it != rDimAsNewRecoverHash.end() )
                         {
                             const DimAsNewRecoverItem& rItem = it->second;
@@ -1942,7 +1922,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
                             }
                             else if( rItem.m_aObjClass.equalsIgnoreAsciiCase( pCollectionStr ) )
                             {
-                                BasicCollection* pNewCollection = new BasicCollection( OUString(pCollectionStr) );
+                                BasicCollection* pNewCollection = new BasicCollection( pCollectionStr );
                                 pNewCollection->SetName( rItem.m_aObjName );
                                 pNewCollection->SetParent( rItem.m_pObjParent );
                                 refVar->PutObject( pNewCollection );
@@ -1953,7 +1933,7 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
                 else
                 {
                     // Does old value exist?
-                    bool bFirstInit = !xPrevVarObj.Is();
+                    bool bFirstInit = !xPrevVarObj.is();
                     if( bFirstInit )
                     {
                         // Store information to instantiate object later
@@ -1967,12 +1947,12 @@ void SbiRuntime::StepSET_Impl( SbxVariableRef& refVal, SbxVariableRef& refVar, b
                             if( pClassModuleObj != nullptr )
                             {
                                 SbModule* pClassModule = pClassModuleObj->getClassModule();
-                                rDimAsNewRecoverHash[refVar] =
+                                rDimAsNewRecoverHash[refVar.get()] =
                                     DimAsNewRecoverItem( aObjClass, pValObj->GetName(), pValObj->GetParent(), pClassModule );
                             }
                             else if( aObjClass.equalsIgnoreAsciiCase( "Collection" ) )
                             {
-                                rDimAsNewRecoverHash[refVar] =
+                                rDimAsNewRecoverHash[refVar.get()] =
                                     DimAsNewRecoverItem( aObjClass, pValObj->GetName(), pValObj->GetParent(), nullptr );
                             }
                         }
@@ -1992,7 +1972,7 @@ void SbiRuntime::StepSET()
 {
     SbxVariableRef refVal = PopVar();
     SbxVariableRef refVar = PopVar();
-    StepSET_Impl( refVal, refVar, bVBAEnabled ); // this is really assigment
+    StepSET_Impl( refVal, refVar, bVBAEnabled ); // this is really assignment
 }
 
 void SbiRuntime::StepVBASET()
@@ -2025,18 +2005,19 @@ void SbiRuntime::StepLSET()
 
         sal_Int32 nVarStrLen = aRefVarString.getLength();
         sal_Int32 nValStrLen = aRefValString.getLength();
-        OUStringBuffer aNewStr;
+        OUString aNewStr;
         if( nVarStrLen > nValStrLen )
         {
-            aNewStr.append(aRefValString);
-            comphelper::string::padToLength(aNewStr, nVarStrLen, ' ');
+            OUStringBuffer buf(aRefValString);
+            comphelper::string::padToLength(buf, nVarStrLen, ' ');
+            aNewStr = buf.makeStringAndClear();
         }
         else
         {
             aNewStr = aRefValString.copy( 0, nVarStrLen );
         }
 
-        refVar->PutString(aNewStr.makeStringAndClear());
+        refVar->PutString(aNewStr);
         refVar->SetFlags( n );
     }
 }
@@ -2069,7 +2050,7 @@ void SbiRuntime::StepRSET()
         }
         else
         {
-            aNewStr.append(aRefValString.copy(0, nVarStrLen));
+            aNewStr.append(std::u16string_view(aRefValString).substr(0, nVarStrLen));
         }
         refVar->PutString(aNewStr.makeStringAndClear());
 
@@ -2099,14 +2080,14 @@ void SbiRuntime::StepDIM()
 }
 
 // #56204 swap out DIM-functionality into a help method (step0.cxx)
-void SbiRuntime::DimImpl( SbxVariableRef refVar )
+void SbiRuntime::DimImpl(const SbxVariableRef& refVar)
 {
     // If refDim then this DIM statement is terminating a ReDIM and
     // previous StepERASE_CLEAR for an array, the following actions have
     // been delayed from ( StepERASE_CLEAR ) 'till here
-    if ( refRedim )
+    if ( refRedim.is() )
     {
-        if ( !refRedimpArray ) // only erase the array not ReDim Preserve
+        if ( !refRedimpArray.is() ) // only erase the array not ReDim Preserve
         {
             lcl_eraseImpl( refVar, bVBAEnabled );
         }
@@ -2173,7 +2154,7 @@ void SbiRuntime::StepREDIM()
 
 
 // Helper function for StepREDIMP
-void implCopyDimArray( SbxDimArray* pNewArray, SbxDimArray* pOldArray, short nMaxDimIndex,
+static void implCopyDimArray( SbxDimArray* pNewArray, SbxDimArray* pOldArray, short nMaxDimIndex,
     short nActualDim, sal_Int32* pActualIndices, sal_Int32* pLowerBounds, sal_Int32* pUpperBounds )
 {
     sal_Int32& ri = pActualIndices[nActualDim];
@@ -2206,11 +2187,11 @@ void SbiRuntime::StepREDIMP()
     DimImpl( refVar );
 
     // Now check, if we can copy from the old array
-    if( refRedimpArray.Is() )
+    if( refRedimpArray.is() )
     {
         SbxBase* pElemObj = refVar->GetObject();
         SbxDimArray* pNewArray = dynamic_cast<SbxDimArray*>( pElemObj );
-        SbxDimArray* pOldArray = static_cast<SbxDimArray*>(static_cast<SbxArray*>(refRedimpArray));
+        SbxDimArray* pOldArray = static_cast<SbxDimArray*>(refRedimpArray.get());
         if( pNewArray )
         {
             short nDimsNew = pNewArray->GetDims();
@@ -2283,7 +2264,7 @@ void SbiRuntime::StepREDIMP_ERASE()
     }
 }
 
-static void lcl_clearImpl( SbxVariableRef& refVar, SbxDataType& eType )
+static void lcl_clearImpl( SbxVariableRef const & refVar, SbxDataType const & eType )
 {
     SbxFlagBits nSavFlags = refVar->GetFlags();
     refVar->ResetFlag( SbxFlagBits::Fixed );
@@ -2292,7 +2273,7 @@ static void lcl_clearImpl( SbxVariableRef& refVar, SbxDataType& eType )
     refVar->Clear();
 }
 
-static void lcl_eraseImpl( SbxVariableRef& refVar, bool bVBAEnabled )
+static void lcl_eraseImpl( SbxVariableRef const & refVar, bool bVBAEnabled )
 {
     SbxDataType eType = refVar->GetType();
     if( eType & SbxARRAY )
@@ -2301,21 +2282,19 @@ static void lcl_eraseImpl( SbxVariableRef& refVar, bool bVBAEnabled )
         {
             SbxBase* pElemObj = refVar->GetObject();
             SbxDimArray* pDimArray = dynamic_cast<SbxDimArray*>( pElemObj );
-            bool bClearValues = true;
             if( pDimArray )
             {
                 if ( pDimArray->hasFixedSize() )
                 {
                     // Clear all Value(s)
                     pDimArray->SbxArray::Clear();
-                    bClearValues = false;
                 }
                 else
                 {
-                    pDimArray->Clear(); // clear Dims
+                    pDimArray->Clear(); // clear dims and values
                 }
             }
-            if ( bClearValues )
+            else
             {
                 SbxArray* pArray = dynamic_cast<SbxArray*>( pElemObj );
                 if ( pArray )
@@ -2360,14 +2339,14 @@ void SbiRuntime::StepERASE_CLEAR()
 
 void SbiRuntime::StepARRAYACCESS()
 {
-    if( !refArgv )
+    if( !refArgv.is() )
     {
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     }
     SbxVariableRef refVar = PopVar();
-    refVar->SetParameters( refArgv );
+    refVar->SetParameters( refArgv.get() );
     PopArgv();
-    PushVar( CheckArray( refVar ) );
+    PushVar( CheckArray( refVar.get() ) );
 }
 
 void SbiRuntime::StepBYVAL()
@@ -2397,7 +2376,7 @@ void SbiRuntime::StepARGC()
 
 void SbiRuntime::StepARGV()
 {
-    if( !refArgv )
+    if( !refArgv.is() )
     {
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     }
@@ -2406,15 +2385,15 @@ void SbiRuntime::StepARGV()
         SbxVariableRef pVal = PopVar();
 
         // Before fix of #94916:
-        if( nullptr != dynamic_cast<const SbxMethod*>( &pVal)
-            || nullptr != dynamic_cast<const SbUnoProperty*>( &pVal)
-            || nullptr != dynamic_cast<const SbProcedureProperty*>( &pVal) )
+        if( dynamic_cast<const SbxMethod*>( pVal.get() ) != nullptr
+            || dynamic_cast<const SbUnoProperty*>( pVal.get() ) != nullptr
+            || dynamic_cast<const SbProcedureProperty*>( pVal.get() ) != nullptr )
         {
             // evaluate methods and properties!
             SbxVariable* pRes = new SbxVariable( *pVal );
             pVal = pRes;
         }
-        refArgv->Put( pVal, nArgc++ );
+        refArgv->Put( pVal.get(), nArgc++ );
     }
 }
 
@@ -2425,9 +2404,9 @@ void SbiRuntime::StepINPUT()
     OUStringBuffer sin;
     OUString s;
     char ch = 0;
-    SbError err;
+    ErrCode err;
     // Skip whitespace
-    while( ( err = pIosys->GetError() ) == 0 )
+    while( ( err = pIosys->GetError() ) == ERRCODE_NONE )
     {
         ch = pIosys->Read();
         if( ch != ' ' && ch != '\t' && ch != '\n' )
@@ -2443,7 +2422,7 @@ void SbiRuntime::StepINPUT()
         {
             ch = pIosys->Read();
         }
-        while( ( err = pIosys->GetError() ) == 0 )
+        while( ( err = pIosys->GetError() ) == ERRCODE_NONE )
         {
             if( ch == sep )
             {
@@ -2463,7 +2442,7 @@ void SbiRuntime::StepINPUT()
         // skip whitespace
         if( ch == ' ' || ch == '\t' )
         {
-            while( ( err = pIosys->GetError() ) == 0 )
+            while( ( err = pIosys->GetError() ) == ERRCODE_NONE )
             {
                 if( ch != ' ' && ch != '\t' && ch != '\n' )
                 {
@@ -2580,19 +2559,19 @@ void SbiRuntime::StepNEXT()
 
 void SbiRuntime::StepCASE()
 {
-    if( !refCaseStk.Is() )
+    if( !refCaseStk.is() )
     {
         refCaseStk = new SbxArray;
     }
     SbxVariableRef xVar = PopVar();
-    refCaseStk->Put( xVar, refCaseStk->Count() );
+    refCaseStk->Put( xVar.get(), refCaseStk->Count() );
 }
 
 // end CASE: free variable
 
 void SbiRuntime::StepENDCASE()
 {
-    if( !refCaseStk || !refCaseStk->Count() )
+    if( !refCaseStk.is() || !refCaseStk->Count() )
     {
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     }
@@ -2607,18 +2586,18 @@ void SbiRuntime::StepSTDERROR()
 {
     pError = nullptr; bError = true;
     pInst->aErrorMsg.clear();
-    pInst->nErr = 0L;
+    pInst->nErr = ERRCODE_NONE;
     pInst->nErl = 0;
-    nError = 0L;
+    nError = ERRCODE_NONE;
     SbxErrObject::getUnoErrObject()->Clear();
 }
 
 void SbiRuntime::StepNOERROR()
 {
     pInst->aErrorMsg.clear();
-    pInst->nErr = 0L;
+    pInst->nErr = ERRCODE_NONE;
     pInst->nErl = 0;
-    nError = 0L;
+    nError = ERRCODE_NONE;
     SbxErrObject::getUnoErrObject()->Clear();
     bError = false;
 }
@@ -2747,7 +2726,7 @@ void SbiRuntime::StepEMPTY()
     // to simplify matters.
     SbxVariableRef xVar = new SbxVariable( SbxVARIANT );
     xVar->PutErr( 448 );
-    PushVar( xVar );
+    PushVar( xVar.get() );
 }
 
 // TOS = error code
@@ -2756,7 +2735,7 @@ void SbiRuntime::StepERROR()
 {
     SbxVariableRef refCode = PopVar();
     sal_uInt16 n = refCode->GetUShort();
-    SbError error = StarBASIC::GetSfxFromVBError( n );
+    ErrCode error = StarBASIC::GetSfxFromVBError( n );
     if ( bVBAEnabled )
     {
         pInst->Error( error );
@@ -2776,7 +2755,7 @@ void SbiRuntime::StepLOADNC( sal_uInt32 nOp1 )
     // #57844 use localized function
     OUString aStr = pImg->GetString( static_cast<short>( nOp1 ) );
     // also allow , !!!
-    sal_Int32 iComma = aStr.indexOf((sal_Unicode)',');
+    sal_Int32 iComma = aStr.indexOf(',');
     if( iComma >= 0 )
     {
         aStr = aStr.replaceAt(iComma, 1, ".");
@@ -2796,7 +2775,7 @@ void SbiRuntime::StepLOADSC( sal_uInt32 nOp1 )
     PushVar( p );
 }
 
-// Immediate Load (+Wert)
+// Immediate Load (+value)
 
 void SbiRuntime::StepLOADI( sal_uInt32 nOp1 )
 {
@@ -2809,22 +2788,25 @@ void SbiRuntime::StepLOADI( sal_uInt32 nOp1 )
 
 void SbiRuntime::StepARGN( sal_uInt32 nOp1 )
 {
-    if( !refArgv )
+    if( !refArgv.is() )
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     else
     {
         OUString aAlias( pImg->GetString( static_cast<short>( nOp1 ) ) );
         SbxVariableRef pVal = PopVar();
-        if( bVBAEnabled && ( nullptr != dynamic_cast<const SbxMethod*>( &pVal) || nullptr != dynamic_cast<const SbUnoProperty*>( &pVal) || nullptr != dynamic_cast<const SbProcedureProperty*>( &pVal) ) )
+        if( bVBAEnabled &&
+                ( dynamic_cast<const SbxMethod*>( pVal.get()) != nullptr
+                  || dynamic_cast<const SbUnoProperty*>( pVal.get()) != nullptr
+                  || dynamic_cast<const SbProcedureProperty*>( pVal.get()) != nullptr ) )
         {
             // named variables ( that are Any especially properties ) can be empty at this point and need a broadcast
             if ( pVal->GetType() == SbxEMPTY )
-                pVal->Broadcast( SBX_HINT_DATAWANTED );
+                pVal->Broadcast( SfxHintId::BasicDataWanted );
             // evaluate methods and properties!
             SbxVariable* pRes = new SbxVariable( *pVal );
             pVal = pRes;
         }
-        refArgv->Put( pVal, nArgc );
+        refArgv->Put( pVal.get(), nArgc );
         refArgv->PutAlias( aAlias, nArgc++ );
     }
 }
@@ -2833,12 +2815,12 @@ void SbiRuntime::StepARGN( sal_uInt32 nOp1 )
 
 void SbiRuntime::StepARGTYP( sal_uInt32 nOp1 )
 {
-    if( !refArgv )
+    if( !refArgv.is() )
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     else
     {
-        bool bByVal = (nOp1 & 0x8000) != 0;         // Ist BYVAL requested?
-        SbxDataType t = (SbxDataType) (nOp1 & 0x7FFF);
+        bool bByVal = (nOp1 & 0x8000) != 0;         // Is BYVAL requested?
+        SbxDataType t = static_cast<SbxDataType>(nOp1 & 0x7FFF);
         SbxVariable* pVar = refArgv->Get( refArgv->Count() - 1 );   // last Arg
 
         // check BYVAL
@@ -2901,7 +2883,7 @@ void SbiRuntime::StepPAD( sal_uInt32 nOp1 )
 void SbiRuntime::StepJUMP( sal_uInt32 nOp1 )
 {
 #ifdef DBG_UTIL
-    // #QUESTION shouln't this be
+    // #QUESTION shouldn't this be
     // if( (sal_uInt8*)( nOp1+pImagGetCode() ) >= pImg->GetCodeSize() )
     if( nOp1 >= pImg->GetCodeSize() )
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
@@ -2948,7 +2930,7 @@ void SbiRuntime::StepONJUMP( sal_uInt32 nOp1 )
     }
     if( n < 1 || static_cast<sal_uInt32>(n) > nOp1 )
         n = static_cast<sal_Int16>( nOp1 + 1 );
-    nOp1 = (sal_uInt32) ( reinterpret_cast<const char*>(pCode) - pImg->GetCode() ) + 5 * --n;
+    nOp1 = static_cast<sal_uInt32>( reinterpret_cast<const char*>(pCode) - pImg->GetCode() ) + 5 * --n;
     StepJUMP( nOp1 );
 }
 
@@ -3000,7 +2982,7 @@ void SbiRuntime::StepTESTFOR( sal_uInt32 nOp1 )
             }
             else
             {
-                SbxDimArray* pArray = reinterpret_cast<SbxDimArray*>(static_cast<SbxVariable*>(p->refEnd));
+                SbxDimArray* pArray = reinterpret_cast<SbxDimArray*>(p->refEnd.get());
                 short nDims = pArray->GetDims();
 
                 // Empty array?
@@ -3009,7 +2991,7 @@ void SbiRuntime::StepTESTFOR( sal_uInt32 nOp1 )
                     bEndLoop = true;
                     break;
                 }
-                SbxVariable* pVal = pArray->Get32( p->pArrayCurIndices );
+                SbxVariable* pVal = pArray->Get32( p->pArrayCurIndices.get() );
                 *(p->refVar) = *pVal;
 
                 bool bFoundNext = false;
@@ -3026,15 +3008,14 @@ void SbiRuntime::StepTESTFOR( sal_uInt32 nOp1 )
                 }
                 if( !bFoundNext )
                 {
-                    delete[] p->pArrayCurIndices;
-                    p->pArrayCurIndices = nullptr;
+                    p->pArrayCurIndices.reset();
                 }
             }
             break;
         }
         case ForType::EachCollection:
         {
-            BasicCollection* pCollection = static_cast<BasicCollection*>(static_cast<SbxVariable*>(pForStk->refEnd));
+            BasicCollection* pCollection = static_cast<BasicCollection*>(pForStk->refEnd.get());
             SbxArrayRef xItemArray = pCollection->xItemArray;
             sal_Int32 nCount = xItemArray->Count32();
             if( pForStk->nCurCollectionIndex < nCount )
@@ -3077,7 +3058,7 @@ void SbiRuntime::StepTESTFOR( sal_uInt32 nOp1 )
 
 void SbiRuntime::StepCASETO( sal_uInt32 nOp1 )
 {
-    if( !refCaseStk || !refCaseStk->Count() )
+    if( !refCaseStk.is() || !refCaseStk->Count() )
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     else
     {
@@ -3097,9 +3078,9 @@ void SbiRuntime::StepERRHDL( sal_uInt32 nOp1 )
     pError = pCode;
     pCode = p;
     pInst->aErrorMsg.clear();
-    pInst->nErr = 0;
+    pInst->nErr = ERRCODE_NONE;
     pInst->nErl = 0;
-    nError = 0;
+    nError = ERRCODE_NONE;
     SbxErrObject::getUnoErrObject()->Clear();
 }
 
@@ -3127,16 +3108,16 @@ void SbiRuntime::StepRESUME( sal_uInt32 nOp1 )
     if( nOp1 > 1 )
         StepJUMP( nOp1 );
     pInst->aErrorMsg.clear();
-    pInst->nErr = 0;
+    pInst->nErr = ERRCODE_NONE;
     pInst->nErl = 0;
-    nError = 0;
+    nError = ERRCODE_NONE;
     bInError = false;
 }
 
 // close channel (+channel, 0=all)
 void SbiRuntime::StepCLOSE( sal_uInt32 nOp1 )
 {
-    SbError err;
+    ErrCode err;
     if( !nOp1 )
         pIosys->Shutdown();
     else
@@ -3162,7 +3143,7 @@ void SbiRuntime::StepPRCHAR( sal_uInt32 nOp1 )
 
 // check whether TOS is a certain object class (+StringID)
 
-bool SbiRuntime::implIsClass( SbxObject* pObj, const OUString& aClass )
+bool SbiRuntime::implIsClass( SbxObject const * pObj, const OUString& aClass )
 {
     bool bRet = true;
 
@@ -3173,12 +3154,11 @@ bool SbiRuntime::implIsClass( SbxObject* pObj, const OUString& aClass )
             bRet = aClass.equalsIgnoreAsciiCase( "object" );
         if( !bRet )
         {
-            OUString aObjClass = pObj->GetClassName();
+            const OUString& aObjClass = pObj->GetClassName();
             SbModule* pClassMod = GetSbData()->pClassFac->FindClass( aObjClass );
-            SbClassData* pClassData;
-            if( pClassMod && (pClassData=pClassMod->pClassData) != nullptr )
+            if( pClassMod && pClassMod->pClassData )
             {
-                SbxVariable* pClassVar = pClassData->mxIfaces->Find( aClass, SbxCLASS_DONTCARE );
+                SbxVariable* pClassVar = pClassMod->pClassData->mxIfaces->Find( aClass, SbxClassType::DontCare );
                 bRet = (pClassVar != nullptr);
             }
         }
@@ -3194,12 +3174,14 @@ bool SbiRuntime::checkClass_Impl( const SbxVariableRef& refVal,
     SbxDataType t = refVal->GetType();
     SbxVariable* pVal = refVal.get();
     // we don't know the type of uno properties that are (maybevoid)
-    if ( t == SbxEMPTY && nullptr != dynamic_cast<const SbUnoProperty*>( &refVal) )
+    if ( t == SbxEMPTY )
     {
-        SbUnoProperty* pProp = static_cast<SbUnoProperty*>(pVal);
-        t = pProp->getRealType();
+        if ( auto pProp = dynamic_cast<SbUnoProperty*>( refVal.get() ) )
+        {
+            t = pProp->getRealType();
+        }
     }
-    if( t == SbxOBJECT )
+    if( t == SbxOBJECT || bVBAEnabled )
     {
         SbxObject* pObj = dynamic_cast<SbxObject*>(pVal);
         if (!pObj)
@@ -3220,11 +3202,8 @@ bool SbiRuntime::checkClass_Impl( const SbxVariableRef& refVal,
                     bOk = checkUnoObjectType(*pUnoObj, aClass);
                 else
                     bOk = false;
-                if ( !bOk )
-                {
-                    if( bRaiseErrors )
-                        Error( ERRCODE_BASIC_INVALID_USAGE_OBJECT );
-                }
+                if ( !bOk && bRaiseErrors )
+                    Error( ERRCODE_BASIC_INVALID_USAGE_OBJECT );
             }
             else
             {
@@ -3238,12 +3217,9 @@ bool SbiRuntime::checkClass_Impl( const SbxVariableRef& refVal,
     }
     else
     {
-        if ( !bVBAEnabled )
-        {
-            if( bRaiseErrors )
-                Error( ERRCODE_BASIC_NEEDS_OBJECT );
-            bOk = false;
-        }
+        if( bRaiseErrors )
+            Error( ERRCODE_BASIC_NEEDS_OBJECT );
+        bOk = false;
     }
     return bOk;
 }
@@ -3254,7 +3230,7 @@ void SbiRuntime::StepSETCLASS_impl( sal_uInt32 nOp1, bool bHandleDflt )
     SbxVariableRef refVar = PopVar();
     OUString aClass( pImg->GetString( static_cast<short>( nOp1 ) ) );
 
-    bool bOk = checkClass_Impl( refVal, aClass, true );
+    bool bOk = checkClass_Impl( refVal, aClass, true, true );
     if( bOk )
     {
         StepSET_Impl( refVal, refVar, bHandleDflt ); // don't do handle default prop for a "proper" set
@@ -3263,7 +3239,7 @@ void SbiRuntime::StepSETCLASS_impl( sal_uInt32 nOp1, bool bHandleDflt )
 
 void SbiRuntime::StepVBASETCLASS( sal_uInt32 nOp1 )
 {
-    StepSETCLASS_impl( nOp1 );
+    StepSETCLASS_impl( nOp1, false );
 }
 
 void SbiRuntime::StepSETCLASS( sal_uInt32 nOp1 )
@@ -3305,7 +3281,7 @@ void SbiRuntime::StepBASED( sal_uInt32 nOp1 )
     p1->PutInteger( uBase );
     if( !bCompatible )
         x2->Compute( SbxPLUS, *p1 );
-    PushVar( x2 );  // first the Expr
+    PushVar( x2.get() );  // first the Expr
     PushVar( p1 );  // then the Base
 }
 
@@ -3313,7 +3289,7 @@ void SbiRuntime::StepBASED( sal_uInt32 nOp1 )
 // 0x8000 - Argv is reserved
 
 SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt32 nOp2,
-                                      SbError nNotFound, bool bLocal, bool bStatic )
+                                      ErrCode nNotFound, bool bLocal, bool bStatic )
 {
     bool bIsVBAInterOp = SbiRuntime::isVBAEnabled();
     if( bIsVBAInterOp )
@@ -3334,7 +3310,7 @@ SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt
     else
     {
         bool bFatalError = false;
-        SbxDataType t = (SbxDataType) nOp2;
+        SbxDataType t = static_cast<SbxDataType>(nOp2);
         OUString aName( pImg->GetString( static_cast<short>( nOp1 & 0x7FFF ) ) );
         // Hacky capture of Evaluate [] syntax
         // this should be tackled I feel at the pcode level
@@ -3353,24 +3329,21 @@ SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt
         }
         if( bLocal )
         {
-            if ( bStatic )
+            if ( bStatic && pMeth )
             {
-                if ( pMeth )
-                {
-                    pElem = pMeth->GetStatics()->Find( aName, SbxCLASS_DONTCARE );
-                }
+                pElem = pMeth->GetStatics()->Find( aName, SbxClassType::DontCare );
             }
 
             if ( !pElem )
             {
-                pElem = refLocals->Find( aName, SbxCLASS_DONTCARE );
+                pElem = refLocals->Find( aName, SbxClassType::DontCare );
             }
         }
         if( !pElem )
         {
             bool bSave = rBasic.bNoRtl;
             rBasic.bNoRtl = true;
-            pElem = pObj->Find( aName, SbxCLASS_DONTCARE );
+            pElem = pObj->Find( aName, SbxClassType::DontCare );
 
             // #110004, #112015: Make private really private
             if( bLocal && pElem )   // Local as flag for global search
@@ -3397,7 +3370,7 @@ SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt
                 if ( bVBAEnabled )
                 {
                     // Try Find in VBA symbols space
-                    pElem = rBasic.VBAFind( aName, SbxCLASS_DONTCARE );
+                    pElem = rBasic.VBAFind( aName, SbxClassType::DontCare );
                     if ( pElem )
                     {
                         bSetName = false; // don't overwrite uno name
@@ -3466,11 +3439,11 @@ SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt
                 if( bFatalError )
                 {
                     // #39108 use dummy variable instead of fatal error
-                    if( !xDummyVar.Is() )
+                    if( !xDummyVar.is() )
                     {
                         xDummyVar = new SbxVariable( SbxVARIANT );
                     }
-                    pElem = xDummyVar;
+                    pElem = xDummyVar.get();
 
                     ClearArgvStack();
 
@@ -3480,7 +3453,7 @@ SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt
                 {
                     if ( bStatic )
                     {
-                        pElem = StepSTATIC_Impl( aName, t );
+                        pElem = StepSTATIC_Impl( aName, t, 0 );
                     }
                     if ( !pElem )
                     {
@@ -3545,7 +3518,7 @@ SbxVariable* SbiRuntime::FindElement( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt
         // definitely we want this for VBA where properties are often
         // collections ( which need index access ), but lets only do
         // this if we actually have params following
-        else if( bVBAEnabled && nullptr != dynamic_cast<const SbUnoProperty*>( pElem) && pElem->GetParameters() )
+        else if( bVBAEnabled && dynamic_cast<const SbUnoProperty*>( pElem) != nullptr && pElem->GetParameters() )
         {
             SbxVariableRef refTemp = pElem;
 
@@ -3569,24 +3542,22 @@ SbxBase* SbiRuntime::FindElementExtern( const OUString& rName )
     {
         return nullptr;
     }
-    if( refLocals )
+    if( refLocals.is() )
     {
-        pElem = refLocals->Find( rName, SbxCLASS_DONTCARE );
+        pElem = refLocals->Find( rName, SbxClassType::DontCare );
     }
     if ( !pElem && pMeth )
     {
         // for statics, set the method's name in front
-        OUString aMethName = pMeth->GetName();
-        aMethName += ":";
-        aMethName += rName;
-        pElem = pMod->Find(aMethName, SbxCLASS_DONTCARE);
+        OUString aMethName = pMeth->GetName() + ":" + rName;
+        pElem = pMod->Find(aMethName, SbxClassType::DontCare);
     }
 
     // search in parameter list
     if( !pElem && pMeth )
     {
         SbxInfo* pInfo = pMeth->GetInfo();
-        if( pInfo && refParams )
+        if( pInfo && refParams.is() )
         {
             sal_uInt16 nParamCount = refParams->Count();
             sal_uInt16 j = 1;
@@ -3617,7 +3588,7 @@ SbxBase* SbiRuntime::FindElementExtern( const OUString& rName )
     {
         bool bSave = rBasic.bNoRtl;
         rBasic.bNoRtl = true;
-        pElem = pMod->Find( rName, SbxCLASS_DONTCARE );
+        pElem = pMod->Find( rName, SbxClassType::DontCare );
         rBasic.bNoRtl = bSave;
     }
     return pElem;
@@ -3628,7 +3599,7 @@ void SbiRuntime::SetupArgs( SbxVariable* p, sal_uInt32 nOp1 )
 {
     if( nOp1 & 0x8000 )
     {
-        if( !refArgv )
+        if( !refArgv.is() )
         {
             StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
         }
@@ -3681,18 +3652,17 @@ void SbiRuntime::SetupArgs( SbxVariable* p, sal_uInt32 nOp1 )
                         }
                     }
                 }
-                else if( bVBAEnabled && p->GetType() == SbxOBJECT && (nullptr == dynamic_cast<const SbxMethod*>( p) || !p->IsBroadcaster()) )
+                else if( bVBAEnabled && p->GetType() == SbxOBJECT && (dynamic_cast<const SbxMethod*>( p) == nullptr || !p->IsBroadcaster()) )
                 {
                     // Check for default method with named parameters
                     SbxBaseRef xObj = p->GetObject();
-                    if (SbUnoObject* pUnoObj = dynamic_cast<SbUnoObject*>(&xObj))
+                    if (SbUnoObject* pUnoObj = dynamic_cast<SbUnoObject*>( xObj.get() ))
                     {
                         Any aAny = pUnoObj->getUnoAny();
 
                         if( aAny.getValueType().getTypeClass() == TypeClass_INTERFACE )
                         {
-                            Reference< XInterface > x = *static_cast<Reference< XInterface > const *>(aAny.getValue());
-                            Reference< XDefaultMethod > xDfltMethod( x, UNO_QUERY );
+                            Reference< XDefaultMethod > xDfltMethod( aAny, UNO_QUERY );
 
                             OUString sDefaultMethod;
                             if ( xDfltMethod.is() )
@@ -3701,7 +3671,7 @@ void SbiRuntime::SetupArgs( SbxVariable* p, sal_uInt32 nOp1 )
                             }
                             if ( !sDefaultMethod.isEmpty() )
                             {
-                                SbxVariable* meth = pUnoObj->Find( sDefaultMethod, SbxCLASS_METHOD );
+                                SbxVariable* meth = pUnoObj->Find( sDefaultMethod, SbxClassType::Method );
                                 if( meth != nullptr )
                                 {
                                     pInfo = meth->GetInfo();
@@ -3753,7 +3723,7 @@ void SbiRuntime::SetupArgs( SbxVariable* p, sal_uInt32 nOp1 )
         }
         // own var as parameter 0
         refArgv->Put( p, 0 );
-        p->SetParameters( refArgv );
+        p->SetParameters( refArgv.get() );
         PopArgv();
     }
     else
@@ -3804,29 +3774,28 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
     }
     // consider index-access for UnoObjects
     else if( pElem->GetType() == SbxOBJECT &&
-            nullptr == dynamic_cast<const SbxMethod*>( pElem) &&
-            ( !bVBAEnabled || nullptr == dynamic_cast<const SbxProperty*>( pElem) ) )
+            dynamic_cast<const SbxMethod*>( pElem) == nullptr &&
+            ( !bVBAEnabled || dynamic_cast<const SbxProperty*>( pElem) == nullptr ) )
     {
         pPar = pElem->GetParameters();
         if ( pPar )
         {
             // is it an uno-object?
             SbxBaseRef pObj = pElem->GetObject();
-            if( pObj )
+            if( pObj.is() )
             {
-                if (SbUnoObject* pUnoObj = dynamic_cast<SbUnoObject*>(static_cast<SbxBase*>(pObj)))
+                if (SbUnoObject* pUnoObj = dynamic_cast<SbUnoObject*>( pObj.get()))
                 {
                     Any aAny = pUnoObj->getUnoAny();
 
                     if( aAny.getValueType().getTypeClass() == TypeClass_INTERFACE )
                     {
-                        Reference< XInterface > x = *static_cast<Reference< XInterface > const *>(aAny.getValue());
-                        Reference< XIndexAccess > xIndexAccess( x, UNO_QUERY );
+                        Reference< XIndexAccess > xIndexAccess( aAny, UNO_QUERY );
                         if ( !bVBAEnabled )
                         {
                             if( xIndexAccess.is() )
                             {
-                                sal_uInt32 nParamCount = (sal_uInt32)pPar->Count() - 1;
+                                sal_uInt32 nParamCount = static_cast<sal_uInt32>(pPar->Count()) - 1;
                                 if( nParamCount != 1 )
                                 {
                                     StarBASIC::Error( ERRCODE_BASIC_BAD_ARGUMENT );
@@ -3839,11 +3808,7 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
                                 try
                                 {
                                     Any aAny2 = xIndexAccess->getByIndex( nIndex );
-                                    TypeClass eType = aAny2.getValueType().getTypeClass();
-                                    if( eType == TypeClass_INTERFACE )
-                                    {
-                                        xRet = *static_cast<Reference< XInterface > const *>(aAny2.getValue());
-                                    }
+                                    aAny2 >>= xRet;
                                 }
                                 catch (const IndexOutOfBoundsException&)
                                 {
@@ -3859,9 +3824,8 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
                                     aAny <<= xRet;
 
                                     // #67173 don't specify a name so that the real class name is entered
-                                    OUString aName;
-                                    SbxObjectRef xWrapper = static_cast<SbxObject*>(new SbUnoObject( aName, aAny ));
-                                    pElem->PutObject( xWrapper );
+                                    SbxObjectRef xWrapper = static_cast<SbxObject*>(new SbUnoObject( OUString(), aAny ));
+                                    pElem->PutObject( xWrapper.get() );
                                 }
                                 else
                                 {
@@ -3877,20 +3841,21 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
                             //      "
                             //   val = rst1("FirstName")
                             // has the default 'Fields' member between rst1 and '("FirstName")'
+                            Any x = aAny;
                             SbxVariable* pDflt = getDefaultProp( pElem );
                             if ( pDflt )
                             {
-                                pDflt->Broadcast( SBX_HINT_DATAWANTED );
+                                pDflt->Broadcast( SfxHintId::BasicDataWanted );
                                 SbxBaseRef pDfltObj = pDflt->GetObject();
-                                if( pDfltObj )
+                                if( pDfltObj.is() )
                                 {
-                                    if (SbUnoObject* pSbObj = dynamic_cast<SbUnoObject*>(static_cast<SbxBase*>(pDfltObj)))
+                                    if (SbUnoObject* pSbObj = dynamic_cast<SbUnoObject*>(pDfltObj.get()))
                                     {
                                         pUnoObj = pSbObj;
                                         Any aUnoAny = pUnoObj->getUnoAny();
 
                                         if( aUnoAny.getValueType().getTypeClass() == TypeClass_INTERFACE )
-                                            x = *static_cast<Reference< XInterface > const *>(aUnoAny.getValue());
+                                            x = aUnoAny;
                                         pElem = pDflt;
                                     }
                                 }
@@ -3909,9 +3874,9 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
                             }
                             if ( !sDefaultMethod.isEmpty() )
                             {
-                                SbxVariable* meth = pUnoObj->Find( sDefaultMethod, SbxCLASS_METHOD );
+                                SbxVariable* meth = pUnoObj->Find( sDefaultMethod, SbxClassType::Method );
                                 SbxVariableRef refTemp = meth;
-                                if ( refTemp )
+                                if ( refTemp.is() )
                                 {
                                     meth->SetParameters( pPar );
                                     SbxVariable* pNew = new SbxMethod( *static_cast<SbxMethod*>(meth) );
@@ -3924,7 +3889,7 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
                     // #42940, set parameter 0 to NULL so that var doesn't contain itself
                     pPar->Put( nullptr, 0 );
                 }
-                else if (BasicCollection* pCol = dynamic_cast<BasicCollection*>(static_cast<SbxBase*>(pObj)))
+                else if (BasicCollection* pCol = dynamic_cast<BasicCollection*>(pObj.get()))
                 {
                     pElem = new SbxVariable( SbxVARIANT );
                     pPar->Put( pElem, 0 );
@@ -3949,13 +3914,13 @@ SbxVariable* SbiRuntime::CheckArray( SbxVariable* pElem )
 
 void SbiRuntime::StepRTL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 {
-    PushVar( FindElement( rBasic.pRtl, nOp1, nOp2, ERRCODE_BASIC_PROC_UNDEFINED, false ) );
+    PushVar( FindElement( rBasic.pRtl.get(), nOp1, nOp2, ERRCODE_BASIC_PROC_UNDEFINED, false ) );
 }
 
 void SbiRuntime::StepFIND_Impl( SbxObject* pObj, sal_uInt32 nOp1, sal_uInt32 nOp2,
-                                SbError nNotFound, bool bStatic )
+                                ErrCode nNotFound, bool bStatic )
 {
-    if( !refLocals )
+    if( !refLocals.is() )
     {
         refLocals = new SbxArray;
     }
@@ -4010,7 +3975,7 @@ void SbiRuntime::StepELEM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     // #74254 now per list
     if( pObj )
     {
-        aRefSaved.push_back( pObj );
+        aRefSaved.emplace_back(pObj );
     }
     PushVar( FindElement( pObj, nOp1, nOp2, ERRCODE_BASIC_NO_METHOD, false ) );
 }
@@ -4023,7 +3988,7 @@ void SbiRuntime::StepELEM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 void SbiRuntime::StepPARAM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 {
     sal_uInt16 i = static_cast<sal_uInt16>( nOp1 & 0x7FFF );
-    SbxDataType t = (SbxDataType) nOp2;
+    SbxDataType t = static_cast<SbxDataType>(nOp2);
     SbxVariable* p;
 
     // #57915 solve missing in a cleaner way
@@ -4057,7 +4022,7 @@ void SbiRuntime::StepPARAM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     }
     p = refParams->Get( i );
 
-    if( p->GetType() == SbxERROR && ( i ) )
+    if( p->GetType() == SbxERROR && i )
     {
         // if there's a parameter missing, it can be OPTIONAL
         bool bOpt = false;
@@ -4070,7 +4035,7 @@ void SbiRuntime::StepPARAM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
                 if( pParam && ( pParam->nFlags & SbxFlagBits::Optional ) )
                 {
                     // Default value?
-                    sal_uInt16 nDefaultId = (sal_uInt16)(pParam->nUserData & 0x0ffff);
+                    sal_uInt16 nDefaultId = static_cast<sal_uInt16>(pParam->nUserData & 0x0ffff);
                     if( nDefaultId > 0 )
                     {
                         OUString aDefaultStr = pImg->GetString( nDefaultId );
@@ -4087,10 +4052,10 @@ void SbiRuntime::StepPARAM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
             Error( ERRCODE_BASIC_NOT_OPTIONAL );
         }
     }
-    else if( t != SbxVARIANT && (SbxDataType)(p->GetType() & 0x0FFF ) != t )
+    else if( t != SbxVARIANT && static_cast<SbxDataType>(p->GetType() & 0x0FFF ) != t )
     {
         SbxVariable* q = new SbxVariable( t );
-        aRefSaved.push_back( q );
+        aRefSaved.emplace_back(q );
         *q = *p;
         p = q;
         if ( i )
@@ -4106,7 +4071,7 @@ void SbiRuntime::StepPARAM( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 
 void SbiRuntime::StepCASEIS( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 {
-    if( !refCaseStk || !refCaseStk->Count() )
+    if( !refCaseStk.is() || !refCaseStk->Count() )
     {
         StarBASIC::FatalError( ERRCODE_BASIC_INTERNAL_ERROR );
     }
@@ -4114,7 +4079,7 @@ void SbiRuntime::StepCASEIS( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     {
         SbxVariableRef xComp = PopVar();
         SbxVariableRef xCase = refCaseStk->Get( refCaseStk->Count() - 1 );
-        if( xCase->Compare( (SbxOperator) nOp2, *xComp ) )
+        if( xCase->Compare( static_cast<SbxOperator>(nOp2), *xComp ) )
         {
             StepJUMP( nOp1 );
         }
@@ -4130,9 +4095,9 @@ void SbiRuntime::StepCALL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     SbxArray* pArgs = nullptr;
     if( nOp1 & 0x8000 )
     {
-        pArgs = refArgv;
+        pArgs = refArgv.get();
     }
-    DllCall( aName, aLibName, pArgs, (SbxDataType) nOp2, false );
+    DllCall( aName, aLibName, pArgs, static_cast<SbxDataType>(nOp2), false );
     aLibName.clear();
     if( nOp1 & 0x8000 )
     {
@@ -4148,9 +4113,9 @@ void SbiRuntime::StepCALLC( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     SbxArray* pArgs = nullptr;
     if( nOp1 & 0x8000 )
     {
-        pArgs = refArgv;
+        pArgs = refArgv.get();
     }
-    DllCall( aName, aLibName, pArgs, (SbxDataType) nOp2, true );
+    DllCall( aName, aLibName, pArgs, static_cast<SbxDataType>(nOp2), true );
     aLibName.clear();
     if( nOp1 & 0x8000 )
     {
@@ -4175,7 +4140,7 @@ void SbiRuntime::StepSTMNT( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     {
         SbxVariable* p = refExprStk->Get( 0 );
         if( p->GetRefCount() > 1 &&
-            refLocals.Is() && refLocals->Find( p->GetName(), p->GetClass() ) )
+            refLocals.is() && refLocals->Find( p->GetName(), p->GetClass() ) )
         {
             sUnknownMethodName = p->GetName();
             bFatalExpr = true;
@@ -4238,18 +4203,18 @@ void SbiRuntime::StepSTMNT( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     if( pInst->nCallLvl <= pInst->nBreakCallLvl )
     {
         StarBASIC* pStepBasic = GetCurrentBasic( &rBasic );
-        sal_uInt16 nNewFlags = pStepBasic->StepPoint( nLine, nCol1, nCol2 );
+        BasicDebugFlags nNewFlags = pStepBasic->StepPoint( nLine, nCol1, nCol2 );
 
         pInst->CalcBreakCallLevel( nNewFlags );
     }
 
     // break points only at STMNT-commands in a new line!
     else if( ( nOp1 != nOld )
-        && ( nFlags & SbDEBUG_BREAK )
+        && ( nFlags & BasicDebugFlags::Break )
         && pMod->IsBP( static_cast<sal_uInt16>( nOp1 ) ) )
     {
         StarBASIC* pBreakBasic = GetCurrentBasic( &rBasic );
-        sal_uInt16 nNewFlags = pBreakBasic->BreakPoint( nLine, nCol1, nCol2 );
+        BasicDebugFlags nNewFlags = pBreakBasic->BreakPoint( nLine, nCol1, nCol2 );
 
         pInst->CalcBreakCallLevel( nNewFlags );
     }
@@ -4307,7 +4272,7 @@ void SbiRuntime::StepDCREATE_REDIMP( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 
 
 // Helper function for StepDCREATE_IMPL / bRedimp = true
-void implCopyDimArray_DCREATE( SbxDimArray* pNewArray, SbxDimArray* pOldArray, short nMaxDimIndex,
+static void implCopyDimArray_DCREATE( SbxDimArray* pNewArray, SbxDimArray* pOldArray, short nMaxDimIndex,
     short nActualDim, sal_Int32* pActualIndices, sal_Int32* pLowerBounds, sal_Int32* pUpperBounds )
 {
     sal_Int32& ri = pActualIndices[nActualDim];
@@ -4335,25 +4300,24 @@ void SbiRuntime::StepDCREATE_IMPL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 
     // fill the array with instances of the requested class
     SbxBaseRef xObj = refVar->GetObject();
-    if( !xObj )
+    if( !xObj.is() )
     {
         StarBASIC::Error( ERRCODE_BASIC_INVALID_OBJECT );
         return;
     }
 
-    SbxDimArray* pArray = dynamic_cast<SbxDimArray*>(static_cast<SbxBase*>(xObj));
+    SbxDimArray* pArray = dynamic_cast<SbxDimArray*>(xObj.get());
     if (pArray)
     {
         short nDims = pArray->GetDims();
         sal_Int32 nTotalSize = 0;
 
         // must be a one-dimensional array
-        sal_Int32 nLower, nUpper, nSize;
-        sal_Int32 i;
-        for( i = 0 ; i < nDims ; i++ )
+        sal_Int32 nLower, nUpper;
+        for( sal_Int32 i = 0 ; i < nDims ; ++i )
         {
             pArray->GetDim32( i+1, nLower, nUpper );
-            nSize = nUpper - nLower + 1;
+            sal_Int32 nSize = nUpper - nLower + 1;
             if( i == 0 )
             {
                 nTotalSize = nSize;
@@ -4366,7 +4330,7 @@ void SbiRuntime::StepDCREATE_IMPL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 
         // create objects and insert them into the array
         OUString aClass( pImg->GetString( static_cast<short>( nOp2 ) ) );
-        for( i = 0 ; i < nTotalSize ; i++ )
+        for( sal_Int32 i = 0 ; i < nTotalSize ; ++i )
         {
             SbxObject *pClassObj = SbxBase::CreateObject( aClass );
             if( !pClassObj )
@@ -4385,7 +4349,7 @@ void SbiRuntime::StepDCREATE_IMPL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
         }
     }
 
-    SbxDimArray* pOldArray = static_cast<SbxDimArray*>(static_cast<SbxArray*>(refRedimpArray));
+    SbxDimArray* pOldArray = static_cast<SbxDimArray*>(refRedimpArray.get());
     if( pArray && pOldArray )
     {
         short nDimsNew = pArray->GetDims();
@@ -4483,14 +4447,14 @@ void SbiRuntime::implHandleSbxFlags( SbxVariable* pVar, SbxDataType t, sal_uInt3
 
 void SbiRuntime::StepLOCAL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 {
-    if( !refLocals.Is() )
+    if( !refLocals.is() )
     {
         refLocals = new SbxArray;
     }
     OUString aName( pImg->GetString( static_cast<short>( nOp1 ) ) );
-    if( refLocals->Find( aName, SbxCLASS_DONTCARE ) == nullptr )
+    if( refLocals->Find( aName, SbxClassType::DontCare ) == nullptr )
     {
-        SbxDataType t = (SbxDataType)(nOp2 & 0xffff);
+        SbxDataType t = static_cast<SbxDataType>(nOp2 & 0xffff);
         SbxVariable* p = new SbxVariable( t );
         p->SetName( aName );
         implHandleSbxFlags( p, t, nOp2 );
@@ -4503,13 +4467,13 @@ void SbiRuntime::StepLOCAL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 void SbiRuntime::StepPUBLIC_Impl( sal_uInt32 nOp1, sal_uInt32 nOp2, bool bUsedForClassModule )
 {
     OUString aName( pImg->GetString( static_cast<short>( nOp1 ) ) );
-    SbxDataType t = (SbxDataType)(SbxDataType)(nOp2 & 0xffff);
+    SbxDataType t = static_cast<SbxDataType>(nOp2 & 0xffff);
     bool bFlag = pMod->IsSet( SbxFlagBits::NoModify );
     pMod->SetFlag( SbxFlagBits::NoModify );
-    SbxVariableRef p = pMod->Find( aName, SbxCLASS_PROPERTY );
-    if( p.Is() )
+    SbxVariableRef p = pMod->Find( aName, SbxClassType::Property );
+    if( p.is() )
     {
-        pMod->Remove (p);
+        pMod->Remove (p.get());
     }
     SbProperty* pProp = pMod->GetProperty( aName, t );
     if( !bUsedForClassModule )
@@ -4555,7 +4519,7 @@ void SbiRuntime::StepGLOBAL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
         StepPUBLIC_Impl( nOp1, nOp2, true );
     }
     OUString aName( pImg->GetString( static_cast<short>( nOp1 ) ) );
-    SbxDataType t = (SbxDataType)(nOp2 & 0xffff);
+    SbxDataType t = static_cast<SbxDataType>(nOp2 & 0xffff);
 
     // Store module scope variables at module scope
     // in non vba mode these are stored at the library level :/
@@ -4569,17 +4533,17 @@ void SbiRuntime::StepGLOBAL( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 
     bool bFlag = pStorage->IsSet( SbxFlagBits::NoModify );
     rBasic.SetFlag( SbxFlagBits::NoModify );
-    SbxVariableRef p = pStorage->Find( aName, SbxCLASS_PROPERTY );
-    if( p.Is() )
+    SbxVariableRef p = pStorage->Find( aName, SbxClassType::Property );
+    if( p.is() )
     {
-        pStorage->Remove (p);
+        pStorage->Remove (p.get());
     }
-    p = pStorage->Make( aName, SbxCLASS_PROPERTY, t );
+    p = pStorage->Make( aName, SbxClassType::Property, t );
     if( !bFlag )
     {
         pStorage->ResetFlag( SbxFlagBits::NoModify );
     }
-    if( p )
+    if( p.is() )
     {
         p->SetFlag( SbxFlagBits::DontStore );
         // from 2.7.1996: HACK because of 'reference can't be saved'
@@ -4613,7 +4577,7 @@ void SbiRuntime::StepFIND_G( sal_uInt32 nOp1, sal_uInt32 nOp2 )
     else
     {
         // Return dummy variable
-        SbxDataType t = (SbxDataType) nOp2;
+        SbxDataType t = static_cast<SbxDataType>(nOp2);
         OUString aName( pImg->GetString( static_cast<short>( nOp1 & 0x7FFF ) ) );
 
         SbxVariable* pDummyVar = new SbxVariable( t );
@@ -4623,13 +4587,14 @@ void SbiRuntime::StepFIND_G( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 }
 
 
-SbxVariable* SbiRuntime::StepSTATIC_Impl( OUString& aName, SbxDataType& t )
+SbxVariable* SbiRuntime::StepSTATIC_Impl(
+    OUString const & aName, SbxDataType t, sal_uInt32 nOp2 )
 {
     SbxVariable* p = nullptr;
     if ( pMeth )
     {
         SbxArray* pStatics = pMeth->GetStatics();
-        if( pStatics && ( pStatics->Find( aName, SbxCLASS_DONTCARE ) == nullptr ) )
+        if( pStatics && ( pStatics->Find( aName, SbxClassType::DontCare ) == nullptr ) )
         {
             p = new SbxVariable( t );
             if( t != SbxVARIANT )
@@ -4637,6 +4602,7 @@ SbxVariable* SbiRuntime::StepSTATIC_Impl( OUString& aName, SbxDataType& t )
                 p->SetFlag( SbxFlagBits::Fixed );
             }
             p->SetName( aName );
+            implHandleSbxFlags( p, t, nOp2 );
             pStatics->Put( p, pStatics->Count() );
         }
     }
@@ -4646,8 +4612,8 @@ SbxVariable* SbiRuntime::StepSTATIC_Impl( OUString& aName, SbxDataType& t )
 void SbiRuntime::StepSTATIC( sal_uInt32 nOp1, sal_uInt32 nOp2 )
 {
     OUString aName( pImg->GetString( static_cast<short>( nOp1 ) ) );
-    SbxDataType t = (SbxDataType) nOp2;
-    StepSTATIC_Impl( aName, t );
+    SbxDataType t = static_cast<SbxDataType>(nOp2 & 0xffff);
+    StepSTATIC_Impl( aName, t, nOp2 );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

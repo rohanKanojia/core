@@ -49,6 +49,7 @@ $(eval $(call gb_Library_use_libraries,sdui,\
     fwl \
     fwe \
     sal \
+    salhelper \
     sd \
     sfx \
     sot \
@@ -59,7 +60,6 @@ $(eval $(call gb_Library_use_libraries,sdui,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,sdui,\
@@ -68,8 +68,6 @@ $(eval $(call gb_Library_add_exception_objects,sdui,\
     sd/source/ui/dlg/brkdlg \
     sd/source/ui/dlg/copydlg \
     sd/source/ui/dlg/custsdlg \
-    sd/source/ui/dlg/dlgass \
-    sd/source/ui/dlg/dlgassim \
     sd/source/ui/dlg/dlgchar \
     sd/source/ui/dlg/dlgfield \
     sd/source/ui/dlg/dlgolbul \

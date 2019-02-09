@@ -41,17 +41,6 @@ using ::xmloff::token::IsXMLToken;
 using ::xmloff::token::XML_USER_INDEX_ENTRY_TEMPLATE;
 using ::xmloff::token::XML_OUTLINE_LEVEL;
 
-
-const sal_Char sAPI_CreateFromEmbeddedObjects[] = "CreateFromEmbeddedObjects";
-const sal_Char sAPI_CreateFromGraphicObjects[] = "CreateFromGraphicObjects";
-const sal_Char sAPI_CreateFromMarks[] = "CreateFromMarks";
-const sal_Char sAPI_CreateFromTables[] = "CreateFromTables";
-const sal_Char sAPI_CreateFromTextFrames[] = "CreateFromTextFrames";
-const sal_Char sAPI_UseLevelFromSource[] = "UseLevelFromSource";
-const sal_Char sAPI_CreateFromLevelParagraphStyles[] = "CreateFromLevelParagraphStyles";
-const sal_Char sAPI_UserIndexName[] = "UserIndexName";
-
-
 XMLIndexUserSourceContext::XMLIndexUserSourceContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrfx,
@@ -59,14 +48,6 @@ XMLIndexUserSourceContext::XMLIndexUserSourceContext(
     Reference<XPropertySet> & rPropSet) :
         XMLIndexSourceBaseContext(rImport, nPrfx, rLocalName,
                                   rPropSet, true),
-        sCreateFromEmbeddedObjects(sAPI_CreateFromEmbeddedObjects),
-        sCreateFromGraphicObjects(sAPI_CreateFromGraphicObjects),
-        sCreateFromMarks(sAPI_CreateFromMarks),
-        sCreateFromTables(sAPI_CreateFromTables),
-        sCreateFromTextFrames(sAPI_CreateFromTextFrames),
-        sUseLevelFromSource(sAPI_UseLevelFromSource),
-        sCreateFromLevelParagraphStyles(sAPI_CreateFromLevelParagraphStyles),
-        sUserIndexName(sAPI_UserIndexName),
         bUseObjects(false),
         bUseGraphic(false),
         bUseMarks(false),
@@ -148,43 +129,25 @@ void XMLIndexUserSourceContext::ProcessAttribute(
     }
 }
 
-
 void XMLIndexUserSourceContext::EndElement()
 {
-    Any aAny;
-
-    aAny.setValue(&bUseObjects, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromEmbeddedObjects, aAny);
-
-    aAny.setValue(&bUseGraphic, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromGraphicObjects, aAny);
-
-    aAny.setValue(&bUseLevelFromSource, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sUseLevelFromSource, aAny);
-
-    aAny.setValue(&bUseMarks, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromMarks, aAny);
-
-    aAny.setValue(&bUseTables, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromTables, aAny);
-
-    aAny.setValue(&bUseFrames, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromTextFrames, aAny);
-
-    aAny.setValue(&bUseLevelParagraphStyles, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromLevelParagraphStyles, aAny);
+    rIndexPropertySet->setPropertyValue("CreateFromEmbeddedObjects", css::uno::Any(bUseObjects));
+    rIndexPropertySet->setPropertyValue("CreateFromGraphicObjects", css::uno::Any(bUseGraphic));
+    rIndexPropertySet->setPropertyValue("UseLevelFromSource", css::uno::Any(bUseLevelFromSource));
+    rIndexPropertySet->setPropertyValue("CreateFromMarks", css::uno::Any(bUseMarks));
+    rIndexPropertySet->setPropertyValue("CreateFromTables", css::uno::Any(bUseTables));
+    rIndexPropertySet->setPropertyValue("CreateFromTextFrames", css::uno::Any(bUseFrames));
+    rIndexPropertySet->setPropertyValue("CreateFromLevelParagraphStyles", css::uno::Any(bUseLevelParagraphStyles));
 
     if( !sIndexName.isEmpty() )
     {
-        aAny <<= sIndexName;
-        rIndexPropertySet->setPropertyValue(sUserIndexName, aAny);
+        rIndexPropertySet->setPropertyValue("UserIndexName", css::uno::Any(sIndexName));
     }
 
     XMLIndexSourceBaseContext::EndElement();
 }
 
-
-SvXMLImportContext* XMLIndexUserSourceContext::CreateChildContext(
+SvXMLImportContextRef XMLIndexUserSourceContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )

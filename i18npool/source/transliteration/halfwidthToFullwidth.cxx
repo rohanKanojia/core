@@ -25,97 +25,63 @@ using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 halfwidthToFullwidth::halfwidthToFullwidth()
 {
     func = nullptr;
-    table = &widthfolding::gethalf2fullTable();
+    table = &i18nutil::widthfolding::gethalf2fullTable();
     transliterationName = "halfwidthToFullwidth";
     implementationName = "com.sun.star.i18n.Transliteration.HALFWIDTH_FULLWIDTH";
 }
 
-OUString SAL_CALL
-halfwidthToFullwidth::transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+halfwidthToFullwidth::transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
-    bool _useOffset = useOffset;
     // One to One mapping
-    useOffset = false;
-    const OUString& newStr = transliteration_OneToOne::transliterate( inStr, startPos, nCount, offset);
-    useOffset = _useOffset;
+    const OUString& newStr = transliteration_OneToOne::transliterateImpl( inStr, startPos, nCount, offset, false);
 
     // Composition: KA + voice-mark --> GA
-    return widthfolding::compose_ja_voiced_sound_marks ( newStr, 0, newStr.getLength(), offset, _useOffset );
+    return i18nutil::widthfolding::compose_ja_voiced_sound_marks ( newStr, 0, newStr.getLength(), offset, useOffset );
 }
-
-sal_Unicode SAL_CALL
-halfwidthToFullwidth::transliterateChar2Char( sal_Unicode inChar)
-  throw(RuntimeException, MultipleCharsOutputException, std::exception)
-{
-    return transliteration_OneToOne::transliterateChar2Char(inChar);
-}
-
 
 halfwidthKatakanaToFullwidthKatakana::halfwidthKatakanaToFullwidthKatakana()
 {
     func = nullptr;
-    table = &widthfolding::gethalfKana2fullKanaTable();
+    table = &i18nutil::widthfolding::gethalfKana2fullKanaTable();
     transliterationName = "halfwidthKatakanaToFullwidthKatakana";
     implementationName = "com.sun.star.i18n.Transliteration.HALFWIDTHKATAKANA_FULLWIDTHKATAKANA";
 }
 
-OUString SAL_CALL
-halfwidthKatakanaToFullwidthKatakana::transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+halfwidthKatakanaToFullwidthKatakana::transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
-    bool _useOffset = useOffset;
     // One to One mapping
-    useOffset = false;
-    const OUString& newStr = transliteration_OneToOne::transliterate( inStr, startPos, nCount, offset);
-    useOffset = _useOffset;
+    const OUString& newStr = transliteration_OneToOne::transliterateImpl( inStr, startPos, nCount, offset, false);
 
     // Composition: KA + voice-mark --> GA
-    return widthfolding::compose_ja_voiced_sound_marks ( newStr, 0, newStr.getLength(), offset, _useOffset );
+    return i18nutil::widthfolding::compose_ja_voiced_sound_marks ( newStr, 0, newStr.getLength(), offset, useOffset );
 }
-
-sal_Unicode SAL_CALL
-halfwidthKatakanaToFullwidthKatakana::transliterateChar2Char( sal_Unicode inChar)
-  throw(RuntimeException, MultipleCharsOutputException, std::exception)
-{
-    return transliteration_OneToOne::transliterateChar2Char(inChar);
-}
-
 
 halfwidthToFullwidthLikeJIS::halfwidthToFullwidthLikeJIS()
 {
     func = nullptr;
-    table = &widthfolding::gethalf2fullTableForJIS();
+    table = &i18nutil::widthfolding::gethalf2fullTableForJIS();
     transliterationName = "halfwidthToFullwidthLikeJIS";
     implementationName = "com.sun.star.i18n.Transliteration.HALFWIDTH_FULLWIDTH_LIKE_JIS";
 }
 
-OUString SAL_CALL
-halfwidthToFullwidthLikeJIS::transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset )
-  throw(RuntimeException, std::exception)
+OUString
+halfwidthToFullwidthLikeJIS::transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, Sequence< sal_Int32 >& offset, bool useOffset )
 {
-    bool _useOffset = useOffset;
     // One to One mapping
-    useOffset = false;
-    const OUString& newStr = transliteration_OneToOne::transliterate( inStr, startPos, nCount, offset);
-    useOffset = _useOffset;
+    const OUString& newStr = transliteration_OneToOne::transliterateImpl( inStr, startPos, nCount, offset, false);
 
     // Composition: KA + voice-mark --> GA
-    return widthfolding::compose_ja_voiced_sound_marks ( newStr, 0, newStr.getLength(), offset, _useOffset, WIDTHFOLDNIG_DONT_USE_COMBINED_VU );
+    return i18nutil::widthfolding::compose_ja_voiced_sound_marks ( newStr, 0, newStr.getLength(), offset, useOffset, WIDTHFOLDING_DONT_USE_COMBINED_VU );
 }
 
-sal_Unicode SAL_CALL
-halfwidthToFullwidthLikeJIS::transliterateChar2Char( sal_Unicode inChar)
-  throw(RuntimeException, MultipleCharsOutputException, std::exception)
-{
-    return transliteration_OneToOne::transliterateChar2Char(inChar);
-}
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

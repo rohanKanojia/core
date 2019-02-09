@@ -13,9 +13,9 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mar_private.h"
-#include "mar_cmdline.h"
-#include "mar.h"
+#include <onlineupdate/mar_private.h>
+#include <onlineupdate/mar_cmdline.h>
+#include <onlineupdate/mar.h>
 #include "cryptox.h"
 #ifndef _WIN32
 #include <unistd.h>
@@ -149,7 +149,7 @@ WriteAndUpdateSignatures(FILE *fpDest, void *buffer,
 }
 
 /**
- * Adjusts each entry's content offset in the the passed in index by the
+ * Adjusts each entry's content offset in the passed in index by the
  * specified amount.
  *
  * @param indexBuf     A buffer containing the MAR index
@@ -491,7 +491,7 @@ extract_signature(const char *src, uint32_t sigIndex, const char * dest)
   FILE *fpSrc = NULL, *fpDest = NULL;
   uint32_t i;
   uint32_t signatureCount;
-  uint32_t signatureLen;
+  uint32_t signatureLen = 0;
   uint8_t *extractedSignature = NULL;
   char *base64Encoded = NULL;
   int rv = -1;

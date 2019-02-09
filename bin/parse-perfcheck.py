@@ -142,7 +142,7 @@ def readCsvFile(targetFilename):
             if not line:
                 continue
 
-            curId, curDate, curTestName, curTestComment, curValue = line
+            curId, curDate, curTestName, curTestComment, curValue, currCallgrindFile = line
 
             if curTestComment not in allTests:
                 allTests.append(curTestComment)
@@ -163,7 +163,7 @@ if __name__ == '__main__':
       displayUsage()
       sys.exit(1)
 
-  # check if sourceDirectorty exists
+  # check if sourceDirectory exists
   if not os.path.isdir(sourceDirectory):
     print("sourceDirectory %s not found - Aborting" % (sourceDirectory))
     sys.exit(1)

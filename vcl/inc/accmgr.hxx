@@ -21,34 +21,31 @@
 #define INCLUDED_VCL_INC_ACCMGR_HXX
 
 #include <vector>
+#include <memory>
 
 #include <vcl/keycod.hxx>
 
 class Accelerator;
 
-typedef ::std::vector< Accelerator* > ImplAccelList;
-
 class ImplAccelManager
 {
 private:
-    ImplAccelList*      mpAccelList;
-    ImplAccelList*      mpSequenceList;
+    std::unique_ptr<std::vector< Accelerator* >> mpAccelList;
+    std::unique_ptr<std::vector< Accelerator* >> mpSequenceList;
 
 public:
                         ImplAccelManager()
                         {
-                            mpAccelList    = nullptr;
-                            mpSequenceList = nullptr;
                         }
                         ~ImplAccelManager();
 
     bool                InsertAccel( Accelerator* pAccel );
-    void                RemoveAccel( Accelerator* pAccel );
+    void                RemoveAccel( Accelerator const * pAccel );
 
     void                EndSequence();
     void                FlushAccel() { EndSequence(); }
 
-    bool                IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRepeat );
+    bool                IsAccelKey( const vcl::KeyCode& rKeyCode );
 };
 
 #endif // INCLUDED_VCL_INC_ACCMGR_HXX

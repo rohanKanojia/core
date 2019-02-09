@@ -20,18 +20,17 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_EXCDOC_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_EXCDOC_HXX
 
-#include "excrecds.hxx"
 #include "xeroot.hxx"
-#include "root.hxx"
-#include "xeescher.hxx"
+#include "xerecord.hxx"
+#include "excrecds.hxx"
 #include <memory>
 
 // Forwards -
 
 class SvStream;
-
-class NameBuffer;
-
+class XclExpNote;
+class XclExpStream;
+class XclExpXmlStream;
 class XclExpChangeTrack;
 
 // class ExcTable -
@@ -49,12 +48,10 @@ private:
     XclExpRecordList<>          aRecList;
     XclExpCellTableRef          mxCellTable;
 
-    SCTAB                       mnScTab;    // table number SC document
-    sal_uInt16                      nExcTab;    // table number Excel document
+    SCTAB const                 mnScTab;    // table number SC document
+    sal_uInt16 const            nExcTab;    // table number Excel document
 
-    NameBuffer*                 pTabNames;
-
-    XclExpNoteListRef   mxNoteList;
+    XclExpNoteListRef           mxNoteList;
 
     // re-create and forget pRec; delete is done by ExcTable itself!
     void                        Add( XclExpRecordBase* pRec );
@@ -62,7 +59,7 @@ private:
 public:
                                 ExcTable( const XclExpRoot& rRoot );
                                 ExcTable( const XclExpRoot& rRoot, SCTAB nScTab );
-                                virtual ~ExcTable();
+                                virtual ~ExcTable() override;
 
     void FillAsHeaderBinary( ExcBoundsheetList& rBoundsheetList );
     void FillAsHeaderXml( ExcBoundsheetList& rBoundsheetList );
@@ -82,7 +79,6 @@ friend class ExcTable;
 
 private:
     typedef XclExpRecordList< ExcTable >            ExcTableList;
-    typedef ExcTableList::RecordRefType             ExcTableRef;
     typedef XclExpRecordList< ExcBundlesheetBase >  ExcBoundsheetList;
     typedef ExcBoundsheetList::RecordRefType        ExcBoundsheetRef;
 
@@ -91,11 +87,11 @@ private:
     ExcTableList        maTableList;
     ExcBoundsheetList   maBoundsheetList;
 
-    XclExpChangeTrack*  pExpChangeTrack;
+    std::unique_ptr<XclExpChangeTrack> m_xExpChangeTrack;
 
 public:
     explicit                    ExcDocument( const XclExpRoot& rRoot );
-    virtual                     ~ExcDocument();
+    virtual                     ~ExcDocument() override;
 
     void                ReadDoc();
     void                Write( SvStream& rSvStrm );

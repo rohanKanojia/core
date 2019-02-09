@@ -20,6 +20,7 @@
 #include <sdr/primitive2d/sdrellipseprimitive2d.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <svx/sdr/primitive2d/sdrdecompositiontools.hxx>
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
@@ -35,7 +36,7 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrEllipsePrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrEllipsePrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             Primitive2DContainer aRetval;
 
@@ -43,11 +44,11 @@ namespace drawinglayer
             // Do use createPolygonFromUnitCircle, but let create from first quadrant to mimic old geometry creation.
             // This is needed to have the same look when stroke is used since the polygon start point defines the
             // stroke start, too.
-            basegfx::B2DPolygon aUnitOutline(basegfx::tools::createPolygonFromUnitCircle(1));
+            basegfx::B2DPolygon aUnitOutline(basegfx::utils::createPolygonFromUnitCircle(1));
 
             // scale and move UnitEllipse to UnitObject (-1,-1 1,1) -> (0,0 1,1)
             const basegfx::B2DHomMatrix aUnitCorrectionMatrix(
-                basegfx::tools::createScaleTranslateB2DHomMatrix(0.5, 0.5, 0.5, 0.5));
+                basegfx::utils::createScaleTranslateB2DHomMatrix(0.5, 0.5, 0.5, 0.5));
 
             // apply to the geometry
             aUnitOutline.transform(aUnitCorrectionMatrix);
@@ -97,7 +98,6 @@ namespace drawinglayer
                         getSdrLFSTAttribute().getText(),
                         getSdrLFSTAttribute().getLine(),
                         false,
-                        false,
                         false));
             }
 
@@ -109,7 +109,7 @@ namespace drawinglayer
                     getSdrLFSTAttribute().getShadow());
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         SdrEllipsePrimitive2D::SdrEllipsePrimitive2D(
@@ -145,12 +145,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrEllipseSegmentPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrEllipseSegmentPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             Primitive2DContainer aRetval;
 
             // create unit outline polygon
-            basegfx::B2DPolygon aUnitOutline(basegfx::tools::createPolygonFromUnitEllipseSegment(mfStartAngle, mfEndAngle));
+            basegfx::B2DPolygon aUnitOutline(basegfx::utils::createPolygonFromUnitEllipseSegment(mfStartAngle, mfEndAngle));
 
             if(mbCloseSegment)
             {
@@ -166,7 +166,7 @@ namespace drawinglayer
 
             // move and scale UnitEllipse to UnitObject (-1,-1 1,1) -> (0,0 1,1)
             const basegfx::B2DHomMatrix aUnitCorrectionMatrix(
-                basegfx::tools::createScaleTranslateB2DHomMatrix(0.5, 0.5, 0.5, 0.5));
+                basegfx::utils::createScaleTranslateB2DHomMatrix(0.5, 0.5, 0.5, 0.5));
 
             // apply to the geometry
             aUnitOutline.transform(aUnitCorrectionMatrix);
@@ -216,7 +216,6 @@ namespace drawinglayer
                         getSdrLFSTAttribute().getText(),
                         getSdrLFSTAttribute().getLine(),
                         false,
-                        false,
                         false));
             }
 
@@ -228,7 +227,7 @@ namespace drawinglayer
                     getSdrLFSTAttribute().getShadow());
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         SdrEllipseSegmentPrimitive2D::SdrEllipseSegmentPrimitive2D(

@@ -20,25 +20,15 @@
 #ifndef INCLUDED_VCL_INC_CONTROLDATA_HXX
 #define INCLUDED_VCL_INC_CONTROLDATA_HXX
 
+#include <memory>
 #include <vcl/controllayout.hxx>
 
 namespace vcl
 {
     struct ImplControlData
     {
-        mutable ControlLayoutData*  mpLayoutData;
+        mutable std::unique_ptr<ControlLayoutData>  mpLayoutData;
         VclPtr<OutputDevice>        mpReferenceDevice;
-
-        ImplControlData()
-            :mpLayoutData( nullptr )
-            ,mpReferenceDevice( nullptr )
-        {
-        }
-
-        ~ImplControlData()
-        {
-            delete mpLayoutData;
-        }
     };
 
 } // namespace vcl

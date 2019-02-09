@@ -27,26 +27,23 @@
 namespace abp
 {
 
-    class FieldMappingPage : public AddressBookSourcePage
+    class FieldMappingPage final : public AddressBookSourcePage
     {
-    protected:
         VclPtr<PushButton>     m_pInvokeDialog;
         VclPtr<FixedText>      m_pHint;
 
     public:
-        explicit FieldMappingPage(OAddessBookSourcePilot* _pParent);
-        virtual ~FieldMappingPage();
+        explicit FieldMappingPage(OAddressBookSourcePilot* _pParent);
+        virtual ~FieldMappingPage() override;
         virtual void dispose() override;
-    protected:
+    private:
         // OWizardPage overridables
         virtual void        initializePage() override;
 
         // TabDialog overridables
         virtual void        ActivatePage() override;
-        virtual void        DeactivatePage() override;
 
-    private:
-        DECL_LINK_TYPED( OnInvokeDialog, Button*, void );
+        DECL_LINK( OnInvokeDialog, Button*, void );
 
         void implUpdateHint();
     };

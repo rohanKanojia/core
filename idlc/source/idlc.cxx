@@ -17,22 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/idlc.hxx>
-#include <idlc/errorhandler.hxx>
-#include <idlc/astscope.hxx>
-#include <idlc/astmodule.hxx>
-#include <idlc/astservice.hxx>
-#include <idlc/astconstants.hxx>
-#include <idlc/astexception.hxx>
-#include <idlc/astenum.hxx>
-#include <idlc/astinterface.hxx>
-#include <idlc/astoperation.hxx>
-#include <idlc/astbasetype.hxx>
-#include "idlc/astdeclaration.hxx"
-#include "idlc/astparameter.hxx"
-#include "idlc/astsequence.hxx"
-#include "idlc/asttype.hxx"
-#include "idlc/asttypedef.hxx"
+#include <idlc.hxx>
+#include <errorhandler.hxx>
+#include <astscope.hxx>
+#include <astmodule.hxx>
+#include <astservice.hxx>
+#include <astconstants.hxx>
+#include <astexception.hxx>
+#include <astenum.hxx>
+#include <astinterface.hxx>
+#include <astoperation.hxx>
+#include <astbasetype.hxx>
+#include <astdeclaration.hxx>
+#include <astparameter.hxx>
+#include <astsequence.hxx>
+#include <asttype.hxx>
+#include <asttypedef.hxx>
 
 #include <osl/diagnose.h>
 #include <osl/file.hxx>
@@ -40,7 +40,7 @@
 
 #include <algorithm>
 
-AstDeclaration* SAL_CALL scopeAsDecl(AstScope* pScope)
+AstDeclaration* scopeAsDecl(AstScope* pScope)
 {
     if (pScope == nullptr) return nullptr;
 
@@ -69,7 +69,7 @@ AstDeclaration* SAL_CALL scopeAsDecl(AstScope* pScope)
     }
 }
 
-AstScope* SAL_CALL declAsScope(AstDeclaration* pDecl)
+AstScope* declAsScope(AstDeclaration* pDecl)
 {
     if (pDecl == nullptr) return nullptr;
 
@@ -98,29 +98,29 @@ AstScope* SAL_CALL declAsScope(AstDeclaration* pDecl)
    }
 }
 
-static void SAL_CALL predefineXInterface(AstModule* pRoot)
+static void predefineXInterface(AstModule* pRoot)
 {
     // define the modules  com::sun::star::uno
     AstModule* pParentScope = pRoot;
-    AstModule* pModule = new AstModule(OString("com"), pParentScope);
+    AstModule* pModule = new AstModule("com", pParentScope);
     pModule->setPredefined(true);
     pParentScope->addDeclaration(pModule);
     pParentScope = pModule;
-    pModule = new AstModule(OString("sun"), pParentScope);
+    pModule = new AstModule("sun", pParentScope);
     pModule->setPredefined(true);
     pParentScope->addDeclaration(pModule);
     pParentScope = pModule;
-    pModule = new AstModule(OString("star"), pParentScope);
+    pModule = new AstModule("star", pParentScope);
     pModule->setPredefined(true);
     pParentScope->addDeclaration(pModule);
     pParentScope = pModule;
-    pModule = new AstModule(OString("uno"), pParentScope);
+    pModule = new AstModule("uno", pParentScope);
     pModule->setPredefined(true);
     pParentScope->addDeclaration(pModule);
     pParentScope = pModule;
 
     // define XInterface
-    AstInterface* pInterface = new AstInterface(OString("XInterface"), nullptr, pParentScope);
+    AstInterface* pInterface = new AstInterface("XInterface", nullptr, pParentScope);
     pInterface->setDefined();
     pInterface->setPredefined(true);
     pInterface->setPublished();
@@ -128,71 +128,71 @@ static void SAL_CALL predefineXInterface(AstModule* pRoot)
 
     // define XInterface::queryInterface
     AstOperation* pOp = new AstOperation(static_cast<AstType*>(pRoot->lookupPrimitiveType(ET_any)),
-                                         OString("queryInterface"), pInterface);
+                                         "queryInterface", pInterface);
     AstParameter* pParam = new AstParameter(DIR_IN, false,
                                             static_cast<AstType*>(pRoot->lookupPrimitiveType(ET_type)),
-                                            OString("aType"), pOp);
+                                            "aType", pOp);
     pOp->addDeclaration(pParam);
     pInterface->addMember(pOp);
 
     // define XInterface::acquire
     pOp = new AstOperation(static_cast<AstType*>(pRoot->lookupPrimitiveType(ET_void)),
-                           OString("acquire"), pInterface);
+                           "acquire", pInterface);
     pInterface->addMember(pOp);
 
     // define XInterface::release
     pOp = new AstOperation(static_cast<AstType*>(pRoot->lookupPrimitiveType(ET_void)),
-                           OString("release"), pInterface);
+                           "release", pInterface);
     pInterface->addMember(pOp);
 }
 
-static void SAL_CALL initializePredefinedTypes(AstModule* pRoot)
+static void initializePredefinedTypes(AstModule* pRoot)
 {
     if ( pRoot )
     {
-         AstBaseType* pPredefined = new AstBaseType(ET_long, OString("long"), pRoot);
+         AstBaseType* pPredefined = new AstBaseType(ET_long, "long", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_ulong, OString("unsigned long"), pRoot);
+         pPredefined = new AstBaseType(ET_ulong, "unsigned long", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_hyper, OString("hyper"), pRoot);
+         pPredefined = new AstBaseType(ET_hyper, "hyper", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_uhyper, OString("unsigned hyper"), pRoot);
+         pPredefined = new AstBaseType(ET_uhyper, "unsigned hyper", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_short, OString("short"), pRoot);
+         pPredefined = new AstBaseType(ET_short, "short", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_ushort, OString("unsigned short"), pRoot);
+         pPredefined = new AstBaseType(ET_ushort, "unsigned short", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_float, OString("float"), pRoot);
+         pPredefined = new AstBaseType(ET_float, "float", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_double, OString("double"), pRoot);
+         pPredefined = new AstBaseType(ET_double, "double", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_char, OString("char"), pRoot);
+         pPredefined = new AstBaseType(ET_char, "char", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_byte, OString("byte"), pRoot);
+         pPredefined = new AstBaseType(ET_byte, "byte", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_any, OString("any"), pRoot);
+         pPredefined = new AstBaseType(ET_any, "any", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_string, OString("string"), pRoot);
+         pPredefined = new AstBaseType(ET_string, "string", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_type, OString("type"), pRoot);
+         pPredefined = new AstBaseType(ET_type, "type", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_boolean, OString("boolean"), pRoot);
+         pPredefined = new AstBaseType(ET_boolean, "boolean", pRoot);
          pRoot->addDeclaration(pPredefined);
 
-         pPredefined = new AstBaseType(ET_void, OString("void"), pRoot);
+         pPredefined = new AstBaseType(ET_void, "void", pRoot);
          pRoot->addDeclaration(pPredefined);
     }
 }
@@ -209,29 +209,24 @@ Idlc::Idlc(Options* pOptions)
     , m_offsetEnd(0)
     , m_parseState(PS_NoState)
 {
-    m_pScopes = new AstStack();
+    m_pScopes.reset( new AstStack() );
     // init root object after construction
     m_pRoot = nullptr;
-    m_pErrorHandler = new ErrorHandler();
     m_bGenerateDoc = m_pOptions->isValid("-C");
 }
 
 Idlc::~Idlc()
 {
-    delete m_pRoot;
-    delete m_pScopes;
-    delete m_pErrorHandler;
 }
 
 void Idlc::init()
 {
-    delete m_pRoot;
-    m_pRoot = new AstModule(NT_root, OString(), nullptr);
+    m_pRoot.reset(new AstModule(NT_root, OString(), nullptr));
 
     // push the root node on the stack
-    m_pScopes->push(m_pRoot);
-    initializePredefinedTypes(m_pRoot);
-    predefineXInterface(m_pRoot);
+    m_pScopes->push(m_pRoot.get());
+    initializePredefinedTypes(m_pRoot.get());
+    predefineXInterface(m_pRoot.get());
 }
 
 void Idlc::reset()
@@ -251,13 +246,11 @@ void Idlc::reset()
     m_documentation.clear();
 
     m_pScopes->clear();
-    delete m_pRoot;
-
-    m_pRoot = new AstModule(NT_root, OString(), nullptr);
+    m_pRoot.reset( new AstModule(NT_root, OString(), nullptr) );
 
     // push the root node on the stack
-    m_pScopes->push(m_pRoot);
-    initializePredefinedTypes(m_pRoot);
+    m_pScopes->push(m_pRoot.get());
+    initializePredefinedTypes(m_pRoot.get());
 
     m_includes.clear();
 }
@@ -350,12 +343,12 @@ Idlc::dumpDeps(OString const& rDepFile, OString const& rTarget)
 
 static Idlc* pStaticIdlc = nullptr;
 
-Idlc* SAL_CALL idlc()
+Idlc* idlc()
 {
     return pStaticIdlc;
 }
 
-Idlc* SAL_CALL setIdlc(Options* pOptions)
+Idlc* setIdlc(Options* pOptions)
 {
     delete pStaticIdlc;
     pStaticIdlc = new Idlc(pOptions);

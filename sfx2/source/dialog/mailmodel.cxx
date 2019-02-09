@@ -32,6 +32,7 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/security/CertificateValidity.hpp>
 #include <com/sun/star/security/DocumentSignatureInformation.hpp>
@@ -51,23 +52,22 @@
 #include <rtl/uri.h>
 #include <rtl/uri.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
+#include <osl/diagnose.h>
 
 #include <sfx2/mailmodelapi.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 #include <sfx2/sfxresid.hxx>
 #include <sfx2/sfxsids.hrc>
-#include "dialog.hrc"
+#include <sfx2/strings.hrc>
 
 #include <unotools/tempfile.hxx>
 #include <unotools/configitem.hxx>
 #include <ucbhelper/content.hxx>
 #include <tools/urlobj.hxx>
 #include <unotools/useroptions.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequenceashashmap.hxx>
-#include <comphelper/storagehelper.hxx>
 #include <comphelper/string.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/svapp.hxx>
@@ -90,15 +90,12 @@ class PrepareListener_Impl : public ::cppu::WeakImplHelper< css::frame::XStatusL
     bool m_bState;
 public:
         PrepareListener_Impl();
-        virtual ~PrepareListener_Impl();
 
         // css.frame.XStatusListener
-        virtual void SAL_CALL statusChanged(const css::frame::FeatureStateEvent& aEvent)
-          throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL statusChanged(const css::frame::FeatureStateEvent& aEvent) override;
 
         // css.lang.XEventListener
-        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent)
-          throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent) override;
 
         bool IsSet() const {return m_bState;}
 };
@@ -108,11 +105,7 @@ PrepareListener_Impl::PrepareListener_Impl() :
 {
 }
 
-PrepareListener_Impl::~PrepareListener_Impl()
-{
-}
-
-void PrepareListener_Impl::statusChanged(const css::frame::FeatureStateEvent& rEvent) throw(css::uno::RuntimeException, std::exception)
+void PrepareListener_Impl::statusChanged(const css::frame::FeatureStateEvent& rEvent)
 {
     if( rEvent.IsEnabled )
         rEvent.State >>= m_bState;
@@ -120,7 +113,7 @@ void PrepareListener_Impl::statusChanged(const css::frame::FeatureStateEvent& rE
         m_bState = false;
 }
 
-void PrepareListener_Impl::disposing(const css::lang::EventObject& /*rEvent*/) throw(css::uno::RuntimeException, std::exception)
+void PrepareListener_Impl::disposing(const css::lang::EventObject& /*rEvent*/)
 {
 }
 
@@ -179,11 +172,11 @@ SfxMailModel::SaveResult SfxMailModel::ShowFilterOptionsDialog(
                                 //used in filter/source/pdf/impdialog.cxx
                                 uno::Sequence< beans::PropertyValue > aFilterDataValue(1);
                                 aFilterDataValue[0].Name = "_OkButtonString";
-                                aFilterDataValue[0].Value = css::uno::makeAny(SfxResId(STR_PDF_EXPORT_SEND ).toString());
+                                aFilterDataValue[0].Value <<= SfxResId(STR_PDF_EXPORT_SEND );
 
                                 //add to the filterdata property, the only one the PDF export filter dialog will care for
                                 aPropsForDialog[0].Name = "FilterData";
-                                aPropsForDialog[0].Value = css::uno::makeAny( aFilterDataValue );
+                                aPropsForDialog[0].Value <<= aFilterDataValue;
 
                                 //when executing the dialog will merge the persistent FilterData properties
                                 xFilterProperties->setPropertyValues( aPropsForDialog );
@@ -222,7 +215,7 @@ SfxMailModel::SaveResult SfxMailModel::ShowFilterOptionsDialog(
                                 {
                                     try
                                     {
-                                        xModifiable->setModified( sal_False );
+                                        xModifiable->setModified( false );
                                     }
                                     catch( css::beans::PropertyVetoException& )
                                     {
@@ -332,9 +325,9 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
                 // Retrieve filter from type
                 css::uno::Sequence< css::beans::NamedValue > aQuery( bSendAsPDF ? 3 : 2 );
                 aQuery[0].Name  = "Type";
-                aQuery[0].Value = css::uno::makeAny( aTypeName );
+                aQuery[0].Value <<= aTypeName;
                 aQuery[1].Name  = "DocumentService";
-                aQuery[1].Value = css::uno::makeAny( aModule );
+                aQuery[1].Value <<= aModule;
                 if( bSendAsPDF )
                 {
                     // #i91419#
@@ -343,7 +336,7 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
                     // this seems to be a bug
                     // without flags we get an import filter here, which is also unwanted
                     aQuery[2].Name  = "Flags";
-                    aQuery[2].Value = css::uno::makeAny( sal_Int32(0x80042) ); // EXPORT ALIEN 3RDPARTY
+                    aQuery[2].Value <<= sal_Int32(0x80042); // EXPORT ALIEN 3RDPARTY
                 }
 
                 css::uno::Reference< css::container::XEnumeration > xEnumeration =
@@ -462,7 +455,7 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
                 {
                     // Determine file name from model
                     INetURLObject aFileObj( xStorable->getLocation() );
-                    aFileName = aFileObj.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::NO_DECODE );
+                    aFileName = aFileObj.getName( INetURLObject::LAST_SEGMENT, true, INetURLObject::DecodeMechanism::NONE );
                 }
             }
 
@@ -483,13 +476,13 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
             aFilePathObj.insertName( aFileName );
             aFilePathObj.setExtension( aExtension );
 
-            OUString aFileURL = aFilePathObj.GetMainURL( INetURLObject::NO_DECODE );
+            OUString aFileURL = aFilePathObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 
             sal_Int32 nNumArgs(0);
             const OUString aPasswordPropName( "Password" );
             css::uno::Sequence< css::beans::PropertyValue > aArgs( ++nNumArgs );
             aArgs[nNumArgs-1].Name  = "FilterName";
-            aArgs[nNumArgs-1].Value = css::uno::makeAny( aFilterName );
+            aArgs[nNumArgs-1].Value <<= aFilterName;
 
             ::comphelper::SequenceAsHashMap aMediaDescrPropsHM( xModel->getArgs() );
             OUString aPassword = aMediaDescrPropsHM.getUnpackedValueOrDefault(
@@ -499,7 +492,7 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
             {
                 aArgs.realloc( ++nNumArgs );
                 aArgs[nNumArgs-1].Name = aPasswordPropName;
-                aArgs[nNumArgs-1].Value = css::uno::makeAny( aPassword );
+                aArgs[nNumArgs-1].Value <<= aPassword;
             }
 
             bool bNeedsPreparation = false;
@@ -545,20 +538,17 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
                 {
                     if( bNeedsPreparation && xPrepareDispatch.is() )
                     {
-                        if ( xPrepareDispatch.is() )
+                        try
                         {
-                            try
-                            {
-                                css::uno::Sequence< css::beans::PropertyValue > aDispatchArgs;
-                                xPrepareDispatch->dispatch( aPrepareURL, aDispatchArgs );
-                            }
-                            catch ( css::uno::RuntimeException& )
-                            {
-                                throw;
-                            }
-                            catch ( css::uno::Exception& )
-                            {
-                            }
+                            css::uno::Sequence< css::beans::PropertyValue > aDispatchArgs;
+                            xPrepareDispatch->dispatch( aPrepareURL, aDispatchArgs );
+                        }
+                        catch ( css::uno::RuntimeException& )
+                        {
+                            throw;
+                        }
+                        catch ( css::uno::Exception& )
+                        {
                         }
                     }
 
@@ -612,7 +602,7 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
                     {
                         try
                         {
-                            xModifiable->setModified( sal_False );
+                            xModifiable->setModified( false );
                         }
                         catch( css::beans::PropertyVetoException& )
                         {
@@ -629,7 +619,7 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
                 // We need 1:1 copy of the document to preserve an added signature.
                 aArgs.realloc( ++nNumArgs );
                 aArgs[nNumArgs-1].Name = "CopyStreamIfPossible";
-                aArgs[nNumArgs-1].Value = css::uno::makeAny( true );
+                aArgs[nNumArgs-1].Value <<= true;
 
                 try
                 {
@@ -648,68 +638,35 @@ SfxMailModel::SaveResult SfxMailModel::SaveDocumentAsFormat(
     return eRet;
 }
 
-SfxMailModel::SfxMailModel() :
-    mpToList    ( nullptr ),
-    mpCcList    ( nullptr ),
-    mpBccList   ( nullptr )
+SfxMailModel::SfxMailModel()
 {
 }
 
 SfxMailModel::~SfxMailModel()
 {
-    delete mpToList;
-    delete mpCcList;
-    delete mpBccList;
 }
 
-void SfxMailModel::AddAddress( const OUString& rAddress, AddressRole eRole )
+void SfxMailModel::AddToAddress( const OUString& rAddress )
 {
     // don't add a empty address
     if ( !rAddress.isEmpty() )
     {
-        AddressList_Impl* pList = nullptr;
-        if ( ROLE_TO == eRole )
-        {
-            if ( !mpToList )
-                // create the list
-                mpToList = new AddressList_Impl();
-            pList = mpToList;
-        }
-        else if ( ROLE_CC == eRole )
-        {
-            if ( !mpCcList )
-                // create the list
-                mpCcList = new AddressList_Impl();
-            pList = mpCcList;
-        }
-        else if ( ROLE_BCC == eRole )
-        {
-            if ( !mpBccList )
-                // create the list
-                mpBccList = new AddressList_Impl();
-            pList = mpBccList;
-        }
-        else
-        {
-            SAL_WARN( "sfx.dialog", "invalid address role" );
-        }
+        if ( !mpToList )
+            // create the list
+            mpToList.reset(new AddressList_Impl);
 
-        if ( pList )
-        {
-            // add address to list
-            pList->push_back( rAddress );
-        }
+        // add address to list
+        mpToList->push_back( rAddress );
     }
 }
 
 SfxMailModel::SendMailResult SfxMailModel::AttachDocument(
-    const OUString& sDocumentType,
     const css::uno::Reference< css::uno::XInterface >& xFrameOrModel,
     const OUString& sAttachmentTitle )
 {
     OUString sFileName;
 
-    SaveResult eSaveResult = SaveDocumentAsFormat( sAttachmentTitle, xFrameOrModel, sDocumentType, sFileName );
+    SaveResult eSaveResult = SaveDocumentAsFormat( sAttachmentTitle, xFrameOrModel, OUString()/*sDocumentType*/, sFileName );
     if ( eSaveResult == SAVE_SUCCESSFULL &&  !sFileName.isEmpty() )
         maAttachedDocuments.push_back(sFileName);
     return eSaveResult == SAVE_SUCCESSFULL ? SEND_MAIL_OK : SEND_MAIL_ERROR;
@@ -764,68 +721,32 @@ SfxMailModel::SendMailResult SfxMailModel::Send( const css::uno::Reference< css:
                 xSimpleMailMessage->setOriginator( maFromAddress );
 
                 size_t nToCount     = mpToList ? mpToList->size() : 0;
-                size_t nCcCount     = mpCcList ? mpCcList->size() : 0;
-                size_t nCcSeqCount  = nCcCount;
 
                 // set recipient (only one) for this simple mail server!!
-                if ( nToCount > 1 )
-                {
-                    nCcSeqCount = nToCount - 1 + nCcCount;
-                    xSimpleMailMessage->setRecipient( mpToList->at( 0 ) );
-                    nSendFlags = SimpleMailClientFlags::NO_USER_INTERFACE;
-                }
-                else if ( nToCount == 1 )
+                if ( nToCount >= 1 )
                 {
                     xSimpleMailMessage->setRecipient( mpToList->at( 0 ) );
                     nSendFlags = SimpleMailClientFlags::NO_USER_INTERFACE;
                 }
 
                 // all other recipient must be handled with CC recipients!
-                if ( nCcSeqCount > 0 )
+                if ( nToCount > 1 )
                 {
-                    size_t                  nIndex = 0;
-                    Sequence< OUString >    aCcRecipientSeq;
-
-                    aCcRecipientSeq.realloc( nCcSeqCount );
-                    if ( nCcSeqCount > nCcCount )
-                    {
-                        for ( size_t i = 1; i < nToCount; ++i )
-                        {
-                            aCcRecipientSeq[nIndex++] = mpToList->at(i);
-                        }
-                    }
-
-                    for ( size_t i = 0; i < nCcCount; i++ )
-                    {
-                        aCcRecipientSeq[nIndex++] = mpCcList->at(i);
-                    }
+                    Sequence< OUString >    aCcRecipientSeq( nToCount - 1 );
+                    for ( size_t i = 1; i < nToCount; ++i )
+                        aCcRecipientSeq[i - 1] = mpToList->at(i);
                     xSimpleMailMessage->setCcRecipient( aCcRecipientSeq );
-                }
-
-                size_t nBccCount = mpBccList ? mpBccList->size() : 0;
-                if ( nBccCount > 0 )
-                {
-                    Sequence< OUString > aBccRecipientSeq( nBccCount );
-                    for ( size_t i = 0; i < nBccCount; ++i )
-                    {
-                        aBccRecipientSeq[i] = mpBccList->at(i);
-                    }
-                    xSimpleMailMessage->setBccRecipient( aBccRecipientSeq );
                 }
 
                 Sequence< OUString > aAttachmentSeq(&(maAttachedDocuments[0]),maAttachedDocuments.size());
 
                 if ( xSimpleMailMessage->getSubject().isEmpty() ) {
                     INetURLObject url(
-                        maAttachedDocuments[0], INetURLObject::WAS_ENCODED);
+                        maAttachedDocuments[0], INetURLObject::EncodeMechanism::WasEncoded);
                     OUString subject(
                         url.getBase(
                             INetURLObject::LAST_SEGMENT, false,
-#ifdef _WIN32
-                            INetURLObject::NO_DECODE)); // MAPISendMail does not accept Unicode
-#else
-                            INetURLObject::DECODE_WITH_CHARSET));
-#endif
+                            INetURLObject::DecodeMechanism::WithCharset));
                     if (subject.isEmpty()) {
                         subject = maAttachedDocuments[0];
                     }
@@ -853,10 +774,11 @@ SfxMailModel::SendMailResult SfxMailModel::Send( const css::uno::Reference< css:
                     css::uno::Reference< css::awt::XWindow > xParentWindow = xFrame->getContainerWindow();
 
                     SolarMutexGuard aGuard;
-                    vcl::Window* pParentWindow = VCLUnoHelper::GetWindow( xParentWindow );
+                    VclPtr<vcl::Window> pParentWindow = VCLUnoHelper::GetWindow( xParentWindow );
 
-                    ScopedVclPtrInstance< MessageDialog > aBox(pParentWindow, "ErrorFindEmailDialog", "sfx/ui/errorfindemaildialog.ui");
-                    aBox->Execute();
+                    std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(pParentWindow ? pParentWindow->GetFrameWeld() : nullptr, "sfx/ui/errorfindemaildialog.ui"));
+                    std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("ErrorFindEmailDialog"));
+                    xBox->run();
                     eResult = SEND_MAIL_CANCELLED;
                 }
                 else
@@ -920,15 +842,12 @@ bool CreateFromAddress_Impl( OUString& rFrom )
         }
         rFrom += comphelper::string::strip(aName, ' ');
         // remove illegal characters
-        rFrom = comphelper::string::remove(rFrom, '<');
-        rFrom = comphelper::string::remove(rFrom, '>');
-        rFrom = comphelper::string::remove(rFrom, '@');
+        rFrom = rFrom.replaceAll("<", "").replaceAll(">", "").replaceAll("@", "");
     }
     OUString aEmailName = aUserCFG.GetEmail();
 
     // remove illegal characters
-    aEmailName = comphelper::string::remove(aEmailName, '<');
-    aEmailName = comphelper::string::remove(aEmailName, '>');
+    aEmailName = aEmailName.replaceAll("<", "").replaceAll(">", "");
 
     if ( !aEmailName.isEmpty() )
     {

@@ -8,14 +8,11 @@
  *
  */
 
-#include "docsh.hxx"
-#include "reffact.hxx"
-#include "strload.hxx"
-#include "StatisticsDialogs.hrc"
-
-#include "CorrelationDialog.hxx"
-
-static const char strCorrelationTemplate[] = "=CORREL(%VAR1%; %VAR2%)";
+#include <docsh.hxx>
+#include <reffact.hxx>
+#include <CorrelationDialog.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
 
 ScCorrelationDialog::ScCorrelationDialog(
                         SfxBindings* pSfxBindings, SfxChildWindow* pChildWindow,
@@ -32,12 +29,12 @@ bool ScCorrelationDialog::Close()
 
 const OUString ScCorrelationDialog::getLabel()
 {
-    return SC_STRLOAD(RID_STATISTICS_DLGS, STR_CORRELATION_LABEL);
+    return ScResId(STR_CORRELATION_LABEL);
 }
 
 const OUString ScCorrelationDialog::getTemplate()
 {
-    return OUString(strCorrelationTemplate);
+    return OUString("=CORREL(%VAR1%; %VAR2%)");
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

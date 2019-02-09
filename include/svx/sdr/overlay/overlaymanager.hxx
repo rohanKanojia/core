@@ -65,12 +65,12 @@ namespace sdr
 
             // Stripe support. All striped OverlayObjects use these stripe
             // values. Changes change all those objects.
-            Color                                       maStripeColorA; // defaults to Color(COL_BLACK)
-            Color                                       maStripeColorB; // defaults to Color(COL_WHITE)
+            Color                                       maStripeColorA; // defaults to COL_BLACK
+            Color                                       maStripeColorB; // defaults to COL_WHITE
             sal_uInt32                                  mnStripeLengthPixel; // defaults to 4L
 
             // hold an incarnation of Drawinglayer configuration options
-            SvtOptionsDrawinglayer                      maDrawinglayerOpt;
+            SvtOptionsDrawinglayer const                maDrawinglayerOpt;
 
             // hold buffered the logic length of discrete vector (1.0, 0.0) and the
             // view transformation belonging to it. Update happens in getDiscreteOne()
@@ -89,22 +89,19 @@ namespace sdr
             double getDiscreteOne() const;
 
             OverlayManager(OutputDevice& rOutputDevice);
-            virtual ~OverlayManager();
+            virtual ~OverlayManager() override;
 
         public:
             static rtl::Reference<OverlayManager> create(OutputDevice& rOutputDevice);
 
             // access to current ViewInformation2D; this call checks and evtl. updates ViewInformation2D
-            const drawinglayer::geometry::ViewInformation2D getCurrentViewInformation2D() const;
+            drawinglayer::geometry::ViewInformation2D const & getCurrentViewInformation2D() const;
 
             // complete redraw
             virtual void completeRedraw(const vcl::Region& rRegion, OutputDevice* pPreRenderDevice = nullptr) const;
 
             // flush. Do buffered updates.
             virtual void flush();
-
-            // restore part of background. Implemented form buffered versions only.
-            virtual void restoreBackground(const vcl::Region& rRegion) const;
 
             // get the OutputDevice
             OutputDevice& getOutputDevice() const { return mrOutputDevice; }
@@ -117,21 +114,21 @@ namespace sdr
             virtual void invalidateRange(const basegfx::B2DRange& rRange);
 
             // stripe support ColA
-            Color getStripeColorA() const { return maStripeColorA; }
-            void setStripeColorA(Color aNew= Color(COL_BLACK));
+            const Color& getStripeColorA() const { return maStripeColorA; }
+            void setStripeColorA(Color aNew);
 
             // stripe support ColB
-            Color getStripeColorB() const { return maStripeColorB; }
-            void setStripeColorB(Color aNew = Color(COL_WHITE));
+            const Color& getStripeColorB() const { return maStripeColorB; }
+            void setStripeColorB(Color aNew);
 
             // stripe support StripeLengthPixel
             sal_uInt32 getStripeLengthPixel() const { return mnStripeLengthPixel; }
-            void setStripeLengthPixel(sal_uInt32 nNew = 5L);
+            void setStripeLengthPixel(sal_uInt32 nNew);
 
             // access to maDrawinglayerOpt
             const SvtOptionsDrawinglayer& getDrawinglayerOpt() const { return maDrawinglayerOpt; }
 
-            void InsertEvent(sdr::animation::Event* pNew) { Scheduler::InsertEvent(pNew); }
+            void InsertEvent(sdr::animation::Event& rNew) { Scheduler::InsertEvent(rNew); }
         };
     } // end of namespace overlay
 } // end of namespace sdr

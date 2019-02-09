@@ -19,23 +19,25 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_PLOTTINGPOSITIONHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_PLOTTINGPOSITIONHELPER_HXX
 
-#include "LabelAlignment.hxx"
-#include "chartview/ExplicitScaleValues.hxx"
+#include <chartview/ExplicitScaleValues.hxx>
 
 #include <basegfx/range/b2drectangle.hxx>
 #include <rtl/math.hxx>
-#include <com/sun/star/chart2/XTransformation.hpp>
 #include <com/sun/star/drawing/Direction3D.hpp>
-#include <com/sun/star/drawing/HomogenMatrix.hpp>
-#include <com/sun/star/drawing/PolyPolygonShape3D.hpp>
 #include <com/sun/star/drawing/Position3D.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
 #include <basegfx/matrix/b3dhommatrix.hxx>
+#include <com/sun/star/awt/Point.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+
+namespace com { namespace sun { namespace star { namespace chart2 { class XTransformation; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { struct HomogenMatrix; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { struct PolyPolygonShape3D; } } } }
 
 namespace chart
 {
 
-class AbstractShapeFactory;
+class ShapeFactory;
 
 class PlottingPositionHelper
 {
@@ -44,13 +46,13 @@ public:
     PlottingPositionHelper( const PlottingPositionHelper& rSource );
     virtual ~PlottingPositionHelper();
 
-    virtual PlottingPositionHelper* clone() const;
-    PlottingPositionHelper* createSecondaryPosHelper( const ExplicitScaleData& rSecondaryScale );
+    virtual std::unique_ptr<PlottingPositionHelper> clone() const;
+    std::unique_ptr<PlottingPositionHelper> createSecondaryPosHelper( const ExplicitScaleData& rSecondaryScale );
 
     virtual void setTransformationSceneToScreen( const css::drawing::HomogenMatrix& rMatrix);
 
-    virtual void setScales( const ::std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis );
-    const ::std::vector< ExplicitScaleData >& getScales() const { return m_aScales;}
+    virtual void setScales( const std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis );
+    const std::vector< ExplicitScaleData >& getScales() const { return m_aScales;}
 
     //better performance for big data
     inline void   setCoordinateSystemResolution( const css::uno::Sequence< sal_Int32 >& rCoordinateSystemResolution );
@@ -81,7 +83,7 @@ public:
     static css::awt::Point transformSceneToScreenPosition(
                   const css::drawing::Position3D& rScenePosition3D
                 , const css::uno::Reference< css::drawing::XShapes >& xSceneTarget
-                , AbstractShapeFactory* pShapeFactory, sal_Int32 nDimensionCount );
+                , ShapeFactory* pShapeFactory, sal_Int32 nDimensionCount );
 
     inline double getLogicMinX() const;
     inline double getLogicMinY() const;
@@ -111,7 +113,7 @@ public:
     void AllowShiftZAxisPos( bool bAllowShift );
 
 protected: //member
-    ::std::vector< ExplicitScaleData >  m_aScales;
+    std::vector< ExplicitScaleData >  m_aScales;
     ::basegfx::B3DHomMatrix             m_aMatrixScreenToScene;
 
     //this is calculated based on m_aScales and m_aMatrixScreenToScene
@@ -134,27 +136,19 @@ protected: //member
     bool   m_bAllowShiftZAxisPos;
 };
 
-//describes which axis of the drawinglayer scene or screen axis are the normal axis
-enum NormalAxis
-{
-      NormalAxis_X
-    , NormalAxis_Y
-    , NormalAxis_Z
-};
-
 class PolarPlottingPositionHelper : public PlottingPositionHelper
 {
 public:
-    PolarPlottingPositionHelper( NormalAxis eNormalAxis=NormalAxis_Z );
+    PolarPlottingPositionHelper();
     PolarPlottingPositionHelper( const PolarPlottingPositionHelper& rSource );
-    virtual ~PolarPlottingPositionHelper();
+    virtual ~PolarPlottingPositionHelper() override;
 
-    virtual PlottingPositionHelper* clone() const override;
+    virtual std::unique_ptr<PlottingPositionHelper> clone() const override;
 
     virtual void setTransformationSceneToScreen( const css::drawing::HomogenMatrix& rMatrix) override;
     virtual void setScales( const std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis ) override;
 
-    ::basegfx::B3DHomMatrix getUnitCartesianToScene() const { return m_aUnitCartesianToScene;}
+    const ::basegfx::B3DHomMatrix& getUnitCartesianToScene() const { return m_aUnitCartesianToScene;}
 
     virtual css::uno::Reference< css::chart2::XTransformation >
                   getTransformationScaledLogicToScene() const override;
@@ -192,7 +186,7 @@ public:
      *  (For a pie chart the origin of the coordinate system is the pie center).
      */
     css::drawing::Position3D
-            transformUnitCircleToScene( double fUnitAngleDegree, double fUnitRadius, double fLogicZ, bool bDoScaling=true ) const;
+            transformUnitCircleToScene( double fUnitAngleDegree, double fUnitRadius, double fLogicZ ) const;
 
     using PlottingPositionHelper::transformScaledLogicToScene;
 
@@ -217,7 +211,6 @@ public:
 
 private:
     ::basegfx::B3DHomMatrix m_aUnitCartesianToScene;
-    NormalAxis  m_eNormalAxis;
 
     ::basegfx::B3DHomMatrix impl_calculateMatrixUnitCartesianToScene( const ::basegfx::B3DHomMatrix& rMatrixScreenToScene ) const;
 };

@@ -23,6 +23,7 @@
 #include <editeng/brushitem.hxx>
 #include <editeng/shaditem.hxx>
 #include <editeng/frmdiritem.hxx>
+#include <sal/log.hxx>
 #include <fmtclds.hxx>
 #include <fmtfsize.hxx>
 #include <pagefrm.hxx>
@@ -30,11 +31,13 @@
 #include <swtable.hxx>
 #include <frmtool.hxx>
 #include <doc.hxx>
-#include <poolfmt.hrc>
+#include <node.hxx>
+#include <strings.hrc>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentStylePoolAccess.hxx>
 #include <poolfmt.hxx>
 #include <calbck.hxx>
+#include <hints.hxx>
 
 SwPageDesc::SwPageDesc(const OUString& rName, SwFrameFormat *pFormat, SwDoc *const pDoc)
     : SwModify(nullptr)
@@ -43,26 +46,30 @@ SwPageDesc::SwPageDesc(const OUString& rName, SwFrameFormat *pFormat, SwDoc *con
     , m_Left( pDoc->GetAttrPool(), rName, pFormat )
     , m_FirstMaster( pDoc->GetAttrPool(), rName, pFormat )
     , m_FirstLeft( pDoc->GetAttrPool(), rName, pFormat )
-    , m_Depend( this, nullptr )
+    , m_aDepends(*this)
+    , m_pTextFormatColl(nullptr)
     , m_pFollow( this )
     , m_nRegHeight( 0 )
     , m_nRegAscent( 0 )
     , m_nVerticalAdjustment( drawing::TextVerticalAdjust_TOP )
-    , m_eUse( (UseOnPage)(nsUseOnPage::PD_ALL | nsUseOnPage::PD_HEADERSHARE | nsUseOnPage::PD_FOOTERSHARE | nsUseOnPage::PD_FIRSTSHARE) )
+    , m_eUse( UseOnPage::All | UseOnPage::HeaderShare | UseOnPage::FooterShare | UseOnPage::FirstShare )
     , m_IsLandscape( false )
     , m_IsHidden( false )
+    , m_pdList( nullptr )
 {
 }
 
 SwPageDesc::SwPageDesc( const SwPageDesc &rCpy )
     : SwModify(nullptr)
+    , BroadcasterMixin()
     , m_StyleName( rCpy.GetName() )
     , m_NumType( rCpy.GetNumType() )
     , m_Master( rCpy.GetMaster() )
     , m_Left( rCpy.GetLeft() )
     , m_FirstMaster( rCpy.GetFirstMaster() )
     , m_FirstLeft( rCpy.GetFirstLeft() )
-    , m_Depend( this, const_cast<SwModify*>(rCpy.m_Depend.GetRegisteredIn()) )
+    , m_aDepends(*this)
+    , m_pTextFormatColl(nullptr)
     , m_pFollow( rCpy.m_pFollow )
     , m_nRegHeight( rCpy.GetRegHeight() )
     , m_nRegAscent( rCpy.GetRegAscent() )
@@ -71,7 +78,13 @@ SwPageDesc::SwPageDesc( const SwPageDesc &rCpy )
     , m_IsLandscape( rCpy.GetLandscape() )
     , m_IsHidden( rCpy.IsHidden() )
     , m_IsFootnoteInfo( rCpy.GetFootnoteInfo() )
+    , m_pdList( nullptr )
 {
+    if (rCpy.m_pTextFormatColl && rCpy.m_aDepends.IsListeningTo(rCpy.m_pTextFormatColl))
+    {
+        m_pTextFormatColl = rCpy.m_pTextFormatColl;
+        m_aDepends.StartListening(const_cast<SwTextFormatColl*>(m_pTextFormatColl));
+    }
 }
 
 SwPageDesc & SwPageDesc::operator = (const SwPageDesc & rSrc)
@@ -82,6 +95,14 @@ SwPageDesc & SwPageDesc::operator = (const SwPageDesc & rSrc)
     m_Left = rSrc.m_Left;
     m_FirstMaster = rSrc.m_FirstMaster;
     m_FirstLeft = rSrc.m_FirstLeft;
+    m_aDepends.EndListeningAll();
+    if (rSrc.m_pTextFormatColl && rSrc.m_aDepends.IsListeningTo(rSrc.m_pTextFormatColl))
+    {
+        m_pTextFormatColl = rSrc.m_pTextFormatColl;
+        m_aDepends.StartListening(const_cast<SwTextFormatColl*>(m_pTextFormatColl));
+    }
+    else
+        m_pTextFormatColl = nullptr;
 
     if (rSrc.m_pFollow == &rSrc)
         m_pFollow = this;
@@ -98,6 +119,23 @@ SwPageDesc & SwPageDesc::operator = (const SwPageDesc & rSrc)
 
 SwPageDesc::~SwPageDesc()
 {
+}
+
+bool SwPageDesc::SetName( const OUString& rNewName )
+{
+    bool renamed = true;
+    if (m_pdList) {
+        SwPageDescs::iterator it = m_pdList->find_( m_StyleName );
+        if( m_pdList->end() == it ) {
+            SAL_WARN( "sw", "SwPageDesc not found in expected m_pdList" );
+            return false;
+        }
+        renamed = m_pdList->m_PosIndex.modify( it,
+            change_name( rNewName ), change_name( m_StyleName ) );
+    }
+    else
+        m_StyleName = rNewName;
+    return renamed;
 }
 
 /// Only the margin is mirrored.
@@ -130,7 +168,7 @@ void SwPageDesc::ResetAllAttr()
 
     // #i73790# - method renamed
     rFormat.ResetAllFormatAttr();
-    rFormat.SetFormatAttr( SvxFrameDirectionItem(FRMDIR_HORI_LEFT_TOP, RES_FRAMEDIR) );
+    rFormat.SetFormatAttr( SvxFrameDirectionItem(SvxFrameDirection::Horizontal_LR_TB, RES_FRAMEDIR) );
 }
 
 // gets information from Modify
@@ -146,15 +184,13 @@ bool SwPageDesc::GetInfo( SfxPoolItem & rInfo ) const
 }
 
 /// set the style for the grid alignment
-void SwPageDesc::SetRegisterFormatColl( const SwTextFormatColl* pFormat )
+void SwPageDesc::SetRegisterFormatColl(const SwTextFormatColl* pFormat)
 {
-    if( pFormat != GetRegisterFormatColl() )
+    if(pFormat != m_pTextFormatColl)
     {
-        if( pFormat )
-            const_cast<SwTextFormatColl*>(pFormat)->Add(&m_Depend);
-        else
-            const_cast<SwTextFormatColl*>(GetRegisterFormatColl())->Remove(&m_Depend);
-
+        m_aDepends.EndListeningAll();
+        m_pTextFormatColl = pFormat;
+        m_aDepends.StartListening(const_cast<SwTextFormatColl*>(m_pTextFormatColl));
         RegisterChange();
     }
 }
@@ -162,8 +198,9 @@ void SwPageDesc::SetRegisterFormatColl( const SwTextFormatColl* pFormat )
 /// retrieve the style for the grid alignment
 const SwTextFormatColl* SwPageDesc::GetRegisterFormatColl() const
 {
-    const SwModify* pReg = m_Depend.GetRegisteredIn();
-    return static_cast<const SwTextFormatColl*>(pReg);
+    if (!m_aDepends.IsListeningTo(m_pTextFormatColl))
+        m_pTextFormatColl = nullptr;
+    return m_pTextFormatColl;
 }
 
 /// notify all affected page frames
@@ -219,15 +256,28 @@ void SwPageDesc::RegisterChange()
 }
 
 /// special handling if the style of the grid alignment changes
-void SwPageDesc::Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew )
+void SwPageDesc::SwClientNotify(const SwModify& rModify, const SfxHint& rHint)
 {
-    const sal_uInt16 nWhich = pOld ? pOld->Which() : pNew ? pNew->Which() : 0;
-    NotifyClients( pOld, pNew );
-
-    if ( (RES_ATTRSET_CHG == nWhich) || (RES_FMT_CHG == nWhich)
-        || isCHRATR(nWhich) || (RES_PARATR_LINESPACING == nWhich) )
+    if(auto pLegacyHint = dynamic_cast<const sw::LegacyModifyHint*>(&rHint))
     {
-        RegisterChange();
+        const sal_uInt16 nWhich = pLegacyHint->m_pOld
+                ? pLegacyHint->m_pOld->Which()
+                : pLegacyHint->m_pNew
+                ? pLegacyHint->m_pNew->Which()
+                : 0;
+        NotifyClients(pLegacyHint->m_pOld, pLegacyHint->m_pNew);
+        if((RES_ATTRSET_CHG == nWhich)
+                || (RES_FMT_CHG == nWhich)
+                || isCHRATR(nWhich)
+                || (RES_PARATR_LINESPACING == nWhich))
+            RegisterChange();
+    }
+    else if (auto pModifyChangedHint = dynamic_cast<const sw::ModifyChangedHint*>(&rHint))
+    {
+        if(m_pTextFormatColl == &rModify)
+            m_pTextFormatColl = static_cast<const SwTextFormatColl*>(pModifyChangedHint->m_pNew);
+        else
+            assert(false);
     }
 }
 
@@ -249,7 +299,8 @@ static const SwFrame* lcl_GetFrameOfNode( const SwNode& rNd )
         pMod = nullptr;
 
     Point aNullPt;
-    return pMod ? ::GetFrameOfModify( nullptr, *pMod, nFrameType, &aNullPt )
+    std::pair<Point, bool> const tmp(aNullPt, false);
+    return pMod ? ::GetFrameOfModify(nullptr, *pMod, nFrameType, nullptr, &tmp)
                 : nullptr;
 }
 
@@ -305,30 +356,45 @@ bool SwPageDesc::IsFollowNextPageOfNode( const SwNode& rNd ) const
 
 SwFrameFormat *SwPageDesc::GetLeftFormat(bool const bFirst)
 {
-    return (nsUseOnPage::PD_LEFT & m_eUse)
-            ? ((bFirst) ? &m_FirstLeft : &m_Left)
+    return (UseOnPage::Left & m_eUse)
+            ? (bFirst ? &m_FirstLeft : &m_Left)
             : nullptr;
 }
 
 SwFrameFormat *SwPageDesc::GetRightFormat(bool const bFirst)
 {
-    return (nsUseOnPage::PD_RIGHT & m_eUse)
-            ? ((bFirst) ? &m_FirstMaster : &m_Master)
+    return (UseOnPage::Right & m_eUse)
+            ? (bFirst ? &m_FirstMaster : &m_Master)
             : nullptr;
 }
 
 bool SwPageDesc::IsFirstShared() const
 {
-    return (m_eUse & nsUseOnPage::PD_FIRSTSHARE) != 0;
+    return bool(m_eUse & UseOnPage::FirstShare);
 }
 
 void SwPageDesc::ChgFirstShare( bool bNew )
 {
     if ( bNew )
-        m_eUse = (UseOnPage) (m_eUse | nsUseOnPage::PD_FIRSTSHARE);
+        m_eUse |= UseOnPage::FirstShare;
     else
-        m_eUse = (UseOnPage) (m_eUse & nsUseOnPage::PD_NOFIRSTSHARE);
+        m_eUse &= UseOnPage::NoFirstShare;
 }
+
+// Page styles
+static const char* STR_POOLPAGE[] =
+{
+    STR_POOLPAGE_STANDARD,
+    STR_POOLPAGE_FIRST,
+    STR_POOLPAGE_LEFT,
+    STR_POOLPAGE_RIGHT,
+    STR_POOLPAGE_JAKET,
+    STR_POOLPAGE_REGISTER,
+    STR_POOLPAGE_HTML,
+    STR_POOLPAGE_FOOTNOTE,
+    STR_POOLPAGE_ENDNOTE,
+    STR_POOLPAGE_LANDSCAPE
+};
 
 SwPageDesc* SwPageDesc::GetByName(SwDoc& rDoc, const OUString& rName)
 {
@@ -343,12 +409,12 @@ SwPageDesc* SwPageDesc::GetByName(SwDoc& rDoc, const OUString& rName)
         }
     }
 
-    for( sal_Int32 i = RC_POOLPAGEDESC_BEGIN; i <= STR_POOLPAGE_LANDSCAPE; ++i)
+    for (size_t i = 0; i < SAL_N_ELEMENTS(STR_POOLPAGE); ++i)
     {
-        if (rName==SW_RESSTR(i))
+        if (rName == SwResId(STR_POOLPAGE[i]))
         {
             return rDoc.getIDocumentStylePoolAccess().GetPageDescFromPool( static_cast< sal_uInt16 >(
-                        i - RC_POOLPAGEDESC_BEGIN + RES_POOLPAGE_BEGIN) );
+                        i + RES_POOLPAGE_BEGIN) );
         }
     }
 
@@ -358,14 +424,14 @@ SwPageDesc* SwPageDesc::GetByName(SwDoc& rDoc, const OUString& rName)
 SwPageFootnoteInfo::SwPageFootnoteInfo()
     : m_nMaxHeight( 0 )
     , m_nLineWidth(10)
-    , m_eLineStyle( table::BorderLineStyle::SOLID )
+    , m_eLineStyle( SvxBorderLineStyle::SOLID )
     , m_Width( 25, 100 )
     , m_nTopDist( 57 )         //1mm
     , m_nBottomDist( 57 )
 {
-    m_eAdjust = FRMDIR_HORI_RIGHT_TOP == GetDefaultFrameDirection(GetAppLanguage()) ?
-           FTNADJ_RIGHT :
-           FTNADJ_LEFT;
+    m_eAdjust = SvxFrameDirection::Horizontal_RL_TB == GetDefaultFrameDirection(GetAppLanguage()) ?
+           css::text::HorizontalAdjust_RIGHT :
+           css::text::HorizontalAdjust_LEFT;
 }
 
 SwPageFootnoteInfo::SwPageFootnoteInfo( const SwPageFootnoteInfo &rCpy )
@@ -423,7 +489,7 @@ SwPageDescExt::~SwPageDescExt()
 {
 }
 
-OUString SwPageDescExt::GetName() const
+OUString const & SwPageDescExt::GetName() const
 {
     return m_PageDesc.GetName();
 }
@@ -460,6 +526,62 @@ SwPageDescExt::operator SwPageDesc() const
         aResult.SetFollow(pPageDesc);
 
     return aResult;
+}
+
+SwPageDescs::SwPageDescs()
+    : m_PosIndex( m_Array.get<0>() )
+    , m_NameIndex( m_Array.get<1>() )
+{
+}
+
+SwPageDescs::~SwPageDescs()
+{
+    for(const_iterator it = begin(); it != end(); ++it)
+        delete *it;
+}
+
+SwPageDescs::iterator SwPageDescs::find_(const OUString &name) const
+{
+    ByName::iterator it = m_NameIndex.find( name );
+    return m_Array.iterator_to( *it );
+}
+
+std::pair<SwPageDescs::const_iterator,bool> SwPageDescs::push_back( const value_type& x )
+{
+    // SwPageDesc is not already in a SwPageDescs list!
+    assert( x->m_pdList == nullptr );
+
+    std::pair<iterator,bool> res = m_PosIndex.push_back( x );
+    if( res.second )
+        x->m_pdList = this;
+    return res;
+}
+
+void SwPageDescs::erase( const value_type& x )
+{
+    // SwPageDesc is not in this SwPageDescs list!
+    assert( x->m_pdList == this );
+
+    iterator const ret = find_( x->GetName() );
+    if (ret != end())
+        m_PosIndex.erase( ret );
+    else
+        SAL_WARN( "sw", "SwPageDesc is not in SwPageDescs m_pdList!" );
+    x->m_pdList = nullptr;
+}
+
+void SwPageDescs::erase( const_iterator const& position )
+{
+    // SwPageDesc is not in this SwPageDescs list!
+    assert( (*position)->m_pdList == this );
+
+    (*position)->m_pdList = nullptr;
+    m_PosIndex.erase( position );
+}
+
+void SwPageDescs::erase( size_type index_ )
+{
+    erase( begin() + index_ );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

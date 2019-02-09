@@ -29,11 +29,10 @@ namespace sdr
 {
     namespace overlay
     {
-        class SVX_DLLPUBLIC OverlayPolyPolygonStripedAndFilled : public OverlayObject
+        class SVX_DLLPUBLIC OverlayPolyPolygonStripedAndFilled final : public OverlayObject
         {
-        protected:
             // geometry
-            basegfx::B2DPolyPolygon             maLinePolyPolygon;
+            basegfx::B2DPolyPolygon const             maLinePolyPolygon;
 
             // geometry creation for OverlayObject
             virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
@@ -41,10 +40,10 @@ namespace sdr
         public:
             explicit OverlayPolyPolygonStripedAndFilled(
                 const basegfx::B2DPolyPolygon& rLinePolyPolygon);
-            virtual ~OverlayPolyPolygonStripedAndFilled();
+            virtual ~OverlayPolyPolygonStripedAndFilled() override;
 
             // change geometry
-            basegfx::B2DPolyPolygon getLinePolyPolygon() const { return maLinePolyPolygon; }
+            const basegfx::B2DPolyPolygon& getLinePolyPolygon() const { return maLinePolyPolygon; }
 
             // react on stripe definition change
             virtual void stripeDefinitionHasChanged() override;

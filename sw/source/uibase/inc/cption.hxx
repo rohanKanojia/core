@@ -19,96 +19,65 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_CPTION_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_CPTION_HXX
 
-#include <svx/stddlg.hxx>
+#include <sfx2/basedlgs.hxx>
+#include "actctrl.hxx"
 
-#include <vcl/fixed.hxx>
-
-#include <vcl/lstbox.hxx>
-
-#include <vcl/edit.hxx>
-
-#include <vcl/group.hxx>
-
-#include <vcl/button.hxx>
-#include <actctrl.hxx>
-
-#include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/container/XContentEnumerationAccess.hpp>
-#include <com/sun/star/container/XEnumeration.hpp>
-#include <com/sun/star/container/XElementAccess.hpp>
-#include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/container/XNamed.hpp>
+
+#include "wrtsh.hxx"
+#include "optload.hxx"
 
 class SwFieldMgr;
 class SwView;
 
-#include <wrtsh.hxx>
-#include "optload.hxx"
-#include "swlbox.hxx"
-
-class TextFilterAutoConvert : public TextFilter
+class SwCaptionDialog : public SfxDialogController
 {
-private:
-    OUString m_sLastGoodText;
-    OUString m_sNone;
-public:
-    TextFilterAutoConvert(const OUString &rNone)
-        : m_sNone(rNone)
-    {
-    }
-    virtual OUString filter(const OUString &rText) override;
-};
-
-class SwCaptionDialog : public SvxStandardDialog
-{
-    VclPtr<Edit>        m_pTextEdit;
-    VclPtr<ComboBox>    m_pCategoryBox;
-    OUString     m_sNone;
+    OUString const      m_sNone;
     TextFilterAutoConvert m_aTextFilter;
-    VclPtr<FixedText>   m_pFormatText;
-    VclPtr<ListBox>     m_pFormatBox;
-    //#i61007# order of captions
-    VclPtr<FixedText>   m_pNumberingSeparatorFT;
-    VclPtr<Edit>        m_pNumberingSeparatorED;
-    VclPtr<FixedText>   m_pSepText;
-    VclPtr<Edit>        m_pSepEdit;
-    VclPtr<FixedText>   m_pPosText;
-    VclPtr<ListBox>     m_pPosBox;
-    VclPtr<OKButton>    m_pOKButton;
-    VclPtr<PushButton>  m_pAutoCaptionButton;
-    VclPtr<PushButton>  m_pOptionButton;
-
-    VclPtr<SwCaptionPreview> m_pPreview;
-
     SwView       &rView; // search per active, avoid View
-    SwFieldMgr     *pMgr;      // pointer to save the include
-    SelectionType eType;
+    std::unique_ptr<SwFieldMgr> pMgr;      // pointer to save the include
 
     OUString     sCharacterStyle;
-    OUString     sObjectName;
     bool         bCopyAttributes;
     bool        bOrderNumberingFirst; //#i61007# order of captions
 
     css::uno::Reference< css::container::XNameAccess >    xNameAccess;
 
-    DECL_LINK_TYPED(SelectHdl, ComboBox&, void);
-    DECL_LINK_TYPED(SelectListBoxHdl, ListBox&, void);
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
-    DECL_LINK_TYPED(OptionHdl, Button *, void);
-    DECL_LINK_TYPED(CaptionHdl, Button *, void);
+    SwCaptionPreview m_aPreview;
+    std::unique_ptr<weld::Entry> m_xTextEdit;
+    std::unique_ptr<weld::ComboBox> m_xCategoryBox;
+    std::unique_ptr<weld::Label> m_xFormatText;
+    std::unique_ptr<weld::ComboBox> m_xFormatBox;
+    //#i61007# order of captions
+    std::unique_ptr<weld::Label> m_xNumberingSeparatorFT;
+    std::unique_ptr<weld::Entry> m_xNumberingSeparatorED;
+    std::unique_ptr<weld::Label> m_xSepText;
+    std::unique_ptr<weld::Entry> m_xSepEdit;
+    std::unique_ptr<weld::Label> m_xPosText;
+    std::unique_ptr<weld::ComboBox> m_xPosBox;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    std::unique_ptr<weld::Button> m_xAutoCaptionButton;
+    std::unique_ptr<weld::Button> m_xOptionButton;
+    std::unique_ptr<weld::CustomWeld> m_xPreview;
 
-    virtual void Apply() override;
+    DECL_LINK(SelectListBoxHdl, weld::ComboBox&, void);
+    DECL_LINK(ModifyEntryHdl, weld::Entry&, void);
+    DECL_LINK(ModifyComboHdl, weld::ComboBox&, void);
+    DECL_LINK(OptionHdl, weld::Button&, void);
+    DECL_LINK(CaptionHdl, weld::Button&, void);
+    DECL_LINK(TextFilterHdl, OUString&, bool);
 
-    void    DrawSample();
-    void    ApplyCaptionOrder(); //#i61007# order of captions
+    void Apply();
+
+    void ModifyHdl();
+    void DrawSample();
+    void ApplyCaptionOrder(); //#i61007# order of captions
 
     static OUString our_aSepTextSave; // Save caption separator text
 public:
-     SwCaptionDialog( vcl::Window *pParent, SwView &rV );
-    virtual ~SwCaptionDialog();
-    virtual void dispose() override;
+    SwCaptionDialog(weld::Window *pParent, SwView &rV);
+    virtual short run() override;
+    virtual ~SwCaptionDialog() override;
 };
 
 #endif

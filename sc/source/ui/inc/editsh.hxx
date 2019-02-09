@@ -21,12 +21,12 @@
 #define INCLUDED_SC_SOURCE_UI_INC_EDITSH_HXX
 
 #include <sfx2/shell.hxx>
-#include <sfx2/module.hxx>
 #include <tools/link.hxx>
+#include <rtl/ref.hxx>
 
-#include "shellids.hxx"
-#include <editeng/editview.hxx>
+#include <shellids.hxx>
 
+class SfxModule;
 class EditView;
 class ScViewData;
 class ScInputHandler;
@@ -39,14 +39,14 @@ class ScEditShell : public SfxShell
 private:
     EditView*   pEditView;
     ScViewData* pViewData;
-    TransferableClipboardListener* pClipEvtLstnr;
+    rtl::Reference<TransferableClipboardListener> mxClipEvtLstnr;
     bool        bPastePossible;
     bool        bIsInsertMode;
 
     const SvxURLField* GetURLField();
     ScInputHandler* GetMyInputHdl();
 
-    DECL_LINK_TYPED( ClipboardChanged, TransferableDataHelper*, void );
+    DECL_LINK( ClipboardChanged, TransferableDataHelper*, void );
 
 public:
     SFX_DECL_INTERFACE(SCID_EDIT_SHELL)
@@ -57,20 +57,20 @@ private:
 
 public:
     ScEditShell(EditView* pView, ScViewData* pData);
-    virtual ~ScEditShell();
+    virtual ~ScEditShell() override;
 
     void    SetEditView(EditView* pView);
     EditView* GetEditView() {return pEditView;}
 
     void    Execute(SfxRequest& rReq);
-    void    ExecuteTrans(SfxRequest& rReq);
+    void    ExecuteTrans(const SfxRequest& rReq);
     void    GetState(SfxItemSet &rSet);
     void    GetClipState(SfxItemSet& rSet);
 
     void    ExecuteAttr(SfxRequest& rReq);
     void    GetAttrState(SfxItemSet &rSet);
 
-    void    ExecuteUndo(SfxRequest& rReq);
+    void    ExecuteUndo(const SfxRequest& rReq);
     void    GetUndoState(SfxItemSet &rSet);
 
     OUString GetSelectionText( bool bWholeWord );

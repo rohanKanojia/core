@@ -18,7 +18,6 @@
 class ScDocument;
 class ScColumn;
 class ScMarkData;
-class ScRange;
 class ScRangeList;
 
 namespace sc {
@@ -28,8 +27,8 @@ class SingleColumnSpanSet;
 
 struct RowSpan
 {
-    SCROW mnRow1;
-    SCROW mnRow2;
+    SCROW const mnRow1;
+    SCROW const mnRow2;
 
     RowSpan(SCROW nRow1, SCROW nRow2);
 };
@@ -60,11 +59,10 @@ private:
         ColumnType(SCROW nStart, SCROW nEnd, bool bInit);
     };
 
-    typedef std::vector<ColumnType*> TableType;
-    typedef std::vector<TableType*> DocType;
+    typedef std::vector<std::unique_ptr<ColumnType>> TableType;
 
-    DocType maDoc;
-    bool mbInit;
+    std::vector<std::unique_ptr<TableType>> maTables;
+    bool const mbInit;
 
     ColumnType& getColumn(SCTAB nTab, SCCOL nCol);
 
@@ -105,7 +103,6 @@ public:
 
     void executeAction(Action& ac) const;
     void executeColumnAction(ScDocument& rDoc, ColumnAction& ac) const;
-    void executeColumnAction(ScDocument& rDoc, ColumnAction& ac, double& fMem) const;
 };
 
 /**
@@ -149,9 +146,27 @@ public:
 
     void swap( SingleColumnSpanSet& r );
 
+    /** Whether there isn't any row tagged. */
+    bool empty() const;
+
 private:
     ColumnSpansType maSpans;
 };
+
+/**
+ * Optimized ColumnSpanSet version that operates on a single ScRange.
+ */
+class RangeColumnSpanSet
+{
+public:
+    RangeColumnSpanSet( const ScRange& spanRange )
+         : range( spanRange ) {}
+    void executeColumnAction(ScDocument& rDoc, sc::ColumnSpanSet::ColumnAction& ac) const;
+    void executeColumnAction(ScDocument& rDoc, sc::ColumnSpanSet::ColumnAction& ac, double& fMem) const;
+private:
+    ScRange range;
+};
+
 
 }
 

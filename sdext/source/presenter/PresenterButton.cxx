@@ -29,7 +29,6 @@
 #include <com/sun/star/drawing/XPresenterHelper.hpp>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
 #include <com/sun/star/rendering/TextDirection.hpp>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -58,11 +57,11 @@ const static double gnVerticalBorder (5);
         PresenterConfigurationAccess::GetProperty(xProperties, "Action") >>= sAction;
 
         PresenterTheme::SharedFontDescriptor pFont;
-        if (rpTheme.get() != nullptr)
+        if (rpTheme != nullptr)
             pFont = rpTheme->GetFont("ButtonFont");
 
         PresenterTheme::SharedFontDescriptor pMouseOverFont;
-        if (rpTheme.get() != nullptr)
+        if (rpTheme != nullptr)
             pMouseOverFont = rpTheme->GetFont("ButtonMouseOverFont");
 
         rtl::Reference<PresenterButton> pButton (
@@ -121,19 +120,16 @@ PresenterButton::PresenterButton (
 
         if (mxPresenterHelper.is())
             mxWindow = mxPresenterHelper->createWindow(rxParentWindow,
-                sal_False,
-                sal_False,
-                sal_False,
-                sal_False);
+                false,
+                false,
+                false,
+                false);
 
         // Make the background transparent.
         Reference<awt::XWindowPeer> xPeer (mxWindow, UNO_QUERY_THROW);
-        if (xPeer.is())
-        {
-            xPeer->setBackground(0xff000000);
-        }
+        xPeer->setBackground(0xff000000);
 
-        mxWindow->setVisible(sal_True);
+        mxWindow->setVisible(true);
         mxWindow->addWindowListener(this);
         mxWindow->addPaintListener(this);
         mxWindow->addMouseListener(this);
@@ -222,7 +218,7 @@ void PresenterButton::SetCanvas (
     }
 }
 
-css::geometry::IntegerSize2D PresenterButton::GetSize()
+css::geometry::IntegerSize2D const & PresenterButton::GetSize()
 {
     if (maButtonSize.Width < 0)
         CalculateButtonSize();
@@ -231,38 +227,29 @@ css::geometry::IntegerSize2D PresenterButton::GetSize()
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL PresenterButton::windowResized (const css::awt::WindowEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::windowResized (const css::awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
-void SAL_CALL PresenterButton::windowMoved (const css::awt::WindowEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::windowMoved (const css::awt::WindowEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
-void SAL_CALL PresenterButton::windowShown (const css::lang::EventObject& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::windowShown (const css::lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
-void SAL_CALL PresenterButton::windowHidden (const css::lang::EventObject& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::windowHidden (const css::lang::EventObject&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterButton::windowPaint (const css::awt::PaintEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     if (mxWindow.is() && mxCanvas.is())
@@ -288,24 +275,20 @@ void SAL_CALL PresenterButton::windowPaint (const css::awt::PaintEvent& rEvent)
 
         Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
         if (xSpriteCanvas.is())
-            xSpriteCanvas->updateScreen(sal_False);
+            xSpriteCanvas->updateScreen(false);
     }
 }
 
 //----- XMouseListener --------------------------------------------------------
 
-void SAL_CALL PresenterButton::mousePressed (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::mousePressed (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     meState = PresenterBitmapDescriptor::ButtonDown;
 }
 
-void SAL_CALL PresenterButton::mouseReleased (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::mouseReleased (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 
     if (meState == PresenterBitmapDescriptor::ButtonDown)
@@ -318,19 +301,15 @@ void SAL_CALL PresenterButton::mouseReleased (const css::awt::MouseEvent& rEvent
     }
 }
 
-void SAL_CALL PresenterButton::mouseEntered (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::mouseEntered (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     meState = PresenterBitmapDescriptor::MouseOver;
     Invalidate();
 }
 
-void SAL_CALL PresenterButton::mouseExited (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::mouseExited (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
     meState = PresenterBitmapDescriptor::Normal;
     Invalidate();
@@ -338,24 +317,19 @@ void SAL_CALL PresenterButton::mouseExited (const css::awt::MouseEvent& rEvent)
 
 //----- XMouseMotionListener --------------------------------------------------
 
-void SAL_CALL PresenterButton::mouseMoved (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::mouseMoved (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
-void SAL_CALL PresenterButton::mouseDragged (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterButton::mouseDragged (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 }
 
 //----- lang::XEventListener --------------------------------------------------
 
 void SAL_CALL PresenterButton::disposing (const css::lang::EventObject& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
 {
     if (rEvent.Source == mxWindow)
         mxWindow = nullptr;
@@ -495,20 +469,20 @@ Reference<beans::XPropertySet> PresenterButton::GetConfigurationProperties (
             Reference<container::XNameAccess>(
                 aConfiguration.GetConfigurationNode("PresenterScreenSettings/Buttons"),
                 UNO_QUERY),
-            ::boost::bind(&PresenterConfigurationAccess::IsStringPropertyEqual,
-                rsConfgurationName,
-                OUString("Name"),
-                _2)),
+            [&rsConfgurationName](OUString const&, uno::Reference<beans::XPropertySet> const& xProps) -> bool
+            {
+                return PresenterConfigurationAccess::IsStringPropertyEqual(
+                        rsConfgurationName, "Name", xProps);
+            }),
         UNO_QUERY);
 }
 
 void PresenterButton::ThrowIfDisposed() const
-    throw (css::lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
         throw lang::DisposedException (
-            OUString( "PresenterButton object has already been disposed"),
+            "PresenterButton object has already been disposed",
             const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
     }
 }

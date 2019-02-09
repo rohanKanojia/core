@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "propertystorage.hxx"
+#include <propertystorage.hxx>
 
 #include <svl/itemset.hxx>
 #include <svl/stritem.hxx>
@@ -31,9 +31,6 @@
 namespace dbaui
 {
 
-    using ::com::sun::star::uno::XInterface;
-    using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
 
     // helper
@@ -85,7 +82,7 @@ namespace dbaui
         const SfxPoolItem& rItem( m_rItemSet.Get( m_nItemID ) );
 
         // try some known item types
-        if  (   ItemAdapter< SfxBoolItem, sal_Bool >::tryGet( rItem, _out_rValue )
+        if  (   ItemAdapter< SfxBoolItem, bool >::tryGet( rItem, _out_rValue )
             ||  ItemAdapter< SfxStringItem, OUString >::tryGet( rItem, _out_rValue )
             )
             return;
@@ -96,7 +93,7 @@ namespace dbaui
     void SetItemPropertyStorage::setPropertyValue( const Any& _rValue )
     {
         // try some known item types
-        if  (   ItemAdapter< SfxBoolItem, sal_Bool >::trySet( m_rItemSet, m_nItemID, _rValue )
+        if  (   ItemAdapter< SfxBoolItem, bool >::trySet( m_rItemSet, m_nItemID, _rValue )
             ||  ItemAdapter< SfxStringItem, OUString >::trySet( m_rItemSet, m_nItemID, _rValue )
             )
             return;

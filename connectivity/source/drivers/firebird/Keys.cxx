@@ -23,7 +23,7 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::uno;
 
-Keys::Keys(Table* pTable, Mutex& rMutex, const TStringVector& rNames):
+Keys::Keys(Table* pTable, Mutex& rMutex, const ::std::vector< OUString>& rNames):
     OKeysHelper(pTable,
                 rMutex,
                 rNames),
@@ -34,8 +34,6 @@ Keys::Keys(Table* pTable, Mutex& rMutex, const TStringVector& rNames):
 //----- XDrop ----------------------------------------------------------------
 void Keys::dropObject(sal_Int32 nPosition, const OUString& sName)
 {
-    Reference< XConnection> xConnection = m_pTable->getConnection();
-
     if (!m_pTable->isNew())
     {
         uno::Reference<XPropertySet> xKey(getObject(nPosition), UNO_QUERY);

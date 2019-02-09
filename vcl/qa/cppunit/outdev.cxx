@@ -17,6 +17,8 @@
 
 #include <tools/stream.hxx>
 #include <vcl/pngwrite.hxx>
+#include <sal/log.hxx>
+#include <basegfx/matrix/b2dhommatrix.hxx>
 
 class VclOutdevTest : public test::BootstrapFixture
 {
@@ -24,9 +26,11 @@ public:
     VclOutdevTest() : BootstrapFixture(true, false) {}
 
     void testVirtualDevice();
+    void testUseAfterDispose();
 
     CPPUNIT_TEST_SUITE(VclOutdevTest);
     CPPUNIT_TEST(testVirtualDevice);
+    CPPUNIT_TEST(testUseAfterDispose);
     CPPUNIT_TEST_SUITE_END();
 };
 
@@ -40,7 +44,7 @@ void VclOutdevTest::testVirtualDevice()
     pVDev->DrawPixel(Point(31,30),COL_RED);
 
     Size aSize = pVDev->GetOutputSizePixel();
-    CPPUNIT_ASSERT(aSize == Size(32,32));
+    CPPUNIT_ASSERT_EQUAL(Size(32,32), aSize);
 
     Bitmap aBmp = pVDev->GetBitmap(Point(),aSize);
 
@@ -56,27 +60,42 @@ void VclOutdevTest::testVirtualDevice()
     }
 #endif
 
-    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pVDev->GetPixel(Point(0,0)).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pVDev->GetPixel(Point(0,0)));
 #if defined LINUX //TODO: various failures on Mac and Windows tinderboxes
-    CPPUNIT_ASSERT_EQUAL(COL_BLUE, pVDev->GetPixel(Point(1,2)).GetColor());
-    CPPUNIT_ASSERT_EQUAL(COL_RED, pVDev->GetPixel(Point(31,30)).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_BLUE, pVDev->GetPixel(Point(1,2)));
+    CPPUNIT_ASSERT_EQUAL(COL_RED, pVDev->GetPixel(Point(31,30)));
 #endif
-    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pVDev->GetPixel(Point(30,31)).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pVDev->GetPixel(Point(30,31)));
 
     // Gotcha: y and x swap for BitmapReadAccess: deep joy.
     Bitmap::ScopedReadAccess pAcc(aBmp);
-    CPPUNIT_ASSERT_EQUAL(COL_WHITE, Color(pAcc->GetPixel(0,0)).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pAcc->GetPixel(0,0).GetColor());
 #if defined LINUX //TODO: various failures on Mac and Windows tinderboxes
-    CPPUNIT_ASSERT_EQUAL(COL_BLUE, Color(pAcc->GetPixel(2,1)).GetColor());
-    CPPUNIT_ASSERT_EQUAL(COL_RED, Color(pAcc->GetPixel(30,31)).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_BLUE, pAcc->GetPixel(2,1).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_RED, pAcc->GetPixel(30,31).GetColor());
 #endif
-    CPPUNIT_ASSERT_EQUAL(COL_WHITE, Color(pAcc->GetPixel(31,30)).GetColor());
+    CPPUNIT_ASSERT_EQUAL(COL_WHITE, pAcc->GetPixel(31,30).GetColor());
 
 #if 0
     VclPtr<vcl::Window> pWin = VclPtr<WorkWindow>::Create( (vcl::Window *)nullptr );
     CPPUNIT_ASSERT( pWin );
-    OutputDevice *pOutDev = static_cast< OutputDevice * >( pWin );
+    OutputDevice *pOutDev = pWin.get();
 #endif
+}
+
+void VclOutdevTest::testUseAfterDispose()
+{
+    // Create a virtual device, enable map mode then dispose it.
+    ScopedVclPtrInstance<VirtualDevice> pVDev;
+
+    pVDev->EnableMapMode();
+
+    pVDev->disposeOnce();
+
+    // Make sure that these don't crash after dispose.
+    pVDev->GetInverseViewTransformation();
+
+    pVDev->GetViewTransformation();
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(VclOutdevTest);

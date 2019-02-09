@@ -22,11 +22,10 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 
-#include "condedit.hxx"
-#include "dbtree.hxx"
-#include "numfmtlb.hxx"
+#include <condedit.hxx>
+#include <dbtree.hxx>
+#include <numfmtlb.hxx>
 
 #include "fldpage.hxx"
 
@@ -54,12 +53,12 @@ class SwFieldDBPage : public SwFieldPage
     sal_uInt16          m_nOldSubType;
     Link<ListBox&,void> m_aOldNumSelectHdl;
 
-    DECL_LINK_TYPED( TypeListBoxHdl, ListBox&, void );
-    DECL_LINK_TYPED( NumSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( TreeSelectHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( AddDBHdl, Button*, void );
-    void TypeHdl(ListBox*);
+    DECL_LINK( TypeListBoxHdl, ListBox&, void );
+    DECL_LINK( NumSelectHdl, ListBox&, void );
+    DECL_LINK( TreeSelectHdl, SvTreeListBox*, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
+    DECL_LINK( AddDBHdl, Button*, void );
+    void TypeHdl(ListBox const *);
 
     void                CheckInsert();
 
@@ -69,12 +68,12 @@ protected:
     virtual sal_uInt16      GetGroup() override;
 
 public:
-                        SwFieldDBPage(vcl::Window* pParent, const SfxItemSet& rSet);
+                        SwFieldDBPage(vcl::Window* pParent, const SfxItemSet* rSet);
 
-                        virtual ~SwFieldDBPage();
+                        virtual ~SwFieldDBPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create(vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage>  Create(TabPageParent pParent, const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <osl/diagnose.h>
 #include "connpooloptions.hxx"
 #include <svtools/editbrowsebox.hxx>
 #include <vcl/field.hxx>
 #include <vcl/builderfactory.hxx>
 #include "connpoolsettings.hxx"
 #include <svl/eitem.hxx>
-#include <cuires.hrc>
-#include "helpid.hrc"
+#include <strings.hrc>
 #include <dialmgr.hxx>
 
 using ::svt::EditBrowseBox;
@@ -68,7 +68,7 @@ namespace offapp
         virtual void InitController( ::svt::CellControllerRef& rController, long nRow, sal_uInt16 nCol ) override;
         virtual ::svt::CellController* GetController( long nRow, sal_uInt16 nCol ) override;
 
-        virtual void PaintCell( OutputDevice& rDev, const Rectangle& rRect, sal_uInt16 nColId ) const override;
+        virtual void PaintCell( OutputDevice& rDev, const ::tools::Rectangle& rRect, sal_uInt16 nColId ) const override;
 
         virtual bool SeekRow( long nRow ) override;
         virtual bool SaveModified() override;
@@ -87,17 +87,14 @@ namespace offapp
         OUString implGetCellText(const DriverPoolingSettings::const_iterator& _rPos, sal_uInt16 _nColId) const;
     };
 
-
     DriverListControl::DriverListControl(vcl::Window* _pParent)
         :EditBrowseBox(_pParent, EditBrowseBoxFlags::NO_HANDLE_COLUMN_CONTENT, WB_BORDER,
                        BrowserMode::AUTO_VSCROLL | BrowserMode::AUTO_HSCROLL | BrowserMode::HIDECURSOR | BrowserMode::AUTOSIZE_LASTCOL | BrowserMode::KEEPHIGHLIGHT)
         ,m_aSeekRow(m_aSettings.end())
-        ,m_sYes(CUI_RES(RID_SVXSTR_YES))
-        ,m_sNo(CUI_RES(RID_SVXSTR_NO))
+        ,m_sYes(CuiResId(RID_SVXSTR_YES))
+        ,m_sNo(CuiResId(RID_SVXSTR_NO))
     {
         SetStyle((GetStyle() & ~WB_HSCROLL) | WB_AUTOHSCROLL);
-
-        SetUniqueId(UID_OFA_CONNPOOL_DRIVERLIST_BACK);
     }
 
     VCL_BUILDER_FACTORY(DriverListControl)
@@ -108,19 +105,17 @@ namespace offapp
         return false;
     }
 
-
     bool DriverListControl::isModified() const
     {
         if (m_aSettings.size() != m_aSavedSettings.size())
             return true;
 
-        DriverPoolingSettings::const_iterator aCurrent = m_aSettings.begin();
-        DriverPoolingSettings::const_iterator aCurrentEnd = m_aSettings.end();
         DriverPoolingSettings::const_iterator aSaved = m_aSavedSettings.begin();
-        for (;aCurrent != aCurrentEnd; ++aCurrent, ++aSaved)
+        for (auto const& currentSetting : m_aSettings)
         {
-            if (*aCurrent != *aSaved)
+            if (currentSetting != *aSaved)
                 return true;
+            ++aSaved;
         }
 
         return false;
@@ -131,12 +126,12 @@ namespace offapp
     {
         EditBrowseBox::Init();
 
-        Size aColWidth = LogicToPixel(Size(160, 0), MAP_APPFONT);
-        InsertDataColumn(1, OUString(CUI_RES(RID_SVXSTR_DRIVER_NAME)), aColWidth.Width());
-        aColWidth = LogicToPixel(Size(30, 0), MAP_APPFONT);
-        InsertDataColumn(2, OUString(CUI_RES(RID_SVXSTR_POOLED_FLAG)), aColWidth.Width());
-        aColWidth = LogicToPixel(Size(60, 0), MAP_APPFONT);
-        InsertDataColumn(3, OUString(CUI_RES(RID_SVXSTR_POOL_TIMEOUT)), aColWidth.Width());
+        Size aColWidth = LogicToPixel(Size(160, 0), MapMode(MapUnit::MapAppFont));
+        InsertDataColumn(1, CuiResId(RID_SVXSTR_DRIVER_NAME), aColWidth.Width());
+        aColWidth = LogicToPixel(Size(30, 0), MapMode(MapUnit::MapAppFont));
+        InsertDataColumn(2, CuiResId(RID_SVXSTR_POOLED_FLAG), aColWidth.Width());
+        aColWidth = LogicToPixel(Size(60, 0), MapMode(MapUnit::MapAppFont));
+        InsertDataColumn(3, CuiResId(RID_SVXSTR_POOL_TIMEOUT), aColWidth.Width());
             // Attention: the resource of the string is local to the resource of the enclosing dialog!
     }
 
@@ -270,7 +265,7 @@ namespace offapp
     }
 
 
-    void DriverListControl::PaintCell( OutputDevice& rDev, const Rectangle& rRect, sal_uInt16 nColId ) const
+    void DriverListControl::PaintCell( OutputDevice& rDev, const ::tools::Rectangle& rRect, sal_uInt16 nColId ) const
     {
         OSL_ENSURE(m_aSeekRow != m_aSettings.end(), "DriverListControl::PaintCell: invalid row!");
 
@@ -307,7 +302,7 @@ namespace offapp
         get(m_pTimeout, "timeout");
 
         Size aControlSize(248, 100);
-        aControlSize = LogicToPixel(aControlSize, MAP_APPFONT);
+        aControlSize = LogicToPixel(aControlSize, MapMode(MapUnit::MapAppFont));
         m_pDriverList->set_width_request(aControlSize.Width());
         m_pDriverList->set_height_request(aControlSize.Height());
         m_pDriverList->Init();
@@ -337,12 +332,12 @@ namespace offapp
         SfxTabPage::dispose();
     }
 
-    VclPtr<SfxTabPage> ConnectionPoolOptionsPage::Create(vcl::Window* _pParent, const SfxItemSet* _rAttrSet)
+    VclPtr<SfxTabPage> ConnectionPoolOptionsPage::Create(TabPageParent _pParent, const SfxItemSet* _rAttrSet)
     {
-        return VclPtr<ConnectionPoolOptionsPage>::Create(_pParent, *_rAttrSet);
+        return VclPtr<ConnectionPoolOptionsPage>::Create(_pParent.pParent, *_rAttrSet);
     }
 
-    void ConnectionPoolOptionsPage::implInitControls(const SfxItemSet& _rSet, bool /*_bFromReset*/)
+    void ConnectionPoolOptionsPage::implInitControls(const SfxItemSet& _rSet)
     {
         // the enabled flag
         const SfxBoolItem* pEnabled = _rSet.GetItem<SfxBoolItem>(SID_SB_POOLING_ENABLED);
@@ -367,13 +362,13 @@ namespace offapp
     }
 
 
-    bool ConnectionPoolOptionsPage::Notify( NotifyEvent& _rNEvt )
+    bool ConnectionPoolOptionsPage::EventNotify( NotifyEvent& _rNEvt )
     {
         if (MouseNotifyEvent::LOSEFOCUS == _rNEvt.GetType())
             if (m_pTimeout->IsWindowOrChild(_rNEvt.GetWindow()))
                 commitTimeoutField();
 
-        return SfxTabPage::Notify(_rNEvt);
+        return SfxTabPage::EventNotify(_rNEvt);
     }
 
 
@@ -385,14 +380,14 @@ namespace offapp
         // the enabled flag
         if (m_pEnablePooling->IsValueChangedFromSaved())
         {
-            _rSet->Put(SfxBoolItem(SID_SB_POOLING_ENABLED, m_pEnablePooling->IsChecked()), SID_SB_POOLING_ENABLED);
+            _rSet->Put(SfxBoolItem(SID_SB_POOLING_ENABLED, m_pEnablePooling->IsChecked()));
             bModified = true;
         }
 
         // the settings for the single drivers
         if (m_pDriverList->isModified())
         {
-            _rSet->Put(DriverPoolingSettingsItem(SID_SB_DRIVER_TIMEOUTS, m_pDriverList->getSettings()), SID_SB_DRIVER_TIMEOUTS);
+            _rSet->Put(DriverPoolingSettingsItem(SID_SB_DRIVER_TIMEOUTS, m_pDriverList->getSettings()));
             bModified = true;
         }
 
@@ -403,17 +398,17 @@ namespace offapp
     void ConnectionPoolOptionsPage::ActivatePage( const SfxItemSet& _rSet)
     {
         SfxTabPage::ActivatePage(_rSet);
-        implInitControls(_rSet, false);
+        implInitControls(_rSet);
     }
 
 
     void ConnectionPoolOptionsPage::Reset(const SfxItemSet* _rSet)
     {
-        implInitControls(*_rSet, true);
+        implInitControls(*_rSet);
     }
 
 
-    IMPL_LINK_TYPED( ConnectionPoolOptionsPage, OnDriverRowChanged, const DriverPooling*, pDriverPos, void )
+    IMPL_LINK( ConnectionPoolOptionsPage, OnDriverRowChanged, const DriverPooling*, pDriverPos, void )
     {
         bool bValidRow = (nullptr != pDriverPos);
         m_pDriverPoolingEnabled->Enable(bValidRow && m_pEnablePooling->IsChecked());
@@ -445,7 +440,7 @@ namespace offapp
     }
 
 
-    IMPL_LINK_TYPED( ConnectionPoolOptionsPage, OnEnabledDisabled, Button*, _pCheckBox, void )
+    IMPL_LINK( ConnectionPoolOptionsPage, OnEnabledDisabled, Button*, _pCheckBox, void )
     {
         bool bGloballyEnabled = m_pEnablePooling->IsChecked();
         bool bLocalDriverChanged = m_pDriverPoolingEnabled == _pCheckBox;

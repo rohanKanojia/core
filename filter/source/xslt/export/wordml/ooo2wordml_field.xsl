@@ -195,7 +195,7 @@
                             <!--wx:font wx:val="MS Mincho"/ -->
                             <w:lang w:fareast="JA"/>
                         </xsl:when>
-                        <xsl:when test=" @style:num-format  ='壹, 	貳, 參, ...' or @style:num-format  ='壹, 貳, 參, ...' or @style:num-format  ='壹, 贰, 	叁, ...'or  @style:num-format  = '一, 二, 三, ...' ">
+                        <xsl:when test=" @style:num-format  ='壹, 貳, 參, ...' or @style:num-format  ='壹, 貳, 參, ...' or @style:num-format  ='壹, 贰, 叁, ...'or  @style:num-format  = '一, 二, 三, ...' ">
                             <w:rFonts w:hint="fareast"/>
                             <!--wx:font wx:val="宋体"/ -->
                         </xsl:when>
@@ -212,7 +212,7 @@
         <!-- this template get the various of number formats for number type field-->
         <xsl:param name="field_number_format_style"/>
         <xsl:choose>
-            <xsl:when test=" $field_number_format_style = '１, ２, ３, ...' or $field_number_format_style = '1'  	">
+            <xsl:when test=" $field_number_format_style = '１, ２, ３, ...' or $field_number_format_style = '1'      ">
                 <xsl:text>  \* Arabic </xsl:text>
             </xsl:when>
             <xsl:when test="$field_number_format_style = '①, ②, ③, ...' ">
@@ -227,8 +227,7 @@
             <xsl:when test="$field_number_format_style = '一, 二, 三, ...'">
                 <xsl:text>  \* CHINESENUM3  </xsl:text>
             </xsl:when>
-            <xsl:when test="  $field_number_format_style ='壹, 	貳, 參, ...' or $field_number_format_style ='壹, 貳, 參, ...' or
-$field_number_format_style ='壹, 贰, 叁, ...' ">
+            <xsl:when test="  $field_number_format_style ='壹, 貳, 參, ...' or $field_number_format_style ='壹, 貳, 參, ...' or $field_number_format_style ='壹, 贰, 叁, ...' ">
                 <xsl:text>  \* CHINESENUM2  </xsl:text>
             </xsl:when>
             <xsl:when test="$field_number_format_style = '壱, 弐, 参, ...' ">
@@ -264,6 +263,9 @@ $field_number_format_style ='壹, 贰, 叁, ...' ">
             <xsl:when test="$field_number_format_style ='A' ">
                 <xsl:text>  \* ALPHABETIC </xsl:text>
             </xsl:when>
+            <xsl:when test="$field_number_format_style = 'א, י, ק, ...' ">
+                <xsl:text>  \* hebrew1  </xsl:text>
+            </xsl:when>
             <xsl:when test="$field_number_format_style = 'א, ב, ג, ...' ">
                 <xsl:text>  \* hebrew2  </xsl:text>
             </xsl:when>
@@ -281,13 +283,13 @@ $field_number_format_style ='壹, 贰, 叁, ...' ">
     <xsl:template name="field_get_date_format">
         <xsl:param name="field_date_stylename"/>
         <xsl:param name="field_date_value"/>
-        <!-- this template retun null date format ATM-->
+        <!-- this template return null date format ATM-->
         <xsl:text/>
     </xsl:template>
     <xsl:template name="field_get_time_format">
         <xsl:param name="field_time_stylename"/>
         <xsl:param name="field_time_value"/>
-        <!-- this template retun null date format ATM-->
+        <!-- this template return null date format ATM-->
         <xsl:text/>
     </xsl:template>
     <xsl:template match="text:template-name">
@@ -507,7 +509,7 @@ $field_number_format_style ='壹, 贰, 叁, ...' ">
         <xsl:call-template name="export_hyoerlink"/>
     </xsl:template>
     <xsl:template name="export_hyoerlink">
-        <!-- all params are useed by draw -->
+        <!-- all params are used by draw -->
         <xsl:param name="TargetMeasure"/>
         <xsl:param name="x-adjust"/>
         <xsl:param name="y-adjust"/>

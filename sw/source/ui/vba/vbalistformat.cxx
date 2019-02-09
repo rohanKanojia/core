@@ -29,7 +29,7 @@
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-SwVbaListFormat::SwVbaListFormat( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< text::XTextRange >& xTextRange ) throw ( uno::RuntimeException ) : SwVbaListFormat_BASE( rParent, rContext ), mxTextRange( xTextRange )
+SwVbaListFormat::SwVbaListFormat( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< text::XTextRange >& xTextRange ) : SwVbaListFormat_BASE( rParent, rContext ), mxTextRange( xTextRange )
 {
 }
 
@@ -37,7 +37,7 @@ SwVbaListFormat::~SwVbaListFormat()
 {
 }
 
-void SAL_CALL SwVbaListFormat::ApplyListTemplate( const css::uno::Reference< word::XListTemplate >& ListTemplate, const css::uno::Any& ContinuePreviousList, const css::uno::Any& ApplyTo, const css::uno::Any& DefaultListBehavior ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL SwVbaListFormat::ApplyListTemplate( const css::uno::Reference< word::XListTemplate >& ListTemplate, const css::uno::Any& ContinuePreviousList, const css::uno::Any& ApplyTo, const css::uno::Any& DefaultListBehavior )
 {
     bool bContinuePreviousList = true;
     if( ContinuePreviousList.hasValue() )
@@ -62,7 +62,7 @@ void SAL_CALL SwVbaListFormat::ApplyListTemplate( const css::uno::Reference< wor
     if (!xEnum->hasMoreElements())
         return;
 
-    SwVbaListTemplate& rListTemplate = dynamic_cast<SwVbaListTemplate&>(*ListTemplate.get());
+    SwVbaListTemplate& rListTemplate = dynamic_cast<SwVbaListTemplate&>(*ListTemplate);
 
     bool isFirstElement = true;
     do
@@ -74,8 +74,7 @@ void SAL_CALL SwVbaListFormat::ApplyListTemplate( const css::uno::Reference< wor
             xProps->setPropertyValue("ParaIsNumberingRestart", uno::makeAny( isNumberingRestart ) );
             if( isNumberingRestart )
             {
-                sal_Int16 nStartValue = 1;
-                xProps->setPropertyValue("NumberingStartValue", uno::makeAny( nStartValue ) );
+                xProps->setPropertyValue("NumberingStartValue", uno::makeAny( sal_Int16(1) ) );
             }
             isFirstElement = false;
         }
@@ -88,7 +87,7 @@ void SAL_CALL SwVbaListFormat::ApplyListTemplate( const css::uno::Reference< wor
     while( xEnum->hasMoreElements() );
 }
 
-void SAL_CALL SwVbaListFormat::ConvertNumbersToText(  ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL SwVbaListFormat::ConvertNumbersToText(  )
 {
     throw uno::RuntimeException("Not implemented" );
 }
@@ -102,12 +101,10 @@ SwVbaListFormat::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaListFormat::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.ListFormat";
-    }
+        "ooo.vba.word.ListFormat"
+    };
     return aServiceNames;
 }
 

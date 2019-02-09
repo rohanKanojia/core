@@ -21,6 +21,7 @@
 #define INCLUDED_FRAMEWORK_INC_UIELEMENT_GENERICTOOLBARCONTROLLER_HXX
 
 #include <svtools/toolboxcontroller.hxx>
+#include <com/sun/star/container/XIndexAccess.hpp>
 
 #include <tools/link.hxx>
 #include <vcl/vclptr.hxx>
@@ -31,7 +32,7 @@ class ToolBox;
 namespace framework
 {
 
-class GenericToolbarController : public svt::ToolboxController
+class GenericToolbarController final : public svt::ToolboxController
 {
     public:
         GenericToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
@@ -39,18 +40,18 @@ class GenericToolbarController : public svt::ToolboxController
                                   ToolBox* pToolBar,
                                   sal_uInt16 nID,
                                   const OUString& aCommand );
-        virtual ~GenericToolbarController();
+        virtual ~GenericToolbarController() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL dispose() override;
 
         // XToolbarController
-        virtual void SAL_CALL execute( sal_Int16 KeyModifier ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL execute( sal_Int16 KeyModifier ) override;
 
         // XStatusListener
-        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
-        DECL_STATIC_LINK_TYPED( GenericToolbarController, ExecuteHdl_Impl, void*, void );
+        DECL_STATIC_LINK( GenericToolbarController, ExecuteHdl_Impl, void*, void );
 
         struct ExecuteInfo
         {
@@ -59,7 +60,7 @@ class GenericToolbarController : public svt::ToolboxController
             css::uno::Sequence< css::beans::PropertyValue >  aArgs;
         };
 
-    protected:
+    private:
         VclPtr<ToolBox>     m_pToolbar;
         sal_uInt16          m_nID;
         bool                m_bEnumCommand : 1,
@@ -67,26 +68,21 @@ class GenericToolbarController : public svt::ToolboxController
         OUString            m_aEnumCommand;
 };
 
-class MenuToolbarController : public GenericToolbarController
+class MenuToolbarController : public svt::ToolboxController
 {
     css::uno::Reference< css::container::XIndexAccess > m_xMenuDesc;
-    PopupMenu*                                          pMenu;
+    VclPtr<PopupMenu>                                   pMenu;
     css::uno::Reference< css::lang::XComponent >        m_xMenuManager;
-    OUString                                            m_aModuleIdentifier;
-    public:
-        MenuToolbarController( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
-                                  const css::uno::Reference< css::frame::XFrame >& rFrame,
-                                  ToolBox* pToolBar,
-                                  sal_uInt16 nID,
-                                  const OUString& aCommand,
-                                  const OUString& aModuleIdentifier,
-                                  const css::uno::Reference< css::container::XIndexAccess >& xMenuDesc );
 
-    virtual ~MenuToolbarController();
+public:
+    // XStatusListener
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& ) override {}
+    // XComponent
+    virtual void SAL_CALL dispose() override;
+    // XInitialization
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& rArgs ) override;
     // XToolbarController
-    virtual void SAL_CALL click() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() throw (css::uno::RuntimeException, std::exception) override;
-
+    virtual css::uno::Reference< css::awt::XWindow > SAL_CALL createPopupWindow() override;
 };
 
 }

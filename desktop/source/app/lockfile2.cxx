@@ -17,17 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#include <vcl/layout.hxx>
-#include "desktopresid.hxx"
-#include "desktop.hrc"
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <dp_shared.hxx>
+#include <strings.hrc>
 #include <tools/config.hxx>
-#include "lockfile.hxx"
-
+#include <lockfile.hxx>
 
 namespace desktop {
 
-bool Lockfile_execWarning( Lockfile * that )
+bool Lockfile_execWarning( Lockfile const * that )
 {
     // read information from lock
     OUString aLockname = that->m_aLockname;
@@ -38,22 +37,22 @@ bool Lockfile_execWarning( Lockfile * that )
     OString aTime  = aConfig.ReadKey( LOCKFILE_TIMEKEY );
 
     // display warning and return response
-    ScopedVclPtrInstance<MessageDialog> aBox(nullptr, DesktopResId(STR_QUERY_USERDATALOCKED),
-                                             VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO);
+    std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                              VclMessageType::Question, VclButtonsType::YesNo, DpResId(STR_QUERY_USERDATALOCKED)));
     // set box title
-    OUString aTitle = OUString( DesktopResId( STR_TITLE_USERDATALOCKED ));
-    aBox->SetText( aTitle );
+    OUString aTitle = DpResId(STR_TITLE_USERDATALOCKED);
+    xBox->set_title( aTitle );
     // insert values...
-    OUString aMsgText = aBox->get_primary_text();
+    OUString aMsgText = xBox->get_primary_text();
     aMsgText = aMsgText.replaceFirst(
         "$u", OStringToOUString( aUser, RTL_TEXTENCODING_ASCII_US) );
     aMsgText = aMsgText.replaceFirst(
         "$h", OStringToOUString( aHost, RTL_TEXTENCODING_ASCII_US) );
     aMsgText = aMsgText.replaceFirst(
         "$t", OStringToOUString( aTime, RTL_TEXTENCODING_ASCII_US) );
-    aBox->set_primary_text(aMsgText);
+    xBox->set_primary_text(aMsgText);
     // do it
-    return aBox->Execute( ) == RET_YES;
+    return xBox->run() == RET_YES;
 }
 
 }

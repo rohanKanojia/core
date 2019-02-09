@@ -19,12 +19,13 @@
 
 #include <tools/debug.hxx>
 #include "XMLTextPropertySetContext.hxx"
-#include "XMLTextColumnsContext.hxx"
-#include "XMLBackgroundImageContext.hxx"
+#include <XMLTextColumnsContext.hxx>
+#include <XMLBackgroundImageContext.hxx>
 #include "XMLSectionFootnoteConfigImport.hxx"
 
+#include <xmloff/xmlimppr.hxx>
 #include <xmloff/txtprmap.hxx>
-#include "xmltabi.hxx"
+#include <xmltabi.hxx>
 #include "txtdropi.hxx"
 
 
@@ -49,25 +50,25 @@ XMLTextPropertySetContext::~XMLTextPropertySetContext()
 {
 }
 
-SvXMLImportContext *XMLTextPropertySetContext::CreateChildContext(
+SvXMLImportContextRef XMLTextPropertySetContext::CreateChildContext(
                    sal_uInt16 nPrefix,
                    const OUString& rLocalName,
                    const Reference< xml::sax::XAttributeList > & xAttrList,
                    ::std::vector< XMLPropertyState > &rProperties,
                    const XMLPropertyState& rProp )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     switch( mxMapper->getPropertySetMapper()
                     ->GetEntryContextId( rProp.mnIndex ) )
     {
     case CTF_TABSTOP:
-        pContext = new SvxXMLTabStopImportContext( GetImport(), nPrefix,
+        xContext = new SvxXMLTabStopImportContext( GetImport(), nPrefix,
                                                    rLocalName, rProp,
                                                    rProperties );
         break;
     case CTF_TEXTCOLUMNS:
-        pContext = new XMLTextColumnsContext( GetImport(), nPrefix,
+        xContext = new XMLTextColumnsContext( GetImport(), nPrefix,
                                                    rLocalName, xAttrList, rProp,
                                                    rProperties );
         break;
@@ -85,7 +86,7 @@ SvXMLImportContext *XMLTextPropertySetContext::CreateChildContext(
                                                         rProp.mnIndex-2,
                                                         rProperties );
             rDropCapTextStyleName = pDCContext->GetStyleName();
-        pContext = pDCContext;
+            xContext = pDCContext;
         }
         break;
 
@@ -107,7 +108,7 @@ SvXMLImportContext *XMLTextPropertySetContext::CreateChildContext(
                   rProp.mnIndex-3 ) ) )
             nTranspIndex = rProp.mnIndex-3;
 
-        pContext =
+        xContext =
             new XMLBackgroundImageContext( GetImport(), nPrefix,
                                            rLocalName, xAttrList,
                                            rProp,
@@ -120,19 +121,18 @@ SvXMLImportContext *XMLTextPropertySetContext::CreateChildContext(
     break;
     case CTF_SECTION_FOOTNOTE_END:
     case CTF_SECTION_ENDNOTE_END:
-        pContext = new XMLSectionFootnoteConfigImport(
+        xContext = new XMLSectionFootnoteConfigImport(
             GetImport(), nPrefix, rLocalName, rProperties,
             mxMapper->getPropertySetMapper());
         break;
     }
 
-    if( !pContext )
-        pContext = SvXMLPropertySetContext::CreateChildContext( nPrefix, rLocalName,
+    if (!xContext)
+        xContext = SvXMLPropertySetContext::CreateChildContext( nPrefix, rLocalName,
                                                             xAttrList,
                                                             rProperties, rProp );
 
-    return pContext;
+    return xContext;
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

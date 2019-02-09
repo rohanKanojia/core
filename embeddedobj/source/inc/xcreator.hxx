@@ -40,33 +40,33 @@ public:
     : m_xContext( rxContext )
     , m_aConfigHelper( rxContext )
     {
-        OSL_ENSURE( rxContext.is(), "No service manager is provided!\n" );
+        OSL_ENSURE( rxContext.is(), "No service manager is provided!" );
     }
 
-    static css::uno::Sequence< OUString > SAL_CALL impl_staticGetSupportedServiceNames();
+    static css::uno::Sequence< OUString > impl_staticGetSupportedServiceNames();
 
-    static OUString SAL_CALL impl_staticGetImplementationName();
+    static OUString impl_staticGetImplementationName();
 
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    static css::uno::Reference< css::uno::XInterface >
         impl_staticCreateSelfInstance(
             const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
 
     // XEmbedObjectCreator
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceInitNew( const css::uno::Sequence< sal_Int8 >& aClassID, const OUString& aClassName, const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) throw (css::lang::IllegalArgumentException, css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceInitFromEntry( const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& aMedDescr, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) throw (css::lang::IllegalArgumentException, css::container::NoSuchElementException, css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceInitFromMediaDescriptor( const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& aMediaDescr, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) throw (css::lang::IllegalArgumentException, css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceInitNew( const css::uno::Sequence< sal_Int8 >& aClassID, const OUString& aClassName, const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceInitFromEntry( const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& aMedDescr, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceInitFromMediaDescriptor( const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& aMediaDescr, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) override;
 
     // XEmbedObjectFactory
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceUserInit( const css::uno::Sequence< sal_Int8 >& aClassID, const OUString& sClassName, const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, sal_Int32 nEntryConnectionMode, const css::uno::Sequence< css::beans::PropertyValue >& aArgs, const css::uno::Sequence< css::beans::PropertyValue >& aObjectArgs ) throw (css::lang::IllegalArgumentException, css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceUserInit( const css::uno::Sequence< sal_Int8 >& aClassID, const OUString& sClassName, const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, sal_Int32 nEntryConnectionMode, const css::uno::Sequence< css::beans::PropertyValue >& aArgs, const css::uno::Sequence< css::beans::PropertyValue >& aObjectArgs ) override;
 
     // XLinkCreator
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceLink( const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& aMediaDescr, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) throw (css::lang::IllegalArgumentException, css::io::IOException, css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceLink( const css::uno::Reference< css::embed::XStorage >& xStorage, const OUString& sEntName, const css::uno::Sequence< css::beans::PropertyValue >& aMediaDescr, const css::uno::Sequence< css::beans::PropertyValue >& lObjArgs ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 };
 

@@ -17,16 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "View.hxx"
-#include "dbastrings.hrc"
+#include <View.hxx>
+#include <stringconstants.hxx>
+#include <strings.hxx>
 
-#include "connectivity/dbexception.hxx"
-#include "connectivity/dbtools.hxx"
+#include <connectivity/dbexception.hxx>
+#include <connectivity/dbtools.hxx>
 
-#include <com/sun/star/lang/WrappedTargetException.hpp>
-#include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/sdbc/XRow.hpp>
 
 #include <cppuhelper/exc_hlp.hxx>
 #include <tools/diagnose_ex.h>
@@ -36,17 +34,11 @@ namespace dbaccess
 {
 
     using namespace ::com::sun::star::uno;
-    using ::com::sun::star::sdbc::XDatabaseMetaData;
     using ::com::sun::star::sdbc::SQLException;
     using ::com::sun::star::sdbc::XConnection;
-    using ::com::sun::star::lang::WrappedTargetException;
     using ::com::sun::star::lang::XMultiServiceFactory;
-    using ::com::sun::star::sdbc::XResultSet;
-    using ::com::sun::star::sdbc::XStatement;
-    using ::com::sun::star::lang::DisposedException;
-    using ::com::sun::star::sdbc::XRow;
 
-    OUString lcl_getServiceNameForSetting(const Reference< css::sdbc::XConnection >& _xConnection,const OUString& i_sSetting)
+    static OUString lcl_getServiceNameForSetting(const Reference< css::sdbc::XConnection >& _xConnection,const OUString& i_sSetting)
     {
         OUString sSupportService;
         Any aValue;
@@ -59,18 +51,17 @@ namespace dbaccess
     // View
     View::View( const Reference< XConnection >& _rxConnection, bool _bCaseSensitive,
         const OUString& _rCatalogName,const OUString& _rSchemaName, const OUString& _rName )
-        :View_Base( _bCaseSensitive, _rName, _rxConnection->getMetaData(), 0, OUString(), _rSchemaName, _rCatalogName )
+        :View_Base( _bCaseSensitive, _rName, _rxConnection->getMetaData(), OUString(), _rSchemaName, _rCatalogName )
     {
         m_nCommandHandle = getProperty(PROPERTY_COMMAND).Handle;
         try
         {
             Reference<XMultiServiceFactory> xFac(_rxConnection,UNO_QUERY_THROW);
-            static const char s_sViewAccess[] = "ViewAccessServiceName";
-            m_xViewAccess.set(xFac->createInstance(lcl_getServiceNameForSetting(_rxConnection,s_sViewAccess)),UNO_QUERY);
+            m_xViewAccess.set(xFac->createInstance(lcl_getServiceNameForSetting(_rxConnection,"ViewAccessServiceName")),UNO_QUERY);
         }
         catch(const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -81,7 +72,7 @@ namespace dbaccess
     IMPLEMENT_FORWARD_REFCOUNT( View, View_Base )
     IMPLEMENT_GET_IMPLEMENTATION_ID( View )
 
-    Any SAL_CALL View::queryInterface( const Type & _rType ) throw(RuntimeException, std::exception)
+    Any SAL_CALL View::queryInterface( const Type & _rType )
     {
         if(_rType == cppu::UnoType<XAlterView>::get()&& !m_xViewAccess.is() )
             return Any();
@@ -91,26 +82,26 @@ namespace dbaccess
         return aReturn;
     }
 
-    Sequence< Type > SAL_CALL View::getTypes(  ) throw(RuntimeException, std::exception)
+    Sequence< Type > SAL_CALL View::getTypes(  )
     {
         Type aAlterType = cppu::UnoType<XAlterView>::get();
 
         Sequence< Type > aTypes( ::comphelper::concatSequences(View_Base::getTypes(),View_IBASE::getTypes()) );
-        ::std::vector<Type> aOwnTypes;
+        std::vector<Type> aOwnTypes;
         aOwnTypes.reserve(aTypes.getLength());
 
         const Type* pIter = aTypes.getConstArray();
         const Type* pEnd = pIter + aTypes.getLength();
         for(;pIter != pEnd ;++pIter)
         {
-            if( (*pIter != aAlterType || m_xViewAccess.is()) )
+            if( *pIter != aAlterType || m_xViewAccess.is() )
                 aOwnTypes.push_back(*pIter);
         }
 
         return Sequence< Type >(aOwnTypes.data(), aOwnTypes.size());
     }
 
-    void SAL_CALL View::alterCommand( const OUString& _rNewCommand ) throw (SQLException, RuntimeException, std::exception)
+    void SAL_CALL View::alterCommand( const OUString& _rNewCommand )
     {
         OSL_ENSURE(m_xViewAccess.is(),"Illegal call to AlterView!");
         m_xViewAccess->alterCommand(this,_rNewCommand);

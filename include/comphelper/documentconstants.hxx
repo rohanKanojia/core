@@ -19,7 +19,6 @@
 #ifndef INCLUDED_COMPHELPER_DOCUMENTCONSTANTS_HXX
 #define INCLUDED_COMPHELPER_DOCUMENTCONSTANTS_HXX
 
-#include <rtl/ustring.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
 // formats of SO6/7
@@ -83,6 +82,7 @@
 // Preferred               - preferred filter for a particular type
 // 3rdPartyFilter          - implemented as a UNO component
 // Default                 - default filter for this document type
+// Exotic                  - an unusual/legacy file-format, we don't normally see
 //
 // (The 3rdPartyFilter flag is here called StarONE)
 //
@@ -106,17 +106,20 @@ enum class SfxFilterFlags
     CONSULTSERVICE    = 0x00040000L,
     STARONEFILTER     = 0x00080000L,
     PACKED            = 0x00100000L,
+    EXOTIC            = 0x00200000L,
     COMBINED          = 0x00800000L,
 
     ENCRYPTION        = 0x01000000L,
     PASSWORDTOMODIFY  = 0x02000000L,
+    GPGENCRYPTION     = 0x04000000L,
     PREFERED          = 0x10000000L,
     STARTPRESENTATION = 0x20000000L,
     SUPPORTSSIGNING   = 0x40000000L,
 };
+
 namespace o3tl
 {
-    template<> struct typed_flags<SfxFilterFlags> : is_typed_flags<SfxFilterFlags, 0x739f157fL> {};
+    template<> struct typed_flags<SfxFilterFlags> : is_typed_flags<SfxFilterFlags, 0x77bf157fL> {};
 }
 
 #define SFX_FILTER_NOTINSTALLED (SfxFilterFlags::MUSTINSTALL | SfxFilterFlags::CONSULTSERVICE)

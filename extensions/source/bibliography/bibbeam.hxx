@@ -38,22 +38,17 @@ namespace bib
 
 
     class BibGridwin;
-    class BibBeamer
+    class BibBeamer final
             :public BibSplitWindow
             ,public FormControlContainer
     {
-        private:
-
             css::uno::Reference< css::frame::XController >            m_xController;
-            css::uno::Reference< css::frame::XFrame >                 m_xToolBarRef;
 
             BibDataManager*         pDatMan;
             VclPtr<BibToolBar>      pToolBar;
             VclPtr<BibGridwin>      pGridWin;
 
-            DECL_LINK_TYPED( RecalcLayout_Impl, void*, void );
-
-        protected:
+            DECL_LINK( RecalcLayout_Impl, void*, void );
 
             void                    createToolBar();
             void                    createGridWin();
@@ -65,8 +60,8 @@ namespace bib
             css::uno::Reference< css::frame::XDispatchProviderInterception >
                     getDispatchProviderInterception();
 
-            BibBeamer(vcl::Window* pParent,BibDataManager* pDatMan, WinBits nStyle = WB_3DLOOK );
-            virtual ~BibBeamer();
+            BibBeamer(vcl::Window* pParent,BibDataManager* pDatMan );
+            virtual ~BibBeamer() override;
             virtual void dispose() override;
 
             void    SetXController(const css::uno::Reference< css::frame::XController > &);

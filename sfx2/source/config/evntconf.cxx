@@ -20,7 +20,6 @@
 
 #include <memory>
 
-#include <vcl/msgbox.hxx>
 #include <svl/lstner.hxx>
 #include <basic/basmgr.hxx>
 #include <basic/sbmod.hxx>
@@ -29,6 +28,7 @@
 #include <unotools/securityoptions.hxx>
 
 #include <rtl/ustring.h>
+#include <sal/log.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <comphelper/processfactory.hxx>
 #include <sfx2/evntconf.hxx>
@@ -37,8 +37,7 @@
 #include <sfx2/app.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/dispatch.hxx>
-#include <sfx2/sfxresid.hxx>
-#include "eventsupplier.hxx"
+#include <eventsupplier.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNameReplace.hpp>
@@ -50,28 +49,15 @@
 
 using namespace com::sun::star;
 
-SfxEventNamesList& SfxEventNamesList::operator=( const SfxEventNamesList& rTbl )
-{
-    DelDtor();
-    for ( size_t i = 0, n = rTbl.size(); i < n; ++i )
-    {
-        SfxEventName* pTmp = rTbl.at( i );
-        SfxEventName* pNew = new SfxEventName( *pTmp );
-        aEventNamesList.push_back( pNew );
-    }
-    return *this;
-}
+SfxEventNamesList& SfxEventNamesList::operator=( const SfxEventNamesList& ) = default;
 
-void SfxEventNamesList::DelDtor()
+SfxEventNamesList::~SfxEventNamesList()
 {
-    for ( size_t i = 0, n = aEventNamesList.size(); i < n; ++i )
-        delete aEventNamesList[ i ];
-    aEventNamesList.clear();
 }
 
 bool SfxEventNamesItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==(rAttr), "unequal types" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SfxEventNamesList& rOwn = aEventsList;
     const SfxEventNamesList& rOther = static_cast<const SfxEventNamesItem&>( rAttr ).aEventsList;
@@ -81,11 +67,11 @@ bool SfxEventNamesItem::operator==( const SfxPoolItem& rAttr ) const
 
     for ( size_t nNo = 0, nCnt = rOwn.size(); nNo < nCnt; ++nNo )
     {
-        const SfxEventName *pOwn = rOwn.at( nNo );
-        const SfxEventName *pOther = rOther.at( nNo );
-        if (    pOwn->mnId != pOther->mnId ||
-                pOwn->maEventName != pOther->maEventName ||
-                pOwn->maUIName != pOther->maUIName )
+        const SfxEventName &rOwnEvent = rOwn.at( nNo );
+        const SfxEventName &rOtherEvent = rOther.at( nNo );
+        if (    rOwnEvent.mnId != rOtherEvent.mnId ||
+                rOwnEvent.maEventName != rOtherEvent.maEventName ||
+                rOwnEvent.maUIName != rOtherEvent.maUIName )
             return false;
     }
 
@@ -94,10 +80,10 @@ bool SfxEventNamesItem::operator==( const SfxPoolItem& rAttr ) const
 }
 
 bool SfxEventNamesItem::GetPresentation( SfxItemPresentation,
-                                    SfxMapUnit,
-                                    SfxMapUnit,
-                                    OUString &rText,
-                                    const IntlWrapper* ) const
+                                         MapUnit,
+                                         MapUnit,
+                                         OUString &rText,
+                                         const IntlWrapper& ) const
 {
     rText.clear();
     return false;
@@ -108,31 +94,19 @@ SfxPoolItem* SfxEventNamesItem::Clone( SfxItemPool *) const
     return new SfxEventNamesItem(*this);
 }
 
-SfxPoolItem* SfxEventNamesItem::Create(SvStream &, sal_uInt16) const
-{
-    OSL_FAIL("not streamable!");
-    return new SfxEventNamesItem(Which());
-}
-
-SvStream& SfxEventNamesItem::Store(SvStream &rStream, sal_uInt16 ) const
-{
-    OSL_FAIL("not streamable!");
-    return rStream;
-}
-
 sal_uInt16 SfxEventNamesItem::GetVersion( sal_uInt16 ) const
 {
     OSL_FAIL("not streamable!");
     return 0;
 }
 
-void SfxEventNamesItem::AddEvent( const OUString& rName, const OUString& rUIName, sal_uInt16 nID )
+void SfxEventNamesItem::AddEvent( const OUString& rName, const OUString& rUIName, SvMacroItemId nID )
 {
-    aEventsList.push_back( new SfxEventName( nID, rName, !rUIName.isEmpty() ? rUIName : rName ) );
+    aEventsList.push_back( SfxEventName( nID, rName, !rUIName.isEmpty() ? rUIName : rName ) );
 }
 
 
-uno::Any CreateEventData_Impl( const SvxMacro *pMacro )
+static uno::Any CreateEventData_Impl( const SvxMacro *pMacro )
 {
 /*
     This function converts a SvxMacro into an Any containing three
@@ -205,7 +179,7 @@ uno::Any CreateEventData_Impl( const SvxMacro *pMacro )
 }
 
 
-void PropagateEvent_Impl( SfxObjectShell *pDoc, const OUString& aEventName, const SvxMacro* pMacro )
+static void PropagateEvent_Impl( SfxObjectShell const *pDoc, const OUString& aEventName, const SvxMacro* pMacro )
 {
     uno::Reference < document::XEventsSupplier > xSupplier;
     if ( pDoc )
@@ -218,34 +192,34 @@ void PropagateEvent_Impl( SfxObjectShell *pDoc, const OUString& aEventName, cons
                        uno::UNO_QUERY );
     }
 
-    if ( xSupplier.is() )
-    {
-        uno::Reference < container::XNameReplace > xEvents = xSupplier->getEvents();
-        if ( !aEventName.isEmpty() )
-        {
-            uno::Any aEventData = CreateEventData_Impl( pMacro );
+    if ( !xSupplier.is() )
+        return;
 
-            try
-            {
-                xEvents->replaceByName( aEventName, aEventData );
-            }
-            catch( const css::lang::IllegalArgumentException& )
-            {
-                SAL_WARN( "sfx.config", "PropagateEvents_Impl: caught IllegalArgumentException" );
-            }
-            catch( const css::container::NoSuchElementException& )
-            {
-                SAL_WARN( "sfx.config", "PropagateEvents_Impl: caught NoSuchElementException" );
-            }
+    uno::Reference < container::XNameReplace > xEvents = xSupplier->getEvents();
+    if ( !aEventName.isEmpty() )
+    {
+        uno::Any aEventData = CreateEventData_Impl( pMacro );
+
+        try
+        {
+            xEvents->replaceByName( aEventName, aEventData );
         }
-        else {
-            SAL_INFO( "sfx.config", "PropagateEvents_Impl: Got unknown event" );
+        catch( const css::lang::IllegalArgumentException& )
+        {
+            SAL_WARN( "sfx.config", "PropagateEvents_Impl: caught IllegalArgumentException" );
         }
+        catch( const css::container::NoSuchElementException& )
+        {
+            SAL_WARN( "sfx.config", "PropagateEvents_Impl: caught NoSuchElementException" );
+        }
+    }
+    else {
+        SAL_INFO( "sfx.config", "PropagateEvents_Impl: Got unknown event" );
     }
 }
 
 
-void SfxEventConfiguration::ConfigureEvent( const OUString& aName, const SvxMacro& rMacro, SfxObjectShell *pDoc )
+void SfxEventConfiguration::ConfigureEvent( const OUString& aName, const SvxMacro& rMacro, SfxObjectShell const *pDoc )
 {
     std::unique_ptr<SvxMacro> pMacro;
     if ( rMacro.HasMacro() )
@@ -254,9 +228,9 @@ void SfxEventConfiguration::ConfigureEvent( const OUString& aName, const SvxMacr
 }
 
 
-SvxMacro* SfxEventConfiguration::ConvertToMacro( const css::uno::Any& rElement, SfxObjectShell* pDoc, bool bBlowUp )
+std::unique_ptr<SvxMacro> SfxEventConfiguration::ConvertToMacro( const css::uno::Any& rElement, SfxObjectShell* pDoc )
 {
-    return SfxEvents_Impl::ConvertToMacro( rElement, pDoc, bBlowUp );
+    return SfxEvents_Impl::ConvertToMacro( rElement, pDoc );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

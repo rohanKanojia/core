@@ -32,33 +32,13 @@ namespace xmlscript
             getSupportedServiceNames_DocumentHandlerImpl, ::cppu::createSingleComponentFactory,
             nullptr, 0
         },
-        {
-            create_XMLBasicExporter, getImplementationName_XMLBasicExporter,
-            getSupportedServiceNames_XMLBasicExporter, ::cppu::createSingleComponentFactory,
-            nullptr, 0
-        },
-        {
-            create_XMLOasisBasicExporter, getImplementationName_XMLOasisBasicExporter,
-            getSupportedServiceNames_XMLOasisBasicExporter, ::cppu::createSingleComponentFactory,
-            nullptr, 0
-        },
-        {
-            create_XMLBasicImporter, getImplementationName_XMLBasicImporter,
-            getSupportedServiceNames_XMLBasicImporter, ::cppu::createSingleComponentFactory,
-            nullptr, 0
-        },
-        {
-            create_XMLOasisBasicImporter, getImplementationName_XMLOasisBasicImporter,
-            getSupportedServiceNames_XMLOasisBasicImporter, ::cppu::createSingleComponentFactory,
-            nullptr, 0
-        },
         { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
     };
 }
 
 extern "C"
 {
-    SAL_DLLPUBLIC_EXPORT void * SAL_CALL xmlscript_component_getFactory(
+    SAL_DLLPUBLIC_EXPORT void * xmlscript_component_getFactory(
         const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
     {
         return ::cppu::component_getFactoryHelper(

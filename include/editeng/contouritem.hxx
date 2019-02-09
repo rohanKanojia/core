@@ -42,15 +42,16 @@ public:
     virtual SvStream&       Store(SvStream &, sal_uInt16 nItemVersion) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
-    inline SvxContourItem& operator=(const SvxContourItem& rCont)
+    SvxContourItem& operator=(const SvxContourItem& rCont)
     {
         SetValue(rCont.GetValue());
         return *this;
     }
+    SvxContourItem(SvxContourItem const &) = default; // SfxPoolItem copy function dichotomy
 };
 
 #endif

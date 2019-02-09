@@ -21,6 +21,7 @@
 
 #include <sal/types.h>
 #include <vector>
+#include <swdllapi.h>
 
 class SwAnchoredObject;
 
@@ -34,8 +35,8 @@ class SwAnchoredObject;
       - order 1: to-page, 2: to-fly, 3: to-paragraph|to-character|as-character
     - anchor node
     - wrapping style (inclusive layer)
-      - order 1: wrapping style != SURROUND_THROUGHT and not in hell layer,
-        2: wrapping style = SURROUND_THROUGHT or in hell layer
+      - order 1: wrapping style != css::text::WrapTextMode_THROUGH and not in hell layer,
+        2: wrapping style = css::text::WrapTextMode_THROUGH or in hell layer
     - wrapping style influence
       - order 1: NONE_SUCCESSIVE_POSITIONED, 2: NONE_CONCURRENT_POSITIONED
     - again anchor type
@@ -45,7 +46,7 @@ class SwAnchoredObject;
     If one of the sort criteria attributes of an anchored object changes,
     the sorting has to be updated - use method <Update(..)>
 */
-class SwSortedObjs
+class SW_DLLPUBLIC SwSortedObjs
 {
     private:
         std::vector< SwAnchoredObject* > maSortedObjLst;
@@ -70,7 +71,7 @@ class SwSortedObjs
 
         bool Insert( SwAnchoredObject& _rAnchoredObj );
 
-        bool Remove( SwAnchoredObject& _rAnchoredObj );
+        void Remove( SwAnchoredObject& _rAnchoredObj );
 
         bool Contains( const SwAnchoredObject& _rAnchoredObj ) const;
 
@@ -79,7 +80,7 @@ class SwSortedObjs
 
             @return boolean, indicating success of the update.
         */
-        bool Update(SwAnchoredObject& _rAnchoredObj);
+        void Update(SwAnchoredObject& _rAnchoredObj);
         void UpdateAll();
 
         /** Position of object <_rAnchoredObj> in sorted list

@@ -17,52 +17,110 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/svapp.hxx>
+#include <sal/log.hxx>
 
-#include "document.hxx"
-#include "brdcst.hxx"
-#include "bcaslot.hxx"
-#include "formulacell.hxx"
-#include <formula/errorcodes.hxx>
-#include "scerrors.hxx"
-#include "docoptio.hxx"
-#include "refupdat.hxx"
-#include "table.hxx"
-#include "progress.hxx"
-#include "scmod.hxx"
-#include "inputopt.hxx"
-#include "conditio.hxx"
-#include "colorscale.hxx"
-#include "sheetevents.hxx"
-#include "tokenarray.hxx"
-#include "listenercontext.hxx"
-#include "formulagroup.hxx"
+#include <document.hxx>
+#include <brdcst.hxx>
+#include <bcaslot.hxx>
+#include <formulacell.hxx>
+#include <table.hxx>
+#include <progress.hxx>
+#include <scmod.hxx>
+#include <inputopt.hxx>
+#include <sheetevents.hxx>
+#include <tokenarray.hxx>
+#include <listenercontext.hxx>
 #include <refhint.hxx>
-
-#include "globstr.hrc"
-
-extern const ScFormulaCell* pLastFormulaTreeTop;    // cellform.cxx Err527 WorkAround
 
 void ScDocument::StartListeningArea(
     const ScRange& rRange, bool bGroupListening, SvtListener* pListener )
 {
-    if ( pBASM )
+    if (!pBASM)
+        return;
+
+    // Ensure sane ranges for the slots, specifically don't attempt to listen
+    // to more sheets than the document has. The slot machine handles it but
+    // with memory waste. Binary import filters can set out-of-bounds ranges
+    // in formula expressions' references, so all middle layers would have to
+    // check it, rather have this central point here.
+    ScRange aLimitedRange( ScAddress::UNINITIALIZED );
+    bool bEntirelyOut;
+    if (!LimitRangeToAvailableSheets( rRange, aLimitedRange, bEntirelyOut))
+    {
         pBASM->StartListeningArea(rRange, bGroupListening, pListener);
+        return;
+    }
+
+    // If both sheets are out-of-bounds in the same direction then just bail out.
+    if (bEntirelyOut)
+        return;
+
+    pBASM->StartListeningArea( aLimitedRange, bGroupListening, pListener);
 }
 
 void ScDocument::EndListeningArea( const ScRange& rRange, bool bGroupListening, SvtListener* pListener )
 {
-    if ( pBASM )
+    if (!pBASM)
+        return;
+
+    // End listening has to limit the range exactly the same as in
+    // StartListeningArea(), otherwise the range would not be found.
+    ScRange aLimitedRange( ScAddress::UNINITIALIZED );
+    bool bEntirelyOut;
+    if (!LimitRangeToAvailableSheets( rRange, aLimitedRange, bEntirelyOut))
+    {
         pBASM->EndListeningArea(rRange, bGroupListening, pListener);
+        return;
+    }
+
+    // If both sheets are out-of-bounds in the same direction then just bail out.
+    if (bEntirelyOut)
+        return;
+
+    pBASM->EndListeningArea( aLimitedRange, bGroupListening, pListener);
+}
+
+bool ScDocument::LimitRangeToAvailableSheets( const ScRange& rRange, ScRange& o_rRange,
+        bool& o_bEntirelyOutOfBounds ) const
+{
+    const SCTAB nMaxTab = GetTableCount() - 1;
+    if (ValidTab( rRange.aStart.Tab(), nMaxTab) && ValidTab( rRange.aEnd.Tab(), nMaxTab))
+        return false;
+
+    // Originally BCA_LISTEN_ALWAYS uses an implicit tab 0 and should had been
+    // valid already, but in case that would change..
+    if (rRange == BCA_LISTEN_ALWAYS)
+        return false;
+
+    SCTAB nTab1 = rRange.aStart.Tab();
+    SCTAB nTab2 = rRange.aEnd.Tab();
+    SAL_WARN("sc.core","ScDocument::LimitRangeToAvailableSheets - bad sheet range: " << nTab1 << ".." << nTab2 <<
+            ", sheets: 0.." << nMaxTab);
+
+    // Both sheets are out-of-bounds in the same direction.
+    if ((nTab1 < 0 && nTab2 < 0) || (nMaxTab < nTab1 && nMaxTab < nTab2))
+    {
+        o_bEntirelyOutOfBounds = true;
+        return true;
+    }
+
+    // Limit the sheet range to bounds.
+    o_bEntirelyOutOfBounds = false;
+    nTab1 = std::max<SCTAB>( 0, std::min( nMaxTab, nTab1));
+    nTab2 = std::max<SCTAB>( 0, std::min( nMaxTab, nTab2));
+    o_rRange = rRange;
+    o_rRange.aStart.SetTab(nTab1);
+    o_rRange.aEnd.SetTab(nTab2);
+    return true;
 }
 
 void ScDocument::Broadcast( const ScHint& rHint )
 {
     if ( !pBASM )
         return ;    // Clipboard or Undo
-    if ( eHardRecalcState == HARDRECALCSTATE_OFF )
+    if ( eHardRecalcState == HardRecalcState::OFF )
     {
-        ScBulkBroadcast aBulkBroadcast( pBASM);     // scoped bulk broadcast
+        ScBulkBroadcast aBulkBroadcast( pBASM.get(), rHint.GetId());     // scoped bulk broadcast
         bool bIsBroadcasted = false;
         SvtBroadcaster* pBC = GetBroadcaster(rHint.GetAddress());
         if ( pBC )
@@ -77,14 +135,14 @@ void ScDocument::Broadcast( const ScHint& rHint )
     if ( rHint.GetAddress() != BCA_BRDCST_ALWAYS )
     {
         SCTAB nTab = rHint.GetAddress().Tab();
-        if (nTab < static_cast<SCTAB>(maTabs.size()) && maTabs[nTab] && maTabs[nTab]->IsStreamValid())
+        if (nTab < static_cast<SCTAB>(maTabs.size()) && maTabs[nTab])
             maTabs[nTab]->SetStreamValid(false);
     }
 }
 
-void ScDocument::BroadcastCells( const ScRange& rRange, sal_uInt32 nHint, bool bBroadcastSingleBroadcasters )
+void ScDocument::BroadcastCells( const ScRange& rRange, SfxHintId nHint, bool bBroadcastSingleBroadcasters )
 {
-    ClearFormulaContext();
+    PrepareFormulaCalc();
 
     if (!pBASM)
         return;    // Clipboard or Undo
@@ -96,9 +154,9 @@ void ScDocument::BroadcastCells( const ScRange& rRange, sal_uInt32 nHint, bool b
     SCCOL nCol1 = rRange.aStart.Col();
     SCCOL nCol2 = rRange.aEnd.Col();
 
-    if (eHardRecalcState == HARDRECALCSTATE_OFF)
+    if (eHardRecalcState == HardRecalcState::OFF)
     {
-        ScBulkBroadcast aBulkBroadcast( pBASM);     // scoped bulk broadcast
+        ScBulkBroadcast aBulkBroadcast( pBASM.get(), nHint);     // scoped bulk broadcast
         bool bIsBroadcasted = false;
 
         if (bBroadcastSingleBroadcasters)
@@ -126,12 +184,12 @@ void ScDocument::BroadcastCells( const ScRange& rRange, sal_uInt32 nHint, bool b
             pTab->SetStreamValid(false);
     }
 
-    BroadcastUno(SfxSimpleHint(SC_HINT_DATACHANGED));
+    BroadcastUno(SfxHint(SfxHintId::ScDataChanged));
 }
 
 namespace {
 
-class RefMovedNotifier : public std::unary_function<SvtListener*, void>
+class RefMovedNotifier
 {
     const sc::RefMovedHint& mrHint;
 public:
@@ -224,9 +282,9 @@ void ScDocument::AreaBroadcast( const ScHint& rHint )
 {
     if ( !pBASM )
         return ;    // Clipboard or Undo
-    if (eHardRecalcState == HARDRECALCSTATE_OFF)
+    if (eHardRecalcState == HardRecalcState::OFF)
     {
-        ScBulkBroadcast aBulkBroadcast( pBASM);     // scoped bulk broadcast
+        ScBulkBroadcast aBulkBroadcast( pBASM.get(), rHint.GetId());     // scoped bulk broadcast
         if ( pBASM->AreaBroadcast( rHint ) )
             TrackFormulas( rHint.GetId() );
     }
@@ -263,7 +321,7 @@ void ScDocument::StartListeningCell(
     if (!pTab)
         return;
 
-    pTab->StartListening(rCxt, rPos.Col(), rPos.Row(), rListener);
+    pTab->StartListening(rCxt, rPos, rListener);
 }
 
 void ScDocument::EndListeningCell(
@@ -273,7 +331,7 @@ void ScDocument::EndListeningCell(
     if (!pTab)
         return;
 
-    pTab->EndListening(rCxt, rPos.Col(), rPos.Row(), rListener);
+    pTab->EndListening(rCxt, rPos, rListener);
 }
 
 void ScDocument::EndListeningFormulaCells( std::vector<ScFormulaCell*>& rCells )
@@ -294,6 +352,7 @@ void ScDocument::PutInFormulaTree( ScFormulaCell* pCell )
     OSL_ENSURE( pCell, "PutInFormulaTree: pCell Null" );
     RemoveFromFormulaTree( pCell );
     // append
+    ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
     if ( pEOFormulaTree )
         pEOFormulaTree->SetNext( pCell );
     else
@@ -306,6 +365,7 @@ void ScDocument::PutInFormulaTree( ScFormulaCell* pCell )
 
 void ScDocument::RemoveFromFormulaTree( ScFormulaCell* pCell )
 {
+    ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
     OSL_ENSURE( pCell, "RemoveFromFormulaTree: pCell Null" );
     ScFormulaCell* pPrev = pCell->GetPrevious();
     assert(pPrev != pCell);                 // pointing to itself?!?
@@ -350,7 +410,7 @@ void ScDocument::RemoveFromFormulaTree( ScFormulaCell* pCell )
     }
 }
 
-bool ScDocument::IsInFormulaTree( ScFormulaCell* pCell ) const
+bool ScDocument::IsInFormulaTree( const ScFormulaCell* pCell ) const
 {
     return pCell->GetPrevious() || pFormulaTree == pCell;
 }
@@ -362,6 +422,7 @@ void ScDocument::CalcFormulaTree( bool bOnlyForced, bool bProgressBar, bool bSet
     if ( IsCalculatingFormulaTree() )
         return ;
 
+    ScMutationGuard aGuard(this, ScMutationGuardFlags::CORE);
     mpFormulaGroupCxt.reset();
     bCalculatingFormulaTree = true;
 
@@ -372,7 +433,7 @@ void ScDocument::CalcFormulaTree( bool bOnlyForced, bool bProgressBar, bool bSet
     //ATTENTION: _not_ SetAutoCalc( true ) because this might call CalcFormulaTree( true )
     //ATTENTION: if it was disabled before and bHasForcedFormulas is set
     bAutoCalc = true;
-    if (eHardRecalcState == HARDRECALCSTATE_ETERNAL)
+    if (eHardRecalcState == HardRecalcState::ETERNAL)
         CalcAll();
     else
     {
@@ -456,8 +517,6 @@ void ScDocument::CalcFormulaTree( bool bOnlyForced, bool bProgressBar, bool bSet
                 else
                     pCell = nullptr;
             }
-            if ( ScProgress::IsUserBreak() )
-                pCell = nullptr;
         }
         if ( bProgress )
             ScProgress::DeleteInterpretProgress();
@@ -532,9 +591,24 @@ void ScDocument::RemoveFromFormulaTrack( ScFormulaCell* pCell )
     }
 }
 
-bool ScDocument::IsInFormulaTrack( ScFormulaCell* pCell ) const
+bool ScDocument::IsInFormulaTrack( const ScFormulaCell* pCell ) const
 {
     return pCell->GetPreviousTrack() || pFormulaTrack == pCell;
+}
+
+void ScDocument::FinalTrackFormulas( SfxHintId nHintId )
+{
+    mbTrackFormulasPending = false;
+    mbFinalTrackFormulas = true;
+    {
+        ScBulkBroadcast aBulk( GetBASM(), nHintId);
+        // Collect all pending formula cells in bulk.
+        TrackFormulas( nHintId );
+    }
+    // A final round not in bulk to track all remaining formula cells and their
+    // dependents that were collected during ScBulkBroadcast dtor.
+    TrackFormulas( nHintId );
+    mbFinalTrackFormulas = false;
 }
 
 /*
@@ -543,8 +617,17 @@ bool ScDocument::IsInFormulaTrack( ScFormulaCell* pCell ) const
     The next is broadcasted again, and so on.
     View initiates Interpret.
  */
-void ScDocument::TrackFormulas( sal_uInt32 nHintId )
+void ScDocument::TrackFormulas( SfxHintId nHintId )
 {
+    if (!pBASM)
+        return;
+
+    if (pBASM->IsInBulkBroadcast() && !IsFinalTrackFormulas() &&
+            (nHintId == SfxHintId::ScDataChanged || nHintId == SfxHintId::ScHiddenRowsChanged))
+    {
+        SetTrackFormulasPending();
+        return;
+    }
 
     if ( pFormulaTrack )
     {
@@ -598,7 +681,7 @@ void ScDocument::StartAllListeners()
 }
 
 void ScDocument::UpdateBroadcastAreas( UpdateRefMode eUpdateRefMode,
-        const ScRange& rRange, SCsCOL nDx, SCsROW nDy, SCsTAB nDz
+        const ScRange& rRange, SCCOL nDx, SCROW nDy, SCTAB nDz
     )
 {
     bool bExpandRefsOld = IsExpandRefs();

@@ -60,10 +60,10 @@
 
 #include "lwpnotes.hxx"
 #include "lwppara.hxx"
-#include "xfilter/xfannotation.hxx"
-#include "xfilter/xftextspan.hxx"
-#include "localtime.hxx"
-#include "lwptools.hxx"
+#include <xfilter/xfannotation.hxx>
+#include <xfilter/xftextspan.hxx>
+#include <localtime.hxx>
+#include <lwptools.hxx>
 
  LwpFribNote::LwpFribNote(LwpPara* pPara ):LwpFrib(pPara)
 {
@@ -126,7 +126,7 @@ void LwpFribNote::XFConvert(XFContentContainer* pCont)
 
 }
 
-LwpNoteLayout::LwpNoteLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpNoteLayout::LwpNoteLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpFrameLayout(objHdr, pStrm)
     , m_nTime(0)
 {
@@ -146,13 +146,13 @@ void LwpNoteLayout::Read()
     LwpFrameLayout::Read();
 
     m_nTime = m_pObjStrm->QuickReaduInt32();
-    m_UserName.Read(m_pObjStrm);
+    m_UserName.Read(m_pObjStrm.get());
 
     LwpAtomHolder aUserInitials;
-    aUserInitials.Read(m_pObjStrm);
+    aUserInitials.Read(m_pObjStrm.get());
 
     LwpColor aColor;
-    aColor.Read(m_pObjStrm);
+    aColor.Read(m_pObjStrm.get());
 
     // vacant note sequence
     m_pObjStrm->QuickReadInt32();
@@ -226,7 +226,7 @@ OUString LwpNoteLayout::GetAuthor()
     return m_UserName.str();
 }
 
-LwpNoteHeaderLayout::LwpNoteHeaderLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpNoteHeaderLayout::LwpNoteHeaderLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpFrameLayout(objHdr, pStrm)
 {
 }
@@ -253,7 +253,7 @@ void LwpNoteHeaderLayout::XFConvert(XFContentContainer * /*pCont*/)
 {
 }
 
-LwpNoteTextLayout::LwpNoteTextLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpNoteTextLayout::LwpNoteTextLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpFrameLayout(objHdr, pStrm)
 {
 }
@@ -294,7 +294,7 @@ void LwpNoteTextLayout::XFConvert(XFContentContainer * pCont)
     }
 }
 
-LwpViewportLayout::LwpViewportLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpViewportLayout::LwpViewportLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpPlacableLayout(objHdr, pStrm)
 {
 }

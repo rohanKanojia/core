@@ -32,13 +32,9 @@ $(eval $(call gb_CppunitTest_use_libraries,writerfilter_rtftok, \
 	unotest \
 	vcl \
 	writerfilter \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,writerfilter_rtftok,\
-	offapi \
-	udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,writerfilter_rtftok))
 
 $(eval $(call gb_CppunitTest_use_ure,writerfilter_rtftok))
 $(eval $(call gb_CppunitTest_use_vcl,writerfilter_rtftok))
@@ -51,7 +47,10 @@ $(eval $(call gb_CppunitTest_use_components,writerfilter_rtftok,\
 	ucb/source/core/ucb1 \
 	ucb/source/ucp/file/ucpfile1 \
 	writerfilter/util/writerfilter \
+	vcl/vcl.common \
 ))
+
+
 
 $(eval $(call gb_CppunitTest_use_configuration,writerfilter_rtftok))
 

@@ -19,28 +19,26 @@
 
 #include <sal/config.h>
 
-#include "osl/process.h"
-#include "rtl/ustring.hxx"
-#include "rtl/string.hxx"
-#include "rtl/strbuf.hxx"
+#include <osl/process.h>
+#include <rtl/ustring.hxx>
+#include <rtl/string.hxx>
+#include <rtl/strbuf.hxx>
 
-#include "osl/thread.h"
+#include <osl/thread.h>
 #include <osl/diagnose.h>
 #include "recently_used_file.hxx"
 
-#include "xml_parser.hxx"
-#include "i_xml_parser_event_handler.hxx"
+#include <xml_parser.hxx>
+#include <i_xml_parser_event_handler.hxx>
 
 #include <map>
+#include <memory>
 #include <vector>
 #include <algorithm>
-#include <functional>
 #include <string.h>
 #include <time.h>
 
 namespace /* private */ {
-    typedef std::vector<string_t> string_container_t;
-
     #define TAG_RECENT_FILES "RecentFiles"
     #define TAG_RECENT_ITEM  "RecentItem"
     #define TAG_URI          "URI"
@@ -49,18 +47,6 @@ namespace /* private */ {
     #define TAG_PRIVATE      "Private"
     #define TAG_GROUPS       "Groups"
     #define TAG_GROUP        "Group"
-
-
-    // compare two string_t's case insensitive, may also be done
-    // by specifying special traits for the string type but in this
-    // case it's easier to do it this way
-    struct str_icase_cmp :
-        public std::binary_function<string_t, string_t, bool>
-    {
-        bool operator() (const string_t& s1, const string_t& s2) const
-        { return (0 == strcasecmp(s1.c_str(), s2.c_str())); }
-    };
-
 
     struct recently_used_item
     {
@@ -72,11 +58,10 @@ namespace /* private */ {
         recently_used_item(
             const string_t& uri,
             const string_t& mime_type,
-            const string_container_t& groups,
-            bool is_private = false) :
+            const std::vector<string_t>& groups) :
             uri_(uri),
             mime_type_(mime_type),
-            is_private_(is_private),
+            is_private_(false),
             groups_(groups)
         {
             timestamp_ = time(nullptr);
@@ -113,11 +98,13 @@ namespace /* private */ {
 
         bool has_group(const string_t& name) const
         {
-            string_container_t::const_iterator iter_end = groups_.end();
             return (has_groups() &&
-                    iter_end != std::find_if(
-                        groups_.begin(), iter_end,
-                        std::bind2nd(str_icase_cmp(), name)));
+                    std::any_of(groups_.cbegin(), groups_.cend(),
+                        [&name](const string_t& s)
+                        { return (0 == strcasecmp(s.c_str(), name.c_str())); })
+                        // compare two string_t's case insensitive
+                   );
+
         }
 
         void write_xml(const recently_used_file& file) const
@@ -136,11 +123,8 @@ namespace /* private */ {
             {
                 write_xml_start_tag(TAG_GROUPS, file, true);
 
-                string_container_t::const_iterator iter = groups_.begin();
-                string_container_t::const_iterator iter_end = groups_.end();
-
-                for ( ; iter != iter_end; ++iter)
-                    write_xml_tag(TAG_GROUP, (*iter), file);
+                for (auto& group : groups_)
+                    write_xml_tag(TAG_GROUP, group, file);
 
                 write_xml_end_tag(TAG_GROUPS, file);
             }
@@ -150,16 +134,16 @@ namespace /* private */ {
         static OString escape_content(const string_t &text)
         {
             OStringBuffer aBuf;
-            for (size_t i = 0; i < text.length(); i++)
+            for (auto i : text)
             {
-                switch (text[i])
+                switch (i)
                 {
                     case '&':  aBuf.append("&amp;");  break;
                     case '<':  aBuf.append("&lt;");   break;
                     case '>':  aBuf.append("&gt;");   break;
                     case '\'': aBuf.append("&apos;"); break;
                     case '"':  aBuf.append("&quot;"); break;
-                    default:   aBuf.append(text[i]);  break;
+                    default:   aBuf.append(i);  break;
                 }
             }
             return aBuf.makeStringAndClear();
@@ -167,7 +151,7 @@ namespace /* private */ {
 
         void write_xml_tag(const string_t& name, const string_t& value, const recently_used_file& file) const
         {
-            write_xml_start_tag(name, file);
+            write_xml_start_tag(name, file, false);
             OString escaped = escape_content (value);
             file.write(escaped.getStr(), escaped.getLength());
             write_xml_end_tag(name, file);
@@ -180,7 +164,7 @@ namespace /* private */ {
             file.write("/>\n", 3);
         }
 
-        void write_xml_start_tag(const string_t& name, const recently_used_file& file, bool linefeed = false) const
+        void write_xml_start_tag(const string_t& name, const recently_used_file& file, bool linefeed) const
         {
             file.write("<", 1);
             file.write(name.c_str(), name.length());
@@ -201,10 +185,10 @@ namespace /* private */ {
         string_t mime_type_;
         time_t timestamp_;
         bool is_private_;
-        string_container_t groups_;
+        std::vector<string_t> groups_;
     };
 
-    typedef std::vector<recently_used_item*> recently_used_item_list_t;
+    typedef std::vector<std::unique_ptr<recently_used_item>> recently_used_item_list_t;
     typedef void (recently_used_item::* SET_COMMAND)(const string_t&);
 
     // thrown if we encounter xml tags that we do not know
@@ -215,7 +199,6 @@ namespace /* private */ {
     {
     public:
         explicit recently_used_file_filter(recently_used_item_list_t& item_list) :
-            item_(nullptr),
             item_list_(item_list)
         {
             named_command_map_[TAG_RECENT_FILES] = &recently_used_item::set_nothing;
@@ -237,7 +220,7 @@ namespace /* private */ {
             const xml_tag_attribute_container_t& /*attributes*/) override
         {
             if ((local_name == TAG_RECENT_ITEM) && (nullptr == item_))
-                item_ = new recently_used_item;
+                item_.reset(new recently_used_item);
         }
 
         virtual void end_element(const string_t& /*raw_name*/, const string_t& local_name) override
@@ -247,17 +230,16 @@ namespace /* private */ {
                 return; // will result in an XML parser error anyway
 
             if (named_command_map_.find(local_name) != named_command_map_.end())
-                (item_->*named_command_map_[local_name])(current_element_);
+                (item_.get()->*named_command_map_[local_name])(current_element_);
             else
             {
-                delete item_;
+                item_.reset();
                 throw unknown_xml_format_exception();
             }
 
             if (local_name == TAG_RECENT_ITEM)
             {
-                item_list_.push_back(item_);
-                item_ = nullptr;
+                item_list_.push_back(std::move(item_));
             }
             current_element_.clear();
         }
@@ -274,7 +256,7 @@ namespace /* private */ {
         virtual void comment(const string_t& /*comment*/) override
         {}
     private:
-        recently_used_item* item_;
+        std::unique_ptr<recently_used_item> item_;
         std::map<string_t, SET_COMMAND> named_command_map_;
         string_t current_element_;
         recently_used_item_list_t& item_list_;
@@ -282,7 +264,7 @@ namespace /* private */ {
 
 
     void read_recently_used_items(
-        recently_used_file& file,
+        recently_used_file const & file,
         recently_used_item_list_t& item_list)
     {
         xml_parser xparser;
@@ -306,28 +288,24 @@ namespace /* private */ {
     class recent_item_writer
     {
     public:
-        recent_item_writer(
-            recently_used_file& file,
-            int max_items_to_write = MAX_RECENTLY_USED_ITEMS) :
+        explicit recent_item_writer( recently_used_file& file ) :
             file_(file),
-            max_items_to_write_(max_items_to_write),
             items_written_(0)
         {}
 
-        void operator() (const recently_used_item* item)
+        void operator() (const std::unique_ptr<recently_used_item> & item)
         {
-            if (items_written_++ < max_items_to_write_)
+            if (items_written_++ < MAX_RECENTLY_USED_ITEMS)
                 item->write_xml(file_);
         }
     private:
         recently_used_file& file_;
-        int max_items_to_write_;
         int items_written_;
     };
 
 
-    const char* XML_HEADER = "<?xml version=\"1.0\"?>\n<RecentFiles>\n";
-    const char* XML_FOOTER = "</RecentFiles>";
+    const char* const XML_HEADER = "<?xml version=\"1.0\"?>\n<RecentFiles>\n";
+    const char* const XML_FOOTER = "</RecentFiles>";
 
 
     // assumes that the list is ordered decreasing
@@ -335,37 +313,20 @@ namespace /* private */ {
         recently_used_file& file,
         recently_used_item_list_t& item_list)
     {
-        if (!item_list.empty())
-        {
-            file.truncate();
-            file.reset();
+        if (item_list.empty())
+            return;
 
-            file.write(XML_HEADER, strlen(XML_HEADER));
+        file.truncate();
+        file.reset();
 
-            std::for_each(
-                item_list.begin(),
-                item_list.end(),
-                recent_item_writer(file));
+        file.write(XML_HEADER, strlen(XML_HEADER));
 
-            file.write(XML_FOOTER, strlen(XML_FOOTER));
-        }
-    }
-
-
-    struct delete_recently_used_item
-    {
-        void operator() (const recently_used_item* item) const
-        { delete item; }
-    };
-
-
-    void recently_used_item_list_clear(recently_used_item_list_t& item_list)
-    {
         std::for_each(
             item_list.begin(),
             item_list.end(),
-            delete_recently_used_item());
-        item_list.clear();
+            recent_item_writer(file));
+
+        file.write(XML_FOOTER, strlen(XML_FOOTER));
     }
 
 
@@ -376,23 +337,23 @@ namespace /* private */ {
             uri_(uri)
         {}
 
-        bool operator() (const recently_used_item* item) const
+        bool operator() (const std::unique_ptr<recently_used_item> & item) const
             { return (item->uri_ == uri_); }
     private:
-        string_t uri_;
+        string_t const uri_;
     };
 
 
     struct greater_recently_used_item
     {
-        bool operator ()(const recently_used_item* lhs, const recently_used_item* rhs) const
+        bool operator ()(const std::unique_ptr<recently_used_item> & lhs, const std::unique_ptr<recently_used_item> & rhs) const
         { return (lhs->timestamp_ > rhs->timestamp_); }
     };
 
 
-    const char* GROUP_OOO         = "openoffice.org";
-    const char* GROUP_STAR_OFFICE = "staroffice";
-    const char* GROUP_STAR_SUITE  = "starsuite";
+    const char* const GROUP_OOO         = "openoffice.org";
+    const char* const GROUP_STAR_OFFICE = "staroffice";
+    const char* const GROUP_STAR_SUITE  = "starsuite";
 
 
     void recently_used_item_list_add(
@@ -419,7 +380,7 @@ namespace /* private */ {
         }
         else
         {
-            string_container_t groups;
+            std::vector<string_t> groups;
             groups.push_back(GROUP_OOO);
             groups.push_back(GROUP_STAR_OFFICE);
             groups.push_back(GROUP_STAR_SUITE);
@@ -430,7 +391,7 @@ namespace /* private */ {
             if (mimetype.length() == 0)
                 mimetype = "application/octet-stream";
 
-            item_list.push_back(new recently_used_item(uri, mimetype, groups));
+            item_list.emplace_back(new recently_used_item(uri, mimetype, groups));
         }
 
         // sort decreasing after the timestamp
@@ -448,7 +409,7 @@ namespace /* private */ {
             item_list_(item_list)
         {}
         ~cleanup_guard()
-        { recently_used_item_list_clear(item_list_); }
+        { item_list_.clear(); }
 
         recently_used_item_list_t& item_list_;
     };

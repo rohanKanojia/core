@@ -24,8 +24,9 @@
 #include <com/sun/star/sdbc/IndexType.hpp>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/TTableHelper.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <comphelper/extract.hxx>
+#include <comphelper/types.hxx>
 #include <rtl/ustrbuf.hxx>
 using namespace connectivity;
 using namespace connectivity::sdbcx;
@@ -40,7 +41,7 @@ using namespace cppu;
 
 OIndexesHelper::OIndexesHelper(OTableHelper* _pTable,
                  ::osl::Mutex& _rMutex,
-             const ::std::vector< OUString> &_rVector
+             const std::vector< OUString> &_rVector
              )
     : OCollection(*_pTable,true,_rMutex,_rVector)
     ,m_pTable(_pTable)
@@ -71,7 +72,7 @@ sdbcx::ObjectType OIndexesHelper::createObject(const OUString& _rName)
     m_pTable->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_NAME))       >>= aTable;
 
     Any aCatalog = m_pTable->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME));
-    Reference< XResultSet > xResult = m_pTable->getMetaData()->getIndexInfo(aCatalog,aSchema,aTable,sal_False,sal_False);
+    Reference< XResultSet > xResult = m_pTable->getMetaData()->getIndexInfo(aCatalog,aSchema,aTable,false,false);
 
     if ( xResult.is() )
     {
@@ -110,7 +111,7 @@ sdbcx::ObjectType OIndexesHelper::createObject(const OUString& _rName)
     return xRet;
 }
 
-void OIndexesHelper::impl_refresh() throw(RuntimeException)
+void OIndexesHelper::impl_refresh()
 {
     m_pTable->refreshIndexes();
 }
@@ -138,7 +139,6 @@ sdbcx::ObjectType OIndexesHelper::appendObject( const OUString& _rForName, const
         ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
         OUStringBuffer aSql( "CREATE " );
         OUString aQuote  = m_pTable->getMetaData()->getIdentifierQuoteString(  );
-        OUString aDot( "." );
 
         if(comphelper::getBOOL(descriptor->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_ISUNIQUE))))
             aSql.append("UNIQUE ");
@@ -192,7 +192,7 @@ sdbcx::ObjectType OIndexesHelper::appendObject( const OUString& _rForName, const
 
             xColumns->getByIndex(0) >>= xColProp;
 
-            aSql.append(aDot);
+            aSql.append(".");
             aSql.append(::dbtools::quoteName( aQuote,comphelper::getString(xColProp->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_NAME)))));
         }
 
@@ -228,9 +228,9 @@ void OIndexesHelper::dropObject(sal_Int32 /*_nPos*/,const OUString& _sElementNam
 
             OUString aSql( "DROP INDEX " );
 
-            OUString aComposedName = dbtools::composeTableName( m_pTable->getMetaData(), m_pTable, ::dbtools::EComposeRule::InIndexDefinitions, false, false, true );
-            OUString sIndexName,sTemp;
-            sIndexName = dbtools::composeTableName( m_pTable->getMetaData(), sTemp, aSchema, aName, true, ::dbtools::EComposeRule::InIndexDefinitions );
+            OUString aComposedName = dbtools::composeTableName( m_pTable->getMetaData(), m_pTable, ::dbtools::EComposeRule::InIndexDefinitions, true );
+            OUString sIndexName;
+            sIndexName = dbtools::composeTableName( m_pTable->getMetaData(), OUString(), aSchema, aName, true, ::dbtools::EComposeRule::InIndexDefinitions );
 
             aSql += sIndexName + " ON " + aComposedName;
 

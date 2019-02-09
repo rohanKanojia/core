@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uiitems.hxx"
+#include <uiitems.hxx>
 
-#include "userlist.hxx"
-#include "dpsave.hxx"
-#include "queryparam.hxx"
+#include <userlist.hxx>
+#include <dpsave.hxx>
+#include <queryparam.hxx>
 
 #include <osl/diagnose.h>
 #include <editeng/editobj.hxx>
@@ -55,7 +55,6 @@ ScInputStatusItem::ScInputStatusItem( const ScInputStatusItem& rItem ) :
 
 ScInputStatusItem::~ScInputStatusItem()
 {
-    delete pEditData;
 }
 
 bool ScInputStatusItem::operator==( const SfxPoolItem& rItem ) const
@@ -95,8 +94,8 @@ ScTablesHint::~ScTablesHint()
 {
 }
 
-ScIndexHint::ScIndexHint(sal_uInt16 nNewId, sal_uInt16 nIdx) :
-    nId( nNewId ),
+ScIndexHint::ScIndexHint(SfxHintId nNewId, sal_uInt16 nIdx) :
+    SfxHint( nNewId ),
     nIndex( nIdx )
 {
 }
@@ -138,17 +137,6 @@ ScSortItem::ScSortItem( sal_uInt16              nWhichP,
     if ( pSortData ) theSortData = *pSortData;
 }
 
-ScSortItem::ScSortItem( const ScSortItem& rItem ) :
-        SfxPoolItem ( rItem ),
-        pViewData   ( rItem.pViewData ),
-        theSortData ( rItem.theSortData )
-{
-}
-
-ScSortItem::~ScSortItem()
-{
-}
-
 bool ScSortItem::operator==( const SfxPoolItem& rItem ) const
 {
     assert(SfxPoolItem::operator==(rItem));
@@ -178,7 +166,6 @@ ScQueryItem::ScQueryItem( sal_uInt16                nWhichP,
                           ScViewData*           ptrViewData,
                           const ScQueryParam*   pQueryData ) :
         SfxPoolItem ( nWhichP ),
-        mpQueryData(nullptr),
         pViewData   ( ptrViewData ),
         bIsAdvanced ( false )
 {
@@ -191,7 +178,6 @@ ScQueryItem::ScQueryItem( sal_uInt16                nWhichP,
 ScQueryItem::ScQueryItem( sal_uInt16                nWhichP,
                           const ScQueryParam*   pQueryData ) :
         SfxPoolItem ( nWhichP ),
-        mpQueryData(nullptr),
         pViewData   ( nullptr ),
         bIsAdvanced ( false )
 {
@@ -273,17 +259,6 @@ ScSubTotalItem::ScSubTotalItem( sal_uInt16                  nWhichP,
     if ( pSubTotalData ) theSubTotalData = *pSubTotalData;
 }
 
-ScSubTotalItem::ScSubTotalItem( const ScSubTotalItem& rItem ) :
-        SfxPoolItem     ( rItem ),
-        pViewData       ( rItem.pViewData ),
-        theSubTotalData ( rItem.theSubTotalData )
-{
-}
-
-ScSubTotalItem::~ScSubTotalItem()
-{
-}
-
 bool ScSubTotalItem::operator==( const SfxPoolItem& rItem ) const
 {
     assert(SfxPoolItem::operator==(rItem));
@@ -310,8 +285,7 @@ bool ScSubTotalItem::QueryValue( css::uno::Any& rVal, sal_uInt8 /* nMemberUd */ 
  * Transporter for the UserLIst dialog
  */
 ScUserListItem::ScUserListItem( sal_uInt16 nWhichP )
-    :   SfxPoolItem ( nWhichP ),
-        pUserList   ( nullptr )
+    :   SfxPoolItem ( nWhichP )
 {
 }
 
@@ -319,14 +293,11 @@ ScUserListItem::ScUserListItem( const ScUserListItem& rItem )
     :   SfxPoolItem ( rItem )
 {
     if ( rItem.pUserList )
-        pUserList = new ScUserList( *(rItem.pUserList) );
-    else
-        pUserList = nullptr;
+        pUserList.reset( new ScUserList( *(rItem.pUserList) ) );
 }
 
 ScUserListItem::~ScUserListItem()
 {
-    delete pUserList;
 }
 
 bool ScUserListItem::operator==( const SfxPoolItem& rItem ) const
@@ -336,8 +307,8 @@ bool ScUserListItem::operator==( const SfxPoolItem& rItem ) const
     const ScUserListItem& r = static_cast<const ScUserListItem&>(rItem);
     bool bEqual = false;
 
-    if ( !pUserList || !(r.pUserList) )
-        bEqual = ( !pUserList && !(r.pUserList) );
+    if ( !pUserList || !r.pUserList )
+        bEqual = ( !pUserList && !r.pUserList );
     else
         bEqual = ( *pUserList == *(r.pUserList) );
 
@@ -351,8 +322,7 @@ SfxPoolItem* ScUserListItem::Clone( SfxItemPool * ) const
 
 void ScUserListItem::SetUserList( const ScUserList& rUserList )
 {
-    delete pUserList;
-    pUserList = new ScUserList( rUserList );
+    pUserList.reset( new ScUserList( rUserList ) );
 }
 
 /**
@@ -364,16 +334,6 @@ ScConsolidateItem::ScConsolidateItem(
         SfxPoolItem ( nWhichP )
 {
     if ( pConsolidateData ) theConsData = *pConsolidateData;
-}
-
-ScConsolidateItem::ScConsolidateItem( const ScConsolidateItem& rItem ) :
-        SfxPoolItem ( rItem ),
-        theConsData ( rItem.theConsData )
-{
-}
-
-ScConsolidateItem::~ScConsolidateItem()
-{
 }
 
 bool ScConsolidateItem::operator==( const SfxPoolItem& rItem ) const
@@ -399,9 +359,9 @@ ScPivotItem::ScPivotItem( sal_uInt16 nWhichP, const ScDPSaveData* pData,
 {
     // pSaveData must always exist
     if ( pData )
-        pSaveData = new ScDPSaveData(*pData);
+        pSaveData.reset( new ScDPSaveData(*pData) );
     else
-        pSaveData = new ScDPSaveData;
+        pSaveData.reset( new ScDPSaveData );
     if ( pRange ) aDestRange = *pRange;
     bNewSheet = bNew;
 }
@@ -412,12 +372,11 @@ ScPivotItem::ScPivotItem( const ScPivotItem& rItem ) :
         bNewSheet   ( rItem.bNewSheet )
 {
     assert(rItem.pSaveData && "pSaveData");
-    pSaveData = new ScDPSaveData(*rItem.pSaveData);
+    pSaveData.reset( new ScDPSaveData(*rItem.pSaveData) );
 }
 
 ScPivotItem::~ScPivotItem()
 {
-    delete pSaveData;
 }
 
 bool ScPivotItem::operator==( const SfxPoolItem& rItem ) const
@@ -446,16 +405,6 @@ ScSolveItem::ScSolveItem( sal_uInt16                nWhichP,
     if ( pSolveData ) theSolveData = *pSolveData;
 }
 
-ScSolveItem::ScSolveItem( const ScSolveItem& rItem )
-    :   SfxPoolItem     ( rItem ),
-        theSolveData    ( rItem.theSolveData )
-{
-}
-
-ScSolveItem::~ScSolveItem()
-{
-}
-
 bool ScSolveItem::operator==( const SfxPoolItem& rItem ) const
 {
     assert(SfxPoolItem::operator==(rItem));
@@ -478,16 +427,6 @@ ScTabOpItem::ScTabOpItem( sal_uInt16                nWhichP,
     :   SfxPoolItem ( nWhichP )
 {
     if ( pTabOpData ) theTabOpData = *pTabOpData;
-}
-
-ScTabOpItem::ScTabOpItem( const ScTabOpItem& rItem )
-    :   SfxPoolItem     ( rItem ),
-        theTabOpData    ( rItem.theTabOpData )
-{
-}
-
-ScTabOpItem::~ScTabOpItem()
-{
 }
 
 bool ScTabOpItem::operator==( const SfxPoolItem& rItem ) const

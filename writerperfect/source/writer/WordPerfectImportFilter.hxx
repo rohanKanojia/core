@@ -25,109 +25,44 @@
 /* This component will be instantiated for both import or export. Whether it calls
  * setSourceDocument or setTargetDocument determines which Impl function the filter
  * member calls */
-class WordPerfectImportFilter : public cppu::WeakImplHelper
-    <
-    css::document::XFilter,
-    css::document::XImporter,
-    css::document::XExtendedFilterDetection,
-    css::lang::XInitialization,
-    css::lang::XServiceInfo
-    >
+class WordPerfectImportFilter
+    : public cppu::WeakImplHelper<css::document::XFilter, css::document::XImporter,
+                                  css::document::XExtendedFilterDetection,
+                                  css::lang::XInitialization, css::lang::XServiceInfo>
 {
-protected:
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-    css::uno::Reference< css::lang::XComponent > mxDoc;
-    OUString msFilterName;
+    css::uno::Reference<css::uno::XComponentContext> mxContext;
+    css::uno::Reference<css::lang::XComponent> mxDoc;
 
-    bool SAL_CALL importImpl(const css::uno::Sequence< css::beans::PropertyValue > &aDescriptor)
-    throw (css::uno::RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    bool importImpl(const css::uno::Sequence<css::beans::PropertyValue>& aDescriptor);
 
 public:
-    explicit WordPerfectImportFilter(const css::uno::Reference< css::uno::XComponentContext > &rxContext)
-        : mxContext(rxContext) {}
-    virtual ~WordPerfectImportFilter() {}
+    explicit WordPerfectImportFilter(
+        const css::uno::Reference<css::uno::XComponentContext>& rxContext)
+        : mxContext(rxContext)
+    {
+    }
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter(const css::uno::Sequence< css::beans::PropertyValue > &aDescriptor)
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel()
-    throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL
+    filter(const css::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
+    virtual void SAL_CALL cancel() override;
 
     // XImporter
-    virtual void SAL_CALL setTargetDocument(const css::uno::Reference< css::lang::XComponent > &xDoc)
-    throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL
+    setTargetDocument(const css::uno::Reference<css::lang::XComponent>& xDoc) override;
 
     //XExtendedFilterDetection
-    virtual OUString SAL_CALL detect(css::uno::Sequence< css::beans::PropertyValue > &Descriptor)
-    throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL
+    detect(css::uno::Sequence<css::beans::PropertyValue>& Descriptor) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any > &aArguments)
-    throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize(const css::uno::Sequence<css::uno::Any>& aArguments) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString &ServiceName)
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception) override;
-
-};
-
-OUString WordPerfectImportFilter_getImplementationName()
-throw (css::uno::RuntimeException);
-
-bool SAL_CALL WordPerfectImportFilter_supportsService(const OUString &ServiceName)
-throw (css::uno::RuntimeException);
-
-css::uno::Sequence< OUString > SAL_CALL WordPerfectImportFilter_getSupportedServiceNames()
-throw (css::uno::RuntimeException);
-
-css::uno::Reference< css::uno::XInterface >
-SAL_CALL WordPerfectImportFilter_createInstance(const css::uno::Reference< css::uno::XComponentContext > &rContext)
-throw (css::uno::Exception);
-
-
-class WordPerfectImportFilterDialog : public cppu::WeakImplHelper <
-    css::ui::dialogs::XExecutableDialog,
-    css::lang::XServiceInfo,
-    css::beans::XPropertyAccess
-    >
-{
-    OUString msPassword;
-    css::uno::Reference< css::io::XInputStream > mxInputStream;
-
-    virtual ~WordPerfectImportFilterDialog();
-
-    // XExecutableDialog
-    virtual void SAL_CALL setTitle(const OUString &aTitle)
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int16 SAL_CALL execute()
-    throw (css::uno::RuntimeException, std::exception) override;
-
-    // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString &ServiceName)
-    throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception) override;
-
-    // XPropertyAccess
-    virtual css::uno::Sequence< css::beans::PropertyValue >
-    SAL_CALL getPropertyValues() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL    setPropertyValues(const css::uno::Sequence<
-                                               css::beans::PropertyValue >& aProps)
-    throw (css::beans::UnknownPropertyException,
-           css::beans::PropertyVetoException,
-           css::lang::IllegalArgumentException,
-           css::lang::WrappedTargetException,
-           css::uno::RuntimeException, std::exception) override;
-
-public:
-    explicit WordPerfectImportFilterDialog();
-
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString& ServiceName) override;
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 };
 
 #endif

@@ -29,10 +29,14 @@
 #include <unotools/configmgr.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <unotools/localedatawrapper.hxx>
-#include <unotools/numberformatcodewrapper.hxx>
 #include <unotools/calendarwrapper.hxx>
 #include <com/sun/star/i18n/KNumberFormatUsage.hpp>
 #include <com/sun/star/i18n/KNumberFormatType.hpp>
+#include <com/sun/star/i18n/FormatElement.hpp>
+#include <com/sun/star/i18n/Currency2.hpp>
+#include <com/sun/star/i18n/NumberFormatCode.hpp>
+#include <com/sun/star/i18n/XNumberFormatCode.hpp>
+#include <com/sun/star/i18n/NumberFormatMapper.hpp>
 #include <comphelper/processfactory.hxx>
 #include <unotools/misccfg.hxx>
 
@@ -66,7 +70,7 @@ using namespace ::std;
 #define ZF_STANDARD_TIME        40
 #define ZF_STANDARD_DATETIME    50
 #define ZF_STANDARD_SCIENTIFIC  60
-#define ZF_STANDARD_FRACTION    70
+#define ZF_STANDARD_FRACTION    65
 
 // Additional builtin formats not fitting into the first 10 of a category (TLOT
 // = The Legacy Of Templin; unfortunately TLOT intended only 10 builtin formats
@@ -83,14 +87,17 @@ using namespace ::std;
 #define ZF_STANDARD_NEWEXTENDED_DATE_DIN_YYYYMMDD 84
 #define ZF_STANDARD_NEWEXTENDED_DATE_WW 85
 
-#define ZF_STANDARD_LOGICAL     SV_MAX_ANZ_STANDARD_FORMATE-1 //  99
-#define ZF_STANDARD_TEXT        SV_MAX_ANZ_STANDARD_FORMATE   // 100
+#define ZF_STANDARD_LOGICAL     SV_MAX_COUNT_STANDARD_FORMATS-1 //  99
+#define ZF_STANDARD_TEXT        SV_MAX_COUNT_STANDARD_FORMATS   // 100
+
+static_assert( ZF_STANDARD_TEXT == NF_STANDARD_FORMAT_TEXT, "definition mismatch" );
 
 /* Locale that is set if an unknown locale (from another system) is loaded of
  * legacy documents. Can not be SYSTEM because else, for example, a German "DM"
  * (old currency) is recognized as a date (#53155#). */
 #define UNKNOWN_SUBSTITUTE      LANGUAGE_ENGLISH_US
 
+// Same order as in include/svl/zforlist.hxx enum NfIndexTableOffset
 static sal_uInt32 const indexTable[NF_INDEX_TABLE_ENTRIES] = {
     ZF_STANDARD, // NF_NUMBER_STANDARD
     ZF_STANDARD + 1, // NF_NUMBER_INT
@@ -102,8 +109,8 @@ static sal_uInt32 const indexTable[NF_INDEX_TABLE_ENTRIES] = {
     ZF_STANDARD_SCIENTIFIC + 1, // NF_SCIENTIFIC_000E00
     ZF_STANDARD_PERCENT, // NF_PERCENT_INT
     ZF_STANDARD_PERCENT + 1, // NF_PERCENT_DEC2
-    ZF_STANDARD_FRACTION, // NF_FRACTION_1
-    ZF_STANDARD_FRACTION + 1, // NF_FRACTION_2
+    ZF_STANDARD_FRACTION, // NF_FRACTION_1D
+    ZF_STANDARD_FRACTION + 1, // NF_FRACTION_2D
     ZF_STANDARD_CURRENCY, // NF_CURRENCY_1000INT
     ZF_STANDARD_CURRENCY + 1, // NF_CURRENCY_1000DEC2
     ZF_STANDARD_CURRENCY + 2, // NF_CURRENCY_1000INT_RED
@@ -142,8 +149,14 @@ static sal_uInt32 const indexTable[NF_INDEX_TABLE_ENTRIES] = {
     ZF_STANDARD_DATETIME + 1, // NF_DATETIME_SYS_DDMMYYYY_HHMMSS
     ZF_STANDARD_LOGICAL, // NF_BOOLEAN
     ZF_STANDARD_TEXT, // NF_TEXT
-    ZF_STANDARD_FRACTION + 2, // NF_FRACTION_3
-    ZF_STANDARD_FRACTION + 3 // NF_FRACTION_4
+    ZF_STANDARD_FRACTION + 2, // NF_FRACTION_3D
+    ZF_STANDARD_FRACTION + 3, // NF_FRACTION_2
+    ZF_STANDARD_FRACTION + 4, // NF_FRACTION_4
+    ZF_STANDARD_FRACTION + 5, // NF_FRACTION_8
+    ZF_STANDARD_FRACTION + 6, // NF_FRACTION_16
+    ZF_STANDARD_FRACTION + 7, // NF_FRACTION_10
+    ZF_STANDARD_FRACTION + 8, // NF_FRACTION_100
+    ZF_STANDARD_DATETIME + 2 // NF_DATETIME_ISO_YYYYMMDD_HHMMSS
 };
 
 /**
@@ -161,17 +174,17 @@ class SvNumberFormatterRegistry_Impl : public utl::ConfigurationListener
 
 public:
                             SvNumberFormatterRegistry_Impl();
-    virtual                 ~SvNumberFormatterRegistry_Impl();
+    virtual                 ~SvNumberFormatterRegistry_Impl() override;
 
     void                    Insert( SvNumberFormatter* pThis )
                                 { aFormatters.push_back( pThis ); }
 
-    void                    Remove( SvNumberFormatter* pThis );
+    void                    Remove( SvNumberFormatter const * pThis );
 
-    size_t                  Count()
+    size_t                  Count() const
                                 { return aFormatters.size(); }
 
-    virtual void            ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 ) override;
+    virtual void            ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints ) override;
 };
 
 SvNumberFormatterRegistry_Impl::SvNumberFormatterRegistry_Impl()
@@ -187,45 +200,39 @@ SvNumberFormatterRegistry_Impl::~SvNumberFormatterRegistry_Impl()
 }
 
 
-void SvNumberFormatterRegistry_Impl::Remove( SvNumberFormatter* pThis )
+void SvNumberFormatterRegistry_Impl::Remove( SvNumberFormatter const * pThis )
 {
-    for (SvNumberFormatterList_impl::iterator it = aFormatters.begin();
-            it != aFormatters.end(); ++it)
-    {
-        if ( *it == pThis )
-        {
-            aFormatters.erase( it );
-            break;
-        }
-    }
+    auto it = std::find(aFormatters.begin(), aFormatters.end(), pThis);
+    if (it != aFormatters.end())
+        aFormatters.erase( it );
 }
 
 void SvNumberFormatterRegistry_Impl::ConfigurationChanged( utl::ConfigurationBroadcaster*,
-                                                           sal_uInt32 nHint)
+                                                           ConfigurationHints nHint)
 {
-    ::osl::MutexGuard aGuard( SvNumberFormatter::GetMutex() );
+    ::osl::MutexGuard aGuard( SvNumberFormatter::GetGlobalMutex() );
 
-    if ( nHint & SYSLOCALEOPTIONS_HINT_LOCALE )
+    if ( nHint & ConfigurationHints::Locale )
     {
-        for( size_t i = 0, n = aFormatters.size(); i < n; ++i )
-            aFormatters[ i ]->ReplaceSystemCL( eSysLanguage );
+        for(SvNumberFormatter* pFormatter : aFormatters)
+            pFormatter->ReplaceSystemCL( eSysLanguage );
         eSysLanguage = MsLangId::getRealLanguage( LANGUAGE_SYSTEM );
     }
-    if ( nHint & SYSLOCALEOPTIONS_HINT_CURRENCY )
+    if ( nHint & ConfigurationHints::Currency )
     {
-        for( size_t i = 0, n = aFormatters.size(); i < n; ++i )
-            aFormatters[ i ]->ResetDefaultSystemCurrency();
+        for(SvNumberFormatter* pFormatter : aFormatters)
+            pFormatter->ResetDefaultSystemCurrency();
     }
-    if ( nHint & SYSLOCALEOPTIONS_HINT_DATEPATTERNS )
+    if ( nHint & ConfigurationHints::DatePatterns )
     {
-        for( size_t i = 0, n = aFormatters.size(); i < n; ++i )
-            aFormatters[ i ]->InvalidateDateAcceptancePatterns();
+        for(SvNumberFormatter* pFormatter : aFormatters)
+            pFormatter->InvalidateDateAcceptancePatterns();
     }
 }
 
 
 SvNumberFormatterRegistry_Impl* SvNumberFormatter::pFormatterRegistry = nullptr;
-bool SvNumberFormatter::bCurrencyTableInitialized = false;
+volatile bool SvNumberFormatter::bCurrencyTableInitialized = false;
 namespace
 {
     struct theCurrencyTable :
@@ -259,7 +266,7 @@ SvNumberFormatter::SvNumberFormatter( const Reference< XComponentContext >& rxCo
 SvNumberFormatter::~SvNumberFormatter()
 {
     {
-        ::osl::MutexGuard aGuard( GetMutex() );
+        ::osl::MutexGuard aGuard( GetGlobalMutex() );
         pFormatterRegistry->Remove( this );
         if ( !pFormatterRegistry->Count() )
         {
@@ -268,14 +275,8 @@ SvNumberFormatter::~SvNumberFormatter()
         }
     }
 
-    for (SvNumberFormatTable::iterator it = aFTable.begin(); it != aFTable.end(); ++it)
-        delete it->second;
-    delete pFormatTable;
-    delete pCharClass;
-    delete pStringScanner;
-    delete pFormatScanner;
+    aFTable.clear();
     ClearMergeTable();
-    delete pMergeTable;
 }
 
 
@@ -291,79 +292,74 @@ void SvNumberFormatter::ImpConstruct( LanguageType eLang )
     nDefaultSystemCurrencyFormat = NUMBERFORMAT_ENTRY_NOT_FOUND;
 
     maLanguageTag.reset( eLang );
-    pCharClass = new CharClass( m_xContext, maLanguageTag );
+    pCharClass.reset( new CharClass( m_xContext, maLanguageTag ) );
     xLocaleData.init( m_xContext, maLanguageTag );
     xCalendar.init( m_xContext, maLanguageTag.getLocale() );
-    xTransliteration.init( m_xContext, eLang,
-                           css::i18n::TransliterationModules_IGNORE_CASE );
+    xTransliteration.init( m_xContext, eLang );
     xNatNum.init( m_xContext );
 
     // cached locale data items
     const LocaleDataWrapper* pLoc = GetLocaleData();
     aDecimalSep = pLoc->getNumDecimalSep();
+    aDecimalSepAlt = pLoc->getNumDecimalSepAlt();
     aThousandSep = pLoc->getNumThousandSep();
     aDateSep = pLoc->getDateSep();
 
-    pStringScanner = new ImpSvNumberInputScan( this );
-    pFormatScanner = new ImpSvNumberformatScan( this );
+    pStringScanner.reset( new ImpSvNumberInputScan( this ) );
+    pFormatScanner.reset( new ImpSvNumberformatScan( this ) );
     pFormatTable = nullptr;
     MaxCLOffset = 0;
     ImpGenerateFormats( 0, false );     // 0 .. 999 for initialized language formats
     pMergeTable = nullptr;
     bNoZero = false;
 
-    ::osl::MutexGuard aGuard( GetMutex() );
+    ::osl::MutexGuard aGuard( GetGlobalMutex() );
     GetFormatterRegistry().Insert( this );
 }
 
 
 void SvNumberFormatter::ChangeIntl(LanguageType eLnge)
 {
-    if (ActLnge != eLnge)
-    {
-        ActLnge = eLnge;
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+    if (ActLnge == eLnge)
+        return;
 
-        maLanguageTag.reset( eLnge );
-        pCharClass->setLanguageTag( maLanguageTag );
-        xLocaleData.changeLocale( maLanguageTag );
-        xCalendar.changeLocale( maLanguageTag.getLocale() );
-        xTransliteration.changeLocale( eLnge );
+    ActLnge = eLnge;
 
-        // cached locale data items, initialize BEFORE calling ChangeIntl below
-        const LocaleDataWrapper* pLoc = GetLocaleData();
-        aDecimalSep = pLoc->getNumDecimalSep();
-        aThousandSep = pLoc->getNumThousandSep();
-        aDateSep = pLoc->getDateSep();
+    maLanguageTag.reset( eLnge );
+    pCharClass->setLanguageTag( maLanguageTag );
+    xLocaleData.changeLocale( maLanguageTag );
+    xCalendar.changeLocale( maLanguageTag.getLocale() );
+    xTransliteration.changeLocale( eLnge );
 
-        pFormatScanner->ChangeIntl();
-        pStringScanner->ChangeIntl();
-    }
+    // cached locale data items, initialize BEFORE calling ChangeIntl below
+    const LocaleDataWrapper* pLoc = GetLocaleData();
+    aDecimalSep = pLoc->getNumDecimalSep();
+    aDecimalSepAlt = pLoc->getNumDecimalSepAlt();
+    aThousandSep = pLoc->getNumThousandSep();
+    aDateSep = pLoc->getDateSep();
+
+    pFormatScanner->ChangeIntl();
+    pStringScanner->ChangeIntl();
 }
 
 
 // static
-::osl::Mutex& SvNumberFormatter::GetMutex()
+::osl::Mutex& SvNumberFormatter::GetGlobalMutex()
 {
-    static ::osl::Mutex* pMutex = nullptr;
-    if( !pMutex )
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if( !pMutex )
-        {
-            // #i77768# Due to a static reference in the toolkit lib
-            // we need a mutex that lives longer than the svl library.
-            // Otherwise the dtor would use a destructed mutex!!
-            pMutex = new ::osl::Mutex;
-        }
-    }
-    return *pMutex;
+    // #i77768# Due to a static reference in the toolkit lib
+    // we need a mutex that lives longer than the svl library.
+    // Otherwise the dtor would use a destructed mutex!!
+    static osl::Mutex* persistentMutex(new osl::Mutex);
+
+    return *persistentMutex;
 }
 
 
 // static
 SvNumberFormatterRegistry_Impl& SvNumberFormatter::GetFormatterRegistry()
 {
-    ::osl::MutexGuard aGuard( GetMutex() );
+    ::osl::MutexGuard aGuard( GetGlobalMutex() );
     if ( !pFormatterRegistry )
     {
         pFormatterRegistry = new SvNumberFormatterRegistry_Impl;
@@ -373,11 +369,13 @@ SvNumberFormatterRegistry_Impl& SvNumberFormatter::GetFormatterRegistry()
 
 void SvNumberFormatter::SetColorLink( const Link<sal_uInt16,Color*>& rColorTableCallBack )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     aColorLink = rColorTableCallBack;
 }
 
 Color* SvNumberFormatter::GetUserDefColor(sal_uInt16 nIndex)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if( aColorLink.IsSet() )
     {
         return aColorLink.Call(nIndex);
@@ -390,34 +388,40 @@ Color* SvNumberFormatter::GetUserDefColor(sal_uInt16 nIndex)
 
 void SvNumberFormatter::ChangeNullDate(sal_uInt16 nDay,
                                        sal_uInt16 nMonth,
-                                       sal_uInt16 nYear)
+                                       sal_Int16 nYear)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     pFormatScanner->ChangeNullDate(nDay, nMonth, nYear);
     pStringScanner->ChangeNullDate(nDay, nMonth, nYear);
 }
 
-Date* SvNumberFormatter::GetNullDate()
+const Date& SvNumberFormatter::GetNullDate() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return pFormatScanner->GetNullDate();
 }
 
 void SvNumberFormatter::ChangeStandardPrec(short nPrec)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     pFormatScanner->ChangeStandardPrec(nPrec);
 }
 
 void SvNumberFormatter::SetNoZero(bool bNZ)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     bNoZero = bNZ;
 }
 
-sal_uInt16 SvNumberFormatter::GetStandardPrec()
+sal_uInt16 SvNumberFormatter::GetStandardPrec() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return pFormatScanner->GetStandardPrec();
 }
 
-bool SvNumberFormatter::GetNoZero()
+bool SvNumberFormatter::GetNoZero() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return bNoZero;
 }
 
@@ -428,15 +432,14 @@ void SvNumberFormatter::ReplaceSystemCL( LanguageType eOldLanguage )
     {
         return ;    // no SYSTEM entries to replace
     }
-    const sal_uInt32 nMaxBuiltin = nCLOffset + SV_MAX_ANZ_STANDARD_FORMATE;
+    const sal_uInt32 nMaxBuiltin = nCLOffset + SV_MAX_COUNT_STANDARD_FORMATS;
     const sal_uInt32 nNextCL = nCLOffset + SV_COUNTRY_LANGUAGE_OFFSET;
     sal_uInt32 nKey;
 
     // remove old builtin formats
-    SvNumberFormatTable::iterator it = aFTable.find( nCLOffset );
+    auto it = aFTable.find( nCLOffset );
     while ( it != aFTable.end() && (nKey = it->first) >= nCLOffset && nKey <= nMaxBuiltin )
     {
-        delete it->second;
         it = aFTable.erase(it);
     }
 
@@ -444,7 +447,7 @@ void SvNumberFormatter::ReplaceSystemCL( LanguageType eOldLanguage )
     SvNumberFormatTable aOldTable;
     while ( it != aFTable.end() && (nKey = it->first) >= nCLOffset && nKey < nNextCL )
     {
-        aOldTable[ nKey ] = it->second;
+        aOldTable[ nKey ] = it->second.release();
         it = aFTable.erase(it);
     }
 
@@ -457,7 +460,7 @@ void SvNumberFormatter::ReplaceSystemCL( LanguageType eOldLanguage )
     // convert additional and user defined from old system to new system
     SvNumberformat* pStdFormat = GetFormatEntry( nCLOffset + ZF_STANDARD );
     sal_uInt32 nLastKey = nMaxBuiltin;
-    pFormatScanner->SetConvertMode( eOldLanguage, LANGUAGE_SYSTEM, true );
+    pFormatScanner->SetConvertMode( eOldLanguage, LANGUAGE_SYSTEM, true , true);
     while ( !aOldTable.empty() )
     {
         nKey = aOldTable.begin()->first;
@@ -465,7 +468,7 @@ void SvNumberFormatter::ReplaceSystemCL( LanguageType eOldLanguage )
         {
             nLastKey = nKey;
         }
-        SvNumberformat* pOldEntry = aOldTable.begin()->second;
+        std::unique_ptr<SvNumberformat> pOldEntry(aOldTable.begin()->second);
         aOldTable.erase( nKey );
         OUString aString( pOldEntry->GetFormatstring() );
 
@@ -475,45 +478,33 @@ void SvNumberFormatter::ReplaceSystemCL( LanguageType eOldLanguage )
         LanguageType eLge = eOldLanguage;   // ConvertMode changes this
         bool bCheck = false;
         sal_Int32 nCheckPos = -1;
-        SvNumberformat* pNewEntry = new SvNumberformat( aString, pFormatScanner,
-                                                        pStringScanner, nCheckPos, eLge );
-        if ( nCheckPos != 0 )
+        std::unique_ptr<SvNumberformat> pNewEntry(new SvNumberformat( aString, pFormatScanner.get(),
+                                                                      pStringScanner.get(), nCheckPos, eLge ));
+        if ( nCheckPos == 0 )
         {
-            delete pNewEntry;
-        }
-        else
-        {
-            short eCheckType = pNewEntry->GetType();
-            if ( eCheckType != css::util::NumberFormat::UNDEFINED )
+            SvNumFormatType eCheckType = pNewEntry->GetType();
+            if ( eCheckType != SvNumFormatType::UNDEFINED )
             {
-                pNewEntry->SetType( eCheckType | css::util::NumberFormat::DEFINED );
+                pNewEntry->SetType( eCheckType | SvNumFormatType::DEFINED );
             }
             else
             {
-                pNewEntry->SetType( css::util::NumberFormat::DEFINED );
+                pNewEntry->SetType( SvNumFormatType::DEFINED );
             }
 
-            if ( !aFTable.insert( make_pair( nKey, pNewEntry) ).second )
-            {
-                delete pNewEntry;
-            }
-            else
+            if ( aFTable.emplace( nKey, std::move(pNewEntry) ).second )
             {
                 bCheck = true;
             }
         }
         DBG_ASSERT( bCheck, "SvNumberFormatter::ReplaceSystemCL: couldn't convert" );
-        (void)bCheck;
-
-        delete pOldEntry;
     }
     pFormatScanner->SetConvertMode(false);
-    pStdFormat->SetLastInsertKey( sal_uInt16(nLastKey - nCLOffset) );
+    pStdFormat->SetLastInsertKey( sal_uInt16(nLastKey - nCLOffset), SvNumberformat::FormatterPrivateAccess() );
 
     // append new system additional formats
-    NumberFormatCodeWrapper aNumberFormatCode( m_xContext,
-                                               GetLanguageTag().getLocale() );
-    ImpGenerateAdditionalFormats( nCLOffset, aNumberFormatCode, true );
+    css::uno::Reference< css::i18n::XNumberFormatCode > xNFC = i18n::NumberFormatMapper::create( m_xContext );
+    ImpGenerateAdditionalFormats( nCLOffset, xNFC, true );
 }
 
 const css::uno::Reference<css::uno::XComponentContext>& SvNumberFormatter::GetComponentContext() const
@@ -521,7 +512,7 @@ const css::uno::Reference<css::uno::XComponentContext>& SvNumberFormatter::GetCo
     return m_xContext;
 }
 
-const ImpSvNumberformatScan* SvNumberFormatter::GetFormatScanner() const { return pFormatScanner; }
+const ImpSvNumberformatScan* SvNumberFormatter::GetFormatScanner() const { return pFormatScanner.get(); }
 
 const LanguageTag& SvNumberFormatter::GetLanguageTag() const { return maLanguageTag; }
 
@@ -530,7 +521,7 @@ const ::utl::TransliterationWrapper* SvNumberFormatter::GetTransliteration() con
     return xTransliteration.get();
 }
 
-const CharClass* SvNumberFormatter::GetCharClass() const { return pCharClass; }
+const CharClass* SvNumberFormatter::GetCharClass() const { return pCharClass.get(); }
 
 const LocaleDataWrapper* SvNumberFormatter::GetLocaleData() const { return xLocaleData.get(); }
 
@@ -540,12 +531,24 @@ const NativeNumberWrapper* SvNumberFormatter::GetNatNum() const { return xNatNum
 
 const OUString& SvNumberFormatter::GetNumDecimalSep() const { return aDecimalSep; }
 
+const OUString& SvNumberFormatter::GetNumDecimalSepAlt() const { return aDecimalSepAlt; }
+
 const OUString& SvNumberFormatter::GetNumThousandSep() const { return aThousandSep; }
 
 const OUString& SvNumberFormatter::GetDateSep() const { return aDateSep; }
 
+bool SvNumberFormatter::IsDecimalSep( const OUString& rStr ) const
+{
+    if (rStr == GetNumDecimalSep())
+        return true;
+    if (GetNumDecimalSepAlt().isEmpty())
+        return false;
+    return rStr == GetNumDecimalSepAlt();
+}
+
 bool SvNumberFormatter::IsTextFormat(sal_uInt32 F_Index) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     const SvNumberformat* pFormat = GetFormatEntry(F_Index);
 
     return pFormat && pFormat->IsTextFormat();
@@ -553,10 +556,11 @@ bool SvNumberFormatter::IsTextFormat(sal_uInt32 F_Index) const
 
 bool SvNumberFormatter::PutEntry(OUString& rString,
                                  sal_Int32& nCheckPos,
-                                 short& nType,
+                                 SvNumFormatType& nType,
                                  sal_uInt32& nKey,      // format key
                                  LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     nKey = 0;
     if (rString.isEmpty())                             // empty string
     {
@@ -570,75 +574,67 @@ bool SvNumberFormatter::PutEntry(OUString& rString,
     ChangeIntl(eLnge);                                  // change locale if necessary
     LanguageType eLge = eLnge;                          // non-const for ConvertMode
     bool bCheck = false;
-    SvNumberformat* p_Entry = new SvNumberformat(rString,
-                                                 pFormatScanner,
-                                                 pStringScanner,
-                                                 nCheckPos,
-                                                 eLge);
+    std::unique_ptr<SvNumberformat> p_Entry(new SvNumberformat(rString,
+                                                               pFormatScanner.get(),
+                                                               pStringScanner.get(),
+                                                               nCheckPos,
+                                                               eLge));
 
     if (nCheckPos == 0)                         // Format ok
     {                                           // Type comparison:
-        short eCheckType = p_Entry->GetType();
-        if ( eCheckType != css::util::NumberFormat::UNDEFINED)
+        SvNumFormatType eCheckType = p_Entry->GetType();
+        if ( eCheckType != SvNumFormatType::UNDEFINED)
         {
-            p_Entry->SetType(eCheckType | css::util::NumberFormat::DEFINED);
+            p_Entry->SetType(eCheckType | SvNumFormatType::DEFINED);
             nType = eCheckType;
         }
         else
         {
-            p_Entry->SetType(css::util::NumberFormat::DEFINED);
-            nType = css::util::NumberFormat::DEFINED;
+            p_Entry->SetType(SvNumFormatType::DEFINED);
+            nType = SvNumFormatType::DEFINED;
         }
 
         sal_uInt32 CLOffset = ImpGenerateCL(eLge);  // create new standard formats if necessary
 
         nKey = ImpIsEntry(p_Entry->GetFormatstring(),CLOffset, eLge);
-        if (nKey != NUMBERFORMAT_ENTRY_NOT_FOUND)   // already present
-        {
-            delete p_Entry;
-        }
-        else
+        if (nKey == NUMBERFORMAT_ENTRY_NOT_FOUND) // only in not yet present
         {
             SvNumberformat* pStdFormat = GetFormatEntry(CLOffset + ZF_STANDARD);
-            sal_uInt32 nPos = CLOffset + pStdFormat->GetLastInsertKey();
+            sal_uInt32 nPos = CLOffset + pStdFormat->GetLastInsertKey( SvNumberformat::FormatterPrivateAccess() );
             if (nPos+1 - CLOffset >= SV_COUNTRY_LANGUAGE_OFFSET)
             {
                 SAL_WARN( "svl.numbers", "SvNumberFormatter::PutEntry: too many formats for CL");
-                delete p_Entry;
             }
-            else if (!aFTable.insert(make_pair( nPos+1,p_Entry)).second)
+            else if (!aFTable.emplace( nPos+1, std::move(p_Entry)).second)
             {
                 SAL_WARN( "svl.numbers", "SvNumberFormatter::PutEntry: dup position");
-                delete p_Entry;
             }
             else
             {
                 bCheck = true;
                 nKey = nPos+1;
-                pStdFormat->SetLastInsertKey((sal_uInt16) (nKey-CLOffset));
+                pStdFormat->SetLastInsertKey(static_cast<sal_uInt16>(nKey-CLOffset), SvNumberformat::FormatterPrivateAccess());
             }
         }
-    }
-    else
-    {
-        delete p_Entry;
     }
     return bCheck;
 }
 
 bool SvNumberFormatter::PutandConvertEntry(OUString& rString,
                                            sal_Int32& nCheckPos,
-                                           short& nType,
+                                           SvNumFormatType& nType,
                                            sal_uInt32& nKey,
                                            LanguageType eLnge,
-                                           LanguageType eNewLnge)
+                                           LanguageType eNewLnge,
+                                           bool bConvertDateOrder )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     bool bRes;
     if (eNewLnge == LANGUAGE_DONTKNOW)
     {
         eNewLnge = IniLnge;
     }
-    pFormatScanner->SetConvertMode(eLnge, eNewLnge);
+    pFormatScanner->SetConvertMode(eLnge, eNewLnge, false, bConvertDateOrder);
     bRes = PutEntry(rString, nCheckPos, nType, nKey, eLnge);
     pFormatScanner->SetConvertMode(false);
     return bRes;
@@ -646,26 +642,28 @@ bool SvNumberFormatter::PutandConvertEntry(OUString& rString,
 
 bool SvNumberFormatter::PutandConvertEntrySystem(OUString& rString,
                                                  sal_Int32& nCheckPos,
-                                                 short& nType,
+                                                 SvNumFormatType& nType,
                                                  sal_uInt32& nKey,
                                                  LanguageType eLnge,
                                                  LanguageType eNewLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     bool bRes;
     if (eNewLnge == LANGUAGE_DONTKNOW)
     {
         eNewLnge = IniLnge;
     }
-    pFormatScanner->SetConvertMode(eLnge, eNewLnge, true);
+    pFormatScanner->SetConvertMode(eLnge, eNewLnge, true, true);
     bRes = PutEntry(rString, nCheckPos, nType, nKey, eLnge);
     pFormatScanner->SetConvertMode(false);
     return bRes;
 }
 
 sal_uInt32 SvNumberFormatter::GetIndexPuttingAndConverting( OUString & rString, LanguageType eLnge,
-                                                            LanguageType eSysLnge, short & rType,
+                                                            LanguageType eSysLnge, SvNumFormatType & rType,
                                                             bool & rNewInserted, sal_Int32 & rCheckPos )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     sal_uInt32 nKey = NUMBERFORMAT_ENTRY_NOT_FOUND;
     rNewInserted = false;
     rCheckPos = 0;
@@ -721,7 +719,7 @@ sal_uInt32 SvNumberFormatter::GetIndexPuttingAndConverting( OUString & rString, 
     rType = GetType( nKey);
     // Convert any (!) old "automatic" currency format to new fixed currency
     // default format.
-    if ((rType & css::util::NumberFormat::CURRENCY) != 0)
+    if (rType & SvNumFormatType::CURRENCY)
     {
         const SvNumberformat* pFormat = GetEntry( nKey);
         if (!pFormat->HasNewCurrency())
@@ -731,7 +729,7 @@ sal_uInt32 SvNumberFormatter::GetIndexPuttingAndConverting( OUString & rString, 
                 DeleteEntry( nKey);     // don't leave trails of rubbish
                 rNewInserted = false;
             }
-            nKey = GetStandardFormat( css::util::NumberFormat::CURRENCY, eLnge);
+            nKey = GetStandardFormat( SvNumFormatType::CURRENCY, eLnge);
         }
     }
     return nKey;
@@ -739,12 +737,13 @@ sal_uInt32 SvNumberFormatter::GetIndexPuttingAndConverting( OUString & rString, 
 
 void SvNumberFormatter::DeleteEntry(sal_uInt32 nKey)
 {
-    delete aFTable[nKey];
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     aFTable.erase(nKey);
 }
 
-void SvNumberFormatter::GetUsedLanguages( std::vector<sal_uInt16>& rList )
+void SvNumberFormatter::GetUsedLanguages( std::vector<LanguageType>& rList )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     rList.clear();
 
     sal_uInt32 nOffset = 0;
@@ -763,6 +762,7 @@ void SvNumberFormatter::GetUsedLanguages( std::vector<sal_uInt16>& rList )
 void SvNumberFormatter::FillKeywordTable( NfKeywordTable& rKeywords,
                                           LanguageType eLang )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     ChangeIntl( eLang );
     const NfKeywordTable & rTable = pFormatScanner->GetKeywords();
     for ( sal_uInt16 i = 0; i < NF_KEYWORD_ENTRIES_COUNT; ++i )
@@ -774,6 +774,7 @@ void SvNumberFormatter::FillKeywordTable( NfKeywordTable& rKeywords,
 
 void SvNumberFormatter::FillKeywordTableForExcel( NfKeywordTable& rKeywords )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     FillKeywordTable( rKeywords, LANGUAGE_ENGLISH_US );
 
     // Replace upper case "GENERAL" with proper case "General".
@@ -791,10 +792,11 @@ void SvNumberFormatter::FillKeywordTableForExcel( NfKeywordTable& rKeywords )
 OUString SvNumberFormatter::GetFormatStringForExcel( sal_uInt32 nKey, const NfKeywordTable& rKeywords,
         SvNumberFormatter& rTempFormatter ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     OUString aFormatStr;
     if (const SvNumberformat* pEntry = GetEntry( nKey))
     {
-        if (pEntry->GetType() == css::util::NumberFormat::LOGICAL)
+        if (pEntry->GetType() == SvNumFormatType::LOGICAL)
         {
             // Build Boolean number format, which needs non-zero and zero
             // subformat codes with TRUE and FALSE strings.
@@ -807,16 +809,20 @@ OUString SvNumberFormatter::GetFormatStringForExcel( sal_uInt32 nKey, const NfKe
         }
         else
         {
+            bool bSystemLanguage = false;
             LanguageType nLang = pEntry->GetLanguage();
             if (nLang == LANGUAGE_SYSTEM)
+            {
+                bSystemLanguage = true;
                 nLang = SvtSysLocale().GetLanguageTag().getLanguageType();
+            }
             if (nLang != LANGUAGE_ENGLISH_US)
             {
                 sal_Int32 nCheckPos;
-                short nType = css::util::NumberFormat::DEFINED;
+                SvNumFormatType nType = SvNumFormatType::DEFINED;
                 sal_uInt32 nTempKey;
                 OUString aTemp( pEntry->GetFormatstring());
-                rTempFormatter.PutandConvertEntry( aTemp, nCheckPos, nType, nTempKey, nLang, LANGUAGE_ENGLISH_US);
+                rTempFormatter.PutandConvertEntry( aTemp, nCheckPos, nType, nTempKey, nLang, LANGUAGE_ENGLISH_US, false);
                 SAL_WARN_IF( nCheckPos != 0, "svl.numbers",
                         "SvNumberFormatter::GetFormatStringForExcel - format code not convertible");
                 if (nTempKey != NUMBERFORMAT_ENTRY_NOT_FOUND)
@@ -829,7 +835,8 @@ OUString SvNumberFormatter::GetFormatStringForExcel( sal_uInt32 nKey, const NfKe
                 // before (which doesn't do anything if it was the same locale
                 // already).
                 rTempFormatter.ChangeIntl( LANGUAGE_ENGLISH_US);
-                aFormatStr = pEntry->GetMappedFormatstring( rKeywords, *rTempFormatter.GetLocaleData());
+                aFormatStr = pEntry->GetMappedFormatstring( rKeywords, *rTempFormatter.GetLocaleData(), nLang,
+                        bSystemLanguage);
             }
         }
     }
@@ -846,6 +853,7 @@ OUString SvNumberFormatter::GetFormatStringForExcel( sal_uInt32 nKey, const NfKe
 
 OUString SvNumberFormatter::GetKeyword( LanguageType eLnge, sal_uInt16 nIndex )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     ChangeIntl(eLnge);
     const NfKeywordTable & rTable = pFormatScanner->GetKeywords();
     if ( nIndex < NF_KEYWORD_ENTRIES_COUNT )
@@ -859,6 +867,7 @@ OUString SvNumberFormatter::GetKeyword( LanguageType eLnge, sal_uInt16 nIndex )
 
 OUString SvNumberFormatter::GetStandardName( LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     ChangeIntl( eLnge );
     return pFormatScanner->GetStandardName();
 }
@@ -884,7 +893,7 @@ sal_uInt32 SvNumberFormatter::ImpIsEntry(const OUString& rString,
                                          LanguageType eLnge)
 {
     sal_uInt32 res = NUMBERFORMAT_ENTRY_NOT_FOUND;
-    SvNumberFormatTable::const_iterator it = aFTable.find( nCLOffset);
+    auto it = aFTable.find( nCLOffset);
     while ( res == NUMBERFORMAT_ENTRY_NOT_FOUND &&
             it != aFTable.end() && it->second->GetLanguage() == eLnge )
     {
@@ -902,12 +911,13 @@ sal_uInt32 SvNumberFormatter::ImpIsEntry(const OUString& rString,
 
 
 SvNumberFormatTable& SvNumberFormatter::GetFirstEntryTable(
-                                                      short& eType,
+                                                      SvNumFormatType& eType,
                                                       sal_uInt32& FIndex,
                                                       LanguageType& rLnge)
 {
-    short eTypetmp = eType;
-    if (eType == css::util::NumberFormat::ALL)                  // empty cell or don't care
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+    SvNumFormatType eTypetmp = eType;
+    if (eType == SvNumFormatType::ALL)                  // empty cell or don't care
     {
         rLnge = IniLnge;
     }
@@ -917,22 +927,22 @@ SvNumberFormatTable& SvNumberFormatter::GetFirstEntryTable(
         if (!pFormat)
         {
             rLnge = IniLnge;
-            eType = css::util::NumberFormat::ALL;
+            eType = SvNumFormatType::ALL;
             eTypetmp = eType;
         }
         else
         {
             rLnge = pFormat->GetLanguage();
-            eType = pFormat->GetType()&~css::util::NumberFormat::DEFINED;
-            if (eType == 0)
+            eType = pFormat->GetMaskedType();
+            if (eType == SvNumFormatType::ALL)
             {
-                eType = css::util::NumberFormat::DEFINED;
+                eType = SvNumFormatType::DEFINED;
                 eTypetmp = eType;
             }
-            else if (eType == css::util::NumberFormat::DATETIME)
+            else if (eType == SvNumFormatType::DATETIME)
             {
                 eTypetmp = eType;
-                eType = css::util::NumberFormat::DATE;
+                eType = SvNumFormatType::DATE;
             }
             else
             {
@@ -956,7 +966,7 @@ sal_uInt32 SvNumberFormatter::ImpGenerateCL( LanguageType eLnge )
             const LanguageTag& rLoadedLocale = xLocaleData->getLoadedLanguageTag();
             if ( !rLoadedLocale.equals( maLanguageTag ) )
             {
-                OUString aMsg("SvNumberFormatter::ImpGenerateCL: locales don't match:");
+                OUString const aMsg("SvNumberFormatter::ImpGenerateCL: locales don't match:");
                 LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg ));
             }
             // test XML locale data FormatElement entries
@@ -983,16 +993,15 @@ sal_uInt32 SvNumberFormatter::ImpGenerateCL( LanguageType eLnge )
                     }
                     if ( !aDupes.isEmpty() )
                     {
-                        OUStringBuffer aMsg(aDupes.getLength() + xSeq[j].formatKey.getLength() + 100);
-                        aMsg.append("XML locale data FormatElement formatindex dupe: ");
-                        aMsg.append(OUString::number(nIdx));
-                        aMsg.append("\nFormatElements: ");
-                        aMsg.append(OUString::number( j ));
-                        aMsg.append("(");
-                        aMsg.append( xSeq[j].formatKey );
-                        aMsg.append( ") ");
-                        aMsg.append(aDupes.makeStringAndClear());
-                        LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg.makeStringAndClear() ));
+                        OUString aMsg = "XML locale data FormatElement formatindex dupe: "
+                                      + OUString::number(nIdx)
+                                      + "\nFormatElements: "
+                                      + OUString::number( j )
+                                      + "("
+                                      + xSeq[j].formatKey
+                                      + ") "
+                                      + aDupes.makeStringAndClear();
+                        LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg ));
                     }
                 }
             }
@@ -1005,26 +1014,28 @@ sal_uInt32 SvNumberFormatter::ImpGenerateCL( LanguageType eLnge )
     return CLOffset;
 }
 
-SvNumberFormatTable& SvNumberFormatter::ChangeCL(short eType,
+SvNumberFormatTable& SvNumberFormatter::ChangeCL(SvNumFormatType eType,
                                                  sal_uInt32& FIndex,
                                                  LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     ImpGenerateCL(eLnge);
     return GetEntryTable(eType, FIndex, ActLnge);
 }
 
 SvNumberFormatTable& SvNumberFormatter::GetEntryTable(
-                                                    short eType,
+                                                    SvNumFormatType eType,
                                                     sal_uInt32& FIndex,
                                                     LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( pFormatTable )
     {
         pFormatTable->clear();
     }
     else
     {
-        pFormatTable = new SvNumberFormatTable;
+        pFormatTable.reset( new SvNumberFormatTable );
     }
     ChangeIntl(eLnge);
     sal_uInt32 CLOffset = ImpGetCLOffset(ActLnge);
@@ -1033,13 +1044,13 @@ SvNumberFormatTable& SvNumberFormatter::GetEntryTable(
     // (e.g. currency) => has to be done before collecting formats.
     sal_uInt32 nDefaultIndex = GetStandardFormat( eType, ActLnge );
 
-    SvNumberFormatTable::iterator it = aFTable.find( CLOffset);
+    auto it = aFTable.find( CLOffset);
 
-    if (eType == css::util::NumberFormat::ALL)
+    if (eType == SvNumFormatType::ALL)
     {
         while (it != aFTable.end() && it->second->GetLanguage() == ActLnge)
         {   // copy all entries to output table
-            (*pFormatTable)[ it->first ] = it->second;
+            (*pFormatTable)[ it->first ] = it->second.get();
             ++it;
         }
     }
@@ -1048,7 +1059,7 @@ SvNumberFormatTable& SvNumberFormatter::GetEntryTable(
         while (it != aFTable.end() && it->second->GetLanguage() == ActLnge)
         {   // copy entries of queried type to output table
             if ((it->second->GetType()) & eType)
-                (*pFormatTable)[ it->first ] = it->second;
+                (*pFormatTable)[ it->first ] = it->second.get();
             ++it;
         }
     }
@@ -1068,26 +1079,37 @@ bool SvNumberFormatter::IsNumberFormat(const OUString& sString,
                                        sal_uInt32& F_Index,
                                        double& fOutNumber)
 {
-    short FType;
-    const SvNumberformat* pFormat = GetFormatEntry(F_Index);
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+
+    SvNumFormatType FType;
+    // For the 0 General format directly use the init/system locale and avoid
+    // all overhead that is associated with a format passed to the scanner.
+    const SvNumberformat* pFormat = (F_Index == 0 ? nullptr : ImpSubstituteEntry( GetFormatEntry(F_Index)));
     if (!pFormat)
     {
         ChangeIntl(IniLnge);
-        FType = css::util::NumberFormat::NUMBER;
+        FType = SvNumFormatType::NUMBER;
     }
     else
     {
-        FType = pFormat->GetType() &~css::util::NumberFormat::DEFINED;
-        if (FType == 0)
+        FType = pFormat->GetMaskedType();
+        if (FType == SvNumFormatType::ALL)
         {
-            FType = css::util::NumberFormat::DEFINED;
+            FType = SvNumFormatType::DEFINED;
         }
         ChangeIntl(pFormat->GetLanguage());
+        // Avoid scanner overhead with the General format of any locale.
+        // These are never substituted above so safe to ignore.
+        if ((F_Index % SV_COUNTRY_LANGUAGE_OFFSET) == 0)
+        {
+            assert(FType == SvNumFormatType::NUMBER);
+            pFormat = nullptr;
+        }
     }
 
     bool res;
-    short RType = FType;
-    if (RType == css::util::NumberFormat::TEXT)
+    SvNumFormatType RType = FType;
+    if (RType == SvNumFormatType::TEXT)
     {
         res = false;        // type text preset => no conversion to number
     }
@@ -1099,9 +1121,9 @@ bool SvNumberFormatter::IsNumberFormat(const OUString& sString,
     {
         switch ( RType )
         {
-        case css::util::NumberFormat::DATE :
+        case SvNumFormatType::DATE :
             // Preserve ISO 8601 input.
-            if (pStringScanner->CanForceToIso8601( DMY))
+            if (pStringScanner->CanForceToIso8601( DateOrder::Invalid))
             {
                 F_Index = GetFormatIndex( NF_DATE_DIN_YYYYMMDD, ActLnge );
             }
@@ -1110,11 +1132,11 @@ bool SvNumberFormatter::IsNumberFormat(const OUString& sString,
                 F_Index = GetStandardFormat( RType, ActLnge );
             }
             break;
-        case css::util::NumberFormat::TIME :
+        case SvNumFormatType::TIME :
             if ( pStringScanner->GetDecPos() )
             {
                 // 100th seconds
-                if ( pStringScanner->GetAnzNums() > 3 || fOutNumber < 0.0 )
+                if ( pStringScanner->GetNumericsCount() > 3 || fOutNumber < 0.0 )
                 {
                     F_Index = GetFormatIndex( NF_TIME_HH_MMSS00, ActLnge );
                 }
@@ -1141,17 +1163,18 @@ bool SvNumberFormatter::IsNumberFormat(const OUString& sString,
 
 LanguageType SvNumberFormatter::GetLanguage() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return IniLnge;
 }
 
-bool SvNumberFormatter::IsCompatible(short eOldType,
-                                     short eNewType)
+// static
+bool SvNumberFormatter::IsCompatible(SvNumFormatType eOldType, SvNumFormatType eNewType)
 {
     if (eOldType == eNewType)
     {
         return true;
     }
-    else if (eOldType == css::util::NumberFormat::DEFINED)
+    else if (eOldType == SvNumFormatType::DEFINED)
     {
         return true;
     }
@@ -1159,43 +1182,43 @@ bool SvNumberFormatter::IsCompatible(short eOldType,
     {
         switch (eNewType)
         {
-        case css::util::NumberFormat::NUMBER:
+        case SvNumFormatType::NUMBER:
             switch (eOldType)
             {
-            case css::util::NumberFormat::PERCENT:
-            case css::util::NumberFormat::CURRENCY:
-            case css::util::NumberFormat::SCIENTIFIC:
-            case css::util::NumberFormat::FRACTION:
-//          case css::util::NumberFormat::LOGICAL:
-            case css::util::NumberFormat::DEFINED:
+            case SvNumFormatType::PERCENT:
+            case SvNumFormatType::CURRENCY:
+            case SvNumFormatType::SCIENTIFIC:
+            case SvNumFormatType::FRACTION:
+            case SvNumFormatType::DEFINED:
+                return true;
+            case SvNumFormatType::LOGICAL:
+            default:
+                return false;
+            }
+            break;
+        case SvNumFormatType::DATE:
+            switch (eOldType)
+            {
+            case SvNumFormatType::DATETIME:
                 return true;
             default:
                 return false;
             }
             break;
-        case css::util::NumberFormat::DATE:
+        case SvNumFormatType::TIME:
             switch (eOldType)
             {
-            case css::util::NumberFormat::DATETIME:
+            case SvNumFormatType::DATETIME:
                 return true;
             default:
                 return false;
             }
             break;
-        case css::util::NumberFormat::TIME:
+        case SvNumFormatType::DATETIME:
             switch (eOldType)
             {
-            case css::util::NumberFormat::DATETIME:
-                return true;
-            default:
-                return false;
-            }
-            break;
-        case css::util::NumberFormat::DATETIME:
-            switch (eOldType)
-            {
-            case css::util::NumberFormat::TIME:
-            case css::util::NumberFormat::DATE:
+            case SvNumFormatType::TIME:
+            case SvNumFormatType::DATE:
                 return true;
             default:
                 return false;
@@ -1208,25 +1231,25 @@ bool SvNumberFormatter::IsCompatible(short eOldType,
 }
 
 
-sal_uInt32 SvNumberFormatter::ImpGetDefaultFormat( short nType )
+sal_uInt32 SvNumberFormatter::ImpGetDefaultFormat( SvNumFormatType nType )
 {
     sal_uInt32 CLOffset = ImpGetCLOffset( ActLnge );
     sal_uInt32 nSearch;
     switch( nType )
     {
-    case css::util::NumberFormat::DATE:
+    case SvNumFormatType::DATE:
         nSearch = CLOffset + ZF_STANDARD_DATE;
         break;
-    case css::util::NumberFormat::TIME:
+    case SvNumFormatType::TIME:
         nSearch = CLOffset + ZF_STANDARD_TIME;
         break;
-    case css::util::NumberFormat::DATETIME:
+    case SvNumFormatType::DATETIME:
         nSearch = CLOffset + ZF_STANDARD_DATETIME;
         break;
-    case css::util::NumberFormat::PERCENT:
+    case SvNumFormatType::PERCENT:
         nSearch = CLOffset + ZF_STANDARD_PERCENT;
         break;
-    case css::util::NumberFormat::SCIENTIFIC:
+    case SvNumFormatType::SCIENTIFIC:
         nSearch = CLOffset + ZF_STANDARD_SCIENTIFIC;
         break;
     default:
@@ -1241,12 +1264,11 @@ sal_uInt32 SvNumberFormatter::ImpGetDefaultFormat( short nType )
         // look for a defined standard
         sal_uInt32 nStopKey = CLOffset + SV_COUNTRY_LANGUAGE_OFFSET;
         sal_uInt32 nKey(0);
-        SvNumberFormatTable::const_iterator it2 = aFTable.find( CLOffset );
+        auto it2 = aFTable.find( CLOffset );
         while ( it2 != aFTable.end() && (nKey = it2->first ) >= CLOffset && nKey < nStopKey )
         {
-            const SvNumberformat* pEntry = it2->second;
-            if ( pEntry->IsStandard() && ((pEntry->GetType() &
-                            ~css::util::NumberFormat::DEFINED) == nType) )
+            const SvNumberformat* pEntry = it2->second.get();
+            if ( pEntry->IsStandard() && (pEntry->GetMaskedType() == nType) )
             {
                 nDefaultFormat = nKey;
                 break;  // while
@@ -1258,19 +1280,19 @@ sal_uInt32 SvNumberFormatter::ImpGetDefaultFormat( short nType )
         {   // none found, use old fixed standards
             switch( nType )
             {
-            case css::util::NumberFormat::DATE:
+            case SvNumFormatType::DATE:
                 nDefaultFormat = CLOffset + ZF_STANDARD_DATE;
                 break;
-            case css::util::NumberFormat::TIME:
+            case SvNumFormatType::TIME:
                 nDefaultFormat = CLOffset + ZF_STANDARD_TIME+1;
                 break;
-            case css::util::NumberFormat::DATETIME:
+            case SvNumFormatType::DATETIME:
                 nDefaultFormat = CLOffset + ZF_STANDARD_DATETIME;
                 break;
-            case css::util::NumberFormat::PERCENT:
+            case SvNumFormatType::PERCENT:
                 nDefaultFormat = CLOffset + ZF_STANDARD_PERCENT+1;
                 break;
-            case css::util::NumberFormat::SCIENTIFIC:
+            case SvNumFormatType::SCIENTIFIC:
                 nDefaultFormat = CLOffset + ZF_STANDARD_SCIENTIFIC;
                 break;
             default:
@@ -1283,8 +1305,9 @@ sal_uInt32 SvNumberFormatter::ImpGetDefaultFormat( short nType )
 }
 
 
-sal_uInt32 SvNumberFormatter::GetStandardFormat( short eType, LanguageType eLnge )
+sal_uInt32 SvNumberFormatter::GetStandardFormat( SvNumFormatType eType, LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (eLnge == LANGUAGE_DONTKNOW)
     {
         eLnge = IniLnge;
@@ -1292,24 +1315,24 @@ sal_uInt32 SvNumberFormatter::GetStandardFormat( short eType, LanguageType eLnge
     sal_uInt32 CLOffset = ImpGenerateCL(eLnge);
     switch(eType)
     {
-    case css::util::NumberFormat::CURRENCY:
+    case SvNumFormatType::CURRENCY:
         return ( eLnge == LANGUAGE_SYSTEM ) ? ImpGetDefaultSystemCurrencyFormat() : ImpGetDefaultCurrencyFormat();
-    case css::util::NumberFormat::DATE:
-    case css::util::NumberFormat::TIME:
-    case css::util::NumberFormat::DATETIME:
-    case css::util::NumberFormat::PERCENT:
-    case css::util::NumberFormat::SCIENTIFIC:
+    case SvNumFormatType::DATE:
+    case SvNumFormatType::TIME:
+    case SvNumFormatType::DATETIME:
+    case SvNumFormatType::PERCENT:
+    case SvNumFormatType::SCIENTIFIC:
         return ImpGetDefaultFormat( eType );
-    case css::util::NumberFormat::FRACTION:
+    case SvNumFormatType::FRACTION:
         return CLOffset + ZF_STANDARD_FRACTION;
-    case css::util::NumberFormat::LOGICAL:
+    case SvNumFormatType::LOGICAL:
         return CLOffset + ZF_STANDARD_LOGICAL;
-    case css::util::NumberFormat::TEXT:
+    case SvNumFormatType::TEXT:
         return CLOffset + ZF_STANDARD_TEXT;
-    case css::util::NumberFormat::ALL:
-    case css::util::NumberFormat::DEFINED:
-    case css::util::NumberFormat::NUMBER:
-    case css::util::NumberFormat::UNDEFINED:
+    case SvNumFormatType::ALL:
+    case SvNumFormatType::DEFINED:
+    case SvNumFormatType::NUMBER:
+    case SvNumFormatType::UNDEFINED:
     default:
         return CLOffset + ZF_STANDARD;
     }
@@ -1318,6 +1341,7 @@ sal_uInt32 SvNumberFormatter::GetStandardFormat( short eType, LanguageType eLnge
 bool SvNumberFormatter::IsSpecialStandardFormat( sal_uInt32 nFIndex,
                                                  LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return
         nFIndex == GetFormatIndex( NF_TIME_MMSS00, eLnge ) ||
         nFIndex == GetFormatIndex( NF_TIME_HH_MMSS00, eLnge ) ||
@@ -1325,9 +1349,10 @@ bool SvNumberFormatter::IsSpecialStandardFormat( sal_uInt32 nFIndex,
         ;
 }
 
-sal_uInt32 SvNumberFormatter::GetStandardFormat( sal_uInt32 nFIndex, short eType,
+sal_uInt32 SvNumberFormatter::GetStandardFormat( sal_uInt32 nFIndex, SvNumFormatType eType,
                                                  LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( IsSpecialStandardFormat( nFIndex, eLnge ) )
         return nFIndex;
     else
@@ -1336,6 +1361,7 @@ sal_uInt32 SvNumberFormatter::GetStandardFormat( sal_uInt32 nFIndex, short eType
 
 sal_uInt32 SvNumberFormatter::GetTimeFormat( double fNumber, LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     bool bSign;
     if ( fNumber < 0.0 )
     {
@@ -1357,27 +1383,29 @@ sal_uInt32 SvNumberFormatter::GetTimeFormat( double fNumber, LanguageType eLnge 
         if ( bSign || fNumber >= 1.0 )
             return GetFormatIndex( NF_TIME_HH_MMSS, eLnge );
         else
-            return GetStandardFormat( css::util::NumberFormat::TIME, eLnge );
+            return GetStandardFormat( SvNumFormatType::TIME, eLnge );
     }
 }
 
 sal_uInt32 SvNumberFormatter::GetStandardFormat( double fNumber, sal_uInt32 nFIndex,
-                                                 short eType, LanguageType eLnge )
+                                                 SvNumFormatType eType, LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( IsSpecialStandardFormat( nFIndex, eLnge ) )
         return nFIndex;
 
     switch( eType )
     {
-        case css::util::NumberFormat::TIME :
+        case SvNumFormatType::TIME :
             return GetTimeFormat( fNumber, eLnge);
         default:
             return GetStandardFormat( eType, eLnge );
     }
 }
 
-sal_uInt32 SvNumberFormatter::GuessDateTimeFormat( short& rType, double fNumber, LanguageType eLnge )
+sal_uInt32 SvNumberFormatter::GuessDateTimeFormat( SvNumFormatType& rType, double fNumber, LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     // Categorize the format according to the implementation of
     // SvNumberFormatter::GetEditFormat(), making assumptions about what
     // would be time only.
@@ -1385,60 +1413,66 @@ sal_uInt32 SvNumberFormatter::GuessDateTimeFormat( short& rType, double fNumber,
     if (0.0 <= fNumber && fNumber < 1.0)
     {
         // Clearly a time.
-        rType = util::NumberFormat::TIME;
+        rType = SvNumFormatType::TIME;
         nRet = GetTimeFormat( fNumber, eLnge);
     }
     else if (fabs( fNumber) * 24 < 0x7fff)
     {
         // Assuming time within 32k hours or 3.7 years.
-        rType = util::NumberFormat::TIME;
+        rType = SvNumFormatType::TIME;
         nRet = GetTimeFormat( fNumber, eLnge);
     }
     else if (rtl::math::approxFloor( fNumber) != fNumber)
     {
         // Date+Time.
-        rType = util::NumberFormat::DATETIME;
+        rType = SvNumFormatType::DATETIME;
         nRet = GetFormatIndex( NF_DATETIME_SYS_DDMMYYYY_HHMMSS, eLnge);
     }
     else
     {
         // Date only.
-        rType = util::NumberFormat::DATE;
+        rType = SvNumFormatType::DATE;
         nRet = GetFormatIndex( NF_DATE_SYS_DDMMYYYY, eLnge);
     }
     return nRet;
 }
 
 sal_uInt32 SvNumberFormatter::GetEditFormat( double fNumber, sal_uInt32 nFIndex,
-                                             short eType, LanguageType eLang,
-                                             SvNumberformat* pFormat )
+                                             SvNumFormatType eType, LanguageType eLang,
+                                             SvNumberformat const * pFormat )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     sal_uInt32 nKey = nFIndex;
     switch ( eType )
     {
     // #61619# always edit using 4-digit year
-    case css::util::NumberFormat::DATE :
-        if (rtl::math::approxFloor( fNumber) != fNumber)
-            nKey = GetFormatIndex( NF_DATETIME_SYS_DDMMYYYY_HHMMSS, eLang );
-        // fdo#34977 preserve time when editing even if only date was
-        // displayed.
-        /* FIXME: in case an ISO 8601 format was used, editing should
-         * also use such. Unfortunately we have no builtin combined
-         * date+time ISO format defined. Needs also locale data work.
-         * */
-        else
+    case SvNumFormatType::DATE :
         {
             // Preserve ISO 8601 format.
-            if (    nFIndex == GetFormatIndex( NF_DATE_DIN_YYYYMMDD, eLang) ||
-                    nFIndex == GetFormatIndex( NF_DATE_DIN_YYMMDD, eLang) ||
-                    nFIndex == GetFormatIndex( NF_DATE_DIN_MMDD, eLang) ||
-                    (pFormat && pFormat->IsIso8601( 0 )))
-                nKey = GetFormatIndex( NF_DATE_DIN_YYYYMMDD, eLang);
+            bool bIsoDate =
+                nFIndex == GetFormatIndex( NF_DATE_DIN_YYYYMMDD, eLang) ||
+                nFIndex == GetFormatIndex( NF_DATE_DIN_YYMMDD, eLang) ||
+                nFIndex == GetFormatIndex( NF_DATE_DIN_MMDD, eLang) ||
+                (pFormat && pFormat->IsIso8601( 0 ));
+            if (rtl::math::approxFloor( fNumber) != fNumber)
+            {
+                // fdo#34977 preserve time when editing even if only date was
+                // displayed.
+                if (bIsoDate)
+                    nKey = GetFormatIndex( NF_DATETIME_ISO_YYYYMMDD_HHMMSS, eLang);
+                else
+                    nKey = GetFormatIndex( NF_DATETIME_SYS_DDMMYYYY_HHMMSS, eLang );
+            }
             else
-                nKey = GetFormatIndex( NF_DATE_SYS_DDMMYYYY, eLang );
+            {
+                if (bIsoDate)
+                    nKey = GetFormatIndex( NF_DATE_ISO_YYYYMMDD, eLang);
+                else
+                    nKey = GetFormatIndex( NF_DATE_SYS_DDMMYYYY, eLang );
+            }
         }
         break;
-    case css::util::NumberFormat::TIME :
+    case SvNumFormatType::TIME :
         if (fNumber < 0.0 || fNumber >= 1.0)
         {
             /* XXX NOTE: this is a purely arbitrary value within the limits
@@ -1455,11 +1489,14 @@ sal_uInt32 SvNumberFormatter::GetEditFormat( double fNumber, sal_uInt32 nFIndex,
         else
             nKey = GetStandardFormat( fNumber, nFIndex, eType, eLang );
         break;
-    case css::util::NumberFormat::DATETIME :
-        nKey = GetFormatIndex( NF_DATETIME_SYS_DDMMYYYY_HHMMSS, eLang );
-        /* FIXME: in case an ISO 8601 format was used, editing should
-         * also use such. Unfortunately we have no builtin combined
-         * date+time ISO format defined. Needs also locale data work. */
+    case SvNumFormatType::DATETIME :
+        if (nFIndex == GetFormatIndex( NF_DATETIME_ISO_YYYYMMDD_HHMMSS, eLang) || (pFormat && pFormat->IsIso8601( 0 )))
+            nKey = GetFormatIndex( NF_DATETIME_ISO_YYYYMMDD_HHMMSS, eLang );
+        else
+            nKey = GetFormatIndex( NF_DATETIME_SYS_DDMMYYYY_HHMMSS, eLang );
+        break;
+    case SvNumFormatType::NUMBER:
+        nKey = GetStandardFormat( eType, eLang );
         break;
     default:
         nKey = GetStandardFormat( fNumber, nFIndex, eType, eLang );
@@ -1471,8 +1508,10 @@ void SvNumberFormatter::GetInputLineString(const double& fOutNumber,
                                            sal_uInt32 nFIndex,
                                            OUString& sOutString)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     Color* pColor;
-    SvNumberformat* pFormat = GetFormatEntry( nFIndex );
+    sal_uInt32 nRealKey = nFIndex;
+    SvNumberformat* pFormat = ImpSubstituteEntry( GetFormatEntry( nFIndex ), &nRealKey);
     if (!pFormat)
     {
         pFormat = GetFormatEntry(ZF_STANDARD);
@@ -1481,8 +1520,8 @@ void SvNumberFormatter::GetInputLineString(const double& fOutNumber,
     LanguageType eLang = pFormat->GetLanguage();
     ChangeIntl( eLang );
 
-    short eType = pFormat->GetType() & ~css::util::NumberFormat::DEFINED;
-    if (eType == 0)
+    SvNumFormatType eType = pFormat->GetMaskedType();
+    if (eType == SvNumFormatType::ALL)
     {
         // Mixed types in subformats, use first.
         /* XXX we could choose a subformat according to fOutNumber and
@@ -1493,28 +1532,28 @@ void SvNumberFormatter::GetInputLineString(const double& fOutNumber,
 
     sal_uInt16 nOldPrec = pFormatScanner->GetStandardPrec();
     bool bPrecChanged = false;
-    if (eType == css::util::NumberFormat::NUMBER ||
-        eType == css::util::NumberFormat::PERCENT ||
-        eType == css::util::NumberFormat::CURRENCY ||
-        eType == css::util::NumberFormat::SCIENTIFIC ||
-        eType == css::util::NumberFormat::FRACTION)
+    if (eType == SvNumFormatType::NUMBER ||
+        eType == SvNumFormatType::PERCENT ||
+        eType == SvNumFormatType::CURRENCY ||
+        eType == SvNumFormatType::SCIENTIFIC ||
+        eType == SvNumFormatType::FRACTION)
     {
-        if (eType != css::util::NumberFormat::PERCENT)  // special treatment of % later
+        if (eType != SvNumFormatType::PERCENT)  // special treatment of % later
         {
-            eType = css::util::NumberFormat::NUMBER;
+            eType = SvNumFormatType::NUMBER;
         }
         ChangeStandardPrec(INPUTSTRING_PRECISION);
         bPrecChanged = true;
     }
 
-    sal_uInt32 nKey = GetEditFormat( fOutNumber, nFIndex, eType, eLang, pFormat);
-    if ( nKey != nFIndex )
+    sal_uInt32 nKey = GetEditFormat( fOutNumber, nRealKey, eType, eLang, pFormat);
+    if ( nKey != nRealKey )
     {
         pFormat = GetFormatEntry( nKey );
     }
     if (pFormat)
     {
-        if ( eType == css::util::NumberFormat::TIME && pFormat->GetFormatPrecision() )
+        if ( eType == SvNumFormatType::TIME && pFormat->GetFormatPrecision() )
         {
             ChangeStandardPrec(INPUTSTRING_PRECISION);
             bPrecChanged = true;
@@ -1533,7 +1572,10 @@ void SvNumberFormatter::GetOutputString(const OUString& sString,
                                         Color** ppColor,
                                         bool bUseStarFormat )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     SvNumberformat* pFormat = GetFormatEntry( nFIndex );
+    // ImpSubstituteEntry() is unnecessary here because so far only numeric
+    // (time and date) are substituted.
     if (!pFormat)
     {
         pFormat = GetFormatEntry(ZF_STANDARD_TEXT);
@@ -1564,12 +1606,13 @@ void SvNumberFormatter::GetOutputString(const double& fOutNumber,
                                         Color** ppColor,
                                         bool bUseStarFormat )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (bNoZero && fOutNumber == 0.0)
     {
         sOutString.clear();
         return;
     }
-    SvNumberformat* pFormat = GetFormatEntry( nFIndex );
+    SvNumberformat* pFormat = ImpSubstituteEntry( GetFormatEntry( nFIndex ));
     if (!pFormat)
         pFormat = GetFormatEntry(ZF_STANDARD);
     ChangeIntl(pFormat->GetLanguage());
@@ -1587,6 +1630,7 @@ bool SvNumberFormatter::GetPreviewString(const OUString& sFormatString,
                                          LanguageType eLnge,
                                          bool bUseStarFormat )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (sFormatString.isEmpty())                       // no empty string
     {
         return false;
@@ -1601,8 +1645,8 @@ bool SvNumberFormatter::GetPreviewString(const OUString& sFormatString,
     sal_Int32 nCheckPos = -1;
     OUString sTmpString = sFormatString;
     std::unique_ptr<SvNumberformat> p_Entry(new SvNumberformat(sTmpString,
-                                                 pFormatScanner,
-                                                 pStringScanner,
+                                                 pFormatScanner.get(),
+                                                 pStringScanner.get(),
                                                  nCheckPos,
                                                  eLnge));
     if (nCheckPos == 0)                                 // String ok
@@ -1639,6 +1683,7 @@ bool SvNumberFormatter::GetPreviewStringGuess( const OUString& sFormatString,
                                                Color** ppColor,
                                                LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (sFormatString.isEmpty())                       // no empty string
     {
         return false;
@@ -1668,8 +1713,8 @@ bool SvNumberFormatter::GetPreviewStringGuess( const OUString& sFormatString,
     if ( bEnglish )
     {
         sTmpString = sFormatString;
-        pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner,
-                                     pStringScanner, nCheckPos, eLnge ));
+        pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner.get(),
+                                     pStringScanner.get(), nCheckPos, eLnge ));
     }
     else
     {
@@ -1679,22 +1724,24 @@ bool SvNumberFormatter::GetPreviewStringGuess( const OUString& sFormatString,
 
         // Try English -> other or convert english to other
         LanguageType eFormatLang = LANGUAGE_ENGLISH_US;
-        pFormatScanner->SetConvertMode( LANGUAGE_ENGLISH_US, eLnge );
+        pFormatScanner->SetConvertMode( LANGUAGE_ENGLISH_US, eLnge, false, false);
         sTmpString = sFormatString;
-        pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner,
-                                     pStringScanner, nCheckPos, eFormatLang ));
+        pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner.get(),
+                                     pStringScanner.get(), nCheckPos, eFormatLang ));
         pFormatScanner->SetConvertMode( false );
         ChangeIntl( eLnge );
 
         if ( !bEnglishFormat )
         {
-            if ( !(nCheckPos == 0) || xTransliteration->isEqual( sFormatString,
-                                                                 pEntry->GetFormatstring() ) )
+            if ( nCheckPos != 0 || xTransliteration->isEqual( sFormatString,
+                                                              pEntry->GetFormatstring() ) )
             {
                 // other Format
+                // Force locale's keywords.
+                pFormatScanner->ChangeIntl( ImpSvNumberformatScan::KeywordLocalization::LocaleLegacy );
                 sTmpString = sFormatString;
-                pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner,
-                                             pStringScanner, nCheckPos, eLnge ));
+                pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner.get(),
+                                             pStringScanner.get(), nCheckPos, eLnge ));
             }
             else
             {
@@ -1702,19 +1749,21 @@ bool SvNumberFormatter::GetPreviewStringGuess( const OUString& sFormatString,
                 sal_Int32 nCheckPos2 = -1;
                 // try other --> english
                 eFormatLang = eLnge;
-                pFormatScanner->SetConvertMode( eLnge, LANGUAGE_ENGLISH_US );
+                pFormatScanner->SetConvertMode( eLnge, LANGUAGE_ENGLISH_US, false, false);
                 sTmpString = sFormatString;
-                std::unique_ptr<SvNumberformat> pEntry2(new SvNumberformat( sTmpString, pFormatScanner,
-                                                              pStringScanner, nCheckPos2, eFormatLang ));
+                std::unique_ptr<SvNumberformat> pEntry2(new SvNumberformat( sTmpString, pFormatScanner.get(),
+                                                              pStringScanner.get(), nCheckPos2, eFormatLang ));
                 pFormatScanner->SetConvertMode( false );
                 ChangeIntl( eLnge );
                 if ( nCheckPos2 == 0 && !xTransliteration->isEqual( sFormatString,
                                                                     pEntry2->GetFormatstring() ) )
                 {
                     // other Format
+                    // Force locale's keywords.
+                    pFormatScanner->ChangeIntl( ImpSvNumberformatScan::KeywordLocalization::LocaleLegacy );
                     sTmpString = sFormatString;
-                    pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner,
-                                                 pStringScanner, nCheckPos, eLnge ));
+                    pEntry.reset(new SvNumberformat( sTmpString, pFormatScanner.get(),
+                                                 pStringScanner.get(), nCheckPos, eLnge ));
                 }
             }
         }
@@ -1735,6 +1784,7 @@ bool SvNumberFormatter::GetPreviewString( const OUString& sFormatString,
                                           Color** ppColor,
                                           LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (sFormatString.isEmpty())               // no empty string
     {
         return false;
@@ -1749,8 +1799,8 @@ bool SvNumberFormatter::GetPreviewString( const OUString& sFormatString,
     sal_Int32 nCheckPos = -1;
     OUString sTmpString = sFormatString;
     std::unique_ptr<SvNumberformat> p_Entry(new SvNumberformat( sTmpString,
-                                                  pFormatScanner,
-                                                  pStringScanner,
+                                                  pFormatScanner.get(),
+                                                  pStringScanner.get(),
                                                   nCheckPos,
                                                   eLnge));
     if (nCheckPos == 0)                          // String ok
@@ -1788,6 +1838,7 @@ bool SvNumberFormatter::GetPreviewString( const OUString& sFormatString,
 sal_uInt32 SvNumberFormatter::TestNewString(const OUString& sFormatString,
                                             LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (sFormatString.isEmpty())                       // no empty string
     {
         return NUMBERFORMAT_ENTRY_NOT_FOUND;
@@ -1802,8 +1853,8 @@ sal_uInt32 SvNumberFormatter::TestNewString(const OUString& sFormatString,
     sal_Int32 nCheckPos = -1;
     OUString sTmpString = sFormatString;
     std::unique_ptr<SvNumberformat> pEntry(new SvNumberformat(sTmpString,
-                                                pFormatScanner,
-                                                pStringScanner,
+                                                pFormatScanner.get(),
+                                                pStringScanner.get(),
                                                 nCheckPos,
                                                 eLnge));
     if (nCheckPos == 0)                                 // String ok
@@ -1823,13 +1874,20 @@ SvNumberformat* SvNumberFormatter::ImpInsertFormat( const css::i18n::NumberForma
                                                     sal_uInt32 nPos, bool bAfterChangingSystemCL,
                                                     sal_Int16 nOrgIndex )
 {
+    SAL_WARN_IF( NF_INDEX_TABLE_LOCALE_DATA_DEFAULTS <= rCode.Index && rCode.Index < NF_INDEX_TABLE_ENTRIES,
+            "svl.numbers", "i18npool locale '" << maLanguageTag.getBcp47() <<
+            "' uses reserved formatIndex value " << rCode.Index << ", next free: " << NF_INDEX_TABLE_ENTRIES <<
+            "  Please see description in include/svl/zforlist.hxx at end of enum NfIndexTableOffset");
+    assert( (rCode.Index < NF_INDEX_TABLE_LOCALE_DATA_DEFAULTS || NF_INDEX_TABLE_ENTRIES <= rCode.Index) &&
+            "reserved formatIndex, see warning above");
+
     OUString aCodeStr( rCode.Code );
     if ( rCode.Index < NF_INDEX_TABLE_LOCALE_DATA_DEFAULTS &&
             rCode.Usage == css::i18n::KNumberFormatUsage::CURRENCY &&
             rCode.Index != NF_CURRENCY_1000DEC2_CCC )
     {   // strip surrounding [$...] on automatic currency
         if ( aCodeStr.indexOf( "[$" ) >= 0)
-            aCodeStr = SvNumberformat::StripNewCurrencyDelimiters( aCodeStr, false );
+            aCodeStr = SvNumberformat::StripNewCurrencyDelimiters( aCodeStr );
         else
         {
             if (LocaleDataWrapper::areChecksEnabled() &&
@@ -1844,11 +1902,11 @@ SvNumberformat* SvNumberFormatter::ImpInsertFormat( const css::i18n::NumberForma
         }
     }
     sal_Int32 nCheckPos = 0;
-    SvNumberformat* pFormat = new SvNumberformat(aCodeStr,
-                                                 pFormatScanner,
-                                                 pStringScanner,
-                                                 nCheckPos,
-                                                 ActLnge);
+    std::unique_ptr<SvNumberformat> pFormat(new SvNumberformat(aCodeStr,
+                                                               pFormatScanner.get(),
+                                                               pStringScanner.get(),
+                                                               nCheckPos,
+                                                               ActLnge));
     if (nCheckPos != 0)
     {
         if (LocaleDataWrapper::areChecksEnabled())
@@ -1859,7 +1917,6 @@ SvNumberformat* SvNumberFormatter::ImpInsertFormat( const css::i18n::NumberForma
                             rCode.Code;
             LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg));
         }
-        delete pFormat;
         return nullptr;
     }
     if ( rCode.Index >= NF_INDEX_TABLE_LOCALE_DATA_DEFAULTS )
@@ -1883,79 +1940,79 @@ SvNumberformat* SvNumberFormatter::ImpInsertFormat( const css::i18n::NumberForma
                     break;
                 default:
                 {
-                    OUString aMsg("SvNumberFormatter::ImpInsertFormat: dup format code, index ");
-                    aMsg += OUString::number( rCode.Index );
-                    aMsg += "\n";
-                    aMsg += rCode.Code;
+                    OUString aMsg = "SvNumberFormatter::ImpInsertFormat: dup format code, index "
+                                  + OUString::number( rCode.Index )
+                                  + "\n"
+                                  + rCode.Code;
                     LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg));
                 }
                 }
             }
-            delete pFormat;
             return nullptr;
         }
         else if ( nPos - nCLOffset >= SV_COUNTRY_LANGUAGE_OFFSET )
         {
             if (LocaleDataWrapper::areChecksEnabled())
             {
-                OUString aMsg( "SvNumberFormatter::ImpInsertFormat: too many format codes, index ");
-                aMsg += OUString::number( rCode.Index );
-                aMsg += "\n";
-                aMsg +=  rCode.Code;
+                OUString aMsg =  "SvNumberFormatter::ImpInsertFormat: too many format codes, index "
+                              + OUString::number( rCode.Index )
+                              + "\n"
+                              +  rCode.Code;
                 LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg));
             }
-            delete pFormat;
             return nullptr;
         }
     }
-    if ( !aFTable.insert( make_pair( nPos, pFormat) ).second )
+    auto pFormat2 = pFormat.get();
+    if ( !aFTable.emplace( nPos, std::move(pFormat) ).second )
     {
         if (LocaleDataWrapper::areChecksEnabled())
         {
-            OUString aMsg( "ImpInsertFormat: can't insert number format key pos: ");
-            aMsg += OUString::number( nPos );
-            aMsg += ", code index ";
-            aMsg += OUString::number( rCode.Index );
-            aMsg += "\n";
-            aMsg += rCode.Code;
+            OUString aMsg = "ImpInsertFormat: can't insert number format key pos: "
+                          + OUString::number( nPos )
+                          + ", code index "
+                          + OUString::number( rCode.Index )
+                          + "\n"
+                          + rCode.Code;
             LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo( aMsg));
         }
         else
         {
             SAL_WARN( "svl.numbers", "SvNumberFormatter::ImpInsertFormat: dup position");
         }
-        delete pFormat;
         return nullptr;
     }
     if ( rCode.Default )
-        pFormat->SetStandard();
+        pFormat2->SetStandard();
     if ( !rCode.DefaultName.isEmpty() )
-        pFormat->SetComment( rCode.DefaultName );
-    return pFormat;
+        pFormat2->SetComment( rCode.DefaultName );
+    return pFormat2;
 }
 
 void SvNumberFormatter::GetFormatSpecialInfo(sal_uInt32 nFormat,
                                              bool& bThousand,
                                              bool& IsRed,
                                              sal_uInt16& nPrecision,
-                                             sal_uInt16& nAnzLeading)
+                                             sal_uInt16& nLeadingCnt)
 
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     SvNumberformat* pFormat = GetFormatEntry( nFormat );
     if (pFormat)
         pFormat->GetFormatSpecialInfo(bThousand, IsRed,
-                                      nPrecision, nAnzLeading);
+                                      nPrecision, nLeadingCnt);
     else
     {
         bThousand = false;
         IsRed = false;
         nPrecision = pFormatScanner->GetStandardPrec();
-        nAnzLeading = 0;
+        nLeadingCnt = 0;
     }
 }
 
 sal_uInt16 SvNumberFormatter::GetFormatPrecision( sal_uInt32 nFormat ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     const SvNumberformat* pFormat = GetFormatEntry( nFormat );
     if ( pFormat )
         return pFormat->GetFormatPrecision();
@@ -1965,6 +2022,7 @@ sal_uInt16 SvNumberFormatter::GetFormatPrecision( sal_uInt32 nFormat ) const
 
 sal_uInt16 SvNumberFormatter::GetFormatIntegerDigits( sal_uInt32 nFormat ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     const SvNumberformat* pFormat = GetFormatEntry( nFormat );
     if ( pFormat )
         return pFormat->GetFormatIntegerDigits();
@@ -1972,13 +2030,9 @@ sal_uInt16 SvNumberFormatter::GetFormatIntegerDigits( sal_uInt32 nFormat ) const
         return 1;
 }
 
-sal_Unicode SvNumberFormatter::GetDecSep() const
-{
-    return GetNumDecimalSep()[0];
-}
-
 OUString SvNumberFormatter::GetFormatDecimalSep( sal_uInt32 nFormat ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     const SvNumberformat* pFormat = GetFormatEntry(nFormat);
     if ( !pFormat || pFormat->GetLanguage() == ActLnge )
     {
@@ -2003,9 +2057,10 @@ OUString SvNumberFormatter::GetFormatDecimalSep( sal_uInt32 nFormat ) const
 
 sal_uInt32 SvNumberFormatter::GetFormatSpecialInfo( const OUString& rFormatString,
                                                     bool& bThousand, bool& IsRed, sal_uInt16& nPrecision,
-                                                    sal_uInt16& nAnzLeading, LanguageType eLnge )
+                                                    sal_uInt16& nLeadingCnt, LanguageType eLnge )
 
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (eLnge == LANGUAGE_DONTKNOW)
     {
         eLnge = IniLnge;
@@ -2014,18 +2069,18 @@ sal_uInt32 SvNumberFormatter::GetFormatSpecialInfo( const OUString& rFormatStrin
     eLnge = ActLnge;
     OUString aTmpStr( rFormatString );
     sal_Int32 nCheckPos = 0;
-    std::unique_ptr<SvNumberformat> pFormat(new SvNumberformat( aTmpStr, pFormatScanner,
-                                                  pStringScanner, nCheckPos, eLnge ));
+    std::unique_ptr<SvNumberformat> pFormat(new SvNumberformat( aTmpStr, pFormatScanner.get(),
+                                                  pStringScanner.get(), nCheckPos, eLnge ));
     if ( nCheckPos == 0 )
     {
-        pFormat->GetFormatSpecialInfo( bThousand, IsRed, nPrecision, nAnzLeading );
+        pFormat->GetFormatSpecialInfo( bThousand, IsRed, nPrecision, nLeadingCnt );
     }
     else
     {
         bThousand = false;
         IsRed = false;
         nPrecision = pFormatScanner->GetStandardPrec();
-        nAnzLeading = 0;
+        nLeadingCnt = 0;
     }
     return nCheckPos;
 }
@@ -2045,8 +2100,8 @@ sal_Int32 SvNumberFormatter::ImpGetFormatCodeIndex(
                 || nTabOff == NF_CURRENCY_1000INT_RED
                 || nTabOff == NF_CURRENCY_1000DEC2_CCC))
     {   // currency entries with decimals might not exist, e.g. Italian Lira
-        OUString aMsg( "SvNumberFormatter::ImpGetFormatCodeIndex: not found: " );
-        aMsg += OUString::number( nTabOff );
+        OUString aMsg = "SvNumberFormatter::ImpGetFormatCodeIndex: not found: "
+                      + OUString::number( nTabOff );
         LocaleDataWrapper::outputCheckMessage( xLocaleData->appendLocaleInfo(aMsg));
     }
     if ( nLen )
@@ -2080,11 +2135,7 @@ sal_Int32 SvNumberFormatter::ImpGetFormatCodeIndex(
     {   // we need at least _some_ format
         rSeq.realloc(1);
         rSeq[0] = css::i18n::NumberFormatCode();
-        rSeq[0].Code = OUStringBuffer().
-            append('0').
-            append(GetNumDecimalSep()).
-            append("############").
-            makeStringAndClear();
+        rSeq[0].Code = "0" + GetNumDecimalSep() + "############";
     }
     return 0;
 }
@@ -2094,8 +2145,6 @@ void SvNumberFormatter::ImpAdjustFormatCodeDefault(
         css::i18n::NumberFormatCode * pFormatArr,
         sal_Int32 nCnt )
 {
-    using namespace ::com::sun::star;
-
     if ( !nCnt )
         return;
     if (LocaleDataWrapper::areChecksEnabled())
@@ -2181,7 +2230,7 @@ void SvNumberFormatter::ImpAdjustFormatCodeDefault(
             case i18n::KNumberFormatType::LONG :
                 if ( nMedium == -1 )
                     nDef = nElem;
-                // fallthru
+                [[fallthrough]];
             default:
                 if ( nDef == -1 )
                     nDef = nElem;
@@ -2196,9 +2245,9 @@ void SvNumberFormatter::ImpAdjustFormatCodeDefault(
 
 SvNumberformat* SvNumberFormatter::GetFormatEntry( sal_uInt32 nKey )
 {
-    SvNumberFormatTable::const_iterator it = aFTable.find( nKey);
+    auto it = aFTable.find( nKey);
     if (it != aFTable.end())
-        return it->second;
+        return it->second.get();
     return nullptr;
 }
 
@@ -2209,31 +2258,63 @@ const SvNumberformat* SvNumberFormatter::GetFormatEntry( sal_uInt32 nKey ) const
 
 const SvNumberformat* SvNumberFormatter::GetEntry( sal_uInt32 nKey ) const
 {
-    SvNumberFormatTable::const_iterator it = aFTable.find( nKey);
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+    auto it = aFTable.find( nKey);
     if (it != aFTable.end())
-        return it->second;
+        return it->second.get();
     return nullptr;
+}
+
+const SvNumberformat* SvNumberFormatter::GetSubstitutedEntry( sal_uInt32 nKey, sal_uInt32 & o_rNewKey ) const
+{
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+    // A tad ugly, but GetStandardFormat() and GetFormatIndex() in
+    // ImpSubstituteEntry() may have to add the LANGUAGE_SYSTEM formats if not
+    // already present (which in practice most times they are).
+    SvNumberFormatter* pThis = const_cast<SvNumberFormatter*>(this);
+    return pThis->ImpSubstituteEntry( pThis->GetFormatEntry( nKey), &o_rNewKey);
+}
+
+SvNumberformat* SvNumberFormatter::ImpSubstituteEntry( SvNumberformat* pFormat, sal_uInt32 * o_pRealKey )
+{
+    if (!pFormat || !pFormat->IsSubstituted())
+        return pFormat;
+
+    // XXX NOTE: substitution can not be done in GetFormatEntry() as otherwise
+    // to be substituted formats would "vanish", i.e. from the number formatter
+    // dialog or when exporting to Excel.
+
+    sal_uInt32 nKey;
+    if (pFormat->IsSystemTimeFormat())
+        /* TODO: should we have NF_TIME_SYSTEM for consistency? */
+        nKey = GetStandardFormat( SvNumFormatType::TIME, LANGUAGE_SYSTEM);
+    else if (pFormat->IsSystemLongDateFormat())
+        /* TODO: either that above, or have a long option for GetStandardFormat() */
+        nKey = GetFormatIndex( NF_DATE_SYSTEM_LONG, LANGUAGE_SYSTEM);
+    else
+        return pFormat;
+
+    if (o_pRealKey)
+        *o_pRealKey = nKey;
+    auto it = aFTable.find( nKey);
+    return it == aFTable.end() ? nullptr : it->second.get();
 }
 
 void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditionalFormats )
 {
-    using namespace ::com::sun::star;
-
     bool bOldConvertMode = pFormatScanner->GetConvertMode();
     if (bOldConvertMode)
     {
         pFormatScanner->SetConvertMode(false);      // switch off for this function
     }
 
-    NumberFormatCodeWrapper aNumberFormatCode( m_xContext,
-            GetLanguageTag().getLocale() );
-    SvNumberformat* pNewFormat = nullptr;
+    css::lang::Locale aLocale = GetLanguageTag().getLocale();
+    css::uno::Reference< css::i18n::XNumberFormatCode > xNFC = i18n::NumberFormatMapper::create( m_xContext );
     sal_Int32 nIdx;
     bool bDefault;
 
     // Number
-    uno::Sequence< i18n::NumberFormatCode > aFormatSeq =
-        aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::FIXED_NUMBER );
+    uno::Sequence< i18n::NumberFormatCode > aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::FIXED_NUMBER, aLocale );
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), aFormatSeq.getLength() );
 
     // General
@@ -2243,14 +2324,14 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
     if (pStdFormat)
     {
         // This is _the_ standard format.
-        if (LocaleDataWrapper::areChecksEnabled() && pStdFormat->GetType() != css::util::NumberFormat::NUMBER)
+        if (LocaleDataWrapper::areChecksEnabled() && pStdFormat->GetType() != SvNumFormatType::NUMBER)
         {
             LocaleDataWrapper::outputCheckMessage( xLocaleData->
                                                    appendLocaleInfo( "SvNumberFormatter::ImpGenerateFormats: General format not NUMBER"));
         }
-        pStdFormat->SetType( css::util::NumberFormat::NUMBER );
+        pStdFormat->SetType( SvNumFormatType::NUMBER );
         pStdFormat->SetStandard();
-        pStdFormat->SetLastInsertKey( SV_MAX_ANZ_STANDARD_FORMATE );
+        pStdFormat->SetLastInsertKey( SV_MAX_COUNT_STANDARD_FORMATS, SvNumberformat::FormatterPrivateAccess() );
     }
     else
     {
@@ -2261,36 +2342,33 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
         }
     }
 
-    // Boolean
-    OUString aFormatCode = pFormatScanner->GetBooleanString();
-    sal_Int32 nCheckPos = 0;
-
-    pNewFormat = new SvNumberformat( aFormatCode, pFormatScanner,
-                                     pStringScanner, nCheckPos, ActLnge );
-    pNewFormat->SetType(css::util::NumberFormat::LOGICAL);
-    pNewFormat->SetStandard();
-    if ( !aFTable.insert(make_pair(
-                             CLOffset + ZF_STANDARD_LOGICAL /* NF_BOOLEAN */,
-                             pNewFormat)).second)
     {
-        SAL_WARN( "svl.numbers", "SvNumberFormatter::ImpGenerateFormats: dup position Boolean");
-        delete pNewFormat;
-    }
+        // Boolean
+        OUString aFormatCode = pFormatScanner->GetBooleanString();
+        sal_Int32 nCheckPos = 0;
 
-    // Text
-    aFormatCode = "@";
-    pNewFormat = new SvNumberformat( aFormatCode, pFormatScanner,
-                                     pStringScanner, nCheckPos, ActLnge );
-    pNewFormat->SetType(css::util::NumberFormat::TEXT);
-    pNewFormat->SetStandard();
-    if ( !aFTable.insert(make_pair(
-                             CLOffset + ZF_STANDARD_TEXT /* NF_TEXT */,
-                             pNewFormat)).second)
-    {
-        SAL_WARN( "svl.numbers", "SvNumberFormatter::ImpGenerateFormats: dup position Text");
-        delete pNewFormat;
-    }
+        std::unique_ptr<SvNumberformat> pNewFormat(new SvNumberformat( aFormatCode, pFormatScanner.get(),
+                                                                       pStringScanner.get(), nCheckPos, ActLnge ));
+        pNewFormat->SetType(SvNumFormatType::LOGICAL);
+        pNewFormat->SetStandard();
+        if ( !aFTable.emplace(CLOffset + ZF_STANDARD_LOGICAL /* NF_BOOLEAN */,
+                            std::move(pNewFormat)).second )
+        {
+            SAL_WARN( "svl.numbers", "SvNumberFormatter::ImpGenerateFormats: dup position Boolean");
+        }
 
+        // Text
+        aFormatCode = "@";
+        pNewFormat.reset(new SvNumberformat( aFormatCode, pFormatScanner.get(),
+                                             pStringScanner.get(), nCheckPos, ActLnge ));
+        pNewFormat->SetType(SvNumFormatType::TEXT);
+        pNewFormat->SetStandard();
+        if ( !aFTable.emplace( CLOffset + ZF_STANDARD_TEXT /* NF_TEXT */,
+                               std::move(pNewFormat)).second )
+        {
+            SAL_WARN( "svl.numbers", "SvNumberFormatter::ImpGenerateFormats: dup position Text");
+        }
+    }
 
     // 0
     nIdx = ImpGetFormatCodeIndex( aFormatSeq, NF_NUMBER_INT );
@@ -2319,7 +2397,7 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
 
 
     // Percent number
-    aFormatSeq = aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::PERCENT_NUMBER );
+    aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::PERCENT_NUMBER, aLocale );
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), aFormatSeq.getLength() );
 
     // 0%
@@ -2335,7 +2413,7 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
 
     // Currency. NO default standard option! Default is determined of locale
     // data default currency and format is generated if needed.
-    aFormatSeq = aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::CURRENCY );
+    aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::CURRENCY, aLocale );
     if (LocaleDataWrapper::areChecksEnabled())
     {
         // though no default desired here, test for correctness of locale data
@@ -2392,7 +2470,7 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
 
 
     // Date
-    aFormatSeq = aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::DATE );
+    aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::DATE, aLocale );
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), aFormatSeq.getLength() );
 
     // DD.MM.YY   System
@@ -2495,14 +2573,14 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
     ImpInsertFormat( aFormatSeq[nIdx],
                      CLOffset + ZF_STANDARD_NEWEXTENDED_DATE_DIN_YYMMDD /* NF_DATE_DIN_YYMMDD */ );
 
-    // YYYY-MM-DD   DIN/EN
+    // YYYY-MM-DD   DIN/EN/ISO
     nIdx = ImpGetFormatCodeIndex( aFormatSeq, NF_DATE_DIN_YYYYMMDD );
     ImpInsertFormat( aFormatSeq[nIdx],
                      CLOffset + ZF_STANDARD_NEWEXTENDED_DATE_DIN_YYYYMMDD /* NF_DATE_DIN_YYYYMMDD */ );
 
 
     // Time
-    aFormatSeq = aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::TIME );
+    aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::TIME, aLocale );
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), aFormatSeq.getLength() );
 
     // HH:MM
@@ -2542,7 +2620,7 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
 
 
     // DateTime
-    aFormatSeq = aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::DATE_TIME );
+    aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::DATE_TIME, aLocale );
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), aFormatSeq.getLength() );
 
     // DD.MM.YY HH:MM   System
@@ -2555,9 +2633,25 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
     ImpInsertFormat( aFormatSeq[nIdx],
                      CLOffset + ZF_STANDARD_DATETIME+1 /* NF_DATETIME_SYS_DDMMYYYY_HHMMSS */ );
 
+    const NfKeywordTable & rKeyword = pFormatScanner->GetKeywords();
+    i18n::NumberFormatCode aSingleFormatCode;
+    OUStringBuffer aBuf;
+    aSingleFormatCode.Usage = i18n::KNumberFormatUsage::DATE_TIME;
+
+    // YYYY-MM-DD HH:MM:SS   ISO
+    aBuf.append( rKeyword[NF_KEY_YYYY]).append('-').
+        append( rKeyword[NF_KEY_MM]).append('-').
+        append( rKeyword[NF_KEY_DD]).append(' ').
+        append( rKeyword[NF_KEY_HH]).append(':').
+        append( rKeyword[NF_KEY_MMI]).append(':').
+        append( rKeyword[NF_KEY_SS]);
+    aSingleFormatCode.Code = aBuf.makeStringAndClear();
+    ImpInsertFormat( aSingleFormatCode,
+                     CLOffset + ZF_STANDARD_DATETIME+2 /* NF_DATETIME_ISO_YYYYMMDD_HHMMSS */ );
+
 
     // Scientific number
-    aFormatSeq = aNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::SCIENTIFIC_NUMBER );
+    aFormatSeq = xNFC->getAllFormatCode( i18n::KNumberFormatUsage::SCIENTIFIC_NUMBER, aLocale );
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), aFormatSeq.getLength() );
 
     // 0.00E+000
@@ -2572,33 +2666,57 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
 
 
     // Fraction number (no default option)
-    i18n::NumberFormatCode aSingleFormatCode;
     aSingleFormatCode.Usage = i18n::KNumberFormatUsage::FRACTION_NUMBER;
 
      // # ?/?
     aSingleFormatCode.Code = "# ?/?";
     ImpInsertFormat( aSingleFormatCode,
-                     CLOffset + ZF_STANDARD_FRACTION /* NF_FRACTION_1 */ );
+                     CLOffset + ZF_STANDARD_FRACTION /* NF_FRACTION_1D */ );
 
     // # ??/??
     //! "??/" would be interpreted by the compiler as a trigraph for '\'
     aSingleFormatCode.Code = "# ?\?/?\?";
     ImpInsertFormat( aSingleFormatCode,
-                     CLOffset + ZF_STANDARD_FRACTION+1 /* NF_FRACTION_2 */ );
+                     CLOffset + ZF_STANDARD_FRACTION+1 /* NF_FRACTION_2D */ );
+
+    // # ???/???
+    //! "??/" would be interpreted by the compiler as a trigraph for '\'
+    aSingleFormatCode.Code = "# ?\?\?/?\?\?";
+    ImpInsertFormat( aSingleFormatCode,
+                     CLOffset + ZF_STANDARD_FRACTION+2 /* NF_FRACTION_3D */ );
+
+    // # ?/2
+    aSingleFormatCode.Code = "# ?/2";
+    ImpInsertFormat( aSingleFormatCode,
+                     CLOffset + ZF_STANDARD_FRACTION+3 /* NF_FRACTION_2 */ );
 
     // # ?/4
     aSingleFormatCode.Code = "# ?/4";
     ImpInsertFormat( aSingleFormatCode,
-                     CLOffset + ZF_STANDARD_FRACTION+2 /* NF_FRACTION_3 */ );
+                     CLOffset + ZF_STANDARD_FRACTION+4 /* NF_FRACTION_4 */ );
+
+    // # ?/8
+    aSingleFormatCode.Code = "# ?/8";
+    ImpInsertFormat( aSingleFormatCode,
+                     CLOffset + ZF_STANDARD_FRACTION+5 /* NF_FRACTION_8 */ );
+
+    // # ??/16
+    aSingleFormatCode.Code = "# ?\?/16";
+    ImpInsertFormat( aSingleFormatCode,
+                     CLOffset + ZF_STANDARD_FRACTION+6 /* NF_FRACTION_16 */ );
+
+    // # ??/10
+    aSingleFormatCode.Code = "# ?\?/10";
+    ImpInsertFormat( aSingleFormatCode,
+                     CLOffset + ZF_STANDARD_FRACTION+7 /* NF_FRACTION_10 */ );
 
     // # ??/100
     aSingleFormatCode.Code = "# ?\?/100";
     ImpInsertFormat( aSingleFormatCode,
-                     CLOffset + ZF_STANDARD_FRACTION+3 /* NF_FRACTION_4 */ );
+                     CLOffset + ZF_STANDARD_FRACTION+8 /* NF_FRACTION_100 */ );
 
 
     // Week of year
-    const NfKeywordTable & rKeyword = pFormatScanner->GetKeywords();
     aSingleFormatCode.Code = rKeyword[NF_KEY_WW];
     ImpInsertFormat( aSingleFormatCode,
                      CLOffset + ZF_STANDARD_NEWEXTENDED_DATE_WW /* NF_DATE_WW */ );
@@ -2607,7 +2725,7 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
     // changing SystemCL, then they are appended last after user defined.
     if ( !bNoAdditionalFormats )
     {
-        ImpGenerateAdditionalFormats( CLOffset, aNumberFormatCode, false );
+        ImpGenerateAdditionalFormats( CLOffset, xNFC, false );
     }
     if (bOldConvertMode)
     {
@@ -2617,24 +2735,22 @@ void SvNumberFormatter::ImpGenerateFormats( sal_uInt32 CLOffset, bool bNoAdditio
 
 
 void SvNumberFormatter::ImpGenerateAdditionalFormats( sal_uInt32 CLOffset,
-            NumberFormatCodeWrapper& rNumberFormatCode, bool bAfterChangingSystemCL )
+            css::uno::Reference< css::i18n::XNumberFormatCode > const & rNumberFormatCode,
+            bool bAfterChangingSystemCL )
 {
-    using namespace ::com::sun::star;
-
     SvNumberformat* pStdFormat = GetFormatEntry( CLOffset + ZF_STANDARD );
     if ( !pStdFormat )
     {
         SAL_WARN( "svl.numbers", "ImpGenerateAdditionalFormats: no GENERAL format" );
         return ;
     }
-    sal_uInt32 nPos = CLOffset + pStdFormat->GetLastInsertKey();
-    rNumberFormatCode.setLocale( GetLanguageTag().getLocale() );
+    sal_uInt32 nPos = CLOffset + pStdFormat->GetLastInsertKey( SvNumberformat::FormatterPrivateAccess() );
+    css::lang::Locale aLocale = GetLanguageTag().getLocale();
     sal_Int32 j;
 
     // All currencies, this time with [$...] which was stripped in
     // ImpGenerateFormats for old "automatic" currency formats.
-    uno::Sequence< i18n::NumberFormatCode > aFormatSeq =
-        rNumberFormatCode.getAllFormatCode( i18n::KNumberFormatUsage::CURRENCY );
+    uno::Sequence< i18n::NumberFormatCode > aFormatSeq = rNumberFormatCode->getAllFormatCode( i18n::KNumberFormatUsage::CURRENCY, aLocale );
     i18n::NumberFormatCode * pFormatArr = aFormatSeq.getArray();
     sal_Int32 nCodes = aFormatSeq.getLength();
     ImpAdjustFormatCodeDefault( aFormatSeq.getArray(), nCodes );
@@ -2672,7 +2788,7 @@ void SvNumberFormatter::ImpGenerateAdditionalFormats( sal_uInt32 CLOffset,
     // like it is done for usage groups with ImpAdjustFormatCodeDefault().
     // There is no harm though, on first invocation ImpGetDefaultFormat() will
     // use the first default encountered.
-    aFormatSeq = rNumberFormatCode.getAllFormatCodes();
+    aFormatSeq = rNumberFormatCode->getAllFormatCodes( aLocale );
     nCodes = aFormatSeq.getLength();
     if ( nCodes )
     {
@@ -2696,23 +2812,11 @@ void SvNumberFormatter::ImpGenerateAdditionalFormats( sal_uInt32 CLOffset,
         }
     }
 
-    pStdFormat->SetLastInsertKey( (sal_uInt16)(nPos - CLOffset) );
+    pStdFormat->SetLastInsertKey( static_cast<sal_uInt16>(nPos - CLOffset), SvNumberformat::FormatterPrivateAccess() );
 }
 
 
-void SvNumberFormatter::ImpGetPosCurrFormat(OUStringBuffer& sPosStr, const OUString& rCurrSymbol)
-{
-    NfCurrencyEntry::CompletePositiveFormatString( sPosStr,
-        rCurrSymbol, xLocaleData->getCurrPositiveFormat() );
-}
-
-void SvNumberFormatter::ImpGetNegCurrFormat(OUStringBuffer& sNegStr, const OUString& rCurrSymbol)
-{
-    NfCurrencyEntry::CompleteNegativeFormatString( sNegStr,
-        rCurrSymbol, xLocaleData->getCurrNegativeFormat() );
-}
-
-sal_Int32 SvNumberFormatter::ImpPosToken ( const OUStringBuffer & sFormat, sal_Unicode token, sal_Int32 nStartPos /* = 0*/ )
+sal_Int32 SvNumberFormatter::ImpPosToken ( const OUStringBuffer & sFormat, sal_Unicode token, sal_Int32 nStartPos /* = 0*/ ) const
 {
     sal_Int32 nLength = sFormat.getLength();
     for ( sal_Int32 i=nStartPos; i<nLength && i>=0 ; i++ )
@@ -2752,20 +2856,21 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
                                            sal_uInt16 nPrecision,
                                            sal_uInt16 nLeadingZeros)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (eLnge == LANGUAGE_DONTKNOW)
     {
         eLnge = IniLnge;
     }
-    short eType = GetType(nIndex);
-    sal_uInt16 i;
+
+    const SvNumberformat* pFormat = GetFormatEntry( nIndex );
+    const SvNumFormatType eType = (pFormat ? pFormat->GetMaskedType() : SvNumFormatType::UNDEFINED);
+
     ImpGenerateCL(eLnge);           // create new standard formats if necessary
 
     utl::DigitGroupingIterator aGrouping( xLocaleData->getDigitGrouping());
     // always group of 3 for Engineering notation
-    const sal_Int32 nDigitsInFirstGroup = ( bThousand && (eType == css::util::NumberFormat::SCIENTIFIC) ) ? 3 : aGrouping.get();
+    const sal_Int32 nDigitsInFirstGroup = ( bThousand && (eType == SvNumFormatType::SCIENTIFIC) ) ? 3 : aGrouping.get();
     const OUString& rThSep = GetNumThousandSep();
-
-    SvNumberformat* pFormat = GetFormatEntry( nIndex );
 
     OUStringBuffer sString;
     using comphelper::string::padToLength;
@@ -2776,7 +2881,7 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
             sString.append('#');
         else
         {
-            if (eType == css::util::NumberFormat::SCIENTIFIC)
+            if (eType == SvNumFormatType::SCIENTIFIC)
             {  // for scientific, bThousand is used for Engineering notation
                 sString.append("###");
             }
@@ -2790,7 +2895,7 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
     }
     else
     {
-        for (i = 0; i < nLeadingZeros; i++)
+        for (sal_uInt16 i = 0; i < nLeadingZeros; i++)
         {
             if (bThousand && i > 0 && i == aGrouping.getPos())
             {
@@ -2801,8 +2906,8 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
         }
         if ( bThousand )
         {
-            sal_Int32 nDigits = (eType == css::util::NumberFormat::SCIENTIFIC) ?  3*((nLeadingZeros-1)/3 + 1) : nDigitsInFirstGroup + 1;
-            for (i = nLeadingZeros; i < nDigits; i++)
+            sal_Int32 nDigits = (eType == SvNumFormatType::SCIENTIFIC) ?  3*((nLeadingZeros-1)/3 + 1) : nDigitsInFirstGroup + 1;
+            for (sal_Int32 i = nLeadingZeros; i < nDigits; i++)
             {
                 if ( i % nDigitsInFirstGroup == 0 )
                     sString.insert(0, rThSep);
@@ -2810,16 +2915,16 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
             }
         }
     }
-    if (nPrecision > 0)
+    if (nPrecision > 0 && eType != SvNumFormatType::FRACTION )
     {
         sString.append(GetNumDecimalSep());
         padToLength(sString, sString.getLength() + nPrecision, '0');
     }
-    if (eType == css::util::NumberFormat::PERCENT)
+    if (eType == SvNumFormatType::PERCENT)
     {
         sString.append('%');
     }
-    else if (eType == css::util::NumberFormat::SCIENTIFIC)
+    else if (eType == SvNumFormatType::SCIENTIFIC)
     {
       OUStringBuffer sOldFormatString = pFormat->GetFormatstring();
       sal_Int32 nIndexE = ImpPosToken( sOldFormatString, 'E' );
@@ -2832,7 +2937,7 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
             sString.append( sOldFormatString.copy(nIndexE) );
       }
     }
-    else if (eType == css::util::NumberFormat::CURRENCY)
+    else if (eType == SvNumFormatType::CURRENCY)
     {
         OUStringBuffer sNegStr(sString);
         OUString aCurr;
@@ -2867,8 +2972,10 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
         {   // "automatic" old style
             OUString aSymbol, aAbbrev;
             GetCompatibilityCurrency( aSymbol, aAbbrev );
-            ImpGetPosCurrFormat( sString, aSymbol );
-            ImpGetNegCurrFormat( sNegStr, aSymbol );
+            NfCurrencyEntry::CompletePositiveFormatString( sString,
+                                aSymbol, xLocaleData->getCurrPositiveFormat() );
+            NfCurrencyEntry::CompleteNegativeFormatString( sNegStr,
+                                aSymbol, xLocaleData->getCurrNegativeFormat() );
         }
         if (IsRed)
         {
@@ -2883,10 +2990,28 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
         }
         sString.append(sNegStr.makeStringAndClear());
     }
-    if (eType != css::util::NumberFormat::CURRENCY)
+    else if (eType == SvNumFormatType::FRACTION)
+    {
+        OUString aIntegerFractionDelimiterString = pFormat->GetIntegerFractionDelimiterString( 0 );
+        if ( aIntegerFractionDelimiterString == " " )
+            sString.append( aIntegerFractionDelimiterString );
+        else
+        {
+            sString.append( '"' );
+            sString.append( aIntegerFractionDelimiterString );
+            sString.append( '"' );
+        }
+        sString.append( pFormat->GetNumeratorString( 0 ) );
+        sString.append( '/' );
+        if ( nPrecision > 0 )
+            padToLength(sString, sString.getLength() + nPrecision, '?');
+        else
+            sString.append( '#' );
+    }
+    if (eType != SvNumFormatType::CURRENCY)
     {
         bool insertBrackets = false;
-        if ( eType != css::util::NumberFormat::UNDEFINED)
+        if ( eType != SvNumFormatType::UNDEFINED)
         {
             insertBrackets = pFormat->IsNegativeInBracket();
         }
@@ -2894,7 +3019,7 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
         {
             OUStringBuffer sTmpStr(sString);
 
-            if ( pFormat->HasPositiveBracketPlaceholder() )
+            if (pFormat && pFormat->HasPositiveBracketPlaceholder())
             {
                  sTmpStr.append('_');
                  sTmpStr.append(')');
@@ -2928,6 +3053,7 @@ OUString SvNumberFormatter::GenerateFormat(sal_uInt32 nIndex,
 bool SvNumberFormatter::IsUserDefined(const OUString& sStr,
                                       LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (eLnge == LANGUAGE_DONTKNOW)
     {
         eLnge = IniLnge;
@@ -2941,16 +3067,13 @@ bool SvNumberFormatter::IsUserDefined(const OUString& sStr,
         return true;
     }
     SvNumberformat* pEntry = GetFormatEntry( nKey );
-    if ( pEntry && ((pEntry->GetType() & css::util::NumberFormat::DEFINED) != 0) )
-    {
-        return true;
-    }
-    return false;
+    return pEntry && (pEntry->GetType() & SvNumFormatType::DEFINED);
 }
 
 sal_uInt32 SvNumberFormatter::GetEntryKey(const OUString& sStr,
                                           LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (eLnge == LANGUAGE_DONTKNOW)
     {
         eLnge = IniLnge;
@@ -2961,27 +3084,29 @@ sal_uInt32 SvNumberFormatter::GetEntryKey(const OUString& sStr,
 
 sal_uInt32 SvNumberFormatter::GetStandardIndex(LanguageType eLnge)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (eLnge == LANGUAGE_DONTKNOW)
     {
         eLnge = IniLnge;
     }
-    return GetStandardFormat(css::util::NumberFormat::NUMBER, eLnge);
+    return GetStandardFormat(SvNumFormatType::NUMBER, eLnge);
 }
 
-short SvNumberFormatter::GetType(sal_uInt32 nFIndex)
+SvNumFormatType SvNumberFormatter::GetType(sal_uInt32 nFIndex) const
 {
-    short eType;
-    SvNumberformat* pFormat = GetFormatEntry( nFIndex );
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+    SvNumFormatType eType;
+    const SvNumberformat* pFormat = GetFormatEntry( nFIndex );
     if (!pFormat)
     {
-        eType = css::util::NumberFormat::UNDEFINED;
+        eType = SvNumFormatType::UNDEFINED;
     }
     else
     {
-        eType = pFormat->GetType() &~css::util::NumberFormat::DEFINED;
-        if (eType == 0)
+        eType = pFormat->GetMaskedType();
+        if (eType == SvNumFormatType::ALL)
         {
-            eType = css::util::NumberFormat::DEFINED;
+            eType = SvNumFormatType::DEFINED;
         }
     }
     return eType;
@@ -2989,6 +3114,7 @@ short SvNumberFormatter::GetType(sal_uInt32 nFIndex)
 
 void SvNumberFormatter::ClearMergeTable()
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( pMergeTable )
     {
         pMergeTable->clear();
@@ -2997,40 +3123,37 @@ void SvNumberFormatter::ClearMergeTable()
 
 SvNumberFormatterIndexTable* SvNumberFormatter::MergeFormatter(SvNumberFormatter& rTable)
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( pMergeTable )
     {
         ClearMergeTable();
     }
     else
     {
-        pMergeTable = new SvNumberFormatterIndexTable;
+        pMergeTable.reset( new SvNumberFormatterIndexTable );
     }
 
     sal_uInt32 nCLOffset = 0;
     sal_uInt32 nOldKey, nOffset, nNewKey;
-    SvNumberformat* pNewEntry;
 
-    SvNumberFormatTable::const_iterator it = rTable.aFTable.begin();
-    while (it != rTable.aFTable.end())
+    for (const auto& rEntry : rTable.aFTable)
     {
-        SvNumberformat* pFormat = it->second;
-        nOldKey = it->first;
+        SvNumberformat* pFormat = rEntry.second.get();
+        nOldKey = rEntry.first;
         nOffset = nOldKey % SV_COUNTRY_LANGUAGE_OFFSET;     // relative index
         if (nOffset == 0)                                   // 1st format of CL
         {
             nCLOffset = ImpGenerateCL(pFormat->GetLanguage());
         }
-        if (nOffset <= SV_MAX_ANZ_STANDARD_FORMATE)     // Std.form.
+        if (nOffset <= SV_MAX_COUNT_STANDARD_FORMATS)     // Std.form.
         {
             nNewKey = nCLOffset + nOffset;
             if (aFTable.find( nNewKey) == aFTable.end())    // not already present
             {
-//              pNewEntry = new SvNumberformat(*pFormat);   // Copy is not sufficient!
-                pNewEntry = new SvNumberformat( *pFormat, *pFormatScanner );
-                if (!aFTable.insert(make_pair( nNewKey, pNewEntry)).second)
+                std::unique_ptr<SvNumberformat> pNewEntry(new SvNumberformat( *pFormat, *pFormatScanner ));
+                if (!aFTable.emplace( nNewKey, std::move(pNewEntry)).second)
                 {
                     SAL_WARN( "svl.numbers", "SvNumberFormatter::MergeFormatter: dup position");
-                    delete pNewEntry;
                 }
             }
             if (nNewKey != nOldKey)                     // new index
@@ -3040,33 +3163,27 @@ SvNumberFormatterIndexTable* SvNumberFormatter::MergeFormatter(SvNumberFormatter
         }
         else                                            // user defined
         {
-//          pNewEntry = new SvNumberformat(*pFormat);   // Copy is not sufficient!
-            pNewEntry = new SvNumberformat( *pFormat, *pFormatScanner );
+            std::unique_ptr<SvNumberformat> pNewEntry(new SvNumberformat( *pFormat, *pFormatScanner ));
             nNewKey = ImpIsEntry(pNewEntry->GetFormatstring(),
                                  nCLOffset,
                                  pFormat->GetLanguage());
-            if (nNewKey != NUMBERFORMAT_ENTRY_NOT_FOUND) // already present
-            {
-                delete pNewEntry;
-            }
-            else
+            if (nNewKey == NUMBERFORMAT_ENTRY_NOT_FOUND) // only if not present yet
             {
                 SvNumberformat* pStdFormat = GetFormatEntry(nCLOffset + ZF_STANDARD);
-                sal_uInt32 nPos = nCLOffset + pStdFormat->GetLastInsertKey();
+                sal_uInt32 nPos = nCLOffset + pStdFormat->GetLastInsertKey( SvNumberformat::FormatterPrivateAccess() );
                 nNewKey = nPos+1;
                 if (nNewKey - nCLOffset >= SV_COUNTRY_LANGUAGE_OFFSET)
                 {
                     SAL_WARN( "svl.numbers", "SvNumberFormatter::MergeFormatter: too many formats for CL");
-                    delete pNewEntry;
                 }
-                else if (!aFTable.insert(make_pair( nNewKey, pNewEntry)).second)
+                else if (!aFTable.emplace( nNewKey, std::move(pNewEntry)).second)
                 {
                     SAL_WARN( "svl.numbers", "SvNumberFormatter::MergeFormatter: dup position");
-                    delete pNewEntry;
                 }
                 else
                 {
-                    pStdFormat->SetLastInsertKey((sal_uInt16) (nNewKey - nCLOffset));
+                    pStdFormat->SetLastInsertKey(static_cast<sal_uInt16>(nNewKey - nCLOffset),
+                            SvNumberformat::FormatterPrivateAccess());
                 }
             }
             if (nNewKey != nOldKey)                     // new index
@@ -3074,23 +3191,23 @@ SvNumberFormatterIndexTable* SvNumberFormatter::MergeFormatter(SvNumberFormatter
                 (*pMergeTable)[nOldKey] = nNewKey;
             }
         }
-        ++it;
     }
-    return pMergeTable;
+    return pMergeTable.get();
 }
 
 
 SvNumberFormatterMergeMap SvNumberFormatter::ConvertMergeTableToMap()
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (!HasMergeFormatTable())
     {
         return SvNumberFormatterMergeMap();
     }
     SvNumberFormatterMergeMap aMap;
-    for (SvNumberFormatterIndexTable::const_iterator it = pMergeTable->begin(); it != pMergeTable->end(); ++it)
+    for (const auto& rEntry : *pMergeTable)
     {
-        sal_uInt32 nOldKey = it->first;
-        aMap[ nOldKey ] = it->second;
+        sal_uInt32 nOldKey = rEntry.first;
+        aMap[ nOldKey ] = rEntry.second;
     }
     ClearMergeTable();
     return aMap;
@@ -3100,6 +3217,7 @@ SvNumberFormatterMergeMap SvNumberFormatter::ConvertMergeTableToMap()
 sal_uInt32 SvNumberFormatter::GetFormatForLanguageIfBuiltIn( sal_uInt32 nFormat,
                                                              LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( eLnge == LANGUAGE_DONTKNOW )
     {
         eLnge = IniLnge;
@@ -3109,7 +3227,7 @@ sal_uInt32 SvNumberFormatter::GetFormatForLanguageIfBuiltIn( sal_uInt32 nFormat,
         return nFormat;     // it stays as it is
     }
     sal_uInt32 nOffset = nFormat % SV_COUNTRY_LANGUAGE_OFFSET;  // relative index
-    if ( nOffset > SV_MAX_ANZ_STANDARD_FORMATE )
+    if ( nOffset > SV_MAX_COUNT_STANDARD_FORMATS )
     {
         return nFormat;    // not a built-in format
     }
@@ -3121,6 +3239,7 @@ sal_uInt32 SvNumberFormatter::GetFormatForLanguageIfBuiltIn( sal_uInt32 nFormat,
 sal_uInt32 SvNumberFormatter::GetFormatIndex( NfIndexTableOffset nTabOff,
                                               LanguageType eLnge )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (nTabOff >= NF_INDEX_TABLE_ENTRIES)
         return NUMBERFORMAT_ENTRY_NOT_FOUND;
 
@@ -3138,8 +3257,9 @@ sal_uInt32 SvNumberFormatter::GetFormatIndex( NfIndexTableOffset nTabOff,
 
 NfIndexTableOffset SvNumberFormatter::GetIndexTableOffset( sal_uInt32 nFormat ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     sal_uInt32 nOffset = nFormat % SV_COUNTRY_LANGUAGE_OFFSET;      // relative index
-    if ( nOffset > SV_MAX_ANZ_STANDARD_FORMATE )
+    if ( nOffset > SV_MAX_COUNT_STANDARD_FORMATS )
     {
         return NF_INDEX_TABLE_ENTRIES;      // not a built-in format
     }
@@ -3147,29 +3267,33 @@ NfIndexTableOffset SvNumberFormatter::GetIndexTableOffset( sal_uInt32 nFormat ) 
     for ( sal_uInt16 j = 0; j < NF_INDEX_TABLE_ENTRIES; j++ )
     {
         if (indexTable[j] == nOffset)
-            return (NfIndexTableOffset) j;
+            return static_cast<NfIndexTableOffset>(j);
     }
     return NF_INDEX_TABLE_ENTRIES;      // bad luck
 }
 
 void SvNumberFormatter::SetEvalDateFormat( NfEvalDateFormat eEDF )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     eEvalDateFormat = eEDF;
 }
 
 NfEvalDateFormat SvNumberFormatter::GetEvalDateFormat() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return eEvalDateFormat;
 }
 
 void SvNumberFormatter::SetYear2000( sal_uInt16 nVal )
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     pStringScanner->SetYear2000( nVal );
 }
 
 
 sal_uInt16 SvNumberFormatter::GetYear2000() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return pStringScanner->GetYear2000();
 }
 
@@ -3186,8 +3310,8 @@ sal_uInt16 SvNumberFormatter::ExpandTwoDigitYear( sal_uInt16 nYear ) const
 // static
 sal_uInt16 SvNumberFormatter::GetYear2000Default()
 {
-    if (!utl::ConfigManager::IsAvoidConfig())
-        return (sal_uInt16) ::utl::MiscCfg().GetYear2000();
+    if (!utl::ConfigManager::IsFuzzing())
+        return static_cast<sal_uInt16>(::utl::MiscCfg().GetYear2000());
     return 1930;
 }
 
@@ -3195,7 +3319,6 @@ sal_uInt16 SvNumberFormatter::GetYear2000Default()
 // static
 const NfCurrencyTable& SvNumberFormatter::GetTheCurrencyTable()
 {
-    ::osl::MutexGuard aGuard( GetMutex() );
     while ( !bCurrencyTableInitialized )
         ImpInitCurrencyTable();
     return theCurrencyTable::get();
@@ -3256,10 +3379,7 @@ const NfCurrencyEntry* SvNumberFormatter::GetCurrencyEntry(const OUString& rAbbr
 const NfCurrencyEntry* SvNumberFormatter::GetLegacyOnlyCurrencyEntry( const OUString& rSymbol,
                                                                       const OUString& rAbbrev )
 {
-    if (!bCurrencyTableInitialized)
-    {
-        GetTheCurrencyTable();      // just for initialization
-    }
+    GetTheCurrencyTable();      // just for initialization
     const NfCurrencyTable& rTable = theLegacyOnlyCurrencyTable::get();
     sal_uInt16 nCount = rTable.size();
     for ( sal_uInt16 j = 0; j < nCount; j++ )
@@ -3275,9 +3395,8 @@ const NfCurrencyEntry* SvNumberFormatter::GetLegacyOnlyCurrencyEntry( const OUSt
 
 
 // static
-IMPL_STATIC_LINK_NOARG_TYPED( SvNumberFormatter, CurrencyChangeLink, LinkParamNone*, void )
+IMPL_STATIC_LINK_NOARG( SvNumberFormatter, CurrencyChangeLink, LinkParamNone*, void )
 {
-    ::osl::MutexGuard aGuard( GetMutex() );
     OUString aAbbrev;
     LanguageType eLang = LANGUAGE_SYSTEM;
     SvtSysLocaleOptions().GetCurrencyAbbrevAndLanguage( aAbbrev, eLang );
@@ -3288,7 +3407,7 @@ IMPL_STATIC_LINK_NOARG_TYPED( SvNumberFormatter, CurrencyChangeLink, LinkParamNo
 // static
 void SvNumberFormatter::SetDefaultSystemCurrency( const OUString& rAbbrev, LanguageType eLang )
 {
-    ::osl::MutexGuard aGuard( GetMutex() );
+    ::osl::MutexGuard aGuard( GetGlobalMutex() );
     if ( eLang == LANGUAGE_SYSTEM )
     {
         eLang = SvtSysLocale().GetLanguageTag().getLanguageType();
@@ -3338,7 +3457,7 @@ sal_uInt32 SvNumberFormatter::ImpGetDefaultSystemCurrencyFormat()
     if ( nDefaultSystemCurrencyFormat == NUMBERFORMAT_ENTRY_NOT_FOUND )
     {
         sal_Int32 nCheck;
-        short nType;
+        SvNumFormatType nType;
         NfWSStringsDtor aCurrList;
         sal_uInt16 nDefault = GetCurrencyFormatStrings( aCurrList,
             GetCurrencyEntry( LANGUAGE_SYSTEM ), false );
@@ -3366,11 +3485,11 @@ sal_uInt32 SvNumberFormatter::ImpGetDefaultCurrencyFormat()
         // look for a defined standard
         sal_uInt32 nStopKey = CLOffset + SV_COUNTRY_LANGUAGE_OFFSET;
         sal_uInt32 nKey(0);
-        SvNumberFormatTable::const_iterator it2 = aFTable.lower_bound( CLOffset );
+        auto it2 = aFTable.lower_bound( CLOffset );
         while ( it2 != aFTable.end() && (nKey = it2->first) >= CLOffset && nKey < nStopKey )
         {
-            const SvNumberformat* pEntry = it2->second;
-            if ( pEntry->IsStandard() && (pEntry->GetType() & css::util::NumberFormat::CURRENCY) )
+            const SvNumberformat* pEntry = it2->second.get();
+            if ( pEntry->IsStandard() && (pEntry->GetType() & SvNumFormatType::CURRENCY) )
             {
                 nDefaultCurrencyFormat = nKey;
                 break;  // while
@@ -3389,7 +3508,7 @@ sal_uInt32 SvNumberFormatter::ImpGetDefaultCurrencyFormat()
             {
                 // if already loaded or user defined nDefaultSystemCurrencyFormat
                 // will be set to the right value
-                short nType;
+                SvNumFormatType nType;
                 PutEntry( aCurrList[ nDefault ], nCheck, nType,
                     nDefaultCurrencyFormat, ActLnge );
                 DBG_ASSERT( nCheck == 0, "NewCurrency CheckError" );
@@ -3465,6 +3584,7 @@ bool SvNumberFormatter::GetNewCurrencySymbolString( sal_uInt32 nFormat, OUString
                                                     const NfCurrencyEntry** ppEntry /* = NULL */,
                                                     bool* pBank /* = NULL */ ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if ( ppEntry )
         *ppEntry = nullptr;
     if ( pBank )
@@ -3542,7 +3662,7 @@ const NfCurrencyEntry* SvNumberFormatter::GetCurrencyEntry( bool & bFoundBank,
         }
         else
         {
-            eExtLang = (LanguageType) ((nExtLang < 0) ? -nExtLang : nExtLang);
+            eExtLang = LanguageType((nExtLang < 0) ? -nExtLang : nExtLang);
         }
     }
     else
@@ -3613,6 +3733,7 @@ const NfCurrencyEntry* SvNumberFormatter::GetCurrencyEntry( bool & bFoundBank,
 
 void SvNumberFormatter::GetCompatibilityCurrency( OUString& rSymbol, OUString& rAbbrev ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     css::uno::Sequence< css::i18n::Currency2 >
         xCurrencies( xLocaleData->getAllCurrencies() );
 
@@ -3716,12 +3837,11 @@ void SvNumberFormatter::ImpInitCurrencyTable()
         aConfiguredCurrencyAbbrev, eConfiguredCurrencyLanguage );
     sal_uInt16 nSecondarySystemCurrencyPosition = 0;
     sal_uInt16 nMatchingSystemCurrencyPosition = 0;
-    std::unique_ptr<NfCurrencyEntry> pEntry(
-    // first entry is SYSTEM
-        new NfCurrencyEntry( *pLocaleData, LANGUAGE_SYSTEM ));
 
+    // First entry is SYSTEM:
     theCurrencyTable::get().insert(
-            theCurrencyTable::get().begin(), std::move(pEntry));
+        theCurrencyTable::get().begin(),
+        std::make_unique<NfCurrencyEntry>(*pLocaleData, LANGUAGE_SYSTEM));
     sal_uInt16 nCurrencyPos = 1;
 
     css::uno::Sequence< css::lang::Locale > xLoc = LocaleDataWrapper::getInstalledLocaleNames();
@@ -3748,6 +3868,7 @@ void SvNumberFormatter::ImpInitCurrencyTable()
             if ( pCurrencies[nDefault].Default )
                 break;
         }
+        std::unique_ptr<NfCurrencyEntry> pEntry;
         if ( nDefault < nCurrencyCount )
         {
             pEntry.reset(new NfCurrencyEntry(pCurrencies[nDefault], *pLocaleData, eLang));
@@ -3781,10 +3902,10 @@ void SvNumberFormatter::ImpInitCurrencyTable()
             {
                 if (pCurrencies[nCurrency].LegacyOnly)
                 {
-                    pEntry.reset(new NfCurrencyEntry(pCurrencies[nCurrency], *pLocaleData, eLang));
                     rLegacyOnlyCurrencyTable.insert(
                         rLegacyOnlyCurrencyTable.begin() + nLegacyOnlyCurrencyPos++,
-                        std::move(pEntry));
+                        std::make_unique<NfCurrencyEntry>(
+                            pCurrencies[nCurrency], *pLocaleData, eLang));
                 }
                 else if ( nCurrency != nDefault )
                 {
@@ -3854,14 +3975,23 @@ void SvNumberFormatter::ImpInitCurrencyTable()
 }
 
 
+static void addToCurrencyFormatsList( NfWSStringsDtor& rStrArr, const OUString& rFormat )
+{
+    // Prevent duplicates even over subsequent calls of
+    // GetCurrencyFormatStrings() with the same vector.
+    if (std::find( rStrArr.begin(), rStrArr.end(), rFormat) == rStrArr.end())
+        rStrArr.push_back( rFormat);
+}
+
+
 sal_uInt16 SvNumberFormatter::GetCurrencyFormatStrings( NfWSStringsDtor& rStrArr,
                                                         const NfCurrencyEntry& rCurr,
                                                         bool bBank ) const
 {
-    OUString aRed = OUStringBuffer().
-        append('[').
-        append(pFormatScanner->GetRedString()).
-        append(']').makeStringAndClear();
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
+    OUString aRed = "["
+                  + pFormatScanner->GetRedString()
+                  + "]";
 
     sal_uInt16 nDefault = 0;
     if ( bBank )
@@ -3870,18 +4000,16 @@ sal_uInt16 SvNumberFormatter::GetCurrencyFormatStrings( NfWSStringsDtor& rStrArr
         OUString aPositiveBank = rCurr.BuildPositiveFormatString(true, *xLocaleData);
         OUString aNegativeBank = rCurr.BuildNegativeFormatString(true, *xLocaleData );
 
-        OUStringBuffer format1(aPositiveBank);
-        format1.append(';');
-        format1.append(aNegativeBank);
-        rStrArr.push_back(format1.makeStringAndClear());
+        OUString format1 = aPositiveBank
+                         + ";"
+                         + aNegativeBank;
+        addToCurrencyFormatsList( rStrArr, format1);
 
-        OUStringBuffer format2(aPositiveBank);
-        format2.append(';');
-
-        format2.append(aRed);
-
-        format2.append(aNegativeBank);
-        rStrArr.push_back(format2.makeStringAndClear());
+        OUString format2 = aPositiveBank
+                         + ";"
+                         + aRed
+                         + aNegativeBank;
+        addToCurrencyFormatsList( rStrArr, format2);
 
         nDefault = rStrArr.size() - 1;
     }
@@ -3891,11 +4019,11 @@ sal_uInt16 SvNumberFormatter::GetCurrencyFormatStrings( NfWSStringsDtor& rStrArr
         // duplicates if no decimals in currency.
         OUString aPositive = rCurr.BuildPositiveFormatString(false, *xLocaleData );
         OUString aNegative = rCurr.BuildNegativeFormatString(false, *xLocaleData );
-        OUStringBuffer format1;
-        OUStringBuffer format2;
-        OUStringBuffer format3;
-        OUStringBuffer format4;
-        OUStringBuffer format5;
+        OUString format1;
+        OUString format2;
+        OUString format3;
+        OUString format4;
+        OUString format5;
         if (rCurr.GetDigits())
         {
             OUString aPositiveNoDec = rCurr.BuildPositiveFormatString(false, *xLocaleData, 0);
@@ -3903,44 +4031,44 @@ sal_uInt16 SvNumberFormatter::GetCurrencyFormatStrings( NfWSStringsDtor& rStrArr
             OUString aPositiveDashed = rCurr.BuildPositiveFormatString(false, *xLocaleData, 2);
             OUString aNegativeDashed = rCurr.BuildNegativeFormatString(false, *xLocaleData, 2);
 
-            format1.append(aPositiveNoDec);
-            format1.append(';');
-            format1.append(aNegativeNoDec);
+            format1 = aPositiveNoDec
+                    + ";"
+                    + aNegativeNoDec;
 
-            format3.append(aPositiveNoDec);
-            format3.append(';');
-            format3.append(aRed);
-            format3.append(aNegativeNoDec);
+            format3 = aPositiveNoDec
+                    + ";"
+                    + aRed
+                    + aNegativeNoDec;
 
-            format5.append(aPositiveDashed);
-            format5.append(';');
-            format5.append(aRed);
-            format5.append(aNegativeDashed);
+            format5 = aPositiveDashed
+                    + ";"
+                    + aRed
+                    + aNegativeDashed;
         }
 
-        format2.append(aPositive);
-        format2.append(';');
-        format2.append(aNegative);
+        format2 = aPositive
+                + ";"
+                + aNegative;
 
-        format4.append(aPositive);
-        format4.append(';');
-        format4.append(aRed);
-        format4.append(aNegative);
+        format4 = aPositive
+                + ";"
+                + aRed
+                + aNegative;
 
         if (rCurr.GetDigits())
         {
-            rStrArr.push_back(format1.makeStringAndClear());
+            addToCurrencyFormatsList( rStrArr, format1);
         }
-        rStrArr.push_back(format2.makeStringAndClear());
+        addToCurrencyFormatsList( rStrArr, format2);
         if (rCurr.GetDigits())
         {
-            rStrArr.push_back(format3.makeStringAndClear());
+            addToCurrencyFormatsList( rStrArr, format3);
         }
-        rStrArr.push_back(format4.makeStringAndClear());
+        addToCurrencyFormatsList( rStrArr, format4);
         nDefault = rStrArr.size() - 1;
         if (rCurr.GetDigits())
         {
-            rStrArr.push_back(format5.makeStringAndClear());
+            addToCurrencyFormatsList( rStrArr, format5);
         }
     }
     return nDefault;
@@ -3948,6 +4076,7 @@ sal_uInt16 SvNumberFormatter::GetCurrencyFormatStrings( NfWSStringsDtor& rStrArr
 
 sal_uInt32 SvNumberFormatter::GetMergeFormatIndex( sal_uInt32 nOldFmt ) const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     if (pMergeTable)
     {
         SvNumberFormatterIndexTable::const_iterator it = pMergeTable->find(nOldFmt);
@@ -3961,6 +4090,7 @@ sal_uInt32 SvNumberFormatter::GetMergeFormatIndex( sal_uInt32 nOldFmt ) const
 
 bool SvNumberFormatter::HasMergeFormatTable() const
 {
+    ::osl::MutexGuard aGuard( GetInstanceMutex() );
     return pMergeTable && !pMergeTable->empty();
 }
 
@@ -4023,8 +4153,8 @@ OUString NfCurrencyEntry::BuildSymbolString(bool bBank,
     }
     else
     {
-        if ( aSymbol.indexOf( (sal_Unicode)'-' ) >= 0 ||
-             aSymbol.indexOf( (sal_Unicode)']' ) >= 0)
+        if ( aSymbol.indexOf( '-' ) >= 0 ||
+             aSymbol.indexOf( ']' ) >= 0)
         {
             aBuf.append('"').append(aSymbol).append('"');
         }
@@ -4034,7 +4164,7 @@ OUString NfCurrencyEntry::BuildSymbolString(bool bBank,
         }
         if ( !bWithoutExtension && eLanguage != LANGUAGE_DONTKNOW && eLanguage != LANGUAGE_SYSTEM )
         {
-            sal_Int32 nLang = static_cast<sal_Int32>(eLanguage);
+            sal_Int32 nLang = static_cast<sal_uInt16>(eLanguage);
             aBuf.append('-').append( OUString::number(nLang, 16).toAsciiUpperCase());
         }
     }
@@ -4287,7 +4417,7 @@ sal_uInt16 NfCurrencyEntry::GetEffectivePositiveFormat( sal_uInt16 nIntlFormat,
 //! Call this only if nCurrFormat is really with parentheses!
 static sal_uInt16 lcl_MergeNegativeParenthesisFormat( sal_uInt16 nIntlFormat, sal_uInt16 nCurrFormat )
 {
-    short nSign = 0;        // -1:=Klammer 0:=links, 1:=mitte, 2:=rechts
+    short nSign = 0;        // -1:=bracket 0:=left, 1:=middle, 2:=right
     switch ( nIntlFormat )
     {
     case 0:                                         // ($1)
@@ -4494,6 +4624,32 @@ sal_uInt16 NfCurrencyEntry::GetEffectiveNegativeFormat( sal_uInt16 nIntlFormat,
         }
     }
     return nIntlFormat;
+}
+
+const NfKeywordTable & SvNumberFormatter::GetKeywords( sal_uInt32 nKey )
+{
+    osl::MutexGuard aGuard( GetInstanceMutex() );
+    const SvNumberformat* pFormat = GetFormatEntry( nKey);
+    if (pFormat)
+        ChangeIntl( pFormat->GetLanguage());
+    else
+        ChangeIntl( IniLnge);
+    return pFormatScanner->GetKeywords();
+}
+
+const NfKeywordTable & SvNumberFormatter::GetEnglishKeywords() const
+{
+    return ImpSvNumberformatScan::GetEnglishKeywords();
+}
+
+const std::vector<Color> & SvNumberFormatter::GetStandardColors() const
+{
+    return ImpSvNumberformatScan::GetStandardColors();
+}
+
+size_t SvNumberFormatter::GetMaxDefaultColors() const
+{
+    return ImpSvNumberformatScan::GetMaxDefaultColors();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

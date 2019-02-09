@@ -54,7 +54,9 @@
 /config_build.mk
 /config_build_lang.mk
 /configure
-/lo.xcent
+/bin/bffvalidator.sh
+/bin/odfvalidator.sh
+/bin/officeotron.sh
 /Makefile
 /NEWS
 /TODO
@@ -67,7 +69,8 @@
 
 # make tags
 
-/tags
+**/tags
+**/.tags*
 
 # make etags
 /TAGS
@@ -76,6 +79,7 @@
 *~
 .*sw?
 \#*
+.\#*
 *.kdev4
 .kdev_include_paths
 .buckd
@@ -85,6 +89,12 @@
 .settings
 .eclipsesettingfile
 eclipsesettingfile.xml
+.clang_complete
+.cxx_tags
+.yavide_proj
+.yavide_session
+.vscode
+*.code-workspace
 
 # things below this point are targeted for elimination
 
@@ -119,7 +129,6 @@ xcuserdata
 *.xccheckout
 *.moved-aside
 DerivedData
-*.xcodeproj
 *.xcworkspace
 
 # MSVS specific
@@ -128,10 +137,12 @@ DerivedData
 *.sln
 *.v11*
 *.v12*
-*.vcxproj*
 *.opensdf
-!windows/*.sln
-!windows/*.vcxproj*
+*.vcxproj*
+/.vs
+/.vscode
+*.VC.db
+LibreOffice.VC.VC.opendb
 
 # QtCreator specific
 *.pro
@@ -146,3 +157,23 @@ DerivedData
 # gdb config
 /.gdbinit
 /.gdb_history
+
+# Codelite IDE specific
+*.project
+/.codelite
+*.workspace
+*.workspace.session
+*.tags
+
+# JetBrains Clion Specific
+.idea
+
+# Cscope
+*.out
+
+# Sublime Specific
+*.sublime-project
+*.sublime-workspace
+
+# vim-ide-integration
+/compile_commands.json

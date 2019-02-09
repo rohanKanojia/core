@@ -20,22 +20,20 @@
 #ifndef INCLUDED_OSL_FILE_HXX
 #define INCLUDED_OSL_FILE_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <string.h>
 
-#include <cassert>
 #include <cstddef>
 
-#include <sal/log.hxx>
-#include <osl/time.h>
-#include <rtl/ustring.hxx>
+#include "sal/log.hxx"
+#include "osl/time.h"
+#include "rtl/ustring.hxx"
 
-#include <osl/file.h>
-#include <osl/diagnose.h>
-#include <rtl/byteseq.hxx>
+#include "osl/file.h"
+#include "osl/diagnose.h"
 
-#include <stdio.h>
+namespace rtl { class ByteSequence; }
 
 namespace osl
 {
@@ -53,53 +51,53 @@ class FileBase
 public:
 
     enum RC {
-        E_None         = osl_File_E_None,
-        E_PERM         = osl_File_E_PERM,
-        E_NOENT        = osl_File_E_NOENT,
-        E_SRCH         = osl_File_E_SRCH,
-        E_INTR         = osl_File_E_INTR,
-        E_IO           = osl_File_E_IO,
-        E_NXIO         = osl_File_E_NXIO,
-        E_2BIG         = osl_File_E_2BIG,
-        E_NOEXEC       = osl_File_E_NOEXEC,
-        E_BADF         = osl_File_E_BADF,
-        E_CHILD        = osl_File_E_CHILD,
-        E_AGAIN        = osl_File_E_AGAIN,
-        E_NOMEM        = osl_File_E_NOMEM,
-        E_ACCES        = osl_File_E_ACCES,
-        E_FAULT        = osl_File_E_FAULT,
-        E_BUSY         = osl_File_E_BUSY,
-        E_EXIST        = osl_File_E_EXIST,
-        E_XDEV         = osl_File_E_XDEV,
-        E_NODEV        = osl_File_E_NODEV,
-        E_NOTDIR       = osl_File_E_NOTDIR,
-        E_ISDIR        = osl_File_E_ISDIR,
-        E_INVAL        = osl_File_E_INVAL,
-        E_NFILE        = osl_File_E_NFILE,
-        E_MFILE        = osl_File_E_MFILE,
-        E_NOTTY        = osl_File_E_NOTTY,
-        E_FBIG         = osl_File_E_FBIG,
-        E_NOSPC        = osl_File_E_NOSPC,
-        E_SPIPE        = osl_File_E_SPIPE,
-        E_ROFS         = osl_File_E_ROFS,
-        E_MLINK        = osl_File_E_MLINK,
-        E_PIPE         = osl_File_E_PIPE,
-        E_DOM          = osl_File_E_DOM,
-        E_RANGE        = osl_File_E_RANGE,
-        E_DEADLK       = osl_File_E_DEADLK,
-        E_NAMETOOLONG  = osl_File_E_NAMETOOLONG,
-        E_NOLCK        = osl_File_E_NOLCK,
-        E_NOSYS        = osl_File_E_NOSYS,
-        E_NOTEMPTY     = osl_File_E_NOTEMPTY,
-        E_LOOP         = osl_File_E_LOOP,
-        E_ILSEQ        = osl_File_E_ILSEQ,
-        E_NOLINK       = osl_File_E_NOLINK,
-        E_MULTIHOP     = osl_File_E_MULTIHOP,
-        E_USERS        = osl_File_E_USERS,
-        E_OVERFLOW     = osl_File_E_OVERFLOW,
-        E_NOTREADY     = osl_File_E_NOTREADY,
-        E_invalidError = osl_File_E_invalidError,   /* unmapped error: always last entry in enum! */
-        E_TIMEDOUT     = osl_File_E_TIMEDOUT,
+        E_None         = osl_File_E_None,           ///< on success
+        E_PERM         = osl_File_E_PERM,           ///< operation not permitted
+        E_NOENT        = osl_File_E_NOENT,          ///< no such file or directory
+        E_SRCH         = osl_File_E_SRCH,           ///< no process matches the PID
+        E_INTR         = osl_File_E_INTR,           ///< function call was interrupted
+        E_IO           = osl_File_E_IO,             ///< I/O error occurred
+        E_NXIO         = osl_File_E_NXIO,           ///< no such device or address
+        E_2BIG         = osl_File_E_2BIG,           ///< argument list too long
+        E_NOEXEC       = osl_File_E_NOEXEC,         ///< invalid executable file format
+        E_BADF         = osl_File_E_BADF,           ///< bad file descriptor
+        E_CHILD        = osl_File_E_CHILD,          ///< there are no child processes
+        E_AGAIN        = osl_File_E_AGAIN,          ///< resource temp unavailable, try again later
+        E_NOMEM        = osl_File_E_NOMEM,          ///< no memory available
+        E_ACCES        = osl_File_E_ACCES,          ///< file permissions do not allow operation
+        E_FAULT        = osl_File_E_FAULT,          ///< bad address; an invalid pointer detected
+        E_BUSY         = osl_File_E_BUSY,           ///< resource busy
+        E_EXIST        = osl_File_E_EXIST,          ///< file exists where should only be created
+        E_XDEV         = osl_File_E_XDEV,           ///< improper link across file systems detected
+        E_NODEV        = osl_File_E_NODEV,          ///< wrong device type specified
+        E_NOTDIR       = osl_File_E_NOTDIR,         ///< file isn't a directory where one is needed
+        E_ISDIR        = osl_File_E_ISDIR,          ///< file is a directory, invalid operation
+        E_INVAL        = osl_File_E_INVAL,          ///< invalid argument to library function
+        E_NFILE        = osl_File_E_NFILE,          ///< too many distinct file openings
+        E_MFILE        = osl_File_E_MFILE,          ///< process has too many distinct files open
+        E_NOTTY        = osl_File_E_NOTTY,          ///< inappropriate I/O control operation
+        E_FBIG         = osl_File_E_FBIG,           ///< file too large
+        E_NOSPC        = osl_File_E_NOSPC,          ///< no space left on device, write failed
+        E_SPIPE        = osl_File_E_SPIPE,          ///< invalid seek operation (such as on pipe)
+        E_ROFS         = osl_File_E_ROFS,           ///< illegal modification to read-only filesystem
+        E_MLINK        = osl_File_E_MLINK,          ///< too many links to file
+        E_PIPE         = osl_File_E_PIPE,           ///< broken pipe; no process reading from other end of pipe
+        E_DOM          = osl_File_E_DOM,            ///< domain error (mathematical error)
+        E_RANGE        = osl_File_E_RANGE,          ///< range error (mathematical error)
+        E_DEADLK       = osl_File_E_DEADLK,         ///< deadlock avoided
+        E_NAMETOOLONG  = osl_File_E_NAMETOOLONG,    ///< filename too long
+        E_NOLCK        = osl_File_E_NOLCK,          ///< no locks available
+        E_NOSYS        = osl_File_E_NOSYS,          ///< function not implemented
+        E_NOTEMPTY     = osl_File_E_NOTEMPTY,       ///< directory not empty
+        E_LOOP         = osl_File_E_LOOP,           ///< too many levels of symbolic links found during name lookup
+        E_ILSEQ        = osl_File_E_ILSEQ,          ///< invalid or incomplete byte sequence of multibyte char found
+        E_NOLINK       = osl_File_E_NOLINK,         ///< link has been severed
+        E_MULTIHOP     = osl_File_E_MULTIHOP,       ///< remote resource is not directly available
+        E_USERS        = osl_File_E_USERS,          ///< file quote system is confused as there are too many users
+        E_OVERFLOW     = osl_File_E_OVERFLOW,       ///< value too large for defined data type
+        E_NOTREADY     = osl_File_E_NOTREADY,       ///< device not ready
+        E_invalidError = osl_File_E_invalidError,   ///< unmapped error: always last entry in enum!
+        E_TIMEDOUT     = osl_File_E_TIMEDOUT,       ///< socket operation timed out
         E_NETWORK      = osl_File_E_NETWORK
     };
 
@@ -113,21 +111,20 @@ public:
         If a file or directory with the requested name already exists a new name is generated following
         the common rules on the actual Operating System and File System.
 
-        @param ustrRequestedURL [in]
+        @param[in] ustrRequestedURL
         Requested name of a file or directory.
 
-        @param ustrValidURL [out]
+        @param[out] ustrValidURL
         On success receives a name which is unused and valid on the actual Operating System and
         File System.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
 
         @see DirectoryItem::getFileStatus()
     */
 
-    static inline RC getCanonicalName( const ::rtl::OUString& ustrRequestedURL, ::rtl::OUString& ustrValidURL )
+    static RC getCanonicalName( const ::rtl::OUString& ustrRequestedURL, ::rtl::OUString& ustrValidURL )
     {
         return static_cast< RC >( osl_getCanonicalName( ustrRequestedURL.pData, &ustrValidURL.pData ) );
     }
@@ -138,86 +135,83 @@ public:
         The function resolves symbolic links if possible and path ellipses, so on success
         the resulting absolute path is fully resolved.
 
-        @param ustrBaseDirectoryURL [in]
+        @param[in] ustrBaseDirectoryURL
         Base directory URL to which the relative path is related to.
 
-        @param ustrRelativeFileURL [in]
+        @param[in] ustrRelativeFileURL
         An URL of a file or directory relative to the directory path specified by ustrBaseDirectoryURL
         or an absolute path.
         If ustrRelativeFileURL denotes an absolute path ustrBaseDirectoryURL will be ignored.
 
-        @param ustrAbsoluteFileURL [out]
+        @param[out] ustrAbsoluteFileURL
         On success it receives the full qualified absolute file URL.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_NOTDIR not a directory
-        E_ACCES permission denied
-        E_NOENT no such file or directory
-        E_NAMETOOLONG file name too long
-        E_OVERFLOW value too large for defined data type
-        E_FAULT bad address
-        E_INTR function call was interrupted
-        E_LOOP too many symbolic links encountered
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_NOTDIR not a directory
+        @retval E_ACCES permission denied
+        @retval E_NOENT no such file or directory
+        @retval E_NAMETOOLONG file name too long
+        @retval E_OVERFLOW value too large for defined data type
+        @retval E_FAULT bad address
+        @retval E_INTR function call was interrupted
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
 
         @see DirectoryItem::getFileStatus()
     */
 
-    static inline RC getAbsoluteFileURL( const ::rtl::OUString& ustrBaseDirectoryURL, const ::rtl::OUString& ustrRelativeFileURL, ::rtl::OUString& ustrAbsoluteFileURL )
+    static RC getAbsoluteFileURL( const ::rtl::OUString& ustrBaseDirectoryURL, const ::rtl::OUString& ustrRelativeFileURL, ::rtl::OUString& ustrAbsoluteFileURL )
     {
         return static_cast< RC >( osl_getAbsoluteFileURL( ustrBaseDirectoryURL.pData, ustrRelativeFileURL.pData, &ustrAbsoluteFileURL.pData ) );
     }
 
     /** Convert a file URL into a system dependent path.
 
-        @param ustrFileURL [in]
+        @param[in] ustrFileURL
         A File URL.
 
-        @param ustrSystemPath [out]
+        @param[out] ustrSystemPath
         On success it receives the system path.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
 
         @see getFileURLFromSystemPath()
     */
 
-    static inline RC getSystemPathFromFileURL( const ::rtl::OUString& ustrFileURL, ::rtl::OUString& ustrSystemPath )
+    static RC getSystemPathFromFileURL( const ::rtl::OUString& ustrFileURL, ::rtl::OUString& ustrSystemPath )
     {
         return static_cast< RC >( osl_getSystemPathFromFileURL( ustrFileURL.pData, &ustrSystemPath.pData ) );
     }
 
     /** Convert a system dependent path into a file URL.
 
-        @param ustrSystemPath [in]
+        @param[in] ustrSystemPath
         A System dependent path of a file or directory.
 
-        @param ustrFileURL [out]
+        @param[out] ustrFileURL
         On success it receives the file URL.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
 
         @see getSystemPathFromFileURL()
     */
 
-    static inline RC getFileURLFromSystemPath( const ::rtl::OUString& ustrSystemPath, ::rtl::OUString& ustrFileURL )
+    static RC getFileURLFromSystemPath( const ::rtl::OUString& ustrSystemPath, ::rtl::OUString& ustrFileURL )
     {
         return static_cast< RC >( osl_getFileURLFromSystemPath( ustrSystemPath.pData, &ustrFileURL.pData ) );
     }
 
     /** Searche a full qualified system path or a file URL.
 
-        @param ustrFileName [in]
+        @param[in] ustrFileName
         A system dependent path, a file URL, a file or relative directory
 
-        @param ustrSearchPath [in]
+        @param[in] ustrSearchPath
         A list of system paths, in which a given file has to be searched. The Notation of a path list is
         system dependent, e.g. on UNIX system "/usr/bin:/bin" and on Windows "C:\BIN;C:\BATCH".
         These paths are only for the search of a file or a relative path, otherwise it will be ignored.
@@ -227,20 +221,19 @@ public:
         The value of an environment variable should be used (e.g. LD_LIBRARY_PATH) if the caller is not
         aware of the Operating System and so doesn't know which path list delimiter to use.
 
-        @param ustrFileURL [out]
+        @param[out] ustrFileURL
         On success it receives the full qualified file URL.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOTDIR not a directory
-        E_NOENT no such file or directory not found
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOTDIR not a directory
+        @retval E_NOENT no such file or directory not found
 
         @see getFileURLFromSystemPath()
         @see getSystemPathFromFileURL()
     */
 
-    static inline RC searchFileURL( const ::rtl::OUString& ustrFileName, const ::rtl::OUString& ustrSearchPath, ::rtl::OUString& ustrFileURL )
+    static RC searchFileURL( const ::rtl::OUString& ustrFileName, const ::rtl::OUString& ustrSearchPath, ::rtl::OUString& ustrFileURL )
     {
         return static_cast< RC >( osl_searchFileURL( ustrFileName.pData, ustrSearchPath.pData, &ustrFileURL.pData ) );
     }
@@ -250,12 +243,11 @@ public:
         @param[out] ustrTempDirURL
         On success receives the URL of system's temporary directory path.
 
-        @return
-        E_None on success
-        E_NOENT no such file or directory not found
+        @retval E_None on success
+        @retval E_NOENT no such file or directory not found
     */
 
-    static inline RC getTempDirURL( ::rtl::OUString& ustrTempDirURL )
+    static RC getTempDirURL( ::rtl::OUString& ustrTempDirURL )
     {
         return static_cast< RC >( osl_getTempDirURL( &ustrTempDirURL.pData ) );
     }
@@ -268,16 +260,16 @@ public:
         it, the file will be automatically removed on close else the caller is
         responsible for removing the file on success.<br><br>
 
-        @param  pustrDirectoryURL [in]
+        @param[in]  pustrDirectoryURL
         Specifies the full qualified URL where the temporary file should be created.
         If pustrDirectoryURL is 0 the path returned by osl_getTempDirURL will be used.
 
-        @param  pHandle [out]
+        @param[out] pHandle
         On success receives a handle to the open file.
         If pHandle is 0 the file will be closed on return, in this case
         pustrTempFileURL must not be 0.
 
-        @param  pustrTempFileURL [out]
+        @param[out] pustrTempFileURL
         On success receives the full qualified URL of the temporary file.
         If pustrTempFileURL is 0 the file will be automatically removed
         on close, in this case pHandle must not be 0.
@@ -294,21 +286,20 @@ public:
         the file name will be returned, the caller is responsible for closing and removing
         the file.<br>
 
-        @return
-        E_None   on success
-        E_INVAL  the format of the parameter is invalid
-        E_NOMEM  not enough memory for allocating structures
-        E_ACCES  Permission denied
-        E_NOENT  No such file or directory
-        E_NOTDIR Not a directory
-        E_ROFS   Read-only file system
-        E_NOSPC  No space left on device
-        E_DQUOT  Quota exceeded
+        @retval E_None   on success
+        @retval E_INVAL  the format of the parameter is invalid
+        @retval E_NOMEM  not enough memory for allocating structures
+        @retval E_ACCES  Permission denied
+        @retval E_NOENT  No such file or directory
+        @retval E_NOTDIR Not a directory
+        @retval E_ROFS   Read-only file system
+        @retval E_NOSPC  No space left on device
+        @retval E_DQUOT  Quota exceeded
 
         @see getTempDirURL()
     */
 
-    static inline RC createTempFile(
+    static RC createTempFile(
         ::rtl::OUString* pustrDirectoryURL,
         oslFileHandle*   pHandle,
         ::rtl::OUString* pustrTempFileURL)
@@ -367,7 +358,7 @@ public:
         The other volume device.
     */
 
-    inline VolumeDevice & operator =( const VolumeDevice & rDevice )
+    VolumeDevice & operator =( const VolumeDevice & rDevice )
     {
         oslVolumeDeviceHandle   newHandle = rDevice._aHandle;
 
@@ -384,10 +375,10 @@ public:
 
     /** Get the full qualified URL where a device is mounted to.
 
-           @return
+        @return
         The full qualified URL where the device is mounted to.
     */
-    inline rtl::OUString getMountPath()
+    rtl::OUString getMountPath()
     {
         rtl::OUString   aPath;
         osl_getVolumeDeviceMountPath( _aHandle, &aPath.pData );
@@ -419,7 +410,7 @@ class VolumeInfo
 
     VolumeInfo( VolumeInfo& ) SAL_DELETED_FUNCTION;
 
-    /** Assginment operator.
+    /** Assignment operator.
     */
 
     VolumeInfo& operator = ( VolumeInfo& ) SAL_DELETED_FUNCTION;
@@ -431,7 +422,6 @@ public:
         @param nMask
         Set of flags describing the demanded information.
     */
-
     VolumeInfo( sal_uInt32 nMask )
         : _nMask( nMask )
     {
@@ -439,9 +429,6 @@ public:
         _aInfo.uStructSize = sizeof( oslVolumeInfo );
         _aInfo.pDeviceHandle = &_aDevice._aHandle;
     }
-
-    /** Destructor.
-    */
 
     ~VolumeInfo()
     {
@@ -456,8 +443,7 @@ public:
 
         @return true if all fields are valid else false.
     */
-
-    inline bool isValid( sal_uInt32 nMask ) const
+    bool isValid( sal_uInt32 nMask ) const
     {
         return ( nMask & _aInfo.uValidFields ) == nMask;
     }
@@ -467,21 +453,19 @@ public:
         @return
         true if Attributes are valid and the volume is remote else false.
     */
-
-    inline bool getRemoteFlag() const
+    bool getRemoteFlag() const
     {
-        return 0 != (_aInfo.uAttributes & osl_Volume_Attribute_Remote);
+        return (_aInfo.uAttributes & osl_Volume_Attribute_Remote) != 0;
     }
 
-    /** Check the removeable flag.
+    /** Check the removable flag.
 
         @return
         true if attributes are valid and the volume is removable else false.
     */
-
-    inline bool getRemoveableFlag() const
+    bool getRemoveableFlag() const
     {
-        return 0 != (_aInfo.uAttributes & osl_Volume_Attribute_Removeable);
+        return (_aInfo.uAttributes & osl_Volume_Attribute_Removeable) != 0;
     }
 
     /** Check the compact disc flag.
@@ -490,9 +474,9 @@ public:
         true if attributes are valid and the volume is a CDROM else false.
     */
 
-    inline bool getCompactDiscFlag() const
+    bool getCompactDiscFlag() const
     {
-        return 0 != (_aInfo.uAttributes & osl_Volume_Attribute_CompactDisc);
+        return (_aInfo.uAttributes & osl_Volume_Attribute_CompactDisc) != 0;
     }
 
     /** Check the floppy disc flag.
@@ -501,9 +485,9 @@ public:
         true if attributes are valid and the volume is a floppy disk else false.
     */
 
-    inline bool getFloppyDiskFlag() const
+    bool getFloppyDiskFlag() const
     {
-        return 0 != (_aInfo.uAttributes & osl_Volume_Attribute_FloppyDisk);
+        return (_aInfo.uAttributes & osl_Volume_Attribute_FloppyDisk) != 0;
     }
 
     /** Check the fixed disk flag.
@@ -512,9 +496,9 @@ public:
         true if attributes are valid and the volume is a fixed disk else false.
     */
 
-    inline bool getFixedDiskFlag() const
+    bool getFixedDiskFlag() const
     {
-        return 0 != (_aInfo.uAttributes & osl_Volume_Attribute_FixedDisk);
+        return (_aInfo.uAttributes & osl_Volume_Attribute_FixedDisk) != 0;
     }
 
     /** Check the RAM disk flag.
@@ -523,9 +507,9 @@ public:
         true if attributes are valid and the volume is a RAM disk else false.
     */
 
-    inline bool getRAMDiskFlag() const
+    bool getRAMDiskFlag() const
     {
-        return 0 != (_aInfo.uAttributes & osl_Volume_Attribute_RAMDisk);
+        return (_aInfo.uAttributes & osl_Volume_Attribute_RAMDisk) != 0;
     }
 
     /** Determine the total space of a volume device.
@@ -535,7 +519,7 @@ public:
         0 otherwise.
     */
 
-    inline sal_uInt64 getTotalSpace() const
+    sal_uInt64 getTotalSpace() const
     {
         return _aInfo.uTotalSpace;
     }
@@ -547,7 +531,7 @@ public:
         0 otherwise.
     */
 
-    inline sal_uInt64 getFreeSpace() const
+    sal_uInt64 getFreeSpace() const
     {
         return _aInfo.uFreeSpace;
     }
@@ -559,7 +543,7 @@ public:
         0 otherwise.
     */
 
-    inline sal_uInt64 getUsedSpace() const
+    sal_uInt64 getUsedSpace() const
     {
         return _aInfo.uUsedSpace;
     }
@@ -571,7 +555,7 @@ public:
         0 otherwise.
     */
 
-    inline sal_uInt32 getMaxNameLength() const
+    sal_uInt32 getMaxNameLength() const
     {
         return _aInfo.uMaxNameLength;
     }
@@ -583,7 +567,7 @@ public:
         0 otherwise.
     */
 
-    inline sal_uInt32 getMaxPathLength() const
+    sal_uInt32 getMaxPathLength() const
     {
         return _aInfo.uMaxPathLength;
     }
@@ -595,7 +579,7 @@ public:
         otherwise an empty string.
     */
 
-    inline ::rtl::OUString getFileSystemName() const
+    ::rtl::OUString getFileSystemName() const
     {
         return _aInfo.ustrFileSystemName ? ::rtl::OUString( _aInfo.ustrFileSystemName ) : ::rtl::OUString();
     }
@@ -608,7 +592,7 @@ public:
         otherwise returns NULL;
     */
 
-    inline VolumeDevice getDeviceHandle() const
+    VolumeDevice getDeviceHandle() const
     {
         return _aDevice;
     }
@@ -708,7 +692,7 @@ public:
         true if all fields are valid else false.
     */
 
-    inline bool isValid( sal_uInt32 nMask ) const
+    bool isValid( sal_uInt32 nMask ) const
     {
         return ( nMask & _aStatus.uValidFields ) == nMask;
     }
@@ -718,7 +702,7 @@ public:
         @return
         The file type.
     */
-    inline Type getFileType() const
+    Type getFileType() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_Type), "sal.osl",
@@ -736,7 +720,7 @@ public:
         @see getFileType
         @since LibreOffice 3.6
     */
-    inline bool isDirectory() const
+    bool isDirectory() const
     {
         return ( getFileType() == Directory || getFileType() == Volume );
     }
@@ -751,7 +735,7 @@ public:
         @see isLink
         @since LibreOffice 3.6
     */
-    inline bool isRegular() const
+    bool isRegular() const
     {
         return ( getFileType() == Regular );
     }
@@ -764,7 +748,7 @@ public:
         @see getFileType
         @since LibreOffice 3.6
     */
-    inline bool isLink() const
+    bool isLink() const
     {
         return ( getFileType() == Link );
     }
@@ -775,7 +759,7 @@ public:
         The set of attribute flags of this file.
     */
 
-    inline sal_uInt64 getAttributes() const
+    sal_uInt64 getAttributes() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_Attributes), "sal.osl",
@@ -790,7 +774,7 @@ public:
         TimeValue otherwise.
     */
 
-    inline TimeValue getCreationTime() const
+    TimeValue getCreationTime() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_CreationTime), "sal.osl",
@@ -805,7 +789,7 @@ public:
         TimeValue otherwise.
     */
 
-    inline TimeValue getAccessTime() const
+    TimeValue getAccessTime() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_AccessTime), "sal.osl",
@@ -820,7 +804,7 @@ public:
         TimeValue otherwise.
     */
 
-    inline TimeValue getModifyTime() const
+    TimeValue getModifyTime() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_ModifyTime), "sal.osl",
@@ -834,7 +818,7 @@ public:
         The actual file size if this information is valid, 0 otherwise.
     */
 
-    inline sal_uInt64 getFileSize() const
+    sal_uInt64 getFileSize() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_FileSize), "sal.osl",
@@ -848,7 +832,7 @@ public:
         The file name if this information is valid, an empty string otherwise.
     */
 
-    inline ::rtl::OUString getFileName() const
+    ::rtl::OUString getFileName() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_FileName), "sal.osl",
@@ -865,7 +849,7 @@ public:
         empty string otherwise.
     */
 
-    inline ::rtl::OUString getFileURL() const
+    ::rtl::OUString getFileURL() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_FileURL), "sal.osl",
@@ -881,7 +865,7 @@ public:
         otherwise.
     */
 
-    inline ::rtl::OUString getLinkTargetURL() const
+    ::rtl::OUString getLinkTargetURL() const
     {
         SAL_INFO_IF(
             !isValid(osl_FileStatus_Mask_LinkTargetURL), "sal.osl",
@@ -910,7 +894,7 @@ class File: public FileBase
 
     File( File& ) SAL_DELETED_FUNCTION;
 
-    /** Assginment operator.
+    /** Assignment operator.
     */
 
     File& operator = ( File& ) SAL_DELETED_FUNCTION;
@@ -919,7 +903,7 @@ public:
 
     /** Constructor.
 
-        @param  ustrFileURL [in]
+        @param[in]  ustrFileURL
         The full qualified URL of the file. Relative paths are not allowed.
     */
 
@@ -928,7 +912,7 @@ public:
     /** Destructor
     */
 
-    inline ~File()
+    ~File()
     {
         close();
     }
@@ -940,41 +924,40 @@ public:
 
         @since LibreOffice 4.1
     */
-    inline rtl::OUString getURL() const { return _aPath; }
+    rtl::OUString getURL() const { return _aPath; }
 
     /** Open a regular file.
 
-        Open a file. Only regular files can be openend.
+        Open a file. Only regular files can be opened.
 
-        @param uFlags [in]
+        @param[in] uFlags
         Specifies the open mode.
 
-        @return
-        E_None on success
-        E_NOMEM not enough memory for allocating structures
-        E_INVAL the format of the parameters was not valid
-        E_NAMETOOLONG pathname was too long
-        E_NOENT no such file or directory
-        E_ACCES permission denied
-        E_AGAIN a write lock could not be established
-        E_NOTDIR not a directory
-        E_NXIO no such device or address
-        E_NODEV no such device
-        E_ROFS read-only file system
-        E_TXTBSY text file busy
-        E_FAULT bad address
-        E_LOOP too many symbolic links encountered
-        E_NOSPC no space left on device
-        E_ISDIR is a directory
-        E_MFILE too many open files used by the process
-        E_NFILE too many open files in the system
-        E_DQUOT quota exceeded
-        E_EXIST file exists
-        E_INTR function call was interrupted
-        E_IO on I/O errors
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
-        E_EOVERFLOW value too large for defined data type
+        @retval E_None on success
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NAMETOOLONG pathname was too long
+        @retval E_NOENT no such file or directory
+        @retval E_ACCES permission denied
+        @retval E_AGAIN a write lock could not be established
+        @retval E_NOTDIR not a directory
+        @retval E_NXIO no such device or address
+        @retval E_NODEV no such device
+        @retval E_ROFS read-only file system
+        @retval E_TXTBSY text file busy
+        @retval E_FAULT bad address
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_NOSPC no space left on device
+        @retval E_ISDIR is a directory
+        @retval E_MFILE too many open files used by the process
+        @retval E_NFILE too many open files in the system
+        @retval E_DQUOT quota exceeded
+        @retval E_EXIST file exists
+        @retval E_INTR function call was interrupted
+        @retval E_IO on I/O errors
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
+        @retval E_EOVERFLOW value too large for defined data type
 
         @see close()
         @see setPos()
@@ -985,26 +968,25 @@ public:
         @see setSize()
     */
 
-    inline RC open( sal_uInt32 uFlags )
+    RC open( sal_uInt32 uFlags )
     {
         return static_cast< RC >( osl_openFile( _aPath.pData, &_pData, uFlags ) );
     }
 
     /** Close an open file.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_BADF Bad file
-        E_INTR function call was interrupted
-        E_NOLINK link has been severed
-        E_NOSPC no space left on device
-        E_IO on I/O errors
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_BADF Bad file
+        @retval E_INTR function call was interrupted
+        @retval E_NOLINK link has been severed
+        @retval E_NOSPC no space left on device
+        @retval E_IO on I/O errors
 
         @see open()
     */
 
-    inline RC close()
+    RC close()
     {
         oslFileError Error = osl_File_E_BADF;
 
@@ -1019,35 +1001,33 @@ public:
 
     /** Set the internal position pointer of an open file.
 
-        @param uHow [in]
+        @param[in] uHow
         Distance to move the internal position pointer (from uPos).
 
-        @param uPos [in]
+        @param[in] uPos
         Absolute position from the beginning of the file.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_OVERFLOW the resulting file offset would be a value which cannot be represented correctly for regular files
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_OVERFLOW the resulting file offset would be a value which cannot be represented correctly for regular files
 
         @see open()
         @see getPos()
     */
 
-    inline RC setPos( sal_uInt32 uHow, sal_Int64 uPos ) SAL_WARN_UNUSED_RESULT
+    SAL_WARN_UNUSED_RESULT RC setPos( sal_uInt32 uHow, sal_Int64 uPos )
     {
         return static_cast< RC >( osl_setFilePos( _pData, uHow, uPos ) );
     }
 
     /** Retrieve the current position of the internal pointer of an open file.
 
-        @param uPos [out]
+        @param[out] uPos
         On success receives the current position of the file pointer.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_OVERFLOW the resulting file offset would be a value which cannot be represented correctly for regular files
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_OVERFLOW the resulting file offset would be a value which cannot be represented correctly for regular files
 
         @see open()
         @see setPos()
@@ -1055,26 +1035,25 @@ public:
         @see write()
     */
 
-    inline RC getPos( sal_uInt64& uPos )
+    RC getPos( sal_uInt64& uPos )
     {
         return static_cast< RC >( osl_getFilePos( _pData, &uPos ) );
     }
 
     /** Test if the end of a file is reached.
 
-        @param pIsEOF [out]
+        @param[out] pIsEOF
         Points to a variable that receives the end-of-file status.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_INTR function call was interrupted
-        E_IO on I/O errors
-        E_ISDIR is a directory
-        E_BADF bad file
-        E_FAULT bad address
-        E_AGAIN operation would block
-        E_NOLINK link has been severed
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_INTR function call was interrupted
+        @retval E_IO on I/O errors
+        @retval E_ISDIR is a directory
+        @retval E_BADF bad file
+        @retval E_FAULT bad address
+        @retval E_AGAIN operation would block
+        @retval E_NOLINK link has been severed
 
         @see open()
         @see read()
@@ -1082,7 +1061,7 @@ public:
         @see setPos()
     */
 
-    inline RC isEndOfFile( sal_Bool *pIsEOF )
+    RC isEndOfFile( sal_Bool *pIsEOF )
     {
         return static_cast< RC >( osl_isEndOfFile( _pData, pIsEOF ) );
     }
@@ -1092,20 +1071,19 @@ public:
         Sets the file size of an open file. The file can be truncated or enlarged by the function.
         The position of the file pointer is not affeced by this function.
 
-        @param uSize [in]
+        @param[in] uSize
         New size in bytes.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_OVERFLOW the resulting file offset would be a value which cannot  be represented correctly for regular files
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_OVERFLOW the resulting file offset would be a value which cannot  be represented correctly for regular files
 
         @see open()
         @see setPos()
         @see getStatus()
     */
 
-    inline RC setSize( sal_uInt64 uSize )
+    RC setSize( sal_uInt64 uSize )
     {
         return static_cast< RC >( osl_setFileSize( _pData, uSize ) );
     }
@@ -1115,13 +1093,12 @@ public:
         Gets the file size of an open file.
         The position of the file pointer is not affeced by this function.
 
-        @param rSize [out]
+        @param[out] rSize
         Current size in bytes.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_OVERFLOW the resulting file offset would be a value which cannot  be represented correctly for regular files
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_OVERFLOW the resulting file offset would be a value which cannot  be represented correctly for regular files
 
         @see open()
         @see setPos()
@@ -1130,7 +1107,7 @@ public:
         @see getStatus()
     */
 
-    inline RC getSize( sal_uInt64 &rSize )
+    RC getSize( sal_uInt64 &rSize )
     {
         return static_cast< RC >( osl_getFileSize( _pData, &rSize ) );
     }
@@ -1140,26 +1117,25 @@ public:
         Reads a number of bytes from a file. The internal file pointer is
         increased by the number of bytes read.
 
-        @param pBuffer [out]
+        @param[out] pBuffer
         Points to a buffer which receives data. The buffer must be large enough
         to hold uBytesRequested bytes.
 
-        @param uBytesRequested [in]
+        @param[in] uBytesRequested
         Number of bytes which should be retrieved.
 
-        @param rBytesRead [out]
+        @param[out] rBytesRead
         On success the number of bytes which have actually been retrieved.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_INTR function call was interrupted
-        E_IO on I/O errors
-        E_ISDIR is a directory
-        E_BADF bad file
-        E_FAULT bad address
-        E_AGAIN operation would block
-        E_NOLINK link has been severed
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_INTR function call was interrupted
+        @retval E_IO on I/O errors
+        @retval E_ISDIR is a directory
+        @retval E_BADF bad file
+        @retval E_FAULT bad address
+        @retval E_AGAIN operation would block
+        @retval E_NOLINK link has been severed
 
         @see open()
         @see write()
@@ -1167,7 +1143,7 @@ public:
         @see setPos()
     */
 
-    inline RC read( void *pBuffer, sal_uInt64 uBytesRequested, sal_uInt64& rBytesRead )
+    RC read( void *pBuffer, sal_uInt64 uBytesRequested, sal_uInt64& rBytesRead )
     {
         return static_cast< RC >( osl_readFile( _pData, pBuffer, uBytesRequested, &rBytesRead ) );
     }
@@ -1177,36 +1153,35 @@ public:
         Writes a number of bytes to a file.
         The internal file pointer is increased by the number of bytes read.
 
-        @param pBuffer [in]
+        @param[in] pBuffer
         Points to a buffer which contains the data.
 
-        @param uBytesToWrite [in]
+        @param[in] uBytesToWrite
         Number of bytes which should be written.
 
-        @param rBytesWritten [out]
+        @param[out] rBytesWritten
         On success the number of bytes which have actually been written.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_FBIG file too large
-        E_DQUOT quota exceeded
-        E_AGAIN operation would block
-        E_BADF bad file
-        E_FAULT bad address
-        E_INTR function call was interrupted
-        E_IO on I/O errosr
-        E_NOLCK no record locks available
-        E_NOLINK link has been severed
-        E_NOSPC no space left on device
-        E_NXIO no such device or address
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_FBIG file too large
+        @retval E_DQUOT quota exceeded
+        @retval E_AGAIN operation would block
+        @retval E_BADF bad file
+        @retval E_FAULT bad address
+        @retval E_INTR function call was interrupted
+        @retval E_IO on I/O errosr
+        @retval E_NOLCK no record locks available
+        @retval E_NOLINK link has been severed
+        @retval E_NOSPC no space left on device
+        @retval E_NXIO no such device or address
 
         @see open()
         @see read()
         @see setPos()
     */
 
-    inline RC write(const void *pBuffer, sal_uInt64 uBytesToWrite, sal_uInt64& rBytesWritten)
+    RC write(const void *pBuffer, sal_uInt64 uBytesToWrite, sal_uInt64& rBytesWritten)
     {
         return static_cast< RC >( osl_writeFile( _pData, pBuffer, uBytesToWrite, &rBytesWritten ) );
     }
@@ -1216,19 +1191,18 @@ public:
 
         Reads a line from a file. The new line delimiter is NOT returned!
 
-        @param  aSeq [in/out]
+        @param[in,out] aSeq
         A reference to a ::rtl::ByteSequence that will hold the line read on success.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_INTR function call was interrupted
-        E_IO on I/O errors
-        E_ISDIR is a directory
-        E_BADF bad file
-        E_FAULT bad address
-        E_AGAIN operation would block
-        E_NOLINK link has been severed
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_INTR function call was interrupted
+        @retval E_IO on I/O errors
+        @retval E_ISDIR is a directory
+        @retval E_BADF bad file
+        @retval E_FAULT bad address
+        @retval E_AGAIN operation would block
+        @retval E_NOLINK link has been severed
 
         @see open()
         @see read()
@@ -1236,42 +1210,31 @@ public:
         @see setPos()
     */
 
-    inline RC readLine( ::rtl::ByteSequence& aSeq )
+    RC readLine( ::rtl::ByteSequence& aSeq )
     {
         return static_cast< RC >( osl_readLine( _pData, reinterpret_cast<sal_Sequence**>(&aSeq) ) );
     }
 
     /** Synchronize the memory representation of a file with that on the physical medium.
 
-    The function ensures that all modified data and attributes of the file associated with
-    the given file handle have been written to the physical medium.
-    In case the hard disk has a write cache enabled, the data may not really be on
-    permanent storage when osl_syncFile returns.
+        The function ensures that all modified data and attributes of the file associated with
+        the given file handle have been written to the physical medium.
+        In case the hard disk has a write cache enabled, the data may not really be on
+        permanent storage when osl_syncFile returns.
 
-    @return
-    <dl>
-    <dt>E_None</dt>
-    <dd>On success</dd>
-    <dt>E_INVAL</dt>
-    <dd>The value of the input parameter is invalid</dd>
-    <br><p><strong>In addition to these error codes others may occur as well, for instance:</strong></p><br>
-    <dt>E_BADF</dt>
-    <dd>The file is not open for writing</dd>
-    <dt>E_IO</dt>
-    <dd>An I/O error occurred</dd>
-    <dt>E_NOSPC</dt>
-    <dd>There is no enough space on the target device</dd>
-    <dt>E_ROFS</dt>
-    <dd>The file is located on a read only file system</dd>
-    <dt>E_TIMEDOUT</dt>
-    <dd>A remote connection timed out. This may happen when a file is on a remote location</dd>
-    </dl>
+        @retval E_None On success
+        @retval E_INVAL The value of the input parameter is invalid
+        @retval E_BADF The file is not open for writing
+        @retval E_IO An I/O error occurred
+        @retval E_NOSPC There is no enough space on the target device
+        @retval E_ROFS The file is located on a read only file system
+        @retval E_TIMEDOUT A remote connection timed out. This may happen when a file is on a remote location
 
-    @see osl_syncFile()
-    @see open()
-    @see write()
+        @see osl_syncFile()
+        @see open()
+        @see write()
     */
-    inline RC sync() const
+    RC sync() const
     {
         OSL_PRECOND(_pData, "File::sync(): File not open");
         return static_cast< RC >(osl_syncFile(_pData));
@@ -1282,28 +1245,27 @@ public:
         Copies a file to a new destination. Copies only files not directories.
         No assumptions should be made about preserving attributes or file time.
 
-        @param ustrSourceFileURL [in]
+        @param[in] ustrSourceFileURL
         Full qualified URL of the source file.
 
-        @param ustrDestFileURL [in]
+        @param[in] ustrDestFileURL
         Full qualified URL of the destination file. A directory is NOT a valid destination file!
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_ACCES permission denied
-        E_PERM operation not permitted
-        E_NAMETOOLONG file name too long
-        E_NOENT no such file or directory
-        E_ISDIR is a directory
-        E_ROFS read-only file system
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_PERM operation not permitted
+        @retval E_NAMETOOLONG file name too long
+        @retval E_NOENT no such file or directory
+        @retval E_ISDIR is a directory
+        @retval E_ROFS read-only file system
 
         @see move()
         @see remove()
     */
 
-    inline static RC copy( const ::rtl::OUString& ustrSourceFileURL, const ::rtl::OUString& ustrDestFileURL )
+    static RC copy( const ::rtl::OUString& ustrSourceFileURL, const ::rtl::OUString& ustrDestFileURL )
     {
         return static_cast< RC >( osl_copyFile( ustrSourceFileURL.pData, ustrDestFileURL.pData ) );
     }
@@ -1313,106 +1275,136 @@ public:
         Moves a file or directory to a new destination or renames it.
         File time and attributes are preserved.
 
-        @param ustrSourceFileURL [in]
+        @param[in] ustrSourceFileURL
         Full qualified URL of the source file.
 
-        @param ustrDestFileURL [in]
+        @param[in] ustrDestFileURL
         Full qualified URL of the destination file. An existing directory is NOT a valid destination !
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_ACCES permission denied
-        E_PERM operation not permitted
-        E_NAMETOOLONG file name too long
-        E_NOENT no such file or directory
-        E_ROFS read-only file system
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_PERM operation not permitted
+        @retval E_NAMETOOLONG file name too long
+        @retval E_NOENT no such file or directory
+        @retval E_ROFS read-only file system
 
         @see copy()
     */
 
-    inline static RC move( const ::rtl::OUString& ustrSourceFileURL, const ::rtl::OUString& ustrDestFileURL )
+    static RC move( const ::rtl::OUString& ustrSourceFileURL, const ::rtl::OUString& ustrDestFileURL )
     {
         return static_cast< RC >( osl_moveFile( ustrSourceFileURL.pData, ustrDestFileURL.pData ) );
     }
 
+    /** Move a file to a new destination or rename it, taking old file's identity (if exists).
+
+        Moves or renames a file, replacing an existing file if exist. If the old file existed,
+        moved file's metadata, e.g. creation time (on FSes which keep files' creation time) or
+        ACLs, are set to old one's (to keep the old file's identity) - currently this is only
+        implemented on Windows; on other platforms, this is equivalent to osl_moveFile.
+
+        @param[in] ustrSourceFileURL
+        Full qualified URL of the source file.
+
+        @param[in] ustrDestFileURL
+        Full qualified URL of the destination file.
+
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_PERM operation not permitted
+        @retval E_NAMETOOLONG file name too long
+        @retval E_NOENT no such file
+        @retval E_ROFS read-only file system
+        @retval E_BUSY device or resource busy
+
+        @see move()
+
+        @since LibreOffice 6.2
+    */
+    static RC replace(const ::rtl::OUString& ustrSourceFileURL,
+                      const ::rtl::OUString& ustrDestFileURL)
+    {
+        return static_cast<RC>(osl_replaceFile(ustrSourceFileURL.pData, ustrDestFileURL.pData));
+    }
+
     /** Remove a regular file.
 
-        @param ustrFileURL [in]
+        @param[in] ustrFileURL
         Full qualified URL of the file to remove.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_ACCES permission denied
-        E_PERM operation not permitted
-        E_NAMETOOLONG file name too long
-        E_NOENT no such file or directory
-        E_ISDIR is a directory
-        E_ROFS read-only file system
-        E_FAULT bad address
-        E_LOOP too many symbolic links encountered
-        E_IO on I/O errors
-        E_BUSY device or resource busy
-        E_INTR function call was interrupted
-        E_LOOP too many symbolic links encountered
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
-        E_TXTBSY text file busy
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_PERM operation not permitted
+        @retval E_NAMETOOLONG file name too long
+        @retval E_NOENT no such file or directory
+        @retval E_ISDIR is a directory
+        @retval E_ROFS read-only file system
+        @retval E_FAULT bad address
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_IO on I/O errors
+        @retval E_BUSY device or resource busy
+        @retval E_INTR function call was interrupted
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
+        @retval E_TXTBSY text file busy
 
         @see open()
     */
 
-    inline static RC remove( const ::rtl::OUString& ustrFileURL )
+    static RC remove( const ::rtl::OUString& ustrFileURL )
     {
         return static_cast< RC >( osl_removeFile( ustrFileURL.pData ) );
     }
 
     /** Set file attributes.
 
-        @param ustrFileURL [in]
+        @param[in] ustrFileURL
         The full qualified file URL.
 
-        @param uAttributes [in]
+        @param[in] uAttributes
         Attributes of the file to be set.
 
         @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
 
         @see FileStatus
     */
 
-    inline static RC setAttributes( const ::rtl::OUString& ustrFileURL, sal_uInt64 uAttributes )
+    static RC setAttributes( const ::rtl::OUString& ustrFileURL, sal_uInt64 uAttributes )
     {
         return static_cast< RC >( osl_setFileAttributes( ustrFileURL.pData, uAttributes ) );
     }
 
     /** Set the file time.
 
-        @param ustrFileURL [in]
+        @param[in] ustrFileURL
         The full qualified URL of the file.
 
-        @param rCreationTime [in]
+        @param[in] rCreationTime
         Creation time of the given file.
 
-        @param rLastAccessTime [in]
+        @param[in] rLastAccessTime
         Time of the last access of the given file.
 
-        @param rLastWriteTime [in]
+        @param[in] rLastWriteTime
         Time of the last modifying of the given file.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOENT no such file or directory not found
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOENT no such file or directory not found
 
         @see FileStatus
     */
 
-    inline static RC setTime(
+    static RC setTime(
         const ::rtl::OUString& ustrFileURL,
         const TimeValue& rCreationTime,
         const TimeValue& rLastAccessTime,
@@ -1489,7 +1481,7 @@ public:
         true if object is valid directory item else false.
      */
 
-    inline bool is()
+    bool is()
     {
         return _pData != NULL;
     }
@@ -1500,35 +1492,34 @@ public:
         Due to performance issues it is not recommended to use this function while
         enumerating the contents of a directory. In this case use osl_getNextDirectoryItem() instead.
 
-        @param ustrFileURL [in]
+        @param[in] ustrFileURL
         An absolute file URL.
 
-        @param rItem [out]
+        @param[out] rItem
         On success it receives a handle which can be used for subsequent calls to osl_getFileStatus().
         The handle has to be released by a call to osl_releaseDirectoryItem().
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_ACCES permission denied
-        E_MFILE too many open files used by the process
-        E_NFILE too many open files in the system
-        E_NOENT no such file or directory
-        E_LOOP  too many symbolic links encountered
-        E_NAMETOOLONG the file name is too long
-        E_NOTDIR a component of the path prefix of path is not a directory
-        E_IO on I/O errors
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
-        E_FAULT bad address
-        E_INTR the function call was interrupted
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_MFILE too many open files used by the process
+        @retval E_NFILE too many open files in the system
+        @retval E_NOENT no such file or directory
+        @retval E_LOOP  too many symbolic links encountered
+        @retval E_NAMETOOLONG the file name is too long
+        @retval E_NOTDIR a component of the path prefix of path is not a directory
+        @retval E_IO on I/O errors
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
+        @retval E_FAULT bad address
+        @retval E_INTR the function call was interrupted
 
         @see FileStatus
         @see Directory::getNextItem()
     */
 
-    static inline RC get( const ::rtl::OUString& ustrFileURL, DirectoryItem& rItem )
+    static RC get( const ::rtl::OUString& ustrFileURL, DirectoryItem& rItem )
     {
         if( rItem._pData)
         {
@@ -1541,37 +1532,36 @@ public:
 
     /** Retrieve information about a single file or directory.
 
-        @param  rStatus [in|out]
+        @param[in,out] rStatus
         Reference to a class which receives the information of the file or directory
         represented by this directory item.
 
-        @return
-        E_None on success
-        E_NOMEM not enough memory for allocating structures
-        E_INVAL the format of the parameters was not valid
-        E_LOOP too many symbolic links encountered
-        E_ACCES permission denied
-        E_NOENT no such file or directory
-        E_NAMETOOLONG file name too long
-        E_BADF invalid oslDirectoryItem parameter
-        E_FAULT bad address
-        E_OVERFLOW value too large for defined data type
-        E_INTR function call was interrupted
-        E_NOLINK link has been severed
-        E_MULTIHOP components of path require hopping to multiple remote machines and the file system does not allow it
-        E_MFILE too many open files used by the process
-        E_NFILE too many open files in the system
-        E_NOSPC no space left on device
-        E_NXIO no such device or address
-        E_IO on I/O errors
-        E_NOSYS function not implemented
+        @retval E_None on success
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_ACCES permission denied
+        @retval E_NOENT no such file or directory
+        @retval E_NAMETOOLONG file name too long
+        @retval E_BADF invalid oslDirectoryItem parameter
+        @retval E_FAULT bad address
+        @retval E_OVERFLOW value too large for defined data type
+        @retval E_INTR function call was interrupted
+        @retval E_NOLINK link has been severed
+        @retval E_MULTIHOP components of path require hopping to multiple remote machines and the file system does not allow it
+        @retval E_MFILE too many open files used by the process
+        @retval E_NFILE too many open files in the system
+        @retval E_NOSPC no space left on device
+        @retval E_NXIO no such device or address
+        @retval E_IO on I/O errors
+        @retval E_NOSYS function not implemented
 
         @see get()
         @see Directory::getNextItem()
         @see FileStatus
     */
 
-    inline RC getFileStatus( FileStatus& rStatus )
+    RC getFileStatus( FileStatus& rStatus )
     {
         return static_cast< RC >( osl_getFileStatus( _pData, &rStatus._aStatus, rStatus._nMask ) );
     }
@@ -1584,15 +1574,14 @@ public:
     @param[in]  pOther
     A directory handle to compare with the underlying object's item
 
-    @return
-    true: if the items point to an identical resource<br>
-    false: if the items point to a different resource, or a fatal error occurred<br>
+    @retval true if the items point to an identical resource<br>
+    @retval false if the items point to a different resource, or a fatal error occurred<br>
 
     @see osl_getDirectoryItem()
 
     @since LibreOffice 3.6
 */
-    inline bool isIdenticalTo( const DirectoryItem &pOther )
+    bool isIdenticalTo( const DirectoryItem &pOther )
     {
         return osl_identicalDirectoryItem( _pData, pOther._pData );
     }
@@ -1633,7 +1622,7 @@ public:
 // private use.
 extern "C" inline void SAL_CALL onDirectoryCreated(void* pData, rtl_uString* aDirectoryUrl)
 {
-    (static_cast<DirectoryCreationObserver*>(pData))->DirectoryCreated(aDirectoryUrl);
+    static_cast<DirectoryCreationObserver*>(pData)->DirectoryCreated(aDirectoryUrl);
 }
 
 /** The directory class object provides a enumeration of DirectoryItems.
@@ -1661,7 +1650,7 @@ public:
 
     /** Constructor.
 
-        @param strPath [in]
+        @param[in] strPath
         The full qualified URL of the directory.
         Relative URLs are not allowed.
      */
@@ -1685,27 +1674,26 @@ public:
 
         @since LibreOffice 4.1
     */
-    inline rtl::OUString getURL() const { return _aPath; }
+    rtl::OUString getURL() const { return _aPath; }
 
     /** Open a directory for enumerating its contents.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOENT the specified path doesn't exist
-        E_NOTDIR the specified path is not an directory
-        E_NOMEM not enough memory for allocating structures
-        E_ACCES permission denied
-        E_MFILE too many open files used by the process
-        E_NFILE too many open files in the system
-        E_NAMETOOLONG File name too long
-        E_LOOP Too many symbolic links encountered
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOENT the specified path doesn't exist
+        @retval E_NOTDIR the specified path is not an directory
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_MFILE too many open files used by the process
+        @retval E_NFILE too many open files in the system
+        @retval E_NAMETOOLONG File name too long
+        @retval E_LOOP Too many symbolic links encountered
 
         @see getNextItem()
         @see close()
     */
 
-    inline RC open()
+    RC open()
     {
         return static_cast< RC >( osl_openDirectory( _aPath.pData, &_pData ) );
     }
@@ -1714,28 +1702,26 @@ public:
 
         Query if directory is open and so item enumeration is valid.
 
-        @return
-        true if the directory is open else false.
+        @retval true if the directory is open else false.
 
         @see open()
         @see close()
     */
 
-    inline bool isOpen() { return _pData != NULL; }
+    bool isOpen() { return _pData != NULL; }
 
     /** Close a directory.
 
-         @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_BADF invalid oslDirectory parameter
-        E_INTR the function call was interrupted
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_BADF invalid oslDirectory parameter
+        @retval E_INTR the function call was interrupted
 
         @see open()
     */
 
-    inline RC close()
+    RC close()
     {
         oslFileError Error = osl_File_E_BADF;
 
@@ -1751,22 +1737,21 @@ public:
 
     /** Resets the directory item enumeration to the beginning.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOENT the specified path doesn't exist
-        E_NOTDIR the specified path is not an directory
-        E_NOMEM not enough memory for allocating structures
-        E_ACCES permission denied
-        E_MFILE too many open files used by the process
-        E_NFILE too many open files in the system
-        E_NAMETOOLONG File name too long
-        E_LOOP Too many symbolic links encountered
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOENT the specified path doesn't exist
+        @retval E_NOTDIR the specified path is not an directory
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_ACCES permission denied
+        @retval E_MFILE too many open files used by the process
+        @retval E_NFILE too many open files in the system
+        @retval E_NAMETOOLONG File name too long
+        @retval E_LOOP Too many symbolic links encountered
 
         @see open()
     */
 
-    inline RC reset()
+    RC reset()
     {
         close();
         return open();
@@ -1776,33 +1761,32 @@ public:
 
         Retrieves the next item of a previously opened directory.
 
-        @param  rItem [out]
+        @param[out] rItem
         On success a valid DirectoryItem.
 
-        @param  nHint [in]
+        @param[in]  nHint
         With this parameter the caller can tell the implementation that (s)he
         is going to call this function uHint times afterwards. This enables the implementation to
         get the information for more than one file and cache it until the next calls.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_NOENT no more entries in this directory
-        E_BADF invalid oslDirectory parameter
-        E_OVERFLOW the value too large for defined data type
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_NOENT no more entries in this directory
+        @retval E_BADF invalid oslDirectory parameter
+        @retval E_OVERFLOW the value too large for defined data type
 
         @see DirectoryItem
     */
 
-    inline RC getNextItem( DirectoryItem& rItem, sal_uInt32 nHint = 0 )
+    RC getNextItem( DirectoryItem& rItem, sal_uInt32 nHint = 0 )
     {
         if( rItem._pData )
         {
             osl_releaseDirectoryItem( rItem._pData );
             rItem._pData = NULL;
         }
-        return ( RC) osl_getNextDirectoryItem( _pData, &rItem._pData, nHint );
+        return static_cast<RC>(osl_getNextDirectoryItem( _pData, &rItem._pData, nHint ));
     }
 
 
@@ -1811,69 +1795,67 @@ public:
         Retrieves information about a volume. A volume can either be a mount point, a network
         resource or a drive depending on Operating System and File System.
 
-        @param ustrDirectoryURL [in]
+        @param[in] ustrDirectoryURL
         Full qualified URL of the volume
 
-        @param rInfo [out]
+        @param[out] rInfo
         On success it receives information about the volume.
 
-        @return
-        E_None on success
-        E_NOMEM not enough memory for allocating structures
-        E_INVAL the format of the parameters was not valid
-        E_NOTDIR not a directory
-        E_NAMETOOLONG file name too long
-        E_NOENT no such file or directory
-        E_ACCES permission denied
-        E_LOOP too many symbolic links encountered
-        E_FAULT Bad address
-        E_IO on I/O errors
-        E_NOSYS function not implemented
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
-        E_INTR function call was interrupted
+        @retval E_None on success
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOTDIR not a directory
+        @retval E_NAMETOOLONG file name too long
+        @retval E_NOENT no such file or directory
+        @retval E_ACCES permission denied
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_FAULT Bad address
+        @retval E_IO on I/O errors
+        @retval E_NOSYS function not implemented
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
+        @retval E_INTR function call was interrupted
 
         @see FileStatus
         @see VolumeInfo
     */
 
-    inline static RC getVolumeInfo( const ::rtl::OUString& ustrDirectoryURL, VolumeInfo& rInfo )
+    static RC getVolumeInfo( const ::rtl::OUString& ustrDirectoryURL, VolumeInfo& rInfo )
     {
         return static_cast< RC >( osl_getVolumeInformation( ustrDirectoryURL.pData, &rInfo._aInfo, rInfo._nMask ) );
     }
 
     /** Create a directory.
 
-        @param ustrDirectoryURL [in]
+        @param[in] ustrDirectoryURL
         Full qualified URL of the directory to create.
 
-        @param flags [in]
+        @param[in] flags
         Optional flags, see osl_createDirectoryWithFlags for details.  This
         defaulted parameter is new since LibreOffice 4.3.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_EXIST file exists
-        E_ACCES permission denied
-        E_NAMETOOLONG file name too long
-        E_NOENT no such file or directory
-        E_NOTDIR not a directory
-        E_ROFS read-only file system
-        E_NOSPC no space left on device
-        E_DQUOT quota exceeded
-        E_LOOP too many symbolic links encountered
-        E_FAULT bad address
-        E_IO on I/O errors
-        E_MLINK too many links
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_EXIST file exists
+        @retval E_ACCES permission denied
+        @retval E_NAMETOOLONG file name too long
+        @retval E_NOENT no such file or directory
+        @retval E_NOTDIR not a directory
+        @retval E_ROFS read-only file system
+        @retval E_NOSPC no space left on device
+        @retval E_DQUOT quota exceeded
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_FAULT bad address
+        @retval E_IO on I/O errors
+        @retval E_MLINK too many links
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
 
         @see remove()
     */
 
-    inline static RC create(
+    static RC create(
         const ::rtl::OUString& ustrDirectoryURL,
         sal_uInt32 flags = osl_File_OpenFlag_Read | osl_File_OpenFlag_Write )
     {
@@ -1883,33 +1865,32 @@ public:
 
     /** Remove an empty directory.
 
-        @param ustrDirectoryURL [in]
+        @param[in] ustrDirectoryURL
         Full qualified URL of the directory.
 
-        @return
-        E_None on success
-        E_INVAL the format of the parameters was not valid
-        E_NOMEM not enough memory for allocating structures
-        E_PERM operation not permitted
-        E_ACCES permission denied
-        E_NOENT no such file or directory
-        E_NOTDIR not a directory
-        E_NOTEMPTY directory not empty
-        E_FAULT bad address
-        E_NAMETOOLONG file name too long
-        E_BUSY device or resource busy
-        E_ROFS read-only file system
-        E_LOOP too many symbolic links encountered
-        E_BUSY device or resource busy
-        E_EXIST file exists
-        E_IO on I/O errors
-        E_MULTIHOP multihop attempted
-        E_NOLINK link has been severed
+        @retval E_None on success
+        @retval E_INVAL the format of the parameters was not valid
+        @retval E_NOMEM not enough memory for allocating structures
+        @retval E_PERM operation not permitted
+        @retval E_ACCES permission denied
+        @retval E_NOENT no such file or directory
+        @retval E_NOTDIR not a directory
+        @retval E_NOTEMPTY directory not empty
+        @retval E_FAULT bad address
+        @retval E_NAMETOOLONG file name too long
+        @retval E_BUSY device or resource busy
+        @retval E_ROFS read-only file system
+        @retval E_LOOP too many symbolic links encountered
+        @retval E_BUSY device or resource busy
+        @retval E_EXIST file exists
+        @retval E_IO on I/O errors
+        @retval E_MULTIHOP multihop attempted
+        @retval E_NOLINK link has been severed
 
         @see create()
     */
 
-    inline static RC remove( const ::rtl::OUString& ustrDirectoryURL )
+    static RC remove( const ::rtl::OUString& ustrDirectoryURL )
     {
         return static_cast< RC >( osl_removeDirectory( ustrDirectoryURL.pData ) );
     }
@@ -1918,9 +1899,10 @@ public:
 
         The osl_createDirectoryPath function creates a specified directory path.
         All nonexisting sub directories will be created.
-        <p><strong>PLEASE NOTE:</strong> You cannot rely on getting the error code
-        E_EXIST for existing directories. Programming against this error code is
-        in general a strong indication of a wrong usage of osl_createDirectoryPath.</p>
+
+        @attention You cannot rely on getting the error code E_EXIST for existing
+        directories. Programming against this error code is in general a strong
+        indication of a wrong usage of osl_createDirectoryPath.
 
         @param aDirectoryUrl
         [in] The absolute file URL of the directory path to create.
@@ -1931,37 +1913,20 @@ public:
         be informed about the creation of a directory. The value of this
         parameter may be NULL, in this case notifications will not be sent.
 
-        @return
-        <dl>
-        <dt>E_None</dt>
-        <dd>On success</dd>
-        <dt>E_INVAL</dt>
-        <dd>The format of the parameters was not valid</dd>
-        <dt>E_ACCES</dt>
-        <dd>Permission denied</dd>
-        <dt>E_EXIST</dt>
-        <dd>The final node of the specified directory path already exist</dd>
-        <dt>E_NAMETOOLONG</dt>
-        <dd>The name of the specified directory path exceeds the maximum allowed length</dd>
-        <dt>E_NOTDIR</dt>
-        <dd>A component of the specified directory path already exist as file in any part of the directory path</dd>
-        <dt>E_ROFS</dt>
-        <dd>Read-only file system</dd>
-        <dt>E_NOSPC</dt>
-        <dd>No space left on device</dd>
-        <dt>E_DQUOT</dt>
-        <dd>Quota exceeded</dd>
-        <dt>E_FAULT</dt>
-        <dd>Bad address</dd>
-        <dt>E_IO</dt>
-        <dd>I/O error</dd>
-        <dt>E_LOOP</dt>
-        <dd>Too many symbolic links encountered</dd>
-        <dt>E_NOLINK</dt>
-        <dd>Link has been severed</dd>
-        <dt>E_invalidError</dt>
-        <dd>An unknown error occurred</dd>
-        </dl>
+        @retval E_None On success
+        @retval E_INVAL The format of the parameters was not valid
+        @retval E_ACCES Permission denied
+        @retval E_EXIST The final node of the specified directory path already exist
+        @retval E_NAMETOOLONG The name of the specified directory path exceeds the maximum allowed length
+        @retval E_NOTDIR A component of the specified directory path already exist as file in any part of the directory path
+        @retval E_ROFS Read-only file system
+        @retval E_NOSPC No space left on device
+        @retval E_DQUOT Quota exceeded
+        @retval E_FAULT Bad address
+        @retval E_IO I/O error
+        @retval E_LOOP Too many symbolic links encountered
+        @retval E_NOLINK Link has been severed
+        @retval E_invalidError An unknown error occurred
 
         @see DirectoryCreationObserver
         @see create
@@ -1972,7 +1937,7 @@ public:
     {
         return static_cast< RC >(osl_createDirectoryPath(
             aDirectoryUrl.pData,
-            (aDirectoryCreationObserver) ? onDirectoryCreated : NULL,
+            aDirectoryCreationObserver ? onDirectoryCreated : NULL,
             aDirectoryCreationObserver));
     }
 };

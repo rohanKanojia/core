@@ -19,14 +19,21 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_VSERIESPLOTTER_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_VSERIESPLOTTER_HXX
 
+#include <memory>
 #include "PlotterBase.hxx"
 #include "VDataSeries.hxx"
 #include "LabelAlignment.hxx"
 #include "MinimumAndMaximumSupplier.hxx"
 #include "LegendEntryProvider.hxx"
-#include "ExplicitCategoriesProvider.hxx"
-#include <com/sun/star/chart2/XChartType.hpp>
 #include <com/sun/star/drawing/Direction3D.hpp>
+
+namespace com { namespace sun { namespace star { namespace awt { struct Point; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartType; } } } }
+
+
+namespace chart { class ExplicitCategoriesProvider; }
+namespace chart { struct ExplicitScaleData; }
+namespace chart { class ChartModel; }
 
 namespace com { namespace sun { namespace star {
     namespace util {
@@ -76,11 +83,12 @@ private:
 class VDataSeriesGroup final
 {
 public:
-    VDataSeriesGroup();
-    VDataSeriesGroup( VDataSeries* pSeries );
+    VDataSeriesGroup() = delete;
+    VDataSeriesGroup( std::unique_ptr<VDataSeries> pSeries );
+    VDataSeriesGroup( VDataSeriesGroup&& );
     ~VDataSeriesGroup();
 
-    void addSeries( VDataSeries* pSeries );//takes ownership of pSeries
+    void addSeries( std::unique_ptr<VDataSeries> pSeries );//takes ownership of pSeries
     sal_Int32 getSeriesCount() const;
     void deleteSeries();
 
@@ -97,7 +105,7 @@ public:
                                                 , bool bSeparateStackingForDifferentSigns
                                                 , double& rfMinimumY, double& rfMaximumY, sal_Int32 nAxisIndex );
 
-    ::std::vector< VDataSeries* >   m_aSeriesVector;
+    std::vector< std::unique_ptr<VDataSeries> >   m_aSeriesVector;
 
 private:
     //cached values
@@ -113,7 +121,7 @@ private:
     mutable bool        m_bMaxPointCountDirty;
     mutable sal_Int32   m_nMaxPointCount;
     typedef std::map< sal_Int32, CachedYValues > tCachedYValuesPerAxisIndexMap;
-    mutable ::std::vector< tCachedYValuesPerAxisIndexMap >   m_aListOfCachedYValues;
+    mutable std::vector< tCachedYValuesPerAxisIndexMap >   m_aListOfCachedYValues;
 };
 
 class VSeriesPlotter : public PlotterBase, public MinimumAndMaximumSupplier, public LegendEntryProvider
@@ -121,9 +129,9 @@ class VSeriesPlotter : public PlotterBase, public MinimumAndMaximumSupplier, pub
 public:
     VSeriesPlotter() = delete;
 
-    virtual ~VSeriesPlotter();
+    virtual ~VSeriesPlotter() override;
 
-    /*
+    /**
     * A new series can be positioned relative to other series in a chart.
     * This positioning has two dimensions. First a series can be placed
     * next to each other on the category axis. This position is indicated by xSlot.
@@ -138,7 +146,7 @@ public:
     * ySlot == already occupied     : insert at given y and x position
     * ySlot > occupied              : stack on top at given x position
     */
-    virtual void addSeries( VDataSeries* pSeries, sal_Int32 zSlot = -1, sal_Int32 xSlot = -1,sal_Int32 ySlot = -1 );
+    virtual void addSeries( std::unique_ptr<VDataSeries> pSeries, sal_Int32 zSlot, sal_Int32 xSlot, sal_Int32 ySlot );
 
     /** a value <= 0 for a directions means that this direction can be stretched arbitrary
     */
@@ -150,12 +158,13 @@ public:
     1==AttachedAxisIndex indicates that the series should be scaled at the first secondary axis if there is any otherwise at the main y axis
     and so on.
     The parameter nAxisIndex matches this DataSeries property 'AttachedAxisIndex'.
-    nAxisIndex must be greater than 0. nAxisIndex==1 referres to the first secondary axis.
+    nAxisIndex must be greater than 0. nAxisIndex==1 refers to the first secondary axis.
     )
+
+    @throws css::uno::RuntimeException
     */
 
-    void addSecondaryValueScale( const ExplicitScaleData& rScale, sal_Int32 nAxisIndex )
-                throw (css::uno::RuntimeException);
+    void addSecondaryValueScale( const ExplicitScaleData& rScale, sal_Int32 nAxisIndex );
 
     // MinimumAndMaximumSupplier
 
@@ -189,13 +198,14 @@ public:
             const css::uno::Reference< css::beans::XPropertySet >& xTextProperties,
             const css::uno::Reference< css::drawing::XShapes >& xTarget,
             const css::uno::Reference< css::lang::XMultiServiceFactory >& xShapeFactory,
-            const css::uno::Reference< css::uno::XComponentContext >& xContext
+            const css::uno::Reference< css::uno::XComponentContext >& xContext,
+            ChartModel& rModel
                 ) override;
 
     virtual LegendSymbolStyle getLegendSymbolStyle();
     virtual css::awt::Size getPreferredLegendKeyAspectRatio() override;
 
-    virtual css::uno::Any getExplicitSymbol( const VDataSeries& rSeries, sal_Int32 nPointIndex=-1/*-1 for series symbol*/ );
+    virtual css::uno::Any getExplicitSymbol( const VDataSeries& rSeries, sal_Int32 nPointIndex/*-1 for series symbol*/ );
 
     css::uno::Reference< css::drawing::XShape > createLegendSymbolForSeries(
                   const css::awt::Size& rEntryKeyAspectRatio
@@ -219,12 +229,12 @@ public:
             const css::uno::Reference< css::uno::XComponentContext >& xContext
                 );
 
-    ::std::vector< VDataSeries* > getAllSeries();
+    std::vector< VDataSeries* > getAllSeries();
 
     // This method creates a series plotter of the requested type; e.g. : return new PieChart ....
     static VSeriesPlotter* createSeriesPlotter( const css::uno::Reference< css::chart2::XChartType >& xChartTypeModel
                                 , sal_Int32 nDimensionCount
-                                , bool bExcludingPositioning = false /*for pie and donut charts labels and exploded segments are excluded from the given size*/);
+                                , bool bExcludingPositioning /*for pie and donut charts labels and exploded segments are excluded from the given size*/);
 
     sal_Int32 getPointCount() const;
 
@@ -319,13 +329,13 @@ protected:
                 , double fValue
                 , double fSumValue
                 , const css::awt::Point& rScreenPosition2D
-                , LabelAlignment eAlignment=LABEL_ALIGN_CENTER
+                , LabelAlignment eAlignment
                 , sal_Int32 nOffset=0
                 , sal_Int32 nTextWidth = 0 );
 
     /// This method returns a text string representation of the passed numeric
     /// value by exploiting a NumberFormatterWrapper object.
-    OUString getLabelTextForValue( VDataSeries& rDataSeries
+    OUString getLabelTextForValue( VDataSeries const & rDataSeries
                 , sal_Int32 nPointIndex
                 , double fValue
                 , bool bAsPercentage );
@@ -354,7 +364,7 @@ protected:
         , const VDataSeries& rVDataSeries
         , sal_Int32 nIndex
         , bool bVertical
-        , double* pfScaledLogicX
+        , const double* pfScaledLogicX
         );
 
     void createErrorBar_X( const css::drawing::Position3D& rUnscaledLogicPosition
@@ -364,9 +374,9 @@ protected:
     void createErrorBar_Y( const css::drawing::Position3D& rUnscaledLogicPosition
         , VDataSeries& rVDataSeries, sal_Int32 nPointIndex
         , const css::uno::Reference< css::drawing::XShapes >& xTarget
-        , double* pfScaledLogicX=nullptr );
+        , double const * pfScaledLogicX );
 
-    void createRegressionCurvesShapes( VDataSeries& rVDataSeries
+    void createRegressionCurvesShapes( VDataSeries const & rVDataSeries
         , const css::uno::Reference< css::drawing::XShapes >& xTarget
         , const css::uno::Reference< css::drawing::XShapes >& xEquationTarget
         , bool bMaySkipPointsInRegressionCalculation );
@@ -381,11 +391,13 @@ protected:
           const css::uno::Reference< css::drawing::XShape >& xTarget
         , const css::uno::Reference< css::beans::XPropertySet >& xSource
         , const tPropertyNameMap& rMap
-        , tPropertyNameValueMap* pOverwriteMap=nullptr );
+        , tPropertyNameValueMap const * pOverwriteMap=nullptr );
 
     virtual PlottingPositionHelper& getPlottingPositionHelper( sal_Int32 nAxisIndex ) const;//nAxisIndex indicates whether the position belongs to the main axis ( nAxisIndex==0 ) or secondary axis ( nAxisIndex==1 )
 
     VDataSeries* getFirstSeries() const;
+
+    OUString getCategoryName( sal_Int32 nPointIndex ) const;
 
 protected:
     PlottingPositionHelper*    m_pMainPosHelper;
@@ -393,7 +405,7 @@ protected:
     css::uno::Reference< css::chart2::XChartType >    m_xChartTypeModel;
     css::uno::Reference< css::beans::XPropertySet >   m_xChartTypeModelProps;
 
-    ::std::vector< ::std::vector< VDataSeriesGroup > >  m_aZSlots;
+    std::vector< std::vector< VDataSeriesGroup > >  m_aZSlots;
 
     bool                                m_bCategoryXAxis;//true->xvalues are indices (this would not be necessary if series for category chart wouldn't have x-values)
     long m_nTimeResolution;
@@ -414,7 +426,7 @@ private:
     typedef std::map< sal_Int32 , ExplicitScaleData > tSecondaryValueScales;
     tSecondaryValueScales   m_aSecondaryValueScales;
 
-    typedef std::map< sal_Int32 , PlottingPositionHelper* > tSecondaryPosHelperMap;
+    typedef std::map< sal_Int32 , std::unique_ptr<PlottingPositionHelper> > tSecondaryPosHelperMap;
     mutable tSecondaryPosHelperMap   m_aSecondaryPosHelperMap;
     css::awt::Size      m_aPageReferenceSize;
 };

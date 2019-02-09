@@ -39,13 +39,13 @@ import com.sun.star.frame.UnknownModuleException;
 * <ul>
 *  <li> <code>'XModuleManager.XFrame'</code> (of type <code>PropertyValue[]</code>):
 *  PropertyValue[n].Value : a XFrame
-*  PropertyValue[n].Name : the expected return value of <code>idendify()</code></li>
+*  PropertyValue[n].Name : the expected return value of <code>identify()</code></li>
 *  <li> <code>'XModuleManager.XController'</code> (of type <code>PropertyValue[]</code>):
 *  PropertyValue[n].Value : a XController
-*  PropertyValue[n].Name : the expected return value of <code>idendify()</code></li>
+*  PropertyValue[n].Name : the expected return value of <code>identify()</code></li>
 *  <li> <code>'XModuleManager.XModel'</code> (of type <code>PropertyValue[]</code>):
 *  PropertyValue[n].Value : a XFrame
-*  PropertyValue[n].Name : the expected return value of <code>idendify()</code></li>
+*  PropertyValue[n].Name : the expected return value of <code>identify()</code></li>
 * </ul> <p>
 * Test is <b> NOT </b> multithread compliant. <p>
 * @see com.sun.star.frame.XModuleManager
@@ -54,13 +54,13 @@ public class _XModuleManager extends MultiMethodTest {
     /** Test calls the method. <p>
      * The onject relations <CODE>XModuleManager.XFrame</CODE>,
      * <CODE>XModuleManager.XController</CODE> and <CODE>XModuleManager.XModel</CODE>
-     * are sequenzes of <CODE>PropertyValue</CODE>. The value of a PropertyValue
+     * are sequences of <CODE>PropertyValue</CODE>. The value of a PropertyValue
      * contains a <CODE>XFrame</CODE>, <CODE>XController</CODE> or a
      * <CODE>XModel</CODE>. The name of the PropertyValue contains the expected return
      * value of method <CODE>indetify()</CODE> if the method was called with
-     * coresponding value.<p>
+     * corresponding value.<p>
      * As enhancement the method <CODE>identify()</CODE> was called with invalid
-     * parameter. In this case the thrown exceptions was catched.
+     * parameter. In this case the thrown exceptions were caught.
      */
     public XModuleManager oObj = null;
     /**

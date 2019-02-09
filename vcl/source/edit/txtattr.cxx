@@ -34,23 +34,14 @@ TextAttribFontColor::TextAttribFontColor( const Color& rColor )
 {
 }
 
-TextAttribFontColor::TextAttribFontColor( const TextAttribFontColor& rAttr )
-    : TextAttrib( rAttr ), maColor( rAttr.maColor )
-{
-}
-
-TextAttribFontColor::~TextAttribFontColor()
-{
-}
-
 void TextAttribFontColor::SetFont( vcl::Font& rFont ) const
 {
     rFont.SetColor( maColor );
 }
 
-TextAttrib* TextAttribFontColor::Clone() const
+std::unique_ptr<TextAttrib> TextAttribFontColor::Clone() const
 {
-    return new TextAttribFontColor( *this );
+    return std::unique_ptr<TextAttrib>(new TextAttribFontColor( *this ));
 }
 
 bool TextAttribFontColor::operator==( const TextAttrib& rAttr ) const
@@ -64,23 +55,14 @@ TextAttribFontWeight::TextAttribFontWeight( FontWeight eWeight )
 {
 }
 
-TextAttribFontWeight::TextAttribFontWeight( const TextAttribFontWeight& rAttr )
-    : TextAttrib( rAttr ), meWeight( rAttr.meWeight )
-{
-}
-
-TextAttribFontWeight::~TextAttribFontWeight()
-{
-}
-
 void TextAttribFontWeight::SetFont( vcl::Font& rFont ) const
 {
     rFont.SetWeight( meWeight );
 }
 
-TextAttrib* TextAttribFontWeight::Clone() const
+std::unique_ptr<TextAttrib> TextAttribFontWeight::Clone() const
 {
-    return new TextAttribFontWeight( *this );
+    return std::unique_ptr<TextAttrib>(new TextAttribFontWeight( *this ));
 }
 
 bool TextAttribFontWeight::operator==( const TextAttrib& rAttr ) const
@@ -89,46 +71,8 @@ bool TextAttribFontWeight::operator==( const TextAttrib& rAttr ) const
                 ( meWeight == static_cast<const TextAttribFontWeight&>(rAttr).meWeight ) );
 }
 
-TextAttribHyperLink::TextAttribHyperLink( const TextAttribHyperLink& rAttr )
-    : TextAttrib( rAttr ), maURL( rAttr.maURL ), maDescription( rAttr.maDescription )
-{
-    maColor = rAttr.maColor;
-}
-
-TextAttribHyperLink::~TextAttribHyperLink()
-{
-}
-
-void TextAttribHyperLink::SetFont( vcl::Font& rFont ) const
-{
-    rFont.SetColor( maColor );
-    rFont.SetUnderline( LINESTYLE_SINGLE );
-}
-
-TextAttrib* TextAttribHyperLink::Clone() const
-{
-    return new TextAttribHyperLink( *this );
-}
-
-bool TextAttribHyperLink::operator==( const TextAttrib& rAttr ) const
-{
-    return ( ( TextAttrib::operator==(rAttr ) ) &&
-                ( maURL == static_cast<const TextAttribHyperLink&>(rAttr).maURL ) &&
-                ( maDescription == static_cast<const TextAttribHyperLink&>(rAttr).maDescription ) &&
-                ( maColor == static_cast<const TextAttribHyperLink&>(rAttr).maColor ) );
-}
-
 TextAttribProtect::TextAttribProtect() :
     TextAttrib( TEXTATTR_PROTECTED )
-{
-}
-
-TextAttribProtect::TextAttribProtect( const TextAttribProtect&) :
-    TextAttrib( TEXTATTR_PROTECTED )
-{
-}
-
-TextAttribProtect::~TextAttribProtect()
 {
 }
 
@@ -136,14 +80,14 @@ void TextAttribProtect::SetFont( vcl::Font& ) const
 {
 }
 
-TextAttrib*     TextAttribProtect::Clone() const
+std::unique_ptr<TextAttrib> TextAttribProtect::Clone() const
 {
-    return new TextAttribProtect();
+    return std::unique_ptr<TextAttrib>(new TextAttribProtect());
 }
 
 bool TextAttribProtect::operator==( const TextAttrib& rAttr ) const
 {
-    return ( TextAttrib::operator==(rAttr ) );
+    return TextAttrib::operator==(rAttr );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

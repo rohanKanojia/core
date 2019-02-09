@@ -26,7 +26,6 @@
 #include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XUriReference.hpp>
-#include <com/sun/star/uri/XUriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarPkgUrlReferenceFactory.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -54,40 +53,34 @@ public:
     Factory(const Factory&) = delete;
     Factory& operator=(const Factory&) = delete;
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName) override;
 
     virtual css::uno::Sequence< OUString > SAL_CALL
-    getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    getSupportedServiceNames() override;
 
     virtual css::uno::Reference< css::uri::XUriReference > SAL_CALL
     createVndSunStarPkgUrlReference(
-        css::uno::Reference< css::uri::XUriReference > const & authority)
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference< css::uri::XUriReference > const & authority) override;
 
 private:
-    virtual ~Factory() {}
+    virtual ~Factory() override {}
 
     css::uno::Reference< css::uno::XComponentContext > m_context;
 };
 
 OUString Factory::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("com.sun.star.comp.uri.VndSunStarPkgUrlReferenceFactory");
 }
 
 sal_Bool Factory::supportsService(OUString const & serviceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, serviceName);
 }
 
 css::uno::Sequence< OUString > Factory::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     css::uno::Sequence< OUString > s { "com.sun.star.uri.VndSunStarPkgUrlReferenceFactory" };
     return s;
@@ -96,7 +89,6 @@ css::uno::Sequence< OUString > Factory::getSupportedServiceNames()
 css::uno::Reference< css::uri::XUriReference >
 Factory::createVndSunStarPkgUrlReference(
     css::uno::Reference< css::uri::XUriReference > const & authority)
-    throw (css::uno::RuntimeException, std::exception)
 {
     OSL_ASSERT(authority.is());
     if (authority->isAbsolute() && !authority->hasFragment()) {
@@ -118,7 +110,7 @@ Factory::createVndSunStarPkgUrlReference(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_uri_VndSunStarPkgUrlReferenceFactory_get_implementation(css::uno::XComponentContext* rxContext,
         css::uno::Sequence<css::uno::Any> const &)
 {

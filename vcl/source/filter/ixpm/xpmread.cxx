@@ -18,15 +18,19 @@
  */
 
 #include <vcl/bitmapaccess.hxx>
+#include <bitmapwriteaccess.hxx>
 #include <vcl/graph.hxx>
+#include <tools/stream.hxx>
 #include "rgbtable.hxx"
 #include "xpmread.hxx"
 #include <cstring>
+#include <array>
+#include <map>
 
 #define XPMTEMPBUFSIZE      0x00008000
 #define XPMSTRINGBUF        0x00008000
 
-#define XPMIDENTIFIER       0x00000001          // mnIdentifier includes on of the six phases
+#define XPMIDENTIFIER       0x00000001          // mnIdentifier includes one of the six phases
 #define XPMDEFINITION       0x00000002          // the XPM format consists of
 #define XPMVALUES           0x00000003
 #define XPMCOLORS           0x00000004
@@ -38,9 +42,6 @@
 #define XPMDOUBLE           0x00000002
 #define XPMSTRING           0x00000004
 #define XPMFINISHED         0x00000008
-
-#define XPMCASESENSITIVE    0x00000001
-#define XPMCASENONSENSITIVE 0x00000002
 
 enum ReadState
 {
@@ -56,17 +57,17 @@ class XPMReader : public GraphicReader
 {
 private:
 
-    SvStream&           mrIStm;
-    Bitmap              maBmp;
-    BitmapWriteAccess*  mpAcc;
-    Bitmap              maMaskBmp;
-    BitmapWriteAccess*  mpMaskAcc;
-    long                mnLastPos;
+    SvStream&                   mrIStm;
+    Bitmap                      maBmp;
+    BitmapScopedWriteAccess     mpAcc;
+    Bitmap                      maMaskBmp;
+    BitmapScopedWriteAccess     mpMaskAcc;
+    long const                  mnLastPos;
 
     sal_uLong               mnWidth;
     sal_uLong               mnHeight;
     sal_uLong               mnColors;
-    sal_uLong               mnCpp;                              // characters per pix
+    sal_uInt32              mnCpp;                              // characters per pix
     bool                mbTransparent;
     bool                mbStatus;
     sal_uLong               mnStatus;
@@ -76,34 +77,36 @@ private:
     sal_uLong               mnTempAvail;
     sal_uInt8*              mpTempBuf;
     sal_uInt8*              mpTempPtr;
-    sal_uInt8*              mpFastColorTable;
-    sal_uInt8*              mpColMap;
+    // each key is ( mnCpp )Byte(s)-> ASCII entry assigned to the colour
+    // each colordata is
+    // 1 Byte   -> 0xFF if colour is transparent
+    // 3 Bytes  -> RGB value of the colour
+    typedef std::array<sal_uInt8,4> colordata;
+    typedef std::map<OString, colordata> colormap;
+    colormap                maColMap;
     sal_uLong               mnStringSize;
     sal_uInt8*              mpStringBuf;
     sal_uLong               mnParaSize;
     sal_uInt8*              mpPara;
 
     bool                    ImplGetString();
-    bool                    ImplGetColor( sal_uLong );
+    bool                    ImplGetColor();
     bool                    ImplGetScanLine( sal_uLong );
-    bool                    ImplGetColSub( sal_uInt8* );
+    bool                    ImplGetColSub(colordata &rDest);
     bool                    ImplGetColKey( sal_uInt8 );
-    void                    ImplGetRGBHex( sal_uInt8*, sal_uLong );
+    void                    ImplGetRGBHex(colordata &rDest, sal_uLong);
     bool                    ImplGetPara( sal_uLong numb );
-    static bool             ImplCompare( sal_uInt8 const *, sal_uInt8 const *, sal_uLong, sal_uLong nmode = XPMCASENONSENSITIVE );
+    static bool             ImplCompare(sal_uInt8 const *, sal_uInt8 const *, sal_uLong);
     sal_uLong               ImplGetULONG( sal_uLong nPara );
 
 public:
     explicit            XPMReader( SvStream& rStm );
-    virtual             ~XPMReader();
 
     ReadState           ReadXPM( Graphic& rGraphic );
 };
 
 XPMReader::XPMReader(SvStream& rStm)
     : mrIStm(rStm)
-    , mpAcc(nullptr)
-    , mpMaskAcc(nullptr)
     , mnLastPos(rStm.Tell())
     , mnWidth(0)
     , mnHeight(0)
@@ -118,19 +121,11 @@ XPMReader::XPMReader(SvStream& rStm)
     , mnTempAvail(0)
     , mpTempBuf(nullptr)
     , mpTempPtr(nullptr)
-    , mpFastColorTable(nullptr)
-    , mpColMap(nullptr)
     , mnStringSize(0)
     , mpStringBuf(nullptr)
     , mnParaSize(0)
     , mpPara(nullptr)
 {
-}
-
-XPMReader::~XPMReader()
-{
-    if( mpAcc )
-        Bitmap::ReleaseAccess( mpAcc );
 }
 
 ReadState XPMReader::ReadXPM( Graphic& rGraphic )
@@ -154,7 +149,8 @@ ReadState XPMReader::ReadXPM( Graphic& rGraphic )
             mpStringBuf = new sal_uInt8 [ XPMSTRINGBUF ];
             mpTempBuf = new sal_uInt8 [ XPMTEMPBUFSIZE ];
 
-            if ( ( mbStatus = ImplGetString() ) )
+            mbStatus = ImplGetString();
+            if ( mbStatus )
             {
                 mnIdentifier = XPMVALUES;           // fetch Bitmap information
                 mnWidth = ImplGetULONG( 0 );
@@ -166,18 +162,17 @@ ReadState XPMReader::ReadXPM( Graphic& rGraphic )
                 mbStatus = false;
             if ( ( mnWidth * mnCpp ) >= XPMSTRINGBUF )
                 mbStatus = false;
+            //xpms are a minimum of one character (one byte) per pixel, so if the file isn't
+            //even that long, it's not all there
+            if (mrIStm.remainingSize() + mnTempAvail < static_cast<sal_uInt64>(mnWidth) * mnHeight)
+                mbStatus = false;
             if ( mbStatus && mnWidth && mnHeight && mnColors && mnCpp )
             {
                 mnIdentifier = XPMCOLORS;
 
-                // mpColMap constitutes for all available
-                // colour:   ( mnCpp )Byte(s)-> ASCII entry assigned to the colour
-                //              1    Byte   -> 0xFF if colour is transparent
-                //              3    Bytes  -> RGB value of the colour
-                mpColMap = new sal_uInt8[ mnColors * ( 4 + mnCpp ) ];
-                for ( sal_uLong i = 0; i < mnColors; i++ )
+                for (sal_uLong i = 0; i < mnColors; ++i)
                 {
-                    if ( !ImplGetColor( i ) )
+                    if (!ImplGetColor())
                     {
                         mbStatus = false;
                         break;
@@ -198,43 +193,33 @@ ReadState XPMReader::ReadXPM( Graphic& rGraphic )
                         nBits = 1;
 
                     maBmp = Bitmap( Size( mnWidth, mnHeight ), nBits );
-                    mpAcc = maBmp.AcquireWriteAccess();
+                    mpAcc = BitmapScopedWriteAccess(maBmp);
 
                     // mbTransparent is TRUE if at least one colour is transparent
                     if ( mbTransparent )
                     {
                         maMaskBmp = Bitmap( Size( mnWidth, mnHeight ), 1 );
-                        if ( ( mpMaskAcc = maMaskBmp.AcquireWriteAccess() ) == nullptr )
+                        mpMaskAcc = BitmapScopedWriteAccess(maMaskBmp);
+                        if ( !mpMaskAcc )
                             mbStatus = false;
                     }
                     if( mpAcc && mbStatus )
                     {
-                        sal_uLong   i;
-                        if ( mnColors <=256 )   // palette is only needed by using less than 257
-                        {                       // colors
-
-                            sal_uInt8*  pPtr = &mpColMap[mnCpp];
-
-                            for ( i = 0; i < mnColors; i++ )
+                        if (mnColors <= 256)  // palette is only needed by using less than 257
+                        {                     // colors
+                            sal_uInt8 i = 0;
+                            for (auto& elem : maColMap)
                             {
-                                mpAcc->SetPaletteColor( (sal_uInt8)i, Color( pPtr[1], pPtr[2], pPtr[3] ) );
-                                pPtr += ( mnCpp + 4 );
-                            }
-                            // using 2 charakters per pixel and less than 257 Colors we speed up
-                            if ( mnCpp == 2 )   // by using a 64kb indexing table
-                            {
-                                mpFastColorTable = new sal_uInt8[ 256 * 256 ];
-                                for ( pPtr = mpColMap, i = 0; i < mnColors; i++, pPtr += mnCpp + 4 )
-                                {
-                                    sal_uLong   j =  pPtr[ 0 ] << 8;
-                                            j += pPtr[ 1 ];
-                                    mpFastColorTable[ j ] = (sal_uInt8)i;
-                                }
+                                mpAcc->SetPaletteColor(i, Color(elem.second[1], elem.second[2], elem.second[3]));
+                                //reuse map entry, overwrite color with palette index
+                                elem.second[1] = i;
+                                i++;
                             }
                         }
+
                         // now we get the bitmap data
                         mnIdentifier = XPMPIXELS;
-                        for ( i = 0; i < mnHeight; i++ )
+                        for (sal_uLong i = 0; i < mnHeight; ++i)
                         {
                             if ( !ImplGetScanLine( i ) )
                             {
@@ -247,42 +232,29 @@ ReadState XPMReader::ReadXPM( Graphic& rGraphic )
                 }
             }
 
-            delete[] mpFastColorTable;
-            delete[] mpColMap;
             delete[] mpStringBuf;
             delete[] mpTempBuf;
 
         }
         if( mbStatus )
         {
+            mpAcc.reset();
             if ( mpMaskAcc )
             {
-                Bitmap::ReleaseAccess ( mpMaskAcc);
-                mpMaskAcc = nullptr;
-                Bitmap::ReleaseAccess( mpAcc );
-                mpAcc = nullptr;
+                mpMaskAcc.reset();
                 rGraphic = Graphic( BitmapEx( maBmp, maMaskBmp ) );
             }
             else
             {
-                Bitmap::ReleaseAccess( mpAcc );
-                mpAcc = nullptr;
                 rGraphic = maBmp;
             }
             eReadState = XPMREAD_OK;
         }
         else
         {
-            if ( mpMaskAcc )
-            {
-                Bitmap::ReleaseAccess ( mpMaskAcc);
-                mpMaskAcc = nullptr;
-            }
-            if ( mpAcc )
-            {
-                Bitmap::ReleaseAccess( mpAcc );
-                mpAcc = nullptr;
-            }
+            mpMaskAcc.reset();
+            mpAcc.reset();
+
             eReadState = XPMREAD_ERROR;
         }
     }
@@ -296,30 +268,31 @@ ReadState XPMReader::ReadXPM( Graphic& rGraphic )
 
 // ImplGetColor returns various colour values,
 // returns TRUE if various colours could be assigned
-
-bool XPMReader::ImplGetColor( sal_uLong nNumb )
+bool XPMReader::ImplGetColor()
 {
     sal_uInt8*  pString = mpStringBuf;
-    sal_uInt8*  pPtr =  ( mpColMap + nNumb * ( 4 + mnCpp ) );
-    bool    bStatus = ImplGetString();
+    if (!ImplGetString())
+        return false;
 
-    if ( bStatus )
+    if (mnStringSize < mnCpp)
+        return false;
+
+    OString aKey(reinterpret_cast<sal_Char*>(pString), mnCpp);
+    colordata aValue;
+    bool bStatus = ImplGetColSub(aValue);
+    if (bStatus)
     {
-        for ( sal_uLong i = 0; i < mnCpp; i++ )
-            *pPtr++ = *pString++;
-        bStatus = ImplGetColSub ( pPtr );
+        maColMap[aKey] = aValue;
     }
     return bStatus;
 }
 
 // ImpGetScanLine reads the string mpBufSize and writes the pixel in the
 // Bitmap. Parameter nY is the horizontal position.
-
 bool XPMReader::ImplGetScanLine( sal_uLong nY )
 {
     bool    bStatus = ImplGetString();
     sal_uInt8*  pString = mpStringBuf;
-    sal_uInt8*  pColor;
     BitmapColor     aWhite;
     BitmapColor     aBlack;
 
@@ -327,51 +300,30 @@ bool XPMReader::ImplGetScanLine( sal_uLong nY )
     {
         if ( mpMaskAcc )
         {
-            aWhite = mpMaskAcc->GetBestMatchingColor( Color( COL_WHITE ) );
-            aBlack = mpMaskAcc->GetBestMatchingColor( Color( COL_BLACK ) );
+            aWhite = mpMaskAcc->GetBestMatchingColor( COL_WHITE );
+            aBlack = mpMaskAcc->GetBestMatchingColor( COL_BLACK );
         }
         if ( mnStringSize != ( mnWidth * mnCpp ))
             bStatus = false;
         else
         {
-            sal_uLong i, j;
-            if ( mpFastColorTable )
+            Scanline pScanline = mpAcc->GetScanline(nY);
+            Scanline pMaskScanline = mpMaskAcc ? mpMaskAcc->GetScanline(nY) : nullptr;
+            for (sal_uLong i = 0; i < mnWidth; ++i)
             {
-                for ( i = 0; i < mnWidth; i++ )
+                OString aKey(reinterpret_cast<sal_Char*>(pString), mnCpp);
+                auto it = maColMap.find(aKey);
+                if (it != maColMap.end())
                 {
-                    j = (*pString++) << 8;
-                    j += *pString++;
-                    sal_uInt8 k = (sal_uInt8)mpFastColorTable[ j ];
-                    mpAcc->SetPixel( nY, i, BitmapColor( (sal_uInt8)k ) );
-
-                    if ( mpMaskAcc )
-                        mpMaskAcc->SetPixel( nY, i,
-                            ( mpColMap[ k * (mnCpp + 4) + mnCpp] ) ? aWhite : aBlack );
-                }
-            }
-            else for ( i = 0; i < mnWidth; i++ )
-            {
-                pColor = mpColMap;
-                for ( j = 0; j < mnColors; j++ )
-                {
-                    if ( ImplCompare( pString, pColor, mnCpp, XPMCASESENSITIVE ) )
-                    {
-                        if ( mnColors > 256 )
-                            mpAcc->SetPixel( nY, i, Color ( pColor[3], pColor[4], pColor[5] ) );
-                        else
-                            mpAcc->SetPixel( nY, i, BitmapColor( (sal_uInt8) j ) );
-
-                        if ( mpMaskAcc )
-                            mpMaskAcc->SetPixel( nY, i, (
-                                pColor[ mnCpp ] ) ? aWhite : aBlack );
-
-                        break;
-                    }
-                    pColor += ( mnCpp + 4 );
+                    if (mnColors > 256)
+                        mpAcc->SetPixelOnData(pScanline, i, Color(it->second[1], it->second[2], it->second[3]));
+                    else
+                        mpAcc->SetPixelOnData(pScanline, i, BitmapColor(it->second[1]));
+                    if (pMaskScanline)
+                        mpMaskAcc->SetPixelOnData(pMaskScanline, i, it->second[0] ? aWhite : aBlack);
                 }
                 pString += mnCpp;
             }
-
         }
     }
     return bStatus;
@@ -381,7 +333,7 @@ bool XPMReader::ImplGetScanLine( sal_uLong nY )
 // if a colour was found the RGB value is written a pDest[1]..pDest[2]
 // pDest[0] contains 0xFF if the colour is transparent otherwise 0
 
-bool XPMReader::ImplGetColSub( sal_uInt8* pDest )
+bool XPMReader::ImplGetColSub(colordata &rDest)
 {
     unsigned char cTransparent[] = "None";
 
@@ -390,30 +342,30 @@ bool XPMReader::ImplGetColSub( sal_uInt8* pDest )
     if ( ImplGetColKey( 'c' ) || ImplGetColKey( 'm' ) || ImplGetColKey( 'g' ) )
     {
         // hexentry for RGB or HSV color ?
-        if ( *mpPara == '#' )
+        if (*mpPara == '#')
         {
-                *pDest++ = 0;
-                bColStatus = true;
-                switch ( mnParaSize )
-                {
-                    case 25 :
-                        ImplGetRGBHex ( pDest, 6 );
-                        break;
-                    case 13 :
-                        ImplGetRGBHex ( pDest, 2 );
-                        break;
-                    case  7 :
-                        ImplGetRGBHex ( pDest, 0 );
-                        break;
-                    default:
-                        bColStatus = false;
-                        break;
-                }
+            rDest[0] = 0;
+            bColStatus = true;
+            switch ( mnParaSize )
+            {
+                case 25 :
+                    ImplGetRGBHex(rDest, 6);
+                    break;
+                case 13 :
+                    ImplGetRGBHex(rDest, 2);
+                    break;
+                case  7 :
+                    ImplGetRGBHex(rDest, 0);
+                    break;
+                default:
+                    bColStatus = false;
+                    break;
+            }
         }
         // maybe pixel is transparent
         else if ( ImplCompare( &cTransparent[0], mpPara, 4 ))
         {
-            *pDest++ = 0xff;
+            rDest[0] = 0xff;
             bColStatus = true;
             mbTransparent = true;
         }
@@ -432,10 +384,11 @@ bool XPMReader::ImplGetColSub( sal_uInt8* pDest )
                             mpPara, mnParaSize ) )
                     {
                         bColStatus = true;
-                        *pDest++ = 0;
-                        *pDest++ = pRGBTable[ i ].red;
-                        *pDest++ = pRGBTable[ i ].green;
-                        *pDest++ = pRGBTable[ i ].blue;
+                        rDest[0] = 0;
+                        rDest[1] = pRGBTable[i].red;
+                        rDest[2] = pRGBTable[i].green;
+                        rDest[3] = pRGBTable[i].blue;
+                        break;
                     }
                 }
                 i++;
@@ -451,6 +404,9 @@ bool XPMReader::ImplGetColSub( sal_uInt8* pDest )
 bool XPMReader::ImplGetColKey( sal_uInt8 nKey )
 {
     sal_uInt8 nTemp, nPrev = ' ';
+
+    if (mnStringSize < mnCpp + 1)
+        return false;
 
     mpPara = mpStringBuf + mnCpp + 1;
     mnParaSize = 0;
@@ -489,30 +445,29 @@ bool XPMReader::ImplGetColKey( sal_uInt8 nKey )
 }
 
 // ImplGetRGBHex translates the ASCII-Hexadecimalvalue belonging to mpPara
-// in a RGB value and writes this to pDest
+// in a RGB value and writes this to rDest
 // below formats should be contained in mpPara:
 // if nAdd = 0 : '#12ab12'                    -> RGB = 0x12, 0xab, 0x12
 //           2 : '#1234abcd1234'                  "      "     "     "
 //           6 : '#12345678abcdefab12345678'      "      "     "     "
 
-void XPMReader::ImplGetRGBHex( sal_uInt8* pDest,sal_uLong  nAdd )
+void XPMReader::ImplGetRGBHex(colordata &rDest, sal_uLong  nAdd)
 {
     sal_uInt8*  pPtr = mpPara+1;
-    sal_uInt8   nHex, nTemp;
 
-    for ( sal_uLong i = 0; i < 3; i++ )
+    for (sal_uLong i = 1; i < 4; ++i)
     {
-        nHex = (*pPtr++) - '0';
+        sal_uInt8 nHex = (*pPtr++) - '0';
         if ( nHex > 9 )
             nHex = ((nHex - 'A' + '0') & 7) + 10;
 
-        nTemp = (*pPtr++) - '0';
+        sal_uInt8 nTemp = (*pPtr++) - '0';
         if ( nTemp > 9 )
             nTemp = ((nTemp - 'A' + '0') & 7) + 10;
         nHex = ( nHex << 4 ) + nTemp;
 
         pPtr += nAdd;
-        *pDest++ = (sal_uInt8)nHex;
+        rDest[i] = nHex;
     }
 }
 
@@ -538,33 +493,16 @@ sal_uLong XPMReader::ImplGetULONG( sal_uLong nPara )
     else return 0;
 }
 
-bool XPMReader::ImplCompare( sal_uInt8 const * pSource, sal_uInt8 const * pDest, sal_uLong nSize, sal_uLong nMode )
+bool XPMReader::ImplCompare(sal_uInt8 const * pSource, sal_uInt8 const * pDest, sal_uLong nSize)
 {
-    bool bRet = true;
-
-    if ( nMode == XPMCASENONSENSITIVE )
+    for (sal_uLong i = 0; i < nSize; ++i)
     {
-        for ( sal_uLong i = 0; i < nSize; i++ )
+        if ( ( pSource[i]&~0x20 ) != ( pDest[i]&~0x20 ) )
         {
-            if ( ( pSource[i]&~0x20 ) != ( pDest[i]&~0x20 ) )
-            {
-                bRet = false;
-                break;
-            }
+            return false;
         }
     }
-    else
-    {
-        for ( sal_uLong i = 0; i < nSize; i++ )
-        {
-            if ( pSource[i] != pDest[i] )
-            {
-                bRet = false;
-                break;
-            }
-        }
-    }
-    return bRet;
+    return true;
 }
 
 // ImplGetPara tries to retrieve nNumb (0...x) parameters from mpStringBuf.
@@ -575,7 +513,7 @@ bool XPMReader::ImplCompare( sal_uInt8 const * pSource, sal_uInt8 const * pDest,
 bool XPMReader::ImplGetPara ( sal_uLong nNumb )
 {
     sal_uInt8   nByte;
-    sal_uLong   pSize = 0;
+    sal_uLong   nSize = 0;
     sal_uInt8*  pPtr = mpStringBuf;
     sal_uLong   nCount = 0;
 
@@ -591,7 +529,7 @@ bool XPMReader::ImplGetPara ( sal_uLong nNumb )
         nCount = 0xffffffff;
     }
 
-    while ( pSize < mnStringSize )
+    while ( nSize < mnStringSize )
     {
         nByte = *pPtr;
 
@@ -616,7 +554,7 @@ bool XPMReader::ImplGetPara ( sal_uLong nNumb )
                 nCount++;
             }
         }
-        pSize++;
+        nSize++;
         pPtr++;
     }
     return ( ( nCount == nNumb ) && ( mpPara ) );
@@ -628,7 +566,7 @@ bool XPMReader::ImplGetPara ( sal_uLong nNumb )
 
 bool XPMReader::ImplGetString()
 {
-    sal_uInt8       sID[] = "/* XPM */";
+    sal_uInt8 const sID[] = "/* XPM */";
     sal_uInt8*      pString = mpStringBuf;
 
     mnStringSize = 0;
@@ -638,7 +576,7 @@ bool XPMReader::ImplGetString()
     {
         if ( mnTempAvail == 0 )
         {
-            mnTempAvail = mrIStm.Read( mpTempBuf, XPMTEMPBUFSIZE );
+            mnTempAvail = mrIStm.ReadBytes( mpTempBuf, XPMTEMPBUFSIZE );
             if ( mnTempAvail == 0 )
                 break;
 
@@ -723,25 +661,25 @@ bool XPMReader::ImplGetString()
 
 VCL_DLLPUBLIC bool ImportXPM( SvStream& rStm, Graphic& rGraphic )
 {
-    XPMReader*  pXPMReader = static_cast<XPMReader*>(rGraphic.GetContext());
-    ReadState   eReadState;
-    bool        bRet = true;
+    std::shared_ptr<GraphicReader> pContext = rGraphic.GetContext();
+    rGraphic.SetContext(nullptr);
+    XPMReader* pXPMReader = dynamic_cast<XPMReader*>( pContext.get() );
+    if (!pXPMReader)
+    {
+        pContext = std::make_shared<XPMReader>( rStm );
+        pXPMReader = static_cast<XPMReader*>( pContext.get() );
+    }
 
-    if( !pXPMReader )
-        pXPMReader = new XPMReader( rStm );
+    bool bRet = true;
 
-    rGraphic.SetContext( nullptr );
-    eReadState = pXPMReader->ReadXPM( rGraphic );
+    ReadState eReadState = pXPMReader->ReadXPM( rGraphic );
 
     if( eReadState == XPMREAD_ERROR )
     {
         bRet = false;
-        delete pXPMReader;
     }
-    else if( eReadState == XPMREAD_OK )
-        delete pXPMReader;
-    else
-        rGraphic.SetContext( pXPMReader );
+    else if( eReadState == XPMREAD_NEED_MORE )
+        rGraphic.SetContext( pContext );
 
     return bRet;
 }

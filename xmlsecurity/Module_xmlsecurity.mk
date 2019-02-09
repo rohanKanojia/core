@@ -9,26 +9,41 @@
 
 $(eval $(call gb_Module_Module,xmlsecurity))
 
+ifeq ($(ENABLE_NSS),TRUE)
+
 $(eval $(call gb_Module_add_targets,xmlsecurity,\
 	Library_xmlsecurity \
-	Library_xsec_fw \
-	$(if $(filter-out ANDROID IOS,$(OS)),Library_xsec_xmlsec) \
+	Library_xsec_xmlsec \
+	UIConfig_xmlsec \
 ))
 
 $(eval $(call gb_Module_add_slowcheck_targets,xmlsecurity,\
     CppunitTest_xmlsecurity_signing \
+    CppunitTest_xmlsecurity_pdfsigning \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,xmlsecurity,\
-	AllLangResTarget_xsec \
-	UIConfig_xmlsec \
+	AllLangMoTarget_xsc \
 ))
-
-#FIXME: ^^^, get nss&libxmlsec building on ios and android
 
 # failing
 #$(eval $(call gb_Module_add_check_targets,xmlsecurity,\
 	CppunitTest_qa_certext \
 ))
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,xmlsecurity,\
+    CppunitTest_xmlsecurity_dialogs_test \
+))
+
+ifneq (,$(filter DESKTOP,$(BUILD_TYPE)))
+
+$(eval $(call gb_Module_add_targets,xmlsecurity,\
+    Executable_pdfverify \
+))
+
+endif
+
+endif
 
 # vim: set noet sw=4 ts=4:

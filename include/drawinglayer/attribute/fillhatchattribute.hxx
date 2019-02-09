@@ -39,11 +39,11 @@ namespace drawinglayer
 {
     namespace attribute
     {
-        enum HatchStyle
+        enum class HatchStyle
         {
-            HATCHSTYLE_SINGLE,
-            HATCHSTYLE_DOUBLE,
-            HATCHSTYLE_TRIPLE
+            Single,
+            Double,
+            Triple
         };
     } // end of namespace attribute
 } // end of namespace drawinglayer
@@ -71,8 +71,10 @@ namespace drawinglayer
                 sal_uInt32 nMinimalDiscreteDistance,
                 bool bFillBackground);
             FillHatchAttribute();
-            FillHatchAttribute(const FillHatchAttribute& rCandidate);
-            FillHatchAttribute& operator=(const FillHatchAttribute& rCandidate);
+            FillHatchAttribute(const FillHatchAttribute&);
+            FillHatchAttribute(FillHatchAttribute&&);
+            FillHatchAttribute& operator=(const FillHatchAttribute&);
+            FillHatchAttribute& operator=(FillHatchAttribute&&);
             ~FillHatchAttribute();
 
             // checks if the incarnation is default constructed

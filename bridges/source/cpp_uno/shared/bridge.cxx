@@ -18,19 +18,18 @@
  */
 
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
+#include <bridge.hxx>
 
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/unointerfaceproxy.hxx"
+#include <cppinterfaceproxy.hxx>
+#include <unointerfaceproxy.hxx>
 
-#include "com/sun/star/uno/XInterface.hpp"
-#include "osl/interlck.h"
-#include "rtl/ustring.h"
-#include "sal/types.h"
-#include "typelib/typedescription.h"
-#include "uno/dispatcher.h"
-#include "uno/environment.h"
-#include "uno/mapping.h"
+#include <com/sun/star/uno/XInterface.hpp>
+#include <rtl/ustring.h>
+#include <sal/types.h>
+#include <typelib/typedescription.h>
+#include <uno/dispatcher.h>
+#include <uno/environment.h>
+#include <uno/mapping.h>
 
 namespace bridges { namespace cpp_uno { namespace shared {
 
@@ -145,13 +144,13 @@ uno_Mapping * Bridge::createMapping(
     bool bExportCpp2Uno)
 {
     Bridge * bridge = new Bridge(pCppEnv, pUnoEnv, bExportCpp2Uno);
-    //coverity[leaked_storage]
+    // coverity[leaked_storage] - on purpose
     return bExportCpp2Uno ? &bridge->aCpp2Uno : &bridge->aUno2Cpp;
 }
 
 void Bridge::acquire()
 {
-    if (1 == osl_atomic_increment( &nRef ))
+    if (++nRef == 1)
     {
         if (bExportCpp2Uno)
         {
@@ -172,7 +171,7 @@ void Bridge::acquire()
 
 void Bridge::release()
 {
-    if (! osl_atomic_decrement( &nRef ))
+    if (! --nRef )
     {
         ::uno_revokeMapping( bExportCpp2Uno ? &aCpp2Uno : &aUno2Cpp );
     }

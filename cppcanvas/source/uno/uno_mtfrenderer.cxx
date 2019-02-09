@@ -11,15 +11,16 @@
 #include <cppcanvas/vclfactory.hxx>
 #include <comphelper/servicedecl.hxx>
 #include <cppuhelper/factory.hxx>
+#include <o3tl/any.hxx>
 
 using namespace ::com::sun::star;
 
-void MtfRenderer::setMetafile (const uno::Sequence< sal_Int8 >& /*rMtf*/) throw (uno::RuntimeException, std::exception)
+void MtfRenderer::setMetafile (const uno::Sequence< sal_Int8 >& /*rMtf*/)
 {
         // printf ("MtfRenderer::setMetafile unimplemented, use fast property set or implement me\n");
 }
 
-void MtfRenderer::draw (double fScaleX, double fScaleY) throw (uno::RuntimeException, std::exception)
+void MtfRenderer::draw (double fScaleX, double fScaleY)
 {
     if (mpMetafile && mxCanvas.get()) {
         cppcanvas::BitmapCanvasSharedPtr canvas = cppcanvas::VCLFactory::createBitmapCanvas (mxCanvas);
@@ -31,10 +32,10 @@ void MtfRenderer::draw (double fScaleX, double fScaleY) throw (uno::RuntimeExcep
     }
 }
 
-void MtfRenderer::setFastPropertyValue( sal_Int32 nHandle, const uno::Any& aAny)  throw (uno::RuntimeException, std::exception)
+void MtfRenderer::setFastPropertyValue( sal_Int32 nHandle, const uno::Any& aAny)
 {
     if (nHandle == 0) {
-        mpMetafile = reinterpret_cast<GDIMetaFile*>( *static_cast<const sal_Int64*>(aAny.getValue()) );
+        mpMetafile = reinterpret_cast<GDIMetaFile*>( *o3tl::doAccess<sal_Int64>(aAny) );
     }
 }
 
@@ -53,7 +54,7 @@ namespace sdecl = comphelper::service_decl;
 
 // The C shared lib entry points
 extern "C"
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL mtfrenderer_component_getFactory( sal_Char const* pImplName,
+SAL_DLLPUBLIC_EXPORT void* mtfrenderer_component_getFactory( sal_Char const* pImplName,
                                          void*, void* )
 {
     return sdecl::component_getFactoryHelper( pImplName, {&MtfRendererDecl} );

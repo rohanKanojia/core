@@ -18,19 +18,20 @@
  */
 
 #include <cppuhelper/compbase_ex.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <rtl/instance.hxx>
 #include <rtl/string.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
 
 using namespace ::osl;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
-using rtl::OUString;
-using rtl::OString;
 
 namespace cppu
 {
@@ -51,7 +52,6 @@ void WeakComponentImplHelperBase::disposing()
 }
 
 Any WeakComponentImplHelperBase::queryInterface( Type const & rType )
-    throw (RuntimeException, std::exception)
 {
     if (rType == cppu::UnoType<lang::XComponent>::get())
     {
@@ -80,10 +80,7 @@ void WeakComponentImplHelperBase::release()
                 dispose();
             }
             catch (RuntimeException const& exc) { // don't break throw ()
-                OSL_FAIL(
-                    OUStringToOString(
-                        exc.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
-                static_cast<void>(exc);
+                SAL_WARN( "cppuhelper", exc );
             }
             OSL_ASSERT( rBHelper.bDisposed );
         }
@@ -92,12 +89,11 @@ void WeakComponentImplHelperBase::release()
 }
 
 void WeakComponentImplHelperBase::dispose()
-    throw (RuntimeException, std::exception)
 {
     ClearableMutexGuard aGuard( rBHelper.rMutex );
     if (!rBHelper.bDisposed && !rBHelper.bInDispose)
     {
-        rBHelper.bInDispose = sal_True;
+        rBHelper.bInDispose = true;
         aGuard.clear();
         try
         {
@@ -112,14 +108,14 @@ void WeakComponentImplHelperBase::dispose()
             {
                 MutexGuard aGuard2( rBHelper.rMutex );
                 // bDisposed and bInDispose must be set in this order:
-                rBHelper.bDisposed = sal_True;
-                rBHelper.bInDispose = sal_False;
+                rBHelper.bDisposed = true;
+                rBHelper.bInDispose = false;
                 throw;
             }
             MutexGuard aGuard2( rBHelper.rMutex );
             // bDisposed and bInDispose must be set in this order:
-            rBHelper.bDisposed = sal_True;
-            rBHelper.bInDispose = sal_False;
+            rBHelper.bDisposed = true;
+            rBHelper.bInDispose = false;
         }
         catch (RuntimeException &)
         {
@@ -127,15 +123,16 @@ void WeakComponentImplHelperBase::dispose()
         }
         catch (Exception & exc)
         {
-            throw RuntimeException(
-                "unexpected UNO exception caught: " + exc.Message );
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw lang::WrappedTargetRuntimeException(
+                "unexpected UNO exception caught: " + exc.Message,
+                nullptr, anyEx );
         }
     }
 }
 
 void WeakComponentImplHelperBase::addEventListener(
     Reference< lang::XEventListener > const & xListener )
-    throw (RuntimeException, std::exception)
 {
     ClearableMutexGuard aGuard( rBHelper.rMutex );
     if (rBHelper.bDisposed || rBHelper.bInDispose)
@@ -152,7 +149,6 @@ void WeakComponentImplHelperBase::addEventListener(
 
 void WeakComponentImplHelperBase::removeEventListener(
     Reference< lang::XEventListener > const & xListener )
-    throw (RuntimeException, std::exception)
 {
     rBHelper.removeListener( cppu::UnoType<decltype(xListener)>::get(), xListener );
 }
@@ -173,13 +169,11 @@ void WeakAggComponentImplHelperBase::disposing()
 }
 
 Any WeakAggComponentImplHelperBase::queryInterface( Type const & rType )
-    throw (RuntimeException, std::exception)
 {
     return OWeakAggObject::queryInterface( rType );
 }
 
 Any WeakAggComponentImplHelperBase::queryAggregation( Type const & rType )
-    throw (RuntimeException, std::exception)
 {
     if (rType == cppu::UnoType<lang::XComponent>::get())
     {
@@ -212,10 +206,7 @@ void WeakAggComponentImplHelperBase::release()
                 dispose();
             }
             catch (RuntimeException const& exc) { // don't break throw ()
-                OSL_FAIL(
-                    OUStringToOString(
-                        exc.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
-                static_cast<void>(exc);
+                SAL_WARN( "cppuhelper", exc );
             }
             OSL_ASSERT( rBHelper.bDisposed );
         }
@@ -224,12 +215,11 @@ void WeakAggComponentImplHelperBase::release()
 }
 
 void WeakAggComponentImplHelperBase::dispose()
-    throw (RuntimeException, std::exception)
 {
     ClearableMutexGuard aGuard( rBHelper.rMutex );
     if (!rBHelper.bDisposed && !rBHelper.bInDispose)
     {
-        rBHelper.bInDispose = sal_True;
+        rBHelper.bInDispose = true;
         aGuard.clear();
         try
         {
@@ -244,14 +234,14 @@ void WeakAggComponentImplHelperBase::dispose()
             {
                 MutexGuard aGuard2( rBHelper.rMutex );
                 // bDisposed and bInDispose must be set in this order:
-                rBHelper.bDisposed = sal_True;
-                rBHelper.bInDispose = sal_False;
+                rBHelper.bDisposed = true;
+                rBHelper.bInDispose = false;
                 throw;
             }
             MutexGuard aGuard2( rBHelper.rMutex );
             // bDisposed and bInDispose must be set in this order:
-            rBHelper.bDisposed = sal_True;
-            rBHelper.bInDispose = sal_False;
+            rBHelper.bDisposed = true;
+            rBHelper.bInDispose = false;
         }
         catch (RuntimeException &)
         {
@@ -259,15 +249,16 @@ void WeakAggComponentImplHelperBase::dispose()
         }
         catch (Exception & exc)
         {
-            throw RuntimeException(
-                "unexpected UNO exception caught: " + exc.Message );
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw lang::WrappedTargetRuntimeException(
+                "unexpected UNO exception caught: " + exc.Message,
+                nullptr, anyEx );
         }
     }
 }
 
 void WeakAggComponentImplHelperBase::addEventListener(
     Reference< lang::XEventListener > const & xListener )
-    throw (RuntimeException, std::exception)
 {
     ClearableMutexGuard aGuard( rBHelper.rMutex );
     if (rBHelper.bDisposed || rBHelper.bInDispose)
@@ -284,9 +275,11 @@ void WeakAggComponentImplHelperBase::addEventListener(
 
 void WeakAggComponentImplHelperBase::removeEventListener(
     Reference< lang::XEventListener > const & xListener )
-    throw (RuntimeException, std::exception)
 {
-    rBHelper.removeListener( cppu::UnoType<decltype(xListener)>::get(), xListener );
+    // if we have disposed, then we have cleared the list already
+    MutexGuard aGuard( rBHelper.rMutex );
+    if (!rBHelper.bDisposed)
+        rBHelper.removeListener( cppu::UnoType<decltype(xListener)>::get(), xListener );
 }
 
 }

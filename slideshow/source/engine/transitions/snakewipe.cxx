@@ -17,7 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
+#include <cmath>
+
+#include <o3tl/temporary.hxx>
 #include <osl/diagnose.h>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/point/b2dpoint.hxx>
@@ -42,8 +46,8 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
 ::basegfx::B2DPolyPolygon SnakeWipe::calcSnake( double t ) const
 {
     ::basegfx::B2DPolyPolygon res;
-    const double area = (t * m_sqrtElements * m_sqrtElements);
-    const sal_Int32 line_ = (static_cast<sal_Int32>(area) / m_sqrtElements);
+    const double area = t * m_sqrtElements * m_sqrtElements;
+    const sal_Int32 line_ = static_cast<sal_Int32>(area) / m_sqrtElements;
     const double line = ::basegfx::pruneScaleValue(
         static_cast<double>(line_) / m_sqrtElements );
     const double col = ::basegfx::pruneScaleValue(
@@ -87,7 +91,7 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
     if (in) {
         const double sqrtArea2 = sqrt( t * m_sqrtElements * m_sqrtElements );
         const double edge = ::basegfx::pruneScaleValue(
-            static_cast<double>( static_cast<sal_Int32>(sqrtArea2) ) /
+            std::trunc(sqrtArea2) /
             m_sqrtElements );
 
         ::basegfx::B2DPolygon poly;
@@ -98,9 +102,9 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
             poly.setClosed(true);
             res.append(poly);
         }
-        const double a = (M_SQRT1_2 / m_sqrtElements);
-        const double d = (sqrtArea2 - static_cast<sal_Int32>(sqrtArea2));
-        const double len = (t * M_SQRT2 * d);
+        const double a = M_SQRT1_2 / m_sqrtElements;
+        const double d = std::modf(sqrtArea2, &o3tl::temporary(double()));
+        const double len = t * M_SQRT2 * d;
         const double height = ::basegfx::pruneScaleValue( M_SQRT1_2 / m_sqrtElements );
         poly.clear();
         poly.append( ::basegfx::B2DPoint( 0.0, 0.0 ) );
@@ -113,12 +117,12 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
         if ((static_cast<sal_Int32>(sqrtArea2) & 1) == 1)
         {
             // odd line
-            aTransform = basegfx::tools::createRotateB2DHomMatrix(M_PI_2 + M_PI_4);
+            aTransform = basegfx::utils::createRotateB2DHomMatrix(M_PI_2 + M_PI_4);
             aTransform.translate(edge + m_elementEdge, 0.0);
         }
         else
         {
-            aTransform = basegfx::tools::createTranslateB2DHomMatrix(-a, 0.0);
+            aTransform = basegfx::utils::createTranslateB2DHomMatrix(-a, 0.0);
             aTransform.rotate( -M_PI_4 );
             aTransform.translate( 0.0, edge );
         }
@@ -130,7 +134,7 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
     {
         const double sqrtArea2 = sqrt( t * m_sqrtElements * m_sqrtElements );
         const double edge = ::basegfx::pruneScaleValue(
-            static_cast<double>( static_cast<sal_Int32>(sqrtArea2) ) /
+            std::trunc(sqrtArea2) /
             m_sqrtElements );
 
         ::basegfx::B2DPolygon poly;
@@ -142,9 +146,9 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
             poly.setClosed(true);
             res.append(poly);
         }
-        const double a = (M_SQRT1_2 / m_sqrtElements);
-        const double d = (sqrtArea2 - static_cast<sal_Int32>(sqrtArea2));
-        const double len = ((1.0 - t) * M_SQRT2 * d);
+        const double a = M_SQRT1_2 / m_sqrtElements;
+        const double d = std::modf(sqrtArea2, &o3tl::temporary(double()));
+        const double len = (1.0 - t) * M_SQRT2 * d;
         const double height = ::basegfx::pruneScaleValue( M_SQRT1_2 / m_sqrtElements );
         poly.clear();
         poly.append( ::basegfx::B2DPoint( 0.0, 0.0 ) );
@@ -157,13 +161,13 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
         if ((static_cast<sal_Int32>(sqrtArea2) & 1) == 1)
         {
             // odd line
-            aTransform = basegfx::tools::createTranslateB2DHomMatrix(0.0, -height);
+            aTransform = basegfx::utils::createTranslateB2DHomMatrix(0.0, -height);
             aTransform.rotate( M_PI_2 + M_PI_4 );
             aTransform.translate( 1.0, edge );
         }
         else
         {
-            aTransform = basegfx::tools::createRotateB2DHomMatrix(-M_PI_4);
+            aTransform = basegfx::utils::createRotateB2DHomMatrix(-M_PI_4);
             aTransform.translate( edge, 1.0 );
         }
         poly.transform( aTransform );
@@ -200,7 +204,7 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
         ::basegfx::B2DPolyPolygon half(
             calcHalfDiagonalSnake( t, false /* out */ ) );
         // flip on x axis and rotate 90 degrees:
-        basegfx::B2DHomMatrix aTransform(basegfx::tools::createScaleB2DHomMatrix(1.0, -1.0));
+        basegfx::B2DHomMatrix aTransform(basegfx::utils::createScaleB2DHomMatrix(1.0, -1.0));
         aTransform.translate( -0.5, 0.5 );
         aTransform.rotate( M_PI_2 );
         aTransform.translate( 0.5, 0.5 );
@@ -209,7 +213,7 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
         res.append( half );
 
         // rotate 180 degrees:
-        aTransform = basegfx::tools::createTranslateB2DHomMatrix(-0.5, -0.5);
+        aTransform = basegfx::utils::createTranslateB2DHomMatrix(-0.5, -0.5);
         aTransform.rotate( M_PI );
         aTransform.translate( 0.5, 0.5 );
         half.transform( aTransform );
@@ -219,7 +223,7 @@ SnakeWipe::SnakeWipe( sal_Int32 nElements, bool diagonal, bool flipOnYAxis )
     {
         ::basegfx::B2DPolyPolygon half( calcSnake( t / 2.0 ) );
         // rotate 90 degrees:
-        basegfx::B2DHomMatrix aTransform(basegfx::tools::createTranslateB2DHomMatrix(-0.5, -0.5));
+        basegfx::B2DHomMatrix aTransform(basegfx::utils::createTranslateB2DHomMatrix(-0.5, -0.5));
         aTransform.rotate( M_PI_2 );
         aTransform.translate( 0.5, 0.5 );
         half.transform( aTransform );

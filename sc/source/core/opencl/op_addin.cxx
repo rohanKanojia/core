@@ -9,12 +9,6 @@
 
 #include "op_addin.hxx"
 
-#include "formulagroup.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
-#include "tokenarray.hxx"
-#include "compiler.hxx"
-#include "interpre.hxx"
 #include <formula/vectortoken.hxx>
 #include <sstream>
 
@@ -25,6 +19,7 @@ namespace sc { namespace opencl {
 void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
     const std::string &sSymName, SubArguments &vSubArguments)
 {
+    CHECK_PARAMETER_COUNT( 2, 2 );
     ss << "\ndouble " << sSymName;
     ss << "_" << BinFuncName() << "(";
     for (size_t i = 0; i < vSubArguments.size(); i++)
@@ -37,11 +32,6 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
     ss << "    int gid0 = get_global_id(0);\n";
     ss << "    double x = 0.0;\n";
     ss << "    double N = 0.0;\n";
-    if(vSubArguments.size() != 2)
-    {
-        ss << "    return DBL_MAX;\n}\n";
-        return ;
-    }
     FormulaToken *tmpCur0 = vSubArguments[0]->GetFormulaToken();
     assert(tmpCur0);
     if(ocPush == vSubArguments[0]->GetFormulaToken()->GetOpCode())
@@ -54,7 +44,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
             ss << "    {\n";
             ss << "        x = ";
             ss << vSubArguments[0]->GenSlidingWindowDeclRef() << ";\n";
-            ss << "        if (isNan(x))\n";
+            ss << "        if (isnan(x))\n";
             ss << "            x = 0.0;\n";
             ss << "    }\n";
         }
@@ -64,8 +54,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
         }
         else
         {
-            ss << "    return DBL_MAX;\n}\n";
-            return ;
+            throw Unhandled(__FILE__, __LINE__);
         }
     }
     else
@@ -86,7 +75,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
             ss << "    {\n";
             ss << "        N = ";
             ss << vSubArguments[1]->GenSlidingWindowDeclRef() << ";\n";
-            ss << "        if (isNan(N))\n";
+            ss << "        if (isnan(N))\n";
             ss << "            N = 0.0;\n";
             ss << "    }\n";
         }
@@ -96,8 +85,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
         }
         else
         {
-            ss << "    return DBL_MAX;\n}\n";
-            return ;
+            throw Unhandled(__FILE__, __LINE__);
         }
     }
     else
@@ -110,7 +98,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
     ss << "    double f_PI_DIV_2 = f_PI / 2.0;\n";
     ss << "    double f_PI_DIV_4 = f_PI / 4.0;\n";
     ss << "    if( N < 0.0 )\n";
-    ss << "        return DBL_MAX;\n";
+    ss << "        return CreateDoubleError(IllegalArgument);\n";
     ss << "    if (x == 0.0)\n";
     ss << "        return (N == 0.0) ? 1.0 : 0.0;\n";
     ss << "    double fSign = ((int)N % 2 == 1 && x < 0.0) ? -1.0 : 1.0;\n";
@@ -124,7 +112,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
     ss << "            return fSign * sqrt(f_2_DIV_PI/fX)";
     ss << "* cos(fX-N*f_PI_DIV_2-f_PI_DIV_4);\n";
     ss << "        else\n";
-    ss << "            return DBL_MAX;\n";
+    ss << "            return CreateDoubleError(NoConvergence);\n";
     ss << "    }\n";
     ss << "    double epsilon = 1.0e-15;\n";
     ss << "    bool bHasfound = false;\n";
@@ -185,7 +173,7 @@ void OpBesselj::GenSlidingWindowFunction(std::stringstream &ss,
     ss << "    if (bHasfound)\n";
     ss << "        return u * fSign;\n";
     ss << "    else\n";
-    ss << "        return DBL_MAX;\n";
+    ss << "        return CreateDoubleError(NoConvergence);\n";
     ss << "}";
 }
 void OpGestep::GenSlidingWindowFunction(
@@ -204,9 +192,8 @@ void OpGestep::GenSlidingWindowFunction(
     ss << "{\n";
     ss << "    double tmp=0,tmp0 =0,tmp1 = 0;\n";
     ss << "    int gid0=get_global_id(0);\n";
-    size_t i = vSubArguments.size();
     ss <<"\n";
-    for (i = 0; i < vSubArguments.size(); i++)
+    for (size_t i = 0; i < vSubArguments.size(); i++)
     {
         FormulaToken *pCur = vSubArguments[i]->GetFormulaToken();
         assert(pCur);
@@ -221,12 +208,10 @@ void OpGestep::GenSlidingWindowFunction(
         {
             ss << "    {\n";
         }
-        else
-        {
-        }
+
         if(ocPush==vSubArguments[i]->GetFormulaToken()->GetOpCode())
         {
-            ss << "        if (isNan(";
+            ss << "        if (isnan(";
             ss << vSubArguments[i]->GenSlidingWindowDeclRef();
             ss << "))\n";
             ss << "            tmp"<<i<<" = 0;\n";

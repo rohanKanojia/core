@@ -22,8 +22,6 @@
 #include <xmloff/xmlprmap.hxx>
 #include <xmloff/contextid.hxx>
 #include <xmloff/controlpropertyhdl.hxx>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/report/XReportDefinition.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
 
 #include <memory>
@@ -41,7 +39,7 @@ namespace rptxml
         void operator =(const OPropertyHandlerFactory&) = delete;
     public:
         OPropertyHandlerFactory();
-        virtual ~OPropertyHandlerFactory();
+        virtual ~OPropertyHandlerFactory() override;
 
         virtual const XMLPropertyHandler* GetPropertyHandler(sal_Int32 _nType) const override;
     };
@@ -51,11 +49,11 @@ namespace rptxml
     public:
         static rtl::Reference < XMLPropertySetMapper > GetCellStylePropertyMap(bool _bOldFormat, bool bForExport);
 
-        static const SvXMLEnumMapEntry* GetReportPrintOptions();
-        static const SvXMLEnumMapEntry* GetForceNewPageOptions();
-        static const SvXMLEnumMapEntry* GetKeepTogetherOptions();
-        static const SvXMLEnumMapEntry* GetCommandTypeOptions();
-        static const SvXMLEnumMapEntry* GetImageScaleOptions();
+        static const SvXMLEnumMapEntry<sal_Int16>* GetReportPrintOptions();
+        static const SvXMLEnumMapEntry<sal_Int16>* GetForceNewPageOptions();
+        static const SvXMLEnumMapEntry<sal_Int16>* GetKeepTogetherOptions();
+        static const SvXMLEnumMapEntry<sal_Int32>* GetCommandTypeOptions();
+        static const SvXMLEnumMapEntry<sal_Int16>* GetImageScaleOptions();
 
         static const XMLPropertyMapEntry* GetTableStyleProps();
         static const XMLPropertyMapEntry* GetColumnStyleProps();

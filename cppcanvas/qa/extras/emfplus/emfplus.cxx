@@ -7,18 +7,17 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/graphic/XGraphic.hpp>
 
 #include <comphelper/processfactory.hxx>
+#include <sfx2/app.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/sfxbasemodel.hxx>
 #include <test/unoapi_test.hxx>
-#include <unotest/macros_test.hxx>
 #include <vcl/bitmapaccess.hxx>
 #include <vcl/pngwrite.hxx>
+#include <vcl/gdimtf.hxx>
+#include <tools/stream.hxx>
 
 using namespace com::sun::star;
 
@@ -29,14 +28,11 @@ public:
     {
     }
 
-    virtual ~Test()
-    {
-    }
-
     virtual void setUp() override
     {
         UnoApiTest::setUp();
         mxDesktop.set(frame::Desktop::create(comphelper::getComponentContext(getMultiServiceFactory())));
+        SfxApplication::GetOrCreate();
     };
 
     virtual void tearDown() override
@@ -72,24 +68,19 @@ public:
         return aResultBitmap.GetBitmap();
     }
 
-    void testFdo77229();
-
-    CPPUNIT_TEST_SUITE(Test);
-    CPPUNIT_TEST(testFdo77229);
-    CPPUNIT_TEST_SUITE_END();
-
     uno::Reference<lang::XComponent> mxComponent;
 };
 
-void Test::testFdo77229()
+CPPUNIT_TEST_FIXTURE(Test, testFdo77229)
 {
     Bitmap aBitmap = load("fdo77229.emf");
     Bitmap::ScopedReadAccess pAccess(aBitmap);
     // The green star was missing.
-    CPPUNIT_ASSERT_EQUAL(sal_uInt32(0x00fe00), Color(pAccess->GetPixel(142, 140)).GetColor());
+    Color aColor(pAccess->GetPixel(142, 140).GetColor());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt8(0), aColor.GetRed());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt8(0), aColor.GetBlue());
+    CPPUNIT_ASSERT(aColor.GetGreen() == 0xfe || aColor.GetGreen() == 0xff);
 }
-
-CPPUNIT_TEST_SUITE_REGISTRATION(Test);
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

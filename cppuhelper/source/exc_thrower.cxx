@@ -21,7 +21,6 @@
 #include <rtl/instance.hxx>
 #include <osl/diagnose.h>
 #include <osl/doublecheckedlocking.h>
-#include <osl/mutex.hxx>
 #include <uno/dispatcher.hxx>
 #include <uno/lbnames.h>
 #include <uno/mapping.hxx>
@@ -29,6 +28,10 @@
 #include <com/sun/star/uno/RuntimeException.hpp>
 
 #include <cppuhelper/exc_hlp.hxx>
+
+#ifdef IOS
+#include <ios/ios.hxx>
+#endif
 
 using namespace ::osl;
 using namespace ::cppu;
@@ -43,36 +46,35 @@ using cppuhelper::detail::XExceptionThrower;
 
 struct ExceptionThrower : public uno_Interface, XExceptionThrower
 {
-    inline ExceptionThrower();
+    ExceptionThrower();
 
     virtual ~ExceptionThrower() {}
 
-    static inline Type const & getCppuType()
+    static Type const & getCppuType()
     {
         return cppu::UnoType<XExceptionThrower>::get();
     }
 
     // XInterface
-    virtual Any SAL_CALL queryInterface( Type const & type )
-        throw (RuntimeException, std::exception) override;
+    virtual Any SAL_CALL queryInterface( Type const & type ) override;
     virtual void SAL_CALL acquire() throw () override;
     virtual void SAL_CALL release() throw () override;
 
     // XExceptionThrower
-    virtual void SAL_CALL throwException( Any const & exc ) throw (Exception, std::exception) override;
-    virtual void SAL_CALL rethrowException() throw (Exception, std::exception) override;
+    virtual void SAL_CALL throwException( Any const & exc ) override;
+    virtual void SAL_CALL rethrowException() override;
 };
 
 extern "C"
 {
 
 
-void SAL_CALL ExceptionThrower_acquire_release_nop(
+void ExceptionThrower_acquire_release_nop(
     SAL_UNUSED_PARAMETER uno_Interface * )
 {}
 
 
-void SAL_CALL ExceptionThrower_dispatch(
+void ExceptionThrower_dispatch(
     uno_Interface * pUnoI, typelib_TypeDescription const * pMemberType,
     void * pReturn, void * pArgs [], uno_Any ** ppException )
 {
@@ -82,7 +84,7 @@ void SAL_CALL ExceptionThrower_dispatch(
                 const_cast< typelib_TypeDescription * >( pMemberType ) )->
             nPosition)
     {
-    case 0: // queryInterace()
+    case 0: // queryInterface()
     {
         Type const & rType_demanded =
             *static_cast< Type const * >( pArgs[ 0 ] );
@@ -129,7 +131,6 @@ void SAL_CALL ExceptionThrower_dispatch(
 
 
 Any ExceptionThrower::queryInterface( Type const & type )
-    throw (RuntimeException, std::exception)
 {
     if (type.equals( cppu::UnoType<XInterface>::get() ) ||
         type.equals( ExceptionThrower::getCppuType() ))
@@ -150,20 +151,20 @@ void ExceptionThrower::release() throw ()
 }
 
 
-void ExceptionThrower::throwException( Any const & exc ) throw (Exception, std::exception)
+void ExceptionThrower::throwException( Any const & exc )
 {
     OSL_FAIL( "unexpected!" );
     cppu::throwException( exc );
 }
 
 
-void ExceptionThrower::rethrowException() throw (Exception, std::exception)
+void ExceptionThrower::rethrowException()
 {
     throw;
 }
 
 
-inline ExceptionThrower::ExceptionThrower()
+ExceptionThrower::ExceptionThrower()
 {
     uno_Interface::acquire = ExceptionThrower_acquire_release_nop;
     uno_Interface::release = ExceptionThrower_acquire_release_nop;
@@ -188,6 +189,9 @@ void SAL_CALL throwException( Any const & exc )
             "(must be derived from com::sun::star::uno::Exception)!" );
     }
 
+#ifdef IOS
+    lo_ios_throwException(exc);
+#else
     Mapping uno2cpp(Environment(UNO_LB_UNO), Environment::getCurrent());
     if (! uno2cpp.is())
     {
@@ -202,6 +206,7 @@ void SAL_CALL throwException( Any const & exc )
         ExceptionThrower::getCppuType() );
     OSL_ASSERT( xThrower.is() );
     xThrower->throwException( exc );
+#endif
 }
 
 

@@ -20,6 +20,7 @@
 #include "xmlimpit.hxx"
 
 #include <sax/tools/converter.hxx>
+#include <utility>
 #include <xmloff/xmluconv.hxx>
 #include <svl/itempool.hxx>
 #include <svl/poolitem.hxx>
@@ -28,10 +29,11 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <editeng/xmlcnitm.hxx>
-#include <editeng/memberids.hrc>
+#include <editeng/memberids.h>
+#include <osl/diagnose.h>
 
-#include "hintids.hxx"
-#include "unomid.h"
+#include <hintids.hxx>
+#include <unomid.h>
 #include <svx/unomid.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/ulspitem.hxx>
@@ -40,11 +42,11 @@
 #include <editeng/formatbreakitem.hxx>
 #include <editeng/keepitem.hxx>
 #include <editeng/brushitem.hxx>
-#include "fmtpdsc.hxx"
-#include "fmtornt.hxx"
-#include "fmtfsize.hxx"
+#include <fmtpdsc.hxx>
+#include <fmtornt.hxx>
+#include <fmtfsize.hxx>
 
-#include "fmtlsplt.hxx"
+#include <fmtlsplt.hxx>
 #include <xmloff/prhdlfac.hxx>
 #include <xmloff/xmltypes.hxx>
 #include <xmloff/xmlprhdl.hxx>
@@ -56,11 +58,11 @@ using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 using uno::Any;
 
+static const sal_uInt16 nUnknownWhich = RES_UNKNOWNATR_CONTAINER;
+
 SvXMLImportItemMapper::SvXMLImportItemMapper(
-                                SvXMLItemMapEntriesRef rMapEntries,
-                                sal_uInt16 nUnknWhich ) :
-    mrMapEntries( rMapEntries ),
-    nUnknownWhich( nUnknWhich )
+                                SvXMLItemMapEntriesRef const & rMapEntries ) :
+    mrMapEntries( rMapEntries )
 {
 }
 
@@ -71,18 +73,18 @@ SvXMLImportItemMapper::~SvXMLImportItemMapper()
 void
 SvXMLImportItemMapper::setMapEntries( SvXMLItemMapEntriesRef rMapEntries )
 {
-    mrMapEntries = rMapEntries;
+    mrMapEntries = std::move(rMapEntries);
 }
 
 // fills the given itemset with the attributes in the given list
 void SvXMLImportItemMapper::importXML( SfxItemSet& rSet,
-                                      uno::Reference< xml::sax::XAttributeList > xAttrList,
+                                      uno::Reference< xml::sax::XAttributeList > const & xAttrList,
                                       const SvXMLUnitConverter& rUnitConverter,
                                       const SvXMLNamespaceMap& rNamespaceMap )
 {
     sal_Int16 nAttr = xAttrList->getLength();
 
-    SvXMLAttrContainerItem *pUnknownItem = nullptr;
+    std::unique_ptr<SvXMLAttrContainerItem> pUnknownItem;
     for( sal_Int16 i=0; i < nAttr; i++ )
     {
         const OUString& rAttrName = xAttrList->getNameByIndex( i );
@@ -96,7 +98,7 @@ void SvXMLImportItemMapper::importXML( SfxItemSet& rSet,
         const OUString& rValue = xAttrList->getValueByIndex( i );
 
         // find a map entry for this attribute
-        SvXMLItemMapEntry* pEntry = mrMapEntries->getByName( nPrefix, aLocalName );
+        SvXMLItemMapEntry const * pEntry = mrMapEntries->getByName( nPrefix, aLocalName );
 
         if( pEntry )
         {
@@ -109,14 +111,14 @@ void SvXMLImportItemMapper::importXML( SfxItemSet& rSet,
                 SfxItemState eState = rSet.GetItemState( pEntry->nWhichId, true,
                                                          &pItem );
 
-                // if its not set, try the pool
-                if(SfxItemState::SET != eState && SFX_WHICH_MAX > pEntry->nWhichId )
+                // if it's not set, try the pool
+                if (SfxItemState::SET != eState && SfxItemPool::IsWhich(pEntry->nWhichId))
                     pItem = &rSet.GetPool()->GetDefaultItem(pEntry->nWhichId);
 
                 // do we have an item?
                 if(eState >= SfxItemState::DEFAULT && pItem)
                 {
-                    SfxPoolItem *pNewItem = pItem->Clone();
+                    std::unique_ptr<SfxPoolItem> pNewItem(pItem->Clone());
                     bool bPut = false;
 
                     if( 0 == (pEntry->nMemberId&MID_SW_FLAG_SPECIAL_ITEM_IMPORT) )
@@ -135,8 +137,6 @@ void SvXMLImportItemMapper::importXML( SfxItemSet& rSet,
 
                     if( bPut )
                         rSet.Put( *pNewItem );
-
-                    delete pNewItem;
                 }
                 else
                 {
@@ -157,16 +157,11 @@ void SvXMLImportItemMapper::importXML( SfxItemSet& rSet,
                 if( SfxItemState::SET == rSet.GetItemState( nUnknownWhich, true,
                                                        &pItem ) )
                 {
-                    SfxPoolItem *pNew = pItem->Clone();
-                    pUnknownItem = dynamic_cast<SvXMLAttrContainerItem*>( pNew  );
-                    OSL_ENSURE( pUnknownItem,
-                                "SvXMLAttrContainerItem expected" );
-                    if( !pUnknownItem )
-                        delete pNew;
+                    pUnknownItem.reset( static_cast<SvXMLAttrContainerItem*>( pItem->Clone() ) );
                 }
                 else
                 {
-                    pUnknownItem = new SvXMLAttrContainerItem( nUnknownWhich );
+                    pUnknownItem.reset( new SvXMLAttrContainerItem( nUnknownWhich ) );
                 }
             }
             if( pUnknownItem )
@@ -183,7 +178,6 @@ void SvXMLImportItemMapper::importXML( SfxItemSet& rSet,
     if( pUnknownItem )
     {
         rSet.Put( *pUnknownItem );
-        delete pUnknownItem;
     }
 
     finished(rSet, rUnitConverter);
@@ -223,32 +217,24 @@ SvXMLImportItemMapper::finished(SfxItemSet &, SvXMLUnitConverter const&) const
 
 struct BoxHolder
 {
-    SvxBorderLine* pTop;
-    SvxBorderLine* pBottom;
-    SvxBorderLine* pLeft;
-    SvxBorderLine* pRight;
+    std::unique_ptr<SvxBorderLine> pTop;
+    std::unique_ptr<SvxBorderLine> pBottom;
+    std::unique_ptr<SvxBorderLine> pLeft;
+    std::unique_ptr<SvxBorderLine> pRight;
 
     BoxHolder(BoxHolder const&) = delete;
     BoxHolder& operator=(BoxHolder const&) = delete;
 
-    explicit BoxHolder(SvxBoxItem& rBox)
+    explicit BoxHolder(SvxBoxItem const & rBox)
     {
-        pTop    = rBox.GetTop() == nullptr ?
-            nullptr : new SvxBorderLine( *rBox.GetTop() );
-        pBottom = rBox.GetBottom() == nullptr ?
-            nullptr : new SvxBorderLine( *rBox.GetBottom() );
-        pLeft   = rBox.GetLeft() == nullptr ?
-            nullptr : new SvxBorderLine( *rBox.GetLeft() );
-        pRight  = rBox.GetRight() == nullptr ?
-            nullptr : new SvxBorderLine( *rBox.GetRight() );
-    }
-
-    ~BoxHolder()
-    {
-        delete pTop;
-        delete pBottom;
-        delete pLeft;
-        delete pRight;
+        if (rBox.GetTop())
+            pTop.reset(new SvxBorderLine( *rBox.GetTop() ));
+        if (rBox.GetBottom())
+            pBottom.reset(new SvxBorderLine( *rBox.GetBottom() ));
+        if (rBox.GetLeft())
+            pLeft.reset(new SvxBorderLine( *rBox.GetLeft() ));
+        if (rBox.GetRight())
+            pRight.reset(new SvxBorderLine( *rBox.GetRight() ));
     }
 };
 
@@ -285,10 +271,10 @@ bool SvXMLImportItemMapper::PutXMLValue(
                         switch( nMemberId )
                         {
                             case MID_L_MARGIN:
-                                rLRSpace.SetTextLeft( (sal_Int32)nAbs, (sal_uInt16)nProp );
+                                rLRSpace.SetTextLeft( nAbs, static_cast<sal_uInt16>(nProp) );
                                 break;
                             case MID_R_MARGIN:
-                                rLRSpace.SetRight( (sal_Int32)nAbs, (sal_uInt16)nProp );
+                                rLRSpace.SetRight( nAbs, static_cast<sal_uInt16>(nProp) );
                                 break;
                         }
                     }
@@ -306,7 +292,7 @@ bool SvXMLImportItemMapper::PutXMLValue(
                         bOk = rUnitConverter.convertMeasureToCore(nAbs, rValue,
                                                              -0x7fff, 0x7fff );
 
-                    rLRSpace.SetTextFirstLineOfst( (short)nAbs, (sal_uInt16)nProp );
+                    rLRSpace.SetTextFirstLineOfst( static_cast<short>(nAbs), static_cast<sal_uInt16>(nProp) );
                 }
                 break;
 
@@ -340,10 +326,10 @@ bool SvXMLImportItemMapper::PutXMLValue(
             switch( nMemberId )
             {
                 case MID_UP_MARGIN:
-                    rULSpace.SetUpper( (sal_uInt16)nAbs, (sal_uInt16)nProp );
+                    rULSpace.SetUpper( static_cast<sal_uInt16>(nAbs), static_cast<sal_uInt16>(nProp) );
                     break;
                 case MID_LO_MARGIN:
-                    rULSpace.SetLower( (sal_uInt16)nAbs, (sal_uInt16)nProp );
+                    rULSpace.SetLower( static_cast<sal_uInt16>(nAbs), static_cast<sal_uInt16>(nProp) );
                     break;
                 default:
                     OSL_FAIL("unknown MemberId");
@@ -361,24 +347,22 @@ bool SvXMLImportItemMapper::PutXMLValue(
             SvXMLTokenEnumerator aTokenEnum( rValue );
 
             Color aColor( 128,128, 128 );
-            rShadow.SetLocation( SVX_SHADOW_BOTTOMRIGHT );
+            rShadow.SetLocation( SvxShadowLocation::BottomRight );
 
             OUString aToken;
             while( aTokenEnum.getNextToken( aToken ) )
             {
                 if( IsXMLToken( aToken, XML_NONE ) )
                 {
-                    rShadow.SetLocation( SVX_SHADOW_NONE );
+                    rShadow.SetLocation( SvxShadowLocation::NONE );
                     bOk = true;
                 }
                 else if( !bColorFound && aToken.startsWith("#") )
                 {
-                    sal_Int32 nColor(0);
-                    bOk = ::sax::Converter::convertColor( nColor, aToken );
+                    bOk = ::sax::Converter::convertColor( aColor, aToken );
                     if( !bOk )
                         return false;
 
-                    aColor.SetColor(nColor);
                     bColorFound = true;
                 }
                 else if( !bOffsetFound )
@@ -395,22 +379,22 @@ bool SvXMLImportItemMapper::PutXMLValue(
                         {
                             if( nY < 0 )
                             {
-                                rShadow.SetLocation( SVX_SHADOW_TOPLEFT );
+                                rShadow.SetLocation( SvxShadowLocation::TopLeft );
                             }
                             else
                             {
-                                rShadow.SetLocation( SVX_SHADOW_BOTTOMLEFT );
+                                rShadow.SetLocation( SvxShadowLocation::BottomLeft );
                             }
                         }
                         else
                         {
                             if( nY < 0 )
                             {
-                                rShadow.SetLocation( SVX_SHADOW_TOPRIGHT );
+                                rShadow.SetLocation( SvxShadowLocation::TopRight );
                             }
                             else
                             {
-                                rShadow.SetLocation( SVX_SHADOW_BOTTOMRIGHT );
+                                rShadow.SetLocation( SvxShadowLocation::BottomRight );
                             }
                         }
 
@@ -455,16 +439,16 @@ bool SvXMLImportItemMapper::PutXMLValue(
 
                     if( nMemberId == LEFT_BORDER_PADDING ||
                         nMemberId == ALL_BORDER_PADDING )
-                        rBox.SetDistance( (sal_uInt16)nTemp, SvxBoxItemLine::LEFT );
+                        rBox.SetDistance( static_cast<sal_uInt16>(nTemp), SvxBoxItemLine::LEFT );
                     if( nMemberId == RIGHT_BORDER_PADDING ||
                         nMemberId == ALL_BORDER_PADDING )
-                        rBox.SetDistance( (sal_uInt16)nTemp, SvxBoxItemLine::RIGHT );
+                        rBox.SetDistance( static_cast<sal_uInt16>(nTemp), SvxBoxItemLine::RIGHT );
                     if( nMemberId == TOP_BORDER_PADDING ||
                         nMemberId == ALL_BORDER_PADDING )
-                        rBox.SetDistance( (sal_uInt16)nTemp, SvxBoxItemLine::TOP );
+                        rBox.SetDistance( static_cast<sal_uInt16>(nTemp), SvxBoxItemLine::TOP );
                     if( nMemberId == BOTTOM_BORDER_PADDING ||
                         nMemberId == ALL_BORDER_PADDING )
-                        rBox.SetDistance( (sal_uInt16)nTemp, SvxBoxItemLine::BOTTOM);
+                        rBox.SetDistance( static_cast<sal_uInt16>(nTemp), SvxBoxItemLine::BOTTOM);
                     break;
 
                 case ALL_BORDER:
@@ -577,10 +561,10 @@ bool SvXMLImportItemMapper::PutXMLValue(
                 break;
             }
 
-            rBox.SetLine( aBoxes.pTop,    SvxBoxItemLine::TOP    );
-            rBox.SetLine( aBoxes.pBottom, SvxBoxItemLine::BOTTOM );
-            rBox.SetLine( aBoxes.pLeft,   SvxBoxItemLine::LEFT   );
-            rBox.SetLine( aBoxes.pRight,  SvxBoxItemLine::RIGHT  );
+            rBox.SetLine( aBoxes.pTop.get(),    SvxBoxItemLine::TOP    );
+            rBox.SetLine( aBoxes.pBottom.get(), SvxBoxItemLine::BOTTOM );
+            rBox.SetLine( aBoxes.pLeft.get(),   SvxBoxItemLine::LEFT   );
+            rBox.SetLine( aBoxes.pRight.get(),  SvxBoxItemLine::RIGHT  );
 
             bOk = true;
         }
@@ -589,14 +573,14 @@ bool SvXMLImportItemMapper::PutXMLValue(
         case RES_BREAK:
         {
             SvxFormatBreakItem& rFormatBreak = dynamic_cast<SvxFormatBreakItem&>(rItem);
-            sal_uInt16 eEnum;
+            sal_uInt16 eEnum{};
 
             if( !SvXMLUnitConverter::convertEnum( eEnum, rValue, psXML_BreakType ) )
                 return false;
 
             if( eEnum == 0 )
             {
-                rFormatBreak.SetValue( SVX_BREAK_NONE );
+                rFormatBreak.SetValue( SvxBreak::NONE );
                 bOk = true;
             }
             else
@@ -604,14 +588,14 @@ bool SvXMLImportItemMapper::PutXMLValue(
                 switch( nMemberId )
                 {
                     case MID_BREAK_BEFORE:
-                        rFormatBreak.SetValue( static_cast< sal_uInt16 >((eEnum == 1) ?
-                                             SVX_BREAK_COLUMN_BEFORE :
-                                             SVX_BREAK_PAGE_BEFORE) );
+                        rFormatBreak.SetValue( eEnum == 1 ?
+                                               SvxBreak::ColumnBefore :
+                                               SvxBreak::PageBefore );
                         break;
                     case MID_BREAK_AFTER:
-                        rFormatBreak.SetValue( static_cast< sal_uInt16 >((eEnum == 1) ?
-                                             SVX_BREAK_COLUMN_AFTER :
-                                             SVX_BREAK_PAGE_AFTER) );
+                        rFormatBreak.SetValue( eEnum == 1 ?
+                                               SvxBreak::ColumnAfter :
+                                               SvxBreak::PageAfter );
                         break;
                 }
                 bOk = true;
@@ -660,29 +644,16 @@ bool SvXMLImportItemMapper::PutXMLValue(
                     }
                     break;
 
-                case MID_GRAPHIC_LINK:
-                {
-                    SvxGraphicPosition eOldGraphicPos = rBrush.GetGraphicPos();
-                    uno::Any aAny;
-                    aAny <<= rValue;
-                    rBrush.PutValue( aAny, MID_GRAPHIC_URL );
-                    if( GPOS_NONE == eOldGraphicPos &&
-                        GPOS_NONE != rBrush.GetGraphicPos() )
-                        rBrush.SetGraphicPos( GPOS_TILED );
-                    bOk = true;
-                }
-                break;
-
                 case MID_GRAPHIC_REPEAT:
                 {
                     SvxGraphicPosition eGraphicPos = rBrush.GetGraphicPos();
-                    sal_uInt16 nPos = GPOS_NONE;
+                    SvxGraphicPosition nPos = GPOS_NONE;
                     if( SvXMLUnitConverter::convertEnum( nPos, rValue,
                                                     psXML_BrushRepeat ) )
                     {
                         if( GPOS_MM != nPos || GPOS_NONE == eGraphicPos ||
                             GPOS_AREA == eGraphicPos || GPOS_TILED == eGraphicPos )
-                            rBrush.SetGraphicPos( (SvxGraphicPosition)nPos );
+                            rBrush.SetGraphicPos( nPos );
                         bOk = true;
                     }
                 }
@@ -691,7 +662,7 @@ bool SvXMLImportItemMapper::PutXMLValue(
                 case MID_GRAPHIC_POSITION:
                 {
                     SvxGraphicPosition ePos = GPOS_NONE, eTmp;
-                    sal_uInt16 nTmp;
+                    SvxGraphicPosition nTmp;
                     SvXMLTokenEnumerator aTokenEnum( rValue );
                     OUString aToken;
                     bool bHori = false, bVert = false;
@@ -741,9 +712,9 @@ bool SvXMLImportItemMapper::PutXMLValue(
                         {
                             if( bVert )
                                 sw_frmitems_MergeXMLHoriPos(
-                                    ePos, (SvxGraphicPosition)nTmp );
+                                    ePos, nTmp );
                             else if( !bHori )
-                                ePos = (SvxGraphicPosition)nTmp;
+                                ePos = nTmp;
                             else
                                 bOk = false;
                             bHori = true;
@@ -753,9 +724,9 @@ bool SvXMLImportItemMapper::PutXMLValue(
                         {
                             if( bHori )
                                 sw_frmitems_MergeXMLVertPos(
-                                    ePos, (SvxGraphicPosition)nTmp );
+                                    ePos, nTmp );
                             else if( !bVert )
-                                ePos = (SvxGraphicPosition)nTmp;
+                                ePos = nTmp;
                             else
                                 bOk = false;
                             bVert = true;
@@ -789,8 +760,11 @@ bool SvXMLImportItemMapper::PutXMLValue(
                 sal_Int32 nVal;
                 bOk = ::sax::Converter::convertNumber(
                         nVal, rValue, 0, USHRT_MAX);
-                if( bOk )
-                    rPageDesc.SetNumOffset( (sal_uInt16)nVal );
+                // i#114163 tdf#77111: OOo < 3.3 had a bug where it wrote
+                // "auto" as "0" for tables - now that we support a real offset
+                //  0, this fake "0" MUST NOT be imported as offset 0!
+                if( bOk && nVal > 0 )
+                    rPageDesc.SetNumOffset( static_cast<sal_uInt16>(nVal) );
             }
         }
         break;
@@ -819,7 +793,7 @@ bool SvXMLImportItemMapper::PutXMLValue(
         {
             SwFormatHoriOrient& rHoriOrient = dynamic_cast<SwFormatHoriOrient&>(rItem);
 
-            sal_uInt16 nValue;
+            sal_Int16 nValue;
             bOk = SvXMLUnitConverter::convertEnum( nValue, rValue,
                                               aXMLTableAlignMap );
             if( bOk )
@@ -831,7 +805,7 @@ bool SvXMLImportItemMapper::PutXMLValue(
         {
             SwFormatVertOrient& rVertOrient = dynamic_cast<SwFormatVertOrient&>(rItem);
 
-            sal_uInt16 nValue;
+            sal_Int16 nValue;
             bOk = SvXMLUnitConverter::convertEnum( nValue, rValue,
                                               aXMLTableVAlignMap );
             if( bOk )
@@ -868,7 +842,7 @@ bool SvXMLImportItemMapper::PutXMLValue(
                         else if( nValue > 100 )
                             nValue = 100;
 
-                        rFrameSize.SetWidthPercent( (sal_Int8)nValue );
+                        rFrameSize.SetWidthPercent( static_cast<sal_Int8>(nValue) );
                     }
                 }
                 break;
@@ -895,15 +869,15 @@ bool SvXMLImportItemMapper::PutXMLValue(
                 case MID_FRMSIZE_REL_COL_WIDTH:
                 {
                     sal_Int32 nPos = rValue.indexOf( '*' );
-                    if( -1L != nPos )
+                    if( -1 != nPos )
                     {
                         sal_Int32 nValue = rValue.toInt32();
                         if( nValue < MINLAY )
                             nValue = MINLAY;
-                        else if( nValue > USHRT_MAX )
-                            nValue = USHRT_MAX;
+                        else if( nValue > SAL_MAX_UINT16 )
+                            nValue = SAL_MAX_UINT16;
 
-                        rFrameSize.SetWidth( (sal_uInt16)nValue );
+                        rFrameSize.SetWidth( static_cast<sal_uInt16>(nValue) );
                         rFrameSize.SetHeightSizeType( ATT_VAR_SIZE );
                         bOk = true;
                     }
@@ -919,9 +893,9 @@ bool SvXMLImportItemMapper::PutXMLValue(
                 if( bOk )
                 {
                     if( bSetWidth )
-                        rFrameSize.SetWidth( (sal_uInt16)nValue );
+                        rFrameSize.SetWidth( static_cast<sal_uInt16>(nValue) );
                     if( bSetHeight )
-                        rFrameSize.SetHeight( (sal_uInt16)nValue );
+                        rFrameSize.SetHeight( static_cast<sal_uInt16>(nValue) );
                     if( bSetSizeType )
                         rFrameSize.SetHeightSizeType( eSizeType );
                 }
@@ -931,19 +905,14 @@ bool SvXMLImportItemMapper::PutXMLValue(
 
         case RES_FRAMEDIR:
         {
-            const XMLPropertyHandler* pWritingModeHandler =
+            std::unique_ptr<XMLPropertyHandler> pWritingModeHandler =
                 XMLPropertyHandlerFactory::CreatePropertyHandler(
                     XML_TYPE_TEXT_WRITING_MODE_WITH_DEFAULT );
-            if( pWritingModeHandler != nullptr )
-            {
-                Any aAny;
-                bOk = pWritingModeHandler->importXML( rValue, aAny,
+            Any aAny;
+            bOk = pWritingModeHandler->importXML( rValue, aAny,
                                                       rUnitConverter );
-                if( bOk )
-                    bOk = rItem.PutValue( aAny, 0 );
-
-                delete pWritingModeHandler;
-            }
+            if( bOk )
+                bOk = rItem.PutValue( aAny, 0 );
         }
         break;
 

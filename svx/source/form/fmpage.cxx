@@ -21,17 +21,12 @@
 
 #include <svx/fmpage.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
-
 
 #include <svx/fmmodel.hxx>
 
-#include "fmobj.hxx"
+#include <fmobj.hxx>
 
-#include <svx/fmresids.hrc>
-#include <svx/dialmgr.hxx>
-
-#include "fmpgeimp.hxx"
+#include <fmpgeimp.hxx>
 
 #include <sfx2/objsh.hxx>
 #include <svx/svditer.hxx>
@@ -41,35 +36,29 @@
 
 
 #include <svx/fmglob.hxx>
-#include "fmprop.hrc"
-#include "fmundo.hxx"
-#include "svx/fmtools.hxx"
+#include <fmprop.hxx>
+#include <fmundo.hxx>
+#include <svx/fmtools.hxx>
 using namespace ::svxform;
 #include <comphelper/property.hxx>
+#include <comphelper/types.hxx>
 
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::UNO_QUERY;
-using com::sun::star::container::XChild;
-using com::sun::star::container::XNameContainer;
 
 
 FmFormPage::FmFormPage(FmFormModel& rModel, bool bMasterPage)
-           :SdrPage(rModel, bMasterPage)
-           ,m_pImpl( new FmFormPageImpl( *this ) )
+:   SdrPage(rModel, bMasterPage)
+    ,m_pImpl( new FmFormPageImpl( *this ) )
 {
 }
 
-
-FmFormPage::FmFormPage(const FmFormPage& rPage)
-           :SdrPage(rPage)
-           ,m_pImpl(new FmFormPageImpl( *this ) )
+void FmFormPage::lateInit(const FmFormPage& rPage)
 {
-}
+    // call parent
+    SdrPage::lateInit( rPage );
 
-void FmFormPage::lateInit(const FmFormPage& rPage, FmFormModel* const pNewModel)
-{
-    SdrPage::lateInit( rPage, pNewModel );
-
+    // copy local variables (former stuff from copy constructor)
     m_pImpl->initFrom( rPage.GetImpl() );
     m_sPageName = rPage.m_sPageName;
 }
@@ -77,69 +66,24 @@ void FmFormPage::lateInit(const FmFormPage& rPage, FmFormModel* const pNewModel)
 
 FmFormPage::~FmFormPage()
 {
-    delete m_pImpl;
+}
+
+SdrPage* FmFormPage::CloneSdrPage(SdrModel& rTargetModel) const
+{
+    FmFormModel& rFmFormModel(static_cast< FmFormModel& >(rTargetModel));
+    FmFormPage* pClonedFmFormPage(
+        new FmFormPage(
+            rFmFormModel,
+            IsMasterPage()));
+    pClonedFmFormPage->lateInit(*this);
+    return pClonedFmFormPage;
 }
 
 
-void FmFormPage::SetModel(SdrModel* pNewModel)
+void FmFormPage::InsertObject(SdrObject* pObj, size_t nPos)
 {
-    /* #35055# */
-    // we want to call the super's "SetModel" method even if the model is the
-    // same, in case code somewhere in the system depends on it.  But our code
-    // doesn't, so get the old model to do a check.
-    SdrModel *pOldModel = GetModel();
-
-    SdrPage::SetModel( pNewModel );
-
-    /* #35055# */
-    if ( ( pOldModel != pNewModel ) && m_pImpl )
-    {
-        try
-        {
-            Reference< css::form::XForms > xForms( m_pImpl->getForms( false ) );
-            if ( xForms.is() )
-            {
-                // we want to keep the current collection, just reset the model
-                // with which it's associated.
-                FmFormModel* pDrawModel = static_cast<FmFormModel*>( GetModel() );
-                SfxObjectShell* pObjShell = pDrawModel->GetObjectShell();
-                if ( pObjShell )
-                    xForms->setParent( pObjShell->GetModel() );
-            }
-        }
-        catch( css::uno::Exception const& )
-        {
-            OSL_FAIL( "UNO Exception caught resetting model for m_pImpl (FmFormPageImpl) in FmFormPage::SetModel" );
-        }
-    }
-}
-
-
-SdrPage* FmFormPage::Clone() const
-{
-    return Clone(nullptr);
-}
-
-SdrPage* FmFormPage::Clone(SdrModel* const pNewModel) const
-{
-    FmFormPage* const pNewPage = new FmFormPage(*this);
-    FmFormModel* pFormModel = nullptr;
-    if (pNewModel)
-    {
-        pFormModel = dynamic_cast<FmFormModel*>(pNewModel);
-        assert(pFormModel);
-    }
-    pNewPage->lateInit(*this, pFormModel);
-    return pNewPage;
-}
-
-
-void FmFormPage::InsertObject(SdrObject* pObj, size_t nPos,
-                              const SdrInsertReason* pReason)
-{
-    SdrPage::InsertObject( pObj, nPos, pReason );
-    if (GetModel() && (!pReason || pReason->GetReason() != SDRREASON_STREAMING))
-        static_cast<FmFormModel*>(GetModel())->GetUndoEnv().Inserted(pObj);
+    SdrPage::InsertObject( pObj, nPos );
+    static_cast< FmFormModel& >(getSdrModelFromSdrPage()).GetUndoEnv().Inserted(pObj);
 }
 
 
@@ -155,7 +99,7 @@ const Reference< css::form::XForms > & FmFormPage::GetForms( bool _bForceCreate 
 }
 
 
-bool FmFormPage::RequestHelp( vcl::Window* pWindow, SdrView* pView,
+bool FmFormPage::RequestHelp( vcl::Window* pWindow, SdrView const * pView,
                               const HelpEvent& rEvt )
 {
     if( pView->IsAction() )
@@ -165,9 +109,9 @@ bool FmFormPage::RequestHelp( vcl::Window* pWindow, SdrView* pView,
     aPos = pWindow->ScreenToOutputPixel( aPos );
     aPos = pWindow->PixelToLogic( aPos );
 
-    SdrObject* pObj = nullptr;
     SdrPageView* pPV = nullptr;
-    if ( !pView->PickObj( aPos, 0, pObj, pPV, SdrSearchOptions::DEEP ) )
+    SdrObject* pObj = pView->PickObj(aPos, 0, pPV, SdrSearchOptions::DEEP);
+    if (!pObj)
         return false;
 
     FmFormObj* pFormObject = FmFormObj::GetFormObject( pObj );
@@ -179,39 +123,39 @@ bool FmFormPage::RequestHelp( vcl::Window* pWindow, SdrView* pView,
     if (xSet.is())
     {
         if (::comphelper::hasProperty(FM_PROP_HELPTEXT, xSet))
-            aHelpText = ::comphelper::getString(xSet->getPropertyValue(FM_PROP_HELPTEXT)).getStr();
+            aHelpText = ::comphelper::getString(xSet->getPropertyValue(FM_PROP_HELPTEXT));
 
         if (aHelpText.isEmpty() && ::comphelper::hasProperty(FM_PROP_TARGET_URL, xSet))
         {
             OUString aText = ::comphelper::getString(xSet->getPropertyValue(FM_PROP_TARGET_URL));
             INetURLObject aUrl(aText);
 
-            // testen, ob es ein Protokoll-Typ ist, den ich anzeigen will
+            // test if it is a protocol type that I want to display
             INetProtocol aProtocol = aUrl.GetProtocol();
             static const INetProtocol s_aQuickHelpSupported[] =
                 {   INetProtocol::Ftp, INetProtocol::Http, INetProtocol::File, INetProtocol::Mailto,
                     INetProtocol::Https, INetProtocol::Javascript,
                     INetProtocol::Ldap
                 };
-            for (sal_uInt16 i=0; i<SAL_N_ELEMENTS(s_aQuickHelpSupported); ++i)
-                if (s_aQuickHelpSupported[i] == aProtocol)
+            for (const INetProtocol& i : s_aQuickHelpSupported)
+                if (i == aProtocol)
                 {
-                    aHelpText = INetURLObject::decode(aUrl.GetURLNoPass(), INetURLObject::DECODE_UNAMBIGUOUS);
+                    aHelpText = INetURLObject::decode(aUrl.GetURLNoPass(), INetURLObject::DecodeMechanism::Unambiguous);
                     break;
                 }
         }
     }
     if ( !aHelpText.isEmpty() )
     {
-        // Hilfe anzeigen
-        Rectangle aItemRect = pObj->GetCurrentBoundRect();
+        // display the help
+        tools::Rectangle aItemRect = pObj->GetCurrentBoundRect();
         aItemRect = pWindow->LogicToPixel( aItemRect );
         Point aPt = pWindow->OutputToScreenPixel( aItemRect.TopLeft() );
-        aItemRect.Left()   = aPt.X();
-        aItemRect.Top()    = aPt.Y();
+        aItemRect.SetLeft( aPt.X() );
+        aItemRect.SetTop( aPt.Y() );
         aPt = pWindow->OutputToScreenPixel( aItemRect.BottomRight() );
-        aItemRect.Right()  = aPt.X();
-        aItemRect.Bottom() = aPt.Y();
+        aItemRect.SetRight( aPt.X() );
+        aItemRect.SetBottom( aPt.Y() );
         if( rEvt.GetMode() == HelpEventMode::BALLOON )
             Help::ShowBalloon( pWindow, aItemRect.Center(), aItemRect, aHelpText);
         else
@@ -224,8 +168,8 @@ bool FmFormPage::RequestHelp( vcl::Window* pWindow, SdrView* pView,
 SdrObject* FmFormPage::RemoveObject(size_t nObjNum)
 {
     SdrObject* pObj = SdrPage::RemoveObject(nObjNum);
-    if (pObj && GetModel())
-        static_cast<FmFormModel*>(GetModel())->GetUndoEnv().Removed(pObj);
+    if (pObj)
+        static_cast< FmFormModel& >(getSdrModelFromSdrPage()).GetUndoEnv().Removed(pObj);
     return pObj;
 }
 

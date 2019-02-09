@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "urltransformer.hxx"
+#include <urltransformer.hxx>
 
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <tools/debug.hxx>
-#include <comphelper/processfactory.hxx>
 
 
 namespace frm

@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "hintids.hxx"
+#include <hintids.hxx>
 #include <vcl/svapp.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/ruler.hxx>
@@ -45,30 +45,49 @@
 #include <wview.hxx>
 
 #include <cmdid.h>
-#include <view.hrc>
-#include <ribbar.hrc>
-#include <helpid.h>
 #include <globals.hrc>
 
 #include <IDocumentSettingAccess.hxx>
 #include <PostItMgr.hxx>
+#include <AnnotationWin.hxx>
+
+#include <svx/srchdlg.hxx>
+
+#include <vcl/uitest/logger.hxx>
+#include <vcl/uitest/eventdescription.hxx>
 
 sal_uInt16  SwView::m_nMoveType = NID_PGE;
 sal_Int32 SwView::m_nActMark = 0;
 
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::frame;
+
+namespace {
+
+void collectUIInformation(const OUString& aFactor)
+{
+    EventDescription aDescription;
+    aDescription.aID = "writer_edit";
+    aDescription.aParameters = {{"ZOOM", aFactor}};
+    aDescription.aAction = "SET";
+    aDescription.aKeyWord = "SwEditWinUIObject";
+    aDescription.aParent = "MainWindow";
+    UITestLogger::getInstance().logEvent(aDescription);
+}
+
+}
 
 void SwView::SetZoom( SvxZoomType eZoomType, short nFactor, bool bViewOnly )
 {
     bool const bCursorIsVisible(m_pWrtShell->IsCursorVisible());
-    _SetZoom( GetEditWin().GetOutputSizePixel(), eZoomType, nFactor, bViewOnly );
+    SetZoom_( GetEditWin().GetOutputSizePixel(), eZoomType, nFactor, bViewOnly );
     // fdo#40465 force the cursor to stay in view whilst zooming
     if (bCursorIsVisible)
         m_pWrtShell->ShowCursor();
+
+    collectUIInformation(OUString::number(nFactor));
 }
 
-void SwView::_SetZoom( const Size &rEditSize, SvxZoomType eZoomType,
+void SwView::SetZoom_( const Size &rEditSize, SvxZoomType eZoomType,
                         short nFactor, bool bViewOnly )
 {
     bool bUnLockView = !m_pWrtShell->IsViewLocked();
@@ -76,7 +95,7 @@ void SwView::_SetZoom( const Size &rEditSize, SvxZoomType eZoomType,
     m_pWrtShell->LockPaint();
 
     { // start of SwActContext scope
-    SwActContext aActContext(m_pWrtShell);
+    SwActContext aActContext(m_pWrtShell.get());
 
     long nFac = nFactor;
 
@@ -92,38 +111,38 @@ void SwView::_SetZoom( const Size &rEditSize, SvxZoomType eZoomType,
     {
         const bool bAutomaticViewLayout = 0 == pOpt->GetViewLayoutColumns();
 
-        const SwRect aPageRect( m_pWrtShell->GetAnyCurRect( RECT_PAGE_CALC ) );
-        const SwRect aRootRect( m_pWrtShell->GetAnyCurRect( RECT_PAGES_AREA ) );
+        const SwRect aPageRect( m_pWrtShell->GetAnyCurRect( CurRectType::PageCalc ) );
+        const SwRect aRootRect( m_pWrtShell->GetAnyCurRect( CurRectType::PagesArea ) );
         Size aPageSize( aPageRect.SSize() );
         Size aRootSize( aRootRect.SSize() );
 
         //mod #i6193# added sidebar width
         SwPostItMgr* pPostItMgr = GetPostItMgr();
         if (pPostItMgr->HasNotes() && pPostItMgr->ShowNotes())
-            aPageSize.Width() += pPostItMgr->GetSidebarWidth() + pPostItMgr->GetSidebarBorderWidth();
+            aPageSize.AdjustWidth(pPostItMgr->GetSidebarWidth() + pPostItMgr->GetSidebarBorderWidth() );
 
-        const MapMode aTmpMap( MAP_TWIP );
+        const MapMode aTmpMap( MapUnit::MapTwip );
         const Size aWindowSize( GetEditWin().PixelToLogic( rEditSize, aTmpMap ) );
 
-        if( nsUseOnPage::PD_MIRROR == rDesc.GetUseOn() )    // mirrored pages
+        if( UseOnPage::Mirror == rDesc.GetUseOn() )    // mirrored pages
         {
             const SvxLRSpaceItem &rLeftLRSpace = rDesc.GetLeft().GetLRSpace();
-            aPageSize.Width() += std::abs( long(rLeftLRSpace.GetLeft()) - long(rLRSpace.GetLeft()) );
+            aPageSize.AdjustWidth(std::abs( rLeftLRSpace.GetLeft() - rLRSpace.GetLeft() ) );
         }
 
         if( SvxZoomType::OPTIMAL == eZoomType )
         {
             if (!pPostItMgr->HasNotes() || !pPostItMgr->ShowNotes())
-                aPageSize.Width() -= ( rLRSpace.GetLeft() + rLRSpace.GetRight() + nLeftOfst * 2 );
-            lLeftMargin = long(rLRSpace.GetLeft()) + DOCUMENTBORDER + nLeftOfst;
+                aPageSize.AdjustWidth( -( rLRSpace.GetLeft() + rLRSpace.GetRight() + nLeftOfst * 2 ) );
+            lLeftMargin = rLRSpace.GetLeft() + DOCUMENTBORDER + nLeftOfst;
             nFac = aWindowSize.Width() * 100 / aPageSize.Width();
         }
         else if(SvxZoomType::WHOLEPAGE == eZoomType || SvxZoomType::PAGEWIDTH == eZoomType )
         {
-            const long nOf = DOCUMENTBORDER * 2L;
+            const long nOf = DOCUMENTBORDER * 2;
             long nTmpWidth = bAutomaticViewLayout ? aPageSize.Width() : aRootSize.Width();
             nTmpWidth += nOf;
-            aPageSize.Height() += nOf;
+            aPageSize.AdjustHeight(nOf );
             nFac = aWindowSize.Width() * 100 / nTmpWidth;
 
             if ( SvxZoomType::WHOLEPAGE == eZoomType )
@@ -166,18 +185,18 @@ void SwView::_SetZoom( const Size &rEditSize, SvxZoomType eZoomType,
             Point aPos;
 
             if ( eZoomType == SvxZoomType::WHOLEPAGE )
-                aPos.Y() = m_pWrtShell->GetAnyCurRect(RECT_PAGE).Top() - DOCUMENTBORDER;
+                aPos.setY( m_pWrtShell->GetAnyCurRect(CurRectType::Page).Top() - DOCUMENTBORDER );
             else
             {
                 // Make sure that the cursor is in the visible range, so that
                 // the scrolling will be performed only once.
-                aPos.X() = lLeftMargin;
+                aPos.setX( lLeftMargin );
                 const SwRect &rCharRect = m_pWrtShell->GetCharRect();
                 if ( rCharRect.Top() > GetVisArea().Bottom() ||
                     rCharRect.Bottom() < aPos.Y() )
-                    aPos.Y() = rCharRect.Top() - rCharRect.Height();
+                    aPos.setY( rCharRect.Top() - rCharRect.Height() );
                 else
-                    aPos.Y() = GetVisArea().Top();
+                    aPos.setY( GetVisArea().Top() );
             }
             SetVisArea( aPos );
         }
@@ -213,7 +232,7 @@ void SwView::SetViewLayout( sal_uInt16 nColumns, bool bBookMode, bool bViewOnly 
 
     {
 
-    SwActContext aActContext(m_pWrtShell);
+    SwActContext aActContext(m_pWrtShell.get());
 
     if ( !GetViewFrame()->GetFrame().IsInPlace() && !bViewOnly )
     {
@@ -258,29 +277,30 @@ void SwView::SetViewLayout( sal_uInt16 nColumns, bool bBookMode, bool bViewOnly 
 
 // Scrollbar - Handler
 
-IMPL_LINK_TYPED( SwView, WindowChildEventListener, VclWindowEvent&, rEvent, void )
+IMPL_LINK( SwView, WindowChildEventListener, VclWindowEvent&, rEvent, void )
 {
     OSL_ENSURE( rEvent.GetWindow(), "Window???" );
     vcl::Window* pChildWin = static_cast< vcl::Window* >( rEvent.GetData() );
 
     switch ( rEvent.GetId() )
     {
-        case VCLEVENT_WINDOW_HIDE:
+        case VclEventId::WindowHide:
             if( pChildWin == m_pHScrollbar )
                 ShowHScrollbar( false );
             else if( pChildWin == m_pVScrollbar )
                 ShowVScrollbar( false );
             break;
-        case VCLEVENT_WINDOW_SHOW:
+        case VclEventId::WindowShow:
             if( pChildWin == m_pHScrollbar )
                 ShowHScrollbar( true );
             else if( pChildWin == m_pVScrollbar )
                 ShowVScrollbar( true );
             break;
+        default: break;
     }
 }
 
-void SwView::_CreateScrollbar( bool bHori )
+void SwView::CreateScrollbar( bool bHori )
 {
     vcl::Window *pMDI = &GetViewFrame()->GetWindow();
     VclPtr<SwScrollbar>& ppScrollbar = bHori ? m_pHScrollbar : m_pVScrollbar;
@@ -304,13 +324,26 @@ void SwView::_CreateScrollbar( bool bHori )
         ppScrollbar->ExtendedShow();
 }
 
-IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
+IMPL_LINK( SwView, MoveNavigationHdl, void*, p, void )
 {
     bool* pbNext = static_cast<bool*>(p);
     if ( !pbNext )
         return;
     const bool bNext = *pbNext;
     SwWrtShell& rSh = GetWrtShell();
+    if ( NID_SRCH_REP != m_nMoveType)
+    {
+        if ( rSh.GetDrawView()->IsTextEdit() )
+            rSh.EndTextEdit();
+        if ( IsDrawMode() )
+            LeaveDrawCreate();
+    }
+    if ( NID_POSTIT != m_nMoveType && m_pPostItMgr )
+    {
+        sw::annotation::SwAnnotationWin* pActiveSidebarWin = m_pPostItMgr->GetActiveSidebarWin();
+        if (pActiveSidebarWin)
+            pActiveSidebarWin->SwitchToFieldPos();
+    }
     switch( m_nMoveType )
     {
         case NID_PGE:
@@ -319,9 +352,9 @@ IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
         case NID_TBL :
             rSh.EnterStdMode();
             if(bNext)
-                rSh.MoveTable(fnTableNext, fnTableStart);
+                rSh.MoveTable(GotoNextTable, fnTableStart);
             else
-                rSh.MoveTable(fnTablePrev, fnTableStart);
+                rSh.MoveTable(GotoPrevTable, fnTableStart);
         break;
         case NID_FRM :
         case NID_GRF:
@@ -344,17 +377,24 @@ IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
         break;
         case NID_DRW :
         case NID_CTRL:
-            rSh.GotoObj(bNext,
+        {
+            bool bSuccess = rSh.GotoObj(bNext,
                     m_nMoveType == NID_DRW ?
                         GotoObjFlags::DrawSimple :
                         GotoObjFlags::DrawControl);
+            if(bSuccess)
+            {
+                rSh.HideCursor();
+                rSh.EnterSelFrameMode();
+            }
+        }
         break;
         case NID_REG :
             rSh.EnterStdMode();
             if(bNext)
-                rSh.MoveRegion(fnRegionNext, fnRegionStart);
+                rSh.MoveRegion(GotoNextRegion, fnRegionStart);
             else
-                rSh.MoveRegion(fnRegionPrev, fnRegionStart);
+                rSh.MoveRegion(GotoPrevRegion, fnRegionStart);
 
         break;
         case NID_BKM :
@@ -371,10 +411,26 @@ IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
             bNext ? rSh.GoNextCursor() : rSh.GoPrevCursor();
         break;
         case NID_FTN:
+        {
+            bool bFrameTypeFootnote(rSh.GetFrameType(nullptr, false) & FrameTypeFlags::FOOTNOTE);
+
+            if (bFrameTypeFootnote)
+            {
+                rSh.LockView(true);
+                rSh.GotoFootnoteAnchor();
+            }
+
             rSh.EnterStdMode();
             bNext ?
                 rSh.GotoNextFootnoteAnchor() :
                     rSh.GotoPrevFootnoteAnchor();
+
+            if (bFrameTypeFootnote)
+            {
+                rSh.LockView(false);
+                rSh.GotoFootnoteText();
+            }
+        }
         break;
         case NID_MARK:
         {
@@ -384,7 +440,7 @@ IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
 
             // collect navigator reminders
             IDocumentMarkAccess* const pMarkAccess = rSh.getIDocumentMarkAccess();
-            ::std::vector< const ::sw::mark::IMark* > vNavMarks;
+            std::vector< const ::sw::mark::IMark* > vNavMarks;
             for( IDocumentMarkAccess::const_iterator_t ppMark = pMarkAccess->getAllMarksBegin();
                 ppMark != pMarkAccess->getAllMarksEnd();
                 ++ppMark)
@@ -396,37 +452,56 @@ IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
             // move
             if(!vNavMarks.empty())
             {
+                SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+
                 if(bNext)
                 {
                     m_nActMark++;
                     if (m_nActMark >= MAX_MARKS || m_nActMark >= static_cast<sal_Int32>(vNavMarks.size()))
+                    {
                         m_nActMark = 0;
+                        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::EndWrapped );
+                    }
                 }
                 else
                 {
                     m_nActMark--;
                     if (m_nActMark < 0 || m_nActMark >= static_cast<sal_Int32>(vNavMarks.size()))
+                    {
                         m_nActMark = vNavMarks.size()-1;
+                        SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::StartWrapped );
+                    }
                 }
                 rSh.GotoMark(vNavMarks[m_nActMark]);
             }
+            else
+                SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
         }
         break;
 
         case NID_POSTIT:
+        {
+            if ( m_pPostItMgr->HasNotes() )
             {
                 rSh.EnterStdMode();
-                sw::sidebarwindows::SwSidebarWin* pPostIt = GetPostItMgr()->GetActiveSidebarWin();
+                sw::annotation::SwAnnotationWin* pPostIt = GetPostItMgr()->GetActiveSidebarWin();
                 if (pPostIt)
                     GetPostItMgr()->SetActiveSidebarWin(nullptr);
-                SwFieldType* pFieldType = rSh.GetFieldType(0, RES_POSTITFLD);
-                if ( rSh.MoveFieldType( pFieldType, bNext ) )
-                    GetViewFrame()->GetDispatcher()->Execute(FN_POSTIT);
+                SwFieldType* pFieldType = rSh.GetFieldType(0, SwFieldIds::Postit);
+                if ( !rSh.MoveFieldType( pFieldType, bNext ) )
+                {
+                    bNext ? (*(m_pPostItMgr->begin()))->pPostIt->GotoPos() :
+                        (*(m_pPostItMgr->end()-1))->pPostIt->GotoPos();
+                    SvxSearchDialogWrapper::SetSearchLabel( bNext ? SearchLabel::EndWrapped : SearchLabel::StartWrapped );
+                }
                 else
-                    //first/last item
-                    GetPostItMgr()->SetActiveSidebarWin(pPostIt);
+                    SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+                GetViewFrame()->GetDispatcher()->Execute(FN_POSTIT);
             }
-            break;
+            else
+                SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+        }
+        break;
 
         case NID_SRCH_REP:
         if(m_pSrchItem)
@@ -456,20 +531,18 @@ IMPL_LINK_TYPED( SwView, MoveNavigationHdl, void*, p, void )
     delete pbNext;
 }
 
-int SwView::CreateTab()
+void SwView::CreateTab()
 {
     m_pHRuler->SetActive(GetFrame() && IsActive());
 
     m_pHRuler->Show();
     InvalidateBorder();
-    return 1;
 }
 
-int SwView::KillTab()
+void SwView::KillTab()
 {
     m_pHRuler->Hide();
     InvalidateBorder();
-    return 1;
 }
 
 void SwView::ChangeTabMetric( FieldUnit eUnit )
@@ -500,43 +573,47 @@ void SwView::GetHRulerMetric(FieldUnit& eToFill) const
     eToFill = m_pHRuler->GetUnit();
 }
 
-int SwView::CreateVRuler()
+void SwView::CreateVRuler()
 {
     m_pHRuler->SetBorderPos( m_pVRuler->GetSizePixel().Width()-1 );
 
     m_pVRuler->SetActive(GetFrame() && IsActive());
     m_pVRuler->Show();
     InvalidateBorder();
-    return 1;
 }
 
-int SwView::KillVRuler()
+void SwView::KillVRuler()
 {
     m_pVRuler->Hide();
     m_pHRuler->SetBorderPos();
     InvalidateBorder();
-    return 1;
 }
 
-IMPL_LINK_TYPED( SwView, ExecRulerClick, Ruler *, pRuler, void )
+IMPL_LINK( SwView, ExecRulerClick, Ruler *, pRuler, void )
 {
     OUString sDefPage;
+    sal_uInt16 nDefDlg = SID_PARA_DLG;
     switch( pRuler->GetClickType() )
     {
-        case RULER_TYPE_DONTKNOW:
-        case RULER_TYPE_OUTSIDE:
-        case RULER_TYPE_INDENT:
-        case RULER_TYPE_MARGIN1:
-        case RULER_TYPE_MARGIN2:
-            sDefPage = "indents";
-        break;
+        case RulerType::DontKnow:
+        case RulerType::Outside:
+            sDefPage="labelTP_BORDER";
+            break;
+        case RulerType::Indent:
+            sDefPage="labelTP_PARA_STD";
+            break;
+        case RulerType::Margin1:
+        case RulerType::Margin2:
+            nDefDlg= FN_FORMAT_PAGE_DLG;
+            sDefPage = "page";
+            break;
         default:
-            sDefPage = "tabs";
+            sDefPage = "labelTP_TABULATOR";
 
     }
 
-    SfxStringItem aDefPage(SID_PARA_DLG, sDefPage);
-    GetViewFrame()->GetDispatcher()->ExecuteList(SID_PARA_DLG,
+    SfxStringItem aDefPage(nDefDlg, sDefPage);
+    GetViewFrame()->GetDispatcher()->ExecuteList(nDefDlg,
                                 SfxCallMode::SYNCHRON|SfxCallMode::RECORD,
                                 { &aDefPage });
 }

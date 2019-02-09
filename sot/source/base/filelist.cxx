@@ -21,41 +21,11 @@
 #include <tools/stream.hxx>
 #include <sot/exchange.hxx>
 #include <sot/filelist.hxx>
-#include <osl/diagnose.h>
 #include <osl/thread.h>
-
-/*************************************************************************
-|*
-|*    FileList - Ctor/Dtor
-|*
-\*************************************************************************/
-
-FileList::~FileList()
-{
-    ClearAll();
-}
-
-void FileList::ClearAll()
-{
-    aStrList.clear();
-}
-
-/*************************************************************************
-|*
-|*    FileList - Zuweisungsoperator
-|*
-\*************************************************************************/
-
-FileList& FileList::operator=( const FileList& rFileList )
-{
-    for ( size_t i = 0, n = rFileList.aStrList.size(); i < n; ++i )
-        aStrList.push_back( rFileList.aStrList[ i ] );
-    return *this;
-}
 
 /******************************************************************************
 |*
-|*  Stream-Operatoren
+|*  Stream operators
 |*
 \******************************************************************************/
 
@@ -67,12 +37,12 @@ FileList& FileList::operator=( const FileList& rFileList )
    resolved by the Windows clipboard bridge.*/
 SvStream& ReadFileList( SvStream& rIStm, FileList& rFileList )
 {
-    rFileList.ClearAll();
+    rFileList.clear();
 
     OUStringBuffer sBuf(512);
     sal_uInt16 c;
 
-    while (!rIStm.IsEof())
+    while (!rIStm.eof())
     {
         // read first character of filepath; c==0 > reach end of stream
         rIStm.ReadUInt16( c );
@@ -80,9 +50,9 @@ SvStream& ReadFileList( SvStream& rIStm, FileList& rFileList )
             break;
 
         // read string till c==0
-        while (c && !rIStm.IsEof())
+        while (c && !rIStm.eof())
         {
-            sBuf.append((sal_Unicode)c);
+            sBuf.append(static_cast<sal_Unicode>(c));
             rIStm.ReadUInt16( c );
         }
 
@@ -95,7 +65,7 @@ SvStream& ReadFileList( SvStream& rIStm, FileList& rFileList )
 
 /******************************************************************************
 |*
-|*  Liste fuellen/abfragen
+|*  Fill in / check the list
 |*
 \******************************************************************************/
 

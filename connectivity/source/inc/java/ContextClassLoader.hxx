@@ -20,11 +20,11 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_CONTEXTCLASSLOADER_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_CONTEXTCLASSLOADER_HXX
 
-#include "java/GlobalRef.hxx"
+#include <java/GlobalRef.hxx>
 
 namespace comphelper
 {
-    class ResourceBasedEventLogger;
+    class EventLogger;
 }
 
 
@@ -51,11 +51,11 @@ namespace connectivity { namespace jdbc
         ContextClassLoaderScope(
             JNIEnv& environment,
             const GlobalRef< jobject >& newClassLoader,
-            const ::comphelper::ResourceBasedEventLogger& _rLoggerForErrors,
-            const ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >& _rxErrorContext
+            const ::comphelper::EventLogger& _rLoggerForErrors,
+            const css::uno::Reference< css::uno::XInterface >& _rxErrorContext
         );
 
-        ~ContextClassLoaderScope() { pop(); }
+        ~ContextClassLoaderScope();
 
         bool isActive() const
         {
@@ -64,10 +64,8 @@ namespace connectivity { namespace jdbc
         }
 
     private:
-        ContextClassLoaderScope(ContextClassLoaderScope &) = delete;
-        void operator =(ContextClassLoaderScope &) = delete;
-
-        void pop();
+        ContextClassLoaderScope(ContextClassLoaderScope const &) = delete;
+        ContextClassLoaderScope& operator =(ContextClassLoaderScope const &) = delete;
 
         JNIEnv&                             m_environment;
         LocalRef< jobject >                 m_currentThread;

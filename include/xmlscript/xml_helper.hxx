@@ -20,13 +20,14 @@
 #define INCLUDED_XMLSCRIPT_XML_HELPER_HXX
 
 #include <vector>
-#include <rtl/byteseq.hxx>
-#include <cppuhelper/implbase1.hxx>
-#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <com/sun/star/xml/sax/XAttributeList.hpp>
 
 #include <xmlscript/xmlscriptdllapi.h>
+
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XDocumentHandler; } } } } }
+namespace com { namespace sun { namespace star { namespace io { class XInputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XOutputStream; } } } }
 
 namespace xmlscript
 {
@@ -39,10 +40,10 @@ namespace xmlscript
 
 
 class XMLSCRIPT_DLLPUBLIC XMLElement
-    : public ::cppu::WeakImplHelper1< css::xml::sax::XAttributeList >
+    : public cppu::WeakImplHelper< css::xml::sax::XAttributeList >
 {
 public:
-    inline XMLElement( OUString const & name )
+    XMLElement( OUString const & name )
         : _name( name )
         {}
 
@@ -50,57 +51,51 @@ public:
 
         @param xElem element reference
     */
-    void SAL_CALL addSubElement(
+    void addSubElement(
         css::uno::Reference< css::xml::sax::XAttributeList > const & xElem );
 
     /** Gets sub element of given index.  The index follows order in which sub elements were added.
 
         @param nIndex index of sub element
     */
-    css::uno::Reference< css::xml::sax::XAttributeList > SAL_CALL getSubElement( sal_Int32 nIndex );
+    css::uno::Reference< css::xml::sax::XAttributeList > const & getSubElement( sal_Int32 nIndex );
 
     /** Adds an attribute to elements.
 
         @param rAttrName qname of attribute
         @param rValue value string of element
     */
-    void SAL_CALL addAttribute( OUString const & rAttrName, OUString const & rValue );
+    void addAttribute( OUString const & rAttrName, OUString const & rValue );
 
     /** Dumps out element (and all sub elements).
 
         @param xOut document handler to be written to
     */
-    void SAL_CALL dump(
+    void dump(
         css::uno::Reference< css::xml::sax::XDocumentHandler > const & xOut );
     /** Dumps out sub elements (and all further sub elements).
 
         @param xOut document handler to be written to
     */
-    void SAL_CALL dumpSubElements(
+    void dumpSubElements(
         css::uno::Reference< css::xml::sax::XDocumentHandler > const & xOut );
 
     // XAttributeList
-    virtual sal_Int16 SAL_CALL getLength()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getNameByIndex( sal_Int16 nPos )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getTypeByIndex( sal_Int16 nPos )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getTypeByName( OUString const & rName )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getValueByIndex( sal_Int16 nPos )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getValueByName( OUString const & rName )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int16 SAL_CALL getLength() override;
+    virtual OUString SAL_CALL getNameByIndex( sal_Int16 nPos ) override;
+    virtual OUString SAL_CALL getTypeByIndex( sal_Int16 nPos ) override;
+    virtual OUString SAL_CALL getTypeByName( OUString const & rName ) override;
+    virtual OUString SAL_CALL getValueByIndex( sal_Int16 nPos ) override;
+    virtual OUString SAL_CALL getValueByName( OUString const & rName ) override;
 
 protected:
-    OUString _name;
-
+    ::std::vector< css::uno::Reference<
+                      css::xml::sax::XAttributeList > > _subElems;
+private:
+    OUString const _name;
     ::std::vector< OUString > _attrNames;
     ::std::vector< OUString > _attrValues;
 
-    ::std::vector< css::uno::Reference<
-                      css::xml::sax::XAttributeList > > _subElems;
 };
 
 
@@ -111,15 +106,15 @@ protected:
 ##################################################################################################*/
 
 XMLSCRIPT_DLLPUBLIC css::uno::Reference< css::io::XInputStream >
-SAL_CALL createInputStream(
+createInputStream(
     std::vector<sal_Int8> const & rInData );
 
 XMLSCRIPT_DLLPUBLIC css::uno::Reference< css::io::XInputStream >
-SAL_CALL createInputStream(
+createInputStream(
     const sal_Int8* pData, int len );
 
 XMLSCRIPT_DLLPUBLIC css::uno::Reference< css::io::XOutputStream >
-SAL_CALL createOutputStream(
+createOutputStream(
     std::vector<sal_Int8> * pOutData );
 
 }

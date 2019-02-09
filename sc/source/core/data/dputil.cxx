@@ -7,11 +7,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "dputil.hxx"
-#include "dpitemdata.hxx"
-#include "dpnumgroupinfo.hxx"
-#include "globalnames.hxx"
-#include "globstr.hrc"
+#include <dputil.hxx>
+#include <dpitemdata.hxx>
+#include <dpnumgroupinfo.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <generalfunction.hxx>
 
 #include <comphelper/string.hxx>
 #include <unotools/localedatawrapper.hxx>
@@ -39,7 +40,7 @@ OUString getTwoDigitString(sal_Int32 nValue)
 
 void appendDateStr(OUStringBuffer& rBuffer, double fValue, SvNumberFormatter* pFormatter)
 {
-    sal_uLong nFormat = pFormatter->GetStandardFormat( css::util::NumberFormat::DATE, ScGlobal::eLnge );
+    sal_uInt32 nFormat = pFormatter->GetStandardFormat( SvNumFormatType::DATE, ScGlobal::eLnge );
     OUString aString;
     pFormatter->GetInputLineString(fValue, nFormat, aString);
     rBuffer.append(aString);
@@ -119,9 +120,8 @@ OUString ScDPUtil::getDateGroupName(
         case sheet::DataPilotFieldGroupBy::DAYS:
         {
             Date aDate(1, 1, SC_DP_LEAPYEAR);
-            aDate += (nValue - 1);            // nValue is 1-based
-            Date aNullDate = *pFormatter->GetNullDate();
-            long nDays = aDate - aNullDate;
+            aDate.AddDays(nValue - 1);            // nValue is 1-based
+            long nDays = aDate - pFormatter->GetNullDate();
 
             const sal_uInt32 nFormat = pFormatter->GetFormatIndex(NF_DATE_SYS_DDMMM, ScGlobal::eLnge);
             Color* pColor;
@@ -195,7 +195,7 @@ namespace {
 
 void lcl_AppendDateStr( OUStringBuffer& rBuffer, double fValue, SvNumberFormatter* pFormatter )
 {
-    sal_uLong nFormat = pFormatter->GetStandardFormat( css::util::NumberFormat::DATE, ScGlobal::eLnge );
+    sal_uInt32 nFormat = pFormatter->GetStandardFormat( SvNumFormatType::DATE, ScGlobal::eLnge );
     OUString aString;
     pFormatter->GetInputLineString( fValue, nFormat, aString );
     rBuffer.append( aString );
@@ -292,7 +292,7 @@ OUString ScDPUtil::getNumGroupName(
 
 sal_Int32 ScDPUtil::getDatePartValue(
     double fValue, const ScDPNumGroupInfo* pInfo, sal_Int32 nDatePart,
-    SvNumberFormatter* pFormatter)
+    const SvNumberFormatter* pFormatter)
 {
     // Start and end are inclusive
     // (End date without a time value is included, with a time value it's not)
@@ -312,28 +312,29 @@ sal_Int32 ScDPUtil::getDatePartValue(
         nDatePart == sheet::DataPilotFieldGroupBy::SECONDS)
     {
         // handle time
-        // (as in the cell functions, ScInterpreter::ScGetHour etc.: seconds are rounded)
+        // (do as in the cell functions, ScInterpreter::ScGetHour() etc.)
 
-        double fTime = fValue - rtl::math::approxFloor(fValue);
-        long nSeconds = (long)rtl::math::approxFloor(fTime*DATE_TIME_FACTOR+0.5);
+        sal_uInt16 nHour, nMinute, nSecond;
+        double fFractionOfSecond;
+        tools::Time::GetClock( fValue, nHour, nMinute, nSecond, fFractionOfSecond, 0);
 
         switch (nDatePart)
         {
             case sheet::DataPilotFieldGroupBy::HOURS:
-                nResult = nSeconds / 3600;
+                nResult = nHour;
                 break;
             case sheet::DataPilotFieldGroupBy::MINUTES:
-                nResult = ( nSeconds % 3600 ) / 60;
+                nResult = nMinute;
                 break;
             case sheet::DataPilotFieldGroupBy::SECONDS:
-                nResult = nSeconds % 60;
+                nResult = nSecond;
                 break;
         }
     }
     else
     {
-        Date aDate = *(pFormatter->GetNullDate());
-        aDate += (long)::rtl::math::approxFloor(fValue);
+        Date aDate = pFormatter->GetNullDate();
+        aDate.AddDays(::rtl::math::approxFloor(fValue));
 
         switch ( nDatePart )
         {
@@ -367,8 +368,8 @@ sal_Int32 ScDPUtil::getDatePartValue(
 
 namespace {
 
-sal_uInt16 nFuncStrIds[12] = {
-    0,                              // SUBTOTAL_FUNC_NONE
+const char* aFuncStrIds[] = {
+    nullptr,                        // SUBTOTAL_FUNC_NONE
     STR_FUN_TEXT_AVG,               // SUBTOTAL_FUNC_AVE
     STR_FUN_TEXT_COUNT,             // SUBTOTAL_FUNC_CNT
     STR_FUN_TEXT_COUNT,             // SUBTOTAL_FUNC_CNT2
@@ -379,7 +380,9 @@ sal_uInt16 nFuncStrIds[12] = {
     STR_FUN_TEXT_STDDEV,            // SUBTOTAL_FUNC_STDP
     STR_FUN_TEXT_SUM,               // SUBTOTAL_FUNC_SUM
     STR_FUN_TEXT_VAR,               // SUBTOTAL_FUNC_VAR
-    STR_FUN_TEXT_VAR                // SUBTOTAL_FUNC_VARP
+    STR_FUN_TEXT_VAR,               // SUBTOTAL_FUNC_VARP
+    STR_FUN_TEXT_MEDIAN,            // SUBTOTAL_FUNC_MED
+    nullptr                         // SUBTOTAL_FUNC_SELECTION_COUNT - not used for pivot table
 };
 
 }
@@ -387,10 +390,11 @@ sal_uInt16 nFuncStrIds[12] = {
 OUString ScDPUtil::getDisplayedMeasureName(const OUString& rName, ScSubTotalFunc eFunc)
 {
     OUStringBuffer aRet;
-    sal_uInt16 nId = nFuncStrIds[eFunc];
-    if (nId)
+    assert(unsigned(eFunc) < SAL_N_ELEMENTS(aFuncStrIds));
+    const char* pId = aFuncStrIds[eFunc];
+    if (pId)
     {
-        aRet.append(ScGlobal::GetRscString(nId));        // function name
+        aRet.append(ScResId(pId));        // function name
         aRet.append(" - ");
     }
     aRet.append(rName);                   // field name
@@ -398,26 +402,27 @@ OUString ScDPUtil::getDisplayedMeasureName(const OUString& rName, ScSubTotalFunc
     return aRet.makeStringAndClear();
 }
 
-ScSubTotalFunc ScDPUtil::toSubTotalFunc(css::sheet::GeneralFunction eGenFunc)
+ScSubTotalFunc ScDPUtil::toSubTotalFunc(ScGeneralFunction eGenFunc)
 {
-    ScSubTotalFunc eSubTotal;
+    ScSubTotalFunc eSubTotal = SUBTOTAL_FUNC_NONE;
     switch (eGenFunc)
     {
-        case sheet::GeneralFunction_NONE:       eSubTotal = SUBTOTAL_FUNC_NONE; break;
-        case sheet::GeneralFunction_SUM:        eSubTotal = SUBTOTAL_FUNC_SUM;  break;
-        case sheet::GeneralFunction_COUNT:      eSubTotal = SUBTOTAL_FUNC_CNT2; break;
-        case sheet::GeneralFunction_AVERAGE:    eSubTotal = SUBTOTAL_FUNC_AVE;  break;
-        case sheet::GeneralFunction_MAX:        eSubTotal = SUBTOTAL_FUNC_MAX;  break;
-        case sheet::GeneralFunction_MIN:        eSubTotal = SUBTOTAL_FUNC_MIN;  break;
-        case sheet::GeneralFunction_PRODUCT:    eSubTotal = SUBTOTAL_FUNC_PROD; break;
-        case sheet::GeneralFunction_COUNTNUMS:  eSubTotal = SUBTOTAL_FUNC_CNT;  break;
-        case sheet::GeneralFunction_STDEV:      eSubTotal = SUBTOTAL_FUNC_STD;  break;
-        case sheet::GeneralFunction_STDEVP:     eSubTotal = SUBTOTAL_FUNC_STDP; break;
-        case sheet::GeneralFunction_VAR:        eSubTotal = SUBTOTAL_FUNC_VAR;  break;
-        case sheet::GeneralFunction_VARP:       eSubTotal = SUBTOTAL_FUNC_VARP; break;
-        case sheet::GeneralFunction_AUTO:
+        case ScGeneralFunction::NONE:       eSubTotal = SUBTOTAL_FUNC_NONE; break;
+        case ScGeneralFunction::SUM:        eSubTotal = SUBTOTAL_FUNC_SUM;  break;
+        case ScGeneralFunction::COUNT:      eSubTotal = SUBTOTAL_FUNC_CNT2; break;
+        case ScGeneralFunction::AVERAGE:    eSubTotal = SUBTOTAL_FUNC_AVE;  break;
+        case ScGeneralFunction::MEDIAN:     eSubTotal = SUBTOTAL_FUNC_MED;  break;
+        case ScGeneralFunction::MAX:        eSubTotal = SUBTOTAL_FUNC_MAX;  break;
+        case ScGeneralFunction::MIN:        eSubTotal = SUBTOTAL_FUNC_MIN;  break;
+        case ScGeneralFunction::PRODUCT:    eSubTotal = SUBTOTAL_FUNC_PROD; break;
+        case ScGeneralFunction::COUNTNUMS:  eSubTotal = SUBTOTAL_FUNC_CNT;  break;
+        case ScGeneralFunction::STDEV:      eSubTotal = SUBTOTAL_FUNC_STD;  break;
+        case ScGeneralFunction::STDEVP:     eSubTotal = SUBTOTAL_FUNC_STDP; break;
+        case ScGeneralFunction::VAR:        eSubTotal = SUBTOTAL_FUNC_VAR;  break;
+        case ScGeneralFunction::VARP:       eSubTotal = SUBTOTAL_FUNC_VARP; break;
+        case ScGeneralFunction::AUTO:       eSubTotal = SUBTOTAL_FUNC_NONE; break;
         default:
-            eSubTotal = SUBTOTAL_FUNC_NONE;
+            assert(false);
     }
     return eSubTotal;
 }

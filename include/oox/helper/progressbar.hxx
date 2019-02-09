@@ -21,9 +21,10 @@
 #define INCLUDED_OOX_HELPER_PROGRESSBAR_HXX
 
 #include <memory>
+
 #include <com/sun/star/uno/Reference.hxx>
 #include <oox/dllapi.h>
-
+#include <rtl/ustring.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace task { class XStatusIndicator; }
@@ -66,7 +67,7 @@ typedef std::shared_ptr< ISegmentProgressBar > ISegmentProgressBarRef;
 class OOX_DLLPUBLIC ISegmentProgressBar : public IProgressBar
 {
 public:
-    virtual             ~ISegmentProgressBar();
+    virtual             ~ISegmentProgressBar() override;
 
     /** Returns the length that is still free for creating sub segments. */
     virtual double      getFreeLength() const = 0;
@@ -85,7 +86,7 @@ public:
                             const css::uno::Reference< css::task::XStatusIndicator >& rxIndicator,
                             const OUString& rText );
 
-    virtual             ~ProgressBar();
+    virtual             ~ProgressBar() override;
 
     /** Returns the current position of the progress bar. */
     virtual double      getPosition() const override;

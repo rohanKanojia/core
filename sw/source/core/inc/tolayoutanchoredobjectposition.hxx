@@ -18,7 +18,7 @@
  */
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_TOLAYOUTANCHOREDOBJECTPOSITION_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_TOLAYOUTANCHOREDOBJECTPOSITION_HXX
-#include <anchoredobjectposition.hxx>
+#include "anchoredobjectposition.hxx"
 #include <swtypes.hxx>
 #include <swrect.hxx>
 
@@ -37,7 +37,7 @@ namespace objectpositioning
 
         public:
             SwToLayoutAnchoredObjectPosition( SdrObject& _rDrawObj );
-            virtual ~SwToLayoutAnchoredObjectPosition();
+            virtual ~SwToLayoutAnchoredObjectPosition() override;
 
             /** calculate position for object
             */

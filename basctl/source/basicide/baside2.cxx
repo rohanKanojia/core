@@ -18,14 +18,15 @@
  */
 
 #include "baside2.hxx"
-#include "baside3.hxx"
+#include <baside3.hxx>
 #include "brkdlg.hxx"
-#include "iderdll.hxx"
+#include <iderdll.hxx>
 #include "moduldlg.hxx"
-#include "docsignature.hxx"
+#include <docsignature.hxx>
+#include <officecfg/Office/BasicIDE.hxx>
 
-#include "helpid.hrc"
-#include "baside2.hrc"
+#include <helpids.h>
+#include <strings.hrc>
 
 #include <basic/basmgr.hxx>
 #include <basic/basrdll.hxx>
@@ -36,6 +37,7 @@
 #include <com/sun/star/ui/dialogs/FilePicker.hpp>
 #include <com/sun/star/ui/dialogs/XFilePickerControlAccess.hpp>
 #include <comphelper/string.hxx>
+#include <svl/srchdefs.hxx>
 #include <sfx2/dinfdlg.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/docfile.hxx>
@@ -46,8 +48,11 @@
 #include <svl/srchitem.hxx>
 #include <svl/visitem.hxx>
 #include <svl/whiter.hxx>
-#include <vcl/xtextedt.hxx>
+#include <svx/svxids.hrc>
 #include <vcl/settings.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/xtextedt.hxx>
+#include <vcl/textview.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <cassert>
 
@@ -98,7 +103,7 @@ void lcl_PrintHeader( Printer* pPrinter, sal_uInt16 nPages, sal_uInt16 nCurPage,
     const Color aOldFillColor( pPrinter->GetFillColor() );
     const vcl::Font aOldFont( pPrinter->GetFont() );
 
-    pPrinter->SetLineColor( Color( COL_BLACK ) );
+    pPrinter->SetLineColor( COL_BLACK );
     pPrinter->SetFillColor();
 
     vcl::Font aFont( aOldFont );
@@ -115,7 +120,7 @@ void lcl_PrintHeader( Printer* pPrinter, sal_uInt16 nPages, sal_uInt16 nCurPage,
     long nXRight = aSz.Width() - Print::nRightMargin + Print::nBorder;
 
     if( bOutput )
-        pPrinter->DrawRect(Rectangle(
+        pPrinter->DrawRect(tools::Rectangle(
             Point(nXLeft, nYTop),
             Size(nXRight - nXLeft, aSz.Height() - nYTop - Print::nBottomMargin + Print::nBorder)
         ));
@@ -129,11 +134,11 @@ void lcl_PrintHeader( Printer* pPrinter, sal_uInt16 nPages, sal_uInt16 nCurPage,
     {
         aFont.SetWeight( WEIGHT_NORMAL );
         pPrinter->SetFont( aFont );
-        aPos.X() += pPrinter->GetTextWidth( rTitle );
+        aPos.AdjustX(pPrinter->GetTextWidth( rTitle ) );
 
         if( bOutput )
         {
-            OUString aPageStr = " [" + IDE_RESSTR(RID_STR_PAGE) + " " + OUString::number( nCurPage ) + "]";
+            OUString aPageStr = " [" + IDEResId(RID_STR_PAGE) + " " + OUString::number( nCurPage ) + "]";
             pPrinter->DrawText( aPos, aPageStr );
         }
     }
@@ -172,35 +177,31 @@ void lcl_ConvertTabsToSpaces( OUString& rLine )
     }
 }
 
-// until we have some configuration lets just keep
-// persist this value for the process lifetime
-bool bSourceLinesEnabled = false;
-
 } // namespace
 
 ModulWindow::ModulWindow (ModulWindowLayout* pParent, ScriptDocument const& rDocument,
-                          const OUString& aLibName, const OUString& aName, OUString& aModule)
+                          const OUString& aLibName, const OUString& aName, OUString const & aModule)
     : BaseWindow(pParent, rDocument, aLibName, aName)
-    , rLayout(*pParent)
-    , nValid(ValidWindow)
-    , aXEditorWindow(VclPtr<ComplexEditorWindow>::Create(this))
+    , m_rLayout(*pParent)
+    , m_nValid(ValidWindow)
+    , m_aXEditorWindow(VclPtr<ComplexEditorWindow>::Create(this))
     , m_aModule(aModule)
 {
-    aXEditorWindow->Show();
+    m_aXEditorWindow->Show();
     SetBackground();
 }
 
-SbModuleRef ModulWindow::XModule()
+SbModuleRef const & ModulWindow::XModule()
 {
     // ModuleWindows can now be created as a result of the
     // modules getting created via the api. This is a result of an
     // elementInserted event from the BasicLibrary container.
     // However the SbModule is also created from a different listener to
     // the same event ( in basmgr ) Therefore it is possible when we look
-    // for xModule it may not yet be available, here we keep trying to access
+    // for m_xModule it may not yet be available, here we keep trying to access
     // the module until such time as it exists
 
-    if ( !xModule.Is() )
+    if ( !m_xModule.is() )
     {
         BasicManager* pBasMgr = GetDocument().getBasicManager();
         if ( pBasMgr )
@@ -208,12 +209,12 @@ SbModuleRef ModulWindow::XModule()
             StarBASIC* pBasic = pBasMgr->GetLib( GetLibName() );
             if ( pBasic )
             {
-                xBasic = pBasic;
-                xModule = pBasic->FindModule( GetName() );
+                m_xBasic = pBasic;
+                m_xModule = pBasic->FindModule( GetName() );
             }
         }
     }
-    return xModule;
+    return m_xModule;
 }
 
 ModulWindow::~ModulWindow()
@@ -223,18 +224,18 @@ ModulWindow::~ModulWindow()
 
 void ModulWindow::dispose()
 {
-    nValid = 0;
+    m_nValid = 0;
     StarBASIC::Stop();
-    aXEditorWindow.disposeAndClear();
+    m_aXEditorWindow.disposeAndClear();
     BaseWindow::dispose();
 }
 
 
 void ModulWindow::GetFocus()
 {
-    if (nValid != ValidWindow)
+    if (m_nValid != ValidWindow)
         return;
-    aXEditorWindow->GetEdtWindow().GrabFocus();
+    m_aXEditorWindow->GetEdtWindow().GrabFocus();
     // don't call basic calls because focus is somewhere else...
 }
 
@@ -246,23 +247,22 @@ void ModulWindow::DoInit()
     GetEditorWindow().InitScrollBars();
 }
 
-void ModulWindow::Paint(vcl::RenderContext& /*rRenderContext*/, const Rectangle&)
+void ModulWindow::Paint(vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle&)
 {
 }
 
 void ModulWindow::Resize()
 {
-    aXEditorWindow->SetPosSizePixel( Point( 0, 0 ),
-                                    Size( GetOutputSizePixel() ) );
+    m_aXEditorWindow->SetPosSizePixel( Point( 0, 0 ), GetOutputSizePixel() );
 }
 
 void ModulWindow::CheckCompileBasic()
 {
-    if ( XModule().Is() )
+    if ( XModule().is() )
     {
         // never compile while running!
         bool const bRunning = StarBASIC::IsRunning();
-        bool const bModified = ( !xModule->IsCompiled() ||
+        bool const bModified = ( !m_xModule->IsCompiled() ||
             ( GetEditEngine() && GetEditEngine()->IsModified() ) );
 
         if ( !bRunning && bModified )
@@ -271,27 +271,24 @@ void ModulWindow::CheckCompileBasic()
 
             GetShell()->GetViewFrame()->GetWindow().EnterWait();
 
-            if( bModified )
-            {
-                AssertValidEditEngine();
-                GetEditorWindow().SetSourceInBasic();
-            }
+            AssertValidEditEngine();
+            GetEditorWindow().SetSourceInBasic();
 
             bool bWasModified = GetBasic()->IsModified();
 
-            bDone = xModule->Compile();
+            bDone = m_xModule->Compile();
             if ( !bWasModified )
                 GetBasic()->SetModified(false);
 
             if ( bDone )
             {
-                GetBreakPoints().SetBreakPointsInBasic( xModule );
+                GetBreakPoints().SetBreakPointsInBasic( m_xModule.get() );
             }
 
             GetShell()->GetViewFrame()->GetWindow().LeaveWait();
 
-            aStatus.bError = !bDone;
-            aStatus.bIsRunning = false;
+            m_aStatus.bError = !bDone;
+            m_aStatus.bIsRunning = false;
         }
     }
 }
@@ -304,21 +301,23 @@ void ModulWindow::BasicExecute()
     {
         if ( !aDocument.allowMacros() )
         {
-            ScopedVclPtrInstance<MessageDialog>::Create(this, IDE_RESSTR(RID_STR_CANNOTRUNMACRO), VCL_MESSAGE_WARNING)->Execute();
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                      VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_CANNOTRUNMACRO)));
+            xBox->run();
             return;
         }
     }
 
     CheckCompileBasic();
 
-    if ( XModule().Is() && xModule->IsCompiled() && !aStatus.bError )
+    if ( XModule().is() && m_xModule->IsCompiled() && !m_aStatus.bError )
     {
         if ( GetBreakPoints().size() )
-            aStatus.nBasicFlags = aStatus.nBasicFlags | SbDEBUG_BREAK;
+            m_aStatus.nBasicFlags = m_aStatus.nBasicFlags | BasicDebugFlags::Break;
 
-        if ( !aStatus.bIsRunning )
+        if ( !m_aStatus.bIsRunning )
         {
-            DBG_ASSERT( xModule.Is(), "Kein Modul!" );
+            DBG_ASSERT( m_xModule.is(), "No Module!" );
             AddStatus( BASWIN_RUNNINGBASIC );
             sal_uInt16 nStart, nEnd;
             TextSelection aSel = GetEditView()->GetSelection();
@@ -326,9 +325,9 @@ void ModulWindow::BasicExecute()
             const sal_uInt32 nCurMethodStart = aSel.GetStart().GetPara() + 1;
             SbMethod* pMethod = nullptr;
             // first Macro, else blind "Main" (ExtSearch?)
-            for ( sal_uInt16 nMacro = 0; nMacro < xModule->GetMethods()->Count(); nMacro++ )
+            for ( sal_uInt16 nMacro = 0; nMacro < m_xModule->GetMethods()->Count(); nMacro++ )
             {
-                SbMethod* pM = static_cast<SbMethod*>(xModule->GetMethods()->Get( nMacro ));
+                SbMethod* pM = static_cast<SbMethod*>(m_xModule->GetMethods()->Get( nMacro ));
                 assert(pM && "Method?");
                 pM->GetLineRange( nStart, nEnd );
                 if (  nCurMethodStart >= nStart && nCurMethodStart <= nEnd )
@@ -341,22 +340,19 @@ void ModulWindow::BasicExecute()
             if ( !pMethod )
             {
                 // If not in a method then prompt the user
-                ChooseMacro( uno::Reference< frame::XModel >(), false, OUString() );
+                ChooseMacro(GetFrameWeld(), uno::Reference<frame::XModel>());
                 return;
             }
-            if ( pMethod )
-            {
-                pMethod->SetDebugFlags( aStatus.nBasicFlags );
-                BasicDLL::SetDebugMode( true );
-                RunMethod( pMethod );
-                BasicDLL::SetDebugMode( false );
-                // if cancelled during Interactive=false
-                BasicDLL::EnableBreak( true );
-            }
+            pMethod->SetDebugFlags(m_aStatus.nBasicFlags);
+            BasicDLL::SetDebugMode(true);
+            RunMethod(pMethod);
+            BasicDLL::SetDebugMode(false);
+            // if cancelled during Interactive=false
+            BasicDLL::EnableBreak(true);
             ClearStatus( BASWIN_RUNNINGBASIC );
         }
         else
-            aStatus.bIsRunning = false; // cancel of Reschedule()
+            m_aStatus.bIsRunning = false; // cancel of Reschedule()
     }
 }
 
@@ -364,31 +360,31 @@ void ModulWindow::CompileBasic()
 {
     CheckCompileBasic();
 
-    XModule().Is() && xModule->IsCompiled();
+    XModule().is() && m_xModule->IsCompiled();
 }
 
 void ModulWindow::BasicRun()
 {
-    aStatus.nBasicFlags = 0;
+    m_aStatus.nBasicFlags = BasicDebugFlags::NONE;
     BasicExecute();
 }
 
 void ModulWindow::BasicStepOver()
 {
-    aStatus.nBasicFlags = SbDEBUG_STEPINTO | SbDEBUG_STEPOVER;
+    m_aStatus.nBasicFlags = BasicDebugFlags::StepInto | BasicDebugFlags::StepOver;
     BasicExecute();
 }
 
 
 void ModulWindow::BasicStepInto()
 {
-    aStatus.nBasicFlags = SbDEBUG_STEPINTO;
+    m_aStatus.nBasicFlags = BasicDebugFlags::StepInto;
     BasicExecute();
 }
 
 void ModulWindow::BasicStepOut()
 {
-    aStatus.nBasicFlags = SbDEBUG_STEPOUT;
+    m_aStatus.nBasicFlags = BasicDebugFlags::StepOut;
     BasicExecute();
 }
 
@@ -396,7 +392,7 @@ void ModulWindow::BasicStepOut()
 void ModulWindow::BasicStop()
 {
     StarBASIC::Stop();
-    aStatus.bIsRunning = false;
+    m_aStatus.bIsRunning = false;
 }
 
 void ModulWindow::LoadBasic()
@@ -404,37 +400,41 @@ void ModulWindow::LoadBasic()
     Reference< uno::XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
     Reference < XFilePicker3 > xFP = FilePicker::createWithMode(xContext, TemplateDescription::FILEOPEN_SIMPLE);
 
-    if ( !aCurPath.isEmpty() )
-        xFP->setDisplayDirectory ( aCurPath );
+    if ( !m_sCurPath.isEmpty() )
+        xFP->setDisplayDirectory ( m_sCurPath );
 
     xFP->appendFilter( "BASIC" , "*.bas" );
-    xFP->appendFilter( IDE_RESSTR(RID_STR_FILTER_ALLFILES), FilterMask_All );
+    xFP->appendFilter( IDEResId(RID_STR_FILTER_ALLFILES), FilterMask_All );
     xFP->setCurrentFilter( "BASIC" );
 
     if( xFP->execute() == RET_OK )
     {
         Sequence< OUString > aPaths = xFP->getSelectedFiles();
-        aCurPath = aPaths[0];
-        SfxMedium aMedium( aCurPath, StreamMode::READ | StreamMode::SHARE_DENYWRITE | StreamMode::NOCREATE );
+        m_sCurPath = aPaths[0];
+        SfxMedium aMedium( m_sCurPath, StreamMode::READ | StreamMode::SHARE_DENYWRITE | StreamMode::NOCREATE );
         SvStream* pStream = aMedium.GetInStream();
         if ( pStream )
         {
             AssertValidEditEngine();
-            sal_uLong nLines = CalcLineCount( *pStream );
+            sal_uInt32 nLines = CalcLineCount( *pStream );
             // nLines*4: ReadText/Formatting/Highlighting/Formatting
-            GetEditorWindow().CreateProgress( IDEResId(RID_STR_GENERATESOURCE).toString(), nLines*4 );
+            GetEditorWindow().CreateProgress( IDEResId(RID_STR_GENERATESOURCE), nLines*4 );
             GetEditEngine()->SetUpdateMode( false );
             GetEditView()->Read( *pStream );
             GetEditEngine()->SetUpdateMode( true );
             GetEditorWindow().Update();
             GetEditorWindow().ForceSyntaxTimeout();
             GetEditorWindow().DestroyProgress();
-            sal_uLong nError = aMedium.GetError();
+            ErrCode nError = aMedium.GetError();
             if ( nError )
                 ErrorHandler::HandleError( nError );
         }
         else
-            ScopedVclPtrInstance<MessageDialog>::Create(this, IDE_RESSTR(RID_STR_COULDNTREAD))->Execute();
+        {
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                      VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_COULDNTREAD)));
+            xBox->run();
+        }
     }
 }
 
@@ -450,18 +450,18 @@ void ModulWindow::SaveBasicSource()
     aValue <<= true;
     xFPControl->setValue(ExtendedFilePickerElementIds::CHECKBOX_AUTOEXTENSION, 0, aValue);
 
-    if ( !aCurPath.isEmpty() )
-        xFP->setDisplayDirectory ( aCurPath );
+    if ( !m_sCurPath.isEmpty() )
+        xFP->setDisplayDirectory ( m_sCurPath );
 
     xFP->appendFilter( "BASIC", "*.bas" );
-    xFP->appendFilter( IDE_RESSTR(RID_STR_FILTER_ALLFILES), FilterMask_All );
+    xFP->appendFilter( IDEResId(RID_STR_FILTER_ALLFILES), FilterMask_All );
     xFP->setCurrentFilter( "BASIC" );
 
     if( xFP->execute() == RET_OK )
     {
         Sequence< OUString > aPaths = xFP->getSelectedFiles();
-        aCurPath = aPaths[0];
-        SfxMedium aMedium( aCurPath, StreamMode::WRITE | StreamMode::SHARE_DENYWRITE | StreamMode::TRUNC );
+        m_sCurPath = aPaths[0];
+        SfxMedium aMedium( m_sCurPath, StreamMode::WRITE | StreamMode::SHARE_DENYWRITE | StreamMode::TRUNC );
         SvStream* pStream = aMedium.GetOutStream();
         if ( pStream )
         {
@@ -470,12 +470,16 @@ void ModulWindow::SaveBasicSource()
             GetEditEngine()->Write( *pStream );
             aMedium.Commit();
             LeaveWait();
-            sal_uLong nError = aMedium.GetError();
+            ErrCode nError = aMedium.GetError();
             if ( nError )
                 ErrorHandler::HandleError( nError );
         }
         else
-            ScopedVclPtrInstance<MessageDialog>::Create(this, IDEResId(RID_STR_COULDNTWRITE))->Execute();
+        {
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                           VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_COULDNTWRITE)));
+            xErrorBox->run();
+        }
     }
 }
 
@@ -483,17 +487,17 @@ void ModulWindow::ImportDialog()
 {
     const ScriptDocument& rDocument = GetDocument();
     OUString aLibName = GetLibName();
-    implImportDialog( this, aCurPath, rDocument, aLibName );
+    implImportDialog(GetFrameWeld(), m_sCurPath, rDocument, aLibName);
 }
 
 void ModulWindow::ToggleBreakPoint( sal_uLong nLine )
 {
-    DBG_ASSERT( XModule().Is(), "Kein Modul!" );
+    DBG_ASSERT( XModule().is(), "No Module!" );
 
-    if ( XModule().Is() )
+    if ( XModule().is() )
     {
         CheckCompileBasic();
-        if ( aStatus.bError )
+        if ( m_aStatus.bError )
         {
             return;
         }
@@ -501,21 +505,21 @@ void ModulWindow::ToggleBreakPoint( sal_uLong nLine )
         BreakPoint* pBrk = GetBreakPoints().FindBreakPoint( nLine );
         if ( pBrk ) // remove
         {
-            xModule->ClearBP( (sal_uInt16)nLine );
-            delete GetBreakPoints().remove( pBrk );
+            m_xModule->ClearBP( static_cast<sal_uInt16>(nLine) );
+            GetBreakPoints().remove( pBrk );
         }
         else // create one
         {
-            if ( xModule->SetBP( (sal_uInt16)nLine) )
+            if ( m_xModule->SetBP( static_cast<sal_uInt16>(nLine)) )
             {
-                GetBreakPoints().InsertSorted( new BreakPoint( nLine ) );
+                GetBreakPoints().InsertSorted( BreakPoint( nLine ) );
                 if ( StarBASIC::IsRunning() )
                 {
-                    for ( sal_uInt16 nMethod = 0; nMethod < xModule->GetMethods()->Count(); nMethod++ )
+                    for ( sal_uInt16 nMethod = 0; nMethod < m_xModule->GetMethods()->Count(); nMethod++ )
                     {
-                        SbMethod* pMethod = static_cast<SbMethod*>(xModule->GetMethods()->Get( nMethod ));
-                        assert(pMethod && "Methode nicht gefunden! (NULL)");
-                        pMethod->SetDebugFlags( pMethod->GetDebugFlags() | SbDEBUG_BREAK );
+                        SbMethod* pMethod = static_cast<SbMethod*>(m_xModule->GetMethods()->Get( nMethod ));
+                        assert(pMethod && "Method not found! (NULL)");
+                        pMethod->SetDebugFlags( pMethod->GetDebugFlags() | BasicDebugFlags::Break );
                     }
                 }
             }
@@ -525,16 +529,16 @@ void ModulWindow::ToggleBreakPoint( sal_uLong nLine )
 
 void ModulWindow::UpdateBreakPoint( const BreakPoint& rBrk )
 {
-    DBG_ASSERT( XModule().Is(), "Kein Modul!" );
+    DBG_ASSERT( XModule().is(), "No Module!" );
 
-    if ( XModule().Is() )
+    if ( XModule().is() )
     {
         CheckCompileBasic();
 
         if ( rBrk.bEnabled )
-            xModule->SetBP( (sal_uInt16)rBrk.nLine );
+            m_xModule->SetBP( rBrk.nLine );
         else
-            xModule->ClearBP( (sal_uInt16)rBrk.nLine );
+            m_xModule->ClearBP( rBrk.nLine );
     }
 }
 
@@ -552,7 +556,7 @@ void ModulWindow::BasicToggleBreakPoint()
         ToggleBreakPoint( nLine );
     }
 
-    aXEditorWindow->GetBrkWindow().Invalidate();
+    m_aXEditorWindow->GetBrkWindow().Invalidate();
 }
 
 
@@ -560,7 +564,7 @@ void ModulWindow::BasicToggleBreakPointEnabled()
 {
     AssertValidEditEngine();
 
-    ExtTextView* pView = GetEditView();
+    TextView* pView = GetEditView();
     if ( pView )
     {
         TextSelection aSel = pView->GetSelection();
@@ -580,21 +584,19 @@ void ModulWindow::BasicToggleBreakPointEnabled()
     }
 }
 
-
 void ModulWindow::ManageBreakPoints()
 {
     BreakPointWindow& rBrkWin = GetBreakPointWindow();
-    ScopedVclPtrInstance< BreakPointDialog > aBrkDlg( &rBrkWin, GetBreakPoints() );
-    aBrkDlg->Execute();
+    BreakPointDialog aBrkDlg(rBrkWin.GetFrameWeld(), GetBreakPoints());
+    aBrkDlg.run();
     rBrkWin.Invalidate();
 }
 
-
-bool ModulWindow::BasicErrorHdl( StarBASIC * pBasic )
+void ModulWindow::BasicErrorHdl( StarBASIC const * pBasic )
 {
-    GoOnTop();
+    GetShell()->GetViewFrame()->ToTop();
 
-    // ReturnWert: BOOL
+    // Return value: BOOL
     //  FALSE:  cancel
     //  TRUE:   go on....
     sal_uInt16 nErrorLine = StarBASIC::GetLine() - 1;
@@ -609,28 +611,33 @@ bool ModulWindow::BasicErrorHdl( StarBASIC * pBasic )
     // if other basic, the IDE should try to display the correct module
     bool const bMarkError = pBasic == GetBasic();
     if ( bMarkError )
-        aXEditorWindow->GetBrkWindow().SetMarkerPos(nErrorLine, true);
+        m_aXEditorWindow->GetBrkWindow().SetMarkerPos(nErrorLine, true);
 
     // #i47002#
     Reference< awt::XWindow > xWindow = VCLUnoHelper::GetInterface( this );
 
-    ErrorHandler::HandleError( StarBASIC::GetErrorCode() );
+    // tdf#118572 make a currently running dialog, regardless of what its modal
+    // to, insensitive to user input until after this error dialog goes away.
+    auto xDialog = Dialog::GetMostRecentExecutingDialog();
+    const bool bToggleEnableInput = xDialog && xDialog->IsInputEnabled();
+    if (bToggleEnableInput)
+        xDialog->EnableInput(false);
+    ErrorHandler::HandleError(StarBASIC::GetErrorCode(), GetFrameWeld());
+    if (bToggleEnableInput)
+        xDialog->EnableInput(true);
 
     // #i47002#
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
     if ( !pWindow )
-        return false;
+        return;
 
     if ( bMarkError )
-        aXEditorWindow->GetBrkWindow().SetNoMarker();
-    return false;
+        m_aXEditorWindow->GetBrkWindow().SetNoMarker();
+    return;
 }
 
-long ModulWindow::BasicBreakHdl( StarBASIC* pBasic )
+BasicDebugFlags ModulWindow::BasicBreakHdl()
 {
-    // #i69280 Required in Window despite normal usage in next command!
-    (void)pBasic;
-
     // Return value: sal_uInt16 => see SB-Debug-Flags
     sal_uInt16 nErrorLine = StarBASIC::GetLine();
 
@@ -640,33 +647,33 @@ long ModulWindow::BasicBreakHdl( StarBASIC* pBasic )
     {
         pBrk->nHitCount++;
         if ( pBrk->nHitCount <= pBrk->nStopAfter && GetBasic()->IsBreak() )
-            return aStatus.nBasicFlags; // go on...
+            return m_aStatus.nBasicFlags; // go on...
     }
 
     nErrorLine--;   // EditEngine starts at 0, Basic at 1
 
     AssertValidEditEngine();
     GetEditView()->SetSelection( TextSelection( TextPaM( nErrorLine, 0 ), TextPaM( nErrorLine, 0 ) ) );
-    aXEditorWindow->GetBrkWindow().SetMarkerPos( nErrorLine );
+    m_aXEditorWindow->GetBrkWindow().SetMarkerPos( nErrorLine );
 
-    rLayout.UpdateDebug(false);
+    m_rLayout.UpdateDebug(false);
 
-    aStatus.bIsInReschedule = true;
-    aStatus.bIsRunning = true;
+    m_aStatus.bIsInReschedule = true;
+    m_aStatus.bIsRunning = true;
 
     AddStatus( BASWIN_INRESCHEDULE );
 
     InvalidateDebuggerSlots();
 
-    while( aStatus.bIsRunning )
+    while( m_aStatus.bIsRunning )
         Application::Yield();
 
-    aStatus.bIsInReschedule = false;
-    aXEditorWindow->GetBrkWindow().SetNoMarker();
+    m_aStatus.bIsInReschedule = false;
+    m_aXEditorWindow->GetBrkWindow().SetNoMarker();
 
     ClearStatus( BASWIN_INRESCHEDULE );
 
-    return aStatus.nBasicFlags;
+    return m_aStatus.nBasicFlags;
 }
 
 void ModulWindow::BasicAddWatch()
@@ -682,30 +689,31 @@ void ModulWindow::BasicAddWatch()
             TextSelection aSel( aWordStart );
             aSel.GetEnd().GetIndex() += aWord.getLength();
             GetEditView()->SetSelection( aSel );
-            bAdd = true;
         }
+        else
+            bAdd = false;
     }
     if ( bAdd )
     {
         TextSelection aSel = GetEditView()->GetSelection();
         if ( aSel.GetStart().GetPara() == aSel.GetEnd().GetPara() ) // single line selection
-            rLayout.BasicAddWatch(GetEditView()->GetSelected());
+            m_rLayout.BasicAddWatch(GetEditView()->GetSelected());
     }
 }
 
 
 void ModulWindow::EditMacro( const OUString& rMacroName )
 {
-    DBG_ASSERT( XModule().Is(), "Kein Modul!" );
+    DBG_ASSERT( XModule().is(), "No Module!" );
 
-    if ( XModule().Is() )
+    if ( XModule().is() )
     {
         CheckCompileBasic();
 
-        if ( !aStatus.bError )
+        if ( !m_aStatus.bError )
         {
             sal_uInt16 nStart, nEnd;
-            SbMethod* pMethod = static_cast<SbMethod*>(xModule->Find( rMacroName, SbxCLASS_METHOD ));
+            SbMethod* pMethod = static_cast<SbMethod*>(m_xModule->Find( rMacroName, SbxClassType::Method ));
             if ( pMethod )
             {
                 pMethod->GetLineRange( nStart, nEnd );
@@ -723,7 +731,7 @@ void ModulWindow::EditMacro( const OUString& rMacroName )
                 {
                     long nMaxY = pView->GetTextEngine()->GetTextHeight() - nVisHeight;
                     long nOldStartY = pView->GetStartDocPos().Y();
-                    long nNewStartY = (long)nStart * pView->GetTextEngine()->GetCharHeight();
+                    long nNewStartY = static_cast<long>(nStart) * pView->GetTextEngine()->GetCharHeight();
                     nNewStartY = std::min( nNewStartY, nMaxY );
                     pView->Scroll( 0, -(nNewStartY-nOldStartY) );
                     pView->ShowCursor( false );
@@ -757,18 +765,18 @@ bool ModulWindow::AllowUndo()
 
 void ModulWindow::UpdateData()
 {
-    DBG_ASSERT( XModule().Is(), "Kein Modul!" );
+    DBG_ASSERT( XModule().is(), "No Module!" );
     // UpdateData is called when the source has changed from outside
     // => interrupts undesired!
 
-    if ( XModule().Is() )
+    if ( XModule().is() )
     {
-        SetModule( xModule->GetSource32() );
+        SetModule( m_xModule->GetSource32() );
 
         if ( GetEditView() )
         {
             TextSelection aSel = GetEditView()->GetSelection();
-            setTextEngineText(*GetEditEngine(), xModule->GetSource32());
+            setTextEngineText(*GetEditEngine(), m_xModule->GetSource32());
             GetEditView()->SetSelection( aSel );
             GetEditEngine()->SetModified( false );
             MarkDocumentModified( GetDocument() );
@@ -778,7 +786,7 @@ void ModulWindow::UpdateData()
 
 sal_Int32 ModulWindow::countPages( Printer* pPrinter )
 {
-    return FormatAndPrint( pPrinter );
+    return FormatAndPrint( pPrinter, -1 );
 }
 
 void ModulWindow::printPage( sal_Int32 nPage, Printer* pPrinter )
@@ -804,7 +812,7 @@ sal_Int32 ModulWindow::FormatAndPrint( Printer* pPrinter, sal_Int32 nPrintPage )
     aFont.SetTransparent( true );
     aFont.SetFontSize( Size( 0, 360 ) );
     pPrinter->SetFont( aFont );
-    pPrinter->SetMapMode( MAP_100TH_MM );
+    pPrinter->SetMapMode(MapMode(MapUnit::Map100thMM));
 
     OUString aTitle( CreateQualifiedName() );
 
@@ -813,17 +821,16 @@ sal_Int32 ModulWindow::FormatAndPrint( Printer* pPrinter, sal_Int32 nPrintPage )
     {
         nLineHeight = 1;
     }
-    sal_Int32 nParaSpace = 10;
 
     Size aPaperSz = pPrinter->GetOutputSize();
-    aPaperSz.Width() -= (Print::nLeftMargin + Print::nRightMargin);
-    aPaperSz.Height() -= (Print::nTopMargin + Print::nBottomMargin);
+    aPaperSz.AdjustWidth( -(Print::nLeftMargin + Print::nRightMargin) );
+    aPaperSz.AdjustHeight( -(Print::nTopMargin + Print::nBottomMargin) );
 
     // nLinepPage is not correct if there's a line break
     sal_Int32 nLinespPage = aPaperSz.Height()/nLineHeight;
     long nXTextWidth = pPrinter->approximate_char_width();
 
-    sal_Int32 nCharspLine = aPaperSz.Width() / (nXTextWidth > 1 ? nXTextWidth : 1);
+    sal_Int32 nCharspLine = aPaperSz.Width() / std::max<long>(nXTextWidth, 1);
     const sal_uInt32 nParas = GetEditEngine()->GetParagraphCount();
 
     sal_Int32 nPages = nParas/nLinespPage+1;
@@ -841,7 +848,7 @@ sal_Int32 ModulWindow::FormatAndPrint( Printer* pPrinter, sal_Int32 nPrintPage )
             sal_Int32 nBeginIndex = nLine*nCharspLine;
             sal_Int32 nCopyCount = std::min<sal_Int32>(nCharspLine, aLine.getLength()-nBeginIndex);
             OUString aTmpLine = aLine.copy(nBeginIndex, nCopyCount);
-            aPos.Y() += nLineHeight;
+            aPos.AdjustY(nLineHeight );
             if ( aPos.Y() > ( aPaperSz.Height() + Print::nTopMargin ) )
             {
                 nCurPage++;
@@ -851,7 +858,7 @@ sal_Int32 ModulWindow::FormatAndPrint( Printer* pPrinter, sal_Int32 nPrintPage )
             if( nCurPage-1 == nPrintPage )
                 pPrinter->DrawText( aPos, aTmpLine );
         }
-        aPos.Y() += nParaSpace;
+        aPos.AdjustY(10 ); // nParaSpace
     }
 
     pPrinter->SetFont( aOldFont );
@@ -949,7 +956,7 @@ void ModulWindow::ExecuteCommand (SfxRequest& rReq)
         break;
         case SID_BASICIDE_REMOVEWATCH:
         {
-            rLayout.BasicRemoveWatch();
+            m_rLayout.BasicRemoveWatch();
         }
         break;
         case SID_CUT:
@@ -985,13 +992,17 @@ void ModulWindow::ExecuteCommand (SfxRequest& rReq)
         case SID_SHOWLINES:
         {
             const SfxBoolItem* pItem = rReq.GetArg<SfxBoolItem>(rReq.GetSlot());
-            bSourceLinesEnabled = pItem && pItem->GetValue();
-            aXEditorWindow->SetLineNumberDisplay(bSourceLinesEnabled);
+            bool bLineNumbers = pItem && pItem->GetValue();
+            m_aXEditorWindow->SetLineNumberDisplay(bLineNumbers);
+
+            std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+            officecfg::Office::BasicIDE::EditorSettings::LineNumbering::set(bLineNumbers, batch);
+            batch->commit();
         }
         break;
         case SID_BASICIDE_DELETECURRENT:
         {
-            if (QueryDelModule(m_aName, this))
+            if (QueryDelModule(m_aName, GetFrameWeld()))
                 if (m_aDocument.removeModule(m_aLibName, m_aName))
                     MarkDocumentModified(m_aDocument);
         }
@@ -1001,13 +1012,15 @@ void ModulWindow::ExecuteCommand (SfxRequest& rReq)
             break;
         case SID_GOTOLINE:
         {
-            ScopedVclPtrInstance< GotoLineDialog > aGotoDlg(this);
-            if (aGotoDlg->Execute())
-                if (sal_Int32 const nLine = aGotoDlg->GetLineNumber())
+            GotoLineDialog aGotoDlg(GetFrameWeld());
+            if (aGotoDlg.run() == RET_OK)
+            {
+                if (sal_Int32 const nLine = aGotoDlg.GetLineNumber())
                 {
                     TextSelection const aSel(TextPaM(nLine - 1, 0), TextPaM(nLine - 1, 0));
                     GetEditView()->SetSelection(aSel);
                 }
+            }
             break;
         }
     }
@@ -1022,7 +1035,7 @@ void ModulWindow::ExecuteGlobal (SfxRequest& rReq)
             DocumentSignature aSignature(m_aDocument);
             if (aSignature.supportsSignatures())
             {
-                aSignature.signScriptingContent();
+                aSignature.signScriptingContent(rReq.GetFrameWeld());
                 if (SfxBindings* pBindings = GetBindingsPtr())
                     pBindings->Invalidate(SID_SIGNATURE);
             }
@@ -1035,7 +1048,7 @@ void ModulWindow::ExecuteGlobal (SfxRequest& rReq)
 void ModulWindow::GetState( SfxItemSet &rSet )
 {
     SfxWhichIter aIter(rSet);
-    for ( sal_uInt16 nWh = aIter.FirstWhich(); 0 != nWh; nWh = aIter.NextWhich() )
+    for ( sal_uInt16 nWh = aIter.FirstWhich(); nWh != 0; nWh = aIter.NextWhich() )
     {
         switch ( nWh )
         {
@@ -1069,11 +1082,11 @@ void ModulWindow::GetState( SfxItemSet &rSet )
                 if ( pView )
                 {
                     TextSelection aSel = pView->GetSelection();
-                    OUString aPos = OUString( IDEResId( RID_STR_LINE ) ) +
+                    OUString aPos = IDEResId( RID_STR_LINE ) +
                                    " " +
                                    OUString::number(aSel.GetEnd().GetPara()+1) +
                                    ", " +
-                                   OUString( IDEResId( RID_STR_COLUMN ) ) +
+                                   IDEResId( RID_STR_COLUMN ) +
                                    " " +
                                    OUString::number(aSel.GetEnd().GetIndex()+1);
                     SfxStringItem aItem( SID_BASICIDE_STAT_POS, aPos );
@@ -1121,7 +1134,8 @@ void ModulWindow::GetState( SfxItemSet &rSet )
             break;
             case SID_SHOWLINES:
             {
-                rSet.Put(SfxBoolItem(nWh, bSourceLinesEnabled));
+                bool bLineNumbers = ::officecfg::Office::BasicIDE::EditorSettings::LineNumbering::get();
+                rSet.Put(SfxBoolItem(nWh, bLineNumbers));
                 break;
             }
             case SID_SELECTALL:
@@ -1152,16 +1166,11 @@ bool ModulWindow::IsModified()
     return GetEditEngine() && GetEditEngine()->IsModified();
 }
 
-void ModulWindow::GoOnTop()
-{
-    GetShell()->GetViewFrame()->ToTop();
-}
-
 OUString ModulWindow::GetSbModuleName()
 {
     OUString aModuleName;
-    if ( XModule().Is() )
-        aModuleName = xModule->GetName();
+    if ( XModule().is() )
+        aModuleName = m_xModule->GetName();
     return aModuleName;
 }
 
@@ -1193,15 +1202,14 @@ void ModulWindow::AssertValidEditEngine()
 
 void ModulWindow::Activating ()
 {
-    aXEditorWindow->SetLineNumberDisplay(bSourceLinesEnabled);
+    bool bLineNumbers = ::officecfg::Office::BasicIDE::EditorSettings::LineNumbering::get();
+    m_aXEditorWindow->SetLineNumberDisplay(bLineNumbers);
     Show();
 }
 
 void ModulWindow::Deactivating()
 {
     Hide();
-    if ( GetEditView() )
-        GetEditView()->EraseVirtualDevice();
 }
 
 sal_uInt16 ModulWindow::StartSearchAndReplace( const SvxSearchItem& rSearchItem, bool bFromStart )
@@ -1211,7 +1219,7 @@ sal_uInt16 ModulWindow::StartSearchAndReplace( const SvxSearchItem& rSearchItem,
 
     // one could also relinquish syntaxhighlighting/formatting instead of the stupid replace-everything...
     AssertValidEditEngine();
-    ExtTextView* pView = GetEditView();
+    TextView* pView = GetEditView();
     TextSelection aSel;
     if ( bFromStart )
     {
@@ -1245,7 +1253,7 @@ sal_uInt16 ModulWindow::StartSearchAndReplace( const SvxSearchItem& rSearchItem,
     return nFound;
 }
 
-svl::IUndoManager* ModulWindow::GetUndoManager()
+SfxUndoManager* ModulWindow::GetUndoManager()
 {
     if ( GetEditEngine() )
         return &GetEditEngine()->GetUndoManager();
@@ -1273,19 +1281,19 @@ SearchOptionFlags ModulWindow::GetSearchOptions()
 
 void ModulWindow::BasicStarted()
 {
-    if ( XModule().Is() )
+    if ( XModule().is() )
     {
-        aStatus.bIsRunning = true;
+        m_aStatus.bIsRunning = true;
         BreakPointList& rList = GetBreakPoints();
         if ( rList.size() )
         {
             rList.ResetHitCount();
-            rList.SetBreakPointsInBasic( xModule );
-            for ( sal_uInt16 nMethod = 0; nMethod < xModule->GetMethods()->Count(); nMethod++ )
+            rList.SetBreakPointsInBasic( m_xModule.get() );
+            for ( sal_uInt16 nMethod = 0; nMethod < m_xModule->GetMethods()->Count(); nMethod++ )
             {
-                SbMethod* pMethod = static_cast<SbMethod*>(xModule->GetMethods()->Get( nMethod ));
-                assert(pMethod && "Methode nicht gefunden! (NULL)");
-                pMethod->SetDebugFlags( pMethod->GetDebugFlags() | SbDEBUG_BREAK );
+                SbMethod* pMethod = static_cast<SbMethod*>(m_xModule->GetMethods()->Get( nMethod ));
+                assert(pMethod && "Method not found! (NULL)");
+                pMethod->SetDebugFlags( pMethod->GetDebugFlags() | BasicDebugFlags::Break );
             }
         }
     }
@@ -1293,7 +1301,7 @@ void ModulWindow::BasicStarted()
 
 void ModulWindow::BasicStopped()
 {
-    aStatus.bIsRunning = false;
+    m_aStatus.bIsRunning = false;
     GetBreakPointWindow().SetNoMarker();
 }
 
@@ -1304,13 +1312,13 @@ EntryDescriptor ModulWindow::CreateEntryDescriptor()
     LibraryLocation eLocation = aDocument.getLibraryLocation( aLibName );
     OUString aModName( GetName() );
     OUString aLibSubName;
-    if( xBasic.Is() && aDocument.isInVBAMode() && XModule().Is() )
+    if( m_xBasic.is() && aDocument.isInVBAMode() && XModule().is() )
     {
-        switch( xModule->GetModuleType() )
+        switch( m_xModule->GetModuleType() )
         {
             case script::ModuleType::DOCUMENT:
             {
-                aLibSubName = OUString( IDEResId( RID_STR_DOCUMENT_OBJECTS ) );
+                aLibSubName = IDEResId( RID_STR_DOCUMENT_OBJECTS );
                 uno::Reference< container::XNameContainer > xLib = aDocument.getOrCreateLibrary( E_SCRIPTS, aLibName );
                 if( xLib.is() )
                 {
@@ -1324,13 +1332,13 @@ EntryDescriptor ModulWindow::CreateEntryDescriptor()
                 break;
             }
             case script::ModuleType::FORM:
-                aLibSubName = OUString( IDEResId( RID_STR_USERFORMS ) );
+                aLibSubName = IDEResId( RID_STR_USERFORMS );
                 break;
             case script::ModuleType::NORMAL:
-                aLibSubName = OUString( IDEResId( RID_STR_NORMAL_MODULES ) );
+                aLibSubName = IDEResId( RID_STR_NORMAL_MODULES );
                 break;
             case script::ModuleType::CLASS:
-                aLibSubName = OUString( IDEResId( RID_STR_CLASS_MODULES ) );
+                aLibSubName = IDEResId( RID_STR_CLASS_MODULES );
                 break;
         }
     }
@@ -1377,7 +1385,8 @@ bool ModulWindow::IsPasteAllowed()
 
 void ModulWindow::OnNewDocument ()
 {
-    aXEditorWindow->SetLineNumberDisplay(bSourceLinesEnabled);
+    bool bLineNumbers = ::officecfg::Office::BasicIDE::EditorSettings::LineNumbering::get();
+    m_aXEditorWindow->SetLineNumberDisplay(bLineNumbers);
 }
 
 char const* ModulWindow::GetHid () const
@@ -1400,7 +1409,7 @@ void ModulWindow::UpdateModule ()
     OUString const aModule = getTextEngineText(*GetEditEngine());
 
     // update module in basic
-    assert(xModule);
+    assert(m_xModule.is());
 
     // update module in module window
     SetModule(aModule);
@@ -1439,17 +1448,9 @@ void ModulWindowLayout::UpdateDebug (bool bBasicStopped)
     aStackWindow->UpdateCalls();
 }
 
-void ModulWindowLayout::Paint (vcl::RenderContext& rRenderContext, Rectangle const&)
+void ModulWindowLayout::Paint (vcl::RenderContext& rRenderContext, tools::Rectangle const&)
 {
-    rRenderContext.DrawText(Point(), IDEResId(RID_STR_NOMODULE).toString());
-}
-
-// virtual
-void ModulWindowLayout::DataChanged (DataChangedEvent const& rDCEvt)
-{
-    Layout::DataChanged(rDCEvt);
-    if (rDCEvt.GetType() == DataChangedEventType::SETTINGS && (rDCEvt.GetFlags() & AllSettingsFlags::STYLE))
-        aSyntaxColors.SettingsChanged();
+    rRenderContext.DrawText(Point(), IDEResId(RID_STR_NOMODULE));
 }
 
 void ModulWindowLayout::Activating (BaseWindow& rChild)
@@ -1511,11 +1512,6 @@ ModulWindowLayout::SyntaxColors::SyntaxColors () :
 {
     aConfig.AddListener(this);
 
-    aColors[TokenType::Unknown] =
-    aColors[TokenType::Whitespace] =
-    aColors[TokenType::EOL] =
-        Application::GetSettings().GetStyleSettings().GetFieldTextColor();
-
     NewConfig(true);
 }
 
@@ -1524,22 +1520,8 @@ ModulWindowLayout::SyntaxColors::~SyntaxColors ()
     aConfig.RemoveListener(this);
 }
 
-void ModulWindowLayout::SyntaxColors::SettingsChanged ()
-{
-    Color const aColor = Application::GetSettings().GetStyleSettings().GetFieldTextColor();
-    if (aColor != aColors[TokenType::Unknown])
-    {
-        aColors[TokenType::Unknown] =
-        aColors[TokenType::Whitespace] =
-        aColors[TokenType::EOL] =
-            aColor;
-        if (pEditor)
-            pEditor->UpdateSyntaxHighlighting();
-    }
-}
-
 // virtual
-void ModulWindowLayout::SyntaxColors::ConfigurationChanged (utl::ConfigurationBroadcaster*, sal_uInt32)
+void ModulWindowLayout::SyntaxColors::ConfigurationChanged (utl::ConfigurationBroadcaster*, ConfigurationHints)
 {
     NewConfig(false);
 }
@@ -1554,14 +1536,36 @@ void ModulWindowLayout::SyntaxColors::NewConfig (bool bFirst)
     }
     const vIds[] =
     {
+        { TokenType::Unknown,     svtools::FONTCOLOR },
         { TokenType::Identifier,  svtools::BASICIDENTIFIER },
+        { TokenType::Whitespace,  svtools::FONTCOLOR },
         { TokenType::Number,      svtools::BASICNUMBER },
         { TokenType::String,      svtools::BASICSTRING },
+        { TokenType::EOL,         svtools::FONTCOLOR },
         { TokenType::Comment,     svtools::BASICCOMMENT },
         { TokenType::Error,       svtools::BASICERROR },
         { TokenType::Operator,    svtools::BASICOPERATOR },
         { TokenType::Keywords,    svtools::BASICKEYWORD },
     };
+
+    Color aDocColor = aConfig.GetColorValue(svtools::DOCCOLOR).nColor;
+    if (bFirst || aDocColor != m_aBackgroundColor)
+    {
+        m_aBackgroundColor = aDocColor;
+        if (!bFirst && pEditor)
+        {
+            pEditor->SetBackground(Wallpaper(m_aBackgroundColor));
+            pEditor->Invalidate();
+        }
+    }
+
+    Color aFontColor = aConfig.GetColorValue(svtools::FONTCOLOR).nColor;
+    if (bFirst || aFontColor != m_aFontColor)
+    {
+        m_aFontColor = aFontColor;
+        if (!bFirst && pEditor)
+            pEditor->ChangeFontColor(m_aFontColor);
+    }
 
     bool bChanged = false;
     for (unsigned i = 0; i != SAL_N_ELEMENTS(vIds); ++i)
@@ -1577,7 +1581,6 @@ void ModulWindowLayout::SyntaxColors::NewConfig (bool bFirst)
     if (bChanged && !bFirst && pEditor)
         pEditor->UpdateSyntaxHighlighting();
 }
-
 
 } // namespace basctl
 

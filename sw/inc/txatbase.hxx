@@ -19,25 +19,21 @@
 #ifndef INCLUDED_SW_INC_TXATBASE_HXX
 #define INCLUDED_SW_INC_TXATBASE_HXX
 
-#include <tools/solar.h>
 #include <svl/poolitem.hxx>
-#include <hintids.hxx>
-#include <fmtautofmt.hxx>
-#include <fmtinfmt.hxx>
-#include <fmtrfmrk.hxx>
-#include <fmtruby.hxx>
-#include <fmtfld.hxx>
-#include <fmtflcnt.hxx>
-#include <fmtftn.hxx>
-#include <fmtmeta.hxx>
-#include <fchrfmt.hxx>
-#include <tox.hxx>
-
+#include "hintids.hxx"
+#include "fmtautofmt.hxx"
+#include "fmtinfmt.hxx"
+#include "fmtrfmrk.hxx"
+#include "fmtruby.hxx"
+#include "fmtfld.hxx"
+#include "fmtflcnt.hxx"
+#include "fmtftn.hxx"
+#include "fchrfmt.hxx"
+#include "tox.hxx"
 
 class SfxItemPool;
-class SvXMLAttrContainerItem;
 
-class SwTextAttr
+class SAL_DLLPUBLIC_RTTI SwTextAttr
 {
 private:
     SfxPoolItem * const m_pAttr;
@@ -61,7 +57,7 @@ private:
 
 protected:
     SwTextAttr( SfxPoolItem& rAttr, sal_Int32 nStart );
-    virtual ~SwTextAttr();
+    virtual ~SwTextAttr() COVERITY_NOEXCEPT_FALSE;
 
     void SetLockExpandFlag( bool bFlag )    { m_bLockExpandFlag = bFlag; }
     void SetDontMoveAttr( bool bFlag )      { m_bDontMoveAttr = bFlag; }
@@ -106,7 +102,7 @@ public:
 
     inline const SfxPoolItem& GetAttr() const;
     inline       SfxPoolItem& GetAttr();
-    inline sal_uInt16 Which() const { return GetAttr().Which(); }
+    sal_uInt16 Which() const { return GetAttr().Which(); }
 
     bool operator==( const SwTextAttr& ) const;
 
@@ -123,7 +119,7 @@ public:
     void dumpAsXml(struct _xmlTextWriter* pWriter) const;
 };
 
-class SwTextAttrEnd : public virtual SwTextAttr
+class SAL_DLLPUBLIC_RTTI SwTextAttrEnd : public virtual SwTextAttr
 {
 protected:
     sal_Int32 m_nEnd;
@@ -135,12 +131,12 @@ public:
 };
 
 // attribute that must not overlap others
-class SwTextAttrNesting : public SwTextAttrEnd
+class SAL_DLLPUBLIC_RTTI SwTextAttrNesting : public SwTextAttrEnd
 {
 protected:
     SwTextAttrNesting( SfxPoolItem & i_rAttr,
         const sal_Int32 i_nStart, const sal_Int32 i_nEnd );
-    virtual ~SwTextAttrNesting();
+    virtual ~SwTextAttrNesting() override;
 };
 
 inline const sal_Int32* SwTextAttr::End() const

@@ -28,12 +28,11 @@ import java.util.TimerTask;
  * Many ideas are from Joe Hewitt's Scrollability:
  *   https://github.com/joehewitt/scrollability/
  */
-public class JavaPanZoomController
+class JavaPanZoomController
         extends GestureDetector.SimpleOnGestureListener
         implements PanZoomController, SimpleScaleGestureDetector.SimpleScaleGestureListener
 {
     private static final String LOGTAG = "GeckoPanZoomController";
-
 
     // Animation stops if the velocity is below this value when overscrolled or panning.
     private static final float STOPPED_THRESHOLD = 4.0f;
@@ -43,7 +42,7 @@ public class JavaPanZoomController
 
     // The distance the user has to pan before we recognize it as such (e.g. to avoid 1-pixel pans
     // between the touch-down and touch-up of a click). In units of density-independent pixels.
-    public static final float PAN_THRESHOLD = 1/16f * LOKitShell.getDpi();
+    private final float PAN_THRESHOLD;
 
     // Angle from axis within which we stay axis-locked
     private static final double AXIS_LOCK_ANGLE = Math.PI / 6.0; // 30 degrees
@@ -51,8 +50,11 @@ public class JavaPanZoomController
     // The maximum amount we allow you to zoom into a page
     private static final float MAX_ZOOM = 4.0f;
 
+    // The threshold zoom factor of whether a double tap triggers zoom-in or zoom-out
+    private static final float DOUBLE_TAP_THRESHOLD = 1.0f;
+
     // The maximum amount we would like to scroll with the mouse
-    private static final float MAX_SCROLL = 0.075f * LOKitShell.getDpi();
+    private final float MAX_SCROLL;
 
     private enum PanZoomState {
         NOTHING,        /* no touch-start events received */
@@ -78,6 +80,7 @@ public class JavaPanZoomController
     private final Axis mY;
     private final TouchEventHandler mTouchEventHandler;
     private Thread mMainThread;
+    private LibreOfficeMainActivity mContext;
 
     /* The timer that handles flings or bounces. */
     private Timer mAnimationTimer;
@@ -92,14 +95,17 @@ public class JavaPanZoomController
     /* Whether or not to wait for a double-tap before dispatching a single-tap */
     private boolean mWaitForDoubleTap;
 
-    public JavaPanZoomController(PanZoomTarget target, View view) {
+    JavaPanZoomController(LibreOfficeMainActivity context, PanZoomTarget target, View view) {
+        mContext = context;
+        PAN_THRESHOLD = 1/16f * LOKitShell.getDpi(view.getContext());
+        MAX_SCROLL = 0.075f * LOKitShell.getDpi(view.getContext());
         mTarget = target;
         mSubscroller = new SubdocumentScrollHelper();
         mX = new AxisX(mSubscroller);
         mY = new AxisY(mSubscroller);
         mTouchEventHandler = new TouchEventHandler(view.getContext(), view, this);
 
-        mMainThread = LibreOfficeMainActivity.mAppContext.getMainLooper().getThread();
+        mMainThread = mContext.getMainLooper().getThread();
         checkMainThread();
 
         setState(PanZoomState.NOTHING);
@@ -110,7 +116,7 @@ public class JavaPanZoomController
         mTouchEventHandler.destroy();
     }
 
-    private static final float easeOut(float t) {
+    private static float easeOut(float t) {
         // ease-out approx.
         // -(t-1)^2+1
         t = t-1;
@@ -201,19 +207,19 @@ public class JavaPanZoomController
     }
 
     /** This function must be called on the UI thread. */
-    public void startingNewEventBlock(MotionEvent event, boolean waitingForTouchListeners) {
+    void startingNewEventBlock(MotionEvent event, boolean waitingForTouchListeners) {
         checkMainThread();
         mSubscroller.cancel();
         if (waitingForTouchListeners && (event.getAction() & MotionEvent.ACTION_MASK) == MotionEvent.ACTION_DOWN) {
             // this is the first touch point going down, so we enter the pending state
-            // seting the state will kill any animations in progress, possibly leaving
+            // setting the state will kill any animations in progress, possibly leaving
             // the page in overscroll
             setState(PanZoomState.WAITING_LISTENERS);
         }
     }
 
     /** This function must be called on the UI thread. */
-    public void preventedTouchFinished() {
+    void preventedTouchFinished() {
         checkMainThread();
         if (mState == PanZoomState.WAITING_LISTENERS) {
             // if we enter here, we just finished a block of events whose default actions
@@ -229,7 +235,7 @@ public class JavaPanZoomController
             synchronized (mTarget.getLock()) {
                 ImmutableViewportMetrics validated = getValidViewportMetrics();
                 if (!getMetrics().fuzzyEquals(validated)) {
-                    // page size changed such that we are now in overscroll. snap to the
+                    // page size changed such that we are now in overscroll. snap to
                     // the nearest valid viewport
                     mTarget.setViewportMetrics(validated);
                 }
@@ -275,7 +281,7 @@ public class JavaPanZoomController
     private boolean handleTouchMove(MotionEvent event) {
         if (mState == PanZoomState.PANNING_LOCKED || mState == PanZoomState.PANNING) {
             if (getVelocity() > 18.0f) {
-                LibreOfficeMainActivity.mAppContext.hideSoftKeyboard();
+                mContext.hideSoftKeyboard();
             }
         }
 
@@ -495,6 +501,7 @@ public class JavaPanZoomController
         ImmutableViewportMetrics bounceStartMetrics = getMetrics();
         if (bounceStartMetrics.fuzzyEquals(metrics)) {
             setState(PanZoomState.NOTHING);
+            finishAnimation();
             return;
         }
 
@@ -554,7 +561,7 @@ public class JavaPanZoomController
         return getVelocity() < STOPPED_THRESHOLD;
     }
 
-    PointF resetDisplacement() {
+    private PointF resetDisplacement() {
         return new PointF(mX.resetDisplacement(), mY.resetDisplacement());
     }
 
@@ -592,7 +599,7 @@ public class JavaPanZoomController
         protected abstract void animateFrame();
 
         /* This should always run on the UI thread */
-        protected final void terminate() {
+        final void terminate() {
             mAnimationTerminated = true;
         }
     }
@@ -686,6 +693,7 @@ public class JavaPanZoomController
                  */
                 float threshold = (overscrolled && !mSubscroller.scrolling() ? STOPPED_THRESHOLD : FLING_STOPPED_THRESHOLD);
                 if (getVelocity() >= threshold) {
+                    mContext.getDocumentOverlay().showPageNumberRect();
                     // we're still flinging
                     return;
                 }
@@ -709,6 +717,8 @@ public class JavaPanZoomController
 
         stopAnimationTimer();
 
+        mContext.getDocumentOverlay().hidePageNumberRect();
+
         // Force a viewport synchronisation
         mTarget.forceRedraw();
     }
@@ -731,7 +741,11 @@ public class JavaPanZoomController
         float maxZoomFactor = MAX_ZOOM;
 
         ZoomConstraints constraints = mTarget.getZoomConstraints();
+        if (null == constraints) {
+            Log.e(LOGTAG, "ZoomConstraints not available - too impatient?");
+            return viewportMetrics;
 
+        }
         if (constraints.getMinZoom() > 0)
             minZoomFactor = constraints.getMinZoom();
         if (constraints.getMaxZoom() > 0)
@@ -814,7 +828,7 @@ public class JavaPanZoomController
         if (mState == PanZoomState.ANIMATED_ZOOM)
             return false;
 
-        if (!mTarget.getZoomConstraints().getAllowZoom())
+        if (null == mTarget.getZoomConstraints() || !mTarget.getZoomConstraints().getAllowZoom())
             return false;
 
         setState(PanZoomState.PINCHING);
@@ -842,13 +856,11 @@ public class JavaPanZoomController
 
         synchronized (mTarget.getLock()) {
             float newZoomFactor = getMetrics().zoomFactor * spanRatio;
-            float minZoomFactor = 0.0f;
+            float minZoomFactor = 0.0f; // deliberately set to zero to allow big zoom out effect
             float maxZoomFactor = MAX_ZOOM;
 
             ZoomConstraints constraints = mTarget.getZoomConstraints();
 
-            if (constraints.getMinZoom() > 0)
-                minZoomFactor = constraints.getMinZoom();
             if (constraints.getMaxZoom() > 0)
                 maxZoomFactor = constraints.getMaxZoom();
 
@@ -922,7 +934,10 @@ public class JavaPanZoomController
 
     @Override
     public boolean onDown(MotionEvent motionEvent) {
-        mWaitForDoubleTap = mTarget.getZoomConstraints().getAllowDoubleTapZoom();
+        if (mTarget.getZoomConstraints() != null)
+            mWaitForDoubleTap = mTarget.getZoomConstraints().getAllowDoubleTapZoom();
+        else
+            mWaitForDoubleTap = false;
         return false;
     }
 
@@ -949,6 +964,12 @@ public class JavaPanZoomController
     }
 
     @Override
+    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+        mContext.getDocumentOverlay().showPageNumberRect();
+        return super.onScroll(e1, e2, distanceX, distanceY);
+    }
+
+    @Override
     public boolean onSingleTapUp(MotionEvent motionEvent) {
         // When double-tapping is allowed, we have to wait to see if this is
         // going to be a double-tap.
@@ -970,7 +991,22 @@ public class JavaPanZoomController
 
     @Override
     public boolean onDoubleTap(MotionEvent motionEvent) {
-        LOKitShell.sendTouchEvent("DoubleTap", getMotionInDocumentCoordinates(motionEvent));
+        if (null == mTarget.getZoomConstraints() || !mTarget.getZoomConstraints().getAllowDoubleTapZoom()) {
+            return true;
+        }
+        // Double tap zooms in or out depending on the current zoom factor
+        PointF pointOfTap = getMotionInDocumentCoordinates(motionEvent);
+        ImmutableViewportMetrics metrics = getMetrics();
+        float newZoom = metrics.getZoomFactor() >=
+                DOUBLE_TAP_THRESHOLD ? mTarget.getZoomConstraints().getMinZoom() : DOUBLE_TAP_THRESHOLD;
+        // calculate new top_left point from the point of tap
+        float ratio = newZoom/metrics.getZoomFactor();
+        float newLeft = pointOfTap.x - 1/ratio * (pointOfTap.x - metrics.getOrigin().x / metrics.getZoomFactor());
+        float newTop = pointOfTap.y - 1/ratio * (pointOfTap.y - metrics.getOrigin().y / metrics.getZoomFactor());
+        // animate move to the new view
+        animatedMove(new PointF(newLeft, newTop), newZoom);
+
+        LOKitShell.sendTouchEvent("DoubleTap", pointOfTap);
         return true;
     }
 
@@ -985,7 +1021,7 @@ public class JavaPanZoomController
      * While we usually use device pixels, zoomToRect must be specified in CSS
      * pixels.
      */
-    public boolean animatedZoomTo(RectF zoomToRect) {
+    boolean animatedZoomTo(RectF zoomToRect) {
         final float startZoom = getMetrics().zoomFactor;
 
         RectF viewport = getMetrics().getViewport();
@@ -1029,7 +1065,7 @@ public class JavaPanZoomController
      * Move the viewport to the top-left point to and zoom to the desired
      * zoom factor. Input zoom factor can be null, in this case leave the zoom unchanged.
      */
-    public boolean animatedMove(PointF topLeft, Float zoom) {
+    boolean animatedMove(PointF topLeft, Float zoom) {
         RectF moveToRect = getMetrics().getCssViewport();
         moveToRect.offsetTo(topLeft.x, topLeft.y);
 

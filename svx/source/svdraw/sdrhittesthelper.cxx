@@ -38,8 +38,9 @@ SdrObject* SdrObjectPrimitiveHit(
     const Point& rPnt,
     sal_uInt16 nTol,
     const SdrPageView& rSdrPageView,
-    const SetOfByte* pVisiLayer,
-    bool bTextOnly)
+    const SdrLayerIDSet* pVisiLayer,
+    bool bTextOnly,
+    drawinglayer::primitive2d::Primitive2DContainer* pHitContainer)
 {
     SdrObject* pResult = nullptr;
 
@@ -77,7 +78,7 @@ SdrObject* SdrObjectPrimitiveHit(
                     const sdr::contact::ViewObjectContact& rVOC = rObject.GetViewContact().GetViewObjectContact(
                         rSdrPageView.GetPageWindow(0)->GetObjectContact());
 
-                    if(ViewObjectContactPrimitiveHit(rVOC, aHitPosition, fLogicTolerance, bTextOnly))
+                    if(ViewObjectContactPrimitiveHit(rVOC, aHitPosition, fLogicTolerance, bTextOnly, pHitContainer))
                     {
                           pResult = const_cast< SdrObject* >(&rObject);
                     }
@@ -95,7 +96,7 @@ SdrObject* SdrObjListPrimitiveHit(
     const Point& rPnt,
     sal_uInt16 nTol,
     const SdrPageView& rSdrPageView,
-    const SetOfByte* pVisiLayer,
+    const SdrLayerIDSet* pVisiLayer,
     bool bTextOnly)
 {
     size_t nObjNum(rList.GetObjCount());
@@ -117,7 +118,8 @@ bool ViewObjectContactPrimitiveHit(
     const sdr::contact::ViewObjectContact& rVOC,
     const basegfx::B2DPoint& rHitPosition,
     double fLogicHitTolerance,
-    bool bTextOnly)
+    bool bTextOnly,
+    drawinglayer::primitive2d::Primitive2DContainer* pHitContainer)
 {
     basegfx::B2DRange aObjectRange(rVOC.getObjectRange());
 
@@ -146,11 +148,23 @@ bool ViewObjectContactPrimitiveHit(
                     fLogicHitTolerance,
                     bTextOnly);
 
+                // ask for HitStack
+                aHitTestProcessor2D.collectHitStack(true);
+
                 // feed it with the primitives
                 aHitTestProcessor2D.process(rSequence);
 
                 // deliver result
-                return aHitTestProcessor2D.getHit();
+                if (aHitTestProcessor2D.getHit())
+                {
+                    if (pHitContainer)
+                    {
+                        // fetch HitStack primitives if requested
+                        *pHitContainer = aHitTestProcessor2D.getHitStack();
+                    }
+
+                    return true;
+                }
             }
         }
     }

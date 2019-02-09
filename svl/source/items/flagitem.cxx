@@ -21,18 +21,12 @@
 #include <svl/flagitem.hxx>
 #include <svl/poolitem.hxx>
 #include <tools/stream.hxx>
+#include <sal/log.hxx>
 
 
 SfxFlagItem::SfxFlagItem( sal_uInt16 nW, sal_uInt16 nV ) :
     SfxPoolItem( nW ),
     nVal(nV)
-{
-}
-
-
-SfxFlagItem::SfxFlagItem( const SfxFlagItem& rItem ) :
-    SfxPoolItem( rItem ),
-    nVal( rItem.nVal )
 {
 }
 
@@ -47,10 +41,10 @@ SvStream& SfxFlagItem::Store(SvStream &rStream, sal_uInt16) const
 bool SfxFlagItem::GetPresentation
 (
     SfxItemPresentation     /*ePresentation*/,
-    SfxMapUnit              /*eCoreMetric*/,
-    SfxMapUnit              /*ePresentationMetric*/,
+    MapUnit              /*eCoreMetric*/,
+    MapUnit              /*ePresentationMetric*/,
     OUString&               rText,
-    const IntlWrapper *
+    const IntlWrapper&
 )   const
 {
     rText.clear();
@@ -76,7 +70,7 @@ SfxPoolItem* SfxFlagItem::Create(SvStream &, sal_uInt16) const
 
 bool SfxFlagItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SfxFlagItem&>(rItem).nVal == nVal;
 }
 

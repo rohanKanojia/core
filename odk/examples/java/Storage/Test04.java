@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -231,7 +232,7 @@ public class Test04 implements StorageTest {
             if ( !m_aTestHelper.disposeStorage( xResSubStorage2 ) )
                 return false;
 
-            // remove element and check that it was removed completelly
+            // remove element and check that it was removed completely
             if ( !m_aTestHelper.removeElement( xResStorage, "SubStorage2" ) )
                 return false;
 
@@ -278,3 +279,4 @@ public class Test04 implements StorageTest {
 
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -22,6 +22,21 @@
 #include <unotest/detail/unotestdllapi.hxx>
 #include <unotest/directories.hxx>
 
+// For cppunit < 1.15.0.
+#ifndef CPPUNIT_TEST_FIXTURE
+#define CPPUNIT_TEST_FIXTURE(TestClass, TestName)                              \
+    class TestName : public TestClass                                          \
+    {                                                                          \
+    public:                                                                    \
+        void TestBody();                                                       \
+        CPPUNIT_TEST_SUITE(TestName);                                          \
+        CPPUNIT_TEST(TestBody);                                                \
+        CPPUNIT_TEST_SUITE_END();                                              \
+    };                                                                         \
+    CPPUNIT_TEST_SUITE_REGISTRATION(TestName);                                 \
+    void TestName::TestBody()
+#endif
+
 namespace test {
 
 // Class to do lots of heavy-lifting UNO & environment
@@ -41,11 +56,11 @@ protected:
 
 public:
   BootstrapFixtureBase();
-  virtual ~BootstrapFixtureBase();
+  virtual ~BootstrapFixtureBase() override;
 
-  css::uno::Reference<css::uno::XComponentContext>
+  const css::uno::Reference<css::uno::XComponentContext>&
               getComponentContext() { return m_xContext; }
-  css::uno::Reference<css::lang::XMultiServiceFactory>
+  const css::uno::Reference<css::lang::XMultiServiceFactory>&
               getMultiServiceFactory() { return m_xSFactory; }
 
   virtual void setUp() override;

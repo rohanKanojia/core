@@ -20,6 +20,7 @@
 #include "menuwindow.hxx"
 #include "menuitemlist.hxx"
 
+#include <salmenu.hxx>
 #include <vcl/help.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/settings.hxx>
@@ -37,8 +38,8 @@ static sal_uLong ImplChangeTipTimeout( sal_uLong nTimeout, vcl::Window *pWindow 
     return nRet;
 }
 
-bool MenuWindow::ImplHandleHelpEvent(vcl::Window* pMenuWindow, Menu* pMenu, sal_uInt16 nHighlightedItem,
-        const HelpEvent& rHEvt, const Rectangle &rHighlightRect)
+bool MenuWindow::ImplHandleHelpEvent(vcl::Window* pMenuWindow, Menu const * pMenu, sal_uInt16 nHighlightedItem,
+        const HelpEvent& rHEvt, const tools::Rectangle &rHighlightRect)
 {
     if( ! pMenu )
         return false;
@@ -61,7 +62,7 @@ bool MenuWindow::ImplHandleHelpEvent(vcl::Window* pMenuWindow, Menu* pMenu, sal_
         else
             aPos = rHEvt.GetMousePosPixel();
 
-        Rectangle aRect( aPos, Size() );
+        tools::Rectangle aRect( aPos, Size() );
         if (!pMenu->GetHelpText(nId).isEmpty())
             Help::ShowBalloon( pMenuWindow, aPos, aRect, pMenu->GetHelpText( nId ) );
         else
@@ -77,7 +78,7 @@ bool MenuWindow::ImplHandleHelpEvent(vcl::Window* pMenuWindow, Menu* pMenu, sal_
     else if ( ( rHEvt.GetMode() &HelpEventMode::QUICK ) && pMenuWindow )
     {
         Point aPos = rHEvt.GetMousePosPixel();
-        Rectangle aRect( aPos, Size() );
+        tools::Rectangle aRect( aPos, Size() );
         // give user a chance to read the full filename
         sal_uLong oldTimeout=ImplChangeTipTimeout( 60000, pMenuWindow );
         // call always, even when strlen==0 to correctly remove tip
@@ -85,7 +86,7 @@ bool MenuWindow::ImplHandleHelpEvent(vcl::Window* pMenuWindow, Menu* pMenu, sal_
         ImplChangeTipTimeout( oldTimeout, pMenuWindow );
         bDone = true;
     }
-    else if ( rHEvt.GetMode() & (HelpEventMode::CONTEXT | HelpEventMode::EXTENDED) )
+    else if ( rHEvt.GetMode() & HelpEventMode::CONTEXT )
     {
         // is help in the application selected
         Help* pHelp = Application::GetHelp();
@@ -99,9 +100,9 @@ bool MenuWindow::ImplHandleHelpEvent(vcl::Window* pMenuWindow, Menu* pMenu, sal_
                 aHelpId = OOO_HELP_INDEX;
 
             if ( !aCommand.isEmpty() )
-                pHelp->Start( aCommand, nullptr );
+                pHelp->Start(aCommand, static_cast<vcl::Window*>(nullptr));
             else
-                pHelp->Start( OStringToOUString( aHelpId, RTL_TEXTENCODING_UTF8 ), nullptr );
+                pHelp->Start(OStringToOUString(aHelpId, RTL_TEXTENCODING_UTF8), static_cast<vcl::Window*>(nullptr));
         }
         bDone = true;
     }

@@ -21,19 +21,16 @@
 #include <connectivity/dbmetadata.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/DriversConfig.hxx>
-#include "resource/common_res.hrc"
-#include "resource/sharedresources.hxx"
+#include <strings.hrc>
+#include <resource/sharedresources.hxx>
 
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/sdb/BooleanComparisonMode.hpp>
 #include <com/sun/star/sdbc/XDatabaseMetaData2.hpp>
 #include <com/sun/star/sdbcx/XUsersSupplier.hpp>
 #include <com/sun/star/sdbcx/XDataDefinitionSupplier.hpp>
-#include <com/sun/star/sdbc/XDriverAccess.hpp>
 #include <com/sun/star/sdbc/DriverManager.hpp>
 
 #include <tools/diagnose_ex.h>
@@ -59,12 +56,9 @@ namespace dbtools
     using ::com::sun::star::container::XChild;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::beans::XPropertySet;
-    using ::com::sun::star::beans::PropertyValue;
-    using ::com::sun::star::beans::XPropertySetInfo;
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::sdbcx::XUsersSupplier;
     using ::com::sun::star::sdbcx::XDataDefinitionSupplier;
-    using ::com::sun::star::sdbc::XDriverAccess;
     using ::com::sun::star::sdbc::DriverManager;
     using ::com::sun::star::sdbc::XDriverManager2;
     using ::com::sun::star::uno::UNO_SET_THROW;
@@ -153,7 +147,7 @@ namespace dbtools
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
             }
             return false;
         }
@@ -168,9 +162,9 @@ namespace dbtools
                 lcl_checkConnected( _metaData );
                 try
                 {
-                    _cachedSetting.reset( (_metaData.xConnectionMetaData.get()->*_getter)() );
+                    _cachedSetting = (_metaData.xConnectionMetaData.get()->*_getter)();
                 }
-                catch( const Exception& ) { DBG_UNHANDLED_EXCEPTION(); }
+                catch( const Exception& ) { DBG_UNHANDLED_EXCEPTION("connectivity.commontools"); }
             }
             return *_cachedSetting;
         }
@@ -180,7 +174,6 @@ namespace dbtools
         :m_pImpl( new DatabaseMetaData_Impl )
     {
     }
-
 
     DatabaseMetaData::DatabaseMetaData( const Reference< XConnection >& _connection )
         :m_pImpl( new DatabaseMetaData_Impl )
@@ -194,6 +187,10 @@ namespace dbtools
     {
     }
 
+    DatabaseMetaData::DatabaseMetaData( DatabaseMetaData&& _copyFrom )
+        :m_pImpl(std::move(_copyFrom.m_pImpl))
+    {
+    }
 
     DatabaseMetaData& DatabaseMetaData::operator=( const DatabaseMetaData& _copyFrom )
     {
@@ -204,11 +201,15 @@ namespace dbtools
         return *this;
     }
 
+    DatabaseMetaData& DatabaseMetaData::operator=( DatabaseMetaData&& _copyFrom )
+    {
+        m_pImpl = std::move(_copyFrom.m_pImpl);
+        return *this;
+    }
 
     DatabaseMetaData::~DatabaseMetaData()
     {
     }
-
 
     bool DatabaseMetaData::isConnected() const
     {
@@ -230,7 +231,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
         return bSupportsSubQueries;
     }
@@ -252,7 +253,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
         return bDoesSupportPrimaryKeys;
     }
@@ -300,6 +301,15 @@ namespace dbtools
         return doGenerate;
     }
 
+    bool DatabaseMetaData::shouldSubstituteParameterNames() const
+    {
+        bool doSubstitute( true );
+        Any setting;
+        if ( lcl_getConnectionSetting( "ParameterNameSubstitution", *m_pImpl, setting ) )
+            OSL_VERIFY( setting >>= doSubstitute );
+        return doSubstitute;
+    }
+
     bool DatabaseMetaData::isAutoIncrementPrimaryKey() const
     {
         bool is( true );
@@ -328,7 +338,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
         try
         {
@@ -340,7 +350,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
         return bSupport;
     }
@@ -379,7 +389,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
         return isSupported;
     }
@@ -401,7 +411,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
 #endif
         return doDisplay;
@@ -418,7 +428,7 @@ namespace dbtools
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         }
         return bSupported;
     }

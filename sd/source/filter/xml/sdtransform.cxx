@@ -29,9 +29,10 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/numitem.hxx>
+#include <editeng/outlobj.hxx>
 
-#include "drawdoc.hxx"
-#include "glob.hxx"
+#include <drawdoc.hxx>
+#include <glob.hxx>
 #include "sdtransform.hxx"
 
 using namespace ::com::sun::star::style;
@@ -50,24 +51,21 @@ public:
     void transformStyles( SfxStyleFamily eFam );
     void transformStyle( SfxStyleSheetBase& rSheet );
 
-    void transformShapes( SdrObjList& rShapes );
+    void transformShapes( SdrObjList const & rShapes );
     void transformShape( SdrObject& rObj );
 
     void transformTextShape( SdrTextObj& rTextShape );
 
     bool getBulletState( const SfxItemSet& rSet, SfxStyleSheetBase* pSheet, bool& rState );
-    bool getBulletState( const SfxItemSet& rSet, sal_uInt16 nWhich, bool& rState );
+    static bool getBulletState( const SfxItemSet& rSet, sal_uInt16 nWhich, bool& rState );
 
     static bool transformItemSet( SfxItemSet& rSet, bool bNumbering );
 
-    bool removeAlienAttributes( SfxItemSet& rSet );
-    bool removeAlienAttributes( SfxItemSet& rSet, sal_uInt16 nWhich );
+    static bool removeAlienAttributes( SfxItemSet& rSet );
+    static bool removeAlienAttributes( SfxItemSet& rSet, sal_uInt16 nWhich );
 
     SdDrawDocument& mrDocument;
     SdrOutliner& mrOutliner;
-    const OUString msEnableNumbering;
-    const OUString msTextNamespace;
-    const OUString msTrue;
 };
 
 /** transforms the given model from OOo 2.x to OOo 3.x. This maps
@@ -82,12 +80,13 @@ void TransformOOo2xDocument( SdDrawDocument* pDocument )
     }
 }
 
+static const OUStringLiteral gsEnableNumbering( "enable-numbering" );
+static const OUStringLiteral gsTextNamespace( "urn:oasis:names:tc:opendocument:xmlns:text:1.0" );
+static const OUStringLiteral gsTrue( "true" );
+
 SdTransformOOo2xDocument::SdTransformOOo2xDocument( SdDrawDocument& rDocument )
 : mrDocument( rDocument )
 , mrOutliner( rDocument.GetDrawOutliner() )
-, msEnableNumbering( "enable-numbering" )
-, msTextNamespace( "urn:oasis:names:tc:opendocument:xmlns:text:1.0" )
-, msTrue( "true" )
 {
 }
 
@@ -122,8 +121,8 @@ void SdTransformOOo2xDocument::transformDrawPages()
 
 void SdTransformOOo2xDocument::transformStyles()
 {
-    transformStyles( SD_STYLE_FAMILY_GRAPHICS );
-    transformStyles( SD_STYLE_FAMILY_MASTERPAGE );
+    transformStyles( SfxStyleFamily::Para );
+    transformStyles( SfxStyleFamily::Page );
 }
 
 void SdTransformOOo2xDocument::transformStyles( SfxStyleFamily eFam )
@@ -146,13 +145,13 @@ void SdTransformOOo2xDocument::transformStyle( SfxStyleSheetBase& rSheet )
     SfxItemSet& rSet = rSheet.GetItemSet();
 
     bool bState = false;
-    getBulletState( rSheet.GetItemSet(), rSheet.GetPool().Find( rSheet.GetParent(), rSheet.GetFamily() ), bState );
+    getBulletState( rSheet.GetItemSet(), rSheet.GetPool()->Find( rSheet.GetParent(), rSheet.GetFamily() ), bState );
 
     transformItemSet( rSet, bState );
     removeAlienAttributes( rSet );
 }
 
-void SdTransformOOo2xDocument::transformShapes( SdrObjList& rShapes )
+void SdTransformOOo2xDocument::transformShapes( SdrObjList const & rShapes )
 {
     const size_t nShapeCount = rShapes.GetObjCount();
     for( size_t nShape = 0; nShape < nShapeCount; ++nShape )
@@ -207,7 +206,7 @@ void SdTransformOOo2xDocument::transformTextShape( SdrTextObj& rTextShape )
                 if( (nDepth != -1) && (!getBulletState( aParaSet, mrOutliner.GetStyleSheet( nPara ), bState ) || !bState) )
                 {
                     // disable bullet if text::enable-bullet="false" is found
-                    if( (nDepth > 0 ) && (rTextShape.GetObjInventor()  == SdrInventor) && (rTextShape.GetObjIdentifier() == OBJ_OUTLINETEXT) )
+                    if( (nDepth > 0 ) && (rTextShape.GetObjInventor()  == SdrInventor::Default) && (rTextShape.GetObjIdentifier() == OBJ_OUTLINETEXT) )
                     {
                         // for outline object and level > 0 burn in the style sheet because it will be changed to "outline 1"
                         SfxStyleSheet* pStyleSheet = mrOutliner.GetStyleSheet( nPara );
@@ -266,7 +265,7 @@ bool SdTransformOOo2xDocument::getBulletState( const SfxItemSet& rSet, SfxStyleS
     if( getBulletState( rSet, SDRATTR_XMLATTRIBUTES, rState ) )
         return true;
 
-    if( pSheet && getBulletState( pSheet->GetItemSet(), pSheet->GetPool().Find( pSheet->GetParent(), pSheet->GetFamily() ), rState ) )
+    if( pSheet && getBulletState( pSheet->GetItemSet(), pSheet->GetPool()->Find( pSheet->GetParent(), pSheet->GetFamily() ), rState ) )
         return true;
 
     return false;
@@ -274,17 +273,17 @@ bool SdTransformOOo2xDocument::getBulletState( const SfxItemSet& rSet, SfxStyleS
 
 bool SdTransformOOo2xDocument::getBulletState( const SfxItemSet& rSet, sal_uInt16 nWhich, bool& rState )
 {
-    if( (rSet.GetItemState( nWhich ) == SfxItemState::SET) )
+    if( rSet.GetItemState( nWhich ) == SfxItemState::SET )
     {
-        const SvXMLAttrContainerItem& rAttr = *static_cast< const SvXMLAttrContainerItem* >( rSet.GetItem( nWhich ) );
+        const SvXMLAttrContainerItem& rAttr = *rSet.GetItem<SvXMLAttrContainerItem>( nWhich );
 
         const sal_uInt16 nCount = rAttr.GetAttrCount();
         for( sal_uInt16 nItem = 0; nItem < nCount; nItem++ )
         {
-            if( ( rAttr.GetAttrLName( nItem ) == msEnableNumbering ) && ( rAttr.GetAttrNamespace( nItem ) == msTextNamespace ) )
+            if( ( rAttr.GetAttrLName( nItem ) == gsEnableNumbering ) && ( rAttr.GetAttrNamespace( nItem ) == gsTextNamespace ) )
             {
-                const OUString sValue( rAttr.GetAttrValue( nItem ) );
-                rState = sValue.equals(msTrue);
+                const OUString& sValue( rAttr.GetAttrValue( nItem ) );
+                rState = sValue == gsTrue;
                 return true;
             }
         }
@@ -298,7 +297,7 @@ bool SdTransformOOo2xDocument::transformItemSet( SfxItemSet& rSet, bool bNumberi
     bool bRet = false;
     if( bNumbering )
     {
-        SvxLRSpaceItem aItem( *static_cast<const SvxLRSpaceItem*>(rSet.GetItem( EE_PARA_LRSPACE )) );
+        SvxLRSpaceItem aItem( *rSet.GetItem<SvxLRSpaceItem>( EE_PARA_LRSPACE ) );
         if( (aItem.GetLeft() != 0) || (aItem.GetTextFirstLineOfst() != 0) )
         {
             aItem.SetLeftValue( 0 );
@@ -320,14 +319,14 @@ bool SdTransformOOo2xDocument::removeAlienAttributes( SfxItemSet& rSet )
 
 bool SdTransformOOo2xDocument::removeAlienAttributes( SfxItemSet& rSet, sal_uInt16 nWhich )
 {
-    if( (rSet.GetItemState( nWhich ) == SfxItemState::SET) )
+    if( rSet.GetItemState( nWhich ) == SfxItemState::SET )
     {
-        const SvXMLAttrContainerItem& rAttr = *static_cast< const SvXMLAttrContainerItem* >( rSet.GetItem( nWhich ) );
+        const SvXMLAttrContainerItem& rAttr = *rSet.GetItem<SvXMLAttrContainerItem>( nWhich );
 
         const sal_uInt16 nCount = rAttr.GetAttrCount();
         for( sal_uInt16 nItem = 0; nItem < nCount; nItem++ )
         {
-            if( ( rAttr.GetAttrLName( nItem ) == msEnableNumbering ) && ( rAttr.GetAttrNamespace( nItem ) == msTextNamespace ) )
+            if( ( rAttr.GetAttrLName( nItem ) == gsEnableNumbering ) && ( rAttr.GetAttrNamespace( nItem ) == gsTextNamespace ) )
             {
                 if( nCount == 1 )
                 {
@@ -341,7 +340,18 @@ bool SdTransformOOo2xDocument::removeAlienAttributes( SfxItemSet& rSet, sal_uInt
                     for( nItem = 0; nItem < nCount; nItem++ )
                     {
                         if( nItem != nFound )
-                            aNewItem.AddAttr( rAttr.GetAttrPrefix(nItem),rAttr.GetAttrNamespace(nItem), rAttr.GetAttrLName(nItem), rAttr.GetAttrValue(nItem ) );
+                        {
+                            OUString const& rNamespace(rAttr.GetAttrNamespace(nItem));
+                            OUString const& rPrefix(rAttr.GetAttrPrefix(nItem));
+                            if (rPrefix.isEmpty())
+                            {
+                                aNewItem.AddAttr(rAttr.GetAttrLName(nItem), rAttr.GetAttrValue(nItem));
+                            }
+                            else
+                            {
+                                aNewItem.AddAttr(rPrefix, rNamespace, rAttr.GetAttrLName(nItem), rAttr.GetAttrValue(nItem));
+                            }
+                        }
                     }
 
                     rSet.Put( aNewItem );

@@ -27,113 +27,36 @@
 #include <fldbas.hxx>
 #include <glosdoc.hxx>
 #include <gloslst.hxx>
-
+#include <comcore.hxx>
+#include <strings.hrc>
 #include <utlui.hrc>
-#include <initui.hrc>
-#include <comcore.hrc>
 #include <authfld.hxx>
 #include <dbmgr.hxx>
 #include <unotools/syslocale.hxx>
+#include <vcl/keycod.hxx>
 
 #include <unomid.h>
 
 // Global Pointer
 
-SwGlossaries*       pGlossaries = nullptr;
+static std::unique_ptr<SwGlossaries> pGlossaries;
 
 // Provides all needed paths. Is initialized by UI.
-SwGlossaryList*     pGlossaryList = nullptr;
+static SwGlossaryList* pGlossaryList = nullptr;
 
 namespace
 {
-
-enum CachedStringID
-{
-    OldGrfCat,
-    OldTabCat,
-    OldFrameCat,
-    OldDrwCat,
-    CurrGlosGroup,
-    CachedStrings
-};
-
-OUString *StringCache[CachedStrings] = {nullptr};
-
-inline OUString GetCachedString(CachedStringID id)
-{
-    return StringCache[id] ? *StringCache[id] : OUString();
+OUString CurrGlosGroup;
 }
 
-inline void SetCachedString(CachedStringID id, const OUString& sStr)
+const OUString& GetCurrGlosGroup()
 {
-    if (StringCache[id])
-    {
-        *StringCache[id] = sStr;
-    }
-    else
-    {
-        StringCache[id] = new OUString(sStr);
-    }
-}
-
-void ClearStringCache()
-{
-    for (int i=0; i<CachedStrings; ++i)
-    {
-        delete StringCache[i];
-    }
-}
-
-}
-
-OUString GetOldGrfCat()
-{
-    return GetCachedString(OldGrfCat);
-}
-
-void SetOldGrfCat(const OUString& sStr)
-{
-    SetCachedString(OldGrfCat, sStr);
-}
-
-OUString GetOldTabCat()
-{
-    return GetCachedString(OldTabCat);
-}
-
-void SetOldTabCat(const OUString& sStr)
-{
-    SetCachedString(OldTabCat, sStr);
-}
-
-OUString GetOldFrameCat()
-{
-    return GetCachedString(OldFrameCat);
-}
-
-void SetOldFrameCat(const OUString& sStr)
-{
-    SetCachedString(OldFrameCat, sStr);
-}
-
-OUString GetOldDrwCat()
-{
-    return GetCachedString(OldDrwCat);
-}
-
-void SetOldDrwCat(const OUString& sStr)
-{
-    SetCachedString(OldDrwCat, sStr);
-}
-
-OUString GetCurrGlosGroup()
-{
-    return GetCachedString(CurrGlosGroup);
+    return CurrGlosGroup;
 }
 
 void SetCurrGlosGroup(const OUString& sStr)
 {
-    SetCachedString(CurrGlosGroup, sStr);
+    CurrGlosGroup = sStr;
 }
 
 namespace
@@ -146,18 +69,17 @@ std::vector<OUString>* pAuthFieldTypeList = nullptr;
 
 // Finish UI
 
-void _FinitUI()
+void FinitUI()
 {
     delete SwViewShell::GetShellRes();
     SwViewShell::SetShellRes( nullptr );
 
-    SwEditWin::_FinitStaticData();
+    SwEditWin::FinitStaticData();
 
-    DELETEZ(pGlossaries);
+    pGlossaries.reset();
 
     delete SwFieldType::s_pFieldNames;
 
-    ClearStringCache();
     delete pGlossaryList;
     delete pAuthFieldNameList;
     delete pAuthFieldTypeList;
@@ -166,52 +88,59 @@ void _FinitUI()
 
 // Initialise
 
-void _InitUI()
+void InitUI()
 {
     // ShellResource gives the CORE the possibility to work with resources.
     SwViewShell::SetShellRes( new ShellResource );
-    SwEditWin::_InitStaticData();
+    SwEditWin::InitStaticData();
 }
 
-ShellResource::ShellResource()
-    : Resource( SW_RES(RID_SW_SHELLRES) ),
-    aPostItAuthor( SW_RES( STR_POSTIT_AUTHOR ) ),
-    aPostItPage( SW_RES( STR_POSTIT_PAGE ) ),
-    aPostItLine( SW_RES( STR_POSTIT_LINE ) ),
+static const char* FLD_DOCINFO_ARY[] =
+{
+    FLD_DOCINFO_TITEL,
+    FLD_DOCINFO_THEMA,
+    FLD_DOCINFO_KEYS,
+    FLD_DOCINFO_COMMENT,
+    FLD_DOCINFO_CREATE,
+    FLD_DOCINFO_CHANGE,
+    FLD_DOCINFO_PRINT,
+    FLD_DOCINFO_DOCNO,
+    FLD_DOCINFO_EDIT
+};
 
-    aCalc_Syntax( SW_RES( STR_CALC_SYNTAX ) ),
-    aCalc_ZeroDiv( SW_RES( STR_CALC_ZERODIV ) ),
-    aCalc_Brack( SW_RES( STR_CALC_BRACK ) ),
-    aCalc_Pow( SW_RES( STR_CALC_POW ) ),
-    aCalc_VarNFnd( SW_RES( STR_CALC_VARNFND ) ),
-    aCalc_Overflow( SW_RES( STR_CALC_OVERFLOW ) ),
-    aCalc_WrongTime( SW_RES( STR_CALC_WRONGTIME ) ),
-    aCalc_Default( SW_RES( STR_CALC_DEFAULT ) ),
-    aCalc_Error( SW_RES( STR_CALC_ERROR ) ),
+ShellResource::ShellResource()
+    : aPostItAuthor( SwResId( STR_POSTIT_AUTHOR ) ),
+    aPostItPage( SwResId( STR_POSTIT_PAGE ) ),
+    aPostItLine( SwResId( STR_POSTIT_LINE ) ),
+
+    aCalc_Syntax( SwResId( STR_CALC_SYNTAX ) ),
+    aCalc_ZeroDiv( SwResId( STR_CALC_ZERODIV ) ),
+    aCalc_Brack( SwResId( STR_CALC_BRACK ) ),
+    aCalc_Pow( SwResId( STR_CALC_POW ) ),
+    aCalc_Overflow( SwResId( STR_CALC_OVERFLOW ) ),
+    aCalc_Default( SwResId( STR_CALC_DEFAULT ) ),
+    aCalc_Error( SwResId( STR_CALC_ERROR ) ),
 
     // #i81002#
-    aGetRefField_RefItemNotFound( SW_RES( STR_GETREFFLD_REFITEMNOTFOUND ) ),
-    aStrNone( SW_RES( STR_TEMPLATE_NONE )),
-    aFixedStr( SW_RES( STR_FIELD_FIXED )),
-    sDurationFormat( SW_RES( STR_DURATION_FORMAT )),
+    aGetRefField_RefItemNotFound( SwResId( STR_GETREFFLD_REFITEMNOTFOUND ) ),
+    aStrNone( SwResId( STR_TEMPLATE_NONE )),
+    aFixedStr( SwResId( STR_FIELD_FIXED )),
+    sDurationFormat( SwResId( STR_DURATION_FORMAT )),
 
-    aTOXIndexName(          SW_RES(STR_TOI)),
-    aTOXUserName(           SW_RES(STR_TOU)),
-    aTOXContentName(        SW_RES(STR_TOC)),
-    aTOXIllustrationsName(  SW_RES(STR_TOX_ILL)),
-    aTOXObjectsName(        SW_RES(STR_TOX_OBJ)),
-    aTOXTablesName(         SW_RES(STR_TOX_TBL)),
-    aTOXAuthoritiesName(    SW_RES(STR_TOX_AUTH)),
-    aTOXCitationName(    SW_RES(STR_TOX_CITATION)),
-    aLinkCtrlClick(SW_RESSTR(STR_LINK_CTRL_CLICK)),
-    aLinkClick(SW_RESSTR(STR_LINK_CLICK)),
-    pAutoFormatNameLst(nullptr),
-    sPageDescFirstName(     SW_RES(STR_PAGEDESC_FIRSTNAME)),
-    sPageDescFollowName(    SW_RES(STR_PAGEDESC_FOLLOWNAME)),
-    sPageDescName(          SW_RES(STR_PAGEDESC_NAME))
+    aTOXIndexName(          SwResId(STR_TOI)),
+    aTOXUserName(           SwResId(STR_TOU)),
+    aTOXContentName(        SwResId(STR_TOC)),
+    aTOXIllustrationsName(  SwResId(STR_TOX_ILL)),
+    aTOXObjectsName(        SwResId(STR_TOX_OBJ)),
+    aTOXTablesName(         SwResId(STR_TOX_TBL)),
+    aTOXAuthoritiesName(    SwResId(STR_TOX_AUTH)),
+    aTOXCitationName(    SwResId(STR_TOX_CITATION)),
+    aLinkCtrlClick(SwResId(STR_LINK_CTRL_CLICK)),
+    aLinkClick(SwResId(STR_LINK_CLICK)),
+    sPageDescFirstName(     SwResId(STR_PAGEDESC_FIRSTNAME)),
+    sPageDescFollowName(    SwResId(STR_PAGEDESC_FOLLOWNAME)),
+    sPageDescName(          SwResId(STR_PAGEDESC_NAME))
 {
-    const sal_uInt16 nCount = FLD_DOCINFO_END - FLD_DOCINFO_BEGIN;
-
     vcl::KeyCode aCode( KEY_SPACE );
     vcl::KeyCode aModifiedCode( KEY_SPACE, KEY_MOD1 );
     OUString aModStr( aModifiedCode.GetName() );
@@ -219,15 +148,8 @@ ShellResource::ShellResource()
     aModStr = aModStr.replaceAll("+", "");
     aLinkCtrlClick = aLinkCtrlClick.replaceAll("%s", aModStr);
 
-    for(sal_uInt16 i = 0; i < nCount; ++i)
-        aDocInfoLst.push_back(OUString(SW_RESSTR(FLD_DOCINFO_BEGIN + i)));
-
-    FreeResource();
-}
-
-ShellResource::~ShellResource()
-{
-    delete pAutoFormatNameLst;
+    for (size_t i = 0; i < SAL_N_ELEMENTS(FLD_DOCINFO_ARY); ++i)
+        aDocInfoLst.push_back(SwResId(FLD_DOCINFO_ARY[i]));
 }
 
 OUString ShellResource::GetPageDescName(sal_uInt16 nNo, PageNameMode eMode)
@@ -253,8 +175,8 @@ OUString ShellResource::GetPageDescName(sal_uInt16 nNo, PageNameMode eMode)
 SwGlossaries* GetGlossaries()
 {
     if (!pGlossaries)
-        pGlossaries = new SwGlossaries;
-    return pGlossaries;
+        pGlossaries.reset( new SwGlossaries );
+    return pGlossaries.get();
 }
 
 bool HasGlossaryList()
@@ -270,65 +192,111 @@ SwGlossaryList* GetGlossaryList()
     return pGlossaryList;
 }
 
-struct ImpAutoFormatNameListLoader : public Resource
-{
-    explicit ImpAutoFormatNameListLoader( std::vector<OUString>& rLst );
-};
-
-void ShellResource::_GetAutoFormatNameLst() const
+void ShellResource::GetAutoFormatNameLst_() const
 {
     assert(!pAutoFormatNameLst);
-    pAutoFormatNameLst = new std::vector<OUString>;
+    pAutoFormatNameLst.reset( new std::vector<OUString> );
     pAutoFormatNameLst->reserve(STR_AUTOFMTREDL_END);
-    ImpAutoFormatNameListLoader aTmp(*pAutoFormatNameLst);
-}
 
-ImpAutoFormatNameListLoader::ImpAutoFormatNameListLoader( std::vector<OUString>& rLst )
-    : Resource( ResId(RID_SHELLRES_AUTOFMTSTRS, *pSwResMgr) )
-{
-    for( sal_uInt16 n = 0; n < STR_AUTOFMTREDL_END; ++n )
+    assert(SAL_N_ELEMENTS(RID_SHELLRES_AUTOFMTSTRS) == STR_AUTOFMTREDL_END);
+    for (sal_uInt16 n = 0; n < STR_AUTOFMTREDL_END; ++n)
     {
-        OUString p(ResId(n + 1, *pSwResMgr));
-        if(STR_AUTOFMTREDL_TYPO == n)
+        OUString p(SwResId(RID_SHELLRES_AUTOFMTSTRS[n]));
+        if (STR_AUTOFMTREDL_TYPO == n)
         {
-#ifdef _WIN32
-            // For Windows, a special treatment is necessary because MS has
-            // forgotten some characters in the dialog font here.
-            p = p.replaceFirst("%1", ",,");
-            p = p.replaceFirst("%2", "''");
-#else
             const SvtSysLocale aSysLocale;
             const LocaleDataWrapper& rLclD = aSysLocale.GetLocaleData();
-            // With real operating systems it also works without special handling.
             p = p.replaceFirst("%1", rLclD.getDoubleQuotationMarkStart());
             p = p.replaceFirst("%2", rLclD.getDoubleQuotationMarkEnd());
-#endif
         }
-        rLst.insert(rLst.begin() + n, p);
+        pAutoFormatNameLst->push_back(p);
     }
-    FreeResource();
 }
 
-OUString SwAuthorityFieldType::GetAuthFieldName(ToxAuthorityField eType)
+namespace
+{
+    const char* STR_AUTH_FIELD_ARY[] =
+    {
+        STR_AUTH_FIELD_IDENTIFIER,
+        STR_AUTH_FIELD_AUTHORITY_TYPE,
+        STR_AUTH_FIELD_ADDRESS,
+        STR_AUTH_FIELD_ANNOTE,
+        STR_AUTH_FIELD_AUTHOR,
+        STR_AUTH_FIELD_BOOKTITLE,
+        STR_AUTH_FIELD_CHAPTER,
+        STR_AUTH_FIELD_EDITION,
+        STR_AUTH_FIELD_EDITOR,
+        STR_AUTH_FIELD_HOWPUBLISHED,
+        STR_AUTH_FIELD_INSTITUTION,
+        STR_AUTH_FIELD_JOURNAL,
+        STR_AUTH_FIELD_MONTH,
+        STR_AUTH_FIELD_NOTE,
+        STR_AUTH_FIELD_NUMBER,
+        STR_AUTH_FIELD_ORGANIZATIONS,
+        STR_AUTH_FIELD_PAGES,
+        STR_AUTH_FIELD_PUBLISHER,
+        STR_AUTH_FIELD_SCHOOL,
+        STR_AUTH_FIELD_SERIES,
+        STR_AUTH_FIELD_TITLE,
+        STR_AUTH_FIELD_TYPE,
+        STR_AUTH_FIELD_VOLUME,
+        STR_AUTH_FIELD_YEAR,
+        STR_AUTH_FIELD_URL,
+        STR_AUTH_FIELD_CUSTOM1,
+        STR_AUTH_FIELD_CUSTOM2,
+        STR_AUTH_FIELD_CUSTOM3,
+        STR_AUTH_FIELD_CUSTOM4,
+        STR_AUTH_FIELD_CUSTOM5,
+        STR_AUTH_FIELD_ISBN
+    };
+}
+
+OUString const & SwAuthorityFieldType::GetAuthFieldName(ToxAuthorityField eType)
 {
     if(!pAuthFieldNameList)
     {
         pAuthFieldNameList = new std::vector<OUString>;
         pAuthFieldNameList->reserve(AUTH_FIELD_END);
-        for(sal_uInt16 i = 0; i < AUTH_FIELD_END; ++i)
-            pAuthFieldNameList->push_back(SW_RES(STR_AUTH_FIELD_START + i));
+        for (sal_uInt16 i = 0; i < AUTH_FIELD_END; ++i)
+            pAuthFieldNameList->push_back(SwResId(STR_AUTH_FIELD_ARY[i]));
     }
     return (*pAuthFieldNameList)[static_cast< sal_uInt16 >(eType)];
 }
 
-OUString SwAuthorityFieldType::GetAuthTypeName(ToxAuthorityType eType)
+static const char* STR_AUTH_TYPE_ARY[] =
+{
+    STR_AUTH_TYPE_ARTICLE,
+    STR_AUTH_TYPE_BOOK,
+    STR_AUTH_TYPE_BOOKLET,
+    STR_AUTH_TYPE_CONFERENCE,
+    STR_AUTH_TYPE_INBOOK,
+    STR_AUTH_TYPE_INCOLLECTION,
+    STR_AUTH_TYPE_INPROCEEDINGS,
+    STR_AUTH_TYPE_JOURNAL,
+    STR_AUTH_TYPE_MANUAL,
+    STR_AUTH_TYPE_MASTERSTHESIS,
+    STR_AUTH_TYPE_MISC,
+    STR_AUTH_TYPE_PHDTHESIS,
+    STR_AUTH_TYPE_PROCEEDINGS,
+    STR_AUTH_TYPE_TECHREPORT,
+    STR_AUTH_TYPE_UNPUBLISHED,
+    STR_AUTH_TYPE_EMAIL,
+    STR_AUTH_TYPE_WWW,
+    STR_AUTH_TYPE_CUSTOM1,
+    STR_AUTH_TYPE_CUSTOM2,
+    STR_AUTH_TYPE_CUSTOM3,
+    STR_AUTH_TYPE_CUSTOM4,
+    STR_AUTH_TYPE_CUSTOM5
+};
+
+OUString const & SwAuthorityFieldType::GetAuthTypeName(ToxAuthorityType eType)
 {
     if(!pAuthFieldTypeList)
     {
         pAuthFieldTypeList = new std::vector<OUString>;
         pAuthFieldTypeList->reserve(AUTH_TYPE_END);
-        for(sal_uInt16 i = 0; i < AUTH_TYPE_END; ++i)
-            pAuthFieldTypeList->push_back(SW_RES(STR_AUTH_TYPE_START + i));
+        for (sal_uInt16 i = 0; i < AUTH_TYPE_END; ++i)
+            pAuthFieldTypeList->push_back(SwResId(STR_AUTH_TYPE_ARY[i]));
     }
     return (*pAuthFieldTypeList)[static_cast< sal_uInt16 >(eType)];
 }

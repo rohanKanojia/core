@@ -18,13 +18,14 @@
  */
 
 
-#include "basecontainernode.hxx"
-#include "eventqueue.hxx"
-#include "tools.hxx"
+#include <basecontainernode.hxx>
+#include <eventqueue.hxx>
+#include <tools.hxx>
 #include "nodetools.hxx"
-#include "delayevent.hxx"
+#include <delayevent.hxx>
+#include <sal/log.hxx>
 
-#include <boost/mem_fn.hpp>
+#include <functional>
 #include <algorithm>
 
 using namespace com::sun::star;
@@ -47,7 +48,7 @@ BaseContainerNode::BaseContainerNode(
 
 void BaseContainerNode::dispose()
 {
-    forEachChildNode( boost::mem_fn(&Disposable::dispose) );
+    forEachChildNode( std::mem_fn(&Disposable::dispose), -1 );
     maChildren.clear();
     BaseNode::dispose();
 }
@@ -66,7 +67,7 @@ bool BaseContainerNode::init_children()
     // initialize all children
     return (std::count_if(
                 maChildren.begin(), maChildren.end(),
-                boost::mem_fn(&AnimationNode::init) ) ==
+                std::mem_fn(&AnimationNode::init) ) ==
             static_cast<VectorOfNodes::difference_type>(maChildren.size()));
 }
 
@@ -75,12 +76,12 @@ void BaseContainerNode::deactivate_st( NodeState eDestState )
     mnLeftIterations = 0; // in order to make skip effect work correctly
     if (eDestState == FROZEN) {
         // deactivate all children that are not FROZEN or ENDED:
-        forEachChildNode( boost::mem_fn(&AnimationNode::deactivate),
+        forEachChildNode( std::mem_fn(&AnimationNode::deactivate),
                           ~(FROZEN | ENDED) );
     }
     else {
         // end all children that are not ENDED:
-        forEachChildNode( boost::mem_fn(&AnimationNode::end), ~ENDED );
+        forEachChildNode( std::mem_fn(&AnimationNode::end), ~ENDED );
     }
 }
 
@@ -91,7 +92,7 @@ bool BaseContainerNode::hasPendingAnimation() const
     // If yes, we, too, return true
     return std::any_of(
                 maChildren.begin(), maChildren.end(),
-                boost::mem_fn(&AnimationNode::hasPendingAnimation) );
+                std::mem_fn(&AnimationNode::hasPendingAnimation) );
 }
 
 void BaseContainerNode::appendChildNode( AnimationNodeSharedPtr const& pNode )
@@ -165,7 +166,7 @@ bool BaseContainerNode::notifyDeactivatedChild(
 
 void BaseContainerNode::repeat()
 {
-    forEachChildNode( boost::mem_fn(&AnimationNode::end), ~ENDED );
+    forEachChildNode( std::mem_fn(&AnimationNode::end), ~ENDED );
     bool bState = init_children();
     if( bState )
         activate_st();
@@ -174,10 +175,10 @@ void BaseContainerNode::repeat()
 #if defined(DBG_UTIL)
 void BaseContainerNode::showState() const
 {
-    for( std::size_t i=0; i<maChildren.size(); ++i )
+    for(const auto & i : maChildren)
     {
         BaseNodeSharedPtr pNode =
-            std::dynamic_pointer_cast<BaseNode>(maChildren[i]);
+            std::dynamic_pointer_cast<BaseNode>(i);
         SAL_INFO("slideshow.verbose",
                  "Node connection: n" <<
                  debugGetNodeName(this) <<

@@ -32,11 +32,6 @@ class XMLSectionSourceDDEImportContext : public SvXMLImportContext
 {
     css::uno::Reference<css::beans::XPropertySet> & rSectionPropertySet;
 
-    const OUString sDdeCommandFile;
-    const OUString sDdeCommandType;
-    const OUString sDdeCommandElement;
-    const OUString sIsAutomaticUpdate;
-
 public:
 
 
@@ -46,7 +41,7 @@ public:
         const OUString& rLocalName,
         css::uno::Reference<css::beans::XPropertySet> & rSectPropSet);
 
-    virtual ~XMLSectionSourceDDEImportContext();
+    virtual ~XMLSectionSourceDDEImportContext() override;
 
 protected:
 
@@ -55,7 +50,7 @@ protected:
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

@@ -19,6 +19,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_INC_RELATIONCONTROLLER_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_RELATIONCONTROLLER_HXX
 
+#include <memory>
 #include "JoinController.hxx"
 #include "RelationDesignView.hxx"
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -29,7 +30,7 @@ namespace dbaui
     class ORelationController : public OJoinController
     {
         css::uno::Reference< css::container::XNameAccess >    m_xTables;
-        ::std::unique_ptr<WaitObject> m_pWaitObject;
+        std::unique_ptr<WaitObject> m_pWaitObject;
         sal_uLong       m_nThreadEvent;
         bool            m_bRelationsPossible;
     protected:
@@ -48,20 +49,22 @@ namespace dbaui
     public:
         ORelationController(const css::uno::Reference< css::uno::XComponentContext >& _rM);
 
-        virtual ~ORelationController();
+        virtual ~ORelationController() override;
 
         void mergeData(const TTableConnectionData& _aConnectionData);
 
         virtual bool Construct(vcl::Window* pParent) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString> SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual css::uno::Sequence< OUString> SAL_CALL getSupportedServiceNames() override;
         // need by registration
-        static OUString getImplementationName_Static() throw( css::uno::RuntimeException );
-        static css::uno::Sequence< OUString > getSupportedServiceNames_Static() throw( css::uno::RuntimeException );
+        /// @throws css::uno::RuntimeException
+        static OUString getImplementationName_Static();
+        /// @throws css::uno::RuntimeException
+        static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
         static css::uno::Reference< css::uno::XInterface >
-                SAL_CALL Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
+                Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
 
         // OJoinController overridables
         virtual bool allowViews() const override;
@@ -73,7 +76,7 @@ namespace dbaui
         virtual void reset() override;
         virtual void impl_initialize() override;
         virtual OUString getPrivateTitle( ) const override;
-        DECL_LINK_TYPED( OnThreadFinished, void*, void );
+        DECL_LINK( OnThreadFinished, void*, void );
     };
 }
 #endif // INCLUDED_DBACCESS_SOURCE_UI_INC_RELATIONCONTROLLER_HXX

@@ -29,47 +29,42 @@ const OUString SVALUE( "MultiPageValue" );
 
 class PagesImpl : public cppu::WeakImplHelper< container::XIndexAccess >
 {
-    sal_Int32 mnPages;
+    sal_Int32 const mnPages;
 public:
     explicit PagesImpl( sal_Int32 nPages ) : mnPages( nPages ) {}
-    virtual ::sal_Int32 SAL_CALL getCount() throw (uno::RuntimeException, std::exception) override { return mnPages; }
-    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, ::uno::RuntimeException, std::exception) override
+    virtual ::sal_Int32 SAL_CALL getCount() override { return mnPages; }
+    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
     {
         if ( Index < 0 || Index > mnPages )
             throw lang::IndexOutOfBoundsException();
         return uno::makeAny( uno::Reference< uno::XInterface >() );
     }
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType() throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType() override
     {
         // no Pages object yet #FIXME
         //return cppu::UnoType<msforms::XPage>::get();
         return cppu::UnoType<uno::XInterface>::get();
     }
-    virtual sal_Bool SAL_CALL hasElements( ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasElements( ) override
     {
         return ( mnPages > 0 );
     }
 };
-uno::Reference< container::XIndexAccess >
-ScVbaMultiPage::getPages( sal_Int32 nPages )
-{
-    return new PagesImpl( nPages );
-}
 
 ScVbaMultiPage::ScVbaMultiPage(
         const uno::Reference< ov::XHelperInterface >& xParent,
         const uno::Reference< uno::XComponentContext >& xContext,
         const uno::Reference< uno::XInterface >& xControl,
         const uno::Reference< frame::XModel >& xModel,
-        AbstractGeometryAttributes* pGeomHelper) :
-    MultiPageImpl_BASE( xParent, xContext, xControl, xModel, pGeomHelper )
+        std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper) :
+    MultiPageImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
 sal_Int32 SAL_CALL
-ScVbaMultiPage::getValue() throw (css::uno::RuntimeException, std::exception)
+ScVbaMultiPage::getValue()
 {
     sal_Int32 nValue = 0;
     m_xProps->getPropertyValue( SVALUE ) >>= nValue;
@@ -78,7 +73,7 @@ ScVbaMultiPage::getValue() throw (css::uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaMultiPage::setValue( const sal_Int32 _value ) throw (css::uno::RuntimeException, std::exception)
+ScVbaMultiPage::setValue( const sal_Int32 _value )
 {
     // Openoffice 1 based tab index
     sal_Int32 nVal = _value + 1;
@@ -95,11 +90,11 @@ ScVbaMultiPage::getServiceImplName()
 }
 
 uno::Any SAL_CALL
-ScVbaMultiPage::Pages( const uno::Any& index ) throw (uno::RuntimeException, std::exception)
+ScVbaMultiPage::Pages( const uno::Any& index )
 {
     // get the container model
     uno::Reference< container::XNameContainer > xContainer( m_xProps, uno::UNO_QUERY_THROW );
-    uno::Reference< XCollection > xColl( new ScVbaPages( this, mxContext, getPages( xContainer->getElementNames().getLength() ) ) );
+    uno::Reference< XCollection > xColl( new ScVbaPages( this, mxContext, new PagesImpl( xContainer->getElementNames().getLength() ) ) );
     if ( !index.hasValue() )
         return uno::makeAny( xColl );
     return xColl->Item( index, uno::Any() );
@@ -108,12 +103,10 @@ ScVbaMultiPage::Pages( const uno::Any& index ) throw (uno::RuntimeException, std
 uno::Sequence< OUString >
 ScVbaMultiPage::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.msforms.MultiPage";
-    }
+        "ooo.vba.msforms.MultiPage"
+    };
     return aServiceNames;
 }
 

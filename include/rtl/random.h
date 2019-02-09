@@ -20,20 +20,15 @@
 #ifndef INCLUDED_RTL_RANDOM_H
 #define INCLUDED_RTL_RANDOM_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*========================================================================
- *
- * rtlRandom interface.
- *
- *======================================================================*/
 /** Random Pool opaque type.
  */
 typedef void* rtlRandomPool;
@@ -62,7 +57,7 @@ SAL_DLLPUBLIC rtlRandomPool SAL_CALL rtl_random_createPool (void) SAL_THROW_EXTE
 
 
 /** Destroy a Random Pool.
-    @param  Pool [in] a Random Pool.
+    @param[in] Pool a Random Pool.
     @return none. Pool is invalid.
  */
 SAL_DLLPUBLIC void SAL_CALL rtl_random_destroyPool (
@@ -74,7 +69,7 @@ SAL_DLLPUBLIC void SAL_CALL rtl_random_destroyPool (
     @param[in] Pool   a Random Pool.
     @param[in] Buffer a buffer containing the bytes to add.
     @param[in] Bytes  the number of bytes to read from the buffer.
-    @return rtl_Random_E_None upon success.
+    @retval rtl_Random_E_None upon success.
  */
 SAL_DLLPUBLIC rtlRandomError SAL_CALL rtl_random_addBytes (
     rtlRandomPool  Pool,
@@ -87,19 +82,13 @@ SAL_DLLPUBLIC rtlRandomError SAL_CALL rtl_random_addBytes (
     @param[in] Pool    a Random Pool.
     @param[in,out] Buffer a buffer to receive the random bytes.
     @param[in] Bytes the number of bytes to write to the buffer.
-    @return rtl_Random_E_None upon success.
+    @retval rtl_Random_E_None upon success.
  */
 SAL_DLLPUBLIC rtlRandomError SAL_CALL rtl_random_getBytes (
     rtlRandomPool  Pool,
     void          *Buffer,
     sal_Size       Bytes
 ) SAL_THROW_EXTERN_C();
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 #ifdef __cplusplus
 }

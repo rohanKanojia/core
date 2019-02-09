@@ -44,6 +44,93 @@ namespace basegfx
             }
         }
     }
+
+    double snapToZeroRange(double v, double fWidth)
+    {
+        if(fTools::equalZero(fWidth))
+        {
+            // with no range all snaps to range bound
+            return 0.0;
+        }
+        else
+        {
+            if(v < 0.0 || v > fWidth)
+            {
+                double fRetval(fmod(v, fWidth));
+
+                if(fRetval < 0.0)
+                {
+                    fRetval += fWidth;
+                }
+
+                return fRetval;
+            }
+            else
+            {
+                return v;
+            }
+        }
+    }
+
+    double snapToRange(double v, double fLow, double fHigh)
+    {
+        if(fTools::equal(fLow, fHigh))
+        {
+            // with no range all snaps to range bound
+            return 0.0;
+        }
+        else
+        {
+            if(fLow > fHigh)
+            {
+                // correct range order. Evtl. assert this (?)
+                std::swap(fLow, fHigh);
+            }
+
+            if(v < fLow || v > fHigh)
+            {
+                return snapToZeroRange(v - fLow, fHigh - fLow) + fLow;
+            }
+            else
+            {
+                return v;
+            }
+        }
+    }
+
+    double normalizeToRange(double v, const double fRange)
+    {
+        if(fTools::lessOrEqual(fRange, 0.0))
+        {
+            // with a zero (or less) range, all normalizes to 0.0
+            return 0.0;
+        }
+
+        const bool bNegative(fTools::less(v, 0.0));
+
+        if(bNegative)
+        {
+            if(fTools::moreOrEqual(v, -fRange))
+            {
+                // in range [-fRange, 0.0[, shift one step
+                return v + fRange;
+            }
+
+            // re-calculate
+            return v - (floor(v/fRange)*fRange);
+        }
+        else
+        {
+            if(fTools::less(v, fRange))
+            {
+                // already in range [0.0, fRange[, nothing to do
+                return v;
+            }
+
+            // re-calculate
+            return v - (floor(v/fRange)*fRange);
+        }
+    }
 } // end of namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

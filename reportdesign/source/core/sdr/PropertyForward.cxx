@@ -16,14 +16,14 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "PropertyForward.hxx"
+#include <PropertyForward.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <comphelper/property.hxx>
 #include <com/sun/star/sdbcx/XAppend.hpp>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include "corestrings.hrc"
+#include <strings.hxx>
 
 namespace rptui
 {
@@ -76,10 +76,9 @@ OPropertyMediator::OPropertyMediator(const Reference< XPropertySet>& _xSource
             }
             startListening();
         }
-        catch(Exception& e)
+        catch(Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
-            (void)e;
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
     osl_atomic_decrement(&m_refCount);
@@ -89,7 +88,7 @@ OPropertyMediator::~OPropertyMediator()
 {
 }
 
-void SAL_CALL OPropertyMediator::propertyChange( const PropertyChangeEvent& evt ) throw(RuntimeException, std::exception)
+void SAL_CALL OPropertyMediator::propertyChange( const PropertyChangeEvent& evt )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     if ( !m_bInChange )
@@ -100,60 +99,57 @@ void SAL_CALL OPropertyMediator::propertyChange( const PropertyChangeEvent& evt 
             bool bDest = (evt.Source == m_xDest);
             Reference<XPropertySet> xProp =  bDest ? m_xSource : m_xDest;
             Reference<XPropertySetInfo> xPropInfo = bDest ? m_xSourceInfo : m_xDestInfo;
-            if ( xProp.is() )
+            if ( xProp.is() && xPropInfo.is() )
             {
-                if ( xPropInfo.is() )
+                if ( xPropInfo->hasPropertyByName(evt.PropertyName) )
+                    xProp->setPropertyValue(evt.PropertyName,evt.NewValue);
+                else
                 {
-                    if ( xPropInfo->hasPropertyByName(evt.PropertyName) )
-                        xProp->setPropertyValue(evt.PropertyName,evt.NewValue);
+                    TPropertyNamePair::const_iterator aFind = m_aNameMap.find(evt.PropertyName);
+                    OUString sPropName;
+                    if ( aFind != m_aNameMap.end() )
+                        sPropName = aFind->second.first;
                     else
                     {
-                        TPropertyNamePair::const_iterator aFind = m_aNameMap.find(evt.PropertyName);
-                        OUString sPropName;
+                        aFind = ::std::find_if(
+                            m_aNameMap.begin(),
+                            m_aNameMap.end(),
+                            [&evt] (const TPropertyNamePair::value_type& namePair) {
+                                return namePair.second.first == evt.PropertyName;
+                            });
                         if ( aFind != m_aNameMap.end() )
-                            sPropName = aFind->second.first;
-                        else
-                        {
-                            aFind = ::std::find_if(
-                                m_aNameMap.begin(),
-                                m_aNameMap.end(),
-                                [&evt] (const TPropertyNamePair::value_type& namePair) {
-                                    return namePair.second.first == evt.PropertyName;
-                                });
-                            if ( aFind != m_aNameMap.end() )
-                                sPropName = aFind->first;
-                        }
-                        if (aFind != m_aNameMap.end() && !sPropName.isEmpty() && xPropInfo->hasPropertyByName(sPropName))
-                            xProp->setPropertyValue(sPropName,aFind->second.second->operator()(sPropName,evt.NewValue));
-                        else if (   evt.PropertyName == PROPERTY_CHARFONTNAME
-                                ||  evt.PropertyName == PROPERTY_CHARFONTSTYLENAME
-                                ||  evt.PropertyName == PROPERTY_CHARSTRIKEOUT
-                                ||  evt.PropertyName == PROPERTY_CHARWORDMODE
-                                ||  evt.PropertyName == PROPERTY_CHARROTATION
-                                ||  evt.PropertyName == PROPERTY_CHARSCALEWIDTH
-                                ||  evt.PropertyName == PROPERTY_CHARFONTFAMILY
-                                ||  evt.PropertyName == PROPERTY_CHARFONTCHARSET
-                                ||  evt.PropertyName == PROPERTY_CHARFONTPITCH
-                                ||  evt.PropertyName == PROPERTY_CHARHEIGHT
-                                ||  evt.PropertyName == PROPERTY_CHARUNDERLINE
-                                ||  evt.PropertyName == PROPERTY_CHARWEIGHT
-                                ||  evt.PropertyName == PROPERTY_CHARPOSTURE)
-                        {
-                            xProp->setPropertyValue(PROPERTY_FONTDESCRIPTOR,m_xSource->getPropertyValue(PROPERTY_FONTDESCRIPTOR));
-                        }
+                            sPropName = aFind->first;
+                    }
+                    if (aFind != m_aNameMap.end() && !sPropName.isEmpty() && xPropInfo->hasPropertyByName(sPropName))
+                        xProp->setPropertyValue(sPropName,aFind->second.second->operator()(sPropName,evt.NewValue));
+                    else if (   evt.PropertyName == PROPERTY_CHARFONTNAME
+                            ||  evt.PropertyName == PROPERTY_CHARFONTSTYLENAME
+                            ||  evt.PropertyName == PROPERTY_CHARSTRIKEOUT
+                            ||  evt.PropertyName == PROPERTY_CHARWORDMODE
+                            ||  evt.PropertyName == PROPERTY_CHARROTATION
+                            ||  evt.PropertyName == PROPERTY_CHARSCALEWIDTH
+                            ||  evt.PropertyName == PROPERTY_CHARFONTFAMILY
+                            ||  evt.PropertyName == PROPERTY_CHARFONTCHARSET
+                            ||  evt.PropertyName == PROPERTY_CHARFONTPITCH
+                            ||  evt.PropertyName == PROPERTY_CHARHEIGHT
+                            ||  evt.PropertyName == PROPERTY_CHARUNDERLINE
+                            ||  evt.PropertyName == PROPERTY_CHARWEIGHT
+                            ||  evt.PropertyName == PROPERTY_CHARPOSTURE)
+                    {
+                        xProp->setPropertyValue(PROPERTY_FONTDESCRIPTOR,m_xSource->getPropertyValue(PROPERTY_FONTDESCRIPTOR));
                     }
                 }
             }
         }
         catch(Exception&)
         {
-            OSL_FAIL("Exception catched!");
+            OSL_FAIL("Exception caught!");
         }
         m_bInChange = false;
     }
 }
 
-void SAL_CALL OPropertyMediator::disposing( const css::lang::EventObject& /*_rSource*/ ) throw (RuntimeException, std::exception)
+void SAL_CALL OPropertyMediator::disposing( const css::lang::EventObject& /*_rSource*/ )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     disposing();

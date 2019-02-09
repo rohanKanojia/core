@@ -23,30 +23,14 @@
 #include <osl/file.h>
 #include <sal/types.h>
 
-/*********************************************
-   oslTranslateFileError
-   Translate errno's to osl file errors
+/** Translate errno's to osl file errors
 
-   @param bIsError [in] specifies if nErrno
-           should be interpreted as error,
-          some libc functions signaling an error
-           but errno is nevertheless 0 in this
-           case the function should at least
-           return osl_File_E_Unknown but in no
-           case osl_File_E_None!
+   @param [in] nErrno   the errno; must not be 0
 
-   @param nErrno [in] the errno if errno is 0
-            and bIsError is true the function
-           returns osl_File_E_Unknown
+   @returns the osl error code appropriate to the errno
 
-   @returns the osl error code appropriate to
-              the errno
-
- *********************************************/
-
-#define OSL_FET_ERROR   true
-
-oslFileError oslTranslateFileError(bool bIsError, int Errno);
+*/
+oslFileError oslTranslateFileError(int Errno);
 
 #endif
 

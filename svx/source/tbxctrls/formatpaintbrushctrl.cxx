@@ -18,7 +18,7 @@
  */
 
 
-#include "svx/formatpaintbrushctrl.hxx"
+#include <svx/formatpaintbrushctrl.hxx>
 
 #include <svl/eitem.hxx>
 #include <sfx2/app.hxx>
@@ -42,7 +42,7 @@ FormatPaintBrushToolBoxControl::FormatPaintBrushToolBoxControl( sal_uInt16 nSlot
 {
     sal_uInt64 nDblClkTime = rTbx.GetSettings().GetMouseSettings().GetDoubleClickTime();
 
-    m_aDoubleClickTimer.SetTimeoutHdl( LINK(this, FormatPaintBrushToolBoxControl, WaitDoubleClickHdl) );
+    m_aDoubleClickTimer.SetInvokeHandler( LINK(this, FormatPaintBrushToolBoxControl, WaitDoubleClickHdl) );
     m_aDoubleClickTimer.SetTimeout(nDblClkTime);
 }
 
@@ -57,7 +57,7 @@ void FormatPaintBrushToolBoxControl::impl_executePaintBrush()
 {
     Sequence< PropertyValue > aArgs( 1 );
     aArgs[0].Name  = "PersistentCopy";
-    aArgs[0].Value = makeAny( m_bPersistentCopy );
+    aArgs[0].Value <<= m_bPersistentCopy;
     Dispatch( ".uno:FormatPaintbrush"
         , aArgs );
 }
@@ -68,7 +68,7 @@ void FormatPaintBrushToolBoxControl::DoubleClick()
     m_aDoubleClickTimer.Stop();
 
     m_bPersistentCopy = true;
-    this->impl_executePaintBrush();
+    impl_executePaintBrush();
 }
 
 
@@ -79,10 +79,10 @@ void FormatPaintBrushToolBoxControl::Click()
 }
 
 
-IMPL_LINK_NOARG_TYPED(FormatPaintBrushToolBoxControl, WaitDoubleClickHdl, Timer *, void)
+IMPL_LINK_NOARG(FormatPaintBrushToolBoxControl, WaitDoubleClickHdl, Timer *, void)
 {
     //there was no second click during waiting
-    this->impl_executePaintBrush();
+    impl_executePaintBrush();
 }
 
 

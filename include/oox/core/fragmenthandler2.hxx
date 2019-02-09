@@ -20,23 +20,42 @@
 #ifndef INCLUDED_OOX_CORE_FRAGMENTHANDLER2_HXX
 #define INCLUDED_OOX_CORE_FRAGMENTHANDLER2_HXX
 
+#include <exception>
+#include <vector>
+
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/xml/sax/SAXException.hpp>
+#include <oox/core/contexthandler.hxx>
 #include <oox/core/contexthandler2.hxx>
 #include <oox/core/fragmenthandler.hxx>
-#include <vector>
 #include <oox/dllapi.h>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star {
+    namespace xml { namespace sax { class XFastAttributeList; } }
+    namespace xml { namespace sax { class XFastContextHandler; } }
+} } }
+
+namespace oox {
+    class AttributeList;
+    class SequenceInputStream;
+}
 
 namespace oox {
 namespace core {
 
+class XmlFilterBase;
 
 class OOX_DLLPUBLIC FragmentHandler2 : public FragmentHandler, public ContextHandler2Helper
 {
 protected:
-    enum MCE_STATE
+    enum class MCE_STATE
     {
-        MCE_UNUSED,
-        MCE_STARTED,
-        MCE_FOUND_CHOICE
+        Started,
+        FoundChoice
     };
     ::std::vector<MCE_STATE>           aMceState;
 
@@ -48,7 +67,12 @@ public:
                             XmlFilterBase& rFilter,
                             const OUString& rFragmentPath,
                             bool bEnableTrimSpace = true );
-    virtual             ~FragmentHandler2();
+    virtual             ~FragmentHandler2() override;
+
+    FragmentHandler2(FragmentHandler2 const &) = default;
+    FragmentHandler2(FragmentHandler2 &&) = default;
+    FragmentHandler2 & operator =(FragmentHandler2 const &) = delete; // due to FragmentHandler
+    FragmentHandler2 & operator =(FragmentHandler2 &&) = delete; // due to FragmentHandler
 
     // resolve ambiguity from base classes
     virtual void SAL_CALL acquire() throw() override { FragmentHandler::acquire(); }
@@ -59,33 +83,21 @@ public:
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
                         createFastChildContext(
                             sal_Int32 nElement,
-                            const css::uno::Reference< css::xml::sax::XFastAttributeList >& rxAttribs )
-                            throw(  css::xml::sax::SAXException,
-                                    css::uno::RuntimeException, std::exception ) final override;
+                            const css::uno::Reference< css::xml::sax::XFastAttributeList >& rxAttribs ) final override;
 
     virtual void SAL_CALL startFastElement(
                             sal_Int32 nElement,
-                            const css::uno::Reference< css::xml::sax::XFastAttributeList >& rxAttribs )
-                            throw(  css::xml::sax::SAXException,
-                                    css::uno::RuntimeException, std::exception ) final override;
+                            const css::uno::Reference< css::xml::sax::XFastAttributeList >& rxAttribs ) final override;
 
-    virtual void SAL_CALL characters( const OUString& rChars )
-                            throw(  css::xml::sax::SAXException,
-                                    css::uno::RuntimeException, std::exception ) final override;
+    virtual void SAL_CALL characters( const OUString& rChars ) final override;
 
-    virtual void SAL_CALL endFastElement( sal_Int32 nElement )
-                            throw(  css::xml::sax::SAXException,
-                                    css::uno::RuntimeException, std::exception ) final override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) final override;
 
     // com.sun.star.xml.sax.XFastDocumentHandler interface --------------------
 
-    virtual void SAL_CALL startDocument()
-                            throw(  css::xml::sax::SAXException,
-                                    css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL startDocument() override;
 
-    virtual void SAL_CALL endDocument()
-                            throw(  css::xml::sax::SAXException,
-                                    css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL endDocument() override;
 
     // oox.core.ContextHandler interface --------------------------------------
 

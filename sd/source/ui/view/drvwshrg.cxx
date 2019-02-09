@@ -17,7 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <config_features.h>
+
+#include <DrawViewShell.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/templdlg.hxx>
 #include <sfx2/infobar.hxx>
@@ -34,23 +36,20 @@
 #include <svx/hyperdlg.hxx>
 #include <avmedia/mediaplayer.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "glob.hrc"
-#include "SpellDialogChildWindow.hxx"
-#include "sdresid.hxx"
-#include "DrawDocShell.hxx"
-#include "GraphicDocShell.hxx"
-#include "GraphicViewShell.hxx"
-#include "AnimationChildWindow.hxx"
-#include "NavigatorChildWindow.hxx"
+#include <app.hrc>
+
+#include <SpellDialogChildWindow.hxx>
+#include <DrawDocShell.hxx>
+#include <GraphicDocShell.hxx>
+#include <GraphicViewShell.hxx>
+#include <AnimationChildWindow.hxx>
+#include <NavigatorChildWindow.hxx>
 
 using namespace sd;
-#define DrawViewShell
-#include "sdslots.hxx"
-#define GraphicViewShell
-#include "sdgslots.hxx"
+#define ShellClass_DrawViewShell
+#include <sdslots.hxx>
+#define ShellClass_GraphicViewShell
+#include <sdgslots.hxx>
 
 namespace sd {
 
@@ -76,7 +75,9 @@ void DrawViewShell::InitInterface_Impl()
     GetStaticInterface()->RegisterChildWindow(SvxHlinkDlgWrapper::GetChildWindowId());
     GetStaticInterface()->RegisterChildWindow(::sd::SpellDialogChildWindow::GetChildWindowId());
     GetStaticInterface()->RegisterChildWindow(SID_SEARCH_DLG);
+#if HAVE_FEATURE_AVMEDIA
     GetStaticInterface()->RegisterChildWindow(::avmedia::MediaPlayer::GetChildWindowId());
+#endif
     GetStaticInterface()->RegisterChildWindow(::sfx2::sidebar::SidebarChildWindow::GetChildWindowId());
 }
 
@@ -99,7 +100,9 @@ void GraphicViewShell::InitInterface_Impl()
     GetStaticInterface()->RegisterChildWindow(SvxHlinkDlgWrapper::GetChildWindowId());
     GetStaticInterface()->RegisterChildWindow(::sd::SpellDialogChildWindow::GetChildWindowId());
     GetStaticInterface()->RegisterChildWindow(SID_SEARCH_DLG);
+#if HAVE_FEATURE_AVMEDIA
     GetStaticInterface()->RegisterChildWindow(::avmedia::MediaPlayer::GetChildWindowId());
+#endif
     GetStaticInterface()->RegisterChildWindow(::sfx2::sidebar::SidebarChildWindow::GetChildWindowId());
 }
 

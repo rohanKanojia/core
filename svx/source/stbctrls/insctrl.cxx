@@ -21,10 +21,11 @@
 #include <svl/eitem.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/dispatch.hxx>
+#include <tools/debug.hxx>
 
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 
-#include "svx/insctrl.hxx"
+#include <svx/insctrl.hxx>
 #include <svx/dialmgr.hxx>
 
 SFX_IMPL_STATUSBAR_CONTROL(SvxInsertStatusBarControl, SfxBoolItem);
@@ -54,9 +55,9 @@ void SvxInsertStatusBarControl::StateChanged( sal_uInt16 , SfxItemState eState,
         bInsert = pItem->GetValue();
 
         if ( bInsert )
-            GetStatusBar().SetQuickHelpText( GetId(), SVX_RESSTR( RID_SVXSTR_INSERT_HELPTEXT ) );
+            GetStatusBar().SetQuickHelpText( GetId(), SvxResId( RID_SVXSTR_INSERT_HELPTEXT ) );
         else
-            GetStatusBar().SetQuickHelpText( GetId(), SVX_RESSTR( RID_SVXSTR_OVERWRITE_HELPTEXT ) );
+            GetStatusBar().SetQuickHelpText( GetId(), SvxResId( RID_SVXSTR_OVERWRITE_HELPTEXT ) );
 
         DrawItemText_Impl();
     }
@@ -71,7 +72,7 @@ void SvxInsertStatusBarControl::DrawItemText_Impl()
 {
     OUString aText;
     if ( !bInsert )
-        aText = SVX_RESSTR( RID_SVXSTR_OVERWRITE_TEXT );
+        aText = SvxResId( RID_SVXSTR_OVERWRITE_TEXT );
 
     GetStatusBar().SetItemText( GetId(), aText );
 }

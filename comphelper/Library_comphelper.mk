@@ -37,10 +37,26 @@ $(eval $(call gb_Library_add_defs,comphelper,\
 ))
 
 $(eval $(call gb_Library_use_externals,comphelper,\
+	gpgmepp \
     boost_headers \
     icuuc \
     icu_headers \
+    zlib \
 ))
+
+ifeq ($(TLS),NSS)
+$(eval $(call gb_Library_use_externals,comphelper,\
+       plc4 \
+       nss3 \
+))
+else
+ifeq ($(TLS),OPENSSL)
+$(eval $(call gb_Library_use_externals,comphelper,\
+	openssl \
+	openssl_headers \
+))
+endif
+endif
 
 $(eval $(call gb_Library_use_libraries,comphelper,\
     cppu \
@@ -49,7 +65,6 @@ $(eval $(call gb_Library_use_libraries,comphelper,\
     salhelper \
     ucbhelper \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_sdk_api,comphelper))
@@ -74,8 +89,12 @@ $(eval $(call gb_Library_add_exception_objects,comphelper,\
     comphelper/source/misc/accessibletexthelper \
     comphelper/source/misc/accessiblewrapper \
     comphelper/source/misc/accimplaccess \
+    comphelper/source/misc/AccessibleImplementationHelper \
     comphelper/source/misc/anytostring \
     comphelper/source/misc/asyncnotification \
+    comphelper/source/misc/automationinvokedzone \
+    comphelper/source/misc/backupfilehelper \
+    comphelper/source/misc/base64 \
     comphelper/source/misc/comphelper_module \
     comphelper/source/misc/comphelper_services \
     comphelper/source/misc/componentbase \
@@ -86,11 +105,12 @@ $(eval $(call gb_Library_add_exception_objects,comphelper,\
     comphelper/source/misc/docpasswordhelper \
     comphelper/source/misc/docpasswordrequest \
     comphelper/source/misc/documentinfo \
-    comphelper/source/misc/documentiologring \
     comphelper/source/misc/evtlistenerhlp \
     comphelper/source/misc/evtmethodhelper \
     comphelper/source/misc/fileurl \
     comphelper/source/misc/getexpandeduri \
+    comphelper/source/misc/graphicmimetype \
+    comphelper/source/misc/hash \
     comphelper/source/misc/instancelocker \
     comphelper/source/misc/interaction \
     comphelper/source/misc/listenernotification \
@@ -100,8 +120,8 @@ $(eval $(call gb_Library_add_exception_objects,comphelper,\
     comphelper/source/misc/namedvaluecollection \
     comphelper/source/misc/numberedcollection \
     comphelper/source/misc/numbers \
-    comphelper/source/misc/officeresourcebundle \
     comphelper/source/misc/officerestartmanager \
+    comphelper/source/misc/profilezone \
     comphelper/source/misc/proxyaggregation \
     comphelper/source/misc/random \
     comphelper/source/misc/scopeguard \
@@ -111,6 +131,7 @@ $(eval $(call gb_Library_add_exception_objects,comphelper,\
     comphelper/source/misc/servicedecl \
     comphelper/source/misc/serviceinfohelper \
     comphelper/source/misc/sharedmutex \
+    comphelper/source/misc/simplefileaccessinteraction \
     comphelper/source/misc/solarmutex \
     comphelper/source/misc/stillreadwriteinteraction \
     comphelper/source/misc/anycompare \
@@ -122,6 +143,7 @@ $(eval $(call gb_Library_add_exception_objects,comphelper,\
     comphelper/source/misc/types \
     comphelper/source/misc/weak \
     comphelper/source/misc/weakeventlistener \
+    comphelper/source/misc/xmlsechelper \
     comphelper/source/officeinstdir/officeinstallationdirectories \
     comphelper/source/processfactory/processfactory \
     comphelper/source/property/ChainablePropertySet \

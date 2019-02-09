@@ -59,23 +59,23 @@
  */
 
 #include "lwptoc.hxx"
-#include "lwpfoundry.hxx"
+#include <lwpfoundry.hxx>
 #include "lwpdoc.hxx"
 #include "lwpframelayout.hxx"
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 
-#include "xfilter/xffont.hxx"
-#include "xfilter/xftextstyle.hxx"
-#include "xfilter/xfstylemanager.hxx"
-#include "xfilter/xfparagraph.hxx"
-#include "xfilter/xfparastyle.hxx"
-#include "xfilter/xfindex.hxx"
-#include "xfilter/xffloatframe.hxx"
-#include "xfilter/xfframestyle.hxx"
-#include "xfilter/xfframe.hxx"
-#include "xfilter/xftable.hxx"
+#include <xfilter/xffont.hxx>
+#include <xfilter/xftextstyle.hxx>
+#include <xfilter/xfstylemanager.hxx>
+#include <xfilter/xfparagraph.hxx>
+#include <xfilter/xfparastyle.hxx>
+#include <xfilter/xfindex.hxx>
+#include <xfilter/xffloatframe.hxx>
+#include <xfilter/xfframestyle.hxx>
+#include <xfilter/xfframe.hxx>
+#include <xfilter/xftable.hxx>
 
-LwpTocSuperLayout::LwpTocSuperLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm)
+LwpTocSuperLayout::LwpTocSuperLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm)
     : LwpSuperTableLayout(objHdr, pStrm)
     , m_nFrom(0)
     , m_pCont(nullptr)
@@ -93,25 +93,25 @@ LwpTocSuperLayout::~LwpTocSuperLayout()
 void LwpTocSuperLayout::Read()
 {
     LwpSuperTableLayout::Read();
-    m_TextMarker.Read(m_pObjStrm);
-    m_ParentName.Read(m_pObjStrm);
-    m_DivisionName.Read(m_pObjStrm);
-    m_SectionName.Read(m_pObjStrm);
+    m_TextMarker.Read(m_pObjStrm.get());
+    m_ParentName.Read(m_pObjStrm.get());
+    m_DivisionName.Read(m_pObjStrm.get());
+    m_SectionName.Read(m_pObjStrm.get());
     m_nFrom = m_pObjStrm->QuickReaduInt16();
 
-    m_SearchItems.Read(m_pObjStrm);
+    m_SearchItems.Read(m_pObjStrm.get());
 
     sal_uInt16 count = m_pObjStrm->QuickReaduInt16();
     if (count > MAX_LEVELS)
         throw std::range_error("corrupt LwpTocSuperLayout");
     for (sal_uInt16 i = 0; i < count; ++i)
-        m_DestName[i].Read(m_pObjStrm);
+        m_DestName[i].Read(m_pObjStrm.get());
 
     count = m_pObjStrm->QuickReaduInt16();
     if (count > MAX_LEVELS)
         throw std::range_error("corrupt LwpTocSuperLayout");
     for (sal_uInt16 i = 0; i < count; ++i)
-        m_DestPGName[i].Read(m_pObjStrm);
+        m_DestPGName[i].Read(m_pObjStrm.get());
 
     count = m_pObjStrm->QuickReaduInt16();
     if (count > MAX_LEVELS)
@@ -132,11 +132,11 @@ void LwpTocSuperLayout::RegisterStyle()
     // Get font info of default text style and set into tab style
     const LwpObjectID *pDefaultTextStyle = m_pFoundry ? m_pFoundry->GetDefaultTextStyle() : nullptr;
     XFParaStyle* pBaseStyle = pDefaultTextStyle ? dynamic_cast<XFParaStyle*>(m_pFoundry->GetStyleManager()->GetStyle(*pDefaultTextStyle)) : nullptr;
-    XFTextStyle*pTextStyle = new XFTextStyle;
+    std::unique_ptr<XFTextStyle> pTextStyle(new XFTextStyle);
     if (pBaseStyle)
         pTextStyle->SetFont(pBaseStyle->GetFont()); // who delete this font?????
     XFStyleManager* pXFStyleManager = LwpGlobalMgr::GetInstance()->GetXFStyleManager();
-    m_TabStyleName = pXFStyleManager->AddStyle(pTextStyle).m_pStyle->GetStyleName();
+    m_TabStyleName = pXFStyleManager->AddStyle(std::move(pTextStyle)).m_pStyle->GetStyleName();
 
 }
 /**
@@ -146,10 +146,10 @@ void LwpTocSuperLayout::RegisterStyle()
  */
 void  LwpTocSuperLayout::XFConvert(XFContentContainer* pCont)
 {
-    XFIndex* pToc = new XFIndex();
+    rtl::Reference<XFIndex> xToc(new XFIndex);
 
-    pToc->SetProtected(false);
-    pToc->SetIndexType(enumXFIndexTOC);
+    xToc->SetProtected(false);
+    xToc->SetIndexType(enumXFIndexTOC);
 
     // add TOC template
     for (sal_uInt16 i = 1; i<= MAX_LEVELS; i++)
@@ -160,7 +160,7 @@ void  LwpTocSuperLayout::XFConvert(XFContentContainer* pCont)
         if(!pLevel)
         {
             // add an blank template so that SODC won't add default style to this level
-            pToc->AddTemplate(OUString::number(i),  OUString(), pTemplate);
+            xToc->AddTemplate(OUString::number(i),  OUString(), pTemplate);
             continue;
         }
 
@@ -226,13 +226,13 @@ void  LwpTocSuperLayout::XFConvert(XFContentContainer* pCont)
                     pTemplate->AddEntry(enumXFIndexTemplatePage, "TOC Page Number Text Style");
                 }
 
-                pToc->AddTemplate(OUString::number((sal_Int32)i),  m_pFoundry->FindActuralStyleName(pLevel->GetSearchStyle()), pTemplate);
+                xToc->AddTemplate(OUString::number(static_cast<sal_Int32>(i)),  m_pFoundry->FindActuralStyleName(pLevel->GetSearchStyle()), pTemplate);
                 bInserted = true;
             }
 
             // 1 style in WordPro may be mapped to several styles in SODC
             LwpDocument * pDocument = m_pFoundry->GetDocument()->GetRootDocument();
-            AddSourceStyle(pToc, pLevel,  pDocument->GetFoundry());
+            AddSourceStyle(xToc.get(), pLevel,  pDocument->GetFoundry());
 
             // one level may have several corresponding Styles
             pLevel = GetNextSearchLevelPtr(i, pLevel);  // find next LwpTocLevelData which is same index
@@ -241,7 +241,7 @@ void  LwpTocSuperLayout::XFConvert(XFContentContainer* pCont)
 
     m_pCont = pCont;
     // add TOC content
-    LwpSuperTableLayout::XFConvert(pToc);
+    LwpSuperTableLayout::XFConvert(xToc.get());
 
     rtl::Reference<LwpVirtualLayout> xContainer(GetContainerLayout());
     if (!xContainer.is())
@@ -250,7 +250,7 @@ void  LwpTocSuperLayout::XFConvert(XFContentContainer* pCont)
     // if current TOC is located in a cell, we must add a frame between upper level container and TOC
     if (!xContainer->IsCell())
     {
-        pCont->Add(pToc);
+        pCont->Add(xToc.get());
     }
 }
 
@@ -261,25 +261,25 @@ void  LwpTocSuperLayout::XFConvert(XFContentContainer* pCont)
  */
 void  LwpTocSuperLayout::XFConvertFrame(XFContentContainer* pCont, sal_Int32 nStart, sal_Int32 nEnd, bool bAll)
 {
-    if(m_pFrame)
+    if (m_pFrame)
     {
-        XFFrame* pXFFrame = nullptr;
+        rtl::Reference<XFFrame> xXFFrame;
         if(nEnd < nStart)
         {
-            pXFFrame = new XFFrame();
+            xXFFrame.set(new XFFrame);
         }
         else
         {
-            pXFFrame = new XFFloatFrame(nStart, nEnd, bAll);
+            xXFFrame.set(new XFFloatFrame(nStart, nEnd, bAll));
         }
 
-        m_pFrame->Parse(pXFFrame, static_cast<sal_uInt16>(nStart));
+        m_pFrame->Parse(xXFFrame.get(), static_cast<sal_uInt16>(nStart));
 
         //parse table, and add table to frame or TOC
         LwpTableLayout * pTableLayout = GetTableLayout();
         if (pTableLayout)
         {
-            XFContentContainer * pTableContainer = pXFFrame;
+            XFContentContainer* pTableContainer = xXFFrame.get();
             // if *this is a TOCSuperTableLayout and it's located in a cell
             // add the frame to upper level and add TOCSuperTableLayout into the frame
             rtl::Reference<LwpVirtualLayout> xContainer(GetContainerLayout());
@@ -288,13 +288,13 @@ void  LwpTocSuperLayout::XFConvertFrame(XFContentContainer* pCont, sal_Int32 nSt
             if (xContainer->IsCell())
             {
                 pTableContainer = pCont; // TOC contain table directly
-                pXFFrame->Add(pCont);
-                m_pCont->Add(pXFFrame);
+                xXFFrame->Add(pCont);
+                m_pCont->Add(xXFFrame.get());
             }
             else
             {
                 //add frame to the container
-                pCont->Add(pXFFrame);
+                pCont->Add(xXFFrame.get());
             }
             pTableLayout->XFConvert(pTableContainer);
         }
@@ -361,7 +361,7 @@ bool LwpTocSuperLayout::GetUsePageNumber(sal_uInt16 index)
     return false;
 }
 /**
- * @short   Get what is used for separater
+ * @short   Get what is used for separator
  * @param  index - TOC level
  * @return sal_uInt16 - separator type
  */
@@ -370,7 +370,7 @@ sal_uInt16 LwpTocSuperLayout::GetSeparatorType(sal_uInt16 index)
     if (index >= MAX_LEVELS)
         return NONE;
 
-    sal_uInt16 Flag = (sal_uInt16)m_nFlags[index];
+    sal_uInt16 Flag = static_cast<sal_uInt16>(m_nFlags[index]);
 
     if (Flag & TS_LEADERDOTS)
         return LEADERDOTS;
@@ -434,7 +434,7 @@ LwpTocLevelData * LwpTocSuperLayout::GetNextSearchLevelPtr(sal_uInt16 index, Lwp
     return nullptr;
 }
 
-LwpTocLevelData::LwpTocLevelData(LwpObjectHeader &objHdr, LwpSvStream* pStrm):LwpDLVList(objHdr, pStrm)
+LwpTocLevelData::LwpTocLevelData(LwpObjectHeader const &objHdr, LwpSvStream* pStrm):LwpDLVList(objHdr, pStrm)
 {
     m_nFlags = 0;
     m_nLevel = 0;
@@ -468,7 +468,7 @@ void LwpTocLevelData::Read()
     LwpDLVList::Read();
     m_nFlags = m_pObjStrm->QuickReaduInt16();
     m_nLevel = m_pObjStrm->QuickReaduInt16();
-    m_SearchName.Read(m_pObjStrm);
+    m_SearchName.Read(m_pObjStrm.get());
 
     m_pObjStrm->SkipExtra();
 }

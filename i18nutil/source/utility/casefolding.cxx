@@ -17,38 +17,50 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "i18nutil/casefolding.hxx"
+#include <i18nutil/casefolding.hxx>
 #include "casefolding_data.h"
-#include "i18nutil/widthfolding.hxx"
+#include <i18nutil/oneToOneMapping.hxx>
+#include <i18nutil/widthfolding.hxx>
+#include <i18nutil/transliteration.hxx>
+#include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/uno/RuntimeException.hpp>
 
 using namespace com::sun::star::lang;
 using namespace com::sun::star::uno;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18nutil {
 
-static Mapping mapping_03a3[] = {{0, 1, {0x03c2, 0, 0}},{0, 1, {0x03c3, 0, 0}}};
-static Mapping mapping_0307[] = {{0, 0, {0, 0, 0}},{0, 1, {0x0307, 0, 0}}};
-static Mapping mapping_004a[] = {{0, 2, {0x006a, 0x0307, 0}},{0, 1, {0x006a, 0, 0}}};
-static Mapping mapping_012e[] = {{0, 2, {0x012f, 0x0307, 0}},{0, 1, {0x012f, 0, 0}}};
-static Mapping mapping_00cc[] = {{0, 3, {0x0069, 0x0307, 0x0300}},{0, 1, {0x00ec, 0, 0}}};
-static Mapping mapping_00cd[] = {{0, 3, {0x0069, 0x0307, 0x0301}},{0, 1, {0x00ed, 0, 0}}};
-static Mapping mapping_0128[] = {{0, 3, {0x0069, 0x0307, 0x0303}},{0, 1, {0x0129, 0, 0}}};
-static Mapping mapping_0049[] = {{0, 2, {0x0069, 0x0307, 0}},{0, 1, {0x0131, 0, 0}},{0, 1, {0x0069, 0, 0}}};
-static Mapping mapping_0069[] = {{0, 1, {0x0130, 0, 0}},{0, 1, {0x0049, 0, 0}}};
-static Mapping mapping_0130[] = {{0, 1, {0x0069, 0, 0}},{0, 1, {0x0130, 0, 0}}};
+static const Mapping mapping_03a3[] = {{0, 1, {0x03c2, 0, 0}},{0, 1, {0x03c3, 0, 0}}};
+static const Mapping mapping_0307[] = {{0, 0, {0, 0, 0}},{0, 1, {0x0307, 0, 0}}};
+static const Mapping mapping_004a[] = {{0, 2, {0x006a, 0x0307, 0}},{0, 1, {0x006a, 0, 0}}};
+static const Mapping mapping_012e[] = {{0, 2, {0x012f, 0x0307, 0}},{0, 1, {0x012f, 0, 0}}};
+static const Mapping mapping_00cc[] = {{0, 3, {0x0069, 0x0307, 0x0300}},{0, 1, {0x00ec, 0, 0}}};
+static const Mapping mapping_00cd[] = {{0, 3, {0x0069, 0x0307, 0x0301}},{0, 1, {0x00ed, 0, 0}}};
+static const Mapping mapping_0128[] = {{0, 3, {0x0069, 0x0307, 0x0303}},{0, 1, {0x0129, 0, 0}}};
+static const Mapping mapping_0049[] = {{0, 2, {0x0069, 0x0307, 0}},{0, 1, {0x0131, 0, 0}},{0, 1, {0x0069, 0, 0}}};
+static const Mapping mapping_0069[] = {{0, 1, {0x0130, 0, 0}},{0, 1, {0x0049, 0, 0}}};
+static const Mapping mapping_0130[] = {{0, 1, {0x0069, 0, 0}},{0, 1, {0x0130, 0, 0}}};
 
 #define langIs(lang) (aLocale.Language == lang)
 
 // only check simple case, there is more complicated case need to be checked.
 #define type_i(ch) ((ch) == 0x0069 || (ch) == 0x006a)
 
-#define cased_letter(ch) (CaseMappingIndex[(ch)>>8] >= 0 && (CaseMappingValue[(CaseMappingIndex[(ch)>>8] << 8) + ((ch)&0xff)].type & CasedLetter))
+static bool cased_letter(sal_Unicode ch)
+{
+    int msb = ch >> 8;
+    int cmi = CaseMappingIndex[msb];
+    if (cmi < 0)
+        return false;
+    int cmv_idx = (cmi << 8) + (ch & 0xff);
+    return bool(static_cast<MappingType>(CaseMappingValue[cmv_idx].type) & MappingType::CasedLetterMask);
+}
 
 // for Lithuanian, condition to make explicit dot above when lowercasing capital I's and J's
 // whenever there are more accents above.
 #define accent_above(ch) (((ch) >= 0x0300 && (ch) <= 0x0314) || ((ch) >= 0x033D && (ch) <= 0x0344) || (ch) == 0x0346 || ((ch) >= 0x034A && (ch) <= 0x034C))
 
-Mapping& casefolding::getConditionalValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, Locale& aLocale, sal_uInt8 nMappingType) throw (RuntimeException)
+const Mapping& casefolding::getConditionalValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, Locale const & aLocale, MappingType nMappingType)
 {
         switch(str[pos]) {
         case 0x03a3:
@@ -57,8 +69,8 @@ Mapping& casefolding::getConditionalValue(const sal_Unicode* str, sal_Int32 pos,
             return !(pos < len && cased_letter(str[pos+1])) && (pos > 0 && cased_letter(str[pos-1])) ?
                 mapping_03a3[0] : mapping_03a3[1];
         case 0x0307:
-            return (((nMappingType == MappingTypeLowerToUpper && langIs("lt")) ||
-                (nMappingType == MappingTypeUpperToLower && (langIs("tr") || langIs("az")))) &&
+            return (((nMappingType == MappingType::LowerToUpper && langIs("lt")) ||
+                (nMappingType == MappingType::UpperToLower && (langIs("tr") || langIs("az")))) &&
                 (pos > 0 && type_i(str[pos-1]))) ?      // after_i
                     mapping_0307[0] : mapping_0307[1];
         case 0x0130:
@@ -77,25 +89,25 @@ Mapping& casefolding::getConditionalValue(const sal_Unicode* str, sal_Int32 pos,
         throw RuntimeException();
 }
 
-Mapping& casefolding::getValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, Locale& aLocale, sal_uInt8 nMappingType) throw (RuntimeException)
+Mapping casefolding::getValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 len, Locale const & aLocale, MappingType nMappingType)
 {
-    static Mapping dummy = { 0, 1, { 0, 0, 0 } };
+    Mapping dummy = { 0, 1, { 0, 0, 0 } };
     sal_Int16 address = CaseMappingIndex[str[pos] >> 8];
 
     dummy.map[0] = str[pos];
 
     if (address >= 0) {
         address = (address << 8) + (str[pos] & 0xFF);
-        if (CaseMappingValue[address].type & nMappingType) {
-            sal_uInt8 type = CaseMappingValue[address].type;
-            if (type & ValueTypeNotValue) {
+        if (static_cast<MappingType>(CaseMappingValue[address].type) & nMappingType) {
+            MappingType type = static_cast<MappingType>(CaseMappingValue[address].type);
+            if (type & MappingType::NotValue) {
                 if (CaseMappingValue[address].value == 0)
                     return getConditionalValue(str, pos, len, aLocale, nMappingType);
                 else {
                     for (int map = CaseMappingValue[address].value;
                             map < CaseMappingValue[address].value + MaxCaseMappingExtras; map++) {
-                        if (CaseMappingExtra[map].type & nMappingType) {
-                            if (CaseMappingExtra[map].type & ValueTypeNotValue)
+                        if (static_cast<MappingType>(CaseMappingExtra[map].type) & nMappingType) {
+                            if (static_cast<MappingType>(CaseMappingExtra[map].type) & MappingType::NotValue)
                                 return getConditionalValue(str, pos, len, aLocale, nMappingType);
                             else
                                 return CaseMappingExtra[map];
@@ -111,7 +123,7 @@ Mapping& casefolding::getValue(const sal_Unicode* str, sal_Int32 pos, sal_Int32 
     return dummy;
 }
 
-inline bool SAL_CALL
+static bool
 is_ja_voice_sound_mark(sal_Unicode& current, sal_Unicode next)
 {
         sal_Unicode c = 0;
@@ -121,7 +133,7 @@ is_ja_voice_sound_mark(sal_Unicode& current, sal_Unicode next)
         return c != 0;
 }
 
-sal_Unicode casefolding::getNextChar(const sal_Unicode *str, sal_Int32& idx, sal_Int32 len, MappingElement& e, Locale& aLocale, sal_uInt8 nMappingType, TransliterationModules moduleLoaded) throw (RuntimeException)
+sal_Unicode casefolding::getNextChar(const sal_Unicode *str, sal_Int32& idx, sal_Int32 len, MappingElement& e, Locale const & aLocale, MappingType nMappingType, TransliterationFlags moduleLoaded)
 {
         if( idx >= len )
         {
@@ -131,7 +143,7 @@ sal_Unicode casefolding::getNextChar(const sal_Unicode *str, sal_Int32& idx, sal
 
         sal_Unicode c;
 
-        if (moduleLoaded & TransliterationModules_IGNORE_CASE) {
+        if (moduleLoaded & TransliterationFlags::IGNORE_CASE) {
             if( e.current >= e.element.nmap ) {
                 e.element = getValue(str, idx++, len, aLocale, nMappingType);
                 e.current = 0;
@@ -141,13 +153,13 @@ sal_Unicode casefolding::getNextChar(const sal_Unicode *str, sal_Int32& idx, sal
             c = *(str + idx++);
         }
 
-        if (moduleLoaded & TransliterationModules_IGNORE_KANA) {
+        if (moduleLoaded & TransliterationFlags::IGNORE_KANA) {
             if ((0x3040 <= c && c <= 0x3094) || (0x309d <= c && c <= 0x309f))
                 c += 0x60;
         }
 
         // composition: KA + voice-mark --> GA. see halfwidthToFullwidth.cxx for detail
-        if (moduleLoaded & TransliterationModules_IGNORE_WIDTH) {
+        if (moduleLoaded & TransliterationFlags::IGNORE_WIDTH) {
             static oneToOneMapping& half2fullTable = widthfolding::gethalf2fullTable();
             c = half2fullTable[c];
             if (0x3040 <= c && c <= 0x30ff && idx < len &&
@@ -158,6 +170,6 @@ sal_Unicode casefolding::getNextChar(const sal_Unicode *str, sal_Int32& idx, sal
         return c;
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

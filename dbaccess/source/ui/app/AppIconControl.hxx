@@ -20,7 +20,7 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_APP_APPICONCONTROL_HXX
 
 #include <svtools/ivctrl.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 namespace dbaui
 {
@@ -33,7 +33,7 @@ namespace dbaui
 
     public:
         explicit OApplicationIconControl(vcl::Window* _pParent);
-        virtual ~OApplicationIconControl();
+        virtual ~OApplicationIconControl() override;
         virtual void dispose() override;
 
         void                    setControlActionListener( IControlActionListener* _pListener ) { m_pActionListener = _pListener; }

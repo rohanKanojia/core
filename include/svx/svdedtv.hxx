@@ -24,6 +24,7 @@
 #include <svx/xpoly.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svxdllapi.h>
+#include <svx/svdundo.hxx>
 #include <o3tl/typed_flags_set.hxx>
 
 class SfxUndoAction;
@@ -33,24 +34,24 @@ class SfxStyleSheet;
 class SdrLayer;
 class SvdProgressInfo;
 
-enum SdrHorAlign  {
-    SDRHALIGN_NONE,
-    SDRHALIGN_LEFT,
-    SDRHALIGN_RIGHT,
-    SDRHALIGN_CENTER
+enum class SdrHorAlign  {
+    NONE,
+    Left,
+    Right,
+    Center
 };
 
-enum SdrVertAlign {
-    SDRVALIGN_NONE,
-    SDRVALIGN_TOP,
-    SDRVALIGN_BOTTOM,
-    SDRVALIGN_CENTER
+enum class SdrVertAlign {
+    NONE,
+    Top,
+    Bottom,
+    Center
 };
 
-enum SdrMergeMode {
-    SDR_MERGE_MERGE,
-    SDR_MERGE_SUBSTRACT,
-    SDR_MERGE_INTERSECT
+enum class SdrMergeMode {
+    Merge,
+    Subtract,
+    Intersect
 };
 
 // Options for InsertObject()
@@ -61,14 +62,13 @@ enum class SdrInsertFlags
     ADDMARK     = 0x0002, /* object will be added an existing selection  */
     SETDEFATTR  = 0x0004, /* actual attributes (+StyleSheet) are assigned to the object */
     SETDEFLAYER = 0x0008, /* actual layer is assigned to the object */
-    NOBROADCAST = 0x0010, /* insert with NbcInsertObject() for SolidDragging */
 };
 namespace o3tl
 {
-    template<> struct typed_flags<SdrInsertFlags> : is_typed_flags<SdrInsertFlags, 0x1f> {};
+    template<> struct typed_flags<SdrInsertFlags> : is_typed_flags<SdrInsertFlags, 0x0f> {};
 }
 
-class SVX_DLLPUBLIC SdrEditView: public SdrMarkView
+class SVX_DLLPUBLIC SdrEditView : public SdrMarkView
 {
     friend class                SdrPageView;
     friend class                SdrDragDistort;
@@ -77,49 +77,41 @@ class SVX_DLLPUBLIC SdrEditView: public SdrMarkView
 protected:
 
     // cache the transformation queries, etc. a little
-    bool                        bPossibilitiesDirty : 1;
-    bool                        bReadOnly : 1;
-    bool                        bGroupPossible : 1;
-    bool                        bUnGroupPossible : 1;
-    bool                        bGrpEnterPossible : 1;
-    bool                        bDeletePossible : 1;
-    bool                        bToTopPossible : 1;
-    bool                        bToBtmPossible : 1;
-    bool                        bReverseOrderPossible : 1;
-    bool                        bImportMtfPossible : 1;
-    bool                        bCombinePossible : 1;
-    bool                        bDismantlePossible : 1;
-    bool                        bCombineNoPolyPolyPossible : 1;
-    bool                        bDismantleMakeLinesPossible : 1;
-    bool                        bOrthoDesiredOnMarked : 1;
-    bool                        bMoreThanOneNotMovable : 1;   // more then one objects are not moveable
-    bool                        bOneOrMoreMovable : 1;        // at least one object is moveable
-    bool                        bMoreThanOneNoMovRot : 1;     // more then one object is not movable nor turnable (Crook)
-    bool                        bContortionPossible : 1;      // all polygones (grouped if necessary)
-    bool                        bAllPolys : 1;                // all polygones (not grouped)
-    bool                        bOneOrMorePolys : 1;          // at least one polygon (not grouped)
-    bool                        bMoveAllowed : 1;
-    bool                        bResizeFreeAllowed : 1;
-    bool                        bResizePropAllowed : 1;
-    bool                        bRotateFreeAllowed : 1;
-    bool                        bRotate90Allowed : 1;
-    bool                        bMirrorFreeAllowed : 1;
-    bool                        bMirror45Allowed : 1;
-    bool                        bMirror90Allowed : 1;
-    bool                        bShearAllowed : 1;
-    bool                        bEdgeRadiusAllowed : 1;
-    bool                        bTransparenceAllowed : 1;
-    bool                        bCropAllowed : 1;
-    bool                        bGradientAllowed : 1;
-    bool                        bCanConvToPath : 1;
-    bool                        bCanConvToPoly : 1;
-    bool                        bCanConvToContour : 1;
-    bool                        bCanConvToPathLineToArea : 1;
-    bool                        bCanConvToPolyLineToArea : 1;
-    bool                        bMoveProtect : 1;
-    bool                        bResizeProtect : 1;
-    // maintain Z-order of the virtual objects (Writer)
-    bool                        bBundleVirtObj : 1;
+    bool                        m_bPossibilitiesDirty : 1;
+    bool                        m_bReadOnly : 1;
+    bool                        m_bGroupPossible : 1;
+    bool                        m_bUnGroupPossible : 1;
+    bool                        m_bGrpEnterPossible : 1;
+    bool                        m_bToTopPossible : 1;
+    bool                        m_bToBtmPossible : 1;
+    bool                        m_bReverseOrderPossible : 1;
+    bool                        m_bImportMtfPossible : 1;
+    bool                        m_bCombinePossible : 1;
+    bool                        m_bDismantlePossible : 1;
+    bool                        m_bCombineNoPolyPolyPossible : 1;
+    bool                        m_bDismantleMakeLinesPossible : 1;
+    bool                        m_bOrthoDesiredOnMarked : 1;
+    bool                        m_bOneOrMoreMovable : 1;        // at least one object is moveable
+    bool                        m_bMoreThanOneNoMovRot : 1;     // more then one object is not movable nor turnable (Crook)
+    bool                        m_bContortionPossible : 1;      // all polygones (grouped if necessary)
+    bool                        m_bMoveAllowed : 1;
+    bool                        m_bResizeFreeAllowed : 1;
+    bool                        m_bResizePropAllowed : 1;
+    bool                        m_bRotateFreeAllowed : 1;
+    bool                        m_bRotate90Allowed : 1;
+    bool                        m_bMirrorFreeAllowed : 1;
+    bool                        m_bMirror45Allowed : 1;
+    bool                        m_bMirror90Allowed : 1;
+    bool                        m_bShearAllowed : 1;
+    bool                        m_bEdgeRadiusAllowed : 1;
+    bool                        m_bTransparenceAllowed : 1;
+    bool                        m_bCropAllowed : 1;
+    bool                        m_bGradientAllowed : 1;
+    bool                        m_bCanConvToPath : 1;
+    bool                        m_bCanConvToPoly : 1;
+    bool                        m_bCanConvToContour : 1;
+    bool                        m_bMoveProtect : 1;
+    bool                        m_bResizeProtect : 1;
 
 private:
     SVX_DLLPRIVATE void ImpClearVars();
@@ -146,8 +138,8 @@ protected:
     // for CombineMarkedObjects
     static bool ImpCanConvertForCombine1(const SdrObject* pObj);
     static bool ImpCanConvertForCombine(const SdrObject* pObj);
-    static basegfx::B2DPolyPolygon ImpGetPolyPolygon1(const SdrObject* pObj, bool bCombine);
-    static basegfx::B2DPolyPolygon ImpGetPolyPolygon(const SdrObject* pObj, bool bCombine);
+    static basegfx::B2DPolyPolygon ImpGetPolyPolygon1(const SdrObject* pObj);
+    static basegfx::B2DPolyPolygon ImpGetPolyPolygon(const SdrObject* pObj);
     static basegfx::B2DPolygon ImpCombineToSinglePolygon(const basegfx::B2DPolyPolygon& rPolyPolygon);
 
     // for DismantleMarkedObjects
@@ -155,23 +147,27 @@ protected:
     static bool ImpCanDismantle(const SdrObject* pObj, bool bMakeLines);
     void ImpDismantleOneObject(const SdrObject* pObj, SdrObjList& rOL, size_t& rPos, SdrPageView* pPV, bool bMakeLines);
     static void ImpCrookObj(SdrObject* pO, const Point& rRef, const Point& rRad, SdrCrookMode eMode,
-        bool bVertical, bool bNoContortion, bool bRotate, const Rectangle& rMarkRect);
-    static void ImpDistortObj(SdrObject* pO, const Rectangle& rRef, const XPolygon& rDistortedRect, bool bNoContortion);
-    bool ImpDelLayerCheck(SdrObjList* pOL, SdrLayerID nDelID) const;
+        bool bVertical, bool bNoContortion, bool bRotate, const tools::Rectangle& rMarkRect);
+    static void ImpDistortObj(SdrObject* pO, const tools::Rectangle& rRef, const XPolygon& rDistortedRect, bool bNoContortion);
+    bool ImpDelLayerCheck(SdrObjList const * pOL, SdrLayerID nDelID) const;
     void ImpDelLayerDelObjs(SdrObjList* pOL, SdrLayerID nDelID);
 
     // Removes all objects of the MarkList from their ObjLists including Undo.
     // The entries in rMark remain.
-    void DeleteMarkedList(const SdrMarkList& rMark); // DeleteMarked -> DeleteMarkedList
+    // @return a list of objects that must be deleted after the outermost EndUndo
+    std::vector<SdrObject *> DeleteMarkedList(SdrMarkList const& rMark); // DeleteMarked -> DeleteMarkedList
 
     // Check possibilities of all marked objects
     virtual void CheckPossibilities();
-    void ForcePossibilities() const { if (bPossibilitiesDirty || mbSomeObjChgdFlag) const_cast<SdrEditView*>(this)->CheckPossibilities(); }
+    void ForcePossibilities() const { if (m_bPossibilitiesDirty || mbSomeObjChgdFlag) const_cast<SdrEditView*>(this)->CheckPossibilities(); }
 
 protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrEditView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrEditView();
+    SdrEditView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
+
+    virtual ~SdrEditView() override;
 
 public:
     // each call of an undo-capable method from its view, generates an undo action.
@@ -182,24 +178,23 @@ public:
     // NotifyNewUndoAction() is not called for an empty group.
     void BegUndo()                         { mpModel->BegUndo();         } // open undo-grouping
     void BegUndo(const OUString& rComment) { mpModel->BegUndo(rComment); } // open undo-grouping
-    void BegUndo(const OUString& rComment, const OUString& rObjDescr, SdrRepeatFunc eFunc=SDRREPFUNC_OBJ_NONE) { mpModel->BegUndo(rComment,rObjDescr,eFunc); } // open undo-grouping
+    void BegUndo(const OUString& rComment, const OUString& rObjDescr, SdrRepeatFunc eFunc=SdrRepeatFunc::NONE) { mpModel->BegUndo(rComment,rObjDescr,eFunc); } // open undo-grouping
     void EndUndo();                                                   // close undo-grouping  (incl. BroadcastEdges)
-    void AddUndo(SdrUndoAction* pUndo)   { mpModel->AddUndo(pUndo);    } // add action
-    // only after first BegUndo or befor last EndUndo:
-    void SetUndoComment(const OUString& rComment) { mpModel->SetUndoComment(rComment); }
+    void AddUndo(std::unique_ptr<SdrUndoAction> pUndo)   { mpModel->AddUndo(std::move(pUndo));    } // add action
+    // only after first BegUndo or before last EndUndo:
     void SetUndoComment(const OUString& rComment, const OUString& rObjDescr) { mpModel->SetUndoComment(rComment,rObjDescr); }
     bool IsUndoEnabled() const;
 
-    std::vector< SdrUndoAction* > CreateConnectorUndo( SdrObject& rO );
-    void AddUndoActions( std::vector< SdrUndoAction* >& );
+    std::vector< std::unique_ptr<SdrUndoAction> > CreateConnectorUndo( SdrObject& rO );
+    void AddUndoActions( std::vector< std::unique_ptr<SdrUndoAction> > );
 
     // Layermanagement with Undo.
-    void InsertNewLayer(const OUString& rName, sal_uInt16 nPos=0xFFFF);
+    void InsertNewLayer(const OUString& rName, sal_uInt16 nPos);
     // Delete a layer including all objects contained
     void DeleteLayer(const OUString& rName);
 
     // Marked objects which are outside a page
-    // are assigned to an other page; at the moment without undo!!!
+    // are assigned to another page; at the moment without undo!!!
     void ForceMarkedObjToAnotherPage();
     void ForceMarkedToAnotherPage()   { ForceMarkedObjToAnotherPage(); }
 
@@ -209,10 +204,10 @@ public:
     // Set a logical enclosing rectangle for all marked objects.
     // It is not guaranteed if this succeeds, as a horizontal
     // line has always a height of 0
-    void SetMarkedObjRect(const Rectangle& rRect);
+    void SetMarkedObjRect(const tools::Rectangle& rRect);
     void MoveMarkedObj(const Size& rSiz, bool bCopy=false);
     void ResizeMarkedObj(const Point& rRef, const Fraction& xFact, const Fraction& yFact, bool bCopy=false);
-    void ResizeMultMarkedObj(const Point& rRef, const Fraction& xFact, const Fraction& yFact, const bool bCopy, const bool bWdh, const bool bHgt);
+    void ResizeMultMarkedObj(const Point& rRef, const Fraction& xFact, const Fraction& yFact, const bool bWdh, const bool bHgt);
     long GetMarkedObjRotate() const;
     void RotateMarkedObj(const Point& rRef, long nAngle, bool bCopy=false);
     void MirrorMarkedObj(const Point& rRef1, const Point& rRef2, bool bCopy=false);
@@ -220,19 +215,19 @@ public:
     void MirrorMarkedObjVertical();
     long GetMarkedObjShear() const;
     void ShearMarkedObj(const Point& rRef, long nAngle, bool bVShear=false, bool bCopy=false);
-    void CrookMarkedObj(const Point& rRef, const Point& rRad, SdrCrookMode eMode, bool bVertical=false, bool bNoContortion=false, bool bCopy=false);
-    void DistortMarkedObj(const Rectangle& rRef, const XPolygon& rDistortedRect, bool bNoContortion=false, bool bCopy=false);
+    void CrookMarkedObj(const Point& rRef, const Point& rRad, SdrCrookMode eMode, bool bVertical, bool bNoContortion, bool bCopy=false);
+    void DistortMarkedObj(const tools::Rectangle& rRef, const XPolygon& rDistortedRect, bool bNoContortion, bool bCopy=false);
 
     // copy marked objects and mark them instead of the old ones
     void CopyMarkedObj();
-    void SetAllMarkedRect(const Rectangle& rRect) { SetMarkedObjRect(rRect); }
+    void SetAllMarkedRect(const tools::Rectangle& rRect) { SetMarkedObjRect(rRect); }
     void MoveAllMarked(const Size& rSiz, bool bCopy=false) { MoveMarkedObj(rSiz,bCopy); }
     void ResizeAllMarked(const Point& rRef, const Fraction& xFact, const Fraction& yFact) { ResizeMarkedObj(rRef,xFact,yFact); }
     void RotateAllMarked(const Point& rRef, long nAngle) { RotateMarkedObj(rRef,nAngle); }
     void MirrorAllMarkedHorizontal() { MirrorMarkedObjHorizontal(); }
     void MirrorAllMarkedVertical() { MirrorMarkedObjVertical(); }
     void CopyMarked() { CopyMarkedObj(); }
-    bool IsMoveAllowed() const { ForcePossibilities(); return bMoveAllowed && !bMoveProtect; }
+    bool IsMoveAllowed() const { ForcePossibilities(); return m_bMoveAllowed && !m_bMoveProtect; }
     bool IsResizeAllowed(bool bProp=false) const;
     bool IsRotateAllowed(bool b90Deg=false) const;
     bool IsMirrorAllowed(bool b45Deg=false, bool b90Deg=false) const;
@@ -245,7 +240,7 @@ public:
     bool IsDistortAllowed(bool bNoContortion=false) const;
 
     // Unite several objects to a polygon:
-    // - rectangles/circles/text... are implicite converted.
+    // - rectangles/circles/text... are implicitly converted.
     // - polygones are closed automatically
     // - attributes and layer are taken from the first object marked
     //   (thus from lowest Z-order).
@@ -260,7 +255,7 @@ public:
     void MergeMarkedObjects(SdrMergeMode eMode);
 
     // for distribution dialog function
-    void DistributeMarkedObjects();
+    void DistributeMarkedObjects(weld::Window* pParent);
 
     // for setting either the width or height of all selected
     // objects to the width/height of the last selected object
@@ -292,8 +287,8 @@ public:
     // EndUndo();
     void ReplaceObjectAtView(SdrObject* pOldObj, SdrPageView& rPV, SdrObject* pNewObj, bool bMark=true);
 
-    void SetNotPersistAttrToMarked(const SfxItemSet& rAttr, bool bReplaceAll);
-    void MergeNotPersistAttrFromMarked(SfxItemSet& rAttr, bool bOnlyHardAttr) const;
+    void SetNotPersistAttrToMarked(const SfxItemSet& rAttr);
+    void MergeNotPersistAttrFromMarked(SfxItemSet& rAttr) const;
     void MergeAttrFromMarked(SfxItemSet& rAttr, bool bOnlyHardAttr) const;
     SfxItemSet GetAttrFromMarked(bool bOnlyHardAttr) const;
     void SetAttrToMarked(const SfxItemSet& rAttr, bool bReplaceAll);
@@ -313,11 +308,11 @@ public:
     void SetStyleSheetToMarked(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
 
     /* new interface src537 */
-    bool GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr) const;
+    void GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr) const;
 
-    bool SetAttributes(const SfxItemSet& rSet, bool bReplaceAll);
+    void SetAttributes(const SfxItemSet& rSet, bool bReplaceAll);
     SfxStyleSheet* GetStyleSheet() const; // SfxStyleSheet* GetStyleSheet(bool& rOk) const;
-    bool SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
+    void SetStyleSheet(SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr);
 
     // Group all marked objects to a single group.
     // Subsequently mark the new group . If the group spawns multiple
@@ -331,17 +326,17 @@ public:
     // Previously marked objects, which are not group objects, remain marked.
     void UnGroupMarked();
 
-    bool IsGroupPossible() const { ForcePossibilities(); return bGroupPossible; }
-    bool IsUnGroupPossible() const { ForcePossibilities(); return bUnGroupPossible; }
-    bool IsGroupEnterPossible() const { ForcePossibilities(); return bGrpEnterPossible; }
+    bool IsGroupPossible() const { ForcePossibilities(); return m_bGroupPossible; }
+    bool IsUnGroupPossible() const { ForcePossibilities(); return m_bUnGroupPossible; }
+    bool IsGroupEnterPossible() const { ForcePossibilities(); return m_bGrpEnterPossible; }
 
     // Convert marked objects to polygones/Beziercurves. The bool-functions
     // return sal_True, if at least one marked object could be converted.
     // Also member objects of group objects are converted.
     // For a better description see: SdrObj.HXX
-    bool IsConvertToPathObjPossible() const { ForcePossibilities(); return bCanConvToPath; }
-    bool IsConvertToPolyObjPossible() const { ForcePossibilities(); return bCanConvToPoly; }
-    bool IsConvertToContourPossible() const { ForcePossibilities(); return bCanConvToContour; }
+    bool IsConvertToPathObjPossible() const { ForcePossibilities(); return m_bCanConvToPath; }
+    bool IsConvertToPolyObjPossible() const { ForcePossibilities(); return m_bCanConvToPoly; }
+    bool IsConvertToContourPossible() const { ForcePossibilities(); return m_bCanConvToContour; }
     void ConvertMarkedToPathObj(bool bLineToArea);
     void ConvertMarkedToPolyObj();
 
@@ -377,9 +372,9 @@ public:
     // Which means it can happen that IsToTopPossible() returns sal_True,
     // but MovMarkedToTop() changes nothing (e.g. for multiple selections),
     // as restriction derived via a view by GetMaxToTopObj() prevents this.
-    bool IsToTopPossible() const { ForcePossibilities(); return bToTopPossible; }
-    bool IsToBtmPossible() const { ForcePossibilities(); return bToBtmPossible; }
-    bool IsReverseOrderPossible() const { ForcePossibilities(); return bReverseOrderPossible; }
+    bool IsToTopPossible() const { ForcePossibilities(); return m_bToTopPossible; }
+    bool IsToBtmPossible() const { ForcePossibilities(); return m_bToBtmPossible; }
+    bool IsReverseOrderPossible() const { ForcePossibilities(); return m_bReverseOrderPossible; }
 
     // Using this method the view determines how far an object
     // can be moved forward or backward (Z-order).
@@ -391,20 +386,14 @@ public:
     // Next method is called, if via ToTop, ToBtm, ... the
     // sequence of object has been changed. It is called after
     // each SdrObjList::SetObjectOrdNum(nOldPos,nNewPos);
-    virtual void ObjOrderChanged(SdrObject* pObj, sal_uIntPtr nOldPos, sal_uIntPtr nNewPos);
+    virtual void ObjOrderChanged(SdrObject* pObj, size_t nOldPos, size_t nNewPos);
 
     // If one or more objects of the type SdrGrafObj or SdrOle2Obj
     // are marked and these are capable to deliver a StarView-metafile,
     // this methods converts the metafile to a drawing object.
     // The SdrGrafObjs/SdrOle2Objs are replaced by the new objects.
     void DoImportMarkedMtf(SvdProgressInfo *pProgrInfo=nullptr);
-    bool IsImportMtfPossible() const { ForcePossibilities(); return bImportMtfPossible; }
-
-    // If the mode VirtualObjectBundling is switched on, all ToTop/ToBtm
-    // virtual objects which reference the same object, are contained
-    // in their Z-order (Writer).
-    // Default setting is sal_False=swithed off.
-    void SetVirtualObjectBundling(bool bOn) { bBundleVirtObj=bOn; }
+    bool IsImportMtfPossible() const { ForcePossibilities(); return m_bImportMtfPossible; }
 
     // override SdrMarkView, for internal use
     virtual void MarkListHasChanged() override;

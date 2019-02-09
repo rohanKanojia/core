@@ -18,34 +18,33 @@
  */
 
 #include <rtl/random.h>
+#include <sal/log.hxx>
 #include <sfx2/docfile.hxx>
-#include <sfx2/request.hxx>
 #include <sfx2/frame.hxx>
 #include <sfx2/sfxsids.hrc>
 #include <unotools/saveopt.hxx>
 #include <svl/itemset.hxx>
 #include <svl/stritem.hxx>
-#include <svl/intitem.hxx>
-#include <svl/eitem.hxx>
-#include "xecontent.hxx"
-#include "xltracer.hxx"
-#include "xeescher.hxx"
-#include "xeformula.hxx"
-#include "xehelper.hxx"
-#include "xelink.hxx"
-#include "xename.hxx"
-#include "xepivot.hxx"
-#include "xestyle.hxx"
-#include "xeroot.hxx"
+#include <xecontent.hxx>
+#include <xeescher.hxx>
+#include <xeformula.hxx>
+#include <xehelper.hxx>
+#include <xelink.hxx>
+#include <xename.hxx>
+#include <xepivot.hxx>
+#include <xestyle.hxx>
+#include <xeroot.hxx>
 #include <xepivotxml.hxx>
-#include "xedbdata.hxx"
+#include <xedbdata.hxx>
+#include <xlcontent.hxx>
+#include <xlname.hxx>
+#include <xllink.hxx>
 
-#include "excrecds.hxx"
-#include "tabprotection.hxx"
-#include "document.hxx"
-#include "scextopt.hxx"
+#include <excrecds.hxx>
+#include <tabprotection.hxx>
+#include <document.hxx>
 
-#include "formulabase.hxx"
+#include <formulabase.hxx>
 #include <com/sun/star/sheet/FormulaOpCodeMapEntry.hpp>
 
 using namespace ::com::sun::star;
@@ -53,12 +52,12 @@ using namespace ::com::sun::star;
 // Global data ================================================================
 
 XclExpRootData::XclExpRootData( XclBiff eBiff, SfxMedium& rMedium,
-        tools::SvRef<SotStorage> xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc ) :
+        const tools::SvRef<SotStorage>& xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc ) :
     XclRootData( eBiff, rMedium, xRootStrg, rDoc, eTextEnc, true )
 {
     SvtSaveOptions aSaveOpt;
     mbRelUrl = mrMedium.IsRemote() ? aSaveOpt.IsSaveRelINet() : aSaveOpt.IsSaveRelFSys();
-    maStringBuf = OStringBuffer();
+    maStringBuf.setLength(0);
 }
 
 XclExpRootData::~XclExpRootData()
@@ -240,9 +239,7 @@ void XclExpRoot::InitializeGlobals()
                 break;
             }
             uno::Reference< lang::XMultiServiceFactory > xModelFactory( xComponent, uno::UNO_QUERY);
-            // OOXML is also BIFF8 function-wise
-            oox::xls::OpCodeProvider aOpCodeProvider( xModelFactory,
-                    oox::xls::FILTER_OOXML, oox::xls::BIFF8, false);
+            oox::xls::OpCodeProvider aOpCodeProvider(xModelFactory, false);
             // Compiler mocks about non-matching ctor or conversion from
             // Sequence<...> to Sequence<const ...> if directly created or passed,
             // conversion through Any works around.
@@ -253,8 +250,7 @@ void XclExpRoot::InitializeGlobals()
                 SAL_WARN( "sc", "XclExpRoot::InitializeGlobals - no OpCodeMap");
                 break;
             }
-            ScCompiler aCompiler( &rDoc, ScAddress());
-            aCompiler.SetGrammar( rDoc.GetGrammar());
+            ScCompiler aCompiler( &rDoc, ScAddress(), rDoc.GetGrammar());
             mrExpData.mxOpCodeMap = formula::FormulaCompiler::CreateOpCodeMap( aOpCodeMapping, true);
         } while(false);
     }
@@ -317,11 +313,7 @@ uno::Sequence< beans::NamedValue > XclExpRoot::GenerateEncryptionData( const OUS
 
     if ( !aPass.isEmpty() && aPass.getLength() < 16 )
     {
-        TimeValue aTime;
-        osl_getSystemTime( &aTime );
         rtlRandomPool aRandomPool = rtl_random_createPool ();
-        rtl_random_addBytes ( aRandomPool, &aTime, 8 );
-
         sal_uInt8 pnDocId[16];
         rtl_random_getBytes( aRandomPool, pnDocId, 16 );
 
@@ -357,16 +349,12 @@ uno::Sequence< beans::NamedValue > XclExpRoot::GetEncryptionData() const
     return aEncryptionData;
 }
 
-uno::Sequence< beans::NamedValue > XclExpRoot::GenerateDefaultEncryptionData() const
+uno::Sequence< beans::NamedValue > XclExpRoot::GenerateDefaultEncryptionData()
 {
-    uno::Sequence< beans::NamedValue > aEncryptionData;
-    if ( !GetDefaultPassword().isEmpty() )
-        aEncryptionData = GenerateEncryptionData( GetDefaultPassword() );
-
-    return aEncryptionData;
+    return GenerateEncryptionData( GetDefaultPassword() );
 }
 
-XclExpRootData::XclExpLinkMgrRef XclExpRoot::GetLocalLinkMgrRef() const
+XclExpRootData::XclExpLinkMgrRef const & XclExpRoot::GetLocalLinkMgrRef() const
 {
     return IsInGlobals() ? mrExpData.mxGlobLinkMgr : mrExpData.mxLocLinkMgr;
 }

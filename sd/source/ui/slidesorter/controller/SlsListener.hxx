@@ -20,19 +20,19 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_CONTROLLER_SLSLISTENER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_CONTROLLER_SLSLISTENER_HXX
 
-#include "MutexOwner.hxx"
-#include "controller/SlideSorterController.hxx"
+#include <MutexOwner.hxx>
+#include <controller/SlideSorterController.hxx>
 #include <com/sun/star/document/XEventListener.hpp>
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/accessibility/XAccessibleEventListener.hpp>
-#include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/XFrameActionListener.hpp>
 #include <cppuhelper/compbase.hxx>
 
 #include <svl/lstner.hxx>
 #include <tools/link.hxx>
 #include <memory>
+
+class SdrPage;
 
 namespace sd {
 class ViewShellBase;
@@ -55,8 +55,6 @@ typedef cppu::WeakComponentImplHelper<
     css::frame::XFrameActionListener
     > ListenerInterfaceBase;
 
-class SlideSorterController;
-
 /** Listen for events of various types and sources and react to them.  This
     class is a part of the controller.
 
@@ -72,7 +70,7 @@ class Listener
 {
 public:
     explicit Listener (SlideSorter& rSlideSorter);
-    virtual ~Listener();
+    virtual ~Listener() override;
 
     /** Connect to the current controller of the view shell as listener.
         This method is called once during initialization and every time a
@@ -96,27 +94,23 @@ public:
 
     //=====  lang::XEventListener  ============================================
     virtual void SAL_CALL
-        disposing (const css::lang::EventObject& rEventObject)
-        throw (css::uno::RuntimeException, std::exception) override;
+        disposing (const css::lang::EventObject& rEventObject) override;
 
     //=====  document::XEventListener  ========================================
     virtual void SAL_CALL
         notifyEvent (
-            const css::document::EventObject& rEventObject)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::document::EventObject& rEventObject) override;
 
     //=====  beans::XPropertySetListener  =====================================
     virtual void SAL_CALL
         propertyChange (
-            const css::beans::PropertyChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::beans::PropertyChangeEvent& rEvent) override;
 
     //===== accessibility::XAccessibleEventListener  ==========================
     virtual void SAL_CALL
         notifyEvent (
             const css::accessibility::AccessibleEventObject&
-            rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+            rEvent) override;
 
     //===== frame::XFrameActionListener  ======================================
     /** For certain actions the listener connects to a new controller of the
@@ -124,8 +118,7 @@ public:
         in the center pane is replaced by another view shell.
     */
     virtual void SAL_CALL
-        frameAction (const css::frame::FrameActionEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        frameAction (const css::frame::FrameActionEvent& rEvent) override;
 
     virtual void SAL_CALL disposing() override;
 
@@ -170,13 +163,7 @@ private:
     */
     void HandleShapeModification (const SdrPage* pPage);
 
-    /** This method throws a DisposedException when the object has already been
-        disposed.
-    */
-    void ThrowIfDisposed()
-        throw (css::lang::DisposedException);
-
-    DECL_LINK_TYPED(EventMultiplexerCallback, tools::EventMultiplexerEvent&, void);
+    DECL_LINK(EventMultiplexerCallback, tools::EventMultiplexerEvent&, void);
 };
 
 } } } // end of namespace ::sd::slidesorter::controller

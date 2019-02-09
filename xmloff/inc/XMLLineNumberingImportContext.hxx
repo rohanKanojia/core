@@ -50,18 +50,6 @@ enum LineNumberingToken
 /** import <text:linenumbering-configuration> elements */
 class XMLLineNumberingImportContext : public SvXMLStyleContext
 {
-    const OUString sCharStyleName;
-    const OUString sCountEmptyLines;
-    const OUString sCountLinesInFrames;
-    const OUString sDistance;
-    const OUString sInterval;
-    const OUString sSeparatorText;
-    const OUString sNumberPosition;
-    const OUString sNumberingType;
-    const OUString sIsOn;
-    const OUString sRestartAtEachPage;
-    const OUString sSeparatorInterval;
-
     OUString sStyleName;
     OUString sNumFormat;
     OUString sNumLetterSync;
@@ -84,7 +72,7 @@ public:
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList);
 
-    virtual ~XMLLineNumberingImportContext();
+    virtual ~XMLLineNumberingImportContext() override;
 
     // to be used by child context: set separator info
     void SetSeparatorText(const OUString& sText);
@@ -101,7 +89,7 @@ protected:
 
     virtual void CreateAndInsert(bool bOverwrite) override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

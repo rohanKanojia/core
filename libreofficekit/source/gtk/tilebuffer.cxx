@@ -50,10 +50,9 @@ void Tile::setSurface(cairo_surface_t *buffer)
 */
 void TileBuffer::resetAllTiles()
 {
-    std::map<int, Tile>::iterator it = m_mTiles.begin();
-    for (; it != m_mTiles.end(); ++it)
+    for (auto & tile : m_mTiles)
     {
-        it->second.valid = false;
+        tile.second.valid = false;
     }
 }
 
@@ -117,7 +116,7 @@ void LOEvent::destroy(void* pMemory)
 }
 
 GQuark
-LOKTileBufferErrorQuark(void)
+LOKTileBufferErrorQuark()
 {
     return g_quark_from_static_string("lok-tilebuffer-error");
 }

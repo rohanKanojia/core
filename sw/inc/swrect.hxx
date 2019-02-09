@@ -26,6 +26,10 @@
 
 class SvStream;
 
+/// *Of course* Writer needs its own rectangles.
+/// This is half-open so m_Point.X() + m_Size.getWidth() is *not* included.
+/// Note the tools Rectangle is (usually? sometimes?) closed so there's a
+/// SVRect() to subtract 1 for the conversion.
 class SAL_WARN_UNUSED SwRect
 {
     Point m_Point;
@@ -39,7 +43,7 @@ public:
     inline SwRect( long X, long Y, long Width, long Height );
 
     //SV-SS e.g. SwRect( pWin->GetClipRect() );
-    SwRect( const Rectangle &rRect );
+    SwRect( const tools::Rectangle &rRect );
 
     //Set-Methods
     inline void Chg( const Point& rNP, const Size &rNS );
@@ -72,16 +76,16 @@ public:
 
     void Justify();
 
-           SwRect &Union( const SwRect& rRect );
-           SwRect &Intersection( const SwRect& rRect );
+    SwRect &Union( const SwRect& rRect );
+    SwRect &Intersection( const SwRect& rRect );
 
-   // Same as Intersection, only assume that Rects are overlapping!
-           SwRect &_Intersection( const SwRect &rRect );
+    // Same as Intersection, only assume that Rects are overlapping!
+    SwRect &Intersection_( const SwRect &rRect );
 
-           bool IsInside( const Point& rPOINT ) const;
-           bool IsNear(const Point& rPoint, long nTolerance ) const;
-           bool IsInside( const SwRect& rRect ) const;
-           bool IsOver( const SwRect& rRect ) const;
+    bool IsInside( const Point& rPOINT ) const;
+    bool IsNear(const Point& rPoint, long nTolerance ) const;
+    bool IsInside( const SwRect& rRect ) const;
+    bool IsOver( const SwRect& rRect ) const;
     inline bool HasArea() const;
     inline bool IsEmpty() const;
     inline void Clear();
@@ -95,24 +99,24 @@ public:
     inline SwRect &operator-=( const Point &rPt );
 
     //SV-SS e.g. pWin->DrawRect( aSwRect.SVRect() );
-    inline Rectangle  SVRect() const;
+    inline tools::Rectangle  SVRect() const;
 
     // Output operator for debugging.
     friend SvStream& WriteSwRect( SvStream &rStream, const SwRect &rRect );
 
 
-    void _Top(      const long nTop );
-    void _Bottom(   const long nBottom );
-    void _Left(     const long nLeft );
-    void _Right(    const long nRight );
-    void _Width(    const long nNew );
-    void _Height(   const long nNew );
-    long _Top()     const;
-    long _Bottom()  const;
-    long _Left()    const;
-    long _Right()   const;
-    long _Width()   const;
-    long _Height()  const;
+    void Top_(      const long nTop );
+    void Bottom_(   const long nBottom );
+    void Left_(     const long nLeft );
+    void Right_(    const long nRight );
+    void Width_(    const long nNew );
+    void Height_(   const long nNew );
+    long Top_()     const;
+    long Bottom_()  const;
+    long Left_()    const;
+    long Right_()   const;
+    long Width_()   const;
+    long Height_()  const;
     void SubTop(    const long nSub );
     void AddBottom( const long nAdd );
     void SubLeft(   const long nSub );
@@ -128,10 +132,12 @@ public:
     void SetUpperLeftCorner(  const Point& rNew );
     void SetUpperRightCorner(  const Point& rNew );
     void SetLowerLeftCorner(  const Point& rNew );
+    const Size  Size_() const;
     const Point TopLeft()  const;
     const Point TopRight()  const;
     const Point BottomLeft()  const;
     const Point BottomRight()  const;
+    const Size  SwappedSize() const;
     long GetLeftDistance( long ) const;
     long GetBottomDistance( long ) const;
     long GetRightDistance( long ) const;
@@ -185,7 +191,7 @@ inline void SwRect::Height( long nNew )
 }
 inline void SwRect::Left( const long nLeft )
 {
-    m_Size.Width() += m_Point.getX() - nLeft;
+    m_Size.AdjustWidth( m_Point.getX() - nLeft );
     m_Point.setX(nLeft);
 }
 inline void SwRect::Right( const long nRight )
@@ -194,7 +200,7 @@ inline void SwRect::Right( const long nRight )
 }
 inline void SwRect::Top( const long nTop )
 {
-    m_Size.Height() += m_Point.getY() - nTop;
+    m_Size.AdjustHeight( m_Point.getY() - nTop );
     m_Point.setY(nTop);
 }
 inline void SwRect::Bottom( const long nBottom )
@@ -272,10 +278,10 @@ inline SwRect &SwRect::operator-=( const Point &rPt )
 }
 
 // other
-inline Rectangle SwRect::SVRect() const
+inline tools::Rectangle SwRect::SVRect() const
 {
     SAL_WARN_IF( IsEmpty(), "sw", "SVRect() without Width or Height" );
-    return Rectangle( m_Point.getX(), m_Point.getY(),
+    return tools::Rectangle( m_Point.getX(), m_Point.getY(),
         m_Point.getX() + m_Size.getWidth() - 1,         //Right()
         m_Point.getY() + m_Size.getHeight() - 1 );      //Bottom()
 }

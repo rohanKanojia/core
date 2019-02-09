@@ -35,9 +35,7 @@ PresenterSprite::PresenterSprite()
       mxSprite(),
       maSize(0,0),
       maLocation(0,0),
-      mbIsVisible(false),
-      mnPriority(0),
-      mnAlpha(1.0)
+      mbIsVisible(false)
 {
 }
 
@@ -119,7 +117,7 @@ void PresenterSprite::MoveTo (const css::geometry::RealPoint2D& rLocation)
 void PresenterSprite::Update()
 {
     if (mxSpriteFactory.is())
-        mxSpriteFactory->updateScreen(sal_False);
+        mxSpriteFactory->updateScreen(false);
 }
 
 void PresenterSprite::ProvideSprite()
@@ -142,8 +140,8 @@ void PresenterSprite::ProvideSprite()
                 uno::Sequence<double>(4),
                 rendering::CompositeOperation::SOURCE)
                 );
-            mxSprite->setAlpha(mnAlpha);
-            mxSprite->setPriority(mnPriority);
+            mxSprite->setAlpha(1.0);
+            mxSprite->setPriority(0);
             if (mbIsVisible)
                 mxSprite->show();
         }

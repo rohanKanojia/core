@@ -20,13 +20,14 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_TOOL_H
 #define INCLUDED_SC_SOURCE_FILTER_INC_TOOL_H
 
-#include <attrib.hxx>
-#include <document.hxx>
+#include <i18nlangtag/lang.h>
+#include <svl/intitem.hxx>
+#include <types.hxx>
 #include <osl/diagnose.h>
 
-// Defaultwerte
-const sal_uInt8 nDezStd = 0;        // Dezimalstellen fuer Standard-Zellen
-const sal_uInt8 nDezFloat = 2;  //        "         "  Float-Zellen
+// Default values
+const sal_uInt8 nFractionalStd = 0;        // Number of digits in fractional part for standard cells
+const sal_uInt8 nFractionalFloat = 2;      //        "         "         "         "  float cells
 
 struct LotusContext;
 
@@ -41,31 +42,25 @@ double      Snum32ToDouble( sal_uInt32 nValue );
 typedef sal_uInt16 StampTyp;
 
 #define MAKE_STAMP(nF,nS) ((nS&0x0F)+((nF&0x7F)*16))
-            // Bit 0...3  = Bit 0...3 von Stellenzahl
-            // Bit 4...10 = Bit 0...6 von Formatbyte
+            // Bit 0...3  = Bit 0...3 of number of digits
+            // Bit 4...10 = Bit 0...6 of Formatbyte
 
 class FormIdent
 {
 private:
-    StampTyp        nStamp;         // Identifikations-Schluessel
-    SfxUInt32Item*  pAttr;          // zugehoeriges Attribut
+    StampTyp        nStamp;         // ID key
+    std::unique_ptr<SfxUInt32Item> pAttr;          // associated attribute
 public:
                     FormIdent( void )
                     {
                         nStamp = 0;
-                        pAttr = NULL;
+                        pAttr = nullptr;
                     }
 
                     FormIdent( sal_uInt8 nFormat, sal_uInt8 nSt, SfxUInt32Item& rAttr )
                     {
                         nStamp = MAKE_STAMP( nFormat, nSt );
-                        pAttr = &rAttr;
-                    }
-
-                    FormIdent( sal_uInt8 nFormat, sal_uInt8 nSt )
-                    {
-                        nStamp = MAKE_STAMP( nFormat, nSt );
-                        pAttr = NULL;
+                        pAttr.reset(&rAttr);
                     }
 
     StampTyp        GetStamp( void ) const
@@ -75,7 +70,7 @@ public:
 
     SfxUInt32Item*  GetAttr( void )
                     {
-                        return pAttr;
+                        return pAttr.get();
                     }
 
     void            SetStamp( sal_uInt8 nFormat, sal_uInt8 nSt )
@@ -91,17 +86,16 @@ public:
 class FormCache
 {
 private:
-    FormIdent           aIdents[ nSize_ ]; //gepufferte Formate
-    sal_Bool                bValid[ nSize_ ];
-    FormIdent           aCompareIdent;      // zum Vergleichen
-    sal_uInt8               nDefaultFormat;     // Defaultformat der Datei
-    SvNumberFormatter*  pFormTable;         // Value-Format-Table-Anker
+    FormIdent           aIdents[ nSize_ ]; //buffered formats
+    bool                bValid[ nSize_ ];
+    FormIdent           aCompareIdent;      // for comparing
+    SvNumberFormatter*  pFormTable;         // value format table anchor
     StampTyp            nIndex;
-    LanguageType        eLanguage;          // Systemsprache
+    LanguageType        eLanguage;          // System language
 
     SfxUInt32Item*      NewAttr( sal_uInt8 nFormat, sal_uInt8 nSt );
 public:
-                        FormCache( ScDocument*, sal_uInt8 nNewDefaultFormat = 0xFF );
+                        FormCache( const ScDocument* );
                         ~FormCache();
 
     inline const SfxUInt32Item* GetAttr( sal_uInt8 nFormat, sal_uInt8 nSt );
@@ -110,9 +104,9 @@ public:
 
 inline const SfxUInt32Item* FormCache::GetAttr( sal_uInt8 nFormat, sal_uInt8 nSt )
 {
-    // PREC:    nFormat = Lotus-Format-Byte
-    //          nSt = Stellenzahl
-    // POST:    return = zu nFormat und nSt passendes SC-Format
+    // PREC:    nFormat = Lotus format byte
+    //          nSt = Number of digit
+    // POST:    return = SC-format fitting nFormat and nSt
     SfxUInt32Item*      pAttr;
     SfxUInt32Item*      pRet;
 
@@ -123,12 +117,12 @@ inline const SfxUInt32Item* FormCache::GetAttr( sal_uInt8 nFormat, sal_uInt8 nSt
         pRet = aIdents[ nIndex ].GetAttr();
     else
     {
-        // neues Attribut anlegen
+        // create new attribute
         pAttr = NewAttr( nFormat, nSt );
         OSL_ENSURE( pAttr, "FormCache::GetAttr(): Nothing to save" );
 
         aIdents[ nIndex ] = FormIdent( nFormat, nSt, *pAttr );
-        bValid[ nIndex ] = sal_True;
+        bValid[ nIndex ] = true;
 
         pRet = pAttr;
     }

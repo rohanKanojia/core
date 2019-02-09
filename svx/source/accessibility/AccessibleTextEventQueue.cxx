@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "AccessibleTextEventQueue.hxx"
 #include <svx/unoshape.hxx>
-#include "editeng/unolingu.hxx"
+#include <editeng/unolingu.hxx>
 #include <editeng/unotext.hxx>
 
-#include "editeng/unoedhlp.hxx"
-#include "editeng/unopracc.hxx"
+#include <editeng/unoedhlp.hxx>
+#include <editeng/unopracc.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svdpntv.hxx>
 #include <editeng/editdata.hxx>
@@ -56,9 +57,9 @@ namespace accessibility
         maEventQueue.push_back( new TextHint( rHint ) );
     }
 
-    void AccessibleTextEventQueue::Append( const SvxViewHint& rHint )
+    void AccessibleTextEventQueue::Append( const SvxViewChangedHint& rHint )
     {
-        maEventQueue.push_back( new SvxViewHint( rHint ) );
+        maEventQueue.push_back( new SvxViewChangedHint( rHint ) );
     }
 
     void AccessibleTextEventQueue::Append( const SvxEditSourceHint& rHint )

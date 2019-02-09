@@ -31,7 +31,7 @@
 #include <svx/svdorect.hxx>
 #include <svx/svdocirc.hxx>
 #include <svx/svdomeas.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <svl/itemiter.hxx>
 #include <svx/xenum.hxx>
 #include <svx/xlineit0.hxx>
@@ -46,7 +46,7 @@
 
 #include <editeng/editdata.hxx>
 #include <editeng/colritem.hxx>
-#include "editeng/fontitem.hxx"
+#include <editeng/fontitem.hxx>
 #include <editeng/fhgtitem.hxx>
 
 #include <svx/xlnstcit.hxx>
@@ -70,17 +70,19 @@
 #include <svx/xlnstit.hxx>
 #include <sdr/properties/attributeproperties.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
-#include "svx/xlinjoit.hxx"
+#include <svx/xlinjoit.hxx>
+#include <o3tl/make_unique.hxx>
 
 using namespace com::sun::star;
 
-sdr::properties::BaseProperties* SdrAttrObj::CreateObjectSpecificProperties()
+std::unique_ptr<sdr::properties::BaseProperties> SdrAttrObj::CreateObjectSpecificProperties()
 {
-    return new sdr::properties::AttributeProperties(*this);
+    return o3tl::make_unique<sdr::properties::AttributeProperties>(*this);
 }
 
 
-SdrAttrObj::SdrAttrObj()
+SdrAttrObj::SdrAttrObj(SdrModel& rSdrModel)
+:   SdrObject(rSdrModel)
 {
 }
 
@@ -88,7 +90,7 @@ SdrAttrObj::~SdrAttrObj()
 {
 }
 
-const Rectangle& SdrAttrObj::GetSnapRect() const
+const tools::Rectangle& SdrAttrObj::GetSnapRect() const
 {
     if(bSnapRectDirty)
     {
@@ -99,41 +101,21 @@ const Rectangle& SdrAttrObj::GetSnapRect() const
     return maSnapRect;
 }
 
-void SdrAttrObj::SetModel(SdrModel* pNewModel)
-{
-    SdrModel* pOldModel = pModel;
-
-    // test for correct pool in ItemSet; move to new pool if necessary
-    if(pNewModel && &GetObjectItemPool() != &pNewModel->GetItemPool())
-    {
-        MigrateItemPool(&GetObjectItemPool(), &pNewModel->GetItemPool(), pNewModel);
-    }
-
-    // call parent
-    SdrObject::SetModel(pNewModel);
-
-    // modify properties
-    GetProperties().SetModel(pOldModel, pNewModel);
-}
-
-
 // syntactical sugar for ItemSet accesses
-
 void SdrAttrObj::Notify(SfxBroadcaster& /*rBC*/, const SfxHint& rHint)
 {
-    const SfxSimpleHint* pSimple = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    bool bDataChg(pSimple && SFX_HINT_DATACHANGED == pSimple->GetId());
+    bool bDataChg(SfxHintId::DataChanged == rHint.GetId());
 
     if(bDataChg)
     {
-        Rectangle aBoundRect = GetLastBoundRect();
+        tools::Rectangle aBoundRect = GetLastBoundRect();
         SetBoundRectDirty();
         SetRectsDirty(true);
 
         // This may have led to object change
         SetChanged();
         BroadcastObjectChange();
-        SendUserCall(SDRUSERCALL_CHGATTR, aBoundRect);
+        SendUserCall(SdrUserCallType::ChangeAttr, aBoundRect);
     }
 }
 
@@ -141,9 +123,9 @@ sal_Int32 SdrAttrObj::ImpGetLineWdt() const
 {
     sal_Int32 nRetval(0);
 
-    if(drawing::LineStyle_NONE != static_cast<const XLineStyleItem&>(GetObjectItem(XATTR_LINESTYLE)).GetValue())
+    if(drawing::LineStyle_NONE != GetObjectItem(XATTR_LINESTYLE).GetValue())
     {
-        nRetval = static_cast<const XLineWidthItem&>(GetObjectItem(XATTR_LINEWIDTH)).GetValue();
+        nRetval = GetObjectItem(XATTR_LINEWIDTH).GetValue();
     }
 
     return nRetval;
@@ -151,12 +133,12 @@ sal_Int32 SdrAttrObj::ImpGetLineWdt() const
 
 bool SdrAttrObj::HasFill() const
 {
-    return bClosedObj && static_cast<const XFillStyleItem&>(GetProperties().GetObjectItemSet().Get(XATTR_FILLSTYLE)).GetValue() != drawing::FillStyle_NONE;
+    return bClosedObj && GetProperties().GetObjectItemSet().Get(XATTR_FILLSTYLE).GetValue() != drawing::FillStyle_NONE;
 }
 
 bool SdrAttrObj::HasLine() const
 {
-    return static_cast<const XLineStyleItem&>(GetProperties().GetObjectItemSet().Get(XATTR_LINESTYLE)).GetValue() != drawing::LineStyle_NONE;
+    return GetProperties().GetObjectItemSet().Get(XATTR_LINESTYLE).GetValue() != drawing::LineStyle_NONE;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

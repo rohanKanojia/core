@@ -19,9 +19,9 @@
 
 #include <vcl/event.hxx>
 #include <vcl/imgctrl.hxx>
-#include <tools/rcid.h>
 
 #include <com/sun/star/awt/ImageScaleMode.hpp>
+#include <osl/diagnose.h>
 
 namespace ImageScaleMode = css::awt::ImageScaleMode;
 
@@ -47,7 +47,7 @@ void ImageControl::Resize()
 
 namespace
 {
-    Size lcl_calcPaintSize( const Rectangle& _rPaintRect, const Size& _rBitmapSize )
+    Size lcl_calcPaintSize( const tools::Rectangle& _rPaintRect, const Size& _rBitmapSize )
     {
         const Size aPaintSize = _rPaintRect.GetSize();
 
@@ -58,28 +58,24 @@ namespace
         return Size( long( _rBitmapSize.Width() * nRatioMin ), long( _rBitmapSize.Height() * nRatioMin ) );
     }
 
-    Point lcl_centerWithin( const Rectangle& _rArea, const Size& _rObjectSize )
+    Point lcl_centerWithin( const tools::Rectangle& _rArea, const Size& _rObjectSize )
     {
         Point aPos( _rArea.TopLeft() );
-        aPos.X() += ( _rArea.GetWidth() - _rObjectSize.Width() ) / 2;
-        aPos.Y() += ( _rArea.GetHeight() - _rObjectSize.Height() ) / 2;
+        aPos.AdjustX(( _rArea.GetWidth() - _rObjectSize.Width() ) / 2 );
+        aPos.AdjustY(( _rArea.GetHeight() - _rObjectSize.Height() ) / 2 );
         return aPos;
     }
 }
 
-void ImageControl::ImplDraw(OutputDevice& rDev, DrawFlags nDrawFlags, const Point& rPos, const Size& rSize) const
+void ImageControl::ImplDraw(OutputDevice& rDev, const Point& rPos, const Size& rSize) const
 {
     DrawImageFlags nStyle = DrawImageFlags::NONE;
-    if ( !(nDrawFlags & DrawFlags::NoDisable) )
-    {
-        if ( !IsEnabled() )
-            nStyle |= DrawImageFlags::Disable;
-    }
+    if ( !IsEnabled() )
+        nStyle |= DrawImageFlags::Disable;
 
     const Image& rImage( GetModeImage() );
-    const Image* pImage = &rImage;
-    const Rectangle aDrawRect( rPos, rSize );
-    if ( !*pImage )
+    const tools::Rectangle aDrawRect( rPos, rSize );
+    if (!rImage)
     {
         OUString  sText( GetText() );
         if ( sText.isEmpty() )
@@ -87,31 +83,27 @@ void ImageControl::ImplDraw(OutputDevice& rDev, DrawFlags nDrawFlags, const Poin
 
         WinBits nWinStyle = GetStyle();
         DrawTextFlags nTextStyle = FixedText::ImplGetTextStyle( nWinStyle );
-        if ( !(nDrawFlags & DrawFlags::NoDisable) )
-            if ( !IsEnabled() )
-                nTextStyle |= DrawTextFlags::Disable;
+        if ( !IsEnabled() )
+            nTextStyle |= DrawTextFlags::Disable;
 
         rDev.DrawText( aDrawRect, sText, nTextStyle );
         return;
     }
 
-    const Size&      rBitmapSize = pImage->GetSizePixel();
+    const Size& rBitmapSize = rImage.GetSizePixel();
 
     switch ( mnScaleMode )
     {
     case ImageScaleMode::NONE:
     {
-        rDev.DrawImage( lcl_centerWithin( aDrawRect, rBitmapSize ), *pImage, nStyle );
+        rDev.DrawImage(lcl_centerWithin( aDrawRect, rBitmapSize ), rImage, nStyle);
     }
     break;
 
     case ImageScaleMode::ISOTROPIC:
     {
         const Size aPaintSize = lcl_calcPaintSize( aDrawRect, rBitmapSize );
-        rDev.DrawImage(
-            lcl_centerWithin( aDrawRect, aPaintSize ),
-            aPaintSize,
-            *pImage, nStyle );
+        rDev.DrawImage(lcl_centerWithin(aDrawRect, aPaintSize), aPaintSize, rImage, nStyle);
     }
     break;
 
@@ -120,7 +112,7 @@ void ImageControl::ImplDraw(OutputDevice& rDev, DrawFlags nDrawFlags, const Poin
         rDev.DrawImage(
             aDrawRect.TopLeft(),
             aDrawRect.GetSize(),
-            *pImage, nStyle );
+            rImage, nStyle );
     }
     break;
 
@@ -131,48 +123,49 @@ void ImageControl::ImplDraw(OutputDevice& rDev, DrawFlags nDrawFlags, const Poin
     }   // switch ( mnScaleMode )
 }
 
-void ImageControl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void ImageControl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
-    ImplDraw(rRenderContext, DrawFlags::NONE, Point(), GetOutputSizePixel());
+    ImplDraw(rRenderContext, Point(), GetOutputSizePixel());
 
-    if (HasFocus())
-    {
-        vcl::Window* pBorderWindow = GetWindow(GetWindowType::Border);
+    if (!HasFocus())
+        return;
 
-        bool bFlat = (GetBorderStyle() == WindowBorderStyle::MONO);
-        Rectangle aRect(Point(0,0), pBorderWindow->GetOutputSizePixel());
-        Color oldLineCol = pBorderWindow->GetLineColor();
-        Color oldFillCol = pBorderWindow->GetFillColor();
-        pBorderWindow->SetFillColor();
-        pBorderWindow->SetLineColor(bFlat ? COL_WHITE : COL_BLACK);
-        pBorderWindow->DrawRect(aRect);
-        ++aRect.Left();
-        --aRect.Right();
-        ++aRect.Top();
-        --aRect.Bottom();
-        pBorderWindow->SetLineColor(bFlat ? COL_BLACK : COL_WHITE);
-        pBorderWindow->DrawRect(aRect);
-        pBorderWindow->SetLineColor(oldLineCol);
-        pBorderWindow->SetFillColor(oldFillCol);
-    }
+    vcl::Window* pBorderWindow = GetWindow(GetWindowType::Border);
+
+    bool bFlat = (GetBorderStyle() == WindowBorderStyle::MONO);
+    tools::Rectangle aRect(Point(0,0), pBorderWindow->GetOutputSizePixel());
+    Color oldLineCol = pBorderWindow->GetLineColor();
+    Color oldFillCol = pBorderWindow->GetFillColor();
+    pBorderWindow->SetFillColor();
+    pBorderWindow->SetLineColor(bFlat ? COL_WHITE : COL_BLACK);
+    pBorderWindow->DrawRect(aRect);
+    aRect.AdjustLeft( 1 );
+    aRect.AdjustRight( -1 );
+    aRect.AdjustTop( 1 );
+    aRect.AdjustBottom( -1 );
+    pBorderWindow->SetLineColor(bFlat ? COL_BLACK : COL_WHITE);
+    pBorderWindow->DrawRect(aRect);
+    pBorderWindow->SetLineColor(oldLineCol);
+    pBorderWindow->SetFillColor(oldFillCol);
+
 }
 
-void ImageControl::Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize, DrawFlags nFlags )
+void ImageControl::Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize, DrawFlags )
 {
     const Point     aPos  = pDev->LogicToPixel( rPos );
     const Size      aSize = pDev->LogicToPixel( rSize );
-          Rectangle aRect( aPos, aSize );
+          tools::Rectangle aRect( aPos, aSize );
 
     pDev->Push();
     pDev->SetMapMode();
 
     // Border
-    if ( !(nFlags & DrawFlags::NoBorder) && (GetStyle() & WB_BORDER) )
+    if ( GetStyle() & WB_BORDER )
     {
         ImplDrawFrame( pDev, aRect );
     }
     pDev->IntersectClipRegion( aRect );
-    ImplDraw( *pDev, nFlags, aRect.TopLeft(), aRect.GetSize() );
+    ImplDraw( *pDev, aRect.TopLeft(), aRect.GetSize() );
 
     pDev->Pop();
 }

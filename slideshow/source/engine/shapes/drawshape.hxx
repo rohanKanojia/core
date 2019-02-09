@@ -23,11 +23,11 @@
 #include <osl/diagnose.hxx>
 #include <com/sun/star/drawing/XShape.hpp>
 
-#include "attributableshape.hxx"
-#include "doctreenodesupplier.hxx"
+#include <attributableshape.hxx>
+#include <doctreenodesupplier.hxx>
 #include "gdimtftools.hxx"
 #include "viewshape.hxx"
-#include "hyperlinkarea.hxx"
+#include <hyperlinkarea.hxx>
 
 #include <boost/optional.hpp>
 #include <set>
@@ -114,7 +114,7 @@ namespace slideshow
 
             virtual css::uno::Reference< css::drawing::XShape > getXShape() const override;
 
-            virtual ~DrawShape();
+            virtual ~DrawShape() override;
 
 
             // View layer methods
@@ -199,7 +199,7 @@ namespace slideshow
                 crafted metafile, usable to display drawing layer text
                 animations.
             */
-            GDIMetaFileSharedPtr forceScrollTextMetaFile();
+            GDIMetaFileSharedPtr const & forceScrollTextMetaFile();
 
         private:
             /** Create a shape for the given XShape
@@ -262,8 +262,8 @@ namespace slideshow
              */
             DrawShape( const DrawShape&, const DocTreeNode& rTreeNode, double nPrio );
 
-            int  getUpdateFlags() const;
-            bool implRender( int nUpdateFlags ) const;
+            UpdateFlags getUpdateFlags() const;
+            bool implRender( UpdateFlags nUpdateFlags ) const;
             void updateStateIds() const;
 
             ViewShape::RenderArgs   getViewRenderArgs() const;
@@ -337,10 +337,7 @@ namespace slideshow
             int                                                                     mnIsAnimatedCount;
 
             /// Number of times the bitmap animation shall loop
-            ::std::size_t                                                           mnAnimationLoopCount;
-
-            /// Cycle mode for bitmap animation
-            CycleMode                                                               meCycleMode;
+            sal_uInt32                                                              mnAnimationLoopCount;
 
             /// Whether shape is visible (without attribute layers)
             bool                                                                    mbIsVisible;

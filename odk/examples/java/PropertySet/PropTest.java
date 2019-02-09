@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -56,7 +57,7 @@ import com.sun.star.lang.XTypeProvider;
 import com.sun.star.beans.PropertyAttribute;
 
 /**
-   This component contains the followin properties:
+   This component contains the following properties:
  *  <table border>
  *  <tr>
  *  <th> Property Name </th>
@@ -257,3 +258,5 @@ public class PropTest extends PropertySet implements XServiceInfo
         return xSingleServiceFactory;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

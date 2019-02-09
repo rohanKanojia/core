@@ -29,12 +29,12 @@ class ListGalleriesEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 nIndex;
 public:
     explicit ListGalleriesEnumWrapper( SwVbaListGalleries* pGalleries ) : pListGalleries( pGalleries ), nIndex( 1 ) {}
-    virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasMoreElements(  ) override
     {
         return ( nIndex <= pListGalleries->getCount() );
     }
 
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         if ( nIndex <= pListGalleries->getCount() )
             return pListGalleries->Item( uno::makeAny( nIndex++ ), uno::Any() );
@@ -42,20 +42,20 @@ public:
     }
 };
 
-SwVbaListGalleries::SwVbaListGalleries( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< text::XTextDocument >& xTextDoc ) throw (uno::RuntimeException) : SwVbaListGalleries_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >() ),  mxTextDocument( xTextDoc )
+SwVbaListGalleries::SwVbaListGalleries( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< text::XTextDocument >& xTextDoc ) : SwVbaListGalleries_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >() ),  mxTextDocument( xTextDoc )
 {
 }
 
-::sal_Int32 SAL_CALL SwVbaListGalleries::getCount() throw (uno::RuntimeException)
+::sal_Int32 SAL_CALL SwVbaListGalleries::getCount()
 {
     // 3 types of list( bullet, numbered and outline )
     return 3;
 }
 
-uno::Any SAL_CALL SwVbaListGalleries::Item( const uno::Any& Index1, const uno::Any& /*not processed in this base class*/ ) throw (uno::RuntimeException)
+uno::Any SAL_CALL SwVbaListGalleries::Item( const uno::Any& Index1, const uno::Any& /*not processed in this base class*/ )
 {
     sal_Int32 nIndex = 0;
-    if( ( Index1 >>= nIndex ) )
+    if( Index1 >>= nIndex )
     {
         if( nIndex == word::WdListGalleryType::wdBulletGallery
             || nIndex == word::WdListGalleryType::wdNumberGallery
@@ -67,13 +67,13 @@ uno::Any SAL_CALL SwVbaListGalleries::Item( const uno::Any& Index1, const uno::A
 
 // XEnumerationAccess
 uno::Type
-SwVbaListGalleries::getElementType() throw (uno::RuntimeException)
+SwVbaListGalleries::getElementType()
 {
     return cppu::UnoType<word::XListGallery>::get();
 }
 
 uno::Reference< container::XEnumeration >
-SwVbaListGalleries::createEnumeration() throw (uno::RuntimeException)
+SwVbaListGalleries::createEnumeration()
 {
     return new ListGalleriesEnumWrapper( this );
 }
@@ -93,12 +93,10 @@ SwVbaListGalleries::getServiceImplName()
 css::uno::Sequence<OUString>
 SwVbaListGalleries::getServiceNames()
 {
-    static uno::Sequence< OUString > sNames;
-    if ( sNames.getLength() == 0 )
+    static uno::Sequence< OUString > const sNames
     {
-        sNames.realloc( 1 );
-        sNames[0] = "ooo.vba.word.ListGalleries";
-    }
+        "ooo.vba.word.ListGalleries"
+    };
     return sNames;
 }
 

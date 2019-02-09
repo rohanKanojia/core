@@ -21,7 +21,7 @@
 #define INCLUDED_IDL_INC_LEX_HXX
 
 #include <sal/types.h>
-#include <hash.hxx>
+#include "hash.hxx"
 #include <tools/stream.hxx>
 #include <vector>
 #include <memory>
@@ -40,7 +40,7 @@ friend class SvTokenStream;
     OString                 aString;
     union
     {
-        sal_uLong           nLong;
+        sal_uInt64           nLong;
         bool                bBool;
         char                cChar;
         SvStringHashEntry * pHash;
@@ -59,7 +59,6 @@ public:
     void        SetColumn( sal_uLong nColumnP ) { nColumn = nColumnP;   }
     sal_uLong   GetColumn() const           { return nColumn;       }
 
-    bool        IsEmpty() const     { return nType == SVTOKENTYPE::Empty; }
     bool        IsComment() const   { return nType == SVTOKENTYPE::Comment; }
     bool        IsInteger() const   { return nType == SVTOKENTYPE::Integer; }
     bool        IsString() const    { return nType == SVTOKENTYPE::String; }
@@ -80,15 +79,13 @@ public:
                         ? pHash->GetName()
                         : aString;
                 }
-    sal_uLong   GetNumber() const       { return nLong;         }
+    sal_uInt64   GetNumber() const       { return nLong;         }
     bool        GetBool() const         { return bBool;         }
     char        GetChar() const         { return cChar;         }
 
     void        SetHash( SvStringHashEntry * pHashP )
                 { pHash = pHashP; nType = SVTOKENTYPE::HashId; }
-    bool        HasHash() const
-                { return nType == SVTOKENTYPE::HashId; }
-    bool        Is( SvStringHashEntry * pEntry ) const
+    bool        Is( SvStringHashEntry const * pEntry ) const
                 { return IsIdentifierHash() && pHash == pEntry; }
 };
 
@@ -102,15 +99,15 @@ inline SvToken::SvToken()
 class SvTokenStream
 {
     sal_uLong       nLine, nColumn;
-    int             nBufPos;
-    int             c;          // next character
-    sal_uInt16      nTabSize;   // length of tabulator
+    sal_Int32       nBufPos;
+    char            c;          // next character
+    static const sal_uInt16 nTabSize = 4;   // length of tabulator
     OString         aStrTrue;
     OString         aStrFalse;
     sal_uLong       nMaxPos;
 
-    SvFileStream *  pInStream;
-    OUString        aFileName;
+    std::unique_ptr<SvFileStream>          pInStream;
+    OUString                               aFileName;
     std::vector<std::unique_ptr<SvToken> > aTokList;
     std::vector<std::unique_ptr<SvToken> >::iterator pCurToken;
 
@@ -118,8 +115,8 @@ class SvTokenStream
 
     void            InitCtor();
 
-    int             GetNextChar();
-    int             GetFastNextChar()
+    char            GetNextChar();
+    char            GetFastNextChar()
                     {
                         return (nBufPos < aBufStr.getLength())
                             ? aBufStr[nBufPos++]
@@ -127,9 +124,9 @@ class SvTokenStream
                     }
 
     void            FillTokenList();
-    sal_uLong       GetNumber();
+    sal_uInt64       GetNumber();
     bool            MakeToken( SvToken & );
-    bool            IsEof() const { return pInStream->IsEof(); }
+    bool            IsEof() const { return pInStream->eof(); }
     void            SetMax()
                     {
                         sal_uLong n = Tell();
@@ -141,7 +138,7 @@ class SvTokenStream
                         // if end of line spare calculation
                         if( 0 != c )
                         {
-                            sal_uInt16 n = 0;
+                            sal_Int32 n = 0;
                             nColumn = 0;
                             while( n < nBufPos )
                                 nColumn += aBufStr[n++] == '\t' ? nTabSize : 1;
@@ -190,27 +187,14 @@ public:
             return false;
     }
 
-    bool     ReadIf( SvStringHashEntry* pEntry )
-    {
-        if( GetToken().Is( pEntry ) )
-        {
-            GetToken_Next();
-            return true;
-        }
-        else
-            return false;
-    }
-
-    bool     ReadIfDelimiter()
+    void     ReadIfDelimiter()
     {
         if( GetToken().IsChar()
             && (';' == GetToken().GetChar()
                  || ',' == GetToken().GetChar()) )
         {
             GetToken_Next();
-            return true;
         }
-        return false;
     }
 
     sal_uInt32 Tell() const { return pCurToken-aTokList.begin(); }

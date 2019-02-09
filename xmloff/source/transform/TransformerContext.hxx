@@ -41,8 +41,8 @@ class XMLTransformerContext : public ::salhelper::SimpleReferenceObject
 
     std::unique_ptr<SvXMLNamespaceMap>   m_xRewindMap;
 
-    SvXMLNamespaceMap  *TakeRewindMap() { return m_xRewindMap.release(); }
-    void PutRewindMap( SvXMLNamespaceMap *p ) { m_xRewindMap.reset(p); }
+    std::unique_ptr<SvXMLNamespaceMap>  TakeRewindMap() { return std::move(m_xRewindMap); }
+    void PutRewindMap( std::unique_ptr<SvXMLNamespaceMap> p ) { m_xRewindMap = std::move(p); }
 
 protected:
 
@@ -63,12 +63,6 @@ public:
     // StartElement instead if this is required.
     XMLTransformerContext( XMLTransformerBase& rTransformer,
                         const OUString& rQName );
-
-    // A contexts destructor does anything that is required if an element
-    // ends. By default, nothing is done.
-    // Note that virtual methods cannot be used inside destructors. Use
-    // EndElement instead if this is required.
-    virtual ~XMLTransformerContext();
 
     // Create a children element context. By default, the import's
     // CreateContext method is called to create a new default context.

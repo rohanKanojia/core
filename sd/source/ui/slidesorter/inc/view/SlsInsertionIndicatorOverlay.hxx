@@ -20,10 +20,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSINSERTIONINDICATOROVERLAY_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSINSERTIONINDICATOROVERLAY_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
-#include "view/SlsILayerPainter.hxx"
-#include "controller/SlsTransferableData.hxx"
-#include "sdxfer.hxx"
+#include <view/SlsILayerPainter.hxx>
+#include <controller/SlsTransferableData.hxx>
 
 #include <tools/gen.hxx>
 #include <vcl/bitmapex.hxx>
@@ -31,20 +29,17 @@
 #include <vector>
 
 class OutputDevice;
+class SdTransferable;
 
 namespace sd { namespace slidesorter {
 class SlideSorter;
 } }
 
-namespace sd { namespace slidesorter { namespace controller {
-class Transferable;
-} } }
-
 namespace sd { namespace slidesorter { namespace view {
 
 class FramePainter;
 
-/** The insertion indicator is painted as a vertical or horizonal bar
+/** The insertion indicator is painted as a vertical or horizontal bar
     in the space between slides.
 */
 class InsertionIndicatorOverlay
@@ -53,7 +48,7 @@ class InsertionIndicatorOverlay
 {
 public:
     InsertionIndicatorOverlay (SlideSorter& rSlideSorter);
-    virtual ~InsertionIndicatorOverlay();
+    virtual ~InsertionIndicatorOverlay() COVERITY_NOEXCEPT_FALSE override;
 
     virtual void SetLayerInvalidator (const SharedILayerInvalidator& rpInvalidator) override;
 
@@ -69,18 +64,17 @@ public:
 
     virtual void Paint (
         OutputDevice& rDevice,
-        const Rectangle& rRepaintArea) override;
+        const ::tools::Rectangle& rRepaintArea) override;
 
     bool IsVisible() const { return mbIsVisible;}
     void Hide();
     void Show();
 
-    Rectangle GetBoundingBox() const;
+    ::tools::Rectangle GetBoundingBox() const;
 
 private:
     SlideSorter& mrSlideSorter;
     bool mbIsVisible;
-    const sal_Int32 mnLayerIndex;
     SharedILayerInvalidator mpLayerInvalidator;
     // Center of the insertion indicator.
     Point maLocation;

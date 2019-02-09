@@ -22,17 +22,17 @@
 #include <exception>
 #include <typeinfo>
 
-#include "rtl/alloc.h"
-#include "rtl/ustrbuf.hxx"
+#include <rtl/alloc.h>
 
 #include <com/sun/star/uno/genfunc.hxx>
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <o3tl/runtimetooustring.hxx>
 #include <uno/data.h>
 
-#include <bridges/cpp_uno/shared/bridge.hxx>
-#include <bridges/cpp_uno/shared/types.hxx>
-#include "bridges/cpp_uno/shared/unointerfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/vtables.hxx"
+#include <bridge.hxx>
+#include <types.hxx>
+#include <unointerfaceproxy.hxx>
+#include <vtables.hxx>
 
 #include "abi.hxx"
 #include "callvirtualmethod.hxx"
@@ -95,14 +95,6 @@ void INSERT_INT8(
         *pDS++ = *static_cast<sal_uInt8 const *>( pSV );
 }
 
-void appendCString(OUStringBuffer & buffer, char const * text) {
-    if (text != nullptr) {
-        buffer.append(
-            OStringToOUString(OString(text), RTL_TEXTENCODING_ISO_8859_1));
-            // use 8859-1 to avoid conversion failure
-    }
-}
-
 }
 
 static void cpp_call(
@@ -112,10 +104,10 @@ static void cpp_call(
     sal_Int32 nParams, typelib_MethodParameter * pParams,
     void * pUnoReturn, void * pUnoArgs[], uno_Any ** ppUnoExc )
 {
-    // Maxium space for [complex ret ptr], values | ptr ...
+    // Maximum space for [complex ret ptr], values | ptr ...
     // (but will be used less - some of the values will be in pGPR and pFPR)
-      sal_uInt64 *pStack = static_cast<sal_uInt64 *>(__builtin_alloca( (nParams + 3) * sizeof(sal_uInt64) ));
-      sal_uInt64 *pStackStart = pStack;
+    sal_uInt64 *pStack = static_cast<sal_uInt64 *>(__builtin_alloca( (nParams + 3) * sizeof(sal_uInt64) ));
+    sal_uInt64 *pStackStart = pStack;
 
     sal_uInt64 pGPR[x86_64::MAX_GPR_REGS];
     sal_uInt32 nGPR = 0;
@@ -168,7 +160,8 @@ static void cpp_call(
 
         if (!rParam.bOut && bridges::cpp_uno::shared::isSimpleType( pParamTypeDescr ))
         {
-            uno_copyAndConvertData( pCppArgs[nPos] = alloca( 8 ), pUnoArgs[nPos], pParamTypeDescr,
+            pCppArgs[nPos] = alloca( 8 );
+            uno_copyAndConvertData( pCppArgs[nPos], pUnoArgs[nPos], pParamTypeDescr,
                                     pThis->getBridge()->getUno2Cpp() );
 
             switch (pParamTypeDescr->eTypeClass)
@@ -207,9 +200,8 @@ static void cpp_call(
             if (! rParam.bIn) // is pure out
             {
                 // cpp out is constructed mem, uno out is not!
-                uno_constructData(
-                    pCppArgs[nPos] = alloca( pParamTypeDescr->nSize ),
-                    pParamTypeDescr );
+                pCppArgs[nPos] = alloca( pParamTypeDescr->nSize );
+                uno_constructData( pCppArgs[nPos], pParamTypeDescr );
                 pTempIndices[nTempIndices] = nPos; // default constructed for cpp call
                 // will be released at reconversion
                 ppTempParamTypeDescr[nTempIndices++] = pParamTypeDescr;
@@ -217,9 +209,9 @@ static void cpp_call(
             // is in/inout
             else if (bridges::cpp_uno::shared::relatesToInterfaceType( pParamTypeDescr ))
             {
+                pCppArgs[nPos] = alloca( pParamTypeDescr->nSize );
                 uno_copyAndConvertData(
-                    pCppArgs[nPos] = alloca( pParamTypeDescr->nSize ),
-                    pUnoArgs[nPos], pParamTypeDescr, pThis->getBridge()->getUno2Cpp() );
+                    pCppArgs[nPos], pUnoArgs[nPos], pParamTypeDescr, pThis->getBridge()->getUno2Cpp() );
 
                 pTempIndices[nTempIndices] = nPos; // has to be reconverted
                 // will be released at reconversion
@@ -246,12 +238,9 @@ static void cpp_call(
         } catch (const Exception &) {
             throw;
         } catch (const std::exception & e) {
-            OUStringBuffer buf;
-            buf.append("C++ code threw ");
-            appendCString(buf, typeid(e).name());
-            buf.append(": ");
-            appendCString(buf, e.what());
-            throw RuntimeException(buf.makeStringAndClear());
+            throw RuntimeException(
+                "C++ code threw " + o3tl::runtimeToOUString(typeid(e).name())
+                + ": " + o3tl::runtimeToOUString(e.what()));
         } catch (...) {
             throw RuntimeException("C++ code threw unknown exception");
         }
@@ -293,10 +282,8 @@ static void cpp_call(
     }
      catch (...)
      {
-         // fill uno exception
-         CPPU_CURRENT_NAMESPACE::fillUnoException(
-             __cxxabiv1::__cxa_get_globals()->caughtExceptions,
-             *ppUnoExc, pThis->getBridge()->getCpp2Uno());
+        // fill uno exception
+        CPPU_CURRENT_NAMESPACE::fillUnoException(*ppUnoExc, pThis->getBridge()->getCpp2Uno());
 
         // temporary params
         for ( ; nTempIndices--; )
@@ -322,19 +309,15 @@ void unoInterfaceProxyDispatch(
     // is my surrogate
     bridges::cpp_uno::shared::UnoInterfaceProxy * pThis
         = static_cast< bridges::cpp_uno::shared::UnoInterfaceProxy * >(pUnoI);
-#if OSL_DEBUG_LEVEL > 0
-    typelib_InterfaceTypeDescription * pTypeDescr = pThis->pTypeDescr;
-#endif
 
     switch (pMemberDescr->eTypeClass)
     {
     case typelib_TypeClass_INTERFACE_ATTRIBUTE:
     {
-#if OSL_DEBUG_LEVEL > 0
-        // determine vtable call index
-        sal_Int32 nMemberPos = reinterpret_cast<typelib_InterfaceMemberTypeDescription const *>(pMemberDescr)->nPosition;
-        assert(nMemberPos < pTypeDescr->nAllMembers);
-#endif
+        assert(
+            (reinterpret_cast<typelib_InterfaceMemberTypeDescription const *>(pMemberDescr)
+             ->nPosition)
+            < pThis->pTypeDescr->nAllMembers);
         VtableSlot aVtableSlot(
                 getVtableSlot(
                     reinterpret_cast<
@@ -356,8 +339,8 @@ void unoInterfaceProxyDispatch(
             typelib_MethodParameter aParam;
             aParam.pTypeRef =
                 reinterpret_cast<typelib_InterfaceAttributeTypeDescription const *>(pMemberDescr)->pAttributeTypeRef;
-            aParam.bIn      = sal_True;
-            aParam.bOut     = sal_False;
+            aParam.bIn      = true;
+            aParam.bOut     = false;
 
             typelib_TypeDescriptionReference * pReturnTypeRef = nullptr;
             OUString aVoidName("void");
@@ -379,11 +362,10 @@ void unoInterfaceProxyDispatch(
     }
     case typelib_TypeClass_INTERFACE_METHOD:
     {
-#if OSL_DEBUG_LEVEL > 0
-        // determine vtable call index
-        sal_Int32 nMemberPos = reinterpret_cast<typelib_InterfaceMemberTypeDescription const *>(pMemberDescr)->nPosition;
-        assert(nMemberPos < pTypeDescr->nAllMembers);
-#endif
+        assert(
+            (reinterpret_cast<typelib_InterfaceMemberTypeDescription const *>(pMemberDescr)
+             ->nPosition)
+            < pThis->pTypeDescr->nAllMembers);
         VtableSlot aVtableSlot(
                 getVtableSlot(
                     reinterpret_cast<
@@ -424,7 +406,8 @@ void unoInterfaceProxyDispatch(
                 }
                 TYPELIB_DANGER_RELEASE( pTD );
             }
-        } // else perform queryInterface()
+            [[fallthrough]]; // else perform queryInterface()
+        }
         default:
             // dependent dispatch
             cpp_call(
@@ -439,7 +422,7 @@ void unoInterfaceProxyDispatch(
     default:
     {
         ::com::sun::star::uno::RuntimeException aExc(
-            OUString("illegal member type description!"),
+            "illegal member type description!",
             ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >() );
 
         Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();

@@ -21,9 +21,8 @@
 #define INCLUDED_WRITERFILTER_SOURCE_DMAPPER_GRAPHICHELPERS_HXX
 
 #include "LoggedResources.hxx"
+#include <com/sun/star/text/WrapTextMode.hpp>
 
-#include <memory>
-#include <map>
 #include <utility>
 
 namespace writerfilter {
@@ -34,7 +33,7 @@ class PositionHandler: public LoggedProperties
 {
 public:
     PositionHandler( std::pair<OUString, OUString>& rPositionOffsets, std::pair<OUString, OUString>& rAligns );
-    virtual ~PositionHandler( );
+    virtual ~PositionHandler( ) override;
     sal_Int16 orientation() const;
     sal_Int16 relation() const { return m_nRelation;}
     sal_Int32 position() const { return m_nPosition;}
@@ -47,22 +46,32 @@ public:
     std::pair<OUString, OUString>& m_rPositionOffsets;
     std::pair<OUString, OUString>& m_rAligns;
 };
-typedef std::shared_ptr<PositionHandler> PositionHandlerPtr;
 
 class WrapHandler: public LoggedProperties
 {
 public:
     WrapHandler( );
-    virtual ~WrapHandler( );
+    virtual ~WrapHandler( ) override;
 
     sal_Int32 m_nType;
     sal_Int32 m_nSide;
 
-    sal_Int32 getWrapMode( );
+    css::text::WrapTextMode getWrapMode( );
 
  private:
     virtual void lcl_attribute( Id aName, Value& rVal ) override;
     virtual void lcl_sprm( Sprm& rSprm ) override;
+};
+
+/// Keeps track of the next available unique automatic name.
+class GraphicNamingHelper
+{
+    int m_nCounter;
+
+public:
+    GraphicNamingHelper();
+    /// Name a graphic based on rTemplate.
+    OUString NameGraphic(const OUString& rTemplate);
 };
 
 } }

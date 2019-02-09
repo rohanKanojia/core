@@ -18,9 +18,7 @@
  */
 
 
-#include "codemaker/options.hxx"
-
-using ::rtl::OString;
+#include <codemaker/options.hxx>
 
 Options::Options()
 {
@@ -37,8 +35,7 @@ bool Options::isValid(const OString& option) const
     return m_options.find(option) != m_options.end();
 }
 
-const OString Options::getOption(const OString& option) const
-    throw( IllegalArgument )
+const OString& Options::getOption(const OString& option) const
 {
     OptionMap::const_iterator i(m_options.find(option));
     if (i == m_options.end()) {

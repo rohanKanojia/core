@@ -20,8 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_HELPER_OCOMPONENTACCESS_HXX
 #define INCLUDED_FRAMEWORK_INC_HELPER_OCOMPONENTACCESS_HXX
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 #include <general.h>
 
 #include <com/sun/star/frame/XFramesSupplier.hpp>
@@ -91,7 +89,7 @@ class OComponentAccess  :   public ::cppu::WeakImplHelper< css::container::XEnum
                         An NULL-reference, other way.
         *//*-*****************************************************************************************************/
 
-        virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() throw( css::uno::RuntimeException, std::exception ) override;
+        virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration() override;
 
         //  XElementAccess
 
@@ -102,7 +100,7 @@ class OComponentAccess  :   public ::cppu::WeakImplHelper< css::container::XEnum
             @return     The uno-type XComponent.
         *//*-*****************************************************************************************************/
 
-        virtual css::uno::Type SAL_CALL getElementType() throw( css::uno::RuntimeException, std::exception ) override;
+        virtual css::uno::Type SAL_CALL getElementType() override;
 
         /*-****************************************************************************************************
             @short      get state of componentlist of enumeration.
@@ -111,7 +109,7 @@ class OComponentAccess  :   public ::cppu::WeakImplHelper< css::container::XEnum
             @return     sal_False ,otherwise.
         *//*-*****************************************************************************************************/
 
-        virtual sal_Bool SAL_CALL hasElements() throw( css::uno::RuntimeException, std::exception ) override;
+        virtual sal_Bool SAL_CALL hasElements() override;
 
     //  protected methods
 
@@ -120,14 +118,14 @@ class OComponentAccess  :   public ::cppu::WeakImplHelper< css::container::XEnum
         /*-****************************************************************************************************
             @short      standard destructor
             @descr      This method destruct an instance of this class and clear some member.
-                        Don't use an instance of this class as normal member. Use it dynamicly with a pointer.
+                        Don't use an instance of this class as normal member. Use it dynamically with a pointer.
                         We hold a weakreference to our owner and not to our superclass!
-                        Thats the reason for a protected dtor.
+                        That's the reason for a protected dtor.
 
             @seealso    class Desktop
         *//*-*****************************************************************************************************/
 
-        virtual ~OComponentAccess();
+        virtual ~OComponentAccess() override;
 
 
     private:
@@ -159,30 +157,6 @@ class OComponentAccess  :   public ::cppu::WeakImplHelper< css::container::XEnum
         *//*-*****************************************************************************************************/
 
         css::uno::Reference< css::lang::XComponent > impl_getFrameComponent( const css::uno::Reference< css::frame::XFrame >& xFrame ) const;
-
-    //  debug methods
-    //  (should be private everyway!)
-
-        /*-****************************************************************************************************
-            @short      debug-method to check incoming parameter of some other mehods of this class
-            @descr      The following methods are used to check parameters for other methods
-                        of this class. The return value is used directly for an ASSERT(...).
-
-            @seealso    ASSERTs in implementation!
-
-            @param      references to checking variables
-            @return     sal_False ,on invalid parameter.
-            @return     sal_True  ,otherwise
-        *//*-*****************************************************************************************************/
-
-    private:
-
-        static bool impldbg_checkParameter_OComponentAccessCtor( const css::uno::Reference< css::frame::XDesktop >& xOwner );
-
-    //  variables
-    //  (should be private everyway!)
-
-    private:
 
         css::uno::WeakReference< css::frame::XDesktop >     m_xOwner;   /// weak reference to the desktop object!
 

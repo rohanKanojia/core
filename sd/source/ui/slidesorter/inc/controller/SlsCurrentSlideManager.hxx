@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSCURRENTSLIDEMANAGER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSCURRENTSLIDEMANAGER_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <model/SlsSharedPageDescriptor.hxx>
 #include <vcl/timer.hxx>
 #include <tools/link.hxx>
-#include <com/sun/star/drawing/XDrawPage.hpp>
 
 class SdPage;
 
@@ -73,7 +72,7 @@ public:
     /** Return the page descriptor for the current slide.  Note, that when
         there is no current slide then the returned pointer is empty.
     */
-    model::SharedPageDescriptor GetCurrentSlide() { return mpCurrentSlide;}
+    const model::SharedPageDescriptor& GetCurrentSlide() { return mpCurrentSlide;}
 
     /** Release all references to model data.
     */
@@ -92,7 +91,6 @@ private:
     */
     Timer maSwitchPageDelayTimer;
 
-    bool IsCurrentSlideIsValid();
     void SetCurrentSlideAtViewShellBase (const model::SharedPageDescriptor& rpSlide);
     void SetCurrentSlideAtTabControl (const model::SharedPageDescriptor& rpSlide);
     void SetCurrentSlideAtXController (const model::SharedPageDescriptor& rpSlide);
@@ -107,7 +105,7 @@ private:
     */
     void AcquireCurrentSlide (const sal_Int32 nSlideIndex);
 
-    DECL_LINK_TYPED(SwitchPageCallback, Timer*, void);
+    DECL_LINK(SwitchPageCallback, Timer*, void);
 };
 
 } } } // end of namespace ::sd::slidesorter::controller

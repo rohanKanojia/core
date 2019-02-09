@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/lok.hxx>
 #include <comphelper/random.hxx>
 #include <svx/sdrpaintwindow.hxx>
 #include <sdr/overlay/overlaymanagerbuffered.hxx>
@@ -35,16 +36,16 @@ class CandidateMgr
 {
     std::vector<VclPtr<vcl::Window> > m_aCandidates;
     std::set<VclPtr<vcl::Window> > m_aDeletedCandidates;
-    DECL_LINK_TYPED(WindowEventListener, VclWindowEvent&, void);
+    DECL_LINK(WindowEventListener, VclWindowEvent&, void);
 public:
-    void PaintTransparentChildren(vcl::Window & rWindow, Rectangle const& rPixelRect);
+    void PaintTransparentChildren(vcl::Window const & rWindow, tools::Rectangle const& rPixelRect);
     ~CandidateMgr();
 };
 
-IMPL_LINK_TYPED(CandidateMgr, WindowEventListener, VclWindowEvent&, rEvent, void)
+IMPL_LINK(CandidateMgr, WindowEventListener, VclWindowEvent&, rEvent, void)
 {
     vcl::Window* pWindow = rEvent.GetWindow();
-    if (rEvent.GetId() == VCLEVENT_OBJECT_DYING)
+    if (rEvent.GetId() == VclEventId::ObjectDying)
     {
         m_aDeletedCandidates.insert(pWindow);
     }
@@ -52,16 +53,15 @@ IMPL_LINK_TYPED(CandidateMgr, WindowEventListener, VclWindowEvent&, rEvent, void
 
 CandidateMgr::~CandidateMgr()
 {
-    for (auto aI = m_aCandidates.begin(); aI != m_aCandidates.end(); ++aI)
+    for (VclPtr<vcl::Window>& pCandidate : m_aCandidates)
     {
-        VclPtr<vcl::Window> pCandidate = *aI;
         if (m_aDeletedCandidates.find(pCandidate) != m_aDeletedCandidates.end())
             continue;
         pCandidate->RemoveEventListener(LINK(this, CandidateMgr, WindowEventListener));
     }
 }
 
-void PaintTransparentChildren(vcl::Window & rWindow, Rectangle const& rPixelRect)
+void PaintTransparentChildren(vcl::Window const & rWindow, tools::Rectangle const& rPixelRect)
 {
     if (!rWindow.IsChildTransparentModeEnabled())
         return;
@@ -70,29 +70,29 @@ void PaintTransparentChildren(vcl::Window & rWindow, Rectangle const& rPixelRect
     aManager.PaintTransparentChildren(rWindow, rPixelRect);
 }
 
-void CandidateMgr::PaintTransparentChildren(vcl::Window & rWindow, Rectangle const& rPixelRect)
+void CandidateMgr::PaintTransparentChildren(vcl::Window const & rWindow, tools::Rectangle const& rPixelRect)
 {
     vcl::Window * pCandidate = rWindow.GetWindow( GetWindowType::FirstChild );
     while (pCandidate)
     {
         if (pCandidate->IsPaintTransparent())
         {
-            const Rectangle aCandidatePosSizePixel(
+            const tools::Rectangle aCandidatePosSizePixel(
                             pCandidate->GetPosPixel(),
                             pCandidate->GetSizePixel());
 
             if (aCandidatePosSizePixel.IsOver(rPixelRect))
             {
-                m_aCandidates.push_back(pCandidate);
+                m_aCandidates.emplace_back(pCandidate);
                 pCandidate->AddEventListener(LINK(this, CandidateMgr, WindowEventListener));
             }
         }
         pCandidate = pCandidate->GetWindow( GetWindowType::Next );
     }
 
-    for (auto aI = m_aCandidates.begin(); aI != m_aCandidates.end(); ++aI)
+    for (const auto& rpCandidate : m_aCandidates)
     {
-        pCandidate = *aI;
+        pCandidate = rpCandidate.get();
         if (m_aDeletedCandidates.find(pCandidate) != m_aDeletedCandidates.end())
             continue;
         //rhbz#1007697 this can cause the window itself to be
@@ -107,7 +107,7 @@ void CandidateMgr::PaintTransparentChildren(vcl::Window & rWindow, Rectangle con
 }
 
 SdrPreRenderDevice::SdrPreRenderDevice(OutputDevice& rOriginal)
-:   mrOutputDevice(rOriginal),
+:   mpOutputDevice(&rOriginal),
     mpPreRenderDevice(VclPtr<VirtualDevice>::Create())
 {
 }
@@ -120,48 +120,48 @@ SdrPreRenderDevice::~SdrPreRenderDevice()
 void SdrPreRenderDevice::PreparePreRenderDevice()
 {
     // compare size of mpPreRenderDevice with size of visible area
-    if(mpPreRenderDevice->GetOutputSizePixel() != mrOutputDevice.GetOutputSizePixel())
+    if(mpPreRenderDevice->GetOutputSizePixel() != mpOutputDevice->GetOutputSizePixel())
     {
-        mpPreRenderDevice->SetOutputSizePixel(mrOutputDevice.GetOutputSizePixel());
+        mpPreRenderDevice->SetOutputSizePixel(mpOutputDevice->GetOutputSizePixel());
     }
 
     // Also compare the MapModes for zoom/scroll changes
-    if(mpPreRenderDevice->GetMapMode() != mrOutputDevice.GetMapMode())
+    if(mpPreRenderDevice->GetMapMode() != mpOutputDevice->GetMapMode())
     {
-        mpPreRenderDevice->SetMapMode(mrOutputDevice.GetMapMode());
+        mpPreRenderDevice->SetMapMode(mpOutputDevice->GetMapMode());
     }
 
     // #i29186#
-    mpPreRenderDevice->SetDrawMode(mrOutputDevice.GetDrawMode());
-    mpPreRenderDevice->SetSettings(mrOutputDevice.GetSettings());
+    mpPreRenderDevice->SetDrawMode(mpOutputDevice->GetDrawMode());
+    mpPreRenderDevice->SetSettings(mpOutputDevice->GetSettings());
 }
 
 void SdrPreRenderDevice::OutputPreRenderDevice(const vcl::Region& rExpandedRegion)
 {
     // region to pixels
-    const vcl::Region aRegionPixel(mrOutputDevice.LogicToPixel(rExpandedRegion));
+    const vcl::Region aRegionPixel(mpOutputDevice->LogicToPixel(rExpandedRegion));
     //RegionHandle aRegionHandle(aRegionPixel.BeginEnumRects());
     //Rectangle aRegionRectanglePixel;
 
     // MapModes off
-    bool bMapModeWasEnabledDest(mrOutputDevice.IsMapModeEnabled());
+    bool bMapModeWasEnabledDest(mpOutputDevice->IsMapModeEnabled());
     bool bMapModeWasEnabledSource(mpPreRenderDevice->IsMapModeEnabled());
-    mrOutputDevice.EnableMapMode(false);
+    mpOutputDevice->EnableMapMode(false);
     mpPreRenderDevice->EnableMapMode(false);
 
     RectangleVector aRectangles;
     aRegionPixel.GetRegionRectangles(aRectangles);
 
-    for(RectangleVector::const_iterator aRectIter(aRectangles.begin()); aRectIter != aRectangles.end(); ++aRectIter)
+    for(const auto& rRect : aRectangles)
     {
         // for each rectangle, copy the area
-        const Point aTopLeft(aRectIter->TopLeft());
-        const Size aSize(aRectIter->GetSize());
+        const Point aTopLeft(rRect.TopLeft());
+        const Size aSize(rRect.GetSize());
 
-        mrOutputDevice.DrawOutDev(
+        mpOutputDevice->DrawOutDev(
             aTopLeft, aSize,
             aTopLeft, aSize,
-            *mpPreRenderDevice.get());
+            *mpPreRenderDevice);
 
 #ifdef DBG_UTIL
         // #i74769#
@@ -172,16 +172,16 @@ void SdrPreRenderDevice::OutputPreRenderDevice(const vcl::Region& rExpandedRegio
             int nR = comphelper::rng::uniform_int_distribution(0, 0x7F-1);
             int nG = comphelper::rng::uniform_int_distribution(0, 0x7F-1);
             int nB = comphelper::rng::uniform_int_distribution(0, 0x7F-1);
-            const Color aColor(((((nR|0x80)<<8L)|(nG|0x80))<<8L)|(nB|0x80));
+            const Color aColor(((((nR|0x80)<<8)|(nG|0x80))<<8)|(nB|0x80));
 
-            mrOutputDevice.SetLineColor(aColor);
-            mrOutputDevice.SetFillColor();
-            mrOutputDevice.DrawRect(*aRectIter);
+            mpOutputDevice->SetLineColor(aColor);
+            mpOutputDevice->SetFillColor();
+            mpOutputDevice->DrawRect(rRect);
         }
 #endif
     }
 
-    mrOutputDevice.EnableMapMode(bMapModeWasEnabledDest);
+    mpOutputDevice->EnableMapMode(bMapModeWasEnabledDest);
     mpPreRenderDevice->EnableMapMode(bMapModeWasEnabledSource);
 }
 
@@ -196,14 +196,14 @@ void SdrPaintWindow::impCreateOverlayManager()
         {
             vcl::Window& rWindow = dynamic_cast<vcl::Window&>(GetOutputDevice());
             // decide which OverlayManager to use
-            if(GetPaintView().IsBufferedOverlayAllowed() && mbUseBuffer && !rWindow.SupportsDoubleBuffering())
+            if(GetPaintView().IsBufferedOverlayAllowed() && !rWindow.SupportsDoubleBuffering())
             {
                 // buffered OverlayManager, buffers its background and refreshes from there
                 // for pure overlay changes (no system redraw). The 3rd parameter specifies
                 // whether that refresh itself will use a 2nd vdev to avoid flickering.
                 // Also hand over the old OverlayManager if existent; this means to take over
                 // the registered OverlayObjects from it
-                mxOverlayManager = sdr::overlay::OverlayManagerBuffered::create(GetOutputDevice(), true);
+                mxOverlayManager = sdr::overlay::OverlayManagerBuffered::create(GetOutputDevice());
             }
             else
             {
@@ -219,7 +219,10 @@ void SdrPaintWindow::impCreateOverlayManager()
             // Request a repaint so that the buffered overlay manager fills
             // its buffer properly.  This is a workaround for missing buffer
             // updates.
-            rWindow.Invalidate();
+            if (!comphelper::LibreOfficeKit::isActive())
+            {
+                rWindow.Invalidate();
+            }
 
             Color aColA(GetPaintView().getOptionsDrawinglayer().GetStripeColorA());
             Color aColB(GetPaintView().getOptionsDrawinglayer().GetStripeColorB());
@@ -238,12 +241,10 @@ void SdrPaintWindow::impCreateOverlayManager()
 }
 
 SdrPaintWindow::SdrPaintWindow(SdrPaintView& rNewPaintView, OutputDevice& rOut, vcl::Window* pWindow)
-:   mrOutputDevice(rOut),
+:   mpOutputDevice(&rOut),
     mpWindow(pWindow),
     mrPaintView(rNewPaintView),
-    mpPreRenderDevice(nullptr),
-    mbTemporaryTarget(false), // #i72889#
-    mbUseBuffer(true)
+    mbTemporaryTarget(false) // #i72889#
 {
 }
 
@@ -254,7 +255,7 @@ SdrPaintWindow::~SdrPaintWindow()
     DestroyPreRenderDevice();
 }
 
-rtl::Reference< sdr::overlay::OverlayManager > SdrPaintWindow::GetOverlayManager() const
+rtl::Reference< sdr::overlay::OverlayManager > const & SdrPaintWindow::GetOverlayManager() const
 {
     if(!mxOverlayManager.is())
     {
@@ -265,15 +266,15 @@ rtl::Reference< sdr::overlay::OverlayManager > SdrPaintWindow::GetOverlayManager
     return mxOverlayManager;
 }
 
-Rectangle SdrPaintWindow::GetVisibleArea() const
+tools::Rectangle SdrPaintWindow::GetVisibleArea() const
 {
     Size aVisSizePixel(GetOutputDevice().GetOutputSizePixel());
-    return Rectangle(GetOutputDevice().PixelToLogic(Rectangle(Point(0,0), aVisSizePixel)));
+    return GetOutputDevice().PixelToLogic(tools::Rectangle(Point(0,0), aVisSizePixel));
 }
 
 bool SdrPaintWindow::OutputToRecordingMetaFile() const
 {
-    GDIMetaFile* pMetaFile = mrOutputDevice.GetConnectMetaFile();
+    GDIMetaFile* pMetaFile = mpOutputDevice->GetConnectMetaFile();
     return (pMetaFile && pMetaFile->IsRecord() && !pMetaFile->IsPause());
 }
 
@@ -282,14 +283,14 @@ void SdrPaintWindow::PreparePreRenderDevice()
     const bool bPrepareBufferedOutput(
         mrPaintView.IsBufferedOutputAllowed()
         && !OutputToPrinter()
-        && !OutputToVirtualDevice()
+        && !OutputIsVirtualDevice()
         && !OutputToRecordingMetaFile());
 
     if(bPrepareBufferedOutput)
     {
         if(!mpPreRenderDevice)
         {
-            mpPreRenderDevice = new SdrPreRenderDevice(mrOutputDevice);
+            mpPreRenderDevice.reset(new SdrPreRenderDevice(*mpOutputDevice));
         }
     }
     else
@@ -305,11 +306,7 @@ void SdrPaintWindow::PreparePreRenderDevice()
 
 void SdrPaintWindow::DestroyPreRenderDevice()
 {
-    if(mpPreRenderDevice)
-    {
-        delete mpPreRenderDevice;
-        mpPreRenderDevice = nullptr;
-    }
+    mpPreRenderDevice.reset();
 }
 
 void SdrPaintWindow::OutputPreRenderDevice(const vcl::Region& rExpandedRegion)

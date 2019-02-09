@@ -24,6 +24,9 @@
 #include "mzstring.h"
 
 #ifdef _WIN32
+# if !defined WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+# endif
 # include <windows.h>
 #endif
 #include <stdio.h>
@@ -31,12 +34,12 @@
 #include <string.h>
 
 #ifndef _WIN32
-# define wsprintf sprintf
+# define wsprintfA sprintf
 #endif
 
 const int AllocSize = 8;
 
-inline int get_alloc_size(int len)
+static int get_alloc_size(int len)
 {
     return (len + AllocSize - 1) / AllocSize * AllocSize;
 }
@@ -57,7 +60,7 @@ MzString::~MzString()
 }
 
 
-MzString &MzString::operator = (MzString &s)
+MzString &MzString::operator=(const MzString &s)
 {
     int n = s.length();
     if (allocate(n))
@@ -89,7 +92,7 @@ void MzString::append(const char *s, int slen)
         return;
 
     int new_len = Length + slen;
-    if (resize(new_len))
+    if (allocate(new_len))
     {
         memcpy(Data + Length, s, slen);
         Length = new_len;
@@ -178,7 +181,7 @@ MzString &MzString::operator << (int i)
 {
     char str[80];
 
-    wsprintf(str, "%d", i);
+    wsprintfA(str, "%d", i);
     append(str);
     return *this;
 }
@@ -188,7 +191,7 @@ MzString &MzString::operator << (long l)
 {
     char str[80];
 
-    wsprintf(str, "%ld", l);
+    wsprintfA(str, "%ld", l);
     append(str);
     return *this;
 }
@@ -258,10 +261,5 @@ bool MzString::allocate(int len)
     return false;
 }
 
-
-bool MzString::resize(int len)
-{
-    return allocate(len);
-}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,29 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbtreelistbox.hxx"
-#include "dbu_resource.hrc"
-#include "browserids.hxx"
-#include "listviewitems.hxx"
-#include "callbacks.hxx"
+#include <dbtreelistbox.hxx>
+#include <browserids.hxx>
+#include <listviewitems.hxx>
+#include <callbacks.hxx>
 
 #include <com/sun/star/datatransfer/dnd/XDragGestureListener.hpp>
 #include <com/sun/star/datatransfer/dnd/XDragGestureRecognizer.hpp>
 #include <com/sun/star/ui/XContextMenuInterceptor.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <comphelper/interfacecontainer2.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/propertyvalue.hxx>
 #include <vcl/help.hxx>
-#include <vcl/commandinfoprovider.hxx>
 #include <dbaccess/IController.hxx>
 #include <framework/actiontriggerhelper.hxx>
+#include <toolkit/awt/vclxmenu.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/svapp.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
+#include <vcl/event.hxx>
 
 #include <memory>
-#include <o3tl/make_unique.hxx>
+
 namespace dbaui
 {
 
@@ -48,7 +52,6 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::datatransfer;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::ui;
 using namespace ::com::sun::star::view;
 
@@ -58,19 +61,18 @@ DBTreeListBox::DBTreeListBox( vcl::Window* pParent, WinBits nWinStyle )
     :SvTreeListBox(pParent,nWinStyle)
     ,m_pDragedEntry(nullptr)
     ,m_pActionListener(nullptr)
-    ,m_pContextMenuProvider( nullptr )
-    ,m_bHandleEnterKey(false)
+    ,m_pContextMenuProvider(nullptr)
+    ,m_pResetEvent(nullptr)
 {
     init();
 }
 
 void DBTreeListBox::init()
 {
-    sal_uInt16 nSize = SPACEBETWEENENTRIES;
-    SetSpaceBetweenEntries(nSize);
+    SetSpaceBetweenEntries(SPACEBETWEENENTRIES);
 
     m_aTimer.SetTimeout(900);
-    m_aTimer.SetTimeoutHdl(LINK(this, DBTreeListBox, OnTimeOut));
+    m_aTimer.SetInvokeHandler(LINK(this, DBTreeListBox, OnTimeOut));
 
     m_aScrollHelper.setUpScrollMethod( LINK(this, DBTreeListBox, ScrollUpHdl) );
     m_aScrollHelper.setDownScrollMethod( LINK(this, DBTreeListBox, ScrollDownHdl) );
@@ -79,16 +81,22 @@ void DBTreeListBox::init()
 
     EnableContextMenuHandling();
 
-    SetStyle( GetStyle() | WB_QUICK_SEARCH );
+    SetQuickSearch( true );
 }
 
 DBTreeListBox::~DBTreeListBox()
 {
+    assert(!m_xMenuController.is());
     disposeOnce();
 }
 
 void DBTreeListBox::dispose()
 {
+    if (m_pResetEvent)
+    {
+        RemoveUserEvent(m_pResetEvent);
+        m_pResetEvent = nullptr;
+    }
     implStopSelectionTimer();
     SvTreeListBox::dispose();
 }
@@ -105,9 +113,9 @@ SvTreeListEntry* DBTreeListBox::GetEntryPosByName( const OUString& aName, SvTree
     {
         pEntry = (*it).get();
         const SvLBoxString* pItem = static_cast<const SvLBoxString*>(
-            pEntry->GetFirstItem(SV_ITEM_ID_LBOXSTRING));
+            pEntry->GetFirstItem(SvLBoxItemType::String));
 
-        if (pItem && pItem->GetText().equals(aName))
+        if (pItem && pItem->GetText() == aName)
         {
             if (!_pFilter || _pFilter->includeEntry(pEntry))
                 // found
@@ -119,27 +127,22 @@ SvTreeListEntry* DBTreeListBox::GetEntryPosByName( const OUString& aName, SvTree
     return pEntry;
 }
 
-void DBTreeListBox::EnableExpandHandler(SvTreeListEntry* _pEntry)
-{
-    LINK(this, DBTreeListBox, OnResetEntry).Call(_pEntry);
-}
-
 void DBTreeListBox::RequestingChildren( SvTreeListEntry* pParent )
 {
     if (m_aPreExpandHandler.IsSet() && !m_aPreExpandHandler.Call(pParent))
     {
         // an error occurred. The method calling us will reset the entry flags, so it can't be expanded again.
-        // But we want that the user may do a second try (i.e. because he misstypes a password in this try), so
+        // But we want that the user may do a second try (i.e. because he mistypes a password in this try), so
         // we have to reset these flags controlling the expand ability
-        PostUserEvent(LINK(this, DBTreeListBox, OnResetEntry), pParent, true);
+        m_pResetEvent = PostUserEvent(LINK(this, DBTreeListBox, OnResetEntryHdl), pParent, true);
     }
 }
 
 void DBTreeListBox::InitEntry(SvTreeListEntry* _pEntry, const OUString& aStr, const Image& _rCollEntryBmp, const Image& _rExpEntryBmp, SvLBoxButtonKind eButtonKind)
 {
     SvTreeListBox::InitEntry( _pEntry, aStr, _rCollEntryBmp,_rExpEntryBmp, eButtonKind);
-    SvLBoxItem* pTextItem(_pEntry->GetFirstItem(SV_ITEM_ID_LBOXSTRING));
-    _pEntry->ReplaceItem(o3tl::make_unique<OBoldListboxString>(aStr), _pEntry->GetPos(pTextItem));
+    SvLBoxItem* pTextItem(_pEntry->GetFirstItem(SvLBoxItemType::String));
+    _pEntry->ReplaceItem(std::make_unique<OBoldListboxString>(aStr), _pEntry->GetPos(pTextItem));
 }
 
 void DBTreeListBox::implStopSelectionTimer()
@@ -177,27 +180,31 @@ void DBTreeListBox::MouseButtonDown( const MouseEvent& rMEvt )
         SvTreeListBox::MouseButtonDown(rMEvt);
 }
 
-IMPL_LINK_TYPED(DBTreeListBox, OnResetEntry, void*, p, void)
+void DBTreeListBox::EnableExpandHandler(SvTreeListEntry* pEntry)
 {
-    SvTreeListEntry* pEntry = static_cast<SvTreeListEntry*>(p);
     // set the flag which allows if the entry can be expanded
     pEntry->SetFlags( (pEntry->GetFlags() & ~SvTLEntryFlags(SvTLEntryFlags::NO_NODEBMP | SvTLEntryFlags::HAD_CHILDREN)) | SvTLEntryFlags::CHILDREN_ON_DEMAND );
     // redraw the entry
-    GetModel()->InvalidateEntry( pEntry );
+    GetModel()->InvalidateEntry(pEntry);
+}
+
+IMPL_LINK(DBTreeListBox, OnResetEntryHdl, void*, p, void)
+{
+    m_pResetEvent = nullptr;
+    EnableExpandHandler(static_cast<SvTreeListEntry*>(p));
 }
 
 void DBTreeListBox::ModelHasEntryInvalidated( SvTreeListEntry* _pEntry )
 {
     SvTreeListBox::ModelHasEntryInvalidated( _pEntry );
 
-    SvTreeListEntry* pLBEntry = static_cast<SvTreeListEntry*>(_pEntry);
-    if (m_aSelectedEntries.find(pLBEntry) != m_aSelectedEntries.end())
+    if (m_aSelectedEntries.find(_pEntry) != m_aSelectedEntries.end())
     {
-        SvLBoxItem* pTextItem = pLBEntry->GetFirstItem(SV_ITEM_ID_BOLDLBSTRING);
+        SvLBoxItem* pTextItem = _pEntry->GetFirstItem(SvLBoxItemType::String);
         if ( pTextItem && !static_cast< OBoldListboxString* >( pTextItem )->isEmphasized() )
         {
             implStopSelectionTimer();
-            m_aSelectedEntries.erase(pLBEntry);
+            m_aSelectedEntries.erase(_pEntry);
                 // ehm - why?
         }
     }
@@ -206,11 +213,10 @@ void DBTreeListBox::ModelHasEntryInvalidated( SvTreeListEntry* _pEntry )
 void DBTreeListBox::ModelHasRemoved( SvTreeListEntry* _pEntry )
 {
     SvTreeListBox::ModelHasRemoved(_pEntry);
-    SvTreeListEntry* pLBEntry = static_cast<SvTreeListEntry*>(_pEntry);
-    if (m_aSelectedEntries.find(pLBEntry) != m_aSelectedEntries.end())
+    if (m_aSelectedEntries.find(_pEntry) != m_aSelectedEntries.end())
     {
         implStopSelectionTimer();
-        m_aSelectedEntries.erase(pLBEntry);
+        m_aSelectedEntries.erase(_pEntry);
     }
 }
 
@@ -295,7 +301,7 @@ void DBTreeListBox::RequestHelp( const HelpEvent& rHEvt )
             if ( m_pActionListener->requestQuickHelp( pEntry, sQuickHelpText ) )
             {
                 Size aSize( GetOutputSizePixel().Width(), GetEntryHeight() );
-                Rectangle aScreenRect( OutputToScreenPixel( GetEntryPosition( pEntry ) ), aSize );
+                tools::Rectangle aScreenRect( OutputToScreenPixel( GetEntryPosition( pEntry ) ), aSize );
 
                 Help::ShowQuickHelp( this, aScreenRect,
                                      sQuickHelpText, QuickHelpFlags::Left | QuickHelpFlags::VCenter );
@@ -339,7 +345,7 @@ void DBTreeListBox::KeyInput( const KeyEvent& rKEvt )
 
     if ( KEY_RETURN == nCode )
     {
-        bHandled = m_bHandleEnterKey;
+        bHandled = false;
         m_aEnterKeyHdl.Call(this);
         // this is a HACK. If the data source browser is opened in the "beamer", while the main frame
         //
@@ -376,7 +382,6 @@ bool DBTreeListBox::EditingEntry( SvTreeListEntry* /*pEntry*/, Selection& /*_aSe
 bool DBTreeListBox::EditedEntry( SvTreeListEntry* pEntry, const OUString& rNewText )
 {
     DBTreeEditedEntry aEntry;
-    aEntry.pEntry = pEntry;
     aEntry.aNewText = rNewText;
     SetEntryText(pEntry,aEntry.aNewText);
 
@@ -389,7 +394,7 @@ bool DBTreeListBox::DoubleClickHdl()
     return !aDoubleClickHdl.Call( this );
 }
 
-void scrollWindow(DBTreeListBox* _pListBox, const Point& _rPos,bool _bUp)
+static void scrollWindow(DBTreeListBox* _pListBox, const Point& _rPos,bool _bUp)
 {
     SvTreeListEntry* pEntry = _pListBox->GetEntry( _rPos );
     if( pEntry && pEntry != _pListBox->Last() )
@@ -398,110 +403,18 @@ void scrollWindow(DBTreeListBox* _pListBox, const Point& _rPos,bool _bUp)
     }
 }
 
-IMPL_LINK_NOARG_TYPED( DBTreeListBox, ScrollUpHdl, LinkParamNone*, void )
+IMPL_LINK_NOARG( DBTreeListBox, ScrollUpHdl, LinkParamNone*, void )
 {
     scrollWindow(this,m_aMousePos,true);
 }
 
-IMPL_LINK_NOARG_TYPED( DBTreeListBox, ScrollDownHdl, LinkParamNone*, void )
+IMPL_LINK_NOARG( DBTreeListBox, ScrollDownHdl, LinkParamNone*, void )
 {
     scrollWindow(this,m_aMousePos,false);
 }
 
 namespace
 {
-    void lcl_enableEntries( PopupMenu* _pPopup, IController& _rController )
-    {
-        if ( !_pPopup )
-            return;
-
-        sal_uInt16 nCount = _pPopup->GetItemCount();
-        for (sal_uInt16 i=0; i < nCount; ++i)
-        {
-            if ( _pPopup->GetItemType(i) != MenuItemType::SEPARATOR )
-            {
-                sal_uInt16 nId = _pPopup->GetItemId(i);
-                PopupMenu* pSubPopUp = _pPopup->GetPopupMenu(nId);
-                if ( pSubPopUp )
-                {
-                    lcl_enableEntries( pSubPopUp, _rController );
-                    _pPopup->EnableItem(nId,pSubPopUp->HasValidEntries());
-                }
-                else
-                {
-                    OUString sCommandURL( _pPopup->GetItemCommand( nId ) );
-                    bool bEnabled =  sCommandURL.isEmpty()
-                                  ? _rController.isCommandEnabled( nId )
-                                  : _rController.isCommandEnabled( sCommandURL );
-                    _pPopup->EnableItem( nId, bEnabled );
-                }
-            }
-        }
-
-        _pPopup->RemoveDisabledEntries();
-    }
-}
-
-namespace
-{
-    void lcl_adjustMenuItemIDs( Menu& _rMenu, IController& _rCommandController )
-    {
-        sal_uInt16 nCount = _rMenu.GetItemCount();
-        for ( sal_uInt16 pos = 0; pos < nCount; ++pos )
-        {
-            // do not adjust separators
-            if ( _rMenu.GetItemType( pos ) == MenuItemType::SEPARATOR )
-                continue;
-
-            sal_uInt16 nId = _rMenu.GetItemId(pos);
-            OUString aCommand = _rMenu.GetItemCommand( nId );
-            PopupMenu* pPopup = _rMenu.GetPopupMenu( nId );
-            if ( pPopup )
-            {
-                lcl_adjustMenuItemIDs( *pPopup, _rCommandController );
-                continue;
-            }
-
-            const sal_uInt16 nCommandId = _rCommandController.registerCommandURL( aCommand );
-            _rMenu.InsertItem( nCommandId, _rMenu.GetItemText( nId ), _rMenu.GetItemImage( nId ),
-                _rMenu.GetItemBits( nId ), OString(), pos );
-
-            // more things to preserve:
-            // - the help command
-            OUString sHelpURL = _rMenu.GetHelpCommand( nId );
-            if ( !sHelpURL.isEmpty() )
-                _rMenu.SetHelpCommand(  nCommandId, sHelpURL  );
-
-            // remove the "old" item
-            _rMenu.RemoveItem( pos+1 );
-        }
-    }
-    void lcl_insertMenuItemImages( Menu& _rMenu, IController& _rCommandController )
-    {
-        uno::Reference< frame::XController > xController = _rCommandController.getXController();
-        uno::Reference< frame::XFrame> xFrame;
-        if ( xController.is() )
-            xFrame = xController->getFrame();
-        sal_uInt16 nCount = _rMenu.GetItemCount();
-        for ( sal_uInt16 pos = 0; pos < nCount; ++pos )
-        {
-            // do not adjust separators
-            if ( _rMenu.GetItemType( pos ) == MenuItemType::SEPARATOR )
-                continue;
-
-            sal_uInt16 nId = _rMenu.GetItemId(pos);
-            OUString aCommand = _rMenu.GetItemCommand( nId );
-            PopupMenu* pPopup = _rMenu.GetPopupMenu( nId );
-            if ( pPopup )
-            {
-                lcl_insertMenuItemImages( *pPopup, _rCommandController );
-                continue;
-            }
-
-            if ( xFrame.is() )
-                _rMenu.SetItemImage(nId, vcl::CommandInfoProvider::Instance().GetImageForCommand(aCommand, false, xFrame));
-        }
-    }
     // SelectionSupplier
     typedef ::cppu::WeakImplHelper<   XSelectionSupplier
                                   >   SelectionSupplier_Base;
@@ -513,13 +426,13 @@ namespace
         {
         }
 
-        virtual sal_Bool SAL_CALL select( const Any& xSelection ) throw (IllegalArgumentException, RuntimeException, std::exception) override;
-        virtual Any SAL_CALL getSelection(  ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL addSelectionChangeListener( const Reference< XSelectionChangeListener >& xListener ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeSelectionChangeListener( const Reference< XSelectionChangeListener >& xListener ) throw (RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL select( const Any& xSelection ) override;
+        virtual Any SAL_CALL getSelection(  ) override;
+        virtual void SAL_CALL addSelectionChangeListener( const Reference< XSelectionChangeListener >& xListener ) override;
+        virtual void SAL_CALL removeSelectionChangeListener( const Reference< XSelectionChangeListener >& xListener ) override;
 
     protected:
-        virtual ~SelectionSupplier()
+        virtual ~SelectionSupplier() override
         {
         }
 
@@ -527,54 +440,69 @@ namespace
         Any m_aSelection;
     };
 
-    sal_Bool SAL_CALL SelectionSupplier::select( const Any& /*_Selection*/ ) throw (IllegalArgumentException, RuntimeException, std::exception)
+    sal_Bool SAL_CALL SelectionSupplier::select( const Any& /*_Selection*/ )
     {
         throw IllegalArgumentException();
         // API bug: this should be a NoSupportException
     }
 
-    Any SAL_CALL SelectionSupplier::getSelection(  ) throw (RuntimeException, std::exception)
+    Any SAL_CALL SelectionSupplier::getSelection(  )
     {
         return m_aSelection;
     }
 
-    void SAL_CALL SelectionSupplier::addSelectionChangeListener( const Reference< XSelectionChangeListener >& /*_Listener*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL SelectionSupplier::addSelectionChangeListener( const Reference< XSelectionChangeListener >& /*_Listener*/ )
     {
         OSL_FAIL( "SelectionSupplier::removeSelectionChangeListener: no support!" );
         // API bug: this should be a NoSupportException
     }
 
-    void SAL_CALL SelectionSupplier::removeSelectionChangeListener( const Reference< XSelectionChangeListener >& /*_Listener*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL SelectionSupplier::removeSelectionChangeListener( const Reference< XSelectionChangeListener >& /*_Listener*/ )
     {
         OSL_FAIL( "SelectionSupplier::removeSelectionChangeListener: no support!" );
         // API bug: this should be a NoSupportException
     }
 }
 
-std::unique_ptr<PopupMenu> DBTreeListBox::CreateContextMenu()
+VclPtr<PopupMenu> DBTreeListBox::CreateContextMenu()
 {
-    ::std::unique_ptr< PopupMenu > pContextMenu;
-
     if ( !m_pContextMenuProvider )
-        return pContextMenu;
+        return nullptr;
 
-    // the basic context menu
-    pContextMenu.reset( m_pContextMenuProvider->getContextMenu( *this ) );
-    // disable what is not available currently
-    lcl_enableEntries( pContextMenu.get(), m_pContextMenuProvider->getCommandController() );
-    // set images
-    lcl_insertMenuItemImages( *pContextMenu, m_pContextMenuProvider->getCommandController() );
+    OUString aResourceName( m_pContextMenuProvider->getContextMenuResourceName( *this ) );
+    if ( aResourceName.isEmpty() )
+        return nullptr;
+
+    css::uno::Sequence< css::uno::Any > aArgs( 3 );
+    aArgs[0] <<= comphelper::makePropertyValue( "Value", aResourceName );
+    aArgs[1] <<= comphelper::makePropertyValue( "Frame", m_pContextMenuProvider->getCommandController().getXController()->getFrame() );
+    aArgs[2] <<= comphelper::makePropertyValue( "IsContextMenu", true );
+
+    css::uno::Reference< css::uno::XComponentContext > xContext = comphelper::getProcessComponentContext();
+    m_xMenuController.set( xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
+        "com.sun.star.comp.framework.ResourceMenuController", aArgs, xContext ), css::uno::UNO_QUERY );
+
+    if ( !m_xMenuController.is() )
+        return nullptr;
+
+    rtl::Reference<VCLXPopupMenu> xPopupMenu( new VCLXPopupMenu );
+    m_xMenuController->setPopupMenu( xPopupMenu.get() );
+    VclPtr<PopupMenu> pContextMenu( static_cast< PopupMenu* >( xPopupMenu->GetMenu() ) );
+    pContextMenu->AddEventListener( LINK( this, DBTreeListBox, MenuEventListener ) );
+
     // allow context menu interception
     ::comphelper::OInterfaceContainerHelper2* pInterceptors = m_pContextMenuProvider->getContextMenuInterceptors();
     if ( !pInterceptors || !pInterceptors->getLength() )
         return pContextMenu;
+
+    OUString aMenuIdentifier( "private:resource/popupmenu/" + aResourceName );
 
     ContextMenuExecuteEvent aEvent;
     aEvent.SourceWindow = VCLUnoHelper::GetInterface( this );
     aEvent.ExecutePosition.X = -1;
     aEvent.ExecutePosition.Y = -1;
     aEvent.ActionTriggerContainer = ::framework::ActionTriggerHelper::CreateActionTriggerContainerFromMenu(
-        pContextMenu.get(), nullptr );
+        pContextMenu.get(), &aMenuIdentifier );
     aEvent.Selection = new SelectionSupplier( m_pContextMenuProvider->getCurrentSelection( *this ) );
 
     ::comphelper::OInterfaceIteratorHelper2 aIter( *pInterceptors );
@@ -606,7 +534,7 @@ std::unique_ptr<PopupMenu> DBTreeListBox::CreateContextMenu()
 
                 default:
                     OSL_FAIL( "DBTreeListBox::CreateContextMenu: unexpected return value of the interceptor call!" );
-
+                    [[fallthrough]];
                 case ContextMenuInterceptorAction_IGNORED:
                     break;
             }
@@ -620,28 +548,31 @@ std::unique_ptr<PopupMenu> DBTreeListBox::CreateContextMenu()
 
     if ( bModifiedMenu )
     {
-        // the interceptor(s) modified the menu description => create a new PopupMenu
-        PopupMenu* pModifiedMenu = new PopupMenu;
+        pContextMenu->Clear();
         ::framework::ActionTriggerHelper::CreateMenuFromActionTriggerContainer(
-            pModifiedMenu, aEvent.ActionTriggerContainer );
+            pContextMenu, aEvent.ActionTriggerContainer );
         aEvent.ActionTriggerContainer.clear();
-        pContextMenu.reset( pModifiedMenu );
-
-        // the interceptors only know command URLs, but our menus primarily work
-        // with IDs -> we need to translate the commands to IDs
-        lcl_adjustMenuItemIDs( *pModifiedMenu, m_pContextMenuProvider->getCommandController() );
     }
 
     return pContextMenu;
 }
 
-void DBTreeListBox::ExcecuteContextMenuAction( sal_uInt16 _nSelectedPopupEntry )
+void DBTreeListBox::ExecuteContextMenuAction( sal_uInt16 )
 {
-    if ( m_pContextMenuProvider && _nSelectedPopupEntry )
-        m_pContextMenuProvider->getCommandController().executeChecked( _nSelectedPopupEntry, Sequence< PropertyValue >() );
 }
 
-IMPL_LINK_NOARG_TYPED(DBTreeListBox, OnTimeOut, Timer*, void)
+IMPL_LINK( DBTreeListBox, MenuEventListener, VclMenuEvent&, rMenuEvent, void )
+{
+    if ( rMenuEvent.GetId() == VclEventId::ObjectDying )
+    {
+        css::uno::Reference< css::lang::XComponent > xComponent( m_xMenuController, css::uno::UNO_QUERY );
+        if ( xComponent.is() )
+            xComponent->dispose();
+        m_xMenuController.clear();
+    }
+}
+
+IMPL_LINK_NOARG(DBTreeListBox, OnTimeOut, Timer*, void)
 {
     implStopSelectionTimer();
 

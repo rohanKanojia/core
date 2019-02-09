@@ -17,27 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sheetdatacontext.hxx"
+#include <sheetdatacontext.hxx>
 
-#include <com/sun/star/table/CellContentType.hpp>
-#include <com/sun/star/table/XCell.hpp>
-#include <com/sun/star/table/XCellRange.hpp>
-#include <com/sun/star/text/XText.hpp>
 #include <oox/helper/attributelist.hxx>
-#include <oox/helper/propertyset.hxx>
-#include "addressconverter.hxx"
-#include "biffinputstream.hxx"
-#include "formulaparser.hxx"
-#include "richstringcontext.hxx"
-#include "unitconverter.hxx"
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <addressconverter.hxx>
+#include <biffhelper.hxx>
+#include <formulaparser.hxx>
+#include <richstringcontext.hxx>
+#include <sal/log.hxx>
 
 namespace oox {
 namespace xls {
-
-using namespace ::com::sun::star::sheet;
-using namespace ::com::sun::star::table;
-using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
 
 using ::oox::core::ContextHandlerRef;
 
@@ -82,12 +75,12 @@ SheetDataContext::SheetDataContext( WorksheetFragmentBase& rFragment ) :
     mnRow( -1 ),
     mnCol( -1 )
 {
-    SAL_INFO( "sc.filter",  "start safe sheet data context - unlock\n" );
+    SAL_INFO( "sc.filter",  "start safe sheet data context - unlock" );
 }
 
 SheetDataContext::~SheetDataContext()
 {
-    SAL_INFO( "sc.filter",  "end safe sheet data context - relock\n" );
+    SAL_INFO( "sc.filter",  "end safe sheet data context - relock" );
 }
 
 ContextHandlerRef SheetDataContext::onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs )
@@ -172,7 +165,9 @@ void SheetDataContext::onEndElement()
             break;
             case XML_array:
                 if( mbValidRange && maFmlaData.isValidArrayRef( maCellData.maCellAddr ) )
+                {
                     setCellArrayFormula( maFmlaData.maFormulaRef, maCellData.maCellAddr, maFormulaStr );
+                }
                 // set cell formatting, but do not set result as cell value
                 mrSheetData.setBlankCell( maCellData );
             break;
@@ -278,7 +273,8 @@ void SheetDataContext::importRow( const AttributeList& rAttribs )
         mnRow = nRow-1; // to 0-based row index.
     }
     else
-        aModel.mnRow = ++mnRow;
+        aModel.mnRow = (++mnRow + 1);   // increment 0-based row index, to 1-based model row
+    mrAddressConv.checkRow( mnRow, true);
     mnCol = -1;
 
     aModel.mfHeight       = rAttribs.getDouble( XML_ht, -1.0 );
@@ -303,8 +299,14 @@ void SheetDataContext::importRow( const AttributeList& rAttribs )
         if( (0 < nSepPos) && (nSepPos + 1 < aColSpanToken.getLength()) )
         {
             // OOXML uses 1-based integer column indexes, row model expects 0-based colspans
-            sal_Int32 nLastCol = ::std::min( aColSpanToken.copy( nSepPos + 1 ).toInt32() - 1, nMaxCol );
-            aModel.insertColSpan( ValueRange( aColSpanToken.copy( 0, nSepPos ).toInt32() - 1, nLastCol ) );
+            const sal_Int32 nCol1 = aColSpanToken.copy( 0, nSepPos ).toInt32() - 1;
+            const bool bValid1 = mrAddressConv.checkCol( nCol1, true);
+            if (bValid1)
+            {
+                const sal_Int32 nCol2 = aColSpanToken.copy( nSepPos + 1 ).toInt32() - 1;
+                mrAddressConv.checkCol( nCol2, true);
+                aModel.insertColSpan( ValueRange( nCol1, ::std::min( nCol2, nMaxCol )));
+            }
         }
     }
 
@@ -320,7 +322,9 @@ bool SheetDataContext::importCell( const AttributeList& rAttribs )
     if (!p)
     {
         ++mnCol;
-        maCellData.maCellAddr = ScAddress( mnCol, mnRow, mnSheet );
+        ScAddress aAddress( mnCol, mnRow, mnSheet );
+        bValid = mrAddressConv.checkCellAddress( aAddress, true );
+        maCellData.maCellAddr = aAddress;
     }
     else
     {
@@ -380,6 +384,7 @@ void SheetDataContext::importRow( SequenceInputStream& rStrm )
     nSpanCount = rStrm.readInt32();
     maCurrPos.mnCol = 0;
 
+    mrAddressConv.checkRow( maCurrPos.mnRow, true);
     // row index is 0-based in BIFF12, but RowModel expects 1-based
     aModel.mnRow          = maCurrPos.mnRow + 1;
     // row height is in twips in BIFF12, convert to points
@@ -399,8 +404,11 @@ void SheetDataContext::importRow( SequenceInputStream& rStrm )
     {
         sal_Int32 nFirstCol, nLastCol;
         nFirstCol = rStrm.readInt32();
+        const bool bValid1 = mrAddressConv.checkCol( nFirstCol, true);
         nLastCol = rStrm.readInt32();
-        aModel.insertColSpan( ValueRange( nFirstCol, ::std::min( nLastCol, nMaxCol ) ) );
+        mrAddressConv.checkCol( nLastCol, true);
+        if (bValid1)
+            aModel.insertColSpan( ValueRange( nFirstCol, ::std::min( nLastCol, nMaxCol ) ) );
     }
 
     // set row properties in the current sheet
@@ -431,7 +439,7 @@ bool SheetDataContext::readCellHeader( SequenceInputStream& rStrm, CellType eCel
 ApiTokenSequence SheetDataContext::readCellFormula( SequenceInputStream& rStrm )
 {
     rStrm.skip( 2 );
-    return mxFormulaParser->importFormula( maCellData.maCellAddr, FORMULATYPE_CELL, rStrm );
+    return mxFormulaParser->importFormula( maCellData.maCellAddr, FormulaType::Cell, rStrm );
 }
 
 bool SheetDataContext::readFormulaRef( SequenceInputStream& rStrm )
@@ -541,7 +549,7 @@ void SheetDataContext::importArray( SequenceInputStream& rStrm )
     if( readFormulaRef( rStrm ) && maFmlaData.isValidArrayRef( maCellData.maCellAddr ) )
     {
         rStrm.skip( 1 );
-        ApiTokenSequence aTokens = mxFormulaParser->importFormula( maCellData.maCellAddr, FORMULATYPE_ARRAY, rStrm );
+        ApiTokenSequence aTokens = mxFormulaParser->importFormula( maCellData.maCellAddr, FormulaType::Array, rStrm );
         mrSheetData.createArrayFormula( maFmlaData.maFormulaRef, aTokens );
     }
 }
@@ -568,7 +576,7 @@ void SheetDataContext::importSharedFmla( SequenceInputStream& rStrm )
 {
     if( readFormulaRef( rStrm ) && maFmlaData.isValidSharedRef( maCellData.maCellAddr ) )
     {
-        ApiTokenSequence aTokens = mxFormulaParser->importFormula( maCellData.maCellAddr, FORMULATYPE_SHAREDFORMULA, rStrm );
+        ApiTokenSequence aTokens = mxFormulaParser->importFormula( maCellData.maCellAddr, FormulaType::SharedFormula, rStrm );
         mrSheetData.createSharedFormula( maCellData.maCellAddr, aTokens );
     }
 }

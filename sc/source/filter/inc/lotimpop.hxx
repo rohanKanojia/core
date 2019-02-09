@@ -23,21 +23,18 @@
 #include <rtl/ustring.hxx>
 
 #include "imp_op.hxx"
-#include "flttypes.hxx"
 #include "ftools.hxx"
 #include "lotform.hxx"
 #include "lotattr.hxx"
 
-class ScFormulaCell;
-class LotusFontBuffer;
 struct LotusContext;
 
 class ImportLotus : public ImportTyp
 {
 private:
-    SvStream*           pIn;            // benoetigt wegen multiplem Read()!
+    SvStream*           pIn;            // needed due to multiple Read()!
     LotusToSc           aConv;
-    sal_uInt16              nTab;           // z.Zt. bearbeitete Tabelle
+    sal_uInt16              nTab;           // currently handled table
     sal_Int32               nExtTab;
 
     // in WK?-Datei
@@ -56,31 +53,32 @@ private:
     void                NamedSheet();                 //          14000
     void                RowPresentation( sal_uInt16 nRecLen );  //           2007
 
-    // in FM?-Datei
+    // in FM? file
     void                Font_Face();                  // 174
     void                Font_Type();                  // 176
     void                Font_Ysize();                 // 177
-    void                _Row( const sal_uInt16 nRecLen );       // 197 ?
+    void                Row_( const sal_uInt16 nRecLen );       // 197 ?
 
     inline void         Read( ScAddress& );
     inline void         Read( ScRange& );
-        // fuer Addresses/Ranges im Format Row(16)/Tab(8)/Col(8)
+        // for addresses/ranges in the format row(16)/tab(8)/col(8)
     inline void         Read( sal_Char& );
     inline void         Read( sal_uInt8& );
     inline void         Read( sal_uInt16& );
     inline void         Read( sal_Int16& );
-    inline void         Read( double& );                    // 10-Byte-IEEE lesen
+    inline void         Read( double& );                    // read 10-byte IEEE
     inline void         Read( LotAttrWK3& );
-    void                Read( OUString& );                  // 0-terminierten String einlesen
+    void                Read( OUString& );                  // read in 0-terminated string
     inline void         Skip( const sal_uInt16 nNumBytes );
 
 public:
     ImportLotus(LotusContext& rContext, SvStream&, ScDocument*, rtl_TextEncoding eSrc);
 
-    virtual             ~ImportLotus();
+    virtual             ~ImportLotus() override;
 
-    FltError            Read() override;
-    FltError            Read( SvStream& );                  // special for *.fm3-Dateien
+    ErrCode             parse(); //parse + CalcAfterLoad
+    ErrCode             Read();
+    ErrCode             Read( SvStream& );                  // special for *.fm3 files
 };
 
 inline void ImportLotus::Read( ScAddress& rAddr )

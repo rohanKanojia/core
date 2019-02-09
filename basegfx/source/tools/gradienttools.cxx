@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <basegfx/tools/gradienttools.hxx>
+#include <basegfx/utils/gradienttools.hxx>
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/range/b2drange.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
@@ -45,7 +45,7 @@ namespace basegfx
     /** Most of the setup for linear & axial gradient is the same, except
         for the border treatment. Factored out here.
     */
-    ODFGradientInfo init1DGradientInfo(
+    static ODFGradientInfo init1DGradientInfo(
         const B2DRange& rTargetRange,
         sal_uInt32 nSteps,
         double fBorder,
@@ -100,7 +100,7 @@ namespace basegfx
         {
             const B2DPoint aCenter(0.5 * fTargetSizeX, 0.5 * fTargetSizeY);
 
-            aTextureTransform *= basegfx::tools::createRotateAroundPoint(aCenter, fAngle);
+            aTextureTransform *= basegfx::utils::createRotateAroundPoint(aCenter, fAngle);
         }
 
         // add object translate
@@ -115,7 +115,7 @@ namespace basegfx
     /** Most of the setup for radial & ellipsoidal gradient is the same,
         except for the border treatment. Factored out here.
     */
-    ODFGradientInfo initEllipticalGradientInfo(
+    static ODFGradientInfo initEllipticalGradientInfo(
         const B2DRange& rTargetRange,
         const B2DVector& rOffset,
         sal_uInt32 nSteps,
@@ -161,7 +161,7 @@ namespace basegfx
         {
             const B2DPoint aCenter(0.5 * fTargetSizeX, 0.5 * fTargetSizeY);
 
-            aTextureTransform *= basegfx::tools::createRotateAroundPoint(aCenter, fAngle);
+            aTextureTransform *= basegfx::utils::createRotateAroundPoint(aCenter, fAngle);
         }
 
         // add defined offsets after rotation
@@ -176,7 +176,7 @@ namespace basegfx
         aTextureTransform.translate(fTargetOffsetX, fTargetOffsetY);
 
         // prepare aspect for texture
-        const double fAspectRatio(rtl::math::approxEqual(0.0, fTargetSizeY) ? 1.0 : (fTargetSizeX / fTargetSizeY));
+        const double fAspectRatio(fTargetSizeY == 0.0 ? 1.0 : (fTargetSizeX / fTargetSizeY));
 
         return ODFGradientInfo(aTextureTransform, fAspectRatio, nSteps);
     }
@@ -184,7 +184,7 @@ namespace basegfx
     /** Setup for rect & square gradient is exactly the same. Factored out
         here.
     */
-    ODFGradientInfo initRectGradientInfo(
+    static ODFGradientInfo initRectGradientInfo(
         const B2DRange& rTargetRange,
         const B2DVector& rOffset,
         sal_uInt32 nSteps,
@@ -238,7 +238,7 @@ namespace basegfx
         {
             const B2DPoint aCenter(0.5 * fTargetSizeX, 0.5 * fTargetSizeY);
 
-            aTextureTransform *= basegfx::tools::createRotateAroundPoint(aCenter, fAngle);
+            aTextureTransform *= basegfx::utils::createRotateAroundPoint(aCenter, fAngle);
         }
 
         // add defined offsets after rotation
@@ -253,12 +253,12 @@ namespace basegfx
         aTextureTransform.translate(fTargetOffsetX, fTargetOffsetY);
 
         // prepare aspect for texture
-        const double fAspectRatio(rtl::math::approxEqual(0.0, fTargetSizeY) ? 1.0 : (fTargetSizeX / fTargetSizeY));
+        const double fAspectRatio(fTargetSizeY == 0.0 ? 1.0 : (fTargetSizeX / fTargetSizeY));
 
         return ODFGradientInfo(aTextureTransform, fAspectRatio, nSteps);
     }
 
-    namespace tools
+    namespace utils
     {
         ODFGradientInfo createLinearODFGradientInfo(
             const B2DRange& rTargetArea,
@@ -465,7 +465,7 @@ namespace basegfx
         {
             return getSquareGradientAlpha(rUV, rGradInfo); // only matrix setup differs
         }
-    } // namespace tools
+    } // namespace utils
 } // namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

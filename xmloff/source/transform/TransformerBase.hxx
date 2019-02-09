@@ -23,6 +23,7 @@
 #include <sal/config.h>
 
 #include <vector>
+#include <memory>
 
 #include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <com/sun/star/xml/sax/SAXException.hpp>
@@ -32,8 +33,11 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <rtl/ref.hxx>
 #include <xmloff/xmltoken.hxx>
+#include <xmloff/nmspmap.hxx>
 
 #include "Transformer.hxx"
+#include "TransformerActions.hxx"
+#include "TransformerTokenMap.hxx"
 
 namespace com { namespace sun { namespace star {
     namespace i18n { class XCharacterClassification; }
@@ -45,7 +49,6 @@ class XMLTransformerActions;
 struct XMLTransformerActionInit;
 struct TransformerAction_Impl;
 class XMLMutableAttributeList;
-class XMLTransformerTokenMap;
 
 const sal_uInt16 INVALID_ACTIONS = 0xffff;
 
@@ -55,18 +58,17 @@ class XMLTransformerBase : public XMLTransformer
 
     css::uno::Reference< css::xml::sax::XLocator >                    m_xLocator;
     css::uno::Reference< css::xml::sax::XDocumentHandler >            m_xHandler;     // the handlers
-    css::uno::Reference< css::xml::sax::XExtendedDocumentHandler >    m_xExtHandler;
     css::uno::Reference< css::beans::XPropertySet >                   m_xPropSet;
     css::uno::Reference< css::i18n::XCharacterClassification >        xCharClass;
 
     OUString m_aExtPathPrefix;
     OUString m_aClass;
 
-    SvXMLNamespaceMap           *m_pNamespaceMap;
-    SvXMLNamespaceMap           *m_pReplaceNamespaceMap;
-    std::vector<rtl::Reference<XMLTransformerContext>> m_pContexts;
-    XMLTransformerActions       *m_pElemActions;
-    XMLTransformerTokenMap      *m_pTokenMap;
+    std::unique_ptr<SvXMLNamespaceMap> m_pNamespaceMap;
+    SvXMLNamespaceMap           m_vReplaceNamespaceMap;
+    std::vector<rtl::Reference<XMLTransformerContext>> m_vContexts;
+    XMLTransformerActions       m_ElemActions;
+    XMLTransformerTokenMap const m_TokenMap;
 
 protected:
     css::uno::Reference< css::frame::XModel >     mxModel;
@@ -78,42 +80,31 @@ protected:
                                       const OUString& rQName );
 
 public:
-    XMLTransformerBase( XMLTransformerActionInit *pInit=nullptr,
-                           ::xmloff::token::XMLTokenEnum *pTKMapInit=nullptr ) throw();
-    virtual ~XMLTransformerBase() throw();
+    XMLTransformerBase( XMLTransformerActionInit const *pInit,
+                           ::xmloff::token::XMLTokenEnum const *pTKMapInit ) throw();
+    virtual ~XMLTransformerBase() throw() override;
 
     // css::xml::sax::XDocumentHandler
-    virtual void SAL_CALL startDocument()
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL endDocument()
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL startDocument() override;
+    virtual void SAL_CALL endDocument() override;
     virtual void SAL_CALL startElement(const OUString& aName,
-                              const css::uno::Reference< css::xml::sax::XAttributeList > & xAttribs)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL endElement(const OUString& aName)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL characters(const OUString& aChars)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
+                              const css::uno::Reference< css::xml::sax::XAttributeList > & xAttribs) override;
+    virtual void SAL_CALL endElement(const OUString& aName) override;
+    virtual void SAL_CALL characters(const OUString& aChars) override;
+    virtual void SAL_CALL ignorableWhitespace(const OUString& aWhitespaces) override;
     virtual void SAL_CALL processingInstruction(const OUString& aTarget,
-                                       const OUString& aData)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setDocumentLocator(const css::uno::Reference< css::xml::sax::XLocator > & xLocator)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
+                                       const OUString& aData) override;
+    virtual void SAL_CALL setDocumentLocator(const css::uno::Reference< css::xml::sax::XLocator > & xLocator) override;
 
     // css::xml::sax::XExtendedDocumentHandler
-    virtual void SAL_CALL startCDATA() throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL endCDATA() throw( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL comment(const OUString& sComment)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL allowLineBreak()
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL unknown(const OUString& sString)
-        throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL startCDATA() override;
+    virtual void SAL_CALL endCDATA() override;
+    virtual void SAL_CALL comment(const OUString& sComment) override;
+    virtual void SAL_CALL allowLineBreak() override;
+    virtual void SAL_CALL unknown(const OUString& sString) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     // C++
     const css::uno::Reference< css::xml::sax::XDocumentHandler > & GetDocHandler() { return m_xHandler; }
@@ -123,9 +114,9 @@ public:
 
     SvXMLNamespaceMap& GetNamespaceMap() { return *m_pNamespaceMap; }
     const SvXMLNamespaceMap& GetNamespaceMap() const { return *m_pNamespaceMap; }
-    SvXMLNamespaceMap& GetReplaceNamespaceMap() { return *m_pReplaceNamespaceMap; }
+    SvXMLNamespaceMap& GetReplaceNamespaceMap() { return m_vReplaceNamespaceMap; }
 
-    XMLTransformerActions& GetElemActions() { return *m_pElemActions; }
+    XMLTransformerActions& GetElemActions() { return m_ElemActions; }
     virtual XMLTransformerActions *GetUserDefinedActions( sal_uInt16 n );
     virtual XMLTransformerContext *CreateUserDefinedContext(
                                       const TransformerAction_Impl& rAction,
@@ -147,15 +138,15 @@ public:
     static bool DecodeStyleName( OUString& rName );
     static bool NegPercent( OUString& rValue );
 
-    bool AddNamespacePrefix( OUString& rName,
+    void AddNamespacePrefix( OUString& rName,
                                  sal_uInt16 nPrefix ) const;
     bool RemoveNamespacePrefix( OUString& rName,
                                     sal_uInt16 nPrefixOnly=0xffffU ) const;
 
     bool ConvertURIToOASIS( OUString& rURI,
-                                bool bSupportPackage=false ) const;
+                                bool bSupportPackage ) const;
     bool ConvertURIToOOo( OUString& rURI,
-                                bool bSupportPackage=false ) const;
+                                bool bSupportPackage ) const;
 
     /** renames the given rOutAttributeValue if one of the parameters contains a
         matching token in its lower 16 bits.  The value is converted to the
@@ -182,8 +173,8 @@ public:
     const XMLTransformerContext *GetAncestorContext( sal_uInt32 i ) const;
 
     // C++
-    inline void SetClass( const OUString& r ) { m_aClass = r; }
-    inline const OUString& GetClass() const { return m_aClass; }
+    void SetClass( const OUString& r ) { m_aClass = r; }
+    const OUString& GetClass() const { return m_aClass; }
 
     bool isWriter() const;
 

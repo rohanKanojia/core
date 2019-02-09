@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controlfeatureinterception.hxx"
-#include "urltransformer.hxx"
+#include <controlfeatureinterception.hxx>
+#include <urltransformer.hxx>
 #include <osl/diagnose.h>
 
 
@@ -37,7 +37,7 @@ namespace frm
     }
 
 
-    void SAL_CALL ControlFeatureInterception::registerDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor ) throw (RuntimeException )
+    void ControlFeatureInterception::registerDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor )
     {
         if ( !_rxInterceptor.is() )
         {
@@ -60,7 +60,7 @@ namespace frm
     }
 
 
-    void SAL_CALL ControlFeatureInterception::releaseDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor ) throw (RuntimeException )
+    void ControlFeatureInterception::releaseDispatchProviderInterceptor( const Reference< XDispatchProviderInterceptor >& _rxInterceptor )
     {
         if ( !_rxInterceptor.is() )
         {
@@ -127,18 +127,12 @@ namespace frm
         }
     }
 
-    Reference< XDispatch > ControlFeatureInterception::queryDispatch( const URL& _rURL, const OUString& _rTargetFrameName )
+    Reference< XDispatch > ControlFeatureInterception::queryDispatch( const URL& _rURL )
     {
         Reference< XDispatch > xDispatcher;
         if ( m_xFirstDispatchInterceptor.is() )
-            xDispatcher = m_xFirstDispatchInterceptor->queryDispatch( _rURL, _rTargetFrameName, 0 );
+            xDispatcher = m_xFirstDispatchInterceptor->queryDispatch( _rURL, OUString(), 0 );
         return xDispatcher;
-    }
-
-
-    Reference< XDispatch > ControlFeatureInterception::queryDispatch( const URL& _rURL )
-    {
-        return queryDispatch( _rURL, OUString() );
     }
 
 

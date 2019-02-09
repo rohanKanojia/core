@@ -22,9 +22,9 @@
 
 #include "appletshape.hxx"
 #include "externalshapebase.hxx"
-#include "vieweventhandler.hxx"
+#include <vieweventhandler.hxx>
 #include "viewappletshape.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 #include <algorithm>
 
@@ -69,7 +69,7 @@ namespace slideshow
                          double                                     nPrio,
                          const OUString&                            rServiceName,
                          const char**                               pPropCopyTable,
-                         sal_Size                                   nNumPropEntries,
+                         std::size_t                                nNumPropEntries,
                          const SlideShowContext&                    rContext ); // throw ShapeLoadFailedException;
 
         private:
@@ -97,7 +97,7 @@ namespace slideshow
 
             const OUString                           maServiceName;
             const char**                                    mpPropCopyTable;
-            const sal_Size                                  mnNumPropEntries;
+            const std::size_t                        mnNumPropEntries;
 
             /// the list of active view shapes (one for each registered view layer)
             typedef ::std::vector< ViewAppletShapeSharedPtr > ViewAppletShapeVector;
@@ -109,7 +109,7 @@ namespace slideshow
                                   double                                   nPrio,
                                   const OUString&                   rServiceName,
                                   const char**                             pPropCopyTable,
-                                  sal_Size                                 nNumPropEntries,
+                                  std::size_t                                 nNumPropEntries,
                                   const SlideShowContext&                  rContext ) :
             ExternalShapeBase( xShape, nPrio, rContext ),
             maServiceName( rServiceName ),
@@ -148,12 +148,12 @@ namespace slideshow
             try
             {
                 maViewAppletShapes.push_back(
-                    ViewAppletShapeSharedPtr( new ViewAppletShape( rNewLayer,
-                                                                   getXShape(),
-                                                                   maServiceName,
-                                                                   mpPropCopyTable,
-                                                                   mnNumPropEntries,
-                                                                   mxComponentContext )));
+                    std::make_shared<ViewAppletShape>( rNewLayer,
+                                                       getXShape(),
+                                                       maServiceName,
+                                                       mpPropCopyTable,
+                                                       mnNumPropEntries,
+                                                       mxComponentContext ));
 
                 // push new size to view shape
                 maViewAppletShapes.back()->resize( getBounds() );
@@ -271,7 +271,7 @@ namespace slideshow
             double                                   nPrio,
             const OUString&                   rServiceName,
             const char**                             pPropCopyTable,
-            sal_Size                                 nNumPropEntries,
+            std::size_t                              nNumPropEntries,
             const SlideShowContext&                  rContext )
         {
             std::shared_ptr< AppletShape > pAppletShape(

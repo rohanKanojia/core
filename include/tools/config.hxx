@@ -21,20 +21,19 @@
 
 #include <tools/toolsdllapi.h>
 #include <rtl/ustring.hxx>
+#include <memory>
 
 struct ImplConfigData;
 struct ImplGroupData;
 
-class TOOLS_DLLPUBLIC Config
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC Config
 {
 private:
     OUString            maFileName;
     OString             maGroupName;
-    ImplConfigData*     mpData;
+    std::unique_ptr<ImplConfigData> mpData;
     ImplGroupData*      mpActGroup;
-    sal_uIntPtr         mnDataUpdateId;
-    sal_uInt16          mnLockCount;
-    bool                mbPersistence;
+    sal_uInt32          mnDataUpdateId;
 
     TOOLS_DLLPRIVATE bool           ImplUpdateConfig() const;
     TOOLS_DLLPRIVATE ImplGroupData* ImplGetGroup() const;

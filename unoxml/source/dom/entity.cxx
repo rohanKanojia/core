@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <entity.hxx>
+#include "entity.hxx"
 
 #include <osl/diagnose.h>
 
@@ -55,7 +55,7 @@ namespace DOM
     /**
     For unparsed entities, the name of the notation for the entity.
     */
-    OUString SAL_CALL CEntity::getNotationName() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntity::getNotationName()
     {
         OSL_ENSURE(false,
                 "CEntity::getNotationName: not implemented (#i113683#)");
@@ -65,7 +65,7 @@ namespace DOM
     /**
     The public identifier associated with the entity, if specified.
     */
-    OUString SAL_CALL CEntity::getPublicId() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntity::getPublicId()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -80,7 +80,7 @@ namespace DOM
     /**
     The system identifier associated with the entity, if specified.
     */
-    OUString SAL_CALL CEntity::getSystemId() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntity::getSystemId()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -91,19 +91,19 @@ namespace DOM
         }
         return aID;
     }
-    OUString SAL_CALL CEntity::getNodeName()throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntity::getNodeName()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
        OUString aName;
         if (m_aNodePtr != nullptr)
         {
-            const xmlChar* xName = m_aNodePtr->name;
-            aName = OUString(reinterpret_cast<char const *>(xName), strlen(reinterpret_cast<char const *>(xName)), RTL_TEXTENCODING_UTF8);
+            const xmlChar* pName = m_aNodePtr->name;
+            aName = OUString(reinterpret_cast<char const *>(pName), strlen(reinterpret_cast<char const *>(pName)), RTL_TEXTENCODING_UTF8);
         }
         return aName;
     }
-    OUString SAL_CALL CEntity::getNodeValue() throw (RuntimeException, std::exception)
+    OUString SAL_CALL CEntity::getNodeValue()
     {
         return OUString();
     }

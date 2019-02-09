@@ -27,7 +27,7 @@
 namespace abp
 {
 
-    TableSelectionPage::TableSelectionPage( OAddessBookSourcePilot* _pParent )
+    TableSelectionPage::TableSelectionPage( OAddressBookSourcePilot* _pParent )
         :AddressBookSourcePage(_pParent, "SelectTablePage",
           "modules/sabpilot/ui/selecttablepage.ui")
     {
@@ -55,12 +55,6 @@ namespace abp
     }
 
 
-    void TableSelectionPage::DeactivatePage()
-    {
-        AddressBookSourcePage::DeactivatePage();
-    }
-
-
     void TableSelectionPage::initializePage()
     {
         AddressBookSourcePage::initializePage();
@@ -75,25 +69,22 @@ namespace abp
             // this page should never bother the user if there is 1 or less tables.
 
         // fill the list
-        for (   StringBag::const_iterator aTables = aTableNames.begin();
-                aTables != aTableNames.end();
-                ++aTables
-            )
-            m_pTableList->InsertEntry( *aTables );
+        for (auto const& tableName : aTableNames)
+            m_pTableList->InsertEntry(tableName);
 
         // initially select the proper table
         m_pTableList->SelectEntry( rSettings.sSelectedTable );
     }
 
 
-    IMPL_LINK_NOARG_TYPED( TableSelectionPage, OnTableDoubleClicked, ListBox&, void )
+    IMPL_LINK_NOARG( TableSelectionPage, OnTableDoubleClicked, ListBox&, void )
     {
-        if ( 1 == m_pTableList->GetSelectEntryCount() )
+        if ( 1 == m_pTableList->GetSelectedEntryCount() )
             getDialog()->travelNext();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( TableSelectionPage, OnTableSelected, ListBox&, void )
+    IMPL_LINK_NOARG( TableSelectionPage, OnTableSelected, ListBox&, void )
     {
         updateDialogTravelUI();
     }
@@ -105,7 +96,7 @@ namespace abp
             return false;
 
         AddressSettings& rSettings = getSettings();
-        rSettings.sSelectedTable = m_pTableList->GetSelectEntry();
+        rSettings.sSelectedTable = m_pTableList->GetSelectedEntry();
 
         return true;
     }
@@ -114,7 +105,7 @@ namespace abp
     bool TableSelectionPage::canAdvance() const
     {
         return  AddressBookSourcePage::canAdvance()
-            &&  ( 0 < m_pTableList->GetSelectEntryCount() );
+            &&  ( 0 < m_pTableList->GetSelectedEntryCount() );
     }
 
 

@@ -21,10 +21,9 @@
 #define INCLUDED_SD_SOURCE_UI_INC_SLIDESORTERVIEWSHELL_HXX
 
 #include "ViewShell.hxx"
-#include "glob.hxx"
+#include <glob.hxx>
 #include <sfx2/shell.hxx>
-#include <sfx2/viewfac.hxx>
-#include "sddllapi.h"
+#include <sddllapi.h>
 #include <memory>
 #include <vector>
 
@@ -53,10 +52,9 @@ public:
         SfxViewFrame* pFrame,
         ViewShellBase& rViewShellBase,
         vcl::Window* pParentWindow,
-        FrameView* pFrameView,
-        const bool bIsCenterPane);
+        FrameView* pFrameView);
 
-    virtual ~SlideSorterViewShell();
+    virtual ~SlideSorterViewShell() override;
 
     /** Late initialization that has to be called after a new instance has
         completed its construction.
@@ -100,12 +98,12 @@ public:
             factor.
         */
     virtual void SetZoom (long int nZoom) override;
-    virtual void SetZoomRect (const Rectangle& rZoomRect) override;
+    virtual void SetZoomRect (const ::tools::Rectangle& rZoomRect) override;
 
     /** This is a callback method used by the active window to delegate its
         Paint() call to.  This view shell itself delegates it to the view.
     */
-    virtual void Paint(const Rectangle& rRect, ::sd::Window* pWin) override;
+    virtual void Paint(const ::tools::Rectangle& rRect, ::sd::Window* pWin) override;
 
     /** Place and size the controls and windows.  You may want to call this
         method when something has changed that for instance affects the
@@ -138,15 +136,15 @@ public:
     virtual sal_Int8 AcceptDrop (
         const AcceptDropEvent& rEvt,
         DropTargetHelper& rTargetHelper,
-        ::sd::Window* pTargetWindow = nullptr,
-        sal_uInt16 nPage = SDRPAGE_NOTFOUND,
-        sal_uInt16 nLayer = SDRPAGE_NOTFOUND ) override;
+        ::sd::Window* pTargetWindow,
+        sal_uInt16 nPage,
+        SdrLayerID nLayer ) override;
     virtual sal_Int8 ExecuteDrop (
         const ExecuteDropEvent& rEvt,
         DropTargetHelper& rTargetHelper,
-        ::sd::Window* pTargetWindow = nullptr,
-        sal_uInt16 nPage = SDRPAGE_NOTFOUND,
-        sal_uInt16 nLayer = SDRPAGE_NOTFOUND) override;
+        ::sd::Window* pTargetWindow,
+        sal_uInt16 nPage,
+        SdrLayerID nLayer) override;
 
     typedef ::std::vector<SdPage*> PageSelection;
 
@@ -168,7 +166,7 @@ public:
     /** Remove a listener that was called when the selection of the slide
         sorter changes.
         @param rListener
-            It is save to pass a listener that was not added are has been
+            It is safe to pass a listener that was not added are has been
             removed previously.  Such calls are ignored.
     */
     void RemoveSelectionChangeListener (const Link<LinkParamNone*,void>& rListener);
@@ -200,7 +198,7 @@ protected:
     /** Override this method to handle a missing tool bar correctly.
         This is the case when the slide sorter is not the main view shell.
     */
-    virtual ::svl::IUndoManager* ImpGetUndoManager() const override;
+    virtual SfxUndoManager* ImpGetUndoManager() const override;
 
 private:
     std::shared_ptr<SlideSorter> mpSlideSorter;
@@ -220,6 +218,15 @@ private:
     virtual void UpdateScrollBars() override;
 
     void PostMoveSlidesActions(const std::shared_ptr<SlideSorterViewShell::PageSelection> &rpSelection);
+
+    void MainViewEndEditAndUnmarkAll();
+
+    /** Select the same pages in the document as are selected in the
+        SlideSorterViewShell
+
+        return the page numbers of the first and last selected pages
+    */
+    std::pair<sal_uInt16, sal_uInt16> SyncPageSelectionToDocument(const std::shared_ptr<SlideSorterViewShell::PageSelection> &rpSelection);
 };
 
 typedef std::shared_ptr<SlideSorterViewShell::PageSelection> SharedPageSelection;

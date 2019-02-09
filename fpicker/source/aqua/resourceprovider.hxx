@@ -21,6 +21,10 @@
 #ifndef INCLUDED_FPICKER_SOURCE_AQUA_RESOURCEPROVIDER_HXX
 #define INCLUDED_FPICKER_SOURCE_AQUA_RESOURCEPROVIDER_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <sal/types.h>
 
 #include <premac.h>
@@ -34,18 +38,10 @@
 #define FILE_PICKER_FILE_TYPE         504
 #define FILE_PICKER_OVERWRITE         505
 
-class CResourceProvider_Impl;
+namespace CResourceProvider {
 
-class CResourceProvider
-{
-public:
-    CResourceProvider( );
-    ~CResourceProvider( );
+NSString* getResString( sal_Int32 aId );
 
-    NSString* getResString( sal_Int32 aId );
-
-private:
-    CResourceProvider_Impl* m_pImpl;
 };
 
 #endif

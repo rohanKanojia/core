@@ -19,6 +19,7 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_MAILMRGE_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_MAILMRGE_HXX
 
+#include <memory>
 #include <svx/stddlg.hxx>
 
 #include <vcl/button.hxx>
@@ -27,7 +28,6 @@
 
 #include <vcl/fixed.hxx>
 #include <vcl/edit.hxx>
-#include <svtools/stdctrl.hxx>
 
 #include <vcl/lstbox.hxx>
 #include <com/sun/star/uno/Sequence.h>
@@ -92,7 +92,7 @@ class SwMailMergeDlg : public SvxStandardDialog
 
     VclPtr<OKButton>        m_pOkBTN;
 
-    SwMailMergeDlg_Impl* pImpl;
+    std::unique_ptr<SwMailMergeDlg_Impl> pImpl;
 
     SwWrtShell&     rSh;
     SwModuleOptions* pModOpt;
@@ -101,16 +101,15 @@ class SwMailMergeDlg : public SvxStandardDialog
     css::uno::Sequence< css::uno::Any >        m_aSelection;
     css::uno::Reference< css::frame::XFrame2 > m_xFrame;
 
-    Size            m_aDialogSize;
     OUString m_sSaveFilter;
     OUString m_sFilename;
 
-    DECL_LINK_TYPED( ButtonHdl, Button*, void );
-    DECL_LINK_TYPED( InsertPathHdl, Button*, void );
-    DECL_LINK_TYPED( OutputTypeHdl, Button*, void );
-    DECL_LINK_TYPED( FilenameHdl, Button*, void );
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( SaveTypeHdl, Button*, void );
+    DECL_LINK( ButtonHdl, Button*, void );
+    DECL_LINK( InsertPathHdl, Button*, void );
+    DECL_LINK( OutputTypeHdl, Button*, void );
+    DECL_LINK( FilenameHdl, Button*, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
+    DECL_LINK( SaveTypeHdl, Button*, void );
 
     virtual void    Apply() override;
     bool            ExecQryShell();
@@ -123,47 +122,45 @@ public:
         const OUString& rTableName,
         sal_Int32 nCommandType,
         const css::uno::Reference< css::sdbc::XConnection>& xConnection,
-        css::uno::Sequence< css::uno::Any >* pSelection = nullptr);
-    virtual ~SwMailMergeDlg();
+        css::uno::Sequence< css::uno::Any > const * pSelection);
+    virtual ~SwMailMergeDlg() override;
     virtual void dispose() override;
 
-    inline DBManagerOptions GetMergeType() { return nMergeType; }
+    DBManagerOptions GetMergeType() { return nMergeType; }
 
     bool IsSaveSingleDoc() const { return m_pSaveSingleDocRB->IsChecked(); }
     bool IsGenerateFromDataBase() const { return m_pGenerateFromDataBaseCB->IsChecked(); }
-    OUString GetColumnName() const { return m_pColumnLB->GetSelectEntry(); }
+    OUString GetColumnName() const { return m_pColumnLB->GetSelectedEntry(); }
     OUString GetTargetURL() const;
 
     const OUString& GetSaveFilter() const {return m_sSaveFilter;}
-    inline const css::uno::Sequence< css::uno::Any > GetSelection() const { return m_aSelection; }
+    const css::uno::Sequence< css::uno::Any >& GetSelection() const { return m_aSelection; }
     css::uno::Reference< css::sdbc::XResultSet> GetResultSet() const;
 
 };
 
-class SwMailMergeCreateFromDlg : public ModalDialog
+class SwMailMergeCreateFromDlg : public weld::GenericDialogController
 {
-    VclPtr<RadioButton> m_pThisDocRB;
+    std::unique_ptr<weld::RadioButton> m_xThisDocRB;
 public:
-    SwMailMergeCreateFromDlg(vcl::Window* pParent);
-    virtual ~SwMailMergeCreateFromDlg();
-    virtual void dispose() override;
+    SwMailMergeCreateFromDlg(weld::Window* pParent);
+    virtual ~SwMailMergeCreateFromDlg() override;
     bool IsThisDocument() const
     {
-        return m_pThisDocRB->IsChecked();
+        return m_xThisDocRB->get_active();
     }
 };
 
-class SwMailMergeFieldConnectionsDlg : public ModalDialog
+class SwMailMergeFieldConnectionsDlg : public weld::GenericDialogController
 {
-    VclPtr<RadioButton> m_pUseExistingRB;
+    std::unique_ptr<weld::RadioButton> m_xUseExistingRB;
 public:
-    SwMailMergeFieldConnectionsDlg(vcl::Window* pParent);
-    virtual ~SwMailMergeFieldConnectionsDlg();
-    virtual void dispose() override;
+    SwMailMergeFieldConnectionsDlg(weld::Window* pParent);
+    virtual ~SwMailMergeFieldConnectionsDlg() override;
 
     bool IsUseExistingConnections() const
     {
-        return m_pUseExistingRB->IsChecked();
+        return m_xUseExistingRB->get_active();
     }
 };
 

@@ -17,21 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_DataEditor.hxx"
-#include "Strings.hrc"
+#include <dlg_DataEditor.hxx>
 #include "DataBrowser.hxx"
+#include <comphelper/stl_types.hxx>
 
-#include "ResId.hxx"
-#include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
+#include <osl/diagnose.h>
 #include <vcl/taskpanelist.hxx>
 #include <svtools/miscopt.hxx>
-#include <unotools/pathoptions.hxx>
-#include <svl/eitem.hxx>
-#include <vcl/edit.hxx>
 
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/chart2/XChartDocument.hpp>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Reference;
@@ -52,7 +46,7 @@ DataEditor::DataEditor(vcl::Window* pParent,
     m_xBrwData->set_hexpand(true);
     m_xBrwData->set_vexpand(true);
     m_xBrwData->set_expand(true);
-    Size aSize(m_xBrwData->LogicToPixel(Size(232, 121), MAP_APPFONT));
+    Size aSize(m_xBrwData->LogicToPixel(Size(232, 121), MapMode(MapUnit::MapAppFont)));
     m_xBrwData->set_width_request(aSize.Width());
     m_xBrwData->set_height_request(aSize.Height());
     m_xBrwData->Show();
@@ -64,14 +58,16 @@ DataEditor::DataEditor(vcl::Window* pParent,
     TBI_DATA_INSERT_TEXT_COL = m_pTbxData->GetItemId("InsertTextColumn");
     TBI_DATA_DELETE_ROW = m_pTbxData->GetItemId("RemoveRow");
     TBI_DATA_DELETE_COL = m_pTbxData->GetItemId("RemoveColumn");
-    TBI_DATA_SWAP_COL = m_pTbxData->GetItemId("SwapColumn");
-    TBI_DATA_SWAP_ROW = m_pTbxData->GetItemId("SwapRow");
+    TBI_DATA_MOVE_LEFT_COL = m_pTbxData->GetItemId("MoveLeftColumn");
+    TBI_DATA_MOVE_RIGHT_COL = m_pTbxData->GetItemId("MoveRightColumn");
+    TBI_DATA_MOVE_UP_ROW = m_pTbxData->GetItemId("MoveUpRow");
+    TBI_DATA_MOVE_DOWN_ROW = m_pTbxData->GetItemId("MoveDownRow");
 
     m_pTbxData->SetSelectHdl( LINK( this, DataEditor, ToolboxHdl ));
 
     m_xBrwData->SetCursorMovedHdl( LINK( this, DataEditor, BrowserCursorMovedHdl ));
 
-    UpdateData();
+    m_xBrwData->SetDataFromModel( m_xChartDoc, m_xContext );
     GrabFocus();
     m_xBrwData->GrabFocus();
 
@@ -104,14 +100,13 @@ void DataEditor::dispose()
     SvtMiscOptions aMiscOptions;
     aMiscOptions.RemoveListenerLink( LINK( this, DataEditor, MiscHdl ) );
 
-    OSL_TRACE( "DataEditor: DTOR" );
     m_pTbxData.clear();
     m_xBrwData.disposeAndClear();
     ModalDialog::dispose();
 }
 
 // react on click (or keypress) on toolbar icon
-IMPL_LINK_NOARG_TYPED(DataEditor, ToolboxHdl, ToolBox *, void)
+IMPL_LINK_NOARG(DataEditor, ToolboxHdl, ToolBox *, void)
 {
     sal_uInt16 nId = m_pTbxData->GetCurItemId();
 
@@ -125,14 +120,18 @@ IMPL_LINK_NOARG_TYPED(DataEditor, ToolboxHdl, ToolBox *, void)
         m_xBrwData->RemoveRow();
     else if (nId == TBI_DATA_DELETE_COL)
         m_xBrwData->RemoveColumn();
-    else if (nId == TBI_DATA_SWAP_COL)
-        m_xBrwData->SwapColumn();
-    else if (nId == TBI_DATA_SWAP_ROW)
-        m_xBrwData->SwapRow();
+    else if (nId == TBI_DATA_MOVE_LEFT_COL)
+        m_xBrwData->MoveLeftColumn();
+    else if (nId == TBI_DATA_MOVE_RIGHT_COL)
+        m_xBrwData->MoveRightColumn();
+    else if (nId == TBI_DATA_MOVE_UP_ROW)
+        m_xBrwData->MoveUpRow();
+    else if (nId == TBI_DATA_MOVE_DOWN_ROW)
+        m_xBrwData->MoveDownRow();
 }
 
 // refresh toolbar icons according to currently selected cell in browse box
-IMPL_LINK_NOARG_TYPED(DataEditor, BrowserCursorMovedHdl, DataBrowser*, void)
+IMPL_LINK_NOARG(DataEditor, BrowserCursorMovedHdl, DataBrowser*, void)
 {
     if( m_bReadOnly )
         return;
@@ -145,8 +144,10 @@ IMPL_LINK_NOARG_TYPED(DataEditor, BrowserCursorMovedHdl, DataBrowser*, void)
     m_pTbxData->EnableItem( TBI_DATA_DELETE_ROW, m_xBrwData->MayDeleteRow() );
     m_pTbxData->EnableItem( TBI_DATA_DELETE_COL, m_xBrwData->MayDeleteColumn() );
 
-    m_pTbxData->EnableItem( TBI_DATA_SWAP_COL,   bIsDataValid && m_xBrwData->MaySwapColumns() );
-    m_pTbxData->EnableItem( TBI_DATA_SWAP_ROW,   bIsDataValid && m_xBrwData->MaySwapRows() );
+    m_pTbxData->EnableItem( TBI_DATA_MOVE_LEFT_COL,   bIsDataValid && m_xBrwData->MayMoveLeftColumns() );
+    m_pTbxData->EnableItem( TBI_DATA_MOVE_RIGHT_COL,   bIsDataValid && m_xBrwData->MayMoveRightColumns() );
+    m_pTbxData->EnableItem( TBI_DATA_MOVE_DOWN_ROW,   bIsDataValid && m_xBrwData->MayMoveDownRows() );
+    m_pTbxData->EnableItem( TBI_DATA_MOVE_UP_ROW,   bIsDataValid && m_xBrwData->MayMoveUpRows() );
 }
 
 // disable all modifying controls
@@ -160,24 +161,21 @@ void DataEditor::SetReadOnly( bool bReadOnly )
         m_pTbxData->EnableItem( TBI_DATA_INSERT_TEXT_COL, false );
         m_pTbxData->EnableItem( TBI_DATA_DELETE_ROW, false );
         m_pTbxData->EnableItem( TBI_DATA_DELETE_COL, false );
-        m_pTbxData->EnableItem( TBI_DATA_SWAP_COL, false );
-        m_pTbxData->EnableItem( TBI_DATA_SWAP_ROW, false );
+        m_pTbxData->EnableItem( TBI_DATA_MOVE_LEFT_COL, false );
+        m_pTbxData->EnableItem( TBI_DATA_MOVE_RIGHT_COL, false );
+        m_pTbxData->EnableItem( TBI_DATA_MOVE_UP_ROW, false );
+        m_pTbxData->EnableItem( TBI_DATA_MOVE_DOWN_ROW, false );
     }
 
     m_xBrwData->SetReadOnly( m_bReadOnly );
 }
 
-IMPL_LINK_NOARG_TYPED(DataEditor, MiscHdl, LinkParamNone*, void)
+IMPL_LINK_NOARG(DataEditor, MiscHdl, LinkParamNone*, void)
 {
     SvtMiscOptions aMiscOptions;
     sal_Int16 nStyle( aMiscOptions.GetToolboxStyle() );
 
     m_pTbxData->SetOutStyle( nStyle );
-}
-
-void DataEditor::UpdateData()
-{
-    m_xBrwData->SetDataFromModel( m_xChartDoc, m_xContext );
 }
 
 bool DataEditor::Close()
@@ -197,7 +195,7 @@ bool DataEditor::ApplyChangesToModel()
 // travels/no longer travels over this window.  _rMemFunc may be
 // TaskPaneList::AddWindow or TaskPaneList::RemoveWindow
 void DataEditor::notifySystemWindow(
-    vcl::Window* pWindow, vcl::Window* pToRegister,
+    vcl::Window const * pWindow, vcl::Window* pToRegister,
     const ::comphelper::mem_fun1_t<TaskPaneList, vcl::Window*>& rMemFunc )
 {
     OSL_ENSURE( pWindow, "Window must not be null!" );
@@ -211,7 +209,7 @@ void DataEditor::notifySystemWindow(
     if ( pParent && pParent->IsSystemWindow())
     {
         SystemWindow* pSystemWindow = static_cast< SystemWindow* >( pParent );
-        rMemFunc( pSystemWindow->GetTaskPaneList(),( pToRegister ));
+        rMemFunc( pSystemWindow->GetTaskPaneList(), pToRegister );
     }
 }
 

@@ -16,7 +16,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include "convertsimple.hxx"
 #include "tenchelp.hxx"
@@ -122,7 +122,7 @@ static ImplDBCSToUniLeadTab const aSJISUniLeadTab[256] =
     { 0x0059,    0,    0, nullptr },                               /* 0x59 */
     { 0x005A,    0,    0, nullptr },                               /* 0x5A */
     { 0x005B,    0,    0, nullptr },                               /* 0x5B */
-    { 0x005C,    0,    0, nullptr },                               /* 0x5C */ /* is A5 (YEN SIGN), but for compatibiliy with ascii, we use 0x5C (SLASH) like MS CP392 */
+    { 0x005C,    0,    0, nullptr },                               /* 0x5C */ /* is A5 (YEN SIGN), but for compatibility with ASCII, we use 0x5C (SLASH) like MS CP392 */
     { 0x005D,    0,    0, nullptr },                               /* 0x5D */
     { 0x005E,    0,    0, nullptr },                               /* 0x5E */
     { 0x005F,    0,    0, nullptr },                               /* 0x5F */
@@ -156,13 +156,13 @@ static ImplDBCSToUniLeadTab const aSJISUniLeadTab[256] =
     { 0x007B,    0,    0, nullptr },                               /* 0x7B */
     { 0x007C,    0,    0, nullptr },                               /* 0x7C */
     { 0x007D,    0,    0, nullptr },                               /* 0x7D */
-    { 0x007E,    0,    0, nullptr },                               /* 0x7E */ /* is 0x0203E (SPACING OVERSCORE), but for compatibiliy with ascii, we use 0x7E (TILDE) like MS CP392 */
+    { 0x007E,    0,    0, nullptr },                               /* 0x7E */ /* is 0x0203E (SPACING OVERSCORE), but for compatibility with ASCII, we use 0x7E (TILDE) like MS CP392 */
     { 0x007F,    0,    0, nullptr },                               /* 0x7F */
-    { 0x005C,    0,    0, nullptr },                               /* 0x80 */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
+    { 0x005C,    0,    0, nullptr },                               /* 0x80 */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_81 },         /* 0x81 */
     {      0, 0x4F, 0xF1, aImplDBCSToUniTab_SJIS_82 },          /* 0x82 */
     {      0, 0x40, 0xD6, aImplDBCSToUniTab_SJIS_83 },          /* 0x83 */
-    {      0, 0x40, 0xBF, aImplDBCSToUniTab_SJIS_84 },          /* 0x84 */
+    {      0, 0x40, 0xBE, aImplDBCSToUniTab_SJIS_84 },          /* 0x84 */
     {      0,    1,    0, aImplDoubleByteIdentifierTab },       /* 0x85 */ /* We convert this as double byte */
     {      0,    1,    0, aImplDoubleByteIdentifierTab },       /* 0x86 */ /* We convert this as double byte */
     {      0, 0x40, 0x9C, aImplDBCSToUniTab_MS932_87 },         /* 0x87 */ /* We use the MS table for better MS compatibility */
@@ -190,7 +190,7 @@ static ImplDBCSToUniLeadTab const aSJISUniLeadTab[256] =
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_SJIS_9D },          /* 0x9D */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_SJIS_9E },          /* 0x9E */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_SJIS_9F },          /* 0x9F */
-    { 0x00A0,    0,    0, nullptr },                               /* 0xA0 */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
+    { 0x00A0,    0,    0, nullptr },                               /* 0xA0 */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
     { 0xFF61,    0,    0, nullptr },                               /* 0xA1 */
     { 0xFF62,    0,    0, nullptr },                               /* 0xA2 */
     { 0xFF63,    0,    0, nullptr },                               /* 0xA3 */
@@ -283,9 +283,9 @@ static ImplDBCSToUniLeadTab const aSJISUniLeadTab[256] =
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_FA },         /* 0xFA */ /* We use the MS table for better MS compatibility */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_FB },         /* 0xFB */ /* We use the MS table for better MS compatibility */
     {      0, 0x40, 0x4B, aImplDBCSToUniTab_MS932_FC },         /* 0xFC */ /* We use the MS table for better MS compatibility */
-    { 0x00A9,    0,    0, nullptr },                               /* 0xFD */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
-    { 0x2122,    0,    0, nullptr },                               /* 0xFE */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
-    { 0x2026,    0,    0, nullptr }                                /* 0xFF */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
+    { 0x00A9,    0,    0, nullptr },                               /* 0xFD */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
+    { 0x2122,    0,    0, nullptr },                               /* 0xFE */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
+    { 0x2026,    0,    0, nullptr }                                /* 0xFF */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
 };
 
 /* ----------------------------------------------------------------------- */
@@ -694,7 +694,7 @@ static ImplDBCSToUniLeadTab const aMS932UniLeadTab[256] =
     { 0x0059,    0,    0, nullptr },                               /* 0x59 */
     { 0x005A,    0,    0, nullptr },                               /* 0x5A */
     { 0x005B,    0,    0, nullptr },                               /* 0x5B */
-    { 0x005C,    0,    0, nullptr },                               /* 0x5C */ /* in SJIS this is A5 (YEN SIGN), but for compatibiliy with ascii, we use 0x5C like MS CP392 */
+    { 0x005C,    0,    0, nullptr },                               /* 0x5C */ /* in SJIS this is A5 (YEN SIGN), but for compatibility with ASCII, we use 0x5C like MS CP392 */
     { 0x005D,    0,    0, nullptr },                               /* 0x5D */
     { 0x005E,    0,    0, nullptr },                               /* 0x5E */
     { 0x005F,    0,    0, nullptr },                               /* 0x5F */
@@ -728,13 +728,13 @@ static ImplDBCSToUniLeadTab const aMS932UniLeadTab[256] =
     { 0x007B,    0,    0, nullptr },                               /* 0x7B */
     { 0x007C,    0,    0, nullptr },                               /* 0x7C */
     { 0x007D,    0,    0, nullptr },                               /* 0x7D */
-    { 0x007E,    0,    0, nullptr },                               /* 0x7E */ /* in SJIS this is 0x0203E (SPACING OVERSCORE), but for compatibiliy with ascii, we use 0x7E (TILDE) like MS CP392 */
+    { 0x007E,    0,    0, nullptr },                               /* 0x7E */ /* in SJIS this is 0x0203E (SPACING OVERSCORE), but for compatibility with ASCII, we use 0x7E (TILDE) like MS CP392 */
     { 0x007F,    0,    0, nullptr },                               /* 0x7F */
-    { 0x005C,    0,    0, nullptr },                               /* 0x80 */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
+    { 0x005C,    0,    0, nullptr },                               /* 0x80 */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_81 },         /* 0x81 */
     {      0, 0x4F, 0xF1, aImplDBCSToUniTab_SJIS_82 },          /* 0x82 */
     {      0, 0x40, 0xD6, aImplDBCSToUniTab_SJIS_83 },          /* 0x83 */
-    {      0, 0x40, 0xBF, aImplDBCSToUniTab_SJIS_84 },          /* 0x84 */
+    {      0, 0x40, 0xBE, aImplDBCSToUniTab_SJIS_84 },          /* 0x84 */
     {      0,    1,    0, aImplDoubleByteIdentifierTab },       /* 0x85 */ /* We convert this as double byte */
     {      0,    1,    0, aImplDoubleByteIdentifierTab },       /* 0x86 */ /* We convert this as double byte */
     {      0, 0x40, 0x9C, aImplDBCSToUniTab_MS932_87 },         /* 0x87 */
@@ -762,7 +762,7 @@ static ImplDBCSToUniLeadTab const aMS932UniLeadTab[256] =
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_SJIS_9D },          /* 0x9D */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_SJIS_9E },          /* 0x9E */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_SJIS_9F },          /* 0x9F */
-    { 0x00A0,    0,    0, nullptr },                               /* 0xA0 */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
+    { 0x00A0,    0,    0, nullptr },                               /* 0xA0 */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
     { 0xFF61,    0,    0, nullptr },                               /* 0xA1 */
     { 0xFF62,    0,    0, nullptr },                               /* 0xA2 */
     { 0xFF63,    0,    0, nullptr },                               /* 0xA3 */
@@ -855,9 +855,9 @@ static ImplDBCSToUniLeadTab const aMS932UniLeadTab[256] =
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_FA },         /* 0xFA */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_FB },         /* 0xFB */
     {      0, 0x40, 0x4B, aImplDBCSToUniTab_MS932_FC },         /* 0xFC */
-    { 0x00A9,    0,    0, nullptr },                               /* 0xFD */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
-    { 0x2122,    0,    0, nullptr },                               /* 0xFE */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
-    { 0x2026,    0,    0, nullptr }                                /* 0xFF */ /* APPLE additions over SJIS, we convert this like apple, because I think, this gives better result, than we take a replacement char */
+    { 0x00A9,    0,    0, nullptr },                               /* 0xFD */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
+    { 0x2122,    0,    0, nullptr },                               /* 0xFE */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
+    { 0x2026,    0,    0, nullptr }                                /* 0xFF */ /* APPLE additions over SJIS, we convert this like Apple, because I think, this gives better result, then we take a replacement char */
 };
 
 /* ----------------------------------------------------------------------- */
@@ -1251,7 +1251,7 @@ static ImplDBCSToUniLeadTab const aAPPLEJAPANESEUniLeadTab[256] =
     { 0x0059,    0,    0, nullptr },                               /* 0x59 */
     { 0x005A,    0,    0, nullptr },                               /* 0x5A */
     { 0x005B,    0,    0, nullptr },                               /* 0x5B */
-    { 0x005C,    0,    0, nullptr },                               /* 0x5C */ /* is A5 (YEN SIGN), but for compatibiliy with ascii, we use 0x5C like MS CP392 */
+    { 0x005C,    0,    0, nullptr },                               /* 0x5C */ /* is A5 (YEN SIGN), but for compatibility with ASCII, we use 0x5C like MS CP392 */
     { 0x005D,    0,    0, nullptr },                               /* 0x5D */
     { 0x005E,    0,    0, nullptr },                               /* 0x5E */
     { 0x005F,    0,    0, nullptr },                               /* 0x5F */
@@ -1285,13 +1285,13 @@ static ImplDBCSToUniLeadTab const aAPPLEJAPANESEUniLeadTab[256] =
     { 0x007B,    0,    0, nullptr },                               /* 0x7B */
     { 0x007C,    0,    0, nullptr },                               /* 0x7C */
     { 0x007D,    0,    0, nullptr },                               /* 0x7D */
-    { 0x007E,    0,    0, nullptr },                               /* 0x7E */ /* in SJIS this is 0x0203E (SPACING OVERSCORE), but for compatibiliy with ascii, we use 0x7E (TILDE) like MS CP392 */
+    { 0x007E,    0,    0, nullptr },                               /* 0x7E */ /* in SJIS this is 0x0203E (SPACING OVERSCORE), but for compatibility with ASCII, we use 0x7E (TILDE) like MS CP392 */
     { 0x007F,    0,    0, nullptr },                               /* 0x7F */
     { 0x005C,    0,    0, nullptr },                               /* 0x80 */ /* APPLE additions over SJIS */
     {      0, 0x40, 0xFC, aImplDBCSToUniTab_MS932_81 },         /* 0x81 */
     {      0, 0x4F, 0xF1, aImplDBCSToUniTab_SJIS_82 },          /* 0x82 */
     {      0, 0x40, 0xD6, aImplDBCSToUniTab_SJIS_83 },          /* 0x83 */
-    {      0, 0x40, 0xBF, aImplDBCSToUniTab_SJIS_84 },          /* 0x84 */
+    {      0, 0x40, 0xBE, aImplDBCSToUniTab_SJIS_84 },          /* 0x84 */
     {      0, 0x40, 0xF4, aImplDBCSToUniTab_APPLEJAPANESE_85 }, /* 0x85 */
     {      0, 0x40, 0xD2, aImplDBCSToUniTab_APPLEJAPANESE_86 }, /* 0x86 */
     {      0, 0x40, 0xFA, aImplDBCSToUniTab_APPLEJAPANESE_87 }, /* 0x87 */

@@ -29,10 +29,11 @@
 #include <basegfx/vector/b2dsize.hxx>
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/range/b2drange.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <sal/log.hxx>
 #include "cachedprimitivebase.hxx"
 #include "bitmapaction.hxx"
-#include "outdevstate.hxx"
+#include <outdevstate.hxx>
 #include "mtftools.hxx"
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 
@@ -84,8 +85,7 @@ namespace cppcanvas
                                         const CanvasSharedPtr&     rCanvas,
                                         const OutDevState&         rState ) :
                 CachedPrimitiveBase( rCanvas, true ),
-                mxBitmap( vcl::unotools::xBitmapFromBitmapEx( rCanvas->getUNOCanvas()->getDevice(),
-                                                                rBmpEx ) ),
+                mxBitmap( vcl::unotools::xBitmapFromBitmapEx( rBmpEx ) ),
                 mpCanvas( rCanvas ),
                 maState()
             {
@@ -93,7 +93,7 @@ namespace cppcanvas
 
                 // Setup transformation such that the next render call is
                 // moved rPoint away.
-                const basegfx::B2DHomMatrix aLocalTransformation(basegfx::tools::createTranslateB2DHomMatrix(rDstPoint));
+                const basegfx::B2DHomMatrix aLocalTransformation(basegfx::utils::createTranslateB2DHomMatrix(rDstPoint));
                 ::canvas::tools::appendToRenderState( maState,
                                                       aLocalTransformation );
 
@@ -112,8 +112,7 @@ namespace cppcanvas
                                         const CanvasSharedPtr&      rCanvas,
                                         const OutDevState&          rState      ) :
                 CachedPrimitiveBase( rCanvas, true ),
-                mxBitmap( vcl::unotools::xBitmapFromBitmapEx( rCanvas->getUNOCanvas()->getDevice(),
-                                                                rBmpEx ) ),
+                mxBitmap( vcl::unotools::xBitmapFromBitmapEx( rBmpEx ) ),
                 mpCanvas( rCanvas ),
                 maState()
             {
@@ -126,7 +125,7 @@ namespace cppcanvas
 
                 const ::basegfx::B2DVector aScale( rDstSize.getX() / aBmpSize.Width(),
                                                    rDstSize.getY() / aBmpSize.Height() );
-                const basegfx::B2DHomMatrix aLocalTransformation(basegfx::tools::createScaleTranslateB2DHomMatrix(
+                const basegfx::B2DHomMatrix aLocalTransformation(basegfx::utils::createScaleTranslateB2DHomMatrix(
                     aScale, rDstPoint));
                 ::canvas::tools::appendToRenderState( maState, aLocalTransformation );
 
@@ -199,24 +198,24 @@ namespace cppcanvas
             }
         }
 
-        ActionSharedPtr BitmapActionFactory::createBitmapAction( const ::BitmapEx&          rBmpEx,
+        std::shared_ptr<Action> BitmapActionFactory::createBitmapAction( const ::BitmapEx&          rBmpEx,
                                                                  const ::basegfx::B2DPoint& rDstPoint,
                                                                  const CanvasSharedPtr&     rCanvas,
                                                                  const OutDevState&         rState )
         {
-            return ActionSharedPtr( new BitmapAction(rBmpEx,
+            return std::shared_ptr<Action>( new BitmapAction(rBmpEx,
                                                      rDstPoint,
                                                      rCanvas,
                                                      rState ) );
         }
 
-        ActionSharedPtr BitmapActionFactory::createBitmapAction( const ::BitmapEx&           rBmpEx,
+        std::shared_ptr<Action> BitmapActionFactory::createBitmapAction( const ::BitmapEx&           rBmpEx,
                                                                  const ::basegfx::B2DPoint&  rDstPoint,
                                                                  const ::basegfx::B2DVector& rDstSize,
                                                                  const CanvasSharedPtr&      rCanvas,
                                                                  const OutDevState&          rState )
         {
-            return ActionSharedPtr( new BitmapAction(rBmpEx,
+            return std::shared_ptr<Action>( new BitmapAction(rBmpEx,
                                                      rDstPoint,
                                                      rDstSize,
                                                      rCanvas,

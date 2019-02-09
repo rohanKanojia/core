@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "componenttools.hxx"
+#include <componenttools.hxx>
 
 #include <com/sun/star/container/XChild.hpp>
 #include <comphelper/sequence.hxx>
@@ -60,8 +60,8 @@ namespace frm
     void TypeBag::addTypes( const TypeSequence& _rTypes )
     {
         ::std::copy(
-            _rTypes.getConstArray(),
-            _rTypes.getConstArray() + _rTypes.getLength(),
+            _rTypes.begin(),
+            _rTypes.end(),
             ::std::insert_iterator< TypeSet >( m_aTypes, m_aTypes.begin() )
         );
     }
@@ -81,7 +81,7 @@ namespace frm
 
     TypeBag::TypeSequence TypeBag::getTypes() const
     {
-        return comphelper::containerToSequence<css::uno::Type>(m_aTypes);
+        return comphelper::containerToSequence(m_aTypes);
     }
 
 

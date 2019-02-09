@@ -60,8 +60,8 @@ import util.utils;
  * of the <code>TypeDetection<code> must match with an expected type.
  *
  *
- * To get information which test file should support which type, filter and
- * document service, this information was collect from configuration files:
+ * To get information on which test file should support which type, filter and
+ * document service, this information was collected from configuration files:
  * <UL>
  * <LI><a href="#TypeDetection.props">TypeDetection.props</a></LI>
  * <LI><a href="#files.csv">files.csv</a></LI>
@@ -72,7 +72,7 @@ import util.utils;
  * <p>
  * <h3><A name="TypeDetection.props"></A>
  * <code>typeDetection.props</code></h3>
- * At fist there will be the <code>typeDetection.props</code>. Here the following
+ * At first there will be the <code>typeDetection.props</code>. Here the following
  * properties should be set (with example values):
  *
  * TestDocumentPath=file:///path/to/my/testdocuments
@@ -100,7 +100,7 @@ import util.utils;
  * this file
  *
  * The second example displays two document types for
- * <code>XInputStream</CODE> (<code>generic_Text</CODE>). This
+ * <code>XInputStream</CODE> (<code>generic_Text</CODE>). These
  * two document types are listed by a colon ':' as separator.
  * This is needed because XInputStream can detect a text file as
  * generic_Text.
@@ -112,9 +112,9 @@ import util.utils;
  * filter to detect the document. This make sense ie. for csv-files: You can
  * open csv files as Writer or as Calc. To check this case you have to specify
  * in <code>csv.files</code> a fileAlias like ?csv_writer? and ?csv_calc? with
- * the same fileURL and it's specific defaultFileType.
- * The returned file type by <code>TypeDetection</code> must equal to
- * correspond <code>defaultFileType</code> from <code>csv.files</code>
+ * the same fileURL and its specific defaultFileType.
+ * The returned file type by <code>TypeDetection</code> must be equal to the
+ * corresponding <code>defaultFileType</code> from <code>csv.files</code>
  *
  * Syntax: fileAlias;FilterName;FilterOptions;FilterData
  * Example: Writer6_1;%SO6productname %SO6formatversion Textdocument;
@@ -125,18 +125,18 @@ import util.utils;
  * name which should be used. Here we have a special: <code>%SO6productname
  * %SO6formatversion</code> will be replaced by the equals of
  * <code>typeDetection.props</code>. The filter names depends on the Office
- * name and version. So a future Office could called ?StarSuite 8?.
+ * name and version. So a future Office could be called ?StarSuite 8?.
  * <code>FilterOptions</code> is not relevant for this filter. But ie. for csv
  * filter this entry could be used to specify the separator of the csv file.
  * <code>FilterData<code> if filter needs some FilterData arguments you can
- * specify it here
+ * specify them here
  *
  * <p>
  * <H3><a name="preselectedType.csv"></A>
  * <code>preselectedType.csv</code></H3>
  * In this file you can preselect the type
  * <code>TypeDetection</code> should use.
- * The returned file type by <code>TypeDetection</code> must equal to the
+ * The file type returned by <code>TypeDetection</code> must be equal to the
  * preselected file type.
  * Note: If you try to use invalid types you will get a failed test because
  * <code>TypeDetection</code> tries to find out the type itself.
@@ -153,8 +153,8 @@ import util.utils;
  * <p>
  * <H3><a name="serviceName.csv"></A>
  * <code>serviceName.csv</code></H3> In this file you can preselect a service name
- * to detect the file type. The returned file type by
- * <code>TypeDetection</code> must equal to correspond
+ * to detect the file type. The file type returned by
+ * <code>TypeDetection</code> must be equal to the corresponding
  * <code>defaultFileType</code> from <code>csv.files</code>
  *
  * Syntax: fileAlias;serviceName
@@ -237,7 +237,7 @@ public class TypeDetection extends ComplexTestCase {
 
     /**
      * The <code>MediaDescriptor</code> was filled with the URL of a file. The
-     * <code>type</code> of the file is kown and must be returned by
+     * <code>type</code> of the file is known and must be returned by
      * <code>MediaDescriptor</code>
      *
      * Syntax of files.csv:
@@ -274,8 +274,8 @@ public class TypeDetection extends ComplexTestCase {
         }
     }
 
-    /** To check the <CODE>TypeDedection</CODE> by URL the <CODE>MediaDescriptor</CODE>
-     * was filled at fist with the URL only, at second with <CODE>XInputStream</CODE>
+    /** To check the <CODE>TypeDetection</CODE> by URL the <CODE>MediaDescriptor</CODE>
+     * was filled at first with the URL only, at second with <CODE>XInputStream</CODE>
      * only. The <CODE>TypeDetection</CODE> must return the expected value
      * @param fileAlias the alias name of the test file
      * @param fileURL the URL of the test file
@@ -299,7 +299,7 @@ public class TypeDetection extends ComplexTestCase {
                    "'\n\texpected type: '" + fileType + "'",fileTypeOK ,ContinueWithTest.YES);
     }
 
-    /** Filles a MediaDescriptor with a <code>XInputStream</code> of the test
+    /** Fills a MediaDescriptor with a <code>XInputStream</code> of the test
      * file given by URL.
      * Then the MediaDescriptor was used as parameter for TypeDetection.
      * The TypeDetection must return expected type
@@ -338,7 +338,7 @@ public class TypeDetection extends ComplexTestCase {
 
     /**
      * The <code>MediaDescriptor</code> was filled with the URL of a file. The
-     * <code>type</code> of the file is kown and must be returned by
+     * <code>type</code> of the file is known and must be returned by
      * <code>MediaDescriptor</code>
      *
      * Syntax of files.csv:
@@ -491,8 +491,8 @@ public class TypeDetection extends ComplexTestCase {
          try{
 
             /*
-             *als Dateien die typeDetection.props und eine der csv-Dateien
-             *benutzten. diese können per dmake einfach auf andere Rechte setzten
+             * As files, use the typeDetection.props and one of the csv files.
+             * Those can, via dmake, simply set rights on others.
              *
              */
             log.println("### checkStreamLoader() ###");

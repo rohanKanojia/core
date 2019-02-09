@@ -52,12 +52,12 @@ void InitDrawModelAndDocShell(SwDocShell* pSwDocShell, SwDrawModel* pSwDrawDocum
             // get and decide on the color table to use
             if(pSwDocShell)
             {
-                const SvxColorListItem* pColItemFromDocShell = static_cast< const SvxColorListItem* >(pSwDocShell->GetItem(SID_COLOR_TABLE));
+                const SvxColorListItem* pColItemFromDocShell = pSwDocShell->GetItem(SID_COLOR_TABLE);
 
                 if(pColItemFromDocShell)
                 {
                     // the DocShell has a ColorTable, use it also in DrawingLayer
-                    XColorListRef xCol(pColItemFromDocShell->GetColorList());
+                    const XColorListRef& xCol(pColItemFromDocShell->GetColorList());
                     pSwDrawDocument->SetPropertyList(static_cast<XPropertyList*>(xCol.get()));
                 }
                 else
@@ -68,7 +68,7 @@ void InitDrawModelAndDocShell(SwDocShell* pSwDocShell, SwDrawModel* pSwDrawDocum
                     {
                         pSwDocShell->PutItem(SvxColorListItem(xColorList, SID_COLOR_TABLE));
                     }
-                    else if (!utl::ConfigManager::IsAvoidConfig())
+                    else if (!utl::ConfigManager::IsFuzzing())
                     {
                         // there wasn't one, get the standard and set to the
                         // docshell and then to the drawdocument
@@ -82,6 +82,7 @@ void InitDrawModelAndDocShell(SwDocShell* pSwDocShell, SwDrawModel* pSwDrawDocum
                 pSwDocShell->PutItem(SvxGradientListItem(pSwDrawDocument->GetGradientList(), SID_GRADIENT_LIST));
                 pSwDocShell->PutItem(SvxHatchListItem(pSwDrawDocument->GetHatchList(), SID_HATCH_LIST));
                 pSwDocShell->PutItem(SvxBitmapListItem(pSwDrawDocument->GetBitmapList(), SID_BITMAP_LIST));
+                pSwDocShell->PutItem(SvxPatternListItem(pSwDrawDocument->GetPatternList(), SID_PATTERN_LIST));
                 pSwDocShell->PutItem(SvxDashListItem(pSwDrawDocument->GetDashList(), SID_DASH_LIST));
                 pSwDocShell->PutItem(SvxLineEndListItem(pSwDrawDocument->GetLineEndList(), SID_LINEEND_LIST));
             }

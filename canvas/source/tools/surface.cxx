@@ -28,7 +28,7 @@
 namespace canvas
 {
     Surface::Surface( const PageManagerSharedPtr&  rPageManager,
-                      const IColorBufferSharedPtr& rColorBuffer,
+                      const std::shared_ptr<IColorBuffer>& rColorBuffer,
                       const ::basegfx::B2IPoint&   rPos,
                       const ::basegfx::B2ISize&    rSize ) :
         mpColorBuffer(rColorBuffer),
@@ -93,7 +93,7 @@ namespace canvas
                         const ::basegfx::B2DPoint&      rPos,
                         const ::basegfx::B2DHomMatrix&  rTransform )
     {
-        IRenderModuleSharedPtr pRenderModule(mpPageManager->getRenderModule());
+        std::shared_ptr<IRenderModule> pRenderModule(mpPageManager->getRenderModule());
 
         RenderModuleGuard aGuard( pRenderModule );
 
@@ -114,7 +114,7 @@ namespace canvas
         // 4) scale to normalized device coordinates
         // 5) flip y-axis
         // 6) translate to account for viewport transform
-        basegfx::B2DHomMatrix aTransform(basegfx::tools::createTranslateB2DHomMatrix(
+        basegfx::B2DHomMatrix aTransform(basegfx::utils::createTranslateB2DHomMatrix(
             maSourceOffset.getX(), maSourceOffset.getY()));
         aTransform = aTransform * rTransform;
         aTransform.translate(::basegfx::fround(rPos.getX()),
@@ -193,7 +193,7 @@ namespace canvas
         if( rArea.isEmpty() )
             return true; // immediate exit for empty area
 
-        IRenderModuleSharedPtr pRenderModule(mpPageManager->getRenderModule());
+        std::shared_ptr<IRenderModule> pRenderModule(mpPageManager->getRenderModule());
 
         RenderModuleGuard aGuard( pRenderModule );
 
@@ -208,10 +208,10 @@ namespace canvas
             ::basegfx::fround(rArea.getMaximum().getY()) );
 
         // clip the positions to the area this surface covers
-        aPos1.setX(::std::max(aPos1.getX(),maSourceOffset.getX()));
-        aPos1.setY(::std::max(aPos1.getY(),maSourceOffset.getY()));
-        aPos2.setX(::std::min(aPos2.getX(),maSourceOffset.getX()+maSize.getX()));
-        aPos2.setY(::std::min(aPos2.getY(),maSourceOffset.getY()+maSize.getY()));
+        aPos1.setX(std::max(aPos1.getX(),maSourceOffset.getX()));
+        aPos1.setY(std::max(aPos1.getY(),maSourceOffset.getY()));
+        aPos2.setX(std::min(aPos2.getX(),maSourceOffset.getX()+maSize.getX()));
+        aPos2.setY(std::min(aPos2.getY(),maSourceOffset.getY()+maSize.getY()));
 
         // if the resulting area is empty, return immediately
         ::basegfx::B2IVector aSize(aPos2 - aPos1);
@@ -235,7 +235,7 @@ namespace canvas
         // 1) offset of surface subarea
         // 2) surface transform
         // 3) translation to output position [rPos]
-        basegfx::B2DHomMatrix aTransform(basegfx::tools::createTranslateB2DHomMatrix(aPos1.getX(), aPos1.getY()));
+        basegfx::B2DHomMatrix aTransform(basegfx::utils::createTranslateB2DHomMatrix(aPos1.getX(), aPos1.getY()));
         aTransform = aTransform * rTransform;
         aTransform.translate(::basegfx::fround(rPos.getX()),
                              ::basegfx::fround(rPos.getY()));
@@ -310,7 +310,7 @@ namespace canvas
                                 const ::basegfx::B2DPolygon&    rClipPoly,
                                 const ::basegfx::B2DHomMatrix&  rTransform )
     {
-        IRenderModuleSharedPtr pRenderModule(mpPageManager->getRenderModule());
+        std::shared_ptr<IRenderModule> pRenderModule(mpPageManager->getRenderModule());
 
         RenderModuleGuard aGuard( pRenderModule );
 
@@ -366,7 +366,7 @@ namespace canvas
         // to the destination rectangle.
         const ::basegfx::B2DRectangle& rUV( getUVCoords() );
 
-        basegfx::B2DPolygon rTriangleList(basegfx::tools::clipTriangleListOnRange(rClipPoly,
+        basegfx::B2DPolygon rTriangleList(basegfx::utils::clipTriangleListOnRange(rClipPoly,
                                                                                   aSurfaceClipRect));
 
         // Push vertices to backend renderer
@@ -378,12 +378,6 @@ namespace canvas
             vertex.b = 1.0f;
             vertex.a = static_cast<float>(fAlpha);
             vertex.z = 0.0f;
-
-#if defined(TRIANGLE_LOG) && defined(DBG_UTIL)
-            OSL_TRACE( "Surface::draw(): numvertices %d numtriangles %d\n",
-                        nVertexCount,
-                        nVertexCount/3 );
-#endif
 
             pRenderModule->beginPrimitive( canvas::IRenderModule::PrimitiveType::Triangle );
 
@@ -416,7 +410,7 @@ namespace canvas
         // of the above implemented concrete rendering operations
         // was triggered. we therefore need to ask the pagemanager
         // to allocate some space for the fragment we're dedicated to.
-        if(!(mpFragment))
+        if(!mpFragment)
         {
             mpFragment = mpPageManager->allocateSpace(maSize);
             if( mpFragment )

@@ -42,12 +42,12 @@ SvXMLItemSetContext::~SvXMLItemSetContext()
 {
 }
 
-SvXMLImportContext *SvXMLItemSetContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef SvXMLItemSetContext::CreateChildContext( sal_uInt16 nPrefix,
                                             const OUString& rLocalName,
                                             const uno::Reference< xml::sax::XAttributeList >& xAttrList )
 {
     SvXMLItemMapEntriesRef xMapEntries = rIMapper.getMapEntries();
-    SvXMLItemMapEntry* pEntry = xMapEntries->getByName( nPrefix, rLocalName );
+    SvXMLItemMapEntry const * pEntry = xMapEntries->getByName( nPrefix, rLocalName );
 
     if( pEntry && 0 != (pEntry->nMemberId & MID_SW_FLAG_ELEMENT_ITEM_IMPORT) )
     {
@@ -61,7 +61,7 @@ SvXMLImportContext *SvXMLItemSetContext::CreateChildContext( sal_uInt16 nPrefix,
     CreateChildContext if the element matches an entry in the
     SvXMLImportItemMapper with the mid flag MID_SW_FLAG_ELEMENT
 */
-SvXMLImportContext *SvXMLItemSetContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef SvXMLItemSetContext::CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const uno::Reference< xml::sax::XAttributeList >& /*xAttrList*/,
                                     SfxItemSet&  /*rItemSet*/,

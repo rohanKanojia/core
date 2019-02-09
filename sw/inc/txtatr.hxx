@@ -19,11 +19,12 @@
 #ifndef INCLUDED_SW_INC_TXTATR_HXX
 #define INCLUDED_SW_INC_TXTATR_HXX
 
-#include <txatbase.hxx>
-#include <calbck.hxx>
+#include "txatbase.hxx"
+#include "calbck.hxx"
 
 class SwTextNode;
 class SwCharFormat;
+class SwFormatMeta;
 
 namespace sw {
     class MetaFieldManager;
@@ -36,11 +37,11 @@ class SwTextCharFormat : public SwTextAttrEnd
 
 public:
     SwTextCharFormat( SwFormatCharFormat& rAttr, sal_Int32 nStart, sal_Int32 nEnd );
-    virtual ~SwTextCharFormat( );
+    virtual ~SwTextCharFormat( ) override;
 
     // Passed from SwFormatCharFormat (no derivation from SwClient!).
     void ModifyNotification( const SfxPoolItem*, const SfxPoolItem* );
-    bool GetInfo( SfxPoolItem& rInfo ) const;
+    bool GetInfo( SfxPoolItem const & rInfo ) const;
 
     // get and set TextNode pointer
     void ChgTextNode( SwTextNode* pNew ) { m_pTextNode = pNew; }
@@ -64,7 +65,7 @@ public:
         sal_Int32 const i_nStart, sal_Int32 const i_nEnd,
         bool const i_bIsCopy);
 
-    virtual ~SwTextMeta();
+    virtual ~SwTextMeta() override;
 
     void ChgTextNode(SwTextNode * const pNode);
 };
@@ -74,10 +75,10 @@ class SW_DLLPUBLIC SwTextRuby : public SwTextAttrNesting, public SwClient
 {
     SwTextNode* m_pTextNode;
 protected:
-   virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
+    virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew) override;
 public:
     SwTextRuby( SwFormatRuby& rAttr, sal_Int32 nStart, sal_Int32 nEnd );
-    virtual ~SwTextRuby();
+    virtual ~SwTextRuby() override;
 
     virtual bool GetInfo( SfxPoolItem& rInfo ) const override;
 
@@ -89,7 +90,7 @@ public:
 
           SwCharFormat* GetCharFormat();
     const SwCharFormat* GetCharFormat() const
-            { return (const_cast<SwTextRuby*>(this))->GetCharFormat(); }
+            { return const_cast<SwTextRuby*>(this)->GetCharFormat(); }
 };
 
 inline const SwTextNode& SwTextRuby::GetTextNode() const

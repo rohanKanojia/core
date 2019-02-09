@@ -20,10 +20,11 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XLTOOLS_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XLTOOLS_HXX
 
-#include "address.hxx"
+#include <types.hxx>
 #include "ftools.hxx"
 
 class SfxObjectShell;
+enum class FormulaError : sal_uInt16;
 
 // BIFF versions ==============================================================
 
@@ -115,9 +116,9 @@ public:
     static sal_uInt8    GetXclOrientFromRot( sal_uInt16 nXclRot );
 
     /** Converts a Calc error code to an Excel error code. */
-    static sal_uInt8    GetXclErrorCode( sal_uInt16 nScError );
+    static sal_uInt8    GetXclErrorCode( FormulaError nScError );
     /** Converts an Excel error code to a Calc error code. */
-    static sal_uInt16       GetScErrorCode( sal_uInt8 nXclError );
+    static FormulaError GetScErrorCode( sal_uInt8 nXclError );
 
     /** Converts the passed BIFF error to a double containing the respective Calc error code. */
     static double       ErrorToDouble( sal_uInt8 nXclError );
@@ -143,6 +144,7 @@ public:
     static sal_Int32    GetHmmFromTwips( sal_Int32 nTwips );
 
     /** Returns the Calc column width (twips) for the passed Excel width.
+     *  Excel Column width is stored as 1/256th of a character.
         @param nScCharWidth  Width of the '0' character in Calc (twips). */
     static sal_uInt16       GetScColumnWidth( sal_uInt16 nXclWidth, long nScCharWidth );
     /** Returns the Excel column width for the passed Calc width (twips).
@@ -187,8 +189,8 @@ public:
     static OUString GetBuiltInDefNameXml( sal_Unicode cBuiltIn );
     /** Returns the Excel built-in name index of the passed defined name from Calc.
         @descr  Ignores any characters following a valid representation of a built-in name.
-        @param pcBuiltIn  (out-param) If not 0, the index of the built-in name will be returned here.
-        @return  true = passed string is a built-in name; false = user-defined name. */
+        @param rDefName  raw English UI representation of a built-in defined name used in NAME records.
+        @return  the index of the built-in name, or EXC_BUILTIN_UNKNOWN if it is not a built-in name. */
     static sal_Unicode  GetBuiltInDefNameIndex( const OUString& rDefName );
 
     // built-in style names ---------------------------------------------------
@@ -233,19 +235,10 @@ public:
     // Basic macro names ------------------------------------------------------
 
     /** Returns the full StarBasic macro URL from an Excel macro name. */
-    static OUString GetSbMacroUrl( const OUString& rMacroName, SfxObjectShell* pDocShell = nullptr );
+    static OUString GetSbMacroUrl( const OUString& rMacroName, SfxObjectShell* pDocShell );
     /** Returns the Excel macro name from a full StarBasic macro URL. */
     static OUString GetXclMacroName( const OUString& rSbMacroUrl );
 
-private:
-    static const OUString maDefNamePrefix;      /// Prefix for built-in defined names.
-    static const OUString maDefNamePrefixXml;   /// Prefix for built-in defined names for OOX
-    static const OUString maStyleNamePrefix1;   /// Prefix for built-in cell style names.
-    static const OUString maStyleNamePrefix2;   /// Prefix for built-in cell style names from OOX filter.
-    static const OUString maCFStyleNamePrefix1; /// Prefix for cond. formatting style names.
-    static const OUString maCFStyleNamePrefix2; /// Prefix for cond. formatting style names from OOX filter.
-    static const OUString maSbMacroPrefix;   /// Prefix for StarBasic macros.
-    static const OUString maSbMacroSuffix;   /// Suffix for StarBasic macros.
 };
 
 // read/write colors ----------------------------------------------------------

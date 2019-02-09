@@ -20,8 +20,7 @@ namespace loplugin
 {
 
 class SalLogAreas
-    : public RecursiveASTVisitor< SalLogAreas >
-    , public Plugin
+    : public FilteringPlugin< SalLogAreas >
     {
     public:
         explicit SalLogAreas( const InstantiationData& data );
@@ -34,7 +33,11 @@ class SalLogAreas
         void readLogAreas();
         const FunctionDecl* inFunction;
         SourceLocation lastSalDetailLogStreamMacro;
-        set< string > logAreas;
+        std::set< std::string > logAreas;
+#if 0
+        std::string firstSeenLogArea;
+        SourceLocation firstSeenLocation;
+#endif
     };
 
 } // namespace

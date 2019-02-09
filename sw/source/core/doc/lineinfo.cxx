@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doc.hxx"
+#include <doc.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentStylePoolAccess.hxx>
 #include <IDocumentState.hxx>
-#include "lineinfo.hxx"
-#include "charfmt.hxx"
-#include "poolfmt.hxx"
-#include "rootfrm.hxx"
-#include "viewsh.hxx"
+#include <lineinfo.hxx>
+#include <charfmt.hxx>
+#include <poolfmt.hxx>
+#include <rootfrm.hxx>
+#include <viewsh.hxx>
 #include <set>
 
 void SwDoc::SetLineNumberInfo( const SwLineNumberInfo &rNew )
@@ -76,16 +76,12 @@ SwLineNumberInfo::SwLineNumberInfo(const SwLineNumberInfo &rCpy ) : SwClient(),
     bCountInFlys( rCpy.IsCountInFlys() ),
     bRestartEachPage( rCpy.IsRestartEachPage() )
 {
-    if ( rCpy.GetRegisteredIn() )
-        const_cast<SwModify*>(rCpy.GetRegisteredIn())->Add( this );
+    StartListeningToSameModifyAs(rCpy);
 }
 
 SwLineNumberInfo& SwLineNumberInfo::operator=(const SwLineNumberInfo &rCpy)
 {
-    if ( rCpy.GetRegisteredIn() )
-        const_cast<SwModify*>(rCpy.GetRegisteredIn())->Add( this );
-    else if ( GetRegisteredIn() )
-        GetRegisteredInNonConst()->Remove( this );
+    StartListeningToSameModifyAs(rCpy);
 
     aType = rCpy.GetNumType();
     aDivider = rCpy.GetDivider();
@@ -106,7 +102,7 @@ SwCharFormat* SwLineNumberInfo::GetCharFormat( IDocumentStylePoolAccess& rIDSPA 
     if ( !GetRegisteredIn() )
     {
         SwCharFormat* pFormat = rIDSPA.GetCharFormatFromPool( RES_POOLCHR_LINENUM );
-        pFormat->Add( const_cast<SwClient*>(static_cast<SwClient const *>(this)) );
+        pFormat->Add( const_cast<SwLineNumberInfo*>(this) );
     }
     return const_cast<SwCharFormat*>(static_cast<const SwCharFormat*>(GetRegisteredIn()));
 }
@@ -117,9 +113,9 @@ void SwLineNumberInfo::SetCharFormat( SwCharFormat *pChFormat )
     pChFormat->Add( this );
 }
 
-void SwLineNumberInfo::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew )
+void SwLineNumberInfo::Modify( const SfxPoolItem* pOld, const SfxPoolItem* /*pNew*/ )
 {
-    CheckRegistration( pOld, pNew );
+    CheckRegistration( pOld );
     SwDoc *pDoc = static_cast<SwCharFormat*>(GetRegisteredIn())->GetDoc();
     SwRootFrame* pRoot = pDoc->getIDocumentLayoutAccess().GetCurrentLayout();
     if( pRoot )

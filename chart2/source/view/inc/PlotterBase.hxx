@@ -19,24 +19,22 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_INC_PLOTTERBASE_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_PLOTTERBASE_HXX
 
-#include "chartview/ExplicitScaleValues.hxx"
-
-#include <com/sun/star/drawing/HomogenMatrix.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/drawing/Position3D.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/chart2/XTransformation.hpp>
-
+#include <com/sun/star/uno/Reference.h>
+#include <rtl/ustring.hxx>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace drawing { struct HomogenMatrix; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { struct Position3D; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+
+namespace chart { struct ExplicitScaleData; }
 
 namespace chart
 {
 
-class AbstractShapeFactory;
 class PlottingPositionHelper;
+class ShapeFactory;
 
 /** This class provides methods for setting axis scales and for performing
  *  scene to screen transformations. It is used as the base class for all
@@ -48,14 +46,15 @@ public:
     PlotterBase( sal_Int32 nDimension );
     virtual ~PlotterBase();
 
+    /// @throws css::uno::RuntimeException
     virtual void initPlotter(
           const css::uno::Reference< css::drawing::XShapes >& xLogicTarget
         , const css::uno::Reference< css::drawing::XShapes >& xFinalTarget
         , const css::uno::Reference< css::lang::XMultiServiceFactory >& xFactory
         , const OUString& rCID
-                ) throw (css::uno::RuntimeException, std::exception);
+                );
 
-    virtual void setScales( const ::std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis );
+    virtual void setScales( const std::vector< ExplicitScaleData >& rScales, bool bSwapXAndYAxis );
 
     virtual void setTransformationSceneToScreen( const css::drawing::HomogenMatrix& rMatrix );
 
@@ -73,7 +72,7 @@ protected: //member
     css::uno::Reference< css::drawing::XShapes >                m_xLogicTarget;
     css::uno::Reference< css::drawing::XShapes >                m_xFinalTarget;
     css::uno::Reference< css::lang::XMultiServiceFactory>       m_xShapeFactory;
-    AbstractShapeFactory* m_pShapeFactory;
+    ShapeFactory* m_pShapeFactory;
     OUString   m_aCID;
 
     const sal_Int32 m_nDimension;

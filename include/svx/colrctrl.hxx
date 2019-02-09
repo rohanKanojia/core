@@ -19,16 +19,26 @@
 #ifndef INCLUDED_SVX_COLRCTRL_HXX
 #define INCLUDED_SVX_COLRCTRL_HXX
 
+#include <sal/types.h>
 #include <sfx2/dockwin.hxx>
-#include <sfx2/childwin.hxx>
-#include <svx/SvxColorValueSet.hxx>
-#include <svtools/transfer.hxx>
 #include <svl/lstner.hxx>
-#include <svx/svxdllapi.h>
+#include <vcl/transfer.hxx>
+#include <svtools/valueset.hxx>
+#include <svx/SvxColorValueSet.hxx>
 #include <svx/xtable.hxx>
+#include <tools/gen.hxx>
+#include <tools/link.hxx>
+#include <tools/wintypes.hxx>
+#include <vcl/event.hxx>
 #include <vcl/vclptr.hxx>
 
-class SvData;
+namespace vcl { class Window; }
+
+class CommandEvent;
+class SfxBindings;
+class SfxBroadcaster;
+class SfxChildWindow;
+class SfxHint;
 
 /*************************************************************************
 |*
@@ -36,30 +46,26 @@ class SvData;
 |*
 \************************************************************************/
 
-class SAL_WARN_UNUSED SvxColorValueSet_docking : public SvxColorValueSet, public DragSourceHelper
+class SAL_WARN_UNUSED SvxColorValueSet_docking final : public SvxColorValueSet, public DragSourceHelper
 {
-private:
-    using SvxColorValueSet::StartDrag;
-
     bool            mbLeftButton;
     Point           aDragPosPixel;
 
-protected:
+    using SvxColorValueSet::StartDrag;
 
     void            DoDrag();
 
     // ValueSet
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void    Command(const CommandEvent& rCEvt ) override;
 
     // DragSourceHelper
     virtual void    StartDrag( sal_Int8 nAction, const Point& rPtPixel ) override;
 
-                    DECL_LINK_TYPED(ExecDragHdl, void*, void);
+                    DECL_LINK(ExecDragHdl, void*, void);
 
 public:
-    SvxColorValueSet_docking( vcl::Window* pParent, WinBits nWinStyle = WB_ITEMBORDER );
+    SvxColorValueSet_docking( vcl::Window* pParent );
 
     bool IsLeftButton() const { return mbLeftButton; }
 };
@@ -77,8 +83,6 @@ friend class SvxColorChildWindow;
 private:
     XColorListRef       pColorList;
     VclPtr<SvxColorValueSet_docking> aColorSet;
-    sal_uInt16          nLeftSlot;
-    sal_uInt16          nRightSlot;
     sal_uInt16          nCols;
     sal_uInt16          nLines;
     long                nCount;
@@ -86,7 +90,7 @@ private:
 
     void                FillValueSet();
     void                SetSize();
-       DECL_LINK_TYPED( SelectHdl, ValueSet*, void );
+       DECL_LINK( SelectHdl, ValueSet*, void );
 
     /** This function is called when the window gets the focus.  It grabs
         the focus to the color value set so that it can be controlled with
@@ -103,12 +107,12 @@ public:
     SvxColorDockingWindow(SfxBindings* pBindings,
                           SfxChildWindow *pCW,
                           vcl::Window* pParent);
-    virtual ~SvxColorDockingWindow();
+    virtual ~SvxColorDockingWindow() override;
     virtual void    dispose() override;
 
     virtual void    Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 };
 
 #endif

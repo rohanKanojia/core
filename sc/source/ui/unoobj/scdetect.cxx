@@ -35,18 +35,12 @@ using utl::MediaDescriptor;
 
 namespace {
 
-const sal_Char pFilterLotus[]        = "Lotus";
-const sal_Char pFilterQPro6[]        = "Quattro Pro 6.0";
-const sal_Char pFilterDBase[]        = "dBase";
-const sal_Char pFilterDif[]      = "DIF";
-const sal_Char pFilterSylk[]     = "SYLK";
-
-// Tabelle mit Suchmustern
-// Bedeutung der Sequenzen
-// 0x00??: genau Byte 0x?? muss an dieser Stelle stehen
-// 0x0100: ein Byte ueberlesen (don't care)
-// 0x02nn: ein Byte aus 0xnn Alternativen folgt
-// 0x8000: Erkennung abgeschlossen
+// table with search pattern
+// meaning of the sequences
+// 0x00??: the exact byte 0x?? must be at that place
+// 0x0100: read over a byte (don't care)
+// 0x02nn: a byte of 0xnn variations follows
+// 0x8000: recognition finished
 
 #define M_DC        0x0100
 #define M_ALT(ANZ)  (0x0200+(ANZ))
@@ -77,7 +71,7 @@ const sal_uInt16 pQPro[] =
          0x0010,
          M_ENDE };
 
-const sal_uInt16 pDIF1[] =       // DIF mit CR-LF
+const sal_uInt16 pDIF1[] =       // DIF with CR-LF
     {
     'T', 'A', 'B', 'L', 'E',
     M_DC, M_DC,
@@ -86,7 +80,7 @@ const sal_uInt16 pDIF1[] =       // DIF mit CR-LF
     '\"',
     M_ENDE };
 
-const sal_uInt16 pDIF2[] =       // DIF mit CR oder LF
+const sal_uInt16 pDIF2[] =       // DIF with CR or LF
     {
     'T', 'A', 'B', 'L', 'E',
     M_DC,
@@ -104,35 +98,35 @@ const sal_uInt16 pSylk[] =       // Sylk
 bool detectThisFormat(SvStream& rStr, const sal_uInt16* pSearch)
 {
     sal_uInt8 nByte;
-    rStr.Seek( 0 ); // am Anfang war alles Uebel...
+    rStr.Seek( 0 ); // in the beginning everything was bad...
     rStr.ReadUChar( nByte );
     bool bSync = true;
-    while( !rStr.IsEof() && bSync )
+    while( !rStr.eof() && bSync )
     {
         sal_uInt16 nMuster = *pSearch;
 
         if( nMuster < 0x0100 )
-        { //                                direkter Byte-Vergleich
-            if( ( sal_uInt8 ) nMuster != nByte )
+        { // compare bytes
+            if( static_cast<sal_uInt8>(nMuster) != nByte )
                 bSync = false;
         }
         else if( nMuster & M_DC )
-        { //                                             don't care
+        { // don't care
         }
         else if( nMuster & M_ALT(0) )
-        { //                                      alternative Bytes
-            sal_uInt8 nAnzAlt = ( sal_uInt8 ) nMuster;
-            bSync = false;          // zunaechst unsynchron
+        { // alternative Bytes
+            sal_uInt8 nAnzAlt = static_cast<sal_uInt8>(nMuster);
+            bSync = false;          // first unsynchron
             while( nAnzAlt > 0 )
             {
                 pSearch++;
-                if( ( sal_uInt8 ) *pSearch == nByte )
-                    bSync = true;   // jetzt erst Synchronisierung
+                if( static_cast<sal_uInt8>(*pSearch) == nByte )
+                    bSync = true;   // only now synchronization
                 nAnzAlt--;
             }
         }
         else if( nMuster & M_ENDE )
-        { //                                        Format detected
+        { // Format detected
             return true;
         }
 
@@ -145,7 +139,7 @@ bool detectThisFormat(SvStream& rStr, const sal_uInt16* pSearch)
 
 }
 
-ScFilterDetect::ScFilterDetect( const uno::Reference<uno::XComponentContext>& /*xContext*/ )
+ScFilterDetect::ScFilterDetect()
 {
 }
 
@@ -197,7 +191,7 @@ static bool lcl_MayBeDBase( SvStream& rStream )
     // Look for dbf marker, see connectivity/source/inc/dbase/DTable.hxx
     // DBFType for values.
     const sal_uInt8 nValidMarks[] = {
-        0x03, 0x04, 0x05, 0x30, 0x43, 0xB3, 0x83, 0x8b, 0x8e, 0xf5 };
+        0x03, 0x04, 0x05, 0x30, 0x31, 0x43, 0xB3, 0x83, 0x8b, 0x8e, 0xf5 };
     sal_uInt8 nMark;
     rStream.Seek(STREAM_SEEK_TO_BEGIN);
     rStream.ReadUChar( nMark );
@@ -214,17 +208,40 @@ static bool lcl_MayBeDBase( SvStream& rStream )
     // Empty dbf is >= 32*2+1 bytes in size.
     const size_t nEmptyDbf = nHeaderBlockSize * 2 + 1;
 
-    rStream.Seek(STREAM_SEEK_TO_END);
-    sal_uLong nSize = rStream.Tell();
+    sal_uLong nSize = rStream.TellEnd();
     if ( nSize < nEmptyDbf )
         return false;
+
+    // count of records at 4
+    rStream.Seek(4);
+    sal_uInt32 nRecords(0);
+    rStream.ReadUInt32(nRecords);
 
     // length of header starts at 8
     rStream.Seek(8);
     sal_uInt16 nHeaderLen;
     rStream.ReadUInt16( nHeaderLen );
 
+    // size of record at 10
+    sal_uInt16 nRecordSize(0);
+    rStream.ReadUInt16(nRecordSize);
+
     if ( nHeaderLen < nEmptyDbf || nSize < nHeaderLen )
+        return false;
+
+    // see DTable.cxx ODbaseTable::readHeader()
+    if (0 == nRecordSize)
+        return false;
+
+    // see DTable.cxx ODbaseTable::construct() line 546
+    if (0 == nRecords)
+    {
+        nRecords = (nSize - nHeaderLen) / nRecordSize;
+    }
+
+    // tdf#84834 sanity check of size
+    // tdf#106423: a dbf file can have 0 record, so no need to check nRecords
+    if (nSize < nHeaderLen + nRecords * sal_uInt64(nRecordSize))
         return false;
 
     // Last byte of header must be 0x0d, this is how it's specified.
@@ -244,7 +261,6 @@ static bool lcl_MayBeDBase( SvStream& rStream )
 }
 
 OUString SAL_CALL ScFilterDetect::detect( uno::Sequence<beans::PropertyValue>& lDescriptor )
-    throw( uno::RuntimeException, std::exception )
 {
     MediaDescriptor aMediaDesc( lDescriptor );
     OUString aTypeName = aMediaDesc.getUnpackedValueOrDefault( MediaDescriptor::PROP_TYPENAME(), OUString() );
@@ -267,35 +283,35 @@ OUString SAL_CALL ScFilterDetect::detect( uno::Sequence<beans::PropertyValue>& l
         if (!detectThisFormat(*pStream, pLotus) && !detectThisFormat(*pStream, pLotusNew) && !detectThisFormat(*pStream, pLotus2))
             return OUString();
 
-        pSearchFilterName = pFilterLotus;
+        pSearchFilterName = "Lotus";
     }
     else if (aTypeName == "calc_QPro")
     {
         if (!detectThisFormat(*pStream, pQPro))
             return OUString();
 
-        pSearchFilterName = pFilterQPro6;
+        pSearchFilterName = "Quattro Pro 6.0";
     }
     else if (aTypeName == "calc_SYLK")
     {
         if (!detectThisFormat(*pStream, pSylk))
             return OUString();
 
-        pSearchFilterName = pFilterSylk;
+        pSearchFilterName = "SYLK";
     }
     else if (aTypeName == "calc_DIF")
     {
         if (!detectThisFormat(*pStream, pDIF1) && !detectThisFormat(*pStream, pDIF2))
             return OUString();
 
-        pSearchFilterName = pFilterDif;
+        pSearchFilterName = "DIF";
     }
     else if (aTypeName == "calc_dBase")
     {
         if (!lcl_MayBeDBase(*pStream))
             return OUString();
 
-        pSearchFilterName = pFilterDBase;
+        pSearchFilterName = "dBase";
     }
     else
         return OUString();
@@ -311,29 +327,27 @@ OUString SAL_CALL ScFilterDetect::detect( uno::Sequence<beans::PropertyValue>& l
     return aTypeName;
 }
 
-OUString SAL_CALL ScFilterDetect::getImplementationName() throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL ScFilterDetect::getImplementationName()
 {
     return OUString("com.sun.star.comp.calc.FormatDetector");
 }
 
 sal_Bool ScFilterDetect::supportsService( const OUString& sServiceName )
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 css::uno::Sequence<OUString> ScFilterDetect::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Sequence<OUString> seqServiceNames { "com.sun.star.frame.ExtendedTypeDetection" };
     return seqServiceNames;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_calc_FormatDetector_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_calc_FormatDetector_get_implementation(css::uno::XComponentContext* /*context*/,
                                                          css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ScFilterDetect(context));
+    return cppu::acquire(new ScFilterDetect);
 }
 
 

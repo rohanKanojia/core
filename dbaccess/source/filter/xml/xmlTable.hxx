@@ -37,16 +37,13 @@ namespace dbaxml
         OUString m_sSchema;
         OUString m_sCatalog;
         OUString m_sStyleName;
-        OUString m_sServiceName;
         bool     m_bApplyFilter;
         bool     m_bApplyOrder;
 
         ODBFilter& GetOwnImport();
 
-        void fillAttributes(    sal_uInt16 nPrfx
-                                ,const OUString& _sLocalName
-                                ,const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList
-                                , OUString& _rsCommand
+        void fillAttributes(     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList
+                                ,OUString& _rsCommand
                                 ,OUString& _rsTableName
                                 ,OUString& _rsTableSchema
                                 ,OUString& _rsTableCatalog
@@ -62,9 +59,9 @@ namespace dbaxml
                     ,const css::uno::Reference< css::container::XNameAccess >& _xParentContainer
                     ,const OUString& _sServiceName
                     );
-        virtual ~OXMLTable();
+        virtual ~OXMLTable() override;
 
-        virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+        virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
         virtual void EndElement() override;

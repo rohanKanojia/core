@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ColumnControlWindow.hxx"
-#include "FieldControls.hxx"
+#include <ColumnControlWindow.hxx>
+#include <FieldControls.hxx>
 #include <unotools/syslocale.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <connectivity/dbtools.hxx>
-#include "UITools.hxx"
-#include "dbu_resource.hrc"
-#include <comphelper/processfactory.hxx>
+#include <UITools.hxx>
+#include <core_resource.hxx>
+#include <strings.hrc>
 #include <com/sun/star/util/NumberFormatter.hpp>
 
 using namespace ::dbaui;
@@ -39,7 +40,7 @@ OColumnControlWindow::OColumnControlWindow(vcl::Window* pParent
                                            ,const Reference<XComponentContext>& _rxContext)
             : OFieldDescControl(pParent,nullptr)
             , m_xContext(_rxContext)
-            , m_sTypeNames(ModuleRes(STR_TABLEDESIGN_DBFIELDTYPES))
+            , m_sTypeNames(DBA_RES(STR_TABLEDESIGN_DBFIELDTYPES))
             , m_bAutoIncrementEnabled(true)
 {
 
@@ -152,11 +153,11 @@ OUString OColumnControlWindow::getAutoIncrementValue() const
     return m_sAutoIncrementValue;
 }
 
-TOTypeInfoSP OColumnControlWindow::getDefaultTyp() const
+TOTypeInfoSP const & OColumnControlWindow::getDefaultTyp() const
 {
     if ( !m_pTypeInfo.get() )
     {
-        m_pTypeInfo = TOTypeInfoSP(new OTypeInfo());
+        m_pTypeInfo = std::make_shared<OTypeInfo>();
         m_pTypeInfo->aUIName = m_sTypeNames.getToken(TYPE_OTHER, ';');
     }
     return m_pTypeInfo;

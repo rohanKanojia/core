@@ -36,7 +36,6 @@ namespace ucb { namespace ucp { namespace ext
 
     //= DataSupplier
 
-    typedef ::ucbhelper::ResultSetDataSupplier  DataSupplier_Base;
     class DataSupplier : public ::ucbhelper::ResultSetDataSupplier
     {
     public:
@@ -48,7 +47,7 @@ namespace ucb { namespace ucp { namespace ext
         void    fetchData();
 
     protected:
-        virtual ~DataSupplier();
+        virtual ~DataSupplier() override;
 
         virtual OUString queryContentIdentifierString( sal_uInt32 nIndex ) override;
         virtual css::uno::Reference< css::ucb::XContentIdentifier > queryContentIdentifier( sal_uInt32 nIndex ) override;
@@ -65,7 +64,7 @@ namespace ucb { namespace ucp { namespace ext
 
         virtual void close() override;
 
-        virtual void validate() throw( css::ucb::ResultSetException ) override;
+        virtual void validate() override;
 
     private:
         std::unique_ptr< DataSupplier_Impl >    m_pImpl;

@@ -21,14 +21,10 @@
 
 #include <sfx2/tabdlg.hxx>
 #include <svl/eitem.hxx>
-#include <vcl/group.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/field.hxx>
+#include <vcl/weld.hxx>
 #include <svx/svxdllapi.h>
 
 class SvxGridTabPage;
-
-// class SvxOptionsGrid --------------------------------------------------
 
 class SVX_DLLPUBLIC SvxOptionsGrid
 {
@@ -46,7 +42,6 @@ protected:
 
 public:
     SvxOptionsGrid();
-    ~SvxOptionsGrid();
 
     void    SetFieldDrawX(    sal_uInt32 nSet){nFldDrawX      = nSet;}
     void    SetFieldDivisionX(sal_uInt32 nSet){nFldDivisionX  = nSet;}
@@ -71,8 +66,6 @@ public:
     bool        GetEqualGrid()    const {  return bEqualGrid;   }
 };
 
-// class SvxGridItem -----------------------------------------------------
-
 class SVX_DLLPUBLIC SvxGridItem : public SvxOptionsGrid, public SfxPoolItem
 {
     // #i9076#
@@ -80,19 +73,16 @@ class SVX_DLLPUBLIC SvxGridItem : public SvxOptionsGrid, public SfxPoolItem
 
 public:
     SvxGridItem( sal_uInt16 _nWhich) : SfxPoolItem(_nWhich){};
-    SvxGridItem( const SvxGridItem& pTestItem );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
 };
-
-// class SvxGridTabPage --------------------------------------------------
 
 class SVX_DLLPUBLIC SvxGridTabPage : public SfxTabPage
 {
@@ -100,51 +90,46 @@ class SVX_DLLPUBLIC SvxGridTabPage : public SfxTabPage
     using TabPage::DeactivatePage;
 
 public:
-    SvxGridTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxGridTabPage();
-    virtual void dispose() override;
+    SvxGridTabPage(TabPageParent pParent, const SfxItemSet& rSet);
+    virtual ~SvxGridTabPage() override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet& rAttrSet );
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet& rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
 
     virtual void        ActivatePage( const SfxItemSet& rSet ) override;
-    virtual sfxpg       DeactivatePage( SfxItemSet* pSet ) override;
-
-private:
-    VclPtr<CheckBox>            pCbxUseGridsnap;
-    VclPtr<CheckBox>            pCbxGridVisible;
-
-    VclPtr<MetricField>         pMtrFldDrawX;
-    VclPtr<MetricField>         pMtrFldDrawY;
-
-    VclPtr<NumericField>        pNumFldDivisionX;
-    VclPtr<NumericField>        pNumFldDivisionY;
-
-    VclPtr<CheckBox>            pCbxSynchronize;
-protected:
-    //these controls are used in draw and impress
-    VclPtr<VclContainer>    pSnapFrames;
-    VclPtr<CheckBox>        pCbxSnapHelplines;
-    VclPtr<CheckBox>        pCbxSnapBorder;
-    VclPtr<CheckBox>        pCbxSnapFrame;
-    VclPtr<CheckBox>        pCbxSnapPoints;
-    VclPtr<MetricField>     pMtrFldSnapArea;
-
-    VclPtr<CheckBox>        pCbxOrtho;
-    VclPtr<CheckBox>        pCbxBigOrtho;
-    VclPtr<CheckBox>        pCbxRotate;
-    VclPtr<MetricField>     pMtrFldAngle;
-    VclPtr<MetricField>     pMtrFldBezAngle;
+    virtual DeactivateRC   DeactivatePage( SfxItemSet* pSet ) override;
 
 private:
     bool                bAttrModified;
 
-    DECL_LINK_TYPED( ClickRotateHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( ChangeDrawHdl_Impl, Edit&, void );
-    DECL_LINK_TYPED( ChangeGridsnapHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( ChangeDivisionHdl_Impl, Edit&, void );
+    std::unique_ptr<weld::CheckButton> m_xCbxUseGridsnap;
+    std::unique_ptr<weld::CheckButton> m_xCbxGridVisible;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldDrawX;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldDrawY;
+    std::unique_ptr<weld::SpinButton> m_xNumFldDivisionX;
+    std::unique_ptr<weld::SpinButton> m_xNumFldDivisionY;
+    std::unique_ptr<weld::CheckButton> m_xCbxSynchronize;
+protected:
+    //these controls are used in draw and impress
+    std::unique_ptr<weld::Widget> m_xSnapFrames;
+    std::unique_ptr<weld::CheckButton> m_xCbxSnapHelplines;
+    std::unique_ptr<weld::CheckButton> m_xCbxSnapBorder;
+    std::unique_ptr<weld::CheckButton> m_xCbxSnapFrame;
+    std::unique_ptr<weld::CheckButton> m_xCbxSnapPoints;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldSnapArea;
+    std::unique_ptr<weld::CheckButton> m_xCbxOrtho;
+    std::unique_ptr<weld::CheckButton> m_xCbxBigOrtho;
+    std::unique_ptr<weld::CheckButton> m_xCbxRotate;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldAngle;
+    std::unique_ptr<weld::MetricSpinButton> m_xMtrFldBezAngle;
+
+    DECL_LINK(ClickRotateHdl_Impl, weld::ToggleButton&, void);
+private:
+    DECL_LINK(ChangeDrawHdl_Impl, weld::MetricSpinButton&, void);
+    DECL_LINK(ChangeGridsnapHdl_Impl, weld::ToggleButton&, void);
+    DECL_LINK(ChangeDivisionHdl_Impl, weld::SpinButton&, void);
 };
 
 #endif

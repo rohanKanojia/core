@@ -31,6 +31,9 @@ namespace sdr
     {
         class AttributeProperties : public DefaultProperties, public SfxListener, public svl::StyleSheetUser
         {
+            // core to set parent at SfxItemSet and to execute the hard attribute computations
+            void ImpSetParentAtSfxItemSet(bool bDontRemoveHardAttr);
+
             // add style sheet, do all the necessary handling
             void ImpAddStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr);
 
@@ -38,11 +41,11 @@ namespace sdr
             void ImpRemoveStyleSheet();
 
         protected:
-            // the SytleSheet of this object
+            // the StyleSheet of this object
             SfxStyleSheet*                                  mpStyleSheet;
 
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& pPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& pPool) override;
 
             // Do the ItemChange, may do special handling
             virtual void ItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem = nullptr) override;
@@ -58,22 +61,20 @@ namespace sdr
             AttributeProperties(const AttributeProperties& rProps, SdrObject& rObj);
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
+
+            // Get the local ItemSet. This directly returns the local ItemSet of the object. No
+            // merging of ItemSets is done for e.g. Group objects.
+            virtual const SfxItemSet& GetObjectItemSet() const override;
 
             // destructor
-            virtual ~AttributeProperties();
+            virtual ~AttributeProperties() override;
 
             // set a new StyleSheet and broadcast
             virtual void SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr) override;
 
             // get the installed StyleSheet
             virtual SfxStyleSheet* GetStyleSheet() const override;
-
-            // Move properties to a new ItemPool.
-            virtual void MoveToItemPool(SfxItemPool* pSrcPool, SfxItemPool* pDestPool, SdrModel* pNewModel = nullptr) override;
-
-            // Set new model.
-            virtual void SetModel(SdrModel* pOldModel, SdrModel* pNewModel) override;
 
             // force all attributes which come from styles to hard attributes
             // to be able to live without the style.

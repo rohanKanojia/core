@@ -17,12 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <fonthdl.hxx>
+#include <sal/config.h>
+
+#include <string_view>
+
+#include "fonthdl.hxx"
 
 #include <sax/tools/converter.hxx>
 
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <tools/fontenum.hxx>
@@ -30,9 +35,9 @@
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
-static const SvXMLEnumMapEntry* lcl_getFontFamilyGenericMapping()
+static const SvXMLEnumMapEntry<FontFamily>* lcl_getFontFamilyGenericMapping()
 {
-    static SvXMLEnumMapEntry const aFontFamilyGenericMapping[] =
+    static SvXMLEnumMapEntry<FontFamily> const aFontFamilyGenericMapping[] =
     {
         { XML_DECORATIVE,       FAMILY_DECORATIVE },
 
@@ -41,16 +46,16 @@ static const SvXMLEnumMapEntry* lcl_getFontFamilyGenericMapping()
         { XML_SCRIPT,           FAMILY_SCRIPT   },
         { XML_SWISS,            FAMILY_SWISS    },
         { XML_SYSTEM,           FAMILY_SYSTEM   },
-        { XML_TOKEN_INVALID,    0               }
+        { XML_TOKEN_INVALID,    FontFamily(0)   }
     };
     return aFontFamilyGenericMapping;
 }
 
-static SvXMLEnumMapEntry const aFontPitchMapping[] =
+static SvXMLEnumMapEntry<FontPitch> const aFontPitchMapping[] =
 {
     { XML_FIXED,            PITCH_FIXED     },
     { XML_VARIABLE,         PITCH_VARIABLE  },
-    { XML_TOKEN_INVALID,    0               }
+    { XML_TOKEN_INVALID,    FontPitch(0)    }
 };
 
 // class XMLFontFamilyNamePropHdl
@@ -93,7 +98,7 @@ bool XMLFontFamilyNamePropHdl::importXML( const OUString& rStrImpValue, uno::Any
             if( !sValue.isEmpty() )
                 sValue.append(';');
 
-            sValue.append(rStrImpValue.copy( nFirst, nLast-nFirst+1));
+            sValue.append(std::u16string_view(rStrImpValue).substr(nFirst, nLast-nFirst+1));
         }
 
         if( -1 != nPos )
@@ -127,13 +132,13 @@ bool XMLFontFamilyNamePropHdl::exportXML( OUString& rStrExpValue, const uno::Any
 
             // Set position to the character behind the ';', so we won't
             // forget this.
-            if( -1L != nPos )
+            if( -1 != nPos )
                 nPos++;
 
             // If the property value was empty, we stop now.
             // If there is a ';' at the first position, the empty name
             // at the start will be removed.
-            if( 0L == nLast )
+            if( 0 == nLast )
                 continue;
 
             // nFirst and nLast now denote the first and last character of
@@ -174,7 +179,7 @@ bool XMLFontFamilyNamePropHdl::exportXML( OUString& rStrExpValue, const uno::Any
                     sValue.append( '\'' );
             }
         }
-        while( -1L != nPos );
+        while( -1 != nPos );
 
         rStrExpValue = sValue.makeStringAndClear();
 
@@ -193,10 +198,10 @@ XMLFontFamilyPropHdl::~XMLFontFamilyPropHdl()
 
 bool XMLFontFamilyPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue, const SvXMLUnitConverter& ) const
 {
-    sal_uInt16 eNewFamily;
+    FontFamily eNewFamily;
     bool bRet = SvXMLUnitConverter::convertEnum( eNewFamily, rStrImpValue, lcl_getFontFamilyGenericMapping() );
     if( bRet )
-        rValue <<= (sal_Int16)eNewFamily;
+        rValue <<= static_cast<sal_Int16>(eNewFamily);
 
     return bRet;
 }
@@ -209,7 +214,7 @@ bool XMLFontFamilyPropHdl::exportXML( OUString& rStrExpValue, const uno::Any& rV
     sal_Int16 nFamily = sal_Int16();
     if( rValue >>= nFamily )
     {
-        FontFamily eFamily = (FontFamily)nFamily;
+        FontFamily eFamily = static_cast<FontFamily>(nFamily);
         if( eFamily != FAMILY_DONTKNOW )
             bRet = SvXMLUnitConverter::convertEnum( aOut, eFamily, lcl_getFontFamilyGenericMapping() );
     }
@@ -228,12 +233,10 @@ XMLFontEncodingPropHdl::~XMLFontEncodingPropHdl()
 
 bool XMLFontEncodingPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue, const SvXMLUnitConverter& ) const
 {
-    bool bRet = true;
-
     if( IsXMLToken( rStrImpValue, XML_X_SYMBOL ) )
-        rValue <<= (sal_Int16) RTL_TEXTENCODING_SYMBOL;
+        rValue <<= sal_Int16(RTL_TEXTENCODING_SYMBOL);
 
-    return bRet;
+    return true;
 }
 
 bool XMLFontEncodingPropHdl::exportXML( OUString& rStrExpValue, const uno::Any& rValue, const SvXMLUnitConverter& ) const
@@ -244,7 +247,7 @@ bool XMLFontEncodingPropHdl::exportXML( OUString& rStrExpValue, const uno::Any& 
 
     if( rValue >>= nSet )
     {
-        if( (rtl_TextEncoding)nSet == RTL_TEXTENCODING_SYMBOL )
+        if( static_cast<rtl_TextEncoding>(nSet) == RTL_TEXTENCODING_SYMBOL )
         {
             aOut.append( GetXMLToken(XML_X_SYMBOL) );
             rStrExpValue = aOut.makeStringAndClear();
@@ -264,10 +267,10 @@ XMLFontPitchPropHdl::~XMLFontPitchPropHdl()
 
 bool XMLFontPitchPropHdl::importXML( const OUString& rStrImpValue, uno::Any& rValue, const SvXMLUnitConverter& ) const
 {
-    sal_uInt16 eNewPitch;
+    FontPitch eNewPitch;
     bool bRet = SvXMLUnitConverter::convertEnum( eNewPitch, rStrImpValue, aFontPitchMapping );
     if( bRet )
-        rValue <<= (sal_Int16)eNewPitch;
+        rValue <<= static_cast<sal_Int16>(eNewPitch);
 
     return bRet;
 }
@@ -280,7 +283,7 @@ bool XMLFontPitchPropHdl::exportXML( OUString& rStrExpValue, const uno::Any& rVa
 
     FontPitch ePitch = PITCH_DONTKNOW;
     if( rValue >>= nPitch )
-        ePitch =  (FontPitch)nPitch;
+        ePitch =  static_cast<FontPitch>(nPitch);
 
     if( PITCH_DONTKNOW != ePitch )
     {

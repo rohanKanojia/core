@@ -19,8 +19,9 @@
 #ifndef INCLUDED_SC_SOURCE_UI_ATTRDLG_SCDLGFACT_HXX
 #define INCLUDED_SC_SOURCE_UI_ATTRDLG_SCDLGFACT_HXX
 
-#include "scabstdlg.hxx"
-class Dialog;
+#include <scabstdlg.hxx>
+#include <sfx2/sfxdlg.hxx>
+
 class ScImportAsciiDlg;
 class ScAutoFormatDlg;
 class ScColRowLabelDlg;
@@ -53,7 +54,6 @@ class ScShowTabDlg;
 class ScStringInputDlg;
 class ScTabBgColorDlg;
 class ScImportOptionsDlg;
-class SfxTabDialog;
 class ScTextImportOptionsDlg;
 class ScCondFormatManagerDlg;
 
@@ -63,18 +63,13 @@ public:                                             \
     explicit        Class( DialogClass* p)          \
                      : pDlg(p)                      \
                      {}                             \
-    virtual         ~Class();                       \
-    virtual short   Execute() override ;
-
-#define DECL_ABSTDLG2_BASE(Class,DialogClass)       \
-    ScopedVclPtr<DialogClass> pDlg;                 \
-public:                                             \
-    explicit        Class( DialogClass* p)          \
-                     : pDlg(p)                      \
-                     {}                             \
-    virtual         ~Class();                       \
-    virtual void    StartExecuteModal( const Link<Dialog&,void>& rEndDialogHdl ) override; \
-    long            GetResult() override;
+    virtual         ~Class() override;                       \
+    virtual short   Execute() override ;            \
+    virtual bool    StartExecuteAsync(VclAbstractDialog::AsyncContext &rCtx) override; \
+    std::vector<OString> getAllPageUIXMLDescriptions() const override; \
+    bool selectPageByUIXMLDescription(const OString& rUIXMLDescription) override; \
+    virtual BitmapEx createScreenshot() const override; \
+    virtual OString GetScreenshotId() const override; \
 
 #define IMPL_ABSTDLG_BASE(Class)                    \
 Class::~Class()                                     \
@@ -83,25 +78,27 @@ Class::~Class()                                     \
 short Class::Execute()                              \
 {                                                   \
     return pDlg->Execute();                         \
-}
-
-#define IMPL_ABSTDLG2_BASE(Class)                   \
-Class::~Class()                                     \
-{                                                   \
 }                                                   \
-void Class::StartExecuteModal( const Link<Dialog&,void>& rEndDialogHdl ) \
+bool Class::StartExecuteAsync(VclAbstractDialog::AsyncContext &rCtx)\
+{ \
+    return pDlg->StartExecuteAsync( rCtx ); \
+} \
+std::vector<OString> Class::getAllPageUIXMLDescriptions() const \
 {                                                   \
-    pDlg->StartExecuteModal( rEndDialogHdl ) ;      \
+    return pDlg->getAllPageUIXMLDescriptions();     \
 }                                                   \
-long Class::GetResult()                             \
+bool Class::selectPageByUIXMLDescription(const OString& rUIXMLDescription) \
 {                                                   \
-    return pDlg->GetResult();                       \
+   return pDlg->selectPageByUIXMLDescription(rUIXMLDescription);  \
+}                                                   \
+BitmapEx Class::createScreenshot() const              \
+{                                                   \
+    return pDlg->createScreenshot();                \
+}                                                   \
+OString Class::GetScreenshotId() const              \
+{                                                   \
+    return pDlg->GetScreenshotId();                 \
 }
-
-class ScVclAbstractDialog_Impl : public VclAbstractDialog
-{
-    DECL_ABSTDLG_BASE(ScVclAbstractDialog_Impl,Dialog)
-};
 
 class AbstractScImportAsciiDlg_Impl : public AbstractScImportAsciiDlg
 {
@@ -119,7 +116,13 @@ class AbstractScAutoFormatDlg_Impl : public AbstractScAutoFormatDlg
 
 class AbstractScColRowLabelDlg_Impl : public AbstractScColRowLabelDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScColRowLabelDlg_Impl,ScColRowLabelDlg)
+    std::unique_ptr<ScColRowLabelDlg> m_xDlg;
+public:
+    explicit AbstractScColRowLabelDlg_Impl(std::unique_ptr<ScColRowLabelDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual bool IsCol() override;
     virtual bool IsRow() override;
 };
@@ -128,22 +131,36 @@ class AbstractScCondFormatManagerDlg_Impl : public AbstractScCondFormatManagerDl
 {
     DECL_ABSTDLG_BASE(AbstractScCondFormatManagerDlg_Impl, ScCondFormatManagerDlg)
 
-    virtual ScConditionalFormatList* GetConditionalFormatList() override;
+    virtual std::unique_ptr<ScConditionalFormatList> GetConditionalFormatList() override;
 
-    virtual bool CondFormatsChanged() override;
+    virtual bool CondFormatsChanged() const override;
+
+    virtual void SetModified() override;
 
     virtual ScConditionalFormat* GetCondFormatSelected() override;
 };
 
 class AbstractScDataPilotDatabaseDlg_Impl  :public AbstractScDataPilotDatabaseDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScDataPilotDatabaseDlg_Impl, ScDataPilotDatabaseDlg)
+    std::unique_ptr<ScDataPilotDatabaseDlg> m_xDlg;
+public:
+    explicit AbstractScDataPilotDatabaseDlg_Impl(std::unique_ptr<ScDataPilotDatabaseDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual void    GetValues( ScImportSourceDesc& rDesc ) override;
 };
 
 class AbstractScDataPilotSourceTypeDlg_Impl  :public AbstractScDataPilotSourceTypeDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScDataPilotSourceTypeDlg_Impl, ScDataPilotSourceTypeDlg)
+    std::unique_ptr<ScDataPilotSourceTypeDlg> m_xDlg;
+public:
+    explicit AbstractScDataPilotSourceTypeDlg_Impl(std::unique_ptr<ScDataPilotSourceTypeDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual bool IsDatabase() const override;
     virtual bool IsExternal() const override;
     virtual bool IsNamedRange() const override;
@@ -153,7 +170,13 @@ class AbstractScDataPilotSourceTypeDlg_Impl  :public AbstractScDataPilotSourceTy
 
 class AbstractScDataPilotServiceDlg_Impl : public AbstractScDataPilotServiceDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScDataPilotServiceDlg_Impl, ScDataPilotServiceDlg)
+    std::unique_ptr<ScDataPilotServiceDlg> m_xDlg;
+public:
+    explicit AbstractScDataPilotServiceDlg_Impl(std::unique_ptr<ScDataPilotServiceDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short     Execute() override;
     virtual OUString  GetServiceName() const override;
     virtual OUString  GetParSource() const override;
     virtual OUString  GetParName() const override;
@@ -163,7 +186,13 @@ class AbstractScDataPilotServiceDlg_Impl : public AbstractScDataPilotServiceDlg
 
 class AbstractScDeleteCellDlg_Impl : public AbstractScDeleteCellDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScDeleteCellDlg_Impl,ScDeleteCellDlg)
+    std::unique_ptr<ScDeleteCellDlg> m_xDlg;
+public:
+    explicit AbstractScDeleteCellDlg_Impl(std::unique_ptr<ScDeleteCellDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short           Execute() override;
     virtual DelCellCmd GetDelCellCmd() const override;
 };
 
@@ -175,14 +204,26 @@ class AbstractScDataFormDlg_Impl : public AbstractScDataFormDlg
 
 class AbstractScDeleteContentsDlg_Impl : public AbstractScDeleteContentsDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScDeleteContentsDlg_Impl,ScDeleteContentsDlg)
+    std::unique_ptr<ScDeleteContentsDlg> m_xDlg;
+public:
+    explicit AbstractScDeleteContentsDlg_Impl(std::unique_ptr<ScDeleteContentsDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short   Execute() override;
     virtual void    DisableObjects() override;
     virtual InsertDeleteFlags GetDelContentsCmdBits() const override;
 };
 
 class AbstractScFillSeriesDlg_Impl:public AbstractScFillSeriesDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScFillSeriesDlg_Impl, ScFillSeriesDlg)
+    std::unique_ptr<ScFillSeriesDlg> m_xDlg;
+public:
+    explicit AbstractScFillSeriesDlg_Impl(std::unique_ptr<ScFillSeriesDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short       Execute() override;
     virtual FillDir     GetFillDir() const override;
     virtual FillCmd     GetFillCmd() const override;
     virtual FillDateCmd GetFillDateCmd() const override;
@@ -195,19 +236,37 @@ class AbstractScFillSeriesDlg_Impl:public AbstractScFillSeriesDlg
 
 class AbstractScGroupDlg_Impl :  public AbstractScGroupDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScGroupDlg_Impl, ScGroupDlg)
+    std::unique_ptr<ScGroupDlg> m_xDlg;
+public:
+    explicit AbstractScGroupDlg_Impl(std::unique_ptr<ScGroupDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual bool GetColsChecked() const override;
 };
 
 class AbstractScInsertCellDlg_Impl : public AbstractScInsertCellDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScInsertCellDlg_Impl, ScInsertCellDlg)
+    std::unique_ptr<ScInsertCellDlg> m_xDlg;
+public:
+    explicit AbstractScInsertCellDlg_Impl(std::unique_ptr<ScInsertCellDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short           Execute() override;
     virtual InsCellCmd GetInsCellCmd() const override ;
 };
 
 class AbstractScInsertContentsDlg_Impl : public AbstractScInsertContentsDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScInsertContentsDlg_Impl, ScInsertContentsDlg)
+    std::unique_ptr<ScInsertContentsDlg> m_xDlg;
+public:
+    explicit AbstractScInsertContentsDlg_Impl(std::unique_ptr<ScInsertContentsDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short           Execute() override;
     virtual InsertDeleteFlags GetInsContentsCmdBits() const override;
     virtual ScPasteFunc   GetFormulaCmdBits() const override;
     virtual bool        IsSkipEmptyCells() const override;
@@ -216,33 +275,51 @@ class AbstractScInsertContentsDlg_Impl : public AbstractScInsertContentsDlg
     virtual void        SetOtherDoc( bool bSet ) override;
     virtual bool        IsTranspose() const override;
     virtual void        SetChangeTrack( bool bSet ) override;
-    virtual void        SetCellShiftDisabled( int nDisable ) override;
+    virtual void        SetCellShiftDisabled( CellShiftDisabledFlags nDisable ) override;
     virtual InsCellCmd  GetMoveMode() override;
 };
 
 class AbstractScInsertTableDlg_Impl : public AbstractScInsertTableDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScInsertTableDlg_Impl, ScInsertTableDlg)
+    std::unique_ptr<ScInsertTableDlg> m_xDlg;
+public:
+    explicit AbstractScInsertTableDlg_Impl(std::unique_ptr<ScInsertTableDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short           Execute() override;
     virtual bool            GetTablesFromFile() override;
     virtual bool            GetTablesAsLink() override;
     virtual const OUString* GetFirstTable( sal_uInt16* pN = nullptr ) override;
     virtual ScDocShell*     GetDocShellTables() override;
     virtual bool            IsTableBefore() override;
     virtual sal_uInt16      GetTableCount() override;
-    virtual const OUString* GetNextTable( sal_uInt16* pN = nullptr ) override;
+    virtual const OUString* GetNextTable( sal_uInt16* pN ) override;
 
 };
 
 class AbstractScSelEntryDlg_Impl : public AbstractScSelEntryDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScSelEntryDlg_Impl, ScSelEntryDlg )
-    virtual OUString GetSelectEntry() const override;
+    std::unique_ptr<ScSelEntryDlg> m_xDlg;
+public:
+    explicit AbstractScSelEntryDlg_Impl(std::unique_ptr<ScSelEntryDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short    Execute() override;
+    virtual OUString GetSelectedEntry() const override;
 };
 
 class AbstractScLinkedAreaDlg_Impl : public AbstractScLinkedAreaDlg
 {
-    DECL_ABSTDLG2_BASE( AbstractScLinkedAreaDlg_Impl, ScLinkedAreaDlg)
-
+    std::unique_ptr<ScLinkedAreaDlg> m_xDlg;
+public:
+    explicit AbstractScLinkedAreaDlg_Impl(std::unique_ptr<ScLinkedAreaDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual                 ~AbstractScLinkedAreaDlg_Impl() override;
+    virtual short           Execute() override;
     virtual void            InitFromOldLink( const OUString& rFile, const OUString& rFilter,
                                         const OUString& rOptions, const OUString& rSource,
                                         sal_uLong nRefresh ) override;
@@ -255,26 +332,44 @@ class AbstractScLinkedAreaDlg_Impl : public AbstractScLinkedAreaDlg
 
 class AbstractScMetricInputDlg_Impl : public AbstractScMetricInputDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScMetricInputDlg_Impl, ScMetricInputDlg)
-    virtual long GetInputValue() const override;
+    std::unique_ptr<ScMetricInputDlg> m_xDlg;
+public:
+    explicit AbstractScMetricInputDlg_Impl(std::unique_ptr<ScMetricInputDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
+    virtual int GetInputValue() const override;
 };
 
 class AbstractScMoveTableDlg_Impl : public AbstractScMoveTableDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScMoveTableDlg_Impl, ScMoveTableDlg)
+    std::unique_ptr<ScMoveTableDlg> m_xDlg;
+public:
+    explicit AbstractScMoveTableDlg_Impl(std::unique_ptr<ScMoveTableDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual sal_uInt16  GetSelectedDocument     () const override;
     virtual sal_uInt16  GetSelectedTable        () const override;
     virtual bool    GetCopyTable            () const override;
     virtual bool    GetRenameTable          () const override;
     virtual void    GetTabNameString( OUString& rString ) const override;
     virtual void    SetForceCopyTable       () override;
-    virtual void    EnableRenameTable       (bool bFlag=true) override;
+    virtual void    EnableRenameTable       (bool bFlag) override;
 };
 
 class AbstractScNameCreateDlg_Impl : public AbstractScNameCreateDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScNameCreateDlg_Impl, ScNameCreateDlg)
-    virtual sal_uInt16          GetFlags() const override;
+    std::unique_ptr<ScNameCreateDlg> m_xDlg;
+public:
+    explicit AbstractScNameCreateDlg_Impl(std::unique_ptr<ScNameCreateDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short           Execute() override;
+    virtual CreateNameFlags GetFlags() const override;
 };
 
 class AbstractScNamePasteDlg_Impl : public AbstractScNamePasteDlg
@@ -292,14 +387,14 @@ class AbstractScPivotFilterDlg_Impl : public AbstractScPivotFilterDlg
 class AbstractScDPFunctionDlg_Impl : public AbstractScDPFunctionDlg
 {
     DECL_ABSTDLG_BASE( AbstractScDPFunctionDlg_Impl, ScDPFunctionDlg)
-    virtual sal_uInt16 GetFuncMask() const override;
+    virtual PivotFunc GetFuncMask() const override;
     virtual css::sheet::DataPilotFieldReference GetFieldRef() const override;
 };
 
 class AbstractScDPSubtotalDlg_Impl : public AbstractScDPSubtotalDlg
 {
     DECL_ABSTDLG_BASE( AbstractScDPSubtotalDlg_Impl, ScDPSubtotalDlg)
-    virtual sal_uInt16 GetFuncMask() const override;
+    virtual PivotFunc GetFuncMask() const override;
     virtual void FillLabelData( ScDPLabelData& rLabelData ) const override;
 };
 
@@ -318,44 +413,86 @@ class AbstractScDPDateGroupDlg_Impl : public AbstractScDPDateGroupDlg
 
 class AbstractScDPShowDetailDlg_Impl : public AbstractScDPShowDetailDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScDPShowDetailDlg_Impl, ScDPShowDetailDlg)
+protected:
+    std::shared_ptr<ScDPShowDetailDlg> m_xDlg;
+public:
+    explicit AbstractScDPShowDetailDlg_Impl(ScDPShowDetailDlg* p)
+        : m_xDlg(p)
+    {
+    }
+    virtual short Execute() override;
     virtual OUString GetDimensionName() const override;
 };
 
 class AbstractScNewScenarioDlg_Impl : public AbstractScNewScenarioDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScNewScenarioDlg_Impl, ScNewScenarioDlg )
+    std::unique_ptr<ScNewScenarioDlg> m_xDlg;
+public:
+    explicit AbstractScNewScenarioDlg_Impl(ScNewScenarioDlg* p)
+        : m_xDlg(p)
+    {
+    }
+    virtual short           Execute() override;
+
     virtual void SetScenarioData( const OUString& rName, const OUString& rComment,
-                            const Color& rColor, sal_uInt16 nFlags ) override;
+                            const Color& rColor, ScScenarioFlags nFlags ) override;
 
     virtual void GetScenarioData( OUString& rName, OUString& rComment,
-                            Color& rColor, sal_uInt16& rFlags ) const override;
+                            Color& rColor, ScScenarioFlags& rFlags ) const override;
 };
 
 class AbstractScShowTabDlg_Impl : public AbstractScShowTabDlg
 {
-    DECL_ABSTDLG_BASE(AbstractScShowTabDlg_Impl,ScShowTabDlg)
-    virtual void    Insert( const OUString& rString, bool bSelected ) override;
-    virtual sal_Int32 GetSelectEntryCount() const override;
-    virtual void SetDescription(const OUString& rTitle, const OUString& rFixedText, const OString& sDlgHelpId, const OString& sLbHelpId ) override;
-    virtual OUString  GetSelectEntry(sal_Int32 nPos) const override;
-    virtual sal_Int32 GetSelectEntryPos(sal_Int32 nPos) const override;
+protected:
+    std::shared_ptr<ScShowTabDlg> m_xDlg;
+public:
+    explicit AbstractScShowTabDlg_Impl(ScShowTabDlg* p)
+        : m_xDlg(p)
+    {
+    }
+    virtual short Execute() override;
+    virtual bool StartExecuteAsync(VclAbstractDialog::AsyncContext &rCtx) override;
+    virtual void Insert( const OUString& rString, bool bSelected ) override;
+    virtual void SetDescription(const OUString& rTitle, const OUString& rFixedText, const OString& sDlgHelpId, const OString& sLbHelpId) override;
+    virtual OUString GetEntry(sal_Int32 nPos) const override;
+    virtual std::vector<sal_Int32> GetSelectedRows() const override;
 };
 
 class AbstractScSortWarningDlg_Impl : public AbstractScSortWarningDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScSortWarningDlg_Impl, ScSortWarningDlg )
+protected:
+    std::unique_ptr<ScSortWarningDlg> m_xDlg;
+public:
+    explicit AbstractScSortWarningDlg_Impl(std::unique_ptr<ScSortWarningDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
 };
 
 class AbstractScStringInputDlg_Impl :  public AbstractScStringInputDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScStringInputDlg_Impl, ScStringInputDlg )
+protected:
+    std::unique_ptr<ScStringInputDlg> m_xDlg;
+public:
+    explicit AbstractScStringInputDlg_Impl(std::unique_ptr<ScStringInputDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual OUString GetInputString() const override;
 };
 
 class AbstractScTabBgColorDlg_Impl :  public AbstractScTabBgColorDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScTabBgColorDlg_Impl, ScTabBgColorDlg )
+protected:
+    std::unique_ptr<ScTabBgColorDlg> m_xDlg;
+public:
+    explicit AbstractScTabBgColorDlg_Impl(std::unique_ptr<ScTabBgColorDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual void GetSelectedColor( Color& rColor ) const override;
 };
 
@@ -363,11 +500,19 @@ class AbstractScImportOptionsDlg_Impl : public AbstractScImportOptionsDlg
 {
     DECL_ABSTDLG_BASE( AbstractScImportOptionsDlg_Impl, ScImportOptionsDlg)
     virtual void GetImportOptions( ScImportOptions& rOptions ) const override;
+    virtual void SaveImportOptions() const override;
 };
 
 class AbstractScTextImportOptionsDlg_Impl : public AbstractScTextImportOptionsDlg
 {
-    DECL_ABSTDLG_BASE( AbstractScTextImportOptionsDlg_Impl, ScTextImportOptionsDlg)
+protected:
+    std::unique_ptr<ScTextImportOptionsDlg> m_xDlg;
+public:
+    explicit AbstractScTextImportOptionsDlg_Impl(std::unique_ptr<ScTextImportOptionsDlg> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
     virtual LanguageType GetLanguageType() const override;
     virtual bool IsDateConversionSet() const override;
 };
@@ -375,14 +520,31 @@ class AbstractScTextImportOptionsDlg_Impl : public AbstractScTextImportOptionsDl
 class ScAbstractTabDialog_Impl : public SfxAbstractTabDialog
 {
     DECL_ABSTDLG_BASE( ScAbstractTabDialog_Impl,SfxTabDialog )
-    virtual void                SetCurPageId( sal_uInt16 nId ) override;
     virtual void                SetCurPageId( const OString &rName ) override;
     virtual const SfxItemSet*   GetOutputItemSet() const override;
     virtual const sal_uInt16*       GetInputRanges( const SfxItemPool& pItem ) override;
     virtual void                SetInputSet( const SfxItemSet* pInSet ) override;
         //From class Window.
     virtual void        SetText( const OUString& rStr ) override;
-    virtual OUString    GetText() const override;
+};
+
+class ScAbstractTabController_Impl : public SfxAbstractTabDialog
+{
+protected:
+    std::shared_ptr<SfxTabDialogController> m_xDlg;
+public:
+    explicit ScAbstractTabController_Impl(std::unique_ptr<SfxTabDialogController> p)
+        : m_xDlg(std::move(p))
+    {
+    }
+    virtual short Execute() override;
+    virtual bool  StartExecuteAsync(AsyncContext &rCtx) override;
+    virtual void                SetCurPageId( const OString &rName ) override;
+    virtual const SfxItemSet*   GetOutputItemSet() const override;
+    virtual const sal_uInt16*   GetInputRanges( const SfxItemPool& pItem ) override;
+    virtual void                SetInputSet( const SfxItemSet* pInSet ) override;
+        //From class Window.
+    virtual void        SetText( const OUString& rStr ) override;
 };
 
 //AbstractDialogFactory_Impl implementations
@@ -392,42 +554,41 @@ class ScAbstractDialogFactory_Impl : public ScAbstractDialogFactory
 public:
     virtual ~ScAbstractDialogFactory_Impl() {}
 
-    virtual     AbstractScImportAsciiDlg * CreateScImportAsciiDlg( const OUString& aDatName,
+    virtual VclPtr<AbstractScImportAsciiDlg> CreateScImportAsciiDlg(vcl::Window* pParent,
+                                                                    const OUString& aDatName,
                                                                     SvStream* pInStream,
                                                                     ScImportAsciiCall eCall) override;
 
-    virtual AbstractScTextImportOptionsDlg * CreateScTextImportOptionsDlg() override;
+    virtual VclPtr<AbstractScTextImportOptionsDlg> CreateScTextImportOptionsDlg(weld::Window* pParent) override;
 
-    virtual     AbstractScAutoFormatDlg * CreateScAutoFormatDlg(vcl::Window* pParent,
+    virtual VclPtr<AbstractScAutoFormatDlg> CreateScAutoFormatDlg(vcl::Window* pParent,
                                                                 ScAutoFormat* pAutoFormat,
                                                                 const ScAutoFormatData* pSelFormatData,
                                                                 ScViewData *pViewData) override;
-    virtual AbstractScColRowLabelDlg * CreateScColRowLabelDlg (vcl::Window* pParent,
-                                                                bool bCol = false,
-                                                                bool bRow = false) override;
+    virtual VclPtr<AbstractScColRowLabelDlg> CreateScColRowLabelDlg (weld::Window* pParent,
+                                                                bool bCol,
+                                                                bool bRow) override;
 
-    virtual AbstractScSortWarningDlg * CreateScSortWarningDlg(vcl::Window* pParent, const OUString& rExtendText, const OUString& rCurrentText ) override;
+    virtual VclPtr<AbstractScSortWarningDlg> CreateScSortWarningDlg(weld::Window* pParent, const OUString& rExtendText, const OUString& rCurrentText ) override;
 
-    virtual AbstractScCondFormatManagerDlg* CreateScCondFormatMgrDlg(vcl::Window* pParent, ScDocument* pDoc, const ScConditionalFormatList* pFormatList,
-                                                                int nId ) override;
+    virtual VclPtr<AbstractScCondFormatManagerDlg> CreateScCondFormatMgrDlg(vcl::Window* pParent, ScDocument* pDoc, const ScConditionalFormatList* pFormatList ) override;
 
-    virtual AbstractScDataPilotDatabaseDlg * CreateScDataPilotDatabaseDlg(vcl::Window* pParent) override;
+    virtual VclPtr<AbstractScDataPilotDatabaseDlg> CreateScDataPilotDatabaseDlg(weld::Window* pParent) override;
 
-    virtual AbstractScDataPilotSourceTypeDlg* CreateScDataPilotSourceTypeDlg(vcl::Window* pParent,
+    virtual VclPtr<AbstractScDataPilotSourceTypeDlg> CreateScDataPilotSourceTypeDlg(weld::Window* pParent,
         bool bEnableExternal) override;
 
-    virtual AbstractScDataPilotServiceDlg * CreateScDataPilotServiceDlg( vcl::Window* pParent,
-                                                                        const std::vector<OUString>& rServices,
-                                                                        int nId ) override;
-    virtual AbstractScDeleteCellDlg * CreateScDeleteCellDlg(vcl::Window* pParent, bool bDisallowCellMove = false ) override;
+    virtual VclPtr<AbstractScDataPilotServiceDlg> CreateScDataPilotServiceDlg(weld::Window* pParent,
+                                                                              const std::vector<OUString>& rServices) override;
+    virtual VclPtr<AbstractScDeleteCellDlg> CreateScDeleteCellDlg(weld::Window* pParent, bool bDisallowCellMove ) override;
 
     //for dataform
-    virtual AbstractScDataFormDlg* CreateScDataFormDlg(vcl::Window* pParent,
+    virtual VclPtr<AbstractScDataFormDlg> CreateScDataFormDlg(vcl::Window* pParent,
         ScTabViewShell* pTabViewShell) override;
 
-    virtual AbstractScDeleteContentsDlg * CreateScDeleteContentsDlg(vcl::Window* pParent) override;
+    virtual VclPtr<AbstractScDeleteContentsDlg> CreateScDeleteContentsDlg(weld::Window* pParent) override;
 
-    virtual AbstractScFillSeriesDlg * CreateScFillSeriesDlg( vcl::Window*        pParent,
+    virtual VclPtr<AbstractScFillSeriesDlg> CreateScFillSeriesDlg(weld::Window*        pParent,
                                                             ScDocument&     rDocument,
                                                             FillDir         eFillDir,
                                                             FillCmd         eFillCmd,
@@ -436,118 +597,109 @@ public:
                                                             double          fStep,
                                                             double          fMax,
                                                             sal_uInt16       nPossDir) override;
-    virtual AbstractScGroupDlg * CreateAbstractScGroupDlg( vcl::Window* pParent,
-                                                            bool bUnGroup = false) override;
+    virtual VclPtr<AbstractScGroupDlg> CreateAbstractScGroupDlg(weld::Window* pParent, bool bUnGroup = false) override;
 
-    virtual AbstractScInsertCellDlg * CreateScInsertCellDlg( vcl::Window* pParent,
-                                                             int nId,
-                                                             bool bDisallowCellMove = false ) override;
+    virtual VclPtr<AbstractScInsertCellDlg> CreateScInsertCellDlg(weld::Window* pParent,
+                                                                  bool bDisallowCellMove) override;
 
-    virtual AbstractScInsertContentsDlg * CreateScInsertContentsDlg( vcl::Window*        pParent,
-                                                                    const OUString* pStrTitle = nullptr ) override;
+    virtual VclPtr<AbstractScInsertContentsDlg> CreateScInsertContentsDlg(weld::Window* pParent,
+                                                                          const OUString* pStrTitle = nullptr) override;
 
-    virtual AbstractScInsertTableDlg * CreateScInsertTableDlg(vcl::Window* pParent, ScViewData& rViewData,
+    virtual VclPtr<AbstractScInsertTableDlg> CreateScInsertTableDlg(weld::Window* pParent, ScViewData& rViewData,
         SCTAB nTabCount, bool bFromFile) override;
 
-    virtual AbstractScSelEntryDlg * CreateScSelEntryDlg ( vcl::Window* pParent,
-                                                          const std::vector<OUString> &rEntryList ) override;
+    virtual VclPtr<AbstractScSelEntryDlg> CreateScSelEntryDlg(weld::Window* pParent, const std::vector<OUString> &rEntryList) override;
 
-    virtual AbstractScLinkedAreaDlg * CreateScLinkedAreaDlg(vcl::Window* pParent) override;
+    virtual VclPtr<AbstractScLinkedAreaDlg> CreateScLinkedAreaDlg(weld::Window* pParent) override;
 
-    virtual AbstractScMetricInputDlg * CreateScMetricInputDlg (  vcl::Window*        pParent,
+    virtual VclPtr<AbstractScMetricInputDlg> CreateScMetricInputDlg(weld::Window* pParent,
                                                                 const OString&  sDialogName,
                                                                 long            nCurrent,
                                                                 long            nDefault,
-                                                                FieldUnit       eFUnit    = FUNIT_MM,
-                                                                sal_uInt16      nDecimals = 2,
-                                                                long            nMaximum  = 1000,
-                                                                long            nMinimum  = 0,
-                                                                long            nFirst    = 1,
-                                                                long            nLast     = 100 ) override;
+                                                                FieldUnit       eFUnit,
+                                                                sal_uInt16      nDecimals,
+                                                                long            nMaximum,
+                                                                long            nMinimum  = 0 ) override;
 
-    virtual AbstractScMoveTableDlg * CreateScMoveTableDlg(vcl::Window * pParent,
+    virtual VclPtr<AbstractScMoveTableDlg> CreateScMoveTableDlg(weld::Window * pParent,
         const OUString& rDefault) override;
 
-    virtual AbstractScNameCreateDlg * CreateScNameCreateDlg(vcl::Window * pParent,
-        sal_uInt16 nFlags) override;
+    virtual VclPtr<AbstractScNameCreateDlg> CreateScNameCreateDlg(weld::Window * pParent,
+        CreateNameFlags nFlags) override;
 
-    virtual AbstractScNamePasteDlg * CreateScNamePasteDlg ( vcl::Window * pParent, ScDocShell* pShell, bool bInsList=true ) override;
+    virtual VclPtr<AbstractScNamePasteDlg> CreateScNamePasteDlg ( vcl::Window * pParent, ScDocShell* pShell ) override;
 
-    virtual AbstractScPivotFilterDlg * CreateScPivotFilterDlg(vcl::Window* pParent,
+    virtual VclPtr<AbstractScPivotFilterDlg> CreateScPivotFilterDlg(vcl::Window* pParent,
         const SfxItemSet& rArgSet, sal_uInt16 nSourceTab) override;
 
-    virtual AbstractScDPFunctionDlg * CreateScDPFunctionDlg( vcl::Window* pParent,
+    virtual VclPtr<AbstractScDPFunctionDlg> CreateScDPFunctionDlg( vcl::Window* pParent,
                                                                 const ScDPLabelDataVector& rLabelVec,
                                                                 const ScDPLabelData& rLabelData,
                                                                 const ScPivotFuncData& rFuncData ) override;
 
-    virtual AbstractScDPSubtotalDlg * CreateScDPSubtotalDlg( vcl::Window* pParent,
+    virtual VclPtr<AbstractScDPSubtotalDlg> CreateScDPSubtotalDlg( vcl::Window* pParent,
                                                                 ScDPObject& rDPObj,
                                                                 const ScDPLabelData& rLabelData,
                                                                 const ScPivotFuncData& rFuncData,
                                                                 const ScDPNameVec& rDataFields ) override;
 
-    virtual AbstractScDPNumGroupDlg * CreateScDPNumGroupDlg( vcl::Window* pParent,
-                                                                int nId,
+    virtual VclPtr<AbstractScDPNumGroupDlg> CreateScDPNumGroupDlg( vcl::Window* pParent,
                                                                 const ScDPNumGroupInfo& rInfo ) override;
 
-    virtual AbstractScDPDateGroupDlg * CreateScDPDateGroupDlg( vcl::Window* pParent,
-                                                                int nId,
+    virtual VclPtr<AbstractScDPDateGroupDlg> CreateScDPDateGroupDlg( vcl::Window* pParent,
                                                                 const ScDPNumGroupInfo& rInfo,
                                                                 sal_Int32 nDatePart,
                                                                 const Date& rNullDate ) override;
 
-    virtual AbstractScDPShowDetailDlg * CreateScDPShowDetailDlg( vcl::Window* pParent, int nId,
+    virtual VclPtr<AbstractScDPShowDetailDlg> CreateScDPShowDetailDlg(weld::Window* pParent,
                                                                 ScDPObject& rDPObj,
-                                                                sal_uInt16 nOrient ) override;
+                                                                css::sheet::DataPilotFieldOrientation nOrient) override;
 
-    virtual AbstractScNewScenarioDlg * CreateScNewScenarioDlg ( vcl::Window* pParent, const OUString& rName,
-                                                                bool bEdit = false, bool bSheetProtected = false ) override;
-    virtual AbstractScShowTabDlg * CreateScShowTabDlg(vcl::Window* pParent) override;
+    virtual VclPtr<AbstractScNewScenarioDlg> CreateScNewScenarioDlg(weld::Window* pParent, const OUString& rName,
+                                                                    bool bEdit, bool bSheetProtected) override;
+    virtual VclPtr<AbstractScShowTabDlg> CreateScShowTabDlg(weld::Window* pParent) override;
 
-    virtual AbstractScStringInputDlg * CreateScStringInputDlg (  vcl::Window* pParent,
-                                                                const OUString& rTitle,
-                                                                const OUString& rEditTitle,
-                                                                const OUString& rDefault,
-                                                                const OString& sHelpId, const OString& sEditHelpId ) override;
+    virtual VclPtr<AbstractScStringInputDlg> CreateScStringInputDlg(weld::Window* pParent,
+                                                                    const OUString& rTitle,
+                                                                    const OUString& rEditTitle,
+                                                                    const OUString& rDefault,
+                                                                    const OString& rHelpId,
+                                                                    const OString& rEditHelpId) override;
 
-    virtual AbstractScTabBgColorDlg * CreateScTabBgColorDlg (  vcl::Window* pParent,
-                                                                const OUString& rTitle, //Dialog Title
-                                                                const OUString& rTabBgColorNoColorText, //Label for no tab color
-                                                                const Color& rDefaultColor, //Currently selected Color
-                                                                const OString& sHelpId ) override;
+    virtual VclPtr<AbstractScTabBgColorDlg> CreateScTabBgColorDlg(weld::Window* pParent,
+                                                                  const OUString& rTitle, //Dialog Title
+                                                                  const OUString& rTabBgColorNoColorText, //Label for no tab color
+                                                                  const Color& rDefaultColor) override; //Currently selected Color
 
-    virtual AbstractScImportOptionsDlg * CreateScImportOptionsDlg ( bool                    bAscii = true,
-                                                                    const ScImportOptions*  pOptions = nullptr,
-                                                                    const OUString*         pStrTitle = nullptr,
-                                                                    bool                    bMultiByte = false,
-                                                                    bool                    bOnlyDbtoolsEncodings = false,
+    virtual VclPtr<AbstractScImportOptionsDlg> CreateScImportOptionsDlg ( bool                    bAscii,
+                                                                    const ScImportOptions*  pOptions,
+                                                                    const OUString*         pStrTitle,
+                                                                    bool                    bOnlyDbtoolsEncodings,
                                                                     bool                    bImport = true ) override;
-    virtual SfxAbstractTabDialog * CreateScAttrDlg( vcl::Window*          pParent,
-                                                    const SfxItemSet* pCellAttrs ) override;
+    virtual VclPtr<SfxAbstractTabDialog> CreateScAttrDlg(weld::Window* pParent,
+                                                         const SfxItemSet* pCellAttrs) override;
 
-    virtual SfxAbstractTabDialog * CreateScHFEditDlg(vcl::Window*         pParent,
+    virtual VclPtr<SfxAbstractTabDialog> CreateScHFEditDlg(vcl::Window*       pParent,
                                                     const SfxItemSet&   rCoreSet,
                                                     const OUString&     rPageStyle,
-                                                    sal_uInt16              nResId = RID_SCDLG_HFEDIT ) override;
+                                                    sal_uInt16          nResId ) override;
 
-    virtual SfxAbstractTabDialog * CreateScStyleDlg( vcl::Window*                pParent,
-                                                    SfxStyleSheetBase&  rStyleBase,
-                                                    sal_uInt16              nRscId,
-                                                    int nId) override;
+    virtual VclPtr<SfxAbstractTabDialog> CreateScStyleDlg(weld::Window* pParent,
+                                                          SfxStyleSheetBase& rStyleBase,
+                                                          bool bPage) override;
 
-    virtual SfxAbstractTabDialog * CreateScSubTotalDlg( vcl::Window*             pParent,
+    virtual VclPtr<SfxAbstractTabDialog> CreateScSubTotalDlg( vcl::Window*             pParent,
                                                         const SfxItemSet*   pArgSet ) override;
-    virtual SfxAbstractTabDialog * CreateScCharDlg(vcl::Window* pParent,
+    virtual VclPtr<SfxAbstractTabDialog> CreateScCharDlg(weld::Window* pParent,
         const SfxItemSet* pAttr, const SfxObjectShell* pDocShell) override;
 
-    virtual SfxAbstractTabDialog * CreateScParagraphDlg(vcl::Window* pParent,
+    virtual VclPtr<SfxAbstractTabDialog> CreateScParagraphDlg(weld::Window* pParent,
         const SfxItemSet* pAttr) override;
 
-    virtual SfxAbstractTabDialog * CreateScSortDlg(vcl::Window* pParent, const SfxItemSet* pArgSet) override;
+    virtual VclPtr<SfxAbstractTabDialog> CreateScSortDlg(weld::Window* pParent, const SfxItemSet* pArgSet) override;
 
     // For TabPage
-    virtual CreateTabPage               GetTabPageCreatorFunc( sal_uInt16 nId ) override;
+    virtual CreateTabPage                GetTabPageCreatorFunc( sal_uInt16 nId ) override;
 
 };
 

@@ -17,62 +17,78 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-//  Discover WKS, WK1 und WK3; s.a op.cpp
+//  Discover WKS, WK1 and WK3; s.a op.cpp
 
-#include <string.h>
 #include <map>
 
-#include "filter.hxx"
-#include "document.hxx"
-#include "compiler.hxx"
-#include "scerrors.hxx"
+#include <filter.hxx>
+#include <document.hxx>
+#include <scerrors.hxx>
 
-#include "root.hxx"
-#include "lotrange.hxx"
-#include "optab.h"
-#include "scmem.h"
-#include "decl.h"
-#include "tool.h"
-#include "fprogressbar.hxx"
+#include <optab.h>
+#include <op.h>
+#include <scmem.h>
+#include <decl.h>
+#include <fprogressbar.hxx>
 #include "lotfilter.hxx"
+#include <tools/stream.hxx>
 
-static FltError
+static ErrCode
 generate_Opcodes(LotusContext &rContext, SvStream& aStream,
                   ScfStreamProgressBar& aPrgrsBar)
 {
-    OPCODE_FKT *pOps;
-    int         nOps;
+    OPCODE_FKT *pOps = nullptr;
+    int         nOps = 0;
+
+    ErrCode nErr = ERRCODE_NONE;
 
     switch (rContext.eTyp)
     {
         case eWK_1:
         case eWK_2:
-            pOps = rContext.pOpFkt;
+            pOps = LotusContext::pOpFkt;
             nOps = FKT_LIMIT;
-        break;
+            break;
         case eWK123:
-            pOps = rContext.pOpFkt123;
+            pOps = LotusContext::pOpFkt123;
             nOps = FKT_LIMIT123;
-        break;
-        case eWK3:      return eERR_NI;
-        case eWK_Error: return eERR_FORMAT;
-        default:        return eERR_UNKN_WK;
-     }
+            break;
+        case eWK3:
+            nErr = SCERR_IMPORT_NI;
+            break;
+        case eWK_Error:
+            nErr = SCERR_IMPORT_FORMAT;
+            break;
+        default:
+            nErr = SCERR_IMPORT_UNKNOWN_WK;
+            break;
+    }
+
+    if (nErr != ERRCODE_NONE)
+    {
+        MemDelete(rContext);
+        return nErr;
+    }
 
     // #i76299# seems that SvStream::IsEof() does not work correctly
-    aStream.Seek( STREAM_SEEK_TO_END );
-    sal_Size nStrmSize = aStream.Tell();
+    sal_uInt64 const nStrmSize = aStream.TellEnd();
     aStream.Seek( STREAM_SEEK_TO_BEGIN );
-    while( !rContext.bEOF && !aStream.IsEof() && (aStream.Tell() < nStrmSize) )
+    while (!rContext.bEOF && aStream.good() && (aStream.Tell() < nStrmSize))
     {
-        sal_uInt16 nOpcode, nLength;
+        sal_uInt16 nOpcode(LOTUS_EOF), nLength(0);
 
-        aStream.ReadUInt16( nOpcode ).ReadUInt16( nLength );
+        aStream.ReadUInt16(nOpcode).ReadUInt16(nLength);
+        if (!aStream.good())
+            break;
+
         aPrgrsBar.Progress();
         if( nOpcode == LOTUS_EOF )
             rContext.bEOF = true;
         else if( nOpcode == LOTUS_FILEPASSWD )
-            return eERR_FILEPASSWD;
+        {
+            nErr = SCERR_IMPORT_FILEPASSWD;
+            break;
+        }
         else if( nOpcode < nOps )
             pOps[ nOpcode ] (rContext, aStream, nLength);
         else if (rContext.eTyp == eWK123 && nOpcode == LOTUS_PATTERN)
@@ -101,25 +117,28 @@ generate_Opcodes(LotusContext &rContext, SvStream& aStream,
 
     MemDelete(rContext);
 
-    rContext.pDoc->CalcAfterLoad();
+    if (!aStream.good())
+        nErr = SCERR_IMPORT_FORMAT;
+    else if (nErr == ERRCODE_NONE)
+        rContext.pDoc->CalcAfterLoad();
 
-    return eERR_OK;
+    return nErr;
 }
 
-WKTYP ScanVersion(LotusContext &rContext, SvStream& aStream)
+static WKTYP ScanVersion(SvStream& aStream)
 {
-    // PREC:    pWKDatei:   pointer to open file
+    // PREC:    pWKFile:   pointer to open file
     // POST:    return:     type of file
     sal_uInt16 nOpcode(0), nVersNr(0), nRecLen(0);
 
     // first byte has to be 0 because of BOF!
     aStream.ReadUInt16( nOpcode );
-    if (nOpcode != rContext.nBOF)
+    if (nOpcode != LotusContext::nBOF)
         return eWK_UNKNOWN;
 
     aStream.ReadUInt16( nRecLen ).ReadUInt16( nVersNr );
 
-    if( aStream.IsEof() )
+    if (!aStream.good())
         return eWK_Error;
 
     switch( nVersNr )
@@ -138,12 +157,14 @@ WKTYP ScanVersion(LotusContext &rContext, SvStream& aStream)
 
         case 0x1000:
             aStream.ReadUInt16( nVersNr );
-            if( aStream.IsEof() ) return eWK_Error;
+            if (!aStream.good())
+                return eWK_Error;
             if( nVersNr == 0x0004 && nRecLen == 26 )
-            {   // 4 bytes of 26 read => skip 22 (read instead of seek to make IsEof() work just in case)
+            {
+                // 4 bytes of 26 read => skip 22 (read instead of seek to make IsEof() work just in case)
                 sal_Char aDummy[22];
-                aStream.Read( aDummy, 22 );
-                return aStream.IsEof() ? eWK_Error : eWK3;
+                aStream.ReadBytes(aDummy, 22);
+                return !aStream.good() ? eWK_Error : eWK3;
             }
             break;
         case 0x1003:
@@ -161,9 +182,9 @@ WKTYP ScanVersion(LotusContext &rContext, SvStream& aStream)
     return eWK_UNKNOWN;
 }
 
-FltError ScImportLotus123old(LotusContext& rContext, SvStream& aStream, ScDocument* pDocument, rtl_TextEncoding eSrc )
+ErrCode ScImportLotus123old(LotusContext& rContext, SvStream& aStream, ScDocument* pDocument, rtl_TextEncoding eSrc )
 {
-    aStream.Seek( 0UL );
+    aStream.Seek( 0 );
 
     // make document pointer global
     rContext.pDoc = pDocument;
@@ -172,7 +193,7 @@ FltError ScImportLotus123old(LotusContext& rContext, SvStream& aStream, ScDocume
 
     // allocate memory
     if( !MemNew(rContext) )
-        return eERR_NOMEM;
+        return SCERR_IMPORT_OUTOFMEM;
 
     // initialize page format (only Tab 0!)
     // initialize page format; meaning: get defaults from SC TODO:
@@ -182,7 +203,7 @@ FltError ScImportLotus123old(LotusContext& rContext, SvStream& aStream, ScDocume
     ScfStreamProgressBar aPrgrsBar( aStream, pDocument->GetDocumentShell() );
 
     // detect file type
-    rContext.eTyp = ScanVersion(rContext, aStream);
+    rContext.eTyp = ScanVersion(aStream);
     rContext.aLotusPatternPool.clear();
 
     return generate_Opcodes(rContext, aStream, aPrgrsBar);

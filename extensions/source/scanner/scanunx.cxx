@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <scanner.hxx>
-#include <sanedlg.hxx>
+#include "scanner.hxx"
+#include "sanedlg.hxx"
 #include <osl/thread.hxx>
+#include <sal/log.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <memory>
 
@@ -36,41 +37,39 @@ BitmapTransporter::~BitmapTransporter()
 }
 
 
-css::awt::Size BitmapTransporter::getSize() throw(std::exception)
+css::awt::Size BitmapTransporter::getSize()
 {
     osl::MutexGuard aGuard( m_aProtector );
-    int         nPreviousPos = m_aStream.Tell();
     css::awt::Size   aRet;
 
     // ensure that there is at least a header
-    m_aStream.Seek( STREAM_SEEK_TO_END );
-    int nLen = m_aStream.Tell();
+    int nLen = m_aStream.TellEnd();
     if( nLen > 15 )
     {
+        int nPreviousPos = m_aStream.Tell();
         m_aStream.Seek( 4 );
         m_aStream.ReadInt32( aRet.Width ).ReadInt32( aRet.Height );
+        m_aStream.Seek( nPreviousPos );
     }
     else
         aRet.Width = aRet.Height = 0;
 
-    m_aStream.Seek( nPreviousPos );
 
     return aRet;
 }
 
 
-Sequence< sal_Int8 > BitmapTransporter::getDIB() throw(std::exception)
+Sequence< sal_Int8 > BitmapTransporter::getDIB()
 {
     osl::MutexGuard aGuard( m_aProtector );
     int         nPreviousPos = m_aStream.Tell();
 
     // create return value
-    m_aStream.Seek( STREAM_SEEK_TO_END );
-    int nBytes = m_aStream.Tell();
+    int nBytes = m_aStream.TellEnd();
     m_aStream.Seek( 0 );
 
     Sequence< sal_Int8 > aValue( nBytes );
-    m_aStream.Read( aValue.getArray(), nBytes );
+    m_aStream.ReadBytes( aValue.getArray(), nBytes );
     m_aStream.Seek( nPreviousPos );
 
     return aValue;
@@ -129,20 +128,19 @@ class ScannerThread : public osl::Thread
     ScannerManager*                           m_pManager; // just for the disposing call
 
 public:
-    virtual void run() override;
-    virtual void onTerminated() override { delete this; }
+    virtual void SAL_CALL run() override;
+    virtual void SAL_CALL onTerminated() override { delete this; }
 public:
-    ScannerThread( std::shared_ptr<SaneHolder> pHolder,
+    ScannerThread( const std::shared_ptr<SaneHolder>& pHolder,
                    const Reference< css::lang::XEventListener >& listener,
                    ScannerManager* pManager );
-    virtual ~ScannerThread();
+    virtual ~ScannerThread() override;
 };
 
 
-ScannerThread::ScannerThread(
-                             std::shared_ptr<SaneHolder> pHolder,
+ScannerThread::ScannerThread(const std::shared_ptr<SaneHolder>& pHolder,
                              const Reference< css::lang::XEventListener >& listener,
-                             ScannerManager* pManager )
+                             ScannerManager* pManager)
         : m_pHolder( pHolder ), m_xListener( listener ), m_pManager( pManager )
 {
     SAL_INFO("extensions.scanner", "ScannerThread");
@@ -200,7 +198,7 @@ void ScannerManager::ReleaseData()
 }
 
 
-css::awt::Size ScannerManager::getSize() throw(std::exception)
+css::awt::Size ScannerManager::getSize()
 {
     css::awt::Size aRet;
     aRet.Width = aRet.Height = 0;
@@ -208,13 +206,13 @@ css::awt::Size ScannerManager::getSize() throw(std::exception)
 }
 
 
-Sequence< sal_Int8 > ScannerManager::getDIB() throw(std::exception)
+Sequence< sal_Int8 > ScannerManager::getDIB()
 {
     return Sequence< sal_Int8 >();
 }
 
 
-Sequence< ScannerContext > ScannerManager::getAvailableScanners() throw(std::exception)
+Sequence< ScannerContext > ScannerManager::getAvailableScanners()
 {
     osl::MutexGuard aGuard( theSaneProtector::get() );
     sanevec &rSanes = theSanes::get().m_aSanes;
@@ -240,7 +238,6 @@ Sequence< ScannerContext > ScannerManager::getAvailableScanners() throw(std::exc
 
 sal_Bool ScannerManager::configureScannerAndScan( ScannerContext& scanner_context,
                                                   const Reference< css::lang::XEventListener >& listener )
-    throw (ScannerException, RuntimeException, std::exception)
 {
     bool bRet;
     bool bScan;
@@ -250,7 +247,7 @@ sal_Bool ScannerManager::configureScannerAndScan( ScannerContext& scanner_contex
 
         SAL_INFO("extensions.scanner", "ScannerManager::configureScanner");
 
-        if( scanner_context.InternalData < 0 || (sal_uLong)scanner_context.InternalData >= rSanes.size() )
+        if( scanner_context.InternalData < 0 || static_cast<sal_uLong>(scanner_context.InternalData) >= rSanes.size() )
             throw ScannerException(
                 "Scanner does not exist",
                 Reference< XScannerManager >( this ),
@@ -279,14 +276,14 @@ sal_Bool ScannerManager::configureScannerAndScan( ScannerContext& scanner_contex
 
 
 void ScannerManager::startScan( const ScannerContext& scanner_context,
-                                const Reference< css::lang::XEventListener >& listener ) throw( ScannerException, std::exception )
+                                const Reference< css::lang::XEventListener >& listener )
 {
     osl::MutexGuard aGuard( theSaneProtector::get() );
     sanevec &rSanes = theSanes::get().m_aSanes;
 
     SAL_INFO("extensions.scanner", "ScannerManager::startScan");
 
-    if( scanner_context.InternalData < 0 || (sal_uLong)scanner_context.InternalData >= rSanes.size() )
+    if( scanner_context.InternalData < 0 || static_cast<sal_uLong>(scanner_context.InternalData) >= rSanes.size() )
         throw ScannerException(
             "Scanner does not exist",
             Reference< XScannerManager >( this ),
@@ -306,12 +303,12 @@ void ScannerManager::startScan( const ScannerContext& scanner_context,
 }
 
 
-ScanError ScannerManager::getError( const ScannerContext& scanner_context ) throw( ScannerException, std::exception )
+ScanError ScannerManager::getError( const ScannerContext& scanner_context )
 {
     osl::MutexGuard aGuard( theSaneProtector::get() );
     sanevec &rSanes = theSanes::get().m_aSanes;
 
-    if( scanner_context.InternalData < 0 || (sal_uLong)scanner_context.InternalData >= rSanes.size() )
+    if( scanner_context.InternalData < 0 || static_cast<sal_uLong>(scanner_context.InternalData) >= rSanes.size() )
         throw ScannerException(
             "Scanner does not exist",
             Reference< XScannerManager >( this ),
@@ -324,12 +321,12 @@ ScanError ScannerManager::getError( const ScannerContext& scanner_context ) thro
 }
 
 
-Reference< css::awt::XBitmap > ScannerManager::getBitmap( const ScannerContext& scanner_context ) throw( ScannerException, std::exception )
+Reference< css::awt::XBitmap > ScannerManager::getBitmap( const ScannerContext& scanner_context )
 {
     osl::MutexGuard aGuard( theSaneProtector::get() );
     sanevec &rSanes = theSanes::get().m_aSanes;
 
-    if( scanner_context.InternalData < 0 || (sal_uLong)scanner_context.InternalData >= rSanes.size() )
+    if( scanner_context.InternalData < 0 || static_cast<sal_uLong>(scanner_context.InternalData) >= rSanes.size() )
         throw ScannerException(
             "Scanner does not exist",
             Reference< XScannerManager >( this ),

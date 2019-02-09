@@ -13,14 +13,11 @@
 #include "scdllapi.h"
 
 #include <memory>
-#include <ostream>
 #include <set>
 
 #include <formula/grammar.hxx>
 #include <formula/opcode.hxx>
 #include <rtl/ustring.hxx>
-
-#include <comphelper/configurationlistener.hxx>
 
 // have to match the registry values
 enum ScRecalcOptions
@@ -28,6 +25,16 @@ enum ScRecalcOptions
     RECALC_ALWAYS = 0,
     RECALC_NEVER,
     RECALC_ASK,
+};
+
+// Env.var. SC_FORCE_CALCULATION can be used to force all calculation
+// to be done using OpenCL or group threading (even for single cells).
+enum ForceCalculationType
+{
+    ForceCalculationNone, // do not force anything
+    ForceCalculationCore, // "core", use only non-threaded normal code
+    ForceCalculationOpenCL, // "opencl", force OpenCL
+    ForceCalculationThreads // "threads", force threaded code
 };
 
 /**
@@ -49,7 +56,8 @@ struct SC_DLLPUBLIC ScCalcConfig
     bool mbHasStringRefSyntax:1;
 
     static bool isOpenCLEnabled();
-    static bool isSwInterpreterEnabled();
+    static bool isThreadingEnabled();
+    static ForceCalculationType getForceCalculationType();
 
     bool mbOpenCLSubsetOnly:1;
     bool mbOpenCLAutoSelect:1;
@@ -59,7 +67,6 @@ struct SC_DLLPUBLIC ScCalcConfig
     typedef std::shared_ptr<std::set<OpCode>> OpCodeSet;
 
     OpCodeSet mpOpenCLSubsetOpCodes;
-    OpCodeSet mpSwInterpreterSubsetOpCodes;
 
     ScCalcConfig();
 

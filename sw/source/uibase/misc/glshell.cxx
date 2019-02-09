@@ -18,7 +18,6 @@
  */
 
 #include <com/sun/star/frame/XTitle.hpp>
-
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
 #include <sfx2/printer.hxx>
@@ -45,14 +44,15 @@
 #include <initui.hxx>
 #include <cmdid.h>
 #include <swerror.h>
-#include <misc.hrc>
+#include <strings.hrc>
 
-#define SwWebGlosDocShell
-#define SwGlosDocShell
+#define ShellClass_SwWebGlosDocShell
+#define ShellClass_SwGlosDocShell
 
 #include <sfx2/msg.hxx>
 #include <swslots.hxx>
 #include <memory>
+#include <utility>
 
 using namespace ::com::sun::star;
 
@@ -95,7 +95,7 @@ static void lcl_GetState( SwDocShell& rSh, SfxItemSet& rSet )
         if( !rSh.GetDoc()->getIDocumentState().IsModified() )
             rSet.DisableItem( SID_SAVEDOC );
         else
-            rSet.Put( SfxStringItem( SID_SAVEDOC, SW_RESSTR(STR_SAVE_GLOSSARY)));
+            rSet.Put( SfxStringItem( SID_SAVEDOC, SwResId(STR_SAVE_GLOSSARY)));
     }
 }
 
@@ -105,8 +105,8 @@ static bool lcl_Save( SwWrtShell& rSh, const OUString& rGroupName,
     const SvxAutoCorrCfg& rCfg = SvxAutoCorrCfg::Get();
     std::unique_ptr<SwTextBlocks> pBlock(::GetGlossaries()->GetGroupDoc( rGroupName ));
 
-    SvxMacro aStart(aEmptyOUStr, aEmptyOUStr);
-    SvxMacro aEnd(aEmptyOUStr, aEmptyOUStr);
+    SvxMacro aStart = SvxMacro(OUString(), OUString());
+    SvxMacro aEnd = SvxMacro(OUString(), OUString());
     SwGlossaryHdl* pGlosHdl;
 
     pGlosHdl = rSh.GetView().GetGlosHdl();
@@ -130,10 +130,9 @@ static bool lcl_Save( SwWrtShell& rSh, const OUString& rGroupName,
 }
 
 SwGlosDocShell::SwGlosDocShell(bool bNewShow)
-    : SwDocShell( (bNewShow)
+    : SwDocShell( bNewShow
             ? SfxObjectCreateMode::STANDARD : SfxObjectCreateMode::INTERNAL )
 {
-    SetHelpId(SW_GLOSDOCSHELL);
 }
 
 SwGlosDocShell::~SwGlosDocShell(  )
@@ -167,9 +166,8 @@ bool SwGlosDocShell::Save()
 }
 
 SwWebGlosDocShell::SwWebGlosDocShell()
-    : SwWebDocShell( SfxObjectCreateMode::STANDARD )
+    : SwWebDocShell()
 {
-    SetHelpId(SW_WEBGLOSDOCSHELL);
 }
 
 SwWebGlosDocShell::~SwWebGlosDocShell(  )
@@ -202,14 +200,14 @@ SwDocShellRef SwGlossaries::EditGroupDoc( const OUString& rGroup, const OUString
 {
     SwDocShellRef xDocSh;
 
-    SwTextBlocks* pGroup = GetGroupDoc( rGroup );
+    std::unique_ptr<SwTextBlocks> pGroup = GetGroupDoc( rGroup );
     if (pGroup && pGroup->GetCount())
     {
         // query which view is registered. In WebWriter there is no normal view
-        sal_uInt16 nViewId = nullptr != SwView::Factory() ? 2 : 6;
+        SfxInterfaceId nViewId = nullptr != SwView::Factory() ? SFX_INTERFACE_SFXDOCSH : SfxInterfaceId(6);
         const OUString sLongName = pGroup->GetLongName(pGroup->GetIndex( rShortName ));
 
-        if( 6 == nViewId )
+        if( SfxInterfaceId(6) == nViewId )
         {
             SwWebGlosDocShell* pDocSh = new SwWebGlosDocShell();
             xDocSh = pDocSh;
@@ -230,7 +228,7 @@ SwDocShellRef SwGlossaries::EditGroupDoc( const OUString& rGroup, const OUString
 
         // set document title
         SfxViewFrame* pFrame = bShow ? SfxViewFrame::LoadDocument( *xDocSh, nViewId ) : SfxViewFrame::LoadHiddenDocument( *xDocSh, nViewId );
-        const OUString aDocTitle(SW_RESSTR( STR_GLOSSARY ) + " " + sLongName);
+        const OUString aDocTitle(SwResId( STR_GLOSSARY ) + " " + sLongName);
 
         bool const bDoesUndo =
             xDocSh->GetDoc()->GetIDocumentUndoRedo().DoesUndo();
@@ -241,12 +239,13 @@ SwDocShellRef SwGlossaries::EditGroupDoc( const OUString& rGroup, const OUString
         {
             // we create a default SfxPrinter.
             // ItemSet is deleted by Sfx!
-            SfxItemSet *pSet = new SfxItemSet( xDocSh->GetDoc()->GetAttrPool(),
-                        FN_PARAM_ADDPRINTER, FN_PARAM_ADDPRINTER,
-                        SID_PRINTER_NOTFOUND_WARN, SID_PRINTER_NOTFOUND_WARN,
-                        SID_PRINTER_CHANGESTODOC, SID_PRINTER_CHANGESTODOC,
-                        0 );
-            VclPtr<SfxPrinter> pPrinter = VclPtr<SfxPrinter>::Create( pSet );
+            auto pSet = std::make_unique<SfxItemSet>(
+                xDocSh->GetDoc()->GetAttrPool(),
+                svl::Items<
+                    SID_PRINTER_NOTFOUND_WARN, SID_PRINTER_NOTFOUND_WARN,
+                    SID_PRINTER_CHANGESTODOC, SID_PRINTER_CHANGESTODOC,
+                    FN_PARAM_ADDPRINTER, FN_PARAM_ADDPRINTER>{});
+            VclPtr<SfxPrinter> pPrinter = VclPtr<SfxPrinter>::Create( std::move(pSet) );
 
             // and append it to the document.
             xDocSh->GetDoc()->getIDocumentDeviceAccess().setPrinter( pPrinter, true, true );
@@ -268,7 +267,6 @@ SwDocShellRef SwGlossaries::EditGroupDoc( const OUString& rGroup, const OUString
         if ( bShow )
             pFrame->GetFrame().Appear();
     }
-    delete pGroup;
     return xDocSh;
 }
 

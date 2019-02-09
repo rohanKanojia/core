@@ -31,7 +31,7 @@ class PreviewValueSet
 {
 public:
     explicit PreviewValueSet (vcl::Window* pParent);
-    virtual ~PreviewValueSet();
+    virtual ~PreviewValueSet() override;
 
     void SetRightMouseClickHandler (const Link<const MouseEvent&,void>& rLink);
     virtual void Resize() override;
@@ -43,7 +43,7 @@ public:
     /** Set the number of rows and columns according to the current number
         of items.  Call this method when new items have been inserted.
     */
-    void Rearrange (bool bForceRequestResize = false);
+    void Rearrange();
 
 protected:
     virtual void MouseButtonDown (const MouseEvent& rEvent) override;
@@ -51,9 +51,6 @@ protected:
 private:
     Link<const MouseEvent&,void> maRightMouseClickHandler;
     Size maPreviewSize;
-    const int mnBorderWidth;
-    const int mnBorderHeight;
-    const int mnMaxColumnCount;
 
     sal_uInt16 CalculateColumnCount (int nWidth) const;
     sal_uInt16 CalculateRowCount (sal_uInt16 nColumnCount) const;

@@ -1,4 +1,4 @@
-# -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
+# -*- tab-width: 4; indent-tabs-mode: nil; py-indent-offset: 4 -*-
 #
 # This file is part of the LibreOffice project.
 #
@@ -14,14 +14,11 @@ from org.libreoffice.unotest import UnoInProcess
 import uno
 
 class CheckSidebarRegistry(unittest.TestCase):
-    _uno = None
-    _xDoc = None
 
     @classmethod
     def setUpClass(cls):
         cls._uno = UnoInProcess()
         cls._uno.setUp()
-        cls._xDoc = cls._uno.openEmptyDoc( url = "private:factory/scalc", bHidden = False, bReadOnly = False)
 
     @classmethod
     def tearDownClass(cls):
@@ -29,39 +26,39 @@ class CheckSidebarRegistry(unittest.TestCase):
 
     def test_sidebar_registry(self):
 
-        # assert(result) after whole processing to list defected nodes at once
+        # assert(result) after whole processing to list defective nodes at once
         result = True
 
         #open registry node in Sidebar.xcu
-        configProvider = self.createUnoService("com.sun.star.configuration.ConfigurationProvider")
+        config_provider = self.createUnoService("com.sun.star.configuration.ConfigurationProvider")
 
         param = uno.createUnoStruct('com.sun.star.beans.PropertyValue')
         param.Name = "nodepath"
 
 
-        # Deck names consitency
+        # Deck names consistency
 
         param.Value = "org.openoffice.Office.UI.Sidebar/Content/DeckList"
 
-        sidebarDecksSettings = configProvider.createInstanceWithArguments("com.sun.star.configuration.ConfigurationAccess",
+        sidebar_decks_settings = config_provider.createInstanceWithArguments("com.sun.star.configuration.ConfigurationAccess",
                                                                     (param, ))
-        for nodeName in sidebarDecksSettings:
+        for nodeName in sidebar_decks_settings:
 
-            node = sidebarDecksSettings.getByName(nodeName)
+            node = sidebar_decks_settings[nodeName]
 
             if (node.Id != nodeName):
                 print("\nNon-consistent sidebar.xcu Deck registry names", nodeName, node.Id)
                 result = False
 
-        # panel names consitency
+        # panel names consistency
 
         param.Value = "org.openoffice.Office.UI.Sidebar/Content/PanelList"
 
-        sidebarPanelsSettings = configProvider.createInstanceWithArguments("com.sun.star.configuration.ConfigurationAccess",
+        sidebar_panels_settings = config_provider.createInstanceWithArguments("com.sun.star.configuration.ConfigurationAccess",
                                                                     (param, ))
-        for nodeName in sidebarPanelsSettings:
+        for nodeName in sidebar_panels_settings:
 
-            node = sidebarPanelsSettings.getByName(nodeName)
+            node = sidebar_panels_settings[nodeName]
 
             if (node.Id != nodeName):
                 print("\nNon-consistent sidebar.xcu Panel registry names", nodeName, node.Id)
@@ -69,9 +66,9 @@ class CheckSidebarRegistry(unittest.TestCase):
 
             # is panel bound to an existing Deck ?
             FoundDeckId = False
-            for deckNodeName in sidebarDecksSettings:
-                deckNode = sidebarDecksSettings.getByName(deckNodeName)
-                if (node.DeckId == deckNode.Id):
+            for deckNodeName in sidebar_decks_settings:
+                deck_node = sidebar_decks_settings[deckNodeName]
+                if (node.DeckId == deck_node.Id):
                     FoundDeckId = True
             if not FoundDeckId:
                 print("\nNon existing DeckId for the panel ",node.Id)
@@ -89,4 +86,4 @@ class CheckSidebarRegistry(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-# vim: set noet sw=4 ts=4:
+# vim: set shiftwidth=4 softtabstop=4 expandtab:

@@ -20,21 +20,21 @@
 #ifndef INCLUDED_SVTOOLS_ADDRESSTEMPLATE_HXX
 #define INCLUDED_SVTOOLS_ADDRESSTEMPLATE_HXX
 
+#include <memory>
 #include <svtools/svtdllapi.h>
 #include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/combobox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/scrbar.hxx>
-#include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/util/AliasProgrammaticPair.hpp>
-#include <com/sun/star/sdb/XDatabaseContext.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/sdbc/XDataSource.hpp>
-#include <unotools/configitem.hxx>
 
+namespace com :: sun :: star :: container { class XNameAccess; }
+namespace com :: sun :: star :: sdbc { class XDataSource; }
+namespace com :: sun :: star :: sdb { class XDatabaseContext; }
+namespace com :: sun :: star :: uno { class XComponentContext; }
+namespace com :: sun :: star :: util { struct AliasProgrammaticPair; }
+
+#define FIELD_PAIRS_VISIBLE         5
+#define FIELD_CONTROLS_VISIBLE      2 * FIELD_PAIRS_VISIBLE
 
 namespace svt
 {
@@ -43,30 +43,8 @@ namespace svt
     // = AddressBookSourceDialog
 
     struct AddressBookSourceDialogData;
-    class SVT_DLLPUBLIC AddressBookSourceDialog : public ModalDialog
+    class SVT_DLLPUBLIC AddressBookSourceDialog final : public ModalDialog
     {
-    private:
-        // Controls
-        VclPtr<ComboBox>       m_pDatasource;
-        VclPtr<PushButton>     m_pAdministrateDatasources;
-        VclPtr<ComboBox>       m_pTable;
-        VclPtr<ScrollBar>      m_pFieldScroller;
-
-        // string to display for "no selection"
-        const OUString         m_sNoFieldSelection;
-
-        /// the DatabaseContext for selecting data sources
-        css::uno::Reference< css::sdb::XDatabaseContext >
-                               m_xDatabaseContext;
-        // the ORB for creating objects
-        css::uno::Reference< css::uno::XComponentContext >
-                               m_xORB;
-        css::uno::Reference< css::container::XNameAccess >
-                               m_xCurrentDatasourceTables;
-
-        AddressBookSourceDialogData*
-                               m_pImpl;
-
     public:
         AddressBookSourceDialog( vcl::Window* _pParent,
             const css::uno::Reference< css::uno::XComponentContext >& _rxORB );
@@ -98,14 +76,14 @@ namespace svt
             const css::uno::Sequence< css::util::AliasProgrammaticPair >& _rMapping
         );
 
-        virtual ~AddressBookSourceDialog();
+        virtual ~AddressBookSourceDialog() override;
         virtual void dispose() override;
 
         // to be used if the object was constructed for editing a field mapping only
         void        getFieldMapping(
             css::uno::Sequence< css::util::AliasProgrammaticPair >& _rMapping) const;
 
-    protected:
+    private:
         void    implConstruct();
 
         // Window overridables
@@ -124,14 +102,34 @@ namespace svt
         // initialize the dialog from the configuration data
         void    loadConfiguration();
 
-        DECL_LINK_TYPED(OnFieldScroll, ScrollBar*, void);
-        DECL_LINK_TYPED(OnFieldSelect, ListBox&, void);
-        DECL_LINK_TYPED(OnAdministrateDatasources, Button*, void);
-        DECL_STATIC_LINK_TYPED(AddressBookSourceDialog, OnComboGetFocus, Control&, void);
-        DECL_LINK_TYPED(OnComboLoseFocus, Control&, void);
-        DECL_LINK_TYPED(OnComboSelect, ComboBox&, void);
-        DECL_LINK_TYPED(OnOkClicked, Button*, void);
-        DECL_LINK_TYPED(OnDelayedInitialize, void*, void);
+        DECL_LINK(OnFieldScroll, ScrollBar*, void);
+        DECL_LINK(OnFieldSelect, ListBox&, void);
+        DECL_LINK(OnAdministrateDatasources, Button*, void);
+        DECL_STATIC_LINK(AddressBookSourceDialog, OnComboGetFocus, Control&, void);
+        DECL_LINK(OnComboLoseFocus, Control&, void);
+        DECL_LINK(OnComboSelect, ComboBox&, void);
+        DECL_LINK(OnOkClicked, Button*, void);
+        DECL_LINK(OnDelayedInitialize, void*, void);
+
+        // Controls
+        VclPtr<ComboBox>       m_pDatasource;
+        VclPtr<PushButton>     m_pAdministrateDatasources;
+        VclPtr<ComboBox>       m_pTable;
+        VclPtr<ScrollBar>      m_pFieldScroller;
+
+        // string to display for "no selection"
+        const OUString         m_sNoFieldSelection;
+
+        /// the DatabaseContext for selecting data sources
+        css::uno::Reference< css::sdb::XDatabaseContext >
+                               m_xDatabaseContext;
+        // the ORB for creating objects
+        css::uno::Reference< css::uno::XComponentContext >
+                               m_xORB;
+        css::uno::Reference< css::container::XNameAccess >
+                               m_xCurrentDatasourceTables;
+
+        std::unique_ptr<AddressBookSourceDialogData> m_pImpl;
     };
 
 

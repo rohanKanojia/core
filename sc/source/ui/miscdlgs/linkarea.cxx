@@ -19,7 +19,6 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include <comphelper/string.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
@@ -27,92 +26,61 @@
 #include <sfx2/fcontnr.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <svtools/ehdl.hxx>
+#include <svtools/inettbc.hxx>
 #include <svtools/sfxecode.hxx>
 #include <vcl/waitobj.hxx>
 
-#include "linkarea.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "rangeutl.hxx"
-#include "docsh.hxx"
-#include "tablink.hxx"
+#include <linkarea.hxx>
+#include <sc.hrc>
+#include <rangeutl.hxx>
+#include <docsh.hxx>
+#include <tablink.hxx>
 
-ScLinkedAreaDlg::ScLinkedAreaDlg(vcl::Window* pParent)
-    : ModalDialog(pParent, "ExternalDataDialog", "modules/scalc/ui/externaldata.ui")
-    , pSourceShell(nullptr)
-    , pDocInserter(nullptr)
-
+ScLinkedAreaDlg::ScLinkedAreaDlg(weld::Window* pParent)
+    : GenericDialogController(pParent, "modules/scalc/ui/externaldata.ui", "ExternalDataDialog")
+    , m_pSourceShell(nullptr)
+    , m_xCbUrl(new URLBox(m_xBuilder->weld_combo_box("url")))
+    , m_xBtnBrowse(m_xBuilder->weld_button("browse"))
+    , m_xLbRanges(m_xBuilder->weld_tree_view("ranges"))
+    , m_xBtnReload(m_xBuilder->weld_check_button("reload"))
+    , m_xNfDelay(m_xBuilder->weld_spin_button("delay"))
+    , m_xFtSeconds(m_xBuilder->weld_label("secondsft"))
+    , m_xBtnOk(m_xBuilder->weld_button("ok"))
 {
-    get(m_pCbUrl, "url");
-    get(m_pLbRanges, "ranges");
-    m_pLbRanges->EnableMultiSelection(true);
-    m_pLbRanges->SetDropDownLineCount(8);
-    get(m_pBtnBrowse, "browse");
-    get(m_pBtnReload, "reload");
-    get(m_pNfDelay, "delay");
-    get(m_pFtSeconds, "secondsft");
-    get(m_pBtnOk, "ok");
+    m_xLbRanges->set_selection_mode(SelectionMode::Multiple);
 
-    m_pCbUrl->SetSelectHdl( LINK( this, ScLinkedAreaDlg, FileHdl ) );
-    m_pBtnBrowse->SetClickHdl( LINK( this, ScLinkedAreaDlg, BrowseHdl ) );
-    m_pLbRanges->SetSelectHdl( LINK( this, ScLinkedAreaDlg, RangeHdl ) );
-    m_pBtnReload->SetClickHdl( LINK( this, ScLinkedAreaDlg, ReloadHdl ) );
+    m_xCbUrl->connect_entry_activate(LINK(this, ScLinkedAreaDlg, FileHdl));
+    m_xBtnBrowse->connect_clicked(LINK( this, ScLinkedAreaDlg, BrowseHdl));
+    m_xLbRanges->connect_changed(LINK( this, ScLinkedAreaDlg, RangeHdl));
+    m_xLbRanges->set_size_request(m_xLbRanges->get_approximate_digit_width() * 54,
+                                  m_xLbRanges->get_height_rows(5));
+    m_xBtnReload->connect_clicked(LINK( this, ScLinkedAreaDlg, ReloadHdl));
     UpdateEnable();
 }
 
 ScLinkedAreaDlg::~ScLinkedAreaDlg()
 {
-    disposeOnce();
-}
-
-void ScLinkedAreaDlg::dispose()
-{
-    // pSourceShell is deleted by aSourceRef
-    m_pCbUrl.clear();
-    m_pBtnBrowse.clear();
-    m_pLbRanges.clear();
-    m_pBtnReload.clear();
-    m_pNfDelay.clear();
-    m_pFtSeconds.clear();
-    m_pBtnOk.clear();
-    ModalDialog::dispose();
-}
-
-short ScLinkedAreaDlg::Execute()
-{
-    // set parent for file dialog or filter options
-
-    vcl::Window* pOldDefParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent( this );
-
-    short nRet = ModalDialog::Execute();
-
-    Application::SetDefDialogParent( pOldDefParent );
-
-    return nRet;
 }
 
 #define FILTERNAME_HTML  "HTML (StarCalc)"
 #define FILTERNAME_QUERY "calc_HTML_WebQuery"
 
-IMPL_LINK_NOARG_TYPED(ScLinkedAreaDlg, BrowseHdl, Button*, void)
+IMPL_LINK_NOARG(ScLinkedAreaDlg, BrowseHdl, weld::Button&, void)
 {
-    if ( !pDocInserter )
-        pDocInserter = new sfx2::DocumentInserter(
-            OUString::createFromAscii( ScDocShell::Factory().GetShortName() ) );
-    pDocInserter->StartExecuteModal( LINK( this, ScLinkedAreaDlg, DialogClosedHdl ) );
+    m_xDocInserter.reset( new sfx2::DocumentInserter(m_xDialog.get(), ScDocShell::Factory().GetFactoryName()) );
+    m_xDocInserter->StartExecuteModal( LINK( this, ScLinkedAreaDlg, DialogClosedHdl ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ScLinkedAreaDlg, FileHdl, ComboBox&, void)
+IMPL_LINK_NOARG(ScLinkedAreaDlg, FileHdl, weld::ComboBox&, bool)
 {
-    OUString aEntered = m_pCbUrl->GetURL();
-    if (pSourceShell)
+    OUString aEntered = m_xCbUrl->GetURL();
+    if (m_pSourceShell)
     {
-        SfxMedium* pMed = pSourceShell->GetMedium();
-        if ( aEntered.equals(pMed->GetName()) )
+        SfxMedium* pMed = m_pSourceShell->GetMedium();
+        if ( aEntered == pMed->GetName() )
         {
             //  already loaded - nothing to do
-            return;
+            return true;
         }
     }
 
@@ -120,8 +88,8 @@ IMPL_LINK_NOARG_TYPED(ScLinkedAreaDlg, FileHdl, ComboBox&, void)
     OUString aOptions;
     //  get filter name by looking at the file content (bWithContent = true)
     // Break operation if any error occurred inside.
-    if (!ScDocumentLoader::GetFilterName( aEntered, aFilter, aOptions, true, true ))
-        return;
+    if (!ScDocumentLoader::GetFilterName( aEntered, aFilter, aOptions, true, false ))
+        return true;
 
     // #i53241# replace HTML filter with DataQuery filter
     if (aFilter == FILTERNAME_HTML)
@@ -131,36 +99,38 @@ IMPL_LINK_NOARG_TYPED(ScLinkedAreaDlg, FileHdl, ComboBox&, void)
 
     UpdateSourceRanges();
     UpdateEnable();
+
+    return true;
 }
 
 void ScLinkedAreaDlg::LoadDocument( const OUString& rFile, const OUString& rFilter, const OUString& rOptions )
 {
-    if ( pSourceShell )
+    if (m_pSourceShell)
     {
         //  unload old document
-        pSourceShell->DoClose();
-        pSourceShell = nullptr;
-        aSourceRef.Clear();
+        m_pSourceShell->DoClose();
+        m_pSourceShell = nullptr;
+        aSourceRef.clear();
     }
 
     if ( !rFile.isEmpty() )
     {
-        WaitObject aWait( this );
+        weld::WaitObject aWait(m_xDialog.get());
 
         OUString aNewFilter = rFilter;
         OUString aNewOptions = rOptions;
 
         SfxErrorContext aEc( ERRCTX_SFX_OPENDOC, rFile );
 
-        ScDocumentLoader aLoader( rFile, aNewFilter, aNewOptions, 0, true );    // with interaction
-        pSourceShell = aLoader.GetDocShell();
-        if ( pSourceShell )
+        ScDocumentLoader aLoader( rFile, aNewFilter, aNewOptions, 0, m_xDialog.get() );    // with interaction
+        m_pSourceShell = aLoader.GetDocShell();
+        if (m_pSourceShell)
         {
-            sal_uLong nErr = pSourceShell->GetErrorCode();
+            ErrCode nErr = m_pSourceShell->GetErrorCode();
             if (nErr)
                 ErrorHandler::HandleError( nErr );      // including warnings
 
-            aSourceRef = pSourceShell;
+            aSourceRef = m_pSourceShell;
             aLoader.ReleaseDocRef();    // don't call DoClose in DocLoader dtor
         }
     }
@@ -171,57 +141,60 @@ void ScLinkedAreaDlg::InitFromOldLink( const OUString& rFile, const OUString& rF
                                         sal_uLong nRefresh )
 {
     LoadDocument( rFile, rFilter, rOptions );
-    if (pSourceShell)
+    if (m_pSourceShell)
     {
-        SfxMedium* pMed = pSourceShell->GetMedium();
-        m_pCbUrl->SetText( pMed->GetName() );
+        SfxMedium* pMed = m_pSourceShell->GetMedium();
+        m_xCbUrl->SetText(pMed->GetName());
     }
     else
-        m_pCbUrl->SetText( EMPTY_OUSTRING );
+        m_xCbUrl->SetText(EMPTY_OUSTRING);
 
     UpdateSourceRanges();
 
-    sal_Int32 nRangeCount = comphelper::string::getTokenCount(rSource, ';');
-    for ( sal_Int32 i=0; i<nRangeCount; i++ )
+    if (!rSource.isEmpty())
     {
-        OUString aRange = rSource.getToken(i,';');
-        m_pLbRanges->SelectEntry( aRange );
+        sal_Int32 nIdx {0};
+        do
+        {
+            m_xLbRanges->select_text(rSource.getToken(0, ';', nIdx));
+        }
+        while (nIdx>0);
     }
 
     bool bDoRefresh = (nRefresh != 0);
-    m_pBtnReload->Check( bDoRefresh );
+    m_xBtnReload->set_active(bDoRefresh);
     if (bDoRefresh)
-        m_pNfDelay->SetValue( nRefresh );
+        m_xNfDelay->set_value(nRefresh);
 
     UpdateEnable();
 }
 
-IMPL_LINK_NOARG_TYPED(ScLinkedAreaDlg, RangeHdl, ListBox&, void)
+IMPL_LINK_NOARG(ScLinkedAreaDlg, RangeHdl, weld::TreeView&, void)
 {
     UpdateEnable();
 }
 
-IMPL_LINK_NOARG_TYPED(ScLinkedAreaDlg, ReloadHdl, Button*, void)
+IMPL_LINK_NOARG(ScLinkedAreaDlg, ReloadHdl, weld::Button&, void)
 {
     UpdateEnable();
 }
 
-IMPL_LINK_TYPED( ScLinkedAreaDlg, DialogClosedHdl, sfx2::FileDialogHelper*, _pFileDlg, void )
+IMPL_LINK( ScLinkedAreaDlg, DialogClosedHdl, sfx2::FileDialogHelper*, _pFileDlg, void )
 {
     if ( _pFileDlg->GetError() != ERRCODE_NONE )
         return;
 
-    SfxMedium* pMed = pDocInserter->CreateMedium();
+    std::unique_ptr<SfxMedium> pMed = m_xDocInserter->CreateMedium();
     if ( pMed )
     {
-        WaitObject aWait( this );
+        weld::WaitObject aWait(m_xDialog.get());
 
         // replace HTML filter with DataQuery filter
         const OUString aHTMLFilterName( FILTERNAME_HTML );
         const OUString aWebQFilterName( FILTERNAME_QUERY );
 
         std::shared_ptr<const SfxFilter> pFilter = pMed->GetFilter();
-        if (pFilter && aHTMLFilterName.equals(pFilter->GetFilterName()))
+        if (pFilter && aHTMLFilterName == pFilter->GetFilterName())
         {
             std::shared_ptr<const SfxFilter> pNewFilter =
                 ScDocShell::Factory().GetFilterContainer()->GetFilter4FilterName( aWebQFilterName );
@@ -232,31 +205,32 @@ IMPL_LINK_TYPED( ScLinkedAreaDlg, DialogClosedHdl, sfx2::FileDialogHelper*, _pFi
         //  ERRCTX_SFX_OPENDOC -> "Error loading document"
         SfxErrorContext aEc( ERRCTX_SFX_OPENDOC, pMed->GetName() );
 
-        if (pSourceShell)
-            pSourceShell->DoClose();        // deleted when assigning aSourceRef
+        if (m_pSourceShell)
+            m_pSourceShell->DoClose();        // deleted when assigning aSourceRef
 
         pMed->UseInteractionHandler( true );    // to enable the filter options dialog
 
-        pSourceShell = new ScDocShell;
-        aSourceRef = pSourceShell;
-        pSourceShell->DoLoad( pMed );
+        m_pSourceShell = new ScDocShell;
+        aSourceRef = m_pSourceShell;
+        m_pSourceShell->DoLoad( pMed.get() );
 
-        sal_uLong nErr = pSourceShell->GetErrorCode();
+        ErrCode nErr = m_pSourceShell->GetErrorCode();
         if (nErr)
             ErrorHandler::HandleError( nErr );              // including warnings
 
-        if ( !pSourceShell->GetError() )                    // only errors
+        if (!m_pSourceShell->GetError())                    // only errors
         {
-            m_pCbUrl->SetText( pMed->GetName() );
+            m_xCbUrl->SetText(pMed->GetName());
         }
         else
         {
-            pSourceShell->DoClose();
-            pSourceShell = nullptr;
-            aSourceRef.Clear();
+            m_pSourceShell->DoClose();
+            m_pSourceShell = nullptr;
+            aSourceRef.clear();
 
-            m_pCbUrl->SetText( EMPTY_OUSTRING );
+            m_xCbUrl->SetText(EMPTY_OUSTRING);
         }
+        pMed.release(); // DoLoad takes ownership
     }
 
     UpdateSourceRanges();
@@ -268,39 +242,46 @@ IMPL_LINK_TYPED( ScLinkedAreaDlg, DialogClosedHdl, sfx2::FileDialogHelper*, _pFi
 
 void ScLinkedAreaDlg::UpdateSourceRanges()
 {
-    m_pLbRanges->SetUpdateMode(false);
+    m_xLbRanges->freeze();
 
-    m_pLbRanges->Clear();
-    if ( pSourceShell )
+    m_xLbRanges->clear();
+    if ( m_pSourceShell )
     {
-        ScAreaNameIterator aIter( &pSourceShell->GetDocument() );
+        std::shared_ptr<const SfxFilter> pFilter = m_pSourceShell->GetMedium()->GetFilter();
+        if (pFilter && pFilter->GetFilterName() == SC_TEXT_CSV_FILTER_NAME)
+        {
+            // Insert dummy All range to have something selectable.
+            m_xLbRanges->append_text("CSV_all");
+        }
+
+        ScAreaNameIterator aIter(&m_pSourceShell->GetDocument());
         ScRange aDummy;
         OUString aName;
         while ( aIter.Next( aName, aDummy ) )
-            m_pLbRanges->InsertEntry( aName );
+            m_xLbRanges->append_text(aName);
     }
 
-    m_pLbRanges->SetUpdateMode(true);
+    m_xLbRanges->thaw();
 
-    if ( m_pLbRanges->GetEntryCount() == 1 )
-        m_pLbRanges->SelectEntryPos(0);
+    if (m_xLbRanges->n_children() == 1)
+        m_xLbRanges->select(0);
 }
 
 void ScLinkedAreaDlg::UpdateEnable()
 {
-    bool bEnable = ( pSourceShell && m_pLbRanges->GetSelectEntryCount() );
-    m_pBtnOk->Enable( bEnable );
+    bool bEnable = ( m_pSourceShell && m_xLbRanges->count_selected_rows() );
+    m_xBtnOk->set_sensitive(bEnable);
 
-    bool bReload = m_pBtnReload->IsChecked();
-    m_pNfDelay->Enable( bReload );
-    m_pFtSeconds->Enable( bReload );
+    bool bReload = m_xBtnReload->get_active();
+    m_xNfDelay->set_sensitive(bReload);
+    m_xFtSeconds->set_sensitive(bReload);
 }
 
 OUString ScLinkedAreaDlg::GetURL()
 {
-    if (pSourceShell)
+    if (m_pSourceShell)
     {
-        SfxMedium* pMed = pSourceShell->GetMedium();
+        SfxMedium* pMed = m_pSourceShell->GetMedium();
         return pMed->GetName();
     }
     return EMPTY_OUSTRING;
@@ -308,9 +289,9 @@ OUString ScLinkedAreaDlg::GetURL()
 
 OUString ScLinkedAreaDlg::GetFilter()
 {
-    if (pSourceShell)
+    if (m_pSourceShell)
     {
-        SfxMedium* pMed = pSourceShell->GetMedium();
+        SfxMedium* pMed = m_pSourceShell->GetMedium();
         return pMed->GetFilter()->GetFilterName();
     }
     return OUString();
@@ -318,9 +299,9 @@ OUString ScLinkedAreaDlg::GetFilter()
 
 OUString ScLinkedAreaDlg::GetOptions()
 {
-    if (pSourceShell)
+    if (m_pSourceShell)
     {
-        SfxMedium* pMed = pSourceShell->GetMedium();
+        SfxMedium* pMed = m_pSourceShell->GetMedium();
         return ScDocumentLoader::GetOptions( *pMed );
     }
     return OUString();
@@ -329,20 +310,20 @@ OUString ScLinkedAreaDlg::GetOptions()
 OUString ScLinkedAreaDlg::GetSource()
 {
     OUStringBuffer aBuf;
-    const sal_Int32 nCount = m_pLbRanges->GetSelectEntryCount();
-    for (sal_Int32 i=0; i<nCount; ++i)
+    std::vector<OUString> aSelection = m_xLbRanges->get_selected_rows_text();
+    for (size_t i = 0; i < aSelection.size(); ++i)
     {
         if (i > 0)
             aBuf.append(';');
-        aBuf.append(m_pLbRanges->GetSelectEntry(i));
+        aBuf.append(aSelection[i]);
     }
     return aBuf.makeStringAndClear();
 }
 
 sal_uLong ScLinkedAreaDlg::GetRefresh()
 {
-    if ( m_pBtnReload->IsChecked() )
-        return sal::static_int_cast<sal_uLong>( m_pNfDelay->GetValue() );
+    if (m_xBtnReload->get_active())
+        return sal::static_int_cast<sal_uLong>(m_xNfDelay->get_value());
     else
         return 0;   // disabled
 }

@@ -9,19 +9,13 @@
 #ifndef INCLUDED_SD_SOURCE_UI_REMOTECONTROL_RECEIVER_HXX
 #define INCLUDED_SD_SOURCE_UI_REMOTECONTROL_RECEIVER_HXX
 
-#include <com/sun/star/presentation/XSlideShowListener.hpp>
-#include <com/sun/star/presentation/XSlideShowController.hpp>
-#include <com/sun/star/presentation/XPresentationSupplier.hpp>
-#include <com/sun/star/presentation/XPresentation.hpp>
-#include <com/sun/star/presentation/XPresentation2.hpp>
-#include <osl/socket.hxx>
-#include <stdlib.h>
+#include <rtl/string.hxx>
 #include <vcl/timer.hxx>
-#include <vcl/svapp.hxx>
 
 #include <vector>
+#include <deque>
 
-#include "Transmitter.hxx"
+namespace sd { class Transmitter; }
 
 namespace sd
 {
@@ -32,7 +26,7 @@ class Receiver : private Timer
     std::deque< std::vector< OString > > maExecQueue;
 public:
     explicit Receiver( Transmitter *aTransmitter );
-    virtual ~Receiver();
+    virtual ~Receiver() override;
     virtual void Invoke() override;
     void pushCommand( const std::vector<OString> &rCommand );
     static void executeCommand( const std::vector<OString> &aCommand );

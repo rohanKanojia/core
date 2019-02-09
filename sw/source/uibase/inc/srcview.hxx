@@ -24,7 +24,7 @@
 #include <vcl/outdev.hxx>
 
 #include "srcedtw.hxx"
-#include "shellid.hxx"
+#include <shellid.hxx>
 
 class SwDocShell;
 class SvxSearchItem;
@@ -34,7 +34,7 @@ class SwSrcView: public SfxViewShell
 {
     VclPtr<SwSrcEditWindow> aEditWin;
 
-    SvxSearchItem*      pSearchItem;
+    std::unique_ptr<SvxSearchItem> pSearchItem;
 
     bool                bSourceSaved    :1;
     rtl_TextEncoding    eLoadEncoding;
@@ -59,7 +59,7 @@ private:
 public:
     SwSrcView(SfxViewFrame* pFrame, SfxViewShell*);
 
-    virtual ~SwSrcView();
+    virtual ~SwSrcView() override;
 
     SwDocShell*         GetDocShell();
     void                SaveContent(const OUString& rTmpFile);
@@ -80,7 +80,6 @@ public:
 
     sal_Int32       PrintSource( OutputDevice *pOutDev, sal_Int32 nPage, bool bCalcNumPagesOnly );
 
-    void            SourceSaved() {bSourceSaved = true;}
     bool            HasSourceSaved() const {return bSourceSaved;}
 
 };

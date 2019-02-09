@@ -19,11 +19,7 @@
 
 #include <sal/config.h>
 
-#include <cctype>
 #include <memory>
-
-#include <boost/preprocessor/repetition.hpp>
-#include <boost/preprocessor/iteration/local.hpp>
 
 #include <cppuhelper/supportsservice.hxx>
 #include <tools/diagnose_ex.h>
@@ -47,7 +43,7 @@ namespace dxcanvas
         ENSURE_OR_THROW( mpDevice.is() && mpBitmap,
                          "CanvasBitmap::CanvasBitmap(): Invalid surface or device" );
 
-        maCanvasHelper.setDevice( *mpDevice.get() );
+        maCanvasHelper.setDevice( *mpDevice );
         maCanvasHelper.setTarget( mpBitmap );
     }
 
@@ -64,9 +60,20 @@ namespace dxcanvas
     {
         BITMAPINFOHEADER bmiHeader;
         RGBQUAD          bmiColors[256];
+        AlphaDIB()
+            : bmiHeader({0,0,0,1,8,BI_RGB,0,0,0,0,0})
+        {
+            for (size_t i = 0; i < 256; ++i)
+            {
+                // this here fills palette with grey level colors, starting
+                // from 0,0,0 up to 255,255,255
+                BYTE const b(i);
+                bmiColors[i] = { b,b,b,b };
+            }
+        }
     };
 
-    uno::Any SAL_CALL CanvasBitmap::getFastPropertyValue( sal_Int32 nHandle )  throw (uno::RuntimeException)
+    uno::Any SAL_CALL CanvasBitmap::getFastPropertyValue( sal_Int32 nHandle )
     {
         uno::Any aRes;
         // 0 ... get BitmapEx
@@ -76,7 +83,7 @@ namespace dxcanvas
         {
             // sorry, no BitmapEx here...
             case 0:
-                aRes = css::uno::Any( reinterpret_cast<sal_Int64>( (BitmapEx*) NULL ) );
+                aRes <<= reinterpret_cast<sal_Int64>( nullptr );
                 break;
 
             case 1:
@@ -87,7 +94,7 @@ namespace dxcanvas
                     mpBitmap->getBitmap()->GetHBITMAP(Gdiplus::Color(), &aHBmp );
 
                     uno::Sequence< uno::Any > args(1);
-                    args[0] = uno::Any( sal_Int64(aHBmp) );
+                    args[0] <<= sal_Int64(aHBmp);
 
                     aRes <<= args;
                 }
@@ -95,7 +102,7 @@ namespace dxcanvas
                 {
                     // need to copy&convert the bitmap, since dx
                     // canvas uses inline alpha channel
-                    HDC hScreenDC=GetDC(NULL);
+                    HDC hScreenDC=GetDC(nullptr);
                     const basegfx::B2IVector aSize(mpBitmap->getSize());
                     HBITMAP hBmpBitmap = CreateCompatibleBitmap( hScreenDC,
                                                                  aSize.getX(),
@@ -124,7 +131,7 @@ namespace dxcanvas
                     aBmpData.Height      = aSize.getY();
                     aBmpData.Stride      = 4*aBmpData.Width;
                     aBmpData.PixelFormat = PixelFormat32bppARGB;
-                    aBmpData.Scan0       = NULL;
+                    aBmpData.Scan0       = nullptr;
                     const Gdiplus::Rect aRect( 0,0,aSize.getX(),aSize.getY() );
                     BitmapSharedPtr pGDIPlusBitmap=mpBitmap->getBitmap();
                     if( Gdiplus::Ok != pGDIPlusBitmap->LockBits( &aRect,
@@ -138,12 +145,12 @@ namespace dxcanvas
 
                     // now aBmpData.Scan0 contains our bits - push
                     // them into HBITMAP, ignoring alpha
-                    SetDIBits( hScreenDC, hBmpBitmap, 0, aSize.getY(), aBmpData.Scan0, (PBITMAPINFO)&aBIH, DIB_RGB_COLORS );
+                    SetDIBits( hScreenDC, hBmpBitmap, 0, aSize.getY(), aBmpData.Scan0, reinterpret_cast<PBITMAPINFO>(&aBIH), DIB_RGB_COLORS );
 
                     pGDIPlusBitmap->UnlockBits( &aBmpData );
 
                     uno::Sequence< uno::Any > args(1);
-                    args[0] = uno::Any( sal_Int64(hBmpBitmap) );
+                    args[0] <<= sal_Int64(hBmpBitmap);
 
                     aRes <<= args;
                 }
@@ -158,24 +165,11 @@ namespace dxcanvas
                 }
                 else
                 {
-                    static AlphaDIB aDIB=
-                        {
-                            {0,0,0,1,8,BI_RGB,0,0,0,0,0},
-                            {
-                                // this here fills palette with grey
-                                // level colors, starting from 0,0,0
-                                // up to 255,255,255
-#define BOOST_PP_LOCAL_MACRO(n_) \
-                    BOOST_PP_COMMA_IF(n_) \
-                    {n_,n_,n_,n_}
-#define BOOST_PP_LOCAL_LIMITS     (0, 255)
-#include BOOST_PP_LOCAL_ITERATE()
-                            }
-                        };
+                    static AlphaDIB aDIB;
 
                     // need to copy&convert the bitmap, since dx
                     // canvas uses inline alpha channel
-                    HDC hScreenDC=GetDC(NULL);
+                    HDC hScreenDC=GetDC(nullptr);
                     const basegfx::B2IVector aSize(mpBitmap->getSize());
                     HBITMAP hBmpBitmap = CreateCompatibleBitmap( hScreenDC, aSize.getX(), aSize.getY() );
                     if( !hBmpBitmap )
@@ -198,7 +192,7 @@ namespace dxcanvas
                     aBmpData.Height      = aSize.getY();
                     aBmpData.Stride      = 4*aBmpData.Width;
                     aBmpData.PixelFormat = PixelFormat32bppARGB;
-                    aBmpData.Scan0       = NULL;
+                    aBmpData.Scan0       = nullptr;
                     const Gdiplus::Rect aRect( 0,0,aSize.getX(),aSize.getY() );
                     BitmapSharedPtr pGDIPlusBitmap=mpBitmap->getBitmap();
                     if( Gdiplus::Ok != pGDIPlusBitmap->LockBits( &aRect,
@@ -213,7 +207,7 @@ namespace dxcanvas
                     // copy only alpha channel to pAlphaBits
                     const sal_Int32 nScanWidth((aSize.getX() + 3) & ~3);
                     std::unique_ptr<sal_uInt8[]> pAlphaBits( new sal_uInt8[nScanWidth*aSize.getY()] );
-                    const sal_uInt8* pInBits=(sal_uInt8*)aBmpData.Scan0;
+                    const sal_uInt8* pInBits=static_cast<sal_uInt8*>(aBmpData.Scan0);
                     pInBits+=3;
                     for( sal_Int32 y=0; y<aSize.getY(); ++y )
                     {
@@ -230,10 +224,10 @@ namespace dxcanvas
                     // set bits to newly create HBITMAP
                     SetDIBits( hScreenDC, hBmpBitmap, 0,
                                aSize.getY(), pAlphaBits.get(),
-                               (PBITMAPINFO)&aDIB, DIB_RGB_COLORS );
+                               reinterpret_cast<PBITMAPINFO>(&aDIB), DIB_RGB_COLORS );
 
                     uno::Sequence< uno::Any > args(1);
-                    args[0] = uno::Any( sal_Int64(hBmpBitmap) );
+                    args[0] <<= sal_Int64(hBmpBitmap);
 
                     aRes <<= args;
                 }
@@ -244,21 +238,19 @@ namespace dxcanvas
         return aRes;
     }
 
-    OUString SAL_CALL CanvasBitmap::getImplementationName(  ) throw (uno::RuntimeException)
+    OUString SAL_CALL CanvasBitmap::getImplementationName(  )
     {
         return OUString( "DXCanvas.CanvasBitmap" );
     }
 
-    sal_Bool SAL_CALL CanvasBitmap::supportsService( const OUString& ServiceName ) throw (uno::RuntimeException)
+    sal_Bool SAL_CALL CanvasBitmap::supportsService( const OUString& ServiceName )
     {
         return cppu::supportsService( this, ServiceName );
     }
 
-    uno::Sequence< OUString > SAL_CALL CanvasBitmap::getSupportedServiceNames(  ) throw (uno::RuntimeException)
+    uno::Sequence< OUString > SAL_CALL CanvasBitmap::getSupportedServiceNames(  )
     {
-        uno::Sequence< OUString > aRet { "com.sun.star.rendering.CanvasBitmap" };
-
-        return aRet;
+        return { "com.sun.star.rendering.CanvasBitmap" };
     }
 
 }

@@ -17,14 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TitleHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "macros.hxx"
-#include "AxisHelper.hxx"
-#include "DiagramHelper.hxx"
+#include <TitleHelper.hxx>
+#include <ChartModel.hxx>
+#include <ChartModelHelper.hxx>
+#include <AxisHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <ReferenceSizeProvider.hxx>
 #include <com/sun/star/chart2/FormattedString.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <rtl/ustrbuf.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 namespace chart
 {
@@ -170,6 +173,25 @@ uno::Reference< XTitle > TitleHelper::getTitle( TitleHelper::eTitleType nTitleIn
     return nullptr;
 }
 
+uno::Reference< XTitle > TitleHelper::createOrShowTitle(
+      TitleHelper::eTitleType eTitleType
+    , const OUString& rTitleText
+    , const uno::Reference< frame::XModel >& xModel
+    , const uno::Reference< uno::XComponentContext > & xContext )
+{
+    uno::Reference< chart2::XTitle > xTitled( TitleHelper::getTitle( eTitleType, xModel ) );
+    if( xTitled.is())
+    {
+        css::uno::Reference<css::beans::XPropertySet> xProps(xTitled, css::uno::UNO_QUERY_THROW);
+        xProps->setPropertyValue("Visible",css::uno::Any(true));
+        return xTitled;
+    }
+    else
+    {
+        return createTitle(eTitleType, rTitleText, xModel, xContext, nullptr/*pRefSizeProvider*/);
+    }
+}
+
 uno::Reference< XTitle > TitleHelper::createTitle(
       TitleHelper::eTitleType eTitleType
     , const OUString& rTitleText
@@ -198,7 +220,7 @@ uno::Reference< XTitle > TitleHelper::createTitle(
         uno::Reference< beans::XPropertySet > xProps( xAxis, uno::UNO_QUERY );
         if( xProps.is() )
         {
-            xProps->setPropertyValue( "Show", uno::makeAny( sal_False ) );
+            xProps->setPropertyValue( "Show", uno::Any( false ) );
             xTitled = lcl_getTitleParent( eTitleType, xModel );
         }
     }
@@ -263,14 +285,13 @@ uno::Reference< XTitle > TitleHelper::createTitle(
                             || (!bIsVertical && eTitleType == TitleHelper::SECONDARY_Y_AXIS_TITLE)
                             || (bIsVertical && eTitleType == TitleHelper::SECONDARY_X_AXIS_TITLE) )
                         {
-                            double fNewAngleDegree = 90.0;
-                            xTitleProps->setPropertyValue( "TextRotation", uno::makeAny( fNewAngleDegree ));
+                            xTitleProps->setPropertyValue( "TextRotation", uno::Any( 90.0 ));
                         }
                     }
                 }
-                catch( const uno::Exception & ex )
+                catch( const uno::Exception & )
                 {
-                    ASSERT_EXCEPTION( ex );
+                    DBG_UNHANDLED_EXCEPTION("chart2");
                 }
             }
         }
@@ -281,19 +302,19 @@ uno::Reference< XTitle > TitleHelper::createTitle(
 
 OUString TitleHelper::getCompleteString( const uno::Reference< XTitle >& xTitle )
 {
-    OUString aRet;
     if(!xTitle.is())
-        return aRet;
+        return OUString();
+    OUStringBuffer aRet;
     uno::Sequence< uno::Reference< XFormattedString > > aStringList = xTitle->getText();
     for( sal_Int32 nN=0; nN<aStringList.getLength();nN++ )
-        aRet += aStringList[nN]->getString();
-    return aRet;
+        aRet.append( aStringList[nN]->getString() );
+    return aRet.makeStringAndClear();
 }
 
 void TitleHelper::setCompleteString( const OUString& rNewText
                     , const uno::Reference< XTitle >& xTitle
                     , const uno::Reference< uno::XComponentContext > & xContext
-                    , float * pDefaultCharHeight /* = 0 */ )
+                    , const float * pDefaultCharHeight /* = 0 */ )
 {
     //the format of the first old text portion will be maintained if there is any
     if(!xTitle.is())
@@ -349,14 +370,14 @@ void TitleHelper::setCompleteString( const OUString& rNewText
         {
             try
             {
-                uno::Any aFontSize( uno::makeAny( *pDefaultCharHeight ));
+                uno::Any aFontSize( *pDefaultCharHeight );
                 xFormattedString->setPropertyValue( "CharHeight", aFontSize );
                 xFormattedString->setPropertyValue( "CharHeightAsian", aFontSize );
                 xFormattedString->setPropertyValue( "CharHeightComplex", aFontSize );
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -370,6 +391,17 @@ void TitleHelper::removeTitle( TitleHelper::eTitleType nTitleIndex
     if( xTitled.is())
     {
         xTitled->setTitleObject(nullptr);
+    }
+}
+
+void TitleHelper::hideTitle( TitleHelper::eTitleType nTitleIndex
+                    , const css::uno::Reference< css::frame::XModel >& xModel )
+{
+    uno::Reference< chart2::XTitle > xTitled( TitleHelper::getTitle( nTitleIndex, xModel ) );
+    if( xTitled.is())
+    {
+        css::uno::Reference<css::beans::XPropertySet> xProps(xTitled, css::uno::UNO_QUERY_THROW);
+        xProps->setPropertyValue("Visible",css::uno::Any(false));
     }
 }
 

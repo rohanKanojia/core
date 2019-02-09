@@ -20,24 +20,25 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_PAGEDATA_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_PAGEDATA_HXX
 
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
+#include <memory>
+#include <vector>
 
 class ScPrintRangeData
 {
 private:
     ScRange     aPrintRange;
-    size_t      nPagesX;
-    SCCOL*      pPageEndX;
-    size_t      nPagesY;
-    SCROW*      pPageEndY;
+    std::vector<SCCOL>
+                mvPageEndX;
+    std::vector<SCROW>
+                mvPageEndY;
     long        nFirstPage;
     bool        bTopDown;
     bool        bAutomatic;
 
 public:
-                ScPrintRangeData();
-                ~ScPrintRangeData();
+                    ScPrintRangeData();
+                    ~ScPrintRangeData();
 
     void            SetPrintRange( const ScRange& rNew )    { aPrintRange = rNew; }
     const ScRange&  GetPrintRange() const                   { return aPrintRange; }
@@ -45,10 +46,10 @@ public:
     void            SetPagesX( size_t nCount, const SCCOL* pEnd );
     void            SetPagesY( size_t nCount, const SCROW* pEnd );
 
-    size_t          GetPagesX() const       { return nPagesX;   }
-    const SCCOL*    GetPageEndX() const     { return pPageEndX; }
-    size_t          GetPagesY() const       { return nPagesY;   }
-    const SCROW*    GetPageEndY() const     { return pPageEndY; }
+    size_t          GetPagesX() const       { return mvPageEndX.size();   }
+    const SCCOL*    GetPageEndX() const     { return mvPageEndX.data(); }
+    size_t          GetPagesY() const       { return mvPageEndY.size();   }
+    const SCROW*    GetPageEndY() const     { return mvPageEndY.data(); }
 
     void            SetFirstPage( long nNew )   { nFirstPage = nNew; }
     long            GetFirstPage() const        { return nFirstPage; }
@@ -63,7 +64,7 @@ class ScPageBreakData
 private:
     size_t              nAlloc;
     size_t              nUsed;
-    ScPrintRangeData*   pData;          // Array
+    std::unique_ptr<ScPrintRangeData[]>   pData;
 
 public:
                 ScPageBreakData(size_t nMax);

@@ -31,11 +31,10 @@ namespace svt
         DisableHistory();
     }
 
-    VCL_BUILDER_DECL_FACTORY(OFileURLControl)
+    extern "C" SAL_DLLPUBLIC_EXPORT void makeOFileURLControl(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap &)
     {
-        (void)rMap;
         WinBits nWinBits = WB_LEFT|WB_VCENTER|WB_3DLOOK|WB_TABSTOP|
-                           WB_DROPDOWN|WB_AUTOSIZE|WB_AUTOHSCROLL;
+                           WB_DROPDOWN|WB_AUTOHSCROLL;
         VclPtrInstance<OFileURLControl> pListBox(pParent, nWinBits);
         pListBox->EnableAutoSize(true);
         rRet = pListBox;
@@ -52,14 +51,14 @@ namespace svt
         return SvtURLBox::PreNotify(_rNEvt);
     }
 
-    bool OFileURLControl::Notify( NotifyEvent& _rNEvt )
+    bool OFileURLControl::EventNotify( NotifyEvent& _rNEvt )
     {
         if (GetSubEdit() == _rNEvt.GetWindow())
             if (MouseNotifyEvent::KEYINPUT == _rNEvt.GetType())
                 if (KEY_RETURN == _rNEvt.GetKeyEvent()->GetKeyCode().GetCode())
                     if (IsInDropDown())
                     {
-                        bool bReturn = SvtURLBox::Notify(_rNEvt);
+                        bool bReturn = SvtURLBox::EventNotify(_rNEvt);
 
                         // build a system dependent (thus more user readable) file name
                         OFileNotation aTransformer(m_sPreservedText, OFileNotation::N_URL);
@@ -72,7 +71,7 @@ namespace svt
                         return bReturn;
                     }
 
-        return SvtURLBox::Notify(_rNEvt);
+        return SvtURLBox::EventNotify(_rNEvt);
     }
 }   // namespace svt
 

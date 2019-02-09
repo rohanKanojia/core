@@ -22,7 +22,7 @@
 
 #include <tools/gen.hxx>
 #include <vcl/window.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 namespace sd {
 
@@ -45,10 +45,11 @@ class Window
 {
 public:
     Window (vcl::Window* pParent);
-    virtual ~Window ();
+    virtual ~Window () override;
     virtual void dispose() override;
 
     void    SetViewShell (ViewShell* pViewSh);
+    ViewShell* GetViewShell();
 
     /** Set the zoom factor to the specified value and center the display
         area around the zoom center.
@@ -82,15 +83,15 @@ public:
         @return
             The new zoom factor is returned as integral percent value.
     */
-    long SetZoomRect (const Rectangle& rZoomRect);
+    long SetZoomRect (const ::tools::Rectangle& rZoomRect);
 
-    long GetZoomForRect( const Rectangle& rZoomRect );
+    long GetZoomForRect( const ::tools::Rectangle& rZoomRect );
 
     void SetMinZoomAutoCalc (bool bAuto);
 
     /** Calculate the minimal zoom factor as the value at which the
         application area would completely fill the window.  All values set
-        manually or programatically are set to this value if they are
+        manually or programmatically are set to this value if they are
         smaller.  If the currently used zoom factor is smaller than the minimal zoom
         factor than set the minimal zoom factor as the new current zoom
         factor.
@@ -106,9 +107,9 @@ public:
 
     long GetZoom() const;
 
-    Point GetWinViewPos() const { return maWinPos;}
-    Point GetViewOrigin() const { return maViewOrigin;}
-    Size GetViewSize() const { return maViewSize;}
+    const Point& GetWinViewPos() const { return maWinPos;}
+    const Point& GetViewOrigin() const { return maViewOrigin;}
+    const Size& GetViewSize() const { return maViewSize;}
     void SetWinViewPos(const Point& rPnt);
     void SetViewOrigin(const Point& rPnt);
     void SetViewSize(const Size& rSize);
@@ -125,11 +126,12 @@ public:
 
     void UpdateMapMode();
 
-    double  GetVisibleX();          // Interface fuer ScrollBars
+    double  GetVisibleX();          // interface for ScrollBars
     double  GetVisibleY();
     void    SetVisibleXY(double fX, double fY);
     double  GetVisibleWidth();
     double  GetVisibleHeight();
+    Point   GetVisibleCenter();
     double  GetScrlLineWidth();
     double  GetScrlLineHeight();
     double  GetScrlPageWidth();
@@ -149,7 +151,6 @@ public:
     void DropScroll (const Point& rMousePos);
     virtual void KeyInput(const KeyEvent& rKEvt) override;
 protected:
-    VclPtr< ::sd::Window> mpShareWin;
     Point maWinPos;
     Point maViewOrigin;
     Size maViewSize;
@@ -161,7 +162,6 @@ protected:
         depending on the current zoom factor.  Its default value is now false.
     */
     bool mbMinZoomAutoCalc;
-    bool mbCalcMinZoomByMinSide;
     bool mbCenterAllowed;
     long mnTicks;
 
@@ -170,14 +170,14 @@ protected:
 
     virtual void Resize() override;
     virtual void PrePaint(vcl::RenderContext& rRenderContext) override;
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect) override;
     virtual void MouseMove(const MouseEvent& rMEvt) override;
     virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
     virtual void Command(const CommandEvent& rCEvt) override;
     virtual void RequestHelp( const HelpEvent& rEvt ) override;
     virtual void LoseFocus() override;
-    virtual bool Notify( NotifyEvent& rNEvt ) override;
+    virtual bool EventNotify( NotifyEvent& rNEvt ) override;
 
     /** Create an accessibility object that makes this window accessible.
 
@@ -190,8 +190,16 @@ protected:
 
     OUString GetSurroundingText() const override;
     Selection GetSurroundingTextSelection() const override;
-    /// @see OutputDevice::LogicInvalidate().
-    void LogicInvalidate(const Rectangle* pRectangle) override;
+    /// @see Window::LogicInvalidate().
+    void LogicInvalidate(const ::tools::Rectangle* pRectangle) override;
+    /// Same as MouseButtonDown(), but coordinates are in logic unit.
+    virtual void LogicMouseButtonDown(const MouseEvent& rMouseEvent) override;
+    /// Same as MouseButtonUp(), but coordinates are in logic unit.
+    virtual void LogicMouseButtonUp(const MouseEvent& rMouseEvent) override;
+    /// Same as MouseMove(), but coordinates are in logic unit.
+    virtual void LogicMouseMove(const MouseEvent& rMouseEvent) override;
+
+    FactoryFunction GetUITestFactory() const override;
 };
 
 } // end of namespace sd

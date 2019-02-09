@@ -17,11 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "framework/Configuration.hxx"
+#include <framework/Configuration.hxx>
 
-#include "framework/FrameworkHelper.hxx"
+#include <framework/FrameworkHelper.hxx>
 
+#include <com/sun/star/drawing/framework/ConfigurationChangeEvent.hpp>
+#include <com/sun/star/drawing/framework/XConfigurationControllerBroadcaster.hpp>
+#include <comphelper/sequence.hxx>
 #include <facreg.hxx>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -33,7 +37,6 @@ namespace {
     for STL containers.
 */
 class XResourceIdLess
-    :   public ::std::binary_function <Reference<XResourceId>, Reference<XResourceId>, bool>
 {
 public:
     bool operator () (const Reference<XResourceId>& rId1, const Reference<XResourceId>& rId2) const
@@ -90,7 +93,6 @@ void SAL_CALL Configuration::disposing()
 //----- XConfiguration --------------------------------------------------------
 
 void SAL_CALL Configuration::addResource (const Reference<XResourceId>& rxResourceId)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -100,15 +102,13 @@ void SAL_CALL Configuration::addResource (const Reference<XResourceId>& rxResour
     if (mpResourceContainer->find(rxResourceId) == mpResourceContainer->end())
     {
         SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": Configuration::addResource() " <<
-            OUStringToOString(
-                FrameworkHelper::ResourceIdToString(rxResourceId), RTL_TEXTENCODING_UTF8).getStr());
+                FrameworkHelper::ResourceIdToString(rxResourceId));
         mpResourceContainer->insert(rxResourceId);
         PostEvent(rxResourceId, true);
     }
 }
 
 void SAL_CALL Configuration::removeResource (const Reference<XResourceId>& rxResourceId)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -119,8 +119,7 @@ void SAL_CALL Configuration::removeResource (const Reference<XResourceId>& rxRes
     if (iResource != mpResourceContainer->end())
     {
         SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": Configuration::removeResource() " <<
-            OUStringToOString(
-                FrameworkHelper::ResourceIdToString(rxResourceId), RTL_TEXTENCODING_UTF8).getStr());
+                FrameworkHelper::ResourceIdToString(rxResourceId));
         PostEvent(rxResourceId,false);
         mpResourceContainer->erase(iResource);
     }
@@ -130,7 +129,6 @@ Sequence<Reference<XResourceId> > SAL_CALL Configuration::getResources (
     const Reference<XResourceId>& rxAnchorId,
     const OUString& rsResourceURLPrefix,
     AnchorBindingMode eMode)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard (maMutex);
     ThrowIfDisposed();
@@ -139,12 +137,9 @@ Sequence<Reference<XResourceId> > SAL_CALL Configuration::getResources (
 
     // Collect the matching resources in a vector.
     ::std::vector<Reference<XResourceId> > aResources;
-    ResourceContainer::const_iterator iResource;
-    for (iResource=mpResourceContainer->begin();
-         iResource!=mpResourceContainer->end();
-         ++iResource)
+    for (const auto& rxResource : *mpResourceContainer)
     {
-        if ( ! (*iResource)->isBoundTo(rxAnchorId,eMode))
+        if ( ! rxResource->isBoundTo(rxAnchorId,eMode))
             continue;
 
         if (bFilterResources)
@@ -153,26 +148,25 @@ Sequence<Reference<XResourceId> > SAL_CALL Configuration::getResources (
 
             // Make sure that the resource is bound directly to the anchor.
             if (eMode != AnchorBindingMode_DIRECT
-                && ! (*iResource)->isBoundTo(rxAnchorId, AnchorBindingMode_DIRECT))
+                && ! rxResource->isBoundTo(rxAnchorId, AnchorBindingMode_DIRECT))
             {
                 continue;
             }
 
             // Make sure that the resource URL matches the given prefix.
-            if ( ! (*iResource)->getResourceURL().match(rsResourceURLPrefix))
+            if ( ! rxResource->getResourceURL().match(rsResourceURLPrefix))
             {
                 continue;
             }
         }
 
-        aResources.push_back(*iResource);
+        aResources.push_back(rxResource);
     }
 
     return comphelper::containerToSequence(aResources);
 }
 
 sal_Bool SAL_CALL Configuration::hasResource (const Reference<XResourceId>& rxResourceId)
-    throw (RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard (maMutex);
     ThrowIfDisposed();
@@ -184,7 +178,6 @@ sal_Bool SAL_CALL Configuration::hasResource (const Reference<XResourceId>& rxRe
 //----- XCloneable ------------------------------------------------------------
 
 Reference<util::XCloneable> SAL_CALL Configuration::createClone()
-    throw (RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard (maMutex);
     ThrowIfDisposed();
@@ -200,14 +193,13 @@ Reference<util::XCloneable> SAL_CALL Configuration::createClone()
 //----- XNamed ----------------------------------------------------------------
 
 OUString SAL_CALL Configuration::getName()
-    throw (RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard (maMutex);
-    OUString aString;
+    OUStringBuffer aString;
 
     if (rBHelper.bDisposed || rBHelper.bInDispose)
-        aString += "DISPOSED ";
-    aString += "Configuration[";
+        aString.append("DISPOSED ");
+    aString.append("Configuration[");
 
     ResourceContainer::const_iterator iResource;
     for (iResource=mpResourceContainer->begin();
@@ -215,35 +207,31 @@ OUString SAL_CALL Configuration::getName()
          ++iResource)
     {
         if (iResource != mpResourceContainer->begin())
-            aString += ", ";
-        aString += FrameworkHelper::ResourceIdToString(*iResource);
+            aString.append(", ");
+        aString.append(FrameworkHelper::ResourceIdToString(*iResource));
     }
-    aString += "]";
+    aString.append("]");
 
-    return aString;
+    return aString.makeStringAndClear();
 }
 
-void SAL_CALL Configuration::setName (const OUString& rsName)
-    throw (RuntimeException, std::exception)
+void SAL_CALL Configuration::setName (const OUString&)
 {
-    (void)rsName; // rsName is ignored.
+    // ignored.
 }
 
 OUString Configuration::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString(
         "com.sun.star.comp.Draw.framework.configuration.Configuration");
 }
 
 sal_Bool Configuration::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> Configuration::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<OUString>{
         "com.sun.star.drawing.framework.Configuration"};
@@ -276,7 +264,6 @@ void Configuration::PostEvent (
 }
 
 void Configuration::ThrowIfDisposed() const
-    throw (css::lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
@@ -332,7 +319,7 @@ bool AreConfigurationsEquivalent (
 } } // end of namespace sd::framework
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Draw_framework_configuration_Configuration_get_implementation(
         css::uno::XComponentContext*,
         css::uno::Sequence<css::uno::Any> const &)

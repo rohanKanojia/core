@@ -16,15 +16,16 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <OLEHandler.hxx>
-#include <DomainMapper.hxx>
-#include <PropertyMap.hxx>
+#include "OLEHandler.hxx"
+#include "DomainMapper.hxx"
+#include "PropertyMap.hxx"
 #include "GraphicHelpers.hxx"
 
 #include <editeng/unoprnms.hxx>
 #include <oox/ole/oleobjecthelper.hxx>
 #include <ooxml/resourceids.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
 #include <unotools/mediadescriptor.hxx>
 #include <officecfg/Office/Common.hxx>
@@ -43,7 +44,9 @@
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
+#include <com/sun/star/text/WrapTextMode.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
 namespace writerfilter {
@@ -54,9 +57,7 @@ using namespace ::com::sun::star;
 
 OLEHandler::OLEHandler(DomainMapper& rDomainMapper) :
 LoggedProperties("OLEHandler"),
-m_nDxaOrig(0),
-m_nDyaOrig(0),
-    m_nWrapMode(1),
+    m_nWrapMode(text::WrapTextMode_THROUGHT),
     m_rDomainMapper(rDomainMapper)
 {
 }
@@ -70,7 +71,6 @@ OLEHandler::~OLEHandler()
 void OLEHandler::lcl_attribute(Id rName, Value & rVal)
 {
     OUString sStringValue = rVal.getString();
-    (void)rName;
     switch( rName )
     {
         case NS_ooxml::LN_CT_OLEObject_Type:
@@ -95,15 +95,24 @@ void OLEHandler::lcl_attribute(Id rName, Value & rVal)
             rVal.getAny() >>= m_xInputStream;
         break;
         case NS_ooxml::LN_CT_Object_dxaOrig:
-            m_nDxaOrig = rVal.getInt();
+             m_sVisAreaWidth = sStringValue;
         break;
         case NS_ooxml::LN_CT_Object_dyaOrig:
-            m_nDyaOrig = rVal.getInt();
+             m_sVisAreaHeight = sStringValue;
         break;
         case NS_ooxml::LN_shape:
         {
             uno::Reference< drawing::XShape > xTempShape;
             rVal.getAny() >>= xTempShape;
+
+            // Control shape is handled on a different code path
+            uno::Reference< lang::XServiceInfo > xSInfo( xTempShape, uno::UNO_QUERY_THROW );
+            if(xSInfo->supportsService("com.sun.star.drawing.ControlShape"))
+            {
+                m_rDomainMapper.hasControls(true);
+                break;
+            }
+
             if( xTempShape.is() )
             {
                 m_xShape.set( xTempShape );
@@ -111,7 +120,7 @@ void OLEHandler::lcl_attribute(Id rName, Value & rVal)
 
                 try
                 {
-                    // Shapes in the header or footer should be in the background.
+                    // Shapes in the header or footer should be in the background, since the default is WrapTextMode_THROUGH.
                     if (m_rDomainMapper.IsInHeaderFooter())
                         xShapeProps->setPropertyValue("Opaque", uno::makeAny(false));
 
@@ -122,7 +131,7 @@ void OLEHandler::lcl_attribute(Id rName, Value & rVal)
                 }
                 catch( const uno::Exception& e )
                 {
-                    SAL_WARN("writerfilter", "Exception in OLE Handler: " << e.Message);
+                    SAL_WARN("writerfilter", "Exception in OLE Handler: " << e);
                 }
                 // No need to set the wrapping here as it's either set in oox or will be set later
             }
@@ -153,7 +162,7 @@ void OLEHandler::lcl_sprm(Sprm & rSprm)
             writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
             if ( pProperties.get( ) )
             {
-                std::shared_ptr<WrapHandler> pHandler( new WrapHandler );
+                tools::SvRef<WrapHandler> pHandler( new WrapHandler );
                 pProperties->resolve( *pHandler );
 
                 m_nWrapMode = pHandler->getWrapMode( );
@@ -164,11 +173,16 @@ void OLEHandler::lcl_sprm(Sprm & rSprm)
 
                     xShapeProps->setPropertyValue(
                         getPropertyName( PROP_SURROUND ),
-                        uno::makeAny( m_nWrapMode ) );
+                        uno::makeAny( static_cast<sal_Int32>(m_nWrapMode) ) );
+
+                    // Through shapes in the header or footer(that spill into the body) should be in the background.
+                    // It is just assumed that all shapes will spill into the body.
+                    if( m_rDomainMapper.IsInHeaderFooter() )
+                        xShapeProps->setPropertyValue("Opaque", uno::makeAny(m_nWrapMode != text::WrapTextMode_THROUGH));
                 }
                 catch( const uno::Exception& e )
                 {
-                    SAL_WARN("writerfilter", "Exception in OLE Handler: " << e.Message);
+                    SAL_WARN("writerfilter", "Exception in OLE Handler: " << e);
                 }
             }
         }
@@ -185,6 +199,8 @@ void OLEHandler::importStream(const uno::Reference<uno::XComponentContext>& xCom
     OUString aFilterService;
     if (m_sProgId == "Word.Document.12")
         aFilterService = "com.sun.star.comp.Writer.WriterFilter";
+    else if (m_sProgId == "Excel.Sheet.12")
+        aFilterService = "com.sun.star.comp.oox.xls.ExcelFilter";
     else if (m_sProgId == "Equation.3")
         aFilterService = "com.sun.star.comp.Math.MathTypeFilter";
     else
@@ -227,6 +243,11 @@ OUString OLEHandler::getCLSID(const uno::Reference<uno::XComponentContext>& xCom
         if (officecfg::Office::Common::Filter::Microsoft::Import::WinWordToWriter::get(xComponentContext))
             aRet = "8BC6B165-B1B2-4EDD-aa47-dae2ee689dd6";
     }
+    else if (m_sProgId == "Excel.Sheet.12")
+    {
+        if (officecfg::Office::Common::Filter::Microsoft::Import::ExcelToCalc::get(xComponentContext))
+            aRet = "47BBB4CB-CE4C-4E80-A591-42D9AE74950F";
+    }
     else if (m_sProgId == "Equation.3")
     {
         if (officecfg::Office::Common::Filter::Microsoft::Import::MathTypeToMath::get(xComponentContext))
@@ -236,6 +257,21 @@ OUString OLEHandler::getCLSID(const uno::Reference<uno::XComponentContext>& xCom
         SAL_WARN("writerfilter", "OLEHandler::getCLSID: unhandled m_sProgId: " << m_sProgId);
 
     return aRet;
+}
+
+OUString const & OLEHandler::GetDrawAspect() const
+{
+    return m_sDrawAspect;
+}
+
+OUString const & OLEHandler::GetVisAreaWidth() const
+{
+    return m_sVisAreaWidth;
+}
+
+OUString const & OLEHandler::GetVisAreaHeight() const
+{
+    return m_sVisAreaHeight;
 }
 
 OUString OLEHandler::copyOLEOStream(
@@ -273,9 +309,8 @@ OUString OLEHandler::copyOLEOStream(
 
             ::oox::ole::SaveInteropProperties(xTextDocument, aURL, nullptr, m_sProgId, m_sDrawAspect);
 
-            static const char sProtocol[] = "vnd.sun.star.EmbeddedObject:";
             OUString aPersistName( xEmbeddedResolver->resolveEmbeddedObjectURL( aURL ) );
-            sRet = aPersistName.copy( strlen(sProtocol) );
+            sRet = aPersistName.copy( strlen("vnd.sun.star.EmbeddedObject:") );
 
         }
         uno::Reference< lang::XComponent > xComp( xEmbeddedResolver, uno::UNO_QUERY_THROW );

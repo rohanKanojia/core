@@ -20,24 +20,19 @@
 #ifndef INCLUDED_STORE_SOURCE_STORBIOS_HXX
 #define INCLUDED_STORE_SOURCE_STORBIOS_HXX
 
-#include "sal/types.h"
-#include "rtl/ref.hxx"
-#include "osl/mutex.hxx"
+#include <sal/types.h>
+#include <rtl/ref.hxx>
+#include <osl/mutex.hxx>
 
-#include "store/types.h"
+#include <store/types.h>
 #include "object.hxx"
-#include "lockbyte.hxx"
 #include "storbase.hxx"
-#include "storcach.hxx"
 
-/*========================================================================
- *
- * OStorePageBIOS.
- *
- *======================================================================*/
 namespace store
 {
 
+class ILockBytes;
+class PageCache;
 struct SuperBlockPage;
 
 class OStorePageBIOS : public store::OStoreObject
@@ -70,12 +65,12 @@ public:
     /** read.
      */
     storeError read (
-        sal_uInt32 nAddr, void *pData, sal_uInt32 nSize);
+        sal_uInt32 nAddr, void *pData, sal_uInt32 nSize) const;
 
     /** write.
      */
     storeError write (
-        sal_uInt32 nAddr, const void *pData, sal_uInt32 nSize);
+        sal_uInt32 nAddr, const void *pData, sal_uInt32 nSize) const;
 
     /** isWriteable.
      */
@@ -117,7 +112,7 @@ public:
 protected:
     /** Destruction (OReference).
      */
-    virtual ~OStorePageBIOS();
+    virtual ~OStorePageBIOS() override;
 
 private:
     /** Representation.
@@ -125,7 +120,7 @@ private:
     rtl::Reference<ILockBytes>    m_xLockBytes;
     osl::Mutex                    m_aMutex;
 
-    SuperBlockPage *              m_pSuper;
+    std::unique_ptr<SuperBlockPage> m_pSuper;
 
     bool                          m_bWriteable;
 
@@ -168,9 +163,9 @@ private:
     /** Page Maintenance.
      */
     storeError loadObjectAt_Impl (
-        OStorePageObject & rPage, sal_uInt32 nAddr);
+        OStorePageObject & rPage, sal_uInt32 nAddr) const;
     storeError saveObjectAt_Impl (
-        OStorePageObject & rPage, sal_uInt32 nAddr);
+        OStorePageObject & rPage, sal_uInt32 nAddr) const;
 
     OStorePageBIOS (const OStorePageBIOS&) = delete;
     OStorePageBIOS& operator= (const OStorePageBIOS&) = delete;
@@ -178,7 +173,7 @@ private:
 
 inline OStorePageBIOS::operator osl::Mutex& (void) const
 {
-    return (osl::Mutex&)m_aMutex;
+    return const_cast<osl::Mutex&>(m_aMutex);
 }
 inline bool OStorePageBIOS::isWriteable() const
 {
@@ -188,12 +183,6 @@ inline bool OStorePageBIOS::isValid() const
 {
     return m_xLockBytes.is();
 }
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

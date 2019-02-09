@@ -17,60 +17,46 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
+#include <global.hxx>
 #include "zipexcptn.hxx"
 
 
-/**
-*/
 RuntimeException::RuntimeException(int Error) :
     m_Error(Error)
 {
 }
 
 
-/**
-*/
 RuntimeException::~RuntimeException() throw()
 {
 }
 
 
-/**
-*/
 int RuntimeException::GetErrorCode() const
 {
     return m_Error;
 }
 
 
-/**
-*/
 ZipException::ZipException(int Error) :
     RuntimeException(Error)
 {
 }
 
 
-/**
-*/
 const char* ZipException::what() const throw()
 {
-    return 0;
+    return nullptr;
 }
 
 
-/**
-*/
 Win32Exception::Win32Exception(int Error) :
     RuntimeException(Error),
-    m_MsgBuff(0)
+    m_MsgBuff(nullptr)
 {
 }
 
 
-/**
-*/
 Win32Exception::~Win32Exception() throw()
 {
     if (m_MsgBuff)
@@ -78,43 +64,38 @@ Win32Exception::~Win32Exception() throw()
 }
 
 
-/**
-*/
 const char* Win32Exception::what() const throw()
 {
-    FormatMessage(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER |
-        FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        GetErrorCode(),
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), // Default language
-        (LPTSTR) &m_MsgBuff,
-        0,
-        NULL);
+    if (m_MsgBuff == nullptr)
+    {
+        FormatMessageA(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER |
+            FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+            nullptr,
+            GetErrorCode(),
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), // Default language
+            reinterpret_cast<LPSTR>(&m_MsgBuff),
+            0,
+            nullptr);
+    }
 
-    return reinterpret_cast<char*>(m_MsgBuff);
+    return m_MsgBuff;
 }
 
 
-/**
-*/
 ZipContentMissException::ZipContentMissException(int Error) :
     ZipException(Error)
 {
 }
 
 
-/**
-*/
 AccessViolationException::AccessViolationException(int Error) :
     Win32Exception(Error)
 {
 }
 
 
-/**
-*/
 IOException::IOException(int Error) :
     Win32Exception(Error)
 {

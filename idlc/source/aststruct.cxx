@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/aststruct.hxx>
-#include <idlc/astmember.hxx>
+#include <aststruct.hxx>
+#include <astmember.hxx>
 
 #include <registry/version.h>
 #include <registry/writer.hxx>
@@ -30,11 +30,10 @@ AstStruct::AstStruct(
     , AstScope(NT_struct)
     , m_pBaseType(pBaseType)
 {
-    for (std::vector< OString >::const_iterator i(typeParameters.begin());
-         i != typeParameters.end(); ++i)
+    for (auto const& elem : typeParameters)
     {
-        m_typeParameters.push_back(
-            new AstType(NT_type_parameter, *i, nullptr));
+        m_typeParameters.emplace_back(
+            new AstType(NT_type_parameter, elem, nullptr));
     }
 }
 
@@ -50,21 +49,15 @@ AstStruct::AstStruct(const NodeType type,
 
 AstStruct::~AstStruct()
 {
-    for (DeclList::iterator i(m_typeParameters.begin());
-         i != m_typeParameters.end(); ++i)
-    {
-        delete *i;
-    }
 }
 
 AstDeclaration const * AstStruct::findTypeParameter(OString const & name)
     const
 {
-    for (DeclList::const_iterator i(m_typeParameters.begin());
-         i != m_typeParameters.end(); ++i)
+    for (auto const& elem : m_typeParameters)
     {
-        if ((*i)->getLocalName() == name) {
-            return *i;
+        if (elem->getLocalName() == name) {
+            return elem.get();
         }
     }
     return nullptr;
@@ -102,11 +95,10 @@ bool AstStruct::dump(RegistryKey& rKey)
     if ( getNodeType() == NT_exception )
         typeClass = RT_TYPE_EXCEPTION;
 
-    OUString emptyStr;
     typereg::Writer aBlob(
         (m_typeParameters.empty() && !m_bPublished
          ? TYPEREG_VERSION_0 : TYPEREG_VERSION_1),
-        getDocumentation(), emptyStr, typeClass, m_bPublished,
+        getDocumentation(), "", typeClass, m_bPublished,
         OStringToOUString(getRelativName(), RTL_TEXTENCODING_UTF8),
         m_pBaseType == nullptr ? 0 : 1, nMember, 0,
         static_cast< sal_uInt16 >(m_typeParameters.size()));
@@ -138,7 +130,7 @@ bool AstStruct::dump(RegistryKey& rKey)
                     typeName = pMember->getType()->getRelativName();
                 }
                 aBlob.setFieldData(
-                    index++, pMember->getDocumentation(), emptyStr, flags,
+                    index++, pMember->getDocumentation(), "", flags,
                     OStringToOUString(
                         pMember->getLocalName(), RTL_TEXTENCODING_UTF8),
                     OStringToOUString(typeName, RTL_TEXTENCODING_UTF8),
@@ -149,19 +141,18 @@ bool AstStruct::dump(RegistryKey& rKey)
     }
 
     sal_uInt16 index = 0;
-    for (DeclList::iterator i(m_typeParameters.begin());
-         i != m_typeParameters.end(); ++i)
+    for (auto const& elem : m_typeParameters)
     {
         aBlob.setReferenceData(
-            index++, emptyStr, RTReferenceType::TYPE_PARAMETER, RTFieldAccess::INVALID,
+            index++, "", RTReferenceType::TYPE_PARAMETER, RTFieldAccess::INVALID,
             OStringToOUString(
-                (*i)->getLocalName(), RTL_TEXTENCODING_UTF8));
+                elem->getLocalName(), RTL_TEXTENCODING_UTF8));
     }
 
     sal_uInt32 aBlobSize;
     void const * pBlob = aBlob.getBlob(&aBlobSize);
 
-    if (localKey.setValue(emptyStr, RegValueType::BINARY,
+    if (localKey.setValue("", RegValueType::BINARY,
                             const_cast<RegValue>(pBlob), aBlobSize) != RegError::NO_ERROR)
     {
         fprintf(stderr, "%s: warning, could not set value of key \"%s\" in %s\n",

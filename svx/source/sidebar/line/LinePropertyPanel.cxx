@@ -16,13 +16,9 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
-#include <sfx2/sidebar/Theme.hxx>
 #include <sfx2/sidebar/ControlFactory.hxx>
-#include <LinePropertyPanel.hxx>
-#include <LinePropertyPanel.hrc>
-#include <svx/dialogs.hrc>
-#include <svx/dialmgr.hxx>
+#include "LinePropertyPanel.hxx"
+#include <svx/svxids.hrc>
 #include <sfx2/objsh.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
@@ -33,25 +29,20 @@
 #include <svtools/valueset.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/viewoptions.hxx>
-#include <comphelper/processfactory.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <svx/xlineit0.hxx>
 #include <svx/xlndsit.hxx>
 #include <vcl/svapp.hxx>
 #include <svx/xlnwtit.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/toolbox.hxx>
 #include <svx/xlntrit.hxx>
 #include <svx/xlnstit.hxx>
 #include <svx/xlnedit.hxx>
 #include <svx/xlncapit.hxx>
 #include <svx/xlinjoit.hxx>
-#include "svx/sidebar/PopupContainer.hxx"
-#include "svx/sidebar/PopupControl.hxx"
 
 using namespace css;
 using namespace css::uno;
-using sfx2::sidebar::Theme;
 
 namespace svx { namespace sidebar {
 
@@ -73,7 +64,7 @@ LinePropertyPanel::LinePropertyPanel(
     mpBindings(pBindings),
     maContext()
 {
-    Initialize();
+    setMapUnit(maWidthControl.GetCoreMetric());
 }
 
 LinePropertyPanel::~LinePropertyPanel()
@@ -95,11 +86,6 @@ void LinePropertyPanel::dispose()
     maCapStyle.dispose();
 
     LinePropertyPanelBase::dispose();
-}
-
-void LinePropertyPanel::Initialize()
-{
-    setMapUnit(maWidthControl.GetCoreMetric());
 }
 
 VclPtr<vcl::Window> LinePropertyPanel::Create (
@@ -186,7 +172,7 @@ void LinePropertyPanel::NotifyItemUpdate(
 }
 
 void LinePropertyPanel::HandleContextChange(
-    const sfx2::sidebar::EnumContext& rContext)
+    const vcl::EnumContext& rContext)
 {
     if(maContext == rContext)
     {
@@ -199,8 +185,11 @@ void LinePropertyPanel::HandleContextChange(
 
     switch(maContext.GetCombinedContext_DI())
     {
-        case CombinedEnumContext(Application_Calc, Context_DrawLine):
-        case CombinedEnumContext(Application_DrawImpress, Context_DrawLine):
+        case CombinedEnumContext(Application::Calc, Context::DrawLine):
+        case CombinedEnumContext(Application::DrawImpress, Context::DrawLine):
+        case CombinedEnumContext(Application::DrawImpress, Context::Draw):
+        case CombinedEnumContext(Application::WriterVariants, Context::Draw):
+            // TODO : Implement DrawLine context in Writer
             bShowArrows = true;
             break;
     }

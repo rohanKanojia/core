@@ -22,7 +22,6 @@
 #include <map>
 
 #include <ooxml/OOXMLDocument.hxx>
-#include <comphelper/storagehelper.hxx>
 #include <com/sun/star/embed/XRelationshipAccess.hpp>
 
 extern OUString customTarget;
@@ -44,9 +43,9 @@ class OOXMLStreamImpl : public OOXMLStream
     css::uno::Reference<css::xml::sax::XFastParser> mxFastParser;
     css::uno::Reference<css::xml::sax::XFastTokenHandler> mxFastTokenHandler;
 
-    StreamType_t mnStreamType;
+    StreamType_t const mnStreamType;
 
-    OUString msId;
+    OUString const msId;
     OUString msPath;
     OUString msTarget;
 
@@ -58,21 +57,20 @@ class OOXMLStreamImpl : public OOXMLStream
                        const OUString & rId,
                        OUString & rDocumentTarget);
 public:
-    typedef std::shared_ptr<OOXMLStreamImpl> Pointer_t;
+    typedef tools::SvRef<OOXMLStreamImpl> Pointer_t;
 
     OOXMLStreamImpl
-    (OOXMLStreamImpl & rStream, StreamType_t nType);
+    (OOXMLStreamImpl const & rStream, StreamType_t nType);
     OOXMLStreamImpl
-    (css::uno::Reference<css::uno::XComponentContext> xContext,
-     css::uno::Reference<css::io::XInputStream> xStorageStream,
+    (css::uno::Reference<css::uno::XComponentContext> const & xContext,
+     css::uno::Reference<css::io::XInputStream> const & xStorageStream,
      StreamType_t nType, bool bRepairStorage);
-    OOXMLStreamImpl(OOXMLStreamImpl & rStream, const OUString & rId);
+    OOXMLStreamImpl(OOXMLStreamImpl const & rStream, const OUString & rId);
 
-    virtual ~OOXMLStreamImpl();
+    virtual ~OOXMLStreamImpl() override;
 
     virtual css::uno::Reference<css::xml::sax::XFastParser> getFastParser() override;
     virtual css::uno::Reference<css::io::XInputStream> getDocumentStream() override;
-    virtual css::uno::Reference<css::io::XInputStream> getStorageStream() override;
     virtual css::uno::Reference<css::uno::XComponentContext> getContext() override;
     virtual OUString getTargetForId(const OUString & rId) override;
     virtual const OUString & getTarget() const override;
@@ -80,7 +78,7 @@ public:
     virtual css::uno::Reference<css::xml::sax::XFastTokenHandler> getFastTokenHandler() override;
 
     // Giving access to mxDocumentStream. It is needed by resolving custom xml to get list of customxml's used in document.
-    css::uno::Reference<css::io::XStream> accessDocumentStream() { return mxDocumentStream;}
+    const css::uno::Reference<css::io::XStream>& accessDocumentStream() { return mxDocumentStream;}
 };
 }}
 #endif // INCLUDED_WRITERFILTER_SOURCE_OOXML_OOXMLSTREAMIMPL_HXX

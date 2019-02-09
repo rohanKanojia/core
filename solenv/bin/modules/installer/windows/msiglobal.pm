@@ -249,10 +249,6 @@ sub generate_cab_file_list
             # Writing the makecab system call
 
             my $oneline = "makecab.exe /V3 /F " . $ddffilename . " 2\>\&1 |" . "\n";
-            if ( $installer::globals::isunix )
-            {
-                $oneline = "$ENV{'WORKDIR_FOR_BUILD'}/LinkTarget/Executable/makecab.exe /V3 /F " . $ddffilename . " 2\>\&1 |" . "\n";
-            }
 
             push(@cabfilelist, $oneline);
 
@@ -329,10 +325,6 @@ sub generate_cab_file_list
             # Writing the makecab system call
 
             my $oneline = "makecab.exe /V3 /F " . $ddffilename . " 2\>\&1 |" . "\n";
-            if ( $installer::globals::isunix )
-            {
-                $oneline = "$ENV{'WORKDIR_FOR_BUILD'}/LinkTarget/Executable/makecab.exe /V3 /F " . $ddffilename . " 2\>\&1 |" . "\n";
-            }
 
             push(@cabfilelist, $oneline);
 
@@ -458,10 +450,6 @@ sub create_msi_database
     # -i : include the following tables ("*" includes all available tables)
 
     my $msidb = "msidb.exe";    # Has to be in the path
-    if ( $installer::globals::isunix )
-    {
-        $msidb = "$ENV{'WORKDIR_FOR_BUILD'}/LinkTarget/Executable/msidb.exe";
-    }
     my $extraslash = "";        # Has to be set for non-ActiveState perl
 
     installer::logger::include_header_into_logfile("Creating msi database");
@@ -613,10 +601,6 @@ sub write_summary_into_msi_database
     installer::logger::include_header_into_logfile("Writing summary information stream");
 
     my $msiinfo = "msiinfo.exe";    # Has to be in the path
-    if ( $installer::globals::isunix )
-    {
-        $msiinfo = "$ENV{'WORKDIR_FOR_BUILD'}/LinkTarget/Executable/msiinfo.exe";
-    }
 
     my $msiversion = get_msiversion_for_sis();
     my $codepage = 0; # PID_CODEPAGE summary property in a signed short, therefore it is impossible to set 65001 here.
@@ -669,11 +653,6 @@ sub create_transforms
     my $cscript = "cscript.exe";    # Has to be in the path
     my $msitran = "msitran.exe";    # Has to be in the path
     my $msidb = "msidb.exe";    # Has to be in the path
-    if ( $installer::globals::isunix )
-    {
-        $infoline = "ERROR: We cannot create transformations yet (we cannot use cscript.exe when cross-compiling)\n";
-        push( @installer::globals::logfileinfo, $infoline);
-    }
     my $wilangid = $ENV{WINDOWS_SDK_WILANGID};
 
     my $from = cwd();
@@ -793,7 +772,7 @@ sub create_transforms
 
         if ( $result == 0 )
         {
-            $infoline = "ERROR: Could not remove file $$referencedbname !\n";
+            $infoline = "ERROR while processing language $onelanguage: Could not remove file $referencedbname!\n";
             push( @installer::globals::logfileinfo, $infoline);
             installer::exiter::exit_program($infoline, "create_transforms");
         }
@@ -909,11 +888,6 @@ sub get_guid_list
     # "-c" for uppercase output
 
     my $systemcall = "$uuidgen -n$number |";
-    if ( $installer::globals::isunix )
-    {
-        # -n is not present in the non-windows uuidgen
-        $systemcall = "for I in `seq 1 $number` ; do uuidgen ; done |";
-    }
     open (UUIDGEN, "$systemcall" ) or die("uuidgen is missing.");
     my @uuidlist = <UUIDGEN>;
     close (UUIDGEN);
@@ -1035,6 +1009,7 @@ sub set_uuid_into_component_table
 # Adding final 64 properties into msi database, if required.
 # RegLocator : +16 in type column to search in 64 bit registry.
 # All conditions: "VersionNT" -> "VersionNT64" (several tables).
+# DrLocator: "SystemFolder" -> "System64Folder"
 # Already done: "+256" in Attributes column of table "Component".
 # Still following: Setting "x64" instead of "Intel" in Summary
 # Information Stream of msi database in "get_template_for_sis".
@@ -1125,6 +1100,34 @@ sub prepare_64bit_database
                 }
             }
         }
+
+        # 3. Replacing all occurrences of "SystemFolder" by "System64Folder" in "DrLocato.idt"
+
+        my $drlocatofilename = $basedir . $installer::globals::separator . "DrLocato.idt";
+        if ( -f $drlocatofilename )
+        {
+            my $saving_required = 0;
+            my $drlocatofile = installer::files::read_file($drlocatofilename);
+
+            for ( my $i = 3; $i <= $#{$drlocatofile}; $i++ )    # ignoring the first three lines
+            {
+                my $oneline = ${$drlocatofile}[$i];
+
+                if ( $oneline =~ /\bSystemFolder\b/ )
+                {
+                    ${$drlocatofile}[$i] =~ s/\bSystemFolder\b/System64Folder/g;
+                    $saving_required = 1;
+                }
+            }
+
+            if ( $saving_required )
+            {
+                # Saving the files
+                installer::files::save_file($drlocatofilename ,$drlocatofile);
+                $infoline = "Making idt file 64 bit conform: $drlocatofilename\n";
+                push(@installer::globals::logfileinfo, $infoline);
+            }
+        }
     }
 
 }
@@ -1149,10 +1152,6 @@ sub include_cabs_into_msi
     push( @installer::globals::logfileinfo, $infoline);
 
     my $msidb = "msidb.exe";    # Has to be in the path
-    if ( $installer::globals::isunix )
-    {
-        $msidb = "$ENV{'WORKDIR_FOR_BUILD'}/LinkTarget/Executable/msidb.exe";
-    }
     my $extraslash = "";        # Has to be set for non-ActiveState perl
 
     my $msifilename = $installer::globals::msidatabasename;

@@ -25,28 +25,26 @@ namespace connectivity
 {
     namespace mysql
     {
-        class OViews : public sdbcx::OCollection
+        class OViews final : public sdbcx::OCollection
         {
-            ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData >       m_xMetaData;
+            css::uno::Reference< css::sdbc::XDatabaseMetaData >       m_xMetaData;
             bool m_bInDrop;
-            //  OCatalog*                                           m_pParent;
-        protected:
             virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
-            virtual void impl_refresh() throw(::com::sun::star::uno::RuntimeException) override;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > createDescriptor() override;
-            virtual sdbcx::ObjectType appendObject( const OUString& _rForName, const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor ) override;
+            virtual void impl_refresh() override;
+            virtual css::uno::Reference< css::beans::XPropertySet > createDescriptor() override;
+            virtual sdbcx::ObjectType appendObject( const OUString& _rForName, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
             virtual void dropObject(sal_Int32 _nPos, const OUString& _sElementName) override;
 
-            void createView( const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor );
+            void createView( const css::uno::Reference< css::beans::XPropertySet >& descriptor );
         public:
-            OViews(const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData >& _rMetaData,::cppu::OWeakObject& _rParent, ::osl::Mutex& _rMutex,
-                const TStringVector &_rVector) : sdbcx::OCollection(_rParent, true, _rMutex, _rVector)
+            OViews(const css::uno::Reference< css::sdbc::XDatabaseMetaData >& _rMetaData,::cppu::OWeakObject& _rParent, ::osl::Mutex& _rMutex,
+                const ::std::vector< OUString> &_rVector) : sdbcx::OCollection(_rParent, true, _rMutex, _rVector)
                 ,m_xMetaData(_rMetaData)
                 ,m_bInDrop(false)
             {}
 
             // only the name is identical to ::cppu::OComponentHelper
-            virtual void SAL_CALL disposing() override;
+            virtual void disposing() override;
 
             void dropByNameImpl(const OUString& elementName);
         };

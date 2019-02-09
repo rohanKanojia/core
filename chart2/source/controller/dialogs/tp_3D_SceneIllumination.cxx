@@ -18,18 +18,18 @@
  */
 
 #include "tp_3D_SceneIllumination.hxx"
-#include "ResId.hxx"
-#include "Bitmaps.hrc"
-#include "CommonConverters.hxx"
+#include <bitmaps.hlst>
+#include <CommonConverters.hxx>
+#include <ControllerLockGuard.hxx>
 
-#include "svx/dialogs.hrc"
+#include <svx/colorbox.hxx>
+#include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
-#include <rtl/math.hxx>
 #include <svtools/colrdlg.hxx>
-#include <vcl/msgbox.hxx>
 #include <svx/svx3ditems.hxx>
 #include <svx/svddef.hxx>
 #include <vcl/builderfactory.hxx>
+#include <tools/diagnose_ex.h>
 
 namespace chart
 {
@@ -41,7 +41,7 @@ LightButton::LightButton( vcl::Window* pParent)
             : ImageButton( pParent)
             , m_bLightOn(false)
 {
-    SetModeImage( Image( SVX_RES(RID_SVXIMAGE_LIGHT_OFF)   ) );
+    SetModeImage(Image(StockImage::Yes, RID_SVXBMP_LAMP_OFF));
 }
 
 VCL_BUILDER_FACTORY(LightButton)
@@ -53,17 +53,17 @@ void LightButton::switchLightOn(bool bOn)
     m_bLightOn = bOn;
     if(m_bLightOn)
     {
-        SetModeImage( Image( SVX_RES(RID_SVXIMAGE_LIGHT_ON) ) );
+        SetModeImage(Image(StockImage::Yes, RID_SVXBMP_LAMP_ON));
     }
     else
     {
-        SetModeImage( Image( SVX_RES(RID_SVXIMAGE_LIGHT_OFF) ) );
+        SetModeImage(Image(StockImage::Yes, RID_SVXBMP_LAMP_OFF));
     }
 }
 
 struct LightSource
 {
-    long nDiffuseColor;
+    Color nDiffuseColor;
     css::drawing::Direction3D aDirection;
     bool bIsEnabled;
 
@@ -87,7 +87,7 @@ LightSourceInfo::LightSourceInfo()
     : pButton(nullptr)
     , aLightSource()
 {
-    aLightSource.nDiffuseColor = 0xffffff; // white
+    aLightSource.nDiffuseColor = Color(0xffffff); // white
     aLightSource.aDirection = drawing::Direction3D(1,1,1);
     aLightSource.bIsEnabled = false;
 }
@@ -96,34 +96,30 @@ void LightSourceInfo::initButtonFromSource()
 {
     if(!pButton)
         return;
-    pButton->SetModeImage( Image( SVX_RES(
-        aLightSource.bIsEnabled ? RID_SVXIMAGE_LIGHT_ON : RID_SVXIMAGE_LIGHT_OFF
-    ) ) );
+    pButton->SetModeImage(Image(StockImage::Yes,
+        aLightSource.bIsEnabled ? OUString(RID_SVXBMP_LAMP_ON) : OUString(RID_SVXBMP_LAMP_OFF)
+    ) );
 }
 
 namespace
 {
-    OUString lcl_makeColorName( Color rColor )
+    OUString lcl_makeColorName(const Color& rColor)
     {
-        OUString aStr = SVX_RESSTR(RID_SVXFLOAT3D_FIX_R) +
+        OUString aStr = SvxResId(RID_SVXFLOAT3D_FIX_R) +
                         OUString::number(rColor.GetRed()) +
                         " " +
-                        SVX_RESSTR(RID_SVXFLOAT3D_FIX_G) +
+                        SvxResId(RID_SVXFLOAT3D_FIX_G) +
                         OUString::number(rColor.GetGreen()) +
                         " " +
-                        SVX_RESSTR(RID_SVXFLOAT3D_FIX_B) +
+                        SvxResId(RID_SVXFLOAT3D_FIX_B) +
                         OUString::number(rColor.GetBlue());
         return aStr;
     }
-    void lcl_selectColor( ColorListBox& rListBox, const Color& rColor )
+
+    void lcl_selectColor(SvxColorListBox& rListBox, const Color& rColor)
     {
         rListBox.SetNoSelection();
-        rListBox.SelectEntry( rColor );
-        if( rListBox.GetSelectEntryCount() == 0 )
-        {
-            const sal_Int32 nPos = rListBox.InsertEntry( rColor, lcl_makeColorName( rColor ) );
-            rListBox.SelectEntryPos( nPos );
-        }
+        rListBox.SelectEntry(std::make_pair(rColor, lcl_makeColorName(rColor)));
     }
 
     ::chart::LightSource lcl_getLightSourceFromProperties(
@@ -141,11 +137,9 @@ namespace
                 xSceneProperties->getPropertyValue( "D3DSceneLightDirection" + aIndex ) >>= aResult.aDirection;
                 xSceneProperties->getPropertyValue( "D3DSceneLightOn" + aIndex ) >>= aResult.bIsEnabled;
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                (void)(ex); // no warning in non-debug builds
-                OSL_FAIL( OUStringToOString("Property Exception caught. Message: " +
-                                            ex.Message, RTL_TEXTENCODING_ASCII_US ).getStr());
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
         return aResult;
@@ -165,15 +159,13 @@ namespace
                 xSceneProperties->setPropertyValue( "D3DSceneLightColor" + aIndex,
                                                     uno::makeAny( rLightSource.nDiffuseColor ));
                 xSceneProperties->setPropertyValue( "D3DSceneLightDirection" + aIndex,
-                                                    uno::makeAny( rLightSource.aDirection ));
+                                                    uno::Any( rLightSource.aDirection ));
                 xSceneProperties->setPropertyValue( "D3DSceneLightOn" + aIndex,
-                                                    uno::makeAny( rLightSource.bIsEnabled ));
+                                                    uno::Any( rLightSource.bIsEnabled ));
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                (void)(ex); // no warning in non-debug builds
-                OSL_FAIL( OUStringToOString("Property Exception caught. Message: " +
-                                            ex.Message, RTL_TEXTENCODING_ASCII_US ).getStr());
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -186,11 +178,9 @@ namespace
         {
             xSceneProperties->getPropertyValue("D3DSceneAmbientColor") >>= nResult;
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            (void)(ex); // no warning in non-debug builds
-            OSL_FAIL( OUStringToOString("Property Exception caught. Message: " +
-                                        ex.Message, RTL_TEXTENCODING_ASCII_US ).getStr());
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
         return Color( nResult );
     }
@@ -202,25 +192,21 @@ namespace
         try
         {
             xSceneProperties->setPropertyValue("D3DSceneAmbientColor",
-                                               uno::makeAny( rColor.GetColor()));
+                                               uno::makeAny( rColor ));
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            (void)(ex); // no warning in non-debug builds
-            OSL_FAIL( OUStringToOString( "Property Exception caught. Message: " +
-                                        ex.Message, RTL_TEXTENCODING_ASCII_US ).getStr());
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 }
 
 ThreeD_SceneIllumination_TabPage::ThreeD_SceneIllumination_TabPage( vcl::Window* pWindow
                 , const uno::Reference< beans::XPropertySet > & xSceneProperties
-                , const uno::Reference< frame::XModel >& xChartModel
-                , const XColorListRef & pColorTable )
+                , const uno::Reference< frame::XModel >& xChartModel )
                 : TabPage ( pWindow
                           ,"tp_3D_SceneIllumination"
                           ,"modules/schart/ui/tp_3D_SceneIllumination.ui")
-                , m_pLightSourceInfoList(nullptr)
                 , m_xSceneProperties( xSceneProperties )
                 , m_aTimerTriggeredControllerLock( xChartModel )
                 , m_bInCommitToModel( false )
@@ -242,15 +228,7 @@ ThreeD_SceneIllumination_TabPage::ThreeD_SceneIllumination_TabPage( vcl::Window*
 
     get(m_pCtl_Preview, "CTL_LIGHT_PREVIEW");
 
-    if( pColorTable.is() )
-    {
-        m_pLB_AmbientLight->Fill( pColorTable );
-        m_pLB_LightSource->Fill( pColorTable );
-    }
-    m_pLB_AmbientLight->SetDropDownLineCount(10);
-    m_pLB_LightSource->SetDropDownLineCount(10);
-
-    m_pLightSourceInfoList = new LightSourceInfo[8];
+    m_pLightSourceInfoList.reset(new LightSourceInfo[8]);
     m_pLightSourceInfoList[0].pButton = m_pBtn_Light1;
     m_pLightSourceInfoList[1].pButton = m_pBtn_Light2;
     m_pLightSourceInfoList[2].pButton = m_pBtn_Light3;
@@ -290,8 +268,7 @@ ThreeD_SceneIllumination_TabPage::~ThreeD_SceneIllumination_TabPage()
 
 void ThreeD_SceneIllumination_TabPage::dispose()
 {
-    delete[] m_pLightSourceInfoList;
-    m_pLightSourceInfoList = nullptr;
+    m_pLightSourceInfoList.reset();
     m_pBtn_Light1.clear();
     m_pBtn_Light2.clear();
     m_pBtn_Light3.clear();
@@ -308,7 +285,7 @@ void ThreeD_SceneIllumination_TabPage::dispose()
     TabPage::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneIllumination_TabPage, fillControlsFromModel, void*, void)
+IMPL_LINK_NOARG(ThreeD_SceneIllumination_TabPage, fillControlsFromModel, void*, void)
 {
     if( m_bInCommitToModel )//don't read own changes
         return;
@@ -321,7 +298,7 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneIllumination_TabPage, fillControlsFromModel, v
 
     lcl_selectColor( *m_pLB_AmbientLight, lcl_getAmbientColor( m_xSceneProperties ));
 
-    this->updatePreview();
+    updatePreview();
 }
 
 void ThreeD_SceneIllumination_TabPage::applyLightSourceToModel( sal_uInt32 nLightNumber )
@@ -342,7 +319,7 @@ void ThreeD_SceneIllumination_TabPage::applyLightSourcesToModel()
     m_aTimerTriggeredControllerLock.startTimer();
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneIllumination_TabPage, PreviewChangeHdl, SvxLightCtl3D*, void)
+IMPL_LINK_NOARG(ThreeD_SceneIllumination_TabPage, PreviewChangeHdl, SvxLightCtl3D*, void)
 {
     m_aTimerTriggeredControllerLock.startTimer();
 
@@ -350,49 +327,49 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneIllumination_TabPage, PreviewChangeHdl, SvxLig
     const SfxItemSet a3DLightAttributes(m_pCtl_Preview->GetSvx3DLightControl().Get3DAttributes());
     LightSourceInfo* pInfo = &m_pLightSourceInfoList[0];
 
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_1)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_1)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_1)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_1).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_1).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_1).GetValue());
 
     pInfo = &m_pLightSourceInfoList[1];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_2)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_2)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_2)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_2).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_2).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_2).GetValue());
 
     pInfo = &m_pLightSourceInfoList[2];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_3)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_3)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_3)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_3).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_3).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_3).GetValue());
 
     pInfo = &m_pLightSourceInfoList[3];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_4)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_4)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_4)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_4).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_4).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_4).GetValue());
 
     pInfo = &m_pLightSourceInfoList[4];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_5)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_5)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_5)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_5).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_5).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_5).GetValue());
 
     pInfo = &m_pLightSourceInfoList[5];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_6)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_6)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_6)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_6).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_6).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_6).GetValue());
 
     pInfo = &m_pLightSourceInfoList[6];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_7)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_7)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_7)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_7).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_7).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_7).GetValue());
 
     pInfo = &m_pLightSourceInfoList[7];
-    pInfo->aLightSource.nDiffuseColor = static_cast<const SvxColorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_8)).GetValue().GetColor();
-    pInfo->aLightSource.bIsEnabled = static_cast<const SfxBoolItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_8)).GetValue();
-    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(static_cast<const SvxB3DVectorItem&>(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_8)).GetValue());
+    pInfo->aLightSource.nDiffuseColor = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTCOLOR_8).GetValue();
+    pInfo->aLightSource.bIsEnabled = a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTON_8).GetValue();
+    pInfo->aLightSource.aDirection = B3DVectorToDirection3D(a3DLightAttributes.Get(SDRATTR_3DSCENE_LIGHTDIRECTION_8).GetValue());
 
     applyLightSourcesToModel();
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneIllumination_TabPage, PreviewSelectHdl, SvxLightCtl3D*, void)
+IMPL_LINK_NOARG(ThreeD_SceneIllumination_TabPage, PreviewSelectHdl, SvxLightCtl3D*, void)
 {
     sal_uInt32 nLightNumber = m_pCtl_Preview->GetSvx3DLightControl().GetSelectedLight();
     if(nLightNumber<8)
@@ -405,14 +382,14 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneIllumination_TabPage, PreviewSelectHdl, SvxLig
     }
 }
 
-IMPL_LINK_TYPED( ThreeD_SceneIllumination_TabPage, ColorDialogHdl, Button*, pButton, void )
+IMPL_LINK( ThreeD_SceneIllumination_TabPage, ColorDialogHdl, Button*, pButton, void )
 {
     bool bIsAmbientLight = (pButton==m_pBtn_AmbientLight_Color);
-    ColorLB* pListBox = ( bIsAmbientLight ? m_pLB_AmbientLight : m_pLB_LightSource);
+    SvxColorListBox* pListBox = bIsAmbientLight ? m_pLB_AmbientLight.get() : m_pLB_LightSource.get();
 
-    SvColorDialog aColorDlg( this );
+    SvColorDialog aColorDlg;
     aColorDlg.SetColor( pListBox->GetSelectEntryColor() );
-    if( aColorDlg.Execute() == RET_OK )
+    if( aColorDlg.Execute(GetFrameWeld()) == RET_OK )
     {
         Color aColor( aColorDlg.GetColor());
         lcl_selectColor( *pListBox, aColor );
@@ -441,13 +418,13 @@ IMPL_LINK_TYPED( ThreeD_SceneIllumination_TabPage, ColorDialogHdl, Button*, pBut
     }
 }
 
-IMPL_LINK_TYPED( ThreeD_SceneIllumination_TabPage, SelectColorHdl, ListBox&, rBox, void )
+IMPL_LINK( ThreeD_SceneIllumination_TabPage, SelectColorHdl, SvxColorListBox&, rBox, void )
 {
-    ColorLB* pListBox = static_cast<ColorLB*>(&rBox);
+    SvxColorListBox* pListBox = &rBox;
     if(pListBox==m_pLB_AmbientLight)
     {
         m_bInCommitToModel = true;
-        lcl_setAmbientColor( m_xSceneProperties, pListBox->GetSelectEntryColor().GetColor());
+        lcl_setAmbientColor( m_xSceneProperties, pListBox->GetSelectEntryColor());
         m_bInCommitToModel = false;
     }
     else if(pListBox==m_pLB_LightSource)
@@ -464,14 +441,14 @@ IMPL_LINK_TYPED( ThreeD_SceneIllumination_TabPage, SelectColorHdl, ListBox&, rBo
         }
         if(pInfo)
         {
-            pInfo->aLightSource.nDiffuseColor = pListBox->GetSelectEntryColor().GetColor();
+            pInfo->aLightSource.nDiffuseColor = pListBox->GetSelectEntryColor();
             applyLightSourceToModel( nL );
         }
     }
-    this->updatePreview();
+    updatePreview();
 }
 
-IMPL_LINK_TYPED( ThreeD_SceneIllumination_TabPage, ClickLightSourceButtonHdl, Button*, pBtn, void )
+IMPL_LINK( ThreeD_SceneIllumination_TabPage, ClickLightSourceButtonHdl, Button*, pBtn, void )
 {
     LightButton* pButton = static_cast<LightButton*>(pBtn);
     if( !pButton )
@@ -514,7 +491,7 @@ IMPL_LINK_TYPED( ThreeD_SceneIllumination_TabPage, ClickLightSourceButtonHdl, Bu
     {
         lcl_selectColor( *m_pLB_LightSource, pInfo->aLightSource.nDiffuseColor );
     }
-    this->updatePreview();
+    updatePreview();
 }
 
 void ThreeD_SceneIllumination_TabPage::updatePreview()

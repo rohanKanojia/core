@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formel.hxx"
+#include <formel.hxx>
 
-#include <o3tl/make_unique.hxx>
+#include <osl/diagnose.h>
 
-_ScRangeListTabs::_ScRangeListTabs()
+ScRangeListTabs::ScRangeListTabs()
 {
 }
 
-_ScRangeListTabs::~_ScRangeListTabs()
+ScRangeListTabs::~ScRangeListTabs()
 {
 }
 
-void _ScRangeListTabs::Append( const ScAddress& aSRD, SCTAB nTab )
+void ScRangeListTabs::Append( const ScAddress& aSRD, SCTAB nTab )
 {
     ScAddress a = aSRD;
 
@@ -55,7 +55,7 @@ void _ScRangeListTabs::Append( const ScAddress& aSRD, SCTAB nTab )
     {
         // No entry for this table yet.  Insert a new one.
         std::pair<TabRangeType::iterator, bool> r =
-            m_TabRanges.insert(std::make_pair(nTab, o3tl::make_unique<RangeListType>()));
+            m_TabRanges.insert(std::make_pair(nTab, std::make_unique<RangeListType>()));
 
         if (!r.second)
             // Insertion failed.
@@ -66,7 +66,7 @@ void _ScRangeListTabs::Append( const ScAddress& aSRD, SCTAB nTab )
     itr->second->push_back(ScRange(a.Col(),a.Row(),a.Tab()));
 }
 
-void _ScRangeListTabs::Append( const ScRange& aCRD, SCTAB nTab )
+void ScRangeListTabs::Append( const ScRange& aCRD, SCTAB nTab )
 {
     ScRange a = aCRD;
 
@@ -113,7 +113,7 @@ void _ScRangeListTabs::Append( const ScRange& aCRD, SCTAB nTab )
     {
         // No entry for this table yet.  Insert a new one.
         std::pair<TabRangeType::iterator, bool> r =
-            m_TabRanges.insert(std::make_pair(nTab, o3tl::make_unique<RangeListType>()));
+            m_TabRanges.insert(std::make_pair(nTab, std::make_unique<RangeListType>()));
 
         if (!r.second)
             // Insertion failed.
@@ -124,9 +124,9 @@ void _ScRangeListTabs::Append( const ScRange& aCRD, SCTAB nTab )
     itr->second->push_back(a);
 }
 
-const ScRange* _ScRangeListTabs::First( SCTAB n )
+const ScRange* ScRangeListTabs::First( SCTAB n )
 {
-    OSL_ENSURE( ValidTab(n), "-_ScRangeListTabs::First(): Good bye!" );
+    OSL_ENSURE( ValidTab(n), "-ScRangeListTabs::First(): Good bye!" );
 
     TabRangeType::iterator itr = m_TabRanges.find(n);
     if (itr == m_TabRanges.end())
@@ -139,7 +139,7 @@ const ScRange* _ScRangeListTabs::First( SCTAB n )
     return rList.empty() ? nullptr : &(*maItrCur);
 }
 
-const ScRange* _ScRangeListTabs::Next ()
+const ScRange* ScRangeListTabs::Next ()
 {
     ++maItrCur;
     if (maItrCur == maItrCurEnd)
@@ -150,27 +150,24 @@ const ScRange* _ScRangeListTabs::Next ()
 
 ConverterBase::ConverterBase( svl::SharedStringPool& rSPool, sal_uInt16 nNewBuffer ) :
     aPool(rSPool),
-    aEingPos( 0, 0, 0 ),
-    eStatus( ConvOK )
+    aEingPos( 0, 0, 0 )
 {
     OSL_ENSURE( nNewBuffer > 0, "ConverterBase::ConverterBase - nNewBuffer == 0!" );
-    pBuffer = new sal_Char[ nNewBuffer ];
+    pBuffer.reset( new sal_Char[ nNewBuffer ] );
 }
 
 ConverterBase::~ConverterBase()
 {
-    delete[] pBuffer;
 }
 
 void ConverterBase::Reset()
 {
-    eStatus = ConvOK;
     aPool.Reset();
     aStack.Reset();
 }
 
-ExcelConverterBase::ExcelConverterBase( svl::SharedStringPool& rSPool, sal_uInt16 nNewBuffer ) :
-    ConverterBase(rSPool, nNewBuffer)
+ExcelConverterBase::ExcelConverterBase( svl::SharedStringPool& rSPool ) :
+    ConverterBase(rSPool, 512)
 {
 }
 
@@ -190,8 +187,8 @@ void ExcelConverterBase::Reset()
     aEingPos.Set( 0, 0, 0 );
 }
 
-LotusConverterBase::LotusConverterBase( SvStream &rStr, svl::SharedStringPool& rSPool, sal_uInt16 nNewBuffers ) :
-    ConverterBase(rSPool, nNewBuffers),
+LotusConverterBase::LotusConverterBase( SvStream &rStr, svl::SharedStringPool& rSPool  ) :
+    ConverterBase(rSPool, 128),
     aIn( rStr ),
     nBytesLeft( 0 )
 {

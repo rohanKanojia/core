@@ -34,18 +34,16 @@ namespace utl
 
     //= NodeValueAccessor
 
-    enum LocationType
+    enum class LocationType
     {
-        ltSimplyObjectInstance,
-        ltAnyInstance,
-
-        ltUnbound
+        SimplyObjectInstance,
+        Unbound
     };
 
     struct NodeValueAccessor
     {
     private:
-        OUString     sRelativePath;      // the relative path of the node
+        OUString const            sRelativePath;      // the relative path of the node
         LocationType        eLocationType;      // the type of location where the value is stored
         void*               pLocation;          // the pointer to the location
         Type                aDataType;          // the type object pointed to by pLocation
@@ -55,7 +53,7 @@ namespace utl
 
         void bind( void* _pLocation, const Type& _rType );
 
-        bool                    isBound( ) const        { return ( ltUnbound != eLocationType ) && ( nullptr != pLocation ); }
+        bool                    isBound( ) const        { return ( LocationType::Unbound != eLocationType ) && ( nullptr != pLocation ); }
         const OUString&  getPath( ) const        { return sRelativePath; }
         LocationType            getLocType( ) const     { return eLocationType; }
         void*                   getLocation( ) const    { return pLocation; }
@@ -66,7 +64,7 @@ namespace utl
 
     NodeValueAccessor::NodeValueAccessor( const OUString& _rNodePath )
         :sRelativePath( _rNodePath )
-        ,eLocationType( ltUnbound )
+        ,eLocationType( LocationType::Unbound )
         ,pLocation( nullptr )
     {
     }
@@ -82,14 +80,12 @@ namespace utl
     {
         SAL_WARN_IF(isBound(), "unotools.config", "NodeValueAccessor::bind: already bound!");
 
-        eLocationType = ltSimplyObjectInstance;
+        eLocationType = LocationType::SimplyObjectInstance;
         pLocation = _pLocation;
         aDataType = _rType;
     }
 
-    #ifndef UNX
     static
-    #endif
     void lcl_copyData( const NodeValueAccessor& _rAccessor, const Any& _rData, ::osl::Mutex& _rMutex )
     {
         ::osl::MutexGuard aGuard( _rMutex );
@@ -97,7 +93,7 @@ namespace utl
         SAL_WARN_IF(!_rAccessor.isBound(), "unotools.config", "::utl::lcl_copyData: invalid accessor!");
         switch ( _rAccessor.getLocType() )
         {
-            case ltSimplyObjectInstance:
+            case LocationType::SimplyObjectInstance:
             {
                 if ( _rData.hasValue() )
                 {
@@ -115,18 +111,12 @@ namespace utl
                 }
             }
             break;
-            case ltAnyInstance:
-                // a simple assignment of an Any ...
-                *static_cast< Any* >( _rAccessor.getLocation() ) = _rData;
-                break;
             default:
                 break;
         }
     }
 
-    #ifndef UNX
     static
-    #endif
     void lcl_copyData( Any& _rData, const NodeValueAccessor& _rAccessor, ::osl::Mutex& _rMutex )
     {
         ::osl::MutexGuard aGuard( _rMutex );
@@ -134,15 +124,11 @@ namespace utl
         SAL_WARN_IF(!_rAccessor.isBound(), "unotools.config", "::utl::lcl_copyData: invalid accessor!" );
         switch ( _rAccessor.getLocType() )
         {
-            case ltSimplyObjectInstance:
+            case LocationType::SimplyObjectInstance:
                 // a simple setValue ....
                 _rData.setValue( _rAccessor.getLocation(), _rAccessor.getDataType() );
                 break;
 
-            case ltAnyInstance:
-                // a simple assignment of an Any ...
-                _rData = *static_cast< Any* >( _rAccessor.getLocation() );
-                break;
             default:
                 break;
         }
@@ -151,7 +137,7 @@ namespace utl
     //= functors on NodeValueAccessor instances
 
     /// base class for functors synchronizing between exchange locations and config sub nodes
-    struct SubNodeAccess : public ::std::unary_function< NodeValueAccessor, void >
+    struct SubNodeAccess
     {
     protected:
         const OConfigurationNode&   m_rRootNode;
@@ -170,7 +156,7 @@ namespace utl
     public:
         UpdateFromConfig( const OConfigurationNode& _rRootNode, ::osl::Mutex& _rMutex ) : SubNodeAccess( _rRootNode, _rMutex ) { }
 
-        void operator() ( NodeValueAccessor& _rAccessor )
+        void operator() ( NodeValueAccessor const & _rAccessor )
         {
             ::utl::lcl_copyData( _rAccessor, m_rRootNode.getNodeValue( _rAccessor.getPath( ) ), m_rMutex );
         }
@@ -181,15 +167,13 @@ namespace utl
     public:
         UpdateToConfig( const OConfigurationNode& _rRootNode, ::osl::Mutex& _rMutex ) : SubNodeAccess( _rRootNode, _rMutex ) { }
 
-        void operator() ( NodeValueAccessor& _rAccessor )
+        void operator() ( NodeValueAccessor const & _rAccessor )
         {
             Any aNewValue;
             lcl_copyData( aNewValue, _rAccessor, m_rMutex );
             m_rRootNode.setNodeValue( _rAccessor.getPath( ), aNewValue );
         }
     };
-
-    typedef std::vector<NodeValueAccessor> NodeValueAccessors;
 
     //= OConfigurationValueContainerImpl
 
@@ -199,7 +183,7 @@ namespace utl
         ::osl::Mutex&                           rMutex;         // the mutex for accessing the data containers
         OConfigurationTreeRoot                  aConfigRoot;    // the configuration node we're accessing
 
-        NodeValueAccessors                      aAccessors;     // the accessors to the node values
+        std::vector<NodeValueAccessor>          aAccessors;     // the accessors to the node values
 
         OConfigurationValueContainerImpl( const Reference< XComponentContext >& _rxORB, ::osl::Mutex& _rMutex )
             :xORB( _rxORB )
@@ -220,7 +204,6 @@ namespace utl
 
     OConfigurationValueContainer::~OConfigurationValueContainer()
     {
-        delete m_pImpl;
     }
 
     void OConfigurationValueContainer::implConstruct( const OUString& _rConfigLocation,
@@ -272,21 +255,14 @@ namespace utl
         );
     }
 
-    void OConfigurationValueContainer::write()
+    void OConfigurationValueContainer::commit()
     {
-        // collect the current values in the exchange locations
+        // write the current values in the exchange locations
         std::for_each(
             m_pImpl->aAccessors.begin(),
             m_pImpl->aAccessors.end(),
             UpdateToConfig( m_pImpl->aConfigRoot, m_pImpl->rMutex )
         );
-    }
-
-    void OConfigurationValueContainer::commit( bool _bWrite )
-    {
-        // write the current values in the exchange locations (if requested)
-        if ( _bWrite )
-            write();
 
         // commit the changes done
         m_pImpl->aConfigRoot.commit( );

@@ -21,23 +21,20 @@
 
 #include <sfx2/tbxctrl.hxx>
 #include <vcl/field.hxx>
-#include <vcl/dialog.hxx>
 
-#include <vcl/button.hxx>
-
-
-class SvxFmAbsRecWin : public NumericField
+class SvxFmAbsRecWin final : public NumericField
 {
-    SfxToolBoxControl*  m_pController;
-        // for invalidating our content whe losing the focus
 public:
     SvxFmAbsRecWin( vcl::Window* _pParent, SfxToolBoxControl* _pController );
 
     virtual void KeyInput( const KeyEvent& rKeyEvt ) override;
     virtual void LoseFocus() override;
 
-protected:
+private:
     void FirePosition( bool _bForce );
+
+    SfxToolBoxControl*  m_pController;
+        // for invalidating our content when losing the focus
 };
 
 
@@ -48,7 +45,7 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SvxFmTbxCtlAbsRec( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxFmTbxCtlAbsRec();
+    virtual ~SvxFmTbxCtlAbsRec() override;
 
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window* pParent ) override;
 
@@ -63,7 +60,7 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SvxFmTbxCtlRecText( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxFmTbxCtlRecText();
+    virtual ~SvxFmTbxCtlRecText() override;
 
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window* pParent ) override;
 };
@@ -75,7 +72,7 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SvxFmTbxCtlRecFromText( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxFmTbxCtlRecFromText();
+    virtual ~SvxFmTbxCtlRecFromText() override;
 
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window* pParent ) override;
 };
@@ -89,7 +86,7 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SvxFmTbxCtlRecTotal( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxFmTbxCtlRecTotal();
+    virtual ~SvxFmTbxCtlRecTotal() override;
 
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window* pParent ) override;
     virtual void    StateChanged( sal_uInt16 nSID, SfxItemState eState,

@@ -21,7 +21,6 @@
 #define INCLUDED_FRAMEWORK_INC_UIELEMENT_COMBOBOXTOOLBARCONTROLLER_HXX
 
 #include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/ControlCommand.hpp>
 
 #include <uielement/complextoolbarcontroller.hxx>
@@ -43,17 +42,17 @@ class ComboboxToolbarController : public ComplexToolbarController
                                    sal_uInt16       nID,
                                    sal_Int32    nWidth,
                                    const OUString& aCommand );
-        virtual ~ComboboxToolbarController();
+        virtual ~ComboboxToolbarController() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL dispose() override;
 
         // called from ComboBoxControl
         void Select();
         void Modify();
         void GetFocus();
         void LoseFocus();
-        bool PreNotify( NotifyEvent& rNEvt );
+        bool PreNotify( NotifyEvent const & rNEvt );
 
     protected:
         virtual void executeControlCommand( const css::frame::ControlCommand& rControlCommand ) override;

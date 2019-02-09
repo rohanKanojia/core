@@ -29,10 +29,12 @@
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/stdtext.hxx>
 #include <com/sun/star/util/AliasProgrammaticPair.hpp>
-#include "abpresid.hrc"
-#include "componentmodule.hxx"
+#include <strings.hrc>
+#include <componentmodule.hxx>
 #include <unotools/confignode.hxx>
-#include "sal/macros.h"
+#include <sal/macros.h>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 
 namespace abp
@@ -73,7 +75,7 @@ namespace abp
 
                 // create an instance of the dialog service
                 Reference< XWindow > xDialogParent = VCLUnoHelper::GetInterface( _pParent );
-                OUString sTitle(ModuleRes(RID_STR_FIELDDIALOGTITLE).toString());
+                OUString sTitle(compmodule::ModuleRes(RID_STR_FIELDDIALOGTITLE));
                 Reference< XExecutableDialog > xDialog = AddressBookSourceDialog::createWithDataSource(_rxORB,
                                                            // the parent window
                                                            xDialogParent,
@@ -168,7 +170,7 @@ namespace abp
                 DBG_ASSERT( 0 == SAL_N_ELEMENTS( pMappingProgrammatics ) % 2,
                     "fieldmapping::defaultMapping: invalid programmatic map!" );
                 // number of pairs
-                sal_Int32 nIntersectedProgrammatics = SAL_N_ELEMENTS( pMappingProgrammatics ) / 2;
+                sal_Int32 const nIntersectedProgrammatics = SAL_N_ELEMENTS( pMappingProgrammatics ) / 2;
 
                 const sal_Char** pProgrammatic = pMappingProgrammatics;
                 OUString sAddressProgrammatic;
@@ -256,18 +258,15 @@ namespace abp
 
             // now everything remaining in aFieldAssignment marks a mapping entry which was not present
             // in the config before
-            for (   MapString2String::const_iterator aNewMapping = aFieldAssignment.begin();
-                    aNewMapping != aFieldAssignment.end();
-                    ++aNewMapping
-                )
+            for (auto const& elem : aFieldAssignment)
             {
-                DBG_ASSERT( !aFields.hasByName( aNewMapping->first ),
+                DBG_ASSERT( !aFields.hasByName( elem.first ),
                     "fieldmapping::writeTemplateAddressFieldMapping: inconsistence!" );
                     // in case the config node for the fields already has the node named <aNewMapping->first>,
                     // the entry should have been removed from aNewMapping (in the above loop)
-                OConfigurationNode aNewField =  aFields.createNode( aNewMapping->first );
-                aNewField.setNodeValue( sProgrammaticNodeName, makeAny( aNewMapping->first ) );
-                aNewField.setNodeValue( sAssignedNodeName, makeAny( aNewMapping->second ) );
+                OConfigurationNode aNewField =  aFields.createNode( elem.first );
+                aNewField.setNodeValue( sProgrammaticNodeName, makeAny( elem.first ) );
+                aNewField.setNodeValue( sAssignedNodeName, makeAny( elem.second ) );
             }
 
             // commit the changes done
@@ -293,7 +292,7 @@ namespace abp
 
             aAddressBookSettings.setNodeValue( OUString( "DataSourceName" ), makeAny( _rDataSourceName ) );
             aAddressBookSettings.setNodeValue( OUString( "Command" ), makeAny( _rTableName ) );
-            aAddressBookSettings.setNodeValue( OUString( "CommandType" ), makeAny( (sal_Int32)CommandType::TABLE ) );
+            aAddressBookSettings.setNodeValue( OUString( "CommandType" ), makeAny( sal_Int16(CommandType::TABLE) ) );
 
             // commit the changes done
             aAddressBookSettings.commit();

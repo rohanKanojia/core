@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbase/DCatalog.hxx"
-#include "dbase/DConnection.hxx"
-#include "dbase/DTables.hxx"
+#include <dbase/DCatalog.hxx>
+#include <dbase/DConnection.hxx>
+#include <dbase/DTables.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 
@@ -38,7 +38,7 @@ ODbaseCatalog::ODbaseCatalog(ODbaseConnection* _pCon) : file::OFileCatalog(_pCon
 
 void ODbaseCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes;
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),
         "%", "%", aTypes);
@@ -52,7 +52,7 @@ void ODbaseCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new ODbaseTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new ODbaseTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 
 

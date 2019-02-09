@@ -7,8 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include "clang/AST/Attr.h"
+
+#include "check.hxx"
 #include "plugin.hxx"
-#include "compat.hxx"
 
 /*
   Look for member functions that can be static
@@ -16,12 +18,12 @@
 namespace {
 
 class StaticMethods:
-    public RecursiveASTVisitor<StaticMethods>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<StaticMethods>
 {
 private:
     bool bVisitedThis;
 public:
-    explicit StaticMethods(InstantiationData const & data): Plugin(data), bVisitedThis(false) {}
+    explicit StaticMethods(loplugin::InstantiationData const & data): FilteringPlugin(data), bVisitedThis(false) {}
 
     void run() override
     { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
@@ -33,17 +35,11 @@ public:
     bool VisitUnresolvedMemberExpr(const UnresolvedMemberExpr *) { bVisitedThis = true; return true; }
     bool VisitCXXDependentScopeMemberExpr(const CXXDependentScopeMemberExpr *) { bVisitedThis = true; return true; }
 private:
-    std::string getFilename(SourceLocation loc);
+    StringRef getFilename(SourceLocation loc);
 };
 
-bool BaseCheckNotTestFixtureSubclass(
-    const CXXRecordDecl *BaseDefinition
-#if CLANG_VERSION < 30800
-    , void *
-#endif
-    )
-{
-    if (BaseDefinition->getQualifiedNameAsString().compare("CppUnit::TestFixture") == 0) {
+bool BaseCheckNotTestFixtureSubclass(const CXXRecordDecl *BaseDefinition) {
+    if (loplugin::TypeCheck(BaseDefinition).Class("TestFixture").Namespace("CppUnit").GlobalNamespace()) {
         return false;
     }
     return true;
@@ -55,16 +51,16 @@ bool isDerivedFromTestFixture(const CXXRecordDecl *decl) {
     if (// not sure what hasAnyDependentBases() does,
         // but it avoids classes we don't want, e.g. WeakAggComponentImplHelper1
         !decl->hasAnyDependentBases() &&
-        !compat::forallBases(*decl, BaseCheckNotTestFixtureSubclass, nullptr, true)) {
+        !decl->forallBases(BaseCheckNotTestFixtureSubclass, true)) {
         return true;
     }
     return false;
 }
 
-std::string StaticMethods::getFilename(SourceLocation loc)
+StringRef StaticMethods::getFilename(SourceLocation loc)
 {
     SourceLocation spellingLocation = compiler.getSourceManager().getSpellingLoc(loc);
-    return compiler.getSourceManager().getFilename(spellingLocation);
+    return getFileNameOfSpellingLoc(spellingLocation);
 }
 
 bool startsWith(const std::string& rStr, const char* pSubStr) {
@@ -75,7 +71,7 @@ bool StaticMethods::TraverseCXXMethodDecl(const CXXMethodDecl * pCXXMethodDecl) 
     if (ignoreLocation(pCXXMethodDecl)) {
         return true;
     }
-    if (!pCXXMethodDecl->isInstance() || pCXXMethodDecl->isVirtual() || !pCXXMethodDecl->hasBody()) {
+    if (!pCXXMethodDecl->isInstance() || pCXXMethodDecl->isVirtual() || !pCXXMethodDecl->doesThisDeclarationHaveABody() || pCXXMethodDecl->isLateTemplateParsed()) {
         return true;
     }
     if (pCXXMethodDecl->getOverloadedOperator() != OverloadedOperatorKind::OO_None || pCXXMethodDecl->hasAttr<OverrideAttr>()) {
@@ -84,108 +80,139 @@ bool StaticMethods::TraverseCXXMethodDecl(const CXXMethodDecl * pCXXMethodDecl) 
     if (isa<CXXConstructorDecl>(pCXXMethodDecl) || isa<CXXDestructorDecl>(pCXXMethodDecl) || isa<CXXConversionDecl>(pCXXMethodDecl)) {
         return true;
     }
-    if (isInUnoIncludeFile(compiler.getSourceManager().getSpellingLoc(pCXXMethodDecl->getCanonicalDecl()->getLocStart()))) {
+    if (isInUnoIncludeFile(pCXXMethodDecl)) {
         return true;
     }
-    if ( pCXXMethodDecl != pCXXMethodDecl->getCanonicalDecl() ) {
+    if (pCXXMethodDecl->getTemplateSpecializationKind() == TSK_ExplicitSpecialization)
         return true;
-    }
 
     // the CppUnit stuff uses macros and methods that can't be changed
     if (isDerivedFromTestFixture(pCXXMethodDecl->getParent())) {
         return true;
     }
     // don't mess with the backwards compatibility stuff
-    if (getFilename(pCXXMethodDecl->getLocStart()) == SRCDIR "/cppuhelper/source/compat.cxx") {
+    if (loplugin::isSamePathname(getFilename(compat::getBeginLoc(pCXXMethodDecl)), SRCDIR "/cppuhelper/source/compat.cxx")) {
         return true;
     }
     // the DDE has a dummy implementation on Linux and a real one on Windows
-    std::string aFilename = getFilename(pCXXMethodDecl->getCanonicalDecl()->getLocStart());
-    if (aFilename == SRCDIR "/include/svl/svdde.hxx") {
+    auto aFilename = getFilename(compat::getBeginLoc(pCXXMethodDecl->getCanonicalDecl()));
+    if (loplugin::isSamePathname(aFilename, SRCDIR "/include/svl/svdde.hxx")) {
         return true;
     }
-    std::string aParentName = pCXXMethodDecl->getParent()->getQualifiedNameAsString();
+    auto cdc = loplugin::DeclCheck(pCXXMethodDecl->getParent());
     // special case having something to do with static initialisation
     // sal/osl/all/utility.cxx
-    if (aParentName == "osl::OGlobalTimer") {
+    if (cdc.Class("OGlobalTimer").Namespace("osl").GlobalNamespace()) {
         return true;
     }
     // leave the TopLeft() method alone for consistency with the other "corner" methods
-    if (aParentName == "BitmapInfoAccess") {
-        return true;
-    }
-    // can't change it because in debug mode it can't be static
-    // sal/cpprt/operators_new_delete.cxx
-    if (aParentName == "(anonymous namespace)::AllocatorTraits") {
+    if (cdc.Class("BitmapInfoAccess").GlobalNamespace()) {
         return true;
     }
     // in this case, the code is taking the address of the member function
     // shell/source/unix/sysshell/recently_used_file_handler.cxx
-    if (aParentName == "(anonymous namespace)::recently_used_item") {
-        return true;
-    }
-    // the unotools and svl config code stuff is doing weird stuff with a reference-counted statically allocated pImpl class
-    if (startsWith(aFilename, SRCDIR "/include/unotools")) {
-        return true;
-    }
-    if (startsWith(aFilename, SRCDIR "/include/svl")) {
-        return true;
-    }
-    if (startsWith(aFilename, SRCDIR "/include/framework") || startsWith(aFilename, SRCDIR "/framework")) {
-        return true;
-    }
-    // there is some odd stuff happening here I don't fully understand, leave it for now
-    if (startsWith(aFilename, SRCDIR "/include/canvas") || startsWith(aFilename, SRCDIR "/canvas")) {
-        return true;
-    }
-    // classes that have static data and some kind of weird reference-counting trick in its constructor
-    if (aParentName == "LinguOptions" || aParentName == "svtools::EditableExtendedColorConfig"
-        || aParentName == "svtools::ExtendedColorConfig" || aParentName == "SvtMiscOptions"
-        || aParentName == "SvtAccessibilityOptions" || aParentName == "svtools::ColorConfig"
-        || aParentName == "SvtOptionsDrawinglayer" || aParentName == "SvtMenuOptions"
-        || aParentName == "SvtToolPanelOptions" || aParentName == "SvtSlideSorterBarOptions"
-        || aParentName == "connectivity::SharedResources"
-        || aParentName == "svxform::OParseContextClient"
-        || aParentName == "frm::OLimitedFormats" )
+    if (cdc.Struct("recently_used_item").AnonymousNamespace().GlobalNamespace())
     {
         return true;
     }
-    std::string fqn = aParentName + "::" + pCXXMethodDecl->getNameAsString();
+    // the unotools and svl config code stuff is doing weird stuff with a reference-counted statically allocated pImpl class
+    if (loplugin::hasPathnamePrefix(aFilename, SRCDIR "/include/unotools/")) {
+        return true;
+    }
+    if (loplugin::hasPathnamePrefix(aFilename, SRCDIR "/include/svl/")) {
+        return true;
+    }
+    if (loplugin::hasPathnamePrefix(aFilename, SRCDIR "/include/framework/") || loplugin::hasPathnamePrefix(aFilename, SRCDIR "/framework/")) {
+        return true;
+    }
+    // there is some odd stuff happening here I don't fully understand, leave it for now
+    if (loplugin::hasPathnamePrefix(aFilename, SRCDIR "/include/canvas/") || loplugin::hasPathnamePrefix(aFilename, SRCDIR "/canvas/")) {
+        return true;
+    }
+    // classes that have static data and some kind of weird reference-counting trick in its constructor
+    if (cdc.Class("LinguOptions").GlobalNamespace()
+        || (cdc.Class("EditableExtendedColorConfig").Namespace("svtools")
+            .GlobalNamespace())
+        || (cdc.Class("ExtendedColorConfig").Namespace("svtools")
+            .GlobalNamespace())
+        || cdc.Class("SvtMiscOptions").GlobalNamespace()
+        || cdc.Class("SvtAccessibilityOptions").GlobalNamespace()
+        || cdc.Class("ColorConfig").Namespace("svtools").GlobalNamespace()
+        || cdc.Class("SvtOptionsDrawinglayer").GlobalNamespace()
+        || cdc.Class("SvtMenuOptions").GlobalNamespace()
+        || cdc.Class("SvtToolPanelOptions").GlobalNamespace()
+        || cdc.Class("SvtSlideSorterBarOptions").GlobalNamespace()
+        || (cdc.Class("SharedResources").Namespace("connectivity")
+            .GlobalNamespace())
+        || (cdc.Class("OParseContextClient").Namespace("svxform")
+            .GlobalNamespace())
+        || cdc.Class("OLimitedFormats").Namespace("frm").GlobalNamespace())
+    {
+        return true;
+    }
+    auto fdc = loplugin::DeclCheck(pCXXMethodDecl);
     // only empty on Linux, not on windows
-    if (fqn == "OleEmbeddedObject::GetVisualRepresentationInNativeFormat_Impl"
-        || fqn == "OleEmbeddedObject::GetRidOfComponent"
-        || fqn == "connectivity::mozab::ProfileAccess::isProfileLocked"
-        || startsWith(fqn, "SbxDecimal::")
-        || fqn == "SbiDllMgr::Call" || fqn == "SbiDllMgr::FreeDll"
-        || fqn == "SfxApplication::InitializeDde" || fqn == "SfxApplication::RemoveDdeTopic"
-        || fqn == "ScannerManager::ReleaseData") {
+    if ((fdc.Function("GetVisualRepresentationInNativeFormat_Impl")
+         .Class("OleEmbeddedObject").GlobalNamespace())
+        || (fdc.Function("GetRidOfComponent").Class("OleEmbeddedObject")
+            .GlobalNamespace())
+        || (fdc.Function("isProfileLocked").Class("ProfileAccess")
+            .Namespace("mozab").Namespace("connectivity").GlobalNamespace())
+        || cdc.Class("SbxDecimal").GlobalNamespace()
+        || fdc.Function("Call").Class("SbiDllMgr").GlobalNamespace()
+        || fdc.Function("FreeDll").Class("SbiDllMgr").GlobalNamespace()
+        || (fdc.Function("InitializeDde").Class("SfxApplication")
+            .GlobalNamespace())
+        || (fdc.Function("RemoveDdeTopic").Class("SfxApplication")
+            .GlobalNamespace())
+        || (fdc.Function("ReleaseData").Class("ScannerManager")
+            .GlobalNamespace()))
+    {
         return true;
     }
     // debugging stuff
-    if (fqn == "chart::InternalData::dump") {
+    if (fdc.Function("dump").Class("InternalData").Namespace("chart")
+        .GlobalNamespace())
+    {
         return true;
     }
     // used in a function-pointer-table
-    if (startsWith(fqn, "SbiRuntime::Step") || startsWith(fqn, "oox::xls::OoxFormulaParserImpl::")
-        || startsWith(fqn, "SwTableFormula::")
-        || startsWith(fqn, "oox::xls::BiffFormulaParserImpl::")
-        || fqn == "SwWW8ImplReader::Read_F_Shape"
-        || fqn == "SwWW8ImplReader::Read_Majority") {
+    if ((cdc.Class("SbiRuntime").GlobalNamespace()
+         && startsWith(pCXXMethodDecl->getNameAsString(), "Step"))
+        || (cdc.Class("OoxFormulaParserImpl").Namespace("xls").Namespace("oox")
+            .GlobalNamespace())
+        || cdc.Class("SwTableFormula").GlobalNamespace()
+        || (cdc.Class("BiffFormulaParserImpl").Namespace("xls").Namespace("oox")
+            .GlobalNamespace())
+        || (fdc.Function("Read_F_Shape").Class("SwWW8ImplReader")
+            .GlobalNamespace())
+        || (fdc.Function("Read_Majority").Class("SwWW8ImplReader")
+            .GlobalNamespace())
+        || fdc.Function("Ignore").Class("SwWrtShell").GlobalNamespace())
+    {
         return true;
     }
     // have no idea why this can't be static, but 'make check' fails with it so...
-    if (fqn == "oox::drawingml::Shape::resolveRelationshipsOfTypeFromOfficeDoc") {
+    if (fdc.Function("resolveRelationshipsOfTypeFromOfficeDoc").Class("Shape")
+        .Namespace("drawingml").Namespace("oox").GlobalNamespace())
+    {
         return true;
     }
     // template magic
-    if (fqn == "ColumnBatch::getValue" || startsWith(fqn, "TitleImpl::")
-        || fqn == "ooo::vba::DefaultReturnHelper::getDefaultPropertyName") {
+    if (fdc.Function("getValue").Class("ColumnBatch").GlobalNamespace()
+        || cdc.Class("TitleImpl").GlobalNamespace()
+        || (fdc.Function("getDefaultPropertyName").Class("DefaultReturnHelper")
+            .Namespace("vba").Namespace("ooo").GlobalNamespace()))
+    {
         return true;
     }
     // depends on config options
-    if (fqn == "psp::PrintFontManager::autoInstallFontLangSupport"
-        || fqn == "GtkSalFrame::AllocateFrame"
-        || fqn == "GtkSalFrame::TriggerPaintEvent") {
+    if ((fdc.Function("autoInstallFontLangSupport").Class("PrintFontManager")
+         .Namespace("psp").GlobalNamespace())
+        || fdc.Function("AllocateFrame").Class("GtkSalFrame").GlobalNamespace()
+        || (fdc.Function("TriggerPaintEvent").Class("GtkSalFrame")
+            .GlobalNamespace()))
+    {
         return true;
     }
 
@@ -197,7 +224,7 @@ bool StaticMethods::TraverseCXXMethodDecl(const CXXMethodDecl * pCXXMethodDecl) 
 
     report(
         DiagnosticsEngine::Warning,
-        "this method can be declared static " + fqn,
+        "this member function can be declared static",
         pCXXMethodDecl->getCanonicalDecl()->getLocation())
       << pCXXMethodDecl->getCanonicalDecl()->getSourceRange();
     FunctionDecl const * def;

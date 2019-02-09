@@ -28,9 +28,7 @@
 #include <com/sun/star/beans/NamedValue.hpp>
 
 #include <memory>
-#include <algorithm>
 #include <vector>
-
 
 namespace comphelper
 {
@@ -50,12 +48,14 @@ namespace comphelper
         NamedValueCollection();
 
         NamedValueCollection( const NamedValueCollection& _rCopySource );
+        NamedValueCollection( NamedValueCollection&& _rCopySource );
 
         NamedValueCollection& operator=( const NamedValueCollection& i_rCopySource );
+        NamedValueCollection& operator=( NamedValueCollection&& i_rCopySource );
 
         /** constructs a collection
             @param  _rElements
-                the wrapped elements of the collection. The <code>Any</code> might contain a sequence of
+                the wrapped elements of the collection. The @c Any might contain a sequence of
                 property values, a sequence of named values, or directly a property value or named value.
                 All other cases are worth an assertion in non-product builds.
         */
@@ -81,12 +81,12 @@ namespace comphelper
 
         ~NamedValueCollection();
 
-        inline void assign( const css::uno::Sequence< css::uno::Any >& _rArguments )
+        void assign( const css::uno::Sequence< css::uno::Any >& _rArguments )
         {
             impl_assign( _rArguments );
         }
 
-        inline void clear()
+        void clear()
         {
             impl_assign( css::uno::Sequence< css::beans::NamedValue >() );
         }
@@ -94,8 +94,8 @@ namespace comphelper
         /** determines whether or not named values can be extracted from the given value
 
             @return
-                <TRUE/> if and only if the given <code>Any</code> contains a <code>NamedValue</code>, a
-                <code>PropertyValue</code>, or a sequence thereof.
+                true if and only if the given @c Any contains a @c NamedValue, a
+                @c PropertyValue, or a sequence thereof.
         */
         static bool canExtractFrom( css::uno::Any const & i_value );
 
@@ -110,13 +110,13 @@ namespace comphelper
         ::std::vector< OUString >
                 getNames() const;
 
-        /** merges the content of another collection into |this|
+        /** merges the content of another collection into @c this
             @param _rAdditionalValues
                 the collection whose values are to be merged
             @param _bOverwriteExisting
-                defines whether or not elements which are already present in |this|
-                should be overwritten (<TRUE/>) or preserved (<FALSE/>).
-            @return |*this|
+                defines whether or not elements which are already present in @c this
+                should be overwritten (true) or preserved (false).
+            @return @c *this
         */
         NamedValueCollection&
                 merge(
@@ -134,11 +134,13 @@ namespace comphelper
                 a value with the given name is not present in the collection, or if a wrong-typed
                 value is present, then this parameter will not be touched.
 
-            @return
-                <TRUE/> if there is a value with the given name, which could successfully
-                be extraced. In this case, <arg>_out_rValue</arg> will contain the requested
-                value.<br/>
-                <FALSE/>, if there is no value with the given name.
+            @retval
+                true if there is a value with the given name, which could successfully
+                be extraced. In this case, @c _out_rValue will contain the requested
+                value.
+            @retval
+                false, if there is no value with the given name.
+
             @throws IllegalArgumentException
                 in case there is a value with the given name, but it cannot legally assigned to
                 _out_rValue.
@@ -150,12 +152,12 @@ namespace comphelper
         }
 
         template < typename VALUE_TYPE >
-        bool    get_ensureType( const OUString& _rValueName, VALUE_TYPE& _out_rValue ) const
+        void    get_ensureType( const OUString& _rValueName, VALUE_TYPE& _out_rValue ) const
         {
-            return get_ensureType( _rValueName, &_out_rValue, ::cppu::UnoType< VALUE_TYPE >::get() );
+            get_ensureType( _rValueName, &_out_rValue, ::cppu::UnoType< VALUE_TYPE >::get() );
         }
 
-        /** retrieves a value with a given name, or defaults it to a given value, if its not present
+        /** retrieves a value with a given name, or defaults it to a given value, if it's not present
             in the collection
         */
         template < typename VALUE_TYPE >
@@ -193,63 +195,63 @@ namespace comphelper
         }
 
         /// determines whether a value with a given name is present in the collection
-        inline bool has( const sal_Char* _pAsciiValueName ) const
+        bool has( const sal_Char* _pAsciiValueName ) const
         {
             return impl_has( OUString::createFromAscii( _pAsciiValueName ) );
         }
 
         /// determines whether a value with a given name is present in the collection
-        inline bool has( const OUString& _rValueName ) const
+        bool has( const OUString& _rValueName ) const
         {
             return impl_has( _rValueName );
         }
 
         /** puts a value into the collection
 
-            @return <TRUE/> if and only if a value was already present previously, in
+            @return true if and only if a value was already present previously, in
                 which case it has been overwritten.
         */
         template < typename VALUE_TYPE >
-        inline bool put( const sal_Char* _pAsciiValueName, const VALUE_TYPE& _rValue )
+        bool put( const sal_Char* _pAsciiValueName, const VALUE_TYPE& _rValue )
         {
             return impl_put( OUString::createFromAscii( _pAsciiValueName ), css::uno::makeAny( _rValue ) );
         }
 
         /** puts a value into the collection
 
-            @return <TRUE/> if and only if a value was already present previously, in
+            @return true if and only if a value was already present previously, in
                 which case it has been overwritten.
         */
         template < typename VALUE_TYPE >
-        inline bool put( const OUString& _rValueName, const VALUE_TYPE& _rValue )
+        bool put( const OUString& _rValueName, const VALUE_TYPE& _rValue )
         {
             return impl_put( _rValueName, css::uno::makeAny( _rValue ) );
         }
 
-        inline bool put( const sal_Char* _pAsciiValueName, const css::uno::Any& _rValue )
+        bool put( const sal_Char* _pAsciiValueName, const css::uno::Any& _rValue )
         {
             return impl_put( OUString::createFromAscii( _pAsciiValueName ), _rValue );
         }
 
-        inline bool put( const OUString& _rValueName, const css::uno::Any& _rValue )
+        bool put( const OUString& _rValueName, const css::uno::Any& _rValue )
         {
             return impl_put( _rValueName, _rValue );
         }
 
         /** removes the value with the given name from the collection
 
-            @return <TRUE/> if and only if a value with the given name existed in the collection.
+            @return true if and only if a value with the given name existed in the collection.
         */
-        inline bool remove( const sal_Char* _pAsciiValueName )
+        bool remove( const sal_Char* _pAsciiValueName )
         {
             return impl_remove( OUString::createFromAscii( _pAsciiValueName ) );
         }
 
         /** removes the value with the given name from the collection
 
-            @return <TRUE/> if and only if a value with the given name existed in the collection.
+            @return true if and only if a value with the given name existed in the collection.
         */
-        inline bool remove( const OUString& _rValueName )
+        bool remove( const OUString& _rValueName )
         {
             return impl_remove( _rValueName );
         }
@@ -257,20 +259,20 @@ namespace comphelper
         /** transforms the collection to a sequence of PropertyValues
 
             @return
-                the  number of elements in the sequence
+                the number of elements in the sequence
         */
         sal_Int32 operator >>= ( css::uno::Sequence< css::beans::PropertyValue >& _out_rValues ) const;
 
         /** transforms the collection to a sequence of NamedValues
 
             @return
-                the  number of elements in the sequence
+                the number of elements in the sequence
         */
         sal_Int32 operator >>= ( css::uno::Sequence< css::beans::NamedValue >& _out_rValues ) const;
 
         /** transforms the collection into a sequence of PropertyValues
         */
-        inline css::uno::Sequence< css::beans::PropertyValue >
+        css::uno::Sequence< css::beans::PropertyValue >
                 getPropertyValues() const
         {
             css::uno::Sequence< css::beans::PropertyValue > aValues;
@@ -280,7 +282,7 @@ namespace comphelper
 
         /** returns a Sequence< Any >, containing PropertyValues
         */
-        inline css::uno::Sequence< css::uno::Any >
+        css::uno::Sequence< css::uno::Any >
                 getWrappedPropertyValues() const
         {
             return impl_wrap< css::beans::PropertyValue >();
@@ -288,7 +290,7 @@ namespace comphelper
 
         /** returns a Sequence< Any >, containing NamedValues
         */
-        inline css::uno::Sequence< css::uno::Any >
+        css::uno::Sequence< css::uno::Any >
                 getWrappedNamedValues() const
         {
             return impl_wrap< css::beans::NamedValue >();
@@ -296,7 +298,7 @@ namespace comphelper
 
         /** transforms the collection into a sequence of NamedValues
         */
-        inline css::uno::Sequence< css::beans::NamedValue >
+        css::uno::Sequence< css::beans::NamedValue >
                 getNamedValues() const
         {
             css::uno::Sequence< css::beans::NamedValue > aValues;

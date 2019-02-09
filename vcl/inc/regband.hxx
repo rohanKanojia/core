@@ -25,7 +25,7 @@
 class ImplRegionBand
 
 This class handles one y-band of the region. In this band may contain one
-or more seprarations in x-direction. The y-Band do not contain any
+or more separations in x-direction. The y-Band do not contain any
 separation after creation.
 
 The separations are modified with basic clipping functions like Union and
@@ -42,7 +42,7 @@ struct ImplRegionBandSep
     bool                        mbRemoved;
 };
 
-enum LineType { LINE_ASCENDING, LINE_DESCENDING, LINE_HORIZONTAL };
+enum class LineType { Ascending, Descending };
 
 // element for the list with x-separations
 struct ImplRegionBandPoint
@@ -64,7 +64,6 @@ public:
     long                        mnYTop;             // actual boundary of the band
     long                        mnYBottom;
 
-    // bitfield
     bool                        mbTouched : 1;
 
                                 // create y-band with boundaries

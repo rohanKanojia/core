@@ -33,12 +33,12 @@ namespace connectivity
             MacabTable* m_pTable;
 
             virtual sdbcx::ObjectType createObject(const OUString& _rName) override;
-            virtual void impl_refresh() throw(::com::sun::star::uno::RuntimeException) override;
+            virtual void impl_refresh() override;
 
         public:
             MacabColumns(   MacabTable* _pTable,
                         ::osl::Mutex& _rMutex,
-                        const TStringVector &_rVector);
+                        const ::std::vector< OUString> &_rVector);
         };
     }
 }

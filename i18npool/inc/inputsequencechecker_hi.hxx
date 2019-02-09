@@ -19,12 +19,9 @@
 #ifndef INCLUDED_I18NPOOL_INC_INPUTSEQUENCECHECKER_HI_HXX
 #define INCLUDED_I18NPOOL_INC_INPUTSEQUENCECHECKER_HI_HXX
 
-#include <inputsequencechecker.hxx>
+#include "inputsequencechecker.hxx"
 
-namespace com {
-namespace sun {
-namespace star {
-namespace i18n {
+namespace i18npool {
 
 
 //  class InputSequenceChecker_hi
@@ -33,16 +30,16 @@ class InputSequenceChecker_hi : public InputSequenceCheckerImpl
 {
 public:
     InputSequenceChecker_hi();
-    virtual ~InputSequenceChecker_hi();
+    virtual ~InputSequenceChecker_hi() override;
 
     sal_Bool SAL_CALL checkInputSequence(const OUString& Text, sal_Int32 nStartPos,
-        sal_Unicode inputChar, sal_Int16 inputCheckMode) throw(css::uno::RuntimeException, std::exception) override;
+        sal_Unicode inputChar, sal_Int16 inputCheckMode) override;
 
     sal_Int32 SAL_CALL correctInputSequence(OUString& Text, sal_Int32 nStartPos,
-        sal_Unicode inputChar, sal_Int16 inputCheckMode) throw(css::uno::RuntimeException, std::exception) override;
+        sal_Unicode inputChar, sal_Int16 inputCheckMode) override;
 };
 
-} } } }
+}
 
 #endif
 

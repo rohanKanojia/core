@@ -19,7 +19,7 @@
 
 #include <com/sun/star/lang/XComponent.hpp>
 
-#include <unowcntr.hxx>
+#include "unowcntr.hxx"
 
 using namespace ::com::sun::star;
 
@@ -29,31 +29,27 @@ SvUnoWeakContainer::SvUnoWeakContainer() throw()
 
 SvUnoWeakContainer::~SvUnoWeakContainer() throw()
 {
-    for ( WeakRefList::iterator it = maList.begin(); it != maList.end(); ++it )
-            delete *it;
-    maList.clear();
 }
 
 /** inserts the given ref into this container */
 void SvUnoWeakContainer::insert( const uno::WeakReference< uno::XInterface >& xRef ) throw()
 {
-    for ( WeakRefList::iterator it = maList.begin(); it != maList.end(); )
+    for ( auto it = maVector.begin(); it != maVector.end(); )
     {
-        uno::WeakReference< uno::XInterface >* pRef = *it;
-        uno::Reference< uno::XInterface > xTestRef( *pRef );
+        uno::WeakReference< uno::XInterface > & rWeakRef = *it;
+        uno::Reference< uno::XInterface > xTestRef( rWeakRef );
         if ( !xTestRef.is() )
         {
-            delete pRef;
-            it = maList.erase( it );
+            it = maVector.erase( it );
         }
         else
         {
-            if ( *pRef == xRef )
+            if ( rWeakRef == xRef )
                 return;
             ++it;
         }
     }
-    maList.push_back( new uno::WeakReference< uno::XInterface >( xRef ) );
+    maVector.emplace_back( xRef );
 }
 
 /** searches the container for a ref that returns true on the given
@@ -61,24 +57,23 @@ void SvUnoWeakContainer::insert( const uno::WeakReference< uno::XInterface >& xR
 */
 bool SvUnoWeakContainer::findRef(
     uno::WeakReference< uno::XInterface >& rRef,
-    void* pSearchData,
+    void const * pSearchData,
     weakref_searchfunc pSearchFunc
 )
 {
-    for ( WeakRefList::iterator it = maList.begin(); it != maList.end(); )
+    for ( auto it = maVector.begin(); it != maVector.end(); )
     {
-        uno::WeakReference< uno::XInterface >* pRef = *it;
-        uno::Reference< uno::XInterface > xTestRef( *pRef );
+        uno::WeakReference< uno::XInterface > & itRef = *it;
+        uno::Reference< uno::XInterface > xTestRef( itRef );
         if ( !xTestRef.is() )
         {
-            delete pRef;
-            it = maList.erase( it );
+            it = maVector.erase( it );
         }
         else
         {
-            if( (*pSearchFunc)( *pRef, pSearchData ) )
+            if( (*pSearchFunc)( itRef, pSearchData ) )
             {
-                rRef = *pRef;
+                rRef = itRef;
                 return true;
             }
             ++it;
@@ -89,10 +84,9 @@ bool SvUnoWeakContainer::findRef(
 
 void SvUnoWeakContainer::dispose()
 {
-    for ( WeakRefList::iterator it = maList.begin(); it != maList.end(); ++it )
+    for (auto const& elem : maVector)
     {
-        uno::WeakReference< uno::XInterface >* pRef = *it;
-        uno::Reference< uno::XInterface > xTestRef( *pRef );
+        uno::Reference< uno::XInterface > xTestRef( elem );
         if ( xTestRef.is() )
         {
             uno::Reference< lang::XComponent > xComp( xTestRef, uno::UNO_QUERY );

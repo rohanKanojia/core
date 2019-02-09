@@ -19,7 +19,7 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_ww8export, \
     comphelper \
     cppu \
     cppuhelper \
-    $(if $(filter WNT-TRUE,$(OS)-$(DISABLE_ATL)),,emboleobj) \
+    emboleobj \
     sal \
     test \
     unotest \
@@ -28,7 +28,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_ww8export, \
     svl \
     sw \
     tl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_ww8export,\
@@ -45,8 +44,9 @@ $(eval $(call gb_CppunitTest_set_include,sw_ww8export,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_ww8export,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_ww8export))
@@ -58,6 +58,7 @@ $(eval $(call gb_CppunitTest_use_components,sw_ww8export,\
     configmgr/source/configmgr \
     dbaccess/util/dba \
     embeddedobj/util/embobj \
+    emfio/emfio \
     filter/source/config/cache/filterconfig1 \
     filter/source/storagefilterdetect/storagefd \
     forms/util/frm \
@@ -79,10 +80,14 @@ $(eval $(call gb_CppunitTest_use_components,sw_ww8export,\
     unotools/util/utl \
     unoxml/source/service/unoxml \
     unoxml/source/rdf/unordf \
+    uui/util/uui \
     $(if $(filter DESKTOP,$(BUILD_TYPE)),xmlhelp/util/ucpchelp1) \
+    vcl/vcl.common \
     xmloff/util/xo \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_ww8export))
+
+$(eval $(call gb_CppunitTest_use_more_fonts,sw_ww8export))
 
 # vim: set noet sw=4 ts=4:

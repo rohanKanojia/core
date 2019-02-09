@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -99,7 +100,7 @@ public class SystemDialog  {
 
             // choose the template that defines the capabilities of the filepicker dialog
             XInitialization xInitialize = UnoRuntime.queryInterface(XInitialization.class, xFilePicker);
-            Short[] listAny = new Short[] { Short.valueOf(com.sun.star.ui.dialogs.TemplateDescription.FILESAVE_AUTOEXTENSION)};
+            short[] listAny = new short[] { com.sun.star.ui.dialogs.TemplateDescription.FILESAVE_AUTOEXTENSION };
             xInitialize.initialize(listAny);
 
             // add a control to the dialog to add the extension automatically to the filename...
@@ -184,3 +185,4 @@ public class SystemDialog  {
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

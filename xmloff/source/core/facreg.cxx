@@ -25,7 +25,7 @@
 #include <string.h>
 #include <com/sun/star/container/XSet.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
-#include <osl/diagnose.h>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 #include <cppuhelper/factory.hxx>
 
@@ -33,10 +33,8 @@
 
 using namespace com::sun::star;
 
-#ifdef __cplusplus
 extern "C"
 {
-#endif
 
 #define SINGLEFACTORY(classname)\
         if( classname##_getImplementationName().equalsAsciiL( pImplName, nImplNameLen ) )\
@@ -47,7 +45,7 @@ extern "C"
                 classname##_getSupportedServiceNames() );\
         }
 
-XMLOFF_DLLPUBLIC void * SAL_CALL xo_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
+XMLOFF_DLLPUBLIC void * xo_component_getFactory( const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
     void * pRet = nullptr;
     if( pServiceManager )
@@ -59,14 +57,12 @@ XMLOFF_DLLPUBLIC void * SAL_CALL xo_component_getFactory( const sal_Char * pImpl
         const sal_Int32 nImplNameLen = strlen( pImplName );
 
         // impress oasis import
-        SINGLEFACTORY( XMLImpressImportOasis )
-        else SINGLEFACTORY( XMLImpressStylesImportOasis )
+        SINGLEFACTORY( XMLImpressStylesImportOasis )
         else SINGLEFACTORY( XMLImpressContentImportOasis )
         else SINGLEFACTORY( XMLImpressMetaImportOasis )
         else SINGLEFACTORY( XMLImpressSettingsImportOasis )
 
         // impress oasis export
-        else SINGLEFACTORY( XMLImpressExportOasis )
         else SINGLEFACTORY( XMLImpressStylesExportOasis )
         else SINGLEFACTORY( XMLImpressContentExportOasis )
         else SINGLEFACTORY( XMLImpressMetaExportOasis )
@@ -142,8 +138,6 @@ XMLOFF_DLLPUBLIC void * SAL_CALL xo_component_getFactory( const sal_Char * pImpl
     return pRet;
 }
 
-#ifdef __cplusplus
 }
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

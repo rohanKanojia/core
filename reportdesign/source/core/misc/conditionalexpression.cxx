@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "conditionalexpression.hxx"
+#include <conditionalexpression.hxx>
 
 #include <osl/diagnose.h>
 
@@ -65,11 +65,6 @@ namespace rptui
 
     bool ConditionalExpression::matchExpression( const OUString& _rExpression, const OUString& _rFieldDataSource, OUString& _out_rLHS, OUString& _out_rRHS ) const
     {
-        (void)_rExpression;
-        (void)_rFieldDataSource;
-        (void)_out_rLHS;
-        (void)_out_rRHS;
-
         // if we had regular expression, the matching would be pretty easy ...
         // just replace $1 and $2 in the pattern with (.*), and then get them with \1 resp. \2.
         // Unfortunately, we don't have such a regexp engine ...
@@ -174,14 +169,14 @@ namespace rptui
         ConditionalExpressions aEmpty;
         _out_rCondExp.swap( aEmpty );
 
-        _out_rCondExp[ eBetween ]        = PConditionalExpression( new ConditionalExpression( "AND( ( $$ ) >= ( $1 ); ( $$ ) <= ( $2 ) )" ) );
-        _out_rCondExp[ eNotBetween ]     = PConditionalExpression( new ConditionalExpression( "NOT( AND( ( $$ ) >= ( $1 ); ( $$ ) <= ( $2 ) ) )" ) );
-        _out_rCondExp[ eEqualTo ]        = PConditionalExpression( new ConditionalExpression( "( $$ ) = ( $1 )" ) );
-        _out_rCondExp[ eNotEqualTo ]     = PConditionalExpression( new ConditionalExpression( "( $$ ) <> ( $1 )" ) );
-        _out_rCondExp[ eGreaterThan ]    = PConditionalExpression( new ConditionalExpression( "( $$ ) > ( $1 )" ) );
-        _out_rCondExp[ eLessThan ]       = PConditionalExpression( new ConditionalExpression( "( $$ ) < ( $1 )" ) );
-        _out_rCondExp[ eGreaterOrEqual ] = PConditionalExpression( new ConditionalExpression( "( $$ ) >= ( $1 )" ) );
-        _out_rCondExp[ eLessOrEqual ]    = PConditionalExpression( new ConditionalExpression( "( $$ ) <= ( $1 )" ) );
+        _out_rCondExp[ eBetween ]        = std::make_shared<ConditionalExpression>( "AND( ( $$ ) >= ( $1 ); ( $$ ) <= ( $2 ) )" );
+        _out_rCondExp[ eNotBetween ]     = std::make_shared<ConditionalExpression>( "NOT( AND( ( $$ ) >= ( $1 ); ( $$ ) <= ( $2 ) ) )" );
+        _out_rCondExp[ eEqualTo ]        = std::make_shared<ConditionalExpression>( "( $$ ) = ( $1 )" );
+        _out_rCondExp[ eNotEqualTo ]     = std::make_shared<ConditionalExpression>( "( $$ ) <> ( $1 )" );
+        _out_rCondExp[ eGreaterThan ]    = std::make_shared<ConditionalExpression>( "( $$ ) > ( $1 )" );
+        _out_rCondExp[ eLessThan ]       = std::make_shared<ConditionalExpression>( "( $$ ) < ( $1 )" );
+        _out_rCondExp[ eGreaterOrEqual ] = std::make_shared<ConditionalExpression>( "( $$ ) >= ( $1 )" );
+        _out_rCondExp[ eLessOrEqual ]    = std::make_shared<ConditionalExpression>( "( $$ ) <= ( $1 )" );
 
         return _out_rCondExp.size();
     }

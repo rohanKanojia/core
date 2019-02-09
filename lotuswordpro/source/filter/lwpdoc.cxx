@@ -53,7 +53,7 @@
  *
  *
  ************************************************************************/
-#include "lwpglobalmgr.hxx"
+#include <lwpglobalmgr.hxx>
 #include "lwpdoc.hxx"
 #include "lwpfootnote.hxx"
 #include "lwppagehint.hxx"
@@ -65,29 +65,23 @@
 #include "lwpsilverbullet.hxx"
 #include "lwplayout.hxx"
 #include "lwppagelayout.hxx"
-#include "xfilter/xfstylemanager.hxx"
+#include "lwpverdocument.hxx"
+#include <xfilter/xfstylemanager.hxx>
 #include <osl/thread.h>
+#include <set>
 
-LwpDocument::LwpDocument(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpDocument::LwpDocument(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     : LwpDLNFPVList(objHdr, pStrm)
-    , m_pOwnedFoundry(nullptr)
     , m_bGettingFirstDivisionWithContentsThatIsNotOLE(false)
+    , m_bGettingPreviousDivisionWithContents(false)
+    , m_bGettingGetLastDivisionWithContents(false)
     , m_nFlags(0)
     , m_nPersistentFlags(0)
-    , m_pLnOpts(nullptr)
 {
 }
 
 LwpDocument::~LwpDocument()
 {
-    if(m_pLnOpts)
-    {
-        delete m_pLnOpts;
-    }
-    if(m_pOwnedFoundry)
-    {
-        delete m_pOwnedFoundry;
-    }
 }
 /**
  * @descr   Read VO_Document from object stream
@@ -102,43 +96,43 @@ void LwpDocument::Read()
 
     //Skip the SortOption and UIDocument
     {
-        LwpSortOption m_DocSort( m_pObjStrm );
-        LwpUIDocument m_UIDoc( m_pObjStrm );
+        LwpSortOption aDocSort( m_pObjStrm.get() );
+        LwpUIDocument aUIDoc( m_pObjStrm.get() );
     }
 
-    m_pLnOpts = new LwpLineNumberOptions(m_pObjStrm);
+    m_xLnOpts.reset(new LwpLineNumberOptions(m_pObjStrm.get()));
 
     //Skip LwpUserDictFiles
     {
-        LwpUserDictFiles m_UsrDicts( m_pObjStrm );
+        LwpUserDictFiles aUsrDicts( m_pObjStrm.get() );
     }
 
     if( !IsChildDoc())
     {
         //Skip LwpPrinterInfo
-        LwpPrinterInfo m_PrtInfo( m_pObjStrm );
+        LwpPrinterInfo aPrtInfo( m_pObjStrm.get() );
     }
 
-    m_pFoundry = m_pOwnedFoundry = new LwpFoundry(m_pObjStrm, this);
+    m_xOwnedFoundry.reset(new LwpFoundry(m_pObjStrm.get(), this));
 
-    m_DivOpts.ReadIndexed(m_pObjStrm);
+    m_DivOpts.ReadIndexed(m_pObjStrm.get());
 
     if(!IsChildDoc())
     {
-        m_FootnoteOpts.ReadIndexed(m_pObjStrm);
-        m_DocData.ReadIndexed(m_pObjStrm);
+        m_FootnoteOpts.ReadIndexed(m_pObjStrm.get());
+        m_DocData.ReadIndexed(m_pObjStrm.get());
     }
     else
     {
         //Skip the docdata used in old version
         LwpObjectID dummyDocData;
-        dummyDocData.ReadIndexed(m_pObjStrm);
+        dummyDocData.ReadIndexed(m_pObjStrm.get());
     }
-    m_DivInfo.ReadIndexed(m_pObjStrm);
-    m_Epoch.Read(m_pObjStrm);
-    m_WYSIWYGPageHints.ReadIndexed(m_pObjStrm);
-    m_VerDoc.ReadIndexed(m_pObjStrm);
-    m_STXInfo.ReadIndexed(m_pObjStrm);
+    m_DivInfo.ReadIndexed(m_pObjStrm.get());
+    m_Epoch.Read(m_pObjStrm.get());
+    m_WYSIWYGPageHints.ReadIndexed(m_pObjStrm.get());
+    m_VerDoc.ReadIndexed(m_pObjStrm.get());
+    m_STXInfo.ReadIndexed(m_pObjStrm.get());
 }
 
 /**
@@ -146,7 +140,7 @@ void LwpDocument::Read()
  **/
 void LwpDocument::ReadPlug()
 {
-    m_DocSockID.ReadIndexed(m_pObjStrm);
+    m_DocSockID.ReadIndexed(m_pObjStrm.get());
     m_nFlags = m_pObjStrm->QuickReaduInt16();
     m_pObjStrm->SkipExtra();
 }
@@ -234,15 +228,17 @@ void LwpDocument::RegisterStyle()
 void LwpDocument::RegisterTextStyles()
 {
     //Register all text styles: para styles, character styles
-    LwpDLVListHeadHolder* pParaStyleHolder = m_pFoundry
-        ? dynamic_cast<LwpDLVListHeadHolder*>(m_pFoundry->GetTextStyleHead().obj().get())
+    LwpDLVListHeadHolder* pParaStyleHolder = m_xOwnedFoundry
+        ? dynamic_cast<LwpDLVListHeadHolder*>(m_xOwnedFoundry->GetTextStyleHead().obj().get())
         : nullptr;
     if(pParaStyleHolder)
     {
         LwpTextStyle* pParaStyle = dynamic_cast<LwpTextStyle*> (pParaStyleHolder->GetHeadID().obj().get());
         while(pParaStyle)
         {
-            pParaStyle->SetFoundry(m_pFoundry);
+            if (pParaStyle->GetFoundry())
+                throw std::runtime_error("loop in register text style");
+            pParaStyle->SetFoundry(m_xOwnedFoundry.get());
             pParaStyle->RegisterStyle();
             pParaStyle = dynamic_cast<LwpParaStyle*>(pParaStyle->GetNext().obj().get());
         }
@@ -255,10 +251,10 @@ void LwpDocument::RegisterTextStyles()
  */
 void LwpDocument::RegisterLayoutStyles()
 {
-    if (m_pFoundry)
+    if (m_xOwnedFoundry)
     {
         //Register all layout styles, before register all styles in para
-        m_pFoundry->RegisterAllLayouts();
+        m_xOwnedFoundry->RegisterAllLayouts();
     }
 
     //set initial pagelayout in story for parsing pagelayout
@@ -285,18 +281,22 @@ void LwpDocument::RegisterLayoutStyles()
 void LwpDocument::RegisterStylesInPara()
 {
     //Register all automatic styles in para
-    rtl::Reference<LwpHeadContent> xContent(m_pFoundry
-        ? dynamic_cast<LwpHeadContent*> (m_pFoundry->GetContentManager().GetContentList().obj().get())
+    rtl::Reference<LwpHeadContent> xContent(m_xOwnedFoundry
+        ? dynamic_cast<LwpHeadContent*> (m_xOwnedFoundry->GetContentManager().GetContentList().obj().get())
         : nullptr);
     if (xContent.is())
     {
         rtl::Reference<LwpStory> xStory(dynamic_cast<LwpStory*>(xContent->GetChildHead().obj(VO_STORY).get()));
+        std::set<LwpStory*> aSeen;
         while (xStory.is())
         {
+            aSeen.insert(xStory.get());
             //Register the child para
-            xStory->SetFoundry(m_pFoundry);
+            xStory->SetFoundry(m_xOwnedFoundry.get());
             xStory->DoRegisterStyle();
             xStory.set(dynamic_cast<LwpStory*>(xStory->GetNext().obj(VO_STORY).get()));
+            if (aSeen.find(xStory.get()) != aSeen.end())
+                throw std::runtime_error("loop in conversion");
         }
     }
 }
@@ -305,20 +305,24 @@ void LwpDocument::RegisterStylesInPara()
  */
 void LwpDocument::RegisterBulletStyles()
 {
-    if (!m_pFoundry)
+    if (!m_xOwnedFoundry)
         return;
     //Register bullet styles
-    LwpDLVListHeadHolder* mBulletHead = dynamic_cast<LwpDLVListHeadHolder*>
-        (m_pFoundry->GetBulletManagerID().obj(VO_HEADHOLDER).get());
-    if (!mBulletHead)
+    LwpDLVListHeadHolder* pBulletHead = dynamic_cast<LwpDLVListHeadHolder*>
+        (m_xOwnedFoundry->GetBulletManagerID().obj(VO_HEADHOLDER).get());
+    if (!pBulletHead)
         return;
     LwpSilverBullet* pBullet = dynamic_cast<LwpSilverBullet*>
-                        (mBulletHead->GetHeadID().obj().get());
-    while(pBullet)
+                        (pBulletHead->GetHeadID().obj().get());
+    std::set<LwpSilverBullet*> aSeen;
+    while (pBullet)
     {
-        pBullet->SetFoundry(m_pFoundry);
+        aSeen.insert(pBullet);
+        pBullet->SetFoundry(m_xOwnedFoundry.get());
         pBullet->RegisterStyle();
         pBullet = dynamic_cast<LwpSilverBullet*> (pBullet->GetNext().obj().get());
+        if (aSeen.find(pBullet) != aSeen.end())
+            throw std::runtime_error("loop in conversion");
     }
 }
 /**
@@ -326,13 +330,13 @@ void LwpDocument::RegisterBulletStyles()
  */
 void LwpDocument::RegisterGraphicsStyles()
 {
-    if (!m_pFoundry)
+    if (!m_xOwnedFoundry)
         return;
     //Register all graphics styles, the first object should register the next;
-    rtl::Reference<LwpObject> pGraphic = m_pFoundry->GetGraphicListHead().obj(VO_GRAPHIC);
+    rtl::Reference<LwpObject> pGraphic = m_xOwnedFoundry->GetGraphicListHead().obj(VO_GRAPHIC);
     if (!pGraphic.is())
         return;
-    pGraphic->SetFoundry(m_pFoundry);
+    pGraphic->SetFoundry(m_xOwnedFoundry.get());
     pGraphic->DoRegisterStyle();
 }
 /**
@@ -340,9 +344,9 @@ void LwpDocument::RegisterGraphicsStyles()
  */
 void LwpDocument::RegisterLinenumberStyles()
 {
-    if (!m_pLnOpts)
+    if (!m_xLnOpts)
         return;
-    m_pLnOpts->RegisterStyle();
+    m_xLnOpts->RegisterStyle();
 }
 
 /**
@@ -385,7 +389,6 @@ void LwpDocument::RegisterFootnoteStyles()
 /**
 * @descr   Register default para styles
 */
-#include "lwpverdocument.hxx"
 void LwpDocument::RegisterDefaultParaStyles()
 {
     if(!IsChildDoc())
@@ -421,7 +424,7 @@ void LwpDocument::ParseDocContent(IXFStream* pOutputStream)
         //master document not supported now.
         return;
     }
-    pLayoutObj->SetFoundry(m_pFoundry);
+    pLayoutObj->SetFoundry(m_xOwnedFoundry.get());
     pLayoutObj->DoParse(pOutputStream);
 }
 
@@ -525,42 +528,58 @@ LwpDocument* LwpDocument::GetPreviousDivision()
 /**
  * @descr    Get previous division which has contents, copy from lwp source code
  */
- LwpDocument* LwpDocument::GetPreviousDivisionWithContents()
+LwpDocument* LwpDocument::GetPreviousDivisionWithContents()
 {
-    if(GetPreviousDivision())
-    {
-        LwpDocument* pDoc = GetPreviousDivision()->GetLastDivisionWithContents();
-        if (pDoc)
-            return pDoc;
-    }
-    if(GetParentDivision())
-        return GetParentDivision()->GetPreviousDivisionWithContents();
-    return nullptr;
+    if (m_bGettingPreviousDivisionWithContents)
+        throw std::runtime_error("recursion in page divisions");
+    m_bGettingPreviousDivisionWithContents = true;
+    LwpDocument* pRet = nullptr;
+
+    if (GetPreviousDivision())
+        pRet = GetPreviousDivision()->GetLastDivisionWithContents();
+    if (!pRet && GetParentDivision())
+        pRet = GetParentDivision()->GetPreviousDivisionWithContents();
+
+    m_bGettingPreviousDivisionWithContents = false;
+    return pRet;
 }
- /**
- * @descr    Get last division which has contents, copy from lwp source code
- */
- LwpDocument* LwpDocument::GetLastDivisionWithContents()
+
+/**
+* @descr    Get last division which has contents, copy from lwp source code
+*/
+LwpDocument* LwpDocument::GetLastDivisionWithContents()
 {
+    if (m_bGettingGetLastDivisionWithContents)
+        throw std::runtime_error("recursion in page divisions");
+    m_bGettingGetLastDivisionWithContents = true;
+    LwpDocument* pRet = nullptr;
+
     LwpDivInfo* pDivInfo = dynamic_cast<LwpDivInfo*>(GetDivInfoID().obj().get());
-    if(pDivInfo && pDivInfo->HasContents())
-    {
-        return this;
-    }
+    if (pDivInfo && pDivInfo->HasContents())
+        pRet = this;
 
-    LwpDocument* pDivision = GetLastDivision();
-
-    while (pDivision && pDivision != this)
+    if (!pRet)
     {
-        LwpDocument* pContentDivision = pDivision->GetLastDivisionWithContents();
-        if(pContentDivision)
+        LwpDocument* pDivision = GetLastDivision();
+
+        std::set<LwpDocument*> aSeen;
+        while (pDivision && pDivision != this)
         {
-            return pContentDivision;
+            aSeen.insert(pDivision);
+            LwpDocument* pContentDivision = pDivision->GetLastDivisionWithContents();
+            if (pContentDivision)
+            {
+                pRet = pContentDivision;
+                break;
+            }
+            pDivision = pDivision->GetPreviousDivision();
+            if (aSeen.find(pDivision) != aSeen.end())
+                throw std::runtime_error("loop in conversion");
         }
-        pDivision = pDivision->GetPreviousDivision();
     }
 
-    return nullptr;
+    m_bGettingGetLastDivisionWithContents = false;
+    return pRet;
 }
  /**
  * @descr    Get last division in group  which has contents, copy from lwp source code
@@ -609,11 +628,15 @@ LwpDocument* LwpDocument::GetPreviousDivision()
  LwpDocument* LwpDocument::GetRootDocument()
 {
     LwpDocument* pRoot = this;
-    while(pRoot)
+    std::set<LwpDocument*> aSeen;
+    while (pRoot)
     {
+        aSeen.insert(pRoot);
         if(!pRoot->IsChildDoc())
             return pRoot;
         pRoot = pRoot->GetParentDivision();
+        if (aSeen.find(pRoot) != aSeen.end())
+            throw std::runtime_error("loop in conversion");
     }
     return nullptr;
 }
@@ -628,13 +651,16 @@ LwpDocument* LwpDocument::GetPreviousDivision()
         return this;
 
     LwpDocument* pDivision = GetFirstDivision();
-
+    std::set<LwpDocument*> aSeen;
     while (pDivision)
     {
+        aSeen.insert(pDivision);
         LwpDocument* pContentDivision = pDivision->GetFirstDivisionWithContentsThatIsNotOLE();
-        if(pContentDivision)
+        if (pContentDivision)
             return pContentDivision;
         pDivision = pDivision->GetNextDivision();
+        if (aSeen.find(pDivision) != aSeen.end())
+            throw std::runtime_error("loop in conversion");
     }
     return nullptr;
 }
@@ -645,11 +671,15 @@ LwpDocument* LwpDocument::GetPreviousDivision()
 {
     LwpDocument* pRoot = GetRootDocument();
     LwpDocument *pLastDoc = pRoot ? pRoot->GetLastDivisionWithContents() : nullptr;
+    std::set<LwpDocument*> aSeen;
     while (pLastDoc)
     {
+        aSeen.insert(pLastDoc);
         if (pLastDoc->GetEnSuperTableLayout().is())
             return pLastDoc;
         pLastDoc = pLastDoc->GetPreviousDivisionWithContents();
+        if (aSeen.find(pLastDoc) != aSeen.end())
+            throw std::runtime_error("loop in conversion");
     }
     return nullptr;
 
@@ -704,38 +734,19 @@ sal_uInt16 LwpDocument::GetNumberOfPagesBefore()
 }
 
  /**
- * @descr    Get Max number of pages
- */
- void  LwpDocument::MaxNumberOfPages(sal_uInt16& nNumPages)
-{
-    LwpDocument* pDivision = GetFirstDivision();
-
-    LwpDivInfo* pDivInfo = dynamic_cast<LwpDivInfo*>(m_DivInfo.obj().get());
-    if(pDivInfo)
-        nNumPages += pDivInfo->GetMaxNumberOfPages();
-    while(pDivision)
-    {
-        pDivision->MaxNumberOfPages(nNumPages);
-        pDivision = pDivision->GetNextDivision();
-    }
-}
-  /**
  * @descr    Parse the frame which anchor is to page before parse other contents,
- *          This method is called when the document is root document.
+ *           This method is called when the document is root document.
  */
 void LwpDocument::ParseFrameInPage(IXFStream * pOutputStream)
 {
-    if(IsChildDoc())
+    if (IsChildDoc())
         return;
 
-    XFContentContainer* pXFContainer = new XFContentContainer;
-
-    XFConvertFrameInPage(pXFContainer);
-
-    pXFContainer->ToXml(pOutputStream);
-    delete pXFContainer;
-    pXFContainer = nullptr;
+    rtl::Reference<XFContentContainer> xXFContainer(new XFContentContainer);
+    XFConvertFrameInPage(xXFContainer.get());
+    xXFContainer->ToXml(pOutputStream);
 }
+
  /**
  * @descr    Parse the frame which anchor is to page in the entire document
  */
@@ -772,7 +783,7 @@ void LwpDocument::ChangeStyleName()
         pStyle->SetStyleName("Placeholder");
     }
 }
-LwpDocSock::LwpDocSock(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpDocSock::LwpDocSock(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     :LwpDLNFVList(objHdr, pStrm)
 {}
 
@@ -782,7 +793,7 @@ LwpDocSock::LwpDocSock(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
 void LwpDocSock::Read()
 {
     LwpDLNFVList::Read();
-    m_Doc.ReadIndexed(m_pObjStrm);
+    m_Doc.ReadIndexed(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
  /**

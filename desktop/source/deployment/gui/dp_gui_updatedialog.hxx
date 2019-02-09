@@ -27,7 +27,7 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <rtl/ref.hxx>
 #include <rtl/ustring.hxx>
-#include <svtools/svlbitm.hxx>
+#include <vcl/svlbitm.hxx>
 #include <svx/checklbx.hxx>
 #include <tools/link.hxx>
 #include <vcl/layout.hxx>
@@ -84,7 +84,7 @@ public:
         css::deployment::XPackage > > & vExtensionList,
         std::vector< dp_gui::UpdateData > * updateData);
 
-    virtual ~UpdateDialog();
+    virtual ~UpdateDialog() override;
     virtual void dispose() override;
 
     virtual bool Close() override;
@@ -93,11 +93,11 @@ public:
 
     void notifyMenubar( bool bPrepareOnly, bool bRecheckOnly );
     static void createNotifyJob( bool bPrepareOnly,
-        css::uno::Sequence< css::uno::Sequence< OUString > > &rItemList );
+        css::uno::Sequence< css::uno::Sequence< OUString > > const &rItemList );
 
 private:
-    UpdateDialog(UpdateDialog &) = delete;
-    void operator =(UpdateDialog &) = delete;
+    UpdateDialog(UpdateDialog const &) = delete;
+    UpdateDialog& operator =(UpdateDialog const &) = delete;
 
     struct DisabledUpdate;
     struct SpecificError;
@@ -115,8 +115,8 @@ private:
         sal_uInt16 getItemCount() const;
 
     private:
-        explicit CheckListBox(UpdateDialog::CheckListBox &) = delete;
-        void operator =(UpdateDialog::CheckListBox &) = delete;
+        explicit CheckListBox(UpdateDialog::CheckListBox const &) = delete;
+        void operator =(UpdateDialog::CheckListBox const &) = delete;
 
         virtual void MouseButtonDown(MouseEvent const & event) override;
         virtual void MouseButtonUp(MouseEvent const & event) override;
@@ -136,11 +136,11 @@ private:
     sal_uInt16 insertItem( UpdateDialog::Index *pIndex, SvLBoxButtonKind kind );
     void addAdditional( UpdateDialog::Index *pIndex, SvLBoxButtonKind kind );
     bool isIgnoredUpdate( UpdateDialog::Index *pIndex );
-    void setIgnoredUpdate( UpdateDialog::Index *pIndex, bool bIgnore, bool bIgnoreAll );
+    void setIgnoredUpdate( UpdateDialog::Index const *pIndex, bool bIgnore, bool bIgnoreAll );
 
-    void addEnabledUpdate( OUString const & name, dp_gui::UpdateData & data );
-    void addDisabledUpdate( UpdateDialog::DisabledUpdate & data );
-    void addSpecificError( UpdateDialog::SpecificError & data );
+    void addEnabledUpdate( OUString const & name, dp_gui::UpdateData const & data );
+    void addDisabledUpdate( UpdateDialog::DisabledUpdate const & data );
+    void addSpecificError( UpdateDialog::SpecificError const & data );
 
     void checkingDone();
 
@@ -159,11 +159,10 @@ private:
         css::xml::dom::XNode > const & aUpdateInfo);
     bool showDescription( const OUString& rDescription);
 
-    DECL_LINK_TYPED(selectionHandler, SvTreeListBox*, void);
-    DECL_LINK_TYPED(allHandler, CheckBox&, void);
-    DECL_LINK_TYPED(okHandler, Button*, void);
-    DECL_LINK_TYPED(closeHandler, Button*, void);
-    DECL_LINK_TYPED(hyperlink_clicked, FixedHyperlink&, void);
+    DECL_LINK(selectionHandler, SvTreeListBox*, void);
+    DECL_LINK(allHandler, CheckBox&, void);
+    DECL_LINK(okHandler, Button*, void);
+    DECL_LINK(closeHandler, Button*, void);
 
     css::uno::Reference< css::uno::XComponentContext >  m_context;
     VclPtr<FixedText> m_pchecking;
@@ -195,13 +194,12 @@ private:
     std::vector< dp_gui::UpdateData > m_enabledUpdates;
     std::vector< UpdateDialog::DisabledUpdate > m_disabledUpdates;
     std::vector< UpdateDialog::SpecificError > m_specificErrors;
-    std::vector< UpdateDialog::IgnoredUpdate* > m_ignoredUpdates;
-    std::vector< Index* > m_ListboxEntries;
+    std::vector< std::unique_ptr<UpdateDialog::IgnoredUpdate> > m_ignoredUpdates;
+    std::vector< std::unique_ptr<Index> > m_ListboxEntries;
     std::vector< dp_gui::UpdateData > & m_updateData;
     rtl::Reference< UpdateDialog::Thread > m_thread;
     css::uno::Reference< css::deployment::XExtensionManager > m_xExtensionManager;
 
-    sal_uInt16  m_nLastID;
     bool    m_bModified;
 };
 

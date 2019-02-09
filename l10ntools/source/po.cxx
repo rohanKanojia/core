@@ -8,6 +8,8 @@
  */
 
 #include <rtl/ustring.hxx>
+#include <rtl/crc.h>
+#include <sal/log.hxx>
 
 #include <cstring>
 #include <ctime>
@@ -16,17 +18,8 @@
 #include <vector>
 #include <string>
 
-#ifdef _MSC_VER
-#pragma warning (push, 1)
-#pragma warning (disable: 4245)
-#endif
-#include <boost/crc.hpp>
-#ifdef _MSC_VER
-#pragma warning (pop)
-#endif
-
-#include "po.hxx"
-#include "helper.hxx"
+#include <po.hxx>
+#include <helper.hxx>
 
 /** Container of po entry
 
@@ -36,23 +29,24 @@
 class GenPoEntry
 {
 private:
-    OString    m_sExtractCom;
-    OString    m_sReference;
+    OStringBuffer m_sExtractCom;
+    std::vector<OString>    m_sReferences;
     OString    m_sMsgCtxt;
     OString    m_sMsgId;
+    OString    m_sMsgIdPlural;
     OString    m_sMsgStr;
+    std::vector<OString>    m_sMsgStrPlural;
     bool       m_bFuzzy;
+    bool       m_bCFormat;
     bool       m_bNull;
 
 public:
-                        GenPoEntry();
-    virtual             ~GenPoEntry();
-                        // Default copy constructor and copy operator work well
+    GenPoEntry();
 
-    OString     getReference() const    { return m_sReference; }
-    OString     getMsgCtxt() const      { return m_sMsgCtxt; }
-    OString     getMsgId() const        { return m_sMsgId; }
-    OString     getMsgStr() const       { return m_sMsgStr; }
+    const std::vector<OString>& getReference() const    { return m_sReferences; }
+    const OString& getMsgCtxt() const      { return m_sMsgCtxt; }
+    const OString& getMsgId() const        { return m_sMsgId; }
+    const OString& getMsgStr() const       { return m_sMsgStr; }
     bool        isFuzzy() const         { return m_bFuzzy; }
     bool        isNull() const          { return m_bNull; }
 
@@ -62,7 +56,7 @@ public:
                         }
     void        setReference(const OString& rReference)
                         {
-                            m_sReference = rReference;
+                            m_sReferences.push_back(rReference);
                         }
     void        setMsgCtxt(const OString& rMsgCtxt)
                         {
@@ -96,7 +90,7 @@ namespace
         sal_Int32 nIndex = 0;
         while((nIndex=sResult.indexOf("\\n",nIndex))!=-1)
         {
-            if( sResult.copy(nIndex-1,3)!="\\\\n" &&
+            if( !sResult.match("\\\\n", nIndex-1) &&
                 nIndex!=sResult.getLength()-3)
             {
                sResult = sResult.replaceAt(nIndex,2,"\\n\"\n\"");
@@ -123,16 +117,15 @@ namespace
 
 GenPoEntry::GenPoEntry()
     : m_sExtractCom( OString() )
-    , m_sReference( OString() )
+    , m_sReferences( std::vector<OString>() )
     , m_sMsgCtxt( OString() )
     , m_sMsgId( OString() )
+    , m_sMsgIdPlural( OString() )
     , m_sMsgStr( OString() )
+    , m_sMsgStrPlural( std::vector<OString>() )
     , m_bFuzzy( false )
+    , m_bCFormat( false )
     , m_bNull( false )
-{
-}
-
-GenPoEntry::~GenPoEntry()
 {
 }
 
@@ -143,19 +136,29 @@ void GenPoEntry::writeToFile(std::ofstream& rOFStream) const
     if ( !m_sExtractCom.isEmpty() )
         rOFStream
             << "#. "
-            << m_sExtractCom.replaceAll("\n","\n#. ").getStr() << std::endl;
-    if ( !m_sReference.isEmpty() )
-        rOFStream << "#: " << m_sReference.getStr() << std::endl;
+            << m_sExtractCom.toString().replaceAll("\n","\n#. ") << std::endl;
+    for(std::vector<OString>::const_iterator it =  m_sReferences.begin(); it != m_sReferences.end(); ++it)
+        rOFStream << "#: " << *it << std::endl;
     if ( m_bFuzzy )
         rOFStream << "#, fuzzy" << std::endl;
+    if ( m_bCFormat )
+        rOFStream << "#, c-format" << std::endl;
     if ( !m_sMsgCtxt.isEmpty() )
         rOFStream << "msgctxt "
-                  << lcl_GenMsgString(m_sReference+"\n"+m_sMsgCtxt).getStr()
+                  << lcl_GenMsgString(m_sMsgCtxt)
                   << std::endl;
     rOFStream << "msgid "
-              << lcl_GenMsgString(m_sMsgId).getStr() << std::endl;
-    rOFStream << "msgstr "
-              << lcl_GenMsgString(m_sMsgStr).getStr() << std::endl;
+              << lcl_GenMsgString(m_sMsgId) << std::endl;
+    if ( !m_sMsgIdPlural.isEmpty() )
+        rOFStream << "msgid_plural "
+                  << lcl_GenMsgString(m_sMsgIdPlural)
+                  << std::endl;
+    if ( !m_sMsgStrPlural.empty() )
+        for(auto & line : m_sMsgStrPlural)
+            rOFStream << line.copy(0,10) << lcl_GenMsgString(line.copy(10)) << std::endl;
+    else
+        rOFStream << "msgstr "
+                  << lcl_GenMsgString(m_sMsgStr) << std::endl;
 }
 
 void GenPoEntry::readFromFile(std::ifstream& rIFStream)
@@ -176,17 +179,21 @@ void GenPoEntry::readFromFile(std::ifstream& rIFStream)
         {
             if( !m_sExtractCom.isEmpty() )
             {
-                m_sExtractCom += "\n";
+                m_sExtractCom.append("\n");
             }
-            m_sExtractCom += sLine.copy(3);
+            m_sExtractCom.append(sLine.copy(3));
         }
         else if (sLine.startsWith("#: "))
         {
-            m_sReference = sLine.copy(3);
+            m_sReferences.push_back(sLine.copy(3));
         }
         else if (sLine.startsWith("#, fuzzy"))
         {
             m_bFuzzy = true;
+        }
+        else if (sLine.startsWith("#, c-format"))
+        {
+            m_bCFormat = true;
         }
         else if (sLine.startsWith("msgctxt "))
         {
@@ -198,14 +205,30 @@ void GenPoEntry::readFromFile(std::ifstream& rIFStream)
             m_sMsgId = lcl_GenNormString(sLine.copy(6));
             pLastMsg = &m_sMsgId;
         }
+        else if (sLine.startsWith("msgid_plural "))
+        {
+            m_sMsgIdPlural = lcl_GenNormString(sLine.copy(13));
+            pLastMsg = &m_sMsgIdPlural;
+        }
         else if (sLine.startsWith("msgstr "))
         {
             m_sMsgStr = lcl_GenNormString(sLine.copy(7));
             pLastMsg = &m_sMsgStr;
         }
+        else if (sLine.startsWith("msgstr["))
+        {
+            // assume there are no more than 10 plural forms...
+            // and that plural strings are never split to multi-line in po
+            m_sMsgStrPlural.push_back(sLine.copy(0,10) + lcl_GenNormString(sLine.copy(10)));
+        }
         else if (sLine.startsWith("\"") && pLastMsg)
         {
-            if (pLastMsg != &m_sMsgCtxt || sLine != "\"" + m_sReference + "\\n\"")
+            OString sReference;
+            if (!m_sReferences.empty())
+            {
+                sReference = m_sReferences.front();
+            }
+            if (pLastMsg != &m_sMsgCtxt || sLine != "\"" + sReference + "\\n\"")
             {
                 *pLastMsg += lcl_GenNormString(sLine);
             }
@@ -239,11 +262,13 @@ PoEntry::PoEntry(
         throw WRONGHELPTEXT;
 
     m_pGenPo.reset( new GenPoEntry() );
-    m_pGenPo->setReference(rSourceFile.copy(rSourceFile.lastIndexOf('/')+1));
+    OString sReference = rSourceFile.copy(rSourceFile.lastIndexOf('/')+1);
+    m_pGenPo->setReference(sReference);
 
     OString sMsgCtxt =
+        sReference + "\n" +
         rGroupId + "\n" +
-        (rLocalId.isEmpty() ? OString( "" ) : rLocalId + "\n") +
+        (rLocalId.isEmpty() ? OString() : rLocalId + "\n") +
         rResType;
     switch(eType){
     case TTEXT:
@@ -257,8 +282,8 @@ PoEntry::PoEntry(
     m_pGenPo->setMsgCtxt(sMsgCtxt);
     m_pGenPo->setMsgId(rText);
     m_pGenPo->setExtractCom(
-        ( !rHelpText.isEmpty() ?  rHelpText + "\n" : OString( "" )) +
-        genKeyId( m_pGenPo->getReference() + rGroupId + rLocalId + rResType + rText ) );
+        ( !rHelpText.isEmpty() ?  rHelpText + "\n" : OString()) +
+        genKeyId( m_pGenPo->getReference().front() + rGroupId + rLocalId + rResType + rText ) );
     m_bIsInitialized = true;
 }
 
@@ -297,10 +322,17 @@ PoEntry& PoEntry::operator=(const PoEntry& rPo)
     return *this;
 }
 
-OString PoEntry::getSourceFile() const
+PoEntry& PoEntry::operator=(PoEntry&& rPo)
+{
+    m_pGenPo = std::move(rPo.m_pGenPo);
+    m_bIsInitialized = std::move(rPo.m_bIsInitialized);
+    return *this;
+}
+
+OString const & PoEntry::getSourceFile() const
 {
     assert( m_bIsInitialized );
-    return m_pGenPo->getReference();
+    return m_pGenPo->getReference().front();
 }
 
 OString PoEntry::getGroupId() const
@@ -350,15 +382,23 @@ bool PoEntry::isFuzzy() const
     return m_pGenPo->isFuzzy();
 }
 
+// Get message context
+const OString& PoEntry::getMsgCtxt() const
+{
+    assert( m_bIsInitialized );
+    return m_pGenPo->getMsgCtxt();
+
+}
+
 // Get translation string in merge format
-OString PoEntry::getMsgId() const
+OString const & PoEntry::getMsgId() const
 {
     assert( m_bIsInitialized );
     return m_pGenPo->getMsgId();
 }
 
 // Get translated string in merge format
-OString PoEntry::getMsgStr() const
+const OString& PoEntry::getMsgStr() const
 {
     assert( m_bIsInitialized );
     return m_pGenPo->getMsgStr();
@@ -376,9 +416,7 @@ bool PoEntry::IsInSameComp(const PoEntry& rPo1,const PoEntry& rPo2)
 
 OString PoEntry::genKeyId(const OString& rGenerator)
 {
-    boost::crc_32_type aCRC32;
-    aCRC32.process_bytes(rGenerator.getStr(), rGenerator.getLength());
-    sal_uInt32 nCRC = aCRC32.checksum();
+    sal_uInt32 nCRC = rtl_crc32(0, rGenerator.getStr(), rGenerator.getLength());
     // Use simple ASCII characters, exclude I, l, 1 and O, 0 to avoid confusing IDs
     static const char sSymbols[] =
         "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -401,8 +439,18 @@ namespace
         struct tm* pNow = localtime(&aNow);
         char pBuff[50];
         strftime( pBuff, sizeof pBuff, "%Y-%m-%d %H:%M%z", pNow );
-        return pBuff;
+        return OString(pBuff);
     }
+}
+
+// when updating existing files (pocheck), reuse provided po-header
+PoHeader::PoHeader( const OString& rExtSrc, const OString& rPoHeaderMsgStr )
+    : m_pGenPo( new GenPoEntry() )
+    , m_bIsInitialized( false )
+{
+    m_pGenPo->setExtractCom("extracted from " + rExtSrc);
+    m_pGenPo->setMsgStr(rPoHeaderMsgStr);
+    m_bIsInitialized = true;
 }
 
 PoHeader::PoHeader( const OString& rExtSrc )
@@ -421,14 +469,13 @@ PoHeader::PoHeader( const OString& rExtSrc )
         "MIME-Version: 1.0\n"
         "Content-Type: text/plain; charset=UTF-8\n"
         "Content-Transfer-Encoding: 8bit\n"
-        "X-Generator: LibreOffice\n"
-        "X-Accelerator-Marker: ~\n"));
+        "X-Accelerator-Marker: ~\n"
+        "X-Generator: LibreOffice\n"));
     m_bIsInitialized = true;
 }
 
 PoHeader::~PoHeader()
 {
-    delete m_pGenPo;
 }
 
 PoOfstream::PoOfstream()
@@ -494,17 +541,9 @@ namespace
 // Check the validity of read entry
 bool lcl_CheckInputEntry(const GenPoEntry& rEntry)
 {
-    const OString sMsgCtxt = rEntry.getMsgCtxt();
-    const sal_Int32 nFirstEndLine = sMsgCtxt.indexOf('\n');
-    const sal_Int32 nLastEndLine = sMsgCtxt.lastIndexOf('\n');
-    const sal_Int32 nLastDot = sMsgCtxt.lastIndexOf('.');
-    const OString sType = sMsgCtxt.copy( nLastDot + 1 );
-    return !rEntry.getReference().isEmpty() &&
-            nFirstEndLine > 0 &&
-            (nLastEndLine == nFirstEndLine || nLastEndLine == sMsgCtxt.indexOf('\n',nFirstEndLine+1)) &&
-            nLastDot - nLastEndLine > 1 &&
-            (sType == "text" || sType == "quickhelptext" || sType == "title")&&
-            !rEntry.getMsgId().isEmpty();
+    return !rEntry.getReference().empty() &&
+           !rEntry.getMsgCtxt().isEmpty() &&
+           !rEntry.getMsgId().isEmpty();
 }
 
 }
@@ -528,6 +567,28 @@ PoIfstream::~PoIfstream()
     {
        close();
     }
+}
+
+void PoIfstream::open( const OString& rFileName, OString& rPoHeader )
+{
+    assert( !isOpen() );
+    m_aInPut.open( rFileName.getStr(), std::ios_base::in );
+
+    // capture header, updating timestamp and generator
+    std::string sTemp;
+    std::getline(m_aInPut,sTemp);
+    while( !sTemp.empty() && !m_aInPut.eof() )
+    {
+        std::getline(m_aInPut,sTemp);
+        OString sLine = OString(sTemp.data(),sTemp.length());
+        if (sLine.startsWith("\"PO-Revision-Date"))
+            rPoHeader += "PO-Revision-Date: " + lcl_GetTime() + "\n";
+        else if (sLine.startsWith("\"X-Generator"))
+            rPoHeader += "X-Generator: LibreOffice\n";
+        else if (sLine.startsWith("\""))
+            rPoHeader += lcl_GenNormString(sLine);
+    }
+    m_bEof = false;
 }
 
 void PoIfstream::open( const OString& rFileName )

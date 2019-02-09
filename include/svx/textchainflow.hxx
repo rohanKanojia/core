@@ -21,6 +21,7 @@
 #define INCLUDED_SVX_TEXTCHAINFLOW_HXX
 
 #include <svx/textchain.hxx>
+#include <memory>
 
 class SdrTextObj;
 class SdrOutliner;
@@ -53,12 +54,11 @@ public:
 protected:
     // Cursor related
     bool mbPossiblyCursorOut;
-    CursorChainingEvent maCursorEvent;
     ESelection maOverflowPosSel;
     ESelection maPostChainingSel;
 
-    OFlowChainedText *mpOverflChText;
-    UFlowChainedText *mpUnderflChText;
+    std::unique_ptr<OFlowChainedText> mpOverflChText;
+    std::unique_ptr<UFlowChainedText> mpUnderflChText;
 
     void impCheckForFlowEvents(SdrOutliner *, SdrOutliner *);
 
@@ -69,9 +69,6 @@ protected:
 
     virtual void impSetFlowOutlinerParams(SdrOutliner *, SdrOutliner *);
 
-    // impGetMergedUnderflowingParaObject merges underflowing text with the one in the next box
-    OutlinerParaObject *impGetMergedUnderflowParaObject(SdrOutliner *pOutliner);
-
 private:
     bool mbOFisUFinduced;
 
@@ -81,8 +78,6 @@ private:
     SdrTextObj *mpNextLink;
 
     TextChain *mpTextChain;
-
-    bool bCheckedFlowEvents;
 
     bool bUnderflow;
     bool bOverflow;

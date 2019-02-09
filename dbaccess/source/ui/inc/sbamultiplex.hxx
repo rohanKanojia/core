@@ -47,7 +47,7 @@
 
 namespace dbaui
 {
-    // TODO : replace this class if MM provides an WeakSubObject in cppu
+    // TODO : replace this class if MM provides a WeakSubObject in cppu
     class OSbaWeakSubObject : public ::cppu::OWeakObject
     {
     protected:
@@ -72,21 +72,21 @@ namespace dbaui
             ::osl::Mutex& rMutex);                                                          \
         DECLARE_UNO3_DEFAULTS(classname, OSbaWeakSubObject)                                     \
         virtual css::uno::Any  SAL_CALL queryInterface(                        \
-            const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) override; \
+            const css::uno::Type& _rType) override; \
                                                                                             \
         /* css::lang::XEventListener */                                        \
-        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw(css::uno::RuntimeException, std::exception) override;  \
+        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;  \
 
     #define DECLARE_MULTIPLEXER_VOID_METHOD(methodname, eventtype)                          \
-        virtual void SAL_CALL methodname(const eventtype& e) throw (css::uno::RuntimeException, std::exception) override; \
+        virtual void SAL_CALL methodname(const eventtype& e) override; \
 
     #define DECLARE_MULTIPLEXER_BOOL_METHOD(methodname, eventtype)                          \
-        virtual sal_Bool SAL_CALL methodname(const eventtype& e) throw (css::uno::RuntimeException, std::exception) override;   \
+        virtual sal_Bool SAL_CALL methodname(const eventtype& e) override;   \
 
-    #define END_DECLARE_LISTENER_MULTIPLEXER()                                              \
-    /* resolve ambiguity : both OWeakObject and OInterfaceContainerHelper2 have these memory operators */    \
-        void * SAL_CALL operator new( size_t size ) throw() { return OSbaWeakSubObject::operator new(size); }   \
-        void SAL_CALL operator delete( void * p ) throw() { OSbaWeakSubObject::operator delete(p); }    \
+    #define END_DECLARE_LISTENER_MULTIPLEXER()                                               \
+        /* resolve ambiguity : both OWeakObject and OInterfaceContainerHelper2 have these memory operators */    \
+        using OSbaWeakSubObject::operator new;   \
+        using OSbaWeakSubObject::operator delete;    \
     };                                                                                      \
 
     // implementation of a listener multiplexer class
@@ -100,7 +100,7 @@ namespace dbaui
     }                                                                                       \
                                                                                             \
     css::uno::Any  SAL_CALL classname::queryInterface(                         \
-        const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) \
+        const css::uno::Type& _rType) \
     {                                                                                       \
         css::uno::Any aReturn =                                                \
             OSbaWeakSubObject::queryInterface(_rType);                                          \
@@ -112,12 +112,12 @@ namespace dbaui
                                                                                             \
         return aReturn;                                                                     \
     }                                                                                       \
-    void SAL_CALL classname::disposing(const css::lang::EventObject& ) throw(css::uno::RuntimeException, std::exception)\
+    void SAL_CALL classname::disposing(const css::lang::EventObject& )\
     {                                                                                       \
     }                                                                                       \
 
     #define IMPLEMENT_LISTENER_MULTIPLEXER_VOID_METHOD(classname, listenerclass, methodname, eventtype) \
-    void SAL_CALL classname::methodname(const eventtype& e) throw (css::uno::RuntimeException, std::exception) \
+    void SAL_CALL classname::methodname(const eventtype& e) \
     {                                                                                       \
         eventtype aMulti(e);                                                                \
         aMulti.Source = &m_rParent;                                                         \
@@ -127,7 +127,7 @@ namespace dbaui
     }                                                                                       \
 
     #define IMPLEMENT_LISTENER_MULTIPLEXER_BOOL_METHOD(classname, listenerclass, methodname, eventtype) \
-    sal_Bool SAL_CALL classname::methodname(const eventtype& e) throw (css::uno::RuntimeException, std::exception) \
+    sal_Bool SAL_CALL classname::methodname(const eventtype& e) \
     {                                                                                       \
         eventtype aMulti(e);                                                                \
         aMulti.Source = &m_rParent;                                                         \
@@ -140,7 +140,7 @@ namespace dbaui
 
     // helper for classes which do event multiplexing
     #define IMPLEMENT_LISTENER_ADMINISTRATION(classname, listenernamespace, listenerdesc, multiplexer, braodcasterclass, broadcaster) \
-    void SAL_CALL classname::add##listenerdesc(const css::uno::Reference< css::listenernamespace::X##listenerdesc >& l) throw(css::uno::RuntimeException, std::exception)\
+    void SAL_CALL classname::add##listenerdesc(const css::uno::Reference< css::listenernamespace::X##listenerdesc >& l)\
     {                                                                                       \
         multiplexer.addInterface(l);                                                            \
         if (multiplexer.getLength() == 1)                                                   \
@@ -150,7 +150,7 @@ namespace dbaui
                 xBroadcaster->add##listenerdesc(&multiplexer);                              \
         }                                                                                   \
     }                                                                                       \
-    void SAL_CALL classname::remove##listenerdesc(const css::uno::Reference< css::listenernamespace::X##listenerdesc >& l) throw(css::uno::RuntimeException, std::exception)\
+    void SAL_CALL classname::remove##listenerdesc(const css::uno::Reference< css::listenernamespace::X##listenerdesc >& l)\
     {                                                                                       \
         if (multiplexer.getLength() == 1)                                                   \
         {                                                                                   \
@@ -180,8 +180,8 @@ namespace dbaui
     // declaration of property listener multiplexers
     // (with support for specialized and unspecialized property listeners)
 
-    #define DECLARE_PROPERTY_MULTIPLEXER(classname, listenerclass, methodname, eventtype, exceptions)   \
-    class classname                                                                         \
+    #define DECLARE_PROPERTY_MULTIPLEXER(classname, listenerclass, methodname, eventtype)   \
+    class classname final                                                                   \
             :public OSbaWeakSubObject                                                           \
             ,public listenerclass                                                           \
     {                                                                                       \
@@ -193,14 +193,13 @@ namespace dbaui
         classname( ::cppu::OWeakObject& rSource, ::osl::Mutex& rMutex );                    \
         DECLARE_UNO3_DEFAULTS(classname, OSbaWeakSubObject)                                     \
         virtual css::uno::Any  SAL_CALL queryInterface(                        \
-            const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) override; \
+            const css::uno::Type& _rType) override; \
                                                                                             \
         /* css::lang::XEventListener */                                        \
-        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw(css::uno::RuntimeException, std::exception) override;  \
+        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;  \
                                                                                             \
-        virtual void SAL_CALL methodname(const eventtype& e)  throw exceptions override;             \
+        virtual void SAL_CALL methodname(const eventtype& e) override;             \
                                                                                             \
-    public:                                                                                 \
         void addInterface(const OUString& rName, const css::uno::Reference< css::uno::XInterface >& rListener);    \
         void removeInterface(const OUString& rName, const css::uno::Reference< css::uno::XInterface >& rListener); \
                                                                                             \
@@ -211,12 +210,12 @@ namespace dbaui
         ::cppu::OInterfaceContainerHelper* getContainer(const OUString& rName)       \
             { return m_aListeners.getContainer(rName); }                                    \
                                                                                             \
-    protected:                                                                              \
+    private:                                                                                \
         void Notify(::cppu::OInterfaceContainerHelper& rListeners, const eventtype& e);     \
     };                                                                                      \
 
     // implementation of property listener multiplexers
-    #define IMPLEMENT_PROPERTY_MULTIPLEXER(classname, listenerclass, methodname, eventtype, exceptions) \
+    #define IMPLEMENT_PROPERTY_MULTIPLEXER(classname, listenerclass, methodname, eventtype) \
     classname::classname(::cppu::OWeakObject& rSource, ::osl::Mutex& rMutex)                \
             :OSbaWeakSubObject(rSource)                                                     \
             ,m_aListeners(rMutex)                                                           \
@@ -224,7 +223,7 @@ namespace dbaui
     }                                                                                       \
                                                                                             \
     css::uno::Any  SAL_CALL classname::queryInterface(                         \
-        const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) \
+        const css::uno::Type& _rType) \
     {                                                                                       \
         css::uno::Any aReturn =                                                \
             OSbaWeakSubObject::queryInterface(_rType);                                          \
@@ -236,11 +235,11 @@ namespace dbaui
                                                                                             \
         return aReturn;                                                                     \
     }                                                                                       \
-    void SAL_CALL classname::disposing(const css::lang::EventObject& ) throw(css::uno::RuntimeException, std::exception)\
+    void SAL_CALL classname::disposing(const css::lang::EventObject& )\
     {                                                                                       \
     }                                                                                       \
                                                                                             \
-    void SAL_CALL classname::methodname(const eventtype& e) throw exceptions                \
+    void SAL_CALL classname::methodname(const eventtype& e)                \
     {                                                                                       \
         ::cppu::OInterfaceContainerHelper* pListeners = m_aListeners.getContainer(e.PropertyName);  \
         if (pListeners)                                                                     \
@@ -296,7 +295,7 @@ namespace dbaui
 
     // helper for classes which do property event multiplexing
     #define IMPLEMENT_PROPERTY_LISTENER_ADMINISTRATION(classname, listenerdesc, multiplexer, braodcasterclass, broadcaster) \
-    void SAL_CALL classname::add##listenerdesc(const OUString& rName, const css::uno::Reference< css::beans::X##listenerdesc >& l ) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)\
+    void SAL_CALL classname::add##listenerdesc(const OUString& rName, const css::uno::Reference< css::beans::X##listenerdesc >& l )\
     {                                                                                       \
         multiplexer.addInterface(rName, l);                                                 \
         if (multiplexer.getOverallLen() == 1)                                               \
@@ -306,7 +305,7 @@ namespace dbaui
                 xBroadcaster->add##listenerdesc(OUString(), &multiplexer);                           \
         }                                                                                   \
     }                                                                                       \
-    void SAL_CALL classname::remove##listenerdesc(const OUString& rName, const css::uno::Reference< css::beans::X##listenerdesc >& l ) throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)\
+    void SAL_CALL classname::remove##listenerdesc(const OUString& rName, const css::uno::Reference< css::beans::X##listenerdesc >& l )\
     {                                                                                       \
         if (multiplexer.getOverallLen() == 1)                                               \
         {                                                                                   \
@@ -389,10 +388,10 @@ namespace dbaui
     END_DECLARE_LISTENER_MULTIPLEXER()
 
     // css::beans::XPropertyChangeListener
-    DECLARE_PROPERTY_MULTIPLEXER(SbaXPropertyChangeMultiplexer, css::beans::XPropertyChangeListener, propertyChange, css::beans::PropertyChangeEvent, (css::uno::RuntimeException, std::exception))
+    DECLARE_PROPERTY_MULTIPLEXER(SbaXPropertyChangeMultiplexer, css::beans::XPropertyChangeListener, propertyChange, css::beans::PropertyChangeEvent)
 
     // css::beans::XVetoableChangeListener
-    DECLARE_PROPERTY_MULTIPLEXER(SbaXVetoableChangeMultiplexer, css::beans::XVetoableChangeListener, vetoableChange, css::beans::PropertyChangeEvent, (css::beans::PropertyVetoException, css::uno::RuntimeException, std::exception))
+    DECLARE_PROPERTY_MULTIPLEXER(SbaXVetoableChangeMultiplexer, css::beans::XVetoableChangeListener, vetoableChange, css::beans::PropertyChangeEvent)
 
     // css::beans::XPropertiesChangeListener
     BEGIN_DECLARE_LISTENER_MULTIPLEXER(SbaXPropertiesChangeMultiplexer, css::beans::XPropertiesChangeListener)

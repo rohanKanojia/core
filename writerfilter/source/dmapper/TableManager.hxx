@@ -20,17 +20,12 @@
 #ifndef INCLUDED_WRITERFILTER_SOURCE_DMAPPER_TABLEMANAGER_HXX
 #define INCLUDED_WRITERFILTER_SOURCE_DMAPPER_TABLEMANAGER_HXX
 
-#include <dmapper/resourcemodel.hxx>
-
-#include <ooxml/resourceids.hxx>
-
 #include <memory>
 #include <stack>
-#include "TagLogger.hxx"
 
-#include <rtl/strbuf.hxx>
-#include <PropertyMap.hxx>
-#include <TableData.hxx>
+#include "PropertyMap.hxx"
+#include "TableData.hxx"
+#include "DomainMapperTableHandler.hxx"
 
 namespace writerfilter
 {
@@ -47,9 +42,9 @@ class DomainMapperTableHandler;
    table structure. The events have to be handles by a TableDataHandler.
 
  */
-class TableManager
+class TableManager : public virtual SvRefBase
 {
-    class TableManagerState
+    class TableManagerState final
     {
         /**
          properties of the current cell
@@ -90,10 +85,6 @@ class TableManager
         {
         }
 
-        virtual ~TableManagerState()
-        {
-        }
-
         void startLevel()
         {
             TablePropertyMapPtr pProps;
@@ -117,7 +108,7 @@ class TableManager
 
         void resetCellProps()
         {
-            mpCellProps.reset();
+            mpCellProps.clear();
         }
 
         void setCellProps(TablePropertyMapPtr pProps)
@@ -125,14 +116,14 @@ class TableManager
             mpCellProps = pProps;
         }
 
-        TablePropertyMapPtr getCellProps()
+        const TablePropertyMapPtr& getCellProps()
         {
             return mpCellProps;
         }
 
         void resetRowProps()
         {
-            mpRowProps.reset();
+            mpRowProps.clear();
         }
 
         void setRowProps(TablePropertyMapPtr pProps)
@@ -140,7 +131,7 @@ class TableManager
             mpRowProps = pProps;
         }
 
-        TablePropertyMapPtr getRowProps()
+        const TablePropertyMapPtr& getRowProps()
         {
             return mpRowProps;
         }
@@ -148,7 +139,7 @@ class TableManager
         void resetTableProps()
         {
             if (mTableProps.size() > 0)
-                mTableProps.top().reset();
+                mTableProps.top().clear();
         }
 
         void setTableProps(TablePropertyMapPtr pProps)
@@ -206,35 +197,15 @@ class TableManager
     TableManagerState mState;
 
 protected:
-    TablePropertyMapPtr getCellProps()
+    TablePropertyMapPtr const & getCellProps()
     {
         return mState.getCellProps();
     }
 
-    void setCellProps(TablePropertyMapPtr pProps)
-    {
-        mState.setCellProps(pProps);
-    }
-
-    void resetCellProps()
-    {
-        mState.resetCellProps();
-    }
-
 public:
-    TablePropertyMapPtr getRowProps()
+    TablePropertyMapPtr const & getRowProps()
     {
         return mState.getRowProps();
-    }
-
-    void setRowProps(TablePropertyMapPtr pProps)
-    {
-        mState.setRowProps(pProps);
-    }
-
-    void resetRowProps()
-    {
-        mState.resetRowProps();
     }
 
 protected:
@@ -253,11 +224,6 @@ protected:
         mState.setCellEnd(bCellEnd);
     }
 
-    bool isCellEnd() const
-    {
-        return mState.isCellEnd();
-    }
-
     void setRowEnd(bool bRowEnd)
     {
         mState.setRowEnd(bRowEnd);
@@ -273,17 +239,7 @@ protected:
         return mState.getTableProps();
     }
 
-    void setTableProps(TablePropertyMapPtr pProps)
-    {
-        mState.setTableProps(pProps);
-    }
-
-    void resetTableProps()
-    {
-        mState.resetTableProps();
-    }
-
-    css::uno::Reference<css::text::XTextRange> getHandle()
+    const css::uno::Reference<css::text::XTextRange>& getHandle()
     {
         return mCurHandle;
     }
@@ -294,7 +250,7 @@ protected:
     }
 
 private:
-    typedef std::shared_ptr< css::uno::Reference<css::text::XTextRange> > T_p;
+    typedef tools::SvRef< css::uno::Reference<css::text::XTextRange> > T_p;
 
     /**
        depth of the current cell
@@ -314,11 +270,15 @@ private:
     std::stack<TableData::Pointer_t> mTableDataStack;
     RowData::Pointer_t mpUnfinishedRow;
     bool mbKeepUnfinishedRow;
+    /// If this is a nested table, does it start at cell start?
+    bool m_bTableStartsAtCellStart;
+
+    bool m_bCellLastParaAfterAutospacing;
 
     /**
        handler for resolveCurrentTable
      */
-    std::shared_ptr<DomainMapperTableHandler> mpTableDataHandler;
+    tools::SvRef<DomainMapperTableHandler> mpTableDataHandler;
 
     /**
        Set flag which indicates the current handle is in a cell.
@@ -351,12 +311,12 @@ private:
      Open a cell at current level.
      */
 
-    void openCell(const css::uno::Reference<css::text::XTextRange>& handle, const TablePropertyMapPtr& pProps);
+    void openCell(const css::uno::Reference<css::text::XTextRange>& rHandle, const TablePropertyMapPtr& pProps);
 
     /**
      Close a cell at current level.
      */
-    void closeCell(const css::uno::Reference<css::text::XTextRange>& handle);
+    void closeCell(const css::uno::Reference<css::text::XTextRange>& rHandle);
 
     /**
      Ensure a cell is open at the current level.
@@ -395,14 +355,13 @@ protected:
 
 public:
     TableManager();
-    virtual ~TableManager(){}
 
     /**
        Set handler for resolveCurrentTable.
 
        @param pTableDataHandler     the handler
      */
-    void setHandler(const std::shared_ptr<DomainMapperTableHandler>& pTableDataHandler);
+    void setHandler(const tools::SvRef<DomainMapperTableHandler>& pTableDataHandler);
 
     /**
        Set the current handle.
@@ -485,14 +444,6 @@ public:
     virtual void cellProps(const TablePropertyMapPtr& pProps);
 
     /**
-       Handle properties of a certain cell in the current row.
-
-       @paran i        index of the cell in the current row
-       @param pProps   the properties
-     */
-    virtual void cellPropsByCell(unsigned int i, const TablePropertyMapPtr& pProps);
-
-    /**
        Handle properties of the current row.
 
        @param pProps   the properties
@@ -515,6 +466,9 @@ public:
     bool isIgnore() const;
 
 
+    void setTableStartsAtCellStart(bool bTableStartsAtCellStart);
+    void setCellLastParaAfterAutospacing(bool bIsAfterAutospacing);
+    bool isCellLastParaAfterAutospacing() {return m_bCellLastParaAfterAutospacing;}
 };
 
 }

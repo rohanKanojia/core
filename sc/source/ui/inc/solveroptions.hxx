@@ -22,10 +22,8 @@
 
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
-#include <vcl/field.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
+#include <vcl/weld.hxx>
 #include <svx/checklbx.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 
@@ -39,16 +37,16 @@ class ScSolverOptionsDialog : public ModalDialog
     VclPtr<SvxCheckListBox> m_pLbSettings;
     VclPtr<PushButton> m_pBtnEdit;
 
-    SvLBoxButtonData* mpCheckButtonData;
+    std::unique_ptr<SvLBoxButtonData> m_xCheckButtonData;
     css::uno::Sequence<OUString> maImplNames;
     css::uno::Sequence<OUString> maDescriptions;
     OUString        maEngine;
     css::uno::Sequence<css::beans::PropertyValue> maProperties;
 
-    DECL_LINK_TYPED( EngineSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( SettingsSelHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( SettingsDoubleClickHdl, SvTreeListBox*, bool );
-    DECL_LINK_TYPED( ButtonHdl, Button*, void );
+    DECL_LINK( EngineSelectHdl, ListBox&, void );
+    DECL_LINK( SettingsSelHdl, SvTreeListBox*, void );
+    DECL_LINK( SettingsDoubleClickHdl, SvTreeListBox*, bool );
+    DECL_LINK( ButtonHdl, Button*, void );
 
     void    ReadFromComponent();
     void    FillListBox();
@@ -60,7 +58,7 @@ public:
                            const css::uno::Sequence<OUString>& rDescriptions,
                            const OUString& rEngine,
                            const css::uno::Sequence<css::beans::PropertyValue>& rProperties );
-    virtual ~ScSolverOptionsDialog();
+    virtual ~ScSolverOptionsDialog() override;
     virtual void dispose() override;
 
     // already updated in selection handler
@@ -68,30 +66,28 @@ public:
     const css::uno::Sequence<css::beans::PropertyValue>& GetProperties();
 };
 
-class ScSolverIntegerDialog : public ModalDialog
+class ScSolverIntegerDialog : public weld::GenericDialogController
 {
-    VclPtr<VclFrame>     m_pFrame;
-    VclPtr<NumericField> m_pNfValue;
+    std::unique_ptr<weld::Frame> m_xFrame;
+    std::unique_ptr<weld::SpinButton> m_xNfValue;
 
 public:
-    ScSolverIntegerDialog( vcl::Window * pParent );
-    virtual ~ScSolverIntegerDialog();
-    virtual void dispose() override;
+    ScSolverIntegerDialog(weld::Window* pParent);
+    virtual ~ScSolverIntegerDialog() override;
 
     void        SetOptionName( const OUString& rName );
     void        SetValue( sal_Int32 nValue );
     sal_Int32   GetValue() const;
 };
 
-class ScSolverValueDialog : public ModalDialog
+class ScSolverValueDialog : public weld::GenericDialogController
 {
-    VclPtr<VclFrame>   m_pFrame;
-    VclPtr<Edit>       m_pEdValue;
+    std::unique_ptr<weld::Frame> m_xFrame;
+    std::unique_ptr<weld::Entry> m_xEdValue;
 
 public:
-    ScSolverValueDialog( vcl::Window * pParent );
-    virtual ~ScSolverValueDialog();
-    virtual void dispose() override;
+    ScSolverValueDialog(weld::Window* pParent);
+    virtual ~ScSolverValueDialog() override;
 
     void        SetOptionName( const OUString& rName );
     void        SetValue( double fValue );

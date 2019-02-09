@@ -23,14 +23,15 @@
 #include "ucpext_provider.hxx"
 
 #include <com/sun/star/deployment/PackageInformationProvider.hpp>
-
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
+#include <com/sun/star/ucb/ResultSetException.hpp>
 #include <ucbhelper/contentidentifier.hxx>
-#include <comphelper/processfactory.hxx>
 #include <ucbhelper/providerhelper.hxx>
 #include <ucbhelper/content.hxx>
 #include <ucbhelper/propertyvalueset.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <memory>
 #include <vector>
@@ -41,24 +42,19 @@ namespace ucb { namespace ucp { namespace ext
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::UNO_SET_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::ucb::XContent;
     using ::com::sun::star::ucb::XContentIdentifier;
     using ::com::sun::star::sdbc::XRow;
-    using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::ucb::IllegalIdentifierException;
     using ::com::sun::star::ucb::ResultSetException;
     using ::com::sun::star::deployment::PackageInformationProvider;
     using ::com::sun::star::deployment::XPackageInformationProvider;
-    using ::com::sun::star::beans::Property;
     using ::com::sun::star::sdbc::XResultSet;
-    using ::com::sun::star::ucb::XCommandEnvironment;
 
 
     //= ResultListEntry
@@ -88,13 +84,7 @@ namespace ucb { namespace ucp { namespace ext
             ,m_xContext( rxContext )
         {
         }
-        ~DataSupplier_Impl();
     };
-
-
-    DataSupplier_Impl::~DataSupplier_Impl()
-    {
-    }
 
 
     //= helper
@@ -137,18 +127,15 @@ namespace ucb { namespace ucp { namespace ext
             case E_ROOT:
             {
                 Sequence< Sequence< OUString > > aExtensionInfo( xPackageInfo->getExtensionList() );
-                for (   const Sequence< OUString >* pExtInfo = aExtensionInfo.getConstArray();
-                        pExtInfo != aExtensionInfo.getConstArray() + aExtensionInfo.getLength();
-                        ++pExtInfo
-                    )
+                for ( auto const & extInfo : aExtensionInfo )
                 {
-                    if ( pExtInfo->getLength() <= 0 )
+                    if ( extInfo.getLength() <= 0 )
                     {
                         SAL_WARN( "ucb.ucp.ext", "illegal extension info" );
                         continue;
                     }
 
-                    const OUString& rLocalId = (*pExtInfo)[0];
+                    const OUString& rLocalId = extInfo[0];
                     ResultListEntry aEntry;
                     aEntry.sId = ContentProvider::getRootURL() + Content::encodeIdentifier( rLocalId ) + "/";
                     m_pImpl->m_aResults.push_back( aEntry );
@@ -181,7 +168,7 @@ namespace ucb { namespace ucp { namespace ext
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("ucb.ucp.ext");
         }
     }
 
@@ -254,7 +241,7 @@ namespace ucb { namespace ucp { namespace ext
             }
             catch ( const IllegalIdentifierException& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("ucb.ucp.ext");
             }
         }
 
@@ -266,11 +253,8 @@ namespace ucb { namespace ucp { namespace ext
     {
         ::osl::ClearableGuard< ::osl::Mutex > aGuard( m_pImpl->m_aMutex );
 
-        if ( m_pImpl->m_aResults.size() > i_nIndex )
-            // result already present.
-            return true;
-
-        return false;
+        // true if result already present.
+        return m_pImpl->m_aResults.size() > i_nIndex;
     }
 
 
@@ -348,7 +332,7 @@ namespace ucb { namespace ucp { namespace ext
     }
 
 
-    void DataSupplier::validate() throw( ResultSetException )
+    void DataSupplier::validate()
     {
     }
 

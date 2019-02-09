@@ -18,14 +18,13 @@
  */
 
 #include "handlerhelper.hxx"
-#include "propresid.hrc"
-#include "formresid.hrc"
-#include <comphelper/extract.hxx>
+#include <strings.hrc>
+#include <yesno.hrc>
 #include "modulepcr.hxx"
 #include "enumrepresentation.hxx"
 #include "formmetadata.hxx"
 
-#include "com/sun/star/inspection/StringRepresentation.hpp"
+#include <com/sun/star/inspection/StringRepresentation.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
@@ -35,8 +34,9 @@
 #include <com/sun/star/inspection/XStringListControl.hpp>
 #include <com/sun/star/inspection/XNumericControl.hpp>
 #include <tools/diagnose_ex.h>
-#include <tools/StringListResource.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/window.hxx>
 
 #include <algorithm>
 
@@ -72,9 +72,7 @@ namespace pcr
         // special handling for booleans (this will become a list)
         if ( _rProperty.Type.getTypeClass() == TypeClass_BOOLEAN )
         {
-            ::std::vector< OUString > aListEntries;
-            tools::StringListResource aRes(PcrRes(RID_RSC_ENUM_YESNO),aListEntries);
-            _out_rDescriptor.Control = createListBoxControl( _rxControlFactory, aListEntries, bReadOnlyControl, false );
+            _out_rDescriptor.Control = createListBoxControl(_rxControlFactory, RID_RSC_ENUM_YESNO, SAL_N_ELEMENTS(RID_RSC_ENUM_YESNO), bReadOnlyControl);
             return;
         }
 
@@ -99,7 +97,7 @@ namespace pcr
 
         default:
             OSL_FAIL( "PropertyHandlerHelper::describePropertyLine: don't know how to represent this at the UI!" );
-            // NO break!
+            [[fallthrough]];
 
         case TypeClass_STRING:
             nControlType = PropertyControlType::TextField;
@@ -115,7 +113,7 @@ namespace pcr
     {
         Reference< XPropertyControl > lcl_implCreateListLikeControl(
                 const Reference< XPropertyControlFactory >& _rxControlFactory,
-                const ::std::vector< OUString >& _rInitialListEntries,
+                const std::vector< OUString >& _rInitialListEntries,
                 bool _bReadOnlyControl,
                 bool _bSorted,
                 bool _bTrueIfListBoxFalseIfComboBox
@@ -128,39 +126,43 @@ namespace pcr
                 UNO_QUERY_THROW
             );
 
-            ::std::vector< OUString > aInitialEntries( _rInitialListEntries );
+            std::vector< OUString > aInitialEntries( _rInitialListEntries );
             if ( _bSorted )
-                ::std::sort( aInitialEntries.begin(), aInitialEntries.end() );
+                std::sort( aInitialEntries.begin(), aInitialEntries.end() );
 
-            for (   ::std::vector< OUString >::const_iterator loop = aInitialEntries.begin();
-                    loop != aInitialEntries.end();
-                    ++loop
-                )
-                xListControl->appendListEntry( *loop );
+            for (auto const& initialEntry : aInitialEntries)
+                xListControl->appendListEntry(initialEntry);
             return xListControl.get();
         }
     }
 
-
     Reference< XPropertyControl > PropertyHandlerHelper::createListBoxControl( const Reference< XPropertyControlFactory >& _rxControlFactory,
-                const ::std::vector< OUString >& _rInitialListEntries, bool _bReadOnlyControl, bool _bSorted )
+                const std::vector< OUString >& _rInitialListEntries, bool _bReadOnlyControl, bool _bSorted )
     {
-        return lcl_implCreateListLikeControl( _rxControlFactory, _rInitialListEntries, _bReadOnlyControl, _bSorted, true );
+        return lcl_implCreateListLikeControl(_rxControlFactory, _rInitialListEntries, _bReadOnlyControl, _bSorted, true);
     }
 
+    Reference< XPropertyControl > PropertyHandlerHelper::createListBoxControl( const Reference< XPropertyControlFactory >& _rxControlFactory,
+                const char** pTransIds, size_t nElements, bool _bReadOnlyControl )
+    {
+        std::vector<OUString> aInitialListEntries;
+        for (size_t i = 0; i < nElements; ++i)
+            aInitialListEntries.push_back(PcrRes(pTransIds[i]));
+        return lcl_implCreateListLikeControl(_rxControlFactory, aInitialListEntries, _bReadOnlyControl, /*_bSorted*/false, true);
+    }
 
     Reference< XPropertyControl > PropertyHandlerHelper::createComboBoxControl( const Reference< XPropertyControlFactory >& _rxControlFactory,
-                const ::std::vector< OUString >& _rInitialListEntries, bool _bReadOnlyControl, bool _bSorted )
+                const std::vector< OUString >& _rInitialListEntries, bool _bSorted )
     {
-        return lcl_implCreateListLikeControl( _rxControlFactory, _rInitialListEntries, _bReadOnlyControl, _bSorted, false );
+        return lcl_implCreateListLikeControl( _rxControlFactory, _rInitialListEntries, /*_bReadOnlyControl*/false, _bSorted, false );
     }
 
 
     Reference< XPropertyControl > PropertyHandlerHelper::createNumericControl( const Reference< XPropertyControlFactory >& _rxControlFactory,
-            sal_Int16 _nDigits, const Optional< double >& _rMinValue, const Optional< double >& _rMaxValue, bool _bReadOnlyControl )
+            sal_Int16 _nDigits, const Optional< double >& _rMinValue, const Optional< double >& _rMaxValue )
     {
         Reference< XNumericControl > xNumericControl(
-            _rxControlFactory->createPropertyControl( PropertyControlType::NumericField, _bReadOnlyControl ),
+            _rxControlFactory->createPropertyControl( PropertyControlType::NumericField, /*_bReadOnlyControl*/false ),
             UNO_QUERY_THROW
         );
 
@@ -244,11 +246,11 @@ namespace pcr
         try
         {
             Reference< XModifiable > xDocumentModifiable( getContextDocument_throw(_rContext), UNO_QUERY_THROW );
-            xDocumentModifiable->setModified( sal_True );
+            xDocumentModifiable->setModified( true );
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -266,7 +268,7 @@ namespace pcr
         return xI;
     }
 
-    Reference< XInterface > PropertyHandlerHelper::getContextDocument_throw( const Reference<XComponentContext> & _rContext ) throw (RuntimeException)
+    Reference< XInterface > PropertyHandlerHelper::getContextDocument_throw( const Reference<XComponentContext> & _rContext )
     {
         Reference< XInterface > xI;
         Any aReturn = _rContext->getValueByName( "ContextDocument" );
@@ -281,16 +283,29 @@ namespace pcr
         try
         {
             Reference< XWindow > xInspectorWindow( _rContext->getValueByName( "DialogParentWindow" ), UNO_QUERY_THROW );
-            pInspectorWindow = VCLUnoHelper::GetWindow( xInspectorWindow );
+            pInspectorWindow = VCLUnoHelper::GetWindow( xInspectorWindow ).get();
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
         return pInspectorWindow;
     }
 
-
+    weld::Window* PropertyHandlerHelper::getDialogParentFrame(const Reference<XComponentContext>& _rContext)
+    {
+        weld::Window* pInspectorWindow = nullptr;
+        try
+        {
+            Reference< XWindow > xInspectorWindow( _rContext->getValueByName( "DialogParentWindow" ), UNO_QUERY_THROW );
+            pInspectorWindow = Application::GetFrameWeld(xInspectorWindow);
+        }
+        catch( const Exception& )
+        {
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
+        }
+        return pInspectorWindow;
+    }
 } // namespace pcr
 
 

@@ -19,12 +19,11 @@
 
 
 #include <com/sun/star/presentation/EffectCommands.hpp>
-#include <com/sun/star/animations/XAnimate.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
 #include "animationcommandnode.hxx"
-#include "delayevent.hxx"
-#include "tools.hxx"
+#include <delayevent.hxx>
+#include <tools.hxx>
 #include "nodetools.hxx"
 
 
@@ -39,6 +38,7 @@ AnimationCommandNode::AnimationCommandNode( uno::Reference<animations::XAnimatio
                                              ::std::shared_ptr<BaseContainerNode> const& pParent,
                                              NodeContext const& rContext ) :
     BaseNode( xNode, pParent, rContext ),
+    mbToggled(false),
     mpShape(),
     mxCommandNode( xNode, css::uno::UNO_QUERY_THROW )
 {
@@ -81,12 +81,13 @@ void AnimationCommandNode::activate_st()
         // the command toggles the pause status on a media object
     case EffectCommands::TOGGLEPAUSE:
     {
-        if( mpShape )
+        if (mpShape)
         {
             if( mpShape->isPlaying() )
                 mpShape->pause();
             else
                 mpShape->play();
+            mbToggled = true;
         }
         break;
     }
@@ -108,6 +109,26 @@ void AnimationCommandNode::activate_st()
     scheduleDeactivationEvent(
         makeEvent( [self] () { self->deactivate(); },
                    "AnimationCommandNode::deactivate" ) );
+}
+
+void AnimationCommandNode::deactivate_st( NodeState /*eDestState*/ )
+{
+    switch( mxCommandNode->getCommand() ) {
+    // the command toggles the pause status on a media object
+    case EffectCommands::TOGGLEPAUSE:
+    {
+        if (mpShape && mbToggled)
+        {
+            if( mpShape->isPlaying() )
+                mpShape->pause();
+            else
+                mpShape->play();
+            mbToggled = false;
+        }
+        break;
+    }
+
+    }
 }
 
 bool AnimationCommandNode::hasPendingAnimation() const

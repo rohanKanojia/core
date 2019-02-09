@@ -21,15 +21,8 @@
 #define INCLUDED_SVX_FMSEARCH_HXX
 
 #include <com/sun/star/sdbc/XResultSet.hpp>
-#include <comphelper/uno3.hxx>
 #include <rtl/ustring.hxx>
 #include <svx/svxdllapi.h>
-#include <vcl/button.hxx>
-#include <vcl/combobox.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace util {
@@ -63,7 +56,7 @@ struct FmSearchContext
     // [out]
     css::uno::Reference< css::sdbc::XResultSet>
                             xCursor;        // the iterator for the context
-    OUString                strUsedFields;  // a list of field names separeted by ';'
+    OUString                strUsedFields;  // a list of field names separated by ';'
     ::std::vector< css::uno::Reference< css::uno::XInterface > >
                             arrFields;      // the corresponding text interfaces for the fields in strUsedFields
     OUString                sFieldDisplayNames;     // if not empty: names to be displayed for the searchable fields (must have the same token count as strUsedFields!)

@@ -20,8 +20,7 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_DRAWINGFRAGMENT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_DRAWINGFRAGMENT_HXX
 
-#include <com/sun/star/awt/Rectangle.hpp>
-#include <com/sun/star/awt/Size.hpp>
+#include <memory>
 #include <oox/drawingml/shapegroupcontext.hxx>
 #include <oox/ole/axcontrol.hxx>
 #include <oox/drawingml/shape.hxx>
@@ -34,7 +33,6 @@
 
 namespace oox { namespace ole {
     struct AxFontData;
-    class AxMorphDataModelBase;
 } }
 
 namespace oox {
@@ -61,7 +59,7 @@ public:
     explicit            Shape(
                             const WorksheetHelper& rHelper,
                             const AttributeList& rAttribs,
-                            const sal_Char* pcServiceName = nullptr );
+                            const sal_Char* pcServiceName );
 
 protected:
     virtual void        finalizeXShape(
@@ -77,7 +75,7 @@ class GroupShapeContext : public ::oox::drawingml::ShapeGroupContext, public Wor
 {
 public:
     explicit            GroupShapeContext(
-                            ::oox::core::ContextHandler2Helper& rParent,
+                            const ::oox::core::ContextHandler2Helper& rParent,
                             const WorksheetHelper& rHelper,
                             const ::oox::drawingml::ShapePtr& rxParentShape,
                             const ::oox::drawingml::ShapePtr& rxShape );
@@ -134,9 +132,9 @@ private:
 
 private:
     css::uno::Reference< css::container::XIndexContainer > mxCtrlFormIC;
-    sal_Int32           mnCtrlIndex;
-    sal_Int32           mnCtrlType;
-    sal_Int32           mnDropStyle;
+    sal_Int32 const           mnCtrlIndex;
+    sal_Int32 const           mnCtrlType;
+    sal_Int32 const           mnDropStyle;
 };
 
 class VmlDrawing : public ::oox::vml::Drawing, public WorksheetHelper
@@ -145,7 +143,7 @@ public:
     explicit            VmlDrawing( const WorksheetHelper& rHelper );
 
     /** Returns the drawing shape for a cell note at the specified position. */
-    const ::oox::vml::ShapeBase* getNoteShape( const css::table::CellAddress& rPos ) const;
+    const ::oox::vml::ShapeBase* getNoteShape( const ScAddress& rPos ) const;
 
     /** Filters cell note shapes. */
     virtual bool        isShapeSupported( const ::oox::vml::ShapeBase& rShape ) const override;
@@ -189,7 +187,7 @@ private:
                             const ::oox::vml::ShapeBase& rShape ) const;
 
 private:
-    ::oox::ole::ControlConverter maControlConv;
+    ::oox::ole::ControlConverter const maControlConv;
     ::oox::vml::TextFontModel maListBoxFont;
 };
 

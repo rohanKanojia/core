@@ -63,19 +63,18 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPVPOINTER_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPVPOINTER_HXX
 
-#include "lwpobj.hxx"
-class LwpVersionedPointer : public LwpObject
+#include <lwpobj.hxx>
+class LwpVersionedPointer final : public LwpObject
 {
 public:
-    LwpVersionedPointer(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpVersionedPointer(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     void Read() override;
     void RegisterStyle() override;
     void Parse(IXFStream* pOutputStream) override;
     LwpObjectID& GetPointer(){return m_PointerID;}
-protected:
-    LwpObjectID m_PointerID;
 private:
-    virtual ~LwpVersionedPointer(){}
+    LwpObjectID m_PointerID;
+    virtual ~LwpVersionedPointer() override {}
 };
 #endif
 

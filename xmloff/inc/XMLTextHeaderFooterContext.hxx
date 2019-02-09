@@ -34,14 +34,13 @@ class XMLTextHeaderFooterContext: public SvXMLImportContext
 
     const OUString sOn;
     const OUString sShareContent;
-    const OUString sShareContentFirst;
     const OUString sText;
     const OUString sTextFirst;
     const OUString sTextLeft;
 
     bool    bInsertContent : 1;
-    bool    bLeft : 1;
-    bool    bFirst : 1;
+    bool const    bLeft : 1;
+    bool const    bFirst : 1;
 
 public:
 
@@ -51,9 +50,9 @@ public:
             const css::uno::Reference< css::beans::XPropertySet > & rPageStylePropSet,
                bool bFooter, bool bLft, bool bFrst );
 
-    virtual ~XMLTextHeaderFooterContext();
+    virtual ~XMLTextHeaderFooterContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

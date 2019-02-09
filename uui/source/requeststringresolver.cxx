@@ -19,7 +19,8 @@
 
 #include "requeststringresolver.hxx"
 #include "iahndl.hxx"
-#include <comphelper/processfactory.hxx>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace css;
@@ -37,31 +38,28 @@ UUIInteractionRequestStringResolver::~UUIInteractionRequestStringResolver()
 
 OUString SAL_CALL
 UUIInteractionRequestStringResolver::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
-    return OUString::createFromAscii(m_aImplementationName);
+    return OUString("com.sun.star.comp.uui.UUIInteractionRequestStringResolver");
 }
 
 sal_Bool SAL_CALL
 UUIInteractionRequestStringResolver::supportsService(
         OUString const & rServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
+
 uno::Sequence< OUString > SAL_CALL
 UUIInteractionRequestStringResolver::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
-    return getSupportedServiceNames_static();
+    return { "com.sun.star.task.InteractionRequestStringResolver" };
 }
 
 beans::Optional< OUString > SAL_CALL
 UUIInteractionRequestStringResolver::getStringFromInformationalRequest(
     const uno::Reference<
         task::XInteractionRequest >& Request )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
@@ -69,33 +67,18 @@ UUIInteractionRequestStringResolver::getStringFromInformationalRequest(
     }
     catch (uno::RuntimeException const & ex)
     {
-        throw uno::RuntimeException(ex.Message, *this);
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( ex.Message,
+                *this, anyEx );
     }
 }
 
-char const UUIInteractionRequestStringResolver::m_aImplementationName[]
-    = "com.sun.star.comp.uui.UUIInteractionRequestStringResolver";
-
-uno::Sequence< OUString >
-UUIInteractionRequestStringResolver::getSupportedServiceNames_static()
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_uui_UUIInteractionRequestStringResolver_get_implementation(
+    css::uno::XComponentContext *context,
+    css::uno::Sequence<css::uno::Any> const &)
 {
-    uno::Sequence< OUString > aNames { "com.sun.star.task.InteractionRequestStringResolver" };
-    return aNames;
-}
-
-uno::Reference< uno::XInterface > SAL_CALL
-UUIInteractionRequestStringResolver::createInstance(
-    uno::Reference< lang::XMultiServiceFactory > const &
-        rServiceFactory)
-{
-    try
-    {
-        return *new UUIInteractionRequestStringResolver(comphelper::getComponentContext(rServiceFactory));
-    }
-    catch (std::bad_alloc const &)
-    {
-        throw uno::RuntimeException("out of memory", nullptr);
-    }
+    return cppu::acquire(new UUIInteractionRequestStringResolver(context));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

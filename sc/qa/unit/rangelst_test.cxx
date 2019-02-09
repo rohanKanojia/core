@@ -9,11 +9,10 @@
 
 #include <sal/config.h>
 #include <test/bootstrapfixture.hxx>
-#include "helper/qahelper.hxx"
-#include "document.hxx"
-#include "docsh.hxx"
+#include <docsh.hxx>
+#include <scdll.hxx>
 
-#include "rangelst.hxx"
+#include <rangelst.hxx>
 
 class Test : public test::BootstrapFixture
 {
@@ -44,9 +43,13 @@ public:
     void testDeleteArea_0Ranges();
     void testJoin_Case1();
     void testJoin_Case2();
+    void testJoin_Case3();
+    void testJoin_Case4();
+    void testJoin_Case5();
     void testGetIntersectedRange();
 
     void testUpdateReference_DeleteRow();
+    void testUpdateReference_DeleteLastRow();
     void testUpdateReference_DeleteCol();
 
     void testInsertRow();
@@ -71,7 +74,11 @@ public:
     CPPUNIT_TEST(testDeleteArea_0Ranges);
     CPPUNIT_TEST(testJoin_Case1);
     CPPUNIT_TEST(testJoin_Case2);
+    CPPUNIT_TEST(testJoin_Case3);
+    CPPUNIT_TEST(testJoin_Case4);
+    CPPUNIT_TEST(testJoin_Case5);
     CPPUNIT_TEST(testUpdateReference_DeleteRow);
+    CPPUNIT_TEST(testUpdateReference_DeleteLastRow);
     CPPUNIT_TEST(testUpdateReference_DeleteCol);
     CPPUNIT_TEST(testGetIntersectedRange);
     CPPUNIT_TEST(testInsertRow);
@@ -98,7 +105,7 @@ void Test::setUp()
 
 void Test::tearDown()
 {
-    m_xDocShRef.Clear();
+    m_xDocShRef.clear();
     BootstrapFixture::tearDown();
 }
 
@@ -107,7 +114,7 @@ void Test::testDeleteArea_4Ranges()
     ScRangeList aList(ScRange(0,0,0,5,5,0));
     aList.DeleteArea(2,2,0,3,3,0);
 
-    CPPUNIT_ASSERT_EQUAL(aList.size(), static_cast<size_t>(4));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(4), aList.size());
     for(SCCOL nCol = 0; nCol <= 5; ++nCol)
     {
         for(SCROW nRow = 0; nRow <= 5; ++nRow)
@@ -228,8 +235,8 @@ void Test::testDeleteArea_2Ranges()
 
     aList.DeleteArea(4,4,0,6,7,0);
     aList2.DeleteArea(4,4,0,6,7,0);
-    CPPUNIT_ASSERT_EQUAL(aList.size(), static_cast<size_t>(2));
-    CPPUNIT_ASSERT_EQUAL(aList2.size(), static_cast<size_t>(2));
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aList.size());
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aList2.size());
 
     for(SCCOL nCol = 0; nCol <= 5; ++nCol)
     {
@@ -402,24 +409,95 @@ void Test::testDeleteArea_0Ranges()
 void Test::testJoin_Case1()
 {
     ScRangeList aList;
-    aList.push_back(new ScRange(1,1,0,3,3,0));
+    aList.push_back(ScRange(1,1,0,3,3,0));
     aList.Join(ScRange(4,1,0,6,3,0));
 
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList.size());
-    CPPUNIT_ASSERT_EQUAL( ScRange(1,1,0,6,3,0), *aList[0]);
+    CPPUNIT_ASSERT_EQUAL( ScRange(1,1,0,6,3,0), aList[0]);
 }
 
 void Test::testJoin_Case2()
 {
     ScRangeList aList;
-    aList.push_back(new ScRange(1,1,0,3,3,0));
-    aList.push_back(new ScRange(4,1,0,6,3,0));
-    aList.push_back(new ScRange(7,1,0,9,3,0));
+    aList.push_back(ScRange(1,1,0,3,3,0));
+    aList.push_back(ScRange(4,1,0,6,3,0));
+    aList.push_back(ScRange(7,1,0,9,3,0));
 
-    aList.Join(*aList[2], true);
+    aList.Join(aList[2], true);
 
     CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList.size());
-    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,9,3,0), *aList[0]);
+    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,9,3,0), aList[0]);
+}
+
+void Test::testJoin_Case3()
+{
+    ScRangeList aList;
+    aList.Join(ScRange(1,1,0,6,6,0));
+    aList.Join(ScRange(3,3,0,4,4,0));
+
+    // The second one should have been swallowed by the first one
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,6,6,0), aList[0]);
+
+    // Add a disjoint one
+    aList.Join(ScRange(8,8,0,9,9,0));
+
+    // Should be two ones now
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aList.size());
+    // The first one should still be as is
+    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,6,6,0), aList[0]);
+    // Ditto for the second one
+    CPPUNIT_ASSERT_EQUAL(ScRange(8,8,0,9,9,0), aList[1]);
+}
+
+void Test::testJoin_Case4()
+{
+    ScRangeList aList;
+    aList.Join(ScRange(1,1,0,2,6,0));
+    // Join a range that overlaps it and extends it vertically
+    aList.Join(ScRange(1,4,0,2,8,0));
+
+    // The one range in the list should have been extended
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,2,8,0), aList[0]);
+
+    // Join a range that overlaps it and extends it horizontally
+    aList.Join(ScRange(2,1,0,4,8,0));
+
+    // Again, should have just been extended
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,4,8,0), aList[0]);
+
+    // And then the same but on top / to the left of existing range
+    ScRangeList aList2;
+    aList2.Join(ScRange(4,4,0,8,8,0));
+    aList2.Join(ScRange(4,1,0,8,6,0));
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList2.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(4,1,0,8,8,0), aList2[0]);
+
+    aList2.Join(ScRange(1,1,0,6,8,0));
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList2.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(1,1,0,8,8,0), aList2[0]);
+}
+
+void Test::testJoin_Case5()
+{
+    ScRangeList aList;
+    aList.Join(ScRange(0,0,0,4,4,0));
+    aList.Join(ScRange(8,0,0,10,4,0));
+
+    // Nothing special so far, two disjoint ranges
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(2), aList.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(0,0,0,4,4,0), aList[0]);
+    CPPUNIT_ASSERT_EQUAL(ScRange(8,0,0,10,4,0), aList[1]);
+
+    // This should join the two ranges into one
+    aList.Join(ScRange(5,0,0,9,4,0));
+
+    CPPUNIT_ASSERT_EQUAL(static_cast<size_t>(1), aList.size());
+    CPPUNIT_ASSERT_EQUAL(ScRange(0,0,0,10,4,0), aList[0]);
 }
 
 void Test::testUpdateReference_DeleteRow()
@@ -441,6 +519,13 @@ void Test::testUpdateReference_DeleteRow()
     ScRangeList aList2(ScRange(2,2,0,2,2,0));
     aList2.UpdateReference(URM_INSDEL, m_pDoc, ScRange(0,3,0,MAXCOL,MAXROW,0), 0, -1, 0);
     CPPUNIT_ASSERT(aList2.empty());
+}
+
+void Test::testUpdateReference_DeleteLastRow()
+{
+    ScRangeList aList(ScRange(1,1,0,4,4,0));
+    bool bUpdated = aList.UpdateReference(URM_INSDEL, m_pDoc, ScRange(0,4,0,MAXCOL,4,0), 0, -1, 0);
+    CPPUNIT_ASSERT(bUpdated);
 }
 
 void Test::testUpdateReference_DeleteCol()

@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tools/SlotStateListener.hxx"
-#include <com/sun/star/frame/XStatusListener.hpp>
+#include <tools/SlotStateListener.hxx>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
@@ -32,7 +31,7 @@ using namespace ::com::sun::star;
 namespace sd { namespace tools {
 
 SlotStateListener::SlotStateListener (
-    Link<const OUString&,void>& rCallback,
+    Link<const OUString&,void> const & rCallback,
     const uno::Reference<frame::XDispatchProvider>& rxDispatchProvider,
     const OUString& rSlotName)
     : SlotStateListenerInterfaceBase(maMutex),
@@ -118,7 +117,6 @@ uno::Reference<frame::XDispatch>
 
 void SlotStateListener::statusChanged (
     const frame::FeatureStateEvent& rState)
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     OUString sSlotName (rState.FeatureURL.Complete);
@@ -127,17 +125,12 @@ void SlotStateListener::statusChanged (
 
 void SlotStateListener::ReleaseListeners()
 {
-    if ( ! maRegisteredURLList.empty())
+    for (const auto& rURL : maRegisteredURLList)
     {
-        RegisteredURLList::iterator iURL (maRegisteredURLList.begin());
-        RegisteredURLList::iterator iEnd (maRegisteredURLList.end());
-        for (; iURL!=iEnd; ++iURL)
+        uno::Reference<frame::XDispatch> xDispatch (GetDispatch(rURL));
+        if (xDispatch.is())
         {
-            uno::Reference<frame::XDispatch> xDispatch (GetDispatch(*iURL));
-            if (xDispatch.is())
-            {
-                xDispatch->removeStatusListener(this,*iURL);
-            }
+            xDispatch->removeStatusListener(this,rURL);
         }
     }
 }
@@ -146,12 +139,10 @@ void SlotStateListener::ReleaseListeners()
 
 void SAL_CALL SlotStateListener::disposing (
     const lang::EventObject& )
-    throw (uno::RuntimeException, std::exception)
 {
 }
 
 void SlotStateListener::ThrowIfDisposed()
-    throw (lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {

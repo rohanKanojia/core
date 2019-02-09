@@ -20,7 +20,7 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_UINUMS_HXX
 
 #include <numrule.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 #include <memory>
 #include <vector>
@@ -33,12 +33,12 @@ namespace sw { class StoredChapterNumberingRules; }
 
 #define MAX_NUM_RULES 9
 
-class SW_DLLPUBLIC SwNumRulesWithName
+class SW_DLLPUBLIC SwNumRulesWithName final
 {
     OUString maName;
     // the NumRule's formats _have_ to be independent of a document
     // (They should always be there!)
-    class SAL_DLLPRIVATE _SwNumFormatGlobal
+    class SAL_DLLPRIVATE SwNumFormatGlobal
     {
         friend class SwNumRulesWithName;
         SwNumFormat aFormat;
@@ -46,19 +46,18 @@ class SW_DLLPUBLIC SwNumRulesWithName
         sal_uInt16 nCharPoolId;
         std::vector<std::unique_ptr<SfxPoolItem>> m_Items;
 
-        _SwNumFormatGlobal& operator=( const _SwNumFormatGlobal& ) = delete;
+        SwNumFormatGlobal& operator=( const SwNumFormatGlobal& ) = delete;
 
     public:
-        _SwNumFormatGlobal( const SwNumFormat& rFormat );
-        _SwNumFormatGlobal( const _SwNumFormatGlobal& );
-        ~_SwNumFormatGlobal();
+        SwNumFormatGlobal( const SwNumFormat& rFormat );
+        SwNumFormatGlobal( const SwNumFormatGlobal& );
+        ~SwNumFormatGlobal();
 
-        void ChgNumFormat( SwWrtShell& rSh, SwNumFormat& rChg ) const;
+        SwNumFormat MakeNumFormat(SwWrtShell& rSh) const;
     };
 
-    _SwNumFormatGlobal* aFormats[ MAXLEVEL ];
+    std::unique_ptr<SwNumFormatGlobal> aFormats[ MAXLEVEL ];
 
-protected:
     friend class sw::StoredChapterNumberingRules;
     friend class SwChapterNumRules;
     void SetName(const OUString& rSet) {maName = rSet;}
@@ -70,40 +69,38 @@ public:
     SwNumRulesWithName( const SwNumRulesWithName & );
     ~SwNumRulesWithName();
 
-    const SwNumRulesWithName &operator=(const SwNumRulesWithName &);
+    SwNumRulesWithName &operator=(const SwNumRulesWithName &);
 
     const OUString& GetName() const               { return maName; }
-    void MakeNumRule( SwWrtShell& rSh, SwNumRule& rChg ) const;
-
+    SwNumRule* MakeNumRule(SwWrtShell& rSh) const;
 
     void GetNumFormat(size_t, SwNumFormat const*&, OUString const*&) const;
 };
 
-class SW_DLLPUBLIC SwChapterNumRules
+class SW_DLLPUBLIC SwChapterNumRules final
 {
 public:
     enum { nMaxRules = MAX_NUM_RULES };         // currently 9 defined forms
-protected:
-    SwNumRulesWithName   *pNumRules[ MAX_NUM_RULES ];
+private:
+    std::unique_ptr<SwNumRulesWithName> pNumRules[ MAX_NUM_RULES ];
 
     void Init();
     void Save();
 
 public:
     SwChapterNumRules();
-    virtual ~SwChapterNumRules();
+    ~SwChapterNumRules();
 
     inline const SwNumRulesWithName*    GetRules(sal_uInt16 nIdx) const;
     void CreateEmptyNumRule(sal_uInt16 nIdx); // for import
     void ApplyNumRules( const SwNumRulesWithName &rCopy,
                         sal_uInt16 nIdx);
-
 };
 
 inline const SwNumRulesWithName *SwChapterNumRules::GetRules(sal_uInt16 nIdx) const
 {
     assert(nIdx < nMaxRules);
-    return pNumRules[nIdx];
+    return pNumRules[nIdx].get();
 }
 
 

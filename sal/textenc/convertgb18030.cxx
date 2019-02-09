@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "context.hxx"
 #include "converter.hxx"
@@ -102,7 +102,7 @@ sal_Size ImplConvertGb18030ToUnicode(void const * pData,
         case IMPL_GB_18030_TO_UNICODE_STATE_0:
             if (nChar < 0x80)
                 if (pDestBufPtr != pDestBufEnd)
-                    *pDestBufPtr++ = (sal_Unicode) nChar;
+                    *pDestBufPtr++ = static_cast<sal_Unicode>(nChar);
                 else
                     goto no_output;
             else if (nChar == 0x80)
@@ -167,9 +167,9 @@ sal_Size ImplConvertGb18030ToUnicode(void const * pData,
                     {
                         nCode -= 189000 - 0x10000;
                         *pDestBufPtr++
-                            = (sal_Unicode) ImplGetHighSurrogate(nCode);
+                            = static_cast<sal_Unicode>(ImplGetHighSurrogate(nCode));
                         *pDestBufPtr++
-                            = (sal_Unicode) ImplGetLowSurrogate(nCode);
+                            = static_cast<sal_Unicode>(ImplGetLowSurrogate(nCode));
                     }
                     else
                         goto no_output;
@@ -197,8 +197,7 @@ sal_Size ImplConvertGb18030ToUnicode(void const * pData,
                         {
                             if (pDestBufPtr != pDestBufEnd)
                                 *pDestBufPtr++
-                                    = (sal_Unicode)
-                                          (pRange->m_nFirstUnicode
+                                    = static_cast<sal_Unicode>(pRange->m_nFirstUnicode
                                                + (nCode
                                                       - pRange->
                                                             m_nFirstLinear));
@@ -240,17 +239,17 @@ sal_Size ImplConvertGb18030ToUnicode(void const * pData,
 
     no_output:
         --pSrcBuf;
-        nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+        nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
         break;
     }
 
     if (eState != IMPL_GB_18030_TO_UNICODE_STATE_0
         && (nInfo & (RTL_TEXTTOUNICODE_INFO_ERROR
-                         | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL))
+                         | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL))
                == 0)
     {
         if ((nFlags & RTL_TEXTTOUNICODE_FLAGS_FLUSH) == 0)
-            nInfo |= RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL;
+            nInfo |= RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL;
         else
             switch (sal::detail::textenc::handleBadInputTextToUnicodeConversion(
                         false, true, 0, nFlags, &pDestBufPtr, pDestBufEnd,
@@ -262,7 +261,7 @@ sal_Size ImplConvertGb18030ToUnicode(void const * pData,
                 break;
 
             case sal::detail::textenc::BAD_INPUT_NO_OUTPUT:
-                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+                nInfo |= RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
                 break;
             }
     }
@@ -314,7 +313,7 @@ sal_Size ImplConvertUnicodeToGb18030(void const * pData,
         {
             if (ImplIsHighSurrogate(nChar))
             {
-                nHighSurrogate = (sal_Unicode) nChar;
+                nHighSurrogate = static_cast<sal_Unicode>(nChar);
                 continue;
             }
         }
@@ -363,7 +362,7 @@ sal_Size ImplConvertUnicodeToGb18030(void const * pData,
                         goto no_output;
                     break;
                 }
-                else if (nChar <= pRange->m_nLastUnicode)
+                if (nChar <= pRange->m_nLastUnicode)
                 {
                     if (pDestBufEnd - pDestBufPtr >= 4)
                     {
@@ -381,7 +380,7 @@ sal_Size ImplConvertUnicodeToGb18030(void const * pData,
                     break;
                 }
                 nFirstNonRange
-                    = (sal_Unicode) ((pRange++)->m_nLastUnicode + 1);
+                    = static_cast<sal_Unicode>((pRange++)->m_nLastUnicode + 1);
             }
         }
         else

@@ -17,17 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/types.h"
+#include <sal/types.h>
 
 #include <stdio.h>
-#include <inprocembobj.h>
-#ifdef __MINGW32__
-#define INITGUID
-#define INPROC_DLLPUBLIC SAL_DLLPUBLIC_EXPORT
-#else
-#define INPROC_DLLPUBLIC
-#endif
+#include "inprocembobj.h"
 #include <embservconst.h>
+
+#include <olectl.h> // declarations of DllRegisterServer/DllUnregisterServer
 
 static const GUID* guidList[ SUPPORTED_FACTORIES_NUM ] = {
     &OID_WriterTextServer,
@@ -42,81 +38,81 @@ static const GUID* guidList[ SUPPORTED_FACTORIES_NUM ] = {
     &OID_MathOASISServer
 };
 
-static HINSTANCE g_hInstance = NULL;
+static HINSTANCE g_hInstance = nullptr;
 static ULONG g_nObj = 0;
 static ULONG g_nLock = 0;
 
 
 namespace {
-    void FillCharFromInt( int nValue, char* pBuf, int nLen )
+    void FillCharFromInt( int nValue, wchar_t* pBuf, int nLen )
     {
         int nInd = 0;
         while( nInd < nLen )
         {
             char nSign = ( nValue / ( 1 << ( ( nLen - nInd - 1 ) * 4 ) ) ) % 16;
             if ( nSign >= 0 && nSign <= 9 )
-                pBuf[nInd] = nSign + '0';
-            else if ( nSign >= 10 && nSign <= 15 )
-                pBuf[nInd] = nSign - 10 + 'a';
+                pBuf[nInd] = nSign + L'0';
+            else if (nSign >= 10)
+                pBuf[nInd] = nSign - 10 + L'a';
 
             nInd++;
         }
     }
 
-    int GetStringFromClassID( const GUID& guid, char* pBuf, int nLen )
+    int GetStringFromClassID( const GUID& guid, wchar_t* pBuf, int nLen )
     {
         // is not allowed to insert
         if ( nLen < 38 )
             return 0;
 
-        pBuf[0] = '{';
+        pBuf[0] = L'{';
         FillCharFromInt( guid.Data1, &pBuf[1], 8 );
-        pBuf[9] = '-';
+        pBuf[9] = L'-';
         FillCharFromInt( guid.Data2, &pBuf[10], 4 );
-        pBuf[14] = '-';
+        pBuf[14] = L'-';
         FillCharFromInt( guid.Data3, &pBuf[15], 4 );
-        pBuf[19] = '-';
+        pBuf[19] = L'-';
 
         int nInd = 0;
         for ( nInd = 0; nInd < 2 ; nInd++ )
             FillCharFromInt( guid.Data4[nInd], &pBuf[20 + 2*nInd], 2 );
-        pBuf[24] = '-';
+        pBuf[24] = L'-';
         for ( nInd = 2; nInd < 8 ; nInd++ )
             FillCharFromInt( guid.Data4[nInd], &pBuf[20 + 1 + 2*nInd], 2 );
-        pBuf[37] = '}';
+        pBuf[37] = L'}';
 
         return 38;
     }
 
-    HRESULT WriteLibraryToRegistry( const char* pLibrary, DWORD nLen )
+    HRESULT WriteLibraryToRegistry( const wchar_t* pLibrary, DWORD nLen )
     {
         HRESULT hRes = E_FAIL;
         if ( pLibrary && nLen )
         {
-            HKEY hKey = NULL;
+            HKEY hKey = nullptr;
 
             hRes = S_OK;
             for ( int nInd = 0; nInd < SUPPORTED_FACTORIES_NUM; nInd++ )
             {
-                const char pSubKeyTemplate[] = "Software\\Classes\\CLSID\\.....................................\\InprocHandler32";
-                char pSubKey[SAL_N_ELEMENTS(pSubKeyTemplate)];
-                strncpy(pSubKey, pSubKeyTemplate, SAL_N_ELEMENTS(pSubKeyTemplate));
+                const wchar_t pSubKeyTemplate[] = L"Software\\Classes\\CLSID\\.....................................\\InprocHandler32";
+                wchar_t pSubKey[SAL_N_ELEMENTS(pSubKeyTemplate)];
+                wcsncpy(pSubKey, pSubKeyTemplate, SAL_N_ELEMENTS(pSubKeyTemplate));
 
                 int nGuidLen = GetStringFromClassID( *guidList[nInd], &pSubKey[23], 38 );
 
                 BOOL bLocalSuccess = FALSE;
                 if ( nGuidLen == 38 )
                 {
-                    if ( ERROR_SUCCESS == RegOpenKey( HKEY_LOCAL_MACHINE, pSubKey, &hKey ) )
+                    if ( ERROR_SUCCESS == RegOpenKeyW( HKEY_LOCAL_MACHINE, pSubKey, &hKey ) )
                     {
-                        if ( ERROR_SUCCESS == RegSetValueEx( hKey, "", 0, REG_SZ, (const BYTE*)pLibrary, nLen ) )
+                        if ( ERROR_SUCCESS == RegSetValueExW( hKey, L"", 0, REG_SZ, reinterpret_cast<const BYTE*>(pLibrary), nLen*sizeof(wchar_t) ) )
                             bLocalSuccess = TRUE;
                     }
 
                     if ( hKey )
                     {
                         RegCloseKey( hKey );
-                        hKey = NULL;
+                        hKey = nullptr;
                     }
                 }
 
@@ -144,13 +140,13 @@ public:
     virtual ~InprocEmbedProvider_Impl();
 
     /* IUnknown methods */
-    STDMETHOD(QueryInterface)(REFIID riid, LPVOID FAR * ppvObj);
-    STDMETHOD_(ULONG, AddRef)();
-    STDMETHOD_(ULONG, Release)();
+    STDMETHOD(QueryInterface)(REFIID riid, LPVOID FAR * ppvObj) override;
+    STDMETHOD_(ULONG, AddRef)() override;
+    STDMETHOD_(ULONG, Release)() override;
 
     /* IClassFactory methods */
-    STDMETHOD(CreateInstance)(IUnknown FAR* punkOuter, REFIID riid, void FAR* FAR* ppv);
-    STDMETHOD(LockServer)(int fLock);
+    STDMETHOD(CreateInstance)(IUnknown FAR* punkOuter, REFIID riid, void FAR* FAR* ppv) override;
+    STDMETHOD(LockServer)(int fLock) override;
 
 protected:
 
@@ -163,21 +159,18 @@ protected:
 // Entry points
 
 
-extern "C" INPROC_DLLPUBLIC BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD dwReason, LPVOID /*lpReserved*/ )
+extern "C" BOOL WINAPI DllMain( HINSTANCE hInstance, DWORD dwReason, LPVOID /*lpReserved*/ )
 {
     if (dwReason == DLL_PROCESS_ATTACH)
     {
         g_hInstance = hInstance;
-    }
-    else if (dwReason == DLL_PROCESS_DETACH)
-    {
     }
 
     return TRUE;    // ok
 }
 
 
-STDAPI INPROC_DLLPUBLIC DllGetClassObject( REFCLSID rclsid, REFIID riid, LPVOID* ppv )
+STDAPI DllGetClassObject( REFCLSID rclsid, REFIID riid, LPVOID* ppv )
 {
     for( int nInd = 0; nInd < SUPPORTED_FACTORIES_NUM; nInd++ )
          if ( *guidList[nInd] == rclsid )
@@ -186,7 +179,7 @@ STDAPI INPROC_DLLPUBLIC DllGetClassObject( REFCLSID rclsid, REFIID riid, LPVOID*
                 return E_NOINTERFACE;
 
             *ppv = new inprocserv::InprocEmbedProvider_Impl( rclsid );
-            ((LPUNKNOWN)*ppv)->AddRef();
+            static_cast<LPUNKNOWN>(*ppv)->AddRef();
             return S_OK;
          }
 
@@ -194,7 +187,7 @@ STDAPI INPROC_DLLPUBLIC DllGetClassObject( REFCLSID rclsid, REFIID riid, LPVOID*
 }
 
 
-STDAPI INPROC_DLLPUBLIC DllCanUnloadNow()
+STDAPI DllCanUnloadNow()
 {
     if ( !g_nObj && !g_nLock )
         return S_OK;
@@ -203,13 +196,13 @@ STDAPI INPROC_DLLPUBLIC DllCanUnloadNow()
 }
 
 
-STDAPI INPROC_DLLPUBLIC DllRegisterServer()
+STDAPI DllRegisterServer()
 {
-    HMODULE aCurModule = GetModuleHandleA( "inprocserv.dll" );
+    HMODULE aCurModule = GetModuleHandleW( L"inprocserv.dll" );
     if( aCurModule )
     {
-        char aLibPath[1024];
-        DWORD nLen = GetModuleFileNameA( aCurModule, aLibPath, 1019 );
+        wchar_t aLibPath[1024];
+        DWORD nLen = GetModuleFileNameW( aCurModule, aLibPath, 1019 );
         if ( nLen && nLen < 1019 )
         {
             aLibPath[nLen++] = 0;
@@ -221,9 +214,9 @@ STDAPI INPROC_DLLPUBLIC DllRegisterServer()
 }
 
 
-STDAPI INPROC_DLLPUBLIC DllUnregisterServer()
+STDAPI DllUnregisterServer()
 {
-    return WriteLibraryToRegistry( "ole32.dll", 10 );
+    return WriteLibraryToRegistry( L"ole32.dll", 10 );
 }
 
 
@@ -270,17 +263,17 @@ STDMETHODIMP InprocEmbedProvider_Impl::QueryInterface( REFIID riid, void FAR* FA
     if(IsEqualIID(riid, IID_IUnknown))
     {
         AddRef();
-        *ppv = (IUnknown*) this;
+        *ppv = static_cast<IUnknown*>(this);
         return S_OK;
     }
     else if (IsEqualIID(riid, IID_IClassFactory))
     {
         AddRef();
-        *ppv = (IClassFactory*) this;
+        *ppv = static_cast<IClassFactory*>(this);
         return S_OK;
     }
 
-    *ppv = NULL;
+    *ppv = nullptr;
     return E_NOINTERFACE;
 }
 
@@ -307,18 +300,16 @@ STDMETHODIMP InprocEmbedProvider_Impl::CreateInstance(IUnknown FAR* punkOuter,
     // TODO/LATER: should the aggregation be supported?
     // if ( punkOuter != NULL && riid != IID_IUnknown )
     //     return E_NOINTERFACE;
-    if ( punkOuter != NULL )
+    if ( punkOuter != nullptr )
         return CLASS_E_NOAGGREGATION;
 
     InprocEmbedDocument_Impl* pEmbedDocument = new InprocEmbedDocument_Impl( m_guid );
     pEmbedDocument->AddRef();
-    HRESULT hr = pEmbedDocument->Init();
-    if ( SUCCEEDED( hr ) )
-        hr = pEmbedDocument->QueryInterface( riid, ppv );
+    HRESULT hr = pEmbedDocument->QueryInterface( riid, ppv );
     pEmbedDocument->Release();
 
     if ( !SUCCEEDED( hr ) )
-        *ppv = NULL;
+        *ppv = nullptr;
 
     return hr;
 }

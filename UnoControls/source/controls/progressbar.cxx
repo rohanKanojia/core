@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "progressbar.hxx"
+#include <progressbar.hxx>
 
 #include <com/sun/star/awt/GradientStyle.hpp>
 #include <com/sun/star/awt/RasterOperation.hpp>
@@ -36,7 +36,7 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::awt;
 
-namespace unocontrols{
+namespace unocontrols {
 
 //  construct/destruct
 
@@ -59,7 +59,7 @@ ProgressBar::~ProgressBar()
 
 //  XInterface
 
-Any SAL_CALL ProgressBar::queryInterface( const Type& rType ) throw( RuntimeException, std::exception )
+Any SAL_CALL ProgressBar::queryInterface( const Type& rType )
 {
     // Attention:
     //  Don't use mutex or guard in this method!!! Is a method of XInterface.
@@ -104,37 +104,19 @@ void SAL_CALL ProgressBar::release() throw()
 
 //  XTypeProvider
 
-Sequence< Type > SAL_CALL ProgressBar::getTypes() throw( RuntimeException, std::exception )
+Sequence< Type > SAL_CALL ProgressBar::getTypes()
 {
-    // Optimize this method !
-    // We initialize a static variable only one time. And we don't must use a mutex at every call!
-    // For the first call; pTypeCollection is NULL - for the second call pTypeCollection is different from NULL!
-    static OTypeCollection* pTypeCollection = nullptr;
+    static OTypeCollection ourTypeCollection(
+                cppu::UnoType<XControlModel>::get(),
+                cppu::UnoType<XProgressBar>::get(),
+                BaseControl::getTypes() );
 
-    if ( pTypeCollection == nullptr )
-    {
-        // Ready for multithreading; get global mutex for first call of this method only! see before
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-
-        // Control these pointer again ... it can be, that another instance will be faster then these!
-        if ( pTypeCollection == nullptr )
-        {
-            // Create a static typecollection ...
-            static OTypeCollection aTypeCollection  ( cppu::UnoType<XControlModel>::get(),
-                                                      cppu::UnoType<XProgressBar>::get(),
-                                                      BaseControl::getTypes()
-                                                    );
-            // ... and set his address to static pointer!
-            pTypeCollection = &aTypeCollection;
-        }
-    }
-
-    return pTypeCollection->getTypes();
+    return ourTypeCollection.getTypes();
 }
 
 //  XAggregation
 
-Any SAL_CALL ProgressBar::queryAggregation( const Type& aType ) throw( RuntimeException, std::exception )
+Any SAL_CALL ProgressBar::queryAggregation( const Type& aType )
 {
     // Ask for my own supported interfaces ...
     // Attention: XTypeProvider and XInterface are supported by OComponentHelper!
@@ -156,13 +138,13 @@ Any SAL_CALL ProgressBar::queryAggregation( const Type& aType ) throw( RuntimeEx
 
 //  XProgressBar
 
-void SAL_CALL ProgressBar::setForegroundColor( sal_Int32 nColor ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressBar::setForegroundColor( sal_Int32 nColor )
 {
     // Ready for multithreading
     MutexGuard  aGuard (m_aMutex);
 
     // Safe color for later use.
-    m_nForegroundColor = nColor;
+    m_nForegroundColor = Color(nColor);
 
     // Repaint control
     impl_paint ( 0, 0, impl_getGraphicsPeer() );
@@ -170,13 +152,13 @@ void SAL_CALL ProgressBar::setForegroundColor( sal_Int32 nColor ) throw( Runtime
 
 //  XProgressBar
 
-void SAL_CALL ProgressBar::setBackgroundColor ( sal_Int32 nColor ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressBar::setBackgroundColor ( sal_Int32 nColor )
 {
     // Ready for multithreading
     MutexGuard  aGuard (m_aMutex);
 
     // Safe color for later use.
-    m_nBackgroundColor = nColor;
+    m_nBackgroundColor = Color(nColor);
 
     // Repaint control
     impl_paint ( 0, 0, impl_getGraphicsPeer() );
@@ -184,7 +166,7 @@ void SAL_CALL ProgressBar::setBackgroundColor ( sal_Int32 nColor ) throw( Runtim
 
 //  XProgressBar
 
-void SAL_CALL ProgressBar::setValue ( sal_Int32 nValue ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressBar::setValue ( sal_Int32 nValue )
 {
     // This method is defined for follow things:
     //      1) Values >= _nMinRange
@@ -213,7 +195,7 @@ void SAL_CALL ProgressBar::setValue ( sal_Int32 nValue ) throw( RuntimeException
 
 //  XProgressBar
 
-void SAL_CALL ProgressBar::setRange ( sal_Int32 nMin, sal_Int32 nMax ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressBar::setRange ( sal_Int32 nMin, sal_Int32 nMax )
 {
     // This method is defined for follow things:
     //      1) All values of sal_Int32
@@ -222,7 +204,7 @@ void SAL_CALL ProgressBar::setRange ( sal_Int32 nMin, sal_Int32 nMax ) throw( Ru
 
     // save impossible cases
     // This method is only defined for valid values
-    // If you ignore this, the release version wil produce an error "division by zero" in "ProgressBar::setValue()"!
+    // If you ignore this, the release version will produce an error "division by zero" in "ProgressBar::setValue()"!
     DBG_ASSERT ( ( nMin != nMax ) , "ProgressBar::setRange()\nValues for MIN and MAX are the same. This is not allowed!\n" );
 
     // Ready for multithreading
@@ -255,7 +237,7 @@ void SAL_CALL ProgressBar::setRange ( sal_Int32 nMin, sal_Int32 nMax ) throw( Ru
 
 //  XProgressBar
 
-sal_Int32 SAL_CALL ProgressBar::getValue () throw( RuntimeException, std::exception )
+sal_Int32 SAL_CALL ProgressBar::getValue ()
 {
     // Ready for multithreading
     MutexGuard aGuard (m_aMutex);
@@ -271,7 +253,7 @@ void SAL_CALL ProgressBar::setPosSize (
     sal_Int32 nWidth,
     sal_Int32 nHeight,
     sal_Int16 nFlags
-) throw( RuntimeException, std::exception )
+)
 {
     // Take old size BEFORE you set the new values at baseclass!
     // You will control changes. At the other way, the values are the same!
@@ -291,7 +273,7 @@ void SAL_CALL ProgressBar::setPosSize (
 
 //  XControl
 
-sal_Bool SAL_CALL ProgressBar::setModel( const Reference< XControlModel >& /*xModel*/ ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ProgressBar::setModel( const Reference< XControlModel >& /*xModel*/ )
 {
     // A model is not possible for this control.
     return false;
@@ -299,7 +281,7 @@ sal_Bool SAL_CALL ProgressBar::setModel( const Reference< XControlModel >& /*xMo
 
 //  XControl
 
-Reference< XControlModel > SAL_CALL ProgressBar::getModel() throw( RuntimeException, std::exception )
+Reference< XControlModel > SAL_CALL ProgressBar::getModel()
 {
     // A model is not possible for this control.
     return Reference< XControlModel >();
@@ -326,24 +308,24 @@ void ProgressBar::impl_paint ( sal_Int32 nX, sal_Int32 nY, const Reference< XGra
     // save impossible cases
     DBG_ASSERT ( rGraphics.is(), "ProgressBar::paint()\nCalled with invalid Reference< XGraphics > ." );
 
-    // This paint method ist not buffered !!
+    // This paint method is not buffered !!
     // Every request paint the completely control. ( but only, if peer exist )
-     if ( rGraphics.is () )
+    if ( rGraphics.is () )
     {
         MutexGuard  aGuard (m_aMutex);
 
         // Clear background
         // (same color for line and fill)
-        rGraphics->setFillColor ( m_nBackgroundColor                        );
-        rGraphics->setLineColor ( m_nBackgroundColor                        );
+        rGraphics->setFillColor ( sal_Int32(m_nBackgroundColor) );
+        rGraphics->setLineColor ( sal_Int32(m_nBackgroundColor) );
         rGraphics->drawRect     ( nX, nY, impl_getWidth(), impl_getHeight() );
 
         // same color for line and fill for blocks
-        rGraphics->setFillColor ( m_nForegroundColor );
-        rGraphics->setLineColor ( m_nForegroundColor );
+        rGraphics->setFillColor ( sal_Int32(m_nForegroundColor) );
+        rGraphics->setLineColor ( sal_Int32(m_nForegroundColor) );
 
         sal_Int32   nBlockStart     =   0;   // = left site of new block
-        sal_Int32   nBlockCount     =   m_nBlockValue!=0.00 ? (sal_Int32)((m_nValue-m_nMinRange)/m_nBlockValue) : 0;   // = number of next block
+        sal_Int32   nBlockCount     =   m_nBlockValue!=0.00 ? static_cast<sal_Int32>((m_nValue-m_nMinRange)/m_nBlockValue) : 0;   // = number of next block
 
         // Draw horizontal progressbar
         // decision in "recalcRange()"
@@ -362,7 +344,7 @@ void ProgressBar::impl_paint ( sal_Int32 nX, sal_Int32 nY, const Reference< XGra
                 nBlockStart +=  m_aBlockSize.Width;
             }
         }
-        // draw vertikal progressbar
+        // draw vertical progressbar
         // decision in "recalcRange()"
         else
         {
@@ -423,8 +405,8 @@ void ProgressBar::impl_recalcRange ()
     double fBlockValue  = fRange/fMaxBlocks;
 
     m_nBlockValue       = fBlockValue;
-    m_aBlockSize.Height = (sal_Int32)fBlockHeight;
-    m_aBlockSize.Width  = (sal_Int32)fBlockWidth;
+    m_aBlockSize.Height = static_cast<sal_Int32>(fBlockHeight);
+    m_aBlockSize.Width  = static_cast<sal_Int32>(fBlockWidth);
 }
 
 }   // namespace unocontrols

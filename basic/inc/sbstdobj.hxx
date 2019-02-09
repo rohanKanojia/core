@@ -35,31 +35,28 @@ public:
 };
 
 // class SbStdPicture
-class BASIC_DLLPUBLIC SbStdPicture : public SbxObject
+class BASIC_DLLPUBLIC SbStdPicture final : public SbxObject
 {
-protected:
     Graphic     aGraphic;
 
-   virtual ~SbStdPicture();
+    virtual ~SbStdPicture() override;
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
-    void    PropType( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropWidth( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropHeight( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
+    void    PropType( SbxVariable* pVar, bool bWrite );
+    void    PropWidth( SbxVariable* pVar, bool bWrite );
+    void    PropHeight( SbxVariable* pVar, bool bWrite );
 
 public:
 
     SbStdPicture();
-    virtual SbxVariable* Find( const OUString&, SbxClassType ) override;
 
     const Graphic& GetGraphic() const { return aGraphic; }
     void    SetGraphic( const Graphic& rGrf ) { aGraphic = rGrf; }
 };
 
 // class SbStdFont
-class BASIC_DLLPUBLIC SbStdFont : public SbxObject
+class BASIC_DLLPUBLIC SbStdFont final : public SbxObject
 {
-protected:
     bool    bBold;
     bool    bItalic;
     bool    bStrikeThrough;
@@ -67,20 +64,19 @@ protected:
     sal_uInt16  nSize;
     OUString  aName;
 
-   virtual ~SbStdFont();
+    virtual ~SbStdFont() override;
     virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
-    void    PropBold( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropItalic( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropStrikeThrough( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropUnderline( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropSize( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
-    void    PropName( SbxVariable* pVar, SbxArray* pPar, bool bWrite );
+    void    PropBold( SbxVariable* pVar, bool bWrite );
+    void    PropItalic( SbxVariable* pVar, bool bWrite );
+    void    PropStrikeThrough( SbxVariable* pVar, bool bWrite );
+    void    PropUnderline( SbxVariable* pVar, bool bWrite );
+    void    PropSize( SbxVariable* pVar, bool bWrite );
+    void    PropName( SbxVariable* pVar, bool bWrite );
 
 public:
 
     SbStdFont();
-    virtual SbxVariable* Find( const OUString&, SbxClassType ) override;
 
     void     SetBold( bool bB ) { bBold = bB; }
     bool     IsBold() const { return bBold; }
@@ -92,29 +88,25 @@ public:
     bool     IsUnderline() const { return bUnderline; }
     void     SetSize( sal_uInt16 nS ) { nSize = nS; }
     sal_uInt16 GetSize() const { return nSize; }
-    void     SetFontName( const OUString& rName ) { aName = rName; }
     const OUString& GetFontName() const { return aName; }
 };
 
 // class SbStdClipboard
-class BASIC_DLLPUBLIC SbStdClipboard : public SbxObject
+class BASIC_DLLPUBLIC SbStdClipboard final : public SbxObject
 {
-protected:
-
-    virtual ~SbStdClipboard();
+    virtual ~SbStdClipboard() override;
     virtual void   Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
-    static void    MethClear( SbxVariable* pVar, SbxArray* pPar_, bool bWrite );
-    static void    MethGetData( SbxVariable* pVar, SbxArray* pPar_, bool bWrite );
-    static void    MethGetFormat( SbxVariable* pVar, SbxArray* pPar_, bool bWrite );
-    static void    MethGetText( SbxVariable* pVar, SbxArray* pPar_, bool bWrite );
-    static void    MethSetData( SbxVariable* pVar, SbxArray* pPar_, bool bWrite );
-    static void    MethSetText( SbxVariable* pVar, SbxArray* pPar_, bool bWrite );
+    static void    MethClear( SbxArray const * pPar_ );
+    static void    MethGetData( SbxArray* pPar_ );
+    static void    MethGetFormat( SbxVariable* pVar, SbxArray* pPar_ );
+    static void    MethGetText( SbxVariable* pVar, SbxArray const * pPar_ );
+    static void    MethSetData( SbxArray* pPar_ );
+    static void    MethSetText( SbxArray const * pPar_ );
 
 public:
 
     SbStdClipboard();
-    virtual SbxVariable* Find( const OUString&, SbxClassType ) override;
 };
 
 #endif // INCLUDED_BASIC_INC_SBSTDOBJ_HXX

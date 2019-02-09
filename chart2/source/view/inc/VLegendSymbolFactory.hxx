@@ -20,22 +20,25 @@
 #define INCLUDED_CHART2_SOURCE_VIEW_INC_VLEGENDSYMBOLFACTORY_HXX
 
 #include "LegendEntryProvider.hxx"
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/uno/Reference.h>
+
+namespace com { namespace sun { namespace star { namespace awt { struct Size; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
 
 namespace chart
 {
 
 namespace VLegendSymbolFactory
 {
-    enum tPropertyType
+    enum class PropertyType
     {
-        PROP_TYPE_FILLED_SERIES,
-        PROP_TYPE_LINE_SERIES,
-        PROP_TYPE_FILL,
-        PROP_TYPE_LINE,
-        PROP_TYPE_FILL_AND_LINE
+        FilledSeries,
+        LineSeries,
+        Line,
     };
 
     css::uno::Reference< css::drawing::XShape >
@@ -45,7 +48,7 @@ namespace VLegendSymbolFactory
             LegendSymbolStyle eStyle,
             const css::uno::Reference< css::lang::XMultiServiceFactory > & xShapeFactory,
             const css::uno::Reference< css::beans::XPropertySet > & xLegendEntryProperties,
-            tPropertyType ePropertyType,
+            PropertyType ePropertyType,
             const css::uno::Any& rExplicitSymbol /*should contain a css::chart2::Symbol without automatic symbol if the charttype does support symbols else empty*/);
 }
 

@@ -19,6 +19,7 @@
 
 
 #include <vcl/status.hxx>
+#include <vcl/builder.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/image.hxx>
 #include <sfx2/signaturestate.hxx>
@@ -32,10 +33,12 @@
 
 #include <svl/eitem.hxx>
 
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
-#include "svx/xmlsecctrl.hxx"
+#include <svx/xmlsecctrl.hxx>
 #include <tools/urlobj.hxx>
+#include <bitmaps.hlst>
+#include <sal/log.hxx>
 
 SFX_IMPL_STATUSBAR_CONTROL( XmlSecStatusBarControl, SfxUInt16Item );
 
@@ -54,31 +57,13 @@ XmlSecStatusBarControl::XmlSecStatusBarControl( sal_uInt16 _nSlotId,  sal_uInt16
 {
     mpImpl->mnState = SignatureState::UNKNOWN;
 
-    mpImpl->maImage             = Image( SVX_RES( RID_SVXBMP_SIGNET              ) );
-    mpImpl->maImageBroken       = Image( SVX_RES( RID_SVXBMP_SIGNET_BROKEN       ) );
-    mpImpl->maImageNotValidated = Image( SVX_RES( RID_SVXBMP_SIGNET_NOTVALIDATED ) );
-
-    if (_rStb.GetDPIScaleFactor() > 1)
-    {
-        Image arr[3] = {mpImpl->maImage, mpImpl->maImageBroken, mpImpl->maImageNotValidated};
-
-        for (int i = 0; i < 3; i++)
-        {
-            BitmapEx b = arr[i].GetBitmapEx();
-            b.Scale(_rStb.GetDPIScaleFactor(), _rStb.GetDPIScaleFactor(), BmpScaleFlag::Fast);
-            arr[i] = Image(b);
-        }
-
-        mpImpl->maImage = arr[0];
-        mpImpl->maImageBroken = arr[1];
-        mpImpl->maImageNotValidated = arr[2];
-    }
-
+    mpImpl->maImage             = Image(StockImage::Yes, RID_SVXBMP_SIGNET);
+    mpImpl->maImageBroken       = Image(StockImage::Yes, RID_SVXBMP_SIGNET_BROKEN);
+    mpImpl->maImageNotValidated = Image(StockImage::Yes, RID_SVXBMP_SIGNET_NOTVALIDATED);
 }
 
 XmlSecStatusBarControl::~XmlSecStatusBarControl()
 {
-    delete mpImpl;
 }
 
 void XmlSecStatusBarControl::StateChanged( sal_uInt16, SfxItemState eState, const SfxPoolItem* pState )
@@ -87,9 +72,9 @@ void XmlSecStatusBarControl::StateChanged( sal_uInt16, SfxItemState eState, cons
     {
         mpImpl->mnState = SignatureState::UNKNOWN;
     }
-    else if( dynamic_cast< const SfxUInt16Item* >(pState) !=  nullptr )
+    else if( auto pUint16Item = dynamic_cast< const SfxUInt16Item* >(pState) )
     {
-        mpImpl->mnState = static_cast<SignatureState>(static_cast<const SfxUInt16Item*>(pState)->GetValue());
+        mpImpl->mnState = static_cast<SignatureState>(pUint16Item->GetValue());
     }
     else
     {
@@ -97,30 +82,30 @@ void XmlSecStatusBarControl::StateChanged( sal_uInt16, SfxItemState eState, cons
         mpImpl->mnState = SignatureState::UNKNOWN;
     }
 
-    if( GetStatusBar().AreItemsVisible() )              // necessary ?
-        GetStatusBar().SetItemData( GetId(), nullptr );
+    GetStatusBar().SetItemData( GetId(), nullptr ); // necessary ?
 
     GetStatusBar().SetItemText( GetId(), "" );    // necessary ?
 
-    sal_uInt16 nResId = RID_SVXSTR_XMLSEC_NO_SIG;
+    const char* pResId = RID_SVXSTR_XMLSEC_NO_SIG;
     if ( mpImpl->mnState == SignatureState::OK )
-        nResId = RID_SVXSTR_XMLSEC_SIG_OK;
+        pResId = RID_SVXSTR_XMLSEC_SIG_OK;
     else if ( mpImpl->mnState == SignatureState::BROKEN )
-        nResId = RID_SVXSTR_XMLSEC_SIG_NOT_OK;
+        pResId = RID_SVXSTR_XMLSEC_SIG_NOT_OK;
     else if ( mpImpl->mnState == SignatureState::NOTVALIDATED )
-        nResId = RID_SVXSTR_XMLSEC_SIG_OK_NO_VERIFY;
+        pResId = RID_SVXSTR_XMLSEC_SIG_OK_NO_VERIFY;
     else if ( mpImpl->mnState == SignatureState::PARTIAL_OK )
-        nResId = RID_SVXSTR_XMLSEC_SIG_CERT_OK_PARTIAL_SIG;
+        pResId = RID_SVXSTR_XMLSEC_SIG_CERT_OK_PARTIAL_SIG;
 
-    GetStatusBar().SetQuickHelpText( GetId(), SVX_RESSTR( nResId ) );
+    GetStatusBar().SetQuickHelpText(GetId(), SvxResId(pResId));
 }
 
 void XmlSecStatusBarControl::Command( const CommandEvent& rCEvt )
 {
     if( rCEvt.GetCommand() == CommandEventId::ContextMenu )
     {
-        PopupMenu aPopupMenu( ResId( RID_SVXMNU_XMLSECSTATBAR, DIALOG_MGR() ) );
-        if( aPopupMenu.Execute( &GetStatusBar(), rCEvt.GetMousePosPixel() ) )
+        VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "svx/ui/xmlsecstatmenu.ui", "");
+        VclPtr<PopupMenu> aPopupMenu(aBuilder.get_menu("menu"));
+        if (aPopupMenu->Execute(&GetStatusBar(), rCEvt.GetMousePosPixel()))
         {
             css::uno::Any a;
             SfxUInt16Item aState( GetSlotId(), 0 );
@@ -142,7 +127,7 @@ void XmlSecStatusBarControl::Paint( const UserDrawEvent& rUsrEvt )
 {
     vcl::RenderContext* pDev = rUsrEvt.GetRenderContext();
 
-    Rectangle           aRect = rUsrEvt.GetRect();
+    tools::Rectangle           aRect = rUsrEvt.GetRect();
     Color               aOldLineColor = pDev->GetLineColor();
     Color               aOldFillColor = pDev->GetFillColor();
 
@@ -153,18 +138,18 @@ void XmlSecStatusBarControl::Paint( const UserDrawEvent& rUsrEvt )
 
     if( mpImpl->mnState == SignatureState::OK )
     {
-        aRect.Top() += yOffset;
+        aRect.AdjustTop(yOffset );
         pDev->DrawImage( aRect.TopLeft(), mpImpl->maImage );
     }
     else if( mpImpl->mnState == SignatureState::BROKEN )
     {
-        aRect.Top() += yOffset;
+        aRect.AdjustTop(yOffset );
         pDev->DrawImage( aRect.TopLeft(), mpImpl->maImageBroken );
     }
     else if( mpImpl->mnState == SignatureState::NOTVALIDATED
         || mpImpl->mnState == SignatureState::PARTIAL_OK)
     {
-        aRect.Top() += yOffset;
+        aRect.AdjustTop(yOffset );
         pDev->DrawImage( aRect.TopLeft(), mpImpl->maImageNotValidated );
     }
     else

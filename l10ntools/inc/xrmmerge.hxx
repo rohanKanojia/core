@@ -20,7 +20,8 @@
 #ifndef INCLUDED_L10NTOOLS_INC_XRMMERGE_HXX
 #define INCLUDED_L10NTOOLS_INC_XRMMERGE_HXX
 
-#include "sal/config.h"
+#include <memory>
+#include <sal/config.h>
 
 #include <fstream>
 
@@ -55,7 +56,7 @@ protected:
         const OString &rCloseTag
     )=0;
 
-    OString GetGID() { return sGID; }
+    const OString& GetGID() const { return sGID; }
 
 public:
     XRMResParser();
@@ -64,7 +65,7 @@ public:
     void Execute( int nToken, char * pToken );
 
     void SetError() { bError = true; }
-    bool GetError() { return bError; }
+    bool GetError() const { return bError; }
 };
 
 
@@ -95,7 +96,7 @@ public:
         const OString &rOutputFile,
         const OString &rFilePath
     );
-    virtual ~XRMResExport();
+    virtual ~XRMResExport() override;
 };
 
 
@@ -103,7 +104,7 @@ public:
 class XRMResMerge : public XRMResParser
 {
 private:
-    MergeDataFile *pMergeDataFile;
+    std::unique_ptr<MergeDataFile> pMergeDataFile;
     OString sFilename;
     std::unique_ptr<ResData> pResData;
     std::ofstream pOutputStream;
@@ -129,7 +130,7 @@ public:
         const OString &rOutputFile,
         const OString &rFilename
     );
-    virtual ~XRMResMerge();
+    virtual ~XRMResMerge() override;
 };
 
 #endif // INCLUDED_L10NTOOLS_INC_XRMMERGE_HXX

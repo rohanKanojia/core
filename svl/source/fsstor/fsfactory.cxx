@@ -18,10 +18,11 @@
  */
 
 
-#include "fsfactory.hxx"
+#include <fsfactory.hxx>
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/ucb/XSimpleFileAccess.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -36,7 +37,7 @@
 
 using namespace ::com::sun::star;
 
-uno::Sequence< OUString > SAL_CALL FSStorageFactory::impl_staticGetSupportedServiceNames()
+uno::Sequence< OUString > FSStorageFactory::impl_staticGetSupportedServiceNames()
 {
     uno::Sequence< OUString > aRet(2);
     aRet[0] = "com.sun.star.embed.FileSystemStorageFactory";
@@ -44,7 +45,7 @@ uno::Sequence< OUString > SAL_CALL FSStorageFactory::impl_staticGetSupportedServ
     return aRet;
 }
 
-OUString SAL_CALL FSStorageFactory::impl_staticGetImplementationName()
+OUString FSStorageFactory::impl_staticGetImplementationName()
 {
     return OUString("com.sun.star.comp.embed.FileSystemStorageFactory");
 }
@@ -56,8 +57,6 @@ uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::impl_staticCreateSe
 }
 
 uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstance()
-    throw ( uno::Exception,
-            uno::RuntimeException, std::exception )
 {
     OUString aTempURL;
 
@@ -86,8 +85,6 @@ uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstance()
  */
 uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstanceWithArguments(
             const uno::Sequence< uno::Any >& aArguments )
-    throw ( uno::Exception,
-            uno::RuntimeException, std::exception )
 {
     sal_Int32 nArgNum = aArguments.getLength();
     OSL_ENSURE( nArgNum < 4, "Wrong parameter number" );
@@ -159,19 +156,16 @@ uno::Reference< uno::XInterface > SAL_CALL FSStorageFactory::createInstanceWithA
 }
 
 OUString SAL_CALL FSStorageFactory::getImplementationName()
-    throw ( uno::RuntimeException, std::exception )
 {
     return impl_staticGetImplementationName();
 }
 
 sal_Bool SAL_CALL FSStorageFactory::supportsService( const OUString& ServiceName )
-    throw ( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL FSStorageFactory::getSupportedServiceNames()
-    throw ( uno::RuntimeException, std::exception )
 {
     return impl_staticGetSupportedServiceNames();
 }
@@ -179,7 +173,7 @@ uno::Sequence< OUString > SAL_CALL FSStorageFactory::getSupportedServiceNames()
 
 extern "C"
 {
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL fsstorage_component_getFactory (
+SAL_DLLPUBLIC_EXPORT void * fsstorage_component_getFactory (
     const sal_Char * pImplementationName, void * pServiceManager,
     SAL_UNUSED_PARAMETER void * /* pRegistryKey */)
 {

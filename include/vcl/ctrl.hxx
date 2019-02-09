@@ -21,20 +21,19 @@
 #define INCLUDED_VCL_CTRL_HXX
 
 #include <tools/link.hxx>
-#include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/window.hxx>
-#include <vcl/salnativewidgets.hxx>
+#include <memory>
 
 // forward
-namespace vcl { struct ImplControlData; struct ControlLayoutData; }
+namespace vcl { struct ImplControlData; }
 class StyleSettings;
 
 
 class VCL_DLLPUBLIC Control : public vcl::Window
 {
 protected:
-    vcl::ImplControlData* mpControlData;
+    std::unique_ptr<vcl::ImplControlData> mpControlData;
 
 private:
     bool                    mbHasControlFocus;
@@ -72,27 +71,35 @@ protected:
             if the Control instance has been destroyed in any of the call
     */
     bool        ImplCallEventListenersAndHandler(
-                    sal_uLong nEvent, std::function<void()> callHandler
+                    VclEventId nEvent, std::function<void()> const & callHandler
                 );
+
+    void        CallEventListeners( VclEventId nEvent, void* pData = nullptr );
 
     /** draws the given text onto the given device
 
         If no reference device is set, the draw request will simply be forwarded to OutputDevice::DrawText. Otherwise,
         the text will be rendered according to the metrics at the reference device.
 
-        Note that the given rectangle might be modified, it will contain the result of a GetTextRect call (either
-        directly at the target device, or taking the reference device into account) when returning.
+        return will contain the result of a GetTextRect call (either directly
+        at the target device, or taking the reference device into account) when
+        returning.
     */
-    void        DrawControlText( OutputDevice& _rTargetDevice, Rectangle& _io_rRect,
-                                 const OUString& _rStr, DrawTextFlags _nStyle,
-                                 MetricVector* _pVector, OUString* _pDisplayText ) const;
+    tools::Rectangle DrawControlText( OutputDevice& _rTargetDevice, const tools::Rectangle& _rRect,
+                               const OUString& _rStr, DrawTextFlags _nStyle,
+                               MetricVector* _pVector, OUString* _pDisplayText,
+                               const Size* i_pDeviceSize = nullptr ) const;
+
+    tools::Rectangle GetControlTextRect( OutputDevice& _rTargetDevice, const tools::Rectangle & rRect,
+                                  const OUString& _rStr, DrawTextFlags _nStyle,
+                                  Size* o_pDeviceSize = nullptr ) const;
 
     virtual const vcl::Font&
                 GetCanonicalFont( const StyleSettings& _rStyle ) const;
     virtual const Color&
                 GetCanonicalTextColor( const StyleSettings& _rStyle ) const;
 
-    void ImplInitSettings( const bool _bFont, const bool _bForeground );
+    void ImplInitSettings();
 
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 
@@ -116,19 +123,16 @@ public:
             the rect for drawing the frame. Upon returning from the call, the rect will be inflated
             by the space occupied by the drawn pixels.
     */
-    SAL_DLLPRIVATE void ImplDrawFrame( OutputDevice* pDev, Rectangle& rRect );
+    SAL_DLLPRIVATE void ImplDrawFrame( OutputDevice* pDev, tools::Rectangle& rRect );
 
 public:
     explicit        Control( vcl::Window* pParent, WinBits nWinStyle = 0 );
-    explicit        Control( vcl::Window* pParent, const ResId& );
-    virtual         ~Control();
+    virtual         ~Control() override;
     virtual void    dispose() override;
 
     virtual void    EnableRTL ( bool bEnable = true ) override;
 
-    virtual void    GetFocus() override;
-    virtual void    LoseFocus() override;
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
     virtual void    StateChanged( StateChangedType nStateChange ) override;
     virtual void    Resize() override;
 
@@ -137,7 +141,7 @@ public:
     // gets the displayed text
     virtual OUString GetDisplayText() const override;
     // returns the bounding box for the character at index nIndex (in control coordinates)
-    Rectangle GetCharacterBounds( long nIndex ) const;
+    tools::Rectangle GetCharacterBounds( long nIndex ) const;
     // returns the character index for corresponding to rPoint (in control coordinates)
     // -1 is returned if no character is at that point
     long GetIndexForPoint( const Point& rPoint ) const;

@@ -23,10 +23,10 @@
 namespace offapp
 {
 
-    DriverPooling::DriverPooling( const OUString& _rName, const sal_Int32 _nTimeout )
+    DriverPooling::DriverPooling( const OUString& _rName )
         :sName(_rName)
         ,bEnabled(false)
-        ,nTimeoutSeconds(_nTimeout)
+        ,nTimeoutSeconds(120)
     {
     }
 
@@ -59,16 +59,13 @@ namespace offapp
         if (m_aSettings.size() != pItem->m_aSettings.size())
             return false;
 
-        DriverPoolingSettings::const_iterator aOwn = m_aSettings.begin();
-        DriverPoolingSettings::const_iterator aOwnEnd = m_aSettings.end();
         DriverPoolingSettings::const_iterator aForeign = pItem->m_aSettings.begin();
-        while (aOwn < aOwnEnd)
+        for (auto const& ownSetting : m_aSettings)
         {
-            if (*aOwn != *aForeign)
+            if (ownSetting != *aForeign)
                 return false;
 
             ++aForeign;
-            ++aOwn;
         }
 
         return true;
@@ -77,7 +74,7 @@ namespace offapp
 
     SfxPoolItem* DriverPoolingSettingsItem::Clone( SfxItemPool * ) const
     {
-        return new DriverPoolingSettingsItem(Which(), m_aSettings);
+        return new DriverPoolingSettingsItem(*this);
     }
 
 

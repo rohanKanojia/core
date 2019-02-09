@@ -18,7 +18,11 @@ $(eval $(call gb_Library_set_include,scd,\
 
 $(eval $(call gb_Library_use_external,scd,boost_headers))
 
-$(eval $(call gb_Library_use_sdk_api,scd))
+$(eval $(call gb_Library_use_api,scd,\
+	udkapi \
+	offapi \
+	oovbaapi \
+))
 
 $(eval $(call gb_Library_use_libraries,scd,\
 	comphelper \
@@ -29,7 +33,6 @@ $(eval $(call gb_Library_use_libraries,scd,\
 	sot \
 	tl \
 	utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,scd,\

@@ -19,80 +19,22 @@
 
 
 #include <svtools/svtresid.hxx>
-#include <svtools/svtools.hrc>
+#include <svtools/strings.hrc>
 #include <svtools/indexentryres.hxx>
 
-
-//  wrapper for locale specific translations data of indexentry algorithm
-
-
-class IndexEntryResourceData
-{
-    friend class IndexEntryResource;
-    private: /* data */
-        OUString  ma_Name;
-        OUString  ma_Translation;
-    private: /* member functions */
-        IndexEntryResourceData () {}
-    public:
-        IndexEntryResourceData ( const OUString &r_Algorithm, const OUString &r_Translation)
-                : ma_Name (r_Algorithm), ma_Translation (r_Translation) {}
-
-        const OUString& GetAlgorithm () const { return ma_Name; }
-
-        const OUString& GetTranslation () const { return ma_Translation; }
-
-        ~IndexEntryResourceData () {}
-
-        IndexEntryResourceData& operator= (const IndexEntryResourceData& r_From)
-        {
-            ma_Name         = r_From.GetAlgorithm();
-            ma_Translation  = r_From.GetTranslation();
-            return *this;
-        }
-};
-
-
 //  implementation of the indexentry-algorithm-name translation
-
-
-#define INDEXENTRY_RESOURCE_COUNT (STR_SVT_INDEXENTRY_END - STR_SVT_INDEXENTRY_START + 1)
-
 IndexEntryResource::IndexEntryResource()
 {
-        mp_Data = new IndexEntryResourceData[INDEXENTRY_RESOURCE_COUNT];
-
-        #define RESSTR(rid) SvtResId(rid).toString()
-
-        mp_Data[STR_SVT_INDEXENTRY_ALPHANUMERIC - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("alphanumeric", RESSTR(STR_SVT_INDEXENTRY_ALPHANUMERIC));
-        mp_Data[STR_SVT_INDEXENTRY_DICTIONARY - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("dict", RESSTR(STR_SVT_INDEXENTRY_DICTIONARY));
-        mp_Data[STR_SVT_INDEXENTRY_PINYIN - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("pinyin", RESSTR(STR_SVT_INDEXENTRY_PINYIN));
-        mp_Data[STR_SVT_INDEXENTRY_PINYIN - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("radical", RESSTR(STR_SVT_INDEXENTRY_RADICAL));
-        mp_Data[STR_SVT_INDEXENTRY_STROKE - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("stroke", RESSTR(STR_SVT_INDEXENTRY_STROKE));
-        mp_Data[STR_SVT_INDEXENTRY_STROKE - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("zhuyin", RESSTR(STR_SVT_INDEXENTRY_ZHUYIN));
-        mp_Data[STR_SVT_INDEXENTRY_ZHUYIN - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("phonetic (alphanumeric first) (grouped by syllable)",
-                    RESSTR(STR_SVT_INDEXENTRY_PHONETIC_FS));
-        mp_Data[STR_SVT_INDEXENTRY_PHONETIC_FS - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("phonetic (alphanumeric first) (grouped by consonant)",
-                    RESSTR(STR_SVT_INDEXENTRY_PHONETIC_FC));
-        mp_Data[STR_SVT_INDEXENTRY_PHONETIC_FC - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("phonetic (alphanumeric last) (grouped by syllable)",
-                    RESSTR(STR_SVT_INDEXENTRY_PHONETIC_LS));
-        mp_Data[STR_SVT_INDEXENTRY_PHONETIC_LS - STR_SVT_INDEXENTRY_START] =
-        IndexEntryResourceData ("phonetic (alphanumeric last) (grouped by consonant)",
-                    RESSTR(STR_SVT_INDEXENTRY_PHONETIC_LC));
-}
-
-IndexEntryResource::~IndexEntryResource()
-{
-    delete[] mp_Data;
+    m_aData.emplace_back("alphanumeric", SvtResId(STR_SVT_INDEXENTRY_ALPHANUMERIC));
+    m_aData.emplace_back("dict", SvtResId(STR_SVT_INDEXENTRY_DICTIONARY));
+    m_aData.emplace_back("pinyin", SvtResId(STR_SVT_INDEXENTRY_PINYIN));
+    m_aData.emplace_back("radical", SvtResId(STR_SVT_INDEXENTRY_RADICAL));
+    m_aData.emplace_back("stroke", SvtResId(STR_SVT_INDEXENTRY_STROKE));
+    m_aData.emplace_back("zhuyin", SvtResId(STR_SVT_INDEXENTRY_ZHUYIN));
+    m_aData.emplace_back("phonetic (alphanumeric first) (grouped by syllable)", SvtResId(STR_SVT_INDEXENTRY_PHONETIC_FS));
+    m_aData.emplace_back("phonetic (alphanumeric first) (grouped by consonant)", SvtResId(STR_SVT_INDEXENTRY_PHONETIC_FC));
+    m_aData.emplace_back("phonetic (alphanumeric last) (grouped by syllable)", SvtResId(STR_SVT_INDEXENTRY_PHONETIC_LS));
+    m_aData.emplace_back("phonetic (alphanumeric last) (grouped by consonant)", SvtResId(STR_SVT_INDEXENTRY_PHONETIC_LC));
 }
 
 const OUString& IndexEntryResource::GetTranslation(const OUString &r_Algorithm)
@@ -104,12 +46,12 @@ const OUString& IndexEntryResource::GetTranslation(const OUString &r_Algorithm)
         aLocaleFreeAlgorithm = r_Algorithm;
     else {
         nIndex += 1;
-        aLocaleFreeAlgorithm = r_Algorithm.copy(nIndex, r_Algorithm.getLength() - nIndex);
+        aLocaleFreeAlgorithm = r_Algorithm.copy(nIndex);
     }
 
-    for (sal_uInt32 i = 0; i < INDEXENTRY_RESOURCE_COUNT; i++)
-        if (aLocaleFreeAlgorithm == mp_Data[i].GetAlgorithm())
-            return mp_Data[i].GetTranslation();
+    for (size_t i = 0; i < m_aData.size(); ++i)
+        if (aLocaleFreeAlgorithm == m_aData[i].GetAlgorithm())
+            return m_aData[i].GetTranslation();
     return r_Algorithm;
 }
 

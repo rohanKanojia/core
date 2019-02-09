@@ -18,7 +18,7 @@
  */
 
 #include "PresenterTextView.hxx"
-#include "facreg.hxx"
+#include <facreg.hxx>
 
 #include <i18nlangtag/mslangid.hxx>
 #include <cppcanvas/vclfactory.hxx>
@@ -48,22 +48,22 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 
+static const OUStringLiteral gsTextPropertyName("Text");
+static const OUStringLiteral gsBitmapPropertyName("Bitmap");
+static const OUStringLiteral gsSizePropertyName("Size");
+static const OUStringLiteral gsBackgroundColorPropertyName("BackgroundColor");
+static const OUStringLiteral gsTextColorPropertyName("TextColor");
+static const OUStringLiteral gsFontDescriptorPropertyName("FontDescriptor");
+static const OUStringLiteral gsTopPropertyName("Top");
+static const OUStringLiteral gsTopRelativePropertyName("RelativeTop");
+static const OUStringLiteral gsTotalHeightPropertyName("TotalHeight");
+
 namespace sd { namespace presenter {
 
 // PresenterTextView::Implementation
 class PresenterTextView::Implementation
 {
 public:
-    const OUString msTextPropertyName;
-    const OUString msBitmapPropertyName;
-    const OUString msSizePropertyName;
-    const OUString msBackgroundColorPropertyName;
-    const OUString msTextColorPropertyName;
-    const OUString msFontDescriptorPropertyName;
-    const OUString msTopPropertyName;
-    const OUString msTopRelativePropertyName;
-    const OUString msTotalHeightPropertyName;
-
     Implementation();
     ~Implementation();
 
@@ -76,14 +76,14 @@ public:
     void SetTop (const sal_Int32 nTop);
     void SetText (const OUString& Text);
     sal_Int32 ParseDistance (const OUString& rsDistance) const;
-    Reference<rendering::XBitmap> GetBitmap();
+    Reference<rendering::XBitmap> const & GetBitmap();
     sal_Int32 GetTotalHeight();
 
 private:
     Reference<rendering::XBitmap> mxBitmap;
     cppcanvas::CanvasSharedPtr mpCanvas;
     VclPtr<VirtualDevice> mpOutputDevice;
-    EditEngine* mpEditEngine;
+    std::unique_ptr<EditEngine> mpEditEngine;
     SfxItemPool* mpEditEngineItemPool;
     Size maSize;
     Color maBackgroundColor;
@@ -92,17 +92,14 @@ private:
     sal_Int32 mnTop;
     sal_Int32 mnTotalHeight;
 
-    void GetEditEngine();
-    EditEngine* CreateEditEngine();
     void CheckTop();
 };
 
 // PresenterTextView
-PresenterTextView::PresenterTextView (const Reference<XComponentContext>& rxContext)
+PresenterTextView::PresenterTextView ()
     : PresenterTextViewInterfaceBase(),
       mpImplementation(new Implementation())
 {
-    (void)rxContext;
 }
 
 PresenterTextView::~PresenterTextView()
@@ -116,46 +113,33 @@ void SAL_CALL PresenterTextView::disposing()
 
 // XInitialization
 void SAL_CALL PresenterTextView::initialize (const Sequence<Any>& rArguments)
-    throw (Exception, RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
-    if (rArguments.getLength() == 1)
-    {
-        try
-        {
-            Reference<rendering::XCanvas> xCanvas (rArguments[0], UNO_QUERY_THROW);
-            if (xCanvas.is())
-            {
-                mpImplementation->SetCanvas(
-                    cppcanvas::VCLFactory::createCanvas(xCanvas));
-            }
-        }
-        catch (RuntimeException&)
-        {
-            throw;
-        }
-    }
-    else
+    if (rArguments.getLength() != 1)
     {
         throw RuntimeException("PresenterTextView: invalid number of arguments",
                 static_cast<XWeak*>(this));
     }
+
+    Reference<rendering::XCanvas> xCanvas (rArguments[0], UNO_QUERY_THROW);
+    mpImplementation->SetCanvas(
+        cppcanvas::VCLFactory::createCanvas(xCanvas));
 }
 
 Any PresenterTextView::GetPropertyValue (const OUString& rsPropertyName)
 {
     ThrowIfDisposed();
 
-    if (rsPropertyName == mpImplementation->msBitmapPropertyName)
+    if (rsPropertyName == gsBitmapPropertyName)
     {
         return Any(mpImplementation->GetBitmap());
     }
-    else if (rsPropertyName == mpImplementation->msTopPropertyName)
+    else if (rsPropertyName == gsTopPropertyName)
     {
         return Any(mpImplementation->GetTop());
     }
-    else if (rsPropertyName == mpImplementation->msTotalHeightPropertyName)
+    else if (rsPropertyName == gsTotalHeightPropertyName)
     {
         return Any(mpImplementation->GetTotalHeight());
     }
@@ -170,43 +154,43 @@ Any PresenterTextView::SetPropertyValue (
     ThrowIfDisposed();
 
     Any aOldValue;
-    if (rsPropertyName == mpImplementation->msTextPropertyName)
+    if (rsPropertyName == gsTextPropertyName)
     {
         OUString sText;
         if (rValue >>= sText)
             mpImplementation->SetText(sText);
     }
-    else if (rsPropertyName == mpImplementation->msSizePropertyName)
+    else if (rsPropertyName == gsSizePropertyName)
     {
         awt::Size aSize;
         if (rValue >>= aSize)
             mpImplementation->SetSize(Size(aSize.Width,aSize.Height));
     }
-    else if (rsPropertyName == mpImplementation->msBackgroundColorPropertyName)
+    else if (rsPropertyName == gsBackgroundColorPropertyName)
     {
         util::Color aColor = util::Color();
         if (rValue >>= aColor)
             mpImplementation->SetBackgroundColor(Color(aColor));
     }
-    else if (rsPropertyName == mpImplementation->msTextColorPropertyName)
+    else if (rsPropertyName == gsTextColorPropertyName)
     {
         util::Color aColor = util::Color();
         if (rValue >>= aColor)
             mpImplementation->SetTextColor(Color(aColor));
     }
-    else if (rsPropertyName == mpImplementation->msFontDescriptorPropertyName)
+    else if (rsPropertyName == gsFontDescriptorPropertyName)
     {
         awt::FontDescriptor aFontDescriptor;
         if (rValue >>= aFontDescriptor)
             mpImplementation->SetFontDescriptor(aFontDescriptor);
     }
-    else if (rsPropertyName == mpImplementation->msTopPropertyName)
+    else if (rsPropertyName == gsTopPropertyName)
     {
         sal_Int32 nTop = 0;
         if (rValue >>= nTop)
             mpImplementation->SetTop(nTop);
     }
-    else if (rsPropertyName == mpImplementation->msTopRelativePropertyName)
+    else if (rsPropertyName == gsTopRelativePropertyName)
     {
         OUString sDistance;
         if (rValue >>= sDistance)
@@ -218,11 +202,9 @@ Any PresenterTextView::SetPropertyValue (
 }
 
 void PresenterTextView::ThrowIfDisposed()
-    throw (css::lang::DisposedException)
 {
     if (PresenterTextViewInterfaceBase::rBHelper.bDisposed
-        || PresenterTextViewInterfaceBase::rBHelper.bInDispose
-        || mpImplementation.get()==nullptr)
+        || PresenterTextViewInterfaceBase::rBHelper.bInDispose || mpImplementation == nullptr)
     {
         throw lang::DisposedException ("PresenterTextView object has already been disposed",
             static_cast<uno::XWeak*>(this));
@@ -231,19 +213,9 @@ void PresenterTextView::ThrowIfDisposed()
 
 // PresenterTextView::Implementation
 PresenterTextView::Implementation::Implementation()
-    : msTextPropertyName("Text"),
-      msBitmapPropertyName("Bitmap"),
-      msSizePropertyName("Size"),
-      msBackgroundColorPropertyName("BackgroundColor"),
-      msTextColorPropertyName("TextColor"),
-      msFontDescriptorPropertyName("FontDescriptor"),
-      msTopPropertyName("Top"),
-      msTopRelativePropertyName("RelativeTop"),
-      msTotalHeightPropertyName("TotalHeight"),
-      mxBitmap(),
+    : mxBitmap(),
       mpCanvas(),
       mpOutputDevice(VclPtr<VirtualDevice>::Create(*Application::GetDefaultDevice(), DeviceFormat::DEFAULT, DeviceFormat::DEFAULT)),
-      mpEditEngine(nullptr),
       mpEditEngineItemPool(EditEngine::CreatePool()),
       maSize(100,100),
       maBackgroundColor(0xffffffff),
@@ -252,92 +224,72 @@ PresenterTextView::Implementation::Implementation()
       mnTop(0),
       mnTotalHeight(-1)
 {
-    mpOutputDevice->SetMapMode(MAP_PIXEL);
+    mpOutputDevice->SetMapMode(MapMode(MapUnit::MapPixel));
 
-    GetEditEngine();
+    // set fonts to be used
+    SvtLinguOptions aOpt;
+    SvtLinguConfig().GetOptions( aOpt );
+
+    struct FontDta {
+        LanguageType    nFallbackLang;
+        LanguageType    nLang;
+        DefaultFontType nFontType;
+        sal_uInt16      nFontInfoId;
+        } aTable[3] =
+    {
+        // info to get western font to be used
+        {   LANGUAGE_ENGLISH_US,    LANGUAGE_NONE,
+            DefaultFontType::SERIF,      EE_CHAR_FONTINFO },
+        // info to get CJK font to be used
+        {   LANGUAGE_JAPANESE,      LANGUAGE_NONE,
+            DefaultFontType::CJK_TEXT,   EE_CHAR_FONTINFO_CJK },
+        // info to get CTL font to be used
+        {   LANGUAGE_ARABIC_SAUDI_ARABIA,  LANGUAGE_NONE,
+            DefaultFontType::CTL_TEXT,   EE_CHAR_FONTINFO_CTL }
+    };
+    aTable[0].nLang = MsLangId::resolveSystemLanguageByScriptType(aOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN);
+    aTable[1].nLang = MsLangId::resolveSystemLanguageByScriptType(aOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN);
+    aTable[2].nLang = MsLangId::resolveSystemLanguageByScriptType(aOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
+
+    for (FontDta & rFntDta : aTable)
+    {
+        LanguageType nLang = (LANGUAGE_NONE == rFntDta.nLang) ?
+            rFntDta.nFallbackLang : rFntDta.nLang;
+        vcl::Font aFont = OutputDevice::GetDefaultFont(
+            rFntDta.nFontType, nLang, GetDefaultFontFlags::OnlyOne);
+        mpEditEngineItemPool->SetPoolDefaultItem(
+            SvxFontItem(
+                aFont.GetFamilyType(),
+                aFont.GetFamilyName(),
+                aFont.GetStyleName(),
+                aFont.GetPitch(),
+                aFont.GetCharSet(),
+                rFntDta.nFontInfoId));
+    }
+
+    mpEditEngine.reset( new EditEngine (mpEditEngineItemPool) );
+
+    mpEditEngine->EnableUndo (true);
+    mpEditEngine->SetDefTab (sal_uInt16(
+        Application::GetDefaultDevice()->GetTextWidth("XXXX")));
+
+    mpEditEngine->SetControlWord(
+            EEControlBits(mpEditEngine->GetControlWord() | EEControlBits::AUTOINDENTING) &
+            EEControlBits(~EEControlBits::UNDOATTRIBS) &
+            EEControlBits(~EEControlBits::PASTESPECIAL) );
+
+    mpEditEngine->SetWordDelimiters (" .=+-*/(){}[];\"");
+    mpEditEngine->SetRefMapMode(MapMode(MapUnit::MapPixel));
+    mpEditEngine->SetPaperSize (Size(800, 0));
+    mpEditEngine->EraseVirtualDevice();
+    mpEditEngine->ClearModifyFlag();
 }
 
 PresenterTextView::Implementation::~Implementation()
 {
-    delete mpEditEngine;
+    mpEditEngine.reset();
     SfxItemPool::Free(mpEditEngineItemPool);
     mpOutputDevice.disposeAndClear();
-}
-
-void PresenterTextView::Implementation::GetEditEngine()
-{
-    if (mpEditEngine == nullptr)
-        mpEditEngine = CreateEditEngine ();
-}
-
-EditEngine* PresenterTextView::Implementation::CreateEditEngine()
-{
-    EditEngine* pEditEngine = mpEditEngine;
-    if (pEditEngine == nullptr)
-    {
-
-        // set fonts to be used
-
-        SvtLinguOptions aOpt;
-        SvtLinguConfig().GetOptions( aOpt );
-
-        struct FontDta {
-            sal_Int16       nFallbackLang;
-            sal_Int16       nLang;
-            DefaultFontType nFontType;
-            sal_uInt16      nFontInfoId;
-            } aTable[3] =
-        {
-            // info to get western font to be used
-            {   LANGUAGE_ENGLISH_US,    LANGUAGE_NONE,
-                DefaultFontType::SERIF,      EE_CHAR_FONTINFO },
-            // info to get CJK font to be used
-            {   LANGUAGE_JAPANESE,      LANGUAGE_NONE,
-                DefaultFontType::CJK_TEXT,   EE_CHAR_FONTINFO_CJK },
-            // info to get CTL font to be used
-            {   LANGUAGE_ARABIC_SAUDI_ARABIA,  LANGUAGE_NONE,
-                DefaultFontType::CTL_TEXT,   EE_CHAR_FONTINFO_CTL }
-        };
-        aTable[0].nLang = MsLangId::resolveSystemLanguageByScriptType(aOpt.nDefaultLanguage, css::i18n::ScriptType::LATIN);
-        aTable[1].nLang = MsLangId::resolveSystemLanguageByScriptType(aOpt.nDefaultLanguage_CJK, css::i18n::ScriptType::ASIAN);
-        aTable[2].nLang = MsLangId::resolveSystemLanguageByScriptType(aOpt.nDefaultLanguage_CTL, css::i18n::ScriptType::COMPLEX);
-
-        for (int i = 0;  i < 3;  ++i)
-        {
-            const FontDta &rFntDta = aTable[i];
-            LanguageType nLang = (LANGUAGE_NONE == rFntDta.nLang) ?
-                rFntDta.nFallbackLang : rFntDta.nLang;
-            vcl::Font aFont = OutputDevice::GetDefaultFont(
-                rFntDta.nFontType, nLang, GetDefaultFontFlags::OnlyOne);
-            mpEditEngineItemPool->SetPoolDefaultItem(
-                SvxFontItem(
-                    aFont.GetFamilyType(),
-                    aFont.GetFamilyName(),
-                    aFont.GetStyleName(),
-                    aFont.GetPitch(),
-                    aFont.GetCharSet(),
-                    rFntDta.nFontInfoId));
-        }
-
-        pEditEngine = new EditEngine (mpEditEngineItemPool);
-
-        pEditEngine->EnableUndo (true);
-        pEditEngine->SetDefTab (sal_uInt16(
-            Application::GetDefaultDevice()->GetTextWidth("XXXX")));
-
-        pEditEngine->SetControlWord(
-                EEControlBits(pEditEngine->GetControlWord() | EEControlBits::AUTOINDENTING) &
-                EEControlBits(~EEControlBits::UNDOATTRIBS) &
-                EEControlBits(~EEControlBits::PASTESPECIAL) );
-
-        pEditEngine->SetWordDelimiters (" .=+-*/(){}[];\"");
-        pEditEngine->SetRefMapMode (MAP_PIXEL);
-        pEditEngine->SetPaperSize (Size(800, 0));
-        pEditEngine->EraseVirtualDevice();
-        pEditEngine->ClearModifyFlag();
-    }
-
-    return pEditEngine;
 }
 
 void PresenterTextView::Implementation::SetCanvas (const cppcanvas::CanvasSharedPtr& rpCanvas)
@@ -388,7 +340,7 @@ void PresenterTextView::Implementation::SetFontDescriptor (
 
     SvxFontHeightItem aFontHeight(
         Application::GetDefaultDevice()->LogicToPixel(
-            Size(0, nFontHeight), MapMode (MAP_POINT)).Height(),
+            Size(0, nFontHeight), MapMode (MapUnit::MapPoint)).Height(),
         100,
         EE_CHAR_FONTHEIGHT);
     mpEditEngineItemPool->SetPoolDefaultItem( aFontHeight);
@@ -446,7 +398,7 @@ sal_Int32 PresenterTextView::Implementation::ParseDistance (const OUString& rsDi
     return nDistance;
 }
 
-Reference<rendering::XBitmap> PresenterTextView::Implementation::GetBitmap()
+Reference<rendering::XBitmap> const & PresenterTextView::Implementation::GetBitmap()
 {
     DBG_ASSERT(mpEditEngine!=nullptr, "EditEngine missing");
 
@@ -455,7 +407,7 @@ Reference<rendering::XBitmap> PresenterTextView::Implementation::GetBitmap()
         mpOutputDevice.disposeAndClear();
         mpOutputDevice = VclPtr<VirtualDevice>::Create(*Application::GetDefaultDevice(),
                                                        DeviceFormat::DEFAULT, DeviceFormat::DEFAULT);
-        mpOutputDevice->SetMapMode(MAP_PIXEL);
+        mpOutputDevice->SetMapMode(MapMode(MapUnit::MapPixel));
         mpOutputDevice->SetOutputSizePixel(maSize);
         mpOutputDevice->SetLineColor();
         mpOutputDevice->SetFillColor();
@@ -465,7 +417,7 @@ Reference<rendering::XBitmap> PresenterTextView::Implementation::GetBitmap()
         MapMode aMapMode (mpOutputDevice->GetMapMode());
         aMapMode.SetOrigin(Point(0,0));
         mpOutputDevice->SetMapMode(aMapMode);
-        const Rectangle aWindowBox (Point(0,0), maSize);
+        const ::tools::Rectangle aWindowBox (Point(0,0), maSize);
         mpOutputDevice->DrawRect(aWindowBox);
 
         mpEditEngine->Clear();
@@ -518,11 +470,11 @@ void PresenterTextView::Implementation::CheckTop()
 } } // end of namespace ::sd::presenter
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_Draw_PresenterTextView_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_Draw_PresenterTextView_get_implementation(css::uno::XComponentContext*,
                                                             css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new sd::presenter::PresenterTextView(context));
+    return cppu::acquire(new sd::presenter::PresenterTextView);
 }
 
 

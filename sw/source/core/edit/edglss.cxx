@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
 #include <osl/endian.h>
 #include <hintids.hxx>
 #include <svl/urihelper.hxx>
@@ -29,12 +28,14 @@
 #include <editsh.hxx>
 #include <edimp.hxx>
 #include <frmfmt.hxx>
+#include <rootfrm.hxx>
 #include <swundo.hxx>
 #include <ndtxt.hxx>
 #include <swtable.hxx>
 #include <shellio.hxx>
 #include <acorrect.hxx>
 #include <swerror.h>
+#include <iodetect.hxx>
 
 void SwEditShell::InsertGlossary( SwTextBlocks& rGlossary, const OUString& rStr )
 {
@@ -53,7 +54,7 @@ sal_uInt16 SwEditShell::MakeGlossary( SwTextBlocks& rBlks, const OUString& rName
     if(bSaveRelFile)
     {
         INetURLObject aURL( rBlks.GetFileName() );
-        sBase = aURL.GetMainURL( INetURLObject::NO_DECODE );
+        sBase = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
     }
     rBlks.SetBaseURL( sBase );
 
@@ -63,9 +64,9 @@ sal_uInt16 SwEditShell::MakeGlossary( SwTextBlocks& rBlks, const OUString& rName
     rBlks.ClearDoc();
     if( rBlks.BeginPutDoc( rShortName, rName ) )
     {
-        rBlks.GetDoc()->getIDocumentRedlineAccess().SetRedlineMode_intern( nsRedlineMode_t::REDLINE_DELETE_REDLINES );
-        _CopySelToDoc( pGDoc );
-        rBlks.GetDoc()->getIDocumentRedlineAccess().SetRedlineMode_intern( (RedlineMode_t)0 );
+        rBlks.GetDoc()->getIDocumentRedlineAccess().SetRedlineFlags_intern( RedlineFlags::DeleteRedlines );
+        CopySelToDoc( pGDoc );
+        rBlks.GetDoc()->getIDocumentRedlineAccess().SetRedlineFlags_intern( RedlineFlags::NONE );
         return rBlks.PutDoc();
     }
 
@@ -87,7 +88,7 @@ sal_uInt16 SwEditShell::SaveGlossaryDoc( SwTextBlocks& rBlock,
     if(bSaveRelFile)
     {
         INetURLObject aURL( rBlock.GetFileName() );
-        sBase = aURL.GetMainURL( INetURLObject::NO_DECODE );
+        sBase = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
     }
     rBlock.SetBaseURL( sBase );
     sal_uInt16 nRet = USHRT_MAX;
@@ -116,7 +117,8 @@ sal_uInt16 SwEditShell::SaveGlossaryDoc( SwTextBlocks& rBlock,
             pCursor->GetPoint()->nContent.Assign( pContentNd, pContentNd->Len() );
 
         OUString sBuf;
-        if( GetSelectedText( sBuf, GETSELTXT_PARABRK_TO_ONLYCR ) && !sBuf.isEmpty() )
+        GetSelectedText( sBuf, ParaBreakType::ToOnlyCR );
+        if( !sBuf.isEmpty() )
             nRet = rBlock.PutText( rShortName, rName, sBuf );
     }
     else
@@ -135,7 +137,7 @@ sal_uInt16 SwEditShell::SaveGlossaryDoc( SwTextBlocks& rBlock,
             aCpyPam.GetPoint()->nNode = pMyDoc->GetNodes().GetEndOfContent().GetIndex()-1;
             pContentNd = aCpyPam.GetContentNode();
             aCpyPam.GetPoint()->nContent.Assign(
-                   pContentNd, (pContentNd) ? pContentNd->Len() : 0);
+                   pContentNd, pContentNd ? pContentNd->Len() : 0);
 
             aStt = pGDoc->GetNodes().GetEndOfExtras();
             pContentNd = pGDoc->GetNodes().GoNext( &aStt );
@@ -150,7 +152,7 @@ sal_uInt16 SwEditShell::SaveGlossaryDoc( SwTextBlocks& rBlock,
 }
 
 /// copy all selections to the doc
-bool SwEditShell::_CopySelToDoc( SwDoc* pInsDoc )
+bool SwEditShell::CopySelToDoc( SwDoc* pInsDoc )
 {
     OSL_ENSURE( pInsDoc, "no Ins.Document"  );
 
@@ -159,7 +161,7 @@ bool SwEditShell::_CopySelToDoc( SwDoc* pInsDoc )
     SwNodeIndex aIdx( rNds.GetEndOfContent(), -1 );
     SwContentNode *const pContentNode = aIdx.GetNode().GetContentNode();
     SwPosition aPos( aIdx,
-        SwIndex(pContentNode, (pContentNode) ? pContentNode->Len() : 0));
+        SwIndex(pContentNode, pContentNode ? pContentNode->Len() : 0));
 
     bool bRet = false;
     SET_CURR_SHELL( this );
@@ -198,7 +200,7 @@ bool SwEditShell::_CopySelToDoc( SwDoc* pInsDoc )
     }
     else
     {
-        bool bColSel = _GetCursor()->IsColumnSelection();
+        bool bColSel = GetCursor_()->IsColumnSelection();
         if( bColSel && pInsDoc->IsClipBoard() )
             pInsDoc->SetColumnSelection( true );
         bool bSelectAll = StartsWithTable() && ExtendedSelectedAll();
@@ -212,7 +214,7 @@ bool SwEditShell::_CopySelToDoc( SwDoc* pInsDoc )
                         ( bColSel || !pNd->GetTextNode() ) )
                     {
                         rPaM.SetMark();
-                        rPaM.Move( fnMoveForward, fnGoContent );
+                        rPaM.Move( fnMoveForward, GoInContent );
                         bRet = GetDoc()->getIDocumentContentOperations().CopyRange( rPaM, aPos, /*bCopyAll=*/false, /*bCheckPos=*/true )
                             || bRet;
                         rPaM.Exchange();
@@ -247,21 +249,19 @@ bool SwEditShell::_CopySelToDoc( SwDoc* pInsDoc )
 }
 
 /** Get text in a Selection
- *
- * @return false if the selected area is too big for being copied into the string buffer
  */
-bool SwEditShell::GetSelectedText( OUString &rBuf, int nHndlParaBrk )
+void SwEditShell::GetSelectedText( OUString &rBuf, ParaBreakType nHndlParaBrk )
 {
     GetCursor();  // creates all cursors if needed
     if( IsSelOnePara() )
     {
         rBuf = GetSelText();
-        if( GETSELTXT_PARABRK_TO_BLANK == nHndlParaBrk )
+        if( ParaBreakType::ToBlank == nHndlParaBrk )
         {
             rBuf = rBuf.replaceAll("\x0a", " ");
         }
         else if( IsSelFullPara() &&
-            GETSELTXT_PARABRK_TO_ONLYCR != nHndlParaBrk )
+            ParaBreakType::ToOnlyCR != nHndlParaBrk )
         {
 #ifdef _WIN32
                 rBuf += "\015\012";
@@ -280,7 +280,7 @@ bool SwEditShell::GetSelectedText( OUString &rBuf, int nHndlParaBrk )
 #endif
         WriterRef xWrt;
         SwReaderWriter::GetWriter( FILTER_TEXT, OUString(), xWrt );
-        if( xWrt.Is() )
+        if( xWrt.is() )
         {
             // write selected areas into a ASCII document
             SwWriter aWriter( aStream, *this);
@@ -288,14 +288,14 @@ bool SwEditShell::GetSelectedText( OUString &rBuf, int nHndlParaBrk )
 
             switch( nHndlParaBrk )
             {
-            case GETSELTXT_PARABRK_TO_BLANK:
-                xWrt->bASCII_ParaAsBlanc = true;
-                xWrt->bASCII_NoLastLineEnd = true;
+            case ParaBreakType::ToBlank:
+                xWrt->m_bASCII_ParaAsBlank = true;
+                xWrt->m_bASCII_NoLastLineEnd = true;
                 break;
 
-            case GETSELTXT_PARABRK_TO_ONLYCR:
-                xWrt->bASCII_ParaAsCR = true;
-                xWrt->bASCII_NoLastLineEnd = true;
+            case ParaBreakType::ToOnlyCR:
+                xWrt->m_bASCII_ParaAsCR = true;
+                xWrt->m_bASCII_NoLastLineEnd = true;
                 break;
             }
 
@@ -303,13 +303,14 @@ bool SwEditShell::GetSelectedText( OUString &rBuf, int nHndlParaBrk )
             SwAsciiOptions aAsciiOpt( xWrt->GetAsciiOptions() );
             aAsciiOpt.SetCharSet( RTL_TEXTENCODING_UCS2 );
             xWrt->SetAsciiOptions( aAsciiOpt );
-            xWrt->bUCS2_WithStartChar = false;
+            xWrt->m_bUCS2_WithStartChar = false;
+            xWrt->m_bHideDeleteRedlines = GetLayout()->IsHideRedlines();
 
-            if (!IsError(aWriter.Write(xWrt)))
+            if ( ! aWriter.Write(xWrt).IsError() )
             {
                 aStream.WriteUInt16( '\0' );
 
-                const sal_Unicode *p = static_cast<sal_Unicode const *>(aStream.GetBuffer());
+                const sal_Unicode *p = static_cast<sal_Unicode const *>(aStream.GetData());
                 if (p)
                     rBuf = OUString(p);
                 else
@@ -320,14 +321,12 @@ bool SwEditShell::GetSelectedText( OUString &rBuf, int nHndlParaBrk )
                     aStream.Seek( 0 );
                     aStream.ResetError();
                     //endian specific?, yipes!
-                    aStream.Read(pStr->buffer, nLen);
+                    aStream.ReadBytes(pStr->buffer, nLen);
                     rBuf = OUString(pStr, SAL_NO_ACQUIRE);
                 }
             }
         }
     }
-
-    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

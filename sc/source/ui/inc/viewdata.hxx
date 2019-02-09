@@ -19,13 +19,15 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_VIEWDATA_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_VIEWDATA_HXX
 
+#include <tools/fract.hxx>
 #include <sfx2/zoomitem.hxx>
-#include "rangelst.hxx"
-#include "scdllapi.h"
-#include "viewopti.hxx"
+#include <rangelst.hxx>
+#include <scdllapi.h>
+#include <viewopti.hxx>
 #include "docsh.hxx"
 
 #include <memory>
+#include <o3tl/typed_flags_set.hxx>
 
 #define SC_SIZE_NONE        65535
 const SCCOL SC_TABSTART_NONE = SCCOL_MAX;
@@ -39,9 +41,9 @@ enum class ScFillMode
     MATRIX      = 4,
 };
 
-enum ScSplitMode { SC_SPLIT_NONE = 0, SC_SPLIT_NORMAL, SC_SPLIT_FIX };
+enum ScSplitMode { SC_SPLIT_NONE = 0, SC_SPLIT_NORMAL, SC_SPLIT_FIX, SC_SPLIT_MODE_MAX_ENUM = SC_SPLIT_FIX };
 
-enum ScSplitPos { SC_SPLIT_TOPLEFT, SC_SPLIT_TOPRIGHT, SC_SPLIT_BOTTOMLEFT, SC_SPLIT_BOTTOMRIGHT };
+enum ScSplitPos { SC_SPLIT_TOPLEFT, SC_SPLIT_TOPRIGHT, SC_SPLIT_BOTTOMLEFT, SC_SPLIT_BOTTOMRIGHT, SC_SPLIT_POS_MAX_ENUM = SC_SPLIT_BOTTOMRIGHT };
 enum ScHSplitPos { SC_SPLIT_LEFT, SC_SPLIT_RIGHT };
 enum ScVSplitPos { SC_SPLIT_TOP, SC_SPLIT_BOTTOM };
 
@@ -77,15 +79,27 @@ enum ScMarkType
 #endif
 };
 
-enum ScPasteFlags
+enum class ScPasteFlags
 {
-    SC_PASTE_NONE   = 0,    // No flags specified
-    SC_PASTE_MODE   = 1,    // Enable paste-mode
-    SC_PASTE_BORDER = 2,    // Show a border around the source cells
+    NONE   = 0,    // No flags specified
+    Mode   = 1,    // Enable paste-mode
+    Border = 2,    // Show a border around the source cells
 };
+namespace o3tl {
+    template<> struct typed_flags<ScPasteFlags> : is_typed_flags<ScPasteFlags, 0x03> {};
+}
+
+// for internal Drag&Drop:
+enum class ScDragSrc{
+    Undefined = 0,
+    Navigator = 1,
+    Table     = 2
+};
+namespace o3tl {
+    template<> struct typed_flags<ScDragSrc> : is_typed_flags<ScDragSrc, 0x00000003> {};
+}
 
 class ScDocFunc;
-class ScDocShell;
 class ScDocument;
 class ScDBFunc;
 class ScTabViewShell;
@@ -103,6 +117,90 @@ class ScExtDocOptions;
 class ScViewData;
 class ScMarkData;
 class ScGridWindow;
+
+class ScPositionHelper
+{
+public:
+    typedef SCCOLROW index_type;
+    typedef std::pair<index_type, long> value_type;
+    static_assert(std::numeric_limits<index_type>::is_signed, "ScPositionCache: index type is not signed");
+
+private:
+    static const index_type null = std::numeric_limits<index_type>::min();
+
+    class Comp
+    {
+    public:
+        bool operator() (const value_type& rValue1, const value_type& rValue2) const;
+    };
+
+    const index_type MAX_INDEX;
+    std::set<value_type, Comp> mData;
+
+public:
+    ScPositionHelper(bool bColumn);
+
+    void insert(index_type nIndex, long nPos);
+    void removeByIndex(index_type nIndex);
+    void invalidateByIndex(index_type nIndex);
+    void invalidateByPosition(long nPos);
+    const value_type& getNearestByIndex(index_type nIndex) const;
+    const value_type& getNearestByPosition(long nPos) const;
+    long getPosition(index_type nIndex) const;
+    long computePosition(index_type nIndex, const std::function<long (index_type)>& getSizePx);
+};
+
+class ScBoundsProvider
+{
+    typedef ScPositionHelper::value_type value_type;
+    typedef SCCOLROW index_type;
+
+    ScDocument* const pDoc;
+    const SCTAB nTab;
+    const bool bColumnHeader;
+    const index_type MAX_INDEX;
+
+    index_type nFirstIndex;
+    index_type nSecondIndex;
+    long nFirstPositionPx;
+    long nSecondPositionPx;
+
+public:
+    ScBoundsProvider(ScDocument* pD, SCTAB nT, bool bColumnHeader);
+
+    void GetStartIndexAndPosition(SCCOL& nIndex, long& nPosition) const;
+    void GetEndIndexAndPosition(SCCOL& nIndex, long& nPosition) const;
+    void GetStartIndexAndPosition(SCROW& nIndex, long& nPosition) const;
+    void GetEndIndexAndPosition(SCROW& nIndex, long& nPosition) const;
+
+    void Compute(value_type aFirstNearest, value_type aSecondNearest,
+                 long nFirstBound, long nSecondBound);
+
+    void EnlargeStartBy(long nOffset);
+
+    void EnlargeEndBy(long nOffset);
+
+    void EnlargeBy(long nOffset)
+    {
+        EnlargeStartBy(nOffset);
+        EnlargeEndBy(nOffset);
+    }
+
+private:
+    long GetSize(index_type nIndex) const;
+
+    void GetIndexAndPos(index_type nNearestIndex, long nNearestPosition,
+                        long nBound, index_type& nFoundIndex, long& nPosition,
+                        bool bTowards, long nDiff);
+
+    void GeIndexBackwards(index_type nNearestIndex, long nNearestPosition,
+                          long nBound, index_type& nFoundIndex, long& nPosition,
+                          bool bTowards);
+
+    void GetIndexTowards(index_type nNearestIndex, long nNearestPosition,
+                         long nBound, index_type& nFoundIndex, long& nPosition,
+                         bool bTowards);
+};
 
 class ScViewDataTable                           // per-sheet data
 {
@@ -134,8 +232,16 @@ private:
     SCROW           nCurY;
     SCCOL           nOldCurX;
     SCROW           nOldCurY;
+    SCCOL           nLOKOldCurX;
+    SCROW           nLOKOldCurY;
+
+    ScPositionHelper aWidthHelper;
+    ScPositionHelper aHeightHelper;
+
     SCCOL           nPosX[2];                   ///< X position of the top left cell of the visible area.
     SCROW           nPosY[2];                   ///< Y position of the top left cell of the visible area.
+    SCCOL           nMaxTiledCol;
+    SCROW           nMaxTiledRow;
 
     bool            bShowGrid;                  // per sheet show grid lines option.
     bool            mbOldCursorValid;           // "virtual" Cursor position when combined
@@ -143,13 +249,22 @@ private:
 
     void            WriteUserDataSequence(
                         css::uno::Sequence <css::beans::PropertyValue>& rSettings,
-                        const ScViewData& rViewData, SCTAB nTab ) const;
+                        const ScViewData& rViewData ) const;
 
     void            ReadUserDataSequence(
                         const css::uno::Sequence <css::beans::PropertyValue>& rSettings,
                         ScViewData& rViewData, SCTAB nTab, bool& rHasZoom);
-public:
-    ~ScViewDataTable();
+
+    /** Sanitize the active split range value to not point into a grid window
+        that would never be initialized due to non-matching split modes.
+
+        This is to be done when reading settings from file formats or
+        configurations that could have arbitrary values. The caller is
+        responsible for actually assigning the new value to eWhichActive because
+        we want this function to be const to be able to call the check from
+        anywhere.
+     */
+    [[nodiscard]] ScSplitPos SanitizeWhichActive() const;
 };
 
 class SC_DLLPUBLIC ScViewData
@@ -157,15 +272,15 @@ class SC_DLLPUBLIC ScViewData
 private:
     double              nPPTX, nPPTY;               // Scaling factors
 
-    ::std::vector<ScViewDataTable*> maTabData;
+    ::std::vector<std::unique_ptr<ScViewDataTable>> maTabData;
     std::unique_ptr<ScMarkData> mpMarkData;
     ScViewDataTable*    pThisTab;                   // Data of the displayed sheet
     ScDocShell*         pDocShell;
     ScDocument*         pDoc;
     ScDBFunc*           pView;
     ScTabViewShell*     pViewShell;
-    EditView*           pEditView[4];               // Belongs to the window
-    ScViewOptions*      pOptions;
+    std::unique_ptr<EditView> pEditView[4];               // Belongs to the window
+    std::unique_ptr<ScViewOptions> pOptions;
     EditView*           pSpellingView;
 
     Size                aScenButSize;
@@ -205,14 +320,21 @@ private:
 
     ScSplitPos          eEditActivePart;            // the part that was active when edit mode was started
     ScFillMode          nFillMode;
+    SvxAdjust           eEditAdjust;
     bool                bEditActive[4];             // Active?
     bool                bActive:1;                  // Active Window ?
     bool                bIsRefMode:1;               // Reference input
     bool                bDelMarkValid:1;            // Only valid at SC_REFTYPE_FILL
     bool                bPagebreak:1;               // Page break preview mode
     bool                bSelCtrlMouseClick:1;       // special selection handling for ctrl-mouse-click
+    bool                bMoveArea:1;
 
-    DECL_DLLPRIVATE_LINK_TYPED( EditEngineHdl, EditStatus&, void );
+    bool                bGrowing;
+
+    long                m_nLOKPageUpDownOffset;
+
+    DECL_DLLPRIVATE_LINK( EditEngineHdl, EditStatus&, void );
+
 
     SAL_DLLPRIVATE void          CalcPPT();
     SAL_DLLPRIVATE void          CreateTabData( SCTAB nNewTab );
@@ -223,8 +345,7 @@ private:
 
 public:
                     ScViewData( ScDocShell* pDocSh, ScTabViewShell* pViewSh );
-                    ScViewData( const ScViewData& rViewData );
-                    ~ScViewData();
+                    ~ScViewData() COVERITY_NOEXCEPT_FALSE;
 
     void            InitData( ScDocument* pDocument );
 
@@ -239,7 +360,8 @@ public:
     ScMarkData&     GetMarkData();
     const ScMarkData& GetMarkData() const;
 
-    vcl::Window*         GetDialogParent();          // forwarded from tabvwsh
+    vcl::Window*    GetDialogParent();          // forwarded from tabvwsh
+    weld::Window*   GetFrameWeld();             // forwarded from tabvwsh
     ScGridWindow*   GetActiveWin();             // from View
     const ScGridWindow* GetActiveWin() const;
     ScDrawView*     GetScDrawView();            // from View
@@ -275,30 +397,54 @@ public:
     SCROW           GetPosY( ScVSplitPos eWhich ) const     { return pThisTab->nPosY[eWhich]; }
     SCCOL           GetCurX() const                         { return pThisTab->nCurX; }
     SCROW           GetCurY() const                         { return pThisTab->nCurY; }
+    SCCOL           GetCurXForTab( SCTAB nTabIndex ) const;
+    SCROW           GetCurYForTab( SCTAB nTabIndex ) const;
     SCCOL           GetOldCurX() const;
     SCROW           GetOldCurY() const;
+    SCCOL           GetLOKOldCurX() const                   { return pThisTab->nLOKOldCurX; }
+    SCROW           GetLOKOldCurY() const                   { return pThisTab->nLOKOldCurY; }
+    long            GetLOKDocWidthPixel() const             { return pThisTab->aWidthHelper.getPosition(pThisTab->nMaxTiledCol); }
+    long            GetLOKDocHeightPixel() const            { return pThisTab->aHeightHelper.getPosition(pThisTab->nMaxTiledRow); }
+
+    ScPositionHelper& GetLOKWidthHelper()                   { return pThisTab->aWidthHelper; }
+    ScPositionHelper& GetLOKHeightHelper()                  { return pThisTab->aHeightHelper; }
+
+    ScPositionHelper* GetLOKWidthHelper(SCTAB nTabIndex);
+    ScPositionHelper* GetLOKHeightHelper(SCTAB nTabIndex);
+
     ScSplitMode     GetHSplitMode() const                   { return pThisTab->eHSplitMode; }
     ScSplitMode     GetVSplitMode() const                   { return pThisTab->eVSplitMode; }
     long            GetHSplitPos() const                    { return pThisTab->nHSplitPos; }
     long            GetVSplitPos() const                    { return pThisTab->nVSplitPos; }
     SCCOL           GetFixPosX() const                      { return pThisTab->nFixPosX; }
     SCROW           GetFixPosY() const                      { return pThisTab->nFixPosY; }
+    SCCOL           GetMaxTiledCol() const                  { return pThisTab->nMaxTiledCol; }
+    SCROW           GetMaxTiledRow() const                  { return pThisTab->nMaxTiledRow; }
+
     bool            IsPagebreakMode() const                 { return bPagebreak; }
-    bool            IsPasteMode() const                     { return (nPasteFlags & SC_PASTE_MODE) != 0; }
-    bool            ShowPasteSource() const                 { return (nPasteFlags & SC_PASTE_BORDER) != 0; }
+    bool            IsPasteMode() const                     { return bool(nPasteFlags & ScPasteFlags::Mode); }
+    bool            ShowPasteSource() const                 { return bool(nPasteFlags & ScPasteFlags::Border); }
 
     void            SetPosX( ScHSplitPos eWhich, SCCOL nNewPosX );
     void            SetPosY( ScVSplitPos eWhich, SCROW nNewPosY );
     void            SetCurX( SCCOL nNewCurX )                       { pThisTab->nCurX = nNewCurX; }
     void            SetCurY( SCROW nNewCurY )                       { pThisTab->nCurY = nNewCurY; }
+    void            SetCurXForTab( SCCOL nNewCurX, SCTAB nTabIndex );
+    void            SetCurYForTab( SCCOL nNewCurY, SCTAB nTabIndex );
     void            SetOldCursor( SCCOL nNewX, SCROW nNewY );
     void            ResetOldCursor();
+    void            SetLOKOldCurX( SCCOL nCurX )                    { pThisTab->nLOKOldCurX = nCurX; }
+    void            SetLOKOldCurY( SCROW nCurY )                    { pThisTab->nLOKOldCurY = nCurY; }
+
     void            SetHSplitMode( ScSplitMode eMode )              { pThisTab->eHSplitMode = eMode; }
     void            SetVSplitMode( ScSplitMode eMode )              { pThisTab->eVSplitMode = eMode; }
     void            SetHSplitPos( long nPos )                       { pThisTab->nHSplitPos = nPos; }
     void            SetVSplitPos( long nPos )                       { pThisTab->nVSplitPos = nPos; }
     void            SetFixPosX( SCCOL nPos )                        { pThisTab->nFixPosX = nPos; }
     void            SetFixPosY( SCROW nPos )                        { pThisTab->nFixPosY = nPos; }
+    void            SetMaxTiledCol( SCCOL nCol );
+    void            SetMaxTiledRow( SCROW nRow );
+
     void            SetPagebreakMode( bool bSet );
     void            SetPasteMode ( ScPasteFlags nFlags )            { nPasteFlags = nFlags; }
 
@@ -335,6 +481,14 @@ public:
 
     bool            IsMultiMarked();
 
+                    /** Disallow cell fill (Paste,Fill,...) on Ctrl+A all
+                        selected or another high amount of selected cells.
+                        We'd go DOOM.
+                     */
+    bool            SelectionForbidsCellFill();
+                    /// Determine DOOM condition, i.e. from selected range.
+    static bool     SelectionFillDOOM( const ScRange& rRange );
+
     void            SetFillMode( SCCOL nStartCol, SCROW nStartRow, SCCOL nEndCol, SCROW nEndRow );
     void            SetDragMode( SCCOL nStartCol, SCROW nStartRow, SCCOL nEndCol, SCROW nEndRow,
                                     ScFillMode nMode );
@@ -345,13 +499,16 @@ public:
     bool            IsFillMode()                { return nFillMode == ScFillMode::FILL; }
     ScFillMode      GetFillMode()               { return nFillMode; }
 
+    SvxAdjust       GetEditAdjust() const {return eEditAdjust; }
+    void            SetEditAdjust( SvxAdjust eNewEditAdjust ) { eEditAdjust = eNewEditAdjust; }
+
                     // TRUE: Cell is merged
     bool            GetMergeSizePixel( SCCOL nX, SCROW nY, long& rSizeXPix, long& rSizeYPix ) const;
     void            GetPosFromPixel( long nClickX, long nClickY, ScSplitPos eWhich,
-                                        SCsCOL& rPosX, SCsROW& rPosY,
+                                        SCCOL& rPosX, SCROW& rPosY,
                                         bool bTestMerge = true, bool bRepair = false );
     void            GetMouseQuadrant( const Point& rClickPos, ScSplitPos eWhich,
-                                        SCsCOL nPosX, SCsROW nPosY, bool& rLeft, bool& rTop );
+                                        SCCOL nPosX, SCROW nPosY, bool& rLeft, bool& rTop );
 
     bool            IsRefMode() const                       { return bIsRefMode; }
     ScRefType       GetRefType() const                      { return eRefType; }
@@ -395,6 +552,10 @@ public:
     bool    IsOutlineMode   () const            { return pOptions->GetOption( VOPT_OUTLINER ); }
     void    SetOutlineMode  ( bool bNewMode )   { pOptions->SetOption( VOPT_OUTLINER, bNewMode ); }
 
+    /// Force page size for PgUp/PgDown to overwrite the computation based on m_aVisArea.
+    void ForcePageUpDownOffset(long nTwips) { m_nLOKPageUpDownOffset = nTwips; }
+    long GetPageUpDownOffset() { return m_nLOKPageUpDownOffset; }
+
     void            KillEditView();
     void            ResetEditView();
     void            SetEditEngine( ScSplitPos eWhich,
@@ -404,9 +565,21 @@ public:
     bool            HasEditView( ScSplitPos eWhich ) const
                                         { return pEditView[eWhich] && bEditActive[eWhich]; }
     EditView*       GetEditView( ScSplitPos eWhich ) const
-                                        { return pEditView[eWhich]; }
+                                        { return pEditView[eWhich].get(); }
 
+    /**
+     * Extend the output area for the edit engine view in a horizontal
+     * direction as needed.
+     */
     void            EditGrowX();
+
+    /**
+     * Extend the output area for the edit engine view in a vertical direction
+     * as needed.
+     *
+     * @param bInitial when true, then the call originates from a brand-new
+     *                 edit engine instance.
+     */
     void            EditGrowY( bool bInitial = false );
 
     ScSplitPos      GetEditActivePart() const       { return eEditActivePart; }
@@ -417,7 +590,7 @@ public:
     SCCOL           GetEditEndCol() const           { return nEditEndCol; }
     SCROW           GetEditEndRow() const           { return nEditEndRow; }
 
-    Rectangle       GetEditArea( ScSplitPos eWhich, SCCOL nPosX, SCROW nPosY, vcl::Window* pWin,
+    tools::Rectangle       GetEditArea( ScSplitPos eWhich, SCCOL nPosX, SCROW nPosY, vcl::Window* pWin,
                                     const ScPatternAttr* pPattern, bool bForceToTop );
 
     void            SetTabNo( SCTAB nNewTab );
@@ -428,8 +601,8 @@ public:
     Point           GetScrPos( SCCOL nWhereX, SCROW nWhereY, ScHSplitPos eWhich ) const;
     Point           GetScrPos( SCCOL nWhereX, SCROW nWhereY, ScVSplitPos eWhich ) const;
 
-    SCCOL           CellsAtX( SCsCOL nPosX, SCsCOL nDir, ScHSplitPos eWhichX, sal_uInt16 nScrSizeY = SC_SIZE_NONE ) const;
-    SCROW           CellsAtY( SCsROW nPosY, SCsROW nDir, ScVSplitPos eWhichY, sal_uInt16 nScrSizeX = SC_SIZE_NONE ) const;
+    SCCOL           CellsAtX( SCCOL nPosX, SCCOL nDir, ScHSplitPos eWhichX, sal_uInt16 nScrSizeY = SC_SIZE_NONE ) const;
+    SCROW           CellsAtY( SCROW nPosY, SCROW nDir, ScVSplitPos eWhichY, sal_uInt16 nScrSizeX = SC_SIZE_NONE ) const;
 
     SCCOL           VisibleCellsX( ScHSplitPos eWhichX ) const;     // Completely visible cell
     SCROW           VisibleCellsY( ScVSplitPos eWhichY ) const;
@@ -438,12 +611,12 @@ public:
 
     bool            IsOle();
     void            SetScreen( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2 );
-    void            SetScreen( const Rectangle& rVisArea );
+    void            SetScreen( const tools::Rectangle& rVisArea );
     void            SetScreenPos( const Point& rVisAreaStart );
 
     void            UpdateScreenZoom( const Fraction& rNewX, const Fraction& rNewY );
 
-    Size            GetScrSize() const              { return aScrSize; }
+    const Size&     GetScrSize() const              { return aScrSize; }
 
     void            RecalcPixPos();
     Point           GetPixPos( ScSplitPos eWhich ) const
@@ -492,7 +665,7 @@ public:
 
 inline long ScViewData::ToPixel( sal_uInt16 nTwips, double nFactor )
 {
-    long nRet = (long)( nTwips * nFactor );
+    long nRet = static_cast<long>( nTwips * nFactor );
     if ( !nRet && nTwips )
         nRet = 1;
     return nRet;

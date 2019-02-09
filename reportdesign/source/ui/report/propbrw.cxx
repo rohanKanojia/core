@@ -16,12 +16,13 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "propbrw.hxx"
-#include "RptObject.hxx"
-#include "ReportController.hxx"
+#include <memory>
+#include <propbrw.hxx>
+#include <RptObject.hxx>
+#include <ReportController.hxx>
 #include <cppuhelper/component_context.hxx>
-#include <RptResId.hrc>
-#include "rptui_slotid.hrc"
+#include <strings.hrc>
+#include <rptui_slotid.hrc>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <com/sun/star/awt/XLayoutConstrains.hpp>
@@ -34,24 +35,23 @@
 #include <com/sun/star/report/inspection/DefaultComponentInspectorModel.hpp>
 #include <svx/svxids.hrc>
 #include <vcl/stdtext.hxx>
+#include <vcl/weld.hxx>
 #include <svx/svdview.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svditer.hxx>
 
 #include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/property.hxx>
 #include <comphelper/namecontainer.hxx>
-#include <comphelper/stl_types.hxx>
 #include <comphelper/types.hxx>
 #include <comphelper/sequence.hxx>
-#include <comphelper/processfactory.hxx>
-#include "SectionView.hxx"
-#include "ReportSection.hxx"
-#include "uistrings.hrc"
-#include "DesignView.hxx"
-#include "ViewsWindow.hxx"
-#include "UITools.hxx"
+#include <core_resource.hxx>
+#include <SectionView.hxx>
+#include <ReportSection.hxx>
+#include <strings.hxx>
+#include <DesignView.hxx>
+#include <ViewsWindow.hxx>
+#include <UITools.hxx>
 #include <unotools/confignode.hxx>
 
 namespace rptui
@@ -106,8 +106,8 @@ PropBrw::PropBrw(const Reference< XComponentContext >& _xORB, vcl::Window* pPare
     }
     catch (Exception&)
     {
+        DBG_UNHANDLED_EXCEPTION("reportdesign");
         OSL_FAIL("PropBrw::PropBrw: could not create/initialize my frame!");
-        DBG_UNHANDLED_EXCEPTION();
         m_xMeAsFrame.clear();
     }
 
@@ -117,9 +117,9 @@ PropBrw::PropBrw(const Reference< XComponentContext >& _xORB, vcl::Window* pPare
         {
             ::cppu::ContextEntry_Init aHandlerContextInfo[] =
             {
-                ::cppu::ContextEntry_Init( OUString( "ContextDocument" ), makeAny( m_pDesignView->getController().getModel() )),
-                ::cppu::ContextEntry_Init( OUString( "DialogParentWindow" ), makeAny( VCLUnoHelper::GetInterface ( this ) )),
-                ::cppu::ContextEntry_Init( OUString( "ActiveConnection" ), makeAny( m_pDesignView->getController().getConnection() ) ),
+                ::cppu::ContextEntry_Init( "ContextDocument", makeAny( m_pDesignView->getController().getModel() )),
+                ::cppu::ContextEntry_Init( "DialogParentWindow", makeAny( VCLUnoHelper::GetInterface ( this ) )),
+                ::cppu::ContextEntry_Init( "ActiveConnection", makeAny( m_pDesignView->getController().getConnection() ) ),
             };
             m_xInspectorContext.set(
                 ::cppu::createComponentContext( aHandlerContextInfo, SAL_N_ELEMENTS( aHandlerContextInfo ),
@@ -134,7 +134,7 @@ PropBrw::PropBrw(const Reference< XComponentContext >& _xORB, vcl::Window* pPare
             if ( !m_xBrowserController.is() )
             {
                 const OUString sServiceName( "com.sun.star.inspection.ObjectInspector" );
-                ShowServiceNotAvailableError(pParent, sServiceName, true);
+                ShowServiceNotAvailableError(pParent ? pParent->GetFrameWeld() : nullptr, sServiceName, true);
             }
             else
             {
@@ -151,8 +151,8 @@ PropBrw::PropBrw(const Reference< XComponentContext >& _xORB, vcl::Window* pPare
         }
         catch (Exception&)
         {
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
             OSL_FAIL("PropBrw::PropBrw: could not create/initialize the browser controller!");
-            DBG_UNHANDLED_EXCEPTION();
             try
             {
                 ::comphelper::disposeComponent(m_xBrowserController);
@@ -170,7 +170,7 @@ PropBrw::PropBrw(const Reference< XComponentContext >& _xORB, vcl::Window* pPare
         m_xBrowserComponentWindow->setPosSize(0, 0, aPropWinSize.Width(), aPropWinSize.Height(),
             awt::PosSize::WIDTH | awt::PosSize::HEIGHT | awt::PosSize::X | awt::PosSize::Y);
         Resize();
-        m_xBrowserComponentWindow->setVisible(sal_True);
+        m_xBrowserComponentWindow->setVisible(true);
     }
     ::rptui::notifySystemWindow(pParent,this,::comphelper::mem_fun(&TaskPaneList::AddWindow));
 }
@@ -194,8 +194,8 @@ void PropBrw::dispose()
             const OUString pProps[] = { OUString( "ContextDocument" )
                                             ,  OUString( "DialogParentWindow" )
                                             , OUString( "ActiveConnection" )};
-            for (size_t i = 0; i < SAL_N_ELEMENTS(pProps); ++i)
-                xName->removeByName(pProps[i]);
+            for (const auto & i : pProps)
+                xName->removeByName(i);
         }
     }
     catch(Exception&)
@@ -258,7 +258,7 @@ bool PropBrw::Close()
         try
         {
             Reference< XController > xController( m_xMeAsFrame->getController() );
-            if ( xController.is() && !xController->suspend( sal_True ) )
+            if ( xController.is() && !xController->suspend( true ) )
                 return false;
         }
         catch( const Exception& )
@@ -290,7 +290,7 @@ uno::Sequence< Reference<uno::XInterface> > PropBrw::CreateCompPropSet(const Sdr
         ::std::unique_ptr<SdrObjListIter> pGroupIterator;
         if (pCurrent->IsGroupObject())
         {
-            pGroupIterator.reset(new SdrObjListIter(*pCurrent->GetSubList()));
+            pGroupIterator.reset(new SdrObjListIter(pCurrent->GetSubList()));
             pCurrent = pGroupIterator->IsMore() ? pGroupIterator->Next() : nullptr;
         }
 
@@ -330,69 +330,67 @@ OUString PropBrw::GetHeadlineName( const uno::Sequence< Reference<uno::XInterfac
     OUString aName;
     if ( !_aObjects.getLength() )
     {
-        aName = ModuleRes(RID_STR_BRWTITLE_NO_PROPERTIES);
+        aName = RptResId(RID_STR_BRWTITLE_NO_PROPERTIES);
     }
     else if ( _aObjects.getLength() == 1 )    // single selection
     {
-        aName = ModuleRes(RID_STR_BRWTITLE_PROPERTIES);
+        aName = RptResId(RID_STR_BRWTITLE_PROPERTIES);
 
         uno::Reference< container::XNameContainer > xNameCont(_aObjects[0],uno::UNO_QUERY);
         Reference< lang::XServiceInfo > xServiceInfo( xNameCont->getByName("ReportComponent"), UNO_QUERY );
         if ( xServiceInfo.is() )
         {
-            sal_uInt16 nResId = 0;
+            const char* pResId;
             if ( xServiceInfo->supportsService( SERVICE_FIXEDTEXT ) )
             {
-                nResId = RID_STR_PROPTITLE_FIXEDTEXT;
+                pResId = RID_STR_PROPTITLE_FIXEDTEXT;
             }
             else if ( xServiceInfo->supportsService( SERVICE_IMAGECONTROL ) )
             {
-                nResId = RID_STR_PROPTITLE_IMAGECONTROL;
+                pResId = RID_STR_PROPTITLE_IMAGECONTROL;
             }
             else if ( xServiceInfo->supportsService( SERVICE_FORMATTEDFIELD ) )
             {
-                nResId = RID_STR_PROPTITLE_FORMATTED;
+                pResId = RID_STR_PROPTITLE_FORMATTED;
             }
             else if ( xServiceInfo->supportsService( SERVICE_SHAPE ) )
             {
-                nResId = RID_STR_PROPTITLE_SHAPE;
+                pResId = RID_STR_PROPTITLE_SHAPE;
             }
             else if ( xServiceInfo->supportsService( SERVICE_REPORTDEFINITION ) )
             {
-                nResId = RID_STR_PROPTITLE_REPORT;
+                pResId = RID_STR_PROPTITLE_REPORT;
             }
             else if ( xServiceInfo->supportsService( SERVICE_SECTION ) )
             {
-                nResId = RID_STR_PROPTITLE_SECTION;
+                pResId = RID_STR_PROPTITLE_SECTION;
             }
             else if ( xServiceInfo->supportsService( SERVICE_FUNCTION ) )
             {
-                nResId = RID_STR_PROPTITLE_FUNCTION;
+                pResId = RID_STR_PROPTITLE_FUNCTION;
             }
             else if ( xServiceInfo->supportsService( SERVICE_GROUP ) )
             {
-                nResId = RID_STR_PROPTITLE_GROUP;
+                pResId = RID_STR_PROPTITLE_GROUP;
             }
             else if ( xServiceInfo->supportsService( SERVICE_FIXEDLINE ) )
             {
-                nResId = RID_STR_PROPTITLE_FIXEDLINE;
+                pResId = RID_STR_PROPTITLE_FIXEDLINE;
             }
             else
             {
                 OSL_FAIL("Unknown service name!");
-                nResId = RID_STR_CLASS_FORMATTEDFIELD;
+                aName += RID_STR_CLASS_FORMATTEDFIELD;
+                return aName;
             }
 
-            if (nResId)
-            {
-                aName += ModuleRes(nResId);
-            }
+            aName += RptResId(pResId);
         }
     }
     else    // multiselection
     {
-        aName = ModuleRes(RID_STR_BRWTITLE_PROPERTIES);
-        aName += ModuleRes(RID_STR_BRWTITLE_MULTISELECT);
+        aName = RptResId(RID_STR_BRWTITLE_PROPERTIES);
+        aName += RptResId(RID_STR_BRWTITLE_MULTISELECT);
     }
 
     return aName;
@@ -559,7 +557,7 @@ void PropBrw::Update( const uno::Reference< uno::XInterface>& _xReportComponent)
     }
 }
 
-IMPL_LINK_NOARG_TYPED( PropBrw, OnAsyncGetFocus, void*, void )
+IMPL_LINK_NOARG( PropBrw, OnAsyncGetFocus, void*, void )
 {
     if (m_xBrowserComponentWindow.is())
         m_xBrowserComponentWindow->setFocus();

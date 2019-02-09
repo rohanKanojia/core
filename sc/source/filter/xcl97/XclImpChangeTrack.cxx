@@ -17,17 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XclImpChangeTrack.hxx"
+#include <XclImpChangeTrack.hxx>
 #include <sot/storage.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/sharedstringpool.hxx>
-#include "chgviset.hxx"
-#include "formulacell.hxx"
-#include "chgtrack.hxx"
-#include "xihelper.hxx"
-#include "xilink.hxx"
-#include "externalrefmgr.hxx"
-#include "document.hxx"
+#include <sal/log.hxx>
+#include <chgviset.hxx>
+#include <formulacell.hxx>
+#include <chgtrack.hxx>
+#include <xihelper.hxx>
+#include <xilink.hxx>
+#include <externalrefmgr.hxx>
+#include <document.hxx>
+#include <excdefs.hxx>
 
 // class XclImpChangeTrack
 
@@ -35,8 +37,6 @@ XclImpChangeTrack::XclImpChangeTrack( const XclImpRoot& rRoot, const XclImpStrea
     XclImpRoot( rRoot ),
     aRecHeader(),
     sOldUsername(),
-    pChangeTrack( nullptr ),
-    pStrm( nullptr ),
     nTabIdCount( 0 ),
     bGlobExit( false ),
     eNestedMode( nmBase )
@@ -45,20 +45,20 @@ XclImpChangeTrack::XclImpChangeTrack( const XclImpRoot& rRoot, const XclImpStrea
     // "Revision Log" and "User Names" streams when Change Tracking is active but the Revision log
     // remains if Change Tracking is turned off.
     tools::SvRef<SotStorageStream> xUserStrm = OpenStream( EXC_STREAM_USERNAMES );
-    if( !xUserStrm.Is() )
+    if( !xUserStrm.is() )
         return;
 
     xInStrm = OpenStream( EXC_STREAM_REVLOG );
-    if( xInStrm.Is() )
+    if( xInStrm.is() )
     {
         xInStrm->Seek( STREAM_SEEK_TO_END );
         sal_uInt64 const nStreamLen = xInStrm->Tell();
         if( (xInStrm->GetErrorCode() == ERRCODE_NONE) && (nStreamLen != STREAM_SEEK_TO_END) )
         {
             xInStrm->Seek( STREAM_SEEK_TO_BEGIN );
-            pStrm = new XclImpStream( *xInStrm, GetRoot() );
+            pStrm.reset( new XclImpStream( *xInStrm, GetRoot() ) );
             pStrm->CopyDecrypterFrom( rBookStrm );
-            pChangeTrack = new ScChangeTrack( &GetDocRef() );
+            pChangeTrack.reset(new ScChangeTrack( &GetDocRef() ));
 
             sOldUsername = pChangeTrack->GetUser();
             pChangeTrack->SetUseFixDateTime( true );
@@ -70,8 +70,8 @@ XclImpChangeTrack::XclImpChangeTrack( const XclImpRoot& rRoot, const XclImpStrea
 
 XclImpChangeTrack::~XclImpChangeTrack()
 {
-    delete pChangeTrack;
-    delete pStrm;
+    pChangeTrack.reset();
+    pStrm.reset();
 }
 
 void XclImpChangeTrack::DoAcceptRejectAction( ScChangeAction* pAction )
@@ -145,7 +145,7 @@ bool XclImpChangeTrack::CheckRecord( sal_uInt16 nOpCode )
     return aRecHeader.nIndex != 0;
 }
 
-bool XclImpChangeTrack::Read3DTabRefInfo( SCTAB& rFirstTab, SCTAB& rLastTab, ExcelToSc8::ExternalTabInfo& rExtInfo )
+void XclImpChangeTrack::Read3DTabRefInfo( SCTAB& rFirstTab, SCTAB& rLastTab, ExcelToSc8::ExternalTabInfo& rExtInfo )
 {
     if( LookAtuInt8() == 0x01 )
     {
@@ -177,10 +177,9 @@ bool XclImpChangeTrack::Read3DTabRefInfo( SCTAB& rFirstTab, SCTAB& rLastTab, Exc
         rExtInfo.maTabName = aTabName;
         rFirstTab = rLastTab = 0;
     }
-    return true;
 }
 
-void XclImpChangeTrack::ReadFormula( ScTokenArray*& rpTokenArray, const ScAddress& rPosition )
+void XclImpChangeTrack::ReadFormula( std::unique_ptr<ScTokenArray>& rpTokenArray, const ScAddress& rPosition )
 {
     sal_uInt16 nFmlSize = pStrm->ReaduInt16();
 
@@ -209,10 +208,10 @@ void XclImpChangeTrack::ReadFormula( ScTokenArray*& rpTokenArray, const ScAddres
     XclImpChTrFmlConverter aFmlConv( GetRoot(), *this );
 
     // read the formula, 3D tab refs from extended data
-    const ScTokenArray* pArray = nullptr;
+    std::unique_ptr<ScTokenArray> pArray;
     aFmlConv.Reset( rPosition );
-    bool bOK = (aFmlConv.Convert( pArray, aFmlaStrm, nFmlSize, false ) == ConvOK);   // JEG : Check This
-    rpTokenArray = (bOK && pArray) ? new ScTokenArray( *pArray ) : nullptr;
+    bool bOK = (aFmlConv.Convert( pArray, aFmlaStrm, nFmlSize, false ) == ConvErr::OK);   // JEG : Check This
+    rpTokenArray = (bOK && pArray) ? std::move( pArray ) : nullptr;
     pStrm->Ignore( 1 );
 }
 
@@ -227,7 +226,7 @@ void XclImpChangeTrack::ReadCell(
         break;
         case EXC_CHTR_TYPE_RK:
         {
-            double fValue = ReadRK();
+            double fValue = XclTools::GetDoubleFromRK( pStrm->ReadInt32() );
             if( pStrm->IsValid() )
             {
                 rCell.meType = CELLTYPE_VALUE;
@@ -257,25 +256,24 @@ void XclImpChangeTrack::ReadCell(
         break;
         case EXC_CHTR_TYPE_BOOL:
         {
-            double fValue = (double) ReadBool();
+            double fValue = static_cast<double>(pStrm->ReaduInt16() != 0);
             if( pStrm->IsValid() )
             {
                 rCell.meType = CELLTYPE_VALUE;
                 rCell.mfValue = fValue;
-                rFormat = GetFormatter().GetStandardFormat( css::util::NumberFormat::LOGICAL, ScGlobal::eLnge );
+                rFormat = GetFormatter().GetStandardFormat( SvNumFormatType::LOGICAL, ScGlobal::eLnge );
             }
         }
         break;
         case EXC_CHTR_TYPE_FORMULA:
         {
-            ScTokenArray* pTokenArray = nullptr;
+            std::unique_ptr<ScTokenArray> pTokenArray;
             ReadFormula( pTokenArray, rPosition );
             if( pStrm->IsValid() && pTokenArray )
             {
                 rCell.meType = CELLTYPE_FORMULA;
-                rCell.mpFormula = new ScFormulaCell(&GetDocRef(), rPosition, *pTokenArray);
+                rCell.mpFormula = new ScFormulaCell(&GetDocRef(), rPosition, std::move(pTokenArray));
             }
-            delete pTokenArray;
         }
         break;
         default:
@@ -491,8 +489,7 @@ void XclImpChangeTrack::Apply()
         pChangeTrack->SetUser( sOldUsername );
         pChangeTrack->SetUseFixDateTime( false );
 
-        GetDoc().SetChangeTrack( pChangeTrack );
-        pChangeTrack = nullptr;
+        GetDoc().SetChangeTrack( std::move(pChangeTrack) );
 
         ScChangeViewSettings aSettings;
         aSettings.SetShowChanges( true );
@@ -515,7 +512,8 @@ XclImpChTrFmlConverter::~XclImpChTrFmlConverter()
 bool XclImpChTrFmlConverter::Read3DTabReference( sal_uInt16 /*nIxti*/, SCTAB& rFirstTab, SCTAB& rLastTab,
                                                  ExternalTabInfo& rExtInfo )
 {
-    return rChangeTrack.Read3DTabRefInfo( rFirstTab, rLastTab, rExtInfo );
+    rChangeTrack.Read3DTabRefInfo( rFirstTab, rLastTab, rExtInfo );
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

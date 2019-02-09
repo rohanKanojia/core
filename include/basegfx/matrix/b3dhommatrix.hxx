@@ -34,7 +34,7 @@ namespace basegfx
     class BASEGFX_DLLPUBLIC B3DHomMatrix
     {
     public:
-        typedef o3tl::cow_wrapper< Impl3DHomMatrix > ImplType;
+        typedef o3tl::cow_wrapper< Impl3DHomMatrix, o3tl::ThreadSafeRefCountingPolicy > ImplType;
 
     private:
         ImplType                                     mpImpl;
@@ -42,6 +42,7 @@ namespace basegfx
     public:
         B3DHomMatrix();
         B3DHomMatrix(const B3DHomMatrix& rMat);
+        B3DHomMatrix(B3DHomMatrix&& rMat);
         ~B3DHomMatrix();
 
         double get(sal_uInt16 nRow, sal_uInt16 nColumn) const;
@@ -56,19 +57,22 @@ namespace basegfx
         void identity();
 
         /// Invert the matrix (if possible)
-        bool invert();
+        void invert();
 
         /// Calc the matrix determinant
         double determinant() const;
 
         /// Rotation
         void rotate(double fAngleX,double fAngleY,double fAngleZ);
+        void rotate(const B3DTuple& rRotation);
 
         /// Translation
         void translate(double fX, double fY, double fZ);
+        void translate(const B3DTuple& rTranslation);
 
         /// Scaling
         void scale(double fX, double fY, double fZ);
+        void scale(const B3DTuple& rScale);
 
         // Shearing-Matrices
         void shearXY(double fSx, double fSy);
@@ -107,9 +111,10 @@ namespace basegfx
 
         // assignment operator
         B3DHomMatrix& operator=(const B3DHomMatrix& rMat);
+        B3DHomMatrix& operator=(B3DHomMatrix&& rMat);
 
         // decomposition
-        bool decompose(B3DTuple& rScale, B3DTuple& rTranslate, B3DTuple& rRotate, B3DTuple& rShear) const;
+        void decompose(B3DTuple& rScale, B3DTuple& rTranslate, B3DTuple& rRotate, B3DTuple& rShear) const;
     };
 
     inline B3DHomMatrix operator*(const B3DHomMatrix& rMatA, const B3DHomMatrix& rMatB)

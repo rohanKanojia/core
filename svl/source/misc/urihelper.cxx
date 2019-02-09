@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
+#include <string_view>
+
 #include <sal/config.h>
 
 #include <unicode/idna.h>
@@ -46,6 +49,7 @@
 #include <rtl/ustring.h>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
+#include <sal/log.hxx>
 #include <tools/inetmime.hxx>
 #include <unotools/charclass.hxx>
 
@@ -59,8 +63,7 @@ OUString URIHelper::SmartRel2Abs(INetURLObject const & rTheBaseURIRef,
                                  INetURLObject::EncodeMechanism eEncodeMechanism,
                                  INetURLObject::DecodeMechanism eDecodeMechanism,
                                  rtl_TextEncoding eCharset,
-                                 bool bRelativeNonURIs,
-                                 INetURLObject::FSysStyle eStyle)
+                                 FSysStyle eStyle)
 {
     // Backwards compatibility:
     if( rTheRelURIRef.startsWith("#") )
@@ -77,7 +80,7 @@ OUString URIHelper::SmartRel2Abs(INetURLObject const & rTheBaseURIRef,
                                                  bIgnoreFragment,
                                                  eEncodeMechanism,
                                                  eCharset,
-                                                 bRelativeNonURIs,
+                                                 false/*bRelativeNonURIs*/,
                                                  eStyle);
         if (bCheckFileExists
             && !bWasAbsolute
@@ -112,7 +115,7 @@ void URIHelper::SetMaybeFileHdl(Link<OUString *, bool> const & rTheMaybeFileHdl)
     MaybeFileHdl::get() = rTheMaybeFileHdl;
 }
 
-Link<OUString *, bool> URIHelper::GetMaybeFileHdl()
+Link<OUString *, bool> const & URIHelper::GetMaybeFileHdl()
 {
     return MaybeFileHdl::get();
 }
@@ -281,7 +284,7 @@ OUString URIHelper::simpleNormalizedMakeRelative(
 
 namespace {
 
-inline sal_Int32 nextChar(OUString const & rStr, sal_Int32 nPos)
+sal_Int32 nextChar(OUString const & rStr, sal_Int32 nPos)
 {
     return rtl::isHighSurrogate(rStr[nPos])
            && rStr.getLength() - nPos >= 2
@@ -493,9 +496,9 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
     // length match.
 
     // Productions 1--4 use the given eMechanism and eCharset.  Productions 5--9
-    // use ENCODE_ALL.
+    // use EncodeMechanism::All.
 
-    // Productions 6--9 are only applicable if the FSYS_DOS bit is set in
+    // Productions 6--9 are only applicable if the FSysStyle::Dos bit is set in
     // eStyle.
 
     bool bBoundary1 = true;
@@ -528,13 +531,13 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
                     {
                         INetURLObject aUri(rText.copy(nPos, nUriEnd - nPos),
                                            INetProtocol::File, eMechanism, eCharset,
-                                           INetURLObject::FSYS_DETECT);
+                                           FSysStyle::Detect);
                         if (!aUri.HasError())
                         {
                             rBegin = nPos;
                             rEnd = nUriEnd;
                             return
-                                aUri.GetMainURL(INetURLObject::DECODE_TO_IURI);
+                                aUri.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
                         }
                     }
                 }
@@ -563,7 +566,7 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
                             rBegin = nPos;
                             rEnd = nUriEnd;
                             return
-                                aUri.GetMainURL(INetURLObject::DECODE_TO_IURI);
+                                aUri.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
                         }
                     }
                 }
@@ -612,7 +615,7 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
                             rBegin = nPos;
                             rEnd = nUriEnd;
                             return
-                                aUri.GetMainURL(INetURLObject::DECODE_TO_IURI);
+                                aUri.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
                         }
                     }
                 }
@@ -630,15 +633,15 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
                     {
                         INetURLObject aUri(rText.copy(nPos, nUriEnd - nPos),
                                            INetProtocol::File,
-                                           INetURLObject::ENCODE_ALL,
+                                           INetURLObject::EncodeMechanism::All,
                                            RTL_TEXTENCODING_UTF8,
-                                           INetURLObject::FSYS_DOS);
+                                           FSysStyle::Dos);
                         if (!aUri.HasError())
                         {
                             rBegin = nPos;
                             rEnd = nUriEnd;
                             return
-                                aUri.GetMainURL(INetURLObject::DECODE_TO_IURI);
+                                aUri.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
                         }
                     }
                 }
@@ -659,15 +662,15 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
                     {
                         INetURLObject aUri(rText.copy(nPos, nUriEnd - nPos),
                                            INetProtocol::File,
-                                           INetURLObject::ENCODE_ALL,
+                                           INetURLObject::EncodeMechanism::All,
                                            RTL_TEXTENCODING_UTF8,
-                                           INetURLObject::FSYS_DOS);
+                                           FSysStyle::Dos);
                         if (!aUri.HasError())
                         {
                             rBegin = nPos;
                             rEnd = nUriEnd;
                             return
-                                aUri.GetMainURL(INetURLObject::DECODE_TO_IURI);
+                                aUri.GetMainURL(INetURLObject::DecodeMechanism::ToIUri);
                         }
                     }
                 }
@@ -696,13 +699,13 @@ OUString URIHelper::FindFirstURLInText(OUString const & rText,
                         {
                             INetURLObject aUri(rText.copy(nPos, i - nPos),
                                                INetProtocol::Mailto,
-                                               INetURLObject::ENCODE_ALL);
+                                               INetURLObject::EncodeMechanism::All);
                             if (!aUri.HasError())
                             {
                                 rBegin = nPos;
                                 rEnd = i;
                                 return aUri.GetMainURL(
-                                           INetURLObject::DECODE_TO_IURI);
+                                           INetURLObject::DecodeMechanism::ToIUri);
                             }
                         }
                     }
@@ -782,12 +785,11 @@ OUString URIHelper::resolveIdnaHost(OUString const & url) {
         return url;
     }
     OUStringBuffer buf(uri->getScheme());
-    buf.append("://").append(auth.getStr(), hostStart);
+    buf.append("://").append(std::u16string_view(auth).substr(0, hostStart));
     buf.append(
         reinterpret_cast<sal_Unicode const *>(ascii.getBuffer()),
         ascii.length());
-    buf.append(auth.getStr() + hostEnd, auth.getLength() - hostEnd)
-        .append(uri->getPath());
+    buf.append(std::u16string_view(auth).substr(hostEnd)).append(uri->getPath());
     if (uri->hasQuery()) {
         buf.append('?').append(uri->getQuery());
     }

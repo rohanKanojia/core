@@ -20,8 +20,6 @@
 #ifndef INCLUDED_VCL_INC_UNX_GTK_GTKDATA_HXX
 #define INCLUDED_VCL_INC_UNX_GTK_GTKDATA_HXX
 
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #define GLIB_DISABLE_DEPRECATION_WARNINGS
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
@@ -29,16 +27,18 @@
 
 #include <unx/gendata.hxx>
 #include <unx/saldisp.hxx>
-#include <unx/saldata.hxx>
 #include <unx/gtk/gtksys.hxx>
 #include <vcl/ptrstyle.hxx>
-#include <osl/conditn.h>
-#include "saltimer.hxx"
+#include <osl/conditn.hxx>
+#include <saltimer.hxx>
 #include <o3tl/enumarray.hxx>
 
-#include <list>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace accessibility { class XAccessibleEventListener; } } } }
 
 class GtkSalDisplay;
+class DocumentFocusListener;
 
 inline GdkWindow * widget_get_window(GtkWidget *widget)
 {
@@ -87,7 +87,7 @@ class GtkSalTimer : public SalTimer
     struct SalGtkTimeoutSource *m_pTimeout;
 public:
     GtkSalTimer();
-    virtual ~GtkSalTimer();
+    virtual ~GtkSalTimer() override;
     virtual void Start( sal_uLong nMS ) override;
     virtual void Stop() override;
     bool         Expired();
@@ -95,16 +95,21 @@ public:
     sal_uLong    m_nTimeoutMS;
 };
 
-class GtkData : public SalGenericData
+class GtkSalData : public GenericUnixSalData
 {
-    GSource*     m_pUserEvent;
-    osl::Mutex   m_aDispatchMutex;
-    oslCondition m_aDispatchCondition;
-    bool         blockIdleTimeout;
+    GSource*        m_pUserEvent;
+    osl::Mutex      m_aDispatchMutex;
+    osl::Condition  m_aDispatchCondition;
+    std::exception_ptr m_aException;
+
+    css::uno::Reference<css::accessibility::XAccessibleEventListener> m_xDocumentFocusListener;
+    DocumentFocusListener * m_pDocumentFocusListener;
 
 public:
-    GtkData( SalInstance *pInstance );
-    virtual ~GtkData();
+    GtkSalData( SalInstance *pInstance );
+    virtual ~GtkSalData() override;
+
+    DocumentFocusListener & GetDocumentFocusListener();
 
     void Init();
     virtual void Dispose() override;
@@ -112,17 +117,17 @@ public:
     static void initNWF();
     static void deInitNWF();
 
-    static gboolean userEventFn( gpointer data );
+    void TriggerUserEventProcessing();
+    void TriggerAllUserEventsProcessed();
 
-    void PostUserEvent();
-    SalYieldResult Yield( bool bWait, bool bHandleAllCurrentEvents );
+    bool Yield( bool bWait, bool bHandleAllCurrentEvents );
     inline GdkDisplay *GetGdkDisplay();
 
     virtual void ErrorTrapPush() override;
-    virtual bool ErrorTrapPop( bool bIgnoreError ) override;
+    virtual bool ErrorTrapPop( bool bIgnoreError = true ) override;
 
     inline GtkSalDisplay *GetGtkDisplay() const;
-    bool BlockIdleTimeout() const { return blockIdleTimeout; }
+    void setException(const std::exception_ptr& exception) { m_aException = exception; }
 };
 
 class GtkSalFrame;
@@ -134,21 +139,24 @@ class GtkSalDisplay : public SalDisplay
 #endif
 {
     GtkSalSystem*                   m_pSys;
-    GdkDisplay*                     m_pGdkDisplay;
+    GdkDisplay* const               m_pGdkDisplay;
     o3tl::enumarray<PointerStyle, GdkCursor*> m_aCursors;
     bool                            m_bStartupCompleted;
     bool                            m_bX11Display;
 
     GdkCursor* getFromXBM( const unsigned char *pBitmap, const unsigned char *pMask,
                            int nWidth, int nHeight, int nXHot, int nYHot );
+
 public:
              GtkSalDisplay( GdkDisplay* pDisplay );
-    virtual ~GtkSalDisplay();
+    virtual ~GtkSalDisplay() override;
 
     GdkDisplay* GetGdkDisplay() const { return m_pGdkDisplay; }
     bool        IsX11Display() const { return m_bX11Display; }
 
     GtkSalSystem* getSystem() const { return m_pSys; }
+
+    GtkWidget* findGtkWidgetForNativeHandle(sal_uIntPtr hWindow) const;
 
     virtual void deregisterFrame( SalFrame* pFrame ) override;
     GdkCursor *getCursor( PointerStyle ePointerStyle );
@@ -167,14 +175,14 @@ public:
     virtual ScreenData *initScreen( SalX11Screen nXScreen ) const override;
 #endif
 
-    GdkFilterReturn filterGdkEvent( GdkXEvent* sys_event,
-                                    GdkEvent* event );
+    GdkFilterReturn filterGdkEvent( GdkXEvent* sys_event );
     void startupNotificationCompleted() { m_bStartupCompleted = true; }
 
-    void screenSizeChanged( GdkScreen* );
-    void monitorsChanged( GdkScreen* );
+    void screenSizeChanged( GdkScreen const * );
+    void monitorsChanged( GdkScreen const * );
 
-    virtual void PostUserEvent() override;
+    virtual void TriggerUserEventProcessing() override;
+    virtual void TriggerAllUserEventsProcessed() override;
 
 #if !GTK_CHECK_VERSION(3,0,0)
     virtual bool Dispatch( XEvent *pEvent ) override;
@@ -184,16 +192,16 @@ public:
 #endif
 };
 
-inline GtkData* GetGtkSalData()
+inline GtkSalData* GetGtkSalData()
 {
-    return static_cast<GtkData*>(ImplGetSVData()->mpSalData);
+    return static_cast<GtkSalData*>(ImplGetSVData()->mpSalData);
 }
-inline GdkDisplay *GtkData::GetGdkDisplay()
+inline GdkDisplay *GtkSalData::GetGdkDisplay()
 {
     return GetGtkDisplay()->GetGdkDisplay();
 }
 
-GtkSalDisplay *GtkData::GetGtkDisplay() const
+GtkSalDisplay *GtkSalData::GetGtkDisplay() const
 {
     return static_cast<GtkSalDisplay *>(GetDisplay());
 }

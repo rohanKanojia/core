@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
 
-#include "drawingml/table/tablepartstylecontext.hxx"
-#include "drawingml/table/tablestyletextstylecontext.hxx"
-#include "drawingml/table/tablestylecellstylecontext.hxx"
+#include <drawingml/table/tablepartstylecontext.hxx>
+#include <drawingml/table/tablestyletextstylecontext.hxx>
+#include <drawingml/table/tablestylecellstylecontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
@@ -30,7 +31,7 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml { namespace table {
 
-TablePartStyleContext::TablePartStyleContext( ContextHandler2Helper& rParent, TableStylePart& rTableStylePart )
+TablePartStyleContext::TablePartStyleContext( ContextHandler2Helper const & rParent, TableStylePart& rTableStylePart )
 : ContextHandler2( rParent )
 , mrTableStylePart( rTableStylePart )
 {

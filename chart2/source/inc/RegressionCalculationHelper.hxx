@@ -22,8 +22,6 @@
 #include <rtl/math.hxx>
 
 #include <utility>
-#include <algorithm>
-#include <functional>
 #include <vector>
 
 namespace chart
@@ -31,7 +29,7 @@ namespace chart
 namespace RegressionCalculationHelper
 {
 
-typedef ::std::pair< ::std::vector< double >, ::std::vector< double > > tDoubleVectorPair;
+typedef std::pair< std::vector< double >, std::vector< double > > tDoubleVectorPair;
 
 /** takes the given x- and y-values and copies them into the resulting pair,
     which contains x-values in the first element and the y-values in the second
@@ -47,7 +45,7 @@ tDoubleVectorPair
              Pred aPred )
 {
     tDoubleVectorPair aResult;
-    sal_Int32 nSize = ::std::min( rXValues.getLength(), rYValues.getLength());
+    sal_Int32 nSize = std::min( rXValues.getLength(), rYValues.getLength());
     for( sal_Int32 i=0; i<nSize; ++i )
     {
         if( aPred( rXValues[i], rYValues[i] ))
@@ -60,10 +58,10 @@ tDoubleVectorPair
     return aResult;
 }
 
-class isValid : public ::std::binary_function< double, double, bool >
+class isValid
 {
 public:
-    inline bool operator()( double x, double y )
+    bool operator()( double x, double y )
     { return ! ( ::rtl::math::isNan( x ) ||
                  ::rtl::math::isNan( y ) ||
                  ::rtl::math::isInf( x ) ||
@@ -71,10 +69,10 @@ public:
     }
 };
 
-class isValidAndXPositive : public ::std::binary_function< double, double, bool >
+class isValidAndXPositive
 {
 public:
-    inline bool operator()( double x, double y )
+    bool operator()( double x, double y )
     { return ! ( ::rtl::math::isNan( x ) ||
                  ::rtl::math::isNan( y ) ||
                  ::rtl::math::isInf( x ) ||
@@ -83,10 +81,10 @@ public:
     }
 };
 
-class isValidAndYPositive : public ::std::binary_function< double, double, bool >
+class isValidAndYPositive
 {
 public:
-    inline bool operator()( double x, double y )
+    bool operator()( double x, double y )
     { return ! ( ::rtl::math::isNan( x ) ||
                  ::rtl::math::isNan( y ) ||
                  ::rtl::math::isInf( x ) ||
@@ -95,10 +93,10 @@ public:
     }
 };
 
-class isValidAndYNegative : public ::std::binary_function< double, double, bool >
+class isValidAndYNegative
 {
 public:
-    inline bool operator()( double x, double y )
+    bool operator()( double x, double y )
     { return ! ( ::rtl::math::isNan( x ) ||
                  ::rtl::math::isNan( y ) ||
                  ::rtl::math::isInf( x ) ||
@@ -107,10 +105,10 @@ public:
     }
 };
 
-class isValidAndBothPositive : public ::std::binary_function< double, double, bool >
+class isValidAndBothPositive
 {
 public:
-    inline bool operator()( double x, double y )
+    bool operator()( double x, double y )
     { return ! ( ::rtl::math::isNan( x ) ||
                  ::rtl::math::isNan( y ) ||
                  ::rtl::math::isInf( x ) ||
@@ -120,10 +118,10 @@ public:
     }
 };
 
-class isValidAndXPositiveAndYNegative : public ::std::binary_function< double, double, bool >
+class isValidAndXPositiveAndYNegative
 {
 public:
-    inline bool operator()( double x, double y )
+    bool operator()( double x, double y )
     { return ! ( ::rtl::math::isNan( x ) ||
                  ::rtl::math::isNan( y ) ||
                  ::rtl::math::isInf( x ) ||

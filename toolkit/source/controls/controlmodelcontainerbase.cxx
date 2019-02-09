@@ -26,10 +26,10 @@
 #include <toolkit/helper/property.hxx>
 #include <toolkit/controls/geometrycontrolmodel.hxx>
 #include <toolkit/controls/unocontrols.hxx>
-#include "toolkit/controls/formattedcontrol.hxx"
-#include "toolkit/controls/roadmapcontrol.hxx"
-#include "toolkit/controls/tkscrollbar.hxx"
-#include "toolkit/controls/tabpagemodel.hxx"
+#include <toolkit/controls/formattedcontrol.hxx>
+#include <toolkit/controls/roadmapcontrol.hxx>
+#include <toolkit/controls/tkscrollbar.hxx>
+#include <toolkit/controls/tabpagemodel.hxx>
 #include <toolkit/controls/stdtabcontroller.hxx>
 #include <com/sun/star/awt/PosSize.hpp>
 #include <com/sun/star/awt/WindowAttribute.hpp>
@@ -38,14 +38,13 @@
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/queryinterface.hxx>
+#include <cppuhelper/weak.hxx>
+#include <cppuhelper/weakagg.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include <comphelper/processfactory.hxx>
 #include <vcl/outdev.hxx>
 #include <comphelper/types.hxx>
 
-#include <toolkit/helper/vclunohelper.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/image.hxx>
 
@@ -55,13 +54,13 @@
 
 #include <map>
 #include <algorithm>
-#include <functional>
-#include "tools/urlobj.hxx"
-#include "osl/file.hxx"
-#include "toolkit/controls/dialogcontrol.hxx"
+#include <tools/urlobj.hxx>
+#include <osl/file.hxx>
+#include <sal/log.hxx>
+#include <toolkit/controls/dialogcontrol.hxx>
 
-#include "helper/tkresmgr.hxx"
-#include "helper/unopropertyarrayhelper.hxx"
+#include <helper/tkresmgr.hxx>
+#include <helper/unopropertyarrayhelper.hxx>
 #include "controlmodelcontainerbase_internal.hxx"
 
 using namespace ::com::sun::star;
@@ -74,36 +73,21 @@ using namespace ::com::sun::star::util;
 using namespace toolkit;
 
 #define PROPERTY_RESOURCERESOLVER "ResourceResolver"
-struct LanguageDependentProp
-{
-    const char* pPropName;
-    sal_Int32   nPropNameLength;
-};
 
 
 namespace
 {
     const Sequence< OUString >& lcl_getLanguageDependentProperties()
     {
-        static Sequence< OUString > s_aLanguageDependentProperties;
-        if ( s_aLanguageDependentProperties.getLength() == 0 )
-        {
-            ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-            if ( s_aLanguageDependentProperties.getLength() == 0 )
-            {
-                s_aLanguageDependentProperties.realloc( 2 );
-                s_aLanguageDependentProperties[0] = "HelpText";
-                s_aLanguageDependentProperties[1] = "Title";
-                // note: properties must be sorted
-            }
-        }
+        // note: properties must be sorted
+        static Sequence<OUString> s_aLanguageDependentProperties{ "HelpText", "Title" };
         return s_aLanguageDependentProperties;
     }
 }
 
 
 // functor for disposing a control model
-struct DisposeControlModel : public ::std::unary_function< Reference< XControlModel >, void >
+struct DisposeControlModel
 {
     void operator()( Reference< XControlModel >& _rxModel )
     {
@@ -113,14 +97,14 @@ struct DisposeControlModel : public ::std::unary_function< Reference< XControlMo
         }
         catch (const Exception&)
         {
-            OSL_TRACE( "DisposeControlModel::(): caught an exception while disposing a component!" );
+            SAL_WARN("toolkit", "caught an exception while disposing a component!" );
         }
     }
 };
 
 
 // functor for searching control model by name
-struct FindControlModel : public ::std::unary_function< ControlModelContainerBase::UnoControlModelHolder, bool >
+struct FindControlModel
 {
 private:
     const OUString& m_rName;
@@ -136,14 +120,14 @@ public:
 
 
 // functor for cloning a control model, and insertion into a target list
-struct CloneControlModel : public ::std::unary_function< ControlModelContainerBase::UnoControlModelHolder, void >
+struct CloneControlModel
 {
 private:
-    ControlModelContainerBase::UnoControlModelHolderList&   m_rTargetList;
+    ControlModelContainerBase::UnoControlModelHolderVector&   m_rTargetVector;
 
 public:
-    explicit CloneControlModel( ControlModelContainerBase::UnoControlModelHolderList& _rTargetList )
-        :m_rTargetList( _rTargetList )
+    explicit CloneControlModel( ControlModelContainerBase::UnoControlModelHolderVector& _rTargetVector )
+        :m_rTargetVector( _rTargetVector )
     {
     }
 
@@ -153,13 +137,13 @@ public:
         Reference< XCloneable > xCloneSource( _rSource.first, UNO_QUERY );
         Reference< XControlModel > xClone( xCloneSource->createClone(), UNO_QUERY );
         // add to target list
-        m_rTargetList.push_back( ControlModelContainerBase::UnoControlModelHolder( xClone, _rSource.second ) );
+        m_rTargetVector.emplace_back( xClone, _rSource.second );
     }
 };
 
 
 // functor for comparing a XControlModel with a given reference
-struct CompareControlModel : public ::std::unary_function< ControlModelContainerBase::UnoControlModelHolder, bool >
+struct CompareControlModel
 {
 private:
     Reference< XControlModel > m_xReference;
@@ -249,16 +233,11 @@ Any ControlModelContainerBase::ImplGetDefaultValue( sal_uInt16 nPropId ) const
 
 ::cppu::IPropertyArrayHelper& ControlModelContainerBase::getInfoHelper()
 {
-    static UnoPropertyArrayHelper* pHelper = nullptr;
-    if ( !pHelper )
-    {
-        Sequence<sal_Int32> aIDs = ImplGetPropertyIds();
-        pHelper = new UnoPropertyArrayHelper( aIDs );
-    }
-    return *pHelper;
+    static UnoPropertyArrayHelper aHelper( ImplGetPropertyIds() );
+    return aHelper;
 }
 
-void SAL_CALL ControlModelContainerBase::dispose(  ) throw(RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::dispose(  )
 {
 
     // tell our listeners
@@ -296,7 +275,7 @@ void SAL_CALL ControlModelContainerBase::dispose(  ) throw(RuntimeException, std
 }
 
 // XMultiPropertySet
-Reference< XPropertySetInfo > ControlModelContainerBase::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+Reference< XPropertySetInfo > ControlModelContainerBase::getPropertySetInfo(  )
 {
     static Reference< XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
     return xInfo;
@@ -309,7 +288,7 @@ void ControlModelContainerBase::Clone_Impl(ControlModelContainerBase& _rClone) c
         CloneControlModel( _rClone.maModels )
     );
 }
-UnoControlModel* ControlModelContainerBase::Clone() const
+rtl::Reference<UnoControlModel> ControlModelContainerBase::Clone() const
 {
     // clone the container itself
     ControlModelContainerBase* pClone = new ControlModelContainerBase( *this );
@@ -318,13 +297,13 @@ UnoControlModel* ControlModelContainerBase::Clone() const
     return pClone;
 }
 
-ControlModelContainerBase::UnoControlModelHolderList::iterator ControlModelContainerBase::ImplFindElement( const OUString& rName )
+ControlModelContainerBase::UnoControlModelHolderVector::iterator ControlModelContainerBase::ImplFindElement( const OUString& rName )
 {
     return ::std::find_if( maModels.begin(), maModels.end(), FindControlModel( rName ) );
 }
 
 // ::XMultiServiceFactory
-Reference< XInterface > ControlModelContainerBase::createInstance( const OUString& aServiceSpecifier ) throw(Exception, RuntimeException, std::exception)
+Reference< XInterface > ControlModelContainerBase::createInstance( const OUString& aServiceSpecifier )
 {
     SolarMutexGuard aGuard;
 
@@ -411,7 +390,7 @@ Reference< XInterface > ControlModelContainerBase::createInstance( const OUStrin
     return xNewModel;
 }
 
-Reference< XInterface > ControlModelContainerBase::createInstanceWithArguments( const OUString& ServiceSpecifier, const Sequence< Any >& i_arguments ) throw(Exception, RuntimeException, std::exception)
+Reference< XInterface > ControlModelContainerBase::createInstanceWithArguments( const OUString& ServiceSpecifier, const Sequence< Any >& i_arguments )
 {
     const Reference< XInterface > xInstance( createInstance( ServiceSpecifier ) );
     const Reference< XInitialization > xInstanceInit( xInstance, UNO_QUERY );
@@ -420,64 +399,62 @@ Reference< XInterface > ControlModelContainerBase::createInstanceWithArguments( 
     return xInstance;
 }
 
-Sequence< OUString > ControlModelContainerBase::getAvailableServiceNames() throw(RuntimeException, std::exception)
+Sequence< OUString > ControlModelContainerBase::getAvailableServiceNames()
 {
-    static Sequence< OUString >* pNamesSeq = nullptr;
-    if ( !pNamesSeq )
-    {
-        pNamesSeq = new Sequence< OUString >( 26 );
-        OUString* pNames = pNamesSeq->getArray();
-        pNames[0] = "com.sun.star.awt.UnoControlEditModel";
-        pNames[1] = "com.sun.star.awt.UnoControlFormattedFieldModel";
-        pNames[2] = "com.sun.star.awt.UnoControlFileControlModel";
-        pNames[3] = "com.sun.star.awt.UnoControlButtonModel";
-        pNames[4] = "com.sun.star.awt.UnoControlImageControlModel";
-        pNames[5] = "com.sun.star.awt.UnoControlRadioButtonModel";
-        pNames[6] = "com.sun.star.awt.UnoControlCheckBoxModel";
-        pNames[7] = "com.sun.star.awt.UnoControlFixedTextModel";
-        pNames[8] = "com.sun.star.awt.UnoControlGroupBoxModel";
-        pNames[9] = "com.sun.star.awt.UnoControlListBoxModel";
-        pNames[10] = "com.sun.star.awt.UnoControlComboBoxModel";
-        pNames[11] = "com.sun.star.awt.UnoControlDateFieldModel";
-        pNames[12] = "com.sun.star.awt.UnoControlTimeFieldModel";
-        pNames[13] = "com.sun.star.awt.UnoControlNumericFieldModel";
-        pNames[14] = "com.sun.star.awt.UnoControlCurrencyFieldModel";
-        pNames[15] = "com.sun.star.awt.UnoControlPatternFieldModel";
-        pNames[16] = "com.sun.star.awt.tree.TreeControlModel";
-        pNames[21] = "com.sun.star.awt.grid.UnoControlGridModel";
-        pNames[22] = "com.sun.star.awt.tab.UnoControlTabPageContainerModel";
-        pNames[23] = "com.sun.star.awt.tab.UnoControlTabPageModel";
-        pNames[24] = "com.sun.star.awt.UnoMultiPageModel";
-        pNames[25] = "com.sun.star.awt.UnoFrameModel";
-    }
-    return *pNamesSeq;
+    return { "com.sun.star.awt.UnoControlEditModel",
+            "com.sun.star.awt.UnoControlFormattedFieldModel",
+            "com.sun.star.awt.UnoControlFileControlModel",
+            "com.sun.star.awt.UnoControlButtonModel",
+            "com.sun.star.awt.UnoControlImageControlModel",
+            "com.sun.star.awt.UnoControlRadioButtonModel",
+            "com.sun.star.awt.UnoControlCheckBoxModel",
+            "com.sun.star.awt.UnoControlFixedTextModel",
+            "com.sun.star.awt.UnoControlGroupBoxModel",
+            "com.sun.star.awt.UnoControlListBoxModel",
+            "com.sun.star.awt.UnoControlComboBoxModel",
+            "com.sun.star.awt.UnoControlDateFieldModel",
+            "com.sun.star.awt.UnoControlTimeFieldModel",
+            "com.sun.star.awt.UnoControlNumericFieldModel",
+            "com.sun.star.awt.UnoControlCurrencyFieldModel",
+            "com.sun.star.awt.UnoControlPatternFieldModel",
+            "com.sun.star.awt.UnoControlProgressBarModel",
+            "com.sun.star.awt.UnoControlScrollBarModel",
+            "com.sun.star.awt.UnoControlFixedLineModel",
+            "com.sun.star.awt.UnoControlRoadmapModel",
+            "com.sun.star.awt.tree.TreeControlModel",
+            "com.sun.star.awt.grid.UnoControlGridModel",
+            "com.sun.star.awt.tab.UnoControlTabPageContainerModel",
+            "com.sun.star.awt.tab.UnoControlTabPageModel",
+            "com.sun.star.awt.UnoMultiPageModel",
+            "com.sun.star.awt.UnoFrameModel"
+    };
 }
 
 // XContainer
-void ControlModelContainerBase::addContainerListener( const Reference< XContainerListener >& l ) throw(RuntimeException, std::exception)
+void ControlModelContainerBase::addContainerListener( const Reference< XContainerListener >& l )
 {
     maContainerListeners.addInterface( l );
 }
 
-void ControlModelContainerBase::removeContainerListener( const Reference< XContainerListener >& l ) throw(RuntimeException, std::exception)
+void ControlModelContainerBase::removeContainerListener( const Reference< XContainerListener >& l )
 {
     maContainerListeners.removeInterface( l );
 }
 
-// XElementAcces
-Type ControlModelContainerBase::getElementType() throw(RuntimeException, std::exception)
+// XElementAccess
+Type ControlModelContainerBase::getElementType()
 {
     Type aType = cppu::UnoType<XControlModel>::get();
     return aType;
 }
 
-sal_Bool ControlModelContainerBase::hasElements() throw(RuntimeException, std::exception)
+sal_Bool ControlModelContainerBase::hasElements()
 {
     return !maModels.empty();
 }
 
 // XNameContainer, XNameReplace, XNameAccess
-void ControlModelContainerBase::replaceByName( const OUString& aName, const Any& aElement ) throw(IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+void ControlModelContainerBase::replaceByName( const OUString& aName, const Any& aElement )
 {
     SolarMutexGuard aGuard;
 
@@ -486,7 +463,7 @@ void ControlModelContainerBase::replaceByName( const OUString& aName, const Any&
     if ( !xNewModel.is() )
         lcl_throwIllegalArgumentException();
 
-    UnoControlModelHolderList::iterator aElementPos = ImplFindElement( aName );
+    UnoControlModelHolderVector::iterator aElementPos = ImplFindElement( aName );
     if ( maModels.end() == aElementPos )
         lcl_throwNoSuchElementException();
     // Dialog behaviour is to have all containee names unique (MSO Userform is the same)
@@ -498,9 +475,9 @@ void ControlModelContainerBase::replaceByName( const OUString& aName, const Any&
     Reference< XNameContainer > xAllChildren( getPropertyValue( GetPropertyName( BASEPROPERTY_USERFORMCONTAINEES ) ), UNO_QUERY );
     if ( xAllChildren.is() )
     {
-        // remove old control (and children) from global list of containees
+        // remove old control (and children) from global list of containers
         updateUserFormChildren( xAllChildren, aName, Remove, uno::Reference< XControlModel >() );
-        // Add new control (and containees if they exist)
+        // Add new control (and containers if they exist)
         updateUserFormChildren( xAllChildren, aName, Insert, xNewModel );
     }
     // stop listening at the old model
@@ -523,16 +500,16 @@ void ControlModelContainerBase::replaceByName( const OUString& aName, const Any&
     implNotifyTabModelChange( aName );
 }
 
-Any ControlModelContainerBase::getByName( const OUString& aName ) throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+Any ControlModelContainerBase::getByName( const OUString& aName )
 {
-    UnoControlModelHolderList::iterator aElementPos = ImplFindElement( aName );
+    UnoControlModelHolderVector::iterator aElementPos = ImplFindElement( aName );
     if ( maModels.end() == aElementPos )
         lcl_throwNoSuchElementException();
 
     return makeAny( aElementPos->first );
 }
 
-Sequence< OUString > ControlModelContainerBase::getElementNames() throw(RuntimeException, std::exception)
+Sequence< OUString > ControlModelContainerBase::getElementNames()
 {
     Sequence< OUString > aNames( maModels.size() );
 
@@ -546,12 +523,12 @@ Sequence< OUString > ControlModelContainerBase::getElementNames() throw(RuntimeE
     return aNames;
 }
 
-sal_Bool ControlModelContainerBase::hasByName( const OUString& aName ) throw(RuntimeException, std::exception)
+sal_Bool ControlModelContainerBase::hasByName( const OUString& aName )
 {
     return maModels.end() != ImplFindElement( aName );
 }
 
-void ControlModelContainerBase::insertByName( const OUString& aName, const Any& aElement ) throw(IllegalArgumentException, ElementExistException, WrappedTargetException, RuntimeException, std::exception)
+void ControlModelContainerBase::insertByName( const OUString& aName, const Any& aElement )
 {
     SolarMutexGuard aGuard;
 
@@ -566,7 +543,7 @@ void ControlModelContainerBase::insertByName( const OUString& aName, const Any& 
 
                 Reference< beans::XPropertySetInfo > xPropInfo = xProps.get()->getPropertySetInfo();
 
-                OUString sImageSourceProperty = GetPropertyName( BASEPROPERTY_IMAGEURL );
+                const OUString& sImageSourceProperty = GetPropertyName( BASEPROPERTY_IMAGEURL );
                 if ( xPropInfo.get()->hasPropertyByName(  sImageSourceProperty ) && ImplHasProperty(BASEPROPERTY_DIALOGSOURCEURL) )
                 {
                     Any aUrl = xProps.get()->getPropertyValue(  sImageSourceProperty );
@@ -585,7 +562,7 @@ void ControlModelContainerBase::insertByName( const OUString& aName, const Any& 
     if ( aName.isEmpty() || !xM.is() )
         lcl_throwIllegalArgumentException();
 
-    UnoControlModelHolderList::iterator aElementPos = ImplFindElement( aName );
+    UnoControlModelHolderVector::iterator aElementPos = ImplFindElement( aName );
     if ( maModels.end() != aElementPos )
         lcl_throwElementExistException();
 
@@ -595,18 +572,18 @@ void ControlModelContainerBase::insertByName( const OUString& aName, const Any& 
     // hierarchy of the added control could contain a name clash, if we have access to the
     // list of global names then we need to recursively check for previously existing
     // names (we need to do this obviously before the 'this' objects container is updated)
-    // remove old control (and children) from global list of containees
+    // remove old control (and children) from global list of containers
     Reference< XNameContainer > xAllChildren( getPropertyValue( GetPropertyName( BASEPROPERTY_USERFORMCONTAINEES ) ), UNO_QUERY );
 
     if ( xAllChildren.is() )
         updateUserFormChildren( xAllChildren, aName, Insert, xM );
-    maModels.push_back( UnoControlModelHolder( xM, aName ) );
+    maModels.emplace_back( xM, aName );
     mbGroupsUpToDate = false;
     startControlListening( xM );
 
     ContainerEvent aEvent;
     aEvent.Source = *this;
-    aEvent.Element <<= aElement;
+    aEvent.Element = aElement;
     aEvent.Accessor <<= aName;
     maContainerListeners.elementInserted( aEvent );
 
@@ -614,11 +591,11 @@ void ControlModelContainerBase::insertByName( const OUString& aName, const Any& 
     implNotifyTabModelChange( aName );
 }
 
-void ControlModelContainerBase::removeByName( const OUString& aName ) throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+void ControlModelContainerBase::removeByName( const OUString& aName )
 {
     SolarMutexGuard aGuard;
 
-    UnoControlModelHolderList::iterator aElementPos = ImplFindElement( aName );
+    UnoControlModelHolderVector::iterator aElementPos = ImplFindElement( aName );
     if ( maModels.end() == aElementPos )
         lcl_throwNoSuchElementException();
 
@@ -650,7 +627,7 @@ void ControlModelContainerBase::removeByName( const OUString& aName ) throw(NoSu
         }
         catch (const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("toolkit.controls");
         }
     }
 
@@ -659,35 +636,33 @@ void ControlModelContainerBase::removeByName( const OUString& aName ) throw(NoSu
 }
 
 
-sal_Bool SAL_CALL ControlModelContainerBase::getGroupControl(  ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL ControlModelContainerBase::getGroupControl(  )
 {
-    return sal_True;
+    return true;
 }
 
 
-void SAL_CALL ControlModelContainerBase::setGroupControl( sal_Bool ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setGroupControl( sal_Bool )
 {
-    OSL_TRACE( "ControlModelContainerBase::setGroupControl: explicit grouping not supported" );
+    SAL_WARN("toolkit", "explicit grouping not supported" );
 }
 
 
-void SAL_CALL ControlModelContainerBase::setControlModels( const Sequence< Reference< XControlModel > >& _rControls ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setControlModels( const Sequence< Reference< XControlModel > >& _rControls )
 {
     SolarMutexGuard aGuard;
 
     // set the tab indexes according to the order of models in the sequence
-    const Reference< XControlModel >* pControls = _rControls.getConstArray( );
-    const Reference< XControlModel >* pControlsEnd = _rControls.getConstArray( ) + _rControls.getLength();
 
     sal_Int16 nTabIndex = 1;
 
-    for ( ; pControls != pControlsEnd; ++pControls )
+    for ( auto const & control : _rControls )
     {
         // look up the control in our own structure. This is to prevent invalid arguments
-        UnoControlModelHolderList::const_iterator aPos =
+        UnoControlModelHolderVector::const_iterator aPos =
             ::std::find_if(
                 maModels.begin(), maModels.end(),
-                CompareControlModel( *pControls )
+                CompareControlModel( control )
             );
         if ( maModels.end() != aPos )
         {
@@ -705,10 +680,10 @@ void SAL_CALL ControlModelContainerBase::setControlModels( const Sequence< Refer
 }
 
 
-typedef ::std::multimap< sal_Int32, Reference< XControlModel >, ::std::less< sal_Int32 > > MapIndexToModel;
+typedef ::std::multimap< sal_Int32, Reference< XControlModel > > MapIndexToModel;
 
 
-Sequence< Reference< XControlModel > > SAL_CALL ControlModelContainerBase::getControlModels(  ) throw (RuntimeException, std::exception)
+Sequence< Reference< XControlModel > > SAL_CALL ControlModelContainerBase::getControlModels(  )
 {
     SolarMutexGuard aGuard;
 
@@ -717,10 +692,9 @@ Sequence< Reference< XControlModel > > SAL_CALL ControlModelContainerBase::getCo
     ::std::vector< Reference< XControlModel > > aUnindexedModels;
         // will be the container of all models which do not have a tab index property
 
-    UnoControlModelHolderList::const_iterator aLoop = maModels.begin();
-    for ( ; aLoop != maModels.end(); ++aLoop )
+    for ( const auto& rModel : maModels )
     {
-        Reference< XControlModel > xModel( aLoop->first );
+        Reference< XControlModel > xModel( rModel.first );
 
         // see if the model has a TabIndex property
         Reference< XPropertySet > xControlProps( xModel, UNO_QUERY );
@@ -735,7 +709,7 @@ Sequence< Reference< XControlModel > > SAL_CALL ControlModelContainerBase::getCo
             sal_Int32 nTabIndex = -1;
             xControlProps->getPropertyValue( getTabIndexPropertyName() ) >>= nTabIndex;
 
-            aSortedModels.insert( MapIndexToModel::value_type( nTabIndex, xModel ) );
+            aSortedModels.emplace( nTabIndex, xModel );
         }
         else if ( xModel.is() )
             // no, it hasn't, but we have to include it, anyway
@@ -757,17 +731,17 @@ Sequence< Reference< XControlModel > > SAL_CALL ControlModelContainerBase::getCo
 }
 
 
-void SAL_CALL ControlModelContainerBase::setGroup( const Sequence< Reference< XControlModel > >&, const OUString& ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setGroup( const Sequence< Reference< XControlModel > >&, const OUString& )
 {
     // not supported. We have only implicit grouping:
     // We only have a sequence of control models, and we _know_ (yes, that's a HACK relying on
     // implementation details) that VCL does grouping according to the order of controls automatically
     // At least VCL does this for all we're interested in: Radio buttons.
-    OSL_TRACE( "ControlModelContainerBase::setGroup: grouping not supported" );
+    SAL_WARN("toolkit", "grouping not supported" );
 }
 
 ////----- XInitialization -------------------------------------------------------------------
-void SAL_CALL ControlModelContainerBase::initialize (const Sequence<Any>& rArguments) throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::initialize (const Sequence<Any>& rArguments)
 {
     if ( rArguments.getLength() == 1 )
     {
@@ -779,19 +753,19 @@ void SAL_CALL ControlModelContainerBase::initialize (const Sequence<Any>& rArgum
     else
         m_nTabPageId = -1;
 }
-::sal_Int16 SAL_CALL ControlModelContainerBase::getTabPageID() throw (css::uno::RuntimeException, std::exception)
+::sal_Int16 SAL_CALL ControlModelContainerBase::getTabPageID()
 {
     return m_nTabPageId;
 }
-sal_Bool SAL_CALL ControlModelContainerBase::getEnabled() throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ControlModelContainerBase::getEnabled()
 {
     return m_bEnabled;
 }
-void SAL_CALL ControlModelContainerBase::setEnabled( sal_Bool _enabled ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setEnabled( sal_Bool _enabled )
 {
     m_bEnabled = _enabled;
 }
-OUString SAL_CALL ControlModelContainerBase::getTitle() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL ControlModelContainerBase::getTitle()
 {
     SolarMutexGuard aGuard;
     Reference<XPropertySet> xThis(*this,UNO_QUERY);
@@ -799,25 +773,25 @@ OUString SAL_CALL ControlModelContainerBase::getTitle() throw (css::uno::Runtime
     xThis->getPropertyValue(GetPropertyName(BASEPROPERTY_TITLE)) >>= sTitle;
     return sTitle;
 }
-void SAL_CALL ControlModelContainerBase::setTitle( const OUString& _title ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setTitle( const OUString& _title )
 {
     SolarMutexGuard aGuard;
     Reference<XPropertySet> xThis(*this,UNO_QUERY);
     xThis->setPropertyValue(GetPropertyName(BASEPROPERTY_TITLE),makeAny(_title));
 }
-OUString SAL_CALL ControlModelContainerBase::getImageURL() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL ControlModelContainerBase::getImageURL()
 {
     return m_sImageURL;
 }
-void SAL_CALL ControlModelContainerBase::setImageURL( const OUString& _imageurl ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setImageURL( const OUString& _imageurl )
 {
     m_sImageURL = _imageurl;
 }
-OUString SAL_CALL ControlModelContainerBase::getToolTip() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL ControlModelContainerBase::getToolTip()
 {
     return m_sTooltip;
 }
-void SAL_CALL ControlModelContainerBase::setToolTip( const OUString& _tooltip ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::setToolTip( const OUString& _tooltip )
 {
     m_sTooltip = _tooltip;
 }
@@ -842,14 +816,14 @@ namespace
         }
         catch (const Exception&)
         {
-            OSL_TRACE( "lcl_getDialogStep: caught an exception while determining the dialog page!" );
+            SAL_WARN("toolkit", "caught an exception while determining the dialog page!" );
         }
         return nStep;
     }
 }
 
 
-sal_Int32 SAL_CALL ControlModelContainerBase::getGroupCount(  ) throw (RuntimeException, std::exception)
+sal_Int32 SAL_CALL ControlModelContainerBase::getGroupCount(  )
 {
     SolarMutexGuard aGuard;
 
@@ -859,15 +833,15 @@ sal_Int32 SAL_CALL ControlModelContainerBase::getGroupCount(  ) throw (RuntimeEx
 }
 
 
-void SAL_CALL ControlModelContainerBase::getGroup( sal_Int32 _nGroup, Sequence< Reference< XControlModel > >& _rGroup, OUString& _rName ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::getGroup( sal_Int32 _nGroup, Sequence< Reference< XControlModel > >& _rGroup, OUString& _rName )
 {
     SolarMutexGuard aGuard;
 
     implUpdateGroupStructure();
 
-    if ( ( _nGroup < 0 ) || ( _nGroup >= (sal_Int32)maGroups.size() ) )
+    if ( ( _nGroup < 0 ) || ( _nGroup >= static_cast<sal_Int32>(maGroups.size()) ) )
     {
-        OSL_TRACE( "ControlModelContainerBase::getGroup: invalid argument and I am not allowed to throw an exception!" );
+        SAL_WARN("toolkit", "invalid argument and I am not allowed to throw an exception!" );
         _rGroup.realloc( 0 );
         _rName.clear();
     }
@@ -883,7 +857,7 @@ void SAL_CALL ControlModelContainerBase::getGroup( sal_Int32 _nGroup, Sequence< 
 }
 
 
-void SAL_CALL ControlModelContainerBase::getGroupByName( const OUString& _rName, Sequence< Reference< XControlModel > >& _rGroup ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::getGroupByName( const OUString& _rName, Sequence< Reference< XControlModel > >& _rGroup )
 {
     SolarMutexGuard aGuard;
 
@@ -892,13 +866,13 @@ void SAL_CALL ControlModelContainerBase::getGroupByName( const OUString& _rName,
 }
 
 
-void SAL_CALL ControlModelContainerBase::addChangesListener( const Reference< XChangesListener >& _rxListener ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::addChangesListener( const Reference< XChangesListener >& _rxListener )
 {
     maChangeListeners.addInterface( _rxListener );
 }
 
 
-void SAL_CALL ControlModelContainerBase::removeChangesListener( const Reference< XChangesListener >& _rxListener ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::removeChangesListener( const Reference< XChangesListener >& _rxListener )
 {
     maChangeListeners.removeInterface( _rxListener );
 }
@@ -1028,7 +1002,7 @@ void ControlModelContainerBase::implUpdateGroupStructure()
 }
 
 
-void SAL_CALL ControlModelContainerBase::propertyChange( const PropertyChangeEvent& _rEvent ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::propertyChange( const PropertyChangeEvent& _rEvent )
 {
     SolarMutexGuard aGuard;
 
@@ -1037,7 +1011,7 @@ void SAL_CALL ControlModelContainerBase::propertyChange( const PropertyChangeEve
 
     // the accessor for the changed element
     OUString sAccessor;
-    UnoControlModelHolderList::const_iterator aPos =
+    UnoControlModelHolderVector::const_iterator aPos =
         ::std::find_if(
             maModels.begin(), maModels.end(),
             CompareControlModel( Reference< XControlModel >( _rEvent.Source, UNO_QUERY ) )
@@ -1054,7 +1028,7 @@ void SAL_CALL ControlModelContainerBase::propertyChange( const PropertyChangeEve
 }
 
 
-void SAL_CALL ControlModelContainerBase::disposing( const EventObject& /*rEvent*/ ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlModelContainerBase::disposing( const EventObject& /*rEvent*/ )
 {
 }
 
@@ -1104,7 +1078,6 @@ ResourceListener::~ResourceListener()
 
 // XInterface
 Any SAL_CALL ResourceListener::queryInterface( const Type& rType )
-throw ( RuntimeException, std::exception )
 {
     Any a = ::cppu::queryInterface(
                 rType ,
@@ -1210,7 +1183,6 @@ void ResourceListener::stopListening()
 // XModifyListener
 void SAL_CALL ResourceListener::modified(
     const lang::EventObject& aEvent )
-throw ( RuntimeException, std::exception )
 {
     Reference< util::XModifyListener > xListener;
 
@@ -1239,7 +1211,6 @@ throw ( RuntimeException, std::exception )
 // XEventListener
 void SAL_CALL ResourceListener::disposing(
     const EventObject& Source )
-throw ( RuntimeException, std::exception )
 {
     Reference< lang::XEventListener > xListener;
     Reference< resource::XStringResourceResolver > xResource;
@@ -1328,13 +1299,13 @@ ControlContainerBase::~ControlContainerBase()
 {
 }
 
-void ControlContainerBase::createPeer( const Reference< XToolkit > & rxToolkit, const Reference< XWindowPeer >  & rParentPeer ) throw(RuntimeException, std::exception)
+void ControlContainerBase::createPeer( const Reference< XToolkit > & rxToolkit, const Reference< XWindowPeer >  & rParentPeer )
 {
     SolarMutexGuard aGuard;
     UnoControlContainer::createPeer( rxToolkit, rParentPeer );
 }
 
-void ControlContainerBase::ImplInsertControl( Reference< XControlModel >& rxModel, const OUString& rName )
+void ControlContainerBase::ImplInsertControl( Reference< XControlModel > const & rxModel, const OUString& rName )
 {
     Reference< XPropertySet > xP( rxModel, UNO_QUERY );
 
@@ -1355,7 +1326,7 @@ void ControlContainerBase::ImplInsertControl( Reference< XControlModel >& rxMode
     }
 }
 
-void ControlContainerBase::ImplRemoveControl( Reference< XControlModel >& rxModel )
+void ControlContainerBase::ImplRemoveControl( Reference< XControlModel > const & rxModel )
 {
     Sequence< Reference< XControl > > aControls = getControls();
     Reference< XControl > xCtrl = StdTabController::FindControl( aControls, rxModel );
@@ -1368,7 +1339,7 @@ void ControlContainerBase::ImplRemoveControl( Reference< XControlModel >& rxMode
         }
         catch (const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("toolkit.controls");
         }
     }
 }
@@ -1382,7 +1353,7 @@ void ControlContainerBase::ImplSetPosSize( Reference< XControl >& rxCtrl )
     xP->getPropertyValue("PositionY") >>= nY;
     xP->getPropertyValue("Width") >>= nWidth;
     xP->getPropertyValue("Height") >>= nHeight;
-    MapMode aMode( MAP_APPFONT );
+    MapMode aMode( MapUnit::MapAppFont );
     OutputDevice*pOutDev = Application::GetDefaultDevice();
     if ( pOutDev )
     {
@@ -1431,7 +1402,7 @@ void ControlContainerBase::ImplSetPosSize( Reference< XControl >& rxCtrl )
     xW->setPosSize( nX, nY, nWidth, nHeight, PosSize::POSSIZE );
 }
 
-void ControlContainerBase::dispose() throw(RuntimeException, std::exception)
+void ControlContainerBase::dispose()
 {
     EventObject aEvt;
     aEvt.Source = static_cast< ::cppu::OWeakObject* >( this );
@@ -1451,12 +1422,11 @@ void ControlContainerBase::dispose() throw(RuntimeException, std::exception)
 
 void SAL_CALL ControlContainerBase::disposing(
     const EventObject& Source )
-throw(RuntimeException, std::exception)
 {
     UnoControlContainer::disposing( Source );
 }
 
-sal_Bool ControlContainerBase::setModel( const Reference< XControlModel >& rxModel ) throw(RuntimeException, std::exception)
+sal_Bool ControlContainerBase::setModel( const Reference< XControlModel >& rxModel )
 {
     SolarMutexGuard aGuard;
 
@@ -1529,7 +1499,7 @@ sal_Bool ControlContainerBase::setModel( const Reference< XControlModel >& rxMod
 
     return bRet;
 }
-void ControlContainerBase::setDesignMode( sal_Bool bOn ) throw(RuntimeException, std::exception)
+void ControlContainerBase::setDesignMode( sal_Bool bOn )
 {
     SolarMutexGuard aGuard;
 
@@ -1548,7 +1518,7 @@ void ControlContainerBase::setDesignMode( sal_Bool bOn ) throw(RuntimeException,
         mxTabController->activateTabOrder();
 }
 
-void ControlContainerBase::elementInserted( const ContainerEvent& Event ) throw(RuntimeException, std::exception)
+void ControlContainerBase::elementInserted( const ContainerEvent& Event )
 {
     SolarMutexGuard aGuard;
 
@@ -1568,11 +1538,11 @@ void ControlContainerBase::elementInserted( const ContainerEvent& Event ) throw(
     }
     catch (const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("toolkit.controls");
     }
 }
 
-void ControlContainerBase::elementRemoved( const ContainerEvent& Event ) throw(RuntimeException, std::exception)
+void ControlContainerBase::elementRemoved( const ContainerEvent& Event )
 {
     SolarMutexGuard aGuard;
 
@@ -1589,11 +1559,11 @@ void ControlContainerBase::elementRemoved( const ContainerEvent& Event ) throw(R
     }
     catch (const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("toolkit.controls");
     }
 }
 
-void ControlContainerBase::elementReplaced( const ContainerEvent& Event ) throw(RuntimeException, std::exception)
+void ControlContainerBase::elementReplaced( const ContainerEvent& Event )
 {
     SolarMutexGuard aGuard;
 
@@ -1611,7 +1581,7 @@ void ControlContainerBase::elementReplaced( const ContainerEvent& Event ) throw(
     }
     catch (const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("toolkit.controls");
     }
 
     OUString aName;
@@ -1628,30 +1598,25 @@ void ControlContainerBase::elementReplaced( const ContainerEvent& Event ) throw(
     }
     catch (const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("toolkit.controls");
     }
 }
 
 // XPropertiesChangeListener
-void ControlContainerBase::ImplModelPropertiesChanged( const Sequence< PropertyChangeEvent >& rEvents ) throw(RuntimeException, std::exception)
+void ControlContainerBase::ImplModelPropertiesChanged( const Sequence< PropertyChangeEvent >& rEvents )
 {
     if( !isDesignMode() && !mbCreatingCompatiblePeer )
     {
-        OUString s1( "PositionX" );
-        OUString s2( "PositionY" );
-        OUString s3( "Width" );
-        OUString s4( "Height" );
-
         sal_Int32 nLen = rEvents.getLength();
         for( sal_Int32 i = 0; i < nLen; i++ )
         {
             const PropertyChangeEvent& rEvt = rEvents.getConstArray()[i];
             Reference< XControlModel > xModel( rEvt.Source, UNO_QUERY );
             bool bOwnModel = xModel.get() == getModel().get();
-            if ( ( rEvt.PropertyName == s1 ) ||
-                 ( rEvt.PropertyName == s2 ) ||
-                 ( rEvt.PropertyName == s3 ) ||
-                 ( rEvt.PropertyName == s4 ) )
+            if ( ( rEvt.PropertyName == "PositionX" ) ||
+                 ( rEvt.PropertyName == "PositionY" ) ||
+                 ( rEvt.PropertyName == "Width" ) ||
+                 ( rEvt.PropertyName == "Height" ) )
             {
                 if ( bOwnModel )
                 {
@@ -1712,7 +1677,7 @@ void ControlContainerBase::removingControl( const Reference< XControl >& _rxCont
 
 }
 
-void SAL_CALL ControlContainerBase::changesOccurred( const ChangesEvent& ) throw (RuntimeException, std::exception)
+void SAL_CALL ControlContainerBase::changesOccurred( const ChangesEvent& )
 {
     SolarMutexGuard aGuard;
     // a tab controller model may have changed
@@ -1726,7 +1691,8 @@ static void lcl_ApplyResolverToNestedContainees(  const Reference< resource::XSt
 {
     OUString aPropName( PROPERTY_RESOURCERESOLVER );
 
-    Any xNewStringResourceResolver; xNewStringResourceResolver <<= xStringResourceResolver;
+    Any aNewStringResourceResolver;
+    aNewStringResourceResolver <<= xStringResourceResolver;
 
     Sequence< OUString > aPropNames { aPropName };
 
@@ -1755,7 +1721,7 @@ static void lcl_ApplyResolverToNestedContainees(  const Reference< resource::XSt
                 xMultiPropSet->firePropertiesChangeEvent( aPropNames, xListener );
             }
             else
-                xPropertySet->setPropertyValue( aPropName, xNewStringResourceResolver );
+                xPropertySet->setPropertyValue( aPropName, aNewStringResourceResolver );
         }
         catch (const Exception&)
         {
@@ -1786,10 +1752,9 @@ void ControlContainerBase::ImplStartListingForResourceEvents()
 
 void ControlContainerBase::ImplUpdateResourceResolver()
 {
-    OUString aPropName( PROPERTY_RESOURCERESOLVER );
     Reference< resource::XStringResourceResolver > xStringResourceResolver;
 
-    ImplGetPropertyValue( aPropName ) >>= xStringResourceResolver;
+    ImplGetPropertyValue( PROPERTY_RESOURCERESOLVER ) >>= xStringResourceResolver;
     if ( !xStringResourceResolver.is() )
         return;
 
@@ -1823,7 +1788,7 @@ OUString getPhysicalLocation( const css::uno::Any& rbase, const css::uno::Any& r
     {
         INetURLObject urlObj(baseLocation);
         urlObj.removeSegment();
-        baseLocation = urlObj.GetMainURL( INetURLObject::NO_DECODE );
+        baseLocation = urlObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 
         const INetURLObject protocolCheck( url );
         const INetProtocol protocol = protocolCheck.GetProtocol();
@@ -1839,53 +1804,52 @@ OUString getPhysicalLocation( const css::uno::Any& rbase, const css::uno::Any& r
 }
 
 void
-ControlModelContainerBase::updateUserFormChildren( const Reference< XNameContainer >& xAllChildren, const OUString& aName, ChildOperation Operation, const css::uno::Reference< css::awt::XControlModel >& xTarget ) throw(IllegalArgumentException, ElementExistException, WrappedTargetException, RuntimeException)
+ControlModelContainerBase::updateUserFormChildren( const Reference< XNameContainer >& xAllChildren, const OUString& aName, ChildOperation Operation, const css::uno::Reference< css::awt::XControlModel >& xTarget )
 {
     if ( Operation < Insert || Operation > Remove )
         throw IllegalArgumentException();
 
-    if ( xAllChildren.is() )
-    {
-        if ( Operation == Remove )
-        {
-            Reference< XControlModel > xOldModel( xAllChildren->getByName( aName ), UNO_QUERY );
-            xAllChildren->removeByName( aName );
+    if ( !xAllChildren.is() )
+        throw IllegalArgumentException();
 
-            Reference< XNameContainer > xChildContainer( xOldModel, UNO_QUERY );
-            if ( xChildContainer.is() )
-            {
-                Reference< XPropertySet > xProps( xChildContainer, UNO_QUERY );
-                // container control is being removed from this container, reset the
-                // global list of containees
-                if ( xProps.is() )
-                    xProps->setPropertyValue(  GetPropertyName( BASEPROPERTY_USERFORMCONTAINEES ), uno::makeAny( uno::Reference< XNameContainer >() ) );
-                Sequence< OUString > aChildNames = xChildContainer->getElementNames();
-                for ( sal_Int32 index=0; index< aChildNames.getLength(); ++index )
-                    updateUserFormChildren( xAllChildren, aChildNames[ index ], Operation,  Reference< XControlModel > () );
-            }
-        }
-        else if ( Operation == Insert )
+    if ( Operation == Remove )
+    {
+        Reference< XControlModel > xOldModel( xAllChildren->getByName( aName ), UNO_QUERY );
+        xAllChildren->removeByName( aName );
+
+        Reference< XNameContainer > xChildContainer( xOldModel, UNO_QUERY );
+        if ( xChildContainer.is() )
         {
-            xAllChildren->insertByName( aName, uno::makeAny( xTarget ) );
-            Reference< XNameContainer > xChildContainer( xTarget, UNO_QUERY );
-            if ( xChildContainer.is() )
+            Reference< XPropertySet > xProps( xChildContainer, UNO_QUERY );
+            // container control is being removed from this container, reset the
+            // global list of containers
+            if ( xProps.is() )
+                xProps->setPropertyValue(  GetPropertyName( BASEPROPERTY_USERFORMCONTAINEES ), uno::makeAny( uno::Reference< XNameContainer >() ) );
+            Sequence< OUString > aChildNames = xChildContainer->getElementNames();
+            for ( sal_Int32 index=0; index< aChildNames.getLength(); ++index )
+                updateUserFormChildren( xAllChildren, aChildNames[ index ], Operation,  Reference< XControlModel > () );
+        }
+    }
+    else if ( Operation == Insert )
+    {
+        xAllChildren->insertByName( aName, uno::makeAny( xTarget ) );
+        Reference< XNameContainer > xChildContainer( xTarget, UNO_QUERY );
+        if ( xChildContainer.is() )
+        {
+            // container control is being added from this container, reset the
+            // global list of containers to point to the correct global list
+            Reference< XPropertySet > xProps( xChildContainer, UNO_QUERY );
+            if ( xProps.is() )
+                xProps->setPropertyValue(  GetPropertyName( BASEPROPERTY_USERFORMCONTAINEES ), uno::makeAny( xAllChildren ) );
+            Sequence< OUString > aChildNames = xChildContainer->getElementNames();
+            for ( sal_Int32 index=0; index< aChildNames.getLength(); ++index )
             {
-                // container control is being added from this container, reset the
-                // global list of containees to point to the correct global list
-                Reference< XPropertySet > xProps( xChildContainer, UNO_QUERY );
-                if ( xProps.is() )
-                    xProps->setPropertyValue(  GetPropertyName( BASEPROPERTY_USERFORMCONTAINEES ), uno::makeAny( xAllChildren ) );
-                Sequence< OUString > aChildNames = xChildContainer->getElementNames();
-                for ( sal_Int32 index=0; index< aChildNames.getLength(); ++index )
-                {
-                    Reference< XControlModel > xChildTarget( xChildContainer->getByName( aChildNames[ index ] ), UNO_QUERY );
-                    updateUserFormChildren( xAllChildren, aChildNames[ index ], Operation, xChildTarget );
-                }
+                Reference< XControlModel > xChildTarget( xChildContainer->getByName( aChildNames[ index ] ), UNO_QUERY );
+                updateUserFormChildren( xAllChildren, aChildNames[ index ], Operation, xChildTarget );
             }
         }
     }
-    else
-        throw IllegalArgumentException();
+
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

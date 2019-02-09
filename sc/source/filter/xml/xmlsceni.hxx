@@ -19,14 +19,15 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLSCENI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLSCENI_HXX
 
-#include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
 #include <tools/color.hxx>
-#include "rangelst.hxx"
+#include <rangelst.hxx>
+#include "importcontext.hxx"
+
+namespace sax_fastparser { class FastAttributeList; }
 
 class ScXMLImport;
 
-class ScXMLTableScenarioContext : public SvXMLImportContext
+class ScXMLTableScenarioContext : public ScXMLImportContext
 {
 private:
     OUString   sComment;
@@ -39,22 +40,14 @@ private:
     bool            bIsActive;
     bool            bProtected;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLTableScenarioContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList );
+    ScXMLTableScenarioContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList );
 
-    virtual ~ScXMLTableScenarioContext();
+    virtual ~ScXMLTableScenarioContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
-
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
 #endif

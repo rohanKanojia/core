@@ -23,10 +23,8 @@
 #include <rtl/ustring.hxx>
 #include <rtl/string.hxx>
 #include <com/sun/star/ucb/IllegalIdentifierException.hpp>
-#include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/ucb/Command.hpp>
 
 namespace chelp {
 
@@ -47,10 +45,10 @@ namespace chelp {
         {
             if( m_ptr )
             {
-                sal_Int32 sizeOfFile = ( sal_Int32 ) m_ptr[0];
+                sal_Int32 sizeOfFile = static_cast<sal_Int32>(m_ptr[0]);
                 OUString Hash( m_ptr+1,sizeOfFile,RTL_TEXTENCODING_UTF8 );
                 sal_Int32 idx;
-                if( ( idx = Hash.indexOf( sal_Unicode( '#' ) ) ) != -1 )
+                if( ( idx = Hash.indexOf( u'#' ) ) != -1 )
                     return Hash.copy( 1+idx );
             }
             return OUString();
@@ -62,10 +60,10 @@ namespace chelp {
             if( ! m_ptr )
                 return OUString();
 
-            sal_Int32 sizeOfFile = ( sal_Int32 ) m_ptr[0];
+            sal_Int32 sizeOfFile = static_cast<sal_Int32>(m_ptr[0]);
             OUString File( m_ptr+1,sizeOfFile,RTL_TEXTENCODING_UTF8 );
             sal_Int32 idx;
-            if( ( idx = File.indexOf( sal_Unicode( '#' ) ) ) != -1 )
+            if( ( idx = File.indexOf( u'#' ) ) != -1 )
                 return File.copy( 0,idx );
             else
                 return File;
@@ -77,8 +75,8 @@ namespace chelp {
             if( ! m_ptr )
                 return OUString();
 
-            sal_Int32 sizeOfDatabase = ( int ) m_ptr[ 1+ ( sal_Int32 ) m_ptr[0] ];
-            return OUString( m_ptr + 2 + ( sal_Int32 ) m_ptr[0],sizeOfDatabase,RTL_TEXTENCODING_UTF8 );
+            sal_Int32 sizeOfDatabase = static_cast<int>(m_ptr[ 1+ static_cast<sal_Int32>(m_ptr[0]) ]);
+            return OUString( m_ptr + 2 + static_cast<sal_Int32>(m_ptr[0]),sizeOfDatabase,RTL_TEXTENCODING_UTF8 );
         }
 
 
@@ -93,7 +91,7 @@ namespace chelp {
             //than 127 defaults to a negative value, casting it would allow up
             //to 255 but instead make use of the null termination to avoid
             //running into a later problem with strings >= 255
-            const sal_Char* pTitle = m_ptr + 3 + m_ptr[0] +  ( sal_Int32 ) m_ptr[ 1+ ( sal_Int32 ) m_ptr[0] ];
+            const sal_Char* pTitle = m_ptr + 3 + m_ptr[0] +  static_cast<sal_Int32>(m_ptr[ 1+ static_cast<sal_Int32>(m_ptr[0]) ]);
 
             return OUString(pTitle, rtl_str_getLength(pTitle), RTL_TEXTENCODING_UTF8);
         }
@@ -109,10 +107,9 @@ namespace chelp {
     class URLParameter
     {
     public:
-
+        /// @throws css::ucb::IllegalIdentifierException
         URLParameter( const OUString& aURL,
-                      Databases* pDatabases )
-            throw( css::ucb::IllegalIdentifierException );
+                      Databases* pDatabases );
 
         bool isActive() const { return !m_aActive.isEmpty() && m_aActive == "true"; }
         bool isQuery() const { return m_aId.isEmpty() && !m_aQuery.isEmpty(); }
@@ -121,25 +118,25 @@ namespace chelp {
         bool isRoot() const { return m_aModule.isEmpty(); }
         bool isErrorDocument();
 
-        OUString get_id();
+        OUString const & get_id();
 
         OUString get_tag();
 
         //  Not called for an directory
 
-        OUString get_path()   { return get_the_path(); }
+        OUString const & get_path();
 
-        OUString get_eid() const   { return m_aEid; }
+        const OUString& get_eid() const   { return m_aEid; }
 
         OUString get_title();
 
-        OUString get_jar()      { return get_the_jar(); }
+        OUString get_jar();
 
-        OUString get_ExtensionRegistryPath() const { return m_aExtensionRegistryPath; }
+        const OUString& get_ExtensionRegistryPath() const { return m_aExtensionRegistryPath; }
 
-        OUString get_module() const { return m_aModule; }
+        const OUString& get_module() const { return m_aModule; }
 
-        OUString get_dbpar() const
+        OUString const & get_dbpar() const
         {
             if( !m_aDbPar.isEmpty() )
                 return m_aDbPar;
@@ -147,41 +144,32 @@ namespace chelp {
                 return m_aModule;
         }
 
-        OUString get_prefix() const { return m_aPrefix; }
+        OUString const & get_language() const;
 
-        OUString get_language();
+        OUString const & get_program();
 
-        OUString get_program();
+        const OUString& get_query() const { return m_aQuery; }
 
-        OUString get_query() const { return m_aQuery; }
+        const OUString& get_scope() const { return m_aScope; }
 
-        OUString get_scope() const { return m_aScope; }
-
-        OUString get_system() const { return m_aSystem; }
+        const OUString& get_system() const { return m_aSystem; }
 
         sal_Int32     get_hitCount() const { return m_nHitCount; }
 
         OString getByName( const char* par );
 
-        void open( const css::ucb::Command& aCommand,
-                   sal_Int32 CommandId,
-                   const css::uno::Reference< css::ucb::XCommandEnvironment >& Environment,
-                   const css::uno::Reference< css::io::XActiveDataSink >& xDataSink );
+        void open( const css::uno::Reference< css::io::XActiveDataSink >& xDataSink );
 
-        void open( const css::ucb::Command& aCommand,
-                   sal_Int32 CommandId,
-                   const css::uno::Reference< css::ucb::XCommandEnvironment >& Environment,
-                   const css::uno::Reference< css::io::XOutputStream >& xDataSink );
+        void open( const css::uno::Reference< css::io::XOutputStream >& xDataSink );
 
     private:
 
         Databases* m_pDatabases;
 
         bool m_bHelpDataFileRead;
-        bool m_bStart;
         bool m_bUseDB;
 
-        OUString  m_aURL;
+        OUString const m_aURL;
 
         OUString  m_aTag;
         OUString  m_aId;
@@ -193,7 +181,6 @@ namespace chelp {
         OUString  m_aEid;
         OUString  m_aDbPar;
 
-        OUString  m_aDefaultLanguage;
         OUString  m_aLanguage;
 
         OUString  m_aPrefix;
@@ -216,15 +203,12 @@ namespace chelp {
 
         OUString get_the_tag();
 
-        OUString get_the_path();
-
         OUString get_the_title();
-
-        OUString get_the_jar();
 
         void readHelpDataFile();
 
-        void parse() throw( css::ucb::IllegalIdentifierException );
+        /// @throws css::ucb::IllegalIdentifierException
+        void parse();
 
         bool scheme();
 

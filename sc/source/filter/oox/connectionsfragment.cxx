@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "connectionsfragment.hxx"
+#include <connectionsfragment.hxx>
 
-#include <oox/helper/attributelist.hxx>
-#include "biffhelper.hxx"
-#include "connectionsbuffer.hxx"
+#include <oox/token/namespaces.hxx>
+#include <biffhelper.hxx>
+#include <connectionsbuffer.hxx>
 
 namespace oox {
 namespace xls {
@@ -49,7 +49,7 @@ ContextHandlerRef ConnectionContext::onCreateContext( sal_Int32 nElement, const 
         case XLS_TOKEN( webPr ):
             if( nElement == XLS_TOKEN( tables ) )
             {
-                mrConnection.importTables( rAttribs );
+                mrConnection.importTables();
                 return this;
             }
         break;

@@ -75,7 +75,7 @@ struct ShapeTypeDescriptor
         service names of shapes and associated enum values and to create new
         accessible objects for given shapes.
 */
-class SVX_DLLPUBLIC ShapeTypeHandler
+class SVX_DLLPUBLIC ShapeTypeHandler final
 {
 public:
     enum { UNKNOWN_SHAPE_TYPE = 0 };
@@ -133,14 +133,15 @@ public:
              Array of new shape type descriptors.
      */
     void AddShapeTypeList (int nDescriptorCount,
-        ShapeTypeDescriptor aDescriptorList[]);
+        ShapeTypeDescriptor const aDescriptorList[]);
 
     /// get the accessible base name for an object
+    ///
+    /// @throws css::uno::RuntimeException
     static OUString CreateAccessibleBaseName (
-        const css::uno::Reference< css::drawing::XShape >& rxShape)
-            throw (css::uno::RuntimeException, std::exception);
+        const css::uno::Reference< css::drawing::XShape >& rxShape);
 
-protected:
+private:
     // Declare default constructor, copy constructor, destructor, and
     // assignment operation protected so that no one accidentally creates a
     // second instance of this singleton class or deletes it.
@@ -151,9 +152,8 @@ protected:
     /** This destructor is never called at the moment.  But because this
         class is a singleton this is not a problem.
     */
-    virtual ~ShapeTypeHandler();
+    ~ShapeTypeHandler();
 
-private:
     /// Pointer to the only instance of this class.
     static ShapeTypeHandler* instance;
 
@@ -167,8 +167,7 @@ private:
     /** This hash map allows the fast look up of a type descriptor for a
         given service name.
     */
-    typedef std::unordered_map<OUString,ShapeTypeId,
-                               OUStringHash> tServiceNameToSlotId;
+    typedef std::unordered_map<OUString,ShapeTypeId> tServiceNameToSlotId;
     mutable tServiceNameToSlotId maServiceNameToSlotId;
 
     /**  Determine the slot id of the specified shape type.  With this id

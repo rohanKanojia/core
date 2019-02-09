@@ -17,14 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <exception>
 #include <malloc.h>
+#include <typeinfo>
+
+#include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <com/sun/star/uno/genfunc.hxx>
+#include <o3tl/runtimetooustring.hxx>
 #include <uno/data.h>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/unointerfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/vtables.hxx"
+#include "bridge.hxx"
+#include "types.hxx"
+#include "unointerfaceproxy.hxx"
+#include "vtables.hxx"
 
 #include "share.hxx"
 
@@ -395,13 +403,23 @@ static void cpp_call(
         if( nStackLongs & 1 )
             // stack has to be 8 byte aligned
             nStackLongs++;
-        callVirtualMethod(
-            pAdjustedThisPtr,
-            aVtableSlot.index,
-            pCppReturn,
-            pReturnTypeDescr->eTypeClass,
-            (sal_Int32 *)pCppStackStart,
-             nStackLongs);
+        try {
+            callVirtualMethod(
+                pAdjustedThisPtr,
+                aVtableSlot.index,
+                pCppReturn,
+                pReturnTypeDescr->eTypeClass,
+                (sal_Int32 *)pCppStackStart,
+                 nStackLongs);
+        } catch (css::uno::Exception &) {
+            throw;
+        } catch (std::exception & e) {
+            throw css::uno::RuntimeException(
+                "C++ code threw " + o3tl::runtimeToOUString(typeid(e).name()) + ": "
+                + o3tl::runtimeToOUString(e.what()));
+        } catch (...) {
+            throw css::uno::RuntimeException("C++ code threw unknown exception");
+        }
         // NO exception occurred...
         *ppUnoExc = 0;
 
@@ -438,11 +456,10 @@ static void cpp_call(
             uno_destructData( pCppReturn, pReturnTypeDescr, cpp_release );
         }
     }
-     catch( ... )
-     {
-         // get exception
-           fillUnoException( CPPU_CURRENT_NAMESPACE::__cxa_get_globals()->caughtExceptions,
-                                *ppUnoExc, pThis->getBridge()->getCpp2Uno() );
+    catch( ... )
+    {
+        // get exception
+        CPPU_CURRENT_NAMESPACE::fillUnoException(*ppUnoExc, pThis->getBridge()->getCpp2Uno());
 
         // temporary params
         for ( ; nTempIndices--; )
@@ -577,7 +594,7 @@ void unoInterfaceProxyDispatch(
     default:
     {
         ::com::sun::star::uno::RuntimeException aExc(
-            OUString("illegal member type description!"),
+            "illegal member type description!",
             ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >() );
 
         Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();

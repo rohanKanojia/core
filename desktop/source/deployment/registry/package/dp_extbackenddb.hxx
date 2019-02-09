@@ -25,7 +25,7 @@
 
 #include <rtl/ustring.hxx>
 
-#include "dp_backenddb.hxx"
+#include <dp_backenddb.hxx>
 
 namespace com { namespace sun { namespace star {
         namespace uno {
@@ -54,9 +54,7 @@ public:
          /* every element consists of a pair of the url to the item (jar,rdb, etc)
            and the media type
          */
-        ::std::vector< ::std::pair< OUString, OUString> > items;
-        typedef ::std::vector<
-            ::std::pair< OUString, OUString> >::const_iterator ITC_ITEMS;
+        std::vector< std::pair< OUString, OUString> > items;
     };
 
 public:

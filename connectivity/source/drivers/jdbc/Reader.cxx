@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/io/Reader.hxx"
+#include <java/io/Reader.hxx>
 #include <string.h>
 using namespace connectivity;
 using ::com::sun::star::uno::Sequence;
@@ -45,20 +45,20 @@ jclass java_io_Reader::getMyClass() const
     return theClass;
 }
 
-sal_Int32 SAL_CALL java_io_Reader::readSomeBytes( ::com::sun::star::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead ) throw(::com::sun::star::io::NotConnectedException, ::com::sun::star::io::BufferSizeExceededException, ::com::sun::star::io::IOException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL java_io_Reader::readSomeBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
 {
     return readBytes(aData,nMaxBytesToRead);
 }
 
-void SAL_CALL java_io_Reader::skipBytes( sal_Int32 nBytesToSkip ) throw(::com::sun::star::io::NotConnectedException, ::com::sun::star::io::BufferSizeExceededException, ::com::sun::star::io::IOException, ::com::sun::star::uno::RuntimeException, std::exception)
+void SAL_CALL java_io_Reader::skipBytes( sal_Int32 nBytesToSkip )
 {
     static jmethodID mID(nullptr);
     if(nBytesToSkip <= 0)
         return;
 
-    if(m_buf != boost::none)
+    if(m_buf)
     {
-        m_buf = boost::none;
+        m_buf.reset();
         --nBytesToSkip;
     }
 
@@ -69,37 +69,37 @@ void SAL_CALL java_io_Reader::skipBytes( sal_Int32 nBytesToSkip ) throw(::com::s
     {
         assert(nBytesToSkip % sizeof(jchar) == 1);
         Sequence< sal_Int8 > aData(1);
-        assert(m_buf == boost::none);
+        assert(m_buf);
         readBytes(aData, 1);
     }
 }
 
-sal_Int32 SAL_CALL java_io_Reader::available(  ) throw(::com::sun::star::io::NotConnectedException, ::com::sun::star::io::IOException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL java_io_Reader::available(  )
 {
-    if(m_buf != boost::none)
+    if(m_buf)
         return 1;
     jboolean out;
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
 
     {
-        static const char * cSignature = "()Z";
-        static const char * cMethodName = "ready";
+        static const char * const cSignature = "()Z";
+        static const char * const cMethodName = "ready";
         // Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwRuntime(t.pEnv, cMethodName,cSignature, mID);
         out = t.pEnv->CallBooleanMethod( object, mID);
         ThrowRuntimeException(t.pEnv,*this);
     } //t.pEnv
-    return (m_buf != boost::none ? 1 : 0) + (out ? 1 : 0); // no way to tell *how much* is ready
+    return (m_buf ? 1 : 0) + (out ? 1 : 0); // no way to tell *how much* is ready
 }
 
-void SAL_CALL java_io_Reader::closeInput(  ) throw(::com::sun::star::io::NotConnectedException, ::com::sun::star::io::IOException, ::com::sun::star::uno::RuntimeException, std::exception)
+void SAL_CALL java_io_Reader::closeInput(  )
 {
     static jmethodID mID(nullptr);
     callVoidMethod_ThrowRuntime("close", mID);
 }
 
-sal_Int32 SAL_CALL java_io_Reader::readBytes( ::com::sun::star::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead ) throw(::com::sun::star::io::NotConnectedException, ::com::sun::star::io::BufferSizeExceededException, ::com::sun::star::io::IOException, ::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL java_io_Reader::readBytes( css::uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
 {
     OSL_ENSURE(aData.getLength() >= nBytesToRead," Sequence is smaller than BytesToRead");
 
@@ -109,7 +109,7 @@ sal_Int32 SAL_CALL java_io_Reader::readBytes( ::com::sun::star::uno::Sequence< s
     sal_Int8 *dst(aData.getArray());
     sal_Int32 nBytesWritten(0);
 
-    if(m_buf != boost::none)
+    if (m_buf)
     {
         if(aData.getLength() == 0)
         {
@@ -117,24 +117,24 @@ sal_Int32 SAL_CALL java_io_Reader::readBytes( ::com::sun::star::uno::Sequence< s
             dst = aData.getArray();
         }
         *dst = *m_buf;
-        m_buf = boost::none;
+        m_buf.reset();
         ++nBytesWritten;
         ++dst;
         --nBytesToRead;
     }
 
     if(nBytesToRead == 0)
-        return 0;
+        return nBytesWritten;
 
     sal_Int32 nCharsToRead = (nBytesToRead + 1)/2;
 
     jint outChars(0);
-    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java Enviroment geloescht worden!");
+    SDBThreadAttach t; OSL_ENSURE(t.pEnv,"Java environment has been deleted!");
 
     {
         jcharArray pCharArray = t.pEnv->NewCharArray(nCharsToRead);
-        static const char * cSignature = "([CII)I";
-        static const char * cMethodName = "read";
+        static const char * const cSignature = "([CII)I";
+        static const char * const cMethodName = "read";
         // Java-Call
         static jmethodID mID(nullptr);
         obtainMethodId_throwRuntime(t.pEnv, cMethodName,cSignature, mID);
@@ -166,7 +166,7 @@ sal_Int32 SAL_CALL java_io_Reader::readBytes( ::com::sun::star::uno::Sequence< s
             if(outBytes < outChars*jcs)
             {
                 assert(outChars*jcs - outBytes == 1);
-                assert(m_buf == boost::none);
+                assert(!m_buf);
                 m_buf = reinterpret_cast<char*>(outBuf)[outBytes];
             }
         }

@@ -16,16 +16,16 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
+
 #include <sfx2/sidebar/Theme.hxx>
 #include <sfx2/sidebar/Paint.hxx>
-#include <sfx2/sidebar/SidebarResource.hxx>
 #include <sfx2/sidebar/Tools.hxx>
 #include <sfx2/app.hxx>
 
 #include <tools/svborder.hxx>
-#include <tools/rc.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <tools/diagnose_ex.h>
 
 using namespace css;
 using namespace css::uno;
@@ -129,7 +129,7 @@ void Theme::HandleDataChange()
     {
         // Do not modify mbIsHighContrastMode when it was manually set.
         GetCurrentTheme().mbIsHighContrastMode = Application::GetSettings().GetStyleSettings().GetHighContrastMode();
-        rTheme.maRawValues[Bool_IsHighContrastModeActive] = Any(GetCurrentTheme().mbIsHighContrastMode);
+        rTheme.maRawValues[Bool_IsHighContrastModeActive] <<= GetCurrentTheme().mbIsHighContrastMode;
     }
 
     GetCurrentTheme().UpdateTheme();
@@ -144,8 +144,6 @@ void Theme::InitializeTheme()
 
 void Theme::UpdateTheme()
 {
-    SidebarResource aLocalResource;
-
     try
     {
         const StyleSettings& rStyle (Application::GetSettings().GetStyleSettings());
@@ -205,7 +203,7 @@ void Theme::UpdateTheme()
         setPropertyValue(
             maPropertyIdToNameMap[Paint_PanelTitleBarBackground],
             Any(Tools::VclToAwtGradient(Gradient(
-                        GradientStyle_LINEAR,
+                        GradientStyle::Linear,
                         aSecondColor.GetRGBColor(),
                         aBaseBackgroundColor.GetRGBColor()
                         ))));
@@ -253,7 +251,6 @@ void Theme::UpdateTheme()
         setPropertyValue(
             maPropertyIdToNameMap[Color_TabItemBorder],
             Any(sal_Int32(rStyle.GetActiveBorderColor().GetRGBColor())));
-        //                    mbIsHighContrastMode ? 0x00ff00 : 0xbfbfbf)));
 
         setPropertyValue(
             maPropertyIdToNameMap[Paint_DropDownBackground],
@@ -275,12 +272,11 @@ void Theme::UpdateTheme()
         setPropertyValue(
             maPropertyIdToNameMap[Paint_TabItemBackgroundHighlight],
             Any(sal_Int32(rStyle.GetActiveTabColor().GetRGBColor())));
-        //                    mbIsHighContrastMode ? 0x000000 : 0x00ffffff)));
 
         setPropertyValue(
             maPropertyIdToNameMap[Paint_HorizontalBorder],
             Any(sal_Int32(aBorderColor.GetRGBColor())));
-        //                    mbIsHighContrastMode ? 0x00ff00 :  0xe4e4e4)));
+
         setPropertyValue(
             maPropertyIdToNameMap[Paint_VerticalBorder],
             Any(sal_Int32(aBorderColor.GetRGBColor())));
@@ -306,29 +302,6 @@ void Theme::UpdateTheme()
             maPropertyIdToNameMap[Image_CloseIndicator],
             Any(OUString("private:graphicrepository/cmd/lc_decrementlevel.png")));
 
-        // ToolBox
-
-        /*
-        // Separator style
-        setPropertyValue(
-            maPropertyIdToNameMap[Paint_ToolBoxBackground],
-            Any(sal_Int32(rStyle.GetMenuColor().GetRGBColor())));
-        setPropertyValue(
-            maPropertyIdToNameMap[Paint_ToolBoxBorderTopLeft],
-            Any());
-        setPropertyValue(
-            maPropertyIdToNameMap[Paint_ToolBoxBorderCenterCorners],
-            Any());
-        setPropertyValue(
-            maPropertyIdToNameMap[Paint_ToolBoxBorderBottomRight],
-            Any());
-        setPropertyValue(
-            maPropertyIdToNameMap[Rect_ToolBoxPadding],
-            Any(awt::Rectangle(2,2,2,2)));
-        setPropertyValue(
-            maPropertyIdToNameMap[Rect_ToolBoxBorder],
-            Any(awt::Rectangle(0,0,0,0)));
-        */
         // Gradient style
         Color aGradientStop2 (aBaseBackgroundColor);
         aGradientStop2.IncreaseLuminance(17);
@@ -337,7 +310,7 @@ void Theme::UpdateTheme()
         setPropertyValue(
             maPropertyIdToNameMap[Paint_ToolBoxBackground],
             Any(Tools::VclToAwtGradient(Gradient(
-                        GradientStyle_LINEAR,
+                        GradientStyle::Linear,
                         aBaseBackgroundColor.GetRGBColor(),
                         aGradientStop2.GetRGBColor()
                         ))));
@@ -363,12 +336,9 @@ void Theme::UpdateTheme()
             maPropertyIdToNameMap[Rect_ToolBoxBorder],
             Any(awt::Rectangle(1,1,1,1)));
     }
-    catch(beans::UnknownPropertyException& rException)
+    catch(beans::UnknownPropertyException const &)
     {
-        OSL_TRACE("unknown property: %s",
-            OUStringToOString(
-                rException.Message,
-                RTL_TEXTENCODING_ASCII_US).getStr());
+        DBG_UNHANDLED_EXCEPTION("sfx", "unknown property");
         OSL_ASSERT(false);
     }
 }
@@ -380,21 +350,13 @@ void SAL_CALL Theme::disposing()
 
     const lang::EventObject aEvent (static_cast<XWeak*>(this));
 
-    for (ChangeListeners::const_iterator
-             iContainer(aListeners.begin()),
-             iContainerEnd(aListeners.end());
-         iContainer != iContainerEnd;
-         ++iContainer)
+    for (const auto& rContainer : aListeners)
     {
-        for (ChangeListenerContainer::const_iterator
-                 iListener(iContainer->second.begin()),
-                 iEnd(iContainer->second.end());
-             iListener!=iEnd;
-             ++iListener)
+        for (const auto& rxListener : rContainer.second)
         {
             try
             {
-                (*iListener)->disposing(aEvent);
+                rxListener->disposing(aEvent);
             }
             catch(const Exception&)
             {
@@ -409,17 +371,13 @@ Reference<beans::XPropertySet> Theme::GetPropertySet()
 }
 
 Reference<beans::XPropertySetInfo> SAL_CALL Theme::getPropertySetInfo()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return Reference<beans::XPropertySetInfo>(this);
 }
 
 void SAL_CALL Theme::setPropertyValue (
-    const ::rtl::OUString& rsPropertyName,
+    const OUString& rsPropertyName,
     const css::uno::Any& rValue)
-    throw (css::beans::UnknownPropertyException,
-           css::uno::RuntimeException,
-           std::exception)
 {
     PropertyNameToIdMap::const_iterator iId (maPropertyNameToIdMap.find(rsPropertyName));
     if (iId == maPropertyNameToIdMap.end())
@@ -443,7 +401,7 @@ void SAL_CALL Theme::setPropertyValue (
     const beans::PropertyChangeEvent aEvent(
         static_cast<XWeak*>(this),
         rsPropertyName,
-        sal_False,
+        false,
         eItem,
         aOldValue,
         rValue);
@@ -461,10 +419,7 @@ void SAL_CALL Theme::setPropertyValue (
 }
 
 Any SAL_CALL Theme::getPropertyValue (
-    const ::rtl::OUString& rsPropertyName)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
+    const OUString& rsPropertyName)
 {
     PropertyNameToIdMap::const_iterator iId (maPropertyNameToIdMap.find(rsPropertyName));
     if (iId == maPropertyNameToIdMap.end())
@@ -480,11 +435,8 @@ Any SAL_CALL Theme::getPropertyValue (
 }
 
 void SAL_CALL Theme::addPropertyChangeListener(
-    const ::rtl::OUString& rsPropertyName,
+    const OUString& rsPropertyName,
     const css::uno::Reference<css::beans::XPropertyChangeListener>& rxListener)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     ThemeItem eItem (AnyItem_);
     if (rsPropertyName.getLength() > 0)
@@ -505,11 +457,8 @@ void SAL_CALL Theme::addPropertyChangeListener(
 }
 
 void SAL_CALL Theme::removePropertyChangeListener(
-    const ::rtl::OUString& rsPropertyName,
+    const OUString& rsPropertyName,
     const css::uno::Reference<css::beans::XPropertyChangeListener>& rxListener)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     ThemeItem eItem (AnyItem_);
     if (rsPropertyName.getLength() > 0)
@@ -540,11 +489,8 @@ void SAL_CALL Theme::removePropertyChangeListener(
 }
 
 void SAL_CALL Theme::addVetoableChangeListener(
-    const ::rtl::OUString& rsPropertyName,
+    const OUString& rsPropertyName,
     const css::uno::Reference<css::beans::XVetoableChangeListener>& rxListener)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     ThemeItem eItem (AnyItem_);
     if (rsPropertyName.getLength() > 0)
@@ -565,11 +511,8 @@ void SAL_CALL Theme::addVetoableChangeListener(
 }
 
 void SAL_CALL Theme::removeVetoableChangeListener(
-    const ::rtl::OUString& rsPropertyName,
+    const OUString& rsPropertyName,
     const css::uno::Reference<css::beans::XVetoableChangeListener>& rxListener)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     ThemeItem eItem (AnyItem_);
     if (rsPropertyName.getLength() > 0)
@@ -599,11 +542,11 @@ void SAL_CALL Theme::removeVetoableChangeListener(
 }
 
 css::uno::Sequence<css::beans::Property> SAL_CALL Theme::getProperties()
-    throw(css::uno::RuntimeException, std::exception)
 {
     ::std::vector<beans::Property> aProperties;
 
-    for (sal_Int32 nItem(Begin_),nEnd(End_); nItem!=nEnd; ++nItem)
+    sal_Int32 const nEnd(End_);
+    for (sal_Int32 nItem(Begin_); nItem!=nEnd; ++nItem)
     {
         const ThemeItem eItem (static_cast<ThemeItem>(nItem));
         const PropertyType eType (GetPropertyType(eItem));
@@ -619,13 +562,11 @@ css::uno::Sequence<css::beans::Property> SAL_CALL Theme::getProperties()
     }
 
     return css::uno::Sequence<css::beans::Property>(
-        &aProperties.front(),
+        aProperties.data(),
         aProperties.size());
 }
 
-beans::Property SAL_CALL Theme::getPropertyByName (const ::rtl::OUString& rsPropertyName)
-    throw(css::beans::UnknownPropertyException,
-        css::uno::RuntimeException, std::exception)
+beans::Property SAL_CALL Theme::getPropertyByName (const OUString& rsPropertyName)
 {
     PropertyNameToIdMap::const_iterator iId (maPropertyNameToIdMap.find(rsPropertyName));
     if (iId == maPropertyNameToIdMap.end())
@@ -644,18 +585,17 @@ beans::Property SAL_CALL Theme::getPropertyByName (const ::rtl::OUString& rsProp
         0);
 }
 
-sal_Bool SAL_CALL Theme::hasPropertyByName (const ::rtl::OUString& rsPropertyName)
-    throw(css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL Theme::hasPropertyByName (const OUString& rsPropertyName)
 {
     PropertyNameToIdMap::const_iterator iId (maPropertyNameToIdMap.find(rsPropertyName));
     if (iId == maPropertyNameToIdMap.end())
-        return sal_False;
+        return false;
 
     const PropertyType eType (GetPropertyType(iId->second));
     if (eType == PT_Invalid)
-        return sal_False;
+        return false;
 
-    return sal_True;
+    return true;
 }
 
 void Theme::SetupPropertyMaps()
@@ -893,12 +833,12 @@ Theme::PropertyType Theme::GetPropertyType (const ThemeItem eItem)
     }
 }
 
-css::uno::Type Theme::GetCppuType (const PropertyType eType)
+css::uno::Type const & Theme::GetCppuType (const PropertyType eType)
 {
     switch(eType)
     {
         case PT_Image:
-            return cppu::UnoType<rtl::OUString>::get();
+            return cppu::UnoType<OUString>::get();
 
         case PT_Color:
             return cppu::UnoType<sal_uInt32>::get();
@@ -986,13 +926,9 @@ bool Theme::DoVetoableListenersVeto (
     VetoableListenerContainer aListeners (*pListeners);
     try
     {
-        for (VetoableListenerContainer::const_iterator
-                 iListener(aListeners.begin()),
-                 iEnd(aListeners.end());
-             iListener!=iEnd;
-             ++iListener)
+        for (const auto& rxListener : aListeners)
         {
-            (*iListener)->vetoableChange(rEvent);
+            rxListener->vetoableChange(rEvent);
         }
     }
     catch(const beans::PropertyVetoException&)
@@ -1016,13 +952,9 @@ void Theme::BroadcastPropertyChange (
     const ChangeListenerContainer aListeners (*pListeners);
     try
     {
-        for (ChangeListenerContainer::const_iterator
-                 iListener(aListeners.begin()),
-                 iEnd(aListeners.end());
-             iListener!=iEnd;
-             ++iListener)
+        for (const auto& rxListener : aListeners)
         {
-            (*iListener)->propertyChange(rEvent);
+            rxListener->propertyChange(rEvent);
         }
     }
     catch(const Exception&)
@@ -1041,7 +973,7 @@ void Theme::ProcessNewValue (
     {
         case PT_Image:
         {
-            ::rtl::OUString sURL;
+            OUString sURL;
             if (rValue >>= sURL)
             {
                 maImages[nIndex] = Tools::GetImage(sURL, nullptr);
@@ -1095,7 +1027,7 @@ void Theme::ProcessNewValue (
             awt::Rectangle aBox;
             if (rValue >>= aBox)
             {
-                maRectangles[nIndex] = Rectangle(
+                maRectangles[nIndex] = tools::Rectangle(
                     aBox.X,
                     aBox.Y,
                     aBox.Width,

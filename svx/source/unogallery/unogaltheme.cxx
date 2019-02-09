@@ -21,17 +21,16 @@
 
 #include "unogaltheme.hxx"
 #include "unogalitem.hxx"
-#include "svx/galtheme.hxx"
-#include "svx/gallery1.hxx"
-#include "svx/galmisc.hxx"
+#include <svx/galtheme.hxx>
+#include <svx/gallery1.hxx>
+#include <svx/galmisc.hxx>
 #include <svx/fmmodel.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/unopage.hxx>
 #include <svl/itempool.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <unotools/pathoptions.hxx>
-#include <comphelper/servicehelper.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::com::sun::star;
@@ -67,40 +66,22 @@ GalleryTheme::~GalleryTheme()
 }
 
 
-OUString GalleryTheme::getImplementationName_Static()
-    throw()
+OUString SAL_CALL GalleryTheme::getImplementationName()
 {
     return OUString( "com.sun.star.comp.gallery.GalleryTheme" );
 }
 
-
-uno::Sequence< OUString > GalleryTheme::getSupportedServiceNames_Static()
-    throw()
-{
-    uno::Sequence< OUString > aSeq { "com.sun.star.gallery.GalleryTheme" };
-    return aSeq;
-}
-
-OUString SAL_CALL GalleryTheme::getImplementationName()
-    throw( uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
 sal_Bool SAL_CALL GalleryTheme::supportsService( const OUString& ServiceName )
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
 uno::Sequence< OUString > SAL_CALL GalleryTheme::getSupportedServiceNames()
-    throw( uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return { "com.sun.star.gallery.GalleryTheme" };
 }
 
 uno::Sequence< uno::Type > SAL_CALL GalleryTheme::getTypes()
-    throw(uno::RuntimeException, std::exception)
 {
     uno::Sequence< uno::Type >  aTypes( 5 );
     uno::Type*                  pTypes = aTypes.getArray();
@@ -115,21 +96,18 @@ uno::Sequence< uno::Type > SAL_CALL GalleryTheme::getTypes()
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL GalleryTheme::getImplementationId()
-    throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 
 uno::Type SAL_CALL GalleryTheme::getElementType()
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<gallery::XGalleryItem>::get();
 }
 
 
 sal_Bool SAL_CALL GalleryTheme::hasElements()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
 
@@ -138,7 +116,6 @@ sal_Bool SAL_CALL GalleryTheme::hasElements()
 
 
 sal_Int32 SAL_CALL GalleryTheme::getCount()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
 
@@ -147,7 +124,6 @@ sal_Int32 SAL_CALL GalleryTheme::getCount()
 
 
 uno::Any SAL_CALL GalleryTheme::getByIndex( ::sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
     uno::Any            aRet;
@@ -158,13 +134,10 @@ uno::Any SAL_CALL GalleryTheme::getByIndex( ::sal_Int32 nIndex )
         {
             throw lang::IndexOutOfBoundsException();
         }
-        else
-        {
-            const GalleryObject* pObj = mpTheme->ImplGetGalleryObject( nIndex );
+        const GalleryObject* pObj = mpTheme->ImplGetGalleryObject( nIndex );
 
-            if( pObj )
-                aRet = uno::makeAny( uno::Reference< gallery::XGalleryItem >( new GalleryItem( *this, *pObj ) ) );
-        }
+        if( pObj )
+            aRet <<= uno::Reference< gallery::XGalleryItem >( new GalleryItem( *this, *pObj ) );
     }
 
     return aRet;
@@ -172,7 +145,6 @@ uno::Any SAL_CALL GalleryTheme::getByIndex( ::sal_Int32 nIndex )
 
 
 OUString SAL_CALL GalleryTheme::getName(  )
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
     OUString     aRet;
@@ -185,7 +157,6 @@ OUString SAL_CALL GalleryTheme::getName(  )
 
 
 void SAL_CALL GalleryTheme::update(  )
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
 
@@ -199,7 +170,6 @@ void SAL_CALL GalleryTheme::update(  )
 
 ::sal_Int32 SAL_CALL GalleryTheme::insertURLByIndex(
     const OUString& rURL, ::sal_Int32 nIndex )
-    throw (lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
     sal_Int32           nRet = -1;
@@ -231,7 +201,6 @@ void SAL_CALL GalleryTheme::update(  )
 
 ::sal_Int32 SAL_CALL GalleryTheme::insertGraphicByIndex(
     const uno::Reference< graphic::XGraphic >& rxGraphic, sal_Int32 nIndex )
-    throw (lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
     sal_Int32           nRet = -1;
@@ -258,7 +227,6 @@ void SAL_CALL GalleryTheme::update(  )
 
 ::sal_Int32 SAL_CALL GalleryTheme::insertDrawingByIndex(
     const uno::Reference< lang::XComponent >& Drawing, sal_Int32 nIndex )
-    throw (lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
     sal_Int32 nRet = -1;
@@ -267,7 +235,7 @@ void SAL_CALL GalleryTheme::update(  )
     {
         GalleryDrawingModel* pModel = GalleryDrawingModel::getImplementation( Drawing );
 
-        if( pModel && pModel->GetDoc() && dynamic_cast<const FmFormModel*>(pModel->GetDoc()) != nullptr )
+        if( pModel && dynamic_cast<const FmFormModel*>(pModel->GetDoc()) )
         {
             // Here we're inserting something that's already a gallery theme drawing
             nIndex = ::std::max( ::std::min( nIndex, getCount() ), sal_Int32( 0 ) );
@@ -285,13 +253,14 @@ void SAL_CALL GalleryTheme::update(  )
                 uno::Reference< drawing::XDrawPages > xDrawPages( xDrawPagesSupplier->getDrawPages(), uno::UNO_QUERY_THROW );
                 uno::Reference< drawing::XDrawPage > xPage( xDrawPages->getByIndex( 0 ), uno::UNO_QUERY_THROW );
                 SvxDrawPage* pUnoPage = xPage.is() ? SvxDrawPage::getImplementation( xPage ) : nullptr;
-                SdrModel* pOrigModel = pUnoPage ? pUnoPage->GetSdrPage()->GetModel() : nullptr;
+                SdrModel* pOrigModel = pUnoPage ? &pUnoPage->GetSdrPage()->getSdrModelFromSdrPage() : nullptr;
                 SdrPage* pOrigPage = pUnoPage ? pUnoPage->GetSdrPage() : nullptr;
 
                 if (pOrigPage && pOrigModel)
                 {
                     FmFormModel* pTmpModel = new FmFormModel(&pOrigModel->GetItemPool());
-                    SdrPage* pNewPage = pOrigPage->Clone();
+                    // Clone to new target SdrModel
+                    SdrPage* pNewPage(pOrigPage->CloneSdrPage(*pTmpModel));
                     pTmpModel->InsertPage(pNewPage, 0);
 
                     uno::Reference< lang::XComponent > xDrawing( new GalleryDrawingModel( pTmpModel ) );
@@ -312,7 +281,6 @@ void SAL_CALL GalleryTheme::update(  )
 
 
 void SAL_CALL GalleryTheme::removeByIndex( sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aGuard;
 
@@ -320,8 +288,7 @@ void SAL_CALL GalleryTheme::removeByIndex( sal_Int32 nIndex )
     {
         if( ( nIndex < 0 ) || ( nIndex >= getCount() ) )
             throw lang::IndexOutOfBoundsException();
-        else
-            mpTheme->RemoveObject( nIndex );
+        mpTheme->RemoveObject( nIndex );
     }
 }
 
@@ -333,7 +300,7 @@ void GalleryTheme::Notify( SfxBroadcaster&, const SfxHint& rHint )
 
     switch( rGalleryHint.GetType() )
     {
-        case( GalleryHintType::CLOSE_THEME ):
+        case GalleryHintType::CLOSE_THEME:
         {
             DBG_ASSERT( !mpTheme || mpGallery, "Theme is living without Gallery" );
 
@@ -347,9 +314,9 @@ void GalleryTheme::Notify( SfxBroadcaster&, const SfxHint& rHint )
         }
         break;
 
-        case( GalleryHintType::CLOSE_OBJECT ):
+        case GalleryHintType::CLOSE_OBJECT:
         {
-            GalleryObject* pObj = reinterpret_cast< GalleryObject* >( rGalleryHint.GetData1() );
+            GalleryObject* pObj = static_cast< GalleryObject* >( rGalleryHint.GetData1() );
 
             if( pObj )
                 implReleaseItems( pObj );
@@ -362,16 +329,16 @@ void GalleryTheme::Notify( SfxBroadcaster&, const SfxHint& rHint )
 }
 
 
-void GalleryTheme::implReleaseItems( GalleryObject* pObj )
+void GalleryTheme::implReleaseItems( GalleryObject const * pObj )
 {
     const SolarMutexGuard aGuard;
 
-    for( GalleryItemList::iterator aIter = maItemList.begin(); aIter != maItemList.end();  )
+    for( GalleryItemVector::iterator aIter = maItemVector.begin(); aIter != maItemVector.end();  )
     {
         if( !pObj || ( (*aIter)->implGetObject() == pObj ) )
         {
             (*aIter)->implSetInvalid();
-            aIter = maItemList.erase( aIter );
+            aIter = maItemVector.erase( aIter );
         }
         else
             ++aIter;
@@ -383,8 +350,7 @@ void GalleryTheme::implRegisterGalleryItem( ::unogallery::GalleryItem& rItem )
 {
     const SolarMutexGuard aGuard;
 
-//  DBG_ASSERT( maItemList.find( &rItem ) == maItemList.end(), "Item already registered" );
-    maItemList.push_back( &rItem );
+    maItemVector.push_back( &rItem );
 }
 
 
@@ -392,8 +358,7 @@ void GalleryTheme::implDeregisterGalleryItem( ::unogallery::GalleryItem& rItem )
 {
     const SolarMutexGuard aGuard;
 
-//  DBG_ASSERT( maItemList.find( &rItem ) != maItemList.end(), "Item is not registered" );
-    maItemList.remove( &rItem );
+    maItemVector.erase(std::remove(maItemVector.begin(), maItemVector.end(), &rItem), maItemVector.end());
 }
 
 }

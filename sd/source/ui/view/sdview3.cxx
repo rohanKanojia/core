@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "View.hxx"
+#include <View.hxx>
 #include <com/sun/star/embed/XEmbedObjectClipboardCreator.hpp>
 #include <com/sun/star/embed/NoVisualAreaSizeException.hpp>
 #include <com/sun/star/embed/MSOLEObjectSystemCreator.hpp>
@@ -26,7 +26,6 @@
 #include <unotools/pathoptions.hxx>
 #include <editeng/editdata.hxx>
 #include <svl/urlbmk.hxx>
-#include <svx/xexch.hxx>
 #include <svx/xflclit.hxx>
 #include <svx/xlnclit.hxx>
 #include <svx/svdpagv.hxx>
@@ -54,23 +53,25 @@
 #include <svx/svxids.hrc>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <svtools/embedhlp.hxx>
-#include "DrawDocShell.hxx"
-#include "fupoor.hxx"
-#include "tablefunction.hxx"
-#include "Window.hxx"
-#include "sdxfer.hxx"
-#include "sdpage.hxx"
-#include "DrawViewShell.hxx"
-#include "drawdoc.hxx"
-#include "sdresid.hxx"
-#include "strings.hrc"
-#include "imapinfo.hxx"
-#include "SlideSorterViewShell.hxx"
-#include "strmname.h"
-#include "unomodel.hxx"
-#include "ViewClipboard.hxx"
+#include <DrawDocShell.hxx>
+#include <fupoor.hxx>
+#include <tablefunction.hxx>
+#include <Window.hxx>
+#include <sdxfer.hxx>
+#include <sdpage.hxx>
+#include <DrawViewShell.hxx>
+#include <drawdoc.hxx>
+#include <sdmod.hxx>
+#include <sdresid.hxx>
+#include <strings.hrc>
+#include <imapinfo.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <strmname.h>
+#include <unomodel.hxx>
+#include <ViewClipboard.hxx>
 #include <sfx2/ipclient.hxx>
 #include <sfx2/classificationhelper.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <tools/stream.hxx>
@@ -103,49 +104,49 @@ struct ImpRememberOrigAndClone
     SdrObject*      pClone;
 };
 
-SdrObject* ImpGetClone(std::vector<ImpRememberOrigAndClone*>& aConnectorContainer, SdrObject* pConnObj)
+static SdrObject* ImpGetClone(std::vector<ImpRememberOrigAndClone>& aConnectorContainer, SdrObject const * pConnObj)
 {
-    for(size_t a(0); a < aConnectorContainer.size(); a++)
+    for(ImpRememberOrigAndClone& rImp : aConnectorContainer)
     {
-        if(pConnObj == aConnectorContainer[a]->pOrig)
-            return aConnectorContainer[a]->pClone;
+        if(pConnObj == rImp.pOrig)
+            return rImp.pClone;
     }
     return nullptr;
 }
 
 // restrict movement to WorkArea
-void ImpCheckInsertPos(Point& rPos, const Size& rSize, const Rectangle& rWorkArea)
+static void ImpCheckInsertPos(Point& rPos, const Size& rSize, const ::tools::Rectangle& rWorkArea)
 {
     if(!rWorkArea.IsEmpty())
     {
-        Rectangle aMarkRect(Point(rPos.X() - (rSize.Width() / 2), rPos.Y() - (rSize.Height() / 2)), rSize);
+        ::tools::Rectangle aMarkRect(Point(rPos.X() - (rSize.Width() / 2), rPos.Y() - (rSize.Height() / 2)), rSize);
 
         if(!aMarkRect.IsInside(rWorkArea))
         {
             if(aMarkRect.Left() < rWorkArea.Left())
             {
-                rPos.X() += rWorkArea.Left() - aMarkRect.Left();
+                rPos.AdjustX(rWorkArea.Left() - aMarkRect.Left() );
             }
 
             if(aMarkRect.Right() > rWorkArea.Right())
             {
-                rPos.X() -= aMarkRect.Right() - rWorkArea.Right();
+                rPos.AdjustX( -(aMarkRect.Right() - rWorkArea.Right()) );
             }
 
             if(aMarkRect.Top() < rWorkArea.Top())
             {
-                rPos.Y() += rWorkArea.Top() - aMarkRect.Top();
+                rPos.AdjustY(rWorkArea.Top() - aMarkRect.Top() );
             }
 
             if(aMarkRect.Bottom() > rWorkArea.Bottom())
             {
-                rPos.Y() -= aMarkRect.Bottom() - rWorkArea.Bottom();
+                rPos.AdjustY( -(aMarkRect.Bottom() - rWorkArea.Bottom()) );
             }
         }
     }
 }
 
-bool View::InsertMetaFile( TransferableDataHelper& rDataHelper, const Point& rPos, ImageMap* pImageMap, bool bOptimize )
+bool View::InsertMetaFile( TransferableDataHelper& rDataHelper, const Point& rPos, ImageMap const * pImageMap, bool bOptimize )
 {
     GDIMetaFile aMtf;
 
@@ -193,7 +194,7 @@ bool View::InsertMetaFile( TransferableDataHelper& rDataHelper, const Point& rPo
                 case MetaActionType::BMPSCALE:
                 case MetaActionType::BMPEX:
                 case MetaActionType::BMPEXSCALE:
-                    if( aGraphic.GetType() != GRAPHIC_NONE )
+                    if( aGraphic.GetType() != GraphicType::NONE )
                     {
                         bVector = true;
                     }
@@ -229,6 +230,7 @@ bool View::InsertMetaFile( TransferableDataHelper& rDataHelper, const Point& rPo
                             break;
                         default: break;
                     }
+                    break;
                 default: break;
             }
 
@@ -237,7 +239,7 @@ bool View::InsertMetaFile( TransferableDataHelper& rDataHelper, const Point& rPo
     }
 
     // it is not a vector metafile but it also has no graphic?
-    if( !bVector && (aGraphic.GetType() == GRAPHIC_NONE) )
+    if( !bVector && (aGraphic.GetType() == GraphicType::NONE) )
         bVector = true;
 
     // restrict movement to WorkArea
@@ -258,7 +260,7 @@ bool View::InsertMetaFile( TransferableDataHelper& rDataHelper, const Point& rPo
 
 bool View::InsertData( const TransferableDataHelper& rDataHelper,
                          const Point& rPos, sal_Int8& rDnDAction, bool bDrag,
-                         SotClipboardFormatId nFormat, sal_uInt16 nPage, sal_uInt16 nLayer )
+                         SotClipboardFormatId nFormat, sal_uInt16 nPage, SdrLayerID nLayer )
 {
     maDropPos = rPos;
     mnAction = rDnDAction;
@@ -285,7 +287,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
     if( bDrag )
     {
         SdrPageView* pPV = nullptr;
-        PickObj( rPos, getHitTolLog(), pPickObj, pPV );
+        pPickObj = PickObj(rPos, getHitTolLog(), pPV);
     }
 
     if( nPage != SDRPAGE_NOTFOUND )
@@ -320,20 +322,22 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
         {
             pImageMap.reset(new ImageMap);
             // mba: clipboard always must contain absolute URLs (could be from alien source)
-            pImageMap->Read( *xStm, OUString() );
+            pImageMap->Read( *xStm );
         }
     }
 
     bool bTable = false;
     // check special cases for pasting table formats as RTL
-    if( !bLink && (nFormat == SotClipboardFormatId::NONE || (nFormat == SotClipboardFormatId::RTF)) )
+    if( !bLink && (nFormat == SotClipboardFormatId::NONE || (nFormat == SotClipboardFormatId::RTF) || (nFormat == SotClipboardFormatId::RICHTEXT)) )
     {
-        // if the objekt supports rtf and there is a table involved, default is to create a table
-        if( aDataHelper.HasFormat( SotClipboardFormatId::RTF ) && ! aDataHelper.HasFormat( SotClipboardFormatId::DRAWING ) )
+        // if the object supports rtf and there is a table involved, default is to create a table
+        bool bIsRTF = aDataHelper.HasFormat( SotClipboardFormatId::RTF );
+        if( ( bIsRTF || aDataHelper.HasFormat( SotClipboardFormatId::RICHTEXT ) )
+            && ! aDataHelper.HasFormat( SotClipboardFormatId::DRAWING ) )
         {
             ::tools::SvRef<SotStorageStream> xStm;
 
-            if( aDataHelper.GetSotStorageStream( SotClipboardFormatId::RTF, xStm ) )
+            if( aDataHelper.GetSotStorageStream( bIsRTF ? SotClipboardFormatId::RTF : SotClipboardFormatId::RICHTEXT, xStm ) )
             {
                 xStm->Seek( 0 );
 
@@ -344,7 +348,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                     if (x != -1)
                     {
                         bTable = true;
-                        nFormat = SotClipboardFormatId::RTF;
+                        nFormat = bIsRTF ? SotClipboardFormatId::RTF : SotClipboardFormatId::RICHTEXT;
                         break;
                     }
                 }
@@ -362,7 +366,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
         // Paste only if SfxClassificationHelper recommends so.
         const SfxObjectShellRef& pSource = pOwnData->GetDocShell();
         SfxObjectShell* pDestination = mrDoc.GetDocSh();
-        if (pSource && pDestination)
+        if (pSource.is() && pDestination)
         {
             SfxClassificationCheckPasteResult eResult = SfxClassificationHelper::CheckPaste(pSource->getDocProperties(), pDestination->getDocProperties());
             if (!SfxClassificationHelper::ShowPasteInfo(eResult))
@@ -374,7 +378,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
     {
         const View* pSourceView = pOwnData->GetView();
 
-        if( pOwnData->GetDocShell() && pOwnData->IsPageTransferable() )
+        if( pOwnData->GetDocShell().is() && pOwnData->IsPageTransferable() )
         {
             mpClipboard->HandlePageDrop (*pOwnData);
             bReturn = true;
@@ -407,12 +411,12 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                 // #i11702#
                                 if( IsUndoEnabled() )
                                 {
-                                    BegUndo(SD_RESSTR(STR_MODIFYLAYER));
-                                    AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoObjectLayerChange(*pO, pO->GetLayer(), (SdrLayerID)nLayer));
+                                    BegUndo(SdResId(STR_MODIFYLAYER));
+                                    AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoObjectLayerChange(*pO, pO->GetLayer(), nLayer));
                                     EndUndo();
                                 }
 
-                                pO->SetLayer( (SdrLayerID) nLayer );
+                                pO->SetLayer( nLayer );
                             }
                         }
 
@@ -443,7 +447,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                                 if( (mnDragSrcPgNum != SDRPAGE_NOTFOUND) && (mnDragSrcPgNum != pPV->GetPage()->GetPageNum()) )
                                 {
-                                    pMarkList = mpDragSrcMarkList;
+                                    pMarkList = mpDragSrcMarkList.get();
                                 }
                                 else
                                 {
@@ -454,7 +458,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                 pMarkList->ForceSort();
 
                                 // stuff to remember originals and clones
-                                std::vector<ImpRememberOrigAndClone*> aConnectorContainer;
+                                std::vector<ImpRememberOrigAndClone> aConnectorContainer;
                                 size_t nConnectorCount = 0;
                                 Point       aCurPos;
 
@@ -462,7 +466,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                 // source objects, if necessary (#103207)
                                 if( pOwnData == SD_MOD()->pTransferSelection )
                                 {
-                                    Rectangle aCurBoundRect;
+                                    ::tools::Rectangle aCurBoundRect;
 
                                     if( pMarkList->TakeBoundRect( pPV, aCurBoundRect ) )
                                         aCurPos = aCurBoundRect.TopLeft();
@@ -477,7 +481,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                 for(size_t a = 0; a < pMarkList->GetMarkCount(); ++a)
                                 {
                                     SdrMark* pM = pMarkList->GetMark(a);
-                                    SdrObject* pObj = pM->GetMarkedSdrObj()->Clone();
+                                    SdrObject* pObj(pM->GetMarkedSdrObj()->CloneSdrObject(pPage->getSdrModelFromSdrPage()));
 
                                     if(pObj)
                                     {
@@ -491,15 +495,15 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                                         if( IsUndoEnabled() )
                                         {
-                                            BegUndo(SD_RESSTR(STR_UNDO_DRAGDROP));
+                                            BegUndo(SdResId(STR_UNDO_DRAGDROP));
                                             AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoNewObject(*pObj));
                                             EndUndo();
                                         }
 
-                                        ImpRememberOrigAndClone* pRem = new ImpRememberOrigAndClone;
-                                        pRem->pOrig = pM->GetMarkedSdrObj();
-                                        pRem->pClone = pObj;
-                                        aConnectorContainer.push_back(pRem);
+                                        ImpRememberOrigAndClone aRem;
+                                        aRem.pOrig = pM->GetMarkedSdrObj();
+                                        aRem.pClone = pObj;
+                                        aConnectorContainer.push_back(aRem);
 
                                         if(dynamic_cast< SdrEdgeObj *>( pObj ) !=  nullptr)
                                             nConnectorCount++;
@@ -511,7 +515,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                 {
                                     for(size_t a = 0; a < aConnectorContainer.size(); ++a)
                                     {
-                                        ImpRememberOrigAndClone* pRem = aConnectorContainer[a];
+                                        ImpRememberOrigAndClone* pRem = &aConnectorContainer[a];
 
                                         if(dynamic_cast< const SdrEdgeObj *>( pRem->pClone ) !=  nullptr)
                                         {
@@ -542,8 +546,8 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                                         {
                                                             const SdrGluePoint& rGluePoint = (*pGlueList)[nInd];
                                                             Point aPosition = rGluePoint.GetAbsolutePos(*pConnObj);
-                                                            aPosition.X() += aVector.A();
-                                                            aPosition.Y() += aVector.B();
+                                                            aPosition.AdjustX(aVector.Width() );
+                                                            aPosition.AdjustY(aVector.Height() );
                                                             pCloneEdge->SetTailPoint(false, aPosition);
                                                         }
                                                     }
@@ -574,8 +578,8 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                                         {
                                                             const SdrGluePoint& rGluePoint = (*pGlueList)[nInd];
                                                             Point aPosition = rGluePoint.GetAbsolutePos(*pConnObj);
-                                                            aPosition.X() += aVector.A();
-                                                            aPosition.Y() += aVector.B();
+                                                            aPosition.AdjustX(aVector.Width() );
+                                                            aPosition.AdjustY(aVector.Height() );
                                                             pCloneEdge->SetTailPoint(true, aPosition);
                                                         }
                                                     }
@@ -585,11 +589,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                     }
                                 }
 
-                                // cleanup remember classes
-                                for(size_t a = 0; a < aConnectorContainer.size(); ++a)
-                                    delete aConnectorContainer[a];
-
-                                if( pMarkList != mpDragSrcMarkList )
+                                if( pMarkList != mpDragSrcMarkList.get() )
                                     delete pMarkList;
 
                                 bReturn = true;
@@ -618,7 +618,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                     // model is owned by from AllocModel() created DocShell
                     SdDrawDocument* pSourceDoc = static_cast<SdDrawDocument*>( pSourceView->GetModel() );
                     pSourceDoc->CreatingDataObj( pOwnData );
-                    SdDrawDocument* pModel = static_cast<SdDrawDocument*>( pSourceView->GetMarkedObjModel() );
+                    SdDrawDocument* pModel = static_cast<SdDrawDocument*>( pSourceView->CreateMarkedObjModel().release() );
                     bReturn = Paste(*pModel, maDropPos, pPage, nPasteOptions);
 
                     if( !pPage )
@@ -641,23 +641,23 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
         else
         {
             SdDrawDocument* pWorkModel = const_cast<SdDrawDocument*>(pOwnData->GetWorkDocument());
-            SdPage*         pWorkPage = pWorkModel->GetSdPage( 0, PK_STANDARD );
+            SdPage*         pWorkPage = pWorkModel->GetSdPage( 0, PageKind::Standard );
 
-            pWorkPage->SetRectsDirty();
+            pWorkPage->SetSdrObjListRectsDirty();
 
             // #i120393# Clipboard data uses full object geometry range
             const Size aSize( pWorkPage->GetAllObjBoundRect().GetSize() );
 
-            maDropPos.X() = pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 );
-            maDropPos.Y() = pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 );
+            maDropPos.setX( pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 ) );
+            maDropPos.setY( pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 ) );
 
             // delete pages, that are not of any interest for us
-            for( long i = ( pWorkModel->GetPageCount() - 1 ); i >= 0; i-- )
+            for( long i = pWorkModel->GetPageCount() - 1; i >= 0; i-- )
             {
-                SdPage* pP = static_cast< SdPage* >( pWorkModel->GetPage( (sal_uInt16) i ) );
+                SdPage* pP = static_cast< SdPage* >( pWorkModel->GetPage( static_cast<sal_uInt16>(i) ) );
 
-                if( pP->GetPageKind() != PK_STANDARD )
-                    pWorkModel->DeletePage( (sal_uInt16) i );
+                if( pP->GetPageKind() != PageKind::Standard )
+                    pWorkModel->DeletePage( static_cast<sal_uInt16>(i) );
             }
 
             bReturn = Paste(*pWorkModel, maDropPos, pPage, nPasteOptions);
@@ -679,7 +679,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
         if( aDataHelper.GetSotStorageStream( SotClipboardFormatId::DRAWING, xStm ) )
         {
-            DrawDocShellRef xShell = new DrawDocShell(SfxObjectCreateMode::INTERNAL);
+            DrawDocShellRef xShell = new DrawDocShell(SfxObjectCreateMode::INTERNAL, false, DocumentType::Impress);
             xShell->DoInitNew();
 
             SdDrawDocument* pModel = xShell->GetDoc();
@@ -701,22 +701,22 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                 if( bReturn )
                 {
-                    if( pModel->GetSdPage( 0, PK_STANDARD )->GetObjCount() == 1 )
+                    if( pModel->GetSdPage( 0, PageKind::Standard )->GetObjCount() == 1 )
                     {
                         // only one object
-                        SdrObject*      pObj = pModel->GetSdPage( 0, PK_STANDARD )->GetObj( 0 );
-                        SdrObject*      pPickObj2 = nullptr;
+                        SdrObject*      pObj = pModel->GetSdPage( 0, PageKind::Standard )->GetObj( 0 );
                         SdrPageView*    pPV = nullptr;
-                        PickObj( rPos, getHitTolLog(), pPickObj2, pPV );
+                        SdrObject* pPickObj2 = PickObj(rPos, getHitTolLog(), pPV);
 
                         if( ( mnAction & DND_ACTION_MOVE ) && pPickObj2 && pObj )
                         {
                             // replace object
-                            SdrObject*  pNewObj = pObj->Clone();
-                            Rectangle   aPickObjRect( pPickObj2->GetCurrentBoundRect() );
+                            SdrPage* pWorkPage = GetSdrPageView()->GetPage();
+                            SdrObject* pNewObj(pObj->CloneSdrObject(pWorkPage->getSdrModelFromSdrPage()));
+                            ::tools::Rectangle   aPickObjRect( pPickObj2->GetCurrentBoundRect() );
                             Size        aPickObjSize( aPickObjRect.GetSize() );
                             Point       aVec( aPickObjRect.TopLeft() );
-                            Rectangle   aObjRect( pNewObj->GetCurrentBoundRect() );
+                            ::tools::Rectangle   aObjRect( pNewObj->GetCurrentBoundRect() );
                             Size        aObjSize( aObjRect.GetSize() );
 
                             Fraction aScaleWidth( aPickObjSize.Width(), aObjSize.Width() );
@@ -729,9 +729,8 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                             const bool bUndo = IsUndoEnabled();
 
                             if( bUndo )
-                                BegUndo(SD_RESSTR(STR_UNDO_DRAGDROP));
+                                BegUndo(SdResId(STR_UNDO_DRAGDROP));
                             pNewObj->NbcSetLayer( pPickObj->GetLayer() );
-                            SdrPage* pWorkPage = GetSdrPageView()->GetPage();
                             pWorkPage->InsertObject( pNewObj );
                             if( bUndo )
                             {
@@ -761,7 +760,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                             const bool bUndo = IsUndoEnabled();
                             if( bUndo )
                             {
-                                BegUndo( SD_RESSTR(STR_UNDO_DRAGDROP) );
+                                BegUndo( SdResId(STR_UNDO_DRAGDROP) );
                                 AddUndo( mrDoc.GetSdrUndoFactory().CreateUndoAttrObject( *pPickObj ) );
                             }
 
@@ -780,7 +779,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                                 // If we have a graphic as source object, use its graphic
                                 // content as fill style
                                 aSet.Put(XFillStyleItem(drawing::FillStyle_BITMAP));
-                                aSet.Put(XFillBitmapItem(&mrDoc.GetPool(), pSdrGrafObj->GetGraphic()));
+                                aSet.Put(XFillBitmapItem(pSdrGrafObj->GetGraphic()));
                             }
 
                             pPickObj->SetMergedItemSetAndBroadcast( aSet );
@@ -788,14 +787,18 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                             if( dynamic_cast< E3dObject *>( pPickObj ) !=  nullptr && dynamic_cast< E3dObject *>( pObj ) !=  nullptr )
                             {
                                 // handle 3D attribute in addition
-                                SfxItemSet aNewSet( mrDoc.GetPool(), SID_ATTR_3D_START, SID_ATTR_3D_END, 0 );
-                                SfxItemSet aOldSet( mrDoc.GetPool(), SID_ATTR_3D_START, SID_ATTR_3D_END, 0 );
+                                SfxItemSet aNewSet( mrDoc.GetPool(), svl::Items<SID_ATTR_3D_START, SID_ATTR_3D_END>{} );
+                                SfxItemSet aOldSet( mrDoc.GetPool(), svl::Items<SID_ATTR_3D_START, SID_ATTR_3D_END>{} );
 
                                 aOldSet.Put(pPickObj->GetMergedItemSet());
                                 aNewSet.Put( pObj->GetMergedItemSet() );
 
                                 if( bUndo )
-                                    AddUndo( new E3dAttributesUndoAction( mrDoc, static_cast<E3dObject*>(pPickObj), aNewSet, aOldSet ) );
+                                    AddUndo(
+                                        std::make_unique<E3dAttributesUndoAction>(
+                                            *static_cast< E3dObject* >(pPickObj),
+                                            aNewSet,
+                                            aOldSet));
                                 pPickObj->SetMergedItemSetAndBroadcast( aNewSet );
                             }
 
@@ -808,17 +811,17 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                 if( !bChanged )
                 {
-                    SdrPage* pWorkPage = pModel->GetSdPage( 0, PK_STANDARD );
+                    SdrPage* pWorkPage = pModel->GetSdPage( 0, PageKind::Standard );
 
-                    pWorkPage->SetRectsDirty();
+                    pWorkPage->SetSdrObjListRectsDirty();
 
                     if( pOwnData )
                     {
                         // #i120393# Clipboard data uses full object geometry range
                         const Size aSize( pWorkPage->GetAllObjBoundRect().GetSize() );
 
-                        maDropPos.X() = pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 );
-                        maDropPos.Y() = pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 );
+                        maDropPos.setX( pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 ) );
+                        maDropPos.setY( pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 ) );
                     }
 
                     bReturn = Paste(*pModel, maDropPos, pPage, nPasteOptions);
@@ -835,19 +838,19 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
         if( aDataHelper.GetString( SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, aOUString ) )
         {
-            SdrObject* pObj = CreateFieldControl( aOUString );
+            SdrObjectUniquePtr pObj = CreateFieldControl( aOUString );
 
             if( pObj )
             {
-                Rectangle   aRect( pObj->GetLogicRect() );
+                ::tools::Rectangle   aRect( pObj->GetLogicRect() );
                 Size        aSize( aRect.GetSize() );
 
-                maDropPos.X() -= ( aSize.Width() >> 1 );
-                maDropPos.Y() -= ( aSize.Height() >> 1 );
+                maDropPos.AdjustX( -( aSize.Width() >> 1 ) );
+                maDropPos.AdjustY( -( aSize.Height() >> 1 ) );
 
                 aRect.SetPos( maDropPos );
                 pObj->SetLogicRect( aRect );
-                InsertObjectAtView( pObj, *GetSdrPageView(), SdrInsertFlags::SETDEFLAYER );
+                InsertObjectAtView( pObj.release(), *GetSdrPageView(), SdrInsertFlags::SETDEFLAYER );
                 bReturn = true;
             }
         }
@@ -882,26 +885,26 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                 if( xDocShRef->DoLoad( pMedium ) )
                 {
                     SdDrawDocument* pModel = xDocShRef->GetDoc();
-                    SdPage*         pWorkPage = pModel->GetSdPage( 0, PK_STANDARD );
+                    SdPage*         pWorkPage = pModel->GetSdPage( 0, PageKind::Standard );
 
-                    pWorkPage->SetRectsDirty();
+                    pWorkPage->SetSdrObjListRectsDirty();
 
                     if( pOwnData )
                     {
                         // #i120393# Clipboard data uses full object geometry range
                         const Size aSize( pWorkPage->GetAllObjBoundRect().GetSize() );
 
-                        maDropPos.X() = pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 );
-                        maDropPos.Y() = pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 );
+                        maDropPos.setX( pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 ) );
+                        maDropPos.setY( pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 ) );
                     }
 
                     // delete pages, that are not of any interest for us
-                    for( long i = ( pModel->GetPageCount() - 1 ); i >= 0; i-- )
+                    for( long i = pModel->GetPageCount() - 1; i >= 0; i-- )
                     {
-                        SdPage* pP = static_cast< SdPage* >( pModel->GetPage( (sal_uInt16) i ) );
+                        SdPage* pP = static_cast< SdPage* >( pModel->GetPage( static_cast<sal_uInt16>(i) ) );
 
-                        if( pP->GetPageKind() != PK_STANDARD )
-                            pModel->DeletePage( (sal_uInt16) i );
+                        if( pP->GetPageKind() != PageKind::Standard )
+                            pModel->DeletePage( static_cast<sal_uInt16>(i) );
                     }
 
                     bReturn = Paste(*pModel, maDropPos, pPage, nPasteOptions);
@@ -917,7 +920,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                 }
 
                 xDocShRef->DoClose();
-                xDocShRef.Clear();
+                xDocShRef.clear();
 
             }
             else
@@ -928,18 +931,6 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                 {
                     svt::EmbeddedObjectRef aObjRef( xObj, aObjDesc.mnViewAspect );
 
-                    // try to get the replacement image from the clipboard
-                    Graphic aGraphic;
-                    SotClipboardFormatId nGrFormat = SotClipboardFormatId::NONE;
-
-                    // insert replacement image ( if there is one ) into the object helper
-                    if ( nGrFormat != SotClipboardFormatId::NONE )
-                    {
-                        datatransfer::DataFlavor aDataFlavor;
-                        SotExchange::GetFormatDataFlavor( nGrFormat, aDataFlavor );
-                        aObjRef.SetGraphic( aGraphic, aDataFlavor.MimeType );
-                    }
-
                     Size aSize;
                     if ( aObjDesc.mnViewAspect == embed::Aspects::MSOLE_ICON )
                     {
@@ -947,7 +938,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                             aSize = aObjDesc.maSize;
                         else
                         {
-                            MapMode aMapMode( MAP_100TH_MM );
+                            MapMode aMapMode( MapUnit::Map100thMM );
                             aSize = aObjRef.GetSize( &aMapMode );
                         }
                     }
@@ -957,7 +948,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                         MapUnit aMapUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( xObj->getMapUnit( aObjDesc.mnViewAspect ) );
                         if( aObjDesc.maSize.Width() && aObjDesc.maSize.Height() )
                         {
-                            Size aTmp( OutputDevice::LogicToLogic( aObjDesc.maSize, MAP_100TH_MM, aMapUnit ) );
+                            Size aTmp(OutputDevice::LogicToLogic(aObjDesc.maSize, MapMode(MapUnit::Map100thMM), MapMode(aMapUnit)));
                             aSz.Width = aTmp.Width();
                             aSz.Height = aTmp.Height();
                             xObj->setVisualAreaSize( aObjDesc.mnViewAspect, aSz );
@@ -976,24 +967,28 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                         if( !aSize.Width() || !aSize.Height() )
                         {
-                            aSize.Width()  = 14100;
-                            aSize.Height() = 10000;
-                            aSize = OutputDevice::LogicToLogic( Size(14100, 10000), MAP_100TH_MM, aMapUnit );
+                            aSize.setWidth( 14100 );
+                            aSize.setHeight( 10000 );
+                            aSize = OutputDevice::LogicToLogic(Size(14100, 10000), MapMode(MapUnit::Map100thMM), MapMode(aMapUnit));
                             aSz.Width = aSize.Width();
                             aSz.Height = aSize.Height();
                             xObj->setVisualAreaSize( aObjDesc.mnViewAspect, aSz );
                         }
 
-                        aSize = OutputDevice::LogicToLogic( aSize, aMapUnit, MAP_100TH_MM );
+                        aSize = OutputDevice::LogicToLogic(aSize, MapMode(aMapUnit), MapMode(MapUnit::Map100thMM));
                     }
 
                     Size aMaxSize( mrDoc.GetMaxObjSize() );
 
-                    maDropPos.X() -= std::min( aSize.Width(), aMaxSize.Width() ) >> 1;
-                    maDropPos.Y() -= std::min( aSize.Height(), aMaxSize.Height() ) >> 1;
+                    maDropPos.AdjustX( -(std::min( aSize.Width(), aMaxSize.Width() ) >> 1) );
+                    maDropPos.AdjustY( -(std::min( aSize.Height(), aMaxSize.Height() ) >> 1) );
 
-                    Rectangle       aRect( maDropPos, aSize );
-                    SdrOle2Obj*     pObj = new SdrOle2Obj( aObjRef, aName, aRect );
+                    ::tools::Rectangle       aRect( maDropPos, aSize );
+                    SdrOle2Obj*     pObj = new SdrOle2Obj(
+                        getSdrModelFromSdrView(),
+                        aObjRef,
+                        aName,
+                        aRect);
                     SdrPageView*    pPV = GetSdrPageView();
                     SdrInsertFlags  nOptions = SdrInsertFlags::SETDEFLAYER;
 
@@ -1009,7 +1004,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                     InsertObjectAtView( pObj, *pPV, nOptions );
 
                     if( pImageMap )
-                        pObj->AppendUserData( new SdIMapInfo( *pImageMap ) );
+                        pObj->AppendUserData( std::unique_ptr<SdrObjUserData>(new SdIMapInfo( *pImageMap )) );
 
                     if (pObj->IsChart())
                     {
@@ -1020,12 +1015,12 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                              ( xProps->getPropertyValue( "DisableDataTableDialog" ) >>= bDisableDataTableDialog ) &&
                              bDisableDataTableDialog )
                         {
-                            xProps->setPropertyValue( "DisableDataTableDialog" , uno::makeAny( sal_False ) );
-                            xProps->setPropertyValue( "DisableComplexChartTypes" , uno::makeAny( sal_False ) );
+                            xProps->setPropertyValue( "DisableDataTableDialog" , uno::makeAny( false ) );
+                            xProps->setPropertyValue( "DisableComplexChartTypes" , uno::makeAny( false ) );
                             uno::Reference< util::XModifiable > xModifiable( xProps, uno::UNO_QUERY );
                             if ( xModifiable.is() )
                             {
-                                xModifiable->setModified( sal_True );
+                                xModifiable->setModified( true );
                             }
                         }
                     }
@@ -1091,8 +1086,8 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                     Graphic aGraphic;
                     SotClipboardFormatId nGrFormat = SotClipboardFormatId::NONE;
 
-// (wg. Selection Manager bei Trustet Solaris)
-#ifndef SOLARIS
+// (for Selection Manager in Trusted Solaris)
+#ifndef __sun
                     if( aDataHelper.GetGraphic( SotClipboardFormatId::SVXB, aGraphic ) )
                         nGrFormat = SotClipboardFormatId::SVXB;
                     else if( aDataHelper.GetGraphic( SotClipboardFormatId::GDIMETAFILE, aGraphic ) )
@@ -1116,7 +1111,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                             aSize = aObjDesc.maSize;
                         else
                         {
-                            MapMode aMapMode( MAP_100TH_MM );
+                            MapMode aMapMode( MapUnit::Map100thMM );
                             aSize = aObjRef.GetSize( &aMapMode );
                         }
                     }
@@ -1135,7 +1130,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                         if( aObjDesc.maSize.Width() && aObjDesc.maSize.Height() )
                         {
-                            Size aTmp( OutputDevice::LogicToLogic( aObjDesc.maSize, MAP_100TH_MM, aMapUnit ) );
+                            Size aTmp(OutputDevice::LogicToLogic(aObjDesc.maSize, MapMode(MapUnit::Map100thMM), MapMode(aMapUnit)));
                             if ( aSz.Width != aTmp.Width() || aSz.Height != aTmp.Height() )
                             {
                                 aSz.Width = aTmp.Width();
@@ -1148,22 +1143,26 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                         if( !aSize.Width() || !aSize.Height() )
                         {
-                            aSize = OutputDevice::LogicToLogic( Size(14100, 10000), MAP_100TH_MM, aMapUnit );
+                            aSize = OutputDevice::LogicToLogic(Size(14100, 10000), MapMode(MapUnit::Map100thMM), MapMode(aMapUnit));
                             aSz.Width = aSize.Width();
                             aSz.Height = aSize.Height();
                             xObj->setVisualAreaSize( aObjDesc.mnViewAspect, aSz );
                         }
 
-                        aSize = OutputDevice::LogicToLogic( aSize, aMapUnit, MAP_100TH_MM );
+                        aSize = OutputDevice::LogicToLogic(aSize, MapMode(aMapUnit), MapMode(MapUnit::Map100thMM));
                     }
 
                     Size aMaxSize( mrDoc.GetMaxObjSize() );
 
-                    maDropPos.X() -= std::min( aSize.Width(), aMaxSize.Width() ) >> 1;
-                    maDropPos.Y() -= std::min( aSize.Height(), aMaxSize.Height() ) >> 1;
+                    maDropPos.AdjustX( -(std::min( aSize.Width(), aMaxSize.Width() ) >> 1) );
+                    maDropPos.AdjustY( -(std::min( aSize.Height(), aMaxSize.Height() ) >> 1) );
 
-                    Rectangle       aRect( maDropPos, aSize );
-                    SdrOle2Obj*     pObj = new SdrOle2Obj( aObjRef, aName, aRect );
+                    ::tools::Rectangle       aRect( maDropPos, aSize );
+                    SdrOle2Obj*     pObj = new SdrOle2Obj(
+                        getSdrModelFromSdrView(),
+                        aObjRef,
+                        aName,
+                        aRect);
                     SdrPageView*    pPV = GetSdrPageView();
                     SdrInsertFlags  nOptions = SdrInsertFlags::SETDEFLAYER;
 
@@ -1179,7 +1178,7 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                     InsertObjectAtView( pObj, *pPV, nOptions );
 
                     if( pImageMap )
-                        pObj->AppendUserData( new SdIMapInfo( *pImageMap ) );
+                        pObj->AppendUserData( std::unique_ptr<SdrObjUserData>(new SdIMapInfo( *pImageMap )) );
 
                     // let the object stay in loaded state after insertion
                     pObj->Unload();
@@ -1211,21 +1210,21 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
             {
                 const SdDrawDocument*   pWorkModel = pOwnData->GetWorkDocument();
                 SdrPage*                pWorkPage = const_cast<SdrPage*>( ( pWorkModel->GetPageCount() > 1 ) ?
-                                                    pWorkModel->GetSdPage( 0, PK_STANDARD ) :
+                                                    pWorkModel->GetSdPage( 0, PageKind::Standard ) :
                                                     pWorkModel->GetPage( 0 ) );
 
-                pWorkPage->SetRectsDirty();
+                pWorkPage->SetSdrObjListRectsDirty();
 
                 // #i120393# Clipboard data uses full object geometry range
                 const Size aSize( pWorkPage->GetAllObjBoundRect().GetSize() );
 
-                aInsertPos.X() = pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 );
-                aInsertPos.Y() = pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 );
+                aInsertPos.setX( pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 ) );
+                aInsertPos.setY( pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 ) );
             }
 
             // restrict movement to WorkArea
             Size aImageMapSize = OutputDevice::LogicToLogic(aGraphic.GetPrefSize(),
-                aGraphic.GetPrefMapMode(), MapMode(MAP_100TH_MM));
+                aGraphic.GetPrefMapMode(), MapMode(MapUnit::Map100thMM));
 
             ImpCheckInsertPos(aInsertPos, aImageMapSize, GetWorkArea());
 
@@ -1243,16 +1242,16 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
         {
             const SdDrawDocument*   pWorkModel = pOwnData->GetWorkDocument();
             SdrPage*                pWorkPage = const_cast<SdrPage*>( ( pWorkModel->GetPageCount() > 1 ) ?
-                                                pWorkModel->GetSdPage( 0, PK_STANDARD ) :
+                                                pWorkModel->GetSdPage( 0, PageKind::Standard ) :
                                                 pWorkModel->GetPage( 0 ) );
 
-            pWorkPage->SetRectsDirty();
+            pWorkPage->SetSdrObjListRectsDirty();
 
             // #i120393# Clipboard data uses full object geometry range
             const Size aSize( pWorkPage->GetAllObjBoundRect().GetSize() );
 
-            aInsertPos.X() = pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 );
-            aInsertPos.Y() = pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 );
+            aInsertPos.setX( pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 ) );
+            aInsertPos.setY( pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 ) );
         }
 
         bReturn = InsertMetaFile( aDataHelper, aInsertPos, pImageMap.get(), nFormat == SotClipboardFormatId::NONE );
@@ -1292,16 +1291,16 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
             {
                 const SdDrawDocument*   pWorkModel = pOwnData->GetWorkDocument();
                 SdrPage*                pWorkPage = const_cast<SdrPage*>( ( pWorkModel->GetPageCount() > 1 ) ?
-                                                    pWorkModel->GetSdPage( 0, PK_STANDARD ) :
+                                                    pWorkModel->GetSdPage( 0, PageKind::Standard ) :
                                                     pWorkModel->GetPage( 0 ) );
 
-                pWorkPage->SetRectsDirty();
+                pWorkPage->SetSdrObjListRectsDirty();
 
                 // #i120393# Clipboard data uses full object geometry range
                 const Size aSize( pWorkPage->GetAllObjBoundRect().GetSize() );
 
-                aInsertPos.X() = pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 );
-                aInsertPos.Y() = pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 );
+                aInsertPos.setX( pOwnData->GetStartPos().X() + ( aSize.Width() >> 1 ) );
+                aInsertPos.setY( pOwnData->GetStartPos().Y() + ( aSize.Height() >> 1 ) );
             }
 
             // restrict movement to WorkArea
@@ -1315,46 +1314,54 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
     if(!bReturn && pPickObj && CHECK_FORMAT_TRANS( SotClipboardFormatId::XFA ) )
     {
-        ::tools::SvRef<SotStorageStream> xStm;
-
-        if( aDataHelper.GetSotStorageStream( SotClipboardFormatId::XFA, xStm ) )
+        uno::Any const data(aDataHelper.GetAny(SotClipboardFormatId::XFA, ""));
+        uno::Sequence<beans::NamedValue> props;
+        if (data >>= props)
         {
-            XFillExchangeData aFillData( XFillAttrSetItem( &mrDoc.GetPool() ) );
-
-            ReadXFillExchangeData( *xStm, aFillData );
-
             if( IsUndoEnabled() )
             {
-                BegUndo( SD_RESSTR(STR_UNDO_DRAGDROP) );
+                BegUndo( SdResId(STR_UNDO_DRAGDROP) );
                 AddUndo( GetModel()->GetSdrUndoFactory().CreateUndoAttrObject( *pPickObj ) );
                 EndUndo();
             }
 
-            XFillAttrSetItem*   pSetItem = aFillData.GetXFillAttrSetItem();
-            SfxItemSet          rSet = pSetItem->GetItemSet();
-            drawing::FillStyle eFill = static_cast<const XFillStyleItem&>( rSet.Get( XATTR_FILLSTYLE ) ).GetValue();
+            ::comphelper::SequenceAsHashMap const map(props);
+            drawing::FillStyle eFill(drawing::FillStyle_BITMAP); // default to something that's ignored
+            Color aColor(COL_BLACK);
+            auto it = map.find("FillStyle");
+            if (it != map.end())
+            {
+                XFillStyleItem style;
+                style.PutValue(it->second, 0);
+                eFill = style.GetValue();
+            }
+            it = map.find("FillColor");
+            if (it != map.end())
+            {
+                XFillColorItem color;
+                color.PutValue(it->second, 0);
+                aColor = color.GetColorValue();
+            }
 
             if( eFill == drawing::FillStyle_SOLID || eFill == drawing::FillStyle_NONE )
             {
-                const XFillColorItem&   rColItem = static_cast<const XFillColorItem&>( rSet.Get( XATTR_FILLCOLOR ) );
-                Color                   aColor( rColItem.GetColorValue() );
-                OUString                aName( rColItem.GetName() );
+                OUString                aName;
                 SfxItemSet              aSet( mrDoc.GetPool() );
                 bool                    bClosed = pPickObj->IsClosedObj();
                 ::sd::Window* pWin = mpViewSh->GetActiveWindow();
-                sal_uInt16 nHitLog = (sal_uInt16) pWin->PixelToLogic(
-                    Size(FuPoor::HITPIX, 0 ) ).Width();
+                sal_uInt16 nHitLog = static_cast<sal_uInt16>(pWin->PixelToLogic(
+                    Size(FuPoor::HITPIX, 0 ) ).Width());
                 const long              n2HitLog = nHitLog << 1;
                 Point                   aHitPosR( rPos );
                 Point                   aHitPosL( rPos );
                 Point                   aHitPosT( rPos );
                 Point                   aHitPosB( rPos );
-                const SetOfByte*        pVisiLayer = &GetSdrPageView()->GetVisibleLayers();
+                const SdrLayerIDSet*        pVisiLayer = &GetSdrPageView()->GetVisibleLayers();
 
-                aHitPosR.X() += n2HitLog;
-                aHitPosL.X() -= n2HitLog;
-                aHitPosT.Y() += n2HitLog;
-                aHitPosB.Y() -= n2HitLog;
+                aHitPosR.AdjustX(n2HitLog );
+                aHitPosL.AdjustX( -n2HitLog );
+                aHitPosT.AdjustY(n2HitLog );
+                aHitPosB.AdjustY( -n2HitLog );
 
                 if( bClosed &&
                     SdrObjectPrimitiveHit(*pPickObj, aHitPosR, nHitLog, *GetSdrPageView(), pVisiLayer, false) &&
@@ -1386,15 +1393,14 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
         {
             xStm->Seek( 0 );
             // mba: clipboard always must contain absolute URLs (could be from alien source)
-            bReturn = SdrView::Paste( *xStm, OUString(), EE_FORMAT_HTML, maDropPos, pPage, nPasteOptions );
+            bReturn = SdrView::Paste( *xStm, EETextFormat::Html, maDropPos, pPage, nPasteOptions );
         }
     }
 
-    if(!bReturn && !bLink && CHECK_FORMAT_TRANS(SotClipboardFormatId::EDITENGINE))
+    if(!bReturn && !bLink && CHECK_FORMAT_TRANS(SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT))
     {
         ::tools::SvRef<SotStorageStream> xStm;
-
-        if( aDataHelper.GetSotStorageStream( SotClipboardFormatId::EDITENGINE, xStm ) )
+        if( aDataHelper.GetSotStorageStream( SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT, xStm ) )
         {
             OutlinerView* pOLV = GetTextEditOutlinerView();
 
@@ -1402,28 +1408,29 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
             if( pOLV )
             {
-                Rectangle   aRect( pOLV->GetOutputArea() );
-                   Point       aPos( pOLV->GetWindow()->PixelToLogic( maDropPos ) );
+                ::tools::Rectangle   aRect( pOLV->GetOutputArea() );
+                Point       aPos( pOLV->GetWindow()->PixelToLogic( maDropPos ) );
 
                 if( aRect.IsInside( aPos ) || ( !bDrag && IsTextEdit() ) )
                 {
                     // mba: clipboard always must contain absolute URLs (could be from alien source)
-                    pOLV->Read( *xStm, OUString(), EE_FORMAT_BIN, mpDocSh->GetHeaderAttributes() );
+                    pOLV->Read( *xStm, EETextFormat::Xml, mpDocSh->GetHeaderAttributes() );
                     bReturn = true;
                 }
             }
 
             if( !bReturn )
                 // mba: clipboard always must contain absolute URLs (could be from alien source)
-                bReturn = SdrView::Paste( *xStm, OUString(), EE_FORMAT_BIN, maDropPos, pPage, nPasteOptions );
+                bReturn = SdrView::Paste( *xStm, EETextFormat::Xml, maDropPos, pPage, nPasteOptions );
         }
     }
 
-    if(!bReturn && !bLink && CHECK_FORMAT_TRANS(SotClipboardFormatId::RTF))
+    bool bIsRTF = false;
+    if(!bReturn && !bLink && (( bIsRTF = CHECK_FORMAT_TRANS(SotClipboardFormatId::RTF) ) || CHECK_FORMAT_TRANS(SotClipboardFormatId::RICHTEXT) ))
     {
         ::tools::SvRef<SotStorageStream> xStm;
 
-        if( aDataHelper.GetSotStorageStream( SotClipboardFormatId::RTF, xStm ) )
+        if( aDataHelper.GetSotStorageStream( bIsRTF ? SotClipboardFormatId::RTF : SotClipboardFormatId::RICHTEXT, xStm ) )
         {
             xStm->Seek( 0 );
 
@@ -1437,20 +1444,20 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                 if( pOLV )
                 {
-                    Rectangle   aRect( pOLV->GetOutputArea() );
+                    ::tools::Rectangle   aRect( pOLV->GetOutputArea() );
                        Point       aPos( pOLV->GetWindow()->PixelToLogic( maDropPos ) );
 
                     if( aRect.IsInside( aPos ) || ( !bDrag && IsTextEdit() ) )
                     {
                         // mba: clipboard always must contain absolute URLs (could be from alien source)
-                        pOLV->Read( *xStm, OUString(), EE_FORMAT_RTF, mpDocSh->GetHeaderAttributes() );
+                        pOLV->Read( *xStm, EETextFormat::Rtf, mpDocSh->GetHeaderAttributes() );
                         bReturn = true;
                     }
                 }
 
                 if( !bReturn )
                     // mba: clipboard always must contain absolute URLs (could be from alien source)
-                    bReturn = SdrView::Paste( *xStm, OUString(), EE_FORMAT_RTF, maDropPos, pPage, nPasteOptions );
+                    bReturn = SdrView::Paste( *xStm, EETextFormat::Rtf, maDropPos, pPage, nPasteOptions );
             }
         }
     }
@@ -1520,9 +1527,9 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
 bool View::PasteRTFTable( const ::tools::SvRef<SotStorageStream>& xStm, SdrPage* pPage, SdrInsertFlags nPasteOptions )
 {
-    std::unique_ptr<SdDrawDocument> pModel(new SdDrawDocument( DOCUMENT_TYPE_IMPRESS, mpDocSh ));
+    std::unique_ptr<SdDrawDocument> pModel(new SdDrawDocument( DocumentType::Impress, mpDocSh ));
     pModel->NewOrLoadCompleted(NEW_DOC);
-    pModel->GetItemPool().SetDefaultMetric(SFX_MAPUNIT_100TH_MM);
+    pModel->GetItemPool().SetDefaultMetric(MapUnit::Map100thMM);
     pModel->InsertPage(pModel->AllocPage(false));
 
     Reference< XComponent > xComponent( new SdXImpressDocument( pModel.get(), true ) );

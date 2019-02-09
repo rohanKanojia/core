@@ -38,7 +38,7 @@ namespace accessibility {
         different transformations between internal and screen coordinates or
         change the validity of the forwarder have to be signaled separately.
 */
-class AccessibleViewForwarder
+class AccessibleViewForwarder final
     :   public IAccessibleViewForwarder
 {
 public:
@@ -46,7 +46,7 @@ public:
 
     AccessibleViewForwarder (SdrPaintView* pView, OutputDevice& rDevice);
 
-    virtual ~AccessibleViewForwarder();
+    virtual ~AccessibleViewForwarder() override;
 
     //=====  IAccessibleViewforwarder  ========================================
 
@@ -56,7 +56,7 @@ public:
         @return
             The rectangle of the visible part of the document.
      */
-    virtual Rectangle GetVisibleArea() const override;
+    virtual ::tools::Rectangle GetVisibleArea() const override;
 
     /** Transform the specified point from internal coordinates to an
         absolute screen position.
@@ -81,13 +81,12 @@ public:
      */
     virtual Size LogicToPixel (const Size& rSize) const override;
 
-protected:
-    SdrPaintView* mpView;
+private:
+    SdrPaintView* const mpView;
     sal_uInt16 mnWindowId;
 
-private:
-    AccessibleViewForwarder (AccessibleViewForwarder&) = delete;
-    AccessibleViewForwarder& operator= (AccessibleViewForwarder&) = delete;
+    AccessibleViewForwarder (AccessibleViewForwarder const &) = delete;
+    AccessibleViewForwarder& operator= (AccessibleViewForwarder const &) = delete;
 };
 
 } // end of namespace accessibility

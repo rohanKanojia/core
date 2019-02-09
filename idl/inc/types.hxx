@@ -21,8 +21,9 @@
 #define INCLUDED_IDL_INC_TYPES_HXX
 
 #include <rtl/strbuf.hxx>
+#include <tools/solar.h>
 #include <tools/ref.hxx>
-#include <basobj.hxx>
+#include "basobj.hxx"
 
 class SvMetaType;
 class SvMetaSlot;
@@ -31,23 +32,20 @@ typedef SvRefMemberList< SvMetaSlot* > SvSlotElementList;
 class SvMetaAttribute : public SvMetaReference
 {
 public:
-    virtual void ReadAttributesSvIdl( SvIdlDataBase & rBase,
-                                      SvTokenStream & rInStm ) override;
     tools::SvRef<SvMetaType> aType;
     SvIdentifier             aSlotId;
                         SvMetaAttribute();
-                        SvMetaAttribute( SvMetaType * );
+    SvMetaAttribute( SvMetaType * );
 
     void                SetSlotId( const SvIdentifier & rId )
                         { aSlotId = rId; }
     const SvIdentifier& GetSlotId() const;
     SvMetaType *        GetType() const;
 
-    virtual bool        Test( SvTokenStream & rInStm ) override;
+    virtual bool        Test( SvTokenStream & rInStm );
     virtual bool        ReadSvIdl( SvIdlDataBase &, SvTokenStream & rInStm ) override;
-    sal_uLong           MakeSfx( OStringBuffer& rAtrrArray );
-    virtual void        Insert( SvSlotElementList&, const OString& rPrefix,
-                                SvIdlDataBase& );
+    sal_uLong           MakeSfx( OStringBuffer& rAtrrArray ) const;
+    virtual void        Insert( SvSlotElementList& );
 };
 
 enum MetaTypeType { Method, Struct, Base, Enum, Interface, Shell };
@@ -58,17 +56,15 @@ class SvMetaType : public SvMetaReference
     MetaTypeType                        nType;
     bool                                bIsItem;
 
-    void                WriteSfxItem( const OString& rItemName, SvIdlDataBase & rBase,
+    void                WriteSfxItem( const OString& rItemName, SvIdlDataBase const & rBase,
                                       SvStream & rOutStm );
 protected:
-    bool                ReadNamesSvIdl( SvTokenStream & rInStm );
-
-    bool                ReadHeaderSvIdl( SvIdlDataBase &, SvTokenStream & rInStm );
+    bool                ReadHeaderSvIdl( SvTokenStream & rInStm );
 public:
             SvMetaType();
             SvMetaType( const OString& rTypeName );
 
-    virtual ~SvMetaType();
+    virtual ~SvMetaType() override;
 
     virtual void        ReadContextSvIdl( SvIdlDataBase &, SvTokenStream & rInStm ) override;
 
@@ -109,11 +105,6 @@ public:
     SvRefMemberList<SvMetaEnumValue *> aEnumValueList;
     OString                            aPrefix;
             SvMetaTypeEnum();
-
-    sal_uLong           Count() const { return aEnumValueList.size(); }
-    const OString&      GetPrefix() const { return aPrefix; }
-    SvMetaEnumValue *   GetObject( sal_uLong n ) const
-                        { return aEnumValueList[n]; }
 };
 
 class SvMetaTypevoid : public SvMetaType

@@ -34,7 +34,7 @@
  *   In 'fsm' there is a line for each state X charset X nextstate.
  *   List chars that overwrite previous entries later (e.g. C_ALPH
  *   can be overridden by '_' by a later entry; and C_XX is the
- *   the universal set, and should always be first.
+ *   universal set, and should always be first.
  *   States above S_SELF are represented in the big table as negative values.
  *   S_SELF and S_SELFB encode the resulting token type in the upper bits.
  *   These actions differ in that S_SELF doesn't have a lookahead char,
@@ -58,22 +58,20 @@
 enum state
 {
     START = 0, NUM1, NUM2, NUM3, ID1, ST1, ST2, ST3, COM1, COM2, COM3, COM4,
-    CC1, CC2, WS1, PLUS1, MINUS1, STAR1, SLASH1, PCT1, SHARP1,
+    CC1, CC2, WS1, PLUS1, MINUS1, STAR1, PCT1, SHARP1,
     CIRC1, GT1, GT2, LT1, LT2, OR1, AND1, ASG1, NOT1, DOTS1,
     S_SELF = MAXSTATE, S_SELFB, S_EOF, S_NL, S_EOFSTR,
     S_STNL, S_COMNL, S_EOFCOM, S_COMMENT, S_EOB, S_WS, S_NAME
 };
 
-int tottok;
-int tokkind[256];
 struct fsm
 {
     int state;                          /* if in this state */
     uchar ch[4];                        /* and see one of these characters */
-    int nextstate;                      /* enter this state if +ve */
+    int const nextstate;                /* enter this state if +ve */
 };
 
- /*const*/ struct fsm fsm[] = {
+static const struct fsm fsm[] = {
     /* start state */
          {START, {C_XX}, ACT(UNCLASS, S_SELF)},
          {START, {' ', '\t', '\v'}, WS1},
@@ -256,12 +254,12 @@ struct fsm
 
 /* first index is char, second is state */
 /* increase #states to power of 2 to encourage use of shift */
-short bigfsm[256][MAXSTATE];
+static short bigfsm[256][MAXSTATE];
 
 void
     expandlex(void)
 {
-     /* const */ struct fsm *fp;
+    const struct fsm *fp;
     int i, j, nstate;
 
     for (fp = fsm; fp->state >= 0; fp++)
@@ -371,7 +369,6 @@ continue2:
         tp->type = UNCLASS;
         tp->t = ip;
         tp->wslen = 0;
-        tp->flag = 0;
         state = START;
         for (;;)
         {
@@ -492,6 +489,7 @@ continue2:
 
                 case S_STNL:
                     error(ERROR, "Unterminated string or char const");
+                    /* fall through */
                 case S_NL:
                     tp->t = ip;
                     tp->type = NL;
@@ -516,6 +514,7 @@ continue2:
                 case S_EOFCOM:
                     error(WARNING, "EOF inside comment");
                     --ip;
+                    /* fall through */
                 case S_COMMENT:
                     if (!Cflag)
                     {
@@ -530,7 +529,6 @@ continue2:
                         runelen = 1;
                         s->lineinc = 0;
                         tp->type = COMMENT;
-                        tp->flag |= XTWS;
                     }
             }
             break;
@@ -645,7 +643,7 @@ int
  * if fd==-1 and str, then from the string.
  */
 Source *
-    setsource(char *name, int path, int fd, char *str, int wrap)
+    setsource(char *name, int path, int fd, char const *str, int wrap)
 {
     Source *s = new(Source);
     size_t len;
@@ -670,7 +668,7 @@ Source *
         len = strlen(str);
         s->inb = domalloc(len + 4);
         s->inp = s->inb;
-        strncpy((char *) s->inp, str, len);
+        memcpy((char *) s->inp, str, len);
     }
     else
     {

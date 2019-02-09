@@ -32,6 +32,7 @@
 #include <i18nlangtag/languagetag.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <vcl/svapp.hxx>
+#include <o3tl/deleter.hxx>
 
 
 // VDev RevDevice provider
@@ -65,7 +66,7 @@ namespace
 
     public:
         explicit ImpTimedRefDev(scoped_timed_RefDev& rOwnerofMe);
-        virtual ~ImpTimedRefDev();
+        virtual ~ImpTimedRefDev() override;
         virtual void Invoke() override;
 
         VirtualDevice& acquireVirtualDevice();
@@ -73,10 +74,10 @@ namespace
     };
 
     ImpTimedRefDev::ImpTimedRefDev(scoped_timed_RefDev& rOwnerOfMe)
-    :   Timer( "Timer to destroy drawinglayer reference device" ),
+    :   Timer( "drawinglayer ImpTimedRefDev destroy mpVirDev" ),
         mrOwnerOfMe(rOwnerOfMe),
         mpVirDev(nullptr),
-        mnUseCount(0L)
+        mnUseCount(0)
     {
         SetTimeout(3L * 60L * 1000L); // three minutes
         Start();
@@ -84,8 +85,8 @@ namespace
 
     ImpTimedRefDev::~ImpTimedRefDev()
     {
-        OSL_ENSURE(0L == mnUseCount, "destruction of a still used ImpTimedRefDev (!)");
-        const SolarMutexGuard aGuard;
+        OSL_ENSURE(0 == mnUseCount, "destruction of a still used ImpTimedRefDev (!)");
+        const SolarMutexGuard aSolarGuard;
         mpVirDev.disposeAndClear();
     }
 
@@ -100,7 +101,7 @@ namespace
         if(!mpVirDev)
         {
             mpVirDev = VclPtr<VirtualDevice>::Create();
-            mpVirDev->SetReferenceDevice( VirtualDevice::REFDEV_MODE_MSO1 );
+            mpVirDev->SetReferenceDevice( VirtualDevice::RefDevMode::MSO1 );
         }
 
         if(!mnUseCount)
@@ -133,7 +134,7 @@ namespace drawinglayer
     namespace primitive2d
     {
         // static methods here
-        VirtualDevice& acquireGlobalVirtualDevice()
+        static VirtualDevice& acquireGlobalVirtualDevice()
         {
             scoped_timed_RefDev& rStdRefDevice = the_scoped_timed_RefDev::get();
 
@@ -143,7 +144,7 @@ namespace drawinglayer
             return rStdRefDevice->acquireVirtualDevice();
         }
 
-        void releaseGlobalVirtualDevice()
+        static void releaseGlobalVirtualDevice()
         {
             scoped_timed_RefDev& rStdRefDevice = the_scoped_timed_RefDev::get();
 
@@ -152,11 +153,12 @@ namespace drawinglayer
         }
 
         TextLayouterDevice::TextLayouterDevice()
-        :   mrDevice(acquireGlobalVirtualDevice())
+        :   maSolarGuard(),
+            mrDevice(acquireGlobalVirtualDevice())
         {
         }
 
-        TextLayouterDevice::~TextLayouterDevice()
+        TextLayouterDevice::~TextLayouterDevice() COVERITY_NOEXCEPT_FALSE
         {
             releaseGlobalVirtualDevice();
         }
@@ -228,12 +230,12 @@ namespace drawinglayer
             return mrDevice.GetTextWidth(rText, nIndex, nLength);
         }
 
-        bool TextLayouterDevice::getTextOutlines(
+        void TextLayouterDevice::getTextOutlines(
             basegfx::B2DPolyPolygonVector& rB2DPolyPolyVector,
             const OUString& rText,
             sal_uInt32 nIndex,
             sal_uInt32 nLength,
-            const ::std::vector< double >& rDXArray) const
+            const std::vector< double >& rDXArray) const
         {
             const sal_uInt32 nDXArrayCount(rDXArray.size());
             sal_uInt32 nTextLength(nLength);
@@ -254,19 +256,18 @@ namespace drawinglayer
                     aIntegerDXArray[a] = basegfx::fround(rDXArray[a]);
                 }
 
-                return mrDevice.GetTextOutlines(
+                mrDevice.GetTextOutlines(
                     rB2DPolyPolyVector,
                     rText,
                     nIndex,
                     nIndex,
                     nLength,
-                    true,
                     0,
                     &(aIntegerDXArray[0]));
             }
             else
             {
-                return mrDevice.GetTextOutlines(
+                mrDevice.GetTextOutlines(
                     rB2DPolyPolyVector,
                     rText,
                     nIndex,
@@ -290,7 +291,7 @@ namespace drawinglayer
 
             if(nTextLength)
             {
-                Rectangle aRect;
+                ::tools::Rectangle aRect;
 
                 mrDevice.GetTextBoundRect(
                     aRect,
@@ -324,7 +325,7 @@ namespace drawinglayer
         }
 
         void TextLayouterDevice::addTextRectActions(
-            const Rectangle& rRectangle,
+            const ::tools::Rectangle& rRectangle,
             const OUString& rText,
             DrawTextFlags nStyle,
             GDIMetaFile& rGDIMetaFile) const
@@ -333,12 +334,12 @@ namespace drawinglayer
                 rRectangle, rText, nStyle, rGDIMetaFile);
         }
 
-        ::std::vector< double > TextLayouterDevice::getTextArray(
+        std::vector< double > TextLayouterDevice::getTextArray(
             const OUString& rText,
             sal_uInt32 nIndex,
             sal_uInt32 nLength) const
         {
-            ::std::vector< double > aRetval;
+            std::vector< double > aRetval;
             sal_uInt32 nTextLength(nLength);
             const sal_uInt32 nStringLength(rText.getLength());
 
@@ -350,7 +351,7 @@ namespace drawinglayer
             if(nTextLength)
             {
                 aRetval.reserve(nTextLength);
-                ::std::vector<long> aArray(nTextLength);
+                std::vector<long> aArray(nTextLength);
                 mrDevice.GetTextArray(rText, &aArray[0], nIndex, nLength);
                 aRetval.assign(aArray.begin(), aArray.end());
             }
@@ -417,8 +418,8 @@ namespace drawinglayer
 
                 if(aUnscaledFontMetric.GetAverageFontWidth() > 0)
                 {
-                    const double fScaleFactor((double)nWidth / (double)nHeight);
-                    const sal_uInt32 nScaledWidth(basegfx::fround((double)aUnscaledFontMetric.GetAverageFontWidth() * fScaleFactor));
+                    const double fScaleFactor(static_cast<double>(nWidth) / static_cast<double>(nHeight));
+                    const sal_uInt32 nScaledWidth(basegfx::fround(static_cast<double>(aUnscaledFontMetric.GetAverageFontWidth()) * fScaleFactor));
                     aRetval.SetAverageFontWidth(nScaledWidth);
                 }
             }
@@ -426,7 +427,7 @@ namespace drawinglayer
             // handle FontRotation (if defined)
             if(!basegfx::fTools::equalZero(fFontRotation))
             {
-                sal_Int16 aRotate10th((sal_Int16)(fFontRotation * (-1800.0/F_PI)));
+                sal_Int16 aRotate10th(static_cast<sal_Int16>(fFontRotation * (-1800.0/F_PI)));
                 aRetval.SetOrientation(aRotate10th % 3600);
             }
 
@@ -453,7 +454,7 @@ namespace drawinglayer
             // TODO: eKerning
 
             // set FontHeight and init to no FontScaling
-            o_rSize.setY(rFont.GetFontSize().getHeight() > 0 ? rFont.GetFontSize().getHeight() : 0);
+            o_rSize.setY(std::max<long>(rFont.GetFontSize().getHeight(), 0));
             o_rSize.setX(o_rSize.getY());
 
 #ifdef _WIN32
@@ -470,7 +471,7 @@ namespace drawinglayer
 
                 if(aUnscaledFontMetric.GetAverageFontWidth() > 0)
                 {
-                    const double fScaleFactor((double)rFont.GetFontSize().getWidth() / (double)aUnscaledFontMetric.GetAverageFontWidth());
+                    const double fScaleFactor(static_cast<double>(rFont.GetFontSize().getWidth()) / static_cast<double>(aUnscaledFontMetric.GetAverageFontWidth()));
                     o_rSize.setX(fScaleFactor * o_rSize.getY());
                 }
             }
@@ -481,7 +482,7 @@ namespace drawinglayer
             // means the scaling is in the direct relation of width to height
             if(rFont.GetFontSize().getWidth() > 0)
             {
-                o_rSize.setX((double)rFont.GetFontSize().getWidth());
+                o_rSize.setX(static_cast<double>(rFont.GetFontSize().getWidth()));
             }
 #endif
             return aRetval;

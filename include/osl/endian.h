@@ -20,7 +20,7 @@
 #ifndef INCLUDED_OSL_ENDIAN_H
 #define INCLUDED_OSL_ENDIAN_H
 
-#include <sal/types.h>
+#include "sal/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,15 +34,13 @@ extern "C" {
             || defined _M_MRX000 || defined _M_PPC
 #       define OSL_LITENDIAN
 #   endif
-#elif defined ANDROID || defined LINUX
+#elif defined ANDROID || defined LINUX || defined HAIKU
 #   include <endian.h>
 #   if __BYTE_ORDER == __LITTLE_ENDIAN
 #       define OSL_LITENDIAN
 #   elif __BYTE_ORDER == __BIG_ENDIAN
 #       define OSL_BIGENDIAN
 #   endif
-#elif defined EMSCRIPTEN
-#   define OSL_LITENDIAN
 #elif defined IOS || defined MACOSX || defined NETBSD
 #   include <machine/endian.h>
 #   if BYTE_ORDER == LITTLE_ENDIAN
@@ -65,7 +63,7 @@ extern "C" {
 #   elif BYTE_ORDER == BIG_ENDIAN
 #       define OSL_BIGENDIAN
 #   endif
-#elif defined SOLARIS
+#elif defined __sun
 #   include <sys/isa_defs.h>
 #   if defined _LITTLE_ENDIAN
 #       define OSL_LITENDIAN

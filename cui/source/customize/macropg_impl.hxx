@@ -20,10 +20,10 @@
 #ifndef INCLUDED_CUI_SOURCE_CUSTOMIZE_MACROPG_IMPL_HXX
 #define INCLUDED_CUI_SOURCE_CUSTOMIZE_MACROPG_IMPL_HXX
 
-class _SvxMacroTabPage_Impl
+class SvxMacroTabPage_Impl
 {
 public:
-    explicit _SvxMacroTabPage_Impl( const SfxItemSet& rAttrSet );
+    explicit SvxMacroTabPage_Impl( const SfxItemSet& rAttrSet );
 
     VclPtr<PushButton>                     pAssignPB;
     VclPtr<PushButton>                     pAssignComponentPB;
@@ -37,23 +37,21 @@ public:
     bool                        bIDEDialogMode;
 };
 
-class AssignComponentDialog : public ModalDialog
+class AssignComponentDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<Edit>           mpMethodEdit;
-    VclPtr<OKButton>       mpOKButton;
-
     OUString maURL;
 
-    DECL_LINK_TYPED(ButtonHandler, Button*, void);
+    std::unique_ptr<weld::Entry> mxMethodEdit;
+    std::unique_ptr<weld::Button> mxOKButton;
+
+    DECL_LINK(ButtonHandler, weld::Button&, void);
 
 public:
-    AssignComponentDialog( vcl::Window * pParent, const OUString& rURL );
-    virtual ~AssignComponentDialog();
-    virtual void dispose() override;
+    AssignComponentDialog(weld::Window* pParent, const OUString& rURL);
+    virtual ~AssignComponentDialog() override;
 
-    OUString getURL() const
-        { return maURL; }
+    const OUString& getURL() const { return maURL; }
 };
 
 #endif

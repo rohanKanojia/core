@@ -11,9 +11,9 @@
 #define INCLUDED_SC_SOURCE_UI_INC_CONDFORMATHELPER_HXX
 
 #include <rtl/ustring.hxx>
-#include "conditio.hxx"
+#include <address.hxx>
 
-#include "global.hxx"
+class ScConditionalFormat;
 
 enum ScCondFormatEntryType
 {
@@ -22,8 +22,7 @@ enum ScCondFormatEntryType
     DATABAR,
     FORMULA,
     ICONSET,
-    DATE,
-    COLLAPSE
+    DATE
 };
 
 class ScCondFormatHelper

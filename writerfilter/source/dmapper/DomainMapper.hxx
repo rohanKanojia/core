@@ -62,13 +62,8 @@ class DomainMapper_Impl;
 class ListsManager;
 class StyleSheetTable;
 class GraphicZOrderHelper;
+class GraphicNamingHelper;
 
-// different context types require different sprm handling (e.g. names)
-enum SprmType
-{
-    SPRM_DEFAULT,
-    SPRM_LIST
-};
 class DomainMapper : public LoggedProperties, public LoggedTable,
                     public BinaryObj, public LoggedStream
 {
@@ -80,8 +75,8 @@ public:
                  css::uno::Reference<css::lang::XComponent> const& xModel,
                  bool bRepairStorage,
                  SourceDocumentType eDocumentType,
-                 utl::MediaDescriptor& rMediaDesc);
-    virtual ~DomainMapper();
+                 utl::MediaDescriptor const & rMediaDesc);
+    virtual ~DomainMapper() override;
 
     // Stream
     virtual void markLastParagraphInSection() override;
@@ -91,28 +86,33 @@ public:
     virtual void data(const sal_uInt8* buf, size_t len,
                       writerfilter::Reference<Properties>::Pointer_t ref) override;
 
-    void sprmWithProps( Sprm& sprm, const ::std::shared_ptr<PropertyMap>& pContext );
+    void sprmWithProps( Sprm& sprm, const ::tools::SvRef<PropertyMap>& pContext );
 
-    void PushStyleSheetProperties( const ::std::shared_ptr<PropertyMap>& pStyleProperties, bool bAffectTableMngr = false );
+    void PushStyleSheetProperties( const ::tools::SvRef<PropertyMap>& pStyleProperties, bool bAffectTableMngr = false );
     void PopStyleSheetProperties( bool bAffectTableMngr = false );
 
-    void PushListProperties( const ::std::shared_ptr<PropertyMap>& pListProperties );
+    void PushListProperties( const ::tools::SvRef<PropertyMap>& pListProperties );
     void PopListProperties();
 
     bool IsOOXMLImport() const;
     bool IsRTFImport() const;
-    css::uno::Reference<css::lang::XMultiServiceFactory> GetTextFactory() const;
+    css::uno::Reference<css::lang::XMultiServiceFactory> const & GetTextFactory() const;
     css::uno::Reference<css::text::XTextRange> GetCurrentTextRange();
 
     OUString getOrCreateCharStyle( PropertyValueVector_t& rCharProperties, bool bAlwaysCreate );
-    std::shared_ptr< StyleSheetTable > GetStyleSheetTable( );
+    tools::SvRef< StyleSheetTable > const & GetStyleSheetTable( );
     GraphicZOrderHelper* graphicZOrderHelper();
+    GraphicNamingHelper& GetGraphicNamingHelper();
 
     /// Return the first from the pending (not inserted to the document) shapes, if there are any.
     css::uno::Reference<css::drawing::XShape> PopPendingShape();
 
     bool IsInHeaderFooter() const;
+    bool IsInTable() const;
     bool IsStyleSheetImport() const;
+
+    void hasControls( const bool bSet ) { mbHasControls = bSet; }
+
     /**
      @see DomainMapper_Impl::processDeferredCharacterProperties()
     */
@@ -123,9 +123,6 @@ public:
     void enableInteropGrabBag(const OUString& aName);
     /// Get the stored tokens and clear the internal storage.
     css::beans::PropertyValue getInteropGrabBag();
-
-    css::uno::Sequence<css::beans::PropertyValue> GetThemeFontLangProperties() const;
-    css::uno::Sequence<css::beans::PropertyValue> GetCompatSettings() const;
 
     void HandleRedline( Sprm& rSprm );
 
@@ -152,6 +149,8 @@ private:
     virtual void lcl_substream(Id name,
                                ::writerfilter::Reference<Stream>::Pointer_t ref) override;
     virtual void lcl_info(const std::string & info) override;
+    virtual void lcl_startGlossaryEntry() override;
+    virtual void lcl_endGlossaryEntry() override;
 
     // Properties
     virtual void lcl_attribute(Id Name, Value & val) override;
@@ -160,15 +159,18 @@ private:
     // Table
     virtual void lcl_entry(int pos, writerfilter::Reference<Properties>::Pointer_t ref) override;
 
-    static void handleUnderlineType(const Id nId, const ::std::shared_ptr<PropertyMap>& rContext);
-    void handleParaJustification(const sal_Int32 nIntValue, const ::std::shared_ptr<PropertyMap>& rContext, const bool bExchangeLeftRight);
+    static void handleUnderlineType(const Id nId, const ::tools::SvRef<PropertyMap>& rContext);
+    void handleParaJustification(const sal_Int32 nIntValue, const ::tools::SvRef<PropertyMap>& rContext, const bool bExchangeLeftRight);
     static bool getColorFromId(const Id, sal_Int32 &nColor);
     static sal_Int16 getEmphasisValue(const sal_Int32 nIntValue);
     static OUString getBracketStringFromEnum(const sal_Int32 nIntValue, const bool bIsPrefix = true);
     static css::style::TabAlign getTabAlignFromValue(const sal_Int32 nIntValue);
     static sal_Unicode getFillCharFromValue(const sal_Int32 nIntValue);
     bool mbIsSplitPara;
+    bool mbHasControls;
     std::unique_ptr< GraphicZOrderHelper > zOrderHelper;
+    std::unique_ptr<GraphicNamingHelper> m_pGraphicNamingHelper;
+    OUString m_sGlossaryEntryName;
 };
 
 } // namespace dmapper

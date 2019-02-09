@@ -25,7 +25,8 @@
 #include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <cppu/unotype.hxx>
-#include <boost/optional.hpp>
+
+namespace boost { template <class T> class optional; }
 
 namespace comphelper {
 
@@ -76,14 +77,14 @@ namespace detail {
             return unwrapArgsError( OUString( "No such argument available!"),
                                      nArg, args... );
         }
-        if( ! ( seq[nArg] >>= v ) )
+        if( !fromAny( seq[nArg], &v ) )
         {
             OUStringBuffer buf;
             buf.append( "Cannot extract ANY { " );
             buf.append( seq[nArg].getValueType().getTypeName() );
             buf.append( " } to " );
             buf.append( ::cppu::UnoType<T>::get().getTypeName() );
-            buf.append( static_cast<sal_Unicode>('!') );
+            buf.append( u'!' );
             return unwrapArgsError( buf.makeStringAndClear(), nArg, args... );
         }
         return unwrapArgs( seq, ++nArg, args... );

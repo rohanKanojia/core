@@ -70,15 +70,15 @@ private:
     PrinterOptions      maPrinterOptions;
     PrinterOptions      maPrintFileOptions;
 
-                        DECL_DLLPRIVATE_LINK_TYPED( ToggleOutputPrinterRBHdl, RadioButton&, void );
-                        DECL_DLLPRIVATE_LINK_TYPED( ToggleOutputPrintFileRBHdl, RadioButton&, void);
+                        DECL_DLLPRIVATE_LINK( ToggleOutputPrinterRBHdl, RadioButton&, void );
+                        DECL_DLLPRIVATE_LINK( ToggleOutputPrintFileRBHdl, RadioButton&, void);
 
-                        DECL_DLLPRIVATE_LINK_TYPED( ClickReduceTransparencyCBHdl, Button*, void );
-                        DECL_DLLPRIVATE_LINK_TYPED( ClickReduceGradientsCBHdl, Button*, void );
-                        DECL_DLLPRIVATE_LINK_TYPED( ClickReduceBitmapsCBHdl, Button*, void );
+                        DECL_DLLPRIVATE_LINK( ClickReduceTransparencyCBHdl, Button*, void );
+                        DECL_DLLPRIVATE_LINK( ClickReduceGradientsCBHdl, Button*, void );
+                        DECL_DLLPRIVATE_LINK( ClickReduceBitmapsCBHdl, Button*, void );
 
-                        DECL_DLLPRIVATE_LINK_TYPED( ToggleReduceGradientsStripesRBHdl, RadioButton&, void );
-                        DECL_DLLPRIVATE_LINK_TYPED( ToggleReduceBitmapsResolutionRBHdl, RadioButton&, void );
+                        DECL_DLLPRIVATE_LINK( ToggleReduceGradientsStripesRBHdl, RadioButton&, void );
+                        DECL_DLLPRIVATE_LINK( ToggleReduceBitmapsResolutionRBHdl, RadioButton&, void );
 
     SAL_DLLPRIVATE void ImplUpdateControls( const PrinterOptions* pCurrentOptions );
     SAL_DLLPRIVATE void ImplSaveControls( PrinterOptions* pCurrentOptions );
@@ -86,19 +86,19 @@ private:
 protected:
 
     using TabPage::DeactivatePage;
-    virtual sfxpg       DeactivatePage( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
 
 public:
 
                         SfxCommonPrintOptionsTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual             ~SfxCommonPrintOptionsTabPage();
+    virtual             ~SfxCommonPrintOptionsTabPage() override;
     virtual void        dispose() override;
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
     virtual vcl::Window*     GetParentLabeledBy( const vcl::Window* pLabel ) const override;
     virtual vcl::Window*     GetParentLabelFor( const vcl::Window* pLabel ) const override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* );
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* );
 };
 
 #endif // INCLUDED_SFX2_PRINTOPT_HXX

@@ -26,12 +26,10 @@ const mdds::mtv::element_t element_type_string = mdds::mtv::element_type_user_st
 // String block
 typedef mdds::mtv::default_element_block<element_type_string, OUString> string_block;
 
-struct custom_string_trait
+struct matrix_trait
 {
-    typedef OUString string_type;
     typedef string_block string_element_block;
-
-    static const mdds::mtv::element_t string_type_identifier = element_type_string;
+    typedef mdds::mtv::ushort_element_block integer_element_block;
 
     typedef mdds::mtv::custom_block_func1<string_block> element_block_func;
 };
@@ -48,12 +46,12 @@ MDDS_MTV_DEFINE_ELEMENT_CALLBACKS(OUString, svl::element_type_string, OUString()
 
 namespace svl {
 
-typedef mdds::multi_type_matrix<custom_string_trait> MatrixImplType;
+typedef mdds::multi_type_matrix<matrix_trait> MatrixImplType;
 
 struct GridPrinter::Impl
 {
     MatrixImplType maMatrix;
-    bool mbPrint;
+    bool const mbPrint;
 
     Impl( size_t nRows, size_t nCols, bool bPrint ) :
         maMatrix(nRows, nCols, OUString()), mbPrint(bPrint) {}
@@ -100,7 +98,7 @@ void GridPrinter::print( const char* pHeader ) const
     {
         aBuf.append("-");
         for (sal_Int32 i = 0; i < aColWidths[col]; ++i)
-            aBuf.append(sal_Unicode('-'));
+            aBuf.append(u'-');
         aBuf.append("-+");
     }
 
@@ -117,7 +115,7 @@ void GridPrinter::print( const char* pHeader ) const
             size_t nPadding = aColWidths[col] - aStr.getLength();
             aBuf.append(aStr);
             for (size_t i = 0; i < nPadding; ++i)
-                aBuf.append(sal_Unicode(' '));
+                aBuf.append(u' ');
             cout << aBuf.makeStringAndClear() << " | ";
         }
         cout << endl;

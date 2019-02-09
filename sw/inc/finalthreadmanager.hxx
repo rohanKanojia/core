@@ -21,14 +21,16 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_FINALTHREADMANAGER_HXX
 
 #include <sal/config.h>
-#include <cppuhelper/factory.hxx>
-#include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/util/XJobManager.hpp>
 #include <com/sun/star/frame/XTerminateListener2.hpp>
+#include <o3tl/deleter.hxx>
 #include <osl/mutex.hxx>
 #include <list>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 class CancelJobsThread;
 class TerminateOfficeThread;
@@ -42,30 +44,30 @@ public:
     explicit FinalThreadManager(css::uno::Reference< css::uno::XComponentContext > const & context);
 
     // css::lang::XServiceInfo:
-    virtual OUString SAL_CALL getImplementationName() throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // css::util::XJobManager:
-    virtual void SAL_CALL registerJob(const css::uno::Reference< css::util::XCancellable > & Job) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL releaseJob(const css::uno::Reference< css::util::XCancellable > & Job) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancelAllJobs() throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL registerJob(const css::uno::Reference< css::util::XCancellable > & Job) override;
+    virtual void SAL_CALL releaseJob(const css::uno::Reference< css::util::XCancellable > & Job) override;
+    virtual void SAL_CALL cancelAllJobs() override;
 
     // css::frame::XTerminateListener2
-    virtual void SAL_CALL cancelTermination( const css::lang::EventObject& Event ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL cancelTermination( const css::lang::EventObject& Event ) override;
 
     // css::frame::XTerminateListener (inherited via css::frame::XTerminateListener2)
-    virtual void SAL_CALL queryTermination( const css::lang::EventObject& Event ) throw (css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& Event ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL queryTermination( const css::lang::EventObject& Event ) override;
+    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& Event ) override;
 
     // ::com::sun:star::lang::XEventListener (inherited via css::frame::XTerminateListener)
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
 private:
-    FinalThreadManager(FinalThreadManager &) = delete;
-    void operator =(FinalThreadManager &) = delete;
+    FinalThreadManager(FinalThreadManager const &) = delete;
+    void operator =(FinalThreadManager const &) = delete;
 
-    virtual ~FinalThreadManager();
+    virtual ~FinalThreadManager() override;
 
     void registerAsListenerAtDesktop();
 
@@ -74,9 +76,9 @@ private:
     osl::Mutex maMutex;
 
     std::list< css::uno::Reference< css::util::XCancellable > > maThreads;
-    CancelJobsThread* mpCancelJobsThread;
+    std::unique_ptr<CancelJobsThread> mpCancelJobsThread;
     TerminateOfficeThread* mpTerminateOfficeThread;
-    SwPauseThreadStarting* mpPauseThreadStarting;
+    std::unique_ptr<SwPauseThreadStarting, o3tl::default_delete<SwPauseThreadStarting>> mpPauseThreadStarting;
 
     bool mbRegisteredAtDesktop;
 };

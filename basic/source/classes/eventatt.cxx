@@ -18,7 +18,6 @@
  */
 
 
-#include <osl/mutex.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
 
@@ -33,21 +32,16 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/resource/XStringResourceSupplier.hpp>
-#include <com/sun/star/resource/XStringResourceManager.hpp>
-#include <com/sun/star/script/XEventAttacher.hpp>
-#include <com/sun/star/script/XAllListener.hpp>
-#include <com/sun/star/script/XScriptEventsSupplier.hpp>
-#include <com/sun/star/script/XScriptEventsAttacher.hpp>
-#include <com/sun/star/script/ScriptEventDescriptor.hpp>
 #include <com/sun/star/script/XLibraryContainer.hpp>
 #include <com/sun/star/script/provider/theMasterScriptProviderFactory.hpp>
 #include <com/sun/star/script/provider/XScriptProviderSupplier.hpp>
 #include <com/sun/star/script/provider/XScriptProvider.hpp>
+#include <com/sun/star/io/XInputStreamProvider.hpp>
 
 #include <basic/basicmanagerrepository.hxx>
 #include <basic/basmgr.hxx>
 
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 #include <xmlscript/xmldlg_imexp.hxx>
 #include <sbunoobj.hxx>
@@ -59,10 +53,10 @@
 #include <eventatt.hxx>
 
 #include <cppuhelper/implbase.hxx>
+
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::script;
-using namespace ::com::sun::star::resource;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
@@ -70,8 +64,8 @@ using namespace ::com::sun::star::reflection;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::io;
 using namespace ::cppu;
-using namespace ::osl;
 
+namespace {
 
 void SFURL_firing_impl( const ScriptEvent& aScriptEvent, Any* pRet, const Reference< frame::XModel >& xModel )
 {
@@ -126,11 +120,11 @@ void SFURL_firing_impl( const ScriptEvent& aScriptEvent, Any* pRet, const Refere
         }
         catch ( const RuntimeException& re )
         {
-            SAL_INFO("basic", "Caught RuntimeException reason " << re.Message);
+            SAL_INFO("basic", "Caught RuntimeException reason " << re);
         }
         catch ( const Exception& e )
         {
-            SAL_INFO("basic", "Caught Exception reason " << e.Message);
+            SAL_INFO("basic", "Caught Exception reason " << e);
         }
 
 }
@@ -148,18 +142,15 @@ public:
         : maBasicRef( pBasic ), m_xModel( xModel ) {}
 
     // Methods of XAllListener
-    virtual void SAL_CALL firing(const ScriptEvent& aScriptEvent)
-        throw( RuntimeException, std::exception ) override;
-    virtual Any SAL_CALL approveFiring(const ScriptEvent& aScriptEvent)
-        throw( InvocationTargetException, RuntimeException, std::exception ) override;
+    virtual void SAL_CALL firing(const ScriptEvent& aScriptEvent) override;
+    virtual Any SAL_CALL approveFiring(const ScriptEvent& aScriptEvent) override;
 
     // Methods of XEventListener
-    virtual void SAL_CALL disposing(const EventObject& Source)
-        throw( RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing(const EventObject& Source) override;
 };
 
 // Methods XAllListener
-void BasicScriptListener_Impl::firing( const ScriptEvent& aScriptEvent ) throw ( RuntimeException, std::exception )
+void BasicScriptListener_Impl::firing( const ScriptEvent& aScriptEvent )
 {
     SolarMutexGuard g;
 
@@ -167,7 +158,6 @@ void BasicScriptListener_Impl::firing( const ScriptEvent& aScriptEvent ) throw (
 }
 
 Any BasicScriptListener_Impl::approveFiring( const ScriptEvent& aScriptEvent )
-    throw ( InvocationTargetException, RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
@@ -177,7 +167,7 @@ Any BasicScriptListener_Impl::approveFiring( const ScriptEvent& aScriptEvent )
 }
 
 // Methods XEventListener
-void BasicScriptListener_Impl::disposing(const EventObject& ) throw ( RuntimeException, std::exception )
+void BasicScriptListener_Impl::disposing(const EventObject& )
 {
     // TODO: ???
     //SolarMutexGuard aGuard;
@@ -196,9 +186,9 @@ void BasicScriptListener_Impl::firing_impl( const ScriptEvent& aScriptEvent, Any
         if( comphelper::string::getTokenCount(aMacro, '.') == 3 )
         {
             sal_Int32 nLast = 0;
-            OUString aFullLibName = aMacro.getToken( (sal_Int32)0, (sal_Unicode)'.', nLast );
+            OUString aFullLibName = aMacro.getToken( 0, '.', nLast );
 
-            sal_Int32 nIndex = aFullLibName.indexOf( (sal_Unicode)':' );
+            sal_Int32 nIndex = aFullLibName.indexOf( ':' );
             if (nIndex >= 0)
             {
                 aLocation = aFullLibName.copy( 0, nIndex );
@@ -208,7 +198,7 @@ void BasicScriptListener_Impl::firing_impl( const ScriptEvent& aScriptEvent, Any
             aMacro = aMacro.copy( nLast );
         }
 
-        SbxObject* p = maBasicRef;
+        SbxObject* p = maBasicRef.get();
         SbxObject* pParent = p->GetParent();
         SbxObject* pParentParent = pParent ? pParent->GetParent() : nullptr;
 
@@ -251,16 +241,15 @@ void BasicScriptListener_Impl::firing_impl( const ScriptEvent& aScriptEvent, Any
         }
         SbxVariable* pMethVar = nullptr;
         // Be still tolerant and make default search if no search basic exists
-        if( bSearchLib && xLibSearchBasic.Is() )
+        if( bSearchLib && xLibSearchBasic.is() )
         {
-            StarBASICRef xLibBasic;
             sal_Int16 nCount = xLibSearchBasic->GetObjects()->Count();
             for( sal_Int16 nObj = -1; nObj < nCount ; nObj++ )
             {
                 StarBASIC* pBasic;
                 if( nObj == -1 )
                 {
-                    pBasic = static_cast<StarBASIC*>(xLibSearchBasic);
+                    pBasic = xLibSearchBasic.get();
                 }
                 else
                 {
@@ -275,7 +264,7 @@ void BasicScriptListener_Impl::firing_impl( const ScriptEvent& aScriptEvent, Any
                         // Search only in the lib, not automatically in application basic
                         SbxFlagBits nFlags = pBasic->GetFlags();
                         pBasic->ResetFlag( SbxFlagBits::GlobalSearch );
-                        pMethVar = pBasic->Find( aMacro, SbxCLASS_DONTCARE );
+                        pMethVar = pBasic->Find( aMacro, SbxClassType::DontCare );
                         pBasic->SetFlags( nFlags );
                         break;
                     }
@@ -284,9 +273,9 @@ void BasicScriptListener_Impl::firing_impl( const ScriptEvent& aScriptEvent, Any
         }
 
         // Default: Be tolerant and search everywhere
-        if( (!pMethVar || nullptr == dynamic_cast<const SbMethod*>( pMethVar)) && maBasicRef.Is() )
+        if( (!pMethVar || dynamic_cast<const SbMethod*>( pMethVar) == nullptr) && maBasicRef.is() )
         {
-            pMethVar = maBasicRef->FindQualified( aMacro, SbxCLASS_DONTCARE );
+            pMethVar = maBasicRef->FindQualified( aMacro, SbxClassType::DontCare );
         }
         SbMethod* pMeth = dynamic_cast<SbMethod*>( pMethVar );
         if( !pMeth )
@@ -303,21 +292,21 @@ void BasicScriptListener_Impl::firing_impl( const ScriptEvent& aScriptEvent, Any
             for( sal_Int32 i = 0; i < nCnt; i++ )
             {
                 SbxVariableRef xVar = new SbxVariable( SbxVARIANT );
-                unoToSbxValue( static_cast<SbxVariable*>(xVar), pArgs[i] );
-                xArray->Put( xVar, sal::static_int_cast< sal_uInt16 >(i+1) );
+                unoToSbxValue( xVar.get(), pArgs[i] );
+                xArray->Put( xVar.get(), sal::static_int_cast< sal_uInt16 >(i+1) );
             }
         }
 
         // Call method
         SbxVariableRef xValue = pRet ? new SbxVariable : nullptr;
-        if( xArray.Is() )
+        if( xArray.is() )
         {
-            pMeth->SetParameters( xArray );
+            pMeth->SetParameters( xArray.get() );
         }
-        pMeth->Call( xValue );
+        pMeth->Call( xValue.get() );
         if( pRet )
         {
-            *pRet = sbxToUnoValue( xValue );
+            *pRet = sbxToUnoValue( xValue.get() );
         }
         pMeth->SetParameters( nullptr );
     }
@@ -332,10 +321,9 @@ css::uno::Reference< css::container::XNameContainer > implFindDialogLibForDialog
 {
     css::uno::Reference< css::container::XNameContainer > aRetDlgLib;
 
-    SbxVariable* pDlgLibContVar = pBasic->Find("DialogLibraries", SbxCLASS_OBJECT);
-    if( pDlgLibContVar && nullptr != dynamic_cast<const SbUnoObject*>( pDlgLibContVar) )
+    SbxVariable* pDlgLibContVar = pBasic->Find("DialogLibraries", SbxClassType::Object);
+    if( auto pDlgLibContUnoObj = dynamic_cast<SbUnoObject*>( pDlgLibContVar) )
     {
-        SbUnoObject* pDlgLibContUnoObj = static_cast<SbUnoObject*>(static_cast<SbxBase*>(pDlgLibContVar));
         Any aDlgLibContAny = pDlgLibContUnoObj->getUnoAny();
 
         Reference< XLibraryContainer > xDlgLibContNameAccess( aDlgLibContAny, UNO_QUERY );
@@ -416,11 +404,10 @@ css::uno::Reference< css::container::XNameContainer > implFindDialogLibForDialog
     return aDlgLib;
 }
 
-void RTL_Impl_CreateUnoDialog( StarBASIC* pBasic, SbxArray& rPar, bool bWrite )
-{
-    (void)pBasic;
-    (void)bWrite;
+}
 
+void RTL_Impl_CreateUnoDialog( SbxArray& rPar )
+{
     Reference< XComponentContext > xContext( comphelper::getProcessComponentContext() );
 
     // We need at least 1 parameter
@@ -432,12 +419,12 @@ void RTL_Impl_CreateUnoDialog( StarBASIC* pBasic, SbxArray& rPar, bool bWrite )
 
     // Get dialog
     SbxBaseRef pObj = rPar.Get( 1 )->GetObject();
-    if( !(pObj && nullptr != dynamic_cast<const SbUnoObject*>( &pObj )) )
+    if( !(pObj.is() && dynamic_cast<const SbUnoObject*>( pObj.get() ) != nullptr) )
     {
         StarBASIC::Error( ERRCODE_BASIC_BAD_ARGUMENT );
         return;
     }
-    SbUnoObject* pUnoObj = static_cast<SbUnoObject*>(static_cast<SbxBase*>(pObj));
+    SbUnoObject* pUnoObj = static_cast<SbUnoObject*>(pObj.get());
     Any aAnyISP = pUnoObj->getUnoAny();
     TypeClass eType = aAnyISP.getValueType().getTypeClass();
 
@@ -476,8 +463,8 @@ void RTL_Impl_CreateUnoDialog( StarBASIC* pBasic, SbxArray& rPar, bool bWrite )
             aDecorationAny >>= bDecoration;
             if( !bDecoration )
             {
-                xDlgModPropSet->setPropertyValue( aDecorationPropName, makeAny( true ) );
-                xDlgModPropSet->setPropertyValue( "Title", makeAny( OUString() ) );
+                xDlgModPropSet->setPropertyValue( aDecorationPropName, Any( true ) );
+                xDlgModPropSet->setPropertyValue( "Title", Any( OUString() ) );
             }
         }
         catch(const UnknownPropertyException& )
@@ -542,7 +529,7 @@ void RTL_Impl_CreateUnoDialog( StarBASIC* pBasic, SbxArray& rPar, bool bWrite )
        // Add dialog model to dispose vector
        Reference< XComponent > xDlgComponent( xCntrl->getModel(), UNO_QUERY );
        GetSbData()->pInst->getComponentVector().push_back( xDlgComponent );
-       // need ThisCompoent from calling script
+       // need ThisComponent from calling script
     }
     // preserve existing bad behaviour, it's possible... but probably
     // illegal to open 2 dialogs ( they ARE modal ) when this happens, sometimes
@@ -556,7 +543,7 @@ void RTL_Impl_CreateUnoDialog( StarBASIC* pBasic, SbxArray& rPar, bool bWrite )
     Any aRetVal;
     aRetVal <<= xCntrl;
     SbxVariableRef refVar = rPar.Get(0);
-    unoToSbxValue( static_cast<SbxVariable*>(refVar), aRetVal );
+    unoToSbxValue( refVar.get(), aRetVal );
 }
 
 

@@ -20,12 +20,16 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_CONFIGURATION_CONFIGURATIONCONTROLLERBROADCASTER_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_CONFIGURATION_CONFIGURATIONCONTROLLERBROADCASTER_HXX
 
-#include <com/sun/star/drawing/framework/XConfigurationChangeListener.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/ConfigurationChangeEvent.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 
 #include <unordered_map>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationChangeListener; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResource; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { struct ConfigurationChangeEvent; } } } } }
 
 namespace sd { namespace framework {
 
@@ -117,8 +121,7 @@ private:
     typedef std::vector<ListenerDescriptor> ListenerList;
     typedef std::unordered_map
         <OUString,
-         ListenerList,
-         OUStringHash> ListenerMap;
+         ListenerList> ListenerMap;
     ListenerMap maListenerMap;
 
     /** Broadcast the given event to all listeners in the given list.

@@ -20,20 +20,19 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_QUERYDESIGN_QUERYSIZETABWINUNDOACT_HXX
 
 #include "QueryDesignUndoAction.hxx"
-#include "dbu_qry.hrc"
+#include <strings.hrc>
 
 namespace dbaui
 {
 
     // OQuerySizeTabWinUndoAct - undo class to change size of TabWins
     class OTableWindow;
-    class OJoinSizeTabWinUndoAct : public OQueryDesignUndoAction
+    class OJoinSizeTabWinUndoAct final : public OQueryDesignUndoAction
     {
         Point           m_ptNextPosition;
         Size            m_szNextSize;
         VclPtr<OTableWindow>   m_pTabWin;
 
-    protected:
         inline void ToggleSizePosition();
 
     public:

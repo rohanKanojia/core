@@ -18,10 +18,10 @@
  */
 
 #include <vcl/wrkwin.hxx>
-#include <vcl/msgbox.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/stream.hxx>
 #include <sot/formats.hxx>
+#include <sal/log.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <sfx2/lnkbase.hxx>
 #include <sfx2/app.hxx>
@@ -39,7 +39,7 @@
 #include <sfx2/opengrf.hxx>
 #include <sfx2/sfxresid.hxx>
 #include "fileobj.hxx"
-#include "app.hrc"
+#include <sfx2/strings.hrc>
 #include <vcl/dibtools.hxx>
 
 #define FILETYPE_TEXT       1
@@ -49,27 +49,23 @@
 SvFileObject::SvFileObject()
     : nPostUserEventId(nullptr)
     , mxDelMed()
-    , pOldParent(nullptr)
     , nType(FILETYPE_TEXT)
     , bLoadAgain(true)
     , bSynchron(false)
     , bLoadError(false)
     , bWaitForData(false)
-    , bInNewData(false)
     , bDataReady(false)
-    , bNativFormat(false)
     , bClearMedium(false)
     , bStateChangeCalled(false)
-    , bInCallDownload(false)
 {
 }
 
 SvFileObject::~SvFileObject()
 {
-    if (xMed.Is())
+    if (xMed.is())
     {
         xMed->SetDoneLink( Link<void*,void>() );
-        xMed.Clear();
+        xMed.clear();
     }
     if (nPostUserEventId)
         Application::RemoveUserEvent(nPostUserEventId);
@@ -77,7 +73,7 @@ SvFileObject::~SvFileObject()
 
 bool SvFileObject::GetData( css::uno::Any & rData,
                                 const OUString & rMimeType,
-                                bool bGetSynchron )
+                                bool /*bGetSynchron*/ )
 {
     SotClipboardFormatId nFmt = SotExchange::RegisterFormatMimeType( rMimeType );
     switch( nType )
@@ -88,111 +84,21 @@ bool SvFileObject::GetData( css::uno::Any & rData,
             // The media in the application must be opened to lookup the
             // relative file links!! This is done through the link manager
             // of the Storage.
-            rData <<= OUString( sFileNm );
+            rData <<= sFileNm;
         }
         break;
 
     case FILETYPE_GRF:
-        if( !bLoadError )
+        if (SotClipboardFormatId::GDIMETAFILE == nFmt
+         || SotClipboardFormatId::BITMAP == nFmt
+         || SotClipboardFormatId::SVXB == nFmt)
         {
-            tools::SvRef<SfxMedium> xTmpMed;
-
-            if( SotClipboardFormatId::GDIMETAFILE == nFmt || SotClipboardFormatId::BITMAP == nFmt ||
-                SotClipboardFormatId::SVXB == nFmt )
-            {
-                Graphic aGrf;
-
-                // If the native format is requested, has to be reset at the
-                // end of the flag. Is solely in the sw/ndgrf.cxx used when
-                // the link is removed form GraphicNode.
-                bool bOldNativFormat = bNativFormat;
-
-                // If about to print, waiting for the data to be available
-                if( bGetSynchron )
-                {
-                    // call a LoadFile every second time to test the loading
-                    if( !xMed.Is() )
-                        LoadFile_Impl();
-
-                    if( !bInCallDownload )
-                    {
-                        xTmpMed = xMed;
-                        while( bWaitForData )
-                            Application::Reschedule();
-
-                        xMed = xTmpMed;
-                        bClearMedium = true;
-                    }
-                }
-
-                if( !bWaitForData && ( xMed.Is() ||  // was loaded as URL
-                      ( bSynchron && LoadFile_Impl() && xMed.Is() ) ) )
-                {
-                    // If it was loaded from the Internet, do not retry
-                    if( !bGetSynchron )
-                        bLoadAgain = !xMed->IsRemote();
-                    bLoadError = !GetGraphic_Impl( aGrf, xMed->GetInStream() );
-                }
-                else if( !LoadFile_Impl() ||
-                        !GetGraphic_Impl( aGrf, xMed.Is() ? xMed->GetInStream() : nullptr ))
-                {
-                    if( !xMed.Is() )
-                        break;
-                    aGrf.SetDefaultType();
-                }
-
-                if( SotClipboardFormatId::SVXB != nFmt )
-                    nFmt = (bLoadError || GRAPHIC_BITMAP == aGrf.GetType())
-                                ? SotClipboardFormatId::BITMAP
-                                : SotClipboardFormatId::GDIMETAFILE;
-
-                SvMemoryStream aMemStm( 0, 65535 );
-                switch ( nFmt )
-                {
-                case SotClipboardFormatId::SVXB:
-                    if( GRAPHIC_NONE != aGrf.GetType() )
-                    {
-                        aMemStm.SetVersion( SOFFICE_FILEFORMAT_50 );
-                        WriteGraphic( aMemStm, aGrf );
-                    }
-                    break;
-
-                case SotClipboardFormatId::BITMAP:
-                {
-                    const Bitmap aBitmap(aGrf.GetBitmap());
-
-                    if(!aBitmap.IsEmpty())
-                    {
-                        WriteDIB(aBitmap, aMemStm, false, true);
-                    }
-
-                    break;
-                }
-
-                default:
-                    if( aGrf.GetGDIMetaFile().GetActionSize() )
-                    {
-                        GDIMetaFile aMeta( aGrf.GetGDIMetaFile() );
-                        aMeta.Write( aMemStm );
-                    }
-                }
-                rData <<= css::uno::Sequence< sal_Int8 >( static_cast<sal_Int8 const *>(aMemStm.GetData()),
-                                        aMemStm.Seek( STREAM_SEEK_TO_END ) );
-
-                bNativFormat = bOldNativFormat;
-
-                // Everything ready?
-                if( xMed.Is() && !bSynchron && bClearMedium )
-                {
-                    xMed.Clear();
-                    bClearMedium = false;
-                }
-            }
+            rData <<= sFileNm;
         }
         break;
     case FILETYPE_OBJECT:
         // TODO/LATER: possibility to insert a new object
-        rData <<= OUString( sFileNm );
+        rData <<= sFileNm;
         break;
     }
     return true/*0 != aTypeList.Count()*/;
@@ -209,7 +115,7 @@ bool SvFileObject::Connect( sfx2::SvBaseLink* pLink )
     if( OBJECT_CLIENT_GRF == pLink->GetObjType() )
     {
         SfxObjectShellRef pShell = pLink->GetLinkManager()->GetPersist();
-        if( pShell.Is() )
+        if( pShell.is() )
         {
             if( pShell->IsAbortingImport() )
                 return false;
@@ -249,11 +155,11 @@ bool SvFileObject::Connect( sfx2::SvBaseLink* pLink )
 bool SvFileObject::LoadFile_Impl()
 {
     // We are still at Loading!!
-    if( bWaitForData || !bLoadAgain || xMed.Is() )
+    if( bWaitForData || !bLoadAgain || xMed.is() )
         return false;
 
     // at the moment on the current DocShell
-    xMed = new SfxMedium( sFileNm, sReferer, STREAM_STD_READ );
+    xMed = new SfxMedium( sFileNm, sReferer, StreamMode::STD_READ );
     SvLinkSource::StreamToLoadFrom aStreamToLoadFrom =
         getStreamToLoadFrom();
     xMed->setStreamToLoadFrom(
@@ -262,22 +168,20 @@ bool SvFileObject::LoadFile_Impl()
 
     if( !bSynchron )
     {
-        bLoadAgain = bDataReady = bInNewData = false;
+        bLoadAgain = bDataReady = false;
         bWaitForData = true;
 
         tools::SvRef<SfxMedium> xTmpMed = xMed;
-        bInCallDownload = true;
         xMed->Download( LINK( this, SvFileObject, LoadGrfReady_Impl ) );
-        bInCallDownload = false;
 
-        bClearMedium = !xMed.Is();
+        bClearMedium = !xMed.is();
         if( bClearMedium )
             xMed = xTmpMed;  // If already finished in Download
         return bDataReady;
     }
 
     bWaitForData = true;
-    bDataReady = bInNewData = false;
+    bDataReady = false;
     xMed->Download();
     bLoadAgain = !xMed->IsRemote();
     bWaitForData = false;
@@ -289,47 +193,6 @@ bool SvFileObject::LoadFile_Impl()
 }
 
 
-bool SvFileObject::GetGraphic_Impl( Graphic& rGrf, SvStream* pStream )
-{
-    GraphicFilter& rGF = GraphicFilter::GetGraphicFilter();
-
-    const sal_uInt16 nFilter = !sFilter.isEmpty() && rGF.GetImportFormatCount()
-                            ? rGF.GetImportFormatNumber( sFilter )
-                            : GRFILTER_FORMAT_DONTKNOW;
-
-    int nRes;
-
-    // To avoid that a native link is created
-    if( !rGrf.IsLink() &&
-        !rGrf.GetContext() && !bNativFormat )
-        rGrf.SetLink( GfxLink() );
-
-    if( !pStream )
-        nRes = xMed.Is() ? GRFILTER_OPENERROR
-                         : rGF.ImportGraphic( rGrf, INetURLObject(sFileNm),
-                            nFilter );
-    else
-    {
-        pStream->Seek( STREAM_SEEK_TO_BEGIN );
-
-        // #i123042# for e.g. SVG the path is needed, see same TaskID in svx for more info
-        nRes = rGF.ImportGraphic( rGrf, sFileNm, *pStream, nFilter );
-    }
-
-    if( pStream && ERRCODE_IO_PENDING == pStream->GetError() )
-        pStream->ResetError();
-
-    if( nRes )
-    {
-        if( xMed.Is() && !pStream )
-            SAL_WARN( "sfx.appl", "Graphic error [" << nRes << "] - [" << xMed->GetPhysicalName() << "] URL[" << sFileNm << "]" );
-        else
-            SAL_WARN( "sfx.appl", "Graphic error [" << nRes << "] - [" << sFileNm << "]" );
-    }
-
-    return GRFILTER_OK == nRes;
-}
-
 /** detect the filter of the given file
 
     @param _rURL
@@ -337,7 +200,7 @@ bool SvFileObject::GetGraphic_Impl( Graphic& rGrf, SvStream* pStream )
         If the URL doesn't denote a valid (existent and accessible) file, the
         request is silently dropped.
 */
-OUString impl_getFilter( const OUString& _rURL )
+static OUString impl_getFilter( const OUString& _rURL )
 {
     OUString sFilter;
     if ( _rURL.isEmpty() )
@@ -351,10 +214,10 @@ OUString impl_getFilter( const OUString& _rURL )
         if ( xTypeDetection.is() )
         {
             utl::MediaDescriptor aDescr;
-            aDescr[ utl::MediaDescriptor::PROP_URL() ] <<= OUString( _rURL );
+            aDescr[ utl::MediaDescriptor::PROP_URL() ] <<= _rURL;
             css::uno::Sequence< css::beans::PropertyValue > aDescrList =
                 aDescr.getAsConstPropertyValueList();
-            OUString sType = xTypeDetection->queryTypeByDescriptor( aDescrList, sal_True );
+            OUString sType = xTypeDetection->queryTypeByDescriptor( aDescrList, true );
             if ( !sType.isEmpty() )
             {
                 // Honor a selected/detected filter.
@@ -390,84 +253,79 @@ OUString impl_getFilter( const OUString& _rURL )
     return sFilter;
 }
 
-void SvFileObject::Edit( vcl::Window* pParent, sfx2::SvBaseLink* pLink, const Link<const OUString&, void>& rEndEditHdl )
+void SvFileObject::Edit(weld::Window* pParent, sfx2::SvBaseLink* pLink, const Link<const OUString&, void>& rEndEditHdl)
 {
     aEndEditLink = rEndEditHdl;
     OUString sFile, sRange, sTmpFilter;
-    if( pLink && pLink->GetLinkManager() )
+    if( !pLink || !pLink->GetLinkManager() )
+        return;
+
+    sfx2::LinkManager::GetDisplayNames( pLink, nullptr, &sFile, &sRange, &sTmpFilter );
+
+    switch( pLink->GetObjType() )
     {
-        sfx2::LinkManager::GetDisplayNames( pLink, nullptr, &sFile, &sRange, &sTmpFilter );
-
-        switch( pLink->GetObjType() )
+        case OBJECT_CLIENT_GRF:
         {
-            case OBJECT_CLIENT_GRF:
+            nType = FILETYPE_GRF;       // If not set already
+
+            SvxOpenGraphicDialog aDlg(SfxResId(RID_SVXSTR_EDITGRFLINK), pParent);
+            aDlg.EnableLink(false);
+            aDlg.SetPath( sFile, true );
+            aDlg.SetCurrentFilter( sTmpFilter );
+
+            if( !aDlg.Execute() )
             {
-                nType = FILETYPE_GRF;       // If not set already
+                sFile = aDlg.GetPath()
+                    + OUStringLiteral1(sfx2::cTokenSeparator)
+                    + OUStringLiteral1(sfx2::cTokenSeparator)
+                    + aDlg.GetDetectedFilter();
 
-                SvxOpenGraphicDialog aDlg(SfxResId(RID_SVXSTR_EDITGRFLINK).toString());
-                aDlg.EnableLink(false);
-                aDlg.SetPath( sFile, true );
-                aDlg.SetCurrentFilter( sTmpFilter );
-
-                if( !aDlg.Execute() )
-                {
-                    sFile = aDlg.GetPath();
-                    sFile += OUString(::sfx2::cTokenSeparator);
-                    sFile += OUString(::sfx2::cTokenSeparator);
-                    sFile += aDlg.GetCurrentFilter();
-
-                    aEndEditLink.Call( sFile );
-                }
-                else
-                    sFile.clear();
+                aEndEditLink.Call( sFile );
             }
-            break;
-
-            case OBJECT_CLIENT_OLE:
-            {
-                nType = FILETYPE_OBJECT; // if not set already
-                pOldParent = Application::GetDefDialogParent();
-                Application::SetDefDialogParent( pParent );
-
-                ::sfx2::FileDialogHelper & rFileDlg =
-                    pLink->GetInsertFileDialog( OUString() );
-                rFileDlg.StartExecuteModal(
-                        LINK( this, SvFileObject, DialogClosedHdl ) );
-            }
-            break;
-
-            case OBJECT_CLIENT_FILE:
-            {
-                nType = FILETYPE_TEXT; // if not set already
-                pOldParent = Application::GetDefDialogParent();
-                Application::SetDefDialogParent( pParent );
-
-                OUString sFactory;
-                SfxObjectShell* pShell = pLink->GetLinkManager()->GetPersist();
-                if ( pShell )
-                    sFactory = pShell->GetFactory().GetFactoryName();
-
-                ::sfx2::FileDialogHelper & rFileDlg =
-                    pLink->GetInsertFileDialog(sFactory);
-                rFileDlg.StartExecuteModal(
-                        LINK( this, SvFileObject, DialogClosedHdl ) );
-            }
-            break;
-
-            default:
+            else
                 sFile.clear();
         }
+        break;
+
+        case OBJECT_CLIENT_OLE:
+        {
+            nType = FILETYPE_OBJECT; // if not set already
+
+            ::sfx2::FileDialogHelper & rFileDlg =
+                pLink->GetInsertFileDialog( OUString() );
+            rFileDlg.StartExecuteModal(
+                    LINK( this, SvFileObject, DialogClosedHdl ) );
+        }
+        break;
+
+        case OBJECT_CLIENT_FILE:
+        {
+            nType = FILETYPE_TEXT; // if not set already
+
+            OUString sFactory;
+            SfxObjectShell* pShell = pLink->GetLinkManager()->GetPersist();
+            if ( pShell )
+                sFactory = pShell->GetFactory().GetFactoryName();
+
+            ::sfx2::FileDialogHelper & rFileDlg =
+                pLink->GetInsertFileDialog(sFactory);
+            rFileDlg.StartExecuteModal(
+                    LINK( this, SvFileObject, DialogClosedHdl ) );
+        }
+        break;
+
+        default:
+            sFile.clear();
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SvFileObject, LoadGrfReady_Impl, void*, void )
+IMPL_LINK_NOARG( SvFileObject, LoadGrfReady_Impl, void*, void )
 {
     // When we come form here there it can not be an error no more.
     bLoadError = false;
     bWaitForData = false;
-    bInCallDownload = false;
 
-    if( !bInNewData && !bDataReady )
+    if( !bDataReady )
     {
         // Graphic is finished, also send DataChanged from Status change
         bDataReady = true;
@@ -480,37 +338,35 @@ IMPL_LINK_NOARG_TYPED( SvFileObject, LoadGrfReady_Impl, void*, void )
     if( bDataReady )
     {
         bLoadAgain = true;
-        if( xMed.Is() )
+        if( xMed.is() )
         {
             xMed->SetDoneLink( Link<void*,void>() );
             mxDelMed = xMed;
             nPostUserEventId = Application::PostUserEvent(
                         LINK( this, SvFileObject, DelMedium_Impl ));
-            xMed.Clear();
+            xMed.clear();
         }
     }
 }
 
-IMPL_LINK_NOARG_TYPED( SvFileObject, DelMedium_Impl, void*, void )
+IMPL_LINK_NOARG( SvFileObject, DelMedium_Impl, void*, void )
 {
     nPostUserEventId = nullptr;
-    mxDelMed.Clear();
+    mxDelMed.clear();
 }
 
-IMPL_LINK_TYPED( SvFileObject, DialogClosedHdl, sfx2::FileDialogHelper*, _pFileDlg, void )
+IMPL_LINK( SvFileObject, DialogClosedHdl, sfx2::FileDialogHelper*, _pFileDlg, void )
 {
     OUString sFile;
-    Application::SetDefDialogParent( pOldParent );
 
     if ( FILETYPE_TEXT == nType || FILETYPE_OBJECT == nType )
     {
         if ( _pFileDlg && _pFileDlg->GetError() == ERRCODE_NONE )
         {
             OUString sURL( _pFileDlg->GetPath() );
-            sFile = sURL;
-            sFile += OUString(::sfx2::cTokenSeparator);
-            sFile += OUString(::sfx2::cTokenSeparator);
-            sFile += impl_getFilter( sURL );
+            sFile = sURL + OUStringLiteral1(sfx2::cTokenSeparator)
+                + OUStringLiteral1(sfx2::cTokenSeparator)
+                + impl_getFilter( sURL );
         }
     }
     else
@@ -521,14 +377,8 @@ IMPL_LINK_TYPED( SvFileObject, DialogClosedHdl, sfx2::FileDialogHelper*, _pFileD
     aEndEditLink.Call( sFile );
 }
 
-/*  [Description]
-
+/*
     The method determines whether the data-object can be read from a DDE.
-
-    The following can be returned:
-        ERRCODE_NONE                    if it has been completely read
-        ERRCODE_SO_PENDING              if it has not been completely read
-        ERRCODE_SO_FALSE                otherwise
 */
 bool SvFileObject::IsPending() const
 {
@@ -544,7 +394,7 @@ bool SvFileObject::IsDataComplete() const
     {
         SvFileObject* pThis = const_cast<SvFileObject*>(this);
         if( bDataReady ||
-            ( bSynchron && pThis->LoadFile_Impl() && xMed.Is() ) )
+            ( bSynchron && pThis->LoadFile_Impl() && xMed.is() ) )
             bRet = true;
         else
         {
@@ -575,10 +425,8 @@ void SvFileObject::SendStateChg_Impl( sfx2::LinkManager::LinkState nState )
 {
     if( !bStateChangeCalled && HasDataLinks() )
     {
-        css::uno::Any aAny;
-        aAny <<= OUString::number( nState );
         DataChanged( SotExchange::GetFormatName(
-                        sfx2::LinkManager::RegisterStatusInfoId()), aAny );
+                        sfx2::LinkManager::RegisterStatusInfoId()), css::uno::Any(OUString::number( nState )) );
         bStateChangeCalled = true;
     }
 }

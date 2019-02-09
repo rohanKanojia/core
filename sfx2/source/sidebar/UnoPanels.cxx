@@ -14,7 +14,7 @@
 #include <sfx2/sidebar/SidebarController.hxx>
 
 #include <sfx2/sidebar/UnoDecks.hxx>
-
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/ui/XPanel.hpp>
 #include <sfx2/sidebar/UnoPanel.hxx>
 
@@ -35,7 +35,6 @@ SidebarController* SfxUnoPanels::getSidebarController()
 }
 
 OUString SAL_CALL SfxUnoPanels::getDeckId()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -45,28 +44,18 @@ OUString SAL_CALL SfxUnoPanels::getDeckId()
 // XNameAccess
 
 uno::Any SAL_CALL SfxUnoPanels::getByName( const OUString& aName )
-                                throw(container::NoSuchElementException,
-                                    lang::WrappedTargetException,
-                                    uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    uno::Any aRet;
-
-    if (hasByName(aName))
-    {
-        uno::Reference<ui::XPanel> xPanel = new SfxUnoPanel(xFrame, aName, mDeckId);
-        aRet <<= xPanel;
-    }
-    else
+    if (!hasByName(aName))
         throw container::NoSuchElementException();
 
-    return aRet;
+    uno::Reference<ui::XPanel> xPanel = new SfxUnoPanel(xFrame, aName, mDeckId);
+    return uno::Any(xPanel);
 }
 
 
 uno::Sequence< OUString > SAL_CALL SfxUnoPanels::getElementNames()
-                                throw(uno::RuntimeException, std::exception)
 {
 
     SolarMutexGuard aGuard;
@@ -87,13 +76,11 @@ uno::Sequence< OUString > SAL_CALL SfxUnoPanels::getElementNames()
 
         long n = 0;
 
-        for (ResourceManager::PanelContextDescriptorContainer::const_iterator
-            iPanel(aPanels.begin()), iEnd(aPanels.end());
-            iPanel!=iEnd; ++iPanel)
-            {
-                panelList[n] = iPanel->msId;
-                n++;
-            }
+        for (const auto& rPanel : aPanels)
+        {
+            panelList[n] = rPanel.msId;
+            n++;
+        }
     }
 
     return panelList;
@@ -101,7 +88,6 @@ uno::Sequence< OUString > SAL_CALL SfxUnoPanels::getElementNames()
 }
 
 sal_Bool SAL_CALL SfxUnoPanels::hasByName( const OUString& aName )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -116,13 +102,13 @@ sal_Bool SAL_CALL SfxUnoPanels::hasByName( const OUString& aName )
                                                       mDeckId,
                                                       xFrame->getController());
 
-        for (ResourceManager::PanelContextDescriptorContainer::const_iterator
-            iPanel(aPanels.begin()), iEnd(aPanels.end());
-            iPanel!=iEnd; ++iPanel)
-            {
-                if (iPanel->msId == aName)
-                    return true;
-            }
+        bool bIsDocumentReadOnly = pSidebarController->IsDocumentReadOnly();
+
+        return std::any_of(aPanels.begin(), aPanels.end(),
+            [&bIsDocumentReadOnly, &aName](const ResourceManager::PanelContextDescriptor& rPanel) {
+                return (!bIsDocumentReadOnly || rPanel.mbShowForReadOnlyDocuments) // Determine if the panel can be displayed.
+                    && (rPanel.msId == aName);
+            });
     }
 
     // nothing found
@@ -132,7 +118,7 @@ sal_Bool SAL_CALL SfxUnoPanels::hasByName( const OUString& aName )
 
 // XIndexAccess
 
-sal_Int32 SAL_CALL SfxUnoPanels::getCount() throw(uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL SfxUnoPanels::getCount()
 {
     SolarMutexGuard aGuard;
 
@@ -141,9 +127,6 @@ sal_Int32 SAL_CALL SfxUnoPanels::getCount() throw(uno::RuntimeException, std::ex
 }
 
 uno::Any SAL_CALL SfxUnoPanels::getByIndex( sal_Int32 Index )
-                                throw(lang::IndexOutOfBoundsException,
-                                    lang::WrappedTargetException,
-                                    uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -162,14 +145,13 @@ uno::Any SAL_CALL SfxUnoPanels::getByIndex( sal_Int32 Index )
 
 // XElementAccess
 uno::Type SAL_CALL SfxUnoPanels::getElementType()
-                                throw(css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     return uno::Type();
 }
 
-sal_Bool SAL_CALL SfxUnoPanels::hasElements() throw(css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SfxUnoPanels::hasElements()
 {
     SolarMutexGuard aGuard;
 

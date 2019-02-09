@@ -17,17 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sddll.hxx"
+#include <sddll.hxx>
 
-#include <com/sun/star/frame/XFrame.hpp>
-#include <sfx2/imagemgr.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
-
-#include <tools/rcid.h>
 
 #include <vcl/help.hxx>
 #include <vcl/lazydelete.hxx>
@@ -37,53 +33,71 @@
 #include <svx/sdr/overlay/overlayanimatedbitmapex.hxx>
 #include <svx/sdr/overlay/overlaybitmapex.hxx>
 #include <svx/sdr/overlay/overlaymanager.hxx>
+#include <svx/sdr/contact/objectcontact.hxx>
 #include <svx/svxids.hrc>
 
-#include "view/viewoverlaymanager.hxx"
+#include <view/viewoverlaymanager.hxx>
 
-#include "res_bmp.hrc"
-#include "DrawDocShell.hxx"
-#include "DrawViewShell.hxx"
-#include "DrawController.hxx"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "sdresid.hxx"
-#include "EventMultiplexer.hxx"
-#include "ViewShellManager.hxx"
-#include "helpids.h"
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "smarttag.hxx"
+
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <DrawController.hxx>
+#include <strings.hrc>
+#include <bitmaps.hlst>
+#include <sdresid.hxx>
+#include <EventMultiplexer.hxx>
+#include <ViewShellBase.hxx>
+#include <ViewShellManager.hxx>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <smarttag.hxx>
 
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::frame;
 
 namespace sd {
 
 class ImageButtonHdl;
 
 static const sal_uInt16 gButtonSlots[] = { SID_INSERT_TABLE, SID_INSERT_DIAGRAM, SID_INSERT_GRAPHIC, SID_INSERT_AVMEDIA };
-static const sal_uInt16 gButtonToolTips[] = { STR_INSERT_TABLE, STR_INSERT_CHART, STR_INSERT_PICTURE, STR_INSERT_MOVIE };
+static const char* gButtonToolTips[] = { STR_INSERT_TABLE, STR_INSERT_CHART, STR_INSERT_PICTURE, STR_INSERT_MOVIE };
 
-static BitmapEx loadImageResource( sal_uInt16 nId )
+static const OUStringLiteral aSmallPlaceHolders[] =
 {
-    SdResId aResId( nId );
-    aResId.SetRT( RSC_BITMAP );
+    BMP_PLACEHOLDER_TABLE_SMALL,
+    BMP_PLACEHOLDER_CHART_SMALL,
+    BMP_PLACEHOLDER_IMAGE_SMALL,
+    BMP_PLACEHOLDER_MOVIE_SMALL,
+    BMP_PLACEHOLDER_TABLE_SMALL_HOVER,
+    BMP_PLACEHOLDER_CHART_SMALL_HOVER,
+    BMP_PLACEHOLDER_IMAGE_SMALL_HOVER,
+    BMP_PLACEHOLDER_MOVIE_SMALL_HOVER
+};
 
-    return BitmapEx( aResId );
-}
+static const OUStringLiteral aBigPlaceHolders[] =
+{
+    BMP_PLACEHOLDER_TABLE_LARGE,
+    BMP_PLACEHOLDER_CHART_LARGE,
+    BMP_PLACEHOLDER_IMAGE_LARGE,
+    BMP_PLACEHOLDER_MOVIE_LARGE,
+    BMP_PLACEHOLDER_TABLE_LARGE_HOVER,
+    BMP_PLACEHOLDER_CHART_LARGE_HOVER,
+    BMP_PLACEHOLDER_IMAGE_LARGE_HOVER,
+    BMP_PLACEHOLDER_MOVIE_LARGE_HOVER
+};
 
 static BitmapEx* getButtonImage( int index, bool large )
 {
-    static vcl::DeleteOnDeinit< BitmapEx > gSmallButtonImages[BMP_PLACEHOLDER_SMALL_END - BMP_PLACEHOLDER_SMALL_START] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-    static vcl::DeleteOnDeinit< BitmapEx > gLargeButtonImages[BMP_PLACEHOLDER_LARGE_END - BMP_PLACEHOLDER_LARGE_START] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+    static vcl::DeleteOnDeinit< BitmapEx > gSmallButtonImages[SAL_N_ELEMENTS(aSmallPlaceHolders)] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+    static vcl::DeleteOnDeinit< BitmapEx > gLargeButtonImages[SAL_N_ELEMENTS(aBigPlaceHolders)] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+
+    assert(SAL_N_ELEMENTS(aSmallPlaceHolders) == SAL_N_ELEMENTS(aBigPlaceHolders));
 
     if( !gSmallButtonImages[0].get() )
     {
-        for( sal_uInt16 i = 0; i < (BMP_PLACEHOLDER_SMALL_END-BMP_PLACEHOLDER_SMALL_START); i++ )
+        for (size_t i = 0; i < SAL_N_ELEMENTS(aSmallPlaceHolders); i++ )
         {
-            gSmallButtonImages[i].set( new BitmapEx( loadImageResource( BMP_PLACEHOLDER_SMALL_START + i ) ) );
-            gLargeButtonImages[i].set( new BitmapEx( loadImageResource( BMP_PLACEHOLDER_LARGE_START + i ) ) );
+            gSmallButtonImages[i].set(std::make_unique<BitmapEx>(aSmallPlaceHolders[i]));
+            gLargeButtonImages[i].set(std::make_unique<BitmapEx>(aBigPlaceHolders[i]));
         }
     }
 
@@ -104,7 +118,6 @@ class ChangePlaceholderTag : public SmartTag
     friend class ImageButtonHdl;
 public:
     ChangePlaceholderTag( ::sd::View& rView, SdrObject& rPlaceholderObj );
-    virtual ~ChangePlaceholderTag();
 
     /** returns true if the SmartTag handled the event. */
     virtual bool MouseButtonDown( const MouseEvent&, SmartHdl& ) override;
@@ -112,45 +125,44 @@ public:
     /** returns true if the SmartTag consumes this event. */
     virtual bool KeyInput( const KeyEvent& rKEvt ) override;
 
-    BitmapEx createOverlayImage( int nHighlight = -1 );
+    BitmapEx createOverlayImage( int nHighlight );
 
 protected:
     virtual void addCustomHandles( SdrHdlList& rHandlerList ) override;
-    virtual void disposing() override;
-    virtual void select() override;
-    virtual void deselect() override;
 
 private:
-    SdrObjectWeakRef    mxPlaceholderObj;
+    ::tools::WeakReference<SdrObject>    mxPlaceholderObj;
 };
 
 class ImageButtonHdl : public SmartHdl
 {
 public:
     ImageButtonHdl( const SmartTagReference& xTag, /* sal_uInt16 nSID, const Image& rImage, const Image& rImageMO, */ const Point& rPnt );
-    virtual ~ImageButtonHdl();
+    virtual ~ImageButtonHdl() override;
     virtual void CreateB2dIAObject() override;
     virtual bool IsFocusHdl() const override;
     virtual Pointer GetPointer() const override;
     virtual bool isMarkable() const override;
 
     virtual void onMouseEnter(const MouseEvent& rMEvt) override;
+    virtual void onHelpRequest(const HelpEvent& rHEvt) override;
     virtual void onMouseLeave() override;
 
     int getHighlightId() const { return mnHighlightId; }
 
+    void ShowTip();
     static void HideTip();
 
 private:
-    rtl::Reference< ChangePlaceholderTag > mxTag;
+    rtl::Reference< ChangePlaceholderTag > mxChangePlaceholderTag;
 
     int mnHighlightId;
     Size maImageSize;
 };
 
 ImageButtonHdl::ImageButtonHdl( const SmartTagReference& xTag /*, sal_uInt16 nSID, const Image& rImage, const Image& rImageMO*/, const Point& rPnt )
-: SmartHdl( xTag, rPnt )
-, mxTag( dynamic_cast< ChangePlaceholderTag* >( xTag.get() ) )
+: SmartHdl( xTag, rPnt, SdrHdlKind::SmartTag )
+, mxChangePlaceholderTag( dynamic_cast< ChangePlaceholderTag* >( xTag.get() ) )
 , mnHighlightId( -1 )
 , maImageSize( 42, 42 )
 {
@@ -166,9 +178,37 @@ void ImageButtonHdl::HideTip()
     Help::HideBalloonAndQuickHelp();
 }
 
+void ImageButtonHdl::ShowTip()
+{
+    if (!pHdlList || !pHdlList->GetView() || mnHighlightId == -1)
+        return;
+
+    OutputDevice* pDev = pHdlList->GetView()->GetFirstOutputDevice();
+    if( pDev == nullptr )
+        pDev = Application::GetDefaultDevice();
+
+    OUString aHelpText(SdResId(gButtonToolTips[mnHighlightId]));
+    Point aHelpPos(pDev->LogicToPixel(GetPos()));
+    if (mnHighlightId == 1)
+        aHelpPos.Move(maImageSize.Width(), 0);
+    else if (mnHighlightId == 2)
+        aHelpPos.Move(0, maImageSize.Height());
+    else if (mnHighlightId == 3)
+        aHelpPos.Move(maImageSize.Width(), maImageSize.Height());
+    ::tools::Rectangle aLogicPix(aHelpPos, maImageSize);
+    vcl::Window* pWindow = static_cast<vcl::Window*>(pHdlList->GetView()->GetFirstOutputDevice());
+    ::tools::Rectangle aScreenRect(pWindow->OutputToScreenPixel(aLogicPix.TopLeft()),
+                                   pWindow->OutputToScreenPixel(aLogicPix.BottomRight()));
+    Help::ShowQuickHelp(pWindow, aScreenRect, aHelpText);
+}
+
+void ImageButtonHdl::onHelpRequest(const HelpEvent& /*rHEvt*/)
+{
+    ShowTip();
+}
+
 void ImageButtonHdl::onMouseEnter(const MouseEvent& rMEvt)
 {
-
     if( pHdlList && pHdlList->GetView())
     {
         int nHighlightId = 0;
@@ -188,15 +228,8 @@ void ImageButtonHdl::onMouseEnter(const MouseEvent& rMEvt)
 
             mnHighlightId = nHighlightId;
 
-            if( pHdlList )
-            {
-                SdResId aResId( gButtonToolTips[mnHighlightId] );
-                aResId.SetRT( RSC_STRING );
+            ShowTip();
 
-                OUString aHelpText( aResId );
-                Rectangle aScreenRect( pDev->LogicToPixel( GetPos() ), maImageSize );
-                Help::ShowQuickHelp(static_cast< vcl::Window* >( pHdlList->GetView()->GetFirstOutputDevice() ), aScreenRect, aHelpText);
-            }
             Touch();
         }
     }
@@ -217,10 +250,10 @@ void ImageButtonHdl::CreateB2dIAObject()
     const Point aTagPos( GetPos() );
     basegfx::B2DPoint aPosition( aTagPos.X(), aTagPos.Y() );
 
-    BitmapEx aBitmapEx( mxTag->createOverlayImage( mnHighlightId ) ); // maImageMO.GetBitmapEx() : maImage.GetBitmapEx() );
+    BitmapEx aBitmapEx( mxChangePlaceholderTag->createOverlayImage( mnHighlightId ) ); // maImageMO.GetBitmapEx() : maImage.GetBitmapEx() );
     maImageSize = aBitmapEx.GetSizePixel();
-    maImageSize.Width() >>= 1;
-    maImageSize.Height() >>= 1;
+    maImageSize.setWidth( maImageSize.Width() >> 1 );
+    maImageSize.setHeight( maImageSize.Height() >> 1 );
 
     if(pHdlList)
     {
@@ -237,14 +270,17 @@ void ImageButtonHdl::CreateB2dIAObject()
                     const SdrPageWindow& rPageWindow = *pPageView->GetPageWindow(b);
 
                     SdrPaintWindow& rPaintWindow = rPageWindow.GetPaintWindow();
-                    rtl::Reference< sdr::overlay::OverlayManager > xManager = rPageWindow.GetOverlayManager();
+                    const rtl::Reference< sdr::overlay::OverlayManager >& xManager = rPageWindow.GetOverlayManager();
                     if(rPaintWindow.OutputToWindow() && xManager.is() )
                     {
-                        sdr::overlay::OverlayObject* pOverlayObject = nullptr;
+                        std::unique_ptr<sdr::overlay::OverlayObject> pOverlayObject(
+                            new sdr::overlay::OverlayBitmapEx( aPosition, aBitmapEx, 0, 0 ));
 
-                        pOverlayObject = new sdr::overlay::OverlayBitmapEx( aPosition, aBitmapEx, 0, 0 );
-                        xManager->add(*pOverlayObject);
-                        maOverlayGroup.append(*pOverlayObject);
+                        // OVERLAYMANAGER
+                        insertNewlyCreatedOverlayObjectForSdrHdl(
+                            std::move(pOverlayObject),
+                            rPageWindow.GetObjectContact(),
+                            *xManager);
                     }
                 }
             }
@@ -270,10 +306,6 @@ Pointer ImageButtonHdl::GetPointer() const
 ChangePlaceholderTag::ChangePlaceholderTag( ::sd::View& rView, SdrObject& rPlaceholderObj )
 : SmartTag( rView )
 , mxPlaceholderObj( &rPlaceholderObj )
-{
-}
-
-ChangePlaceholderTag::~ChangePlaceholderTag()
 {
 }
 
@@ -327,7 +359,7 @@ BitmapEx ChangePlaceholderTag::createOverlayImage( int nHighlight )
     {
         SdrObject* pPlaceholder = mxPlaceholderObj.get();
         SmartTagReference xThis( this );
-        const Rectangle& rSnapRect = pPlaceholder->GetSnapRect();
+        const ::tools::Rectangle& rSnapRect = pPlaceholder->GetSnapRect();
 
         OutputDevice* pDev = mrView.GetFirstOutputDevice();
         if( pDev == nullptr )
@@ -340,16 +372,16 @@ BitmapEx ChangePlaceholderTag::createOverlayImage( int nHighlight )
 
         Size aSize( getButtonImage( 0, bLarge )->GetSizePixel() );
 
-        aRet.SetSizePixel( Size( aSize.Width() << 1, aSize.Height() << 1 ) );
+        aRet.Scale(Size(aSize.Width() << 1, aSize.Height() << 1));
 
-        const Rectangle aRectSrc( Point( 0, 0 ), aSize );
+        const ::tools::Rectangle aRectSrc( Point( 0, 0 ), aSize );
 
         aRet = *(getButtonImage((nHighlight == 0) ? 4 : 0, bLarge));
-        aRet.Expand( aSize.Width(), aSize.Height(), nullptr, true );
+        aRet.Expand( aSize.Width(), aSize.Height(), true );
 
-        aRet.CopyPixel( Rectangle( Point( aSize.Width(), 0              ), aSize ), aRectSrc, getButtonImage((nHighlight == 1) ? 5 : 1, bLarge) );
-        aRet.CopyPixel( Rectangle( Point( 0,             aSize.Height() ), aSize ), aRectSrc, getButtonImage((nHighlight == 2) ? 6 : 2, bLarge) );
-        aRet.CopyPixel( Rectangle( Point( aSize.Width(), aSize.Height() ), aSize ), aRectSrc, getButtonImage((nHighlight == 3) ? 7 : 3, bLarge) );
+        aRet.CopyPixel( ::tools::Rectangle( Point( aSize.Width(), 0              ), aSize ), aRectSrc, getButtonImage((nHighlight == 1) ? 5 : 1, bLarge) );
+        aRet.CopyPixel( ::tools::Rectangle( Point( 0,             aSize.Height() ), aSize ), aRectSrc, getButtonImage((nHighlight == 2) ? 6 : 2, bLarge) );
+        aRet.CopyPixel( ::tools::Rectangle( Point( aSize.Width(), aSize.Height() ), aSize ), aRectSrc, getButtonImage((nHighlight == 3) ? 7 : 3, bLarge) );
     }
 
     return aRet;
@@ -361,7 +393,7 @@ void ChangePlaceholderTag::addCustomHandles( SdrHdlList& rHandlerList )
     {
         SdrObject* pPlaceholder = mxPlaceholderObj.get();
         SmartTagReference xThis( this );
-        const Rectangle& rSnapRect = pPlaceholder->GetSnapRect();
+        const ::tools::Rectangle& rSnapRect = pPlaceholder->GetSnapRect();
         const Point aPoint;
 
         OutputDevice* pDev = mrView.GetFirstOutputDevice();
@@ -384,32 +416,17 @@ void ChangePlaceholderTag::addCustomHandles( SdrHdlList& rHandlerList )
         long all_height = nRows * aButtonSize.Height();
 
         Point aPos( rSnapRect.Center() );
-        aPos.X() -= all_width >> 1;
-        aPos.Y() -= all_height >> 1;
+        aPos.AdjustX( -(all_width >> 1) );
+        aPos.AdjustY( -(all_height >> 1) );
 
-        ImageButtonHdl* pHdl = new ImageButtonHdl( xThis, aPoint );
+        std::unique_ptr<ImageButtonHdl> pHdl(new ImageButtonHdl( xThis, aPoint ));
         pHdl->SetObjHdlNum( SMART_TAG_HDL_NUM );
         pHdl->SetPageView( mrView.GetSdrPageView() );
 
         pHdl->SetPos( aPos );
 
-        rHandlerList.AddHdl( pHdl );
+        rHandlerList.AddHdl( std::move(pHdl) );
     }
-}
-
-void ChangePlaceholderTag::disposing()
-{
-    SmartTag::disposing();
-}
-
-void ChangePlaceholderTag::select()
-{
-    SmartTag::select();
-}
-
-void ChangePlaceholderTag::deselect()
-{
-    SmartTag::deselect();
 }
 
 ViewOverlayManager::ViewOverlayManager( ViewShellBase& rViewShellBase )
@@ -417,11 +434,7 @@ ViewOverlayManager::ViewOverlayManager( ViewShellBase& rViewShellBase )
 , mnUpdateTagsEvent( nullptr )
 {
     Link<tools::EventMultiplexerEvent&,void> aLink( LINK(this,ViewOverlayManager,EventMultiplexerListener) );
-    mrBase.GetEventMultiplexer()->AddEventListener(aLink, tools::EventMultiplexerEvent::EID_CURRENT_PAGE
-        | tools::EventMultiplexerEvent::EID_MAIN_VIEW_ADDED
-        | tools::EventMultiplexerEvent::EID_VIEW_ADDED
-        | tools::EventMultiplexerEvent::EID_BEGIN_TEXT_EDIT
-        | tools::EventMultiplexerEvent::EID_END_TEXT_EDIT );
+    mrBase.GetEventMultiplexer()->AddEventListener(aLink);
 
     StartListening( *mrBase.GetDocShell() );
 }
@@ -442,13 +455,9 @@ ViewOverlayManager::~ViewOverlayManager()
 
 void ViewOverlayManager::Notify(SfxBroadcaster&, const SfxHint& rHint)
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint != nullptr)
+    if (rHint.GetId() == SfxHintId::DocChanged)
     {
-        if (pSimpleHint->GetId() == SFX_HINT_DOCCHANGED)
-        {
-            UpdateTags();
-        }
+        UpdateTags();
     }
 }
 
@@ -466,10 +475,8 @@ void ViewOverlayManager::UpdateTags()
         mnUpdateTagsEvent = Application::PostUserEvent( LINK( this, ViewOverlayManager, UpdateTagsHdl ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ViewOverlayManager, UpdateTagsHdl, void*, void)
+IMPL_LINK_NOARG(ViewOverlayManager, UpdateTagsHdl, void*, void)
 {
-    OSL_TRACE("ViewOverlayManager::UpdateTagsHdl");
-
     mnUpdateTagsEvent  = nullptr;
     bool bChanges = DisposeTags();
     bChanges |= CreateTags();
@@ -486,15 +493,15 @@ bool ViewOverlayManager::CreateTags()
 
     SdPage* pPage = aMainShell.get() ? aMainShell->getCurrentPage() : nullptr;
 
-    if( pPage && !pPage->IsMasterPage() && (pPage->GetPageKind() == PK_STANDARD) )
+    if( pPage && !pPage->IsMasterPage() && (pPage->GetPageKind() == PageKind::Standard) )
     {
         const std::list< SdrObject* >& rShapes = pPage->GetPresentationShapeList().getList();
 
-        for( std::list< SdrObject* >::const_iterator iter( rShapes.begin() ); iter != rShapes.end(); ++iter )
+        for( SdrObject* pShape : rShapes )
         {
-            if( (*iter)->IsEmptyPresObj() && ((*iter)->GetObjIdentifier() == OBJ_OUTLINETEXT) && (mrBase.GetDrawView()->GetTextEditObject() != (*iter)) )
+            if( pShape->IsEmptyPresObj() && (pShape->GetObjIdentifier() == OBJ_OUTLINETEXT) && (mrBase.GetDrawView()->GetTextEditObject() != pShape) )
             {
-                rtl::Reference< SmartTag > xTag( new ChangePlaceholderTag( *mrBase.GetMainViewShell()->GetView(), *(*iter) ) );
+                rtl::Reference< SmartTag > xTag( new ChangePlaceholderTag( *mrBase.GetMainViewShell()->GetView(), *pShape ) );
                 maTagVector.push_back(xTag);
                 bChanges = true;
             }
@@ -511,30 +518,27 @@ bool ViewOverlayManager::DisposeTags()
         ViewTagVector vec;
         vec.swap( maTagVector );
 
-        ViewTagVector::iterator iter = vec.begin();
-        do
-        {
-            (*iter++)->Dispose();
-        }
-        while( iter != vec.end() );
+        for (auto& rxViewTag : vec)
+            rxViewTag->Dispose();
         return true;
     }
 
     return false;
 }
 
-IMPL_LINK_TYPED(ViewOverlayManager,EventMultiplexerListener,
+IMPL_LINK(ViewOverlayManager,EventMultiplexerListener,
     tools::EventMultiplexerEvent&, rEvent, void)
 {
     switch (rEvent.meEventId)
     {
-        case tools::EventMultiplexerEvent::EID_MAIN_VIEW_ADDED:
-        case tools::EventMultiplexerEvent::EID_VIEW_ADDED:
-        case tools::EventMultiplexerEvent::EID_BEGIN_TEXT_EDIT:
-        case tools::EventMultiplexerEvent::EID_END_TEXT_EDIT:
-        case tools::EventMultiplexerEvent::EID_CURRENT_PAGE:
+        case EventMultiplexerEventId::MainViewAdded:
+        case EventMultiplexerEventId::ViewAdded:
+        case EventMultiplexerEventId::BeginTextEdit:
+        case EventMultiplexerEventId::EndTextEdit:
+        case EventMultiplexerEventId::CurrentPageChanged:
             UpdateTags();
             break;
+        default: break;
     }
 }
 

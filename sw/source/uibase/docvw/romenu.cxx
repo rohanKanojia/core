@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <hintids.hxx>
 
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
-#include <svtools/imap.hxx>
-#include <svtools/inetimg.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/imap.hxx>
+#include <vcl/inetimg.hxx>
+#include <vcl/transfer.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/gallery.hxx>
@@ -38,13 +39,11 @@
 #include <wrtsh.hxx>
 #include <viewopt.hxx>
 #include <swmodule.hxx>
-#include <romenu.hxx>
+#include "romenu.hxx"
 #include <pagedesc.hxx>
 #include <modcfg.hxx>
 
 #include <cmdid.h>
-#include <helpid.h>
-#include <docvw.hrc>
 
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
@@ -53,311 +52,297 @@ using namespace ::sfx2;
 
 SwReadOnlyPopup::~SwReadOnlyPopup()
 {
-    delete pImageMap;
-    delete pTargetURL;
+    m_xMenu.disposeAndClear();
 }
 
-void SwReadOnlyPopup::Check( sal_uInt16 nMID, sal_uInt16 nSID, SfxDispatcher &rDis )
+void SwReadOnlyPopup::Check( sal_uInt16 nMID, sal_uInt16 nSID, SfxDispatcher const &rDis )
 {
     std::unique_ptr<SfxPoolItem> _pItem;
     SfxItemState eState = rDis.GetBindings()->QueryState( nSID, _pItem );
     if (eState >= SfxItemState::DEFAULT)
     {
-        EnableItem( nMID );
+        m_xMenu->EnableItem(nMID);
         if (_pItem)
         {
-            CheckItem ( nMID, dynamic_cast< const SfxVoidItem *>( _pItem.get() ) ==  nullptr &&
+            m_xMenu->CheckItem(nMID, !_pItem->IsVoidItem() &&
                             dynamic_cast< const SfxBoolItem *>( _pItem.get() ) !=  nullptr &&
                             static_cast<SfxBoolItem*>(_pItem.get())->GetValue());
             //remove full screen entry when not in full screen mode
-            if( SID_WIN_FULLSCREEN == nSID && !IsItemChecked(SID_WIN_FULLSCREEN) )
-                EnableItem(nMID, false);
+            if (SID_WIN_FULLSCREEN == nSID && !m_xMenu->IsItemChecked(m_nReadonlyFullscreen))
+                m_xMenu->EnableItem(nMID, false);
         }
     }
     else
-        EnableItem( nMID, false );
+        m_xMenu->EnableItem(nMID, false);
 }
 
-SwReadOnlyPopup::SwReadOnlyPopup( const Point &rDPos, SwView &rV ) :
-    PopupMenu( SW_RES(MN_READONLY_POPUP) ),
-    rView  ( rV ),
-    aBrushItem(RES_BACKGROUND),
-    rDocPos( rDPos ),
-    pImageMap( nullptr ),
-    pTargetURL( nullptr )
+#define MN_READONLY_GRAPHICTOGALLERY 1000
+#define MN_READONLY_BACKGROUNDTOGALLERY 2000
+
+SwReadOnlyPopup::SwReadOnlyPopup(const Point &rDPos, SwView &rV)
+    : m_aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "modules/swriter/ui/readonlymenu.ui", "")
+    , m_xMenu(m_aBuilder.get_menu("menu"))
+    , m_nReadonlyOpenurl(m_xMenu->GetItemId("openurl"))
+    , m_nReadonlyOpendoc(m_xMenu->GetItemId("opendoc"))
+    , m_nReadonlyEditdoc(m_xMenu->GetItemId("edit"))
+    , m_nReadonlySelectionMode(m_xMenu->GetItemId("selection"))
+    , m_nReadonlyReload(m_xMenu->GetItemId("reload"))
+    , m_nReadonlyReloadFrame(m_xMenu->GetItemId("reloadframe"))
+    , m_nReadonlySourceview(m_xMenu->GetItemId("html"))
+    , m_nReadonlyBrowseBackward(m_xMenu->GetItemId("backward"))
+    , m_nReadonlyBrowseForward(m_xMenu->GetItemId("forward"))
+    , m_nReadonlySaveGraphic(m_xMenu->GetItemId("savegraphic"))
+    , m_nReadonlyGraphictogallery(m_xMenu->GetItemId("graphictogallery"))
+    , m_nReadonlyTogallerylink(m_xMenu->GetItemId("graphicaslink"))
+    , m_nReadonlyTogallerycopy(m_xMenu->GetItemId("graphicascopy"))
+    , m_nReadonlySaveBackground(m_xMenu->GetItemId("savebackground"))
+    , m_nReadonlyBackgroundtogallery(m_xMenu->GetItemId("backgroundtogallery"))
+    , m_nReadonlyBackgroundTogallerylink(m_xMenu->GetItemId("backaslink"))
+    , m_nReadonlyBackgroundTogallerycopy(m_xMenu->GetItemId("backascopy"))
+    , m_nReadonlyCopylink(m_xMenu->GetItemId("copylink"))
+    , m_nReadonlyLoadGraphic(m_xMenu->GetItemId("loadgraphic"))
+    , m_nReadonlyGraphicoff(m_xMenu->GetItemId("imagesoff"))
+    , m_nReadonlyFullscreen(m_xMenu->GetItemId("fullscreen"))
+    , m_nReadonlyCopy(m_xMenu->GetItemId("copy"))
+    , m_rView(rV)
+    , m_aBrushItem(RES_BACKGROUND)
 {
-    bGrfToGalleryAsLnk = SW_MOD()->GetModuleConfig()->IsGrfToGalleryAsLnk();
-    SwWrtShell &rSh = rView.GetWrtShell();
-    rSh.IsURLGrfAtPos( rDocPos, &sURL, &sTargetFrameName, &sDescription );
-    if ( sURL.isEmpty() )
+    m_bGrfToGalleryAsLnk = SW_MOD()->GetModuleConfig()->IsGrfToGalleryAsLnk();
+    SwWrtShell &rSh = m_rView.GetWrtShell();
+    OUString sDescription;
+    rSh.IsURLGrfAtPos( rDPos, &m_sURL, &m_sTargetFrameName, &sDescription );
+    if ( m_sURL.isEmpty() )
     {
-        SwContentAtPos aContentAtPos( SwContentAtPos::SW_INETATTR );
-        if( rSh.GetContentAtPos( rDocPos, aContentAtPos))
+        SwContentAtPos aContentAtPos( IsAttrAtPos::InetAttr );
+        if( rSh.GetContentAtPos( rDPos, aContentAtPos))
         {
             const SwFormatINetFormat &rIItem = *static_cast<const SwFormatINetFormat*>(aContentAtPos.aFnd.pAttr);
-            sURL = rIItem.GetValue();
-            sTargetFrameName = rIItem.GetTargetFrame();
-            sDescription = aContentAtPos.sStr;
+            m_sURL = rIItem.GetValue();
+            m_sTargetFrameName = rIItem.GetTargetFrame();
         }
     }
 
     bool bLink = false;
     const Graphic *pGrf;
-    if ( nullptr == (pGrf = rSh.GetGrfAtPos( rDocPos, sGrfName, bLink )) )
+    if ( nullptr == (pGrf = rSh.GetGrfAtPos( rDPos, m_sGrfName, bLink )) )
     {
-        EnableItem( MN_READONLY_SAVEGRAPHIC, false );
-        EnableItem( MN_READONLY_COPYGRAPHIC, false );
+        m_xMenu->EnableItem(m_nReadonlySaveGraphic, false);
     }
     else
     {
-        aGraphic = *pGrf;
-        const SwFrameFormat* pGrfFormat = rSh.GetFormatFromObj( rDocPos );
-        const SfxPoolItem* pURLItem;
-        if( pGrfFormat && SfxItemState::SET == pGrfFormat->GetItemState(
-            RES_URL, true, &pURLItem ))
-        {
-            const SwFormatURL& rURL = *static_cast<const SwFormatURL*>(pURLItem);
-            if( rURL.GetMap() )
-                pImageMap = new ImageMap( *rURL.GetMap() );
-            else if( !rURL.GetURL().isEmpty() )
-                pTargetURL = new INetImage( bLink ? sGrfName : OUString(),
-                                            rURL.GetURL(),
-                                            rURL.GetTargetFrameName(),
-                                            OUString(), Size() );
-        }
+        m_aGraphic = *pGrf;
     }
 
     bool bEnableGraphicToGallery = bLink;
     if ( bEnableGraphicToGallery )
     {
-        if (GalleryExplorer::FillThemeList( aThemeList ))
+        if (GalleryExplorer::FillThemeList( m_aThemeList ))
         {
-            PopupMenu *pMenu = GetPopupMenu(MN_READONLY_GRAPHICTOGALLERY);
-            pMenu->CheckItem( MN_READONLY_TOGALLERYLINK,  bGrfToGalleryAsLnk );
-            pMenu->CheckItem( MN_READONLY_TOGALLERYCOPY, !bGrfToGalleryAsLnk );
+            PopupMenu *pMenu = m_xMenu->GetPopupMenu(m_nReadonlyGraphictogallery);
+            pMenu->CheckItem(m_nReadonlyTogallerylink,  m_bGrfToGalleryAsLnk);
+            pMenu->CheckItem(m_nReadonlyTogallerycopy, !m_bGrfToGalleryAsLnk);
 
-            for ( size_t i=0; i < aThemeList.size(); ++i )
-                pMenu->InsertItem( MN_READONLY_GRAPHICTOGALLERY+i + 3, aThemeList[ i ] );
+            for ( size_t i=0; i < m_aThemeList.size(); ++i )
+                pMenu->InsertItem(MN_READONLY_GRAPHICTOGALLERY + i, m_aThemeList[i]);
         }
         else
             bEnableGraphicToGallery = false;
     }
 
-    EnableItem( MN_READONLY_GRAPHICTOGALLERY, bEnableGraphicToGallery );
+    m_xMenu->EnableItem(m_nReadonlyGraphictogallery, bEnableGraphicToGallery);
 
     SfxViewFrame * pVFrame = rV.GetViewFrame();
     SfxDispatcher &rDis = *pVFrame->GetDispatcher();
     const SwPageDesc &rDesc = rSh.GetPageDesc( rSh.GetCurPageDesc() );
-    aBrushItem = rDesc.GetMaster().makeBackgroundBrushItem();
+    m_aBrushItem = rDesc.GetMaster().makeBackgroundBrushItem();
     bool bEnableBackGallery = false,
          bEnableBack = false;
 
-    if ( GPOS_NONE != aBrushItem.GetGraphicPos() )
+    if ( GPOS_NONE != m_aBrushItem.GetGraphicPos() )
     {
         bEnableBack = true;
-        if ( !aBrushItem.GetGraphicLink().isEmpty() )
+        if ( !m_aBrushItem.GetGraphicLink().isEmpty() )
         {
-            if ( aThemeList.empty() )
-                GalleryExplorer::FillThemeList( aThemeList );
+            if ( m_aThemeList.empty() )
+                GalleryExplorer::FillThemeList( m_aThemeList );
 
-            if ( !aThemeList.empty() )
+            if ( !m_aThemeList.empty() )
             {
-                PopupMenu *pMenu = GetPopupMenu(MN_READONLY_BACKGROUNDTOGALLERY);
-                pMenu->CheckItem( MN_READONLY_TOGALLERYLINK,  bGrfToGalleryAsLnk );
-                pMenu->CheckItem( MN_READONLY_TOGALLERYCOPY, !bGrfToGalleryAsLnk );
+                PopupMenu *pMenu = m_xMenu->GetPopupMenu(m_nReadonlyBackgroundtogallery);
+                pMenu->CheckItem(m_nReadonlyBackgroundTogallerylink,  m_bGrfToGalleryAsLnk);
+                pMenu->CheckItem(m_nReadonlyBackgroundTogallerycopy, !m_bGrfToGalleryAsLnk);
                 bEnableBackGallery = true;
 
-                for ( size_t i=0; i < aThemeList.size(); ++i )
-                    pMenu->InsertItem( MN_READONLY_GRAPHICTOGALLERY+i + 3, aThemeList[ i ] );
+                for ( size_t i=0; i < m_aThemeList.size(); ++i )
+                    pMenu->InsertItem(MN_READONLY_BACKGROUNDTOGALLERY + i, m_aThemeList[i]);
             }
         }
     }
-    EnableItem( MN_READONLY_SAVEBACKGROUND, bEnableBack );
-    EnableItem( MN_READONLY_BACKGROUNDTOGALLERY, bEnableBackGallery );
+    m_xMenu->EnableItem(m_nReadonlySaveBackground, bEnableBack);
+    m_xMenu->EnableItem(m_nReadonlyBackgroundtogallery, bEnableBackGallery);
 
     if ( !rSh.GetViewOptions()->IsGraphic() )
-        CheckItem( MN_READONLY_GRAPHICOFF );
+        m_xMenu->CheckItem(m_nReadonlyGraphicoff);
     else
-        EnableItem( MN_READONLY_LOADGRAPHIC, false );
+        m_xMenu->EnableItem(m_nReadonlyLoadGraphic, false);
 
-    bool bReloadFrame = nullptr != rSh.GetView().GetViewFrame()->GetFrame().GetParentFrame();
-    EnableItem( MN_READONLY_RELOAD_FRAME,
-            bReloadFrame );
-    EnableItem( MN_READONLY_RELOAD, !bReloadFrame);
+    m_xMenu->EnableItem(m_nReadonlyReloadFrame, false);
+    m_xMenu->EnableItem(m_nReadonlyReload);
 
-    Check( MN_READONLY_EDITDOC,         SID_EDITDOC,        rDis );
-    Check( MN_READONLY_SELECTION_MODE,  FN_READONLY_SELECTION_MODE,    rDis );
-    Check( MN_READONLY_SOURCEVIEW,      SID_SOURCEVIEW,     rDis );
-    Check( MN_READONLY_BROWSE_BACKWARD, SID_BROWSE_BACKWARD,rDis );
-    Check( MN_READONLY_BROWSE_FORWARD,  SID_BROWSE_FORWARD, rDis );
-#ifdef _WIN32
-    Check( MN_READONLY_PLUGINOFF,       SID_PLUGINS_ACTIVE, rDis );
-#endif
-    Check( MN_READONLY_OPENURL,         SID_OPENDOC,        rDis );
-    Check( MN_READONLY_OPENURLNEW,      SID_OPENDOC,        rDis );
+    Check(m_nReadonlyEditdoc, SID_EDITDOC, rDis);
+    Check(m_nReadonlySelectionMode, FN_READONLY_SELECTION_MODE, rDis);
+    Check(m_nReadonlySourceview, SID_SOURCEVIEW, rDis);
+    Check(m_nReadonlyBrowseBackward, SID_BROWSE_BACKWARD, rDis);
+    Check(m_nReadonlyBrowseForward,SID_BROWSE_FORWARD, rDis);
+    Check(m_nReadonlyOpenurl, SID_OPENDOC, rDis);
+    Check(m_nReadonlyOpendoc, SID_OPENDOC, rDis);
 
     std::unique_ptr<SfxPoolItem> pState;
 
     SfxItemState eState = pVFrame->GetBindings().QueryState( SID_COPY, pState );
-    Check( MN_READONLY_COPY,            SID_COPY,           rDis );
-    if(eState < SfxItemState::DEFAULT)
-        EnableItem( MN_READONLY_COPY, false );
+    Check(m_nReadonlyCopy, SID_COPY, rDis);
+    if (eState < SfxItemState::DEFAULT)
+        m_xMenu->EnableItem(m_nReadonlyCopy, false);
 
     eState = pVFrame->GetBindings().QueryState( SID_EDITDOC, pState );
     if (
         eState < SfxItemState::DEFAULT ||
-        (rSh.IsGlobalDoc() && rView.GetDocShell()->IsReadOnlyUI())
+        (rSh.IsGlobalDoc() && m_rView.GetDocShell()->IsReadOnlyUI())
        )
     {
-        EnableItem( MN_READONLY_EDITDOC, false );
+        m_xMenu->EnableItem(m_nReadonlyEditdoc, false);
     }
 
-    if ( sURL.isEmpty() )
+    if ( m_sURL.isEmpty() )
     {
-        EnableItem( MN_READONLY_OPENURL, false );
-        EnableItem( MN_READONLY_OPENURLNEW, false );
-        EnableItem( MN_READONLY_COPYLINK, false );
+        m_xMenu->EnableItem(m_nReadonlyOpenurl, false);
+        m_xMenu->EnableItem(m_nReadonlyOpendoc, false);
+        m_xMenu->EnableItem(m_nReadonlyCopylink, false);
     }
-    Check( SID_WIN_FULLSCREEN,         SID_WIN_FULLSCREEN,        rDis );
+    Check(m_nReadonlyFullscreen, SID_WIN_FULLSCREEN, rDis);
 
-    RemoveDisabledEntries( true, true );
+    m_xMenu->RemoveDisabledEntries( true, true );
 }
 
 void SwReadOnlyPopup::Execute( vcl::Window* pWin, const Point &rPixPos )
 {
-    sal_uInt16 nId     = PopupMenu::Execute(
-    pWin,
-    rPixPos );
+    sal_uInt16 nId = m_xMenu->Execute(pWin, rPixPos);
     Execute(pWin, nId);
 }
 
 // execute the resulting ID only - necessary to support XContextMenuInterception
 void SwReadOnlyPopup::Execute( vcl::Window* pWin, sal_uInt16 nId )
 {
-    SwWrtShell &rSh = rView.GetWrtShell();
-    SfxDispatcher &rDis = *rView.GetViewFrame()->GetDispatcher();
-    if ( nId >= MN_READONLY_GRAPHICTOGALLERY )
+    SwWrtShell &rSh = m_rView.GetWrtShell();
+    SfxDispatcher &rDis = *m_rView.GetViewFrame()->GetDispatcher();
+    if (nId >= MN_READONLY_GRAPHICTOGALLERY)
     {
         OUString sTmp;
         sal_uInt16 nSaveId;
-        if ( nId >= MN_READONLY_BACKGROUNDTOGALLERY )
+        if (nId >= MN_READONLY_BACKGROUNDTOGALLERY)
         {
-            nId -= MN_READONLY_BACKGROUNDTOGALLERY+3;
-            nSaveId = MN_READONLY_SAVEBACKGROUND;
-            sTmp = aBrushItem.GetGraphicLink();
+            nId -= MN_READONLY_BACKGROUNDTOGALLERY;
+            nSaveId = m_nReadonlySaveBackground;
+            sTmp = m_aBrushItem.GetGraphicLink();
         }
         else
         {
-            nId -= MN_READONLY_GRAPHICTOGALLERY+3;
-            nSaveId = MN_READONLY_SAVEGRAPHIC;
-            sTmp = sGrfName;
+            nId -= MN_READONLY_GRAPHICTOGALLERY;
+            nSaveId = m_nReadonlySaveGraphic;
+            sTmp = m_sGrfName;
         }
-        if ( !bGrfToGalleryAsLnk )
-            sTmp = SaveGraphic( nSaveId );
+        if ( !m_bGrfToGalleryAsLnk )
+            sTmp = SaveGraphic(nSaveId);
 
         if ( !sTmp.isEmpty() )
-            GalleryExplorer::InsertURL( aThemeList[nId], sTmp );
+            GalleryExplorer::InsertURL( m_aThemeList[nId], sTmp );
 
         return;
     }
 
-    TransferDataContainer* pClipCntnr = nullptr;
+    rtl::Reference<TransferDataContainer> pClipCntnr;
 
     sal_uInt16 nExecId = USHRT_MAX;
-    sal_uInt16 nFilter = USHRT_MAX;
-    switch( nId )
+    bool bFilterSet = false;
+    LoadUrlFlags nFilter = LoadUrlFlags::NONE;
+    if (nId == m_nReadonlyFullscreen)
+        nExecId = SID_WIN_FULLSCREEN;
+    else if (nId == m_nReadonlyOpenurl)
     {
-        case SID_WIN_FULLSCREEN :           nExecId = SID_WIN_FULLSCREEN; break;
-        case MN_READONLY_OPENURL:           nFilter = URLLOAD_NOFILTER;   break;
-        case MN_READONLY_OPENURLNEW:        nFilter = URLLOAD_NEWVIEW;    break;
-        case MN_READONLY_COPY:              nExecId = SID_COPY;           break;
-
-        case MN_READONLY_EDITDOC:           nExecId = SID_EDITDOC;        break;
-        case MN_READONLY_SELECTION_MODE:    nExecId = FN_READONLY_SELECTION_MODE; break;
-        case MN_READONLY_RELOAD:
-        case MN_READONLY_RELOAD_FRAME:
-            rSh.GetView().GetViewFrame()->GetDispatcher()->Execute(SID_RELOAD);
-        break;
-
-        case MN_READONLY_BROWSE_BACKWARD:   nExecId = SID_BROWSE_BACKWARD;break;
-        case MN_READONLY_BROWSE_FORWARD:    nExecId = SID_BROWSE_FORWARD; break;
-        case MN_READONLY_SOURCEVIEW:        nExecId = SID_SOURCEVIEW;     break;
-        case MN_READONLY_SAVEGRAPHIC:
-        case MN_READONLY_SAVEBACKGROUND:
-            {
-                SaveGraphic( nId );
-                break;
-            }
-        case MN_READONLY_COPYLINK:
-            pClipCntnr = new TransferDataContainer;
-            pClipCntnr->CopyString( sURL );
-            break;
-
-        case MN_READONLY_COPYGRAPHIC:
-            pClipCntnr = new TransferDataContainer;
-            pClipCntnr->CopyGraphic( aGraphic );
-
-            if( pImageMap )
-                pClipCntnr->CopyImageMap( *pImageMap );
-            if( pTargetURL )
-                pClipCntnr->CopyINetImage( *pTargetURL );
-            break;
-
-        case MN_READONLY_LOADGRAPHIC:
-            {
-                bool bModified = rSh.IsModified();
-                SwViewOption aOpt( *rSh.GetViewOptions() );
-                aOpt.SetGraphic( true );
-                rSh.ApplyViewOptions( aOpt );
-                if(!bModified)
-                    rSh.ResetModified();
-                break;
-            }
-        case MN_READONLY_GRAPHICOFF:        nExecId = FN_VIEW_GRAPHIC;    break;
-#ifdef _WIN32
-        case MN_READONLY_PLUGINOFF:         nExecId = SID_PLUGINS_ACTIVE; break;
-#endif
-        case MN_READONLY_TOGALLERYLINK:
-            SW_MOD()->GetModuleConfig()->SetGrfToGalleryAsLnk( true );
-            break;
-        case MN_READONLY_TOGALLERYCOPY:
-            SW_MOD()->GetModuleConfig()->SetGrfToGalleryAsLnk( false );
-            break;
-
-        default: //forward the id to the SfxBindings
-            nExecId = nId;
+        nFilter = LoadUrlFlags::NONE;
+        bFilterSet = true;
     }
+    else if (nId == m_nReadonlyOpendoc)
+    {
+        nFilter = LoadUrlFlags::NewView;
+        bFilterSet = true;
+    }
+    else if (nId == m_nReadonlyCopy)
+        nExecId = SID_COPY;
+    else if (nId == m_nReadonlyEditdoc)
+        nExecId = SID_EDITDOC;
+    else if (nId == m_nReadonlySelectionMode)
+        nExecId = FN_READONLY_SELECTION_MODE;
+    else if (nId == m_nReadonlyReload || nId == m_nReadonlyReloadFrame)
+        rSh.GetView().GetViewFrame()->GetDispatcher()->Execute(SID_RELOAD);
+    else if (nId == m_nReadonlyBrowseBackward)
+        nExecId = SID_BROWSE_BACKWARD;
+    else if (nId == m_nReadonlyBrowseForward)
+        nExecId = SID_BROWSE_FORWARD;
+    else if (nId == m_nReadonlySourceview)
+        nExecId = SID_SOURCEVIEW;
+    else if (nId == m_nReadonlySaveGraphic || nId == m_nReadonlySaveBackground)
+        SaveGraphic(nId);
+    else if (nId == m_nReadonlyCopylink)
+    {
+        pClipCntnr = new TransferDataContainer;
+        pClipCntnr->CopyString( m_sURL );
+    }
+    else if (nId == m_nReadonlyLoadGraphic)
+    {
+        bool bModified = rSh.IsModified();
+        SwViewOption aOpt( *rSh.GetViewOptions() );
+        aOpt.SetGraphic( true );
+        rSh.ApplyViewOptions( aOpt );
+        if(!bModified)
+            rSh.ResetModified();
+    }
+    else if (nId == m_nReadonlyGraphicoff)
+        nExecId = FN_VIEW_GRAPHIC;
+    else if (nId == m_nReadonlyTogallerylink || nId == m_nReadonlyBackgroundTogallerylink)
+        SW_MOD()->GetModuleConfig()->SetGrfToGalleryAsLnk(true);
+    else if (nId == m_nReadonlyTogallerycopy || nId == m_nReadonlyBackgroundTogallerycopy)
+        SW_MOD()->GetModuleConfig()->SetGrfToGalleryAsLnk(false);
+
     if( USHRT_MAX != nExecId )
         rDis.GetBindings()->Execute( nExecId );
-    if( USHRT_MAX != nFilter )
-        ::LoadURL(rSh, sURL, nFilter, sTargetFrameName);
+    if( bFilterSet )
+        ::LoadURL(rSh, m_sURL, nFilter, m_sTargetFrameName);
 
-    if( pClipCntnr )
+    if( pClipCntnr && pClipCntnr->HasAnyData() )
     {
-        css::uno::Reference< css::datatransfer::XTransferable > xRef( pClipCntnr );
-        if( pClipCntnr->HasAnyData() )
-            pClipCntnr->CopyToClipboard( pWin );
+        pClipCntnr->CopyToClipboard( pWin );
     }
 }
 
-OUString SwReadOnlyPopup::SaveGraphic( sal_uInt16 nId )
+OUString SwReadOnlyPopup::SaveGraphic(sal_uInt16 nId)
 {
     // fish out the graphic's name
-    if ( MN_READONLY_SAVEBACKGROUND == nId )
+    if (nId == m_nReadonlySaveBackground)
     {
-        if ( !aBrushItem.GetGraphicLink().isEmpty() )
-            sGrfName = aBrushItem.GetGraphicLink();
-        const Graphic *pGrf = aBrushItem.GetGraphic();
+        if ( !m_aBrushItem.GetGraphicLink().isEmpty() )
+            m_sGrfName = m_aBrushItem.GetGraphicLink();
+        const Graphic *pGrf = m_aBrushItem.GetGraphic();
         if ( pGrf )
         {
-            aGraphic = *pGrf;
-            if ( !aBrushItem.GetGraphicLink().isEmpty() )
-                sGrfName = aBrushItem.GetGraphicLink();
+            m_aGraphic = *pGrf;
+            if ( !m_aBrushItem.GetGraphicLink().isEmpty() )
+                m_sGrfName = m_aBrushItem.GetGraphicLink();
         }
         else
             return OUString();
     }
-    return GraphicHelper::ExportGraphic( aGraphic, sGrfName );
+    return GraphicHelper::ExportGraphic(m_rView.GetFrameWeld(), m_aGraphic, m_sGrfName);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

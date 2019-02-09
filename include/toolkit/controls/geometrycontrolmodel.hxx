@@ -21,25 +21,17 @@
 #define INCLUDED_TOOLKIT_CONTROLS_GEOMETRYCONTROLMODEL_HXX
 
 #include <comphelper/broadcasthelper.hxx>
-#include <comphelper/uno3.hxx>
 #include <comphelper/propagg.hxx>
 #include <comphelper/proparrhlp.hxx>
 #include <comphelper/propertycontainer.hxx>
-#include <cppuhelper/weakagg.hxx>
 #include <cppuhelper/compbase2.hxx>
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/script/XScriptEventsSupplier.hpp>
-#include <com/sun/star/resource/XStringResourceResolver.hpp>
-#include <cppuhelper/typeprovider.hxx>
 #include <comphelper/IdPropArrayHelper.hxx>
 
+namespace com { namespace sun { namespace star { namespace resource { class XStringResourceResolver; } } } }
+
 namespace com { namespace sun { namespace star {
-    namespace lang {
-        class XMultiServiceFactory;
-    }
-    namespace script {
-        class XNameContainer;
-    }
     namespace uno {
         class XComponentContext;
     }
@@ -107,28 +99,26 @@ namespace com { namespace sun { namespace star {
         void releaseAggregation();
 
     protected:
-        virtual ~OGeometryControlModel_Base();
+        virtual ~OGeometryControlModel_Base() override;
 
         // XAggregation
-        css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _aType ) throw(css::uno::RuntimeException, std::exception) override;
+        css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& _aType ) override;
 
         // XInterface
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
         virtual void SAL_CALL acquire(  ) throw() override;
         virtual void SAL_CALL release(  ) throw() override;
 
         // XTypeProvider
-        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
 
         // OPropertySetHelper overridables
         virtual sal_Bool SAL_CALL convertFastPropertyValue(
                 css::uno::Any& _rConvertedValue, css::uno::Any& _rOldValue,
-                sal_Int32 _nHandle, const css::uno::Any& _rValue )
-            throw (css::lang::IllegalArgumentException) override;
+                sal_Int32 _nHandle, const css::uno::Any& _rValue ) override;
 
         virtual void SAL_CALL setFastPropertyValue_NoBroadcast(
-                sal_Int32 _nHandle, const css::uno::Any& _rValue)
-            throw (css::uno::Exception, std::exception) override;
+                sal_Int32 _nHandle, const css::uno::Any& _rValue) override;
 
         using comphelper::OPropertySetAggregationHelper::getFastPropertyValue;
         virtual void SAL_CALL getFastPropertyValue(
@@ -140,17 +130,17 @@ namespace com { namespace sun { namespace star {
         virtual css::uno::Any              getPropertyDefaultByHandle(sal_Int32 nHandle) const override;
 
         // XPropertySet
-        virtual css::uno::Reference< css::beans::XPropertySetInfo> SAL_CALL getPropertySetInfo() throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::beans::XPropertySetInfo> SAL_CALL getPropertySetInfo() override;
 
         // OPropertySetAggregationHelper overridables
         using OPropertySetAggregationHelper::getInfoHelper;
 
         // XCloneable
-        virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) override;
 
         //XScriptEventsSupplier
         virtual css::uno::Reference< css::container::XNameContainer >
-            SAL_CALL getEvents(  ) throw(css::uno::RuntimeException, std::exception) override;
+            SAL_CALL getEvents(  ) override;
 
         // XCloneable implementation - to be overwritten
         virtual OGeometryControlModel_Base* createClone_Impl(
@@ -204,7 +194,7 @@ namespace com { namespace sun { namespace star {
             css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
 
         // XTypeProvider
-        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) override;
     };
 
 
@@ -244,12 +234,11 @@ namespace com { namespace sun { namespace star {
             css::uno::Reference< css::util::XCloneable >& _rxAggregateInstance) override;
 
         // XTypeProvider
-        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) override;
 
     private:
         virtual void SAL_CALL setFastPropertyValue_NoBroadcast(
-                sal_Int32 _nHandle, const css::uno::Any& _rValue)
-            throw (css::uno::Exception, std::exception) override;
+                sal_Int32 _nHandle, const css::uno::Any& _rValue) override;
     };
 
 #include <toolkit/controls/geometrycontrolmodel_impl.hxx>

@@ -19,17 +19,16 @@
 
 #include "SlsBitmapFactory.hxx"
 
-#include "PreviewRenderer.hxx"
-#include "view/SlideSorterView.hxx"
-#include "sdpage.hxx"
-#include "Window.hxx"
+#include <PreviewRenderer.hxx>
+#include <view/SlideSorterView.hxx>
+#include <sdpage.hxx>
+#include <Window.hxx>
 #include <drawdoc.hxx>
-#include "DrawDocShell.hxx"
+#include <DrawDocShell.hxx>
 #include <svx/svdtypes.hxx>
 #include <svx/svdpage.hxx>
 #include <vcl/bitmapex.hxx>
 #include <vcl/bitmapaccess.hxx>
-#include <vcl/pngwrite.hxx>
 
 namespace sd { namespace slidesorter { namespace view {
 class SlideSorterView;
@@ -39,7 +38,7 @@ class PageObjectViewObjectContact;
 namespace sd { namespace slidesorter { namespace cache {
 
 BitmapFactory::BitmapFactory()
-    : maRenderer(nullptr, false)
+    : maRenderer(false)
 {
 }
 
@@ -47,7 +46,7 @@ BitmapFactory::~BitmapFactory()
 {
 }
 
-Bitmap BitmapFactory::CreateBitmap (
+BitmapEx BitmapFactory::CreateBitmap (
     const SdPage& rPage,
     const Size& rPixelSize,
     const bool bDoSuperSampling)
@@ -57,16 +56,15 @@ Bitmap BitmapFactory::CreateBitmap (
     {
         // Supersampling factor
         int aSuperSamplingFactor = 2;
-        aSize.Width() *= aSuperSamplingFactor;
-        aSize.Height() *= aSuperSamplingFactor;
+        aSize.setWidth( aSize.Width() * aSuperSamplingFactor );
+        aSize.setHeight( aSize.Height() * aSuperSamplingFactor );
     }
 
-    Bitmap aPreview (maRenderer.RenderPage (
+    BitmapEx aPreview (maRenderer.RenderPage (
         &rPage,
         aSize,
-        OUString(),
         true,
-        false).GetBitmapEx().GetBitmap());
+        false).GetBitmapEx());
     if (bDoSuperSampling)
     {
         aPreview.Scale(rPixelSize, BmpScaleFlag::BestQuality);

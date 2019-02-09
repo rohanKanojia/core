@@ -59,11 +59,11 @@
  ************************************************************************/
 #include "lwpfilter.hxx"
 #include "lwpresource.hxx"
-#include "xfilter/xfsaxstream.hxx"
+#include <xfilter/xfsaxstream.hxx>
 #include "lwp9reader.hxx"
-#include "lwpsvstream.hxx"
-#include "xfilter/xffontfactory.hxx"
-#include "xfilter/xfstylemanager.hxx"
+#include <lwpsvstream.hxx>
+#include <xfilter/xffontfactory.hxx>
+#include <xfilter/xfstylemanager.hxx>
 
 #include <osl/file.h>
 #include <osl/file.hxx>
@@ -71,8 +71,6 @@
 #include <vcl/svapp.hxx>
 #include <xmloff/attrlist.hxx>
 #include <com/sun/star/io/IOException.hpp>
-#include <com/sun/star/frame/XDesktop.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
 #include <com/sun/star/text/XText.hpp>
 
@@ -84,7 +82,6 @@
 
 using namespace ::cppu;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::registry;
@@ -101,23 +98,25 @@ using namespace ::com::sun::star;
 #include "bento.hxx"
 using namespace OpenStormBento;
 #include "explode.hxx"
- bool Decompress(SvStream *pCompressed, SvStream * & pOutDecompressed)
+static bool Decompress(SvStream *pCompressed, SvStream * & pOutDecompressed)
 {
     pCompressed->Seek(0);
-    std::unique_ptr<SvStream> aDecompressed(new SvMemoryStream(4096, 4096));
+    std::unique_ptr<SvMemoryStream> aDecompressed(new SvMemoryStream(4096, 4096));
     unsigned char buffer[512];
-    pCompressed->Read(buffer, 16);
-    aDecompressed->Write(buffer, 16);
+    pCompressed->ReadBytes(buffer, 16);
+    aDecompressed->WriteBytes(buffer, 16);
 
     std::unique_ptr<LwpSvStream> aLwpStream(new LwpSvStream(pCompressed));
-    LtcBenContainer* pBentoContainer;
-    sal_uLong ulRet = BenOpenContainer(aLwpStream.get(), &pBentoContainer);
-    if (ulRet != BenErr_OK)
-        return false;
+    std::unique_ptr<OpenStormBento::LtcBenContainer> pBentoContainer;
+    {
+        sal_uLong ulRet = BenOpenContainer(aLwpStream.get(), &pBentoContainer);
+        if (ulRet != BenErr_OK)
+            return false;
+    }
 
     std::unique_ptr<LtcUtBenValueStream> aWordProData(pBentoContainer->FindValueStreamWithPropertyName("WordProData"));
 
-    if (!aWordProData.get())
+    if (!aWordProData)
         return false;
 
     // decompressing
@@ -129,8 +128,11 @@ using namespace OpenStormBento;
     nPos += 0x10;
 
     pCompressed->Seek(nPos);
-    while (sal_uInt32 iRead = pCompressed->Read(buffer, 512))
-        aDecompressed->Write(buffer, iRead);
+    while (sal_uInt32 iRead = pCompressed->ReadBytes(buffer, 512))
+        aDecompressed->WriteBytes(buffer, iRead);
+
+    // disable stream growing past its current size
+    aDecompressed->SetResizeOffset(0);
 
     //transfer ownership of aDecompressed's ptr
     pOutDecompressed = aDecompressed.release();
@@ -144,7 +146,7 @@ using namespace OpenStormBento;
  * @param    LwpSvStream * , created inside, deleted outside
  * @param      sal_Bool, sal_True -
  */
- bool GetLwpSvStream(SvStream *pStream, LwpSvStream * & pLwpSvStream)
+static bool GetLwpSvStream(SvStream *pStream, LwpSvStream * & pLwpSvStream)
 {
     SvStream * pDecompressed = nullptr;
 
@@ -177,8 +179,9 @@ using namespace OpenStormBento;
     }
     return bCompressed;
 }
-int ReadWordproFile(SvStream &rStream, uno::Reference<css::xml::sax::XDocumentHandler>& xHandler)
+int ReadWordproFile(SvStream &rStream, uno::Reference<css::xml::sax::XDocumentHandler> const & xHandler)
 {
+    int nRet = 0;
     try
     {
         LwpSvStream *pRawLwpSvStream = nullptr;
@@ -207,14 +210,15 @@ int ReadWordproFile(SvStream &rStream, uno::Reference<css::xml::sax::XDocumentHa
         Lwp9Reader reader(aLwpSvStream.get(), pStrm.get());
         //Reset all static objects,because this function may be called many times.
         XFGlobalReset();
-        reader.Read();
-
-        return 0;
+        const bool bOk = reader.Read();
+        if (!bOk)
+            nRet = 1;
     }
     catch (...)
     {
         return 1;
     }
+    return nRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

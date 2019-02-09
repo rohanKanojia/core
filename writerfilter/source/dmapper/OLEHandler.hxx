@@ -20,11 +20,10 @@
 #define INCLUDED_WRITERFILTER_SOURCE_DMAPPER_OLEHANDLER_HXX
 
 #include "LoggedResources.hxx"
-#include <memory>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/awt/Point.hpp>
-
 #include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/text/WrapTextMode.hpp>
 
 namespace com{ namespace sun{ namespace star{
     namespace graphic{
@@ -53,14 +52,14 @@ class OLEHandler : public LoggedProperties
     OUString     m_sProgId;
     OUString     m_sShapeId;
     OUString     m_sDrawAspect;
+    OUString     m_sVisAreaWidth;
+    OUString     m_sVisAreaHeight;
     OUString     m_sObjectId;
     OUString     m_sr_id;
     /// The stream URL right after the import of the raw data.
     OUString     m_aURL;
 
-    sal_Int32                   m_nDxaOrig;
-    sal_Int32                   m_nDyaOrig;
-    sal_Int32                   m_nWrapMode;
+    css::text::WrapTextMode     m_nWrapMode;
 
     css::uno::Reference<css::drawing::XShape> m_xShape;
 
@@ -77,10 +76,10 @@ class OLEHandler : public LoggedProperties
     virtual void lcl_sprm(Sprm & sprm) override;
 
 public:
-    OLEHandler(DomainMapper& rDomainMapper);
-    virtual ~OLEHandler();
+    explicit OLEHandler(DomainMapper& rDomainMapper);
+    virtual ~OLEHandler() override;
 
-    css::uno::Reference<css::drawing::XShape> getShape() { return m_xShape; };
+    const css::uno::Reference<css::drawing::XShape>& getShape() { return m_xShape; };
 
     bool isOLEObject() { return m_xInputStream.is(); }
 
@@ -92,13 +91,16 @@ public:
     /// Get the CLSID of the OLE object, in case we can find one based on m_sProgId.
     OUString getCLSID(const css::uno::Reference<css::uno::XComponentContext>& xComponentContext) const;
 
+    OUString const & GetDrawAspect() const;
+    OUString const & GetVisAreaWidth() const;
+    OUString const & GetVisAreaHeight() const;
+
     OUString copyOLEOStream(css::uno::Reference<css::text::XTextDocument> const& xTextDocument);
 
-    css::awt::Size getSize() const { return m_aShapeSize; }
-    css::uno::Reference<css::graphic::XGraphic> getReplacement() const { return m_xReplacement; }
+    const css::awt::Size& getSize() const { return m_aShapeSize; }
+    const css::uno::Reference<css::graphic::XGraphic>& getReplacement() const { return m_xReplacement; }
 
 };
-typedef std::shared_ptr< OLEHandler >  OLEHandlerPtr;
 }}
 
 #endif

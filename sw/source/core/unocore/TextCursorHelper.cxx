@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TextCursorHelper.hxx"
-#include "unobaseclass.hxx"
+#include <TextCursorHelper.hxx>
+#include <unobaseclass.hxx>
 #include <comphelper/servicehelper.hxx>
 
 using namespace ::com::sun::star;
@@ -36,7 +36,6 @@ const uno::Sequence< sal_Int8 > & OTextCursorHelper::getUnoTunnelId()
 //XUnoTunnel
 sal_Int64 SAL_CALL OTextCursorHelper::getSomething(
     const uno::Sequence< sal_Int8 >& rId )
-        throw(uno::RuntimeException, std::exception)
 {
     if( rId.getLength() == 16
         && 0 == memcmp( getUnoTunnelId().getConstArray(),

@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ManifestReader.hxx>
-#include <ManifestImport.hxx>
+#include "ManifestReader.hxx"
+#include "ManifestImport.hxx"
+#include <sal/log.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
@@ -47,7 +49,6 @@ ManifestReader::~ManifestReader()
 {
 }
 Sequence< Sequence< PropertyValue > > SAL_CALL ManifestReader::readManifestSequence( const Reference< XInputStream >& rStream )
-    throw (css::uno::RuntimeException, std::exception)
 {
     Sequence < Sequence < PropertyValue > > aManifestSequence;
     Reference < XParser > xParser  = Parser::create(m_xContext);
@@ -64,22 +65,22 @@ Sequence< Sequence< PropertyValue > > SAL_CALL ManifestReader::readManifestSeque
     }
     catch (SAXParseException& e)
     {
-        SAL_WARN("package", "ignoring SAXParseException " + e.Message);
+        SAL_WARN("package", "ignoring " << e);
     }
     catch (SAXException& e)
     {
-        SAL_WARN("package", "ignoring SAXException " + e.Message);
+        SAL_WARN("package", "ignoring " << e);
     }
     catch (IOException& e)
     {
-        SAL_WARN("package", "ignoring IOException " + e.Message);
+        SAL_WARN("package", "ignoring " << e);
     }
     xParser->setDocumentHandler ( Reference < XDocumentHandler > () );
     return aManifestSequence;
 }
 // Component functions
 
-Reference < XInterface > SAL_CALL ManifestReader_createInstance( Reference< XMultiServiceFactory > const & rServiceFactory )
+static Reference < XInterface > ManifestReader_createInstance( Reference< XMultiServiceFactory > const & rServiceFactory )
 {
     return *new ManifestReader( comphelper::getComponentContext(rServiceFactory) );
 }
@@ -95,19 +96,16 @@ Sequence < OUString > ManifestReader::static_getSupportedServiceNames()
 }
 
 OUString ManifestReader::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return static_getImplementationName();
 }
 
 sal_Bool SAL_CALL ManifestReader::supportsService(OUString const & rServiceName)
-    throw (RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName );
 }
 
 Sequence < OUString > ManifestReader::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return static_getSupportedServiceNames();
 }

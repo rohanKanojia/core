@@ -21,30 +21,42 @@
     <menu:menupopup>
       <menu:menuitem menu:id=".uno:AddDirect"/>
       <menu:menuitem menu:id=".uno:Open"/>
+      <menu:menuitem menu:id=".uno:OpenRemote"/>
       <menu:menuitem menu:id=".uno:RecentFileList"/>
+      <menu:menuitem menu:id=".uno:CloseDoc"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:AutoPilotMenu"/>
-      <menu:menuseparator/>
       <menu:menu menu:id=".uno:TemplateMenu">
           <menu:menupopup>
+              <menu:menuitem menu:id=".uno:OpenTemplate"/>
               <menu:menuitem menu:id=".uno:SaveAsTemplate"/>
+              <menu:menuseparator/>
               <menu:menuitem menu:id=".uno:NewDoc"/>
           </menu:menupopup>
       </menu:menu>
       <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:CloseDoc"/>
+      <menu:menuitem menu:id=".uno:Reload"/>
+      <menu:menuitem menu:id=".uno:VersionDialog"/>
+      <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:Save"/>
+      <menu:menuitem menu:id=".uno:SaveAsRemote"/>
       <menu:menuitem menu:id=".uno:SaveAs"/>
+      <menu:menuitem menu:id=".uno:SaveACopy"/>
       <menu:menuitem menu:id=".uno:SaveAll"/>
+      <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:CheckOut"/>
       <menu:menuitem menu:id=".uno:CancelCheckOut"/>
       <menu:menuitem menu:id=".uno:CheckIn"/>
       <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:Reload"/>
-      <menu:menuitem menu:id=".uno:VersionDialog"/>
-      <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:ExportTo"/>
-      <menu:menuitem menu:id=".uno:ExportToPDF"/>
+      <menu:menu menu:id=".uno:ExportAsMenu">
+        <menu:menupopup>
+          <menu:menuitem menu:id=".uno:ExportToPDF"/>
+          <menu:menuitem menu:id=".uno:ExportDirectToPDF"/>
+          <menu:menuitem menu:id=".uno:ExportToEPUB"/>
+          <menu:menuitem menu:id=".uno:ExportDirectToEPUB"/>
+        </menu:menupopup>
+      </menu:menu>
       <menu:menu menu:id=".uno:SendToMenu">
         <menu:menupopup>
           <menu:menuitem menu:id=".uno:SendMail"/>
@@ -64,11 +76,11 @@
         </menu:menupopup>
       </menu:menu>
       <menu:menuseparator/>
-      <menu:menuitem menu:id=".uno:SetDocumentProperties"/>
-      <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:PrintPreview"/>
       <menu:menuitem menu:id=".uno:Print"/>
       <menu:menuitem menu:id=".uno:PrinterSetup"/>
+      <menu:menuseparator/>
+      <menu:menuitem menu:id=".uno:SetDocumentProperties"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:Quit"/>
     </menu:menupopup>
@@ -120,7 +132,6 @@
       <menu:menuitem menu:id=".uno:EditHyperlink"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:LinkDialog"/>
-      <menu:menuitem menu:id=".uno:PlugInsActive"/>
       <menu:menuitem menu:id=".uno:ImageMapDialog"/>
       <menu:menuitem menu:id=".uno:ObjectMenue"/>
       <menu:menuseparator/>
@@ -134,7 +145,6 @@
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:AvailableToolbars"/>
       <menu:menuitem menu:id=".uno:StatusBarVisible"/>
-      <menu:menuitem menu:id=".uno:ShowImeStatusWindow"/>
       <menu:menuitem menu:id=".uno:Ruler"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:ViewBounds"/>
@@ -286,7 +296,7 @@
           <menu:menuitem menu:id=".uno:WrapOn"/>
           <menu:menuitem menu:id=".uno:WrapIdeal"/>
           <menu:menuitem menu:id=".uno:WrapThrough"/>
-          <menu:menuitem menu:id=".uno:WrapThroughTransparent"/>
+          <menu:menuitem menu:id=".uno:WrapThroughTransparencyToggle"/>
           <menu:menuseparator/>
           <menu:menuitem menu:id=".uno:WrapContour"/>
           <menu:menuitem menu:id=".uno:ContourDialog"/>
@@ -318,16 +328,16 @@
           <menu:menuitem menu:id=".uno:SetObjectToBackground"/>
         </menu:menupopup>
       </menu:menu>
-      <menu:menu menu:id=".uno:FlipMenu">
+      <menu:menu menu:id=".uno:RotateFlipMenu">
         <menu:menupopup>
-            <menu:menuitem menu:id=".uno:FlipVertical"/>
-            <menu:menuitem menu:id=".uno:FlipHorizontal"/>
-        </menu:menupopup>
-      </menu:menu>
-      <menu:menu menu:id=".uno:RotateMenu">
-        <menu:menupopup>
+          <menu:menuitem menu:id=".uno:ToggleObjectRotateMode"/>
           <menu:menuitem menu:id=".uno:RotateLeft"/>
           <menu:menuitem menu:id=".uno:RotateRight"/>
+          <menu:menuitem menu:id=".uno:Rotate180"/>
+          <menu:menuitem menu:id=".uno:RotateReset"/>
+          <menu:menuseparator/>
+          <menu:menuitem menu:id=".uno:FlipVertical"/>
+          <menu:menuitem menu:id=".uno:FlipHorizontal"/>
         </menu:menupopup>
       </menu:menu>
       <menu:menu menu:id=".uno:GroupMenu">
@@ -388,14 +398,16 @@
       <menu:menuitem menu:id=".uno:AutoFormat"/>
       <menu:menu menu:id=".uno:TableAutoFitMenu">
         <menu:menupopup>
-          <menu:menuitem menu:id=".uno:SetColumnWidth"/>
-          <menu:menuitem menu:id=".uno:SetOptimalColumnWidth"/>
-          <menu:menuitem menu:id=".uno:DistributeColumns"/>
-          <menu:menuseparator/>
           <menu:menuitem menu:id=".uno:SetRowHeight"/>
+          <menu:menuitem menu:id=".uno:SetMinimalRowHeight"/>
           <menu:menuitem menu:id=".uno:SetOptimalRowHeight"/>
           <menu:menuitem menu:id=".uno:DistributeRows"/>
           <menu:menuitem menu:id=".uno:RowSplit"/>
+          <menu:menuseparator/>
+          <menu:menuitem menu:id=".uno:SetColumnWidth"/>
+          <menu:menuitem menu:id=".uno:SetMinimalColumnWidth"/>
+          <menu:menuitem menu:id=".uno:SetOptimalColumnWidth"/>
+          <menu:menuitem menu:id=".uno:DistributeColumns"/>
         </menu:menupopup>
       </menu:menu>
       <menu:menuitem menu:id=".uno:HeadingRowsRepeat"/>
@@ -457,7 +469,7 @@
         <menu:menupopup>
           <menu:menuitem menu:id=".uno:MacroRecorder"/>
           <menu:menuitem menu:id=".uno:RunMacro"/>
-          <menu:menu menu:id=".uno:ScriptOrganizer"/>
+          <menu:menuitem menu:id=".uno:ScriptOrganizer"/>
           <menu:menuseparator/>
           <menu:menuitem menu:id=".uno:MacroOrganizer?TabId:short=1"/>
         </menu:menupopup>
@@ -480,8 +492,15 @@
     <menu:menupopup>
       <menu:menuitem menu:id=".uno:HelpIndex"/>
       <menu:menuitem menu:id=".uno:ExtendedHelp"/>
+      <menu:menuitem menu:id=".uno:Documentation"/>
       <menu:menuseparator/>
+      <menu:menuitem menu:id=".uno:QuestionAnswers"/>
       <menu:menuitem menu:id=".uno:SendFeedback"/>
+      <menu:menuseparator/>
+      <menu:menuitem menu:id=".uno:SafeMode"/>
+      <menu:menuseparator/>
+      <menu:menuitem menu:id=".uno:GetInvolved"/>
+      <menu:menuitem menu:id=".uno:Donation"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:ShowLicense"/>
       <menu:menuitem menu:id=".uno:About"/>

@@ -49,7 +49,6 @@
 #include <com/sun/star/util/Color.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
 #include <rtl/ustrbuf.hxx>
-#include <boost/bind.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -58,8 +57,6 @@ using namespace ::com::sun::star::drawing::framework;
 namespace sdext { namespace presenter {
 
 static const sal_Int32 gnGapSize (20);
-static const sal_Int32 gnMinimalSeparatorSize (20);
-static const sal_Int32 gnSeparatorInset (0);
 
 namespace {
 
@@ -72,14 +69,13 @@ namespace {
             const PresenterTheme::SharedFontDescriptor& rpFont);
 
         void SetText (const OUString& rsText);
-        OUString GetText() const;
-        PresenterTheme::SharedFontDescriptor GetFont() const;
+        const OUString& GetText() const;
+        const PresenterTheme::SharedFontDescriptor& GetFont() const;
 
         void Paint (
             const Reference<rendering::XCanvas>& rxCanvas,
             const rendering::ViewState& rViewState,
-            const awt::Rectangle& rBoundingBox,
-            const awt::Point& rOffset);
+            const awt::Rectangle& rBoundingBox);
 
         geometry::RealRectangle2D GetBoundingBox (
             const Reference<rendering::XCanvas>& rxCanvas);
@@ -103,8 +99,8 @@ namespace {
         void ReadElementMode (
             const Reference<beans::XPropertySet>& rxProperties,
             const OUString& rsModeName,
-            std::shared_ptr<ElementMode>& rpDefaultMode,
-            ::sdext::presenter::PresenterToolBar::Context& rContext);
+            std::shared_ptr<ElementMode> const & rpDefaultMode,
+            ::sdext::presenter::PresenterToolBar::Context const & rContext);
     };
     typedef std::shared_ptr<ElementMode> SharedElementMode;
 
@@ -134,7 +130,6 @@ namespace {
     {
     public:
         explicit Element (const ::rtl::Reference<PresenterToolBar>& rpToolBar);
-        virtual ~Element();
         Element(const Element&) = delete;
         Element& operator=(const Element&) = delete;
 
@@ -151,29 +146,26 @@ namespace {
         virtual void Paint (
             const Reference<rendering::XCanvas>& rxCanvas,
             const rendering::ViewState& rViewState) = 0;
-        awt::Size GetBoundingSize (
+        awt::Size const & GetBoundingSize (
             const Reference<rendering::XCanvas>& rxCanvas);
         awt::Rectangle GetBoundingBox() const;
         virtual bool SetState (const bool bIsOver, const bool bIsPressed);
-        void Invalidate (const bool bSynchronous = true);
+        void Invalidate (const bool bSynchronous);
         bool IsOutside (const awt::Rectangle& rBox);
         virtual bool IsFilling() const;
         void UpdateState();
 
         // lang::XEventListener
 
-        virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent) override;
 
         // document::XEventListener
 
-        virtual void SAL_CALL notifyEvent (const css::document::EventObject& rEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL notifyEvent (const css::document::EventObject& rEvent) override;
 
         // frame::XStatusListener
 
-        virtual void SAL_CALL statusChanged (const css::frame::FeatureStateEvent& rEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL statusChanged (const css::frame::FeatureStateEvent& rEvent) override;
 
     protected:
         ::rtl::Reference<PresenterToolBar> mpToolBar;
@@ -213,7 +205,6 @@ namespace {
         static ::rtl::Reference<Element> Create (
             const ::rtl::Reference<PresenterToolBar>& rpToolBar);
 
-        virtual ~Button();
         virtual void SAL_CALL disposing() override;
 
         virtual void Paint (
@@ -222,8 +213,7 @@ namespace {
 
         // lang::XEventListener
 
-        virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing (const css::lang::EventObject& rEvent) override;
 
     protected:
         virtual awt::Size CreateBoundingSize (
@@ -264,12 +254,7 @@ namespace {
     class TimeFormatter
     {
     public:
-        TimeFormatter();
-        OUString FormatTime (const oslDateTime& rTime);
-    private:
-        bool mbIs24HourFormat;
-        bool mbIsAmPmFormat;
-        bool mbIsShowSeconds;
+        static OUString FormatTime (const oslDateTime& rTime);
     };
 
     class TimeLabel : public Label
@@ -307,9 +292,8 @@ namespace {
             const SharedElementMode& rpSelectedMode,
             const SharedElementMode& rpDisabledMode) override;
     private:
-        TimeFormatter maTimeFormatter;
         CurrentTimeLabel (const ::rtl::Reference<PresenterToolBar>& rpToolBar);
-        virtual ~CurrentTimeLabel();
+        virtual ~CurrentTimeLabel() override;
         virtual void TimeHasChanged (const oslDateTime& rCurrentTime) override;
     };
 
@@ -325,10 +309,9 @@ namespace {
             const SharedElementMode& rpDisabledMode) override;
         virtual void restart() override;
     private:
-        TimeFormatter maTimeFormatter;
         TimeValue maStartTimeValue;
         PresentationTimeLabel (const ::rtl::Reference<PresenterToolBar>& rpToolBar);
-        virtual ~PresentationTimeLabel();
+        virtual ~PresentationTimeLabel() override;
         virtual void TimeHasChanged (const oslDateTime& rCurrentTime) override;
     };
 
@@ -380,7 +363,6 @@ PresenterToolBar::PresenterToolBar (
       mpPresenterController(rpPresenterController),
       mbIsLayoutPending(false),
       meAnchor(eAnchor),
-      maBoundingBox(),
       maMinimalSize()
 {
 }
@@ -403,7 +385,7 @@ void PresenterToolBar::Initialize (
             if (xPeer.is())
                 xPeer->setBackground(util::Color(0xff000000));
 
-            mxWindow->setVisible(sal_True);
+            mxWindow->setVisible(true);
         }
 
         mxSlideShowController = mpPresenterController->GetSlideShowController();
@@ -434,18 +416,13 @@ void SAL_CALL PresenterToolBar::disposing()
     }
 
     // Dispose tool bar elements.
-    ElementContainer::iterator iPart (maElementContainer.begin());
-    ElementContainer::const_iterator iEnd (maElementContainer.end());
-    for ( ; iPart!=iEnd; ++iPart)
+    for (const auto& rxPart : maElementContainer)
     {
-        OSL_ASSERT(iPart->get()!=nullptr);
-        ElementContainerPart::iterator iElement ((*iPart)->begin());
-        ElementContainerPart::const_iterator iPartEnd ((*iPart)->end());
-        for ( ; iElement!=iPartEnd; ++iElement)
+        OSL_ASSERT(rxPart != nullptr);
+        for (rtl::Reference<Element>& pElement : *rxPart)
         {
-            if (iElement->get() != nullptr)
+            if (pElement.get() != nullptr)
             {
-                ::rtl::Reference<Element> pElement (*iElement);
                 Reference<lang::XComponent> xComponent (
                     static_cast<XWeak*>(pElement.get()), UNO_QUERY);
                 if (xComponent.is())
@@ -482,19 +459,19 @@ void PresenterToolBar::RequestLayout()
     xManager->Invalidate(mxWindow);
 }
 
-geometry::RealSize2D PresenterToolBar::GetMinimalSize()
+geometry::RealSize2D const & PresenterToolBar::GetMinimalSize()
 {
     if (mbIsLayoutPending)
         Layout(mxCanvas);
     return maMinimalSize;
 }
 
-::rtl::Reference<PresenterController> PresenterToolBar::GetPresenterController() const
+const ::rtl::Reference<PresenterController>& PresenterToolBar::GetPresenterController() const
 {
     return mpPresenterController;
 }
 
-Reference<XComponentContext> PresenterToolBar::GetComponentContext() const
+const Reference<XComponentContext>& PresenterToolBar::GetComponentContext() const
 {
     return mxComponentContext;
 }
@@ -502,7 +479,6 @@ Reference<XComponentContext> PresenterToolBar::GetComponentContext() const
 //-----  lang::XEventListener -------------------------------------------------
 
 void SAL_CALL PresenterToolBar::disposing (const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
 {
     if (rEventObject.Source == mxWindow)
         mxWindow = nullptr;
@@ -510,35 +486,22 @@ void SAL_CALL PresenterToolBar::disposing (const lang::EventObject& rEventObject
 
 //----- XWindowListener -------------------------------------------------------
 
-void SAL_CALL PresenterToolBar::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterToolBar::windowResized (const awt::WindowEvent&)
 {
-    (void)rEvent;
     mbIsLayoutPending = true;
 }
 
-void SAL_CALL PresenterToolBar::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterToolBar::windowMoved (const awt::WindowEvent&) {}
 
-void SAL_CALL PresenterToolBar::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterToolBar::windowShown (const lang::EventObject&)
 {
-    (void)rEvent;
     mbIsLayoutPending = true;
 }
 
-void SAL_CALL PresenterToolBar::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterToolBar::windowHidden (const lang::EventObject&) {}
 
 //----- XPaintListener --------------------------------------------------------
 void SAL_CALL PresenterToolBar::windowPaint (const css::awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if ( ! mxCanvas.is())
         return;
@@ -558,33 +521,29 @@ void SAL_CALL PresenterToolBar::windowPaint (const css::awt::PaintEvent& rEvent)
     // Make the back buffer visible.
     Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxCanvas, UNO_QUERY);
     if (xSpriteCanvas.is())
-        xSpriteCanvas->updateScreen(sal_False);
+        xSpriteCanvas->updateScreen(false);
 }
 
 //----- XMouseListener --------------------------------------------------------
 void SAL_CALL PresenterToolBar::mousePressed (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
         ThrowIfDisposed();
         CheckMouseOver(rEvent, true, true);
 }
 
 void SAL_CALL PresenterToolBar::mouseReleased (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
         ThrowIfDisposed();
         CheckMouseOver(rEvent, true);
 }
 
 void SAL_CALL PresenterToolBar::mouseEntered (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
         ThrowIfDisposed();
         CheckMouseOver(rEvent, true);
 }
 
 void SAL_CALL PresenterToolBar::mouseExited (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
         ThrowIfDisposed();
         CheckMouseOver(rEvent, false);
@@ -593,23 +552,19 @@ void SAL_CALL PresenterToolBar::mouseExited (const css::awt::MouseEvent& rEvent)
 //----- XMouseMotionListener --------------------------------------------------
 
 void SAL_CALL PresenterToolBar::mouseMoved (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
 {
         ThrowIfDisposed();
         CheckMouseOver(rEvent, true);
  }
 
-void SAL_CALL PresenterToolBar::mouseDragged (const css::awt::MouseEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterToolBar::mouseDragged (const css::awt::MouseEvent&)
 {
     ThrowIfDisposed();
-    (void)rEvent;
 }
 
 //----- XDrawView -------------------------------------------------------------
 
 void SAL_CALL PresenterToolBar::setCurrentPage (const Reference<drawing::XDrawPage>& rxSlide)
-    throw (RuntimeException, std::exception)
 {
     if (rxSlide != mxCurrentSlide)
     {
@@ -619,7 +574,6 @@ void SAL_CALL PresenterToolBar::setCurrentPage (const Reference<drawing::XDrawPa
 }
 
 Reference<drawing::XDrawPage> SAL_CALL PresenterToolBar::getCurrentPage()
-    throw (RuntimeException, std::exception)
 {
     return mxCurrentSlide;
 }
@@ -634,10 +588,10 @@ void PresenterToolBar::CreateControls (
     // Expand the macro in the bitmap file names.
     PresenterConfigurationAccess aConfiguration (
         mxComponentContext,
-        OUString("/org.openoffice.Office.PresenterScreen/"),
+        "/org.openoffice.Office.PresenterScreen/",
         PresenterConfigurationAccess::READ_ONLY);
 
-    mpCurrentContainerPart.reset(new ElementContainerPart());
+    mpCurrentContainerPart.reset(new ElementContainerPart);
     maElementContainer.clear();
     maElementContainer.push_back(mpCurrentContainerPart);
 
@@ -658,14 +612,17 @@ void PresenterToolBar::CreateControls (
         {
             PresenterConfigurationAccess::ForAll(
                 xEntries,
-                ::boost::bind(&PresenterToolBar::ProcessEntry, this, _2, ::boost::ref(aContext)));
+                [this, &aContext] (OUString const&, uno::Reference<beans::XPropertySet> const& xProps)
+                {
+                    return this->ProcessEntry(xProps, aContext);
+                });
         }
     }
 }
 
 void PresenterToolBar::ProcessEntry (
     const Reference<beans::XPropertySet>& rxProperties,
-    Context& rContext)
+    Context const & rContext)
 {
     if ( ! rxProperties.is())
         return;
@@ -704,7 +661,7 @@ void PresenterToolBar::ProcessEntry (
         pElement.set(new Label(this));
     else if ( sType == "ChangeOrientation" )
     {
-        mpCurrentContainerPart.reset(new ElementContainerPart());
+        mpCurrentContainerPart.reset(new ElementContainerPart);
         maElementContainer.push_back(mpCurrentContainerPart);
         return;
     }
@@ -726,27 +683,24 @@ void PresenterToolBar::Layout (
     mbIsLayoutPending = false;
 
     const awt::Rectangle aWindowBox (mxWindow->getPosSize());
-    ElementContainer::iterator iPart;
-    ElementContainer::iterator iEnd (maElementContainer.end());
-    ElementContainer::iterator iBegin (maElementContainer.begin());
     ::std::vector<geometry::RealSize2D> aPartSizes (maElementContainer.size());
     geometry::RealSize2D aTotalSize (0,0);
     bool bIsHorizontal (true);
-    sal_Int32 nIndex;
+    sal_Int32 nIndex (0);
     double nTotalHorizontalGap (0);
     sal_Int32 nGapCount (0);
-    for (iPart=maElementContainer.begin(),nIndex=0; iPart!=iEnd; ++iPart,++nIndex)
+    for (const auto& rxPart : maElementContainer)
     {
-        geometry::RealSize2D aSize (CalculatePartSize(rxCanvas, *iPart, bIsHorizontal));
+        geometry::RealSize2D aSize (CalculatePartSize(rxCanvas, rxPart, bIsHorizontal));
 
         // Remember the size of each part for later.
         aPartSizes[nIndex] = aSize;
 
         // Add gaps between elements.
-        if ((*iPart)->size()>1 && bIsHorizontal)
+        if (rxPart->size()>1 && bIsHorizontal)
         {
-            nTotalHorizontalGap += ((*iPart)->size() - 1) * gnGapSize;
-            nGapCount += (*iPart)->size()-1;
+            nTotalHorizontalGap += (rxPart->size() - 1) * gnGapSize;
+            nGapCount += rxPart->size() - 1;
         }
 
         // Orientation changes for each part.
@@ -755,6 +709,7 @@ void PresenterToolBar::Layout (
         aTotalSize.Width += aSize.Width;
         // Height is the maximum height of all parts.
         aTotalSize.Height = ::std::max(aTotalSize.Height, aSize.Height);
+        ++nIndex;
     }
     // Add gaps between parts.
     if (maElementContainer.size() > 1)
@@ -783,38 +738,36 @@ void PresenterToolBar::Layout (
     {
         case Left : nX = 0; break;
         case Center: nX = (aWindowBox.Width - aTotalSize.Width - nTotalHorizontalGap) / 2; break;
-        case Right: nX = aWindowBox.Width - aTotalSize.Width - nTotalHorizontalGap; break;
     }
 
     // Place the parts.
     double nY ((aWindowBox.Height - aTotalSize.Height) / 2);
     bIsHorizontal = true;
 
-    maBoundingBox.X1 = nX;
-    maBoundingBox.Y1 = nY;
-    maBoundingBox.X2 = nX + aTotalSize.Width + nTotalHorizontalGap;
-    maBoundingBox.Y2 = nY + aTotalSize.Height;
-
     /* push front or back ? ... */
     /// check whether RTL interface or not
     if(!AllSettings::GetLayoutRTL()){
-        for (iPart=maElementContainer.begin(), nIndex=0; iPart!=iEnd; ++iPart,++nIndex)
+        nIndex = 0;
+        for (const auto& rxPart : maElementContainer)
         {
             geometry::RealRectangle2D aBoundingBox(
                 nX, nY,
                 nX+aPartSizes[nIndex].Width, nY+aTotalSize.Height);
 
             // Add space for gaps between elements.
-            if ((*iPart)->size() > 1)
+            if (rxPart->size() > 1)
                 if (bIsHorizontal)
-                    aBoundingBox.X2 += ((*iPart)->size()-1) * nGapWidth;
+                    aBoundingBox.X2 += (rxPart->size() - 1) * nGapWidth;
 
-            LayoutPart(rxCanvas, *iPart, aBoundingBox, aPartSizes[nIndex], bIsHorizontal);
+            LayoutPart(rxCanvas, rxPart, aBoundingBox, aPartSizes[nIndex], bIsHorizontal);
             bIsHorizontal = !bIsHorizontal;
             nX += aBoundingBox.X2 - aBoundingBox.X1 + nGapWidth;
+            ++nIndex;
         }
     }
     else {
+        ElementContainer::iterator iPart;
+        ElementContainer::iterator iBegin (maElementContainer.begin());
         for (iPart=maElementContainer.end()-1, nIndex=2; iPart!=iBegin-1; --iPart, --nIndex)
         {
             geometry::RealRectangle2D aBoundingBox(
@@ -849,13 +802,12 @@ geometry::RealSize2D PresenterToolBar::CalculatePartSize (
     if (mxWindow.is())
     {
         // Calculate the summed width of all elements.
-        ElementContainerPart::const_iterator iElement;
-        for (iElement=rpPart->begin(); iElement!=rpPart->end(); ++iElement)
+        for (const auto& rxElement : *rpPart)
         {
-            if (iElement->get() == nullptr)
+            if (rxElement.get() == nullptr)
                 continue;
 
-            const awt::Size aBSize ((*iElement)->GetBoundingSize(rxCanvas));
+            const awt::Size aBSize (rxElement->GetBoundingSize(rxCanvas));
             if (bIsHorizontal)
             {
                 aTotalSize.Width += aBSize.Width;
@@ -893,45 +845,45 @@ void PresenterToolBar::LayoutPart (
     double nX (rBoundingBox.X1);
     double nY (rBoundingBox.Y1);
 
-    ElementContainerPart::const_iterator iElement;
-    ElementContainerPart::const_iterator iEnd (rpPart->end());
-    ElementContainerPart::const_iterator iBegin (rpPart->begin());
-
     /// check whether RTL interface or not
     if(!AllSettings::GetLayoutRTL()){
-        for (iElement=rpPart->begin(); iElement!=iEnd; ++iElement)
+        for (auto& rxElement : *rpPart)
         {
-            if (iElement->get() == nullptr)
+            if (rxElement.get() == nullptr)
                 continue;
 
-            const awt::Size aElementSize ((*iElement)->GetBoundingSize(rxCanvas));
+            const awt::Size aElementSize (rxElement->GetBoundingSize(rxCanvas));
             if (bIsHorizontal)
             {
-                if ((*iElement)->IsFilling())
+                if (rxElement->IsFilling())
                 {
                     nY = rBoundingBox.Y1;
-                    (*iElement)->SetSize(geometry::RealSize2D(aElementSize.Width, rBoundingBox.Y2 - rBoundingBox.Y1));
+                    rxElement->SetSize(geometry::RealSize2D(aElementSize.Width, rBoundingBox.Y2 - rBoundingBox.Y1));
                 }
                 else
                     nY = rBoundingBox.Y1 + (rBoundingBox.Y2-rBoundingBox.Y1 - aElementSize.Height) / 2;
-                (*iElement)->SetLocation(awt::Point(sal_Int32(0.5 + nX), sal_Int32(0.5 + nY)));
+                rxElement->SetLocation(awt::Point(sal_Int32(0.5 + nX), sal_Int32(0.5 + nY)));
                 nX += aElementSize.Width + nGap;
             }
             else
             {
-                if ((*iElement)->IsFilling())
+                if (rxElement->IsFilling())
                 {
                     nX = rBoundingBox.X1;
-                    (*iElement)->SetSize(geometry::RealSize2D(rBoundingBox.X2 - rBoundingBox.X1, aElementSize.Height));
+                    rxElement->SetSize(geometry::RealSize2D(rBoundingBox.X2 - rBoundingBox.X1, aElementSize.Height));
                 }
                 else
                     nX = rBoundingBox.X1 + (rBoundingBox.X2-rBoundingBox.X1 - aElementSize.Width) / 2;
-                (*iElement)->SetLocation(awt::Point(sal_Int32(0.5 + nX), sal_Int32(0.5 + nY)));
+                rxElement->SetLocation(awt::Point(sal_Int32(0.5 + nX), sal_Int32(0.5 + nY)));
                 nY += aElementSize.Height + nGap;
             }
         }
     }
     else {
+        ElementContainerPart::const_iterator iElement;
+        ElementContainerPart::const_iterator iEnd (rpPart->end());
+        ElementContainerPart::const_iterator iBegin (rpPart->begin());
+
         for (iElement=rpPart->end()-1; iElement!=iBegin-1; --iElement)
         {
             if (iElement->get() == nullptr)
@@ -978,7 +930,6 @@ void PresenterToolBar::LayoutPart (
             }
         }
     }
-
 }
 
 void PresenterToolBar::Paint (
@@ -987,18 +938,14 @@ void PresenterToolBar::Paint (
 {
     OSL_ASSERT(mxCanvas.is());
 
-    ElementContainer::iterator iPart;
-    ElementContainer::const_iterator iEnd (maElementContainer.end());
-    for (iPart=maElementContainer.begin(); iPart!=iEnd; ++iPart)
+    for (const auto& rxPart : maElementContainer)
     {
-        ElementContainerPart::iterator iElement;
-        ElementContainerPart::const_iterator iPartEnd ((*iPart)->end());
-        for (iElement=(*iPart)->begin(); iElement!=iPartEnd; ++iElement)
+        for (auto& rxElement : *rxPart)
         {
-            if (iElement->get() != nullptr)
+            if (rxElement.get() != nullptr)
             {
-                if ( ! (*iElement)->IsOutside(rUpdateBox))
-                    (*iElement)->Paint(mxCanvas, rViewState);
+                if ( ! rxElement->IsOutside(rUpdateBox))
+                    rxElement->Paint(mxCanvas, rViewState);
             }
         }
     }
@@ -1008,16 +955,12 @@ void PresenterToolBar::UpdateSlideNumber()
 {
     if( mxSlideShowController.is() )
     {
-        ElementContainer::iterator iPart;
-        ElementContainer::const_iterator iEnd (maElementContainer.end());
-        for (iPart=maElementContainer.begin(); iPart!=iEnd; ++iPart)
+        for (const auto& rxPart : maElementContainer)
         {
-            ElementContainerPart::iterator iElement;
-            ElementContainerPart::const_iterator iPartEnd ((*iPart)->end());
-            for (iElement=(*iPart)->begin(); iElement!=iPartEnd; ++iElement)
+            for (auto& rxElement : *rxPart)
             {
-                if (iElement->get() != nullptr)
-                    (*iElement)->CurrentSlideHasChanged();
+                if (rxElement.get() != nullptr)
+                    rxElement->CurrentSlideHasChanged();
             }
         }
     }
@@ -1033,24 +976,20 @@ void PresenterToolBar::CheckMouseOver (
         awt::Rectangle aWindowBox = mxWindow->getPosSize();
         rTemp.X=aWindowBox.Width-rTemp.X;
     }
-    ElementContainer::iterator iPart;
-    ElementContainer::const_iterator iEnd (maElementContainer.end());
-    for (iPart=maElementContainer.begin(); iPart!=iEnd; ++iPart)
+    for (const auto& rxPart : maElementContainer)
     {
-        ElementContainerPart::iterator iElement;
-        ElementContainerPart::const_iterator iPartEnd ((*iPart)->end());
-        for (iElement=(*iPart)->begin(); iElement!=iPartEnd; ++iElement)
+        for (auto& rxElement : *rxPart)
         {
-            if (iElement->get() == nullptr)
+            if (rxElement.get() == nullptr)
                 continue;
 
-            awt::Rectangle aBox ((*iElement)->GetBoundingBox());
+            awt::Rectangle aBox (rxElement->GetBoundingBox());
             const bool bIsOver = bOverWindow
                 && aBox.X <= rTemp.X
                 && aBox.Width+aBox.X-1 >= rTemp.X
                 && aBox.Y <= rTemp.Y
                 && aBox.Height+aBox.Y-1 >= rTemp.Y;
-            (*iElement)->SetState(
+            rxElement->SetState(
                 bIsOver,
                 bIsOver && rTemp.Buttons!=0 && bMouseDown && rTemp.ClickCount>0);
         }
@@ -1058,12 +997,11 @@ void PresenterToolBar::CheckMouseOver (
 }
 
 void PresenterToolBar::ThrowIfDisposed() const
-    throw (css::lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
         throw lang::DisposedException (
-            OUString( "PresenterToolBar has already been disposed"),
+            "PresenterToolBar has already been disposed",
             const_cast<uno::XWeak*>(static_cast<const uno::XWeak*>(this)));
     }
 }
@@ -1109,7 +1047,7 @@ PresenterToolBarView::PresenterToolBarView (
             if (xPeer.is())
                 xPeer->setBackground(util::Color(0xff000000));
 
-            mxWindow->setVisible(sal_True);
+            mxWindow->setVisible(true);
         }
     }
     catch (RuntimeException&)
@@ -1143,7 +1081,7 @@ void SAL_CALL PresenterToolBarView::disposing()
 
 }
 
-::rtl::Reference<PresenterToolBar> PresenterToolBarView::GetPresenterToolBar() const
+const ::rtl::Reference<PresenterToolBar>& PresenterToolBarView::GetPresenterToolBar() const
 {
     return mpToolBar;
 }
@@ -1151,7 +1089,6 @@ void SAL_CALL PresenterToolBarView::disposing()
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterToolBarView::windowPaint (const css::awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     awt::Rectangle aWindowBox (mxWindow->getPosSize());
     mpPresenterController->GetCanvasHelper()->Paint(
@@ -1165,7 +1102,6 @@ void SAL_CALL PresenterToolBarView::windowPaint (const css::awt::PaintEvent& rEv
 //-----  lang::XEventListener -------------------------------------------------
 
 void SAL_CALL PresenterToolBarView::disposing (const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
 {
     if (rEventObject.Source == mxWindow)
         mxWindow = nullptr;
@@ -1174,13 +1110,11 @@ void SAL_CALL PresenterToolBarView::disposing (const lang::EventObject& rEventOb
 //----- XResourceId -----------------------------------------------------------
 
 Reference<XResourceId> SAL_CALL PresenterToolBarView::getResourceId()
-    throw (RuntimeException, std::exception)
 {
     return mxViewId;
 }
 
 sal_Bool SAL_CALL PresenterToolBarView::isAnchorOnly()
-    throw (RuntimeException, std::exception)
 {
     return false;
 }
@@ -1188,7 +1122,6 @@ sal_Bool SAL_CALL PresenterToolBarView::isAnchorOnly()
 //----- XDrawView -------------------------------------------------------------
 
 void SAL_CALL PresenterToolBarView::setCurrentPage (const Reference<drawing::XDrawPage>& rxSlide)
-    throw (RuntimeException, std::exception)
 {
     Reference<drawing::XDrawView> xToolBar (static_cast<XWeak*>(mpToolBar.get()), UNO_QUERY);
     if (xToolBar.is())
@@ -1196,7 +1129,6 @@ void SAL_CALL PresenterToolBarView::setCurrentPage (const Reference<drawing::XDr
 }
 
 Reference<drawing::XDrawPage> SAL_CALL PresenterToolBarView::getCurrentPage()
-    throw (RuntimeException, std::exception)
 {
     return nullptr;
 }
@@ -1228,10 +1160,6 @@ Element::Element (
     }
 }
 
-Element::~Element()
-{
-}
-
 void Element::SetModes (
     const SharedElementMode& rpNormalMode,
     const SharedElementMode& rpMouseOverMode,
@@ -1249,7 +1177,7 @@ void Element::disposing()
 {
 }
 
-awt::Size Element::GetBoundingSize (
+awt::Size const & Element::GetBoundingSize (
     const Reference<rendering::XCanvas>& rxCanvas)
 {
     maSize = CreateBoundingSize(rxCanvas);
@@ -1321,7 +1249,7 @@ bool Element::SetState (
     }
     else if (bModified)
     {
-        Invalidate();
+        Invalidate(true);
     }
 
     return bModified;
@@ -1372,25 +1300,18 @@ void Element::UpdateState()
 
 //----- lang::XEventListener --------------------------------------------------
 
-void SAL_CALL Element::disposing (const css::lang::EventObject& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL Element::disposing (const css::lang::EventObject&) {}
 
 //----- document::XEventListener ----------------------------------------------
 
-void SAL_CALL Element::notifyEvent (const css::document::EventObject& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL Element::notifyEvent (const css::document::EventObject&)
 {
-    (void)rEvent;
     UpdateState();
 }
 
 //----- frame::XStatusListener ------------------------------------------------
 
 void SAL_CALL Element::statusChanged (const css::frame::FeatureStateEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
     bool bIsSelected (mbIsSelected);
     bool bIsEnabled (rEvent.IsEnabled);
@@ -1421,8 +1342,8 @@ ElementMode::ElementMode()
 void ElementMode::ReadElementMode (
     const Reference<beans::XPropertySet>& rxElementProperties,
     const OUString& rsModeName,
-    std::shared_ptr<ElementMode>& rpDefaultMode,
-    ::sdext::presenter::PresenterToolBar::Context& rContext)
+    std::shared_ptr<ElementMode> const & rpDefaultMode,
+    ::sdext::presenter::PresenterToolBar::Context const & rContext)
 {
     try
     {
@@ -1431,7 +1352,7 @@ void ElementMode::ReadElementMode (
         UNO_QUERY);
     Reference<beans::XPropertySet> xProperties (
         PresenterConfigurationAccess::GetNodeProperties(xNode, OUString()));
-    if ( ! xProperties.is() && rpDefaultMode.get()!=nullptr)
+    if (!xProperties.is() && rpDefaultMode != nullptr)
     {
         // The mode is not specified.  Use the given, possibly empty,
         // default mode instead.
@@ -1442,31 +1363,25 @@ void ElementMode::ReadElementMode (
 
     // Read action.
     if ( ! (PresenterConfigurationAccess::GetProperty(xProperties, "Action") >>= msAction))
-        if (rpDefaultMode.get()!=nullptr)
+        if (rpDefaultMode != nullptr)
             msAction = rpDefaultMode->msAction;
 
     // Read text and font
-    OUString sText (rpDefaultMode.get()!=nullptr ? rpDefaultMode->maText.GetText() : OUString());
+    OUString sText(rpDefaultMode != nullptr ? rpDefaultMode->maText.GetText() : OUString());
     PresenterConfigurationAccess::GetProperty(xProperties, "Text") >>= sText;
     Reference<container::XHierarchicalNameAccess> xFontNode (
         PresenterConfigurationAccess::GetProperty(xProperties, "Font"), UNO_QUERY);
-    PresenterTheme::SharedFontDescriptor pFont (PresenterTheme::ReadFont(
-        xFontNode,
-        "",
-        rpDefaultMode.get()!=nullptr
-            ? rpDefaultMode->maText.GetFont()
-            : PresenterTheme::SharedFontDescriptor()));
+    PresenterTheme::SharedFontDescriptor pFont(PresenterTheme::ReadFont(
+        xFontNode, rpDefaultMode != nullptr ? rpDefaultMode->maText.GetFont()
+                                            : PresenterTheme::SharedFontDescriptor()));
     maText = Text(sText,pFont);
 
     // Read bitmaps to display as icons.
     Reference<container::XHierarchicalNameAccess> xIconNode (
         PresenterConfigurationAccess::GetProperty(xProperties, "Icon"), UNO_QUERY);
     mpIcon = PresenterBitmapContainer::LoadBitmap(
-        xIconNode,
-        "",
-        rContext.mxPresenterHelper,
-        rContext.mxCanvas,
-        rpDefaultMode.get()!=nullptr ? rpDefaultMode->mpIcon : SharedBitmapDescriptor());
+        xIconNode, "", rContext.mxPresenterHelper, rContext.mxCanvas,
+        rpDefaultMode != nullptr ? rpDefaultMode->mpIcon : SharedBitmapDescriptor());
     }
     catch(Exception&)
     {
@@ -1496,10 +1411,6 @@ Button::Button (
     OSL_ASSERT(mpToolBar.get() != nullptr);
     OSL_ASSERT(mpToolBar->GetPresenterController().is());
     OSL_ASSERT(mpToolBar->GetPresenterController()->GetWindowManager().is());
-}
-
-Button::~Button()
-{
 }
 
 void Button::Initialize()
@@ -1539,15 +1450,7 @@ void Button::Paint (
     sal_Int32 nTextHeight (sal::static_int_cast<sal_Int32>(0.5 + aTextBBox.Y2 - aTextBBox.Y1));
 
     PaintIcon(rxCanvas, nTextHeight, rViewState);
-    awt::Point aOffset(0,0);
-    if ( ! IsEnabled())
-        if (mpMode->mpIcon.get() != nullptr)
-        {
-            Reference<rendering::XBitmap> xBitmap (mpMode->mpIcon->GetNormalBitmap());
-            if (xBitmap.is())
-                aOffset.Y = xBitmap->getSize().Height;
-        }
-    mpMode->maText.Paint(rxCanvas, rViewState, GetBoundingBox(), aOffset);
+    mpMode->maText.Paint(rxCanvas, rViewState, GetBoundingBox());
 }
 
 awt::Size Button::CreateBoundingSize (
@@ -1628,9 +1531,7 @@ PresenterBitmapDescriptor::Mode Button::GetMode() const
 //----- lang::XEventListener --------------------------------------------------
 
 void SAL_CALL Button::disposing (const css::lang::EventObject& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
-    (void)rEvent;
     mbIsListenerRegistered = false;
     Element::disposing(rEvent);
 }
@@ -1684,14 +1585,12 @@ void Label::Paint (
     if (mpMode.get() == nullptr)
         return;
 
-    mpMode->maText.Paint(rxCanvas, rViewState, GetBoundingBox(), awt::Point(0,0));
+    mpMode->maText.Paint(rxCanvas, rViewState, GetBoundingBox());
 }
 
-bool Label::SetState (const bool bIsOver, const bool bIsPressed)
+bool Label::SetState (const bool, const bool)
 {
     // For labels there is no mouse over effect.
-    (void)bIsOver;
-    (void)bIsPressed;
     return Element::SetState(false, false);
 }
 
@@ -1720,12 +1619,12 @@ void Text::SetText (const OUString& rsText)
     msText = rsText;
 }
 
-OUString Text::GetText() const
+const OUString& Text::GetText() const
 {
     return msText;
 }
 
-PresenterTheme::SharedFontDescriptor Text::GetFont() const
+const PresenterTheme::SharedFontDescriptor& Text::GetFont() const
 {
     return mpFont;
 }
@@ -1733,10 +1632,8 @@ PresenterTheme::SharedFontDescriptor Text::GetFont() const
 void Text::Paint (
     const Reference<rendering::XCanvas>& rxCanvas,
     const rendering::ViewState& rViewState,
-    const awt::Rectangle& rBoundingBox,
-    const awt::Point& rOffset)
+    const awt::Rectangle& rBoundingBox)
 {
-    (void)rOffset;
     OSL_ASSERT(rxCanvas.is());
 
     if (msText.isEmpty())
@@ -1795,13 +1692,6 @@ geometry::RealRectangle2D Text::GetBoundingBox (const Reference<rendering::XCanv
 
 //===== TimeFormatter =========================================================
 
-TimeFormatter::TimeFormatter()
-    : mbIs24HourFormat(true),
-      mbIsAmPmFormat(false),
-      mbIsShowSeconds(true)
-{
-}
-
 OUString TimeFormatter::FormatTime (const oslDateTime& rTime)
 {
     OUStringBuffer sText;
@@ -1810,11 +1700,7 @@ OUString TimeFormatter::FormatTime (const oslDateTime& rTime)
     const sal_Int32 nMinutes (sal::static_int_cast<sal_Int32>(rTime.Minutes));
     const sal_Int32 nSeconds(sal::static_int_cast<sal_Int32>(rTime.Seconds));
     // Hours
-    if (mbIs24HourFormat)
-        sText.append(OUString::number(nHours));
-    else
-        sText.append(OUString::number(
-            sal::static_int_cast<sal_Int32>(nHours>12 ? nHours-12 : nHours)));
+    sText.append(OUString::number(nHours));
 
     sText.append(":");
 
@@ -1825,21 +1711,11 @@ OUString TimeFormatter::FormatTime (const oslDateTime& rTime)
     sText.append(sMinutes);
 
     // Seconds
-    if (mbIsShowSeconds)
-    {
-        sText.append(":");
-        const OUString sSeconds (OUString::number(nSeconds));
-        if (sSeconds.getLength() == 1)
-            sText.append("0");
-        sText.append(sSeconds);
-    }
-    if (mbIsAmPmFormat)
-    {
-        if (rTime.Hours < 12)
-            sText.append("am");
-        else
-            sText.append("pm");
-    }
+    sText.append(":");
+    const OUString sSeconds (OUString::number(nSeconds));
+    if (sSeconds.getLength() == 1)
+        sText.append("0");
+    sText.append(sSeconds);
     return sText.makeStringAndClear();
 }
 
@@ -1879,14 +1755,13 @@ CurrentTimeLabel::~CurrentTimeLabel()
 
 CurrentTimeLabel::CurrentTimeLabel (
     const ::rtl::Reference<PresenterToolBar>& rpToolBar)
-    : TimeLabel(rpToolBar),
-      maTimeFormatter()
+    : TimeLabel(rpToolBar)
 {
 }
 
 void CurrentTimeLabel::TimeHasChanged (const oslDateTime& rCurrentTime)
 {
-    SetText(maTimeFormatter.FormatTime(rCurrentTime));
+    SetText(TimeFormatter::FormatTime(rCurrentTime));
     Invalidate(false);
 }
 
@@ -1897,7 +1772,7 @@ void CurrentTimeLabel::SetModes (
     const SharedElementMode& rpDisabledMode)
 {
     TimeLabel::SetModes(rpNormalMode, rpMouseOverMode, rpSelectedMode, rpDisabledMode);
-    SetText(maTimeFormatter.FormatTime(PresenterClockTimer::GetCurrentTime()));
+    SetText(TimeFormatter::FormatTime(PresenterClockTimer::GetCurrentTime()));
 }
 
 //===== PresentationTimeLabel =================================================
@@ -1918,7 +1793,6 @@ PresentationTimeLabel::~PresentationTimeLabel()
 PresentationTimeLabel::PresentationTimeLabel (
     const ::rtl::Reference<PresenterToolBar>& rpToolBar)
     : TimeLabel(rpToolBar),
-      maTimeFormatter(),
       maStartTimeValue()
 {
     restart();
@@ -1954,7 +1828,7 @@ void PresentationTimeLabel::TimeHasChanged (const oslDateTime& rCurrentTime)
         oslDateTime aElapsedDateTime;
         if (osl_getDateTimeFromTimeValue(&aElapsedTimeValue, &aElapsedDateTime))
         {
-            SetText(maTimeFormatter.FormatTime(aElapsedDateTime));
+            SetText(TimeFormatter::FormatTime(aElapsedDateTime));
             Invalidate(false);
         }
     }
@@ -1971,7 +1845,7 @@ void PresentationTimeLabel::SetModes (
     oslDateTime aStartDateTime;
     if (osl_getDateTimeFromTimeValue(&maStartTimeValue, &aStartDateTime))
     {
-        SetText(maTimeFormatter.FormatTime(aStartDateTime));
+        SetText(TimeFormatter::FormatTime(aStartDateTime));
     }
 }
 
@@ -2003,11 +1877,6 @@ void VerticalSeparator::Paint (
             PresenterCanvasHelper::SetDeviceColor(aRenderState, pFont->mnColor);
     }
 
-    if (aBBox.Height >= gnMinimalSeparatorSize + 2*gnSeparatorInset)
-    {
-        aBBox.Height -= 2*gnSeparatorInset;
-        aBBox.Y += gnSeparatorInset;
-    }
     rxCanvas->fillPolyPolygon(
         PresenterGeometryHelper::CreatePolygon(aBBox, rxCanvas->getDevice()),
         rViewState,
@@ -2015,9 +1884,8 @@ void VerticalSeparator::Paint (
 }
 
 awt::Size VerticalSeparator::CreateBoundingSize (
-    const Reference<rendering::XCanvas>& rxCanvas)
+    const Reference<rendering::XCanvas>&)
 {
-    (void)rxCanvas;
     return awt::Size(1,20);
 }
 
@@ -2054,11 +1922,6 @@ void HorizontalSeparator::Paint (
             PresenterCanvasHelper::SetDeviceColor(aRenderState, pFont->mnColor);
     }
 
-    if (aBBox.Width >= gnMinimalSeparatorSize+2*gnSeparatorInset)
-    {
-        aBBox.Width -= 2*gnSeparatorInset;
-        aBBox.X += gnSeparatorInset;
-    }
     rxCanvas->fillPolyPolygon(
         PresenterGeometryHelper::CreatePolygon(aBBox, rxCanvas->getDevice()),
         rViewState,
@@ -2066,9 +1929,8 @@ void HorizontalSeparator::Paint (
 }
 
 awt::Size HorizontalSeparator::CreateBoundingSize (
-    const Reference<rendering::XCanvas>& rxCanvas)
+    const Reference<rendering::XCanvas>&)
 {
-    (void)rxCanvas;
     return awt::Size(20,1);
 }
 

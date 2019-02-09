@@ -24,10 +24,9 @@
 #include <svl/languageoptions.hxx>
 #if OSL_DEBUG_LEVEL > 0
     #include <unotools/ucbstreamhelper.hxx>
-    #include <vcl/msgbox.hxx>
     #include <sfx2/filedlghelper.hxx>
     #include <tools/urlobj.hxx>
-    #include "com/sun/star/ui/dialogs/TemplateDescription.hpp"
+    #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #endif
 #include <editeng/scripttypeitem.hxx>
 #include <editeng/editeng.hxx>
@@ -37,6 +36,8 @@
 #include <editeng/fhgtitem.hxx>
 #include <editeng/editids.hrc>
 #include <svx/svxids.hrc>
+#include <osl/diagnose.h>
+#include <vcl/event.hxx>
 
 namespace frm
 {
@@ -44,7 +45,6 @@ namespace frm
     RichTextControl::RichTextControl( RichTextEngine* _pEngine, vcl::Window* _pParent, WinBits _nStyle,
         ITextAttributeListener* _pTextAttribListener, ITextSelectionListener* _pSelectionListener )
         :Control( _pParent, implInitStyle( _nStyle ) )
-        ,m_pImpl( nullptr )
     {
         implInit( _pEngine, _pTextAttribListener, _pSelectionListener );
     }
@@ -52,7 +52,7 @@ namespace frm
 
     void RichTextControl::implInit( RichTextEngine* _pEngine, ITextAttributeListener* _pTextAttribListener, ITextSelectionListener* _pSelectionListener )
     {
-        m_pImpl = new RichTextControlImpl( this, _pEngine, _pTextAttribListener, _pSelectionListener );
+        m_pImpl.reset( new RichTextControlImpl( this, _pEngine, _pTextAttribListener, _pSelectionListener ) );
         SetCompoundControl( true );
     }
 
@@ -64,7 +64,7 @@ namespace frm
 
     void RichTextControl::dispose()
     {
-        delete m_pImpl;
+        m_pImpl.reset();
         Control::dispose();
     }
 
@@ -160,7 +160,7 @@ namespace frm
 
     void RichTextControl::GetFocus()
     {
-        getViewport().GrabFocus();
+        m_pImpl->getViewport( RichTextControlImpl::GrantAccess() )->GrabFocus();
     }
 
 
@@ -222,43 +222,43 @@ namespace frm
                     )
                 {
                     bool bLoad = KEY_F11 == nCode;
-                    struct
+                    static struct
                     {
                         const sal_Char* pDescription;
                         const sal_Char* pExtension;
                         EETextFormat    eFormat;
-                    } aExportFormats[] =
+                    } const aExportFormats[] =
                     {
-                        { "OASIS OpenDocument (*.xml)", "*.xml", EE_FORMAT_XML },
-                        { "HyperText Markup Language (*.html)", "*.html", EE_FORMAT_HTML },
-                        { "Rich Text format (*.rtf)", "*.rtf", EE_FORMAT_RTF },
-                        { "Text (*.txt)", "*.txt", EE_FORMAT_TEXT }
+                        { "OASIS OpenDocument (*.xml)", "*.xml", EETextFormat::Xml },
+                        { "HyperText Markup Language (*.html)", "*.html", EETextFormat::Html },
+                        { "Rich Text format (*.rtf)", "*.rtf", EETextFormat::Rtf },
+                        { "Text (*.txt)", "*.txt", EETextFormat::Text }
                     };
 
-                    ::sfx2::FileDialogHelper aFP( bLoad ? css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE : css::ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION, 0, this );
+                    ::sfx2::FileDialogHelper aFP( bLoad ? css::ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE : css::ui::dialogs::TemplateDescription::FILESAVE_AUTOEXTENSION, FileDialogFlags::NONE, GetFrameWeld() );
 
-                    for ( size_t i = 0; i < SAL_N_ELEMENTS( aExportFormats ); ++i )
+                    for (auto & aExportFormat : aExportFormats)
                     {
                         aFP.AddFilter(
-                            OUString::createFromAscii( aExportFormats[i].pDescription ),
-                            OUString::createFromAscii( aExportFormats[i].pExtension ) );
+                            OUString::createFromAscii( aExportFormat.pDescription ),
+                            OUString::createFromAscii( aExportFormat.pExtension ) );
                     }
                     ErrCode nResult = aFP.Execute();
-                    if ( nResult == 0 )
+                    if ( nResult == ERRCODE_NONE )
                     {
                         OUString sFileName = aFP.GetPath();
-                        SvStream* pStream = ::utl::UcbStreamHelper::CreateStream(
+                        std::unique_ptr<SvStream> pStream = ::utl::UcbStreamHelper::CreateStream(
                             sFileName, ( bLoad ? StreamMode::READ : StreamMode::WRITE | StreamMode::TRUNC ) | StreamMode::SHARE_DENYALL
                         );
                         if ( pStream )
                         {
-                            EETextFormat eFormat = EE_FORMAT_XML;
+                            EETextFormat eFormat = EETextFormat::Xml;
                             OUString sFilter = aFP.GetCurrentFilter();
-                            for ( size_t i = 0; i < SAL_N_ELEMENTS( aExportFormats ); ++i )
+                            for (auto & aExportFormat : aExportFormats)
                             {
-                                if ( sFilter.equalsAscii( aExportFormats[i].pDescription ) )
+                                if ( sFilter.equalsAscii( aExportFormat.pDescription ) )
                                 {
-                                    eFormat = aExportFormats[i].eFormat;
+                                    eFormat = aExportFormat.eFormat;
                                     break;
                                 }
                             }
@@ -266,14 +266,13 @@ namespace frm
                             {
                                 INetURLObject aURL( sFileName );
                                 aURL.removeSegment();
-                                getEngine().Read( *pStream, aURL.GetMainURL( INetURLObject::NO_DECODE ), eFormat );
+                                getEngine().Read( *pStream, aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), eFormat );
                             }
                             else
                             {
                                 getEngine().Write( *pStream, eFormat );
                             }
                         }
-                        DELETEZ( pStream );
                     }
                     return true;   // handled
                 }
@@ -284,7 +283,7 @@ namespace frm
     }
 
 
-    bool RichTextControl::Notify( NotifyEvent& _rNEvt )
+    bool RichTextControl::EventNotify( NotifyEvent& _rNEvt )
     {
         bool bDone = false;
         if ( _rNEvt.GetType() == MouseNotifyEvent::COMMAND )
@@ -292,13 +291,13 @@ namespace frm
             const CommandEvent& rEvent = *_rNEvt.GetCommandEvent();
             bDone = m_pImpl->HandleCommand( rEvent );
         }
-        return bDone || Control::Notify( _rNEvt );
+        return bDone || Control::EventNotify(_rNEvt);
     }
 
 
-    void RichTextControl::Draw( OutputDevice* _pDev, const Point& _rPos, const Size& _rSize, DrawFlags _nFlags )
+    void RichTextControl::Draw( OutputDevice* _pDev, const Point& _rPos, const Size& _rSize, DrawFlags /*_nFlags*/ )
     {
-        m_pImpl->Draw( _pDev, _rPos, _rSize, _nFlags );
+        m_pImpl->Draw( _pDev, _rPos, _rSize );
     }
 
 
@@ -317,12 +316,6 @@ namespace frm
     EditEngine& RichTextControl::getEngine() const
     {
         return *m_pImpl->getEngine( RichTextControlImpl::GrantAccess() );
-    }
-
-
-    vcl::Window& RichTextControl::getViewport() const
-    {
-        return *m_pImpl->getViewport( RichTextControlImpl::GrantAccess() );
     }
 
 

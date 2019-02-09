@@ -20,29 +20,17 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_BASICPANEFACTORY_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_BASICPANEFACTORY_HXX
 
-#include "MutexOwner.hxx"
-
 #include <com/sun/star/drawing/framework/XResourceFactory.hpp>
 #include <com/sun/star/drawing/framework/XConfigurationChangeListener.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <osl/mutex.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
 
 #include <memory>
 
-namespace {
-
-typedef ::cppu::WeakComponentImplHelper <
-    css::lang::XInitialization,
-    css::drawing::framework::XResourceFactory,
-    css::drawing::framework::XConfigurationChangeListener
-    > BasicPaneFactoryInterfaceBase;
-
-} // end of anonymous namespace.
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace sd {
 
@@ -50,6 +38,12 @@ class ViewShellBase;
 }
 
 namespace sd { namespace framework {
+
+typedef ::cppu::WeakComponentImplHelper <
+    css::lang::XInitialization,
+    css::drawing::framework::XResourceFactory,
+    css::drawing::framework::XConfigurationChangeListener
+    > BasicPaneFactoryInterfaceBase;
 
 /** This factory provides the frequently used standard panes
         private:resource/pane/CenterPane
@@ -66,39 +60,34 @@ class BasicPaneFactory
 public:
     explicit BasicPaneFactory (
         const css::uno::Reference<css::uno::XComponentContext>& rxContext);
-    virtual ~BasicPaneFactory();
+    virtual ~BasicPaneFactory() override;
 
     virtual void SAL_CALL disposing() override;
 
     // XInitialization
 
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence<css::uno::Any>& aArguments)
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::uno::Any>& aArguments) override;
 
     // XResourceFactory
 
     virtual css::uno::Reference<css::drawing::framework::XResource>
         SAL_CALL createResource (
-            const css::uno::Reference<css::drawing::framework::XResourceId>& rxPaneId)
-        throw (css::uno::RuntimeException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, std::exception) override;
+            const css::uno::Reference<css::drawing::framework::XResourceId>& rxPaneId) override;
 
     virtual void SAL_CALL
         releaseResource (
-            const css::uno::Reference<css::drawing::framework::XResource>& rxPane)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference<css::drawing::framework::XResource>& rxPane) override;
 
     // XConfigurationChangeListener
 
     virtual void SAL_CALL notifyConfigurationChange (
-        const css::drawing::framework::ConfigurationChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::drawing::framework::ConfigurationChangeEvent& rEvent) override;
 
     // lang::XEventListener
 
     virtual void SAL_CALL disposing (
-        const css::lang::EventObject& rEventObject)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEventObject) override;
 
 private:
     css::uno::Reference<css::uno::XComponentContext> mxComponentContext;
@@ -137,8 +126,8 @@ private:
                 css::drawing::framework::XResourceId>& rxPaneId,
             const PaneDescriptor& rDescriptor);
 
-    void ThrowIfDisposed() const
-        throw (css::lang::DisposedException);
+    /// @throws css::lang::DisposedException
+    void ThrowIfDisposed() const;
 };
 
 } } // end of namespace sd::framework

@@ -26,6 +26,7 @@
 #include "TransformerActions.hxx"
 #include "TransformerBase.hxx"
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 // Used to parse Scripting Framework URLs
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
@@ -43,11 +44,10 @@ class XMLTransformerOASISEventMap_Impl:
                             NameHash_Impl, NameHash_Impl >
 {
 public:
-    explicit XMLTransformerOASISEventMap_Impl( XMLTransformerEventMapEntry *pInit );
-    ~XMLTransformerOASISEventMap_Impl();
+    explicit XMLTransformerOASISEventMap_Impl( XMLTransformerEventMapEntry const *pInit );
 };
 
-XMLTransformerOASISEventMap_Impl::XMLTransformerOASISEventMap_Impl( XMLTransformerEventMapEntry *pInit )
+XMLTransformerOASISEventMap_Impl::XMLTransformerOASISEventMap_Impl( XMLTransformerEventMapEntry const *pInit )
 {
     if( pInit )
     {
@@ -68,10 +68,6 @@ XMLTransformerOASISEventMap_Impl::XMLTransformerOASISEventMap_Impl( XMLTransform
             ++pInit;
         }
     }
-}
-
-XMLTransformerOASISEventMap_Impl::~XMLTransformerOASISEventMap_Impl()
-{
 }
 
 XMLEventOASISTransformerContext::XMLEventOASISTransformerContext(
@@ -126,7 +122,7 @@ OUString XMLEventOASISTransformerContext::GetEventName(
         return (*aIter).second;
 }
 
-bool ParseURL(
+static bool ParseURL(
     const OUString& rAttrValue,
     OUString* pName, OUString* pLocation )
 {
@@ -138,7 +134,7 @@ bool ParseURL(
 
     if ( xUrl.is() )
     {
-        OUString aLanguageKey = GetXMLToken( XML_LANGUAGE );
+        const OUString& aLanguageKey = GetXMLToken( XML_LANGUAGE );
         if ( xUrl.is() && xUrl->hasParameter( aLanguageKey ) )
         {
             OUString aLanguage = xUrl->getParameter( aLanguageKey );
@@ -150,7 +146,7 @@ bool ParseURL(
                 OUString tmp =
                     xUrl->getParameter( GetXMLToken( XML_LOCATION ) );
 
-                OUString doc = GetXMLToken( XML_DOCUMENT );
+                const OUString& doc = GetXMLToken( XML_DOCUMENT );
 
                 if ( tmp.equalsIgnoreAsciiCase( doc ) )
                 {

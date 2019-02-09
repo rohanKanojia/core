@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LifeTime.hxx"
-#include "macros.hxx"
+#include <LifeTime.hxx>
 #include <osl/diagnose.h>
 
-#include <com/sun/star/util/XModifyListener.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XCloseListener.hpp>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 
@@ -57,7 +59,6 @@ bool LifeTimeManager::impl_isDisposed( bool bAssert )
         if( bAssert )
         {
             OSL_FAIL( "This component is already disposed " );
-            (void)(bAssert);
         }
         return true;
     }
@@ -110,7 +111,6 @@ void LifeTimeManager::impl_unregisterApiCall(bool bLongLastingCall)
 }
 
 bool LifeTimeManager::dispose()
-    throw(uno::RuntimeException)
 {
     //hold no mutex
     {
@@ -118,7 +118,7 @@ bool LifeTimeManager::dispose()
 
         if( m_bDisposed || m_bInDispose )
         {
-            OSL_TRACE( "This component is already disposed " );
+            SAL_WARN("chart2",  "This component is already disposed " );
             return false; //behave passive if already disposed
         }
 
@@ -182,7 +182,6 @@ bool CloseableLifeTimeManager::impl_isDisposedOrClosed( bool bAssert )
         if( bAssert )
         {
             OSL_FAIL( "This object is already closed" );
-            (void)(bAssert);//avoid warnings
         }
         return true;
     }
@@ -190,7 +189,6 @@ bool CloseableLifeTimeManager::impl_isDisposedOrClosed( bool bAssert )
 }
 
 bool CloseableLifeTimeManager::g_close_startTryClose(bool bDeliverOwnership)
-    throw ( uno::Exception )
 {
     //no mutex is allowed to be acquired
     {
@@ -242,13 +240,13 @@ bool CloseableLifeTimeManager::g_close_startTryClose(bool bDeliverOwnership)
     catch( const uno::Exception& )
     {
         //no mutex is acquired
-        g_close_endTryClose(bDeliverOwnership, false);
+        g_close_endTryClose(bDeliverOwnership);
         throw;
     }
     return true;
 }
 
-void CloseableLifeTimeManager::g_close_endTryClose(bool bDeliverOwnership, bool /* bMyVeto */ )
+void CloseableLifeTimeManager::g_close_endTryClose(bool bDeliverOwnership )
 {
     //this method is called, if the try to close was not successful
     osl::Guard< osl::Mutex > aGuard( m_aAccessMutex );
@@ -262,8 +260,7 @@ void CloseableLifeTimeManager::g_close_endTryClose(bool bDeliverOwnership, bool 
     impl_unregisterApiCall(false);
 }
 
-bool CloseableLifeTimeManager::g_close_isNeedToCancelLongLastingCalls( bool bDeliverOwnership, util::CloseVetoException& ex )
-    throw ( util::CloseVetoException )
+void CloseableLifeTimeManager::g_close_isNeedToCancelLongLastingCalls( bool bDeliverOwnership, util::CloseVetoException const & ex )
 {
     //this method is called when no closelistener has had a veto during queryclosing
     //the method returns false, if nothing stands against closing anymore
@@ -273,7 +270,7 @@ bool CloseableLifeTimeManager::g_close_isNeedToCancelLongLastingCalls( bool bDel
     osl::Guard< osl::Mutex > aGuard( m_aAccessMutex );
     //this count cannot grow after try of close has started, because we wait in all those methods for end of try closing
     if( !m_nLongLastingCallCount )
-        return false;
+        return;
 
     impl_setOwnership( bDeliverOwnership, true );
 
@@ -310,7 +307,7 @@ void CloseableLifeTimeManager::impl_apiCallCountReachedNull()
 {
     //Mutex needs to be acquired exactly ones
     //mutex will be released inbetween in impl_doClose()
-    if( m_pCloseable && impl_shouldCloseAtNextChance() )
+    if( m_pCloseable && m_bOwnership )
         impl_doClose();
 }
 
@@ -328,7 +325,7 @@ void CloseableLifeTimeManager::impl_doClose()
     NegativeGuard< osl::Mutex > aNegativeGuard( m_aAccessMutex );
     //mutex is not acquired, mutex will be reacquired at the end of this method automatically
 
-    uno::Reference< util::XCloseable > xCloseable=nullptr;
+    uno::Reference< util::XCloseable > xCloseable;
     try
     {
         xCloseable.set(m_pCloseable);
@@ -350,9 +347,9 @@ void CloseableLifeTimeManager::impl_doClose()
             }
         }
     }
-    catch( const uno::Exception& ex )
+    catch( const uno::Exception& )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     if(xCloseable.is())
@@ -369,7 +366,6 @@ void CloseableLifeTimeManager::impl_doClose()
 }
 
 void CloseableLifeTimeManager::g_addCloseListener( const uno::Reference< util::XCloseListener > & xListener )
-    throw(uno::RuntimeException)
 {
     osl::Guard< osl::Mutex > aGuard( m_aAccessMutex );
     //Mutex needs to be acquired exactly ones; will be released inbetween
@@ -411,7 +407,7 @@ bool CloseableLifeTimeManager::impl_canStartApiCall()
 bool LifeTimeGuard::startApiCall(bool bLongLastingCall)
 {
     //Mutex needs to be acquired exactly ones; will be released inbetween
-    //mutex is requiered due to constructor of LifeTimeGuard
+    //mutex is required due to constructor of LifeTimeGuard
 
     OSL_ENSURE( !m_bCallRegistered, "this method is only allowed ones" );
     if(m_bCallRegistered)

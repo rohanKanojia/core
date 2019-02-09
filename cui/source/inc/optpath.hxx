@@ -19,10 +19,10 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_OPTPATH_HXX
 #define INCLUDED_CUI_SOURCE_INC_OPTPATH_HXX
 
+#include <memory>
 #include <sfx2/tabdlg.hxx>
 #include <svtools/simptabl.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
+#include <vcl/button.hxx>
 
 #include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
 #include <svtools/dialogclosedlistener.hxx>
@@ -46,22 +46,22 @@ private:
     VclPtr<PushButton>         m_pPathBtn;
 
     VclPtr<svx::OptHeaderTabListBox> pPathBox;
-    OptPath_Impl*               pImpl;
+    std::unique_ptr<OptPath_Impl>               pImpl;
 
-    css::uno::Reference< ::svt::DialogClosedListener > xDialogListener;
+    rtl::Reference< ::svt::DialogClosedListener > xDialogListener;
     css::uno::Reference< css::ui::dialogs::XFolderPicker2 > xFolderPicker;
 
     void        ChangeCurrentEntry( const OUString& _rFolder );
 
-    DECL_LINK_TYPED( PathHdl_Impl, Button*, void);
-    DECL_LINK_TYPED( DoubleClickPathHdl_Impl, SvTreeListBox*, bool);
-    DECL_LINK_TYPED( StandardHdl_Impl, Button*, void);
+    DECL_LINK( PathHdl_Impl, Button*, void);
+    DECL_LINK( DoubleClickPathHdl_Impl, SvTreeListBox*, bool);
+    DECL_LINK( StandardHdl_Impl, Button*, void);
 
-    DECL_LINK_TYPED( PathSelect_Impl, SvTreeListBox*, void);
-    DECL_LINK_TYPED( HeaderSelect_Impl, HeaderBar *, void );
-    DECL_LINK_TYPED( HeaderEndDrag_Impl, HeaderBar *, void );
+    DECL_LINK( PathSelect_Impl, SvTreeListBox*, void);
+    DECL_LINK( HeaderSelect_Impl, HeaderBar *, void );
+    DECL_LINK( HeaderEndDrag_Impl, HeaderBar *, void );
 
-    DECL_LINK_TYPED( DialogClosedHdl, css::ui::dialogs::DialogClosedEvent*, void );
+    DECL_LINK( DialogClosedHdl, css::ui::dialogs::DialogClosedEvent*, void );
 
     void        GetPathList( sal_uInt16 _nPathHandle, OUString& _rInternalPath,
                              OUString& _rUserPath, OUString& _rWritablePath, bool& _rReadOnly );
@@ -70,10 +70,10 @@ private:
 
 public:
     SvxPathTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxPathTabPage();
+    virtual ~SvxPathTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

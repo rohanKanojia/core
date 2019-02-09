@@ -28,29 +28,24 @@
 namespace framework
 {
 
-class FWE_DLLPUBLIC XMLNamespaces
+class FWE_DLLPUBLIC XMLNamespaces final
 {
     public:
-        XMLNamespaces();
-        XMLNamespaces( const XMLNamespaces& );
-        virtual ~XMLNamespaces();
+        /// @throws css::xml::sax::SAXException
+        void addNamespace( const OUString& aName, const OUString& aValue );
 
-        void addNamespace( const OUString& aName, const OUString& aValue )
-            throw(  css::xml::sax::SAXException );
-
-        OUString applyNSToAttributeName( const OUString& ) const
-            throw(  css::xml::sax::SAXException, std::exception );
-        OUString applyNSToElementName( const OUString& ) const
-            throw(  css::xml::sax::SAXException, std::exception );
+        /// @throws css::xml::sax::SAXException
+        OUString applyNSToAttributeName( const OUString& ) const;
+        /// @throws css::xml::sax::SAXException
+        OUString applyNSToElementName( const OUString& ) const;
 
     private:
         typedef ::std::map< OUString, OUString > NamespaceMap;
 
-        OUString getNamespaceValue( const OUString& aNamespace ) const
-            throw( css::xml::sax::SAXException );
+        /// @throws css::xml::sax::SAXException
+        OUString const & getNamespaceValue( const OUString& aNamespace ) const;
 
         OUString        m_aDefaultNamespace;
-        OUString        m_aXMLAttributeNamespace;
         NamespaceMap    m_aNamespaceMap;
 };
 

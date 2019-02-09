@@ -18,21 +18,20 @@
  */
 
 #include <sal/types.h>
-#include <svtools/accessibletableprovider.hxx>
-#include <accessibility/extended/accessiblebrowseboxcell.hxx>
+#include <vcl/accessibletableprovider.hxx>
+#include <extended/accessiblebrowseboxcell.hxx>
 
 namespace accessibility
 {
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::awt;
     using namespace ::com::sun::star::accessibility;
-    using namespace ::svt;
 
     // AccessibleBrowseBoxCell
     AccessibleBrowseBoxCell::AccessibleBrowseBoxCell(
-            const css::uno::Reference< css::accessibility::XAccessible >& _rxParent, ::svt::IAccessibleTableProvider& _rBrowseBox,
+            const css::uno::Reference< css::accessibility::XAccessible >& _rxParent, ::vcl::IAccessibleTableProvider& _rBrowseBox,
             const css::uno::Reference< css::awt::XWindow >& _xFocusWindow,
-            sal_Int32 _nRowPos, sal_uInt16 _nColPos, ::svt::AccessibleBrowseBoxObjType _eType )
+            sal_Int32 _nRowPos, sal_uInt16 _nColPos, ::vcl::AccessibleBrowseBoxObjType _eType )
         :AccessibleBrowseBoxBase( _rxParent, _rBrowseBox, _xFocusWindow, _eType )
         ,m_nRowPos( _nRowPos )
         ,m_nColPos( _nColPos )
@@ -40,7 +39,7 @@ namespace accessibility
         // set accessible name here, because for that we need the position of the cell
         // and so the base class isn't capable of doing this
         sal_Int32 nPos = _nRowPos * _rBrowseBox.GetColumnCount() + _nColPos;
-        OUString aAccName = _rBrowseBox.GetAccessibleObjectName( BBTYPE_TABLECELL, nPos );
+        OUString aAccName = _rBrowseBox.GetAccessibleObjectName( vcl::BBTYPE_TABLECELL, nPos );
         implSetName( aAccName );
     }
 
@@ -48,18 +47,20 @@ namespace accessibility
     {
     }
 
-    void SAL_CALL AccessibleBrowseBoxCell::grabFocus() throw ( RuntimeException, std::exception )
+    void SAL_CALL AccessibleBrowseBoxCell::grabFocus()
     {
-        SolarMethodGuard aGuard( *this );
+        SolarMethodGuard aGuard(getMutex());
+        ensureIsAlive();
+
         mpBrowseBox->GoToCell( m_nRowPos, m_nColPos );
     }
 
-    ::Rectangle AccessibleBrowseBoxCell::implGetBoundingBox()
+    ::tools::Rectangle AccessibleBrowseBoxCell::implGetBoundingBox()
     {
         return mpBrowseBox->GetFieldRectPixelAbs( m_nRowPos, m_nColPos, false, false );
     }
 
-    ::Rectangle AccessibleBrowseBoxCell::implGetBoundingBoxOnScreen()
+    ::tools::Rectangle AccessibleBrowseBoxCell::implGetBoundingBoxOnScreen()
     {
         return mpBrowseBox->GetFieldRectPixelAbs( m_nRowPos, m_nColPos, false );
     }

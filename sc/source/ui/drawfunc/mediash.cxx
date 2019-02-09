@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sfx2/app.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/request.hxx>
@@ -24,22 +25,22 @@
 #include <svl/whiter.hxx>
 #include <svx/svdomedia.hxx>
 #include <svx/sdr/contact/viewcontactofsdrmediaobj.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 
-#include "mediash.hxx"
-#include "sc.hrc"
-#include "viewdata.hxx"
-#include "drawview.hxx"
-#include "scresid.hxx"
+#include <mediash.hxx>
+#include <strings.hrc>
+#include <viewdata.hxx>
+#include <drawview.hxx>
+#include <scresid.hxx>
 
-#define ScMediaShell
-#include "scslots.hxx"
+#define ShellClass_ScMediaShell
+#include <scslots.hxx>
 
 SFX_IMPL_INTERFACE(ScMediaShell, ScDrawShell)
 
 void ScMediaShell::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_MEDIA_OBJECTBAR);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Media_Objectbar);
 
     GetStaticInterface()->RegisterPopupMenu("media");
 }
@@ -48,9 +49,8 @@ void ScMediaShell::InitInterface_Impl()
 ScMediaShell::ScMediaShell(ScViewData* pData) :
     ScDrawShell(pData)
 {
-    SetHelpId(HID_SCSHELL_MEDIA);
-    SetName( OUString( ScResId( SCSTR_MEDIASHELL ) ) );
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Media));
+    SetName( ScResId( SCSTR_MEDIASHELL ) );
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Media));
 }
 
 ScMediaShell::~ScMediaShell()
@@ -77,7 +77,7 @@ void ScMediaShell::GetMediaState( SfxItemSet& rSet )
                 {
                     SdrObject* pObj = pMarkList->GetMark( 0 )->GetMarkedSdrObj();
 
-                    if( pObj && dynamic_cast<const SdrMediaObj*>( pObj) !=  nullptr )
+                    if( dynamic_cast<const SdrMediaObj*>( pObj) )
                     {
                         ::avmedia::MediaItem aItem( SID_AVMEDIA_TOOLBOX );
 
@@ -96,7 +96,7 @@ void ScMediaShell::GetMediaState( SfxItemSet& rSet )
     }
 }
 
-void ScMediaShell::ExecuteMedia( SfxRequest& rReq )
+void ScMediaShell::ExecuteMedia( const SfxRequest& rReq )
 {
     ScDrawView* pView = GetViewData()->GetScDrawView();
 
@@ -116,7 +116,7 @@ void ScMediaShell::ExecuteMedia( SfxRequest& rReq )
             {
                 SdrObject* pObj = pMarkList->GetMark( 0 )->GetMarkedSdrObj();
 
-                if( pObj && dynamic_cast<const SdrMediaObj*>( pObj) !=  nullptr )
+                if( dynamic_cast<const SdrMediaObj*>( pObj) )
                 {
                     static_cast< sdr::contact::ViewContactOfSdrMediaObj& >( pObj->GetViewContact() ).executeMediaItem(
                         static_cast< const ::avmedia::MediaItem& >( *pItem ) );

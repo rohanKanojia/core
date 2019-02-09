@@ -22,12 +22,12 @@
 
 #include <rtl/ustring.hxx>
 #include <vcl/dllapi.h>
+#include <vcl/print.hxx>
+#include "salprn.hxx"
 
 #include <vector>
 #include <unordered_map>
 
-struct SalPrinterQueueInfo;
-class QueueInfo;
 class JobSetup;
 
 namespace vcl
@@ -35,21 +35,33 @@ namespace vcl
 
 struct ImplPrnQueueData
 {
-    QueueInfo*              mpQueueInfo;
-    SalPrinterQueueInfo*    mpSalQueueInfo;
+    std::unique_ptr<QueueInfo>           mpQueueInfo;
+    std::unique_ptr<SalPrinterQueueInfo> mpSalQueueInfo;
+
+// unlike other similar places, we need to ifdef this to keep old GCC baseline happy
+#ifdef _MSC_VER
+    ImplPrnQueueData() {}
+    ImplPrnQueueData(ImplPrnQueueData&&) = default;
+  
+    ImplPrnQueueData& operator=( ImplPrnQueueData const & ) = delete; // MSVC2017 workaround
+    ImplPrnQueueData( ImplPrnQueueData const & ) = delete; // MSVC2017 workaround
+#endif
 };
 
 class VCL_PLUGIN_PUBLIC ImplPrnQueueList
 {
 public:
-    std::unordered_map< OUString, sal_Int32, OUStringHash > m_aNameToIndex;
+    std::unordered_map< OUString, sal_Int32 > m_aNameToIndex;
     std::vector< ImplPrnQueueData >     m_aQueueInfos;
     std::vector< OUString >             m_aPrinterList;
 
     ImplPrnQueueList() {}
     ~ImplPrnQueueList();
 
-    void                    Add( SalPrinterQueueInfo* pData );
+    ImplPrnQueueList& operator=( ImplPrnQueueList const & ) = delete; // MSVC2017 workaround
+    ImplPrnQueueList( ImplPrnQueueList const & ) = delete; // MSVC2017 workaround
+
+void                    Add( std::unique_ptr<SalPrinterQueueInfo> pData );
     ImplPrnQueueData*       Get( const OUString& rPrinter );
 };
 

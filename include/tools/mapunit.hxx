@@ -22,25 +22,26 @@
 
 #include <sal/types.h>
 
-enum MapUnit { MAP_100TH_MM, MAP_10TH_MM, MAP_MM, MAP_CM,
-               MAP_1000TH_INCH, MAP_100TH_INCH, MAP_10TH_INCH, MAP_INCH,
-               MAP_POINT, MAP_TWIP, MAP_PIXEL, MAP_SYSFONT, MAP_APPFONT,
-               MAP_RELATIVE, MAP_LASTENUMDUMMY };
-
-inline sal_Int64 convertTwipToMm100(sal_Int64 n)
+enum class MapUnit
 {
-    if (n >= 0)
-        return (n*127+36)/72;
-    else
-        return (n*127-36)/72;
+    Map100thMM, Map10thMM, MapMM, MapCM,
+    Map1000thInch, Map100thInch, Map10thInch, MapInch,
+    MapPoint, MapTwip,
+    MapPixel,
+    MapSysFont, MapAppFont,
+    MapRelative,
+    LAST = MapRelative,
+    LASTENUMDUMMY // used as an error return
+};
+
+constexpr sal_Int64 convertTwipToMm100(sal_Int64 n)
+{
+    return (n >= 0)? (n*127+36)/72: (n*127-36)/72;
 }
 
-inline sal_Int64 convertMm100ToTwip(sal_Int64 n)
+constexpr sal_Int64 convertMm100ToTwip(sal_Int64 n)
 {
-    if (n >= 0)
-        return (n*72+63)/127;
-    else
-        return (n*72-63)/127;
+    return (n >= 0)? (n*72+63)/127: (n*72-63)/127;
 }
 
 #endif

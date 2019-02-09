@@ -20,6 +20,11 @@
 #ifndef INCLUDED_HWPFILTER_SOURCE_HTAGS_H
 #define INCLUDED_HWPFILTER_SOURCE_HTAGS_H
 
+#include <memory>
+#ifdef _WIN32
+#  include <objidl.h>
+#endif
+
 class HWPFile;
 /**
  * @short Embedded image
@@ -29,7 +34,7 @@ struct EmPicture
     size_t size;
     char  name[16];
     char  type[16];
-    uchar *data;
+    std::unique_ptr<uchar[]> data;
 
     explicit EmPicture(size_t size);
     ~EmPicture(void);
@@ -46,7 +51,7 @@ struct HyperText
     char  macro[325];
     uchar type;
     char reserve[3];
-    void Read(HWPFile& hwpf);
+    bool Read(HWPFile& hwpf);
 };
 /**
  * @short Win32 OLE object
@@ -57,8 +62,6 @@ struct OlePicture
     uint signature;
 #ifdef _WIN32
     IStorage *pis;
-#else
-    char *pis;
 #endif
     explicit OlePicture(int tsize);
     ~OlePicture(void);

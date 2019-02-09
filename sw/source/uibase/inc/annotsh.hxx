@@ -20,8 +20,8 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_ANNOTSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellid.hxx"
-#include "swmodule.hxx"
+#include <shellid.hxx>
+#include <swmodule.hxx>
 #include <unotools/caserotate.hxx>
 
 class SwView;
@@ -39,7 +39,7 @@ private:
 
 public:
                 SwAnnotationShell(SwView&);
-    virtual     ~SwAnnotationShell();
+    virtual     ~SwAnnotationShell() override;
 
     static void StateDisableItems(SfxItemSet &);
     void        Exec(SfxRequest &);
@@ -47,17 +47,17 @@ public:
     void        GetState(SfxItemSet &);
     void        StateInsert(SfxItemSet &rSet);
 
-    void        NoteExec(SfxRequest &);
+    void        NoteExec(SfxRequest const &);
     void        GetNoteState(SfxItemSet &);
 
     void        ExecLingu(SfxRequest &rReq);
     void        GetLinguState(SfxItemSet &);
 
-    void        ExecClpbrd(SfxRequest &rReq);
+    void        ExecClpbrd(SfxRequest const &rReq);
     void        StateClpbrd(SfxItemSet &rSet);
 
-    void        ExecTransliteration(SfxRequest &);
-    void        ExecRotateTransliteration(SfxRequest &);
+    void        ExecTransliteration(SfxRequest const &);
+    void        ExecRotateTransliteration(SfxRequest const &);
 
     void        ExecUndo(SfxRequest &rReq);
     void        StateUndo(SfxItemSet &rSet);
@@ -69,10 +69,10 @@ public:
     void        ExecSearch(SfxRequest&);
     void        StateSearch(SfxItemSet &);
 
-    virtual ::svl::IUndoManager*
+    virtual SfxUndoManager*
                 GetUndoManager() override;
 
-    static SfxItemPool* GetAnnotationPool(SwView& rV);
+    static SfxItemPool* GetAnnotationPool(SwView const & rV);
 };
 
 #endif

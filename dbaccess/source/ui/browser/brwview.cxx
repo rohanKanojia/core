@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "brwctrlr.hxx"
-#include "brwview.hxx"
-#include "sbagrid.hxx"
+#include <brwctrlr.hxx>
+#include <brwview.hxx>
+#include <sbagrid.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/types.hxx>
 #include <vcl/split.hxx>
 #include "dbtreeview.hxx"
-#include "dbustrings.hrc"
-#include "dbu_brw.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <com/sun/star/form/XLoadable.hpp>
 #include <com/sun/star/awt/XControlContainer.hpp>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <osl/diagnose.h>
 
 using namespace dbaui;
@@ -45,7 +45,7 @@ namespace
     {
         bool bGrabFocus = false;
         SbaGridControl* pVclControl = _pView->getVclControl();
-        Reference< css::awt::XControl > xGrid = _pView->getGridControl();
+        const Reference< css::awt::XControl >& xGrid = _pView->getGridControl();
         if (pVclControl && xGrid.is())
         {
             bGrabFocus = true;
@@ -89,11 +89,11 @@ void UnoDataBrowserView::Construct(const Reference< css::awt::XControlModel >& x
         m_xGrid = new SbaXGridControl( getORB() );
         OSL_ENSURE(m_xGrid.is(), "UnoDataBrowserView::Construct : could not create a grid control !");
         // in design mode (for the moment)
-        m_xGrid->setDesignMode(sal_True);
+        m_xGrid->setDesignMode(true);
 
         Reference< css::awt::XWindow >  xGridWindow(m_xGrid, UNO_QUERY);
-        xGridWindow->setVisible(sal_True);
-        xGridWindow->setEnable(sal_True);
+        xGridWindow->setVisible(true);
+        xGridWindow->setEnable(true);
 
         // introduce the model to the grid
         m_xGrid->setModel(xModel);
@@ -138,7 +138,7 @@ void UnoDataBrowserView::dispose()
     ODataView::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED( UnoDataBrowserView, SplitHdl, Splitter*, void )
+IMPL_LINK_NOARG( UnoDataBrowserView, SplitHdl, Splitter*, void )
 {
     long nYPos = m_pSplitter->GetPosPixel().Y();
     m_pSplitter->SetPosPixel( Point( m_pSplitter->GetSplitPosPixel(), nYPos ) );
@@ -186,7 +186,7 @@ void UnoDataBrowserView::hideStatus()
     Update();
 }
 
-void UnoDataBrowserView::resizeDocumentView(Rectangle& _rPlayground)
+void UnoDataBrowserView::resizeDocumentView(tools::Rectangle& _rPlayground)
 {
     Point   aSplitPos;
     Size    aSplitSize;
@@ -197,15 +197,15 @@ void UnoDataBrowserView::resizeDocumentView(Rectangle& _rPlayground)
     {
         // calculate the splitter pos and size
         aSplitPos   = m_pSplitter->GetPosPixel();
-        aSplitPos.Y() = aPlaygroundPos.Y();
+        aSplitPos.setY( aPlaygroundPos.Y() );
         aSplitSize  = m_pSplitter->GetOutputSizePixel();
-        aSplitSize.Height() = aPlaygroundSize.Height();
+        aSplitSize.setHeight( aPlaygroundSize.Height() );
 
         if( ( aSplitPos.X() + aSplitSize.Width() ) > ( aPlaygroundSize.Width() ))
-            aSplitPos.X() = aPlaygroundSize.Width() - aSplitSize.Width();
+            aSplitPos.setX( aPlaygroundSize.Width() - aSplitSize.Width() );
 
         if( aSplitPos.X() <= aPlaygroundPos.X() )
-            aSplitPos.X() = aPlaygroundPos.X() + sal_Int32(aPlaygroundSize.Width() * 0.2);
+            aSplitPos.setX( aPlaygroundPos.X() + sal_Int32(aPlaygroundSize.Width() * 0.2) );
 
         // the tree pos and size
         Point   aTreeViewPos( aPlaygroundPos );
@@ -215,12 +215,12 @@ void UnoDataBrowserView::resizeDocumentView(Rectangle& _rPlayground)
         if (m_pStatus && m_pStatus->IsVisible())
         {
             Size aStatusSize(aPlaygroundPos.X(), GetTextHeight() + 2);
-            aStatusSize = LogicToPixel(aStatusSize, MAP_APPFONT);
-            aStatusSize.Width() = aTreeViewSize.Width() - 2 - 2;
+            aStatusSize = LogicToPixel(aStatusSize, MapMode(MapUnit::MapAppFont));
+            aStatusSize.setWidth( aTreeViewSize.Width() - 2 - 2 );
 
             Point aStatusPos( aPlaygroundPos.X() + 2, aTreeViewPos.Y() + aTreeViewSize.Height() - aStatusSize.Height() );
             m_pStatus->SetPosSizePixel( aStatusPos, aStatusSize );
-            aTreeViewSize.Height() -= aStatusSize.Height();
+            aTreeViewSize.AdjustHeight( -(aStatusSize.Height()) );
         }
 
         // set the size of treelistbox

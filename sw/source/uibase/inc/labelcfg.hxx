@@ -20,7 +20,7 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_LABELCFG_HXX
 
 #include <unotools/configitem.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 #include "labrec.hxx"
 
 #include <map>
@@ -42,7 +42,7 @@ private:
 
 public:
     SwLabelConfig();
-    virtual ~SwLabelConfig();
+    virtual ~SwLabelConfig() override;
 
     virtual void Notify( const css::uno::Sequence< OUString >& aPropertyNames ) override;
 

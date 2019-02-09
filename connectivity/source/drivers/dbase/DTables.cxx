@@ -20,19 +20,19 @@
 #include <sal/config.h>
 
 #include <dbase/DConnection.hxx>
-#include "dbase/DTables.hxx"
-#include "dbase/DTable.hxx"
+#include <dbase/DTables.hxx>
+#include <dbase/DTable.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
-#include "file/FCatalog.hxx"
-#include "file/FConnection.hxx"
+#include <file/FCatalog.hxx>
+#include <file/FConnection.hxx>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include "dbase/DCatalog.hxx"
-#include <comphelper/types.hxx>
-#include "resource/dbase_res.hrc"
+#include <dbase/DCatalog.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <strings.hrc>
 #include <connectivity/dbexception.hxx>
 
 using namespace ::comphelper;
@@ -49,14 +49,14 @@ using namespace ::com::sun::star::container;
 sdbcx::ObjectType ODbaseTables::createObject(const OUString& _rName)
 {
     ODbaseTable* pRet = new ODbaseTable(this, static_cast<ODbaseConnection*>(static_cast<OFileCatalog&>(m_rParent).getConnection()),
-                                        _rName,OUString("TABLE"));
+                                        _rName,"TABLE");
 
     sdbcx::ObjectType xRet = pRet;
     pRet->construct();
     return xRet;
 }
 
-void ODbaseTables::impl_refresh(  ) throw(RuntimeException)
+void ODbaseTables::impl_refresh(  )
 {
     static_cast<ODbaseCatalog*>(&m_rParent)->refreshTables();
 }
@@ -85,9 +85,10 @@ sdbcx::ObjectType ODbaseTables::appendObject( const OUString& _rForName, const R
             {
                 throw;
             }
-            catch(Exception&)
+            catch(Exception& ex)
             {
-                throw SQLException();
+                css::uno::Any anyEx = cppu::getCaughtException();
+                throw SQLException( ex.Message, nullptr, "", 0, anyEx );
             }
         }
     }
@@ -124,7 +125,7 @@ void ODbaseTables::dropObject(sal_Int32 _nPos, const OUString& _sElementName)
     }
 }
 
-Any SAL_CALL ODbaseTables::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL ODbaseTables::queryInterface( const Type & rType )
 {
     typedef sdbcx::OCollection OTables_BASE;
     return OTables_BASE::queryInterface(rType);

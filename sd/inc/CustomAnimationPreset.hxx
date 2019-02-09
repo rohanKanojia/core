@@ -22,28 +22,25 @@
 
 #include <sal/config.h>
 
-#include <memory>
 #include <vector>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/animations/AnimationNodeType.hpp>
 
-#include <CustomAnimationEffect.hxx>
+#include "CustomAnimationEffect.hxx"
 
 #include <unordered_map>
 
 namespace sd {
 
-typedef std::unordered_map< OUString, CustomAnimationEffectPtr, OUStringHash > EffectsSubTypeMap;
-typedef std::unordered_map< OUString, OUString, OUStringHash > UStringMap;
-typedef std::vector< OUString > UStringList;
+typedef std::unordered_map< OUString, CustomAnimationEffectPtr > EffectsSubTypeMap;
+typedef std::unordered_map< OUString, OUString > UStringMap;
 
 class CustomAnimationPreset
 {
     friend class CustomAnimationPresets;
 
 public:
-    CustomAnimationPreset( CustomAnimationEffectPtr pEffect );
+    CustomAnimationPreset( const CustomAnimationEffectPtr& pEffect );
 
     void add( const CustomAnimationEffectPtr& pEffect );
 
@@ -53,8 +50,8 @@ public:
     const OUString& getLabel() const { return maLabel; }
     double getDuration() const { return mfDuration; }
 
-    UStringList getSubTypes();
-    UStringList getProperties() const;
+    std::vector<OUString> getSubTypes();
+    std::vector<OUString> getProperties() const;
 
     bool hasProperty( const OUString& rProperty ) const;
     bool isTextOnly() const { return mbIsTextOnly; }
@@ -62,7 +59,6 @@ public:
 private:
     OUString maPresetId;
     OUString maProperty;
-    sal_Int16 mnPresetClass;
     OUString maLabel;
     OUString maDefaultSubTyp;
     double mfDuration;
@@ -72,12 +68,12 @@ private:
 };
 
 typedef std::shared_ptr< CustomAnimationPreset > CustomAnimationPresetPtr;
-typedef std::unordered_map<OUString, CustomAnimationPresetPtr, OUStringHash> EffectDescriptorMap;
+typedef std::unordered_map<OUString, CustomAnimationPresetPtr> EffectDescriptorMap;
 typedef std::vector< CustomAnimationPresetPtr > EffectDescriptorList;
 
 struct PresetCategory
 {
-    OUString maLabel;
+    OUString const maLabel;
     EffectDescriptorList maEffects;
 
     PresetCategory( const OUString& rLabel, const EffectDescriptorList& rEffects )
@@ -86,13 +82,11 @@ struct PresetCategory
 typedef std::shared_ptr< PresetCategory > PresetCategoryPtr;
 typedef std::vector< PresetCategoryPtr > PresetCategoryList;
 
-class SD_DLLPUBLIC CustomAnimationPresets
+class SD_DLLPUBLIC CustomAnimationPresets final
 {
 public:
     SAL_DLLPRIVATE CustomAnimationPresets();
-    SAL_DLLPRIVATE virtual ~CustomAnimationPresets();
-
-    SAL_DLLPRIVATE void init();
+    SAL_DLLPRIVATE ~CustomAnimationPresets();
 
     static const CustomAnimationPresets& getCustomAnimationPresets();
 
@@ -117,7 +111,7 @@ private:
 
     SAL_DLLPRIVATE void importPresets( const css::uno::Reference< css::lang::XMultiServiceFactory >& xConfigProvider, const OUString& rNodePath, PresetCategoryList& rPresetMap  );
 
-    SAL_DLLPRIVATE const OUString& translateName( const OUString& rId, const UStringMap& rNameMap ) const;
+    SAL_DLLPRIVATE static const OUString& translateName( const OUString& rId, const UStringMap& rNameMap );
 
 private:
     css::uno::Reference< css::animations::XAnimationNode > mxRootNode;

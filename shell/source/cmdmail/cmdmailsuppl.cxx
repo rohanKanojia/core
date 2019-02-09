@@ -19,13 +19,13 @@
 
 #include <config_folders.h>
 
-#include <osl/diagnose.h>
 #include <osl/thread.h>
 
 #include <rtl/bootstrap.hxx>
 
 #include <osl/file.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include "cmdmailsuppl.hxx"
 #include "cmdmailmsg.hxx"
 #include <com/sun/star/system/SimpleMailClientFlags.hpp>
@@ -40,18 +40,12 @@
 #include <errno.h>
 #include <unistd.h>
 
-
-// namespace directives
-
-
 using com::sun::star::beans::PropertyValue;
 using com::sun::star::system::XSimpleMailClientSupplier;
 using com::sun::star::system::XSimpleMailClient;
 using com::sun::star::system::XSimpleMailMessage;
 using com::sun::star::system::XSimpleMailMessage2;
 using com::sun::star::container::XNameAccess;
-using com::sun::star::container::NoSuchElementException;
-using osl::MutexGuard;
 using osl::FileBase;
 
 using namespace cppu;
@@ -60,16 +54,15 @@ using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::configuration;
 
-namespace // private
+namespace
 {
-    Sequence< OUString > SAL_CALL Component_getSupportedServiceNames()
+    Sequence< OUString > Component_getSupportedServiceNames()
     {
         Sequence< OUString > aRet { "com.sun.star.system.SimpleCommandMail" };
         return aRet;
     }
 
-} // end private namespace
-
+}
 
 CmdMailSuppl::CmdMailSuppl( const Reference< XComponentContext >& xContext ) :
     WeakImplHelper< XSimpleMailClientSupplier, XSimpleMailClient, XServiceInfo >()
@@ -77,29 +70,19 @@ CmdMailSuppl::CmdMailSuppl( const Reference< XComponentContext >& xContext ) :
     m_xConfigurationProvider = theDefaultProvider::get(xContext);
 }
 
-
 // XSimpleMailClientSupplier
 
-
 Reference< XSimpleMailClient > SAL_CALL CmdMailSuppl::querySimpleMailClient(  )
-    throw (RuntimeException, std::exception)
 {
     return static_cast < XSimpleMailClient * > (this);
 }
 
-
 // XSimpleMailClient
 
-
 Reference< XSimpleMailMessage > SAL_CALL CmdMailSuppl::createSimpleMailMessage(  )
-        throw (css::uno::RuntimeException, std::exception)
 {
     return Reference< XSimpleMailMessage >( new CmdMailMsg(  ) );
 }
-
-
-// XSimpleMailClient
-
 
 namespace {
 
@@ -143,7 +126,6 @@ void appendShellWord(OStringBuffer & buffer, OUString const & word, bool strict)
 }
 
 void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailMessage >& xSimpleMailMessage, sal_Int32 /*aFlag*/ )
-    throw (IllegalArgumentException, Exception, RuntimeException, std::exception)
 {
     if ( ! xSimpleMailMessage.is() )
     {
@@ -164,7 +146,7 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
     OUString aProgram;
     if ( FileBase::E_None != FileBase::getSystemPathFromFileURL(aProgramURL, aProgram))
     {
-        throw css::uno::Exception("Cound not convert executable path",
+        throw css::uno::Exception("Could not convert executable path",
             static_cast < XSimpleMailClient * > (this));
     }
 
@@ -180,10 +162,10 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
 
         PropertyValue aProperty;
         aProperty.Name = "nodepath";
-        aProperty.Value = makeAny( aConfigRoot );
+        aProperty.Value <<= aConfigRoot;
 
         Sequence< Any > aArgumentList( 1 );
-        aArgumentList[0] = makeAny( aProperty );
+        aArgumentList[0] <<= aProperty;
 
         Reference< XNameAccess > xNameAccess =
             Reference< XNameAccess > (
@@ -219,15 +201,14 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
     catch(const RuntimeException &e )
     {
         m_xConfigurationProvider.clear();
-        OSL_TRACE( "RuntimeException caught accessing configuration provider." );
-        OSL_TRACE( "%s", OUStringToOString( e.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
+        SAL_WARN("shell", "RuntimeException caught accessing configuration provider. " << e );
         throw;
     }
 
     Reference< XSimpleMailMessage2 > xMessage( xSimpleMailMessage, UNO_QUERY );
     if ( xMessage.is() )
     {
-        rtl::OUString sBody = xMessage->getBody();
+        OUString sBody = xMessage->getBody();
         if ( sBody.getLength() > 0 )
         {
             aBuffer.append(" --body ");
@@ -247,14 +228,14 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
         appendShellWord(aBuffer, xSimpleMailMessage->getOriginator(), false);
     }
 
-    // Append receipient if set in the message
+    // Append recipient if set in the message
     if ( !xSimpleMailMessage->getRecipient().isEmpty() )
     {
         aBuffer.append(" --to ");
         appendShellWord(aBuffer, xSimpleMailMessage->getRecipient(), false);
     }
 
-    // Append carbon copy receipients set in the message
+    // Append carbon copy recipients set in the message
     Sequence< OUString > aStringList = xSimpleMailMessage->getCcRecipient();
     sal_Int32 n, nmax = aStringList.getLength();
     for ( n = 0; n < nmax; n++ )
@@ -263,7 +244,7 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
         appendShellWord(aBuffer, aStringList[n], false);
     }
 
-    // Append blind carbon copy receipients set in the message
+    // Append blind carbon copy recipients set in the message
     aStringList = xSimpleMailMessage->getBccRecipient();
     nmax = aStringList.getLength();
     for ( n = 0; n < nmax; n++ )
@@ -302,22 +283,18 @@ void SAL_CALL CmdMailSuppl::sendSimpleMailMessage( const Reference< XSimpleMailM
 }
 
 // XServiceInfo
+
 OUString SAL_CALL CmdMailSuppl::getImplementationName(  )
-    throw( RuntimeException, std::exception )
 {
     return OUString("com.sun.star.comp.system.SimpleCommandMail");
 }
 
-//  XServiceInfo
 sal_Bool SAL_CALL CmdMailSuppl::supportsService( const OUString& ServiceName )
-    throw( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-//  XServiceInfo
 Sequence< OUString > SAL_CALL CmdMailSuppl::getSupportedServiceNames(    )
-    throw( RuntimeException, std::exception )
 {
     return Component_getSupportedServiceNames();
 }

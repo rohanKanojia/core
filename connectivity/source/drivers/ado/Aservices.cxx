@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ado/ADriver.hxx"
+#include <ado/ADriver.hxx>
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 using namespace connectivity::ado;
 using ::com::sun::star::uno::Reference;
@@ -26,7 +27,7 @@ using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::lang::XSingleServiceFactory;
 using ::com::sun::star::lang::XMultiServiceFactory;
 
-typedef Reference< XSingleServiceFactory > (SAL_CALL *createFactoryFunc)
+typedef Reference< XSingleServiceFactory > (*createFactoryFunc)
         (
             const Reference< XMultiServiceFactory > & rServiceManager,
             const OUString & rComponentName,
@@ -46,13 +47,12 @@ struct ProviderRequest
         void* pServiceManager,
         sal_Char const* pImplementationName
     )
-    : xServiceManager(reinterpret_cast<XMultiServiceFactory*>(pServiceManager))
+    : xServiceManager(static_cast<XMultiServiceFactory*>(pServiceManager))
     , sImplementationName(OUString::createFromAscii(pImplementationName))
     {
     }
 
-    inline
-    sal_Bool CREATE_PROVIDER(
+    bool CREATE_PROVIDER(
                 const OUString& Implname,
                 const Sequence< OUString > & Services,
                 ::cppu::ComponentInstantiation Factory,
@@ -60,13 +60,13 @@ struct ProviderRequest
             )
     {
         if (!xRet.is() && (Implname == sImplementationName))
-        try
-        {
-            xRet = creator( xServiceManager, sImplementationName,Factory, Services,0);
-        }
-        catch(...)
-        {
-        }
+            try
+            {
+                xRet = creator( xServiceManager, sImplementationName,Factory, Services,nullptr);
+            }
+            catch(...)
+            {
+            }
         return xRet.is();
     }
 
@@ -74,12 +74,12 @@ struct ProviderRequest
 };
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL ado_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* ado_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* /*pRegistryKey*/)
 {
-    void* pRet = 0;
+    void* pRet = nullptr;
     if (pServiceManager)
     {
         ProviderRequest aReq(pServiceManager,pImplementationName);

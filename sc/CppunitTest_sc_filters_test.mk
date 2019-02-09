@@ -40,6 +40,7 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_filters_test, \
     salhelper \
     sax \
     sc \
+    scfilt \
     scqahelper \
     sfx \
     sot \
@@ -55,7 +56,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_filters_test, \
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_filters_test,\
@@ -65,8 +65,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_filters_test,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_filters_test,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_filters_test))
@@ -81,8 +82,11 @@ $(eval $(call gb_CppunitTest_use_components,sc_filters_test,\
     connectivity/source/manager/sdbc2 \
     dbaccess/util/dba \
     embeddedobj/util/embobj \
+    emfio/emfio \
     eventattacher/source/evtatt \
     filter/source/config/cache/filterconfig1 \
+    filter/source/xmlfilteradaptor/xmlfa \
+    filter/source/xsltfilter/xsltfilter \
     forms/util/frm \
     framework/util/fwk \
     i18npool/util/i18npool \
@@ -108,6 +112,8 @@ $(eval $(call gb_CppunitTest_use_components,sc_filters_test,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     xmloff/util/xo \
 ))
 

@@ -18,18 +18,20 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <algorithm>
 #include <map>
 #include <vector>
 
-#include <vclhelperbufferdevice.hxx>
+#include "vclhelperbufferdevice.hxx"
 #include <basegfx/range/b2drange.hxx>
 #include <vcl/bitmapex.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <tools/stream.hxx>
 #include <vcl/timer.hxx>
-#include <comphelper/broadcasthelper.hxx>
+#include <cppuhelper/basemutex.hxx>
 #include <vcl/lazydelete.hxx>
 #include <vcl/dibtools.hxx>
 
@@ -38,9 +40,9 @@
 
 namespace
 {
-    typedef ::std::vector< VclPtr<VirtualDevice> > aBuffers;
+    typedef std::vector< VclPtr<VirtualDevice> > aBuffers;
 
-    class VDevBuffer : public Timer, protected comphelper::OBaseMutex
+    class VDevBuffer : public Timer, protected cppu::BaseMutex
     {
     private:
         // available buffers
@@ -56,9 +58,9 @@ namespace
 
     public:
         VDevBuffer();
-        virtual ~VDevBuffer();
+        virtual ~VDevBuffer() override;
 
-        VirtualDevice* alloc(OutputDevice& rOutDev, const Size& rSizePixel, bool bClear, bool bMonoChrome);
+        VclPtr<VirtualDevice> alloc(OutputDevice& rOutDev, const Size& rSizePixel, bool bClear, bool bMonoChrome);
         void free(VirtualDevice& rDevice);
 
         // Timer virtuals
@@ -66,11 +68,12 @@ namespace
     };
 
     VDevBuffer::VDevBuffer()
-    :   Timer(),
+    :   Timer("VDevBuffer timer"),
         maFreeBuffers(),
         maUsedBuffers()
     {
         SetTimeout(10L * 1000L); // ten seconds
+        SetDebugName("drawinglayer::VDevBuffer via Invoke()");
     }
 
     VDevBuffer::~VDevBuffer()
@@ -91,10 +94,10 @@ namespace
         }
     }
 
-    VirtualDevice* VDevBuffer::alloc(OutputDevice& rOutDev, const Size& rSizePixel, bool bClear, bool bMonoChrome)
+    VclPtr<VirtualDevice> VDevBuffer::alloc(OutputDevice& rOutDev, const Size& rSizePixel, bool bClear, bool bMonoChrome)
     {
         ::osl::MutexGuard aGuard(m_aMutex);
-        VirtualDevice* pRetval = nullptr;
+        VclPtr<VirtualDevice> pRetval;
 
         sal_Int32 nBits = bMonoChrome ? 1 : rOutDev.GetBitCount();
 
@@ -175,7 +178,7 @@ namespace
                 {
                     if (bClear)
                     {
-                        pRetval->Erase(Rectangle(0, 0, rSizePixel.getWidth(), rSizePixel.getHeight()));
+                        pRetval->Erase(::tools::Rectangle(0, 0, rSizePixel.getWidth(), rSizePixel.getHeight()));
                     }
                 }
                 else
@@ -196,6 +199,7 @@ namespace
         {
             // reused, reset some values
             pRetval->SetMapMode();
+            pRetval->SetRasterOp(RasterOp::OverPaint);
         }
 
         // remember allocated buffer
@@ -207,11 +211,11 @@ namespace
     void VDevBuffer::free(VirtualDevice& rDevice)
     {
         ::osl::MutexGuard aGuard(m_aMutex);
-        const aBuffers::iterator aUsedFound(::std::find(maUsedBuffers.begin(), maUsedBuffers.end(), &rDevice));
+        const aBuffers::iterator aUsedFound(std::find(maUsedBuffers.begin(), maUsedBuffers.end(), &rDevice));
         OSL_ENSURE(aUsedFound != maUsedBuffers.end(), "OOps, non-registered buffer freed (!)");
 
         maUsedBuffers.erase(aUsedFound);
-        maFreeBuffers.push_back(&rDevice);
+        maFreeBuffers.emplace_back(&rDevice);
         SAL_WARN_IF(maFreeBuffers.size() > 1000, "drawinglayer", "excessive cached buffers, "
             << maFreeBuffers.size() << " entries!");
         Start();
@@ -256,11 +260,11 @@ namespace drawinglayer
     {
         basegfx::B2DRange aRangePixel(rRange);
         aRangePixel.transform(mrOutDev.GetViewTransformation());
-        const Rectangle aRectPixel(
-            (sal_Int32)floor(aRangePixel.getMinX()), (sal_Int32)floor(aRangePixel.getMinY()),
-            (sal_Int32)ceil(aRangePixel.getMaxX()), (sal_Int32)ceil(aRangePixel.getMaxY()));
+        const ::tools::Rectangle aRectPixel(
+            static_cast<sal_Int32>(floor(aRangePixel.getMinX())), static_cast<sal_Int32>(floor(aRangePixel.getMinY())),
+            static_cast<sal_Int32>(ceil(aRangePixel.getMaxX())), static_cast<sal_Int32>(ceil(aRangePixel.getMaxY())));
         const Point aEmptyPoint;
-        maDestPixel = Rectangle(aEmptyPoint, mrOutDev.GetOutputSizePixel());
+        maDestPixel = ::tools::Rectangle(aEmptyPoint, mrOutDev.GetOutputSizePixel());
         maDestPixel.Intersection(aRectPixel);
 
         if(isVisible())
@@ -294,7 +298,7 @@ namespace drawinglayer
             // copy AA flag for new target
             mpContent->SetAntialiasing(mrOutDev.GetAntialiasing());
 
-            // copy RasterOp (e.g. may be ROP_XOR on destination)
+            // copy RasterOp (e.g. may be RasterOp::Xor on destination)
             mpContent->SetRasterOp(mrOutDev.GetRasterOp());
         }
     }
@@ -346,9 +350,9 @@ namespace drawinglayer
             }
 #endif
 
-            // during painting the buffer, disable evtl. set RasterOp (may be ROP_XOR)
+            // during painting the buffer, disable evtl. set RasterOp (may be RasterOp::Xor)
             const RasterOp aOrigRasterOp(mrOutDev.GetRasterOp());
-            mrOutDev.SetRasterOp(ROP_OVERPAINT);
+            mrOutDev.SetRasterOp(RasterOp::OverPaint);
 
             if(mpAlpha)
             {
@@ -394,7 +398,7 @@ namespace drawinglayer
             }
             else if(0.0 != fTrans)
             {
-                sal_uInt8 nMaskValue((sal_uInt8)basegfx::fround(fTrans * 255.0));
+                sal_uInt8 nMaskValue(static_cast<sal_uInt8>(basegfx::fround(fTrans * 255.0)));
                 const AlphaMask aAlphaMask(aSizePixel, &nMaskValue);
                 mrOutDev.DrawBitmapEx(maDestPixel.TopLeft(), BitmapEx(aContent, aAlphaMask));
             }

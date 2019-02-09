@@ -16,18 +16,20 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "DataProviderHandler.hxx"
+#include <DataProviderHandler.hxx>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <comphelper/namedvaluecollection.hxx>
 #include <comphelper/property.hxx>
+#include <comphelper/sequence.hxx>
 #include <comphelper/types.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "uistrings.hrc"
-#include <toolkit/helper/vclunohelper.hxx>
+#include <strings.hxx>
 #include <unotools/syslocale.hxx>
 #include <com/sun/star/form/inspection/FormComponentPropertyHandler.hpp>
 #include <com/sun/star/inspection/PropertyControlType.hpp>
 #include <com/sun/star/inspection/PropertyLineElement.hpp>
+#include <com/sun/star/lang/NullPointerException.hpp>
 #include <com/sun/star/chart/ChartDataRowSource.hpp>
 #include <com/sun/star/chart2/FormattedString.hpp>
 #include <com/sun/star/chart2/XDiagram.hpp>
@@ -39,18 +41,17 @@
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/report/XReportDefinition.hpp>
-#include <com/sun/star/report/XSection.hpp>
 #include <com/sun/star/script/Converter.hpp>
-#include <com/sun/star/inspection/XNumericControl.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <tools/fldunit.hxx>
-#include "metadata.hxx"
+#include <metadata.hxx>
 #include <vcl/svapp.hxx>
 #include <osl/mutex.hxx>
-#include "helpids.hrc"
-#include "RptResId.hrc"
-#include "PropertyForward.hxx"
+#include <core_resource.hxx>
+#include <helpids.h>
+#include <strings.hrc>
+#include <PropertyForward.hxx>
 
 namespace rptui
 {
@@ -71,33 +72,33 @@ DataProviderHandler::DataProviderHandler(uno::Reference< uno::XComponentContext 
     }
 }
 
-OUString SAL_CALL DataProviderHandler::getImplementationName(  ) throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL DataProviderHandler::getImplementationName(  )
 {
     return getImplementationName_Static();
 }
 
-sal_Bool SAL_CALL DataProviderHandler::supportsService( const OUString& ServiceName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL DataProviderHandler::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-uno::Sequence< OUString > SAL_CALL DataProviderHandler::getSupportedServiceNames(  ) throw(uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL DataProviderHandler::getSupportedServiceNames(  )
 {
     return getSupportedServiceNames_static();
 }
 
-OUString DataProviderHandler::getImplementationName_Static(  ) throw(uno::RuntimeException)
+OUString DataProviderHandler::getImplementationName_Static(  )
 {
     return OUString("com.sun.star.comp.report.DataProviderHandler");
 }
 
-uno::Sequence< OUString > DataProviderHandler::getSupportedServiceNames_static(  ) throw(uno::RuntimeException)
+uno::Sequence< OUString > DataProviderHandler::getSupportedServiceNames_static(  )
 {
     uno::Sequence< OUString > aSupported { "com.sun.star.report.inspection.DataProviderHandler" };
     return aSupported;
 }
 
-uno::Reference< uno::XInterface > SAL_CALL DataProviderHandler::create( const uno::Reference< uno::XComponentContext >& _rxContext )
+uno::Reference< uno::XInterface > DataProviderHandler::create( const uno::Reference< uno::XComponentContext >& _rxContext )
 {
     return *(new DataProviderHandler( _rxContext ));
 }
@@ -111,12 +112,12 @@ void SAL_CALL DataProviderHandler::disposing()
     ::comphelper::disposeComponent( m_xMasterDetails );
     ::comphelper::disposeComponent(m_xTypeConverter);
 }
-void SAL_CALL DataProviderHandler::addEventListener(const uno::Reference< lang::XEventListener > & xListener) throw (uno::RuntimeException, std::exception)
+void SAL_CALL DataProviderHandler::addEventListener(const uno::Reference< lang::XEventListener > & xListener)
 {
     m_xFormComponentHandler->addEventListener(xListener);
 }
 
-void SAL_CALL DataProviderHandler::removeEventListener(const uno::Reference< lang::XEventListener > & aListener) throw (uno::RuntimeException, std::exception)
+void SAL_CALL DataProviderHandler::removeEventListener(const uno::Reference< lang::XEventListener > & aListener)
 {
     m_xFormComponentHandler->removeEventListener(aListener);
 }
@@ -124,7 +125,7 @@ void SAL_CALL DataProviderHandler::removeEventListener(const uno::Reference< lan
 // inspection::XPropertyHandler:
 
 /********************************************************************************/
-void SAL_CALL DataProviderHandler::inspect(const uno::Reference< uno::XInterface > & Component) throw (uno::RuntimeException, lang::NullPointerException, std::exception)
+void SAL_CALL DataProviderHandler::inspect(const uno::Reference< uno::XInterface > & Component)
 {
     try
     {
@@ -145,10 +146,10 @@ void SAL_CALL DataProviderHandler::inspect(const uno::Reference< uno::XInterface
         m_xReportComponent.set( xNameCont->getByName("ReportComponent"), uno::UNO_QUERY );
         if ( m_xDataProvider.is() )
         {
-            std::shared_ptr<AnyConverter> aNoConverter(new AnyConverter());
+            std::shared_ptr<AnyConverter> aNoConverter(new AnyConverter);
             TPropertyNamePair aPropertyMediation;
-            aPropertyMediation.insert( TPropertyNamePair::value_type( PROPERTY_MASTERFIELDS, TPropertyConverter(PROPERTY_MASTERFIELDS,aNoConverter) ) );
-            aPropertyMediation.insert( TPropertyNamePair::value_type( PROPERTY_DETAILFIELDS, TPropertyConverter(PROPERTY_DETAILFIELDS,aNoConverter) ) );
+            aPropertyMediation.emplace( PROPERTY_MASTERFIELDS, TPropertyConverter(PROPERTY_MASTERFIELDS,aNoConverter) );
+            aPropertyMediation.emplace( PROPERTY_DETAILFIELDS, TPropertyConverter(PROPERTY_DETAILFIELDS,aNoConverter) );
 
             m_xMasterDetails = new OPropertyMediator( m_xDataProvider.get(), m_xReportComponent.get(), aPropertyMediation,true );
         }
@@ -163,7 +164,7 @@ void SAL_CALL DataProviderHandler::inspect(const uno::Reference< uno::XInterface
     }
 }
 
-uno::Any SAL_CALL DataProviderHandler::getPropertyValue(const OUString & PropertyName) throw (uno::RuntimeException, beans::UnknownPropertyException, std::exception)
+uno::Any SAL_CALL DataProviderHandler::getPropertyValue(const OUString & PropertyName)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     uno::Any aPropertyValue;
@@ -209,7 +210,7 @@ uno::Any SAL_CALL DataProviderHandler::getPropertyValue(const OUString & Propert
     return aPropertyValue;
 }
 
-void SAL_CALL DataProviderHandler::setPropertyValue(const OUString & PropertyName, const uno::Any & Value) throw (uno::RuntimeException, beans::UnknownPropertyException, std::exception)
+void SAL_CALL DataProviderHandler::setPropertyValue(const OUString & PropertyName, const uno::Any & Value)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     const sal_Int32 nId = OPropertyInfoService::getPropertyId(PropertyName);
@@ -250,12 +251,12 @@ void DataProviderHandler::impl_updateChartTitle_throw(const uno::Any& _aValue)
     }
 }
 
-beans::PropertyState SAL_CALL DataProviderHandler::getPropertyState(const OUString & PropertyName) throw (uno::RuntimeException, beans::UnknownPropertyException, std::exception)
+beans::PropertyState SAL_CALL DataProviderHandler::getPropertyState(const OUString & PropertyName)
 {
     return m_xFormComponentHandler->getPropertyState(PropertyName);
 }
 
-inspection::LineDescriptor SAL_CALL DataProviderHandler::describePropertyLine(const OUString & PropertyName,  const uno::Reference< inspection::XPropertyControlFactory > & _xControlFactory) throw (beans::UnknownPropertyException, lang::NullPointerException,uno::RuntimeException, std::exception)
+inspection::LineDescriptor SAL_CALL DataProviderHandler::describePropertyLine(const OUString & PropertyName,  const uno::Reference< inspection::XPropertyControlFactory > & _xControlFactory)
 {
     inspection::LineDescriptor aOut;
     const sal_Int32 nId = OPropertyInfoService::getPropertyId(PropertyName);
@@ -263,24 +264,24 @@ inspection::LineDescriptor SAL_CALL DataProviderHandler::describePropertyLine(co
     {
         case PROPERTY_ID_CHARTTYPE:
             aOut.PrimaryButtonId = UID_RPT_PROP_CHARTTYPE_DLG;
-            aOut.Control = _xControlFactory->createPropertyControl(inspection::PropertyControlType::TextField , sal_True);
-            aOut.HasPrimaryButton = sal_True;
+            aOut.Control = _xControlFactory->createPropertyControl(inspection::PropertyControlType::TextField , true);
+            aOut.HasPrimaryButton = true;
             break;
         case PROPERTY_ID_PREVIEW_COUNT:
-            aOut.Control = _xControlFactory->createPropertyControl(inspection::PropertyControlType::NumericField , sal_False);
+            aOut.Control = _xControlFactory->createPropertyControl(inspection::PropertyControlType::NumericField , false);
             break;
         case PROPERTY_ID_MASTERFIELDS:
         case PROPERTY_ID_DETAILFIELDS:
-            aOut.Control = _xControlFactory->createPropertyControl(inspection::PropertyControlType::StringListField , sal_False);
+            aOut.Control = _xControlFactory->createPropertyControl(inspection::PropertyControlType::StringListField , false);
             aOut.PrimaryButtonId = UID_RPT_PROP_DLG_LINKFIELDS;
-            aOut.HasPrimaryButton = sal_True;
+            aOut.HasPrimaryButton = true;
             break;
         default:
             aOut = m_xFormComponentHandler->describePropertyLine(PropertyName, _xControlFactory);
     }
     if ( nId != -1 )
     {
-        aOut.Category = ((OPropertyInfoService::getPropertyUIFlags(nId ) & PROP_FLAG_DATA_PROPERTY) != 0) ?
+        aOut.Category = (OPropertyInfoService::getPropertyUIFlags(nId ) & PropUIFlags::DataProperty) ?
                                     OUString("Data")
                                                         :
                                     OUString("General");
@@ -290,7 +291,7 @@ inspection::LineDescriptor SAL_CALL DataProviderHandler::describePropertyLine(co
     return aOut;
 }
 
-uno::Any SAL_CALL DataProviderHandler::convertToPropertyValue(const OUString & _rPropertyValue, const uno::Any & _rControlValue) throw (uno::RuntimeException, beans::UnknownPropertyException, std::exception)
+uno::Any SAL_CALL DataProviderHandler::convertToPropertyValue(const OUString & _rPropertyValue, const uno::Any & _rControlValue)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     uno::Any aPropertyValue( _rControlValue );
@@ -318,7 +319,7 @@ uno::Any SAL_CALL DataProviderHandler::convertToPropertyValue(const OUString & _
     return aPropertyValue;
 }
 
-uno::Any SAL_CALL DataProviderHandler::convertToControlValue(const OUString & _rPropertyName, const uno::Any & _rPropertyValue, const uno::Type & ControlValueType) throw (uno::RuntimeException, beans::UnknownPropertyException, std::exception)
+uno::Any SAL_CALL DataProviderHandler::convertToControlValue(const OUString & _rPropertyName, const uno::Any & _rPropertyValue, const uno::Type & ControlValueType)
 {
     uno::Any aControlValue( _rPropertyValue );
     if ( !aControlValue.hasValue() )
@@ -349,47 +350,47 @@ uno::Any SAL_CALL DataProviderHandler::convertToControlValue(const OUString & _r
     return aControlValue;
 }
 
-void SAL_CALL DataProviderHandler::addPropertyChangeListener(const uno::Reference< beans::XPropertyChangeListener > & Listener) throw (uno::RuntimeException, lang::NullPointerException, std::exception)
+void SAL_CALL DataProviderHandler::addPropertyChangeListener(const uno::Reference< beans::XPropertyChangeListener > & Listener)
 {
     m_xFormComponentHandler->addPropertyChangeListener(Listener);
 }
 
-void SAL_CALL DataProviderHandler::removePropertyChangeListener(const uno::Reference< beans::XPropertyChangeListener > & _rxListener) throw (uno::RuntimeException, std::exception)
+void SAL_CALL DataProviderHandler::removePropertyChangeListener(const uno::Reference< beans::XPropertyChangeListener > & _rxListener)
 {
     m_xFormComponentHandler->removePropertyChangeListener(_rxListener);
 }
 
-uno::Sequence< beans::Property > SAL_CALL DataProviderHandler::getSupportedProperties() throw (uno::RuntimeException, std::exception)
+uno::Sequence< beans::Property > SAL_CALL DataProviderHandler::getSupportedProperties()
 {
     ::std::vector< beans::Property > aNewProps;
     if( m_xChartModel.is() )
     {
         rptui::OPropertyInfoService::getExcludeProperties( aNewProps, m_xFormComponentHandler );
         beans::Property aValue;
-        static const OUString s_pProperties[] =
+        static const OUStringLiteral s_pProperties[] =
         {
-             OUString(PROPERTY_CHARTTYPE)
-            ,OUString(PROPERTY_MASTERFIELDS)
-            ,OUString(PROPERTY_DETAILFIELDS)
-            ,OUString(PROPERTY_PREVIEW_COUNT)
+             PROPERTY_CHARTTYPE
+            ,PROPERTY_MASTERFIELDS
+            ,PROPERTY_DETAILFIELDS
+            ,PROPERTY_PREVIEW_COUNT
         };
 
-        for (size_t nPos = 0; nPos < SAL_N_ELEMENTS(s_pProperties); ++nPos )
+        for (const auto & rName : s_pProperties)
         {
-            aValue.Name = s_pProperties[nPos];
+            aValue.Name = rName;
             aNewProps.push_back(aValue);
         }
     }
     return uno::Sequence< beans::Property >(aNewProps.data(), aNewProps.size());
 }
 
-uno::Sequence< OUString > SAL_CALL DataProviderHandler::getSupersededProperties() throw (uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL DataProviderHandler::getSupersededProperties()
 {
     uno::Sequence< OUString > aRet { PROPERTY_TITLE }; // have a look at OPropertyInfoService::getExcludeProperties
     return aRet;
 }
 
-uno::Sequence< OUString > SAL_CALL DataProviderHandler::getActuatingProperties() throw (uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL DataProviderHandler::getActuatingProperties()
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -397,12 +398,12 @@ uno::Sequence< OUString > SAL_CALL DataProviderHandler::getActuatingProperties()
     return ::comphelper::concatSequences(m_xFormComponentHandler->getActuatingProperties(),aSeq);
 }
 
-sal_Bool SAL_CALL DataProviderHandler::isComposable( const OUString& _rPropertyName ) throw (uno::RuntimeException, beans::UnknownPropertyException, std::exception)
+sal_Bool SAL_CALL DataProviderHandler::isComposable( const OUString& _rPropertyName )
 {
     return OPropertyInfoService::isComposable( _rPropertyName, m_xFormComponentHandler );
 }
 
-inspection::InteractiveSelectionResult SAL_CALL DataProviderHandler::onInteractivePropertySelection(const OUString & PropertyName, sal_Bool Primary, uno::Any & out_Data, const uno::Reference< inspection::XObjectInspectorUI > & _rxInspectorUI) throw (uno::RuntimeException, beans::UnknownPropertyException, lang::NullPointerException, std::exception)
+inspection::InteractiveSelectionResult SAL_CALL DataProviderHandler::onInteractivePropertySelection(const OUString & PropertyName, sal_Bool Primary, uno::Any & out_Data, const uno::Reference< inspection::XObjectInspectorUI > & _rxInspectorUI)
 {
     if ( !_rxInspectorUI.is() )
         throw lang::NullPointerException();
@@ -429,7 +430,7 @@ inspection::InteractiveSelectionResult SAL_CALL DataProviderHandler::onInteracti
     return eResult;
 }
 
-void SAL_CALL DataProviderHandler::actuatingPropertyChanged(const OUString & ActuatingPropertyName, const uno::Any & NewValue, const uno::Any & OldValue, const uno::Reference< inspection::XObjectInspectorUI > & InspectorUI, sal_Bool FirstTimeInit) throw (uno::RuntimeException, lang::NullPointerException, std::exception)
+void SAL_CALL DataProviderHandler::actuatingPropertyChanged(const OUString & ActuatingPropertyName, const uno::Any & NewValue, const uno::Any & OldValue, const uno::Reference< inspection::XObjectInspectorUI > & InspectorUI, sal_Bool FirstTimeInit)
 {
     ::osl::ClearableMutexGuard aGuard( m_aMutex );
 
@@ -446,13 +447,13 @@ void SAL_CALL DataProviderHandler::actuatingPropertyChanged(const OUString & Act
             // this fills the chart again
             ::comphelper::NamedValueCollection aArgs;
             aArgs.put( "CellRangeRepresentation", uno::makeAny( OUString( "all" ) ) );
-            aArgs.put( "HasCategories", uno::makeAny( sal_True ) );
-            aArgs.put( "FirstCellAsLabel", uno::makeAny( sal_True ) );
+            aArgs.put( "HasCategories", uno::makeAny( true ) );
+            aArgs.put( "FirstCellAsLabel", uno::makeAny( true ) );
             aArgs.put( "DataRowSource", uno::makeAny( chart::ChartDataRowSource_COLUMNS ) );
             uno::Reference< chart2::data::XDataReceiver > xReceiver(m_xChartModel,uno::UNO_QUERY_THROW);
             xReceiver->setArguments( aArgs.getPropertyValues() );
             if ( !bModified )
-                xReport->setModified(sal_False);
+                xReport->setModified(false);
         }
         m_xFormComponentHandler->actuatingPropertyChanged(ActuatingPropertyName, NewValue, OldValue, InspectorUI, FirstTimeInit);
     }
@@ -477,33 +478,21 @@ void SAL_CALL DataProviderHandler::actuatingPropertyChanged(const OUString & Act
     }
 }
 
-sal_Bool SAL_CALL DataProviderHandler::suspend(sal_Bool Suspend) throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL DataProviderHandler::suspend(sal_Bool Suspend)
 {
     return m_xFormComponentHandler->suspend(Suspend);
 }
 bool DataProviderHandler::impl_dialogLinkedFields_nothrow( ::osl::ClearableMutexGuard& _rClearBeforeDialog ) const
 {
-    uno::Sequence<uno::Any> aSeq(6);
-    beans::PropertyValue aParam;
-    aParam.Name = "ParentWindow";
-    aParam.Value <<= m_xContext->getValueByName("DialogParentWindow");
-    aSeq[0] <<= aParam;
-    aParam.Name = "Detail";
-    aParam.Value <<= m_xDataProvider;
-    aSeq[1] <<= aParam;
-    aParam.Name = "Master";
-    aParam.Value <<= m_xReportComponent->getSection()->getReportDefinition();
-    aSeq[2] <<= aParam;
-
-    aParam.Name = "Explanation";
-    aParam.Value <<= OUString(ModuleRes(RID_STR_EXPLANATION));
-    aSeq[3] <<= aParam;
-    aParam.Name = "DetailLabel";
-    aParam.Value <<= OUString(ModuleRes(RID_STR_DETAILLABEL));
-    aSeq[4] <<= aParam;
-    aParam.Name = "MasterLabel";
-    aParam.Value <<= OUString(ModuleRes(RID_STR_MASTERLABEL));
-    aSeq[5] <<= aParam;
+    uno::Sequence<uno::Any> aSeq(comphelper::InitAnyPropertySequence(
+    {
+        {"ParentWindow", m_xContext->getValueByName("DialogParentWindow")},
+        {"Detail", uno::Any(m_xDataProvider)},
+        {"Master", uno::Any(m_xReportComponent->getSection()->getReportDefinition())},
+        {"Explanation", uno::Any(RptResId(RID_STR_EXPLANATION))},
+        {"DetailLabel", uno::Any(RptResId(RID_STR_DETAILLABEL))},
+        {"MasterLabel", uno::Any(RptResId(RID_STR_MASTERLABEL))},
+    }));
 
     uno::Reference< ui::dialogs::XExecutableDialog > xDialog(
         m_xContext->getServiceManager()->createInstanceWithArgumentsAndContext(
@@ -516,14 +505,11 @@ bool DataProviderHandler::impl_dialogLinkedFields_nothrow( ::osl::ClearableMutex
 
 bool DataProviderHandler::impl_dialogChartType_nothrow( ::osl::ClearableMutexGuard& _rClearBeforeDialog ) const
 {
-    uno::Sequence<uno::Any> aSeq(2);
-    beans::PropertyValue aParam;
-    aParam.Name = "ParentWindow";
-    aParam.Value <<= m_xContext->getValueByName("DialogParentWindow");
-    aSeq[0] <<= aParam;
-    aParam.Name = "ChartModel";
-    aParam.Value <<= m_xChartModel;
-    aSeq[1] <<= aParam;
+    uno::Sequence<uno::Any> aSeq(comphelper::InitAnyPropertySequence(
+    {
+        {"ParentWindow", m_xContext->getValueByName("DialogParentWindow")},
+        {"ChartModel", uno::Any(m_xChartModel)}
+    }));
 
     uno::Reference< ui::dialogs::XExecutableDialog > xDialog(
         m_xContext->getServiceManager()->createInstanceWithArgumentsAndContext(

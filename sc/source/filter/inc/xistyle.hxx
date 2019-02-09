@@ -20,16 +20,16 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XISTYLE_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XISTYLE_HXX
 
-#include <list>
-#include <memory>
+#include <tools/solar.h>
 #include <vector>
-#include <tools/mempool.hxx>
-#include "rangelst.hxx"
-#include "patattr.hxx"
-#include "xladdress.hxx"
+#include <memory>
+#include <rangelst.hxx>
 #include "xlstyle.hxx"
 #include "xiroot.hxx"
 
+class ScPatternAttr;
+
+struct XclRange;
 struct ScAttrEntry;
 enum class SvxBoxItemLine;
 
@@ -50,23 +50,18 @@ public:
     /** Clears all buffered data, used to set up for a new sheet. */
     void                Initialize();
 
-    /** Returns the RGB color data for a (non-zero-based) Excel palette entry.
-        @descr  First looks for a color read from file, then looks for a default color.
-        @return  The color from current or default palette or COL_AUTO, if nothing else found. */
-    ColorData           GetColorData( sal_uInt16 nXclIndex ) const;
     /** Returns the color for a (non-zero-based) Excel palette entry.
         @descr  First looks for a color read from file, then looks for a default color.
         @return  The color from current or default palette or COL_AUTO, if nothing else found. */
-    inline Color        GetColor( sal_uInt16 nXclIndex ) const
-                            { return Color( GetColorData( nXclIndex ) ); }
+    Color           GetColor( sal_uInt16 nXclIndex ) const;
 
     /** Reads a PALETTE record. */
     void                ReadPalette( XclImpStream& rStrm );
 
 private:
     void ExportPalette();
-    typedef ::std::vector< ColorData > ColorDataVec;
-    ColorDataVec        maColorTable;       /// Colors read from file.
+    typedef ::std::vector< Color > ColorVec;
+    ColorVec                      maColorTable;       /// Colors read from file.
     const XclImpRoot&             mrRoot;
 };
 
@@ -89,16 +84,16 @@ public:
     void                SetFontData( const XclFontData& rFontData, bool bHasCharSet );
 
     /** Returns read-only access to font data. */
-    inline const XclFontData& GetFontData() const { return maData; }
+    const XclFontData& GetFontData() const { return maData; }
     /** Returns true, if the font character set is valid. */
-    inline bool         HasCharSet() const { return mbHasCharSet; }
+    bool         HasCharSet() const { return mbHasCharSet; }
     /** Returns true, if the font contains superscript or subscript. */
-    inline bool         HasEscapement() const { return maData.mnEscapem != EXC_FONTESC_NONE; }
+    bool         HasEscapement() const { return maData.mnEscapem != EXC_FONTESC_NONE; }
     /** Returns the text encoding for strings used with this font. */
     rtl_TextEncoding    GetFontEncoding() const;
 
     /** Returns true, if this font contains characters for Asian scripts (CJK). */
-    inline bool         HasAsianChars() const { return mbHasAsian; }
+    bool         HasAsianChars() const { return mbHasAsian; }
 
     /** Reads a FONT record for all BIFF versions. */
     void                ReadFont( XclImpStream& rStrm );
@@ -171,7 +166,7 @@ public:
     /** Returns the object that stores all contents of a FONT record. */
     const XclImpFont*   GetFont( sal_uInt16 nFontIndex ) const;
     /** Returns the application font data of this file, needed i.e. for column width. */
-    inline const XclFontData& GetAppFontData() const { return maAppFont; }
+    const XclFontData& GetAppFontData() const { return maAppFont; }
 
     /** Reads a FONT record. */
     void                ReadFont( XclImpStream& rStrm );
@@ -225,7 +220,7 @@ public:
     void                CreateScFormats();
 
     /** Returns the format key with the passed Excel index or NUMBERFORMAT_ENTRY_NOT_FOUND on error. */
-    sal_uLong               GetScFormat( sal_uInt16 nXclNumFmt ) const;
+    sal_uInt32          GetScFormat( sal_uInt16 nXclNumFmt ) const;
 
     /** Fills an Excel number format to the passed item set.
         @param rItemSet  The destination item set.
@@ -239,7 +234,7 @@ public:
         @param nScNumFmt  The Calc number formatter index of the format.
         @param bSkipPoolDefs  true = Do not put items equal to pool default; false = Put all items. */
     void                FillScFmtToItemSet(
-                            SfxItemSet& rItemSet, sal_uLong nScNumFmt,
+                            SfxItemSet& rItemSet, sal_uInt32 nScNumFmt,
                             bool bSkipPoolDefs = false ) const;
 
 private:
@@ -362,11 +357,11 @@ struct XclImpCellArea : public XclCellArea
 class XclImpXFIndex
 {
 public:
-    inline explicit     XclImpXFIndex( sal_uInt16 nXFIndex, bool bBoolCell = false ) :
+    explicit     XclImpXFIndex( sal_uInt16 nXFIndex, bool bBoolCell = false ) :
                             mnXFIndex( nXFIndex ), mbBoolCell( bBoolCell ) {}
 
-    inline sal_uInt16   GetXFIndex() const { return mnXFIndex; }
-    inline bool         IsBoolCell() const { return mbBoolCell; }
+    sal_uInt16   GetXFIndex() const { return mnXFIndex; }
+    bool         IsBoolCell() const { return mbBoolCell; }
 
 private:
     sal_uInt16          mnXFIndex;      /// The XF record index.
@@ -388,22 +383,22 @@ public:
     const XclImpXF& operator=(const XclImpXF&) = delete;
 
     explicit            XclImpXF( const XclImpRoot& rRoot );
-    virtual             ~XclImpXF();
+    virtual             ~XclImpXF() override;
 
     /** Reads an XF record. */
     void                ReadXF( XclImpStream& rStrm );
 
-    inline sal_uInt8    GetHorAlign() const { return maAlignment.mnHorAlign; }
-    inline sal_uInt16   GetFontIndex() const { return mnXclFont; }
+    sal_uInt8    GetHorAlign() const { return maAlignment.mnHorAlign; }
+    sal_uInt16   GetFontIndex() const { return mnXclFont; }
 
     /** Creates a Calc item set containing an item set with all cell properties.
         @param bSkipPoolDefs  true = Do not put items equal to pool default; false = Put all items.
         @return  A read-only reference to the item set stored internally. */
     const ScPatternAttr& CreatePattern( bool bSkipPoolDefs = false );
 
-    void                ApplyPatternToAttrList(
-                            ::std::list<ScAttrEntry>& rAttrs, SCROW nRow1, SCROW nRow2,
-                            sal_uInt32 nForceScNumFmt = NUMBERFORMAT_ENTRY_NOT_FOUND);
+    void                ApplyPatternToAttrVector(
+                            ::std::vector<ScAttrEntry>& rAttrs, SCROW nRow1, SCROW nRow2,
+                            sal_uInt32 nForceScNumFmt);
 
     /** Inserts all formatting attributes to the specified area in the Calc document.
         @param nForcedNumFmt  If not set to NUMBERFORMAT_ENTRY_NOT_FOUND, it will overwrite
@@ -453,11 +448,11 @@ public:
     /** Reads a STYLE record. */
     void                ReadStyle( XclImpStream& rStrm );
 
-    inline const OUString& GetName() const { return maName; }
-    inline sal_uInt16   GetXfId() const { return mnXfId; }
-    inline bool         IsBuiltin() const { return mbBuiltin && (mnBuiltinId != EXC_STYLE_USERDEF); }
-    inline sal_uInt8    GetBuiltinId() const { return mnBuiltinId; }
-    inline sal_uInt8    GetLevel() const { return mnLevel; }
+    const OUString& GetName() const { return maName; }
+    sal_uInt16   GetXfId() const { return mnXfId; }
+    bool         IsBuiltin() const { return mbBuiltin && (mnBuiltinId != EXC_STYLE_USERDEF); }
+    sal_uInt8    GetBuiltinId() const { return mnBuiltinId; }
+    sal_uInt8    GetLevel() const { return mnLevel; }
 
     /** Creates a cell style sheet and inserts it into the Calc document.
         @return  The pointer to the cell style sheet, or 0, if there is no style sheet. */
@@ -498,10 +493,10 @@ public:
     void                ReadStyle( XclImpStream& rStrm );
 
     /** Returns the object that stores all contents of an XF record. */
-    inline XclImpXF*    GetXF( sal_uInt16 nXFIndex )
+    XclImpXF*    GetXF( sal_uInt16 nXFIndex )
                             { return (nXFIndex >= maXFList.size()) ? nullptr : maXFList.at(nXFIndex).get(); }
 
-    inline const XclImpXF*    GetXF( sal_uInt16 nXFIndex ) const
+    const XclImpXF*    GetXF( sal_uInt16 nXFIndex ) const
                             { return (nXFIndex >= maXFList.size()) ? nullptr : maXFList.at(nXFIndex).get(); }
 
     /** Returns the index to the Excel font used in the specified XF record. */
@@ -530,8 +525,6 @@ private:
 /** Contains an (encoded) XF index for a range of rows in a single column. */
 class XclImpXFRange
 {
-    DECL_FIXEDMEMPOOL_NEWDEL( XclImpXFRange )
-
 public:
     SCROW               mnScRow1;       /// The first row of an equal-formatted range.
     SCROW               mnScRow2;       /// The last row of an equal-formatted range.
@@ -578,7 +571,7 @@ public:
 
     typedef std::vector< std::unique_ptr<XclImpXFRange> > IndexList;
 
-    inline explicit     XclImpXFRangeColumn() {}
+    explicit     XclImpXFRangeColumn() {}
 
     IndexList::iterator begin() { return maIndexList.begin(); }
     IndexList::iterator end() { return maIndexList.end(); }
@@ -619,7 +612,7 @@ public:
     const XclImpXFRangeBuffer& operator=(const XclImpXFRangeBuffer&) = delete;
 
     explicit            XclImpXFRangeBuffer( const XclImpRoot& rRoot );
-    virtual             ~XclImpXFRangeBuffer();
+    virtual             ~XclImpXFRangeBuffer() override;
 
     /** Clears all buffered data, used to set up for a new sheet. */
     void                Initialize();
@@ -638,8 +631,6 @@ public:
     /** Inserts a range of hyperlink cells. */
     void                SetHyperlink( const XclRange& rXclRange, const OUString& rUrl );
 
-    /** Inserts the first cell of a merged cell range. */
-    void                SetMerge( SCCOL nScCol, SCROW nScRow );
     /** Inserts a complete merged cell range. */
     void                SetMerge( SCCOL nScCol1, SCROW nScRow1, SCCOL nScCol2, SCROW nScRow2 );
 
@@ -671,10 +662,10 @@ private:
     typedef std::shared_ptr< XclImpXFRangeColumn > XclImpXFRangeColumnRef;
     typedef ::std::vector< XclImpXFRangeColumnRef >  XclImpXFRangeColumnVec;
     typedef ::std::pair< XclRange, OUString >        XclImpHyperlinkRange;
-    typedef ::std::list< XclImpHyperlinkRange >      XclImpHyperlinkList;
+    typedef ::std::vector< XclImpHyperlinkRange >      XclImpHyperlinkVector;
 
     XclImpXFRangeColumnVec maColumns;       /// Array of column XF index buffers.
-    XclImpHyperlinkList maHyperlinks;       /// Maps URLs to hyperlink cells.
+    XclImpHyperlinkVector maHyperlinks;     /// Maps URLs to hyperlink cells.
     ScRangeList         maMergeList;        /// List of merged cell ranges.
 };
 

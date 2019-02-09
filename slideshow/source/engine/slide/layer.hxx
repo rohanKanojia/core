@@ -23,8 +23,8 @@
 #include <basegfx/range/b2dpolyrange.hxx>
 #include <cppcanvas/spritecanvas.hxx>
 
-#include "view.hxx"
-#include "animatableshape.hxx"
+#include <view.hxx>
+#include <animatableshape.hxx>
 
 #include <vector>
 #include <memory>
@@ -248,7 +248,7 @@ namespace slideshow
             basegfx::B2DRange          maBounds;
             basegfx::B2DRange          maNewBounds;
             bool                       mbBoundsDirty;     // true, if view layers need resize
-            bool                       mbBackgroundLayer; // true, if this
+            bool const                 mbBackgroundLayer; // true, if this
                                                           // layer is the
                                                           // special
                                                           // background layer
@@ -257,7 +257,6 @@ namespace slideshow
 
         typedef ::std::shared_ptr< Layer >    LayerSharedPtr;
         typedef ::std::weak_ptr< Layer >      LayerWeakPtr;
-        typedef ::std::vector< LayerSharedPtr > LayerVector;
 
     }
 }

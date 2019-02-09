@@ -19,10 +19,9 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_EEIMPORT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_EEIMPORT_HXX
 
-#include "global.hxx"
-#include "address.hxx"
-#include "filter.hxx"
-#include "scdllapi.h"
+#include <memory>
+#include <address.hxx>
+#include <filter.hxx>
 #include <map>
 
 class ScDocument;
@@ -39,19 +38,21 @@ class ScEEImport : public ScEEAbsImport
 protected:
     ScRange             maRange;
     ScDocument*         mpDoc;
-    ScEEParser*         mpParser;
-    ScTabEditEngine*    mpEngine;
+    std::unique_ptr<ScTabEditEngine>
+                        mpEngine;
+    std::unique_ptr<ScEEParser>        // needs mpEngine
+                        mpParser;      // must reset before mpEngine resets
     RowHeightMap        maRowHeights;
 
-    bool                GraphicSize( SCCOL nCol, SCROW nRow, SCTAB nTab,
+    bool                GraphicSize( SCCOL nCol, SCROW nRow,
                                      ScEEParseEntry* );
     void                InsertGraphic( SCCOL nCol, SCROW nRow, SCTAB nTab,
                                        ScEEParseEntry* );
 public:
     ScEEImport( ScDocument* pDoc, const ScRange& rRange );
-    virtual ~ScEEImport();
+    virtual ~ScEEImport() override;
 
-    virtual sal_uLong    Read( SvStream& rStream, const OUString& rBaseURL ) override;
+    virtual ErrCode  Read( SvStream& rStream, const OUString& rBaseURL ) override;
     virtual ScRange  GetRange() override { return maRange; }
     virtual void     WriteToDocument( bool bSizeColsRows = false,
                                       double nOutputFactor = 1.0,

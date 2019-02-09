@@ -17,26 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable: 4917)
-#endif
 #include <objbase.h>
 #include <strmif.h>
 #include <control.h>
 #include <uuids.h>
 #include <evcode.h>
-#ifdef _WIN32_WINNT_WINBLUE
-#include <VersionHelpers.h>
-#endif
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include "player.hxx"
 #include "framegrabber.hxx"
 #include "window.hxx"
 #include <cppuhelper/supportsservice.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #define AVMEDIA_WIN_PLAYER_IMPLEMENTATIONNAME "com.sun.star.comp.avmedia.Player_DirectX"
 #define AVMEDIA_WIN_PLAYER_SERVICENAME "com.sun.star.media.Player_DirectX"
@@ -45,9 +36,9 @@ using namespace ::com::sun::star;
 
 namespace avmedia { namespace win {
 
-LRESULT CALLBACK MediaPlayerWndProc_2( HWND hWnd,UINT nMsg, WPARAM nPar1, LPARAM nPar2 )
+static LRESULT CALLBACK MediaPlayerWndProc_2( HWND hWnd,UINT nMsg, WPARAM nPar1, LPARAM nPar2 )
 {
-    Player* pPlayer = (Player*) ::GetWindowLongPtr( hWnd, 0 );
+    Player* pPlayer = reinterpret_cast<Player*>(::GetWindowLongPtrW( hWnd, 0 ));
     bool    bProcessed = true;
 
     if( pPlayer )
@@ -65,46 +56,30 @@ LRESULT CALLBACK MediaPlayerWndProc_2( HWND hWnd,UINT nMsg, WPARAM nPar1, LPARAM
     else
         bProcessed = false;
 
-    return( bProcessed ? 0 : DefWindowProc( hWnd, nMsg, nPar1, nPar2 ) );
-}
-
-
-bool isWindowsVistaOrHigher()
-{
-// the Win32 SDK 8.1 deprecates GetVersionEx()
-#ifdef _WIN32_WINNT_WINBLUE
-    return IsWindowsVistaOrGreater() ? true : false;
-#else
-    // POST: return true if we are at least on Windows Vista
-    OSVERSIONINFO osvi;
-    ZeroMemory(&osvi, sizeof(osvi));
-    osvi.dwOSVersionInfoSize = sizeof(osvi);
-    GetVersionEx(&osvi);
-    return  osvi.dwMajorVersion >= 6;
-#endif
+    return( bProcessed ? 0 : DefWindowProcW( hWnd, nMsg, nPar1, nPar2 ) );
 }
 
 
 Player::Player( const uno::Reference< lang::XMultiServiceFactory >& rxMgr ) :
     Player_BASE(m_aMutex),
     mxMgr( rxMgr ),
-    mpGB( NULL ),
-    mpOMF( NULL ),
-    mpMC( NULL ),
-    mpME( NULL ),
-    mpMS( NULL ),
-    mpMP( NULL ),
-    mpBA( NULL ),
-    mpBV( NULL ),
-    mpVW( NULL ),
-    mpEV( NULL ),
+    mpGB( nullptr ),
+    mpOMF( nullptr ),
+    mpMC( nullptr ),
+    mpME( nullptr ),
+    mpMS( nullptr ),
+    mpMP( nullptr ),
+    mpBA( nullptr ),
+    mpBV( nullptr ),
+    mpVW( nullptr ),
+    mpEV( nullptr ),
     mnUnmutedVolume( 0 ),
-    mnFrameWnd( 0 ),
+    mnFrameWnd( nullptr ),
     mbMuted( false ),
     mbLooping( false ),
     mbAddWindow( true )
 {
-    ::CoInitialize( NULL );
+    ::CoInitialize( nullptr );
 }
 
 
@@ -161,31 +136,24 @@ bool Player::create( const OUString& rURL )
     HRESULT hR;
     bool    bRet = false;
 
-    if( SUCCEEDED( hR = CoCreateInstance( CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, IID_IGraphBuilder, (void**) &mpGB ) ) )
+    if( SUCCEEDED( hR = CoCreateInstance( CLSID_FilterGraph, nullptr, CLSCTX_INPROC_SERVER, IID_IGraphBuilder, reinterpret_cast<void**>(&mpGB) ) ) )
     {
         // Don't use the overlay mixer on Windows Vista
         // It disables the desktop composition as soon as RenderFile is called
         // also causes some other problems: video rendering is not reliable
-        if( !isWindowsVistaOrHigher() && SUCCEEDED( CoCreateInstance( CLSID_OverlayMixer, NULL, CLSCTX_INPROC_SERVER, IID_IBaseFilter, (void**) &mpOMF ) ) )
-        {
-            mpGB->AddFilter( mpOMF, L"com_sun_star_media_OverlayMixerFilter" );
 
-            if( !SUCCEEDED( mpOMF->QueryInterface( IID_IDDrawExclModeVideo, (void**) &mpEV ) ) )
-                mpEV = NULL;
-        }
-
-        if( SUCCEEDED( hR = mpGB->RenderFile( reinterpret_cast<LPCWSTR>(rURL.getStr()), NULL ) ) &&
-            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaControl, (void**) &mpMC ) ) &&
-            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaEventEx, (void**) &mpME ) ) &&
-            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaSeeking, (void**) &mpMS ) ) &&
-            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaPosition, (void**) &mpMP ) ) )
+        if( SUCCEEDED( hR = mpGB->RenderFile( o3tl::toW(rURL.getStr()), nullptr ) ) &&
+            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaControl, reinterpret_cast<void**>(&mpMC) ) ) &&
+            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaEventEx, reinterpret_cast<void**>(&mpME) ) ) &&
+            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaSeeking, reinterpret_cast<void**>(&mpMS) ) ) &&
+            SUCCEEDED( hR = mpGB->QueryInterface( IID_IMediaPosition, reinterpret_cast<void**>(&mpMP) ) ) )
         {
             // Video interfaces
-            mpGB->QueryInterface( IID_IVideoWindow, (void**) &mpVW );
-            mpGB->QueryInterface( IID_IBasicVideo, (void**) &mpBV );
+            mpGB->QueryInterface( IID_IVideoWindow, reinterpret_cast<void**>(&mpVW) );
+            mpGB->QueryInterface( IID_IBasicVideo, reinterpret_cast<void**>(&mpBV) );
 
             // Audio interface
-            mpGB->QueryInterface( IID_IBasicAudio, (void**) &mpBA );
+            mpGB->QueryInterface( IID_IBasicAudio, reinterpret_cast<void**>(&mpBA) );
 
             if( mpBA )
                 mpBA->put_Volume( mnUnmutedVolume );
@@ -213,7 +181,7 @@ void Player::setNotifyWnd( HWND nNotifyWnd )
 {
     mbAddWindow = false;
     if( mpME )
-        mpME->SetNotifyWindow( (OAHWND) nNotifyWnd, WM_GRAPHNOTIFY, reinterpret_cast< LONG_PTR>( this ) );
+        mpME->SetNotifyWindow( reinterpret_cast<OAHWND>(nNotifyWnd), WM_GRAPHNOTIFY, reinterpret_cast< LONG_PTR>( this ) );
 }
 
 
@@ -246,38 +214,37 @@ long Player::processEvent()
 
 
 void SAL_CALL Player::start(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     if( mpMC )
     {
         if ( mbAddWindow )
         {
-            static WNDCLASS* mpWndClass = NULL;
+            static WNDCLASSW* mpWndClass = nullptr;
             if ( !mpWndClass )
             {
-                mpWndClass = new WNDCLASS;
+                mpWndClass = new WNDCLASSW;
 
                 memset( mpWndClass, 0, sizeof( *mpWndClass ) );
-                mpWndClass->hInstance = GetModuleHandle( NULL );
+                mpWndClass->hInstance = GetModuleHandleW( nullptr );
                 mpWndClass->cbWndExtra = sizeof( DWORD );
                 mpWndClass->lpfnWndProc = MediaPlayerWndProc_2;
-                mpWndClass->lpszClassName = "com_sun_star_media_Sound_Player";
-                mpWndClass->hbrBackground = (HBRUSH) ::GetStockObject( BLACK_BRUSH );
-                mpWndClass->hCursor = ::LoadCursor( NULL, IDC_ARROW );
+                mpWndClass->lpszClassName = L"com_sun_star_media_Sound_Player";
+                mpWndClass->hbrBackground = static_cast<HBRUSH>(::GetStockObject( BLACK_BRUSH ));
+                mpWndClass->hCursor = ::LoadCursor( nullptr, IDC_ARROW );
 
-                ::RegisterClass( mpWndClass );
+                RegisterClassW( mpWndClass );
             }
             if ( !mnFrameWnd )
             {
-                mnFrameWnd = ::CreateWindow( mpWndClass->lpszClassName, NULL,
-                                           0,
-                                           0, 0, 0, 0,
-                                           (HWND) NULL, NULL, mpWndClass->hInstance, 0 );
+                mnFrameWnd = CreateWindowW( mpWndClass->lpszClassName, nullptr,
+                                            0,
+                                            0, 0, 0, 0,
+                                            nullptr, nullptr, mpWndClass->hInstance, nullptr );
                 if ( mnFrameWnd )
                 {
                     ::ShowWindow(mnFrameWnd, SW_HIDE);
-                    ::SetWindowLongPtr( mnFrameWnd, 0, (LONG_PTR) this );
+                    SetWindowLongPtrW( mnFrameWnd, 0, reinterpret_cast<LONG_PTR>(this) );
                     // mpVW->put_Owner( (OAHWND) mnFrameWnd );
                     setNotifyWnd( mnFrameWnd );
                 }
@@ -290,7 +257,6 @@ void SAL_CALL Player::start(  )
 
 
 void SAL_CALL Player::stop(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     if( mpMC )
@@ -299,7 +265,6 @@ void SAL_CALL Player::stop(  )
 
 
 sal_Bool SAL_CALL Player::isPlaying()
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -314,7 +279,6 @@ sal_Bool SAL_CALL Player::isPlaying()
 
 
 double SAL_CALL Player::getDuration(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -328,7 +292,6 @@ double SAL_CALL Player::getDuration(  )
 
 
 void SAL_CALL Player::setMediaTime( double fTime )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -345,7 +308,6 @@ void SAL_CALL Player::setMediaTime( double fTime )
 
 
 double SAL_CALL Player::getMediaTime(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -359,7 +321,6 @@ double SAL_CALL Player::getMediaTime(  )
 
 
 void SAL_CALL Player::setPlaybackLoop( sal_Bool bSet )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -368,7 +329,6 @@ void SAL_CALL Player::setPlaybackLoop( sal_Bool bSet )
 
 
 sal_Bool SAL_CALL Player::isPlaybackLoop(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -377,7 +337,6 @@ sal_Bool SAL_CALL Player::isPlaybackLoop(  )
 
 
 void SAL_CALL Player::setMute( sal_Bool bSet )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -390,7 +349,6 @@ void SAL_CALL Player::setMute( sal_Bool bSet )
 
 
 sal_Bool SAL_CALL Player::isMute(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -399,7 +357,6 @@ sal_Bool SAL_CALL Player::isMute(  )
 
 
 void SAL_CALL Player::setVolumeDB( sal_Int16 nVolumeDB )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -411,16 +368,14 @@ void SAL_CALL Player::setVolumeDB( sal_Int16 nVolumeDB )
 
 
 sal_Int16 SAL_CALL Player::getVolumeDB(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
-    return( static_cast< sal_Int16 >( mnUnmutedVolume / 100 ) );
+    return static_cast< sal_Int16 >( mnUnmutedVolume / 100 );
 }
 
 
 awt::Size SAL_CALL Player::getPreferredPlayerWindowSize(  )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -440,7 +395,6 @@ awt::Size SAL_CALL Player::getPreferredPlayerWindowSize(  )
 
 
 uno::Reference< ::media::XPlayerWindow > SAL_CALL Player::createPlayerWindow( const uno::Sequence< uno::Any >& aArguments )
-    throw (uno::RuntimeException)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -462,7 +416,6 @@ uno::Reference< ::media::XPlayerWindow > SAL_CALL Player::createPlayerWindow( co
 
 
 uno::Reference< media::XFrameGrabber > SAL_CALL Player::createFrameGrabber(  )
-    throw (uno::RuntimeException)
 {
     uno::Reference< media::XFrameGrabber > xRet;
 
@@ -481,25 +434,20 @@ uno::Reference< media::XFrameGrabber > SAL_CALL Player::createFrameGrabber(  )
 
 
 OUString SAL_CALL Player::getImplementationName(  )
-    throw (uno::RuntimeException)
 {
     return OUString( AVMEDIA_WIN_PLAYER_IMPLEMENTATIONNAME );
 }
 
 
 sal_Bool SAL_CALL Player::supportsService( const OUString& ServiceName )
-    throw (uno::RuntimeException)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 
 uno::Sequence< OUString > SAL_CALL Player::getSupportedServiceNames(  )
-    throw (uno::RuntimeException)
 {
-    uno::Sequence<OUString> aRet { AVMEDIA_WIN_PLAYER_SERVICENAME };
-
-    return aRet;
+    return { AVMEDIA_WIN_PLAYER_SERVICENAME };
 }
 
 } // namespace win

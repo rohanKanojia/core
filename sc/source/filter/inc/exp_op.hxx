@@ -20,13 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_EXP_OP_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_EXP_OP_HXX
 
-#include "filter.hxx"
-#include "root.hxx"
+#include <memory>
 #include "xeroot.hxx"
 
-class ScDocument;
-class ScPatternAttr;
-class ScFormulaCell;
 class ExcDocument;
 
 class ExportTyp
@@ -35,38 +31,32 @@ protected:
                         ~ExportTyp() {}
 
     SvStream&           aOut;
-    ScDocument*         pD;
-    rtl_TextEncoding    eTargetCharset;      // target character set
 public:
-                        ExportTyp( SvStream& aStream, ScDocument* pDoc, rtl_TextEncoding eDest ):
-                            aOut( aStream )
-                        {
-                            eTargetCharset = eDest;
-                            pD = pDoc;
-                        }
+                        ExportTyp( SvStream& aStream ) : aOut( aStream ) {}
 
-    virtual FltError    Write() = 0;
+    virtual ErrCode     Write() = 0;
 };
 
 class ExportBiff5 : public ExportTyp, protected XclExpRoot
 {
 private:
-    ExcDocument*        pExcDoc;
+    std::unique_ptr<ExcDocument>
+                        pExcDoc;
 
 protected:
     RootData*           pExcRoot;
 
 public:
                         ExportBiff5( XclExpRootData& rExpData, SvStream& rStrm );
-    virtual             ~ExportBiff5();
-    FltError            Write() override;
+    virtual             ~ExportBiff5() override;
+    ErrCode             Write() override;
 };
 
 class ExportBiff8 : public ExportBiff5
 {
 public:
                         ExportBiff8( XclExpRootData& rExpData, SvStream& rStrm );
-    virtual             ~ExportBiff8();
+    virtual             ~ExportBiff8() override;
 };
 
 #endif

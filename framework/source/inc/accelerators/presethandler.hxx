@@ -27,8 +27,8 @@
 #include <com/sun/star/embed/XStorage.hpp>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <i18nlangtag/languagetag.hxx>
 
 namespace framework
@@ -132,7 +132,7 @@ class PresetHandler
                     working storage of the user layer. */
         std::vector<OUString> m_lTargets;
 
-        /** @short  its the current office locale and will be used
+        /** @short  it's the current office locale and will be used
                     to handle localized presets.
 
             @descr  Default is "x-no-translate" which disable any
@@ -190,7 +190,6 @@ class PresetHandler
             @return css::embed::XStorage
                     which the current working storage.
          */
-        css::uno::Reference< css::embed::XStorage > getWorkingStorageShare();
         css::uno::Reference< css::embed::XStorage > getWorkingStorageUser();
 
         /** @short  check if there is a parent storage well known for
@@ -202,8 +201,8 @@ class PresetHandler
             @return css::embed::XStorage
                     A valid storage if a paranet exists. NULL otherwise.
          */
-        css::uno::Reference< css::embed::XStorage > getParentStorageShare(const css::uno::Reference< css::embed::XStorage >& xChild);
-        css::uno::Reference< css::embed::XStorage > getParentStorageUser (const css::uno::Reference< css::embed::XStorage >& xChild);
+        css::uno::Reference< css::embed::XStorage > getParentStorageShare();
+        css::uno::Reference< css::embed::XStorage > getParentStorageUser ();
 
         /** @short  free all internal structures and let this handler
                     work on a new type of configuration sets.
@@ -221,14 +220,14 @@ class PresetHandler
             @param  xDocumentRoot
                     if sResourceType is set to E_DOCUMENT, this value points to the
                     root storage inside the document, where we can save our
-                    configuration files. Note: Thats not the real root of the document ...
+                    configuration files. Note: that's not the real root of the document...
                     its only a sub storage. But we interpret it as our root storage.
 
             @param  rLanguageTag
                     in case this configuration supports localized entries,
                     the current locale must be set.
 
-                    Localzation will be represented as directory structure
+                    Localization will be represented as directory structure
                     of provided presets. Means: you call us with a preset name "default";
                     and we use e.g. "/en-US/default.xml" internally.
 
@@ -295,9 +294,10 @@ class PresetHandler
                     the ALIAS name of the target.
 
             @return The opened target stream ... or NULL if the target does not exists
-                    or couldnt be created as new one.
+                    or couldn't be created as new one.
          */
-        css::uno::Reference< css::io::XStream > openTarget(const OUString& sTarget);
+        css::uno::Reference< css::io::XStream > openTarget(
+                const OUString& sTarget, sal_Int32 nMode);
 
         /** @short  do anything which is necessary to flush all changes
                     back to disk.
@@ -371,7 +371,7 @@ class PresetHandler
             @param  sPath
                     the configuration path, which should be opened.
                     Its further used as out parameter too, so we can return the localized
-                    path to the calli!
+                    path!
 
             @param  eMode
                     the open mode (READ/READWRITE)

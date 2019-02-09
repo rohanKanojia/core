@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "infotips.hxx"
-#include "shlxthdl.hxx"
-#include "metainforeader.hxx"
-#include "contentreader.hxx"
-#include "utilities.hxx"
-#include "registry.hxx"
-#include "fileextensions.hxx"
-#include "iso8601_converter.hxx"
-#include "config.hxx"
+#include <global.hxx>
+#include <infotips.hxx>
+#include <shlxthdl.hxx>
+#include <metainforeader.hxx>
+#include <contentreader.hxx>
+#include <utilities.hxx>
+#include <registry.hxx>
+#include <fileextensions.hxx>
+#include <iso8601_converter.hxx>
+#include <config.hxx>
 
-#include "resource.h"
+#include <resource.h>
 #include <stdio.h>
 #include <utility>
 #include <stdlib.h>
@@ -58,9 +58,9 @@ CInfoTip::~CInfoTip()
 
 HRESULT STDMETHODCALLTYPE CInfoTip::QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject)
 {
-    *ppvObject = 0;
+    *ppvObject = nullptr;
 
-    IUnknown* pUnk = 0;
+    IUnknown* pUnk = nullptr;
 
     if (IID_IUnknown == riid || IID_IQueryInfo == riid)
     {
@@ -101,34 +101,34 @@ ULONG STDMETHODCALLTYPE CInfoTip::Release()
 
 /** get file type information from registry.
 */
-std::wstring getFileTypeInfo(const std::string& file_extension)
+static std::wstring getFileTypeInfo(const std::wstring& file_extension)
 {
-    char extKeyValue[MAX_STRING];
-    char typeKeyValue[MAX_STRING];
-    ::std::string sDot(".");
-    if (QueryRegistryKey(HKEY_CLASSES_ROOT, (sDot.append(file_extension)).c_str(), "", extKeyValue, MAX_STRING))
-        if (QueryRegistryKey( HKEY_CLASSES_ROOT, extKeyValue, "",typeKeyValue, MAX_STRING))
-            return StringToWString(typeKeyValue);
+    wchar_t extKeyValue[MAX_STRING];
+    wchar_t typeKeyValue[MAX_STRING];
+    ::std::wstring sDot(L".");
+    if (QueryRegistryKey(HKEY_CLASSES_ROOT, sDot.append(file_extension).c_str(), L"", extKeyValue, MAX_STRING))
+        if (QueryRegistryKey( HKEY_CLASSES_ROOT, extKeyValue, L"",typeKeyValue, MAX_STRING))
+            return typeKeyValue;
 
     return EMPTY_STRING;
 }
 
 /** get file size.
 */
-DWORD getSizeOfFile( char* FileName )
+static DWORD getSizeOfFile( wchar_t const * FileName )
 {
-    HANDLE hFile = CreateFile(StringToWString(FileName).c_str(),            // open file
+    HANDLE hFile = CreateFileW(FileName,                                    // open file
                         GENERIC_READ,                                       // open for reading
                         FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, // share for all operations
-                        NULL,                                               // no security
+                        nullptr,                                            // no security
                         OPEN_EXISTING,                                      // existing file only
                         FILE_ATTRIBUTE_NORMAL,                              // normal file
-                        NULL);                                              // no attr. template
+                        nullptr);                                           // no attr. template
 
     if (hFile != INVALID_HANDLE_VALUE)
     {
-        DWORD dwSize = GetFileSize( HANDLE(hFile), NULL );
-        CloseHandle( HANDLE(hFile) );
+        DWORD dwSize = GetFileSize( hFile, nullptr );
+        CloseHandle( hFile );
         return dwSize;
     }
 
@@ -137,7 +137,7 @@ DWORD getSizeOfFile( char* FileName )
 
 /** format file size in to be more readable.
 */
-std::wstring formatSizeOfFile( DWORD dwSize )
+static std::wstring formatSizeOfFile( DWORD dwSize )
 {
     if ( dwSize < 1000 )
     {
@@ -148,9 +148,9 @@ std::wstring formatSizeOfFile( DWORD dwSize )
         return StringToWString( buffer ).append(StringToWString("B"));
     }
 
-    char *buffer=NULL;
+    char *buffer=nullptr;
     int  decimal, sign;
-    double dFileSize = (double)dwSize/(double)KB;
+    double dFileSize = static_cast<double>(dwSize)/KB;
 
     buffer = _fcvt( dFileSize, 1, &decimal, &sign );
 
@@ -178,7 +178,7 @@ std::wstring formatSizeOfFile( DWORD dwSize )
 
 /** get file size information.
 */
-std::wstring getFileSizeInfo(char* FileName)
+static std::wstring getFileSizeInfo(wchar_t const * FileName)
 {
     DWORD dwSize=getSizeOfFile(FileName);
     if (dwSize != INVALID_FILE_SIZE)
@@ -281,7 +281,7 @@ HRESULT STDMETHODCALLTYPE CInfoTip::GetInfoTip(DWORD /*dwFlags*/, wchar_t** ppws
     if (SUCCEEDED(hr))
     {
         size_t len = sizeof(wchar_t) * msg.length() + sizeof(wchar_t);
-        wchar_t* pMem = reinterpret_cast<wchar_t*>(lpMalloc->Alloc(len));
+        wchar_t* pMem = static_cast<wchar_t*>(lpMalloc->Alloc(len));
 
         ZeroMemory(pMem, len);
 
@@ -329,13 +329,11 @@ HRESULT STDMETHODCALLTYPE CInfoTip::Load(LPCOLESTR pszFileName, DWORD /*dwMode*/
 
     fname = getShortPathName( fname );
 
-    std::string fnameA = WStringToString(fname);
-
     // ZeroMemory because strncpy doesn't '\0'-terminates the destination
     // string; reserve the last place in the buffer for the final '\0'
     // that's why '(sizeof(m_szFileName) - 1)'
     ZeroMemory(m_szFileName, sizeof(m_szFileName));
-    strncpy(m_szFileName, fnameA.c_str(), (sizeof(m_szFileName) - 1));
+    wcsncpy(m_szFileName, fname.c_str(), (sizeof(m_szFileName)/sizeof(*m_szFileName) - 1));
 
     return S_OK;
 }

@@ -17,9 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#undef ENABLE_PANE_RESIZING
-//#define ENABLE_PANE_RESIZING
-
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include "PresenterWindowManager.hxx"
@@ -28,7 +25,6 @@
 #include "PresenterHelper.hxx"
 #include "PresenterPaintManager.hxx"
 #include "PresenterPaneBase.hxx"
-#include "PresenterPaneBorderManager.hxx"
 #include "PresenterPaneBorderPainter.hxx"
 #include "PresenterPaneContainer.hxx"
 #include "PresenterPaneFactory.hxx"
@@ -86,7 +82,7 @@ PresenterWindowManager::PresenterWindowManager (
       maLayoutListeners(),
       mbIsMouseClickPending(false)
 {
-    UpdateWindowList();
+
 }
 
 PresenterWindowManager::~PresenterWindowManager()
@@ -104,17 +100,13 @@ void SAL_CALL PresenterWindowManager::disposing()
         xComponent->dispose();
     mxPaneBorderManager = nullptr;
 
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    PresenterPaneContainer::PaneList::const_iterator iEnd (mpPaneContainer->maPanes.end());
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=iEnd; ++iPane)
+    for (const auto& rxPane : mpPaneContainer->maPanes)
     {
-        if ((*iPane)->mxBorderWindow.is())
+        if (rxPane->mxBorderWindow.is())
         {
-            (*iPane)->mxBorderWindow->removeWindowListener(this);
-            (*iPane)->mxBorderWindow->removeFocusListener(this);
-#ifndef ENABLE_PANE_RESIZING
-            (*iPane)->mxBorderWindow->removeMouseListener(this);
-#endif
+            rxPane->mxBorderWindow->removeWindowListener(this);
+            rxPane->mxBorderWindow->removeFocusListener(this);
+            rxPane->mxBorderWindow->removeMouseListener(this);
         }
     }
 }
@@ -162,7 +154,7 @@ void PresenterWindowManager::SetTheme (const std::shared_ptr<PresenterTheme>& rp
 
     // Get background bitmap or background color from the theme.
 
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
     {
         mpBackgroundBitmap = mpTheme->GetBitmap(OUString(), "Background");
     }
@@ -179,7 +171,7 @@ void PresenterWindowManager::NotifyViewCreation (const Reference<XView>& rxView)
 
         mpPresenterController->GetPaintManager()->Invalidate(
             pDescriptor->mxContentWindow,
-            (sal_Int16)(awt::InvalidateStyle::TRANSPARENT
+            sal_Int16(awt::InvalidateStyle::TRANSPARENT
             | awt::InvalidateStyle::CHILDREN));
     }
 }
@@ -195,14 +187,6 @@ void PresenterWindowManager::SetPanePosSizeAbsolute (
         mpPaneContainer->FindPaneURL(rsPaneURL));
     if (pDescriptor.get() != nullptr)
     {
-        awt::Rectangle aParentBox = mxParentWindow->getPosSize();
-        if (aParentBox.Width > 0 && aParentBox.Height > 0)
-        {
-            pDescriptor->mnLeft = nX / aParentBox.Width;
-            pDescriptor->mnTop = nY / aParentBox.Height;
-            pDescriptor->mnRight = (nX + nWidth) / aParentBox.Width;
-            pDescriptor->mnBottom = (nY + nHeight) / aParentBox.Height;
-        }
         if (pDescriptor->mxBorderWindow.is())
             pDescriptor->mxBorderWindow->setPosSize(
                 ::sal::static_int_cast<sal_Int32>(nX),
@@ -222,7 +206,6 @@ void PresenterWindowManager::SetPaneBorderPainter (
 //----- XWindowListener -------------------------------------------------------
 
 void SAL_CALL PresenterWindowManager::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     if (rEvent.Source == mxParentWindow)
@@ -243,7 +226,6 @@ void SAL_CALL PresenterWindowManager::windowResized (const awt::WindowEvent& rEv
 }
 
 void SAL_CALL PresenterWindowManager::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     if (rEvent.Source != mxParentWindow)
@@ -256,22 +238,13 @@ void SAL_CALL PresenterWindowManager::windowMoved (const awt::WindowEvent& rEven
     }
 }
 
-void SAL_CALL PresenterWindowManager::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterWindowManager::windowShown (const lang::EventObject&) {}
 
-void SAL_CALL PresenterWindowManager::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+void SAL_CALL PresenterWindowManager::windowHidden (const lang::EventObject&) {}
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterWindowManager::windowPaint (const awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -280,19 +253,14 @@ void SAL_CALL PresenterWindowManager::windowPaint (const awt::PaintEvent& rEvent
     if ( ! mxParentCanvas.is())
         return;
 
-    if (mpTheme.get()!=nullptr)
+    if (mpTheme != nullptr)
     {
         try
         {
             if (mbIsLayoutPending)
                 Layout();
             PaintBackground(rEvent.UpdateRect);
-            if ( ! PaintChildren(rEvent))
-            {
-                Reference<rendering::XSpriteCanvas> xSpriteCanvas (mxParentCanvas, UNO_QUERY);
-                //                if (xSpriteCanvas.is())
-                //                    xSpriteCanvas->updateScreen(sal_False);
-            }
+            PaintChildren(rEvent);
         }
         catch (RuntimeException&)
         {
@@ -303,95 +271,69 @@ void SAL_CALL PresenterWindowManager::windowPaint (const awt::PaintEvent& rEvent
 
 //----- XMouseListener --------------------------------------------------------
 
-void SAL_CALL PresenterWindowManager::mousePressed (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterWindowManager::mousePressed (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     mbIsMouseClickPending = true;
 }
 
 void SAL_CALL PresenterWindowManager::mouseReleased (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
 {
-#ifndef ENABLE_PANE_RESIZING
     if (mbIsMouseClickPending)
     {
         mbIsMouseClickPending = false;
         mpPresenterController->HandleMouseClick(rEvent);
     }
-#else
-    (void)rEvent;
-#endif
 }
 
-void SAL_CALL PresenterWindowManager::mouseEntered (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterWindowManager::mouseEntered (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     mbIsMouseClickPending = false;
 }
 
-void SAL_CALL PresenterWindowManager::mouseExited (const css::awt::MouseEvent& rEvent)
-    throw(css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterWindowManager::mouseExited (const css::awt::MouseEvent&)
 {
-    (void)rEvent;
     mbIsMouseClickPending = false;
 }
 
 //----- XFocusListener --------------------------------------------------------
 
-void SAL_CALL PresenterWindowManager::focusGained (const css::awt::FocusEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterWindowManager::focusGained (const css::awt::FocusEvent& /*rEvent*/)
 {
     ThrowIfDisposed();
-    (void)rEvent;
-    OSL_TRACE("PresenterWindowManager::focusGained window %p\n",
-        rEvent.Source.get());
 }
 
-void SAL_CALL PresenterWindowManager::focusLost (const css::awt::FocusEvent& rEvent)
-    throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL PresenterWindowManager::focusLost (const css::awt::FocusEvent&)
 {
     ThrowIfDisposed();
-    (void)rEvent;
 }
 
 //----- XEventListener --------------------------------------------------------
 
 void SAL_CALL PresenterWindowManager::disposing (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source == mxParentWindow)
         mxParentWindow = nullptr;
-    else
-    {
-        Reference<awt::XWindow> xWindow (rEvent.Source, UNO_QUERY);
-    }
 }
 
 
-bool PresenterWindowManager::PaintChildren (const awt::PaintEvent& rEvent) const
+void PresenterWindowManager::PaintChildren (const awt::PaintEvent& rEvent) const
 {
-    bool bChildInvalidated (false);
-
     // Call windowPaint on all children that lie in or touch the
     // update rectangle.
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    PresenterPaneContainer::PaneList::const_iterator iEnd (mpPaneContainer->maPanes.end());
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=iEnd; ++iPane)
+    for (const auto& rxPane : mpPaneContainer->maPanes)
     {
         try
         {
             // Make sure that the pane shall and can be painted.
-            if ( ! (*iPane)->mbIsActive)
+            if ( ! rxPane->mbIsActive)
                 continue;
-            if ((*iPane)->mbIsSprite)
+            if (rxPane->mbIsSprite)
                 continue;
-            if ( ! (*iPane)->mxPane.is())
+            if ( ! rxPane->mxPane.is())
                 continue;
-            if ( ! (*iPane)->mxBorderWindow.is())
+            if ( ! rxPane->mxBorderWindow.is())
                 continue;
-            Reference<awt::XWindow> xBorderWindow ((*iPane)->mxBorderWindow);
+            Reference<awt::XWindow> xBorderWindow (rxPane->mxBorderWindow);
             if ( ! xBorderWindow.is())
                 continue;
 
@@ -422,8 +364,6 @@ bool PresenterWindowManager::PaintChildren (const awt::PaintEvent& rEvent) const
             OSL_FAIL("paint children failed!");
         }
     }
-
-    return bChildInvalidated;
 }
 
 void PresenterWindowManager::SetLayoutMode (const LayoutMode eMode)
@@ -530,7 +470,7 @@ void PresenterWindowManager::RestoreViewMode()
     sal_Int32 nMode (0);
     PresenterConfigurationAccess aConfiguration (
         mxComponentContext,
-        OUString("/org.openoffice.Office.PresenterScreen/"),
+        "/org.openoffice.Office.PresenterScreen/",
         PresenterConfigurationAccess::READ_ONLY);
     aConfiguration.GetConfigurationNode("Presenter/InitialViewMode") >>= nMode;
     switch (nMode)
@@ -556,7 +496,7 @@ void PresenterWindowManager::StoreViewMode (const ViewMode eViewMode)
     {
         PresenterConfigurationAccess aConfiguration (
             mxComponentContext,
-            OUString("/org.openoffice.Office.PresenterScreen/"),
+            "/org.openoffice.Office.PresenterScreen/",
             PresenterConfigurationAccess::READ_WRITE);
         aConfiguration.GoToChild(OUString("Presenter"));
         Any aValue;
@@ -564,15 +504,15 @@ void PresenterWindowManager::StoreViewMode (const ViewMode eViewMode)
         {
             default:
             case VM_Standard:
-                aValue = Any(sal_Int32(0));
+                aValue <<= sal_Int32(0);
                 break;
 
             case VM_Notes:
-                aValue = Any(sal_Int32(1));
+                aValue <<= sal_Int32(1);
                 break;
 
             case VM_SlideOverview:
-                aValue = Any(sal_Int32(2));
+                aValue <<= sal_Int32(2);
                 break;
         }
 
@@ -593,17 +533,10 @@ void PresenterWindowManager::AddLayoutListener (
 void PresenterWindowManager::RemoveLayoutListener (
     const Reference<document::XEventListener>& rxListener)
 {
-    LayoutListenerContainer::iterator iListener (maLayoutListeners.begin());
-    LayoutListenerContainer::iterator iEnd (maLayoutListeners.end());
-    for ( ; iListener!=iEnd; ++iListener)
-    {
-        if (*iListener == rxListener)
-        {
-            maLayoutListeners.erase(iListener);
-            // Assume that there are no multiple entries.
-            break;
-        }
-    }
+    // Assume that there are no multiple entries.
+    auto iListener = std::find(maLayoutListeners.begin(), maLayoutListeners.end(), rxListener);
+    if (iListener != maLayoutListeners.end())
+        maLayoutListeners.erase(iListener);
 }
 
 void PresenterWindowManager::Layout()
@@ -655,7 +588,7 @@ void PresenterWindowManager::LayoutStandardMode()
 
 
     // For the current slide view calculate the outer height from the outer
-    // width.  This takes into acount the slide aspect ratio and thus has to
+    // width.  This takes into account the slide aspect ratio and thus has to
     // go over the inner pane size.
     PresenterPaneContainer::SharedPaneDescriptor pPane (
         mpPaneContainer->FindPaneURL(PresenterPaneFactory::msCurrentSlidePreviewPaneURL));
@@ -678,7 +611,7 @@ void PresenterWindowManager::LayoutStandardMode()
     }
 
     // For the next slide view calculate the outer height from the outer
-    // width.  This takes into acount the slide aspect ratio and thus has to
+    // width.  This takes into account the slide aspect ratio and thus has to
     // go over the inner pane size.
     pPane = mpPaneContainer->FindPaneURL(PresenterPaneFactory::msNextSlidePreviewPaneURL);
     if (pPane.get() != nullptr)
@@ -741,7 +674,7 @@ void PresenterWindowManager::LayoutNotesMode()
     }
 
     // For the current slide view calculate the outer height from the outer
-    // width.  This takes into acount the slide aspect ratio and thus has to
+    // width.  This takes into account the slide aspect ratio and thus has to
     // go over the inner pane size.
     pPane = mpPaneContainer->FindPaneURL(PresenterPaneFactory::msCurrentSlidePreviewPaneURL);
     if (pPane.get() != nullptr)
@@ -762,7 +695,7 @@ void PresenterWindowManager::LayoutNotesMode()
     }
 
     // For the next slide view calculate the outer height from the outer
-    // width.  This takes into acount the slide aspect ratio and thus has to
+    // width.  This takes into account the slide aspect ratio and thus has to
     // go over the inner pane size.
     pPane = mpPaneContainer->FindPaneURL(PresenterPaneFactory::msNextSlidePreviewPaneURL);
     if (pPane.get() != nullptr)
@@ -901,19 +834,17 @@ void PresenterWindowManager::NotifyLayoutModeChange()
     aEvent.Source = Reference<XInterface>(static_cast<XWeak*>(this));
 
     LayoutListenerContainer aContainerCopy (maLayoutListeners);
-    LayoutListenerContainer::iterator iListener (aContainerCopy.begin());
-    LayoutListenerContainer::iterator iEnd (aContainerCopy.end());
-    for ( ; iListener!=iEnd; ++iListener)
+    for (const auto& rxListener : aContainerCopy)
     {
-        if (iListener->is())
+        if (rxListener.is())
         {
             try
             {
-                (*iListener)->notifyEvent(aEvent);
+                rxListener->notifyEvent(aEvent);
             }
             catch (lang::DisposedException&)
             {
-                RemoveLayoutListener(*iListener);
+                RemoveLayoutListener(rxListener);
             }
             catch (RuntimeException&)
             {
@@ -929,15 +860,13 @@ void PresenterWindowManager::NotifyDisposing()
 
     LayoutListenerContainer aContainer;
     aContainer.swap(maLayoutListeners);
-    LayoutListenerContainer::iterator iListener (aContainer.begin());
-    LayoutListenerContainer::iterator iEnd (aContainer.end());
-    for ( ; iListener!=iEnd; ++iListener)
+    for (auto& rxListener : aContainer)
     {
-        if (iListener->is())
+        if (rxListener.is())
         {
             try
             {
-                (*iListener)->disposing(aEvent);
+                rxListener->disposing(aEvent);
             }
             catch (lang::DisposedException&)
             {
@@ -957,25 +886,6 @@ void PresenterWindowManager::UpdateWindowSize (const Reference<awt::XWindow>& rx
     {
         mxClipPolygon = nullptr;
 
-        awt::Rectangle aParentBox = mxParentWindow->getPosSize();
-        awt::Rectangle aBorderBox (pDescriptor->mxBorderWindow->getPosSize());
-
-        if ( ! mbIsLayouting)
-        {
-            const double nWidth (aParentBox.Width);
-            const double nHeight (aParentBox.Height);
-            pDescriptor->mnLeft = double(aBorderBox.X) / nWidth;
-            pDescriptor->mnTop = double(aBorderBox.Y) / nHeight;
-            pDescriptor->mnRight = double(aBorderBox.X + aBorderBox.Width) / nWidth;
-            pDescriptor->mnBottom = double(aBorderBox.Y + aBorderBox.Height) / nHeight;
-        }
-        else
-        {
-            // This update of the window size was initiated by
-            // Layout(). Therefore the window size does not have to be
-            // updated.
-        }
-
         // ToTop is called last because it may invalidate the iterator.
         if ( ! mbIsLayouting)
             mpPaneContainer->ToTop(pDescriptor);
@@ -984,7 +894,6 @@ void PresenterWindowManager::UpdateWindowSize (const Reference<awt::XWindow>& rx
 
 void PresenterWindowManager::PaintBackground (const awt::Rectangle& rUpdateBox)
 {
-    (void)rUpdateBox;
     if ( ! mxParentWindow.is())
         return;
 
@@ -1073,7 +982,7 @@ void PresenterWindowManager::ProvideBackgroundBitmap()
                     aSize.Width = mxParentWindow->getPosSize().Width;
                 else
                     aSize.Width = xBitmap->getSize().Width;
-                mxScaledBackgroundBitmap = xBitmap->getScaledBitmap(aSize, sal_False);
+                mxScaledBackgroundBitmap = xBitmap->getScaledBitmap(aSize, false);
             }
             else
             {
@@ -1091,11 +1000,8 @@ Reference<rendering::XPolyPolygon2D> PresenterWindowManager::CreateClipPolyPolyg
     ::std::vector<awt::Rectangle> aRectangles;
     aRectangles.reserve(1+nPaneCount);
     aRectangles.push_back(mxParentWindow->getPosSize());
-    PresenterPaneContainer::PaneList::const_iterator iPane;
-    PresenterPaneContainer::PaneList::const_iterator iEnd (mpPaneContainer->maPanes.end());
-    for (iPane=mpPaneContainer->maPanes.begin(); iPane!=iEnd; ++iPane)
+    for (const auto& pDescriptor : mpPaneContainer->maPanes)
     {
-        PresenterPaneContainer::SharedPaneDescriptor pDescriptor (*iPane);
         if ( ! pDescriptor->mbIsActive)
             continue;
         if ( ! pDescriptor->mbIsOpaque)
@@ -1121,72 +1027,15 @@ Reference<rendering::XPolyPolygon2D> PresenterWindowManager::CreateClipPolyPolyg
     return xPolyPolygon;
 }
 
-void PresenterWindowManager::UpdateWindowList()
-{
-#ifdef ENABLE_PANE_RESIZING
-    try
-    {
-        OSL_ASSERT(mxComponentContext.is());
-
-        Reference<lang::XComponent> xComponent (mxPaneBorderManager, UNO_QUERY);
-        if (xComponent.is())
-            xComponent->dispose();
-
-        Reference<lang::XMultiComponentFactory> xFactory (mxComponentContext->getServiceManager());
-        if (xFactory.is())
-        {
-            Sequence<Any> aArguments (1 + mpPaneContainer->maPanes.size()*2);
-            sal_Int32 nIndex (0);
-            aArguments[nIndex++] = Any(mxParentWindow);
-            for (sal_uInt32 nPaneIndex=0; nPaneIndex<mpPaneContainer->maPanes.size(); ++nPaneIndex)
-            {
-                if ( ! mpPaneContainer->maPanes[nPaneIndex]->mbIsActive)
-                    continue;
-
-                const Reference<awt::XWindow> xBorderWindow (
-                    mpPaneContainer->maPanes[nPaneIndex]->mxBorderWindow);
-                const Reference<awt::XWindow> xContentWindow (
-                    mpPaneContainer->maPanes[nPaneIndex]->mxContentWindow);
-                const Reference<awt::XWindow2> xBorderWindow2(xBorderWindow, UNO_QUERY);
-                if (xBorderWindow.is()
-                    && xContentWindow.is()
-                    && ( ! xBorderWindow2.is() || xBorderWindow2->isVisible()))
-                {
-                    aArguments[nIndex++] = Any(xBorderWindow);
-                    aArguments[nIndex++] = Any(xContentWindow);
-                }
-            }
-
-            aArguments.realloc(nIndex);
-            rtl::Reference<PresenterPaneBorderManager> pManager (
-                new PresenterPaneBorderManager (
-                    mxComponentContext,
-                    mpPresenterController));
-            pManager->initialize(aArguments);
-            mxPaneBorderManager.set(static_cast<XWeak*>(pManager.get()));
-        }
-    }
-    catch (RuntimeException&)
-    {
-    }
-#endif
-}
-
-void PresenterWindowManager::Invalidate()
-{
-    mpPresenterController->GetPaintManager()->Invalidate(mxParentWindow);
-}
 void PresenterWindowManager::Update()
 {
     mxClipPolygon = nullptr;
     mbIsLayoutPending = true;
 
-    UpdateWindowList();
-    Invalidate();
+    mpPresenterController->GetPaintManager()->Invalidate(mxParentWindow);
 }
 
 void PresenterWindowManager::ThrowIfDisposed() const
-    throw (css::lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {

@@ -25,13 +25,10 @@
 #include <rootfrm.hxx>
 #include <calbck.hxx>
 
-sw::DocDisposingHint::~DocDisposingHint() {}
+sw::UnoCursorHint::~UnoCursorHint() {}
 
-IMPL_FIXEDMEMPOOL_NEWDEL( SwUnoCursor )
-
-SwUnoCursor::SwUnoCursor( const SwPosition &rPos, SwPaM* pRing )
-    : SwCursor( rPos, pRing )
-    , SwModify(nullptr)
+SwUnoCursor::SwUnoCursor( const SwPosition &rPos )
+    : SwCursor( rPos, nullptr )
     , m_bRemainInSection(true)
     , m_bSkipOverHiddenSections(false)
     , m_bSkipOverProtectSections(false)
@@ -42,13 +39,13 @@ SwUnoCursor::~SwUnoCursor()
     SwDoc* pDoc = GetDoc();
     if( !pDoc->IsInDtor() )
     {
-        assert(!static_cast<bool>(SwIterator<SwClient, SwUnoCursor>(*this).First()));
+        assert(!m_aNotifier.HasListeners());
     }
 
     // delete the whole ring
     while( GetNext() != this )
     {
-        Ring* pNxt = GetNext();
+        Ring* pNxt = GetNextInRing();
         pNxt->MoveTo(nullptr); // remove from chain
         delete pNxt;       // and delete
     }
@@ -67,10 +64,10 @@ SwUnoCursor::DoSetBidiLevelLeftRight( bool &, bool, bool )
 
 void SwUnoCursor::DoSetBidiLevelUpDown()
 {
-    return; // not for uno cursor
+    // not for uno cursor
 }
 
-bool SwUnoCursor::IsSelOvr( int eFlags )
+bool SwUnoCursor::IsSelOvr( SwCursorSelOverFlags eFlags )
 {
     if (m_bRemainInSection)
     {
@@ -171,7 +168,7 @@ SwUnoTableCursor::~SwUnoTableCursor()
         delete m_aTableSel.GetNext();
 }
 
-bool SwUnoTableCursor::IsSelOvr( int eFlags )
+bool SwUnoTableCursor::IsSelOvr( SwCursorSelOverFlags eFlags )
 {
     bool bRet = SwUnoCursor::IsSelOvr( eFlags );
     if( !bRet )

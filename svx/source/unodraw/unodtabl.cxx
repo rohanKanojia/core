@@ -28,7 +28,7 @@
 
 #include <svx/xdash.hxx>
 #include <svx/svdmodel.hxx>
-#include "svx/unofill.hxx"
+#include <svx/unofill.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::cppu;
@@ -37,16 +37,15 @@ class SvxUnoDashTable : public SvxUnoNameItemTable
 {
 public:
     explicit SvxUnoDashTable( SdrModel* pModel ) throw();
-    virtual ~SvxUnoDashTable() throw();
 
-    virtual NameOrIndex* createItem() const throw() override;
+    virtual NameOrIndex* createItem() const override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw( uno::RuntimeException, std::exception ) override;
-    virtual uno::Sequence<  OUString > SAL_CALL getSupportedServiceNames(  ) throw( uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual uno::Sequence<  OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType(  ) throw( uno::RuntimeException, std::exception) override;
+    virtual uno::Type SAL_CALL getElementType(  ) override;
 };
 
 SvxUnoDashTable::SvxUnoDashTable( SdrModel* pModel ) throw()
@@ -54,23 +53,18 @@ SvxUnoDashTable::SvxUnoDashTable( SdrModel* pModel ) throw()
 {
 }
 
-SvxUnoDashTable::~SvxUnoDashTable() throw()
-{
-}
-
-OUString SAL_CALL SvxUnoDashTable::getImplementationName() throw( uno::RuntimeException, std::exception )
+OUString SAL_CALL SvxUnoDashTable::getImplementationName()
 {
     return OUString("SvxUnoDashTable");
 }
 
 uno::Sequence< OUString > SAL_CALL SvxUnoDashTable::getSupportedServiceNames(  )
-    throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence<OUString> aSNS { "com.sun.star.drawing.DashTable" };
     return aSNS;
 }
 
-NameOrIndex* SvxUnoDashTable::createItem() const throw()
+NameOrIndex* SvxUnoDashTable::createItem() const
 {
     XLineDashItem* pNewItem = new XLineDashItem();
     pNewItem->SetWhich( XATTR_LINEDASH ); // set which id for pooling
@@ -79,7 +73,6 @@ NameOrIndex* SvxUnoDashTable::createItem() const throw()
 
 // XElementAccess
 uno::Type SAL_CALL SvxUnoDashTable::getElementType(  )
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::UnoType<drawing::LineDash>::get();
 }
@@ -87,7 +80,7 @@ uno::Type SAL_CALL SvxUnoDashTable::getElementType(  )
 /**
  * Create a gradienttable
  */
-uno::Reference< uno::XInterface > SAL_CALL SvxUnoDashTable_createInstance( SdrModel* pModel )
+uno::Reference< uno::XInterface > SvxUnoDashTable_createInstance( SdrModel* pModel )
 {
     return *new SvxUnoDashTable(pModel);
 }

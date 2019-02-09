@@ -21,7 +21,6 @@
 #define INCLUDED_STARMATH_SOURCE_TMPDEVICE_HXX
 
 #include <tools/color.hxx>
-#include <vcl/lineinfo.hxx>
 #include <vcl/outdev.hxx>
 
 class SmTmpDevice
@@ -35,7 +34,7 @@ class SmTmpDevice
 
 public:
     SmTmpDevice(OutputDevice &rTheDev, bool bUseMap100th_mm);
-    ~SmTmpDevice()  { rOutDev.Pop(); }
+    ~SmTmpDevice() COVERITY_NOEXCEPT_FALSE { rOutDev.Pop(); }
 
     void SetFont(const vcl::Font &rNewFont);
 

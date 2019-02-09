@@ -17,17 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DataSourceHelper.hxx"
-#include "macros.hxx"
-#include "ChartModelHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSeriesHelper.hxx"
-#include "DataSource.hxx"
-#include "ContainerHelper.hxx"
-#include "ControllerLockGuard.hxx"
-#include "PropertyHelper.hxx"
-#include "CachedDataSequence.hxx"
-#include "LabeledDataSequence.hxx"
+#include <DataSourceHelper.hxx>
+#include <ChartModel.hxx>
+#include <ChartModelHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <DataSeriesHelper.hxx>
+#include <DataSource.hxx>
+#include <ControllerLockGuard.hxx>
+#include <CachedDataSequence.hxx>
+#include <LabeledDataSequence.hxx>
 #include <unonames.hxx>
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
@@ -36,6 +34,7 @@
 
 #include <com/sun/star/chart/ChartDataRowSource.hpp>
 #include <com/sun/star/chart/ErrorBarStyle.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <iterator>
 
@@ -48,7 +47,7 @@ using ::com::sun::star::uno::Sequence;
 
 namespace
 {
-void lcl_addRanges( ::std::vector< OUString > & rOutResult,
+void lcl_addRanges( std::vector< OUString > & rOutResult,
                     const uno::Reference< data::XLabeledDataSequence > & xLabeledSeq )
 {
     if( ! xLabeledSeq.is())
@@ -62,7 +61,7 @@ void lcl_addRanges( ::std::vector< OUString > & rOutResult,
 }
 
 void lcl_addDataSourceRanges(
-    ::std::vector< OUString > & rOutResult,
+    std::vector< OUString > & rOutResult,
     const uno::Reference< data::XDataSource > & xDataSource )
 {
     if( xDataSource.is() )
@@ -74,7 +73,7 @@ void lcl_addDataSourceRanges(
 }
 
 void lcl_addErrorBarRanges(
-    ::std::vector< OUString > & rOutResult,
+    std::vector< OUString > & rOutResult,
     const uno::Reference< XDataSeries > & xDataSeries )
 {
     uno::Reference< beans::XPropertySet > xSeriesProp( xDataSeries, uno::UNO_QUERY );
@@ -109,9 +108,9 @@ void lcl_addErrorBarRanges(
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -160,13 +159,13 @@ uno::Sequence< beans::PropertyValue > DataSourceHelper::createArguments(
 
     uno::Sequence< beans::PropertyValue > aArguments(3);
     aArguments[0] = beans::PropertyValue( "DataRowSource"
-        , -1, uno::makeAny( eRowSource )
+        , -1, uno::Any( eRowSource )
         , beans::PropertyState_DIRECT_VALUE );
     aArguments[1] = beans::PropertyValue( "FirstCellAsLabel"
-        , -1, uno::makeAny( bFirstCellAsLabel )
+        , -1, uno::Any( bFirstCellAsLabel )
         , beans::PropertyState_DIRECT_VALUE );
     aArguments[2] = beans::PropertyValue( "HasCategories"
-        , -1, uno::makeAny( bHasCategories )
+        , -1, uno::Any( bHasCategories )
         , beans::PropertyState_DIRECT_VALUE );
 
     return aArguments;
@@ -181,14 +180,14 @@ uno::Sequence< beans::PropertyValue > DataSourceHelper::createArguments(
     aArguments.realloc( aArguments.getLength() + 1 );
     aArguments[aArguments.getLength() - 1] =
         beans::PropertyValue( "CellRangeRepresentation"
-                              , -1, uno::makeAny( rRangeRepresentation )
+                              , -1, uno::Any( rRangeRepresentation )
                               , beans::PropertyState_DIRECT_VALUE );
     if( rSequenceMapping.getLength() )
     {
         aArguments.realloc( aArguments.getLength() + 1 );
         aArguments[aArguments.getLength() - 1] =
             beans::PropertyValue( "SequenceMapping"
-                                , -1, uno::makeAny( rSequenceMapping )
+                                , -1, uno::Any( rSequenceMapping )
                                 , beans::PropertyState_DIRECT_VALUE );
     }
     return aArguments;
@@ -198,31 +197,29 @@ void DataSourceHelper::readArguments( const uno::Sequence< beans::PropertyValue 
                                      , OUString & rRangeRepresentation, uno::Sequence< sal_Int32 >& rSequenceMapping
             , bool& bUseColumns, bool& bFirstCellAsLabel, bool& bHasCategories )
 {
-    const beans::PropertyValue* pArguments = rArguments.getConstArray();
-    for(sal_Int32 i=0; i<rArguments.getLength(); ++i, ++pArguments)
+    for(const beans::PropertyValue& rProperty : rArguments)
     {
-        const beans::PropertyValue& aProperty = *pArguments;
-        if ( aProperty.Name == "DataRowSource" )
+        if ( rProperty.Name == "DataRowSource" )
         {
             css::chart::ChartDataRowSource eRowSource;
-            if( aProperty.Value >>= eRowSource )
+            if( rProperty.Value >>= eRowSource )
                 bUseColumns = (eRowSource==css::chart::ChartDataRowSource_COLUMNS);
         }
-        else if ( aProperty.Name == "FirstCellAsLabel" )
+        else if ( rProperty.Name == "FirstCellAsLabel" )
         {
-            aProperty.Value >>= bFirstCellAsLabel;
+            rProperty.Value >>= bFirstCellAsLabel;
         }
-        else if ( aProperty.Name == "HasCategories" )
+        else if ( rProperty.Name == "HasCategories" )
         {
-            aProperty.Value >>= bHasCategories;
+            rProperty.Value >>= bHasCategories;
         }
-        else if ( aProperty.Name == "CellRangeRepresentation" )
+        else if ( rProperty.Name == "CellRangeRepresentation" )
         {
-            aProperty.Value >>= rRangeRepresentation;
+            rProperty.Value >>= rRangeRepresentation;
         }
-        else if ( aProperty.Name == "SequenceMapping" )
+        else if ( rProperty.Name == "SequenceMapping" )
         {
-            aProperty.Value >>= rSequenceMapping;
+            rProperty.Value >>= rSequenceMapping;
         }
     }
 }
@@ -230,7 +227,7 @@ void DataSourceHelper::readArguments( const uno::Sequence< beans::PropertyValue 
 uno::Reference< chart2::data::XDataSource > DataSourceHelper::pressUsedDataIntoRectangularFormat(
         const uno::Reference< chart2::XChartDocument >& xChartDoc )
 {
-    ::std::vector< Reference< chart2::data::XLabeledDataSequence > > aResultVector;
+    std::vector< Reference< chart2::data::XLabeledDataSequence > > aResultVector;
 
     //categories are always the first sequence
     Reference< chart2::XDiagram > xDiagram( xChartDoc->getFirstDiagram());
@@ -239,10 +236,10 @@ uno::Reference< chart2::data::XDataSource > DataSourceHelper::pressUsedDataIntoR
     if( xCategories.is() )
         aResultVector.push_back( xCategories );
 
-    ::std::vector< Reference< chart2::XDataSeries > > xSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
+    std::vector< Reference< chart2::XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
     uno::Reference< chart2::data::XDataSource > xSeriesSource(
-        DataSeriesHelper::getDataSource( comphelper::containerToSequence(xSeriesVector) ) );
-    Sequence< Reference< chart2::data::XLabeledDataSequence > > aDataSeqences( xSeriesSource->getDataSequences() );
+        DataSeriesHelper::getDataSource( comphelper::containerToSequence(aSeriesVector) ) );
+    Sequence< Reference< chart2::data::XLabeledDataSequence > > aDataSequences( xSeriesSource->getDataSequences() );
 
     //the first x-values is always the next sequence //todo ... other x-values get lost for old format
     Reference< chart2::data::XLabeledDataSequence > xXValues(
@@ -251,11 +248,11 @@ uno::Reference< chart2::data::XDataSource > DataSourceHelper::pressUsedDataIntoR
         aResultVector.push_back( xXValues );
 
     //add all other sequences now without x-values
-    for( sal_Int32 nN=0; nN<aDataSeqences.getLength(); nN++ )
+    for( sal_Int32 nN=0; nN<aDataSequences.getLength(); nN++ )
     {
-        OUString aRole = DataSeriesHelper::getRole(aDataSeqences[nN]);
+        OUString aRole = DataSeriesHelper::getRole(aDataSequences[nN]);
         if( aRole != "values-x" )
-            aResultVector.push_back( aDataSeqences[nN] );
+            aResultVector.push_back( aDataSequences[nN] );
     }
 
     return new DataSource( comphelper::containerToSequence(aResultVector) );
@@ -264,7 +261,7 @@ uno::Reference< chart2::data::XDataSource > DataSourceHelper::pressUsedDataIntoR
 uno::Sequence< OUString > DataSourceHelper::getUsedDataRanges(
     const uno::Reference< chart2::XDiagram > & xDiagram )
 {
-    ::std::vector< OUString > aResult;
+    std::vector< OUString > aResult;
 
     if( xDiagram.is())
     {
@@ -272,13 +269,12 @@ uno::Sequence< OUString > DataSourceHelper::getUsedDataRanges(
         if( xCategories.is() )
             lcl_addRanges( aResult, xCategories );
 
-        ::std::vector< uno::Reference< XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
-        for( ::std::vector< uno::Reference< XDataSeries > >::const_iterator aSeriesIt( aSeriesVector.begin() )
-                 ; aSeriesIt != aSeriesVector.end(); ++aSeriesIt )
+        std::vector< uno::Reference< XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
+        for (auto const& series : aSeriesVector)
         {
-            uno::Reference< data::XDataSource > xDataSource( *aSeriesIt, uno::UNO_QUERY );
+            uno::Reference< data::XDataSource > xDataSource(series, uno::UNO_QUERY);
             lcl_addDataSourceRanges( aResult, xDataSource );
-            lcl_addErrorBarRanges( aResult, *aSeriesIt );
+            lcl_addErrorBarRanges( aResult, series );
         }
     }
 
@@ -300,23 +296,22 @@ uno::Reference< chart2::data::XDataSource > DataSourceHelper::getUsedData(
 uno::Reference< chart2::data::XDataSource > DataSourceHelper::getUsedData(
     const uno::Reference< frame::XModel >& xChartModel )
 {
-    ::std::vector< uno::Reference< chart2::data::XLabeledDataSequence > > aResult;
+    std::vector< uno::Reference< chart2::data::XLabeledDataSequence > > aResult;
 
     uno::Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
     uno::Reference< data::XLabeledDataSequence > xCategories( DiagramHelper::getCategoriesFromDiagram( xDiagram ) );
     if( xCategories.is() )
         aResult.push_back( xCategories );
 
-    ::std::vector< uno::Reference< XDataSeries > > aSeriesVector( ChartModelHelper::getDataSeries( xChartModel ) );
-    for( ::std::vector< uno::Reference< XDataSeries > >::const_iterator aSeriesIt( aSeriesVector.begin() )
-        ; aSeriesIt != aSeriesVector.end(); ++aSeriesIt )
+    std::vector< uno::Reference< XDataSeries > > aSeriesVector( ChartModelHelper::getDataSeries( xChartModel ) );
+    for (auto const& series : aSeriesVector)
     {
-        uno::Reference< data::XDataSource > xDataSource( *aSeriesIt, uno::UNO_QUERY );
+        uno::Reference< data::XDataSource > xDataSource(series, uno::UNO_QUERY);
         if( !xDataSource.is() )
             continue;
         uno::Sequence< uno::Reference< data::XLabeledDataSequence > > aDataSequences( xDataSource->getDataSequences() );
-        ::std::copy( aDataSequences.begin(), aDataSequences.end(),
-                     ::std::back_inserter( aResult ));
+        std::copy( aDataSequences.begin(), aDataSequences.end(),
+                     std::back_inserter( aResult ));
     }
 
     return uno::Reference< chart2::data::XDataSource >(
@@ -326,23 +321,22 @@ uno::Reference< chart2::data::XDataSource > DataSourceHelper::getUsedData(
 uno::Reference< chart2::data::XDataSource > DataSourceHelper::getUsedData(
     ChartModel& rModel )
 {
-    ::std::vector< uno::Reference< chart2::data::XLabeledDataSequence > > aResult;
+    std::vector< uno::Reference< chart2::data::XLabeledDataSequence > > aResult;
 
     uno::Reference< XDiagram > xDiagram( rModel.getFirstDiagram() );
     uno::Reference< data::XLabeledDataSequence > xCategories( DiagramHelper::getCategoriesFromDiagram( xDiagram ) );
     if( xCategories.is() )
         aResult.push_back( xCategories );
 
-    ::std::vector< uno::Reference< XDataSeries > > aSeriesVector( ChartModelHelper::getDataSeries( rModel ) );
-    for( ::std::vector< uno::Reference< XDataSeries > >::const_iterator aSeriesIt( aSeriesVector.begin() )
-        ; aSeriesIt != aSeriesVector.end(); ++aSeriesIt )
+    std::vector< uno::Reference< XDataSeries > > aSeriesVector( ChartModelHelper::getDataSeries( rModel ) );
+    for (auto const& series : aSeriesVector)
     {
-        uno::Reference< data::XDataSource > xDataSource( *aSeriesIt, uno::UNO_QUERY );
+        uno::Reference< data::XDataSource > xDataSource(series, uno::UNO_QUERY);
         if( !xDataSource.is() )
             continue;
         uno::Sequence< uno::Reference< data::XLabeledDataSequence > > aDataSequences( xDataSource->getDataSequences() );
-        ::std::copy( aDataSequences.begin(), aDataSequences.end(),
-                     ::std::back_inserter( aResult ));
+        std::copy( aDataSequences.begin(), aDataSequences.end(),
+                     std::back_inserter( aResult ));
     }
 
     return uno::Reference< chart2::data::XDataSource >(
@@ -378,9 +372,9 @@ bool DataSourceHelper::detectRangeSegmentation(
                     DiagramHelper::getCategoriesFromDiagram( xChartDocument->getFirstDiagram() ));
         rOutHasCategories = xCategories.is();
     }
-    catch( uno::Exception & ex )
+    catch( uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return bSomethingDetected;
 }
@@ -400,32 +394,30 @@ bool DataSourceHelper::allArgumentsForRectRangeDetected(
     {
         const uno::Sequence< beans::PropertyValue > aArguments(
             xDataProvider->detectArguments( pressUsedDataIntoRectangularFormat( xChartDocument )));
-        const beans::PropertyValue* pArguments = aArguments.getConstArray();
-        for(sal_Int32 i=0; i<aArguments.getLength(); ++i, ++pArguments)
+        for(const beans::PropertyValue& rProperty : aArguments)
         {
-            const beans::PropertyValue& aProperty = *pArguments;
-            if ( aProperty.Name == "DataRowSource" )
+            if ( rProperty.Name == "DataRowSource" )
             {
                 bHasDataRowSource =
-                    (aProperty.Value.hasValue() && aProperty.Value.isExtractableTo(
+                    (rProperty.Value.hasValue() && rProperty.Value.isExtractableTo(
                         cppu::UnoType<css::chart::ChartDataRowSource>::get()));
             }
-            else if ( aProperty.Name == "FirstCellAsLabel" )
+            else if ( rProperty.Name == "FirstCellAsLabel" )
             {
                 bHasFirstCellAsLabel =
-                    (aProperty.Value.hasValue() && aProperty.Value.isExtractableTo(cppu::UnoType<bool>::get()));
+                    (rProperty.Value.hasValue() && rProperty.Value.isExtractableTo(cppu::UnoType<bool>::get()));
             }
-            else if ( aProperty.Name == "CellRangeRepresentation" )
+            else if ( rProperty.Name == "CellRangeRepresentation" )
             {
                 OUString aRange;
                 bHasCellRangeRepresentation =
-                    (aProperty.Value.hasValue() && (aProperty.Value >>= aRange) && !aRange.isEmpty());
+                    (rProperty.Value.hasValue() && (rProperty.Value >>= aRange) && !aRange.isEmpty());
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return (bHasCellRangeRepresentation && bHasDataRowSource && bHasFirstCellAsLabel);
@@ -517,7 +509,7 @@ OUString DataSourceHelper::getRangeFromValues(
 
 Sequence< OUString > DataSourceHelper::getRangesFromDataSource( const Reference< data::XDataSource > & xSource )
 {
-    ::std::vector< OUString > aResult;
+    std::vector< OUString > aResult;
     if( xSource.is())
     {
         Sequence< Reference< data::XLabeledDataSequence > > aLSeqSeq( xSource->getDataSequences());

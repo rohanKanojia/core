@@ -20,12 +20,12 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_NUMPREVW_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_NUMPREVW_HXX
 
-#include <vcl/window.hxx>
+#include <vcl/customweld.hxx>
 
 class SwNumRule;
 namespace rtl { class OUString; }
 
-class NumberingPreview : public vcl::Window
+class NumberingPreview : public weld::CustomWidgetController
 {
     const SwNumRule*    pActNum;
     vcl::Font           aStdFont;
@@ -34,36 +34,32 @@ class NumberingPreview : public vcl::Window
     bool                bPosition;
     sal_uInt16          nActLevel;
 
-    protected:
-        virtual void        Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect ) override;
+private:
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 
-    public:
-        NumberingPreview(vcl::Window* pParent, const ResId& rResId)
-        : Window(pParent, rResId),
-            pActNum(nullptr),nPageWidth(0), pOutlineNames(nullptr),
-            bPosition(false), nActLevel(USHRT_MAX)
-        {
-        }
+public:
+    NumberingPreview()
+        : pActNum(nullptr)
+        , nPageWidth(0)
+        , pOutlineNames(nullptr)
+        , bPosition(false)
+        , nActLevel(USHRT_MAX)
+    {
+    }
 
-        NumberingPreview(vcl::Window* pParent)
-            : Window(pParent)
-            , pActNum(nullptr),nPageWidth(0), pOutlineNames(nullptr),
-            bPosition(false), nActLevel(USHRT_MAX)
-        {
-        }
+    void    SetNumRule(const SwNumRule* pNum)
+    {
+        pActNum = pNum;
+        Invalidate();
+    }
 
-        virtual ~NumberingPreview();
-
-        void    SetNumRule(const SwNumRule* pNum)
-                    {pActNum = pNum; Invalidate();};
-        void    SetPageWidth(long nPgWidth)
-                                {nPageWidth = nPgWidth;}
-        void    SetOutlineNames(const OUString* pNames)
-                        {pOutlineNames = pNames;}
-        void    SetPositionMode()
-                        { bPosition = true;}
-        void    SetLevel(sal_uInt16 nSet) {nActLevel = nSet;}
-
+    void    SetPageWidth(long nPgWidth)
+                            {nPageWidth = nPgWidth;}
+    void    SetOutlineNames(const OUString* pNames)
+                    {pOutlineNames = pNames;}
+    void    SetPositionMode()
+                    { bPosition = true;}
+    void    SetLevel(sal_uInt16 nSet) {nActLevel = nSet;}
 };
 
 #endif

@@ -20,7 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_DISPATCH_INTERCEPTIONHELPER_HXX
 #define INCLUDED_FRAMEWORK_INC_DISPATCH_INTERCEPTIONHELPER_HXX
 
-#include <macros/xinterface.hxx>
 #include <general.h>
 
 #include <com/sun/star/frame/XDispatchProviderInterception.hpp>
@@ -43,7 +42,7 @@ namespace framework{
     @descr      This helper implements the complete XDispatchProviderInterception interface with
                 master/slave functionality AND using of optional features like registration of URL pattern!
 
-    @attention  Don't use this class as direct member - use it dynamicly. Do not derive from this class.
+    @attention  Don't use this class as direct member - use it dynamically. Do not derive from this class.
                 We hold a weakreference to our owner not to our superclass.
  */
 class InterceptionHelper : public  ::cppu::WeakImplHelper<
@@ -130,7 +129,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
 
     private:
 
-        /** @short reference to the frame, which uses this instance to implement it's own interception.
+        /** @short reference to the frame, which uses this instance to implement its own interception.
 
             @descr We hold a weak reference only, to make disposing operations easy. */
         css::uno::WeakReference< css::frame::XFrame > m_xOwnerWeak;
@@ -149,7 +148,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
         /** @short creates a new interception helper instance.
 
             @param xOwner
-                    points to the frame, which use this instances to support it's own interception interfaces.
+                    points to the frame, which use this instances to support its own interception interfaces.
 
             @param xSlave
                     an outside creates dispatch provider, which has to be used here as lowest slave "interceptor".
@@ -162,10 +161,10 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
         /** @short standard destructor.
 
             @descr This method destruct an instance of this class and clear some member.
-                   This method is protected, because its not allowed to use this class as a direct member!
+                   This method is protected, because it's not allowed to use this class as a direct member!
                    You MUST use a dynamical instance (pointer). That's the reason for a protected dtor.
          */
-        virtual ~InterceptionHelper();
+        virtual ~InterceptionHelper() override;
 
     // uno interface
 
@@ -195,8 +194,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
          */
         virtual css::uno::Reference< css::frame::XDispatch > SAL_CALL queryDispatch(const css::util::URL&  aURL            ,
                                                                                     const OUString& sTargetFrameName,
-                                                                                          sal_Int32        nSearchFlags    )
-            throw(css::uno::RuntimeException, std::exception) override;
+                                                                                          sal_Int32        nSearchFlags    ) override;
 
         // XDispatchProvider
 
@@ -211,8 +209,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
 
             @return A list of dispatch objects.
          */
-        virtual css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL queryDispatches(const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL queryDispatches(const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor) override;
 
         // XDispatchProviderInterception
 
@@ -229,8 +226,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
 
             @throw      A RuntimeException if the given reference is NULL!
          */
-        virtual void SAL_CALL registerDispatchProviderInterceptor(const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& xInterceptor)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL registerDispatchProviderInterceptor(const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& xInterceptor) override;
 
         // XDispatchProviderInterception
 
@@ -244,7 +240,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
 
             @throw      A RuntimeException if the given reference is NULL!
          */
-        virtual void SAL_CALL releaseDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& xInterceptor ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL releaseDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& xInterceptor ) override;
 
         // XEventListener
 
@@ -253,8 +249,7 @@ class InterceptionHelper : public  ::cppu::WeakImplHelper<
             @descr      We have to release all references to him then.
                         Normally we will die by ref count too...
          */
-        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent) override;
 
 }; // class InterceptionHelper
 

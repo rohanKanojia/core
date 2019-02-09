@@ -20,20 +20,18 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_BASICVIEWFACTORY_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_BASICVIEWFACTORY_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 
 #include <com/sun/star/drawing/framework/XResourceFactory.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/XPane.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/compbase.hxx>
-#include <osl/mutex.hxx>
 
 #include <vcl/vclptr.hxx>
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XPane; } } } } }
 
 namespace sd {
 class ViewShell;
@@ -43,16 +41,12 @@ class FrameView;
 class SfxViewFrame;
 namespace vcl { class Window; }
 
-namespace {
+namespace sd { namespace framework {
 
 typedef ::cppu::WeakComponentImplHelper <
     css::drawing::framework::XResourceFactory,
     css::lang::XInitialization
     > BasicViewFactoryInterfaceBase;
-
-} // end of anonymous namespace.
-
-namespace sd { namespace framework {
 
 /** Factory for the frequently used standard views of the drawing framework:
         private:resource/view/
@@ -71,9 +65,8 @@ class BasicViewFactory
       public BasicViewFactoryInterfaceBase
 {
 public:
-    explicit BasicViewFactory (
-        const css::uno::Reference<css::uno::XComponentContext>& rxContext);
-    virtual ~BasicViewFactory();
+    BasicViewFactory ();
+    virtual ~BasicViewFactory() override;
 
     virtual void SAL_CALL disposing() override;
 
@@ -81,18 +74,15 @@ public:
 
     virtual css::uno::Reference<css::drawing::framework::XResource>
         SAL_CALL createResource (
-            const css::uno::Reference<css::drawing::framework::XResourceId>& rxViewId)
-        throw(css::uno::RuntimeException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, std::exception) override;
+            const css::uno::Reference<css::drawing::framework::XResourceId>& rxViewId) override;
 
     virtual void SAL_CALL releaseResource (
-        const css::uno::Reference<css::drawing::framework::XResource>& xView)
-        throw(css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::drawing::framework::XResource>& xView) override;
 
     // XInitialization
 
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence<css::uno::Any>& aArguments)
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::uno::Any>& aArguments) override;
 
 private:
     css::uno::Reference<css::drawing::framework::XConfigurationController>
@@ -121,15 +111,14 @@ private:
         const css::uno::Reference<css::drawing::framework::XResourceId>& rxViewId,
         SfxViewFrame& rFrame,
         vcl::Window& rWindow,
-        FrameView* pFrameView,
-        const bool bIsCenterView);
+        FrameView* pFrameView);
 
     void ActivateCenterView (
         const std::shared_ptr<ViewDescriptor>& rpDescriptor);
 
     void ReleaseView (
         const std::shared_ptr<ViewDescriptor>& rpDescriptor,
-        bool bDoNotCache = false);
+        bool bDoNotCache);
 
     bool IsCacheable (
         const std::shared_ptr<ViewDescriptor>& rpDescriptor);

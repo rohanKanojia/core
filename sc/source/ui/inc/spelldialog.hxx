@@ -22,14 +22,13 @@
 
 #include <memory>
 #include <svx/SpellDialogChildWindow.hxx>
+#include <document.hxx>
 
 class ScConversionEngineBase;
 class ScSelectionState;
 class ScTabViewShell;
 class ScViewData;
 class ScRangeList;
-class ScDocShell;
-class ScDocument;
 
 /** Specialized spell check dialog child window for Calc.
 
@@ -44,7 +43,7 @@ public:
 
     explicit            ScSpellDialogChildWindow( vcl::Window* pParent, sal_uInt16 nId,
                             SfxBindings* pBindings, SfxChildWinInfo* pInfo );
-    virtual             ~ScSpellDialogChildWindow();
+    virtual             ~ScSpellDialogChildWindow() override;
 
     /** This method makes the one from the base class public so that
         it can be called from the view shell when one is created.
@@ -73,15 +72,14 @@ private:
 
 private:
     typedef ::std::unique_ptr< ScConversionEngineBase >   ScConvEnginePtr;
-    typedef ::std::unique_ptr< ScDocument >               ScDocumentPtr;
     typedef ::std::unique_ptr< ScSelectionState >         ScSelectionStatePtr;
-    typedef ::std::unique_ptr< ScRangeList >              ScRangeListPtr;
 
     ScConvEnginePtr     mxEngine;
-    ScDocumentPtr       mxUndoDoc;
-    ScDocumentPtr       mxRedoDoc;
+    ScDocumentUniquePtr mxUndoDoc;
+    ScDocumentUniquePtr mxRedoDoc;
     ScSelectionStatePtr mxOldSel;           /// For cursor position in selection
-    ScRangeListPtr      mxOldRangeList;     /// Original selection range for comparison.
+    tools::SvRef< ScRangeList >
+                        mxOldRangeList;     /// Original selection range for comparison.
     ScTabViewShell*     mpViewShell;
     ScViewData*         mpViewData;
     ScDocShell*         mpDocShell;

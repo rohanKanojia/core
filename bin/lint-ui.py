@@ -59,6 +59,23 @@ def check_message_box_spacing(element):
     lint_assert(spacing.text == MESSAGE_BOX_SPACING,
                 "Button box 'spacing' should be " + MESSAGE_BOX_SPACING)
 
+def check_radio_buttons(root):
+    radios = [element for element in root.findall('.//object') if element.attrib['class'] == 'GtkRadioButton']
+    for radio in radios:
+        radio_underlines = radio.findall("./property[@name='use_underline']")
+        assert len(radio_underlines) <= 1
+        if len(radio_underlines) < 1:
+            lint_assert(False, "No use_underline in GtkRadioButton with id = '" + radio.attrib['id'] + "'")
+
+def check_check_buttons(root):
+    radios = [element for element in root.findall('.//object') if element.attrib['class'] == 'GtkCheckButton']
+    for radio in radios:
+        radio_underlines = radio.findall("./property[@name='use_underline']")
+        assert len(radio_underlines) <= 1
+        if len(radio_underlines) < 1:
+            lint_assert(False, "No use_underline in GtkCheckButton with id = '" + radio.attrib['id'] + "'")
+
+
 def check_frames(root):
     frames = [element for element in root.findall('.//object') if element.attrib['class'] == 'GtkFrame']
     for frame in frames:
@@ -86,7 +103,7 @@ def check_title_labels(root):
     for title in titles:
         if title is None:
             continue
-        words = re.split(r'[^a-zA-Z0-9_-]', title.text)
+        words = re.split(r'[^a-zA-Z0-9:_-]', title.text)
         first = True
         for word in words:
             if word[0].islower() and (word not in IGNORED_WORDS or first):
@@ -97,6 +114,8 @@ def main():
     print(" == " + sys.argv[1] + " ==")
     tree = ET.parse(sys.argv[1])
     root = tree.getroot()
+
+    lint_assert('domain' in root.attrib, "interface needs to specific translation domain")
 
     top_level_widgets = [element for element in root.findall('object') if element.attrib['class'] not in IGNORED_TOP_LEVEL_WIDGETS]
     assert len(top_level_widgets) == 1
@@ -117,6 +136,10 @@ def main():
         check_message_box_spacing(element)
 
     check_frames(root)
+
+    check_radio_buttons(root)
+
+    check_check_buttons(root)
 
     check_title_labels(root)
 

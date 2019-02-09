@@ -19,16 +19,22 @@
 
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
-#include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/task/XStatusIndicatorFactory.hpp>
-#include <com/sun/star/io/XActiveDataSource.hpp>
+#include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/xml/sax/Writer.hpp>
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/frame/XModule.hpp>
+
+#include <officecfg/Office/Common.hxx>
+
+#include <comphelper/fileformat.h>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/genericpropertyset.hxx>
+#include <comphelper/propertysetinfo.hxx>
+#include <vcl/errinf.hxx>
+#include <o3tl/any.hxx>
+#include <sal/log.hxx>
 #include <unotools/streamwrap.hxx>
 #include <svx/xmlgrhlp.hxx>
 #include <svx/xmleohlp.hxx>
@@ -36,19 +42,21 @@
 #include <svl/stritem.hxx>
 #include <sfx2/frame.hxx>
 #include <sfx2/docfile.hxx>
+#include <sfx2/sfxsids.hrc>
 #include <pam.hxx>
 #include <doc.hxx>
 #include <docfunc.hxx>
 #include <IDocumentRedlineAccess.hxx>
 #include <IDocumentStatistics.hxx>
 #include <IDocumentLayoutAccess.hxx>
+#include <rootfrm.hxx>
 #include <docstat.hxx>
 #include <docsh.hxx>
 
 #include <unotools/ucbstreamhelper.hxx>
 #include <swerror.h>
-#include <wrtxml.hxx>
-#include <statstr.hrc>
+#include "wrtxml.hxx"
+#include <strings.hrc>
 
 #include <comphelper/documentconstants.hxx>
 #include <com/sun/star/rdf/XDocumentMetadataAccess.hpp>
@@ -69,7 +77,7 @@ SwXMLWriter::~SwXMLWriter()
 {
 }
 
-sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >& xStatusIndicator,
+ErrCode SwXMLWriter::Write_( const uno::Reference < task::XStatusIndicator >& xStatusIndicator,
                                 const OUString& aDocHierarchicalName )
 {
     // Get service factory
@@ -77,27 +85,24 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
             comphelper::getProcessComponentContext();
 
     // Get data sink ...
-    uno::Reference< io::XOutputStream > xOut;
     tools::SvRef<SotStorageStream> xDocStream;
-    uno::Reference< document::XGraphicObjectResolver > xGraphicResolver;
-    SvXMLGraphicHelper *pGraphicHelper = nullptr;
+    uno::Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
+    rtl::Reference<SvXMLGraphicHelper> xGraphicHelper ;
     uno::Reference< document::XEmbeddedObjectResolver > xObjectResolver;
-    SvXMLEmbeddedObjectHelper *pObjectHelper = nullptr;
+    rtl::Reference<SvXMLEmbeddedObjectHelper> xObjectHelper;
 
     OSL_ENSURE( xStg.is(), "Where is my storage?" );
-    pGraphicHelper = SvXMLGraphicHelper::Create( xStg,
-                                                 GRAPHICHELPER_MODE_WRITE,
-                                                 false );
-    xGraphicResolver = pGraphicHelper;
+    xGraphicHelper = SvXMLGraphicHelper::Create( xStg,
+                                                 SvXMLGraphicHelperMode::Write );
+    xGraphicStorageHandler = xGraphicHelper.get();
 
-    SfxObjectShell *pPersist = pDoc->GetPersist();
+    SfxObjectShell *pPersist = m_pDoc->GetPersist();
     if( pPersist )
     {
-        pObjectHelper = SvXMLEmbeddedObjectHelper::Create(
+        xObjectHelper = SvXMLEmbeddedObjectHelper::Create(
                                          xStg, *pPersist,
-                                         EMBEDDEDOBJECTHELPER_MODE_WRITE,
-                                         false );
-        xObjectResolver = pObjectHelper;
+                                         SvXMLEmbeddedObjectHelperMode::Write );
+        xObjectResolver = xObjectHelper.get();
     }
 
     // create and prepare the XPropertySet that gets passed through
@@ -160,21 +165,18 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
 
     xInfoSet->setPropertyValue( "TargetStorage", Any( xStg ) );
 
-    uno::Any aAny;
-    if (bShowProgress)
+    if (m_bShowProgress)
     {
         // set progress range and start status indicator
         sal_Int32 nProgressRange(1000000);
         if (xStatusIndicator.is())
         {
-            xStatusIndicator->start(SW_RESSTR( STR_STATSTR_SWGWRITE),
+            xStatusIndicator->start(SwResId( STR_STATSTR_SWGWRITE),
                                     nProgressRange);
         }
-        aAny <<= nProgressRange;
-        xInfoSet->setPropertyValue("ProgressRange", aAny);
+        xInfoSet->setPropertyValue("ProgressRange", Any(nProgressRange));
 
-        aAny <<= static_cast < sal_Int32 >( -1 );
-        xInfoSet->setPropertyValue("ProgressMax", aAny);
+        xInfoSet->setPropertyValue("ProgressMax", Any(static_cast < sal_Int32 >( -1 )));
     }
 
     SvtSaveOptions aSaveOpt;
@@ -182,18 +184,22 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
 
     // save show redline mode ...
     const OUString sShowChanges("ShowChanges");
-    sal_uInt16 nRedlineMode = pDoc->getIDocumentRedlineAccess().GetRedlineMode();
-    xInfoSet->setPropertyValue( sShowChanges,
-        makeAny( IDocumentRedlineAccess::IsShowChanges( nRedlineMode ) ) );
+    RedlineFlags const nOrigRedlineFlags = m_pDoc->getIDocumentRedlineAccess().GetRedlineFlags();
+    RedlineFlags nRedlineFlags(nOrigRedlineFlags);
+    bool isShowChanges;
+    // TODO: ideally this would be stored per-view...
+    SwRootFrame const*const pLayout(m_pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
+    isShowChanges = pLayout == nullptr || !pLayout->IsHideRedlines();
+    xInfoSet->setPropertyValue(sShowChanges, makeAny(isShowChanges));
     // ... and hide redlines for export
-    nRedlineMode &= ~nsRedlineMode_t::REDLINE_SHOW_MASK;
-    nRedlineMode |= nsRedlineMode_t::REDLINE_SHOW_INSERT;
-    pDoc->getIDocumentRedlineAccess().SetRedlineMode((RedlineMode_t)( nRedlineMode ));
+    nRedlineFlags &= ~RedlineFlags::ShowMask;
+    nRedlineFlags |= RedlineFlags::ShowInsert;
+    m_pDoc->getIDocumentRedlineAccess().SetRedlineFlags( nRedlineFlags );
 
     // Set base URI
     xInfoSet->setPropertyValue( "BaseURI", makeAny( GetBaseURL() ) );
 
-    if( SfxObjectCreateMode::EMBEDDED == pDoc->GetDocShell()->GetCreateMode() )
+    if( SfxObjectCreateMode::EMBEDDED == m_pDoc->GetDocShell()->GetCreateMode() )
     {
         const OUString aName( !aDocHierarchicalName.isEmpty()
             ? aDocHierarchicalName
@@ -202,7 +208,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
         xInfoSet->setPropertyValue( "StreamRelPath", makeAny( aName ) );
     }
 
-    if( bBlock )
+    if( m_bBlock )
     {
         xInfoSet->setPropertyValue( "AutoTextMode", makeAny(true) );
     }
@@ -210,7 +216,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
     // #i69627#
     const bool bOASIS = ( SotStorage::GetVersion( xStg ) > SOFFICE_FILEFORMAT_60 );
     if ( bOASIS &&
-         docfunc::HasOutlineStyleToBeWrittenAsNormalListStyle( *pDoc ) )
+         docfunc::HasOutlineStyleToBeWrittenAsNormalListStyle( *m_pDoc ) )
     {
         xInfoSet->setPropertyValue( "OutlineStyleAsNormalListStyle", makeAny( true ) );
     }
@@ -230,7 +236,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
     if( xStatusIndicator.is() )
         *pArgs++ <<= xStatusIndicator;
 
-    if( xGraphicResolver.is() )
+    if( xGraphicStorageHandler.is() )
         nArgs++;
     if( xObjectResolver.is() )
         nArgs++;
@@ -238,8 +244,8 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
     Sequence < Any > aFilterArgs( nArgs );
     pArgs = aFilterArgs.getArray();
     *pArgs++ <<= xInfoSet;
-    if( xGraphicResolver.is() )
-        *pArgs++ <<= xGraphicResolver;
+    if( xGraphicStorageHandler.is() )
+        *pArgs++ <<= xGraphicStorageHandler;
     if( xObjectResolver.is() )
         *pArgs++ <<= xObjectResolver;
     if( xStatusIndicator.is() )
@@ -247,7 +253,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
 
     //Get model
     uno::Reference< lang::XComponent > xModelComp(
-        pDoc->GetDocShell()->GetModel(), UNO_QUERY );
+        m_pDoc->GetDocShell()->GetModel(), UNO_QUERY );
     OSL_ENSURE( xModelComp.is(), "XMLWriter::Write: got no model" );
     if( !xModelComp.is() )
         return ERR_SWG_WRITE_ERROR;
@@ -256,12 +262,12 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
     PutEditEngFontsInAttrPool();
 
     // properties
-    Sequence < PropertyValue > aProps( pOrigFileName ? 1 : 0 );
-    if( pOrigFileName )
+    Sequence < PropertyValue > aProps( m_pOrigFileName ? 1 : 0 );
+    if( m_pOrigFileName )
     {
         PropertyValue *pProps = aProps.getArray();
         pProps->Name = "FileName";
-        pProps->Value <<= *pOrigFileName;
+        pProps->Value <<= *m_pOrigFileName;
     }
 
     // export sub streams for package, else full stream into a file
@@ -294,7 +300,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
         }
     }
 
-    bool bStoreMeta = ( SfxObjectCreateMode::EMBEDDED != pDoc->GetDocShell()->GetCreateMode() );
+    bool bStoreMeta = ( SfxObjectCreateMode::EMBEDDED != m_pDoc->GetDocShell()->GetCreateMode() );
     if ( !bStoreMeta )
     {
         try
@@ -313,7 +319,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
     }
 
     OUString sWarnFile;
-    if( !bOrganizerMode && !bBlock && bStoreMeta )
+    if( !m_bOrganizerMode && !m_bBlock && bStoreMeta )
     {
         if( !WriteThroughComponent(
                 xModelComp, "meta.xml", xContext,
@@ -326,7 +332,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
         }
     }
 
-    if( !bBlock )
+    if( !m_bBlock )
     {
         if( !WriteThroughComponent(
             xModelComp, "settings.xml", xContext,
@@ -355,7 +361,7 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
         sErrFile = "styles.xml";
     }
 
-    if( !bOrganizerMode && !bErr )
+    if( !m_bOrganizerMode && !bErr )
     {
         if( !WriteThroughComponent(
                 xModelComp, "content.xml", xContext,
@@ -368,45 +374,45 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
         }
     }
 
-    if( pDoc->getIDocumentLayoutAccess().GetCurrentViewShell() && pDoc->getIDocumentStatistics().GetDocStat().nPage > 1 &&
-        !(bOrganizerMode || bBlock || bErr) )
+    if( m_pDoc->getIDocumentLayoutAccess().GetCurrentViewShell() && m_pDoc->getIDocumentStatistics().GetDocStat().nPage > 1 &&
+        !(m_bOrganizerMode || m_bBlock || bErr ||
+            // sw_redlinehide: disable layout cache for now
+            m_pDoc->getIDocumentLayoutAccess().GetCurrentLayout()->IsHideRedlines()))
     {
         try
         {
             uno::Reference < io::XStream > xStm = xStg->openStreamElement( "layout-cache", embed::ElementModes::READWRITE | embed::ElementModes::TRUNCATE );
-            SvStream* pStream = utl::UcbStreamHelper::CreateStream( xStm );
+            std::unique_ptr<SvStream> pStream = utl::UcbStreamHelper::CreateStream( xStm );
             if( !pStream->GetError() )
             {
                 uno::Reference < beans::XPropertySet > xSet( xStm, UNO_QUERY );
                 uno::Any aAny2;
                 aAny2 <<= OUString("application/binary");
                 xSet->setPropertyValue("MediaType", aAny2 );
-                pDoc->WriteLayoutCache( *pStream );
+                m_pDoc->WriteLayoutCache( *pStream );
             }
-
-            delete pStream;
         }
         catch ( uno::Exception& )
         {
         }
     }
 
-    if( pGraphicHelper )
-        SvXMLGraphicHelper::Destroy( pGraphicHelper );
-    xGraphicResolver = nullptr;
+    if( xGraphicHelper )
+        xGraphicHelper->dispose();
+    xGraphicHelper.clear();
+    xGraphicStorageHandler = nullptr;
 
-    if( pObjectHelper )
-        SvXMLEmbeddedObjectHelper::Destroy( pObjectHelper );
+    if( xObjectHelper )
+        xObjectHelper->dispose();
+    xObjectHelper.clear();
     xObjectResolver = nullptr;
 
     // restore redline mode
-    aAny = xInfoSet->getPropertyValue( sShowChanges );
-    nRedlineMode = pDoc->getIDocumentRedlineAccess().GetRedlineMode();
-    nRedlineMode &= ~nsRedlineMode_t::REDLINE_SHOW_MASK;
-    nRedlineMode |= nsRedlineMode_t::REDLINE_SHOW_INSERT;
-    if ( *static_cast<sal_Bool const *>(aAny.getValue()) )
-        nRedlineMode |= nsRedlineMode_t::REDLINE_SHOW_DELETE;
-    pDoc->getIDocumentRedlineAccess().SetRedlineMode((RedlineMode_t)( nRedlineMode ));
+    nRedlineFlags = m_pDoc->getIDocumentRedlineAccess().GetRedlineFlags();
+    nRedlineFlags &= ~RedlineFlags::ShowMask;
+    nRedlineFlags |= RedlineFlags::ShowInsert;
+    nRedlineFlags |= nOrigRedlineFlags & RedlineFlags::ShowMask;
+    m_pDoc->getIDocumentRedlineAccess().SetRedlineFlags( nRedlineFlags );
 
     if (xStatusIndicator.is())
     {
@@ -417,26 +423,26 @@ sal_uInt32 SwXMLWriter::_Write( const uno::Reference < task::XStatusIndicator >&
     {
         if( !sErrFile.isEmpty() )
             return *new StringErrorInfo( ERR_WRITE_ERROR_FILE, sErrFile,
-                                         ERRCODE_BUTTON_OK | ERRCODE_MSG_ERROR );
+                                         DialogMask::ButtonsOk | DialogMask::MessageError );
         return ERR_SWG_WRITE_ERROR;
     }
     else if( bWarn )
     {
         if( !sWarnFile.isEmpty() )
             return *new StringErrorInfo( WARN_WRITE_ERROR_FILE, sWarnFile,
-                                         ERRCODE_BUTTON_OK | ERRCODE_MSG_ERROR );
+                                         DialogMask::ButtonsOk | DialogMask::MessageError );
         return WARN_SWG_FEATURES_LOST;
     }
 
-    return 0;
+    return ERRCODE_NONE;
 }
 
-sal_uLong SwXMLWriter::WriteStorage()
+ErrCode SwXMLWriter::WriteStorage()
 {
-    return _Write( uno::Reference < task::XStatusIndicator >(), OUString() );
+    return Write_( uno::Reference < task::XStatusIndicator >(), OUString() );
 }
 
-sal_uLong SwXMLWriter::WriteMedium( SfxMedium& aTargetMedium )
+ErrCode SwXMLWriter::WriteMedium( SfxMedium& aTargetMedium )
 {
     uno::Reference < task::XStatusIndicator > xStatusIndicator;
     OUString aName;
@@ -449,10 +455,10 @@ sal_uLong SwXMLWriter::WriteMedium( SfxMedium& aTargetMedium )
     if ( pDocHierarchItem )
         aName = pDocHierarchItem->GetValue();
 
-    return _Write( xStatusIndicator, aName );
+    return Write_( xStatusIndicator, aName );
 }
 
-sal_uLong SwXMLWriter::Write( SwPaM& rPaM, SfxMedium& rMed,
+ErrCode SwXMLWriter::Write( SwPaM& rPaM, SfxMedium& rMed,
                                const OUString* pFileName )
 {
     return IsStgWriter()
@@ -486,9 +492,7 @@ bool SwXMLWriter::WriteThroughComponent(
         if( !xSet.is() )
             return false;
 
-        uno::Any aAny;
-        aAny <<= OUString("text/xml");
-        xSet->setPropertyValue("MediaType", aAny );
+        xSet->setPropertyValue("MediaType", Any(OUString("text/xml")) );
 
         // even plain stream should be encrypted in encrypted documents
         xSet->setPropertyValue( "UseCommonStoragePasswordEncryption", makeAny(true) );

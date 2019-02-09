@@ -55,7 +55,6 @@ $(eval $(call gb_CppunitTest_use_libraries,chart2_trendcalculators, \
     vbahelper \
     xo \
     sw \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,chart2_trendcalculators,\
@@ -63,10 +62,7 @@ $(eval $(call gb_CppunitTest_set_include,chart2_trendcalculators,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,chart2_trendcalculators,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,chart2_trendcalculators))
 
 $(eval $(call gb_CppunitTest_use_ure,chart2_trendcalculators))
 $(eval $(call gb_CppunitTest_use_vcl,chart2_trendcalculators))
@@ -117,20 +113,19 @@ $(eval $(call gb_CppunitTest_use_components,chart2_trendcalculators,\
     svx/util/svx \
     svx/util/svxcore \
     toolkit/util/tk \
+    vcl/vcl.common \
     ucb/source/core/ucb1 \
     ucb/source/ucp/file/ucpfile1 \
     ucb/source/ucp/tdoc/ucptdoc1 \
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
     writerfilter/util/writerfilter \
     xmloff/util/xo \
     xmlscript/util/xmlscript \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,chart2_trendcalculators))
-
-$(call gb_CppunitTest_get_target,chart2_trendcalculators): \
-    $(call gb_AllLangResTarget_get_target,sd)
 
 # vim: set noet sw=4 ts=4:

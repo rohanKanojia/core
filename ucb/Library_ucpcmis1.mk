@@ -23,16 +23,26 @@ $(eval $(call gb_Library_use_libraries,ucpcmis1,\
 	sax \
 	ucbhelper \
 	tl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,ucpcmis1,\
 	boost_headers \
 	boost_date_time \
-	cmis \
+	libcmis \
 	curl \
 	libxml2 \
 ))
+
+# On Windows, libcmis.lib(ws-relatedmultipart.o) references BCryptCloseAlgorithmProvider,
+# BCryptGenRandom, and BCryptOpenAlgorithmProvider via
+# workdir/UnpackedTarball/boost/boost/winapi/bcrypt.hpp:
+ifeq ($(OS),WNT)
+ifeq ($(SYSTEM_LIBCMIS)$(SYSTEM_BOOST),)
+$(eval $(call gb_Library_add_libs,ucpcmis1, \
+    Bcrypt.lib \
+))
+endif
+endif
 
 $(eval $(call gb_Library_add_exception_objects,ucpcmis1,\
 	ucb/source/ucp/cmis/auth_provider \
@@ -43,6 +53,8 @@ $(eval $(call gb_Library_add_exception_objects,ucpcmis1,\
 	ucb/source/ucp/cmis/cmis_provider \
 	ucb/source/ucp/cmis/cmis_resultset \
 	ucb/source/ucp/cmis/cmis_url \
+	ucb/source/ucp/cmis/std_inputstream \
+	ucb/source/ucp/cmis/std_outputstream \
 ))
 
 # vim: set noet sw=4 ts=4:

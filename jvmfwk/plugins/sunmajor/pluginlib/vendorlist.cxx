@@ -22,8 +22,9 @@
 #include "gnujre.hxx"
 #include "sunjre.hxx"
 #include "otherjre.hxx"
-#include "osl/thread.h"
+#include <osl/thread.h>
 #include <stdio.h>
+#include <sal/log.hxx>
 
 
 namespace jfw_plugin
@@ -33,28 +34,30 @@ namespace jfw_plugin
    the string contains an a umlaut then it must be expressed
    by "\xXX\xXX"
  */
-BEGIN_VENDOR_MAP()
-// For OS X, don't bother with implementations that aren't relevant (or have never existed)
+VendorSupportMapEntry const gVendorMap[] ={
+// For macOS, don't bother with implementations that aren't relevant (or have never existed)
 #ifdef MACOSX
-    VENDOR_MAP_ENTRY("Apple Inc.", OtherInfo)
-    VENDOR_MAP_ENTRY("Apple Computer, Inc.", OtherInfo)
+    VENDOR_MAP_ENTRY<OtherInfo>("Apple Inc."),
+    VENDOR_MAP_ENTRY<OtherInfo>("Apple Computer, Inc."),
 #endif
-    VENDOR_MAP_ENTRY("Sun Microsystems Inc.", SunInfo)
-    VENDOR_MAP_ENTRY("Oracle Corporation", SunInfo)
+    VENDOR_MAP_ENTRY<SunInfo>("Sun Microsystems Inc."),
+    VENDOR_MAP_ENTRY<SunInfo>("Oracle Corporation"),
+    VENDOR_MAP_ENTRY<SunInfo>("AdoptOpenJdk"),
+    VENDOR_MAP_ENTRY<SunInfo>("Amazon.com Inc."),
 #ifndef MACOSX
-    VENDOR_MAP_ENTRY("IBM Corporation", OtherInfo)
-    VENDOR_MAP_ENTRY("Blackdown Java-Linux Team", OtherInfo)
-    VENDOR_MAP_ENTRY("BEA Systems, Inc.", OtherInfo)
-    VENDOR_MAP_ENTRY("Free Software Foundation, Inc.", GnuInfo)
-    VENDOR_MAP_ENTRY("The FreeBSD Foundation", OtherInfo)
+    VENDOR_MAP_ENTRY<OtherInfo>("IBM Corporation"),
+    VENDOR_MAP_ENTRY<OtherInfo>("Blackdown Java-Linux Team"),
+    VENDOR_MAP_ENTRY<OtherInfo>("BEA Systems, Inc."),
+    VENDOR_MAP_ENTRY<GnuInfo>("Free Software Foundation, Inc."),
+    VENDOR_MAP_ENTRY<OtherInfo>("The FreeBSD Foundation"),
 #endif
-    VENDOR_MAP_ENTRY("Azul Systems, Inc.", OtherInfo)
-END_VENDOR_MAP()
+    VENDOR_MAP_ENTRY<OtherInfo>("Azul Systems, Inc."),
+    {nullptr, nullptr, nullptr} };
 
 
 bool isVendorSupported(const OUString& sVendor)
 {
-    const size_t count = sizeof(gVendorMap) / sizeof (VendorSupportMapEntry) - 1;
+    const size_t count = SAL_N_ELEMENTS(gVendorMap) - 1;
     for ( size_t pos = 0; pos < count; ++pos )
     {
         if (sVendor.equalsAscii(gVendorMap[pos].sVendorName))

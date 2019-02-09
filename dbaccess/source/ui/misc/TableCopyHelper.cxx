@@ -17,29 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableCopyHelper.hxx"
-#include "dbustrings.hrc"
-#include "sqlmessage.hxx"
-#include <vcl/msgbox.hxx>
-#include "WCopyTable.hxx"
+#include <TableCopyHelper.hxx>
+#include <core_resource.hxx>
+#include <stringconstants.hxx>
+#include <strings.hrc>
+#include <strings.hxx>
+#include <sqlmessage.hxx>
+#include <WCopyTable.hxx>
 #include <dbaccess/genericcontroller.hxx>
-#include "WCPage.hxx"
+#include <WCPage.hxx>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/sdb/XSingleSelectQueryComposer.hpp>
 #include <com/sun/star/sdb/application/CopyTableOperation.hpp>
 #include <com/sun/star/sdb/application/CopyTableWizard.hpp>
 #include <com/sun/star/sdb/DataAccessDescriptorFactory.hpp>
 
-#include "RtfReader.hxx"
-#include "HtmlReader.hxx"
-#include "TokenWriter.hxx"
-#include "UITools.hxx"
+#include <RtfReader.hxx>
+#include <HtmlReader.hxx>
+#include <TokenWriter.hxx>
+#include <UITools.hxx>
 #include <dbaccess/dataview.hxx>
-#include "dbu_resource.hrc"
 #include <unotools/ucbhelper.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/diagnose_ex.h>
-#include <comphelper/processfactory.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/XViewsSupplier.hpp>
 #include <com/sun/star/sdb/XQueryDefinitionsSupplier.hpp>
@@ -54,7 +55,7 @@
 #include <unotools/tempfile.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
-#include "dbexchange.hxx"
+#include <dbexchange.hxx>
 namespace dbaui
 {
 using namespace ::dbtools;
@@ -68,7 +69,6 @@ using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdb::application;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::ucb;
 
 OTableCopyHelper::OTableCopyHelper(OGenericUnoController* _pControler)
@@ -130,7 +130,7 @@ void OTableCopyHelper::insertTable( const OUString& i_rSourceDataSource, const R
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -140,37 +140,37 @@ void OTableCopyHelper::pasteTable( const svx::ODataAccessDescriptor& _rPasteData
     OUString sSrcDataSourceName = _rPasteData.getDataSource();
 
     OUString sCommand;
-    _rPasteData[ daCommand ] >>= sCommand;
+    _rPasteData[ DataAccessDescriptorProperty::Command ] >>= sCommand;
 
     Reference<XConnection> xSrcConnection;
-    if ( _rPasteData.has(daConnection) )
+    if ( _rPasteData.has(DataAccessDescriptorProperty::Connection) )
     {
-        OSL_VERIFY( _rPasteData[daConnection] >>= xSrcConnection );
+        OSL_VERIFY( _rPasteData[DataAccessDescriptorProperty::Connection] >>= xSrcConnection );
     }
 
     Reference< XResultSet > xResultSet;
-    if ( _rPasteData.has(daCursor) )
+    if ( _rPasteData.has(DataAccessDescriptorProperty::Cursor) )
     {
-        OSL_VERIFY( _rPasteData[ daCursor ] >>= xResultSet );
+        OSL_VERIFY( _rPasteData[ DataAccessDescriptorProperty::Cursor ] >>= xResultSet );
     }
 
     Sequence< Any > aSelection;
-    if ( _rPasteData.has( daSelection ) )
+    if ( _rPasteData.has( DataAccessDescriptorProperty::Selection ) )
     {
-        OSL_VERIFY( _rPasteData[ daSelection ] >>= aSelection );
-        OSL_ENSURE( _rPasteData.has( daBookmarkSelection ), "OTableCopyHelper::pasteTable: you should specify BookmarkSelection, too, to be on the safe side!" );
+        OSL_VERIFY( _rPasteData[ DataAccessDescriptorProperty::Selection ] >>= aSelection );
+        OSL_ENSURE( _rPasteData.has( DataAccessDescriptorProperty::BookmarkSelection ), "OTableCopyHelper::pasteTable: you should specify BookmarkSelection, too, to be on the safe side!" );
     }
 
     bool bBookmarkSelection( true );
-    if ( _rPasteData.has( daBookmarkSelection ) )
+    if ( _rPasteData.has( DataAccessDescriptorProperty::BookmarkSelection ) )
     {
-        OSL_VERIFY( _rPasteData[ daBookmarkSelection ] >>= bBookmarkSelection );
+        OSL_VERIFY( _rPasteData[ DataAccessDescriptorProperty::BookmarkSelection ] >>= bBookmarkSelection );
     }
-    OSL_ENSURE( bBookmarkSelection, "OTableCopyHelper::pasteTable: working with selection-indicies (instead of bookmarks) is error-prone, and thus deprecated!" );
+    OSL_ENSURE( bBookmarkSelection, "OTableCopyHelper::pasteTable: working with selection-indices (instead of bookmarks) is error-prone, and thus deprecated!" );
 
     sal_Int32 nCommandType = CommandType::COMMAND;
-    if ( _rPasteData.has(daCommandType) )
-        _rPasteData[daCommandType] >>= nCommandType;
+    if ( _rPasteData.has(DataAccessDescriptorProperty::CommandType) )
+        _rPasteData[DataAccessDescriptorProperty::CommandType] >>= nCommandType;
 
     insertTable( sSrcDataSourceName, xSrcConnection, sCommand, nCommandType,
                  xResultSet, aSelection, bBookmarkSelection,
@@ -205,7 +205,7 @@ void OTableCopyHelper::pasteTable( SotClipboardFormatId _nFormatId
             aTrans.bHtml            = SotClipboardFormatId::HTML == _nFormatId;
             aTrans.sDefaultTableName = GetTableNameForAppend();
             if ( !bOk || !copyTagTable(aTrans,false,_xConnection) )
-                m_pController->showError(SQLException(ModuleRes(STR_NO_TABLE_FORMAT_INSIDE), *m_pController, OUString("S1000"), 0, Any()));
+                m_pController->showError(SQLException(DBA_RES(STR_NO_TABLE_FORMAT_INSIDE), *m_pController, "S1000", 0, Any()));
         }
         catch(const SQLException&)
         {
@@ -213,11 +213,11 @@ void OTableCopyHelper::pasteTable( SotClipboardFormatId _nFormatId
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
     else
-        m_pController->showError(SQLException(ModuleRes(STR_NO_TABLE_FORMAT_INSIDE), *m_pController, OUString("S1000"), 0, Any()));
+        m_pController->showError(SQLException(DBA_RES(STR_NO_TABLE_FORMAT_INSIDE), *m_pController, "S1000", 0, Any()));
 }
 
 void OTableCopyHelper::pasteTable( const TransferableDataHelper& _rTransData
@@ -232,7 +232,7 @@ void OTableCopyHelper::pasteTable( const TransferableDataHelper& _rTransData
         pasteTable( SotClipboardFormatId::RTF,_rTransData,i_rDestDataSource,_xConnection);
 }
 
-bool OTableCopyHelper::copyTagTable(OTableCopyHelper::DropDescriptor& _rDesc, bool _bCheck, const SharedConnection& _xConnection)
+bool OTableCopyHelper::copyTagTable(OTableCopyHelper::DropDescriptor const & _rDesc, bool _bCheck, const SharedConnection& _xConnection)
 {
     Reference<XEventListener> xEvt;
     ODatabaseImportExport* pImport = nullptr;
@@ -242,7 +242,7 @@ bool OTableCopyHelper::copyTagTable(OTableCopyHelper::DropDescriptor& _rDesc, bo
         pImport = new ORTFImportExport(_xConnection,getNumberFormatter(_xConnection, m_pController->getORB()),m_pController->getORB());
 
     xEvt = pImport;
-    SvStream* pStream = static_cast<SvStream*>(static_cast<SotStorageStream*>(_rDesc.aHtmlRtfStorage));
+    SvStream* pStream = static_cast<SvStream*>(_rDesc.aHtmlRtfStorage.get());
     if ( _bCheck )
         pImport->enableCheckOnly();
 
@@ -280,7 +280,7 @@ bool OTableCopyHelper::copyTagTable(const TransferableDataHelper& _aDroppedData
         _rAsyncDrop.bHtml           = bHtml;
         _rAsyncDrop.bError          = !copyTagTable(_rAsyncDrop,true,_xConnection);
 
-        bRet = ( !_rAsyncDrop.bError && bOk && _rAsyncDrop.aHtmlRtfStorage.Is() );
+        bRet = ( !_rAsyncDrop.bError && bOk && _rAsyncDrop.aHtmlRtfStorage.is() );
         if ( bRet )
         {
             // now we need to copy the stream
@@ -288,7 +288,7 @@ bool OTableCopyHelper::copyTagTable(const TransferableDataHelper& _aDroppedData
             _rAsyncDrop.aUrl = aTmp.GetURL();
             ::tools::SvRef<SotStorageStream> aNew = new SotStorageStream( aTmp.GetFileName() );
             _rAsyncDrop.aHtmlRtfStorage->Seek(STREAM_SEEK_TO_BEGIN);
-            _rAsyncDrop.aHtmlRtfStorage->CopyTo( aNew );
+            _rAsyncDrop.aHtmlRtfStorage->CopyTo( aNew.get() );
             aNew->Commit();
             _rAsyncDrop.aHtmlRtfStorage = aNew;
         }
@@ -302,19 +302,19 @@ void OTableCopyHelper::asyncCopyTagTable(  DropDescriptor& _rDesc
                                 ,const OUString& i_rDestDataSource
                                 ,const SharedConnection& _xConnection)
 {
-    if ( _rDesc.aHtmlRtfStorage.Is() )
+    if ( _rDesc.aHtmlRtfStorage.is() )
     {
         copyTagTable(_rDesc,false,_xConnection);
         _rDesc.aHtmlRtfStorage = nullptr;
         // we now have to delete the temp file created in executeDrop
         INetURLObject aURL;
         aURL.SetURL(_rDesc.aUrl);
-        ::utl::UCBContentHelper::Kill(aURL.GetMainURL(INetURLObject::NO_DECODE));
+        ::utl::UCBContentHelper::Kill(aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE));
     }
     else if ( !_rDesc.bError )
         pasteTable(_rDesc.aDroppedData,i_rDestDataSource,_xConnection);
     else
-        m_pController->showError(SQLException(ModuleRes(STR_NO_TABLE_FORMAT_INSIDE), *m_pController, OUString("S1000"), 0, Any()));
+        m_pController->showError(SQLException(DBA_RES(STR_NO_TABLE_FORMAT_INSIDE), *m_pController, "S1000", 0, Any()));
 }
 
 }   // namespace dbaui

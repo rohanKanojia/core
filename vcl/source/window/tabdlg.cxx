@@ -21,7 +21,7 @@
 #include <vcl/layout.hxx>
 #include <vcl/tabctrl.hxx>
 #include <vcl/tabdlg.hxx>
-#include <tools/rc.h>
+#include <vcl/tabpage.hxx>
 
 void TabDialog::ImplInitTabDialogData()
 {
@@ -46,17 +46,17 @@ void TabDialog::ImplPosControls()
     {
         if ( pChild->IsVisible() && (pChild != mpViewWindow) )
         {
-            if (pChild->GetType() == WINDOW_TABCONTROL || isContainerWindow(*pChild))
+            if (pChild->GetType() == WindowType::TABCONTROL || isContainerWindow(*pChild))
                 pTabControl = pChild;
             else if ( pTabControl )
             {
                 Size aOptimalSize(pChild->get_preferred_size());
                 long nTxtWidth = aOptimalSize.Width();
                 if ( nTxtWidth > aCtrlSize.Width() )
-                    aCtrlSize.Width() = nTxtWidth;
+                    aCtrlSize.setWidth( nTxtWidth );
                 long nTxtHeight = aOptimalSize.Height();
                 if ( nTxtHeight > aCtrlSize.Height() )
-                    aCtrlSize.Height() = nTxtHeight;
+                    aCtrlSize.setHeight( nTxtHeight );
                 nDownCtrl++;
             }
             else
@@ -88,7 +88,7 @@ void TabDialog::ImplPosControls()
                           aTabSize.Height() + IMPL_DIALOG_OFFSET*2 + nOffY );
         long    nBtnEx = 0;
 
-        // consider Preview-Fenster and adapt the sizes/offsets
+        // consider preview window and adapt the sizes/offsets
         if ( mpViewWindow && mpViewWindow->IsVisible() )
         {
             long    nViewOffX = 0;
@@ -103,8 +103,8 @@ void TabDialog::ImplPosControls()
                 nViewOffY       = nOffY+IMPL_DIALOG_OFFSET;
                 nViewWidth      = aTabSize.Width();
                 nViewPosFlags  |= PosSizeFlags::Width;
-                aTabOffset.Y() += aViewSize.Height()+IMPL_DIALOG_OFFSET;
-                aDlgSize.Height() += aViewSize.Height()+IMPL_DIALOG_OFFSET;
+                aTabOffset.AdjustY(aViewSize.Height()+IMPL_DIALOG_OFFSET );
+                aDlgSize.AdjustHeight(aViewSize.Height()+IMPL_DIALOG_OFFSET );
             }
             else if (  meViewAlign == WindowAlign::Bottom )
             {
@@ -112,7 +112,7 @@ void TabDialog::ImplPosControls()
                 nViewOffY       = aTabOffset.Y()+aTabSize.Height()+IMPL_DIALOG_OFFSET;
                 nViewWidth      = aTabSize.Width();
                 nViewPosFlags  |= PosSizeFlags::Width;
-                aDlgSize.Height() += aViewSize.Height()+IMPL_DIALOG_OFFSET;
+                aDlgSize.AdjustHeight(aViewSize.Height()+IMPL_DIALOG_OFFSET );
             }
             else if (  meViewAlign == WindowAlign::Right )
             {
@@ -120,7 +120,7 @@ void TabDialog::ImplPosControls()
                 nViewOffY       = aTabOffset.Y();
                 nViewHeight     = aTabSize.Height();
                 nViewPosFlags  |= PosSizeFlags::Height;
-                aDlgSize.Width() += aViewSize.Width()+IMPL_DIALOG_OFFSET;
+                aDlgSize.AdjustWidth(aViewSize.Width()+IMPL_DIALOG_OFFSET );
                 nBtnEx          = aViewSize.Width()+IMPL_DIALOG_OFFSET;
             }
             else // meViewAlign == WindowAlign::Left
@@ -129,8 +129,8 @@ void TabDialog::ImplPosControls()
                 nViewOffY       = aTabOffset.Y();
                 nViewHeight     = aTabSize.Height();
                 nViewPosFlags  |= PosSizeFlags::Height;
-                aTabOffset.X() += aViewSize.Width()+IMPL_DIALOG_OFFSET;
-                aDlgSize.Width() += aViewSize.Width()+IMPL_DIALOG_OFFSET;
+                aTabOffset.AdjustX(aViewSize.Width()+IMPL_DIALOG_OFFSET );
+                aDlgSize.AdjustWidth(aViewSize.Width()+IMPL_DIALOG_OFFSET );
                 nBtnEx          = aViewSize.Width()+IMPL_DIALOG_OFFSET;
             }
 
@@ -188,7 +188,7 @@ void TabDialog::ImplPosControls()
             pChild2 = pChild2->GetWindow( GetWindowType::Next );
         }
 
-        aDlgSize.Height() += nLines * (aCtrlSize.Height()+IMPL_DIALOG_OFFSET);
+        aDlgSize.AdjustHeight(nLines * (aCtrlSize.Height()+IMPL_DIALOG_OFFSET) );
         SetOutputSizePixel( aDlgSize );
     }
 
@@ -207,14 +207,14 @@ void TabDialog::ImplPosControls()
 }
 
 TabDialog::TabDialog( vcl::Window* pParent, WinBits nStyle ) :
-    Dialog( WINDOW_TABDIALOG )
+    Dialog( WindowType::TABDIALOG )
 {
     ImplInitTabDialogData();
     ImplInit( pParent, nStyle );
 }
 
 TabDialog::TabDialog( vcl::Window* pParent, const OUString& rID, const OUString& rUIXMLDescription ) :
-    Dialog(pParent, rID, rUIXMLDescription, WINDOW_TABDIALOG)
+    Dialog(pParent, rID, rUIXMLDescription, WindowType::TABDIALOG)
 {
     ImplInitTabDialogData();
 }
@@ -240,6 +240,148 @@ void TabDialog::StateChanged( StateChangedType nType )
             ImplPosControls();
     }
     Dialog::StateChanged( nType );
+}
+
+static vcl::Window* findTabControl(vcl::Window* pCurrent)
+{
+    if (!pCurrent)
+    {
+        return nullptr;
+    }
+
+    if (pCurrent->GetType() == WindowType::TABCONTROL)
+    {
+        return pCurrent;
+    }
+
+    vcl::Window* pChild = pCurrent->GetWindow(GetWindowType::FirstChild);
+
+    while (pChild)
+    {
+
+        vcl::Window* pInorderChild = findTabControl(pChild);
+
+        if (pInorderChild)
+        {
+            return pInorderChild;
+        }
+
+        pChild = pChild->GetWindow(GetWindowType::Next);
+    }
+
+    return nullptr;
+}
+
+std::vector<OString> TabDialog::getAllPageUIXMLDescriptions() const
+{
+    std::vector<OString> aRetval;
+
+    const TabControl* pTabCtrl = dynamic_cast<TabControl*>(findTabControl(const_cast<TabDialog*>(this)));
+
+    if (pTabCtrl)
+    {
+        for (sal_uInt16 a(0); a < pTabCtrl->GetPageCount(); a++)
+        {
+            const sal_uInt16 nPageId(pTabCtrl->GetPageId(a));
+
+            if (TAB_PAGE_NOTFOUND != nPageId)
+            {
+                TabPage* pCandidate = pTabCtrl->GetTabPage(nPageId);
+
+                if (pCandidate)
+                {
+                    OString aNewName(pCandidate->getUIFile());
+
+                    if (!aNewName.isEmpty())
+                    {
+                        // we have to check for double entries, this may happen e.g.
+                        // in the HeaderFooterDialog which has two times the same
+                        // tabPage added. Add the PageID as hint to the name, separated
+                        // by a token (using "|" here). Do not do this for 1st occurrence,
+                        // that is used for detection and is not necessary.
+                        // Use the UIXMLDescription without trailing '.ui', with one trailing '/'
+                        bool bAlreadyAdded(false);
+
+                        for (auto const& elem : aRetval)
+                        {
+                            bAlreadyAdded = (elem == aNewName);
+                            if (bAlreadyAdded)
+                                break;
+                        }
+
+                        if (bAlreadyAdded)
+                        {
+                            // add the PageId to be able to detect the correct tabPage in
+                            // selectPageByUIXMLDescription below
+                            aNewName = aNewName + "|" + OString::number(nPageId);
+                        }
+
+                        aRetval.push_back(aNewName);
+                    }
+                }
+            }
+        }
+    }
+
+    return aRetval;
+}
+
+bool TabDialog::selectPageByUIXMLDescription(const OString& rUIXMLDescription)
+{
+    TabControl* pTabCtrl = dynamic_cast<TabControl*>(findTabControl(this));
+
+    if (pTabCtrl)
+    {
+        sal_uInt32 nTargetPageId(0);
+        OString aTargetName(rUIXMLDescription);
+        const sal_Int32 nIndexOfSeparator(rUIXMLDescription.indexOf("|"));
+
+        if (-1 != nIndexOfSeparator)
+        {
+            // more than one tabPage with that UXMLDescription is added to this dialog,
+            // see getAllPageUIXMLDescriptions() above. Extract target PageId and
+            // strip the UXMLDescription name for comparison
+            nTargetPageId = rUIXMLDescription.copy(nIndexOfSeparator + 1).toUInt32();
+            aTargetName = rUIXMLDescription.copy(0, nIndexOfSeparator);
+        }
+
+        for (sal_uInt16 a(0); a < pTabCtrl->GetPageCount(); a++)
+        {
+            const sal_uInt16 nPageId(pTabCtrl->GetPageId(a));
+
+            if (TAB_PAGE_NOTFOUND != nPageId)
+            {
+                TabPage* pCandidate = pTabCtrl->GetTabPage(nPageId);
+
+                if (pCandidate)
+                {
+                    if (pCandidate->getUIFile() == aTargetName)
+                    {
+                        if (nTargetPageId)
+                        {
+                            // when multiple versions may exist, name is not sufficient. Also
+                            // check for the given PageId to select the correct tabPage
+                            // for cases where the same TabPage is used more than once
+                            // in a tabDialog (e.g. HeaderFooterDialog)
+                            if (nTargetPageId == nPageId)
+                            {
+                                pTabCtrl->SelectTabPage(nPageId);
+                                return true;
+                            }
+                        }
+                        else
+                        {
+                            // select that tabPage
+                            pTabCtrl->SelectTabPage(nPageId);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

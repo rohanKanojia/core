@@ -23,7 +23,6 @@
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <comphelper/propstate.hxx>
 #include <comphelper/propertysetinfo.hxx>
-#include <comphelper/proparrhlp.hxx>
 #include <rtl/ref.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 
@@ -45,7 +44,7 @@ class PropertyAccessorBase : public salhelper::SimpleReferenceObject
 {
 protected:
     PropertyAccessorBase() { }
-    virtual ~PropertyAccessorBase();
+    virtual ~PropertyAccessorBase() override;
 
 public:
 
@@ -124,7 +123,7 @@ public:
 
 /** helper class for implementing non-UNO accessors to a boolean property
 */
-template< typename CLASS, typename DUMMY >
+template< typename CLASS >
 class BooleanPropertyAccessor
     :public GenericPropertyAccessor < CLASS
                                 , bool
@@ -182,13 +181,13 @@ private:
     typedef ::std::map< const sal_Int32, css::uno::Any >                                PropertyValueCache;
 
     PropertyArray                   m_aProperties;
-    cppu::IPropertyArrayHelper*     m_pProperties;
+    std::unique_ptr<cppu::IPropertyArrayHelper> m_pProperties;
     PropertyAccessors               m_aAccessors;
     PropertyValueCache              m_aCache;
 
 protected:
     PropertySetBase();
-    virtual ~PropertySetBase();
+    virtual ~PropertySetBase() override;
 
     /** registers a new property to be supported by this instance
         @param rProperty
@@ -253,14 +252,12 @@ protected:
     void initializePropertyValueCache( sal_Int32 nHandle );
 
     /// OPropertysetHelper methods
-    virtual sal_Bool SAL_CALL convertFastPropertyValue( css::uno::Any& rConvertedValue, css::uno::Any& rOldValue, sal_Int32 nHandle, const css::uno::Any& rValue )
-        throw (css::lang::IllegalArgumentException) override;
-    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue )
-        throw (css::uno::Exception, std::exception) override;
+    virtual sal_Bool SAL_CALL convertFastPropertyValue( css::uno::Any& rConvertedValue, css::uno::Any& rOldValue, sal_Int32 nHandle, const css::uno::Any& rValue ) override;
+    virtual void SAL_CALL setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const css::uno::Any& rValue ) override;
     virtual void SAL_CALL getFastPropertyValue( css::uno::Any& rValue, sal_Int32 nHandle ) const override;
 
     virtual cppu::IPropertyArrayHelper& SAL_CALL getInfoHelper() override;
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
 
 public:
     /// helper struct for granting selective access to some notification-related methods
@@ -271,14 +268,14 @@ public:
             one previously registered via <member>registerProperty</member>.
         @see registerProperty
     */
-    inline void getCurrentPropertyValueByHandle( sal_Int32 nHandle, css::uno::Any& /* [out] */ rValue, const NotifierAccess& ) const
+    void getCurrentPropertyValueByHandle( sal_Int32 nHandle, css::uno::Any& /* [out] */ rValue, const NotifierAccess& ) const
     {
         getFastPropertyValue( rValue, nHandle );
     }
 
     /** notifies a change in a given property to all interested listeners
     */
-    inline void notifyPropertyChange( sal_Int32 nHandle, const css::uno::Any& rOldValue, const css::uno::Any& rNewValue, const NotifierAccess& ) const
+    void notifyPropertyChange( sal_Int32 nHandle, const css::uno::Any& rOldValue, const css::uno::Any& rNewValue, const NotifierAccess& ) const
     {
         const_cast< PropertySetBase* >( this )->firePropertyChange( nHandle, rNewValue, rOldValue );
     }
@@ -327,13 +324,13 @@ public:
             the handle of the property which is going to be changed. Must be a valid property
             handle for the given <arg>rPropertySet</arg>
     */
-    inline PropertyChangeNotifier( const PropertySetBase& rPropertySet, sal_Int32 nHandle )
+    PropertyChangeNotifier( const PropertySetBase& rPropertySet, sal_Int32 nHandle )
         :m_rPropertySet( rPropertySet )
         ,m_nHandle( nHandle )
     {
         m_rPropertySet.getCurrentPropertyValueByHandle( m_nHandle, m_aOldValue, PropertySetBase::NotifierAccess() );
     }
-    inline ~PropertyChangeNotifier()
+    ~PropertyChangeNotifier()
     {
         css::uno::Any aNewValue;
         m_rPropertySet.getCurrentPropertyValueByHandle( m_nHandle, aNewValue, PropertySetBase::NotifierAccess() );
@@ -346,7 +343,7 @@ public:
 
 
 #define PROPERTY_FLAGS( NAME, TYPE, FLAG ) css::beans::Property( \
-    OUString( #NAME, sizeof( #NAME ) - 1, RTL_TEXTENCODING_ASCII_US ), \
+    #NAME, \
     HANDLE_##NAME, cppu::UnoType<TYPE>::get(), FLAG )
 #define PROPERTY( NAME, TYPE )      PROPERTY_FLAGS( NAME, TYPE, css::beans::PropertyAttribute::BOUND )
 #define PROPERTY_RO( NAME, TYPE )   PROPERTY_FLAGS( NAME, TYPE, css::beans::PropertyAttribute::BOUND | css::beans::PropertyAttribute::READONLY )

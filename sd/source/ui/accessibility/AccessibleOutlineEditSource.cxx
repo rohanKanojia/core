@@ -17,11 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <editeng/unoedhlp.hxx>
 #include <svx/svdoutl.hxx>
 
 #include <AccessibleOutlineEditSource.hxx>
-#include "OutlineView.hxx"
+#include <OutlineView.hxx>
 #include <svx/sdrpaintwindow.hxx>
 
 namespace accessibility
@@ -49,12 +50,12 @@ namespace accessibility
     {
         if( mpOutliner )
             mpOutliner->SetNotifyHdl( Link<EENotify&,void>() );
-        Broadcast( TextHint( SFX_HINT_DYING ) );
+        Broadcast( TextHint( SfxHintId::Dying ) );
     }
 
-    SvxEditSource* AccessibleOutlineEditSource::Clone() const
+    std::unique_ptr<SvxEditSource> AccessibleOutlineEditSource::Clone() const
     {
-        return new AccessibleOutlineEditSource(*mpOutliner, mrView, *mpOutlinerView, mrWindow);
+        return std::unique_ptr<SvxEditSource>(new AccessibleOutlineEditSource(*mpOutliner, mrView, *mpOutlinerView, mrWindow));
     }
 
     SvxTextForwarder* AccessibleOutlineEditSource::GetTextForwarder()
@@ -100,7 +101,7 @@ namespace accessibility
 
     SfxBroadcaster& AccessibleOutlineEditSource::GetBroadcaster() const
     {
-        return *( const_cast< AccessibleOutlineEditSource* > (this) );
+        return * const_cast< AccessibleOutlineEditSource* > (this);
     }
 
     bool AccessibleOutlineEditSource::IsValid() const
@@ -118,26 +119,6 @@ namespace accessibility
         }
 
         return false;
-    }
-
-    Rectangle AccessibleOutlineEditSource::GetVisArea() const
-    {
-        if( IsValid() )
-        {
-            SdrPaintWindow* pPaintWindow = mrView.FindPaintWindow(mrWindow);
-            Rectangle aVisArea;
-
-            if(pPaintWindow)
-            {
-                aVisArea = pPaintWindow->GetVisibleArea();
-            }
-
-            MapMode aMapMode(mrWindow.GetMapMode());
-            aMapMode.SetOrigin(Point());
-            return mrWindow.LogicToPixel( aVisArea, aMapMode );
-        }
-
-        return Rectangle();
     }
 
     Point AccessibleOutlineEditSource::LogicToPixel( const Point& rPoint, const MapMode& rMapMode ) const
@@ -175,8 +156,7 @@ namespace accessibility
 
         if( &rBroadcaster == mpOutliner )
         {
-            const SfxSimpleHint* pHint = dynamic_cast< const SfxSimpleHint * >( &rHint );
-            if( pHint && (pHint->GetId() == SFX_HINT_DYING) )
+            if( rHint.GetId() == SfxHintId::Dying )
             {
                 bDispose = true;
                 mpOutliner = nullptr;
@@ -186,7 +166,7 @@ namespace accessibility
         {
             const SdrHint* pSdrHint = dynamic_cast< const SdrHint* >( &rHint );
 
-            if( pSdrHint && ( pSdrHint->GetKind() == HINT_MODELCLEARED ) )
+            if( pSdrHint && ( pSdrHint->GetKind() == SdrHintKind::ModelCleared ) )
             {
                 // model is dying under us, going defunc
                 bDispose = true;
@@ -199,17 +179,17 @@ namespace accessibility
                 mpOutliner->SetNotifyHdl( Link<EENotify&,void>() );
             mpOutliner = nullptr;
             mpOutlinerView = nullptr;
-            Broadcast( TextHint( SFX_HINT_DYING ) );
+            Broadcast( TextHint( SfxHintId::Dying ) );
         }
     }
 
-    IMPL_LINK_TYPED(AccessibleOutlineEditSource, NotifyHdl, EENotify&, rNotify, void)
+    IMPL_LINK(AccessibleOutlineEditSource, NotifyHdl, EENotify&, rNotify, void)
     {
         ::std::unique_ptr< SfxHint > aHint( SvxEditSourceHelper::EENotification2Hint( &rNotify) );
 
-         if( aHint.get() )
-         {
-             Broadcast( *aHint.get() );
+        if (aHint)
+        {
+            Broadcast(*aHint);
          }
     }
 

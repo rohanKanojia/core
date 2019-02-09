@@ -28,6 +28,7 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <dbui.hrc>
+#include <strings.hrc>
 #include <mmconfigitem.hxx>
 #include <swmodule.hxx>
 #include <view.hxx>
@@ -41,21 +42,17 @@ class MMCurrentEntryController : public svt::ToolboxController, public lang::XSe
 {
     VclPtr<Edit> m_pCurrentEdit;
 
-    DECL_LINK_TYPED(CurrentEditUpdatedHdl, Edit&, void);
+    DECL_LINK(CurrentEditUpdatedHdl, Edit&, void);
 
 public:
     explicit MMCurrentEntryController(const uno::Reference<uno::XComponentContext>& rContext)
-        : svt::ToolboxController(rContext, uno::Reference<frame::XFrame>(), OUString(".uno:MailMergeCurrentEntry"))
+        : svt::ToolboxController(rContext, uno::Reference<frame::XFrame>(), ".uno:MailMergeCurrentEntry")
         , m_pCurrentEdit(nullptr)
     {
     }
 
-    virtual ~MMCurrentEntryController()
-    {
-    }
-
     // XInterface
-    virtual uno::Any SAL_CALL queryInterface(const uno::Type& aType) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL queryInterface(const uno::Type& aType) override
     {
         uno::Any a(ToolboxController::queryInterface(aType));
         if (a.hasValue())
@@ -75,33 +72,30 @@ public:
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw (uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("lo.writer.MMCurrentEntryController");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(const OUString& rServiceName) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(const OUString& rServiceName) override
     {
         return cppu::supportsService(this, rServiceName);
     }
 
-    virtual uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw (uno::RuntimeException, std::exception) override
+    virtual uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
         uno::Sequence<OUString> aServices { "com.sun.star.frame.ToolbarController" };
         return aServices;
     }
 
     // XComponent
-    virtual void SAL_CALL dispose() throw (uno::RuntimeException, std::exception) override;
-
-    // XInitialization
-    virtual void SAL_CALL initialize(const uno::Sequence< uno::Any >& aArguments) throw (uno::Exception, uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
 
     // XToolbarController
-    virtual uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) override;
 };
 
 /// Controller for .uno:MailMergeExcludeEntry toolbar checkbox: creates the checkbox & handles the value.
@@ -109,21 +103,17 @@ class MMExcludeEntryController : public svt::ToolboxController, public lang::XSe
 {
     VclPtr<CheckBox> m_pExcludeCheckbox;
 
-    DECL_STATIC_LINK_TYPED(MMExcludeEntryController, ExcludeHdl, CheckBox&, void);
+    DECL_STATIC_LINK(MMExcludeEntryController, ExcludeHdl, CheckBox&, void);
 
 public:
     explicit MMExcludeEntryController(const uno::Reference<uno::XComponentContext>& rContext)
-        : svt::ToolboxController(rContext, uno::Reference<frame::XFrame>(), OUString(".uno:MailMergeExcludeEntry"))
+        : svt::ToolboxController(rContext, uno::Reference<frame::XFrame>(), ".uno:MailMergeExcludeEntry")
         , m_pExcludeCheckbox(nullptr)
     {
     }
 
-    virtual ~MMExcludeEntryController()
-    {
-    }
-
     // XInterface
-    virtual uno::Any SAL_CALL queryInterface(const uno::Type& aType) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL queryInterface(const uno::Type& aType) override
     {
         uno::Any a(ToolboxController::queryInterface(aType));
         if (a.hasValue())
@@ -143,36 +133,33 @@ public:
     }
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw (uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("lo.writer.MMExcludeEntryController");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(const OUString& rServiceName) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(const OUString& rServiceName) override
     {
         return cppu::supportsService(this, rServiceName);
     }
 
-    virtual uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() throw (uno::RuntimeException, std::exception) override
+    virtual uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
         uno::Sequence<OUString> aServices { "com.sun.star.frame.ToolbarController" };
         return aServices;
     }
 
     // XComponent
-    virtual void SAL_CALL dispose() throw (uno::RuntimeException, std::exception) override;
-
-    // XInitialization
-    virtual void SAL_CALL initialize(const uno::Sequence< uno::Any >& aArguments) throw (uno::Exception, uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
 
     // XToolbarController
-    virtual uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Reference<awt::XWindow> SAL_CALL createItemWindow(const uno::Reference<awt::XWindow>& rParent) override;
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL statusChanged(const frame::FeatureStateEvent& rEvent) override;
 };
 
-void MMCurrentEntryController::dispose() throw (uno::RuntimeException, std::exception)
+void MMCurrentEntryController::dispose()
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -180,15 +167,10 @@ void MMCurrentEntryController::dispose() throw (uno::RuntimeException, std::exce
     m_pCurrentEdit.disposeAndClear();
 }
 
-void MMCurrentEntryController::initialize(const uno::Sequence< uno::Any >& aArguments) throw (uno::Exception, uno::RuntimeException, std::exception)
+uno::Reference<awt::XWindow> MMCurrentEntryController::createItemWindow(const uno::Reference<awt::XWindow>& rParent)
 {
-    svt::ToolboxController::initialize(aArguments);
-}
-
-uno::Reference<awt::XWindow> MMCurrentEntryController::createItemWindow(const uno::Reference<awt::XWindow>& rParent) throw (uno::RuntimeException, std::exception)
-{
-    vcl::Window* pParent = VCLUnoHelper::GetWindow(rParent);
-    ToolBox* pToolbar = dynamic_cast<ToolBox*>(pParent);
+    VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(rParent);
+    ToolBox* pToolbar = dynamic_cast<ToolBox*>(pParent.get());
     if (pToolbar)
     {
         // make it visible
@@ -199,36 +181,40 @@ uno::Reference<awt::XWindow> MMCurrentEntryController::createItemWindow(const un
         m_pCurrentEdit->SetModifyHdl(LINK(this, MMCurrentEntryController, CurrentEditUpdatedHdl));
     }
 
-    return uno::Reference<awt::XWindow>(VCLUnoHelper::GetInterface(m_pCurrentEdit));
+    return VCLUnoHelper::GetInterface(m_pCurrentEdit);
 }
 
-IMPL_LINK_TYPED(MMCurrentEntryController, CurrentEditUpdatedHdl, Edit&, rEdit, void)
+IMPL_LINK(MMCurrentEntryController, CurrentEditUpdatedHdl, Edit&, rEdit, void)
 {
     SwView* pView = ::GetActiveView();
-    SwMailMergeConfigItem* pConfigItem = pView->GetMailMergeConfigItem();
+    std::shared_ptr<SwMailMergeConfigItem> xConfigItem;
+    if (pView)
+        xConfigItem = pView->GetMailMergeConfigItem();
 
-    if (!pConfigItem)
+    if (!xConfigItem)
         return;
 
     OUString aText(rEdit.GetText());
     sal_Int32 nEntry = aText.toInt32();
-    if (!aText.isEmpty() && nEntry != pConfigItem->GetResultSetPosition())
+    if (!aText.isEmpty() && nEntry != xConfigItem->GetResultSetPosition())
     {
-        pConfigItem->MoveResultSet(nEntry);
+        xConfigItem->MoveResultSet(nEntry);
         // notify about the change
         dispatchCommand(".uno:MailMergeCurrentEntry", uno::Sequence<beans::PropertyValue>());
     }
 };
 
-void MMCurrentEntryController::statusChanged(const frame::FeatureStateEvent& rEvent) throw (uno::RuntimeException, std::exception)
+void MMCurrentEntryController::statusChanged(const frame::FeatureStateEvent& rEvent)
 {
     if (!m_pCurrentEdit)
         return;
 
     SwView* pView = ::GetActiveView();
-    SwMailMergeConfigItem* pConfigItem = pView->GetMailMergeConfigItem();
+    std::shared_ptr<SwMailMergeConfigItem> xConfigItem;
+    if (pView)
+        xConfigItem = pView->GetMailMergeConfigItem();
 
-    if (!pConfigItem || !rEvent.IsEnabled)
+    if (!xConfigItem || !rEvent.IsEnabled)
     {
         m_pCurrentEdit->Disable();
         m_pCurrentEdit->SetText("");
@@ -236,15 +222,15 @@ void MMCurrentEntryController::statusChanged(const frame::FeatureStateEvent& rEv
     else
     {
         sal_Int32 nEntry = m_pCurrentEdit->GetText().toInt32();
-        if (!m_pCurrentEdit->IsEnabled() || nEntry != pConfigItem->GetResultSetPosition())
+        if (!m_pCurrentEdit->IsEnabled() || nEntry != xConfigItem->GetResultSetPosition())
         {
             m_pCurrentEdit->Enable();
-            m_pCurrentEdit->SetText(OUString::number(pConfigItem->GetResultSetPosition()));
+            m_pCurrentEdit->SetText(OUString::number(xConfigItem->GetResultSetPosition()));
         }
     }
 }
 
-void MMExcludeEntryController::dispose() throw (uno::RuntimeException, std::exception)
+void MMExcludeEntryController::dispose()
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -252,46 +238,45 @@ void MMExcludeEntryController::dispose() throw (uno::RuntimeException, std::exce
     m_pExcludeCheckbox.disposeAndClear();
 }
 
-void MMExcludeEntryController::initialize(const uno::Sequence< uno::Any >& aArguments) throw (uno::Exception, uno::RuntimeException, std::exception)
+uno::Reference<awt::XWindow> MMExcludeEntryController::createItemWindow(const uno::Reference<awt::XWindow>& rParent)
 {
-    svt::ToolboxController::initialize(aArguments);
-}
-
-uno::Reference<awt::XWindow> MMExcludeEntryController::createItemWindow(const uno::Reference<awt::XWindow>& rParent) throw (uno::RuntimeException, std::exception)
-{
-    vcl::Window* pParent = VCLUnoHelper::GetWindow(rParent);
-    ToolBox* pToolbar = dynamic_cast<ToolBox*>(pParent);
+    VclPtr<vcl::Window> pParent = VCLUnoHelper::GetWindow(rParent);
+    ToolBox* pToolbar = dynamic_cast<ToolBox*>(pParent.get());
     if (pToolbar)
     {
         // make it visible
         m_pExcludeCheckbox = VclPtr<CheckBox>::Create(pToolbar);
-        m_pExcludeCheckbox->SetText(SW_RES(ST_EXCLUDE));
+        m_pExcludeCheckbox->SetText(SwResId(ST_EXCLUDE));
         m_pExcludeCheckbox->SetSizePixel(m_pExcludeCheckbox->GetOptimalSize());
 
         m_pExcludeCheckbox->SetToggleHdl(LINK(this, MMExcludeEntryController, ExcludeHdl));
     }
 
-    return uno::Reference<awt::XWindow>(VCLUnoHelper::GetInterface(m_pExcludeCheckbox));
+    return VCLUnoHelper::GetInterface(m_pExcludeCheckbox);
 }
 
-IMPL_STATIC_LINK_TYPED(MMExcludeEntryController, ExcludeHdl, CheckBox&, rCheckbox, void)
+IMPL_STATIC_LINK(MMExcludeEntryController, ExcludeHdl, CheckBox&, rCheckbox, void)
 {
     SwView* pView = ::GetActiveView();
-    SwMailMergeConfigItem* pConfigItem = pView->GetMailMergeConfigItem();
+    std::shared_ptr<SwMailMergeConfigItem> xConfigItem;
+    if (pView)
+        xConfigItem = pView->GetMailMergeConfigItem();
 
-    if (pConfigItem)
-        pConfigItem->ExcludeRecord(pConfigItem->GetResultSetPosition(), rCheckbox.IsChecked());
+    if (xConfigItem)
+        xConfigItem->ExcludeRecord(xConfigItem->GetResultSetPosition(), rCheckbox.IsChecked());
 };
 
-void MMExcludeEntryController::statusChanged(const frame::FeatureStateEvent& rEvent) throw (uno::RuntimeException, std::exception)
+void MMExcludeEntryController::statusChanged(const frame::FeatureStateEvent& rEvent)
 {
     if (!m_pExcludeCheckbox)
         return;
 
     SwView* pView = ::GetActiveView();
-    SwMailMergeConfigItem* pConfigItem = pView->GetMailMergeConfigItem();
+    std::shared_ptr<SwMailMergeConfigItem> xConfigItem;
+    if (pView)
+        xConfigItem = pView->GetMailMergeConfigItem();
 
-    if (!pConfigItem || !rEvent.IsEnabled)
+    if (!xConfigItem || !rEvent.IsEnabled)
     {
         m_pExcludeCheckbox->Disable();
         m_pExcludeCheckbox->Check(false);
@@ -299,13 +284,13 @@ void MMExcludeEntryController::statusChanged(const frame::FeatureStateEvent& rEv
     else
     {
         m_pExcludeCheckbox->Enable();
-        m_pExcludeCheckbox->Check(pConfigItem->IsRecordExcluded(pConfigItem->GetResultSetPosition()));
+        m_pExcludeCheckbox->Check(xConfigItem->IsRecordExcluded(xConfigItem->GetResultSetPosition()));
     }
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface *
 lo_writer_MMCurrentEntryController_get_implementation(
     uno::XComponentContext *context,
     uno::Sequence<uno::Any> const &)
@@ -313,7 +298,7 @@ lo_writer_MMCurrentEntryController_get_implementation(
     return cppu::acquire(new MMCurrentEntryController(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface *
 lo_writer_MMExcludeEntryController_get_implementation(
     uno::XComponentContext *context,
     uno::Sequence<uno::Any> const &)

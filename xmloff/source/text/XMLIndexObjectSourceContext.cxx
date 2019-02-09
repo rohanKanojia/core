@@ -46,12 +46,6 @@ using ::xmloff::token::IsXMLToken;
 using ::xmloff::token::XML_OBJECT_INDEX_ENTRY_TEMPLATE;
 using ::xmloff::token::XML_TOKEN_INVALID;
 
-const sal_Char sAPI_CreateFromStarCalc[] = "CreateFromStarCalc";
-const sal_Char sAPI_CreateFromStarChart[] = "CreateFromStarChart";
-const sal_Char sAPI_CreateFromStarDraw[] = "CreateFromStarDraw";
-const sal_Char sAPI_CreateFromStarMath[] = "CreateFromStarMath";
-const sal_Char sAPI_CreateFromOtherEmbeddedObjects[] = "CreateFromOtherEmbeddedObjects";
-
 
 XMLIndexObjectSourceContext::XMLIndexObjectSourceContext(
     SvXMLImport& rImport,
@@ -60,11 +54,6 @@ XMLIndexObjectSourceContext::XMLIndexObjectSourceContext(
     Reference<XPropertySet> & rPropSet) :
         XMLIndexSourceBaseContext(rImport, nPrfx, rLocalName,
                                   rPropSet, false),
-        sCreateFromStarCalc(sAPI_CreateFromStarCalc),
-        sCreateFromStarChart(sAPI_CreateFromStarChart),
-        sCreateFromStarDraw(sAPI_CreateFromStarDraw),
-        sCreateFromStarMath(sAPI_CreateFromStarMath),
-        sCreateFromOtherEmbeddedObjects(sAPI_CreateFromOtherEmbeddedObjects),
         bUseCalc(false),
         bUseChart(false),
         bUseDraw(false),
@@ -128,27 +117,16 @@ void XMLIndexObjectSourceContext::ProcessAttribute(
 
 void XMLIndexObjectSourceContext::EndElement()
 {
-    Any aAny;
-
-    aAny.setValue(&bUseCalc, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromStarCalc, aAny);
-
-    aAny.setValue(&bUseChart, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromStarChart, aAny);
-
-    aAny.setValue(&bUseDraw, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromStarDraw, aAny);
-
-    aAny.setValue(&bUseMath, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromStarMath, aAny);
-
-    aAny.setValue(&bUseOtherObjects, cppu::UnoType<bool>::get());
-    rIndexPropertySet->setPropertyValue(sCreateFromOtherEmbeddedObjects, aAny);
+    rIndexPropertySet->setPropertyValue("CreateFromStarCalc", css::uno::Any(bUseCalc));
+    rIndexPropertySet->setPropertyValue("CreateFromStarChart", css::uno::Any(bUseChart));
+    rIndexPropertySet->setPropertyValue("CreateFromStarDraw", css::uno::Any(bUseDraw));
+    rIndexPropertySet->setPropertyValue("CreateFromStarMath", css::uno::Any(bUseMath));
+    rIndexPropertySet->setPropertyValue("CreateFromOtherEmbeddedObjects", css::uno::Any(bUseOtherObjects));
 
     XMLIndexSourceBaseContext::EndElement();
 }
 
-SvXMLImportContext* XMLIndexObjectSourceContext::CreateChildContext(
+SvXMLImportContextRef XMLIndexObjectSourceContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )

@@ -19,11 +19,13 @@
 
 
 #include <basic/sbx.hxx>
-#include "image.hxx"
-#include "codegen.hxx"
-#include "parser.hxx"
+#include <image.hxx>
+#include <codegen.hxx>
+#include <parser.hxx>
+#include <cstddef>
 #include <limits>
 #include <algorithm>
+#include <string_view>
 #include <osl/diagnose.h>
 #include <com/sun/star/script/ModuleType.hpp>
 
@@ -57,7 +59,7 @@ void SbiCodeGen::Statement()
     nCol  = pParser->GetCol1();
 
     // #29955 Store the information of the for-loop-layer
-    // in the uppper Byte of the column
+    // in the upper Byte of the column
     nCol = (nCol & 0xff) + 0x100 * nForLevel;
 }
 
@@ -88,7 +90,7 @@ sal_uInt32 SbiCodeGen::Gen( SbiOpcode eOpcode )
         pParser->Error( ERRCODE_BASIC_INTERNAL_ERROR, "OPCODE1" );
 #endif
     GenStmnt();
-    aCode += (sal_uInt8) eOpcode;
+    aCode += static_cast<sal_uInt8>(eOpcode);
     return GetPC();
 }
 
@@ -102,7 +104,7 @@ sal_uInt32 SbiCodeGen::Gen( SbiOpcode eOpcode, sal_uInt32 nOpnd )
         pParser->Error( ERRCODE_BASIC_INTERNAL_ERROR, "OPCODE2" );
 #endif
     GenStmnt();
-    aCode += (sal_uInt8) eOpcode;
+    aCode += static_cast<sal_uInt8>(eOpcode);
     sal_uInt32 n = GetPC();
     aCode += nOpnd;
     return n;
@@ -118,7 +120,7 @@ sal_uInt32 SbiCodeGen::Gen( SbiOpcode eOpcode, sal_uInt32 nOpnd1, sal_uInt32 nOp
         pParser->Error( ERRCODE_BASIC_INTERNAL_ERROR, "OPCODE3" );
 #endif
     GenStmnt();
-    aCode += (sal_uInt8) eOpcode;
+    aCode += static_cast<sal_uInt8>(eOpcode);
     sal_uInt32 n = GetPC();
     aCode += nOpnd1;
     aCode += nOpnd2;
@@ -132,7 +134,7 @@ void SbiCodeGen::Save()
     if( pParser->IsCodeCompleting() )
         return;
 
-    SbiImage* p = new SbiImage;
+    std::unique_ptr<SbiImage> p( new SbiImage );
     rMod.StartDefinitions();
     // OPTION BASE-Value:
     p->nDimBase = pParser->nBase;
@@ -143,14 +145,13 @@ void SbiCodeGen::Save()
     int nIfaceCount = 0;
     if( rMod.mnType == css::script::ModuleType::CLASS )
     {
-                OSL_TRACE("COdeGen::save() classmodule processing");
         rMod.bIsProxyModule = true;
         p->SetFlag( SbiImageFlags::CLASSMODULE );
         GetSbData()->pClassFac->AddClassModule( &rMod );
 
         nIfaceCount = pParser->aIfaceVector.size();
         if( !rMod.pClassData )
-            rMod.pClassData = new SbClassData;
+            rMod.pClassData.reset( new SbClassData );
         if( nIfaceCount )
         {
             for( int i = 0 ; i < nIfaceCount ; i++ )
@@ -158,7 +159,7 @@ void SbiCodeGen::Save()
                 const OUString& rIfaceName = pParser->aIfaceVector[i];
                 SbxVariable* pIfaceVar = new SbxVariable( SbxVARIANT );
                 pIfaceVar->SetName( rIfaceName );
-                SbxArray* pIfaces = rMod.pClassData->mxIfaces;
+                SbxArray* pIfaces = rMod.pClassData->mxIfaces.get();
                 pIfaces->Insert( pIfaceVar, pIfaces->Count() );
             }
         }
@@ -181,7 +182,7 @@ void SbiCodeGen::Save()
     {
         p->SetFlag( SbiImageFlags::INITCODE );
     }
-    // Die Entrypoints:
+    // The entry points:
     for( SbiSymDef* pDef = pParser->aPublics.First(); pDef;
          pDef = pParser->aPublics.Next() )
     {
@@ -189,7 +190,7 @@ void SbiCodeGen::Save()
         if( pProc && pProc->IsDefined() )
         {
             OUString aProcName = pProc->GetName();
-            OUString aIfaceProcName;
+            OUStringBuffer aIfaceProcName;
             OUString aIfaceName;
             sal_uInt16 nPassCount = 1;
             if( nIfaceCount )
@@ -206,13 +207,13 @@ void SbiCodeGen::Save()
                 {
                     const OUString& rIfaceName = pParser->aIfaceVector[i];
                     int nFound = aPureProcName.indexOf( rIfaceName );
-                    if( nFound == 0 && '_' == aPureProcName[rIfaceName.getLength()] )
+                    if( nFound == 0 && aPureProcName[rIfaceName.getLength()] == '_' )
                     {
                         if( nPropPrefixFound == 0 )
                         {
-                            aIfaceProcName += aPropPrefix;
+                            aIfaceProcName.append(aPropPrefix);
                         }
-                        aIfaceProcName += aPureProcName.copy( rIfaceName.getLength() + 1 );
+                        aIfaceProcName.append(std::u16string_view(aPureProcName).substr(rIfaceName.getLength() + 1) );
                         aIfaceName = rIfaceName;
                         nPassCount = 2;
                         break;
@@ -224,7 +225,7 @@ void SbiCodeGen::Save()
             {
                 if( nPass == 1 )
                 {
-                    aProcName = aIfaceProcName;
+                    aProcName = aIfaceProcName.toString();
                 }
                 PropertyMode ePropMode = pProc->getPropertyMode();
                 if( ePropMode != PropertyMode::NONE )
@@ -262,8 +263,6 @@ void SbiCodeGen::Save()
                     {
                         aPropName = aPropName.copy( aIfaceName.getLength() + 1 );
                     }
-                    OSL_TRACE("*** getProcedureProperty for thing %s",
-                              OUStringToOString( aPropName,RTL_TEXTENCODING_UTF8 ).getStr() );
                     rMod.GetProcedureProperty( aPropName, ePropType );
                 }
                 if( nPass == 1 )
@@ -308,11 +307,11 @@ void SbiCodeGen::Save()
                         SbxDataType t = pPar->GetType();
                         if( !pPar->IsByVal() )
                         {
-                            t = (SbxDataType) ( t | SbxBYREF );
+                            t = static_cast<SbxDataType>( t | SbxBYREF );
                         }
                         if( pPar->GetDims() )
                         {
-                            t = (SbxDataType) ( t | SbxARRAY );
+                            t = static_cast<SbxDataType>( t | SbxARRAY );
                         }
                         // #33677 hand-over an Optional-Info
                         SbxFlagBits nFlags = SbxFlagBits::Read;
@@ -352,7 +351,7 @@ void SbiCodeGen::Save()
         }
     }
     // The code
-    p->AddCode( aCode.GetBuffer(), aCode.GetSize() );
+    p->AddCode( std::unique_ptr<char[]>(aCode.GetBuffer()), aCode.GetSize() );
 
     // The global StringPool. 0 is not occupied.
     SbiStringPool* pPool = &pParser->aGblStrings;
@@ -377,11 +376,7 @@ void SbiCodeGen::Save()
     }
     if( !p->IsError() )
     {
-        rMod.pImage = p;
-    }
-    else
-    {
-        delete p;
+        rMod.pImage = std::move(p);
     }
     rMod.EndDefinitions();
 }
@@ -392,12 +387,11 @@ class PCodeVisitor
 public:
     virtual ~PCodeVisitor();
 
-    virtual void start( sal_uInt8* pStart ) = 0;
+    virtual void start( const sal_uInt8* pStart ) = 0;
     virtual void processOpCode0( SbiOpcode eOp ) = 0;
     virtual void processOpCode1( SbiOpcode eOp, T nOp1 ) = 0;
     virtual void processOpCode2( SbiOpcode eOp, T nOp1, T nOp2 ) = 0;
     virtual bool processParams() = 0;
-    virtual void end() = 0;
 };
 
 template <class T> PCodeVisitor< T >::~PCodeVisitor()
@@ -408,30 +402,29 @@ class PCodeBufferWalker
 {
 private:
     T  m_nBytes;
-    sal_uInt8* m_pCode;
-    static T readParam( sal_uInt8*& pCode )
+    const sal_uInt8* m_pCode;
+    static T readParam( sal_uInt8 const *& pCode )
     {
-        short nBytes = sizeof( T );
         T nOp1=0;
-        for ( int i=0; i<nBytes; ++i )
+        for ( std::size_t i=0; i<sizeof( T ); ++i )
             nOp1 |= *pCode++ << ( i * 8);
         return nOp1;
     }
 public:
-    PCodeBufferWalker( sal_uInt8* pCode, T nBytes ): m_nBytes( nBytes ), m_pCode( pCode )
+    PCodeBufferWalker( const sal_uInt8* pCode, T nBytes ): m_nBytes( nBytes ), m_pCode( pCode )
     {
     }
     void visitBuffer( PCodeVisitor< T >& visitor )
     {
-        sal_uInt8* pCode = m_pCode;
+        const sal_uInt8* pCode = m_pCode;
         if ( !pCode )
             return;
-        sal_uInt8* pEnd = pCode + m_nBytes;
+        const sal_uInt8* pEnd = pCode + m_nBytes;
         visitor.start( m_pCode );
         T nOp1 = 0, nOp2 = 0;
         for( ; pCode < pEnd; )
         {
-            SbiOpcode eOp = (SbiOpcode)(*pCode++);
+            SbiOpcode eOp = static_cast<SbiOpcode>(*pCode++);
 
             if ( eOp <= SbiOpcode::SbOP0_END )
                 visitor.processOpCode0( eOp );
@@ -455,7 +448,6 @@ public:
                 visitor.processOpCode2( eOp, nOp1, nOp2 );
             }
         }
-        visitor.end();
     }
 };
 
@@ -468,44 +460,37 @@ class OffSetAccumulator : public PCodeVisitor< T >
 public:
 
     OffSetAccumulator() : m_nNumOp0(0), m_nNumSingleParams(0), m_nNumDoubleParams(0){}
-    virtual void start( sal_uInt8* /*pStart*/ ) override {}
+    virtual void start( const sal_uInt8* /*pStart*/ ) override {}
     virtual void processOpCode0( SbiOpcode /*eOp*/ ) override { ++m_nNumOp0; }
     virtual void processOpCode1( SbiOpcode /*eOp*/, T /*nOp1*/ ) override {  ++m_nNumSingleParams; }
     virtual void processOpCode2( SbiOpcode /*eOp*/, T /*nOp1*/, T /*nOp2*/ ) override { ++m_nNumDoubleParams; }
-    virtual void end() override {}
     S offset()
     {
+        typedef decltype(T(1) + S(1)) larger_t; // type capable to hold both value ranges of T and S
         T result = 0 ;
         static const S max = std::numeric_limits< S >::max();
         result = m_nNumOp0 + ( ( sizeof(S) + 1 ) * m_nNumSingleParams ) + ( (( sizeof(S) * 2 )+ 1 )  * m_nNumDoubleParams );
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning( disable : 4309)
-#endif
-        return std::min(static_cast<T>(max), result);
-#ifdef _MSC_VER
-#pragma warning(push)
-#endif
+        return std::min<larger_t>(max, result);
     }
-   virtual bool processParams() override { return false; }
+    virtual bool processParams() override { return false; }
 };
 
 
 template < class T, class S >
 class BufferTransformer : public PCodeVisitor< T >
 {
-    sal_uInt8* m_pStart;
+    const sal_uInt8* m_pStart;
     SbiBuffer m_ConvertedBuf;
 public:
     BufferTransformer():m_pStart(nullptr), m_ConvertedBuf( nullptr, 1024 ) {}
-    virtual void start( sal_uInt8* pStart ) override { m_pStart = pStart; }
+    virtual void start( const sal_uInt8* pStart ) override { m_pStart = pStart; }
     virtual void processOpCode0( SbiOpcode eOp ) override
     {
-        m_ConvertedBuf += (sal_uInt8)eOp;
+        m_ConvertedBuf += static_cast<sal_uInt8>(eOp);
     }
     virtual void processOpCode1( SbiOpcode eOp, T nOp1 ) override
     {
-        m_ConvertedBuf += (sal_uInt8)eOp;
+        m_ConvertedBuf += static_cast<sal_uInt8>(eOp);
         switch( eOp )
         {
             case SbiOpcode::JUMP_:
@@ -530,16 +515,14 @@ public:
     }
     virtual void processOpCode2( SbiOpcode eOp, T nOp1, T nOp2 ) override
     {
-        m_ConvertedBuf += (sal_uInt8)eOp;
-        if ( eOp == SbiOpcode::CASEIS_ )
-                if ( nOp1 )
-                    nOp1 = static_cast<T>( convertBufferOffSet(m_pStart, nOp1) );
+        m_ConvertedBuf += static_cast<sal_uInt8>(eOp);
+        if ( eOp == SbiOpcode::CASEIS_  && nOp1 )
+            nOp1 = static_cast<T>( convertBufferOffSet(m_pStart, nOp1) );
         m_ConvertedBuf += static_cast<S>(nOp1);
         m_ConvertedBuf += static_cast<S>(nOp2);
 
     }
     virtual bool processParams() override { return true; }
-    virtual void end() override {}
     // yeuch, careful here, you can only call
     // GetBuffer on the returned SbiBuffer once, also
     // you (as the caller) get to own the memory
@@ -547,7 +530,7 @@ public:
     {
         return m_ConvertedBuf;
     }
-    static S convertBufferOffSet( sal_uInt8* pStart, T nOp1 )
+    static S convertBufferOffSet( const sal_uInt8* pStart, T nOp1 )
     {
         PCodeBufferWalker< T > aBuff( pStart, nOp1);
         OffSetAccumulator< T, S > aVisitor;
@@ -557,13 +540,13 @@ public:
 };
 
 sal_uInt32
-SbiCodeGen::calcNewOffSet( sal_uInt8* pCode, sal_uInt16 nOffset )
+SbiCodeGen::calcNewOffSet( sal_uInt8 const * pCode, sal_uInt16 nOffset )
 {
     return BufferTransformer< sal_uInt16, sal_uInt32 >::convertBufferOffSet( pCode, nOffset );
 }
 
 sal_uInt16
-SbiCodeGen::calcLegacyOffSet( sal_uInt8* pCode, sal_uInt32 nOffset )
+SbiCodeGen::calcLegacyOffSet( sal_uInt8 const * pCode, sal_uInt32 nOffset )
 {
     return BufferTransformer< sal_uInt32, sal_uInt16 >::convertBufferOffSet( pCode, nOffset );
 }

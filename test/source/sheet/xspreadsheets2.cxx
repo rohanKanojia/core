@@ -33,17 +33,18 @@
 #include <com/sun/star/util/XCloseable.hpp>
 
 #include <rtl/ustring.hxx>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 using namespace css;
 using namespace css::uno;
 
 namespace apitest {
 
-XSpreadsheets2::XSpreadsheets2():
-    aSrcSheetName("SheetToCopy"),
-    aSrcFileName("rangenamessrc.ods"),
-    aDestFileBase("ScNamedRangeObj.ods")
+static constexpr OUStringLiteral gaSrcSheetName("SheetToCopy");
+static constexpr OUStringLiteral gaSrcFileName("rangenamessrc.ods");
+static constexpr OUStringLiteral gaDestFileBase("ScNamedRangeObj.ods");
+
+XSpreadsheets2::XSpreadsheets2()
 {
 }
 
@@ -65,7 +66,7 @@ void XSpreadsheets2::testImportedSheetNameAndIndex()
     importSheetToCopy();
 
     uno::Reference< container::XNameAccess > xDestSheetNameAccess(xDestDoc->getSheets(), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_MESSAGE("Wrong sheet name", xDestSheetNameAccess->hasByName(aSrcSheetName));
+    CPPUNIT_ASSERT_MESSAGE("Wrong sheet name", xDestSheetNameAccess->hasByName(gaSrcSheetName));
 
 }
 
@@ -148,14 +149,12 @@ void XSpreadsheets2::testImportOverExistingNamedRange()
 */
     importSheetToCopy();
 
-    OUString aNamedRangeString("initial1");
-
     uno::Reference< container::XNameAccess > xDestNamedRangesNameAccess(getNamedRanges(xDestDoc), UNO_QUERY_THROW);
-    uno::Any aNr = xDestNamedRangesNameAccess->getByName(aNamedRangeString);
+    uno::Any aNr = xDestNamedRangesNameAccess->getByName("initial1");
     uno::Reference< sheet::XNamedRange > xDestNamedRange(aNr, UNO_QUERY_THROW);
     OUString aNrDestContent = xDestNamedRange->getContent();
 
-    OUString aExpectedContent("$Sheet1.$B$1");
+    OUString const aExpectedContent("$Sheet1.$B$1");
 
     std::cout << "testImportSheet : initial1 aNrDestContent " << aNrDestContent << std::endl;
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Wrong address for initial1", aNrDestContent, aExpectedContent);
@@ -203,7 +202,7 @@ void XSpreadsheets2::testImportNamedRangeRedefinedInSource()
     uno::Any aRedefinedInSheetNr = xDestNamedRangesNameAccess->getByName(aRedefinedInSheetNamedRangeString);
     uno::Reference< sheet::XNamedRange > xDestRedefinedInSheetNamedRange(aRedefinedInSheetNr, UNO_QUERY_THROW);
     OUString aRedefinedInSheetNrDestContent = xDestRedefinedInSheetNamedRange->getContent();
-    OUString aRedefinedInSheetExpectedContent("$Sheet1.$B$2");
+    OUString const aRedefinedInSheetExpectedContent("$Sheet1.$B$2");
     std::cout << "testImportSheet : initial2 content " << aRedefinedInSheetNrDestContent << std::endl;
     CPPUNIT_ASSERT_EQUAL_MESSAGE("Wrong address for Redefined InSheet named range", aRedefinedInSheetNrDestContent, aRedefinedInSheetExpectedContent);
 }
@@ -247,7 +246,7 @@ void XSpreadsheets2::testImportCellStyle()
     importSheetToCopy();
 
     uno::Reference< table::XCell > xSrcCell = xSrcSheet->getCellByPosition(3,0);
-    uno::Reference< table::XCell > xDestCell = xDestSheet->getCellByPosition(3,0);
+    xDestSheet->getCellByPosition(3,0);
 
     //new style created in dest
     uno::Reference< beans::XPropertySet > xSrcCellPropSet (xSrcCell, UNO_QUERY_THROW);
@@ -263,19 +262,17 @@ void XSpreadsheets2::testImportCellStyle()
 
     uno::Reference< style::XStyleFamiliesSupplier > xFamiliesSupplier (xDestDoc, UNO_QUERY_THROW);
     uno::Reference< container::XNameAccess > xFamiliesNameAccess (xFamiliesSupplier->getStyleFamilies(), UNO_QUERY_THROW);
-    OUString aCellFamilyName("CellStyles");
-    uno::Any xCellStylesFamily = xFamiliesNameAccess->getByName(aCellFamilyName);
-    uno::Reference< container::XNameContainer > xCellStylesFamilyNameAccess (xCellStylesFamily, UNO_QUERY_THROW);
+    uno::Any aCellStylesFamily = xFamiliesNameAccess->getByName("CellStyles");
+    uno::Reference< container::XNameContainer > xCellStylesFamilyNameAccess (aCellStylesFamily, UNO_QUERY_THROW);
 
     CPPUNIT_ASSERT_MESSAGE("New cell style not present", xCellStylesFamilyNameAccess->hasByName(aDestStyleName));
 
     uno::Any aCellStyle = xCellStylesFamilyNameAccess->getByName(aDestStyleName);
     uno::Reference< beans::XPropertySet > xCellStyleProp (aCellStyle, UNO_QUERY_THROW);
-    OUString aProperty("VertJustify");
     sal_Int32 aVertJustify = 0;
-    CPPUNIT_ASSERT(xCellStyleProp->getPropertyValue(aProperty) >>= aVertJustify);
+    CPPUNIT_ASSERT(xCellStyleProp->getPropertyValue("VertJustify") >>= aVertJustify);
 
-    CPPUNIT_ASSERT_MESSAGE("New style: VertJustify not set", aVertJustify == table::CellVertJustify_CENTER);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("New style: VertJustify not set", table::CellVertJustify_CENTER, static_cast<table::CellVertJustify>(aVertJustify));
 }
 
 uno::Reference< sheet::XSpreadsheetDocument> XSpreadsheets2::getDoc(const OUString& aFileBase, uno::Reference< lang::XComponent >& xComp)
@@ -289,35 +286,31 @@ uno::Reference< sheet::XSpreadsheetDocument> XSpreadsheets2::getDoc(const OUStri
     CPPUNIT_ASSERT(xComp.is());
 
     uno::Reference< sheet::XSpreadsheetDocument > xDoc(xComp, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xDoc.is());
     return xDoc;
 }
 
-uno::Reference< sheet::XNamedRanges> XSpreadsheets2::getNamedRanges(uno::Reference< sheet::XSpreadsheetDocument> xDoc)
+uno::Reference< sheet::XNamedRanges> XSpreadsheets2::getNamedRanges(uno::Reference< sheet::XSpreadsheetDocument> const & xDoc)
 {
     uno::Reference< beans::XPropertySet > xPropSet (xDoc, UNO_QUERY_THROW);
-    OUString NamedRangesPropertyString("NamedRanges");
-    uno::Reference< sheet::XNamedRanges > xNamedRanges(xPropSet->getPropertyValue(NamedRangesPropertyString), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xNamedRanges.is());
-
+    uno::Reference< sheet::XNamedRanges > xNamedRanges(xPropSet->getPropertyValue("NamedRanges"), UNO_QUERY_THROW);
     return xNamedRanges;
 }
 
 void XSpreadsheets2::importSheetToCopy()
 {
     uno::Reference< container::XNameAccess> xSrcNameAccess(init(),UNO_QUERY_THROW);
-    xSrcSheet.set( xSrcNameAccess->getByName(aSrcSheetName), UNO_QUERY_THROW);
+    xSrcSheet.set( xSrcNameAccess->getByName(gaSrcSheetName), UNO_QUERY_THROW);
 
     uno::Reference< lang::XComponent > xDestComponent;
     if (!xDestComponent.is())
     {
-        xDestDoc = getDoc(aDestFileBase, xDestComponent);
+        xDestDoc = getDoc(gaDestFileBase, xDestComponent);
         CPPUNIT_ASSERT(xDestDoc.is());
 
         // import sheet
         uno::Reference< sheet::XSpreadsheets2 > xDestSheets (xDestDoc->getSheets(), UNO_QUERY_THROW);
         sal_Int32 nDestPos = 0;
-        sal_Int32 nDestPosEffective = xDestSheets->importSheet(xDocument, aSrcSheetName, nDestPos);
+        sal_Int32 nDestPosEffective = xDestSheets->importSheet(xDocument, gaSrcSheetName, nDestPos);
         CPPUNIT_ASSERT_EQUAL_MESSAGE("Wrong sheet index", nDestPosEffective, nDestPos);
     }
     else
@@ -326,17 +319,15 @@ void XSpreadsheets2::importSheetToCopy()
     }
 
     uno::Reference< container::XNameAccess > xDestSheetNameAccess (xDestDoc->getSheets(), UNO_QUERY_THROW);
-    xDestSheet.set( xDestSheetNameAccess->getByName(aSrcSheetName), UNO_QUERY_THROW);
+    xDestSheet.set( xDestSheetNameAccess->getByName(gaSrcSheetName), UNO_QUERY_THROW);
 }
 
 bool XSpreadsheets2::isExternalReference(const OUString& aDestContent, const OUString& aSrcContent )
 {
-    OUString aStart("'file://");
-
-    CPPUNIT_ASSERT(aDestContent.startsWith(aStart));
+    CPPUNIT_ASSERT(aDestContent.startsWith("'file://"));
 
     return  (aDestContent.endsWithIgnoreAsciiCase(aSrcContent) // same cell address
-            && aDestContent.indexOf(aSrcFileName)>0); // contains source file name
+            && aDestContent.indexOf(gaSrcFileName)>0); // contains source file name
 }
 
 }

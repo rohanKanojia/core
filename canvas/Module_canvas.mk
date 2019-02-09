@@ -24,7 +24,8 @@ $(eval $(call gb_Module_add_targets,canvas,\
 	Library_canvastools \
 	Library_simplecanvas \
 	Library_vclcanvas \
-	Package_opengl \
+	$(if $(filter DESKTOP,$(BUILD_TYPE)), \
+		$(if $(DISABLE_GUI),,Executable_canvasdemo)) \
 ))
 
 ifeq ($(ENABLE_CAIRO_CANVAS),TRUE)
@@ -36,10 +37,11 @@ endif
 ifeq ($(ENABLE_OPENGL_CANVAS),TRUE)
 $(eval $(call gb_Module_add_targets,canvas,\
 	Library_oglcanvas \
+	Package_opengl \
 ))
 endif
 
-ifneq ($(ENABLE_DIRECTX),)
+ifeq ($(OS),WNT)
 $(eval $(call gb_Module_add_targets,canvas,\
 	Library_directx9canvas \
 	Library_gdipluscanvas \

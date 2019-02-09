@@ -27,13 +27,11 @@
 #include <com/sun/star/container/XContainerListener.hpp>
 #include <com/sun/star/container/XContainer.hpp>
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/types.hxx>
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <vector>
-
-using namespace comphelper;
 
 /*
  * The GroupManager listens at the StarForm for FormComponent insertion and removal as well as
@@ -88,7 +86,6 @@ namespace frm
 
 class OGroupComp
 {
-    OUString m_aName;
     css::uno::Reference< css::beans::XPropertySet>    m_xComponent;
     css::uno::Reference< css::awt::XControlModel>     m_xControlModel;
     sal_Int32   m_nPos;
@@ -98,13 +95,12 @@ class OGroupComp
 
 public:
     OGroupComp(const css::uno::Reference< css::beans::XPropertySet>& rxElement, sal_Int32 nInsertPos );
-    OGroupComp(const OGroupComp& _rSource);
     OGroupComp();
 
     bool operator==( const OGroupComp& rComp ) const;
 
-    inline const css::uno::Reference< css::beans::XPropertySet>& GetComponent() const { return m_xComponent; }
-    inline const css::uno::Reference< css::awt::XControlModel>&   GetControlModel() const { return m_xControlModel; }
+    const css::uno::Reference< css::beans::XPropertySet>& GetComponent() const { return m_xComponent; }
+    const css::uno::Reference< css::awt::XControlModel>&   GetControlModel() const { return m_xControlModel; }
 
     sal_Int32   GetPos() const { return m_nPos; }
     sal_Int16   GetTabIndex() const { return m_nTabIndex; }
@@ -127,25 +123,24 @@ public:
 
     bool operator==( const OGroupCompAcc& rCompAcc ) const;
 
-    inline const css::uno::Reference< css::beans::XPropertySet>&  GetComponent() const { return m_xComponent; }
     const OGroupComp&   GetGroupComponent() const { return m_aGroupComp; }
 };
 
-class OGroup
+class OGroup final
 {
     OGroupCompArr              m_aCompArray;
     std::vector<OGroupCompAcc> m_aCompAccArray;
 
     OUString    m_aGroupName;
-    sal_uInt16  m_nInsertPos; // The insertion position of the GroupComps is determind by the Group
+    sal_uInt16  m_nInsertPos; // The insertion position of the GroupComps is determined by the Group
 
     friend class OGroupLess;
 
 public:
     explicit OGroup(const OUString& rGroupName);
-    virtual ~OGroup();
+    ~OGroup();
 
-    OUString GetGroupName() const { return m_aGroupName; }
+    const OUString& GetGroupName() const { return m_aGroupName; }
     css::uno::Sequence< css::uno::Reference< css::awt::XControlModel>  > GetControlModels() const;
 
     void InsertComponent( const css::uno::Reference< css::beans::XPropertySet>& rxElement );
@@ -161,7 +156,8 @@ typedef std::vector<OGroupArr::iterator> OActiveGroups;
 
 class OGroupManager : public ::cppu::WeakImplHelper< css::beans::XPropertyChangeListener, css::container::XContainerListener>
 {
-    OGroup*         m_pCompGroup;           // Sort all Components by TabIndices
+    std::unique_ptr<OGroup>
+                    m_pCompGroup;           // Sort all Components by TabIndices
     OGroupArr       m_aGroupArr;            // Sort all Components by group
     OActiveGroups   m_aActiveGroupMap;      // This map contains all indices of all groups with more than 1 element
 
@@ -175,18 +171,18 @@ class OGroupManager : public ::cppu::WeakImplHelper< css::beans::XPropertyChange
 
 public:
     explicit OGroupManager(const css::uno::Reference< css::container::XContainer >& _rxContainer);
-    virtual ~OGroupManager();
+    virtual ~OGroupManager() override;
 
 // css::lang::XEventListener
-    virtual void SAL_CALL disposing(const css::lang::EventObject& _rSource) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(const css::lang::EventObject& _rSource) override;
 
 // css::beans::XPropertyChangeListener
-    virtual void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt) override;
 
 // css::container::XContainerListener
-    virtual void SAL_CALL elementInserted(const css::container::ContainerEvent& _rEvent) throw ( css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL elementRemoved(const css::container::ContainerEvent& _rEvent) throw ( css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL elementReplaced(const css::container::ContainerEvent& _rEvent) throw ( css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL elementInserted(const css::container::ContainerEvent& _rEvent) override;
+    virtual void SAL_CALL elementRemoved(const css::container::ContainerEvent& _rEvent) override;
+    virtual void SAL_CALL elementReplaced(const css::container::ContainerEvent& _rEvent) override;
 
 // Other functions
     sal_Int32 getGroupCount();
@@ -194,7 +190,7 @@ public:
     void getGroupByName(const OUString& Name, css::uno::Sequence< css::uno::Reference< css::awt::XControlModel> >& _rGroup);
     css::uno::Sequence< css::uno::Reference< css::awt::XControlModel> > getControlModels();
 
-    static OUString GetGroupName( css::uno::Reference< css::beans::XPropertySet> xComponent );
+    static OUString GetGroupName( const css::uno::Reference< css::beans::XPropertySet>& xComponent );
 };
 
 

@@ -28,8 +28,8 @@
 #include <com/sun/star/form/XForm.hpp>
 #include <com/sun/star/form/FormComponentType.hpp>
 #include <com/sun/star/awt/XTextLayoutConstrains.hpp>
-#include <comphelper/string.hxx>
 #include <hintids.hxx>
+#include <o3tl/any.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
 #include <svl/macitem.hxx>
@@ -37,7 +37,7 @@
 #include <svtools/htmltokn.h>
 #include <svtools/htmlkywd.hxx>
 #include <svl/urihelper.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
+#include <vcl/unohelp.hxx>
 #include <svx/svdouno.hxx>
 #include <svx/fmglob.hxx>
 #include <editeng/brushitem.hxx>
@@ -52,34 +52,34 @@
 #include <fmtanchr.hxx>
 #include <docary.hxx>
 #include <viewsh.hxx>
-#include "pam.hxx"
-#include "doc.hxx"
+#include <pam.hxx>
+#include <doc.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentDrawModelAccess.hxx>
-#include "ndtxt.hxx"
-#include "flypos.hxx"
+#include <ndtxt.hxx>
+#include <flypos.hxx>
 #include "wrthtml.hxx"
 #include "htmlfly.hxx"
 #include "htmlform.hxx"
-#include "frmfmt.hxx"
+#include <frmfmt.hxx>
 #include <rtl/strbuf.hxx>
 #include <memory>
 
 using namespace ::com::sun::star;
 
-const sal_uInt32 HTML_FRMOPTS_CONTROL   =
-    0;
-const sal_uInt32 HTML_FRMOPTS_CONTROL_CSS1  =
-    HTML_FRMOPT_S_ALIGN |
-    HTML_FRMOPT_S_SIZE |
-    HTML_FRMOPT_S_SPACE |
-    HTML_FRMOPT_BRCLEAR;
-const sal_uInt32 HTML_FRMOPTS_IMG_CONTROL   =
-    HTML_FRMOPT_ALIGN |
-    HTML_FRMOPT_BRCLEAR;
-const sal_uInt32 HTML_FRMOPTS_IMG_CONTROL_CSS1 =
-    HTML_FRMOPT_S_ALIGN |
-    HTML_FRMOPT_S_SPACE;
+const HtmlFrmOpts HTML_FRMOPTS_CONTROL   =
+    HtmlFrmOpts::NONE;
+const HtmlFrmOpts HTML_FRMOPTS_CONTROL_CSS1  =
+    HtmlFrmOpts::SAlign |
+    HtmlFrmOpts::SSize |
+    HtmlFrmOpts::SSpace |
+    HtmlFrmOpts::BrClear;
+const HtmlFrmOpts HTML_FRMOPTS_IMG_CONTROL   =
+    HtmlFrmOpts::Align |
+    HtmlFrmOpts::BrClear;
+const HtmlFrmOpts HTML_FRMOPTS_IMG_CONTROL_CSS1 =
+    HtmlFrmOpts::SAlign |
+    HtmlFrmOpts::SSpace;
 
 static void lcl_html_outEvents( SvStream& rStrm,
                          const uno::Reference< form::XFormComponent >& rFormComp,
@@ -98,31 +98,26 @@ static void lcl_html_outEvents( SvStream& rStrm,
     if( !xIndexAcc.is() || !xEventManager.is() )
         return;
 
-    // Und die Position des ControlModel darin suchen
+    // and search for the position of the ControlModel within
     sal_Int32 nCount = xIndexAcc->getCount(), nPos;
     for( nPos = 0 ; nPos < nCount; nPos++ )
     {
         uno::Any aTmp = xIndexAcc->getByIndex(nPos);
-        OSL_ENSURE( aTmp.getValueType() ==
-                        cppu::UnoType<form::XFormComponent>::get()||
-                aTmp.getValueType() ==
-                        cppu::UnoType<form::XForm>::get(),
-                "lcl_html_outEvents: falsche Reflection" );
-        if( aTmp.getValueType() ==
-                    cppu::UnoType<form::XFormComponent>::get())
+        if( auto x1 = o3tl::tryAccess<uno::Reference<form::XFormComponent>>(aTmp) )
 
         {
-            if( rFormComp ==
-                    *static_cast<uno::Reference< form::XFormComponent > const *>(aTmp.getValue()) )
+            if( rFormComp == *x1 )
                 break;
         }
-        else if( aTmp.getValueType() ==
-                            cppu::UnoType<form::XForm>::get())
+        else if( auto x2 = o3tl::tryAccess<uno::Reference<form::XForm>>(aTmp) )
         {
-            uno::Reference< form::XFormComponent > xFC(
-                *static_cast<uno::Reference< form::XForm > const *>(aTmp.getValue()), uno::UNO_QUERY );
+            uno::Reference< form::XFormComponent > xFC( *x2, uno::UNO_QUERY );
             if( rFormComp == xFC )
                 break;
+        }
+        else
+        {
+            OSL_ENSURE( false, "lcl_html_outEvents: wrong reflection" );
         }
     }
 
@@ -148,9 +143,21 @@ static void lcl_html_outEvents( SvStream& rStrm,
             continue;
 
         OUString sListener( pDescs[i].ListenerType );
-        sal_Int32 nTok = comphelper::string::getTokenCount(sListener, '.');
-        if( nTok )
-            sListener = sListener.getToken( nTok-1, '.' );
+        if (!sListener.isEmpty())
+        {
+            const sal_Int32 nIdx { sListener.lastIndexOf('.')+1 };
+            if (nIdx>0)
+            {
+                if (nIdx<sListener.getLength())
+                {
+                    sListener = sListener.copy(nIdx);
+                }
+                else
+                {
+                    sListener.clear();
+                }
+            }
+        }
         OUString sMethod( pDescs[i].EventMethod );
 
         const sal_Char *pOpt = nullptr;
@@ -215,7 +222,7 @@ static bool lcl_html_isHTMLControl( sal_Int16 nClassId )
 
 bool SwHTMLWriter::HasControls() const
 {
-    sal_uInt32 nStartIdx = pCurPam->GetPoint()->nNode.GetIndex();
+    sal_uInt32 nStartIdx = m_pCurrentPam->GetPoint()->nNode.GetIndex();
     size_t i = 0;
 
     // Skip all controls in front of the current paragraph
@@ -227,12 +234,12 @@ bool SwHTMLWriter::HasControls() const
 
 void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
 {
-    if( m_bPreserveForm )     // wir sind in einer Tabelle oder einem Bereich
-        return;             // ueber dem eine Form aufgespannt wurde
+    if( m_bPreserveForm )   // we are in a table or an area with form spanned over it
+        return;
 
     if( !bTag_On )
     {
-        // die Form beenden wenn alle Controls ausgegeben wurden
+        // end the form when all controls are output
         if( mxFormComps.is() &&
             mxFormComps->getCount() == m_nFormCntrlCnt )
         {
@@ -242,51 +249,49 @@ void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
         return;
     }
 
-    uno::Reference< container::XIndexContainer > xNewFormComps;  // die neue Form
+    uno::Reference< container::XIndexContainer > xNewFormComps;
     sal_uInt32 nStartIdx = pStartNd ? pStartNd->GetIndex()
-                                    : pCurPam->GetPoint()->nNode.GetIndex();
+                                    : m_pCurrentPam->GetPoint()->nNode.GetIndex();
 
-    // Ueberspringen von Controls vor dem interesanten Bereich
+    // skip controls before the interesting area
     size_t i = 0;
     while ( i < m_aHTMLControls.size() && m_aHTMLControls[i]->nNdIdx < nStartIdx )
         ++i;
 
     if( !pStartNd )
     {
-        // Check fuer einen einzelnen Node: da ist nur interessant, ob
-        // es zu dem Node ein Control gibt und zu welcher Form es gehoert
+        // Check for a single node: there it's only interesting, if there is
+        // a control for the node and to which form it belongs.
         if( i < m_aHTMLControls.size() &&
             m_aHTMLControls[i]->nNdIdx == nStartIdx )
             xNewFormComps = m_aHTMLControls[i]->xFormComps;
     }
     else
     {
-        // wir klappern eine Tabelle/einen Bereich ab: hier interessiert uns:
-        // - ob es Controls mit unterschiedlichen Start-Nodes gibt
-        // - ob es eine Form gibt, fuer die nicht alle Controls in der
-        //   Tabelle/dem Bereich liegen
+        // we iterate over a table/an area: we're interested in:
+        // - if there are controls with different start nodes
+        // - if there is a form, with controls which aren't all in the table/area
 
-        uno::Reference< container::XIndexContainer > xCurrentFormComps;// die aktuelle Form in der Tabelle
-        const SwStartNode *pCurrentStNd = nullptr; // und der Start-Node eines Ctrls
-        sal_Int32 nCurrentCtrls = 0;   // und die in ihr gefundenen Controls
+        uno::Reference< container::XIndexContainer > xCurrentFormComps;// current form in table
+        const SwStartNode *pCurrentStNd = nullptr; // and the start node of a Control
+        sal_Int32 nCurrentCtrls = 0;   // and the found controls in it
         sal_uInt32 nEndIdx =  pStartNd->EndOfSectionIndex();
         for( ; i < m_aHTMLControls.size() &&
             m_aHTMLControls[i]->nNdIdx <= nEndIdx; i++ )
         {
             const SwStartNode *pCntrlStNd =
-                pDoc->GetNodes()[m_aHTMLControls[i]->nNdIdx]->StartOfSectionNode();
+                m_pDoc->GetNodes()[m_aHTMLControls[i]->nNdIdx]->StartOfSectionNode();
 
             if( xCurrentFormComps.is() )
             {
-                // Wir befinden uns bereits in einer Form ...
+                // already inside a form ...
                 if( xCurrentFormComps==m_aHTMLControls[i]->xFormComps )
                 {
-                    // ... und das Control befindet sich auch darin ...
+                    // ... and the control is also inside ...
                     if( pCurrentStNd!=pCntrlStNd )
                     {
-                        // ... aber es liegt in einer anderen Zelle:
-                        // Dann muessen eir eine Form ueber der Tabelle
-                        // aufmachen
+                        // ... but it's inside another cell:
+                        // Then open a form above the table
                         xNewFormComps = xCurrentFormComps;
                         break;
                     }
@@ -294,9 +299,8 @@ void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
                 }
                 else
                 {
-                    // ... aber das Control liegt in einer anderen Zelle:
-                    // Da tun wir so, als ob wir eine neue Form aufmachen
-                    // und suchen weiter.
+                    // ... but the Control is in another cell:
+                    // There we act as if we open a new from and continue searching.
                     xCurrentFormComps = m_aHTMLControls[i]->xFormComps;
                     pCurrentStNd = pCntrlStNd;
                     nCurrentCtrls = m_aHTMLControls[i]->nCount;
@@ -304,8 +308,8 @@ void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
             }
             else
             {
-                // Wir befinden uns noch in keiner Form:
-                // Da tun wir mal so, als ob wie wir die Form aufmachen.
+                // We aren't in a form:
+                // There we act as if we open a form.
                 xCurrentFormComps = m_aHTMLControls[i]->xFormComps;
                 pCurrentStNd = pCntrlStNd;
                 nCurrentCtrls = m_aHTMLControls[i]->nCount;
@@ -314,9 +318,8 @@ void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
         if( !xNewFormComps.is() && xCurrentFormComps.is() &&
             nCurrentCtrls != xCurrentFormComps->getCount() )
         {
-            // In der Table/dem Bereich sollte eine Form aufgemacht werden,
-            // die nicht vollstaendig in der Tabelle liegt. Dan muessen
-            // wie die Form jetzt ebenfalls oeffen.
+            // A form should be opened in the table/area which isn't completely
+            // inside the table. Then we must also now open the form.
             xNewFormComps = xCurrentFormComps;
         }
     }
@@ -324,15 +327,14 @@ void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
     if( xNewFormComps.is() &&
         (!mxFormComps.is() || !(xNewFormComps == mxFormComps)) )
     {
-        // Es soll eine Form aufgemacht werden ...
+        // A form should be opened ...
         if( mxFormComps.is() )
         {
-            // .. es ist aber noch eine Form offen: Das ist in
-            // jedem Fall eine Fehler, aber wir schliessen die alte
-            // Form trotzdem
+            // ... but a form is still open: That is in every case an error,
+            // but we'll close the old form nevertheless.
             OutForm( false, mxFormComps );
 
-            //!!!nWarn = 1; // Control wird falscher Form zugeordnet
+            //!!!nWarn = 1; // Control will be assigned to wrong form
         }
 
         mxFormComps = xNewFormComps;
@@ -345,44 +347,43 @@ void SwHTMLWriter::OutForm( bool bTag_On, const SwStartNode *pStartNd )
 
 void SwHTMLWriter::OutHiddenForms()
 {
-    // Ohne DrawModel kann es auch keine Controls geben. Dann darf man
-    // auch nicht per UNO auf das Dok zugreifen, weil sonst ein DrawModel
-    // angelegt wird.
-    if( !pDoc->getIDocumentDrawModelAccess().GetDrawModel() )
+    // Without DrawModel there can't be controls. Then you also can't access the
+    // document via UNO, because otherwise a DrawModel would be created.
+    if( !m_pDoc->getIDocumentDrawModelAccess().GetDrawModel() )
         return;
 
-    SwDocShell *pDocSh = pDoc->GetDocShell();
+    SwDocShell *pDocSh = m_pDoc->GetDocShell();
     if( !pDocSh )
         return;
 
     uno::Reference< drawing::XDrawPageSupplier > xDPSupp( pDocSh->GetBaseModel(),
                                                      uno::UNO_QUERY );
-    OSL_ENSURE( xDPSupp.is(), "XTextDocument nicht vom XModel erhalten" );
+    OSL_ENSURE( xDPSupp.is(), "XTextDocument not received from XModel" );
     uno::Reference< drawing::XDrawPage > xDrawPage = xDPSupp->getDrawPage();
 
-    OSL_ENSURE( xDrawPage.is(), "XDrawPage nicht erhalten" );
+    OSL_ENSURE( xDrawPage.is(), "XDrawPage not received" );
     if( !xDrawPage.is() )
         return;
 
     uno::Reference< form::XFormsSupplier > xFormsSupplier( xDrawPage, uno::UNO_QUERY );
     OSL_ENSURE( xFormsSupplier.is(),
-            "XFormsSupplier nicht vom XDrawPage erhalten" );
+            "XFormsSupplier not received from XDrawPage" );
 
     uno::Reference< container::XNameContainer > xTmp = xFormsSupplier->getForms();
-    OSL_ENSURE( xTmp.is(), "XForms nicht erhalten" );
+    OSL_ENSURE( xTmp.is(), "XForms not received" );
     uno::Reference< container::XIndexContainer > xForms( xTmp, uno::UNO_QUERY );
-    OSL_ENSURE( xForms.is(), "XForms ohne container::XIndexContainer?" );
+    OSL_ENSURE( xForms.is(), "XForms without container::XIndexContainer?" );
 
     sal_Int32 nCount = xForms->getCount();
     for( sal_Int32 i=0; i<nCount; i++)
     {
         uno::Any aTmp = xForms->getByIndex( i );
-        OSL_ENSURE( aTmp.getValueType() ==
-                        cppu::UnoType<form::XForm>::get(),
-                "OutHiddenForms: falsche Reflection" );
-        if( aTmp.getValueType() ==
-                    cppu::UnoType<form::XForm>::get())
-            OutHiddenForm( *static_cast<uno::Reference< form::XForm > const *>(aTmp.getValue()) );
+        if( auto x = o3tl::tryAccess<uno::Reference<form::XForm>>(aTmp) )
+            OutHiddenForm( *x );
+        else
+        {
+            OSL_ENSURE( false, "OutHiddenForms: wrong reflection" );
+        }
     }
 }
 
@@ -397,33 +398,28 @@ void SwHTMLWriter::OutHiddenForm( const uno::Reference< form::XForm > & rForm )
     for( sal_Int32 i=0; i<nCount; i++ )
     {
         uno::Any aTmp = xFormComps->getByIndex( i );
-        OSL_ENSURE( aTmp.getValueType() ==
-                        cppu::UnoType<form::XFormComponent>::get(),
-                "OutHiddenForm: falsche Reflection" );
-        if( aTmp.getValueType() !=
-                    cppu::UnoType<form::XFormComponent>::get())
+        auto xFormComp = o3tl::tryAccess<uno::Reference<form::XFormComponent>>(
+            aTmp);
+        OSL_ENSURE( xFormComp, "OutHiddenForm: wrong reflection" );
+        if( !xFormComp )
             continue;
 
-        uno::Reference< form::XFormComponent > xFormComp =
-            *static_cast<uno::Reference< form::XFormComponent > const *>(aTmp.getValue());
-        uno::Reference< form::XForm > xForm( xFormComp, uno::UNO_QUERY );
+        uno::Reference< form::XForm > xForm( *xFormComp, uno::UNO_QUERY );
         if( xForm.is() )
             OutHiddenForm( xForm );
 
         if( bHiddenOnly )
         {
-            uno::Reference< beans::XPropertySet >  xPropSet( xFormComp, uno::UNO_QUERY );
+            uno::Reference< beans::XPropertySet >  xPropSet( *xFormComp, uno::UNO_QUERY );
             OUString sPropName("ClassId");
             if( xPropSet->getPropertySetInfo()->hasPropertyByName( sPropName ) )
             {
                 uno::Any aAny2 = xPropSet->getPropertyValue( sPropName );
-                if( aAny2.getValueType() == ::cppu::UnoType<sal_Int16>::get() )
+                if( auto n = o3tl::tryAccess<sal_Int16>(aAny2) )
                 {
-                    if( form::FormComponentType::HIDDENCONTROL ==
-                                                *static_cast<sal_Int16 const *>(aAny2.getValue()) )
+                    if( form::FormComponentType::HIDDENCONTROL == *n )
                         bHidden = true;
-                    else if( lcl_html_isHTMLControl(
-                                            *static_cast<sal_Int16 const *>(aAny2.getValue()) ) )
+                    else if( lcl_html_isHTMLControl( *n ) )
                         bHiddenOnly = false;
                 }
             }
@@ -446,16 +442,16 @@ void SwHTMLWriter::OutForm( bool bOn,
 
     if( !bOn )
     {
-        DecIndentLevel(); // Inhalt der Form einruecken
+        DecIndentLevel(); // indent content of form
         if( m_bLFPossible )
             OutNewLine();
-        HTMLOutFuncs::Out_AsciiTag( Strm(), OOO_STRING_SVTOOLS_HTML_form, false );
+        HTMLOutFuncs::Out_AsciiTag( Strm(), GetNamespace() + OOO_STRING_SVTOOLS_HTML_form, false );
         m_bLFPossible = true;
 
         return;
     }
 
-    // die neue Form wird geoeffnet
+    // the new form is opened
     if( m_bLFPossible )
         OutNewLine();
     OString sOut = "<" OOO_STRING_SVTOOLS_HTML_form;
@@ -463,46 +459,46 @@ void SwHTMLWriter::OutForm( bool bOn,
     uno::Reference< beans::XPropertySet > xFormPropSet( rFormComps, uno::UNO_QUERY );
 
     uno::Any aTmp = xFormPropSet->getPropertyValue( "Name" );
-    if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-        !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+    if( auto s = o3tl::tryAccess<OUString>(aTmp) )
     {
-        sOut += " " OOO_STRING_SVTOOLS_HTML_O_name "=\"";
-        Strm().WriteOString( sOut );
-        HTMLOutFuncs::Out_String( Strm(), *static_cast<OUString const *>(aTmp.getValue()),
-                                  m_eDestEnc, &m_aNonConvertableCharacters );
-        sOut = "\"";
+        if( !s->isEmpty() )
+        {
+            sOut += " " OOO_STRING_SVTOOLS_HTML_O_name "=\"";
+            Strm().WriteOString( sOut );
+            HTMLOutFuncs::Out_String( Strm(), *s,
+                                      m_eDestEnc, &m_aNonConvertableCharacters );
+            sOut = "\"";
+        }
     }
 
     aTmp = xFormPropSet->getPropertyValue( "TargetURL" );
-    if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-        !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+    if( auto s = o3tl::tryAccess<OUString>(aTmp) )
     {
-        sOut += " " OOO_STRING_SVTOOLS_HTML_O_action "=\"";
-        Strm().WriteOString( sOut );
-        OUString aURL( *static_cast<OUString const *>(aTmp.getValue()) );
-        aURL = URIHelper::simpleNormalizedMakeRelative( GetBaseURL(), aURL);
-        HTMLOutFuncs::Out_String( Strm(), aURL, m_eDestEnc, &m_aNonConvertableCharacters );
-        sOut = "\"";
+        if ( !s->isEmpty() )
+        {
+            sOut += " " OOO_STRING_SVTOOLS_HTML_O_action "=\"";
+            Strm().WriteOString( sOut );
+            OUString aURL
+                = URIHelper::simpleNormalizedMakeRelative( GetBaseURL(), *s);
+            HTMLOutFuncs::Out_String( Strm(), aURL, m_eDestEnc, &m_aNonConvertableCharacters );
+            sOut = "\"";
+        }
     }
 
     aTmp = xFormPropSet->getPropertyValue( "SubmitMethod" );
-    if( aTmp.getValueType() == cppu::UnoType<form::FormSubmitMethod>::get())
+    if( auto eMethod = o3tl::tryAccess<form::FormSubmitMethod>(aTmp) )
     {
-        form::FormSubmitMethod eMethod =
-                *static_cast<form::FormSubmitMethod const *>(aTmp.getValue());
-        if( form::FormSubmitMethod_POST==eMethod )
+        if( form::FormSubmitMethod_POST==*eMethod )
         {
             sOut += " " OOO_STRING_SVTOOLS_HTML_O_method "=\""
                 OOO_STRING_SVTOOLS_HTML_METHOD_post "\"";
         }
     }
     aTmp = xFormPropSet->getPropertyValue( "SubmitEncoding" );
-    if( aTmp.getValueType()==cppu::UnoType<form::FormSubmitEncoding>::get())
+    if( auto eEncType = o3tl::tryAccess<form::FormSubmitEncoding>(aTmp) )
     {
-        form::FormSubmitEncoding eEncType =
-                    *static_cast<form::FormSubmitEncoding const *>(aTmp.getValue());
         const sal_Char *pStr = nullptr;
-        switch( eEncType )
+        switch( *eEncType )
         {
         case form::FormSubmitEncoding_MULTIPART:
             pStr = OOO_STRING_SVTOOLS_HTML_ET_multipart;
@@ -522,14 +518,16 @@ void SwHTMLWriter::OutForm( bool bOn,
     }
 
     aTmp = xFormPropSet->getPropertyValue( "TargetFrame" );
-    if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get()&&
-        !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+    if( auto s = o3tl::tryAccess<OUString>(aTmp) )
     {
-        sOut += " " OOO_STRING_SVTOOLS_HTML_O_target "=\"";
-        Strm().WriteOString( sOut );
-        HTMLOutFuncs::Out_String( Strm(), *static_cast<OUString const *>(aTmp.getValue()),
-                                  m_eDestEnc, &m_aNonConvertableCharacters );
-        sOut = "\"";
+        if (!s->isEmpty() )
+        {
+            sOut += " " OOO_STRING_SVTOOLS_HTML_O_target "=\"";
+            Strm().WriteOString( sOut );
+            HTMLOutFuncs::Out_String( Strm(), *s,
+                                      m_eDestEnc, &m_aNonConvertableCharacters );
+            sOut = "\"";
+        }
     }
 
     Strm().WriteOString( sOut );
@@ -537,7 +535,7 @@ void SwHTMLWriter::OutForm( bool bOn,
     lcl_html_outEvents( Strm(), xFormComp, m_bCfgStarBasic, m_eDestEnc, &m_aNonConvertableCharacters );
     Strm().WriteChar( '>' );
 
-    IncIndentLevel(); // Inhalt der Form einruecken
+    IncIndentLevel(); // indent content of form
     m_bLFPossible = true;
 }
 
@@ -555,39 +553,33 @@ void SwHTMLWriter::OutHiddenControls(
         for( nPos=0; !bDone && nPos < nCount; nPos++ )
         {
             uno::Any aTmp = rFormComps->getByIndex( nPos );
-            OSL_ENSURE( aTmp.getValueType() ==
-                        cppu::UnoType<form::XFormComponent>::get(),
-                    "OutHiddenControls: falsche Reflection" );
-            bDone = aTmp.getValueType() ==
-                        cppu::UnoType<form::XFormComponent>::get()&&
-                    *static_cast<uno::Reference< form::XFormComponent > const *>(aTmp.getValue()) ==
-                        xFC;
+            auto x = o3tl::tryAccess<uno::Reference<form::XFormComponent>>(aTmp);
+            OSL_ENSURE( x,
+                    "OutHiddenControls: wrong reflection" );
+            bDone = x && *x == xFC;
         }
     }
 
     for( ; nPos < nCount; nPos++ )
     {
         uno::Any aTmp = rFormComps->getByIndex( nPos );
-        OSL_ENSURE( aTmp.getValueType() ==
-                        cppu::UnoType<form::XFormComponent>::get(),
-                "OutHiddenControls: falsche Reflection" );
-        if( aTmp.getValueType() !=
-                    cppu::UnoType<form::XFormComponent>::get())
+        auto xFC = o3tl::tryAccess<uno::Reference<form::XFormComponent>>(aTmp);
+        OSL_ENSURE( xFC,
+                "OutHiddenControls: wrong reflection" );
+        if( !xFC )
             continue;
-        uno::Reference< form::XFormComponent > xFC =
-                *static_cast<uno::Reference< form::XFormComponent > const *>(aTmp.getValue());
-        uno::Reference< beans::XPropertySet > xPropSet( xFC, uno::UNO_QUERY );
+        uno::Reference< beans::XPropertySet > xPropSet( *xFC, uno::UNO_QUERY );
 
         OUString sPropName = "ClassId";
         if( !xPropSet->getPropertySetInfo()->hasPropertyByName( sPropName ) )
             continue;
 
         aTmp = xPropSet->getPropertyValue( sPropName );
-        if( aTmp.getValueType() != ::cppu::UnoType<sal_Int16>::get() )
+        auto n = o3tl::tryAccess<sal_Int16>(aTmp);
+        if( !n )
             continue;
 
-        if( form::FormComponentType::HIDDENCONTROL ==
-                                            *static_cast<sal_Int16 const *>(aTmp.getValue()) )
+        if( form::FormComponentType::HIDDENCONTROL == *n )
         {
             if( m_bLFPossible )
                 OutNewLine( true );
@@ -596,55 +588,59 @@ void SwHTMLWriter::OutHiddenControls(
                 OOO_STRING_SVTOOLS_HTML_IT_hidden "\"";
 
             aTmp = xPropSet->getPropertyValue( "Name" );
-            if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-                !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+            if( auto s = o3tl::tryAccess<OUString>(aTmp) )
             {
-                sOut += " " OOO_STRING_SVTOOLS_HTML_O_name "=\"";
-                Strm().WriteOString( sOut );
-                HTMLOutFuncs::Out_String( Strm(), *static_cast<OUString const *>(aTmp.getValue()),
-                                          m_eDestEnc, &m_aNonConvertableCharacters );
-                sOut = "\"";
+                if( !s->isEmpty() )
+                {
+                    sOut += " " OOO_STRING_SVTOOLS_HTML_O_name "=\"";
+                    Strm().WriteOString( sOut );
+                    HTMLOutFuncs::Out_String( Strm(), *s,
+                                              m_eDestEnc, &m_aNonConvertableCharacters );
+                    sOut = "\"";
+                }
             }
             aTmp = xPropSet->getPropertyValue( "HiddenValue" );
-            if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-                !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+            if( auto s = o3tl::tryAccess<OUString>(aTmp) )
             {
-                sOut += " " OOO_STRING_SVTOOLS_HTML_O_value "=\"";
-                Strm().WriteOString( sOut );
-                HTMLOutFuncs::Out_String( Strm(), *static_cast<OUString const *>(aTmp.getValue()),
-                                          m_eDestEnc, &m_aNonConvertableCharacters );
-                sOut = "\"";
+                if( !s->isEmpty() )
+                {
+                    sOut += " " OOO_STRING_SVTOOLS_HTML_O_value "=\"";
+                    Strm().WriteOString( sOut );
+                    HTMLOutFuncs::Out_String( Strm(), *s,
+                                              m_eDestEnc, &m_aNonConvertableCharacters );
+                    sOut = "\"";
+                }
             }
             sOut += ">";
             Strm().WriteOString( sOut );
 
             m_nFormCntrlCnt++;
         }
-        else if( lcl_html_isHTMLControl( *static_cast<sal_Int16 const *>(aTmp.getValue()) ) )
+        else if( lcl_html_isHTMLControl( *n ) )
         {
             break;
         }
     }
 }
 
-// hier folgen die Ausgabe-Routinen, dadurch sind die form::Forms gebuendelt:
+// here are the output routines, thus the form::Forms are bundled:
 
 const SdrObject *SwHTMLWriter::GetHTMLControl( const SwDrawFrameFormat& rFormat )
 {
-    // es muss ein Draw-Format sein
+    // it must be a Draw-Format
     OSL_ENSURE( RES_DRAWFRMFMT == rFormat.Which(),
-            "GetHTMLControl nuer fuer Draw-Formate erlaubt" );
+            "GetHTMLControl only allow for Draw-Formats" );
 
-    // Schauen, ob es ein SdrObject dafuer gibt
+    // Look if a SdrObject exists for it
     const SdrObject *pObj = rFormat.FindSdrObject();
-    if( !pObj || FmFormInventor != pObj->GetObjInventor() )
+    if( !pObj || SdrInventor::FmForm != pObj->GetObjInventor() )
         return nullptr;
 
     const SdrUnoObj& rFormObj = dynamic_cast<const SdrUnoObj&>(*pObj);
-    uno::Reference< awt::XControlModel >  xControlModel =
+    const uno::Reference< awt::XControlModel >&  xControlModel =
             rFormObj.GetUnoControlModel();
 
-    OSL_ENSURE( xControlModel.is(), "UNO-Control ohne Model" );
+    OSL_ENSURE( xControlModel.is(), "UNO-Control without model" );
     if( !xControlModel.is() )
         return nullptr;
 
@@ -655,10 +651,12 @@ const SdrObject *SwHTMLWriter::GetHTMLControl( const SwDrawFrameFormat& rFormat 
         return nullptr;
 
     uno::Any aTmp = xPropSet->getPropertyValue( sPropName );
-    if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get()&&
-        lcl_html_isHTMLControl( *static_cast<sal_Int16 const *>(aTmp.getValue()) ) )
+    if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
     {
-        return pObj;
+        if( lcl_html_isHTMLControl( *n ) )
+        {
+            return pObj;
+        }
     }
 
     return nullptr;
@@ -676,14 +674,14 @@ static void GetControlSize(const SdrUnoObj& rFormObj, Size& rSz, SwDoc *pDoc)
     if ( pDrawView && pVSh->GetWin() )
         xControl = rFormObj.GetUnoControl( *pDrawView, *pVSh->GetWin() );
     uno::Reference< awt::XTextLayoutConstrains > xLC( xControl, uno::UNO_QUERY );
-    OSL_ENSURE( xLC.is(), "kein XTextLayoutConstrains" );
+    OSL_ENSURE( xLC.is(), "no XTextLayoutConstrains" );
     if( !xLC.is() )
         return;
 
     sal_Int16 nCols=0, nLines=0;
     xLC->getColumnsAndLines( nCols, nLines );
-    rSz.Width() = nCols;
-    rSz.Height() = nLines;
+    rSz.setWidth( nCols );
+    rSz.setHeight( nLines );
 }
 
 Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
@@ -691,10 +689,10 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                                      const SdrUnoObj& rFormObj,
                                      bool bInCntnr )
 {
-    uno::Reference< awt::XControlModel > xControlModel =
+    const uno::Reference< awt::XControlModel >& xControlModel =
         rFormObj.GetUnoControlModel();
 
-    OSL_ENSURE( xControlModel.is(), "UNO-Control ohne Model" );
+    OSL_ENSURE( xControlModel.is(), "UNO-Control without model" );
     if( !xControlModel.is() )
         return rWrt;
 
@@ -724,8 +722,8 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     OString sOptions;
     bool bEmptyValue = false;
     uno::Any aTmp = xPropSet->getPropertyValue( "ClassId" );
-    sal_Int16 nClassId = *static_cast<sal_Int16 const *>(aTmp.getValue());
-    sal_uInt32 nFrameOpts = HTML_FRMOPTS_CONTROL;
+    sal_Int16 nClassId = *o3tl::doAccess<sal_Int16>(aTmp);
+    HtmlFrmOpts nFrameOpts = HTML_FRMOPTS_CONTROL;
     switch( nClassId )
     {
     case form::FormComponentType::CHECKBOX:
@@ -733,24 +731,25 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         eType = (form::FormComponentType::CHECKBOX == nClassId
                     ? TYPE_CHECKBOX : TYPE_RADIO);
         aTmp = xPropSet->getPropertyValue( "DefaultState" );
-        if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get() &&
-            TRISTATE_FALSE != *static_cast<sal_Int16 const *>(aTmp.getValue()) )
+        if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
         {
-            sOptions += " " OOO_STRING_SVTOOLS_HTML_O_checked;
-            sOptions += "=\"";
-            sOptions += OString(OOO_STRING_SVTOOLS_HTML_O_checked);
-            sOptions += "\"";
+            if ( TRISTATE_FALSE != *n )
+            {
+                sOptions += " " OOO_STRING_SVTOOLS_HTML_O_checked;
+                sOptions += "=\"";
+                sOptions += OString(OOO_STRING_SVTOOLS_HTML_O_checked);
+                sOptions += "\"";
+            }
         }
 
         aTmp = xPropSet->getPropertyValue( "RefValue" );
-        if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() )
+        if( auto rVal = o3tl::tryAccess<OUString>(aTmp) )
 
         {
-            const OUString& rVal = *static_cast<OUString const *>(aTmp.getValue());
-            if( rVal.isEmpty() )
+            if( rVal->isEmpty() )
                 bEmptyValue = true;
-            else if( rVal != OOO_STRING_SVTOOLS_HTML_on )
-                sValue = rVal;
+            else if( *rVal != OOO_STRING_SVTOOLS_HTML_on )
+                sValue = *rVal;
         }
         break;
 
@@ -758,9 +757,8 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         {
             form::FormButtonType eButtonType = form::FormButtonType_PUSH;
             aTmp = xPropSet->getPropertyValue( "ButtonType" );
-            if( aTmp.getValueType() ==
-                            ::cppu::UnoType<form::FormButtonType>::get() )
-                eButtonType = *static_cast<form::FormButtonType const *>(aTmp.getValue());
+            if( auto t = o3tl::tryAccess<form::FormButtonType>(aTmp) )
+                eButtonType = *t;
 
             switch( eButtonType )
             {
@@ -776,10 +774,12 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
             }
 
             aTmp = xPropSet->getPropertyValue( "Label" );
-            if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-                !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+            if( auto s = o3tl::tryAccess<OUString>(aTmp) )
             {
-                sValue = *static_cast<OUString const *>(aTmp.getValue());
+                if( !s->isEmpty() )
+                {
+                    sValue = *s;
+                }
             }
         }
         break;
@@ -789,24 +789,28 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
             rHTMLWrt.OutNewLine( true );
         eTag = TAG_SELECT;
         aTmp = xPropSet->getPropertyValue( "Dropdown" );
-        if( aTmp.getValueType() == cppu::UnoType<bool>::get() &&
-            !*static_cast<sal_Bool const *>(aTmp.getValue()) )
+        if( auto b1 = o3tl::tryAccess<bool>(aTmp) )
         {
-            Size aSz( 0, 0 );
-            GetControlSize( rFormObj, aSz, rWrt.pDoc );
-
-            // wieviele sind sichtbar ??
-            if( aSz.Height() )
+            if( !*b1 )
             {
-                sOptions += " " OOO_STRING_SVTOOLS_HTML_O_size "=\"" +
-                    OString::number(static_cast<sal_Int32>(aSz.Height())) + "\"";
-            }
+                Size aSz( 0, 0 );
+                GetControlSize( rFormObj, aSz, rWrt.m_pDoc );
 
-            aTmp = xPropSet->getPropertyValue( "MultiSelection" );
-            if( aTmp.getValueType() == cppu::UnoType<bool>::get() &&
-                *static_cast<sal_Bool const *>(aTmp.getValue()) )
-            {
-                sOptions += " " OOO_STRING_SVTOOLS_HTML_O_multiple;
+                // How many are visible ??
+                if( aSz.Height() )
+                {
+                    sOptions += " " OOO_STRING_SVTOOLS_HTML_O_size "=\"" +
+                        OString::number(static_cast<sal_Int32>(aSz.Height())) + "\"";
+                }
+
+                auto aTmp2 = xPropSet->getPropertyValue( "MultiSelection" );
+                if( auto b2 = o3tl::tryAccess<bool>(aTmp2) )
+                {
+                    if ( *b2 )
+                    {
+                        sOptions += " " OOO_STRING_SVTOOLS_HTML_O_multiple;
+                    }
+                }
             }
         }
         break;
@@ -814,15 +818,15 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     case form::FormComponentType::TEXTFIELD:
         {
             Size aSz( 0, 0 );
-            GetControlSize( rFormObj, aSz, rWrt.pDoc );
+            GetControlSize( rFormObj, aSz, rWrt.m_pDoc );
 
             bool bMultiLine = false;
             OUString sMultiLine("MultiLine");
             if( xPropSetInfo->hasPropertyByName( sMultiLine ) )
             {
                 aTmp = xPropSet->getPropertyValue( sMultiLine );
-                bMultiLine = aTmp.getValueType() == cppu::UnoType<bool>::get() &&
-                             *static_cast<sal_Bool const *>(aTmp.getValue());
+                auto b = o3tl::tryAccess<bool>(aTmp);
+                bMultiLine = b && *b;
             }
 
             if( bMultiLine )
@@ -845,14 +849,13 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                 aTmp = xPropSet->getPropertyValue( "HScroll" );
                 if( aTmp.getValueType() == cppu::UnoType<void>::get() ||
                     (aTmp.getValueType() == cppu::UnoType<bool>::get() &&
-                    !*static_cast<sal_Bool const *>(aTmp.getValue())) )
+                    !*o3tl::forceAccess<bool>(aTmp)) )
                 {
                     const sal_Char *pWrapStr = nullptr;
-                    aTmp = xPropSet->getPropertyValue( "HardLineBreaks" );
-                    pWrapStr =
-                        (aTmp.getValueType() == cppu::UnoType<bool>::get() &&
-                        *static_cast<sal_Bool const *>(aTmp.getValue())) ? OOO_STRING_SVTOOLS_HTML_WW_hard
-                                                     : OOO_STRING_SVTOOLS_HTML_WW_soft;
+                    auto aTmp2 = xPropSet->getPropertyValue( "HardLineBreaks" );
+                    auto b = o3tl::tryAccess<bool>(aTmp2);
+                    pWrapStr = (b && *b) ? OOO_STRING_SVTOOLS_HTML_WW_hard
+                                         : OOO_STRING_SVTOOLS_HTML_WW_soft;
                     sOptions += " " OOO_STRING_SVTOOLS_HTML_O_wrap "=\"" +
                         OString(pWrapStr) + "\"";
                 }
@@ -864,9 +867,11 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                 if( xPropSetInfo->hasPropertyByName( sEchoChar ) )
                 {
                     aTmp = xPropSet->getPropertyValue( sEchoChar );
-                    if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get() &&
-                        *static_cast<sal_Int16 const *>(aTmp.getValue()) != 0 )
-                        eType = TYPE_PASSWORD;
+                    if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
+                    {
+                        if( *n != 0 )
+                            eType = TYPE_PASSWORD;
+                    }
                 }
 
                 if( aSz.Width() )
@@ -876,20 +881,24 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                 }
 
                 aTmp = xPropSet->getPropertyValue( "MaxTextLen" );
-                if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get() &&
-                    *static_cast<sal_Int16 const *>(aTmp.getValue()) != 0 )
+                if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
                 {
-                    sOptions += " " OOO_STRING_SVTOOLS_HTML_O_maxlength "=\"" +
-                        OString::number(static_cast<sal_Int32>(*static_cast<sal_Int16 const *>(aTmp.getValue()))) + "\"";
+                    if( *n != 0 )
+                    {
+                        sOptions += " " OOO_STRING_SVTOOLS_HTML_O_maxlength "=\"" +
+                            OString::number(static_cast<sal_Int32>(*n)) + "\"";
+                    }
                 }
 
                 if( xPropSetInfo->hasPropertyByName( "DefaultText" ) )
                 {
                     aTmp = xPropSet->getPropertyValue( "DefaultText" );
-                    if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-                        !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+                    if( auto s = o3tl::tryAccess<OUString>(aTmp) )
                     {
-                        sValue = *static_cast<OUString const *>(aTmp.getValue());
+                        if( !s->isEmpty() )
+                        {
+                            sValue = *s;
+                        }
                     }
                 }
             }
@@ -899,7 +908,7 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     case form::FormComponentType::FILECONTROL:
         {
             Size aSz( 0, 0 );
-            GetControlSize( rFormObj, aSz, rWrt.pDoc );
+            GetControlSize( rFormObj, aSz, rWrt.m_pDoc );
             eType = TYPE_FILE;
 
             if( aSz.Width() )
@@ -908,7 +917,7 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                     OString::number(static_cast<sal_Int32>(aSz.Width())) + "\"";
             }
 
-            // VALUE vim form aus Sicherheitsgruenden nicht exportieren
+            // VALUE vim form: don't export because of security reasons
         }
         break;
 
@@ -917,8 +926,8 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         nFrameOpts = HTML_FRMOPTS_IMG_CONTROL;
         break;
 
-    default:                // kennt HTML nicht
-        eTag = TAG_NONE;        // also ueberspringen
+    default:                // doesn't know HTML
+        eTag = TAG_NONE;    // therefore skip it
         break;
     }
 
@@ -933,21 +942,25 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     }
 
     aTmp = xPropSet->getPropertyValue("Name");
-    if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-        !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+    if( auto s = o3tl::tryAccess<OUString>(aTmp) )
     {
-        sOut += " " OOO_STRING_SVTOOLS_HTML_O_name "=\"";
-        rWrt.Strm().WriteOString( sOut );
-        HTMLOutFuncs::Out_String( rWrt.Strm(), *static_cast<OUString const *>(aTmp.getValue()),
-                                  rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters );
-        sOut = "\"";
+        if( !s->isEmpty() )
+        {
+            sOut += " " OOO_STRING_SVTOOLS_HTML_O_name "=\"";
+            rWrt.Strm().WriteOString( sOut );
+            HTMLOutFuncs::Out_String( rWrt.Strm(), *s,
+                                      rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters );
+            sOut = "\"";
+        }
     }
 
     aTmp = xPropSet->getPropertyValue("Enabled");
-    if( aTmp.getValueType() == cppu::UnoType<bool>::get() &&
-        !*static_cast<sal_Bool const *>(aTmp.getValue()) )
+    if( auto b = o3tl::tryAccess<bool>(aTmp) )
     {
-        sOut += " " OOO_STRING_SVTOOLS_HTML_O_disabled;
+        if( !*b )
+        {
+            sOut += " " OOO_STRING_SVTOOLS_HTML_O_disabled;
+        }
     }
 
     if( !sValue.isEmpty() || bEmptyValue )
@@ -963,16 +976,18 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     if( TYPE_IMAGE == eType )
     {
         aTmp = xPropSet->getPropertyValue( "ImageURL" );
-        if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-            !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+        if( auto s = o3tl::tryAccess<OUString>(aTmp) )
         {
-            sOut += " " OOO_STRING_SVTOOLS_HTML_O_src "=\"";
-            rWrt.Strm().WriteOString( sOut );
+            if( !s->isEmpty() )
+            {
+                sOut += " " OOO_STRING_SVTOOLS_HTML_O_src "=\"";
+                rWrt.Strm().WriteOString( sOut );
 
-            HTMLOutFuncs::Out_String( rWrt.Strm(),
-                        URIHelper::simpleNormalizedMakeRelative( rWrt.GetBaseURL(), *static_cast<OUString const *>(aTmp.getValue())),
-                        rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters );
-            sOut = "\"";
+                HTMLOutFuncs::Out_String( rWrt.Strm(),
+                            URIHelper::simpleNormalizedMakeRelative( rWrt.GetBaseURL(), *s),
+                            rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters );
+                sOut = "\"";
+            }
         }
 
         Size aTwipSz( rFormObj.GetLogicRect().GetSize() );
@@ -982,11 +997,11 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         {
             aPixelSz =
                 Application::GetDefaultDevice()->LogicToPixel( aTwipSz,
-                                                    MapMode(MAP_TWIP) );
+                                                    MapMode(MapUnit::MapTwip) );
             if( !aPixelSz.Width() && aTwipSz.Width() )
-                aPixelSz.Width() = 1;
+                aPixelSz.setWidth( 1 );
             if( !aPixelSz.Height() && aTwipSz.Height() )
-                aPixelSz.Height() = 1;
+                aPixelSz.setHeight( 1 );
         }
 
         if( aPixelSz.Width() )
@@ -1003,9 +1018,9 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     }
 
     aTmp = xPropSet->getPropertyValue( "TabIndex" );
-    if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get() )
+    if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
     {
-        sal_Int16 nTabIndex = *static_cast<sal_Int16 const *>(aTmp.getValue());
+        sal_Int16 nTabIndex = *n;
         if( nTabIndex > 0 )
         {
             if( nTabIndex >= 32767 )
@@ -1019,86 +1034,86 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     if( !sOut.isEmpty() )
         rWrt.Strm().WriteOString( sOut );
 
-    OSL_ENSURE( !bInCntnr, "Container wird fuer Controls nicht unterstuertzt" );
+    OSL_ENSURE( !bInCntnr, "Container is not supported for Controls" );
     if( rHTMLWrt.IsHTMLMode( HTMLMODE_ABS_POS_DRAW ) && !bInCntnr )
     {
-        // Wenn Zeichen-Objekte nicht absolut positioniert werden duerfen,
-        // das entsprechende Flag loeschen.
+        // If Character-Objects can't be positioned absolutely,
+        // then delete the corresponding flag.
         nFrameOpts |= (TYPE_IMAGE == eType
                             ? HTML_FRMOPTS_IMG_CONTROL_CSS1
                             : HTML_FRMOPTS_CONTROL_CSS1);
     }
     OString aEndTags;
-    if( nFrameOpts != 0 )
-        aEndTags = rHTMLWrt.OutFrameFormatOptions( rFormat, aEmptyOUStr, nFrameOpts );
+    if( nFrameOpts != HtmlFrmOpts::NONE )
+        aEndTags = rHTMLWrt.OutFrameFormatOptions(rFormat, OUString(), nFrameOpts);
 
     if( rHTMLWrt.m_bCfgOutStyles )
     {
         bool bEdit = TAG_TEXTAREA == eTag || TYPE_FILE == eType ||
                      TYPE_TEXT == eType;
 
-        SfxItemSet aItemSet( rHTMLWrt.pDoc->GetAttrPool(), RES_CHRATR_BEGIN,
-                             RES_CHRATR_END );
+        SfxItemSet aItemSet( rHTMLWrt.m_pDoc->GetAttrPool(), svl::Items<RES_CHRATR_BEGIN,
+                             RES_CHRATR_END>{} );
         if( xPropSetInfo->hasPropertyByName( "BackgroundColor" ) )
         {
             aTmp = xPropSet->getPropertyValue( "BackgroundColor" );
-            if( aTmp.getValueType() == ::cppu::UnoType<sal_Int32>::get() )
+            if( auto n = o3tl::tryAccess<sal_Int32>(aTmp) )
             {
-                Color aCol(*static_cast<sal_Int32 const *>(aTmp .getValue()));
+                Color aCol(*n);
                 aItemSet.Put( SvxBrushItem( aCol, RES_CHRATR_BACKGROUND ) );
             }
         }
         if( xPropSetInfo->hasPropertyByName( "TextColor" ) )
         {
             aTmp = xPropSet->getPropertyValue( "TextColor" );
-            if( aTmp.getValueType() == ::cppu::UnoType<sal_Int32>::get() )
+            if( auto n = o3tl::tryAccess<sal_Int32>(aTmp) )
             {
-                Color aColor( *static_cast<sal_Int32 const *>(aTmp .getValue()) );
+                Color aColor( *n );
                 aItemSet.Put( SvxColorItem( aColor, RES_CHRATR_COLOR ) );
             }
         }
         if( xPropSetInfo->hasPropertyByName( "FontHeight" ) )
         {
             aTmp = xPropSet->getPropertyValue( "FontHeight" );
-            if( aTmp.getValueType() == cppu::UnoType<float>::get())
+            if( auto nHeight = o3tl::tryAccess<float>(aTmp) )
 
             {
-                float nHeight = *static_cast<float const *>(aTmp.getValue());
-                if( nHeight > 0  && (!bEdit || !rtl::math::approxEqual(nHeight, 10.0)) )
-                    aItemSet.Put( SvxFontHeightItem( sal_Int16(nHeight * 20.), 100, RES_CHRATR_FONTSIZE ) );
+                if( *nHeight > 0  && (!bEdit || !rtl::math::approxEqual(*nHeight, 10.0)) )
+                    aItemSet.Put( SvxFontHeightItem( sal_Int16(*nHeight * 20.), 100, RES_CHRATR_FONTSIZE ) );
             }
         }
         if( xPropSetInfo->hasPropertyByName( "FontName" ) )
         {
             aTmp = xPropSet->getPropertyValue( "FontName" );
-            if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-                !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+            if( auto aFName = o3tl::tryAccess<OUString>(aTmp) )
             {
-                vcl::Font aFixedFont( OutputDevice::GetDefaultFont(
-                                    DefaultFontType::FIXED, LANGUAGE_ENGLISH_US,
-                                    GetDefaultFontFlags::OnlyOne ) );
-                OUString aFName( *static_cast<OUString const *>(aTmp.getValue()) );
-                if( !bEdit || aFName != aFixedFont.GetFamilyName() )
+                if( !aFName->isEmpty() )
                 {
-                    FontFamily eFamily = FAMILY_DONTKNOW;
-                    if( xPropSetInfo->hasPropertyByName( "FontFamily" ) )
+                    vcl::Font aFixedFont( OutputDevice::GetDefaultFont(
+                                        DefaultFontType::FIXED, LANGUAGE_ENGLISH_US,
+                                        GetDefaultFontFlags::OnlyOne ) );
+                    if( !bEdit || *aFName != aFixedFont.GetFamilyName() )
                     {
-                        aTmp = xPropSet->getPropertyValue( "FontFamily" );
-                        if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get())
-                            eFamily = (FontFamily)*static_cast<sal_Int16 const *>(aTmp.getValue());
+                        FontFamily eFamily = FAMILY_DONTKNOW;
+                        if( xPropSetInfo->hasPropertyByName( "FontFamily" ) )
+                        {
+                            auto aTmp2 = xPropSet->getPropertyValue( "FontFamily" );
+                            if( auto n = o3tl::tryAccess<sal_Int16>(aTmp2) )
+                                eFamily = static_cast<FontFamily>(*n);
+                        }
+                        SvxFontItem aItem(eFamily, *aFName, OUString(), PITCH_DONTKNOW, RTL_TEXTENCODING_DONTKNOW, RES_CHRATR_FONT);
+                        aItemSet.Put( aItem );
                     }
-                    SvxFontItem aItem( eFamily, aFName, aEmptyOUStr, PITCH_DONTKNOW, RTL_TEXTENCODING_DONTKNOW, RES_CHRATR_FONT );
-                    aItemSet.Put( aItem );
                 }
             }
         }
         if( xPropSetInfo->hasPropertyByName( "FontWeight" ) )
         {
             aTmp = xPropSet->getPropertyValue( "FontWeight" );
-            if( aTmp.getValueType() == cppu::UnoType<float>::get())
+            if( auto x = o3tl::tryAccess<float>(aTmp) )
             {
                 FontWeight eWeight =
-                    VCLUnoHelper::ConvertFontWeight( *static_cast<float const *>(aTmp.getValue()) );
+                    vcl::unohelper::ConvertFontWeight( *x );
                 if( eWeight != WEIGHT_DONTKNOW && eWeight != WEIGHT_NORMAL )
                     aItemSet.Put( SvxWeightItem( eWeight, RES_CHRATR_WEIGHT ) );
             }
@@ -1106,9 +1121,9 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         if( xPropSetInfo->hasPropertyByName( "FontSlant" ) )
         {
             aTmp = xPropSet->getPropertyValue( "FontSlant" );
-            if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get())
+            if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
             {
-                FontItalic eItalic = (FontItalic)*static_cast<sal_Int16 const *>(aTmp.getValue());
+                FontItalic eItalic = static_cast<FontItalic>(*n);
                 if( eItalic != ITALIC_DONTKNOW && eItalic != ITALIC_NONE )
                     aItemSet.Put( SvxPostureItem( eItalic, RES_CHRATR_POSTURE ) );
             }
@@ -1116,10 +1131,9 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         if( xPropSetInfo->hasPropertyByName( "FontLineStyle" ) )
         {
             aTmp = xPropSet->getPropertyValue( "FontLineStyle" );
-            if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get() )
+            if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
             {
-                FontLineStyle eUnderline =
-                    (FontLineStyle)*static_cast<sal_Int16 const *>(aTmp.getValue());
+                FontLineStyle eUnderline = static_cast<FontLineStyle>(*n);
                 if( eUnderline != LINESTYLE_DONTKNOW  &&
                     eUnderline != LINESTYLE_NONE )
                     aItemSet.Put( SvxUnderlineItem( eUnderline, RES_CHRATR_UNDERLINE ) );
@@ -1128,10 +1142,9 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
         if( xPropSetInfo->hasPropertyByName( "FontStrikeout" ) )
         {
             aTmp = xPropSet->getPropertyValue( "FontStrikeout" );
-            if( aTmp.getValueType() == ::cppu::UnoType<sal_Int16>::get())
+            if( auto n = o3tl::tryAccess<sal_Int16>(aTmp) )
             {
-                FontStrikeout eStrikeout =
-                    (FontStrikeout)*static_cast<sal_Int16 const *>(aTmp.getValue());
+                FontStrikeout eStrikeout = static_cast<FontStrikeout>(*n);
                 if( eStrikeout != STRIKEOUT_DONTKNOW &&
                     eStrikeout != STRIKEOUT_NONE )
                     aItemSet.Put( SvxCrossedOutItem( eStrikeout, RES_CHRATR_CROSSEDOUT ) );
@@ -1151,21 +1164,19 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     if( TAG_SELECT == eTag )
     {
         aTmp = xPropSet->getPropertyValue( "StringItemList" );
-        if( aTmp.getValueType() == cppu::UnoType<uno::Sequence<OUString>>::get() )
+        if( auto aList = o3tl::tryAccess<uno::Sequence<OUString>>(aTmp) )
         {
-            rHTMLWrt.IncIndentLevel(); // der Inhalt von Select darf
-                                       // eingerueckt werden
-            uno::Sequence<OUString> aList( *static_cast<uno::Sequence<OUString> const *>(aTmp.getValue()) );
-            sal_Int32 nCnt = aList.getLength();
-            const OUString *pStrings = aList.getConstArray();
+            rHTMLWrt.IncIndentLevel(); // the content of Select can be indented
+            sal_Int32 nCnt = aList->getLength();
+            const OUString *pStrings = aList->getConstArray();
 
             const OUString *pValues = nullptr;
             sal_Int32 nValCnt = 0;
-            aTmp = xPropSet->getPropertyValue( "ListSource" );
+            auto aTmp2 = xPropSet->getPropertyValue( "ListSource" );
             uno::Sequence<OUString> aValList;
-            if( aTmp.getValueType() == cppu::UnoType<uno::Sequence<OUString>>::get() )
+            if( auto s = o3tl::tryAccess<uno::Sequence<OUString>>(aTmp2) )
             {
-                aValList = *static_cast<uno::Sequence<OUString> const *>(aTmp.getValue());
+                aValList = *s;
                 nValCnt = aValList.getLength();
                 pValues = aValList.getConstArray();
             }
@@ -1175,9 +1186,9 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
             sal_Int32 nSel = 0;
             sal_Int32 nSelCnt = 0;
             uno::Sequence<sal_Int16> aSelList;
-            if( aSelTmp.getValueType() ==cppu::UnoType<uno::Sequence<sal_Int16>>::get())
+            if( auto s = o3tl::tryAccess<uno::Sequence<sal_Int16>>(aSelTmp) )
             {
-                aSelList = *static_cast<uno::Sequence<sal_Int16> const *>(aSelTmp.getValue());
+                aSelList = *s;
                 nSelCnt = aSelList.getLength();
                 pSels = aSelList.getConstArray();
             }
@@ -1199,7 +1210,7 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                 if( bSelected )
                     nSel++;
 
-                rHTMLWrt.OutNewLine(); // jede Option bekommt eine eigene Zeile
+                rHTMLWrt.OutNewLine(); // every Option gets its own line
                 sOut = "<" OOO_STRING_SVTOOLS_HTML_option;
                 if( !sVal.isEmpty() || bEmptyVal )
                 {
@@ -1218,23 +1229,24 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                 HTMLOutFuncs::Out_String( rWrt.Strm(), pStrings[i],
                                           rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters );
             }
-            HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), OOO_STRING_SVTOOLS_HTML_option, false );
+            HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), rHTMLWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_option, false );
 
             rHTMLWrt.DecIndentLevel();
-            rHTMLWrt.OutNewLine();// das </SELECT> bekommt eine eigene Zeile
+            rHTMLWrt.OutNewLine();// the </SELECT> gets its own line
         }
-        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), OOO_STRING_SVTOOLS_HTML_select, false );
+        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), rHTMLWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_select, false );
     }
     else if( TAG_TEXTAREA == eTag )
     {
-        // In TextAreas duerfen keine zusaetzlichen Spaces oder LF exportiert
-        // werden!
+        // In TextAreas no additional spaces or LF may be exported!
         OUString sVal;
         aTmp = xPropSet->getPropertyValue( "DefaultText" );
-        if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get()&&
-            !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+        if( auto s = o3tl::tryAccess<OUString>(aTmp) )
         {
-            sVal = *static_cast<OUString const *>(aTmp.getValue());
+            if( !s->isEmpty() )
+            {
+                sVal = *s;
+            }
         }
         if( !sVal.isEmpty() )
         {
@@ -1249,24 +1261,25 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
                                         rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters );
             }
         }
-        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), OOO_STRING_SVTOOLS_HTML_textarea, false );
+        HTMLOutFuncs::Out_AsciiTag( rWrt.Strm(), rHTMLWrt.GetNamespace() + OOO_STRING_SVTOOLS_HTML_textarea, false );
     }
     else if( TYPE_CHECKBOX == eType || TYPE_RADIO == eType )
     {
         aTmp = xPropSet->getPropertyValue("Label");
-        if( aTmp.getValueType() == ::cppu::UnoType<OUString>::get() &&
-            !static_cast<const OUString*>(aTmp.getValue())->isEmpty() )
+        if( auto s = o3tl::tryAccess<OUString>(aTmp) )
         {
-            sValue = *static_cast<OUString const *>(aTmp.getValue());
-            HTMLOutFuncs::Out_String( rWrt.Strm(), sValue,
-                rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters ).WriteChar( ' ' );
+            if( !s->isEmpty() )
+            {
+                HTMLOutFuncs::Out_String( rWrt.Strm(), *s,
+                    rHTMLWrt.m_eDestEnc, &rHTMLWrt.m_aNonConvertableCharacters ).WriteChar( ' ' );
+            }
         }
     }
 
     if( !aEndTags.isEmpty() )
         rWrt.Strm().WriteCharPtr( aEndTags.getStr() );
 
-    // Controls sind nicht absatz-gebunden, deshalb kein LF mehr ausgeben!
+    // Controls aren't bound to a paragraph, therefore don't output LF anymore!
     rHTMLWrt.m_bLFPossible = false;
 
     if( rHTMLWrt.mxFormComps.is() )
@@ -1274,13 +1287,14 @@ Writer& OutHTML_DrawFrameFormatAsControl( Writer& rWrt,
     return rWrt;
 }
 
-// Ermitteln, ob eine Format zu einem Control gehoert und wenn ja
-// dessen Form zurueckgeben
+/**
+ * Find out if a format belongs to a control and if yes return its form.
+ */
 static void AddControl( HTMLControls& rControls,
                         const SdrUnoObj& rFormObj,
                         sal_uInt32 nNodeIdx )
 {
-    uno::Reference< awt::XControlModel > xControlModel =
+    const uno::Reference< awt::XControlModel >& xControlModel =
             rFormObj.GetUnoControlModel();
     if( !xControlModel.is() )
         return;
@@ -1289,14 +1303,14 @@ static void AddControl( HTMLControls& rControls,
     uno::Reference< uno::XInterface >  xIfc = xFormComp->getParent();
     uno::Reference< form::XForm >  xForm(xIfc, uno::UNO_QUERY);
 
-    OSL_ENSURE( xForm.is(), "Wo ist die Form?" );
+    OSL_ENSURE( xForm.is(), "Where is the form?" );
     if( xForm.is() )
     {
         uno::Reference< container::XIndexContainer >  xFormComps( xForm, uno::UNO_QUERY );
         std::unique_ptr<HTMLControl> pHCntrl(new HTMLControl( xFormComps, nNodeIdx ));
         HTMLControls::const_iterator it = rControls.find( pHCntrl.get() );
         if( it == rControls.end() )
-            rControls.insert( pHCntrl.release() );
+            rControls.insert( std::move(pHCntrl) );
         else
         {
             if( (*it)->xFormComps==xFormComps )
@@ -1307,23 +1321,23 @@ static void AddControl( HTMLControls& rControls,
 
 void SwHTMLWriter::GetControls()
 {
-    // Idee: die absatz- und zeichengebundenen Controls werden erst einmal
-    // eingesammelt. Dabei wird fuer jedes Control des Absatz-Position
-    // und VCForm in einem Array gemerkt.
-    // Ueber dieses Array laesst sich dann feststellen, wo form::Forms geoeffnet
-    // und geschlossen werden muessen.
+    // Idea: first off collect the paragraph- and character-bound controls.
+    // In the process for every control the paragraph position and VCForm are
+    // saved in an array.
+    // With that array it's possible to find out where form::Forms must be
+    // opened and closed.
 
     if( m_pHTMLPosFlyFrames )
     {
-        // die absatz-gebundenen Controls einsammeln
+        // collect the paragraph-bound controls
         for( size_t i=0; i<m_pHTMLPosFlyFrames->size(); i++ )
         {
-            const SwHTMLPosFlyFrame* pPosFlyFrame = (*m_pHTMLPosFlyFrames)[ i ];
-            if( HTML_OUT_CONTROL != pPosFlyFrame->GetOutFn() )
+            const SwHTMLPosFlyFrame* pPosFlyFrame = (*m_pHTMLPosFlyFrames)[ i ].get();
+            if( HtmlOut::Control != pPosFlyFrame->GetOutFn() )
                 continue;
 
             const SdrObject *pSdrObj = pPosFlyFrame->GetSdrObject();
-            OSL_ENSURE( pSdrObj, "Wo ist das SdrObject?" );
+            OSL_ENSURE( pSdrObj, "Where is the SdrObject?" );
             if( !pSdrObj )
                 continue;
 
@@ -1332,8 +1346,8 @@ void SwHTMLWriter::GetControls()
         }
     }
 
-    // und jetzt die in einem zeichengebundenen Rahmen
-    const SwFrameFormats* pSpzFrameFormats = pDoc->GetSpzFrameFormats();
+    // and now the ones in a character-bound frame
+    const SwFrameFormats* pSpzFrameFormats = m_pDoc->GetSpzFrameFormats();
     for( size_t i=0; i<pSpzFrameFormats->size(); i++ )
     {
         const SwFrameFormat *pFrameFormat = (*pSpzFrameFormats)[i];
@@ -1342,7 +1356,7 @@ void SwHTMLWriter::GetControls()
 
         const SwFormatAnchor& rAnchor = pFrameFormat->GetAnchor();
         const SwPosition *pPos = rAnchor.GetContentAnchor();
-        if ((FLY_AS_CHAR != rAnchor.GetAnchorId()) || !pPos)
+        if ((RndStdIds::FLY_AS_CHAR != rAnchor.GetAnchorId()) || !pPos)
             continue;
 
         const SdrObject *pSdrObj =

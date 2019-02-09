@@ -26,19 +26,19 @@
 
 class XMLRenameElemTransformerContext : public XMLTransformerContext
 {
-    OUString m_aElemQName;
-    OUString m_aAttrQName;
-    OUString m_aAttrValue;
+    OUString const m_aElemQName;
+    OUString const m_aAttrQName;
+    OUString const m_aAttrValue;
 
 public:
-    // The following consutructor renames the element names "rQName"
+    // The following constructor renames the element names "rQName"
     // to bPrefix/eToken
     XMLRenameElemTransformerContext( XMLTransformerBase& rTransformer,
                            const OUString& rQName,
                               sal_uInt16 nPrefix,
                               ::xmloff::token::XMLTokenEnum eToken  );
 
-    // The following consutructor renames the element names "rQName"
+    // The following constructor renames the element names "rQName"
     // to bPrefix/eToken and adds an attribute nAPrefix/eAToken that has
     // the value eVToken.
     XMLRenameElemTransformerContext( XMLTransformerBase& rTransformer,
@@ -53,7 +53,7 @@ public:
     // ends. By default, nothing is done.
     // Note that virtual methods cannot be used inside destructors. Use
     // EndElement instead if this is required.
-    virtual ~XMLRenameElemTransformerContext();
+    virtual ~XMLRenameElemTransformerContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;

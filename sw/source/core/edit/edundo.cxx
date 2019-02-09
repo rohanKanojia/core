@@ -18,6 +18,7 @@
  */
 
 #include <svx/svdview.hxx>
+#include <sal/log.hxx>
 
 #include <editsh.hxx>
 #include <fesh.hxx>
@@ -94,7 +95,7 @@ void SwEditShell::HandleUndoRedoContext(::sw::UndoRedoContext & rContext)
     }
 }
 
-bool SwEditShell::Undo(sal_uInt16 const nCount)
+void SwEditShell::Undo(sal_uInt16 const nCount)
 {
     SET_CURR_SHELL( this );
 
@@ -112,18 +113,18 @@ bool SwEditShell::Undo(sal_uInt16 const nCount)
 
         // Keep Cursor - so that we're able to set it at
         // the same position for autoformat or autocorrection
-        SwUndoId nLastUndoId(UNDO_EMPTY);
+        SwUndoId nLastUndoId(SwUndoId::EMPTY);
         GetLastUndoInfo(nullptr, & nLastUndoId);
         const bool bRestoreCursor = nCount == 1
-                                  && ( UNDO_AUTOFORMAT == nLastUndoId
-                                       || UNDO_AUTOCORRECT == nLastUndoId
-                                       || UNDO_SETDEFTATTR == nLastUndoId );
+                                  && ( SwUndoId::AUTOFORMAT == nLastUndoId
+                                       || SwUndoId::AUTOCORRECT == nLastUndoId
+                                       || SwUndoId::SETDEFTATTR == nLastUndoId );
         Push();
 
         // Destroy stored TableBoxPtr. A dection is only permitted for the new "Box"!
         ClearTableBoxContent();
 
-        const RedlineMode_t eOld = GetDoc()->getIDocumentRedlineAccess().GetRedlineMode();
+        const RedlineFlags eOld = GetDoc()->getIDocumentRedlineAccess().GetRedlineFlags();
 
         try {
             for (sal_uInt16 i = 0; i < nCount; ++i)
@@ -132,28 +133,25 @@ bool SwEditShell::Undo(sal_uInt16 const nCount)
                     || bRet;
             }
         } catch (const css::uno::Exception & e) {
-            SAL_WARN("sw.core",
-                    "SwEditShell::Undo(): exception caught: " << e.Message);
+            SAL_WARN("sw.core", "SwEditShell::Undo(): exception caught: " << e);
         }
 
         if (bRestoreCursor)
         {   // fdo#39003 Pop does not touch the rest of the cursor ring
             KillPams(); // so call this first to get rid of unwanted cursors
         }
-        Pop( !bRestoreCursor );
+        Pop(bRestoreCursor ? PopMode::DeleteCurrent : PopMode::DeleteStack);
 
-        GetDoc()->getIDocumentRedlineAccess().SetRedlineMode( eOld );
+        GetDoc()->getIDocumentRedlineAccess().SetRedlineFlags( eOld );
         GetDoc()->getIDocumentRedlineAccess().CompressRedlines();
 
         // automatic detection of the new "Box"
         SaveTableBoxContent();
     }
     EndAllAction();
-
-    return bRet;
 }
 
-bool SwEditShell::Redo(sal_uInt16 const nCount)
+void SwEditShell::Redo(sal_uInt16 const nCount)
 {
     SET_CURR_SHELL( this );
 
@@ -171,15 +169,15 @@ bool SwEditShell::Redo(sal_uInt16 const nCount)
         SetMark();          // Bound1 and Bound2 in the same Node
         ClearMark();
 
-        SwUndoId nFirstRedoId(UNDO_EMPTY);
+        SwUndoId nFirstRedoId(SwUndoId::EMPTY);
         GetDoc()->GetIDocumentUndoRedo().GetFirstRedoInfo(nullptr, & nFirstRedoId);
-        const bool bRestoreCursor = nCount == 1 && UNDO_SETDEFTATTR == nFirstRedoId;
+        const bool bRestoreCursor = nCount == 1 && SwUndoId::SETDEFTATTR == nFirstRedoId;
         Push();
 
         // Destroy stored TableBoxPtr. A dection is only permitted for the new "Box"!
         ClearTableBoxContent();
 
-        RedlineMode_t eOld = GetDoc()->getIDocumentRedlineAccess().GetRedlineMode();
+        RedlineFlags eOld = GetDoc()->getIDocumentRedlineAccess().GetRedlineFlags();
 
         try {
             for (sal_uInt16 i = 0; i < nCount; ++i)
@@ -188,13 +186,12 @@ bool SwEditShell::Redo(sal_uInt16 const nCount)
                     || bRet;
             }
         } catch (const css::uno::Exception & e) {
-            SAL_WARN("sw.core",
-                    "SwEditShell::Redo(): exception caught: " << e.Message);
+            SAL_WARN("sw.core", "SwEditShell::Redo(): exception caught: " << e);
         }
 
-        Pop( !bRestoreCursor );
+        Pop(bRestoreCursor ? PopMode::DeleteCurrent : PopMode::DeleteStack);
 
-        GetDoc()->getIDocumentRedlineAccess().SetRedlineMode( eOld );
+        GetDoc()->getIDocumentRedlineAccess().SetRedlineFlags( eOld );
         GetDoc()->getIDocumentRedlineAccess().CompressRedlines();
 
         // automatic detection of the new "Box"
@@ -202,28 +199,22 @@ bool SwEditShell::Redo(sal_uInt16 const nCount)
     }
 
     EndAllAction();
-
-    return bRet;
 }
 
-bool SwEditShell::Repeat(sal_uInt16 const nCount)
+void SwEditShell::Repeat(sal_uInt16 const nCount)
 {
     SET_CURR_SHELL( this );
 
-    bool bRet = false;
     StartAllAction();
 
     try {
         ::sw::RepeatContext context(*GetDoc(), *GetCursor());
-        bRet = GetDoc()->GetIDocumentUndoRedo().Repeat( context, nCount )
-            || bRet;
+        GetDoc()->GetIDocumentUndoRedo().Repeat( context, nCount );
     } catch (const css::uno::Exception & e) {
-        SAL_WARN("sw.core",
-                "SwEditShell::Repeat(): exception caught: " << e.Message);
+        SAL_WARN("sw.core", "SwEditShell::Repeat(): exception caught: " << e);
     }
 
     EndAllAction();
-    return bRet;
 }
 
 static void lcl_SelectSdrMarkList( SwEditShell* pShell,

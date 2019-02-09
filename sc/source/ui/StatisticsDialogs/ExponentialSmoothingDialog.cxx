@@ -8,23 +8,23 @@
  *
  */
 
+#include <memory>
 #include <sfx2/dispatch.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/undo.hxx>
 
-#include "formulacell.hxx"
-#include "rangelst.hxx"
-#include "scitems.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "strload.hxx"
-#include "docfunc.hxx"
-#include "StatisticsDialogs.hrc"
-#include "TableFillingAndNavigationTools.hxx"
-
-#include "ExponentialSmoothingDialog.hxx"
+#include <formulacell.hxx>
+#include <rangelst.hxx>
+#include <scitems.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <docfunc.hxx>
+#include <TableFillingAndNavigationTools.hxx>
+#include <ExponentialSmoothingDialog.hxx>
+#include <scresid.hxx>
+#include <strings.hrc>
 
 ScExponentialSmoothingDialog::ScExponentialSmoothingDialog(
                     SfxBindings* pSfxBindings, SfxChildWindow* pChildWindow,
@@ -52,7 +52,7 @@ bool ScExponentialSmoothingDialog::Close()
     return DoClose( ScExponentialSmoothingDialogWrapper::GetChildWindowId() );
 }
 
-sal_Int16 ScExponentialSmoothingDialog::GetUndoNameId()
+const char* ScExponentialSmoothingDialog::GetUndoNameId()
 {
     return STR_EXPONENTIAL_SMOOTHING_UNDO_NAME;
 }
@@ -67,7 +67,7 @@ ScRange ScExponentialSmoothingDialog::ApplyOutput(ScDocShell* pDocShell)
     double aSmoothingFactor = mpSmoothingFactor->GetValue() / 100.0;
 
     // Alpha
-    output.writeBoldString(SC_STRLOAD(RID_STATISTICS_DLGS, STR_LABEL_ALPHA));
+    output.writeBoldString(ScResId(STR_LABEL_ALPHA));
     output.nextRow();
 
     // Alpha Value
@@ -92,15 +92,15 @@ ScRange ScExponentialSmoothingDialog::ApplyOutput(ScDocShell* pDocShell)
 
         // Write column label
         if (mGroupedBy == BY_COLUMN)
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_COLUMN_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_COLUMN_LABEL_TEMPLATE));
         else
-            aTemplate.setTemplate(SC_STRLOAD(RID_STATISTICS_DLGS, STR_ROW_LABEL_TEMPLATE));
+            aTemplate.setTemplate(ScResId(STR_ROW_LABEL_TEMPLATE));
         aTemplate.applyNumber("%NUMBER%", pIterator->index() + 1);
         output.writeBoldString(aTemplate.getTemplate());
         output.nextRow();
 
         // Initial value
-        if (false)
+        if ((false))
         {
             aTemplate.setTemplate("=AVERAGE(%RANGE%)");
             aTemplate.applyRange("%RANGE%", aCurrentRange);

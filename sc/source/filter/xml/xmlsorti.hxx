@@ -19,17 +19,18 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLSORTI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLSORTI_HXX
 
-#include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
 #include <xmloff/languagetagodf.hxx>
-#include <com/sun/star/util/SortField.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
 
-#include "xmldrani.hxx"
+#include "importcontext.hxx"
+
+namespace com { namespace sun { namespace star { namespace util { struct SortField; } } } }
+namespace sax_fastparser { class FastAttributeList; }
 
 class ScXMLImport;
+class ScXMLDatabaseRangeContext;
 
-class ScXMLSortContext : public SvXMLImportContext
+class ScXMLSortContext : public ScXMLImportContext
 {
     ScXMLDatabaseRangeContext* pDatabaseRangeContext;
 
@@ -43,28 +44,23 @@ class ScXMLSortContext : public SvXMLImportContext
     bool        bIsCaseSensitive;
     bool        bEnabledUserList;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLSortContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLSortContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDatabaseRangeContext* pTempDatabaseRangeContext);
 
-    virtual ~ScXMLSortContext();
+    virtual ~ScXMLSortContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
     void AddSortField(const OUString& sFieldNumber, const OUString& sDataType, const OUString& sOrder);
 };
 
-class ScXMLSortByContext : public SvXMLImportContext
+class ScXMLSortByContext : public ScXMLImportContext
 {
     ScXMLSortContext* pSortContext;
 
@@ -72,23 +68,15 @@ class ScXMLSortByContext : public SvXMLImportContext
     OUString   sDataType;
     OUString   sOrder;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLSortByContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLSortByContext( ScXMLImport& rImport, sal_Int32 nElement,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLSortContext* pTempSortContext);
 
-    virtual ~ScXMLSortByContext();
+    virtual ~ScXMLSortByContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
-
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
 #endif

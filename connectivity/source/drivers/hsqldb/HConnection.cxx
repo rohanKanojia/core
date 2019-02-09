@@ -18,16 +18,14 @@
  */
 
 
-#include "hsqldb/HConnection.hxx"
-#include "hsqldb/HTools.hxx"
-#include "hsqlui.hrc"
+#include <hsqldb/HConnection.hxx>
+#include <hsqldb/HTools.hxx>
+#include <bitmaps.hlst>
 
 #include <connectivity/dbtools.hxx>
 
-#include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/sdbcx/XDataDefinitionSupplier.hpp>
-#include <com/sun/star/lang/ServiceNotRegisteredException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
@@ -35,15 +33,13 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/sdbc/XDatabaseMetaData2.hpp>
 
-#include <comphelper/listenernotification.hxx>
-#include <comphelper/processfactory.hxx>
-#include <comphelper/sequence.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 
-#include "resource/sharedresources.hxx"
-#include "resource/hsqldb_res.hrc"
+#include <resource/sharedresources.hxx>
+#include <strings.hrc>
 
 using ::com::sun::star::util::XFlushListener;
 using ::com::sun::star::lang::EventObject;
@@ -59,11 +55,8 @@ using ::com::sun::star::sdbcx::XDataDefinitionSupplier;
 using ::com::sun::star::sdbcx::XTablesSupplier;
 using ::com::sun::star::container::XNameAccess;
 using ::com::sun::star::uno::Sequence;
-using ::com::sun::star::beans::NamedValue;
 using ::com::sun::star::lang::WrappedTargetException;
-using ::com::sun::star::lang::ServiceNotRegisteredException;
 using ::com::sun::star::sdbc::XDriver;
-using ::com::sun::star::lang::XMultiServiceFactory;
 using ::com::sun::star::graphic::XGraphic;
 using ::com::sun::star::graphic::GraphicProvider;
 using ::com::sun::star::graphic::XGraphicProvider;
@@ -77,7 +70,6 @@ using ::com::sun::star::sdbc::XRow;
 using ::com::sun::star::sdb::application::XDatabaseDocumentUI;
 using ::com::sun::star::beans::PropertyValue;
 
-namespace GraphicColorMode = ::com::sun::star::graphic::GraphicColorMode;
 
 namespace connectivity { namespace hsqldb
 {
@@ -127,7 +119,7 @@ namespace connectivity { namespace hsqldb
 
     // XFlushable
 
-    void SAL_CALL OHsqlConnection::flush(  ) throw (RuntimeException, std::exception)
+    void SAL_CALL OHsqlConnection::flush(  )
     {
         MethodGuard aGuard( *this );
 
@@ -158,7 +150,7 @@ namespace connectivity { namespace hsqldb
                 }
                 catch(const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
                 }
             }
 
@@ -167,26 +159,26 @@ namespace connectivity { namespace hsqldb
         }
         catch(const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
         }
    }
 
 
-    void SAL_CALL OHsqlConnection::addFlushListener( const Reference< XFlushListener >& l ) throw (RuntimeException, std::exception)
+    void SAL_CALL OHsqlConnection::addFlushListener( const Reference< XFlushListener >& l )
     {
         MethodGuard aGuard( *this );
         m_aFlushListeners.addInterface( l );
     }
 
 
-    void SAL_CALL OHsqlConnection::removeFlushListener( const Reference< XFlushListener >& l ) throw (RuntimeException, std::exception)
+    void SAL_CALL OHsqlConnection::removeFlushListener( const Reference< XFlushListener >& l )
     {
         MethodGuard aGuard( *this );
         m_aFlushListeners.removeInterface( l );
     }
 
 
-    Reference< XGraphic > SAL_CALL OHsqlConnection::getTableIcon( const OUString& TableName, ::sal_Int32 /*_ColorMode*/ ) throw (RuntimeException, std::exception)
+    Reference< XGraphic > SAL_CALL OHsqlConnection::getTableIcon( const OUString& TableName, ::sal_Int32 /*_ColorMode*/ )
     {
         MethodGuard aGuard( *this );
 
@@ -198,7 +190,7 @@ namespace connectivity { namespace hsqldb
     }
 
 
-    Reference< XInterface > SAL_CALL OHsqlConnection::getTableEditor( const Reference< XDatabaseDocumentUI >& DocumentUI, const OUString& TableName ) throw (IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
+    Reference< XInterface > SAL_CALL OHsqlConnection::getTableEditor( const Reference< XDatabaseDocumentUI >& DocumentUI, const OUString& TableName )
     {
         MethodGuard aGuard( *this );
 
@@ -238,9 +230,10 @@ namespace connectivity { namespace hsqldb
         catch( const RuntimeException& ) { throw; }
         catch( const Exception& )
         {
+            css::uno::Any anyEx = cppu::getCaughtException();
             ::connectivity::SharedResources aResources;
             const OUString sError( aResources.getResourceString(STR_NO_TABLE_CONTAINER));
-            throw WrappedTargetException( sError ,*this, ::cppu::getCaughtException() );
+            throw WrappedTargetException( sError ,*this, anyEx );
         }
 
         SAL_WARN_IF( !xTables.is(), "connectivity.hsqldb", "OHsqlConnection::impl_getTableContainer_throw: post condition not met!" );
@@ -255,14 +248,13 @@ namespace connectivity { namespace hsqldb
         try
         {
             Reference< XNameAccess > xTables( impl_getTableContainer_throw(), UNO_QUERY_THROW );
-            if ( xTables.is() )
-                bDoesExist = xTables->hasByName( _rTableName );
+            bDoesExist = xTables->hasByName( _rTableName );
         }
         catch( const Exception& )
         {
             // that's a serious error in impl_getTableContainer_throw, or hasByName, however, we're only
             // allowed to throw an IllegalArgumentException ourself
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
         }
 
         if ( !bDoesExist )
@@ -307,7 +299,7 @@ namespace connectivity { namespace hsqldb
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
         }
 
         return bIsTextTable;
@@ -329,7 +321,6 @@ namespace connectivity { namespace hsqldb
             // load the graphic from the global graphic repository
             aImageURL.append( "private:graphicrepository/" );
             // the relative path within the images.zip
-            aImageURL.append( "database/" );
             aImageURL.append( LINKED_TEXT_TABLE_IMAGE_RESOURCE );
             // the name of the graphic to use
             OUString sImageURL( aImageURL.makeStringAndClear() );
@@ -343,7 +334,7 @@ namespace connectivity { namespace hsqldb
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
         }
         return xGraphic;
     }

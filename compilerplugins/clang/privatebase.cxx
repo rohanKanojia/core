@@ -12,10 +12,11 @@
 namespace {
 
 class PrivateBase:
-    public RecursiveASTVisitor<PrivateBase>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<PrivateBase>
 {
 public:
-    explicit PrivateBase(InstantiationData const & data): Plugin(data) {}
+    explicit PrivateBase(loplugin::InstantiationData const & data): FilteringPlugin(data)
+    {}
 
     void run() override;
 
@@ -34,14 +35,14 @@ bool PrivateBase::VisitCXXRecordDecl(CXXRecordDecl const * decl) {
     {
         return true;
     }
-    for (auto const & i: decl->bases()) {
-        if (i.getAccessSpecifierAsWritten() == AS_none) {
+    for (auto i = decl->bases_begin(); i != decl->bases_end(); ++i) {
+        if (i->getAccessSpecifierAsWritten() == AS_none) {
             report(
                 DiagnosticsEngine::Warning,
                 "base class is private by default; explicitly give an access"
                     " specifier",
-                i.getLocStart())
-                << i.getSourceRange();
+                compat::getBeginLoc(i))
+                << i->getSourceRange();
         }
     }
     return true;

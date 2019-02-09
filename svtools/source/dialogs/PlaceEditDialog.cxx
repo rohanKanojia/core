@@ -7,84 +7,121 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <config_oauth2.h>
+
 #include <svtools/PlaceEditDialog.hxx>
 #include <svtools/ServerDetailsControls.hxx>
 
 #include <com/sun/star/uno/Sequence.hxx>
 #include <officecfg/Office/Common.hxx>
 #include <svtools/svtresid.hxx>
-#include <svtools/svtools.hrc>
-#include <vcl/msgbox.hxx>
+#include <svtools/strings.hrc>
+#include <svtools/place.hxx>
 
 using namespace com::sun::star::uno;
 
-PlaceEditDialog::PlaceEditDialog(vcl::Window* pParent)
-    : ModalDialog(pParent, "PlaceEditDialog", "svt/ui/placeedit.ui")
+PlaceEditDialog::PlaceEditDialog(weld::Window* pParent)
+    : GenericDialogController(pParent, "svt/ui/placeedit.ui", "PlaceEditDialog")
     , m_xCurrentDetails()
     , m_nCurrentType( 0 )
-    , bLabelChanged( false )
+    , m_bLabelChanged( false )
     , m_bShowPassword( true )
+    , m_xEDServerName(m_xBuilder->weld_entry("name"))
+    , m_xLBServerType(m_xBuilder->weld_combo_box("type"))
+    , m_xEDUsername(m_xBuilder->weld_entry("login"))
+    , m_xFTUsernameLabel(m_xBuilder->weld_label("loginLabel"))
+    , m_xBTOk(m_xBuilder->weld_button("ok"))
+    , m_xBTCancel(m_xBuilder->weld_button("cancel"))
+    , m_xBTDelete(m_xBuilder->weld_button("delete"))
+    , m_xBTRepoRefresh(m_xBuilder->weld_button("repositoriesRefresh"))
+    , m_xCBPassword(m_xBuilder->weld_check_button("rememberPassword"))
+    , m_xEDPassword(m_xBuilder->weld_entry("password"))
+    , m_xFTPasswordLabel(m_xBuilder->weld_label("passwordLabel"))
+    , m_xTypeGrid(m_xBuilder->weld_widget("TypeGrid"))
+
+    , m_xRepositoryBox(m_xBuilder->weld_widget("RepositoryDetails"))
+    , m_xFTRepository(m_xBuilder->weld_label("repositoryLabel"))
+    , m_xLBRepository(m_xBuilder->weld_combo_box("repositories"))
+
+    , m_xEDShare(m_xBuilder->weld_entry("share"))
+    , m_xFTShare(m_xBuilder->weld_label("shareLabel"))
+
+    , m_xDetailsGrid(m_xBuilder->weld_widget("Details"))
+    , m_xHostBox(m_xBuilder->weld_widget("HostDetails"))
+    , m_xEDHost(m_xBuilder->weld_entry("host"))
+    , m_xFTHost(m_xBuilder->weld_label("hostLabel"))
+    , m_xEDPort(m_xBuilder->weld_spin_button("port"))
+    , m_xFTPort(m_xBuilder->weld_label("portLabel"))
+    , m_xEDRoot(m_xBuilder->weld_entry("path"))
+    , m_xFTRoot(m_xBuilder->weld_label("pathLabel"))
+
+    , m_xCBDavs(m_xBuilder->weld_check_button("webdavs"))
 {
-    get( m_pEDServerName, "name" );
-    get( m_pLBServerType, "type" );
-    get( m_pEDUsername, "login" );
-    get( m_pFTUsernameLabel, "loginLabel" );
-    get( m_pBTOk, "ok" );
-    get( m_pBTCancel, "cancel" );
-    get( m_pBTDelete, "delete" );
-    get( m_pBTRepoRefresh, "repositoriesRefresh" );
-    get( m_pCBPassword, "rememberPassword" );
-    get( m_pEDPassword, "password" );
-    get( m_pFTPasswordLabel, "passwordLabel" );
+    m_xBTOk->connect_clicked( LINK( this, PlaceEditDialog, OKHdl) );
+    m_xBTOk->set_sensitive( false );
 
-    m_pBTOk->SetClickHdl( LINK( this, PlaceEditDialog, OKHdl) );
-    m_pBTOk->Enable( false );
-
-    m_pEDServerName->SetModifyHdl( LINK( this, PlaceEditDialog, EditLabelHdl) );
+    m_xEDServerName->connect_changed( LINK( this, PlaceEditDialog, EditLabelHdl) );
 
     // This constructor is called when user request a place creation, so
     // delete button is hidden.
-    m_pBTDelete->Hide();
+    m_xBTDelete->hide();
 
-    m_pLBServerType->SetSelectHdl( LINK( this, PlaceEditDialog, SelectTypeHdl ) );
-    m_pEDUsername->SetModifyHdl( LINK( this, PlaceEditDialog, EditUsernameHdl ) );
-    m_pEDPassword->SetModifyHdl( LINK( this, PlaceEditDialog, EditUsernameHdl ) );
+    m_xLBServerType->connect_changed( LINK( this, PlaceEditDialog, SelectTypeHdl ) );
+    m_xEDUsername->connect_changed( LINK( this, PlaceEditDialog, EditUsernameHdl ) );
+    m_xEDPassword->connect_changed( LINK( this, PlaceEditDialog, EditUsernameHdl ) );
 
     InitDetails( );
 }
 
-PlaceEditDialog::PlaceEditDialog(vcl::Window* pParent, const std::shared_ptr<Place>& rPlace)
-    : ModalDialog(pParent, "PlaceEditDialog", "svt/ui/placeedit.ui")
+PlaceEditDialog::PlaceEditDialog(weld::Window* pParent, const std::shared_ptr<Place>& rPlace)
+    : GenericDialogController(pParent, "svt/ui/placeedit.ui", "PlaceEditDialog")
     , m_xCurrentDetails( )
-    , bLabelChanged( true )
+    , m_bLabelChanged( true )
     , m_bShowPassword( false )
+    , m_xEDServerName(m_xBuilder->weld_entry("name"))
+    , m_xLBServerType(m_xBuilder->weld_combo_box("type"))
+    , m_xEDUsername(m_xBuilder->weld_entry("login"))
+    , m_xFTUsernameLabel(m_xBuilder->weld_label("loginLabel"))
+    , m_xBTOk(m_xBuilder->weld_button("ok"))
+    , m_xBTCancel(m_xBuilder->weld_button("cancel"))
+    , m_xBTDelete(m_xBuilder->weld_button("delete"))
+    , m_xBTRepoRefresh(m_xBuilder->weld_button("repositoriesRefresh"))
+    , m_xCBPassword(m_xBuilder->weld_check_button("rememberPassword"))
+    , m_xEDPassword(m_xBuilder->weld_entry("password"))
+    , m_xFTPasswordLabel(m_xBuilder->weld_label("passwordLabel"))
+    , m_xTypeGrid(m_xBuilder->weld_widget("TypeGrid"))
+
+    , m_xRepositoryBox(m_xBuilder->weld_widget("RepositoryDetails"))
+    , m_xFTRepository(m_xBuilder->weld_label("repositoryLabel"))
+    , m_xLBRepository(m_xBuilder->weld_combo_box("repositories"))
+
+    , m_xEDShare(m_xBuilder->weld_entry("share"))
+    , m_xFTShare(m_xBuilder->weld_label("shareLabel"))
+
+    , m_xDetailsGrid(m_xBuilder->weld_widget("Details"))
+    , m_xHostBox(m_xBuilder->weld_widget("HostDetails"))
+    , m_xEDHost(m_xBuilder->weld_entry("host"))
+    , m_xFTHost(m_xBuilder->weld_label("hostLabel"))
+    , m_xEDPort(m_xBuilder->weld_spin_button("port"))
+    , m_xFTPort(m_xBuilder->weld_label("portLabel"))
+    , m_xEDRoot(m_xBuilder->weld_entry("path"))
+    , m_xFTRoot(m_xBuilder->weld_label("pathLabel"))
+
+    , m_xCBDavs(m_xBuilder->weld_check_button("webdavs"))
 {
-    get( m_pEDServerName, "name" );
-    get( m_pLBServerType, "type" );
-    get( m_pEDUsername, "login" );
-    get( m_pFTUsernameLabel, "loginLabel" );
-    get( m_pBTOk, "ok" );
-    get( m_pBTCancel, "cancel" );
-    get( m_pBTDelete, "delete" );
-    get( m_pBTRepoRefresh, "repositoriesRefresh" );
-    get( m_pTypeGrid, "TypeGrid" );
-    get( m_pCBPassword, "rememberPassword" );
-    get( m_pEDPassword, "password" );
-    get( m_pFTPasswordLabel, "passwordLabel" );
+    m_xEDPassword->hide();
+    m_xFTPasswordLabel->hide();
+    m_xCBPassword->hide();
 
-    m_pEDPassword->Hide();
-    m_pFTPasswordLabel->Hide();
-    m_pCBPassword->Hide();
+    m_xBTOk->connect_clicked( LINK( this, PlaceEditDialog, OKHdl) );
+    m_xBTDelete->connect_clicked( LINK( this, PlaceEditDialog, DelHdl) );
 
-    m_pBTOk->SetClickHdl( LINK( this, PlaceEditDialog, OKHdl) );
-    m_pBTDelete->SetClickHdl ( LINK( this, PlaceEditDialog, DelHdl) );
-
-    m_pEDServerName->SetModifyHdl( LINK( this, PlaceEditDialog, ModifyHdl) );
-    m_pLBServerType->SetSelectHdl( LINK( this, PlaceEditDialog, SelectTypeHdl ) );
+    m_xEDServerName->connect_changed( LINK( this, PlaceEditDialog, ModifyHdl) );
+    m_xLBServerType->connect_changed( LINK( this, PlaceEditDialog, SelectTypeHdl ) );
 
     InitDetails( );
 
-    m_pEDServerName->SetText(rPlace->GetName());
+    m_xEDServerName->set_text(rPlace->GetName());
 
     // Fill the boxes with the URL parts
     bool bSuccess = false;
@@ -97,38 +134,23 @@ PlaceEditDialog::PlaceEditDialog(vcl::Window* pParent, const std::shared_ptr<Pla
             // Fill the Username field
             if ( rUrl.HasUserData( ) )
             {
-                m_pEDUsername->SetText( INetURLObject::decode( rUrl.GetUser( ),
-                                                              INetURLObject::DECODE_WITH_CHARSET ) );
+                m_xEDUsername->set_text( INetURLObject::decode( rUrl.GetUser( ),
+                                                              INetURLObject::DecodeMechanism::WithCharset ) );
                 m_aDetailsContainers[i]->setUsername( INetURLObject::decode( rUrl.GetUser( ),
-                                                              INetURLObject::DECODE_WITH_CHARSET ) );
+                                                              INetURLObject::DecodeMechanism::WithCharset ) );
             }
 
-            m_pLBServerType->SelectEntryPos( i );
-            SelectTypeHdl( *m_pLBServerType );
+            m_xLBServerType->set_active(i);
+            SelectType(true);
         }
     }
 
     // In edit mode user can't change connection type
-    m_pTypeGrid->Hide();
+    m_xTypeGrid->hide();
 }
 
 PlaceEditDialog::~PlaceEditDialog()
 {
-    disposeOnce();
-}
-
-void PlaceEditDialog::dispose()
-{
-    m_pEDServerName.clear();
-    m_pLBServerType.clear();
-    m_pEDUsername.clear();
-    m_pFTUsernameLabel.clear();
-    m_pBTOk.clear();
-    m_pBTCancel.clear();
-    m_pBTDelete.clear();
-    m_pEDPassword.clear();
-    m_pFTPasswordLabel.clear();
-    ModalDialog::dispose();
 }
 
 OUString PlaceEditDialog::GetServerUrl()
@@ -137,11 +159,11 @@ OUString PlaceEditDialog::GetServerUrl()
     if (m_xCurrentDetails.get())
     {
         INetURLObject aUrl = m_xCurrentDetails->getUrl();
-        OUString sUsername = m_pEDUsername->GetText( ).trim( );
+        OUString sUsername = m_xEDUsername->get_text().trim();
         if ( !sUsername.isEmpty( ) )
             aUrl.SetUser( sUsername );
         if ( !aUrl.HasError( ) )
-            sUrl = aUrl.GetMainURL( INetURLObject::NO_DECODE );
+            sUrl = aUrl.GetMainURL( INetURLObject::DecodeMechanism::NONE );
     }
 
     return sUrl;
@@ -149,7 +171,7 @@ OUString PlaceEditDialog::GetServerUrl()
 
 std::shared_ptr<Place> PlaceEditDialog::GetPlace()
 {
-    return std::make_shared<Place>(m_pEDServerName->GetText(), GetServerUrl(), true);
+    return std::make_shared<Place>(m_xEDServerName->get_text(), GetServerUrl(), true);
 }
 
 void PlaceEditDialog::InitDetails( )
@@ -169,10 +191,10 @@ void PlaceEditDialog::InitDetails( )
     Sequence< OUString > aTypesUrlsList( officecfg::Office::Common::Misc::CmisServersUrls::get( xContext ) );
     Sequence< OUString > aTypesNamesList( officecfg::Office::Common::Misc::CmisServersNames::get( xContext ) );
 
-    unsigned int nPos = 0;
+    int nPos = 0;
     for ( sal_Int32 i = 0; i < aTypesUrlsList.getLength( ) && aTypesNamesList.getLength( ); ++i )
     {
-        OUString sUrl = aTypesUrlsList[i];
+        OUString sUrl = aTypesUrlsList[i].replaceFirst("<host", "<" + SvtResId(STR_SVT_HOST)).replaceFirst("port>",  SvtResId(STR_SVT_PORT) + ">");
 
         if ((sUrl == GDRIVE_BASE_URL && bSkipGDrive) ||
             (sUrl.startsWith( ALFRESCO_CLOUD_BASE_URL) && bSkipAlfresco) ||
@@ -182,13 +204,13 @@ void PlaceEditDialog::InitDetails( )
             continue;
         }
 
-        nPos = m_pLBServerType->InsertEntry( aTypesNamesList[i], nPos );
+        m_xLBServerType->insert_text(nPos, aTypesNamesList[i].replaceFirst("Other CMIS", SvtResId(STR_SVT_OTHER_CMIS)));
 
         std::shared_ptr<DetailsContainer> xCmisDetails(std::make_shared<CmisDetailsContainer>(this, sUrl));
         xCmisDetails->setChangeHdl( LINK( this, PlaceEditDialog, EditHdl ) );
         m_aDetailsContainers.push_back(xCmisDetails);
 
-        nPos++;
+        ++nPos;
     }
 
     // Create WebDAV / FTP / SSH details control
@@ -204,147 +226,149 @@ void PlaceEditDialog::InitDetails( )
     xSshDetails->setChangeHdl( LINK( this, PlaceEditDialog, EditHdl ) );
     m_aDetailsContainers.push_back(xSshDetails);
 
+    // Remove Windows Share entry from dialog on Windows OS, where it's non-functional
+#if defined(_WIN32)
+    // nPos is the position of first item that is pre-defined in svtools/uiconfig/ui/placeedit.ui,
+    // after other CMIS types were inserted
+    m_xLBServerType->remove(nPos + 3);
+#else
     // Create Windows Share control
     std::shared_ptr<DetailsContainer> xSmbDetails(std::make_shared<SmbDetailsContainer>(this));
     xSmbDetails->setChangeHdl( LINK( this, PlaceEditDialog, EditHdl ) );
     m_aDetailsContainers.push_back(xSmbDetails);
+#endif
 
     // Set default to first value
-    m_pLBServerType->SelectEntryPos( 0 );
+    m_xLBServerType->set_active(0);
 
-    if ( m_pLBServerType->GetSelectEntry() == "--------------------" )
-        m_pLBServerType->SelectEntryPos( 1 );
+    if (m_xLBServerType->get_active_text() == "--------------------" )
+        m_xLBServerType->set_active(1);
 
-    SelectTypeHdl( *m_pLBServerType );
+    SelectType(true);
 }
 
-void PlaceEditDialog::UpdateLabel( )
+IMPL_LINK( PlaceEditDialog, OKHdl, weld::Button&, /*rBtn*/, void)
 {
-    if( !bLabelChanged )
+    if ( !m_xCurrentDetails.get() )
+        return;
+
+    OUString sUrl = m_xCurrentDetails->getUrl().GetHost( INetURLObject::DecodeMechanism::WithCharset );
+
+    if ( sUrl.startsWith( GDRIVE_BASE_URL )
+       || sUrl.startsWith( ALFRESCO_CLOUD_BASE_URL )
+       || sUrl.startsWith( ONEDRIVE_BASE_URL ) )
     {
-        if( !m_pEDUsername->GetText().isEmpty( ) )
+        m_xBTRepoRefresh->clicked();
+
+        sUrl = m_xCurrentDetails->getUrl().GetHost( INetURLObject::DecodeMechanism::WithCharset );
+        INetURLObject aHostUrl( sUrl );
+        OUString sRepoId = aHostUrl.GetMark();
+
+        if ( !sRepoId.isEmpty() )
+        {
+            m_xDialog->response(RET_OK);
+        }
+        else
+        {
+            // TODO: repository id missing. Auth error?
+        }
+    }
+    else
+    {
+        m_xDialog->response(RET_OK);
+    }
+}
+
+IMPL_LINK( PlaceEditDialog, DelHdl, weld::Button&, /*rButton*/, void)
+{
+    // ReUsing existing symbols...
+    m_xDialog->response(RET_NO);
+}
+
+IMPL_LINK_NOARG( PlaceEditDialog, EditHdl, DetailsContainer*, void )
+{
+    if( !m_bLabelChanged )
+    {
+        if( !m_xEDUsername->get_text().isEmpty( ) )
         {
             OUString sLabel = SvtResId( STR_SVT_DEFAULT_SERVICE_LABEL );
-            OUString sUser = m_pEDUsername->GetText();
+            OUString sUser = m_xEDUsername->get_text();
 
             int nLength = sUser.indexOf( '@' );
             if( nLength < 0 )
                 nLength = sUser.getLength();
 
             sLabel = sLabel.replaceFirst( "$user$", sUser.copy( 0, nLength ) );
-            sLabel = sLabel.replaceFirst( "$service$", m_pLBServerType->GetSelectEntry() );
+            sLabel = sLabel.replaceFirst( "$service$", m_xLBServerType->get_active_text() );
 
-            m_pEDServerName->SetText( sLabel );
-            bLabelChanged = false;
+            m_xEDServerName->set_text( sLabel );
+            m_bLabelChanged = false;
         }
         else
         {
-            m_pEDServerName->SetText( m_pLBServerType->GetSelectEntry( ) );
+            m_xEDServerName->set_text( m_xLBServerType->get_active_text( ) );
         }
     }
-}
-
-IMPL_LINK_TYPED( PlaceEditDialog, OKHdl, Button*, /*pBtn*/, void)
-{
-    if ( m_xCurrentDetails.get() )
-    {
-        OUString sUrl = m_xCurrentDetails->getUrl().GetHost( INetURLObject::DECODE_WITH_CHARSET );
-        OUString sGDriveHost( GDRIVE_BASE_URL );
-        OUString sAlfrescoHost( ALFRESCO_CLOUD_BASE_URL );
-        OUString sOneDriveHost( ONEDRIVE_BASE_URL );
-
-        if ( sUrl.compareTo( sGDriveHost, sGDriveHost.getLength() ) == 0
-           || sUrl.compareTo( sAlfrescoHost, sAlfrescoHost.getLength() ) == 0
-           || sUrl.compareTo( sOneDriveHost, sOneDriveHost.getLength() ) == 0 )
-        {
-            m_pBTRepoRefresh->Click();
-
-            sUrl = m_xCurrentDetails->getUrl().GetHost( INetURLObject::DECODE_WITH_CHARSET );
-            INetURLObject aHostUrl( sUrl );
-            OUString sRepoId = aHostUrl.GetMark();
-
-            if ( !sRepoId.isEmpty() )
-            {
-                EndDialog( RET_OK );
-            }
-            else
-            {
-                // TODO: repository id missing. Auth error?
-            }
-        }
-        else
-        {
-            EndDialog( RET_OK );
-        }
-    }
-}
-
-IMPL_LINK_TYPED( PlaceEditDialog, DelHdl, Button*, /*pButton*/, void)
-{
-    // ReUsing existing symbols...
-    EndDialog( RET_NO );
-}
-
-IMPL_LINK_NOARG_TYPED( PlaceEditDialog, EditHdl, DetailsContainer*, void )
-{
-    UpdateLabel( );
 
     OUString sUrl = GetServerUrl( );
-    OUString sName = m_pEDServerName->GetText().trim( );
-    m_pBTOk->Enable( !sName.isEmpty( ) && !sUrl.isEmpty( ) );
+    OUString sName = m_xEDServerName->get_text().trim();
+    m_xBTOk->set_sensitive( !sName.isEmpty( ) && !sUrl.isEmpty( ) );
 }
 
-IMPL_LINK_NOARG_TYPED( PlaceEditDialog, ModifyHdl, Edit&, void )
+IMPL_LINK_NOARG( PlaceEditDialog, ModifyHdl, weld::Entry&, void )
 {
     EditHdl(nullptr);
 }
 
-IMPL_LINK_NOARG_TYPED( PlaceEditDialog, EditLabelHdl, Edit&, void )
+IMPL_LINK_NOARG( PlaceEditDialog, EditLabelHdl, weld::Entry&, void )
 {
-    bLabelChanged = true;
+    m_bLabelChanged = true;
     EditHdl(nullptr);
 }
 
-IMPL_LINK_NOARG_TYPED( PlaceEditDialog, EditUsernameHdl, Edit&, void )
+IMPL_LINK_NOARG( PlaceEditDialog, EditUsernameHdl, weld::Entry&, void )
 {
-    for ( std::vector< std::shared_ptr< DetailsContainer > >::iterator it = m_aDetailsContainers.begin( );
-            it != m_aDetailsContainers.end( ); ++it )
+    for ( auto& rxDetailsContainer : m_aDetailsContainers )
     {
-        ( *it )->setUsername( OUString( m_pEDUsername->GetText() ) );
-        ( *it )->setPassword( m_pEDPassword->GetText() );
+        rxDetailsContainer->setUsername( m_xEDUsername->get_text() );
+        rxDetailsContainer->setPassword( m_xEDPassword->get_text() );
     }
 
     EditHdl(nullptr);
 }
 
-IMPL_LINK_NOARG_TYPED( PlaceEditDialog, SelectTypeHdl, ListBox&, void )
+IMPL_LINK_NOARG( PlaceEditDialog, SelectTypeHdl, weld::ComboBox&, void )
 {
-    if ( m_pLBServerType->GetSelectEntry() == "--------------------" )
-    {
-        if( !m_pLBServerType->IsTravelSelect() )
-            m_pLBServerType->SelectEntryPos( m_nCurrentType );
-        else
-            m_pLBServerType->SetNoSelection();
+    SelectType(false);
+}
 
+void PlaceEditDialog::SelectType(bool bSkipSeparator)
+{
+    if ( m_xLBServerType->get_active_text() == "--------------------" )
+    {
+        if (bSkipSeparator)
+            m_xLBServerType->set_active(m_nCurrentType);
+        else
+            m_xLBServerType->set_active(-1);
         return;
     }
 
     if (m_xCurrentDetails.get())
         m_xCurrentDetails->show(false);
 
-    const sal_Int32 nPos = m_pLBServerType->GetSelectEntryPos( );
+    const int nPos = m_xLBServerType->get_active( );
     m_xCurrentDetails = m_aDetailsContainers[nPos];
     m_nCurrentType = nPos;
 
     m_xCurrentDetails->show();
 
-    m_pCBPassword->Show( m_bShowPassword && m_xCurrentDetails->enableUserCredentials() );
-    m_pEDPassword->Show( m_bShowPassword && m_xCurrentDetails->enableUserCredentials() );
-    m_pFTPasswordLabel->Show( m_bShowPassword && m_xCurrentDetails->enableUserCredentials() );
-    m_pEDUsername->Show( m_xCurrentDetails->enableUserCredentials() );
-    m_pFTUsernameLabel->Show( m_xCurrentDetails->enableUserCredentials() );
+    m_xCBPassword->show( m_bShowPassword && m_xCurrentDetails->enableUserCredentials() );
+    m_xEDPassword->show( m_bShowPassword && m_xCurrentDetails->enableUserCredentials() );
+    m_xFTPasswordLabel->show( m_bShowPassword && m_xCurrentDetails->enableUserCredentials() );
+    m_xEDUsername->show( m_xCurrentDetails->enableUserCredentials() );
+    m_xFTUsernameLabel->show( m_xCurrentDetails->enableUserCredentials() );
 
-    SetSizePixel(GetOptimalSize());
+    m_xDialog->resize_to_request();
 
     EditHdl(nullptr);
 }

@@ -17,33 +17,59 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/i18n/DirectionProperty.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/Any.h>
 
 #include <i18nlangtag/lang.h>
 #include <i18nlangtag/mslangid.hxx>
 #include <i18nlangtag/languagetag.hxx>
 
-#include <svtools/svtools.hrc>
+#include <sal/log.hxx>
+#include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
 #include <svtools/langtab.hxx>
 #include <unotools/syslocale.hxx>
+#include <unotools/charclass.hxx>
 #include <tools/resary.hxx>
-
+#include <officecfg/VCL.hxx>
+#include <langtab.hrc>
 
 using namespace ::com::sun::star;
 
-class SvtLanguageTableImpl : public ResStringArray
+class SvtLanguageTableImpl
 {
+private:
+    std::vector<std::pair<OUString, LanguageType>> m_aStrings;
 public:
 
     SvtLanguageTableImpl();
-    virtual ~SvtLanguageTableImpl();
 
     bool            HasType( const LanguageType eType ) const;
-    const OUString  GetString( const LanguageType eType, bool bUserInterfaceSelection = false ) const;
+    const OUString  GetString( const LanguageType eType ) const;
     LanguageType    GetType( const OUString& rStr ) const;
     sal_uInt32      GetEntryCount() const;
     LanguageType    GetTypeAtIndex( sal_uInt32 nIndex ) const;
+    sal_uInt32      AddItem(const OUString& rLanguage, const LanguageType eType)
+    {
+        m_aStrings.emplace_back(rLanguage, eType);
+        return m_aStrings.size();
+    }
+    LanguageType    GetValue(sal_uInt32 nIndex) const
+    {
+        return (nIndex < m_aStrings.size()) ? m_aStrings[nIndex].second : LANGUAGE_DONTKNOW;
+    }
+    sal_uInt32      FindIndex(LanguageType nValue) const
+    {
+        const size_t nItems = m_aStrings.size();
+        for (size_t i = 0; i < nItems; ++i)
+        {
+            if (m_aStrings[i].second == nValue)
+                return i;
+        }
+        return RESARRAY_INDEX_NOTFOUND;
+    }
 };
 
 namespace {
@@ -78,9 +104,9 @@ const OUString ApplyLreOrRleEmbedding( const OUString &rText )
     // Thus we can avoid to check every character of the text.
     bool bFound     = false;
     bool bIsRtlText = false;
-    for (sal_uInt16 i = 0;  i < nLen && !bFound;  ++i)
+    for (sal_Int32 i = 0;  i < nLen && !bFound;  ++i)
     {
-        sal_Int16 nDirection = rCharClass.getCharacterDirection( rText, i );
+        i18n::DirectionProperty nDirection = rCharClass.getCharacterDirection( rText, i );
         switch (nDirection)
         {
             case i18n::DirectionProperty_LEFT_TO_RIGHT :
@@ -119,28 +145,63 @@ const OUString ApplyLreOrRleEmbedding( const OUString &rText )
     OUString aRes( rText );
     if (bFound)
     {
-        aRes = OUString(cStart) + aRes + OUString(cPopDirectionalFormat);
+        aRes = OUStringLiteral1(cStart) + aRes
+            + OUStringLiteral1(cPopDirectionalFormat);
     }
 
     return aRes;
 }
 
-SvtLanguageTableImpl::SvtLanguageTableImpl() :
-    ResStringArray( SvtResId( STR_ARR_SVT_LANGUAGE_TABLE ) )
+static OUString lcl_getDescription( const OUString& rBcp47 )
 {
+    // Place in curly brackets, so all on-the-fly tags are grouped together at
+    // the top of a listbox (but behind the "[None]" entry), and not sprinkled
+    // all over, which alphabetically might make sense in an English UI only
+    // anyway. Also a visual indicator that it is a programmatical name, IMHO.
+    /* TODO: pulling descriptive names (language, script, country, subtags)
+     * from liblangtag or ISO databases might be nice, but those are English
+     * only. Maybe ICU, that has translations for language and country. */
+    return "{" + rBcp47 + "}";
 }
 
-SvtLanguageTableImpl::~SvtLanguageTableImpl()
+SvtLanguageTableImpl::SvtLanguageTableImpl()
 {
-}
+    for (size_t i = 0; i < SAL_N_ELEMENTS(STR_ARR_SVT_LANGUAGE_TABLE); ++i)
+    {
+        m_aStrings.emplace_back(SvtResId(STR_ARR_SVT_LANGUAGE_TABLE[i].first), STR_ARR_SVT_LANGUAGE_TABLE[i].second);
+    }
 
+    auto xNA = officecfg::VCL::ExtraLanguages::get();
+    uno::Sequence <OUString> rElementNames = xNA->getElementNames();
+    sal_Int32 nLen = rElementNames.getLength();
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const OUString& rBcp47 = rElementNames[i];
+        OUString aName;
+        sal_Int32 nType = 0;
+        uno::Reference <container::XNameAccess> xNB;
+        xNA->getByName(rBcp47) >>= xNB;
+        bool bSuccess = (xNB->getByName("Name") >>= aName) &&
+                        (xNB->getByName("ScriptType") >>= nType);
+        if (bSuccess)
+        {
+            LanguageTag aLang(rBcp47);
+            LanguageType nLangType = aLang.getLanguageType();
+            if (nType <= sal_Int32(LanguageTag::ScriptType::RTL) && nType > sal_Int32(LanguageTag::ScriptType::UNKNOWN))
+                aLang.setScriptType(LanguageTag::ScriptType(nType));
+            sal_uInt32 nPos = FindIndex(nLangType);
+            if (nPos == RESARRAY_INDEX_NOTFOUND)
+                AddItem((aName.isEmpty() ? lcl_getDescription(rBcp47) : aName), nLangType);
+        }
+    }
+}
 
 bool SvtLanguageTableImpl::HasType( const LanguageType eType ) const
 {
     LanguageType eLang = MsLangId::getReplacementForObsoleteLanguage( eType );
-    sal_uInt32 nPos = FindIndex( eLang );
+    sal_uInt32 nPos = FindIndex(eLang);
 
-    return RESARRAY_INDEX_NOTFOUND != nPos && nPos < Count();
+    return RESARRAY_INDEX_NOTFOUND != nPos && nPos < GetEntryCount();
 }
 
 bool SvtLanguageTable::HasLanguageType( const LanguageType eType )
@@ -148,17 +209,16 @@ bool SvtLanguageTable::HasLanguageType( const LanguageType eType )
     return theLanguageTable::get().HasType( eType );
 }
 
-
-const OUString SvtLanguageTableImpl::GetString( const LanguageType eType, bool bUserInterfaceSelection ) const
+const OUString SvtLanguageTableImpl::GetString( const LanguageType eType ) const
 {
-    LanguageType eLang = MsLangId::getReplacementForObsoleteLanguage( eType, bUserInterfaceSelection);
-    sal_uInt32 nPos = FindIndex( eLang );
+    LanguageType eLang = MsLangId::getReplacementForObsoleteLanguage( eType );
+    sal_uInt32 nPos = FindIndex(eLang);
 
-    if ( RESARRAY_INDEX_NOTFOUND != nPos && nPos < Count() )
-        return ResStringArray::GetString( nPos );
+    if ( RESARRAY_INDEX_NOTFOUND != nPos && nPos < GetEntryCount() )
+        return m_aStrings[nPos].first;
 
     //Rather than return a fairly useless "Unknown" name, return a geeky but usable-in-a-pinch lang-tag
-    OUString sLangTag(LanguageTag::convertToBcp47(eType));
+    OUString sLangTag( lcl_getDescription( LanguageTag::convertToBcp47(eType)));
     SAL_WARN("svtools.misc", "Language: 0x"
         << std::hex << eType
         << " with unknown name, so returning lang-tag of: "
@@ -177,22 +237,16 @@ OUString SvtLanguageTable::GetLanguageString( const LanguageType eType )
     return theLanguageTable::get().GetString( eType );
 }
 
-OUString SvtLanguageTable::GetLanguageString( const LanguageType eType, bool bUserInterfaceSelection )
-{
-    return theLanguageTable::get().GetString( eType, bUserInterfaceSelection );
-}
-
-
 LanguageType SvtLanguageTableImpl::GetType( const OUString& rStr ) const
 {
     LanguageType eType = LANGUAGE_DONTKNOW;
-    sal_uInt32 nCount = Count();
+    sal_uInt32 nCount = GetEntryCount();
 
     for ( sal_uInt32 i = 0; i < nCount; ++i )
     {
-        if (ResStringArray::GetString( i ).equals(rStr))
+        if (m_aStrings[i].first == rStr)
         {
-            eType = LanguageType( GetValue( i ) );
+            eType = GetValue(i);
             break;
         }
     }
@@ -204,10 +258,9 @@ LanguageType SvtLanguageTable::GetLanguageType( const OUString& rStr )
     return theLanguageTable::get().GetType( rStr );
 }
 
-
 sal_uInt32 SvtLanguageTableImpl::GetEntryCount() const
 {
-    return Count();
+    return m_aStrings.size();
 }
 
 sal_uInt32 SvtLanguageTable::GetLanguageEntryCount()
@@ -219,8 +272,8 @@ sal_uInt32 SvtLanguageTable::GetLanguageEntryCount()
 LanguageType SvtLanguageTableImpl::GetTypeAtIndex( sal_uInt32 nIndex ) const
 {
     LanguageType nType = LANGUAGE_DONTKNOW;
-    if (nIndex < Count())
-        nType = LanguageType( GetValue( nIndex ) );
+    if (nIndex < GetEntryCount())
+        nType = GetValue(nIndex);
     return nType;
 }
 
@@ -230,9 +283,9 @@ LanguageType SvtLanguageTable::GetLanguageTypeAtIndex( sal_uInt32 nIndex )
 }
 
 
-sal_uInt32 SvtLanguageTable::AddLanguageTag( const LanguageTag& rLanguageTag, const OUString& rString )
+sal_uInt32 SvtLanguageTable::AddLanguageTag( const LanguageTag& rLanguageTag )
 {
-    return theLanguageTable::get().AddItem( (rString.isEmpty() ? rLanguageTag.getBcp47() : rString),
+    return theLanguageTable::get().AddItem( lcl_getDescription(rLanguageTag.getBcp47()),
             rLanguageTag.getLanguageType());
 }
 

@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <comphelper/accessiblekeybindinghelper.hxx>
 
 
@@ -24,7 +27,7 @@ namespace comphelper
 {
 
 
-    using namespace ::com::sun::star; // MT 04/2003: was ::drafts::com::sun::star - otherwise to many changes
+    using namespace ::com::sun::star; // MT 04/2003: was ::drafts::com::sun::star - otherwise too many changes
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::accessibility;
@@ -50,7 +53,7 @@ namespace comphelper
     }
 
 
-    void OAccessibleKeyBindingHelper::AddKeyBinding( const Sequence< awt::KeyStroke >& rKeyBinding ) throw (RuntimeException)
+    void OAccessibleKeyBindingHelper::AddKeyBinding( const Sequence< awt::KeyStroke >& rKeyBinding )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -58,7 +61,7 @@ namespace comphelper
     }
 
 
-    void OAccessibleKeyBindingHelper::AddKeyBinding( const awt::KeyStroke& rKeyStroke ) throw (RuntimeException)
+    void OAccessibleKeyBindingHelper::AddKeyBinding( const awt::KeyStroke& rKeyStroke )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -71,7 +74,7 @@ namespace comphelper
     // XAccessibleKeyBinding
 
 
-    sal_Int32 OAccessibleKeyBindingHelper::getAccessibleKeyBindingCount() throw (RuntimeException, std::exception)
+    sal_Int32 OAccessibleKeyBindingHelper::getAccessibleKeyBindingCount()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -79,11 +82,11 @@ namespace comphelper
     }
 
 
-    Sequence< awt::KeyStroke > OAccessibleKeyBindingHelper::getAccessibleKeyBinding( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+    Sequence< awt::KeyStroke > OAccessibleKeyBindingHelper::getAccessibleKeyBinding( sal_Int32 nIndex )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        if ( nIndex < 0 || nIndex >= (sal_Int32)m_aKeyBindings.size() )
+        if ( nIndex < 0 || nIndex >= static_cast<sal_Int32>(m_aKeyBindings.size()) )
             throw IndexOutOfBoundsException();
 
         return m_aKeyBindings[nIndex];

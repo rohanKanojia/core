@@ -61,7 +61,7 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPNOTES_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPNOTES_HXX
 
-#include "lwpfrib.hxx"
+#include <lwpfrib.hxx>
 #include "lwpframelayout.hxx"
 
 /**
@@ -72,7 +72,6 @@ class LwpFribNote: public LwpFrib
 {
 public:
     explicit LwpFribNote(LwpPara* pPara );
-    virtual ~LwpFribNote(){}
     void Read(LwpObjectStream* pObjStrm, sal_uInt16 len) override;
     void RegisterNewStyle();
     void XFConvert(XFContentContainer* pCont);
@@ -84,22 +83,21 @@ private:
  * @brief       VO_NOTELAYOUT object
  *
  */
-class LwpNoteLayout: public LwpFrameLayout
+class LwpNoteLayout final : public LwpFrameLayout
 {
 public:
-    LwpNoteLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpNoteLayout();
+    LwpNoteLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpNoteLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_NOTE_LAYOUT;}
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
     sal_uInt32 GetTime(){ return m_nTime;}
     OUString GetAuthor();
 
-protected:
+private:
     void Read() override;
     LwpVirtualLayout* GetTextLayout();
 
-private:
     sal_uInt32 m_nTime;
     LwpAtomHolder m_UserName;
 };
@@ -111,8 +109,8 @@ private:
 class LwpNoteHeaderLayout: public LwpFrameLayout
 {
 public:
-    LwpNoteHeaderLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpNoteHeaderLayout();
+    LwpNoteHeaderLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpNoteHeaderLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_NOTEHEADER_LAYOUT;}
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
@@ -128,8 +126,8 @@ protected:
 class LwpNoteTextLayout: public LwpFrameLayout
 {
 public:
-    LwpNoteTextLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpNoteTextLayout();
+    LwpNoteTextLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpNoteTextLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_NOTETEXT_LAYOUT;}
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
@@ -145,8 +143,8 @@ protected:
 class LwpViewportLayout: public LwpPlacableLayout
 {
 public:
-    LwpViewportLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpViewportLayout();
+    LwpViewportLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpViewportLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_VIEWPORT_LAYOUT;}
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;

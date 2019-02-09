@@ -26,6 +26,7 @@
 #endif
 
 #include "cmdlineargs.hxx"
+#include <tools/stream.hxx>
 #include <vcl/svapp.hxx>
 #include <rtl/uri.hxx>
 #include <rtl/ustring.hxx>
@@ -33,11 +34,13 @@
 #include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/uri/ExternalUriReferenceTranslator.hpp>
-#include <tools/getprocessworkingdir.hxx>
+#include <unotools/bootstrap.hxx>
 
 #include <svl/documentlockfile.hxx>
 
-#include <cstdio>
+#include <rtl/strbuf.hxx>
+#include <osl/file.hxx>
+#include <sal/log.hxx>
 
 using namespace com::sun::star::lang;
 using namespace com::sun::star::uri;
@@ -60,10 +63,10 @@ std::vector< OUString > translateExternalUris(
     std::vector< OUString > const & input)
 {
     std::vector< OUString > t;
-    for (std::vector< OUString >::const_iterator i(input.begin());
-         i != input.end(); ++i)
+    t.reserve(input.size());
+    for (auto const& elem : input)
     {
-        t.push_back(translateExternalUris(*i));
+        t.push_back(translateExternalUris(elem));
     }
     return t;
 }
@@ -77,12 +80,10 @@ public:
         m_index(0)
     {
         OUString url;
-        if (tools::getProcessWorkingDir(url)) {
+        if (utl::Bootstrap::getProcessWorkingDir(url)) {
             m_cwdUrl.reset(url);
         }
     }
-
-    virtual ~ExtCommandLineSupplier() {}
 
     virtual boost::optional< OUString > getCwdUrl() override { return m_cwdUrl; }
 
@@ -102,7 +103,148 @@ private:
     sal_uInt32 m_index;
 };
 
+enum class CommandLineEvent {
+    Open, Print, View, Start, PrintTo,
+    ForceOpen, ForceNew, Conversion, BatchPrint
+};
+
+// Office URI Schemes: see https://msdn.microsoft.com/en-us/library/dn906146
+// This functions checks if the arg is an Office URI.
+// If applicable, it updates arg to inner URI.
+// If no event argument is explicitly set in command line,
+// then it returns updated command line event,
+// according to Office URI command.
+CommandLineEvent CheckOfficeURI(/* in,out */ OUString& arg, CommandLineEvent curEvt)
+{
+    // 1. Strip the scheme name
+    OUString rest1;
+    bool isOfficeURI = ( arg.startsWithIgnoreAsciiCase("vnd.libreoffice.command:", &rest1) // Proposed extended schema
+                      || arg.startsWithIgnoreAsciiCase("ms-word:",                 &rest1)
+                      || arg.startsWithIgnoreAsciiCase("ms-powerpoint:",           &rest1)
+                      || arg.startsWithIgnoreAsciiCase("ms-excel:",                &rest1)
+                      || arg.startsWithIgnoreAsciiCase("ms-visio:",                &rest1)
+                      || arg.startsWithIgnoreAsciiCase("ms-access:",               &rest1));
+    if (!isOfficeURI)
+        return curEvt;
+
+    OUString rest2;
+    long nURIlen = -1;
+    // 2. Discriminate by command name (incl. 1st command argument descriptor)
+    //    Extract URI: everything up to possible next argument
+    if (rest1.startsWith("ofv|u|", &rest2))
+    {
+        // Open for view - override only in default mode
+        if (curEvt == CommandLineEvent::Open)
+            curEvt = CommandLineEvent::View;
+        nURIlen = rest2.indexOf("|");
+    }
+    else if (rest1.startsWith("ofe|u|", &rest2))
+    {
+        // Open for editing - override only in default mode
+        if (curEvt == CommandLineEvent::Open)
+            curEvt = CommandLineEvent::ForceOpen;
+        nURIlen = rest2.indexOf("|");
+    }
+    else if (rest1.startsWith("nft|u|", &rest2))
+    {
+        // New from template - override only in default mode
+        if (curEvt == CommandLineEvent::Open)
+            curEvt = CommandLineEvent::ForceNew;
+        nURIlen = rest2.indexOf("|");
+        // TODO: process optional second argument (default save-to location)
+        // For now, we just ignore it
+    }
+    else
+    {
+        // Abbreviated scheme: <scheme-name>:URI
+        // "ofv|u|" implied
+        // override only in default mode
+        if (curEvt == CommandLineEvent::Open)
+            curEvt = CommandLineEvent::View;
+        rest2 = rest1;
+    }
+    if (nURIlen < 0)
+        nURIlen = rest2.getLength();
+    arg = rest2.copy(0, nURIlen);
+    return curEvt;
 }
+
+// Skip single newline (be it *NIX LF, MacOS CR, of Win CRLF)
+// Changes the offset, and returns true if moved
+bool SkipNewline(const char* & pStr)
+{
+    if ((*pStr != '\r') && (*pStr != '\n'))
+        return false;
+    if (*pStr == '\r')
+        ++pStr;
+    if (*pStr == '\n')
+        ++pStr;
+    return true;
+}
+
+// Web query: http://support.microsoft.com/kb/157482
+CommandLineEvent CheckWebQuery(/* in,out */ OUString& arg, CommandLineEvent curEvt)
+{
+    // Only handle files with extension .iqy
+    if (!arg.endsWithIgnoreAsciiCase(".iqy"))
+        return curEvt;
+
+    static osl::Mutex aMutex;
+    osl::MutexGuard aGuard(aMutex);
+
+    try
+    {
+        OUString sFileURL;
+        // Cannot use translateExternalUris yet, because process service factory is not yet available
+        if (osl::FileBase::getFileURLFromSystemPath(arg, sFileURL) != osl::FileBase::RC::E_None)
+            return curEvt;
+        SvFileStream stream(sFileURL, StreamMode::READ);
+
+        const sal_Int32 nBufLen = 32000;
+        char sBuffer[nBufLen];
+        size_t nRead = stream.ReadBytes(sBuffer, nBufLen);
+        if (nRead < 8) // WEB\n1\n...
+            return curEvt;
+
+        const char* pPos = sBuffer;
+        if (strncmp(pPos, "WEB", 3) != 0)
+            return curEvt;
+        pPos += 3;
+        if (!SkipNewline(pPos))
+            return curEvt;
+        if (*pPos != '1')
+            return curEvt;
+        ++pPos;
+        if (!SkipNewline(pPos))
+            return curEvt;
+
+        OStringBuffer aResult(static_cast<unsigned int>(nRead));
+        do
+        {
+            const char* pPos1 = pPos;
+            const char* pEnd = sBuffer + nRead;
+            while ((pPos1 < pEnd) && (*pPos1 != '\r') && (*pPos1 != '\n'))
+                ++pPos1;
+            aResult.append(pPos, pPos1 - pPos);
+            if (pPos1 < pEnd) // newline
+                break;
+            pPos = sBuffer;
+        } while ((nRead = stream.ReadBytes(sBuffer, nBufLen)) > 0);
+
+        stream.Close();
+
+        arg = OStringToOUString(aResult.makeStringAndClear(), osl_getThreadTextEncoding());
+        return CommandLineEvent::ForceNew;
+    }
+    catch (...)
+    {
+        SAL_WARN("desktop.app", "An error processing Web Query file: " << arg);
+    }
+
+    return curEvt;
+}
+
+} // namespace
 
 CommandLineArgs::Supplier::Exception::Exception() {}
 
@@ -116,7 +258,7 @@ CommandLineArgs::Supplier::Exception::operator =(Exception const &)
 
 CommandLineArgs::Supplier::~Supplier() {}
 
-// intialize class with command line parameters from process environment
+// initialize class with command line parameters from process environment
 CommandLineArgs::CommandLineArgs()
 {
     InitParamValues();
@@ -133,23 +275,7 @@ CommandLineArgs::CommandLineArgs( Supplier& supplier )
 void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
 {
     m_cwdUrl = supplier.getCwdUrl();
-
-    // parse command line arguments
-    bool bOpenEvent(true);
-    bool bPrintEvent(false);
-    bool bViewEvent(false);
-    bool bStartEvent(false);
-    bool bPrintToEvent(false);
-    bool bPrinterName(false);
-    bool bForceOpenEvent(false);
-    bool bForceNewEvent(false);
-    bool bDisplaySpec(false);
-    bool bOpenDoc(false);
-    bool bConversionEvent(false);
-    bool bConversionParamsEvent(false);
-    bool bBatchPrintEvent(false);
-    bool bBatchPrinterNameEvent(false);
-    bool bConversionOutEvent(false);
+    CommandLineEvent eCurrentEvent = CommandLineEvent::Open;
 
     for (;;)
     {
@@ -163,9 +289,12 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
         {
             m_bEmpty = false;
             OUString oArg;
-            bool bDeprecated = !aArg.startsWith("--", &oArg)
-                && aArg.startsWith("-", &oArg) && aArg.getLength() > 2;
-                // -h, -?, -n, -o, -p are still valid
+            OUString oDeprecatedArg;
+            if (!aArg.startsWith("--", &oArg) && aArg.startsWith("-", &oArg)
+                && aArg.getLength() > 2) // -h, -?, -n, -o, -p are still valid
+            {
+                oDeprecatedArg = aArg; // save here, since aArg can change later
+            }
 
             OUString rest;
             if ( oArg == "minimized" )
@@ -192,12 +321,22 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
             {
                 m_eventtesting = true;
             }
+            else if ( oArg == "safe-mode" )
+            {
+                m_safemode = true;
+            }
             else if ( oArg == "cat" )
             {
                 m_textcat = true;
                 m_conversionparams = "txt:Text";
-                bOpenEvent = false;
-                bConversionEvent = true;
+                eCurrentEvent = CommandLineEvent::Conversion;
+                setHeadless();
+            }
+            else if ( oArg == "script-cat" )
+            {
+                m_scriptcat = true;
+                eCurrentEvent = CommandLineEvent::Conversion;
+                setHeadless();
             }
             else if ( oArg == "quickstart" )
             {
@@ -270,8 +409,8 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
 
                 // We specifically need to consume the following 2 arguments
                 // for --protector
-                assert( supplier.next( &aArg ) );
-                assert( supplier.next( &aArg ) );
+                if ((!supplier.next(&aArg) || !supplier.next(&aArg)) && m_unknown.isEmpty())
+                    m_unknown = "--protector must be followed by two arguments";
             }
             else if ( oArg == "version" )
             {
@@ -289,7 +428,7 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
             */
             else if ( aArg.startsWith("-psn") )
             {
-                bDeprecated = false;
+                oDeprecatedArg.clear();
             }
 #endif
 #if HAVE_FEATURE_MACOSX_SANDBOX
@@ -305,7 +444,7 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
             */
             else if ( oArg == "Embedding" )
             {
-                bDeprecated = false;
+                oDeprecatedArg.clear();
             }
 #endif
             else if ( oArg.startsWith("infilter=", &rest))
@@ -371,120 +510,101 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
             else if ( aArg == "-n" )
             {
                 // force new documents based on the following documents
-                bForceNewEvent  = true;
-                bOpenEvent      = false;
-                bForceOpenEvent = false;
-                bPrintToEvent   = false;
-                bPrintEvent     = false;
-                bViewEvent      = false;
-                bStartEvent     = false;
-                bDisplaySpec    = false;
+                eCurrentEvent = CommandLineEvent::ForceNew;
             }
             else if ( aArg == "-o" )
             {
                 // force open documents regardless if they are templates or not
-                bForceOpenEvent = true;
-                bOpenEvent      = false;
-                bForceNewEvent  = false;
-                bPrintToEvent   = false;
-                bPrintEvent     = false;
-                bViewEvent      = false;
-                bStartEvent     = false;
-                bDisplaySpec    = false;
+                eCurrentEvent = CommandLineEvent::ForceOpen;
             }
             else if ( oArg == "pt" )
             {
                 // Print to special printer
-                bPrintToEvent   = true;
-                bPrinterName    = true;
-                bPrintEvent     = false;
-                bOpenEvent      = false;
-                bForceNewEvent  = false;
-                bViewEvent      = false;
-                bStartEvent     = false;
-                bDisplaySpec    = false;
-                bForceOpenEvent = false;
+                eCurrentEvent = CommandLineEvent::PrintTo;
+                // first argument after "-pt" must be the printer name
+                if (supplier.next(&aArg))
+                    m_printername = aArg;
+                else if (m_unknown.isEmpty())
+                    m_unknown = "--pt must be followed by printername";
             }
             else if ( aArg == "-p" )
             {
                 // Print to default printer
-                bPrintEvent     = true;
-                bPrintToEvent   = false;
-                bOpenEvent      = false;
-                bForceNewEvent  = false;
-                bForceOpenEvent = false;
-                bViewEvent      = false;
-                bStartEvent     = false;
-                bDisplaySpec    = false;
+                eCurrentEvent = CommandLineEvent::Print;
             }
             else if ( oArg == "view")
             {
                 // open in viewmode
-                bOpenEvent      = false;
-                bPrintEvent     = false;
-                bPrintToEvent   = false;
-                bForceNewEvent  = false;
-                bForceOpenEvent = false;
-                bViewEvent      = true;
-                bStartEvent     = false;
-                bDisplaySpec    = false;
+                eCurrentEvent = CommandLineEvent::View;
             }
             else if ( oArg == "show" )
             {
                 // open in viewmode
-                bOpenEvent      = false;
-                bViewEvent      = false;
-                bStartEvent     = true;
-                bPrintEvent     = false;
-                bPrintToEvent   = false;
-                bForceNewEvent  = false;
-                bForceOpenEvent = false;
-                bDisplaySpec    = false;
+                eCurrentEvent = CommandLineEvent::Start;
             }
             else if ( oArg == "display" )
             {
-                // set display
-                bOpenEvent      = false;
-                bPrintEvent     = false;
-                bForceOpenEvent = false;
-                bPrintToEvent   = false;
-                bForceNewEvent  = false;
-                bViewEvent      = false;
-                bStartEvent     = false;
-                bDisplaySpec    = true;
-            }
-            else if ( oArg == "language" )
-            {
-                bOpenEvent      = false;
-                bPrintEvent     = false;
-                bForceOpenEvent = false;
-                bPrintToEvent   = false;
-                bForceNewEvent  = false;
-                bViewEvent      = false;
-                bStartEvent     = false;
-                bDisplaySpec    = false;
+                // The command line argument following --display should
+                // always be treated as the argument of --display.
+                // --display and its argument are handled "out of line"
+                // in Unix-only desktop/unx/source/splashx.c and vcl/unx/*,
+                // and just ignored here
+                (void)supplier.next(&aArg);
             }
             else if ( oArg == "convert-to" )
             {
-                bOpenEvent = false;
-                bConversionEvent = true;
-                bConversionParamsEvent = true;
-                // It doesn't make sense to use convert-to without headless.
-                setHeadless();
+                eCurrentEvent = CommandLineEvent::Conversion;
+                // first argument must be the params
+                if (supplier.next(&aArg))
+                {
+                    m_conversionparams = aArg;
+                    // It doesn't make sense to use convert-to without headless.
+                    setHeadless();
+                }
+                else if (m_unknown.isEmpty())
+                    m_unknown = "--convert-to must be followed by output_file_extension[:output_filter_name]";
             }
             else if ( oArg == "print-to-file" )
             {
-                bOpenEvent = false;
-                bBatchPrintEvent = true;
+                eCurrentEvent = CommandLineEvent::BatchPrint;
             }
-            else if ( oArg == "printer-name" && bBatchPrintEvent )
+            else if ( oArg == "printer-name" )
             {
-                bBatchPrinterNameEvent = true;
+                if (eCurrentEvent == CommandLineEvent::BatchPrint)
+                {
+                    // first argument is the printer name
+                    if (supplier.next(&aArg))
+                        m_printername = aArg;
+                    else if (m_unknown.isEmpty())
+                        m_unknown = "--printer-name must be followed by printername";
+                }
+                else if (m_unknown.isEmpty())
+                {
+                    m_unknown = "--printer-name must directly follow --print-to-file";
+                }
             }
-            else if ( oArg == "outdir" &&
-                      (bConversionEvent || bBatchPrintEvent) )
+            else if ( oArg == "outdir" )
             {
-                bConversionOutEvent = true;
+                if (eCurrentEvent == CommandLineEvent::Conversion ||
+                    eCurrentEvent == CommandLineEvent::BatchPrint)
+                {
+                    if (supplier.next(&aArg))
+                        m_conversionout = aArg;
+                    else if (m_unknown.isEmpty())
+                        m_unknown = "--outdir must be followed by output directory path";
+                }
+                else if (m_unknown.isEmpty())
+                {
+                    m_unknown = "--outdir must directly follow either output filter specification of --convert-to, or --print-to-file or its printer specification";
+                }
+            }
+            else if ( eCurrentEvent == CommandLineEvent::Conversion
+                      && oArg == "convert-images-to" )
+            {
+                if (supplier.next(&aArg))
+                    m_convertimages = aArg;
+                else if (m_unknown.isEmpty())
+                    m_unknown = "--convert-images-to must be followed by an image type";
             }
             else if ( aArg.startsWith("-") )
             {
@@ -507,91 +627,64 @@ void CommandLineArgs::ParseCommandLine_Impl( Supplier& supplier )
                 {
                     m_unknown = aArg;
                 }
-                bDeprecated = false;
+                oDeprecatedArg.clear();
             }
             else
             {
-                if ( bPrinterName && bPrintToEvent )
+                // handle this argument as a filename
+
+                // First check if this is an Office URI
+                // This will possibly adjust event for this argument
+                // and put real URI to aArg
+                CommandLineEvent eThisEvent = CheckOfficeURI(aArg, eCurrentEvent);
+
+                // Now check if this is a Web Query file
+                eThisEvent = CheckWebQuery(aArg, eThisEvent);
+
+                switch (eThisEvent)
                 {
-                    // first argument after "-pt" this must be the printer name
-                    m_printername = aArg;
-                    bPrinterName = false;
-                }
-                else if ( bConversionParamsEvent && bConversionEvent )
-                {
-                    // first argument must be the params
-                    m_conversionparams = aArg;
-                    bConversionParamsEvent = false;
-                }
-                else if ( bBatchPrinterNameEvent && bBatchPrintEvent )
-                {
-                    // first argument is the printer name
-                    m_printername = aArg;
-                    bBatchPrinterNameEvent = false;
-                }
-                else if ( (bConversionEvent || bBatchPrintEvent) && bConversionOutEvent )
-                {
-                    m_conversionout = aArg;
-                    bConversionOutEvent = false;
-                }
-                else
-                {
-                    // handle this argument as a filename
-                    if ( bOpenEvent )
-                    {
-                        m_openlist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bViewEvent )
-                    {
-                        m_viewlist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bStartEvent )
-                    {
-                        m_startlist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bPrintEvent )
-                    {
-                        m_printlist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bPrintToEvent )
-                    {
-                        m_printtolist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bForceNewEvent )
-                    {
-                        m_forcenewlist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bForceOpenEvent )
-                    {
-                        m_forceopenlist.push_back(aArg);
-                        bOpenDoc = true;
-                    }
-                    else if ( bDisplaySpec )
-                    {
-                        bDisplaySpec = false; // only one display, not a list
-                        bOpenEvent = true;    // set back to standard
-                    }
-                    else if ( bConversionEvent || bBatchPrintEvent )
-                        m_conversionlist.push_back(aArg);
+                case CommandLineEvent::Open:
+                    m_openlist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::View:
+                    m_viewlist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::Start:
+                    m_startlist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::Print:
+                    m_printlist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::PrintTo:
+                    m_printtolist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::ForceNew:
+                    m_forcenewlist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::ForceOpen:
+                    m_forceopenlist.push_back(aArg);
+                    m_bDocumentArgs = true;
+                    break;
+                case CommandLineEvent::Conversion:
+                case CommandLineEvent::BatchPrint:
+                    m_conversionlist.push_back(aArg);
+                    break;
                 }
             }
 
-            if (bDeprecated)
+            if (!oDeprecatedArg.isEmpty())
             {
-                OString sArg(OUStringToOString(aArg, osl_getThreadTextEncoding()));
+                OString sArg(OUStringToOString(oDeprecatedArg, osl_getThreadTextEncoding()));
                 fprintf(stderr, "Warning: %s is deprecated.  Use -%s instead.\n", sArg.getStr(), sArg.getStr());
             }
         }
     }
-
-    if ( bOpenDoc )
-        m_bDocumentArgs = true;
 }
 
 void CommandLineArgs::InitParamValues()
@@ -633,6 +726,8 @@ void CommandLineArgs::InitParamValues()
     m_bEmpty = true;
     m_bDocumentArgs  = false;
     m_textcat = false;
+    m_scriptcat = false;
+    m_safemode = false;
 }
 
 bool CommandLineArgs::HasModuleParam() const

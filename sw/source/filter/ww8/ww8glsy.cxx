@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <tools/urlobj.hxx>
 #include <svl/urihelper.hxx>
 #include <rtl/tencinfo.h>
@@ -32,29 +33,30 @@
 #include <docary.hxx>
 #include "ww8glsy.hxx"
 #include "ww8par.hxx"
+#include "ww8par2.hxx"
 
-WW8Glossary::WW8Glossary(tools::SvRef<SotStorageStream> &refStrm, sal_uInt8 nVersion,
-    SotStorage *pStg)
-    : pGlossary(nullptr), rStrm(refStrm), xStg(pStg), nStrings(0)
+WW8Glossary::WW8Glossary(tools::SvRef<SotStorageStream> &refStrm, sal_uInt8 nVersion, SotStorage *pStg)
+    : rStrm(refStrm)
+    , xStg(pStg)
+    , nStrings(0)
 {
     refStrm->SetEndian(SvStreamEndian::LITTLE);
     WW8Fib aWwFib(*refStrm, nVersion);
 
-    if (aWwFib.nFibBack >= 0x6A)   //Word97
+    if (aWwFib.m_nFibBack >= 0x6A)   //Word97
     {
-        xTableStream = pStg->OpenSotStream(OUString::createFromAscii(
-            aWwFib.fWhichTableStm ? SL::a1Table : SL::a0Table), STREAM_STD_READ);
+        xTableStream = pStg->OpenSotStream(
+            aWwFib.m_fWhichTableStm ? SL::a1Table : SL::a0Table, StreamMode::STD_READ);
 
-        if (xTableStream.Is() && SVSTREAM_OK == xTableStream->GetError())
+        if (xTableStream.is() && ERRCODE_NONE == xTableStream->GetError())
         {
             xTableStream->SetEndian(SvStreamEndian::LITTLE);
-            pGlossary =
-                new WW8GlossaryFib(*refStrm, nVersion, *xTableStream, aWwFib);
+            xGlossary.reset(new WW8GlossaryFib(*refStrm, nVersion, aWwFib));
         }
     }
 }
 
-bool WW8Glossary::HasBareGraphicEnd(SwDoc *pDoc,SwNodeIndex &rIdx)
+bool WW8Glossary::HasBareGraphicEnd(SwDoc *pDoc,SwNodeIndex const &rIdx)
 {
     bool bRet=false;
     for( sal_uInt16 nCnt = pDoc->GetSpzFrameFormats()->size(); nCnt; )
@@ -66,8 +68,8 @@ bool WW8Glossary::HasBareGraphicEnd(SwDoc *pDoc,SwNodeIndex &rIdx)
         const SwFormatAnchor& rAnchor = pFrameFormat->GetAnchor();
         SwPosition const*const pAPos = rAnchor.GetContentAnchor();
         if (pAPos &&
-            ((FLY_AT_PARA == rAnchor.GetAnchorId()) ||
-             (FLY_AT_CHAR == rAnchor.GetAnchorId())) &&
+            ((RndStdIds::FLY_AT_PARA == rAnchor.GetAnchorId()) ||
+             (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId())) &&
             rIdx == pAPos->nNode.GetIndex() )
             {
                 bRet=true;
@@ -137,7 +139,7 @@ bool WW8Glossary::MakeEntries(SwDoc *pD, SwTextBlocks &rBlocks,
             aPam.GetPoint()->nContent.Assign( pCNd, pCNd->Len() );
 
             // now we have the right selection for one entry.  Copy this to
-            // the definied TextBlock, but only if it is not an autocorrection
+            // the defined TextBlock, but only if it is not an autocorrection
             // entry (== -1) otherwise the group indicates the group in the
             // sttbfglsystyle list that this entry belongs to. Unused at the
             // moment
@@ -153,11 +155,9 @@ bool WW8Glossary::MakeEntries(SwDoc *pD, SwTextBlocks &rBlocks,
                 // Need to check make sure the shortcut is not already being used
                 sal_Int32 nStart = 0;
                 sal_uInt16 nCurPos = rBlocks.GetIndex( sShortcut );
-                sal_Int32 nLen = sShortcut.getLength();
-                while( (sal_uInt16)-1 != nCurPos )
+                while( sal_uInt16(-1) != nCurPos )
                 {
-                    sShortcut = sShortcut.copy( 0, nLen );
-                    sShortcut += OUString::number(++nStart);    // add an Number to it
+                    sShortcut = rLNm + OUString::number(++nStart);    // add an Number to it
                     nCurPos = rBlocks.GetIndex( sShortcut );
                 }
 
@@ -168,7 +168,7 @@ bool WW8Glossary::MakeEntries(SwDoc *pD, SwTextBlocks &rBlocks,
                     SwNodeIndex aIdx( pGlDoc->GetNodes().GetEndOfContent(),
                         -1 );
                     pCNd = aIdx.GetNode().GetContentNode();
-                    SwPosition aPos(aIdx, SwIndex(pCNd, (pCNd) ? pCNd->Len() : 0));
+                    SwPosition aPos(aIdx, SwIndex(pCNd, pCNd ? pCNd->Len() : 0));
                     pD->getIDocumentContentOperations().CopyRange( aPam, aPos, /*bCopyAll=*/false, /*bCheckPos=*/true );
                     rBlocks.PutDoc();
                 }
@@ -190,17 +190,17 @@ bool WW8Glossary::MakeEntries(SwDoc *pD, SwTextBlocks &rBlocks,
 bool WW8Glossary::Load( SwTextBlocks &rBlocks, bool bSaveRelFile )
 {
     bool bRet=false;
-    if (pGlossary && pGlossary->IsGlossaryFib() && rBlocks.StartPutMuchBlockEntries())
+    if (xGlossary && xGlossary->IsGlossaryFib() && rBlocks.StartPutMuchBlockEntries())
     {
         //read the names of the autotext entries
         std::vector<OUString> aStrings;
         std::vector<ww::bytes> aData;
 
         rtl_TextEncoding eStructCharSet =
-            WW8Fib::GetFIBCharset(pGlossary->chseTables, pGlossary->lid);
+            WW8Fib::GetFIBCharset(xGlossary->m_chseTables, xGlossary->m_lid);
 
-        WW8ReadSTTBF(true, *xTableStream, pGlossary->fcSttbfglsy,
-            pGlossary->lcbSttbfglsy, 0, eStructCharSet, aStrings, &aData );
+        WW8ReadSTTBF(true, *xTableStream, xGlossary->m_fcSttbfglsy,
+            xGlossary->m_lcbSttbfglsy, 0, eStructCharSet, aStrings, &aData );
 
         rStrm->Seek(0);
 
@@ -215,14 +215,14 @@ bool WW8Glossary::Load( SwTextBlocks &rBlocks, bool bSaveRelFile )
                     *pD->GetNodes().GetEndOfContent().StartOfSectionNode(), 1);
                 if( !aIdx.GetNode().IsTextNode() )
                 {
-                    OSL_ENSURE( false, "wo ist der TextNode?" );
+                    OSL_ENSURE( false, "Where is the TextNode?" );
                     pD->GetNodes().GoNext( &aIdx );
                 }
                 SwPaM aPamo( aIdx );
                 aPamo.GetPoint()->nContent.Assign(aIdx.GetNode().GetContentNode(),
                     0);
                 std::unique_ptr<SwWW8ImplReader> xRdr(new SwWW8ImplReader(
-                    pGlossary->nVersion, xStg, &rStrm, *pD, rBlocks.GetBaseURL(),
+                    xGlossary->m_nVersion, xStg.get(), rStrm.get(), *pD, rBlocks.GetBaseURL(),
                     true, false, *aPamo.GetPoint()));
                 xRdr->LoadDoc(this);
                 bRet = MakeEntries(pD, rBlocks, bSaveRelFile, aStrings, aData);
@@ -234,15 +234,13 @@ bool WW8Glossary::Load( SwTextBlocks &rBlocks, bool bSaveRelFile )
     return bRet;
 }
 
-sal_uInt32 WW8GlossaryFib::FindGlossaryFibOffset(SvStream & /* rTableStrm */,
-                                             SvStream & /* rStrm */,
-                                             const WW8Fib &rFib)
+sal_uInt32 WW8GlossaryFib::FindGlossaryFibOffset(const WW8Fib &rFib)
 {
     sal_uInt32 nGlossaryFibOffset = 0;
-    if ( rFib.fDot ) // it's a template
+    if ( rFib.m_fDot ) // it's a template
     {
-        if ( rFib.pnNext  )
-            nGlossaryFibOffset = ( rFib.pnNext * 512 );
+        if ( rFib.m_pnNext  )
+            nGlossaryFibOffset = ( rFib.m_pnNext * 512 );
     }
     return nGlossaryFibOffset;
 }

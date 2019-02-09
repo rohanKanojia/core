@@ -27,12 +27,8 @@
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XPopupMenuController.hpp>
 #include <com/sun/star/frame/XLayoutManager.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/ui/XUIConfigurationManager.hpp>
 
@@ -52,26 +48,30 @@ namespace framework
 
         public:
             ToolbarsMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-            virtual ~ToolbarsMenuController();
+            virtual ~ToolbarsMenuController() override;
 
             // XServiceInfo
-            DECLARE_XSERVICEINFO
+            DECLARE_XSERVICEINFO_NOFACTORY
+            /* Helper for registry */
+            /// @throws css::uno::Exception
+            static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+            static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
             // XPopupMenuController
-            virtual void SAL_CALL setPopupMenu( const css::uno::Reference< css::awt::XPopupMenu >& PopupMenu ) throw (css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL setPopupMenu( const css::uno::Reference< css::awt::XPopupMenu >& PopupMenu ) override;
 
             // XInitialization
-            virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
             // XStatusListener
-            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
             // XMenuListener
-            virtual void SAL_CALL itemSelected( const css::awt::MenuEvent& rEvent ) throw (css::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL itemActivated( const css::awt::MenuEvent& rEvent ) throw (css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL itemSelected( const css::awt::MenuEvent& rEvent ) override;
+            virtual void SAL_CALL itemActivated( const css::awt::MenuEvent& rEvent ) override;
 
             // XEventListener
-            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
             struct ExecuteInfo
             {
@@ -80,22 +80,19 @@ namespace framework
                 css::uno::Sequence< css::beans::PropertyValue >  aArgs;
             };
 
-            DECL_STATIC_LINK_TYPED( ToolbarsMenuController, ExecuteHdl_Impl, void*, void );
+            DECL_STATIC_LINK( ToolbarsMenuController, ExecuteHdl_Impl, void*, void );
 
         private:
-            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu );
+            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
             css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > getLayoutManagerToolbars( const css::uno::Reference< css::frame::XLayoutManager >& rLayoutManager );
             css::uno::Reference< css::frame::XDispatch > getDispatchFromCommandURL( const OUString& rCommandURL );
-            void addCommand( css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu, const OUString& rCommandURL, const OUString& aLabel );
-            bool isContextSensitiveToolbarNonVisible() { return m_bResetActive;}
+            void addCommand( css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu, const OUString& rCommandURL, const OUString& aLabel );
 
             css::uno::Reference< css::uno::XComponentContext >        m_xContext;
             css::uno::Reference< css::container::XNameAccess >        m_xPersistentWindowState;
             css::uno::Reference< css::ui::XUIConfigurationManager >   m_xModuleCfgMgr;
             css::uno::Reference< css::ui::XUIConfigurationManager >   m_xDocCfgMgr;
             OUString                                                  m_aModuleIdentifier;
-            OUString                                                  m_aPropUIName;
-            OUString                                                  m_aPropResourceURL;
             bool                                                      m_bResetActive;
             std::vector< OUString >                                   m_aCommandVector;
             IntlWrapper                                               m_aIntlWrapper;

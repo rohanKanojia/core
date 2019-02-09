@@ -20,23 +20,20 @@
 #define INCLUDED_SW_INC_ACCMAP_HXX
 
 #include <cppuhelper/weakref.hxx>
-#include <com/sun/star/accessibility/XAccessible.hpp>
 #include <rtl/ref.hxx>
 #include <osl/mutex.hxx>
 #include <svx/IAccessibleViewForwarder.hxx>
 #include <svx/IAccessibleParent.hxx>
-#include <tools/fract.hxx>
 
 #include <svx/AccessibleControlShape.hxx>
-#include <svx/AccessibleShape.hxx>
-#include "fesh.hxx"
-#include <vector>
-#include <set>
 #include <o3tl/typed_flags_set.hxx>
+
+#include <vector>
+#include <memory>
+#include <set>
 
 class SwAccessibleParagraph;
 class SwViewShell;
-class Rectangle;
 class SwFrame;
 class SwTextFrame;
 class SwPageFrame;
@@ -44,7 +41,6 @@ class SwAccessibleContext;
 class SwAccessibleContextMap_Impl;
 class SwAccessibleEventList_Impl;
 class SwAccessibleEventMap_Impl;
-class SwShapeList_Impl;
 class SdrObject;
 namespace accessibility { class AccessibleShape; }
 class SwAccessibleShapeMap_Impl;
@@ -53,8 +49,23 @@ class SwAccessibleSelectedParas_Impl;
 class SwRect;
 class MapMode;
 class SwAccPreviewData;
+class SwFEShell;
+class Fraction;
 struct PreviewPage;
 namespace vcl { class Window; }
+namespace com { namespace sun { namespace star { namespace accessibility { class XAccessible; } } } }
+
+// The shape list is filled if an accessible shape is destroyed. It
+// simply keeps a reference to the accessible shape's XShape. These
+// references are destroyed within the EndAction when firing events.
+// There are two reason for this. First of all, a new accessible shape
+// for the XShape might be created soon. It's then cheaper if the XShape
+// still exists. The other reason are situations where an accessible shape
+// is destroyed within an SwFrameFormat::Modify. In this case, destroying
+// the XShape at the same time (indirectly by destroying the accessible
+// shape) leads to an assert, because a client of the Modify is destroyed
+// within a Modify call.
+using SwShapeList_Impl = std::vector<css::uno::Reference<css::drawing::XShape>>;
 
 enum class AccessibleStates
 {
@@ -76,21 +87,22 @@ namespace o3tl
 
 class SwAccessibleMap : public ::accessibility::IAccessibleViewForwarder,
                         public ::accessibility::IAccessibleParent
+                , public std::enable_shared_from_this<SwAccessibleMap>
 {
     mutable ::osl::Mutex maMutex;
     ::osl::Mutex maEventMutex;
-    SwAccessibleContextMap_Impl *mpFrameMap;
-    SwAccessibleShapeMap_Impl *mpShapeMap;
-    SwShapeList_Impl *mpShapes;
-    SwAccessibleEventList_Impl *mpEvents;
-    SwAccessibleEventMap_Impl *mpEventMap;
+    std::unique_ptr<SwAccessibleContextMap_Impl> mpFrameMap;
+    std::unique_ptr<SwAccessibleShapeMap_Impl> mpShapeMap;
+    SwShapeList_Impl mvShapes;
+    std::unique_ptr<SwAccessibleEventList_Impl> mpEvents;
+    std::unique_ptr<SwAccessibleEventMap_Impl> mpEventMap;
     // #i27301 data structure to keep information about
     // accessible paragraph, which have a selection.
-    SwAccessibleSelectedParas_Impl* mpSelectedParas;
+    std::unique_ptr<SwAccessibleSelectedParas_Impl> mpSelectedParas;
     SwViewShell *mpVSh;
     /// for page preview: store preview data, VisArea, and mapping of
     /// preview-to-display coordinates
-    SwAccPreviewData* mpPreview;
+    std::unique_ptr<SwAccPreviewData> mpPreview;
 
     css::uno::WeakReference < css::accessibility::XAccessible > mxCursorContext;
 
@@ -106,33 +118,34 @@ class SwAccessibleMap : public ::accessibility::IAccessibleViewForwarder,
     void InvalidateShapeSelection();
 
     //mpSelectedFrameMap contains the old selected objects.
-    SwAccessibleContextMap_Impl *mpSeletedFrameMap;
-    //IvalidateShapeInParaSelection() method is responsible for the updating the selected states of the objects.
+    std::unique_ptr<SwAccessibleContextMap_Impl> mpSeletedFrameMap;
+
+    OUString const maDocName;
+
+    //InvalidateShapeInParaSelection() method is responsible for the updating the selected states of the objects.
     void InvalidateShapeInParaSelection();
 
-    void _InvalidateRelationSet( const SwFrame* pFrame, bool bFrom );
+    void InvalidateRelationSet_( const SwFrame* pFrame, bool bFrom );
 
     css::uno::Reference<css::accessibility::XAccessible>
-            _GetDocumentView( bool bPagePreview );
+            GetDocumentView_( bool bPagePreview );
 
     /** method to build up a new data structure of the accessible paragraphs,
         which have a selection
 
         Important note: method has to used inside a mutual exclusive section
-
-        @author OD
     */
-    SwAccessibleSelectedParas_Impl* _BuildSelectedParas();
+    std::unique_ptr<SwAccessibleSelectedParas_Impl> BuildSelectedParas();
 
 public:
 
     SwAccessibleMap( SwViewShell *pSh );
-    virtual ~SwAccessibleMap();
+    virtual ~SwAccessibleMap() override;
 
     css::uno::Reference<css::accessibility::XAccessible> GetDocumentView();
 
     css::uno::Reference<css::accessibility::XAccessible> GetDocumentPreview(
-                            const std::vector<PreviewPage*>& _rPreviewPages,
+                            const std::vector<std::unique_ptr<PreviewPage>>& _rPreviewPages,
                             const Fraction&  _rScale,
                             const SwPageFrame* _pSelectedPageFrame,
                             const Size&      _rPreviewWinSize );
@@ -153,23 +166,21 @@ public:
                                         SwAccessibleContext *pParentImpl,
                                         bool bCreate = true );
 
-    inline SwViewShell* GetShell() const
+    SwViewShell* GetShell() const
     {
         return mpVSh;
     }
     static bool IsInSameLevel(const SdrObject* pObj, const SwFEShell* pFESh);
     void AddShapeContext(const SdrObject *pObj,
-                             css::uno::Reference < css::accessibility::XAccessible > xAccShape);
+                             css::uno::Reference < css::accessibility::XAccessible > const & xAccShape);
 
     void AddGroupContext(const SdrObject *pParentObj,
-                    css::uno::Reference < css::accessibility::XAccessible > xAccParent);
-    void RemoveGroupContext(const SdrObject *pParentObj, css::uno::Reference < css::accessibility::XAccessible > xAccParent);
+                    css::uno::Reference < css::accessibility::XAccessible > const & xAccParent);
+    void RemoveGroupContext(const SdrObject *pParentObj);
 
     const SwRect& GetVisArea() const;
 
     /** get size of a dedicated preview page
-
-        @author OD
 
         @param _nPreviewPageNum
         input parameter - physical page number of page visible in the page preview
@@ -182,10 +193,11 @@ public:
     void RemoveContext( const SdrObject *pObj );
 
     // Dispose frame and its children if bRecursive is set
-    void Dispose( const SwFrame* pFrame,
-                  const SdrObject* pObj,
-                  vcl::Window* pWindow,
-                  bool bRecursive = false );
+    void A11yDispose( const SwFrame* pFrame,
+                      const SdrObject* pObj,
+                      vcl::Window* pWindow,
+                      bool bRecursive = false,
+                      bool bCanSkipInvisible = true );
 
     void InvalidatePosOrSize( const SwFrame* pFrame,
                               const SdrObject* pObj,
@@ -209,8 +221,6 @@ public:
 
     /** invalidation CONTENT_FLOWS_FROM/_TO relation of a paragraph
 
-        @author OD
-
         @param _rTextFrame
         input parameter - reference to paragraph, whose CONTENT_FLOWS_FROM/_TO
         has to be invalidated.
@@ -222,23 +232,17 @@ public:
     void InvalidateParaFlowRelation( const SwTextFrame& _rTextFrame,
                                      const bool _bFrom );
 
-    /** invalidation of text selection of a paragraph
-
-        @author OD
-    */
+    /** invalidation of text selection of a paragraph */
     void InvalidateParaTextSelection( const SwTextFrame& _rTextFrame );
 
-    /** invalidation of text selection of all paragraphs
-
-        @author OD
-    */
+    /** invalidation of text selection of all paragraphs */
     void InvalidateTextSelectionOfAllParas();
 
     sal_Int32 GetChildIndex( const SwFrame& rParentFrame,
                              vcl::Window& rChild ) const;
 
     // update preview data (and fire events if necessary)
-    void UpdatePreview( const std::vector<PreviewPage*>& _rPreviewPages,
+    void UpdatePreview( const std::vector<std::unique_ptr<PreviewPage>>& _rPreviewPages,
                         const Fraction&  _rScale,
                         const SwPageFrame* _pSelectedPageFrame,
                         const Size&      _rPreviewWinSize );
@@ -248,9 +252,11 @@ public:
 
     void FireEvents();
 
+    const OUString& GetDocName() const { return maDocName; }
+
     // IAccessibleViewForwarder
 
-    virtual Rectangle GetVisibleArea() const override;
+    virtual tools::Rectangle GetVisibleArea() const override;
     virtual Point LogicToPixel (const Point& rPoint) const override;
     virtual Size LogicToPixel (const Size& rSize) const override;
 
@@ -260,18 +266,19 @@ public:
         const css::uno::Reference< css::drawing::XShape >& _rxShape,
         const long _nIndex,
         const ::accessibility::AccessibleShapeTreeInfo& _rShapeTreeInfo
-    )   throw (css::uno::RuntimeException) override;
+    ) override;
     virtual ::accessibility::AccessibleControlShape* GetAccControlShapeFromModel
-        (css::beans::XPropertySet* pSet)
-        throw (css::uno::RuntimeException) override;
+        (css::beans::XPropertySet* pSet) override;
     virtual css::uno::Reference< css::accessibility::XAccessible >   GetAccessibleCaption (
-        const css::uno::Reference< css::drawing::XShape > & xShape)
-    throw (css::uno::RuntimeException) override;
+        const css::uno::Reference< css::drawing::XShape > & xShape) override;
 
     // additional Core/Pixel conversions for internal use; also works
     // for preview
     Point PixelToCore (const Point& rPoint) const;
-    Rectangle CoreToPixel (const Rectangle& rRect) const;
+    tools::Rectangle CoreToPixel (const tools::Rectangle& rRect) const;
+
+    // is there a known accessibility impl cached for the frame
+    bool Contains(const SwFrame *pFrame) const;
 
 private:
     /** get mapping mode for LogicToPixel and PixelToLogic conversions
@@ -282,8 +289,6 @@ private:
         Necessary, because <PreviewAdjust(..)> changes mapping mode at current
         output device for mapping logic document positions to page preview window
         positions and vice versa and doesn't take care to recover its changes.
-
-        @author OD
 
         @param _rPoint
         input parameter - constant reference to point to determine the mapping
@@ -298,7 +303,7 @@ private:
 public:
     virtual bool IsDocumentSelAll() override;
 
-    css::uno::WeakReference < css::accessibility::XAccessible >
+    const css::uno::WeakReference < css::accessibility::XAccessible >&
         GetCursorContext() const { return mxCursorContext; }
 
     //Para Container for InvalidateCursorPosition

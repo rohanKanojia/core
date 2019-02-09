@@ -27,8 +27,10 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include "xmlConnectionData.hxx"
@@ -77,7 +79,7 @@ OXMLDataSource::OXMLDataSource( ODBFilter& rImport,
                 }
                 catch(const Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("dbaccess");
                 }
                 break;
             case XML_TOK_SUPPRESS_VERSION_COLUMNS:
@@ -88,7 +90,7 @@ OXMLDataSource::OXMLDataSource( ODBFilter& rImport,
                 }
                 catch(const Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("dbaccess");
                 }
                 break;
             case XML_TOK_JAVA_DRIVER_CLASS:
@@ -169,30 +171,30 @@ OXMLDataSource::OXMLDataSource( ODBFilter& rImport,
         if ( !bFoundTableNameLengthLimited && ( _eUsedFor == eAppSettings ) )
         {
             aProperty.Name = INFO_ALLOWLONGTABLENAMES;
-            aProperty.Value <<= sal_True;
+            aProperty.Value <<= true;
             rImport.addInfo(aProperty);
         }
         if ( !bFoundParamNameSubstitution && ( _eUsedFor == eDriverSettings ) )
         {
             aProperty.Name = INFO_PARAMETERNAMESUBST;
-            aProperty.Value <<= sal_True;
+            aProperty.Value <<= true;
             rImport.addInfo(aProperty);
         }
         if ( !bFoundAppendTableAliasName && ( _eUsedFor == eAppSettings ) )
         {
             aProperty.Name = INFO_APPEND_TABLE_ALIAS;
-            aProperty.Value <<= sal_True;
+            aProperty.Value <<= true;
             rImport.addInfo(aProperty);
         }
         if ( !bFoundSuppressVersionColumns && ( _eUsedFor == eAppSettings ) )
         {
             try
             {
-                xDataSource->setPropertyValue(PROPERTY_SUPPRESSVERSIONCL,makeAny(sal_True));
+                xDataSource->setPropertyValue(PROPERTY_SUPPRESSVERSIONCL,makeAny(true));
             }
             catch(const Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
         }
     }
@@ -203,7 +205,7 @@ OXMLDataSource::~OXMLDataSource()
 
 }
 
-SvXMLImportContext* OXMLDataSource::CreateChildContext(
+SvXMLImportContextRef OXMLDataSource::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

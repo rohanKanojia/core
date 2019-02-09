@@ -13,31 +13,24 @@
 class HeadlessSalInstance : public SvpSalInstance
 {
 public:
-    explicit HeadlessSalInstance( SalYieldMutex *pMutex );
-    virtual ~HeadlessSalInstance();
+    explicit HeadlessSalInstance(std::unique_ptr<SalYieldMutex> pMutex);
 
-    virtual SalSystem* CreateSalSystem();
+    virtual SalSystem* CreateSalSystem() override;
 };
 
-HeadlessSalInstance::HeadlessSalInstance( SalYieldMutex *pMutex ) :
-    SvpSalInstance( pMutex)
-{
-}
-
-HeadlessSalInstance::~HeadlessSalInstance()
+HeadlessSalInstance::HeadlessSalInstance(std::unique_ptr<SalYieldMutex> pMutex)
+    : SvpSalInstance(std::move(pMutex))
 {
 }
 
 class HeadlessSalSystem : public SvpSalSystem {
 public:
     HeadlessSalSystem() : SvpSalSystem() {}
-    virtual ~HeadlessSalSystem() {}
     virtual int ShowNativeDialog( const OUString& rTitle,
                                   const OUString& rMessage,
-                                  const std::list< OUString >& rButtons,
-                                  int nDefButton )
+                                  const std::vector< OUString >& rButtons ) override
     {
-        (void)rButtons; (void)nDefButton;
+        (void)rButtons;
         ::fprintf(stdout, "LibreOffice - dialog '%s': '%s'",
                             OUStringToOString(rTitle, RTL_TEXTENCODING_ASCII_US).getStr(),
                             OUStringToOString(rMessage, RTL_TEXTENCODING_ASCII_US).getStr());
@@ -50,18 +43,13 @@ SalSystem *HeadlessSalInstance::CreateSalSystem()
     return new HeadlessSalSystem();
 }
 
-class HeadlessSalData : public SalGenericData
+class HeadlessSalData : public GenericUnixSalData
 {
 public:
-    explicit HeadlessSalData( SalInstance *pInstance ) : SalGenericData( SAL_DATA_HEADLESS, pInstance ) {}
-    virtual void ErrorTrapPush() {}
-    virtual bool ErrorTrapPop( bool ) { return false; }
+    explicit HeadlessSalData( SalInstance *pInstance ) : GenericUnixSalData( SAL_DATA_HEADLESS, pInstance ) {}
+    virtual void ErrorTrapPush() override {}
+    virtual bool ErrorTrapPop( bool ) override { return false; }
 };
-
-// All the interesting stuff is slaved from the AndroidSalInstance
-void InitSalData()   {}
-void DeInitSalData() {}
-void InitSalMain()   {}
 
 void SalAbort( const OUString& rErrorText, bool bDumpCore )
 {
@@ -85,9 +73,8 @@ const OUString& SalGetDesktopEnvironment()
 }
 
 SalData::SalData() :
-    m_pInstance( 0 ),
-    m_pPlugin( 0 ),
-    m_pPIManager(0 )
+    m_pInstance( nullptr ),
+    m_pPIManager( nullptr )
 {
 }
 
@@ -98,15 +85,15 @@ SalData::~SalData()
 // This is our main entry point:
 SalInstance *CreateSalInstance()
 {
-    HeadlessSalInstance* pInstance = new HeadlessSalInstance( new SalYieldMutex() );
+    HeadlessSalInstance* pInstance = new HeadlessSalInstance(std::make_unique<SvpSalYieldMutex>());
     new HeadlessSalData( pInstance );
-    pInstance->AcquireYieldMutex(1);
+    pInstance->AcquireYieldMutex();
     return pInstance;
 }
 
 void DestroySalInstance( SalInstance *pInst )
 {
-    pInst->ReleaseYieldMutex();
+    pInst->ReleaseYieldMutexAll();
     delete pInst;
 }
 

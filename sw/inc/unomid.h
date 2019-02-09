@@ -114,6 +114,7 @@
 #define MID_RUBY_ADJUST         1
 #define MID_RUBY_CHARSTYLE      2
 #define MID_RUBY_ABOVE          3
+#define MID_RUBY_POSITION       4
 
 //SwTextGridItem
 #define MID_GRID_COLOR          0
@@ -145,6 +146,10 @@
 
 // SwFormatWrapInfluenceOnObjPos
 #define MID_WRAP_INFLUENCE      0
+
+// SwFormatFollowTextFlow
+#define MID_FOLLOW_TEXT_FLOW    0
+#define MID_FTF_LAYOUT_IN_CELL  1
 
 #endif
 

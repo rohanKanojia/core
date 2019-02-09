@@ -17,7 +17,6 @@
 
 #include <memory>
 #include <unordered_map>
-#include <unordered_set>
 
 class ScDocument;
 class ScFormulaCell;
@@ -34,11 +33,11 @@ public:
     SC_DLLPUBLIC bool GetUserFuncVolatile( const OUString& sName );
 
     void AddDependentCell(const OUString& aModuleName, ScFormulaCell* pCell);
-    void RemoveDependentCell(ScFormulaCell* pCell);
+    void RemoveDependentCell(const ScFormulaCell* pCell);
     void BroadcastModuleUpdate(const OUString& aModuleName);
 
 private:
-    typedef std::unordered_map< OUString, bool, OUStringHash > NameBoolMap;
+    typedef std::unordered_map< OUString, bool > NameBoolMap;
     NameBoolMap mhFuncToVolatile;
     css::uno::Reference< css::container::XContainerListener > mxContainerListener;
 

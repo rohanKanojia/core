@@ -17,36 +17,46 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <stdlib.h>
 
-#include "iso8601_converter.hxx"
-#include "utilities.hxx"
+#include <iso8601_converter.hxx>
+#include <utilities.hxx>
 
 #include <sstream>
 #include <iomanip>
 
+#include <rtl/character.hxx>
 
-/* Converts ISO 8601 conform date/time
-   represenation to the representation
+/* Converts ISO 8601 compliant date/time
+   representation to the representation
    conforming to the current locale
 */
 std::wstring iso8601_date_to_local_date(const std::wstring& isoDate )
 {
     ::std::wstring ws8601DateTime(isoDate);
 
+    // Get rid of the optional milliseconds part if it exists.
+    // Function accepts date/time as a combined date/time string in extended ISO8601 format,
+    // which is yyyy-mm-ddThh:mm:ss[.mmm]. Last part is the optional "fraction of second" part,
+    // that's why we cut off at 19.
+    if (ws8601DateTime.length() > 19)
+    {
+      ws8601DateTime.erase(19, ::std::basic_string<char>::npos);
+    }
+
     if ( ws8601DateTime.length() == 19 )
     {
         std::string asDateTime = WStringToString( ws8601DateTime );
         SYSTEMTIME DateTime;
-        DateTime.wYear         = ( unsigned short )strtol( asDateTime.substr( 0, 4 ).c_str(), NULL, 10 );
-        DateTime.wMonth        = ( unsigned short )strtol( asDateTime.substr( 5, 2 ).c_str(), NULL, 10 );
+        DateTime.wYear         = static_cast<unsigned short>(strtol( asDateTime.substr( 0, 4 ).c_str(), nullptr, 10 ));
+        DateTime.wMonth        = static_cast<unsigned short>(strtol( asDateTime.substr( 5, 2 ).c_str(), nullptr, 10 ));
         DateTime.wDayOfWeek    =  0;
-        DateTime.wDay          = ( unsigned short )strtol( asDateTime.substr( 8, 2 ).c_str(), NULL, 10 );
-        DateTime.wHour         = ( unsigned short )strtol( asDateTime.substr( 11,2 ).c_str(), NULL, 10 );
-        DateTime.wMinute       = ( unsigned short )strtol( asDateTime.substr( 14,2 ).c_str(), NULL, 10 );
-        DateTime.wSecond       = ( unsigned short )strtol( asDateTime.substr( 17,2 ).c_str(), NULL, 10 );
+        DateTime.wDay          = static_cast<unsigned short>(strtol( asDateTime.substr( 8, 2 ).c_str(), nullptr, 10 ));
+        DateTime.wHour         = static_cast<unsigned short>(strtol( asDateTime.substr( 11,2 ).c_str(), nullptr, 10 ));
+        DateTime.wMinute       = static_cast<unsigned short>(strtol( asDateTime.substr( 14,2 ).c_str(), nullptr, 10 ));
+        DateTime.wSecond       = static_cast<unsigned short>(strtol( asDateTime.substr( 17,2 ).c_str(), nullptr, 10 ));
         DateTime.wMilliseconds =  0;
 
         //get Date info from structure
@@ -55,7 +65,7 @@ std::wstring iso8601_date_to_local_date(const std::wstring& isoDate )
             LOCALE_SYSTEM_DEFAULT,
             0,
             &DateTime,
-            NULL,
+            nullptr,
             DateBuffer,
             MAX_PATH );
 
@@ -71,7 +81,7 @@ std::wstring iso8601_date_to_local_date(const std::wstring& isoDate )
             LOCALE_SYSTEM_DEFAULT,
             0,
             &DateTime,
-            NULL,
+            nullptr,
             TimeBuffer,
             MAX_PATH );
 
@@ -104,26 +114,23 @@ std::wstring iso8601_duration_to_local_duration(const std::wstring& iso8601durat
     std::wstring minutes;
     std::wstring seconds;
 
-    std::wstring::const_iterator iter     = iso8601duration.begin();
-    std::wstring::const_iterator iter_end = iso8601duration.end();
-
     std::wstring num;
 
-    for (/**/; iter != iter_end; ++iter)
+    for (const auto& w_ch : iso8601duration)
     {
-        if (isdigit(*iter))
+        if (rtl::isAsciiDigit(w_ch)) // wchar_t is unsigned under MSVC
         {
-            num += *iter;
+            num += w_ch;
         }
         else
         {
-            if (*iter == L'D' || *iter == L'd')
+            if (w_ch == L'D' || w_ch == L'd')
                 days = num;
-            else if (*iter == L'H' || *iter == L'h')
+            else if (w_ch == L'H' || w_ch == L'h')
                 hours = num;
-            else if (*iter == L'M' || *iter == L'm')
+            else if (w_ch == L'M' || w_ch == L'm')
                 minutes = num;
-            else if (*iter == L'S' || *iter == L's')
+            else if (w_ch == L'S' || w_ch == L's')
                 seconds = num;
 
             num.clear();
@@ -132,36 +139,17 @@ std::wstring iso8601_duration_to_local_duration(const std::wstring& iso8601durat
 
     if (days.length() > 0)
     {
-        int h = ((_wtoi(days.c_str()) * 24) + _wtoi(hours.c_str()));
+        int h = (_wtoi(days.c_str()) * 24) + _wtoi(hours.c_str());
         wchar_t buff[10];
         _itow(h, buff, 10);
         hours = buff;
     }
 
-#if defined(_MSC_VER) //&& defined(_M_X64)
     std::wostringstream oss;
     oss << std::setw(2) << std::setfill(wchar_t('0')) << hours   << L":" <<
            std::setw(2) << std::setfill(wchar_t('0')) << minutes << L":" <<
            std::setw(2) << std::setfill(wchar_t('0')) << seconds;
     return oss.str();
-#elif defined( __MINGW32__ )
-#define ADD_AS_PREFILLED( st, out ) \
-    if ( st.length() == 0 ) \
-        out += L"00"; \
-    else if ( st.length() == 1 ) \
-        out += L"0"; \
-    out += st;
-
-    std::wstring result;
-    ADD_AS_PREFILLED( hours, result )
-    result += L":";
-    ADD_AS_PREFILLED( minutes, result )
-    result += L":";
-    ADD_AS_PREFILLED( seconds, result )
-
-    return result;
-#undef ADD_AS_PREFILLED
-#endif
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

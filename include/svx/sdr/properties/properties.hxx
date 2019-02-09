@@ -20,8 +20,13 @@
 #ifndef INCLUDED_SVX_SDR_PROPERTIES_PROPERTIES_HXX
 #define INCLUDED_SVX_SDR_PROPERTIES_PROPERTIES_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <sal/types.h>
 #include <svx/svxdllapi.h>
+#include <svl/typedwhich.hxx>
 
 class SdrObject;
 class SfxItemSet;
@@ -39,6 +44,32 @@ namespace sdr
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//  BaseProperties
+//      DefaultProperties                   ->SfxItemSet
+//          AttributeProperties             ->SfxStyleSheet
+//              E3dProperties
+//                  E3dCompoundProperties
+//                      E3dExtrudeProperties
+//                      E3dLatheProperties
+//                      E3dSphereProperties
+//                  E3dSceneProperties
+//              TextProperties              ->maVersion
+//                  ConnectorProperties
+//                  CustomShapeProperties
+//                  MeasureProperties
+//                  RectangleProperties
+//                      CaptionProperties
+//                      CircleProperties
+//                      GraphicProperties
+//                      OleProperties
+//                  CellProperties
+//                  TableProperties
+//          GroupProperties
+//      EmptyProperties
+//          PageProperties
+
 namespace sdr
 {
     namespace properties
@@ -51,9 +82,11 @@ namespace sdr
             SdrObject&                                      mrObject;
 
         protected:
+            // apply the correct SfyStyleSheet from SdrObject's SdrModel
+            virtual void applyDefaultStyleSheetFromSdrModel();
 
             // create a new object specific itemset with object specific ranges.
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& pPool) = 0;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& pPool) = 0;
 
             // internal access to SdrObject
             const SdrObject& GetSdrObject() const;
@@ -79,16 +112,12 @@ namespace sdr
             // basic constructor, used from SdrObject.
             explicit BaseProperties(SdrObject& rObj);
 
-            // constructor for copying, but using new object. Used from the Clone()
-            // method.
-            BaseProperties(const BaseProperties& rProps, SdrObject& rObj);
-
             // destructor
             virtual ~BaseProperties();
 
             // Clone() operator, normally just calls the local copy constructor,
             // see above.
-            virtual BaseProperties& Clone(SdrObject& rObj) const = 0;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const = 0;
 
             // Get the local ItemSet. This directly returns the local ItemSet of the object. No
             // merging of ItemSets is done for e.g. Group objects.
@@ -126,12 +155,12 @@ namespace sdr
 
             // Clear a single item, iterate over hierarchies if necessary. Default
             // Implementation falls back to ClearObjectItem().
-            virtual void ClearMergedItem(const sal_uInt16 nWhich = 0);
+            virtual void ClearMergedItem(const sal_uInt16 nWhich);
 
             // Clear single item direct. Only uses AllowItemChange() and ItemChange(),
             // but not PostItemChange() and ItemSetChanged() calls.
             // Also supports complete deletion of items when default parameter 0 is used.
-            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich = 0) = 0;
+            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich) = 0;
 
             // Set a new StyleSheet. Registers as listener at the StyleSheet to get knowledge
             // of StyleSheet changes.
@@ -139,17 +168,6 @@ namespace sdr
 
             // Get the installed StyleSheet.
             virtual SfxStyleSheet* GetStyleSheet() const = 0;
-
-            // Scale the local ItemSet as far as it contains metric items.
-            // Override this to do it for hierarchical objects like e.g. groups.
-            virtual void Scale(const Fraction& rScale);
-
-            // Move local items to a new ItemPool.
-            // Override this to do it for hierarchical objects like e.g. groups.
-            virtual void MoveToItemPool(SfxItemPool* pSrcPool, SfxItemPool* pDestPool, SdrModel* pNewModel = nullptr);
-
-            // Set new model.
-            virtual void SetModel(SdrModel* pOldModel, SdrModel* pNewModel);
 
             // force all attributes which come from styles to hard attributes
             // to be able to live without the style.
@@ -164,6 +182,10 @@ namespace sdr
 
             // Just a convenient shortcut for GetObjectItemSet().Get(nWhich).
             const SfxPoolItem& GetItem(const sal_uInt16 nWhich) const;
+            template<class T> const T& GetItem(TypedWhichId<T> nWhich) const
+            {
+                return static_cast<const T&>(GetItem(sal_uInt16(nWhich)));
+            }
 
             // support for convenient broadcasting. Used from SetMergedItemAndBroadcast(),
             // ClearItemAndBroadcast() and SetItemSetAndBroadcast(), see above.

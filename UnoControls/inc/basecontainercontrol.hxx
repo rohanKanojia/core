@@ -30,15 +30,12 @@
 #include <com/sun/star/container/ContainerEvent.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
+#include <memory>
 #include <vector>
 
 #include "basecontrol.hxx"
 
-//  "namespaces"
-
-namespace unocontrols{
-
-//  structs, types, forwards
+namespace unocontrols {
 
 struct IMPL_ControlInfo
 {
@@ -50,16 +47,15 @@ class BaseContainerControl  : public css::awt::XControlModel
                             , public css::awt::XControlContainer
                             , public BaseControl
 {
-
 public:
 
-       BaseContainerControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    BaseContainerControl( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
-    virtual ~BaseContainerControl();
+    virtual ~BaseContainerControl() override;
 
     //  XInterface
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      give answer, if interface is supported
         @descr      The interfaces are searched by type.
 
@@ -74,11 +70,11 @@ public:
 
     virtual css::uno::Any SAL_CALL queryInterface(
         const css::uno::Type& aType
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XTypeProvider
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      get information about supported interfaces
         @seealso    XTypeProvider
         @return     Sequence of types of all supported interfaces
@@ -86,67 +82,64 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() override;
 
     //  XAggregation
 
     virtual css::uno::Any SAL_CALL queryAggregation(
         const css::uno::Type& aType
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XControl
 
     virtual void SAL_CALL createPeer(
         const css::uno::Reference< css::awt::XToolkit >&      xToolkit ,
         const css::uno::Reference< css::awt::XWindowPeer >&   xParent
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual sal_Bool SAL_CALL setModel(
         const css::uno::Reference< css::awt::XControlModel >& xModel
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
-    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel() override;
 
     //  XComponent
 
-    virtual void SAL_CALL dispose() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL dispose() override;
 
     //  XEventListener
 
-    virtual void SAL_CALL disposing( const css::lang::EventObject& rEvent ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& rEvent ) override;
 
     //  XControlContainer
 
     virtual void SAL_CALL addControl(
         const OUString&                                     sName    ,
         const css::uno::Reference< css::awt::XControl >&    xControl
-    ) throw( css::uno::RuntimeException, std::exception  ) override;
+    ) override;
 
     virtual void SAL_CALL removeControl(
         const css::uno::Reference< css::awt::XControl >& xControl
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL setStatusText(
         const OUString& sStatusText
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual css::uno::Reference< css::awt::XControl > SAL_CALL getControl(
         const OUString& sName
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
-    virtual css::uno::Sequence< css::uno::Reference< css::awt::XControl > > SAL_CALL getControls()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::uno::Reference< css::awt::XControl > > SAL_CALL getControls() override;
 
     //  XWindow
 
-    virtual void SAL_CALL setVisible( sal_Bool bVisible ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setVisible( sal_Bool bVisible ) override;
 
 protected:
     using OComponentHelper::disposing;
 
-    virtual css::awt::WindowDescriptor* impl_getWindowDescriptor(
+    virtual css::awt::WindowDescriptor impl_getWindowDescriptor(
         const css::uno::Reference< css::awt::XWindowPeer >& xParentPeer
     ) override;
 
@@ -158,22 +151,14 @@ protected:
     ) override;
 
 private:
-
-    void impl_activateTabControllers();
-
-    void impl_cleanMemory();
-
     // list of pointer of "struct IMPL_ControlInfo" to hold child-controls
-    ::std::vector< IMPL_ControlInfo* > maControlInfoList;
-
-    // list of references of XTabController to hold tab-order in this container
-    css::uno::Sequence< css::uno::Reference< css::awt::XTabController > >  m_xTabControllerList;
+    ::std::vector< std::unique_ptr<IMPL_ControlInfo> > maControlInfoList;
 
     ::cppu::OMultiTypeInterfaceContainerHelper                          m_aListeners;
 
-};  // class BaseContainerControl
+};
 
-}   // namespace unocontrols
+}
 
 #endif // INCLUDED_UNOCONTROLS_INC_BASECONTAINERCONTROL_HXX
 

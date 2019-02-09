@@ -17,19 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/relfld.hxx"
+#include <svx/relfld.hxx>
 #include <vcl/builderfactory.hxx>
 
 SvxRelativeField::SvxRelativeField(
         vcl::Window *const pParent, WinBits const nBits, FieldUnit const eUnit)
     : MetricField( pParent, nBits)
-    , nRelMin(0)
-    , nRelMax(0)
-    , nRelStep(0)
-    , bRelativeMode(false)
-    , bRelative(false)
-    , bNegativeEnabled(false)
-
 {
     SetUnit(eUnit);
     SetDecimalDigits( 2 );
@@ -37,23 +30,34 @@ SvxRelativeField::SvxRelativeField(
     SetMax( 9999 );
 }
 
-VCL_BUILDER_DECL_FACTORY(SvxRelativeField)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeSvxRelativeField(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap & rMap)
 {
-    OString const custom(VclBuilder::extractCustomProperty(rMap));
-    FieldUnit const eUnit(VclBuilder::detectUnit(custom));
+    OUString const custom(BuilderUtils::extractCustomProperty(rMap));
+    FieldUnit const eUnit(BuilderUtils::detectUnit(custom));
     rRet = VclPtr<SvxRelativeField>::Create(pParent,
                                             WB_BORDER | WB_SPIN | WB_REPEAT |
                                             WB_LEFT | WB_GROUP,
                                             eUnit);
 }
 
-void SvxRelativeField::Modify()
-{
-    MetricField::Modify();
+RelativeField::RelativeField(std::unique_ptr<weld::MetricSpinButton> pControl)
+    : m_xSpinButton(std::move(pControl))
+    , nRelMin(0)
+    , nRelMax(0)
+    , bRelativeMode(false)
+    , bRelative(false)
+    , bNegativeEnabled(false)
 
-    if ( bRelativeMode )
+{
+    weld::SpinButton& rSpinButton = m_xSpinButton->get_widget();
+    rSpinButton.connect_changed(LINK(this, RelativeField, ModifyHdl));
+}
+
+IMPL_LINK_NOARG(RelativeField, ModifyHdl, weld::Entry&, void)
+{
+    if (bRelativeMode)
     {
-        OUString  aStr = GetText();
+        OUString  aStr = m_xSpinButton->get_text();
         bool      bNewMode = bRelative;
 
         if ( bRelative )
@@ -79,48 +83,42 @@ void SvxRelativeField::Modify()
 
         if ( bNewMode != bRelative )
             SetRelative( bNewMode );
-
-        MetricField::Modify();
     }
 }
 
-
-void SvxRelativeField::EnableRelativeMode( sal_uInt16 nMin,
-                                           sal_uInt16 nMax, sal_uInt16 nStep )
+void RelativeField::EnableRelativeMode(sal_uInt16 nMin, sal_uInt16 nMax)
 {
     bRelativeMode = true;
     nRelMin       = nMin;
     nRelMax       = nMax;
-    nRelStep      = nStep;
-    SetUnit( FUNIT_CM );
+    m_xSpinButton->set_unit(FieldUnit::CM);
 }
 
-
-void SvxRelativeField::SetRelative( bool bNewRelative )
+void RelativeField::SetRelative( bool bNewRelative )
 {
-    Selection aSelection = GetSelection();
-    OUString aStr = GetText();
+    weld::SpinButton& rSpinButton = m_xSpinButton->get_widget();
+
+    int nStartPos, nEndPos;
+    rSpinButton.get_selection_bounds(nStartPos, nEndPos);
+    OUString aStr = rSpinButton.get_text();
 
     if ( bNewRelative )
     {
         bRelative = true;
-        SetDecimalDigits( 0 );
-        SetMin( nRelMin );
-        SetMax( nRelMax );
-        SetUnit( FUNIT_PERCENT );
+        m_xSpinButton->set_digits(0);
+        m_xSpinButton->set_range(nRelMin, nRelMax, FieldUnit::NONE);
+        m_xSpinButton->set_unit(FieldUnit::PERCENT);
     }
     else
     {
         bRelative = false;
-        SetDecimalDigits( 2 );
-        SetMin( bNegativeEnabled ? -9999 : 0 );
-        SetMax( 9999 );
-        SetUnit( FUNIT_CM );
+        m_xSpinButton->set_digits(2);
+        m_xSpinButton->set_range(bNegativeEnabled ? -9999 : 0, 9999, FieldUnit::NONE);
+        m_xSpinButton->set_unit(FieldUnit::CM);
     }
 
-    SetText( aStr );
-    SetSelection( aSelection );
+    rSpinButton.set_text(aStr);
+    rSpinButton.select_region(nStartPos, nEndPos);
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

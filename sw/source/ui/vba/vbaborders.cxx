@@ -45,8 +45,8 @@ class SwVbaBorder : public SwVbaBorder_Base
 {
 private:
     uno::Reference< beans::XPropertySet > m_xProps;
-    sal_Int32 m_LineType;
-    void setBorderLine( table::BorderLine& rBorderLine )
+    sal_Int32 const m_LineType;
+    void setBorderLine( table::BorderLine const & rBorderLine )
     {
         table::TableBorder aTableBorder;
         m_xProps->getPropertyValue( "TableBorder" ) >>= aTableBorder;
@@ -54,28 +54,28 @@ private:
         switch ( m_LineType )
         {
             case word::WdBorderType::wdBorderLeft:
-                aTableBorder.IsLeftLineValid = sal_True;
+                aTableBorder.IsLeftLineValid = true;
                 aTableBorder.LeftLine= rBorderLine;
                 break;
             case word::WdBorderType::wdBorderTop:
-                aTableBorder.IsTopLineValid = sal_True;
+                aTableBorder.IsTopLineValid = true;
                 aTableBorder.TopLine = rBorderLine;
                 break;
 
             case word::WdBorderType::wdBorderBottom:
-                aTableBorder.IsBottomLineValid = sal_True;
+                aTableBorder.IsBottomLineValid = true;
                 aTableBorder.BottomLine = rBorderLine;
                 break;
             case word::WdBorderType::wdBorderRight:
-                aTableBorder.IsRightLineValid = sal_True;
+                aTableBorder.IsRightLineValid = true;
                 aTableBorder.RightLine = rBorderLine;
                 break;
             case word::WdBorderType::wdBorderVertical:
-                aTableBorder.IsVerticalLineValid = sal_True;
+                aTableBorder.IsVerticalLineValid = true;
                 aTableBorder.VerticalLine = rBorderLine;
                 break;
             case word::WdBorderType::wdBorderHorizontal:
-                aTableBorder.IsHorizontalLineValid = sal_True;
+                aTableBorder.IsHorizontalLineValid = true;
                 aTableBorder.HorizontalLine = rBorderLine;
                 break;
             case word::WdBorderType::wdBorderDiagonalDown:
@@ -139,18 +139,16 @@ protected:
 
     virtual css::uno::Sequence<OUString> getServiceNames() override
     {
-        static uno::Sequence< OUString > aServiceNames;
-        if ( aServiceNames.getLength() == 0 )
+        static uno::Sequence< OUString > const aServiceNames
         {
-            aServiceNames.realloc( 1 );
-            aServiceNames[ 0 ] = "ooo.vba.word.Border";
-        }
+            "ooo.vba.word.Border"
+        };
         return aServiceNames;
     }
 public:
     SwVbaBorder( const uno::Reference< beans::XPropertySet > & xProps, const uno::Reference< uno::XComponentContext >& xContext, sal_Int32 lineType ) : SwVbaBorder_Base( uno::Reference< XHelperInterface >( xProps, uno::UNO_QUERY ), xContext ), m_xProps( xProps ), m_LineType( lineType ) {}
 
-    uno::Any SAL_CALL getLineStyle() throw (uno::RuntimeException, std::exception) override
+    uno::Any SAL_CALL getLineStyle() override
     {
         sal_Int32 nLineStyle = word::WdLineStyle::wdLineStyleNone;
         table::BorderLine aBorderLine;
@@ -171,59 +169,58 @@ public:
         }
         return uno::makeAny( nLineStyle );
     }
-    void SAL_CALL setLineStyle( const uno::Any& _linestyle ) throw (uno::RuntimeException, std::exception) override
+    void SAL_CALL setLineStyle( const uno::Any& _linestyle ) override
     {
         // Urk no choice but to silently ignore we don't support this attribute
         // #TODO would be nice to support the word line styles
         sal_Int32 nLineStyle = 0;
         _linestyle >>= nLineStyle;
         table::BorderLine aBorderLine;
-        if ( getBorderLine( aBorderLine ) )
-        {
-            switch ( nLineStyle )
-            {
-                case word::WdLineStyle::wdLineStyleNone:
-                {
-                    aBorderLine.InnerLineWidth = 0;
-                    aBorderLine.OuterLineWidth = 0;
-                    break;
-                }
-                case word::WdLineStyle::wdLineStyleDashDot:
-                case word::WdLineStyle::wdLineStyleDashDotDot:
-                case word::WdLineStyle::wdLineStyleDashDotStroked:
-                case word::WdLineStyle::wdLineStyleDashLargeGap:
-                case word::WdLineStyle::wdLineStyleDashSmallGap:
-                case word::WdLineStyle::wdLineStyleDot:
-                case word::WdLineStyle::wdLineStyleDouble:
-                case word::WdLineStyle::wdLineStyleDoubleWavy:
-                case word::WdLineStyle::wdLineStyleEmboss3D:
-                case word::WdLineStyle::wdLineStyleEngrave3D:
-                case word::WdLineStyle::wdLineStyleInset:
-                case word::WdLineStyle::wdLineStyleOutset:
-                case word::WdLineStyle::wdLineStyleSingle:
-                case word::WdLineStyle::wdLineStyleSingleWavy:
-                case word::WdLineStyle::wdLineStyleThickThinLargeGap:
-                case word::WdLineStyle::wdLineStyleThickThinMedGap:
-                case word::WdLineStyle::wdLineStyleThickThinSmallGap:
-                case word::WdLineStyle::wdLineStyleThinThickLargeGap:
-                case word::WdLineStyle::wdLineStyleThinThickMedGap:
-                case word::WdLineStyle::wdLineStyleThinThickSmallGap:
-                case word::WdLineStyle::wdLineStyleThinThickThinLargeGap:
-                case word::WdLineStyle::wdLineStyleThinThickThinMedGap:
-                case word::WdLineStyle::wdLineStyleThinThickThinSmallGap:
-                case word::WdLineStyle::wdLineStyleTriple:
-                {
-                    aBorderLine.InnerLineWidth = 0;
-                    aBorderLine.OuterLineWidth = OOLineHairline;
-                    break;
-                }
-                default:
-                    throw uno::RuntimeException("Bad param" );
-            }
-            setBorderLine( aBorderLine );
-        }
-        else
+        if ( !getBorderLine( aBorderLine ) )
             throw uno::RuntimeException("Method failed" );
+
+        switch ( nLineStyle )
+        {
+            case word::WdLineStyle::wdLineStyleNone:
+            {
+                aBorderLine.InnerLineWidth = 0;
+                aBorderLine.OuterLineWidth = 0;
+                break;
+            }
+            case word::WdLineStyle::wdLineStyleDashDot:
+            case word::WdLineStyle::wdLineStyleDashDotDot:
+            case word::WdLineStyle::wdLineStyleDashDotStroked:
+            case word::WdLineStyle::wdLineStyleDashLargeGap:
+            case word::WdLineStyle::wdLineStyleDashSmallGap:
+            case word::WdLineStyle::wdLineStyleDot:
+            case word::WdLineStyle::wdLineStyleDouble:
+            case word::WdLineStyle::wdLineStyleDoubleWavy:
+            case word::WdLineStyle::wdLineStyleEmboss3D:
+            case word::WdLineStyle::wdLineStyleEngrave3D:
+            case word::WdLineStyle::wdLineStyleInset:
+            case word::WdLineStyle::wdLineStyleOutset:
+            case word::WdLineStyle::wdLineStyleSingle:
+            case word::WdLineStyle::wdLineStyleSingleWavy:
+            case word::WdLineStyle::wdLineStyleThickThinLargeGap:
+            case word::WdLineStyle::wdLineStyleThickThinMedGap:
+            case word::WdLineStyle::wdLineStyleThickThinSmallGap:
+            case word::WdLineStyle::wdLineStyleThinThickLargeGap:
+            case word::WdLineStyle::wdLineStyleThinThickMedGap:
+            case word::WdLineStyle::wdLineStyleThinThickSmallGap:
+            case word::WdLineStyle::wdLineStyleThinThickThinLargeGap:
+            case word::WdLineStyle::wdLineStyleThinThickThinMedGap:
+            case word::WdLineStyle::wdLineStyleThinThickThinSmallGap:
+            case word::WdLineStyle::wdLineStyleTriple:
+            {
+                aBorderLine.InnerLineWidth = 0;
+                aBorderLine.OuterLineWidth = OOLineHairline;
+                break;
+            }
+            default:
+                throw uno::RuntimeException("Bad param" );
+        }
+        setBorderLine( aBorderLine );
+
     }
 };
 
@@ -232,7 +229,7 @@ class RangeBorders : public RangeBorders_Base
 private:
     uno::Reference< table::XCellRange > m_xRange;
     uno::Reference< uno::XComponentContext > m_xContext;
-    VbaPalette m_Palette;
+    VbaPalette const m_Palette;
     sal_Int32 getTableIndex( sal_Int32 nConst )
     {
         // okay return position of the index in the table
@@ -247,15 +244,15 @@ private:
         return getCount(); // error condition
     }
 public:
-    RangeBorders(  const uno::Reference< table::XCellRange >& xRange,  const uno::Reference< uno::XComponentContext > & xContext, VbaPalette& rPalette ) : m_xRange( xRange ), m_xContext( xContext ), m_Palette( rPalette )
+    RangeBorders(  const uno::Reference< table::XCellRange >& xRange,  const uno::Reference< uno::XComponentContext > & xContext, VbaPalette const & rPalette ) : m_xRange( xRange ), m_xContext( xContext ), m_Palette( rPalette )
     {
     }
     // XIndexAccess
-    virtual ::sal_Int32 SAL_CALL getCount(  ) throw (uno::RuntimeException, std::exception) override
+    virtual ::sal_Int32 SAL_CALL getCount(  ) override
     {
         return SAL_N_ELEMENTS( supportedIndexTable );
     }
-    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL getByIndex( ::sal_Int32 Index ) override
     {
 
         sal_Int32 nIndex = getTableIndex( Index );
@@ -266,18 +263,18 @@ public:
         }
         throw lang::IndexOutOfBoundsException();
     }
-    virtual uno::Type SAL_CALL getElementType(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType(  ) override
     {
         return  cppu::UnoType<word::XBorder>::get();
     }
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasElements(  ) override
     {
-        return sal_True;
+        return true;
     }
 };
 
-uno::Reference< container::XIndexAccess >
-rangeToBorderIndexAccess( const uno::Reference< table::XCellRange >& xRange,  const uno::Reference< uno::XComponentContext > & xContext, VbaPalette& rPalette )
+static uno::Reference< container::XIndexAccess >
+rangeToBorderIndexAccess( const uno::Reference< table::XCellRange >& xRange,  const uno::Reference< uno::XComponentContext > & xContext, VbaPalette const & rPalette )
 {
     return new RangeBorders( xRange, xContext, rPalette );
 }
@@ -288,12 +285,12 @@ class RangeBorderEnumWrapper : public EnumerationHelper_BASE
     sal_Int32 nIndex;
 public:
     explicit RangeBorderEnumWrapper( const uno::Reference< container::XIndexAccess >& xIndexAccess ) : m_xIndexAccess( xIndexAccess ), nIndex( 0 ) {}
-    virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasMoreElements(  ) override
     {
         return ( nIndex < m_xIndexAccess->getCount() );
     }
 
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         if ( nIndex < m_xIndexAccess->getCount() )
             return m_xIndexAccess->getByIndex( nIndex++ );
@@ -302,13 +299,13 @@ public:
 };
 
 // for Table borders
-SwVbaBorders::SwVbaBorders( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< table::XCellRange >& xRange, VbaPalette& rPalette  ):  SwVbaBorders_BASE( xParent, xContext, rangeToBorderIndexAccess( xRange ,xContext, rPalette ) )
+SwVbaBorders::SwVbaBorders( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext > & xContext, const uno::Reference< table::XCellRange >& xRange, VbaPalette const & rPalette  ):  SwVbaBorders_BASE( xParent, xContext, rangeToBorderIndexAccess( xRange ,xContext, rPalette ) )
 {
     m_xProps.set( xRange, uno::UNO_QUERY_THROW );
 }
 
 uno::Reference< container::XEnumeration >
-SwVbaBorders::createEnumeration() throw (uno::RuntimeException)
+SwVbaBorders::createEnumeration()
 {
     return new RangeBorderEnumWrapper( m_xIndexAccess );
 }
@@ -316,28 +313,28 @@ SwVbaBorders::createEnumeration() throw (uno::RuntimeException)
 uno::Any
 SwVbaBorders::createCollectionObject( const css::uno::Any& aSource )
 {
-    return aSource; // its already a Border object
+    return aSource; // it's already a Border object
 }
 
 uno::Type
-SwVbaBorders::getElementType() throw (uno::RuntimeException)
+SwVbaBorders::getElementType()
 {
     return cppu::UnoType<word::XBorders>::get();
 }
 
 uno::Any
-SwVbaBorders::getItemByIntIndex( const sal_Int32 nIndex )  throw (uno::RuntimeException)
+SwVbaBorders::getItemByIntIndex( const sal_Int32 nIndex )
 {
     return createCollectionObject( m_xIndexAccess->getByIndex( nIndex ) );
 }
 
-sal_Bool SAL_CALL SwVbaBorders::getShadow() throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SwVbaBorders::getShadow()
 {
     // always return False for table border in MS Word
-    return sal_False;
+    return false;
 }
 
-void SAL_CALL SwVbaBorders::setShadow( sal_Bool /*_shadow*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwVbaBorders::setShadow( sal_Bool /*_shadow*/ )
 {
     // not support in Table border in Word
     // TODO:
@@ -352,12 +349,10 @@ SwVbaBorders::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaBorders::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Borders";
-    }
+        "ooo.vba.word.Borders"
+    };
     return aServiceNames;
 }
 

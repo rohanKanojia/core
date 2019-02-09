@@ -20,24 +20,35 @@
 #ifndef INCLUDED_SD_SOURCE_FILTER_EPPT_EPPTBASE_HXX
 #define INCLUDED_SD_SOURCE_FILTER_EPPT_EPPTBASE_HXX
 
+#include <memory>
 #include <vector>
 
 #include <vcl/mapmod.hxx>
 #include <tools/stream.hxx>
 #include <tools/fract.hxx>
 #include <tools/gen.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
-#include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
-#include <com/sun/star/drawing/XMasterPageTarget.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/presentation/XPresentationSupplier.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/presentation/FadeEffect.hpp>
-#include <com/sun/star/task/XStatusIndicatorSupplier.hpp>
+#include <com/sun/star/beans/PropertyState.hpp>
 #include <vcl/vclptr.hxx>
-#include <vcl/outdev.hxx>
+#include <vcl/graph.hxx>
 
 #include "grouptable.hxx"
+
+namespace com { namespace sun { namespace star { namespace task { class XStatusIndicator; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace awt { struct Rectangle; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XMasterPagesSupplier; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPages; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPagesSupplier; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+
+class VirtualDevice;
 
 // PLACEMENT_ID
 enum class EppLayout
@@ -65,12 +76,10 @@ enum class EppLayout
 
 #define EPP_LAYOUT_SIZE 25
 
-class PptEscherEx;
-
 struct PHLayout
 {
     EppLayout   nLayout;
-    sal_uInt8   nPlaceHolder[ 8 ];
+    sal_uInt8 nPlaceHolder[ 8 ];
 
     sal_uInt8   nUsedObjectPlaceHolder;
     sal_uInt8   nTypeOfTitle;
@@ -98,10 +107,6 @@ class PropValue
 
         PropValue() {}
 
-        explicit PropValue( css::uno::Reference< css::beans::XPropertySet > rXPropSet )
-            : mXPropSet( rXPropSet )
-        {}
-
         static bool GetPropertyValue(
             css::uno::Any& rAny,
             const css::uno::Reference< css::beans::XPropertySet > &,
@@ -124,14 +129,15 @@ class PPTExBulletProvider
         SvMemoryStream          aBuExOutlineStream;
         SvMemoryStream          aBuExMasterStream;
 
-        EscherGraphicProvider*  pGraphicProv;
+        std::unique_ptr<EscherGraphicProvider>
+                                pGraphicProv;
 
     public:
 
-        sal_uInt16              GetId( const OString& rUniqueId, Size& rGraphicSize );
+        sal_uInt16 GetId(Graphic const & rGraphic, Size& rGraphicSize);
 
-                                PPTExBulletProvider();
-                                ~PPTExBulletProvider();
+        PPTExBulletProvider();
+        ~PPTExBulletProvider();
 };
 
 struct FontCollectionEntry
@@ -142,8 +148,7 @@ struct FontCollectionEntry
         sal_Int16               Pitch;
         sal_Int16               CharSet;
 
-        OUString                Original;
-        bool                    bIsConverted;
+        OUString const          Original;
 
         FontCollectionEntry( const OUString& rName, sal_Int16 nFamily, sal_Int16 nPitch, sal_Int16 nCharSet ) :
                             Scaling ( 1.0 ),
@@ -168,8 +173,6 @@ struct FontCollectionEntry
 
     private:
 
-        FontCollectionEntry() {}
-
         void ImplInit( const OUString& rName );
 };
 
@@ -185,7 +188,7 @@ public:
 
     sal_uInt32  GetId( FontCollectionEntry& rFontDescriptor );
 
-    inline sal_uInt32  GetCount() const { return maFonts.size(); };
+    sal_uInt32  GetCount() const { return maFonts.size(); };
 
     const FontCollectionEntry* GetById( sal_uInt32 nId );
 
@@ -216,9 +219,6 @@ enum PPTExTextAttr
     ParaAttr_TextOfs,
     ParaAttr_BulletOfs,
     ParaAttr_DefaultTab,
-    ParaAttr_AsianLB_1,
-    ParaAttr_AsianLB_2,
-    ParaAttr_AsianLB_3,
     ParaAttr_BiDi,
     CharAttr_Bold,
     CharAttr_Italic,
@@ -241,7 +241,7 @@ struct PPTExCharLevel
     sal_uInt16      mnAsianOrComplexFont;
     sal_uInt16      mnFontHeight;
     sal_uInt16      mnEscapement;
-    sal_uInt32      mnFontColor;
+    Color           mnFontColor;
 };
 
 struct PPTExCharSheet
@@ -252,7 +252,7 @@ struct PPTExCharSheet
 
                 void    SetStyleSheet( const css::uno::Reference< css::beans::XPropertySet > &,
                                         FontCollection& rFontCollection, int nLevel );
-                void    Write( SvStream& rSt, PptEscherEx* pEx, sal_uInt16 nLev, bool bFirst, bool bSimpleText,
+                void    Write( SvStream& rSt, sal_uInt16 nLev, bool bSimpleText,
                             const css::uno::Reference< css::beans::XPropertySet > & rPagePropSet );
 
 };
@@ -293,7 +293,7 @@ struct PPTExParaSheet
 
                 void    SetStyleSheet( const css::uno::Reference< css::beans::XPropertySet > &,
                                         FontCollection& rFontCollection, int nLevel, const PPTExCharLevel& rCharLevel );
-                void    Write( SvStream& rSt, PptEscherEx* pEx, sal_uInt16 nLev, bool bFirst, bool bSimpleText,
+                void    Write( SvStream& rSt, sal_uInt16 nLev, bool bSimpleText,
                     const css::uno::Reference< css::beans::XPropertySet > & rPagePropSet );
 };
 
@@ -302,8 +302,8 @@ class PPTExStyleSheet
 
     public:
 
-                PPTExCharSheet*     mpCharSheet[ PPTEX_STYLESHEETENTRYS ];
-                PPTExParaSheet*     mpParaSheet[ PPTEX_STYLESHEETENTRYS ];
+                std::unique_ptr<PPTExCharSheet>  mpCharSheet[ PPTEX_STYLESHEETENTRYS ];
+                std::unique_ptr<PPTExParaSheet>  mpParaSheet[ PPTEX_STYLESHEETENTRYS ];
 
                 PPTExStyleSheet( sal_uInt16 nDefaultTab, PPTExBulletProvider* pBuProv );
                 ~PPTExStyleSheet();
@@ -336,7 +336,7 @@ protected:
     css::uno::Reference< css::drawing::XShape >               mXShape;
     css::awt::Size         maSize;
     css::awt::Point        maPosition;
-    Rectangle           maRect;
+    ::tools::Rectangle           maRect;
     OString        mType;
     bool            mbPresObj;
     bool            mbEmptyPresObj;
@@ -346,24 +346,23 @@ protected:
     sal_uInt32          mnPages;            ///< number of Slides ( w/o master pages & notes & handout )
     sal_uInt32          mnMasterPages;
 
-    Fraction                        maFraction;
-    MapMode                         maMapModeSrc;
-    MapMode                         maMapModeDest;
+    Fraction const     maFraction;
+    MapMode const      maMapModeSrc;
+    MapMode const      maMapModeDest;
     css::awt::Size     maDestPageSize;
     css::awt::Size     maPageSize; // #i121183# Keep size in logic coordinates (100th mm)
     css::awt::Size     maNotesPageSize;
 
     PageType                        meLatestPageType;
-    std::vector< PPTExStyleSheet* > maStyleSheetList;
+    std::vector< std::unique_ptr<PPTExStyleSheet> > maStyleSheetList;
     PPTExStyleSheet*                mpStyleSheet;
 
     FontCollection      maFontCollection;
 
     virtual void ImplWriteSlide( sal_uInt32 /* nPageNum */, sal_uInt32 /* nMasterNum */, sal_uInt16 /* nMode */,
-                                 bool /* bHasBackground */, css::uno::Reference< css::beans::XPropertySet > /* aXBackgroundPropSet */ ) {}
+                                 bool /* bHasBackground */, css::uno::Reference< css::beans::XPropertySet > const & /* aXBackgroundPropSet */ ) {}
     virtual void ImplWriteNotes( sal_uInt32 nPageNum ) = 0;
-    virtual void ImplWriteSlideMaster( sal_uInt32 /* nPageNum */, css::uno::Reference< css::beans::XPropertySet > /* aXBackgroundPropSet */ ) {}
-    virtual void ImplWriteLayout( sal_Int32 /* nOffset */, sal_uInt32 /* nMasterNum */ ) {}
+    virtual void ImplWriteSlideMaster( sal_uInt32 /* nPageNum */, css::uno::Reference< css::beans::XPropertySet > const & /* aXBackgroundPropSet */ ) {}
 
     virtual void exportPPTPre( const std::vector< css::beans::PropertyValue >& ) {}
     virtual void exportPPTPost() {}
@@ -372,13 +371,13 @@ protected:
     virtual bool ImplCreateMainNotes()=0;
 
     bool GetStyleSheets();
-    bool GetShapeByIndex( sal_uInt32 nIndex, bool bGroup = false );
+    bool GetShapeByIndex( sal_uInt32 nIndex, bool bGroup );
 
     bool CreateMainNotes();
 
     css::awt::Size   MapSize( const css::awt::Size& );
     css::awt::Point  MapPoint( const css::awt::Point& );
-    Rectangle        MapRectangle( const css::awt::Rectangle& );
+    ::tools::Rectangle        MapRectangle( const css::awt::Rectangle& );
 
     bool ContainsOtherShapeThanPlaceholders();
 
@@ -398,8 +397,8 @@ public:
 
     bool GetPresObj() { return mbPresObj; }
 
-    static PHLayout& GetLayout( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet );
-    static PHLayout& GetLayout( sal_Int32 nOffset );
+    static PHLayout const & GetLayout( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet );
+    static PHLayout const & GetLayout( sal_Int32 nOffset );
     static sal_Int32 GetLayoutOffset( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet );
     static sal_Int32 GetLayoutOffsetFixed( const css::uno::Reference< css::beans::XPropertySet >& rXPropSet );
 

@@ -20,9 +20,12 @@
 #ifndef INCLUDED_HWPFILTER_SOURCE_HPARA_H
 #define INCLUDED_HWPFILTER_SOURCE_HPARA_H
 
-#include <hwplib.h>
-#include <hwpfile.h>
-#include <hinfo.h>
+#include "hwplib.h"
+#include "hwpfile.h"
+#include "hinfo.h"
+#include <map>
+#include <memory>
+#include <vector>
 
 struct HBox;
 
@@ -68,7 +71,7 @@ struct LineInfo
     hunit         height_sp;
     unsigned short    softbreak;                  // column, page, section
 
-    void  Read(HWPFile &hwpf, HWPPara *para);
+    void  Read(HWPFile &hwpf, HWPPara const *para);
 };
 /**
  * It represents the paragraph.
@@ -102,20 +105,20 @@ class DLLEXPORT HWPPara
  */
         unsigned long     ctrlflag;
         unsigned char     pstyno;
-        CharShape     cshape;                     /* When characters are all the same shape */
-        ParaShape     pshape;                     /* if reuse flag is 0, */
+        std::shared_ptr<CharShape> cshape;                     /* When characters are all the same shape */
+        std::shared_ptr<ParaShape> pshape;                     /* if reuse flag is 0, */
 
-        LineInfo      *linfo;
-        CharShape     *cshapep;
+        std::unique_ptr<LineInfo[]> linfo;
+        std::vector<std::shared_ptr<CharShape>>   cshapep;
 /**
  * Box object list
  */
-        HBox          **hhstr;
+        std::map<unsigned short, std::unique_ptr<HBox>> hhstr;
 
         HWPPara(void);
         ~HWPPara(void);
 
-        bool  Read(HWPFile &hwpf, unsigned char flag = 0);
+        bool  Read(HWPFile &hwpf, unsigned char flag);
 
         void  SetNext(HWPPara *n) { _next = n; };
 
@@ -127,7 +130,7 @@ class DLLEXPORT HWPPara
 /**
  * Returns the style of paragraph.
  */
-        ParaShape& GetParaShape(void) { return pshape;}
+        ParaShape& GetParaShape(void) { return *pshape; }
 
 /**
  * Returns next paragraph.
@@ -135,7 +138,7 @@ class DLLEXPORT HWPPara
         HWPPara *Next(void) { return _next;}
 
     private:
-        HBox *readHBox(HWPFile &);
+        std::unique_ptr<HBox> readHBox(HWPFile &);
 };
 
 #endif // INCLUDED_HWPFILTER_SOURCE_HPARA_H

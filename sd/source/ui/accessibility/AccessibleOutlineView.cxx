@@ -22,13 +22,13 @@
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/document/XEventBroadcaster.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <rtl/ustring.h>
+#include <sal/log.hxx>
 #include <sfx2/viewfrm.hxx>
 
 #include <svx/AccessibleShape.hxx>
@@ -36,20 +36,20 @@
 #include <svx/svdobj.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/unoapi.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/svapp.hxx>
-#include "Window.hxx"
-#include "ViewShell.hxx"
-#include "OutlineViewShell.hxx"
-#include "View.hxx"
-#include "AccessibleOutlineView.hxx"
-#include "AccessibleOutlineEditSource.hxx"
+#include <Window.hxx>
+#include <ViewShell.hxx>
+#include <OutlineViewShell.hxx>
+#include <DrawDocShell.hxx>
+#include <OutlineView.hxx>
+#include <View.hxx>
+#include <AccessibleOutlineView.hxx>
+#include <AccessibleOutlineEditSource.hxx>
+#include <drawdoc.hxx>
+#include <strings.hrc>
+#include <sdresid.hxx>
 
 #include <memory>
-
-#include "accessibility.hrc"
-#include "sdresid.hxx"
-#include <osl/mutex.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
@@ -92,7 +92,6 @@ AccessibleOutlineView::AccessibleOutlineView (
 
 AccessibleOutlineView::~AccessibleOutlineView()
 {
-    OSL_TRACE ("~AccessibleOutlineView");
 }
 
 void AccessibleOutlineView::Init()
@@ -103,10 +102,9 @@ void AccessibleOutlineView::Init()
     AccessibleDocumentViewBase::Init ();
 }
 
-void AccessibleOutlineView::ViewForwarderChanged (ChangeType aChangeType,
-    const IAccessibleViewForwarder* pViewForwarder)
+void AccessibleOutlineView::ViewForwarderChanged()
 {
-    AccessibleDocumentViewBase::ViewForwarderChanged (aChangeType, pViewForwarder);
+    AccessibleDocumentViewBase::ViewForwarderChanged();
 
     UpdateChildren();
 }
@@ -115,7 +113,6 @@ void AccessibleOutlineView::ViewForwarderChanged (ChangeType aChangeType,
 
 sal_Int32 SAL_CALL
     AccessibleOutlineView::getAccessibleChildCount()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
 
@@ -125,18 +122,14 @@ sal_Int32 SAL_CALL
 
 uno::Reference<XAccessible> SAL_CALL
     AccessibleOutlineView::getAccessibleChild (sal_Int32 nIndex)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
     // Forward request to children manager.
     return maTextHelper.GetChild(nIndex);
 }
 
-#include <drawdoc.hxx>
-
 OUString SAL_CALL
     AccessibleOutlineView::getAccessibleName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -145,7 +138,7 @@ OUString SAL_CALL
     if ( pSdView )
     {
         SdDrawDocument& rDoc = pSdView->GetDoc();
-        rtl::OUString sFileName = rDoc.getDocAccTitle();
+        OUString sFileName = rDoc.getDocAccTitle();
         if (sFileName.isEmpty())
         {
             ::sd::DrawDocShell* pDocSh = pSdView->GetDocSh();
@@ -164,7 +157,7 @@ OUString SAL_CALL
 
 //=====  XAccessibleEventBroadcaster  ========================================
 
-void SAL_CALL AccessibleOutlineView::addAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL AccessibleOutlineView::addAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener )
 {
     // delegate listener handling to children manager.
     if ( ! IsDisposed())
@@ -172,7 +165,7 @@ void SAL_CALL AccessibleOutlineView::addAccessibleEventListener( const uno::Refe
     AccessibleContextBase::addEventListener(xListener);
 }
 
-void SAL_CALL AccessibleOutlineView::removeAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL AccessibleOutlineView::removeAccessibleEventListener( const uno::Reference< XAccessibleEventListener >& xListener )
 {
     // forward
     if ( ! IsDisposed())
@@ -184,19 +177,11 @@ void SAL_CALL AccessibleOutlineView::removeAccessibleEventListener( const uno::R
 
 OUString SAL_CALL
     AccessibleOutlineView::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("AccessibleOutlineView");
 }
 
 //=====  XEventListener  ======================================================
-
-void SAL_CALL
-    AccessibleOutlineView::disposing (const lang::EventObject& rEventObject)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    AccessibleDocumentViewBase::disposing (rEventObject);
-}
 
 //=====  protected internal  ==================================================
 
@@ -228,57 +213,37 @@ void SAL_CALL AccessibleOutlineView::disposing()
 
 void SAL_CALL
     AccessibleOutlineView::propertyChange (const beans::PropertyChangeEvent& rEventObject)
-    throw (css::uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed ();
 
     AccessibleDocumentViewBase::propertyChange (rEventObject);
 
-    OSL_TRACE ("AccessibleOutlineView::propertyChange");
     //add page switch event for slide show mode
     if (rEventObject.PropertyName == "CurrentPage" ||
         rEventObject.PropertyName == "PageChange")
     {
-        OSL_TRACE ("    current page changed");
-
         // The current page changed. Update the children accordingly.
         UpdateChildren();
         CommitChange(AccessibleEventId::PAGE_CHANGED,rEventObject.NewValue, rEventObject.OldValue);
     }
     else if ( rEventObject.PropertyName == "VisibleArea" )
     {
-        OSL_TRACE ("    visible area changed");
-
         // The visible area changed. Update the children accordingly.
         UpdateChildren();
     }
     else
     {
-        OSL_TRACE ("  unhandled");
+        SAL_INFO("sd", "unhandled");
     }
-    OSL_TRACE ("  done");
 }
 
 /// Create a name for this view.
 OUString
     AccessibleOutlineView::CreateAccessibleName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    return SD_RESSTR(SID_SD_A11Y_I_OUTLINEVIEW_N);
-}
-
-/** Create a description for this view.  Use the model's description or URL
-    if a description is not available.
-*/
-OUString
-    AccessibleOutlineView::CreateAccessibleDescription()
-    throw (css::uno::RuntimeException, std::exception)
-{
-    SolarMutexGuard aGuard;
-
-    return SD_RESSTR(SID_SD_A11Y_I_OUTLINEVIEW_D);
+    return SdResId(SID_SD_A11Y_I_OUTLINEVIEW_N);
 }
 
 void AccessibleOutlineView::UpdateChildren()

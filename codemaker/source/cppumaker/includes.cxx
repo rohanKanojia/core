@@ -23,15 +23,15 @@
 #include "dependencies.hxx"
 #include "dumputils.hxx"
 
-#include "codemaker/global.hxx"
-#include "codemaker/typemanager.hxx"
-#include "codemaker/unotype.hxx"
+#include <codemaker/global.hxx>
+#include <codemaker/typemanager.hxx>
+#include <codemaker/unotype.hxx>
 
-#include "osl/diagnose.h"
-#include "rtl/ref.hxx"
-#include "rtl/string.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
+#include <osl/diagnose.h>
+#include <rtl/ref.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 #include <vector>
 
@@ -41,12 +41,12 @@ Includes::Includes(
     rtl::Reference< TypeManager > const & manager,
     codemaker::cppumaker::Dependencies const & dependencies, bool hpp):
     m_manager(manager), m_map(dependencies.getMap()), m_hpp(hpp),
-    m_includeCassert(false), m_includeException(false),
+    m_includeCassert(false),
     m_includeAny(dependencies.hasAnyDependency()), m_includeReference(false),
     m_includeSequence(dependencies.hasSequenceDependency()),
     m_includeType(dependencies.hasTypeDependency()),
     m_includeCppuMacrosHxx(false), m_includeCppuUnotypeHxx(false),
-    m_includeOslDoublecheckedlockingH(false), m_includeOslMutexHxx(false),
+    m_includeOslMutexHxx(false),
     m_includeRtlStrbufHxx(false), m_includeRtlStringH(false),
     m_includeRtlTextencH(false), m_includeRtlUstrbufHxx(false),
     m_includeRtlUstringH(false),
@@ -57,7 +57,7 @@ Includes::Includes(
         || dependencies.hasShortDependency()
         || dependencies.hasUnsignedShortDependency()
         || dependencies.hasLongDependency()
-        || dependencies.hasUnsignedShortDependency()
+        || dependencies.hasUnsignedLongDependency()
         || dependencies.hasHyperDependency()
         || dependencies.hasUnsignedHyperDependency()
         || dependencies.hasCharDependency()),
@@ -104,15 +104,14 @@ void Includes::add(OString const & entityName) {
         {
             add(arg);
         }
-        // fall through
+        [[fallthrough]];
     case codemaker::UnoType::Sort::Sequence:
     case codemaker::UnoType::Sort::Enum:
     case codemaker::UnoType::Sort::PlainStruct:
     case codemaker::UnoType::Sort::Exception:
     case codemaker::UnoType::Sort::Interface:
     case codemaker::UnoType::Sort::Typedef:
-        m_map.insert(
-            Dependencies::Map::value_type(n, Dependencies::KIND_NO_BASE));
+        m_map.emplace(n, Dependencies::KIND_NORMAL);
         break;
     default:
         throw CannotDumpException(
@@ -133,10 +132,12 @@ void dumpEmptyLineBeforeFirst(FileStream & out, bool * first) {
 
 }
 
-void Includes::dump(FileStream & out, OUString const * companionHdl) {
+void Includes::dump(
+    FileStream & out, OUString const * companionHdl, bool exceptions)
+{
     OSL_ASSERT(companionHdl == nullptr || m_hpp);
     if (!m_includeReference) {
-        for (const std::pair<OUString, codemaker::cppumaker::Dependencies::Kind>& pair : m_map)
+        for (const auto& pair : m_map)
         {
             if (isInterfaceType(u2b(pair.first))) {
                 m_includeReference = true;
@@ -145,40 +146,39 @@ void Includes::dump(FileStream & out, OUString const * companionHdl) {
         }
     }
     out << "#include \"sal/config.h\"\n";
-    if (m_includeCassert || m_includeException) {
-        out << "\n";
-        if (m_includeCassert) {
-            out << "#include <cassert>\n";
-        }
-        if (m_includeException) {
-            out << "#include <exception>\n";
-        }
+    if (m_includeCassert) {
+        out << "\n#include <cassert>\n";
     }
     if (companionHdl) {
         out << "\n";
         dumpInclude(out, u2b(*companionHdl), false);
     }
     bool first = true;
-    for (const std::pair<OUString, codemaker::cppumaker::Dependencies::Kind>& pair : m_map)
+    for (const auto& pair : m_map)
     {
-        dumpEmptyLineBeforeFirst(out, &first);
-        if (m_hpp || pair.second == Dependencies::KIND_BASE
-            || !isInterfaceType(u2b(pair.first)))
-        {
-            dumpInclude(out, u2b(pair.first), m_hpp);
-        } else {
-            bool ns = dumpNamespaceOpen(out, pair.first, false);
-            if (ns) {
-                out << " ";
+        if (exceptions || pair.second != Dependencies::KIND_EXCEPTION) {
+            dumpEmptyLineBeforeFirst(out, &first);
+            if (m_hpp || pair.second == Dependencies::KIND_BASE
+                || !isInterfaceType(u2b(pair.first)))
+            {
+                // If we know our name, then avoid including ourselves.
+                if (!companionHdl || *companionHdl != pair.first) {
+                    dumpInclude(out, u2b(pair.first), m_hpp);
+                }
+            } else {
+                bool ns = dumpNamespaceOpen(out, pair.first, false);
+                if (ns) {
+                    out << " ";
+                }
+                out << "class ";
+                dumpTypeIdentifier(out, pair.first);
+                out << ";";
+                if (ns) {
+                    out << " ";
+                }
+                dumpNamespaceClose(out, pair.first, false);
+                out << "\n";
             }
-            out << "class ";
-            dumpTypeIdentifier(out, pair.first);
-            out << ";";
-            if (ns) {
-                out << " ";
-            }
-            dumpNamespaceClose(out, pair.first, false);
-            out << "\n";
         }
     }
     static char const * hxxExtension[2] = { "h", "hxx" };
@@ -204,15 +204,11 @@ void Includes::dump(FileStream & out, OUString const * companionHdl) {
     }
     if (m_includeCppuMacrosHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"cppu/macros.hxx\"\n");
+        out << "#include \"cppu/macros.hxx\"\n";
     }
     if (m_includeCppuUnotypeHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"cppu/unotype.hxx\"\n");
-    }
-    if (m_includeOslDoublecheckedlockingH) {
-        dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"osl/doublecheckedlocking.h\"\n");
+        out << "#include \"cppu/unotype.hxx\"\n";
     }
     if (m_includeOslMutexHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
@@ -220,7 +216,7 @@ void Includes::dump(FileStream & out, OUString const * companionHdl) {
     }
     if (m_includeRtlStrbufHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"rtl/strbuf.hxx\"\n");
+        out << "#include \"rtl/strbuf.hxx\"\n";
     }
     if (m_includeRtlStringH) {
         dumpEmptyLineBeforeFirst(out, &first);
@@ -232,7 +228,7 @@ void Includes::dump(FileStream & out, OUString const * companionHdl) {
     }
     if (m_includeRtlUstrbufHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"rtl/ustrbuf.hxx\"\n");
+        out << "#include \"rtl/ustrbuf.hxx\"\n";
     }
     if (m_includeRtlUstringH) {
         dumpEmptyLineBeforeFirst(out, &first);
@@ -240,7 +236,7 @@ void Includes::dump(FileStream & out, OUString const * companionHdl) {
     }
     if (m_includeRtlUstringHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"rtl/ustring.hxx\"\n");
+        out << "#include \"rtl/ustring.hxx\"\n";
     }
     if (m_includeRtlInstanceHxx) {
         dumpEmptyLineBeforeFirst(out, &first);
@@ -252,11 +248,11 @@ void Includes::dump(FileStream & out, OUString const * companionHdl) {
     }
     if (m_includeTypelibTypeclassH) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"typelib/typeclass.h\"\n");
+        out << "#include \"typelib/typeclass.h\"\n";
     }
     if (m_includeTypelibTypedescriptionH) {
         dumpEmptyLineBeforeFirst(out, &first);
-        out << ("#include \"typelib/typedescription.h\"\n");
+        out << "#include \"typelib/typedescription.h\"\n";
     }
 }
 

@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <memory>
+#include <scitems.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/objsh.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/stritem.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
@@ -31,27 +32,26 @@
 #include <tools/urlobj.hxx>
 #include <formula/formulahelper.hxx>
 #include <formula/IFunctionDescription.hxx>
+#include <formula/errorcodes.hxx>
 
-#include "tokenuno.hxx"
-#include "formula.hxx"
-#include "formdata.hxx"
-#include "globstr.hrc"
-#include "scresid.hxx"
-#include "reffact.hxx"
-#include "document.hxx"
-#include "simpleformulacalc.hxx"
-#include "scmod.hxx"
-#include "inputhdl.hxx"
-#include "tabvwsh.hxx"
-#include "appoptio.hxx"
-#include "docsh.hxx"
-#include "funcdesc.hxx"
+#include <tokenuno.hxx>
+#include <formula.hxx>
+#include <formdata.hxx>
+#include <reffact.hxx>
+#include <document.hxx>
+#include <simpleformulacalc.hxx>
+#include <scmod.hxx>
+#include <inputhdl.hxx>
+#include <tabvwsh.hxx>
+#include <appoptio.hxx>
+#include <docsh.hxx>
+#include <funcdesc.hxx>
 #include <formula/token.hxx>
-#include "tokenarray.hxx"
-#include "sc.hrc"
-#include "servuno.hxx"
-#include "unonames.hxx"
-#include "externalrefmgr.hxx"
+#include <tokenarray.hxx>
+#include <sc.hrc>
+#include <servuno.hxx>
+#include <unonames.hxx>
+#include <externalrefmgr.hxx>
 
 #include <com/sun/star/table/CellAddress.hpp>
 
@@ -61,7 +61,7 @@ using namespace com::sun::star;
 //      init/ shared functions for dialog
 
 ScFormulaDlg::ScFormulaDlg( SfxBindings* pB, SfxChildWindow* pCW,
-                                    vcl::Window* pParent, ScViewData* pViewData,formula::IFunctionManager* _pFunctionMgr )
+                                    vcl::Window* pParent, const ScViewData* pViewData, const formula::IFunctionManager* _pFunctionMgr )
     : formula::FormulaDlg( pB, pCW, pParent, _pFunctionMgr,this)
     , m_aHelper(this,pB)
 {
@@ -92,7 +92,7 @@ ScFormulaDlg::ScFormulaDlg( SfxBindings* pB, SfxChildWindow* pCW,
     m_xParser.set(ScServiceProvider::MakeInstance(ScServiceProvider::Type::FORMULAPARS,
                                                   static_cast<ScDocShell*>(m_pDoc->GetDocumentShell())),uno::UNO_QUERY);
     uno::Reference< beans::XPropertySet> xSet(m_xParser,uno::UNO_QUERY);
-    xSet->setPropertyValue(SC_UNO_COMPILEFAP, uno::makeAny(sal_True));
+    xSet->setPropertyValue(SC_UNO_COMPILEFAP, uno::makeAny(true));
 
     m_xOpCodeMapper.set(ScServiceProvider::MakeInstance(ScServiceProvider::Type::OPCODEMAPPER,
                                                         static_cast<ScDocShell*>(m_pDoc->GetDocumentShell())),uno::UNO_QUERY);
@@ -107,7 +107,7 @@ ScFormulaDlg::ScFormulaDlg( SfxBindings* pB, SfxChildWindow* pCW,
     ScFormulaReferenceHelper::enableInput( true );
     ScFormulaReferenceHelper::EnableSpreadsheets();
     m_aHelper.Init();
-    ScFormulaReferenceHelper::SetDispatcherLock( true );
+    m_aHelper.SetDispatcherLock( true );
 
     notifyChange();
     fill();
@@ -128,9 +128,9 @@ ScFormulaDlg::ScFormulaDlg( SfxBindings* pB, SfxChildWindow* pCW,
         pData->SetInputHandler(pScMod->GetInputHdl());
         pData->SetDocShell(pViewData->GetDocShell());
 
-        OSL_ENSURE(pData,"FormEditData ist nicht da");
+        OSL_ENSURE(pData,"FormEditData not available");
 
-        formula::FormulaDlgMode eMode = FORMULA_FORMDLG_FORMULA;            // default...
+        formula::FormulaDlgMode eMode = FormulaDlgMode::Formula;            // default...
 
         // edit if formula exists
 
@@ -173,7 +173,7 @@ ScFormulaDlg::ScFormulaDlg( SfxBindings* pB, SfxChildWindow* pCW,
             pData->SetFStart( 1 );      // after "="
         }
 
-        pData->SetMode( (sal_uInt16) eMode );
+        pData->SetMode( eMode );
         OUString rStrExp = GetMeText();
 
         Update(rStrExp);
@@ -257,7 +257,7 @@ void ScFormulaDlg::dispose()
     formula::FormulaDlg::dispose();
 }
 
-bool ScFormulaDlg::IsInputHdl(ScInputHandler* pHdl)
+bool ScFormulaDlg::IsInputHdl(const ScInputHandler* pHdl)
 {
     bool bAlive = false;
 
@@ -275,7 +275,7 @@ bool ScFormulaDlg::IsInputHdl(ScInputHandler* pHdl)
 
 }
 
-ScInputHandler* ScFormulaDlg::GetNextInputHandler(ScDocShell* pDocShell, ScTabViewShell** ppViewSh)
+ScInputHandler* ScFormulaDlg::GetNextInputHandler(const ScDocShell* pDocShell, ScTabViewShell** ppViewSh)
 {
     ScInputHandler* pHdl=nullptr;
 
@@ -331,18 +331,21 @@ bool ScFormulaDlg::calculateValue( const OUString& rStrExp, OUString& rStrResult
             bColRowName = false;
     }
 
-    sal_uInt16 nErrCode = pFCell->GetErrCode();
-    if ( nErrCode == 0 || pFCell->IsMatrix() )
+    FormulaError nErrCode = pFCell->GetErrCode();
+    if ( nErrCode == FormulaError::NONE || pFCell->IsMatrix() )
     {
         SvNumberFormatter& aFormatter = *(m_pDoc->GetFormatTable());
         Color* pColor;
-        if ( pFCell->IsValue() )
+        if (pFCell->IsMatrix())
+        {
+            rStrResult = pFCell->GetString().getString();
+        }
+        else if (pFCell->IsValue())
         {
             double n = pFCell->GetValue();
             sal_uLong nFormat = aFormatter.GetStandardFormat( n, 0,
                             pFCell->GetFormatType(), ScGlobal::eLnge );
-            aFormatter.GetOutputString( n, nFormat,
-                                        rStrResult, &pColor );
+            aFormatter.GetOutputString( n, nFormat, rStrResult, &pColor );
         }
         else
         {
@@ -350,6 +353,11 @@ bool ScFormulaDlg::calculateValue( const OUString& rStrExp, OUString& rStrResult
                             pFCell->GetFormatType(), ScGlobal::eLnge);
             aFormatter.GetOutputString( pFCell->GetString().getString(), nFormat,
                                         rStrResult, &pColor );
+            // Indicate it's a string, so a number string doesn't look numeric.
+            // Escape embedded quotation marks first by doubling them, as
+            // usual. Actually the result can be copy-pasted from the result
+            // box as literal into a formula expression.
+            rStrResult = "\"" + rStrResult.replaceAll( "\"", "\"\"") + "\"";
         }
 
         ScRange aTestRange;
@@ -363,13 +371,30 @@ bool ScFormulaDlg::calculateValue( const OUString& rStrExp, OUString& rStrResult
     return true;
 }
 
+std::shared_ptr<formula::FormulaCompiler> ScFormulaDlg::getCompiler() const
+{
+    if (!m_xCompiler)
+        m_xCompiler.reset( new ScCompiler( m_pDoc, m_CursorPos, m_pDoc->GetGrammar()));
+    return m_xCompiler;
+}
+
+std::unique_ptr<formula::FormulaCompiler> ScFormulaDlg::createCompiler( formula::FormulaTokenArray& rArray ) const
+{
+    ScCompiler* pCompiler = nullptr;
+    ScTokenArray* pArr = dynamic_cast<ScTokenArray*>(&rArray);
+    assert(pArr);   // violation of contract and not created using convertToTokenArray()?
+    if (pArr)
+        pCompiler = new ScCompiler( m_pDoc, m_CursorPos, *pArr, m_pDoc->GetGrammar());
+    return std::unique_ptr<formula::FormulaCompiler>(pCompiler);
+}
+
 //  virtual methods of ScAnyRefDlg:
 void ScFormulaDlg::RefInputStart( formula::RefEdit* pEdit, formula::RefButton* pButton )
 {
     pEdit->SetSelection(Selection(0, SELECTION_MAX));
     ::std::pair<formula::RefButton*,formula::RefEdit*> aPair = RefInputStartBefore( pEdit, pButton );
     m_aHelper.RefInputStart( aPair.second, aPair.first);
-    RefInputStartAfter( aPair.second, aPair.first );
+    RefInputStartAfter();
 }
 
 void ScFormulaDlg::RefInputDone( bool bForced )
@@ -395,22 +420,20 @@ void ScFormulaDlg::SetReference( const ScRange& rRef, ScDocument* pRefDoc )
         bool bOtherDoc = (pRefDoc != m_pDoc && pRefDoc->GetDocumentShell()->HasName());
         if ( bOtherDoc )
         {
-            //  reference to other document - wie inputhdl.cxx
+            //  reference to other document - like inputhdl.cxx
 
             OSL_ENSURE(rRef.aStart.Tab()==rRef.aEnd.Tab(), "nStartTab!=nEndTab");
 
-            OUString aTmp(rRef.Format(ScRefFlags::VALID|ScRefFlags::TAB_3D, pRefDoc));     // immer 3d
+            // Always 3D and absolute.
+            OUString aTmp( rRef.Format( ScRefFlags::VALID | ScRefFlags::TAB_ABS_3D, pRefDoc));
 
             SfxObjectShell* pObjSh = pRefDoc->GetDocumentShell();
 
             // #i75893# convert escaped URL of the document to something user friendly
 //           OUString aFileName = pObjSh->GetMedium()->GetName();
-            OUString aFileName = pObjSh->GetMedium()->GetURLObject().GetMainURL( INetURLObject::DECODE_UNAMBIGUOUS );
+            OUString aFileName = pObjSh->GetMedium()->GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::Unambiguous );
 
-            aRefStr = "'";
-            aRefStr += aFileName;
-            aRefStr += "'#";
-            aRefStr += aTmp;
+            aRefStr = "'" + aFileName + "'#" + aTmp;
         }
         else
         {
@@ -422,13 +445,16 @@ void ScFormulaDlg::SetReference( const ScRange& rRef, ScDocument* pRefDoc )
             aRefData.InitRangeRel(rRef, m_CursorPos);
             bool bSingle = aRefData.Ref1 == aRefData.Ref2;
             if (m_CursorPos.Tab() != rRef.aStart.Tab())
+            {
+                // pointer-selected => absolute sheet reference
+                aRefData.Ref1.SetAbsTab( rRef.aStart.Tab() );
                 aRefData.Ref1.SetFlag3D(true);
+            }
             if (bSingle)
                 aArray.AddSingleReference(aRefData.Ref1);
             else
                 aArray.AddDoubleReference(aRefData);
-            ScCompiler aComp(m_pDoc, m_CursorPos, aArray);
-            aComp.SetGrammar(m_pDoc->GetGrammar());
+            ScCompiler aComp(m_pDoc, m_CursorPos, aArray, m_pDoc->GetGrammar());
             OUStringBuffer aBuf;
             aComp.CreateStringFromTokenArray(aBuf);
             aRefStr = aBuf.makeStringAndClear();
@@ -449,10 +475,7 @@ bool ScFormulaDlg::IsDocAllowed(SfxObjectShell* pDocSh) const
 {
     //  not allowed: different from this doc, and no name
     //  pDocSh is always a ScDocShell
-    if (pDocSh && &static_cast<ScDocShell*>(pDocSh)->GetDocument() != m_pDoc && !pDocSh->HasName())
-        return false;
-
-    return true;        // everything else is allowed
+    return !(pDocSh && &static_cast<ScDocShell*>(pDocSh)->GetDocument() != m_pDoc && !pDocSh->HasName());        // everything else is allowed
 }
 
 void ScFormulaDlg::SetActive()
@@ -527,7 +550,7 @@ void ScFormulaDlg::dispatch(bool _bOK, bool _bMatrixChecked)
     if ( aStrItem.GetValue().isEmpty() )
         aRetItem.SetValue( false );     // sal_False = Cancel
 
-    ScFormulaReferenceHelper::SetDispatcherLock( false ); // turn off modal-mode
+    m_aHelper.SetDispatcherLock( false ); // turn off modal-mode
 
     clear();
 
@@ -537,13 +560,7 @@ void ScFormulaDlg::dispatch(bool _bOK, bool _bMatrixChecked)
 }
 void ScFormulaDlg::setDispatcherLock( bool bLock )
 {
-    ScFormulaReferenceHelper::SetDispatcherLock( bLock );
-}
-void ScFormulaDlg::setReferenceInput(const formula::FormEditData* _pData)
-{
-    ScModule* pScMod = SC_MOD();
-    ScFormEditData& rData = const_cast<ScFormEditData&>(dynamic_cast<const ScFormEditData&>(*_pData));
-    pScMod->SetRefInputHdl(rData.GetInputHandler());
+    m_aHelper.SetDispatcherLock( bLock );
 }
 void ScFormulaDlg::deleteFormData()
 {

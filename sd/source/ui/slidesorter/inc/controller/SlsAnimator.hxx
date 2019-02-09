@@ -20,17 +20,17 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSANIMATOR_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSANIMATOR_HXX
 
-#include "SlideSorter.hxx"
-#include "view/SlideSorterView.hxx"
+#include <view/SlideSorterView.hxx>
 #include <canvas/elapsedtime.hxx>
-#include <vcl/timer.hxx>
 #include <vcl/idle.hxx>
 #include <sal/types.h>
-
-#include <memory>
+#include <o3tl/deleter.hxx>
 
 #include <functional>
+#include <memory>
 #include <vector>
+
+namespace sd { namespace slidesorter { class SlideSorter; } }
 
 namespace sd { namespace slidesorter { namespace controller {
 
@@ -69,13 +69,10 @@ public:
         the specified duration.
         @param rAnimation
             The animation operation.
-        @param nDuration
-            The duration in milli seconds.
     */
     AnimationId AddAnimation (
         const AnimationFunctor& rAnimation,
-        const sal_Int32 nDuration,
-        const FinishFunctor& rFinishFunctor = FinishFunctor());
+        const FinishFunctor& rFinishFunctor);
 
     /** Abort and remove an animation.  In order to reduce the bookkeeping
         on the caller side, it is OK to call this method with an animation
@@ -97,13 +94,13 @@ private:
     class Animation;
     typedef ::std::vector<std::shared_ptr<Animation> > AnimationList;
     AnimationList maAnimations;
-    ::canvas::tools::ElapsedTime maElapsedTime;
+    ::canvas::tools::ElapsedTime const maElapsedTime;
 
-    std::unique_ptr<view::SlideSorterView::DrawLock> mpDrawLock;
+    std::unique_ptr<view::SlideSorterView::DrawLock, o3tl::default_delete<view::SlideSorterView::DrawLock>> mpDrawLock;
 
     AnimationId mnNextAnimationId;
 
-    DECL_LINK_TYPED(TimeoutHandler, Idle *, void);
+    DECL_LINK(TimeoutHandler, Timer *, void);
 
     /** Execute one step of every active animation.
         @param nTime

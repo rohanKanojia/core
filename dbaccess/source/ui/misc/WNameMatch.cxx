@@ -17,37 +17,39 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "WNameMatch.hxx"
+#include <WNameMatch.hxx>
 #include <osl/diagnose.h>
-#include "FieldDescriptions.hxx"
-#include "WCopyTable.hxx"
-#include "dbaccess_helpid.hrc"
-#include "dbu_misc.hrc"
+#include <FieldDescriptions.hxx>
+#include <WCopyTable.hxx>
+#include <core_resource.hxx>
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include <vcl/scrbar.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 #include <com/sun/star/sdbc/DataType.hpp>
-#include <o3tl/make_unique.hxx>
+
 using namespace ::dbaui;
+
 // OWizColumnSelect
-OWizNameMatching::OWizNameMatching( vcl::Window* pParent)
-        :OWizardPage( pParent, "NameMatching", "dbaccess/ui/namematchingpage.ui" )
-        , m_aImgUp(ModuleRes(IMG_UP))
-        , m_aImgDown(ModuleRes(IMG_DOWN))
+OWizNameMatching::OWizNameMatching(vcl::Window* pParent)
+    : OWizardPage(pParent, "NameMatching", "dbaccess/ui/namematchingpage.ui")
 {
+    Image aImgUp(StockImage::Yes, BMP_UP);
+    Image aImgDown(StockImage::Yes, BMP_DOWN);
     get(m_pTABLE_LEFT, "leftlabel");
     get(m_pTABLE_RIGHT, "rightlabel");
     get(m_pCTRL_LEFT, "left");
     get(m_pCTRL_RIGHT, "right");
     get(m_pColumn_up, "up");
-    m_pColumn_up->SetModeImage(m_aImgUp);
+    m_pColumn_up->SetModeImage(aImgUp);
     get(m_pColumn_down, "down");
-    m_pColumn_down->SetModeImage(m_aImgDown);
+    m_pColumn_down->SetModeImage(aImgDown);
     get(m_pColumn_up_right, "up_right");
-    m_pColumn_up_right->SetModeImage(m_aImgUp);
+    m_pColumn_up_right->SetModeImage(aImgUp);
     get(m_pColumn_down_right, "down_right");
-    m_pColumn_down_right->SetModeImage(m_aImgDown);
+    m_pColumn_down_right->SetModeImage(aImgDown);
     get(m_pAll, "all");
     get(m_pNone, "none");
 
@@ -64,13 +66,11 @@ OWizNameMatching::OWizNameMatching( vcl::Window* pParent)
     m_pCTRL_RIGHT->SetSelectHdl(LINK(this,OWizNameMatching,TableListRightSelectHdl));
     m_pCTRL_RIGHT->EnableCheckButton( nullptr );
 
-    m_pCTRL_LEFT->SetStyle( m_pCTRL_LEFT->GetStyle() | WB_FORCE_MAKEVISIBLE );
-    m_pCTRL_RIGHT->SetStyle( m_pCTRL_RIGHT->GetStyle() | WB_FORCE_MAKEVISIBLE );
+    m_pCTRL_LEFT->SetForceMakeVisible( true );
+    m_pCTRL_RIGHT->SetForceMakeVisible( true );
 
-    m_sSourceText = m_pTABLE_LEFT->GetText();
-    m_sSourceText += "\n";
-    m_sDestText   = m_pTABLE_RIGHT->GetText();
-    m_sDestText   += "\n";
+    m_sSourceText = m_pTABLE_LEFT->GetText() + "\n";
+    m_sDestText   = m_pTABLE_RIGHT->GetText() + "\n";
 }
 
 OWizNameMatching::~OWizNameMatching()
@@ -95,7 +95,7 @@ void OWizNameMatching::dispose()
 
 void OWizNameMatching::Reset()
 {
-    // urspr"unglichen zustand wiederherstellen
+    // restore original state;
     // the left tree contains bitmaps so i need to resize the right one
     if(m_bFirstTime)
     {
@@ -113,14 +113,12 @@ void OWizNameMatching::ActivatePage( )
 {
 
     // set source table name
-    OUString aName = m_sSourceText;
-    aName += m_pParent->m_sSourceName;
+    OUString aName = m_sSourceText + m_pParent->m_sSourceName;
 
     m_pTABLE_LEFT->SetText(aName);
 
     // set dest table name
-    aName = m_sDestText;
-    aName += m_pParent->m_sName;
+    aName = m_sDestText + m_pParent->m_sName;
     m_pTABLE_RIGHT->SetText(aName);
 
     m_pCTRL_LEFT->FillListBox(m_pParent->getSrcVector());
@@ -141,9 +139,9 @@ bool OWizNameMatching::LeavePage()
 
     const ODatabaseExport::TColumnVector& rSrcColumns = m_pParent->getSrcVector();
 
-    m_pParent->m_vColumnPos.clear();
+    m_pParent->m_vColumnPositions.clear();
     m_pParent->m_vColumnTypes.clear();
-    m_pParent->m_vColumnPos.resize( rSrcColumns.size(), ODatabaseExport::TPositions::value_type( COLUMN_POSITION_NOT_FOUND, COLUMN_POSITION_NOT_FOUND ) );
+    m_pParent->m_vColumnPositions.resize( rSrcColumns.size(), ODatabaseExport::TPositions::value_type( COLUMN_POSITION_NOT_FOUND, COLUMN_POSITION_NOT_FOUND ) );
     m_pParent->m_vColumnTypes.resize( rSrcColumns.size(), COLUMN_POSITION_NOT_FOUND );
 
     sal_Int32 nParamPos = 0;
@@ -154,34 +152,44 @@ bool OWizNameMatching::LeavePage()
         OFieldDescription* pSrcField = static_cast<OFieldDescription*>(pLeftEntry->GetUserData());
         OSL_ENSURE(pSrcField,"OWizNameMatching: OColumn can not be null!");
 
-        ODatabaseExport::TColumnVector::const_iterator aSrcIter = rSrcColumns.begin();
-        ODatabaseExport::TColumnVector::const_iterator aSrcEnd  = rSrcColumns.end();
-        for(;aSrcIter != aSrcEnd && (*aSrcIter)->second != pSrcField;++aSrcIter)
-            ;
-        const sal_Int32 nPos = ::std::distance(rSrcColumns.begin(),aSrcIter);
+        sal_Int32 nPos = 0;
+        for (auto const& column : rSrcColumns)
+        {
+            if (column->second == pSrcField)
+                break;
+            ++nPos;
+        }
 
         if(m_pCTRL_LEFT->GetCheckButtonState(pLeftEntry) == SvButtonState::Checked)
         {
             OFieldDescription* pDestField = static_cast<OFieldDescription*>(pRightEntry->GetUserData());
             OSL_ENSURE(pDestField,"OWizNameMatching: OColumn can not be null!");
             const ODatabaseExport::TColumnVector& rDestColumns          = m_pParent->getDestVector();
-            ODatabaseExport::TColumnVector::const_iterator aDestIter    = rDestColumns.begin();
-            ODatabaseExport::TColumnVector::const_iterator aDestEnd = rDestColumns.end();
+            sal_Int32 nPosDest = 1;
+            bool bDestColumnFound = false;
+            TOTypeInfoSP typeInfoSPFound;
+            for (auto const& column : rDestColumns)
+            {
+                if (column->second == pDestField)
+                {
+                    bDestColumnFound = true;
+                    typeInfoSPFound = column->second->getSpecialTypeInfo();
+                    break;
+                }
+                ++nPosDest;
+            }
 
-            for(;aDestIter != aDestEnd && (*aDestIter)->second != pDestField;++aDestIter)
-                ;
-
-            OSL_ENSURE((nPos) < static_cast<sal_Int32>(m_pParent->m_vColumnPos.size()),"m_pParent->m_vColumnPos: Illegal index for vector");
-            m_pParent->m_vColumnPos[nPos].first = ++nParamPos;
-            m_pParent->m_vColumnPos[nPos].second = ::std::distance(rDestColumns.begin(),aDestIter) + 1;
+            OSL_ENSURE((nPos) < static_cast<sal_Int32>(m_pParent->m_vColumnPositions.size()),"m_pParent->m_vColumnPositions: Illegal index for vector");
+            m_pParent->m_vColumnPositions[nPos].first = ++nParamPos;
+            m_pParent->m_vColumnPositions[nPos].second = nPosDest;
 
             TOTypeInfoSP pTypeInfo;
 
-            assert(aDestIter != aDestEnd);
-            if (aDestIter != aDestEnd)
+            assert(bDestColumnFound);
+            if (bDestColumnFound)
             {
                 bool bNotConvert = true;
-                pTypeInfo = m_pParent->convertType((*aDestIter)->second->getSpecialTypeInfo(), bNotConvert);
+                pTypeInfo = m_pParent->convertType(typeInfoSPFound, bNotConvert);
             }
 
             sal_Int32 nType = css::sdbc::DataType::VARCHAR;
@@ -191,8 +199,8 @@ bool OWizNameMatching::LeavePage()
         }
         else
         {
-            m_pParent->m_vColumnPos[nPos].first = COLUMN_POSITION_NOT_FOUND;
-            m_pParent->m_vColumnPos[nPos].second = COLUMN_POSITION_NOT_FOUND;
+            m_pParent->m_vColumnPositions[nPos].first = COLUMN_POSITION_NOT_FOUND;
+            m_pParent->m_vColumnPositions[nPos].second = COLUMN_POSITION_NOT_FOUND;
         }
 
         pLeftEntry = m_pCTRL_LEFT->GetModel()->Next(pLeftEntry);
@@ -202,9 +210,9 @@ bool OWizNameMatching::LeavePage()
     return true;
 }
 
-OUString OWizNameMatching::GetTitle() const { return ModuleRes(STR_WIZ_NAME_MATCHING_TITEL); }
+OUString OWizNameMatching::GetTitle() const { return DBA_RES(STR_WIZ_NAME_MATCHING_TITEL); }
 
-IMPL_LINK_TYPED( OWizNameMatching, ButtonClickHdl, Button *, pButton, void )
+IMPL_LINK( OWizNameMatching, ButtonClickHdl, Button *, pButton, void )
 {
     SvTreeListEntry* pEntry = m_pCTRL_LEFT->FirstSelected();
     if ( pEntry )
@@ -224,14 +232,14 @@ IMPL_LINK_TYPED( OWizNameMatching, ButtonClickHdl, Button *, pButton, void )
 
         if(pButton == m_pColumn_down && (nThumbPos+nVisibleSize+1) < nPos)
         {
-            m_pCTRL_LEFT->GetVScroll()->DoScrollAction(SCROLL_LINEDOWN);
+            m_pCTRL_LEFT->GetVScroll()->DoScrollAction(ScrollType::LineDown);
         }
 
         TableListClickHdl(m_pCTRL_LEFT);
     }
 }
 
-IMPL_LINK_TYPED( OWizNameMatching, RightButtonClickHdl, Button *, pButton, void )
+IMPL_LINK( OWizNameMatching, RightButtonClickHdl, Button *, pButton, void )
 {
     SvTreeListEntry* pEntry = m_pCTRL_RIGHT->FirstSelected();
     if ( pEntry )
@@ -249,12 +257,12 @@ IMPL_LINK_TYPED( OWizNameMatching, RightButtonClickHdl, Button *, pButton, void 
         long nVisibleSize   = m_pCTRL_RIGHT->GetVScroll()->GetVisibleSize();
 
         if(pButton == m_pColumn_down_right && (nThumbPos+nVisibleSize+1) < nPos)
-            m_pCTRL_RIGHT->GetVScroll()->DoScrollAction(SCROLL_LINEDOWN);
+            m_pCTRL_RIGHT->GetVScroll()->DoScrollAction(ScrollType::LineDown);
         TableListRightSelectHdl(m_pCTRL_RIGHT);
     }
 }
 
-IMPL_LINK_NOARG_TYPED( OWizNameMatching, TableListClickHdl, SvTreeListBox*, void )
+IMPL_LINK_NOARG( OWizNameMatching, TableListClickHdl, SvTreeListBox*, void )
 {
     SvTreeListEntry* pEntry = m_pCTRL_LEFT->FirstSelected();
     if(pEntry)
@@ -286,7 +294,7 @@ IMPL_LINK_NOARG_TYPED( OWizNameMatching, TableListClickHdl, SvTreeListBox*, void
     }
 }
 
-IMPL_LINK_NOARG_TYPED( OWizNameMatching, TableListRightSelectHdl, SvTreeListBox*, void )
+IMPL_LINK_NOARG( OWizNameMatching, TableListRightSelectHdl, SvTreeListBox*, void )
 {
     SvTreeListEntry* pEntry = m_pCTRL_RIGHT->FirstSelected();
     if(pEntry)
@@ -318,7 +326,7 @@ IMPL_LINK_NOARG_TYPED( OWizNameMatching, TableListRightSelectHdl, SvTreeListBox*
     }
 }
 
-IMPL_LINK_TYPED( OWizNameMatching, AllNoneClickHdl, Button *, pButton, void )
+IMPL_LINK( OWizNameMatching, AllNoneClickHdl, Button *, pButton, void )
 {
     bool bAll = pButton == m_pAll;
     SvTreeListEntry* pEntry = m_pCTRL_LEFT->First();
@@ -334,9 +342,9 @@ class OColumnString : public SvLBoxString
 {
     bool m_bReadOnly;
 public:
-    OColumnString( const OUString& rStr, bool _RO )
+    OColumnString( const OUString& rStr, bool RO )
         :SvLBoxString(rStr)
-        ,m_bReadOnly(_RO)
+        ,m_bReadOnly(RO)
     {
     }
 
@@ -358,14 +366,14 @@ void OColumnString::Paint(const Point& rPos, SvTreeListBox& /*rDev*/, vcl::Rende
     rRenderContext.Pop();
 }
 
-OColumnTreeBox::OColumnTreeBox( vcl::Window* pParent, WinBits nBits )
-    : OMarkableTreeListBox(pParent, nBits)
+OColumnTreeBox::OColumnTreeBox( vcl::Window* pParent )
+    : OMarkableTreeListBox(pParent, WB_BORDER)
     , m_bReadOnly(false)
 {
     SetDragDropMode( DragDropMode::NONE );
     EnableInplaceEditing( false );
-    SetStyle(GetStyle() | WB_BORDER | WB_HASBUTTONS | WB_HSCROLL | nBits);
-    SetSelectionMode( SINGLE_SELECTION );
+    SetStyle(GetStyle() | WB_BORDER | WB_HASBUTTONS | WB_HSCROLL );
+    SetSelectionMode( SelectionMode::Single );
 }
 
 VCL_BUILDER_FACTORY(OColumnTreeBox)
@@ -373,7 +381,7 @@ VCL_BUILDER_FACTORY(OColumnTreeBox)
 void OColumnTreeBox::InitEntry(SvTreeListEntry* pEntry, const OUString& rStr, const Image& rImg1, const Image& rImg2, SvLBoxButtonKind eButtonKind)
 {
     DBTreeListBox::InitEntry(pEntry, rStr, rImg1, rImg2, eButtonKind);
-    pEntry->ReplaceItem(o3tl::make_unique<OColumnString>(rStr,false), pEntry->ItemCount() - 1);
+    pEntry->ReplaceItem(std::make_unique<OColumnString>(rStr,false), pEntry->ItemCount() - 1);
 }
 
 bool OColumnTreeBox::Select( SvTreeListEntry* pEntry, bool bSelect )
@@ -392,12 +400,10 @@ bool OColumnTreeBox::Select( SvTreeListEntry* pEntry, bool bSelect )
 void OColumnTreeBox::FillListBox( const ODatabaseExport::TColumnVector& _rList)
 {
     Clear();
-    ODatabaseExport::TColumnVector::const_iterator aIter = _rList.begin();
-    ODatabaseExport::TColumnVector::const_iterator aEnd = _rList.end();
-    for(;aIter != aEnd;++aIter)
+    for (auto const& elem : _rList)
     {
-        SvTreeListEntry* pEntry = InsertEntry((*aIter)->first, nullptr, false, TREELIST_APPEND, (*aIter)->second);
-        SvButtonState eState = !(m_bReadOnly && (*aIter)->second->IsAutoIncrement()) ? SvButtonState::Checked : SvButtonState::Unchecked;
+        SvTreeListEntry* pEntry = InsertEntry(elem->first, nullptr, false, TREELIST_APPEND, elem->second);
+        SvButtonState eState = !(m_bReadOnly && elem->second->IsAutoIncrement()) ? SvButtonState::Checked : SvButtonState::Unchecked;
         SetCheckButtonState( pEntry, eState );
     }
 }

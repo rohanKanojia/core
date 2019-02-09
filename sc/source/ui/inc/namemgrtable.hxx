@@ -11,10 +11,8 @@
 #define INCLUDED_SC_SOURCE_UI_INC_NAMEMGRTABLE_HXX
 
 #include <svtools/simptabl.hxx>
-#include <vcl/ctrl.hxx>
 
-#include "scresid.hxx"
-#include "address.hxx"
+#include <address.hxx>
 
 #include <memory>
 #include <vector>
@@ -45,7 +43,7 @@ public:
     };
 
 private:
-    OUString maGlobalString;
+    OUString const maGlobalString;
 
     // should be const because we should not modify it here
     const std::map<OUString, std::unique_ptr<ScRangeName>>& m_RangeMap;
@@ -66,9 +64,9 @@ private:
 
 public:
     ScRangeManagerTable(SvSimpleTableContainer& rParent,
-        std::map<OUString, std::unique_ptr<ScRangeName>>& rTabRangeNames,
+        const std::map<OUString, std::unique_ptr<ScRangeName>>& rTabRangeNames,
         const ScAddress& rPos);
-    virtual ~ScRangeManagerTable();
+    virtual ~ScRangeManagerTable() override;
     virtual void dispose() override;
 
     virtual void Resize() override;
@@ -76,7 +74,7 @@ public:
 
     void setInitListener( InitListener* pListener );
 
-    void addEntry( const ScRangeNameLine& rLine, bool bSetCurEntry = true );
+    void addEntry( const ScRangeNameLine& rLine, bool bSetCurEntry );
     void DeleteSelectedEntries();
     void SetEntry( const ScRangeNameLine& rLine );
 
@@ -84,8 +82,8 @@ public:
     bool IsMultiSelection();
     std::vector<ScRangeNameLine> GetSelectedEntries();
 
-    DECL_LINK_TYPED( ScrollHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED( HeaderEndDragHdl, HeaderBar*, void);
+    DECL_LINK( ScrollHdl, SvTreeListBox*, void);
+    DECL_LINK( HeaderEndDragHdl, HeaderBar*, void);
 };
 
 #endif

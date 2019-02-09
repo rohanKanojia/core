@@ -18,45 +18,19 @@
  */
 
 #include "virtoutp.hxx"
-#include "viewopt.hxx"
-#include "rootfrm.hxx"
-
-#if OSL_DEBUG_LEVEL > 1
-
-class DbgRect
-{
-        OutputDevice *pOut;
-public:
-        DbgRect( OutputDevice *pOut, const Rectangle &rRect,
-                 const ColorData eColor = COL_LIGHTBLUE );
-};
-
-inline DbgRect::DbgRect( OutputDevice *pOutDev, const Rectangle &rRect,
-                         const ColorData eColor )
-   :pOut( pOutDev )
-{
-    if( pOut )
-    {
-        pOut->Push( PushFlags::FILLCOLOR|PushFlags::LINECOLOR );
-        pOut->SetLineColor( eColor );
-        pOut->SetFillColor();
-        pOut->DrawRect( rRect );
-        pOut->Pop();
-    }
-}
-
-#endif
+#include <viewopt.hxx>
+#include <rootfrm.hxx>
 
 /* The SWLayVout class manages the virtual output devices.
- * RootFrame has a static member of this class which is created in _FrameInit
- * and destroyed in _FrameFinit.
+ * RootFrame has a static member of this class which is created in FrameInit
+ * and destroyed in FrameFinit.
  * */
 
 bool SwRootFrame::FlushVout()
 {
     if (SwRootFrame::s_pVout->IsFlushable())
     {
-        SwRootFrame::s_pVout->_Flush();
+        SwRootFrame::s_pVout->Flush_();
         return true;
     }
     return false;
@@ -88,18 +62,13 @@ bool SwRootFrame::HasSameRect( const SwRect& rRect )
     @param _pVirDev
     input/output parameter - instance of the virtual output device.
 
-    @param _pMapMode
-    input/output parameter - instance of the mapping mode, which will be set
-    at the virtual output device.
-
     @param _rNewOrigin
     input parameter - constant instance of the origin, which will be used in
     the virtual output device
 */
 // define to control, if old or new solution for setting the mapping for
 // an virtual output device is used.
-void SetMappingForVirtDev(  const Point&    _rNewOrigin,
-                            MapMode*        ,
+static void SetMappingForVirtDev(  const Point&    _rNewOrigin,
                             const vcl::RenderContext* _pOrgOutDev,
                             vcl::RenderContext*  _pVirDev )
 {
@@ -130,11 +99,11 @@ bool SwLayVout::DoesFit( const Size &rNew )
 
     if( rNew.Width() > aSize.Width() )
     {
-        aSize.Width() = rNew.Width();
+        aSize.setWidth( rNew.Width() );
         if( !pVirDev->SetOutputSizePixel( aSize ) )
         {
             pVirDev.disposeAndClear();
-            aSize.Width() = 0;
+            aSize.setWidth( 0 );
             return false;
         }
     }
@@ -160,53 +129,54 @@ void SwLayVout::Enter(  SwViewShell *pShell, SwRect &rRect, bool bOn )
 
     bOn = bOn && !nCount && rRect.HasArea() && pShell->GetWin();
     ++nCount;
-    if( bOn )
-    {
-        pSh = pShell;
-        pOut = nullptr;
-        OutputDevice *pO = pSh->GetOut();
+    if( !bOn )
+        return;
+
+    pSh = pShell;
+    pOut = nullptr;
+    OutputDevice *pO = pSh->GetOut();
 // We don't cheat on printers or virtual output devices...
-        if( OUTDEV_WINDOW != pO->GetOutDevType() )
-            return;
+    if( OUTDEV_WINDOW != pO->GetOutDevType() )
+        return;
 
-        pOut = pO;
-        Size aPixSz( pOut->PixelToLogic( Size( 1,1 )) );
-        SwRect aTmp( rRect );
-        aTmp.SSize().Width() += aPixSz.Width()/2 + 1;
-        aTmp.SSize().Height()+= aPixSz.Height()/2 + 1;
-        Rectangle aTmpRect( pO->LogicToPixel( aTmp.SVRect() ) );
+    pOut = pO;
+    Size aPixSz( pOut->PixelToLogic( Size( 1,1 )) );
+    SwRect aTmp( rRect );
+    aTmp.SSize().AdjustWidth(aPixSz.Width()/2 + 1 );
+    aTmp.SSize().AdjustHeight(aPixSz.Height()/2 + 1 );
+    tools::Rectangle aTmpRect( pO->LogicToPixel( aTmp.SVRect() ) );
 
-        OSL_ENSURE( !pSh->GetWin()->IsReallyVisible() ||
-                aTmpRect.GetWidth() <= pSh->GetWin()->GetOutputSizePixel().Width() + 2,
-                "Paintwidth bigger than visarea?" );
-        // Does the rectangle fit in our buffer?
-        if( !DoesFit( aTmpRect.GetSize() ) )
-        {
-            pOut = nullptr;
-            return;
-        }
-
-        aRect = SwRect( pO->PixelToLogic( aTmpRect ) );
-
-        SetOutDev( pSh, pVirDev );
-
-        if( pVirDev->GetFillColor() != pOut->GetFillColor() )
-            pVirDev->SetFillColor( pOut->GetFillColor() );
-
-        MapMode aMapMode( pOut->GetMapMode() );
-        // OD 12.11.2002 #96272# - use method to set mapping
-        //aMapMode.SetOrigin( Point(0,0) - aRect.Pos() );
-        ::SetMappingForVirtDev( aRect.Pos(), &aMapMode, pOut, pVirDev );
-
-        if( aMapMode != pVirDev->GetMapMode() )
-            pVirDev->SetMapMode( aMapMode );
-
-        /// OD 27.09.2002 #103636# - set value of parameter <rRect>
-        rRect = aRect;
+    OSL_ENSURE( !pSh->GetWin()->IsReallyVisible() ||
+            aTmpRect.GetWidth() <= pSh->GetWin()->GetOutputSizePixel().Width() + 2,
+            "Paintwidth bigger than visarea?" );
+    // Does the rectangle fit in our buffer?
+    if( !DoesFit( aTmpRect.GetSize() ) )
+    {
+        pOut = nullptr;
+        return;
     }
+
+    aRect = SwRect( pO->PixelToLogic( aTmpRect ) );
+
+    SetOutDev( pSh, pVirDev );
+
+    if( pVirDev->GetFillColor() != pOut->GetFillColor() )
+        pVirDev->SetFillColor( pOut->GetFillColor() );
+
+    MapMode aMapMode( pOut->GetMapMode() );
+    // OD 12.11.2002 #96272# - use method to set mapping
+    //aMapMode.SetOrigin( Point(0,0) - aRect.Pos() );
+    ::SetMappingForVirtDev( aRect.Pos(), pOut, pVirDev );
+
+    if( aMapMode != pVirDev->GetMapMode() )
+        pVirDev->SetMapMode( aMapMode );
+
+    /// OD 27.09.2002 #103636# - set value of parameter <rRect>
+    rRect = aRect;
+
 }
 
-void SwLayVout::_Flush()
+void SwLayVout::Flush_()
 {
     OSL_ENSURE( pVirDev, "SwLayVout::DrawOut: nothing left Toulouse" );
     pOut->DrawOutDev( aRect.Pos(), aRect.SSize(),

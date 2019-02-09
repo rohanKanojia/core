@@ -30,11 +30,8 @@
 struct EENotify;
 class EditEngine;
 
-#define EDITSOURCE_HINT_PARASMOVED          20
-#define EDITSOURCE_HINT_SELECTIONCHANGED    21
-
 /** Extends TextHint by two additional parameters which are necessary
-    for the EDITSOURCE_HINT_PARASMOVED hint. TextHint's value in this
+    for the SfxHintId::EditSourceParasMoved hint. TextHint's value in this
     case denotes the destination position, the two parameters the
     start and the end of the moved paragraph range.
  */
@@ -45,20 +42,17 @@ private:
     sal_Int32   mnEnd;
 
 public:
-            SvxEditSourceHint( sal_uInt32 nId );
-            SvxEditSourceHint( sal_uInt32 nId, sal_uLong nValue, sal_Int32 nStart=0, sal_Int32 nEnd=0 );
+            SvxEditSourceHint( SfxHintId nId );
+            SvxEditSourceHint( SfxHintId nId, sal_uLong nValue, sal_Int32 nStart, sal_Int32 nEnd );
 
-    sal_uLong   GetValue() const;
+    using TextHint::GetValue;
     sal_Int32   GetStartValue() const { return mnStart;}
     sal_Int32   GetEndValue() const { return mnEnd;}
 };
 class SvxEditSourceHintEndPara :public SvxEditSourceHint
 {
 public:
-    SvxEditSourceHintEndPara( sal_uInt32 nId )
-        :SvxEditSourceHint(nId) {}
-    SvxEditSourceHintEndPara( sal_uInt32 nId, sal_uInt32 nValue, sal_uInt32 nStart=0, sal_uInt32 nEnd=0 )
-        :SvxEditSourceHint(nId,nValue,nStart){ (void)nEnd; }
+    SvxEditSourceHintEndPara() : SvxEditSourceHint(SfxHintId::EditSourceSelectionChanged) {}
 };
 /** Helper class for common functionality in edit sources
  */
@@ -73,7 +67,7 @@ public:
 
         @return the translated hint
      */
-    static ::std::unique_ptr<SfxHint> EENotification2Hint( EENotify* aNotify );
+    static ::std::unique_ptr<SfxHint> EENotification2Hint( EENotify const * aNotify );
 
     /** Calculate attribute run for EditEngines
 
@@ -93,10 +87,8 @@ public:
 
         @param nIndex
         The character index from which the range of similar attributed characters is requested
-
-        @return true, if the range has been successfully determined
      */
-     static bool GetAttributeRun( sal_Int32& nStartIndex, sal_Int32& nEndIndex, const EditEngine& rEE, sal_Int32 nPara, sal_Int32 nIndex, bool bInCell = false);
+     static void GetAttributeRun( sal_Int32& nStartIndex, sal_Int32& nEndIndex, const EditEngine& rEE, sal_Int32 nPara, sal_Int32 nIndex, bool bInCell = false);
 
     /** Convert point from edit engine to user coordinate space
 
@@ -156,7 +148,7 @@ public:
 
         @return the possibly transformed rect
      */
-    static Rectangle EEToUserSpace( const Rectangle& rRect, const Size& rEESize, bool bIsVertical );
+    static tools::Rectangle EEToUserSpace( const tools::Rectangle& rRect, const Size& rEESize, bool bIsVertical );
 
 };
 

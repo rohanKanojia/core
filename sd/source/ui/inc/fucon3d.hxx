@@ -38,15 +38,12 @@ public:
     virtual void DoExecute( SfxRequest& rReq ) override;
 
     // Mouse- & Key-Events
-    virtual bool KeyInput(const KeyEvent& rKEvt) override;
-    virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
 
     virtual void Activate() override;
-    virtual void Deactivate() override;
 
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle) override;
 
 private:
     FuConstruct3dObject (
@@ -56,7 +53,7 @@ private:
         SdDrawDocument* pDoc,
         SfxRequest& rReq);
 
-    void ImpPrepareBasic3DShape(E3dCompoundObject* p3DObj, E3dScene *pScene);
+    void ImpPrepareBasic3DShape(E3dCompoundObject const * p3DObj, E3dScene *pScene);
     E3dCompoundObject* ImpCreateBasic3DShape();
 };
 

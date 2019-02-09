@@ -35,14 +35,15 @@ namespace util
 
 inline ::System::String ^ ustring_to_String( OUString const & ustr )
 {
-    return gcnew ::System::String( ustr.getStr(), 0, ustr.getLength() );
+    return gcnew ::System::String(
+        reinterpret_cast<wchar_t const *>(ustr.getStr()), 0, ustr.getLength());
 }
 
 inline OUString String_to_ustring( ::System::String ^ str )
 {
     OSL_ASSERT( sizeof (wchar_t) == sizeof (sal_Unicode) );
     pin_ptr<wchar_t const> chars = PtrToStringChars( str );
-    return OUString( chars, str->Length );
+    return OUString(reinterpret_cast<sal_Unicode const *>(chars), str->Length);
 }
 
 template< typename T >
@@ -91,10 +92,10 @@ inline void to_uno(
         reinterpret_cast< void ** >( &ret ),
         reinterpret_cast< void * >(
             ::System::Runtime::InteropServices::GCHandle::op_Explicit( handle )
-#if defined _WIN32
-            .ToInt32()
-#elif defined _WIN64
+#if defined _WIN64
             .ToInt64()
+#elif defined _WIN32
+            .ToInt32()
 #else
 #error ERROR: either _WIN64 or _WIN32 must be defined
             ERROR: either _WIN64 or _WIN32 must be defined

@@ -18,33 +18,22 @@
  */
 
 
-#include "idlc/options.hxx"
+#include <options.hxx>
 
 #include <osl/diagnose.h>
 #include <rtl/string.hxx>
 #include <rtl/strbuf.hxx>
 
-#include "rtl/ustring.hxx"
-#include "osl/file.hxx"
+#include <rtl/ustring.hxx>
+#include <osl/file.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #ifdef _WIN32
+#   if !defined WIN32_LEAN_AND_MEAN
+#      define WIN32_LEAN_AND_MEAN
+#   endif
 #   include <windows.h>
 #endif
-
-/*
-#ifndef WIN32_LEAN_AND_MEAN
-#   define WIN32_LEAN_AND_MEAN
-# ifdef _MSC_VER
-#   pragma warning(push,1)
-# endif
-#   include <windows.h>
-# ifdef _MSC_VER
-#   pragma warning(pop)
-# endif
-#   include <tchar.h>
-#   undef WIN32_LEAN_AND_MEAN
-#endif
-*/
 
 #include <stdio.h>
 #include <string.h>
@@ -69,14 +58,16 @@ bool Options::checkArgument (std::vector< std::string > & rArgs, char const * ar
     switch(arg[0])
     {
     case '@':
-      if ((result = (len > 1)))
+      result = len > 1;
+      if (result)
       {
         // "@<cmdfile>"
         result = Options::checkCommandFile (rArgs, &(arg[1]));
       }
       break;
     case '-':
-      if ((result = (len > 1)))
+      result = len > 1;
+      if (result)
       {
         // "-<option>"
         switch (arg[1])
@@ -99,14 +90,14 @@ bool Options::checkArgument (std::vector< std::string > & rArgs, char const * ar
           }
         default:
           // "-<option>" ([long] option, w/o param)
-          rArgs.push_back(std::string(arg, len));
+          rArgs.emplace_back(arg, len);
           break;
         }
       }
       break;
     default:
       // "<param>"
-      rArgs.push_back(std::string(arg, len));
+      rArgs.emplace_back(arg, len);
       break;
     }
   }
@@ -153,8 +144,8 @@ bool Options::checkCommandFile (std::vector< std::string > & rArgs, char const *
               }
               break;
           }
+          [[fallthrough]];
         default:
-          // quoted white-space fall through
           buffer.push_back(sal::static_int_cast<char>(c));
           break;
         }
@@ -172,7 +163,7 @@ bool Options::checkCommandFile (std::vector< std::string > & rArgs, char const *
     return (fclose(fp) == 0);
 }
 
-bool Options::badOption(char const * reason, std::string const & rArg) throw(IllegalArgument)
+bool Options::badOption(char const * reason, std::string const & rArg)
 {
   OStringBuffer message;
   if (reason != nullptr)
@@ -192,17 +183,17 @@ bool Options::setOption(char const * option, std::string const & rArg)
 }
 
 #ifdef _WIN32
-/* Helper functiopn to convert windows paths including spaces, brackets etc. into
+/* Helper function to convert windows paths including spaces, brackets etc. into
    a windows short Url. The ucpp preprocessor has problems with such paths and returns
    with error.
 */
-OString convertIncPathtoShortWindowsPath(const OString& incPath) {
+static OString convertIncPathtoShortWindowsPath(const OString& incPath) {
     OUString path = OStringToOUString(incPath, RTL_TEXTENCODING_UTF8);
 
     std::vector<sal_Unicode> vec(path.getLength() + 1);
     //GetShortPathNameW only works if the file can be found!
     const DWORD len = GetShortPathNameW(
-        reinterpret_cast<LPCWSTR>(path.getStr()), reinterpret_cast<LPWSTR>(&vec[0]), path.getLength() + 1);
+        o3tl::toW(path.getStr()), o3tl::toW(&vec[0]), path.getLength() + 1);
 
     if (len > 0)
     {
@@ -214,7 +205,7 @@ OString convertIncPathtoShortWindowsPath(const OString& incPath) {
 }
 #endif
 
-bool Options::initOptions(std::vector< std::string > & rArgs) throw(IllegalArgument)
+bool Options::initOptions(std::vector< std::string > & rArgs)
 {
   std::vector< std::string >::const_iterator first = rArgs.begin(), last = rArgs.end();
   for (; first != last; ++first)
@@ -377,7 +368,7 @@ bool Options::initOptions(std::vector< std::string > & rArgs) throw(IllegalArgum
   return true;
 }
 
-OString Options::prepareHelp()
+OString Options::prepareHelp() const
 {
     OString help("\nusing: ");
     help += m_program + " [-options] <file_1> ... <file_n> | @<filename> | -stdin\n";
@@ -411,7 +402,7 @@ OString Options::prepareHelp()
     return help;
 }
 
-OString Options::prepareVersion()
+OString Options::prepareVersion() const
 {
     OString version(m_program);
     version += " Version 1.1\n\n";
@@ -419,13 +410,12 @@ OString Options::prepareVersion()
 }
 
 
-bool Options::isValid(const OString& option)
+bool Options::isValid(const OString& option) const
 {
     return (m_options.count(option) > 0);
 }
 
 const OString& Options::getOption(const OString& option)
-    throw( IllegalArgument )
 {
     if (!isValid(option))
     {

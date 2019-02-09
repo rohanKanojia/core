@@ -38,7 +38,7 @@ public class ColumnarTwoColumns extends ReportBuilderLayouter
 
     public String getLocalizedName()
     {
-        return getResource().getResText(UIConsts.RID_REPORT + 82);
+        return getResource().getResText("RID_REPORT_82");
     }
 
     @Override
@@ -116,7 +116,7 @@ public class ColumnarTwoColumns extends ReportBuilderLayouter
     }
 
     @Override
-    protected void insertDetailFieldTitles(int lastGroupPostion)
+    protected void insertDetailFieldTitles(int lastGroupPosition)
     {
         // we won't extra field titles
     }

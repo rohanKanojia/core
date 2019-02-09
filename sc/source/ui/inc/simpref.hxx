@@ -20,15 +20,8 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_SIMPREF_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_SIMPREF_HXX
 
-#include <vcl/group.hxx>
-
-#include <vcl/combobox.hxx>
-
 #include <vcl/fixed.hxx>
-
-#include <vcl/morebtn.hxx>
 #include "anyrefdg.hxx"
-#include "dbdata.hxx"
 
 class ScDocument;
 
@@ -56,8 +49,8 @@ private:
 
     void            Init();
 
-    DECL_LINK_TYPED( CancelBtnHdl, Button*, void );
-    DECL_LINK_TYPED( OkBtnHdl, Button*, void );
+    DECL_LINK( CancelBtnHdl, Button*, void );
+    DECL_LINK( OkBtnHdl, Button*, void );
 
 protected:
 
@@ -65,7 +58,7 @@ protected:
 
 public:
                     ScSimpleRefDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent);
-    virtual        ~ScSimpleRefDlg();
+    virtual        ~ScSimpleRefDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;

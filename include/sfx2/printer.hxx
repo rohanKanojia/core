@@ -19,6 +19,7 @@
 #ifndef INCLUDED_SFX2_PRINTER_HXX
 #define INCLUDED_SFX2_PRINTER_HXX
 
+#include <memory>
 #include <sal/config.h>
 #include <sfx2/dllapi.h>
 #include <sal/types.h>
@@ -27,32 +28,29 @@
 class SfxTabPage;
 class SfxItemSet;
 
-struct SfxPrinter_Impl;
-
 // class SfxPrinter ------------------------------------------------------
 
 class SFX2_DLLPUBLIC SfxPrinter : public Printer
 {
 private:
-    SfxItemSet*             pOptions;
-    SfxPrinter_Impl*        pImpl;
+    std::unique_ptr<SfxItemSet> pOptions;
     bool                    bKnown;
 
-    SAL_DLLPRIVATE void operator =(SfxPrinter &) = delete;
+    SfxPrinter& operator =(SfxPrinter const &) = delete;
 
 public:
-                            SfxPrinter( SfxItemSet *pTheOptions );
-                            SfxPrinter( SfxItemSet *pTheOptions,
+                            SfxPrinter( std::unique_ptr<SfxItemSet> &&pTheOptions );
+                            SfxPrinter( std::unique_ptr<SfxItemSet> &&pTheOptions,
                                         const OUString &rPrinterName );
-                            SfxPrinter( SfxItemSet *pTheOptions,
+                            SfxPrinter( std::unique_ptr<SfxItemSet> &&pTheOptions,
                                         const JobSetup &rTheOrigJobSetup );
                             SfxPrinter( const SfxPrinter &rPrinter );
-                            virtual ~SfxPrinter();
+                            virtual ~SfxPrinter() override;
     virtual void            dispose() override;
 
     VclPtr<SfxPrinter>      Clone() const;
 
-    static VclPtr<SfxPrinter> Create( SvStream &rStream, SfxItemSet *pOptions );
+    static VclPtr<SfxPrinter> Create( SvStream &rStream, std::unique_ptr<SfxItemSet> &&pOptions );
     void                    Store( SvStream &rStream ) const;
 
     const SfxItemSet&       GetOptions() const { return *pOptions; }

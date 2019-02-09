@@ -32,7 +32,7 @@ use installer::windows::language;
 use installer::windows::component;
 
 ##########################################################################
-# Assigning one cabinet file to each file. This is requrired,
+# Assigning one cabinet file to each file. This is required,
 # if cabinet files shall be equivalent to packages.
 ##########################################################################
 
@@ -108,7 +108,7 @@ sub assign_cab_to_files
 }
 
 ##########################################################################
-# Assigning sequencenumbers to files. This is requrired,
+# Assigning sequencenumbers to files. This is required,
 # if cabinet files shall be equivalent to packages.
 ##########################################################################
 
@@ -199,11 +199,11 @@ sub get_file_component_name
 
     my $componentname = "";
 
-    # Special handling for files with ASSIGNCOMPOMENT
+    # Special handling for files with ASSIGNCOMPONENT
 
     my $styles = "";
     if ( $fileref->{'Styles'} ) { $styles = $fileref->{'Styles'}; }
-    if ( $styles =~ /\bASSIGNCOMPOMENT\b/ )
+    if ( $styles =~ /\bASSIGNCOMPONENT\b/ )
     {
         $componentname = get_component_from_assigned_file($fileref->{'AssignComponent'}, $filesref);
     }
@@ -333,7 +333,7 @@ sub get_file_component_name
 
 ####################################################################
 # Returning the component name for a defined file gid.
-# This is necessary for files with flag ASSIGNCOMPOMENT
+# This is necessary for files with flag ASSIGNCOMPONENT
 ####################################################################
 
 sub get_component_from_assigned_file
@@ -399,8 +399,8 @@ sub generate_unique_filename_for_filetable
     $uniquefilename =~ s/\-/\_/g;       # no "-" allowed
     $uniquefilename =~ s/\@/\_/g;       # no "@" allowed
     $uniquefilename =~ s/\$/\_/g;       # no "$" allowed
-    $uniquefilename =~ s/^\s*\./\_/g;       # no "." at the beginning allowed allowed
-    $uniquefilename =~ s/^\s*\d/\_d/g;      # no number at the beginning allowed allowed (even file "0.gif", replacing to "_d.gif")
+    $uniquefilename =~ s/^\s*\./\_/g;       # no "." at the beginning allowed
+    $uniquefilename =~ s/^\s*\d/\_d/g;      # no number at the beginning allowed (even file "0.gif", replacing to "_d.gif")
     $uniquefilename =~ s/org_openoffice_/ooo_/g;    # shorten the unique file name
 
     my $lcuniquefilename = lc($uniquefilename); # only lowercase names
@@ -552,16 +552,17 @@ sub get_fileversion
         }
     }
     # file version for font files (tdf#76239)
-    if ( $onefile->{'Name'} =~ /\.ttf$|\.TTF$/ )
+    if ( $onefile->{'Name'} =~ /\.(otf|ttf|ttc)$/i )
     {
-        open (TTF, "<$onefile->{'sourcepath'}");
-        binmode TTF;
-        {local $/ = undef; $ttfdata = <TTF>;}
-        close TTF;
+        require Font::TTF::Font;
+        Font::TTF::Font->import;
+        my $fnt = Font::TTF::Font->open("<$onefile->{'sourcepath'}");
+        # 5 is pre-defined name ID for version string - see
+        # https://docs.microsoft.com/en-us/typography/opentype/spec/name
+        my $ttfdata = $fnt->{'name'}->read->find_name(5);
+        $fnt->release;
 
-        my $ttfversion = "(Version )([0-9]+[.]*([0-9][.])*[0-9]+)";
-
-        if ($ttfdata =~ /$ttfversion/ms)
+        if ($ttfdata =~ /(Version )?([0-9]+(\.[0-9]+)*)/i)
         {
             my ($version, $subversion, $microversion, $vervariant) = split(/\./,$2);
             $fileversion = int($version) . "." . int($subversion) . "." . int($microversion) . "." . int($vervariant);

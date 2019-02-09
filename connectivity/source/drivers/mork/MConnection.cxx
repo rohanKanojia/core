@@ -15,13 +15,11 @@
 #include "MorkParser.hxx"
 
 #include <connectivity/dbexception.hxx>
+#include <sal/log.hxx>
 
-#include "resource/mork_res.hrc"
-#include "resource/common_res.hrc"
+#include <strings.hrc>
 
 #include <com/sun/star/sdbc/TransactionIsolation.hpp>
-
-#include <comphelper/processfactory.hxx>
 
 using namespace dbtools;
 
@@ -39,34 +37,23 @@ static const int defaultScope = 0x80;
 
 
 OConnection::OConnection(MorkDriver* _pDriver)
-    :OSubComponent<OConnection, OConnection_BASE>(static_cast<cppu::OWeakObject*>(_pDriver), this)
-    ,m_pDriver(_pDriver)
+    :m_xDriver(_pDriver)
     ,m_aColumnAlias( _pDriver->getFactory() )
 {
-    m_pDriver->acquire();
-    m_pBook = new MorkParser();
-    m_pHistory = new MorkParser();
+    m_pBook.reset( new MorkParser() );
+    m_pHistory.reset( new MorkParser() );
 }
 
 OConnection::~OConnection()
 {
     if(!isClosed())
         close();
-    m_pDriver->release();
-    m_pDriver = nullptr;
-    delete m_pBook;
-    delete m_pHistory;
+    m_pBook.reset();
+    m_pHistory.reset();
 }
 
-void SAL_CALL OConnection::release() throw()
+void OConnection::construct(const OUString& url)
 {
-    relase_ChildImpl();
-}
-
-
-void OConnection::construct(const OUString& url,const Sequence< PropertyValue >& info)  throw(SQLException)
-{
-    (void) info; // avoid warnings
     SAL_INFO("connectivity.mork", "=> OConnection::construct()" );
     //  open file
     setURL(url);
@@ -75,13 +62,12 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
 
     sal_Int32 nLen = url.indexOf(':');
     nLen = url.indexOf(':',nLen+1);
-    OSL_ENSURE( url.copy( 0, nLen ) == "sdbc:address", "OConnection::construct: invalid start of the URI - should never have survived XDriver::acceptsURL!" );
+    OSL_ENSURE( url.startsWith("sdbc:address:"), "OConnection::construct: invalid start of the URI - should never have survived XDriver::acceptsURL!" );
 
     OUString aAddrbookURI(url.copy(nLen+1));
     // Get Scheme
     nLen = aAddrbookURI.indexOf(':');
     OUString aAddrbookScheme;
-    OUString sAdditionalInfo;
     if ( nLen == -1 )
     {
         // There isn't any subschema: - but could be just subschema
@@ -98,7 +84,6 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
     else
     {
         aAddrbookScheme = aAddrbookURI.copy(0, nLen);
-        sAdditionalInfo = aAddrbookURI.copy( nLen + 1 );
     }
 
     SAL_INFO("connectivity.mork", "URI = " << aAddrbookURI );
@@ -112,7 +97,7 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
     // production?
     if (unittestIndex == -1)
     {
-        OUString path = m_pDriver->getProfilePath();
+        OUString path = m_xDriver->getProfilePath();
         SAL_INFO("connectivity.mork", "ProfilePath: " << path);
         abook = path + "/abook.mab";
         history = path + "/history.mab";
@@ -179,7 +164,7 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
 IMPLEMENT_SERVICE_INFO(OConnection, "com.sun.star.sdbc.drivers.mork.OConnection", "com.sun.star.sdbc.Connection")
 
 
-Reference< XStatement > SAL_CALL OConnection::createStatement(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XStatement > SAL_CALL OConnection::createStatement(  )
 {
     SAL_INFO("connectivity.mork", "=> OConnection::createStatement()" );
 
@@ -193,7 +178,7 @@ Reference< XStatement > SAL_CALL OConnection::createStatement(  ) throw(SQLExcep
     return xReturn;
 }
 
-Reference< XPreparedStatement > SAL_CALL OConnection::prepareStatement( const OUString& _sSql ) throw(SQLException, RuntimeException, std::exception)
+Reference< XPreparedStatement > SAL_CALL OConnection::prepareStatement( const OUString& _sSql )
 {
     SAL_INFO("connectivity.mork", "=> OConnection::prepareStatement()" );
     SAL_INFO("connectivity.mork", "OConnection::prepareStatement( " << _sSql << " )");
@@ -212,7 +197,7 @@ Reference< XPreparedStatement > SAL_CALL OConnection::prepareStatement( const OU
     return xReturn;
 }
 
-Reference< XPreparedStatement > SAL_CALL OConnection::prepareCall( const OUString& _sSql ) throw(SQLException, RuntimeException, std::exception)
+Reference< XPreparedStatement > SAL_CALL OConnection::prepareCall( const OUString& _sSql )
 {
     SAL_INFO("connectivity.mork", "=> OConnection::prepareCall()" );
     SAL_INFO("connectivity.mork", "sql: " << _sSql);
@@ -221,7 +206,7 @@ Reference< XPreparedStatement > SAL_CALL OConnection::prepareCall( const OUStrin
     return nullptr;
 }
 
-OUString SAL_CALL OConnection::nativeSQL( const OUString& _sSql ) throw(SQLException, RuntimeException, std::exception)
+OUString SAL_CALL OConnection::nativeSQL( const OUString& _sSql )
 {
     SAL_INFO("connectivity.mork", "=> OConnection::nativeSQL()" );
     SAL_INFO("connectivity.mork", "sql: " << _sSql);
@@ -233,30 +218,30 @@ OUString SAL_CALL OConnection::nativeSQL( const OUString& _sSql ) throw(SQLExcep
     return _sSql;
 }
 
-void SAL_CALL OConnection::setAutoCommit( sal_Bool /*autoCommit*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setAutoCommit( sal_Bool /*autoCommit*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XConnection::setAutoCommit", *this );
 }
 
-sal_Bool SAL_CALL OConnection::getAutoCommit(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnection::getAutoCommit(  )
 {
     // you have to distinguish which if you are in autocommit mode or not
     // at normal case true should be fine here
 
-    return sal_True;
+    return true;
 }
 
-void SAL_CALL OConnection::commit(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::commit(  )
 {
     // when you database does support transactions you should commit here
 }
 
-void SAL_CALL OConnection::rollback(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::rollback(  )
 {
     // same as commit but for the other case
 }
 
-sal_Bool SAL_CALL OConnection::isClosed(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnection::isClosed(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -264,7 +249,7 @@ sal_Bool SAL_CALL OConnection::isClosed(  ) throw(SQLException, RuntimeException
     return OConnection_BASE::rBHelper.bDisposed;
 }
 
-Reference< XDatabaseMetaData > SAL_CALL OConnection::getMetaData(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XDatabaseMetaData > SAL_CALL OConnection::getMetaData(  )
 {
     SAL_INFO("connectivity.mork", "=> OConnection::getMetaData()" );
 
@@ -283,51 +268,51 @@ Reference< XDatabaseMetaData > SAL_CALL OConnection::getMetaData(  ) throw(SQLEx
     return xMetaData;
 }
 
-void SAL_CALL OConnection::setReadOnly( sal_Bool /*readOnly*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setReadOnly( sal_Bool /*readOnly*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XConnection::setReadOnly", *this );
 }
 
-sal_Bool SAL_CALL OConnection::isReadOnly(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnection::isReadOnly(  )
 {
     // return if your connection to readonly
-    return sal_False;
+    return false;
 }
 
-void SAL_CALL OConnection::setCatalog( const OUString& /*catalog*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setCatalog( const OUString& /*catalog*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XConnection::setCatalog", *this );
 }
 
-OUString SAL_CALL OConnection::getCatalog(  ) throw(SQLException, RuntimeException, std::exception)
+OUString SAL_CALL OConnection::getCatalog(  )
 {
     return OUString();
 }
 
-void SAL_CALL OConnection::setTransactionIsolation( sal_Int32 /*level*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setTransactionIsolation( sal_Int32 /*level*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XConnection::setTransactionIsolation", *this );
 }
 
-sal_Int32 SAL_CALL OConnection::getTransactionIsolation(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OConnection::getTransactionIsolation(  )
 {
     // please have a look at @see com.sun.star.sdbc.TransactionIsolation
     return TransactionIsolation::NONE;
 }
 
-Reference< ::com::sun::star::container::XNameAccess > SAL_CALL OConnection::getTypeMap(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< css::container::XNameAccess > SAL_CALL OConnection::getTypeMap(  )
 {
     // if your driver has special database types you can return it here
     return nullptr;
 }
 
-void SAL_CALL OConnection::setTypeMap( const Reference< ::com::sun::star::container::XNameAccess >& /*typeMap*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setTypeMap( const Reference< css::container::XNameAccess >& /*typeMap*/ )
 {
     ::dbtools::throwFeatureNotImplementedSQLException( "XConnection::setTypeMap", *this );
 }
 
 // XCloseable
-void SAL_CALL OConnection::close(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::close(  )
 {
     // we just dispose us
     {
@@ -339,29 +324,26 @@ void SAL_CALL OConnection::close(  ) throw(SQLException, RuntimeException, std::
 }
 
 // XWarningsSupplier
-Any SAL_CALL OConnection::getWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+Any SAL_CALL OConnection::getWarnings(  )
 {
     // when you collected some warnings -> return it
     return Any();
 }
 
-void SAL_CALL OConnection::clearWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::clearWarnings(  )
 {
     // you should clear your collected warnings here
 }
 
 void OConnection::disposing()
 {
-    // we noticed that we should be destroied in near future so we have to dispose our statements
+    // we noticed that we should be destroyed in near future so we have to dispose our statements
     ::osl::MutexGuard aGuard(m_aMutex);
-    dispose_ChildImpl();
     m_xCatalog.clear();
 }
 
-
-Reference< XTablesSupplier > SAL_CALL OConnection::createCatalog()
+Reference< XTablesSupplier > OConnection::createCatalog()
 {
-    OSL_TRACE("IN OConnection::createCatalog()" );
     ::osl::MutexGuard aGuard( m_aMutex );
     Reference< XTablesSupplier > xTab = m_xCatalog;
     if(!m_xCatalog.is())
@@ -370,53 +352,25 @@ Reference< XTablesSupplier > SAL_CALL OConnection::createCatalog()
         xTab = pCat;
         m_xCatalog = xTab;
     }
-    OSL_TRACE( "\tOUT OConnection::createCatalog()" );
     return xTab;
 }
 
-
 void OConnection::throwSQLException( const ErrorDescriptor& _rError, const Reference< XInterface >& _rxContext )
 {
-    if ( _rError.getResId() != 0 )
+    if (_rError.getResId() != nullptr)
     {
-        OSL_ENSURE( ( _rError.getErrorCondition() == 0 ),
-            "OConnection::throwSQLException: unsupported error code combination!" );
-
-        OUString sParameter( _rError.getParameter() );
-        if ( !sParameter.isEmpty() )
-        {
-            const OUString sError( getResources().getResourceStringWithSubstitution(
-                _rError.getResId(),
-                "$1$", sParameter
-             ) );
-            ::dbtools::throwGenericSQLException( sError, _rxContext );
-            OSL_FAIL( "OConnection::throwSQLException: unreachable (1)!" );
-        }
-
         throwGenericSQLException( _rError.getResId(), _rxContext );
         OSL_FAIL( "OConnection::throwSQLException: unreachable (2)!" );
-    }
-
-    if ( _rError.getErrorCondition() != 0 )
-    {
-        SQLError aErrorHelper( comphelper::getComponentContext(getDriver()->getFactory()) );
-        OUString sParameter( _rError.getParameter() );
-        if ( !sParameter.isEmpty() )
-            aErrorHelper.raiseException( _rError.getErrorCondition(), _rxContext, sParameter );
-        else
-            aErrorHelper.raiseException( _rError.getErrorCondition(), _rxContext);
-        OSL_FAIL( "OConnection::throwSQLException: unreachable (3)!" );
     }
 
     throwGenericSQLException( STR_UNSPECIFIED_ERROR, _rxContext );
 }
 
-
-void OConnection::throwSQLException( const sal_uInt16 _nErrorResourceId, const Reference< XInterface >& _rxContext )
+void OConnection::throwSQLException( const char* pErrorResourceId, const Reference< XInterface >& _rxContext )
 {
     ErrorDescriptor aError;
-    aError.setResId( _nErrorResourceId );
-    throwSQLException( aError, _rxContext );
+    aError.setResId(pErrorResourceId);
+    throwSQLException(aError, _rxContext);
 }
 
 } } // namespace connectivity::mork

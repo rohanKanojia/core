@@ -50,34 +50,32 @@ class CSubmissionPut;
 class CSubmissionPost;
 class CSubmissionGet;
 
-class CCommandEnvironmentHelper : public cppu::WeakImplHelper< css::ucb::XCommandEnvironment >
+class CCommandEnvironmentHelper final : public cppu::WeakImplHelper< css::ucb::XCommandEnvironment >
 {
     friend class CSubmissionPut;
     friend class CSubmissionPost;
     friend class CSubmissionGet;
     friend class CSubmission;
 
-protected:
     css::uno::Reference< css::task::XInteractionHandler >   m_aInteractionHandler;
     css::uno::Reference< css::ucb::XProgressHandler >       m_aProgressHandler;
 
 public:
-    virtual css::uno::Reference< css::task::XInteractionHandler > SAL_CALL getInteractionHandler() throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Reference< css::task::XInteractionHandler > SAL_CALL getInteractionHandler() override
     {
         return m_aInteractionHandler;
     }
-    virtual css::uno::Reference< css::ucb::XProgressHandler > SAL_CALL getProgressHandler() throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Reference< css::ucb::XProgressHandler > SAL_CALL getProgressHandler() override
     {
         return m_aProgressHandler;
     }
 };
 
-class CProgressHandlerHelper : public cppu::WeakImplHelper< css::ucb::XProgressHandler >
+class CProgressHandlerHelper final : public cppu::WeakImplHelper< css::ucb::XProgressHandler >
 {
     friend class CSubmissionPut;
     friend class CSubmissionPost;
     friend class CSubmissionGet;
-protected:
     osl::Condition m_cFinished;
     osl::Mutex m_mLock;
     sal_Int32 m_count;
@@ -85,16 +83,16 @@ public:
     CProgressHandlerHelper()
         : m_count(0)
     {}
-    virtual void SAL_CALL push( const css::uno::Any& /*aStatus*/) throw(css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL push( const css::uno::Any& /*aStatus*/) override
     {
         m_mLock.acquire();
         m_count++;
         m_mLock.release();
     }
-    virtual void SAL_CALL update(const css::uno::Any& /*aStatus*/) throw(css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL update(const css::uno::Any& /*aStatus*/) override
     {
     }
-    virtual void SAL_CALL pop() throw(css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL pop() override
     {
         m_mLock.acquire();
         m_count--;
@@ -120,10 +118,6 @@ protected:
 public:
     enum SubmissionResult {
         SUCCESS,
-        INVALID_METHOD,
-        INVALID_URL,
-        INVALID_ENCODING,
-        E_TRANSMISSION,
         UNKNOWN_ERROR
     };
 

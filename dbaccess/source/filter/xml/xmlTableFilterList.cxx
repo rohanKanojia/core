@@ -23,11 +23,12 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
-#include "xmlstrings.hrc"
+#include <xmloff/ProgressBarHelper.hxx>
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <xmloff/xmlimp.hxx>
 #include "xmlfilter.hxx"
-#include <tools/debug.hxx>
 
 namespace dbaxml
 {
@@ -46,7 +47,7 @@ OXMLTableFilterList::~OXMLTableFilterList()
 {
 }
 
-SvXMLImportContext* OXMLTableFilterList::CreateChildContext(
+SvXMLImportContextRef OXMLTableFilterList::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & /*xAttrList*/ )

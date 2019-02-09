@@ -18,7 +18,7 @@
  */
 
 
-#include "XMLFootnoteConfigurationImportContext.hxx"
+#include <XMLFootnoteConfigurationImportContext.hxx>
 
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -28,6 +28,7 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
+#include <xmloff/xmlement.hxx>
 
 #include <xmloff/families.hxx>
 #include <xmloff/xmluconv.hxx>
@@ -58,7 +59,7 @@ class XMLFootnoteConfigHelper : public SvXMLImportContext
 {
     OUStringBuffer sBuffer;
     XMLFootnoteConfigurationImportContext& rConfig;
-    bool bIsBegin;
+    bool const bIsBegin;
 
 public:
 
@@ -109,6 +110,18 @@ void XMLFootnoteConfigHelper::Characters( const OUString& rChars )
 
 // XMLFootnoteConfigurationImportContext
 
+static const OUStringLiteral gsPropertyAnchorCharStyleName("AnchorCharStyleName");
+static const OUStringLiteral gsPropertyCharStyleName("CharStyleName");
+static const OUStringLiteral gsPropertyNumberingType("NumberingType");
+static const OUStringLiteral gsPropertyPageStyleName("PageStyleName");
+static const OUStringLiteral gsPropertyParagraphStyleName("ParaStyleName");
+static const OUStringLiteral gsPropertyPrefix("Prefix");
+static const OUStringLiteral gsPropertyStartAt("StartAt");
+static const OUStringLiteral gsPropertySuffix("Suffix");
+static const OUStringLiteral gsPropertyPositionEndOfDoc("PositionEndOfDoc");
+static const OUStringLiteral gsPropertyFootnoteCounting("FootnoteCounting");
+static const OUStringLiteral gsPropertyEndNotice("EndNotice");
+static const OUStringLiteral gsPropertyBeginNotice("BeginNotice");
 
 XMLFootnoteConfigurationImportContext::XMLFootnoteConfigurationImportContext(
     SvXMLImport& rImport,
@@ -116,21 +129,8 @@ XMLFootnoteConfigurationImportContext::XMLFootnoteConfigurationImportContext(
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList)
 :   SvXMLStyleContext(rImport, nPrfx, rLocalName, xAttrList, XML_STYLE_FAMILY_TEXT_FOOTNOTECONFIG)
-,   sPropertyAnchorCharStyleName("AnchorCharStyleName")
-,   sPropertyCharStyleName("CharStyleName")
-,   sPropertyNumberingType("NumberingType")
-,   sPropertyPageStyleName("PageStyleName")
-,   sPropertyParagraphStyleName("ParaStyleName")
-,   sPropertyPrefix("Prefix")
-,   sPropertyStartAt("StartAt")
-,   sPropertySuffix("Suffix")
-,   sPropertyPositionEndOfDoc("PositionEndOfDoc")
-,   sPropertyFootnoteCounting("FootnoteCounting")
-,   sPropertyEndNotice("EndNotice")
-,   sPropertyBeginNotice("BeginNotice")
 ,   sNumFormat("1")
 ,   sNumSync("false")
-,   pAttrTokenMap(nullptr)
 ,   nOffset(0)
 ,   nNumbering(FootnoteNumbering::PER_PAGE)
 ,   bPosition(false)
@@ -159,7 +159,6 @@ XMLFootnoteConfigurationImportContext::XMLFootnoteConfigurationImportContext(
 }
 XMLFootnoteConfigurationImportContext::~XMLFootnoteConfigurationImportContext()
 {
-    delete pAttrTokenMap;
 }
 
 enum XMLFtnConfigToken
@@ -201,15 +200,15 @@ static const SvXMLTokenMapEntry aTextFieldAttrTokenMap[] =
 const SvXMLTokenMap&
     XMLFootnoteConfigurationImportContext::GetFtnConfigAttrTokenMap()
 {
-    if (nullptr == pAttrTokenMap)
+    if (!pAttrTokenMap)
     {
-        pAttrTokenMap = new SvXMLTokenMap(aTextFieldAttrTokenMap);
+        pAttrTokenMap.reset( new SvXMLTokenMap(aTextFieldAttrTokenMap) );
     }
 
     return *pAttrTokenMap;
 }
 
-static SvXMLEnumMapEntry const aFootnoteNumberingMap[] =
+static SvXMLEnumMapEntry<sal_Int16> const aFootnoteNumberingMap[] =
 {
     { XML_PAGE,             FootnoteNumbering::PER_PAGE },
     { XML_CHAPTER,          FootnoteNumbering::PER_CHAPTER },
@@ -247,7 +246,7 @@ void XMLFootnoteConfigurationImportContext::StartElement(
                 sal_Int32 nTmp;
                 if (::sax::Converter::convertNumber(nTmp, sValue))
                 {
-                    nOffset = (sal_uInt16)nTmp;
+                    nOffset = static_cast<sal_uInt16>(nTmp);
                 }
                 break;
             }
@@ -265,12 +264,8 @@ void XMLFootnoteConfigurationImportContext::StartElement(
                 break;
             case XML_TOK_FTNCONFIG_START_AT:
             {
-                sal_uInt16 nTmp;
-                if (SvXMLUnitConverter::convertEnum(nTmp, sValue,
-                                                    aFootnoteNumberingMap))
-                {
-                    nNumbering = nTmp;
-                }
+                (void)SvXMLUnitConverter::convertEnum(nNumbering, sValue,
+                                                      aFootnoteNumberingMap);
                 break;
             }
             case XML_TOK_FTNCONFIG_POSITION:
@@ -282,12 +277,12 @@ void XMLFootnoteConfigurationImportContext::StartElement(
     }
 }
 
-SvXMLImportContext *XMLFootnoteConfigurationImportContext::CreateChildContext(
+SvXMLImportContextRef XMLFootnoteConfigurationImportContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if (!bIsEndnote)
     {
@@ -296,14 +291,14 @@ SvXMLImportContext *XMLFootnoteConfigurationImportContext::CreateChildContext(
             if ( IsXMLToken( rLocalName,
                              XML_FOOTNOTE_CONTINUATION_NOTICE_FORWARD ) )
             {
-                pContext = new XMLFootnoteConfigHelper(GetImport(),
+                xContext = new XMLFootnoteConfigHelper(GetImport(),
                                                        nPrefix, rLocalName,
                                                        *this, false);
             }
             else if ( IsXMLToken( rLocalName,
                                   XML_FOOTNOTE_CONTINUATION_NOTICE_BACKWARD ) )
             {
-                pContext = new XMLFootnoteConfigHelper(GetImport(),
+                xContext = new XMLFootnoteConfigHelper(GetImport(),
                                                        nPrefix, rLocalName,
                                                        *this, true);
             }
@@ -313,15 +308,15 @@ SvXMLImportContext *XMLFootnoteConfigurationImportContext::CreateChildContext(
     }
     // else: endnote -> default context
 
-    if (pContext == nullptr)
+    if (!xContext)
     {
         // default: delegate to super class
-        pContext = SvXMLStyleContext::CreateChildContext(nPrefix,
+        xContext = SvXMLStyleContext::CreateChildContext(nPrefix,
                                                          rLocalName,
                                                          xAttrList);
     }
 
-    return pContext;
+    return xContext;
 }
 
 // Rename method <CreateAndInsertLate(..)> to <Finish(..)> (#i40597#)
@@ -361,35 +356,33 @@ void XMLFootnoteConfigurationImportContext::ProcessSettings(
     {
         aAny <<= GetImport().GetStyleDisplayName(
                         XML_STYLE_FAMILY_TEXT_TEXT, sCitationStyle );
-        rConfig->setPropertyValue(sPropertyCharStyleName, aAny);
+        rConfig->setPropertyValue(gsPropertyCharStyleName, aAny);
     }
 
     if (!sAnchorStyle.isEmpty())
     {
         aAny <<= GetImport().GetStyleDisplayName(
                         XML_STYLE_FAMILY_TEXT_TEXT, sAnchorStyle );
-        rConfig->setPropertyValue(sPropertyAnchorCharStyleName, aAny);
+        rConfig->setPropertyValue(gsPropertyAnchorCharStyleName, aAny);
     }
 
     if (!sPageStyle.isEmpty())
     {
         aAny <<= GetImport().GetStyleDisplayName(
                         XML_STYLE_FAMILY_MASTER_PAGE, sPageStyle );
-        rConfig->setPropertyValue(sPropertyPageStyleName, aAny);
+        rConfig->setPropertyValue(gsPropertyPageStyleName, aAny);
     }
 
     if (!sDefaultStyle.isEmpty())
     {
         aAny <<= GetImport().GetStyleDisplayName(
                         XML_STYLE_FAMILY_TEXT_PARAGRAPH, sDefaultStyle );
-        rConfig->setPropertyValue(sPropertyParagraphStyleName, aAny);
+        rConfig->setPropertyValue(gsPropertyParagraphStyleName, aAny);
     }
 
-    aAny <<= sPrefix;
-    rConfig->setPropertyValue(sPropertyPrefix, aAny);
+    rConfig->setPropertyValue(gsPropertyPrefix, Any(sPrefix));
 
-    aAny <<= sSuffix;
-    rConfig->setPropertyValue(sPropertySuffix, aAny);
+    rConfig->setPropertyValue(gsPropertySuffix, Any(sSuffix));
 
     sal_Int16 nNumType = NumberingType::ARABIC;
     GetImport().GetMM100UnitConverter().convertNumFormat( nNumType, sNumFormat,
@@ -399,25 +392,16 @@ void XMLFootnoteConfigurationImportContext::ProcessSettings(
     if( NumberingType::CHAR_SPECIAL == nNumType )
         nNumType = NumberingType::ARABIC;
 
-    aAny <<=  nNumType;
-    rConfig->setPropertyValue(sPropertyNumberingType, aAny);
+    rConfig->setPropertyValue(gsPropertyNumberingType, Any(nNumType));
 
-    aAny <<= nOffset;
-    rConfig->setPropertyValue(sPropertyStartAt, aAny);
+    rConfig->setPropertyValue(gsPropertyStartAt, Any(nOffset));
 
     if (!bIsEndnote)
     {
-        aAny.setValue(&bPosition, cppu::UnoType<bool>::get());
-        rConfig->setPropertyValue(sPropertyPositionEndOfDoc, aAny);
-
-        aAny <<= nNumbering;
-        rConfig->setPropertyValue(sPropertyFootnoteCounting, aAny);
-
-        aAny <<= sEndNotice;
-        rConfig->setPropertyValue(sPropertyEndNotice, aAny);
-
-        aAny <<= sBeginNotice;
-        rConfig->setPropertyValue(sPropertyBeginNotice, aAny);
+        rConfig->setPropertyValue(gsPropertyPositionEndOfDoc, Any(bPosition));
+        rConfig->setPropertyValue(gsPropertyFootnoteCounting, Any(nNumbering));
+        rConfig->setPropertyValue(gsPropertyEndNotice, Any(sEndNotice));
+        rConfig->setPropertyValue(gsPropertyBeginNotice, Any(sBeginNotice));
     }
 }
 

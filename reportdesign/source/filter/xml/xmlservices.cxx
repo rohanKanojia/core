@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
 #include <cppuhelper/implementationentry.hxx>
 #include "xmlfilter.hxx"
 #include "xmlExport.hxx"
@@ -37,7 +36,7 @@ using namespace ::com::sun::star::registry;
 namespace
 {
 
-cppu::ImplementationEntry entries[] = {
+cppu::ImplementationEntry const entries[] = {
     { &ORptFilter::create, &ORptFilter::getImplementationName_Static, &ORptFilter::getSupportedServiceNames_Static,
         &cppu::createSingleComponentFactory, nullptr, 0 },
     { &ORptTypeDetection::create, &ORptTypeDetection::getImplementationName_Static, &ORptTypeDetection::getSupportedServiceNames_Static,
@@ -71,7 +70,7 @@ cppu::ImplementationEntry entries[] = {
 };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL rptxml_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * rptxml_component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return cppu::component_getFactoryHelper(

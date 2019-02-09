@@ -19,6 +19,7 @@
 
 
 #include <sal/main.h>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
 #include <rtl/alloc.h>
 #include <uno/environment.hxx>
@@ -55,7 +56,7 @@ public:
 
     virtual ~TargetObject() {
         --s_obj;
-        OSL_TRACE( "~TargetObject()" );
+        SAL_INFO("stoc", "~TargetObject()" );
     }
     TargetObject()
         { ++s_obj; }
@@ -113,7 +114,7 @@ public:
 
     virtual ~TestMaster() {
         --s_obj;
-        OSL_TRACE( "~TestMaster()" );
+        SAL_INFO("stoc", "~TestMaster()" );
     }
 
     virtual Any SAL_CALL queryInterface( const Type & rType )

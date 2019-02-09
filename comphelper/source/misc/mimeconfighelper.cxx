@@ -20,16 +20,19 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/container/XContainerQuery.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/embed/VerbDescriptor.hpp>
 #include <com/sun/star/document/XTypeDetection.hpp>
 
 #include <osl/diagnose.h>
 
 #include <comphelper/fileformat.h>
 #include <comphelper/mimeconfighelper.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/classids.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/documentconstants.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <rtl/ustrbuf.hxx>
 
 
 using namespace ::com::sun::star;
@@ -46,27 +49,26 @@ MimeConfigurationHelper::MimeConfigurationHelper( const uno::Reference< uno::XCo
 
 OUString MimeConfigurationHelper::GetStringClassIDRepresentation( const uno::Sequence< sal_Int8 >& aClassID )
 {
-    OUString aResult;
+    OUStringBuffer aResult;
 
     if ( aClassID.getLength() == 16 )
     {
         for ( sal_Int32 nInd = 0; nInd < aClassID.getLength(); nInd++ )
         {
             if ( nInd == 4 || nInd == 6 || nInd == 8 || nInd == 10 )
-                aResult += "-";
+                aResult.append("-");
 
-            sal_Int32 nDigit1 = (sal_Int32)( (sal_uInt8)aClassID[nInd] / 16 );
-            sal_Int32 nDigit2 = (sal_uInt8)aClassID[nInd] % 16;
-            aResult += OUString::number( nDigit1, 16 );
-            aResult += OUString::number( nDigit2, 16 );
+            sal_Int32 nDigit1 = static_cast<sal_Int32>( static_cast<sal_uInt8>(aClassID[nInd]) / 16 );
+            sal_Int32 nDigit2 = static_cast<sal_uInt8>(aClassID[nInd]) % 16;
+            aResult.append(OUString::number( nDigit1, 16 )).append(OUString::number( nDigit2, 16 ));
         }
     }
 
-    return aResult;
+    return aResult.makeStringAndClear();
 }
 
 
-sal_uInt8 GetDigit_Impl( sal_Char aChar )
+static sal_uInt8 GetDigit_Impl( sal_Char aChar )
 {
     if ( aChar >= '0' && aChar <= '9' )
         return aChar - '0';
@@ -85,30 +87,26 @@ uno::Sequence< sal_Int8 > MimeConfigurationHelper::GetSequenceClassIDRepresentat
     if ( nLength == 36 )
     {
         OString aCharClassID = OUStringToOString( aClassID, RTL_TEXTENCODING_ASCII_US );
-        const sal_Char* pString = aCharClassID.getStr();
-        if ( pString )
+        uno::Sequence< sal_Int8 > aResult( 16 );
+
+        sal_Int32 nStrPointer = 0;
+        sal_Int32 nSeqInd = 0;
+        while( nSeqInd < 16 && nStrPointer + 1 < nLength )
         {
-            uno::Sequence< sal_Int8 > aResult( 16 );
+            sal_uInt8 nDigit1 = GetDigit_Impl( aCharClassID[nStrPointer++] );
+            sal_uInt8 nDigit2 = GetDigit_Impl( aCharClassID[nStrPointer++] );
 
-            sal_Int32 nStrPointer = 0;
-            sal_Int32 nSeqInd = 0;
-            while( nSeqInd < 16 && nStrPointer + 1 < nLength )
-            {
-                sal_uInt8 nDigit1 = GetDigit_Impl( pString[nStrPointer++] );
-                sal_uInt8 nDigit2 = GetDigit_Impl( pString[nStrPointer++] );
+            if ( nDigit1 > 15 || nDigit2 > 15 )
+                break;
 
-                if ( nDigit1 > 15 || nDigit2 > 15 )
-                    break;
+            aResult[nSeqInd++] = static_cast<sal_Int8>( nDigit1 * 16 + nDigit2 );
 
-                aResult[nSeqInd++] = (sal_Int8)( nDigit1 * 16 + nDigit2 );
-
-                if ( nStrPointer < nLength && pString[nStrPointer] == '-' )
-                    nStrPointer++;
-            }
-
-            if ( nSeqInd == 16 && nStrPointer == nLength )
-                return aResult;
+            if ( nStrPointer < nLength && aCharClassID[nStrPointer] == '-' )
+                nStrPointer++;
         }
+
+        if ( nSeqInd == 16 && nStrPointer == nLength )
+            return aResult;
     }
 
     return uno::Sequence< sal_Int8 >();
@@ -126,12 +124,10 @@ uno::Reference< container::XNameAccess > MimeConfigurationHelper::GetConfigurati
         if ( !m_xConfigProvider.is() )
             m_xConfigProvider = configuration::theDefaultProvider::get( m_xContext );
 
-        uno::Sequence< uno::Any > aArgs( 1 );
-        beans::PropertyValue aPathProp;
-        aPathProp.Name = "nodepath";
-        aPathProp.Value <<= aPath;
-        aArgs[0] <<= aPathProp;
-
+        uno::Sequence<uno::Any> aArgs(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", uno::Any(aPath)}
+        }));
         xConfig.set( m_xConfigProvider->createInstanceWithArguments(
                         "com.sun.star.configuration.ConfigurationAccess",
                         aArgs ),
@@ -230,7 +226,7 @@ OUString MimeConfigurationHelper::GetDocServiceNameFromMediaType( const OUString
         try
         {
             // make query for all types matching the properties
-            uno::Sequence < beans::NamedValue > aSeq { { "MediaType", css::uno::makeAny(aMediaType) } };
+            uno::Sequence < beans::NamedValue > aSeq { { "MediaType", css::uno::Any(aMediaType) } };
 
             uno::Reference < container::XEnumeration > xEnum = xTypeCFG->createSubSetEnumerationByProperties( aSeq );
             while ( xEnum->hasMoreElements() )
@@ -313,17 +309,14 @@ uno::Sequence< beans::NamedValue > MimeConfigurationHelper::GetObjPropsFromConfi
                 if ( aObjPropNames[nInd] == "ObjectVerbs" )
                 {
                     uno::Sequence< OUString > aVerbShortcuts;
-                    if ( xObjectProps->getByName( aObjPropNames[nInd] ) >>= aVerbShortcuts )
-                    {
-                        uno::Sequence< embed::VerbDescriptor > aVerbDescriptors( aVerbShortcuts.getLength() );
-                        for ( sal_Int32 nVerbI = 0; nVerbI < aVerbShortcuts.getLength(); nVerbI++ )
-                            if ( !GetVerbByShortcut( aVerbShortcuts[nVerbI], aVerbDescriptors[nVerbI] ) )
-                                throw uno::RuntimeException();
-
-                        aResult[nInd+1].Value <<= aVerbDescriptors;
-                    }
-                    else
+                    if ( !(xObjectProps->getByName( aObjPropNames[nInd] ) >>= aVerbShortcuts) )
                         throw uno::RuntimeException();
+                    uno::Sequence< embed::VerbDescriptor > aVerbDescriptors( aVerbShortcuts.getLength() );
+                    for ( sal_Int32 nVerbI = 0; nVerbI < aVerbShortcuts.getLength(); nVerbI++ )
+                        if ( !GetVerbByShortcut( aVerbShortcuts[nVerbI], aVerbDescriptors[nVerbI] ) )
+                            throw uno::RuntimeException();
+
+                    aResult[nInd+1].Value <<= aVerbDescriptors;
                 }
                 else
                     aResult[nInd+1].Value = xObjectProps->getByName( aObjPropNames[nInd] );
@@ -580,16 +573,13 @@ OUString MimeConfigurationHelper::UpdateMediaDescriptorWithFilterName(
 
         uno::Reference< document::XTypeDetection > xTypeDetection(
                 m_xContext->getServiceManager()->createInstanceWithContext("com.sun.star.document.TypeDetection", m_xContext),
-                uno::UNO_QUERY );
-
-        if ( !xTypeDetection.is() )
-            throw uno::RuntimeException(); // TODO
+                uno::UNO_QUERY_THROW );
 
         // typedetection can change the mode, add a stream and so on, thus a copy should be used
         uno::Sequence< beans::PropertyValue > aTempMD( aMediaDescr );
 
         // get TypeName
-        OUString aTypeName = xTypeDetection->queryTypeByDescriptor( aTempMD, sal_True );
+        OUString aTypeName = xTypeDetection->queryTypeByDescriptor( aTempMD, true );
 
         // get FilterName
         for ( sal_Int32 nInd = 0; nInd < aTempMD.getLength(); nInd++ )
@@ -641,7 +631,7 @@ OUString MimeConfigurationHelper::UpdateMediaDescriptorWithFilterName(
             break;
         }
 
-    OSL_ENSURE( !aDocName.isEmpty(), "The name must exist at this point!\n" );
+    OSL_ENSURE( !aDocName.isEmpty(), "The name must exist at this point!" );
 
 
     bool bNeedsAddition = true;
@@ -682,7 +672,7 @@ SfxFilterFlags MimeConfigurationHelper::GetFilterFlags( const OUString& aFilterN
             if ( aFilterAny >>= aData )
             {
                 SequenceAsHashMap aFilterHM( aData );
-                nFlags = static_cast<SfxFilterFlags>(aFilterHM.getUnpackedValueOrDefault( "Flags", (sal_Int32)0 ));
+                nFlags = static_cast<SfxFilterFlags>(aFilterHM.getUnpackedValueOrDefault( "Flags", sal_Int32(0) ));
             }
         }
     } catch( uno::Exception& )
@@ -694,7 +684,7 @@ SfxFilterFlags MimeConfigurationHelper::GetFilterFlags( const OUString& aFilterN
 bool MimeConfigurationHelper::AddFilterNameCheckOwnFile(
                         uno::Sequence< beans::PropertyValue >& aMediaDescr )
 {
-    OUString aFilterName = UpdateMediaDescriptorWithFilterName( aMediaDescr, sal_False );
+    OUString aFilterName = UpdateMediaDescriptorWithFilterName( aMediaDescr, false );
     if ( !aFilterName.isEmpty() )
     {
         SfxFilterFlags nFlags = GetFilterFlags( aFilterName );
@@ -720,8 +710,8 @@ OUString MimeConfigurationHelper::GetDefaultFilterFromServiceName( const OUStrin
 
             uno::Sequence< beans::NamedValue > aSearchRequest
             {
-                { "DocumentService", css::uno::makeAny(aServiceName) },
-                { "FileFormatVersion", css::uno::makeAny(nVersion) }
+                { "DocumentService", css::uno::Any(aServiceName) },
+                { "FileFormatVersion", css::uno::Any(nVersion) }
             };
 
             uno::Reference< container::XEnumeration > xFilterEnum =
@@ -735,19 +725,19 @@ OUString MimeConfigurationHelper::GetDefaultFilterFromServiceName( const OUStrin
                     if ( xFilterEnum->nextElement() >>= aProps )
                     {
                         SequenceAsHashMap aPropsHM( aProps );
-                        SfxFilterFlags nFlags = static_cast<SfxFilterFlags>(aPropsHM.getUnpackedValueOrDefault( "Flags", (sal_Int32)0 ));
+                        SfxFilterFlags nFlags = static_cast<SfxFilterFlags>(aPropsHM.getUnpackedValueOrDefault( "Flags", sal_Int32(0) ));
 
                         // that should be import, export, own filter and not a template filter ( TemplatePath flag )
-                        SfxFilterFlags const nRequired = (SfxFilterFlags::OWN
+                        SfxFilterFlags const nRequired = SfxFilterFlags::OWN
                             // fdo#78159 for OOoXML, there is code to convert
                             // to ODF in OCommonEmbeddedObject::store*
                             // so accept it even though there's no export
                             | (SOFFICE_FILEFORMAT_60 == nVersion ? SfxFilterFlags::NONE : SfxFilterFlags::EXPORT)
-                            | SfxFilterFlags::IMPORT );
+                            | SfxFilterFlags::IMPORT;
                         if ( ( ( nFlags & nRequired ) == nRequired ) && !( nFlags & SfxFilterFlags::TEMPLATEPATH ) )
                         {
-                            // if there are more than one filter the preffered one should be used
-                            // if there is no preffered filter the first one will be used
+                            // if there are more than one filter the preferred one should be used
+                            // if there is no preferred filter the first one will be used
                             if ( aResult.isEmpty() || ( nFlags & SfxFilterFlags::PREFERED ) )
                                 aResult = aPropsHM.getUnpackedValueOrDefault( "Name", OUString() );
                             if ( nFlags & SfxFilterFlags::PREFERED )
@@ -780,12 +770,12 @@ OUString MimeConfigurationHelper::GetExportFilterFromImportFilter( const OUStrin
             if ( aImpFilterAny >>= aImpData )
             {
                 SequenceAsHashMap aImpFilterHM( aImpData );
-                SfxFilterFlags nFlags = static_cast<SfxFilterFlags>(aImpFilterHM.getUnpackedValueOrDefault( "Flags", (sal_Int32)0 ));
+                SfxFilterFlags nFlags = static_cast<SfxFilterFlags>(aImpFilterHM.getUnpackedValueOrDefault( "Flags", sal_Int32(0) ));
 
                 if ( !( nFlags & SfxFilterFlags::IMPORT ) )
                 {
                     OSL_FAIL( "This is no import filter!" );
-                    throw uno::Exception();
+                    throw uno::Exception("this is no import filter", nullptr);
                 }
 
                 if ( nFlags & SfxFilterFlags::EXPORT )
@@ -802,8 +792,8 @@ OUString MimeConfigurationHelper::GetExportFilterFromImportFilter( const OUStrin
                     {
                         uno::Sequence< beans::NamedValue > aSearchRequest
                         {
-                            { "Type", css::uno::makeAny(aTypeName) },
-                            { "DocumentService", css::uno::makeAny(aDocumentServiceName) }
+                            { "Type", css::uno::Any(aTypeName) },
+                            { "DocumentService", css::uno::Any(aDocumentServiceName) }
                         };
 
                         uno::Sequence< beans::PropertyValue > aExportFilterProps = SearchForFilter(
@@ -851,7 +841,7 @@ uno::Sequence< beans::PropertyValue > MimeConfigurationHelper::SearchForFilter(
             {
                 SequenceAsHashMap aPropsHM( aProps );
                 SfxFilterFlags nFlags = static_cast<SfxFilterFlags>(aPropsHM.getUnpackedValueOrDefault("Flags",
-                                                                        (sal_Int32)0 ));
+                                                                        sal_Int32(0) ));
                 if ( ( ( nFlags & nMustFlags ) == nMustFlags ) && !( nFlags & nDontFlags ) )
                 {
                     if ( ( nFlags & SfxFilterFlags::DEFAULT ) == SfxFilterFlags::DEFAULT )
@@ -888,14 +878,14 @@ uno::Sequence< sal_Int8 > MimeConfigurationHelper::GetSequenceClassID( sal_uInt3
                                                 sal_uInt8 b12, sal_uInt8 b13, sal_uInt8 b14, sal_uInt8 b15 )
 {
     uno::Sequence< sal_Int8 > aResult( 16 );
-    aResult[0] = (sal_Int8)( n1 >> 24 );
-    aResult[1] = (sal_Int8)( ( n1 << 8 ) >> 24 );
-    aResult[2] = (sal_Int8)( ( n1 << 16 ) >> 24 );
-    aResult[3] = (sal_Int8)( ( n1 << 24 ) >> 24 );
-    aResult[4] = (sal_Int8)( n2 >> 8 );
-    aResult[5] = (sal_Int8)( ( n2 << 8 ) >> 8 );
-    aResult[6] = (sal_Int8)( n3 >> 8 );
-    aResult[7] = (sal_Int8)( ( n3 << 8 ) >> 8 );
+    aResult[0] = static_cast<sal_Int8>( n1 >> 24 );
+    aResult[1] = static_cast<sal_Int8>( ( n1 << 8 ) >> 24 );
+    aResult[2] = static_cast<sal_Int8>( ( n1 << 16 ) >> 24 );
+    aResult[3] = static_cast<sal_Int8>( ( n1 << 24 ) >> 24 );
+    aResult[4] = static_cast<sal_Int8>( n2 >> 8 );
+    aResult[5] = static_cast<sal_Int8>( ( n2 << 8 ) >> 8 );
+    aResult[6] = static_cast<sal_Int8>( n3 >> 8 );
+    aResult[7] = static_cast<sal_Int8>( ( n3 << 8 ) >> 8 );
     aResult[8] = b8;
     aResult[9] = b9;
     aResult[10] = b10;

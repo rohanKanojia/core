@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
@@ -145,7 +145,7 @@ public:
 
     void scanForButtonSets( const OUString& rPath );
 
-    Reference< XGraphicProvider > getGraphicProvider();
+    Reference< XGraphicProvider > const & getGraphicProvider();
 
     std::vector< std::shared_ptr< ButtonsImpl > >  maButtons;
     Reference< XGraphicProvider > mxGraphicProvider;
@@ -177,7 +177,7 @@ void ButtonSetImpl::scanForButtonSets( const OUString& rPath )
             {
                 OUString sFileName( aStatus.getFileName() );
                 if( sFileName.endsWithIgnoreAsciiCase( ".zip" ) )
-                    maButtons.push_back( std::shared_ptr< ButtonsImpl >( new ButtonsImpl( aStatus.getFileURL() ) ) );
+                    maButtons.push_back( std::make_shared< ButtonsImpl >( aStatus.getFileURL() ) );
             }
         }
     }
@@ -197,7 +197,7 @@ bool ButtonSetImpl::getPreview( int nSet, const std::vector< OUString >& rButton
         std::vector< Graphic > aGraphics;
 
         ScopedVclPtrInstance< VirtualDevice > pDev;
-        pDev->SetMapMode(MapMode(MAP_PIXEL));
+        pDev->SetMapMode(MapMode(MapUnit::MapPixel));
 
         Size aSize;
         std::vector< OUString >::const_iterator aIter( rButtons.begin() );
@@ -210,27 +210,24 @@ bool ButtonSetImpl::getPreview( int nSet, const std::vector< OUString >& rButton
             aGraphics.push_back(aGraphic);
 
             Size aGraphicSize( aGraphic.GetSizePixel( pDev ) );
-            aSize.Width() += aGraphicSize.Width();
+            aSize.AdjustWidth(aGraphicSize.Width() );
 
             if( aSize.Height() < aGraphicSize.Height() )
-                aSize.Height() = aGraphicSize.Height();
+                aSize.setHeight( aGraphicSize.Height() );
 
             if( aIter != rButtons.end() )
-                aSize.Width() += 3;
+                aSize.AdjustWidth(3 );
         }
 
         pDev->SetOutputSizePixel( aSize );
 
         Point aPos;
 
-        std::vector< Graphic >::iterator aGraphIter( aGraphics.begin() );
-        while( aGraphIter != aGraphics.end() )
+        for( Graphic& aGraphic : aGraphics )
         {
-            Graphic aGraphic( (*aGraphIter++) );
-
             aGraphic.Draw( pDev, aPos );
 
-            aPos.X() += aGraphic.GetSizePixel().Width() + 3;
+            aPos.AdjustX(aGraphic.GetSizePixel().Width() + 3 );
         }
 
         rImage = Image( pDev->GetBitmapEx( Point(), aSize ) );
@@ -250,7 +247,7 @@ bool ButtonSetImpl::exportButton( int nSet, const OUString& rPath, const OUStrin
     return false;
 }
 
-Reference< XGraphicProvider > ButtonSetImpl::getGraphicProvider()
+Reference< XGraphicProvider > const & ButtonSetImpl::getGraphicProvider()
 {
     if( !mxGraphicProvider.is() )
     {

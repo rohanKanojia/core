@@ -60,16 +60,17 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPBREAKSOVERRIDE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPBREAKSOVERRIDE_HXX
 
-#include "lwpoverride.hxx"
+#include <memory>
+#include <lwpoverride.hxx>
 
 class LwpObjectStream;
 class LwpAtomHolder;
-class LwpBreaksOverride : public LwpOverride
+class LwpBreaksOverride final : public LwpOverride
 {
 
 public:
     LwpBreaksOverride();
-    virtual ~LwpBreaksOverride();
+    virtual ~LwpBreaksOverride() override;
 
     virtual LwpBreaksOverride* clone() const override;
 
@@ -126,14 +127,11 @@ public:
     void OverrideKeepWithPrevious(bool bVal);
     void OverrideUseNextStyle(bool bVal);
 
-protected:
-    LwpBreaksOverride(LwpBreaksOverride const& rOther);
-
 private:
+    LwpBreaksOverride(LwpBreaksOverride const& rOther);
     LwpBreaksOverride& operator=(const LwpBreaksOverride& rOther) = delete;
 
-private:
-    LwpAtomHolder       *m_pNextStyle;
+    std::unique_ptr<LwpAtomHolder>  m_pNextStyle;
 };
 
 inline bool LwpBreaksOverride::IsPageBreakBefore()

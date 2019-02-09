@@ -21,7 +21,6 @@
 
 #include <vcl/canvastools.hxx>
 #include <vcl/status.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/whiter.hxx>
 #include <svl/stritem.hxx>
 #include <svl/intitem.hxx>
@@ -31,16 +30,10 @@
 #include <com/sun/star/registry/InvalidRegistryException.hpp>
 #include <com/sun/star/rendering/XIntegerReadOnlyBitmap.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/graphic/Primitive2DTools.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
 #include <com/sun/star/uno/Reference.h>
-#include <tools/rcid.h>
-#include <osl/mutex.hxx>
 #include <unotools/configmgr.hxx>
-#include <com/sun/star/frame/XDesktop.hpp>
-#include <unotools/ucbstreamhelper.hxx>
 #include <framework/menuconfiguration.hxx>
 #include <comphelper/processfactory.hxx>
 #include <unotools/localfilehelper.hxx>
@@ -50,9 +43,8 @@
 #include <osl/process.h>
 #include <rtl/bootstrap.hxx>
 
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/app.hxx>
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/tbxctrl.hxx>
 #include <sfx2/stbitem.hxx>
 #include <sfx2/docfac.hxx>
@@ -61,19 +53,16 @@
 #include <sfx2/request.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
-#include "workwin.hxx"
+#include <workwin.hxx>
 #include <sfx2/fcontnr.hxx>
-#include "sfxlocal.hrc"
-#include <sfx2/sfx.hrc>
-#include "app.hrc"
 #include <sfx2/templdlg.hxx>
 #include <sfx2/module.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/viewfrm.hxx>
-#include "openflag.hxx"
+#include <openflag.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/objface.hxx>
-#include "helper.hxx"
+#include <helper.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 
@@ -83,16 +72,14 @@ using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
 
-#define SfxApplication
-#include "sfxslots.hxx"
-
-#define SFX_ITEMTYPE_STATBAR             4
+#define ShellClass_SfxApplication
+#include <sfxslots.hxx>
 
 SFX_IMPL_INTERFACE(SfxApplication,SfxShell)
 
 void SfxApplication::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterStatusBar(SFX_ITEMTYPE_STATBAR);
+    GetStaticInterface()->RegisterStatusBar(StatusBarId::GenericStatusBar);
 
     GetStaticInterface()->RegisterChildWindow(SID_DOCKWIN_0);
     GetStaticInterface()->RegisterChildWindow(SID_DOCKWIN_1);
@@ -116,7 +103,7 @@ void SfxApplication::InitInterface_Impl()
 */
 SfxProgress* SfxApplication::GetProgress() const
 {
-    return pAppData_Impl->pProgress;
+    return pImpl->pProgress;
 }
 
 SfxModule* SfxApplication::GetModule_Impl()
@@ -133,9 +120,9 @@ SfxModule* SfxApplication::GetModule_Impl()
     }
 }
 
-bool  SfxApplication::IsDowning() const { return pAppData_Impl->bDowning; }
-SfxDispatcher* SfxApplication::GetAppDispatcher_Impl() { return pAppData_Impl->pAppDispat; }
-SfxSlotPool& SfxApplication::GetAppSlotPool_Impl() const { return *pAppData_Impl->pSlotPool; }
+bool  SfxApplication::IsDowning() const { return pImpl->bDowning; }
+SfxDispatcher* SfxApplication::GetAppDispatcher_Impl() { return pImpl->pAppDispat; }
+SfxSlotPool& SfxApplication::GetAppSlotPool_Impl() const { return *pImpl->pSlotPool; }
 
 bool SfxApplication::loadBrandSvg(const char *pName, BitmapEx &rBitmap, int nWidth)
 {
@@ -143,30 +130,28 @@ bool SfxApplication::loadBrandSvg(const char *pName, BitmapEx &rBitmap, int nWid
 
     OUString aBaseName = "/" + OUString::createFromAscii( pName );
 
-    rtl_Locale *pLoc = nullptr;
-    osl_getProcessLocale (&pLoc);
-    LanguageTag aLanguageTag( *pLoc);
-
     OUString uri = "$BRAND_BASE_DIR/" LIBO_ETC_FOLDER + aBaseName + ".svg";
     rtl::Bootstrap::expandMacros( uri );
     INetURLObject aObj( uri );
-    SvgData aSvgData(aObj.PathToFileName());
+    VectorGraphicData aVectorGraphicData(aObj.PathToFileName(), VectorGraphicDataType::Svg);
 
     // transform into [0,0,width,width*aspect] std dimensions
 
-    basegfx::B2DRange aRange(aSvgData.getRange());
-    const double fAspectRatio(aRange.getWidth()/aRange.getHeight());
+    basegfx::B2DRange aRange(aVectorGraphicData.getRange());
+    const double fAspectRatio(
+        aRange.getHeight() == 0.0 ? 1.0 : aRange.getWidth()/aRange.getHeight());
     basegfx::B2DHomMatrix aTransform(
-        basegfx::tools::createTranslateB2DHomMatrix(
+        basegfx::utils::createTranslateB2DHomMatrix(
             -aRange.getMinX(),
             -aRange.getMinY()));
     aTransform.scale(
-        nWidth / aRange.getWidth(),
-        nWidth / fAspectRatio / aRange.getHeight());
+        aRange.getWidth() == 0.0 ? 1.0 : nWidth / aRange.getWidth(),
+        (aRange.getHeight() == 0.0
+         ? 1.0 : nWidth / fAspectRatio / aRange.getHeight()));
     const drawinglayer::primitive2d::Primitive2DReference xTransformRef(
         new drawinglayer::primitive2d::TransformPrimitive2D(
             aTransform,
-            aSvgData.getPrimitive2DSequence()));
+            aVectorGraphicData.getPrimitive2DSequence()));
 
     // UNO dance to render from drawinglayer
 
@@ -198,12 +183,8 @@ bool SfxApplication::loadBrandSvg(const char *pName, BitmapEx &rBitmap, int nWid
         if(xBitmap.is())
         {
             const uno::Reference< rendering::XIntegerReadOnlyBitmap> xIntBmp(xBitmap, uno::UNO_QUERY_THROW);
-
-            if(xIntBmp.is())
-            {
-                rBitmap = vcl::unotools::bitmapExFromXBitmap(xIntBmp);
-                return true;
-            }
+            rBitmap = vcl::unotools::bitmapExFromXBitmap(xIntBmp);
+            return true;
         }
     }
     catch(const uno::Exception&)
@@ -218,7 +199,7 @@ BitmapEx SfxApplication::GetApplicationLogo(long nWidth)
 {
     BitmapEx aBitmap;
     SfxApplication::loadBrandSvg("flat_logo", aBitmap, nWidth);
-    Application::LoadBrandBitmap ("about", aBitmap);
+    (void)Application::LoadBrandBitmap ("about", aBitmap);
     return aBitmap;
 }
 

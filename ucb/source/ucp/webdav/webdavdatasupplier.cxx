@@ -17,7 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
+#include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <memory>
+#include <utility>
+
 #include <com/sun/star/ucb/OpenMode.hpp>
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/providerhelper.hxx>
@@ -26,6 +31,8 @@
 #include "ContentProperties.hxx"
 #include "DAVSession.hxx"
 #include "SerfUri.hxx"
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
+#include <com/sun/star/ucb/ResultSetException.hpp>
 
 using namespace com::sun::star;
 using namespace http_dav_ucp;
@@ -43,10 +50,9 @@ struct ResultListEntry
     uno::Reference< ucb::XContentIdentifier > xId;
     uno::Reference< ucb::XContent >           xContent;
     uno::Reference< sdbc::XRow >              xRow;
-    const ContentProperties*                  pData;
+    std::unique_ptr<ContentProperties> pData;
 
-    explicit ResultListEntry( const ContentProperties* pEntry ) : pData( pEntry ) {}
-    ~ResultListEntry() { delete pData; }
+    explicit ResultListEntry( std::unique_ptr<ContentProperties> && pEntry ) : pData( std::move(pEntry) ) {}
 };
 
 
@@ -81,13 +87,9 @@ struct DataSupplier_Impl
 
 DataSupplier_Impl::~DataSupplier_Impl()
 {
-    ResultList::const_iterator it  = m_aResults.begin();
-    ResultList::const_iterator end = m_aResults.end();
-
-    while ( it != end )
+    for ( auto& rResultPtr : m_aResults )
     {
-        delete (*it);
-        ++it;
+        delete rResultPtr;
     }
 }
 
@@ -101,16 +103,14 @@ DataSupplier::DataSupplier(
             const uno::Reference< uno::XComponentContext >& rxContext,
             const rtl::Reference< Content >& rContent,
             sal_Int32 nOpenMode )
-: m_pImpl( new DataSupplier_Impl( rxContext, rContent, nOpenMode ) )
+: m_pImpl(std::make_unique<DataSupplier_Impl>(rxContext, rContent, nOpenMode))
 {
 }
 
 
 // virtual
 DataSupplier::~DataSupplier()
-{
-    delete m_pImpl;
-}
+{}
 
 
 // virtual
@@ -317,7 +317,6 @@ void DataSupplier::close()
 
 // virtual
 void DataSupplier::validate()
-    throw( ucb::ResultSetException )
 {
     if ( m_pImpl->m_bThrowException )
         throw ucb::ResultSetException();
@@ -337,20 +336,10 @@ bool DataSupplier::getData()
         // needed to get a valid ContentProperties::pIsFolder value, which
         // is needed for OpenMode handling.
 
-        std::vector< OUString >::const_iterator it
-            = propertyNames.begin();
-        std::vector< OUString >::const_iterator end
-            = propertyNames.end();
+        bool isNoResourceType = std::none_of(propertyNames.begin(), propertyNames.end(),
+            [](const OUString& rPropName) { return rPropName.equals(DAVProperties::RESOURCETYPE); });
 
-        while ( it != end )
-        {
-            if ( (*it).equals( DAVProperties::RESOURCETYPE ) )
-                break;
-
-            ++it;
-        }
-
-        if ( it == end )
+        if ( isNoResourceType )
             propertyNames.push_back( DAVProperties::RESOURCETYPE );
 
         std::vector< DAVResource > resources;
@@ -415,8 +404,8 @@ bool DataSupplier::getData()
                         }
                     }
 
-                    ContentProperties* pContentProperties
-                        = new ContentProperties( rRes );
+                    std::unique_ptr<ContentProperties> pContentProperties
+                        = std::make_unique<ContentProperties>( rRes );
 
                     // Check resource against open mode.
                     switch ( m_pImpl->m_nOpenMode )
@@ -426,9 +415,7 @@ bool DataSupplier::getData()
                             bool bFolder = false;
 
                             const uno::Any & rValue
-                                = pContentProperties->getValue(
-                                    OUString(
-                                            "IsFolder" ) );
+                                = pContentProperties->getValue( "IsFolder" );
                             rValue >>= bFolder;
 
                             if ( !bFolder )
@@ -442,9 +429,7 @@ bool DataSupplier::getData()
                             bool bDocument = false;
 
                             const uno::Any & rValue
-                                = pContentProperties->getValue(
-                                    OUString(
-                                            "IsDocument" ) );
+                                = pContentProperties->getValue( "IsDocument" );
                             rValue >>= bDocument;
 
                             if ( !bDocument )
@@ -459,7 +444,7 @@ bool DataSupplier::getData()
                     }
 
                     m_pImpl->m_aResults.push_back(
-                        new ResultListEntry( pContentProperties ) );
+                        new ResultListEntry( std::move(pContentProperties) ) );
                 }
             }
             catch ( DAVException const & )

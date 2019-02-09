@@ -21,25 +21,27 @@
 #define INCLUDED_SVTOOLS_STATUSBARCONTROLLER_HXX
 
 #include <svtools/svtdllapi.h>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XStatusbarController.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
-#include <com/sun/star/ui/XStatusbarItem.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
 #include <cppuhelper/weak.hxx>
 #include <cppuhelper/interfacecontainer.hxx>
-#include <comphelper/broadcasthelper.hxx>
+#include <cppuhelper/basemutex.hxx>
 #include <tools/gen.hxx>
 #include <unordered_map>
+
+namespace com :: sun :: star :: awt { class XWindow; }
+namespace com :: sun :: star :: beans { struct PropertyValue; }
+namespace com :: sun :: star :: frame { class XDispatch; }
+namespace com :: sun :: star :: frame { class XFrame; }
+namespace com :: sun :: star :: ui { class XStatusbarItem; }
+namespace com :: sun :: star :: uno { class XComponentContext; }
+namespace com :: sun :: star :: util { class XURLTransformer; }
 
 namespace svt
 {
 
 class SVT_DLLPUBLIC StatusbarController :
                             public css::frame::XStatusbarController,
-                            public ::comphelper::OBaseMutex,
+                            public ::cppu::BaseMutex,
                             public ::cppu::OWeakObject
 {
     public:
@@ -48,48 +50,48 @@ class SVT_DLLPUBLIC StatusbarController :
                              const OUString& aCommandURL,
                              unsigned short       nID );
         StatusbarController();
-        virtual ~StatusbarController();
+        virtual ~StatusbarController() override;
 
         css::uno::Reference< css::frame::XFrame > getFrameInterface() const;
         css::uno::Reference< css::util::XURLTransformer > getURLTransformer() const;
 
-        ::Rectangle getControlRect() const;
+        ::tools::Rectangle getControlRect() const;
 
         // XInterface
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
         virtual void SAL_CALL acquire() throw () override;
         virtual void SAL_CALL release() throw () override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XUpdatable
-        virtual void SAL_CALL update() throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL update() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL dispose() override;
+        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XStatusListener
-        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
         // XStatusbarController
-        virtual sal_Bool SAL_CALL mouseButtonDown( const css::awt::MouseEvent& aMouseEvent ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL mouseMove( const css::awt::MouseEvent& aMouseEvent ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL mouseButtonUp( const css::awt::MouseEvent& aMouseEvent ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL mouseButtonDown( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual sal_Bool SAL_CALL mouseMove( const css::awt::MouseEvent& aMouseEvent ) override;
+        virtual sal_Bool SAL_CALL mouseButtonUp( const css::awt::MouseEvent& aMouseEvent ) override;
         virtual void SAL_CALL command( const css::awt::Point& aPos,
                                        ::sal_Int32 nCommand,
                                        sal_Bool bMouseEvent,
-                                       const css::uno::Any& aData ) throw (css::uno::RuntimeException, std::exception) override;
+                                       const css::uno::Any& aData ) override;
         virtual void SAL_CALL paint( const css::uno::Reference< css::awt::XGraphics >& xGraphics,
                                      const css::awt::Rectangle& rOutputRectangle,
-                                     ::sal_Int32 nStyle ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL click( const css::awt::Point& aPos ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL doubleClick( const css::awt::Point& aPos ) throw (css::uno::RuntimeException, std::exception) override;
+                                     ::sal_Int32 nStyle ) override;
+        virtual void SAL_CALL click( const css::awt::Point& aPos ) override;
+        virtual void SAL_CALL doubleClick( const css::awt::Point& aPos ) override;
 
     protected:
         struct Listener
@@ -97,13 +99,12 @@ class SVT_DLLPUBLIC StatusbarController :
             Listener( const css::util::URL& rURL, const css::uno::Reference< css::frame::XDispatch >& rDispatch ) :
                 aURL( rURL ), xDispatch( rDispatch ) {}
 
-            css::util::URL                               aURL;
+            css::util::URL const                         aURL;
             css::uno::Reference< css::frame::XDispatch > xDispatch;
         };
 
         typedef std::unordered_map< OUString,
-                                    css::uno::Reference< css::frame::XDispatch >,
-                                    OUStringHash > URLToDispatchMap;
+                                    css::uno::Reference< css::frame::XDispatch > > URLToDispatchMap;
 
         // methods to support status forwarder, known by the old sfx2 toolbox controller implementation
         void addStatusListener( const OUString& aCommandURL );

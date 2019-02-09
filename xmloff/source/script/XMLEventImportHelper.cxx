@@ -18,7 +18,7 @@
  */
 
 
-#include "XMLEventImportHelper.hxx"
+#include <XMLEventImportHelper.hxx>
 #include <tools/debug.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/nmspmap.hxx>
@@ -31,8 +31,8 @@ using ::com::sun::star::uno::Sequence;
 
 XMLEventImportHelper::XMLEventImportHelper() :
     aFactoryMap(),
-    pEventNameMap(new NameMap()),
-    aEventNameMapList()
+    pEventNameMap(new NameMap),
+    aEventNameMapVector()
 {
 }
 
@@ -40,28 +40,18 @@ XMLEventImportHelper::XMLEventImportHelper() :
 XMLEventImportHelper::~XMLEventImportHelper()
 {
     // delete factories
-    FactoryMap::iterator aEnd = aFactoryMap.end();
-    for(FactoryMap::iterator aIter = aFactoryMap.begin();
-        aIter != aEnd;
-        ++aIter)
-    {
-        delete aIter->second;
-    }
     aFactoryMap.clear();
 
     // delete name map
-    delete pEventNameMap;
+    pEventNameMap.reset();
 }
 
 void XMLEventImportHelper::RegisterFactory(
     const OUString& rLanguage,
-    XMLEventContextFactory* pFactory )
+    std::unique_ptr<XMLEventContextFactory> pFactory )
 {
-    DBG_ASSERT(pFactory != nullptr, "I need a factory.");
-    if (nullptr != pFactory)
-    {
-        aFactoryMap[rLanguage] = pFactory;
-    }
+    assert(pFactory);
+    aFactoryMap[rLanguage] = std::move(pFactory);
 }
 
 void XMLEventImportHelper::AddTranslationTable(
@@ -91,20 +81,19 @@ void XMLEventImportHelper::AddTranslationTable(
 void XMLEventImportHelper::PushTranslationTable()
 {
     // save old map and install new one
-    aEventNameMapList.push_back(pEventNameMap);
-    pEventNameMap = new NameMap();
+    aEventNameMapVector.push_back(std::move(pEventNameMap));
+    pEventNameMap.reset( new NameMap );
 }
 
 void XMLEventImportHelper::PopTranslationTable()
 {
-    DBG_ASSERT(aEventNameMapList.size() > 0,
+    DBG_ASSERT(!aEventNameMapVector.empty(),
                "no translation tables left to pop");
-    if ( !aEventNameMapList.empty() )
+    if ( !aEventNameMapVector.empty() )
     {
         // delete current and install old map
-        delete pEventNameMap;
-        pEventNameMap = aEventNameMapList.back();
-        aEventNameMapList.pop_back();
+        pEventNameMap = std::move(aEventNameMapVector.back());
+        aEventNameMapVector.pop_back();
     }
 }
 

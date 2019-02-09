@@ -18,96 +18,72 @@
  */
 
 #include <comphelper/string.hxx>
-#include <vcl/msgbox.hxx>
 
-#include "conflictsdlg.hxx"
-#include "sc.hrc"
-#include "scresid.hxx"
-#include "viewdata.hxx"
-#include "dbfunc.hxx"
+#include <conflictsdlg.hxx>
+#include <strings.hrc>
+#include <scresid.hxx>
+#include <viewdata.hxx>
+#include <dbfunc.hxx>
+#include <chgtrack.hxx>
 
 // struct ScConflictsListEntry
 
 bool ScConflictsListEntry::HasSharedAction( sal_uLong nSharedAction ) const
 {
-    ScChangeActionList::const_iterator aEnd = maSharedActions.end();
-    for ( ScChangeActionList::const_iterator aItr = maSharedActions.begin(); aItr != aEnd; ++aItr )
-    {
-        if ( *aItr == nSharedAction )
-        {
-            return true;
-        }
-    }
+    auto aEnd = maSharedActions.cend();
+    auto aItr = std::find(maSharedActions.cbegin(), aEnd, nSharedAction);
 
-    return false;
+    return aItr != aEnd;
 }
 
 bool ScConflictsListEntry::HasOwnAction( sal_uLong nOwnAction ) const
 {
-    ScChangeActionList::const_iterator aEnd = maOwnActions.end();
-    for ( ScChangeActionList::const_iterator aItr = maOwnActions.begin(); aItr != aEnd; ++aItr )
-    {
-        if ( *aItr == nOwnAction )
-        {
-            return true;
-        }
-    }
+    auto aEnd = maOwnActions.cend();
+    auto aItr = std::find(maOwnActions.cbegin(), aEnd, nOwnAction);
 
-    return false;
+    return aItr != aEnd;
 }
 
 // class ScConflictsListHelper
 
 bool ScConflictsListHelper::HasOwnAction( ScConflictsList& rConflictsList, sal_uLong nOwnAction )
 {
-    ScConflictsList::const_iterator aEnd = rConflictsList.end();
-    for ( ScConflictsList::const_iterator aItr = rConflictsList.begin(); aItr != aEnd; ++aItr )
-    {
-        if ( aItr->HasOwnAction( nOwnAction ) )
-        {
-            return true;
-        }
-    }
-
-    return false;
+    return std::any_of(rConflictsList.begin(), rConflictsList.end(),
+                       [nOwnAction](ScConflictsListEntry& rConflict) { return rConflict.HasOwnAction( nOwnAction ); });
 }
 
 ScConflictsListEntry* ScConflictsListHelper::GetSharedActionEntry( ScConflictsList& rConflictsList, sal_uLong nSharedAction )
 {
-    ScConflictsList::iterator aEnd = rConflictsList.end();
-    for ( ScConflictsList::iterator aItr = rConflictsList.begin(); aItr != aEnd; ++aItr )
-    {
-        if ( aItr->HasSharedAction( nSharedAction ) )
-        {
-            return &(*aItr);
-        }
-    }
+    auto aEnd = rConflictsList.end();
+    auto aItr = std::find_if(rConflictsList.begin(), aEnd,
+        [nSharedAction](ScConflictsListEntry& rConflict) { return rConflict.HasSharedAction( nSharedAction ); });
+
+    if (aItr != aEnd)
+        return &(*aItr);
 
     return nullptr;
 }
 
 ScConflictsListEntry* ScConflictsListHelper::GetOwnActionEntry( ScConflictsList& rConflictsList, sal_uLong nOwnAction )
 {
-    ScConflictsList::iterator aEnd = rConflictsList.end();
-    for ( ScConflictsList::iterator aItr = rConflictsList.begin(); aItr != aEnd; ++aItr )
-    {
-        if ( aItr->HasOwnAction( nOwnAction ) )
-        {
-            return &(*aItr);
-        }
-    }
+    auto aEnd = rConflictsList.end();
+    auto aItr = std::find_if(rConflictsList.begin(), aEnd,
+        [nOwnAction](ScConflictsListEntry& rConflict) { return rConflict.HasOwnAction( nOwnAction ); });
+
+    if (aItr != aEnd)
+        return &(*aItr);
 
     return nullptr;
 }
 
-void ScConflictsListHelper::Transform_Impl( ScChangeActionList& rActionList, ScChangeActionMergeMap* pMergeMap )
+void ScConflictsListHelper::Transform_Impl( std::vector<sal_uLong>& rActionList, ScChangeActionMergeMap* pMergeMap )
 {
     if ( !pMergeMap )
     {
         return;
     }
 
-    for ( ScChangeActionList::iterator aItr = rActionList.begin(); aItr != rActionList.end(); )
+    for ( auto aItr = rActionList.begin(); aItr != rActionList.end(); )
     {
         ScChangeActionMergeMap::iterator aItrMap = pMergeMap->find( *aItr );
         if ( aItrMap != pMergeMap->end() )
@@ -126,17 +102,16 @@ void ScConflictsListHelper::Transform_Impl( ScChangeActionList& rActionList, ScC
 void ScConflictsListHelper::TransformConflictsList( ScConflictsList& rConflictsList,
     ScChangeActionMergeMap* pSharedMap, ScChangeActionMergeMap* pOwnMap )
 {
-    ScConflictsList::iterator aEnd = rConflictsList.end();
-    for ( ScConflictsList::iterator aItr = rConflictsList.begin(); aItr != aEnd; ++aItr )
+    for ( auto& rConflictEntry : rConflictsList )
     {
         if ( pSharedMap )
         {
-            ScConflictsListHelper::Transform_Impl( aItr->maSharedActions, pSharedMap );
+            ScConflictsListHelper::Transform_Impl( rConflictEntry.maSharedActions, pSharedMap );
         }
 
         if ( pOwnMap )
         {
-            ScConflictsListHelper::Transform_Impl( aItr->maOwnActions, pOwnMap );
+            ScConflictsListHelper::Transform_Impl( rConflictEntry.maOwnActions, pOwnMap );
         }
     }
 }
@@ -160,47 +135,32 @@ ScConflictsFinder::~ScConflictsFinder()
 
 bool ScConflictsFinder::DoActionsIntersect( const ScChangeAction* pAction1, const ScChangeAction* pAction2 )
 {
-    if ( pAction1 && pAction2 && pAction1->GetBigRange().Intersects( pAction2->GetBigRange() ) )
-    {
-        return true;
-    }
-    return false;
+    return pAction1 && pAction2 && pAction1->GetBigRange().Intersects( pAction2->GetBigRange() );
 }
 
 ScConflictsListEntry* ScConflictsFinder::GetIntersectingEntry( const ScChangeAction* pAction ) const
 {
-    ScConflictsList::iterator aEnd = mrConflictsList.end();
-    for ( ScConflictsList::iterator aItr = mrConflictsList.begin(); aItr != aEnd; ++aItr )
-    {
-        ScChangeActionList::const_iterator aEndShared = aItr->maSharedActions.end();
-        for ( ScChangeActionList::const_iterator aItrShared = aItr->maSharedActions.begin(); aItrShared != aEndShared; ++aItrShared )
-        {
-            if ( DoActionsIntersect( mpTrack->GetAction( *aItrShared ), pAction ) )
-            {
-                return &(*aItr);
-            }
-        }
+    auto doActionsIntersect = [this, pAction](const sal_uLong& aAction) { return DoActionsIntersect( mpTrack->GetAction( aAction ), pAction ); };
 
-        ScChangeActionList::const_iterator aEndOwn = aItr->maOwnActions.end();
-        for ( ScChangeActionList::const_iterator aItrOwn = aItr->maOwnActions.begin(); aItrOwn != aEndOwn; ++aItrOwn )
-        {
-            if ( DoActionsIntersect( mpTrack->GetAction( *aItrOwn ), pAction ) )
-            {
-                return &(*aItr);
-            }
-        }
+    for ( auto& rConflict : mrConflictsList )
+    {
+        if (std::any_of( rConflict.maSharedActions.cbegin(), rConflict.maSharedActions.cend(), doActionsIntersect ))
+            return &rConflict;
+
+        if (std::any_of( rConflict.maOwnActions.cbegin(), rConflict.maOwnActions.cend(), doActionsIntersect ))
+            return &rConflict;
     }
 
     return nullptr;
 }
 
-ScConflictsListEntry* ScConflictsFinder::GetEntry( sal_uLong nSharedAction, const ScChangeActionList& rOwnActions )
+ScConflictsListEntry& ScConflictsFinder::GetEntry( sal_uLong nSharedAction, const std::vector<sal_uLong>& rOwnActions )
 {
     // try to get a list entry which already contains the shared action
     ScConflictsListEntry* pEntry = ScConflictsListHelper::GetSharedActionEntry( mrConflictsList, nSharedAction );
     if ( pEntry )
     {
-        return pEntry;
+        return *pEntry;
     }
 
     // try to get a list entry for which the shared action intersects with any
@@ -209,19 +169,18 @@ ScConflictsListEntry* ScConflictsFinder::GetEntry( sal_uLong nSharedAction, cons
     if ( pEntry )
     {
         pEntry->maSharedActions.push_back( nSharedAction );
-        return pEntry;
+        return *pEntry;
     }
 
     // try to get a list entry for which any of the own actions intersects with
     // any other action of this entry
-    ScChangeActionList::const_iterator aEnd = rOwnActions.end();
-    for ( ScChangeActionList::const_iterator aItr = rOwnActions.begin(); aItr != aEnd; ++aItr )
+    for ( auto& rOwnAction : rOwnActions )
     {
-        pEntry = GetIntersectingEntry( mpTrack->GetAction( *aItr ) );
+        pEntry = GetIntersectingEntry( mpTrack->GetAction( rOwnAction ) );
         if ( pEntry )
         {
             pEntry->maSharedActions.push_back( nSharedAction );
-            return pEntry;
+            return *pEntry;
         }
     }
 
@@ -230,7 +189,7 @@ ScConflictsListEntry* ScConflictsFinder::GetEntry( sal_uLong nSharedAction, cons
     aEntry.meConflictAction = SC_CONFLICT_ACTION_NONE;
     aEntry.maSharedActions.push_back( nSharedAction );
     mrConflictsList.push_back( aEntry );
-    return &(mrConflictsList.back());
+    return mrConflictsList.back();
 }
 
 bool ScConflictsFinder::Find()
@@ -244,7 +203,7 @@ bool ScConflictsFinder::Find()
     ScChangeAction* pSharedAction = mpTrack->GetAction( mnStartShared );
     while ( pSharedAction && pSharedAction->GetActionNumber() <= mnEndShared )
     {
-        ScChangeActionList aOwnActions;
+        std::vector<sal_uLong> aOwnActions;
         ScChangeAction* pOwnAction = mpTrack->GetAction( mnStartOwn );
         while ( pOwnAction && pOwnAction->GetActionNumber() <= mnEndOwn )
         {
@@ -255,15 +214,14 @@ bool ScConflictsFinder::Find()
             pOwnAction = pOwnAction->GetNext();
         }
 
-        if ( aOwnActions.size() )
+        if ( !aOwnActions.empty() )
         {
-            ScConflictsListEntry* pEntry = GetEntry( pSharedAction->GetActionNumber(), aOwnActions );
-            ScChangeActionList::iterator aEnd = aOwnActions.end();
-            for ( ScChangeActionList::iterator aItr = aOwnActions.begin(); aItr != aEnd; ++aItr )
+            ScConflictsListEntry& rEntry = GetEntry(pSharedAction->GetActionNumber(), aOwnActions);
+            for ( auto& aOwnAction : aOwnActions )
             {
-                if ( pEntry && !ScConflictsListHelper::HasOwnAction( mrConflictsList, *aItr ) )
+                if (!ScConflictsListHelper::HasOwnAction(mrConflictsList, aOwnAction))
                 {
-                    pEntry->maOwnActions.push_back( *aItr );
+                    rEntry.maOwnActions.push_back(aOwnAction);
                 }
             }
             bReturn = true;
@@ -376,8 +334,6 @@ ScConflictsDlg::ScConflictsDlg( vcl::Window* pParent, ScViewData* pViewData, ScD
     ,m_pLbConflictsContainer  ( get<SvSimpleTableContainer>("container") )
     ,m_pLbConflicts     ( VclPtr<SvxRedlinTable>::Create(*m_pLbConflictsContainer) )
     ,maStrTitleConflict ( ScResId( STR_TITLE_CONFLICT ) )
-    ,maStrTitleAuthor   ( ScResId( STR_TITLE_AUTHOR ) )
-    ,maStrTitleDate     ( ScResId( STR_TITLE_DATE ) )
     ,maStrUnknownUser   ( ScResId( STR_UNKNOWN_USER_CONFLICT ) )
     ,mpViewData         ( pViewData )
     ,mpOwnDoc           ( nullptr )
@@ -385,7 +341,7 @@ ScConflictsDlg::ScConflictsDlg( vcl::Window* pParent, ScViewData* pViewData, ScD
     ,mpSharedDoc        ( pSharedDoc )
     ,mpSharedTrack      ( nullptr )
     ,mrConflictsList    ( rConflictsList )
-    ,maDialogSize       ( GetSizePixel() )
+    ,maSelectionIdle    ( "ScConflictsDlg SelectionIdle" )
     ,mbInSelectHdl      ( false )
     ,mbInDeselectHdl    ( false )
 {
@@ -403,25 +359,25 @@ ScConflictsDlg::ScConflictsDlg( vcl::Window* pParent, ScViewData* pViewData, ScD
     mpSharedTrack = ( mpSharedDoc ? mpSharedDoc->GetChangeTrack() : nullptr );
     OSL_ENSURE( mpSharedTrack, "ScConflictsDlg CTOR: mpSharedTrack is null!" );
 
-    SetMinOutputSizePixel( maDialogSize );
+    SetMinOutputSizePixel( GetSizePixel() );
 
-    long nTabs[] = { 3, 10, 216, 266 };
-    m_pLbConflicts->SetTabs( nTabs );
+    long const nTabs[] = { 10, 216, 266 };
+    m_pLbConflicts->SetTabs( SAL_N_ELEMENTS(nTabs), nTabs );
 
     OUString aTab('\t');
     OUString aHeader( maStrTitleConflict );
     aHeader += aTab;
-    aHeader += maStrTitleAuthor;
+    aHeader += ScResId( STR_TITLE_AUTHOR );
     aHeader += aTab;
-    aHeader += maStrTitleDate;
-    m_pLbConflicts->InsertHeaderEntry( aHeader, HEADERBAR_APPEND, HeaderBarItemBits::LEFT | HeaderBarItemBits::LEFTIMAGE | HeaderBarItemBits::VCENTER );
+    aHeader += ScResId( STR_TITLE_DATE );
+    m_pLbConflicts->InsertHeaderEntry( aHeader, HEADERBAR_APPEND, HeaderBarItemBits::LEFT | HeaderBarItemBits::LEFTIMAGE );
 
     m_pLbConflicts->SetStyle( m_pLbConflicts->GetStyle() | WB_HASLINES | WB_CLIPCHILDREN | WB_HASBUTTONS | WB_HASBUTTONSATROOT | WB_HSCROLL );
-    m_pLbConflicts->SetSelectionMode( MULTIPLE_SELECTION );
+    m_pLbConflicts->SetSelectionMode( SelectionMode::Multiple );
     m_pLbConflicts->SetHighlightRange();
 
-    maSelectionIdle.SetPriority( SchedulerPriority::LOW );
-    maSelectionIdle.SetIdleHdl( LINK( this, ScConflictsDlg, UpdateSelectionHdl ) );
+    maSelectionIdle.SetInvokeHandler( LINK( this, ScConflictsDlg, UpdateSelectionHdl ) );
+    maSelectionIdle.SetDebugName( "ScConflictsDlg maSelectionIdle" );
 
     m_pLbConflicts->SetSelectHdl( LINK( this, ScConflictsDlg, SelectHandle ) );
     m_pLbConflicts->SetDeselectHdl( LINK( this, ScConflictsDlg, DeselectHandle ) );
@@ -532,12 +488,12 @@ void ScConflictsDlg::HandleListBoxSelection( bool bSelectHandle )
             {
                 m_pLbConflicts->Select( pEntry );
             }
-            pEntry = SvTreeListBox::NextSibling( pEntry );
+            pEntry = pEntry->NextSibling();
         }
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, SelectHandle, SvTreeListBox*, void)
+IMPL_LINK_NOARG(ScConflictsDlg, SelectHandle, SvTreeListBox*, void)
 {
     if ( mbInSelectHdl || mbInDeselectHdl )
     {
@@ -550,7 +506,7 @@ IMPL_LINK_NOARG_TYPED(ScConflictsDlg, SelectHandle, SvTreeListBox*, void)
     mbInSelectHdl = false;
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, DeselectHandle, SvTreeListBox*, void)
+IMPL_LINK_NOARG(ScConflictsDlg, DeselectHandle, SvTreeListBox*, void)
 {
     if ( mbInDeselectHdl || mbInSelectHdl )
     {
@@ -562,7 +518,7 @@ IMPL_LINK_NOARG_TYPED(ScConflictsDlg, DeselectHandle, SvTreeListBox*, void)
     mbInDeselectHdl = false;
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, UpdateSelectionHdl, Idle *, void)
+IMPL_LINK_NOARG(ScConflictsDlg, UpdateSelectionHdl, Timer *, void)
 {
     if ( !mpViewData || !mpOwnDoc )
     {
@@ -584,7 +540,7 @@ IMPL_LINK_NOARG_TYPED(ScConflictsDlg, UpdateSelectionHdl, Idle *, void)
                 if ( pAction && ( pAction->GetType() != SC_CAT_DELETE_TABS ) &&
                      ( pAction->IsClickable() || pAction->IsVisible() ) )
                 {
-                    const ScBigRange& rBigRange = ( static_cast< const ScChangeAction* >( pAction ) )->GetBigRange();
+                    const ScBigRange& rBigRange = static_cast< const ScChangeAction* >( pAction )->GetBigRange();
                     if ( rBigRange.IsValid( mpOwnDoc ) )
                     {
                         bool bSetCursor = !m_pLbConflicts->NextSelected( pEntry );
@@ -598,7 +554,7 @@ IMPL_LINK_NOARG_TYPED(ScConflictsDlg, UpdateSelectionHdl, Idle *, void)
     }
 }
 
-void ScConflictsDlg::SetConflictAction( SvTreeListEntry* pRootEntry, ScConflictAction eConflictAction )
+void ScConflictsDlg::SetConflictAction( const SvTreeListEntry* pRootEntry, ScConflictAction eConflictAction )
 {
     RedlinData* pUserData = static_cast< RedlinData* >( pRootEntry ? pRootEntry->GetUserData() : nullptr );
     ScConflictsListEntry* pConflictEntry = static_cast< ScConflictsListEntry* >( pUserData ? pUserData->pData : nullptr );
@@ -640,7 +596,7 @@ void ScConflictsDlg::KeepAllHandler( bool bMine )
     while ( pRootEntry )
     {
         SetConflictAction( pRootEntry, eConflictAction );
-        pRootEntry = SvTreeListBox::NextSibling( pRootEntry );
+        pRootEntry = pRootEntry->NextSibling();
     }
     m_pLbConflicts->SetUpdateMode( false );
     m_pLbConflicts->Clear();
@@ -649,79 +605,75 @@ void ScConflictsDlg::KeepAllHandler( bool bMine )
     EndDialog( RET_OK );
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, KeepMineHandle, Button*, void)
+IMPL_LINK_NOARG(ScConflictsDlg, KeepMineHandle, Button*, void)
 {
     KeepHandler( true );
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, KeepOtherHandle, Button*, void)
+IMPL_LINK_NOARG(ScConflictsDlg, KeepOtherHandle, Button*, void)
 {
     KeepHandler( false );
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, KeepAllMineHandle, Button*, void)
+IMPL_LINK_NOARG(ScConflictsDlg, KeepAllMineHandle, Button*, void)
 {
     KeepAllHandler( true );
 }
 
-IMPL_LINK_NOARG_TYPED(ScConflictsDlg, KeepAllOthersHandle, Button*, void)
+IMPL_LINK_NOARG(ScConflictsDlg, KeepAllOthersHandle, Button*, void)
 {
     KeepAllHandler( false );
 }
 
 void ScConflictsDlg::UpdateView()
 {
-    ScConflictsList::iterator aEndItr = mrConflictsList.end();
-    for ( ScConflictsList::iterator aItr = mrConflictsList.begin(); aItr != aEndItr; ++aItr )
+    for ( ScConflictsListEntry& rConflictEntry : mrConflictsList )
     {
-        ScConflictsListEntry* pConflictEntry = &(*aItr);
-        if ( pConflictEntry && pConflictEntry->meConflictAction == SC_CONFLICT_ACTION_NONE )
+        if (rConflictEntry.meConflictAction == SC_CONFLICT_ACTION_NONE)
         {
-            RedlinData* pRootUserData = new RedlinData();
-            pRootUserData->pData = static_cast< void* >( pConflictEntry );
-            SvTreeListEntry* pRootEntry = m_pLbConflicts->InsertEntry( GetConflictString( *aItr ), pRootUserData );
+            std::unique_ptr<RedlinData> pRootUserData(new RedlinData());
+            pRootUserData->pData = static_cast<void*>(&rConflictEntry);
+            SvTreeListEntry* pRootEntry = m_pLbConflicts->InsertEntry( GetConflictString( rConflictEntry ), std::move(pRootUserData) );
 
-            ScChangeActionList::const_iterator aEndShared = aItr->maSharedActions.end();
-            for ( ScChangeActionList::const_iterator aItrShared = aItr->maSharedActions.begin(); aItrShared != aEndShared; ++aItrShared )
+            for ( auto& aSharedAction : rConflictEntry.maSharedActions )
             {
-                ScChangeAction* pAction = mpSharedTrack ? mpSharedTrack->GetAction(*aItrShared) : nullptr;
+                ScChangeAction* pAction = mpSharedTrack ? mpSharedTrack->GetAction(aSharedAction) : nullptr;
                 if ( pAction )
                 {
                     // only display shared top content entries
                     if ( pAction->GetType() == SC_CAT_CONTENT )
                     {
-                        ScChangeActionContent* pNextContent = (dynamic_cast<ScChangeActionContent&>(*pAction)).GetNextContent();
-                        if ( pNextContent && aItr->HasSharedAction( pNextContent->GetActionNumber() ) )
+                        ScChangeActionContent* pNextContent = dynamic_cast<ScChangeActionContent&>(*pAction).GetNextContent();
+                        if ( pNextContent && rConflictEntry.HasSharedAction( pNextContent->GetActionNumber() ) )
                         {
                             continue;
                         }
                     }
 
                     OUString aString( GetActionString( pAction, mpSharedDoc ) );
-                    m_pLbConflicts->InsertEntry( aString, static_cast< RedlinData* >( nullptr ), pRootEntry );
+                    m_pLbConflicts->InsertEntry( aString, std::unique_ptr<RedlinData>(), pRootEntry );
                 }
             }
 
-            ScChangeActionList::const_iterator aEndOwn = aItr->maOwnActions.end();
-            for ( ScChangeActionList::const_iterator aItrOwn = aItr->maOwnActions.begin(); aItrOwn != aEndOwn; ++aItrOwn )
+            for ( auto& aOwnAction : rConflictEntry.maOwnActions )
             {
-                ScChangeAction* pAction = mpOwnTrack ? mpOwnTrack->GetAction(*aItrOwn) : nullptr;
+                ScChangeAction* pAction = mpOwnTrack ? mpOwnTrack->GetAction(aOwnAction) : nullptr;
                 if ( pAction )
                 {
                     // only display own top content entries
                     if ( pAction->GetType() == SC_CAT_CONTENT )
                     {
-                        ScChangeActionContent* pNextContent = ( dynamic_cast<ScChangeActionContent&>(*pAction) ).GetNextContent();
-                        if ( pNextContent && aItr->HasOwnAction( pNextContent->GetActionNumber() ) )
+                        ScChangeActionContent* pNextContent = dynamic_cast<ScChangeActionContent&>(*pAction).GetNextContent();
+                        if ( pNextContent && rConflictEntry.HasOwnAction( pNextContent->GetActionNumber() ) )
                         {
                             continue;
                         }
                     }
 
                     OUString aString( GetActionString( pAction, mpOwnDoc ) );
-                    RedlinData* pUserData = new RedlinData();
+                    std::unique_ptr<RedlinData> pUserData(new RedlinData());
                     pUserData->pData = static_cast< void* >( pAction );
-                    m_pLbConflicts->InsertEntry( aString, pUserData, pRootEntry );
+                    m_pLbConflicts->InsertEntry( aString, std::move(pUserData), pRootEntry );
                 }
             }
 

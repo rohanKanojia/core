@@ -7,20 +7,20 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "ToxTabStopTokenHandler.hxx"
+#include <ToxTabStopTokenHandler.hxx>
 
-#include "editeng/tstpitem.hxx"
-#include "editeng/lrspitem.hxx"
+#include <editeng/tstpitem.hxx>
+#include <editeng/lrspitem.hxx>
 
-#include "cntfrm.hxx"
-#include "fmtfsize.hxx"
-#include "fmtpdsc.hxx"
-#include "frmfmt.hxx"
-#include "ndtxt.hxx"
-#include "pagedesc.hxx"
-#include "pagefrm.hxx"
-#include "swrect.hxx"
-#include "tox.hxx"
+#include <cntfrm.hxx>
+#include <fmtfsize.hxx>
+#include <fmtpdsc.hxx>
+#include <frmfmt.hxx>
+#include <ndtxt.hxx>
+#include <pagedesc.hxx>
+#include <pagefrm.hxx>
+#include <swrect.hxx>
+#include <tox.hxx>
 
 namespace sw {
 
@@ -47,7 +47,7 @@ DefaultToxTabStopTokenHandler::HandleTabStopToken(
     }
 
     // check whether a tab adjustment has been specified.
-    if (SVX_TAB_ADJUST_END > aToken.eTabAlign) {
+    if (SvxTabAdjust::End > aToken.eTabAlign) {
         const SvxLRSpaceItem& rLR = static_cast<const SvxLRSpaceItem&>( targetNode.SwContentNode::GetAttr(RES_LR_SPACE) );
 
         long nTabPosition = aToken.nTabStopPosition;
@@ -76,7 +76,7 @@ DefaultToxTabStopTokenHandler::HandleTabStopToken(
         nRightMargin -= rLRSpace.GetTextFirstLineOfst();
     }
 
-    result.tabStop = SvxTabStop(nRightMargin, SVX_TAB_ADJUST_RIGHT, cDfltDecimalChar, aToken.cTabFillChar);
+    result.tabStop = SvxTabStop(nRightMargin, SvxTabAdjust::Right, cDfltDecimalChar, aToken.cTabFillChar);
     return result;
 }
 
@@ -93,6 +93,9 @@ DefaultToxTabStopTokenHandler::CalculatePageMarginFromPageDescription(const SwTe
     const SwFrameFormat& rPgDscFormat = pPageDesc->GetMaster();
     long result = rPgDscFormat.GetFrameSize().GetWidth() - rPgDscFormat.GetLRSpace().GetLeft()
             - rPgDscFormat.GetLRSpace().GetRight();
+    // Also consider borders
+    const SvxBoxItem& rBox = rPgDscFormat.GetBox();
+    result -= rBox.CalcLineSpace(SvxBoxItemLine::LEFT) + rBox.CalcLineSpace(SvxBoxItemLine::RIGHT);
     return result;
 }
 
@@ -115,10 +118,7 @@ DefaultToxTabStopTokenHandler::CanUseLayoutRectangle(const SwTextNode& targetNod
         return false;
     }
     const SwPageFrame* pageFrame = static_cast<const SwPageFrame*>(pFrame);
-    if (pageDescription != pageFrame->GetPageDesc()) {
-        return false;
-    }
-    return true;
+    return pageDescription == pageFrame->GetPageDesc();
 }
 
 }

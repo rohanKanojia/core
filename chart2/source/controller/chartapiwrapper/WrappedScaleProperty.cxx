@@ -18,12 +18,14 @@
  */
 
 #include "WrappedScaleProperty.hxx"
-#include "macros.hxx"
-#include "CommonConverters.hxx"
-#include "AxisHelper.hxx"
+#include "Chart2ModelContact.hxx"
+#include <CommonConverters.hxx>
+#include <AxisHelper.hxx>
+#include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart2/XAxis.hpp>
 #include <com/sun/star/chart/ChartAxisType.hpp>
 #include <chartview/ExplicitScaleValues.hxx>
+#include <osl/diagnose.h>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Any;
@@ -37,8 +39,8 @@ namespace chart
 namespace wrapper
 {
 
-WrappedScaleProperty::WrappedScaleProperty( tScaleProperty eScaleProperty
-                , std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
+WrappedScaleProperty::WrappedScaleProperty(tScaleProperty eScaleProperty
+                , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
             : WrappedProperty(OUString(),OUString())
             , m_spChart2ModelContact( spChart2ModelContact )
             , m_eScaleProperty( eScaleProperty )
@@ -103,41 +105,38 @@ WrappedScaleProperty::~WrappedScaleProperty()
 {
 }
 
-void WrappedScaleProperty::addWrappedProperties( std::vector< WrappedProperty* >& rList
+void WrappedScaleProperty::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
             , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_MAX, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_MIN, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_ORIGIN, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_STEPMAIN, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_STEPHELP, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_STEPHELP_COUNT, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_AUTO_MAX, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_AUTO_MIN, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_AUTO_ORIGIN, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_AUTO_STEPMAIN, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_AUTO_STEPHELP, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_AXIS_TYPE, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_DATE_INCREMENT, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_EXPLICIT_DATE_INCREMENT, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_LOGARITHMIC, spChart2ModelContact ) );
-    rList.push_back( new WrappedScaleProperty( SCALE_PROP_REVERSEDIRECTION, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_MAX, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_MIN, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_ORIGIN, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_STEPMAIN, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_STEPHELP, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_STEPHELP_COUNT, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_AUTO_MAX, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_AUTO_MIN, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_AUTO_ORIGIN, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_AUTO_STEPMAIN, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_AUTO_STEPHELP, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_AXIS_TYPE, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_DATE_INCREMENT, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_EXPLICIT_DATE_INCREMENT, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_LOGARITHMIC, spChart2ModelContact ) );
+    rList.emplace_back( new WrappedScaleProperty( SCALE_PROP_REVERSEDIRECTION, spChart2ModelContact ) );
 }
 
 void WrappedScaleProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     setPropertyValue( m_eScaleProperty, rOuterValue, xInnerPropertySet );
 }
 
 Any WrappedScaleProperty::getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     return getPropertyValue( m_eScaleProperty, xInnerPropertySet );
 }
 
 void WrappedScaleProperty::setPropertyValue( tScaleProperty eScaleProperty, const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     m_aOuterValue = rOuterValue;
 
@@ -178,7 +177,7 @@ void WrappedScaleProperty::setPropertyValue( tScaleProperty eScaleProperty, cons
                 rSubIncrements.realloc( 1 );
 
             double fStepHelp = 0;
-            if( (rOuterValue >>= fStepHelp) )
+            if( rOuterValue >>= fStepHelp )
             {
                 double fStepMain = 0;
                 if( AxisHelper::isLogarithmic(aScaleData.Scaling) )
@@ -268,21 +267,21 @@ void WrappedScaleProperty::setPropertyValue( tScaleProperty eScaleProperty, cons
         case SCALE_PROP_AXIS_TYPE:
         {
             sal_Int32 nType = 0;
-            if( (rOuterValue >>= nType) )
+            if( rOuterValue >>= nType )
             {
-                if( css::chart::ChartAxisType::AUTOMATIC == nType )
+                if( nType == css::chart::ChartAxisType::AUTOMATIC )
                 {
                     aScaleData.AutoDateAxis = true;
                     if( aScaleData.AxisType == AxisType::DATE )
                         aScaleData.AxisType = AxisType::CATEGORY;
                 }
-                else if( css::chart::ChartAxisType::CATEGORY == nType )
+                else if( nType == css::chart::ChartAxisType::CATEGORY )
                 {
                     aScaleData.AutoDateAxis = false;
                     if( aScaleData.AxisType == AxisType::DATE )
                         aScaleData.AxisType = AxisType::CATEGORY;
                 }
-                else if( css::chart::ChartAxisType::DATE == nType )
+                else if( nType == css::chart::ChartAxisType::DATE )
                 {
                     if( aScaleData.AxisType == AxisType::CATEGORY )
                         aScaleData.AxisType = AxisType::DATE;
@@ -324,7 +323,7 @@ void WrappedScaleProperty::setPropertyValue( tScaleProperty eScaleProperty, cons
         {
             if( rOuterValue >>= bBool )
             {
-                bool bWasReverse = ( AxisOrientation_REVERSE == aScaleData.Orientation );
+                bool bWasReverse = ( aScaleData.Orientation == AxisOrientation_REVERSE );
                 if( (!bBool) != (!bWasReverse) ) // safe comparison between sal_Bool and bool
                 {
                     aScaleData.Orientation = bBool ? AxisOrientation_REVERSE : AxisOrientation_MATHEMATICAL;
@@ -345,7 +344,6 @@ void WrappedScaleProperty::setPropertyValue( tScaleProperty eScaleProperty, cons
 }
 
 Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet( m_aOuterValue );
 
@@ -408,7 +406,7 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
                 {
                     sal_Int32 nIntervalCount = 0;
                     rSubIncrements[ 0 ].IntervalCount >>= nIntervalCount;
-                    aRet = uno::makeAny( double(nIntervalCount) );
+                    aRet <<= double(nIntervalCount);
                     bNeedToCalculateExplicitValues = false;
                 }
             }
@@ -422,7 +420,7 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
                         (rSubIncrements[ 0 ].IntervalCount >>= nIntervalCount) &&
                         nIntervalCount > 0 )
                     {
-                        aRet <<= ( fStepMain / static_cast< double >( nIntervalCount ) );
+                        aRet <<= fStepMain / static_cast< double >( nIntervalCount );
                         bNeedToCalculateExplicitValues = false;
                     }
                 }
@@ -446,13 +444,13 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
                         if( rSubIncrements.getLength() > 0 )
                         {
                             sal_Int32 nIntervalCount = aExplicitIncrement.SubIncrements[ 0 ].IntervalCount;
-                            aRet = uno::makeAny( double(nIntervalCount) );
+                            aRet <<= double(nIntervalCount);
                         }
                     }
                     else
-                        aRet <<= ( aExplicitIncrement.Distance /
+                        aRet <<= aExplicitIncrement.Distance /
                                 static_cast< double >(
-                                    aExplicitIncrement.SubIncrements[ 0 ].IntervalCount ));
+                                    aExplicitIncrement.SubIncrements[ 0 ].IntervalCount );
                 }
                 else
                 {
@@ -480,7 +478,7 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
                 if( !aExplicitIncrement.SubIncrements.empty() )
                     nIntervalCount = aExplicitIncrement.SubIncrements[ 0 ].IntervalCount;
             }
-            aRet = uno::makeAny( nIntervalCount );
+            aRet <<= nIntervalCount;
             break;
         }
         case SCALE_PROP_AUTO_MAX:
@@ -535,13 +533,13 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
                 if( !aScaleData.AutoDateAxis )
                     nType = css::chart::ChartAxisType::CATEGORY;
             }
-            aRet = uno::makeAny( nType );
+            aRet <<= nType;
             break;
         }
         case SCALE_PROP_DATE_INCREMENT:
         {
             if( aScaleData.AxisType == AxisType::DATE || aScaleData.AutoDateAxis )
-                aRet = uno::makeAny( aScaleData.TimeIncrement );
+                aRet <<= aScaleData.TimeIncrement;
             break;
         }
         case SCALE_PROP_EXPLICIT_DATE_INCREMENT:
@@ -552,15 +550,15 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
                 if( aExplicitScale.AxisType == AxisType::DATE )
                 {
                     TimeIncrement aTimeIncrement;
-                    aTimeIncrement.MajorTimeInterval = uno::makeAny( aExplicitIncrement.MajorTimeInterval );
-                    aTimeIncrement.MinorTimeInterval = uno::makeAny( aExplicitIncrement.MinorTimeInterval );
-                    aTimeIncrement.TimeResolution = uno::makeAny( aExplicitScale.TimeResolution );
-                    aRet = uno::makeAny(aTimeIncrement);
+                    aTimeIncrement.MajorTimeInterval <<= aExplicitIncrement.MajorTimeInterval;
+                    aTimeIncrement.MinorTimeInterval <<= aExplicitIncrement.MinorTimeInterval;
+                    aTimeIncrement.TimeResolution <<= aExplicitScale.TimeResolution;
+                    aRet <<= aTimeIncrement;
                 }
             }
 
             if( aScaleData.AxisType == AxisType::DATE || aScaleData.AutoDateAxis )
-                aRet = uno::makeAny( aScaleData.TimeIncrement );
+                aRet <<= aScaleData.TimeIncrement;
             break;
         }
         case SCALE_PROP_LOGARITHMIC:
@@ -570,7 +568,7 @@ Any WrappedScaleProperty::getPropertyValue( tScaleProperty eScaleProperty, const
         }
         case SCALE_PROP_REVERSEDIRECTION:
         {
-            aRet <<= AxisOrientation_REVERSE == aScaleData.Orientation;
+            aRet <<= aScaleData.Orientation == AxisOrientation_REVERSE;
             break;
         }
         default:

@@ -21,7 +21,10 @@
 #define INCLUDED_HWPFILTER_SOURCE_HINFO_H
 
 #include "hwplib.h"
-#include "string.h"
+#include <string.h>
+
+#include <vector>
+#include <memory>
 
 #define CHAIN_MAX_PATH  40
 #define ANNOTATION_LEN  24
@@ -77,7 +80,7 @@ struct PaperBackInfo
     int range; /* 0-????, 1-????????, 3-??????, 4-?????? */
     char reserved3[27];
     int size;
-    char *data;        // image data
+    std::vector<char> data;        // image data
     bool isset;
     PaperBackInfo()
         : type(0)
@@ -87,7 +90,6 @@ struct PaperBackInfo
         , flag(0)
         , range(0)
         , size(0)
-        , data(NULL)
         , isset(false)
     {
         memset(reserved1, 0, sizeof(reserved1));
@@ -200,7 +202,7 @@ class DLLEXPORT HWPInfo
  * Summary of document
  */
         HWPSummary    summary;
-        unsigned char *info_block;
+        std::unique_ptr<unsigned char[]> info_block;
 
         HWPInfo(void);
         ~HWPInfo(void);
@@ -240,23 +242,37 @@ struct CharShape
 /**
  * @short Tab properties
  */
-typedef struct
+struct TabSet
 {
     unsigned char type;
     unsigned char dot_continue;
     hunit     position;
-} TabSet;
+    TabSet()
+        : type(0)
+        , dot_continue(0)
+        , position(0)
+    {
+    }
+};
 
 /**
  * @short Column properties
  */
-typedef struct
+struct ColumnDef
 {
     unsigned char ncols;
     unsigned char separator;
     hunit     spacing;
     hunit     columnlen, columnlen0;
-} ColumnDef;
+    ColumnDef()
+        : ncols(0)
+        , separator(0)
+        , spacing(0)
+        , columnlen(0)
+        , columnlen0(0)
+    {
+    }
+};
 
 /**
  * @short Style of paragraph
@@ -276,16 +292,17 @@ struct ParaShape
     unsigned char condense;
     unsigned char arrange_type;
     TabSet    tabs[MAXTABS];
-    ColumnDef coldef;
+    std::shared_ptr<ColumnDef> xColdef;
     unsigned char shade;
     unsigned char outline;
     unsigned char outline_continue;
     unsigned char reserved[2];
-    CharShape *cshape;
-     unsigned char pagebreak;
+    std::shared_ptr<CharShape> cshape;
+    unsigned char pagebreak;
 
     void  Read(HWPFile &);
-//  virtual ~ParaShape();
+
+    ParaShape();
 };
 #endif // INCLUDED_HWPFILTER_SOURCE_HINFO_H
 

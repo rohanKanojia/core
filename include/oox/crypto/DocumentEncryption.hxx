@@ -13,16 +13,16 @@
 
 #include <oox/dllapi.h>
 
-#include <oox/ole/olestorage.hxx>
-
-#include <com/sun/star/io/XStream.hpp>
-#include <com/sun/star/beans/NamedValue.hpp>
-
-#include <oox/crypto/CryptTools.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 #include <oox/crypto/Standard2007Engine.hxx>
+#include <oox/crypto/AgileEngine.hxx>
+#include <rtl/ustring.hxx>
 
-#include <vector>
+namespace com { namespace sun { namespace star {
+    namespace io { class XStream; }
+} } }
 
+namespace oox { namespace ole { class OleStorage; } }
 
 namespace oox {
 namespace core {
@@ -32,13 +32,13 @@ class OOX_DLLPUBLIC DocumentEncryption
 private:
     css::uno::Reference< css::io::XStream > mxDocumentStream;
     oox::ole::OleStorage& mrOleStorage;
-    OUString maPassword;
+    OUString const maPassword;
 
     Standard2007Engine mEngine;
 
 public:
     DocumentEncryption(
-        css::uno::Reference< css::io::XStream > xDocumentStream,
+        css::uno::Reference< css::io::XStream > const & xDocumentStream,
         oox::ole::OleStorage& rOleStorage,
         const OUString& aPassword);
 

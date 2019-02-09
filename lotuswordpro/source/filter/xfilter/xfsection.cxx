@@ -57,12 +57,10 @@
  * @file
  * Section object.
  ************************************************************************/
-#include "xfsection.hxx"
+#include <xfilter/xfsection.hxx>
 
 XFSection::XFSection()
 {
-    m_bProtected = false;
-    m_bHiden = false;
     m_strSectionName = XFGlobal::GenSectionName();
 }
 
@@ -83,10 +81,6 @@ void    XFSection::ToXml(IXFStream *pStrm)
     //section name
     if( !m_strSectionName.isEmpty() )
         pAttrList->AddAttribute( "text:name", m_strSectionName);
-    if( m_bProtected )
-        pAttrList->AddAttribute( "text:protected", "true" );
-    if( m_bHiden )
-        pAttrList->AddAttribute( "text:display", "none" );
 
     pStrm->StartElement( "text:section" );
     if( !m_strSourceLink.isEmpty() )

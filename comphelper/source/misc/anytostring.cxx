@@ -19,7 +19,6 @@
 
 
 #include <comphelper/anytostring.hxx>
-#include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <typelib/typedescription.h>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -37,7 +36,7 @@ void appendTypeError(
     buf.append( '>' );
 }
 
-inline void appendChar( OUStringBuffer & buf, sal_Unicode c )
+void appendChar( OUStringBuffer & buf, sal_Unicode c )
 {
     if (c < ' ' || c > '~') {
         buf.append( "\\X" );

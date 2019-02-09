@@ -22,18 +22,14 @@
 #include <vcl/commandevent.hxx>
 
 CommandExtTextInputData::CommandExtTextInputData( const OUString& rText,
-    const sal_uInt16* pTextAttr, sal_Int32 nCursorPos, sal_uInt16 nCursorFlags,
+    const ExtTextInputAttr* pTextAttr, sal_Int32 nCursorPos, sal_uInt16 nCursorFlags,
     bool bOnlyCursor)
     : maText(rText)
 {
     if ( pTextAttr && !maText.isEmpty() )
     {
-        mpTextAttr = new sal_uInt16[maText.getLength()];
-        memcpy( mpTextAttr, pTextAttr, maText.getLength()*sizeof(sal_uInt16) );
-    }
-    else
-    {
-        mpTextAttr = nullptr;
+        mpTextAttr.reset( new ExtTextInputAttr[maText.getLength()] );
+        memcpy( mpTextAttr.get(), pTextAttr, maText.getLength()*sizeof(ExtTextInputAttr) );
     }
 
     mnCursorPos     = nCursorPos;
@@ -46,12 +42,8 @@ CommandExtTextInputData::CommandExtTextInputData( const CommandExtTextInputData&
 {
     if ( rData.mpTextAttr && !maText.isEmpty() )
     {
-        mpTextAttr = new sal_uInt16[maText.getLength()];
-        memcpy( mpTextAttr, rData.mpTextAttr, maText.getLength()*sizeof(sal_uInt16) );
-    }
-    else
-    {
-        mpTextAttr = nullptr;
+        mpTextAttr.reset( new ExtTextInputAttr[maText.getLength()] );
+        memcpy( mpTextAttr.get(), rData.mpTextAttr.get(), maText.getLength()*sizeof(ExtTextInputAttr) );
     }
 
     mnCursorPos     = rData.mnCursorPos;
@@ -61,24 +53,13 @@ CommandExtTextInputData::CommandExtTextInputData( const CommandExtTextInputData&
 
 CommandExtTextInputData::~CommandExtTextInputData()
 {
-    delete [] mpTextAttr;
-}
-
-CommandInputContextData::CommandInputContextData()
-{
-    meLanguage = LANGUAGE_DONTKNOW;
-}
-
-CommandInputContextData::CommandInputContextData( LanguageType eLang )
-{
-    meLanguage = eLang;
 }
 
 CommandWheelData::CommandWheelData()
 {
     mnDelta         = 0;
     mnNotchDelta    = 0;
-    mnLines         = 0;
+    mnLines         = 0.0;
     mnWheelMode     = CommandWheelMode::NONE;
     mnCode          = 0;
     mbHorz          = false;
@@ -86,7 +67,7 @@ CommandWheelData::CommandWheelData()
 }
 
 CommandWheelData::CommandWheelData( long nWheelDelta, long nWheelNotchDelta,
-                                    sal_uLong nScrollLines,
+                                    double nScrollLines,
                                     CommandWheelMode nWheelMode, sal_uInt16 nKeyModifier,
                                     bool bHorz, bool bDeltaIsPixel )
 {
@@ -99,31 +80,16 @@ CommandWheelData::CommandWheelData( long nWheelDelta, long nWheelNotchDelta,
     mbDeltaIsPixel  = bDeltaIsPixel;
 }
 
-CommandScrollData::CommandScrollData()
-{
-    mnDeltaX    = 0;
-    mnDeltaY    = 0;
-}
-
 CommandScrollData::CommandScrollData( long nDeltaX, long nDeltaY )
 {
     mnDeltaX    = nDeltaX;
     mnDeltaY    = nDeltaY;
 }
 
-CommandModKeyData::CommandModKeyData()
+CommandModKeyData::CommandModKeyData( ModKeyFlags nCode, bool bDown )
 {
-    mnCode = 0L;
-}
-
-CommandModKeyData::CommandModKeyData( sal_uInt16 nCode )
-{
+    mbDown = bDown;
     mnCode = nCode;
-}
-
-CommandSelectionChangeData::CommandSelectionChangeData()
-{
-    mnStart = mnEnd = 0;
 }
 
 CommandSelectionChangeData::CommandSelectionChangeData( sal_uLong nStart, sal_uLong nEnd )

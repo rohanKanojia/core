@@ -18,7 +18,6 @@
  */
 
 #include <sfx2/viewfrm.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <IDocumentUndoRedo.hxx>
@@ -36,7 +35,6 @@
 #include <swtable.hxx>
 #include <tblsel.hxx>
 #include <unochart.hxx>
-#include <autoedit.hxx>
 #include <doc.hxx>
 
 #include <edtwin.hxx>
@@ -48,20 +46,17 @@
 
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/component_context.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <com/sun/star/chart2/data/XDataProvider.hpp>
-#include <com/sun/star/chart2/data/XDataReceiver.hpp>
-#include <com/sun/star/chart/ChartDataRowSource.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
-#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
-Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSize, const Rectangle& rLogicChart )
+Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSize, const tools::Rectangle& rLogicChart )
 {
     // positioning code according to spec; similar to Calc fuins2.cxx
     Point aRet;
@@ -69,12 +64,12 @@ Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSiz
     OSL_ENSURE( pParentWin, "Window not found" );
     if (pParentWin)
     {
-        Rectangle aObjPixel = pParentWin->LogicToPixel( rLogicChart, pParentWin->GetMapMode() );
-        Rectangle aObjAbs( pParentWin->OutputToAbsoluteScreenPixel( aObjPixel.TopLeft() ),
+        tools::Rectangle aObjPixel = pParentWin->LogicToPixel( rLogicChart, pParentWin->GetMapMode() );
+        tools::Rectangle aObjAbs( pParentWin->OutputToAbsoluteScreenPixel( aObjPixel.TopLeft() ),
                            pParentWin->OutputToAbsoluteScreenPixel( aObjPixel.BottomRight() ) );
 
-        Rectangle aDesktop = pParentWin->GetDesktopRectPixel();
-        Size aSpace = pParentWin->LogicToPixel( Size( 8, 12 ), MAP_APPFONT );
+        tools::Rectangle aDesktop = pParentWin->GetDesktopRectPixel();
+        Size aSpace = pParentWin->LogicToPixel(Size(8, 12), MapMode(MapUnit::MapAppFont));
 
         bool bLayoutRTL = ::GetActiveView()->GetWrtShell().IsTableRightToLeft();
         bool bCenterHor = false;
@@ -82,13 +77,13 @@ Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSiz
         if ( aDesktop.Bottom() - aObjAbs.Bottom() >= rDialogSize.Height() + aSpace.Height() )
         {
             // first preference: below the chart
-            aRet.Y() = aObjAbs.Bottom() + aSpace.Height();
+            aRet.setY( aObjAbs.Bottom() + aSpace.Height() );
             bCenterHor = true;
         }
         else if ( aObjAbs.Top() - aDesktop.Top() >= rDialogSize.Height() + aSpace.Height() )
         {
             // second preference: above the chart
-            aRet.Y() = aObjAbs.Top() - rDialogSize.Height() - aSpace.Height();
+            aRet.setY( aObjAbs.Top() - rDialogSize.Height() - aSpace.Height() );
             bCenterHor = true;
         }
         else
@@ -101,41 +96,39 @@ Point SwGetChartDialogPos( const vcl::Window *pParentWin, const Size& rDialogSiz
                 // if both fit, prefer right in RTL mode, left otherwise
                 bool bPutRight = bFitRight && ( bLayoutRTL || !bFitLeft );
                 if ( bPutRight )
-                    aRet.X() = aObjAbs.Right() + aSpace.Width();
+                    aRet.setX( aObjAbs.Right() + aSpace.Width() );
                 else
-                    aRet.X() = aObjAbs.Left() - rDialogSize.Width() - aSpace.Width();
+                    aRet.setX( aObjAbs.Left() - rDialogSize.Width() - aSpace.Width() );
 
                 // center vertically
-                aRet.Y() = aObjAbs.Top() + ( aObjAbs.GetHeight() - rDialogSize.Height() ) / 2;
+                aRet.setY( aObjAbs.Top() + ( aObjAbs.GetHeight() - rDialogSize.Height() ) / 2 );
             }
             else
             {
                 // doesn't fit on any edge - put at the bottom of the screen
-                aRet.Y() = aDesktop.Bottom() - rDialogSize.Height();
+                aRet.setY( aDesktop.Bottom() - rDialogSize.Height() );
                 bCenterHor = true;
             }
         }
         if ( bCenterHor )
-            aRet.X() = aObjAbs.Left() + ( aObjAbs.GetWidth() - rDialogSize.Width() ) / 2;
+            aRet.setX( aObjAbs.Left() + ( aObjAbs.GetWidth() - rDialogSize.Width() ) / 2 );
 
         // limit to screen (centering might lead to invalid positions)
         if ( aRet.X() + rDialogSize.Width() - 1 > aDesktop.Right() )
-            aRet.X() = aDesktop.Right() - rDialogSize.Width() + 1;
+            aRet.setX( aDesktop.Right() - rDialogSize.Width() + 1 );
         if ( aRet.X() < aDesktop.Left() )
-            aRet.X() = aDesktop.Left();
+            aRet.setX( aDesktop.Left() );
         if ( aRet.Y() + rDialogSize.Height() - 1 > aDesktop.Bottom() )
-            aRet.Y() = aDesktop.Bottom() - rDialogSize.Height() + 1;
+            aRet.setY( aDesktop.Bottom() - rDialogSize.Height() + 1 );
         if ( aRet.Y() < aDesktop.Top() )
-            aRet.Y() = aDesktop.Top();
+            aRet.setY( aDesktop.Top() );
     }
 
     return aRet;
 }
 
-void SwInsertChart(vcl::Window* pParent, SfxBindings* pBindings )
+void SwInsertChart()
 {
-    (void) pParent;
-    (void) pBindings;
     SwView *pView = ::GetActiveView();
 
     // get range string of marked data
@@ -181,18 +174,12 @@ void SwInsertChart(vcl::Window* pParent, SfxBindings* pBindings )
             uno::Reference< lang::XInitialization > xInit( xDialog, uno::UNO_QUERY );
             if( xInit.is() )
             {
-                uno::Reference< awt::XWindow > xDialogParentWindow(nullptr);
                 //  initialize dialog
-                uno::Sequence<uno::Any> aSeq(2);
-                uno::Any* pArray = aSeq.getArray();
-                beans::PropertyValue aParam1;
-                aParam1.Name = "ParentWindow";
-                aParam1.Value <<= uno::makeAny(xDialogParentWindow);
-                beans::PropertyValue aParam2;
-                aParam2.Name = "ChartModel";
-                aParam2.Value <<= uno::makeAny(xChartModel);
-                pArray[0] <<= uno::makeAny(aParam1);
-                pArray[1] <<= uno::makeAny(aParam2);
+                uno::Sequence<uno::Any> aSeq(comphelper::InitAnyPropertySequence(
+                {
+                    {"ParentWindow", uno::Any(uno::Reference< awt::XWindow >())},
+                    {"ChartModel", uno::Any(xChartModel)}
+                }));
                 xInit->initialize( aSeq );
 
                 // try to set the dialog's position so it doesn't hide the chart
@@ -213,7 +200,7 @@ void SwInsertChart(vcl::Window* pParent, SfxBindings* pBindings )
                                 SwRect aSwRect;
                                 if (pFlyFrameFormat)
                                     aSwRect = pFlyFrameFormat->GetAnchoredObj()->GetObjRectWithSpaces();
-                                Rectangle aRect( aSwRect.SVRect() );
+                                tools::Rectangle aRect( aSwRect.SVRect() );
                                 Point aDialogPos = SwGetChartDialogPos( &rWrtShell.GetView().GetEditWin(), aDialogSize, aRect );
                                 xDialogProps->setPropertyValue("Position",
                                     uno::makeAny( awt::Point(aDialogPos.getX(),aDialogPos.getY()) ) );
@@ -222,7 +209,7 @@ void SwInsertChart(vcl::Window* pParent, SfxBindings* pBindings )
                     }
                     catch (const uno::Exception&)
                     {
-                        OSL_FAIL("Chart wizard couldn't be positioned automatically\n" );
+                        OSL_FAIL("Chart wizard couldn't be positioned automatically" );
                     }
                 }
 
@@ -243,12 +230,6 @@ void SwInsertChart(vcl::Window* pParent, SfxBindings* pBindings )
                 xComponent->dispose();
         }
     }
-}
-
-void AutoEdit::KeyInput( const KeyEvent& rEvt )
-{
-    if( rEvt.GetKeyCode().GetCode() != KEY_SPACE )
-        Edit::KeyInput( rEvt );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

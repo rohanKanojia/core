@@ -25,9 +25,9 @@
 
 #include <vcl/svapp.hxx>
 
-#include "AccContainerEventListener.hxx"
-#include "AccObjectManagerAgent.hxx"
-#include "unomsaaevent.hxx"
+#include <AccContainerEventListener.hxx>
+#include <AccObjectManagerAgent.hxx>
+#include <unomsaaevent.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::accessibility;
@@ -47,7 +47,6 @@ AccContainerEventListener::~AccContainerEventListener()
  *  @param AccessibleEventObject    the event object which contains information about event
  */
 void  AccContainerEventListener::notifyEvent( const css::accessibility::AccessibleEventObject& aEvent )
-throw (css::uno::RuntimeException)
 {
     SolarMutexGuard g;
 
@@ -64,6 +63,7 @@ throw (css::uno::RuntimeException)
         break;
     case AccessibleEventId::TEXT_CHANGED:
         HandleTextChangedEvent(aEvent.OldValue, aEvent.NewValue);
+        [[fallthrough]]; //TODO ???
     case AccessibleEventId::VISIBLE_DATA_CHANGED:
         HandleVisibleDataChangedEvent();
         break;
@@ -137,8 +137,6 @@ void AccContainerEventListener::HandleChildChangedEvent(Any oldValue, Any newVal
                 pAgent->NotifyAccEvent(UM_EVENT_CHILD_ADDED, pAcc);
             }
         }
-        else
-        {}
     }
     else if (oldValue >>= xChild)
     {
@@ -153,8 +151,6 @@ void AccContainerEventListener::HandleChildChangedEvent(Any oldValue, Any newVal
             pAgent->DeleteAccObj( pAcc );
 
         }
-        else
-        {}
     }
 
 }
@@ -427,9 +423,8 @@ void AccContainerEventListener::HandleValueChangedEvent(Any, Any)
     pAgent->NotifyAccEvent(UM_EVENT_OBJECT_VALUECHANGE, m_xAccessible.get());
 }
 
-bool AccContainerEventListener::IsEditable(Reference<XAccessibleContext> xContext)
+bool AccContainerEventListener::IsEditable(Reference<XAccessibleContext> const & xContext)
 {
-    bool ret = false;
     Reference< XAccessibleStateSet > pRState = xContext->getAccessibleStateSet();
     if( !pRState.is() )
         return false;
@@ -441,7 +436,7 @@ bool AccContainerEventListener::IsEditable(Reference<XAccessibleContext> xContex
         if(pStates[iIndex] == AccessibleStateType::EDITABLE)
             return true;
     }
-    return ret;
+    return false;
 }
 
 bool AccContainerEventListener::NotifyChildEvent(short nWinEvent,const Any &Value)
@@ -494,7 +489,7 @@ void AccContainerEventListener::UpdateAllChildrenState(XAccessible* pXAccessible
         return;
     }
     css::accessibility::XAccessibleContext* pAccessibleContext = xContext.get();
-    if(pAccessibleContext == NULL)
+    if(pAccessibleContext == nullptr)
     {
         return;
     }
@@ -511,7 +506,7 @@ void AccContainerEventListener::UpdateAllChildrenState(XAccessible* pXAccessible
         = pAccessibleContext->getAccessibleChild(i);
 
         css::accessibility::XAccessible* mpAccessible = mxAccessible.get();
-        if(mpAccessible != NULL)
+        if(mpAccessible != nullptr)
         {
             pAgent->UpdateState(mpAccessible);
             UpdateAllChildrenState(mpAccessible);

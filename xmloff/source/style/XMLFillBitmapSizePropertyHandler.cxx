@@ -18,10 +18,9 @@
  */
 
 
-#include "XMLFillBitmapSizePropertyHandler.hxx"
+#include <XMLFillBitmapSizePropertyHandler.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/uno/Any.hxx>
-#include <comphelper/extract.hxx>
 #include <sax/tools/converter.hxx>
 #include <xmloff/xmluconv.hxx>
 

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_XMLSECURITY_SOURCE_HELPER_XSECPARSER_HXX
 #define INCLUDED_XMLSECURITY_SOURCE_HELPER_XSECPARSER_HXX
 
-#include "xsecctl.hxx"
+#include <xsecctl.hxx>
 
 #include <com/sun/star/xml/sax/XParser.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
@@ -57,11 +57,19 @@ private:
     OUString m_ouX509IssuerName;
     OUString m_ouX509SerialNumber;
     OUString m_ouX509Certificate;
+    OUString m_ouGpgCertificate;
+    OUString m_ouGpgKeyID;
+    OUString m_ouGpgOwner;
+    OUString m_ouCertDigest;
+    OUString m_ouEncapsulatedX509Certificate;
     OUString m_ouDigestValue;
     OUString m_ouSignatureValue;
     OUString m_ouDate;
     /// Characters of a <dc:description> element, as just read from XML.
     OUString m_ouDescription;
+    OUString m_ouSignatureLineId;
+    OUString m_ouSignatureLineValidImage;
+    OUString m_ouSignatureLineInvalidImage;
 
     /*
      * whether inside a particular element
@@ -69,10 +77,19 @@ private:
     bool m_bInX509IssuerName;
     bool m_bInX509SerialNumber;
     bool m_bInX509Certificate;
+    bool m_bInGpgCertificate;
+    bool m_bInGpgKeyID;
+    bool m_bInGpgOwner;
+    bool m_bInCertDigest;
+    bool m_bInEncapsulatedX509Certificate;
+    bool m_bInSigningTime;
     bool m_bInDigestValue;
     bool m_bInSignatureValue;
     bool m_bInDate;
     bool m_bInDescription;
+    bool m_bInSignatureLineId;
+    bool m_bInSignatureLineValidImage;
+    bool m_bInSignatureLineInvalidImage;
 
     /*
      * the XSecController collaborating with XSecParser
@@ -95,56 +112,49 @@ private:
     OUString m_currentReferenceURI;
     bool m_bReferenceUnresolved;
 
+    // Relevant for ODF. The digest algorithm selected by the current DigestMethod element's
+    // Algorithm attribute in the current Reference element. From css::xml::crypto::DigestID.
+    sal_Int32 m_nReferenceDigestID;
+    XMLSignatureHelper& m_rXMLSignatureHelper;
+
 private:
     static OUString getIdAttr(const css::uno::Reference<
             css::xml::sax::XAttributeList >& xAttribs );
 
 public:
-    XSecParser( XSecController* pXSecController,
-        const css::uno::Reference<
-            css::xml::sax::XDocumentHandler >& xNextHandler );
-    virtual ~XSecParser(){};
+    XSecParser(XMLSignatureHelper& rXMLSignatureHelper, XSecController* pXSecController);
 
     /*
      * XDocumentHandler
      */
-    virtual void SAL_CALL startDocument(  )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL startDocument(  ) override;
 
-    virtual void SAL_CALL endDocument(  )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL endDocument(  ) override;
 
     virtual void SAL_CALL startElement(
         const OUString& aName,
         const css::uno::Reference<
-            css::xml::sax::XAttributeList >& xAttribs )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+            css::xml::sax::XAttributeList >& xAttribs ) override;
 
-    virtual void SAL_CALL endElement( const OUString& aName )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL endElement( const OUString& aName ) override;
 
-    virtual void SAL_CALL characters( const OUString& aChars )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL characters( const OUString& aChars ) override;
 
-    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) override;
 
     virtual void SAL_CALL processingInstruction(
         const OUString& aTarget,
-        const OUString& aData )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+        const OUString& aData ) override;
 
     virtual void SAL_CALL setDocumentLocator(
         const css::uno::Reference<
-            css::xml::sax::XLocator >& xLocator )
-        throw (css::xml::sax::SAXException, css::uno::RuntimeException, std::exception) override;
+            css::xml::sax::XLocator >& xLocator ) override;
 
     /*
      * XInitialization
      */
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence< css::uno::Any >& aArguments )
-        throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 };
 
 #endif

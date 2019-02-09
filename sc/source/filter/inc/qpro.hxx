@@ -22,29 +22,37 @@
 
 #include <rtl/ustring.hxx>
 #include <sal/config.h>
-#include "filter.hxx"
-
-#include "flttypes.hxx"
-#include "ftools.hxx"
-#include "qprostyle.hxx"
-#include "biff.hxx"
+#include <vcl/errcode.hxx>
+#include <types.hxx>
 
 class ScDocument;
+class SvStream;
+class ScQProStyle;
 
 // Stream wrapper class
-class ScQProReader : public ScBiffReader
+class ScQProReader
 {
-    public:
+    sal_uInt16 mnId;
+    sal_uInt16 mnLength;
+    sal_uInt32 mnOffset;
+    SvStream *mpStream;
+    bool mbEndOfFile;
+    const SCTAB mnMaxTab;
+
+public:
+    ScQProReader(SvStream* pStream);
+    ~ScQProReader();
+
     bool recordsLeft();
     void SetEof( bool bValue ){ mbEndOfFile = bValue; }
     bool nextRecord();
     sal_uInt16 getId() { return mnId; }
     sal_uInt16 getLength() { return mnLength; }
-    void readString( OUString &rString, sal_uInt16 nLength );
-    ScQProReader( SfxMedium &rMedium );
-    ~ScQProReader(){ };
-    FltError import( ScDocument *pDoc );
-    FltError readSheet( SCTAB nTab, ScDocument* pDoc, ScQProStyle *pStyle );
+    OUString readString(sal_uInt16 nLength);
+
+    ErrCode parse( ScDocument *pDoc );
+    ErrCode import( ScDocument *pDoc ); //parse + CalcAfterLoad
+    ErrCode readSheet( SCTAB nTab, ScDocument* pDoc, ScQProStyle *pStyle );
 };
 #endif
 

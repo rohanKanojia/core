@@ -21,43 +21,41 @@
 
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include "cfgids.hxx"
-#include "appoptio.hxx"
-#include "rechead.hxx"
-#include "scresid.hxx"
-#include "global.hxx"
-#include "userlist.hxx"
-#include "sc.hrc"
-#include <formula/compiler.hrc>
-#include "miscuno.hxx"
+#include <appoptio.hxx>
+#include <rechead.hxx>
+#include <global.hxx>
+#include <userlist.hxx>
+#include <sc.hrc>
+#include <formula/compiler.hxx>
+#include <miscuno.hxx>
 #include <memory>
+#include <osl/diagnose.h>
 
 using namespace utl;
 using namespace com::sun::star::uno;
 
-//      ScAppOptions - Applikations-Optionen
+//      ScAppOptions - Application Options
 
-ScAppOptions::ScAppOptions() : pLRUList( nullptr )
+ScAppOptions::ScAppOptions()
 {
     SetDefaults();
 }
 
-ScAppOptions::ScAppOptions( const ScAppOptions& rCpy ) : pLRUList( nullptr )
+ScAppOptions::ScAppOptions( const ScAppOptions& rCpy )
 {
     *this = rCpy;
 }
 
 ScAppOptions::~ScAppOptions()
 {
-    delete [] pLRUList;
 }
 
 void ScAppOptions::SetDefaults()
 {
     if ( ScOptionsUtil::IsMetricSystem() )
-        eMetric     = FUNIT_CM;             // default for countries with metric system
+        eMetric     = FieldUnit::CM;             // default for countries with metric system
     else
-        eMetric     = FUNIT_INCH;           // default for others
+        eMetric     = FieldUnit::INCH;           // default for others
 
     nZoom           = 100;
     eZoomType       = SvxZoomType::PERCENT;
@@ -66,8 +64,7 @@ void ScAppOptions::SetDefaults()
     bAutoComplete   = true;
     bDetectiveAuto  = true;
 
-    delete [] pLRUList;
-    pLRUList = new sal_uInt16[5];               // sinnvoll vorbelegen
+    pLRUList.reset( new sal_uInt16[5] );               // sensible initialization
     pLRUList[0] = SC_OPCODE_SUM;
     pLRUList[1] = SC_OPCODE_AVERAGE;
     pLRUList[2] = SC_OPCODE_MIN;
@@ -89,13 +86,13 @@ void ScAppOptions::SetDefaults()
     meKeyBindingType     = ScOptionsUtil::KEY_DEFAULT;
 }
 
-const ScAppOptions& ScAppOptions::operator=( const ScAppOptions& rCpy )
+ScAppOptions& ScAppOptions::operator=( const ScAppOptions& rCpy )
 {
     eMetric         = rCpy.eMetric;
     eZoomType       = rCpy.eZoomType;
     bSynchronizeZoom = rCpy.bSynchronizeZoom;
     nZoom           = rCpy.nZoom;
-    SetLRUFuncList( rCpy.pLRUList, rCpy.nLRUFuncCount );
+    SetLRUFuncList( rCpy.pLRUList.get(), rCpy.nLRUFuncCount );
     nStatusFunc     = rCpy.nStatusFunc;
     bAutoComplete   = rCpy.bAutoComplete;
     bDetectiveAuto  = rCpy.bDetectiveAuto;
@@ -113,19 +110,17 @@ const ScAppOptions& ScAppOptions::operator=( const ScAppOptions& rCpy )
 
 void ScAppOptions::SetLRUFuncList( const sal_uInt16* pList, const sal_uInt16 nCount )
 {
-    delete [] pLRUList;
-
     nLRUFuncCount = nCount;
 
     if ( nLRUFuncCount > 0 )
     {
-        pLRUList = new sal_uInt16[nLRUFuncCount];
+        pLRUList.reset( new sal_uInt16[nLRUFuncCount] );
 
         for ( sal_uInt16 i=0; i<nLRUFuncCount; i++ )
             pLRUList[i] = pList[i];
     }
     else
-        pLRUList = nullptr;
+        pLRUList.reset();
 }
 
 //  Config Item containing app options
@@ -135,13 +130,13 @@ static void lcl_SetLastFunctions( ScAppOptions& rOpt, const Any& rValue )
     Sequence<sal_Int32> aSeq;
     if ( rValue >>= aSeq )
     {
-        long nCount = aSeq.getLength();
-        if ( nCount < USHRT_MAX )
+        sal_Int32 nCount = aSeq.getLength();
+        if ( nCount < SAL_MAX_UINT16 )
         {
             const sal_Int32* pArray = aSeq.getConstArray();
             std::unique_ptr<sal_uInt16[]> pUShorts(new sal_uInt16[nCount]);
-            for (long i=0; i<nCount; i++)
-                pUShorts[i] = (sal_uInt16) pArray[i];
+            for (sal_Int32 i=0; i<nCount; i++)
+                pUShorts[i] = static_cast<sal_uInt16>(pArray[i]);
 
             rOpt.SetLRUFuncList( pUShorts.get(), sal::static_int_cast<sal_uInt16>(nCount) );
         }
@@ -216,14 +211,12 @@ static void lcl_GetSortList( Any& rDest )
 #define SCLAYOUTOPT_ZOOMTYPE        3
 #define SCLAYOUTOPT_SYNCZOOM        4
 #define SCLAYOUTOPT_STATUSBARMULTI  5
-#define SCLAYOUTOPT_COUNT           6
 
 #define CFGPATH_INPUT       "Office.Calc/Input"
 
 #define SCINPUTOPT_LASTFUNCS        0
 #define SCINPUTOPT_AUTOINPUT        1
 #define SCINPUTOPT_DET_AUTO         2
-#define SCINPUTOPT_COUNT            3
 
 #define CFGPATH_REVISION    "Office.Calc/Revision/Color"
 
@@ -231,29 +224,32 @@ static void lcl_GetSortList( Any& rDest )
 #define SCREVISOPT_INSERTION        1
 #define SCREVISOPT_DELETION         2
 #define SCREVISOPT_MOVEDENTRY       3
-#define SCREVISOPT_COUNT            4
 
 #define CFGPATH_CONTENT     "Office.Calc/Content/Update"
 
 #define SCCONTENTOPT_LINK           0
-#define SCCONTENTOPT_COUNT          1
 
 #define CFGPATH_SORTLIST    "Office.Calc/SortList"
 
 #define SCSORTLISTOPT_LIST          0
-#define SCSORTLISTOPT_COUNT         1
 
 #define CFGPATH_MISC        "Office.Calc/Misc"
 
 #define SCMISCOPT_DEFOBJWIDTH       0
 #define SCMISCOPT_DEFOBJHEIGHT      1
 #define SCMISCOPT_SHOWSHAREDDOCWARN 2
-#define SCMISCOPT_COUNT             3
 
 #define CFGPATH_COMPAT      "Office.Calc/Compatibility"
 
 #define SCCOMPATOPT_KEY_BINDING     0
-#define SCCOMPATOPT_COUNT           1
+
+// Default value of Layout/Other/StatusbarMultiFunction
+#define SCLAYOUTOPT_STATUSBARMULTI_DEFAULTVAL         514
+// Default value of Layout/Other/StatusbarFunction
+#define SCLAYOUTOPT_STATUSBAR_DEFAULTVAL              1
+// Legacy default value of Layout/Other/StatusbarFunction
+// prior to multiple statusbar functions feature addition
+#define SCLAYOUTOPT_STATUSBAR_DEFAULTVAL_LEGACY       9
 
 static sal_uInt32 lcl_ConvertStatusBarFuncSetToSingle( sal_uInt32 nFuncSet )
 {
@@ -267,126 +263,62 @@ static sal_uInt32 lcl_ConvertStatusBarFuncSetToSingle( sal_uInt32 nFuncSet )
 
 Sequence<OUString> ScAppCfg::GetLayoutPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "Other/MeasureUnit/NonMetric",  // SCLAYOUTOPT_MEASURE
-        "Other/StatusbarFunction",      // SCLAYOUTOPT_STATUSBAR
-        "Zoom/Value",                   // SCLAYOUTOPT_ZOOMVAL
-        "Zoom/Type",                    // SCLAYOUTOPT_ZOOMTYPE
-        "Zoom/Synchronize",             // SCLAYOUTOPT_SYNCZOOM
-        "Other/StatusbarMultiFunction"  // SCLAYOUTOPT_STATUSBARMULTI
-    };
-    Sequence<OUString> aNames(SCLAYOUTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCLAYOUTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
+    const bool bIsMetric = ScOptionsUtil::IsMetricSystem();
 
-    //  adjust for metric system
-    if (ScOptionsUtil::IsMetricSystem())
-        pNames[SCLAYOUTOPT_MEASURE] = "Other/MeasureUnit/Metric";
-
-    return aNames;
+    return {(bIsMetric ? OUString("Other/MeasureUnit/Metric")
+                       : OUString("Other/MeasureUnit/NonMetric")),  // SCLAYOUTOPT_MEASURE
+             "Other/StatusbarFunction",                             // SCLAYOUTOPT_STATUSBAR
+             "Zoom/Value",                                          // SCLAYOUTOPT_ZOOMVAL
+             "Zoom/Type",                                           // SCLAYOUTOPT_ZOOMTYPE
+             "Zoom/Synchronize",                                    // SCLAYOUTOPT_SYNCZOOM
+             "Other/StatusbarMultiFunction"};                       // SCLAYOUTOPT_STATUSBARMULTI
 }
 
 Sequence<OUString> ScAppCfg::GetInputPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "LastFunctions",            // SCINPUTOPT_LASTFUNCS
-        "AutoInput",                // SCINPUTOPT_AUTOINPUT
-        "DetectiveAuto"             // SCINPUTOPT_DET_AUTO
-    };
-    Sequence<OUString> aNames(SCINPUTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCINPUTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"LastFunctions",            // SCINPUTOPT_LASTFUNCS
+            "AutoInput",                // SCINPUTOPT_AUTOINPUT
+            "DetectiveAuto"};           // SCINPUTOPT_DET_AUTO
 }
 
 Sequence<OUString> ScAppCfg::GetRevisionPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "Change",                   // SCREVISOPT_CHANGE
-        "Insertion",                // SCREVISOPT_INSERTION
-        "Deletion",                 // SCREVISOPT_DELETION
-        "MovedEntry"                // SCREVISOPT_MOVEDENTRY
-    };
-    Sequence<OUString> aNames(SCREVISOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCREVISOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"Change",                   // SCREVISOPT_CHANGE
+            "Insertion",                // SCREVISOPT_INSERTION
+            "Deletion",                 // SCREVISOPT_DELETION
+            "MovedEntry"};              // SCREVISOPT_MOVEDENTRY
 }
 
 Sequence<OUString> ScAppCfg::GetContentPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "Link"                      // SCCONTENTOPT_LINK
-    };
-    Sequence<OUString> aNames(SCCONTENTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCCONTENTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"Link"};                    // SCCONTENTOPT_LINK
 }
 
 Sequence<OUString> ScAppCfg::GetSortListPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "List"                      // SCSORTLISTOPT_LIST
-    };
-    Sequence<OUString> aNames(SCSORTLISTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCSORTLISTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"List"};                    // SCSORTLISTOPT_LIST
 }
 
 Sequence<OUString> ScAppCfg::GetMiscPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "DefaultObjectSize/Width",      // SCMISCOPT_DEFOBJWIDTH
-        "DefaultObjectSize/Height",     // SCMISCOPT_DEFOBJHEIGHT
-        "SharedDocument/ShowWarning"    // SCMISCOPT_SHOWSHAREDDOCWARN
-    };
-    Sequence<OUString> aNames(SCMISCOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCMISCOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"DefaultObjectSize/Width",      // SCMISCOPT_DEFOBJWIDTH
+            "DefaultObjectSize/Height",     // SCMISCOPT_DEFOBJHEIGHT
+            "SharedDocument/ShowWarning"};  // SCMISCOPT_SHOWSHAREDDOCWARN
 }
 
 Sequence<OUString> ScAppCfg::GetCompatPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "KeyBindings/BaseGroup"         // SCCOMPATOPT_KEY_BINDING
-    };
-    Sequence<OUString> aNames(SCCOMPATOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for (int i = 0; i < SCCOMPATOPT_COUNT; ++i)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"KeyBindings/BaseGroup"};   // SCCOMPATOPT_KEY_BINDING
 }
 
 ScAppCfg::ScAppCfg() :
-    aLayoutItem( OUString( CFGPATH_LAYOUT ) ),
-    aInputItem( OUString( CFGPATH_INPUT ) ),
-    aRevisionItem( OUString( CFGPATH_REVISION ) ),
-    aContentItem( OUString( CFGPATH_CONTENT ) ),
-    aSortListItem( OUString( CFGPATH_SORTLIST ) ),
-    aMiscItem( OUString( CFGPATH_MISC ) ),
-    aCompatItem( OUString(CFGPATH_COMPAT ) )
+    aLayoutItem( CFGPATH_LAYOUT ),
+    aInputItem( CFGPATH_INPUT ),
+    aRevisionItem( CFGPATH_REVISION ),
+    aContentItem( CFGPATH_CONTENT ),
+    aSortListItem( CFGPATH_SORTLIST ),
+    aMiscItem( CFGPATH_MISC ),
+    aCompatItem( CFGPATH_COMPAT )
 {
     sal_Int32 nIntVal = 0;
 
@@ -401,8 +333,9 @@ ScAppCfg::ScAppCfg() :
     OSL_ENSURE(aValues.getLength() == aNames.getLength(), "GetProperties failed");
     if(aValues.getLength() == aNames.getLength())
     {
-        bool bStatusBarFuncSingleFound = false;
-        bool bStatusBarFuncMultiFound = false;
+        sal_uInt32 nStatusBarFuncSingle = 0;
+        sal_uInt32 nStatusBarFuncMulti = 0;
+        sal_uInt32 nUIntValTmp = 0;
         for(int nProp = 0; nProp < aNames.getLength(); nProp++)
         {
             OSL_ENSURE(pValues[nProp].hasValue(), "property value missing");
@@ -411,19 +344,21 @@ ScAppCfg::ScAppCfg() :
                 switch(nProp)
                 {
                     case SCLAYOUTOPT_MEASURE:
-                        if (pValues[nProp] >>= nIntVal) SetAppMetric( (FieldUnit) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetAppMetric( static_cast<FieldUnit>(nIntVal) );
                         break;
                     case SCLAYOUTOPT_STATUSBAR:
-                        bStatusBarFuncSingleFound = true;
+                        if ( pValues[SCLAYOUTOPT_STATUSBAR] >>= nUIntValTmp )
+                            nStatusBarFuncSingle = nUIntValTmp;
                         break;
                     case SCLAYOUTOPT_STATUSBARMULTI:
-                        bStatusBarFuncMultiFound = true;
+                        if ( pValues[SCLAYOUTOPT_STATUSBARMULTI] >>= nUIntValTmp )
+                            nStatusBarFuncMulti = nUIntValTmp;
                         break;
                     case SCLAYOUTOPT_ZOOMVAL:
-                        if (pValues[nProp] >>= nIntVal) SetZoom( (sal_uInt16) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetZoom( static_cast<sal_uInt16>(nIntVal) );
                         break;
                     case SCLAYOUTOPT_ZOOMTYPE:
-                        if (pValues[nProp] >>= nIntVal) SetZoomType( (SvxZoomType) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetZoomType( static_cast<SvxZoomType>(nIntVal) );
                         break;
                     case SCLAYOUTOPT_SYNCZOOM:
                         SetSynchronizeZoom( ScUnoHelpFunctions::GetBoolFromAny( pValues[nProp] ) );
@@ -432,22 +367,18 @@ ScAppCfg::ScAppCfg() :
             }
         }
 
-        sal_uInt32 nUIntVal = 0;
-        if ( bStatusBarFuncMultiFound )
+        if ( nStatusBarFuncMulti != SCLAYOUTOPT_STATUSBARMULTI_DEFAULTVAL )
+            SetStatusFunc( nStatusBarFuncMulti );
+        else if ( nStatusBarFuncSingle != SCLAYOUTOPT_STATUSBAR_DEFAULTVAL &&
+                  nStatusBarFuncSingle != SCLAYOUTOPT_STATUSBAR_DEFAULTVAL_LEGACY )
         {
-            if ( pValues[SCLAYOUTOPT_STATUSBARMULTI] >>= nUIntVal )
-                SetStatusFunc( nUIntVal );
+            if ( nStatusBarFuncSingle )
+                SetStatusFunc( 1 << nStatusBarFuncSingle );
+            else
+                SetStatusFunc( 0 );
         }
-        else if ( bStatusBarFuncSingleFound )
-        {
-            if ( pValues[SCLAYOUTOPT_STATUSBAR] >>= nUIntVal )
-            {
-                if ( nUIntVal )
-                    SetStatusFunc( 1 << nUIntVal );
-                else
-                    SetStatusFunc( 0 );
-            }
-        }
+        else
+            SetStatusFunc( SCLAYOUTOPT_STATUSBARMULTI_DEFAULTVAL );
     }
     aLayoutItem.SetCommitLink( LINK( this, ScAppCfg, LayoutCommitHdl ) );
 
@@ -495,16 +426,16 @@ ScAppCfg::ScAppCfg() :
                 switch(nProp)
                 {
                     case SCREVISOPT_CHANGE:
-                        if (pValues[nProp] >>= nIntVal) SetTrackContentColor( (sal_uInt32) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetTrackContentColor( Color(nIntVal) );
                         break;
                     case SCREVISOPT_INSERTION:
-                        if (pValues[nProp] >>= nIntVal) SetTrackInsertColor( (sal_uInt32) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetTrackInsertColor( Color(nIntVal) );
                         break;
                     case SCREVISOPT_DELETION:
-                        if (pValues[nProp] >>= nIntVal) SetTrackDeleteColor( (sal_uInt32) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetTrackDeleteColor( Color(nIntVal) );
                         break;
                     case SCREVISOPT_MOVEDENTRY:
-                        if (pValues[nProp] >>= nIntVal) SetTrackMoveColor( (sal_uInt32) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetTrackMoveColor( Color(nIntVal) );
                         break;
                 }
             }
@@ -527,7 +458,7 @@ ScAppCfg::ScAppCfg() :
                 switch(nProp)
                 {
                     case SCCONTENTOPT_LINK:
-                        if (pValues[nProp] >>= nIntVal) SetLinkMode( (ScLkUpdMode) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetLinkMode( static_cast<ScLkUpdMode>(nIntVal) );
                         break;
                 }
             }
@@ -609,7 +540,7 @@ ScAppCfg::ScAppCfg() :
     }
     aCompatItem.SetCommitLink( LINK(this, ScAppCfg, CompatCommitHdl) );
 }
- IMPL_LINK_NOARG_TYPED(ScAppCfg, LayoutCommitHdl, ScLinkConfigItem&, void)
+ IMPL_LINK_NOARG(ScAppCfg, LayoutCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetLayoutPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -620,19 +551,19 @@ ScAppCfg::ScAppCfg() :
         switch(nProp)
         {
             case SCLAYOUTOPT_MEASURE:
-                pValues[nProp] <<= (sal_Int32) GetAppMetric();
+                pValues[nProp] <<= static_cast<sal_Int32>(GetAppMetric());
                 break;
             case SCLAYOUTOPT_STATUSBAR:
                 pValues[nProp] <<= lcl_ConvertStatusBarFuncSetToSingle( GetStatusFunc() );
                 break;
             case SCLAYOUTOPT_ZOOMVAL:
-                pValues[nProp] <<= (sal_Int32) GetZoom();
+                pValues[nProp] <<= static_cast<sal_Int32>(GetZoom());
                 break;
             case SCLAYOUTOPT_ZOOMTYPE:
-                pValues[nProp] <<= (sal_Int32) GetZoomType();
+                pValues[nProp] <<= static_cast<sal_Int32>(GetZoomType());
                 break;
             case SCLAYOUTOPT_SYNCZOOM:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], GetSynchronizeZoom() );
+                pValues[nProp] <<= GetSynchronizeZoom();
                 break;
             case SCLAYOUTOPT_STATUSBARMULTI:
                 pValues[nProp] <<= GetStatusFunc();
@@ -642,7 +573,7 @@ ScAppCfg::ScAppCfg() :
     aLayoutItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScAppCfg, InputCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScAppCfg, InputCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetInputPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -656,17 +587,17 @@ IMPL_LINK_NOARG_TYPED(ScAppCfg, InputCommitHdl, ScLinkConfigItem&, void)
                 lcl_GetLastFunctions( pValues[nProp], *this );
                 break;
             case SCINPUTOPT_AUTOINPUT:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], GetAutoComplete() );
+                pValues[nProp] <<= GetAutoComplete();
                 break;
             case SCINPUTOPT_DET_AUTO:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], GetDetectiveAuto() );
+                pValues[nProp] <<= GetDetectiveAuto();
                 break;
         }
     }
     aInputItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScAppCfg, RevisionCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScAppCfg, RevisionCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetRevisionPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -677,23 +608,23 @@ IMPL_LINK_NOARG_TYPED(ScAppCfg, RevisionCommitHdl, ScLinkConfigItem&, void)
         switch(nProp)
         {
             case SCREVISOPT_CHANGE:
-                pValues[nProp] <<= (sal_Int32) GetTrackContentColor();
+                pValues[nProp] <<= GetTrackContentColor();
                 break;
             case SCREVISOPT_INSERTION:
-                pValues[nProp] <<= (sal_Int32) GetTrackInsertColor();
+                pValues[nProp] <<= GetTrackInsertColor();
                 break;
             case SCREVISOPT_DELETION:
-                pValues[nProp] <<= (sal_Int32) GetTrackDeleteColor();
+                pValues[nProp] <<= GetTrackDeleteColor();
                 break;
             case SCREVISOPT_MOVEDENTRY:
-                pValues[nProp] <<= (sal_Int32) GetTrackMoveColor();
+                pValues[nProp] <<= GetTrackMoveColor();
                 break;
         }
     }
     aRevisionItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScAppCfg, ContentCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScAppCfg, ContentCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetContentPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -704,14 +635,14 @@ IMPL_LINK_NOARG_TYPED(ScAppCfg, ContentCommitHdl, ScLinkConfigItem&, void)
         switch(nProp)
         {
             case SCCONTENTOPT_LINK:
-                pValues[nProp] <<= (sal_Int32) GetLinkMode();
+                pValues[nProp] <<= static_cast<sal_Int32>(GetLinkMode());
                 break;
         }
     }
     aContentItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScAppCfg, SortListCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScAppCfg, SortListCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetSortListPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -729,7 +660,7 @@ IMPL_LINK_NOARG_TYPED(ScAppCfg, SortListCommitHdl, ScLinkConfigItem&, void)
     aSortListItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScAppCfg, MiscCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScAppCfg, MiscCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetMiscPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -740,20 +671,20 @@ IMPL_LINK_NOARG_TYPED(ScAppCfg, MiscCommitHdl, ScLinkConfigItem&, void)
         switch(nProp)
         {
             case SCMISCOPT_DEFOBJWIDTH:
-                pValues[nProp] <<= (sal_Int32) GetDefaultObjectSizeWidth();
+                pValues[nProp] <<= GetDefaultObjectSizeWidth();
                 break;
             case SCMISCOPT_DEFOBJHEIGHT:
-                pValues[nProp] <<= (sal_Int32) GetDefaultObjectSizeHeight();
+                pValues[nProp] <<= GetDefaultObjectSizeHeight();
                 break;
             case SCMISCOPT_SHOWSHAREDDOCWARN:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], GetShowSharedDocumentWarning() );
+                pValues[nProp] <<= GetShowSharedDocumentWarning();
                 break;
         }
     }
     aMiscItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScAppCfg, CompatCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScAppCfg, CompatCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetCompatPropertyNames();
     Sequence<Any> aValues(aNames.getLength());

@@ -22,15 +22,13 @@
 #define INCLUDED_SALHELPER_CONDITION_HXX
 
 
-#include <osl/conditn.h>
-#include <osl/mutex.hxx>
-#include <salhelper/salhelperdllapi.h>
+#include "osl/conditn.hxx"
+#include "salhelper/salhelperdllapi.h"
+
+namespace osl { class Mutex; }
 
 namespace salhelper
 {
-    class ConditionModifier;
-    class ConditionWaiter;
-
 
     class SALHELPER_DLLPUBLIC Condition
     {
@@ -53,8 +51,8 @@ namespace salhelper
         Condition(Condition &) SAL_DELETED_FUNCTION;
         void operator =(Condition &) SAL_DELETED_FUNCTION;
 
-        osl::Mutex&  m_aMutex;
-        oslCondition m_aCondition;
+        osl::Mutex&     m_aMutex;
+        osl::Condition  m_aCondition;
     };
 
 
@@ -91,10 +89,8 @@ namespace salhelper
             timedout & operator =(timedout const &);
         };
 
-        ConditionWaiter(Condition& aCond,sal_uInt32 milliSec)
-            throw(
-                timedout
-            );
+        /// @throws timedout
+        ConditionWaiter(Condition& aCond,sal_uInt32 milliSec);
 
 
         ~ConditionWaiter();

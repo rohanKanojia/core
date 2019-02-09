@@ -19,10 +19,15 @@
 
 #include <recording/dispatchrecorder.hxx>
 #include <com/sun/star/frame/DispatchStatement.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/script/CannotConvertException.hpp>
 #include <com/sun/star/script/Converter.hpp>
+#include <o3tl/any.hxx>
+#include <osl/diagnose.h>
 #include <services.h>
 #include <vcl/svapp.hxx>
-#include <comphelper/processfactory.hxx>
+#include <typelib/typedescription.h>
 
 using namespace ::com::sun::star::uno;
 
@@ -37,7 +42,7 @@ DEFINE_XSERVICEINFO_MULTISERVICE_2(
     DispatchRecorder,
     ::cppu::OWeakObject,
     "com.sun.star.frame.DispatchRecorder",
-    OUString("com.sun.star.comp.framework.DispatchRecorder"))
+    "com.sun.star.comp.framework.DispatchRecorder")
 
 DEFINE_INIT_SERVICE(
     DispatchRecorder,
@@ -45,9 +50,8 @@ DEFINE_INIT_SERVICE(
     }
 )
 
-#include <typelib/typedescription.h>
 
-void flatten_struct_members(
+static void flatten_struct_members(
     ::std::vector< Any > * vec, void const * data,
     typelib_CompoundTypeDescription * pTD )
 {
@@ -62,7 +66,7 @@ void flatten_struct_members(
     }
 }
 
-Sequence< Any > make_seq_out_of_struct(
+static Sequence< Any > make_seq_out_of_struct(
     Any const & val )
 {
     Type const & type = val.getValueType();
@@ -99,38 +103,34 @@ DispatchRecorder::~DispatchRecorder()
 }
 
 // generate header
-void SAL_CALL DispatchRecorder::startRecording( const css::uno::Reference< css::frame::XFrame >& ) throw( css::uno::RuntimeException, std::exception )
+void SAL_CALL DispatchRecorder::startRecording( const css::uno::Reference< css::frame::XFrame >& )
 {
     /* SAFE{ */
     /* } */
 }
 
 void SAL_CALL DispatchRecorder::recordDispatch( const css::util::URL& aURL,
-                                                const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception )
+                                                const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
 {
-    OUString aTarget;
-
-    css::frame::DispatchStatement aStatement( aURL.Complete, aTarget, lArguments, 0, sal_False );
+    css::frame::DispatchStatement aStatement( aURL.Complete, OUString(), lArguments, 0, false );
     m_aStatements.push_back( aStatement );
 }
 
 void SAL_CALL  DispatchRecorder::recordDispatchAsComment( const css::util::URL& aURL,
-                                                          const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception )
+                                                          const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
 {
-    OUString aTarget;
-
     // last parameter must be set to true -> it's a comment
-    css::frame::DispatchStatement aStatement( aURL.Complete, aTarget, lArguments, 0, sal_True );
+    css::frame::DispatchStatement aStatement( aURL.Complete, OUString(), lArguments, 0, true );
     m_aStatements.push_back( aStatement );
 }
 
-void SAL_CALL DispatchRecorder::endRecording() throw( css::uno::RuntimeException, std::exception )
+void SAL_CALL DispatchRecorder::endRecording()
 {
     SolarMutexGuard g;
     m_aStatements.clear();
 }
 
-OUString SAL_CALL DispatchRecorder::getRecordedMacro() throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL DispatchRecorder::getRecordedMacro()
 {
     SolarMutexGuard g;
 
@@ -150,14 +150,13 @@ OUString SAL_CALL DispatchRecorder::getRecordedMacro() throw( css::uno::RuntimeE
     aScriptBuffer.append("document   = ThisComponent.CurrentController.Frame\n");
     aScriptBuffer.append("dispatcher = createUnoService(\"com.sun.star.frame.DispatchHelper\")\n\n");
 
-    std::vector< css::frame::DispatchStatement>::iterator p;
-    for ( p = m_aStatements.begin(); p != m_aStatements.end(); ++p )
-        implts_recordMacro( p->aCommand, p->aArgs, p->bIsComment, aScriptBuffer );
+    for (auto const& statement : m_aStatements)
+        implts_recordMacro( statement.aCommand, statement.aArgs, statement.bIsComment, aScriptBuffer );
     OUString sScript = aScriptBuffer.makeStringAndClear();
     return sScript;
 }
 
-void SAL_CALL DispatchRecorder::AppendToBuffer( const css::uno::Any& aValue, OUStringBuffer& aArgumentBuffer )
+void DispatchRecorder::AppendToBuffer( const css::uno::Any& aValue, OUStringBuffer& aArgumentBuffer )
 {
     // if value == bool
     if (aValue.getValueTypeClass() == css::uno::TypeClass_STRUCT )
@@ -224,7 +223,7 @@ void SAL_CALL DispatchRecorder::AppendToBuffer( const css::uno::Any& aValue, OUS
 
                     // add the character constant
                     aArgumentBuffer.append("CHR$(");
-                    aArgumentBuffer.append( (sal_Int32) pChars[nChar] );
+                    aArgumentBuffer.append( static_cast<sal_Int32>(pChars[nChar]) );
                     aArgumentBuffer.append(")");
                 }
                 else
@@ -251,15 +250,14 @@ void SAL_CALL DispatchRecorder::AppendToBuffer( const css::uno::Any& aValue, OUS
         else
             aArgumentBuffer.append("\"\"");
     }
-    else if (aValue.getValueType() == cppu::UnoType<cppu::UnoCharType>::get())
+    else if (auto nVal = o3tl::tryAccess<sal_Unicode>(aValue))
     {
         // character variables are recorded as strings, back conversion must be handled in client code
-        sal_Unicode nVal = *static_cast<sal_Unicode const *>(aValue.getValue());
         aArgumentBuffer.append("\"");
-        if ( (sal_Unicode(nVal) == '\"') )
+        if ( *nVal == '\"' )
             // encode \" to \"\"
-            aArgumentBuffer.append((sal_Unicode)nVal);
-        aArgumentBuffer.append((sal_Unicode)nVal);
+            aArgumentBuffer.append(*nVal);
+        aArgumentBuffer.append(*nVal);
         aArgumentBuffer.append("\"");
     }
     else
@@ -285,7 +283,7 @@ void SAL_CALL DispatchRecorder::AppendToBuffer( const css::uno::Any& aValue, OUS
     }
 }
 
-void SAL_CALL DispatchRecorder::implts_recordMacro( const OUString& aURL,
+void DispatchRecorder::implts_recordMacro( const OUString& aURL,
                                                     const css::uno::Sequence< css::beans::PropertyValue >& lArguments,
                                                           bool bAsComment, OUStringBuffer& aScriptBuffer )
 {
@@ -348,7 +346,7 @@ void SAL_CALL DispatchRecorder::implts_recordMacro( const OUString& aURL,
         aScriptBuffer.append("dim ");
         aScriptBuffer.append     (sArrayName);
         aScriptBuffer.append("(");
-        aScriptBuffer.append     ((sal_Int32)(nValidArgs-1)); // 0 based!
+        aScriptBuffer.append     (static_cast<sal_Int32>(nValidArgs-1)); // 0 based!
         aScriptBuffer.append(") as new com.sun.star.beans.PropertyValue\n");
         aScriptBuffer.append     (aArgumentBuffer.makeStringAndClear());
         aScriptBuffer.append("\n");
@@ -358,13 +356,13 @@ void SAL_CALL DispatchRecorder::implts_recordMacro( const OUString& aURL,
     if(bAsComment)
         aScriptBuffer.append(REM_AS_COMMENT);
     aScriptBuffer.append("dispatcher.executeDispatch(document, \"");
-    aScriptBuffer.append     (aURL);
+    aScriptBuffer.append(aURL);
     aScriptBuffer.append("\", \"\", 0, ");
     if(nValidArgs<1)
         aScriptBuffer.append("Array()");
     else
     {
-        aScriptBuffer.append( sArrayName.getStr() );
+        aScriptBuffer.append( sArrayName );
         aScriptBuffer.append("()");
     }
     aScriptBuffer.append(")\n\n");
@@ -374,24 +372,24 @@ void SAL_CALL DispatchRecorder::implts_recordMacro( const OUString& aURL,
     /* } */
 }
 
-css::uno::Type SAL_CALL DispatchRecorder::getElementType() throw (css::uno::RuntimeException, std::exception)
+css::uno::Type SAL_CALL DispatchRecorder::getElementType()
 {
     return cppu::UnoType<css::frame::DispatchStatement>::get();
 }
 
-sal_Bool SAL_CALL DispatchRecorder::hasElements()  throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL DispatchRecorder::hasElements()
 {
     return (! m_aStatements.empty());
 }
 
-sal_Int32 SAL_CALL DispatchRecorder::getCount() throw (css::uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL DispatchRecorder::getCount()
 {
     return m_aStatements.size();
 }
 
-css::uno::Any SAL_CALL DispatchRecorder::getByIndex(sal_Int32 idx)  throw (css::lang::IndexOutOfBoundsException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+css::uno::Any SAL_CALL DispatchRecorder::getByIndex(sal_Int32 idx)
 {
-    if (idx >= (sal_Int32)m_aStatements.size()) {
+    if (idx >= static_cast<sal_Int32>(m_aStatements.size())) {
         throw css::lang::IndexOutOfBoundsException( "Dispatch recorder out of bounds"  );
    }
 
@@ -401,7 +399,7 @@ css::uno::Any SAL_CALL DispatchRecorder::getByIndex(sal_Int32 idx)  throw (css::
     return element;
 }
 
-void SAL_CALL DispatchRecorder::replaceByIndex(sal_Int32 idx, const css::uno::Any& element) throw (css::lang::IllegalArgumentException, css::lang::IndexOutOfBoundsException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
+void SAL_CALL DispatchRecorder::replaceByIndex(sal_Int32 idx, const css::uno::Any& element)
 {
     if (element.getValueType() !=
         cppu::UnoType<css::frame::DispatchStatement>::get()) {
@@ -410,15 +408,13 @@ void SAL_CALL DispatchRecorder::replaceByIndex(sal_Int32 idx, const css::uno::An
                           Reference< XInterface >(), 2 );
     }
 
-    if (idx >= (sal_Int32)m_aStatements.size()) {
+    if (idx >= static_cast<sal_Int32>(m_aStatements.size())) {
                 throw css::lang::IndexOutOfBoundsException(
                         "Dispatch recorder out of bounds"  );
 
         }
 
-    css::frame::DispatchStatement const *pStatement;
-
-    pStatement = static_cast<css::frame::DispatchStatement const *>(element.getValue());
+    auto pStatement = o3tl::doAccess<css::frame::DispatchStatement>(element);
 
     css::frame::DispatchStatement aStatement(
         pStatement->aCommand,

@@ -18,12 +18,10 @@
  */
 
 #include <basic/sbx.hxx>
-#include "parser.hxx"
-#include <osl/diagnose.h>
+#include <parser.hxx>
 #include <com/sun/star/script/ModuleType.hpp>
 #include <svtools/miscopt.hxx>
 #include <rtl/character.hxx>
-#include <o3tl/make_unique.hxx>
 
 struct SbiParseStack {              // "Stack" for statement-blocks
     SbiParseStack* pNext;           // Chain
@@ -118,23 +116,20 @@ SbiParser::SbiParser( StarBASIC* pb, SbModule* pm )
           aRtlSyms( aGblStrings, SbRTL, this ),
           aGen( *pm, this, 1024 )
 {
-    eCurExpr = SbSYMBOL;
     eEndTok  = NIL;
     pProc    = nullptr;
     pStack   = nullptr;
     pWithVar = nullptr;
     nBase    = 0;
-    bText    =
     bGblDefs =
     bNewGblDefs =
     bSingleLineIf =
     bCodeCompleting =
     bExplicit = false;
     bClassModule = ( pm->GetModuleType() == css::script::ModuleType::CLASS );
-    OSL_TRACE("Parser - %s, bClassModule %d", OUStringToOString( pm->GetName(), RTL_TEXTENCODING_UTF8 ).getStr(), bClassModule );
     pPool    = &aPublics;
-    for( short i = 0; i < 26; i++ )
-        eDefTypes[ i ] = SbxVARIANT;    // no explicit default type
+    for(SbxDataType & eDefType : eDefTypes)
+        eDefType = SbxVARIANT;    // no explicit default type
 
     aPublics.SetParent( &aGlobals );
     aGlobals.SetParent( &aRtlSyms );
@@ -150,10 +145,12 @@ SbiParser::SbiParser( StarBASIC* pb, SbModule* pm )
 
 }
 
+SbiParser::~SbiParser() { }
+
 // part of the runtime-library?
 SbiSymDef* SbiParser::CheckRTLForSym(const OUString& rSym, SbxDataType eType)
 {
-    SbxVariable* pVar = GetBasic()->GetRtl()->Find(rSym, SbxCLASS_DONTCARE);
+    SbxVariable* pVar = GetBasic()->GetRtl()->Find(rSym, SbxClassType::DontCare);
     if (!pVar)
         return nullptr;
 
@@ -310,7 +307,7 @@ void SbiParser::StmntBlock( SbiToken eEnd )
     }
 }
 
-void SbiParser::SetCodeCompleting( const bool& b )
+void SbiParser::SetCodeCompleting( bool b )
 {
     bCodeCompleting = b;
 }
@@ -376,17 +373,17 @@ bool SbiParser::Parse()
         Next(); return true;
     }
 
-        // In vba it's possible to do Error.foobar ( even if it results in
+    // In vba it's possible to do Error.foobar ( even if it results in
     // a runtime error
-        if ( eCurTok == ERROR_ && IsVBASupportOn() ) // we probably need to define a subset of keywords where this madness applies e.g. if ( IsVBASupportOn() && SymbolCanBeRedined( eCurTok ) )
+    if ( eCurTok == ERROR_ && IsVBASupportOn() ) // we probably need to define a subset of keywords where this madness applies e.g. if ( IsVBASupportOn() && SymbolCanBeRedined( eCurTok ) )
+    {
+        SbiTokenizer tokens( *this );
+        tokens.Next();
+        if ( tokens.Peek()  == DOT )
         {
-            SbiTokenizer tokens( *static_cast<SbiTokenizer*>(this) );
-            tokens.Next();
-            if ( tokens.Peek()  == DOT )
-            {
-                eCurTok = SYMBOL;
-        ePush = eCurTok;
-            }
+            eCurTok = SYMBOL;
+            ePush = eCurTok;
+        }
     }
     // if there's a symbol, it's either a variable (LET)
     // or a SUB-procedure (CALL without brackets)
@@ -401,7 +398,7 @@ bool SbiParser::Parse()
             Next();
             Push( eCurTok );
             aGen.Statement();
-                Symbol();
+            Symbol(nullptr);
         }
     }
     else
@@ -435,11 +432,11 @@ bool SbiParser::Parse()
                         eCurTok == SUB || eCurTok == FUNCTION )
                     aGen.Statement();
                 (this->*( p->Func ) )();
-                SbxError nSbxErr = SbxBase::GetError();
+                ErrCode nSbxErr = SbxBase::GetError();
                 if( nSbxErr )
                 {
                     SbxBase::ResetError();
-                    Error( (SbError)nSbxErr );
+                    Error( nSbxErr );
                 }
             }
         }
@@ -510,10 +507,10 @@ void SbiParser::Symbol( const KeywordSymbolInfo* pKeywordSymbolInfo )
                 if( nParCount == 2 || nParCount == 3 )
                 {
                     if( nParCount == 2 )
-                        pPar->addExpression( o3tl::make_unique<SbiExpression>( this, -1, SbxLONG ) );
+                        pPar->addExpression( std::make_unique<SbiExpression>( this, -1, SbxLONG ) );
 
                     TestToken( EQ );
-                    pPar->addExpression( o3tl::make_unique<SbiExpression>( this ) );
+                    pPar->addExpression( std::make_unique<SbiExpression>( this ) );
 
                     bSpecialMidHandling = true;
                 }
@@ -592,8 +589,7 @@ void SbiParser::Set()
     if( eTok == NEW )
     {
         Next();
-        OUString aStr;
-        SbiSymDef* pTypeDef = new SbiSymDef( aStr );
+        SbiSymDef* pTypeDef = new SbiSymDef( OUString() );
         TypeDecl( *pTypeDef, true );
 
         aLvalue.Gen();
@@ -605,10 +601,10 @@ void SbiParser::Set()
         SbiExpression aExpr( this );
         aLvalue.Gen();
         aExpr.Gen();
-        // Its a good idea to distinguish between
+        // It's a good idea to distinguish between
         // set something = another &
         // something = another
-        // ( its necessary for vba objects where set is object
+        // ( it's necessary for vba objects where set is object
         // specific and also doesn't involve processing default params )
         if( pDef->GetTypeId() )
         {
@@ -765,13 +761,10 @@ void SbiParser::Option()
         case BASIC_EXPLICIT:
             bExplicit = true; break;
         case BASE:
-            if( Next() == NUMBER )
+            if( Next() == NUMBER && ( nVal == 0 || nVal == 1 ) )
             {
-                if( nVal == 0 || nVal == 1 )
-                {
-                    nBase = (short) nVal;
-                    break;
-                }
+                nBase = static_cast<short>(nVal);
+                break;
             }
             Error( ERRCODE_BASIC_EXPECTED, "0/1" );
             break;
@@ -789,11 +782,9 @@ void SbiParser::Option()
             SbiToken eTok = Next();
             if( eTok == BINARY )
             {
-                bText = false;
             }
             else if( eTok == SYMBOL && GetSym().equalsIgnoreAsciiCase("text") )
             {
-                bText = true;
             }
             else
             {
@@ -835,17 +826,12 @@ void SbiParser::Option()
     }
 }
 
-void addStringConst( SbiSymPool& rPool, const char* pSym, const OUString& rStr )
+static void addStringConst( SbiSymPool& rPool, const OUString& pSym, const OUString& rStr )
 {
-    SbiConstDef* pConst = new SbiConstDef( OUString::createFromAscii( pSym ) );
+    SbiConstDef* pConst = new SbiConstDef( pSym );
     pConst->SetType( SbxSTRING );
     pConst->Set( rStr );
     rPool.Add( pConst );
-}
-
-inline void addStringConst( SbiSymPool& rPool, const char* pSym, const char* pStr )
-{
-    addStringConst( rPool, pSym, OUString::createFromAscii( pStr ) );
 }
 
 void SbiParser::AddConstants()
@@ -855,7 +841,7 @@ void SbiParser::AddConstants()
     addStringConst( aPublics, "vbCrLf", "\x0D\x0A" );
     addStringConst( aPublics, "vbFormFeed", "\x0C" );
     addStringConst( aPublics, "vbLf", "\x0A" );
-#ifndef WIN32_
+#ifdef _WIN32
     addStringConst( aPublics, "vbNewLine", "\x0D\x0A" );
 #else
     addStringConst( aPublics, "vbNewLine", "\x0A" );
@@ -865,7 +851,7 @@ void SbiParser::AddConstants()
     addStringConst( aPublics, "vbVerticalTab", "\x0B" );
 
     // Force length 1 and make char 0 afterwards
-    OUString aNullCharStr((sal_Unicode)0);
+    OUString aNullCharStr(u'\0');
     addStringConst( aPublics, "vbNullChar", aNullCharStr );
 }
 

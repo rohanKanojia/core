@@ -25,19 +25,16 @@
 #include <tools/globname.hxx>
 #include <sfx2/app.hxx>
 
-#include "swtypes.hxx"
-#include "cmdid.h"
-#include "wformsh.hxx"
-#include "globals.hrc"
-#include "web.hrc"
-#include "popup.hrc"
-#include "shells.hrc"
+#include <swtypes.hxx>
+#include <cmdid.h>
+#include <wformsh.hxx>
+#include <globals.hrc>
 
 #include <sfx2/request.hxx>
     // needed for -fsanitize=function visibility of typeinfo for functions of
     // type void(SfxShell*,SfxRequest&) defined in swslots.hxx
-#define SwWebDrawFormShell
-#include "swslots.hxx"
+#define ShellClass_SwWebDrawFormShell
+#include <swslots.hxx>
 
 SFX_IMPL_SUPERCLASS_INTERFACE(SwWebDrawFormShell, SwDrawFormShell)
 
@@ -45,7 +42,7 @@ void SwWebDrawFormShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("form");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_TEXT_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Text_Toolbox_Sw);
 }
 
 

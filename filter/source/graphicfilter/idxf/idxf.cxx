@@ -27,16 +27,16 @@
 
 class FilterConfigItem;
 
-//================== GraphicImport - die exportierte Funktion ================
+//================== GraphicImport - the exported function ================
 
-extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT bool
 idxGraphicImport( SvStream & rStream, Graphic & rGraphic, FilterConfigItem* )
 {
     DXFRepresentation aDXF;
     DXF2GDIMetaFile aConverter;
     GDIMetaFile aMTF;
 
-    if ( !aDXF.Read( rStream, 0, 60 ) )
+    if ( !aDXF.Read( rStream ) )
         return false;
     if ( !aConverter.Convert( aDXF, aMTF, 60, 100 ) )
         return false;

@@ -22,6 +22,7 @@
 
 #include <sal/config.h>
 
+#include <memory>
 #include <set>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -40,10 +41,10 @@ namespace xmloff
     class OElementExport : public OPropertyExport
     {
     protected:
-        css::uno::Sequence< css::script::ScriptEventDescriptor >
+        css::uno::Sequence< css::script::ScriptEventDescriptor > const
                                 m_aEvents;
 
-        SvXMLElementExport*     m_pXMLElement;          // XML element doing the concrete startElement etc.
+        std::unique_ptr<SvXMLElementExport> m_pXMLElement;          // XML element doing the concrete startElement etc.
 
     public:
         OElementExport(IFormsExportContext& _rContext,
@@ -90,17 +91,17 @@ namespace xmloff
         typedef std::set<sal_Int16> Int16Set;
             // used below
 
-        OUString         m_sControlId;           // the control id to use when exporting
-        OUString         m_sReferringControls;   // list of referring controls (i.e. their id's)
+        OUString const          m_sControlId;           // the control id to use when exporting
+        OUString const          m_sReferringControls;   // list of referring controls (i.e. their id's)
         sal_Int16               m_nClassId;             // class id of the control we're representing
         ElementType             m_eType;                // (XML) type of the control we're representing
-        sal_Int32               m_nIncludeCommon;       // common control attributes to include
-        sal_Int32               m_nIncludeDatabase;     // common database attributes to include
-        sal_Int32               m_nIncludeSpecial;      // special attributes to include
-        sal_Int32               m_nIncludeEvents;       // events to include
-        sal_Int32               m_nIncludeBindings;     // binding attributes to include
+        CCAFlags                m_nIncludeCommon;       // common control attributes to include
+        DAFlags                 m_nIncludeDatabase;     // common database attributes to include
+        SCAFlags                m_nIncludeSpecial;      // special attributes to include
+        EAFlags                 m_nIncludeEvents;       // events to include
+        BAFlags                 m_nIncludeBindings;     // binding attributes to include
 
-        SvXMLElementExport*     m_pOuterElement;        // XML element doing the concrete startElement etc. for the outer element
+        std::unique_ptr<SvXMLElementExport> m_pOuterElement;        // XML element doing the concrete startElement etc. for the outer element
 
     public:
         /** constructs an object capable of exporting controls
@@ -119,7 +120,6 @@ namespace xmloff
             const OUString& _rControlId,
             const OUString& _rReferringControls,
             const css::uno::Sequence< css::script::ScriptEventDescriptor >& _rxEvents);
-        virtual ~OControlExport();
 
     protected:
         /// start the XML element
@@ -149,7 +149,7 @@ namespace xmloff
 
         /** writes everything which needs to be represented as sub tag
         */
-        void exportSubTags() throw (css::uno::Exception, std::exception) override;
+        void exportSubTags() override;
 
         /** adds the attributes which are handled via generic IPropertyHandlers
 
@@ -173,7 +173,7 @@ namespace xmloff
         /** adds the XML attributes which are related to binding controls to
             external values and/or list sources
         */
-        void exportBindingAtributes();
+        void exportBindingAttributes();
 
         /** adds attributes which are special to a control type to the export context's attribute list
         */
@@ -199,7 +199,7 @@ namespace xmloff
         */
         void exportListSourceAsElements();
 
-        /** get's a Sequence&lt; sal_Int16 &gt; property value as set of sal_Int16's
+        /** gets a Sequence&lt; sal_Int16 &gt; property value as set of sal_Int16's
             @param _rPropertyName
                 the property name to use
             @param _rOut
@@ -271,7 +271,7 @@ namespace xmloff
             const OUString& _rControlId,
             const css::uno::Sequence< css::script::ScriptEventDescriptor >& _rxEvents);
 
-        virtual ~OColumnExport();
+        virtual ~OColumnExport() override;
 
     protected:
         // OControlExport overridables

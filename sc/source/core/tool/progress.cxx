@@ -24,12 +24,14 @@
 #include <sfx2/sfxsids.hrc>
 #include <svl/eitem.hxx>
 #include <svl/itemset.hxx>
+#include <osl/diagnose.h>
 
 #define SC_PROGRESS_CXX
-#include "progress.hxx"
-#include "document.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
+#include <progress.hxx>
+#include <document.hxx>
+#include <global.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
 using namespace com::sun::star;
 
@@ -37,15 +39,12 @@ static ScProgress theDummyInterpretProgress;
 SfxProgress*    ScProgress::pGlobalProgress = nullptr;
 sal_uLong       ScProgress::nGlobalRange = 0;
 sal_uLong       ScProgress::nGlobalPercent = 0;
-bool            ScProgress::bGlobalNoUserBreak = true;
 ScProgress*     ScProgress::pInterpretProgress = &theDummyInterpretProgress;
-ScProgress*     ScProgress::pOldInterpretProgress = nullptr;
 sal_uLong       ScProgress::nInterpretProgress = 0;
-bool            ScProgress::bAllowInterpretProgress = true;
 ScDocument*     ScProgress::pInterpretDoc;
 bool            ScProgress::bIdleWasEnabled = false;
 
-static bool lcl_IsHiddenDocument( SfxObjectShell* pObjSh )
+static bool lcl_IsHiddenDocument( const SfxObjectShell* pObjSh )
 {
     if (pObjSh)
     {
@@ -62,7 +61,7 @@ static bool lcl_IsHiddenDocument( SfxObjectShell* pObjSh )
     return false;
 }
 
-static bool lcl_HasControllersLocked( SfxObjectShell& rObjSh )
+static bool lcl_HasControllersLocked( const SfxObjectShell& rObjSh )
 {
     uno::Reference<frame::XModel> xModel( rObjSh.GetBaseModel() );
     if (xModel.is())
@@ -107,17 +106,15 @@ ScProgress::ScProgress(SfxObjectShell* pObjSh, const OUString& rText,
     }
     else
     {
-        pProgress = new SfxProgress( pObjSh, rText, nRange, bWait );
-        pGlobalProgress = pProgress;
+        pProgress.reset(new SfxProgress( pObjSh, rText, nRange, bWait ));
+        pGlobalProgress = pProgress.get();
         nGlobalRange = nRange;
         nGlobalPercent = 0;
-        bGlobalNoUserBreak = true;
     }
 }
 
 ScProgress::ScProgress()
     : bEnabled(true)
-    , pProgress(nullptr)
 {
     // DummyInterpret
 }
@@ -126,40 +123,36 @@ ScProgress::~ScProgress()
 {
     if ( pProgress )
     {
-        delete pProgress;
+        pProgress.reset();
         pGlobalProgress = nullptr;
         nGlobalRange = 0;
         nGlobalPercent = 0;
-        bGlobalNoUserBreak = true;
     }
 }
 
 void ScProgress::CreateInterpretProgress( ScDocument* pDoc, bool bWait )
 {
-    if ( bAllowInterpretProgress )
+    if ( nInterpretProgress )
+        nInterpretProgress++;
+    else if ( pDoc->GetAutoCalc() )
     {
-        if ( nInterpretProgress )
-            nInterpretProgress++;
-        else if ( pDoc->GetAutoCalc() )
-        {
-            nInterpretProgress = 1;
-            bIdleWasEnabled = pDoc->IsIdleEnabled();
-            pDoc->EnableIdle(false);
-            // Interpreter may be called in many circumstances, also if another
-            // progress bar is active, for example while adapting row heights.
-            // Keep the dummy interpret progress.
-            if ( !pGlobalProgress )
-                pInterpretProgress = new ScProgress( pDoc->GetDocumentShell(),
-                    ScGlobal::GetRscString( STR_PROGRESS_CALCULATING ),
-                    pDoc->GetFormulaCodeInTree()/MIN_NO_CODES_PER_PROGRESS_UPDATE, bWait );
-            pInterpretDoc = pDoc;
-        }
+        nInterpretProgress = 1;
+        bIdleWasEnabled = pDoc->IsIdleEnabled();
+        pDoc->EnableIdle(false);
+        // Interpreter may be called in many circumstances, also if another
+        // progress bar is active, for example while adapting row heights.
+        // Keep the dummy interpret progress.
+        if ( !pGlobalProgress )
+            pInterpretProgress = new ScProgress( pDoc->GetDocumentShell(),
+                ScResId( STR_PROGRESS_CALCULATING ),
+                pDoc->GetFormulaCodeInTree()/MIN_NO_CODES_PER_PROGRESS_UPDATE, bWait );
+        pInterpretDoc = pDoc;
     }
 }
 
 void ScProgress::DeleteInterpretProgress()
 {
-    if ( bAllowInterpretProgress && nInterpretProgress )
+    if ( nInterpretProgress )
     {
         /*  Do not decrement 'nInterpretProgress', before 'pInterpretProgress'
             is deleted. In rare cases, deletion of 'pInterpretProgress' causes

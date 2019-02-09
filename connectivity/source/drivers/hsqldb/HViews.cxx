@@ -18,40 +18,39 @@
  */
 
 
-#include "hsqldb/HTables.hxx"
-#include "hsqldb/HViews.hxx"
-#include "hsqldb/HView.hxx"
+#include <hsqldb/HTables.hxx>
+#include <hsqldb/HViews.hxx>
+#include <hsqldb/HView.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
 #include <com/sun/star/sdbcx/CheckOption.hpp>
-#include "hsqldb/HCatalog.hxx"
-#include <comphelper/extract.hxx>
+#include <hsqldb/HCatalog.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbexception.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <comphelper/types.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
 using namespace ::comphelper;
 
 using namespace ::cppu;
 using namespace connectivity;
 using namespace connectivity::hsqldb;
-using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::sdbcx;
-using namespace ::com::sun::star::sdbc;
-using namespace ::com::sun::star::container;
-using namespace ::com::sun::star::lang;
+using namespace css::uno;
+using namespace css::beans;
+using namespace css::sdbcx;
+using namespace css::sdbc;
+using namespace css::container;
+using namespace css::lang;
 using namespace dbtools;
 typedef connectivity::sdbcx::OCollection OCollection_TYPE;
 
 
 HViews::HViews( const Reference< XConnection >& _rxConnection, ::cppu::OWeakObject& _rParent, ::osl::Mutex& _rMutex,
-    const TStringVector &_rVector )
+    const ::std::vector< OUString> &_rVector )
     :sdbcx::OCollection( _rParent, true, _rMutex, _rVector )
     ,m_xConnection( _rxConnection )
     ,m_xMetaData( _rxConnection->getMetaData() )
@@ -73,14 +72,14 @@ sdbcx::ObjectType HViews::createObject(const OUString& _rName)
 }
 
 
-void HViews::impl_refresh(  ) throw(RuntimeException)
+void HViews::impl_refresh(  )
 {
     static_cast<OHCatalog&>(m_rParent).refreshTables();
 }
 
 void HViews::disposing()
 {
-m_xMetaData.clear();
+    m_xMetaData.clear();
     OCollection::disposing();
 }
 
@@ -111,7 +110,7 @@ void HViews::dropObject(sal_Int32 _nPos,const OUString& /*_sElementName*/)
         OUString aSql(  "DROP VIEW" );
 
         Reference<XPropertySet> xProp(xObject,UNO_QUERY);
-        aSql += ::dbtools::composeTableName( m_xMetaData, xProp, ::dbtools::EComposeRule::InTableDefinitions, false, false, true );
+        aSql += ::dbtools::composeTableName( m_xMetaData, xProp, ::dbtools::EComposeRule::InTableDefinitions, true );
 
         Reference<XConnection> xConnection = static_cast<OHCatalog&>(m_rParent).getConnection();
         Reference< XStatement > xStmt = xConnection->createStatement(  );
@@ -135,7 +134,7 @@ void HViews::createView( const Reference< XPropertySet >& descriptor )
     descriptor->getPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_COMMAND)) >>= sCommand;
 
     OUString aSql = "CREATE VIEW " +
-        ::dbtools::composeTableName( m_xMetaData, descriptor, ::dbtools::EComposeRule::InTableDefinitions, false, false, true ) +
+        ::dbtools::composeTableName( m_xMetaData, descriptor, ::dbtools::EComposeRule::InTableDefinitions, true ) +
         " AS " + sCommand;
 
     Reference< XStatement > xStmt = xConnection->createStatement(  );
@@ -149,7 +148,7 @@ void HViews::createView( const Reference< XPropertySet >& descriptor )
     OTables* pTables = static_cast<OTables*>(static_cast<OHCatalog&>(m_rParent).getPrivateTables());
     if ( pTables )
     {
-        OUString sName = ::dbtools::composeTableName( m_xMetaData, descriptor, ::dbtools::EComposeRule::InDataManipulation, false, false, false );
+        OUString sName = ::dbtools::composeTableName( m_xMetaData, descriptor, ::dbtools::EComposeRule::InDataManipulation, false );
         pTables->appendNew(sName);
     }
 }

@@ -22,7 +22,6 @@
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <vcl/window.hxx>
-#include <tools/resid.hxx>
 #include <com/sun/star/awt/Size.hpp>
 
 
@@ -32,21 +31,20 @@ namespace pcr
 
     class OPropertyEditor;
 
-    class OPropertyBrowserView : public vcl::Window
+    class OPropertyBrowserView final : public vcl::Window
     {
         VclPtr<OPropertyEditor>     m_pPropBox;
         sal_uInt16                  m_nActivePage;
         Link<LinkParamNone*,void>   m_aPageActivationHandler;
 
-    protected:
         virtual void Resize() override;
         virtual void GetFocus() override;
-        virtual bool Notify( NotifyEvent& _rNEvt ) override;
+        virtual bool EventNotify( NotifyEvent& _rNEvt ) override;
 
     public:
-        OPropertyBrowserView( vcl::Window* pParent);
+        explicit OPropertyBrowserView( vcl::Window* pParent);
 
-        virtual ~OPropertyBrowserView();
+        virtual ~OPropertyBrowserView() override;
         virtual void dispose() override;
 
         OPropertyEditor&    getPropertyBox() { return *m_pPropBox; }
@@ -59,8 +57,8 @@ namespace pcr
 
         css::awt::Size getMinimumSize();
 
-    protected:
-        DECL_LINK_TYPED(OnPageActivation, LinkParamNone*, void);
+    private:
+        DECL_LINK(OnPageActivation, LinkParamNone*, void);
     };
 
 

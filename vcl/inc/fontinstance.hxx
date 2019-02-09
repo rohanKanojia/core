@@ -23,28 +23,38 @@
 #include "fontselect.hxx"
 #include "impfontmetricdata.hxx"
 
-#include <unordered_map>
+#include <rtl/ref.hxx>
+#include <salhelper/simplereferenceobject.hxx>
+#include <tools/gen.hxx>
+#include <tools/fontenum.hxx>
+#include <vcl/glyphitem.hxx>
+#include <vcl/vcllayout.hxx>
 
-class ImplFontCache;
+#include <unordered_map>
+#include <memory>
+
+#include <hb-ot.h>
+
 class ConvertChar;
+class ImplFontCache;
+class PhysicalFontFace;
 
 // TODO: allow sharing of metrics for related fonts
 
-class VCL_PLUGIN_PUBLIC LogicalFontInstance
+class VCL_PLUGIN_PUBLIC LogicalFontInstance : public salhelper::SimpleReferenceObject
 {
-public:
-    explicit        LogicalFontInstance( const FontSelectPattern& );
-    virtual         ~LogicalFontInstance();
+    // just declaring the factory function doesn't work AKA
+    // friend LogicalFontInstance* PhysicalFontFace::CreateFontInstance(const FontSelectPattern&) const;
+    friend class PhysicalFontFace;
+    friend class ImplFontCache;
 
 public: // TODO: make data members private
-    ImplFontCache * mpFontCache;
-    FontSelectPattern  maFontSelData;       // FontSelectionData
-    ImplFontMetricDataPtr mxFontMetric;        // Font attributes
+    virtual ~LogicalFontInstance() override;
+
+    ImplFontMetricDataRef mxFontMetric;        // Font attributes
     const ConvertChar* mpConversion;        // used e.g. for StarBats->StarSymbol
 
     long            mnLineHeight;
-    sal_uInt32      mnRefCount;
-    sal_uInt16      mnSetFontFlags;         // Flags returned by SalGraphics::SetFont()
     short           mnOwnOrientation;       // text angle if lower layers don't rotate text themselves
     short           mnOrientation;          // text angle in 3600 system
     bool            mbInit;                 // true if maFontMetric member is valid
@@ -53,13 +63,68 @@ public: // TODO: make data members private
     bool            GetFallbackForUnicode( sal_UCS4, FontWeight eWeight, OUString* pFontName ) const;
     void            IgnoreFallbackForUnicode( sal_UCS4, FontWeight eWeight, const OUString& rFontName );
 
+    inline hb_font_t* GetHbFont();
+    void SetAverageWidthFactor(double nFactor) { m_nAveWidthFactor = nFactor; }
+    double GetAverageWidthFactor() const { return m_nAveWidthFactor; }
+    const FontSelectPattern& GetFontSelectPattern() const { return m_aFontSelData; }
+
+    const PhysicalFontFace* GetFontFace() const { return m_pFontFace.get(); }
+    const ImplFontCache* GetFontCache() const { return mpFontCache; }
+
+    bool GetGlyphBoundRect(sal_GlyphId, tools::Rectangle&, bool) const;
+    virtual bool GetGlyphOutline(sal_GlyphId, basegfx::B2DPolyPolygon&, bool) const = 0;
+
+    int GetKashidaWidth();
+
+    void GetScale(double* nXScale, double* nYScale);
+    static inline void DecodeOpenTypeTag(const uint32_t nTableTag, char* pTagName);
+
+protected:
+    explicit LogicalFontInstance(const PhysicalFontFace&, const FontSelectPattern&);
+
+    virtual bool ImplGetGlyphBoundRect(sal_GlyphId, tools::Rectangle&, bool) const = 0;
+
+    // Takes ownership of pHbFace.
+    static hb_font_t* InitHbFont(hb_face_t* pHbFace);
+    virtual hb_font_t* ImplInitHbFont() { assert(false); return nullptr; }
+    inline void ReleaseHbFont();
+
 private:
     // cache of Unicode characters and replacement font names
     // TODO: a fallback map can be shared with many other ImplFontEntries
     // TODO: at least the ones which just differ in orientation, stretching or height
     typedef ::std::unordered_map< ::std::pair<sal_UCS4,FontWeight>, OUString > UnicodeFallbackList;
-    UnicodeFallbackList* mpUnicodeFallbackList;
+    std::unique_ptr<UnicodeFallbackList> mpUnicodeFallbackList;
+    mutable ImplFontCache * mpFontCache;
+    const FontSelectPattern m_aFontSelData;
+    hb_font_t* m_pHbFont;
+    double m_nAveWidthFactor;
+    rtl::Reference<PhysicalFontFace> m_pFontFace;
 };
+
+inline hb_font_t* LogicalFontInstance::GetHbFont()
+{
+    if (!m_pHbFont)
+        m_pHbFont = ImplInitHbFont();
+    return m_pHbFont;
+}
+
+inline void LogicalFontInstance::ReleaseHbFont()
+{
+    if (!m_pHbFont)
+        return;
+    hb_font_destroy(m_pHbFont);
+    m_pHbFont = nullptr;
+}
+
+inline void LogicalFontInstance::DecodeOpenTypeTag(const uint32_t nTableTag, char* pTagName)
+{
+    pTagName[0] = static_cast<char>(nTableTag >> 24);
+    pTagName[1] = static_cast<char>(nTableTag >> 16);
+    pTagName[2] = static_cast<char>(nTableTag >> 8);
+    pTagName[3] = static_cast<char>(nTableTag);
+    pTagName[4] = 0;
+}
 
 #endif // INCLUDED_VCL_INC_FONTINSTANCE_HXX
 

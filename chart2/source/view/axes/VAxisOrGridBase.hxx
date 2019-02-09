@@ -19,14 +19,13 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_AXES_VAXISORGRIDBASE_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_VAXISORGRIDBASE_HXX
 
-#include "PlotterBase.hxx"
-#include "ThreeDHelper.hxx"
-#include "chartview/ExplicitScaleValues.hxx"
+#include <PlotterBase.hxx>
+#include <ThreeDHelper.hxx>
+#include <chartview/ExplicitScaleValues.hxx>
 
-#include <com/sun/star/drawing/HomogenMatrix.hpp>
-#include <com/sun/star/drawing/XShapes.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <basegfx/matrix/b3dhommatrix.hxx>
+
+namespace com { namespace sun { namespace star { namespace drawing { struct HomogenMatrix; } } } }
 
 namespace chart
 {
@@ -37,13 +36,13 @@ class VAxisOrGridBase : public PlotterBase
 {
 public:
     VAxisOrGridBase( sal_Int32 nDimensionIndex, sal_Int32 nDimensionCount );
-    virtual ~VAxisOrGridBase();
+    virtual ~VAxisOrGridBase() override;
 
     virtual void setTransformationSceneToScreen( const css::drawing::HomogenMatrix& rMatrix ) override;
+    /// @throws css::uno::RuntimeException
     virtual void setExplicitScaleAndIncrement(
             const ExplicitScaleData& rScale
-          , const ExplicitIncrementData& rIncrement )
-                throw (css::uno::RuntimeException);
+          , const ExplicitIncrementData& rIncrement );
     void set3DWallPositions( CuboidPlanePosition eLeftWallPos, CuboidPlanePosition eBackWallPos, CuboidPlanePosition eBottomPos );
 
     virtual TickFactory* createTickFactory();

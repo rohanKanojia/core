@@ -23,13 +23,12 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/toolbox.hxx>
 #include <vcl/edit.hxx>
 
 #include "fldpage.hxx"
-#include "condedit.hxx"
-#include "numfmtlb.hxx"
+#include <condedit.hxx>
+#include <numfmtlb.hxx>
 
 class SwFieldVarPage;
 
@@ -73,16 +72,16 @@ class SwFieldVarPage : public SwFieldPage
     OUString            sOldValueFT;
     OUString            sOldNameFT;
 
-    sal_uLong           nOldFormat;
+    sal_uInt32          nOldFormat;
     bool                bInit;
 
-    DECL_LINK_TYPED( TypeHdl, ListBox&, void );
-    DECL_LINK_TYPED( SubTypeListBoxHdl, ListBox&, void );
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( TBClickHdl, ToolBox *, void );
-    DECL_LINK_TYPED( ChapterHdl, ListBox&, void );
-    DECL_LINK_TYPED( SeparatorHdl, Edit&, void );
-    void SubTypeHdl(ListBox*);
+    DECL_LINK( TypeHdl, ListBox&, void );
+    DECL_LINK( SubTypeListBoxHdl, ListBox&, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
+    DECL_LINK( TBClickHdl, ToolBox *, void );
+    DECL_LINK( ChapterHdl, ListBox&, void );
+    DECL_LINK( SeparatorHdl, Edit&, void );
+    void SubTypeHdl(ListBox const *);
 
     void                UpdateSubType();
     void                FillFormatLB(sal_uInt16 nTypeId);
@@ -91,12 +90,12 @@ protected:
     virtual sal_uInt16      GetGroup() override;
 
 public:
-                        SwFieldVarPage(vcl::Window* pParent, const SfxItemSet& rSet);
+                        SwFieldVarPage(vcl::Window* pParent, const SfxItemSet* pSet);
 
-                        virtual ~SwFieldVarPage();
+                        virtual ~SwFieldVarPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create(vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage>  Create(TabPageParent pParent, const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

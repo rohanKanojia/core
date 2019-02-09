@@ -48,7 +48,6 @@ $(eval $(call gb_Library_use_libraries,fwe,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,fwe,\
@@ -60,7 +59,6 @@ $(eval $(call gb_Library_add_exception_objects,fwe,\
     framework/source/fwe/classes/framelistanalyzer \
     framework/source/fwe/classes/fwkresid \
     framework/source/fwe/classes/imagewrapper \
-    framework/source/fwe/classes/menuextensionsupplier \
     framework/source/fwe/classes/rootactiontriggercontainer \
     framework/source/fwe/classes/sfxhelperfunctions \
     framework/source/fwe/dispatch/interaction \
@@ -70,7 +68,6 @@ $(eval $(call gb_Library_add_exception_objects,fwe,\
     framework/source/fwe/helper/titlehelper \
     framework/source/fwe/helper/documentundoguard \
     framework/source/fwe/helper/undomanagerhelper \
-    framework/source/fwe/interaction/preventduplicateinteraction \
     framework/source/fwe/xml/menuconfiguration \
     framework/source/fwe/xml/menudocumenthandler \
     framework/source/fwe/xml/saxnamespacefilter \
@@ -79,9 +76,7 @@ $(eval $(call gb_Library_add_exception_objects,fwe,\
     framework/source/fwe/xml/toolboxconfiguration \
     framework/source/fwe/xml/toolboxdocumenthandler \
     framework/source/fwe/xml/xmlnamespaces \
+    framework/source/services/dispatchhelper \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,fwe,fwe))
 
 # vim: set noet sw=4 ts=4:

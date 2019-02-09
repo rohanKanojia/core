@@ -18,6 +18,9 @@
  */
 
 #include "SlsRequestQueue.hxx"
+#include <sdpage.hxx>
+
+#include <sal/log.hxx>
 
 #include <set>
 
@@ -37,6 +40,7 @@ public:
     */
     class Comparator { public:
         bool operator() (const Request& rRequest1, const Request& rRequest2)
+            const
         {
             if (rRequest1.meClass == rRequest2.meClass)
             {
@@ -68,9 +72,9 @@ public:
         const CacheKey maKey;
     };
 
-    CacheKey maKey;
-    sal_Int32 mnPriorityInClass;
-    RequestPriorityClass meClass;
+    CacheKey const maKey;
+    sal_Int32 const mnPriorityInClass;
+    RequestPriorityClass const meClass;
 };
 
 class RequestQueue::Container
@@ -84,7 +88,7 @@ class RequestQueue::Container
 
 RequestQueue::RequestQueue (const SharedCacheContext& rpCacheContext)
     : maMutex(),
-      mpRequestQueue(new Container()),
+      mpRequestQueue(new Container),
       mpCacheContext(rpCacheContext),
       mnMinimumPriority(0),
       mnMaximumPriority(1)
@@ -98,12 +102,11 @@ RequestQueue::~RequestQueue()
 
 void RequestQueue::AddRequest (
     CacheKey aKey,
-    RequestPriorityClass eRequestClass,
-    bool /*bInsertWithHighestPriority*/)
+    RequestPriorityClass eRequestClass)
 {
     ::osl::MutexGuard aGuard (maMutex);
 
-    OSL_ASSERT(eRequestClass>=MIN__CLASS && eRequestClass<=MAX__CLASS);
+    assert(eRequestClass>=MIN_CLASS && eRequestClass<=MAX_CLASS);
 
     // If the request is already a member of the queue then remove it so
     // that the following insertion will use the new prioritization.
@@ -140,11 +143,18 @@ void RequestQueue::PageInDestruction(const SdrPage& rPage)
     RemoveRequest(&rPage);
 }
 
-void RequestQueue::RemoveRequest (
+#if OSL_DEBUG_LEVEL >=2
+bool
+#else
+void
+#endif
+RequestQueue::RemoveRequest(
     CacheKey aKey)
 {
     ::osl::MutexGuard aGuard (maMutex);
-
+#if OSL_DEBUG_LEVEL >=2
+    bool bIsRemoved = false;
+#endif
     while(true)
     {
         Container::const_iterator aRequestIterator = ::std::find_if (
@@ -161,10 +171,16 @@ void RequestQueue::RemoveRequest (
             SdrPage *pPage = const_cast<SdrPage*>(aRequestIterator->maKey);
             pPage->RemovePageUser(*this);
             mpRequestQueue->erase(aRequestIterator);
+#if OSL_DEBUG_LEVEL >=2
+            bIsRemoved = true;
+#endif
         }
         else
             break;
     }
+#if OSL_DEBUG_LEVEL >=2
+    return bIsRemoved;
+#endif
 
 }
 
@@ -174,7 +190,7 @@ void RequestQueue::ChangeClass (
 {
     ::osl::MutexGuard aGuard (maMutex);
 
-    OSL_ASSERT(eNewRequestClass>=MIN__CLASS && eNewRequestClass<=MAX__CLASS);
+    assert(eNewRequestClass>=MIN_CLASS && eNewRequestClass<=MAX_CLASS);
 
     Container::const_iterator iRequest (
         ::std::find_if (
@@ -183,7 +199,7 @@ void RequestQueue::ChangeClass (
             Request::DataComparator(aKey)));
     if (iRequest!=mpRequestQueue->end() && iRequest->meClass!=eNewRequestClass)
     {
-        AddRequest(aKey, eNewRequestClass, true);
+        AddRequest(aKey, eNewRequestClass);
     }
 }
 
@@ -239,9 +255,9 @@ void RequestQueue::Clear()
 {
     ::osl::MutexGuard aGuard (maMutex);
 
-    for (Container::iterator aI = mpRequestQueue->begin(), aEnd = mpRequestQueue->end(); aI != aEnd; ++aI)
+    for (const auto& rItem : *mpRequestQueue)
     {
-        SdrPage *pPage = const_cast<SdrPage*>(aI->maKey);
+        SdrPage *pPage = const_cast<SdrPage*>(rItem.maKey);
         pPage->RemovePageUser(*this);
     }
 

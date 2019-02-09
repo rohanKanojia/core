@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "definitioncontainer.hxx"
-#include "dbastrings.hrc"
-#include "apitools.hxx"
-#include "core_resource.hxx"
-#include "core_resource.hrc"
+#include <definitioncontainer.hxx>
+#include <stringconstants.hxx>
+#include <apitools.hxx>
+#include <core_resource.hxx>
+#include <strings.hrc>
 
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
-#include <comphelper/sequence.hxx>
 #include <comphelper/enumhelper.hxx>
-#include <comphelper/extract.hxx>
 #include <cppuhelper/exc_hlp.hxx>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/ucb/CommandInfo.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -62,7 +62,7 @@ void ODefinitionContainer_Impl::erase( const TContentPtr& _pDefinition )
 
 ODefinitionContainer_Impl::const_iterator ODefinitionContainer_Impl::find( const TContentPtr& _pDefinition ) const
 {
-    return ::std::find_if(
+    return std::find_if(
         m_aDefinitions.begin(),
         m_aDefinitions.end(),
         [&_pDefinition] (const NamedDefinitions::value_type& namedDef) {
@@ -72,7 +72,7 @@ ODefinitionContainer_Impl::const_iterator ODefinitionContainer_Impl::find( const
 
 ODefinitionContainer_Impl::iterator ODefinitionContainer_Impl::find( const TContentPtr& _pDefinition )
 {
-    return ::std::find_if(
+    return std::find_if(
         m_aDefinitions.begin(),
         m_aDefinitions.end(),
         [&_pDefinition] (const NamedDefinitions::value_type& namedDef) {
@@ -97,14 +97,9 @@ ODefinitionContainer::ODefinitionContainer(   const Reference< XComponentContext
     m_pImpl->m_aProps.bIsFolder = true;
 
     const ODefinitionContainer_Impl& rDefinitions( getDefinitions() );
-    ODefinitionContainer_Impl::const_iterator aEnd = rDefinitions.end();
-    for (   ODefinitionContainer_Impl::const_iterator aDefinition = rDefinitions.begin();
-            aDefinition != aEnd;
-            ++aDefinition
-        )
+    for (auto const& definition : rDefinitions)
         m_aDocuments.push_back(
-            m_aDocumentMap.insert(
-                Documents::value_type( aDefinition->first, Documents::mapped_type() ) ).first );
+            m_aDocumentMap.emplace(definition.first, Documents::mapped_type() ).first );
 
 }
 
@@ -120,12 +115,9 @@ void SAL_CALL ODefinitionContainer::disposing()
     m_aContainerListeners.disposeAndClear(aEvt);
 
     // dispose our elements
-    Documents::const_iterator aIter = m_aDocumentMap.begin();
-    Documents::const_iterator aEnd = m_aDocumentMap.end();
-
-    for (; aIter != aEnd; ++aIter)
+    for (auto const& elem : m_aDocumentMap)
     {
-        Reference<XContent> xProp = aIter->second;
+        Reference<XContent> xProp = elem.second;
         if ( xProp.is() )
         {
             removeObjectListener(xProp);
@@ -147,18 +139,17 @@ IMPLEMENT_FORWARD_XINTERFACE2( ODefinitionContainer,OContentHelper,ODefinitionCo
 IMPLEMENT_GETTYPES2(ODefinitionContainer,OContentHelper,ODefinitionContainer_Base);
 
 css::uno::Sequence<sal_Int8> ODefinitionContainer::getImplementationId()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 // XServiceInfo
-OUString SAL_CALL ODefinitionContainer::getImplementationName(  ) throw(RuntimeException, std::exception)
+OUString SAL_CALL ODefinitionContainer::getImplementationName(  )
 {
     return OUString("com.sun.star.sdb.ODefinitionContainer");
 }
 
-Sequence< OUString > SAL_CALL ODefinitionContainer::getSupportedServiceNames(  ) throw(RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL ODefinitionContainer::getSupportedServiceNames(  )
 {
     Sequence< OUString > aReturn(2);
     aReturn.getArray()[0] = "com.sun.star.sdb.DefinitionContainer";
@@ -167,7 +158,7 @@ Sequence< OUString > SAL_CALL ODefinitionContainer::getSupportedServiceNames(  )
 }
 
 // XNameContainer
-void SAL_CALL ODefinitionContainer::insertByName( const OUString& _rName, const Any& aElement ) throw(IllegalArgumentException, ElementExistException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::insertByName( const OUString& _rName, const Any& aElement )
 {
     ResettableMutexGuard aGuard(m_aMutex);
 
@@ -180,7 +171,7 @@ void SAL_CALL ODefinitionContainer::insertByName( const OUString& _rName, const 
     notifyByName( aGuard, _rName, xNewElement, nullptr, E_INSERTED, ContainerListemers );
 }
 
-void SAL_CALL ODefinitionContainer::removeByName( const OUString& _rName ) throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::removeByName( const OUString& _rName )
 {
     ResettableMutexGuard aGuard(m_aMutex);
 
@@ -204,7 +195,7 @@ void SAL_CALL ODefinitionContainer::removeByName( const OUString& _rName ) throw
 }
 
 // XNameReplace
-void SAL_CALL ODefinitionContainer::replaceByName( const OUString& _rName, const Any& aElement ) throw(IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::replaceByName( const OUString& _rName, const Any& aElement )
 {
     ResettableMutexGuard aGuard(m_aMutex);
 
@@ -262,9 +253,9 @@ namespace
         {
         }
 
-        void operator()( const Reference< XContainerApproveListener >& _Listener ) const
+        void operator()( const Reference< XContainerApproveListener >& Listener ) const
         {
-            Reference< XVeto > xVeto = (_Listener.get()->*m_pMethod)( m_rEvent );
+            Reference< XVeto > xVeto = (Listener.get()->*m_pMethod)( m_rEvent );
             if ( !xVeto.is() )
                 return;
 
@@ -278,7 +269,7 @@ namespace
             if ( eVetoDetails >>= aWrappedError )
                 throw aWrappedError;
 
-            throw WrappedTargetException( xVeto->getReason(), _Listener.get(), eVetoDetails );
+            throw WrappedTargetException( xVeto->getReason(), Listener.get(), eVetoDetails );
         }
     };
 }
@@ -325,61 +316,61 @@ void ODefinitionContainer::notifyByName( ResettableMutexGuard& _rGuard, const OU
         _rGuard.reset();
 }
 
-void SAL_CALL ODefinitionContainer::addContainerListener( const Reference< XContainerListener >& _rxListener ) throw(RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::addContainerListener( const Reference< XContainerListener >& _rxListener )
 {
     if (_rxListener.is())
         m_aContainerListeners.addInterface(_rxListener);
 }
 
-void SAL_CALL ODefinitionContainer::removeContainerListener( const Reference< XContainerListener >& _rxListener ) throw(RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::removeContainerListener( const Reference< XContainerListener >& _rxListener )
 {
     if (_rxListener.is())
         m_aContainerListeners.removeInterface(_rxListener);
 }
 
-void SAL_CALL ODefinitionContainer::addContainerApproveListener( const Reference< XContainerApproveListener >& _Listener ) throw (RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::addContainerApproveListener( const Reference< XContainerApproveListener >& Listener )
 {
-    if ( _Listener.is() )
-        m_aApproveListeners.addInterface( _Listener );
+    if ( Listener.is() )
+        m_aApproveListeners.addInterface( Listener );
 }
 
-void SAL_CALL ODefinitionContainer::removeContainerApproveListener( const Reference< XContainerApproveListener >& _Listener ) throw (RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::removeContainerApproveListener( const Reference< XContainerApproveListener >& Listener )
 {
-    if ( _Listener.is() )
-        m_aApproveListeners.removeInterface( _Listener );
+    if ( Listener.is() )
+        m_aApproveListeners.removeInterface( Listener );
 }
 
 // XElementAccess
-Type SAL_CALL ODefinitionContainer::getElementType( ) throw (RuntimeException, std::exception)
+Type SAL_CALL ODefinitionContainer::getElementType( )
 {
     return cppu::UnoType<XContent>::get();
 }
 
-sal_Bool SAL_CALL ODefinitionContainer::hasElements( ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL ODefinitionContainer::hasElements( )
 {
     MutexGuard aGuard(m_aMutex);
     return !m_aDocuments.empty();
 }
 
 // XEnumerationAccess
-Reference< XEnumeration > SAL_CALL ODefinitionContainer::createEnumeration(  ) throw(RuntimeException, std::exception)
+Reference< XEnumeration > SAL_CALL ODefinitionContainer::createEnumeration(  )
 {
     MutexGuard aGuard(m_aMutex);
     return new ::comphelper::OEnumerationByIndex(static_cast<XIndexAccess*>(this));
 }
 
 // XIndexAccess
-sal_Int32 SAL_CALL ODefinitionContainer::getCount(  ) throw(RuntimeException, std::exception)
+sal_Int32 SAL_CALL ODefinitionContainer::getCount(  )
 {
     MutexGuard aGuard(m_aMutex);
     return m_aDocuments.size();
 }
 
-Any SAL_CALL ODefinitionContainer::getByIndex( sal_Int32 _nIndex ) throw(IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception)
+Any SAL_CALL ODefinitionContainer::getByIndex( sal_Int32 _nIndex )
 {
     MutexGuard aGuard(m_aMutex);
 
-    if ((_nIndex < 0) || (_nIndex >= (sal_Int32)m_aDocuments.size()))
+    if ((_nIndex < 0) || (_nIndex >= static_cast<sal_Int32>(m_aDocuments.size())))
         throw IndexOutOfBoundsException();
 
     Documents::iterator aPos = m_aDocuments[_nIndex];
@@ -395,14 +386,14 @@ Any SAL_CALL ODefinitionContainer::getByIndex( sal_Int32 _nIndex ) throw(IndexOu
     return makeAny(xProp);
 }
 
-Any SAL_CALL ODefinitionContainer::getByName( const OUString& _rName ) throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+Any SAL_CALL ODefinitionContainer::getByName( const OUString& _rName )
 {
     MutexGuard aGuard(m_aMutex);
 
     return makeAny( implGetByName( _rName, true ) );
 }
 
-Reference< XContent > ODefinitionContainer::implGetByName(const OUString& _rName, bool _bReadIfNecessary) throw (NoSuchElementException)
+Reference< XContent > ODefinitionContainer::implGetByName(const OUString& _rName, bool _bReadIfNecessary)
 {
     Documents::iterator aMapPos = m_aDocumentMap.find(_rName);
     if (aMapPos == m_aDocumentMap.end())
@@ -423,45 +414,40 @@ Reference< XContent > ODefinitionContainer::implGetByName(const OUString& _rName
     return xProp;
 }
 
-Sequence< OUString > SAL_CALL ODefinitionContainer::getElementNames(  ) throw(RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL ODefinitionContainer::getElementNames(  )
 {
     MutexGuard aGuard(m_aMutex);
 
     Sequence< OUString > aNames(m_aDocumentMap.size());
     OUString* pNames = aNames.getArray();
-    Documents::const_iterator aEnd = m_aDocumentMap.end();
-    for (   Documents::const_iterator aNameIter = m_aDocumentMap.begin();
-            aNameIter != aEnd;
-            ++pNames, ++aNameIter
-        )
+    for (auto const& elem : m_aDocumentMap)
     {
-        *pNames = aNameIter->first;
+        *pNames = elem.first;
+        ++pNames;
     }
 
     return aNames;
 }
 
-sal_Bool SAL_CALL ODefinitionContainer::hasByName( const OUString& _rName ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL ODefinitionContainer::hasByName( const OUString& _rName )
 {
     MutexGuard aGuard(m_aMutex);
 
     return checkExistence(_rName);
 }
 
-void SAL_CALL ODefinitionContainer::disposing( const EventObject& _rSource ) throw(RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::disposing( const EventObject& _rSource )
 {
     MutexGuard aGuard(m_aMutex);
     Reference< XContent > xSource(_rSource.Source, UNO_QUERY);
     // it's one of our documents ....
-    Documents::iterator aIter = m_aDocumentMap.begin();
-    Documents::const_iterator aEnd = m_aDocumentMap.end();
-    for (;aIter != aEnd;++aIter )
+    for (auto & elem : m_aDocumentMap)
     {
-        if ( xSource == aIter->second.get() )
+        if ( xSource == elem.second.get() )
         {
             removeObjectListener(xSource);
             // and clear our document map/vector, so the object will be recreated on next access
-            aIter->second = Documents::mapped_type();
+            elem.second = Documents::mapped_type();
         }
     }
 }
@@ -472,7 +458,7 @@ void ODefinitionContainer::implRemove(const OUString& _rName)
     Documents::const_iterator aFind = m_aDocumentMap.find(_rName);
     if ( aFind != m_aDocumentMap.end() )
     {
-        m_aDocuments.erase( ::std::find(m_aDocuments.begin(),m_aDocuments.end(),aFind));
+        m_aDocuments.erase( std::find(m_aDocuments.begin(),m_aDocuments.end(),aFind));
         m_aDocumentMap.erase(aFind);
 
         getDefinitions().erase( _rName );
@@ -497,7 +483,7 @@ namespace
             {
                 OUString sCurrentName;
                 OSL_VERIFY( xProps->getPropertyValue( PROPERTY_NAME ) >>= sCurrentName );
-                if ( sCurrentName.equals( _rName ) )
+                if ( sCurrentName == _rName )
                     return true;
             }
         }
@@ -554,7 +540,7 @@ void ODefinitionContainer::implAppend(const OUString& _rName, const Reference< X
             }
         }
 
-        m_aDocuments.push_back(m_aDocumentMap.insert(Documents::value_type(_rName,_rxNewObject)).first);
+        m_aDocuments.push_back(m_aDocumentMap.emplace(_rName,_rxNewObject).first);
         notifyDataSourceModified();
         // now update our structures
         if ( _rxNewObject.is() )
@@ -617,7 +603,7 @@ void ODefinitionContainer::approveNewObject(const OUString& _sName,const Referen
 }
 
 // XPropertyChangeListener
-void SAL_CALL ODefinitionContainer::propertyChange( const PropertyChangeEvent& evt ) throw (RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::propertyChange( const PropertyChangeEvent& evt )
 {
     ClearableMutexGuard aGuard(m_aMutex);
     if( evt.PropertyName == PROPERTY_NAME || evt.PropertyName ==  "Title" )
@@ -633,17 +619,18 @@ void SAL_CALL ODefinitionContainer::propertyChange( const PropertyChangeEvent& e
             implRemove( sOldName );
             implAppend( sNewName, xContent );
         }
-        catch(const Exception&)
+        catch(const Exception& ex)
         {
-            DBG_UNHANDLED_EXCEPTION();
-            throw RuntimeException();
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw css::lang::WrappedTargetRuntimeException( ex.Message,
+                            nullptr, anyEx );
         }
         m_bInPropertyChange = false;
     }
 }
 
 // XVetoableChangeListener
-void SAL_CALL ODefinitionContainer::vetoableChange( const PropertyChangeEvent& aEvent ) throw (PropertyVetoException, RuntimeException, std::exception)
+void SAL_CALL ODefinitionContainer::vetoableChange( const PropertyChangeEvent& aEvent )
 {
     MutexGuard aGuard(m_aMutex);
 

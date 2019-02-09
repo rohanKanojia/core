@@ -21,9 +21,9 @@
 #define INCLUDED_SC_INC_VALIDAT_HXX
 
 #include "conditio.hxx"
-#include <com/sun/star/sheet/TableValidationVisibility.hpp>
 #include "scdllapi.h"
 
+namespace weld { class Window; }
 
 namespace sc {
 
@@ -62,7 +62,7 @@ class SC_DLLPUBLIC ScValidationData : public ScConditionEntry
 private:
     sal_uInt32 nKey;               // index in attributes
 
-    ScValidationMode eDataMode;
+    ScValidationMode const eDataMode;
     bool bShowInput;
     bool bShowError;
     ScValidErrorStyle eErrorStyle;
@@ -73,10 +73,10 @@ private:
     OUString aErrorMessage;
 
     bool DoMacro( const ScAddress& rPos, const OUString& rInput,
-                                ScFormulaCell* pCell, vcl::Window* pParent ) const;
+                                ScFormulaCell* pCell, weld::Window* pParent ) const;
 
     bool DoScript( const ScAddress& rPos, const OUString& rInput,
-                                ScFormulaCell* pCell, vcl::Window* pParent ) const;
+                                ScFormulaCell* pCell, weld::Window* pParent ) const;
 
     using ScConditionEntry::operator==;
 
@@ -92,7 +92,7 @@ public:
                                 ScDocument* pDocument, const ScAddress& rPos );
             ScValidationData( const ScValidationData& r );
             ScValidationData( ScDocument* pDocument, const ScValidationData& r );
-    virtual ~ScValidationData();
+    virtual ~ScValidationData() override;
 
     ScValidationData* Clone() const     // real copy
                     { return new ScValidationData( GetDocument(), *this ); }
@@ -113,8 +113,8 @@ public:
 
     ScValidationMode GetDataMode() const    { return eDataMode; }
 
-    inline sal_Int16 GetListType() const                { return mnListType; }
-    inline void     SetListType( sal_Int16 nListType )  { mnListType = nListType; }
+    sal_Int16 GetListType() const                { return mnListType; }
+    void     SetListType( sal_Int16 nListType )  { mnListType = nListType; }
 
     /** Returns true, if the validation cell will show a selection list.
         @descr  Use this instead of GetListType() which returns the raw property
@@ -122,7 +122,7 @@ public:
     bool            HasSelectionList() const;
     /** Tries to fill the passed collection with list validation entries.
         @descr  Fills the list only, if this is a list validation and IsShowList() is enabled.
-        @param rStrings  (out-param) The string list to fill with list validation entires.
+        @param rStrings  (out-param) The string list to fill with list validation entries.
         @return  true = rStrings has been filled with at least one entry. */
     bool FillSelectionList(std::vector<ScTypedStrData>& rStrings, const ScAddress& rPos) const;
 
@@ -130,10 +130,30 @@ public:
     bool IsDataValid(
         const OUString& rTest, const ScPatternAttr& rPattern, const ScAddress& rPos ) const;
 
+    // Custom validations (SC_VALID_CUSTOM) should be validated using this specific method.
+    // Take care that internally this method commits to the to be validated cell the new input,
+    // in order to be able to interpret the validating boolean formula on the new input.
+    // After the formula has been evaluated the original cell content is restored.
+    // At present is only used in ScInputHandler::EnterHandler: handling this case in the
+    // regular IsDataValid method would have been unsafe since it can be invoked
+    // by ScFormulaCell::InterpretTail.
+
+    struct CustomValidationPrivateAccess
+    {
+        // so IsDataValidCustom can be invoked only by ScInputHandler methods
+        friend class ScInputHandler;
+    private:
+        CustomValidationPrivateAccess() {}
+    };
+
+    bool IsDataValidCustom(
+        const OUString& rTest, const ScPatternAttr& rPattern,
+        const ScAddress& rPos, const CustomValidationPrivateAccess& ) const;
+
     bool IsDataValid( ScRefCellValue& rCell, const ScAddress& rPos ) const;
 
                     // TRUE -> break
-    bool DoError( vcl::Window* pParent, const OUString& rInput, const ScAddress& rPos ) const;
+    bool DoError(weld::Window* pParent, const OUString& rInput, const ScAddress& rPos) const;
     void DoCalcError( ScFormulaCell* pCell ) const;
 
     bool IsEmpty() const;
@@ -148,7 +168,7 @@ public:
 private:
     /** Tries to fill the passed collection with list validation entries.
         @descr  Fills the list only if it is non-NULL,
-        @param pStrings  (out-param) Optionally NULL, string list to fill with list validation entires.
+        @param pStrings  (out-param) Optionally NULL, string list to fill with list validation entries.
         @param pCell     can be NULL if it is not necessary to which element in the list is selected.
         @param rPos      the base address for relative references.
         @param rTokArr   Formula token array.
@@ -165,24 +185,23 @@ private:
     bool IsListValid( ScRefCellValue& rCell, const ScAddress& rPos ) const;
 };
 
-//  list of contitions:
+//  list of conditions:
 
 struct CompareScValidationDataPtr
 {
-  bool operator()( ScValidationData* const& lhs, ScValidationData* const& rhs ) const { return (*lhs)<(*rhs); }
+  bool operator()( std::unique_ptr<ScValidationData> const& lhs, std::unique_ptr<ScValidationData> const& rhs ) const { return (*lhs)<(*rhs); }
 };
 
 class ScValidationDataList
 {
 private:
-    typedef std::set<ScValidationData*, CompareScValidationDataPtr> ScValidationDataListDataType;
+    typedef std::set<std::unique_ptr<ScValidationData>, CompareScValidationDataPtr> ScValidationDataListDataType;
     ScValidationDataListDataType maData;
 
 public:
     ScValidationDataList() {}
     ScValidationDataList(const ScValidationDataList& rList);
     ScValidationDataList(ScDocument* pNewDoc, const ScValidationDataList& rList);
-    ~ScValidationDataList() {}
 
     typedef ScValidationDataListDataType::iterator iterator;
     typedef ScValidationDataListDataType::const_iterator const_iterator;
@@ -192,8 +211,8 @@ public:
     iterator end();
     const_iterator end() const;
 
-    void InsertNew( ScValidationData* pNew )
-                { if (!maData.insert(pNew).second) delete pNew; }
+    void InsertNew( std::unique_ptr<ScValidationData> pNew )
+                { maData.insert(std::move(pNew)); }
 
     ScValidationData* GetData( sal_uInt32 nKey );
 
@@ -202,9 +221,6 @@ public:
     void UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt );
     void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt );
     void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt );
-
-    void clear();
-
 };
 
 #endif

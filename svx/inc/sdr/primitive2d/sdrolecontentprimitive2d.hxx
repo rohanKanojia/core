@@ -37,17 +37,17 @@ namespace drawinglayer
         class SdrOleContentPrimitive2D : public BufferedDecompositionPrimitive2D
         {
         private:
-            SdrObjectWeakRef                            mpSdrOle2Obj;
-            basegfx::B2DHomMatrix                       maObjectTransform;
+            tools::WeakReference<SdrOle2Obj>            mpSdrOle2Obj;
+            basegfx::B2DHomMatrix const                 maObjectTransform;
 
             // #i104867# The GraphicVersion number to identify in operator== if
             // the graphic has changed, but without fetching it (which may
             // be expensive, e.g. triggering chart creation)
-            sal_uInt32                                  mnGraphicVersion;
+            sal_uInt32 const                            mnGraphicVersion;
 
         protected:
             // local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const override;
 
         public:
             SdrOleContentPrimitive2D(
@@ -64,7 +64,6 @@ namespace drawinglayer
 
             // data access
             const basegfx::B2DHomMatrix& getObjectTransform() const { return maObjectTransform; }
-            sal_uInt32 getGraphicVersion() const { return mnGraphicVersion; }
 
             // provide unique ID
             DeclPrimitive2DIDBlock()

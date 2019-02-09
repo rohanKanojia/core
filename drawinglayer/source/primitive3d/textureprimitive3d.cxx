@@ -98,7 +98,7 @@ namespace drawinglayer
             {
                 // create TransparenceTexturePrimitive3D with fixed transparence as replacement
                 const basegfx::BColor aGray(getTransparence(), getTransparence(), getTransparence());
-                const attribute::FillGradientAttribute aFillGradient(attribute::GRADIENTSTYLE_LINEAR, 0.0, 0.0, 0.0, 0.0, aGray, aGray, 1);
+                const attribute::FillGradientAttribute aFillGradient(attribute::GradientStyle::Linear, 0.0, 0.0, 0.0, 0.0, aGray, aGray, 1);
                 const Primitive3DReference xRef(new TransparenceTexturePrimitive3D(aFillGradient, getChildren(), getTextureSize()));
                 return { xRef };
             }
@@ -197,7 +197,7 @@ namespace drawinglayer
 
         bool TransparenceTexturePrimitive3D::operator==(const BasePrimitive3D& rPrimitive) const
         {
-            return (GradientTexturePrimitive3D::operator==(rPrimitive));
+            return GradientTexturePrimitive3D::operator==(rPrimitive);
         }
 
         // provide unique ID

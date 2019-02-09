@@ -23,7 +23,6 @@
 
 #include <comphelper/streamsection.hxx>
 #include <comphelper/basicio.hxx>
-#include <comphelper/processfactory.hxx>
 
 namespace frm
 {
@@ -126,7 +125,7 @@ namespace frm
     }
 
 
-    Any SAL_CALL ONavigationBarModel::queryAggregation( const Type& _rType ) throw ( RuntimeException, std::exception )
+    Any SAL_CALL ONavigationBarModel::queryAggregation( const Type& _rType )
     {
         Any aReturn = ONavigationBarModel_BASE::queryInterface( _rType );
 
@@ -143,23 +142,13 @@ namespace frm
     IMPLEMENT_DEFAULT_CLONING( ONavigationBarModel )
 
 
-    OUString SAL_CALL ONavigationBarModel::getImplementationName()  throw(RuntimeException, std::exception)
-    {
-        return getImplementationName_Static();
-    }
-
-
-    Sequence< OUString > SAL_CALL ONavigationBarModel::getSupportedServiceNames()  throw(RuntimeException, std::exception)
-    {
-        return getSupportedServiceNames_Static();
-    }
-
-    OUString SAL_CALL ONavigationBarModel::getImplementationName_Static()
+    OUString SAL_CALL ONavigationBarModel::getImplementationName()
     {
         return OUString( "com.sun.star.comp.form.ONavigationBarModel" );
     }
 
-    Sequence< OUString > SAL_CALL ONavigationBarModel::getSupportedServiceNames_Static()
+
+    Sequence< OUString > SAL_CALL ONavigationBarModel::getSupportedServiceNames()
     {
         Sequence< OUString > aSupported = OControlModel::getSupportedServiceNames_Static();
         aSupported.realloc( aSupported.getLength() + 2 );
@@ -170,12 +159,7 @@ namespace frm
         return aSupported;
     }
 
-    void SAL_CALL ONavigationBarModel::disposing()
-    {
-        OControlModel::disposing( );
-    }
-
-    OUString SAL_CALL ONavigationBarModel::getServiceName() throw ( RuntimeException, std::exception )
+    OUString SAL_CALL ONavigationBarModel::getServiceName()
     {
         return OUString(FRM_SUN_COMPONENT_NAVTOOLBAR);
     }
@@ -194,7 +178,7 @@ namespace frm
     #define PERSIST_SHOW_FILTERSORT 0x0040
 
 
-    void SAL_CALL ONavigationBarModel::write( const Reference< XObjectOutputStream >& _rxOutStream ) throw ( IOException, RuntimeException, std::exception )
+    void SAL_CALL ONavigationBarModel::write( const Reference< XObjectOutputStream >& _rxOutStream )
     {
         // open a section for compatibility - if we later on write additional members,
         // then older versions can skip them
@@ -233,11 +217,11 @@ namespace frm
             }
             if ( nNonVoids & PERSIST_TEXTCOLOR )
             {
-               _rxOutStream->writeLong( getTextColor() );
+               _rxOutStream->writeLong( sal_Int32(getTextColor()) );
             }
             if ( nNonVoids & PERSIST_TEXTLINECOLOR )
             {
-                _rxOutStream->writeLong( getTextLineColor() );
+                _rxOutStream->writeLong( sal_Int32(getTextLineColor()) );
             }
         }
 
@@ -267,7 +251,7 @@ namespace frm
     }
 
 
-    void SAL_CALL ONavigationBarModel::read( const Reference< XObjectInputStream >& _rxInStream ) throw ( IOException, RuntimeException, std::exception )
+    void SAL_CALL ONavigationBarModel::read( const Reference< XObjectInputStream >& _rxInStream )
     {
         OStreamSection aEnsureBlockCompat( _rxInStream );
 
@@ -281,22 +265,22 @@ namespace frm
 
             // the maybeboid anys
             if ( nNonVoids & PERSIST_TABSTOP )
-                m_aTabStop = makeAny( _rxInStream->readBoolean() );
+                m_aTabStop <<= _rxInStream->readBoolean();
             else
                 m_aTabStop.clear();
 
             if ( nNonVoids & PERSIST_BACKGROUND )
-                m_aBackgroundColor = makeAny( _rxInStream->readLong() );
+                m_aBackgroundColor <<= _rxInStream->readLong();
             else
                 m_aBackgroundColor.clear();
 
             if ( nNonVoids & PERSIST_TEXTCOLOR )
-                setTextColor( _rxInStream->readLong() );
+                setTextColor( ::Color(_rxInStream->readLong()) );
             else
                 clearTextColor();
 
             if ( nNonVoids & PERSIST_TEXTLINECOLOR )
-                setTextLineColor( _rxInStream->readLong() );
+                setTextLineColor( ::Color(_rxInStream->readLong()) );
             else
                 clearTextLineColor();
         }
@@ -346,7 +330,7 @@ namespace frm
 
 
     sal_Bool SAL_CALL ONavigationBarModel::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue,
-        sal_Int32 _nHandle, const Any& _rValue ) throw( IllegalArgumentException )
+        sal_Int32 _nHandle, const Any& _rValue )
     {
         bool bModified = false;
 
@@ -367,7 +351,7 @@ namespace frm
     }
 
 
-    void SAL_CALL ONavigationBarModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw ( Exception, std::exception )
+    void SAL_CALL ONavigationBarModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
     {
         if ( isRegisteredProperty( _nHandle ) )
         {
@@ -411,7 +395,7 @@ namespace frm
             break;
 
         case PROPERTY_ID_ICONSIZE:
-            aDefault <<= (sal_Int16)0;
+            aDefault <<= sal_Int16(0);
             break;
 
         case PROPERTY_ID_DEFAULTCONTROL:
@@ -424,11 +408,11 @@ namespace frm
             break;
 
         case PROPERTY_ID_BORDER:
-            aDefault <<= (sal_Int16)0;
+            aDefault <<= sal_Int16(0);
             break;
 
         case PROPERTY_ID_DELAY:
-            aDefault <<= (sal_Int32)20;
+            aDefault <<= sal_Int32(20);
             break;
 
         default:
@@ -464,7 +448,7 @@ namespace frm
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_form_ONavigationBarModel_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {

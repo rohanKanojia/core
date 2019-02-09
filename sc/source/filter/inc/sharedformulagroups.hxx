@@ -10,10 +10,9 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_SHAREDFORMULAGROUPS_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_SHAREDFORMULAGROUPS_HXX
 
-#include "tokenarray.hxx"
-
 #include <memory>
 #include <map>
+class ScTokenArray;
 
 namespace sc {
 
@@ -24,7 +23,7 @@ private:
     StoreType m_Store;
 
 public:
-    void set( size_t nSharedId, ScTokenArray* pArray );
+    void set( size_t nSharedId, std::unique_ptr<ScTokenArray> pArray );
     const ScTokenArray* get( size_t nSharedId ) const;
 };
 

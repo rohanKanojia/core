@@ -20,14 +20,11 @@
 #include "XMLDetectiveContext.hxx"
 
 #include <sax/tools/converter.hxx>
-#include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
-#include "convuno.hxx"
+#include <xmloff/xmlnmspe.hxx>
 #include "xmlimprt.hxx"
 #include "XMLConverter.hxx"
-#include "rangeutl.hxx"
-
-#include <algorithm>
+#include <rangeutl.hxx>
 
 using namespace ::com::sun::star;
 using namespace xmloff::token;
@@ -61,10 +58,8 @@ bool ScMyImpDetectiveOpArray::GetFirstOp( ScMyImpDetectiveOp& rDetOp )
 
 ScXMLDetectiveContext::ScXMLDetectiveContext(
         ScXMLImport& rImport,
-        sal_uInt16 nPrfx,
-        const OUString& rLName,
         ScMyImpDetectiveObjVec* pNewDetectiveObjVec ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDetectiveObjVec( pNewDetectiveObjVec )
 {
 }
@@ -73,77 +68,63 @@ ScXMLDetectiveContext::~ScXMLDetectiveContext()
 {
 }
 
-SvXMLImportContext *ScXMLDetectiveContext::CreateChildContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDetectiveContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext*     pContext    = nullptr;
-    const SvXMLTokenMap&    rTokenMap   = GetScImport().GetDetectiveElemTokenMap();
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DETECTIVE_ELEM_HIGHLIGHTED:
-            pContext = new ScXMLDetectiveHighlightedContext( GetScImport(), nPrefix, rLName, xAttrList, pDetectiveObjVec );
+        case XML_ELEMENT( TABLE, XML_HIGHLIGHTED_RANGE ):
+            pContext = new ScXMLDetectiveHighlightedContext( GetScImport(), pAttribList, pDetectiveObjVec );
         break;
-        case XML_TOK_DETECTIVE_ELEM_OPERATION:
-            pContext = new ScXMLDetectiveOperationContext( GetScImport(), nPrefix, rLName, xAttrList );
+        case XML_ELEMENT( TABLE, XML_OPERATION ):
+            pContext = new ScXMLDetectiveOperationContext( GetScImport(), pAttribList );
         break;
     }
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDetectiveContext::EndElement()
-{
-}
-
 ScXMLDetectiveHighlightedContext::ScXMLDetectiveHighlightedContext(
         ScXMLImport& rImport,
-        sal_uInt16 nPrfx,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList >& xAttrList,
+        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
         ScMyImpDetectiveObjVec* pNewDetectiveObjVec ):
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDetectiveObjVec( pNewDetectiveObjVec ),
     aDetectiveObj(),
     bValid( false )
 {
-    if( !xAttrList.is() ) return;
-
-    sal_Int16               nAttrCount      = xAttrList->getLength();
-    const SvXMLTokenMap&    rAttrTokenMap   = GetScImport().GetDetectiveHighlightedAttrTokenMap();
-
-    for( sal_Int16 nIndex = 0; nIndex < nAttrCount; ++nIndex )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName  (xAttrList->getNameByIndex( nIndex ));
-        const OUString& sValue     (xAttrList->getValueByIndex( nIndex ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix      = GetScImport().GetNamespaceMap().GetKeyByAttrName( sAttrName, &aLocalName );
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DETECTIVE_HIGHLIGHTED_ATTR_CELL_RANGE:
+            switch (aIter.getToken())
             {
-                sal_Int32 nOffset(0);
-                ScXMLImport::MutexGuard aGuard(GetScImport());
-                bValid = ScRangeStringConverter::GetRangeFromString( aDetectiveObj.aSourceRange, sValue, GetScImport().GetDocument(), ::formula::FormulaGrammar::CONV_OOO, nOffset );
-            }
-            break;
-            case XML_TOK_DETECTIVE_HIGHLIGHTED_ATTR_DIRECTION:
-                aDetectiveObj.eObjType = ScXMLConverter::GetDetObjTypeFromString( sValue );
-            break;
-            case XML_TOK_DETECTIVE_HIGHLIGHTED_ATTR_CONTAINS_ERROR:
-                aDetectiveObj.bHasError = IsXMLToken(sValue, XML_TRUE);
-            break;
-            case XML_TOK_DETECTIVE_HIGHLIGHTED_ATTR_MARKED_INVALID:
+                case XML_ELEMENT( TABLE, XML_CELL_RANGE_ADDRESS ):
                 {
-                    if (IsXMLToken(sValue, XML_TRUE))
+                    sal_Int32 nOffset(0);
+                    ScXMLImport::MutexGuard aGuard(GetScImport());
+                    bValid = ScRangeStringConverter::GetRangeFromString( aDetectiveObj.aSourceRange, aIter.toString(), GetScImport().GetDocument(), ::formula::FormulaGrammar::CONV_OOO, nOffset );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DIRECTION ):
+                    aDetectiveObj.eObjType = ScXMLConverter::GetDetObjTypeFromString( aIter.toString() );
+                break;
+                case XML_ELEMENT( TABLE, XML_CONTAINS_ERROR ):
+                    aDetectiveObj.bHasError = IsXMLToken(aIter, XML_TRUE);
+                break;
+                case XML_ELEMENT( TABLE, XML_MARKED_INVALID ):
+                {
+                    if (IsXMLToken(aIter, XML_TRUE))
                         aDetectiveObj.eObjType = SC_DETOBJ_CIRCLE;
                 }
-            break;
+                break;
+            }
         }
     }
 }
@@ -152,15 +133,7 @@ ScXMLDetectiveHighlightedContext::~ScXMLDetectiveHighlightedContext()
 {
 }
 
-SvXMLImportContext *ScXMLDetectiveHighlightedContext::CreateChildContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDetectiveHighlightedContext::EndElement()
+void SAL_CALL ScXMLDetectiveHighlightedContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     switch( aDetectiveObj.eObjType )
     {
@@ -180,37 +153,28 @@ void ScXMLDetectiveHighlightedContext::EndElement()
 
 ScXMLDetectiveOperationContext::ScXMLDetectiveOperationContext(
         ScXMLImport& rImport,
-        sal_uInt16 nPrfx,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList >& xAttrList ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList ) :
+    ScXMLImportContext( rImport ),
     aDetectiveOp(),
     bHasType( false )
 {
-    if( !xAttrList.is() ) return;
-
-    sal_Int16               nAttrCount      = xAttrList->getLength();
-    const SvXMLTokenMap&    rAttrTokenMap   = GetScImport().GetDetectiveOperationAttrTokenMap();
-
-    for( sal_Int16 nIndex = 0; nIndex < nAttrCount; ++nIndex )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName  (xAttrList->getNameByIndex( nIndex ));
-        const OUString& sValue     (xAttrList->getValueByIndex( nIndex ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix      = GetScImport().GetNamespaceMap().GetKeyByAttrName( sAttrName, &aLocalName );
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DETECTIVE_OPERATION_ATTR_NAME:
-                bHasType = ScXMLConverter::GetDetOpTypeFromString( aDetectiveOp.eOpType, sValue );
-            break;
-            case XML_TOK_DETECTIVE_OPERATION_ATTR_INDEX:
+            switch (aIter.getToken())
             {
-                sal_Int32 nValue;
-                if (::sax::Converter::convertNumber( nValue, sValue, 0 ))
-                    aDetectiveOp.nIndex = nValue;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    bHasType = ScXMLConverter::GetDetOpTypeFromString( aDetectiveOp.eOpType, aIter.toString() );
+                break;
+                case XML_ELEMENT( TABLE, XML_INDEX ):
+                {
+                    sal_Int32 nValue;
+                    if (::sax::Converter::convertNumber( nValue, aIter.toString(), 0 ))
+                        aDetectiveOp.nIndex = nValue;
+                }
+                break;
             }
-            break;
         }
     }
     aDetectiveOp.aPosition =  rImport.GetTables().GetCurrentCellPos();
@@ -220,15 +184,7 @@ ScXMLDetectiveOperationContext::~ScXMLDetectiveOperationContext()
 {
 }
 
-SvXMLImportContext *ScXMLDetectiveOperationContext::CreateChildContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLName,
-        const uno::Reference< xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDetectiveOperationContext::EndElement()
+void SAL_CALL ScXMLDetectiveOperationContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if( bHasType && (aDetectiveOp.nIndex >= 0) )
         GetScImport().GetDetectiveOpArray()->AddDetectiveOp( aDetectiveOp );

@@ -121,7 +121,7 @@ const XMLPropertyMapEntry aXMLChartPropMap[] =
     // if type=="named-symbol" => name of symbol (square, diamond, ...)
     MAP_ENTRY( "SymbolType", CHART, XML_SYMBOL_NAME, XML_SCH_TYPE_NAMED_SYMBOL | MID_FLAG_MULTI_PROPERTY ),
     // if type=="image" => an xlink:href element with a linked (package) URI
-    MAP_SPECIAL( "SymbolBitmapURL", CHART, XML_SYMBOL_IMAGE, XML_TYPE_STRING | MID_FLAG_ELEMENT_ITEM, XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE ),
+    MAP_SPECIAL( "SymbolBitmap", CHART, XML_SYMBOL_IMAGE, XML_TYPE_STRING | MID_FLAG_ELEMENT_ITEM, XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE ),
     MAP_SPECIAL( "SymbolSize", CHART, XML_SYMBOL_WIDTH, XML_TYPE_MEASURE | MID_FLAG_MERGE_PROPERTY, XML_SCH_CONTEXT_SPECIAL_SYMBOL_WIDTH ),
     MAP_SPECIAL( "SymbolSize", CHART, XML_SYMBOL_HEIGHT, XML_TYPE_MEASURE | MID_FLAG_MERGE_PROPERTY, XML_SCH_CONTEXT_SPECIAL_SYMBOL_HEIGHT ),
     MAP_ENTRY( "Vertical", CHART, XML_VERTICAL, XML_TYPE_BOOL ),
@@ -147,9 +147,6 @@ const XMLPropertyMapEntry aXMLChartPropMap[] =
     MAP_ENTRY_ODF_EXT( "DisplayUnits", LO_EXT, XML_CHART_DUNITS_DISPLAYUNITS, XML_TYPE_BOOL ),
     MAP_ENTRY_ODF_EXT( "BuiltInUnit", LO_EXT, XML_CHART_DUNITS_BUILTINUNIT, XML_TYPE_STRING ),
     MAP_ENTRY_ODF_EXT( "ExternalData", LO_EXT, XML_EXTERNALDATA, XML_TYPE_STRING),
-
-    // OpenGL 3D chart flags
-    MAP_ENTRY_ODF_EXT( "RoundedEdge", LO_EXT, XML_ROUNDED_EDGE, XML_TYPE_BOOL),
 
     MAP_ENTRY_ODF_EXT( "LabelBorderColor", LO_EXT, XML_LABEL_STROKE_COLOR, XML_TYPE_COLOR ),
     MAP_ENTRY_ODF_EXT( "LabelBorderStyle", LO_EXT, XML_LABEL_STROKE, XML_SCH_TYPE_LABEL_BORDER_STYLE ),
@@ -217,6 +214,8 @@ const XMLPropertyMapEntry aXMLChartPropMap[] =
     MAP_ENTRY_ODF_EXT( "ExtrapolateBackward", LO_EXT, XML_REGRESSION_EXTRAPOLATE_BACKWARD, XML_TYPE_DOUBLE ),
     MAP_ENTRY_ODF_EXT( "ForceIntercept", LO_EXT, XML_REGRESSION_FORCE_INTERCEPT, XML_TYPE_BOOL ),
     MAP_ENTRY_ODF_EXT( "InterceptValue", LO_EXT, XML_REGRESSION_INTERCEPT_VALUE, XML_TYPE_DOUBLE ),
+    MAP_ENTRY_ODF_EXT( "XName", LO_EXT, XML_REGRESSION_X_NAME, XML_TYPE_STRING ),
+    MAP_ENTRY_ODF_EXT( "YName", LO_EXT, XML_REGRESSION_Y_NAME, XML_TYPE_STRING ),
 
     // import mapping for broken files
     MAP_ENTRY_ODF_EXT_IMPORT( "CurveName", CHART, XML_REGRESSION_CURVE_NAME, XML_TYPE_STRING ),
@@ -249,7 +248,7 @@ const XMLPropertyMapEntry aXMLChartPropMap[] =
     MAP_ENTRY( "StackedText", STYLE, XML_DIRECTION, XML_SCH_TYPE_TEXT_ORIENTATION ),
 
     // for compatibility to pre 6.0beta documents
-//     MAP_SPECIAL( "SymbolBitmapURL", CHART, XML_SYMBOL_IMAGE_NAME, XML_TYPE_STRING, XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE_NAME ),
+//     MAP_SPECIAL( "SymbolBitmap", CHART, XML_SYMBOL_IMAGE_NAME, XML_TYPE_STRING, XML_SCH_CONTEXT_SPECIAL_SYMBOL_IMAGE_NAME ),
 
     MAP_ENTRY( "ChartUserDefinedAttributes", TEXT, XML_XMLNS, XML_TYPE_ATTRIBUTE_CONTAINER | MID_FLAG_SPECIAL_ITEM ),
 
@@ -258,7 +257,7 @@ const XMLPropertyMapEntry aXMLChartPropMap[] =
 
 // maps for enums to XML attributes
 
-const SvXMLEnumMapEntry aXMLChartAxisLabelPositionEnumMap[] =
+const SvXMLEnumMapEntry<css::chart::ChartAxisLabelPosition> aXMLChartAxisLabelPositionEnumMap[] =
 {
     { ::xmloff::token::XML_NEAR_AXIS,               css::chart::ChartAxisLabelPosition_NEAR_AXIS },
     { ::xmloff::token::XML_NEAR_AXIS_OTHER_SIDE,    css::chart::ChartAxisLabelPosition_NEAR_AXIS_OTHER_SIDE },
@@ -266,26 +265,26 @@ const SvXMLEnumMapEntry aXMLChartAxisLabelPositionEnumMap[] =
     { ::xmloff::token::XML_OUTSIDE_END,             css::chart::ChartAxisLabelPosition_OUTSIDE_END },
     { ::xmloff::token::XML_OUTSIDE_MINIMUM,         css::chart::ChartAxisLabelPosition_OUTSIDE_START },//#i114142#
     { ::xmloff::token::XML_OUTSIDE_MAXIMUM,         css::chart::ChartAxisLabelPosition_OUTSIDE_END },//#i114142#
-    { ::xmloff::token::XML_TOKEN_INVALID, 0 }
+    { ::xmloff::token::XML_TOKEN_INVALID, css::chart::ChartAxisLabelPosition(0) }
 };
 
-const SvXMLEnumMapEntry aXMLChartAxisMarkPositionEnumMap[] =
+const SvXMLEnumMapEntry<css::chart::ChartAxisMarkPosition> aXMLChartAxisMarkPositionEnumMap[] =
 {
     { ::xmloff::token::XML_AT_LABELS,           css::chart::ChartAxisMarkPosition_AT_LABELS },
     { ::xmloff::token::XML_AT_AXIS,             css::chart::ChartAxisMarkPosition_AT_AXIS },
     { ::xmloff::token::XML_AT_LABELS_AND_AXIS,  css::chart::ChartAxisMarkPosition_AT_LABELS_AND_AXIS },
-    { ::xmloff::token::XML_TOKEN_INVALID, 0 }
+    { ::xmloff::token::XML_TOKEN_INVALID, css::chart::ChartAxisMarkPosition(0) }
 };
 
-const SvXMLEnumMapEntry aXMLChartAxisArrangementEnumMap[] =
+const SvXMLEnumMapEntry<css::chart::ChartAxisArrangeOrderType> aXMLChartAxisArrangementEnumMap[] =
 {
-    { ::xmloff::token::XML_SIDE_BY_SIDE,        css::chart::ChartAxisArrangeOrderType_SIDE_BY_SIDE },
-    { ::xmloff::token::XML_STAGGER_EVEN,        css::chart::ChartAxisArrangeOrderType_STAGGER_EVEN },
-    { ::xmloff::token::XML_STAGGER_ODD,     css::chart::ChartAxisArrangeOrderType_STAGGER_ODD },
-    { ::xmloff::token::XML_TOKEN_INVALID, 0 }
+    { ::xmloff::token::XML_SIDE_BY_SIDE,  css::chart::ChartAxisArrangeOrderType_SIDE_BY_SIDE },
+    { ::xmloff::token::XML_STAGGER_EVEN,  css::chart::ChartAxisArrangeOrderType_STAGGER_EVEN },
+    { ::xmloff::token::XML_STAGGER_ODD,   css::chart::ChartAxisArrangeOrderType_STAGGER_ODD },
+    { ::xmloff::token::XML_TOKEN_INVALID, css::chart::ChartAxisArrangeOrderType(0) }
 };
 
-const SvXMLEnumMapEntry aXMLChartErrorBarStyleEnumMap[] =
+const SvXMLEnumMapEntry<sal_Int32> aXMLChartErrorBarStyleEnumMap[] =
 {
     { ::xmloff::token::XML_NONE,                css::chart::ErrorBarStyle::NONE },
     { ::xmloff::token::XML_VARIANCE,            css::chart::ErrorBarStyle::VARIANCE },
@@ -298,23 +297,23 @@ const SvXMLEnumMapEntry aXMLChartErrorBarStyleEnumMap[] =
     { ::xmloff::token::XML_TOKEN_INVALID, 0 }
 };
 
-const SvXMLEnumMapEntry aXMLChartSolidTypeEnumMap[] =
+const SvXMLEnumMapEntry<sal_Int32> aXMLChartSolidTypeEnumMap[] =
 {
     { ::xmloff::token::XML_CUBOID,      css::chart::ChartSolidType::RECTANGULAR_SOLID },
     { ::xmloff::token::XML_CYLINDER,    css::chart::ChartSolidType::CYLINDER },
-    { ::xmloff::token::XML_CONE,            css::chart::ChartSolidType::CONE },
+    { ::xmloff::token::XML_CONE,        css::chart::ChartSolidType::CONE },
     { ::xmloff::token::XML_PYRAMID,     css::chart::ChartSolidType::PYRAMID },
     { ::xmloff::token::XML_TOKEN_INVALID, 0 }
 };
 
-const SvXMLEnumMapEntry aXMLChartDataRowSourceTypeEnumMap[] =
+const SvXMLEnumMapEntry<css::chart::ChartDataRowSource> aXMLChartDataRowSourceTypeEnumMap[] =
 {
     { ::xmloff::token::XML_COLUMNS,     css::chart::ChartDataRowSource_COLUMNS },
     { ::xmloff::token::XML_ROWS,        css::chart::ChartDataRowSource_ROWS },
-    { ::xmloff::token::XML_TOKEN_INVALID, 0 }
+    { ::xmloff::token::XML_TOKEN_INVALID, css::chart::ChartDataRowSource(0) }
 };
 
-const SvXMLEnumMapEntry aXMLChartInterpolationTypeEnumMap[] =
+const SvXMLEnumMapEntry<sal_Int32> aXMLChartInterpolationTypeEnumMap[] =
 {
     // this is neither an enum nor a constants group, but just a
     // documented long property
@@ -334,7 +333,7 @@ const SvXMLEnumMapEntry aXMLChartInterpolationTypeEnumMap[] =
     { ::xmloff::token::XML_TOKEN_INVALID,      0 }
 };
 
-const SvXMLEnumMapEntry aXMLChartDataLabelPlacementEnumMap[] =
+const SvXMLEnumMapEntry<sal_Int32> aXMLChartDataLabelPlacementEnumMap[] =
 {
     { ::xmloff::token::XML_AVOID_OVERLAP,   css::chart::DataLabelPlacement::AVOID_OVERLAP },
     { ::xmloff::token::XML_CENTER,          css::chart::DataLabelPlacement::CENTER },
@@ -352,7 +351,7 @@ const SvXMLEnumMapEntry aXMLChartDataLabelPlacementEnumMap[] =
     { ::xmloff::token::XML_TOKEN_INVALID, 0 }
 };
 
-const SvXMLEnumMapEntry aXMLChartMissingValueTreatmentEnumMap[] =
+const SvXMLEnumMapEntry<sal_Int32> aXMLChartMissingValueTreatmentEnumMap[] =
 {
     { ::xmloff::token::XML_LEAVE_GAP,    css::chart::MissingValueTreatment::LEAVE_GAP },
     { ::xmloff::token::XML_USE_ZERO,     css::chart::MissingValueTreatment::USE_ZERO },

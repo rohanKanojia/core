@@ -34,16 +34,16 @@ class AccessibleViewForwarder : public ::accessibility::IAccessibleViewForwarder
 {
 public:
     AccessibleViewForwarder( AccessibleChartView* pAccChartView, vcl::Window* pWindow );
-    virtual ~AccessibleViewForwarder();
+    virtual ~AccessibleViewForwarder() override;
 
     // ________ IAccessibleViewforwarder ________
-    virtual Rectangle GetVisibleArea() const override;
+    virtual tools::Rectangle GetVisibleArea() const override;
     virtual Point LogicToPixel( const Point& rPoint ) const override;
     virtual Size LogicToPixel( const Size& rSize ) const override;
 
 private:
-    AccessibleViewForwarder( AccessibleViewForwarder& ) = delete;
-    AccessibleViewForwarder& operator=( AccessibleViewForwarder& ) = delete;
+    AccessibleViewForwarder( AccessibleViewForwarder const & ) = delete;
+    AccessibleViewForwarder& operator=( AccessibleViewForwarder const & ) = delete;
 
     AccessibleChartView* m_pAccChartView;
     VclPtr<vcl::Window> m_pWindow;

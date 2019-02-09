@@ -18,8 +18,9 @@
  */
 
 #include "commonpagesdbp.hxx"
-#include "dbpresid.hrc"
-#include "componentmodule.hxx"
+#include <strings.hrc>
+#include <bitmaps.hlst>
+#include <componentmodule.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdb/XCompletedConnection.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
@@ -30,7 +31,6 @@
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <tools/debug.hxx>
-#include <svtools/localresaccess.hxx>
 #include <comphelper/interaction.hxx>
 #include <connectivity/dbtools.hxx>
 #include <vcl/stdtext.hxx>
@@ -63,7 +63,16 @@ namespace dbp
         get(m_pDatasourceLabel, "datasourcelabel");
         get(m_pSearchDatabase, "search");
 
-        implCollectDatasource();
+        try
+        {
+            m_xDSContext = getContext().xDatasourceContext;
+            if (m_xDSContext.is())
+                fillListBox(*m_pDatasource, m_xDSContext->getElementNames());
+        }
+        catch (const Exception&)
+        {
+            OSL_FAIL("OTableSelectionPage::OTableSelectionPage: could not collect the data source names!");
+        }
 
         m_pDatasource->SetSelectHdl(LINK(this, OTableSelectionPage, OnListboxSelection));
         m_pTable->SetSelectHdl(LINK(this, OTableSelectionPage, OnListboxSelection));
@@ -99,10 +108,10 @@ namespace dbp
         if (!OControlWizardPage::canAdvance())
             return false;
 
-        if (0 == m_pDatasource->GetSelectEntryCount())
+        if (0 == m_pDatasource->GetSelectedEntryCount())
             return false;
 
-        if (0 == m_pTable->GetSelectEntryCount())
+        if (0 == m_pTable->GetSelectedEntryCount())
             return false;
 
         return true;
@@ -139,7 +148,7 @@ namespace dbp
             // search the entry of the given type with the given name
             for ( sal_Int32 nLookup = 0; nLookup < m_pTable->GetEntryCount(); ++nLookup )
             {
-                if (sCommand.equals(m_pTable->GetEntry(nLookup)))
+                if (sCommand == m_pTable->GetEntry(nLookup))
                 {
                     if ( reinterpret_cast< sal_IntPtr >( m_pTable->GetEntryData( nLookup ) ) == nCommandType )
                     {
@@ -169,11 +178,11 @@ namespace dbp
             {
                 xOldConn = getFormConnection();
 
-                OUString sDataSource = m_pDatasource->GetSelectEntry();
+                OUString sDataSource = m_pDatasource->GetSelectedEntry();
                 rContext.xForm->setPropertyValue("DataSourceName", makeAny( sDataSource ) );
             }
-            OUString sCommand = m_pTable->GetSelectEntry();
-            sal_Int32 nCommandType = reinterpret_cast< sal_IntPtr >( m_pTable->GetSelectEntryData() );
+            OUString sCommand = m_pTable->GetSelectedEntry();
+            sal_Int32 nCommandType = reinterpret_cast< sal_IntPtr >( m_pTable->GetSelectedEntryData() );
 
             rContext.xForm->setPropertyValue("Command", makeAny( sCommand ) );
             rContext.xForm->setPropertyValue("CommandType", makeAny( nCommandType ) );
@@ -193,10 +202,11 @@ namespace dbp
     }
 
 
-    IMPL_LINK_NOARG_TYPED( OTableSelectionPage, OnSearchClicked, Button*, void )
+    IMPL_LINK_NOARG( OTableSelectionPage, OnSearchClicked, Button*, void )
     {
         ::sfx2::FileDialogHelper aFileDlg(
-                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION, 0);
+                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
+                FileDialogFlags::NONE, GetFrameWeld());
         aFileDlg.SetDisplayDirectory( SvtPathOptions().GetWorkPath() );
 
         std::shared_ptr<const SfxFilter> pFilter = SfxFilter::GetFilterByName("StarOffice XML (Base)");
@@ -206,7 +216,7 @@ namespace dbp
             aFileDlg.AddFilter(pFilter->GetUIName(),pFilter->GetDefaultExtension());
         }
 
-        if (0 == aFileDlg.Execute())
+        if (ERRCODE_NONE == aFileDlg.Execute())
         {
             OUString sDataSourceName = aFileDlg.GetPath();
             ::svt::OFileNotation aFileNotation(sDataSourceName);
@@ -217,14 +227,14 @@ namespace dbp
         }
     }
 
-    IMPL_LINK_TYPED( OTableSelectionPage, OnListboxDoubleClicked, ListBox&, _rBox, void )
+    IMPL_LINK( OTableSelectionPage, OnListboxDoubleClicked, ListBox&, _rBox, void )
     {
-        if (_rBox.GetSelectEntryCount())
+        if (_rBox.GetSelectedEntryCount())
             getDialog()->travelNext();
     }
 
 
-    IMPL_LINK_TYPED( OTableSelectionPage, OnListboxSelection, ListBox&, _rBox, void )
+    IMPL_LINK( OTableSelectionPage, OnListboxSelection, ListBox&, _rBox, void )
     {
         if (m_pDatasource == &_rBox)
         {   // new data source selected
@@ -237,13 +247,11 @@ namespace dbp
 
     namespace
     {
-        void    lcl_fillEntries( ListBox& _rListBox, const Sequence< OUString >& _rNames, const Image& _rImage, sal_Int32 _nCommandType )
+        void lcl_fillEntries( ListBox& _rListBox, const Sequence< OUString >& _rNames, const Image& _rImage, sal_Int32 _nCommandType )
         {
-            const OUString* pNames = _rNames.getConstArray();
-            const OUString* pNamesEnd = _rNames.getConstArray() + _rNames.getLength();
-            while ( pNames != pNamesEnd )
+            for ( auto const & name : _rNames )
             {
-                const sal_Int32 nPos = _rListBox.InsertEntry( *pNames++, _rImage );
+                const sal_Int32 nPos = _rListBox.InsertEntry( name, _rImage );
                 _rListBox.SetEntryData( nPos, reinterpret_cast< void* >( _nCommandType ) );
             }
         }
@@ -270,7 +278,7 @@ namespace dbp
             // connect to the data source
             try
             {
-                OUString sCurrentDatasource = m_pDatasource->GetSelectEntry();
+                OUString sCurrentDatasource = m_pDatasource->GetSelectedEntry();
                 if (!sCurrentDatasource.isEmpty())
                 {
                     // obtain the DS object
@@ -285,7 +293,7 @@ namespace dbp
                     if (m_xDSContext->getByName(sCurrentDatasource) >>= xDatasource)
                     {   // connect
                         // get the default SDB interaction handler
-                        Reference< XInteractionHandler > xHandler = getDialog()->getInteractionHandler(this);
+                        Reference< XInteractionHandler > xHandler = getDialog()->getInteractionHandler(GetFrameWeld());
                         if (!xHandler.is() )
                             return;
                         xConn = xDatasource->connectWithCompletion(xHandler);
@@ -345,7 +353,7 @@ namespace dbp
             try
             {
                 // get the default SDB interaction handler
-                Reference< XInteractionHandler > xHandler = getDialog()->getInteractionHandler(this);
+                Reference< XInteractionHandler > xHandler = getDialog()->getInteractionHandler(GetFrameWeld());
                 if ( xHandler.is() )
                     xHandler->handle(xRequest);
             }
@@ -353,28 +361,13 @@ namespace dbp
             return;
         }
 
-        Image aTableImage, aQueryImage;
-        aTableImage = Image( ModuleRes( IMG_TABLE ) );
-        aQueryImage = Image( ModuleRes( IMG_QUERY ) );
+        Image aTableImage(StockImage::Yes, BMP_TABLE);
+        Image aQueryImage(StockImage::Yes, BMP_QUERY);
 
         lcl_fillEntries( *m_pTable, aTableNames, aTableImage, CommandType::TABLE );
         lcl_fillEntries( *m_pTable, aQueryNames, aQueryImage, CommandType::QUERY );
     }
 
-
-    void OTableSelectionPage::implCollectDatasource()
-    {
-        try
-        {
-            m_xDSContext = getContext().xDatasourceContext;
-            if (m_xDSContext.is())
-                fillListBox(*m_pDatasource, m_xDSContext->getElementNames());
-        }
-        catch (const Exception&)
-        {
-            OSL_FAIL("OTableSelectionPage::implCollectDatasource: could not collect the data source names!");
-        }
-    }
 
     OMaybeListSelectionPage::OMaybeListSelectionPage( OControlWizard* _pParent, const OString& _rID, const OUString& _rUIXMLDescription )
         :OControlWizardPage(_pParent, _rID, _rUIXMLDescription)
@@ -408,7 +401,7 @@ namespace dbp
         implEnableWindows();
     }
 
-    IMPL_LINK_NOARG_TYPED( OMaybeListSelectionPage, OnRadioSelected, Button*, void )
+    IMPL_LINK_NOARG( OMaybeListSelectionPage, OnRadioSelected, Button*, void )
     {
         implEnableWindows();
     }
@@ -428,7 +421,7 @@ namespace dbp
 
     void OMaybeListSelectionPage::implCommit(OUString& _rSelection)
     {
-        _rSelection = m_pYes->IsChecked() ? m_pList->GetSelectEntry() : OUString();
+        _rSelection = m_pYes->IsChecked() ? m_pList->GetSelectedEntry() : OUString();
     }
 
 
@@ -456,7 +449,7 @@ namespace dbp
         get(m_pStoreYes, "yesRadiobutton");
         get(m_pStoreNo, "noRadiobutton");
         get(m_pStoreWhere, "storeInFieldCombobox");
-        SetText(ModuleRes(RID_STR_OPTION_DB_FIELD_TITLE));
+        SetText(compmodule::ModuleRes(RID_STR_OPTION_DB_FIELD_TITLE));
 
         announceControls(*m_pStoreYes, *m_pStoreNo, *m_pStoreWhere);
         m_pStoreWhere->SetDropDownLineCount(10);

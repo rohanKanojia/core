@@ -32,12 +32,9 @@
 #include <sfx2/dockwin.hxx>
 #include <sfx2/ctrlitem.hxx>
 #include <vcl/image.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 
-#include <vcl/dialog.hxx>
-#include <vcl/group.hxx>
-#include <vcl/dockwin.hxx>
-#include "svx/fmtools.hxx"
+#include <svx/fmtools.hxx>
 #include "fmexch.hxx"
 #include "sqlparserclient.hxx"
 
@@ -58,18 +55,18 @@ class FmFilterAdapter;
 
 class FmFilterData
 {
-    FmParentData*           m_pParent;
+    FmParentData* const    m_pParent;
     OUString         m_aText;
 
 public:
-    FmFilterData(FmParentData* pParent = nullptr, const OUString& rText = OUString())
+    FmFilterData(FmParentData* pParent, const OUString& rText)
         :m_pParent( pParent )
         ,m_aText( rText )
     {}
     virtual ~FmFilterData(){}
 
     void    SetText( const OUString& rText ){ m_aText = rText; }
-    OUString  GetText() const { return m_aText; }
+    const OUString& GetText() const { return m_aText; }
     FmParentData* GetParent() const {return m_pParent;}
 
     virtual Image GetImage() const;
@@ -79,15 +76,15 @@ public:
 class FmParentData : public FmFilterData
 {
 protected:
-    ::std::vector< FmFilterData* >  m_aChildren;
+    ::std::vector< std::unique_ptr<FmFilterData> >  m_aChildren;
 
 public:
     FmParentData(FmParentData* pParent, const OUString& rText)
         : FmFilterData(pParent, rText)
     {}
-    virtual ~FmParentData();
+    virtual ~FmParentData() override;
 
-    ::std::vector< FmFilterData* >& GetChildren() { return m_aChildren; }
+    ::std::vector< std::unique_ptr<FmFilterData> >& GetChildren() { return m_aChildren; }
 };
 
 
@@ -108,10 +105,10 @@ public:
     {
     }
 
-    inline const css::uno::Reference< css::form::runtime::XFormController >&
+    const css::uno::Reference< css::form::runtime::XFormController >&
         GetController() { return m_xController; }
 
-    inline const css::uno::Reference< css::form::runtime::XFilterController >&
+    const css::uno::Reference< css::form::runtime::XFilterController >&
         GetFilterController() { return m_xFilterController; }
 
     virtual Image GetImage() const override;
@@ -121,7 +118,6 @@ public:
 class FmFilterItems : public FmParentData
 {
 public:
-    FmFilterItems() : FmParentData(nullptr, OUString()) {}
     FmFilterItems(FmFormItem* pParent, const OUString& rText ) : FmParentData(pParent, rText) {}
 
     FmFilterItem* Find( const ::sal_Int32 _nFilterComponentIndex ) const;
@@ -131,7 +127,7 @@ public:
 
 class FmFilterItem : public FmFilterData
 {
-    OUString     m_aFieldName;
+    OUString const      m_aFieldName;
     const sal_Int32     m_nComponentIndex;
 
 public:
@@ -149,7 +145,7 @@ public:
 };
 
 
-class FmFilterModel : public FmParentData
+class FmFilterModel final : public FmParentData
                      ,public SfxBroadcaster
                      ,public ::svxform::OSQLParserClient
 {
@@ -157,17 +153,17 @@ class FmFilterModel : public FmParentData
 
     css::uno::Reference< css::container::XIndexAccess >           m_xControllers;
     css::uno::Reference< css::form::runtime::XFormController >    m_xController;
-    FmFilterAdapter*        m_pAdapter;
+    rtl::Reference<FmFilterAdapter>                               m_pAdapter;
     FmFilterItems*          m_pCurrentItems;
 
 public:
     FmFilterModel();
-    virtual ~FmFilterModel();
+    virtual ~FmFilterModel() override;
 
     void Update(const css::uno::Reference< css::container::XIndexAccess > & xControllers, const css::uno::Reference< css::form::runtime::XFormController > & xCurrent);
     void Clear();
-    bool ValidateText(FmFilterItem* pItem, OUString& rText, OUString& rErrorMsg) const;
-    void Append(FmFilterItems* pItems, FmFilterItem* pFilterItem);
+    bool ValidateText(FmFilterItem const * pItem, OUString& rText, OUString& rErrorMsg) const;
+    void Append(FmFilterItems* pItems, std::unique_ptr<FmFilterItem> pFilterItem);
     void SetTextForItem(FmFilterItem* pItem, const OUString& rText);
 
     FmFormItem* GetCurrentForm() const {return m_pCurrentItems ? static_cast<FmFormItem*>(m_pCurrentItems->GetParent()) : nullptr;}
@@ -181,11 +177,11 @@ public:
     static void AppendFilterItems( FmFormItem& _rItem );
     void EnsureEmptyFilterRows( FmParentData& _rItem );
 
-protected:
-    void Insert(const ::std::vector<FmFilterData*>::iterator& rPos, FmFilterData* pFilterItem);
-    void Remove( const ::std::vector<FmFilterData*>::iterator& rPos );
-    FmFormItem* Find(const ::std::vector<FmFilterData*>& rItems, const css::uno::Reference< css::form::runtime::XFormController > & xController) const;
-    FmFormItem* Find(const ::std::vector<FmFilterData*>& rItems, const css::uno::Reference< css::form::XForm >& xForm) const;
+private:
+    void Insert(const ::std::vector<std::unique_ptr<FmFilterData>>::iterator& rPos, std::unique_ptr<FmFilterData> pFilterItem);
+    void Remove( const ::std::vector<std::unique_ptr<FmFilterData>>::iterator& rPos );
+    FmFormItem* Find(const ::std::vector<std::unique_ptr<FmFilterData>>& rItems, const css::uno::Reference< css::form::runtime::XFormController > & xController) const;
+    FmFormItem* Find(const ::std::vector<std::unique_ptr<FmFilterData>>& rItems, const css::uno::Reference< css::form::XForm >& xForm) const;
     void Update(const css::uno::Reference< css::container::XIndexAccess > & xControllers, FmParentData* pParent);
 };
 
@@ -221,18 +217,18 @@ class OFilterExchangeHelper : public OLocalExchangeHelper
 public:
     OFilterExchangeHelper(vcl::Window* _pDragSource) : OLocalExchangeHelper(_pDragSource) { }
 
-    OFilterItemExchange* operator->() const { return static_cast<OFilterItemExchange*>(m_pTransferable); }
+    OFilterItemExchange* operator->() const { return static_cast<OFilterItemExchange*>(m_xTransferable.get()); }
 
 protected:
     virtual OLocalExchange* createExchange() const override;
 };
 
 
-class FmFilterNavigator : public SvTreeListBox, public SfxListener
+class FmFilterNavigator final : public SvTreeListBox, public SfxListener
 {
     enum DROP_ACTION{ DA_SCROLLUP, DA_SCROLLDOWN, DA_EXPANDNODE };
 
-    FmFilterModel*          m_pModel;
+    std::unique_ptr<FmFilterModel> m_pModel;
     SvTreeListEntry*            m_pEditingCurrently;
     OFilterExchangeHelper   m_aControlExchange;
 
@@ -244,17 +240,16 @@ class FmFilterNavigator : public SvTreeListBox, public SfxListener
 
 public:
     FmFilterNavigator( vcl::Window* pParent );
-    virtual ~FmFilterNavigator();
+    virtual ~FmFilterNavigator() override;
     virtual void dispose() override;
 
     void UpdateContent(
             const css::uno::Reference< css::container::XIndexAccess > & xControllers,
             const css::uno::Reference< css::form::runtime::XFormController > & xCurrent
         );
-    const FmFilterModel* GetFilterModel() const {return m_pModel;}
+    const FmFilterModel* GetFilterModel() const {return m_pModel.get();}
 
-protected:
-    using Control::Notify;
+private:
 
     virtual void KeyInput( const KeyEvent& rKEvt ) override;
     virtual void Command( const CommandEvent& rEvt ) override;
@@ -271,12 +266,11 @@ protected:
     void DeleteSelection();
     SvTreeListEntry* FindEntry(const FmFilterData* pItem) const;
     void Insert(FmFilterData* pItem, sal_uLong nPos);
-    void Remove(FmFilterData* pItem);
+    void Remove(FmFilterData const * pItem);
 
-    DECL_LINK_TYPED(OnRemove, void*, void);
-    DECL_LINK_TYPED(OnDropActionTimer, Timer*, void);
+    DECL_LINK(OnRemove, void*, void);
+    DECL_LINK(OnDropActionTimer, Timer*, void);
 
-private:
     /** returns the first form item and the selected FilterItems in the vector
         @param  _rItemList
             Is filled inside. <OUT/>
@@ -293,9 +287,9 @@ private:
      *    @param  _bCopy
      *        If <TRUE/> the items will not be removed from the model, otherwise they will.
      */
-    void insertFilterItem(const ::std::vector<FmFilterItem*>& _rFilterList,FmFilterItems* _pTargetItems, bool _bCopy = false);
-    SvTreeListEntry* getPrevEntry(SvTreeListEntry* _pStartWith = nullptr);
-    SvTreeListEntry* getNextEntry(SvTreeListEntry* _pStartWith = nullptr);
+    void insertFilterItem(const ::std::vector<FmFilterItem*>& _rFilterList,FmFilterItems* _pTargetItems, bool _bCopy);
+    SvTreeListEntry* getPrevEntry(SvTreeListEntry* _pStartWith);
+    SvTreeListEntry* getNextEntry(SvTreeListEntry* _pStartWith);
 
     using SvTreeListBox::Select;
     using SvTreeListBox::ExecuteDrop;
@@ -317,10 +311,10 @@ protected:
 public:
     FmFilterNavigatorWin( SfxBindings *pBindings, SfxChildWindow *pMgr,
                    vcl::Window* pParent );
-    virtual ~FmFilterNavigatorWin();
+    virtual ~FmFilterNavigatorWin() override;
     virtual void dispose() override;
 
-    void UpdateContent( FmFormShell* pFormShell );
+    void UpdateContent( FmFormShell const * pFormShell );
     void StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     void FillInfo( SfxChildWinInfo& rInfo ) const override;
 

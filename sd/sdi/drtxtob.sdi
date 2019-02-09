@@ -22,7 +22,7 @@ shell TextObjectBar
     [
         ExecMethod = Execute;
         StateMethod = GetAttrState;
-        GroupId = GID_DOCUMENT;
+        GroupId = SfxGroupId::Document;
         AutoUpdate;
     ]
 
@@ -192,6 +192,12 @@ shell TextObjectBar
     ]
 
     SID_ATTR_PARA_LRSPACE
+    [
+        ExecMethod = Execute ;
+        StateMethod = GetAttrState;
+    ]
+
+    SID_HANGING_INDENT
     [
         ExecMethod = Execute ;
         StateMethod = GetAttrState;

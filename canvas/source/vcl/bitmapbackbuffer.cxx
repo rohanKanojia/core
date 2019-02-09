@@ -19,7 +19,7 @@
 
 #include <sal/config.h>
 
-#include <osl/mutex.hxx>
+#include <osl/diagnose.h>
 #include <vcl/bitmapex.hxx>
 #include <vcl/bitmapaccess.hxx>
 #include <vcl/svapp.hxx>

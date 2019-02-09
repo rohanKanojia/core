@@ -400,7 +400,7 @@
             <desc>Selects a set of functions that are calculated for the selected cells, and which show the results in the status bar.</desc>
             <label>Statusbar Functions</label>
           </info>
-          <value>0</value>
+          <value>514</value>
         </prop>
         <prop oor:name="StatusbarFunction" oor:type="xs:int" oor:nillable="false">
           <!-- OldPath: Calc/Layout -->
@@ -447,7 +447,7 @@
               </info>
             </enumeration>
           </constraints>
-          <value>9</value>
+          <value>1</value>
         </prop>
         <prop oor:name="TabbarInlineWithScrollbar" oor:type="xs:boolean" oor:nillable="false">
           <info>
@@ -1023,6 +1023,60 @@
           <value>-1</value>
         </prop>
       </group>
+      <group oor:name="CSVExport">
+        <info>
+          <desc>Contains setting for Text CSV Export</desc>
+        </info>
+        <prop oor:name="CharSet" oor:type="xs:int" oor:nillable="false">
+          <info>
+            <desc>Char Set</desc>
+            <label>CharSet</label>
+          </info>
+          <value>-1</value>
+        </prop>
+        <prop oor:name="FieldSeparator" oor:type="xs:string" oor:nillable="false">
+          <info>
+            <desc>Field delimiter</desc>
+            <label>FieldSeparator</label>
+          </info>
+          <value/>
+        </prop>
+        <prop oor:name="TextSeparator" oor:type="xs:string" oor:nillable="false">
+          <info>
+            <desc>Text delimiter</desc>
+            <label>TextSeparator</label>
+          </info>
+          <value/>
+        </prop>
+        <prop oor:name="SaveTrueCellContent" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, formatted cell content is exported. If false, raw cell content is exported.</desc>
+            <label>SaveTrueCellContent</label>
+          </info>
+          <value>true</value>
+        </prop>
+        <prop oor:name="SaveCellFormulas" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, text formulas are exported instead of the calculated values.</desc>
+            <label>SaveCellFormulas</label>
+          </info>
+          <value>false</value>
+        </prop>
+        <prop oor:name="QuoteAllTextCells" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, text cells are always enclosed in quotes with no exception.</desc>
+            <label>QuoteAllTextCells</label>
+          </info>
+          <value>false</value>
+        </prop>
+        <prop oor:name="FixedWidth" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>All fields are exported having the same width</desc>
+            <label>FixedWidth</label>
+          </info>
+          <value>false</value>
+        </prop>
+      </group>
       <group oor:name="CSVImport">
         <info>
           <desc>Contains setting for Text CSV Import</desc>
@@ -1031,6 +1085,13 @@
           <info>
             <desc>Merge Delimiter check box status</desc>
             <label>MergeDelimiters</label>
+          </info>
+          <value>false</value>
+        </prop>
+        <prop oor:name="RemoveSpace" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, leading and trailing white spaces are trimmed off.</desc>
+            <label>RemoveSpace</label>
           </info>
           <value>false</value>
         </prop>
@@ -1109,6 +1170,13 @@
           </info>
           <value>false</value>
         </prop>
+        <prop oor:name="RemoveSpace" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, leading and trailing white spaces are trimmed off.</desc>
+            <label>RemoveSpace</label>
+          </info>
+          <value>false</value>
+        </prop>
         <prop oor:name="QuotedFieldAsText" oor:type="xs:boolean" oor:nillable="false">
           <info>
             <desc>If true, quoted field is always imported as text with no exception.</desc>
@@ -1120,6 +1188,13 @@
           <info>
             <desc>If true, Calc tries to detect special number format, such as date and scientific notation.</desc>
             <label>DetectSpecialNumbers</label>
+          </info>
+          <value>true</value>
+        </prop>
+        <prop oor:name="SkipEmptyCells" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, Calc preserves previous content of cells when pasting empty ones. If false, Calc delete content of previous cells.</desc>
+            <label>SkipEmptyCells</label>
           </info>
           <value>true</value>
         </prop>
@@ -1184,12 +1259,26 @@
           </info>
           <value>false</value>
         </prop>
+        <prop oor:name="RemoveSpace" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, leading and trailing white spaces are trimmed off.</desc>
+            <label>RemoveSpace</label>
+          </info>
+          <value>false</value>
+        </prop>
         <prop oor:name="Separators" oor:type="xs:string" oor:nillable="false">
           <info>
             <desc>List of Separators - as a String</desc>
             <label>Separators</label>
           </info>
           <value>	</value>
+        </prop>
+        <prop oor:name="SkipEmptyCells" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>If true, Calc preserves previous content of cells when pasting empty ones. If false, Calc delete content of previous cells.</desc>
+            <label>SkipEmptyCells</label>
+          </info>
+          <value>false</value>
         </prop>
         <prop oor:name="TextSeparators" oor:type="xs:string" oor:nillable="false">
           <info>
@@ -1313,7 +1402,7 @@
             <desc>Specifies whether the calculation uses regular expressions in formulas, e.g. for functions which look up sheet contents.</desc>
             <label>Enable regular expressions in formulas</label>
           </info>
-          <value>true</value>
+          <value>false</value>
         </prop>
         <prop oor:name="Wildcards" oor:type="xs:boolean" oor:nillable="false">
           <!-- UIHints: Tools - Options  Spreadsheet  Calculate  [Check box] Enable wildcards in formulas -->
@@ -1321,7 +1410,7 @@
             <desc>Specifies whether the calculation uses wildcards in formulas, e.g. for functions which look up sheet contents.</desc>
             <label>Enable wildcards in formulas</label>
           </info>
-          <value>false</value>
+          <value>true</value>
         </prop>
         <prop oor:name="FormulaSyntax" oor:type="xs:int">
           <!-- UIHints: Tools - Options  Spreadsheet  Calculate -->
@@ -1362,43 +1451,44 @@
         <info>
           <desc>Contains settings for how to calculate formulae.</desc>
         </info>
+	<prop oor:name="UseThreadedCalculationForFormulaGroups" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>Whether to use threaded calculation of formula groups when applicable.</desc>
+          </info>
+          <value>true</value>
+	</prop>
 	<!-- Note: The default values below probably must correspond
 	to those assigned in setOpenCLConfigToDefault() in
 	sc/source/core/tool/calcconfig.cxx
 	-->
         <prop oor:name="OpenCLSubsetOnly" oor:type="xs:boolean" oor:nillable="false">
-          <!-- UIHints: Tools - Options  Spreadsheet  Formula -->
           <info>
             <desc>Whether to use OpenCL only when a formula uses only a subset of operator and function opcodes.</desc>
           </info>
           <value>true</value>
         </prop>
         <prop oor:name="OpenCLMinimumDataSize" oor:type="xs:int">
-          <!-- UIHints: Tools - Options  Spreadsheet  Formula -->
           <info>
             <desc>An approximate lower limit on the number of data cells a spreadsheet formula should use for OpenCL to be considered.</desc>
           </info>
           <value>100</value>
         </prop>
         <prop oor:name="OpenCLSubsetOpCodes" oor:type="xs:string" oor:nillable="false">
-          <!-- UIHints: Tools - Options  Spreadsheet  Formula -->
           <info>
             <desc>The list of operator and function opcodes (in
             English) for which to use OpenCL. If OpenCLSubsetOnly is
             true, and a formula contains only these operators and
             functions, it might be calculated using OpenCL.</desc>
           </info>
-          <value>+;-;*;/;RAND;SIN;COS;TAN;ATAN;EXP;LN;SQRT;NORMSDIST;NORMSINV;ROUND;POWER;SUMPRODUCT;MIN;MAX;SUM;PRODUCT;AVERAGE;COUNT;VAR;NORMDIST;VLOOKUP;CORREL;COVAR;PEARSON;SLOPE;SUMIFS</value>
+          <value>+;-;*;/;^;RAND;SIN;COS;TAN;ATAN;EXP;LN;SQRT;NORMSDIST;NORMSINV;ROUND;POWER;SUMPRODUCT;MIN;MAX;SUM;PRODUCT;AVERAGE;COUNT;VAR;NORMDIST;VLOOKUP;CORREL;COVAR;PEARSON;SLOPE;SUMIFS</value>
         </prop>
         <prop oor:name="OpenCLAutoSelect" oor:type="xs:boolean" oor:nillable="false">
-          <!-- UIHints: Tools - Options  Spreadsheet  Formula -->
           <info>
             <desc>Whether to automatically select the OpenCL device</desc>
           </info>
           <value>true</value>
         </prop>
         <prop oor:name="OpenCLDevice" oor:type="xs:string" oor:nillable="false">
-          <!-- UIHints: Tools - Options  Spreadsheet  Formula -->
           <info>
             <desc>The Device ID of the OpenCL device selected if OpenCLAutoSelect is false</desc>
           </info>
@@ -1811,6 +1901,26 @@
       <info>
         <desc>Contains various compatibility settings.</desc>
       </info>
+      <group oor:name="MergeCells">
+        <info>
+          <desc>Contains settings for merging cells.</desc>
+          <label>Merge cells</label>
+        </info>
+        <prop oor:name="ShowDialog" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>Specifies whether the Merge Cells dialog box is shown, when some cells are not empty.</desc>
+            <label>Show Merge Cells dialog</label>
+          </info>
+          <value>true</value>
+        </prop>
+        <prop oor:name="EmptyMergedCells" oor:type="xs:boolean" oor:nillable="false">
+          <info>
+            <desc>Specifies whether to empty the contents of the hidden cells (like Excel does).</desc>
+            <label>Empty merged cells</label>
+          </info>
+          <value>false</value>
+        </prop>
+      </group>
       <group oor:name="KeyBindings">
         <info>
           <desc>Contains options related to key bindings</desc>

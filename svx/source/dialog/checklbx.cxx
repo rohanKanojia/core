@@ -17,10 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svtools/treelistentry.hxx>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
 #include <svx/checklbx.hxx>
-#include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
 #include <vcl/builderfactory.hxx>
 
 SvxCheckListBox::SvxCheckListBox( vcl::Window* pParent, WinBits nWinStyle ) :
@@ -31,14 +30,7 @@ SvxCheckListBox::SvxCheckListBox( vcl::Window* pParent, WinBits nWinStyle ) :
     Init_Impl();
 }
 
-VCL_BUILDER_DECL_FACTORY(SvxCheckListBox)
-{
-    WinBits nWinStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<SvxCheckListBox>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SvxCheckListBox, WB_TABSTOP)
 
 void SvxCheckListBox::SetNormalStaticImage(const Image& rNormalStaticImage)
 {
@@ -52,14 +44,14 @@ SvxCheckListBox::~SvxCheckListBox()
 
 void SvxCheckListBox::dispose()
 {
-    delete pCheckButton;
+    pCheckButton.reset();
     SvTreeListBox::dispose();
 }
 
 void SvxCheckListBox::Init_Impl()
 {
-    pCheckButton = new SvLBoxButtonData( this );
-    EnableCheckButton( pCheckButton );
+    pCheckButton.reset(new SvLBoxButtonData( this ));
+    EnableCheckButton( pCheckButton.get() );
 }
 
 void SvxCheckListBox::InsertEntry( const OUString& rStr, sal_uLong nPos,
@@ -85,7 +77,7 @@ void SvxCheckListBox::SelectEntryPos( sal_uLong nPos )
 }
 
 
-sal_uLong SvxCheckListBox::GetSelectEntryPos() const
+sal_uLong SvxCheckListBox::GetSelectedEntryPos() const
 {
     SvTreeListEntry* pEntry = GetCurEntry();
 
@@ -164,7 +156,7 @@ void SvxCheckListBox::ToggleCheckButton( SvTreeListEntry* pEntry )
         if ( !IsSelected( pEntry ) )
             Select( pEntry );
         else
-            CheckEntryPos( GetSelectEntryPos(), !IsChecked( GetSelectEntryPos() ) );
+            CheckEntryPos( GetSelectedEntryPos(), !IsChecked( GetSelectedEntryPos() ) );
     }
 }
 
@@ -181,7 +173,7 @@ void SvxCheckListBox::MouseButtonDown( const MouseEvent& rMEvt )
             bool bCheck = GetCheckButtonState( pEntry ) == SvButtonState::Checked;
             SvLBoxItem* pItem = GetItem( pEntry, aPnt.X() );
 
-            if (pItem && pItem->GetType() == SV_ITEM_ID_LBOXBUTTON)
+            if (pItem && pItem->GetType() == SvLBoxItemType::Button)
             {
                 SvTreeListBox::MouseButtonDown( rMEvt );
                 Select( pEntry );
@@ -229,7 +221,7 @@ void SvxCheckListBox::KeyInput( const KeyEvent& rKEvt )
 }
 
 
-SvTreeListEntry* SvxCheckListBox::InsertEntry( const OUString& rText, SvTreeListEntry* pParent, bool bChildrenOnDemand, sal_uIntPtr nPos, void* pUserData, SvLBoxButtonKind eButtonKind )
+SvTreeListEntry* SvxCheckListBox::InsertEntry( const OUString& rText, SvTreeListEntry* pParent, bool bChildrenOnDemand, sal_uLong nPos, void* pUserData, SvLBoxButtonKind eButtonKind )
 {
     return SvTreeListBox::InsertEntry( rText, pParent, bChildrenOnDemand, nPos, pUserData, eButtonKind );
 }

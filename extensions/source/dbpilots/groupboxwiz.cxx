@@ -21,10 +21,10 @@
 #include "commonpagesdbp.hxx"
 #include <tools/debug.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include "optiongrouplayouter.hxx"
-#include "dbpilots.hrc"
+#include <helpids.h>
 #include <comphelper/processfactory.hxx>
+#include <osl/diagnose.h>
 
 #define GBW_STATE_OPTIONLIST        0
 #define GBW_STATE_DEFAULTOPTION     1
@@ -55,7 +55,7 @@ namespace dbp
         m_pNextPage->SetHelpId(HID_GROUPWIZARD_NEXT);
         m_pCancel->SetHelpId(HID_GROUPWIZARD_CANCEL);
         m_pFinish->SetHelpId(HID_GROUPWIZARD_FINISH);
-        setTitleBase(ModuleRes(RID_STR_GROUPWIZARD_TITLE).toString());
+        setTitleBase(compmodule::ModuleRes(RID_STR_GROUPWIZARD_TITLE));
     }
 
 
@@ -153,8 +153,12 @@ namespace dbp
     }
 
 
-    void OGroupBoxWizard::createRadios()
+    bool OGroupBoxWizard::onFinish()
     {
+        // commit the basic control settings
+        commitControlSettings(&m_aSettings);
+
+        // create the radio buttons
         try
         {
             OOptionGroupLayouter aLayouter( getComponentContext() );
@@ -164,16 +168,6 @@ namespace dbp
         {
             OSL_FAIL("OGroupBoxWizard::createRadios: caught an exception while creating the radio shapes!");
         }
-    }
-
-
-    bool OGroupBoxWizard::onFinish()
-    {
-        // commit the basic control settings
-        commitControlSettings(&m_aSettings);
-
-        // create the radio buttons
-        createRadios();
 
         return OControlWizard::onFinish();
     }
@@ -200,8 +194,6 @@ namespace dbp
         m_pExistingRadios->EnableMultiSelection(true);
 
         getDialog()->defaultButton(m_pMoveRight.get());
-
-        m_pExistingRadios->SetAccessibleRelationMemberOf(m_pExistingRadios);
     }
 
     ORadioSelectionPage::~ORadioSelectionPage()
@@ -261,13 +253,13 @@ namespace dbp
     }
 
 
-    IMPL_LINK_TYPED( ORadioSelectionPage, OnMoveEntry, Button*, _pButton, void )
+    IMPL_LINK( ORadioSelectionPage, OnMoveEntry, Button*, _pButton, void )
     {
         bool bMoveLeft = (m_pMoveLeft == _pButton);
         if (bMoveLeft)
         {
-            while (m_pExistingRadios->GetSelectEntryCount())
-                m_pExistingRadios->RemoveEntry(m_pExistingRadios->GetSelectEntryPos());
+            while (m_pExistingRadios->GetSelectedEntryCount())
+                m_pExistingRadios->RemoveEntry(m_pExistingRadios->GetSelectedEntryPos());
         }
         else
         {
@@ -285,13 +277,13 @@ namespace dbp
     }
 
 
-    IMPL_LINK_NOARG_TYPED( ORadioSelectionPage, OnEntrySelected, ListBox&, void )
+    IMPL_LINK_NOARG( ORadioSelectionPage, OnEntrySelected, ListBox&, void )
     {
         implCheckMoveButtons();
     }
 
 
-    IMPL_LINK_NOARG_TYPED( ORadioSelectionPage, OnNameModified, Edit&, void )
+    IMPL_LINK_NOARG( ORadioSelectionPage, OnNameModified, Edit&, void )
     {
         implCheckMoveButtons();
     }
@@ -306,8 +298,8 @@ namespace dbp
     void ORadioSelectionPage::implCheckMoveButtons()
     {
         bool bHaveSome = (0 != m_pExistingRadios->GetEntryCount());
-        bool bSelectedSome = (0 != m_pExistingRadios->GetSelectEntryCount());
-        bool bUnfinishedInput = (!m_pRadioName->GetText().isEmpty());
+        bool bSelectedSome = (0 != m_pExistingRadios->GetSelectedEntryCount());
+        bool bUnfinishedInput = !m_pRadioName->GetText().isEmpty();
 
         m_pMoveLeft->Enable(bSelectedSome);
         m_pMoveRight->Enable(bUnfinishedInput);
@@ -335,7 +327,6 @@ namespace dbp
 
         announceControls(*m_pDefSelYes, *m_pDefSelNo, *m_pDefSelection);
         m_pDefSelection->SetDropDownLineCount(10);
-        m_pDefSelection->SetAccessibleRelationLabeledBy( m_pDefSelYes );
         m_pDefSelection->SetStyle(WB_DROPDOWN);
     }
 
@@ -360,11 +351,8 @@ namespace dbp
 
         // fill the listbox
         m_pDefSelection->Clear();
-        for (   StringArray::const_iterator aLoop = rSettings.aLabels.begin();
-                aLoop != rSettings.aLabels.end();
-                ++aLoop
-            )
-            m_pDefSelection->InsertEntry(*aLoop);
+        for (auto const& label : rSettings.aLabels)
+            m_pDefSelection->InsertEntry(label);
 
 
         implInitialize(rSettings.sDefaultField);
@@ -384,14 +372,12 @@ namespace dbp
 
     OOptionValuesPage::OOptionValuesPage( OControlWizard* _pParent )
         :OGBWPage(_pParent, "OptionValuesPage", "modules/sabpilot/ui/optionvaluespage.ui")
-        ,m_nLastSelection((::svt::WizardTypes::WizardState)-1)
+        ,m_nLastSelection(::svt::WizardTypes::WizardState(-1))
     {
         get(m_pValue, "optionvalue");
         get(m_pOptions, "radiobuttons");
 
         m_pOptions->SetSelectHdl(LINK(this, OOptionValuesPage, OnOptionSelected));
-
-        m_pOptions->SetAccessibleRelationMemberOf(m_pOptions);
     }
 
     OOptionValuesPage::~OOptionValuesPage()
@@ -406,7 +392,7 @@ namespace dbp
         OGBWPage::dispose();
     }
 
-    IMPL_LINK_NOARG_TYPED( OOptionValuesPage, OnOptionSelected, ListBox&, void )
+    IMPL_LINK_NOARG( OOptionValuesPage, OnOptionSelected, ListBox&, void )
     {
         implTraveledOptions();
     }
@@ -421,15 +407,15 @@ namespace dbp
 
     void OOptionValuesPage::implTraveledOptions()
     {
-        if ((::svt::WizardTypes::WizardState)-1 != m_nLastSelection)
+        if (::svt::WizardTypes::WizardState(-1) != m_nLastSelection)
         {
             // save the value for the last option
-            DBG_ASSERT((size_t)m_nLastSelection < m_aUncommittedValues.size(), "OOptionValuesPage::implTraveledOptions: invalid previous selection index!");
+            DBG_ASSERT(static_cast<size_t>(m_nLastSelection) < m_aUncommittedValues.size(), "OOptionValuesPage::implTraveledOptions: invalid previous selection index!");
             m_aUncommittedValues[m_nLastSelection] = m_pValue->GetText();
         }
 
-        m_nLastSelection = m_pOptions->GetSelectEntryPos();
-        DBG_ASSERT((size_t)m_nLastSelection < m_aUncommittedValues.size(), "OOptionValuesPage::implTraveledOptions: invalid new selection index!");
+        m_nLastSelection = m_pOptions->GetSelectedEntryPos();
+        DBG_ASSERT(static_cast<size_t>(m_nLastSelection) < m_aUncommittedValues.size(), "OOptionValuesPage::implTraveledOptions: invalid new selection index!");
         m_pValue->SetText(m_aUncommittedValues[m_nLastSelection]);
     }
 
@@ -445,11 +431,8 @@ namespace dbp
         // fill the list with all available options
         m_pOptions->Clear();
         m_nLastSelection = -1;
-        for (   StringArray::const_iterator aLoop = rSettings.aLabels.begin();
-                aLoop != rSettings.aLabels.end();
-                ++aLoop
-            )
-            m_pOptions->InsertEntry(*aLoop);
+        for (auto const& label : rSettings.aLabels)
+            m_pOptions->InsertEntry(label);
 
         // remember the values ... can't set them directly in the settings without the explicit commit call
         // so we need have a copy of the values
@@ -479,13 +462,13 @@ namespace dbp
     OOptionDBFieldPage::OOptionDBFieldPage( OControlWizard* _pParent )
         :ODBFieldPage(_pParent)
     {
-        setDescriptionText(ModuleRes(RID_STR_GROUPWIZ_DBFIELD).toString());
+        setDescriptionText(compmodule::ModuleRes(RID_STR_GROUPWIZ_DBFIELD));
     }
 
 
     OUString& OOptionDBFieldPage::getDBFieldSetting()
     {
-        return getSettings().sDBField;
+        return static_cast<OGroupBoxWizard*>(getDialog())->getSettings().sDBField;
     }
 
     OFinalizeGBWPage::OFinalizeGBWPage( OControlWizard* _pParent )

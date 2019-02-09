@@ -32,6 +32,7 @@
 #include <osl/mutex.hxx>
 
 #include <rtl/instance.hxx>
+#include <rtl/ustrbuf.hxx>
 
 #include "itemholder1.hxx"
 
@@ -93,25 +94,29 @@ public:
     OUString         m_aUserDictionaryPath;
 
                     SvtDefaultOptions_Impl();
+                    virtual ~SvtDefaultOptions_Impl() override;
 
     OUString         GetDefaultPath( sal_uInt16 nId ) const;
     virtual void    Notify( const css::uno::Sequence<OUString>& aPropertyNames) override;
 
 private:
-    virtual void    ImplCommit() override;
+    virtual void    ImplCommit() final override;
 };
 
 // global ----------------------------------------------------------------
 
-static SvtDefaultOptions_Impl*  pOptions = nullptr;
-static sal_Int32                nRefCount = 0;
+namespace {
+
+std::weak_ptr<SvtDefaultOptions_Impl> g_pOptions;
+
+}
 
 typedef OUString SvtDefaultOptions_Impl:: *PathStrPtr;
 
 struct PathToDefaultMapping_Impl
 {
-    SvtPathOptions::Paths   _ePath;
-    PathStrPtr              _pDefaultPath;
+    SvtPathOptions::Paths const   _ePath;
+    PathStrPtr const              _pDefaultPath;
 };
 
 static PathToDefaultMapping_Impl const PathMap_Impl[] =
@@ -142,7 +147,7 @@ static PathToDefaultMapping_Impl const PathMap_Impl[] =
 
 // functions -------------------------------------------------------------
 
-Sequence< OUString > GetDefaultPropertyNames()
+static Sequence< OUString > GetDefaultPropertyNames()
 {
     static const char* aPropNames[] =
     {
@@ -170,7 +175,7 @@ Sequence< OUString > GetDefaultPropertyNames()
         "Classification"    // PATH_CLASSIFICATION
     };
 
-    const int nCount = sizeof( aPropNames ) / sizeof( const char* );
+    const int nCount = SAL_N_ELEMENTS( aPropNames );
     Sequence< OUString > aNames( nCount );
     OUString* pNames = aNames.getArray();
     for ( int i = 0; i < nCount; i++ )
@@ -230,7 +235,8 @@ SvtDefaultOptions_Impl::SvtDefaultOptions_Impl() : ConfigItem( "Office.Common/Pa
     if ( aValues.getLength() == aNames.getLength() )
     {
         SvtPathOptions aPathOpt;
-        OUString aTempStr, aFullPath;
+        OUString aTempStr;
+        OUStringBuffer aFullPathBuf;
 
         for ( int nProp = 0; nProp < aNames.getLength(); nProp++ )
         {
@@ -242,7 +248,7 @@ SvtDefaultOptions_Impl::SvtDefaultOptions_Impl() : ConfigItem( "Office.Common/Pa
                     {
                         // multi paths
                         if ( pValues[nProp] >>= aTempStr )
-                            aFullPath = aPathOpt.SubstituteVariable( aTempStr );
+                            aFullPathBuf = aPathOpt.SubstituteVariable( aTempStr );
                         else
                         {
                             SAL_WARN( "unotools.config", "any operator >>= failed" );
@@ -253,17 +259,16 @@ SvtDefaultOptions_Impl::SvtDefaultOptions_Impl() : ConfigItem( "Office.Common/Pa
                     case css::uno::TypeClass_SEQUENCE :
                     {
                         // single paths
-                        aFullPath.clear();
+                        aFullPathBuf.setLength(0);
                         Sequence < OUString > aList;
                         if ( pValues[nProp] >>= aList )
                         {
                             sal_Int32 nCount = aList.getLength();
                             for ( sal_Int32 nPosition = 0; nPosition < nCount; ++nPosition )
                             {
-                                aTempStr = aPathOpt.SubstituteVariable( aList[ nPosition ] );
-                                aFullPath += aTempStr;
+                                aFullPathBuf.append(aPathOpt.SubstituteVariable( aList[ nPosition ] ));
                                 if ( nPosition < nCount-1 )
-                                    aFullPath += ";";
+                                    aFullPathBuf.append(";");
                             }
                         }
                         else
@@ -279,6 +284,7 @@ SvtDefaultOptions_Impl::SvtDefaultOptions_Impl() : ConfigItem( "Office.Common/Pa
                     }
                 }
 
+                auto aFullPath = aFullPathBuf.makeStringAndClear();
                 switch ( nProp )
                 {
                     case DEFAULTPATH_ADDIN:            m_aAddinPath = aFullPath;         break;
@@ -313,6 +319,12 @@ SvtDefaultOptions_Impl::SvtDefaultOptions_Impl() : ConfigItem( "Office.Common/Pa
     }
 }
 
+SvtDefaultOptions_Impl::~SvtDefaultOptions_Impl()
+{
+    if ( IsModified() )
+        Commit();
+}
+
 // class SvtDefaultOptions -----------------------------------------------
 namespace { struct lclMutex : public rtl::Static< ::osl::Mutex, lclMutex > {}; }
 
@@ -320,30 +332,25 @@ SvtDefaultOptions::SvtDefaultOptions()
 {
     // Global access, must be guarded (multithreading)
     ::osl::MutexGuard aGuard( lclMutex::get() );
-    if ( !pOptions )
+    pImpl = g_pOptions.lock();
+    if ( !pImpl )
     {
-        pOptions = new SvtDefaultOptions_Impl;
-        ItemHolder1::holdConfigItem(E_DEFAULTOPTIONS);
+        pImpl = std::make_shared<SvtDefaultOptions_Impl>();
+        g_pOptions = pImpl;
+        ItemHolder1::holdConfigItem(EItem::DefaultOptions);
     }
-    ++nRefCount;
-    pImp = pOptions;
 }
 
 SvtDefaultOptions::~SvtDefaultOptions()
 {
     // Global access, must be guarded (multithreading)
     ::osl::MutexGuard aGuard( lclMutex::get() );
-    if ( !--nRefCount )
-    {
-        if ( pOptions->IsModified() )
-            pOptions->Commit();
-        DELETEZ( pOptions );
-    }
+    pImpl.reset();
 }
 
 OUString SvtDefaultOptions::GetDefaultPath( sal_uInt16 nId ) const
 {
-    return pImp->GetDefaultPath( nId );
+    return pImpl->GetDefaultPath( nId );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

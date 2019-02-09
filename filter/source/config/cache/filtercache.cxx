@@ -18,14 +18,13 @@
  */
 
 
+#include <memory>
 #include "filtercache.hxx"
-#include "macros.hxx"
 #include "constant.hxx"
 #include "cacheupdatelistener.hxx"
 
 /*TODO see using below ... */
 #define AS_ENABLE_FILTER_UINAMES
-#define WORKAROUND_EXCEPTION_PROBLEM
 
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
@@ -43,9 +42,11 @@
 #include <comphelper/sequence.hxx>
 #include <comphelper/processfactory.hxx>
 
+#include <unotools/configmgr.hxx>
 #include <unotools/configpaths.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/uri.hxx>
+#include <sal/log.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/wldcrd.hxx>
 #include <i18nlangtag/languagetag.hxx>
@@ -61,10 +62,11 @@ FilterCache::FilterCache()
     , m_eFillState(E_CONTAINS_NOTHING                      )
 {
     int i = 0;
-    OUString sStandardProps[9];
+    OUString sStandardProps[10];
 
     sStandardProps[i++] = PROPNAME_USERDATA;
     sStandardProps[i++] = PROPNAME_TEMPLATENAME;
+    sStandardProps[i++] = PROPNAME_ENABLED;
     // E_READ_UPDATE only above
     sStandardProps[i++] = PROPNAME_TYPE;
     sStandardProps[i++] = PROPNAME_FILEFORMATVERSION;
@@ -77,9 +79,9 @@ FilterCache::FilterCache()
 
     // E_READ_NOTHING -> creative nothingness.
     m_aStandardProps[E_READ_STANDARD] =
-        css::uno::Sequence< OUString >(sStandardProps + 2, 7);
+        css::uno::Sequence< OUString >(sStandardProps + 3, 7);
     m_aStandardProps[E_READ_UPDATE] =
-        css::uno::Sequence< OUString >(sStandardProps, 2);
+        css::uno::Sequence< OUString >(sStandardProps, 3);
     m_aStandardProps[E_READ_ALL] =
         css::uno::Sequence< OUString >(sStandardProps,
                                        SAL_N_ELEMENTS(sStandardProps));
@@ -116,12 +118,12 @@ FilterCache::~FilterCache()
 }
 
 
-FilterCache* FilterCache::clone() const
+std::unique_ptr<FilterCache> FilterCache::clone() const
 {
     // SAFE -> ----------------------------------
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
-    FilterCache* pClone = new FilterCache();
+    auto pClone = std::make_unique<FilterCache>();
 
     // Don't copy the configuration access points here.
     // They will be created on demand inside the cloned instance,
@@ -196,9 +198,7 @@ void FilterCache::takeOver(const FilterCache& rClone)
     // <- SAFE ----------------------------------
 }
 
-
 void FilterCache::load(EFillState eRequired)
-    throw(css::uno::Exception)
 {
     // SAFE -> ----------------------------------
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -222,7 +222,6 @@ void FilterCache::load(EFillState eRequired)
         impl_getDirectCFGValue(CFGDIRECTKEY_OFFICELOCALE) >>= m_sActLocale;
         if (m_sActLocale.isEmpty())
         {
-            FILTER_CONFIG_LOG_1_("FilterCache::ctor() ... could not specify office locale => use default \"%s\"\n", _FILTER_CONFIG_TO_ASCII_(DEFAULT_OFFICELOCALE));
             m_sActLocale = DEFAULT_OFFICELOCALE;
         }
 
@@ -238,9 +237,7 @@ void FilterCache::load(EFillState eRequired)
     // <- SAFE
 }
 
-
 bool FilterCache::isFillState(FilterCache::EFillState eState) const
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -249,10 +246,9 @@ bool FilterCache::isFillState(FilterCache::EFillState eState) const
 }
 
 
-OUStringList FilterCache::getMatchingItemsByProps(      EItemType  eType  ,
+std::vector<OUString> FilterCache::getMatchingItemsByProps(      EItemType  eType  ,
                                                   const CacheItem& lIProps,
                                                   const CacheItem& lEProps) const
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -262,22 +258,18 @@ OUStringList FilterCache::getMatchingItemsByProps(      EItemType  eType  ,
     // => rList will be valid everytimes next line is reached.
     const CacheItemList& rList = impl_getItemList(eType);
 
-    OUStringList lKeys;
+    std::vector<OUString> lKeys;
 
     // search items, which provides all needed properties of set "lIProps"
     // but not of set "lEProps"!
-    for (CacheItemList::const_iterator pIt  = rList.begin();
-                                       pIt != rList.end()  ;
-                                     ++pIt                 )
+    for (auto const& elem : rList)
     {
-        FILTER_CONFIG_LOG_1_("getMatchingProps for \"%s\"  ...\n",
-                              FILTER_CONFIG_TO_ASCII_(pIt->first))
         if (
-            (pIt->second.haveProps(lIProps)    ) &&
-            (pIt->second.dontHaveProps(lEProps))
+            (elem.second.haveProps(lIProps)    ) &&
+            (elem.second.dontHaveProps(lEProps))
            )
         {
-            lKeys.push_back(pIt->first);
+            lKeys.push_back(elem.first);
         }
     }
 
@@ -287,7 +279,6 @@ OUStringList FilterCache::getMatchingItemsByProps(      EItemType  eType  ,
 
 
 bool FilterCache::hasItems(EItemType eType) const
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -302,8 +293,7 @@ bool FilterCache::hasItems(EItemType eType) const
 }
 
 
-OUStringList FilterCache::getItemNames(EItemType eType) const
-    throw(css::uno::Exception)
+std::vector<OUString> FilterCache::getItemNames(EItemType eType) const
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -313,12 +303,10 @@ OUStringList FilterCache::getItemNames(EItemType eType) const
     // => rList will be valid everytimes next line is reached.
     const CacheItemList& rList = impl_getItemList(eType);
 
-    OUStringList lKeys;
-    for (CacheItemList::const_iterator pIt  = rList.begin();
-                                       pIt != rList.end()  ;
-                                     ++pIt                 )
+    std::vector<OUString> lKeys;
+    for (auto const& elem : rList)
     {
-        lKeys.push_back(pIt->first);
+        lKeys.push_back(elem.first);
     }
     return lKeys;
     // <- SAFE
@@ -327,7 +315,6 @@ OUStringList FilterCache::getItemNames(EItemType eType) const
 
 bool FilterCache::hasItem(      EItemType        eType,
                               const OUString& sItem)
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -360,7 +347,6 @@ bool FilterCache::hasItem(      EItemType        eType,
 
 CacheItem FilterCache::getItem(      EItemType        eType,
                                const OUString& sItem)
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -411,7 +397,6 @@ CacheItem FilterCache::getItem(      EItemType        eType,
 
 void FilterCache::removeItem(      EItemType        eType,
                              const OUString& sItem)
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -433,7 +418,6 @@ void FilterCache::removeItem(      EItemType        eType,
 void FilterCache::setItem(      EItemType        eType ,
                           const OUString& sItem ,
                           const CacheItem&       aValue)
-    throw(css::uno::Exception, std::exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -450,7 +434,7 @@ void FilterCache::setItem(      EItemType        eType ,
     aItem.validateUINames(m_sActLocale);
 
     // remove implicit properties as e.g. FINALIZED or MANDATORY
-    // They can't be saved here and must be readed on demand later, if they are needed.
+    // They can't be saved here and must be read on demand later, if they are needed.
     removeStatePropsFromItem(aItem);
 
     rList[sItem] = aItem;
@@ -461,7 +445,6 @@ void FilterCache::setItem(      EItemType        eType ,
 
 void FilterCache::refreshItem(      EItemType        eType,
                               const OUString& sItem)
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -472,7 +455,6 @@ void FilterCache::refreshItem(      EItemType        eType,
 void FilterCache::addStatePropsToItem(      EItemType        eType,
                                       const OUString& sItem,
                                             CacheItem&       rItem)
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -502,7 +484,7 @@ void FilterCache::addStatePropsToItem(      EItemType        eType,
                 /* TODO
                     Hack -->
                         The default frame loader can't be located inside the normal set of frame loaders.
-                        Its an atomic property inside the misc cfg package. So we can't retrieve the information
+                        It's an atomic property inside the misc cfg package. So we can't retrieve the information
                         about FINALIZED and MANDATORY very easy ... :-(
                         => set it to readonly/required everytimes :-)
                 */
@@ -511,11 +493,11 @@ void FilterCache::addStatePropsToItem(      EItemType        eType,
                 if (
                     (aDirectValue >>= sDefaultFrameLoader) &&
                     (!sDefaultFrameLoader.isEmpty()      ) &&
-                    (sItem.equals(sDefaultFrameLoader)   )
+                    (sItem == sDefaultFrameLoader   )
                    )
                 {
-                    rItem[PROPNAME_FINALIZED] <<= sal_True;
-                    rItem[PROPNAME_MANDATORY] <<= sal_True;
+                    rItem[PROPNAME_FINALIZED] <<= true;
+                    rItem[PROPNAME_MANDATORY] <<= true;
                     return;
                 }
                 /* <-- HACK */
@@ -557,8 +539,8 @@ void FilterCache::addStatePropsToItem(      EItemType        eType,
 
             => mark item as FINALIZED / MANDATORY, we don't support writing to the old format
         */
-        rItem[PROPNAME_FINALIZED] <<= sal_True;
-        rItem[PROPNAME_MANDATORY] <<= sal_True;
+        rItem[PROPNAME_FINALIZED] <<= true;
+        rItem[PROPNAME_MANDATORY] <<= true;
     }
 
     // <- SAFE
@@ -566,7 +548,6 @@ void FilterCache::addStatePropsToItem(      EItemType        eType,
 
 
 void FilterCache::removeStatePropsFromItem(CacheItem& rItem)
-    throw(css::uno::Exception)
 {
     CacheItem::iterator pIt;
     pIt = rItem.find(PROPNAME_FINALIZED);
@@ -579,7 +560,6 @@ void FilterCache::removeStatePropsFromItem(CacheItem& rItem)
 
 
 void FilterCache::flush()
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -587,7 +567,7 @@ void FilterCache::flush()
     // renew all dependencies and optimizations
     impl_validateAndOptimize();
 
-    if (m_lChangedTypes.size() > 0)
+    if (!m_lChangedTypes.empty())
     {
         css::uno::Reference< css::container::XNameAccess > xConfig(impl_openConfig(E_PROVIDER_TYPES), css::uno::UNO_QUERY_THROW);
         css::uno::Reference< css::container::XNameAccess > xSet   ;
@@ -599,7 +579,7 @@ void FilterCache::flush()
         xFlush->commitChanges();
     }
 
-    if (m_lChangedFilters.size() > 0)
+    if (!m_lChangedFilters.empty())
     {
         css::uno::Reference< css::container::XNameAccess > xConfig(impl_openConfig(E_PROVIDER_FILTERS), css::uno::UNO_QUERY_THROW);
         css::uno::Reference< css::container::XNameAccess > xSet   ;
@@ -618,24 +598,19 @@ void FilterCache::flush()
 void FilterCache::impl_flushByList(const css::uno::Reference< css::container::XNameAccess >& xSet  ,
                                          EItemType                                           eType ,
                                    const CacheItemList&                                      rCache,
-                                   const OUStringList&                                       lItems)
-    throw(css::uno::Exception)
+                                   const std::vector<OUString>&                              lItems)
 {
     css::uno::Reference< css::container::XNameContainer >   xAddRemoveSet(xSet, css::uno::UNO_QUERY);
-    css::uno::Reference< css::container::XNameReplace >     xReplaceeSet(xSet, css::uno::UNO_QUERY);
     css::uno::Reference< css::lang::XSingleServiceFactory > xFactory(xSet, css::uno::UNO_QUERY);
 
-    for (OUStringList::const_iterator pIt  = lItems.begin();
-                                      pIt != lItems.end()  ;
-                                    ++pIt                  )
+    for (auto const& item : lItems)
     {
-        const OUString& sItem  = *pIt;
-              EItemFlushState  eState = impl_specifyFlushOperation(xSet, rCache, sItem);
+        EItemFlushState  eState = impl_specifyFlushOperation(xSet, rCache, item);
         switch(eState)
         {
             case E_ITEM_REMOVED :
             {
-                xAddRemoveSet->removeByName(sItem);
+                xAddRemoveSet->removeByName(item);
             }
             break;
 
@@ -644,29 +619,29 @@ void FilterCache::impl_flushByList(const css::uno::Reference< css::container::XN
                 css::uno::Reference< css::container::XNameReplace > xItem (xFactory->createInstance(), css::uno::UNO_QUERY);
 
                 // special case. no exception - but not a valid item => set must be finalized or mandatory!
-                // Reject flush operation by throwing an exception. At least one item couldnt be flushed.
+                // Reject flush operation by throwing an exception. At least one item couldn't be flushed.
                 if (!xItem.is())
                     throw css::uno::Exception("Can not add item. Set is finalized or mandatory!",
                                               css::uno::Reference< css::uno::XInterface >());
 
-                CacheItemList::const_iterator pItem = rCache.find(sItem);
+                CacheItemList::const_iterator pItem = rCache.find(item);
                 impl_saveItem(xItem, eType, pItem->second);
-                xAddRemoveSet->insertByName(sItem, css::uno::makeAny(xItem));
+                xAddRemoveSet->insertByName(item, css::uno::makeAny(xItem));
             }
             break;
 
             case E_ITEM_CHANGED :
             {
                 css::uno::Reference< css::container::XNameReplace > xItem;
-                xSet->getByName(sItem) >>= xItem;
+                xSet->getByName(item) >>= xItem;
 
                 // special case. no exception - but not a valid item => it must be finalized or mandatory!
-                // Reject flush operation by throwing an exception. At least one item couldnt be flushed.
+                // Reject flush operation by throwing an exception. At least one item couldn't be flushed.
                 if (!xItem.is())
                     throw css::uno::Exception("Can not change item. Its finalized or mandatory!",
                                               css::uno::Reference< css::uno::XInterface >());
 
-                CacheItemList::const_iterator pItem = rCache.find(sItem);
+                CacheItemList::const_iterator pItem = rCache.find(item);
                 impl_saveItem(xItem, eType, pItem->second);
             }
             break;
@@ -678,7 +653,6 @@ void FilterCache::impl_flushByList(const css::uno::Reference< css::container::XN
 
 void FilterCache::detectFlatForURL(const css::util::URL& aURL      ,
                                          FlatDetection&  rFlatTypes) const
-    throw(css::uno::Exception)
 {
     // extract extension from URL, so it can be used directly as key into our hash map!
     // Note further: It must be converted to lower case, because the optimize hash
@@ -686,7 +660,7 @@ void FilterCache::detectFlatForURL(const css::util::URL& aURL      ,
     INetURLObject   aParser    (aURL.Main);
     OUString sExtension = aParser.getExtension(INetURLObject::LAST_SEGMENT       ,
                                                       true                          ,
-                                                      INetURLObject::DECODE_WITH_CHARSET);
+                                                      INetURLObject::DecodeMechanism::WithCharset);
     sExtension = sExtension.toAsciiLowerCase();
 
     // SAFE -> ----------------------------------
@@ -698,14 +672,12 @@ void FilterCache::detectFlatForURL(const css::util::URL& aURL      ,
     //    Do it as first one - because: if a type match by a
     //    pattern a following deep detection can be suppressed!
     //    Further we can stop after first match ...
-    for (CacheItemRegistration::const_iterator pPattReg  = m_lURLPattern2Types.begin();
-                                               pPattReg != m_lURLPattern2Types.end()  ;
-                                             ++pPattReg                               )
+    for (auto const& pattern : m_lURLPattern2Types)
     {
-        WildCard aPatternCheck(pPattReg->first);
+        WildCard aPatternCheck(pattern.first);
         if (aPatternCheck.Matches(aURL.Main))
         {
-            const OUStringList& rTypesForPattern = pPattReg->second;
+            const std::vector<OUString>& rTypesForPattern = pattern.second;
 
             FlatDetectionInfo aInfo;
             aInfo.sType = *(rTypesForPattern.begin());
@@ -724,13 +696,11 @@ void FilterCache::detectFlatForURL(const css::util::URL& aURL      ,
     CacheItemRegistration::const_iterator pExtReg = m_lExtensions2Types.find(sExtension);
     if (pExtReg != m_lExtensions2Types.end())
     {
-        const OUStringList& rTypesForExtension = pExtReg->second;
-        for (OUStringList::const_iterator pIt  = rTypesForExtension.begin();
-                                          pIt != rTypesForExtension.end()  ;
-                                        ++pIt                              )
+        const std::vector<OUString>& rTypesForExtension = pExtReg->second;
+        for (auto const& elem : rTypesForExtension)
         {
             FlatDetectionInfo aInfo;
-            aInfo.sType             = *pIt;
+            aInfo.sType             = elem;
             aInfo.bMatchByExtension = true;
 
             rFlatTypes.push_back(aInfo);
@@ -780,7 +750,6 @@ CacheItemList& FilterCache::impl_getItemList(EItemType eType)
 }
 
 css::uno::Reference< css::uno::XInterface > FilterCache::impl_openConfig(EConfigProvider eProvider)
-    throw(css::uno::Exception)
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
@@ -824,7 +793,7 @@ css::uno::Reference< css::uno::XInterface > FilterCache::impl_openConfig(EConfig
         case E_PROVIDER_OLD :
         {
             // This special provider is used to work with
-            // the old configuration format only. Its not cached!
+            // the old configuration format only. It's not cached!
             sPath   = CFGPACKAGE_TD_OLD;
             pConfig = &xOld;
             sRtlLog = "impl_openconfig(E_PROVIDER_OLD)";
@@ -835,7 +804,7 @@ css::uno::Reference< css::uno::XInterface > FilterCache::impl_openConfig(EConfig
     }
 
     {
-        SAL_INFO( "filter.config", "" << sRtlLog.getStr());
+        SAL_INFO( "filter.config", "" << sRtlLog);
         *pConfig = impl_createConfigAccess(sPath    ,
                                            false,   // bReadOnly
                                            true );  // bLocalesMode
@@ -893,15 +862,9 @@ css::uno::Any FilterCache::impl_getDirectCFGValue(const OUString& sDirectKey)
     }
     catch(const css::uno::RuntimeException&)
         { throw; }
-    #if OSL_DEBUG_LEVEL > 0
     catch(const css::uno::Exception& ex)
-    #else
-    catch(const css::uno::Exception&)
-    #endif
         {
-            #if OSL_DEBUG_LEVEL > 0
-            OSL_FAIL(OUStringToOString(ex.Message, RTL_TEXTENCODING_UTF8).getStr());
-            #endif
+            SAL_WARN( "filter.config", ex);
             aValue.clear();
         }
 
@@ -918,49 +881,52 @@ css::uno::Reference< css::uno::XInterface > FilterCache::impl_createConfigAccess
 
     css::uno::Reference< css::uno::XInterface > xCfg;
 
-    try
+    if (!utl::ConfigManager::IsFuzzing())
     {
-        css::uno::Reference< css::lang::XMultiServiceFactory > xConfigProvider(
-            css::configuration::theDefaultProvider::get( comphelper::getProcessComponentContext() ) );
-
-        ::std::vector< css::uno::Any > lParams;
-        css::beans::NamedValue aParam;
-
-        // set root path
-        aParam.Name = "nodepath";
-        aParam.Value <<= sRoot;
-        lParams.push_back(css::uno::makeAny(aParam));
-
-        // enable "all locales mode" ... if required
-        if (bLocalesMode)
+        try
         {
-            aParam.Name = "locale";
-            aParam.Value <<= OUString("*");
+            css::uno::Reference< css::lang::XMultiServiceFactory > xConfigProvider(
+                css::configuration::theDefaultProvider::get( comphelper::getProcessComponentContext() ) );
+
+            ::std::vector< css::uno::Any > lParams;
+            css::beans::NamedValue aParam;
+
+            // set root path
+            aParam.Name = "nodepath";
+            aParam.Value <<= sRoot;
             lParams.push_back(css::uno::makeAny(aParam));
+
+            // enable "all locales mode" ... if required
+            if (bLocalesMode)
+            {
+                aParam.Name = "locale";
+                aParam.Value <<= OUString("*");
+                lParams.push_back(css::uno::makeAny(aParam));
+            }
+
+            // open it
+            if (bReadOnly)
+                xCfg = xConfigProvider->createInstanceWithArguments(SERVICE_CONFIGURATIONACCESS,
+                        comphelper::containerToSequence(lParams));
+            else
+                xCfg = xConfigProvider->createInstanceWithArguments(SERVICE_CONFIGURATIONUPDATEACCESS,
+                        comphelper::containerToSequence(lParams));
+
+            // If configuration could not be opened... but factory method did not throw an exception
+            // trigger throwing of our own CorruptedFilterConfigurationException.
+            // Let message empty. The normal exception text show enough information to the user.
+            if (! xCfg.is())
+                throw css::uno::Exception(
+                        "Got NULL reference on opening configuration file ... but no exception.",
+                        css::uno::Reference< css::uno::XInterface >());
         }
-
-        // open it
-        if (bReadOnly)
-            xCfg = xConfigProvider->createInstanceWithArguments(SERVICE_CONFIGURATIONACCESS,
-                    comphelper::containerToSequence(lParams));
-        else
-            xCfg = xConfigProvider->createInstanceWithArguments(SERVICE_CONFIGURATIONUPDATEACCESS,
-                    comphelper::containerToSequence(lParams));
-
-        // If configuration could not be opened ... but factory method does not throwed an exception
-        // trigger throwing of our own CorruptedFilterConfigurationException.
-        // Let message empty. The normal exception text show enough information to the user.
-        if (! xCfg.is())
-            throw css::uno::Exception(
-                    "Got NULL reference on opening configuration file ... but no exception.",
-                    css::uno::Reference< css::uno::XInterface >());
-    }
-    catch(const css::uno::Exception& ex)
-    {
-        throw css::document::CorruptedFilterConfigurationException(
-                "filter configuration, caught: " + ex.Message,
-                css::uno::Reference< css::uno::XInterface >(),
-                ex.Message);
+        catch(const css::uno::Exception& ex)
+        {
+            throw css::document::CorruptedFilterConfigurationException(
+                    "filter configuration, caught: " + ex.Message,
+                    css::uno::Reference< css::uno::XInterface >(),
+                    ex.Message);
+        }
     }
 
     return xCfg;
@@ -969,12 +935,11 @@ css::uno::Reference< css::uno::XInterface > FilterCache::impl_createConfigAccess
 
 
 void FilterCache::impl_validateAndOptimize()
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
-    // First check if any filter or type could be readed
+    // First check if any filter or type could be read
     // from the underlying configuration!
     bool bSomeTypesShouldExist   = ((m_eFillState & E_CONTAINS_STANDARD       ) == E_CONTAINS_STANDARD       );
     bool bAllFiltersShouldExist  = ((m_eFillState & E_CONTAINS_FILTERS        ) == E_CONTAINS_FILTERS        );
@@ -990,12 +955,10 @@ void FilterCache::impl_validateAndOptimize()
 
     if (
         (
-            (bSomeTypesShouldExist) &&
-            (m_lTypes.empty())
+            bSomeTypesShouldExist && m_lTypes.empty()
         ) ||
         (
-            (bAllFiltersShouldExist) &&
-            (m_lFilters.empty())
+            bAllFiltersShouldExist && m_lFilters.empty()
         )
        )
     {
@@ -1012,12 +975,10 @@ void FilterCache::impl_validateAndOptimize()
     sal_Int32             nErrors   = 0;
     OUStringBuffer sLog(256);
 
-    CacheItemList::iterator pIt;
-
-    for (pIt = m_lTypes.begin(); pIt != m_lTypes.end(); ++pIt)
+    for (auto const& elem : m_lTypes)
     {
-        OUString sType = pIt->first;
-        CacheItem       aType = pIt->second;
+        OUString sType = elem.first;
+        CacheItem aType = elem.second;
 
         // get its registration for file Extensions AND(!) URLPattern ...
         // It doesn't matter if these items exists or if our
@@ -1036,15 +997,15 @@ void FilterCache::impl_validateAndOptimize()
 
         OUString sInternalTypeNameCheck;
         aType[PROPNAME_NAME] >>= sInternalTypeNameCheck;
-        if (!sInternalTypeNameCheck.equals(sType))
+        if (sInternalTypeNameCheck != sType)
         {
-            sLog.append("Warning\t:\t" "The type \"" + sType + "\" does support the property \"Name\" correctly.\n");
+            sLog.append("Warning\t:\t" "The type \"").append(sType).append("\" does support the property \"Name\" correctly.\n");
             ++nWarnings;
         }
 
         if (!ce && !cu)
         {
-            sLog.append("Warning\t:\t" "The type \"" + sType + "\" does not contain any URL pattern nor any extensions.\n");
+            sLog.append("Warning\t:\t" "The type \"").append(sType).append("\" does not contain any URL pattern nor any extensions.\n");
             ++nWarnings;
         }
 #endif
@@ -1055,7 +1016,7 @@ void FilterCache::impl_validateAndOptimize()
         // a "Preferred" one - set it to the front of this list.
         // Of course multiple "Preferred" registrations can occur
         // (they shouldn't - but they can!) ... Ignore it. The last
-        // preferred type is useable in the same manner then every
+        // preferred type is usable in the same manner then every
         // other type!
         bool bPreferred = false;
         aType[PROPNAME_PREFERRED] >>= bPreferred;
@@ -1067,7 +1028,7 @@ void FilterCache::impl_validateAndOptimize()
             // does not depend from any upper/lower case problems ...
             OUString sNormalizedExtension = pExtensions[e].toAsciiLowerCase();
 
-            OUStringList& lTypesForExtension = m_lExtensions2Types[sNormalizedExtension];
+            std::vector<OUString>& lTypesForExtension = m_lExtensions2Types[sNormalizedExtension];
             if (::std::find(lTypesForExtension.begin(), lTypesForExtension.end(), sType) != lTypesForExtension.end())
                 continue;
 
@@ -1080,7 +1041,7 @@ void FilterCache::impl_validateAndOptimize()
         const OUString* pURLPattern = lURLPattern.getConstArray();
         for (sal_Int32 u=0; u<cu; ++u)
         {
-            OUStringList& lTypesForURLPattern = m_lURLPattern2Types[pURLPattern[u]];
+            std::vector<OUString>& lTypesForURLPattern = m_lURLPattern2Types[pURLPattern[u]];
             if (::std::find(lTypesForURLPattern.begin(), lTypesForURLPattern.end(), sType) != lTypesForURLPattern.end())
                 continue;
 
@@ -1103,10 +1064,10 @@ void FilterCache::impl_validateAndOptimize()
         aType[PROPNAME_PREFERREDFILTER] >>= sPrefFilter;
         if (sPrefFilter.isEmpty())
         {
-            // OK - there is no filter for this type. But thats not an error.
-            // May be it can be handled by a ContentHandler ...
-            // But at this time its not guaranteed that there is any ContentHandler
-            // or FrameLoader inside this cache ... but on disk ...
+            // OK - there is no filter for this type. But that's not an error.
+            // Maybe it can be handled by a ContentHandler...
+            // But at this time it's not guaranteed that there is any ContentHandler
+            // or FrameLoader inside this cache... but on disk...
             bool bReferencedByLoader  = true;
             bool bReferencedByHandler = true;
             if (bAllLoadersShouldExist)
@@ -1120,7 +1081,7 @@ void FilterCache::impl_validateAndOptimize()
                 (!bReferencedByHandler)
                )
             {
-                sLog.append("Warning\t:\t" "The type \"" + sType + "\" is not used by any filter, loader or content handler.\n");
+                sLog.append("Warning\t:\t" "The type \"").append(sType).append("\" is not used by any filter, loader or content handler.\n");
                 ++nWarnings;
             }
         }
@@ -1141,7 +1102,7 @@ void FilterCache::impl_validateAndOptimize()
                     sLog.append("warning\t:\t");
                 }
 
-                sLog.append("The type \"" + sType + "\" points to an invalid filter \"" + sPrefFilter + "\".\n");
+                sLog.append("The type \"").append(sType).append("\" points to an invalid filter \"").append(sPrefFilter).append("\".\n");
                 continue;
             }
 
@@ -1150,10 +1111,10 @@ void FilterCache::impl_validateAndOptimize()
             aPrefFilter[PROPNAME_TYPE] >>= sFilterTypeReg;
             if (sFilterTypeReg != sType)
             {
-                sLog.append("error\t:\t" "The preferred filter \""
-                    + sPrefFilter + "\" of type \"" + sType +
-                    "\" is registered for another type \"" + sFilterTypeReg +
-                    "\".\n");
+                sLog.append("error\t:\t" "The preferred filter \"")
+                    .append(sPrefFilter).append("\" of type \"").append(sType)
+                    .append("\" is registered for another type \"").append(sFilterTypeReg)
+                    .append("\".\n");
                 ++nErrors;
             }
 
@@ -1161,17 +1122,17 @@ void FilterCache::impl_validateAndOptimize()
             aPrefFilter[PROPNAME_FLAGS] >>= nFlags;
             if (!(static_cast<SfxFilterFlags>(nFlags) & SfxFilterFlags::IMPORT))
             {
-                sLog.append("error\t:\t" "The preferred filter \"" + sPrefFilter + "\" of type \"" +
-                            sType + "\" is not an IMPORT filter!\n");
+                sLog.append("error\t:\t" "The preferred filter \"").append(sPrefFilter).append("\" of type \"")
+                            .append(sType).append("\" is not an IMPORT filter!\n");
                 ++nErrors;
             }
 
             OUString sInternalFilterNameCheck;
             aPrefFilter[PROPNAME_NAME] >>= sInternalFilterNameCheck;
-            if (!sInternalFilterNameCheck.equals(sPrefFilter))
+            if (sInternalFilterNameCheck !=  sPrefFilter)
             {
-                sLog.append("Warning\t:\t" "The filter \"" + sPrefFilter +
-                            "\" does support the property \"Name\" correctly.\n");
+                sLog.append("Warning\t:\t" "The filter \"").append(sPrefFilter)
+                            .append("\" does support the property \"Name\" correctly.\n");
                 ++nWarnings;
             }
         }
@@ -1197,28 +1158,24 @@ void FilterCache::impl_validateAndOptimize()
     // b) step over all well known frame loader services
     //    and remove all types from list a), which already
     //    referenced by a loader b)
-    OUStringList lTypes = getItemNames(E_TYPE);
-    for (  pIt  = m_lFrameLoaders.begin();
-           pIt != m_lFrameLoaders.end()  ;
-         ++pIt                           )
+    std::vector<OUString> lTypes = getItemNames(E_TYPE);
+    for (auto & frameLoader : m_lFrameLoaders)
     {
         // Note: of course the default loader must be ignored here.
         // Because we replace its registration later completely with all
         // types, which are not referenced by any other loader.
         // So we can avoid our code against the complexity of a diff!
-        OUString sLoader = pIt->first;
-        if (sLoader.equals(sDefaultFrameLoader))
+        OUString sLoader = frameLoader.first;
+        if (sLoader == sDefaultFrameLoader)
             continue;
 
-        CacheItem&     rLoader   = pIt->second;
+        CacheItem&     rLoader   = frameLoader.second;
         css::uno::Any& rTypesReg = rLoader[PROPNAME_TYPES];
-        OUStringList   lTypesReg (comphelper::sequenceToContainer<OUStringList>(rTypesReg.get<css::uno::Sequence<OUString> >()));
+        std::vector<OUString>   lTypesReg (comphelper::sequenceToContainer< std::vector<OUString> >(rTypesReg.get<css::uno::Sequence<OUString> >()));
 
-        for (OUStringList::const_iterator pTypesReg  = lTypesReg.begin();
-                                          pTypesReg != lTypesReg.end()  ;
-                                        ++pTypesReg                     )
+        for (auto const& typeReg : lTypesReg)
         {
-            OUStringList::iterator pTypeCheck = ::std::find(lTypes.begin(), lTypes.end(), *pTypesReg);
+            auto pTypeCheck = ::std::find(lTypes.begin(), lTypes.end(), typeReg);
             if (pTypeCheck != lTypes.end())
                 lTypes.erase(pTypeCheck);
         }
@@ -1244,9 +1201,8 @@ void FilterCache::impl_validateAndOptimize()
 
 void FilterCache::impl_addItem2FlushList(      EItemType        eType,
                                          const OUString& sItem)
-    throw(css::uno::Exception)
 {
-    OUStringList* pList = nullptr;
+    std::vector<OUString>* pList = nullptr;
     switch(eType)
     {
         case E_TYPE :
@@ -1268,15 +1224,14 @@ void FilterCache::impl_addItem2FlushList(      EItemType        eType,
         default : throw css::uno::RuntimeException("unsupported item type", nullptr);
     }
 
-    OUStringList::const_iterator pItem = ::std::find(pList->begin(), pList->end(), sItem);
-    if (pItem == pList->end())
+    auto pItem = ::std::find(pList->cbegin(), pList->cend(), sItem);
+    if (pItem == pList->cend())
         pList->push_back(sItem);
 }
 
 FilterCache::EItemFlushState FilterCache::impl_specifyFlushOperation(const css::uno::Reference< css::container::XNameAccess >& xSet ,
                                                                      const CacheItemList&                                      rList,
                                                                      const OUString&                                    sItem)
-    throw(css::uno::Exception)
 {
     bool bExistsInConfigLayer = xSet->hasByName(sItem);
     bool bExistsInMemory      = (rList.find(sItem) != rList.end());
@@ -1297,7 +1252,6 @@ FilterCache::EItemFlushState FilterCache::impl_specifyFlushOperation(const css::
 }
 
 void FilterCache::impl_load(EFillState eRequiredState)
-    throw(css::uno::Exception)
 {
     // SAFE ->
     ::osl::ResettableMutexGuard aLock(m_aLock);
@@ -1312,9 +1266,9 @@ void FilterCache::impl_load(EFillState eRequiredState)
         ((m_eFillState   & E_CONTAINS_STANDARD) != E_CONTAINS_STANDARD)
        )
     {
-        // Attention! If config couldnt be opened successfully
+        // Attention! If config couldn't be opened successfully
         // and exception os thrown automatically and must be forwarded
-        // to our calli ...
+        // to our caller...
         css::uno::Reference< css::container::XNameAccess > xTypes(impl_openConfig(E_PROVIDER_TYPES), css::uno::UNO_QUERY_THROW);
         {
             SAL_INFO( "filter.config", "FilterCache::load std");
@@ -1329,9 +1283,9 @@ void FilterCache::impl_load(EFillState eRequiredState)
         ((m_eFillState   & E_CONTAINS_TYPES) != E_CONTAINS_TYPES)
        )
     {
-        // Attention! If config couldnt be opened successfully
+        // Attention! If config couldn't be opened successfully
         // and exception os thrown automatically and must be forwarded
-        // to our calli ...
+        // to our call...
         css::uno::Reference< css::container::XNameAccess > xTypes(impl_openConfig(E_PROVIDER_TYPES), css::uno::UNO_QUERY_THROW);
         {
             SAL_INFO( "filter.config", "FilterCache::load all types");
@@ -1346,9 +1300,9 @@ void FilterCache::impl_load(EFillState eRequiredState)
         ((m_eFillState   & E_CONTAINS_FILTERS) != E_CONTAINS_FILTERS)
        )
     {
-        // Attention! If config couldnt be opened successfully
+        // Attention! If config couldn't be opened successfully
         // and exception os thrown automatically and must be forwarded
-        // to our calli ...
+        // to our call...
         css::uno::Reference< css::container::XNameAccess > xFilters(impl_openConfig(E_PROVIDER_FILTERS), css::uno::UNO_QUERY_THROW);
         {
             SAL_INFO( "filter.config", "FilterCache::load all filters");
@@ -1363,9 +1317,9 @@ void FilterCache::impl_load(EFillState eRequiredState)
         ((m_eFillState   & E_CONTAINS_FRAMELOADERS) != E_CONTAINS_FRAMELOADERS)
        )
     {
-        // Attention! If config couldnt be opened successfully
+        // Attention! If config couldn't be opened successfully
         // and exception os thrown automatically and must be forwarded
-        // to our calli ...
+        // to our call...
         css::uno::Reference< css::container::XNameAccess > xLoaders(impl_openConfig(E_PROVIDER_OTHERS), css::uno::UNO_QUERY_THROW);
         {
             SAL_INFO( "filter.config", "FilterCache::load all frame loader");
@@ -1374,15 +1328,15 @@ void FilterCache::impl_load(EFillState eRequiredState)
     }
 
 
-    // d) We need all content handler information ...
+    // d) We need all content handler information...
     if (
         ((eRequiredState & E_CONTAINS_CONTENTHANDLERS) == E_CONTAINS_CONTENTHANDLERS) &&
         ((m_eFillState   & E_CONTAINS_CONTENTHANDLERS) != E_CONTAINS_CONTENTHANDLERS)
        )
     {
-        // Attention! If config couldnt be opened successfully
+        // Attention! If config couldn't be opened successfully
         // and exception os thrown automatically and must be forwarded
-        // to our calli ...
+        // to our call...
         css::uno::Reference< css::container::XNameAccess > xHandlers(impl_openConfig(E_PROVIDER_OTHERS), css::uno::UNO_QUERY_THROW);
         {
             SAL_INFO( "filter.config", "FilterCache::load all content handler");
@@ -1391,21 +1345,19 @@ void FilterCache::impl_load(EFillState eRequiredState)
     }
 
     // update fill state. Note: it's a bit field, which combines different parts.
-    m_eFillState = (EFillState) ((sal_Int32)m_eFillState | (sal_Int32)eRequiredState);
+    m_eFillState = static_cast<EFillState>(static_cast<sal_Int32>(m_eFillState) | static_cast<sal_Int32>(eRequiredState));
 
-    // any data readed?
+    // any data read?
     // yes! => validate it and update optimized structures.
     impl_validateAndOptimize();
 
     // <- SAFE
 }
 
-
 void FilterCache::impl_loadSet(const css::uno::Reference< css::container::XNameAccess >& xConfig,
                                      EItemType                                           eType  ,
                                      EReadOption                                         eOption,
                                      CacheItemList*                                      pCache )
-    throw(css::uno::Exception)
 {
     // get access to the right configuration set
     OUString sSetName;
@@ -1510,10 +1462,8 @@ void FilterCache::impl_loadSet(const css::uno::Reference< css::container::XNameA
     }
 }
 
-
 void FilterCache::impl_readPatchUINames(const css::uno::Reference< css::container::XNameAccess >& xNode,
                                               CacheItem&                                          rItem)
-    throw(css::uno::Exception)
 {
 
     // SAFE -> ----------------------------------
@@ -1532,16 +1482,12 @@ void FilterCache::impl_readPatchUINames(const css::uno::Reference< css::containe
           ::std::vector< OUString >::const_iterator pLocale ;
           ::comphelper::SequenceAsHashMap                                   lUINames;
 
-    for (  pLocale  = lLocales.begin();
-           pLocale != lLocales.end()  ;
-         ++pLocale                    )
+    for (auto const& locale : lLocales)
     {
-        const OUString& sLocale = *pLocale;
-
         OUString sValue;
-        xUIName->getByName(sLocale) >>= sValue;
+        xUIName->getByName(locale) >>= sValue;
 
-        lUINames[sLocale] <<= sValue;
+        lUINames[locale] <<= sValue;
     }
 
     aVal <<= lUINames.getAsConstPropertyValueList();
@@ -1557,10 +1503,8 @@ void FilterCache::impl_readPatchUINames(const css::uno::Reference< css::containe
             return;
         OUString sName = rItem.getUnpackedValueOrDefault(PROPNAME_NAME, OUString());
 
-        OUString sMsg("Fallback scenario for filter or type '" + sName + "' and locale '" +
-                      sActLocale + "' failed. Please check your filter configuration.");
-
-        OSL_FAIL(FILTER_CONFIG_TO_ASCII_(sMsg));
+        SAL_WARN("filter.config", "Fallback scenario for filter or type '" << sName << "' and locale '" <<
+                      sActLocale << "' failed. Please check your filter configuration.");
 #endif
         return;
     }
@@ -1571,10 +1515,8 @@ void FilterCache::impl_readPatchUINames(const css::uno::Reference< css::containe
         rItem[PROPNAME_UINAME] = pUIName->second;
 }
 
-
 void FilterCache::impl_savePatchUINames(const css::uno::Reference< css::container::XNameReplace >& xNode,
                                         const CacheItem&                                           rItem)
-    throw(css::uno::Exception)
 {
     css::uno::Reference< css::container::XNameContainer > xAdd  (xNode, css::uno::UNO_QUERY);
     css::uno::Reference< css::container::XNameAccess >    xCheck(xNode, css::uno::UNO_QUERY);
@@ -1603,37 +1545,25 @@ CacheItem FilterCache::impl_loadItem(const css::uno::Reference< css::container::
                                            EItemType                                           eType  ,
                                      const OUString&                                    sItem  ,
                                            EReadOption                                         eOption)
-    throw(css::uno::Exception)
 {
     // try to get an API object, which points directly to the
     // requested item. If it fail an exception should occur and
     // break this operation. Of course returned API object must be
     // checked too.
     css::uno::Reference< css::container::XNameAccess > xItem;
-    #ifdef WORKAROUND_EXCEPTION_PROBLEM
-    try
+    css::uno::Any aVal = xSet->getByName(sItem);
+    if (!(aVal >>= xItem) || !xItem.is())
     {
-    #endif
-        css::uno::Any aVal = xSet->getByName(sItem);
-        if (!(aVal >>= xItem) || !xItem.is())
-        {
-            OUString sMsg("found corrupted item \"" + sItem + "\".");
-            throw css::uno::RuntimeException(sMsg, css::uno::Reference< css::uno::XInterface >());
-        }
-    #ifdef WORKAROUND_EXCEPTION_PROBLEM
+        throw css::uno::RuntimeException("found corrupted item \"" + sItem + "\".",
+                                         css::uno::Reference< css::uno::XInterface >());
     }
-    catch(const css::container::NoSuchElementException&)
-    {
-        throw;
-    }
-    #endif
 
-    // set too. Of course its already used as key into the e.g. outside
-    // used hash map ... but some of our API methods provide
+    // set too. Of course it's already used as key into the e.g. outside
+    // used hash map... but some of our API methods provide
     // this property set as result only. But the user of this CacheItem
-    // should know, which value the key names has :-) ITS IMPORTANT!
+    // should know, which value the key names has :-) IT'S IMPORTANT!
     CacheItem aItem;
-    aItem[PROPNAME_NAME] = css::uno::makeAny(sItem);
+    aItem[PROPNAME_NAME] <<= sItem;
     switch(eType)
     {
         case E_TYPE :
@@ -1686,7 +1616,7 @@ CacheItem FilterCache::impl_loadItem(const css::uno::Reference< css::container::
                         // int representation ...
                         css::uno::Sequence< OUString > lFlagNames;
                         if (aValues[i] >>= lFlagNames)
-                            aItem[rPropName] <<= (sal_Int32) FilterCache::impl_convertFlagNames2FlagField(lFlagNames);
+                            aItem[rPropName] <<= static_cast<sal_Int32>(FilterCache::impl_convertFlagNames2FlagField(lFlagNames));
                     }
                 }
             }
@@ -1709,10 +1639,8 @@ CacheItem FilterCache::impl_loadItem(const css::uno::Reference< css::container::
     return aItem;
 }
 
-
 CacheItemList::iterator FilterCache::impl_loadItemOnDemand(      EItemType        eType,
                                                            const OUString& sItem)
-    throw(css::uno::Exception)
 {
     CacheItemList*                              pList   = nullptr;
     css::uno::Reference< css::uno::XInterface > xConfig    ;
@@ -1766,7 +1694,6 @@ CacheItemList::iterator FilterCache::impl_loadItemOnDemand(      EItemType      
     if (bItemInConfig)
     {
         (*pList)[sItem] = impl_loadItem(xSet, eType, sItem, E_READ_ALL);
-        FILTER_CONFIG_LOG_2_("impl_loadItemOnDemand(%d, \"%s\") ... OK", (int)eType, _FILTER_CONFIG_TO_ASCII_(sItem).getStr())
     }
     else
     {
@@ -1783,77 +1710,78 @@ CacheItemList::iterator FilterCache::impl_loadItemOnDemand(      EItemType      
     return pList->find(sItem);
 }
 
-
 void FilterCache::impl_saveItem(const css::uno::Reference< css::container::XNameReplace >& xItem,
                                       EItemType                                            eType,
-                                const CacheItem&                                           aItem)
-    throw(css::uno::Exception)
+                                const CacheItem & aItem)
 {
+    // This function changes the properties of aItem one-by-one; but it also
+    // listens to the configuration changes and reloads the whole item from the
+    // configuration on change, so use a copy of aItem throughout:
+    CacheItem copiedItem(aItem);
+
     CacheItem::const_iterator pIt;
     switch(eType)
     {
 
         case E_TYPE :
         {
-            pIt = aItem.find(PROPNAME_PREFERREDFILTER);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_PREFERREDFILTER);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_PREFERREDFILTER, pIt->second);
-            pIt = aItem.find(PROPNAME_DETECTSERVICE);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_DETECTSERVICE);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_DETECTSERVICE, pIt->second);
-            pIt = aItem.find(PROPNAME_URLPATTERN);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_URLPATTERN);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_URLPATTERN, pIt->second);
-            pIt = aItem.find(PROPNAME_EXTENSIONS);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_EXTENSIONS);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_EXTENSIONS, pIt->second);
-            pIt = aItem.find(PROPNAME_PREFERRED);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_PREFERRED);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_PREFERRED, pIt->second);
-            pIt = aItem.find(PROPNAME_MEDIATYPE);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_MEDIATYPE);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_MEDIATYPE, pIt->second);
-            pIt = aItem.find(PROPNAME_CLIPBOARDFORMAT);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_CLIPBOARDFORMAT);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_CLIPBOARDFORMAT, pIt->second);
 
             css::uno::Reference< css::container::XNameReplace > xUIName;
             xItem->getByName(PROPNAME_UINAME) >>= xUIName;
-            impl_savePatchUINames(xUIName, aItem);
+            impl_savePatchUINames(xUIName, copiedItem);
         }
         break;
 
 
         case E_FILTER :
         {
-            pIt = aItem.find(PROPNAME_TYPE);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_TYPE);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_TYPE, pIt->second);
-            pIt = aItem.find(PROPNAME_FILEFORMATVERSION);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_FILEFORMATVERSION);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_FILEFORMATVERSION, pIt->second);
-            pIt = aItem.find(PROPNAME_UICOMPONENT);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_UICOMPONENT);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_UICOMPONENT, pIt->second);
-            pIt = aItem.find(PROPNAME_FILTERSERVICE);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_FILTERSERVICE);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_FILTERSERVICE, pIt->second);
-            pIt = aItem.find(PROPNAME_DOCUMENTSERVICE);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_DOCUMENTSERVICE);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_DOCUMENTSERVICE, pIt->second);
-            pIt = aItem.find(PROPNAME_USERDATA);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_USERDATA);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_USERDATA, pIt->second);
-            pIt = aItem.find(PROPNAME_TEMPLATENAME);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_TEMPLATENAME);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_TEMPLATENAME, pIt->second);
 
             // special handling for flags! Convert it from an integer flag field back
             // to a list of names ...
-            // But note: because we work directly on a reference to the cache item,
-            // its not allowed to change the value here. We must work on a copy!
-            pIt = aItem.find(PROPNAME_FLAGS);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_FLAGS);
+            if (pIt != copiedItem.end())
             {
                 sal_Int32 nFlags = 0;
                 pIt->second >>= nFlags;
@@ -1867,7 +1795,7 @@ void FilterCache::impl_saveItem(const css::uno::Reference< css::container::XName
 #ifdef AS_ENABLE_FILTER_UINAMES
             css::uno::Reference< css::container::XNameReplace > xUIName;
             xItem->getByName(PROPNAME_UINAME) >>= xUIName;
-            impl_savePatchUINames(xUIName, aItem);
+            impl_savePatchUINames(xUIName, copiedItem);
 #endif //  AS_ENABLE_FILTER_UINAMES
         }
         break;
@@ -1876,8 +1804,8 @@ void FilterCache::impl_saveItem(const css::uno::Reference< css::container::XName
         case E_FRAMELOADER :
         case E_CONTENTHANDLER :
         {
-            pIt = aItem.find(PROPNAME_TYPES);
-            if (pIt != aItem.end())
+            pIt = copiedItem.find(PROPNAME_TYPES);
+            if (pIt != copiedItem.end())
                 xItem->replaceByName(PROPNAME_TYPES, pIt->second);
         }
         break;
@@ -1890,29 +1818,31 @@ void FilterCache::impl_saveItem(const css::uno::Reference< css::container::XName
 -----------------------------------------------*/
 css::uno::Sequence< OUString > FilterCache::impl_convertFlagField2FlagNames(SfxFilterFlags nFlags)
 {
-    OUStringList lFlagNames;
+    std::vector<OUString> lFlagNames;
 
-    if (nFlags & SfxFilterFlags::STARONEFILTER    ) lFlagNames.push_back(FLAGNAME_3RDPARTYFILTER   );
-    if (nFlags & SfxFilterFlags::ALIEN            ) lFlagNames.push_back(FLAGNAME_ALIEN            );
-    if (nFlags & SfxFilterFlags::CONSULTSERVICE   ) lFlagNames.push_back(FLAGNAME_CONSULTSERVICE   );
-    if (nFlags & SfxFilterFlags::DEFAULT          ) lFlagNames.push_back(FLAGNAME_DEFAULT          );
-    if (nFlags & SfxFilterFlags::ENCRYPTION       ) lFlagNames.push_back(FLAGNAME_ENCRYPTION       );
-    if (nFlags & SfxFilterFlags::EXPORT           ) lFlagNames.push_back(FLAGNAME_EXPORT           );
-    if (nFlags & SfxFilterFlags::IMPORT           ) lFlagNames.push_back(FLAGNAME_IMPORT           );
-    if (nFlags & SfxFilterFlags::INTERNAL         ) lFlagNames.push_back(FLAGNAME_INTERNAL         );
-    if (nFlags & SfxFilterFlags::NOTINFILEDLG     ) lFlagNames.push_back(FLAGNAME_NOTINFILEDIALOG  );
-    if (nFlags & SfxFilterFlags::MUSTINSTALL      ) lFlagNames.push_back(FLAGNAME_NOTINSTALLED     );
-    if (nFlags & SfxFilterFlags::OWN              ) lFlagNames.push_back(FLAGNAME_OWN              );
-    if (nFlags & SfxFilterFlags::PACKED           ) lFlagNames.push_back(FLAGNAME_PACKED           );
-    if (nFlags & SfxFilterFlags::PASSWORDTOMODIFY ) lFlagNames.push_back(FLAGNAME_PASSWORDTOMODIFY );
-    if (nFlags & SfxFilterFlags::PREFERED         ) lFlagNames.push_back(FLAGNAME_PREFERRED        );
-    if (nFlags & SfxFilterFlags::STARTPRESENTATION) lFlagNames.push_back(FLAGNAME_STARTPRESENTATION);
-    if (nFlags & SfxFilterFlags::OPENREADONLY     ) lFlagNames.push_back(FLAGNAME_READONLY         );
-    if (nFlags & SfxFilterFlags::SUPPORTSSELECTION) lFlagNames.push_back(FLAGNAME_SUPPORTSSELECTION);
-    if (nFlags & SfxFilterFlags::TEMPLATE         ) lFlagNames.push_back(FLAGNAME_TEMPLATE         );
-    if (nFlags & SfxFilterFlags::TEMPLATEPATH     ) lFlagNames.push_back(FLAGNAME_TEMPLATEPATH     );
-    if (nFlags & SfxFilterFlags::COMBINED         ) lFlagNames.push_back(FLAGNAME_COMBINED         );
-    if (nFlags & SfxFilterFlags::SUPPORTSSIGNING) lFlagNames.push_back(FLAGNAME_SUPPORTSSIGNING);
+    if (nFlags & SfxFilterFlags::STARONEFILTER    ) lFlagNames.emplace_back(FLAGNAME_3RDPARTYFILTER   );
+    if (nFlags & SfxFilterFlags::ALIEN            ) lFlagNames.emplace_back(FLAGNAME_ALIEN            );
+    if (nFlags & SfxFilterFlags::CONSULTSERVICE   ) lFlagNames.emplace_back(FLAGNAME_CONSULTSERVICE   );
+    if (nFlags & SfxFilterFlags::DEFAULT          ) lFlagNames.emplace_back(FLAGNAME_DEFAULT          );
+    if (nFlags & SfxFilterFlags::ENCRYPTION       ) lFlagNames.emplace_back(FLAGNAME_ENCRYPTION       );
+    if (nFlags & SfxFilterFlags::EXPORT           ) lFlagNames.emplace_back(FLAGNAME_EXPORT           );
+    if (nFlags & SfxFilterFlags::IMPORT           ) lFlagNames.emplace_back(FLAGNAME_IMPORT           );
+    if (nFlags & SfxFilterFlags::INTERNAL         ) lFlagNames.emplace_back(FLAGNAME_INTERNAL         );
+    if (nFlags & SfxFilterFlags::NOTINFILEDLG     ) lFlagNames.emplace_back(FLAGNAME_NOTINFILEDIALOG  );
+    if (nFlags & SfxFilterFlags::MUSTINSTALL      ) lFlagNames.emplace_back(FLAGNAME_NOTINSTALLED     );
+    if (nFlags & SfxFilterFlags::OWN              ) lFlagNames.emplace_back(FLAGNAME_OWN              );
+    if (nFlags & SfxFilterFlags::PACKED           ) lFlagNames.emplace_back(FLAGNAME_PACKED           );
+    if (nFlags & SfxFilterFlags::PASSWORDTOMODIFY ) lFlagNames.emplace_back(FLAGNAME_PASSWORDTOMODIFY );
+    if (nFlags & SfxFilterFlags::PREFERED         ) lFlagNames.emplace_back(FLAGNAME_PREFERRED        );
+    if (nFlags & SfxFilterFlags::STARTPRESENTATION) lFlagNames.emplace_back(FLAGNAME_STARTPRESENTATION);
+    if (nFlags & SfxFilterFlags::OPENREADONLY     ) lFlagNames.emplace_back(FLAGNAME_READONLY         );
+    if (nFlags & SfxFilterFlags::SUPPORTSSELECTION) lFlagNames.emplace_back(FLAGNAME_SUPPORTSSELECTION);
+    if (nFlags & SfxFilterFlags::TEMPLATE         ) lFlagNames.emplace_back(FLAGNAME_TEMPLATE         );
+    if (nFlags & SfxFilterFlags::TEMPLATEPATH     ) lFlagNames.emplace_back(FLAGNAME_TEMPLATEPATH     );
+    if (nFlags & SfxFilterFlags::COMBINED         ) lFlagNames.emplace_back(FLAGNAME_COMBINED         );
+    if (nFlags & SfxFilterFlags::SUPPORTSSIGNING) lFlagNames.emplace_back(FLAGNAME_SUPPORTSSIGNING);
+    if (nFlags & SfxFilterFlags::GPGENCRYPTION) lFlagNames.emplace_back(FLAGNAME_GPGENCRYPTION);
+    if (nFlags & SfxFilterFlags::EXOTIC) lFlagNames.emplace_back(FLAGNAME_EXOTIC);
 
     return comphelper::containerToSequence(lFlagNames);
 }
@@ -1953,9 +1883,19 @@ SfxFilterFlags FilterCache::impl_convertFlagNames2FlagField(const css::uno::Sequ
             nField |= SfxFilterFlags::ENCRYPTION;
             continue;
         }
+        if (pNames[i] == FLAGNAME_EXOTIC)
+        {
+            nField |= SfxFilterFlags::EXOTIC;
+            continue;
+        }
         if (pNames[i] == FLAGNAME_EXPORT)
         {
             nField |= SfxFilterFlags::EXPORT;
+            continue;
+        }
+        if (pNames[i] == FLAGNAME_GPGENCRYPTION)
+        {
+            nField |= SfxFilterFlags::GPGENCRYPTION;
             continue;
         }
         if (pNames[i] == FLAGNAME_IMPORT)
@@ -2046,12 +1986,7 @@ void FilterCache::impl_interpretDataVal4Type(const OUString& sValue,
     switch(nProp)
     {
         // Preferred
-        case 0:     {
-                        if (sValue.toInt32() == 1)
-                            rItem[PROPNAME_PREFERRED] = css::uno::makeAny(sal_True);
-                        else
-                            rItem[PROPNAME_PREFERRED] = css::uno::makeAny(sal_False);
-                    }
+        case 0:     rItem[PROPNAME_PREFERRED] <<= (sValue.toInt32() == 1);
                     break;
         // MediaType
         case 1:     rItem[PROPNAME_MEDIATYPE] <<= ::rtl::Uri::decode(sValue, rtl_UriDecodeWithCharset, RTL_TEXTENCODING_UTF8);
@@ -2060,10 +1995,10 @@ void FilterCache::impl_interpretDataVal4Type(const OUString& sValue,
         case 2:     rItem[PROPNAME_CLIPBOARDFORMAT] <<= ::rtl::Uri::decode(sValue, rtl_UriDecodeWithCharset, RTL_TEXTENCODING_UTF8);
                     break;
         // URLPattern
-        case 3:     rItem[PROPNAME_URLPATTERN] <<= comphelper::containerToSequence(impl_tokenizeString(sValue, (sal_Unicode)';'));
+        case 3:     rItem[PROPNAME_URLPATTERN] <<= comphelper::containerToSequence(impl_tokenizeString(sValue, ';'));
                     break;
         // Extensions
-        case 4:     rItem[PROPNAME_EXTENSIONS] <<= comphelper::containerToSequence(impl_tokenizeString(sValue, (sal_Unicode)';'));
+        case 4:     rItem[PROPNAME_EXTENSIONS] <<= comphelper::containerToSequence(impl_tokenizeString(sValue, ';'));
                     break;
     }
 }
@@ -2081,7 +2016,6 @@ void FilterCache::impl_interpretDataVal4Filter(const OUString& sValue,
                         if (nOrder > 0)
                         {
                             SAL_WARN( "filter.config", "FilterCache::impl_interpretDataVal4Filter()\nCan not move Order value from filter to type on demand!");
-                            FILTER_CONFIG_LOG_2_("impl_interpretDataVal4Filter(%d, \"%s\") ... OK", (int)eType, _FILTER_CONFIG_TO_ASCII_(rItem).getStr())
                         }
                     }
                     break;
@@ -2098,7 +2032,7 @@ void FilterCache::impl_interpretDataVal4Filter(const OUString& sValue,
         case 4:     rItem[PROPNAME_FLAGS] <<= sValue.toInt32();
                     break;
         // UserData
-        case 5:     rItem[PROPNAME_USERDATA] <<= comphelper::containerToSequence(impl_tokenizeString(sValue, (sal_Unicode)';'));
+        case 5:     rItem[PROPNAME_USERDATA] <<= comphelper::containerToSequence(impl_tokenizeString(sValue, ';'));
                     break;
         // FileFormatVersion
         case 6:     rItem[PROPNAME_FILEFORMATVERSION] <<= sValue.toInt32();
@@ -2164,7 +2098,6 @@ void FilterCache::impl_readOldFormat()
 CacheItem FilterCache::impl_readOldItem(const css::uno::Reference< css::container::XNameAccess >& xSet ,
                                               EItemType                                           eType,
                                         const OUString&                                    sItem)
-    throw(css::uno::Exception)
 {
     css::uno::Reference< css::container::XNameAccess > xItem;
     xSet->getByName(sItem) >>= xItem;
@@ -2182,31 +2115,28 @@ CacheItem FilterCache::impl_readOldItem(const css::uno::Reference< css::containe
 
     // Data
     OUString sData;
-    OUStringList    lData;
+    std::vector<OUString>    lData;
     xItem->getByName( "Data" ) >>= sData;
-    lData = impl_tokenizeString(sData, (sal_Unicode)',');
+    lData = impl_tokenizeString(sData, ',');
     if (
         (sData.isEmpty()) ||
-        (lData.size()<1    )
+        (lData.empty()    )
        )
     {
         throw css::uno::Exception( "Can not read old item property DATA.", css::uno::Reference< css::uno::XInterface >());
     }
 
     sal_Int32 nProp = 0;
-    for (OUStringList::const_iterator pProp  = lData.begin();
-                                      pProp != lData.end()  ;
-                                    ++pProp                 )
+    for (auto const& prop : lData)
     {
-        const OUString& sProp = *pProp;
         switch(eType)
         {
             case E_TYPE :
-                impl_interpretDataVal4Type(sProp, nProp, aItem);
+                impl_interpretDataVal4Type(prop, nProp, aItem);
                 break;
 
             case E_FILTER :
-                impl_interpretDataVal4Filter(sProp, nProp, aItem);
+                impl_interpretDataVal4Filter(prop, nProp, aItem);
                 break;
             default: break;
         }
@@ -2217,10 +2147,10 @@ CacheItem FilterCache::impl_readOldItem(const css::uno::Reference< css::containe
 }
 
 
-OUStringList FilterCache::impl_tokenizeString(const OUString& sData     ,
+std::vector<OUString> FilterCache::impl_tokenizeString(const OUString& sData     ,
                                                     sal_Unicode      cSeparator)
 {
-    OUStringList lData  ;
+    std::vector<OUString> lData  ;
     sal_Int32    nToken = 0;
     do
     {
@@ -2236,15 +2166,12 @@ OUStringList FilterCache::impl_tokenizeString(const OUString& sData     ,
 
 OUString FilterCache::impl_searchFrameLoaderForType(const OUString& sType) const
 {
-    CacheItemList::const_iterator pIt;
-    for (  pIt  = m_lFrameLoaders.begin();
-           pIt != m_lFrameLoaders.end()  ;
-         ++pIt                           )
+    for (auto const& frameLoader : m_lFrameLoaders)
     {
-        const OUString& sItem = pIt->first;
-        ::comphelper::SequenceAsHashMap lProps(pIt->second);
-        OUStringList                    lTypes(
-                comphelper::sequenceToContainer<OUStringList>(lProps[PROPNAME_TYPES].get<css::uno::Sequence<OUString> >()));
+        const OUString& sItem = frameLoader.first;
+        ::comphelper::SequenceAsHashMap lProps(frameLoader.second);
+        std::vector<OUString>           lTypes(
+                comphelper::sequenceToContainer< std::vector<OUString> >(lProps[PROPNAME_TYPES].get<css::uno::Sequence<OUString> >()));
 
         if (::std::find(lTypes.begin(), lTypes.end(), sType) != lTypes.end())
             return sItem;
@@ -2256,15 +2183,12 @@ OUString FilterCache::impl_searchFrameLoaderForType(const OUString& sType) const
 
 OUString FilterCache::impl_searchContentHandlerForType(const OUString& sType) const
 {
-    CacheItemList::const_iterator pIt;
-    for (  pIt  = m_lContentHandlers.begin();
-           pIt != m_lContentHandlers.end()  ;
-         ++pIt                              )
+    for (auto const& contentHandler : m_lContentHandlers)
     {
-        const OUString& sItem = pIt->first;
-        ::comphelper::SequenceAsHashMap lProps(pIt->second);
-        OUStringList                    lTypes(
-                comphelper::sequenceToContainer<OUStringList>( lProps[PROPNAME_TYPES].get<css::uno::Sequence<OUString> >() ));
+        const OUString& sItem = contentHandler.first;
+        ::comphelper::SequenceAsHashMap lProps(contentHandler.second);
+        std::vector<OUString>           lTypes(
+                comphelper::sequenceToContainer< std::vector<OUString> >( lProps[PROPNAME_TYPES].get<css::uno::Sequence<OUString> >() ));
         if (::std::find(lTypes.begin(), lTypes.end(), sType) != lTypes.end())
             return sItem;
     }

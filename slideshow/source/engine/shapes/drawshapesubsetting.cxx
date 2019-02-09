@@ -22,6 +22,8 @@
 
 #include <rtl/math.hxx>
 
+#include <sal/log.hxx>
+#include <utility>
 #include <vcl/metaact.hxx>
 #include <vcl/gdimtf.hxx>
 #include <basegfx/numeric/ftools.hxx>
@@ -72,7 +74,7 @@ namespace slideshow
                         MetaCommentAction* pAct = static_cast<MetaCommentAction*>(pCurrAct);
 
                         // skip comment if not a special XTEXT... comment
-                        if( pAct->GetComment().matchIgnoreAsciiCase( OString("XTEXT") ) )
+                        if( pAct->GetComment().matchIgnoreAsciiCase( "XTEXT" ) )
                         {
                             // fill classification vector with NOOPs,
                             // then insert corresponding classes at
@@ -152,7 +154,7 @@ namespace slideshow
                         SAL_INFO("slideshow.verbose", "Shape text \"" <<
                                  (static_cast<MetaTextAction*>(pCurrAct))->GetText() <<
                                  "\" at action #" << nActionIndex );
-                        // fallthrough intended
+                        [[fallthrough]];
                     default:
                         // comment action and all actions not
                         // explicitly handled here:
@@ -164,54 +166,84 @@ namespace slideshow
             mbNodeTreeInitialized = true;
         }
 
-        void DrawShapeSubsetting::updateSubsetBounds( const SubsetEntry& rSubsetEntry )
+        void DrawShapeSubsetting::excludeSubset(sal_Int32 nExcludedStart, sal_Int32 nExcludedEnd)
         {
-            // TODO(F1): This removes too much from non-contiguous subsets
-            mnMinSubsetActionIndex = ::std::min(
-                mnMinSubsetActionIndex,
-                rSubsetEntry.mnStartActionIndex );
-            mnMaxSubsetActionIndex = ::std::max(
-                mnMaxSubsetActionIndex,
-                rSubsetEntry.mnEndActionIndex );
+            // If current subsets are empty, fill it with initial range
+            initCurrentSubsets();
+            if (maCurrentSubsets.empty())
+            {
+                // Non-subsetting mode (not a subset of anything; child subsets subtract content)
+                maCurrentSubsets.emplace_back(0, maActionClassVector.size());
+            }
+
+            slideshow::internal::VectorOfDocTreeNodes aNodesToAppend;
+            for (auto i = maCurrentSubsets.begin(); i != maCurrentSubsets.end();)
+            {
+                if (i->getStartIndex() < nExcludedStart)
+                {
+                    if (i->getEndIndex() > nExcludedStart)
+                    {
+                        // Some overlap -> append new node (if required), and correct this node's end
+                        if (i->getEndIndex() > nExcludedEnd)
+                        {
+                            aNodesToAppend.emplace_back(nExcludedEnd, i->getEndIndex());
+                        }
+                        i->setEndIndex(nExcludedStart);
+                    }
+                    ++i;
+                }
+                else if (i->getStartIndex() < nExcludedEnd)
+                {
+                    if (i->getEndIndex() > nExcludedEnd)
+                    {
+                        // Partial overlap; change the node's start
+                        i->setStartIndex(nExcludedEnd);
+                        ++i;
+                    }
+                    else
+                    {
+                        // Node is fully inside the removed range: erase it
+                        i = maCurrentSubsets.erase(i);
+                    }
+                }
+                else
+                {
+                    // Node is fully outside (after) excluded range
+                    ++i;
+                }
+            }
+
+            maCurrentSubsets.insert(maCurrentSubsets.end(), aNodesToAppend.begin(),
+                                    aNodesToAppend.end());
+            // Excluding subsets must not leave an absolutely empty maCurrentSubsets, because it
+            // would mean "non-subsetting" mode unconditionally, with whole object added to subsets.
+            // So to indicate a subset with all parts excluded, add two empty subsets (starting and
+            // ending).
+            if (!maCurrentSubsets.empty())
+                return;
+
+            if (maSubset.isEmpty())
+            {
+                maCurrentSubsets.emplace_back(0, 0);
+                maCurrentSubsets.emplace_back(maActionClassVector.size(),
+                                              maActionClassVector.size());
+            }
+            else
+            {
+                maCurrentSubsets.emplace_back(maSubset.getStartIndex(),
+                                              maSubset.getStartIndex());
+                maCurrentSubsets.emplace_back(maSubset.getEndIndex(), maSubset.getEndIndex());
+            }
         }
 
         void DrawShapeSubsetting::updateSubsets()
         {
             maCurrentSubsets.clear();
+            initCurrentSubsets();
 
-            if( !maSubsetShapes.empty() )
+            for (const auto& rSubsetShape : maSubsetShapes)
             {
-                if( maSubset.isEmpty() )
-                {
-                    // non-subsetted node, with some child subsets
-                    // that subtract from it
-                    maCurrentSubsets.push_back( DocTreeNode( 0,
-                                                             mnMinSubsetActionIndex,
-                                                             DocTreeNode::NODETYPE_INVALID ) );
-                    maCurrentSubsets.push_back( DocTreeNode( mnMaxSubsetActionIndex,
-                                                             maActionClassVector.size(),
-                                                             DocTreeNode::NODETYPE_INVALID ) );
-                }
-                else
-                {
-                    // subsetted node, from which some further child
-                    // subsets subtract content
-                    maCurrentSubsets.push_back( DocTreeNode( maSubset.getStartIndex(),
-                                                             mnMinSubsetActionIndex,
-                                                             DocTreeNode::NODETYPE_INVALID ) );
-                    maCurrentSubsets.push_back( DocTreeNode( mnMaxSubsetActionIndex,
-                                                             maSubset.getEndIndex(),
-                                                             DocTreeNode::NODETYPE_INVALID ) );
-                }
-            }
-            else
-            {
-                // no further child subsets, simply add our subset (if any)
-                if( !maSubset.isEmpty() )
-                {
-                    // subsetted node, without any subset children
-                    maCurrentSubsets.push_back( maSubset );
-                }
+                excludeSubset(rSubsetShape.mnStartActionIndex, rSubsetShape.mnEndActionIndex);
             }
         }
 
@@ -224,21 +256,17 @@ namespace slideshow
             mpMtf(),
             maSubset(),
             maSubsetShapes(),
-            mnMinSubsetActionIndex( SAL_MAX_INT32 ),
-            mnMaxSubsetActionIndex(0),
             maCurrentSubsets(),
             mbNodeTreeInitialized( false )
         {
         }
 
         DrawShapeSubsetting::DrawShapeSubsetting( const DocTreeNode&            rShapeSubset,
-                                                  const GDIMetaFileSharedPtr&   rMtf ) :
+                                                  GDIMetaFileSharedPtr    rMtf ) :
             maActionClassVector(),
-            mpMtf( rMtf ),
+            mpMtf(std::move( rMtf )),
             maSubset( rShapeSubset ),
             maSubsetShapes(),
-            mnMinSubsetActionIndex( SAL_MAX_INT32 ),
-            mnMaxSubsetActionIndex(0),
             maCurrentSubsets(),
             mbNodeTreeInitialized( false )
         {
@@ -254,8 +282,6 @@ namespace slideshow
             mpMtf.reset();
             maSubset.reset();
             maSubsetShapes.clear();
-            mnMinSubsetActionIndex = SAL_MAX_INT32;
-            mnMaxSubsetActionIndex = 0;
             maCurrentSubsets.clear();
             mbNodeTreeInitialized = false;
         }
@@ -270,14 +296,14 @@ namespace slideshow
 
         void DrawShapeSubsetting::initCurrentSubsets()
         {
-            // only add subset to vector, if it's not empty - that's
+            // only add subset to vector, if vector is empty, and subset is not empty - that's
             // because the vector's content is later literally used
             // for e.g. painting.
-            if( !maSubset.isEmpty() )
+            if (maCurrentSubsets.empty() && !maSubset.isEmpty())
                 maCurrentSubsets.push_back( maSubset );
         }
 
-        DocTreeNode DrawShapeSubsetting::getSubsetNode() const
+        const DocTreeNode& DrawShapeSubsetting::getSubsetNode() const
         {
             return maSubset;
         }
@@ -330,9 +356,7 @@ namespace slideshow
 
                 maSubsetShapes.insert( aEntry );
 
-                // update cached subset borders
-                updateSubsetBounds( aEntry );
-                updateSubsets();
+                excludeSubset(aEntry.mnStartActionIndex, aEntry.mnEndActionIndex);
             }
         }
 
@@ -384,18 +408,9 @@ namespace slideshow
             // part of this shape that is visible, i.e. not displayed
             // in subset shapes)
 
-
-            // init bounds
-            mnMinSubsetActionIndex = SAL_MAX_INT32;
-            mnMaxSubsetActionIndex = 0;
-
             // TODO(P2): This is quite expensive, when
             // after every subset effect end, we have to scan
             // the whole shape set
-
-            // determine new subset range
-            for( const auto& pShape : maSubsetShapes )
-                updateSubsetBounds( pShape );
 
             updateSubsets();
 
@@ -504,8 +519,7 @@ namespace slideshow
                             }
 
                             ++nCurrShapeCount;
-                            // FALLTHROUGH intended: shape end also
-                            // ends lines
+                            [[fallthrough]]; // shape end also ends lines
                         case DrawShapeSubsetting::CLASS_PARAGRAPH_END:
                             if( !io_rFunctor( DrawShapeSubsetting::CLASS_PARAGRAPH_END,
                                               nCurrParaCount,
@@ -517,8 +531,7 @@ namespace slideshow
 
                             ++nCurrParaCount;
                             aLastParaStart = aNext;
-                            // FALLTHROUGH intended: para end also
-                            // ends line
+                            [[fallthrough]]; // para end also ends line
                         case DrawShapeSubsetting::CLASS_LINE_END:
                             if( !io_rFunctor( DrawShapeSubsetting::CLASS_LINE_END,
                                               nCurrLineCount,
@@ -545,7 +558,7 @@ namespace slideshow
                                 // character cell, OTOH?
                                 break;
                             }
-                            // FALLTHROUGH intended
+                            [[fallthrough]];
                         case DrawShapeSubsetting::CLASS_SENTENCE_END:
                             if( !io_rFunctor( DrawShapeSubsetting::CLASS_SENTENCE_END,
                                               nCurrSentenceCount,
@@ -557,7 +570,7 @@ namespace slideshow
 
                             ++nCurrSentenceCount;
                             aLastSentenceStart = aNext;
-                            // FALLTHROUGH intended
+                            [[fallthrough]];
                         case DrawShapeSubsetting::CLASS_WORD_END:
                             if( !io_rFunctor( DrawShapeSubsetting::CLASS_WORD_END,
                                               nCurrWordCount,
@@ -569,7 +582,7 @@ namespace slideshow
 
                             ++nCurrWordCount;
                             aLastWordStart = aNext;
-                            // FALLTHROUGH intended
+                            [[fallthrough]];
                         case DrawShapeSubsetting::CLASS_CHARACTER_CELL_END:
                             if( !io_rFunctor( DrawShapeSubsetting::CLASS_CHARACTER_CELL_END,
                                               nCurrCharCount,
@@ -592,30 +605,17 @@ namespace slideshow
             {
                 switch( eNodeType )
                 {
-                    case DocTreeNode::NODETYPE_INVALID:
-                        // FALLTHROUGH intended
                     default:
                         SAL_WARN( "slideshow", "DrawShapeSubsetting::mapDocTreeNode(): unexpected node type");
                         return DrawShapeSubsetting::CLASS_NOOP;
 
-                    case DocTreeNode::NODETYPE_LOGICAL_SHAPE:
-                        // FALLTHROUGH intended
-                    case DocTreeNode::NODETYPE_FORMATTING_SHAPE:
-                        return DrawShapeSubsetting::CLASS_SHAPE_END;
-
-                    case DocTreeNode::NODETYPE_FORMATTING_LINE:
-                        return DrawShapeSubsetting::CLASS_LINE_END;
-
-                    case DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH:
+                    case DocTreeNode::NodeType::LogicalParagraph:
                         return DrawShapeSubsetting::CLASS_PARAGRAPH_END;
 
-                    case DocTreeNode::NODETYPE_LOGICAL_SENTENCE:
-                        return DrawShapeSubsetting::CLASS_SENTENCE_END;
-
-                    case DocTreeNode::NODETYPE_LOGICAL_WORD:
+                    case DocTreeNode::NodeType::LogicalWord:
                         return DrawShapeSubsetting::CLASS_WORD_END;
 
-                    case DocTreeNode::NODETYPE_LOGICAL_CHARACTER_CELL:
+                    case DocTreeNode::NodeType::LogicalCharacterCell:
                         return DrawShapeSubsetting::CLASS_CHARACTER_CELL_END;
                 };
             }
@@ -647,7 +647,7 @@ namespace slideshow
                 }
 
             private:
-                DrawShapeSubsetting::IndexClassificator meClass;
+                DrawShapeSubsetting::IndexClassificator const meClass;
                 sal_Int32                               mnCurrCount;
             };
         }
@@ -722,22 +722,20 @@ namespace slideshow
                 }
 
             private:
-                sal_Int32                                                       mnNodeIndex;
+                sal_Int32 const                                                 mnNodeIndex;
                 DrawShapeSubsetting::IndexClassificatorVector::const_iterator&  mrLastBegin;
                 DrawShapeSubsetting::IndexClassificatorVector::const_iterator&  mrLastEnd;
-                DrawShapeSubsetting::IndexClassificator                         meClass;
+                DrawShapeSubsetting::IndexClassificator const                   meClass;
             };
 
             DocTreeNode makeTreeNode( const DrawShapeSubsetting::IndexClassificatorVector::const_iterator& rBegin,
                                       const DrawShapeSubsetting::IndexClassificatorVector::const_iterator& rStart,
-                                      const DrawShapeSubsetting::IndexClassificatorVector::const_iterator& rEnd,
-                                      DocTreeNode::NodeType                                                eNodeType )
+                                      const DrawShapeSubsetting::IndexClassificatorVector::const_iterator& rEnd   )
             {
                 return DocTreeNode( ::std::distance(rBegin,
                                                     rStart),
                                     ::std::distance(rBegin,
-                                                    rEnd),
-                                    eNodeType );
+                                                    rEnd) );
             }
         }
 
@@ -763,8 +761,7 @@ namespace slideshow
             iterateActionClassifications( aFunctor, rBegin, rEnd );
 
             return makeTreeNode( maActionClassVector.begin(),
-                                 aLastBegin, aLastEnd,
-                                 eNodeType );
+                                 aLastBegin, aLastEnd );
         }
 
         DocTreeNode DrawShapeSubsetting::getTreeNode( sal_Int32             nNodeIndex,

@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <map>
 #include <utility>
@@ -27,7 +27,7 @@ public:
     {}
 
 private:
-    virtual ~Cursor() throw () {}
+    virtual ~Cursor() throw () override {}
 
     virtual rtl::Reference< Entity > getNext(OUString * name) override;
 
@@ -53,16 +53,16 @@ public:
     std::map< OUString, rtl::Reference<Entity> > map;
 
 private:
-    virtual ~Module() throw () {}
+    virtual ~Module() throw () override {}
 
-    virtual std::vector<rtl::OUString> getMemberNames() const override;
+    virtual std::vector<OUString> getMemberNames() const override;
 
     virtual rtl::Reference<MapCursor> createCursor() const override
     { return new Cursor(map); }
 };
 
-std::vector<rtl::OUString> Module::getMemberNames() const {
-    std::vector<rtl::OUString> names;
+std::vector<OUString> Module::getMemberNames() const {
+    std::vector<OUString> names;
     for (auto & i: map) {
         names.push_back(i.first);
     }
@@ -94,7 +94,7 @@ SourceFileProvider::SourceFileProvider(
                 if (k == map->end()) {
                     k = map->insert(std::make_pair(id, new Module)).first;
                 }
-                Module& mod = dynamic_cast<Module&>(*k->second.get());
+                Module& mod = dynamic_cast<Module&>(*k->second);
                 map = &mod.map;
             }
         }

@@ -11,9 +11,12 @@ $(eval $(call gb_UnpackedTarball_UnpackedTarball,harfbuzz))
 
 $(eval $(call gb_UnpackedTarball_set_tarball,harfbuzz,$(HARFBUZZ_TARBALL),,harfbuzz))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,harfbuzz))
+
 $(eval $(call gb_UnpackedTarball_set_patchlevel,harfbuzz,0))
 
 $(eval $(call gb_UnpackedTarball_add_patches,harfbuzz, \
+    external/harfbuzz/clang-cl.patch \
     external/harfbuzz/ubsan.patch \
 ))
 
@@ -22,5 +25,9 @@ $(eval $(call gb_UnpackedTarball_add_patches,harfbuzz, \
     external/harfbuzz/harfbuzz-rtti.patch \
 ))
 endif
+
+$(eval $(call gb_UnpackedTarball_add_patches,harfbuzz, \
+    external/harfbuzz/harfbuzz-ios.patch \
+))
 
 # vim: set noet sw=4 ts=4:

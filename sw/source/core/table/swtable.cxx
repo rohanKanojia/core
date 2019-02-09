@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ctype.h>
 #include <float.h>
 #include <hintids.hxx>
 #include <hints.hxx>
@@ -27,7 +26,6 @@
 #include <editeng/colritem.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <editeng/boxitem.hxx>
-#include <o3tl/make_unique.hxx>
 #include <fmtfsize.hxx>
 #include <fmtornt.hxx>
 #include <fmtpdsc.hxx>
@@ -72,7 +70,7 @@ using namespace com::sun::star;
 
 #define COLFUZZY 20
 
-void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
+static void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
                     bool bChgAlign, sal_uLong nNdPos );
 
 inline const Color* SwTableBox::GetSaveUserColor() const
@@ -156,7 +154,7 @@ static OUString& lcl_DelTabsAtSttEnd( OUString& rText )
     return rText;
 }
 
-void _InsTableBox( SwDoc* pDoc, SwTableNode* pTableNd,
+void InsTableBox( SwDoc* pDoc, SwTableNode* pTableNd,
                         SwTableLine* pLine, SwTableBoxFormat* pBoxFrameFormat,
                         SwTableBox* pBox,
                         sal_uInt16 nInsPos, sal_uInt16 nCnt )
@@ -204,9 +202,8 @@ void _InsTableBox( SwDoc* pDoc, SwTableNode* pTableNd,
     }
 }
 
-SwTable::SwTable( SwTableFormat* pFormat )
-    : SwClient( pFormat ),
-    m_pHTMLLayout( nullptr ),
+SwTable::SwTable()
+    : SwClient( nullptr ),
     m_pTableNode( nullptr ),
     m_nGraphicsThatResize( 0 ),
     m_nRowsToRepeat( 1 ),
@@ -214,12 +211,11 @@ SwTable::SwTable( SwTableFormat* pFormat )
     m_bNewModel( true )
 {
     // default value set in the options
-    m_eTableChgMode = (TableChgMode)GetTableChgDefaultMode();
+    m_eTableChgMode = GetTableChgDefaultMode();
 }
 
 SwTable::SwTable( const SwTable& rTable )
     : SwClient( rTable.GetFrameFormat() ),
-    m_pHTMLLayout( nullptr ),
     m_pTableNode( nullptr ),
     m_eTableChgMode( rTable.m_eTableChgMode ),
     m_nGraphicsThatResize( 0 ),
@@ -230,7 +226,7 @@ SwTable::SwTable( const SwTable& rTable )
 {
 }
 
-void DelBoxNode( SwTableSortBoxes& rSortCntBoxes )
+void DelBoxNode( SwTableSortBoxes const & rSortCntBoxes )
 {
     for (size_t n = 0; n < rSortCntBoxes.size(); ++n)
     {
@@ -240,17 +236,17 @@ void DelBoxNode( SwTableSortBoxes& rSortCntBoxes )
 
 SwTable::~SwTable()
 {
-    if( m_xRefObj.Is() )
+    if( m_xRefObj.is() )
     {
         SwDoc* pDoc = GetFrameFormat()->GetDoc();
         if( !pDoc->IsInDtor() )         // then remove from the list
-            pDoc->getIDocumentLinksAdministration().GetLinkManager().RemoveServer( &m_xRefObj );
+            pDoc->getIDocumentLinksAdministration().GetLinkManager().RemoveServer( m_xRefObj.get() );
 
         m_xRefObj->Closed();
     }
 
     // the table can be deleted if it's the last client of the FrameFormat
-    SwTableFormat* pFormat = static_cast<SwTableFormat*>(GetFrameFormat());
+    SwTableFormat* pFormat = GetFrameFormat();
     pFormat->Remove( this );               // remove
 
     if( !pFormat->HasWriterListeners() )
@@ -262,14 +258,13 @@ SwTable::~SwTable()
     // section need deletion.
     DelBoxNode(m_TabSortContentBoxes);
     m_TabSortContentBoxes.clear();
-    delete m_pHTMLLayout;
 }
 
 namespace
 {
 
 template<class T>
-inline T lcl_MulDiv64(sal_uInt64 nA, sal_uInt64 nM, sal_uInt64 nD)
+T lcl_MulDiv64(sal_uInt64 nA, sal_uInt64 nM, sal_uInt64 nD)
 {
     return static_cast<T>((nA*nM)/nD);
 }
@@ -293,9 +288,8 @@ static void lcl_ModifyLines( SwTableLines &rLines, const long nOld,
         ::lcl_ModifyBoxes( rLines[i]->GetTabBoxes(), nOld, nNew, rFormatArr );
     if( bCheckSum )
     {
-        for( size_t i = 0; i < rFormatArr.size(); ++i )
+        for(SwFormat* pFormat : rFormatArr)
         {
-            SwFormat* pFormat = rFormatArr[i];
             const SwTwips nBox = lcl_MulDiv64<SwTwips>(pFormat->GetFrameSize().GetWidth(), nNew, nOld);
             SwFormatFrameSize aNewBox( ATT_VAR_SIZE, nBox, 0 );
             pFormat->LockModify();
@@ -366,9 +360,9 @@ void SwTable::Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew )
         pNewSize = static_cast<const SwFormatFrameSize*>(pNew);
     }
     else
-        CheckRegistration( pOld, pNew );
+        CheckRegistration( pOld );
 
-    if (pOldSize && pNewSize && !IsModifyLocked())
+    if (pOldSize && pNewSize && !m_bModifyLocked)
         AdjustWidths( pOldSize->GetWidth(), pNewSize->GetWidth() );
 }
 
@@ -737,11 +731,11 @@ static void lcl_ProcessBoxSet( SwTableBox *pBox, Parm &rParm )
 
         if( pBox->getRowSpan() == 1 )
         {
+            const sal_uInt16 nPos = pBox->GetUpper()->GetBoxPos( pBox );
             SwTableBoxes& rTableBoxes = pBox->GetUpper()->GetTabBoxes();
-            const sal_uInt16 nPos = rTableBoxes.GetPos( pBox );
             if( nPos && rTableBoxes[ nPos - 1 ]->getRowSpan() != 1 )
                 nLeftDiff = 0;
-            if( nPos + 1 < (sal_uInt16)rTableBoxes.size() &&
+            if( nPos + 1 < static_cast<sal_uInt16>(rTableBoxes.size()) &&
                 rTableBoxes[ nPos + 1 ]->getRowSpan() != 1 )
                 nRightDiff = 0;
         }
@@ -841,7 +835,7 @@ void SwTable::SetTabCols( const SwTabCols &rNew, const SwTabCols &rOld,
 {
     CHECK_TABLE( *this )
 
-    SetHTMLTableLayout( nullptr );    // delete HTML-Layout
+    SetHTMLTableLayout(std::shared_ptr<SwHTMLTableLayout>());    // delete HTML-Layout
 
     // FME: Made rOld const. The caller is responsible for passing correct
     // values of rOld. Therefore we do not have to call GetTabCols anymore:
@@ -987,7 +981,7 @@ void SwTable::SetTabCols( const SwTabCols &rNew, const SwTabCols &rOld,
         SwTwips nSize = GetFrameFormat()->GetFrameSize().GetWidth();
         for (size_t n = 0; n < m_aLines.size(); ++n)
         {
-            _CheckBoxWidth( *m_aLines[ n ], nSize );
+            CheckBoxWidth( *m_aLines[ n ], nSize );
         }
     }
 #endif
@@ -1091,8 +1085,8 @@ static void lcl_CalcNewWidths( std::list<sal_uInt16> &rSpanPos, ChangeList& rCha
         if( pCurr != rChanges.end() && pCurr->first <= nPos &&
             pCurr->first != pCurr->second )
         {
-            while( pSpan != rSpanPos.end() && *pSpan < nCurr )
-                ++pSpan;
+            pSpan = std::find_if(pSpan, rSpanPos.end(),
+                [nCurr](const sal_uInt16 nSpan) { return nSpan >= nCurr; });
             if( pSpan != rSpanPos.end() && *pSpan == nCurr )
             {
                 aNewChanges.push_back( *pCurr );
@@ -1165,14 +1159,8 @@ static void lcl_CalcNewWidths( std::list<sal_uInt16> &rSpanPos, ChangeList& rCha
         }
     }
 
-    rChanges.clear();
-    ChangeList::iterator pCopy = aNewChanges.begin();
-    while( pCopy != aNewChanges.end() )
-        rChanges.push_back( *pCopy++ );
-    rSpanPos.clear();
-    std::list<sal_uInt16>::iterator pSpCopy = aNewSpanPos.begin();
-    while( pSpCopy != aNewSpanPos.end() )
-        rSpanPos.push_back( *pSpCopy++ );
+    rChanges.swap(aNewChanges);
+    rSpanPos.swap(aNewSpanPos);
 }
 
 void SwTable::NewSetTabCols( Parm &rParm, const SwTabCols &rNew,
@@ -1206,7 +1194,7 @@ void SwTable::NewSetTabCols( Parm &rParm, const SwTabCols &rNew,
         nOldPos = lcl_MulDiv64<long>(nOldPos, rParm.nOldWish, nOldWidth);
         if( nOldPos != nNewPos && nNewPos > 0 && nOldPos > 0 )
         {
-            ColChange aChg( (sal_uInt16)nOldPos, (sal_uInt16)nNewPos );
+            ColChange aChg( static_cast<sal_uInt16>(nOldPos), static_cast<sal_uInt16>(nNewPos) );
             aOldNew.push_back( aChg );
         }
     }
@@ -1228,12 +1216,10 @@ void SwTable::NewSetTabCols( Parm &rParm, const SwTabCols &rNew,
         if( nCurr )
         {
             ChangeList aCopy;
-            ChangeList::iterator pCop = aOldNew.begin();
             sal_uInt16 nPos = 0;
-            while( pCop != aOldNew.end() )
+            for( const auto& rCop : aOldNew )
             {
-                aCopy.push_back( *pCop );
-                ++pCop;
+                aCopy.push_back( rCop );
                 aRowSpanPos.push_back( nPos++ );
             }
             lcl_CalcNewWidths( aRowSpanPos, aCopy, rLines[nCurr],
@@ -1249,15 +1235,13 @@ void SwTable::NewSetTabCols( Parm &rParm, const SwTabCols &rNew,
             }
             aRowSpanPos.clear();
         }
-        if( nCurr+1 < (sal_uInt16)rLines.size() )
+        if( nCurr+1 < static_cast<sal_uInt16>(rLines.size()) )
         {
             ChangeList aCopy;
-            ChangeList::iterator pCop = aOldNew.begin();
             sal_uInt16 nPos = 0;
-            while( pCop != aOldNew.end() )
+            for( const auto& rCop : aOldNew )
             {
-                aCopy.push_back( *pCop );
-                ++pCop;
+                aCopy.push_back( rCop );
                 aRowSpanPos.push_back( nPos++ );
             }
             lcl_CalcNewWidths( aRowSpanPos, aCopy, rLines[nCurr],
@@ -1269,7 +1253,7 @@ void SwTable::NewSetTabCols( Parm &rParm, const SwTabCols &rNew,
                 lcl_CalcNewWidths( aRowSpanPos, aCopy, rLines[++j],
                     rParm.nOldWish, nOldWidth, false );
                 lcl_AdjustWidthsInLine( rLines[j], aCopy, rParm, 0 );
-                bGoOn = !aRowSpanPos.empty() && j+1 < (sal_uInt16)rLines.size();
+                bGoOn = !aRowSpanPos.empty() && j+1 < static_cast<sal_uInt16>(rLines.size());
             }
         }
         ::lcl_AdjustWidthsInLine( rLines[nCurr], aOldNew, rParm, COLFUZZY );
@@ -1298,7 +1282,7 @@ static bool lcl_IsValidRowName( const OUString& rStr )
 
 // #i80314#
 // add 3rd parameter and its handling
-sal_uInt16 SwTable::_GetBoxNum( OUString& rStr, bool bFirstPart,
+sal_uInt16 SwTable::GetBoxNum( OUString& rStr, bool bFirstPart,
                             const bool bPerformValidCheck )
 {
     sal_uInt16 nRet = 0;
@@ -1362,7 +1346,7 @@ const SwTableBox* SwTable::GetTableBox( const OUString& rName,
     OUString aNm( rName );
     while( !aNm.isEmpty() )
     {
-        nBox = SwTable::_GetBoxNum( aNm, nullptr == pBox, bPerformValidCheck );
+        nBox = SwTable::GetBoxNum( aNm, nullptr == pBox, bPerformValidCheck );
         // first box ?
         if( !pBox )
             pLines = &GetTabLines();
@@ -1373,7 +1357,7 @@ const SwTableBox* SwTable::GetTableBox( const OUString& rName,
                 --nBox;
         }
 
-        nLine = SwTable::_GetBoxNum( aNm, false, bPerformValidCheck );
+        nLine = SwTable::GetBoxNum( aNm, false, bPerformValidCheck );
 
         // determine line
         if( !nLine || nLine > pLines->size() )
@@ -1535,7 +1519,7 @@ void SwTableLine::ChgFrameFormat( SwTableLineFormat *pNewFormat )
             pRow->RegisterToFormat( *pNewFormat );
 
             pRow->InvalidateSize();
-            pRow->_InvalidatePrt();
+            pRow->InvalidatePrt_();
             pRow->SetCompletePaint();
             pRow->ReinitializeFrameSizeAttrFlags();
 
@@ -1580,8 +1564,8 @@ SwTwips SwTableLine::GetTableLineHeight( bool& bLayoutAvailable ) const
         {
             const SwTabFrame* pTab = pLast->FindTabFrame();
             bLayoutAvailable = ( pTab && pTab->IsVertical() ) ?
-                               ( 0 < pTab->Frame().Height() ) :
-                               ( 0 < pTab->Frame().Width() );
+                               ( 0 < pTab->getFrameArea().Height() ) :
+                               ( 0 < pTab->getFrameArea().Width() );
 
             // The first one defines the chain, if a chain is defined, only members of the chain
             // will be added.
@@ -1589,9 +1573,9 @@ SwTwips SwTableLine::GetTableLineHeight( bool& bLayoutAvailable ) const
             {
                 pChain = pTab; // defines my chain (even it is already)
                 if( pTab->IsVertical() )
-                    nRet += pLast->Frame().Width();
+                    nRet += pLast->getFrameArea().Width();
                 else
-                    nRet += pLast->Frame().Height();
+                    nRet += pLast->getFrameArea().Height();
                 // Optimization, if there are no master/follows in my chain, nothing more to add
                 if( !pTab->HasFollow() && !pTab->IsFollow() )
                     break;
@@ -1603,15 +1587,6 @@ SwTwips SwTableLine::GetTableLineHeight( bool& bLayoutAvailable ) const
         }
     }
     return nRet;
-}
-
-SwTableBox::SwTableBox()
-    : m_pStartNode(nullptr)
-    , m_pUpper(nullptr)
-    , mnRowSpan(1)
-    , mbDummyFlag(false)
-    , mbDirectFormatting(false)
-{
 }
 
 SwTableBox::SwTableBox( SwTableBoxFormat* pFormat, sal_uInt16 nLines, SwTableLine *pUp )
@@ -1642,9 +1617,9 @@ SwTableBox::SwTableBox( SwTableBoxFormat* pFormat, const SwNodeIndex &rIdx,
 
     // insert into the table
     const SwTableNode* pTableNd = m_pStartNode->FindTableNode();
-    OSL_ENSURE( pTableNd, "In which table is that box?" );
-    SwTableSortBoxes& rSrtArr = (SwTableSortBoxes&)pTableNd->GetTable().
-                                GetTabSortBoxes();
+    assert(pTableNd && "In which table is that box?");
+    SwTableSortBoxes& rSrtArr = const_cast<SwTableSortBoxes&>(pTableNd->GetTable().
+                                GetTabSortBoxes());
     SwTableBox* p = this;   // error: &this
     rSrtArr.insert( p );        // insert
 }
@@ -1663,8 +1638,8 @@ SwTableBox::SwTableBox( SwTableBoxFormat* pFormat, const SwStartNode& rSttNd, Sw
     // insert into the table
     const SwTableNode* pTableNd = m_pStartNode->FindTableNode();
     OSL_ENSURE( pTableNd, "In which table is the box?" );
-    SwTableSortBoxes& rSrtArr = (SwTableSortBoxes&)pTableNd->GetTable().
-                                GetTabSortBoxes();
+    SwTableSortBoxes& rSrtArr = const_cast<SwTableSortBoxes&>(pTableNd->GetTable().
+                                GetTabSortBoxes());
     SwTableBox* p = this;   // error: &this
     rSrtArr.insert( p );        // insert
 }
@@ -1676,8 +1651,8 @@ void SwTableBox::RemoveFromTable()
         // remove from table
         const SwTableNode* pTableNd = m_pStartNode->FindTableNode();
         assert(pTableNd && "In which table is that box?");
-        SwTableSortBoxes& rSrtArr = (SwTableSortBoxes&)pTableNd->GetTable().
-                                    GetTabSortBoxes();
+        SwTableSortBoxes& rSrtArr = const_cast<SwTableSortBoxes&>(pTableNd->GetTable().
+                                    GetTabSortBoxes());
         SwTableBox *p = this;   // error: &this
         rSrtArr.erase( p );        // remove
         m_pStartNode = nullptr; // clear it so this is only run once
@@ -1701,7 +1676,7 @@ SwTableBox::~SwTableBox()
 SwTableBoxFormat* SwTableBox::CheckBoxFormat( SwTableBoxFormat* pFormat )
 {
     // We might need to create a new format here, because the box must be
-    // added to the format solely if pFormat has a value or formular.
+    // added to the format solely if pFormat has a value or form.
     if( SfxItemState::SET == pFormat->GetItemState( RES_BOXATR_VALUE, false ) ||
         SfxItemState::SET == pFormat->GetItemState( RES_BOXATR_FORMULA, false ) )
     {
@@ -1712,7 +1687,7 @@ SwTableBoxFormat* SwTableBox::CheckBoxFormat( SwTableBoxFormat* pFormat )
             pNewFormat->LockModify();
             *pNewFormat = *pFormat;
 
-            // Remove values and formulars
+            // Remove values and formulas
             pNewFormat->ResetFormatAttr( RES_BOXATR_FORMULA, RES_BOXATR_VALUE );
             pNewFormat->UnlockModify();
 
@@ -1770,7 +1745,7 @@ void SwTableBox::ChgFrameFormat( SwTableBoxFormat* pNewFormat )
         {
             pCell->RegisterToFormat( *pNewFormat );
             pCell->InvalidateSize();
-            pCell->_InvalidatePrt();
+            pCell->InvalidatePrt_();
             pCell->SetCompletePaint();
             pCell->SetDerivedVert( false );
             pCell->CheckDirChange();
@@ -1783,8 +1758,8 @@ void SwTableBox::ChgFrameFormat( SwTableBoxFormat* pNewFormat )
             if ( pTab && pTab->IsCollapsingBorders() )
             {
                 SwFrame* pRow = pCell->GetUpper();
-                pRow->_InvalidateSize();
-                pRow->_InvalidatePrt();
+                pRow->InvalidateSize_();
+                pRow->InvalidatePrt_();
             }
         }
     }
@@ -1805,9 +1780,9 @@ void sw_GetTableBoxColStr( sal_uInt16 nCol, OUString& rNm )
     do {
         const sal_uInt16 nCalc = nCol % coDiff;
         if( nCalc >= 26 )
-            rNm = OUString( sal_Unicode('a' - 26 + nCalc ) ) + rNm;
+            rNm = OUStringLiteral1( 'a' - 26 + nCalc ) + rNm;
         else
-            rNm = OUString( sal_Unicode('A' + nCalc ) ) + rNm;
+            rNm = OUStringLiteral1( 'A' + nCalc ) + rNm;
 
         if( 0 == (nCol = nCol - nCalc) )
             break;
@@ -1828,14 +1803,13 @@ Point SwTableBox::GetCoordinates() const
     sal_uInt16 nX, nY;
     const SwTableBox* pBox = this;
     do {
-        const SwTableBoxes* pBoxes = &pBox->GetUpper()->GetTabBoxes();
         const SwTableLine* pLine = pBox->GetUpper();
         // at the first level?
         const SwTableLines* pLines = pLine->GetUpper()
                 ? &pLine->GetUpper()->GetTabLines() : &rTable.GetTabLines();
 
         nY = pLines->GetPos( pLine ) + 1 ;
-        nX = pBoxes->GetPos( pBox ) + 1 ;
+        nX = pBox->GetUpper()->GetBoxPos( pBox ) + 1;
         pBox = pLine->GetUpper();
     } while( pBox );
     return Point( nX, nY );
@@ -1854,19 +1828,20 @@ OUString SwTableBox::GetName() const
     OUString sNm, sTmp;
     const SwTableBox* pBox = this;
     do {
-        const SwTableBoxes* pBoxes = &pBox->GetUpper()->GetTabBoxes();
         const SwTableLine* pLine = pBox->GetUpper();
         // at the first level?
         const SwTableLines* pLines = pLine->GetUpper()
                 ? &pLine->GetUpper()->GetTabLines() : &rTable.GetTabLines();
 
-        sTmp = OUString::number( nPos = pLines->GetPos( pLine ) + 1 );
+        nPos = pLines->GetPos( pLine ) + 1;
+        sTmp = OUString::number( nPos );
         if( !sNm.isEmpty() )
             sNm = sTmp + "." + sNm;
         else
             sNm = sTmp;
 
-        sTmp = OUString::number(( nPos = pBoxes->GetPos( pBox )) + 1 );
+        nPos = pBox->GetUpper()->GetBoxPos( pBox );
+        sTmp = OUString::number(nPos + 1);
         if( nullptr != ( pBox = pLine->GetUpper()) )
             sNm = sTmp + "." + sNm;
         else
@@ -1910,16 +1885,15 @@ bool SwTable::GetInfo( SfxPoolItem& rInfo ) const
                 if (!m_TabSortContentBoxes.empty())
                 {
                     SwNodeIndex aIdx( *m_TabSortContentBoxes[0]->GetSttNd() );
-                    static_cast<SwAutoFormatGetDocNode&>(rInfo).pContentNode =
-                                    GetFrameFormat()->GetDoc()->GetNodes().GoNext( &aIdx );
+                    GetFrameFormat()->GetDoc()->GetNodes().GoNext( &aIdx );
                 }
                 return false;
             }
             break;
         }
         case RES_FINDNEARESTNODE:
-            if( GetFrameFormat() && static_cast<const SwFormatPageDesc&>(GetFrameFormat()->GetFormatAttr(
-                RES_PAGEDESC )).GetPageDesc() &&
+            if( GetFrameFormat() &&
+                GetFrameFormat()->GetFormatAttr( RES_PAGEDESC ).GetPageDesc() &&
                 !m_TabSortContentBoxes.empty() &&
                 m_TabSortContentBoxes[0]->GetSttNd()->GetNodes().IsDocNodes() )
                 static_cast<SwFindNearestNode&>(rInfo).CheckNode( *
@@ -1935,7 +1909,7 @@ bool SwTable::GetInfo( SfxPoolItem& rInfo ) const
 
 SwTable * SwTable::FindTable( SwFrameFormat const*const pFormat )
 {
-    return (pFormat)
+    return pFormat
         ? SwIterator<SwTable,SwFormat>(*pFormat).First()
         : nullptr;
 }
@@ -1949,19 +1923,18 @@ SwTableNode* SwTable::GetTableNode() const
 
 void SwTable::SetRefObject( SwServerObject* pObj )
 {
-    if( m_xRefObj.Is() )
+    if( m_xRefObj.is() )
         m_xRefObj->Closed();
 
     m_xRefObj = pObj;
 }
 
-void SwTable::SetHTMLTableLayout( SwHTMLTableLayout *p )
+void SwTable::SetHTMLTableLayout(std::shared_ptr<SwHTMLTableLayout> const& r)
 {
-    delete m_pHTMLLayout;
-    m_pHTMLLayout = p;
+    m_xHTMLLayout = r;
 }
 
-void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
+static void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
                     bool bChgAlign )
 {
     sal_uLong nNdPos = rBox.IsValidNumTextNd();
@@ -1971,195 +1944,214 @@ void ChgTextToNum( SwTableBox& rBox, const OUString& rText, const Color* pCol,
                     bool bChgAlign,sal_uLong nNdPos )
 {
 
-    if( ULONG_MAX != nNdPos )
+    if( ULONG_MAX == nNdPos )
+        return;
+
+    SwDoc* pDoc = rBox.GetFrameFormat()->GetDoc();
+    SwTextNode* pTNd = pDoc->GetNodes()[ nNdPos ]->GetTextNode();
+    const SfxPoolItem* pItem;
+
+    // assign adjustment
+    if( bChgAlign )
     {
-        SwDoc* pDoc = rBox.GetFrameFormat()->GetDoc();
-        SwTextNode* pTNd = pDoc->GetNodes()[ nNdPos ]->GetTextNode();
-        const SfxPoolItem* pItem;
-
-        // assign adjustment
-        if( bChgAlign )
+        pItem = &pTNd->SwContentNode::GetAttr( RES_PARATR_ADJUST );
+        SvxAdjust eAdjust = static_cast<const SvxAdjustItem*>(pItem)->GetAdjust();
+        if( SvxAdjust::Left == eAdjust || SvxAdjust::Block == eAdjust )
         {
-            pItem = &pTNd->SwContentNode::GetAttr( RES_PARATR_ADJUST );
-            SvxAdjust eAdjust = static_cast<const SvxAdjustItem*>(pItem)->GetAdjust();
-            if( SVX_ADJUST_LEFT == eAdjust || SVX_ADJUST_BLOCK == eAdjust )
-            {
-                SvxAdjustItem aAdjust( *static_cast<const SvxAdjustItem*>(pItem) );
-                aAdjust.SetAdjust( SVX_ADJUST_RIGHT );
-                pTNd->SetAttr( aAdjust );
-            }
-        }
-
-        // assign color or save "user color"
-        if( !pTNd->GetpSwAttrSet() || SfxItemState::SET != pTNd->GetpSwAttrSet()->
-            GetItemState( RES_CHRATR_COLOR, false, &pItem ))
-            pItem = nullptr;
-
-        const Color* pOldNumFormatColor = rBox.GetSaveNumFormatColor();
-        const Color* pNewUserColor = pItem ? &static_cast<const SvxColorItem*>(pItem)->GetValue() : nullptr;
-
-        if( ( pNewUserColor && pOldNumFormatColor &&
-                *pNewUserColor == *pOldNumFormatColor ) ||
-            ( !pNewUserColor && !pOldNumFormatColor ))
-        {
-            // Keep the user color, set updated values, delete old NumFormatColor if needed
-            if( pCol )
-                // if needed, set the color
-                pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
-            else if( pItem )
-            {
-                pNewUserColor = rBox.GetSaveUserColor();
-                if( pNewUserColor )
-                    pTNd->SetAttr( SvxColorItem( *pNewUserColor, RES_CHRATR_COLOR ));
-                else
-                    pTNd->ResetAttr( RES_CHRATR_COLOR );
-            }
-        }
-        else
-        {
-            // Save user color, set NumFormat color if needed, but never reset the color
-            rBox.SetSaveUserColor( pNewUserColor );
-
-            if( pCol )
-                // if needed, set the color
-                pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
-
-        }
-        rBox.SetSaveNumFormatColor( pCol );
-
-        if( pTNd->GetText() != rText )
-        {
-            // Exchange text. Bugfix to keep Tabs (front and back!)
-            const OUString& rOrig = pTNd->GetText();
-            sal_Int32 n;
-
-            for( n = 0; n < rOrig.getLength() && '\x9' == rOrig[n]; ++n )
-                ;
-            for( ; n < rOrig.getLength() && '\x01' == rOrig[n]; ++n )
-                ;
-            SwIndex aIdx( pTNd, n );
-            for( n = rOrig.getLength(); n && '\x9' == rOrig[--n]; )
-                ;
-            n -= aIdx.GetIndex() - 1;
-
-            // Reset DontExpand-Flags before exchange, to retrigger expansion
-            {
-                SwIndex aResetIdx( aIdx, n );
-                pTNd->DontExpandFormat( aResetIdx, false, false );
-            }
-
-            if( !pDoc->getIDocumentRedlineAccess().IsIgnoreRedline() && !pDoc->getIDocumentRedlineAccess().GetRedlineTable().empty() )
-            {
-                SwPaM aTemp(*pTNd, 0, *pTNd, rOrig.getLength());
-                pDoc->getIDocumentRedlineAccess().DeleteRedline(aTemp, true, USHRT_MAX);
-            }
-
-            pTNd->EraseText( aIdx, n, SwInsertFlags::EMPTYEXPAND );
-            pTNd->InsertText( rText, aIdx, SwInsertFlags::EMPTYEXPAND );
-
-            if( pDoc->getIDocumentRedlineAccess().IsRedlineOn() )
-            {
-                SwPaM aTemp(*pTNd, 0, *pTNd, rText.getLength());
-                pDoc->getIDocumentRedlineAccess().AppendRedline(new SwRangeRedline(nsRedlineType_t::REDLINE_INSERT, aTemp), true);
-            }
-        }
-
-        // assign vertical orientation
-        if( bChgAlign &&
-            ( SfxItemState::SET != rBox.GetFrameFormat()->GetItemState(
-                RES_VERT_ORIENT, true, &pItem ) ||
-                text::VertOrientation::TOP == static_cast<const SwFormatVertOrient*>(pItem)->GetVertOrient() ))
-        {
-            rBox.GetFrameFormat()->SetFormatAttr( SwFormatVertOrient( 0, text::VertOrientation::BOTTOM ));
+            SvxAdjustItem aAdjust( *static_cast<const SvxAdjustItem*>(pItem) );
+            aAdjust.SetAdjust( SvxAdjust::Right );
+            pTNd->SetAttr( aAdjust );
         }
     }
+
+    // assign color or save "user color"
+    if( !pTNd->GetpSwAttrSet() || SfxItemState::SET != pTNd->GetpSwAttrSet()->
+        GetItemState( RES_CHRATR_COLOR, false, &pItem ))
+        pItem = nullptr;
+
+    const Color* pOldNumFormatColor = rBox.GetSaveNumFormatColor();
+    const Color* pNewUserColor = pItem ? &static_cast<const SvxColorItem*>(pItem)->GetValue() : nullptr;
+
+    if( ( pNewUserColor && pOldNumFormatColor &&
+            *pNewUserColor == *pOldNumFormatColor ) ||
+        ( !pNewUserColor && !pOldNumFormatColor ))
+    {
+        // Keep the user color, set updated values, delete old NumFormatColor if needed
+        if( pCol )
+            // if needed, set the color
+            pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
+        else if( pItem )
+        {
+            pNewUserColor = rBox.GetSaveUserColor();
+            if( pNewUserColor )
+                pTNd->SetAttr( SvxColorItem( *pNewUserColor, RES_CHRATR_COLOR ));
+            else
+                pTNd->ResetAttr( RES_CHRATR_COLOR );
+        }
+    }
+    else
+    {
+        // Save user color, set NumFormat color if needed, but never reset the color
+        rBox.SetSaveUserColor( pNewUserColor );
+
+        if( pCol )
+            // if needed, set the color
+            pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
+
+    }
+    rBox.SetSaveNumFormatColor( pCol );
+
+    if( pTNd->GetText() != rText )
+    {
+        // Exchange text. Bugfix to keep Tabs (front and back!) and annotations (inword comment anchors)
+        const OUString& rOrig = pTNd->GetText();
+        sal_Int32 n;
+
+        for( n = 0; n < rOrig.getLength() && ('\x9' == rOrig[n] || CH_TXTATR_INWORD == rOrig[n]); ++n )
+            ;
+        for( ; n < rOrig.getLength() && '\x01' == rOrig[n]; ++n )
+            ;
+        SwIndex aIdx( pTNd, n );
+        for( n = rOrig.getLength(); n && ('\x9' == rOrig[--n] || CH_TXTATR_INWORD == rOrig[n]); )
+            ;
+        sal_Int32 nEndPos = n;
+        n -= aIdx.GetIndex() - 1;
+
+        // Reset DontExpand-Flags before exchange, to retrigger expansion
+        {
+            SwIndex aResetIdx( aIdx, n );
+            pTNd->DontExpandFormat( aResetIdx, false, false );
+        }
+
+        if( !pDoc->getIDocumentRedlineAccess().IsIgnoreRedline() && !pDoc->getIDocumentRedlineAccess().GetRedlineTable().empty() )
+        {
+            SwPaM aTemp(*pTNd, 0, *pTNd, rOrig.getLength());
+            pDoc->getIDocumentRedlineAccess().DeleteRedline(aTemp, true, USHRT_MAX);
+        }
+
+        // preserve comments inside of the number by deleting number portions starting from the back
+        sal_Int32 nCommentPos = pTNd->GetText().lastIndexOf( CH_TXTATR_INWORD, nEndPos );
+        while( nCommentPos > aIdx.GetIndex() )
+        {
+            pTNd->EraseText( SwIndex(pTNd, nCommentPos+1), nEndPos - nCommentPos, SwInsertFlags::EMPTYEXPAND );
+            // find the next non-sequential comment anchor
+            do
+            {
+                nEndPos = nCommentPos;
+                n = nEndPos - aIdx.GetIndex();
+                nCommentPos = pTNd->GetText().lastIndexOf( CH_TXTATR_INWORD, nEndPos );
+                --nEndPos;
+            }
+            while( nCommentPos > aIdx.GetIndex() && nCommentPos == nEndPos );
+        }
+
+        pTNd->EraseText( aIdx, n, SwInsertFlags::EMPTYEXPAND );
+        pTNd->InsertText( rText, aIdx, SwInsertFlags::EMPTYEXPAND );
+
+        if( pDoc->getIDocumentRedlineAccess().IsRedlineOn() )
+        {
+            SwPaM aTemp(*pTNd, 0, *pTNd, rText.getLength());
+            pDoc->getIDocumentRedlineAccess().AppendRedline(new SwRangeRedline(nsRedlineType_t::REDLINE_INSERT, aTemp), true);
+        }
+    }
+
+    // assign vertical orientation
+    if( bChgAlign &&
+        ( SfxItemState::SET != rBox.GetFrameFormat()->GetItemState(
+            RES_VERT_ORIENT, true, &pItem ) ||
+            text::VertOrientation::TOP == static_cast<const SwFormatVertOrient*>(pItem)->GetVertOrient() ))
+    {
+        rBox.GetFrameFormat()->SetFormatAttr( SwFormatVertOrient( 0, text::VertOrientation::BOTTOM ));
+    }
+
 }
 
-void ChgNumToText( SwTableBox& rBox, sal_uLong nFormat )
+static void ChgNumToText( SwTableBox& rBox, sal_uLong nFormat )
 {
     sal_uLong nNdPos = rBox.IsValidNumTextNd( false );
-    if( ULONG_MAX != nNdPos )
+    if( ULONG_MAX == nNdPos )
+        return;
+
+    SwDoc* pDoc = rBox.GetFrameFormat()->GetDoc();
+    SwTextNode* pTNd = pDoc->GetNodes()[ nNdPos ]->GetTextNode();
+    bool bChgAlign = pDoc->IsInsTableAlignNum();
+    const SfxPoolItem* pItem;
+
+    Color* pCol = nullptr;
+    if( getSwDefaultTextFormat() != nFormat )
     {
-        SwDoc* pDoc = rBox.GetFrameFormat()->GetDoc();
-        SwTextNode* pTNd = pDoc->GetNodes()[ nNdPos ]->GetTextNode();
-        bool bChgAlign = pDoc->IsInsTableAlignNum();
-        const SfxPoolItem* pItem;
-
-        Color* pCol = nullptr;
-        if( css::util::NumberFormat::TEXT != static_cast<sal_Int16>(nFormat) )
+        // special text format:
+        OUString sTmp;
+        const OUString sText( pTNd->GetText() );
+        pDoc->GetNumberFormatter()->GetOutputString( sText, nFormat, sTmp, &pCol );
+        if( sText != sTmp )
         {
-            // special text format:
-            OUString sTmp;
-            const OUString sText( pTNd->GetText() );
-            pDoc->GetNumberFormatter()->GetOutputString( sText, nFormat, sTmp, &pCol );
-            if( sText != sTmp )
-            {
-                // exchange text
-                SwIndex aIdx( pTNd, sText.getLength() );
-                // Reset DontExpand-Flags before exchange, to retrigger expansion
-                pTNd->DontExpandFormat( aIdx, false, false );
-                aIdx = 0;
-                pTNd->EraseText( aIdx, SAL_MAX_INT32, SwInsertFlags::EMPTYEXPAND );
-                pTNd->InsertText( sTmp, aIdx, SwInsertFlags::EMPTYEXPAND );
-            }
-        }
-
-        const SfxItemSet* pAttrSet = pTNd->GetpSwAttrSet();
-
-        // assign adjustment
-        if( bChgAlign && pAttrSet && SfxItemState::SET == pAttrSet->GetItemState(
-            RES_PARATR_ADJUST, false, &pItem ) &&
-                SVX_ADJUST_RIGHT == static_cast<const SvxAdjustItem*>(pItem)->GetAdjust() )
-        {
-            pTNd->SetAttr( SvxAdjustItem( SVX_ADJUST_LEFT, RES_PARATR_ADJUST ) );
-        }
-
-        // assign color or save "user color"
-        if( !pAttrSet || SfxItemState::SET != pAttrSet->
-            GetItemState( RES_CHRATR_COLOR, false, &pItem ))
-            pItem = nullptr;
-
-        const Color* pOldNumFormatColor = rBox.GetSaveNumFormatColor();
-        const Color* pNewUserColor = pItem ? &static_cast<const SvxColorItem*>(pItem)->GetValue() : nullptr;
-
-        if( ( pNewUserColor && pOldNumFormatColor &&
-                *pNewUserColor == *pOldNumFormatColor ) ||
-            ( !pNewUserColor && !pOldNumFormatColor ))
-        {
-            // Keep the user color, set updated values, delete old NumFormatColor if needed
-            if( pCol )
-                // if needed, set the color
-                pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
-            else if( pItem )
-            {
-                pNewUserColor = rBox.GetSaveUserColor();
-                if( pNewUserColor )
-                    pTNd->SetAttr( SvxColorItem( *pNewUserColor, RES_CHRATR_COLOR ));
-                else
-                    pTNd->ResetAttr( RES_CHRATR_COLOR );
-            }
-        }
-        else
-        {
-            // Save user color, set NumFormat color if needed, but never reset the color
-            rBox.SetSaveUserColor( pNewUserColor );
-
-            if( pCol )
-                // if needed, set the color
-                pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
-
-        }
-        rBox.SetSaveNumFormatColor( pCol );
-
-        // assign vertical orientation
-        if( bChgAlign &&
-            SfxItemState::SET == rBox.GetFrameFormat()->GetItemState(
-            RES_VERT_ORIENT, false, &pItem ) &&
-            text::VertOrientation::BOTTOM == static_cast<const SwFormatVertOrient*>(pItem)->GetVertOrient() )
-        {
-            rBox.GetFrameFormat()->SetFormatAttr( SwFormatVertOrient( 0, text::VertOrientation::TOP ));
+            // exchange text
+            SwIndex aIdx( pTNd, sText.getLength() );
+            // Reset DontExpand-Flags before exchange, to retrigger expansion
+            pTNd->DontExpandFormat( aIdx, false, false );
+            aIdx = 0;
+            pTNd->EraseText( aIdx, SAL_MAX_INT32, SwInsertFlags::EMPTYEXPAND );
+            pTNd->InsertText( sTmp, aIdx, SwInsertFlags::EMPTYEXPAND );
         }
     }
+
+    const SfxItemSet* pAttrSet = pTNd->GetpSwAttrSet();
+
+    // assign adjustment
+    if( bChgAlign && pAttrSet && SfxItemState::SET == pAttrSet->GetItemState(
+        RES_PARATR_ADJUST, false, &pItem ) &&
+            SvxAdjust::Right == static_cast<const SvxAdjustItem*>(pItem)->GetAdjust() )
+    {
+        pTNd->SetAttr( SvxAdjustItem( SvxAdjust::Left, RES_PARATR_ADJUST ) );
+    }
+
+    // assign color or save "user color"
+    if( !pAttrSet || SfxItemState::SET != pAttrSet->
+        GetItemState( RES_CHRATR_COLOR, false, &pItem ))
+        pItem = nullptr;
+
+    const Color* pOldNumFormatColor = rBox.GetSaveNumFormatColor();
+    const Color* pNewUserColor = pItem ? &static_cast<const SvxColorItem*>(pItem)->GetValue() : nullptr;
+
+    if( ( pNewUserColor && pOldNumFormatColor &&
+            *pNewUserColor == *pOldNumFormatColor ) ||
+        ( !pNewUserColor && !pOldNumFormatColor ))
+    {
+        // Keep the user color, set updated values, delete old NumFormatColor if needed
+        if( pCol )
+            // if needed, set the color
+            pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
+        else if( pItem )
+        {
+            pNewUserColor = rBox.GetSaveUserColor();
+            if( pNewUserColor )
+                pTNd->SetAttr( SvxColorItem( *pNewUserColor, RES_CHRATR_COLOR ));
+            else
+                pTNd->ResetAttr( RES_CHRATR_COLOR );
+        }
+    }
+    else
+    {
+        // Save user color, set NumFormat color if needed, but never reset the color
+        rBox.SetSaveUserColor( pNewUserColor );
+
+        if( pCol )
+            // if needed, set the color
+            pTNd->SetAttr( SvxColorItem( *pCol, RES_CHRATR_COLOR ));
+
+    }
+    rBox.SetSaveNumFormatColor( pCol );
+
+    // assign vertical orientation
+    if( bChgAlign &&
+        SfxItemState::SET == rBox.GetFrameFormat()->GetItemState(
+        RES_VERT_ORIENT, false, &pItem ) &&
+        text::VertOrientation::BOTTOM == static_cast<const SwFormatVertOrient*>(pItem)->GetVertOrient() )
+    {
+        rBox.GetFrameFormat()->SetFormatAttr( SwFormatVertOrient( 0, text::VertOrientation::TOP ));
+    }
+
 }
 
 // for detection of modifications (mainly TableBoxAttribute)
@@ -2170,7 +2162,7 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
         const SwTableBoxNumFormat *pNewFormat = nullptr;
         const SwTableBoxFormula *pNewFormula = nullptr;
         const SwTableBoxValue *pNewVal = nullptr;
-        sal_uLong nOldFormat = css::util::NumberFormat::TEXT;
+        sal_uLong nOldFormat = getSwDefaultTextFormat();
 
         switch( pNew ? pNew->Which() : 0 )
         {
@@ -2179,8 +2171,8 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                 const SfxItemSet& rSet = *static_cast<const SwAttrSetChg*>(pNew)->GetChgSet();
                 if( SfxItemState::SET == rSet.GetItemState( RES_BOXATR_FORMAT,
                                     false, reinterpret_cast<const SfxPoolItem**>(&pNewFormat) ) )
-                    nOldFormat = static_cast<const SwTableBoxNumFormat&>(static_cast<const SwAttrSetChg*>(pOld)->
-                            GetChgSet()->Get( RES_BOXATR_FORMAT )).GetValue();
+                    nOldFormat = static_cast<const SwAttrSetChg*>(pOld)->
+                            GetChgSet()->Get( RES_BOXATR_FORMAT ).GetValue();
                 rSet.GetItemState( RES_BOXATR_FORMULA, false,
                                     reinterpret_cast<const SfxPoolItem**>(&pNewFormula) );
                 rSet.GetItemState( RES_BOXATR_VALUE, false,
@@ -2227,8 +2219,7 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                     else
                     {
                         // fetch the current Item
-                        GetItemState( RES_BOXATR_FORMAT, false,
-                                            reinterpret_cast<const SfxPoolItem**>(&pNewFormat) );
+                        (void)GetItemState(RES_BOXATR_FORMAT, false, reinterpret_cast<const SfxPoolItem**>(&pNewFormat));
                         nOldFormat = GetTableBoxNumFormat().GetValue();
                         nNewFormat = pNewFormat ? pNewFormat->GetValue() : nOldFormat;
                     }
@@ -2236,15 +2227,15 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                     // is it newer or has the current been removed?
                     if( pNewVal )
                     {
-                        if( css::util::NumberFormat::TEXT != static_cast<sal_Int16>(nNewFormat) )
+                        if( GetDoc()->GetNumberFormatter()->IsTextFormat(nNewFormat) )
+                            nOldFormat = 0;
+                        else
                         {
                             if( SfxItemState::SET == GetItemState( RES_BOXATR_VALUE, false ))
-                                nOldFormat = css::util::NumberFormat::TEXT;
+                                nOldFormat = getSwDefaultTextFormat();
                             else
-                                nNewFormat = css::util::NumberFormat::TEXT;
+                                nNewFormat = getSwDefaultTextFormat();
                         }
-                        else if( css::util::NumberFormat::TEXT == static_cast<sal_Int16>(nNewFormat) )
-                            nOldFormat = 0;
                     }
 
                     // Logic:
@@ -2258,11 +2249,12 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                     //          - align left for horizontal alignment, if RIGHT
                     //          - align top for vertical alignment, if BOTTOM is set
                     SvNumberFormatter* pNumFormatr = GetDoc()->GetNumberFormatter();
-                    bool bNewIsTextFormat = pNumFormatr->IsTextFormat( nNewFormat ) ||
-                                        css::util::NumberFormat::TEXT == static_cast<sal_Int16>(nNewFormat);
+                    bool bNewIsTextFormat = pNumFormatr->IsTextFormat( nNewFormat );
 
                     if( (!bNewIsTextFormat && nOldFormat != nNewFormat) || pNewFormula )
                     {
+                        bool bIsNumFormat = false;
+                        OUString aOrigText;
                         bool bChgText = true;
                         double fVal = 0;
                         if( !pNewVal && SfxItemState::SET != GetItemState(
@@ -2275,6 +2267,7 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                                 sal_uInt32 nTmpFormatIdx = nNewFormat;
                                 OUString aText( GetDoc()->GetNodes()[ nNdPos ]
                                                 ->GetTextNode()->GetRedlineText());
+                                aOrigText = aText;
                                 if( aText.isEmpty() )
                                     bChgText = false;
                                 else
@@ -2284,24 +2277,23 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
 
                                     // JP 22.04.98: Bug 49659 -
                                     //  Special casing for percent
-                                    bool bIsNumFormat = false;
-                                    if( css::util::NumberFormat::PERCENT ==
+                                    if( SvNumFormatType::PERCENT ==
                                         pNumFormatr->GetType( nNewFormat ))
                                     {
                                         sal_uInt32 nTmpFormat = 0;
-                                        if( pNumFormatr->IsNumberFormat(
+                                        if( GetDoc()->IsNumberFormat(
                                                     aText, nTmpFormat, fVal ))
                                         {
-                                            if( css::util::NumberFormat::NUMBER ==
+                                            if( SvNumFormatType::NUMBER ==
                                                 pNumFormatr->GetType( nTmpFormat ))
                                                 aText += "%";
 
-                                            bIsNumFormat = pNumFormatr->IsNumberFormat(
+                                            bIsNumFormat = GetDoc()->IsNumberFormat(
                                                         aText, nTmpFormatIdx, fVal );
                                         }
                                     }
                                     else
-                                        bIsNumFormat = pNumFormatr->IsNumberFormat(
+                                        bIsNumFormat = GetDoc()->IsNumberFormat(
                                                         aText, nTmpFormatIdx, fVal );
 
                                     if( bIsNumFormat )
@@ -2317,7 +2309,10 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                             }
                         }
                         else
+                        {
                             fVal = pNewVal->GetValue();
+                            bIsNumFormat = true;
+                        }
 
                         // format contents with the new value assigned and write to paragraph
                         Color* pCol = nullptr;
@@ -2328,7 +2323,25 @@ void SwTableBoxFormat::Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew 
                         }
                         else
                         {
-                            pNumFormatr->GetOutputString( fVal, nNewFormat, sNewText, &pCol );
+                            if (bIsNumFormat)
+                                pNumFormatr->GetOutputString( fVal, nNewFormat, sNewText, &pCol );
+                            else
+                            {
+                                // Original text could not be parsed as
+                                // number/date/time/..., so keep the text.
+#if 0
+                                // Actually the text should be formatted
+                                // according to the format, which may include
+                                // additional text from the format, for example
+                                // in {0;-0;"BAD: "@}. But other places when
+                                // entering a new value or changing text or
+                                // changing to a different format of type Text
+                                // don't do this (yet?).
+                                pNumFormatr->GetOutputString( aOrigText, nNewFormat, sNewText, &pCol );
+#else
+                                sNewText = aOrigText;
+#endif
+                            }
 
                             if( !bChgText )
                             {
@@ -2386,18 +2399,18 @@ bool SwTableBox::HasNumContent( double& rNum, sal_uInt32& rFormatIndex,
         {
             rFormatIndex = static_cast<const SwTableBoxNumFormat*>(pItem)->GetValue();
             // Special casing for percent
-            if( !rIsEmptyTextNd && css::util::NumberFormat::PERCENT == pNumFormatr->GetType( rFormatIndex ))
+            if( !rIsEmptyTextNd && SvNumFormatType::PERCENT == pNumFormatr->GetType( rFormatIndex ))
             {
                 sal_uInt32 nTmpFormat = 0;
-                if( pNumFormatr->IsNumberFormat( aText, nTmpFormat, rNum ) &&
-                    css::util::NumberFormat::NUMBER == pNumFormatr->GetType( nTmpFormat ))
+                if( GetFrameFormat()->GetDoc()->IsNumberFormat( aText, nTmpFormat, rNum ) &&
+                    SvNumFormatType::NUMBER == pNumFormatr->GetType( nTmpFormat ))
                     aText += "%";
             }
         }
         else
             rFormatIndex = 0;
 
-        bRet = pNumFormatr->IsNumberFormat( aText, rFormatIndex, rNum );
+        bRet = GetFrameFormat()->GetDoc()->IsNumberFormat( aText, rFormatIndex, rNum );
     }
     else
         rIsEmptyTextNd = false;
@@ -2504,6 +2517,10 @@ sal_uLong SwTableBox::IsValidNumTextNd( bool bCheckAttr ) const
                                     continue;
                                 }
                             }
+                            else if( RES_TXTATR_ANNOTATION == pAttr->Which() )
+                            {
+                                continue;
+                            }
                             nPos = ULONG_MAX;
                             break;
                         }
@@ -2568,7 +2585,7 @@ struct SwTableCellInfo::Impl
     const SwTable * m_pTable;
     const SwCellFrame * m_pCellFrame;
     const SwTabFrame * m_pTabFrame;
-    typedef ::std::set<const SwTableBox *> TableBoxes_t;
+    typedef std::set<const SwTableBox *> TableBoxes_t;
     TableBoxes_t m_HandledTableBoxes;
 
 public:
@@ -2576,8 +2593,6 @@ public:
         : m_pTable(nullptr), m_pCellFrame(nullptr), m_pTabFrame(nullptr)
     {
     }
-
-    ~Impl() {}
 
     void setTable(const SwTable * pTable)
     {
@@ -2683,7 +2698,7 @@ bool SwTableCellInfo::Impl::getNext()
 }
 
 SwTableCellInfo::SwTableCellInfo(const SwTable * pTable)
-    : m_pImpl(o3tl::make_unique<Impl>())
+    : m_pImpl(std::make_unique<Impl>())
 {
     m_pImpl->setTable(pTable);
 }
@@ -2702,7 +2717,7 @@ SwRect SwTableCellInfo::getRect() const
     SwRect aRet;
 
     if (getCellFrame() != nullptr)
-        aRet = getCellFrame()->Frame();
+        aRet = getCellFrame()->getFrameArea();
 
     return aRet;
 }

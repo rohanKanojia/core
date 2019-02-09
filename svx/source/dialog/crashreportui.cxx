@@ -11,7 +11,6 @@
 #include <com/sun/star/frame/XSynchronousDispatch.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 #include <vcl/svapp.hxx>
@@ -24,61 +23,43 @@ class CrashReportUI : public ::cppu::WeakImplHelper< css::lang::XServiceInfo    
                                                    css::frame::XSynchronousDispatch > // => XDispatch!
 {
 public:
-    explicit CrashReportUI(const css::uno::Reference< css::uno::XComponentContext >& xContext);
-    virtual ~CrashReportUI();
+    explicit CrashReportUI();
 
     // css.lang.XServiceInfo
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(const OUString& sServiceName)
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString& sServiceName) override;
 
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 
     virtual css::uno::Any SAL_CALL dispatchWithReturnValue(const css::util::URL& aURL,
-                                        const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
-        throw(css::uno::RuntimeException, std::exception) override;
-
-private:
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
+                                        const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) override;
 };
 
-CrashReportUI::CrashReportUI(const css::uno::Reference<css::uno::XComponentContext>& xContext):
-    mxContext(xContext)
+CrashReportUI::CrashReportUI()
 {
 
-}
-
-CrashReportUI::~CrashReportUI()
-{
 }
 
 OUString SAL_CALL CrashReportUI::getImplementationName()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return OUString("com.sun.star.comp.svx.CrashReportUI");
 }
 
 sal_Bool SAL_CALL CrashReportUI::supportsService(const OUString& sServiceName)
-    throw(css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL CrashReportUI::getSupportedServiceNames()
-    throw(css::uno::RuntimeException, std::exception)
 {
-    css::uno::Sequence< OUString > lServiceNames { "com.sun.star.dialog.CrashReportUI" };
-    return lServiceNames;
+    return { "com.sun.star.dialog.CrashReportUI" };
 }
 
 css::uno::Any SAL_CALL CrashReportUI::dispatchWithReturnValue(const css::util::URL&,
                                                    const css::uno::Sequence< css::beans::PropertyValue >& )
-    throw(css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     css::uno::Any aRet;
@@ -89,12 +70,12 @@ css::uno::Any SAL_CALL CrashReportUI::dispatchWithReturnValue(const css::util::U
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_svx_CrashReportUI_get_implementation(
-    css::uno::XComponentContext *context,
+    css::uno::XComponentContext * /*context*/,
     css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new CrashReportUI(context));
+    return cppu::acquire(new CrashReportUI());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

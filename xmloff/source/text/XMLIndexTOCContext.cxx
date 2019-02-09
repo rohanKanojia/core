@@ -43,6 +43,7 @@
 #include <xmloff/prstylei.hxx>
 #include <xmloff/xmlerror.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <rtl/ustring.hxx>
 #include <osl/diagnose.h>
 
@@ -80,7 +81,7 @@ static const XMLTokenEnum aIndexSourceElementMap[] =
     XML_ILLUSTRATION_INDEX_SOURCE
 };
 
-SvXMLEnumMapEntry const aIndexTypeMap[] =
+SvXMLEnumMapEntry<IndexTypeEnum> const aIndexTypeMap[] =
 {
     { XML_TABLE_OF_CONTENT,     TEXT_INDEX_TOC },
     { XML_ALPHABETICAL_INDEX,   TEXT_INDEX_ALPHABETICAL },
@@ -89,30 +90,25 @@ SvXMLEnumMapEntry const aIndexTypeMap[] =
     { XML_BIBLIOGRAPHY,         TEXT_INDEX_BIBLIOGRAPHY },
     { XML_USER_INDEX,           TEXT_INDEX_USER },
     { XML_ILLUSTRATION_INDEX,   TEXT_INDEX_ILLUSTRATION },
-    { XML_TOKEN_INVALID,        0 }
+    { XML_TOKEN_INVALID,        IndexTypeEnum(0) }
 };
 
 
 XMLIndexTOCContext::XMLIndexTOCContext(SvXMLImport& rImport,
     sal_uInt16 nPrfx, const OUString& rLocalName)
     : SvXMLImportContext(rImport, nPrfx, rLocalName)
-    , sIsProtected("IsProtected")
-    , sName("Name")
     , eIndexType(TEXT_INDEX_UNKNOWN)
     , bValid(false)
 {
     if (XML_NAMESPACE_TEXT == nPrfx)
     {
-        sal_uInt16 nTmp;
-        if (SvXMLUnitConverter::convertEnum(nTmp, rLocalName, aIndexTypeMap))
+        if (SvXMLUnitConverter::convertEnum(eIndexType, rLocalName, aIndexTypeMap))
         {
             // check for array index:
-            OSL_ENSURE(nTmp < (SAL_N_ELEMENTS(aIndexServiceMap)), "index out of range");
+            OSL_ENSURE(unsigned(eIndexType) < (SAL_N_ELEMENTS(aIndexServiceMap)), "index out of range");
             OSL_ENSURE(SAL_N_ELEMENTS(aIndexServiceMap) ==
                        SAL_N_ELEMENTS(aIndexSourceElementMap),
                        "service and source element maps must be same size");
-
-            eIndexType = static_cast<IndexTypeEnum>(nTmp);
             bValid = true;
         }
     }
@@ -125,131 +121,129 @@ XMLIndexTOCContext::~XMLIndexTOCContext()
 void XMLIndexTOCContext::StartElement(
     const Reference<XAttributeList> & xAttrList)
 {
-    if (bValid)
+    if (!bValid)
+        return;
+
+    // find text:style-name attribute and set section style
+    // find text:protected and set value
+    // find text:name and set value (if not empty)
+    sal_Int16 nCount = xAttrList->getLength();
+    bool bProtected = false;
+    OUString sIndexName;
+    OUString sXmlId;
+    XMLPropStyleContext* pStyle(nullptr);
+    for(sal_Int16 nAttr = 0; nAttr < nCount; nAttr++)
     {
-        // find text:style-name attribute and set section style
-        // find text:protected and set value
-        // find text:name and set value (if not empty)
-        sal_Int16 nCount = xAttrList->getLength();
-        sal_Bool bProtected = sal_False;
-        OUString sIndexName;
-        OUString sXmlId;
-        XMLPropStyleContext* pStyle(nullptr);
-        for(sal_Int16 nAttr = 0; nAttr < nCount; nAttr++)
+        OUString sLocalName;
+        sal_uInt16 nPrefix = GetImport().GetNamespaceMap().
+            GetKeyByAttrName( xAttrList->getNameByIndex(nAttr),
+                              &sLocalName );
+        if ( XML_NAMESPACE_TEXT == nPrefix)
         {
-            OUString sLocalName;
-            sal_uInt16 nPrefix = GetImport().GetNamespaceMap().
-                GetKeyByAttrName( xAttrList->getNameByIndex(nAttr),
-                                  &sLocalName );
-            if ( XML_NAMESPACE_TEXT == nPrefix)
+            if ( IsXMLToken( sLocalName, XML_STYLE_NAME ) )
             {
-                if ( IsXMLToken( sLocalName, XML_STYLE_NAME ) )
+                pStyle = GetImport().GetTextImport()->FindSectionStyle(
+                            xAttrList->getValueByIndex(nAttr));
+            }
+            else if ( IsXMLToken( sLocalName, XML_PROTECTED ) )
+            {
+                bool bTmp(false);
+                if (::sax::Converter::convertBool(
+                     bTmp, xAttrList->getValueByIndex(nAttr)))
                 {
-                    pStyle = GetImport().GetTextImport()->FindSectionStyle(
-                                xAttrList->getValueByIndex(nAttr));
-                }
-                else if ( IsXMLToken( sLocalName, XML_PROTECTED ) )
-                {
-                    bool bTmp(false);
-                    if (::sax::Converter::convertBool(
-                         bTmp, xAttrList->getValueByIndex(nAttr)))
-                    {
-                        bProtected = bTmp;
-                    }
-                }
-                else if ( IsXMLToken( sLocalName, XML_NAME ) )
-                {
-                    sIndexName = xAttrList->getValueByIndex(nAttr);
+                    bProtected = bTmp;
                 }
             }
-            else if ( XML_NAMESPACE_XML == nPrefix)
+            else if ( IsXMLToken( sLocalName, XML_NAME ) )
             {
-                if ( IsXMLToken( sLocalName, XML_ID ) )
-                {
-                    sXmlId = xAttrList->getValueByIndex(nAttr);
-                }
+                sIndexName = xAttrList->getValueByIndex(nAttr);
             }
         }
-
-        // create table of content (via MultiServiceFactory)
-        Reference<XMultiServiceFactory> xFactory(GetImport().GetModel(),
-                                                 UNO_QUERY);
-        if( xFactory.is() )
+        else if ( XML_NAMESPACE_XML == nPrefix)
         {
-            Reference<XInterface> xIfc =
-                xFactory->createInstance(
-                    OUString::createFromAscii(aIndexServiceMap[eIndexType]));
-            if( xIfc.is() )
+            if ( IsXMLToken( sLocalName, XML_ID ) )
             {
-                // get Property set
-                Reference<XPropertySet> xPropSet(xIfc, UNO_QUERY);
-                xTOCPropertySet = xPropSet;
-
-                // insert section
-                // a) insert section
-                //    The inserted index consists of an empty paragraph
-                //    only, as well as an empty paragraph *after* the index
-                // b) insert marker after index, and put Cursor inside of the
-                //    index
-
-                // preliminaries
-#ifndef DBG_UTIL
-                OUString sMarker(" ");
-#else
-                OUString sMarker("Y");
-#endif
-                rtl::Reference<XMLTextImportHelper> rImport =
-                    GetImport().GetTextImport();
-
-                // a) insert index
-                Reference<XTextContent> xTextContent(xIfc, UNO_QUERY);
-                try
-                {
-                    GetImport().GetTextImport()->InsertTextContent(
-                        xTextContent);
-                }
-                catch(const IllegalArgumentException& e)
-                {
-                    // illegal argument? Then we can't accept indices here!
-                    Sequence<OUString> aSeq { GetLocalName() };
-                    GetImport().SetError(
-                        XMLERROR_FLAG_ERROR | XMLERROR_NO_INDEX_ALLOWED_HERE,
-                        aSeq, e.Message, nullptr );
-
-                    // set bValid to false, and return prematurely
-                    bValid = false;
-                    return;
-                }
-
-                // xml:id for RDF metadata
-                GetImport().SetXmlId(xIfc, sXmlId);
-
-                // b) insert marker and move cursor
-                rImport->InsertString(sMarker);
-                rImport->GetCursor()->goLeft(2, sal_False);
+                sXmlId = xAttrList->getValueByIndex(nAttr);
             }
-        }
-
-        // finally, check for redlines that should start at
-        // the section start node
-        if( bValid )
-            GetImport().GetTextImport()->RedlineAdjustStartNodeCursor(true);
-
-        if (pStyle != nullptr)
-        {
-            pStyle->FillPropertySet( xTOCPropertySet );
-        }
-
-        Any aAny;
-        aAny.setValue( &bProtected, cppu::UnoType<bool>::get() );
-        xTOCPropertySet->setPropertyValue( sIsProtected, aAny );
-
-        if (!sIndexName.isEmpty())
-        {
-            aAny <<= sIndexName;
-            xTOCPropertySet->setPropertyValue( sName, aAny );
         }
     }
+
+    // create table of content (via MultiServiceFactory)
+    Reference<XMultiServiceFactory> xFactory(GetImport().GetModel(),
+                                             UNO_QUERY);
+    if( xFactory.is() )
+    {
+        Reference<XInterface> xIfc =
+            xFactory->createInstance(
+                OUString::createFromAscii(aIndexServiceMap[eIndexType]));
+        if( xIfc.is() )
+        {
+            // get Property set
+            Reference<XPropertySet> xPropSet(xIfc, UNO_QUERY);
+            xTOCPropertySet = xPropSet;
+
+            // insert section
+            // a) insert section
+            //    The inserted index consists of an empty paragraph
+            //    only, as well as an empty paragraph *after* the index
+            // b) insert marker after index, and put Cursor inside of the
+            //    index
+
+            // preliminaries
+#ifndef DBG_UTIL
+            OUString const sMarker(" ");
+#else
+            OUString const sMarker("Y");
+#endif
+            rtl::Reference<XMLTextImportHelper> rImport =
+                GetImport().GetTextImport();
+
+            // a) insert index
+            Reference<XTextContent> xTextContent(xIfc, UNO_QUERY);
+            try
+            {
+                GetImport().GetTextImport()->InsertTextContent(
+                    xTextContent);
+            }
+            catch(const IllegalArgumentException& e)
+            {
+                // illegal argument? Then we can't accept indices here!
+                Sequence<OUString> aSeq { GetLocalName() };
+                GetImport().SetError(
+                    XMLERROR_FLAG_ERROR | XMLERROR_NO_INDEX_ALLOWED_HERE,
+                    aSeq, e.Message, nullptr );
+
+                // set bValid to false, and return prematurely
+                bValid = false;
+                return;
+            }
+
+            // xml:id for RDF metadata
+            GetImport().SetXmlId(xIfc, sXmlId);
+
+            // b) insert marker and move cursor
+            rImport->InsertString(sMarker);
+            rImport->GetCursor()->goLeft(2, false);
+        }
+    }
+
+    // finally, check for redlines that should start at
+    // the section start node
+    if( bValid )
+        GetImport().GetTextImport()->RedlineAdjustStartNodeCursor(true);
+
+    if (pStyle != nullptr)
+    {
+        pStyle->FillPropertySet( xTOCPropertySet );
+    }
+
+    xTOCPropertySet->setPropertyValue( "IsProtected", Any(bProtected) );
+
+    if (!sIndexName.isEmpty())
+    {
+        xTOCPropertySet->setPropertyValue( "Name", Any(sIndexName) );
+    }
+
 }
 
 void XMLIndexTOCContext::EndElement()
@@ -262,31 +256,31 @@ void XMLIndexTOCContext::EndElement()
         rtl::Reference<XMLTextImportHelper> rHelper= GetImport().GetTextImport();
 
         // get rid of last paragraph (unless it's the only paragraph)
-        rHelper->GetCursor()->goRight(1, sal_False);
-        if( xBodyContextRef.Is() &&
-            static_cast<XMLIndexBodyContext*>(&xBodyContextRef)->HasContent() )
+        rHelper->GetCursor()->goRight(1, false);
+        if( xBodyContextRef.is() &&
+            static_cast<XMLIndexBodyContext*>(xBodyContextRef.get())->HasContent() )
         {
-            rHelper->GetCursor()->goLeft(1, sal_True);
+            rHelper->GetCursor()->goLeft(1, true);
             rHelper->GetText()->insertString(rHelper->GetCursorAsRange(),
-                                             "", sal_True);
+                                             "", true);
         }
 
         // and delete second marker
-        rHelper->GetCursor()->goRight(1, sal_True);
+        rHelper->GetCursor()->goRight(1, true);
         rHelper->GetText()->insertString(rHelper->GetCursorAsRange(),
-                                         "", sal_True);
+                                         "", true);
 
         // check for Redlines on our end node
         GetImport().GetTextImport()->RedlineAdjustStartNodeCursor(false);
     }
 }
 
-SvXMLImportContext* XMLIndexTOCContext::CreateChildContext(
+SvXMLImportContextRef XMLIndexTOCContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if (bValid)
     {
@@ -294,12 +288,12 @@ SvXMLImportContext* XMLIndexTOCContext::CreateChildContext(
         {
             if ( IsXMLToken( rLocalName, XML_INDEX_BODY ) )
             {
-                pContext = new XMLIndexBodyContext(GetImport(), nPrefix,
+                xContext = new XMLIndexBodyContext(GetImport(), nPrefix,
                                                    rLocalName);
-                if ( !xBodyContextRef.Is() ||
-                     !static_cast<XMLIndexBodyContext*>(&xBodyContextRef)->HasContent() )
+                if ( !xBodyContextRef.is() ||
+                     !static_cast<XMLIndexBodyContext*>(xBodyContextRef.get())->HasContent() )
                 {
-                    xBodyContextRef = pContext;
+                    xBodyContextRef = xContext;
                 }
             }
             else if (IsXMLToken(rLocalName, aIndexSourceElementMap[eIndexType]))
@@ -308,37 +302,37 @@ SvXMLImportContext* XMLIndexTOCContext::CreateChildContext(
                 switch (eIndexType)
                 {
                     case TEXT_INDEX_TOC:
-                        pContext = new XMLIndexTOCSourceContext(
+                        xContext = new XMLIndexTOCSourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
                     case TEXT_INDEX_OBJECT:
-                        pContext = new XMLIndexObjectSourceContext(
+                        xContext = new XMLIndexObjectSourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
                     case TEXT_INDEX_ALPHABETICAL:
-                        pContext = new XMLIndexAlphabeticalSourceContext(
+                        xContext = new XMLIndexAlphabeticalSourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
                     case TEXT_INDEX_USER:
-                        pContext = new XMLIndexUserSourceContext(
+                        xContext = new XMLIndexUserSourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
                     case TEXT_INDEX_BIBLIOGRAPHY:
-                        pContext = new XMLIndexBibliographySourceContext(
+                        xContext = new XMLIndexBibliographySourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
                     case TEXT_INDEX_TABLE:
-                        pContext = new XMLIndexTableSourceContext(
+                        xContext = new XMLIndexTableSourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
                     case TEXT_INDEX_ILLUSTRATION:
-                        pContext = new XMLIndexIllustrationSourceContext(
+                        xContext = new XMLIndexIllustrationSourceContext(
                             GetImport(), nPrefix, rLocalName, xTOCPropertySet);
                         break;
 
@@ -354,13 +348,13 @@ SvXMLImportContext* XMLIndexTOCContext::CreateChildContext(
     // else: not valid -> ignore
 
     // default: ignore
-    if (pContext == nullptr)
+    if (!xContext)
     {
-        pContext = SvXMLImportContext::CreateChildContext(nPrefix, rLocalName,
+        xContext = SvXMLImportContext::CreateChildContext(nPrefix, rLocalName,
                                                           xAttrList);
     }
 
-    return pContext;
+    return xContext;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

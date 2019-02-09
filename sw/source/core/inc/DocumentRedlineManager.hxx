@@ -21,6 +21,7 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_DOCUMENTREDLINEMANAGER_HXX
 
 #include <IDocumentRedlineAccess.hxx>
+#include <memory>
 
 class SwDoc;
 
@@ -32,11 +33,15 @@ class DocumentRedlineManager : public IDocumentRedlineAccess
 public:
     DocumentRedlineManager( SwDoc& i_rSwdoc );
 
-    virtual RedlineMode_t GetRedlineMode() const override;
+    /**
+     * Replaced by SwRootFrame::IsHideRedlines() (this is model-level redline
+     * hiding).
+     */
+    virtual RedlineFlags GetRedlineFlags() const override;
 
-    virtual void SetRedlineMode_intern(/*[in]*/RedlineMode_t eMode) override;
+    virtual void SetRedlineFlags_intern(/*[in]*/RedlineFlags eMode) override;
 
-    virtual void SetRedlineMode(/*[in]*/RedlineMode_t eMode) override;
+    virtual void SetRedlineFlags(/*[in]*/RedlineFlags eMode) override;
 
     virtual bool IsRedlineOn() const override;
 
@@ -50,7 +55,7 @@ public:
 
     virtual bool IsInRedlines(const SwNode& rNode) const override;
 
-    virtual bool AppendRedline(/*[in]*/SwRangeRedline* pPtr, /*[in]*/bool bCallDelete) override;
+    virtual AppendResult AppendRedline(/*[in]*/SwRangeRedline* pPtr, /*[in]*/bool bCallDelete) override;
 
     virtual bool AppendTableRowRedline(/*[in]*/SwTableRowRedline* pPtr, /*[in]*/bool bCallDelete) override;
     virtual bool AppendTableCellRedline(/*[in]*/SwTableCellRedline* pPtr, /*[in]*/bool bCallDelete) override;
@@ -67,7 +72,7 @@ public:
         /*[in]*/bool bSaveInUndo,
         /*[in]*/sal_uInt16 nDelType) override;
 
-    virtual sal_uInt16 GetRedlinePos(
+    virtual SwRedlineTable::size_type GetRedlinePos(
         /*[in]*/const SwNode& rNode,
         /*[in]*/sal_uInt16 nType) const override;
 
@@ -75,19 +80,23 @@ public:
 
     virtual const SwRangeRedline* GetRedline(
         /*[in]*/const SwPosition& rPos,
-        /*[in]*/sal_uInt16* pFndPos) const override;
+        /*[in]*/SwRedlineTable::size_type* pFndPos) const override;
 
     virtual bool IsRedlineMove() const override;
 
     virtual void SetRedlineMove(/*[in]*/bool bFlag) override;
 
-    virtual bool AcceptRedline(/*[in]*/sal_uInt16 nPos, /*[in]*/bool bCallDelete) override;
+    virtual bool AcceptRedline(/*[in]*/SwRedlineTable::size_type nPos, /*[in]*/bool bCallDelete) override;
 
     virtual bool AcceptRedline(/*[in]*/const SwPaM& rPam, /*[in]*/bool bCallDelete) override;
 
-    virtual bool RejectRedline(/*[in]*/sal_uInt16 nPos, /*[in]*/bool bCallDelete) override;
+    virtual void AcceptRedlineParagraphFormatting(/*[in]*/const SwPaM& rPam) override;
+
+    virtual bool RejectRedline(/*[in]*/SwRedlineTable::size_type nPos, /*[in]*/bool bCallDelete) override;
 
     virtual bool RejectRedline(/*[in]*/const SwPaM& rPam, /*[in]*/bool bCallDelete) override;
+
+    virtual void AcceptAllRedline(/*[in]*/bool bAcceptReject) override;
 
     virtual const SwRangeRedline* SelNextRedline(/*[in]*/SwPaM& rPam) const override;
 
@@ -95,9 +104,9 @@ public:
 
     virtual void UpdateRedlineAttr() override;
 
-    virtual sal_uInt16 GetRedlineAuthor() override;
+    virtual std::size_t GetRedlineAuthor() override;
 
-    virtual sal_uInt16 InsertRedlineAuthor(const OUString& rAuthor) override;
+    virtual std::size_t InsertRedlineAuthor(const OUString& rAuthor) override;
 
     virtual bool SetRedlineComment(
         /*[in]*/const SwPaM& rPam,
@@ -108,7 +117,6 @@ public:
     virtual void SetRedlinePassword(
         /*[in]*/const css::uno::Sequence <sal_Int8>& rNewPassword) override;
 
-
     //Non Interface methods;
 
     /** Set comment-text for Redline. It then comes in via AppendRedLine.
@@ -116,10 +124,10 @@ public:
      Sequence number is for conjoining of Redlines by the UI. */
     void SetAutoFormatRedlineComment( const OUString* pText, sal_uInt16 nSeqNo = 0 );
 
-    void checkRedlining(RedlineMode_t& _rReadlineMode);
+    bool IsHideRedlines() const { return m_bHideRedlines; }
+    void SetHideRedlines(bool const bHideRedlines) { m_bHideRedlines = bHideRedlines; }
 
-
-    virtual ~DocumentRedlineManager();
+    virtual ~DocumentRedlineManager() override;
 
 private:
 
@@ -128,15 +136,18 @@ private:
 
     SwDoc& m_rDoc;
 
-    RedlineMode_t meRedlineMode;     //< Current Redline Mode.
-    SwRedlineTable        *mpRedlineTable;           //< List of all Ranged Redlines.
-    SwExtraRedlineTable   *mpExtraRedlineTable;      //< List of all Extra Redlines.
-    OUString            *mpAutoFormatRedlnComment;  //< Comment for Redlines inserted via AutoFormat.
+    RedlineFlags meRedlineFlags;     //< Current Redline Mode.
+    std::unique_ptr<SwRedlineTable> mpRedlineTable;           //< List of all Ranged Redlines.
+    std::unique_ptr<SwExtraRedlineTable> mpExtraRedlineTable;      //< List of all Extra Redlines.
+    std::unique_ptr<OUString> mpAutoFormatRedlnComment;  //< Comment for Redlines inserted via AutoFormat.
     bool mbIsRedlineMove;    //< true: Redlines are moved into to / out of the section.
-    bool mbReadlineChecked;    //< true: if the query was already shown
     sal_uInt16 mnAutoFormatRedlnCommentNo;  /**< SeqNo for conjoining of AutoFormat-Redlines.
                                          by the UI. Managed by SwAutoFormat! */
     css::uno::Sequence <sal_Int8 > maRedlinePasswd;
+
+    /// this flag is necessary for file import because the ViewShell/layout is
+    /// created "too late" and the ShowRedlineChanges item is not below "Views"
+    bool m_bHideRedlines = false;
 };
 
 }

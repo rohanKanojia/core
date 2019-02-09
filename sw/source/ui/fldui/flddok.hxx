@@ -23,11 +23,10 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/field.hxx>
 
-#include "numfmtlb.hxx"
+#include <numfmtlb.hxx>
 #include "fldpage.hxx"
 
 class SwFieldDokPage : public SwFieldPage
@@ -50,9 +49,9 @@ class SwFieldDokPage : public SwFieldPage
     sal_Int32               nOldSel;
     sal_uLong               nOldFormat;
 
-    DECL_LINK_TYPED(TypeHdl, ListBox&, void);
-    DECL_LINK_TYPED(FormatHdl, ListBox&, void);
-    DECL_LINK_TYPED(SubTypeHdl, ListBox&, void);
+    DECL_LINK(TypeHdl, ListBox&, void);
+    DECL_LINK(FormatHdl, ListBox&, void);
+    DECL_LINK(SubTypeHdl, ListBox&, void);
 
     void                AddSubType(sal_uInt16 nTypeId);
     sal_Int32           FillFormatLB(sal_uInt16 nTypeId);
@@ -61,12 +60,12 @@ protected:
     virtual sal_uInt16      GetGroup() override;
 
 public:
-                        SwFieldDokPage(vcl::Window* pWindow, const SfxItemSet& rSet);
+                        SwFieldDokPage(vcl::Window* pWindow, const SfxItemSet * pSet);
 
-                        virtual ~SwFieldDokPage();
+                        virtual ~SwFieldDokPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create(vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage>  Create(TabPageParent pParent, const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

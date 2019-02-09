@@ -19,9 +19,10 @@
 #ifndef INCLUDED_BRIDGES_SOURCE_CPP_UNO_MSVC_WIN32_INTEL_MSCI_HXX
 #define INCLUDED_BRIDGES_SOURCE_CPP_UNO_MSVC_WIN32_INTEL_MSCI_HXX
 
-#pragma warning(push, 1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
-#pragma warning(pop)
 
 #include "rtl/ustring.hxx"
 

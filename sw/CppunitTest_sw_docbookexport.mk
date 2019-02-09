@@ -21,13 +21,13 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_docbookexport, \
 	cppuhelper \
 	i18nlangtag \
     sal \
+    sfx \
     sw \
     test \
 	tl \
     unotest \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_docbookexport,\
@@ -44,8 +44,9 @@ $(eval $(call gb_CppunitTest_set_include,sw_docbookexport,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_docbookexport,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_docbookexport))
@@ -54,5 +55,9 @@ $(eval $(call gb_CppunitTest_use_vcl,sw_docbookexport))
 $(eval $(call gb_CppunitTest_use_rdb,sw_docbookexport,services))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_docbookexport))
+
+$(eval $(call gb_CppunitTest_use_packages,sw_docbookexport,\
+	filter_docbook \
+))
 
 # vim: set noet sw=4 ts=4:

@@ -19,21 +19,27 @@
 
 #include "system.hxx"
 
+#include <config_global.h>
 #include <osl/interlck.h>
-#include <osl/diagnose.h>
 
-#if  ( defined ( SOLARIS ) || defined ( NETBSD ) ) && defined ( SPARC )
+#if  ( defined (__sun) || defined ( NETBSD ) ) && defined ( SPARC )
 #error please use asm/interlck_sparc.s
-#elif defined ( SOLARIS) && defined ( X86 )
+#elif defined (__sun) && defined ( X86 )
 #error please use asm/interlck_x86.s
+#elif HAVE_GCC_BUILTIN_ATOMIC
+oslInterlockedCount SAL_CALL osl_incrementInterlockedCount(oslInterlockedCount* pCount)
+{
+    return __sync_add_and_fetch(pCount, 1);
+}
+oslInterlockedCount SAL_CALL osl_decrementInterlockedCount(oslInterlockedCount* pCount)
+{
+    return __sync_sub_and_fetch(pCount, 1);
+}
 #elif defined ( __GNUC__ ) && ( defined ( X86 ) || defined ( X86_64 ) )
 /* That's possible on x86-64 too since oslInterlockedCount is a sal_Int32 */
 
 oslInterlockedCount SAL_CALL osl_incrementInterlockedCount(oslInterlockedCount* pCount)
 {
-#if HAVE_GCC_BUILTIN_ATOMIC
-    return __sync_add_and_fetch (pCount, 1);
-#else
     register oslInterlockedCount nCount asm("%eax");
     nCount = 1;
     __asm__ __volatile__ (
@@ -43,14 +49,10 @@ oslInterlockedCount SAL_CALL osl_incrementInterlockedCount(oslInterlockedCount* 
     :   /* nothing */
     :   "memory");
     return ++nCount;
-#endif
 }
 
 oslInterlockedCount SAL_CALL osl_decrementInterlockedCount(oslInterlockedCount* pCount)
 {
-#if HAVE_GCC_BUILTIN_ATOMIC
-    return __sync_sub_and_fetch (pCount, 1);
-#else
     register oslInterlockedCount nCount asm("%eax");
     nCount = -1;
     __asm__ __volatile__ (
@@ -60,16 +62,6 @@ oslInterlockedCount SAL_CALL osl_decrementInterlockedCount(oslInterlockedCount* 
     :   /* nothing */
     :   "memory");
     return --nCount;
-#endif
-}
-#elif HAVE_GCC_BUILTIN_ATOMIC
-oslInterlockedCount SAL_CALL osl_incrementInterlockedCount(oslInterlockedCount* pCount)
-{
-    return __sync_add_and_fetch(pCount, 1);
-}
-oslInterlockedCount SAL_CALL osl_decrementInterlockedCount(oslInterlockedCount* pCount)
-{
-    return __sync_sub_and_fetch(pCount, 1);
 }
 #else
 /* use only if nothing else works, expensive due to single mutex for all reference counts */

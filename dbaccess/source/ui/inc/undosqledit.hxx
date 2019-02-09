@@ -20,16 +20,15 @@
 #define INCLUDED_DBACCESS_SOURCE_UI_INC_UNDOSQLEDIT_HXX
 
 #include "GeneralUndo.hxx"
-#include "dbu_control.hrc"
 #include <vcl/vclptr.hxx>
+#include <strings.hrc>
 
 namespace dbaui
 {
     class OSqlEdit;
     // OSqlEditUndoAct - Undo-class for changing sql text
-    class OSqlEditUndoAct : public OCommentUndoAction
+    class OSqlEditUndoAct final : public OCommentUndoAction
     {
-    protected:
         VclPtr<OSqlEdit>   m_pOwner;
         OUString    m_strNextText;
 

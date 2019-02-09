@@ -19,31 +19,28 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_AXES_VCARTESIANCOORDINATESYSTEM_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_VCARTESIANCOORDINATESYSTEM_HXX
 
-#include "VCoordinateSystem.hxx"
+#include <VCoordinateSystem.hxx>
 
 namespace chart
 {
 
-/**
-*/
 class VCartesianCoordinateSystem : public VCoordinateSystem
 {
 public:
+    VCartesianCoordinateSystem() = delete;
     explicit VCartesianCoordinateSystem( const css::uno::Reference< css::chart2::XCoordinateSystem >& xCooSys );
-    virtual ~VCartesianCoordinateSystem();
+    virtual ~VCartesianCoordinateSystem() override;
 
     virtual void createVAxisList(
             const css::uno::Reference< css::chart2::XChartDocument> &ChartDoc
             , const css::awt::Size& rFontReferenceSize
-            , const css::awt::Rectangle& rMaximumSpaceForLabels ) override;
+            , const css::awt::Rectangle& rMaximumSpaceForLabels
+            , bool bLimitSpaceForLabels ) override;
 
     virtual void initVAxisInList() override;
     virtual void updateScalesAndIncrementsOnAxes() override;
 
     virtual void createGridShapes() override;
-
-private:
-    VCartesianCoordinateSystem();
 };
 
 } //namespace chart

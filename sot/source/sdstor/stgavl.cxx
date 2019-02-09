@@ -33,14 +33,14 @@ StgAvlNode::~StgAvlNode()
     delete m_pRight;
 }
 
-StgAvlNode* StgAvlNode::Find( StgAvlNode* pFind )
+StgAvlNode* StgAvlNode::Find( StgAvlNode const * pFind )
 {
     if ( pFind )
     {
         StgAvlNode* p = this;
         while( p )
         {
-            short nRes = p->Compare( pFind );
+            sal_Int32 nRes = p->Compare( pFind );
             if( !nRes )
                 return p;
             else p = ( nRes < 0 ) ? p->m_pLeft : p->m_pRight;
@@ -52,11 +52,11 @@ StgAvlNode* StgAvlNode::Find( StgAvlNode* pFind )
 // find point to add node to AVL tree and returns
 // +/0/- for >/=/< previous
 
-short StgAvlNode::Locate
-    ( StgAvlNode* pFind,
+sal_Int32 StgAvlNode::Locate
+    ( StgAvlNode const * pFind,
       StgAvlNode** pPivot, StgAvlNode **pParent, StgAvlNode** pPrev )
 {
-    short nRes = 0;
+    sal_Int32 nRes = 0;
     StgAvlNode* pCur = this;
 
     OSL_ENSURE( pPivot && pParent && pPrev, "The pointers may not be NULL!" );
@@ -89,7 +89,7 @@ short StgAvlNode::Locate
 // adjust balance factors in AVL tree from pivot down.
 // Returns delta balance.
 
-short StgAvlNode::Adjust( StgAvlNode** pHeavy, StgAvlNode* pNew )
+short StgAvlNode::Adjust( StgAvlNode** pHeavy, StgAvlNode const * pNew )
 {
     StgAvlNode* pCur = this;
     short nDelta;
@@ -98,7 +98,7 @@ short StgAvlNode::Adjust( StgAvlNode** pHeavy, StgAvlNode* pNew )
     if( pCur == pNew || !pNew )
         return m_nBalance;
 
-    short nRes = Compare( pNew );
+    sal_Int32 nRes = Compare( pNew );
     if( nRes > 0 )
     {
         *pHeavy = pCur = m_pRight;
@@ -221,7 +221,7 @@ StgAvlNode* StgAvlNode::Rem( StgAvlNode** p, StgAvlNode* pDel, bool bPtrs )
     if( p && *p && pDel )
     {
         StgAvlNode* pCur = *p;
-        short nRes = bPtrs ? short( pCur == pDel ) : short(pCur->Compare( pDel ));
+        sal_Int32 nRes = bPtrs ? sal_Int32( pCur == pDel ) : pCur->Compare( pDel );
         if( !nRes )
         {
             // Element found: remove
@@ -295,7 +295,7 @@ bool StgAvlNode::Insert( StgAvlNode** pRoot, StgAvlNode* pIns )
         return true;
     }
     // find insertion point and return if already present
-    short nRes = (*pRoot)->Locate( pIns, &pPivot, &pParent, &pPrev );
+    sal_Int32 nRes = (*pRoot)->Locate( pIns, &pPivot, &pParent, &pPrev );
     if( !nRes )
         return false;
 
@@ -351,7 +351,7 @@ bool StgAvlNode::Remove( StgAvlNode** pRoot, StgAvlNode* pDel, bool bDel )
         if( bDel )
             delete pDel;
         // Rebalance the tree the hard way
-        // OS 22.09.95: Auf MD's Wunsch auskommentiert wg. Absturz
+        // OS 22.09.95: On MD's request commented out due to crash
 /*      StgAvlNode* pNew = NULL;
         while( *pRoot )
         {
@@ -376,10 +376,12 @@ bool StgAvlNode::Remove( StgAvlNode** pRoot, StgAvlNode* pDel, bool bDel )
 StgAvlIterator::StgAvlIterator( StgAvlNode* p )
 {
     m_pRoot = p;
-    m_nCount = 0;
     m_nCur = 0;
     if( p )
-        p->StgEnum( m_nCount );
+    {
+        short nCount = 0; // tree size
+        p->StgEnum( nCount );
+    }
 }
 
 StgAvlNode* StgAvlIterator::Find( short n )

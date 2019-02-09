@@ -20,7 +20,10 @@
 #include <doc.hxx>
 #include <list.hxx>
 #include <numrule.hxx>
-#include <rtl/random.h>
+
+#include <comphelper/random.hxx>
+#include <osl/diagnose.h>
+
 #include <vector>
 
 
@@ -54,54 +57,43 @@ SwList* DocumentListsManager::createList( const OUString& rListId,
     }
 
     SwList* pNewList = new SwList( sListId, *pDefaultNumRuleForNewList, m_rDoc.GetNodes() );
-    maLists[sListId] = pNewList;
+    maLists[sListId].reset(pNewList);
 
     return pNewList;
-}
-
-void DocumentListsManager::deleteList( const OUString& sListId )
-{
-    SwList* pList = getListByName( sListId );
-    if ( pList )
-    {
-        maLists.erase( sListId );
-        delete pList;
-    }
 }
 
 SwList* DocumentListsManager::getListByName( const OUString& sListId ) const
 {
     SwList* pList = nullptr;
 
-    std::unordered_map< OUString, SwList*, OUStringHash >::const_iterator
-                                            aListIter = maLists.find( sListId );
+    auto aListIter = maLists.find( sListId );
     if ( aListIter != maLists.end() )
     {
-        pList = (*aListIter).second;
+        pList = (*aListIter).second.get();
     }
 
     return pList;
 }
 
-SwList* DocumentListsManager::createListForListStyle( const OUString& sListStyleName )
+void DocumentListsManager::createListForListStyle( const OUString& sListStyleName )
 {
     if ( sListStyleName.isEmpty() )
     {
         OSL_FAIL( "<DocumentListsManager::createListForListStyle(..)> - no list style name provided. Serious defect." );
-        return nullptr;
+        return;
     }
 
     if ( getListForListStyle( sListStyleName ) )
     {
         OSL_FAIL( "<DocumentListsManager::createListForListStyle(..)> - a list for the provided list style name already exists. Serious defect." );
-        return nullptr;
+        return;
     }
 
     SwNumRule* pNumRule = m_rDoc.FindNumRulePtr( sListStyleName );
     if ( !pNumRule )
     {
         OSL_FAIL( "<DocumentListsManager::createListForListStyle(..)> - for provided list style name no list style is found. Serious defect." );
-        return nullptr;
+        return;
     }
 
     OUString sListId( pNumRule->GetDefaultListId() ); // can be empty String
@@ -112,15 +104,13 @@ SwList* DocumentListsManager::createListForListStyle( const OUString& sListStyle
     SwList* pNewList = createList( sListId, sListStyleName );
     maListStyleLists[sListStyleName] = pNewList;
     pNumRule->SetDefaultListId( pNewList->GetListId() );
-
-    return pNewList;
 }
 
 SwList* DocumentListsManager::getListForListStyle( const OUString& sListStyleName ) const
 {
     SwList* pList = nullptr;
 
-    std::unordered_map< OUString, SwList*, OUStringHash >::const_iterator
+    std::unordered_map< OUString, SwList* >::const_iterator
                             aListIter = maListStyleLists.find( sListStyleName );
     if ( aListIter != maListStyleLists.end() )
     {
@@ -145,28 +135,21 @@ void DocumentListsManager::deleteListForListStyle( const OUString& sListStyleNam
     if ( !sListId.isEmpty() )
     {
         maListStyleLists.erase( sListStyleName );
-        deleteList( sListId );
+        maLists.erase( sListId );
     }
 }
 
 void DocumentListsManager::deleteListsByDefaultListStyle( const OUString& rListStyleName )
 {
-    std::vector< SwList* > aListsForDeletion;
-    tHashMapForLists::iterator aListIter = maLists.begin();
+    auto aListIter = maLists.begin();
     while ( aListIter != maLists.end() )
     {
-        SwList* pList = (*aListIter).second;
-        if ( pList->GetDefaultListStyleName() == rListStyleName )
+        if ( (*aListIter).second->GetDefaultListStyleName() == rListStyleName )
         {
-            aListsForDeletion.push_back( pList );
+            aListIter = maLists.erase(aListIter);
         }
-        ++aListIter;
-    }
-    while ( !aListsForDeletion.empty() )
-    {
-        SwList* pList = aListsForDeletion.back();
-        aListsForDeletion.pop_back();
-        deleteList( pList->GetListId() );
+        else
+            ++aListIter;
     }
 }
 
@@ -194,16 +177,6 @@ void DocumentListsManager::trackChangeOfListStyleName( const OUString& sListStyl
 
 DocumentListsManager::~DocumentListsManager()
 {
-    for ( std::unordered_map< OUString, SwList*, OUStringHash >::iterator
-                                           aListIter = maLists.begin();
-        aListIter != maLists.end();
-        ++aListIter )
-    {
-         delete (*aListIter).second;
-    }
-    maLists.clear();
-
-    maListStyleLists.clear();
 }
 
 
@@ -214,8 +187,7 @@ const OUString DocumentListsManager::MakeListIdUnique( const OUString& aSuggeste
     while ( getListByName( aTmpStr ) )
     {
         ++nHitCount;
-        aTmpStr = aSuggestedUniqueListId;
-        aTmpStr += OUString::number( nHitCount );
+        aTmpStr = aSuggestedUniqueListId + OUString::number( nHitCount );
     }
 
     return aTmpStr;
@@ -232,13 +204,9 @@ const OUString DocumentListsManager::CreateUniqueListId()
     else
     {
         // #i92478#
-        OUString aNewListId( "list" );
-        // #o12311627#
-        static rtlRandomPool s_RandomPool( rtl_random_createPool() );
-        sal_Int64 n;
-        rtl_random_getBytes( s_RandomPool, &n, sizeof(n) );
-        aNewListId += OUString::number( (n < 0 ? -n : n) );
-
+        unsigned int const n(comphelper::rng::uniform_uint_distribution(0,
+                                std::numeric_limits<unsigned int>::max()));
+        OUString const aNewListId = "list" + OUString::number(n);
         return MakeListIdUnique( aNewListId );
     }
 }

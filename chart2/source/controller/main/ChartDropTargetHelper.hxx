@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_CHARTDROPTARGETHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_CHARTDROPTARGETHELPER_HXX
 
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
 namespace com { namespace sun { namespace star {
 namespace chart2 {
@@ -33,10 +33,11 @@ namespace chart
 class ChartDropTargetHelper : public DropTargetHelper
 {
 public:
+    ChartDropTargetHelper() = delete;
     explicit ChartDropTargetHelper(
         const css::uno::Reference< css::datatransfer::dnd::XDropTarget >& rxDropTarget,
         const css::uno::Reference< css::chart2::XChartDocument > & xChartDocument );
-    virtual ~ChartDropTargetHelper();
+    virtual ~ChartDropTargetHelper() override;
 
 protected:
 
@@ -44,9 +45,6 @@ protected:
     virtual sal_Int8    ExecuteDrop( const ExecuteDropEvent& rEvt ) override;
 
 private:
-    // not available
-    ChartDropTargetHelper();
-
     bool satisfiesPrerequisites() const;
 
     css::uno::Reference< css::chart2::XChartDocument > m_xChartDocument;

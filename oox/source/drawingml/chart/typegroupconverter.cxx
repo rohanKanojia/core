@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/typegroupconverter.hxx"
+#include <drawingml/chart/typegroupconverter.hxx>
 
 #include <com/sun/star/chart/DataLabelPlacement.hpp>
 #include <com/sun/star/chart2/CartesianCoordinateSystem2d.hpp>
@@ -34,10 +34,14 @@
 #include <com/sun/star/chart2/data/XDataSink.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <osl/diagnose.h>
-#include "oox/drawingml/lineproperties.hxx"
-#include "drawingml/chart/seriesconverter.hxx"
-#include "drawingml/chart/typegroupmodel.hxx"
-#include "oox/helper/containerhelper.hxx"
+#include <drawingml/lineproperties.hxx>
+#include <drawingml/chart/seriesconverter.hxx>
+#include <drawingml/chart/typegroupmodel.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 namespace drawingml {
@@ -87,10 +91,11 @@ static const TypeGroupInfo saUnknownTypeInfo =
 
 const TypeGroupInfo& lclGetTypeInfoFromTypeId( TypeId eTypeId )
 {
-    const TypeGroupInfo* pEnd = STATIC_ARRAY_END( spTypeInfos );
-    for( const TypeGroupInfo* pIt = spTypeInfos; pIt != pEnd; ++pIt )
-        if( pIt->meTypeId == eTypeId )
-            return *pIt;
+    for( auto const &rIt : spTypeInfos)
+    {
+        if( rIt.meTypeId == eTypeId )
+            return rIt;
+    }
     OSL_ENSURE( eTypeId == TYPEID_UNKNOWN, "lclGetTypeInfoFromTypeId - unexpected chart type identifier" );
     return saUnknownTypeInfo;
 }
@@ -139,7 +144,7 @@ TypeGroupConverter::TypeGroupConverter( const ConverterRoot& rParent, TypeGroupM
     TypeId eTypeId = TYPEID_UNKNOWN;
     switch( mrModel.mnTypeId )
     {
-#define ENSURE_AXESCOUNT( min, max ) OSL_ENSURE( (min <= (int)mrModel.maAxisIds.size()) && ((int)mrModel.maAxisIds.size() <= max), "TypeGroupConverter::TypeGroupConverter - invalid axes count" )
+#define ENSURE_AXESCOUNT( min, max ) OSL_ENSURE( (min <= static_cast<int>(mrModel.maAxisIds.size())) && (static_cast<int>(mrModel.maAxisIds.size()) <= max), "TypeGroupConverter::TypeGroupConverter - invalid axes count" )
         case C_TOKEN( area3DChart ):    ENSURE_AXESCOUNT( 2, 3 ); eTypeId = TYPEID_AREA;      mb3dChart = true;   break;
         case C_TOKEN( areaChart ):      ENSURE_AXESCOUNT( 2, 2 ); eTypeId = TYPEID_AREA;      mb3dChart = false;  break;
         case C_TOKEN( bar3DChart ):     ENSURE_AXESCOUNT( 2, 3 ); eTypeId = TYPEID_BAR;       mb3dChart = true;   break;
@@ -217,11 +222,6 @@ ObjectType TypeGroupConverter::getSeriesObjectType() const
         (maTypeInfo.mbSeriesIsFrame2d ? OBJECTTYPE_FILLEDSERIES2D : OBJECTTYPE_LINEARSERIES2D);
 }
 
-bool TypeGroupConverter::isReverseSeries() const
-{
-    return maTypeInfo.mbReverseSeries && !mb3dChart && !isStacked() && !isPercent();
-}
-
 OUString TypeGroupConverter::getSingleSeriesTitle() const
 {
     OUString aSeriesTitle;
@@ -267,30 +267,33 @@ Reference< XLabeledDataSequence > TypeGroupConverter::createCategorySequence()
 {
     sal_Int32 nMaxValues = 0;
     Reference< XLabeledDataSequence > xLabeledSeq;
-    /*  Find first existing category sequence. The bahaviour of Excel 2007 is
+    /*  Find first existing category sequence. The behaviour of Excel 2007 is
         different to Excel 2003, which always used the category sequence of the
         first series, even if it was empty. */
-    for( TypeGroupModel::SeriesVector::iterator aIt = mrModel.maSeries.begin(), aEnd = mrModel.maSeries.end(); !xLabeledSeq.is() && (aIt != aEnd); ++aIt )
+    for (auto const& elem : mrModel.maSeries)
     {
-        if( (*aIt)->maSources.has( SeriesModel::CATEGORIES ) )
+        if( elem->maSources.has( SeriesModel::CATEGORIES ) )
         {
-            SeriesConverter aSeriesConv( *this, **aIt );
+            SeriesConverter aSeriesConv(*this, *elem);
             xLabeledSeq = aSeriesConv.createCategorySequence( "categories" );
+            if (xLabeledSeq.is())
+                break;
         }
-        else if( nMaxValues <= 0 && (*aIt)->maSources.has( SeriesModel::VALUES ) )
+        else if( nMaxValues <= 0 && elem->maSources.has( SeriesModel::VALUES ) )
         {
-            DataSourceModel *pValues = (*aIt)->maSources.get( SeriesModel::VALUES ).get();
+            DataSourceModel *pValues = elem->maSources.get( SeriesModel::VALUES ).get();
             if( pValues->mxDataSeq.is() )
                 nMaxValues = pValues->mxDataSeq.get()->maData.size();
         }
     }
     /* n#839727 Create Category Sequence when none are found */
-    if( !xLabeledSeq.is() && mrModel.maSeries.size() > 0 ) {
+    if( !xLabeledSeq.is() && !mrModel.maSeries.empty() ) {
         if( nMaxValues < 0 )
             nMaxValues = 2;
         SeriesModel &aModel = *mrModel.maSeries.get(0);
         DataSourceModel &aSrc = aModel.maSources.create( SeriesModel::CATEGORIES );
         DataSequenceModel &aSeq = aSrc.mxDataSeq.create();
+        aSeq.mnPointCount = nMaxValues;
         for( sal_Int32 i = 0; i < nMaxValues; i++ )
             aSeq.maData[ i ] <<= OUString::number( i + 1 );
         SeriesConverter aSeriesConv( *this,  aModel );
@@ -339,11 +342,11 @@ void TypeGroupConverter::convertFromModel( const Reference< XDiagram >& rxDiagra
         // create converter objects for all series models
         typedef RefVector< SeriesConverter > SeriesConvVector;
         SeriesConvVector aSeries;
-        for( TypeGroupModel::SeriesVector::iterator aIt = mrModel.maSeries.begin(), aEnd = mrModel.maSeries.end(); aIt != aEnd; ++aIt )
-            aSeries.push_back( SeriesConvVector::value_type( new SeriesConverter( *this, **aIt ) ) );
+        for (auto const& elemSeries : mrModel.maSeries)
+            aSeries.push_back( std::make_shared<SeriesConverter>(*this, *elemSeries) );
 
         // reverse series order for some unstacked 2D chart types
-        if( isReverseSeries() )
+        if( maTypeInfo.mbReverseSeries && !mb3dChart && !isStacked() && !isPercent() )
             ::std::reverse( aSeries.begin(), aSeries.end() );
 
         // decide whether to use varying colors for each data point
@@ -412,9 +415,9 @@ void TypeGroupConverter::convertFromModel( const Reference< XDiagram >& rxDiagra
         }
         else
         {
-            for( SeriesConvVector::iterator aIt = aSeries.begin(), aEnd = aSeries.end(); aIt != aEnd; ++aIt )
+            for (auto const& elem : aSeries)
             {
-                SeriesConverter& rSeriesConv = **aIt;
+                SeriesConverter& rSeriesConv = *elem;
                 Reference< XDataSeries > xDataSeries = rSeriesConv.createDataSeries( *this, bVaryColorsByPoint );
                 insertDataSeries( xChartType, xDataSeries, nAxesSetIdx );
 
@@ -477,7 +480,7 @@ void TypeGroupConverter::convertMarker( PropertySet& rPropSet, sal_Int32 nOoxSym
         if(xShapeProps.is())
         {
             Color aFillColor = xShapeProps->getFillProperties().maFillColor;
-            aSymbol.FillColor = aFillColor.getColor(getFilter().getGraphicHelper());
+            aSymbol.FillColor = sal_Int32(aFillColor.getColor(getFilter().getGraphicHelper()));
             rPropSet.setProperty(PROP_Color, aSymbol.FillColor);
         }
 

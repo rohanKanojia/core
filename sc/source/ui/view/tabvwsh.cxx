@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svx/imapdlg.hxx>
 #include <svx/srchdlg.hxx>
 #include <svl/srchitem.hxx>
@@ -29,31 +29,32 @@
 #include <sfx2/infobar.hxx>
 #include <sfx2/sidebar/SidebarChildWindow.hxx>
 
-#include "cellvalue.hxx"
-#include "docoptio.hxx"
+#include <cellvalue.hxx>
+#include <docoptio.hxx>
 
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "reffact.hxx"
-#include "scresid.hxx"
-#include "dwfunctr.hxx"
-#include "sc.hrc"
-#include "spelldialog.hxx"
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <reffact.hxx>
+#include <dwfunctr.hxx>
+#include <sc.hrc>
+#include <spelldialog.hxx>
+#include <formulacell.hxx>
 #include <searchresults.hxx>
 
 #include <sfx2/request.hxx>
     // needed for -fsanitize=function visibility of typeinfo for functions of
     // type void(SfxShell*,SfxRequest&) defined in scslots.hxx
-#define ScTabViewShell
-#include "scslots.hxx"
+#define ShellClass_ScTabViewShell
+#include <scslots.hxx>
 
 
 SFX_IMPL_INTERFACE(ScTabViewShell, SfxViewShell)
 
 void ScTabViewShell::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_TOOLS | SFX_VISIBILITY_STANDARD | SFX_VISIBILITY_FULLSCREEN | SFX_VISIBILITY_SERVER,
-                                            RID_OBJECTBAR_TOOLS);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_TOOLS,
+                                            SfxVisibilityFlags::Standard | SfxVisibilityFlags::FullScreen | SfxVisibilityFlags::Server,
+                                            ToolbarId::Objectbar_Tools);
 
     GetStaticInterface()->RegisterChildWindow(FID_INPUTLINE_STATUS);
     GetStaticInterface()->RegisterChildWindow(SfxInfoBarContainerChild::GetChildWindowId());
@@ -107,14 +108,14 @@ SFX_IMPL_NAMED_VIEWFACTORY( ScTabViewShell, "Default" )
     SFX_VIEW_REGISTRATION(ScDocShell);
 }
 
-OUString ScTabViewShell::GetFormula(ScAddress& rAddress)
+OUString ScTabViewShell::GetFormula(const ScAddress& rAddress)
 {
     OUString sFormula;
     ScDocument* pDoc = GetViewData().GetDocument();
     ScRefCellValue aCell(*pDoc, rAddress);
     if (!aCell.isEmpty() && aCell.meType == CELLTYPE_FORMULA)
     {
-        sFormula = aCell.mpString->getString();
+        aCell.mpFormula->GetFormula( sFormula);
     }
     return sFormula;
 }

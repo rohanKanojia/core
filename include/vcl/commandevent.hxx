@@ -20,23 +20,13 @@
 #ifndef INCLUDED_VCL_COMMANDEVENT_HXX
 #define INCLUDED_VCL_COMMANDEVENT_HXX
 
+#include <memory>
 #include <tools/gen.hxx>
 #include <tools/solar.h>
 #include <vcl/dllapi.h>
-#include <vcl/keycod.hxx>
-#include <vcl/font.hxx>
-
-#define EXTTEXTINPUT_ATTR_GRAYWAVELINE          ((sal_uInt16)0x0100)
-#define EXTTEXTINPUT_ATTR_UNDERLINE             ((sal_uInt16)0x0200)
-#define EXTTEXTINPUT_ATTR_BOLDUNDERLINE         ((sal_uInt16)0x0400)
-#define EXTTEXTINPUT_ATTR_DOTTEDUNDERLINE       ((sal_uInt16)0x0800)
-#define EXTTEXTINPUT_ATTR_DASHDOTUNDERLINE      ((sal_uInt16)0x1000)
-#define EXTTEXTINPUT_ATTR_HIGHLIGHT             ((sal_uInt16)0x2000)
-#define EXTTEXTINPUT_ATTR_REDTEXT               ((sal_uInt16)0x4000)
-#define EXTTEXTINPUT_ATTR_HALFTONETEXT          ((sal_uInt16)0x8000)
-
-#define EXTTEXTINPUT_CURSOR_INVISIBLE           ((sal_uInt16)0x0001)
-#define EXTTEXTINPUT_CURSOR_OVERWRITE           ((sal_uInt16)0x0002)
+#include <vcl/keycodes.hxx>
+#include <o3tl/typed_flags_set.hxx>
+#include <rtl/ustring.hxx>
 
 class CommandExtTextInputData;
 class CommandWheelData;
@@ -48,6 +38,26 @@ class CommandSelectionChangeData;
 class CommandSwipeData;
 class CommandLongPressData;
 enum class CommandEventId;
+
+enum class ExtTextInputAttr {
+    NONE                  = 0x0000,
+    GrayWaveline          = 0x0100,
+    Underline             = 0x0200,
+    BoldUnderline         = 0x0400,
+    DottedUnderline       = 0x0800,
+    DashDotUnderline      = 0x1000,
+    Highlight             = 0x2000,
+    RedText               = 0x4000,
+    HalfToneText          = 0x8000
+};
+namespace o3tl
+{
+    template<> struct typed_flags<ExtTextInputAttr> : is_typed_flags<ExtTextInputAttr, 0xff00> {};
+}
+
+#define EXTTEXTINPUT_CURSOR_INVISIBLE           (sal_uInt16(0x0001))
+#define EXTTEXTINPUT_CURSOR_OVERWRITE           (sal_uInt16(0x0002))
+
 
 class VCL_DLLPUBLIC CommandEvent
 {
@@ -81,15 +91,15 @@ public:
 class VCL_DLLPUBLIC CommandExtTextInputData
 {
 private:
-    OUString            maText;
-    sal_uInt16*         mpTextAttr;
+    OUString const       maText;
+    std::unique_ptr<ExtTextInputAttr[]> mpTextAttr;
     sal_Int32           mnCursorPos;
     sal_uInt16          mnCursorFlags;
     bool                mbOnlyCursor;
 
 public:
                         CommandExtTextInputData( const OUString& rText,
-                                                 const sal_uInt16* pTextAttr,
+                                                 const ExtTextInputAttr* pTextAttr,
                                                  sal_Int32 nCursorPos,
                                                  sal_uInt16 nCursorFlags,
                                                  bool bOnlyCursor );
@@ -97,7 +107,7 @@ public:
                         ~CommandExtTextInputData();
 
     const OUString&     GetText() const { return maText; }
-    const sal_uInt16*   GetTextAttr() const { return mpTextAttr; }
+    const ExtTextInputAttr* GetTextAttr() const { return mpTextAttr.get(); }
 
     sal_Int32           GetCursorPos() const { return mnCursorPos; }
     bool                IsCursorVisible() const { return (mnCursorFlags & EXTTEXTINPUT_CURSOR_INVISIBLE) == 0; }
@@ -107,12 +117,6 @@ public:
 
 class VCL_DLLPUBLIC CommandInputContextData
 {
-private:
-    LanguageType    meLanguage;
-
-public:
-                    CommandInputContextData();
-                    CommandInputContextData( LanguageType eLang );
 };
 
 enum class CommandWheelMode
@@ -120,19 +124,18 @@ enum class CommandWheelMode
     NONE              = 0,
     SCROLL            = 1,
     ZOOM              = 2,
-    ZOOM_SCALE        = 3,
-    DATAZOOM          = 4
+    DATAZOOM          = 3
 };
 
 // Magic value used in mnLines field in CommandWheelData
-#define COMMAND_WHEEL_PAGESCROLL        ((sal_uLong)0xFFFFFFFF)
+#define COMMAND_WHEEL_PAGESCROLL        (sal_uLong(0xFFFFFFFF))
 
 class VCL_DLLPUBLIC CommandWheelData
 {
 private:
     long              mnDelta;
     long              mnNotchDelta;
-    sal_uLong         mnLines;
+    double            mnLines;
     CommandWheelMode  mnWheelMode;
     sal_uInt16        mnCode;
     bool              mbHorz;
@@ -141,13 +144,13 @@ private:
 public:
                     CommandWheelData();
                     CommandWheelData( long nWheelDelta, long nWheelNotchDelta,
-                                      sal_uLong nScrollLines,
+                                      double nScrollLines,
                                       CommandWheelMode nWheelMode, sal_uInt16 nKeyModifier,
-                                      bool bHorz = false, bool bDeltaIsPixel = false );
+                                      bool bHorz, bool bDeltaIsPixel = false );
 
     long            GetDelta() const { return mnDelta; }
     long            GetNotchDelta() const { return mnNotchDelta; }
-    sal_uLong       GetScrollLines() const { return mnLines; }
+    double          GetScrollLines() const { return mnLines; }
     bool            IsHorz() const { return mbHorz; }
     bool            IsDeltaPixel() const { return mbDeltaIsPixel; }
 
@@ -170,7 +173,6 @@ private:
     long            mnDeltaY;
 
 public:
-                    CommandScrollData();
                     CommandScrollData( long nDeltaX, long nDeltaY );
 
     long            GetDeltaX() const { return mnDeltaX; }
@@ -180,16 +182,17 @@ public:
 class VCL_DLLPUBLIC CommandModKeyData
 {
 private:
-    sal_uInt16          mnCode;
+    bool            mbDown;
+    ModKeyFlags     mnCode;
 
 public:
-                    CommandModKeyData();
-                    CommandModKeyData( sal_uInt16 nCode );
+                    CommandModKeyData( ModKeyFlags nCode, bool bDown );
 
-    bool            IsMod1()    const { return (mnCode & MODKEY_MOD1) != 0; }
-    bool            IsMod2()    const { return (mnCode & MODKEY_MOD2) != 0; }
-    bool            IsLeftShift() const { return (mnCode & MODKEY_LSHIFT) != 0; }
-    bool            IsRightShift() const { return (mnCode & MODKEY_RSHIFT) != 0; }
+    bool            IsDown()       const { return mbDown; }
+    bool            IsMod1()       const { return bool(mnCode & ModKeyFlags::Mod1Msk); }
+    bool            IsMod2()       const { return bool(mnCode & ModKeyFlags::Mod2Msk); }
+    bool            IsLeftShift()  const { return bool(mnCode & ModKeyFlags::LeftShift); }
+    bool            IsRightShift() const { return bool(mnCode & ModKeyFlags::RightShift); }
 };
 
 enum class ShowDialogId
@@ -200,9 +203,9 @@ enum class ShowDialogId
 
 class VCL_DLLPUBLIC CommandDialogData
 {
-    ShowDialogId   m_nDialogId;
+    ShowDialogId const   m_nDialogId;
 public:
-    CommandDialogData( ShowDialogId nDialogId = ShowDialogId::Preferences )
+    CommandDialogData( ShowDialogId nDialogId )
     : m_nDialogId( nDialogId )
     {}
 
@@ -230,15 +233,13 @@ enum class MediaCommand
     VolumeMute            = 16,// Mute the volume.
     VolumeUp              = 17,// Raise the volume.
     Menu                  = 18,// Button Menu pressed.
-    MenuHold              = 19,// Button Menu (long) pressed.
     PlayHold              = 20,// Button Play (long) pressed.
     NextTrackHold         = 21,// Button Right holding pressed.
-    PreviousTrackHold     = 22,// Button Left holding pressed.
 };
 
 class VCL_DLLPUBLIC CommandMediaData
 {
-    MediaCommand m_nMediaId;
+    MediaCommand const m_nMediaId;
     bool m_bPassThroughToOS;
 public:
     CommandMediaData(MediaCommand nMediaId)
@@ -258,7 +259,6 @@ private:
     sal_uLong          mnEnd;
 
 public:
-    CommandSelectionChangeData();
     CommandSelectionChangeData( sal_uLong nStart, sal_uLong nEnd );
 
     sal_uLong          GetStart() const { return mnStart; }
@@ -267,7 +267,7 @@ public:
 
 class VCL_DLLPUBLIC CommandSwipeData
 {
-    double mnVelocityX;
+    double const mnVelocityX;
 public:
     CommandSwipeData()
         : mnVelocityX(0)
@@ -283,8 +283,8 @@ public:
 
 class VCL_DLLPUBLIC CommandLongPressData
 {
-    double mnX;
-    double mnY;
+    double const mnX;
+    double const mnY;
 public:
     CommandLongPressData()
         : mnX(0)
@@ -315,7 +315,6 @@ enum class CommandEventId
     CursorPos               = 11,
     PasteSelection          = 12,
     ModKeyChange            = 13,
-    HangulHanjaConversion   = 14,
     InputLanguageChange     = 15,
     ShowDialog              = 16,
     Media                   = 17,

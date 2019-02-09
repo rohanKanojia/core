@@ -38,14 +38,10 @@ enum Orientation {
 };
 
 enum Tag {
-    ORIENTATION         = 0x0112,
-    X_RESOLUTION        = 0x011a,
-    Y_RESOLUTION        = 0x011b,
-    EXIF_OFFSET         = 0x8769,
-    INTEROP_OFFSET      = 0xa005
+    ORIENTATION         = 0x0112
 };
 
-class Exif
+class Exif final
 {
 private:
     Orientation maOrientation;
@@ -63,7 +59,7 @@ private:
     };
 
     struct TiffHeader {
-        sal_uInt16 byteOrder;
+        sal_uInt16 const byteOrder;
         sal_uInt16 tagAlign;
         sal_uInt32 offset;
     };
@@ -72,7 +68,7 @@ private:
 
 public:
     Exif();
-    virtual ~Exif();
+    ~Exif();
 
     bool hasExif() { return mbExifPresent;}
 

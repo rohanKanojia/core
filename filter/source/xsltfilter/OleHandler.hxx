@@ -57,24 +57,39 @@ namespace XSLT
     class OleHandler
     {
     public:
-        OleHandler(const css::uno::Reference<XComponentContext>& rxContext){
-            m_xContext = rxContext;
+        OleHandler(const css::uno::Reference<XComponentContext>& rxContext)
+            : m_xContext(rxContext)
+            , m_tcontext(nullptr)
+        {
         }
-        void SAL_CALL          insertByName(const OUString& streamName, const OString& content);
-        const OString SAL_CALL getByName(const OUString& streamName);
+        ~OleHandler()
+        {
+            if (m_tcontext)
+                m_tcontext->_private = nullptr;
+        }
+        void          insertByName(const OUString& streamName, const OString& content);
+        const OString getByName(const OUString& streamName);
+        void registercontext(xsltTransformContextPtr context)
+        {
+            assert(context);
+            m_tcontext = context;
+            m_tcontext->_private = this;
+        }
 
     private:
         css::uno::Reference<XComponentContext> m_xContext;
         css::uno::Reference<XNameContainer> m_storage;
         css::uno::Reference<XStream> m_rootStream;
+        xsltTransformContextPtr m_tcontext;
 
-        void SAL_CALL    ensureCreateRootStorage();
-        OString SAL_CALL encodeSubStorage(const OUString& streamName);
-        void SAL_CALL    insertSubStorage(const OUString& streamName, const OString& content);
-        void SAL_CALL    initRootStorageFromBase64(const OString& content);
-        css::uno::Reference<XStream> SAL_CALL createTempFile();
+        void    ensureCreateRootStorage();
+        OString encodeSubStorage(const OUString& streamName);
+        void    insertSubStorage(const OUString& streamName, const OString& content);
+        void    initRootStorageFromBase64(const OString& content);
+        css::uno::Reference<XStream> createTempFile();
     };
 }
 
-
 #endif // INCLUDED_FILTER_SOURCE_XSLTFILTER_OLEHANDLER_HXX
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

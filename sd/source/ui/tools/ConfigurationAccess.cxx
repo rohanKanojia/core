@@ -17,14 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tools/ConfigurationAccess.hxx"
+#include <tools/ConfigurationAccess.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -59,22 +62,12 @@ void ConfigurationAccess::Initialize (
 {
     try
     {
-        Sequence<Any> aCreationArguments(3);
-        aCreationArguments[0] = makeAny(beans::PropertyValue(
-            "nodepath",
-            0,
-            makeAny(rsRootName),
-            beans::PropertyState_DIRECT_VALUE));
-        aCreationArguments[1] = makeAny(beans::PropertyValue(
-            "depth",
-            0,
-            makeAny((sal_Int32)-1),
-            beans::PropertyState_DIRECT_VALUE));
-        aCreationArguments[2] = makeAny(beans::PropertyValue(
-            "lazywrite",
-            0,
-            makeAny(true),
-            beans::PropertyState_DIRECT_VALUE));
+        Sequence<Any> aCreationArguments(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", makeAny(rsRootName)},
+            {"depth", makeAny(sal_Int32(-1))}
+        }));
+
         OUString sAccessService;
         if (eMode == READ_ONLY)
             sAccessService = "com.sun.star.configuration.ConfigurationAccess";
@@ -87,7 +80,7 @@ void ConfigurationAccess::Initialize (
     }
     catch (Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd.tools");
     }
 }
 
@@ -115,9 +108,7 @@ Any ConfigurationAccess::GetConfigurationNode (
     }
     catch (const Exception& rException)
     {
-        OSL_TRACE ("caught exception while getting configuration node %s: %s",
-            OUStringToOString(sPathToNode, RTL_TEXTENCODING_UTF8).getStr(),
-            OUStringToOString(rException.Message, RTL_TEXTENCODING_UTF8).getStr());
+        SAL_WARN("sd", "caught exception while getting configuration node" << sPathToNode << ": " << rException);
     }
 
     return Any();

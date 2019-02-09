@@ -47,6 +47,7 @@ import java.lang.reflect.Method;
 import java.util.Random;
 
 // ---------- junit imports -----------------
+import org.junit.After;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -127,6 +128,11 @@ public class RowSet extends TestCase
         }
     }
 
+    @After public final void closeAndDeleteDatabase() {
+        if (m_database != null) {
+            m_database.closeAndDelete();
+        }
+    }
 
     /** creates a com.sun.star.sdb.RowSet to use during the test
      *  @param command
@@ -528,7 +534,12 @@ public class RowSet extends TestCase
      */
     private int positionRandom() throws SQLException, UnknownPropertyException, WrappedTargetException
     {
-        final int position = (new Random()).nextInt(currentRowCount() - 2) + 2;
+        // note: obviously this should subtract 2 but actually subtract 3
+        // because if we have just deleted the current row then
+        // ORowSetBase::impl_getRowCount() will lie and currentRowCount()
+        // returns 1 more than the actual number of rows and then
+        // positionRandom() followed by deleteRow() deletes *last* row
+        final int position = (new Random()).nextInt(currentRowCount() - 3) + 2;
         assertTrue("sub task failed: could not position to row no. " + (Integer.valueOf(position)).toString(),
                 m_resultSet.absolute(position));
         return m_resultSet.getRow();

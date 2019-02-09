@@ -21,8 +21,6 @@
 #define INCLUDED_BASEGFX_TUPLE_B2ITUPLE_HXX
 
 #include <sal/types.h>
-#include <basegfx/numeric/ftools.hxx>
-#include <algorithm>
 #include <basegfx/basegfxdllapi.h>
 
 namespace basegfx
@@ -64,19 +62,6 @@ namespace basegfx
         B2ITuple(sal_Int32 fX, sal_Int32 fY)
         :   mnX( fX ),
             mnY( fY )
-        {}
-
-        /** Create a copy of a 2D Tuple
-
-            @param rTup
-            The 2D Tuple which will be copied.
-        */
-        B2ITuple(const B2ITuple& rTup)
-        :   mnX( rTup.mnX ),
-            mnY( rTup.mnY )
-        {}
-
-        ~B2ITuple()
         {}
 
         /// Get X-Coordinate of 2D Tuple
@@ -184,13 +169,6 @@ namespace basegfx
         bool operator!=( const B2ITuple& rTup ) const
         {
             return !(*this == rTup);
-        }
-
-        B2ITuple& operator=( const B2ITuple& rTup )
-        {
-            mnX = rTup.mnX;
-            mnY = rTup.mnY;
-            return *this;
         }
     };
 

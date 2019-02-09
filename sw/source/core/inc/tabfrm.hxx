@@ -19,7 +19,6 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_TABFRM_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_TABFRM_HXX
 
-#include <tools/mempool.hxx>
 #include "layfrm.hxx"
 #include "flowfrm.hxx"
 
@@ -30,9 +29,9 @@ class SwAttrSetChg;
 /// SwTabFrame is one table in the document layout, containing rows (which contain cells).
 class SwTabFrame: public SwLayoutFrame, public SwFlowFrame
 {
-    friend void CalcContent( SwLayoutFrame *pLay, bool bNoColl, bool bNoCalcFollow );
+    friend void CalcContent( SwLayoutFrame *pLay, bool bNoColl );
 
-    // does the special treatment for _Get[Next|Prev]Leaf()
+    // does the special treatment for Get_[Next|Prev]Leaf()
     using SwFrame::GetLeaf;
 
     SwTable * m_pTable;
@@ -91,9 +90,9 @@ class SwTabFrame: public SwLayoutFrame, public SwFlowFrame
      * Join() gets the Follow's content and destroys it.
      */
     bool Split( const SwTwips nCutPos, bool bTryToSplit, bool bTableRowKeep );
-    bool Join();
+    void Join();
 
-    void _UpdateAttr(
+    void UpdateAttr_(
         const SfxPoolItem*,
         const SfxPoolItem*, sal_uInt8 &,
         SwAttrSetChg *pa = nullptr,
@@ -102,7 +101,7 @@ class SwTabFrame: public SwLayoutFrame, public SwFlowFrame
     virtual bool ShouldBwdMoved( SwLayoutFrame *pNewUpper, bool bHead, bool &rReformat ) override;
 
     virtual void DestroyImpl() override;
-    virtual ~SwTabFrame();
+    virtual ~SwTabFrame() override;
 
 protected:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
@@ -112,7 +111,7 @@ protected:
     virtual SwTwips GrowFrame  ( SwTwips, bool bTst = false, bool bInfo = false ) override;
 
 public:
-    SwTabFrame( SwTable &, SwFrame* );  // calling Regist Flys always after creation _and_pasting!
+    SwTabFrame( SwTable &, SwFrame* );  // calling RegistFlys always after creation _and_pasting!
     SwTabFrame( SwTabFrame & ); // _only_ for the creation of follows
 
     void JoinAndDelFollows();   // for DelFrames of the TableNodes!
@@ -125,7 +124,7 @@ public:
     SwTabFrame* FindMaster( bool bFirstMaster = false ) const;
 
     virtual bool GetInfo( SfxPoolItem &rHint ) const override;
-    virtual void Paint( vcl::RenderContext& rRenderContext, SwRect const&,
+    virtual void PaintSwFrame( vcl::RenderContext& rRenderContext, SwRect const&,
                         SwPrintData const*const pPrintData = nullptr ) const override;
     virtual void CheckDirection( bool bVert ) override;
 
@@ -156,8 +155,6 @@ public:
 
     bool HasFollowFlowLine() const { return m_bHasFollowFlowLine; }
     void SetFollowFlowLine(bool bNew) { m_bHasFollowFlowLine = bNew; }
-    //return the SwTabFrame (if any) that this SwTabFrame is a follow flow line for
-    SwTabFrame* GetFollowFlowLineFor();
 
     bool IsRebuildLastLine() const { return m_bIsRebuildLastLine; }
     void SetRebuildLastLine(bool bNew) { m_bIsRebuildLastLine = bNew; }
@@ -219,8 +216,6 @@ public:
     sal_uInt16 GetBottomLineSize() const;
 
     virtual void dumpAsXmlAttributes(xmlTextWriterPtr writer) const override;
-
-    DECL_FIXEDMEMPOOL_NEWDEL(SwTabFrame)
 };
 
 inline const SwContentFrame *SwTabFrame::FindLastContent() const

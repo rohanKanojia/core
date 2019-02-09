@@ -23,10 +23,10 @@
 #include <com/sun/star/uno/genfunc.hxx>
 #include <uno/data.h>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/unointerfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/vtables.hxx"
+#include "bridge.hxx"
+#include "types.hxx"
+#include "unointerfaceproxy.hxx"
+#include "vtables.hxx"
 
 #include "msci.hxx"
 
@@ -439,7 +439,7 @@ void unoInterfaceProxyDispatch(
     default:
     {
         ::com::sun::star::uno::RuntimeException aExc(
-            OUString("illegal member type description!"),
+            "illegal member type description!",
             ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >() );
 
         Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();

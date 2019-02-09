@@ -23,6 +23,7 @@
 #include <sfx2/dllapi.h>
 #include <sal/types.h>
 #include <svl/poolitem.hxx>
+#include <tools/debug.hxx>
 #if defined( DBG_UTIL )
 #include <sfx2/msg.hxx>
 #endif
@@ -37,11 +38,6 @@ private:
     sal_uInt16              nId;
     SfxControllerItem*  pNext; // to notify next ControllerItem
     SfxBindings*        pBindings;
-
-protected:
-#if defined( DBG_UTIL )
-    SAL_DLLPRIVATE void CheckConfigure_Impl( SfxSlotMode nType );
-#endif
 
 public:
     SfxBindings &       GetBindings() {
@@ -58,12 +54,11 @@ public:
     virtual             ~SfxControllerItem();
     virtual void        dispose();
 
-    void                Bind( sal_uInt16 nNewId, SfxBindings * = nullptr);    // Register in SfxBindings
+    void                Bind( sal_uInt16 nNewId, SfxBindings *);    // Register in SfxBindings
     void                UnBind();
     void                ReBind();
     bool                IsBound() const;
     void                ClearCache();
-    void                SetBindings(SfxBindings &rBindings) { pBindings = &rBindings; }
 
     SfxControllerItem*  GetItemLink();
     SfxControllerItem*  ChangeItemLink( SfxControllerItem* pNewLink );
@@ -74,12 +69,10 @@ public:
     virtual void        StateChanged( sal_uInt16 nSID, SfxItemState eState,
                                       const SfxPoolItem* pState );
 
-    SfxMapUnit          GetCoreMetric() const;
+    MapUnit             GetCoreMetric() const;
 
     static SfxItemState GetItemState( const SfxPoolItem* pState );
 
-    SAL_DLLPRIVATE bool IsBindable_Impl() const
-                        { return pBindings != nullptr; }
     SAL_DLLPRIVATE void BindInternal_Impl( sal_uInt16 nNewId, SfxBindings* );
 };
 

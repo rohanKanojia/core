@@ -22,15 +22,16 @@
 
 #include <svl/broadcast.hxx>
 #include <set>
+#include <tools/solar.h>
 
-#include "callform.hxx"
+#include <callform.hxx>
 
 extern "C" {
 void CALLTYPE ScAddInAsyncCallBack( double& nHandle, void* pData );
 }
 
 class ScDocument;
-class ScAddInDocs : public std::set<ScDocument*> {};
+using ScAddInDocs = std::set<ScDocument*>;
 
 class ScAddInAsync : public SvtBroadcaster
 {
@@ -40,19 +41,17 @@ private:
         double      nVal;               // current value
         OUString*   pStr;
     };
-    ScAddInDocs*    pDocs;              // List of using documents
+    std::unique_ptr<ScAddInDocs> pDocs; // List of using documents
     LegacyFuncData* mpFuncData;         // Pointer to data in collection
-    sal_uLong       nHandle;            // is casted from double to sal_uLong
-    ParamType       meType;             // result of type PTR_DOUBLE or PTR_STRING
+    sal_uLong const nHandle;            // is casted from double to sal_uLong
+    ParamType const meType;             // result of type PTR_DOUBLE or PTR_STRING
     bool            bValid;             // is value valid?
 
 public:
     // cTor only if ScAddInAsync::Get fails.
     // nIndex: Index from FunctionCollection
     ScAddInAsync(sal_uLong nHandle, LegacyFuncData* pFuncData, ScDocument* pDoc);
-                    // default-cTor only for that single, global aSeekObj!
-                    ScAddInAsync();
-    virtual         ~ScAddInAsync();
+    virtual         ~ScAddInAsync() override;
     static ScAddInAsync*    Get( sal_uLong nHandle );
     static void     CallBack( sal_uLong nHandle, void* pData );
     static void     RemoveDocument( ScDocument* pDocument );
@@ -70,9 +69,9 @@ public:
 
 struct CompareScAddInAsync
 {
-  bool operator()( ScAddInAsync* const& lhs, ScAddInAsync* const& rhs ) const { return (*lhs)<(*rhs); }
+  bool operator()( std::unique_ptr<ScAddInAsync> const& lhs, std::unique_ptr<ScAddInAsync> const& rhs ) const { return (*lhs)<(*rhs); }
 };
-class ScAddInAsyncs : public std::set<ScAddInAsync*, CompareScAddInAsync> {};
+using ScAddInAsyncs = std::set<std::unique_ptr<ScAddInAsync>, CompareScAddInAsync>;
 
 extern ScAddInAsyncs theAddInAsyncTbl;  // in adiasync.cxx
 

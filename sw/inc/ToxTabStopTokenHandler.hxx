@@ -11,10 +11,9 @@
 #ifndef TOXTABSTOPTOKENHANDLER_HXX_
 #define TOXTABSTOPTOKENHANDLER_HXX_
 
-#include "swdllapi.h"
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 
-#include "editeng/tstpitem.hxx"
+#include <editeng/tstpitem.hxx>
 
 struct SwFormToken;
 class SwPageDesc;
@@ -56,7 +55,7 @@ public:
 
     enum TabStopReferencePolicy {TABSTOPS_RELATIVE_TO_INDENT, TABSTOPS_RELATIVE_TO_PAGE};
 
-   /**
+    /**
     * @param indexOfSectionNode
     * The index of the section node. It is needed to determine whether a page description was given by a node
     * before the tox section.
@@ -73,7 +72,7 @@ public:
     */
     DefaultToxTabStopTokenHandler(sal_uInt32 indexOfSectionNode, const SwPageDesc& defaultPageDescription,
             bool tabPositionIsRelativeToParagraphIndent,
-            TabStopReferencePolicy referencePolicy = TABSTOPS_RELATIVE_TO_PAGE);
+            TabStopReferencePolicy referencePolicy);
 
     /** Handle a tab stop token.
      *
@@ -101,10 +100,10 @@ private:
     long
     CalculatePageMarginFromPageDescription(const SwTextNode& targetNode) const;
 
-    sal_uInt32 mIndexOfSectionNode;
+    sal_uInt32 const mIndexOfSectionNode;
     const SwPageDesc& mDefaultPageDescription;
-    bool mTabPositionIsRelativeToParagraphIndent;
-    TabStopReferencePolicy mTabStopReferencePolicy;
+    bool const mTabPositionIsRelativeToParagraphIndent;
+    TabStopReferencePolicy const mTabStopReferencePolicy;
 };
 
 }

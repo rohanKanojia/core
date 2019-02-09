@@ -19,7 +19,8 @@
 
 #include "HelperCollections.hxx"
 
-#include "dbastrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 
 namespace dbaccess
 {
@@ -41,32 +42,29 @@ namespace dbaccess
                         bool _bCase,
                         ::cppu::OWeakObject& _rParent,
                         ::osl::Mutex& _rMutex,
-                        const ::std::vector< OUString> &_rVector,
+                        const std::vector< OUString> &_rVector,
                         bool _bUseAsIndex
                     ) : sdbcx::OCollection(_rParent,_bCase,_rMutex,_rVector,_bUseAsIndex)
                         ,m_aColumns(_rColumns)
     {
     }
 
-    OPrivateColumns* OPrivateColumns::createWithIntrinsicNames( const ::rtl::Reference< ::connectivity::OSQLColumns >& _rColumns,
+    std::unique_ptr<OPrivateColumns> OPrivateColumns::createWithIntrinsicNames( const ::rtl::Reference< ::connectivity::OSQLColumns >& _rColumns,
         bool _bCase, ::cppu::OWeakObject& _rParent, ::osl::Mutex& _rMutex )
     {
-        ::std::vector< OUString > aNames; aNames.reserve( _rColumns->get().size() );
+        std::vector< OUString > aNames; aNames.reserve( _rColumns->get().size() );
 
         OUString sColumName;
-        for (   ::connectivity::OSQLColumns::Vector::const_iterator column = _rColumns->get().begin();
-                column != _rColumns->get().end();
-                ++column
-            )
+        for (auto const& column : _rColumns->get())
         {
-            Reference< XPropertySet > xColumn( *column, UNO_QUERY_THROW );
+            Reference< XPropertySet > xColumn(column, UNO_QUERY_THROW);
             xColumn->getPropertyValue( PROPERTY_NAME ) >>= sColumName;
             aNames.push_back( sColumName );
         }
-        return new OPrivateColumns( _rColumns, _bCase, _rParent, _rMutex, aNames, false );
+        return std::unique_ptr<OPrivateColumns>(new OPrivateColumns( _rColumns, _bCase, _rParent, _rMutex, aNames, false ));
     }
 
-    void SAL_CALL OPrivateColumns::disposing()
+    void OPrivateColumns::disposing()
     {
         m_aColumns = nullptr;
         clear_NoDispose();
@@ -98,7 +96,6 @@ namespace dbaccess
             OSQLTables::iterator aIter = m_aTables.find(_rName);
             OSL_ENSURE(aIter != m_aTables.end(),"Table not found!");
             OSL_ENSURE(aIter->second.is(),"Table is null!");
-            (void)aIter;
             return connectivity::sdbcx::ObjectType(m_aTables.find(_rName)->second,UNO_QUERY);
         }
         return nullptr;

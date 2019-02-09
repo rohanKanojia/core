@@ -64,35 +64,26 @@ private:
 public:
 
     explicit TaskCreatorService(const css::uno::Reference< css::uno::XComponentContext >& xContext);
-    virtual ~TaskCreatorService(                                                                   );
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.TaskCreator");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.frame.TaskCreator" };
-        return aSeq;
+        return {"com.sun.star.frame.TaskCreator"};
     }
 
     // XSingleServiceFactory
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance()
-        throw(css::uno::Exception       ,
-              css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance() override;
 
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments(const css::uno::Sequence< css::uno::Any >& lArguments)
-        throw(css::uno::Exception       ,
-              css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments(const css::uno::Sequence< css::uno::Any >& lArguments) override;
 
 private:
 
@@ -120,20 +111,12 @@ TaskCreatorService::TaskCreatorService(const css::uno::Reference< css::uno::XCom
 {
 }
 
-TaskCreatorService::~TaskCreatorService()
-{
-}
-
 css::uno::Reference< css::uno::XInterface > SAL_CALL TaskCreatorService::createInstance()
-    throw(css::uno::Exception       ,
-          css::uno::RuntimeException, std::exception)
 {
     return createInstanceWithArguments(css::uno::Sequence< css::uno::Any >());
 }
 
 css::uno::Reference< css::uno::XInterface > SAL_CALL TaskCreatorService::createInstanceWithArguments(const css::uno::Sequence< css::uno::Any >& lArguments)
-    throw(css::uno::Exception       ,
-          css::uno::RuntimeException, std::exception)
 {
     ::comphelper::SequenceAsHashMap lArgs(lArguments);
 
@@ -146,6 +129,8 @@ css::uno::Reference< css::uno::XInterface > SAL_CALL TaskCreatorService::createI
     css::uno::Reference< css::awt::XWindow >  xContainerWindow              = lArgs.getUnpackedValueOrDefault(ARGUMENT_CONTAINERWINDOW              , css::uno::Reference< css::awt::XWindow >() );
     bool                                  bSupportPersistentWindowState = lArgs.getUnpackedValueOrDefault(ARGUMENT_SUPPORTPERSISTENTWINDOWSTATE , false );
     bool                                  bEnableTitleBarUpdate         = lArgs.getUnpackedValueOrDefault(ARGUMENT_ENABLE_TITLEBARUPDATE        , true );
+    // If the frame is explicitly requested to be hidden.
+    bool bHidden = lArgs.getUnpackedValueOrDefault("HiddenForConversion", false);
 
     // We use FrameName property to set it as API name of the new created frame later.
     // But those frame names must be different from the set of special target names as e.g. _blank, _self etcpp !
@@ -184,6 +169,13 @@ css::uno::Reference< css::uno::XInterface > SAL_CALL TaskCreatorService::createI
     //------------------->
 
     // create the new frame
+    VclPtr<vcl::Window> pContainerWindow = VCLUnoHelper::GetWindow(xContainerWindow);
+    if (pContainerWindow && bHidden)
+    {
+        WindowExtendedStyle eStyle = pContainerWindow->GetExtendedStyle();
+        eStyle |= WindowExtendedStyle::DocHidden;
+        pContainerWindow->SetExtendedStyle(eStyle);
+    }
     css::uno::Reference< css::frame::XFrame2 > xFrame = implts_createFrame(xParentFrame, xContainerWindow, sRightName);
 
     // special freature:
@@ -217,9 +209,9 @@ void TaskCreatorService::implts_applyDocStyleToWindow(const css::uno::Reference<
 {
     // SYNCHRONIZED ->
     SolarMutexGuard aSolarGuard;
-    vcl::Window* pVCLWindow = VCLUnoHelper::GetWindow(xWindow);
+    VclPtr<vcl::Window> pVCLWindow = VCLUnoHelper::GetWindow(xWindow);
     if (pVCLWindow)
-        pVCLWindow->SetExtendedStyle(WB_EXT_DOCUMENT);
+        pVCLWindow->SetExtendedStyle(WindowExtendedStyle::Document);
     // <- SYNCHRONIZED
 }
 
@@ -267,10 +259,7 @@ css::uno::Reference< css::awt::XWindow > TaskCreatorService::implts_createContai
 
     // create a new blank container window and get access to parent container to append new created task.
     css::uno::Reference< css::awt::XWindowPeer > xPeer      = xToolkit->createWindow( aDescriptor );
-    css::uno::Reference< css::awt::XWindow >     xWindow    ( xPeer, css::uno::UNO_QUERY );
-    if ( ! xWindow.is())
-        throw css::uno::Exception("TaskCreator service was not able to create suitable frame window.",
-                                  static_cast< ::cppu::OWeakObject* >(this));
+    css::uno::Reference< css::awt::XWindow >     xWindow    ( xPeer, css::uno::UNO_QUERY_THROW );
 
     sal_Int32 nBackground = 0xffffffff;
 
@@ -278,7 +267,7 @@ css::uno::Reference< css::awt::XWindow > TaskCreatorService::implts_createContai
     {
         try
         {
-            nBackground = ::svtools::ColorConfig().GetColorValue(::svtools::APPBACKGROUND).nColor;
+            nBackground = sal_Int32(::svtools::ColorConfig().GetColorValue(::svtools::APPBACKGROUND).nColor);
         }
         catch (const css::uno::Exception &)
         {
@@ -381,7 +370,7 @@ struct Singleton:
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_TaskCreator_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

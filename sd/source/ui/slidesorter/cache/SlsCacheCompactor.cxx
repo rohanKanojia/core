@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "SlsCacheCompactor.hxx"
 
 #include "SlsBitmapCompressor.hxx"
@@ -24,6 +25,8 @@
 #include "SlsCacheConfiguration.hxx"
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <com/sun/star/uno/Any.hxx>
 #include <set>
 
@@ -82,27 +85,23 @@ namespace sd { namespace slidesorter { namespace cache {
     sal_Int32 nMaximalCacheSize)
 {
     static const char sNone[] = "None";
-    static const char sCompress[] = "Compress";
-    static const char sErase[] = "Erase";
-    static const char sResolution[] = "ResolutionReduction";
-    static const char sPNGCompression[] = "PNGCompression";
 
     std::shared_ptr<BitmapCompressor> pCompressor;
-    OUString sCompressionPolicy(sPNGCompression);
+    OUString sCompressionPolicy("PNGCompression");
     Any aCompressionPolicy (CacheConfiguration::Instance()->GetValue("CompressionPolicy"));
     if (aCompressionPolicy.has<OUString>())
         aCompressionPolicy >>= sCompressionPolicy;
     if (sCompressionPolicy == sNone)
-        pCompressor.reset(new NoBitmapCompression());
-    else if (sCompressionPolicy == sErase)
-        pCompressor.reset(new CompressionByDeletion());
-    else if (sCompressionPolicy == sResolution)
-        pCompressor.reset(new ResolutionReduction());
+        pCompressor.reset(new NoBitmapCompression);
+    else if (sCompressionPolicy == "Erase")
+        pCompressor.reset(new CompressionByDeletion);
+    else if (sCompressionPolicy == "ResolutionReduction")
+        pCompressor.reset(new ResolutionReduction);
     else
-        pCompressor.reset(new PngCompression());
+        pCompressor.reset(new PngCompression);
 
     ::std::unique_ptr<CacheCompactor> pCompactor;
-    OUString sCompactionPolicy(sCompress);
+    OUString sCompactionPolicy("Compress");
     Any aCompactionPolicy (CacheConfiguration::Instance()->GetValue("CompactionPolicy"));
     if (aCompactionPolicy.has<OUString>())
         aCompactionPolicy >>= sCompactionPolicy;
@@ -128,11 +127,11 @@ CacheCompactor::CacheCompactor(
       mbIsCompactionRunning(false)
 {
     maCompactionTimer.SetTimeout(100);
-    maCompactionTimer.SetTimeoutHdl(LINK(this,CacheCompactor,CompactionCallback));
+    maCompactionTimer.SetInvokeHandler(LINK(this,CacheCompactor,CompactionCallback));
 
 }
 
-IMPL_LINK_NOARG_TYPED(CacheCompactor, CompactionCallback, Timer *, void)
+IMPL_LINK_NOARG(CacheCompactor, CompactionCallback, Timer *, void)
 {
     mbIsCompactionRunning = true;
 
@@ -173,13 +172,12 @@ void CacheCompactionByCompression::Run()
 
         ::std::unique_ptr< ::sd::slidesorter::cache::BitmapCache::CacheIndex> pIndex (
             mrCache.GetCacheIndex());
-        ::sd::slidesorter::cache::BitmapCache::CacheIndex::iterator iIndex;
-        for (iIndex=pIndex->begin(); iIndex!=pIndex->end(); ++iIndex)
+        for (const auto& rpIndex : *pIndex)
         {
-            if (*iIndex == nullptr)
+            if (rpIndex == nullptr)
                 continue;
 
-            mrCache.Compress(*iIndex, mpCompressor);
+            mrCache.Compress(rpIndex, mpCompressor);
             if (mrCache.GetSize() < mnMaximalCacheSize)
                 break;
         }

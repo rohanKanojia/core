@@ -17,32 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingbase.hxx"
+#include <drawingbase.hxx>
+#include <addressconverter.hxx>
 
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <osl/diagnose.h>
 #include <oox/helper/attributelist.hxx>
-#include <oox/helper/binaryinputstream.hxx>
-#include "unitconverter.hxx"
-#include <oox/helper/propertyset.hxx>
-#include <oox/token/properties.hxx>
+#include <unitconverter.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 namespace oox {
 namespace xls {
 
-using namespace ::com::sun::star::table;
 using namespace ::oox::drawingml;
 
 namespace {
 
 /** Converts the passed 32-bit integer value from 1/100 mm to EMUs. */
-inline sal_Int64 lclHmmToEmu( sal_Int32 nValue )
+sal_Int64 lclHmmToEmu( sal_Int32 nValue )
 {
     return (nValue < 0) ? -1 : convertHmmToEmu( nValue );
 }
 
 /** Converts the passed 64-bit integer value from EMUs to 1/100 mm. */
-inline sal_Int32 lclEmuToHmm( sal_Int64 nValue )
+sal_Int32 lclEmuToHmm( sal_Int64 nValue )
 {
     return (nValue < 0) ? -1 : convertEmuToHmm( nValue );
 }
@@ -66,7 +65,7 @@ AnchorClientDataModel::AnchorClientDataModel() :
 ShapeAnchor::ShapeAnchor( const WorksheetHelper& rHelper ) :
     WorksheetHelper( rHelper ),
     meAnchorType( ANCHOR_INVALID ),
-    meCellAnchorType( CELLANCHOR_EMU ),
+    meCellAnchorType( CellAnchorType::Emu ),
     meEditAs( ANCHOR_TWOCELL )
 {
 }
@@ -91,13 +90,15 @@ void ShapeAnchor::importAnchor( sal_Int32 nElement, const AttributeList& rAttrib
                     meEditAs = ANCHOR_ABSOLUTE;
                 else if ( sEditAs.equalsIgnoreAsciiCase("oneCell") )
                     meEditAs = ANCHOR_ONECELL;
+                else if (sEditAs.equalsIgnoreAsciiCase("twoCell") )
+                    meEditAs = ANCHOR_TWOCELL;
             }
         }
         break;
         default:
             OSL_ENSURE( false, "ShapeAnchor::importAnchor - unexpected element" );
     }
-    meCellAnchorType = CELLANCHOR_EMU;
+    meCellAnchorType = CellAnchorType::Emu;
 }
 
 void ShapeAnchor::importPos( const AttributeList& rAttribs )
@@ -149,7 +150,7 @@ void ShapeAnchor::setCellPos( sal_Int32 nElement, sal_Int32 nParentContext, cons
 void ShapeAnchor::importVmlAnchor( const OUString& rAnchor )
 {
     meAnchorType = ANCHOR_VML;
-    meCellAnchorType = CELLANCHOR_PIXEL;
+    meCellAnchorType = CellAnchorType::Pixel;
 
     ::std::vector< OUString > aTokens;
     sal_Int32 nIndex = 0;
@@ -175,13 +176,9 @@ bool ShapeAnchor::isAnchorValid() const
     // Checks whether the shape is visible based on the anchor
     // if From and To anchor has the same attribute values, the shape will not have width and height
     // and thus we can assume that such kind of shape will be not be visible
-    if (meAnchorType == ANCHOR_TWOCELL &&
+    return !(meAnchorType == ANCHOR_TWOCELL &&
         (maTo.mnRow == maFrom.mnRow && maTo.mnCol == maFrom.mnCol) &&
-        (maTo.mnColOffset == maFrom.mnColOffset && maTo.mnRowOffset == maFrom.mnRowOffset))
-    {
-        return false;
-    }
-    return true;
+        (maTo.mnColOffset == maFrom.mnColOffset && maTo.mnRowOffset == maFrom.mnRowOffset));
 }
 
 EmuRectangle ShapeAnchor::calcAnchorRectEmu( const css::awt::Size& rPageSizeHmm ) const
@@ -270,27 +267,16 @@ EmuPoint ShapeAnchor::calcCellAnchorEmu( const CellAnchorModel& rModel ) const
     // add the offset inside the cell
     switch( meCellAnchorType )
     {
-        case CELLANCHOR_EMU:
+        case CellAnchorType::Emu:
             aEmuPoint.X += rModel.mnColOffset;
             aEmuPoint.Y += rModel.mnRowOffset;
         break;
 
-        case CELLANCHOR_PIXEL:
+        case CellAnchorType::Pixel:
         {
             const UnitConverter& rUnitConv = getUnitConverter();
-            aEmuPoint.X += static_cast< sal_Int64 >( rUnitConv.scaleValue( static_cast< double >( rModel.mnColOffset ), UNIT_SCREENX, UNIT_EMU ) );
-            aEmuPoint.Y += static_cast< sal_Int64 >( rUnitConv.scaleValue( static_cast< double >( rModel.mnRowOffset ), UNIT_SCREENY, UNIT_EMU ) );
-        }
-        break;
-
-        case CELLANCHOR_COLROW:
-        {
-            css::awt::Size aCellSize = getCellSize( rModel.mnCol, rModel.mnRow );
-            EmuSize aEmuSize( lclHmmToEmu( aCellSize.Width ), lclHmmToEmu( aCellSize.Height ) );
-            // X offset is given in 1/1024 of column width
-            aEmuPoint.X += static_cast< sal_Int64 >( aEmuSize.Width * getLimitedValue< double >( static_cast< double >( rModel.mnColOffset ) / 1024.0, 0.0, 1.0 ) + 0.5 );
-            // Y offset is given in 1/256 of row height
-            aEmuPoint.Y += static_cast< sal_Int64 >( aEmuSize.Height * getLimitedValue< double >( static_cast< double >( rModel.mnRowOffset ) / 256.0, 0.0, 1.0 ) + 0.5 );
+            aEmuPoint.X += static_cast< sal_Int64 >( rUnitConv.scaleValue( static_cast< double >( rModel.mnColOffset ), Unit::ScreenX, Unit::Emu ) );
+            aEmuPoint.Y += static_cast< sal_Int64 >( rUnitConv.scaleValue( static_cast< double >( rModel.mnRowOffset ), Unit::ScreenY, Unit::Emu ) );
         }
         break;
     }

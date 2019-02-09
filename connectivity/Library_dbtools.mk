@@ -40,8 +40,8 @@ $(eval $(call gb_Library_use_libraries,dbtools,\
 	tl \
 	comphelper \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 	svt \
+	vcl \
 ))
 
 ifeq ($(filter-out NETBSD MACOSX,$(OS)),)
@@ -67,8 +67,6 @@ connectivity/source/parse/sqlflex \
 
 $(call gb_LexTarget_get_scanner_target,connectivity/source/parse/sqlflex) : T_LEXFLAGS := -i -8 -PSQLyy -L
 
-
-
 $(eval $(call gb_Library_add_exception_objects,dbtools,\
 	connectivity/source/commontools/AutoRetrievingBase \
 	connectivity/source/commontools/BlobHelper \
@@ -79,7 +77,7 @@ $(eval $(call gb_Library_add_exception_objects,dbtools,\
 	connectivity/source/commontools/FDatabaseMetaDataResultSet \
 	connectivity/source/commontools/FDatabaseMetaDataResultSetMetaData \
 	connectivity/source/commontools/FValue \
-	connectivity/source/commontools/ParamterSubstitution \
+	connectivity/source/commontools/ParameterSubstitution \
 	connectivity/source/commontools/RowFunctionParser \
 	connectivity/source/commontools/TColumnsHelper \
 	connectivity/source/commontools/TConnection \

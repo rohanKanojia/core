@@ -31,8 +31,6 @@ private:
 public:
     static SfxPoolItem* CreateDefault();
     SfxScriptOrganizerItem();
-    SfxScriptOrganizerItem( const SfxScriptOrganizerItem& );
-    virtual ~SfxScriptOrganizerItem();
 
     virtual SfxPoolItem*  Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool          operator==( const SfxPoolItem& ) const override;

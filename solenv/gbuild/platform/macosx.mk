@@ -17,9 +17,6 @@
 #   the License at http://www.apache.org/licenses/LICENSE-2.0 .
 #
 
-# to avoid flashing windows during tests
-export VCL_HIDE_WINDOWS=1
-
 gb_SDKDIR := $(MACOSX_SDK_PATH)
 
 include $(GBUILDDIR)/platform/com_GCC_defs.mk
@@ -36,8 +33,7 @@ gb_OSDEFS := \
 	-DNO_PTHREAD_PRIORITY \
 	-DMAC_OS_X_VERSION_MIN_REQUIRED=$(MAC_OS_X_VERSION_MIN_REQUIRED) \
 	-DMAC_OS_X_VERSION_MAX_ALLOWED=$(MAC_OS_X_VERSION_MAX_ALLOWED) \
-	-DMACOSX_SDK_VERSION=$(MACOSX_SDK_VERSION) \
-	$(EXTRA_CDEFS) \
+	$(LFS_CFLAGS) \
 
 
 gb_CFLAGS := \
@@ -88,13 +84,6 @@ gb_LinkTarget_CXXFLAGS := $(gb_CXXFLAGS)
 gb_LinkTarget_OBJCXXFLAGS := $(gb_CXXFLAGS) $(gb_OBJCXXFLAGS)
 gb_LinkTarget_OBJCFLAGS := $(gb_CFLAGS) $(gb_OBJCFLAGS)
 
-ifeq ($(gb_SYMBOL),$(true))
-gb_LinkTarget_CFLAGS += $(gb_DEBUGINFO_FLAGS)
-gb_LinkTarget_CXXFLAGS += $(gb_DEBUGINFO_FLAGS)
-gb_LinkTarget_OBJCFLAGS += $(gb_DEBUGINFO_FLAGS)
-gb_LinkTarget_OBJCXXFLAGS += $(gb_DEBUGINFO_FLAGS)
-endif
-
 define gb_LinkTarget__get_layer
 $(if $(filter Executable,$(1)),\
 	$$(call gb_Executable_get_layer,$(2)),\
@@ -112,13 +101,7 @@ endef
 
 define gb_LinkTarget__command_dynamiclink
 $(call gb_Helper_abbreviate_dirs,\
-	$(if $(CXXOBJECTS)$(OBJCXXOBJECTS)$(GENCXXOBJECTS)$(EXTRAOBJECTLISTS),$(gb_CXX),$(gb_CC)) \
-		$(if $(filter Executable,$(TARGETTYPE)),$(gb_Executable_TARGETTYPEFLAGS)) \
-		$(if $(filter Bundle,$(TARGETTYPE)),$(gb_Bundle_TARGETTYPEFLAGS)) \
-		$(if $(filter Library CppunitTest,$(TARGETTYPE)),$(gb_Library_TARGETTYPEFLAGS)) \
-		$(subst \d,$$,$(RPATH)) \
-		$(T_LDFLAGS) \
-		$(patsubst lib%.dylib,-l%,$(patsubst %.$(gb_Library_UDK_MAJORVER),%,$(foreach lib,$(LINKED_LIBS),$(call gb_Library_get_filename,$(lib))))) \
+	FILELIST=$(call var2file,$(shell $(gb_MKTEMP)),100, \
 		$(foreach object,$(COBJECTS),$(call gb_CObject_get_target,$(object))) \
 		$(foreach object,$(CXXOBJECTS),$(call gb_CxxObject_get_target,$(object))) \
 		$(foreach object,$(ASMOBJECTS),$(call gb_AsmObject_get_target,$(object))) \
@@ -126,10 +109,21 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(foreach object,$(OBJCXXOBJECTS),$(call gb_ObjCxxObject_get_target,$(object))) \
 		$(foreach object,$(GENCOBJECTS),$(call gb_GenCObject_get_target,$(object))) \
 		$(foreach object,$(GENCXXOBJECTS),$(call gb_GenCxxObject_get_target,$(object))) \
-		$(foreach extraobjectlist,$(EXTRAOBJECTLISTS),`cat $(extraobjectlist)`) \
+		$(foreach extraobjectlist,$(EXTRAOBJECTLISTS),$(shell cat $(extraobjectlist)))) && \
+	cat $${FILELIST} | tr "[:space:]" "\n" | grep -v '^$$' > $${FILELIST}.1 && \
+	mv $${FILELIST}.1 $${FILELIST} && \
+	$(if $(CXXOBJECTS)$(OBJCXXOBJECTS)$(GENCXXOBJECTS)$(EXTRAOBJECTLISTS),$(gb_CXX),$(gb_CC)) \
+		$(if $(filter Executable,$(TARGETTYPE)),$(gb_Executable_TARGETTYPEFLAGS)) \
+		$(if $(filter Bundle,$(TARGETTYPE)),$(gb_Bundle_TARGETTYPEFLAGS)) \
+		$(if $(filter Library CppunitTest,$(TARGETTYPE)),$(gb_Library_TARGETTYPEFLAGS)) \
+		$(subst \d,$$,$(RPATH)) \
+		$(T_LDFLAGS) \
+		$(patsubst lib%.dylib,-l%,$(patsubst %.$(gb_Library_UDK_MAJORVER),%,$(foreach lib,$(LINKED_LIBS),$(call gb_Library_get_filename,$(lib))))) \
+		-Wl$(COMMA)-filelist$(COMMA)$${FILELIST} \
 		$(T_LIBS) \
 		$(foreach lib,$(LINKED_STATIC_LIBS),$(call gb_StaticLibrary_get_target,$(lib))) \
 		-o $(1) && \
+	rm -f $${FILELIST} && \
 	$(if $(SOVERSIONSCRIPT),ln -sf $(1) $(ILIBTARGET),:) && \
 	$(if $(filter Executable,$(TARGETTYPE)), \
 		$(PERL) $(SRCDIR)/solenv/bin/macosx-change-install-names.pl app $(LAYER) $(1) &&) \
@@ -339,7 +333,7 @@ gb_CliAssemblyTarget_get_dll :=
 
 # Extension class
 
-gb_Extension_LICENSEFILE_DEFAULT := $(INSTROOT)/LICENSE
+gb_Extension_LICENSEFILE_DEFAULT := $(INSTROOT)/Resources/LICENSE
 
 # UnpackedTarget class
 
@@ -369,7 +363,7 @@ $(call gb_UIMenubarTarget_get_target,$(1)) :| $(call gb_ExternalExecutable_get_d
 endef
 
 # Python
-gb_Python_PRECOMMAND :=
+gb_Python_PRECOMMAND := PYTHONPATH="$$PYPATH"
 gb_Python_INSTALLED_EXECUTABLE := $(INSTROOT)/$(LIBO_LIB_FOLDER)/LibreOfficePython.framework/Versions/$(PYTHON_VERSION_MAJOR).$(PYTHON_VERSION_MINOR)/Resources/Python.app/Contents/MacOS/LibreOfficePython
 # this is passed to gdb as executable when running tests
 gb_Python_INSTALLED_EXECUTABLE_GDB := $(gb_Python_INSTALLED_EXECUTABLE)

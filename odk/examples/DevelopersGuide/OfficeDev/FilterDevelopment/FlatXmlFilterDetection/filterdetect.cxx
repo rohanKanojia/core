@@ -34,7 +34,6 @@
  *************************************************************************/
 
 #include "filterdetect.hxx"
-#include <osl/diagnose.h>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
@@ -114,7 +113,7 @@ OUString SAL_CALL FilterDetect::detect(Sequence< PropertyValue >& aArguments )
     }
 
     // flatxml starts with an office:document element. this element
-    // conatains a class="..." attribute by which we can deduct the
+    // contains a class="..." attribute by which we can deduct the
     // type of document that is to be loaded
 
     // WARNING:

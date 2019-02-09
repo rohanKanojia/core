@@ -20,6 +20,7 @@
 #define INCLUDED_SFX2_SOURCE_SIDEBAR_PANEL_HXX
 
 #include <sfx2/sidebar/Context.hxx>
+#include <sfx2/dllapi.h>
 
 #include <vcl/window.hxx>
 
@@ -35,7 +36,7 @@ class PanelDescriptor;
 class TitleBar;
 class PanelTitleBar;
 
-class Panel : public vcl::Window
+class SFX2_DLLPUBLIC Panel : public vcl::Window
 {
 public:
     Panel(const PanelDescriptor& rPanelDescriptor, vcl::Window* pParentWindow,
@@ -43,10 +44,10 @@ public:
           const std::function<Context()>& rContextAccess,
           const css::uno::Reference<css::frame::XFrame>& rxFrame);
 
-    virtual ~Panel();
+    virtual ~Panel() override;
     virtual void dispose() override;
 
-    PanelTitleBar* GetTitleBar() const;
+    VclPtr<PanelTitleBar> const & GetTitleBar() const;
     bool IsTitleBarOptional() const { return mbIsTitleBarOptional;}
     void SetUIElement (const css::uno::Reference<css::ui::XUIElement>& rxElement);
     const css::uno::Reference<css::ui::XSidebarPanel>& GetPanelComponent() const { return mxPanelComponent;}
@@ -55,11 +56,10 @@ public:
     bool IsExpanded() const { return mbIsExpanded;}
     bool HasIdPredicate (const OUString& rsId) const;
     const OUString& GetId() const { return msPanelId;}
+    void TriggerDeckLayouting() { maDeckLayoutTrigger(); }
 
-    virtual void Paint (vcl::RenderContext& rRenderContext, const Rectangle& rUpdateArea) override;
     virtual void Resize() override;
     virtual void DataChanged (const DataChangedEvent& rEvent) override;
-    virtual void Activate() override;
     virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
 
 private:

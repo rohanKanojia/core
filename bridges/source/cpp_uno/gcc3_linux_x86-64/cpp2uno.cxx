@@ -23,25 +23,23 @@
 
 #include <rtl/alloc.h>
 #include <sal/log.hxx>
-#include <osl/mutex.hxx>
 
 #include <com/sun/star/uno/genfunc.hxx>
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <config_options.h>
 #include <uno/data.h>
 #include <typelib/typedescription.hxx>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include <bridge.hxx>
+#include <cppinterfaceproxy.hxx>
+#include <types.hxx>
+#include <vtablefactory.hxx>
 
 #include "abi.hxx"
 #include "call.hxx"
 #include "rtti.hxx"
 #include "share.hxx"
 
-using namespace ::osl;
 using namespace ::com::sun::star::uno;
 
 // Perform the UNO call
@@ -162,7 +160,8 @@ static typelib_TypeClass cpp2uno_call(
             }
             else if ( bridges::cpp_uno::shared::relatesToInterfaceType( pParamTypeDescr ) ) // is in/inout
             {
-                uno_copyAndConvertData( pUnoArgs[nPos] = alloca( pParamTypeDescr->nSize ),
+                pUnoArgs[nPos] = alloca( pParamTypeDescr->nSize );
+                uno_copyAndConvertData( pUnoArgs[nPos],
                                         pCppStack, pParamTypeDescr,
                                         pThis->getBridge()->getCpp2Uno() );
                 pTempIndices[nTempIndices] = nPos; // has to be reconverted
@@ -239,7 +238,7 @@ static typelib_TypeClass cpp2uno_call(
         }
         if ( pReturnTypeDescr )
         {
-            typelib_TypeClass eRet = (typelib_TypeClass)pReturnTypeDescr->eTypeClass;
+            typelib_TypeClass eRet = pReturnTypeDescr->eTypeClass;
             TYPELIB_DANGER_RELEASE( pReturnTypeDescr );
             return eRet;
         }
@@ -314,8 +313,8 @@ typelib_TypeClass cpp_vtable_call(
                 // is SET method
                 typelib_MethodParameter aParam;
                 aParam.pTypeRef = pAttrTypeRef;
-                aParam.bIn      = sal_True;
-                aParam.bOut     = sal_False;
+                aParam.bIn      = true;
+                aParam.bOut     = false;
 
                 eRet = cpp2uno_call( pCppI, aMemberDescr.get(),
                         nullptr, // indicates void return
@@ -364,7 +363,8 @@ typelib_TypeClass cpp_vtable_call(
                         }
                         TYPELIB_DANGER_RELEASE( pTD );
                     }
-                } // else perform queryInterface()
+                    [[fallthrough]]; // else perform queryInterface()
+                }
                 default:
                 {
                     typelib_InterfaceMethodTypeDescription *pMethodTD =
@@ -401,11 +401,11 @@ const int codeSnippetSize = 24;
 // Note: The code snippet we build here must not create a stack frame,
 // otherwise the UNO exceptions stop working thanks to non-existing
 // unwinding info.
-unsigned char * codeSnippet( unsigned char * code,
+static unsigned char * codeSnippet( unsigned char * code,
         sal_Int32 nFunctionIndex, sal_Int32 nVtableOffset,
         bool bHasHiddenParam )
 {
-    sal_uInt64 nOffsetAndIndex = ( ( (sal_uInt64) nVtableOffset ) << 32 ) | ( (sal_uInt64) nFunctionIndex );
+    sal_uInt64 nOffsetAndIndex = ( static_cast<sal_uInt64>(nVtableOffset) << 32 ) | static_cast<sal_uInt64>(nFunctionIndex);
 
     if ( bHasHiddenParam )
         nOffsetAndIndex |= 0x80000000;
@@ -443,7 +443,7 @@ bridges::cpp_uno::shared::VtableFactory::mapBlockToVtable(void * block)
     return static_cast< Slot * >(block) + 2;
 }
 
-sal_Size bridges::cpp_uno::shared::VtableFactory::getBlockSize(
+std::size_t bridges::cpp_uno::shared::VtableFactory::getBlockSize(
     sal_Int32 slotCount)
 {
     return (slotCount + 2) * sizeof (Slot) + slotCount * codeSnippetSize;
@@ -480,7 +480,7 @@ unsigned char * bridges::cpp_uno::shared::VtableFactory::addLocalFunctions(
         TYPELIB_DANGER_GET( &pTD, type->ppMembers[ nPos ] );
         assert(pTD);
 
-        if ( typelib_TypeClass_INTERFACE_ATTRIBUTE == pTD->eTypeClass )
+        if ( pTD->eTypeClass == typelib_TypeClass_INTERFACE_ATTRIBUTE )
         {
             typelib_InterfaceAttributeTypeDescription *pAttrTD =
                 reinterpret_cast<typelib_InterfaceAttributeTypeDescription *>( pTD );
@@ -497,7 +497,7 @@ unsigned char * bridges::cpp_uno::shared::VtableFactory::addLocalFunctions(
                 code = codeSnippet( code, nFunctionOffset++, nVtableOffset, false );
             }
         }
-        else if ( typelib_TypeClass_INTERFACE_METHOD == pTD->eTypeClass )
+        else if ( pTD->eTypeClass == typelib_TypeClass_INTERFACE_METHOD )
         {
             typelib_InterfaceMethodTypeDescription *pMethodTD =
                 reinterpret_cast<typelib_InterfaceMethodTypeDescription *>( pTD );

@@ -26,10 +26,10 @@
 class ScStyleSheet;
 class ScDocument;
 
-class ScStyleSheetPool : public SfxStyleSheetPool
+class SC_DLLPUBLIC ScStyleSheetPool : public SfxStyleSheetPool
 {
 public:
-                        ScStyleSheetPool( SfxItemPool&  rPool,
+                        ScStyleSheetPool( const SfxItemPool& rPool,
                                           ScDocument*   pDocument );
 
     void                SetDocument( ScDocument* pDocument );
@@ -43,33 +43,35 @@ public:
     SfxStyleSheetBase*  GetActualStyleSheet ()
                                 { return pActualStyleSheet; }
 
-    void SC_DLLPUBLIC CreateStandardStyles();
+    void                CreateStandardStyles();
     void                CopyStdStylesFrom( ScStyleSheetPool* pSrcPool );
 
     void                CopyStyleFrom( ScStyleSheetPool* pSrcPool,
                                        const OUString& rName, SfxStyleFamily eFamily );
 
+    bool                HasStandardStyles() { return bHasStandardStyles; }
+
     ScStyleSheet*       FindCaseIns( const OUString& rName, SfxStyleFamily eFam );
 
-    const OUString*     GetForceStdName() const { return pForceStdName; }
-
     virtual SfxStyleSheetBase& Make( const OUString&, SfxStyleFamily eFam,
-                                     sal_uInt16 nMask = SFXSTYLEBIT_ALL) override;
+                                     SfxStyleSearchBits nMask = SfxStyleSearchBits::All) override;
+
+    void setAllStandard();
 
 protected:
-    virtual             ~ScStyleSheetPool();
+    virtual             ~ScStyleSheetPool() override;
 
     using SfxStyleSheetPool::Create;    // calcwarnings: Create(const SfxStyleSheet&) - ever used?
 
     virtual SfxStyleSheetBase* Create( const OUString&  rName,
                                        SfxStyleFamily   eFamily,
-                                       sal_uInt16       nMask) override;
+                                       SfxStyleSearchBits     nMask) override;
     virtual SfxStyleSheetBase* Create( const SfxStyleSheetBase& rStyle ) override;
 
 private:
     SfxStyleSheetBase*  pActualStyleSheet;
     ScDocument*         pDoc;
-    const OUString*       pForceStdName;
+    bool                bHasStandardStyles;
 };
 
 #endif // INCLUDED_SC_INC_STLPOOL_HXX

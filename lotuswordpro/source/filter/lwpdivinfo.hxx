@@ -61,11 +61,11 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPDIVINFO_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPDIVINFO_HXX
 
-#include "lwpobj.hxx"
-#include "lwpobjid.hxx"
-#include "lwpatomholder.hxx"
-#include "lwpcolor.hxx"
-#include "lwpheader.hxx"
+#include <lwpobj.hxx>
+#include <lwpobjid.hxx>
+#include <lwpatomholder.hxx>
+#include <lwpcolor.hxx>
+#include <lwpheader.hxx>
 #include "lwpdoc.hxx"
 
 #define STR_OleDivisionClassName    "OLEDivision"
@@ -73,23 +73,22 @@
 class LwpDivInfo : public LwpObject
 {
 public:
-    LwpDivInfo(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpDivInfo(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     LwpObjectID& GetInitialLayoutID() { return m_InitialLayoutID; }
     LwpObjectID& GetFillerPageTextID() { return m_FillerPageTextID; }
-    OUString GetDivName() { return m_Name.str(); }
+    OUString const & GetDivName() { return m_Name.str(); }
 
-    OUString GetClassName() { return m_ClassName.str(); }
+    OUString const & GetClassName() { return m_ClassName.str(); }
     inline bool HasContents();
     inline bool IsOleDivision();
     inline bool IsScrollable();
     inline bool IsGotoable();
-    inline LwpDocument* GetDivision();
     void GetNumberOfPages(sal_uInt16& nPageno);
     sal_uInt16 GetMaxNumberOfPages();
 protected:
     void Read() override;
 private:
-    virtual ~LwpDivInfo();
+    virtual ~LwpDivInfo() override;
 
     LwpObjectID m_ParentID;
     LwpAtomHolder m_Name;
@@ -153,10 +152,6 @@ inline bool LwpDivInfo::IsGotoable()
     return HasContents() && (IsScrollable() || IsOleDivision());
 }
 
-inline LwpDocument* LwpDivInfo::GetDivision()
-{
-    return dynamic_cast<LwpDocument*>(m_ParentID.obj().get());
-}
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

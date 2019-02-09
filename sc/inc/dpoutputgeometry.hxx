@@ -23,13 +23,12 @@
 #include "address.hxx"
 #include <vector>
 
-class ScAddress;
-
 class SC_DLLPUBLIC ScDPOutputGeometry
 {
 public:
     enum FieldType { Column = 0, Row, Page, Data, None };
 
+    ScDPOutputGeometry() = delete;
     ScDPOutputGeometry(const ScRange& rOutRange, bool bShowFilter);
     ~ScDPOutputGeometry();
 
@@ -41,6 +40,8 @@ public:
     void setPageFieldCount(sal_uInt32 nCount);
     void setDataFieldCount(sal_uInt32 nCount);
     void setDataLayoutType(FieldType eType);
+    void setHeaderLayout(bool bHeaderLayout);
+    void setCompactMode(bool bCompactMode);
 
     void getColumnFieldPositions(::std::vector<ScAddress>& rAddrs) const;
     void getRowFieldPositions(::std::vector<ScAddress>& rAddrs) const;
@@ -51,18 +52,18 @@ public:
     std::pair<FieldType, size_t> getFieldButtonType(const ScAddress& rPos) const;
 
 private:
-    ScDPOutputGeometry(); // disabled
-
     void adjustFieldsForDataLayout(sal_uInt32& rColumnFields, sal_uInt32& rRowFields) const;
 
 private:
-    ScRange     maOutRange;
+    ScRange const maOutRange;
     sal_uInt32  mnRowFields;    /// number of row fields
     sal_uInt32  mnColumnFields;
     sal_uInt32  mnPageFields;
     sal_uInt32  mnDataFields;
     FieldType   meDataLayoutType;
-    bool        mbShowFilter;
+    bool const  mbShowFilter;
+    bool        mbHeaderLayout;
+    bool        mbCompactMode; // MSO only setting
 };
 
 #endif

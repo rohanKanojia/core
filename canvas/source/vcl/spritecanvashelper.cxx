@@ -18,11 +18,12 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <boost/cast.hpp>
 
 #include <basegfx/range/b2drectangle.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/bitmapex.hxx>
 #include <vcl/canvastools.hxx>
@@ -36,7 +37,7 @@
 
 using namespace ::com::sun::star;
 
-#define FPS_BOUNDS Rectangle(0,0,130,90)
+#define FPS_BOUNDS ::tools::Rectangle(0,0,130,90)
 #define INFO_COLOR COL_RED
 
 namespace vclcanvas
@@ -66,7 +67,7 @@ namespace vclcanvas
         }
 
         void repaintBackground( OutputDevice&               rOutDev,
-                                OutputDevice&               rBackBuffer,
+                                OutputDevice const &        rBackBuffer,
                                 const ::basegfx::B2DRange&  rArea )
         {
             const ::Point& rPos( vcl::unotools::pointFromB2DPoint( rArea.getMinimum()) );
@@ -79,7 +80,7 @@ namespace vclcanvas
                                      OutputDevice&                      rOutDev,
                                      const ::basegfx::B2IRange&         rArea )
         {
-            const Rectangle& rRequestedArea(
+            const ::tools::Rectangle& rRequestedArea(
                 vcl::unotools::rectangleFromB2IRectangle( rArea ) );
 
             // clip output to actual update region (otherwise a)
@@ -104,10 +105,10 @@ namespace vclcanvas
         {
             vcl::Font aVCLFont;
             aVCLFont.SetFontHeight( 20 );
-            aVCLFont.SetColor( Color( INFO_COLOR ) );
+            aVCLFont.SetColor( INFO_COLOR );
 
             rOutDev.SetTextAlign(ALIGN_TOP);
-            rOutDev.SetTextColor( Color( INFO_COLOR ) );
+            rOutDev.SetTextColor( INFO_COLOR );
             rOutDev.SetFont( aVCLFont );
 
             rOutDev.DrawText( rPos, rStr );
@@ -222,12 +223,12 @@ namespace vclcanvas
             // clips. besides that, will interfere with animations (as for
             // Window-invalidate repaints, only parts of the window will
             // be redrawn otherwise)
-            const vcl::Region aFullWindowRegion( Rectangle(aEmptyPoint,
+            const vcl::Region aFullWindowRegion( ::tools::Rectangle(aEmptyPoint,
                                                       aOutDevSize) );
             pTargetWindow->ExpandPaintClipRegion(aFullWindowRegion);
         }
 
-        // TODO(P1): Might be worthwile to track areas of background
+        // TODO(P1): Might be worthwhile to track areas of background
         // changes, too.
         if( !bUpdateAll && !io_bSurfaceDirty )
         {
@@ -262,7 +263,7 @@ namespace vclcanvas
 
             // repaint all active sprites on top of background into
             // VDev.
-            OutputDevice& rTmpOutDev( *maVDev.get() );
+            OutputDevice& rTmpOutDev( *maVDev );
             mpRedrawManager->forEachSprite(
                     [&rTmpOutDev]( const ::canvas::Sprite::Reference& rSprite )
                     { spriteRedraw( rTmpOutDev, rSprite ); }
@@ -354,7 +355,7 @@ namespace vclcanvas
             ::canvas::tools::spritePixelAreaFromB2DRange( rMoveEnd ) );
         ::basegfx::B2IPoint aDestPos( rDestRect.getMinimum() );
 
-        ::std::vector< ::basegfx::B2IRange > aUnscrollableAreas;
+        std::vector< ::basegfx::B2IRange > aUnscrollableAreas;
 
         // Since strictly speaking, this scroll algorithm is plain
         // buggy, the scrolled area might actually lie _below_ another
@@ -415,7 +416,7 @@ namespace vclcanvas
         // repaint uncovered areas from backbuffer - take the
         // _rounded_ rectangles from above, to have the update
         // consistent with the scroll above.
-        ::std::vector< ::basegfx::B2DRange > aUncoveredAreas;
+        std::vector< ::basegfx::B2DRange > aUncoveredAreas;
         ::basegfx::computeSetDifference( aUncoveredAreas,
                                          rUpdateArea.maTotalBounds,
                                          ::basegfx::B2DRange( rDestRect ) );
@@ -425,7 +426,7 @@ namespace vclcanvas
     }
 
     void SpriteCanvasHelper::opaqueUpdate( SAL_UNUSED_PARAMETER const ::basegfx::B2DRange&,
-                                           const ::std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
+                                           const std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
     {
         ENSURE_OR_THROW( mpOwningSpriteCanvas &&
                          mpOwningSpriteCanvas->getBackBuffer() &&
@@ -452,7 +453,7 @@ namespace vclcanvas
     }
 
     void SpriteCanvasHelper::genericUpdate( const ::basegfx::B2DRange&                          rRequestedArea,
-                                            const ::std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
+                                            const std::vector< ::canvas::Sprite::Reference >& rSortedUpdateSprites )
     {
         ENSURE_OR_THROW( mpOwningSpriteCanvas &&
                          mpOwningSpriteCanvas->getBackBuffer() &&
@@ -471,20 +472,20 @@ namespace vclcanvas
         // otherwise, truncation of size below might leave visible
         // areas uncovered by VDev.
         const ::Point aOutputPosition(
-            ::std::max( sal_Int32( 0 ),
+            std::max( sal_Int32( 0 ),
                         static_cast< sal_Int32 >(rRequestedArea.getMinX()) ),
-            ::std::max( sal_Int32( 0 ),
+            std::max( sal_Int32( 0 ),
                         static_cast< sal_Int32 >(rRequestedArea.getMinY()) ) );
         // round output size towards +infty. Don't want to truncate a
         // fraction of a sprite pixel... Limit coverage of VDev to
         // output device's area (i.e. not only to total size, but to
         // cover _only_ the visible parts).
         const ::Size aOutputSize(
-            ::std::max( sal_Int32( 0 ),
-                        ::std::min( static_cast< sal_Int32 >(rTargetSizePixel.Width() - aOutputPosition.X()),
+            std::max( sal_Int32( 0 ),
+                        std::min( static_cast< sal_Int32 >(rTargetSizePixel.Width() - aOutputPosition.X()),
                                     ::canvas::tools::roundUp( rRequestedArea.getMaxX() - aOutputPosition.X() ))),
-            ::std::max( sal_Int32( 0 ),
-                        ::std::min( static_cast< sal_Int32 >(rTargetSizePixel.Height() - aOutputPosition.Y()),
+            std::max( sal_Int32( 0 ),
+                        std::min( static_cast< sal_Int32 >(rTargetSizePixel.Height() - aOutputPosition.Y()),
                                     ::canvas::tools::roundUp( rRequestedArea.getMaxY() - aOutputPosition.Y() ))));
 
         // early exit for empty output area.
@@ -533,7 +534,7 @@ namespace vclcanvas
                         rSpriteScreenPos - vcl::unotools::b2DPointFromPoint(aOutputPosition)
                         );
 
-                pSprite->redraw( *maVDev.get(), rSpriteRenderPos, true );
+                pSprite->redraw( *maVDev, rSpriteRenderPos, true );
             }
         }
 
@@ -578,7 +579,6 @@ namespace vclcanvas
             {
             }
 
-            void operator()() { *mpTarget += mnIncrement; }
             void operator()( const ::canvas::Sprite::Reference& ) { *mpTarget += mnIncrement; }
             void operator()( T nIncrement ) { *mpTarget += nIncrement; }
 

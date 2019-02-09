@@ -22,6 +22,7 @@
 #include <svl/poolitem.hxx>
 #include <vcl/floatwin.hxx>
 #include <vcl/layout.hxx>
+#include <array>
 
 class Edit;
 class MetricField;
@@ -37,28 +38,26 @@ class LineWidthPopup : public FloatingWindow
 public:
     LineWidthPopup(LinePropertyPanelBase& rParent);
     virtual void dispose() override;
-    virtual ~LineWidthPopup();
+    virtual ~LineWidthPopup() override;
 
-    void SetWidthSelect (long lValue, bool bValuable, SfxMapUnit eMapUnit);
+    void SetWidthSelect (long lValue, bool bValuable, MapUnit eMapUnit);
 
 private:
     LinePropertyPanelBase& m_rParent;
-    OUString* m_pStr;
-    OUString m_sPt;
-    SfxMapUnit m_eMapUnit;
+    std::array<OUString,9> maStrUnits;
+    OUString const m_sPt;
+    MapUnit m_eMapUnit;
     bool m_bVSFocus;
     bool m_bCustom;
-    bool m_bCloseByEdit;
     long m_nCustomWidth;
-    long m_nTmpCustomWidth;
     VclPtr<MetricField> m_xMFWidth;
     VclPtr<VclContainer> m_xBox;
     VclPtr<LineWidthValueSet> m_xVSWidth;
-    Image m_aIMGCus;
-    Image m_aIMGCusGray;
+    Image const m_aIMGCus;
+    Image const m_aIMGCusGray;
 
-    DECL_LINK_TYPED(VSSelectHdl, ValueSet*, void);
-    DECL_LINK_TYPED(MFModifyHdl, Edit&, void);
+    DECL_LINK(VSSelectHdl, ValueSet*, void);
+    DECL_LINK(MFModifyHdl, Edit&, void);
 };
 
 } } // end of namespace svx::sidebar

@@ -21,7 +21,6 @@
 #include "xmlHelper.hxx"
 #include "xmlExport.hxx"
 #include <xmloff/families.hxx>
-#include <tools/debug.hxx>
 namespace dbaxml
 {
     using namespace ::com::sun::star::uno;
@@ -30,7 +29,7 @@ namespace dbaxml
 void OXMLAutoStylePoolP::exportStyleAttributes(
             SvXMLAttributeList& rAttrList,
             sal_Int32 nFamily,
-            const ::std::vector< XMLPropertyState >& rProperties,
+            const std::vector< XMLPropertyState >& rProperties,
             const SvXMLExportPropertyMapper& rPropExp
             , const SvXMLUnitConverter& rUnitConverter,
             const SvXMLNamespaceMap& rNamespaceMap
@@ -40,24 +39,22 @@ void OXMLAutoStylePoolP::exportStyleAttributes(
     if ( nFamily == XML_STYLE_FAMILY_TABLE_COLUMN )
     {
         rtl::Reference< XMLPropertySetMapper > aPropMapper = rODBExport.GetColumnStylesPropertySetMapper();
-        ::std::vector< XMLPropertyState >::const_iterator i = rProperties.begin();
-        ::std::vector< XMLPropertyState >::const_iterator aEnd = rProperties.end();
-        for ( ; i != aEnd ; ++i )
+        for (auto const& property : rProperties)
         {
-            sal_Int16 nContextID = aPropMapper->GetEntryContextId(i->mnIndex);
+            sal_Int16 nContextID = aPropMapper->GetEntryContextId(property.mnIndex);
             switch (nContextID)
             {
                 case CTF_DB_NUMBERFORMAT :
                 {
                     sal_Int32 nNumberFormat = 0;
-                    if ( i->maValue >>= nNumberFormat )
+                    if ( property.maValue >>= nNumberFormat )
                     {
                         OUString sAttrValue = rODBExport.getDataStyleName(nNumberFormat);
                         if ( !sAttrValue.isEmpty() )
                         {
                             GetExport().AddAttribute(
-                                aPropMapper->GetEntryNameSpace(i->mnIndex),
-                                aPropMapper->GetEntryXMLName(i->mnIndex),
+                                aPropMapper->GetEntryNameSpace(property.mnIndex),
+                                aPropMapper->GetEntryXMLName(property.mnIndex),
                                 sAttrValue );
                         }
                     }

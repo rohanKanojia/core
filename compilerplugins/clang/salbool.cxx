@@ -9,11 +9,13 @@
 
 #include <algorithm>
 #include <cassert>
+#include <limits>
 #include <set>
 #include <string>
 
 #include "clang/AST/Attr.h"
 
+#include "check.hxx"
 #include "compat.hxx"
 #include "plugin.hxx"
 
@@ -24,18 +26,11 @@ bool isSalBool(QualType type) {
     return t != nullptr && t->getDecl()->getNameAsString() == "sal_Bool";
 }
 
-// Clang 3.2 FunctionDecl::isInlined doesn't work as advertised ("Determine
-// whether this function should be inlined, because it is either marked 'inline'
-// or 'constexpr' or is a member function of a class that was defined in the
-// class body.") but mis-classifies salhelper::Timer's isTicking, isExpired, and
-// expiresBefore members as defined in salhelper/source/timer.cxx as inlined:
-bool isInlined(FunctionDecl const & decl) {
-#if CLANG_VERSION >= 30300
-    return decl.isInlined();
-#else
-    (void)decl;
-    return false;
-#endif
+bool isSalBoolArray(QualType type) {
+    auto t = type->getAsArrayTypeUnsafe();
+    return t != nullptr
+        && (isSalBool(t->getElementType())
+            || isSalBoolArray(t->getElementType()));
 }
 
 // It appears that, given a function declaration, there is no way to determine
@@ -53,15 +48,9 @@ bool hasCLanguageLinkageType(FunctionDecl const * decl) {
     if (decl->isExternC()) {
         return true;
     }
-#if CLANG_VERSION >= 30300
     if (decl->isInExternCContext()) {
         return true;
     }
-#else
-    if (decl->getCanonicalDecl()->getDeclContext()->isExternCContext()) {
-        return true;
-    }
-#endif
     return false;
 }
 
@@ -81,37 +70,72 @@ OverrideKind getOverrideKind(FunctionDecl const * decl) {
     return OverrideKind::MAYBE;
 }
 
+enum class BoolOverloadKind { No, Yes, CheckNext };
+
+BoolOverloadKind isBoolOverloadOf(
+    FunctionDecl const * f, FunctionDecl const * decl, bool mustBeDeleted)
+{
+    if (!mustBeDeleted || f->isDeleted()) {
+        unsigned n = decl->getNumParams();
+        if (f->getNumParams() == n) {
+            bool hasSB = false;
+            for (unsigned i = 0; i != n; ++i) {
+                QualType t1 { decl->getParamDecl(i)->getType() };
+                bool isSB = isSalBool(t1);
+                bool isSBRef = !isSB && t1->isReferenceType()
+                    && isSalBool(t1.getNonReferenceType());
+                QualType t2 { f->getParamDecl(i)->getType() };
+                if (!(isSB
+                      ? t2->isBooleanType()
+                      : isSBRef
+                      ? (t2->isReferenceType()
+                         && t2.getNonReferenceType()->isBooleanType())
+                      : t2.getCanonicalType() == t1.getCanonicalType()))
+                {
+                    return BoolOverloadKind::CheckNext;
+                }
+                hasSB |= isSB || isSBRef;
+            }
+            return hasSB ? BoolOverloadKind::Yes : BoolOverloadKind::No;
+                // cheaply protect against the case where decl would have no
+                // sal_Bool parameters at all and would match itself
+        }
+    }
+    return BoolOverloadKind::CheckNext;
+}
+
 //TODO: current implementation is not at all general, just tests what we
 // encounter in practice:
 bool hasBoolOverload(FunctionDecl const * decl, bool mustBeDeleted) {
-    unsigned n = decl->getNumParams();
-    auto res = decl->getDeclContext()->lookup(decl->getDeclName());
-    for (auto d = compat::begin(res); d != compat::end(res); ++d) {
-        FunctionDecl const * f = dyn_cast<FunctionDecl>(*d);
-        if (f != nullptr && (!mustBeDeleted || f->isDeleted())) {
-            if (f->getNumParams() == n) {
-                bool hasSB = false;
-                for (unsigned i = 0; i != n; ++i) {
-                    QualType t1 { decl->getParamDecl(i)->getType() };
-                    bool isSB = isSalBool(t1);
-                    bool isSBRef = !isSB && t1->isReferenceType()
-                        && isSalBool(t1.getNonReferenceType());
-                    QualType t2 { f->getParamDecl(i)->getType() };
-                    if (!(isSB
-                          ? t2->isBooleanType()
-                          : isSBRef
-                          ? (t2->isReferenceType()
-                             && t2.getNonReferenceType()->isBooleanType())
-                          : t2 == t1))
-                    {
-                        goto next;
+    auto ctx = decl->getDeclContext();
+    if (!ctx->isLookupContext()) {
+        return false;
+    }
+    auto res = ctx->lookup(decl->getDeclName());
+    for (auto d = res.begin(); d != res.end(); ++d) {
+        if (auto f = dyn_cast<FunctionDecl>(*d)) {
+            switch (isBoolOverloadOf(f, decl, mustBeDeleted)) {
+            case BoolOverloadKind::No:
+                return false;
+            case BoolOverloadKind::Yes:
+                return true;
+            case BoolOverloadKind::CheckNext:
+                break;
+            }
+        } else if (auto ftd = dyn_cast<FunctionTemplateDecl>(*d)) {
+            for (auto f: ftd->specializations()) {
+                if (f->getTemplateSpecializationKind()
+                    == TSK_ExplicitSpecialization)
+                {
+                    switch (isBoolOverloadOf(f, decl, mustBeDeleted)) {
+                    case BoolOverloadKind::No:
+                        return false;
+                    case BoolOverloadKind::Yes:
+                        return true;
+                    case BoolOverloadKind::CheckNext:
+                        break;
                     }
-                    hasSB |= isSB || isSBRef;
                 }
-                return hasSB;
-                    // cheaply protect against the case where decl would have no
-                    // sal_Bool parameters at all and would match itself
-            next:;
             }
         }
     }
@@ -119,10 +143,11 @@ bool hasBoolOverload(FunctionDecl const * decl, bool mustBeDeleted) {
 }
 
 class SalBool:
-    public RecursiveASTVisitor<SalBool>, public loplugin::RewritePlugin
+    public loplugin::FilteringRewritePlugin<SalBool>
 {
 public:
-    explicit SalBool(InstantiationData const & data): RewritePlugin(data) {}
+    explicit SalBool(loplugin::InstantiationData const & data):
+        FilteringRewritePlugin(data) {}
 
     virtual void run() override;
 
@@ -135,6 +160,10 @@ public:
     bool VisitCXXStaticCastExpr(CXXStaticCastExpr * expr);
 
     bool VisitCXXFunctionalCastExpr(CXXFunctionalCastExpr * expr);
+
+    bool VisitImplicitCastExpr(ImplicitCastExpr * expr);
+
+    bool VisitReturnStmt(ReturnStmt const * stmt);
 
     bool WalkUpFromParmVarDecl(ParmVarDecl const * decl);
     bool VisitParmVarDecl(ParmVarDecl const * decl);
@@ -150,19 +179,28 @@ public:
 
     bool VisitValueDecl(ValueDecl const * decl);
 
+    bool TraverseStaticAssertDecl(StaticAssertDecl * decl);
+
+    bool TraverseLinkageSpecDecl(LinkageSpecDecl * decl);
+
 private:
+    bool isFromCIncludeFile(SourceLocation spellingLocation) const;
+
+    bool isSharedCAndCppCode(SourceLocation location) const;
+
     bool isInSpecialMainFile(SourceLocation spellingLocation) const;
 
     bool rewrite(SourceLocation location);
 
     std::set<VarDecl const *> varDecls_;
+    unsigned int externCContexts_ = 0;
 };
 
 void SalBool::run() {
     if (compiler.getLangOpts().CPlusPlus) {
         TraverseDecl(compiler.getASTContext().getTranslationUnitDecl());
         for (auto decl: varDecls_) {
-            SourceLocation loc { decl->getLocStart() };
+            SourceLocation loc { compat::getBeginLoc(decl) };
             TypeSourceInfo * tsi = decl->getTypeSourceInfo();
             if (tsi != nullptr) {
                 SourceLocation l {
@@ -224,37 +262,52 @@ bool SalBool::VisitCallExpr(CallExpr * expr) {
     if (d != nullptr) {
         FunctionDecl const * fd = dyn_cast<FunctionDecl>(d);
         if (fd != nullptr) {
-            PointerType const * pt = fd->getType()->getAs<PointerType>();
-            QualType t2(pt == nullptr ? fd->getType() : pt->getPointeeType());
-            ft = t2->getAs<FunctionProtoType>();
-            assert(
-                ft != nullptr || !compiler.getLangOpts().CPlusPlus
-                || (fd->getBuiltinID() != Builtin::NotBuiltin
-                    && isa<FunctionNoProtoType>(t2)));
-                // __builtin_*s have no proto type?
+            if (!hasBoolOverload(fd, false)) {
+                clang::PointerType const * pt = fd->getType()
+                    ->getAs<clang::PointerType>();
+                QualType t2(
+                    pt == nullptr ? fd->getType() : pt->getPointeeType());
+                ft = t2->getAs<FunctionProtoType>();
+                assert(
+                    ft != nullptr || !compiler.getLangOpts().CPlusPlus
+                    || (fd->getBuiltinID() != Builtin::NotBuiltin
+                        && isa<FunctionNoProtoType>(t2)));
+                    // __builtin_*s have no proto type?
+            }
         } else {
             VarDecl const * vd = dyn_cast<VarDecl>(d);
             if (vd != nullptr) {
-                PointerType const * pt = vd->getType()->getAs<PointerType>();
+                clang::PointerType const * pt = vd->getType()
+                    ->getAs<clang::PointerType>();
                 ft = (pt == nullptr ? vd->getType() : pt->getPointeeType())
                     ->getAs<FunctionProtoType>();
             }
         }
     }
     if (ft != nullptr) {
-        for (unsigned i = 0; i != compat::getNumParams(*ft); ++i) {
-            QualType t(compat::getParamType(*ft, i));
+        for (unsigned i = 0; i != ft->getNumParams(); ++i) {
+            QualType t(ft->getParamType(i));
+            bool b = false;
             if (t->isLValueReferenceType()) {
                 t = t.getNonReferenceType();
-                if (!t.isConstQualified() && isSalBool(t)
-                    && i < expr->getNumArgs())
-                {
-                    DeclRefExpr * ref = dyn_cast<DeclRefExpr>(expr->getArg(i));
-                    if (ref != nullptr) {
-                        VarDecl const * d = dyn_cast<VarDecl>(ref->getDecl());
-                        if (d != nullptr) {
-                            varDecls_.erase(d);
-                        }
+                b = !t.isConstQualified() && isSalBool(t);
+            } else if (t->isPointerType()) {
+                for (;;) {
+                    auto t2 = t->getAs<clang::PointerType>();
+                    if (t2 == nullptr) {
+                        break;
+                    }
+                    t = t2->getPointeeType();
+                }
+                b = isSalBool(t);
+            }
+            if (b && i < expr->getNumArgs()) {
+                DeclRefExpr * ref = dyn_cast<DeclRefExpr>(
+                    expr->getArg(i)->IgnoreParenImpCasts());
+                if (ref != nullptr) {
+                    VarDecl const * d = dyn_cast<VarDecl>(ref->getDecl());
+                    if (d != nullptr) {
+                        varDecls_.erase(d);
                     }
                 }
             }
@@ -268,21 +321,59 @@ bool SalBool::VisitCStyleCastExpr(CStyleCastExpr * expr) {
         return true;
     }
     if (isSalBool(expr->getType())) {
-        SourceLocation loc { expr->getLocStart() };
+        SourceLocation loc { compat::getBeginLoc(expr) };
         while (compiler.getSourceManager().isMacroArgExpansion(loc)) {
             loc = compiler.getSourceManager().getImmediateMacroCallerLoc(loc);
         }
-        if (compat::isMacroBodyExpansion(compiler, loc)) {
+        if (compiler.getSourceManager().isMacroBodyExpansion(loc)) {
             StringRef name { Lexer::getImmediateMacroName(
                 loc, compiler.getSourceManager(), compiler.getLangOpts()) };
             if (name == "sal_False" || name == "sal_True") {
+                auto callLoc = compiler.getSourceManager()
+                    .getImmediateMacroCallerLoc(loc);
+                if (!isSharedCAndCppCode(callLoc)) {
+                    SourceLocation argLoc;
+                    if (compiler.getSourceManager().isMacroArgExpansion(
+                            compat::getBeginLoc(expr), &argLoc)
+                        //TODO: check it's the complete (first) arg to the macro
+                        && (Lexer::getImmediateMacroName(
+                                argLoc, compiler.getSourceManager(),
+                                compiler.getLangOpts())
+                            == "CPPUNIT_ASSERT_EQUAL"))
+                    {
+                        // Ignore sal_False/True that are directly used as
+                        // arguments to CPPUNIT_ASSERT_EQUAL:
+                        return true;
+                    }
+                    bool b = name == "sal_True";
+                    if (rewriter != nullptr) {
+                        auto callSpellLoc = compiler.getSourceManager()
+                            .getSpellingLoc(callLoc);
+                        unsigned n = Lexer::MeasureTokenLength(
+                            callSpellLoc, compiler.getSourceManager(),
+                            compiler.getLangOpts());
+                        if (StringRef(
+                                compiler.getSourceManager().getCharacterData(
+                                    callSpellLoc),
+                                n)
+                            == name)
+                        {
+                            return replaceText(
+                                callSpellLoc, n, b ? "true" : "false");
+                        }
+                    }
+                    report(
+                        DiagnosticsEngine::Warning,
+                        "use '%select{false|true}0' instead of '%1'", callLoc)
+                        << b << name << expr->getSourceRange();
+                }
                 return true;
             }
         }
         report(
             DiagnosticsEngine::Warning,
             "CStyleCastExpr, suspicious cast from %0 to %1",
-            expr->getLocStart())
+            compat::getBeginLoc(expr))
             << expr->getSubExpr()->IgnoreParenImpCasts()->getType()
             << expr->getType() << expr->getSourceRange();
     }
@@ -295,12 +386,12 @@ bool SalBool::VisitCXXStaticCastExpr(CXXStaticCastExpr * expr) {
     }
     if (isSalBool(expr->getType())
         && !isInSpecialMainFile(
-            compiler.getSourceManager().getSpellingLoc(expr->getLocStart())))
+            compiler.getSourceManager().getSpellingLoc(compat::getBeginLoc(expr))))
     {
         report(
             DiagnosticsEngine::Warning,
             "CXXStaticCastExpr, suspicious cast from %0 to %1",
-            expr->getLocStart())
+            compat::getBeginLoc(expr))
             << expr->getSubExpr()->IgnoreParenImpCasts()->getType()
             << expr->getType() << expr->getSourceRange();
     }
@@ -315,10 +406,104 @@ bool SalBool::VisitCXXFunctionalCastExpr(CXXFunctionalCastExpr * expr) {
         report(
             DiagnosticsEngine::Warning,
             "CXXFunctionalCastExpr, suspicious cast from %0 to %1",
-            expr->getLocStart())
+            compat::getBeginLoc(expr))
             << expr->getSubExpr()->IgnoreParenImpCasts()->getType()
             << expr->getType() << expr->getSourceRange();
     }
+    return true;
+}
+
+bool SalBool::VisitImplicitCastExpr(ImplicitCastExpr * expr) {
+    if (ignoreLocation(expr)) {
+        return true;
+    }
+    if (!isSalBool(expr->getType())) {
+        return true;
+    }
+    auto l = compat::getBeginLoc(expr);
+    while (compiler.getSourceManager().isMacroArgExpansion(l)) {
+        l = compiler.getSourceManager().getImmediateMacroCallerLoc(l);
+    }
+    if (compiler.getSourceManager().isMacroBodyExpansion(l)) {
+        auto n = Lexer::getImmediateMacroName(
+            l, compiler.getSourceManager(), compiler.getLangOpts());
+        if (n == "sal_False" || n == "sal_True") {
+            return true;
+        }
+    }
+    auto e1 = expr->getSubExprAsWritten();
+    auto t = e1->getType();
+    if (!t->isFundamentalType() || loplugin::TypeCheck(t).AnyBoolean()) {
+        return true;
+    }
+    auto e2 = dyn_cast<ConditionalOperator>(e1);
+    if (e2 != nullptr) {
+        auto ic1 = dyn_cast<ImplicitCastExpr>(
+            e2->getTrueExpr()->IgnoreParens());
+        auto ic2 = dyn_cast<ImplicitCastExpr>(
+            e2->getFalseExpr()->IgnoreParens());
+        if (ic1 != nullptr && ic2 != nullptr
+            && ic1->getType()->isSpecificBuiltinType(BuiltinType::Int)
+            && (loplugin::TypeCheck(ic1->getSubExprAsWritten()->getType())
+                .AnyBoolean())
+            && ic2->getType()->isSpecificBuiltinType(BuiltinType::Int)
+            && (loplugin::TypeCheck(ic2->getSubExprAsWritten()->getType())
+                .AnyBoolean()))
+        {
+            return true;
+        }
+    }
+    report(
+        DiagnosticsEngine::Warning, "conversion from %0 to sal_Bool",
+        compat::getBeginLoc(expr))
+        << t << expr->getSourceRange();
+    return true;
+}
+
+bool SalBool::VisitReturnStmt(ReturnStmt const * stmt) {
+    // Just enough to avoid warnings in rtl_getUriCharClass (sal/rtl/uri.cxx),
+    // which has
+    //
+    //  static sal_Bool const aCharClass[][nCharClassSize] = ...;
+    //
+    // and
+    //
+    //  return aCharClass[eCharClass];
+    //
+    if (ignoreLocation(stmt)) {
+        return true;
+    }
+    auto e = stmt->getRetValue();
+    if (e == nullptr) {
+        return true;
+    }
+    auto t = e->getType();
+    if (!t->isPointerType()) {
+        return true;
+    }
+    for (;;) {
+        auto t2 = t->getAs<clang::PointerType>();
+        if (t2 == nullptr) {
+            break;
+        }
+        t = t2->getPointeeType();
+    }
+    if (!isSalBool(t)) {
+        return true;
+    }
+    auto e2 = dyn_cast<ArraySubscriptExpr>(e->IgnoreParenImpCasts());
+    if (e2 == nullptr) {
+        return true;
+    }
+    auto e3 = dyn_cast<DeclRefExpr>(e2->getBase()->IgnoreParenImpCasts());
+    if (e3 == nullptr) {
+        return true;
+    }
+    auto d = dyn_cast<VarDecl>(e3->getDecl());
+    if (d == nullptr) {
+        return true;
+    }
+    varDecls_.erase(d);
     return true;
 }
 
@@ -335,17 +520,15 @@ bool SalBool::VisitParmVarDecl(ParmVarDecl const * decl) {
         if (f != nullptr) { // e.g.: typedef sal_Bool (* FuncPtr )( sal_Bool );
             f = f->getCanonicalDecl();
             if (!(hasCLanguageLinkageType(f)
-                  || (isInUnoIncludeFile(
-                          compiler.getSourceManager().getSpellingLoc(
-                              f->getNameInfo().getLoc()))
-                      && (!isInlined(*f) || f->hasAttr<DeprecatedAttr>()
+                  || (isInUnoIncludeFile(f)
+                      && (!f->isInlined() || f->hasAttr<DeprecatedAttr>()
                           || decl->getType()->isReferenceType()
                           || hasBoolOverload(f, false)))
                   || f->isDeleted() || hasBoolOverload(f, true)))
             {
                 OverrideKind k = getOverrideKind(f);
                 if (k != OverrideKind::YES) {
-                    SourceLocation loc { decl->getLocStart() };
+                    SourceLocation loc { compat::getBeginLoc(decl) };
                     TypeSourceInfo * tsi = decl->getTypeSourceInfo();
                     if (tsi != nullptr) {
                         SourceLocation l {
@@ -390,8 +573,7 @@ bool SalBool::VisitParmVarDecl(ParmVarDecl const * decl) {
                     // where the function would still implicitly override and
                     // cause a compilation error due to the incompatible return
                     // type):
-                    if (!((compat::isInMainFile(
-                               compiler.getSourceManager(),
+                    if (!((compiler.getSourceManager().isInMainFile(
                                compiler.getSourceManager().getSpellingLoc(
                                    dyn_cast<FunctionDecl>(
                                        decl->getDeclContext())
@@ -426,9 +608,10 @@ bool SalBool::VisitVarDecl(VarDecl const * decl) {
     if (ignoreLocation(decl)) {
         return true;
     }
-    if (!decl->isExternC() && isSalBool(decl->getType())
+    if (!decl->isExternC()
+        && (isSalBool(decl->getType()) || isSalBoolArray(decl->getType()))
         && !isInSpecialMainFile(
-            compiler.getSourceManager().getSpellingLoc(decl->getLocStart())))
+            compiler.getSourceManager().getSpellingLoc(compat::getBeginLoc(decl))))
     {
         varDecls_.insert(decl);
     }
@@ -443,19 +626,18 @@ bool SalBool::VisitFieldDecl(FieldDecl const * decl) {
     if (ignoreLocation(decl)) {
         return true;
     }
-    if (isSalBool(decl->getType())
+    if ((isSalBool(decl->getType()) || isSalBoolArray(decl->getType()))
         && !isInSpecialMainFile(
-            compiler.getSourceManager().getSpellingLoc(decl->getLocStart())))
+            compiler.getSourceManager().getSpellingLoc(compat::getBeginLoc(decl))))
     {
         TagDecl const * td = dyn_cast<TagDecl>(decl->getDeclContext());
         assert(td != nullptr);
-        if (!(((td->isStruct() || td->isUnion())
-               && compat::isExternCContext(*td))
+        if (!(((td->isStruct() || td->isUnion()) && td->isExternCContext())
               || isInUnoIncludeFile(
                   compiler.getSourceManager().getSpellingLoc(
                       decl->getLocation()))))
         {
-            SourceLocation loc { decl->getLocStart() };
+            SourceLocation loc { compat::getBeginLoc(decl) };
             TypeSourceInfo * tsi = decl->getTypeSourceInfo();
             if (tsi != nullptr) {
                 SourceLocation l {
@@ -506,17 +688,17 @@ bool SalBool::VisitFunctionDecl(FunctionDecl const * decl) {
     if (ignoreLocation(decl)) {
         return true;
     }
-    if (isSalBool(compat::getReturnType(*decl).getNonReferenceType())) {
+    if (isSalBool(decl->getReturnType().getNonReferenceType())
+        && !(decl->isDeletedAsWritten() && isa<CXXConversionDecl>(decl)))
+    {
         FunctionDecl const * f = decl->getCanonicalDecl();
         OverrideKind k = getOverrideKind(f);
         if (k != OverrideKind::YES
             && !(hasCLanguageLinkageType(f)
-                 || (isInUnoIncludeFile(
-                         compiler.getSourceManager().getSpellingLoc(
-                             f->getNameInfo().getLoc()))
-                     && (!isInlined(*f) || f->hasAttr<DeprecatedAttr>()))))
+                 || (isInUnoIncludeFile(f)
+                     && (!f->isInlined() || f->hasAttr<DeprecatedAttr>()))))
         {
-            SourceLocation loc { decl->getLocStart() };
+            SourceLocation loc { compat::getBeginLoc(decl) };
             SourceLocation l { compiler.getSourceManager().getExpansionLoc(
                 loc) };
             SourceLocation end { compiler.getSourceManager().getExpansionLoc(
@@ -541,8 +723,7 @@ bool SalBool::VisitFunctionDecl(FunctionDecl const * decl) {
             // rewriter had a chance to act upon the definition (but use the
             // heuristic of assuming pure virtual functions do not have
             // definitions):
-            if (!((compat::isInMainFile(
-                       compiler.getSourceManager(),
+            if (!((compiler.getSourceManager().isInMainFile(
                        compiler.getSourceManager().getSpellingLoc(
                            decl->getNameInfo().getLoc()))
                    || f->isDefined() || f->isPure())
@@ -568,23 +749,64 @@ bool SalBool::VisitValueDecl(ValueDecl const * decl) {
     if (ignoreLocation(decl)) {
         return true;
     }
-    if (isSalBool(decl->getType()) && !rewrite(decl->getLocStart())) {
+    if (isSalBool(decl->getType()) && !rewrite(compat::getBeginLoc(decl))) {
         report(
             DiagnosticsEngine::Warning,
             "ValueDecl, use \"bool\" instead of \"sal_Bool\"",
-            decl->getLocStart())
+            compat::getBeginLoc(decl))
             << decl->getSourceRange();
     }
     return true;
 }
 
+bool SalBool::TraverseStaticAssertDecl(StaticAssertDecl * decl) {
+    // Ignore special code like
+    //
+    //   static_cast<sal_Bool>(true) == sal_True
+    //
+    // inside static_assert in cppu/source/uno/check.cxx:
+    return
+        loplugin::isSamePathname(
+            getFileNameOfSpellingLoc(decl->getLocation()),
+            SRCDIR "/cppu/source/uno/check.cxx")
+        || RecursiveASTVisitor::TraverseStaticAssertDecl(decl);
+}
+
+bool SalBool::TraverseLinkageSpecDecl(LinkageSpecDecl * decl) {
+    assert(externCContexts_ != std::numeric_limits<unsigned int>::max()); //TODO
+    ++externCContexts_;
+    bool ret = RecursiveASTVisitor::TraverseLinkageSpecDecl(decl);
+    assert(externCContexts_ != 0);
+    --externCContexts_;
+    return ret;
+}
+
+bool SalBool::isFromCIncludeFile(SourceLocation spellingLocation) const {
+    return !compiler.getSourceManager().isInMainFile(spellingLocation)
+        && (StringRef(
+                compiler.getSourceManager().getPresumedLoc(spellingLocation)
+                .getFilename())
+            .endswith(".h"));
+}
+
+bool SalBool::isSharedCAndCppCode(SourceLocation location) const {
+    // Assume that code is intended to be shared between C and C++ if it comes
+    // from an include file ending in .h, and is either in an extern "C" context
+    // or the body of a macro definition:
+    return
+        isFromCIncludeFile(compiler.getSourceManager().getSpellingLoc(location))
+        && (externCContexts_ != 0
+            || compiler.getSourceManager().isMacroBodyExpansion(location));
+}
+
 bool SalBool::isInSpecialMainFile(SourceLocation spellingLocation) const {
-    if (!compat::isInMainFile(compiler.getSourceManager(), spellingLocation)) {
+    if (!compiler.getSourceManager().isInMainFile(spellingLocation)) {
         return false;
     }
-    auto f = compiler.getSourceManager().getFilename(spellingLocation);
-    return f == SRCDIR "/cppu/qa/test_any.cxx"
-        || f == SRCDIR "/cppu/source/uno/check.cxx"; // TODO: the offset checks
+    auto f = getFileNameOfSpellingLoc(spellingLocation);
+    return loplugin::isSamePathname(f, SRCDIR "/cppu/qa/test_any.cxx")
+        || loplugin::isSamePathname(f, SRCDIR "/cppu/source/uno/check.cxx");
+        // TODO: the offset checks
 }
 
 bool SalBool::rewrite(SourceLocation location) {

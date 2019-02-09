@@ -21,14 +21,18 @@
 #include <unotools/configpaths.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <com/sun/star/container/XHierarchicalName.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/util/XChangesBatch.hpp>
 #include <com/sun/star/util/XStringEscape.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <comphelper/namedvaluecollection.hxx>
 #include <rtl/string.hxx>
 #if OSL_DEBUG_LEVEL > 0
@@ -74,24 +78,36 @@ namespace utl
             startComponentListening(xConfigNodeComp);
 
         if (isValid())
-            setEscape(isSetNode());
+            m_bEscapeNames = isSetNode() && Reference< XStringEscape >::query(m_xDirectAccess).is();
     }
 
     OConfigurationNode::OConfigurationNode(const OConfigurationNode& _rSource)
-        :OEventListenerAdapter()
-        ,m_xHierarchyAccess(_rSource.m_xHierarchyAccess)
-        ,m_xDirectAccess(_rSource.m_xDirectAccess)
-        ,m_xReplaceAccess(_rSource.m_xReplaceAccess)
-        ,m_xContainerAccess(_rSource.m_xContainerAccess)
-        ,m_bEscapeNames(_rSource.m_bEscapeNames)
-        ,m_sCompletePath(_rSource.m_sCompletePath)
+        : OEventListenerAdapter()
+        , m_xHierarchyAccess(_rSource.m_xHierarchyAccess)
+        , m_xDirectAccess(_rSource.m_xDirectAccess)
+        , m_xReplaceAccess(_rSource.m_xReplaceAccess)
+        , m_xContainerAccess(_rSource.m_xContainerAccess)
+        , m_bEscapeNames(_rSource.m_bEscapeNames)
     {
         Reference< XComponent > xConfigNodeComp(m_xDirectAccess, UNO_QUERY);
         if (xConfigNodeComp.is())
             startComponentListening(xConfigNodeComp);
     }
 
-    const OConfigurationNode& OConfigurationNode::operator=(const OConfigurationNode& _rSource)
+    OConfigurationNode::OConfigurationNode(OConfigurationNode&& _rSource)
+        : OEventListenerAdapter()
+        , m_xHierarchyAccess(std::move(_rSource.m_xHierarchyAccess))
+        , m_xDirectAccess(std::move(_rSource.m_xDirectAccess))
+        , m_xReplaceAccess(std::move(_rSource.m_xReplaceAccess))
+        , m_xContainerAccess(std::move(_rSource.m_xContainerAccess))
+        , m_bEscapeNames(std::move(_rSource.m_bEscapeNames))
+    {
+        Reference< XComponent > xConfigNodeComp(m_xDirectAccess, UNO_QUERY);
+        if (xConfigNodeComp.is())
+            startComponentListening(xConfigNodeComp);
+    }
+
+    OConfigurationNode& OConfigurationNode::operator=(const OConfigurationNode& _rSource)
     {
         stopAllComponentListening();
 
@@ -100,7 +116,23 @@ namespace utl
         m_xContainerAccess = _rSource.m_xContainerAccess;
         m_xReplaceAccess = _rSource.m_xReplaceAccess;
         m_bEscapeNames = _rSource.m_bEscapeNames;
-        m_sCompletePath = _rSource.m_sCompletePath;
+
+        Reference< XComponent > xConfigNodeComp(m_xDirectAccess, UNO_QUERY);
+        if (xConfigNodeComp.is())
+            startComponentListening(xConfigNodeComp);
+
+        return *this;
+    }
+
+    OConfigurationNode& OConfigurationNode::operator=(OConfigurationNode&& _rSource)
+    {
+        stopAllComponentListening();
+
+        m_xHierarchyAccess = std::move(_rSource.m_xHierarchyAccess);
+        m_xDirectAccess = std::move(_rSource.m_xDirectAccess);
+        m_xContainerAccess = std::move(_rSource.m_xContainerAccess);
+        m_xReplaceAccess = std::move(_rSource.m_xReplaceAccess);
+        m_bEscapeNames = std::move(_rSource.m_bEscapeNames);
 
         Reference< XComponent > xConfigNodeComp(m_xDirectAccess, UNO_QUERY);
         if (xConfigNodeComp.is())
@@ -127,7 +159,7 @@ namespace utl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("unotools");
         }
         return sLocalName;
     }
@@ -149,7 +181,7 @@ namespace utl
                 }
                 catch(Exception&)
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("unotools");
                 }
             }
         }
@@ -192,13 +224,7 @@ namespace utl
             }
             catch (NoSuchElementException&)
             {
-                #if OSL_DEBUG_LEVEL > 0
-                OStringBuffer aBuf( 256 );
-                aBuf.append("OConfigurationNode::removeNode: there is no element named!");
-                aBuf.append( OUStringToOString( _rName, RTL_TEXTENCODING_ASCII_US ) );
-                aBuf.append( "!" );
-                OSL_FAIL(aBuf.getStr());
-                #endif
+                SAL_WARN( "unotools", "OConfigurationNode::removeNode: there is no element named: " << _rName );
             }
             catch (WrappedTargetException&)
             {
@@ -225,7 +251,7 @@ namespace utl
             }
             catch(const Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("unotools");
             }
 
             // dispose the child if it has already been created, but could not be inserted
@@ -251,7 +277,7 @@ namespace utl
             }
             catch(const Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("unotools");
             }
             return insertNode(_rName,xNewChild);
         }
@@ -288,24 +314,13 @@ namespace utl
         }
         catch(const NoSuchElementException&)
         {
-            #if OSL_DEBUG_LEVEL > 0
-            OStringBuffer aBuf( 256 );
-            aBuf.append("OConfigurationNode::openNode: there is no element named ");
-            aBuf.append( OUStringToOString( _rPath, RTL_TEXTENCODING_ASCII_US ) );
-            aBuf.append("!");
-            OSL_FAIL(aBuf.getStr());
-            #endif
+            SAL_WARN( "unotools", "OConfigurationNode::openNode: there is no element named " << _rPath );
         }
         catch(Exception&)
         {
             OSL_FAIL("OConfigurationNode::openNode: caught an exception while retrieving the node!");
         }
         return OConfigurationNode();
-    }
-
-    void OConfigurationNode::setEscape(bool _bEnable)
-    {
-        m_bEscapeNames = _bEnable && Reference< XStringEscape >::query(m_xDirectAccess).is();
     }
 
     bool OConfigurationNode::isSetNode() const
@@ -430,7 +445,7 @@ namespace utl
         }
         catch(const NoSuchElementException&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("unotools");
         }
         return aReturn;
     }
@@ -457,20 +472,19 @@ namespace utl
             }
             catch ( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("unotools");
             }
             return nullptr;
         }
 
         Reference< XInterface > lcl_createConfigurationRoot( const Reference< XMultiServiceFactory >& i_rxConfigProvider,
-            const OUString& i_rNodePath, const bool i_bUpdatable, const sal_Int32 i_nDepth, const bool i_bLazyWrite )
+            const OUString& i_rNodePath, const bool i_bUpdatable, const sal_Int32 i_nDepth )
         {
             ENSURE_OR_RETURN( i_rxConfigProvider.is(), "invalid provider", nullptr );
             try
             {
                 ::comphelper::NamedValueCollection aArgs;
                 aArgs.put( "nodepath", i_rNodePath );
-                aArgs.put( "lazywrite", i_bLazyWrite );
                 aArgs.put( "depth", i_nDepth );
 
                 OUString sAccessService( i_bUpdatable ?
@@ -485,7 +499,7 @@ namespace utl
             }
             catch ( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("unotools");
             }
             return nullptr;
         }
@@ -499,7 +513,7 @@ namespace utl
 
     OConfigurationTreeRoot::OConfigurationTreeRoot( const Reference<XComponentContext> & i_rContext, const OUString& i_rNodePath, const bool i_bUpdatable )
         :OConfigurationNode( lcl_createConfigurationRoot( lcl_getConfigProvider( i_rContext ),
-            i_rNodePath, i_bUpdatable, -1, false ).get() )
+            i_rNodePath, i_bUpdatable, -1 ).get() )
         ,m_xCommitter()
     {
         if ( i_bUpdatable )
@@ -531,23 +545,23 @@ namespace utl
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("unotools");
         }
         return false;
     }
 
-    OConfigurationTreeRoot OConfigurationTreeRoot::createWithProvider(const Reference< XMultiServiceFactory >& _rxConfProvider, const OUString& _rPath, sal_Int32 _nDepth, CREATION_MODE _eMode, bool _bLazyWrite)
+    OConfigurationTreeRoot OConfigurationTreeRoot::createWithProvider(const Reference< XMultiServiceFactory >& _rxConfProvider, const OUString& _rPath, sal_Int32 _nDepth, CREATION_MODE _eMode)
     {
         Reference< XInterface > xRoot( lcl_createConfigurationRoot(
-            _rxConfProvider, _rPath, _eMode != CM_READONLY, _nDepth, _bLazyWrite ) );
+            _rxConfProvider, _rPath, _eMode != CM_READONLY, _nDepth ) );
         if ( xRoot.is() )
             return OConfigurationTreeRoot( xRoot );
         return OConfigurationTreeRoot();
     }
 
-    OConfigurationTreeRoot OConfigurationTreeRoot::createWithComponentContext( const Reference< XComponentContext >& _rxContext, const OUString& _rPath, sal_Int32 _nDepth, CREATION_MODE _eMode, bool _bLazyWrite )
+    OConfigurationTreeRoot OConfigurationTreeRoot::createWithComponentContext( const Reference< XComponentContext >& _rxContext, const OUString& _rPath, sal_Int32 _nDepth, CREATION_MODE _eMode )
     {
-        return createWithProvider( lcl_getConfigProvider( _rxContext ), _rPath, _nDepth, _eMode, _bLazyWrite );
+        return createWithProvider( lcl_getConfigProvider( _rxContext ), _rPath, _nDepth, _eMode );
     }
 
     OConfigurationTreeRoot OConfigurationTreeRoot::tryCreateWithComponentContext( const Reference< XComponentContext >& rxContext,

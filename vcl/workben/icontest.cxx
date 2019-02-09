@@ -20,8 +20,6 @@
 
 #include <math.h>
 
-#include <GL/glew.h>
-
 #include <glm/gtx/bit.hpp>
 
 #include <com/sun/star/lang/XComponent.hpp>
@@ -31,6 +29,8 @@
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/bootstrap.hxx>
 #include <osl/file.hxx>
+#include <sal/log.hxx>
+#include <tools/stream.hxx>
 #include <vcl/builder.hxx>
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
@@ -38,7 +38,6 @@
 #include <vcl/graph.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <vcl/image.hxx>
-#include <vcl/openglwin.hxx>
 #include <vcl/opengl/OpenGLContext.hxx>
 #include <vcl/opengl/OpenGLHelper.hxx>
 #include <vcl/svapp.hxx>
@@ -54,31 +53,28 @@ namespace {
     {
         TimeValue aValue;
         osl_getSystemTime(&aValue);
-        return (double)aValue.Seconds +
-            (double)aValue.Nanosec / (1000*1000*1000);
+        return static_cast<double>(aValue.Seconds) +
+            static_cast<double>(aValue.Nanosec) / (1000*1000*1000);
     }
 
 }
 
 class MyWorkWindow : public WorkWindow
 {
-private:
-
-protected:
     double mnStartTime;
     int mnPaintCount;
 
 public:
     Graphic maGraphic;
-    Bitmap *mpBitmap;
+    BitmapEx *mpBitmap;
     VclPtr<FixedBitmap> mpFixedBitmap;
 
     MyWorkWindow( vcl::Window* pParent, WinBits nWinStyle );
-    virtual ~MyWorkWindow() { disposeOnce(); }
+    virtual ~MyWorkWindow() override { disposeOnce(); }
     virtual void dispose() override { mpFixedBitmap.clear(); WorkWindow::dispose(); }
     void LoadGraphic( const OUString& sImageFile );
 
-    virtual void Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle& rRect ) override;
     virtual void Resize() override;
 };
 
@@ -96,31 +92,31 @@ void MyWorkWindow::LoadGraphic( const OUString& sImageFile )
 {
     SvFileStream aFileStream( sImageFile, StreamMode::READ );
     GraphicFilter aGraphicFilter(false);
-    if (aGraphicFilter.ImportGraphic(maGraphic, sImageFile, aFileStream) != 0)
+    if (aGraphicFilter.ImportGraphic(maGraphic, sImageFile, aFileStream) != ERRCODE_NONE)
     {
         SAL_WARN("vcl.icontest", "Could not import image '" << sImageFile << "'");
         return;
     }
 }
 
-void MyWorkWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void MyWorkWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     std::cout << "==> Paint! " << mnPaintCount++ << " (vcl) " << GetSizePixel() << " " << getTimeNow() - mnStartTime << std::endl;
 
     Size aGraphicSize( maGraphic.GetSizePixel() );
-    float aspect = ((float) aGraphicSize.Width()) / aGraphicSize.Height();
+    float aspect = static_cast<float>(aGraphicSize.Width()) / aGraphicSize.Height();
     Size aSize;
-    if( aspect >= ((float) WIDTH) / HEIGHT )
+    if( aspect >= (float(WIDTH)) / HEIGHT )
         aSize = Size( WIDTH, HEIGHT/aspect );
     else
         aSize = Size( WIDTH * aspect, HEIGHT );
     aSize.setWidth( aSize.Width() * (1 + (0.1*sin(mnPaintCount/60.))) );
     aSize.setHeight( aSize.Height() * (1 + (0.1*sin(mnPaintCount/50.))) );
 
-    Bitmap aEmpty;
+    BitmapEx aEmpty;
     mpFixedBitmap->SetBitmap( aEmpty );
     GraphicConversionParameters aConv( aSize );
-    mpBitmap = new Bitmap( maGraphic.GetBitmap( aConv ) );
+    mpBitmap = new BitmapEx(maGraphic.GetBitmapEx( aConv ));
     mpFixedBitmap->SetBitmap( *mpBitmap );
     mpFixedBitmap->SetSizePixel( aSize );
 

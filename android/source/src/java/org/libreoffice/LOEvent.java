@@ -33,6 +33,16 @@ public class LOEvent implements Comparable<LOEvent> {
     public static final int SWIPE_LEFT = 12;
     public static final int NAVIGATION_CLICK = 13;
     public static final int UNO_COMMAND = 14;
+    public static final int RESUME = 15;
+    public static final int LOAD_NEW = 16;
+    public static final int SAVE_AS = 17;
+    public static final int UPDATE_PART_PAGE_RECT = 18;
+    public static final int UPDATE_ZOOM_CONSTRAINTS = 19;
+    public static final int UPDATE_CALC_HEADERS = 20;
+    public static final int REFRESH = 21;
+    public static final int PAGE_SIZE_CHANGED = 22;
+    public static final int UNO_COMMAND_NOTIFY = 23;
+
 
     public final int mType;
     public int mPriority = 0;
@@ -41,6 +51,8 @@ public class LOEvent implements Comparable<LOEvent> {
     public ThumbnailCreator.ThumbnailCreationTask mTask;
     public int mPartIndex;
     public String mString;
+    public String filePath;
+    public String fileType;
     public ComposedTileLayer mComposedTileLayer;
     public String mTouchType;
     public PointF mDocumentCoordinate;
@@ -48,6 +60,9 @@ public class LOEvent implements Comparable<LOEvent> {
     public RectF mInvalidationRect;
     public SelectionHandle.HandleType mHandleType;
     public String mValue;
+    public int mPageWidth;
+    public int mPageHeight;
+    public boolean mNotify;
 
     public LOEvent(int type) {
         mType = type;
@@ -66,11 +81,47 @@ public class LOEvent implements Comparable<LOEvent> {
         mValue = null;
     }
 
+    public LOEvent(int type, String someString, boolean notify) {
+        mType = type;
+        mTypeString = "String";
+        mString = someString;
+        mValue = null;
+        mNotify = notify;
+    }
+
+    public LOEvent(int type, String someString, String value, boolean notify) {
+        mType = type;
+        mTypeString = "String";
+        mString = someString;
+        mValue = value;
+        mNotify = notify;
+    }
+
     public LOEvent(int type, String key, String value) {
         mType = type;
         mTypeString = "key / value";
         mString = key;
         mValue = value;
+    }
+
+    public LOEvent(int type, String key, int value) {
+        mType = type;
+        mTypeString = "Resume partIndex";
+        mString = key;
+        mPartIndex = value;
+    }
+
+    public LOEvent(String filePath, int type) {
+        mType = type;
+        mTypeString = "Load";
+        this.filePath = filePath;
+    }
+
+    public LOEvent(String filePath, String fileType, int type) {
+        mType = type;
+        mTypeString = "Load New/Save As";
+        this.filePath = filePath;
+        this.fileType = fileType;
     }
 
     public LOEvent(int type, int partIndex) {
@@ -108,6 +159,12 @@ public class LOEvent implements Comparable<LOEvent> {
         mType = type;
         mHandleType = handleType;
         mDocumentCoordinate = documentCoordinate;
+    }
+
+    public LOEvent(int type, int pageWidth, int pageHeight){
+        mType = type;
+        mPageWidth = pageWidth;
+        mPageHeight = pageHeight;
     }
 
     public String getTypeString() {

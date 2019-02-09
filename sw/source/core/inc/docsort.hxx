@@ -21,6 +21,8 @@
 #define INCLUDED_SW_SOURCE_CORE_INC_DOCSORT_HXX
 
 #include <ndindex.hxx>
+
+#include <memory>
 #include <vector>
 
 class SwDoc;
@@ -29,8 +31,8 @@ class SwUndoSort;
 class FlatFndBox;
 struct SwSortOptions;
 struct SwSortElement;
-class _FndBox;
-class _FndLine;
+class FndBox_;
+class FndLine_;
 class CollatorWrapper;
 class LocaleDataWrapper;
 
@@ -57,9 +59,9 @@ public:
 
 // Functions for moving boxes
 void MoveCol(SwDoc* pDoc, const FlatFndBox& rBox,
-             sal_uInt16 nS, sal_uInt16 nT, SwMovedBoxes& rMovedList, SwUndoSort* pUD=nullptr);
+             sal_uInt16 nS, sal_uInt16 nT, SwMovedBoxes& rMovedList, SwUndoSort* pUD);
 void MoveRow(SwDoc* pDoc, const FlatFndBox& rBox,
-             sal_uInt16 nS, sal_uInt16 nT, SwMovedBoxes& rMovedList, SwUndoSort* pUD=nullptr);
+             sal_uInt16 nS, sal_uInt16 nT, SwMovedBoxes& rMovedList, SwUndoSort* pUD);
 void MoveCell(SwDoc* pDoc, const SwTableBox* pSource,
               const SwTableBox* pTar, bool bMovedBefore, SwUndoSort* pUD=nullptr);
 
@@ -74,8 +76,14 @@ struct SwSortElement
     static OUString*            pLastAlgorithm;
     static LocaleDataWrapper*   pLclData;
 
-    static void Init( SwDoc*, const SwSortOptions& rOpt, FlatFndBox* = nullptr );
+    static void Init( SwDoc*, const SwSortOptions& rOpt, FlatFndBox const * = nullptr );
     static void Finit();
+
+    SwSortElement() = default;
+    SwSortElement(SwSortElement const &) = default;
+    SwSortElement(SwSortElement &&) = default;
+    SwSortElement & operator =(SwSortElement const &) = default;
+    SwSortElement & operator =(SwSortElement &&) = default;
 
     virtual ~SwSortElement();
 
@@ -92,11 +100,11 @@ private:
 // sort text
 struct SwSortTextElement : public SwSortElement
 {
-    sal_uLong   nOrg;
+    sal_uLong const   nOrg;
     SwNodeIndex aPos;
 
     SwSortTextElement( const SwNodeIndex& rPos );
-    virtual ~SwSortTextElement();
+    virtual ~SwSortTextElement() override;
 
     virtual OUString GetKey( sal_uInt16 nKey ) const override;
 };
@@ -104,10 +112,10 @@ struct SwSortTextElement : public SwSortElement
 // sort table
 struct SwSortBoxElement : public SwSortElement
 {
-    sal_uInt16 nRow;
+    sal_uInt16 const nRow;
 
     SwSortBoxElement( sal_uInt16 nRC );
-    virtual ~SwSortBoxElement();
+    virtual ~SwSortBoxElement() override;
 
     virtual OUString GetKey( sal_uInt16 nKey ) const override;
     virtual double GetValue( sal_uInt16 nKey ) const override;
@@ -117,29 +125,28 @@ struct SwSortBoxElement : public SwSortElement
 class FlatFndBox
 {
 public:
-    FlatFndBox(SwDoc* pDocPtr, const _FndBox& rBox);
+    FlatFndBox(SwDoc* pDocPtr, const FndBox_& rBox);
     ~FlatFndBox();
 
     bool            IsSymmetric() const { return bSym;  }
     sal_uInt16          GetRows()     const { return nRows; }
     sal_uInt16          GetCols()     const { return nCols; }
 
-    const _FndBox*      GetBox(sal_uInt16 nCol, sal_uInt16 nRow) const;
+    const FndBox_*      GetBox(sal_uInt16 nCol, sal_uInt16 nRow) const;
 
     inline bool     HasItemSets() const;
     const SfxItemSet*   GetItemSet(sal_uInt16 nCol, sal_uInt16 nRow) const;
 
 private:
-    bool            CheckLineSymmetry(const _FndBox& rBox);
-    bool            CheckBoxSymmetry(const _FndLine& rLn);
-    sal_uInt16          GetColCount(const _FndBox& rBox);
-    sal_uInt16          GetRowCount(const _FndBox& rBox);
-    void                FillFlat(const _FndBox&, bool bLastBox=false);
+    bool            CheckLineSymmetry(const FndBox_& rBox);
+    bool            CheckBoxSymmetry(const FndLine_& rLn);
+    sal_uInt16          GetColCount(const FndBox_& rBox);
+    sal_uInt16          GetRowCount(const FndBox_& rBox);
+    void                FillFlat(const FndBox_&, bool bLastBox=false);
 
     SwDoc*              pDoc;
-    const _FndBox&      rBoxRef;
-    const _FndBox**     pArr;
-    SfxItemSet**        ppItemSets;
+    std::unique_ptr<FndBox_ const *[]> pArr;
+    std::vector<std::unique_ptr<SfxItemSet>> ppItemSets;
 
     sal_uInt16          nRows;
     sal_uInt16          nCols;
@@ -149,7 +156,7 @@ private:
     bool            bSym;
 };
 
-inline bool FlatFndBox::HasItemSets() const { return nullptr != ppItemSets; }
+inline bool FlatFndBox::HasItemSets() const { return !ppItemSets.empty(); }
 
 #endif
 

@@ -41,7 +41,7 @@ public:
         const OUString& rLocalName,
         css::uno::Reference<css::beans::XPropertySet> & rSectPropSet);
 
-    virtual ~XMLSectionSourceImportContext();
+    virtual ~XMLSectionSourceImportContext() override;
 
 protected:
 
@@ -50,7 +50,7 @@ protected:
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;

@@ -21,8 +21,8 @@
 #include <com/sun/star/xml/sax/Parser.hpp>
 #include <com/sun/star/xml/sax/XAttributeList.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <osl/diagnose.h>
 
-#include <comphelper/processfactory.hxx>
 #include "typedetectionimport.hxx"
 #include "xmlfiltersettingsdialog.hxx"
 
@@ -34,11 +34,6 @@ using namespace com::sun::star::xml::sax;
 using namespace com::sun::star;
 using namespace std;
 
-static const OUString sNode( "node" );
-static const OUString sName( "oor:name" );
-static const OUString sUIName( "UIName" );
-static const OUString sData( "Data" );
-
 TypeDetectionImporter::TypeDetectionImporter()
 {
 }
@@ -47,7 +42,8 @@ TypeDetectionImporter::~TypeDetectionImporter()
 {
 }
 
-void TypeDetectionImporter::doImport( const Reference< XComponentContext >& rxContext, const Reference< XInputStream >& xIS, XMLFilterVector& rFilters )
+void TypeDetectionImporter::doImport( const Reference< XComponentContext >& rxContext, const Reference< XInputStream >& xIS,
+                                      std::vector< std::unique_ptr<filter_info_impl> >& rFilters )
 {
     try
     {
@@ -67,27 +63,23 @@ void TypeDetectionImporter::doImport( const Reference< XComponentContext >& rxCo
     }
     catch( const Exception& /* e */ )
     {
-        OSL_FAIL( "TypeDetectionImporter::doImport exception catched!" );
+        OSL_FAIL( "TypeDetectionImporter::doImport exception caught!" );
     }
 }
 
-void TypeDetectionImporter::fillFilterVector(  XMLFilterVector& rFilters )
+void TypeDetectionImporter::fillFilterVector(  std::vector< std::unique_ptr<filter_info_impl> >& rFilters )
 {
     // create filter infos from imported filter nodes
-    NodeVector::iterator aIter = maFilterNodes.begin();
-    while( aIter != maFilterNodes.end() )
+    for (auto const& filterNode : maFilterNodes)
     {
-        filter_info_impl* pFilter = createFilterForNode( (*aIter) );
+        std::unique_ptr<filter_info_impl> pFilter = createFilterForNode(filterNode.get());
         if( pFilter )
-            rFilters.push_back( pFilter );
-
-        delete (*aIter++);
+            rFilters.push_back( std::move(pFilter) );
     }
+    maFilterNodes.clear();
 
     // now delete type nodes
-    aIter = maTypeNodes.begin();
-    while( aIter != maTypeNodes.end() )
-        delete (*aIter++);
+    maTypeNodes.clear();
 }
 
 static OUString getSubdata( int index, sal_Unicode delimiter, const OUString& rData )
@@ -123,24 +115,23 @@ static OUString getSubdata( int index, sal_Unicode delimiter, const OUString& rD
 
 Node* TypeDetectionImporter::findTypeNode( const OUString& rType )
 {
-    // now delete type nodes
-    for (NodeVector::const_iterator aIter(maTypeNodes.begin()), aEnd(maTypeNodes.end()); aIter != aEnd; ++aIter)
+    for (auto aIter(maTypeNodes.begin()), aEnd(maTypeNodes.end()); aIter != aEnd; ++aIter)
     {
         if( (*aIter)->maName == rType )
-            return (*aIter);
+            return aIter->get();
     }
 
     return nullptr;
 }
 
-filter_info_impl* TypeDetectionImporter::createFilterForNode( Node * pNode )
+std::unique_ptr<filter_info_impl> TypeDetectionImporter::createFilterForNode( Node * pNode )
 {
-    filter_info_impl* pFilter = new filter_info_impl;
+    std::unique_ptr<filter_info_impl> pFilter(new filter_info_impl);
 
     pFilter->maFilterName = pNode->maName;
-    pFilter->maInterfaceName = pNode->maPropertyMap[sUIName];
+    pFilter->maInterfaceName = pNode->maPropertyMap["UIName"];
 
-    OUString aData = pNode->maPropertyMap[sData];
+    OUString aData = pNode->maPropertyMap["Data"];
 
     sal_Unicode aComma(',');
 
@@ -169,7 +160,7 @@ filter_info_impl* TypeDetectionImporter::createFilterForNode( Node * pNode )
     Node* pTypeNode = findTypeNode( pFilter->maType );
     if( pTypeNode )
     {
-        OUString aTypeUserData( pTypeNode->maPropertyMap[sData] );
+        OUString aTypeUserData( pTypeNode->maPropertyMap["Data"] );
 
         pFilter->maDocType = getSubdata( 2, aComma, aTypeUserData );
         pFilter->maExtension = getSubdata( 4, aComma, aTypeUserData );
@@ -203,26 +194,20 @@ filter_info_impl* TypeDetectionImporter::createFilterForNode( Node * pNode )
         bOk = false;
 
     if( !bOk )
-    {
-        delete pFilter;
-        pFilter = nullptr;
-    }
+        return nullptr;
 
     return pFilter;
 }
 
 void SAL_CALL TypeDetectionImporter::startDocument(  )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL TypeDetectionImporter::endDocument(  )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL TypeDetectionImporter::startElement( const OUString& aName, const uno::Reference< xml::sax::XAttributeList >& xAttribs )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
     ImportState eNewState = e_Unknown;
 
@@ -236,9 +221,9 @@ void SAL_CALL TypeDetectionImporter::startElement( const OUString& aName, const 
     }
     else if( maStack.top() == e_Root )
     {
-        if( aName == sNode )
+        if( aName == "node" )
         {
-            OUString aNodeName( xAttribs->getValueByName( sName ) );
+            OUString aNodeName( xAttribs->getValueByName( "oor:name" ) );
 
             if( aNodeName == "Filters" )
             {
@@ -252,9 +237,9 @@ void SAL_CALL TypeDetectionImporter::startElement( const OUString& aName, const 
     }
     else if( (maStack.top() == e_Filters) || (maStack.top() == e_Types) )
     {
-        if( aName == sNode )
+        if( aName == "node" )
         {
-            maNodeName = xAttribs->getValueByName( sName );
+            maNodeName = xAttribs->getValueByName( "oor:name" );
 
             eNewState = (maStack.top() == e_Filters) ? e_Filter : e_Type;
         }
@@ -263,7 +248,7 @@ void SAL_CALL TypeDetectionImporter::startElement( const OUString& aName, const 
     {
         if( aName == "prop" )
         {
-            maPropertyName = xAttribs->getValueByName( sName );
+            maPropertyName = xAttribs->getValueByName( "oor:name" );
             eNewState = e_Property;
         }
     }
@@ -279,7 +264,6 @@ void SAL_CALL TypeDetectionImporter::startElement( const OUString& aName, const 
     maStack.push( eNewState );
 }
 void SAL_CALL TypeDetectionImporter::endElement( const OUString& /* aName */ )
-    throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
     if( !maStack.empty()  )
     {
@@ -289,18 +273,18 @@ void SAL_CALL TypeDetectionImporter::endElement( const OUString& /* aName */ )
         case e_Filter:
         case e_Type:
             {
-                Node* pNode = new Node;
+                std::unique_ptr<Node> pNode(new Node);
                 pNode->maName = maNodeName;
                 pNode->maPropertyMap = maPropertyMap;
                 maPropertyMap.clear();
 
                 if( eCurrentState == e_Filter )
                 {
-                    maFilterNodes.push_back( pNode );
+                    maFilterNodes.push_back( std::move(pNode) );
                 }
                 else
                 {
-                    maTypeNodes.push_back( pNode );
+                    maTypeNodes.push_back( std::move(pNode) );
                 }
             }
             break;
@@ -315,7 +299,6 @@ void SAL_CALL TypeDetectionImporter::endElement( const OUString& /* aName */ )
     }
 }
 void SAL_CALL TypeDetectionImporter::characters( const OUString& aChars )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
     if( !maStack.empty() && maStack.top() == e_Value )
     {
@@ -323,15 +306,12 @@ void SAL_CALL TypeDetectionImporter::characters( const OUString& aChars )
     }
 }
 void SAL_CALL TypeDetectionImporter::ignorableWhitespace( const OUString& /* aWhitespaces */ )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
 }
 void SAL_CALL TypeDetectionImporter::processingInstruction( const OUString& /* aTarget */, const OUString& /* aData */ )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
 }
 void SAL_CALL TypeDetectionImporter::setDocumentLocator( const uno::Reference< xml::sax::XLocator >& /* xLocator */ )
-        throw(xml::sax::SAXException, uno::RuntimeException, std::exception)
 {
 }
 

@@ -18,16 +18,17 @@
  */
 
 #include "ShapeFilterBase.hxx"
-#include "oox/drawingml/chart/chartconverter.hxx"
-#include "oox/ole/vbaproject.hxx"
-#include "oox/drawingml/theme.hxx"
+#include <oox/drawingml/chart/chartconverter.hxx>
+#include <oox/helper/graphichelper.hxx>
+#include <oox/ole/vbaproject.hxx>
+#include <oox/drawingml/theme.hxx>
 
 namespace oox {
 namespace shape {
 
 using namespace ::com::sun::star;
 
-ShapeFilterBase::ShapeFilterBase( const uno::Reference< uno::XComponentContext >& rxContext ) throw( uno::RuntimeException ) :
+ShapeFilterBase::ShapeFilterBase( const uno::Reference< uno::XComponentContext >& rxContext ) :
     XmlFilterBase( rxContext ),
     mxChartConv( new ::oox::drawingml::chart::ChartConverter )
 {
@@ -67,7 +68,7 @@ const ::oox::drawingml::table::TableStyleListPtr ShapeFilterBase::getTableStyles
     return new ::oox::ole::VbaProject( getComponentContext(), getModel(), "Writer" );
 }
 
-OUString ShapeFilterBase::getImplementationName() throw (css::uno::RuntimeException, std::exception)
+OUString ShapeFilterBase::getImplementationName()
 {
     return OUString();
 }
@@ -77,7 +78,7 @@ class ShapeGraphicHelper : public GraphicHelper
 {
 public:
     explicit            ShapeGraphicHelper( const ShapeFilterBase& rFilter );
-    virtual sal_Int32   getSchemeColor( sal_Int32 nToken ) const override;
+    virtual ::Color     getSchemeColor( sal_Int32 nToken ) const override;
 private:
     const ShapeFilterBase& mrFilter;
 };
@@ -88,7 +89,7 @@ ShapeGraphicHelper::ShapeGraphicHelper( const ShapeFilterBase& rFilter ) :
 {
 }
 
-sal_Int32 ShapeGraphicHelper::getSchemeColor( sal_Int32 nToken ) const
+::Color ShapeGraphicHelper::getSchemeColor( sal_Int32 nToken ) const
 {
     return mrFilter.getSchemeColor( nToken );
 }
@@ -98,9 +99,9 @@ GraphicHelper* ShapeFilterBase::implCreateGraphicHelper() const
     return new ShapeGraphicHelper( *this );
 }
 
-sal_Int32 ShapeFilterBase::getSchemeColor( sal_Int32 nToken ) const
+::Color ShapeFilterBase::getSchemeColor( sal_Int32 nToken ) const
 {
-    sal_Int32 nColor = 0;
+    ::Color nColor;
 
     if (mpTheme.get())
         mpTheme->getClrScheme().getColor( nToken, nColor );

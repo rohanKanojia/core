@@ -19,18 +19,20 @@
 
 
 #include <tools/urlobj.hxx>
+#include <tools/debug.hxx>
 
 #include <sfx2/objsh.hxx>
 #include <sfx2/docfile.hxx>
-#include "openflag.hxx"
+#include <sfx2/event.hxx>
+#include <openflag.hxx>
 
 #include <svtools/htmlkywd.hxx>
 #include <svtools/htmltokn.h>
-#include <svtools/imap.hxx>
-#include <svtools/imapcirc.hxx>
-#include <svtools/imapobj.hxx>
-#include <svtools/imappoly.hxx>
-#include <svtools/imaprect.hxx>
+#include <vcl/imap.hxx>
+#include <vcl/imapcirc.hxx>
+#include <vcl/imapobj.hxx>
+#include <vcl/imappoly.hxx>
+#include <vcl/imaprect.hxx>
 #include <svl/zforlist.hxx>
 #include <rtl/tencinfo.h>
 #include <tools/tenccvt.hxx>
@@ -46,27 +48,22 @@
 using namespace ::com::sun::star;
 
 
-const sal_Char sHTML_MIME_text[] = "text/";
-const sal_Char sHTML_MIME_application[] = "application/";
-const sal_Char sHTML_MIME_experimental[] = "x-";
-
 // <INPUT TYPE=xxx>
-static HTMLOptionEnum const aAreaShapeOptEnums[] =
+static HTMLOptionEnum<sal_uInt16> const aAreaShapeOptEnums[] =
 {
     { OOO_STRING_SVTOOLS_HTML_SH_rect,      IMAP_OBJ_RECTANGLE  },
     { OOO_STRING_SVTOOLS_HTML_SH_rectangle, IMAP_OBJ_RECTANGLE  },
     { OOO_STRING_SVTOOLS_HTML_SH_circ,      IMAP_OBJ_CIRCLE     },
     { OOO_STRING_SVTOOLS_HTML_SH_circle,    IMAP_OBJ_CIRCLE     },
-    { OOO_STRING_SVTOOLS_HTML_SH_poly,          IMAP_OBJ_POLYGON    },
-    { OOO_STRING_SVTOOLS_HTML_SH_polygon,       IMAP_OBJ_POLYGON    },
-    { nullptr,                    0                   }
+    { OOO_STRING_SVTOOLS_HTML_SH_poly,      IMAP_OBJ_POLYGON    },
+    { OOO_STRING_SVTOOLS_HTML_SH_polygon,   IMAP_OBJ_POLYGON    },
+    { nullptr,                              0                   }
 };
 
 SfxHTMLParser::SfxHTMLParser( SvStream& rStream, bool bIsNewDoc,
                               SfxMedium *pMed )
     : HTMLParser(rStream, bIsNewDoc)
     , pMedium(pMed)
-    , pDLMedium(nullptr)
     , eScriptType(STARBASIC)
 {
     DBG_ASSERT( RTL_TEXTENCODING_UTF8 == GetSrcEncoding( ),
@@ -82,7 +79,6 @@ SfxHTMLParser::SfxHTMLParser( SvStream& rStream, bool bIsNewDoc,
 SfxHTMLParser::~SfxHTMLParser()
 {
     DBG_ASSERT( !pDLMedium, "Here is a File Download that has got stuck" );
-    delete pDLMedium;
 }
 
 bool SfxHTMLParser::ParseMapOptions(
@@ -95,12 +91,8 @@ bool SfxHTMLParser::ParseMapOptions(
     for (size_t i = rOptions.size(); i; )
     {
         const HTMLOption& aOption = rOptions[--i];
-        switch( aOption.GetToken() )
-        {
-        case HTML_O_NAME:
+        if ( aOption.GetToken() == HtmlOptionId::NAME )
             aName = aOption.GetString();
-            break;
-        }
     }
 
     if( !aName.isEmpty() )
@@ -111,8 +103,8 @@ bool SfxHTMLParser::ParseMapOptions(
 
 bool SfxHTMLParser::ParseAreaOptions(ImageMap * pImageMap, const OUString& rBaseURL,
                                      const HTMLOptions& rOptions,
-                                     sal_uInt16 nEventMouseOver,
-                                     sal_uInt16 nEventMouseOut )
+                                     SvMacroItemId nEventMouseOver,
+                                     SvMacroItemId nEventMouseOut )
 {
     DBG_ASSERT( pImageMap, "ParseAreaOptions: no Image-Map" );
 
@@ -124,48 +116,48 @@ bool SfxHTMLParser::ParseAreaOptions(ImageMap * pImageMap, const OUString& rBase
 
     for (size_t i = rOptions.size(); i; )
     {
-        sal_uInt16 nEvent = 0;
+        SvMacroItemId nEvent = SvMacroItemId::NONE;
         ScriptType eScrpType = STARBASIC;
         const HTMLOption& rOption = rOptions[--i];
         switch( rOption.GetToken() )
         {
-        case HTML_O_NAME:
+        case HtmlOptionId::NAME:
             aName = rOption.GetString();
             break;
-        case HTML_O_SHAPE:
+        case HtmlOptionId::SHAPE:
             rOption.GetEnum( nShape, aAreaShapeOptEnums );
             break;
-        case HTML_O_COORDS:
+        case HtmlOptionId::COORDS:
             rOption.GetNumbers( aCoords );
             break;
-        case HTML_O_HREF:
+        case HtmlOptionId::HREF:
             aHRef = INetURLObject::GetAbsURL( rBaseURL, rOption.GetString() );
             break;
-        case HTML_O_NOHREF:
+        case HtmlOptionId::NOHREF:
             bNoHRef = true;
             break;
-        case HTML_O_ALT:
+        case HtmlOptionId::ALT:
             aAlt = rOption.GetString();
             break;
-        case HTML_O_TARGET:
+        case HtmlOptionId::TARGET:
             aTarget = rOption.GetString();
             break;
 
-        case HTML_O_ONMOUSEOVER:
+        case HtmlOptionId::ONMOUSEOVER:
             eScrpType = JAVASCRIPT;
-            //fallthrough
-        case HTML_O_SDONMOUSEOVER:
+            [[fallthrough]];
+        case HtmlOptionId::SDONMOUSEOVER:
             nEvent = nEventMouseOver;
             goto IMAPOBJ_SETEVENT;
 
-        case HTML_O_ONMOUSEOUT:
+        case HtmlOptionId::ONMOUSEOUT:
             eScrpType = JAVASCRIPT;
-            //fallthrough
-        case HTML_O_SDONMOUSEOUT:
+            [[fallthrough]];
+        case HtmlOptionId::SDONMOUSEOUT:
             nEvent = nEventMouseOut;
             goto IMAPOBJ_SETEVENT;
 IMAPOBJ_SETEVENT:
-            if( nEvent )
+            if( nEvent != SvMacroItemId::NONE)
             {
                 OUString sTmp( rOption.GetString() );
                 if( !sTmp.isEmpty() )
@@ -175,6 +167,7 @@ IMAPOBJ_SETEVENT:
                 }
             }
             break;
+        default: break;
         }
     }
 
@@ -187,24 +180,24 @@ IMAPOBJ_SETEVENT:
     case IMAP_OBJ_RECTANGLE:
         if( aCoords.size() >=4 )
         {
-            Rectangle aRect( aCoords[0], aCoords[1],
+            tools::Rectangle aRect( aCoords[0], aCoords[1],
                              aCoords[2], aCoords[3] );
-            IMapRectangleObject aMapRObj( aRect, aHRef, aAlt, OUString(), aTarget, aName,
-                                          !bNoHRef );
+            std::unique_ptr<IMapRectangleObject> pMapRObj( new IMapRectangleObject(aRect, aHRef, aAlt, OUString(), aTarget, aName,
+                                          !bNoHRef ));
             if( !aMacroTbl.empty() )
-                aMapRObj.SetMacroTable( aMacroTbl );
-            pImageMap->InsertIMapObject( aMapRObj );
+                pMapRObj->SetMacroTable( aMacroTbl );
+            pImageMap->InsertIMapObject( std::move(pMapRObj) );
         }
         break;
     case IMAP_OBJ_CIRCLE:
         if( aCoords.size() >=3 )
         {
             Point aPoint( aCoords[0], aCoords[1] );
-            IMapCircleObject aMapCObj( aPoint, aCoords[2],aHRef, aAlt, OUString(),
-                                       aTarget, aName, !bNoHRef );
+            std::unique_ptr<IMapCircleObject> pMapCObj(new IMapCircleObject(aPoint, aCoords[2],aHRef, aAlt, OUString(),
+                                       aTarget, aName, !bNoHRef ));
             if( !aMacroTbl.empty() )
-                aMapCObj.SetMacroTable( aMacroTbl );
-            pImageMap->InsertIMapObject( aMapCObj );
+                pMapCObj->SetMacroTable( aMacroTbl );
+            pImageMap->InsertIMapObject( std::move(pMapCObj) );
         }
         break;
     case IMAP_OBJ_POLYGON:
@@ -214,11 +207,11 @@ IMAPOBJ_SETEVENT:
             tools::Polygon aPoly( nCount );
             for( sal_uInt16 i=0; i<nCount; i++ )
                 aPoly[i] = Point( aCoords[2*i], aCoords[2*i+1] );
-            IMapPolygonObject aMapPObj( aPoly, aHRef, aAlt, OUString(), aTarget, aName,
-                                        !bNoHRef );
+            std::unique_ptr<IMapPolygonObject> pMapPObj(new IMapPolygonObject( aPoly, aHRef, aAlt, OUString(), aTarget, aName,
+                                        !bNoHRef ));
             if( !aMacroTbl.empty() )
-                aMapPObj.SetMacroTable( aMacroTbl );
-            pImageMap->InsertIMapObject( aMapPObj );
+                pMapPObj->SetMacroTable( aMacroTbl );
+            pImageMap->InsertIMapObject( std::move(pMapPObj) );
         }
         break;
     default:
@@ -234,13 +227,13 @@ void SfxHTMLParser::StartFileDownload(const OUString& rURL)
     if( pDLMedium )
         return;
 
-    pDLMedium = new SfxMedium( rURL, SFX_STREAM_READONLY );
+    pDLMedium.reset( new SfxMedium( rURL, SFX_STREAM_READONLY ) );
     pDLMedium->Download();
 }
 
 bool SfxHTMLParser::FinishFileDownload( OUString& rStr )
 {
-    bool bOK = pDLMedium && pDLMedium->GetErrorCode()==0;
+    bool bOK = pDLMedium && pDLMedium->GetErrorCode() == ERRCODE_NONE;
     if( bOK )
     {
         SvStream* pStream = pDLMedium->GetInStream();
@@ -250,15 +243,12 @@ bool SfxHTMLParser::FinishFileDownload( OUString& rStr )
         if( pStream )
             aStream.WriteStream( *pStream );
 
-        aStream.Seek( STREAM_SEEK_TO_END );
-        sal_Size nLen = aStream.Tell();
+        sal_uInt64 const nLen = aStream.TellEnd();
         aStream.Seek( 0 );
-        OString sBuffer = read_uInt8s_ToOString(aStream, nLen);
-        rStr = OStringToOUString( sBuffer, RTL_TEXTENCODING_UTF8 );
+        rStr = read_uInt8s_ToOUString(aStream, nLen, RTL_TEXTENCODING_UTF8);
     }
 
-    delete pDLMedium;
-    pDLMedium = nullptr;
+    pDLMedium.reset();
 
     return bOK;
 }
@@ -267,43 +257,43 @@ void SfxHTMLParser::GetScriptType_Impl( SvKeyValueIterator *pHTTPHeader )
 {
     aScriptType = SVX_MACRO_LANGUAGE_JAVASCRIPT;
     eScriptType = JAVASCRIPT;
-    if( pHTTPHeader )
+    if( !pHTTPHeader )
+        return;
+
+    SvKeyValue aKV;
+    for( bool bCont = pHTTPHeader->GetFirst( aKV ); bCont;
+         bCont = pHTTPHeader->GetNext( aKV ) )
     {
-        SvKeyValue aKV;
-        for( bool bCont = pHTTPHeader->GetFirst( aKV ); bCont;
-             bCont = pHTTPHeader->GetNext( aKV ) )
+        if( aKV.GetKey().equalsIgnoreAsciiCase(
+                                OOO_STRING_SVTOOLS_HTML_META_content_script_type ) )
         {
-            if( aKV.GetKey().equalsIgnoreAsciiCase(
-                                    OOO_STRING_SVTOOLS_HTML_META_content_script_type ) )
+            if( !aKV.GetValue().isEmpty() )
             {
-                if( !aKV.GetValue().isEmpty() )
+                OUString aTmp( aKV.GetValue() );
+                if( aTmp.startsWithIgnoreAsciiCase( "text/" ) )
+                    aTmp = aTmp.copy( 5 );
+                else if( aTmp.startsWithIgnoreAsciiCase( "application/" ) )
+                    aTmp = aTmp.copy( 12 );
+                else
+                    break;
+
+                if( aTmp.startsWithIgnoreAsciiCase( "x-" ) ) // MIME-experimental
                 {
-                    OUString aTmp( aKV.GetValue() );
-                    if( aTmp.startsWithIgnoreAsciiCase( sHTML_MIME_text ) )
-                        aTmp = aTmp.copy( 5 );
-                    else if( aTmp.startsWithIgnoreAsciiCase( sHTML_MIME_application ) )
-                        aTmp = aTmp.copy( 12 );
-                    else
-                        break;
-
-                    if( aTmp.startsWithIgnoreAsciiCase( sHTML_MIME_experimental ) )
-                    {
-                        aTmp = aTmp.copy( 2 );
-                    }
-
-                    if( aTmp.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_LG_starbasic ) )
-                    {
-                        eScriptType = STARBASIC;
-                        aScriptType = SVX_MACRO_LANGUAGE_STARBASIC;
-                    }
-                    if( !aTmp.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_LG_javascript ) )
-                    {
-                        eScriptType = EXTENDED_STYPE;
-                        aScriptType = aTmp;
-                    }
+                    aTmp = aTmp.copy( 2 );
                 }
-                break;
+
+                if( aTmp.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_LG_starbasic ) )
+                {
+                    eScriptType = STARBASIC;
+                    aScriptType = SVX_MACRO_LANGUAGE_STARBASIC;
+                }
+                if( !aTmp.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_LG_javascript ) )
+                {
+                    eScriptType = EXTENDED_STYPE;
+                    aScriptType = aTmp;
+                }
             }
+            break;
         }
     }
 }
@@ -329,23 +319,22 @@ double SfxHTMLParser::GetTableDataOptionsValNum( sal_uInt32& nNumForm,
         LanguageType& eNumLang, const OUString& aValStr, const OUString& aNumStr,
         SvNumberFormatter& rFormatter )
 {
-    LanguageType eParseLang = (LanguageType )aNumStr.toInt32();
+    LanguageType eParseLang(aNumStr.toInt32());
     sal_uInt32 nParseForm = rFormatter.GetFormatForLanguageIfBuiltIn( 0, eParseLang );
     double fVal;
     (void)rFormatter.IsNumberFormat(aValStr, nParseForm, fVal);
     if ( comphelper::string::getTokenCount(aNumStr, ';') > 2 )
     {
-        eNumLang = (LanguageType)aNumStr.getToken( 1, ';' ).toInt32();
-        sal_Int32 nPos = aNumStr.indexOf( ';' );
-        nPos = aNumStr.indexOf( ';', nPos + 1 );
-        OUString aFormat( aNumStr.copy( nPos + 1 ) );
+        sal_Int32 nIdx {0};
+        eNumLang = LanguageType(aNumStr.getToken( 1, ';', nIdx ).toInt32());
+        OUString aFormat( aNumStr.copy( nIdx ) );
         sal_Int32 nCheckPos;
-        short nType;
+        SvNumFormatType nType;
         if ( eNumLang != LANGUAGE_SYSTEM )
             rFormatter.PutEntry( aFormat, nCheckPos, nType, nNumForm, eNumLang );
         else
             rFormatter.PutandConvertEntry( aFormat, nCheckPos, nType, nNumForm,
-                                           eParseLang, eNumLang );
+                                           eParseLang, eNumLang, true);
     }
     else
     {

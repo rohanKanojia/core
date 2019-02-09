@@ -10,12 +10,12 @@
 #ifndef INCLUDED_UNOIDL_SOURCE_SOURCETREEPROVIDER_HXX
 #define INCLUDED_UNOIDL_SOURCE_SOURCETREEPROVIDER_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <map>
 
-#include "rtl/ref.hxx"
-#include "unoidl/unoidl.hxx"
+#include <rtl/ref.hxx>
+#include <unoidl/unoidl.hxx>
 
 namespace unoidl { namespace detail {
 
@@ -31,10 +31,10 @@ public:
     virtual rtl::Reference<Entity> findEntity(OUString const & name) const override;
 
 private:
-    virtual ~SourceTreeProvider() throw ();
+    virtual ~SourceTreeProvider() throw () override;
 
     Manager & manager_;
-    OUString uri_;
+    OUString const uri_;
     mutable std::map< OUString, rtl::Reference<Entity> > cache_; //TODO: at manager
 };
 

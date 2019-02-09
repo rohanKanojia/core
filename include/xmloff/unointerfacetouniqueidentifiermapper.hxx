@@ -55,7 +55,7 @@ public:
         In contrast to registerReference(), this here overwrites any
         earlier registration of the same identifier
     */
-    void registerReferenceAlways( const rtl::OUString& rIdentifier, const css::uno::Reference< css::uno::XInterface >& rInterface );
+    void registerReferenceAlways( const OUString& rIdentifier, const css::uno::Reference< css::uno::XInterface >& rInterface );
 
     /** @returns
             the identifier for the given uno object. If this uno object is not already
@@ -75,7 +75,7 @@ private:
     void insertReference( const OUString& rIdentifier, const css::uno::Reference< css::uno::XInterface >& rInterface );
 
     IdMap_t maEntries;
-    sal_Int32 mnNextId;
+    sal_uInt32 mnNextId;
 };
 
 }

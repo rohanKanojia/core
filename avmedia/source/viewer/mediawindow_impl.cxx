@@ -22,22 +22,25 @@
 #include <iostream>
 #include "mediawindow_impl.hxx"
 #include "mediaevent_impl.hxx"
-#include "mediamisc.hxx"
-#include "mediawindow.hrc"
-#include "helpids.hrc"
+#include <mediamisc.hxx>
+#include <bitmaps.hlst>
+#include <helpids.h>
 
 #include <algorithm>
 #include <cmath>
 
+#include <sal/log.hxx>
 #include <comphelper/processfactory.hxx>
-#include <osl/mutex.hxx>
 #include <tools/urlobj.hxx>
 #include <unotools/securityoptions.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
 
 #include <com/sun/star/awt/SystemPointer.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/media/XManager.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <vcl/sysdata.hxx>
 #if HAVE_FEATURE_OPENGL
 #include <vcl/opengl/OpenGLContext.hxx>
@@ -68,13 +71,6 @@ MediaChildWindow::MediaChildWindow(vcl::Window* pParent)
     : SystemChildWindow(pParent, WB_CLIPCHILDREN)
 {
 }
-
-#if HAVE_FEATURE_GLTF
-MediaChildWindow::MediaChildWindow(vcl::Window* pParent, SystemWindowData* pData)
-    : SystemChildWindow(pParent, WB_CLIPCHILDREN, pData)
-{
-}
-#endif
 
 void MediaChildWindow::MouseMove( const MouseEvent& rMEvt )
 {
@@ -129,11 +125,7 @@ MediaWindowImpl::MediaWindowImpl(vcl::Window* pParent, MediaWindow* pMediaWindow
     , DropTargetHelper(this)
     , DragSourceHelper(this)
     , mpMediaWindow(pMediaWindow)
-    , mpEvents(nullptr)
-    , mbEventTransparent(true)
     , mpMediaWindowControl(bInternalMediaControl ? VclPtr<MediaWindowControl>::Create(this) : nullptr)
-    , mpEmptyBmpEx(nullptr)
-    , mpAudioBmpEx(nullptr)
 {
     if (mpMediaWindowControl)
     {
@@ -149,14 +141,15 @@ MediaWindowImpl::~MediaWindowImpl()
 
 void MediaWindowImpl::dispose()
 {
-    if (mpEvents)
-        mpEvents->cleanUp();
+    if (mxEvents.is())
+        mxEvents->cleanUp();
 
     if (mxPlayerWindow.is())
     {
-        mxPlayerWindow->removeKeyListener( uno::Reference< awt::XKeyListener >( mxEventsIf, uno::UNO_QUERY ) );
-        mxPlayerWindow->removeMouseListener( uno::Reference< awt::XMouseListener >( mxEventsIf, uno::UNO_QUERY ) );
-        mxPlayerWindow->removeMouseMotionListener( uno::Reference< awt::XMouseMotionListener >( mxEventsIf, uno::UNO_QUERY ) );
+        auto pEventsIf = static_cast<cppu::OWeakObject*>(mxEvents.get());
+        mxPlayerWindow->removeKeyListener( uno::Reference< awt::XKeyListener >( pEventsIf, uno::UNO_QUERY ) );
+        mxPlayerWindow->removeMouseListener( uno::Reference< awt::XMouseListener >( pEventsIf, uno::UNO_QUERY ) );
+        mxPlayerWindow->removeMouseMotionListener( uno::Reference< awt::XMouseMotionListener >( pEventsIf, uno::UNO_QUERY ) );
 
         uno::Reference< lang::XComponent > xComponent( mxPlayerWindow, uno::UNO_QUERY );
         if (xComponent.is())
@@ -173,10 +166,8 @@ void MediaWindowImpl::dispose()
 
     mpMediaWindow = nullptr;
 
-    delete mpEmptyBmpEx;
-    mpEmptyBmpEx = nullptr;
-    delete mpAudioBmpEx;
-    mpAudioBmpEx = nullptr;
+    mpEmptyBmpEx.reset();
+    mpAudioBmpEx.reset();
     mpMediaWindowControl.disposeAndClear();
     mpChildWindow.disposeAndClear();
 
@@ -208,10 +199,6 @@ uno::Reference<media::XPlayer> MediaWindowImpl::createPlayer(const OUString& rUR
 #ifdef AVMEDIA_MANAGER_SERVICE_NAME_OLD
             AVMEDIA_MANAGER_SERVICE_NAME_OLD
 #endif
-// fallback to AVMedia framework on OS X
-#ifdef AVMEDIA_MANAGER_SERVICE_NAME_FALLBACK1
-            AVMEDIA_MANAGER_SERVICE_NAME_FALLBACK1
-#endif
         };
 
         for (sal_uInt32 i = 0; !xPlayer.is() && i < SAL_N_ELEMENTS( aServiceManagers ); ++i)
@@ -223,21 +210,13 @@ uno::Reference<media::XPlayer> MediaWindowImpl::createPlayer(const OUString& rUR
             xPlayer = createPlayer(rURL, aServiceName, xContext);
         }
     }
-#if HAVE_FEATURE_GLTF
-#if HAVE_FEATURE_OPENGL
-    else if ( *pMimeType == AVMEDIA_MIMETYPE_JSON )
-    {
-        xPlayer = createPlayer(rURL, AVMEDIA_OPENGL_MANAGER_SERVICE_NAME, xContext);
-    }
-#endif
-#endif
 
     return xPlayer;
 }
 
 uno::Reference< media::XPlayer > MediaWindowImpl::createPlayer(
     const OUString& rURL, const OUString& rManagerServName,
-    uno::Reference< uno::XComponentContext > xContext)
+    const uno::Reference< uno::XComponentContext >& xContext)
 {
     uno::Reference< media::XPlayer > xPlayer;
     try
@@ -248,11 +227,10 @@ uno::Reference< media::XPlayer > MediaWindowImpl::createPlayer(
         if( xManager.is() )
             xPlayer.set( xManager->createPlayer( rURL ), uno::UNO_QUERY );
         else
-            SAL_WARN( "avmedia", "failed to create media player service " << rManagerServName );
+            SAL_INFO( "avmedia", "failed to create media player service " << rManagerServName );
     } catch ( const uno::Exception &e )
     {
-        SAL_WARN( "avmedia", "couldn't create media player " << rManagerServName
-                              << ", exception '" << e.Message << '\'');
+        SAL_WARN( "avmedia", "couldn't create media player " << rManagerServName << ", " << e);
     }
     return xPlayer;
 }
@@ -285,7 +263,7 @@ void MediaWindowImpl::setURL( const OUString& rURL,
             INetURLObject aURL( rURL );
 
             if (aURL.GetProtocol() != INetProtocol::NotValid)
-                maFileURL = aURL.GetMainURL(INetURLObject::DECODE_UNAMBIGUOUS);
+                maFileURL = aURL.GetMainURL(INetURLObject::DecodeMechanism::Unambiguous);
             else
                 maFileURL = rURL;
         }
@@ -302,19 +280,19 @@ const OUString& MediaWindowImpl::getURL() const
 
 bool MediaWindowImpl::isValid() const
 {
-    return( mxPlayer.is() );
+    return mxPlayer.is();
 }
 
 Size MediaWindowImpl::getPreferredSize() const
 {
-    Size aRet;
+    Size aRet(480, 360);
 
     if( mxPlayer.is() )
     {
         awt::Size aPrefSize( mxPlayer->getPreferredPlayerWindowSize() );
 
-        aRet.Width() = aPrefSize.Width;
-        aRet.Height() = aPrefSize.Height;
+        aRet.setWidth( aPrefSize.Width );
+        aRet.setHeight( aPrefSize.Height );
     }
 
     return aRet;
@@ -330,14 +308,14 @@ void MediaWindowImpl::updateMediaItem( MediaItem& rItem ) const
     if( isPlaying() )
         rItem.setState( MediaState::Play );
     else
-        rItem.setState( ( 0.0 == getMediaTime() ) ? MediaState::Stop : MediaState::Pause );
+        rItem.setState( ( getMediaTime() == 0.0 ) ? MediaState::Stop : MediaState::Pause );
 
     rItem.setDuration( getDuration() );
     rItem.setTime( getMediaTime() );
-    rItem.setLoop( isPlaybackLoop() );
-    rItem.setMute( isMute() );
-    rItem.setVolumeDB( getVolumeDB() );
-    rItem.setZoom( getZoom() );
+    rItem.setLoop( mxPlayer.is() && mxPlayer->isPlaybackLoop() );
+    rItem.setMute( mxPlayer.is() && mxPlayer->isMute() );
+    rItem.setVolumeDB( mxPlayer.is() ? mxPlayer->getVolumeDB() : 0 );
+    rItem.setZoom( mxPlayerWindow.is() ? mxPlayerWindow->getZoomLevel() : media::ZoomLevel_NOT_AVAILABLE );
     rItem.setURL( getURL(), mTempFileURL, maReferer );
 }
 
@@ -356,17 +334,17 @@ void MediaWindowImpl::executeMediaItem( const MediaItem& rItem )
     if (nMaskSet & AVMediaSetMask::TIME)
         setMediaTime(std::min(rItem.getTime(), getDuration()));
 
-    if (nMaskSet & AVMediaSetMask::LOOP)
-        setPlaybackLoop(rItem.isLoop());
+    if (nMaskSet & AVMediaSetMask::LOOP && mxPlayer.is() )
+        mxPlayer->setPlaybackLoop( rItem.isLoop() );
 
-    if (nMaskSet & AVMediaSetMask::MUTE)
-        setMute(rItem.isMute());
+    if (nMaskSet & AVMediaSetMask::MUTE && mxPlayer.is() )
+        mxPlayer->setMute( rItem.isMute() );
 
-    if (nMaskSet & AVMediaSetMask::VOLUMEDB)
-        setVolumeDB(rItem.getVolumeDB());
+    if (nMaskSet & AVMediaSetMask::VOLUMEDB && mxPlayer.is() )
+        mxPlayer->setVolumeDB( rItem.getVolumeDB() );
 
-    if (nMaskSet & AVMediaSetMask::ZOOM)
-        setZoom(rItem.getZoom());
+    if (nMaskSet & AVMediaSetMask::ZOOM && mxPlayerWindow.is() )
+        mxPlayerWindow->setZoomLevel( rItem.getZoom() );
 
     // set play state at last
     if (nMaskSet & AVMediaSetMask::STATE)
@@ -401,16 +379,6 @@ void MediaWindowImpl::executeMediaItem( const MediaItem& rItem )
     }
 }
 
-bool MediaWindowImpl::setZoom(css::media::ZoomLevel eLevel)
-{
-    return mxPlayerWindow.is() && mxPlayerWindow->setZoomLevel( eLevel );
-}
-
-css::media::ZoomLevel MediaWindowImpl::getZoom() const
-{
-    return( mxPlayerWindow.is() ? mxPlayerWindow->getZoomLevel() : media::ZoomLevel_NOT_AVAILABLE );
-}
-
 void MediaWindowImpl::stop()
 {
     if( mxPlayer.is() )
@@ -438,39 +406,6 @@ double MediaWindowImpl::getMediaTime() const
     return( mxPlayer.is() ? mxPlayer->getMediaTime() : 0.0 );
 }
 
-void MediaWindowImpl::setPlaybackLoop( bool bSet )
-{
-    if( mxPlayer.is() )
-        mxPlayer->setPlaybackLoop( bSet );
-}
-
-bool MediaWindowImpl::isPlaybackLoop() const
-{
-    return mxPlayer.is() && mxPlayer->isPlaybackLoop();
-}
-
-void MediaWindowImpl::setMute( bool bSet )
-{
-    if( mxPlayer.is() )
-        mxPlayer->setMute( bSet );
-}
-
-bool MediaWindowImpl::isMute() const
-{
-    return mxPlayer.is() && mxPlayer->isMute();
-}
-
-void MediaWindowImpl::setVolumeDB( sal_Int16 nVolumeDB )
-{
-    if( mxPlayer.is() )
-        mxPlayer->setVolumeDB( nVolumeDB );
-}
-
-sal_Int16 MediaWindowImpl::getVolumeDB() const
-{
-    return (mxPlayer.is() ? mxPlayer->getVolumeDB() : 0);
-}
-
 void MediaWindowImpl::stopPlayingInternal(bool bStop)
 {
     if (isPlaying())
@@ -486,19 +421,10 @@ void MediaWindowImpl::onURLChanged()
         mpChildWindow.disposeAndClear();
         mpChildWindow.reset(VclPtr<MediaChildWindow>::Create(this));
     }
-#if HAVE_FEATURE_GLTF
-    else if (m_sMimeType == AVMEDIA_MIMETYPE_JSON)
-    {
-        SystemWindowData aWinData = OpenGLContext::generateWinData(this, false);
-        mpChildWindow.disposeAndClear();
-        mpChildWindow.reset(VclPtr<MediaChildWindow>::Create(this,&aWinData));
-        mbEventTransparent = false;
-    }
-#endif
     if (!mpChildWindow)
         return;
     mpChildWindow->SetHelpId(HID_AVMEDIA_PLAYERWINDOW);
-    mxEventsIf.set(static_cast<cppu::OWeakObject*>(mpEvents = new MediaEventListenersImpl(*mpChildWindow.get())));
+    mxEvents = new MediaEventListenersImpl(*mpChildWindow);
 
     if (mxPlayer.is())
     {
@@ -508,9 +434,9 @@ void MediaWindowImpl::onURLChanged()
         const Point aPoint;
         const Size aSize(mpChildWindow->GetSizePixel());
 
-        aArgs[0] = uno::makeAny(mpChildWindow->GetParentWindowHandle());
-        aArgs[1] = uno::makeAny(awt::Rectangle(aPoint.X(), aPoint.Y(), aSize.Width(), aSize.Height()));
-        aArgs[2] = uno::makeAny(reinterpret_cast<sal_IntPtr>(mpChildWindow.get()));
+        aArgs[0] <<= mpChildWindow->GetParentWindowHandle();
+        aArgs[1] <<= awt::Rectangle(aPoint.X(), aPoint.Y(), aSize.Width(), aSize.Height());
+        aArgs[2] <<= reinterpret_cast<sal_IntPtr>(mpChildWindow.get());
 
         try
         {
@@ -525,10 +451,11 @@ void MediaWindowImpl::onURLChanged()
 
         if( xPlayerWindow.is() )
         {
-            xPlayerWindow->addKeyListener( uno::Reference< awt::XKeyListener >( mxEventsIf, uno::UNO_QUERY ) );
-            xPlayerWindow->addMouseListener( uno::Reference< awt::XMouseListener >( mxEventsIf, uno::UNO_QUERY ) );
-            xPlayerWindow->addMouseMotionListener( uno::Reference< awt::XMouseMotionListener >( mxEventsIf, uno::UNO_QUERY ) );
-            xPlayerWindow->addFocusListener( uno::Reference< awt::XFocusListener >( mxEventsIf, uno::UNO_QUERY ) );
+            auto pEventsIf = static_cast<cppu::OWeakObject*>(mxEvents.get());
+            xPlayerWindow->addKeyListener( uno::Reference< awt::XKeyListener >( pEventsIf, uno::UNO_QUERY ) );
+            xPlayerWindow->addMouseListener( uno::Reference< awt::XMouseListener >( pEventsIf, uno::UNO_QUERY ) );
+            xPlayerWindow->addMouseMotionListener( uno::Reference< awt::XMouseMotionListener >( pEventsIf, uno::UNO_QUERY ) );
+            xPlayerWindow->addFocusListener( uno::Reference< awt::XFocusListener >( pEventsIf, uno::UNO_QUERY ) );
         }
     }
     else
@@ -548,7 +475,7 @@ void MediaWindowImpl::onURLChanged()
     }
 }
 
-void MediaWindowImpl::setPosSize(const Rectangle& rRect)
+void MediaWindowImpl::setPosSize(const tools::Rectangle& rRect)
 {
     SetPosSizePixel(rRect.TopLeft(), rRect.GetSize());
 }
@@ -598,9 +525,9 @@ void MediaWindowImpl::Resize()
     if (mpMediaWindowControl)
     {
         const sal_Int32 nControlHeight = mpMediaWindowControl->GetSizePixel().Height();
-        const sal_Int32 nControlY = ::std::max(aCurSize.Height() - nControlHeight - nOffset, 0L);
+        const sal_Int32 nControlY = std::max(aCurSize.Height() - nControlHeight - nOffset, 0L);
 
-        aPlayerWindowSize.Height() = (nControlY - (nOffset << 1));
+        aPlayerWindowSize.setHeight( nControlY - (nOffset << 1) );
         mpMediaWindowControl->SetPosSizePixel(Point(nOffset, nControlY ), Size(aCurSize.Width() - (nOffset << 1), nControlHeight));
     }
     if (mpChildWindow)
@@ -637,7 +564,7 @@ void MediaWindowImpl::StateChanged(StateChangedType eType)
     }
 }
 
-void MediaWindowImpl::Paint(vcl::RenderContext& rRenderContext, const Rectangle&)
+void MediaWindowImpl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&)
 {
     if (mxPlayerWindow.is())
         mxPlayerWindow->update();
@@ -647,23 +574,23 @@ void MediaWindowImpl::Paint(vcl::RenderContext& rRenderContext, const Rectangle&
     if (!mxPlayer.is())
     {
         if (!mpEmptyBmpEx)
-            mpEmptyBmpEx = new BitmapEx(AVMEDIA_RESID(AVMEDIA_BMP_EMPTYLOGO));
+            mpEmptyBmpEx.reset(new BitmapEx(AVMEDIA_BMP_EMPTYLOGO));
 
-        pLogo = mpEmptyBmpEx;
+        pLogo = mpEmptyBmpEx.get();
     }
     else if (!mxPlayerWindow.is())
     {
         if (!mpAudioBmpEx)
-            mpAudioBmpEx = new BitmapEx(AVMEDIA_RESID(AVMEDIA_BMP_AUDIOLOGO));
+            mpAudioBmpEx.reset(new BitmapEx(AVMEDIA_BMP_AUDIOLOGO));
 
-        pLogo = mpAudioBmpEx;
+        pLogo = mpAudioBmpEx.get();
     }
 
     if (!mpChildWindow)
         return;
 
     const Point aBasePos(mpChildWindow->GetPosPixel());
-    const Rectangle aVideoRect(aBasePos, mpChildWindow->GetSizePixel());
+    const tools::Rectangle aVideoRect(aBasePos, mpChildWindow->GetSizePixel());
 
     if (pLogo && !pLogo->IsEmpty() && (aVideoRect.GetWidth() > 0) && (aVideoRect.GetHeight() > 0))
     {
@@ -681,13 +608,13 @@ void MediaWindowImpl::Paint(vcl::RenderContext& rRenderContext, const Rectangle&
 
             if (fLogoWH < (double(aVideoRect.GetWidth()) / aVideoRect.GetHeight()))
             {
-                aLogoSize.Width() = long(aVideoRect.GetHeight() * fLogoWH);
-                aLogoSize.Height() = aVideoRect.GetHeight();
+                aLogoSize.setWidth( long(aVideoRect.GetHeight() * fLogoWH) );
+                aLogoSize.setHeight( aVideoRect.GetHeight() );
             }
             else
             {
-                aLogoSize.Width() = aVideoRect.GetWidth();
-                aLogoSize.Height()= long(aVideoRect.GetWidth() / fLogoWH);
+                aLogoSize.setWidth( aVideoRect.GetWidth() );
+                aLogoSize.setHeight( long(aVideoRect.GetWidth() / fLogoWH) );
             }
         }
 
@@ -704,53 +631,53 @@ void MediaWindowImpl::GetFocus()
 
 void MediaWindowImpl::MouseMove(const MouseEvent& rMEvt)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->MouseMove(rMEvt);
 }
 
 void MediaWindowImpl::MouseButtonDown(const MouseEvent& rMEvt)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->MouseButtonDown(rMEvt);
 }
 
 void MediaWindowImpl::MouseButtonUp(const MouseEvent& rMEvt)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->MouseButtonUp(rMEvt);
 }
 
 void MediaWindowImpl::KeyInput(const KeyEvent& rKEvt)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->KeyInput(rKEvt);
 }
 
 void MediaWindowImpl::KeyUp(const KeyEvent& rKEvt)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->KeyUp(rKEvt);
 }
 
 void MediaWindowImpl::Command(const CommandEvent& rCEvt)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->Command(rCEvt);
 }
 
 sal_Int8 MediaWindowImpl::AcceptDrop(const AcceptDropEvent& rEvt)
 {
-    return (mpMediaWindow && mbEventTransparent ? mpMediaWindow->AcceptDrop(rEvt) : 0);
+    return (mpMediaWindow ? mpMediaWindow->AcceptDrop(rEvt) : 0);
 }
 
 sal_Int8 MediaWindowImpl::ExecuteDrop(const ExecuteDropEvent& rEvt)
 {
-    return (mpMediaWindow && mbEventTransparent ? mpMediaWindow->ExecuteDrop(rEvt) : 0);
+    return (mpMediaWindow ? mpMediaWindow->ExecuteDrop(rEvt) : 0);
 }
 
 void MediaWindowImpl::StartDrag(sal_Int8 nAction, const Point& rPosPixel)
 {
-    if (mpMediaWindow && mbEventTransparent)
+    if (mpMediaWindow)
         mpMediaWindow->StartDrag(nAction, rPosPixel);
 }
 

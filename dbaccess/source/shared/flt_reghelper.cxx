@@ -18,9 +18,8 @@
  */
 
 
-#include "flt_reghelper.hxx"
+#include <flt_reghelper.hxx>
 
-#include <osl/diagnose.h>
 #include <comphelper/sequence.hxx>
 
 namespace dbaxml

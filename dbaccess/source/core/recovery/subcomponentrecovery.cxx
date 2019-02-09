@@ -19,7 +19,7 @@
 
 #include "subcomponentrecovery.hxx"
 
-#include "sdbcoretools.hxx"
+#include <sdbcoretools.hxx>
 #include "storagexmlstream.hxx"
 #include "subcomponentloader.hxx"
 #include "settingsimport.hxx"
@@ -32,11 +32,13 @@
 #include <com/sun/star/sdb/XFormDocumentsSupplier.hpp>
 #include <com/sun/star/sdb/XReportDocumentsSupplier.hpp>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/SAXException.hpp>
 
 #include <comphelper/namedvaluecollection.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <connectivity/dbtools.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 #include <xmloff/XMLSettingsExportContext.hxx>
 #include <xmloff/SettingsExportHelper.hxx>
 
@@ -55,7 +57,6 @@ namespace dbaccess
     using css::uno::Any;
     using css::uno::Sequence;
     using css::uno::XComponentContext;
-    using css::lang::XMultiServiceFactory;
     using css::embed::XStorage;
     using css::sdb::application::XDatabaseDocumentUI;
     using css::beans::Pair;
@@ -156,7 +157,7 @@ namespace dbaccess
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("dbaccess");
             }
             return xCommandProcessor;
         }
@@ -166,7 +167,7 @@ namespace dbaccess
     }
 
     // SettingsExportContext
-    class DBACCESS_DLLPRIVATE SettingsExportContext : public ::xmloff::XMLSettingsExportContext
+    class SettingsExportContext : public ::xmloff::XMLSettingsExportContext
     {
     public:
         SettingsExportContext( const Reference<XComponentContext>& i_rContext, const StorageXMLOutputStream& i_rDelegator )
@@ -239,7 +240,7 @@ namespace dbaccess
     // SettingsDocumentHandler
     typedef ::cppu::WeakImplHelper<   XDocumentHandler
                                   >   SettingsDocumentHandler_Base;
-    class DBACCESS_DLLPRIVATE SettingsDocumentHandler : public SettingsDocumentHandler_Base
+    class SettingsDocumentHandler : public SettingsDocumentHandler_Base
     {
     public:
         SettingsDocumentHandler()
@@ -247,37 +248,37 @@ namespace dbaccess
         }
 
     protected:
-        virtual ~SettingsDocumentHandler()
+        virtual ~SettingsDocumentHandler() override
         {
         }
 
     public:
         // XDocumentHandler
-        virtual void SAL_CALL startDocument(  ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL endDocument(  ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL startElement( const OUString& aName, const Reference< XAttributeList >& xAttribs ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL endElement( const OUString& aName ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL characters( const OUString& aChars ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL processingInstruction( const OUString& aTarget, const OUString& aData ) throw (SAXException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL setDocumentLocator( const Reference< XLocator >& xLocator ) throw (SAXException, RuntimeException, std::exception) override;
+        virtual void SAL_CALL startDocument(  ) override;
+        virtual void SAL_CALL endDocument(  ) override;
+        virtual void SAL_CALL startElement( const OUString& aName, const Reference< XAttributeList >& xAttribs ) override;
+        virtual void SAL_CALL endElement( const OUString& aName ) override;
+        virtual void SAL_CALL characters( const OUString& aChars ) override;
+        virtual void SAL_CALL ignorableWhitespace( const OUString& aWhitespaces ) override;
+        virtual void SAL_CALL processingInstruction( const OUString& aTarget, const OUString& aData ) override;
+        virtual void SAL_CALL setDocumentLocator( const Reference< XLocator >& xLocator ) override;
 
         const ::comphelper::NamedValueCollection&   getSettings() const { return m_aSettings; }
 
     private:
-        ::std::stack< ::rtl::Reference< SettingsImport > >  m_aStates;
+        std::stack< ::rtl::Reference< SettingsImport > >  m_aStates;
         ::comphelper::NamedValueCollection                  m_aSettings;
     };
 
-    void SAL_CALL SettingsDocumentHandler::startDocument(  ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::startDocument(  )
     {
     }
 
-    void SAL_CALL SettingsDocumentHandler::endDocument(  ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::endDocument(  )
     {
     }
 
-    void SAL_CALL SettingsDocumentHandler::startElement( const OUString& i_Name, const Reference< XAttributeList >& i_Attribs ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::startElement( const OUString& i_Name, const Reference< XAttributeList >& i_Attribs )
     {
         ::rtl::Reference< SettingsImport >  pNewState;
 
@@ -308,17 +309,16 @@ namespace dbaccess
         m_aStates.push( pNewState );
     }
 
-    void SAL_CALL SettingsDocumentHandler::endElement( const OUString& i_Name ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::endElement( const OUString& )
     {
         ENSURE_OR_THROW( !m_aStates.empty(), "no active element" );
-        (void)i_Name;
 
         ::rtl::Reference< SettingsImport > pCurrentState( m_aStates.top() );
         pCurrentState->endElement();
         m_aStates.pop();
     }
 
-    void SAL_CALL SettingsDocumentHandler::characters( const OUString& i_Chars ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::characters( const OUString& i_Chars )
     {
         ENSURE_OR_THROW( !m_aStates.empty(), "no active element" );
 
@@ -326,23 +326,17 @@ namespace dbaccess
         pCurrentState->characters( i_Chars );
     }
 
-    void SAL_CALL SettingsDocumentHandler::ignorableWhitespace( const OUString& aWhitespaces ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::ignorableWhitespace( const OUString& )
     {
         // ignore them - that's why they're called "ignorable"
-        (void)aWhitespaces;
     }
 
-    void SAL_CALL SettingsDocumentHandler::processingInstruction( const OUString& i_Target, const OUString& i_Data ) throw (SAXException, RuntimeException, std::exception)
+    void SAL_CALL SettingsDocumentHandler::processingInstruction( const OUString&, const OUString& )
     {
         OSL_FAIL( "SettingsDocumentHandler::processingInstruction: unexpected ..." );
-        (void)i_Target;
-        (void)i_Data;
     }
 
-    void SAL_CALL SettingsDocumentHandler::setDocumentLocator( const Reference< XLocator >& i_Locator ) throw (SAXException, RuntimeException, std::exception)
-    {
-        (void)i_Locator;
-    }
+    void SAL_CALL SettingsDocumentHandler::setDocumentLocator( const Reference< XLocator >& ) {}
 
     // SubComponentRecovery
     const OUString SubComponentRecovery::getComponentsStorageName( const SubComponentType i_eType )
@@ -441,7 +435,7 @@ namespace dbaccess
                 m_aCompDesc.bForEditing = true;
                 break;
             }
-            // fall through
+            [[fallthrough]];
 
         case FORM:
             m_aCompDesc.bForEditing = !lcl_determineReadOnly( m_xComponent );
@@ -544,8 +538,7 @@ namespace dbaccess
         if ( xDocDefinition.is() )
         {
             Reference< XController > xController( m_xDocumentUI, UNO_QUERY_THROW );
-            Reference< XInterface > xLoader( *new SubComponentLoader( xController, xDocDefinition ) );
-            (void)xLoader;
+            rtl::Reference< SubComponentLoader >( new SubComponentLoader( xController, xDocDefinition ) );
         }
 
         return xSubComponent;
@@ -563,7 +556,7 @@ namespace dbaccess
         aDesignInput.import( pDocHandler.get() );
 
         const ::comphelper::NamedValueCollection& rSettings( pDocHandler->getSettings() );
-        const Any aCurrentQueryDesign = rSettings.get( sCurrentQueryDesignName );
+        const Any& aCurrentQueryDesign = rSettings.get( sCurrentQueryDesignName );
 #if OSL_DEBUG_LEVEL > 0
         Sequence< PropertyValue > aQueryDesignLayout;
         OSL_VERIFY( aCurrentQueryDesign >>= aQueryDesignLayout );
@@ -598,8 +591,7 @@ namespace dbaccess
         }
 
         Reference< XController > xController( m_xDocumentUI, UNO_QUERY_THROW );
-        Reference< XInterface > xLoader( *new SubComponentLoader( xController, xSubComponent ) );
-        (void)xLoader;
+        rtl::Reference< SubComponentLoader >( new SubComponentLoader( xController, xSubComponent ) );
 
         return xSubComponent;
     }

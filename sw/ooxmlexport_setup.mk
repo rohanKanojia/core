@@ -13,14 +13,16 @@ define sw_ooxmlexport_libraries
 	comphelper \
 	cppu \
 	cppuhelper \
+	editeng \
 	sal \
+	sfx \
 	sw \
 	test \
 	tl \
 	unotest \
 	utl \
 	vcl \
-	$(gb_UWINAPI)
+	svxcore
 endef
 
 define sw_ooxmlexport_components
@@ -33,10 +35,9 @@ define sw_ooxmlexport_components
 	dbaccess/util/dba \
 	drawinglayer/drawinglayer \
 	embeddedobj/util/embobj \
+	emfio/emfio \
 	$(if $(filter WNT,$(OS)), \
-		$(if $(DISABLE_ATL),, \
-			embeddedobj/source/msole/emboleobj.windows \
-		), \
+		embeddedobj/source/msole/emboleobj.windows, \
 		embeddedobj/source/msole/emboleobj \
 	) \
 	filter/source/config/cache/filterconfig1 \
@@ -58,6 +59,7 @@ define sw_ooxmlexport_components
 	sw/util/swd \
 	sw/util/msword \
 	sfx2/util/sfx \
+	sot/util/sot \
 	starmath/util/sm \
 	svl/source/fsstor/fsstorage \
 	svl/util/svl \
@@ -72,6 +74,7 @@ define sw_ooxmlexport_components
 	unoxml/source/rdf/unordf \
 	unoxml/source/service/unoxml \
 	uui/util/uui \
+	vcl/vcl.common \
 	writerfilter/util/writerfilter \
 	xmloff/util/xo
 endef
@@ -102,8 +105,9 @@ $(eval $(call gb_CppunitTest_set_include,sw_ooxmlexport$(1),\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_ooxmlexport$(1),\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_ooxmlexport$(1)))
@@ -116,12 +120,18 @@ $(eval $(call gb_CppunitTest_use_components,sw_ooxmlexport$(1),\
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_ooxmlexport$(1)))
 
+$(eval $(call gb_CppunitTest_use_uiconfigs,sw_ooxmlexport$(1),\
+    modules/swriter \
+))
+
 $(eval $(call gb_CppunitTest_use_packages,sw_ooxmlexport$(1),\
 	oox_customshapes \
 	oox_generated \
 ))
 
 $(call gb_CppunitTest_get_target,sw_ooxmlexport$(1)) : $(call gb_Library_get_target,iti)
+
+$(eval $(call gb_CppunitTest_use_more_fonts,sw_ooxmlexport$(1)))
 
 endef
 

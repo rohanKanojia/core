@@ -18,20 +18,17 @@
  */
 
 #include "XMLTableShapeResizer.hxx"
-#include "unonames.hxx"
-#include "document.hxx"
+#include <document.hxx>
 #include "xmlimprt.hxx"
-#include "chartlis.hxx"
-#include "XMLConverter.hxx"
-#include "rangeutl.hxx"
-#include "compiler.hxx"
-#include "reftokenhelper.hxx"
+#include <chartlis.hxx>
+#include <rangeutl.hxx>
+#include <compiler.hxx>
+#include <reftokenhelper.hxx>
 
 #include <osl/diagnose.h>
 
-#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/table/XColumnRowRange.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
 
 #include <memory>
 #include <vector>
@@ -51,7 +48,7 @@ ScMyOLEFixer::~ScMyOLEFixer()
 {
 }
 
-bool ScMyOLEFixer::IsOLE(uno::Reference< drawing::XShape >& rShape)
+bool ScMyOLEFixer::IsOLE(const uno::Reference< drawing::XShape >& rShape)
 {
     return rShape->getShapeType() == "com.sun.star.drawing.OLE2Shape";
 }
@@ -90,12 +87,12 @@ void ScMyOLEFixer::CreateChartListener(ScDocument* pDoc,
         *pRefTokens, aRangeStr, pDoc, cSep, pDoc->GetGrammar());
     if (!pRefTokens->empty())
     {
-        ScChartListener* pCL(new ScChartListener(rName, pDoc, pRefTokens.release()));
+        ScChartListener* pCL(new ScChartListener(rName, pDoc, std::move(pRefTokens)));
 
         //for loading binary files e.g.
         //if we have the flat filter we need to set the dirty flag thus the visible charts get repainted
         //otherwise the charts keep their first visual representation which was created at a moment where the calc itself was not loaded completely and is therefore incorrect
-        if( rImport.getImportFlags() & SvXMLImportFlags::ALL )
+        if( (rImport.getImportFlags() & SvXMLImportFlags::ALL) == SvXMLImportFlags::ALL )
             pCL->SetDirty( true );
         else
         {
@@ -109,7 +106,7 @@ void ScMyOLEFixer::CreateChartListener(ScDocument* pDoc,
     }
 }
 
-void ScMyOLEFixer::AddOLE(uno::Reference <drawing::XShape>& rShape,
+void ScMyOLEFixer::AddOLE(const uno::Reference <drawing::XShape>& rShape,
        const OUString &rRangeList)
 {
     ScMyToFixupOLE aShape;
@@ -123,30 +120,28 @@ void ScMyOLEFixer::FixupOLEs()
     if (!aShapes.empty() && rImport.GetModel().is())
     {
         OUString sPersistName ("PersistName");
-        ScMyToFixupOLEs::iterator aItr(aShapes.begin());
-        ScMyToFixupOLEs::iterator aEndItr(aShapes.end());
         ScDocument* pDoc(rImport.GetDocument());
 
         ScXMLImport::MutexGuard aGuard(rImport);
 
-        while (aItr != aEndItr)
+        for (auto const& shape : aShapes)
         {
             // #i78086# also call CreateChartListener for invalid position (anchored to sheet)
-            if (!IsOLE(aItr->xShape))
+            if (!IsOLE(shape.xShape))
                 OSL_FAIL("Only OLEs should be in here now");
 
-            if (IsOLE(aItr->xShape))
+            if (IsOLE(shape.xShape))
             {
-                uno::Reference < beans::XPropertySet > xShapeProps ( aItr->xShape, uno::UNO_QUERY );
+                uno::Reference < beans::XPropertySet > xShapeProps ( shape.xShape, uno::UNO_QUERY );
                 uno::Reference < beans::XPropertySetInfo > xShapeInfo(xShapeProps->getPropertySetInfo());
 
                 OUString sName;
                 if (pDoc && xShapeProps.is() && xShapeInfo.is() && xShapeInfo->hasPropertyByName(sPersistName) &&
                     (xShapeProps->getPropertyValue(sPersistName) >>= sName))
-                    CreateChartListener(pDoc, sName, aItr->sRangeList);
+                    CreateChartListener(pDoc, sName, shape.sRangeList);
             }
-            aItr = aShapes.erase(aItr);
         }
+        aShapes.clear();
     }
 }
 

@@ -16,8 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "dlgedclip.hxx"
-#include <comphelper/processfactory.hxx>
+#include <dlgedclip.hxx>
 #include <osl/diagnose.h>
 #include <sot/exchange.hxx>
 #include <com/sun/star/datatransfer/XMimeContentType.hpp>
@@ -26,7 +25,6 @@
 namespace rptui
 {
 
-using namespace comphelper;
 using namespace ::com::sun::star;
 
 
@@ -57,7 +55,7 @@ void OReportExchange::AddSupportedFormats()
 bool OReportExchange::GetData( const datatransfer::DataFlavor& _rFlavor, const OUString& /*rDestDoc*/ )
 {
     const SotClipboardFormatId nFormatId = SotExchange::GetFormat(_rFlavor);
-    return (nFormatId == getDescriptorFormatId()) && SetAny( uno::Any(m_aCopyElements), _rFlavor );
+    return (nFormatId == getDescriptorFormatId()) && SetAny( uno::Any(m_aCopyElements) );
 }
 
 bool OReportExchange::canExtract(const DataFlavorExVector& _rFlavor)

@@ -19,17 +19,14 @@
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/document/XDocumentLanguages.hpp>
-#include <com/sun/star/frame/ModuleManager.hpp>
-#include <com/sun/star/frame/theUICommandDescription.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/linguistic2/LanguageGuessing.hpp>
 
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <svtools/langtab.hxx>
-#include <comphelper/processfactory.hxx>
 #include <helper/mischelper.hxx>
 #include <services.h>
 
@@ -43,7 +40,7 @@ using namespace ::com::sun::star::lang;
 namespace framework
 {
 
-uno::Reference< linguistic2::XLanguageGuessing > LanguageGuessingHelper::GetGuesser() const
+uno::Reference< linguistic2::XLanguageGuessing > const & LanguageGuessingHelper::GetGuesser() const
 {
     if (!m_xLanguageGuesser.is())
     {
@@ -80,7 +77,7 @@ void FillLangItems( std::set< OUString > &rLangItems,
     if( rSystemLanguage != LANGUAGE_DONTKNOW )
     {
         if ( IsScriptTypeMatchingToLanguage( nScriptType, rSystemLanguage ))
-            rLangItems.insert( OUString( SvtLanguageTable::GetLanguageString( rSystemLanguage )) );
+            rLangItems.insert( SvtLanguageTable::GetLanguageString( rSystemLanguage ) );
     }
 
     //3--UI
@@ -88,11 +85,11 @@ void FillLangItems( std::set< OUString > &rLangItems,
     if( rUILanguage != LANGUAGE_DONTKNOW )
     {
         if ( IsScriptTypeMatchingToLanguage( nScriptType, rUILanguage ))
-            rLangItems.insert( OUString( SvtLanguageTable::GetLanguageString( rUILanguage )) );
+            rLangItems.insert( SvtLanguageTable::GetLanguageString( rUILanguage ) );
     }
 
     //4--guessed language
-    uno::Reference< linguistic2::XLanguageGuessing > xLangGuesser( rLangGuessHelper.GetGuesser() );
+    const uno::Reference< linguistic2::XLanguageGuessing >& xLangGuesser( rLangGuessHelper.GetGuesser() );
     if ( xLangGuesser.is() && !rGuessedTextLang.isEmpty())
     {
         css::lang::Locale aLocale(xLangGuesser->guessPrimaryLanguage( rGuessedTextLang, 0, rGuessedTextLang.getLength()) );
@@ -135,7 +132,7 @@ void FillLangItems( std::set< OUString > &rLangItems,
                     break;
                 const Locale& rLocale=rLocales[i];
                 if( IsScriptTypeMatchingToLanguage( nScriptType, SvtLanguageTable::GetLanguageType( rLocale.Language )))
-                    rLangItems.insert( OUString( rLocale.Language ) );
+                    rLangItems.insert( rLocale.Language );
             }
         }
     }

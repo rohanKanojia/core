@@ -19,11 +19,9 @@
 #ifndef INCLUDED_SW_INC_FORMAT_HXX
 #define INCLUDED_SW_INC_FORMAT_HXX
 
-#include <tools/solar.h>
 #include "swdllapi.h"
-#include <swatrset.hxx>
-#include <calbck.hxx>
-#include <hintids.hxx>
+#include "swatrset.hxx"
+#include "calbck.hxx"
 #include <memory>
 
 class IDocumentSettingAccess;
@@ -34,6 +32,7 @@ class IDocumentFieldsAccess;
 class IDocumentChartDataProviderAccess;
 class SwDoc;
 class SfxGrabBagItem;
+class SwTextGridItem;
 
 namespace drawinglayer { namespace attribute {
     class SdrAllFillAttributesHelper;
@@ -41,8 +40,10 @@ namespace drawinglayer { namespace attribute {
 }}
 
 /// Base class for various Writer styles.
-class SW_DLLPUBLIC SwFormat : public SwModify
+class SW_DLLPUBLIC SwFormat : public sw::BroadcastingModify
 {
+    friend class SwFrameFormat;
+
     OUString m_aFormatName;
     SwAttrSet m_aSet;
 
@@ -51,7 +52,6 @@ class SW_DLLPUBLIC SwFormat : public SwModify
                                        (is not hard attribution!!!) */
     sal_uInt16 m_nPoolHelpId;       ///< HelpId for this Pool-style.
     sal_uInt8 m_nPoolHlpFileId;     ///< FilePos to Doc to these style helps.
-    bool   m_bWritten : 1;      ///< TRUE: already written.
     bool   m_bAutoFormat : 1;      /**< FALSE: it is a template.
                                        default is true! */
     bool   m_bFormatInDTOR : 1;    /**< TRUE: Format becomes deleted. In order to be able
@@ -67,18 +67,15 @@ protected:
     SwFormat( SwAttrPool& rPool, const OUString &rFormatNm, const sal_uInt16* pWhichRanges,
             SwFormat *pDrvdFrame, sal_uInt16 nFormatWhich );
     SwFormat( const SwFormat& rFormat );
-   virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNewValue ) override;
+    virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNewValue ) override;
 
 public:
 
-    virtual ~SwFormat();
+    virtual ~SwFormat() override;
     SwFormat &operator=(const SwFormat&);
 
     /// for Querying of Writer-functions.
     sal_uInt16 Which() const { return m_nWhichId; }
-
-    /// Query format information.
-    virtual bool GetInfo( SfxPoolItem& ) const override;
 
     /// Copy attributes even among documents.
     void CopyAttrs( const SwFormat& );
@@ -91,10 +88,12 @@ public:
     bool SetDerivedFrom(SwFormat *pDerivedFrom = nullptr);
 
     /// If bInParents is FALSE, search only in this format for attribute.
-    //UUUUinline
     const SfxPoolItem& GetFormatAttr( sal_uInt16 nWhich,
                                    bool bInParents = true ) const;
-    //UUUUinline
+    template<class T> const T& GetFormatAttr( TypedWhichId<T> nWhich, bool bInParents = true ) const
+    {
+        return static_cast<const T&>(GetFormatAttr(sal_uInt16(nWhich), bInParents));
+    }
     SfxItemState GetItemState( sal_uInt16 nWhich, bool bSrchInParent = true,
                                     const SfxPoolItem **ppItem = nullptr ) const;
     SfxItemState GetBackgroundState(SvxBrushItem &rItem) const;
@@ -106,18 +105,17 @@ public:
         @return count of deleted hints. */
     virtual sal_uInt16 ResetAllFormatAttr();
 
-    inline SwFormat* DerivedFrom() const { return const_cast<SwFormat*>(static_cast<const SwFormat*>(GetRegisteredIn())); }
-    inline bool IsDefault() const { return DerivedFrom() == nullptr; }
+    SwFormat* DerivedFrom() const { return const_cast<SwFormat*>(static_cast<const SwFormat*>(GetRegisteredIn())); }
+    bool IsDefault() const { return DerivedFrom() == nullptr; }
 
-    inline OUString GetName() const                  { return m_aFormatName; }
-    inline bool HasName(const OUString &rName) const { return m_aFormatName == rName; }
-    void SetName( const OUString& rNewName, bool bBroadcast=false );
+    const OUString& GetName() const                  { return m_aFormatName; }
+    bool HasName(const OUString &rName) const { return m_aFormatName == rName; }
+    virtual void SetName( const OUString& rNewName, bool bBroadcast=false );
 
     /// For querying the attribute array.
-    inline const SwAttrSet& GetAttrSet() const { return m_aSet; }
+    const SwAttrSet& GetAttrSet() const { return m_aSet; }
 
-    /** Das Doc wird jetzt am SwAttrPool gesetzt. Dadurch hat man es immer
-       im Zugriff. */
+    /** The document is set in SwAttrPool now, therefore you always can access it. */
     const SwDoc *GetDoc() const         { return m_aSet.GetDoc(); }
           SwDoc *GetDoc()               { return m_aSet.GetDoc(); }
 
@@ -153,11 +151,8 @@ public:
 
     /// Get attribute-description. Returns passed string.
     void GetPresentation( SfxItemPresentation ePres,
-        SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric, OUString &rText ) const
+        MapUnit eCoreMetric, MapUnit ePresMetric, OUString &rText ) const
         { m_aSet.GetPresentation( ePres, eCoreMetric, ePresMetric, rText ); }
-
-    /// Format-ID for reading/writing:
-    void   ResetWritten()    { m_bWritten = false; }
 
     /// Query / set AutoFormat-flag.
     bool IsAuto() const                 { return m_bAutoFormat; }
@@ -207,7 +202,7 @@ public:
     inline const SvxBoxItem               &GetBox( bool = true ) const;
     inline const SvxFormatKeepItem         &GetKeep( bool = true ) const;
 
-    //UUUU Create SvxBrushItem for Background fill (partially for backwards compatibility)
+    // Create SvxBrushItem for Background fill (partially for backwards compatibility)
     SvxBrushItem makeBackgroundBrushItem( bool = true ) const;
 
     inline const SvxShadowItem            &GetShadow( bool = true ) const;
@@ -248,13 +243,11 @@ public:
         Default implementation returns false. Thus, subclasses have to override
         method, if the specific subclass can have a transparent background.
 
-        @author OD
-
         @return false, default implementation
     */
     virtual bool IsBackgroundTransparent() const;
 
-    //UUUU Access to DrawingLayer FillAttributes in a preprocessed form for primitive usage
+    // Access to DrawingLayer FillAttributes in a preprocessed form for primitive usage
     virtual drawinglayer::attribute::SdrAllFillAttributesHelperPtr getSdrAllFillAttributesHelper() const;
     virtual bool supportsFullDrawingLayerFillAttributeSet() const;
 };

@@ -14,7 +14,7 @@
 
 #include <boost/optional.hpp>
 #include <com/sun/star/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Reference.h>
 #include <comphelper/comphelperdllapi.h>
 #include <comphelper/processfactory.hxx>
 #include <sal/types.h>
@@ -245,9 +245,7 @@ template< typename T, typename U > struct ConfigurationLocalizedProperty
     /// com.sun.star.configuration.theDefaultProvider.
     ///
     /// For nillable properties, U is of type boost::optional<U'>.
-    static U get(
-        css::uno::Reference< css::uno::XComponentContext >
-            const & context = comphelper::getProcessComponentContext())
+    static U get(css::uno::Reference< css::uno::XComponentContext > const & context)
     {
         // Folding this into one statement causes a bogus error at least with
         // Red Hat GCC 4.6.2-1:

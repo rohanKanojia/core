@@ -20,12 +20,14 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_HTMLEXP_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_HTMLEXP_HXX
 
-#include "global.hxx"
 #include <rtl/textenc.h>
 #include <tools/gen.hxx>
 #include <tools/color.hxx>
+#include <vcl/vclptr.hxx>
 #include <vector>
 #include <memory>
+#include <map>
+#include <svx/xoutbmp.hxx>
 
 #include "expbase.hxx"
 
@@ -41,7 +43,7 @@ enum class SvtScriptType;
 namespace editeng { class SvxBorderLine; }
 
 struct ScHTMLStyle
-{   // Defaults aus StyleSheet
+{   // Defaults from stylesheet
     Color               aBackgroundColor;
     OUString            aFontFamilyName;
     sal_uInt32          nFontHeight;        // Item-Value
@@ -70,11 +72,11 @@ struct ScHTMLStyle
 
 struct ScHTMLGraphEntry
 {
-    ScRange             aRange;         // mapped range
-    Size                aSize;          // size in pixels
-    Size                aSpace;         // spacing in pixels
-    SdrObject*          pObject;
-    bool                bInCell;        // if output is in cell
+    ScRange const       aRange;         // mapped range
+    Size const          aSize;          // size in pixels
+    Size const          aSpace;         // spacing in pixels
+    SdrObject* const    pObject;
+    bool const          bInCell;        // if output is in cell
     bool                bWritten;
 
     ScHTMLGraphEntry( SdrObject* pObj, const ScRange& rRange,
@@ -107,8 +109,7 @@ class ScHTMLExport : public ScExportBase
     GraphEntryList   aGraphList;
     ScHTMLStyle      aHTMLStyle;
     OUString         aBaseURL;
-    OUString         aStreamPath;
-    OUString         aCId;           // Content-Id for Mail-Export
+    OUString const   aStreamPath;
     VclPtr<OutputDevice> pAppWin;        // for Pixel-work
     FileNameMapPtr   pFileNameMap;        // for CopyLocalFileToINet
     OUString         aNonConvertibleChars;   // collect nonconvertible characters
@@ -116,12 +117,11 @@ class ScHTMLExport : public ScExportBase
     SCTAB            nUsedTables;
     short            nIndent;
     sal_Char         sIndent[nIndentMax+1];
-    bool             bAll;           // whole document
+    bool const       bAll;           // whole document
     bool             bTabHasGraphics;
     bool             bTabAlignedLeft;
-    bool             bCalcAsShown;
+    bool const       bCalcAsShown;
     bool             bCopyLocalFileToINet;
-    bool             bTableDataWidth;
     bool             bTableDataHeight;
     bool             mbSkipImages;
     /// If HTML header and footer should be written as well, or just the content itself.
@@ -137,7 +137,7 @@ class ScHTMLExport : public ScExportBase
     void WriteGraphEntry( ScHTMLGraphEntry* );
     void WriteImage( OUString& rLinkName,
                      const Graphic&, const OString& rImgOptions,
-                     sal_uLong nXOutFlags = 0 );
+                     XOutFlags nXOutFlags = XOutFlags::NONE );
             // nXOutFlags for XOutBitmap::WriteGraphic
 
     // write to stream if and only if URL fields in edit cell
@@ -145,11 +145,6 @@ class ScHTMLExport : public ScExportBase
 
     // copy a local file to internet if needed
     void CopyLocalFileToINet( OUString& rFileNm, const OUString& rTargetNm );
-    bool HasCId()
-    {
-        return !aCId.isEmpty();
-    }
-    void MakeCIdURL( OUString& rURL );
 
     void PrepareGraphics( ScDrawLayer*, SCTAB nTab,
                           SCCOL nStartCol, SCROW nStartRow,
@@ -177,7 +172,7 @@ class ScHTMLExport : public ScExportBase
 public:
                         ScHTMLExport( SvStream&, const OUString&, ScDocument*, const ScRange&,
                                       bool bAll, const OUString& aStreamPath, const OUString& rFilterOptions );
-    virtual             ~ScHTMLExport();
+    virtual             ~ScHTMLExport() override;
     void                Write();
     const OUString&     GetNonConvertibleChars() const
     {

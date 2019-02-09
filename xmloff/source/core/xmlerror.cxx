@@ -20,6 +20,7 @@
 #include <xmloff/xmlerror.hxx>
 #include <rtl/ustring.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <com/sun/star/xml/sax/XLocator.hpp>
 #include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <com/sun/star/uno/Any.hxx>
@@ -49,20 +50,19 @@ public:
                  sal_Int32 nColumn,
                  const OUString& rPublicId,
                  const OUString& rSystemId);
-    ~ErrorRecord();
 
-    sal_Int32 nId;  /// error ID
+    sal_Int32 const nId;  /// error ID
 
-    OUString sExceptionMessage;/// message of original exception (if available)
+    OUString const sExceptionMessage;/// message of original exception (if available)
 
     // XLocator information:
-    sal_Int32 nRow;     /// row number where error occurred (or -1 for unknown)
-    sal_Int32 nColumn;  /// column number where error occurred (or -1)
-    OUString sPublicId; /// public identifier
-    OUString sSystemId; /// public identifier
+    sal_Int32 const nRow;     /// row number where error occurred (or -1 for unknown)
+    sal_Int32 const nColumn;  /// column number where error occurred (or -1)
+    OUString const sPublicId; /// public identifier
+    OUString const sSystemId; /// public identifier
 
     /// message Parameters
-    Sequence<OUString> aParams;
+    Sequence<OUString> const aParams;
 };
 
 
@@ -78,11 +78,6 @@ ErrorRecord::ErrorRecord( sal_Int32 nID, const Sequence<OUString>& rParams,
         aParams(rParams)
 {
 }
-
-ErrorRecord::~ErrorRecord()
-{
-}
-
 
 XMLErrors::XMLErrors()
 {
@@ -101,8 +96,8 @@ void XMLErrors::AddRecord(
     const OUString& rPublicId,
     const OUString& rSystemId )
 {
-    aErrors.push_back( ErrorRecord( nId, rParams, rExceptionMessage,
-                                    nRow, nColumn, rPublicId, rSystemId ) );
+    aErrors.emplace_back( nId, rParams, rExceptionMessage,
+                                    nRow, nColumn, rPublicId, rSystemId );
 
 #ifdef DBG_UTIL
 
@@ -172,10 +167,7 @@ void XMLErrors::AddRecord(
         sMessage.append( "\n" );
     }
 
-    // convert to byte string and signal the error
-    OString aError(OUStringToOString(sMessage.makeStringAndClear(),
-        RTL_TEXTENCODING_ASCII_US));
-    OSL_FAIL( aError.getStr() );
+    SAL_WARN( "xmloff", sMessage.makeStringAndClear() );
 #endif
 }
 
@@ -199,21 +191,16 @@ void XMLErrors::AddRecord(
 }
 
 void XMLErrors::ThrowErrorAsSAXException(sal_Int32 nIdMask)
-    throw( SAXParseException )
 {
     // search first error/warning that matches the nIdMask
-    for( ErrorList::iterator aIter = aErrors.begin();
-         aIter != aErrors.end();
-         ++aIter )
+    for( const auto& rError : aErrors )
     {
-        if ( (aIter->nId & nIdMask) != 0 )
+        if ( (rError.nId & nIdMask) != 0 )
         {
             // we throw the error
             ErrorRecord& rErr = aErrors[0];
-            Any aAny;
-            aAny <<= rErr.aParams;
             throw SAXParseException(
-                rErr.sExceptionMessage, nullptr, aAny,
+                rErr.sExceptionMessage, nullptr, Any(rErr.aParams),
                 rErr.sPublicId, rErr.sSystemId, rErr.nRow, rErr.nColumn );
         }
     }

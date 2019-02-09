@@ -22,49 +22,45 @@
 #include <svl/itempool.hxx>
 #include <svl/aeitem.hxx>
 
-#include "sdattr.hxx"
-#include "View.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "dlgsnap.hxx"
+#include <sdattr.hxx>
+#include <View.hxx>
+#include <drawdoc.hxx>
+#include <dlgsnap.hxx>
+#include <sdenumdef.hxx>
 
 /**
  * dialog to adjust grid (scarcely ESO!)
  */
-SdSnapLineDlg::SdSnapLineDlg(
-    vcl::Window* pWindow,
-    const SfxItemSet& rInAttrs,
-    ::sd::View* pView)
-    : ModalDialog(pWindow, "SnapObjectDialog", "modules/sdraw/ui/dlgsnap.ui")
-    , eUIUnit(pView->GetDoc().GetUIUnit())
+SdSnapLineDlg::SdSnapLineDlg(weld::Window* pWindow, const SfxItemSet& rInAttrs, ::sd::View const * pView)
+    : GenericDialogController(pWindow, "modules/sdraw/ui/dlgsnap.ui", "SnapObjectDialog")
     , aUIScale(pView->GetDoc().GetUIScale())
+    , m_xFtX(m_xBuilder->weld_label("xlabel"))
+    , m_xMtrFldX(m_xBuilder->weld_metric_spin_button("x", FieldUnit::CM))
+    , m_xFtY(m_xBuilder->weld_label("ylabel"))
+    , m_xMtrFldY(m_xBuilder->weld_metric_spin_button("y", FieldUnit::CM))
+    , m_xRadioGroup(m_xBuilder->weld_widget("radiogroup"))
+    , m_xRbPoint(m_xBuilder->weld_radio_button("point"))
+    , m_xRbVert(m_xBuilder->weld_radio_button("vert"))
+    , m_xRbHorz(m_xBuilder->weld_radio_button("horz"))
+    , m_xBtnDelete(m_xBuilder->weld_button("delete"))
 {
-    get(m_pFtX, "xlabel");
-    get(m_pMtrFldX, "x");
-    get(m_pFtY, "ylabel");
-    get(m_pMtrFldY, "y");
-    get(m_pRadioGroup, "radiogroup");
-    get(m_pRbPoint, "point");
-    get(m_pRbVert, "vert");
-    get(m_pRbHorz, "horz");
-    get(m_pBtnDelete, "delete");
+    m_xRbHorz->connect_clicked(LINK(this, SdSnapLineDlg, ClickHdl));
+    m_xRbVert->connect_clicked(LINK(this, SdSnapLineDlg, ClickHdl));
+    m_xRbPoint->connect_clicked(LINK(this, SdSnapLineDlg, ClickHdl));
 
-    m_pRbHorz->SetClickHdl(LINK(this, SdSnapLineDlg, ClickHdl));
-    m_pRbVert->SetClickHdl(LINK(this, SdSnapLineDlg, ClickHdl));
-    m_pRbPoint->SetClickHdl(LINK(this, SdSnapLineDlg, ClickHdl));
+    m_xBtnDelete->connect_clicked(LINK(this, SdSnapLineDlg, ClickHdl));
 
-    m_pBtnDelete->SetClickHdl(LINK(this, SdSnapLineDlg, ClickHdl));
-
-    SetFieldUnit( *m_pMtrFldX, eUIUnit, true );
-    SetFieldUnit( *m_pMtrFldY, eUIUnit, true );
+    FieldUnit eUIUnit = pView->GetDoc().GetUIUnit();
+    SetFieldUnit(*m_xMtrFldX, eUIUnit, true);
+    SetFieldUnit(*m_xMtrFldY, eUIUnit, true);
 
     // get WorkArea
-    Rectangle aWorkArea = pView->GetWorkArea();
+    ::tools::Rectangle aWorkArea = pView->GetWorkArea();
 
     // determine PoolUnit
     SfxItemPool* pPool = rInAttrs.GetPool();
     DBG_ASSERT( pPool, "Where's the Pool?" );
-    SfxMapUnit ePoolUnit = pPool->GetMetric( SID_ATTR_FILL_HATCH );
+    MapUnit ePoolUnit = pPool->GetMetric( SID_ATTR_FILL_HATCH );
 
     // #i48497# Consider page origin
     SdrPageView* pPV = pView->GetSdrPageView();
@@ -75,70 +71,51 @@ SdSnapLineDlg::SdSnapLineDlg(
 
     // determine max and min values depending on
     // WorkArea, PoolUnit and FieldUnit:
-    SetMetricValue( *m_pMtrFldX, aLeftTop.X(), ePoolUnit );
+    SetMetricValue(*m_xMtrFldX, aLeftTop.X(), ePoolUnit );
 
-    long nValue = static_cast<long>(m_pMtrFldX->GetValue());
-    nValue = Fraction( nValue ) / aUIScale;
-    m_pMtrFldX->SetMin( nValue );
-    m_pMtrFldX->SetFirst( nValue );
+    int nValue = m_xMtrFldX->get_value(FieldUnit::NONE);
+    nValue = sal_Int32(nValue / aUIScale);
+    m_xMtrFldX->set_min(nValue, FieldUnit::NONE);
 
-    SetMetricValue( *m_pMtrFldX, aRightBottom.X(), ePoolUnit );
-    nValue = static_cast<long>(m_pMtrFldX->GetValue());
-    nValue = Fraction( nValue ) / aUIScale;
-    m_pMtrFldX->SetMax( nValue );
-    m_pMtrFldX->SetLast( nValue );
+    SetMetricValue(*m_xMtrFldX, aRightBottom.X(), ePoolUnit);
+    nValue = m_xMtrFldX->get_value(FieldUnit::NONE);
+    nValue = sal_Int32(nValue / aUIScale);
+    m_xMtrFldX->set_max(nValue, FieldUnit::NONE);
 
-    SetMetricValue( *m_pMtrFldY, aLeftTop.Y(), ePoolUnit );
-    nValue = static_cast<long>(m_pMtrFldY->GetValue());
-    nValue = Fraction( nValue ) / aUIScale;
-    m_pMtrFldY->SetMin( nValue );
-    m_pMtrFldY->SetFirst( nValue );
+    SetMetricValue(*m_xMtrFldY, aLeftTop.Y(), ePoolUnit);
+    nValue = m_xMtrFldY->get_value(FieldUnit::NONE);
+    nValue = sal_Int32(nValue / aUIScale);
+    m_xMtrFldY->set_min(nValue, FieldUnit::NONE);
 
-    SetMetricValue( *m_pMtrFldY, aRightBottom.Y(), ePoolUnit );
-    nValue = static_cast<long>(m_pMtrFldY->GetValue());
-    nValue = Fraction( nValue ) / aUIScale;
-    m_pMtrFldY->SetMax( nValue );
-    m_pMtrFldY->SetLast( nValue );
+    SetMetricValue(*m_xMtrFldY, aRightBottom.Y(), ePoolUnit);
+    nValue = m_xMtrFldY->get_value(FieldUnit::NONE);
+    nValue = sal_Int32(nValue / aUIScale);
+    m_xMtrFldY->set_max(nValue, FieldUnit::NONE);
 
     // set values
     nXValue = static_cast<const SfxInt32Item&>( rInAttrs.Get(ATTR_SNAPLINE_X)).GetValue();
     nYValue = static_cast<const SfxInt32Item&>( rInAttrs.Get(ATTR_SNAPLINE_Y)).GetValue();
-    nXValue = Fraction(nXValue) / aUIScale;
-    nYValue = Fraction(nYValue) / aUIScale;
-    SetMetricValue( *m_pMtrFldX, nXValue, SFX_MAPUNIT_100TH_MM);
-    SetMetricValue( *m_pMtrFldY, nYValue, SFX_MAPUNIT_100TH_MM);
+    nXValue = sal_Int32(nXValue / aUIScale);
+    nYValue = sal_Int32(nYValue / aUIScale);
+    SetMetricValue(*m_xMtrFldX, nXValue, MapUnit::Map100thMM);
+    SetMetricValue(*m_xMtrFldY, nYValue, MapUnit::Map100thMM);
 
-    m_pRbPoint->Check();
+    m_xRbPoint->set_active(true);
 }
 
 SdSnapLineDlg::~SdSnapLineDlg()
 {
-    disposeOnce();
-}
-
-void SdSnapLineDlg::dispose()
-{
-    m_pFtX.clear();
-    m_pMtrFldX.clear();
-    m_pFtY.clear();
-    m_pMtrFldY.clear();
-    m_pRadioGroup.clear();
-    m_pRbPoint.clear();
-    m_pRbVert.clear();
-    m_pRbHorz.clear();
-    m_pBtnDelete.clear();
-    ModalDialog::dispose();
 }
 
 /**
  * fills provided item sets with dialog box attributes
  */
-IMPL_LINK_TYPED( SdSnapLineDlg, ClickHdl, Button *, pBtn, void )
+IMPL_LINK( SdSnapLineDlg, ClickHdl, weld::Button&, rBtn, void )
 {
-    if ( pBtn == m_pRbPoint )        SetInputFields(true, true);
-    else if ( pBtn == m_pRbHorz )    SetInputFields(false, true);
-    else if ( pBtn == m_pRbVert )    SetInputFields(true, false);
-    else if ( pBtn == m_pBtnDelete ) EndDialog(RET_SNAP_DELETE);
+    if (&rBtn == m_xRbPoint.get())   SetInputFields(true, true);
+    else if (&rBtn == m_xRbHorz.get())    SetInputFields(false, true);
+    else if (&rBtn == m_xRbVert.get())    SetInputFields(true, false);
+    else if (&rBtn == m_xBtnDelete.get()) m_xDialog->response(RET_SNAP_DELETE);
 }
 
 /**
@@ -148,21 +125,21 @@ void SdSnapLineDlg::GetAttr(SfxItemSet& rOutAttrs)
 {
     SnapKind eKind;
 
-    if ( m_pRbHorz->IsChecked() )      eKind = SK_HORIZONTAL;
-    else if ( m_pRbVert->IsChecked() ) eKind = SK_VERTICAL;
-    else                            eKind = SK_POINT;
+    if (m_xRbHorz->get_active())      eKind = SK_HORIZONTAL;
+    else if (m_xRbVert->get_active()) eKind = SK_VERTICAL;
+    else                              eKind = SK_POINT;
 
-    nXValue = Fraction( GetCoreValue( *m_pMtrFldX, SFX_MAPUNIT_100TH_MM) ) * aUIScale;
-    nYValue = Fraction( GetCoreValue( *m_pMtrFldY, SFX_MAPUNIT_100TH_MM) ) * aUIScale;
+    nXValue = sal_Int32(GetCoreValue(*m_xMtrFldX, MapUnit::Map100thMM) * aUIScale);
+    nYValue = sal_Int32(GetCoreValue(*m_xMtrFldY, MapUnit::Map100thMM) * aUIScale);
 
-    rOutAttrs.Put(SfxAllEnumItem(ATTR_SNAPLINE_KIND, (sal_uInt16)eKind));
-    rOutAttrs.Put(SfxUInt32Item(ATTR_SNAPLINE_X, nXValue));
-    rOutAttrs.Put(SfxUInt32Item(ATTR_SNAPLINE_Y, nYValue));
+    rOutAttrs.Put(SfxAllEnumItem(ATTR_SNAPLINE_KIND, static_cast<sal_uInt16>(eKind)));
+    rOutAttrs.Put(SfxInt32Item(ATTR_SNAPLINE_X, nXValue));
+    rOutAttrs.Put(SfxInt32Item(ATTR_SNAPLINE_Y, nYValue));
 }
 
 void SdSnapLineDlg::HideRadioGroup()
 {
-    m_pRadioGroup->Hide();
+    m_xRadioGroup->hide();
 }
 
 /**
@@ -172,31 +149,31 @@ void SdSnapLineDlg::SetInputFields(bool bEnableX, bool bEnableY)
 {
     if ( bEnableX )
     {
-        if ( !m_pMtrFldX->IsEnabled() )
-            m_pMtrFldX->SetValue(nXValue);
-        m_pMtrFldX->Enable();
-        m_pFtX->Enable();
+        if (!m_xMtrFldX->get_sensitive())
+            m_xMtrFldX->set_value(nXValue, FieldUnit::NONE);
+        m_xMtrFldX->set_sensitive(true);
+        m_xFtX->set_sensitive(true);
     }
-    else if ( m_pMtrFldX->IsEnabled() )
+    else if (m_xMtrFldX->get_sensitive())
     {
-        nXValue = static_cast<long>(m_pMtrFldX->GetValue());
-        m_pMtrFldX->SetText(OUString());
-        m_pMtrFldX->Disable();
-        m_pFtX->Disable();
+        nXValue = m_xMtrFldX->get_value(FieldUnit::NONE);
+        m_xMtrFldX->set_text(OUString());
+        m_xMtrFldX->set_sensitive(false);
+        m_xFtX->set_sensitive(false);
     }
     if ( bEnableY )
     {
-        if ( !m_pMtrFldY->IsEnabled() )
-            m_pMtrFldY->SetValue(nYValue);
-        m_pMtrFldY->Enable();
-        m_pFtY->Enable();
+        if (!m_xMtrFldY->get_sensitive())
+            m_xMtrFldY->set_value(nYValue, FieldUnit::NONE);
+        m_xMtrFldY->set_sensitive(true);
+        m_xFtY->set_sensitive(true);
     }
-    else if ( m_pMtrFldY->IsEnabled() )
+    else if (m_xMtrFldY->get_sensitive())
     {
-        nYValue = static_cast<long>(m_pMtrFldY->GetValue());
-        m_pMtrFldY->SetText(OUString());
-        m_pMtrFldY->Disable();
-        m_pFtY->Disable();
+        nYValue = m_xMtrFldY->get_value(FieldUnit::NONE);
+        m_xMtrFldY->set_text(OUString());
+        m_xMtrFldY->set_sensitive(false);
+        m_xFtY->set_sensitive(false);
     }
 }
 

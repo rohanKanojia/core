@@ -14,9 +14,12 @@
 #include <editeng/wghtitem.hxx>
 #include <editeng/eeitem.hxx>
 
-#include "editutil.hxx"
+#include <editutil.hxx>
 
-#include "TableFillingAndNavigationTools.hxx"
+#include <TableFillingAndNavigationTools.hxx>
+#include <formulacell.hxx>
+#include <docfunc.hxx>
+#include <docsh.hxx>
 
 FormulaTemplate::FormulaTemplate(ScDocument* pDoc)
     : mpDoc(pDoc)
@@ -35,15 +38,13 @@ void FormulaTemplate::setTemplate(const char* aTemplate)
 
 const OUString& FormulaTemplate::getTemplate()
 {
-    RangeReplacementMap::iterator itRange;
-    for (itRange = mRangeReplacementMap.begin(); itRange != mRangeReplacementMap.end(); ++itRange)
+    for (const auto& [rVariable, rRange] : mRangeReplacementMap)
     {
-        applyRange(itRange->first, itRange->second, mbUse3D);
+        applyRange(rVariable, rRange, mbUse3D);
     }
-    AddressReplacementMap::iterator itAddress;
-    for (itAddress = mAddressReplacementMap.begin(); itAddress != mAddressReplacementMap.end(); ++itAddress)
+    for (const auto& [rVariable, rAddress] : mAddressReplacementMap)
     {
-        applyAddress(itAddress->first, itAddress->second, mbUse3D);
+        applyAddress(rVariable, rAddress, mbUse3D);
     }
     return mTemplate;
 }
@@ -53,7 +54,7 @@ void FormulaTemplate::autoReplaceRange(const OUString& aVariable, const ScRange&
     mRangeReplacementMap[aVariable] = rRange;
 }
 
-void FormulaTemplate::autoReplaceAddress(const OUString& aVariable, ScAddress aAddress)
+void FormulaTemplate::autoReplaceAddress(const OUString& aVariable, ScAddress const & aAddress)
 {
 
     mAddressReplacementMap[aVariable] = aAddress;
@@ -66,10 +67,10 @@ void FormulaTemplate::applyRange(const OUString& aVariable, const ScRange& aRang
     mTemplate = mTemplate.replaceAll(aVariable, aString);
 }
 
-void FormulaTemplate::applyRangeList(const OUString& aVariable, const ScRangeList& aRangeList)
+void FormulaTemplate::applyRangeList(const OUString& aVariable, const ScRangeList& aRangeList, sal_Unicode cDelimiter)
 {
     OUString aString;
-    aRangeList.Format(aString, ScRefFlags::RANGE_ABS_3D, mpDoc, mpDoc->GetAddressConvention());
+    aRangeList.Format(aString, ScRefFlags::RANGE_ABS_3D, mpDoc, mpDoc->GetAddressConvention(), cDelimiter);
     mTemplate = mTemplate.replaceAll(aVariable, aString);
 }
 
@@ -90,11 +91,10 @@ void FormulaTemplate::applyNumber(const OUString& aVariable, sal_Int32 aValue)
     mTemplate = mTemplate.replaceAll(aVariable, OUString::number(aValue));
 }
 
-AddressWalker::AddressWalker(ScAddress aInitialAddress) :
+AddressWalker::AddressWalker(const ScAddress& aInitialAddress) :
     mCurrentAddress(aInitialAddress),
     mMinimumAddress(aInitialAddress),
-    mMaximumAddress(aInitialAddress),
-    mTrackRange(true)
+    mMaximumAddress(aInitialAddress)
 {
     mAddressStack.push_back(mCurrentAddress);
 }
@@ -132,21 +132,15 @@ void AddressWalker::nextColumn()
 {
     mCurrentAddress.IncCol();
 
-    if (mTrackRange)
-    {
-        if(mMaximumAddress.Col() < mCurrentAddress.Col())
-            mMaximumAddress.SetCol(mCurrentAddress.Col());
-    }
+    if(mMaximumAddress.Col() < mCurrentAddress.Col())
+        mMaximumAddress.SetCol(mCurrentAddress.Col());
 }
 
 void AddressWalker::nextRow()
 {
     mCurrentAddress.IncRow();
-    if (mTrackRange)
-    {
-        if(mMaximumAddress.Row() < mCurrentAddress.Row())
-            mMaximumAddress.SetRow(mCurrentAddress.Row());
-    }
+    if(mMaximumAddress.Row() < mCurrentAddress.Row())
+        mMaximumAddress.SetRow(mCurrentAddress.Row());
 }
 
 void AddressWalker::push(SCCOL aRelativeCol, SCROW aRelativeRow, SCTAB aRelativeTab)
@@ -155,7 +149,7 @@ void AddressWalker::push(SCCOL aRelativeCol, SCROW aRelativeRow, SCTAB aRelative
     mAddressStack.push_back(mCurrentAddress);
 }
 
-AddressWalkerWriter::AddressWalkerWriter(ScAddress aInitialAddress, ScDocShell* pDocShell, ScDocument* pDocument,
+AddressWalkerWriter::AddressWalkerWriter(const ScAddress& aInitialAddress, ScDocShell* pDocShell, ScDocument* pDocument,
         formula::FormulaGrammar::Grammar eGrammar ) :
     AddressWalker(aInitialAddress),
     mpDocShell(pDocShell),
@@ -169,11 +163,15 @@ void AddressWalkerWriter::writeFormula(const OUString& aFormula)
             new ScFormulaCell(mpDocument, mCurrentAddress, aFormula, meGrammar), true);
 }
 
-void AddressWalkerWriter::writeMatrixFormula(const OUString& aFormula)
+void AddressWalkerWriter::writeMatrixFormula(const OUString& aFormula, SCCOL nCols, SCROW nRows)
 {
     ScRange aRange;
     aRange.aStart = mCurrentAddress;
     aRange.aEnd = mCurrentAddress;
+    if (nCols > 1)
+        aRange.aEnd.IncCol(nCols - 1);
+    if (nRows > 1)
+        aRange.aEnd.IncRow(nRows - 1);
     mpDocShell->GetDocFunc().EnterMatrix(aRange, nullptr, nullptr, aFormula, false, false, OUString(), meGrammar );
 }
 
@@ -206,7 +204,7 @@ void AddressWalkerWriter::writeValue(double aValue)
 
 // DataCellIterator
 
-DataCellIterator::DataCellIterator(ScRange aInputRange, bool aByColumn)
+DataCellIterator::DataCellIterator(const ScRange& aInputRange, bool aByColumn)
     : mInputRange(aInputRange)
     , mByColumn(aByColumn)
     , mCol(0)
@@ -270,7 +268,7 @@ ScAddress DataCellIterator::getRelative(int aDelta)
 
 // DataRangeIterator
 
-DataRangeIterator::DataRangeIterator(ScRange aInputRange) :
+DataRangeIterator::DataRangeIterator(const ScRange& aInputRange) :
     mInputRange(aInputRange),
     mIndex(0)
 {}
@@ -285,9 +283,9 @@ sal_Int32 DataRangeIterator::index()
 
 // DataRangeByColumnIterator
 
-DataRangeByColumnIterator::DataRangeByColumnIterator(ScRange aInputRange) :
-    DataRangeIterator(aInputRange),
-    mCol(aInputRange.aStart.Col())
+DataRangeByColumnIterator::DataRangeByColumnIterator(const ScRange& aInputRange)
+    : DataRangeIterator(aInputRange)
+    , mCol(aInputRange.aStart.Col())
 {}
 
 bool DataRangeByColumnIterator::hasNext()
@@ -326,9 +324,9 @@ DataCellIterator DataRangeByColumnIterator::iterateCells()
 
 // DataRangeByRowIterator
 
-DataRangeByRowIterator::DataRangeByRowIterator(ScRange aInputRange) :
-    DataRangeIterator(aInputRange),
-    mRow(aInputRange.aStart.Row())
+DataRangeByRowIterator::DataRangeByRowIterator(const ScRange& aInputRange)
+    : DataRangeIterator(aInputRange)
+    , mRow(aInputRange.aStart.Row())
 {}
 
 bool DataRangeByRowIterator::hasNext()

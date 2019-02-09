@@ -58,21 +58,15 @@
  * Global functions or include files that are needed.
  * It's all for the full filter.
  ************************************************************************/
-#include "xfglobal.hxx"
-#include "xffontfactory.hxx"
-#include "xfstylemanager.hxx"
+#include <xfilter/xfglobal.hxx>
+#include <xfilter/xffontfactory.hxx>
+#include <xfilter/xfstylemanager.hxx>
 
 int XFGlobal::s_nFrameID = 1;
-int XFGlobal::s_nGraphID = 1;
 int XFGlobal::s_nSectionID = 1;
-int XFGlobal::s_nTableID = 1;
 int XFGlobal::s_nNoteID = 1;
 int XFGlobal::s_nStrokeDashID = 1;
 int XFGlobal::s_nAreaID = 1;
-
-//For chart object, /2005/2
-int XFGlobal::s_nObjID = 1;
-
 int XFGlobal::s_nImageID = 1;
 
 OUString XFGlobal::GenSectionName()
@@ -123,11 +117,9 @@ void    XFGlobal::Reset()
 {
     s_nSectionID = 1;
     s_nFrameID = 1;
-    s_nTableID = 1;
     s_nNoteID = 1;
     s_nStrokeDashID = 1;
     s_nAreaID = 1;
-    s_nObjID = 1;
 }
 
 void    XFGlobalReset()

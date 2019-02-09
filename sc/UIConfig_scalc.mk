@@ -9,36 +9,33 @@
 
 $(eval $(call gb_UIConfig_UIConfig,modules/scalc))
 
-ifeq ($(ENABLE_TELEPATHY),TRUE)
-$(eval $(call gb_UIConfig_add_generated_menubarfiles,modules/scalc,\
-	CustomTarget/sc/uiconfig/scalc/menubar/menubar \
-))
-else
 $(eval $(call gb_UIConfig_add_menubarfiles,modules/scalc,\
 	sc/uiconfig/scalc/menubar/menubar \
 ))
-endif
 
 $(eval $(call gb_UIConfig_add_popupmenufiles,modules/scalc,\
 	sc/uiconfig/scalc/popupmenu/anchor \
 	sc/uiconfig/scalc/popupmenu/audit \
 	sc/uiconfig/scalc/popupmenu/cell \
 	sc/uiconfig/scalc/popupmenu/celledit \
-	sc/uiconfig/scalc/popupmenu/chart \
 	sc/uiconfig/scalc/popupmenu/colheader \
+	sc/uiconfig/scalc/popupmenu/column_operations \
 	sc/uiconfig/scalc/popupmenu/conditional \
 	sc/uiconfig/scalc/popupmenu/draw \
 	sc/uiconfig/scalc/popupmenu/drawtext \
 	sc/uiconfig/scalc/popupmenu/form \
 	sc/uiconfig/scalc/popupmenu/formrichtext \
+	sc/uiconfig/scalc/popupmenu/formulabar \
 	sc/uiconfig/scalc/popupmenu/freezepanes \
 	sc/uiconfig/scalc/popupmenu/graphic \
 	sc/uiconfig/scalc/popupmenu/media \
+	sc/uiconfig/scalc/popupmenu/notebookbar \
 	sc/uiconfig/scalc/popupmenu/oleobject \
 	sc/uiconfig/scalc/popupmenu/pagebreak \
 	sc/uiconfig/scalc/popupmenu/pivot \
 	sc/uiconfig/scalc/popupmenu/preview \
 	sc/uiconfig/scalc/popupmenu/rowheader \
+	sc/uiconfig/scalc/popupmenu/row_operations \
 	sc/uiconfig/scalc/popupmenu/sheettab \
 ))
 
@@ -48,6 +45,7 @@ $(eval $(call gb_UIConfig_add_statusbarfiles,modules/scalc,\
 
 $(eval $(call gb_UIConfig_add_toolbarfiles,modules/scalc,\
 	sc/uiconfig/scalc/toolbar/alignmentbar \
+	sc/uiconfig/scalc/toolbar/arrowsbar \
 	sc/uiconfig/scalc/toolbar/arrowshapes \
 	sc/uiconfig/scalc/toolbar/basicshapes \
 	sc/uiconfig/scalc/toolbar/calloutshapes \
@@ -75,7 +73,9 @@ $(eval $(call gb_UIConfig_add_toolbarfiles,modules/scalc,\
 	sc/uiconfig/scalc/toolbar/linesbar \
 	sc/uiconfig/scalc/toolbar/mediaobjectbar \
 	sc/uiconfig/scalc/toolbar/moreformcontrols \
+	sc/uiconfig/scalc/toolbar/notebookbarshortcuts \
 	sc/uiconfig/scalc/toolbar/previewbar \
+	sc/uiconfig/scalc/toolbar/singlemode \
 	sc/uiconfig/scalc/toolbar/standardbar \
 	sc/uiconfig/scalc/toolbar/starshapes \
 	sc/uiconfig/scalc/toolbar/symbolshapes \
@@ -92,11 +92,14 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/cellprotectionpage \
 	sc/uiconfig/scalc/ui/changesourcedialog \
 	sc/uiconfig/scalc/ui/chardialog \
+	sc/uiconfig/scalc/ui/checkwarningdialog \
 	sc/uiconfig/scalc/ui/chisquaretestdialog \
 	sc/uiconfig/scalc/ui/colorrowdialog \
 	sc/uiconfig/scalc/ui/colwidthdialog \
 	sc/uiconfig/scalc/ui/condformatmanager \
 	sc/uiconfig/scalc/ui/conditionalformatdialog \
+	sc/uiconfig/scalc/ui/conditionalentry \
+	sc/uiconfig/scalc/ui/conditionaliconset \
 	sc/uiconfig/scalc/ui/conflictsdialog \
 	sc/uiconfig/scalc/ui/consolidatedialog \
 	sc/uiconfig/scalc/ui/correlationdialog \
@@ -108,11 +111,16 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/datafieldoptionsdialog \
 	sc/uiconfig/scalc/ui/dataform \
 	sc/uiconfig/scalc/ui/datastreams \
+	sc/uiconfig/scalc/ui/dataprovider \
+	sc/uiconfig/scalc/ui/dataproviderdlg \
+	sc/uiconfig/scalc/ui/dataproviderentry \
 	sc/uiconfig/scalc/ui/definedatabaserangedialog \
 	sc/uiconfig/scalc/ui/definename \
 	sc/uiconfig/scalc/ui/deletecells \
+	sc/uiconfig/scalc/ui/deletecolumnentry \
 	sc/uiconfig/scalc/ui/deletecontents \
 	sc/uiconfig/scalc/ui/descriptivestatisticsdialog \
+	sc/uiconfig/scalc/ui/dropmenu \
 	sc/uiconfig/scalc/ui/doubledialog \
 	sc/uiconfig/scalc/ui/erroralerttabpage \
 	sc/uiconfig/scalc/ui/externaldata \
@@ -121,6 +129,9 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/footerdialog \
 	sc/uiconfig/scalc/ui/formatcellsdialog \
 	sc/uiconfig/scalc/ui/formulacalculationoptions \
+	sc/uiconfig/scalc/ui/floatingborderstyle \
+	sc/uiconfig/scalc/ui/floatinglinestyle \
+	sc/uiconfig/scalc/ui/functionpanel \
 	sc/uiconfig/scalc/ui/goalseekdlg \
 	sc/uiconfig/scalc/ui/groupdialog \
 	sc/uiconfig/scalc/ui/groupbydate \
@@ -137,10 +148,24 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/leftfooterdialog \
 	sc/uiconfig/scalc/ui/leftheaderdialog \
 	sc/uiconfig/scalc/ui/namerangesdialog \
+	sc/uiconfig/scalc/ui/notebookbar \
+	sc/uiconfig/scalc/ui/notebookbar_compact \
+	sc/uiconfig/scalc/ui/notebookbar_groups \
+	sc/uiconfig/scalc/ui/notebookbar_groupedbar_full \
+	sc/uiconfig/scalc/ui/notebookbar_groupedbar_compact \
 	sc/uiconfig/scalc/ui/managenamesdialog \
+	sc/uiconfig/scalc/ui/mergecellsdialog \
+	sc/uiconfig/scalc/ui/mergecolumnentry \
+	sc/uiconfig/scalc/ui/texttransformationentry \
+	sc/uiconfig/scalc/ui/sorttransformationentry \
+	sc/uiconfig/scalc/ui/aggregatefunctionentry \
+	sc/uiconfig/scalc/ui/numbertransformationentry \
+	sc/uiconfig/scalc/ui/replacenulltransformationentry \
+	sc/uiconfig/scalc/ui/datetimetransformationentry \
 	sc/uiconfig/scalc/ui/movecopysheet \
 	sc/uiconfig/scalc/ui/movingaveragedialog \
 	sc/uiconfig/scalc/ui/multipleoperationsdialog \
+	sc/uiconfig/scalc/ui/navigatorpanel \
 	sc/uiconfig/scalc/ui/nosolutiondialog \
 	sc/uiconfig/scalc/ui/optcalculatepage \
 	sc/uiconfig/scalc/ui/optchangespage \
@@ -163,6 +188,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/protectsheetdlg \
 	sc/uiconfig/scalc/ui/queryrunstreamscriptdialog \
 	sc/uiconfig/scalc/ui/randomnumbergenerator \
+	sc/uiconfig/scalc/ui/recalcquerydialog \
 	sc/uiconfig/scalc/ui/regressiondialog \
 	sc/uiconfig/scalc/ui/retypepassdialog \
 	sc/uiconfig/scalc/ui/retypepassworddialog \
@@ -172,6 +198,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/samplingdialog \
 	sc/uiconfig/scalc/ui/standardfilterdialog \
 	sc/uiconfig/scalc/ui/scenariodialog \
+	sc/uiconfig/scalc/ui/scenariomenu \
 	sc/uiconfig/scalc/ui/scgeneralpage \
 	sc/uiconfig/scalc/ui/searchresults \
 	sc/uiconfig/scalc/ui/selectdatasource \
@@ -181,6 +208,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/sharedocumentdlg \
 	sc/uiconfig/scalc/ui/sharedfooterdialog \
 	sc/uiconfig/scalc/ui/sharedheaderdialog \
+	sc/uiconfig/scalc/ui/sharedwarningdialog \
 	sc/uiconfig/scalc/ui/showchangesdialog \
 	sc/uiconfig/scalc/ui/showdetaildialog \
 	sc/uiconfig/scalc/ui/showsheetdialog \
@@ -197,6 +225,7 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/scalc,\
 	sc/uiconfig/scalc/ui/sortkey \
 	sc/uiconfig/scalc/ui/sortoptionspage \
 	sc/uiconfig/scalc/ui/sortwarning \
+	sc/uiconfig/scalc/ui/splitcolumnentry \
 	sc/uiconfig/scalc/ui/subtotaldialog \
 	sc/uiconfig/scalc/ui/subtotaloptionspage \
 	sc/uiconfig/scalc/ui/subtotalgrppage \

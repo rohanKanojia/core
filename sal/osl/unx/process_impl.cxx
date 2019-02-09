@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/process.h"
+#include <osl/process.h>
 
 #include <limits.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "osl/diagnose.h"
-#include "osl/file.h"
-#include "osl/module.h"
-#include "osl/thread.h"
-#include "rtl/ustring.hxx"
-#include "rtl/strbuf.h"
-#include "sal/log.hxx"
+#include <osl/diagnose.h>
+#include <osl/file.hxx>
+#include <osl/module.h>
+#include <osl/thread.h>
+#include <rtl/alloc.h>
+#include <rtl/ustring.hxx>
+#include <rtl/strbuf.h>
+#include <sal/log.hxx>
 
 #include "file_path_helper.hxx"
 
@@ -46,7 +47,7 @@
 
 namespace {
 
-oslProcessError SAL_CALL bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
+oslProcessError bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
 {
     oslProcessError result = osl_Process_E_NotFound;
 
@@ -62,7 +63,7 @@ oslProcessError SAL_CALL bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
             /* Convert from utf8 to unicode. */
             rtl_uString * pAbsPath = nullptr;
             rtl_string2UString (
-                &(pAbsPath),
+                &pAbsPath,
                 abspath, rtl_str_getLength (abspath),
                 RTL_TEXTENCODING_UTF8,
                 OSTRING_TO_OUSTRING_CVTFLAGS);
@@ -90,7 +91,7 @@ oslProcessError SAL_CALL bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
 
 namespace {
 
-oslProcessError SAL_CALL bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
+oslProcessError bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
 {
     oslProcessError result = osl_Process_E_NotFound;
 
@@ -99,6 +100,26 @@ oslProcessError SAL_CALL bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
      * any */
     void * addr = dlsym (RTLD_DEFAULT, "JNI_OnLoad");
 #else
+#if defined __linux
+    // The below code looking for "main" with dlsym() will typically
+    // fail, as there is little reason for "main" to be exported, in
+    // the dlsym() sense, from an executable. But Linux has
+    // /proc/self/exe, try using that.
+    char buf[PATH_MAX];
+    int rc = readlink("/proc/self/exe", buf, sizeof(buf));
+    if (rc > 0 && rc < PATH_MAX)
+    {
+        buf[rc] = '\0';
+        OUString path = OUString::fromUtf8(buf);
+        OUString fileURL;
+        if (osl::File::getFileURLFromSystemPath(path, fileURL) == osl::File::E_None)
+        {
+            rtl_uString_acquire(fileURL.pData);
+            *ppFileURL = fileURL.pData;
+            return osl_Process_E_None;
+        }
+    }
+#endif
     /* Determine address of "main()" function. */
     void * addr = dlsym (RTLD_DEFAULT, "main");
 #endif
@@ -119,9 +140,6 @@ oslProcessError SAL_CALL bootstrap_getExecutableFile(rtl_uString ** ppFileURL)
 
 #endif
 
-/***************************************
- CommandArgs_Impl.
- **************************************/
 struct CommandArgs_Impl
 {
     pthread_mutex_t m_mutex;
@@ -136,9 +154,6 @@ static struct CommandArgs_Impl g_command_args =
     nullptr
 };
 
-/***************************************
-  osl_getExecutableFile().
- **************************************/
 oslProcessError SAL_CALL osl_getExecutableFile (rtl_uString ** ppustrFile)
 {
     pthread_mutex_lock (&(g_command_args.m_mutex));
@@ -154,9 +169,6 @@ oslProcessError SAL_CALL osl_getExecutableFile (rtl_uString ** ppustrFile)
     return osl_Process_E_None;
 }
 
-/***************************************
- osl_getCommandArgCount().
- **************************************/
 sal_uInt32 SAL_CALL osl_getCommandArgCount()
 {
     sal_uInt32 result = 0;
@@ -172,9 +184,6 @@ sal_uInt32 SAL_CALL osl_getCommandArgCount()
     return result;
 }
 
-/***************************************
- osl_getCommandArg().
- **************************************/
 oslProcessError SAL_CALL osl_getCommandArg (sal_uInt32 nArg, rtl_uString ** strCommandArg)
 {
     oslProcessError result = osl_Process_E_NotFound;
@@ -191,9 +200,6 @@ oslProcessError SAL_CALL osl_getCommandArg (sal_uInt32 nArg, rtl_uString ** strC
     return result;
 }
 
-/***************************************
- osl_setCommandArgs().
- **************************************/
 void SAL_CALL osl_setCommandArgs (int argc, char ** argv)
 {
     assert(argc > 0);
@@ -218,7 +224,7 @@ void SAL_CALL osl_setCommandArgs (int argc, char ** argv)
                 /* see @ osl_getExecutableFile(). */
                 if (rtl_ustr_indexOfChar (rtl_uString_getStr(ppArgs[0]), '/') == -1)
                 {
-                    const rtl::OUString PATH ("PATH");
+                    const OUString PATH ("PATH");
 
                     rtl_uString * pSearchPath = nullptr;
                     osl_getEnvironment (PATH.pData, &pSearchPath);
@@ -249,9 +255,6 @@ void SAL_CALL osl_setCommandArgs (int argc, char ** argv)
     pthread_mutex_unlock (&(g_command_args.m_mutex));
 }
 
-/***************************************
- osl_getEnvironment().
- **************************************/
 oslProcessError SAL_CALL osl_getEnvironment(rtl_uString* pustrEnvVar, rtl_uString** ppustrValue)
 {
     oslProcessError  result   = osl_Process_E_NotFound;
@@ -284,9 +287,6 @@ oslProcessError SAL_CALL osl_getEnvironment(rtl_uString* pustrEnvVar, rtl_uStrin
     return result;
 }
 
-/***************************************
- osl_setEnvironment().
- **************************************/
 oslProcessError SAL_CALL osl_setEnvironment(rtl_uString* pustrEnvVar, rtl_uString* pustrValue)
 {
     oslProcessError  result   = osl_Process_E_Unknown;
@@ -309,7 +309,7 @@ oslProcessError SAL_CALL osl_setEnvironment(rtl_uString* pustrEnvVar, rtl_uStrin
 
     if (pstr_env_var != nullptr && pstr_val != nullptr)
     {
-#if defined (SOLARIS)
+#if defined (__sun)
         rtl_String * pBuffer = NULL;
 
         sal_Int32 nCapacity = rtl_stringbuffer_newFromStringBuffer( &pBuffer,
@@ -340,9 +340,6 @@ oslProcessError SAL_CALL osl_setEnvironment(rtl_uString* pustrEnvVar, rtl_uStrin
     return result;
 }
 
-/***************************************
- osl_clearEnvironment().
- **************************************/
 oslProcessError SAL_CALL osl_clearEnvironment(rtl_uString* pustrEnvVar)
 {
     oslProcessError  result   = osl_Process_E_Unknown;
@@ -358,7 +355,7 @@ oslProcessError SAL_CALL osl_clearEnvironment(rtl_uString* pustrEnvVar)
 
     if (pstr_env_var)
     {
-#if defined (SOLARIS)
+#if defined (__sun)
         rtl_String * pBuffer = NULL;
 
         sal_Int32 nCapacity = rtl_stringbuffer_newFromStringBuffer( &pBuffer,
@@ -372,9 +369,9 @@ oslProcessError SAL_CALL osl_clearEnvironment(rtl_uString* pustrEnvVar)
         else
             rtl_string_release(pBuffer);
 #elif (defined(MACOSX) || defined(NETBSD) || defined(FREEBSD))
-        //MacOSX baseline is 10.4, which has an old-school void return
-        //for unsetenv.
-                //See: http://developer.apple.com/mac/library/documentation/Darwin/Reference/ManPages/10.4/man3/unsetenv.3.html?useVersion=10.4
+        // MacOSX baseline is 10.4, which has an old-school void return
+        // for unsetenv.
+        // See: http://developer.apple.com/mac/library/documentation/Darwin/Reference/ManPages/10.4/man3/unsetenv.3.html?useVersion=10.4
         unsetenv(rtl_string_getStr(pstr_env_var));
         result = osl_Process_E_None;
 #else
@@ -387,9 +384,6 @@ oslProcessError SAL_CALL osl_clearEnvironment(rtl_uString* pustrEnvVar)
     return result;
 }
 
-/***************************************
- osl_getProcessWorkingDir().
- **************************************/
 oslProcessError SAL_CALL osl_getProcessWorkingDir(rtl_uString **ppustrWorkingDir)
 {
     oslProcessError result = osl_Process_E_Unknown;
@@ -416,12 +410,6 @@ oslProcessError SAL_CALL osl_getProcessWorkingDir(rtl_uString **ppustrWorkingDir
     return result;
 }
 
-/******************************************************************************
- *
- *              new functions to set/return the current process locale
- *
- *****************************************************************************/
-
 struct ProcessLocale_Impl
 {
     pthread_mutex_t m_mutex;
@@ -434,9 +422,6 @@ static struct ProcessLocale_Impl g_process_locale =
     nullptr
 };
 
-/**********************************************
- osl_getProcessLocale().
- *********************************************/
 oslProcessError SAL_CALL osl_getProcessLocale( rtl_Locale ** ppLocale )
 {
     oslProcessError result = osl_Process_E_Unknown;
@@ -455,24 +440,15 @@ oslProcessError SAL_CALL osl_getProcessLocale( rtl_Locale ** ppLocale )
     return result;
 }
 
-/**********************************************
- osl_setProcessLocale().
- *********************************************/
 oslProcessError SAL_CALL osl_setProcessLocale( rtl_Locale * pLocale )
 {
-    oslProcessError result = osl_Process_E_Unknown;
-
     OSL_PRECOND(pLocale, "osl_setProcessLocale(): Invalid parameter.");
 
     pthread_mutex_lock(&(g_process_locale.m_mutex));
-    if (imp_setProcessLocale (pLocale) == 0)
-    {
-        g_process_locale.m_pLocale = pLocale;
-        result = osl_Process_E_None;
-    }
+    g_process_locale.m_pLocale = pLocale;
     pthread_mutex_unlock (&(g_process_locale.m_mutex));
 
-    return result;
+    return osl_Process_E_None;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

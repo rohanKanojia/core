@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "chartview/DataPointSymbolSupplier.hxx"
-#include "AbstractShapeFactory.hxx"
-#include "macros.hxx"
+#include <chartview/DataPointSymbolSupplier.hxx>
+#include <ShapeFactory.hxx>
+#include <com/sun/star/drawing/Position3D.hpp>
 
 namespace chart
 {
@@ -30,14 +30,14 @@ uno::Reference< drawing::XShapes > DataPointSymbolSupplier::create2DSymbolList(
             , const uno::Reference< drawing::XShapes >& xTarget
             , const drawing::Direction3D& rSize )
 {
-    AbstractShapeFactory* pShapeFactory = AbstractShapeFactory::getOrCreateShapeFactory(xShapeFactory);
+    ShapeFactory* pShapeFactory = ShapeFactory::getOrCreateShapeFactory(xShapeFactory);
     uno::Reference< drawing::XShapes > xGroupShapes =
         pShapeFactory->createGroup2D( xTarget );
 
     drawing::Position3D  aPos(0,0,0);
-    for(sal_Int32 nS=0;nS<AbstractShapeFactory::getSymbolCount();nS++)
+    for(sal_Int32 nS=0;nS<ShapeFactory::getSymbolCount();nS++)
     {
-        pShapeFactory->createSymbol2D( xGroupShapes, aPos, rSize, nS );
+        pShapeFactory->createSymbol2D( xGroupShapes, aPos, rSize, nS, 0, 0 );
     }
     return xGroupShapes;
 }

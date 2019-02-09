@@ -21,10 +21,12 @@
 
 #include <unotools/unotoolsdllapi.h>
 #include <sal/types.h>
-#include <osl/mutex.hxx>
 #include <com/sun/star/uno/Sequence.h>
-#include <com/sun/star/beans/PropertyValue.hpp>
 #include <unotools/options.hxx>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
+namespace osl { class Mutex; }
 
 /*-************************************************************************************************************
     @descr          The method GetList() returns a list of property values.
@@ -38,11 +40,10 @@
 /*-************************************************************************************************************
     @descr          You can use these enum values to specify right menu if you call our interface methods.
 *//*-*************************************************************************************************************/
-enum EDynamicMenuType
+enum class EDynamicMenuType
 {
-    E_NEWMENU       =   0,
-    E_WIZARDMENU    =   1,
-    E_HELPBOOKMARKS =   2
+    NewMenu       =   0,
+    WizardMenu    =   1
 };
 
 /*-************************************************************************************************************
@@ -63,24 +64,13 @@ class SvtDynamicMenuOptions_Impl;
 class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtDynamicMenuOptions : public utl::detail::Options
 {
     public:
-        /*-****************************************************************************************************
-            @short      standard constructor and destructor
-            @descr      This will initialize an instance with default values.
-                        We implement these class with a refcount mechanism! Every instance of this class increase it
-                        at create and decrease it at delete time - but all instances use the same data container!
-                        He is implemented as a static member ...
-
-            @seealso    member m_nRefCount
-            @seealso    member m_pDataContainer
-        *//*-*****************************************************************************************************/
-
          SvtDynamicMenuOptions();
-        virtual ~SvtDynamicMenuOptions();
+        virtual ~SvtDynamicMenuOptions() override;
 
         /*-****************************************************************************************************
             @short      return complete specified list
             @descr      Call it to get all entries of an dynamic menu.
-                        We return a list of all nodes with his names and properties.
+                        We return a list of all nodes with its names and properties.
             @param      "eMenu" select right menu.
             @return     A list of menu items is returned.
 
@@ -93,7 +83,7 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtDynamicMenuOptions : public utl::det
         /*-****************************************************************************************************
             @short      return a reference to a static mutex
             @descr      These class is partially threadsafe (for de-/initialization only).
-                        All access methods are'nt safe!
+                        All access methods aren't safe!
                         We create a static mutex only for one ime and use at different times.
             @return     A reference to a static mutex member.
         *//*-*****************************************************************************************************/
@@ -101,17 +91,7 @@ class SAL_WARN_UNUSED UNOTOOLS_DLLPUBLIC SvtDynamicMenuOptions : public utl::det
         UNOTOOLS_DLLPRIVATE static ::osl::Mutex& GetOwnStaticMutex();
 
     private:
-
-        /*Attention
-
-            Don't initialize these static members in these headers!
-            a) Double defined symbols will be detected ...
-            b) and unresolved externals exist at linking time.
-            Do it in your source only.
-         */
-
-        static SvtDynamicMenuOptions_Impl* m_pDataContainer;
-        static sal_Int32             m_nRefCount;
+        std::shared_ptr<SvtDynamicMenuOptions_Impl> m_pImpl;
 
 };      // class SvtDynamicMenuOptions
 

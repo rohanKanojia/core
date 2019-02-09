@@ -20,12 +20,11 @@
 #include <sal/config.h>
 
 #include <calc/CConnection.hxx>
-#include "calc/CTables.hxx"
-#include "calc/CTable.hxx"
-#include "file/FCatalog.hxx"
-#include "file/FConnection.hxx"
-#include "calc/CCatalog.hxx"
-#include <comphelper/types.hxx>
+#include <calc/CTables.hxx>
+#include <calc/CTable.hxx>
+#include <file/FCatalog.hxx>
+#include <file/FConnection.hxx>
+#include <calc/CCatalog.hxx>
 
 using namespace ::comphelper;
 using namespace connectivity;
@@ -41,7 +40,7 @@ using namespace ::com::sun::star::container;
 sdbcx::ObjectType OCalcTables::createObject(const OUString& _rName)
 {
     OCalcTable* pTable = new OCalcTable(this, static_cast<OCalcConnection*>(static_cast<OFileCatalog&>(m_rParent).getConnection()),
-                                        _rName,OUString("TABLE"));
+                                        _rName,"TABLE");
     sdbcx::ObjectType xRet = pTable;
     pTable->construct();
     return xRet;

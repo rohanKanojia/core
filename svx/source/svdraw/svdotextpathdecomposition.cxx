@@ -78,7 +78,6 @@ namespace
         ::std::vector< double >                     maDblDXArray;   // double DXArray, font size independent -> unit coordinate system
         css::lang::Locale                           maLocale;
 
-        // bitfield
         bool                                        mbRTL : 1;
 
     public:
@@ -99,7 +98,7 @@ namespace
 
                 for(sal_Int32 a=0; a < mnTextLength; a++)
                 {
-                    maDblDXArray.push_back((double)rInfo.mpDXArray[a]);
+                    maDblDXArray.push_back(static_cast<double>(rInfo.mpDXArray[a]));
                 }
             }
         }
@@ -148,7 +147,7 @@ namespace
 
             if(maFont.IsVertical())
             {
-                fRetval = aTextLayouter.getTextHeight() * (double)nLength;
+                fRetval = aTextLayouter.getTextHeight() * static_cast<double>(nLength);
             }
             else
             {
@@ -170,7 +169,7 @@ namespace
         SdrOutliner&                                mrOutliner;
         ::std::vector< impPathTextPortion >         maPathTextPortions;
 
-        DECL_LINK_TYPED(decompositionPathTextPrimitive, DrawPortionInfo*, void );
+        DECL_LINK(decompositionPathTextPrimitive, DrawPortionInfo*, void );
 
     public:
         explicit impTextBreakupHandler(SdrOutliner& rOutliner)
@@ -194,9 +193,9 @@ namespace
         }
     };
 
-    IMPL_LINK_TYPED(impTextBreakupHandler, decompositionPathTextPrimitive, DrawPortionInfo*, pInfo, void)
+    IMPL_LINK(impTextBreakupHandler, decompositionPathTextPrimitive, DrawPortionInfo*, pInfo, void)
     {
-        maPathTextPortions.push_back(impPathTextPortion(*pInfo));
+        maPathTextPortions.emplace_back(*pInfo);
     }
 } // end of anonymous namespace
 
@@ -217,10 +216,8 @@ namespace
             drawinglayer::primitive2d::TextLayouterDevice aTextLayouter;
             double fRetval(0.0);
 
-            for(size_t a(0); a < rTextPortions.size(); a++)
+            for(const impPathTextPortion* pCandidate : rTextPortions)
             {
-                const impPathTextPortion* pCandidate = rTextPortions[a];
-
                 if(pCandidate && pCandidate->getTextLength())
                 {
                     aTextLayouter.setFont(pCandidate->getFont());
@@ -237,7 +234,7 @@ namespace
 
             if(mxBreak.is())
             {
-                sal_Int32 nDone(0L);
+                sal_Int32 nDone(0);
                 nNextGlyphLen = mxBreak->nextCharacters(pCandidate->getText(), nPosition,
                     rFontLocale, CharacterIteratorMode::SKIPCELL, 1, nDone) - nPosition;
             }
@@ -263,7 +260,7 @@ namespace
         {
             // prepare polygon geometry, take into account as many parameters as possible
             basegfx::B2DPolygon aPolygonCandidate(rPolygonCandidate);
-            const double fPolyLength(basegfx::tools::getLength(aPolygonCandidate));
+            const double fPolyLength(basegfx::utils::getLength(aPolygonCandidate));
             double fPolyEnd(fPolyLength);
             double fPolyStart(0.0);
             double fAutosizeScaleFactor(1.0);
@@ -275,10 +272,10 @@ namespace
             }
 
             if(maSdrFormTextAttribute.getFormTextStart()
-                && (XFT_LEFT == maSdrFormTextAttribute.getFormTextAdjust()
-                    || XFT_RIGHT == maSdrFormTextAttribute.getFormTextAdjust()))
+                && (XFormTextAdjust::Left == maSdrFormTextAttribute.getFormTextAdjust()
+                    || XFormTextAdjust::Right == maSdrFormTextAttribute.getFormTextAdjust()))
             {
-                if(XFT_LEFT == maSdrFormTextAttribute.getFormTextAdjust())
+                if(XFormTextAdjust::Left == maSdrFormTextAttribute.getFormTextAdjust())
                 {
                     fPolyStart += maSdrFormTextAttribute.getFormTextStart();
 
@@ -298,16 +295,16 @@ namespace
                 }
             }
 
-            if(XFT_LEFT != maSdrFormTextAttribute.getFormTextAdjust())
+            if(XFormTextAdjust::Left != maSdrFormTextAttribute.getFormTextAdjust())
             {
                 // calculate total text length of this paragraph, some layout needs to be done
                 const double fParagraphTextLength(getParagraphTextLength(rTextPortions));
 
                 // check if text is too long for paragraph. If yes, handle as if left aligned (default),
-                // but still take care of XFT_AUTOSIZE in that case
+                // but still take care of XFormTextAdjust::AutoSize in that case
                 const bool bTextTooLong(fParagraphTextLength > (fPolyEnd - fPolyStart));
 
-                if(XFT_RIGHT == maSdrFormTextAttribute.getFormTextAdjust())
+                if(XFormTextAdjust::Right == maSdrFormTextAttribute.getFormTextAdjust())
                 {
                     if(!bTextTooLong)
                     {
@@ -315,7 +312,7 @@ namespace
                         fPolyStart += ((fPolyEnd - fPolyStart) - fParagraphTextLength);
                     }
                 }
-                else if(XFT_CENTER == maSdrFormTextAttribute.getFormTextAdjust())
+                else if(XFormTextAdjust::Center == maSdrFormTextAttribute.getFormTextAdjust())
                 {
                     if(!bTextTooLong)
                     {
@@ -323,7 +320,7 @@ namespace
                         fPolyStart += ((fPolyEnd - fPolyStart) - fParagraphTextLength) / 2.0;
                     }
                 }
-                else if(XFT_AUTOSIZE == maSdrFormTextAttribute.getFormTextAdjust())
+                else if(XFormTextAdjust::AutoSize == maSdrFormTextAttribute.getFormTextAdjust())
                 {
                     // if scale, prepare scale factor between curve length and text length
                     if(0.0 != fParagraphTextLength)
@@ -335,9 +332,9 @@ namespace
             }
 
             // handle text portions for this paragraph
-            for(sal_uInt32 a(0L); a < rTextPortions.size() && fPolyStart < fPolyEnd; a++)
+            for(auto a = rTextPortions.begin(); a != rTextPortions.end() && fPolyStart < fPolyEnd; ++a)
             {
-                const impPathTextPortion* pCandidate = rTextPortions[a];
+                const impPathTextPortion* pCandidate = *a;
                 basegfx::B2DVector aFontScaling;
 
                 if(pCandidate && pCandidate->getTextLength())
@@ -368,7 +365,7 @@ namespace
 
                         // create transformation
                         basegfx::B2DHomMatrix aNewTransformA, aNewTransformB, aNewShadowTransform;
-                        basegfx::B2DPoint aStartPos(basegfx::tools::getPositionAbsolute(aPolygonCandidate, fPolyStart, fPolyLength));
+                        basegfx::B2DPoint aStartPos(basegfx::utils::getPositionAbsolute(aPolygonCandidate, fPolyStart, fPolyLength));
                         basegfx::B2DPoint aEndPos(aStartPos);
 
                         // add font scaling
@@ -382,17 +379,17 @@ namespace
                         }
 
                         // eventually create shadow primitives from aDecomposition and add to rDecomposition
-                        const bool bShadow(XFTSHADOW_NONE != maSdrFormTextAttribute.getFormTextShadow());
+                        const bool bShadow(XFormTextShadow::NONE != maSdrFormTextAttribute.getFormTextShadow());
 
                         if(bShadow)
                         {
-                            if(XFTSHADOW_NORMAL == maSdrFormTextAttribute.getFormTextShadow())
+                            if(XFormTextShadow::Normal == maSdrFormTextAttribute.getFormTextShadow())
                             {
                                 aNewShadowTransform.translate(
                                     maSdrFormTextAttribute.getFormTextShdwXVal(),
                                     -maSdrFormTextAttribute.getFormTextShdwYVal());
                             }
-                            else // XFTSHADOW_SLANT
+                            else // XFormTextShadow::Slant
                             {
                                 double fScaleValue(maSdrFormTextAttribute.getFormTextShdwYVal() / 100.0);
                                 double fShearValue(-maSdrFormTextAttribute.getFormTextShdwXVal() * F_PI1800);
@@ -405,24 +402,24 @@ namespace
 
                         switch(maSdrFormTextAttribute.getFormTextStyle())
                         {
-                            case XFT_ROTATE :
+                            case XFormTextStyle::Rotate :
                             {
-                                aEndPos = basegfx::tools::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
+                                aEndPos = basegfx::utils::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
                                 const basegfx::B2DVector aDirection(aEndPos - aStartPos);
                                 aNewTransformB.rotate(atan2(aDirection.getY(), aDirection.getX()));
                                 aNewTransformB.translate(aStartPos.getX(), aStartPos.getY());
 
                                 break;
                             }
-                            case XFT_UPRIGHT :
+                            case XFormTextStyle::Upright :
                             {
                                 aNewTransformB.translate(aStartPos.getX() - (fPortionLength / 2.0), aStartPos.getY());
 
                                 break;
                             }
-                            case XFT_SLANTX :
+                            case XFormTextStyle::SlantX :
                             {
-                                aEndPos = basegfx::tools::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
+                                aEndPos = basegfx::utils::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
                                 const basegfx::B2DVector aDirection(aEndPos - aStartPos);
                                 const double fShearValue(atan2(aDirection.getY(), aDirection.getX()));
                                 const double fSin(sin(fShearValue));
@@ -438,9 +435,9 @@ namespace
 
                                 break;
                             }
-                            case XFT_SLANTY :
+                            case XFormTextStyle::SlantY :
                             {
-                                aEndPos = basegfx::tools::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
+                                aEndPos = basegfx::utils::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
                                 const basegfx::B2DVector aDirection(aEndPos - aStartPos);
                                 const double fShearValue(atan2(aDirection.getY(), aDirection.getX()));
                                 const double fCos(cos(fShearValue));
@@ -457,7 +454,7 @@ namespace
 
                                 break;
                             }
-                            default : break; // XFT_NONE
+                            default : break; // XFormTextStyle::NONE
                         }
 
                         // distance from path?
@@ -465,7 +462,7 @@ namespace
                         {
                             if(aEndPos.equal(aStartPos))
                             {
-                                aEndPos = basegfx::tools::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
+                                aEndPos = basegfx::utils::getPositionAbsolute(aPolygonCandidate, fPolyStart + fPortionLength, fPolyLength);
                             }
 
                             // use back vector (aStartPos - aEndPos) here to get mirrored perpendicular as in old stuff
@@ -480,7 +477,7 @@ namespace
                             const sal_Int32 nPortionIndex(pCandidate->getPortionIndex(nUsedTextLength, nNextGlyphLen));
                             ::std::vector< double > aNewDXArray;
 
-                            if(nNextGlyphLen > 1 && pCandidate->getDoubleDXArray().size())
+                            if(nNextGlyphLen > 1 && !pCandidate->getDoubleDXArray().empty())
                             {
                                 // copy DXArray for portion
                                 aNewDXArray.insert(
@@ -494,7 +491,7 @@ namespace
                                     double fDXOffset= *(pCandidate->getDoubleDXArray().begin() + (nPortionIndex - 1));
                                     ::std::transform(
                                         aNewDXArray.begin(), aNewDXArray.end(),
-                                        aNewDXArray.begin(), ::std::bind2nd(::std::minus<double>(), fDXOffset));
+                                        aNewDXArray.begin(), [fDXOffset](double x) { return x - fDXOffset; });
                                 }
 
                                 if(bAutosizeScale)
@@ -502,7 +499,7 @@ namespace
                                     // when autosize scaling, adapt to DXArray, too
                                     ::std::transform(
                                         aNewDXArray.begin(), aNewDXArray.end(),
-                                        aNewDXArray.begin(), ::std::bind2nd(::std::multiplies<double>(), fAutosizeScaleFactor));
+                                        aNewDXArray.begin(), [fAutosizeScaleFactor](double x) { return x * fAutosizeScaleFactor; });
                                 }
                             }
 
@@ -570,18 +567,18 @@ namespace
         const drawinglayer::attribute::StrokeAttribute& rStrokeAttribute,
         std::vector< drawinglayer::primitive2d::BasePrimitive2D* >& rTarget)
     {
-        for(basegfx::B2DPolyPolygonVector::const_iterator aPolygon(rB2DPolyPolyVector.begin()); aPolygon != rB2DPolyPolyVector.end(); ++aPolygon)
+        for(const auto& rB2DPolyPolygon : rB2DPolyPolyVector)
         {
             // prepare PolyPolygons
-            basegfx::B2DPolyPolygon aB2DPolyPolygon = *aPolygon;
+            basegfx::B2DPolyPolygon aB2DPolyPolygon = rB2DPolyPolygon;
             aB2DPolyPolygon.transform(rTransform);
 
-            for(sal_uInt32 a(0L); a < aB2DPolyPolygon.count(); a++)
+            for(auto const& rPolygon : aB2DPolyPolygon)
             {
                 // create one primitive per polygon
                 drawinglayer::primitive2d::PolygonStrokePrimitive2D* pNew =
                     new drawinglayer::primitive2d::PolygonStrokePrimitive2D(
-                        aB2DPolyPolygon.getB2DPolygon(a), rLineAttribute, rStrokeAttribute);
+                        rPolygon, rLineAttribute, rStrokeAttribute);
                 rTarget.push_back(pNew);
             }
         }
@@ -593,9 +590,9 @@ namespace
     {
         std::vector< drawinglayer::primitive2d::BasePrimitive2D* > aNewPrimitives;
 
-        for(size_t a(0); a < rSource.size(); a++)
+        for(drawinglayer::primitive2d::BasePrimitive2D* a : rSource)
         {
-            const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* pTextCandidate = dynamic_cast< const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* >(rSource[a]);
+            const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* pTextCandidate = dynamic_cast< const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* >(a);
 
             if(pTextCandidate)
             {
@@ -624,7 +621,7 @@ namespace
                             // create UnifiedTransparencePrimitive2D
                             drawinglayer::primitive2d::Primitive2DContainer aStrokePrimitiveSequence(nStrokeCount);
 
-                            for(sal_uInt32 b(0L); b < nStrokeCount; b++)
+                            for(sal_uInt32 b(0); b < nStrokeCount; b++)
                             {
                                 aStrokePrimitiveSequence[b] = drawinglayer::primitive2d::Primitive2DReference(aStrokePrimitives[b]);
                             }
@@ -632,7 +629,7 @@ namespace
                             drawinglayer::primitive2d::UnifiedTransparencePrimitive2D* pNew2 =
                                 new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
                                     aStrokePrimitiveSequence,
-                                    (double)rOutlineAttribute.getTransparence() / 100.0);
+                                    static_cast<double>(rOutlineAttribute.getTransparence()) / 100.0);
                             aNewPrimitives.push_back(pNew2);
                         }
                         else
@@ -651,7 +648,7 @@ namespace
         {
             drawinglayer::primitive2d::Primitive2DContainer aRetval(nNewCount);
 
-            for(sal_uInt32 a(0L); a < nNewCount; a++)
+            for(sal_uInt32 a(0); a < nNewCount; a++)
             {
                 aRetval[a] = drawinglayer::primitive2d::Primitive2DReference(aNewPrimitives[a]);
             }
@@ -715,15 +712,13 @@ void SdrTextObj::impDecomposePathTextPrimitive(
                 aShadowDecomposition);
             sal_uInt32 a;
 
-            for(a = 0L; a < nLoopCount; a++)
+            for(a = 0; a < nLoopCount; a++)
             {
                 // filter text portions for this paragraph
                 ::std::vector< const impPathTextPortion* > aParagraphTextPortions;
 
-                for(size_t b(0); b < rPathTextPortions.size(); b++)
+                for(const auto & rCandidate : rPathTextPortions)
                 {
-                    const impPathTextPortion& rCandidate = rPathTextPortions[b];
-
                     if(static_cast<sal_uInt32>(rCandidate.getParagraph()) == a)
                     {
                         aParagraphTextPortions.push_back(&rCandidate);
@@ -745,7 +740,7 @@ void SdrTextObj::impDecomposePathTextPrimitive(
                 // add shadow primitives to decomposition
                 aRetvalA.resize(nShadowCount);
 
-                for(a = 0L; a < nShadowCount; a++)
+                for(a = 0; a < nShadowCount; a++)
                 {
                     aRetvalA[a] = drawinglayer::primitive2d::Primitive2DReference(aShadowDecomposition[a]);
                 }
@@ -768,7 +763,7 @@ void SdrTextObj::impDecomposePathTextPrimitive(
                 // add normal primitives to decomposition
                 aRetvalB.resize(nRegularCount);
 
-                for(a = 0L; a < nRegularCount; a++)
+                for(a = 0; a < nRegularCount; a++)
                 {
                     aRetvalB[a] = drawinglayer::primitive2d::Primitive2DReference(aRegularDecomposition[a]);
                 }

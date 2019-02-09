@@ -17,26 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SwSmartTagMgr.hxx"
+#include <SwSmartTagMgr.hxx>
 
 #include <docsh.hxx>
-#include <osl/mutex.hxx>
 #include <swmodule.hxx>
 #include <vcl/svapp.hxx>
 
 using namespace com::sun::star;
 using namespace com::sun::star::uno;
 
-SwSmartTagMgr* SwSmartTagMgr::mpTheSwSmartTagMgr = nullptr;
+SwSmartTagMgr* SwSmartTagMgr::spTheSwSmartTagMgr = nullptr;
 
 SwSmartTagMgr& SwSmartTagMgr::Get()
 {
-    if ( !mpTheSwSmartTagMgr )
+    if ( !spTheSwSmartTagMgr )
     {
-        mpTheSwSmartTagMgr = new SwSmartTagMgr( SwDocShell::Factory().GetModuleName() );
-        mpTheSwSmartTagMgr->Init("Writer");
+        spTheSwSmartTagMgr = new SwSmartTagMgr( SwDocShell::Factory().GetModuleName() );
+        spTheSwSmartTagMgr->Init("Writer");
     }
-    return *mpTheSwSmartTagMgr;
+    return *spTheSwSmartTagMgr;
 }
 
 SwSmartTagMgr::SwSmartTagMgr( const OUString& rModuleName ) :
@@ -48,7 +47,7 @@ SwSmartTagMgr::~SwSmartTagMgr()
 {
 }
 
-void SwSmartTagMgr::modified( const lang::EventObject& rEO ) throw( RuntimeException, std::exception )
+void SwSmartTagMgr::modified( const lang::EventObject& rEO )
 {
     SolarMutexGuard aGuard;
 
@@ -58,7 +57,7 @@ void SwSmartTagMgr::modified( const lang::EventObject& rEO ) throw( RuntimeExcep
     SmartTagMgr::modified( rEO );
 }
 
-void SwSmartTagMgr::changesOccurred( const util::ChangesEvent& rEvent ) throw( RuntimeException, std::exception)
+void SwSmartTagMgr::changesOccurred( const util::ChangesEvent& rEvent )
 {
     SolarMutexGuard aGuard;
 

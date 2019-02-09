@@ -28,7 +28,7 @@
 
 struct value
 {
-    long val;
+    int val;
     int type;
 };
 
@@ -43,11 +43,12 @@ struct value
 /* operator priority, arity, and conversion type, indexed by tokentype */
 struct pri
 {
-    char pri;
-    char arity;
-    char ctype;
-}   priority[] =
+    char const pri;
+    char const arity;
+    char const ctype;
+};
 
+static const struct pri priority[] =
 {
     {
         0, 0, 0
@@ -237,10 +238,10 @@ struct pri
     },                                  /* ARCHITECTURE */
 };
 
-int evalop(struct pri);
-struct value tokval(Token *);
-struct value vals[NSTAK], *vp;
-enum toktype ops[NSTAK], *op;
+static int evalop(struct pri);
+static struct value tokval(Token *);
+static struct value vals[NSTAK], *vp;
+static enum toktype ops[NSTAK], *op;
 
 /*
  * Evaluate an #if #elif #ifdef #ifndef line.  trp->tp points to the keyword.
@@ -318,7 +319,7 @@ long
                     }
                     continue;
                 }
-                /* flow through */
+                /* fall through */
 
                 /* plain binary */
             case EQ:
@@ -406,7 +407,7 @@ int
 {
     struct value v1;
     struct value v2 = { 0, UND };
-    long rv1, rv2;
+    int rv1, rv2;
     int rtype, oper;
 
     rv2 = 0;
@@ -619,7 +620,7 @@ struct value
     struct value v;
     Nlist *np;
     int i, base;
-    unsigned long n;
+    unsigned int n;
     uchar *p, c;
 
     v.type = SGN;

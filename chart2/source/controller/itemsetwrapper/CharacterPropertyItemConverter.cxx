@@ -17,23 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "CharacterPropertyItemConverter.hxx"
+#include <CharacterPropertyItemConverter.hxx>
 #include "SchWhichPairs.hxx"
-#include "macros.hxx"
-#include "ItemPropertyMap.hxx"
-#include "RelativeSizeHelper.hxx"
-#include <editeng/memberids.hrc>
+#include <ItemPropertyMap.hxx>
+#include <RelativeSizeHelper.hxx>
+#include <editeng/memberids.h>
 #include <editeng/eeitem.hxx>
 #include <editeng/udlnitem.hxx>
 #include <editeng/fontitem.hxx>
-#include <editeng/crossedoutitem.hxx>
 #include <editeng/postitem.hxx>
 #include <editeng/wghtitem.hxx>
 #include <editeng/fhgtitem.hxx>
+#include <o3tl/any.hxx>
 #include <svl/stritem.hxx>
 
-#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/chart2/XFormattedString.hpp>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 
@@ -43,24 +43,22 @@ namespace {
 
 ItemPropertyMapType & lcl_GetCharacterPropertyPropertyMap()
 {
-    static ItemPropertyMapType aCharacterPropertyMap(
-        MakeItemPropertyMap
-        IPM_MAP_ENTRY( EE_CHAR_COLOR, "CharColor", 0 )
-        IPM_MAP_ENTRY( EE_CHAR_LANGUAGE, "CharLocale", MID_LANG_LOCALE )
-        IPM_MAP_ENTRY( EE_CHAR_LANGUAGE_CJK, "CharLocaleAsian", MID_LANG_LOCALE )
-        IPM_MAP_ENTRY( EE_CHAR_LANGUAGE_CTL, "CharLocaleComplex", MID_LANG_LOCALE )
+    static ItemPropertyMapType aCharacterPropertyMap{
+        {EE_CHAR_COLOR, {"CharColor", 0}},
+        {EE_CHAR_LANGUAGE, {"CharLocale", MID_LANG_LOCALE}},
+        {EE_CHAR_LANGUAGE_CJK, {"CharLocaleAsian", MID_LANG_LOCALE}},
+        {EE_CHAR_LANGUAGE_CTL, {"CharLocaleComplex", MID_LANG_LOCALE}},
 
-        IPM_MAP_ENTRY( EE_CHAR_STRIKEOUT, "CharStrikeout", MID_CROSS_OUT )
-        IPM_MAP_ENTRY( EE_CHAR_WLM, "CharWordMode", 0 )
-        IPM_MAP_ENTRY( EE_CHAR_SHADOW, "CharShadowed", 0 )
-        IPM_MAP_ENTRY( EE_CHAR_RELIEF, "CharRelief", 0 )
-        IPM_MAP_ENTRY( EE_CHAR_OUTLINE, "CharContoured", 0 )
-        IPM_MAP_ENTRY( EE_CHAR_EMPHASISMARK, "CharEmphasis", 0 )
+        {EE_CHAR_STRIKEOUT, {"CharStrikeout", MID_CROSS_OUT}},
+        {EE_CHAR_WLM, {"CharWordMode", 0}},
+        {EE_CHAR_SHADOW, {"CharShadowed", 0}},
+        {EE_CHAR_RELIEF, {"CharRelief", 0}},
+        {EE_CHAR_OUTLINE, {"CharContoured", 0}},
+        {EE_CHAR_EMPHASISMARK, {"CharEmphasis", 0}},
 
-        IPM_MAP_ENTRY( EE_PARA_WRITINGDIR, "WritingMode", 0 )
+        {EE_PARA_WRITINGDIR, {"WritingMode", 0}},
 
-        IPM_MAP_ENTRY( EE_PARA_ASIANCJKSPACING, "ParaIsCharacterDistance", 0 )
-        );
+        {EE_PARA_ASIANCJKSPACING, {"ParaIsCharacterDistance", 0}}};
 
     return aCharacterPropertyMap;
 }
@@ -108,7 +106,6 @@ bool CharacterPropertyItemConverter::GetItemProperty( tWhichIdType nWhichId, tPr
 
 void CharacterPropertyItemConverter::FillSpecialItem(
     sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-    throw( uno::Exception )
 {
     switch( nWhichId )
     {
@@ -152,8 +149,7 @@ void CharacterPropertyItemConverter::FillSpecialItem(
             }
 
             aValue = GetPropertySet()->getPropertyValue( "CharUnderlineHasColor" );
-            if( aValue.hasValue() &&
-                ( *static_cast< const sal_Bool * >( aValue.getValue()) != sal_False ))
+            if( aValue.hasValue() && *o3tl::doAccess<bool>(aValue) )
             {
                 aItem.PutValue( aValue, MID_TL_HASCOLOR );
                 bModified = true;
@@ -184,8 +180,7 @@ void CharacterPropertyItemConverter::FillSpecialItem(
             }
 
             aValue = GetPropertySet()->getPropertyValue( "CharOverlineHasColor" );
-            if ( aValue.hasValue() &&
-                 ( *static_cast< const sal_Bool* >( aValue.getValue() ) != sal_False ) )
+            if ( aValue.hasValue() && *o3tl::doAccess<bool>(aValue) )
             {
                 aItem.PutValue( aValue, MID_TL_HASCOLOR );
                 bModified = true;
@@ -281,9 +276,9 @@ void CharacterPropertyItemConverter::FillSpecialItem(
                     rOutItemSet.Put( aItem );
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
         break;
@@ -297,7 +292,7 @@ void CharacterPropertyItemConverter::FillSpecialItem(
                 rOutItemSet.Put( SfxStringItem( nWhichId, aString ) );
             }
             else
-                rOutItemSet.Put( SfxStringItem( nWhichId, OUString("") ) );
+                rOutItemSet.Put( SfxStringItem( nWhichId, OUString() ) );
         }
         break;
 
@@ -310,7 +305,6 @@ void CharacterPropertyItemConverter::FillSpecialItem(
 
 bool CharacterPropertyItemConverter::ApplySpecialItem(
     sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-    throw( uno::Exception )
 {
     bool bChanged = false;
     uno::Any aValue;
@@ -533,7 +527,7 @@ bool CharacterPropertyItemConverter::ApplySpecialItem(
                         if (m_pRefSize && GetRefSizePropertySet()->getPropertyValue( m_aRefSizePropertyName ).hasValue())
                         {
                             GetRefSizePropertySet()->setPropertyValue(
-                                m_aRefSizePropertyName, uno::makeAny(*m_pRefSize));
+                                m_aRefSizePropertyName, uno::Any(*m_pRefSize));
                         }
 
                         GetPropertySet()->setPropertyValue( "CharHeight" + aPostfix, aValue );
@@ -541,9 +535,9 @@ bool CharacterPropertyItemConverter::ApplySpecialItem(
                     }
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
         break;
@@ -552,7 +546,7 @@ bool CharacterPropertyItemConverter::ApplySpecialItem(
     return bChanged;
 }
 
-uno::Reference<beans::XPropertySet> CharacterPropertyItemConverter::GetRefSizePropertySet() const
+const uno::Reference<beans::XPropertySet>& CharacterPropertyItemConverter::GetRefSizePropertySet() const
 {
     return m_xRefSizePropSet;
 }

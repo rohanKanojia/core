@@ -23,10 +23,12 @@
 #include <com/sun/star/awt/FontFamily.hpp>
 #include <com/sun/star/awt/FontPitch.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
 
 #include <comphelper/seqstream.hxx>
 
 #include <osl/file.hxx>
+#include <sal/log.hxx>
 #include <vcl/embeddedfontshelper.hxx>
 
 #include <xmloff/nmspmap.hxx>
@@ -57,8 +59,6 @@ enum XMLFontStyleAttrTokens
     XML_TOK_FONT_STYLE_ATTR_STYLENAME,
     XML_TOK_FONT_STYLE_ATTR_PITCH,
     XML_TOK_FONT_STYLE_ATTR_CHARSET,
-
-    XML_TOK_FONT_STYLE_ATTR_END=XML_TOK_UNKNOWN
 };
 
 static const SvXMLTokenMapEntry* lcl_getFontStyleAttrTokenMap()
@@ -91,9 +91,9 @@ XMLFontStyleContextFontFace::XMLFontStyleContextFontFace( SvXMLImport& rImport,
 {
     aFamilyName <<= OUString();
     aStyleName <<= OUString();
-    aFamily <<= (sal_Int16)awt::FontFamily::DONTKNOW;
-    aPitch <<= (sal_Int16)awt::FontPitch::DONTKNOW;
-    aEnc <<= (sal_Int16)rStyles.GetDfltCharset();
+    aFamily <<= sal_Int16(awt::FontFamily::DONTKNOW);
+    aPitch <<= sal_Int16(awt::FontPitch::DONTKNOW);
+    aEnc <<= static_cast<sal_Int16>(rStyles.GetDfltCharset());
 }
 
 void XMLFontStyleContextFontFace::SetAttribute( sal_uInt16 nPrefixKey,
@@ -174,7 +174,7 @@ void XMLFontStyleContextFontFace::FillProperties(
     }
 }
 
-SvXMLImportContext * XMLFontStyleContextFontFace::CreateChildContext(
+SvXMLImportContextRef XMLFontStyleContextFontFace::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList )
@@ -219,7 +219,7 @@ XMLFontStyleContextFontFaceSrc::XMLFontStyleContextFontFaceSrc( SvXMLImport& rIm
 {
 }
 
-SvXMLImportContext * XMLFontStyleContextFontFaceSrc::CreateChildContext(
+SvXMLImportContextRef XMLFontStyleContextFontFaceSrc::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList )
@@ -239,7 +239,7 @@ XMLFontStyleContextFontFaceUri::XMLFontStyleContextFontFaceUri( SvXMLImport& rIm
 {
 }
 
-SvXMLImportContext * XMLFontStyleContextFontFaceUri::CreateChildContext(
+SvXMLImportContextRef XMLFontStyleContextFontFaceUri::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList )
@@ -271,9 +271,9 @@ void XMLFontStyleContextFontFaceUri::SetFormat( const OUString& rFormat )
 
 // the CSS2 standard ( http://www.w3.org/TR/2008/REC-CSS2-20080411/fonts.html#referencing )
 // defines these format strings.
-const char* OPENTYPE_FORMAT = "opentype";
-const char* TRUETYPE_FORMAT = "truetype";
-const char* EOT_FORMAT      = "embedded-opentype";
+const char OPENTYPE_FORMAT[] = "opentype";
+const char TRUETYPE_FORMAT[] = "truetype";
+const char EOT_FORMAT[]      = "embedded-opentype";
 
 void XMLFontStyleContextFontFaceUri::EndElement()
 {
@@ -285,12 +285,12 @@ void XMLFontStyleContextFontFaceUri::EndElement()
     bool eot;
     // Assume by default that the font is not compressed.
     if( format.getLength() == 0
-        || format.equalsAscii( OPENTYPE_FORMAT )
-        || format.equalsAscii( TRUETYPE_FORMAT ))
+        || format == OPENTYPE_FORMAT
+        || format == TRUETYPE_FORMAT )
     {
         eot = false;
     }
-    else if( format.equalsAscii( EOT_FORMAT ))
+    else if( format == EOT_FORMAT )
     {
         eot = true;
     }
@@ -377,14 +377,7 @@ XMLFontStylesContext::XMLFontStylesContext( SvXMLImport& rImport,
 {
 }
 
-XMLFontStylesContext::~XMLFontStylesContext()
-{
-    delete pFamilyNameHdl;
-    delete pFamilyHdl;
-    delete pPitchHdl;
-    delete pEncHdl;
-    delete pFontStyleAttrTokenMap;
-}
+XMLFontStylesContext::~XMLFontStylesContext() {}
 
 bool XMLFontStylesContext::FillProperties( const OUString& rName,
                          ::std::vector< XMLPropertyState > &rProps,

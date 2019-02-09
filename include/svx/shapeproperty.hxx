@@ -24,26 +24,18 @@
 namespace svx
 {
 
-
     //= ShapeProperty
 
-    enum ShapeProperty
+    enum class ShapeProperty
     {
         // generic (UNO) shape properties
-        eShapePosition,
-        eShapeSize,
+        Position,
+        Size,
         // text doc shape properties
-        eTextShapeAnchorType,
-        // spreadsheet doc shape properties
-        eSpreadsheetAnchor,
-
-        // invalid, not to be used
-        eInvalidShapeProperty
+        TextDocAnchor
     };
 
-
 }
-
 
 #endif // INCLUDED_SVX_SHAPEPROPERTY_HXX
 

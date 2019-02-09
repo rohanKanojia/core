@@ -1,18 +1,106 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="InsertCaptionDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Insert Caption</property>
+    <property name="title" translatable="yes" context="insertcaption|InsertCaptionDialog">Insert Caption</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
         <property name="spacing">12</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox" id="dialog-action_area1">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="auto">
+                <property name="label" translatable="yes" context="insertcaption|auto">Auto...</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="options">
+                <property name="label" translatable="yes" context="insertcaption|options">Options...</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="ok">
+                <property name="label">gtk-ok</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="can_default">True</property>
+                <property name="has_default">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="cancel">
+                <property name="label">gtk-cancel</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="help">
+                <property name="label">gtk-help</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">4</property>
+                <property name="secondary">True</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="pack_type">end</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
         <child>
           <object class="GtkBox" id="box1">
             <property name="visible">True</property>
@@ -39,7 +127,7 @@
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
+                        <property name="activates_default">True</property>
                       </object>
                     </child>
                   </object>
@@ -48,7 +136,7 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Caption</property>
+                    <property name="label" translatable="yes" context="insertcaption|label1">Caption</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -86,7 +174,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">start</property>
-                            <property name="label" translatable="yes">Numbering:</property>
+                            <property name="label" translatable="yes" context="insertcaption|numbering_label">Numbering:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">numbering</property>
                           </object>
@@ -100,7 +188,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">start</property>
-                            <property name="label" translatable="yes">Separator:</property>
+                            <property name="label" translatable="yes" context="insertcaption|separator_label">Separator:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">separator_edit</property>
                           </object>
@@ -114,7 +202,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">start</property>
-                            <property name="label" translatable="yes">Position:</property>
+                            <property name="label" translatable="yes" context="insertcaption|position_label">Position:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">position</property>
                           </object>
@@ -124,7 +212,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkComboBox" id="numbering">
+                          <object class="GtkComboBoxText" id="numbering">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
@@ -139,8 +227,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
-                            <property name="text" translatable="yes">: </property>
+                            <property name="activates_default">True</property>
+                            <property name="text" translatable="yes" context="insertcaption|separator_edit">: </property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -152,7 +240,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">start</property>
-                            <property name="label" translatable="yes">Numbering separator:</property>
+                            <property name="label" translatable="yes" context="insertcaption|num_separator">Numbering separator:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">num_separator_edit</property>
                           </object>
@@ -166,8 +254,8 @@
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
-                            <property name="text" translatable="yes">. </property>
+                            <property name="activates_default">True</property>
+                            <property name="text" translatable="yes" context="insertcaption|num_separator_edit">. </property>
                           </object>
                           <packing>
                             <property name="left_attach">1</property>
@@ -175,7 +263,7 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkComboBox" id="position">
+                          <object class="GtkComboBoxText" id="position">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="hexpand">True</property>
@@ -190,7 +278,7 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="halign">start</property>
-                            <property name="label" translatable="yes">Category:</property>
+                            <property name="label" translatable="yes" context="insertcaption|label4">Category:</property>
                             <property name="use_underline">True</property>
                             <property name="mnemonic_widget">category</property>
                           </object>
@@ -207,6 +295,7 @@
                             <child internal-child="entry">
                               <object class="GtkEntry" id="comboboxtext-entry">
                                 <property name="can_focus">False</property>
+                                <property name="activates_default">True</property>
                               </object>
                             </child>
                           </object>
@@ -223,7 +312,7 @@
                   <object class="GtkLabel" id="label2">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Properties</property>
+                    <property name="label" translatable="yes" context="insertcaption|label2">Properties</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -250,9 +339,24 @@
                     <property name="top_padding">6</property>
                     <property name="left_padding">12</property>
                     <child>
-                      <object class="swuilo-SwCaptionPreview" id="preview:border">
+                      <object class="GtkScrolledWindow">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can_focus">True</property>
+                        <property name="hscrollbar_policy">never</property>
+                        <property name="vscrollbar_policy">never</property>
+                        <property name="shadow_type">in</property>
+                        <child>
+                          <object class="GtkViewport">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkDrawingArea" id="preview">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -261,7 +365,7 @@
                   <object class="GtkLabel" id="label3">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">Preview</property>
+                    <property name="label" translatable="yes" context="insertcaption|label3">Preview</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -281,97 +385,14 @@
             <property name="position">0</property>
           </packing>
         </child>
-        <child internal-child="action_area">
-          <object class="GtkButtonBox" id="dialog-action_area1">
-            <property name="can_focus">False</property>
-            <property name="layout_style">end</property>
-            <child>
-              <object class="GtkButton" id="ok">
-                <property name="label">gtk-ok</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="can_default">True</property>
-                <property name="has_default">True</property>
-                <property name="receives_default">True</property>
-                <property name="use_stock">True</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">0</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="cancel">
-                <property name="label">gtk-cancel</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-                <property name="use_stock">True</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="help">
-                <property name="label">gtk-help</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-                <property name="use_stock">True</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">2</property>
-                <property name="secondary">True</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="auto">
-                <property name="label" translatable="yes">Auto...</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">3</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="options">
-                <property name="label" translatable="yes">Options...</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">4</property>
-              </packing>
-            </child>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="pack_type">end</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
-      <action-widget response="0">auto</action-widget>
-      <action-widget response="0">options</action-widget>
+      <action-widget response="101">auto</action-widget>
+      <action-widget response="102">options</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
   <object class="GtkAdjustment" id="adjustment1">
@@ -388,7 +409,7 @@
     </columns>
     <data>
       <row>
-        <col id="0" translatable="yes">[None]</col>
+        <col id="0" translatable="yes" context="insertcaption|liststore1">[None]</col>
       </row>
     </data>
   </object>

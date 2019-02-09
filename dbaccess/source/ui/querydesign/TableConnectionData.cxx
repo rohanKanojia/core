@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableConnectionData.hxx"
-#include <tools/debug.hxx>
+#include <TableConnectionData.hxx>
 #include <osl/diagnose.h>
 
 using namespace dbaui;
@@ -30,11 +29,9 @@ OTableConnectionData::OTableConnectionData()
 }
 
 OTableConnectionData::OTableConnectionData(const TTableWindowData::value_type& _pReferencingTable
-                                          ,const TTableWindowData::value_type& _pReferencedTable
-                                          ,const OUString& rConnName )
+                                          ,const TTableWindowData::value_type& _pReferencedTable )
  :m_pReferencingTable(_pReferencingTable)
  ,m_pReferencedTable(_pReferencedTable)
- ,m_aConnName( rConnName )
 {
     Init();
 }
@@ -42,7 +39,7 @@ OTableConnectionData::OTableConnectionData(const TTableWindowData::value_type& _
 void OTableConnectionData::Init()
 {
     // initialise linedatalist with defaults
-    OSL_ENSURE(m_vConnLineData.empty(), "OTableConnectionData::Init() : nur mit leere Linienliste aufzurufen !");
+    OSL_ENSURE(m_vConnLineData.empty(), "OTableConnectionData::Init() : call only with empty line list!");
     ResetConnLines();
         // this creates the defaults
 }
@@ -71,18 +68,14 @@ OTableConnectionData& OTableConnectionData::operator=( const OTableConnectionDat
 
     m_pReferencingTable = rConnData.m_pReferencingTable;
     m_pReferencedTable = rConnData.m_pReferencedTable;
-    m_aConnName = rConnData.GetConnName();
+    m_aConnName = rConnData.m_aConnName;
 
     // clear line list
     ResetConnLines();
 
     // and copy
-    const OConnectionLineDataVec& rLineData = rConnData.GetConnLineDataList();
-
-    OConnectionLineDataVec::const_iterator aIter = rLineData.begin();
-    OConnectionLineDataVec::const_iterator aEnd = rLineData.end();
-    for(;aIter != aEnd;++aIter)
-        m_vConnLineData.push_back(new OConnectionLineData(**aIter));
+    for (auto const& elem : rConnData.GetConnLineDataList())
+        m_vConnLineData.push_back(new OConnectionLineData(*elem));
 
     return *this;
 }
@@ -101,7 +94,7 @@ void OTableConnectionData::SetConnLine( sal_uInt16 nIndex, const OUString& rSour
     }
 
     OConnectionLineDataRef pConnLineData = m_vConnLineData[nIndex];
-    OSL_ENSURE(pConnLineData != nullptr, "OTableConnectionData::SetConnLine : habe ungueltiges LineData-Objekt");
+    OSL_ENSURE(pConnLineData != nullptr, "OTableConnectionData::SetConnLine : have invalid LineData object");
 
     pConnLineData->SetSourceFieldName( rSourceFieldName );
     pConnLineData->SetDestFieldName( rDestFieldName );
@@ -109,32 +102,22 @@ void OTableConnectionData::SetConnLine( sal_uInt16 nIndex, const OUString& rSour
 
 bool OTableConnectionData::AppendConnLine( const OUString& rSourceFieldName, const OUString& rDestFieldName )
 {
-    OConnectionLineDataVec::const_iterator aIter = m_vConnLineData.begin();
-    OConnectionLineDataVec::const_iterator aEnd = m_vConnLineData.end();
-    for(;aIter != aEnd;++aIter)
+    for (auto const& elem : m_vConnLineData)
     {
-        if((*aIter)->GetDestFieldName() == rDestFieldName && (*aIter)->GetSourceFieldName() == rSourceFieldName)
-            break;
+        if(elem->GetDestFieldName() == rDestFieldName && elem->GetSourceFieldName() == rSourceFieldName)
+            return true;
     }
-    if(aIter == aEnd)
-    {
-        OConnectionLineDataRef pNew = new OConnectionLineData(rSourceFieldName, rDestFieldName);
-        if (!pNew.is())
-            return false;
+    OConnectionLineDataRef pNew = new OConnectionLineData(rSourceFieldName, rDestFieldName);
+    if (!pNew.is())
+        return false;
 
-        m_vConnLineData.push_back(pNew);
-    }
+    m_vConnLineData.push_back(pNew);
     return true;
 }
 
 void OTableConnectionData::ResetConnLines()
 {
     OConnectionLineDataVec().swap(m_vConnLineData);
-}
-
-OConnectionLineDataRef OTableConnectionData::CreateLineDataObj()
-{
-    return new OConnectionLineData();
 }
 
 OTableConnectionData* OTableConnectionData::NewInstance() const

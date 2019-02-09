@@ -14,11 +14,30 @@
 #include <osl/process.h>
 #include <sot/storage.hxx>
 #include <sot/storinfo.hxx>
+#include <sysformats.hxx>
 
 using namespace ::com::sun::star;
 
 namespace
 {
+    size_t FindFormatIndex(const SotAction_Impl* pFormats, SotClipboardFormatId eFormat)
+    {
+        size_t nRet = 0;
+        SotClipboardFormatId nId = pFormats->nFormatId;
+
+        while (nId != static_cast<SotClipboardFormatId>(0xffff))
+        {
+            if (nId == eFormat)
+                break;
+
+            ++pFormats;
+            ++nRet;
+            nId = pFormats->nFormatId;
+        }
+
+        return nRet;
+    }
+
     class SotTest
         : public test::FiltersTest
         , public test::BootstrapFixtureBase
@@ -37,10 +56,12 @@ namespace
 
         void test();
         void testSize();
+        void testClipboard();
 
         CPPUNIT_TEST_SUITE(SotTest);
         CPPUNIT_TEST(test);
         CPPUNIT_TEST(testSize);
+        CPPUNIT_TEST(testClipboard);
         CPPUNIT_TEST_SUITE_END();
     };
 
@@ -58,12 +79,11 @@ namespace
             xStream->Seek(0);
             sal_uLong nRemaining = xStream->GetSize() - xStream->Tell();
 
-            CPPUNIT_ASSERT_MESSAGE( "check size", nRemaining == nSize );
-            CPPUNIT_ASSERT_MESSAGE( "check size #2", xStream->remainingSize() == nSize );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "check size", nSize, nRemaining );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "check size #2", static_cast<sal_uInt64>(nSize), xStream->remainingSize());
 
             // Read as much as we can, a corrupted FAT chain can cause real grief here
-            nReadableSize = xStream->Read( static_cast<void *>(pData), nSize );
-//            fprintf(stderr, "readable size %d vs size %d remaining %d\n", nReadableSize, nSize, nReadableSize);
+            nReadableSize = xStream->ReadBytes(static_cast<void *>(pData), nSize);
         }
         {   // Read the data backwards as well
             tools::SvRef<SotStorageStream> xStream( xObjStor->OpenSotStream( rStreamName ) );
@@ -72,10 +92,10 @@ namespace
                 CPPUNIT_ASSERT_MESSAGE( "sot reading error", !xStream->GetError() );
                 unsigned char c;
                 xStream->Seek( i - 1 );
-                CPPUNIT_ASSERT_MESSAGE( "sot storage reading byte",
-                                        xStream->Read( &c, 1 ) == 1);
-                CPPUNIT_ASSERT_MESSAGE( "mismatching data storage reading byte",
-                                        pData[i - 1] == c );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "sot storage reading byte",
+                                              static_cast<size_t>(1), xStream->ReadBytes(&c, 1));
+                CPPUNIT_ASSERT_EQUAL_MESSAGE( "mismatching data storage reading byte",
+                                              c, pData[i - 1] );
             }
         }
         free(pData);
@@ -87,16 +107,15 @@ namespace
         SvStorageInfoList aInfoList;
         xObjStor->FillInfoList( &aInfoList );
 
-        for( SvStorageInfoList::iterator aIt = aInfoList.begin();
-             aIt != aInfoList.end(); ++aIt )
+        for (auto& rInfo : aInfoList)
         {
-            if( aIt->IsStorage() )
+            if( rInfo.IsStorage() )
             {
-                tools::SvRef<SotStorage> xChild( xObjStor->OpenSotStorage( aIt->GetName() ) );
+                tools::SvRef<SotStorage> xChild( xObjStor->OpenSotStorage( rInfo.GetName() ) );
                 checkStorage( xChild );
             }
-            else if( aIt->IsStream() )
-                checkStream( xObjStor, aIt->GetName(), aIt->GetSize() );
+            else if( rInfo.IsStream() )
+                checkStream( xObjStor, rInfo.GetName(), rInfo.GetSize() );
         }
 
         return true;
@@ -108,7 +127,7 @@ namespace
     {
         SvFileStream aStream(rURL, StreamMode::READ);
         tools::SvRef<SotStorage> xObjStor = new SotStorage(aStream);
-        if (!xObjStor.Is() || xObjStor->GetError())
+        if (!xObjStor.is() || xObjStor->GetError())
             return false;
 
         CPPUNIT_ASSERT_MESSAGE("sot storage is not valid", xObjStor->Validate());
@@ -127,22 +146,42 @@ namespace
         SvFileStream aStream(aURL, StreamMode::READ);
         tools::SvRef<SotStorage> xObjStor = new SotStorage(aStream);
         CPPUNIT_ASSERT_MESSAGE("sot storage failed to open",
-                               xObjStor.Is() && !xObjStor->GetError());
+                               xObjStor.is() && !xObjStor->GetError());
         tools::SvRef<SotStorageStream> xStream = xObjStor->OpenSotStream("Book");
         CPPUNIT_ASSERT_MESSAGE("stream failed to open",
-                               xStream.Is() && !xObjStor->GetError());
+                               xStream.is() && !xObjStor->GetError());
         CPPUNIT_ASSERT_MESSAGE("error in opened stream", !xStream->GetError());
         sal_uLong nPos = xStream->GetSize();
-        CPPUNIT_ASSERT_MESSAGE("odd stream length", nPos == 13312);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("odd stream length", static_cast<sal_uLong>(13312), nPos);
 
         xStream->Seek(STREAM_SEEK_TO_END);
         CPPUNIT_ASSERT_MESSAGE("error seeking to end", !xStream->GetError());
         // cf. comment in Pos2Page, not extremely intuitive ...
-        CPPUNIT_ASSERT_MESSAGE("stream not at beginning", xStream->Tell() == xStream->GetSize());
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("stream not at beginning", static_cast<sal_uInt64>(xStream->GetSize()), xStream->Tell());
         xStream->Seek(STREAM_SEEK_TO_BEGIN);
 
         CPPUNIT_ASSERT_MESSAGE("error seeking to beginning", !xStream->GetError());
-        CPPUNIT_ASSERT_MESSAGE("stream not at beginning", xStream->Tell() == 0);
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("stream not at beginning", static_cast<sal_uInt64>(0), xStream->Tell());
+    }
+
+    void SotTest::testClipboard()
+    {
+        const SotAction_Impl* pFormats = sot::GetExchangeDestinationWriterFreeAreaCopy();
+        // tdf#52547 prefer BITMAP over HTML
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::BITMAP) < FindFormatIndex(pFormats, SotClipboardFormatId::HTML));
+        // tdf#78801 prefer image over html over text
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::BITMAP) < FindFormatIndex(pFormats, SotClipboardFormatId::HTML));
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::HTML) < FindFormatIndex(pFormats, SotClipboardFormatId::STRING));
+        // tdf#81835 prefer RTF/HTML over GDI Metafile
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::RTF) < FindFormatIndex(pFormats, SotClipboardFormatId::GDIMETAFILE));
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::HTML) < FindFormatIndex(pFormats, SotClipboardFormatId::GDIMETAFILE));
+#ifndef MACOSX
+        // tdf#115574 prefer RTF over BITMAP (Excel provides a BITMAP we can't
+        // read, also Excel paste result used to be an editable table)
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::RTF) < FindFormatIndex(pFormats, SotClipboardFormatId::BITMAP));
+#else
+        CPPUNIT_ASSERT(FindFormatIndex(pFormats, SotClipboardFormatId::BITMAP) < FindFormatIndex(pFormats, SotClipboardFormatId::RTF));
+#endif
     }
 
     CPPUNIT_TEST_SUITE_REGISTRATION(SotTest);

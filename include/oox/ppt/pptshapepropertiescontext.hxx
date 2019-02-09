@@ -21,13 +21,21 @@
 #define INCLUDED_OOX_PPT_PPTSHAPEPROPERTIESCONTEXT_HXX
 
 #include <drawingml/shapepropertiescontext.hxx>
+#include <oox/core/contexthandler.hxx>
+#include <sal/types.h>
+
+namespace oox {
+    class AttributeList;
+    namespace core { class ContextHandler2Helper; }
+    namespace drawingml { class Shape; }
+}
 
 namespace oox { namespace ppt {
 
 class PPTShapePropertiesContext : public ::oox::drawingml::ShapePropertiesContext
 {
 public:
-    PPTShapePropertiesContext( ::oox::core::ContextHandler2Helper& rParent, ::oox::drawingml::Shape& rShape );
+    PPTShapePropertiesContext( ::oox::core::ContextHandler2Helper const & rParent, ::oox::drawingml::Shape& rShape );
     virtual ::oox::core::ContextHandlerRef
         onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 };

@@ -17,9 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "asciiopt.hxx"
-#include "asciiopt.hrc"
+#include <global.hxx>
+#include <asciiopt.hxx>
 #include <comphelper/string.hxx>
 #include <osl/thread.h>
 
@@ -30,121 +29,38 @@ ScAsciiOptions::ScAsciiOptions() :
     bFixedLen       ( false ),
     aFieldSeps      ( OUString(';') ),
     bMergeFieldSeps ( false ),
+    bRemoveSpace    ( false ),
     bQuotedFieldAsText(false),
     bDetectSpecialNumber(false),
+    bSkipEmptyCells(false),
+    bSaveAsShown(true),
+    bSaveFormulas(false),
     cTextSep        ( cDefaultTextSep ),
     eCharSet        ( osl_getThreadTextEncoding() ),
     eLang           ( LANGUAGE_SYSTEM ),
     bCharSetSystem  ( false ),
-    nStartRow       ( 1 ),
-    nInfoCount      ( 0 ),
-    pColStart       ( nullptr ),
-    pColFormat      ( nullptr )
+    nStartRow       ( 1 )
 {
-}
-
-ScAsciiOptions::ScAsciiOptions(const ScAsciiOptions& rOpt) :
-    bFixedLen       ( rOpt.bFixedLen ),
-    aFieldSeps      ( rOpt.aFieldSeps ),
-    bMergeFieldSeps ( rOpt.bMergeFieldSeps ),
-    bQuotedFieldAsText(rOpt.bQuotedFieldAsText),
-    bDetectSpecialNumber(rOpt.bDetectSpecialNumber),
-    cTextSep        ( rOpt.cTextSep ),
-    eCharSet        ( rOpt.eCharSet ),
-    eLang           ( rOpt.eLang ),
-    bCharSetSystem  ( rOpt.bCharSetSystem ),
-    nStartRow       ( rOpt.nStartRow ),
-    nInfoCount      ( rOpt.nInfoCount )
-{
-    if (nInfoCount)
-    {
-        pColStart = new sal_Int32[nInfoCount];
-        pColFormat = new sal_uInt8[nInfoCount];
-        for (sal_uInt16 i=0; i<nInfoCount; i++)
-        {
-            pColStart[i] = rOpt.pColStart[i];
-            pColFormat[i] = rOpt.pColFormat[i];
-        }
-    }
-    else
-    {
-        pColStart = nullptr;
-        pColFormat = nullptr;
-    }
-}
-
-ScAsciiOptions::~ScAsciiOptions()
-{
-    delete[] pColStart;
-    delete[] pColFormat;
-}
-
-void ScAsciiOptions::SetColInfo( sal_uInt16 nCount, const sal_Int32* pStart, const sal_uInt8* pFormat )
-{
-    delete[] pColStart;
-    delete[] pColFormat;
-
-    nInfoCount = nCount;
-
-    if (nInfoCount)
-    {
-        pColStart = new sal_Int32[nInfoCount];
-        pColFormat = new sal_uInt8[nInfoCount];
-        for (sal_uInt16 i=0; i<nInfoCount; i++)
-        {
-            pColStart[i] = pStart[i];
-            pColFormat[i] = pFormat[i];
-        }
-    }
-    else
-    {
-        pColStart = nullptr;
-        pColFormat = nullptr;
-    }
 }
 
 void ScAsciiOptions::SetColumnInfo( const ScCsvExpDataVec& rDataVec )
 {
-    delete[] pColStart;
-    pColStart = nullptr;
-    delete[] pColFormat;
-    pColFormat = nullptr;
-
-    nInfoCount = static_cast< sal_uInt16 >( rDataVec.size() );
-    if( nInfoCount )
+    sal_uInt16 nInfoCount = static_cast< sal_uInt16 >( rDataVec.size() );
+    mvColStart.resize(nInfoCount);
+    mvColFormat.resize(nInfoCount);
+    for( sal_uInt16 nIx = 0; nIx < nInfoCount; ++nIx )
     {
-        pColStart = new sal_Int32[ nInfoCount ];
-        pColFormat = new sal_uInt8[ nInfoCount ];
-        for( sal_uInt16 nIx = 0; nIx < nInfoCount; ++nIx )
-        {
-            pColStart[ nIx ] = rDataVec[ nIx ].mnIndex;
-            pColFormat[ nIx ] = rDataVec[ nIx ].mnType;
-        }
+        mvColStart[ nIx ] = rDataVec[ nIx ].mnIndex;
+        mvColFormat[ nIx ] = rDataVec[ nIx ].mnType;
     }
-}
-
-ScAsciiOptions& ScAsciiOptions::operator=( const ScAsciiOptions& rCpy )
-{
-    SetColInfo( rCpy.nInfoCount, rCpy.pColStart, rCpy.pColFormat );
-
-    bFixedLen       = rCpy.bFixedLen;
-    aFieldSeps      = rCpy.aFieldSeps;
-    bMergeFieldSeps = rCpy.bMergeFieldSeps;
-    bQuotedFieldAsText = rCpy.bQuotedFieldAsText;
-    cTextSep        = rCpy.cTextSep;
-    eCharSet        = rCpy.eCharSet;
-    bCharSetSystem  = rCpy.bCharSetSystem;
-    nStartRow       = rCpy.nStartRow;
-
-    return *this;
 }
 
 static OUString lcl_decodeSepString( const OUString & rSepNums, bool & o_bMergeFieldSeps )
 {
-    OUString aFieldSeps;
     if ( rSepNums.isEmpty() )
-        return aFieldSeps;
+        return OUString();
 
+    OUStringBuffer aFieldSeps;
     sal_Int32 nPos = 0;
     do
     {
@@ -155,12 +71,12 @@ static OUString lcl_decodeSepString( const OUString & rSepNums, bool & o_bMergeF
         {
             sal_Int32 nVal = aCode.toInt32();
             if ( nVal )
-                aFieldSeps += OUString((sal_Unicode) nVal);
+                aFieldSeps.append(OUStringLiteral1(nVal));
         }
     }
     while ( nPos >= 0 );
 
-    return aFieldSeps;
+    return aFieldSeps.makeStringAndClear();
 }
 
 // The options string must not contain semicolons (because of the pick list),
@@ -203,27 +119,15 @@ void ScAsciiOptions::ReadFromString( const OUString& rString )
     // Token 4: Column info.
     if ( nPos >= 0 )
     {
-        delete[] pColStart;
-        delete[] pColFormat;
-
         const OUString aToken = rString.getToken(0, ',', nPos);
-        sal_Int32 nSub = comphelper::string::getTokenCount(aToken, '/');
-        nInfoCount = nSub / 2;
-        if (nInfoCount)
+        const sal_Int32 nInfoCount = comphelper::string::getTokenCount(aToken, '/')/2;
+        mvColStart.resize(nInfoCount);
+        mvColFormat.resize(nInfoCount);
+        sal_Int32 nP = 0;
+        for (sal_Int32 nInfo=0; nInfo<nInfoCount; ++nInfo)
         {
-            pColStart = new sal_Int32[nInfoCount];
-            pColFormat = new sal_uInt8[nInfoCount];
-            sal_Int32 nP = 0;
-            for (sal_Int32 nInfo=0; nInfo<nInfoCount; ++nInfo)
-            {
-                pColStart[nInfo]  = aToken.getToken(0, '/', nP).toInt32();
-                pColFormat[nInfo] = static_cast<sal_uInt8>(aToken.getToken(0, '/', nP).toInt32());
-            }
-        }
-        else
-        {
-            pColStart = nullptr;
-            pColFormat = nullptr;
+            mvColStart[nInfo]  = aToken.getToken(0, '/', nP).toInt32();
+            mvColFormat[nInfo] = static_cast<sal_uInt8>(aToken.getToken(0, '/', nP).toInt32());
         }
     }
 
@@ -247,73 +151,95 @@ void ScAsciiOptions::ReadFromString( const OUString& rString )
     else
         bDetectSpecialNumber = true;    // default of versions that didn't add the parameter
 
-    // 9th token is used for "Save as shown" in export options
-    // 10th token is used for "Save cell formulas" in export options
+    // Token 8: used for "Save as shown" in export options
+    if ( nPos >= 0 )
+    {
+        bSaveAsShown = rString.getToken(0, ',', nPos) == "true";
+    }
+    else
+        bSaveAsShown = true;    // default value
+
+    // Token 9: used for "Save cell formulas" in export options
+    if ( nPos >= 0 )
+    {
+        bSaveFormulas = rString.getToken(0, ',', nPos) == "true";
+    }
+    else
+        bSaveFormulas = false;
+
+    // Token 10: Boolean for Trim spaces.
+    if (nPos >= 0)
+    {
+        bRemoveSpace = rString.getToken(0, ',', nPos) == "true";
+    }
+    else
+        bRemoveSpace = false;
 }
 
 OUString ScAsciiOptions::WriteToString() const
 {
-    OUString aOutStr;
+    OUStringBuffer aOutStr;
 
-    // Field separator.
+    // Token 0: Field separator.
     if ( bFixedLen )
-        aOutStr += pStrFix;
+        aOutStr.append(pStrFix);
     else if ( aFieldSeps.isEmpty() )
-        aOutStr += "0";
+        aOutStr.append("0");
     else
     {
         sal_Int32 nLen = aFieldSeps.getLength();
         for (sal_Int32 i=0; i<nLen; i++)
         {
             if (i)
-                aOutStr += "/";
-            aOutStr += OUString::number(aFieldSeps[i]);
+                aOutStr.append("/");
+            aOutStr.append(OUString::number(aFieldSeps[i]));
         }
         if ( bMergeFieldSeps )
         {
-            aOutStr += "/";
-            aOutStr += pStrMrg;
+            aOutStr.append("/");
+            aOutStr.append(pStrMrg);
         }
     }
 
-    // Text delimiter.
-    aOutStr += "," + OUString::number(cTextSep) + ",";
+    // Token 1: Text Quote character.
+    aOutStr.append(",").append(OUString::number(cTextSep)).append(",");
 
-    // Text encoding.
+    //Token 2: Text encoding.
     if ( bCharSetSystem )           // force "SYSTEM"
-        aOutStr += ScGlobal::GetCharsetString( RTL_TEXTENCODING_DONTKNOW );
+        aOutStr.append(ScGlobal::GetCharsetString( RTL_TEXTENCODING_DONTKNOW ));
     else
-        aOutStr += ScGlobal::GetCharsetString( eCharSet );
+        aOutStr.append(ScGlobal::GetCharsetString( eCharSet ));
 
-    // Number of start row.
-    aOutStr += "," + OUString::number(nStartRow) + ",";
+    //Token 3: Number of start row.
+    aOutStr.append(",").append(OUString::number(nStartRow)).append(",");
 
-    // Column info.
-    OSL_ENSURE( !nInfoCount || (pColStart && pColFormat), "NULL pointer in ScAsciiOptions column info" );
-    for (sal_uInt16 nInfo=0; nInfo<nInfoCount; nInfo++)
+    //Token 4: Column info.
+    for (size_t nInfo=0; nInfo<mvColStart.size(); nInfo++)
     {
         if (nInfo)
-            aOutStr += "/";
-        aOutStr += OUString::number(pColStart[nInfo]) +
-                   "/" +
-                   OUString::number(pColFormat[nInfo]);
+            aOutStr.append("/");
+        aOutStr.append(OUString::number(mvColStart[nInfo]))
+               .append("/")
+               .append(OUString::number(mvColFormat[nInfo]));
     }
 
     // #i112025# the options string is used in macros and linked sheets,
     // so new options must be added at the end, to remain compatible
 
-    aOutStr += "," +
-               // Language
-               OUString::number(eLang) + "," +
-               // Import quoted field as text.
-               OUString::boolean( bQuotedFieldAsText ) + "," +
-               // Detect special numbers.
-               OUString::boolean( bDetectSpecialNumber );
-
-    // 9th token is used for "Save as shown" in export options
-    // 10th token is used for "Save cell formulas" in export options
-
-    return aOutStr;
+    aOutStr.append(",")
+               //Token 5: Language
+               .append(OUString::number(static_cast<sal_uInt16>(eLang))).append(",")
+               //Token 6: Import quoted field as text.
+               .append(OUString::boolean( bQuotedFieldAsText )).append(",")
+               //Token 7: Detect special numbers.
+               .append(OUString::boolean( bDetectSpecialNumber )).append(",")
+               // Token 8: used for "Save as shown" in export options
+               .append(OUString::boolean( bSaveAsShown )).append(",")
+               // Token 9: used for "Save cell formulas" in export options
+               .append(OUString::boolean( bSaveFormulas )).append(",")
+               //Token 10: Trim Space
+               .append(OUString::boolean( bRemoveSpace ));
+    return aOutStr.makeStringAndClear();
 }
 
 // static

@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <accelerators/keymapping.hxx>
 #include <xml/acceleratorconfigurationreader.hxx>
@@ -25,6 +26,7 @@
 #include <acceleratorconst.h>
 
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/SAXException.hpp>
 #include <com/sun/star/awt/KeyModifier.hpp>
 #include <com/sun/star/awt/KeyEvent.hpp>
 #include <com/sun/star/awt/Key.hpp>
@@ -47,12 +49,8 @@ namespace framework{
  */
 #define THROW_PARSEEXCEPTION(COMMENT)                                   \
     {                                                                   \
-        OUStringBuffer sMessage(256);                            \
-        sMessage.append     (implts_getErrorLineString());              \
-        sMessage.append(COMMENT                    );              \
-                                                                        \
         throw css::xml::sax::SAXException(                              \
-                sMessage.makeStringAndClear(),                          \
+                implts_getErrorLineString() + COMMENT,                  \
                 static_cast< css::xml::sax::XDocumentHandler* >(this),  \
                 css::uno::Any());                                       \
     }
@@ -69,14 +67,10 @@ AcceleratorConfigurationReader::~AcceleratorConfigurationReader()
 }
 
 void SAL_CALL AcceleratorConfigurationReader::startDocument()
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL AcceleratorConfigurationReader::endDocument()
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
     // The xml file seems to be corrupted.
     // Because we found no end-tags ... at least for
@@ -92,8 +86,6 @@ void SAL_CALL AcceleratorConfigurationReader::endDocument()
 
 void SAL_CALL AcceleratorConfigurationReader::startElement(const OUString&                                      sElement      ,
                                                            const css::uno::Reference< css::xml::sax::XAttributeList >& xAttributeList)
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
     EXMLElement eElement = AcceleratorConfigurationReader::implst_classifyElement(sElement);
 
@@ -159,7 +151,7 @@ void SAL_CALL AcceleratorConfigurationReader::startElement(const OUString&      
             m_rContainer.setKeyCommandPair(aEvent, sCommand);
         else
         {
-            // Attention: Its not really a reason to throw an exception and kill the office, if the configuration contains
+            // Attention: It's not really a reason to throw an exception and kill the office, if the configuration contains
             // multiple registrations for the same key :-) Show a warning ... and ignore the second item.
             // THROW_PARSEEXCEPTION("Command is registered for the same key more than once.")
             SAL_INFO("fwk",
@@ -182,8 +174,6 @@ void SAL_CALL AcceleratorConfigurationReader::startElement(const OUString&      
 }
 
 void SAL_CALL AcceleratorConfigurationReader::endElement(const OUString& sElement)
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
     EXMLElement eElement = AcceleratorConfigurationReader::implst_classifyElement(sElement);
 
@@ -205,27 +195,19 @@ void SAL_CALL AcceleratorConfigurationReader::endElement(const OUString& sElemen
 }
 
 void SAL_CALL AcceleratorConfigurationReader::characters(const OUString&)
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL AcceleratorConfigurationReader::ignorableWhitespace(const OUString&)
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL AcceleratorConfigurationReader::processingInstruction(const OUString& /*sTarget*/,
                                                                     const OUString& /*sData*/  )
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL AcceleratorConfigurationReader::setDocumentLocator(const css::uno::Reference< css::xml::sax::XLocator >& xLocator)
-    throw(css::xml::sax::SAXException,
-          css::uno::RuntimeException, std::exception )
 {
     m_xLocator = xLocator;
 }

@@ -23,6 +23,7 @@
 #include <vcl/i18nhelp.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <sal/log.hxx>
 
 #include <boost/optional.hpp>
 
@@ -43,7 +44,8 @@ namespace vcl
             ,aSearchTimeout()
         {
             aSearchTimeout.SetTimeout( 2500 );
-            aSearchTimeout.SetTimeoutHdl( LINK( this, QuickSelectionEngine_Data, SearchStringTimeout ) );
+            aSearchTimeout.SetInvokeHandler( LINK( this, QuickSelectionEngine_Data, SearchStringTimeout ) );
+            aSearchTimeout.SetDebugName( "vcl::QuickSelectionEngine_Data aSearchTimeout" );
         }
 
         ~QuickSelectionEngine_Data()
@@ -51,7 +53,7 @@ namespace vcl
             aSearchTimeout.Stop();
         }
 
-        DECL_LINK_TYPED( SearchStringTimeout, Timer*, void );
+        DECL_LINK( SearchStringTimeout, Timer*, void );
     };
 
     namespace
@@ -64,12 +66,12 @@ namespace vcl
         }
     }
 
-    IMPL_LINK_NOARG_TYPED( QuickSelectionEngine_Data, SearchStringTimeout, Timer*, void )
+    IMPL_LINK_NOARG( QuickSelectionEngine_Data, SearchStringTimeout, Timer*, void )
     {
         lcl_reset( *this );
     }
 
-    static StringEntryIdentifier findMatchingEntry( const OUString& _searchString, QuickSelectionEngine_Data& _engineData )
+    static StringEntryIdentifier findMatchingEntry( const OUString& _searchString, QuickSelectionEngine_Data const & _engineData )
     {
         const vcl::I18nHelper& rI18nHelper = Application::GetSettings().GetLocaleI18nHelper();
         // TODO: do we really need the Window's settings here? The original code used it ...
@@ -104,7 +106,7 @@ namespace vcl
     {
     }
 
-    void QuickSelectionEngine::SetEnabled( const bool& b )
+    void QuickSelectionEngine::SetEnabled( bool b )
     {
         bEnabled = b;
     }
@@ -117,12 +119,12 @@ namespace vcl
 
             if ( ( c >= 32 ) && ( c != 127 ) && !_keyEvent.GetKeyCode().IsMod2() )
             {
-                m_pData->sCurrentSearchString += OUString(c);
-                OSL_TRACE( "QuickSelectionEngine::HandleKeyEvent: searching for %s", OUStringToOString(m_pData->sCurrentSearchString, RTL_TEXTENCODING_UTF8).getStr() );
+                m_pData->sCurrentSearchString += OUStringLiteral1(c);
+                SAL_INFO( "vcl", "QuickSelectionEngine::HandleKeyEvent: searching for " << m_pData->sCurrentSearchString );
 
                 if ( m_pData->sCurrentSearchString.getLength() == 1 )
                 {   // first character in the search -> remember
-                    m_pData->aSingleSearchChar.reset( c );
+                    m_pData->aSingleSearchChar = c;
                 }
                 else if ( m_pData->sCurrentSearchString.getLength() > 1 )
                 {
@@ -134,7 +136,7 @@ namespace vcl
                 OUString aSearchTemp( m_pData->sCurrentSearchString );
 
                 StringEntryIdentifier pMatchingEntry = findMatchingEntry( aSearchTemp, *m_pData );
-                OSL_TRACE( "QuickSelectionEngine::HandleKeyEvent: found %p", pMatchingEntry );
+                SAL_INFO( "vcl", "QuickSelectionEngine::HandleKeyEvent: found " << pMatchingEntry );
                 if ( !pMatchingEntry && (aSearchTemp.getLength() > 1) && !!m_pData->aSingleSearchChar )
                 {
                     // if there's only one letter in the search string, use a different search mode

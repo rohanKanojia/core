@@ -26,12 +26,7 @@
 #include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/frame/XPopupMenuController.hpp>
 #include <svtools/popupmenucontrollerbase.hxx>
 #include <toolkit/awt/vclxmenu.hxx>
 #include <cppuhelper/weak.hxx>
@@ -48,19 +43,23 @@ namespace framework
 
         public:
             MacrosMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-            virtual ~MacrosMenuController();
+            virtual ~MacrosMenuController() override;
 
             // XServiceInfo
-            DECLARE_XSERVICEINFO
+            DECLARE_XSERVICEINFO_NOFACTORY
+            /* Helper for registry */
+            /// @throws css::uno::Exception
+            static css::uno::Reference< css::uno::XInterface >             SAL_CALL impl_createInstance                ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
+            static css::uno::Reference< css::lang::XSingleServiceFactory > impl_createFactory                 ( const css::uno::Reference< css::lang::XMultiServiceFactory >& xServiceManager );
 
             // XStatusListener
-            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
             // XEventListener
-            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+            virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         private:
-            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu );
+            void fillPopupMenu( css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
             void addScriptItems( PopupMenu* pPopupMenu, sal_uInt16 startItemId );
     };
 }

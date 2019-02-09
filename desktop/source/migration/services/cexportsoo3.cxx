@@ -24,7 +24,7 @@
 extern "C"
 {
 
-::cppu::ImplementationEntry oo3_entries [] =
+::cppu::ImplementationEntry const oo3_entries [] =
 {
     {
         migration::OO3ExtensionMigration_create, migration::OO3ExtensionMigration_getImplementationName,
@@ -35,7 +35,7 @@ extern "C"
 };
 
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL migrationoo3_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * migrationoo3_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return ::cppu::component_getFactoryHelper(

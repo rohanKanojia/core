@@ -20,16 +20,16 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLEMASTERPAGEEXPORT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLEMASTERPAGEEXPORT_HXX
 
-#include <rtl/ustring.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/XMLTextMasterPageExport.hxx>
-#include <com/sun/star/sheet/XHeaderFooterContent.hpp>
-
-#include "xmlexprt.hxx"
 
 namespace com { namespace sun { namespace star {
     namespace text { class XText; }
 } } }
+
+namespace com { namespace sun { namespace star { namespace sheet { class XHeaderFooterContent; } } } }
+
+class ScXMLExport;
 
 class XMLTableMasterPageExport : public XMLTextMasterPageExport
 {
@@ -40,7 +40,7 @@ class XMLTableMasterPageExport : public XMLTextMasterPageExport
 protected:
     virtual void exportHeaderFooterContent(
             const css::uno::Reference< css::text::XText >& rText,
-            bool bAutoStyles, bool bProgress ) override;
+            bool bAutoStyles, bool bProgress = true ) override;
 
     virtual void exportMasterPageContent(
                 const css::uno::Reference< css::beans::XPropertySet > & rPropSet,
@@ -48,7 +48,7 @@ protected:
 
 public:
     explicit XMLTableMasterPageExport( ScXMLExport& rExp );
-    virtual ~XMLTableMasterPageExport();
+    virtual ~XMLTableMasterPageExport() override;
 };
 
 #endif  //  _XMLOFF_XMLTABLEMASTERPAGEEXPORT_HXX

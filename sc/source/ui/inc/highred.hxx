@@ -20,21 +20,10 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_HIGHRED_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_HIGHRED_HXX
 
-#include <vcl/morebtn.hxx>
-#include <vcl/combobox.hxx>
-#include <vcl/group.hxx>
-#include <svtools/headbar.hxx>
-#include <svtools/simptabl.hxx>
-#include <svtools/svtabbx.hxx>
-
-#include "rangenam.hxx"
 #include "anyrefdg.hxx"
 
-#include <vcl/lstbox.hxx>
-
 #include <svx/ctredlin.hxx>
-#include "chgtrack.hxx"
-#include "chgviset.hxx"
+#include <chgviset.hxx>
 
 class ScViewData;
 class ScDocument;
@@ -58,9 +47,9 @@ private:
 
     void                    Init();
 
-    DECL_LINK_TYPED( RefHandle, SvxTPFilter*, void );
-    DECL_LINK_TYPED( HighlightHandle, Button*, void );
-    DECL_LINK_TYPED( OKBtnHdl, Button*, void );
+    DECL_LINK( RefHandle, SvxTPFilter*, void );
+    DECL_LINK( HighlightHandle, Button*, void );
+    DECL_LINK( OKBtnHdl, Button*, void );
 
 protected:
 
@@ -70,7 +59,7 @@ public:
                     ScHighlightChgDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                ScViewData*      ptrViewData);
 
-                    virtual ~ScHighlightChgDlg();
+                    virtual ~ScHighlightChgDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetActive() override;

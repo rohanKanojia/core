@@ -25,10 +25,12 @@
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/processfactory.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 
 #include "thesdsp.hxx"
-#include "linguistic/lngprops.hxx"
+#include <linguistic/lngprops.hxx>
 
 using namespace osl;
 using namespace com::sun::star;
@@ -78,16 +80,14 @@ void ThesaurusDispatcher::ClearSvcList()
 
 Sequence< Locale > SAL_CALL
     ThesaurusDispatcher::getLocales()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     Sequence< Locale > aLocales( static_cast< sal_Int32 >(aSvcMap.size()) );
     Locale *pLocales = aLocales.getArray();
-    ThesSvcByLangMap_t::const_iterator aIt;
-    for (aIt = aSvcMap.begin();  aIt != aSvcMap.end();  ++aIt)
+    for (auto const& elem : aSvcMap)
     {
-        *pLocales++ = LanguageTag::convertToLocale( aIt->first );
+        *pLocales++ = LanguageTag::convertToLocale(elem.first);
     }
     return aLocales;
 }
@@ -95,7 +95,6 @@ Sequence< Locale > SAL_CALL
 
 sal_Bool SAL_CALL
     ThesaurusDispatcher::hasLocale( const Locale& rLocale )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     ThesSvcByLangMap_t::const_iterator aIt( aSvcMap.find( LinguLocaleToLanguage( rLocale ) ) );
@@ -107,13 +106,12 @@ Sequence< Reference< XMeaning > > SAL_CALL
     ThesaurusDispatcher::queryMeanings(
             const OUString& rTerm, const Locale& rLocale,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     Sequence< Reference< XMeaning > >   aMeanings;
 
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
     if (LinguIsUnspecified( nLanguage) || rTerm.isEmpty())
         return aMeanings;
 
@@ -175,14 +173,14 @@ Sequence< Reference< XMeaning > > SAL_CALL
                 }
                 catch (uno::Exception &)
                 {
-                    DBG_ASSERT( false, "createInstanceWithArguments failed" );
+                    SAL_WARN( "linguistic", "createInstanceWithArguments failed" );
                 }
                 pRef[i] = xThes;
 
                 if (xThes.is()  &&  xThes->hasLocale( rLocale ))
                     aMeanings = xThes->queryMeanings( aChkWord, rLocale, rProperties );
 
-                pEntry->nLastTriedSvcIndex = (sal_Int16) i;
+                pEntry->nLastTriedSvcIndex = static_cast<sal_Int16>(i);
                 ++i;
             }
 
@@ -205,7 +203,7 @@ void ThesaurusDispatcher::SetServiceList( const Locale &rLocale,
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
 
     sal_Int32 nLen = rSvcImplNames.getLength();
     if (0 == nLen)
@@ -239,7 +237,7 @@ Sequence< OUString >
     Sequence< OUString > aRes;
 
     // search for entry with that language and use data from that
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
     const ThesSvcByLangMap_t::const_iterator  aIt( aSvcMap.find( nLanguage ) );
     const LangSvcEntries_Thes       *pEntry = aIt != aSvcMap.end() ? aIt->second.get() : nullptr;
     if (pEntry)

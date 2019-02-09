@@ -24,17 +24,18 @@
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-uno::Reference< container::XIndexAccess > createVariablesAccess( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< beans::XPropertyAccess >& xUserDefined ) throw ( uno::RuntimeException )
+/// @throws uno::RuntimeException
+static uno::Reference< container::XIndexAccess > createVariablesAccess( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< beans::XPropertyAccess >& xUserDefined )
 {
     // FIXME: the performance is poor?
-    XNamedObjectCollectionHelper< word::XVariable >::XNamedVec mVariables;
+    XNamedObjectCollectionHelper< word::XVariable >::XNamedVec aVariables;
     const uno::Sequence< beans::PropertyValue > props = xUserDefined->getPropertyValues();
     sal_Int32 nCount = props.getLength();
-    mVariables.reserve( nCount );
+    aVariables.reserve( nCount );
     for( sal_Int32 i=0; i < nCount; i++ )
-        mVariables.push_back( uno::Reference< word::XVariable > ( new SwVbaVariable( xParent, xContext, xUserDefined, props[i].Name ) ) );
+        aVariables.push_back( uno::Reference< word::XVariable > ( new SwVbaVariable( xParent, xContext, xUserDefined, props[i].Name ) ) );
 
-    uno::Reference< container::XIndexAccess > xVariables( new XNamedObjectCollectionHelper< word::XVariable >( mVariables ) );
+    uno::Reference< container::XIndexAccess > xVariables( new XNamedObjectCollectionHelper< word::XVariable >( aVariables ) );
     return xVariables;
 }
 
@@ -43,12 +44,12 @@ SwVbaVariables::SwVbaVariables( const uno::Reference< XHelperInterface >& xParen
 }
 // XEnumerationAccess
 uno::Type
-SwVbaVariables::getElementType() throw (uno::RuntimeException)
+SwVbaVariables::getElementType()
 {
     return cppu::UnoType<word::XVariable>::get();
 }
 uno::Reference< container::XEnumeration >
-SwVbaVariables::createEnumeration() throw (uno::RuntimeException)
+SwVbaVariables::createEnumeration()
 {
     uno::Reference< container::XEnumerationAccess > xEnumerationAccess( m_xIndexAccess, uno::UNO_QUERY_THROW );
     return xEnumerationAccess->createEnumeration();
@@ -61,7 +62,7 @@ SwVbaVariables::createCollectionObject( const css::uno::Any& aSource )
 }
 
 uno::Any SAL_CALL
-SwVbaVariables::Add( const OUString& rName, const uno::Any& rValue ) throw (uno::RuntimeException, std::exception)
+SwVbaVariables::Add( const OUString& rName, const uno::Any& rValue )
 {
     uno::Any aValue;
     if( rValue.hasValue() )
@@ -83,12 +84,10 @@ SwVbaVariables::getServiceImplName()
 css::uno::Sequence<OUString>
 SwVbaVariables::getServiceNames()
 {
-    static uno::Sequence< OUString > sNames;
-    if ( sNames.getLength() == 0 )
+    static uno::Sequence< OUString > const sNames
     {
-        sNames.realloc( 1 );
-        sNames[0] = "ooo.vba.word.Variables";
-    }
+        "ooo.vba.word.Variables"
+    };
     return sNames;
 }
 

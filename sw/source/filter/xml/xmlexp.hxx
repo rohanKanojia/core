@@ -43,26 +43,26 @@ class SwTableNode;
 class XMLPropertySetMapper;
 class SwXMLTableLines_Impl;
 
-typedef ::std::vector< SwXMLTableLines_Impl* > SwXMLTableLinesCache_Impl;
+typedef std::vector< SwXMLTableLines_Impl* > SwXMLTableLinesCache_Impl;
 
 class SwXMLExport : public SvXMLExport
 {
-    SvXMLUnitConverter*         pTwipUnitConv;
-    SvXMLExportItemMapper*      pTableItemMapper;
-    SwXMLTableLinesCache_Impl*  pTableLines;
+    std::unique_ptr<SvXMLUnitConverter>    m_pTwipUnitConverter;
+    std::unique_ptr<SvXMLExportItemMapper> m_pTableItemMapper;
+    std::unique_ptr<SwXMLTableLinesCache_Impl> m_pTableLines;
 
-    SvXMLItemMapEntriesRef      xTableItemMap;
-    SvXMLItemMapEntriesRef      xTableRowItemMap;
-    SvXMLItemMapEntriesRef      xTableCellItemMap;
+    SvXMLItemMapEntriesRef      m_xTableItemMap;
+    SvXMLItemMapEntriesRef      m_xTableRowItemMap;
+    SvXMLItemMapEntriesRef      m_xTableCellItemMap;
 
-    bool                    bBlock : 1;         // export text block?
-    bool                    bShowProgress : 1;
-    bool                    bSavedShowChanges : 1;
+    bool                    m_bBlock : 1;         // export text block?
+    bool                    m_bShowProgress : 1;
+    bool                    m_bSavedShowChanges : 1;
 
-    SwDoc*                      doc; // cached for getDoc()
+    SwDoc*                      m_pDoc; // cached for getDoc()
 
-    void _InitItemExport();
-    void _FinitItemExport();
+    void InitItemExport();
+    void FinitItemExport();
     void ExportTableLinesAutoStyles( const SwTableLines& rLines,
                                  sal_uInt32 nAbsWidth,
                                  sal_uInt32 nBaseWidth,
@@ -73,7 +73,7 @@ class SwXMLExport : public SvXMLExport
                                  SwXMLTableInfo_Impl& rTableInfo,
                                  bool bTop=false );
 
-    void ExportFormat( const SwFormat& rFormat,  enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID );
+    void ExportFormat( const SwFormat& rFormat,  enum ::xmloff::token::XMLTokenEnum eClass );
     void ExportTableFormat( const SwFrameFormat& rFormat, sal_uInt32 nAbsWidth );
 
     void ExportTableColumnStyle( const SwXMLTableColumn_Impl& rCol );
@@ -95,9 +95,8 @@ class SwXMLExport : public SvXMLExport
     virtual void ExportContent_() override;
     virtual void GetViewSettings(css::uno::Sequence<css::beans::PropertyValue>& aProps) override;
     virtual void GetConfigurationSettings(css::uno::Sequence<css::beans::PropertyValue>& aProps) override;
-    virtual sal_Int32 GetDocumentSpecificSettings( ::std::list< SettingsGroup >& _out_rSettings ) override;
+    virtual sal_Int32 GetDocumentSpecificSettings( std::vector< SettingsGroup >& _out_rSettings ) override;
 
-    void setBlockMode();
 private:
     void DeleteTableLines();
 protected:
@@ -113,24 +112,23 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         OUString const & implementationName, SvXMLExportFlags nExportFlags);
 
-    virtual ~SwXMLExport();
+    virtual ~SwXMLExport() override;
 
-    virtual sal_uInt32 exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
+    void collectAutoStyles() override;
+
+    virtual ErrCode exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
 
     inline const SvXMLUnitConverter& GetTwipUnitConverter() const;
 
     void ExportTableAutoStyles( const SwTableNode& rTableNd );
     void ExportTable( const SwTableNode& rTableNd );
 
-    SvXMLExportItemMapper& GetTableItemMapper() { return *pTableItemMapper; }
-
-    bool IsShowProgress() const { return bShowProgress; }
-    void SetShowProgress( bool b ) { bShowProgress = b; }
-    bool IsBlockMode() const { return bBlock; }
+    bool IsShowProgress() const { return m_bShowProgress; }
+    void SetShowProgress( bool b ) { m_bShowProgress = b; }
 
     // XUnoTunnel
     static const css::uno::Sequence< sal_Int8 > & getUnoTunnelId() throw();
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     const SwDoc* getDoc() const;
     SwDoc* getDoc();
@@ -138,7 +136,7 @@ public:
 
 inline const SvXMLUnitConverter& SwXMLExport::GetTwipUnitConverter() const
 {
-    return *pTwipUnitConv;
+    return *m_pTwipUnitConverter;
 }
 
 #endif // INCLUDED_SW_SOURCE_FILTER_XML_XMLEXP_HXX

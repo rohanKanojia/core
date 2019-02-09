@@ -39,14 +39,14 @@
 namespace desktop
 {
 
-oslSignalAction SAL_CALL SalMainPipeExchangeSignal_impl(void* /*pData*/, oslSignalInfo* pInfo);
+oslSignalAction SalMainPipeExchangeSignal_impl(void* /*pData*/, oslSignalInfo* pInfo);
 
 // A request for the current office
 // that was given by command line or by IPC pipe communication.
 struct ProcessDocumentsRequest
 {
     explicit ProcessDocumentsRequest(boost::optional< OUString > const & cwdUrl):
-        aCwdUrl(cwdUrl), pcProcessed( nullptr ), bTextCat( false ) {}
+        aCwdUrl(cwdUrl), pcProcessed( nullptr ), bTextCat( false ), bScriptCat( false ) {}
 
     boost::optional< OUString > aCwdUrl;
     OUString aModule;
@@ -61,9 +61,12 @@ struct ProcessDocumentsRequest
     std::vector< OUString > aConversionList;
     OUString aConversionParams;
     OUString aConversionOut;
+    OUString aImageConversionType;
     std::vector< OUString > aInFilter;
     ::osl::Condition *pcProcessed;  // pointer condition to be set when the request has been processed
-    bool bTextCat; // boolean flag indicating whether to dump text content to screen
+    bool* mpbSuccess = nullptr; // pointer to boolean receiving if the processing was successful
+    bool bTextCat; // boolean flag indicating whether to dump text content to console
+    bool bScriptCat; // boolean flag indicating whether to dump script content to console
 };
 
 class DispatchWatcher;
@@ -89,6 +92,8 @@ class RequestHandler: public salhelper::SimpleReferenceObject
 
     /* condition to be set when the request has been processed */
     ::osl::Condition cProcessed;
+    /* receives if the processing was successful (may be false e.g. when shutting down) */
+    bool mbSuccess = false;
 
     /* condition to be set when the main event loop is ready
        otherwise an error dialogs event loop could eat away
@@ -99,7 +104,7 @@ class RequestHandler: public salhelper::SimpleReferenceObject
 
     RequestHandler();
 
-    virtual ~RequestHandler();
+    virtual ~RequestHandler() override;
 
   public:
     enum Status
@@ -122,7 +127,7 @@ class RequestHandler: public salhelper::SimpleReferenceObject
     static Status               Enable(bool ipc);
     static void                 Disable();
     // start dispatching events...
-    static void                 SetReady();
+    static void                 SetReady(bool bIsReady);
     static void                 WaitForReady();
 
     bool                        AreRequestsEnabled() const { return mState == State::RequestsEnabled; }
@@ -135,25 +140,18 @@ class RequestHandlerController : public ::cppu::WeakImplHelper<
 {
     public:
         RequestHandlerController() {}
-        virtual ~RequestHandlerController() {}
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName()
-            throw ( css::uno::RuntimeException, std::exception ) override;
-        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw ( css::uno::RuntimeException, std::exception ) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XTerminateListener
-        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent )
-            throw( css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
+        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
 };
 
 }

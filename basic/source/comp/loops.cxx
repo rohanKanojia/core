@@ -18,7 +18,7 @@
  */
 
 
-#include "parser.hxx"
+#include <parser.hxx>
 #include <memory>
 
 // Single-line IF and Multiline IF
@@ -263,6 +263,8 @@ void SbiParser::With()
     SbiExpression aVar( this, SbOPERAND );
 
     SbiExprNode *pNode = aVar.GetExprNode()->GetRealNode();
+    if (!pNode)
+        return;
     SbiSymDef* pDef = pNode->GetVar();
     // Variant, from 27.6.1997, #41090: empty -> must be Object
     if( pDef->GetType() == SbxVARIANT || pDef->GetType() == SbxEMPTY )
@@ -544,7 +546,8 @@ void SbiParser::Resume()
             {
                 aGen.Gen( SbiOpcode::RESUME_, 0 );
                 break;
-            } // fall through
+            }
+            [[fallthrough]];
         case SYMBOL:
             if( MayBeLabel() )
             {
@@ -552,7 +555,8 @@ void SbiParser::Resume()
                 aGen.Gen( SbiOpcode::RESUME_, nLbl );
                 Next();
                 break;
-            } // fall through
+            }
+            [[fallthrough]];
         default:
             Error( ERRCODE_BASIC_LABEL_EXPECTED );
     }

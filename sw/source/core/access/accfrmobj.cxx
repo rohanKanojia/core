@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accfrmobj.hxx>
+#include "accfrmobj.hxx"
 
 #include <accmap.hxx>
-#include <acccontext.hxx>
+#include "acccontext.hxx"
 
 #include <viewsh.hxx>
 #include <rootfrm.hxx>
@@ -95,12 +95,13 @@ SwAccessibleChild::SwAccessibleChild( const SwFrame* pFrame,
 
 }
 
+SwAccessibleChild::~SwAccessibleChild() = default;
+
 void SwAccessibleChild::Init( const SdrObject* pDrawObj )
 {
     mpDrawObj = pDrawObj;
-    mpFrame = mpDrawObj && dynamic_cast<const SwVirtFlyDrawObj*>( mpDrawObj) !=  nullptr
-            ? static_cast < const SwVirtFlyDrawObj * >( mpDrawObj )->GetFlyFrame()
-            : nullptr;
+    const SwVirtFlyDrawObj* pFlyDrawObj = dynamic_cast<const SwVirtFlyDrawObj*>(mpDrawObj);
+    mpFrame = pFlyDrawObj ? pFlyDrawObj->GetFlyFrame() : nullptr;
     mpWindow = nullptr;
 }
 
@@ -156,9 +157,9 @@ bool SwAccessibleChild::IsBoundAsChar() const
     }
     else if ( mpDrawObj )
     {
-        const SwFrameFormat* mpFrameFormat = ::FindFrameFormat( mpDrawObj );
-        bRet = mpFrameFormat
-               && (FLY_AS_CHAR == mpFrameFormat->GetAnchor().GetAnchorId());
+        const SwFrameFormat* pFrameFormat = ::FindFrameFormat( mpDrawObj );
+        bRet = pFrameFormat
+               && (RndStdIds::FLY_AS_CHAR == pFrameFormat->GetAnchor().GetAnchorId());
     }
     else if ( mpWindow )
     {
@@ -166,21 +167,6 @@ bool SwAccessibleChild::IsBoundAsChar() const
     }
 
     return bRet;
-}
-
-SwAccessibleChild::SwAccessibleChild( const SwAccessibleChild& r )
-    : mpFrame( r.mpFrame )
-    , mpDrawObj( r.mpDrawObj )
-    , mpWindow( r.mpWindow )
-{}
-
-SwAccessibleChild& SwAccessibleChild::operator=( const SwAccessibleChild& r )
-{
-    mpDrawObj = r.mpDrawObj;
-    mpFrame = r.mpFrame;
-    mpWindow = r.mpWindow;
-
-    return *this;
 }
 
 SwAccessibleChild& SwAccessibleChild::operator=( const SdrObject* pDrawObj )
@@ -244,21 +230,33 @@ SwRect SwAccessibleChild::GetBox( const SwAccessibleMap& rAccMap ) const
         if ( mpFrame->IsPageFrame() &&
              static_cast< const SwPageFrame * >( mpFrame )->IsEmptyPage() )
         {
-            aBox = SwRect( mpFrame->Frame().Left(), mpFrame->Frame().Top()-1, 1, 1 );
+            aBox = SwRect( mpFrame->getFrameArea().Left(), mpFrame->getFrameArea().Top()-1, 1, 1 );
         }
         else if ( mpFrame->IsTabFrame() )
         {
-            aBox = SwRect( mpFrame->Frame() );
-            aBox.Intersection( mpFrame->GetUpper()->Frame() );
+            aBox = mpFrame->getFrameArea();
+            aBox.Intersection( mpFrame->GetUpper()->getFrameArea() );
         }
         else
         {
-            aBox = mpFrame->Frame();
+            aBox = mpFrame->getFrameArea();
         }
     }
     else if( mpDrawObj )
     {
-        aBox = SwRect( mpDrawObj->GetCurrentBoundRect() );
+        SwDrawContact const*const pContact(dynamic_cast<SwDrawContact const*>(::GetUserCall(mpDrawObj)));
+        // assume that a) the SwVirt* objects that don't have this are handled
+        // by the mpFrame case above b) for genuine SdrObject this must be set
+        // if it's connected to layout
+        assert(pContact);
+        SwPageFrame const*const pPage(const_cast<SwAnchoredObject *>(
+            pContact->GetAnchoredObj(mpDrawObj))->FindPageFrameOfAnchor());
+        if (pPage) // may end up here with partial layout -> not visible
+        {
+            aBox = SwRect( mpDrawObj->GetCurrentBoundRect() );
+            // tdf#91260 drawing object may be partially off-page
+            aBox.Intersection(pPage->getFrameArea());
+        }
     }
     else if ( mpWindow )
     {
@@ -266,7 +264,7 @@ SwRect SwAccessibleChild::GetBox( const SwAccessibleMap& rAccMap ) const
         if (pWin)
         {
             aBox = SwRect( pWin->PixelToLogic(
-                                            Rectangle( mpWindow->GetPosPixel(),
+                                            tools::Rectangle( mpWindow->GetPosPixel(),
                                                        mpWindow->GetSizePixel() ) ) );
         }
     }
@@ -283,10 +281,10 @@ SwRect SwAccessibleChild::GetBounds( const SwAccessibleMap& rAccMap ) const
         if( mpFrame->IsPageFrame() &&
             static_cast< const SwPageFrame * >( mpFrame )->IsEmptyPage() )
         {
-            aBound = SwRect( mpFrame->Frame().Left(), mpFrame->Frame().Top()-1, 0, 0 );
+            aBound = SwRect( mpFrame->getFrameArea().Left(), mpFrame->getFrameArea().Top()-1, 0, 0 );
         }
         else
-            aBound = mpFrame->PaintArea();
+            aBound = mpFrame->GetPaintArea();
     }
     else if( mpDrawObj )
     {
@@ -323,7 +321,7 @@ const SwFrame* SwAccessibleChild::GetParent( const bool bInPagePreview ) const
             const SwFlyFrame* pFly = static_cast< const SwFlyFrame *>( mpFrame );
             if( pFly->IsFlyInContentFrame() )
             {
-                // For FLY_AS_CHAR the parent is the anchor
+                // For RndStdIds::FLY_AS_CHAR the parent is the anchor
                 pParent = pFly->GetAnchorFrame();
                 OSL_ENSURE( SwAccessibleChild( pParent ).IsAccessible( bInPagePreview ),
                         "parent is not accessible" );
@@ -357,9 +355,9 @@ const SwFrame* SwAccessibleChild::GetParent( const bool bInPagePreview ) const
         {
             const SwFrameFormat *pFrameFormat = pContact->GetFormat();
             OSL_ENSURE( pFrameFormat, "frame format is missing" );
-            if( pFrameFormat && FLY_AS_CHAR == pFrameFormat->GetAnchor().GetAnchorId() )
+            if( pFrameFormat && RndStdIds::FLY_AS_CHAR == pFrameFormat->GetAnchor().GetAnchorId() )
             {
-                // For FLY_AS_CHAR the parent is the anchor
+                // For RndStdIds::FLY_AS_CHAR the parent is the anchor
                 pParent = pContact->GetAnchorFrame();
                 OSL_ENSURE( SwAccessibleChild( pParent ).IsAccessible( bInPagePreview ),
                         "parent is not accessible" );
@@ -368,10 +366,14 @@ const SwFrame* SwAccessibleChild::GetParent( const bool bInPagePreview ) const
             else
             {
                 // In any other case the parent is the root frm
-                if( bInPagePreview )
-                    pParent = pContact->GetAnchorFrame()->FindPageFrame();
-                else
-                    pParent = pContact->GetAnchorFrame()->getRootFrame();
+                SwFrame const*const pAnchor(pContact->GetAnchorFrame());
+                if (pAnchor) // null if object removed from layout
+                {
+                    if (bInPagePreview)
+                        pParent = pAnchor->FindPageFrame();
+                    else
+                        pParent = pAnchor->getRootFrame();
+                }
             }
         }
     }

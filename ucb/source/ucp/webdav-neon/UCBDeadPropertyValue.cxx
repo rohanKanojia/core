@@ -29,9 +29,10 @@
 #include <config_lgpl.h>
 #include <string.h>
 #include <ne_xml.h>
-#include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include "UCBDeadPropertyValue.hxx"
+#include <memory>
 
 using namespace webdav_ucp;
 using namespace com::sun::star;
@@ -39,28 +40,26 @@ using namespace com::sun::star;
 
 struct UCBDeadPropertyValueParseContext
 {
-    OUString * pType;
-    OUString * pValue;
+    std::unique_ptr<OUString> pType;
+    std::unique_ptr<OUString> pValue;
 
-    UCBDeadPropertyValueParseContext() : pType( nullptr ), pValue( nullptr ) {}
-    ~UCBDeadPropertyValueParseContext() { delete pType; delete pValue; }
+    UCBDeadPropertyValueParseContext() {}
 };
 
-// static
-const OUString UCBDeadPropertyValue::aTypeString("string");
-const OUString UCBDeadPropertyValue::aTypeLong("long");
-const OUString UCBDeadPropertyValue::aTypeShort("short");
-const OUString UCBDeadPropertyValue::aTypeBoolean("boolean");
-const OUString UCBDeadPropertyValue::aTypeChar("char");
-const OUString UCBDeadPropertyValue::aTypeByte("byte");
-const OUString UCBDeadPropertyValue::aTypeHyper("hyper");
-const OUString UCBDeadPropertyValue::aTypeFloat("float");
-const OUString UCBDeadPropertyValue::aTypeDouble("double");
+static const char aTypeString[] = "string";
+static const char aTypeLong[] = "long";
+static const char aTypeShort[] = "short";
+static const char aTypeBoolean[] = "boolean";
+static const char aTypeChar[] = "char";
+static const char aTypeByte[] = "byte";
+static const char aTypeHyper[] = "hyper";
+static const char aTypeFloat[] = "float";
+static const char aTypeDouble[] = "double";
 
-// static
-const OUString UCBDeadPropertyValue::aXMLPre("<ucbprop><type>");
-const OUString UCBDeadPropertyValue::aXMLMid("</type><value>");
-const OUString UCBDeadPropertyValue::aXMLEnd("</value></ucbprop>");
+static const char aXMLPre[] = "<ucbprop><type>";
+static const char aXMLMid[] = "</type><value>";
+static const char aXMLEnd[] = "</value></ucbprop>";
+
 
 #define STATE_TOP (1)
 
@@ -69,7 +68,9 @@ const OUString UCBDeadPropertyValue::aXMLEnd("</value></ucbprop>");
 #define STATE_VALUE     (STATE_TOP + 2)
 
 
-extern "C" int UCBDeadPropertyValue_startelement_callback(
+extern "C" {
+
+static int UCBDeadPropertyValue_startelement_callback(
     void *,
     int parent,
     const char * /*nspace*/,
@@ -97,7 +98,7 @@ extern "C" int UCBDeadPropertyValue_startelement_callback(
 }
 
 
-extern "C" int UCBDeadPropertyValue_chardata_callback(
+static int UCBDeadPropertyValue_chardata_callback(
     void *userdata,
     int state,
     const char *buf,
@@ -112,23 +113,21 @@ extern "C" int UCBDeadPropertyValue_chardata_callback(
             assert( !pCtx->pType &&
                         "UCBDeadPropertyValue_endelement_callback - "
                         "Type already set!" );
-            pCtx->pType
-                = new OUString( buf, len, RTL_TEXTENCODING_ASCII_US );
+            pCtx->pType.reset( new OUString( buf, len, RTL_TEXTENCODING_ASCII_US ) );
             break;
 
         case STATE_VALUE:
             assert( !pCtx->pValue &&
                         "UCBDeadPropertyValue_endelement_callback - "
                         "Value already set!" );
-            pCtx->pValue
-                = new OUString( buf, len, RTL_TEXTENCODING_ASCII_US );
+            pCtx->pValue.reset( new OUString( buf, len, RTL_TEXTENCODING_ASCII_US ) );
             break;
     }
     return 0; // zero to continue, non-zero to abort parsing
 }
 
 
-extern "C" int UCBDeadPropertyValue_endelement_callback(
+static int UCBDeadPropertyValue_endelement_callback(
     void *userdata,
     int state,
     const char *,
@@ -157,6 +156,7 @@ extern "C" int UCBDeadPropertyValue_endelement_callback(
     return 0; // zero to continue, non-zero to abort parsing
 }
 
+}
 
 static OUString encodeValue( const OUString & rValue )
 {
@@ -308,28 +308,15 @@ static OUString decodeValue( const OUString & rValue )
 // static
 bool UCBDeadPropertyValue::supportsType( const uno::Type & rType )
 {
-    if ( ( rType != cppu::UnoType<OUString>::get() )
-         &&
-         ( rType != cppu::UnoType<sal_Int32>::get() )
-         &&
-         ( rType != cppu::UnoType<sal_Int16>::get() )
-         &&
-         ( rType != cppu::UnoType<bool>::get() )
-         &&
-         ( rType != cppu::UnoType<cppu::UnoCharType>::get() )
-         &&
-         ( rType != cppu::UnoType<sal_Int8>::get() )
-         &&
-         ( rType != cppu::UnoType<sal_Int64>::get() )
-         &&
-         ( rType != cppu::UnoType<float>::get() )
-         &&
-         ( rType != cppu::UnoType<double>::get() ) )
-    {
-        return false;
-    }
-
-    return true;
+    return rType == cppu::UnoType<OUString>::get()
+         || rType == cppu::UnoType<sal_Int32>::get()
+         || rType == cppu::UnoType<sal_Int16>::get()
+         || rType == cppu::UnoType<bool>::get()
+         || rType == cppu::UnoType<cppu::UnoCharType>::get()
+         || rType == cppu::UnoType<sal_Int8>::get()
+         || rType == cppu::UnoType<sal_Int64>::get()
+         || rType == cppu::UnoType<float>::get()
+         || rType == cppu::UnoType<double>::get();
 }
 
 

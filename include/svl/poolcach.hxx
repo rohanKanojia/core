@@ -27,19 +27,17 @@ class SfxItemSet;
 class SfxPoolItem;
 class SfxSetItem;
 
-struct SfxItemModifyImpl
-{
-    const SfxSetItem  *pOrigItem;
-    SfxSetItem        *pPoolItem;
-};
-
-typedef std::vector<SfxItemModifyImpl> SfxItemModifyArr_Impl;
-
-
 class SVL_DLLPUBLIC SfxItemPoolCache
 {
+    struct SfxItemModifyImpl
+    {
+        const SfxSetItem  *pOrigItem;
+        SfxSetItem        *pPoolItem;
+    };
+
     SfxItemPool             *pPool;
-    SfxItemModifyArr_Impl   *pCache;
+    std::vector<SfxItemModifyImpl>
+                             m_aCache;
     const SfxItemSet        *pSetToPut;
     const SfxPoolItem       *pItemToPut;
 

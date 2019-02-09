@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuinsert.hxx"
+#include <config_features.h>
 
+#include <fuinsert.hxx>
 #include <comphelper/storagehelper.hxx>
-#include <comphelper/processfactory.hxx>
+#include <editeng/outlobj.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <svx/svxdlg.hxx>
 #include <com/sun/star/embed/EmbedVerbs.hpp>
@@ -37,7 +38,6 @@
 #include <sfx2/docfile.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/filedlghelper.hxx>
-#include <svtools/sores.hxx>
 #include <svtools/insdlg.hxx>
 #include <sfx2/request.hxx>
 #include <svl/globalnameitem.hxx>
@@ -49,11 +49,10 @@
 #include <svx/linkwarn.hxx>
 #include <svx/svdetc.hxx>
 #include <avmedia/mediawindow.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <sfx2/printer.hxx>
 #include <comphelper/classids.hxx>
 #include <svtools/sfxecode.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svl/urlbmk.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdograf.hxx>
@@ -63,30 +62,32 @@
 #include <sot/storage.hxx>
 #include <sot/formats.hxx>
 #include <svx/svdpagv.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/opengrf.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svx/charthelper.hxx>
 
-#include "app.hrc"
-#include "sdresid.hxx"
-#include "View.hxx"
-#include "sdmod.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
-#include "DrawViewShell.hxx"
-#include "DrawDocShell.hxx"
-#include "GraphicDocShell.hxx"
-#include "strings.hrc"
-#include "drawdoc.hxx"
-#include "sdgrffilter.hxx"
-#include "sdxfer.hxx"
+#include <app.hrc>
+#include <sdresid.hxx>
+#include <View.hxx>
+#include <sdmod.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
+#include <DrawViewShell.hxx>
+#include <DrawDocShell.hxx>
+#include <GraphicDocShell.hxx>
+#include <strings.hrc>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <sdgrffilter.hxx>
+#include <sdxfer.hxx>
 #include <vcl/svapp.hxx>
-#include "undo/undoobjects.hxx"
+#include <undo/undoobjects.hxx>
 #include <memory>
-#include "glob.hrc"
+#include <vcl/weld.hxx>
+#include <vcl/errinf.hxx>
 
-#include <config_features.h>
+#include <vcl/GraphicNativeTransform.hxx>
+#include <vcl/GraphicNativeMetadata.hxx>
 
 using namespace com::sun::star;
 
@@ -98,14 +99,17 @@ FuInsertGraphic::FuInsertGraphic (
     ::sd::Window* pWin,
     ::sd::View* pView,
     SdDrawDocument* pDoc,
-    SfxRequest& rReq)
-    : FuPoor(pViewSh, pWin, pView, pDoc, rReq)
+    SfxRequest& rReq,
+    bool replaceExistingImage)
+    : FuPoor(pViewSh, pWin, pView, pDoc, rReq),
+      mbReplaceExistingImage(replaceExistingImage)
 {
 }
 
-rtl::Reference<FuPoor> FuInsertGraphic::Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq )
+rtl::Reference<FuPoor> FuInsertGraphic::Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView,
+                                                SdDrawDocument* pDoc, SfxRequest& rReq, bool replaceExistingImage )
 {
-    rtl::Reference<FuPoor> xFunc( new FuInsertGraphic( pViewSh, pWin, pView, pDoc, rReq ) );
+    rtl::Reference<FuPoor> xFunc( new FuInsertGraphic( pViewSh, pWin, pView, pDoc, rReq, replaceExistingImage ) );
     xFunc->DoExecute(rReq);
     return xFunc;
 }
@@ -117,7 +121,7 @@ void FuInsertGraphic::DoExecute( SfxRequest& rReq )
     Graphic aGraphic;
 
     bool bAsLink = false;
-    int nError = GRFILTER_OPENERROR;
+    ErrCode nError = ERRCODE_GRFILTER_OPENERROR;
 
     const SfxItemSet* pArgs = rReq.GetArgs();
     const SfxPoolItem* pItem;
@@ -137,44 +141,46 @@ void FuInsertGraphic::DoExecute( SfxRequest& rReq )
     }
     else
     {
-        SvxOpenGraphicDialog    aDlg(SdResId(STR_INSERTGRAPHIC));
+        SvxOpenGraphicDialog aDlg(SdResId(STR_INSERTGRAPHIC), mpWindow ? mpWindow->GetFrameWeld() : nullptr);
 
-        if( aDlg.Execute() != GRFILTER_OK )
+        if( aDlg.Execute() != ERRCODE_NONE )
             return; // cancel dialog
 
         nError = aDlg.GetGraphic(aGraphic);
         bAsLink = aDlg.IsAsLink();
         aFileName = aDlg.GetPath();
-        aFilterName = aDlg.GetCurrentFilter();
+        aFilterName = aDlg.GetDetectedFilter();
     }
 
-    if( nError == GRFILTER_OK )
+    if( nError == ERRCODE_NONE )
     {
-        if( mpViewShell && dynamic_cast< DrawViewShell *>( mpViewShell ) !=  nullptr)
+        GraphicNativeMetadata aMetadata;
+        if ( aMetadata.read(aGraphic) )
+        {
+            const sal_uInt16 aRotation = aMetadata.getRotation();
+            if (aRotation != 0)
+            {
+                std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(nullptr, VclMessageType::Question,VclButtonsType::YesNo,SdResId(STR_QUERYROTATION)));
+                if (xQueryBox->run() == RET_YES)
+                {
+                    GraphicNativeTransform aTransform( aGraphic );
+                    aTransform.rotate( aRotation );
+                }
+            }
+        }
+        if( dynamic_cast< DrawViewShell *>( mpViewShell ) )
         {
             sal_Int8    nAction = DND_ACTION_COPY;
             SdrObject* pPickObj;
-            bool bSelectionReplaced(false);
 
-            if( ( pPickObj = mpView->GetSelectedSingleObject( mpView->GetPage() ) ) || ( pPickObj = mpView->GetEmptyPresentationObject( PRESOBJ_GRAPHIC ) ) )
+            if( ( ( pPickObj = mpView->GetSelectedSingleObject( mpView->GetPage() ) ) && mbReplaceExistingImage ) || (pPickObj = mpView->GetEmptyPresentationObject( PRESOBJ_GRAPHIC ) ) )
             {
                 nAction = DND_ACTION_LINK;
-            }
-            else if(1 == mpView->GetMarkedObjectCount())
-            {
-                pPickObj = mpView->GetMarkedObjectByIndex(0);
-                nAction = DND_ACTION_MOVE;
-                bSelectionReplaced = true;
+            } else {
+                pPickObj = nullptr;
             }
 
-            Point aPos;
-            Rectangle aRect(aPos, mpWindow->GetOutputSizePixel() );
-            aPos = aRect.Center();
-            bool bMapModeWasEnabled(mpWindow->IsMapModeEnabled());
-            mpWindow->EnableMapMode(/*true*/);
-            aPos = mpWindow->PixelToLogic(aPos);
-            mpWindow->EnableMapMode(bMapModeWasEnabled);
-
+            Point aPos = mpWindow->GetVisibleCenter();
             SdrGrafObj* pGrafObj = mpView->InsertGraphic(aGraphic, nAction, aPos, pPickObj, nullptr);
 
             if(pGrafObj && bAsLink )
@@ -182,8 +188,8 @@ void FuInsertGraphic::DoExecute( SfxRequest& rReq )
                 // really store as link only?
                 if( SvtMiscOptions().ShowLinkWarningDialog() )
                 {
-                    ScopedVclPtrInstance< SvxLinkWarningDialog > aWarnDlg(mpWindow, aFileName);
-                    if( aWarnDlg->Execute() != RET_OK )
+                    SvxLinkWarningDialog aWarnDlg(mpWindow->GetFrameWeld(), aFileName);
+                    if (aWarnDlg.run() != RET_OK)
                         return; // don't store as link
                 }
 
@@ -194,16 +200,11 @@ void FuInsertGraphic::DoExecute( SfxRequest& rReq )
                 }
                 pGrafObj->SetGraphicLink(aFileName, aReferer, aFilterName);
             }
-
-            if(bSelectionReplaced && pGrafObj)
-            {
-                mpView->MarkObj(pGrafObj, mpView->GetSdrPageView());
-            }
         }
     }
     else
     {
-        SdGRFFilter::HandleGraphicFilterError( (sal_uInt16)nError, GraphicFilter::GetGraphicFilter().GetLastError().nStreamError );
+        SdGRFFilter::HandleGraphicFilterError( nError, GraphicFilter::GetGraphicFilter().GetLastError().nStreamError );
     }
 }
 
@@ -230,48 +231,46 @@ void FuInsertClipboard::DoExecute( SfxRequest&  )
     SotClipboardFormatId                        nFormatId;
 
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    std::unique_ptr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog( mpViewShell->GetActiveWindow() ));
-    if ( pDlg )
+    ScopedVclPtr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog(mpViewShell->GetFrameWeld()));
+    pDlg->Insert( SotClipboardFormatId::EMBED_SOURCE, OUString() );
+    pDlg->Insert( SotClipboardFormatId::LINK_SOURCE, OUString() );
+    pDlg->Insert( SotClipboardFormatId::DRAWING, OUString() );
+    pDlg->Insert( SotClipboardFormatId::SVXB, OUString() );
+    pDlg->Insert( SotClipboardFormatId::GDIMETAFILE, OUString() );
+    pDlg->Insert( SotClipboardFormatId::BITMAP, OUString() );
+    pDlg->Insert( SotClipboardFormatId::NETSCAPE_BOOKMARK, OUString() );
+    pDlg->Insert( SotClipboardFormatId::STRING, OUString() );
+    pDlg->Insert( SotClipboardFormatId::HTML, OUString() );
+    pDlg->Insert( SotClipboardFormatId::RTF, OUString() );
+    pDlg->Insert( SotClipboardFormatId::RICHTEXT, OUString() );
+    pDlg->Insert( SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT, OUString() );
+
+    //TODO/MBA: testing
+    nFormatId = pDlg->GetFormat( aDataHelper );
+    if( nFormatId != SotClipboardFormatId::NONE && aDataHelper.GetTransferable().is() )
     {
-        pDlg->Insert( SotClipboardFormatId::EMBED_SOURCE, OUString() );
-        pDlg->Insert( SotClipboardFormatId::LINK_SOURCE, OUString() );
-        pDlg->Insert( SotClipboardFormatId::DRAWING, OUString() );
-        pDlg->Insert( SotClipboardFormatId::SVXB, OUString() );
-        pDlg->Insert( SotClipboardFormatId::GDIMETAFILE, OUString() );
-        pDlg->Insert( SotClipboardFormatId::BITMAP, OUString() );
-        pDlg->Insert( SotClipboardFormatId::NETSCAPE_BOOKMARK, OUString() );
-        pDlg->Insert( SotClipboardFormatId::STRING, OUString() );
-        pDlg->Insert( SotClipboardFormatId::HTML, OUString() );
-        pDlg->Insert( SotClipboardFormatId::RTF, OUString() );
-        pDlg->Insert( SotClipboardFormatId::EDITENGINE, OUString() );
+        sal_Int8 nAction = DND_ACTION_COPY;
+        DrawViewShell* pDrViewSh = nullptr;
 
-        //TODO/MBA: testing
-        nFormatId = pDlg->GetFormat( aDataHelper );
-        if( nFormatId != SotClipboardFormatId::NONE && aDataHelper.GetTransferable().is() )
+        if (!mpView->InsertData( aDataHelper,
+                                mpWindow->PixelToLogic( ::tools::Rectangle( Point(), mpWindow->GetOutputSizePixel() ).Center() ),
+                                nAction, false, nFormatId ))
         {
-            sal_Int8 nAction = DND_ACTION_COPY;
-            DrawViewShell* pDrViewSh = nullptr;
+            pDrViewSh = dynamic_cast<DrawViewShell*>(mpViewShell);
+        }
 
-            if (!mpView->InsertData( aDataHelper,
-                                    mpWindow->PixelToLogic( Rectangle( Point(), mpWindow->GetOutputSizePixel() ).Center() ),
-                                    nAction, false, nFormatId ))
+        if (pDrViewSh)
+        {
+            INetBookmark        aINetBookmark( "", "" );
+
+            if( ( aDataHelper.HasFormat( SotClipboardFormatId::NETSCAPE_BOOKMARK ) &&
+                aDataHelper.GetINetBookmark( SotClipboardFormatId::NETSCAPE_BOOKMARK, aINetBookmark ) ) ||
+                ( aDataHelper.HasFormat( SotClipboardFormatId::FILEGRPDESCRIPTOR ) &&
+                aDataHelper.GetINetBookmark( SotClipboardFormatId::FILEGRPDESCRIPTOR, aINetBookmark ) ) ||
+                ( aDataHelper.HasFormat( SotClipboardFormatId::UNIFORMRESOURCELOCATOR ) &&
+                aDataHelper.GetINetBookmark( SotClipboardFormatId::UNIFORMRESOURCELOCATOR, aINetBookmark ) ) )
             {
-                pDrViewSh = dynamic_cast<DrawViewShell*>(mpViewShell);
-            }
-
-            if (pDrViewSh)
-            {
-                INetBookmark        aINetBookmark( "", "" );
-
-                if( ( aDataHelper.HasFormat( SotClipboardFormatId::NETSCAPE_BOOKMARK ) &&
-                    aDataHelper.GetINetBookmark( SotClipboardFormatId::NETSCAPE_BOOKMARK, aINetBookmark ) ) ||
-                    ( aDataHelper.HasFormat( SotClipboardFormatId::FILEGRPDESCRIPTOR ) &&
-                    aDataHelper.GetINetBookmark( SotClipboardFormatId::FILEGRPDESCRIPTOR, aINetBookmark ) ) ||
-                    ( aDataHelper.HasFormat( SotClipboardFormatId::UNIFORMRESOURCELOCATOR ) &&
-                    aDataHelper.GetINetBookmark( SotClipboardFormatId::UNIFORMRESOURCELOCATOR, aINetBookmark ) ) )
-                {
-                    pDrViewSh->InsertURLField( aINetBookmark.GetURL(), aINetBookmark.GetDescription(), "", nullptr );
-                }
+                pDrViewSh->InsertURLField( aINetBookmark.GetURL(), aINetBookmark.GetDescription(), "" );
             }
         }
     }
@@ -331,7 +330,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
 
             MapUnit aUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( xObj->getMapUnit( nAspect ) );
 
-            Rectangle aRect;
+            ::tools::Rectangle aRect;
             if( pPickObj )
             {
                 aRect = pPickObj->GetLogicRect();
@@ -358,34 +357,35 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                 if (aSize.Height() == 0 || aSize.Width() == 0)
                 {
                     // rectangle with balanced edge ratio
-                    aSize.Width()  = 14100;
-                    aSize.Height() = 10000;
-                    Size aTmp = OutputDevice::LogicToLogic( aSize, MAP_100TH_MM, aUnit );
+                    aSize.setWidth( 14100 );
+                    aSize.setHeight( 10000 );
+                    Size aTmp = OutputDevice::LogicToLogic(aSize, MapMode(MapUnit::Map100thMM), MapMode(aUnit));
                     aSz.Width = aTmp.Width();
                     aSz.Height = aTmp.Height();
                     xObj->setVisualAreaSize( nAspect, aSz );
                 }
                 else
                 {
-                    aSize = OutputDevice::LogicToLogic(aSize, aUnit, MAP_100TH_MM);
+                    aSize = OutputDevice::LogicToLogic(aSize, MapMode(aUnit), MapMode(MapUnit::Map100thMM));
                 }
 
-                Point aPos;
-                Rectangle aWinRect(aPos, mpWindow->GetOutputSizePixel() );
-                aPos = aWinRect.Center();
-                aPos = mpWindow->PixelToLogic(aPos);
-                aPos.X() -= aSize.Width() / 2;
-                aPos.Y() -= aSize.Height() / 2;
-                aRect = Rectangle(aPos, aSize);
+                Point aPos = mpWindow->GetVisibleCenter();
+                aPos.AdjustX( -(aSize.Width() / 2) );
+                aPos.AdjustY( -(aSize.Height() / 2) );
+                aRect = ::tools::Rectangle(aPos, aSize);
             }
 
-            SdrOle2Obj* pOleObj = new SdrOle2Obj( svt::EmbeddedObjectRef( xObj, nAspect ), aObjName, aRect );
+            SdrOle2Obj* pOleObj = new SdrOle2Obj(
+                mpView->getSdrModelFromSdrView(),
+                svt::EmbeddedObjectRef( xObj, nAspect ),
+                aObjName,
+                aRect);
             SdrPageView* pPV = mpView->GetSdrPageView();
 
             // if we have a pick obj we need to make this new ole a pres obj replacing the current pick obj
             if( pPickObj )
             {
-                SdPage* pPage = static_cast< SdPage* >(pPickObj->GetPage());
+                SdPage* pPage = static_cast< SdPage* >(pPickObj->getSdrPageFromSdrObject());
                 if(pPage && pPage->IsPresObj(pPickObj))
                 {
                     pPage->InsertPresObj( pOleObj, ePresObjKind );
@@ -423,7 +423,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                 }
 
                 pOleObj->SetLogicRect(aRect);
-                Size aTmp( OutputDevice::LogicToLogic( aRect.GetSize(), MAP_100TH_MM, aUnit ) );
+                Size aTmp( OutputDevice::LogicToLogic(aRect.GetSize(), MapMode(MapUnit::Map100thMM), MapMode(aUnit)) );
                 awt::Size aVisualSize;
                 aVisualSize.Width = aTmp.Width();
                 aVisualSize.Height = aTmp.Height();
@@ -461,7 +461,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
         const SfxGlobalNameItem* pNameItem = rReq.GetArg<SfxGlobalNameItem>(SID_INSERT_OBJECT);
         if ( nSlotId == SID_INSERT_OBJECT && pNameItem )
         {
-            SvGlobalName aClassName = pNameItem->GetValue();
+            const SvGlobalName& aClassName = pNameItem->GetValue();
             xObj =  mpViewShell->GetViewFrame()->GetObjectShell()->
                     GetEmbeddedObjectContainer().CreateEmbeddedObject( aClassName.GetByteSequence(), aName );
         }
@@ -472,7 +472,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                 case SID_INSERT_OBJECT :
                 {
                     aServerLst.FillInsertObjects();
-                    if (mpDoc->GetDocumentType() == DOCUMENT_TYPE_DRAW)
+                    if (mpDoc->GetDocumentType() == DocumentType::Draw)
                     {
                         aServerLst.Remove( GraphicDocShell::Factory().GetClassId() );
                     }
@@ -481,27 +481,24 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                         aServerLst.Remove( DrawDocShell::Factory().GetClassId() );
                     }
 
-                    // intentionally no break!
+                    [[fallthrough]];
                 }
                 case SID_INSERT_FLOATINGFRAME :
                 {
                     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-                    std::unique_ptr<SfxAbstractInsertObjectDialog> pDlg(
-                            pFact->CreateInsertObjectDialog( mpViewShell->GetActiveWindow(), SD_MOD()->GetSlotPool()->GetSlot(nSlotId)->GetCommandString(),
+                    ScopedVclPtr<SfxAbstractInsertObjectDialog> pDlg(
+                            pFact->CreateInsertObjectDialog( mpViewShell->GetFrameWeld(), SD_MOD()->GetSlotPool()->GetSlot(nSlotId)->GetCommandString(),
                             xStorage, &aServerLst ));
-                    if ( pDlg )
-                    {
-                        pDlg->Execute();
-                        bCreateNew = pDlg->IsCreateNew();
-                        xObj = pDlg->GetObject();
+                    pDlg->Execute();
+                    bCreateNew = pDlg->IsCreateNew();
+                    xObj = pDlg->GetObject();
 
-                        xIconMetaFile = pDlg->GetIconIfIconified( &aIconMediaType );
-                        if ( xIconMetaFile.is() )
-                            nAspect = embed::Aspects::MSOLE_ICON;
+                    xIconMetaFile = pDlg->GetIconIfIconified( &aIconMediaType );
+                    if ( xIconMetaFile.is() )
+                        nAspect = embed::Aspects::MSOLE_ICON;
 
-                        if ( xObj.is() )
-                            mpViewShell->GetObjectShell()->GetEmbeddedObjectContainer().InsertEmbeddedObject( xObj, aName );
-                    }
+                    if ( xObj.is() )
+                        mpViewShell->GetObjectShell()->GetEmbeddedObjectContainer().InsertEmbeddedObject( xObj, aName );
 
                     break;
                 }
@@ -512,14 +509,10 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
         {
             if (xObj.is())
             {
-                //TODO/LATER: needs status for RESIZEONPRINTERCHANGE
-                //if( SVOBJ_MISCSTATUS_RESIZEONPRINTERCHANGE & xObj->getStatus( nAspect ) )
-                //    aIPObj->OnDocumentPrinterChanged( mpDocSh->GetPrinter(sal_False) );
-
                 bool bInsertNewObject = true;
 
                 Size aSize;
-                MapUnit aMapUnit = MAP_100TH_MM;
+                MapUnit aMapUnit = MapUnit::Map100thMM;
                 if ( nAspect != embed::Aspects::MSOLE_ICON )
                 {
                     awt::Size aSz;
@@ -538,16 +531,16 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                     if (aSize.Height() == 0 || aSize.Width() == 0)
                     {
                         // rectangle with balanced edge ratio
-                        aSize.Width()  = 14100;
-                        aSize.Height() = 10000;
-                        Size aTmp = OutputDevice::LogicToLogic( aSize, MAP_100TH_MM, aMapUnit );
+                        aSize.setWidth( 14100 );
+                        aSize.setHeight( 10000 );
+                        Size aTmp = OutputDevice::LogicToLogic(aSize, MapMode(MapUnit::Map100thMM), MapMode(aMapUnit));
                         aSz.Width = aTmp.Width();
                         aSz.Height = aTmp.Height();
                         xObj->setVisualAreaSize( nAspect, aSz );
                     }
                     else
                     {
-                        aSize = OutputDevice::LogicToLogic(aSize, aMapUnit, MAP_100TH_MM);
+                        aSize = OutputDevice::LogicToLogic(aSize, MapMode(aMapUnit), MapMode(MapUnit::Map100thMM));
                     }
                 }
 
@@ -561,7 +554,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                         SdrMark* pMark = rMarkList.GetMark(0);
                         SdrObject* pObj = pMark->GetMarkedSdrObj();
 
-                        if (pObj->GetObjInventor() == SdrInventor &&
+                        if (pObj->GetObjInventor() == SdrInventor::Default &&
                         pObj->GetObjIdentifier() == OBJ_OLE2)
                         {
                             if ( !static_cast<SdrOle2Obj*>(pObj)->GetObjRef().is() )
@@ -574,7 +567,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                                 static_cast<SdrOle2Obj*>(pObj)->SetPersistName(aName);
                                 static_cast<SdrOle2Obj*>(pObj)->SetName(aName);
                                 static_cast<SdrOle2Obj*>(pObj)->SetAspect(nAspect);
-                                Rectangle aRect = static_cast<SdrOle2Obj*>(pObj)->GetLogicRect();
+                                ::tools::Rectangle aRect = static_cast<SdrOle2Obj*>(pObj)->GetLogicRect();
 
                                 if ( nAspect == embed::Aspects::MSOLE_ICON )
                                 {
@@ -583,7 +576,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                                 }
                                 else
                                 {
-                                    Size aTmp = OutputDevice::LogicToLogic( aRect.GetSize(), MAP_100TH_MM, aMapUnit );
+                                    Size aTmp = OutputDevice::LogicToLogic(aRect.GetSize(), MapMode(MapUnit::Map100thMM), MapMode(aMapUnit));
                                     awt::Size aSz( aTmp.Width(), aTmp.Height() );
                                     xObj->setVisualAreaSize( nAspect, aSz );
                                 }
@@ -603,15 +596,18 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                     if ( nAspect == embed::Aspects::MSOLE_ICON )
                     {
                         aObjRef.SetGraphicStream( xIconMetaFile, aIconMediaType );
-                        MapMode aMapMode( MAP_100TH_MM );
+                        MapMode aMapMode( MapUnit::Map100thMM );
                         aSize = aObjRef.GetSize( &aMapMode );
                     }
 
                     Point aPnt ((aPageSize.Width()  - aSize.Width())  / 2,
                         (aPageSize.Height() - aSize.Height()) / 2);
-                    Rectangle aRect (aPnt, aSize);
-
-                    SdrOle2Obj* pObj = new SdrOle2Obj( aObjRef, aName, aRect);
+                    ::tools::Rectangle aRect (aPnt, aSize);
+                    SdrOle2Obj* pObj = new SdrOle2Obj(
+                        mpView->getSdrModelFromSdrView(),
+                        aObjRef,
+                        aName,
+                        aRect);
 
                     if( mpView->InsertObjectAtView(pObj, *pPV, SdrInsertFlags::SETDEFLAYER) )
                     {
@@ -626,7 +622,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                                 awt::Size aSz = xObj->getVisualAreaSize( nAspect );
 
                                 Size aNewSize = Window::LogicToLogic( Size( aSz.Width, aSz.Height ),
-                                    MapMode( aMapUnit ), MapMode( MAP_100TH_MM ) );
+                                    MapMode( aMapUnit ), MapMode( MapUnit::Map100thMM ) );
                                 if ( aNewSize != aSize )
                                 {
                                     aRect.SetSize( aNewSize );
@@ -643,7 +639,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
 
                             if ( nAspect != embed::Aspects::MSOLE_ICON )
                             {
-                                Size aTmp = OutputDevice::LogicToLogic( aRect.GetSize(), MAP_100TH_MM, aMapUnit );
+                                Size aTmp = OutputDevice::LogicToLogic(aRect.GetSize(), MapMode(MapUnit::Map100thMM), MapMode(aMapUnit));
                                 awt::Size aSz( aTmp.Width(), aTmp.Height() );
                                 xObj->setVisualAreaSize( nAspect, aSz );
                             }
@@ -652,7 +648,7 @@ void FuInsertOLE::DoExecute( SfxRequest& rReq )
                         }
 
                         Size aVisSizePixel = mpWindow->GetOutputSizePixel();
-                        Rectangle aVisAreaWin = mpWindow->PixelToLogic( Rectangle( Point(0,0), aVisSizePixel) );
+                        ::tools::Rectangle aVisAreaWin = mpWindow->PixelToLogic( ::tools::Rectangle( Point(0,0), aVisSizePixel) );
                         mpViewShell->VisAreaChanged(aVisAreaWin);
                         mpDocSh->SetVisArea(aVisAreaWin);
                     }
@@ -702,21 +698,25 @@ void FuInsertAVMedia::DoExecute( SfxRequest& rReq )
     }
 
     bool bLink(true);
-    if (bAPI ||
-        ::avmedia::MediaWindow::executeMediaURLDialog(mpWindow, aURL, & bLink))
+    if (bAPI
+#if HAVE_FEATURE_AVMEDIA
+        || ::avmedia::MediaWindow::executeMediaURLDialog(mpWindow ? mpWindow->GetFrameWeld() : nullptr, aURL, & bLink)
+#endif
+       )
     {
         Size aPrefSize;
 
         if( mpWindow )
             mpWindow->EnterWait();
 
+#if HAVE_FEATURE_AVMEDIA
         if( !::avmedia::MediaWindow::isMediaURL( aURL, "", true, &aPrefSize ) )
         {
             if( mpWindow )
                 mpWindow->LeaveWait();
 
             if( !bAPI )
-                ::avmedia::MediaWindow::executeFormatErrorBox( mpWindow );
+                ::avmedia::MediaWindow::executeFormatErrorBox(mpWindow->GetFrameWeld());
         }
         else
         {
@@ -727,18 +727,18 @@ void FuInsertAVMedia::DoExecute( SfxRequest& rReq )
             if( aPrefSize.Width() && aPrefSize.Height() )
             {
                 if( mpWindow )
-                    aSize = mpWindow->PixelToLogic( aPrefSize, MAP_100TH_MM );
+                    aSize = mpWindow->PixelToLogic(aPrefSize, MapMode(MapUnit::Map100thMM));
                 else
-                    aSize = Application::GetDefaultDevice()->PixelToLogic( aPrefSize, MAP_100TH_MM );
+                    aSize = Application::GetDefaultDevice()->PixelToLogic(aPrefSize, MapMode(MapUnit::Map100thMM));
             }
             else
                 aSize = Size( 5000, 5000 );
 
             if( mpWindow )
             {
-                aPos = mpWindow->PixelToLogic( Rectangle( aPos, mpWindow->GetOutputSizePixel() ).Center() );
-                aPos.X() -= aSize.Width() >> 1;
-                aPos.Y() -= aSize.Height() >> 1;
+                aPos = mpWindow->PixelToLogic( ::tools::Rectangle( aPos, mpWindow->GetOutputSizePixel() ).Center() );
+                aPos.AdjustX( -(aSize.Width() >> 1) );
+                aPos.AdjustY( -(aSize.Height() >> 1) );
             }
 
             mpView->InsertMediaURL( aURL, nAction, aPos, aSize, bLink ) ;
@@ -746,85 +746,15 @@ void FuInsertAVMedia::DoExecute( SfxRequest& rReq )
             if( mpWindow )
                 mpWindow->LeaveWait();
         }
-    }
-}
-
-#if HAVE_FEATURE_GLTF
-
-FuInsert3DModel::FuInsert3DModel(
-    ViewShell* pViewSh,
-    ::sd::Window* pWin,
-    ::sd::View* pView,
-    SdDrawDocument* pDoc,
-    SfxRequest& rReq)
-    : FuPoor(pViewSh, pWin, pView, pDoc, rReq)
-{
-}
-
-rtl::Reference<FuPoor> FuInsert3DModel::Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq )
-{
-    rtl::Reference<FuPoor> xFunc( new FuInsert3DModel( pViewSh, pWin, pView, pDoc, rReq ) );
-    xFunc->DoExecute(rReq);
-    return xFunc;
-}
-
-void FuInsert3DModel::DoExecute( SfxRequest& )
-{
-    sfx2::FileDialogHelper aDlg( ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, 0 );
-
-    aDlg.SetTitle( SD_RESSTR( STR_INSERT_3D_MODEL_TITLE ) );
-
-#if HAVE_FEATURE_COLLADA
-    aDlg.AddFilter( SD_RESSTR( STR_INSERT_3D_MODEL_ALL_SUPPORTED_FORMATS ), "*.json;*.dae;*.kmz"  );
 #else
-    aDlg.AddFilter( SD_RESSTR( STR_INSERT_3D_MODEL_ALL_SUPPORTED_FORMATS ), "*.json"  );
-#endif
-
-    aDlg.AddFilter( "JSON - GL Transmission Format", "*.json" );
-
-#if HAVE_FEATURE_COLLADA
-    aDlg.AddFilter( "DAE - COLLADA", "*.dae" );
-    aDlg.AddFilter( "KMZ - Keyhole Markup language Zipped", "*.kmz"  );
-#endif
-
-    OUString sURL;
-    if( aDlg.Execute() == ERRCODE_NONE )
-    {
-        const INetURLObject aURL( aDlg.GetPath() );
-        sURL = aURL.GetMainURL( INetURLObject::DECODE_UNAMBIGUOUS );
-    }
-    else if( !sURL.isEmpty() )
-        sURL.clear();
-
-    if (!sURL.isEmpty())
-    {
-        if( mpWindow )
-            mpWindow->EnterWait();
-
-        Point aPos;
-        sal_Int8 nAction = DND_ACTION_COPY;
-
-        Size aSize(480,360);
-        if( mpWindow )
-            aSize = mpWindow->PixelToLogic( aSize, MAP_100TH_MM );
-        else
-            aSize = Application::GetDefaultDevice()->PixelToLogic( aSize, MAP_100TH_MM );
-
-        if( mpWindow )
-        {
-            aPos = mpWindow->PixelToLogic( Rectangle( aPos, mpWindow->GetOutputSizePixel() ).Center() );
-            aPos.X() -= aSize.Width() >> 1;
-            aPos.Y() -= aSize.Height() >> 1;
-        }
-#if HAVE_FEATURE_OPENGL
-        mpView->Insert3DModelURL( sURL, nAction, aPos, aSize ) ;
-#endif
-
         if( mpWindow )
             mpWindow->LeaveWait();
+        (void) aPrefSize;
+        (void) bLink;
+#endif
     }
 }
-#endif
+
 } // end of namespace sd
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

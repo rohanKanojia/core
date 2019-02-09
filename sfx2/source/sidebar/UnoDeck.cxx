@@ -34,7 +34,6 @@ SidebarController* SfxUnoDeck::getSidebarController()
 }
 
 OUString SAL_CALL SfxUnoDeck::getId()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -42,12 +41,11 @@ OUString SAL_CALL SfxUnoDeck::getId()
 }
 
 OUString SAL_CALL  SfxUnoDeck::getTitle()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     SidebarController* pSidebarController = getSidebarController();
-    Deck* pDeck = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId)->mpDeck;
+    VclPtr<Deck> pDeck = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId)->mpDeck;
 
     if (!pDeck)
     {
@@ -55,35 +53,33 @@ OUString SAL_CALL  SfxUnoDeck::getTitle()
         pDeck = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId)->mpDeck;
     }
 
-    DeckTitleBar* pTitleBar = pDeck->GetTitleBar();
+    VclPtr<DeckTitleBar> pTitleBar = pDeck->GetTitleBar();
     return pTitleBar->GetTitle();
 }
 
 void SAL_CALL SfxUnoDeck::setTitle( const OUString& newTitle )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     SidebarController* pSidebarController = getSidebarController();
     pSidebarController->CreateDeck(mDeckId);
 
-    DeckDescriptor* pDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
+    std::shared_ptr<DeckDescriptor> xDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
 
-    if (pDeckDescriptor)
+    if (xDeckDescriptor)
     {
-        Deck* pDeck = pDeckDescriptor->mpDeck;
-        DeckTitleBar* pTitleBar = pDeck->GetTitleBar();
+        Deck* pDeck = xDeckDescriptor->mpDeck;
+        const VclPtr<DeckTitleBar>& pTitleBar = pDeck->GetTitleBar();
         pTitleBar->SetTitle(newTitle);
 
-        pDeckDescriptor->msTitle = newTitle;
-        pDeckDescriptor->msHelpText = newTitle;
+        xDeckDescriptor->msTitle = newTitle;
+        xDeckDescriptor->msHelpText = newTitle;
 
         pSidebarController->notifyDeckTitle(mDeckId);
     }
 }
 
 sal_Bool SAL_CALL SfxUnoDeck::isActive()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -93,7 +89,6 @@ sal_Bool SAL_CALL SfxUnoDeck::isActive()
 
 
 void SAL_CALL SfxUnoDeck::activate( const sal_Bool bActivate )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -109,7 +104,6 @@ void SAL_CALL SfxUnoDeck::activate( const sal_Bool bActivate )
 }
 
 uno::Reference<ui::XPanels> SAL_CALL SfxUnoDeck::getPanels()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -118,7 +112,6 @@ uno::Reference<ui::XPanels> SAL_CALL SfxUnoDeck::getPanels()
 }
 
 sal_Int32 SAL_CALL SfxUnoDeck::getOrderIndex()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -128,23 +121,21 @@ sal_Int32 SAL_CALL SfxUnoDeck::getOrderIndex()
 }
 
 void SAL_CALL SfxUnoDeck::setOrderIndex( const sal_Int32 newOrderIndex )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
 
-    DeckDescriptor* pDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
+    std::shared_ptr<DeckDescriptor> xDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
 
-    if (pDeckDescriptor)
+    if (xDeckDescriptor)
     {
-        pDeckDescriptor->mnOrderIndex = newOrderIndex;
+        xDeckDescriptor->mnOrderIndex = newOrderIndex;
         // update the sidebar
         pSidebarController->NotifyResize();
     }
 }
 
 void SAL_CALL SfxUnoDeck::moveFirst()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -157,10 +148,10 @@ void SAL_CALL SfxUnoDeck::moveFirst()
     if (curOrderIndex != minIndex) // is deck already in place ?
     {
         minIndex -= 1;
-        DeckDescriptor* pDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
-        if (pDeckDescriptor)
+        std::shared_ptr<DeckDescriptor> xDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
+        if (xDeckDescriptor)
         {
-            pDeckDescriptor->mnOrderIndex = minIndex;
+            xDeckDescriptor->mnOrderIndex = minIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -168,7 +159,6 @@ void SAL_CALL SfxUnoDeck::moveFirst()
 }
 
 void SAL_CALL SfxUnoDeck::moveLast()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -181,10 +171,10 @@ void SAL_CALL SfxUnoDeck::moveLast()
     if (curOrderIndex != maxIndex) // is deck already in place ?
     {
         maxIndex += 1;
-        DeckDescriptor* pDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
-        if (pDeckDescriptor)
+        std::shared_ptr<DeckDescriptor> xDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
+        if (xDeckDescriptor)
         {
-            pDeckDescriptor->mnOrderIndex = maxIndex;
+            xDeckDescriptor->mnOrderIndex = maxIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -192,7 +182,6 @@ void SAL_CALL SfxUnoDeck::moveLast()
 }
 
 void SAL_CALL SfxUnoDeck::moveUp()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -203,10 +192,9 @@ void SAL_CALL SfxUnoDeck::moveUp()
     sal_Int32 curOrderIndex = getOrderIndex();
     sal_Int32 previousIndex = GetMinOrderIndex(aDecks);
 
-    ResourceManager::DeckContextDescriptorContainer::const_iterator iDeck;
-    for (iDeck = aDecks.begin(); iDeck != aDecks.end(); ++iDeck)
+    for (auto const& deck : aDecks)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(iDeck->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(deck.msId)->mnOrderIndex;
         if( index < curOrderIndex && index > previousIndex)
             previousIndex = index;
     }
@@ -214,10 +202,10 @@ void SAL_CALL SfxUnoDeck::moveUp()
     if (curOrderIndex != previousIndex) // is deck already in place ?
     {
         previousIndex -= 1;
-        DeckDescriptor* pDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
-        if (pDeckDescriptor)
+        std::shared_ptr<DeckDescriptor> xDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
+        if (xDeckDescriptor)
         {
-            pDeckDescriptor->mnOrderIndex = previousIndex;
+            xDeckDescriptor->mnOrderIndex = previousIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
@@ -225,7 +213,6 @@ void SAL_CALL SfxUnoDeck::moveUp()
 }
 
 void SAL_CALL SfxUnoDeck::moveDown()
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     SidebarController* pSidebarController = getSidebarController();
@@ -236,11 +223,9 @@ void SAL_CALL SfxUnoDeck::moveDown()
     sal_Int32 curOrderIndex = getOrderIndex();
     sal_Int32 nextIndex = GetMaxOrderIndex(aDecks);
 
-
-    ResourceManager::DeckContextDescriptorContainer::const_iterator iDeck;
-    for (iDeck = aDecks.begin(); iDeck != aDecks.end(); ++iDeck)
+    for (auto const& deck : aDecks)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(iDeck->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(deck.msId)->mnOrderIndex;
         if( index > curOrderIndex && index < nextIndex)
             nextIndex = index;
     }
@@ -248,16 +233,15 @@ void SAL_CALL SfxUnoDeck::moveDown()
     if (curOrderIndex != nextIndex) // is deck already in place ?
     {
         nextIndex += 1;
-        DeckDescriptor* pDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
-        if (pDeckDescriptor)
+        std::shared_ptr<DeckDescriptor> xDeckDescriptor = pSidebarController->GetResourceManager()->GetDeckDescriptor(mDeckId);
+        if (xDeckDescriptor)
         {
-            pDeckDescriptor->mnOrderIndex = nextIndex;
+            xDeckDescriptor->mnOrderIndex = nextIndex;
             // update the sidebar
             pSidebarController->NotifyResize();
         }
     }
 }
-
 
 sal_Int32 SfxUnoDeck::GetMinOrderIndex(ResourceManager::DeckContextDescriptorContainer aDecks)
 {
@@ -268,9 +252,9 @@ sal_Int32 SfxUnoDeck::GetMinOrderIndex(ResourceManager::DeckContextDescriptorCon
     iDeck = aDecks.begin();
     sal_Int32 minIndex = pSidebarController->GetResourceManager()->GetDeckDescriptor(iDeck->msId)->mnOrderIndex;
 
-    for (iDeck = aDecks.begin(); iDeck != aDecks.end(); ++iDeck)
+    for (auto const& deck : aDecks)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(iDeck->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(deck.msId)->mnOrderIndex;
         if(minIndex > index)
             minIndex = index;
     }
@@ -281,14 +265,11 @@ sal_Int32 SfxUnoDeck::GetMaxOrderIndex(ResourceManager::DeckContextDescriptorCon
 {
     SidebarController* pSidebarController = getSidebarController();
 
-    ResourceManager::DeckContextDescriptorContainer::const_iterator iDeck;
+    sal_Int32 maxIndex = pSidebarController->GetResourceManager()->GetDeckDescriptor(aDecks.begin()->msId)->mnOrderIndex;
 
-    iDeck = aDecks.begin();
-    sal_Int32 maxIndex = pSidebarController->GetResourceManager()->GetDeckDescriptor(iDeck->msId)->mnOrderIndex;
-
-    for (iDeck = aDecks.begin(); iDeck != aDecks.end(); ++iDeck)
+    for (auto const& deck : aDecks)
     {
-        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(iDeck->msId)->mnOrderIndex;
+        sal_Int32 index = pSidebarController->GetResourceManager()->GetDeckDescriptor(deck.msId)->mnOrderIndex;
         if(maxIndex < index)
             maxIndex = index;
     }

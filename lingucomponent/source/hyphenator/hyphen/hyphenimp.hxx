@@ -28,7 +28,6 @@
 #include <com/sun/star/beans/PropertyValues.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/linguistic2/XHyphenator.hpp>
-#include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
 #include <com/sun/star/linguistic2/XLinguServiceEventBroadcaster.hpp>
 
 #include <unotools/charclass.hxx>
@@ -51,7 +50,7 @@ struct HDInfo {
   OUString         aName;
   Locale           aLoc;
   rtl_TextEncoding eEnc;
-  CharClass *      apCC;
+  std::unique_ptr<CharClass> apCC;
 };
 
 class Hyphenator :
@@ -66,11 +65,10 @@ class Hyphenator :
     >
 {
     Sequence< Locale >                      aSuppLocales;
-    HDInfo * aDicts;
-    sal_Int32 numdict;
+    std::vector< HDInfo >                   mvDicts;
 
     ::comphelper::OInterfaceContainerHelper2       aEvtListeners;
-    linguistic::PropertyHelper_Hyphenation* pPropHelper;
+    std::unique_ptr<linguistic::PropertyHelper_Hyphenation> pPropHelper;
     bool                                    bDisposing;
 
     Hyphenator(const Hyphenator &) = delete;
@@ -85,54 +83,50 @@ class Hyphenator :
 public:
     Hyphenator();
 
-    virtual ~Hyphenator();
+    virtual ~Hyphenator() override;
 
     // XSupportedLocales (for XHyphenator)
-    virtual Sequence< Locale > SAL_CALL getLocales() throw(RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasLocale( const Locale& rLocale ) throw(RuntimeException, std::exception) override;
+    virtual Sequence< Locale > SAL_CALL getLocales() override;
+    virtual sal_Bool SAL_CALL hasLocale( const Locale& rLocale ) override;
 
     // XHyphenator
-    virtual css::uno::Reference< css::linguistic2::XHyphenatedWord > SAL_CALL hyphenate( const OUString& aWord, const css::lang::Locale& aLocale, sal_Int16 nMaxLeading, const css::beans::PropertyValues& aProperties ) throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::linguistic2::XHyphenatedWord > SAL_CALL queryAlternativeSpelling( const OUString& aWord, const css::lang::Locale& aLocale, sal_Int16 nIndex, const css::beans::PropertyValues& aProperties ) throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::linguistic2::XPossibleHyphens > SAL_CALL createPossibleHyphens( const OUString& aWord, const css::lang::Locale& aLocale, const css::beans::PropertyValues& aProperties ) throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::linguistic2::XHyphenatedWord > SAL_CALL hyphenate( const OUString& aWord, const css::lang::Locale& aLocale, sal_Int16 nMaxLeading, const css::beans::PropertyValues& aProperties ) override;
+    virtual css::uno::Reference< css::linguistic2::XHyphenatedWord > SAL_CALL queryAlternativeSpelling( const OUString& aWord, const css::lang::Locale& aLocale, sal_Int16 nIndex, const css::beans::PropertyValues& aProperties ) override;
+    virtual css::uno::Reference< css::linguistic2::XPossibleHyphens > SAL_CALL createPossibleHyphens( const OUString& aWord, const css::lang::Locale& aLocale, const css::beans::PropertyValues& aProperties ) override;
 
     // XLinguServiceEventBroadcaster
-    virtual sal_Bool SAL_CALL addLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) throw(RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL removeLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) throw(RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL addLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) override;
+    virtual sal_Bool SAL_CALL removeLinguServiceEventListener( const Reference< XLinguServiceEventListener >& rxLstnr ) override;
 
     // XServiceDisplayName
-    virtual OUString SAL_CALL getServiceDisplayName( const Locale& rLocale ) throw(RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getServiceDisplayName( const Locale& rLocale ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence< Any >& rArguments ) throw(Exception, RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const Sequence< Any >& rArguments ) override;
 
     // XComponent
-    virtual void SAL_CALL dispose() throw(RuntimeException, std::exception) override;
-    virtual void SAL_CALL addEventListener( const Reference< XEventListener >& rxListener ) throw(RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeEventListener( const Reference< XEventListener >& rxListener ) throw(RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
+    virtual void SAL_CALL addEventListener( const Reference< XEventListener >& rxListener ) override;
+    virtual void SAL_CALL removeEventListener( const Reference< XEventListener >& rxListener ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName ) throw(RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     static inline OUString  getImplementationName_Static() throw();
     static Sequence< OUString > getSupportedServiceNames_Static() throw();
 
 private:
-        static OUString SAL_CALL makeLowerCase(const OUString&, CharClass *);
-        static OUString SAL_CALL makeUpperCase(const OUString&, CharClass *);
-        static OUString SAL_CALL makeInitCap(const OUString&, CharClass *);
+        static OUString makeLowerCase(const OUString&, CharClass const *);
+        static OUString makeUpperCase(const OUString&, CharClass const *);
+        static OUString makeInitCap(const OUString&, CharClass const *);
 };
 
 inline OUString Hyphenator::getImplementationName_Static() throw()
 {
     return OUString( "org.openoffice.lingu.LibHnjHyphenator" );
 }
-
-void * SAL_CALL Hyphenator_getFactory(
-    char const * pImplName, css::lang::XMultiServiceFactory * pServiceManager,
-    void *);
 
 #endif
 

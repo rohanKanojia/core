@@ -7,16 +7,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "extlstcontext.hxx"
-#include "worksheethelper.hxx"
+#include <memory>
+#include <extlstcontext.hxx>
+#include <worksheethelper.hxx>
 #include <oox/core/contexthandler.hxx>
-#include "colorscale.hxx"
-#include "condformatbuffer.hxx"
-#include "condformatcontext.hxx"
-#include "document.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <colorscale.hxx>
+#include <condformatbuffer.hxx>
+#include <condformatcontext.hxx>
+#include <document.hxx>
+#include <worksheetfragment.hxx>
+#include <workbookfragment.hxx>
 
-#include "rangeutl.hxx"
-#include <o3tl/make_unique.hxx>
+#include <rangeutl.hxx>
+#include <sal/log.hxx>
 
 using ::oox::core::ContextHandlerRef;
 
@@ -71,8 +77,7 @@ void ExtCfRuleContext::onStartElement( const AttributeList& rAttribs )
 }
 
 ExtConditionalFormattingContext::ExtConditionalFormattingContext(WorksheetContextBase& rFragment):
-    WorksheetContextBase(rFragment),
-    mpCurrentRule(nullptr)
+    WorksheetContextBase(rFragment)
 {
 }
 
@@ -80,15 +85,14 @@ ContextHandlerRef ExtConditionalFormattingContext::onCreateContext(sal_Int32 nEl
 {
     if (mpCurrentRule)
     {
-        ScFormatEntry& rFormat = *maEntries.rbegin()->get();
-        assert(rFormat.GetType() == condformat::ICONSET);
+        ScFormatEntry& rFormat = **maEntries.rbegin();
+        assert(rFormat.GetType() == ScFormatEntry::Type::Iconset);
         ScIconSetFormat& rIconSet = static_cast<ScIconSetFormat&>(rFormat);
         ScDocument* pDoc = &getScDocument();
         SCTAB nTab = getSheetIndex();
         ScAddress aPos(0, 0, nTab);
         mpCurrentRule->SetData(&rIconSet, pDoc, aPos);
-        delete mpCurrentRule;
-        mpCurrentRule = nullptr;
+        mpCurrentRule.reset();
     }
     if (nElement == XLS14_TOKEN(cfRule))
     {
@@ -111,9 +115,9 @@ ContextHandlerRef ExtConditionalFormattingContext::onCreateContext(sal_Int32 nEl
         else if (aType == "iconSet")
         {
             ScDocument* pDoc = &getScDocument();
-            mpCurrentRule = new IconSetRule(*this);
-            maEntries.push_back(o3tl::make_unique<ScIconSetFormat>(pDoc));
-            return new IconSetContext(*this, mpCurrentRule);
+            mpCurrentRule.reset(new IconSetRule(*this));
+            maEntries.push_back(std::make_unique<ScIconSetFormat>(pDoc));
+            return new IconSetContext(*this, mpCurrentRule.get());
         }
         else
         {
@@ -159,18 +163,13 @@ void ExtConditionalFormattingContext::onEndElement()
             SCTAB nTab = getSheetIndex();
             for (size_t i = 0; i < aRange.size(); ++i)
             {
-                aRange[i]->aStart.SetTab(nTab);
-                aRange[i]->aEnd.SetTab(nTab);
+                aRange[i].aStart.SetTab(nTab);
+                aRange[i].aEnd.SetTab(nTab);
             }
 
             std::vector< std::unique_ptr<ExtCfCondFormat> >& rExtFormats =  getCondFormats().importExtCondFormat();
-            rExtFormats.push_back(o3tl::make_unique<ExtCfCondFormat>(aRange, maEntries));
+            rExtFormats.push_back(std::make_unique<ExtCfCondFormat>(aRange, maEntries));
         }
-        break;
-        case XLS14_TOKEN(cfRule):
-            if (mpCurrentRule)
-            {
-            }
         break;
         default:
         break;
@@ -226,9 +225,11 @@ ExtGlobalContext::ExtGlobalContext( WorksheetContextBase& rFragment ):
 
 ContextHandlerRef ExtGlobalContext::onCreateContext( sal_Int32 nElement, const AttributeList& /*rAttribs*/ )
 {
-    if (nElement == XLS14_TOKEN(conditionalFormatting))
-        return new ExtConditionalFormattingContext(*this);
-
+    switch (nElement)
+    {
+        case XLS14_TOKEN(conditionalFormatting): return new ExtConditionalFormattingContext(*this);
+        case XLS14_TOKEN(dataValidations):       return new ExtDataValidationsContext(*this);
+    }
     return this;
 }
 

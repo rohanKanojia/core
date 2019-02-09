@@ -17,8 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/clrschemecontext.hxx"
-#include "oox/core/xmlfilterbase.hxx"
+#include <drawingml/clrschemecontext.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -36,7 +39,7 @@ static void setClrMap( const ::oox::AttributeList& rAttributes,
     }
 }
 
-clrMapContext::clrMapContext( ContextHandler2Helper& rParent,
+clrMapContext::clrMapContext( ContextHandler2Helper const & rParent,
     const ::oox::AttributeList& rAttributes, ClrMap& rClrMap )
 : ContextHandler2( rParent )
 {
@@ -54,7 +57,7 @@ clrMapContext::clrMapContext( ContextHandler2Helper& rParent,
     setClrMap( rAttributes, rClrMap, XML_folHlink );
 }
 
-clrSchemeColorContext::clrSchemeColorContext( ContextHandler2Helper& rParent, ClrScheme& rClrScheme, sal_Int32 nColorToken ) :
+clrSchemeColorContext::clrSchemeColorContext( ContextHandler2Helper const & rParent, ClrScheme& rClrScheme, sal_Int32 nColorToken ) :
     ColorContext( rParent, *this ),
     mrClrScheme( rClrScheme ),
     mnColorToken( nColorToken )
@@ -66,7 +69,7 @@ clrSchemeColorContext::~clrSchemeColorContext()
     mrClrScheme.setColor( mnColorToken, getColor( getFilter().getGraphicHelper() ) );
 }
 
-clrSchemeContext::clrSchemeContext( ContextHandler2Helper& rParent, ClrScheme& rClrScheme ) :
+clrSchemeContext::clrSchemeContext( ContextHandler2Helper const & rParent, ClrScheme& rClrScheme ) :
     ContextHandler2( rParent ),
     mrClrScheme( rClrScheme )
 {

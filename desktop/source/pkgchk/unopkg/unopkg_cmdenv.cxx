@@ -18,11 +18,12 @@
  */
 
 
-#include "../../deployment/gui/dp_gui.hrc"
-#include "../../deployment/gui/dp_gui_shared.hxx"
+#include <strings.hrc>
+#include <dp_shared.hxx>
 #include "unopkg_shared.h"
 #include <osl/thread.h>
-#include <tools/resmgr.hxx>
+#include <sal/log.hxx>
+#include <unotools/resmgr.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <comphelper/anytostring.hxx>
@@ -30,6 +31,7 @@
 #include <com/sun/star/lang/WrappedTargetException.hpp>
 #include <com/sun/star/task/XInteractionAbort.hpp>
 #include <com/sun/star/task/XInteractionApprove.hpp>
+#include <com/sun/star/deployment/DeploymentException.hpp>
 #include <com/sun/star/deployment/InstallException.hpp>
 #include <com/sun/star/container/ElementExistException.hpp>
 #include <com/sun/star/deployment/LicenseException.hpp>
@@ -39,8 +41,7 @@
 #include <com/sun/star/i18n/CollatorOptions.hpp>
 
 #include <stdio.h>
-#include "deployment.hrc"
-#include "dp_version.hxx"
+#include <dp_version.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::ucb;
@@ -63,40 +64,37 @@ class CommandEnvironmentImpl
     Reference< XComponentContext > m_xComponentContext;
     Reference< XProgressHandler > m_xLogFile;
 
-    void update_( Any const & Status ) throw (RuntimeException);
+    /// @throws RuntimeException
+    void update_( Any const & Status );
     void printLicense(const OUString & sName,const OUString& sLicense,
                       bool & accept, bool & decline);
 
 public:
-    virtual ~CommandEnvironmentImpl();
+    virtual ~CommandEnvironmentImpl() override;
     CommandEnvironmentImpl(
         Reference<XComponentContext> const & xComponentContext,
-        OUString const & log_file,
         bool option_force_overwrite,
         bool option_verbose,
         bool option_suppress_license);
 
     // XCommandEnvironment
     virtual Reference< task::XInteractionHandler > SAL_CALL
-    getInteractionHandler() throw (RuntimeException, std::exception) override;
-    virtual Reference< XProgressHandler > SAL_CALL getProgressHandler()
-        throw (RuntimeException, std::exception) override;
+    getInteractionHandler() override;
+    virtual Reference< XProgressHandler > SAL_CALL getProgressHandler() override;
 
     // XInteractionHandler
     virtual void SAL_CALL handle(
-        Reference< task::XInteractionRequest > const & xRequest )
-        throw (RuntimeException, std::exception) override;
+        Reference< task::XInteractionRequest > const & xRequest ) override;
 
     // XProgressHandler
-    virtual void SAL_CALL push( Any const & Status ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL update( Any const & Status ) throw (RuntimeException, std::exception) override;
-    virtual void SAL_CALL pop() throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL push( Any const & Status ) override;
+    virtual void SAL_CALL update( Any const & Status ) override;
+    virtual void SAL_CALL pop() override;
 };
 
 
 CommandEnvironmentImpl::CommandEnvironmentImpl(
     Reference<XComponentContext> const & xComponentContext,
-    OUString const & log_file,
     bool option_force_overwrite,
     bool option_verbose,
     bool option_suppressLicense)
@@ -106,15 +104,12 @@ CommandEnvironmentImpl::CommandEnvironmentImpl(
       m_option_suppress_license( option_suppressLicense ),
       m_xComponentContext(xComponentContext)
 {
-    if (!log_file.isEmpty()) {
-        const Any logfile(log_file);
-        m_xLogFile.set(
-            xComponentContext->getServiceManager()
-            ->createInstanceWithArgumentsAndContext(
-                "com.sun.star.comp.deployment.ProgressLog",
-                Sequence<Any>( &logfile, 1 ), xComponentContext ),
-            UNO_QUERY_THROW );
-    }
+    m_xLogFile.set(
+        xComponentContext->getServiceManager()
+        ->createInstanceWithArgumentsAndContext(
+            "com.sun.star.comp.deployment.ProgressLog",
+            Sequence<Any>(), xComponentContext ),
+        UNO_QUERY_THROW );
 }
 
 
@@ -126,9 +121,7 @@ CommandEnvironmentImpl::~CommandEnvironmentImpl()
             xComp->dispose();
     }
     catch (const RuntimeException & exc) {
-        (void) exc;
-        OSL_FAIL( OUStringToOString(
-                        exc.Message, osl_getThreadTextEncoding() ).getStr() );
+        SAL_WARN( "desktop", exc );
     }
 }
 
@@ -136,16 +129,15 @@ CommandEnvironmentImpl::~CommandEnvironmentImpl()
 void CommandEnvironmentImpl::printLicense(
     const OUString & sName, const OUString& sLicense, bool & accept, bool &decline)
 {
-    ResMgr * pResMgr = DeploymentResMgr::get();
-    OUString s1tmp(ResId(RID_STR_UNOPKG_ACCEPT_LIC_1, *pResMgr).toString());
+    OUString s1tmp(DpResId(RID_STR_UNOPKG_ACCEPT_LIC_1));
     OUString s1(s1tmp.replaceAll("$NAME", sName));
-    OUString s2 = ResId(RID_STR_UNOPKG_ACCEPT_LIC_2, *pResMgr).toString();
-    OUString s3 = ResId(RID_STR_UNOPKG_ACCEPT_LIC_3, *pResMgr).toString();
-    OUString s4 = ResId(RID_STR_UNOPKG_ACCEPT_LIC_4, *pResMgr).toString();
-    OUString sYES = ResId(RID_STR_UNOPKG_ACCEPT_LIC_YES, *pResMgr).toString();
-    OUString sY = ResId(RID_STR_UNOPKG_ACCEPT_LIC_Y, *pResMgr).toString();
-    OUString sNO = ResId(RID_STR_UNOPKG_ACCEPT_LIC_NO, *pResMgr).toString();
-    OUString sN = ResId(RID_STR_UNOPKG_ACCEPT_LIC_N, *pResMgr).toString();
+    OUString s2 = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_2);
+    OUString s3 = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_3);
+    OUString s4 = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_4);
+    OUString sYES = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_YES);
+    OUString sY = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_Y);
+    OUString sNO = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_NO);
+    OUString sN = DpResId(RID_STR_UNOPKG_ACCEPT_LIC_N);
 
     OUString sNewLine("\n");
 
@@ -158,7 +150,7 @@ void CommandEnvironmentImpl::printLicense(
     Reference< css::i18n::XCollator > xCollator =
         css::i18n::Collator::create( m_xComponentContext );
     xCollator->loadDefaultCollator(
-        LanguageTag(utl::ConfigManager::getLocale()).getLocale(),
+        LanguageTag(utl::ConfigManager::getUILocale()).getLocale(),
         css::i18n::CollatorOptions::CollatorOptions_IGNORE_CASE);
 
     do
@@ -187,14 +179,13 @@ void CommandEnvironmentImpl::printLicense(
 // XCommandEnvironment
 
 Reference< task::XInteractionHandler >
-CommandEnvironmentImpl::getInteractionHandler() throw (RuntimeException, std::exception)
+CommandEnvironmentImpl::getInteractionHandler()
 {
     return this;
 }
 
 
 Reference< XProgressHandler > CommandEnvironmentImpl::getProgressHandler()
-    throw (RuntimeException, std::exception)
 {
     return this;
 }
@@ -203,7 +194,6 @@ Reference< XProgressHandler > CommandEnvironmentImpl::getProgressHandler()
 
 void CommandEnvironmentImpl::handle(
     Reference<task::XInteractionRequest> const & xRequest )
-    throw (RuntimeException, std::exception)
 {
     Any request( xRequest->getRequest() );
     OSL_ASSERT( request.getValueTypeClass() == TypeClass_EXCEPTION );
@@ -218,10 +208,7 @@ void CommandEnvironmentImpl::handle(
     deployment::LicenseException licExc;
     deployment::InstallException instExc;
     deployment::PlatformException platExc;
-    deployment::VersionException verExc;
 
-
-    bool bLicenseException = false;
     if (request >>= wtExc) {
         // ignore intermediate errors of legacy packages, i.e.
         // former pkgchk behaviour:
@@ -259,7 +246,7 @@ void CommandEnvironmentImpl::handle(
             abort = false;
         }
     }
-       else if (request >>= instExc)
+    else if (request >>= instExc)
     {
         //Only if the unopgk was started with gui + extension then we user is asked.
         //In console mode there is no asking.
@@ -267,7 +254,7 @@ void CommandEnvironmentImpl::handle(
     }
     else if (request >>= platExc)
     {
-        OUString sMsg(ResId(RID_STR_UNSUPPORTED_PLATFORM, *dp_gui::DeploymentGuiResMgr::get()).toString());
+        OUString sMsg(DpResId(RID_STR_UNSUPPORTED_PLATFORM));
         sMsg = sMsg.replaceAll("%Name", platExc.package->getDisplayName());
         dp_misc::writeConsole("\n" + sMsg + "\n\n");
         approve = true;
@@ -284,25 +271,18 @@ void CommandEnvironmentImpl::handle(
             return; // unknown request => no selection at all
     }
 
-    //In case of a user declining a license abort is true but this is intended,
-    //therefore no logging
-    if (abort && m_option_verbose && !bLicenseException)
+    if (abort && m_option_verbose)
     {
         OUString msg = ::comphelper::anyToString(request);
         dp_misc::writeConsoleError("\nERROR: " + msg + "\n");
     }
 
     // select:
-    Sequence< Reference<task::XInteractionContinuation> > conts(
-        xRequest->getContinuations() );
-    Reference<task::XInteractionContinuation> const * pConts =
-        conts.getConstArray();
-    sal_Int32 len = conts.getLength();
-    for ( sal_Int32 pos = 0; pos < len; ++pos )
+    for ( auto const& rCont : xRequest->getContinuations() )
     {
         if (approve) {
             Reference<task::XInteractionApprove> xInteractionApprove(
-                pConts[ pos ], UNO_QUERY );
+                rCont, UNO_QUERY );
             if (xInteractionApprove.is()) {
                 xInteractionApprove->select();
                 break;
@@ -310,7 +290,7 @@ void CommandEnvironmentImpl::handle(
         }
         else if (abort) {
             Reference<task::XInteractionAbort> xInteractionAbort(
-                pConts[ pos ], UNO_QUERY );
+                rCont, UNO_QUERY );
             if (xInteractionAbort.is()) {
                 xInteractionAbort->select();
                 break;
@@ -322,7 +302,6 @@ void CommandEnvironmentImpl::handle(
 // XProgressHandler
 
 void CommandEnvironmentImpl::push( Any const & Status )
-    throw (RuntimeException, std::exception)
 {
     update_( Status );
     OSL_ASSERT( m_logLevel >= 0 );
@@ -333,7 +312,6 @@ void CommandEnvironmentImpl::push( Any const & Status )
 
 
 void CommandEnvironmentImpl::update_( Any const & Status )
-    throw (RuntimeException)
 {
     if (! Status.hasValue())
         return;
@@ -375,7 +353,6 @@ void CommandEnvironmentImpl::update_( Any const & Status )
 
 
 void CommandEnvironmentImpl::update( Any const & Status )
-    throw (RuntimeException, std::exception)
 {
     update_( Status );
     if (m_xLogFile.is())
@@ -383,7 +360,7 @@ void CommandEnvironmentImpl::update( Any const & Status )
 }
 
 
-void CommandEnvironmentImpl::pop() throw (RuntimeException, std::exception)
+void CommandEnvironmentImpl::pop()
 {
     OSL_ASSERT( m_logLevel > 0 );
     --m_logLevel;
@@ -399,13 +376,12 @@ namespace unopkg {
 
 Reference< XCommandEnvironment > createCmdEnv(
     Reference< XComponentContext > const & xContext,
-    OUString const & logFile,
     bool option_force_overwrite,
     bool option_verbose,
     bool option_suppress_license)
 {
     return new CommandEnvironmentImpl(
-        xContext, logFile, option_force_overwrite, option_verbose, option_suppress_license);
+        xContext, option_force_overwrite, option_verbose, option_suppress_license);
 }
 } // unopkg
 

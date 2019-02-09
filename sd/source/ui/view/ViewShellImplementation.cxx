@@ -19,30 +19,27 @@
 
 #include <config_features.h>
 
-#include "ViewShellImplementation.hxx"
+#include <ViewShellImplementation.hxx>
 
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "sdresid.hxx"
-#include "glob.hrc"
-#include "app.hrc"
-#include "strings.hrc"
-#include "helpids.h"
-#include "sdattr.hxx"
-#include "sdabstdlg.hxx"
-#include "unmodpg.hxx"
-#include "Window.hxx"
-#include "optsitem.hxx"
-#include "DrawDocShell.hxx"
-#include "DrawController.hxx"
-#include "FactoryIds.hxx"
-#include "slideshow.hxx"
-#include "ViewShellBase.hxx"
-#include "FrameView.hxx"
-#include "DrawViewShell.hxx"
-#include "ViewShellHint.hxx"
-#include "SidebarPanelId.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <sdresid.hxx>
+#include <unokywds.hxx>
+#include <strings.hrc>
+#include <app.hrc>
+#include <sdattr.hxx>
+#include <sdabstdlg.hxx>
+#include <unmodpg.hxx>
+#include <Window.hxx>
+#include <optsitem.hxx>
+#include <DrawDocShell.hxx>
+#include <DrawController.hxx>
+#include <FactoryIds.hxx>
+#include <slideshow.hxx>
+#include <ViewShellBase.hxx>
+#include <FrameView.hxx>
+#include <DrawViewShell.hxx>
+#include <ViewShellHint.hxx>
 
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
@@ -50,21 +47,20 @@
 #include <sfx2/sidebar/Sidebar.hxx>
 #include <svl/aeitem.hxx>
 #include <svx/imapdlg.hxx>
-#include <vcl/msgbox.hxx>
 #include <basic/sbstar.hxx>
-#include "undo/undoobjects.hxx"
+#include <xmloff/autolayout.hxx>
+
+#include <undo/undoobjects.hxx>
 
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::drawing::framework;
-using ::sd::framework::FrameworkHelper;
 
 namespace sd {
 
 ViewShell::Implementation::Implementation (ViewShell& rViewShell)
-    : mbIsShowingUIControls(false),
-      mbIsMainViewShell(false),
+    : mbIsMainViewShell(false),
       mbIsInitialized(false),
       mbArrangeActive(false),
       mpSubShellFactory(),
@@ -73,12 +69,12 @@ ViewShell::Implementation::Implementation (ViewShell& rViewShell)
 {
 }
 
-ViewShell::Implementation::~Implementation()
+ViewShell::Implementation::~Implementation() COVERITY_NOEXCEPT_FALSE
 {
     if ( ! mpUpdateLockForMouse.expired())
     {
         std::shared_ptr<ToolBarManagerLock> pLock(mpUpdateLockForMouse);
-        if (pLock.get() != nullptr)
+        if (pLock != nullptr)
         {
             // Force the ToolBarManagerLock to be released even when the
             // IsUICaptured() returns <TRUE/>.
@@ -94,9 +90,7 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
 {
     SdDrawDocument* pDocument = mrViewShell.GetDoc();
     SdrLayerAdmin& rLayerAdmin = pDocument->GetLayerAdmin();
-    sal_uInt8 aBckgrnd = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRND), false);
-    sal_uInt8 aBckgrndObj = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false);
-    SetOfByte aVisibleLayers;
+    SdrLayerIDSet aVisibleLayers;
     bool bHandoutMode = false;
     SdPage* pHandoutMPage = nullptr;
     OUString aNewName;
@@ -120,6 +114,8 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
         if (!pArgs || pArgs->Count() == 1 || pArgs->Count() == 2 )
         {
             // First make sure that the sidebar is visible
+            mrViewShell.GetDrawView()->SdrEndTextEdit();
+            mrViewShell.GetDrawView()->UnmarkAll();
             mrViewShell.GetViewFrame()->ShowChildWindow(SID_SIDEBAR);
             sfx2::sidebar::Sidebar::ShowPanel(
                 "SdLayoutsPanel",
@@ -132,12 +128,12 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
             const SfxUInt32Item* pNewAutoLayout = rRequest.GetArg<SfxUInt32Item>(ID_VAL_WHATLAYOUT);
             const SfxBoolItem* pBVisible = rRequest.GetArg<SfxBoolItem>(ID_VAL_ISPAGEBACK);
             const SfxBoolItem* pBObjsVisible = rRequest.GetArg<SfxBoolItem>(ID_VAL_ISPAGEOBJ);
-            AutoLayout aLayout ((AutoLayout)pNewAutoLayout->GetValue ());
-            if (aLayout >= AUTOLAYOUT__START
-                && aLayout < AUTOLAYOUT__END)
+            AutoLayout aLayout (static_cast<AutoLayout>(pNewAutoLayout->GetValue ()));
+            if (aLayout >= AUTOLAYOUT_START
+                && aLayout < AUTOLAYOUT_END)
             {
                 aNewName        = pNewName->GetValue ();
-                aNewAutoLayout = (AutoLayout) pNewAutoLayout->GetValue ();
+                aNewAutoLayout = static_cast<AutoLayout>(pNewAutoLayout->GetValue ());
                 bBVisible       = pBVisible->GetValue ();
                 bBObjsVisible   = pBObjsVisible->GetValue ();
             }
@@ -149,10 +145,10 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
                 rRequest.Ignore ();
                 break;
             }
-            if (ePageKind == PK_HANDOUT)
+            if (ePageKind == PageKind::Handout)
             {
                 bHandoutMode = true;
-                pHandoutMPage = pDocument->GetMasterSdPage(0, PK_HANDOUT);
+                pHandoutMPage = pDocument->GetMasterSdPage(0, PageKind::Handout);
             }
         }
         else
@@ -167,16 +163,16 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
         SdPage* pUndoPage =
             bHandoutMode ? pHandoutMPage : pCurrentPage;
 
-        ::svl::IUndoManager* pUndoManager = mrViewShell.GetDocSh()->GetUndoManager();
+        SfxUndoManager* pUndoManager = mrViewShell.GetDocSh()->GetUndoManager();
         DBG_ASSERT(pUndoManager, "No UNDO MANAGER ?!?");
 
         if( pUndoManager )
         {
             OUString aComment( SdResId(STR_UNDO_MODIFY_PAGE) );
-            pUndoManager->EnterListAction(aComment, aComment);
-            ModifyPageUndoAction* pAction = new ModifyPageUndoAction(
-                pDocument, pUndoPage, aNewName, aNewAutoLayout, bBVisible, bBObjsVisible);
-            pUndoManager->AddUndoAction(pAction);
+            pUndoManager->EnterListAction(aComment, aComment, 0, mrViewShell.GetViewShellBase().GetViewShellId());
+            pUndoManager->AddUndoAction(
+                std::make_unique<ModifyPageUndoAction>(
+                    pDocument, pUndoPage, aNewName, aNewAutoLayout, bBVisible, bBObjsVisible));
 
             // Clear the selection because the selected object may be removed as
             // a result of the assignment of the layout.
@@ -188,10 +184,10 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
                 {
                     pCurrentPage->SetName(aNewName);
 
-                    if (ePageKind == PK_STANDARD)
+                    if (ePageKind == PageKind::Standard)
                     {
                         sal_uInt16 nPage = (pCurrentPage->GetPageNum()-1) / 2;
-                        SdPage* pNotesPage = pDocument->GetSdPage(nPage, PK_NOTES);
+                        SdPage* pNotesPage = pDocument->GetSdPage(nPage, PageKind::Notes);
                         if (pNotesPage != nullptr)
                             pNotesPage->SetName(aNewName);
                     }
@@ -199,8 +195,8 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
 
                 pCurrentPage->SetAutoLayout(aNewAutoLayout, true);
 
-                aBckgrnd = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRND), false);
-                aBckgrndObj = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false);
+                SdrLayerID aBckgrnd = rLayerAdmin.GetLayerID(sUNO_LayerName_background);
+                SdrLayerID aBckgrndObj = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
                 aVisibleLayers.Set(aBckgrnd, bBVisible);
                 aVisibleLayers.Set(aBckgrndObj, bBObjsVisible);
                 pCurrentPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
@@ -220,7 +216,7 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
                 bSetModified = static_cast<const SfxBoolItem&>(pArgs->Get(SID_MODIFYPAGE)).GetValue();
             }
 
-            pUndoManager->AddUndoAction( new UndoAutoLayoutPosAndSize( *pUndoPage ) );
+            pUndoManager->AddUndoAction( std::make_unique<UndoAutoLayoutPosAndSize>( *pUndoPage ) );
             pUndoManager->LeaveListAction();
 
             pDocument->SetChanged(bSetModified);
@@ -232,7 +228,7 @@ void ViewShell::Implementation::ProcessModifyPageSlot (
     rRequest.Done ();
 }
 
-void ViewShell::Implementation::AssignLayout ( SfxRequest& rRequest, PageKind ePageKind )
+void ViewShell::Implementation::AssignLayout ( SfxRequest const & rRequest, PageKind ePageKind )
 {
     const SfxUInt32Item* pWhatPage = rRequest.GetArg<SfxUInt32Item>(ID_VAL_WHATPAGE);
     const SfxUInt32Item* pWhatLayout = rRequest.GetArg<SfxUInt32Item>(ID_VAL_WHATLAYOUT);
@@ -260,12 +256,12 @@ void ViewShell::Implementation::AssignLayout ( SfxRequest& rRequest, PageKind eP
         // Transform the given request into the four argument form that is
         // understood by ProcessModifyPageSlot().
         SdrLayerAdmin& rLayerAdmin (mrViewShell.GetViewShellBase().GetDocument()->GetLayerAdmin());
-        sal_uInt8 aBackground (rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRND), false));
-        sal_uInt8 aBackgroundObject (rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false));
+        SdrLayerID aBackground (rLayerAdmin.GetLayerID(sUNO_LayerName_background));
+        SdrLayerID aBackgroundObject (rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects));
 
-        SetOfByte aVisibleLayers;
+        SdrLayerIDSet aVisibleLayers;
 
-        if( pPage->GetPageKind() == PK_HANDOUT )
+        if( pPage->GetPageKind() == PageKind::Handout )
             aVisibleLayers.SetAll();
         else
             aVisibleLayers = pPage->TRG_GetMasterPageVisibleLayers();
@@ -281,7 +277,7 @@ void ViewShell::Implementation::AssignLayout ( SfxRequest& rRequest, PageKind eP
     }
 }
 
-sal_uInt16 ViewShell::Implementation::GetViewId()
+SfxInterfaceId ViewShell::Implementation::GetViewId()
 {
     switch (mrViewShell.GetShellType())
     {
@@ -346,12 +342,12 @@ ViewShell::Implementation::ToolBarManagerLock::ToolBarManagerLock (
 {
     // Start a timer that will unlock the ToolBarManager update lock when
     // that is not done explicitly by calling Release().
-    maTimer.SetTimeoutHdl(LINK(this,ToolBarManagerLock,TimeoutCallback));
+    maTimer.SetInvokeHandler(LINK(this,ToolBarManagerLock,TimeoutCallback));
     maTimer.SetTimeout(100);
     maTimer.Start();
 }
 
-IMPL_LINK_NOARG_TYPED(ViewShell::Implementation::ToolBarManagerLock, TimeoutCallback, Timer *, void)
+IMPL_LINK_NOARG(ViewShell::Implementation::ToolBarManagerLock, TimeoutCallback, Timer *, void)
 {
     // If possible then release the lock now.  Otherwise start the timer
     // and try again later.

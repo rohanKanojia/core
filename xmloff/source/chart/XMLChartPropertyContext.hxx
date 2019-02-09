@@ -31,10 +31,10 @@ public:
                              sal_uInt32 nFamily,
                              ::std::vector< XMLPropertyState >& rProps,
                              const rtl::Reference< SvXMLImportPropertyMapper >& rMapper );
-    virtual ~XMLChartPropertyContext();
+    virtual ~XMLChartPropertyContext() override;
 
     using SvXMLPropertySetContext::CreateChildContext;
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,

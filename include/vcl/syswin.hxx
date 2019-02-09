@@ -20,17 +20,17 @@
 #ifndef INCLUDED_VCL_SYSWIN_HXX
 #define INCLUDED_VCL_SYSWIN_HXX
 
-#include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/builder.hxx>
 #include <vcl/idle.hxx>
-#include <vcl/notebookbar.hxx>
+#include <vcl/vclenum.hxx>
 #include <vcl/window.hxx>
+#include <o3tl/typed_flags_set.hxx>
+#include <memory>
 
-class ModalDialog;
 class MenuBar;
+class NotebookBar;
 class TaskPaneList;
-class VclContainer;
 
 #define ICON_LO_DEFAULT                 1
 #define ICON_TEXT_DOCUMENT              2
@@ -42,32 +42,26 @@ class VclContainer;
 #define ICON_MATH_DOCUMENT              13
 #define ICON_MACROLIBRARY               1
 
-
-#define WINDOWSTATE_MASK_X                  ((sal_uInt32)0x00000001)
-#define WINDOWSTATE_MASK_Y                  ((sal_uInt32)0x00000002)
-#define WINDOWSTATE_MASK_WIDTH              ((sal_uInt32)0x00000004)
-#define WINDOWSTATE_MASK_HEIGHT             ((sal_uInt32)0x00000008)
-#define WINDOWSTATE_MASK_STATE              ((sal_uInt32)0x00000010)
-#define WINDOWSTATE_MASK_MINIMIZED          ((sal_uInt32)0x00000020)
-#define WINDOWSTATE_MASK_MAXIMIZED_X        ((sal_uInt32)0x00000100)
-#define WINDOWSTATE_MASK_MAXIMIZED_Y        ((sal_uInt32)0x00000200)
-#define WINDOWSTATE_MASK_MAXIMIZED_WIDTH    ((sal_uInt32)0x00000400)
-#define WINDOWSTATE_MASK_MAXIMIZED_HEIGHT   ((sal_uInt32)0x00000800)
-#define WINDOWSTATE_MASK_POS  (WINDOWSTATE_MASK_X | WINDOWSTATE_MASK_Y)
-#define WINDOWSTATE_MASK_ALL  (WINDOWSTATE_MASK_X | WINDOWSTATE_MASK_Y | WINDOWSTATE_MASK_WIDTH | WINDOWSTATE_MASK_HEIGHT | WINDOWSTATE_MASK_MAXIMIZED_X | WINDOWSTATE_MASK_MAXIMIZED_Y | WINDOWSTATE_MASK_MAXIMIZED_WIDTH | WINDOWSTATE_MASK_MAXIMIZED_HEIGHT | WINDOWSTATE_MASK_STATE | WINDOWSTATE_MASK_MINIMIZED)
-
-#define WINDOWSTATE_STATE_NORMAL         ((sal_uInt32)0x00000001)
-#define WINDOWSTATE_STATE_MINIMIZED      ((sal_uInt32)0x00000002)
-#define WINDOWSTATE_STATE_MAXIMIZED      ((sal_uInt32)0x00000004)
-#define WINDOWSTATE_STATE_ROLLUP         ((sal_uInt32)0x00000008)
-#define WINDOWSTATE_STATE_MAXIMIZED_HORZ ((sal_uInt32)0x00000010)
-#define WINDOWSTATE_STATE_MAXIMIZED_VERT ((sal_uInt32)0x00000020)
-#define WINDOWSTATE_STATE_SYSTEMMASK     ((sal_uInt32)0x0000FFFF)
+enum class WindowStateState {
+    NONE           = 0x0000,
+    Normal         = 0x0001,
+    Minimized      = 0x0002,
+    Maximized      = 0x0004,
+    Rollup         = 0x0008,
+    MaximizedHorz  = 0x0010,
+    MaximizedVert  = 0x0020,
+    FullScreen     = 0x0040,
+    SystemMask     = 0xffff
+};
+namespace o3tl
+{
+    template<> struct typed_flags<WindowStateState> : is_typed_flags<WindowStateState, 0xffff> {};
+}
 
 class VCL_PLUGIN_PUBLIC WindowStateData
 {
 private:
-    sal_uInt32          mnValidMask;
+    WindowStateMask     mnValidMask;
     int                 mnX;
     int                 mnY;
     unsigned int        mnWidth;
@@ -76,11 +70,11 @@ private:
     int                 mnMaximizedY;
     unsigned int        mnMaximizedWidth;
     unsigned int        mnMaximizedHeight;
-    sal_uInt32          mnState;
+    WindowStateState    mnState;
 
 public:
     WindowStateData()
-        : mnValidMask(0)
+        : mnValidMask(WindowStateMask::NONE)
         , mnX(0)
         , mnY(0)
         , mnWidth(0)
@@ -89,12 +83,12 @@ public:
         , mnMaximizedY(0)
         , mnMaximizedWidth(0)
         , mnMaximizedHeight(0)
-        , mnState(0)
+        , mnState(WindowStateState::NONE)
     {
     }
 
-    void        SetMask( sal_uInt32 nValidMask ) { mnValidMask = nValidMask; }
-    sal_uInt32  GetMask() const { return mnValidMask; }
+    void        SetMask( WindowStateMask nValidMask ) { mnValidMask = nValidMask; }
+    WindowStateMask GetMask() const { return mnValidMask; }
 
     void         SetX( int nX ) { mnX = nX; }
     int          GetX() const { return mnX; }
@@ -104,8 +98,8 @@ public:
     unsigned int GetWidth() const { return mnWidth; }
     void         SetHeight( unsigned int nHeight ) { mnHeight = nHeight; }
     unsigned int GetHeight() const { return mnHeight; }
-    void         SetState( sal_uInt32 nState ) { mnState = nState; }
-    sal_uInt32   GetState() const { return mnState; }
+    void         SetState( WindowStateState nState ) { mnState = nState; }
+    WindowStateState GetState() const { return mnState; }
     void         SetMaximizedX( int nRX ) { mnMaximizedX = nRX; }
     int          GetMaximizedX() const { return mnMaximizedX; }
     void         SetMaximizedY( int nRY ) { mnMaximizedY = nRY; }
@@ -137,36 +131,32 @@ class VCL_DLLPUBLIC SystemWindow
     class ImplData;
 
 private:
-    MenuBar*        mpMenuBar;
+    VclPtr<MenuBar> mpMenuBar;
     Size            maOrgSize;
     Size            maRollUpOutSize;
     Size            maMinOutSize;
-    bool            mbPinned;
     bool            mbRollUp;
-    bool            mbRollFunc;
     bool            mbDockBtn;
     bool            mbHideBtn;
     bool            mbSysChild;
     bool            mbIsCalculatingInitialLayoutSize;
-    bool            mbInitialLayoutDone;
     MenuBarMode     mnMenuBarMode;
     sal_uInt16      mnIcon;
-    ImplData*       mpImplData;
+    std::unique_ptr<ImplData> mpImplData;
     Idle            maLayoutIdle;
     OUString        maNotebookBarUIFile;
 protected:
-    bool            mbIsDefferedInit;
+    bool            mbIsDeferredInit;
     VclPtr<vcl::Window> mpDialogParent;
 public:
     using Window::ImplIsInTaskPaneList;
     SAL_DLLPRIVATE bool ImplIsInTaskPaneList( vcl::Window* pWin );
-    SAL_DLLPRIVATE bool isDeferredInit() const { return mbIsDefferedInit; }
+    SAL_DLLPRIVATE bool isDeferredInit() const { return mbIsDeferredInit; }
 
 private:
-    SAL_DLLPRIVATE void Init();
-    SAL_DLLPRIVATE void ImplMoveToScreen( long& io_rX, long& io_rY, long i_nWidth, long i_nHeight, vcl::Window* i_pConfigureWin );
-    virtual void setPosSizeOnContainee(Size aSize, Window &rBox);
-    DECL_DLLPRIVATE_LINK_TYPED( ImplHandleLayoutTimerHdl, Idle*, void );
+    SAL_DLLPRIVATE void ImplMoveToScreen( long& io_rX, long& io_rY, long i_nWidth, long i_nHeight, vcl::Window const * i_pConfigureWin );
+    SAL_DLLPRIVATE void setPosSizeOnContainee(Size aSize, Window &rBox);
+    DECL_DLLPRIVATE_LINK( ImplHandleLayoutTimerHdl, Timer*, void );
 
 protected:
     // Single argument ctors shall be explicit.
@@ -178,17 +168,17 @@ protected:
     virtual void settingOptimalLayoutSize(Window *pBox);
 
     SAL_DLLPRIVATE void DoInitialLayout();
+
+    SAL_DLLPRIVATE void SetIdleDebugName( const sal_Char *pDebugName );
 public:
-    virtual         ~SystemWindow();
+    virtual         ~SystemWindow() override;
     virtual void    dispose() override;
 
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
     virtual bool    PreNotify( NotifyEvent& rNEvt ) override;
 
     virtual bool    Close();
     virtual void    TitleButtonClick( TitleButton nButton );
-    virtual void    Pin();
-    virtual void    Roll();
     virtual void    Resizing( Size& rSize );
     virtual void    Resize() override;
     virtual Size    GetOptimalSize() const override;
@@ -203,18 +193,15 @@ public:
     // separately from the window title
     void            SetRepresentedURL( const OUString& );
 
-    void            ShowTitleButton( TitleButton nButton, bool bVisible = true );
+    void            ShowTitleButton( TitleButton nButton, bool bVisible );
     bool            IsTitleButtonVisible( TitleButton nButton ) const;
-
-    void            SetPin( bool bPin );
-    bool            IsPinned() const { return mbPinned; }
 
     void            RollUp();
     void            RollDown();
     bool            IsRollUp() const { return mbRollUp; }
 
     void            SetRollUpOutputSizePixel( const Size& rSize ) { maRollUpOutSize = rSize; }
-    Size            GetRollUpOutputSizePixel() const { return maRollUpOutSize; }
+    const Size&     GetRollUpOutputSizePixel() const { return maRollUpOutSize; }
 
     void            SetMinOutputSizePixel( const Size& rSize );
     const Size&     GetMinOutputSizePixel() const { return maMinOutSize; }
@@ -222,14 +209,15 @@ public:
     const Size&     GetMaxOutputSizePixel() const;
 
     void            SetWindowState(const OString& rStr);
-    OString         GetWindowState(sal_uInt32 nMask = WINDOWSTATE_MASK_ALL) const;
+    OString         GetWindowState(WindowStateMask nMask = WindowStateMask::All) const;
 
     void            SetMenuBar(MenuBar* pMenuBar);
     MenuBar*        GetMenuBar() const { return mpMenuBar; }
     void            SetMenuBarMode( MenuBarMode nMode );
 
     void            SetNotebookBar(const OUString& rUIXMLDescription, const css::uno::Reference<css::frame::XFrame>& rFrame);
-    VclPtr<NotebookBar> GetNotebookBar() const;
+    void            CloseNotebookBar();
+    VclPtr<NotebookBar> const & GetNotebookBar() const;
 
     TaskPaneList*   GetTaskPaneList();
     void            GetWindowStateData( WindowStateData& rData ) const;
@@ -278,6 +266,11 @@ public:
 
     virtual        void    doDeferredInit(WinBits nBits);
 };
+
+inline void SystemWindow::SetIdleDebugName( const sal_Char *pDebugName )
+{
+    maLayoutIdle.SetDebugName( pDebugName );
+}
 
 #endif // INCLUDED_VCL_SYSWIN_HXX
 

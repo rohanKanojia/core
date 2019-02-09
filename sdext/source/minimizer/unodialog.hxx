@@ -26,7 +26,6 @@
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/script/XInvocation.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/awt/XControl.hpp>
@@ -54,14 +53,14 @@ class UnoDialog
 {
 public:
 
-    UnoDialog( const css::uno::Reference< css::uno::XComponentContext >& rxMSF, css::uno::Reference< css::frame::XFrame >& rxFrame );
+    UnoDialog( const css::uno::Reference< css::uno::XComponentContext >& rxMSF, css::uno::Reference< css::frame::XFrame > const & rxFrame );
     ~UnoDialog();
 
     void execute();
     void endExecute( bool bStatus );
 
-    css::uno::Reference< css::awt::XWindowPeer > createWindowPeer( css::uno::Reference< css::awt::XWindowPeer > xParentPeer )
-        throw ( css::uno::Exception );
+    /// @throws css::uno::Exception
+    css::uno::Reference< css::awt::XWindowPeer > createWindowPeer( css::uno::Reference< css::awt::XWindowPeer > const & xParentPeer );
 
     css::uno::Reference< css::uno::XInterface > insertControlModel( const OUString& rServiceName, const OUString& rName,
         const css::uno::Sequence< OUString >& rPropertyNames, const css::uno::Sequence< css::uno::Any >& rPropertyValues );
@@ -69,7 +68,7 @@ public:
     void setVisible( const OUString& rName, bool bVisible );
 
     css::uno::Reference< css::awt::XButton > insertButton( const OUString& rName,
-        css::uno::Reference< css::awt::XActionListener > xActionListener, const css::uno::Sequence< OUString >& rPropertyNames,
+        const css::uno::Reference< css::awt::XActionListener >& xActionListener, const css::uno::Sequence< OUString >& rPropertyNames,
             const css::uno::Sequence< css::uno::Any >& rPropertyValues );
 
     css::uno::Reference< css::awt::XFixedText > insertFixedText( const OUString& rName,

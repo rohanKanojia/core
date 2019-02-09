@@ -11,8 +11,9 @@
 #include "optHeaderTabListbox.hxx"
 
 #include <vcl/builderfactory.hxx>
-#include <svtools/svlbitm.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
+#include <vcl/fixed.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
@@ -25,12 +26,12 @@
 #include <com/sun/star/container/XHierarchicalName.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
-#include <com/sun/star/i18n/TransliterationModules.hpp>
 #include <com/sun/star/util/SearchFlags.hpp>
 #include <com/sun/star/util/SearchAlgorithms2.hpp>
 #include <unotools/textsearch.hxx>
-#include <o3tl/make_unique.hxx>
+#include <sal/log.hxx>
 
+#include <memory>
 #include <vector>
 #include <iostream>
 
@@ -69,7 +70,7 @@ struct UserData
         , aLineage(0)
     {}
 
-    explicit UserData( Reference<XNameAccess> const & rXNameAccess, int rIndex = 0 )
+    explicit UserData( Reference<XNameAccess> const & rXNameAccess, int rIndex )
         : bIsPropertyPath( false )
         , aLineage(rIndex)
         , aXNameAccess( rXNameAccess )
@@ -137,11 +138,11 @@ void CuiCustomMultilineEdit::KeyInput( const KeyEvent& rKeyEvent )
 
 Size CuiCustomMultilineEdit::GetOptimalSize() const
 {
-    return LogicToPixel(Size(150, GetTextHeight()), MAP_APPFONT);
+    return LogicToPixel(Size(150, GetTextHeight()), MapMode(MapUnit::MapAppFont));
 }
 
 CuiAboutConfigTabPage::CuiAboutConfigTabPage( vcl::Window* pParent/*, const SfxItemSet& rItemSet*/ ) :
-    ModelessDialog( pParent, "AboutConfig", "cui/ui/aboutconfigdialog.ui"),
+    ModalDialog( pParent, "AboutConfig", "cui/ui/aboutconfigdialog.ui"),
     m_pPrefCtrl( get<SvSimpleTableContainer>("preferences") ),
     m_pResetBtn( get<PushButton>("reset") ),
     m_pEditBtn( get<PushButton>("edit") ),
@@ -150,7 +151,7 @@ CuiAboutConfigTabPage::CuiAboutConfigTabPage( vcl::Window* pParent/*, const SfxI
     m_vectorOfModified(),
     m_pPrefBox( VclPtr<SvSimpleTable>::Create(*m_pPrefCtrl, WB_SCROLL | WB_HSCROLL | WB_VSCROLL ) )
 {
-    Size aControlSize(LogicToPixel(Size(385, 230), MAP_APPFONT));
+    Size aControlSize(LogicToPixel(Size(385, 230), MapMode(MapUnit::MapAppFont)));
     m_pPrefCtrl->set_width_request(aControlSize.Width());
     m_pPrefCtrl->set_height_request(aControlSize.Height());
 
@@ -165,21 +166,19 @@ CuiAboutConfigTabPage::CuiAboutConfigTabPage( vcl::Window* pParent/*, const SfxI
     m_pPrefBox->InsertHeaderEntry(get<FixedText>("type")->GetText());
     m_pPrefBox->InsertHeaderEntry(get<FixedText>("value")->GetText());
 
-    long aTabs[] = {4,0,0,0,0};
-
     float fWidth = approximate_char_width();
 
-    aTabs[1] = 0;
-    aTabs[2] = aTabs[1] + fWidth * 65;
-    aTabs[3] = aTabs[2] + fWidth * 20;
-    aTabs[4] = aTabs[3] + fWidth * 8;
+    long aTabs[] = {0,0,0,0};
+    aTabs[1] = fWidth * 65;
+    aTabs[2] = aTabs[1] + fWidth * 20;
+    aTabs[3] = aTabs[2] + fWidth * 8;
 
     m_options.AlgorithmType2 = util::SearchAlgorithms2::ABSOLUTE;
-    m_options.transliterateFlags |= i18n::TransliterationModules_IGNORE_CASE;
+    m_options.transliterateFlags |= TransliterationFlags::IGNORE_CASE;
     m_options.searchFlag |= (util::SearchFlags::REG_NOT_BEGINOFLINE |
                                         util::SearchFlags::REG_NOT_ENDOFLINE);
 
-    m_pPrefBox->SetTabs(aTabs, MAP_PIXEL);
+    m_pPrefBox->SetTabs(SAL_N_ELEMENTS(aTabs), aTabs, MapUnit::MapPixel);
     m_pPrefBox->SetAlternatingRowColors( true );
 }
 
@@ -196,7 +195,7 @@ void CuiAboutConfigTabPage::dispose()
     m_pEditBtn.clear();
     m_pSearchBtn.clear();
     m_pSearchEdit.clear();
-    ModelessDialog::dispose();
+    ModalDialog::dispose();
 }
 
 void CuiAboutConfigTabPage::InsertEntry(const OUString& rPropertyPath, const OUString& rProp, const OUString& rStatus,
@@ -204,13 +203,14 @@ void CuiAboutConfigTabPage::InsertEntry(const OUString& rPropertyPath, const OUS
                                         bool bInsertToPrefBox)
 {
     SvTreeListEntry* pEntry = new SvTreeListEntry;
-    pEntry->AddItem(std::unique_ptr<SvLBoxContextBmp>(
-        new SvLBoxContextBmp( Image(), Image(), false))); //It is needed, otherwise causes crash
-    pEntry->AddItem(std::unique_ptr<SvLBoxString>(new SvLBoxString(rProp)));
-    pEntry->AddItem(std::unique_ptr<SvLBoxString>(new SvLBoxString(rStatus)));
-    pEntry->AddItem(std::unique_ptr<SvLBoxString>(new SvLBoxString(rType)));
-    pEntry->AddItem(std::unique_ptr<SvLBoxString>(new SvLBoxString(rValue)));
-    pEntry->SetUserData( new UserData(rPropertyPath) );
+    pEntry->AddItem(std::make_unique<SvLBoxContextBmp>(
+        Image(), Image(), false)); //It is needed, otherwise causes crash
+    pEntry->AddItem(std::make_unique<SvLBoxString>(rProp));
+    pEntry->AddItem(std::make_unique<SvLBoxString>(rStatus));
+    pEntry->AddItem(std::make_unique<SvLBoxString>(rType));
+    pEntry->AddItem(std::make_unique<SvLBoxString>(rValue));
+    m_vectorUserData.push_back(std::make_unique<UserData>(rPropertyPath));
+    pEntry->SetUserData(m_vectorUserData.back().get());
 
     if(bInsertToPrefBox)
         m_pPrefBox->Insert( pEntry, pParentEntry );
@@ -229,7 +229,7 @@ void CuiAboutConfigTabPage::Reset()
 
     m_pPrefBox->SetUpdateMode(false);
     Reference< XNameAccess > xConfigAccess = getConfigAccess( "/", false );
-    //Load all XNameAcces to m_prefBoxEntries
+    //Load all XNameAccess to m_prefBoxEntries
     FillItems( xConfigAccess, nullptr, 0, true );
     //Load xConfigAccess' children to m_prefBox
     FillItems( xConfigAccess );
@@ -271,7 +271,7 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
         }
         catch (const RuntimeException& e)
         {
-            SAL_WARN( "cui.options", "CuiAboutConfigTabPage: exception " << e.Message);
+            SAL_WARN( "cui.options", "CuiAboutConfigTabPage: " << e);
         }
 
         if (bNotLeaf)
@@ -282,16 +282,17 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
             {
                 // not leaf node
                 SvTreeListEntry* pEntry = new SvTreeListEntry;
-                pEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(
+                pEntry->AddItem(std::make_unique<SvLBoxContextBmp>(
                     SvTreeListBox::GetDefaultExpandedNodeImage(),
                     SvTreeListBox::GetDefaultCollapsedNodeImage(), false));
-                pEntry->AddItem(o3tl::make_unique<SvLBoxString>(seqItems[i]));
+                pEntry->AddItem(std::make_unique<SvLBoxString>(seqItems[i]));
                 //It is needed, without this the selection line will be truncated.
-                pEntry->AddItem(o3tl::make_unique<SvLBoxString>(""));
-                pEntry->AddItem(o3tl::make_unique<SvLBoxString>(""));
-                pEntry->AddItem(o3tl::make_unique<SvLBoxString>(""));
+                pEntry->AddItem(std::make_unique<SvLBoxString>(""));
+                pEntry->AddItem(std::make_unique<SvLBoxString>(""));
+                pEntry->AddItem(std::make_unique<SvLBoxString>(""));
 
-                pEntry->SetUserData( new UserData(xNextNameAccess, lineage + 1) );
+                m_vectorUserData.push_back(std::make_unique<UserData>(xNextNameAccess, lineage + 1));
+                pEntry->SetUserData(m_vectorUserData.back().get());
                 pEntry->EnableChildrenOnDemand();
                 m_pPrefBox->Insert( pEntry, pParentEntry );
             }
@@ -303,13 +304,13 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
             SvTreeListEntries::iterator it = std::find_if(m_modifiedPrefBoxEntries.begin(), m_modifiedPrefBoxEntries.end(),
               [&sPath, &sPropertyName](std::unique_ptr<SvTreeListEntry> const& pEntry) -> bool
               {
-                  return static_cast<UserData*>(pEntry->GetUserData())->sPropertyPath.equals(sPath)
-                      && static_cast<SvLBoxString&>(pEntry->GetItem(2)).GetText().equals(sPropertyName);
+                  return static_cast<UserData*>(pEntry->GetUserData())->sPropertyPath == sPath
+                      && static_cast<SvLBoxString&>(pEntry->GetItem(2)).GetText() == sPropertyName;
               }
             );
 
             OUString sType = aNode.getValueTypeName();
-            OUString sValue;
+            OUStringBuffer sValue;
 
             if (it != m_modifiedPrefBoxEntries.end())
                 sValue = static_cast< SvLBoxString& >( (*it)->GetItem(4) ).GetText();
@@ -346,9 +347,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
-                            sValue += OUString::boolean( seq[j] );
+                            sValue.append(OUString::boolean( seq[j] ));
                         }
                     }
                     else if( sType == "[]byte" )
@@ -360,9 +361,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                                 static_cast<sal_uInt8>(seq[j]), 16 );
                             if( s.getLength() == 1 )
                             {
-                                sValue += "0";
+                                sValue.append("0");
                             }
-                            sValue += s.toAsciiUpperCase();
+                            sValue.append(s.toAsciiUpperCase());
                         }
                     }
                     else if( sType == "[][]byte" )
@@ -372,7 +373,7 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
                             for( sal_Int32 k = 0; k != seq[j].getLength(); ++k )
                             {
@@ -380,9 +381,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                                     static_cast<sal_uInt8>(seq[j][k]), 16 );
                                 if( s.getLength() == 1 )
                                 {
-                                    sValue += "0";
+                                    sValue.append("0");
                                 }
-                                sValue += s.toAsciiUpperCase();
+                                sValue.append(s.toAsciiUpperCase());
                             }
                         }
                     }
@@ -393,9 +394,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
-                            sValue += OUString::number( seq[j] );
+                            sValue.append(OUString::number( seq[j] ));
                         }
                     }
                     else if( sType == "[]long" )
@@ -405,9 +406,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
-                            sValue += OUString::number( seq[j] );
+                            sValue.append(OUString::number( seq[j] ));
                         }
                     }
                     else if( sType == "[]hyper" )
@@ -417,9 +418,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
-                            sValue += OUString::number( seq[j] );
+                            sValue.append(OUString::number( seq[j] ));
                         }
                     }
                     else if( sType == "[]double" )
@@ -429,9 +430,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
-                            sValue += OUString::number( seq[j] );
+                            sValue.append(OUString::number( seq[j] ));
                         }
                     }
                     else if( sType == "[]string" )
@@ -441,9 +442,9 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
                         {
                             if( j != 0 )
                             {
-                                sValue += ",";
+                                sValue.append(",");
                             }
-                            sValue += seq[j];
+                            sValue.append(seq[j]);
                         }
                     }
                     else
@@ -469,7 +470,7 @@ void CuiAboutConfigTabPage::FillItems(const Reference< XNameAccess >& xNameAcces
             for(int j = 1; j < lineage; ++j)
                 index = sPath.indexOf("/", index + 1);
 
-            InsertEntry(sPath, sPath.copy(index+1), seqItems[i], sType, sValue, pParentEntry, !bLoadAll);
+            InsertEntry(sPath, sPath.copy(index+1), seqItems[i], sType, sValue.makeStringAndClear(), pParentEntry, !bLoadAll);
         }
     }
 }
@@ -483,10 +484,10 @@ Reference< XNameAccess > CuiAboutConfigTabPage::getConfigAccess( const OUString&
 
     beans::NamedValue aProperty;
     aProperty.Name = "nodepath";
-    aProperty.Value = uno::makeAny( sNodePath );
+    aProperty.Value <<= sNodePath;
 
     uno::Sequence< uno::Any > aArgumentList( 1 );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aArgumentList[0] <<= aProperty;
 
     OUString sAccessString;
 
@@ -507,13 +508,13 @@ void CuiAboutConfigTabPage::AddToModifiedVector( const std::shared_ptr< Prop_Imp
 {
     bool isModifiedBefore = false;
     //Check if value modified before
-    for( size_t nInd = 0; nInd < m_vectorOfModified.size() ; ++nInd )
+    for(std::shared_ptr<Prop_Impl> & nInd : m_vectorOfModified)
     {
-        if( rProp->Name == m_vectorOfModified[nInd]->Name && rProp->Property == m_vectorOfModified[nInd]->Property )
+        if( rProp->Name == nInd->Name && rProp->Property == nInd->Property )
         {
             //property modified before. Assign reference to the modified value
             //do your changes on this object. They will be saved later.
-            m_vectorOfModified[nInd] = rProp;
+            nInd = rProp;
             isModifiedBefore = true;
             break;
         }
@@ -531,7 +532,7 @@ std::vector< OUString > CuiAboutConfigTabPage::commaStringToSequence( const OUSt
     sal_Int32 index = 0;
     do
     {
-        OUString word = rCommaSepString.getToken(0, static_cast<sal_Unicode> (','), index);
+        OUString word = rCommaSepString.getToken(0, u',', index);
         word = word.trim();
         if( !word.isEmpty())
             tempVector.push_back(word);
@@ -562,18 +563,18 @@ void CuiAboutConfigValueDialog::dispose()
     ModalDialog::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, ResetBtnHdl_Impl, Button*, void )
+IMPL_LINK_NOARG( CuiAboutConfigTabPage, ResetBtnHdl_Impl, Button*, void )
 {
     Reset();
 }
 
-IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, DoubleClickHdl_Impl, SvTreeListBox*, bool )
+IMPL_LINK_NOARG( CuiAboutConfigTabPage, DoubleClickHdl_Impl, SvTreeListBox*, bool )
 {
     StandardHdl_Impl(nullptr);
-    return false;
+    return true;
 }
 
-IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
+IMPL_LINK_NOARG( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
 {
     SvTreeListEntry* pEntry = m_pPrefBox->GetHdlEntry();
     if(pEntry == nullptr)
@@ -587,7 +588,7 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
         OUString sPropertyType = SvTabListBox::GetEntryText( pEntry, 2 );
         OUString sPropertyValue = SvTabListBox::GetEntryText( pEntry, 3 );
 
-        std::shared_ptr< Prop_Impl > pProperty (new Prop_Impl( pUserData->sPropertyPath, sPropertyName, makeAny( sPropertyValue ) ) );
+        std::shared_ptr< Prop_Impl > pProperty (new Prop_Impl( pUserData->sPropertyPath, sPropertyName, Any( sPropertyValue ) ) );
         bool bSaveChanges = false;
 
         bool bOpenDialog = true;
@@ -608,7 +609,7 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                 bValue = true;
             }
 
-            pProperty->Value = uno::makeAny( bValue );
+            pProperty->Value <<= bValue;
             bOpenDialog = false;
             bSaveChanges = true;
         }
@@ -647,47 +648,42 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                         sal_Int32 nNumb = sNewValue.toInt32();
 
                         //if the value is 0 and length is not 1, there is something wrong
-                        if( !( nNumb==0 && sNewValue.getLength()!=1 ) && nNumb < SAL_MAX_INT16 && nNumb > SAL_MIN_INT16)
-                            nShort = (sal_Int16) nNumb;
-                        else
-                            throw uno::Exception();
-                        pProperty->Value = uno::makeAny( nShort );
+                        if( ( nNumb==0 && sNewValue.getLength()!=1 ) || nNumb >= SAL_MAX_INT16 || nNumb <= SAL_MIN_INT16)
+                            throw uno::Exception("out of range short", nullptr);
+                        nShort = static_cast<sal_Int16>(nNumb);
+                        pProperty->Value <<= nShort;
                     }
                     else if( sPropertyType == "long" )
                     {
                         sal_Int32 nLong = sNewValue.toInt32();
-                        if( !( nLong==0 && sNewValue.getLength()!=1 ) && nLong < SAL_MAX_INT32 && nLong > SAL_MIN_INT32)
-                            pProperty->Value = uno::makeAny( nLong );
-                        else
-                            throw uno::Exception();
+                        if( ( nLong==0 && sNewValue.getLength()!=1 ) || nLong >= SAL_MAX_INT32 || nLong <= SAL_MIN_INT32)
+                            throw uno::Exception("out of range long", nullptr);
+                        pProperty->Value <<= nLong;
                     }
                     else if( sPropertyType == "hyper")
                     {
                         sal_Int64 nHyper = sNewValue.toInt64();
-                        if( !( nHyper==0 && sNewValue.getLength()!=1 ) && nHyper < SAL_MAX_INT32 && nHyper > SAL_MIN_INT32)
-                            pProperty->Value = uno::makeAny( nHyper );
-                        else
-                            throw uno::Exception();
+                        if( ( nHyper==0 && sNewValue.getLength()!=1 ) || nHyper >= SAL_MAX_INT32 || nHyper <= SAL_MIN_INT32)
+                            throw uno::Exception("out of range hyper", nullptr);
+                        pProperty->Value <<= nHyper;
                     }
                     else if( sPropertyType == "double")
                     {
                         double nDoub = sNewValue.toDouble();
-                        if( !( nDoub ==0 && sNewValue.getLength()!=1 ) && nDoub < SAL_MAX_INT32 && nDoub > SAL_MIN_INT32)
-                            pProperty->Value = uno::makeAny( nDoub );
-                        else
-                            throw uno::Exception();
+                        if( ( nDoub ==0 && sNewValue.getLength()!=1 ) || nDoub >= SAL_MAX_INT32 || nDoub <= SAL_MIN_INT32)
+                            throw uno::Exception("out of range double", nullptr);
+                        pProperty->Value <<= nDoub;
                     }
                     else if( sPropertyType == "float")
                     {
                         float nFloat = sNewValue.toFloat();
-                        if( !( nFloat ==0 && sNewValue.getLength()!=1 ) && nFloat < SAL_MAX_INT32 && nFloat > SAL_MIN_INT32)
-                            pProperty->Value = uno::makeAny( nFloat );
-                        else
-                            throw uno::Exception();
+                        if( ( nFloat ==0 && sNewValue.getLength()!=1 ) || nFloat >= SAL_MAX_INT32 || nFloat <= SAL_MIN_INT32)
+                            throw uno::Exception("out of range float", nullptr);
+                        pProperty->Value <<= nFloat;
                     }
                     else if( sPropertyType == "string" )
                     {
-                        pProperty->Value = uno::makeAny( sNewValue );
+                        pProperty->Value <<= sNewValue;
                     }
                     else if( sPropertyType == "[]short" )
                     {
@@ -701,9 +697,9 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                         //convert all strings to appropriate type
                         for( size_t i = 0; i < seqStr.size(); ++i )
                         {
-                            seqShort[i] = (sal_Int16) seqStr[i].toInt32();
+                            seqShort[i] = static_cast<sal_Int16>(seqStr[i].toInt32());
                         }
-                        pProperty->Value = uno::makeAny( seqShort );
+                        pProperty->Value <<= seqShort;
                     }
                     else if( sPropertyType == "[]long" )
                     {
@@ -715,7 +711,7 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                         {
                             seqLong[i] = seqStrLong[i].toInt32();
                         }
-                        pProperty->Value = uno::makeAny( seqLong );
+                        pProperty->Value <<= seqLong;
                     }
                     else if( sPropertyType == "[]hyper" )
                     {
@@ -726,7 +722,7 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                         {
                             seqHyper[i] = seqStrHyper[i].toInt64();
                         }
-                        pProperty->Value = uno::makeAny( seqHyper );
+                        pProperty->Value <<= seqHyper;
                     }
                     else if( sPropertyType == "[]double" )
                     {
@@ -737,7 +733,7 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                         {
                             seqDoub[i] = seqStrDoub[i].toDouble();
                         }
-                        pProperty->Value = uno::makeAny( seqDoub );
+                        pProperty->Value <<= seqDoub;
                     }
                     else if( sPropertyType == "[]float" )
                     {
@@ -748,14 +744,14 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                         {
                             seqFloat[i] = seqStrFloat[i].toFloat();
                         }
-                        pProperty->Value = uno::makeAny( seqFloat );
+                        pProperty->Value <<= seqFloat;
                     }
                     else if( sPropertyType == "[]string" )
                     {
-                        pProperty->Value = uno::makeAny( comphelper::containerToSequence( commaStringToSequence( sNewValue )));
+                        pProperty->Value <<= comphelper::containerToSequence( commaStringToSequence( sNewValue ));
                     }
                     else //unknown
-                        throw uno::Exception();
+                        throw uno::Exception("unknown property type " + sPropertyType, nullptr);
 
                     sDialogValue = sNewValue;
                 }
@@ -771,26 +767,26 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
                 SvTreeListEntries::iterator it = std::find_if(m_prefBoxEntries.begin(), m_prefBoxEntries.end(),
                   [&pUserData, &sPropertyName](std::unique_ptr<SvTreeListEntry> const& rpEntry) -> bool
                   {
-                      return static_cast<UserData*>(rpEntry->GetUserData())->sPropertyPath.equals(pUserData->sPropertyPath)
-                          && static_cast<SvLBoxString&>(rpEntry->GetItem(2)).GetText().equals(sPropertyName);
+                      return static_cast<UserData*>(rpEntry->GetUserData())->sPropertyPath == pUserData->sPropertyPath
+                          && static_cast<SvLBoxString&>(rpEntry->GetItem(2)).GetText() == sPropertyName;
                   }
                 );
                 if (it != m_prefBoxEntries.end())
                 {
-                    (*it)->ReplaceItem(o3tl::make_unique<SvLBoxString>(sDialogValue), 4);
+                    (*it)->ReplaceItem(std::make_unique<SvLBoxString>(sDialogValue), 4);
 
                     SvTreeListEntries::iterator modifiedIt = std::find_if(
                                 m_modifiedPrefBoxEntries.begin(), m_modifiedPrefBoxEntries.end(),
                                 [&pUserData, &sPropertyName](std::unique_ptr<SvTreeListEntry> const& rpEntry) -> bool
                                 {
-                                    return static_cast<UserData*>(rpEntry->GetUserData())->sPropertyPath.equals(pUserData->sPropertyPath)
-                                        && static_cast<SvLBoxString&>(rpEntry->GetItem(2)).GetText().equals(sPropertyName);
+                                    return static_cast<UserData*>(rpEntry->GetUserData())->sPropertyPath == pUserData->sPropertyPath
+                                        && static_cast<SvLBoxString&>(rpEntry->GetItem(2)).GetText() == sPropertyName;
                                 }
                     );
 
                     if( modifiedIt != m_modifiedPrefBoxEntries.end())
                     {
-                        (*modifiedIt)->ReplaceItem(o3tl::make_unique<SvLBoxString>(sDialogValue), 4);
+                        (*modifiedIt)->ReplaceItem(std::make_unique<SvLBoxString>(sDialogValue), 4);
                     }
                     else
                     {
@@ -808,7 +804,7 @@ IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, StandardHdl_Impl, Button*, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, SearchHdl_Impl, Button*, void)
+IMPL_LINK_NOARG( CuiAboutConfigTabPage, SearchHdl_Impl, Button*, void)
 {
     m_pPrefBox->Clear();
     m_pPrefBox->SetUpdateMode( false );
@@ -871,10 +867,16 @@ void CuiAboutConfigTabPage::InsertEntry( SvTreeListEntry *pEntry)
     {
         int prevIndex = index;
         index = sPath.indexOf("/", index+1);
+        // deal with no parent case (tdf#107811)
+        if (index < 0)
+        {
+            m_pPrefBox->Insert( pEntry, nullptr);
+            return;
+        }
         OUString sParentName = sPath.copy(prevIndex+1, index - prevIndex - 1);
 
         bool hasEntry = false;
-        for(pParentEntry = m_pPrefBox->FirstChild(pGrandParentEntry); pParentEntry != nullptr; pParentEntry = SvTreeListBox::NextSibling(pParentEntry))
+        for(pParentEntry = m_pPrefBox->FirstChild(pGrandParentEntry); pParentEntry != nullptr; pParentEntry = pParentEntry->NextSibling())
             if(static_cast< SvLBoxString& >(pParentEntry->GetItem(1)).GetText() == sParentName)
             {
                 hasEntry = true;
@@ -884,14 +886,14 @@ void CuiAboutConfigTabPage::InsertEntry( SvTreeListEntry *pEntry)
         if(!hasEntry)
         {
             pParentEntry = new SvTreeListEntry;
-            pParentEntry->AddItem(o3tl::make_unique<SvLBoxContextBmp>(
+            pParentEntry->AddItem(std::make_unique<SvLBoxContextBmp>(
                    SvTreeListBox::GetDefaultExpandedNodeImage(),
                    SvTreeListBox::GetDefaultCollapsedNodeImage(), false));
-            pParentEntry->AddItem(o3tl::make_unique<SvLBoxString>(sParentName));
+            pParentEntry->AddItem(std::make_unique<SvLBoxString>(sParentName));
             //It is needed, without this the selection line will be truncated.
-            pParentEntry->AddItem(o3tl::make_unique<SvLBoxString>(""));
-            pParentEntry->AddItem(o3tl::make_unique<SvLBoxString>(""));
-            pParentEntry->AddItem(o3tl::make_unique<SvLBoxString>(""));
+            pParentEntry->AddItem(std::make_unique<SvLBoxString>(""));
+            pParentEntry->AddItem(std::make_unique<SvLBoxString>(""));
+            pParentEntry->AddItem(std::make_unique<SvLBoxString>(""));
             pParentEntry->EnableChildrenOnDemand(false);
             m_pPrefBox->Insert( pParentEntry, pGrandParentEntry );
         }
@@ -905,7 +907,7 @@ void CuiAboutConfigTabPage::InsertEntry( SvTreeListEntry *pEntry)
     m_pPrefBox->Expand( pParentEntry );
 }
 
-IMPL_LINK_NOARG_TYPED( CuiAboutConfigTabPage, ExpandingHdl_Impl, SvTreeListBox*, bool )
+IMPL_LINK_NOARG( CuiAboutConfigTabPage, ExpandingHdl_Impl, SvTreeListBox*, bool )
 {
     SvTreeListEntry* pEntry = m_pPrefBox->GetHdlEntry();
 

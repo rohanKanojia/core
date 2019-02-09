@@ -19,7 +19,7 @@
 
 #include "pcrcommon.hxx"
 #include "modulepcr.hxx"
-#include "propresid.hrc"
+#include <strings.hrc>
 
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <rtl/ustrbuf.hxx>
@@ -53,7 +53,7 @@ namespace pcr
         INetURLObject aHID( aTmp );
         if ( aHID.GetProtocol() == INetProtocol::NotValid )
             aBuffer.append( INET_HID_SCHEME );
-        aBuffer.append( aTmp.getStr() );
+        aBuffer.append( aTmp );
         return aBuffer.makeStringAndClear();
     }
 

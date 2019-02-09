@@ -26,14 +26,10 @@ Viewport3D::Viewport3D() :
     aVPN(0, 0, 1),
     aVUV(0, 1, 1),
     aPRP(0, 0, 2),
-    fVPD(-3),
-    eProjection(PR_PERSPECTIVE),
-    eAspectMapping(AS_NO_MAPPING),
+    eProjection(ProjectionType::Perspective),
     aDeviceRect(Point(0,0), Size(-1,-1)),
     aViewPoint (0, 0, 5000),
-    bTfValid(false),
-    fWRatio (1.0),
-    fHRatio (1.0)
+    bTfValid(false)
 {
     aViewWin.X = -1; aViewWin.Y = -1;
     aViewWin.W =  2; aViewWin.H = 2;
@@ -49,24 +45,13 @@ void Viewport3D::SetViewWindow(double fX, double fY, double fW, double fH)
     else            aViewWin.W = 1.0;
     if ( fH > 0 )   aViewWin.H = fH;
     else            aViewWin.H = 1.0;
-
-    fWRatio = aDeviceRect.GetWidth() / aViewWin.W;
-    fHRatio = aDeviceRect.GetHeight() / aViewWin.H;
 }
 
 // Returns observer position (PRP) in world coordinates
 
 const basegfx::B3DPoint& Viewport3D::GetViewPoint()
 {
-    MakeTransform();
-
-    return aViewPoint;
-}
-
-// Calculate View transformations matrix
-
-void Viewport3D::MakeTransform()
-{
+    // Calculate View transformations matrix
     if ( !bTfValid )
     {
         double fV, fXupVp, fYupVp;
@@ -124,58 +109,11 @@ void Viewport3D::MakeTransform()
 
         bTfValid = true;
     }
+    return aViewPoint;
 }
 
-void Viewport3D::SetDeviceWindow(const Rectangle& rRect)
+void Viewport3D::SetDeviceWindow(const tools::Rectangle& rRect)
 {
-    long nNewW = rRect.GetWidth();
-    long nNewH = rRect.GetHeight();
-    long nOldW = aDeviceRect.GetWidth();
-    long nOldH = aDeviceRect.GetHeight();
-
-    switch ( eAspectMapping )
-    {
-        double  fRatio, fTmp;
-
-        // Mapping, without changing the real size of the objects in the
-        // Device Window
-        case AS_HOLD_SIZE:
-            // When the Device is invalid (w, h = -1), adapt the  View
-            // with AsHoldX
-            if ( nOldW > 0 && nOldH > 0 )
-            {
-                fRatio = (double) nNewW / nOldW;
-                aViewWin.X *= fRatio;
-                aViewWin.W *= fRatio;
-                fRatio = (double) nNewH / nOldH;
-                aViewWin.Y *= fRatio;
-                aViewWin.H *= fRatio;
-                break;
-            }
-        case AS_HOLD_X:
-            if (nNewW == 0)
-                throw o3tl::divide_by_zero();
-            // Adapt view height to view width
-            fRatio = (double) nNewH / nNewW;
-            fTmp = aViewWin.H;
-            aViewWin.H = aViewWin.W * fRatio;
-            aViewWin.Y = aViewWin.Y * aViewWin.H / fTmp;
-            break;
-
-        case AS_HOLD_Y:
-            if (nNewH == 0)
-                throw o3tl::divide_by_zero();
-            // Adapt view width to view height
-            fRatio = (double) nNewW / nNewH;
-            fTmp = aViewWin.W;
-            aViewWin.W = aViewWin.H * fRatio;
-            aViewWin.X = aViewWin.X * aViewWin.W / fTmp;
-            break;
-        default: break;
-    }
-    fWRatio = nNewW / aViewWin.W;
-    fHRatio = nNewH / aViewWin.H;
-
     aDeviceRect = rRect;
 }
 
@@ -211,14 +149,6 @@ void Viewport3D::SetPRP(const basegfx::B3DPoint& rNewPRP)
     aPRP = rNewPRP;
     aPRP.setX(0.0);
     aPRP.setY(0.0);
-    bTfValid = false;
-}
-
-// Set View Plane Distance
-
-void Viewport3D::SetVPD(double fNewVPD)
-{
-    fVPD = fNewVPD;
     bTfValid = false;
 }
 

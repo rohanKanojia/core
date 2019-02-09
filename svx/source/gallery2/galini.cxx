@@ -14,6 +14,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <unotools/streamwrap.hxx>
 #include <unotools/ucbstreamhelper.hxx>
@@ -28,7 +29,7 @@
 OUString GalleryThemeEntry::ReadStrFromIni(const OUString &aKeyName )
 {
     std::unique_ptr<SvStream> pStrm(::utl::UcbStreamHelper::CreateStream(
-                                GetStrURL().GetMainURL( INetURLObject::NO_DECODE ),
+                                GetStrURL().GetMainURL( INetURLObject::DecodeMechanism::NONE ),
                                 StreamMode::READ ));
 
     const LanguageTag &rLangTag = Application::GetSettings().GetUILanguageTag();
@@ -76,14 +77,14 @@ OUString GalleryThemeEntry::ReadStrFromIni(const OUString &aKeyName )
                 /* FIXME-BCP47: what is this supposed to do? */
                 n = 0;
                 OUString aLang = aLocale.replace('_','-');
-                for( std::vector< OUString >::const_iterator i = aFallbacks.begin();
-                     i != aFallbacks.end(); ++i, ++n )
+                for( const auto& rFallback : aFallbacks )
                 {
-                    SAL_INFO( "svx", "compare '" << aLang << "' with '" << *i << "' rank " << nRank << " vs. " << n );
-                    if( *i == aLang && n < nRank ) {
+                    SAL_INFO( "svx", "compare '" << aLang << "' with '" << rFallback << "' rank " << nRank << " vs. " << n );
+                    if( rFallback == aLang && n < nRank ) {
                         nRank = n; // try to get the most accurate match
                         aResult = aValue;
                     }
+                    ++n;
                 }
             }
         }

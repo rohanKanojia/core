@@ -23,13 +23,10 @@
 #include <vcl/combobox.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/layout.hxx>
-#include <vcl/morebtn.hxx>
-#include <svtools/stdctrl.hxx>
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include "anyrefdg.hxx"
-#include "queryparam.hxx"
-#include "typedstrdata.hxx"
+#include <queryparam.hxx>
+#include <filterentries.hxx>
 
 #include <memory>
 #include <deque>
@@ -45,7 +42,7 @@ class ScFilterDlg : public ScAnyRefDlg
 {
     struct EntryList
     {
-        std::vector<ScTypedStrData> maList;
+        ScFilterEntries maFilterEntries;
         size_t mnHeaderPos;
 
         EntryList(const EntryList&) = delete;
@@ -57,13 +54,14 @@ class ScFilterDlg : public ScAnyRefDlg
 public:
                     ScFilterDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                  const SfxItemSet&  rArgSet );
-                    virtual ~ScFilterDlg();
+                    virtual ~ScFilterDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
 
     virtual bool    IsRefInputMode() const override;
     virtual void    SetActive() override;
+
     virtual bool    Close() override;
     void            SliderMoved();
     size_t          GetSliderPos();
@@ -114,11 +112,11 @@ private:
     const OUString aStrNotEmpty;
     const OUString aStrColumn;
 
-    ScFilterOptionsMgr* pOptionsMgr;
+    std::unique_ptr<ScFilterOptionsMgr> pOptionsMgr;
 
     const sal_uInt16        nWhichQuery;
     ScQueryParam        theQueryData;
-    ScQueryItem*        pOutItem;
+    std::unique_ptr<ScQueryItem> pOutItem;
     ScViewData*         pViewData;
     ScDocument*         pDoc;
     SCTAB               nSrcTab;
@@ -135,7 +133,7 @@ private:
     EntryListsMap m_EntryLists;
 
     // Hack: RefInput control
-    Timer*  pTimer;
+    std::unique_ptr<Timer>  pTimer;
 
 private:
     void            Init            ( const SfxItemSet& rArgSet );
@@ -147,15 +145,15 @@ private:
     ScQueryItem*    GetOutputItem   ();
 
     // Handler:
-    DECL_LINK_TYPED( LbSelectHdl,  ListBox&, void );
-    DECL_LINK_TYPED( ValModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( CheckBoxHdl,  Button*, void );
-    DECL_LINK_TYPED( EndDlgHdl,    Button*, void );
-    DECL_LINK_TYPED( ScrollHdl, ScrollBar*, void );
-    DECL_LINK_TYPED( MoreExpandedHdl, VclExpander&, void );
+    DECL_LINK( LbSelectHdl,  ListBox&, void );
+    DECL_LINK( ValModifyHdl, Edit&, void );
+    DECL_LINK( CheckBoxHdl,  Button*, void );
+    DECL_LINK( EndDlgHdl,    Button*, void );
+    DECL_LINK( ScrollHdl, ScrollBar*, void );
+    DECL_LINK( MoreExpandedHdl, VclExpander&, void );
 
     // Hack: RefInput control
-    DECL_LINK_TYPED( TimeOutHdl, Timer*, void );
+    DECL_LINK( TimeOutHdl, Timer*, void );
 };
 
 class ScSpecialFilterDlg : public ScAnyRefDlg
@@ -163,11 +161,11 @@ class ScSpecialFilterDlg : public ScAnyRefDlg
 public:
                     ScSpecialFilterDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                         const SfxItemSet&   rArgSet );
-                    virtual ~ScSpecialFilterDlg();
+                    virtual ~ScSpecialFilterDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
-    void            SyncFocusState();
+
     virtual bool    IsRefInputMode() const override;
     virtual void    SetActive() override;
 
@@ -195,17 +193,19 @@ private:
     VclPtr<OKButton>        pBtnOk;
     VclPtr<CancelButton>    pBtnCancel;
 
-    ScFilterOptionsMgr* pOptionsMgr;
+    std::unique_ptr<ScFilterOptionsMgr> pOptionsMgr;
 
     const sal_uInt16    nWhichQuery;
     const ScQueryParam  theQueryData;
-    ScQueryItem*        pOutItem;
+    std::unique_ptr<ScQueryItem> pOutItem;
     ScViewData*         pViewData;
     ScDocument*         pDoc;
 
     VclPtr<formula::RefEdit>   pRefInputEdit;
     bool                bRefInputMode;
 
+    // Hack: RefInput control
+    std::unique_ptr<Idle> pIdle;
 
 private:
     void            Init( const SfxItemSet& rArgSet );
@@ -213,12 +213,12 @@ private:
                                     const ScRange& rSource );
 
     // Handler
-    DECL_LINK_TYPED( FilterAreaSelHdl, ListBox&, void );
-    DECL_LINK_TYPED( FilterAreaModHdl, Edit&, void );
-    DECL_LINK_TYPED( EndDlgHdl,  Button*, void );
+    DECL_LINK( FilterAreaSelHdl, ListBox&, void );
+    DECL_LINK( FilterAreaModHdl, Edit&, void );
+    DECL_LINK( EndDlgHdl,  Button*, void );
 
     // Hack: RefInput control
-    DECL_LINK_TYPED( TimeOutHdl, Idle*, void );
+    DECL_LINK( TimeOutHdl, Timer*, void );
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_FILTDLG_HXX

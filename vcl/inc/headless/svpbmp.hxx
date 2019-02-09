@@ -20,17 +20,16 @@
 #ifndef INCLUDED_VCL_INC_HEADLESS_SVPBMP_HXX
 #define INCLUDED_VCL_INC_HEADLESS_SVPBMP_HXX
 
-#include "sal/config.h"
-#include "tools/solar.h"
+#include <sal/config.h>
+#include <tools/solar.h>
 
 #include <salbmp.hxx>
 
 class VCL_DLLPUBLIC SvpSalBitmap : public SalBitmap
 {
-    BitmapBuffer*   mpDIB;
+    std::unique_ptr<BitmapBuffer> mpDIB;
 public:
-    SvpSalBitmap() : mpDIB(nullptr) {}
-    virtual ~SvpSalBitmap();
+    virtual ~SvpSalBitmap() override;
 
     // SalBitmap
     virtual bool            Create( const Size& rSize,
@@ -44,12 +43,12 @@ public:
     virtual bool            Create( const css::uno::Reference< css::rendering::XBitmapCanvas >& rBitmapCanvas,
                                     Size& rSize,
                                     bool bMask = false ) override;
-    bool                    Create(BitmapBuffer *pBuf);
+    void                    Create(std::unique_ptr<BitmapBuffer> pBuf);
     const BitmapBuffer*     GetBuffer() const
     {
-        return mpDIB;
+        return mpDIB.get();
     }
-    virtual void            Destroy() override;
+    virtual void            Destroy() final override;
     virtual Size            GetSize() const override;
     virtual sal_uInt16      GetBitCount() const override;
 
@@ -57,8 +56,9 @@ public:
     virtual void            ReleaseBuffer( BitmapBuffer* pBuffer, BitmapAccessMode nMode ) override;
     virtual bool            GetSystemData( BitmapSystemData& rData ) override;
 
+    virtual bool            ScalingSupported() const override;
     virtual bool            Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag ) override;
-    virtual bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uLong nTol ) override;
+    virtual bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uInt8 nTol ) override;
 };
 
 #endif // INCLUDED_VCL_INC_HEADLESS_SVPBMP_HXX

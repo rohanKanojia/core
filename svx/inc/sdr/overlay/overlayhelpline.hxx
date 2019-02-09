@@ -28,11 +28,10 @@ namespace sdr
 {
     namespace overlay
     {
-        class OverlayHelplineStriped : public OverlayObjectWithBasePosition
+        class OverlayHelplineStriped final : public OverlayObjectWithBasePosition
         {
-        protected:
             // remember HelpLineKind
-            SdrHelpLineKind                             meKind;
+            SdrHelpLineKind const                             meKind;
 
             // geometry creation for OverlayObject
             virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
@@ -40,8 +39,8 @@ namespace sdr
         public:
             explicit OverlayHelplineStriped(
                 const basegfx::B2DPoint& rBasePos,
-                SdrHelpLineKind eNewKind = SDRHELPLINE_POINT);
-            virtual ~OverlayHelplineStriped();
+                SdrHelpLineKind eNewKind);
+            virtual ~OverlayHelplineStriped() override;
 
             // dat read access
             SdrHelpLineKind getKind() const { return meKind; }

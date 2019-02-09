@@ -20,13 +20,7 @@
 #ifndef INCLUDED_SHELL_INC_INTERNAL_SHLXTHDL_HXX
 #define INCLUDED_SHELL_INC_INTERNAL_SHLXTHDL_HXX
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#endif
 #include <objbase.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 // {087B3AE3-E237-4467-B8DB-5A38AB959AC9}
 const CLSID CLSID_INFOTIP_HANDLER =
@@ -43,6 +37,8 @@ const CLSID CLSID_PROPERTYSHEET_HANDLER =
 // {3B092F0C-7696-40e3-A80F-68D74DA84210}
 const CLSID CLSID_THUMBVIEWER_HANDLER =
 { 0x3b092f0c, 0x7696, 0x40e3, { 0xa8, 0xf, 0x68, 0xd7, 0x4d, 0xa8, 0x42, 0x10 } };
+
+extern HINSTANCE g_hModule;
 
 #endif
 

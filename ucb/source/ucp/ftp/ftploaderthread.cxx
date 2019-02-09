@@ -34,17 +34,14 @@ using namespace ftp;
 /*                                                                              */
 /********************************************************************************/
 
-
-#ifdef __cplusplus
 extern "C" {
-#endif
 
-    int memory_write_dummy(void *,size_t,size_t,void *)
+    static int memory_write_dummy(void *,size_t,size_t,void *)
     {
         return 0;
     }
 
-    void delete_CURL(void *pData)
+    static void delete_CURL(void *pData)
     {
         // Otherwise response for QUIT will be sent to already destroyed
         // MemoryContainer via non-dummy memory_write function.
@@ -54,10 +51,7 @@ extern "C" {
         curl_easy_cleanup(static_cast<CURL*>(pData));
     }
 
-#ifdef __cplusplus
 }
-#endif
-
 
 /********************************************************************************/
 /*                                                                              */
@@ -77,7 +71,7 @@ FTPLoaderThread::~FTPLoaderThread() {
 
 
 CURL* FTPLoaderThread::handle() {
-    CURL* ret = osl_getThreadKeyData(m_threadKey);
+    CURL* ret = static_cast<CURL*>(osl_getThreadKeyData(m_threadKey));
     if(!ret) {
         ret = curl_easy_init();
         if (ret != nullptr) {
@@ -88,7 +82,7 @@ CURL* FTPLoaderThread::handle() {
                 ret = nullptr;
             }
         }
-        osl_setThreadKeyData(m_threadKey,static_cast<void*>(ret));
+        osl_setThreadKeyData(m_threadKey, ret);
     }
 
     return ret;

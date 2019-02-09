@@ -18,21 +18,21 @@
  */
 
 #include "RecentlyUsedMasterPages.hxx"
-#include "MasterPageObserver.hxx"
+#include "MasterPageContainerProviders.hxx"
+#include <MasterPageObserver.hxx>
 #include "MasterPagesSelector.hxx"
 #include "MasterPageDescriptor.hxx"
-#include "tools/ConfigurationAccess.hxx"
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
+#include <tools/ConfigurationAccess.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
-#include <comphelper/processfactory.hxx>
-#include "unomodel.hxx"
+#include <unomodel.hxx>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawPages.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -86,10 +86,11 @@ RecentlyUsedMasterPages&  RecentlyUsedMasterPages::Instance()
     return *mpInstance;
 }
 
+static constexpr size_t gnMaxListSize(8);
+
 RecentlyUsedMasterPages::RecentlyUsedMasterPages()
     : maListeners(),
       mvMasterPages(),
-      mnMaxListSize(8),
       mpContainer(new MasterPageContainer())
 {
 }
@@ -166,7 +167,7 @@ void RecentlyUsedMasterPages::LoadPersistentValues()
                     pDescriptor->mpPreviewProvider = std::shared_ptr<PreviewProvider>(
                         new PagePreviewProvider());
                 MasterPageContainer::Token aToken (mpContainer->PutMasterPage(pDescriptor));
-                mvMasterPages.push_back(Descriptor(aToken,sURL,sName));
+                mvMasterPages.emplace_back(aToken,sURL,sName);
             }
         }
 
@@ -205,11 +206,8 @@ void RecentlyUsedMasterPages::SavePersistentValues()
             xSet, UNO_QUERY);
         if ( ! xChildFactory.is())
             return;
-        MasterPageList::const_iterator iDescriptor;
         sal_Int32 nIndex(0);
-        for (iDescriptor=mvMasterPages.begin();
-                iDescriptor!=mvMasterPages.end();
-                ++iDescriptor,++nIndex)
+        for (const auto& rDescriptor : mvMasterPages)
         {
             // Create new child.
             OUString sKey ("index_");
@@ -220,12 +218,13 @@ void RecentlyUsedMasterPages::SavePersistentValues()
             {
                 xSet->insertByName (sKey, makeAny(xChild));
 
-                aValue <<= OUString(iDescriptor->msURL);
+                aValue <<= rDescriptor.msURL;
                 xChild->replaceByName (sURLMemberName, aValue);
 
-                aValue <<= OUString(iDescriptor->msName);
+                aValue <<= rDescriptor.msName;
                 xChild->replaceByName (sNameMemberName, aValue);
             }
+            ++nIndex;
         }
 
         // Write the data back to disk.
@@ -278,7 +277,7 @@ void RecentlyUsedMasterPages::SendEvent()
     }
 }
 
-IMPL_LINK_TYPED(RecentlyUsedMasterPages, MasterPageChangeListener,
+IMPL_LINK(RecentlyUsedMasterPages, MasterPageChangeListener,
     MasterPageObserverEvent&, rEvent, void)
 {
     switch (rEvent.meType)
@@ -298,15 +297,14 @@ IMPL_LINK_TYPED(RecentlyUsedMasterPages, MasterPageChangeListener,
     }
 }
 
-IMPL_LINK_TYPED(RecentlyUsedMasterPages, MasterPageContainerChangeListener,
+IMPL_LINK(RecentlyUsedMasterPages, MasterPageContainerChangeListener,
     MasterPageContainerChangeEvent&, rEvent, void)
 {
     switch (rEvent.meEventType)
     {
-        case MasterPageContainerChangeEvent::CHILD_ADDED:
-        case MasterPageContainerChangeEvent::CHILD_REMOVED:
-        case MasterPageContainerChangeEvent::INDEX_CHANGED:
-        case MasterPageContainerChangeEvent::INDEXES_CHANGED:
+        case MasterPageContainerChangeEvent::EventType::CHILD_ADDED:
+        case MasterPageContainerChangeEvent::EventType::CHILD_REMOVED:
+        case MasterPageContainerChangeEvent::EventType::INDEX_CHANGED:
             ResolveList();
             break;
 
@@ -343,7 +341,7 @@ void RecentlyUsedMasterPages::AddMasterPage (
                 mpContainer->GetStyleNameForToken(aToken)));
 
         // Shorten list to maximal size.
-        while (mvMasterPages.size() > mnMaxListSize)
+        while (mvMasterPages.size() > gnMaxListSize)
         {
             mvMasterPages.pop_back ();
         }
@@ -357,21 +355,20 @@ void RecentlyUsedMasterPages::ResolveList()
 {
     bool bNotify (false);
 
-    MasterPageList::iterator iDescriptor;
-    for (iDescriptor=mvMasterPages.begin(); iDescriptor!=mvMasterPages.end(); ++iDescriptor)
+    for (auto& rDescriptor : mvMasterPages)
     {
-        if (iDescriptor->maToken == MasterPageContainer::NIL_TOKEN)
+        if (rDescriptor.maToken == MasterPageContainer::NIL_TOKEN)
         {
-            MasterPageContainer::Token aToken (mpContainer->GetTokenForURL(iDescriptor->msURL));
-            iDescriptor->maToken = aToken;
+            MasterPageContainer::Token aToken (mpContainer->GetTokenForURL(rDescriptor.msURL));
+            rDescriptor.maToken = aToken;
             if (aToken != MasterPageContainer::NIL_TOKEN)
                 bNotify = true;
         }
         else
         {
-            if ( ! mpContainer->HasToken(iDescriptor->maToken))
+            if ( ! mpContainer->HasToken(rDescriptor.maToken))
             {
-                iDescriptor->maToken = MasterPageContainer::NIL_TOKEN;
+                rDescriptor.maToken = MasterPageContainer::NIL_TOKEN;
                 bNotify = true;
             }
         }

@@ -30,11 +30,11 @@
 
 class Color;
 
-enum SvxNumberValueType
+enum class SvxNumberValueType
 {
-    SVX_VALUE_TYPE_UNDEFINED = 0,
-    SVX_VALUE_TYPE_NUMBER,
-    SVX_VALUE_TYPE_STRING
+    Undefined,
+    Number,
+    String
 };
 
 // sort order of the category ListBox entries in the TabPage
@@ -67,7 +67,7 @@ public:
                                               sal_uInt32         nFormatKey,
                                               SvxNumberValueType eNumValType,
                                               double             nNumVal,
-                                              const OUString*    pNumStr = nullptr );
+                                              const OUString*    pNumStr );
 
                         ~SvxNumberFormatShell();
 
@@ -81,7 +81,7 @@ public:
                                               sal_uInt32         nFormatKey,
                                               SvxNumberValueType eNumValType,
                                               double             nNumVal,
-                                              const OUString*    pNumStr = nullptr );
+                                              const OUString*    pNumStr );
 
 
     void                GetInitSettings( sal_uInt16&           nCatLbPos,
@@ -109,7 +109,7 @@ public:
                                    short&                rFmtSelPos,
                                    std::vector<OUString>& rFmtEntries );
 
-    bool                RemoveFormat( const OUString&       rFormat,
+    void                RemoveFormat( const OUString&       rFormat,
                                       sal_uInt16&           rCatLbSelPos,
                                       short&                rFmtSelPos,
                                       std::vector<OUString>& rFmtEntries );
@@ -144,8 +144,7 @@ public:
     bool                FindEntry( const OUString& rFmtString, sal_uInt32* pAt = nullptr );
 
     void                ValidateNewEntries() { bUndoAddList = false; }
-    size_t              GetUpdateDataCount() const;
-    void                GetUpdateData( sal_uInt32* pDelArray, const sal_uInt32 nSize );
+    std::vector<sal_uInt32> const & GetUpdateData() const;
 
     void                SetCurNumFmtKey( sal_uInt32 nNew )  { nCurFormatKey = nNew; }
     sal_uInt32          GetCurNumFmtKey() const             { return nCurFormatKey; }
@@ -166,8 +165,7 @@ public:
     sal_uInt16          FindCurrencyFormat( const OUString& rFmtString );
     sal_uInt16          FindCurrencyFormat(const NfCurrencyEntry* pTmpCurrencyEntry,bool bTmpBanking);
     void                SetCurCurrencyEntry(NfCurrencyEntry*);
-    short               GetListPos4Entry(sal_uInt32 nIdx);
-    short               GetListPos4Entry( const OUString& rFmtString );
+    short               GetListPos4Entry( sal_uInt32 nIdx, const OUString& rFmtString );
 
     void                GetCurrencySymbols(std::vector<OUString>& rList, sal_uInt16* pPos );
 
@@ -177,11 +175,9 @@ public:
 
     void                SetUseStarFormat( bool bUse ) { bUseStarFormat = bUse; }
 private:
-    static const double     DEFAULT_NUMVALUE;
-
     SvNumberFormatter*      pFormatter;
     SvNumberFormatTable*    pCurFmtTable;
-    SvxNumberValueType      eValType;
+    SvxNumberValueType const eValType;
     OUString                aValStr;
     double                  nValNum;
     bool                    bUndoAddList;
@@ -189,7 +185,7 @@ private:
     std::vector<sal_uInt32> aDelList;
     std::vector<sal_uInt32> aCurEntryList;
     sal_uInt32              nCurFormatKey;
-    short                   nCurCategory;
+    SvNumFormatType         nCurCategory;
     LanguageType            eCurLanguage;
     std::vector<sal_uInt16> aCurCurrencyList;
     NfCurrencyEntry*        pCurCurrencyEntry;
@@ -197,27 +193,32 @@ private:
     sal_uInt32              nCurCurrencyEntryPos;
     std::vector<OUString>   aCurrencyFormatList;
     bool                    bUseStarFormat;
+    bool                    bIsDefaultValNum;
 
     SVX_DLLPRIVATE short FillEntryList_Impl( std::vector<OUString>& rList );
-    SVX_DLLPRIVATE void  FillEListWithStd_Impl( std::vector<OUString>& rList,sal_uInt16 aPrivCat, short &Pos);
+    SVX_DLLPRIVATE void  FillEListWithStd_Impl( std::vector<OUString>& rList, SvNumFormatType eCategory, short &Pos,
+                                                bool bSuppressDuplicates = false );
     SVX_DLLPRIVATE short FillEListWithFormats_Impl( std::vector<OUString>& rList,short nSelPos,
                                                        NfIndexTableOffset eOffsetStart,
-                                                       NfIndexTableOffset eOffsetEnd);
-    SVX_DLLPRIVATE short FillEListWithDateTime_Impl( std::vector<OUString>& rList,short nSelPos);
+                                                       NfIndexTableOffset eOffsetEnd,
+                                                       bool bSuppressDuplicates );
+    SVX_DLLPRIVATE short FillEListWithDateTime_Impl( std::vector<OUString>& rList,short nSelPos,
+                                                     bool bSuppressDuplicates );
     SVX_DLLPRIVATE short FillEListWithCurrency_Impl( std::vector<OUString>& rList,short nSelPos);
     SVX_DLLPRIVATE short FillEListWithSysCurrencys( std::vector<OUString>& rList,short nSelPos);
     SVX_DLLPRIVATE short FillEListWithUserCurrencys( std::vector<OUString>& rList,short nSelPos);
-    SVX_DLLPRIVATE short FillEListWithUsD_Impl( std::vector<OUString>& rList, sal_uInt16 nPrivCat, short Pos );
+    SVX_DLLPRIVATE short FillEListWithUsD_Impl( std::vector<OUString>& rList, SvNumFormatType eCategory, short Pos );
+
+    SVX_DLLPRIVATE bool IsEssentialFormat_Impl( SvNumFormatType eType, sal_uInt32 nKey );
 
     SVX_DLLPRIVATE ::std::vector<sal_uInt32>::iterator GetRemoved_Impl( size_t nKey );
     SVX_DLLPRIVATE bool                                IsRemoved_Impl( size_t nKey );
     SVX_DLLPRIVATE ::std::vector<sal_uInt32>::iterator GetAdded_Impl( size_t nKey );
-    SVX_DLLPRIVATE bool                                IsAdded_Impl( size_t nKey );
 
     SVX_DLLPRIVATE void  GetPreviewString_Impl( OUString& rString,
                                                 Color*& rpColor );
-    SVX_DLLPRIVATE void  PosToCategory_Impl(sal_uInt16 nPos, short& rCategory) const;
-    SVX_DLLPRIVATE void  CategoryToPos_Impl(short nCategory, sal_uInt16& rPos) const;
+    SVX_DLLPRIVATE static void PosToCategory_Impl(sal_uInt16 nPos, SvNumFormatType& rCategory);
+    SVX_DLLPRIVATE static void CategoryToPos_Impl(SvNumFormatType nCategory, sal_uInt16& rPos);
 };
 
 #endif

@@ -37,13 +37,20 @@ private:
     SdrPage*                                mpShownPage;
 
 protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
-    virtual sdr::properties::BaseProperties* CreateObjectSpecificProperties() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::properties::BaseProperties> CreateObjectSpecificProperties() override;
+
+    // protected destructor
+    virtual ~SdrPageObj() override;
 
 public:
-    SdrPageObj(SdrPage* pNewPage = nullptr);
-    SdrPageObj(const Rectangle& rRect, SdrPage* pNewPage = nullptr);
-    virtual ~SdrPageObj();
+    SdrPageObj(
+        SdrModel& rSdrModel,
+        SdrPage* pNewPage = nullptr);
+    SdrPageObj(
+        SdrModel& rSdrModel,
+        const tools::Rectangle& rRect,
+        SdrPage* pNewPage = nullptr);
 
     SdrPage* GetReferencedPage() const { return mpShownPage;}
     void SetReferencedPage(SdrPage* pNewPage);
@@ -53,7 +60,7 @@ public:
 
     virtual sal_uInt16 GetObjIdentifier() const override;
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
-    virtual SdrPageObj* Clone() const override;
+    virtual SdrPageObj* CloneSdrObject(SdrModel& rTargetModel) const override;
     SdrPageObj& operator=(const SdrPageObj& rObj);
 
     virtual OUString TakeObjNameSingul() const override;

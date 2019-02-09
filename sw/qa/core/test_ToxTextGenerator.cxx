@@ -7,13 +7,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "rtl/ustring.hxx"
-#include "chpfld.hxx"
-#include "ndtxt.hxx"
-#include "tox.hxx"
-#include "txmsrt.hxx"
-#include "ToxTextGenerator.hxx"
-#include "ToxTabStopTokenHandler.hxx"
+#include <rtl/ustring.hxx>
+#include <chpfld.hxx>
+#include <ndtxt.hxx>
+#include <tox.hxx>
+#include <txmsrt.hxx>
+#include <ToxTextGenerator.hxx>
+#include <ToxTabStopTokenHandler.hxx>
 
 #include <memory>
 
@@ -48,9 +48,9 @@ public:
 
 struct MockedSortTab : public SwTOXSortTabBase {
     MockedSortTab()
-    : SwTOXSortTabBase(TOX_SORT_INDEX,nullptr,nullptr,nullptr) {;}
+    : SwTOXSortTabBase(TOX_SORT_INDEX,nullptr,nullptr,nullptr) {}
 
-    virtual TextAndReading GetText_Impl() const override {
+    virtual TextAndReading GetText_Impl(SwRootFrame const*) const override {
         return TextAndReading();
     }
     virtual sal_uInt16  GetLevel() const override {
@@ -61,7 +61,7 @@ struct MockedSortTab : public SwTOXSortTabBase {
 void
 ToxTextGeneratorTest::EmptyStringIsReturnedForPageNumberPlaceholderOfZeroItems()
 {
-    OUString expected("");
+    OUString const expected("");
     OUString actual = ToxTextGenerator::ConstructPageNumberPlaceholder(0);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
@@ -69,7 +69,7 @@ ToxTextGeneratorTest::EmptyStringIsReturnedForPageNumberPlaceholderOfZeroItems()
 void
 ToxTextGeneratorTest::OneAtSignIsReturnedForPageNumberPlaceholderOfOneItem()
 {
-    OUString expected("@~");
+    OUString const expected("@~");
     OUString actual = ToxTextGenerator::ConstructPageNumberPlaceholder(1);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
@@ -77,7 +77,7 @@ ToxTextGeneratorTest::OneAtSignIsReturnedForPageNumberPlaceholderOfOneItem()
 void
 ToxTextGeneratorTest::TwoAtSignsAreReturnedForPageNumberPlaceholderOfOneItem()
 {
-    OUString expected("@, @~");
+    OUString const expected("@, @~");
     OUString actual = ToxTextGenerator::ConstructPageNumberPlaceholder(2);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
@@ -88,8 +88,8 @@ ToxTextGeneratorTest::EmptyStringIsReturnedAsNumStringIfNoTextMarkIsSet()
     MockedSortTab sortTab;
     sortTab.pTextMark = nullptr;
 
-    OUString expected("");
-    OUString actual = ToxTextGenerator::GetNumStringOfFirstNode(sortTab, false, 0);
+    OUString const expected("");
+    OUString actual = ToxTextGenerator::GetNumStringOfFirstNode(sortTab, false, 0, nullptr);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
 
@@ -99,26 +99,25 @@ ToxTextGeneratorTest::EmptyStringIsReturnedAsNumStringIfToxSourcesIsEmpty()
     MockedSortTab sortTab;
     sortTab.pTextMark = reinterpret_cast<SwTextTOXMark*>(1);
 
-    OUString expected("");
-    OUString actual = ToxTextGenerator::GetNumStringOfFirstNode(sortTab, false, 0);
+    OUString const expected("");
+    OUString actual = ToxTextGenerator::GetNumStringOfFirstNode(sortTab, false, 0, nullptr);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
 
 class MockedToxTabStopTokenHandler : public ToxTabStopTokenHandler {
 public:
     virtual HandledTabStopToken
-    HandleTabStopToken(const SwFormToken& aToken, const SwTextNode& targetNode,
-            const SwRootFrame *currentLayout) const override {
-        (void)(aToken); (void)(targetNode); (void)(currentLayout); // avoid unused warnings.
+    HandleTabStopToken(const SwFormToken&, const SwTextNode&,
+            const SwRootFrame *) const override {
         return HandledTabStopToken();
     }
 };
 
 class ToxTextGeneratorWithMockedChapterField : public ToxTextGenerator {
 public:
-    explicit ToxTextGeneratorWithMockedChapterField(SwForm &form)
+    explicit ToxTextGeneratorWithMockedChapterField(SwForm const &form)
     : ToxTextGenerator(form, std::make_shared<MockedToxTabStopTokenHandler>()),
-      mChapterFieldType(), mChapterField(&mChapterFieldType) {;}
+      mChapterFieldType(), mChapterField(&mChapterFieldType) {}
 
     SwChapterField&
     GetChapterField() {
@@ -127,10 +126,8 @@ public:
 
 private:
     SwChapterField
-    ObtainChapterField(SwChapterFieldType* chapterFieldType, const SwFormToken* chapterToken,
-            const SwContentFrame* contentFrame, const SwContentNode *contentNode) const override {
-        // get rid of 'unused-parameters' warnings
-        (void)(chapterFieldType);(void)(chapterToken);(void)(contentFrame);(void)(contentNode);
+    ObtainChapterField(SwChapterFieldType*, const SwFormToken*,
+            const SwContentFrame*, const SwContentNode *) const override {
         return mChapterField;
     }
 
@@ -144,22 +141,22 @@ ToxTextGeneratorTest::ChapterNumberWithoutTextIsGeneratedForNoprepstTitle()
     SwForm form;
     ToxTextGeneratorWithMockedChapterField ttg(form);
     // set all values to make sure they are not used
-    ttg.GetChapterField().sNumber = "1";
-    ttg.GetChapterField().sPre = "PRE";
-    ttg.GetChapterField().sPost = "POST";
-    ttg.GetChapterField().sTitle = "TITLE";
+    ttg.GetChapterField().m_State.sNumber = "1";
+    ttg.GetChapterField().m_State.sPre = "PRE";
+    ttg.GetChapterField().m_State.sPost = "POST";
+    ttg.GetChapterField().m_State.sTitle = "TITLE";
 
     SwFormToken token(TOKEN_CHAPTER_INFO);
     token.nChapterFormat = CF_NUM_NOPREPST_TITLE;
 
     OUString expected("1");
-    OUString actual = ttg.GenerateTextForChapterToken(token, nullptr, nullptr);
+    OUString actual = ttg.GenerateTextForChapterToken(token, nullptr, nullptr, nullptr);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 
     // we cannot mock the pre- and suffix generation in the chapterfield. We just test that sNumber and
     // sTitle are used and hope that the pre- and suffix addition works.
     token.nChapterFormat = CF_NUMBER;
-    expected = ttg.GenerateTextForChapterToken(token, nullptr, nullptr);
+    expected = ttg.GenerateTextForChapterToken(token, nullptr, nullptr, nullptr);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
 
@@ -170,22 +167,22 @@ ToxTextGeneratorTest::ChapterNumberWithTitleIsGeneratedForNumberNoPrepst()
     SwForm form;
     ToxTextGeneratorWithMockedChapterField ttg(form);
     // set all values to make sure they are not used
-    ttg.GetChapterField().sNumber = "5";
-    ttg.GetChapterField().sPre = "PRE";
-    ttg.GetChapterField().sPost = "POST";
-    ttg.GetChapterField().sTitle = "myTitle";
+    ttg.GetChapterField().m_State.sNumber = "5";
+    ttg.GetChapterField().m_State.sPre = "PRE";
+    ttg.GetChapterField().m_State.sPost = "POST";
+    ttg.GetChapterField().m_State.sTitle = "myTitle";
 
     SwFormToken token(TOKEN_CHAPTER_INFO);
     token.nChapterFormat = CF_NUMBER_NOPREPST;
 
     OUString expected("5 myTitle");
-    OUString actual = ttg.GenerateTextForChapterToken(token, nullptr, nullptr);
+    OUString actual = ttg.GenerateTextForChapterToken(token, nullptr, nullptr, nullptr);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 
     // we cannot mock the pre- and suffix generation in the chapterfield. We just test that sNumber and
     // sTitle are used and hope that the pre- and suffix addition works.
     token.nChapterFormat = CF_NUM_TITLE;
-    expected = ttg.GenerateTextForChapterToken(token, nullptr, nullptr);
+    expected = ttg.GenerateTextForChapterToken(token, nullptr, nullptr, nullptr);
     CPPUNIT_ASSERT_EQUAL(expected, actual);
 }
 

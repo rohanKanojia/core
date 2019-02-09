@@ -12,9 +12,11 @@
 
 #include <com/sun/star/mozilla/XMozillaBootstrap.hpp>
 
+#include <sal/log.hxx>
+
 using namespace connectivity::mork;
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL com_sun_star_comp_sdbc_MorkDriver_get_implementation(
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * com_sun_star_comp_sdbc_MorkDriver_get_implementation(
     css::uno::XComponentContext* context,
     css::uno::Sequence<css::uno::Any> const &)
 {
@@ -29,46 +31,40 @@ MorkDriver::MorkDriver(const css::uno::Reference< css::uno::XComponentContext >&
 }
 
 OUString SAL_CALL MorkDriver::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString(MORK_DRIVER_IMPL_NAME);
 }
 
 sal_Bool SAL_CALL MorkDriver::supportsService(const OUString& serviceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, serviceName);
 }
 
 css::uno::Sequence< OUString > MorkDriver::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return { "com.sun.star.sdbc.Driver" };
 }
 
 css::uno::Reference< css::sdbc::XConnection > MorkDriver::connect(
     OUString const & url,
-    css::uno::Sequence< css::beans::PropertyValue > const & info)
-    throw (css::sdbc::SQLException, css::uno::RuntimeException, std::exception)
+    css::uno::Sequence< css::beans::PropertyValue > const &)
 {
     SAL_INFO("connectivity.mork", "=> MorkDriver::connect()" );
-
-    (void) url; (void) info; // avoid warnings
 
     // Profile discovery
     css::uno::Reference<css::uno::XInterface> xInstance = context_->getServiceManager()->createInstanceWithContext("com.sun.star.mozilla.MozillaBootstrap", context_);
     OSL_ENSURE( xInstance.is(), "failed to create instance" );
 
-    css::uno::Reference<::com::sun::star::mozilla::XMozillaBootstrap> xMozillaBootstrap(xInstance, css::uno::UNO_QUERY);
+    css::uno::Reference<css::mozilla::XMozillaBootstrap> xMozillaBootstrap(xInstance, css::uno::UNO_QUERY);
     OSL_ENSURE( xMozillaBootstrap.is(), "failed to create instance" );
 
     if (xMozillaBootstrap.is())
     {
-        OUString defaultProfile = xMozillaBootstrap->getDefaultProfile(::com::sun::star::mozilla::MozillaProductType_Thunderbird);
+        OUString defaultProfile = xMozillaBootstrap->getDefaultProfile(css::mozilla::MozillaProductType_Thunderbird);
 
         if (!defaultProfile.isEmpty())
         {
-            m_sProfilePath = xMozillaBootstrap->getProfilePath(::com::sun::star::mozilla::MozillaProductType_Thunderbird, defaultProfile);
+            m_sProfilePath = xMozillaBootstrap->getProfilePath(css::mozilla::MozillaProductType_Thunderbird, defaultProfile);
             SAL_INFO("connectivity.mork", "Using Thunderbird profile " << m_sProfilePath);
         }
     }
@@ -76,12 +72,11 @@ css::uno::Reference< css::sdbc::XConnection > MorkDriver::connect(
     css::uno::Reference< css::sdbc::XConnection > xCon;
     OConnection* pCon = new OConnection(this);
     xCon = pCon;    // important here because otherwise the connection could be deleted inside (refcount goes -> 0)
-    pCon->construct(url, info);
+    pCon->construct(url);
     return xCon;
 }
 
 sal_Bool MorkDriver::acceptsURL(OUString const & url)
-    throw (css::sdbc::SQLException, css::uno::RuntimeException, std::exception)
 {
     SAL_INFO("connectivity.mork", "=> MorkDriver::acceptsURL()" );
     // Skip 'sdbc:mozab: part of URL
@@ -117,21 +112,19 @@ sal_Bool MorkDriver::acceptsURL(OUString const & url)
 }
 
 css::uno::Sequence< css::sdbc::DriverPropertyInfo > MorkDriver::getPropertyInfo(
-    OUString const & url,
-    css::uno::Sequence< css::beans::PropertyValue > const & info)
-    throw (css::sdbc::SQLException, css::uno::RuntimeException, std::exception)
+    OUString const &,
+    css::uno::Sequence< css::beans::PropertyValue > const &)
 {
     //... TODO
-    (void) url; (void) info; // avoid warnings
     return css::uno::Sequence< css::sdbc::DriverPropertyInfo >();
 }
 
-sal_Int32 MorkDriver::getMajorVersion() throw (css::uno::RuntimeException, std::exception) {
+sal_Int32 MorkDriver::getMajorVersion() {
     //... TODO
     return 0;
 }
 
-sal_Int32 MorkDriver::getMinorVersion() throw (css::uno::RuntimeException, std::exception) {
+sal_Int32 MorkDriver::getMinorVersion() {
     //... TODO
     return 0;
 }

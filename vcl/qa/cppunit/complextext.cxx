@@ -7,38 +7,62 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <config_features.h>
+
+#include <ostream>
+#include <vector>
+#if !defined(_WIN32) && HAVE_MORE_FONTS
+static std::ostream& operator<<(std::ostream& rStream, const std::vector<long>& rVec);
+#endif
+
 #include <unotest/filters-test.hxx>
 #include <test/bootstrapfixture.hxx>
 
 #include <vcl/wrkwin.hxx>
+// workaround MSVC2015 issue with std::unique_ptr
+#include <sallayout.hxx>
 
 #include <osl/file.hxx>
 #include <osl/process.h>
+
+#if !defined(_WIN32) && HAVE_MORE_FONTS
+static std::ostream& operator<<(std::ostream& rStream, const std::vector<long>& rVec)
+{
+    rStream << "{ ";
+    for (size_t i = 0; i < rVec.size() - 1; i++)
+        rStream << rVec[i] << ", ";
+    rStream << rVec.back();
+    rStream << " }";
+    return rStream;
+}
+#endif
 
 class VclComplexTextTest : public test::BootstrapFixture
 {
 public:
     VclComplexTextTest() : BootstrapFixture(true, false) {}
 
+#if HAVE_MORE_FONTS
     /// Play with font measuring etc.
     void testArabic();
+#endif
 #if defined(_WIN32)
     void testTdf95650(); // Windows-only issue
 #endif
 
     CPPUNIT_TEST_SUITE(VclComplexTextTest);
+#if HAVE_MORE_FONTS
     CPPUNIT_TEST(testArabic);
+#endif
 #if defined(_WIN32)
     CPPUNIT_TEST(testTdf95650);
 #endif
     CPPUNIT_TEST_SUITE_END();
 };
 
+#if HAVE_MORE_FONTS
 void VclComplexTextTest::testArabic()
 {
-#if !defined (LINUX)
-    return;
-#else // only tested on Linux so far
     const unsigned char pOneTwoThreeUTF8[] = {
         0xd9, 0x88, 0xd8, 0xa7, 0xd8, 0xad, 0xd9, 0x90,
         0xd8, 0xaf, 0xd9, 0x92, 0x20, 0xd8, 0xa5, 0xd8,
@@ -49,29 +73,60 @@ void VclComplexTextTest::testArabic()
     OUString aOneTwoThree( reinterpret_cast<char const *>(pOneTwoThreeUTF8),
                            SAL_N_ELEMENTS( pOneTwoThreeUTF8 ) - 1,
                            RTL_TEXTENCODING_UTF8 );
-    VclPtr<vcl::Window> pWin = VclPtr<WorkWindow>::Create( static_cast<vcl::Window *>(nullptr) );
+    ScopedVclPtrInstance<WorkWindow> pWin(static_cast<vcl::Window *>(nullptr));
     CPPUNIT_ASSERT( pWin );
 
-    OutputDevice *pOutDev = static_cast< OutputDevice * >( pWin.get() );
+    vcl::Font aFont("DejaVu Sans", "Book", Size(0, 12));
 
-    vcl::Font aFont = OutputDevice::GetDefaultFont(
-                        DefaultFontType::CTL_SPREADSHEET,
-                        LANGUAGE_ARABIC_SAUDI_ARABIA,
-                        GetDefaultFontFlags::OnlyOne );
+    OutputDevice *pOutDev = pWin.get();
     pOutDev->SetFont( aFont );
 
+    // absolute character widths AKA text array.
+#if !defined(_WIN32)
+    std::vector<long> aRefCharWidths {6,  9,  16, 16, 22, 22, 26, 29, 32, 32,
+                                      36, 40, 49, 53, 56, 63, 63, 66, 72, 72};
+    std::vector<long> aCharWidths(aOneTwoThree.getLength(), 0);
+    long nTextWidth = pOutDev->GetTextArray(aOneTwoThree, aCharWidths.data());
+
+    CPPUNIT_ASSERT_EQUAL(aRefCharWidths, aCharWidths);
+    // this sporadically returns 75 or 74 on some of the windows tinderboxes eg. tb73
+    CPPUNIT_ASSERT_EQUAL(72L, nTextWidth);
+    CPPUNIT_ASSERT_EQUAL(nTextWidth, aCharWidths.back());
+#endif
+
+    // text advance width and line height
+    CPPUNIT_ASSERT_EQUAL(72L, pOutDev->GetTextWidth(aOneTwoThree));
+    CPPUNIT_ASSERT_EQUAL(14L, pOutDev->GetTextHeight());
+
+    // exact bounding rectangle, not essentially the same as text width/height
+#if defined(MACOSX) || defined(_WIN32)
+    // FIXME: fails on some Linux tinderboxes, might be a FreeType issue.
+    tools::Rectangle aBoundRect, aTestRect( 0, 1, 71, 15 );
+    pOutDev->GetTextBoundRect(aBoundRect, aOneTwoThree);
+#if defined(_WIN32)
+    // if run on Win7 KVM QXL / Spice GUI, we "miss" the first pixel column?!
+    if ( 1 == aBoundRect.Left() )
+    {
+        aTestRect.AdjustLeft(1);
+    }
+#endif
+    CPPUNIT_ASSERT_EQUAL(aTestRect, aBoundRect);
+#endif
+
     // normal orientation
-    Rectangle aInput;
-    Rectangle aRect = pOutDev->GetTextRect( aInput, aOneTwoThree );
+    tools::Rectangle aInput;
+    tools::Rectangle aRect = pOutDev->GetTextRect( aInput, aOneTwoThree );
 
     // now rotate 270 degress
     vcl::Font aRotated( aFont );
     aRotated.SetOrientation( 2700 );
     pOutDev->SetFont( aRotated );
-    Rectangle aRectRot = pOutDev->GetTextRect( aInput, aOneTwoThree );
+    tools::Rectangle aRectRot = pOutDev->GetTextRect( aInput, aOneTwoThree );
 
     // Check that we did do the rotation ...
 #if 0
+    // FIXME: This seems to be wishful thinking, GetTextRect() does not take
+    // rotation into account.
     fprintf( stderr, "%ld %ld %ld %ld\n",
              aRect.GetWidth(), aRect.GetHeight(),
              aRectRot.GetWidth(), aRectRot.GetHeight() );
@@ -80,8 +135,8 @@ void VclComplexTextTest::testArabic()
 #else
     (void)aRect; (void)aRectRot;
 #endif
-#endif
 }
+#endif
 
 #if defined(_WIN32)
 void VclComplexTextTest::testTdf95650()
@@ -94,12 +149,12 @@ void VclComplexTextTest::testTdf95650()
         0x030A, 0x0C0B, 0x20E0, 0x0A0D
     };
     OUString aTxt(pTxt, SAL_N_ELEMENTS(pTxt) - 1);
-    VclPtr<vcl::Window> pWin = VclPtr<WorkWindow>::Create(static_cast<vcl::Window *>(nullptr));
+    ScopedVclPtrInstance<WorkWindow> pWin(static_cast<vcl::Window *>(nullptr));
     CPPUNIT_ASSERT(pWin);
 
-    OutputDevice *pOutDev = static_cast< OutputDevice * >(pWin.get());
+    OutputDevice *pOutDev = pWin.get();
     // Check that the following executes without failing assertion
-    pOutDev->ImplLayout(aTxt, 9, 1, Point(), 0, 0, SalLayoutFlags::BiDiRtl, nullptr);
+    pOutDev->ImplLayout(aTxt, 9, 1, Point(), 0, nullptr, SalLayoutFlags::BiDiRtl);
 }
 #endif
 

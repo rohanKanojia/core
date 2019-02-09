@@ -27,12 +27,12 @@ class ScTabViewShell;
 class ScTabViewTarget : public SfxRepeatTarget
 {
 private:
-    ScTabViewShell* pViewShell;
+    ScTabViewShell* const pViewShell;
 
 public:
 
                     ScTabViewTarget( ScTabViewShell* pShell ) : pViewShell( pShell ) {}
-    virtual         ~ScTabViewTarget();
+    virtual         ~ScTabViewTarget() override;
 
     ScTabViewShell* GetViewShell() const { return pViewShell; }
 };

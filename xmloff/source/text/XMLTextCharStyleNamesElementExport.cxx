@@ -18,9 +18,11 @@
  */
 
 #include "XMLTextCharStyleNamesElementExport.hxx"
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlexp.hxx>
+#include <osl/diagnose.h>
 
 namespace com { namespace sun { namespace star {
     namespace beans { class XPropertySet; }

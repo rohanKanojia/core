@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSFONTPROVIDER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSFONTPROVIDER_HXX
 
-#include "tools/SdGlobalResourceContainer.hxx"
+#include <tools/SdGlobalResourceContainer.hxx>
 
 #include <memory>
-#include <vcl/mapmod.hxx>
 
 namespace vcl { class Font; }
 
@@ -36,8 +35,6 @@ class FontProvider
     : public SdGlobalResource
 {
 public:
-    typedef std::shared_ptr<vcl::Font> SharedFontPointer;
-
     /** Return the single instance of this class.  Throws a RuntimeException
         when no instance can be created.
     */
@@ -57,10 +54,10 @@ private:
         replaced by another one only when GetFont() is called with a device
         with a different map mode or by a call to Invalidate().
     */
-    SharedFontPointer maFont;
+    std::shared_ptr<vcl::Font> maFont;
 
     FontProvider();
-    virtual ~FontProvider();
+    virtual ~FontProvider() override;
 
     FontProvider (const FontProvider&) = delete;
     FontProvider& operator= (const FontProvider&) = delete;

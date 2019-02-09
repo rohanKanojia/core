@@ -21,6 +21,7 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_ooxmlimport, \
     cppu \
     cppuhelper \
     sal \
+    sfx \
     test \
     unotest \
     utl \
@@ -28,7 +29,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_ooxmlimport, \
     tl \
     vcl \
     svxcore \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_ooxmlimport,\
@@ -56,8 +56,9 @@ $(eval $(call gb_CppunitTest_use_system_darwin_frameworks,sw_ooxmlimport,\
 endif
 
 $(eval $(call gb_CppunitTest_use_api,sw_ooxmlimport,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_ooxmlimport))
@@ -72,6 +73,7 @@ $(eval $(call gb_CppunitTest_use_components,sw_ooxmlimport,\
     configmgr/source/configmgr \
     drawinglayer/drawinglayer \
     embeddedobj/util/embobj \
+    emfio/emfio \
     filter/source/config/cache/filterconfig1 \
     forms/util/frm \
     framework/util/fwk \
@@ -85,7 +87,8 @@ $(eval $(call gb_CppunitTest_use_components,sw_ooxmlimport,\
     sw/util/swd \
     sw/util/msword \
     sfx2/util/sfx \
-	starmath/util/sm \
+    sot/util/sot \
+    starmath/util/sm \
     svl/source/fsstor/fsstorage \
     svl/util/svl \
     svtools/util/svt \
@@ -97,10 +100,14 @@ $(eval $(call gb_CppunitTest_use_components,sw_ooxmlimport,\
     unotools/util/utl \
     unoxml/source/service/unoxml \
     unoxml/source/rdf/unordf \
+    uui/util/uui \
+    vcl/vcl.common \
     writerfilter/util/writerfilter \
     xmloff/util/xo \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_ooxmlimport))
+
+$(eval $(call gb_CppunitTest_use_more_fonts,sw_ooxmlimport))
 
 # vim: set noet sw=4 ts=4:

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <xpathapi.hxx>
+#include "xpathapi.hxx"
 
 #include <stdarg.h>
 #include <string.h>
@@ -28,11 +28,12 @@
 #include <libxml/xpathInternals.h>
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
-#include <nodelist.hxx>
-#include <xpathobject.hxx>
+#include "nodelist.hxx"
+#include "xpathobject.hxx"
 
-#include "../dom/node.hxx"
+#include <node.hxx>
 #include "../dom/document.hxx"
 
 #include <cppuhelper/supportsservice.hxx>
@@ -57,15 +58,15 @@ namespace XPath
     {
     }
 
-    const char* CXPathAPI::aImplementationName = "com.sun.star.comp.xml.xpath.XPathAPI";
-    const char* CXPathAPI::aSupportedServiceNames[] = {
+    static const char aImplementationName[] = "com.sun.star.comp.xml.xpath.XPathAPI";
+    static const char* aSupportedServiceNames[] = {
         "com.sun.star.xml.xpath.XPathAPI",
         nullptr
     };
 
     OUString CXPathAPI::_getImplementationName()
     {
-        return OUString::createFromAscii(aImplementationName);
+        return OUString(aImplementationName);
     }
 
     Sequence<OUString> CXPathAPI::_getSupportedServiceNames()
@@ -73,25 +74,22 @@ namespace XPath
         Sequence<OUString> aSequence;
         for (int i=0; aSupportedServiceNames[i]!=nullptr; i++) {
             aSequence.realloc(i+1);
-            aSequence[i]=(OUString::createFromAscii(aSupportedServiceNames[i]));
+            aSequence[i] = OUString::createFromAscii(aSupportedServiceNames[i]);
         }
         return aSequence;
     }
 
     Sequence< OUString > SAL_CALL CXPathAPI::getSupportedServiceNames()
-        throw (RuntimeException, std::exception)
     {
         return CXPathAPI::_getSupportedServiceNames();
     }
 
     OUString SAL_CALL CXPathAPI::getImplementationName()
-        throw (RuntimeException, std::exception)
     {
         return CXPathAPI::_getImplementationName();
     }
 
     sal_Bool SAL_CALL CXPathAPI::supportsService(const OUString& aServiceName)
-        throw (RuntimeException, std::exception)
     {
         return cppu::supportsService(this, aServiceName);
     }
@@ -99,21 +97,19 @@ namespace XPath
     void SAL_CALL CXPathAPI::registerNS(
             const OUString& aPrefix,
             const OUString& aURI)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 
-        m_nsmap.insert(nsmap_t::value_type(aPrefix, aURI));
+        m_nsmap.emplace(aPrefix, aURI);
     }
 
     void SAL_CALL CXPathAPI::unregisterNS(
             const OUString& aPrefix,
             const OUString& aURI)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 
-        if ((m_nsmap.find(aPrefix))->second.equals(aURI)) {
+        if ((m_nsmap.find(aPrefix))->second == aURI) {
             m_nsmap.erase(aPrefix);
         }
     }
@@ -124,16 +120,14 @@ namespace XPath
             xmlXPathContextPtr ctx,
             const nsmap_t& nsmap)
     {
-        nsmap_t::const_iterator i = nsmap.begin();
         OString oprefix, ouri;
-        while (i != nsmap.end())
+        for (const auto& rEntry : nsmap)
         {
-            oprefix = OUStringToOString(i->first,  RTL_TEXTENCODING_UTF8);
-            ouri    = OUStringToOString(i->second, RTL_TEXTENCODING_UTF8);
+            oprefix = OUStringToOString(rEntry.first,  RTL_TEXTENCODING_UTF8);
+            ouri    = OUStringToOString(rEntry.second, RTL_TEXTENCODING_UTF8);
             xmlChar const *p = reinterpret_cast<xmlChar const *>(oprefix.getStr());
             xmlChar const *u = reinterpret_cast<xmlChar const *>(ouri.getStr());
-            xmlXPathRegisterNs(ctx, p, u);
-            ++i;
+            (void)xmlXPathRegisterNs(ctx, p, u);
         }
     }
 
@@ -150,10 +144,10 @@ namespace XPath
         while (pNode != nullptr) {
             xmlNsPtr curDef = pNode->nsDef;
             while (curDef != nullptr) {
-                const xmlChar* xHref = curDef->href;
-                OUString aURI(reinterpret_cast<char const *>(xHref), strlen(reinterpret_cast<char const *>(xHref)), RTL_TEXTENCODING_UTF8);
-                const xmlChar* xPre = curDef->prefix;
-                OUString aPrefix(reinterpret_cast<char const *>(xPre), strlen(reinterpret_cast<char const *>(xPre)), RTL_TEXTENCODING_UTF8);
+                const xmlChar* pHref = curDef->href;
+                OUString aURI(reinterpret_cast<char const *>(pHref), strlen(reinterpret_cast<char const *>(pHref)), RTL_TEXTENCODING_UTF8);
+                const xmlChar* pPre = curDef->prefix;
+                OUString aPrefix(reinterpret_cast<char const *>(pPre), strlen(reinterpret_cast<char const *>(pPre)), RTL_TEXTENCODING_UTF8);
                 // we could already have this prefix from a child node
                 if (rNamespaces.find(aPrefix) == rNamespaces.end())
                 {
@@ -170,10 +164,9 @@ namespace XPath
     {
         nsmap_t namespaces;
         lcl_collectNamespaces(namespaces, xNamespaceNode);
-        for (nsmap_t::const_iterator iter = namespaces.begin();
-                iter != namespaces.end(); ++iter)
+        for (const auto& rEntry : namespaces)
         {
-            rAPI.registerNS(iter->first, iter->second);
+            rAPI.registerNS(rEntry.first, rEntry.second);
         }
     }
 
@@ -183,10 +176,9 @@ namespace XPath
             xmlXPathContextPtr ctx,
             const extensions_t& extensions)
     {
-        extensions_t::const_iterator i = extensions.begin();
-        while (i != extensions.end())
+        for (const auto& rExtensionRef : extensions)
         {
-            Libxml2ExtensionHandle aHandle = (*i)->getLibxml2ExtensionHandle();
+            Libxml2ExtensionHandle aHandle = rExtensionRef->getLibxml2ExtensionHandle();
             if ( aHandle.functionLookupFunction != 0 )
             {
                 xmlXPathRegisterFuncLookup(ctx,
@@ -203,7 +195,6 @@ namespace XPath
                     reinterpret_cast<void*>(
                         sal::static_int_cast<sal_IntPtr>(aHandle.variableData)));
             }
-            ++i;
         }
     }
 
@@ -213,7 +204,6 @@ namespace XPath
     Reference< XNodeList > SAL_CALL CXPathAPI::selectNodeList(
             const Reference< XNode >& contextNode,
             const OUString& expr)
-        throw (RuntimeException, XPathException, std::exception)
     {
         Reference< XXPathObject > xobj = eval(contextNode, expr);
         return xobj->getNodeList();
@@ -226,7 +216,6 @@ namespace XPath
             const Reference< XNode >&  contextNode,
             const OUString& expr,
             const Reference< XNode >&  namespaceNode)
-        throw (RuntimeException, XPathException, std::exception)
     {
         lcl_collectRegisterNamespaces(*this, namespaceNode);
         return selectNodeList(contextNode, expr);
@@ -238,7 +227,6 @@ namespace XPath
     Reference< XNode > SAL_CALL CXPathAPI::selectSingleNode(
             const Reference< XNode >& contextNode,
             const OUString& expr)
-        throw (RuntimeException, XPathException, std::exception)
     {
         Reference< XNodeList > aList = selectNodeList(contextNode, expr);
         Reference< XNode > aNode = aList->item(0);
@@ -253,7 +241,6 @@ namespace XPath
             const Reference< XNode >& contextNode,
             const OUString& expr,
             const Reference< XNode >&  namespaceNode )
-        throw (RuntimeException, XPathException, std::exception)
     {
         lcl_collectRegisterNamespaces(*this, namespaceNode);
         return selectSingleNode(contextNode, expr);
@@ -316,7 +303,6 @@ namespace XPath
     Reference< XXPathObject > SAL_CALL CXPathAPI::eval(
             Reference< XNode > const& xContextNode,
             const OUString& expr)
-        throw (RuntimeException, XPathException, std::exception)
     {
         if (!xContextNode.is()) { throw RuntimeException(); }
 
@@ -372,9 +358,9 @@ namespace XPath
 
         /* run the query */
         OString o1 = OUStringToOString(expr, RTL_TEXTENCODING_UTF8);
-        xmlChar const *xStr = reinterpret_cast<xmlChar const *>(o1.getStr());
+        xmlChar const *pStr = reinterpret_cast<xmlChar const *>(o1.getStr());
         std::shared_ptr<xmlXPathObject> const xpathObj(
-                xmlXPathEval(xStr, xpathCtx.get()), xmlXPathFreeObject);
+                xmlXPathEval(pStr, xpathCtx.get()), xmlXPathFreeObject);
         xmlSetGenericErrorFunc(nullptr, nullptr);
         if (nullptr == xpathObj) {
             // OSL_ENSURE(xpathCtx->lastError == NULL, xpathCtx->lastError->message);
@@ -392,7 +378,6 @@ namespace XPath
             const Reference< XNode >& contextNode,
             const OUString& expr,
             const Reference< XNode >& namespaceNode)
-        throw (RuntimeException, XPathException, std::exception)
     {
         lcl_collectRegisterNamespaces(*this, namespaceNode);
         return eval(contextNode, expr);
@@ -405,7 +390,6 @@ namespace XPath
      */
     void SAL_CALL CXPathAPI::registerExtension(
             const OUString& aName)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_Mutex);
 
@@ -421,7 +405,6 @@ namespace XPath
      */
     void SAL_CALL CXPathAPI::registerExtensionInstance(
             Reference< XXPathExtension> const& xExtension)
-        throw (RuntimeException, std::exception)
     {
         if (!xExtension.is()) {
             throw RuntimeException();

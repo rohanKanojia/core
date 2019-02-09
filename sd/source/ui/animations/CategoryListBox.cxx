@@ -18,6 +18,9 @@
  */
 
 #include "CategoryListBox.hxx"
+#include <vcl/builderfactory.hxx>
+
+#include <vcl/event.hxx>
 
 namespace sd {
 
@@ -34,13 +37,11 @@ CategoryListBox::~CategoryListBox()
 {
 }
 
-sal_Int32  CategoryListBox::InsertCategory( const OUString& rStr )
+void  CategoryListBox::InsertCategory( const OUString& rStr )
 {
     sal_Int32  n = ListBox::InsertEntry( rStr );
     if( n != LISTBOX_ENTRY_NOTFOUND )
         ListBox::SetEntryFlags( n, ListBox::GetEntryFlags(n) | ListBoxEntryFlags::DisableSelection );
-
-    return n;
 }
 
 void CategoryListBox::UserDraw( const UserDrawEvent& rUDEvt )
@@ -49,7 +50,7 @@ void CategoryListBox::UserDraw( const UserDrawEvent& rUDEvt )
 
     if( ListBox::GetEntryFlags(nItem) & ListBoxEntryFlags::DisableSelection )
     {
-        Rectangle aOutRect( rUDEvt.GetRect() );
+        ::tools::Rectangle aOutRect( rUDEvt.GetRect() );
         vcl::RenderContext* pDev = rUDEvt.GetRenderContext();
 
         // fill the background
@@ -71,11 +72,11 @@ void CategoryListBox::UserDraw( const UserDrawEvent& rUDEvt )
     }
     else
     {
-        DrawEntry( rUDEvt, true, false );
+        DrawEntry( rUDEvt );
     }
 }
 
-IMPL_LINK_NOARG_TYPED(CategoryListBox, implDoubleClickHdl, ListBox&, void)
+IMPL_LINK_NOARG(CategoryListBox, implDoubleClickHdl, ListBox&, void)
 {
     CaptureMouse();
 }
@@ -83,11 +84,7 @@ IMPL_LINK_NOARG_TYPED(CategoryListBox, implDoubleClickHdl, ListBox&, void)
 void CategoryListBox::MouseButtonUp( const MouseEvent& rMEvt )
 {
     ReleaseMouse();
-    if( rMEvt.IsLeft() && (rMEvt.GetClicks() == 2) )
-    {
-        maDoubleClickHdl.Call( *this );
-    }
-    else
+    if (!( rMEvt.IsLeft() && (rMEvt.GetClicks() == 2) ))
     {
         ListBox::MouseButtonUp( rMEvt );
     }

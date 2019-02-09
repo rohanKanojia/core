@@ -19,7 +19,6 @@
 
 #include <float.h>
 #include <hintids.hxx>
-#include <vcl/window.hxx>
 #include <doc.hxx>
 #include <IDocumentChartDataProviderAccess.hxx>
 #include <IDocumentState.hxx>
@@ -37,7 +36,6 @@
 #include <swtblfmt.hxx>
 #include <tblsel.hxx>
 #include <cellatr.hxx>
-#include <osl/mutex.hxx>
 
 #include <unochart.hxx>
 
@@ -101,13 +99,13 @@ void SwDoc::DoUpdateAllCharts()
                 nullptr != ( pTableNd = pTmpTable->GetTableNode() ) &&
                 pTableNd->GetNodes().IsDocNodes() )
             {
-                _UpdateCharts( *pTmpTable, *pVSh );
+                UpdateCharts_( *pTmpTable, *pVSh );
             }
         }
     }
 }
 
-void SwDoc::_UpdateCharts( const SwTable& rTable, SwViewShell const & rVSh ) const
+void SwDoc::UpdateCharts_( const SwTable& rTable, SwViewShell const & rVSh ) const
 {
     OUString aName( rTable.GetFrameFormat()->GetName() );
     SwStartNode *pStNd;
@@ -138,7 +136,7 @@ void SwDoc::UpdateCharts( const OUString &rName ) const
         SwViewShell const * pVSh = getIDocumentLayoutAccess().GetCurrentViewShell();
 
         if( pVSh )
-            _UpdateCharts( *pTmpTable, *pVSh );
+            UpdateCharts_( *pTmpTable, *pVSh );
     }
 }
 

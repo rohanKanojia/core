@@ -26,10 +26,12 @@ using namespace ::com::sun::star;
 // ---------------------- AtkHyperlink ----------------------
 
 typedef struct {
+    AtkHyperlink const atk_hyper_link;
+
     uno::Reference< accessibility::XAccessibleHyperlink > xLink;
 } HyperLink;
 
-static uno::Reference< accessibility::XAccessibleHyperlink >
+static uno::Reference< accessibility::XAccessibleHyperlink > const &
     getHyperlink( AtkHyperlink *pHyperlink )
 {
     HyperLink *pLink = reinterpret_cast<HyperLink *>(pHyperlink);
@@ -64,17 +66,10 @@ hyper_link_get_uri( AtkHyperlink *pLink,
 }
 
 static AtkObject *
-hyper_link_get_object( AtkHyperlink *pLink,
-                       gint          i)
+hyper_link_get_object( AtkHyperlink *,
+                       gint          )
 {
-    try {
-        uno::Any aAny = getHyperlink( pLink )->getAccessibleActionObject( i );
-        uno::Reference< accessibility::XAccessible > xObj( aAny, uno::UNO_QUERY_THROW );
-        return atk_object_wrapper_ref( xObj );
-    }
-    catch(const uno::Exception&) {
-        g_warning( "Exception in hyper_link_get_object" );
-    }
+    g_warning( "FIXME: hyper_link_get_object unimplemented" );
     return nullptr;
 }
 static gint
@@ -177,7 +172,7 @@ hyper_link_get_type()
 
         type = g_type_register_static (ATK_TYPE_HYPERLINK,
                                        "OOoAtkObjHyperLink", &tinfo,
-                                       (GTypeFlags)0);
+                                       GTypeFlags(0));
         g_type_add_interface_static (type, ATK_TYPE_ACTION,
                                      &atk_action_info);
     }
@@ -187,8 +182,9 @@ hyper_link_get_type()
 
 // ---------------------- AtkHyperText ----------------------
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleHypertext>
-    getHypertext( AtkHypertext *pHypertext ) throw (uno::RuntimeException)
+    getHypertext( AtkHypertext *pHypertext )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pHypertext );
     if( pWrap )

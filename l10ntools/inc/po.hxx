@@ -46,19 +46,21 @@ public:
                     PoEntry();
                     PoEntry( const OString& rSourceFile, const OString& rResType, const OString& rGroupId,
                              const OString& rLocalId, const OString& rHelpText, const OString& rText,
-                             const TYPE eType = TTEXT );
+                             const TYPE eType );
                     ~PoEntry();
 
                     PoEntry( const PoEntry& rPo );
     PoEntry&        operator=( const PoEntry& rPo );
+    PoEntry&        operator=( PoEntry&& rPo );
 
-    OString         getSourceFile() const;      ///< Get name of file from which entry is extracted
+    OString const &  getSourceFile() const;      ///< Get name of file from which entry is extracted
     OString         getGroupId() const;
     OString         getLocalId() const;
     OString         getResourceType() const;    ///< Get the type of component from which entry is extracted
     TYPE            getType() const;            ///< Get the type of entry
-    OString         getMsgId() const;
-    OString         getMsgStr() const;
+    OString const & getMsgCtxt() const;
+    OString const & getMsgId() const;
+    OString const & getMsgStr() const;
     bool            isFuzzy() const;
 
     /// Check whether po-s belong to the same localization component
@@ -77,7 +79,7 @@ class PoHeader
 {
 private:
 
-    GenPoEntry* m_pGenPo;
+    std::unique_ptr<GenPoEntry> m_pGenPo;
     bool m_bIsInitialized;
 
 public:
@@ -86,6 +88,7 @@ public:
     friend class PoIfstream;
 
                     PoHeader( const OString& rExtSrc ); ///< Template Constructor
+                    PoHeader( const OString& rExtSrc, const OString& rPoHeaderMsgStr );
                     ~PoHeader();
                     PoHeader(const PoHeader&) = delete;
     PoHeader&       operator=(const PoHeader&) = delete;
@@ -104,7 +107,7 @@ public:
     enum OpenMode { TRUNC, APP };
 
             PoOfstream();
-            PoOfstream(const OString& rFileName, OpenMode aMode = TRUNC );
+            PoOfstream(const OString& rFileName, OpenMode aMode );
             ~PoOfstream();
             PoOfstream(const PoOfstream&) = delete;
     PoOfstream& operator=(const PoOfstream&) = delete;
@@ -137,6 +140,7 @@ public:
     bool    eof() const     { return m_bEof; }
 
     void    open(const OString& rFileName);
+    void    open(const OString& rFileName, OString& sPoHeader);
     void    close();
     void    readEntry(PoEntry& rPo);
 };

@@ -45,9 +45,9 @@ namespace drawinglayer
         :   BaseProcessor2D(rViewInformation),
             maDiscreteHitPosition(),
             mfDiscreteHitTolerance(0.0),
+            maHitStack(),
+            mbCollectHitStack(false),
             mbHit(false),
-            mbHitToleranceUsed(false),
-            mbUseInvisiblePrimitiveContent(true),
             mbHitTextOnly(bHitTextOnly)
         {
             // init hit tolerance
@@ -65,11 +65,8 @@ namespace drawinglayer
                     * basegfx::B2DVector(mfDiscreteHitTolerance, 0.0)).getLength();
             }
 
-            // gererate discrete hit position
+            // generate discrete hit position
             maDiscreteHitPosition = getViewInformation2D().getObjectToViewTransformation() * rLogicHitPosition;
-
-            // check if HitTolerance is used
-            mbHitToleranceUsed = basegfx::fTools::more(getDiscreteHitTolerance(), 0.0);
         }
 
         HitTestProcessor2D::~HitTestProcessor2D()
@@ -78,7 +75,7 @@ namespace drawinglayer
 
         bool HitTestProcessor2D::checkHairlineHitWithTolerance(
             const basegfx::B2DPolygon& rPolygon,
-            double fDiscreteHitTolerance)
+            double fDiscreteHitTolerance) const
         {
             basegfx::B2DPolygon aLocalPolygon(rPolygon);
             aLocalPolygon.transform(getViewInformation2D().getObjectToViewTransformation());
@@ -95,7 +92,7 @@ namespace drawinglayer
             if(aPolygonRange.isInside(getDiscreteHitPosition()))
             {
                 // check if a polygon edge is hit
-                return basegfx::tools::isInEpsilonRange(
+                return basegfx::utils::isInEpsilonRange(
                     aLocalPolygon,
                     getDiscreteHitPosition(),
                     fDiscreteHitTolerance);
@@ -106,7 +103,7 @@ namespace drawinglayer
 
         bool HitTestProcessor2D::checkFillHitWithTolerance(
             const basegfx::B2DPolyPolygon& rPolyPolygon,
-            double fDiscreteHitTolerance)
+            double fDiscreteHitTolerance) const
         {
             bool bRetval(false);
             basegfx::B2DPolyPolygon aLocalPolyPolygon(rPolyPolygon);
@@ -126,7 +123,7 @@ namespace drawinglayer
             {
                 // if a HitTolerance is given, check for polygon edge hit in epsilon first
                 if(bDiscreteHitToleranceUsed &&
-                    basegfx::tools::isInEpsilonRange(
+                    basegfx::utils::isInEpsilonRange(
                         aLocalPolyPolygon,
                         getDiscreteHitPosition(),
                         fDiscreteHitTolerance))
@@ -135,7 +132,7 @@ namespace drawinglayer
                 }
 
                 // check for hit in filled polyPolygon
-                if(!bRetval && basegfx::tools::isInside(
+                if(!bRetval && basegfx::utils::isInside(
                     aLocalPolyPolygon,
                     getDiscreteHitPosition(),
                     true))
@@ -202,7 +199,7 @@ namespace drawinglayer
                                         true);
                                     aCutFindProcessor.process(rPrimitives);
 
-                                    mbHit = (0 != aCutFindProcessor.getCutPoints().size());
+                                    mbHit = (!aCutFindProcessor.getCutPoints().empty());
                                 }
                             }
                         }
@@ -212,7 +209,7 @@ namespace drawinglayer
                 if(!getHit())
                 {
                     // empty 3D scene; Check for border hit
-                    basegfx::B2DPolygon aOutline(basegfx::tools::createUnitPolygon());
+                    basegfx::B2DPolygon aOutline(basegfx::utils::createUnitPolygon());
                     aOutline.transform(rCandidate.getObjectTransformation());
 
                     mbHit = checkHairlineHitWithTolerance(aOutline, getDiscreteHitTolerance());
@@ -294,7 +291,7 @@ namespace drawinglayer
                             {
                                 // if line is mitered, use decomposition since mitered line
                                 // geometry may use more space than the geometry grown by half line width
-                                process(rCandidate.get2DDecomposition(getViewInformation2D()));
+                                process(rCandidate);
                             }
                             else
                             {
@@ -419,7 +416,7 @@ namespace drawinglayer
 
                     if(!aRange.isEmpty())
                     {
-                        const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(aRange));
+                        const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(aRange));
                         mbHit = checkFillHitWithTolerance(basegfx::B2DPolyPolygon(aOutline), getDiscreteHitTolerance());
                     }
 
@@ -430,7 +427,7 @@ namespace drawinglayer
                     if(!getHitTextOnly())
                     {
                         // The recently added BitmapEx::GetTransparency() makes it easy to extend
-                        // the BitmapPrimitive2D HitTest to take the contained BotmapEx and it's
+                        // the BitmapPrimitive2D HitTest to take the contained BitmapEx and it's
                         // transparency into account
                         const basegfx::B2DRange aRange(rCandidate.getB2DRange(getViewInformation2D()));
 
@@ -462,7 +459,7 @@ namespace drawinglayer
                             else
                             {
                                 // fallback to standard HitTest
-                                const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(aRange));
+                                const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(aRange));
                                 mbHit = checkFillHitWithTolerance(basegfx::B2DPolyPolygon(aOutline), getDiscreteHitTolerance());
                             }
                         }
@@ -489,7 +486,7 @@ namespace drawinglayer
 
                         if(!aRange.isEmpty())
                         {
-                            const basegfx::B2DPolygon aOutline(basegfx::tools::createPolygonFromRect(aRange));
+                            const basegfx::B2DPolygon aOutline(basegfx::utils::createPolygonFromRect(aRange));
                             mbHit = checkFillHitWithTolerance(basegfx::B2DPolyPolygon(aOutline), getDiscreteHitTolerance());
                         }
                     }
@@ -498,7 +495,7 @@ namespace drawinglayer
                 }
                 case PRIMITIVE2D_ID_HIDDENGEOMETRYPRIMITIVE2D :
                 {
-                    // HiddenGeometryPrimitive2D; the default decomposition would return an empty seqence,
+                    // HiddenGeometryPrimitive2D; the default decomposition would return an empty sequence,
                     // so force this primitive to process its children directly if the switch is set
                     // (which is the default). Else, ignore invisible content
                     const primitive2d::HiddenGeometryPrimitive2D& rHiddenGeometry(static_cast< const primitive2d::HiddenGeometryPrimitive2D& >(rCandidate));
@@ -506,10 +503,7 @@ namespace drawinglayer
 
                     if(!rChildren.empty())
                     {
-                        if(getUseInvisiblePrimitiveContent())
-                        {
-                            process(rChildren);
-                        }
+                        process(rChildren);
                     }
 
                     break;
@@ -539,10 +533,17 @@ namespace drawinglayer
                 default :
                 {
                     // process recursively
-                    process(rCandidate.get2DDecomposition(getViewInformation2D()));
+                    process(rCandidate);
 
                     break;
                 }
+            }
+
+            if (getHit() && getCollectHitStack())
+            {
+                /// push candidate to HitStack to create it. This only happens when a hit is found and
+                /// creating the HitStack was requested (see collectHitStack)
+                maHitStack.append(primitive2d::Primitive2DReference(const_cast< primitive2d::BasePrimitive2D* >(&rCandidate)));
             }
         }
 

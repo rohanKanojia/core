@@ -17,29 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SlideSorter.hxx"
+#include <SlideSorter.hxx>
 
-#include "SlideSorterViewShell.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsScrollBarManager.hxx"
-#include "controller/SlsProperties.hxx"
-#include "controller/SlsAnimator.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsTheme.hxx"
-#include "model/SlideSorterModel.hxx"
+#include <SlideSorterViewShell.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsScrollBarManager.hxx>
+#include <controller/SlsProperties.hxx>
+#include <controller/SlsAnimator.hxx>
+#include <o3tl/deleter.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsTheme.hxx>
+#include <model/SlideSorterModel.hxx>
 
-#include "glob.hrc"
-#include "DrawController.hxx"
-#include "ViewShellBase.hxx"
-#include "ViewShellManager.hxx"
-#include "Window.hxx"
+#include <DrawController.hxx>
+#include <ViewShellBase.hxx>
+#include <ViewShellManager.hxx>
+#include <Window.hxx>
 
 #include <vcl/scrbar.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
 #include <sfx2/dispatch.hxx>
-#include "sdresid.hxx"
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star;
@@ -51,15 +50,15 @@ class ContentWindow : public ::sd::Window
 {
 public:
     ContentWindow(vcl::Window& rParent, SlideSorter& rSlideSorter);
-    virtual ~ContentWindow();
+
     void SetCurrentFunction (const rtl::Reference<FuPoor>& rpFunction);
-    virtual void Paint(vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& /*rRenderContext*/, const ::tools::Rectangle& rRect) override;
     virtual void KeyInput (const KeyEvent& rEvent) override;
     virtual void MouseMove (const MouseEvent& rEvent) override;
     virtual void MouseButtonUp (const MouseEvent& rEvent) override;
     virtual void MouseButtonDown (const MouseEvent& rEvent) override;
     virtual void Command (const CommandEvent& rEvent) override;
-    virtual bool Notify (NotifyEvent& rEvent) override;
+    virtual bool EventNotify (NotifyEvent& rEvent) override;
 
 private:
     SlideSorter& mrSlideSorter;
@@ -82,21 +81,21 @@ std::shared_ptr<SlideSorter> SlideSorter::CreateSlideSorter(
             pContentWindow,
             pHorizontalScrollBar,
             pVerticalScrollBar,
-            pScrollBarBox));
+            pScrollBarBox),
+        o3tl::default_delete<SlideSorter>());
     pSlideSorter->Init();
     return pSlideSorter;
 }
 
 std::shared_ptr<SlideSorter> SlideSorter::CreateSlideSorter (
     ViewShellBase& rBase,
-    ViewShell* pViewShell,
     vcl::Window& rParentWindow)
 {
     std::shared_ptr<SlideSorter> pSlideSorter(
         new SlideSorter(
             rBase,
-            pViewShell,
-            rParentWindow));
+            rParentWindow),
+        o3tl::default_delete<SlideSorter>());
     pSlideSorter->Init();
     return pSlideSorter;
 }
@@ -118,7 +117,6 @@ SlideSorter::SlideSorter (
       mpHorizontalScrollBar(pHorizontalScrollBar),
       mpVerticalScrollBar(pVerticalScrollBar),
       mpScrollBarBox(pScrollBarBox),
-      mbLayoutPending(true),
       mpProperties(new controller::Properties()),
       mpTheme(new view::Theme(mpProperties))
 {
@@ -126,20 +124,18 @@ SlideSorter::SlideSorter (
 
 SlideSorter::SlideSorter (
     ViewShellBase& rBase,
-    ViewShell* pViewShell,
     vcl::Window& rParentWindow)
     : mbIsValid(false),
       mpSlideSorterController(),
       mpSlideSorterModel(),
       mpSlideSorterView(),
       mxControllerWeak(),
-      mpViewShell(pViewShell),
+      mpViewShell(nullptr),
       mpViewShellBase(&rBase),
       mpContentWindow(VclPtr<ContentWindow>::Create(rParentWindow,*this )),
       mpHorizontalScrollBar(VclPtr<ScrollBar>::Create(&rParentWindow,WinBits(WB_HSCROLL | WB_DRAG))),
       mpVerticalScrollBar(VclPtr<ScrollBar>::Create(&rParentWindow,WinBits(WB_VSCROLL | WB_DRAG))),
       mpScrollBarBox(VclPtr<ScrollBarBox>::Create(&rParentWindow)),
-      mbLayoutPending(true),
       mpProperties(new controller::Properties()),
       mpTheme(new view::Theme(mpProperties))
 {
@@ -168,7 +164,7 @@ void SlideSorter::Init()
     SetupListeners ();
 
     // Initialize the window.
-    sd::Window *pContentWindow (GetContentWindow());
+    sd::Window *pContentWindow = GetContentWindow().get();
     if (pContentWindow)
     {
         vcl::Window* pParentWindow = pContentWindow->GetParent();
@@ -183,7 +179,7 @@ void SlideSorter::Init()
         pContentWindow->Hide();
 
         // Set view pointer of base class.
-        SetupControls(pParentWindow);
+        SetupControls();
 
         mbIsValid = true;
     }
@@ -213,19 +209,19 @@ SlideSorter::~SlideSorter()
 
 model::SlideSorterModel& SlideSorter::GetModel() const
 {
-    OSL_ASSERT(mpSlideSorterModel.get()!=nullptr);
+    assert(mpSlideSorterModel.get()!=nullptr);
     return *mpSlideSorterModel;
 }
 
 view::SlideSorterView& SlideSorter::GetView() const
 {
-    OSL_ASSERT(mpSlideSorterView.get()!=nullptr);
+    assert(mpSlideSorterView.get()!=nullptr);
     return *mpSlideSorterView;
 }
 
 controller::SlideSorterController& SlideSorter::GetController() const
 {
-    OSL_ASSERT(mpSlideSorterController.get()!=nullptr);
+    assert(mpSlideSorterController.get()!=nullptr);
     return *mpSlideSorterController;
 }
 
@@ -235,21 +231,21 @@ Reference<frame::XController> SlideSorter::GetXController() const
     return xController;
 }
 
-void SlideSorter::Paint (const Rectangle& rRepaintArea)
+void SlideSorter::Paint (const ::tools::Rectangle& rRepaintArea)
 {
     GetController().Paint(
         rRepaintArea,
         GetContentWindow());
 }
 
-void SlideSorter::SetupControls (vcl::Window* )
+void SlideSorter::SetupControls()
 {
     GetVerticalScrollBar()->Show();
 }
 
 void SlideSorter::SetupListeners()
 {
-    sd::Window *pWindow (GetContentWindow());
+    sd::Window *pWindow = GetContentWindow().get();
     if (pWindow)
     {
         vcl::Window* pParentWindow = pWindow->GetParent();
@@ -278,7 +274,7 @@ void SlideSorter::ReleaseListeners()
 {
     mpSlideSorterController->GetScrollBarManager().Disconnect();
 
-    sd::Window *pWindow (GetContentWindow());
+    sd::Window *pWindow (GetContentWindow().get());
     if (pWindow)
     {
         pWindow->RemoveEventListener(
@@ -302,16 +298,10 @@ void SlideSorter::ReleaseListeners()
 void SlideSorter::CreateModelViewController()
 {
     mpSlideSorterModel.reset(CreateModel());
-    DBG_ASSERT (mpSlideSorterModel.get()!=nullptr,
-        "Can not create model for slide browser");
+    DBG_ASSERT(mpSlideSorterModel != nullptr, "Can not create model for slide browser");
 
-    mpSlideSorterView.reset(CreateView());
-    DBG_ASSERT (mpSlideSorterView.get()!=nullptr,
-        "Can not create view for slide browser");
-
-    mpSlideSorterController.reset(CreateController());
-    DBG_ASSERT (mpSlideSorterController.get()!=nullptr,
-        "Can not create controller for slide browser");
+    mpSlideSorterView.reset(new view::SlideSorterView (*this));
+    mpSlideSorterController.reset(new controller::SlideSorterController(*this));
 
     // Now that model, view, and controller are constructed, do the
     // initialization that relies on all three being in place.
@@ -325,24 +315,12 @@ model::SlideSorterModel* SlideSorter::CreateModel()
     ViewShellBase* pViewShellBase = GetViewShellBase();
     if (pViewShellBase != nullptr)
     {
-        OSL_ASSERT (pViewShellBase->GetDocument() != nullptr);
+        assert (pViewShellBase->GetDocument() != nullptr);
 
         return new model::SlideSorterModel(*this);
     }
     else
         return nullptr;
-}
-
-view::SlideSorterView* SlideSorter::CreateView()
-{
-    return new view::SlideSorterView (*this);
-}
-
-controller::SlideSorterController* SlideSorter::CreateController()
-{
-    controller::SlideSorterController* pController
-        = new controller::SlideSorterController (*this);
-    return pController;
 }
 
 void SlideSorter::ArrangeGUIElements (
@@ -361,31 +339,25 @@ void SlideSorter::ArrangeGUIElements (
         view::SlideSorterView::DrawLock aLock (*this);
         GetContentWindow()->EnablePaint (false);
 
-        mpSlideSorterController->Resize (Rectangle(aOrigin, rSize));
+        mpSlideSorterController->Resize (::tools::Rectangle(aOrigin, rSize));
 
         GetContentWindow()->EnablePaint (true);
-
-        mbLayoutPending = false;
     }
 }
 
-bool SlideSorter::RelocateToWindow (vcl::Window* pParentWindow)
+void SlideSorter::RelocateToWindow (vcl::Window* pParentWindow)
 {
    // Stop all animations for they have been started for the old window.
     mpSlideSorterController->GetAnimator()->RemoveAllAnimations();
 
     ReleaseListeners();
 
-    vcl::Window *pNewWindow = nullptr;
     if (mpViewShell)
     {
         mpViewShell->ViewShell::RelocateToParentWindow(pParentWindow);
-        pNewWindow = mpViewShell->GetParentWindow();
     }
-    else
-        pNewWindow = nullptr;
 
-    SetupControls(pNewWindow);
+    SetupControls();
     SetupListeners();
 
     // For accessibility we have to shortly hide the content window.  This
@@ -398,8 +370,6 @@ bool SlideSorter::RelocateToWindow (vcl::Window* pParentWindow)
         mpContentWindow->Hide();
         mpContentWindow->Show();
     }
-
-    return true;
 }
 
 void SlideSorter::SetCurrentFunction (const rtl::Reference<FuPoor>& rpFunction)
@@ -417,15 +387,15 @@ void SlideSorter::SetCurrentFunction (const rtl::Reference<FuPoor>& rpFunction)
     }
 }
 
-std::shared_ptr<controller::Properties> SlideSorter::GetProperties() const
+std::shared_ptr<controller::Properties> const & SlideSorter::GetProperties() const
 {
-    OSL_ASSERT(mpProperties);
+    assert(mpProperties);
     return mpProperties;
 }
 
-std::shared_ptr<view::Theme> SlideSorter::GetTheme() const
+std::shared_ptr<view::Theme> const & SlideSorter::GetTheme() const
 {
-    OSL_ASSERT(mpTheme);
+    assert(mpTheme);
     return mpTheme;
 }
 
@@ -444,16 +414,12 @@ ContentWindow::ContentWindow(
     SetStyle(GetStyle() | WB_NOPOINTERFOCUS);
 }
 
-ContentWindow::~ContentWindow()
-{
-}
-
 void ContentWindow::SetCurrentFunction (const rtl::Reference<FuPoor>& rpFunction)
 {
     mpCurrentFunction = rpFunction;
 }
 
-void ContentWindow::Paint (vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect)
+void ContentWindow::Paint (vcl::RenderContext& /*rRenderContext*/, const ::tools::Rectangle& rRect)
 {
     mrSlideSorter.Paint(rRect);
 }
@@ -488,7 +454,7 @@ void ContentWindow::Command(const CommandEvent& rEvent)
         mpCurrentFunction->Command(rEvent);
 }
 
-bool ContentWindow::Notify (NotifyEvent&)
+bool ContentWindow::EventNotify(NotifyEvent&)
 {
     return false;
 }

@@ -19,13 +19,14 @@
 
 #include <uielement/fontsizemenucontroller.hxx>
 
-#include "services.h"
+#include <services.h>
 
 #include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/awt/MenuItemStyle.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/view/XPrintable.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
 
 #include <vcl/menu.hxx>
 #include <tools/mapunit.hxx>
@@ -59,18 +60,16 @@ DEFINE_XSERVICEINFO_MULTISERVICE_2      (   FontSizeMenuController              
 DEFINE_INIT_SERVICE                     (   FontSizeMenuController, {} )
 
 FontSizeMenuController::FontSizeMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
-    svt::PopupMenuControllerBase( xContext ),
-    m_pHeightArray( nullptr )
+    svt::PopupMenuControllerBase( xContext )
 {
 }
 
 FontSizeMenuController::~FontSizeMenuController()
 {
-    delete []m_pHeightArray;
 }
 
 // private function
-OUString FontSizeMenuController::retrievePrinterName( css::uno::Reference< css::frame::XFrame >& rFrame )
+OUString FontSizeMenuController::retrievePrinterName( css::uno::Reference< css::frame::XFrame > const & rFrame )
 {
     OUString aPrinterName;
 
@@ -99,7 +98,7 @@ OUString FontSizeMenuController::retrievePrinterName( css::uno::Reference< css::
 }
 
 // private function
-void FontSizeMenuController::setCurHeight( long nHeight, Reference< css::awt::XPopupMenu >& rPopupMenu )
+void FontSizeMenuController::setCurHeight( long nHeight, Reference< css::awt::XPopupMenu > const & rPopupMenu )
 {
     // check menu item
     sal_uInt16          nChecked    = 0;
@@ -110,7 +109,7 @@ void FontSizeMenuController::setCurHeight( long nHeight, Reference< css::awt::XP
 
         if ( m_pHeightArray[i] == nHeight )
         {
-            rPopupMenu->checkItem( nItemId, sal_True );
+            rPopupMenu->checkItem( nItemId, true );
             return;
         }
 
@@ -119,11 +118,11 @@ void FontSizeMenuController::setCurHeight( long nHeight, Reference< css::awt::XP
     }
 
     if ( nChecked )
-        rPopupMenu->checkItem( nChecked, sal_False );
+        rPopupMenu->checkItem( nChecked, false );
 }
 
 // private function
-void FontSizeMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& rPopupMenu )
+void FontSizeMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu > const & rPopupMenu )
 {
     VCLXPopupMenu*          pPopupMenu = static_cast<VCLXPopupMenu *>(VCLXMenu::GetImplementation( rPopupMenu ));
     PopupMenu*              pVCLPopupMenu = nullptr;
@@ -155,7 +154,7 @@ void FontSizeMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& r
         FontMetric aFontMetric = pFontList->Get( m_aFontDescriptor.Name, m_aFontDescriptor.StyleName );
 
         // setup font size array
-        delete m_pHeightArray;
+        m_pHeightArray.reset();
 
         const sal_IntPtr* pTempAry;
         const sal_IntPtr* pAry = pFontList->GetSizeAry( aFontMetric );
@@ -169,7 +168,7 @@ void FontSizeMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& r
         // first insert font size names (for simplified/traditional chinese)
         float           fPoint;
         FontSizeNames   aFontSizeNames( Application::GetSettings().GetUILanguageTag().getLanguageType() );
-        m_pHeightArray = new long[nSizeCount+aFontSizeNames.Count()];
+        m_pHeightArray.reset( new long[nSizeCount+aFontSizeNames.Count()] );
         OUString   aCommand;
 
         if ( !aFontSizeNames.IsEmpty() )
@@ -177,11 +176,11 @@ void FontSizeMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& r
             if ( pAry == FontList::GetStdSizeAry() )
             {
                 // for scalable fonts all font size names
-                sal_uLong nCount = aFontSizeNames.Count();
-                for( sal_uLong i = 0; i < nCount; i++ )
+                sal_Int32 nCount = aFontSizeNames.Count();
+                for( sal_Int32 i = 0; i < nCount; i++ )
                 {
                     OUString  aSizeName = aFontSizeNames.GetIndexName( i );
-                    long      nSize = aFontSizeNames.GetIndexSize( i );
+                    sal_Int32 nSize = aFontSizeNames.GetIndexSize( i );
                     m_pHeightArray[nPos] = nSize;
                     nPos++; // Id is nPos+1
                     pVCLPopupMenu->InsertItem( nPos, aSizeName, MenuItemBits::RADIOCHECK | MenuItemBits::AUTOCHECK );
@@ -237,7 +236,7 @@ void FontSizeMenuController::fillPopupMenu( Reference< css::awt::XPopupMenu >& r
 }
 
 // XEventListener
-void SAL_CALL FontSizeMenuController::disposing( const EventObject& ) throw ( RuntimeException, std::exception )
+void SAL_CALL FontSizeMenuController::disposing( const EventObject& )
 {
     Reference< css::awt::XMenuListener > xHolder(static_cast<OWeakObject *>(this), UNO_QUERY );
 
@@ -251,7 +250,7 @@ void SAL_CALL FontSizeMenuController::disposing( const EventObject& ) throw ( Ru
 }
 
 // XStatusListener
-void SAL_CALL FontSizeMenuController::statusChanged( const FeatureStateEvent& Event ) throw ( RuntimeException, std::exception )
+void SAL_CALL FontSizeMenuController::statusChanged( const FeatureStateEvent& Event )
 {
     css::awt::FontDescriptor                 aFontDescriptor;
     css::frame::status::FontHeight   aFontHeight;
@@ -289,7 +288,7 @@ void FontSizeMenuController::impl_setPopupMenu()
     m_xCurrentFontDispatch = xDispatchProvider->queryDispatch( aTargetURL, OUString(), 0 );
 }
 
-void SAL_CALL FontSizeMenuController::updatePopupMenu() throw ( css::uno::RuntimeException, std::exception )
+void SAL_CALL FontSizeMenuController::updatePopupMenu()
 {
     osl::ClearableMutexGuard aLock( m_aMutex );
 
@@ -303,8 +302,8 @@ void SAL_CALL FontSizeMenuController::updatePopupMenu() throw ( css::uno::Runtim
 
     if ( xDispatch.is() )
     {
-        xDispatch->addStatusListener( (static_cast< XStatusListener* >(this)), aTargetURL );
-        xDispatch->removeStatusListener( (static_cast< XStatusListener* >(this)), aTargetURL );
+        xDispatch->addStatusListener( static_cast< XStatusListener* >(this), aTargetURL );
+        xDispatch->removeStatusListener( static_cast< XStatusListener* >(this), aTargetURL );
     }
 
     svt::PopupMenuControllerBase::updatePopupMenu();

@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
+#include <sal/log.hxx>
 #include <sfx2/opengrf.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdomedia.hxx>
@@ -27,21 +30,28 @@
 #include <vcl/graphicfilter.hxx>
 #include <svl/stritem.hxx>
 #include <svtools/miscopt.hxx>
-#include <vcl/msgbox.hxx>
 #include <avmedia/mediawindow.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/GraphicNativeTransform.hxx>
+#include <vcl/GraphicNativeMetadata.hxx>
+#include <fuinsert.hxx>
+#include <tabvwsh.hxx>
+#include <drwlayer.hxx>
+#include <drawview.hxx>
+#include <document.hxx>
+#include <scresid.hxx>
+#include <progress.hxx>
+#include <strings.hrc>
+#include <globstr.hrc>
 
-#include "fuinsert.hxx"
-#include "tabvwsh.hxx"
-#include "drwlayer.hxx"
-#include "drawview.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
-#include "progress.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
+#include <com/sun/star/ui/dialogs/ExtendedFilePickerElementIds.hpp>
+#include <com/sun/star/ui/dialogs/ListboxControlActions.hpp>
+#include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
 
-using namespace ::com::sun::star;
+using namespace css;
+using namespace css::uno;
 
 void ScLimitSizeOnDrawPage( Size& rSize, Point& rPos, const Size& rPage )
 {
@@ -53,46 +63,62 @@ void ScLimitSizeOnDrawPage( Size& rSize, Point& rPos, const Size& rPage )
     if ( bNegative )
     {
         //  make everything positive temporarily
-        aPageSize.Width() = -aPageSize.Width();
-        rPos.X() = -rPos.X() - rSize.Width();
+        aPageSize.setWidth( -aPageSize.Width() );
+        rPos.setX( -rPos.X() - rSize.Width() );
     }
 
     if ( rSize.Width() > aPageSize.Width() || rSize.Height() > aPageSize.Height() )
     {
-        double fX = aPageSize.Width()  / (double) rSize.Width();
-        double fY = aPageSize.Height() / (double) rSize.Height();
+        double fX = aPageSize.Width()  / static_cast<double>(rSize.Width());
+        double fY = aPageSize.Height() / static_cast<double>(rSize.Height());
 
         if ( fX < fY )
         {
-            rSize.Width()  = aPageSize.Width();
-            rSize.Height() = (long) ( rSize.Height() * fX );
+            rSize.setWidth( aPageSize.Width() );
+            rSize.setHeight( static_cast<long>( rSize.Height() * fX ) );
         }
         else
         {
-            rSize.Height() = aPageSize.Height();
-            rSize.Width()  = (long) ( rSize.Width() * fY );
+            rSize.setHeight( aPageSize.Height() );
+            rSize.setWidth( static_cast<long>( rSize.Width() * fY ) );
         }
 
         if (!rSize.Width())
-            rSize.Width() = 1;
+            rSize.setWidth( 1 );
         if (!rSize.Height())
-            rSize.Height() = 1;
+            rSize.setHeight( 1 );
     }
 
     if ( rPos.X() + rSize.Width() > aPageSize.Width() )
-        rPos.X() = aPageSize.Width() - rSize.Width();
+        rPos.setX( aPageSize.Width() - rSize.Width() );
     if ( rPos.Y() + rSize.Height() > aPageSize.Height() )
-        rPos.Y() = aPageSize.Height() - rSize.Height();
+        rPos.setY( aPageSize.Height() - rSize.Height() );
 
     if ( bNegative )
-        rPos.X() = -rPos.X() - rSize.Width();       // back to real position
+        rPos.setX( -rPos.X() - rSize.Width() );       // back to real position
 }
 
 static void lcl_InsertGraphic( const Graphic& rGraphic,
                         const OUString& rFileName, const OUString& rFilterName, bool bAsLink, bool bApi,
-                        ScTabViewShell* pViewSh, vcl::Window* pWindow, SdrView* pView )
+                        ScTabViewShell& rViewSh, const vcl::Window* pWindow, SdrView* pView,
+                        ScAnchorType aAnchorType = SCA_CELL )
 {
-    ScDrawView* pDrawView = pViewSh->GetScDrawView();
+    Graphic& rGraphic1 = const_cast<Graphic &>(rGraphic);
+    GraphicNativeMetadata aMetadata;
+    if ( aMetadata.read(rGraphic1) )
+    {
+        const sal_uInt16 aRotation = aMetadata.getRotation();
+        if (aRotation != 0)
+        {
+            std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(nullptr, VclMessageType::Question,VclButtonsType::YesNo,ScResId(STR_QUERYROTATION)));
+            if (xQueryBox->run() == RET_YES)
+            {
+                GraphicNativeTransform aTransform( rGraphic1 );
+                aTransform.rotate( aRotation );
+            }
+        }
+    }
+    ScDrawView* pDrawView = rViewSh.GetScDrawView();
 
     // #i123922# check if an existing object is selected; if yes, evtl. replace
     // the graphic for a SdrGraphObj (including link state updates) or adapt the fill
@@ -105,11 +131,11 @@ static void lcl_InsertGraphic( const Graphic& rGraphic,
         {
             //sal_Int8 nAction(DND_ACTION_MOVE);
             //Point aPos;
-            const OUString aBeginUndo(ScGlobal::GetRscString(STR_UNDO_DRAGDROP));
+            const OUString aBeginUndo(ScResId(STR_UNDO_DRAGDROP));
 
             SdrObject* pResult = pDrawView->ApplyGraphicToObject(
                 *pPickObj,
-                rGraphic,
+                rGraphic1,
                 aBeginUndo,
                 bAsLink ? rFileName : OUString(),
                 bAsLink ? rFilterName : OUString());
@@ -127,8 +153,8 @@ static void lcl_InsertGraphic( const Graphic& rGraphic,
     //  at 100% view scale (as in SetMarkedOriginalSize),
     //  instead of respecting the current view scale
     MapMode aSourceMap = rGraphic.GetPrefMapMode();
-    MapMode aDestMap( MAP_100TH_MM );
-    if ( aSourceMap.GetMapUnit() == MAP_PIXEL && pDrawView )
+    MapMode aDestMap( MapUnit::Map100thMM );
+    if ( aSourceMap.GetMapUnit() == MapUnit::MapPixel && pDrawView )
     {
         Fraction aScaleX, aScaleY;
         pDrawView->CalcNormScale( aScaleX, aScaleY );
@@ -142,25 +168,32 @@ static void lcl_InsertGraphic( const Graphic& rGraphic,
 
     SdrPageView* pPV  = pView->GetSdrPageView();
     SdrPage* pPage = pPV->GetPage();
-    Point aInsertPos = pViewSh->GetInsertPos();
+    Point aInsertPos = rViewSh.GetInsertPos();
 
-    ScViewData& rData = pViewSh->GetViewData();
+    ScViewData& rData = rViewSh.GetViewData();
     if ( rData.GetDocument()->IsNegativePage( rData.GetTabNo() ) )
-        aInsertPos.X() -= aLogicSize.Width();       // move position to left edge
+        aInsertPos.AdjustX( -(aLogicSize.Width()) );       // move position to left edge
 
     ScLimitSizeOnDrawPage( aLogicSize, aInsertPos, pPage->GetSize() );
 
-    Rectangle aRect ( aInsertPos, aLogicSize );
+    tools::Rectangle aRect ( aInsertPos, aLogicSize );
 
-    SdrGrafObj* pObj = new SdrGrafObj( rGraphic, aRect );
+    SdrGrafObj* pObj = new SdrGrafObj(
+        pView->getSdrModelFromSdrView(), // TTTT pView should be reference
+        rGraphic1,
+        aRect);
 
     // calling SetGraphicLink here doesn't work
-
+    // Yes, due to the SdrObject had no SdrModel
     //  Path is no longer used as name for the graphics object
 
     ScDrawLayer* pLayer = static_cast<ScDrawLayer*>(pView->GetModel());
     OUString aName = pLayer->GetNewGraphicName();                 // "Graphics"
     pObj->SetName(aName);
+
+    if (aAnchorType == SCA_CELL || aAnchorType == SCA_CELL_RESIZE)
+        ScDrawLayer::SetCellAnchoredFromPosition(*pObj, *(rData.GetDocument()), rData.GetTabNo(),
+                                                 aAnchorType == SCA_CELL_RESIZE);
 
     //  don't select if from (dispatch) API, to allow subsequent cell operations
     SdrInsertFlags nInsOptions = bApi ? SdrInsertFlags::DONTMARK : SdrInsertFlags::NONE;
@@ -174,7 +207,7 @@ static void lcl_InsertGraphic( const Graphic& rGraphic,
 }
 
 static void lcl_InsertMedia( const OUString& rMediaURL, bool bApi,
-                      ScTabViewShell* pViewSh, vcl::Window* pWindow, SdrView* pView,
+                      ScTabViewShell* pViewSh, const vcl::Window* pWindow, SdrView* pView,
                       const Size& rPrefSize, bool const bLink )
 {
     SdrPageView*    pPV  = pView->GetSdrPageView();
@@ -186,9 +219,9 @@ static void lcl_InsertMedia( const OUString& rMediaURL, bool bApi,
     if( rPrefSize.Width() && rPrefSize.Height() )
     {
         if( pWindow )
-            aSize = pWindow->PixelToLogic( rPrefSize, MAP_100TH_MM );
+            aSize = pWindow->PixelToLogic(rPrefSize, MapMode(MapUnit::Map100thMM));
         else
-            aSize = Application::GetDefaultDevice()->PixelToLogic( rPrefSize, MAP_100TH_MM );
+            aSize = Application::GetDefaultDevice()->PixelToLogic(rPrefSize, MapMode(MapUnit::Map100thMM));
     }
     else
         aSize = Size( 5000, 5000 );
@@ -196,7 +229,7 @@ static void lcl_InsertMedia( const OUString& rMediaURL, bool bApi,
     ScLimitSizeOnDrawPage( aSize, aInsertPos, pPage->GetSize() );
 
     if( rData.GetDocument()->IsNegativePage( rData.GetTabNo() ) )
-        aInsertPos.X() -= aSize.Width();
+        aInsertPos.AdjustX( -(aSize.Width()) );
 
     OUString realURL;
     if (bLink)
@@ -207,29 +240,28 @@ static void lcl_InsertMedia( const OUString& rMediaURL, bool bApi,
     {
         uno::Reference<frame::XModel> const xModel(
                 rData.GetDocument()->GetDocumentShell()->GetModel());
+#if HAVE_FEATURE_AVMEDIA
         bool const bRet = ::avmedia::EmbedMedia(xModel, rMediaURL, realURL);
         if (!bRet) { return; }
+#else
+        return;
+#endif
     }
 
-    SdrMediaObj* pObj = new SdrMediaObj( Rectangle( aInsertPos, aSize ) );
+    SdrMediaObj* pObj = new SdrMediaObj(
+        *rData.GetDocument()->GetDrawLayer(),
+        tools::Rectangle(aInsertPos, aSize));
 
-    pObj->SetModel(rData.GetDocument()->GetDrawLayer()); // set before setURL
     pObj->setURL( realURL, ""/*TODO?*/ );
     pView->InsertObjectAtView( pObj, *pPV, bApi ? SdrInsertFlags::DONTMARK : SdrInsertFlags::NONE );
 }
 
-/*************************************************************************
-|*
-|* FuInsertGraphic::Konstruktor
-|*
-\************************************************************************/
-
-FuInsertGraphic::FuInsertGraphic( ScTabViewShell*   pViewSh,
-                                  vcl::Window*           pWin,
+FuInsertGraphic::FuInsertGraphic( ScTabViewShell&   rViewSh,
+                                  vcl::Window*      pWin,
                                   ScDrawView*       pViewP,
                                   SdrModel*         pDoc,
                                   SfxRequest&       rReq )
-       : FuPoor(pViewSh, pWin, pViewP, pDoc, rReq)
+       : FuPoor(rViewSh, pWin, pViewP, pDoc, rReq)
 {
     const SfxItemSet* pReqArgs = rReq.GetArgs();
     const SfxPoolItem* pItem;
@@ -247,35 +279,76 @@ FuInsertGraphic::FuInsertGraphic( ScTabViewShell*   pViewSh,
             bAsLink = static_cast<const SfxBoolItem*>(pItem)->GetValue();
 
         Graphic aGraphic;
-        int nError = GraphicFilter::LoadGraphic( aFileName, aFilterName, aGraphic, &GraphicFilter::GetGraphicFilter() );
-        if ( nError == GRFILTER_OK )
+        ErrCode nError = GraphicFilter::LoadGraphic( aFileName, aFilterName, aGraphic, &GraphicFilter::GetGraphicFilter() );
+        if ( nError == ERRCODE_NONE )
         {
-            lcl_InsertGraphic( aGraphic, aFileName, aFilterName, bAsLink, true, pViewSh, pWindow, pView );
+            lcl_InsertGraphic( aGraphic, aFileName, aFilterName, bAsLink, true, rViewSh, pWindow, pView );
         }
     }
     else
     {
-        SvxOpenGraphicDialog aDlg(ScResId(STR_INSERTGRAPHIC));
+        SvxOpenGraphicDialog aDlg(ScResId(STR_INSERTGRAPHIC), pWin ? pWin->GetFrameWeld() : nullptr,
+                                  ui::dialogs::TemplateDescription::FILEOPEN_LINK_PREVIEW_IMAGE_ANCHOR);
 
-        if( aDlg.Execute() == GRFILTER_OK )
+        Reference<ui::dialogs::XFilePickerControlAccess> xCtrlAcc = aDlg.GetFilePickerControlAccess();
+        sal_Int16 nSelect = 0;
+        Sequence<OUString> aListBoxEntries {
+            ScResId(STR_ANCHOR_TO_CELL),
+            ScResId(STR_ANCHOR_TO_CELL_RESIZE),
+            ScResId(STR_ANCHOR_TO_PAGE)
+        };
+        try
+        {
+            Any aTemplates(&aListBoxEntries, cppu::UnoType<decltype(aListBoxEntries)>::get());
+
+            xCtrlAcc->setValue(ui::dialogs::ExtendedFilePickerElementIds::LISTBOX_IMAGE_ANCHOR,
+                ui::dialogs::ListboxControlActions::ADD_ITEMS, aTemplates);
+
+            Any aSelectPos(&nSelect, cppu::UnoType<decltype(nSelect)>::get());
+            xCtrlAcc->setValue(ui::dialogs::ExtendedFilePickerElementIds::LISTBOX_IMAGE_ANCHOR,
+                ui::dialogs::ListboxControlActions::SET_SELECT_ITEM, aSelectPos);
+        }
+        catch (const Exception&)
+        {
+            SAL_WARN("sc", "control access failed");
+        }
+
+        if( aDlg.Execute() == ERRCODE_NONE )
         {
             Graphic aGraphic;
-            int nError = aDlg.GetGraphic(aGraphic);
-            if( nError == GRFILTER_OK )
+            ErrCode nError = aDlg.GetGraphic(aGraphic);
+            if( nError == ERRCODE_NONE )
             {
                 OUString aFileName = aDlg.GetPath();
-                OUString aFilterName = aDlg.GetCurrentFilter();
+                const OUString& aFilterName = aDlg.GetDetectedFilter();
                 bool bAsLink = aDlg.IsAsLink();
 
                 // really store as link only?
                 if( bAsLink && SvtMiscOptions().ShowLinkWarningDialog() )
                 {
-                    ScopedVclPtrInstance< SvxLinkWarningDialog > aWarnDlg(pWin,aFileName);
-                    if( aWarnDlg->Execute() != RET_OK )
+                    SvxLinkWarningDialog aWarnDlg(pWin ? pWin->GetFrameWeld() : nullptr, aFileName);
+                    if (aWarnDlg.run() != RET_OK)
                         bAsLink = false; // don't store as link
                 }
 
-                lcl_InsertGraphic( aGraphic, aFileName, aFilterName, bAsLink, false, pViewSh, pWindow, pView );
+                // Anchor to cell or to page?
+                Any aAnchorValue = xCtrlAcc->getValue(
+                    ui::dialogs::ExtendedFilePickerElementIds::LISTBOX_IMAGE_ANCHOR,
+                    ui::dialogs::ListboxControlActions::GET_SELECTED_ITEM );
+                OUString sAnchor;
+                aAnchorValue >>= sAnchor;
+
+                ScAnchorType aAnchorType;
+                if (sAnchor == ScResId(STR_ANCHOR_TO_CELL))
+                    aAnchorType = SCA_CELL;
+                else if (sAnchor == ScResId(STR_ANCHOR_TO_CELL_RESIZE))
+                    aAnchorType = SCA_CELL_RESIZE;
+                else if (sAnchor == ScResId(STR_ANCHOR_TO_PAGE))
+                    aAnchorType = SCA_PAGE;
+                else
+                    aAnchorType = SCA_DONTKNOW;
+
+                lcl_InsertGraphic( aGraphic, aFileName, aFilterName, bAsLink, false, rViewSh, pWindow, pView, aAnchorType );
 
                 //  append items for recording
                 rReq.AppendItem( SfxStringItem( SID_INSERT_GRAPHIC, aFileName ) );
@@ -291,50 +364,16 @@ FuInsertGraphic::FuInsertGraphic( ScTabViewShell*   pViewSh,
     }
 }
 
-/*************************************************************************
-|*
-|* FuInsertGraphic::Destruktor
-|*
-\************************************************************************/
-
 FuInsertGraphic::~FuInsertGraphic()
 {
 }
 
-/*************************************************************************
-|*
-|* FuInsertGraphic::Function aktivieren
-|*
-\************************************************************************/
-
-void FuInsertGraphic::Activate()
-{
-    FuPoor::Activate();
-}
-
-/*************************************************************************
-|*
-|* FuInsertGraphic::Function deaktivieren
-|*
-\************************************************************************/
-
-void FuInsertGraphic::Deactivate()
-{
-    FuPoor::Deactivate();
-}
-
-/*************************************************************************
-|*
-|* FuInsertMedia::Konstruktor
-|*
-\************************************************************************/
-
-FuInsertMedia::FuInsertMedia( ScTabViewShell*   pViewSh,
-                              vcl::Window*           pWin,
+FuInsertMedia::FuInsertMedia( ScTabViewShell&   rViewSh,
+                              vcl::Window*      pWin,
                               ScDrawView*       pViewP,
                               SdrModel*         pDoc,
-                              SfxRequest&       rReq ) :
-    FuPoor(pViewSh, pWin, pViewP, pDoc, rReq)
+                              const SfxRequest& rReq ) :
+    FuPoor(rViewSh, pWin, pViewP, pDoc, rReq)
 {
     OUString     aURL;
     const SfxItemSet*   pReqArgs = rReq.GetArgs();
@@ -352,25 +391,30 @@ FuInsertMedia::FuInsertMedia( ScTabViewShell*   pViewSh,
     }
 
     bool bLink(true);
-    if (bAPI ||
-        ::avmedia::MediaWindow::executeMediaURLDialog(pWindow, aURL, & bLink))
+    if (bAPI
+#if HAVE_FEATURE_AVMEDIA
+        || ::avmedia::MediaWindow::executeMediaURLDialog(pWin ? pWin->GetFrameWeld() : nullptr, aURL, &bLink)
+#endif
+       )
     {
         Size aPrefSize;
 
         if( pWin )
             pWin->EnterWait();
 
+#if HAVE_FEATURE_AVMEDIA
         if( !::avmedia::MediaWindow::isMediaURL( aURL, ""/*TODO?*/, true, &aPrefSize ) )
         {
             if( pWin )
                 pWin->LeaveWait();
 
             if( !bAPI )
-                ::avmedia::MediaWindow::executeFormatErrorBox( pWindow );
+                ::avmedia::MediaWindow::executeFormatErrorBox(pWindow ? pWindow->GetFrameWeld() : nullptr);
         }
         else
+#endif
         {
-            lcl_InsertMedia( aURL, bAPI, pViewSh, pWindow, pView, aPrefSize,
+            lcl_InsertMedia( aURL, bAPI, &rViewSh, pWindow, pView, aPrefSize,
                     bLink );
 
             if( pWin )
@@ -379,36 +423,8 @@ FuInsertMedia::FuInsertMedia( ScTabViewShell*   pViewSh,
     }
 }
 
-/*************************************************************************
-|*
-|* FuInsertMedia::Destruktor
-|*
-\************************************************************************/
-
 FuInsertMedia::~FuInsertMedia()
 {
-}
-
-/*************************************************************************
-|*
-|* FuInsertMedia::Function aktivieren
-|*
-\************************************************************************/
-
-void FuInsertMedia::Activate()
-{
-    FuPoor::Activate();
-}
-
-/*************************************************************************
-|*
-|* FuInsertMedia::Function deaktivieren
-|*
-\************************************************************************/
-
-void FuInsertMedia::Deactivate()
-{
-    FuPoor::Deactivate();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -28,7 +28,6 @@ $(eval $(call gb_Library_use_libraries,hyphen,\
 	sal \
 	tl \
 	utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_static_libraries,hyphen,\
@@ -42,7 +41,6 @@ $(eval $(call gb_Library_use_externals,hyphen,\
 ))
 
 $(eval $(call gb_Library_add_exception_objects,hyphen,\
-	lingucomponent/source/hyphenator/hyphen/hreg \
 	lingucomponent/source/hyphenator/hyphen/hyphenimp \
 ))
 

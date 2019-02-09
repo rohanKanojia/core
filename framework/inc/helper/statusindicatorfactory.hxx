@@ -26,9 +26,6 @@
 
 // include files of own module
 #include <helper/wakeupthread.hxx>
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
-#include <macros/xserviceinfo.hxx>
 #include <general.h>
 
 // include uno interfaces
@@ -45,6 +42,7 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/util/XUpdatable.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/status.hxx>
@@ -71,9 +69,6 @@ struct IndicatorInfo
         /** @short  the last set text for this indicator */
         OUString m_sText;
 
-        /** @short  the max range for this indicator. */
-        sal_Int32 m_nRange;
-
         /** @short  the last set value for this indicator */
         sal_Int32 m_nValue;
 
@@ -92,12 +87,10 @@ struct IndicatorInfo
                     the max range for this indicator.
          */
         IndicatorInfo(const css::uno::Reference< css::task::XStatusIndicator >& xIndicator,
-                      const OUString&                                    sText     ,
-                            sal_Int32                                           nRange    )
+                      const OUString&                                    sText    )
         {
             m_xIndicator = xIndicator;
             m_sText      = sText;
-            m_nRange     = nRange;
             m_nValue     = 0;
         }
 
@@ -108,11 +101,11 @@ struct IndicatorInfo
             m_xIndicator.clear();
         }
 
-        /** @short  Used to locate an info struct inside a stl structure ...
+        /** @short  Used to locate an info struct inside a stl structure...
 
             @descr  The indicator object itself is used as key. Its values
-                    are not interesting then. Because mor then one child
-                    indicator can use the same values ...
+                    are not interesting then. Because more then one child
+                    indicator can use the same values...
          */
         bool operator==(const css::uno::Reference< css::task::XStatusIndicator >& xIndicator)
         {
@@ -194,58 +187,51 @@ class StatusIndicatorFactory : public  ::cppu::WeakImplHelper<
     public:
         StatusIndicatorFactory(const css::uno::Reference< css::uno::XComponentContext >& xContext);
 
-        virtual OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override
+        virtual OUString SAL_CALL getImplementationName() override
         {
             return OUString("com.sun.star.comp.framework.StatusIndicatorFactory");
         }
 
-        virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-            throw (css::uno::RuntimeException, std::exception) override
+        virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
         {
             return cppu::supportsService(this, ServiceName);
         }
 
-        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override
+        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
         {
             css::uno::Sequence< OUString > aSeq { "com.sun.star.task.StatusIndicatorFactory" };
             return aSeq;
         }
 
         // XInitialization
-        virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any >& lArguments)
-            throw(css::uno::Exception       ,
-                  css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any >& lArguments) override;
 
         // XStatusIndicatorFactory
-        virtual css::uno::Reference< css::task::XStatusIndicator > SAL_CALL createStatusIndicator()
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Reference< css::task::XStatusIndicator > SAL_CALL createStatusIndicator() override;
 
         // XUpdatable
-        virtual void SAL_CALL update()
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL update() override;
 
         // similar (XStatusIndicator)
         void start(const css::uno::Reference< css::task::XStatusIndicator >& xChild,
                            const OUString&                                    sText ,
                                  sal_Int32                                           nRange);
 
-        void SAL_CALL reset(const css::uno::Reference< css::task::XStatusIndicator >& xChild);
+        void reset(const css::uno::Reference< css::task::XStatusIndicator >& xChild);
 
-        void SAL_CALL end(const css::uno::Reference< css::task::XStatusIndicator >& xChild);
+        void end(const css::uno::Reference< css::task::XStatusIndicator >& xChild);
 
-        void SAL_CALL setText(const css::uno::Reference< css::task::XStatusIndicator >& xChild,
+        void setText(const css::uno::Reference< css::task::XStatusIndicator >& xChild,
                                       const OUString&                                    sText );
 
-        void SAL_CALL setValue(const css::uno::Reference< css::task::XStatusIndicator >& xChild,
+        void setValue(const css::uno::Reference< css::task::XStatusIndicator >& xChild,
                                              sal_Int32                                           nValue);
 
     // specials
 
     protected:
 
-        virtual ~StatusIndicatorFactory();
+        virtual ~StatusIndicatorFactory() override;
 
     // helper
     private:
@@ -256,7 +242,7 @@ class StatusIndicatorFactory : public  ::cppu::WeakImplHelper<
             @descr  By default we show the parent window automatically
                     if this progress is used.
                     If that isn't a valid operation, the user of this
-                    progress can suppress this feature by initializaing
+                    progress can suppress this feature by initializing
                     us with a special parameter.
 
             @seealso    initialize()

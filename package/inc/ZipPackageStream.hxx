@@ -24,12 +24,11 @@
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/packages/XDataSinkEncrSupport.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include <ZipPackageEntry.hxx>
+#include "ZipPackageEntry.hxx"
 #include <rtl/ref.hxx>
 #include <cppuhelper/implbase.hxx>
 
-#include <EncryptionData.hxx>
-#include <mutexholder.hxx>
+#include "EncryptionData.hxx"
 
 #define PACKAGE_STREAM_NOTSET           0
 #define PACKAGE_STREAM_PACKAGEMEMBER    1
@@ -72,20 +71,21 @@ private:
     bool m_bRawStream;
 
     /// Check that m_xStream implements io::XSeekable and return it
-    css::uno::Reference< css::io::XInputStream > GetOwnSeekStream();
-    css::uno::Reference< css::io::XInputStream > SAL_CALL getRawData()
-        throw(css::uno::RuntimeException);
+    css::uno::Reference< css::io::XInputStream > const & GetOwnSeekStream();
+    /// get raw data using unbuffered stream
+    /// @throws css::uno::RuntimeException
+    css::uno::Reference< css::io::XInputStream > getRawData();
 
 public:
-    bool IsEncrypted () const    { return m_bIsEncrypted;}
     bool IsPackageMember () const { return m_nStreamMode == PACKAGE_STREAM_PACKAGEMEMBER;}
 
     bool IsFromManifest() const { return m_bFromManifest; }
     void SetFromManifest( bool bValue ) { m_bFromManifest = bValue; }
 
-    ::rtl::Reference< EncryptionData > GetEncryptionData( bool bWinEncoding = false );
+    enum class Bugs { None, WinEncodingWrongSHA1, WrongSHA1 };
+    ::rtl::Reference<EncryptionData> GetEncryptionData(Bugs bugs = Bugs::None);
 
-    css::uno::Sequence< sal_Int8 > GetEncryptionKey( bool bWinEncoding = false );
+    css::uno::Sequence<sal_Int8> GetEncryptionKey(Bugs bugs = Bugs::None);
 
     sal_Int32 GetStartKeyGenID();
 
@@ -118,13 +118,11 @@ public:
     { m_xBaseEncryptionData->m_nIterationCount = nNewCount;}
     void setSize (const sal_Int64 nNewSize);
 
-    void CloseOwnStreamIfAny();
-
     ZipPackageStream( ZipPackage & rNewPackage,
                       const css::uno::Reference < css::uno::XComponentContext >& xContext,
                       sal_Int32 nFormat,
                       bool bAllowRemoveOnInsert );
-    virtual ~ZipPackageStream();
+    virtual ~ZipPackageStream() override;
 
     css::uno::Reference< css::io::XInputStream > GetRawEncrStreamNoHeaderCopy();
     css::uno::Reference< css::io::XInputStream > TryToGetRawFromDataStream(bool bAddHeaderForEncr );
@@ -134,59 +132,38 @@ public:
                             std::vector < css::uno::Sequence < css::beans::PropertyValue > > &rManList,
                             ZipOutputStream & rZipOut,
                             const css::uno::Sequence < sal_Int8 >& rEncryptionKey,
+                            sal_Int32 nPBKDF2IterationCount,
                             const rtlRandomPool &rRandomPool ) override;
 
     void setZipEntryOnLoading( const ZipEntry &rInEntry);
-    void successfullyWritten( ZipEntry *pEntry );
+    void successfullyWritten( ZipEntry const *pEntry );
 
     static css::uno::Sequence < sal_Int8 > static_getImplementationId();
 
     // XActiveDataSink
-    virtual void SAL_CALL setInputStream( const css::uno::Reference< css::io::XInputStream >& aStream )
-        throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getInputStream(  )
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setInputStream( const css::uno::Reference< css::io::XInputStream >& aStream ) override;
+    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getInputStream(  ) override;
 
     // XDataSinkEncrSupport
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getDataStream()
-        throw ( css::packages::WrongPasswordException, css::packages::zip::ZipException,
-                css::io::IOException,
-                css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getRawStream()
-        throw ( css::packages::NoEncryptionException,
-                css::io::IOException,
-                css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getDataStream() override;
+    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getRawStream() override;
     virtual void SAL_CALL setDataStream(
-                    const css::uno::Reference< css::io::XInputStream >& aStream )
-        throw ( css::io::IOException,
-                css::uno::RuntimeException, std::exception ) override;
+                    const css::uno::Reference< css::io::XInputStream >& aStream ) override;
     virtual void SAL_CALL setRawStream(
-                    const css::uno::Reference< css::io::XInputStream >& aStream )
-        throw ( css::packages::EncryptionNotAllowedException,
-                css::packages::NoRawFormatException,
-                css::io::IOException,
-                css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getPlainRawStream()
-        throw ( css::io::IOException, css::packages::NoEncryptionException,
-                css::uno::RuntimeException, std::exception ) override;
+                    const css::uno::Reference< css::io::XInputStream >& aStream ) override;
+    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getPlainRawStream() override;
 
     // XUnoTunnel
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     // XPropertySet
-    virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName, const css::uno::Any& aValue )
-        throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName )
-        throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setPropertyValue( const OUString& aPropertyName, const css::uno::Any& aValue ) override;
+    virtual css::uno::Any SAL_CALL getPropertyValue( const OUString& PropertyName ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 };
 #endif
 

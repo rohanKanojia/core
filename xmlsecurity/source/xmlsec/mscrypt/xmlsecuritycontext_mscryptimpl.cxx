@@ -18,15 +18,15 @@
  */
 
 #include <sal/config.h>
+#include <com/sun/star/xml/crypto/XXMLSecurityContext.hpp>
 #include "securityenvironment_mscryptimpl.hxx"
 
-#include "xmlsecuritycontext_mscryptimpl.hxx"
-#include "xmlstreamio.hxx"
+#include <xmlsec/xmlstreamio.hxx>
+#include "akmngr.hxx"
 
-#include "xmlsecurity/xmlsec-wrapper.h"
-#include "xmlsec/mscrypto/akmngr.h"
+#include <xmlsec-wrapper.h>
 
-using namespace ::com::sun::star::uno ;
+using namespace ::com::sun::star;
 using namespace ::com::sun::star::lang ;
 using ::com::sun::star::lang::XMultiServiceFactory ;
 using ::com::sun::star::lang::XSingleServiceFactory ;
@@ -34,42 +34,57 @@ using ::com::sun::star::lang::XSingleServiceFactory ;
 using ::com::sun::star::xml::crypto::XSecurityEnvironment ;
 using ::com::sun::star::xml::crypto::XXMLSecurityContext ;
 
-XMLSecurityContext_MSCryptImpl::XMLSecurityContext_MSCryptImpl()
-    ://m_pKeysMngr( NULL ) ,
-     m_xSecurityEnvironment( NULL )
+class XMLSecurityContext_MSCryptImpl : public ::cppu::WeakImplHelper<
+    css::xml::crypto::XXMLSecurityContext ,
+    css::lang::XServiceInfo >
 {
-    //Init xmlsec library
-    if( xmlSecInit() < 0 ) {
-        throw RuntimeException() ;
-    }
+    private:
+        //xmlSecKeysMngrPtr m_pKeysMngr ;
+        css::uno::Reference< css::xml::crypto::XSecurityEnvironment > m_xSecurityEnvironment ;
 
-    //Init xmlsec crypto engine library
-    if( xmlSecCryptoInit() < 0 ) {
-        xmlSecShutdown() ;
-        throw RuntimeException() ;
-    }
+    public:
+        XMLSecurityContext_MSCryptImpl();
 
-    //Enable external stream handlers
-    if( xmlEnableStreamInputCallbacks() < 0 ) {
-        xmlSecCryptoShutdown() ;
-        xmlSecShutdown() ;
-        throw RuntimeException() ;
-    }
-}
+        //Methods from XXMLSecurityContext
+        virtual sal_Int32 SAL_CALL addSecurityEnvironment(
+            const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment
+            ) override;
 
-XMLSecurityContext_MSCryptImpl::~XMLSecurityContext_MSCryptImpl() {
-    xmlDisableStreamInputCallbacks() ;
-    xmlSecCryptoShutdown() ;
-    xmlSecShutdown() ;
+        virtual ::sal_Int32 SAL_CALL getSecurityEnvironmentNumber(  ) override;
+
+        virtual css::uno::Reference<
+            css::xml::crypto::XSecurityEnvironment > SAL_CALL
+            getSecurityEnvironmentByIndex( ::sal_Int32 index ) override;
+
+        virtual css::uno::Reference<
+            css::xml::crypto::XSecurityEnvironment > SAL_CALL
+            getSecurityEnvironment(  ) override;
+
+        virtual ::sal_Int32 SAL_CALL getDefaultSecurityEnvironmentIndex(  ) override;
+
+        virtual void SAL_CALL setDefaultSecurityEnvironmentIndex( sal_Int32 nDefaultEnvIndex ) override;
+
+
+        //Methods from XServiceInfo
+        virtual OUString SAL_CALL getImplementationName() override;
+
+        virtual sal_Bool SAL_CALL supportsService(
+            const OUString& ServiceName
+        ) override;
+
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+};
+
+XMLSecurityContext_MSCryptImpl::XMLSecurityContext_MSCryptImpl()
+{
 }
 
 sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::addSecurityEnvironment(
     const css::uno::Reference< css::xml::crypto::XSecurityEnvironment >& aSecurityEnvironment)
-    throw (css::security::SecurityInfrastructureException, css::uno::RuntimeException)
 {
     if( !aSecurityEnvironment.is() )
     {
-        throw RuntimeException() ;
+        throw uno::RuntimeException() ;
     }
 
     m_xSecurityEnvironment = aSecurityEnvironment;
@@ -79,84 +94,63 @@ sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::addSecurityEnvironment(
 
 
 sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentNumber(  )
-    throw (css::uno::RuntimeException)
 {
     return 1;
 }
 
 css::uno::Reference< css::xml::crypto::XSecurityEnvironment > SAL_CALL
     XMLSecurityContext_MSCryptImpl::getSecurityEnvironmentByIndex( sal_Int32 index )
-    throw (css::uno::RuntimeException)
 {
-    if (index == 0)
+    if (index != 0)
     {
-        return m_xSecurityEnvironment;
+        throw uno::RuntimeException() ;
     }
-    else
-        throw RuntimeException() ;
+    return m_xSecurityEnvironment;
 }
 
 css::uno::Reference< css::xml::crypto::XSecurityEnvironment > SAL_CALL
     XMLSecurityContext_MSCryptImpl::getSecurityEnvironment(  )
-    throw (css::uno::RuntimeException)
 {
     return m_xSecurityEnvironment;
 }
 
 sal_Int32 SAL_CALL XMLSecurityContext_MSCryptImpl::getDefaultSecurityEnvironmentIndex(  )
-    throw (css::uno::RuntimeException)
 {
     return 0;
 }
 
 void SAL_CALL XMLSecurityContext_MSCryptImpl::setDefaultSecurityEnvironmentIndex( sal_Int32 /*nDefaultEnvIndex*/ )
-    throw (css::uno::RuntimeException)
 {
     //dummy
 }
 
 /* XServiceInfo */
-OUString SAL_CALL XMLSecurityContext_MSCryptImpl::getImplementationName() throw( RuntimeException ) {
-    return impl_getImplementationName() ;
+OUString SAL_CALL XMLSecurityContext_MSCryptImpl::getImplementationName() {
+    return OUString("com.sun.star.xml.crypto.XMLSecurityContext") ;
 }
 
 /* XServiceInfo */
-sal_Bool SAL_CALL XMLSecurityContext_MSCryptImpl::supportsService( const OUString& serviceName) throw( RuntimeException ) {
-    Sequence< OUString > seqServiceNames = getSupportedServiceNames() ;
+sal_Bool SAL_CALL XMLSecurityContext_MSCryptImpl::supportsService( const OUString& serviceName) {
+    uno::Sequence< OUString > seqServiceNames = getSupportedServiceNames() ;
     const OUString* pArray = seqServiceNames.getConstArray() ;
     for( sal_Int32 i = 0 ; i < seqServiceNames.getLength() ; i ++ ) {
         if( *( pArray + i ) == serviceName )
-            return sal_True ;
+            return true ;
     }
-    return sal_False ;
+    return false ;
 }
 
 /* XServiceInfo */
-Sequence< OUString > SAL_CALL XMLSecurityContext_MSCryptImpl::getSupportedServiceNames() throw( RuntimeException ) {
-    return impl_getSupportedServiceNames() ;
-}
-
-//Helper for XServiceInfo
-Sequence< OUString > XMLSecurityContext_MSCryptImpl::impl_getSupportedServiceNames() {
-    ::osl::Guard< ::osl::Mutex > aGuard( ::osl::Mutex::getGlobalMutex() ) ;
-    Sequence<OUString> seqServiceNames { "com.sun.star.xml.crypto.XMLSecurityContext" };
+uno::Sequence< OUString > SAL_CALL XMLSecurityContext_MSCryptImpl::getSupportedServiceNames() {
+    uno::Sequence<OUString> seqServiceNames { "com.sun.star.xml.crypto.XMLSecurityContext" };
     return seqServiceNames ;
 }
 
-OUString XMLSecurityContext_MSCryptImpl::impl_getImplementationName() throw( RuntimeException ) {
-    return OUString("com.sun.star.xml.security.bridge.xmlsec.XMLSecurityContext_MSCryptImpl") ;
-}
-
-//Helper for registry
-Reference< XInterface > SAL_CALL XMLSecurityContext_MSCryptImpl::impl_createInstance( const Reference< XMultiServiceFactory >& ) throw( RuntimeException ) {
-    return Reference< XInterface >( *new XMLSecurityContext_MSCryptImpl ) ;
-}
-
-Reference< XSingleServiceFactory > XMLSecurityContext_MSCryptImpl::impl_createFactory( const Reference< XMultiServiceFactory >& aServiceManager ) {
-    //Reference< XSingleServiceFactory > xFactory ;
-    //xFactory = ::cppu::createSingleFactory( aServiceManager , impl_getImplementationName , impl_createInstance , impl_getSupportedServiceNames ) ;
-    //return xFactory ;
-    return ::cppu::createSingleFactory( aServiceManager , impl_getImplementationName() , impl_createInstance , impl_getSupportedServiceNames() ) ;
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_xml_crypto_XMLSecurityContext_get_implementation(
+    uno::XComponentContext* /*pCtx*/, uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new XMLSecurityContext_MSCryptImpl);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

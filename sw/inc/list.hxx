@@ -20,7 +20,9 @@
 #ifndef INCLUDED_SW_INC_LIST_HXX
 #define INCLUDED_SW_INC_LIST_HXX
 
+#include <o3tl/deleter.hxx>
 #include <rtl/ustring.hxx>
+#include <memory>
 
 class SwNumRule;
 class SwNodes;
@@ -36,12 +38,13 @@ class SwList
                 const SwNodes& rNodes );
         ~SwList();
 
-        const OUString GetListId() const;
+        const OUString & GetListId() const;
 
-        const OUString GetDefaultListStyleName() const;
+        const OUString & GetDefaultListStyleName() const;
         void SetDefaultListStyleName(OUString const&);
 
         void InsertListItem( SwNodeNum& rNodeNum,
+                             bool isHiddenRedlines,
                              const int nLevel );
         static void RemoveListItem( SwNodeNum& rNodeNum );
 
@@ -57,7 +60,7 @@ class SwList
         SwList( const SwList& ) = delete;
         SwList& operator=( const SwList& ) = delete;
 
-        SwListImpl* mpListImpl;
+        std::unique_ptr<SwListImpl, o3tl::default_delete<SwListImpl>> mpListImpl;
 };
 #endif // INCLUDED_SW_INC_LIST_HXX
 

@@ -17,34 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "classes/fwkresid.hxx"
-#include <osl/mutex.hxx>
-#include <vcl/svapp.hxx>
-#include <vcl/settings.hxx>
+#include <classes/fwkresid.hxx>
+#include <unotools/resmgr.hxx>
 
-#include <rtl/strbuf.hxx>
-
-namespace framework
+OUString FwkResId(const char* pId)
 {
-
-ResMgr* FwkResId::GetResManager()
-{
-    static ResMgr*  pResMgr = nullptr;
-
-    if ( !pResMgr )
-    {
-        SolarMutexGuard aSolarGuard;
-        pResMgr = ResMgr::CreateResMgr("fwe", Application::GetSettings().GetUILanguageTag());
-    }
-
-    return pResMgr;
-}
-
-FwkResId::FwkResId( sal_uInt16 nId ) :
-    ResId( nId, *FwkResId::GetResManager() )
-{
-}
-
+    return Translate::get(pId, Translate::Create("fwk"));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

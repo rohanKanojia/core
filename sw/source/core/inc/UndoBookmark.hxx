@@ -20,6 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_UNDOBOOKMARK_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_UNDOBOOKMARK_HXX
 
+#include <memory>
 #include <undobj.hxx>
 
 class SwHistoryBookmark;
@@ -30,9 +31,11 @@ namespace sw {
     }
 }
 
+class SwDoc;
+
 class SwUndoBookmark : public SwUndo
 {
-    const ::std::unique_ptr<SwHistoryBookmark> m_pHistoryBookmark;
+    const std::unique_ptr<SwHistoryBookmark> m_pHistoryBookmark;
 
 protected:
     SwUndoBookmark( SwUndoId nUndoId, const ::sw::mark::IMark& );
@@ -41,7 +44,7 @@ protected:
     void ResetInDoc( SwDoc* );
 
 public:
-    virtual ~SwUndoBookmark();
+    virtual ~SwUndoBookmark() override;
 
     /**
        Returns the rewriter for this undo object.
@@ -82,12 +85,12 @@ class SwUndoRenameBookmark : public SwUndo
     const OUString m_sNewName;
 
 public:
-    SwUndoRenameBookmark( const OUString& rOldName, const OUString& rNewName );
-    virtual ~SwUndoRenameBookmark();
+    SwUndoRenameBookmark( const OUString& rOldName, const OUString& rNewName, const SwDoc* pDoc );
+    virtual ~SwUndoRenameBookmark() override;
 
 private:
     virtual SwRewriter GetRewriter() const override;
-    static void Rename( ::sw::UndoRedoContext &, const OUString& sFrom, const OUString& sTo );
+    static void Rename( ::sw::UndoRedoContext const &, const OUString& sFrom, const OUString& sTo );
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
 };

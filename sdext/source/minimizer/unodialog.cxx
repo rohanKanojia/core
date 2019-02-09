@@ -25,7 +25,6 @@
 #include <com/sun/star/awt/XMessageBoxFactory.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/view/XControlAccess.hpp>
@@ -38,9 +37,8 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::view;
 using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::script;
 
-UnoDialog::UnoDialog( const Reference< XComponentContext > &rxContext, Reference< XFrame >& rxFrame ) :
+UnoDialog::UnoDialog( const Reference< XComponentContext > &rxContext, Reference< XFrame > const & rxFrame ) :
     mxContext( rxContext ),
     mxController( rxFrame->getController() ),
     mxDialogModel( mxContext->getServiceManager()->createInstanceWithContext(
@@ -71,8 +69,8 @@ UnoDialog::~UnoDialog()
 
 void UnoDialog::execute()
 {
-    mxDialog->setEnable( sal_True );
-    mxDialog->setVisible( sal_True );
+    mxDialog->setEnable( true );
+    mxDialog->setVisible( true );
     mxDialog->execute();
 }
 
@@ -83,15 +81,14 @@ void UnoDialog::endExecute( bool bStatus )
 }
 
 
-Reference< XWindowPeer > UnoDialog::createWindowPeer( Reference< XWindowPeer > xParentPeer )
-    throw ( Exception )
+Reference< XWindowPeer > UnoDialog::createWindowPeer( Reference< XWindowPeer > const & xParentPeer )
 {
-    mxDialog->setVisible( sal_False );
+    mxDialog->setVisible( false );
     Reference< XToolkit > xToolkit( Toolkit::create( mxContext ), UNO_QUERY_THROW  );
-    if ( !xParentPeer.is() )
-        xParentPeer = xToolkit->getDesktopWindow();
     mxReschedule.set( xToolkit, UNO_QUERY );
-    mxDialog->createPeer( xToolkit, xParentPeer );
+    mxDialog->createPeer(
+        xToolkit,
+        xParentPeer.is() ? xParentPeer : xToolkit->getDesktopWindow());
 //  xWindowPeer = xControl.getPeer();
     return mxDialog->getPeer();
 }
@@ -129,7 +126,7 @@ void UnoDialog::setVisible( const OUString& rName, bool bVisible )
 }
 
 
-Reference< XButton > UnoDialog::insertButton( const OUString& rName, Reference< XActionListener > xActionListener,
+Reference< XButton > UnoDialog::insertButton( const OUString& rName, const Reference< XActionListener >& xActionListener,
             const Sequence< OUString >& rPropertyNames, const Sequence< Any >& rPropertyValues )
 {
     Reference< XButton > xButton;
@@ -311,14 +308,14 @@ Any UnoDialog::getControlProperty( const OUString& rControlName, const OUString&
 void UnoDialog::enableControl( const OUString& rControlName )
 {
     const OUString sEnabled( "Enabled" );
-    setControlProperty( rControlName, sEnabled, Any( sal_True ) );
+    setControlProperty( rControlName, sEnabled, Any( true ) );
 }
 
 
 void UnoDialog::disableControl( const OUString& rControlName )
 {
     const OUString sEnabled( "Enabled" );
-    setControlProperty( rControlName, sEnabled, Any( sal_False ) );
+    setControlProperty( rControlName, sEnabled, Any( false ) );
 }
 
 

@@ -28,19 +28,18 @@ namespace connectivity
         class OMySQLColumns : public OColumnsHelper
         {
         protected:
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > createDescriptor() override;
+            virtual css::uno::Reference< css::beans::XPropertySet > createDescriptor() override;
         public:
             OMySQLColumns(  ::cppu::OWeakObject& _rParent
                             ,::osl::Mutex& _rMutex
-                            ,const TStringVector &_rVector
+                            ,const ::std::vector< OUString> &_rVector
                         );
         };
 
         class OMySQLColumn;
-        typedef sdbcx::OColumn OMySQLColumn_BASE;
         typedef ::comphelper::OIdPropertyArrayUsageHelper<OMySQLColumn> OMySQLColumn_PROP;
 
-        class OMySQLColumn :    public OMySQLColumn_BASE,
+        class OMySQLColumn :    public sdbcx::OColumn,
                                 public OMySQLColumn_PROP
         {
             OUString m_sAutoIncrement;
@@ -52,7 +51,7 @@ namespace connectivity
             OMySQLColumn();
             virtual void construct() override;
 
-            virtual ::com::sun::star::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
         };
     }
 }

@@ -17,17 +17,13 @@ $(eval $(call gb_CppunitTest_use_externals,comphelper_syntaxhighlight_test,\
 	boost_headers \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,comphelper_syntaxhighlight_test, \
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,comphelper_syntaxhighlight_test))
 
 $(eval $(call gb_CppunitTest_use_libraries,comphelper_syntaxhighlight_test, \
     comphelper \
     cppuhelper \
     cppu \
     sal \
-	$(gb_UWINAPI) \
 ))
 
 # vim: set noet sw=4 ts=4:

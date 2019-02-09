@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="chart">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="dlg_InsertLegend">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Legend</property>
+    <property name="title" translatable="yes" context="dlg_InsertLegend|dlg_InsertLegend">Legend</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
@@ -97,9 +103,9 @@
                         <property name="spacing">6</property>
                         <child>
                           <object class="GtkCheckButton" id="show">
-                            <property name="label" translatable="yes">_Display legend</property>
+                            <property name="label" translatable="yes" context="dlg_InsertLegend|show">_Display legend</property>
                             <property name="visible">True</property>
-                            <property name="can_focus">False</property>
+                            <property name="can_focus">True</property>
                             <property name="receives_default">False</property>
                             <property name="use_underline">True</property>
                             <property name="xalign">0</property>
@@ -119,14 +125,14 @@
                             <property name="row_spacing">6</property>
                             <child>
                               <object class="GtkRadioButton" id="left">
-                                <property name="label" translatable="yes">_Left</property>
+                                <property name="label" translatable="yes" context="dlg_InsertLegend|left">_Left</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
                                 <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
+                                <property name="active">True</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">right</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -135,14 +141,14 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="right">
-                                <property name="label" translatable="yes">_Right</property>
+                                <property name="label" translatable="yes" context="dlg_InsertLegend|right">_Right</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
                                 <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">top</property>
+                                <property name="group">left</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -151,14 +157,14 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="top">
-                                <property name="label" translatable="yes">_Top</property>
+                                <property name="label" translatable="yes" context="dlg_InsertLegend|top">_Top</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
                                 <property name="use_underline">True</property>
                                 <property name="xalign">0</property>
                                 <property name="draw_indicator">True</property>
-                                <property name="group">bottom</property>
+                                <property name="group">left</property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -167,7 +173,7 @@
                             </child>
                             <child>
                               <object class="GtkRadioButton" id="bottom">
-                                <property name="label" translatable="yes">_Bottom</property>
+                                <property name="label" translatable="yes" context="dlg_InsertLegend|bottom">_Bottom</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
@@ -196,8 +202,8 @@
                   <object class="GtkLabel" id="TXT_POSITION">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="dlg_InsertLegend|TXT_POSITION">Position</property>
                     <property name="xalign">0</property>
-                    <property name="label" translatable="yes">Position</property>
                     <attributes>
                       <attribute name="weight" value="bold"/>
                     </attributes>
@@ -220,9 +226,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

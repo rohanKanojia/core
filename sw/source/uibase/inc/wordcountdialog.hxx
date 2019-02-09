@@ -19,62 +19,54 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_WORDCOUNTDIALOG_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_WORDCOUNTDIALOG_HXX
 #include <sfx2/basedlgs.hxx>
-#include <svtools/stdctrl.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/button.hxx>
 struct SwDocStat;
 #include <sfx2/childwin.hxx>
-#include "swabstdlg.hxx"
+#include <swabstdlg.hxx>
 
-class SwWordCountFloatDlg : public SfxModelessDialog
+class SwWordCountFloatDlg : public SfxModelessDialogController
 {
-    virtual void    Activate() override;
     void SetValues(const SwDocStat& rCurrent, const SwDocStat& rDoc);
     void showCJK(bool bShowCJK);
     void showStandardizedPages(bool bShowStandardizedPages);
 
-    VclPtr<FixedText> m_pCurrentWordFT;
-    VclPtr<FixedText> m_pCurrentCharacterFT;
-    VclPtr<FixedText> m_pCurrentCharacterExcludingSpacesFT;
-    VclPtr<FixedText> m_pCurrentCjkcharsFT;
-    VclPtr<FixedText> m_pCurrentStandardizedPagesFT;
+    std::unique_ptr<weld::Label> m_xCurrentWordFT;
+    std::unique_ptr<weld::Label> m_xCurrentCharacterFT;
+    std::unique_ptr<weld::Label> m_xCurrentCharacterExcludingSpacesFT;
+    std::unique_ptr<weld::Label> m_xCurrentCjkcharsFT;
+    std::unique_ptr<weld::Label> m_xCurrentStandardizedPagesFT;
+    std::unique_ptr<weld::Label> m_xDocWordFT;
+    std::unique_ptr<weld::Label> m_xDocCharacterFT;
+    std::unique_ptr<weld::Label> m_xDocCharacterExcludingSpacesFT;
+    std::unique_ptr<weld::Label> m_xDocCjkcharsFT;
+    std::unique_ptr<weld::Label> m_xDocStandardizedPagesFT;
+    std::unique_ptr<weld::Label> m_xCjkcharsLabelFT;
+    std::unique_ptr<weld::Label> m_xStandardizedPagesLabelFT;
 
-    VclPtr<FixedText> m_pDocWordFT;
-    VclPtr<FixedText> m_pDocCharacterFT;
-    VclPtr<FixedText> m_pDocCharacterExcludingSpacesFT;
-    VclPtr<FixedText> m_pDocCjkcharsFT;
-    VclPtr<FixedText> m_pDocStandardizedPagesFT;
-
-    VclPtr<FixedText> m_pCjkcharsLabelFT;
-    VclPtr<FixedText> m_pStandardizedPagesLabelFT;
-
-    VclPtr<CloseButton> m_pClosePB;
-
-    DECL_STATIC_LINK_TYPED( SwWordCountFloatDlg, CloseHdl, Button*, void );
 public:
-    SwWordCountFloatDlg(     SfxBindings* pBindings,
-                             SfxChildWindow* pChild,
-                             vcl::Window *pParent,
-                             SfxChildWinInfo* pInfo);
-    virtual ~SwWordCountFloatDlg();
-    virtual void dispose() override;
+    SwWordCountFloatDlg(SfxBindings* pBindings,
+                        SfxChildWindow* pChild,
+                        weld::Window *pParent,
+                        SfxChildWinInfo const * pInfo);
+    virtual ~SwWordCountFloatDlg() override;
     void    UpdateCounts();
 
     void    SetCounts(const SwDocStat &rCurrCnt, const SwDocStat &rDocStat);
 };
 
-class SwWordCountWrapper : public SfxChildWindow
+class SwWordCountWrapper final : public SfxChildWindow
 {
-    std::unique_ptr<AbstractSwWordCountFloatDlg> xAbstDlg;
-protected:
+    VclPtr<AbstractSwWordCountFloatDlg> xAbstDlg;
+
+public:
     SwWordCountWrapper(    vcl::Window *pParentWindow,
                             sal_uInt16 nId,
                             SfxBindings* pBindings,
                             SfxChildWinInfo* pInfo );
-
     SFX_DECL_CHILDWINDOW_WITHID(SwWordCountWrapper);
 
-public:
+    virtual ~SwWordCountWrapper() override;
     void    UpdateCounts();
     void    SetCounts(const SwDocStat &rCurrCnt, const SwDocStat &rDocStat);
 };

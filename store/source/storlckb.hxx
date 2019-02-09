@@ -20,26 +20,21 @@
 #ifndef INCLUDED_STORE_SOURCE_STORLCKB_HXX
 #define INCLUDED_STORE_SOURCE_STORLCKB_HXX
 
-#include "sal/types.h"
+#include <sal/types.h>
 
-#include "rtl/ustring.h"
-#include "rtl/ref.hxx"
+#include <rtl/string.h>
+#include <rtl/ref.hxx>
 
 #include "object.hxx"
 #include "storbase.hxx"
-#include "storpage.hxx"
 
 namespace store
 {
 
+class OStorePageManager;
 struct OStoreDataPageData;
 struct OStoreDirectoryPageData;
 
-/*========================================================================
- *
- * OStoreLockBytes interface.
- *
- *======================================================================*/
 class OStoreLockBytes : public store::OStoreObject
 {
 public:
@@ -56,8 +51,8 @@ public:
      */
     storeError create (
         OStorePageManager *pManager,
-        rtl_String        *pPath,
-        rtl_String        *pName,
+        rtl_String const  *pPath,
+        rtl_String const  *pName,
         storeAccessMode    eAccessMode);
 
     /** Read at Offset into Buffer.
@@ -99,7 +94,7 @@ public:
 protected:
     /** Destruction (OReference).
      */
-    virtual ~OStoreLockBytes();
+    virtual ~OStoreLockBytes() override;
 
 private:
     /** IStoreHandle TypeId.
@@ -137,12 +132,6 @@ SAL_CALL query (OStoreObject *pHandle, SAL_UNUSED_PARAMETER OStoreLockBytes*)
     }
     return nullptr;
 }
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

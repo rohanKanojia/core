@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "csvsplits.hxx"
+#include <csvsplits.hxx>
 
 #include <algorithm>
 
@@ -28,7 +28,7 @@ bool ScCsvSplits::Insert( sal_Int32 nPos )
     if (nPos < 0)
         return false;
 
-    const iterator aIter = ::std::lower_bound( maVec.begin(), maVec.end(), nPos );
+    const auto aIter = ::std::lower_bound( maVec.begin(), maVec.end(), nPos );
 
     if (aIter != maVec.end() && *aIter == nPos)
         return false;
@@ -70,7 +70,7 @@ bool ScCsvSplits::HasSplit( sal_Int32 nPos ) const
 
 sal_uInt32 ScCsvSplits::GetIndex( sal_Int32 nPos ) const
 {
-    const_iterator aIter = ::std::lower_bound( maVec.begin(), maVec.end(), nPos );
+    auto aIter = ::std::lower_bound( maVec.cbegin(), maVec.cend(), nPos );
     return GetIterIndex( ((aIter != maVec.end()) && (*aIter == nPos)) ? aIter : maVec.end() );
 }
 
@@ -94,7 +94,7 @@ sal_Int32 ScCsvSplits::GetPos( sal_uInt32 nIndex ) const
     return (nIndex < Count()) ? maVec[ nIndex ] : CSV_POS_INVALID;
 }
 
-sal_uInt32 ScCsvSplits::GetIterIndex( const_iterator aIter ) const
+sal_uInt32 ScCsvSplits::GetIterIndex( const_iterator const & aIter ) const
 {
     return (aIter == maVec.end()) ? CSV_VEC_NOTFOUND : (aIter - maVec.begin());
 }

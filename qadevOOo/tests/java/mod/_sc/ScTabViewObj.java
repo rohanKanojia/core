@@ -113,7 +113,7 @@ public class ScTabViewObj extends TestCase {
 
     /*
      * Creating a TestEnvironment for the interfaces to be tested.
-     * Retrives the current controller of the spreadsheet document using the
+     * Retrieves the current controller of the spreadsheet document using the
      * interface <code>XModel</code>. The controller is the instance of the
      * service <code>com.sun.star.sheet.SpreadsheetView</code>. Retrieves
      * a collection of spreadsheets from the document and takes one of  them.
@@ -188,7 +188,7 @@ public class ScTabViewObj extends TestCase {
             XForm myForm = null;
             String kindOfControl="CommandButton";
             XShape aShape = null;
-            log.println("adding contol shape '" + kindOfControl + "'");
+            log.println("adding control shape '" + kindOfControl + "'");
             XComponent oComp = UnoRuntime.queryInterface(XComponent.class, xSpreadsheetDoc) ;
 
             aShape = FormTools.createControlShape(oComp, 3000, 4500, 15000, 10000, kindOfControl);

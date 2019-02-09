@@ -9,6 +9,7 @@
 
 #include <undosort.hxx>
 #include <globstr.hrc>
+#include <scresid.hxx>
 #include <global.hxx>
 #include <undoutil.hxx>
 
@@ -19,7 +20,7 @@ UndoSort::UndoSort( ScDocShell* pDocSh, const ReorderParam& rParam ) :
 
 OUString UndoSort::GetComment() const
 {
-    return ScGlobal::GetRscString(STR_UNDO_SORT);
+    return ScResId(STR_UNDO_SORT);
 }
 
 void UndoSort::Undo()
@@ -42,7 +43,7 @@ void UndoSort::Execute( bool bUndo )
     sc::ReorderParam aParam = maParam;
     if (bUndo)
         aParam.reverse();
-    rDoc.Reorder(aParam, nullptr);
+    rDoc.Reorder(aParam);
 
     if (maParam.mbHasHeaders)
     {
@@ -66,9 +67,9 @@ void UndoSort::Execute( bool bUndo )
 
     rDoc.SetDirty(maParam.maSortRange, true);
     if (!aParam.mbUpdateRefs)
-        rDoc.BroadcastCells(aParam.maSortRange, SC_HINT_DATACHANGED);
+        rDoc.BroadcastCells(aParam.maSortRange, SfxHintId::ScDataChanged);
 
-    pDocShell->PostPaint(maParam.maSortRange, PAINT_GRID);
+    pDocShell->PostPaint(maParam.maSortRange, PaintPartFlags::Grid);
     pDocShell->PostDataChanged();
 }
 

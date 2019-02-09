@@ -26,8 +26,8 @@
 
 #include <rtl/ustring.hxx>
 
-#include "oox/drawingml/shape.hxx"
-#include "oox/drawingml/fillproperties.hxx"
+#include <oox/drawingml/shape.hxx>
+#include <drawingml/fillproperties.hxx>
 #include <oox/token/tokens.hxx>
 
 namespace com { namespace sun { namespace star {
@@ -48,7 +48,7 @@ struct Connection
         mnDestOrder( 0 )
     {}
 
-    void dump();
+    void dump() const;
 
     sal_Int32 mnType;
     OUString msModelId;
@@ -73,7 +73,6 @@ struct Point
         mnMaxChildren(-1),
         mnPreferredChildren(-1),
         mnDirection(XML_norm),
-        mnHierarchyBranch(XML_std),
         mnResizeHandles(XML_rel),
         mnCustomAngle(-1),
         mnPercentageNeighbourWidth(-1),
@@ -97,7 +96,7 @@ struct Point
         mbCustomText(false),
         mbIsPlaceholder(false)
     {}
-    void dump();
+    void dump() const;
 
     ShapePtr      mpShape;
 
@@ -118,7 +117,7 @@ struct Point
     sal_Int32     mnMaxChildren;
     sal_Int32     mnPreferredChildren;
     sal_Int32     mnDirection;
-    sal_Int32     mnHierarchyBranch;
+    OptValue<sal_Int32> moHierarchyBranch;
     sal_Int32     mnResizeHandles;
     sal_Int32     mnCustomAngle;
     sal_Int32     mnPercentageNeighbourWidth;
@@ -147,6 +146,7 @@ typedef std::vector< Point >        Points;
 
 }
 
+class Diagram;
 class LayoutNode;
 typedef std::shared_ptr< LayoutNode > LayoutNodePtr;
 
@@ -180,7 +180,12 @@ public:
         { return maPointsPresNameMap; }
     ::std::vector<OUString> &getExtDrawings()
         { return maExtDrawings; }
-    void dump();
+    const dgm::Point* getRootPoint() const;
+    sal_Int32 getMaxDepth() const
+        { return mnMaxDepth; }
+    void setMaxDepth(sal_Int32 nDepth)
+        { mnMaxDepth = nDepth; }
+    void dump() const;
 private:
     FillPropertiesPtr mpFillProperties;
     dgm::Connections  maConnections;
@@ -189,6 +194,7 @@ private:
     PointsNameMap     maPointsPresNameMap;
     ConnectionNameMap maConnectionNameMap;
     StringMap         maPresOfNameMap;
+    sal_Int32         mnMaxDepth;
 };
 
 typedef std::shared_ptr< DiagramData > DiagramDataPtr;
@@ -196,6 +202,7 @@ typedef std::shared_ptr< DiagramData > DiagramDataPtr;
 class DiagramLayout
 {
 public:
+    DiagramLayout(const Diagram& rDgm) : mrDgm(rDgm) {}
     void setDefStyle( const OUString & sDefStyle )
         { msDefStyle = sDefStyle; }
     void setMinVer( const OUString & sMinVer )
@@ -206,6 +213,8 @@ public:
         { msTitle = sTitle; }
     void setDesc( const OUString & sDesc )
         { msDesc = sDesc; }
+    const Diagram& getDiagram() const
+        { return mrDgm; }
     LayoutNodePtr & getNode()
         { return mpNode; }
     const LayoutNodePtr & getNode() const
@@ -220,6 +229,7 @@ public:
         { return mpStyleData; }
 
 private:
+    const Diagram& mrDgm;
     OUString msDefStyle;
     OUString msMinVer;
     OUString msUniqueId;
@@ -261,12 +271,12 @@ typedef std::map<OUString,DiagramColor> DiagramColorMap;
 class Diagram
 {
 public:
-    void setData( const DiagramDataPtr & );
+    void setData( const DiagramDataPtr & pData )
+        { mpData = pData; }
     const DiagramDataPtr& getData() const
-        {
-            return mpData;
-        }
-    void setLayout( const DiagramLayoutPtr & );
+        { return mpData; }
+    void setLayout( const DiagramLayoutPtr & pLayout )
+        { mpLayout = pLayout; }
 
     DiagramQStyleMap& getStyles() { return maStyles; }
     const DiagramQStyleMap& getStyles() const { return maStyles; }

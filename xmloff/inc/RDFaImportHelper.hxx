@@ -45,9 +45,7 @@ class RDFaImportHelper
 private:
     const SvXMLImport & m_rImport;
 
-    typedef ::std::vector< RDFaEntry > RDFaEntries_t;
-
-    RDFaEntries_t m_RDFaEntries;
+    ::std::vector< RDFaEntry > m_RDFaEntries;
 
     const SvXMLImport & GetImport() const { return m_rImport; }
 
@@ -67,7 +65,7 @@ public:
     /** Add a RDFa statement; must have been parsed with ParseRDFa */
     void AddRDFa(
         css::uno::Reference< css::rdf::XMetadatable> const & i_xObject,
-        std::shared_ptr<ParsedRDFaAttributes> & i_pRDFaAttributes);
+        std::shared_ptr<ParsedRDFaAttributes> const & i_pRDFaAttributes);
 
     /** Parse and add a RDFa statement; parameters are XML attribute values */
     void ParseAndAddRDFa(

@@ -19,17 +19,17 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_TXTFLY_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_TXTFLY_HXX
 
-#include "swtypes.hxx"
-#include "swrect.hxx"
-#include <fmtsrndenum.hxx>
+#include <tools/solar.h>
+#include <swtypes.hxx>
+#include <swrect.hxx>
+#include <com/sun/star/text/WrapTextMode.hpp>
+#include <memory>
 #include <vector>
 
 class OutputDevice;
 class SwContentFrame;
 class SwPageFrame;
-class SwTextFly;
 class SdrObject;
-class SwTextPaintInfo;
 class SwFormat;
 class TextRanger;
 class SwAnchoredObject;
@@ -38,8 +38,6 @@ class SwDrawTextInfo;
 class SwContourCache;
 
 typedef std::vector< SwAnchoredObject* > SwAnchoredObjList;
-
-enum PAGESIDE { LEFT_SIDE, RIGHT_SIDE, DONTKNOW_SIDE };
 
 /** Contour-cache global variable, initialized/destroyed in txtinit.cxx
     and needed in txtfly.cxx by text wrapping.
@@ -55,10 +53,13 @@ void ClrContourCache( const SdrObject *pObj );
 class SwContourCache
 {
     friend void ClrContourCache();
-    const SdrObject *pSdrObj[ POLY_CNT ];
-    TextRanger *pTextRanger[ POLY_CNT ];
+    struct CacheItem
+    {
+        const SdrObject *mpSdrObj;
+        std::unique_ptr<TextRanger> mxTextRanger;
+    };
+    std::vector<CacheItem> mvItems;
     long nPntCnt;
-    sal_uInt16 nObjCnt;
     const SwRect ContourRect( const SwFormat* pFormat, const SdrObject* pObj,
         const SwTextFrame* pFrame, const SwRect &rLine, const long nXPos,
         const bool bRight );
@@ -66,8 +67,8 @@ class SwContourCache
 public:
     SwContourCache();
     ~SwContourCache();
-    const SdrObject* GetObject( sal_uInt16 nPos ) const{ return pSdrObj[ nPos ]; }
-    sal_uInt16 GetCount() const { return nObjCnt; }
+    const SdrObject* GetObject( sal_uInt16 nPos ) const{ return mvItems[ nPos ].mpSdrObj; }
+    sal_uInt16 GetCount() const { return mvItems.size(); }
     void ClrObject( sal_uInt16 nPos );
 
     /**
@@ -118,15 +119,15 @@ public:
  */
 class SwTextFly
 {
-    const SwPageFrame             * pPage;
-    const SwAnchoredObject      * mpCurrAnchoredObj;
-    const SwTextFrame              * pCurrFrame;
-    const SwContentFrame            * pMaster;
-    SwAnchoredObjList           * mpAnchoredObjList;
+    const SwPageFrame                * pPage;
+    const SwAnchoredObject           * mpCurrAnchoredObj;
+    const SwTextFrame                * m_pCurrFrame;
+    const SwTextFrame                * m_pMaster;
+    std::unique_ptr<SwAnchoredObjList> mpAnchoredObjList;
 
     long nMinBottom;
     long nNextTop;  /// Stores the upper edge of the "next" frame
-    sal_uLong nIndex;
+    sal_uLong m_nCurrFrameNodeIndex;
 
     bool bOn : 1;
     bool bTopRule: 1;
@@ -146,7 +147,7 @@ class SwTextFly
         \param[in] rPortion
             Scope: document global.
      */
-    SwRect _GetFrame( const SwRect &rPortion ) const;
+    SwRect GetFrame_( const SwRect &rPortion ) const;
 
     SwAnchoredObjList* InitAnchoredObjList();
 
@@ -160,19 +161,19 @@ class SwTextFly
 
     /**
       \li There is less than 2cm space on both sides for the text:
-      no surround (SURROUND_NONE)
+      no surround (css::text::WrapTextMode_NONE)
 
       \li There is more than 2cm space on only one side:
-      surround on that side (SURROUND_LEFT or SURROUND_RIGHT)
+      surround on that side (css::text::WrapTextMode_LEFT or css::text::WrapTextMode_RIGHT)
 
       \li There is more than 2cm space on both sides, the object is
       larger than 1.5cm: surround on the wider side
-      (SURROUND_LET or SURROUND_RIGHT)
+      (css::text::WrapTextMode_LEFT or css::text::WrapTextMode_RIGHT)
 
       \li There is more than 2cm space on both sides and the object
-      width is less than 1.5cm: both sides surround (SURROUND_PARALLEL)
+      width is less than 1.5cm: both sides surround (css::text::WrapTextMode_PARALLEL)
      */
-    SwSurround _GetSurroundForTextWrap( const SwAnchoredObject* pAnchoredObj ) const;
+    css::text::WrapTextMode GetSurroundForTextWrap( const SwAnchoredObject* pAnchoredObj ) const;
 
     /**
        The right margin is the right margin or it is determined by the
@@ -201,7 +202,7 @@ class SwTextFly
 
     SwTwips CalcMinBottom() const;
 
-    const SwContentFrame* _GetMaster();
+    const SwTextFrame* GetMaster_();
 
 public:
 
@@ -227,7 +228,7 @@ public:
     bool Relax();
 
     SwTwips GetMinBottom() const;
-    const SwContentFrame* GetMaster() const;
+    const SwTextFrame* GetMaster() const;
 
     // This temporary variable needs to be manipulated in const methods
     long GetNextTop() const;
@@ -255,7 +256,7 @@ public:
 
         DrawText() takes over the on optimization!
      */
-    bool DrawTextOpaque( SwDrawTextInfo &rInf );
+    void DrawTextOpaque( SwDrawTextInfo &rInf );
 
     /**
         Two subtleties needs to be mentioned:
@@ -301,7 +302,7 @@ public:
 inline SwAnchoredObjList* SwTextFly::GetAnchoredObjList() const
 {
     return mpAnchoredObjList
-           ? mpAnchoredObjList
+           ? mpAnchoredObjList.get()
            : const_cast<SwTextFly*>(this)->InitAnchoredObjList();
 }
 
@@ -338,9 +339,9 @@ inline SwTwips SwTextFly::GetMinBottom() const
     return mpAnchoredObjList ? nMinBottom : CalcMinBottom();
 }
 
-inline const SwContentFrame* SwTextFly::GetMaster() const
+inline const SwTextFrame* SwTextFly::GetMaster() const
 {
-    return pMaster ? pMaster : const_cast<SwTextFly*>(this)->_GetMaster();
+    return m_pMaster ? m_pMaster : const_cast<SwTextFly*>(this)->GetMaster_();
 }
 
 inline long SwTextFly::GetNextTop() const
@@ -355,7 +356,7 @@ inline void SwTextFly::SetNextTop( long nNew ) const
 
 inline SwRect SwTextFly::GetFrame( const SwRect &rRect ) const
 {
-    return bOn ? _GetFrame( rRect ) : SwRect();
+    return bOn ? GetFrame_( rRect ) : SwRect();
 }
 
 inline void SwTextFly::SetIgnoreCurrentFrame( bool bNew )

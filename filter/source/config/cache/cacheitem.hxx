@@ -21,7 +21,6 @@
 #define INCLUDED_FILTER_SOURCE_CONFIG_CACHE_CACHEITEM_HXX
 
 #include <deque>
-#include <list>
 #include <unordered_map>
 #include <com/sun/star/uno/Sequence.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -43,12 +42,9 @@ struct BaseLock
 {
     public:
 
-        // must be mutable to be useable in const environments too!
+        // must be mutable to be usable in const environments too!
         mutable ::osl::Mutex m_aLock;
 };
-
-
-typedef ::std::vector< OUString > OUStringList;
 
 
 /** @short  represent an item of a FilterCache
@@ -147,9 +143,8 @@ class CacheItem : public ::comphelper::SequenceAsHashMap
 /** @short  represent an item list of a FilterCache
             instance.
  */
-typedef std::unordered_map< OUString                    ,
-                            CacheItem                          ,
-                            OUStringHash > CacheItemList;
+typedef std::unordered_map< OUString,
+                            CacheItem > CacheItemList;
 
 
 /** @short  supports registration of multiple key to
@@ -164,9 +159,8 @@ typedef std::unordered_map< OUString                    ,
             there we need key-value pairs too, which can't be provided
             by a pure vector!
  */
-typedef std::unordered_map< OUString                    ,
-                            OUStringList                       ,
-                            OUStringHash > CacheItemRegistration;
+typedef std::unordered_map< OUString,
+                            std::vector<OUString> > CacheItemRegistration;
 
 
 /** @short  is used to collect all matching types of an URL
@@ -194,7 +188,7 @@ struct FlatDetectionInfo
     FlatDetectionInfo();
 };
 
-typedef ::std::list< FlatDetectionInfo > FlatDetection;
+typedef ::std::vector< FlatDetectionInfo > FlatDetection;
 
     } // namespace config
 } // namespace filter

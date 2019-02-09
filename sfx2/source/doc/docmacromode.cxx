@@ -28,7 +28,6 @@
 #include <com/sun/star/task/DocumentMacroConfirmationRequest.hpp>
 #include <com/sun/star/task/InteractionClassification.hpp>
 #include <com/sun/star/security/DocumentDigitalSignatures.hpp>
-#include <com/sun/star/script/XLibraryQueryExecutable.hpp>
 
 #include <comphelper/processfactory.hxx>
 #include <framework/interaction.hxx>
@@ -48,19 +47,14 @@ namespace sfx2
     using ::com::sun::star::task::XInteractionHandler;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::uno::Sequence;
-    using ::com::sun::star::task::XInteractionContinuation;
-    using ::com::sun::star::task::XInteractionRequest;
     using ::com::sun::star::task::DocumentMacroConfirmationRequest;
     using ::com::sun::star::task::ErrorCodeRequest;
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::security::DocumentDigitalSignatures;
     using ::com::sun::star::security::XDocumentDigitalSignatures;
-    using ::com::sun::star::security::DocumentSignatureInformation;
     using ::com::sun::star::embed::XStorage;
-    using ::com::sun::star::task::InteractionClassification_QUERY;
     using ::com::sun::star::document::XEmbeddedScripts;
     using ::com::sun::star::script::XLibraryContainer;
-    using ::com::sun::star::script::XLibraryQueryExecutable;
     using ::com::sun::star::container::XNameAccess;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
 
@@ -89,13 +83,13 @@ namespace sfx2
     namespace
     {
 
-        void lcl_showGeneralSfxErrorOnce( const Reference< XInteractionHandler >& rxHandler, const sal_Int32 nSfxErrorCode, bool& rbAlreadyShown )
+        void lcl_showGeneralSfxErrorOnce( const Reference< XInteractionHandler >& rxHandler, ErrCode nSfxErrorCode, bool& rbAlreadyShown )
         {
             if ( rbAlreadyShown )
                 return;
 
             ErrorCodeRequest aErrorCodeRequest;
-            aErrorCodeRequest.ErrCode = nSfxErrorCode;
+            aErrorCodeRequest.ErrCode = sal_uInt32(nSfxErrorCode);
 
             SfxMedium::CallApproveHandler( rxHandler, makeAny( aErrorCodeRequest ), false );
             rbAlreadyShown = true;
@@ -127,20 +121,11 @@ namespace sfx2
         }
     }
 
-
     //= DocumentMacroMode
-
-
     DocumentMacroMode::DocumentMacroMode( IMacroDocumentAccess& rDocumentAccess )
         :m_xData( new DocumentMacroMode_Data( rDocumentAccess ) )
     {
     }
-
-
-    DocumentMacroMode::~DocumentMacroMode()
-    {
-    }
-
 
     bool DocumentMacroMode::allowMacroExecution()
     {
@@ -148,13 +133,11 @@ namespace sfx2
         return true;
     }
 
-
     bool DocumentMacroMode::disallowMacroExecution()
     {
         m_xData->m_rDocumentAccess.setCurrentMacroExecMode( MacroExecMode::NEVER_EXECUTE );
         return false;
     }
-
 
     bool DocumentMacroMode::adjustMacroMode( const Reference< XInteractionHandler >& rxInteraction )
     {
@@ -215,16 +198,14 @@ namespace sfx2
 
         try
         {
-            OUString sReferrer( m_xData->m_rDocumentAccess.getDocumentLocation() );
-
             // get document location from medium name and check whether it is a trusted one
-            // the service is created ohne document version, since it is not of interest here
+            // the service is created without document version, since it is not of interest here
             Reference< XDocumentDigitalSignatures > xSignatures(DocumentDigitalSignatures::createDefault(::comphelper::getProcessComponentContext()));
-            INetURLObject aURLReferer( sReferrer );
+            INetURLObject aURLReferer( m_xData->m_rDocumentAccess.getDocumentLocation() );
 
             OUString aLocation;
             if ( aURLReferer.removeSegment() )
-                aLocation = aURLReferer.GetMainURL( INetURLObject::NO_DECODE );
+                aLocation = aURLReferer.GetMainURL( INetURLObject::DecodeMechanism::NONE );
 
             if ( !aLocation.isEmpty() && xSignatures->isLocationTrusted( aLocation ) )
             {
@@ -247,10 +228,6 @@ namespace sfx2
                 SignatureState nSignatureState = m_xData->m_rDocumentAccess.getScriptingSignatureState();
                 if ( nSignatureState == SignatureState::BROKEN )
                 {
-                    // the signature is broken, no macro execution
-                    if ( nMacroExecutionMode != MacroExecMode::FROM_LIST_AND_SIGNED_NO_WARN )
-                        m_xData->m_rDocumentAccess.showBrokenSignatureWarning( rxInteraction );
-
                     return disallowMacroExecution();
                 }
                 else if ( bHasTrustedMacroSignature )
@@ -288,7 +265,7 @@ namespace sfx2
             }
         }
 
-        // conformation is required
+        // confirmation is required
         bool bSecure = false;
 
         if ( eAutoConfirm == eNoAutoConfirm )
@@ -329,15 +306,15 @@ namespace sfx2
                     bHasMacroLib = false;
                 else
                 {
-                    OUString aStdLibName( "Standard" );
-                    OUString aVBAProject( "VBAProject" );
+                    const OUString aStdLibName( "Standard" );
+                    const OUString aVBAProject( "VBAProject" );
                     Sequence< OUString > aElements = xContainer->getElementNames();
                     if ( aElements.getLength() )
                     {
                         sal_Int32 nElements = aElements.getLength();
                         for( sal_Int32 i = 0; i < nElements; ++i )
                         {
-                            OUString aElement = aElements[i];
+                            const OUString aElement = aElements[i];
                             if( aElement == aStdLibName || aElement == aVBAProject )
                             {
                                 Reference < XNameAccess > xLib;
@@ -355,7 +332,7 @@ namespace sfx2
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("sfx.doc");
         }
         return bHasMacroLib;
     }
@@ -376,7 +353,7 @@ namespace sfx2
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("sfx.doc");
         }
 #endif
         return bHasMacroLib;
@@ -403,7 +380,7 @@ namespace sfx2
             }
             catch ( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("sfx.doc");
             }
         }
         return bHasMacros;

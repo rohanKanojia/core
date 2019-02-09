@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_WINDOWUPDATER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_WINDOWUPDATER_HXX
 
-#include <svl/lstner.hxx>
 #include <svl/ctloptions.hxx>
 #include <vcl/vclptr.hxx>
-#include "sddllapi.h"
+#include <sddllapi.h>
 
 #include <vector>
 
@@ -32,8 +31,6 @@ class OutputDevice;
 class SdDrawDocument;
 
 namespace sd {
-
-class ViewShell;
 
 /** The purpose of the <type>WindowUpdater</type> is to update output
     devices to take care of modified global values.  These values are
@@ -55,7 +52,7 @@ class SD_DLLPUBLIC WindowUpdater
 {
 public:
     explicit WindowUpdater();
-    virtual ~WindowUpdater() throw();
+    virtual ~WindowUpdater() throw() override;
 
     /** Add the given device to the list of devices which will be updated
         when one of the monitored values changes.
@@ -72,12 +69,6 @@ public:
             of that list.
     */
     void UnregisterWindow (vcl::Window* pWindow);
-
-    /** Set the view shell whose output devices shall be kept up to date.
-        It is used to clear the master page cache so that a redraw affects
-        the master page content as well.
-    */
-    void SetViewShell (ViewShell& rViewShell);
 
     /** Set the document so that it is reformatted when one of the monitored
         values changes.
@@ -98,14 +89,11 @@ public:
     /** Callback that waits for notifications of a
         <type>SvtCTLOptions</type> object.
     */
-    virtual void ConfigurationChanged ( utl::ConfigurationBroadcaster*, sal_uInt32 nHint) override;
+    virtual void ConfigurationChanged ( utl::ConfigurationBroadcaster*, ConfigurationHints nHint) override;
 
 private:
     /// Options to monitor for changes.
     SvtCTLOptions maCTLOptions;
-
-    /// Keep the output devices of this view shell up to date.
-    ViewShell* mpViewShell;
 
     /// The document rendered in the output devices.
     SdDrawDocument* mpDocument;

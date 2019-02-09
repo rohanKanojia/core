@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -159,7 +160,7 @@ public class JavaLoader implements XImplementationLoader,
      * new <code>com.sun.star.lang.XMultiServiceFactory</code> should be set at
      * the loader.
      *
-     * @param       args - the first parameter (args[0]) specifices the <code>ServiceManager</code>.
+     * @param       args - the first parameter (args[0]) specifies the <code>ServiceManager</code>.
      * @see         com.sun.star.lang.XInitialization
      * @see         com.sun.star.comp.servicemanager.ServiceManager
      */
@@ -355,7 +356,7 @@ public class JavaLoader implements XImplementationLoader,
      * the call is delegated to that method. Otherwise a default registration
      * will be accomplished.</p>
      *
-     * @param       regKey                  the root key under that the component should be registred.
+     * @param       regKey                  the root key under that the component should be registered.
      * @param       implementationLoaderUrl specifies the loader, the component is loaded by.
      * @param       locationUrl             points to an archive (JAR file) which contains a component.
      * @return      true if registration is successfully - otherwise false.
@@ -414,7 +415,7 @@ public class JavaLoader implements XImplementationLoader,
      * Registers the <code>JavaLoader</code> at the registry.
      *
      * @param      regKey   root key under which the <code>JavaLoader</code> should be registered.
-     * @return     true if registration succseeded - otherwise false.
+     * @return     true if registration succeeded - otherwise false.
      */
     public static boolean writeRegistryServiceInfo(XRegistryKey regKey) {
         boolean result = false;
@@ -435,3 +436,4 @@ public class JavaLoader implements XImplementationLoader,
     }
 }
 
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

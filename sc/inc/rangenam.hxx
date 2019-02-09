@@ -59,10 +59,19 @@ public:
         AbsPos     = 0x0080
     };
 
+    enum IsNameValidType
+    {
+        NAME_VALID,
+        NAME_INVALID_CELL_REF,
+        NAME_INVALID_BAD_STRING
+    };
+
 private:
-    OUString   aName;
-    OUString   aUpperName;     // #i62977# for faster searching (aName is never modified after ctor)
-    ScTokenArray*   pCode;
+    OUString const  aName;
+    OUString const  aUpperName; // #i62977# for faster searching (aName is never modified after ctor)
+    OUString        maNewName;  ///< used for formulas after changing names in the dialog
+    std::unique_ptr<ScTokenArray>
+                    pCode;
     ScAddress       aPos;
     Type            eType;
     ScDocument*     pDoc;
@@ -70,16 +79,9 @@ private:
     sal_uInt16      nIndex;
     bool            bModified;          // is set/cleared by UpdateReference
 
-    // max row and column to use for wrapping of references.  If -1 use the
-    // application's default.
-    SCROW           mnMaxRow;
-    SCCOL           mnMaxCol;
-
     void CompileRangeData( const OUString& rSymbol, bool bSetError );
     void InitCode();
 public:
-
-    typedef ::std::map<sal_uInt16, sal_uInt16> IndexMap;
 
     SC_DLLPUBLIC                ScRangeData( ScDocument* pDoc,
                                  const OUString& rName,
@@ -106,17 +108,19 @@ public:
 
     bool            operator== (const ScRangeData& rData) const;
 
-    void            GetName( OUString& rName ) const  { rName = aName; }
-    const OUString&   GetName() const           { return aName; }
+    void            GetName( OUString& rName ) const  { rName = maNewName.isEmpty() ? aName : maNewName; }
+    const OUString&   GetName() const           { return maNewName.isEmpty() ? aName : maNewName; }
     const OUString&   GetUpperName() const      { return aUpperName; }
-    ScAddress       GetPos() const                  { return aPos; }
+    const ScAddress&  GetPos() const                  { return aPos; }
     // The index has to be unique. If index=0 a new index value is assigned.
     void            SetIndex( sal_uInt16 nInd )         { nIndex = nInd; }
-    sal_uInt16    GetIndex() const                { return nIndex; }
-    ScTokenArray*   GetCode()                       { return pCode; }
-    SC_DLLPUBLIC void   SetCode( ScTokenArray& );
-    const ScTokenArray* GetCode() const             { return pCode; }
-    SC_DLLPUBLIC sal_uInt16 GetErrCode() const;
+    sal_uInt16      GetIndex() const                { return nIndex; }
+    /// Does not change the name, but sets maNewName for formula update after dialog.
+    void            SetNewName( const OUString& rNewName )  { maNewName = rNewName; }
+    ScTokenArray*   GetCode()                       { return pCode.get(); }
+    SC_DLLPUBLIC void   SetCode( const ScTokenArray& );
+    const ScTokenArray* GetCode() const             { return pCode.get(); }
+    SC_DLLPUBLIC FormulaError GetErrCode() const;
     bool            HasReferences() const;
     void            AddType( Type nType );
     Type            GetType() const                 { return eType; }
@@ -130,7 +134,7 @@ public:
      * @param nLocalTab sheet index where this name belongs, or -1 for global
      *                  name.
      */
-    void UpdateReference( sc::RefUpdateContext& rCxt, SCTAB nLocalTab = -1 );
+    void UpdateReference( sc::RefUpdateContext& rCxt, SCTAB nLocalTab );
     bool            IsModified() const              { return bModified; }
 
     SC_DLLPUBLIC void           GuessPosition();
@@ -143,17 +147,15 @@ public:
     SC_DLLPUBLIC bool           IsValidReference( ScRange& rRef ) const;
     bool                        IsRangeAtBlock( const ScRange& ) const;
 
-    void UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt, SCTAB nLocalTab = -1 );
-    void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt, SCTAB nLocalTab = -1 );
-    void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt, SCTAB nLocalTab = -1 );
+    void UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt, SCTAB nLocalTab );
+    void UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt, SCTAB nLocalTab );
+    void UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt, SCTAB nLocalTab );
 
     void            ValidateTabRefs();
 
     static void     MakeValidName( OUString& rName );
-    SC_DLLPUBLIC static bool        IsNameValid( const OUString& rName, ScDocument* pDoc );
 
-    SCROW GetMaxRow() const;
-    SCCOL GetMaxCol() const;
+    SC_DLLPUBLIC static IsNameValidType     IsNameValid( const OUString& rName, const ScDocument* pDoc );
 
     void CompileUnresolvedXML( sc::CompileFormulaContext& rCxt );
 
@@ -177,7 +179,7 @@ inline bool ScRangeData::HasType( Type nType ) const
     return ( ( eType & nType ) == nType );
 }
 
-extern "C" int SAL_CALL ScRangeData_QsortNameCompare( const void*, const void* );
+extern "C" int ScRangeData_QsortNameCompare( const void*, const void* );
 
 class ScRangeName
 {
@@ -213,6 +215,26 @@ public:
      */
     void CompileUnresolvedXML( sc::CompileFormulaContext& rCxt );
 
+    /** Copy names while copying a sheet if they reference the sheet to be copied.
+
+        Assumes that new sheet was already inserted, global names have been
+        updated/adjusted, but sheet-local names on nOldTab are not, as is the
+        case in ScDocument::CopyTab()
+
+        @param  nLocalTab
+                -1 when operating on global names, else sheet/tab of
+                sheet-local name scope. The already adjusted tab on which to
+                find the name.
+
+        @param  nOldTab
+                The original unadjusted tab position.
+
+        @param  nNewTab
+                The new tab position.
+     */
+    void CopyUsedNames( const SCTAB nLocalTab, const SCTAB nOldTab, const SCTAB nNewTab,
+            const ScDocument& rOldDoc, ScDocument& rNewDoc, const bool bGlobalNamesToLocal ) const;
+
     SC_DLLPUBLIC const_iterator begin() const;
     SC_DLLPUBLIC const_iterator end() const;
     SC_DLLPUBLIC iterator begin();
@@ -224,8 +246,15 @@ public:
         @ATTENTION: The underlying ::std::map<std::unique_ptr>::insert(p) takes
         ownership of p and if it can't insert it deletes the object! So, if
         this insert here returns false the object where p pointed to is gone!
+
+        @param  bReuseFreeIndex
+                If the ScRangeData p points to has an index value of 0:
+                If `TRUE` then reuse a free index slot if available.
+                If `FALSE` then assign a new index slot. The Manage Names
+                dialog uses this so that deleting and adding ranges in the same
+                run is guaranteed to not reuse previously assigned indexes.
      */
-    SC_DLLPUBLIC bool insert(ScRangeData* p);
+    SC_DLLPUBLIC bool insert( ScRangeData* p, bool bReuseFreeIndex = true );
 
     void erase(const ScRangeData& r);
     void erase(const OUString& rName);

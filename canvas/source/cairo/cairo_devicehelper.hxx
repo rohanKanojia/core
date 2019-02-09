@@ -83,7 +83,7 @@ namespace cairocanvas
         css::uno::Any getDeviceHandle() const;
         css::uno::Any getSurfaceHandle() const;
         css::uno::Reference<
-            css::rendering::XColorSpace > getColorSpace() const;
+            css::rendering::XColorSpace > const & getColorSpace() const;
 
         /** called when DumpScreenContent property is enabled on
             XGraphicDevice, and writes out bitmaps of current screen.
@@ -92,8 +92,8 @@ namespace cairocanvas
 
         OutputDevice* getOutputDevice() const { return mpRefDevice; }
         const ::cairo::SurfaceSharedPtr& getSurface() { return mpSurface; }
-        ::cairo::SurfaceSharedPtr createSurface( const ::basegfx::B2ISize& rSize, int aContent = CAIRO_CONTENT_COLOR_ALPHA );
-        ::cairo::SurfaceSharedPtr createSurface( BitmapSystemData& rData, const Size& rSize );
+        ::cairo::SurfaceSharedPtr createSurface( const ::basegfx::B2ISize& rSize, int aContent );
+        ::cairo::SurfaceSharedPtr createSurface( BitmapSystemData const & rData, const Size& rSize );
 
     protected:
         /** init helper

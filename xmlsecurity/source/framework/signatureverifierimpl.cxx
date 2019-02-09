@@ -18,11 +18,10 @@
  */
 
 
-#include "signatureverifierimpl.hxx"
+#include <framework/signatureverifierimpl.hxx>
 #include <com/sun/star/xml/crypto/XXMLSignatureTemplate.hpp>
 #include <com/sun/star/xml/wrapper/XXMLElementWrapper.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/diagnose.h>
 
@@ -32,8 +31,8 @@ namespace cssxc = com::sun::star::xml::crypto;
 
 #define IMPLEMENTATION_NAME "com.sun.star.xml.security.framework.SignatureVerifierImpl"
 
-SignatureVerifierImpl::SignatureVerifierImpl( const cssu::Reference< css::uno::XComponentContext >& xContext)
-  : SignatureVerifierImpl_Base(xContext)
+SignatureVerifierImpl::SignatureVerifierImpl()
+  : SignatureVerifierImpl_Base()
 {
 }
 
@@ -41,29 +40,7 @@ SignatureVerifierImpl::~SignatureVerifierImpl()
 {
 }
 
-bool SignatureVerifierImpl::checkReady() const
-/****** SignatureVerifierImpl/checkReady *************************************
- *
- *   NAME
- *  checkReady -- checks the conditions for the signature verification.
- *
- *   SYNOPSIS
- *  bReady = checkReady( );
- *
- *   FUNCTION
- *  checks whether all following conditions are satisfied:
- *  1. the result listener is ready;
- *  2. the SignatureEngine is ready.
- *
- *   RESULT
- *  bReady - true if all conditions are satisfied, false otherwise
- ******************************************************************************/
-{
-    return (m_xResultListener.is() && SignatureEngine::checkReady());
-}
-
 void SignatureVerifierImpl::notifyResultListener() const
-    throw (cssu::Exception, cssu::RuntimeException)
 /****** SignatureVerifierImpl/notifyResultListener ***************************
  *
  *   NAME
@@ -76,17 +53,11 @@ void SignatureVerifierImpl::notifyResultListener() const
     xSignatureVerifyResultListener->signatureVerified( m_nSecurityId, m_nStatus );
 }
 
-void SignatureVerifierImpl::startEngine( const cssu::Reference<
-    cssxc::XXMLSignatureTemplate >&
-    xSignatureTemplate)
-    throw (cssu::Exception, cssu::RuntimeException)
+void SignatureVerifierImpl::startEngine( const rtl::Reference<XMLSignatureTemplateImpl>& xSignatureTemplate)
 /****** SignatureVerifierImpl/startEngine ************************************
  *
  *   NAME
  *  startEngine -- verifies the signature.
- *
- *   SYNOPSIS
- *  startEngine( xSignatureTemplate );
  *
  *   INPUTS
  *  xSignatureTemplate - the signature template (along with all referenced
@@ -96,7 +67,7 @@ void SignatureVerifierImpl::startEngine( const cssu::Reference<
     cssu::Reference< cssxc::XXMLSignatureTemplate > xResultTemplate;
     try
     {
-        xResultTemplate = m_xXMLSignature->validate(xSignatureTemplate, m_xXMLSecurityContext);
+        xResultTemplate = m_xXMLSignature->validate(css::uno::Reference<css::xml::crypto::XXMLSignatureTemplate>(xSignatureTemplate.get()), m_xXMLSecurityContext);
         m_nStatus = xResultTemplate->getStatus();
     }
     catch( cssu::Exception& )
@@ -108,7 +79,6 @@ void SignatureVerifierImpl::startEngine( const cssu::Reference<
 /* XSignatureVerifyResultBroadcaster */
 void SAL_CALL SignatureVerifierImpl::addSignatureVerifyResultListener(
     const cssu::Reference< cssxc::sax::XSignatureVerifyResultListener >& listener )
-    throw (cssu::Exception, cssu::RuntimeException, std::exception)
 {
     m_xResultListener = listener;
     tryToPerform();
@@ -116,14 +86,12 @@ void SAL_CALL SignatureVerifierImpl::addSignatureVerifyResultListener(
 
 void SAL_CALL SignatureVerifierImpl::removeSignatureVerifyResultListener(
     const cssu::Reference< cssxc::sax::XSignatureVerifyResultListener >&)
-    throw (cssu::RuntimeException, std::exception)
 {
 }
 
 /* XInitialization */
 void SAL_CALL SignatureVerifierImpl::initialize(
     const cssu::Sequence< cssu::Any >& aArguments )
-    throw (cssu::Exception, cssu::RuntimeException, std::exception)
 {
     OSL_ASSERT(aArguments.getLength() == 5);
 
@@ -140,40 +108,28 @@ void SAL_CALL SignatureVerifierImpl::initialize(
 
 
 OUString SignatureVerifierImpl_getImplementationName ()
-    throw (cssu::RuntimeException)
 {
     return OUString( IMPLEMENTATION_NAME );
 }
 
-cssu::Sequence< OUString > SAL_CALL SignatureVerifierImpl_getSupportedServiceNames(  )
-    throw (cssu::RuntimeException)
+cssu::Sequence< OUString > SignatureVerifierImpl_getSupportedServiceNames(  )
 {
     cssu::Sequence<OUString> aRet { "com.sun.star.xml.crypto.sax.SignatureVerifier" };
     return aRet;
 }
 
-cssu::Reference< cssu::XInterface > SAL_CALL SignatureVerifierImpl_createInstance(
-    const cssu::Reference< cssl::XMultiServiceFactory >& rSMgr)
-    throw( cssu::Exception )
-{
-    return static_cast<cppu::OWeakObject*>(new SignatureVerifierImpl( comphelper::getComponentContext(rSMgr) ));
-}
-
 /* XServiceInfo */
 OUString SAL_CALL SignatureVerifierImpl::getImplementationName(  )
-    throw (cssu::RuntimeException, std::exception)
 {
     return SignatureVerifierImpl_getImplementationName();
 }
 
 sal_Bool SAL_CALL SignatureVerifierImpl::supportsService( const OUString& rServiceName )
-    throw (cssu::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 cssu::Sequence< OUString > SAL_CALL SignatureVerifierImpl::getSupportedServiceNames(  )
-    throw (cssu::RuntimeException, std::exception)
 {
     return SignatureVerifierImpl_getSupportedServiceNames();
 }

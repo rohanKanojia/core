@@ -54,16 +54,13 @@ public:
     sal_uLong GetDocPos() const { return nDocPos; }
 
     /// For sorting.
-    inline bool operator==( const SwGlblDocContent& rCmp ) const
+    bool operator==( const SwGlblDocContent& rCmp ) const
         {   return GetDocPos() == rCmp.GetDocPos(); }
-    inline bool operator<( const SwGlblDocContent& rCmp ) const
+    bool operator<( const SwGlblDocContent& rCmp ) const
         {   return GetDocPos() < rCmp.GetDocPos(); }
 };
 
-class SwGlblDocContents : public o3tl::sorted_vector<SwGlblDocContent*, o3tl::less_ptr_to<SwGlblDocContent> > {
-public:
-    ~SwGlblDocContents() { DeleteAndDestroyAll(); }
-};
+class SwGlblDocContents : public o3tl::sorted_vector<std::unique_ptr<SwGlblDocContent>, o3tl::less_uniqueptr_to<SwGlblDocContent> > {};
 
 #endif
 

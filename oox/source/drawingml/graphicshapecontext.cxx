@@ -18,28 +18,31 @@
  */
 
 #include <com/sun/star/io/TempFile.hpp>
-#include "oox/drawingml/graphicshapecontext.hxx"
+#include <oox/drawingml/graphicshapecontext.hxx>
 
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <drawingml/embeddedwavaudiofile.hxx>
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "drawingml/graphicproperties.hxx"
-#include "drawingml/customshapeproperties.hxx"
-#include "drawingml/diagram/diagram.hxx"
-#include "drawingml/table/tablecontext.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/helper/attributelist.hxx"
-#include "oox/helper/graphichelper.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/vml/vmldrawing.hxx"
-#include "oox/vml/vmlshape.hxx"
-#include "oox/vml/vmlshapecontainer.hxx"
-#include "oox/drawingml/fillproperties.hxx"
-#include "drawingml/transform2dcontext.hxx"
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/binaryoutputstream.hxx"
-#include "oox/ppt/pptshapegroupcontext.hxx"
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/graphicproperties.hxx>
+#include <drawingml/customshapeproperties.hxx>
+#include <drawingml/diagram/diagram.hxx>
+#include <drawingml/table/tablecontext.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/helper/graphichelper.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/vml/vmldrawing.hxx>
+#include <oox/vml/vmlshape.hxx>
+#include <oox/vml/vmlshapecontainer.hxx>
+#include <drawingml/fillproperties.hxx>
+#include <drawingml/transform2dcontext.hxx>
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/binaryoutputstream.hxx>
+#include <oox/ppt/pptshapegroupcontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::io;
@@ -69,7 +72,7 @@ namespace drawingml {
 
 // CT_Picture
 
-GraphicShapeContext::GraphicShapeContext( ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pShapePtr )
+GraphicShapeContext::GraphicShapeContext( ContextHandler2Helper const & rParent, const ShapePtr& pMasterShapePtr, const ShapePtr& pShapePtr )
 : ShapeContext( rParent, pMasterShapePtr, pShapePtr )
 {
 }
@@ -119,7 +122,7 @@ ContextHandlerRef GraphicShapeContext::onCreateContext( sal_Int32 aElementToken,
 
 // CT_GraphicalObjectFrameContext
 
-GraphicalObjectFrameContext::GraphicalObjectFrameContext( ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pShapePtr, bool bEmbedShapesInChart ) :
+GraphicalObjectFrameContext::GraphicalObjectFrameContext( ContextHandler2Helper& rParent, const ShapePtr& pMasterShapePtr, const ShapePtr& pShapePtr, bool bEmbedShapesInChart ) :
     ShapeContext( rParent, pMasterShapePtr, pShapePtr ),
     mbEmbedShapesInChart( bEmbedShapesInChart ),
     mpParent(&rParent)
@@ -155,7 +158,7 @@ ContextHandlerRef GraphicalObjectFrameContext::onCreateContext( sal_Int32 aEleme
                 return new table::TableContext( *this, mpShapePtr );
             else
             {
-                SAL_WARN("oox", "OOX: Ignore graphicsData of :" << sUri );
+                SAL_WARN("oox.drawingml", "OOX: Ignore graphicsData of :" << sUri );
                 return nullptr;
             }
         }
@@ -175,7 +178,7 @@ void GraphicalObjectFrameContext::onEndElement()
     }
 }
 
-OleObjectGraphicDataContext::OleObjectGraphicDataContext( ContextHandler2Helper& rParent, ShapePtr xShape ) :
+OleObjectGraphicDataContext::OleObjectGraphicDataContext( ContextHandler2Helper const & rParent, const ShapePtr& xShape ) :
     ShapeContext( rParent, ShapePtr(), xShape ),
     mrOleObjectInfo( xShape->setOleObjectType() )
 {
@@ -235,7 +238,7 @@ ContextHandlerRef OleObjectGraphicDataContext::onCreateContext( sal_Int32 nEleme
     return nullptr;
 }
 
-DiagramGraphicDataContext::DiagramGraphicDataContext( ContextHandler2Helper& rParent, ShapePtr pShapePtr )
+DiagramGraphicDataContext::DiagramGraphicDataContext( ContextHandler2Helper const & rParent, const ShapePtr& pShapePtr )
 : ShapeContext( rParent, ShapePtr(), pShapePtr )
 {
     pShapePtr->setDiagramType();
@@ -260,15 +263,31 @@ ContextHandlerRef DiagramGraphicDataContext::onCreateContext( ::sal_Int32 aEleme
                     getFragmentPathFromRelId( msDm ),
                     getFragmentPathFromRelId( msLo ),
                     getFragmentPathFromRelId( msQs ),
-                    getFragmentPathFromRelId( msCs ));
-        SAL_INFO("oox.drawingml", OSL_THIS_FUNC
-                 << "diagram added shape " << mpShapePtr->getName()
+                    getFragmentPathFromRelId( msCs ),
+                    getRelations());
+        SAL_INFO("oox.drawingml", "DiagramGraphicDataContext::onCreateContext: added shape " << mpShapePtr->getName()
                  << " of type " << mpShapePtr->getServiceName()
-                 << ", size (" << mpShapePtr->getPosition().X
+                 << ", position: " << mpShapePtr->getPosition().X
                  << "," << mpShapePtr->getPosition().Y
-                 << "," << mpShapePtr->getSize().Width
-                 << "," << mpShapePtr->getSize().Height
-                 <<")");
+                 << ", size: " << mpShapePtr->getSize().Width
+                 << "x" << mpShapePtr->getSize().Height);
+
+        // No DrawingML fallback, need to warn the user at the end.
+        if (mpShapePtr->getExtDrawings().empty())
+            getFilter().setMissingExtDrawing();
+        else
+        {
+            for (const auto& rRelId : mpShapePtr->getExtDrawings())
+            {
+                // An invalid fallback reference is as bad as a missing one.
+                if (getFragmentPathFromRelId(rRelId).isEmpty())
+                {
+                    getFilter().setMissingExtDrawing();
+                    break;
+                }
+            }
+        }
+
         break;
     }
     default:
@@ -278,7 +297,7 @@ ContextHandlerRef DiagramGraphicDataContext::onCreateContext( ::sal_Int32 aEleme
     return ShapeContext::onCreateContext( aElementToken, rAttribs );
 }
 
-ChartGraphicDataContext::ChartGraphicDataContext( ContextHandler2Helper& rParent, const ShapePtr& rxShape, bool bEmbedShapes ) :
+ChartGraphicDataContext::ChartGraphicDataContext( ContextHandler2Helper const & rParent, const ShapePtr& rxShape, bool bEmbedShapes ) :
     ShapeContext( rParent, ShapePtr(), rxShape ),
     mrChartShapeInfo( rxShape->setChartType( bEmbedShapes ) )
 {

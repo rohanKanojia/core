@@ -19,31 +19,37 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_SPLITTBL_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_SPLITTBL_HXX
 
-#include <svx/stddlg.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/button.hxx>
+#include <vcl/weld.hxx>
+#include <tblenum.hxx>
 
 class SwWrtShell;
 
-class SwSplitTableDlg : public SvxStandardDialog
+class SwSplitTableDlg : public weld::GenericDialogController
 {
-    VclPtr<RadioButton>    mpContentCopyRB;
-    VclPtr<RadioButton>    mpBoxAttrCopyWithParaRB ;
-    VclPtr<RadioButton>    mpBoxAttrCopyNoParaRB ;
-    VclPtr<RadioButton>    mpBorderCopyRB;
+private:
+    std::unique_ptr<weld::RadioButton> m_xHorzBox;
+    std::unique_ptr<weld::RadioButton> m_xContentCopyRB;
+    std::unique_ptr<weld::RadioButton> m_xBoxAttrCopyWithParaRB;
+    std::unique_ptr<weld::RadioButton> m_xBoxAttrCopyNoParaRB;
+    std::unique_ptr<weld::RadioButton> m_xBorderCopyRB;
 
-    SwWrtShell      &rShell;
-    sal_uInt16          m_nSplit;
+    SwWrtShell            &rShell;
+    SplitTable_HeadlineOption m_nSplit;
 
-protected:
-    virtual void Apply() override;
+    void Apply();
 
 public:
-    SwSplitTableDlg( vcl::Window *pParent, SwWrtShell &rSh );
-    virtual ~SwSplitTableDlg();
-    virtual void dispose() override;
+    SwSplitTableDlg(weld::Window *pParent, SwWrtShell &rSh);
 
-    sal_uInt16 GetSplitMode() const { return m_nSplit; }
+    virtual short run() override
+    {
+        short nRet = GenericDialogController::run();
+        if (nRet == RET_OK)
+            Apply();
+        return nRet;
+    }
+
+    SplitTable_HeadlineOption GetSplitMode() const { return m_nSplit; }
 };
 
 #endif

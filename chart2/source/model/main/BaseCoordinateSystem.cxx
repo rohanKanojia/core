@@ -17,22 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "BaseCoordinateSystem.hxx"
-#include "macros.hxx"
-#include "PropertyHelper.hxx"
-#include "UserDefinedProperties.hxx"
-#include "ContainerHelper.hxx"
-#include "CloneHelper.hxx"
+#include <BaseCoordinateSystem.hxx>
+#include <PropertyHelper.hxx>
+#include <UserDefinedProperties.hxx>
+#include <ContainerHelper.hxx>
+#include <CloneHelper.hxx>
+#include <ModifyListenerHelper.hxx>
 #include "Axis.hxx"
-#include "AxisHelper.hxx"
 #include <com/sun/star/chart2/AxisType.hpp>
+#include <com/sun/star/container/NoSuchElementException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <algorithm>
-#include <iterator>
 
-#if OSL_DEBUG_LEVEL > 1
-#include <rtl/math.hxx>
-#endif
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
 using namespace ::com::sun::star;
@@ -48,14 +46,13 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "SwapXAndYAxis",
+    rOutProperties.emplace_back( "SwapXAndYAxis",
                   PROP_COORDINATESYSTEM_SWAPXANDYAXIS,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 }
 
 struct StaticCooSysDefaults_Initializer
@@ -63,13 +60,8 @@ struct StaticCooSysDefaults_Initializer
     ::chart::tPropertyValueMap* operator()()
     {
         static ::chart::tPropertyValueMap aStaticDefaults;
-        lcl_AddDefaultsToMap( aStaticDefaults );
+        ::chart::PropertyHelper::setPropertyValueDefault( aStaticDefaults, PROP_COORDINATESYSTEM_SWAPXANDYAXIS, false );
         return &aStaticDefaults;
-    }
-private:
-    static void lcl_AddDefaultsToMap( ::chart::tPropertyValueMap & rOutMap )
-    {
-        ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_COORDINATESYSTEM_SWAPXANDYAXIS, false );
     }
 };
 
@@ -88,11 +80,11 @@ struct StaticCooSysInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
         ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -123,10 +115,8 @@ namespace chart
 {
 
 BaseCoordinateSystem::BaseCoordinateSystem(
-    const Reference< uno::XComponentContext > & xContext,
     sal_Int32 nDimensionCount /* = 2 */ ) :
         ::property::OPropertySet( m_aMutex ),
-        m_xContext( xContext ),
         m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder()),
         m_nDimensionCount( nDimensionCount )
  {
@@ -134,7 +124,7 @@ BaseCoordinateSystem::BaseCoordinateSystem(
     for( sal_Int32 nN=0; nN<m_nDimensionCount; nN++ )
     {
         m_aAllAxis[nN].resize( 1 );
-        Reference< chart2::XAxis > xAxis( new Axis(m_xContext) );
+        Reference< chart2::XAxis > xAxis( new Axis );
         m_aAllAxis[nN][0] = xAxis;
 
         ModifyListenerHelper::addListenerToAllElements( m_aAllAxis[nN], m_xModifyEventForwarder );
@@ -154,29 +144,23 @@ BaseCoordinateSystem::BaseCoordinateSystem(
         xAxis->setScaleData( aScaleData );
     }
 
-    m_aOrigin.realloc( m_nDimensionCount );
-    for( sal_Int32 i = 0; i < m_nDimensionCount; ++i )
-        m_aOrigin[ i ] = uno::makeAny( double( 0.0 ) );
-
-    setFastPropertyValue_NoBroadcast( PROP_COORDINATESYSTEM_SWAPXANDYAXIS, uno::makeAny( false ));
+    setFastPropertyValue_NoBroadcast( PROP_COORDINATESYSTEM_SWAPXANDYAXIS, uno::Any( false ));
 }
 
 // explicit
 BaseCoordinateSystem::BaseCoordinateSystem(
     const BaseCoordinateSystem & rSource ) :
-        impl::BaseCoordinateSystem_Base(),
+        impl::BaseCoordinateSystem_Base(rSource),
         MutexContainer(),
         ::property::OPropertySet( rSource, m_aMutex ),
-    m_xContext( rSource.m_xContext ),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder()),
-    m_nDimensionCount( rSource.m_nDimensionCount ),
-    m_aOrigin( rSource.m_aOrigin )
+    m_nDimensionCount( rSource.m_nDimensionCount )
 {
     m_aAllAxis.resize(rSource.m_aAllAxis.size());
     tAxisVecVecType::size_type nN=0;
     for( nN=0; nN<m_aAllAxis.size(); nN++ )
-        CloneHelper::CloneRefVector< Reference< chart2::XAxis > >( rSource.m_aAllAxis[nN], m_aAllAxis[nN] );
-    CloneHelper::CloneRefVector< Reference< chart2::XChartType > >( rSource.m_aChartTypes, m_aChartTypes );
+        CloneHelper::CloneRefVector<chart2::XAxis>( rSource.m_aAllAxis[nN], m_aAllAxis[nN] );
+    CloneHelper::CloneRefVector<chart2::XChartType>( rSource.m_aChartTypes, m_aChartTypes );
 
     for( nN=0; nN<m_aAllAxis.size(); nN++ )
         ModifyListenerHelper::addListenerToAllElements( m_aAllAxis[nN], m_xModifyEventForwarder );
@@ -187,19 +171,18 @@ BaseCoordinateSystem::~BaseCoordinateSystem()
 {
     try
     {
-        for( tAxisVecVecType::size_type nN=0; nN<m_aAllAxis.size(); nN++ )
-            ModifyListenerHelper::removeListenerFromAllElements( m_aAllAxis[nN], m_xModifyEventForwarder );
+        for(tAxisVecVecType::value_type & i : m_aAllAxis)
+            ModifyListenerHelper::removeListenerFromAllElements( i, m_xModifyEventForwarder );
         ModifyListenerHelper::removeListenerFromAllElements( m_aChartTypes, m_xModifyEventForwarder );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2" );
     }
 }
 
 // ____ XCoordinateSystem ____
 sal_Int32 SAL_CALL BaseCoordinateSystem::getDimension()
-    throw (uno::RuntimeException, std::exception)
 {
     return m_nDimensionCount;
 }
@@ -208,8 +191,6 @@ void SAL_CALL BaseCoordinateSystem::setAxisByDimension(
     sal_Int32 nDimensionIndex,
     const Reference< chart2::XAxis >& xAxis,
     sal_Int32 nIndex )
-    throw (lang::IndexOutOfBoundsException,
-           uno::RuntimeException, std::exception)
 {
     if( nDimensionIndex < 0 || nDimensionIndex >= getDimension() )
         throw lang::IndexOutOfBoundsException();
@@ -234,23 +215,19 @@ void SAL_CALL BaseCoordinateSystem::setAxisByDimension(
 
 Reference< chart2::XAxis > SAL_CALL BaseCoordinateSystem::getAxisByDimension(
             sal_Int32 nDimensionIndex, sal_Int32 nAxisIndex )
-    throw (lang::IndexOutOfBoundsException,
-           uno::RuntimeException, std::exception)
 {
     if( nDimensionIndex < 0 || nDimensionIndex >= getDimension() )
         throw lang::IndexOutOfBoundsException();
 
     OSL_ASSERT( m_aAllAxis.size() == static_cast< size_t >( getDimension()));
 
-    if( nAxisIndex < 0 || nAxisIndex > this->getMaximumAxisIndexByDimension(nDimensionIndex) )
+    if( nAxisIndex < 0 || nAxisIndex > getMaximumAxisIndexByDimension(nDimensionIndex) )
         throw lang::IndexOutOfBoundsException();
 
     return m_aAllAxis[ nDimensionIndex ][nAxisIndex];
 }
 
 sal_Int32 SAL_CALL BaseCoordinateSystem::getMaximumAxisIndexByDimension( sal_Int32 nDimensionIndex )
-        throw (lang::IndexOutOfBoundsException,
-           uno::RuntimeException, std::exception)
 {
     if( nDimensionIndex < 0 || nDimensionIndex >= getDimension() )
         throw lang::IndexOutOfBoundsException();
@@ -266,10 +243,8 @@ sal_Int32 SAL_CALL BaseCoordinateSystem::getMaximumAxisIndexByDimension( sal_Int
 
 // ____ XChartTypeContainer ____
 void SAL_CALL BaseCoordinateSystem::addChartType( const Reference< chart2::XChartType >& aChartType )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
-    if( ::std::find( m_aChartTypes.begin(), m_aChartTypes.end(), aChartType )
+    if( std::find( m_aChartTypes.begin(), m_aChartTypes.end(), aChartType )
         != m_aChartTypes.end())
         throw lang::IllegalArgumentException();
 
@@ -279,11 +254,9 @@ void SAL_CALL BaseCoordinateSystem::addChartType( const Reference< chart2::XChar
 }
 
 void SAL_CALL BaseCoordinateSystem::removeChartType( const Reference< chart2::XChartType >& aChartType )
-    throw (container::NoSuchElementException,
-           uno::RuntimeException, std::exception)
 {
-    ::std::vector< uno::Reference< chart2::XChartType > >::iterator
-          aIt( ::std::find( m_aChartTypes.begin(), m_aChartTypes.end(), aChartType ));
+    std::vector< uno::Reference< chart2::XChartType > >::iterator
+          aIt( std::find( m_aChartTypes.begin(), m_aChartTypes.end(), aChartType ));
     if( aIt == m_aChartTypes.end())
         throw container::NoSuchElementException(
             "The given chart type is no element of the container",
@@ -295,14 +268,11 @@ void SAL_CALL BaseCoordinateSystem::removeChartType( const Reference< chart2::XC
 }
 
 Sequence< Reference< chart2::XChartType > > SAL_CALL BaseCoordinateSystem::getChartTypes()
-    throw (uno::RuntimeException, std::exception)
 {
     return comphelper::containerToSequence( m_aChartTypes );
 }
 
 void SAL_CALL BaseCoordinateSystem::setChartTypes( const Sequence< Reference< chart2::XChartType > >& aChartTypes )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     ModifyListenerHelper::removeListenerFromAllElements( m_aChartTypes, m_xModifyEventForwarder );
     m_aChartTypes = ContainerHelper::SequenceToVector( aChartTypes );
@@ -312,43 +282,39 @@ void SAL_CALL BaseCoordinateSystem::setChartTypes( const Sequence< Reference< ch
 
 // ____ XModifyBroadcaster ____
 void SAL_CALL BaseCoordinateSystem::addModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2" );
     }
 }
 
 void SAL_CALL BaseCoordinateSystem::removeModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2" );
     }
 }
 
 // ____ XModifyListener ____
 void SAL_CALL BaseCoordinateSystem::modified( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xModifyEventForwarder->modified( aEvent );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL BaseCoordinateSystem::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
     // nothing
 }
@@ -366,7 +332,6 @@ void BaseCoordinateSystem::fireModifyEvent()
 
 // ____ OPropertySet ____
 uno::Any BaseCoordinateSystem::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticCooSysDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -383,7 +348,6 @@ uno::Any BaseCoordinateSystem::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 Reference< beans::XPropertySetInfo > SAL_CALL BaseCoordinateSystem::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticCooSysInfo::get();
 }

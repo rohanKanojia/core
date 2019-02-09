@@ -22,18 +22,17 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <com/sun/star/drawing/XDrawPage.hpp>
-#include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
 #include <salhelper/simplereferenceobject.hxx>
-#include <xmloff/xmlexppr.hxx>
 #include <memory>
 
 namespace com { namespace sun { namespace star { namespace awt {
     class XControlModel;
 } } } }
+
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
 
 class SvXMLExport;
 
@@ -47,17 +46,16 @@ namespace xmloff
 
     //= OFormLayerXMLExport
 
-    /** provides functionallity for exporting a complete form layer.
+    /** provides functionality for exporting a complete form layer.
     */
     class XMLOFF_DLLPUBLIC OFormLayerXMLExport
                 :public ::salhelper::SimpleReferenceObject
     {
-    protected:
         // impl class
         std::unique_ptr<OFormLayerXMLExport_Impl> m_pImpl;
 
     protected:
-        virtual ~OFormLayerXMLExport();
+        virtual ~OFormLayerXMLExport() override;
 
     public:
         OFormLayerXMLExport(SvXMLExport& _rContext);

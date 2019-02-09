@@ -29,12 +29,17 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/awt/XBitmap.hpp>
+#include <com/sun/star/style/NumberingType.hpp>
+#include <com/sun/star/container/XIndexReplace.hpp>
 
+#include <o3tl/any.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
 
-#include <tools/debug.hxx>
 #include <tools/fontenum.hxx>
+#include <tools/color.hxx>
 
 #include <sax/tools/converter.hxx>
 
@@ -77,17 +82,14 @@ public:
              const OUString& rLName,
               const Reference< xml::sax::XAttributeList >& xAttrList,
             SvxXMLListLevelStyleContext_Impl& rLLevel   );
-    virtual ~SvxXMLListLevelStyleAttrContext_Impl();
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix, const OUString& rLocalName,
             const Reference< xml::sax::XAttributeList > & xAttrList ) override;
 };
 
 class SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl : public SvXMLImportContext
 {
-    SvxXMLListLevelStyleContext_Impl&   rListLevel;
-
 public:
 
     SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl(
@@ -95,7 +97,6 @@ public:
             const OUString& rLName,
             const Reference< xml::sax::XAttributeList >& xAttrList,
             SvxXMLListLevelStyleContext_Impl& rLLevel   );
-    virtual ~SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl();
 };
 
 enum SvxXMLTextListLevelStyleAttrTokens
@@ -112,9 +113,7 @@ enum SvxXMLTextListLevelStyleAttrTokens
     XML_TOK_TEXT_LEVEL_ATTR_NUM_SUFFIX,
     XML_TOK_TEXT_LEVEL_ATTR_NUM_LETTER_SYNC,
     XML_TOK_TEXT_LEVEL_ATTR_START_VALUE,
-    XML_TOK_TEXT_LEVEL_ATTR_DISPLAY_LEVELS,
-
-    XML_TOK_TEXT_LEVEL_ATTR_END=XML_TOK_UNKNOWN
+    XML_TOK_TEXT_LEVEL_ATTR_DISPLAY_LEVELS
 };
 
 static const SvXMLTokenMapEntry* lcl_getLevelAttrTokenMap()
@@ -144,8 +143,6 @@ static const SvXMLTokenMapEntry* lcl_getLevelAttrTokenMap()
 class SvxXMLListLevelStyleContext_Impl : public SvXMLImportContext
 {
     friend class SvxXMLListLevelStyleAttrContext_Impl;
-    const OUString      sStarBats;
-    const OUString      sStarMath;
 
     OUString            sPrefix;
     OUString            sSuffix;
@@ -176,7 +173,7 @@ class SvxXMLListLevelStyleContext_Impl : public SvXMLImportContext
     sal_Unicode         cBullet;
 
     sal_Int16           nRelSize;
-    sal_Int32           m_nColor;
+    Color               m_nColor;
 
     sal_Int16           ePosAndSpaceMode;
     sal_Int16           eLabelFollowedBy;
@@ -190,7 +187,7 @@ class SvxXMLListLevelStyleContext_Impl : public SvXMLImportContext
     bool            bHasColor : 1;
 
     void SetRelSize( sal_Int16 nRel ) { nRelSize = nRel; }
-    void SetColor( sal_Int32 nColor )
+    void SetColor( Color nColor )
         { m_nColor = nColor; bHasColor = true; }
     void SetSpaceBefore( sal_Int32 nSet ) { nSpaceBefore = nSet; }
     void SetMinLabelWidth( sal_Int32 nSet ) { nMinLabelWidth = nSet; }
@@ -216,36 +213,38 @@ public:
             SvXMLImport& rImport, sal_uInt16 nPrfx,
             const OUString& rLName,
             const Reference< xml::sax::XAttributeList > & xAttrList );
-    virtual ~SvxXMLListLevelStyleContext_Impl();
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix, const OUString& rLocalName,
             const Reference< xml::sax::XAttributeList > & xAttrList ) override;
 
     sal_Int32 GetLevel() const { return nLevel; }
     Sequence<beans::PropertyValue> GetProperties();
 
-    inline void SetPosAndSpaceMode( sal_Int16 eValue )
+    void SetPosAndSpaceMode( sal_Int16 eValue )
     {
         ePosAndSpaceMode = eValue;
     }
-    inline void SetLabelFollowedBy( sal_Int16 eValue )
+    void SetLabelFollowedBy( sal_Int16 eValue )
     {
         eLabelFollowedBy = eValue;
     }
-    inline void SetListtabStopPosition( sal_Int32 nValue )
+    void SetListtabStopPosition( sal_Int32 nValue )
     {
         nListtabStopPosition = nValue;
     }
-    inline void SetFirstLineIndent( sal_Int32 nValue )
+    void SetFirstLineIndent( sal_Int32 nValue )
     {
         nFirstLineIndent = nValue;
     }
-    inline void SetIndentAt( sal_Int32 nValue )
+    void SetIndentAt( sal_Int32 nValue )
     {
         nIndentAt = nValue;
     }
 };
+
+static const OUStringLiteral gsStarBats( "StarBats"  );
+static const OUStringLiteral gsStarMath( "StarMath"  );
 
 SvxXMLListLevelStyleContext_Impl::SvxXMLListLevelStyleContext_Impl(
         SvXMLImport& rImport, sal_uInt16 nPrfx,
@@ -253,15 +252,13 @@ SvxXMLListLevelStyleContext_Impl::SvxXMLListLevelStyleContext_Impl(
         const Reference< xml::sax::XAttributeList > & xAttrList )
 
 :   SvXMLImportContext( rImport, nPrfx, rLName )
-,   sStarBats( "StarBats"  )
-,   sStarMath( "StarMath"  )
-,   sNumFormat( OUString("1") )
-,   nLevel( -1L )
-,   nSpaceBefore( 0L )
-,   nMinLabelWidth( 0L )
-,   nMinLabelDist( 0L )
-,   nImageWidth( 0L )
-,   nImageHeight( 0L )
+,   sNumFormat( "1" )
+,   nLevel( -1 )
+,   nSpaceBefore( 0 )
+,   nMinLabelWidth( 0 )
+,   nMinLabelDist( 0 )
+,   nImageWidth( 0 )
+,   nImageHeight( 0 )
 ,   nNumStartValue( 1 )
 ,   nNumDisplayLevels( 1 )
 ,   eAdjust( HoriOrientation::LEFT )
@@ -305,7 +302,7 @@ SvxXMLListLevelStyleContext_Impl::SvxXMLListLevelStyleContext_Impl(
         {
         case XML_TOK_TEXT_LEVEL_ATTR_LEVEL:
             nLevel = rValue.toInt32();
-            if( nLevel >= 1L )
+            if( nLevel >= 1 )
                 nLevel--;
             else
                 nLevel = 0;
@@ -345,8 +342,8 @@ SvxXMLListLevelStyleContext_Impl::SvxXMLListLevelStyleContext_Impl(
             {
                 sal_Int32 nTmp = rValue.toInt32();
                 nNumStartValue =
-                    (nTmp < 0L) ? 1 : ( (nTmp>SHRT_MAX) ? SHRT_MAX
-                                                        : (sal_Int16)nTmp );
+                    (nTmp < 0) ? 1 : ( (nTmp>SHRT_MAX) ? SHRT_MAX
+                                                        : static_cast<sal_Int16>(nTmp) );
             }
             break;
         case XML_TOK_TEXT_LEVEL_ATTR_DISPLAY_LEVELS:
@@ -354,19 +351,15 @@ SvxXMLListLevelStyleContext_Impl::SvxXMLListLevelStyleContext_Impl(
             {
                 sal_Int32 nTmp = rValue.toInt32();
                 nNumDisplayLevels =
-                    (nTmp < 1L) ? 1 : ( (nTmp>SHRT_MAX) ? SHRT_MAX
-                                                        : (sal_Int16)nTmp );
+                    (nTmp < 1) ? 1 : ( (nTmp>SHRT_MAX) ? SHRT_MAX
+                                                        : static_cast<sal_Int16>(nTmp) );
             }
             break;
         }
     }
 }
 
-SvxXMLListLevelStyleContext_Impl::~SvxXMLListLevelStyleContext_Impl()
-{
-}
-
-SvXMLImportContext *SvxXMLListLevelStyleContext_Impl::CreateChildContext(
+SvXMLImportContextRef SvxXMLListLevelStyleContext_Impl::CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
 {
@@ -457,7 +450,7 @@ Sequence<beans::PropertyValue> SvxXMLListLevelStyleContext_Impl::GetProperties()
         beans::PropertyValue *pProps = aPropSeq.getArray();
         sal_Int32 nPos = 0;
         pProps[nPos].Name = "NumberingType";
-        pProps[nPos++].Value <<= (sal_Int16)eType ;
+        pProps[nPos++].Value <<= eType ;
 
         pProps[nPos].Name = "Prefix";
         pProps[nPos++].Value <<= sPrefix;
@@ -470,26 +463,26 @@ Sequence<beans::PropertyValue> SvxXMLListLevelStyleContext_Impl::GetProperties()
 
         sal_Int32 nLeftMargin = nSpaceBefore + nMinLabelWidth;
         pProps[nPos].Name = "LeftMargin";
-        pProps[nPos++].Value <<= (sal_Int32)nLeftMargin;
+        pProps[nPos++].Value <<= nLeftMargin;
 
         sal_Int32 nFirstLineOffset = -nMinLabelWidth;
 
         pProps[nPos].Name = "FirstLineOffset";
-        pProps[nPos++].Value <<= (sal_Int32)nFirstLineOffset;
+        pProps[nPos++].Value <<= nFirstLineOffset;
 
         pProps[nPos].Name = "SymbolTextDistance";
-        pProps[nPos++].Value <<= (sal_Int16)nMinLabelDist;
+        pProps[nPos++].Value <<= static_cast<sal_Int16>(nMinLabelDist);
 
         pProps[nPos].Name = "PositionAndSpaceMode";
-        pProps[nPos++].Value <<= (sal_Int16)ePosAndSpaceMode;
+        pProps[nPos++].Value <<= ePosAndSpaceMode;
         pProps[nPos].Name = "LabelFollowedBy";
-        pProps[nPos++].Value <<= (sal_Int16)eLabelFollowedBy;
+        pProps[nPos++].Value <<= eLabelFollowedBy;
         pProps[nPos].Name = "ListtabStopPosition";
-        pProps[nPos++].Value <<= (sal_Int32)nListtabStopPosition;
+        pProps[nPos++].Value <<= nListtabStopPosition;
         pProps[nPos].Name = "FirstLineIndent";
-        pProps[nPos++].Value <<= (sal_Int32)nFirstLineIndent;
+        pProps[nPos++].Value <<= nFirstLineIndent;
         pProps[nPos].Name = "IndentAt";
-        pProps[nPos++].Value <<= (sal_Int32)nIndentAt;
+        pProps[nPos++].Value <<= nIndentAt;
 
         OUString sDisplayTextStyleName = GetImport().GetStyleDisplayName(
                                 XML_STYLE_FAMILY_TEXT_TEXT, sTextStyleName  );
@@ -508,12 +501,12 @@ Sequence<beans::PropertyValue> SvxXMLListLevelStyleContext_Impl::GetProperties()
                 aFDesc.CharSet = eBulletFontEncoding;
                 aFDesc.Weight = WEIGHT_DONTKNOW;
                 bool bStarSymbol = false;
-                if( aFDesc.Name.equalsIgnoreAsciiCase( sStarBats ) )
+                if( aFDesc.Name.equalsIgnoreAsciiCase( gsStarBats ) )
                 {
                     cBullet = GetImport().ConvStarBatsCharToStarSymbol( cBullet );
                     bStarSymbol = true;
                 }
-                else if( aFDesc.Name.equalsIgnoreAsciiCase( sStarMath ) )
+                else if( aFDesc.Name.equalsIgnoreAsciiCase( gsStarMath ) )
                 {
                     cBullet = GetImport().ConvStarMathCharToStarSymbol( cBullet );
                     bStarSymbol = true;
@@ -536,37 +529,41 @@ Sequence<beans::PropertyValue> SvxXMLListLevelStyleContext_Impl::GetProperties()
 
         if( bImage )
         {
-            OUString sStr( sImageURL );
-            if( !sImageURL.isEmpty() )
+            uno::Reference<graphic::XGraphic> xGraphic;
+            if (!sImageURL.isEmpty())
             {
-                sStr = GetImport().ResolveGraphicObjectURL( sImageURL, false );
+                xGraphic = GetImport().loadGraphicByURL(sImageURL);
             }
             else if( xBase64Stream.is() )
             {
-                sStr = GetImport().ResolveGraphicObjectURLFromBase64( xBase64Stream );
+                xGraphic = GetImport().loadGraphicFromBase64(xBase64Stream);
             }
 
-            if( !sStr.isEmpty() )
+            uno::Reference<awt::XBitmap> xBitmap;
+            if (xGraphic.is())
+                xBitmap.set(xGraphic, uno::UNO_QUERY);
+
+            if (xBitmap.is())
             {
-                pProps[nPos].Name = "GraphicURL";
-                pProps[nPos++].Value <<= sStr;
+                pProps[nPos].Name = "GraphicBitmap";
+                pProps[nPos++].Value <<= xBitmap;
             }
 
-            awt::Size aSize( nImageWidth, nImageHeight );
+            awt::Size aSize(nImageWidth, nImageHeight);
             pProps[nPos].Name = "GraphicSize";
             pProps[nPos++].Value <<= aSize;
 
             pProps[nPos].Name = "VertOrient";
-            pProps[nPos++].Value <<= (sal_Int16)eImageVertOrient;
+            pProps[nPos++].Value <<= eImageVertOrient;
         }
 
         if( bNum )
         {
             pProps[nPos].Name = "StartWith";
-            pProps[nPos++].Value <<= (sal_Int16)nNumStartValue;
+            pProps[nPos++].Value <<= nNumStartValue;
 
             pProps[nPos].Name = "ParentNumbering";
-            pProps[nPos++].Value <<= (sal_Int16)nNumDisplayLevels;
+            pProps[nPos++].Value <<= nNumDisplayLevels;
         }
 
         if( ( bNum || bBullet ) && nRelSize )
@@ -581,7 +578,7 @@ Sequence<beans::PropertyValue> SvxXMLListLevelStyleContext_Impl::GetProperties()
             pProps[nPos++].Value <<= m_nColor;
         }
 
-        DBG_ASSERT( nPos == nCount, "array under/overflow" );
+        SAL_WARN_IF( nPos != nCount, "xmloff", "array under/overflow" );
     }
 
     return aPropSeq;
@@ -606,9 +603,9 @@ enum SvxXMLStyleAttributesAttrTokens
     XML_TOK_STYLE_ATTRIBUTES_ATTR_COLOR,
     XML_TOK_STYLE_ATTRIBUTES_ATTR_WINDOW_FONT_COLOR,
     XML_TOK_STYLE_ATTRIBUTES_ATTR_FONT_SIZE,
-    XML_TOK_STYLE_ATTRIBUTES_ATTR_POSITION_AND_SPACE_MODE,
-    XML_TOK_STYLE_ATTRIBUTES_ATTR_END=XML_TOK_UNKNOWN
+    XML_TOK_STYLE_ATTRIBUTES_ATTR_POSITION_AND_SPACE_MODE
 };
+
 static const SvXMLTokenMapEntry* lcl_getStyleAttributesAttrTokenMap()
 {
     static const SvXMLTokenMapEntry aStyleAttributesAttrTokenMap[] =
@@ -741,19 +738,19 @@ SvxXMLListLevelStyleAttrContext_Impl::SvxXMLListLevelStyleAttrContext_Impl(
                 sal_Int32 nColor(0);
                 if (::sax::Converter::convertColor( nColor, rValue ))
                 {
-                    rListLevel.SetColor( nColor );
+                    rListLevel.SetColor( Color(nColor) );
                 }
             }
             break;
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_WINDOW_FONT_COLOR:
             {
                 if( IsXMLToken( rValue, XML_TRUE ) )
-                    rListLevel.SetColor( (sal_Int32)0xffffffff );
+                    rListLevel.SetColor( Color(0xffffffff) );
             }
             break;
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_FONT_SIZE:
             if (::sax::Converter::convertPercent( nVal, rValue ))
-                rListLevel.SetRelSize( (sal_Int16)nVal );
+                rListLevel.SetRelSize( static_cast<sal_Int16>(nVal) );
             break;
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_POSITION_AND_SPACE_MODE:
             {
@@ -777,29 +774,28 @@ SvxXMLListLevelStyleAttrContext_Impl::SvxXMLListLevelStyleAttrContext_Impl(
             {
                 OUString sTmp;
                 sal_Int16 nTmp = 0;
-                ::std::vector< XMLPropertyState >::iterator i;
-                for( i = aProps.begin(); i != aProps.end(); ++i )
+                for( const auto& rProp : aProps )
                 {
-                    switch( i->mnIndex )
+                    switch( rProp.mnIndex )
                     {
                     case 0:
-                        i->maValue >>= sTmp;
+                        rProp.maValue >>= sTmp;
                         rListLevel.SetBulletFontName( sTmp);
                         break;
                     case 1:
-                        i->maValue >>= sTmp;
+                        rProp.maValue >>= sTmp;
                         rListLevel.SetBulletFontStyleName( sTmp );
                         break;
                     case 2:
-                        i->maValue >>= nTmp;
+                        rProp.maValue >>= nTmp;
                         rListLevel.SetBulletFontFamily( nTmp );
                         break;
                     case 3:
-                        i->maValue >>= nTmp;
+                        rProp.maValue >>= nTmp;
                         rListLevel.SetBulletFontPitch( nTmp );
                         break;
                     case 4:
-                        i->maValue >>= nTmp;
+                        rProp.maValue >>= nTmp;
                         rListLevel.SetBulletFontEncoding( nTmp );
                         break;
                     }
@@ -895,11 +891,7 @@ SvxXMLListLevelStyleAttrContext_Impl::SvxXMLListLevelStyleAttrContext_Impl(
     rListLevel.SetImageVertOrient( eVertOrient );
 }
 
-SvxXMLListLevelStyleAttrContext_Impl::~SvxXMLListLevelStyleAttrContext_Impl()
-{
-}
-
-SvXMLImportContext* SvxXMLListLevelStyleAttrContext_Impl::CreateChildContext(
+SvXMLImportContextRef SvxXMLListLevelStyleAttrContext_Impl::CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
 {
@@ -926,15 +918,15 @@ enum SvxXMLStyleAttributesLabelAlignmentAttrTokens
     XML_TOK_STYLE_ATTRIBUTES_ATTR_LABEL_FOLLOWED_BY,
     XML_TOK_STYLE_ATTRIBUTES_ATTR_LISTTAB_STOP_POSITION,
     XML_TOK_STYLE_ATTRIBUTES_ATTR_FIRST_LINE_INDENT,
-    XML_TOK_STYLE_ATTRIBUTES_ATTR_INDENT_AT,
-
-    XML_TOK_STYLE_ATTRIBUTES_LABEL_ALIGNMENT_ATTR_END=XML_TOK_UNKNOWN
+    XML_TOK_STYLE_ATTRIBUTES_ATTR_INDENT_AT
 };
 static const SvXMLTokenMapEntry* lcl_getStyleAlignmentAttributesAttrTokenMap()
 {
     static const SvXMLTokenMapEntry aStyleAlignmentAttributesAttrTokenMap[] =
     {
         { XML_NAMESPACE_TEXT, XML_LABEL_FOLLOWED_BY,
+                XML_TOK_STYLE_ATTRIBUTES_ATTR_LABEL_FOLLOWED_BY },
+        { XML_NAMESPACE_LO_EXT, XML_LABEL_FOLLOWED_BY,
                 XML_TOK_STYLE_ATTRIBUTES_ATTR_LABEL_FOLLOWED_BY },
         { XML_NAMESPACE_TEXT, XML_LIST_TAB_STOP_POSITION,
                 XML_TOK_STYLE_ATTRIBUTES_ATTR_LISTTAB_STOP_POSITION },
@@ -952,13 +944,13 @@ SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl::SvxXMLListLevelStyleLabelAli
         const OUString& rLName,
         const Reference< xml::sax::XAttributeList > & xAttrList,
         SvxXMLListLevelStyleContext_Impl& rLLevel ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    rListLevel( rLLevel )
+    SvXMLImportContext( rImport, nPrfx, rLName )
 {
     static const SvXMLTokenMap aTokenMap( lcl_getStyleAlignmentAttributesAttrTokenMap() );
     SvXMLUnitConverter& rUnitConv = GetImport().GetMM100UnitConverter();
 
     sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
+    sal_Int16 eLabelFollowedBy = LabelFollow::LISTTAB;
     for( sal_Int16 i=0; i < nAttrCount; i++ )
     {
         const OUString& rAttrName = xAttrList->getNameByIndex( i );
@@ -973,32 +965,32 @@ SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl::SvxXMLListLevelStyleLabelAli
         {
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_LABEL_FOLLOWED_BY:
             {
-                sal_Int16 eLabelFollowedBy = LabelFollow::LISTTAB;
+                if( eLabelFollowedBy == LabelFollow::NEWLINE)
+                    //NewLine from LO_EXT has precedence over other values of the Non LO_EXT namespace
+                    break;
                 if( IsXMLToken( rValue, XML_SPACE ) )
                     eLabelFollowedBy = LabelFollow::SPACE;
                 else if( IsXMLToken( rValue, XML_NOTHING ) )
                     eLabelFollowedBy = LabelFollow::NOTHING;
-                rListLevel.SetLabelFollowedBy( eLabelFollowedBy );
+                else if( IsXMLToken( rValue, XML_NEWLINE ) )
+                    eLabelFollowedBy = LabelFollow::NEWLINE;
             }
             break;
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_LISTTAB_STOP_POSITION:
             if (rUnitConv.convertMeasureToCore(nVal, rValue, 0, SHRT_MAX))
-                rListLevel.SetListtabStopPosition( nVal );
+                rLLevel.SetListtabStopPosition( nVal );
             break;
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_FIRST_LINE_INDENT:
             if (rUnitConv.convertMeasureToCore(nVal, rValue, SHRT_MIN, SHRT_MAX))
-                rListLevel.SetFirstLineIndent( nVal );
+                rLLevel.SetFirstLineIndent( nVal );
             break;
         case XML_TOK_STYLE_ATTRIBUTES_ATTR_INDENT_AT:
             if (rUnitConv.convertMeasureToCore(nVal, rValue, SHRT_MIN, SHRT_MAX))
-                rListLevel.SetIndentAt( nVal );
+                rLLevel.SetIndentAt( nVal );
             break;
         }
     }
-}
-
-SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl::~SvxXMLListLevelStyleLabelAlignmentAttrContext_Impl()
-{
+    rLLevel.SetLabelFollowedBy( eLabelFollowedBy );
 }
 
 void SvxXMLListStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
@@ -1016,44 +1008,29 @@ void SvxXMLListStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
     }
 }
 
+static const OUStringLiteral sIsPhysical( "IsPhysical"  );
+static const OUStringLiteral sNumberingRules( "NumberingRules"  );
+static const OUStringLiteral sIsContinuousNumbering( "IsContinuousNumbering"  );
+
 SvxXMLListStyleContext::SvxXMLListStyleContext( SvXMLImport& rImport,
         sal_uInt16 nPrfx,
         const OUString& rLName,
         const Reference< xml::sax::XAttributeList > & xAttrList,
         bool bOutl )
 :   SvXMLStyleContext( rImport, nPrfx, rLName, xAttrList, bOutl ? XML_STYLE_FAMILY_TEXT_OUTLINE : XML_STYLE_FAMILY_TEXT_LIST )
-,   sIsPhysical( "IsPhysical"  )
-,   sNumberingRules( "NumberingRules"  )
-,   sIsContinuousNumbering( "IsContinuousNumbering"  )
-,   pLevelStyles( nullptr )
-,   nLevels( 0 )
 ,   bConsecutive( false )
 ,   bOutline( bOutl )
 {
 }
 
-SvxXMLListStyleContext::~SvxXMLListStyleContext()
-{
-    if( pLevelStyles )
-    {
-        while( !pLevelStyles->empty() )
-        {
-            SvxXMLListLevelStyleContext_Impl *pStyle = pLevelStyles->back();
-            pLevelStyles->pop_back();
-            pStyle->ReleaseRef();
-        }
-    }
+SvxXMLListStyleContext::~SvxXMLListStyleContext() {}
 
-    delete pLevelStyles;
-}
-
-
-SvXMLImportContext *SvxXMLListStyleContext::CreateChildContext(
+SvXMLImportContextRef SvxXMLListStyleContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< xml::sax::XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if( XML_NAMESPACE_TEXT == nPrefix &&
         ( bOutline
@@ -1062,22 +1039,21 @@ SvXMLImportContext *SvxXMLListStyleContext::CreateChildContext(
                 IsXMLToken( rLocalName, XML_LIST_LEVEL_STYLE_BULLET ) ||
                  IsXMLToken( rLocalName, XML_LIST_LEVEL_STYLE_IMAGE )    ) ) )
     {
-        SvxXMLListLevelStyleContext_Impl *pLevelStyle =
+        rtl::Reference<SvxXMLListLevelStyleContext_Impl> xLevelStyle{
             new SvxXMLListLevelStyleContext_Impl( GetImport(), nPrefix,
-                                                  rLocalName, xAttrList );
+                                                  rLocalName, xAttrList )};
         if( !pLevelStyles )
-            pLevelStyles = new SvxXMLListStyle_Impl;
-        pLevelStyles->push_back( pLevelStyle );
-        pLevelStyle->AddFirstRef();
+            pLevelStyles = std::make_unique<SvxXMLListStyle_Impl>();
+        pLevelStyles->push_back( xLevelStyle );
 
-        pContext = pLevelStyle;
+        xContext = xLevelStyle.get();
     }
     else
     {
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
+        xContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
     }
 
-    return pContext;
+    return xContext;
 }
 
 void SvxXMLListStyleContext::FillUnoNumRule(
@@ -1087,20 +1063,15 @@ void SvxXMLListStyleContext::FillUnoNumRule(
     {
         if( pLevelStyles && rNumRule.is() )
         {
-            sal_uInt16 nCount = pLevelStyles->size();
             sal_Int32 l_nLevels = rNumRule->getCount();
-            for( sal_uInt16 i=0; i < nCount; i++ )
+            for (const auto& pLevelStyle : *pLevelStyles)
             {
-                SvxXMLListLevelStyleContext_Impl *pLevelStyle =
-                    (*pLevelStyles)[i];
                 sal_Int32 nLevel = pLevelStyle->GetLevel();
                 if( nLevel >= 0 && nLevel < l_nLevels )
                 {
                     Sequence<beans::PropertyValue> aProps =
                         pLevelStyle->GetProperties();
-                    Any aAny;
-                    aAny <<= aProps;
-                    rNumRule->replaceByIndex( nLevel, aAny );
+                    rNumRule->replaceByIndex( nLevel, Any(aProps) );
                 }
             }
         }
@@ -1112,10 +1083,7 @@ void SvxXMLListStyleContext::FillUnoNumRule(
         if( xPropSetInfo.is() &&
             xPropSetInfo->hasPropertyByName( sIsContinuousNumbering ) )
         {
-            Any aAny;
-            sal_Bool bTmp = bConsecutive;
-            aAny.setValue( &bTmp, cppu::UnoType<bool>::get() );
-            xPropSet->setPropertyValue( sIsContinuousNumbering, aAny );
+            xPropSet->setPropertyValue( sIsContinuousNumbering, Any(bConsecutive) );
         }
     }
     catch (const Exception&)
@@ -1166,7 +1134,7 @@ void SvxXMLListStyleContext::CreateAndInsertLate( bool bOverwrite )
         {
             Reference< XMultiServiceFactory > xFactory( GetImport().GetModel(),
                                                         UNO_QUERY );
-            DBG_ASSERT( xFactory.is(), "no factory" );
+            SAL_WARN_IF( !xFactory.is(), "xmloff", "no factory" );
             if( !xFactory.is() )
                 return;
 
@@ -1178,9 +1146,7 @@ void SvxXMLListStyleContext::CreateAndInsertLate( bool bOverwrite )
             if( !xStyle.is() )
                 return;
 
-            Any aAny;
-            aAny <<= xStyle;
-            rNumStyles->insertByName( rName, aAny );
+            rNumStyles->insertByName( rName, Any(xStyle) );
             bNew = true;
         }
 
@@ -1190,7 +1156,7 @@ void SvxXMLListStyleContext::CreateAndInsertLate( bool bOverwrite )
         if( !bNew && xPropSetInfo->hasPropertyByName( sIsPhysical ) )
         {
             Any aAny = xPropSet->getPropertyValue( sIsPhysical );
-            bNew = !*static_cast<sal_Bool const *>(aAny.getValue());
+            bNew = !*o3tl::doAccess<bool>(aAny);
         }
 
         if ( xPropSetInfo->hasPropertyByName( "Hidden" ) )
@@ -1202,12 +1168,10 @@ void SvxXMLListStyleContext::CreateAndInsertLate( bool bOverwrite )
 
         Any aAny = xPropSet->getPropertyValue( sNumberingRules );
         aAny >>= xNumRules;
-        nLevels = xNumRules->getCount();
         if( bOverwrite || bNew )
         {
             FillUnoNumRule(xNumRules);
-            aAny <<= xNumRules;
-            xPropSet->setPropertyValue( sNumberingRules, aAny );
+            xPropSet->setPropertyValue( sNumberingRules, Any(xNumRules) );
         }
         else
         {
@@ -1220,8 +1184,8 @@ void SvxXMLListStyleContext::CreateAndInsertLate( bool bOverwrite )
 
 void SvxXMLListStyleContext::CreateAndInsertAuto() const
 {
-    DBG_ASSERT( !bOutline, "Outlines cannot be inserted here" );
-    DBG_ASSERT( !xNumRules.is(), "Numbering Rule is existing already" );
+    SAL_WARN_IF( bOutline, "xmloff", "Outlines cannot be inserted here" );
+    SAL_WARN_IF( xNumRules.is(), "xmloff", "Numbering Rule is existing already" );
 
     const OUString& rName = GetName();
     if( bOutline || xNumRules.is() || rName.isEmpty() )
@@ -1232,7 +1196,6 @@ void SvxXMLListStyleContext::CreateAndInsertAuto() const
 
     const_cast<SvxXMLListStyleContext *>(this)->xNumRules = CreateNumRule(
         GetImport().GetModel() );
-    const_cast<SvxXMLListStyleContext *>(this)->nLevels = xNumRules->getCount();
 
     FillUnoNumRule(xNumRules);
 }
@@ -1243,7 +1206,7 @@ Reference < XIndexReplace > SvxXMLListStyleContext::CreateNumRule(
     Reference<XIndexReplace> xNumRule;
 
     Reference< XMultiServiceFactory > xFactory( rModel, UNO_QUERY );
-    DBG_ASSERT( xFactory.is(), "no factory" );
+    SAL_WARN_IF( !xFactory.is(), "xmloff", "no factory" );
     if( !xFactory.is() )
         return xNumRule;
 
@@ -1252,7 +1215,7 @@ Reference < XIndexReplace > SvxXMLListStyleContext::CreateNumRule(
         return xNumRule;
 
     xNumRule.set( xIfc, UNO_QUERY );
-    DBG_ASSERT( xNumRule.is(), "go no numbering rule" );
+    SAL_WARN_IF( !xNumRule.is(), "xmloff", "go no numbering rule" );
 
     return xNumRule;
 }
@@ -1266,7 +1229,7 @@ void SvxXMLListStyleContext::SetDefaultStyle(
     beans::PropertyValue *pProps = aPropSeq.getArray();
 
     pProps->Name = "NumberingType";
-    (pProps++)->Value <<= (sal_Int16)(bOrdered ? NumberingType::ARABIC
+    (pProps++)->Value <<= static_cast<sal_Int16>(bOrdered ? NumberingType::ARABIC
                                                  : NumberingType::CHAR_SPECIAL );
     if( !bOrdered )
     {
@@ -1287,16 +1250,14 @@ void SvxXMLListStyleContext::SetDefaultStyle(
         (pProps++)->Value <<= aFDesc;
 
         OUStringBuffer sTmp(1);
-        sTmp.append( (sal_Unicode)(0xF000 + 149) );
+        sTmp.append( sal_Unicode(0xF000 + 149) );
         pProps->Name = "BulletChar";
         (pProps++)->Value <<= sTmp.makeStringAndClear();
         pProps->Name = "CharStyleName";
         (pProps++)->Value <<= OUString( "Numbering Symbols"  );
     }
 
-    Any aAny;
-    aAny <<= aPropSeq;
-    rNumRule->replaceByIndex( nLevel, aAny );
+    rNumRule->replaceByIndex( nLevel, Any(aPropSeq) );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_MSGPOOL_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_MSGPOOL_HXX
 
-#include "scitems.hxx"
 #include <svl/srchitem.hxx>
 
 #include <svl/itempool.hxx>
 #include <svl/stritem.hxx>
-#include <svl/eitem.hxx>
 
 #include "uiitems.hxx"
+#include "condformatdlgitem.hxx"
 
 class ScDocumentPool;
 
@@ -42,19 +41,18 @@ class ScMessagePool: public SfxItemPool
     ScPivotItem         aGlobalPivotItem;
     ScSolveItem         aGlobalSolveItem;
     ScUserListItem      aGlobalUserListItem;
+    ScCondFormatDlgItem aCondFormatDlgItem;
 
-    SfxBoolItem         aPrintWarnItem;
-
-    SfxPoolItem**   ppPoolDefaults;
-    ScDocumentPool* pDocPool;
+    std::vector<SfxPoolItem*>    mvPoolDefaults;
+    ScDocumentPool* const        pDocPool;
 
 public:
     ScMessagePool();
 protected:
-    virtual ~ScMessagePool();
+    virtual ~ScMessagePool() override;
 public:
 
-    virtual SfxMapUnit              GetMetric( sal_uInt16 nWhich ) const override;
+    virtual MapUnit GetMetric( sal_uInt16 nWhich ) const override;
 };
 
 #endif

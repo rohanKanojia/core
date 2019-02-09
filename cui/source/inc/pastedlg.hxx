@@ -23,40 +23,30 @@
 #include <map>
 #include <sot/formats.hxx>
 #include <tools/globname.hxx>
-#include <svtools/transfer.hxx>
-
-#include <vcl/dialog.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/button.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/lstbox.hxx>
-
-/********************** SvPasteObjectDialog ******************************
-*************************************************************************/
+#include <vcl/transfer.hxx>
+#include <vcl/weld.hxx>
 
 struct TransferableObjectDescriptor;
 class TransferableDataHelper;
 
-class SvPasteObjectDialog : public ModalDialog
+class SvPasteObjectDialog : public weld::GenericDialogController
 {
-    VclPtr<FixedText> m_pFtObjectSource;
-    VclPtr<ListBox> m_pLbInsertList;
-    VclPtr<OKButton> m_pOKButton;
-    ::std::map< SotClipboardFormatId, OUString > aSupplementMap;
+    std::map< SotClipboardFormatId, OUString > aSupplementMap;
     SvGlobalName    aObjClassName;
     OUString        aObjName;
 
-    ListBox&        ObjectLB()      { return *m_pLbInsertList; }
-    FixedText&      ObjectSource()  { return *m_pFtObjectSource; }
+    std::unique_ptr<weld::Label> m_xFtObjectSource;
+    std::unique_ptr<weld::TreeView> m_xLbInsertList;
+    std::unique_ptr<weld::Button> m_xOKButton;
+
+    weld::TreeView& ObjectLB() { return *m_xLbInsertList; }
 
     void            SelectObject();
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( DoubleClickHdl, ListBox&, void );
+    DECL_LINK(SelectHdl, weld::TreeView&, void);
+    DECL_LINK(DoubleClickHdl, weld::TreeView&, void);
 
 public:
-                SvPasteObjectDialog( vcl::Window* pParent );
-    virtual     ~SvPasteObjectDialog();
-    virtual void dispose() override;
+    SvPasteObjectDialog(weld::Window* pParent);
 
     void        Insert( SotClipboardFormatId nFormat, const OUString & rFormatName );
     void        SetObjName( const SvGlobalName & rClass, const OUString & rObjName );

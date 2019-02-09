@@ -18,8 +18,7 @@
  */
 
 
-#include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/svxids.hrc>
 #include <svx/verttexttbxctrl.hxx>
 #include <svl/languageoptions.hxx>
 #include <sfx2/app.hxx>
@@ -51,6 +50,12 @@ SvxVertCTLTextTbxCtrl::~SvxVertCTLTextTbxCtrl( )
 {
 }
 
+void SvxVertCTLTextTbxCtrl::initialize(const css::uno::Sequence<css::uno::Any>& rArguments)
+{
+    SfxToolBoxControl::initialize(rArguments);
+    setFastPropertyValue_NoBroadcast(1, css::uno::makeAny(true));
+}
+
 void SvxVertCTLTextTbxCtrl::StateChanged(
     sal_uInt16 nSID,
     SfxItemState eState,
@@ -80,8 +85,7 @@ void SvxVertCTLTextTbxCtrl::StateChanged(
     {
         ToolBox& rTbx = GetToolBox();
         vcl::Window* pParent = rTbx.GetParent();
-        WindowType nWinType = pParent->GetType();
-        if(WINDOW_FLOATINGWINDOW == nWinType)
+        if(WindowType::FLOATINGWINDOW == pParent->GetType())
         {
             Size aSize(rTbx.CalcWindowSizePixel());
             rTbx.SetPosSizePixel( Point(), aSize );

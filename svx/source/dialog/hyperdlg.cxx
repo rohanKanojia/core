@@ -19,7 +19,7 @@
 
 #include <vcl/settings.hxx>
 #include <unotools/viewoptions.hxx>
-#include "svx/hyperdlg.hxx"
+#include <svx/hyperdlg.hxx>
 #include <svx/svxdlg.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/sfxsids.hrc>
@@ -41,9 +41,7 @@ SvxHlinkDlgWrapper::SvxHlinkDlgWrapper( vcl::Window* _pParent, sal_uInt16 nId,
 
 {
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    DBG_ASSERT(pFact, "Dialog creation failed!");
     mpDlg = pFact->CreateSvxHpLinkDlg(_pParent, pBindings);
-    DBG_ASSERT(mpDlg, "Dialog creation failed!");
     SetWindow( mpDlg->GetWindow() );
     SetVisible_Impl(false);
 
@@ -75,6 +73,11 @@ SfxChildWinInfo SvxHlinkDlgWrapper::GetInfo() const
 bool SvxHlinkDlgWrapper::QueryClose()
 {
     return !mpDlg || mpDlg->QueryClose();
+}
+
+SvxHlinkDlgWrapper::~SvxHlinkDlgWrapper()
+{
+    mpDlg.disposeAndClear();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

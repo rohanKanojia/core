@@ -37,7 +37,6 @@
 #include <tools/diagnose_ex.h>
 #include "formstrings.hxx"
 
-#include <functional>
 #include <algorithm>
 
 
@@ -60,7 +59,7 @@ namespace pcr
     namespace
     {
 
-        struct StringCompare : public ::std::unary_function< OUString, bool >
+        struct StringCompare
         {
         private:
             OUString m_sReference;
@@ -68,7 +67,7 @@ namespace pcr
         public:
             explicit StringCompare( const OUString& _rReference ) : m_sReference( _rReference ) { }
 
-            inline bool operator()( const OUString& _rCompare )
+            bool operator()( const OUString& _rCompare )
             {
                 return ( _rCompare == m_sReference );
             }
@@ -128,7 +127,7 @@ namespace pcr
 
                     if ( xSuppForms->getForms() == xFormsCollection )
                     {   // found it
-                        nSheetIndex = (sal_Int16)i;
+                        nSheetIndex = static_cast<sal_Int16>(i);
                         _out_rxSheet.set( xSuppPage, UNO_QUERY_THROW );
                         break;
                     }
@@ -137,7 +136,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         return nSheetIndex;
@@ -177,7 +176,7 @@ namespace pcr
             try
             {
                 Reference< XSpreadsheet > xSheet;
-                xConverter->setPropertyValue( PROPERTY_REFERENCE_SHEET, makeAny( (sal_Int32)getControlSheetIndex( xSheet ) ) );
+                xConverter->setPropertyValue( PROPERTY_REFERENCE_SHEET, makeAny( static_cast<sal_Int32>(getControlSheetIndex( xSheet )) ) );
                 xConverter->setPropertyValue( _rInputProperty, _rInputValue );
                 _rOutputValue = xConverter->getPropertyValue( _rOutputProperty );
                 bSuccess = true;
@@ -306,7 +305,7 @@ namespace pcr
             OSL_ENSURE( xBindingProps.is() || !_rxBinding.is(), "CellBindingHelper::getAddressFromCellBinding: no property set for the binding!" );
             if ( xBindingProps.is() )
             {
-                bReturn = (bool)( xBindingProps->getPropertyValue( PROPERTY_BOUND_CELL ) >>= _rAddress );
+                bReturn = ( xBindingProps->getPropertyValue( PROPERTY_BOUND_CELL ) >>= _rAddress );
             }
         }
         catch( const Exception& )
@@ -382,15 +381,11 @@ namespace pcr
             if ( xDocumentFactory.is() )
                 aAvailableServices = xDocumentFactory->getAvailableServiceNames( );
 
-            const OUString* pFound = ::std::find_if(
-                aAvailableServices.getConstArray(),
-                aAvailableServices.getConstArray() + aAvailableServices.getLength(),
+            bYesItIs = std::any_of(
+                aAvailableServices.begin(),
+                aAvailableServices.end(),
                 StringCompare( _rService )
             );
-            if ( pFound - aAvailableServices.getConstArray() < aAvailableServices.getLength() )
-            {
-                bYesItIs = true;
-            }
         }
 
         return bYesItIs;

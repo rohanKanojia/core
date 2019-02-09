@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unprlout.hxx"
+#include <tools/debug.hxx>
 
-#include "strings.hrc"
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "sdresid.hxx"
+#include <unprlout.hxx>
+
+#include <strings.hrc>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <sdresid.hxx>
 
 
 SdPresentationLayoutUndoAction::SdPresentationLayoutUndoAction(
@@ -43,7 +45,7 @@ SdPresentationLayoutUndoAction::SdPresentationLayoutUndoAction(
 
     DBG_ASSERT(pThePage, "No Page set!");
     pPage = pThePage;
-    aComment = SD_RESSTR(STR_UNDO_SET_PRESLAYOUT);
+    aComment = SdResId(STR_UNDO_SET_PRESLAYOUT);
 }
 
 void SdPresentationLayoutUndoAction::Undo()

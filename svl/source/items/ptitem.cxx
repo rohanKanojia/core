@@ -26,7 +26,7 @@
 #include <tools/mapunit.hxx>
 
 #include <svl/poolitem.hxx>
-#include <svl/memberid.hrc>
+#include <svl/memberid.h>
 
 using namespace ::com::sun::star;
 
@@ -46,20 +46,13 @@ SfxPointItem::SfxPointItem( sal_uInt16 nW, const Point& rVal ) :
 }
 
 
-SfxPointItem::SfxPointItem( const SfxPointItem& rItem ) :
-    SfxPoolItem( rItem ),
-    aVal( rItem.aVal )
-{
-}
-
-
 bool SfxPointItem::GetPresentation
 (
     SfxItemPresentation     /*ePresentation*/,
-    SfxMapUnit              /*eCoreMetric*/,
-    SfxMapUnit              /*ePresentationMetric*/,
+    MapUnit                 /*eCoreMetric*/,
+    MapUnit                 /*ePresentationMetric*/,
     OUString&               rText,
-    const IntlWrapper *
+    const IntlWrapper&
 )   const
 {
     rText = OUString::number(aVal.X()) + ", " + OUString::number(aVal.Y()) + ", ";
@@ -69,7 +62,7 @@ bool SfxPointItem::GetPresentation
 
 bool SfxPointItem::operator==( const SfxPoolItem& rItem ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==( rItem ), "unequal type" );
+    assert(SfxPoolItem::operator==(rItem));
     return static_cast<const SfxPointItem&>(rItem).aVal == aVal;
 }
 

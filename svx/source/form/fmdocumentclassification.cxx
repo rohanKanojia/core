@@ -18,7 +18,7 @@
  */
 
 
-#include "fmdocumentclassification.hxx"
+#include <fmdocumentclassification.hxx>
 
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -80,7 +80,7 @@ namespace svxform
         struct ModuleInfo
         {
             const sal_Char* pAsciiModuleOrServiceName;
-            DocumentType    eType;
+            DocumentType const    eType;
         };
 
 
@@ -139,7 +139,7 @@ namespace svxform
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
 
         return eType;

@@ -19,8 +19,8 @@
 #ifndef INCLUDED_SW_INC_TBLSEL_HXX
 #define INCLUDED_SW_INC_TBLSEL_HXX
 
-#include <swtable.hxx>
-#include <swrect.hxx>
+#include "swtable.hxx"
+#include "swrect.hxx"
 #include "swdllapi.h"
 
 #include <o3tl/sorted_vector.hxx>
@@ -34,16 +34,13 @@ class SwCursor;
 class SwTableCursor;
 class SwFrame;
 class SwTabFrame;
-class SwTableBox;
-class SwTableLine;
 class SwLayoutFrame;
 class SwPaM;
 class SwNode;
-class SwTable;
 class SwUndoTableMerge;
 class SwCellFrame;
 
-typedef ::std::deque< SwCellFrame* > SwCellFrames;
+typedef std::deque< SwCellFrame* > SwCellFrames;
 
 struct CompareSwSelBoxes
 {
@@ -58,28 +55,30 @@ class SwSelBoxes : public o3tl::sorted_vector<SwTableBox*, CompareSwSelBoxes> {}
 // Selection gets extended in given direction according to enum-parameter.
 // Boxes are collected via the Layout; works correctly if tables are split.
 // (Cf. MakeSelUnions().)
-typedef sal_uInt16 SwTableSearchType;
-namespace nsSwTableSearchType
+enum class SwTableSearchType : sal_uInt16
 {
-    const SwTableSearchType TBLSEARCH_NONE = 0x1;       // No extension.
-    const SwTableSearchType TBLSEARCH_ROW  = 0x2;       // Extend to rows.
-    const SwTableSearchType TBLSEARCH_COL  = 0x3;       // Extend to columns.
+    NONE           = 0x01, // No extension.
+    Row            = 0x02, // Extend to rows.
+    Col            = 0x03, // Extend to columns.
 
-    // As flag to the other values!
-    const SwTableSearchType TBLSEARCH_PROTECT = 0x8;      // Collect protected boxes too.
-    const SwTableSearchType TBLSEARCH_NO_UNION_CORRECT = 0x10; // Do not correct collected Union.
+    // As flags to the other values!
+    Protect        = 0x08, // Collect protected boxes too.
+    NoUnionCorrect = 0x10, // Do not correct collected Union.
+};
+namespace o3tl {
+    template<> struct typed_flags<SwTableSearchType> : is_typed_flags<SwTableSearchType, 0x1f> {};
 }
 
 SW_DLLPUBLIC void GetTableSel( const SwCursorShell& rShell, SwSelBoxes& rBoxes,
-                const SwTableSearchType = nsSwTableSearchType::TBLSEARCH_NONE );
+                const SwTableSearchType = SwTableSearchType::NONE );
 
 void GetTableSel( const SwCursor& rCursor, SwSelBoxes& rBoxes,
-                const SwTableSearchType = nsSwTableSearchType::TBLSEARCH_NONE );
+                const SwTableSearchType = SwTableSearchType::NONE );
 
 // As before, but don't start from selection but from Start- EndFrames.
 void GetTableSel( const SwLayoutFrame* pStart, const SwLayoutFrame* pEnd,
                 SwSelBoxes& rBoxes, SwCellFrames* pCells,
-                const SwTableSearchType = nsSwTableSearchType::TBLSEARCH_NONE );
+                const SwTableSearchType = SwTableSearchType::NONE );
 
 // As before but directly via PaMs.
 void GetTableSelCrs( const SwCursorShell& rShell, SwSelBoxes& rBoxes );
@@ -104,25 +103,25 @@ bool IsFrameInTableSel( const SwRect& rUnion, const SwFrame* pCell );
 // i.e. boxes are added if some overlap at the sides.
 // Additionally a new box is created and filled with the relevant content.
 void GetMergeSel( const SwPaM& rPam, SwSelBoxes& rBoxes,
-                  SwTableBox** ppMergeBox, SwUndoTableMerge* pUndo = nullptr );
+                  SwTableBox** ppMergeBox, SwUndoTableMerge* pUndo );
 
 // Check if selected boxes allow for a valid merge.
-sal_uInt16 CheckMergeSel( const SwPaM& rPam );
-sal_uInt16 CheckMergeSel( const SwSelBoxes& rBoxes );
+TableMergeErr CheckMergeSel( const SwPaM& rPam );
+TableMergeErr CheckMergeSel( const SwSelBoxes& rBoxes );
 
 bool IsEmptyBox( const SwTableBox& rBox, SwPaM& rPam );
 
 // Check if Split or InsertCol lead to a box becoming smaller than MINLAY.
 bool CheckSplitCells( const SwCursorShell& rShell, sal_uInt16 nDiv,
-                        const SwTableSearchType = nsSwTableSearchType::TBLSEARCH_NONE );
+                        const SwTableSearchType );
 bool CheckSplitCells( const SwCursor& rCursor, sal_uInt16 nDiv,
-                        const SwTableSearchType = nsSwTableSearchType::TBLSEARCH_NONE );
+                        const SwTableSearchType );
 
 // For working on tab selection also for split tables.
 class SwSelUnion
 {
     SwRect   m_aUnion;        // The rectangle enclosing the selection.
-    SwTabFrame *m_pTable;       // The (Follow-)Table for the Union.
+    SwTabFrame * const m_pTable;  // The (Follow-)Table for the Union.
 
 public:
     SwSelUnion( const SwRect &rRect, SwTabFrame *pTab ) :
@@ -140,43 +139,43 @@ typedef std::vector<SwSelUnion> SwSelUnions;
 
 // Gets the tables involved in a table selection and the union-rectangles of the selections
 // - also for split tables.
-// If a parameter is passed that != nsSwTableSearchType::TBLSEARCH_NONE
+// If a parameter is passed that != SwTableSearchType::NONE
 // the selection is extended in the given direction.
 void MakeSelUnions( SwSelUnions&, const SwLayoutFrame *pStart,
                     const SwLayoutFrame *pEnd,
-                    const SwTableSearchType = nsSwTableSearchType::TBLSEARCH_NONE );
+                    const SwTableSearchType = SwTableSearchType::NONE );
 
 // These classes copy the current table selections (rBoxes) into a
 // separate structure while keeping the table structure.
 
-class _FndBox;
-class _FndLine;
+class FndBox_;
+class FndLine_;
 
-typedef std::vector<std::unique_ptr<_FndBox>> FndBoxes_t;
-typedef std::vector<std::unique_ptr<_FndLine>> FndLines_t;
+typedef std::vector<std::unique_ptr<FndBox_>> FndBoxes_t;
+typedef std::vector<std::unique_ptr<FndLine_>> FndLines_t;
 
-class _FndBox
+class FndBox_
 {
-    SwTableBox* pBox;
+    SwTableBox* const m_pBox;
     FndLines_t m_Lines;
-    _FndLine* pUpper;
+    FndLine_* const m_pUpper;
 
-    SwTableLine *pLineBefore;   // For deleting/restoring the layout.
-    SwTableLine *pLineBehind;
+    SwTableLine *m_pLineBefore;   // For deleting/restoring the layout.
+    SwTableLine *m_pLineBehind;
 
-    _FndBox(_FndBox const&) = delete;
-    _FndBox& operator=(_FndBox const&) = delete;
+    FndBox_(FndBox_ const&) = delete;
+    FndBox_& operator=(FndBox_ const&) = delete;
 
 public:
-    _FndBox( SwTableBox* pB, _FndLine* pFL ) :
-        pBox(pB), pUpper(pFL), pLineBefore( nullptr ), pLineBehind( nullptr ) {}
+    FndBox_( SwTableBox* pB, FndLine_* pFL ) :
+        m_pBox(pB), m_pUpper(pFL), m_pLineBefore( nullptr ), m_pLineBehind( nullptr ) {}
 
     const FndLines_t&   GetLines() const    { return m_Lines; }
         FndLines_t&     GetLines()          { return m_Lines; }
-    const SwTableBox*   GetBox() const      { return pBox; }
-        SwTableBox*     GetBox()            { return pBox; }
-    const _FndLine*     GetUpper() const    { return pUpper; }
-        _FndLine*       GetUpper()          { return pUpper; }
+    const SwTableBox*   GetBox() const      { return m_pBox; }
+        SwTableBox*     GetBox()            { return m_pBox; }
+    const FndLine_*     GetUpper() const    { return m_pUpper; }
+        FndLine_*       GetUpper()          { return m_pUpper; }
 
     void SetTableLines( const SwSelBoxes &rBoxes, const SwTable &rTable );
     void SetTableLines( const SwTable &rTable );
@@ -187,45 +186,45 @@ public:
                                        const bool bBehind );
     bool AreLinesToRestore( const SwTable &rTable ) const;
 
-    void ClearLineBehind() { pLineBehind = nullptr; }
+    void ClearLineBehind() { m_pLineBehind = nullptr; }
 };
 
-class _FndLine
+class FndLine_
 {
-    SwTableLine* pLine;
+    SwTableLine* const m_pLine;
     FndBoxes_t m_Boxes;
-    _FndBox* pUpper;
+    FndBox_* m_pUpper;
 
-    _FndLine(_FndLine const&) = delete;
-    _FndLine& operator=(_FndLine const&) = delete;
+    FndLine_(FndLine_ const&) = delete;
+    FndLine_& operator=(FndLine_ const&) = delete;
 
 public:
-    _FndLine(SwTableLine* pL, _FndBox* pFB=nullptr) : pLine(pL), pUpper(pFB) {}
+    FndLine_(SwTableLine* pL, FndBox_* pFB) : m_pLine(pL), m_pUpper(pFB) {}
     const FndBoxes_t&   GetBoxes() const    { return m_Boxes; }
         FndBoxes_t&     GetBoxes()          { return m_Boxes; }
-    const SwTableLine*  GetLine() const     { return pLine; }
-        SwTableLine*    GetLine()           { return pLine; }
-    const _FndBox*      GetUpper() const    { return pUpper; }
-        _FndBox*        GetUpper()          { return pUpper; }
+    const SwTableLine*  GetLine() const     { return m_pLine; }
+        SwTableLine*    GetLine()           { return m_pLine; }
+    const FndBox_*      GetUpper() const    { return m_pUpper; }
+        FndBox_*        GetUpper()          { return m_pUpper; }
 
-    void SetUpper( _FndBox* pUp ) { pUpper = pUp; }
+    void SetUpper( FndBox_* pUp ) { m_pUpper = pUp; }
 };
 
-struct _FndPara
+struct FndPara
 {
     const SwSelBoxes& rBoxes;
-    _FndLine* pFndLine;
-    _FndBox* pFndBox;
+    FndLine_* pFndLine;
+    FndBox_* pFndBox;
 
-    _FndPara( const SwSelBoxes& rBxs, _FndBox* pFB )
+    FndPara( const SwSelBoxes& rBxs, FndBox_* pFB )
         : rBoxes(rBxs), pFndLine(nullptr), pFndBox(pFB) {}
-    _FndPara( const _FndPara& rPara, _FndBox* pFB )
+    FndPara( const FndPara& rPara, FndBox_* pFB )
         : rBoxes(rPara.rBoxes), pFndLine(rPara.pFndLine), pFndBox(pFB) {}
-    _FndPara( const _FndPara& rPara, _FndLine* pFL )
+    FndPara( const FndPara& rPara, FndLine_* pFL )
         : rBoxes(rPara.rBoxes), pFndLine(pFL), pFndBox(rPara.pFndBox) {}
 };
 
-SW_DLLPUBLIC void ForEach_FndLineCopyCol(SwTableLines& rLines, _FndPara* pFndPara );
+SW_DLLPUBLIC void ForEach_FndLineCopyCol(SwTableLines& rLines, FndPara* pFndPara );
 
 #endif // INCLUDED_SW_INC_TBLSEL_HXX
 

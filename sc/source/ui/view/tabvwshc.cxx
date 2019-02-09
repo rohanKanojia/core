@@ -19,62 +19,66 @@
 
 #include <config_mpl.h>
 
-#include "scitems.hxx"
-#include <vcl/msgbox.hxx>
+#include <scitems.hxx>
 #include <sfx2/childwin.hxx>
 #include <sfx2/dispatch.hxx>
+#include <editeng/editview.hxx>
+#include <inputhdl.hxx>
 
-#include "tabvwsh.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
-#include "global.hxx"
-#include "scmod.hxx"
-#include "docsh.hxx"
-#include "document.hxx"
-#include "uiitems.hxx"
-#include "pivot.hxx"
-#include "namedlg.hxx"
-#include "namedefdlg.hxx"
-#include "solvrdlg.hxx"
-#include "optsolver.hxx"
-#include "tabopdlg.hxx"
-#include "autoform.hxx"
-#include "autofmt.hxx"
-#include "consdlg.hxx"
-#include "filtdlg.hxx"
-#include "dbnamdlg.hxx"
-#include "areasdlg.hxx"
-#include "rangeutl.hxx"
-#include "crnrdlg.hxx"
-#include "formula.hxx"
-#include "formulacell.hxx"
-#include "acredlin.hxx"
-#include "highred.hxx"
-#include "simpref.hxx"
-#include "funcdesc.hxx"
-#include "dpobject.hxx"
-#include "markdata.hxx"
-#include "reffact.hxx"
-#include "condformatdlg.hxx"
-#include "xmlsourcedlg.hxx"
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <scres.hrc>
+#include <global.hxx>
+#include <scmod.hxx>
+#include <docsh.hxx>
+#include <document.hxx>
+#include <uiitems.hxx>
+#include <pivot.hxx>
+#include <namedlg.hxx>
+#include <namedefdlg.hxx>
+#include <solvrdlg.hxx>
+#include <optsolver.hxx>
+#include <tabopdlg.hxx>
+#include <autoform.hxx>
+#include <autofmt.hxx>
+#include <consdlg.hxx>
+#include <filtdlg.hxx>
+#include <dbnamdlg.hxx>
+#include <areasdlg.hxx>
+#include <rangeutl.hxx>
+#include <crnrdlg.hxx>
+#include <formula.hxx>
+#include <formulacell.hxx>
+#include <acredlin.hxx>
+#include <highred.hxx>
+#include <simpref.hxx>
+#include <funcdesc.hxx>
+#include <dpobject.hxx>
+#include <markdata.hxx>
+#include <reffact.hxx>
+#include <condformatdlg.hxx>
+#include <xmlsourcedlg.hxx>
+#include <condformatdlgitem.hxx>
 
-#include "RandomNumberGeneratorDialog.hxx"
-#include "SamplingDialog.hxx"
-#include "DescriptiveStatisticsDialog.hxx"
-#include "AnalysisOfVarianceDialog.hxx"
-#include "CorrelationDialog.hxx"
-#include "CovarianceDialog.hxx"
-#include "ExponentialSmoothingDialog.hxx"
-#include "MovingAverageDialog.hxx"
-#include "RegressionDialog.hxx"
-#include "TTestDialog.hxx"
-#include "FTestDialog.hxx"
-#include "ZTestDialog.hxx"
-#include "ChiSquareTestDialog.hxx"
+#include <RandomNumberGeneratorDialog.hxx>
+#include <SamplingDialog.hxx>
+#include <DescriptiveStatisticsDialog.hxx>
+#include <AnalysisOfVarianceDialog.hxx>
+#include <CorrelationDialog.hxx>
+#include <CovarianceDialog.hxx>
+#include <ExponentialSmoothingDialog.hxx>
+#include <MovingAverageDialog.hxx>
+#include <RegressionDialog.hxx>
+#include <TTestDialog.hxx>
+#include <FTestDialog.hxx>
+#include <ZTestDialog.hxx>
+#include <ChiSquareTestDialog.hxx>
 
-#include "PivotLayoutDialog.hxx"
+#include <PivotLayoutDialog.hxx>
 
-#include <config_orcus.h>
+#include <comphelper/lok.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+#include <sfx2/lokhelper.hxx>
 
 void ScTabViewShell::SetCurRefDlgId( sal_uInt16 nNew )
 {
@@ -108,15 +112,11 @@ void ScTabViewShell::SwitchBetweenRefDialogs(SfxModelessDialog* pDialog)
 
         SC_MOD()->SetRefDialog( nId, pWnd == nullptr );
    }
-   else
-   {
-
-   }
 }
 
 VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
                                 SfxBindings* pB, SfxChildWindow* pCW,
-                                SfxChildWinInfo* pInfo,
+                                const SfxChildWinInfo* pInfo,
                                 vcl::Window* pParent, sal_uInt16 nSlotId )
 {
     // only open dialog when called through ScModule::SetRefDialog,
@@ -199,8 +199,8 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
         case SID_OPENDLG_CONSOLIDATE:
         {
             SfxItemSet aArgSet( GetPool(),
-                                SCITEM_CONSOLIDATEDATA,
-                                SCITEM_CONSOLIDATEDATA );
+                                svl::Items<SCITEM_CONSOLIDATEDATA,
+                                SCITEM_CONSOLIDATEDATA>{} );
 
             const ScConsolidateParam* pDlgData =
                             pDoc->GetConsolidateDlgData();
@@ -250,10 +250,10 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
         {
             ScQueryParam    aQueryParam;
             SfxItemSet      aArgSet( GetPool(),
-                                     SCITEM_QUERYDATA,
-                                     SCITEM_QUERYDATA );
+                                     svl::Items<SCITEM_QUERYDATA,
+                                     SCITEM_QUERYDATA>{} );
 
-            ScDBData* pDBData = GetDBData(false, SC_DB_MAKE, SC_DBSEL_ROW_DOWN);
+            ScDBData* pDBData = GetDBData(false, SC_DB_MAKE, ScGetDBSelection::RowDown);
             pDBData->ExtendDataArea(pDoc);
             pDBData->GetQueryParam( aQueryParam );
 
@@ -280,10 +280,10 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
 
             ScQueryParam    aQueryParam;
             SfxItemSet      aArgSet( GetPool(),
-                                     SCITEM_QUERYDATA,
-                                     SCITEM_QUERYDATA );
+                                     svl::Items<SCITEM_QUERYDATA,
+                                     SCITEM_QUERYDATA>{} );
 
-            ScDBData* pDBData = GetDBData(false, SC_DB_MAKE, SC_DBSEL_ROW_DOWN);
+            ScDBData* pDBData = GetDBData(false, SC_DB_MAKE, ScGetDBSelection::RowDown);
             pDBData->ExtendDataArea(pDoc);
             pDBData->GetQueryParam( aQueryParam );
 
@@ -307,8 +307,7 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
             ScViewData&   rViewData  = GetViewData();
             ScRefAddress  aCurPos   ( rViewData.GetCurX(),
                                       rViewData.GetCurY(),
-                                      rViewData.GetTabNo(),
-                                      false, false, false );
+                                      rViewData.GetTabNo());
 
             pResult = VclPtr<ScTabOpDlg>::Create( pB, pCW, pParent, rViewData.GetDocument(), aCurPos );
         }
@@ -420,7 +419,7 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
                 ScViewData& rViewData = GetViewData();
                 rViewData.SetRefTabNo( rViewData.GetTabNo() );
                 ScDPObject* pObj = pDoc->GetDPAtCursor(rViewData.GetCurX(), rViewData.GetCurY(), rViewData.GetTabNo());
-                pResult = VclPtr<ScPivotLayoutDialog>::Create(pB, pCW, pParent, &rViewData, pDialogDPObject, pObj == nullptr);
+                pResult = VclPtr<ScPivotLayoutDialog>::Create(pB, pCW, pParent, &rViewData, pDialogDPObject.get(), pObj == nullptr);
             }
         }
         break;
@@ -441,9 +440,7 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
 
         case SID_MANAGE_XML_SOURCE:
         {
-#if ENABLE_ORCUS
             pResult = VclPtr<ScXMLSourceDlg>::Create(pB, pCW, pParent, pDoc);
-#endif
         }
         break;
 
@@ -467,55 +464,27 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
 
         case WID_CONDFRMT_REF:
         {
-            sal_uInt32  nIndex      = sal_uInt32(-1);
-            sal_uInt8   nType       = 0;
-            bool        bManaged    = false;
             bool        bFound      = false;
-
-            ScRangeList aRangeList;
-            ScConditionalFormat* pCondFormat;
-            condformat::dialog::ScCondFormatDialogType aDialogType;
-
-            // Get the pool item stored it by Conditional Format Manager Dialog.
+            const ScCondFormatDlgItem* pDlgItem = nullptr;
+            // Get the pool item stored by Conditional Format Manager Dialog.
             const SfxPoolItem* pItem = nullptr;
-            sal_uInt32 nItems(GetPool().GetItemCount2( SCITEM_STRING ));
+            sal_uInt32 nItems(GetPool().GetItemCount2( SCITEM_CONDFORMATDLGDATA ));
             for( sal_uInt32 nIter = 0; nIter < nItems; ++nIter )
             {
-                if( nullptr != (pItem = GetPool().GetItem2( SCITEM_STRING, nIter ) ) )
+                if( nullptr != (pItem = GetPool().GetItem2( SCITEM_CONDFORMATDLGDATA, nIter ) ) )
                 {
-                    if ( ScCondFormatDlg::ParseXmlString(
-                            static_cast<const SfxStringItem*>(pItem)->GetValue(),
-                            nIndex, nType, bManaged))
-                    {
-                        bFound = true;
-                        break;
-                    }
+                    pDlgItem = static_cast<const ScCondFormatDlgItem*>(pItem);
+                    bFound = true;
+                    break;
                 }
             }
 
             ScViewData& rViewData = GetViewData();
             rViewData.SetRefTabNo( rViewData.GetTabNo() );
 
-            aDialogType = static_cast< condformat::dialog::ScCondFormatDialogType > ( nType );
-            pCondFormat = pDoc->GetCondFormList(rViewData.GetTabNo())->GetFormat ( nIndex );
+            pResult = VclPtr<ScCondFormatDlg>::Create( pB, pCW, pParent, &rViewData, pDlgItem );
 
-            if ( pCondFormat )
-                aRangeList = pCondFormat->GetRange();
-            else
-            {
-                rViewData.GetMarkData().FillRangeListWithMarks(&aRangeList, false);
-                ScAddress aPos(rViewData.GetCurX(), rViewData.GetCurY(), rViewData.GetTabNo());
-                if(aRangeList.empty())
-                {
-                    ScRange* pRange = new ScRange(aPos);
-                    aRangeList.push_back(pRange);
-                }
-            }
-
-            pResult = VclPtr<ScCondFormatDlg>::Create( pB, pCW, pParent, &rViewData, pCondFormat, aRangeList,
-                aRangeList.GetTopLeftCorner(), aDialogType, bManaged );
-
-            // Remove the pool item stored it by Conditional Format Manager Dialog.
+            // Remove the pool item stored by Conditional Format Manager Dialog.
             if ( bFound && pItem )
                 GetPool().Remove( *pItem );
         }
@@ -534,6 +503,246 @@ VclPtr<SfxModelessDialog> ScTabViewShell::CreateRefDialog(
     }
 
     return pResult;
+}
+
+int ScTabViewShell::getPart() const
+{
+    return GetViewData().GetTabNo();
+}
+
+void ScTabViewShell::afterCallbackRegistered()
+{
+    UpdateInputHandler(true, false);
+}
+
+void ScTabViewShell::NotifyCursor(SfxViewShell* pOtherShell) const
+{
+    ScDrawView* pDrView = const_cast<ScTabViewShell*>(this)->GetScDrawView();
+    if (pDrView)
+    {
+        if (pDrView->GetTextEditObject())
+        {
+            // Blinking cursor.
+            EditView& rEditView = pDrView->GetTextEditOutlinerView()->GetEditView();
+            rEditView.RegisterOtherShell(pOtherShell);
+            rEditView.ShowCursor();
+            rEditView.RegisterOtherShell(nullptr);
+            // Text selection, if any.
+            rEditView.DrawSelectionXOR(pOtherShell);
+        }
+        else
+        {
+            // Graphic selection.
+            pDrView->AdjustMarkHdl(pOtherShell);
+        }
+    }
+
+    const ScGridWindow* pWin = GetViewData().GetActiveWin();
+    if (pWin)
+        pWin->updateLibreOfficeKitCellCursor(pOtherShell);
+}
+
+css::uno::Reference<css::datatransfer::XTransferable2> ScTabViewShell::GetClipData(vcl::Window* pWin)
+{
+    SfxViewFrame* pViewFrame = nullptr;
+    css::uno::Reference<css::datatransfer::XTransferable2> xTransferable;
+    css::uno::Reference<css::datatransfer::clipboard::XClipboard> xClipboard;
+
+    if (pWin)
+        xClipboard = pWin->GetClipboard();
+    else if ((pViewFrame = SfxViewFrame::GetFirst(nullptr, false)))
+        xClipboard = pViewFrame->GetWindow().GetClipboard();
+
+    xTransferable.set(xClipboard.is() ? xClipboard->getContents() : nullptr, css::uno::UNO_QUERY);
+
+    return xTransferable;
+}
+
+void ScTabViewShell::notifyAllViewsHeaderInvalidation(HeaderType eHeaderType, SCTAB nCurrentTabIndex)
+{
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        OString aPayload;
+        switch (eHeaderType)
+        {
+            case COLUMN_HEADER:
+                aPayload = "column";
+                break;
+            case ROW_HEADER:
+                aPayload = "row";
+                break;
+            case BOTH_HEADERS:
+            default:
+                aPayload = "all";
+                break;
+        }
+
+        SfxViewShell* pViewShell = SfxViewShell::GetFirst();
+        while (pViewShell)
+        {
+            ScTabViewShell* pTabViewShell = dynamic_cast<ScTabViewShell*>(pViewShell);
+            if (pTabViewShell && (nCurrentTabIndex == -1 || pTabViewShell->getPart() == nCurrentTabIndex))
+            {
+                pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_INVALIDATE_HEADER, aPayload.getStr());
+            }
+            pViewShell = SfxViewShell::GetNext(*pViewShell);
+        }
+    }
+}
+
+void ScTabViewShell::notifyAllViewsHeaderInvalidation(bool bColumns, SCTAB nCurrentTabIndex)
+{
+    HeaderType eHeaderType = bColumns ? COLUMN_HEADER : ROW_HEADER;
+    ScTabViewShell::notifyAllViewsHeaderInvalidation(eHeaderType, nCurrentTabIndex);
+}
+
+bool ScTabViewShell::isAnyEditViewInRange(bool bColumns, SCCOLROW nStart, SCCOLROW nEnd)
+{
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        SfxViewShell* pViewShell = SfxViewShell::GetFirst();
+        while (pViewShell)
+        {
+            ScTabViewShell* pTabViewShell = dynamic_cast<ScTabViewShell*>(pViewShell);
+            if (pTabViewShell)
+            {
+                ScInputHandler* pInputHandler = pTabViewShell->GetInputHandler();
+                if (pInputHandler && pInputHandler->GetActiveView())
+                {
+                    const ScViewData& rViewData = pTabViewShell->GetViewData();
+                    SCCOLROW nPos = bColumns ? rViewData.GetCurX() : rViewData.GetCurY();
+                    if (nStart <= nPos && nPos <= nEnd)
+                        return true;
+                }
+            }
+            pViewShell = SfxViewShell::GetNext(*pViewShell);
+        }
+    }
+    return false;
+}
+
+bool ScTabViewShell::UseSubTotal(ScRangeList* pRangeList)
+{
+    bool bSubTotal = false;
+    ScDocument* pDoc = GetViewData().GetDocument();
+    size_t nRangeCount (pRangeList->size());
+    size_t nRangeIndex (0);
+    while (!bSubTotal && nRangeIndex < nRangeCount)
+    {
+        const ScRange& rRange = (*pRangeList)[nRangeIndex];
+        SCTAB nTabEnd(rRange.aEnd.Tab());
+        SCTAB nTab(rRange.aStart.Tab());
+        while (!bSubTotal && nTab <= nTabEnd)
+        {
+            SCROW nRowEnd(rRange.aEnd.Row());
+            SCROW nRow(rRange.aStart.Row());
+            while (!bSubTotal && nRow <= nRowEnd)
+            {
+                if (pDoc->RowFiltered(nRow, nTab))
+                    bSubTotal = true;
+                else
+                    ++nRow;
+            }
+            ++nTab;
+        }
+        ++nRangeIndex;
+    }
+
+    if (!bSubTotal)
+    {
+        const ScDBCollection::NamedDBs& rDBs = pDoc->GetDBCollection()->getNamedDBs();
+        for (const auto& rxDB : rDBs)
+        {
+            const ScDBData& rDB = *rxDB;
+            if (!rDB.HasAutoFilter())
+                continue;
+
+            nRangeIndex = 0;
+            while (!bSubTotal && nRangeIndex < nRangeCount)
+            {
+                const ScRange & rRange = (*pRangeList)[nRangeIndex];
+                ScRange aDBArea;
+                rDB.GetArea(aDBArea);
+                if (aDBArea.Intersects(rRange))
+                    bSubTotal = true;
+                ++nRangeIndex;
+            }
+
+            if (bSubTotal)
+                break;
+        }
+    }
+    return bSubTotal;
+}
+
+const OUString ScTabViewShell::DoAutoSum(bool& rRangeFinder, bool& rSubTotal)
+{
+    OUString aFormula;
+    const ScMarkData& rMark = GetViewData().GetMarkData();
+    if ( rMark.IsMarked() || rMark.IsMultiMarked() )
+    {
+        ScRangeList aMarkRangeList;
+        rRangeFinder = rSubTotal = false;
+        rMark.FillRangeListWithMarks( &aMarkRangeList, false );
+        ScDocument* pDoc = GetViewData().GetDocument();
+
+        // check if one of the marked ranges is empty
+        bool bEmpty = false;
+        const size_t nCount = aMarkRangeList.size();
+        for ( size_t i = 0; i < nCount; ++i )
+        {
+            const ScRange & rRange( aMarkRangeList[i] );
+            if ( pDoc->IsBlockEmpty( rRange.aStart.Tab(),
+                 rRange.aStart.Col(), rRange.aStart.Row(),
+                 rRange.aEnd.Col(), rRange.aEnd.Row() ) )
+            {
+                bEmpty = true;
+                break;
+            }
+        }
+
+        if ( bEmpty )
+        {
+            ScRangeList aRangeList;
+            const bool bDataFound = GetAutoSumArea( aRangeList );
+            if ( bDataFound )
+            {
+                ScAddress aAddr = aRangeList.back().aEnd;
+                aAddr.IncRow();
+                const bool bSubTotal( UseSubTotal( &aRangeList ) );
+                EnterAutoSum( aRangeList, bSubTotal, aAddr );
+            }
+        }
+        else
+        {
+            const bool bSubTotal( UseSubTotal( &aMarkRangeList ) );
+            for ( size_t i = 0; i < nCount; ++i )
+            {
+                const ScRange & rRange = aMarkRangeList[i];
+                const bool bSetCursor = ( i == nCount - 1 );
+                const bool bContinue = ( i != 0 );
+                if ( !AutoSum( rRange, bSubTotal, bSetCursor, bContinue ) )
+                {
+                    MarkRange( rRange, false );
+                    SetCursor( rRange.aEnd.Col(), rRange.aEnd.Row() );
+                    const ScRangeList aRangeList;
+                    ScAddress aAddr = rRange.aEnd;
+                    aAddr.IncRow();
+                    aFormula = GetAutoSumFormula( aRangeList, bSubTotal, aAddr );
+                    break;
+                }
+            }
+        }
+    }
+    else // Only insert into input row
+    {
+        ScRangeList aRangeList;
+        rRangeFinder = GetAutoSumArea( aRangeList );
+        rSubTotal = UseSubTotal( &aRangeList );
+        ScAddress aAddr = GetViewData().GetCurPos();
+        aFormula = GetAutoSumFormula( aRangeList, rSubTotal, aAddr );
+    }
+    return aFormula;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

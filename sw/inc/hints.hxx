@@ -19,20 +19,19 @@
 #ifndef INCLUDED_SW_INC_HINTS_HXX
 #define INCLUDED_SW_INC_HINTS_HXX
 
-#include <swatrset.hxx>
+#include "swatrset.hxx"
+#include "swtypes.hxx"
 #include <vcl/vclptr.hxx>
-#include <vector>
 
 class SwFormat;
 class OutputDevice;
 class SwTable;
 class SwNode;
 class SwNodes;
-class SwContentNode;
 class SwPageFrame;
 class SwFrame;
-class SwTextNode;
 class SwHistory;
+class SwTextNode;
 
 // Base class for all Message-Hints:
 // "Overhead" of SfxPoolItem is handled here
@@ -65,15 +64,15 @@ public:
 class SwFormatChg: public SwMsgPoolItem
 {
 public:
-    SwFormat *pChangedFormat;
+    SwFormat * const pChangedFormat;
     SwFormatChg( SwFormat *pFormat );
 };
 
 class SwInsText: public SwMsgPoolItem
 {
 public:
-    sal_Int32 nPos;
-    sal_Int32 nLen;
+    sal_Int32 const nPos;
+    sal_Int32 const nLen;
 
     SwInsText( sal_Int32 nP, sal_Int32 nL );
 };
@@ -81,7 +80,7 @@ public:
 class SwDelChr: public SwMsgPoolItem
 {
 public:
-    sal_Int32 nPos;
+    sal_Int32 const nPos;
 
     SwDelChr( sal_Int32 nP );
 };
@@ -89,22 +88,59 @@ public:
 class SwDelText: public SwMsgPoolItem
 {
 public:
-    sal_Int32 nStart;
-    sal_Int32 nLen;
+    sal_Int32 const nStart;
+    sal_Int32 const nLen;
 
     SwDelText( sal_Int32 nS, sal_Int32 nL );
 };
 
+namespace sw {
+
+/// text is moved into pDestNode
+class MoveText : public SfxHint
+{
+public:
+    SwTextNode * pDestNode;
+    sal_Int32 nDestStart;
+    sal_Int32 nSourceStart;
+    sal_Int32 nLen;
+
+    MoveText(SwTextNode *pD, sal_Int32 nD, sal_Int32 nS, sal_Int32 nL);
+};
+
+/// new delete redline is created
+class RedlineDelText : public SfxHint
+{
+public:
+    sal_Int32 const nStart;
+    sal_Int32 const nLen;
+
+    RedlineDelText(sal_Int32 nS, sal_Int32 nL);
+};
+
+/// delete redline is removed
+class RedlineUnDelText : public SfxHint
+{
+public:
+    sal_Int32 nStart;
+    sal_Int32 nLen;
+
+    RedlineUnDelText(sal_Int32 nS, sal_Int32 nL);
+};
+
+}
+
 class SwUpdateAttr : public SwMsgPoolItem
 {
 private:
-    sal_Int32 m_nStart;
-    sal_Int32 m_nEnd;
-    sal_uInt16 m_nWhichAttr;
-    std::vector<sal_uInt16> m_aWhichFormatAttr; // attributes changed inside RES_TXTATR_AUTOFMT
+    sal_Int32 const m_nStart;
+    sal_Int32 const m_nEnd;
+    sal_uInt16 const m_nWhichAttr;
+    std::vector<sal_uInt16> m_aWhichFmtAttrs; // attributes changed inside RES_TXTATR_AUTOFMT
 
 public:
     SwUpdateAttr( sal_Int32 nS, sal_Int32 nE, sal_uInt16 nW );
+    SwUpdateAttr( sal_Int32 nS, sal_Int32 nE, sal_uInt16 nW, std::vector<sal_uInt16> aW );
 
     sal_Int32 getStart() const
     {
@@ -121,9 +157,9 @@ public:
         return m_nWhichAttr;
     }
 
-    const std::vector<sal_uInt16>& getFormatAttr() const
+    const std::vector<sal_uInt16>& getFmtAttrs() const
     {
-        return m_aWhichFormatAttr;
+        return m_aWhichFmtAttrs;
     }
 };
 
@@ -147,8 +183,8 @@ public:
 class SwDocPosUpdate : public SwMsgPoolItem
 {
 public:
-    const long nDocPos;
-    SwDocPosUpdate( const long nDocPos );
+    const SwTwips nDocPos;
+    SwDocPosUpdate( const SwTwips nDocPos );
 };
 
 /// SwTableFormulaUpdate is sent when the table has to be newly calculated or when a table itself is merged or splitted
@@ -180,7 +216,6 @@ public:
 class SwAutoFormatGetDocNode: public SwMsgPoolItem
 {
 public:
-    const SwContentNode* pContentNode;
     const SwNodes* pNodes;
 
     SwAutoFormatGetDocNode( const SwNodes* pNds );
@@ -192,13 +227,13 @@ public:
  */
 class SwAttrSetChg: public SwMsgPoolItem
 {
-    bool m_bDelSet;
+    bool const m_bDelSet;
     SwAttrSet* m_pChgSet;           ///< what has changed
     const SwAttrSet* m_pTheChgdSet; ///< is only used to compare
 public:
     SwAttrSetChg( const SwAttrSet& rTheSet, SwAttrSet& rSet );
     SwAttrSetChg( const SwAttrSetChg& );
-    virtual ~SwAttrSetChg();
+    virtual ~SwAttrSetChg() override;
 
     /// What has changed
     const SwAttrSet* GetChgSet() const     { return m_pChgSet; }
@@ -208,7 +243,7 @@ public:
     const SwAttrSet* GetTheChgdSet() const { return m_pTheChgdSet; }
 
     sal_uInt16 Count() const { return m_pChgSet->Count(); }
-    void ClearItem( sal_uInt16 nWhichL = 0 )
+    void ClearItem( sal_uInt16 nWhichL )
 #ifdef DBG_UTIL
         ;
 #else
@@ -219,7 +254,7 @@ public:
 class SwCondCollCondChg: public SwMsgPoolItem
 {
 public:
-    SwFormat *pChangedFormat;
+    SwFormat * const pChangedFormat;
     SwCondCollCondChg( SwFormat *pFormat );
 };
 
@@ -252,10 +287,10 @@ public:
 
 class SwStringMsgPoolItem : public SwMsgPoolItem
 {
-    OUString m_sStr;
+    OUString const m_sStr;
 public:
 
-    OUString GetString() const { return m_sStr; }
+    const OUString& GetString() const { return m_sStr; }
 
     SwStringMsgPoolItem( sal_uInt16 nId, const OUString& rStr )
         : SwMsgPoolItem( nId ), m_sStr( rStr )

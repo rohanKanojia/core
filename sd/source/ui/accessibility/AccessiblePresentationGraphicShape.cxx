@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessiblePresentationGraphicShape.hxx"
+#include <AccessiblePresentationGraphicShape.hxx>
+#include <com/sun/star/accessibility/AccessibleRole.hpp>
 
-#include "SdShapeTypes.hxx"
+#include <SdShapeTypes.hxx>
 
 #include <svx/DescriptionGenerator.hxx>
+#include <svx/ShapeTypeHandler.hxx>
 #include <rtl/ustring.h>
 
 using namespace ::com::sun::star;
@@ -46,7 +48,6 @@ AccessiblePresentationGraphicShape::~AccessiblePresentationGraphicShape()
 
 OUString SAL_CALL
     AccessiblePresentationGraphicShape::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("AccessiblePresentationGraphicShape");
 }
@@ -54,7 +55,6 @@ OUString SAL_CALL
 /// Set this object's name if is different to the current name.
 OUString
     AccessiblePresentationGraphicShape::CreateAccessibleBaseName()
-    throw (css::uno::RuntimeException)
 {
     OUString sName;
 
@@ -76,7 +76,6 @@ OUString
 
 OUString
     AccessiblePresentationGraphicShape::CreateAccessibleDescription()
-    throw (css::uno::RuntimeException, std::exception)
 {
     //    return createAccessibleName ();
     DescriptionGenerator aDG (mxShape);
@@ -100,7 +99,6 @@ OUString
 }
 
 sal_Int16 SAL_CALL AccessiblePresentationGraphicShape::getAccessibleRole ()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return  AccessibleRole::GRAPHIC ;
 }

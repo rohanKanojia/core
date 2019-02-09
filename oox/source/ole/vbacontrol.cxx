@@ -17,26 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/vbacontrol.hxx"
+#include <oox/ole/vbacontrol.hxx>
 
 #include <algorithm>
 #include <set>
 #include <com/sun/star/awt/XControlModel.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/io/XInputStreamProvider.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <xmlscript/xmldlg_imexp.hxx>
-#include "oox/helper/attributelist.hxx"
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/propertymap.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/helper/storagebase.hxx"
-#include "oox/helper/textinputstream.hxx"
-#include "oox/ole/vbahelper.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/propertymap.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/helper/storagebase.hxx>
+#include <oox/helper/textinputstream.hxx>
+#include <oox/ole/vbahelper.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 #include <unordered_map>
 
 namespace oox {
@@ -92,14 +96,14 @@ public:
     OUString            generateDummyName();
 
 private:
-    typedef ::std::set< OUString > OUStringSet;
-    OUStringSet         maCtrlNames;
-    const OUString      maDummyBaseName;
+    ::std::set< OUString >
+                        maCtrlNames;
     sal_Int32           mnIndex;
 };
 
+static const OUStringLiteral gaDummyBaseName( "DummyGroupSep" );
+
 VbaControlNamesSet::VbaControlNamesSet() :
-    maDummyBaseName( "DummyGroupSep" ),
     mnIndex( 0 )
 {
 }
@@ -116,7 +120,7 @@ OUString VbaControlNamesSet::generateDummyName()
     OUString aCtrlName;
     do
     {
-        aCtrlName = OUStringBuffer( maDummyBaseName ).append( ++mnIndex ).makeStringAndClear();
+        aCtrlName = gaDummyBaseName + OUString::number( ++mnIndex );
     }
     while( maCtrlNames.count( aCtrlName ) > 0 );
     maCtrlNames.insert( aCtrlName );
@@ -128,8 +132,8 @@ struct VbaControlNameInserter
 {
 public:
     VbaControlNamesSet& mrCtrlNames;
-    inline explicit     VbaControlNameInserter( VbaControlNamesSet& rCtrlNames ) : mrCtrlNames( rCtrlNames ) {}
-    inline void         operator()( const VbaFormControl& rControl ) { mrCtrlNames.insertName( rControl ); }
+    explicit     VbaControlNameInserter( VbaControlNamesSet& rCtrlNames ) : mrCtrlNames( rCtrlNames ) {}
+    void         operator()( const VbaFormControl& rControl ) { mrCtrlNames.insertName( rControl ); }
 };
 
 /** A dummy invisible form control (fixed label without text) that is used to
@@ -421,30 +425,33 @@ void VbaFormControl::importStorage( StorageBase& rStrg, const AxClassTable& rCla
                 }
                 typedef std::unordered_map< sal_uInt32, std::shared_ptr< VbaFormControl > > IdToPageMap;
                 IdToPageMap idToPage;
-                VbaFormControlVector::iterator it = maControls.begin();
-                VbaFormControlVector::iterator it_end = maControls.end();
-                typedef std::vector< sal_uInt32 > UInt32Array;
                 AxArrayString sCaptions;
 
-                for ( ; it != it_end; ++it )
+                for (auto const& control : maControls)
                 {
-                    if ( (*it)->mxCtrlModel->getControlType() == API_CONTROL_PAGE )
+                    auto& elem = control->mxCtrlModel;
+                    if (!elem)
                     {
-                        VbaSiteModelRef xPageSiteRef = (*it)->mxSiteModel;
+                        SAL_WARN("oox", "empty control model");
+                        continue;
+                    }
+                    if (elem->getControlType() == API_CONTROL_PAGE)
+                    {
+                        VbaSiteModelRef xPageSiteRef = control->mxSiteModel;
                         if ( xPageSiteRef.get() )
-                            idToPage[ xPageSiteRef->getId() ] = (*it);
+                            idToPage[ xPageSiteRef->getId() ] = control;
                     }
                     else
                     {
-                        AxTabStripModel* pTabStrip = static_cast<AxTabStripModel*> ( (*it)->mxCtrlModel.get() );
+                        AxTabStripModel* pTabStrip = static_cast<AxTabStripModel*>(elem.get());
                         sCaptions = pTabStrip->maItems;
                         pMultiPage->mnActiveTab = pTabStrip->mnListIndex;
                         pMultiPage->mnTabStyle = pTabStrip->mnTabStyle;
                     }
                 }
                 // apply caption/titles to pages
-                UInt32Array::iterator itCtrlId = pMultiPage->mnIDs.begin();
-                UInt32Array::iterator itCtrlId_end = pMultiPage->mnIDs.end();
+                auto itCtrlId = pMultiPage->mnIDs.begin();
+                auto itCtrlId_end = pMultiPage->mnIDs.end();
                 AxArrayString::iterator itCaption = sCaptions.begin();
 
                 maControls.clear();
@@ -591,9 +598,9 @@ void VbaFormControl::finalizeEmbeddedControls()
     VbaControlNamesSet aControlNames;
     VbaControlNameInserter aInserter( aControlNames );
     maControls.forEach( aInserter );
-    for( VbaFormControlVector::iterator aIt = maControls.begin(), aEnd = maControls.end(); aIt != aEnd; ++aIt )
-        if( (*aIt)->mxCtrlModel.get() && ((*aIt)->mxCtrlModel->getControlType() == API_CONTROL_GROUPBOX) )
-            (*aIt)->maControls.forEach( aInserter );
+    for (auto const& control : maControls)
+        if( control->mxCtrlModel.get() && (control->mxCtrlModel->getControlType() == API_CONTROL_GROUPBOX) )
+            control->maControls.forEach( aInserter );
 
     /*  Reprocess the sorted list and collect all option button controls that
         are part of the same option group (determined by group name). All
@@ -610,10 +617,9 @@ void VbaFormControl::finalizeEmbeddedControls()
 
     typedef VbaFormControlVectorMap::mapped_type VbaFormControlVectorRef;
     bool bLastWasOptionButton = false;
-    for( VbaFormControlVector::iterator aIt = maControls.begin(), aEnd = maControls.end(); aIt != aEnd; ++aIt )
+    for (auto const& control : maControls)
     {
-        VbaFormControlRef xControl = *aIt;
-        const ControlModelBase* pCtrlModel = xControl->mxCtrlModel.get();
+        const ControlModelBase* pCtrlModel = control->mxCtrlModel.get();
 
         if( const AxOptionButtonModel* pOptButtonModel = dynamic_cast< const AxOptionButtonModel* >( pCtrlModel ) )
         {
@@ -639,7 +645,7 @@ void VbaFormControl::finalizeEmbeddedControls()
             /*  Append the option button to the control group (which is now
                 referred by the vector aControlGroups and by the map
                 aOptionGroups). */
-            rxOptionGroup->push_back( xControl );
+            rxOptionGroup->push_back(control);
             bLastWasOptionButton = true;
         }
         else
@@ -652,7 +658,7 @@ void VbaFormControl::finalizeEmbeddedControls()
             }
             // append the control to the last control group
             VbaFormControlVector& rLastGroup = *aControlGroups.back();
-            rLastGroup.push_back( xControl );
+            rLastGroup.push_back(control);
             bLastWasOptionButton = false;
 
             // if control is a group box, move all its children to this control
@@ -660,11 +666,11 @@ void VbaFormControl::finalizeEmbeddedControls()
             {
                 /*  Move all embedded controls of the group box relative to the
                     position of the group box. */
-                xControl->moveEmbeddedToAbsoluteParent();
+                control->moveEmbeddedToAbsoluteParent();
                 /*  Insert all children of the group box into the last control
                     group (following the group box). */
-                rLastGroup.insert( rLastGroup.end(), xControl->maControls.begin(), xControl->maControls.end() );
-                xControl->maControls.clear();
+                rLastGroup.insert( rLastGroup.end(), control->maControls.begin(), control->maControls.end() );
+                control->maControls.clear();
                 // check if last control of the group box is an option button
                 bLastWasOptionButton = dynamic_cast< const AxOptionButtonModel* >( rLastGroup.back()->mxCtrlModel.get() ) != nullptr;
             }
@@ -673,8 +679,8 @@ void VbaFormControl::finalizeEmbeddedControls()
 
     // flatten the vector of vectors of form controls to a single vector
     maControls.clear();
-    for( VbaFormControlVectorVector::iterator aIt = aControlGroups.begin(), aEnd = aControlGroups.end(); aIt != aEnd; ++aIt )
-        maControls.insert( maControls.end(), (*aIt)->begin(), (*aIt)->end() );
+    for (auto const& controlGroup : aControlGroups)
+        maControls.insert( maControls.end(), controlGroup->begin(), controlGroup->end() );
 }
 
 void VbaFormControl::moveRelative( const AxPairData& rDistance )

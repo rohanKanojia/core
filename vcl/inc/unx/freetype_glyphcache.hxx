@@ -20,13 +20,12 @@
 #ifndef INCLUDED_VCL_GENERIC_GLYPHS_GCACH_FTYP_HXX
 #define INCLUDED_VCL_GENERIC_GLYPHS_GCACH_FTYP_HXX
 
-#include "unx/glyphcache.hxx"
-#include "PhysicalFontFace.hxx"
+#include <unx/glyphcache.hxx>
+#include <PhysicalFontFace.hxx>
+#include <fontinstance.hxx>
+#include <vcl/glyphitem.hxx>
 
-#include <config_graphite.h>
-#if ENABLE_GRAPHITE
-class GraphiteFaceWrapper;
-#endif
+class CmapResult;
 
 // FreetypeFontFile has the responsibility that a font file is only mapped once.
 // (#86621#) the old directly ft-managed solution caused it to be mapped
@@ -63,100 +62,65 @@ public:
                                int nFaceNum, sal_IntPtr nFontId);
                           ~FreetypeFontInfo();
 
-    const unsigned char*  GetTable( const char*, sal_uLong* pLength=nullptr ) const;
+    const unsigned char*  GetTable( const char*, sal_uLong* pLength) const;
 
     FT_FaceRec_*          GetFaceFT();
-#if ENABLE_GRAPHITE
-    GraphiteFaceWrapper*  GetGraphiteFace();
-#endif
     void                  ReleaseFaceFT();
 
     const OString&        GetFontFileName() const   { return mpFontFile->GetFileName(); }
+    int                   GetFontFaceIndex() const  { return mnFaceNum; }
     sal_IntPtr            GetFontId() const         { return mnFontId; }
     bool                  IsSymbolFont() const      { return maDevFontAttributes.IsSymbolFont(); }
     const FontAttributes& GetFontAttributes() const { return maDevFontAttributes; }
 
     void                  AnnounceFont( PhysicalFontCollection* );
 
-    int                   GetGlyphIndex( sal_UCS4 cChar ) const;
-    void                  CacheGlyphIndex( sal_UCS4 cChar, int nGI ) const;
-
     bool                  GetFontCodeRanges( CmapResult& ) const;
-    const FontCharMapPtr  GetFontCharMap();
+    const FontCharMapRef& GetFontCharMap();
 
 private:
     FT_FaceRec_*    maFaceFT;
-    FreetypeFontFile*     mpFontFile;
+    FreetypeFontFile* const mpFontFile;
     const int       mnFaceNum;
     int             mnRefCount;
-#if ENABLE_GRAPHITE
-    bool            mbCheckedGraphite;
-    GraphiteFaceWrapper * mpGraphiteFace;
-#endif
-    sal_IntPtr      mnFontId;
+    sal_IntPtr const mnFontId;
     FontAttributes  maDevFontAttributes;
 
-    FontCharMapPtr  mxFontCharMap;
-
-    // cache unicode->glyphid mapping because looking it up is expensive
-    // TODO: change to std::unordered_multimap when a use case requires a m:n mapping
-    typedef std::unordered_map<int,int> Int2IntMap;
-    mutable Int2IntMap* mpChar2Glyph;
-    mutable Int2IntMap* mpGlyph2Char;
-    void InitHashes() const;
-};
-
-// these two inlines are very important for performance
-
-inline int FreetypeFontInfo::GetGlyphIndex( sal_UCS4 cChar ) const
-{
-    if( !mpChar2Glyph )
-        return -1;
-    Int2IntMap::const_iterator it = mpChar2Glyph->find( cChar );
-    if( it == mpChar2Glyph->end() )
-        return -1;
-    return it->second;
-}
-
-inline void FreetypeFontInfo::CacheGlyphIndex( sal_UCS4 cChar, int nIndex ) const
-{
-    if( !mpChar2Glyph )
-        InitHashes();
-    (*mpChar2Glyph)[ cChar ] = nIndex;
-    (*mpGlyph2Char)[ nIndex ] = cChar;
-}
-
-class FreetypeManager
-{
-public:
-                        FreetypeManager();
-                        ~FreetypeManager();
-
-    void                AddFontFile( const OString& rNormalizedName,
-                            int nFaceNum, sal_IntPtr nFontId, const FontAttributes&);
-    void                AnnounceFonts( PhysicalFontCollection* ) const;
-    void                ClearFontList();
-
-    ServerFont* CreateFont( const FontSelectPattern& );
-
-private:
-    typedef std::unordered_map<sal_IntPtr,FreetypeFontInfo*> FontList;
-    FontList            maFontList;
-
-    sal_IntPtr          mnMaxFontId;
+    FontCharMapRef  mxFontCharMap;
 };
 
 class FreetypeFontFace : public PhysicalFontFace
 {
 private:
-    FreetypeFontInfo*             mpFreetypeFontInfo;
+    FreetypeFontInfo* const             mpFreetypeFontInfo;
 
 public:
                             FreetypeFontFace( FreetypeFontInfo*, const FontAttributes& );
 
-    virtual LogicalFontInstance* CreateFontInstance( FontSelectPattern& ) const override;
-    virtual PhysicalFontFace* Clone() const override   { return new FreetypeFontFace( *this ); }
+    virtual rtl::Reference<LogicalFontInstance> CreateFontInstance( const FontSelectPattern& ) const override;
     virtual sal_IntPtr      GetFontId() const override { return mpFreetypeFontInfo->GetFontId(); }
+};
+
+// a class for cache entries for physical font instances that are based on serverfonts
+class VCL_DLLPUBLIC FreetypeFontInstance : public LogicalFontInstance
+{
+    friend rtl::Reference<LogicalFontInstance> FreetypeFontFace::CreateFontInstance(const FontSelectPattern&) const;
+
+    FreetypeFont* mpFreetypeFont;
+
+    virtual hb_font_t* ImplInitHbFont() override;
+    virtual bool ImplGetGlyphBoundRect(sal_GlyphId, tools::Rectangle&, bool) const override;
+
+protected:
+    explicit FreetypeFontInstance(const PhysicalFontFace& rPFF, const FontSelectPattern& rFSP);
+
+public:
+    virtual ~FreetypeFontInstance() override;
+
+    void SetFreetypeFont(FreetypeFont* p);
+    FreetypeFont* GetFreetypeFont() const { return mpFreetypeFont; }
+
+    virtual bool GetGlyphOutline(sal_GlyphId, basegfx::B2DPolyPolygon&, bool) const override;
 };
 
 #endif // INCLUDED_VCL_GENERIC_GLYPHS_GCACH_FTYP_HXX

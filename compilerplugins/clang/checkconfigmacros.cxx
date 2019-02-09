@@ -9,7 +9,9 @@
  *
  */
 
-#include "compat.hxx"
+#include <memory>
+#include <set>
+
 #include "plugin.hxx"
 
 #include <clang/Lex/Preprocessor.h>
@@ -34,41 +36,21 @@ class CheckConfigMacros
     public:
         explicit CheckConfigMacros( const InstantiationData& data );
         virtual void run() override;
-#if CLANG_VERSION < 30300
-        virtual void MacroDefined( const Token& macroToken, const MacroInfo* info ) override;
-        virtual void MacroUndefined( const Token& macroToken, const MacroInfo* info ) override;
-        virtual void Ifdef( SourceLocation location, const Token& macroToken ) override;
-        virtual void Ifndef( SourceLocation location, const Token& macroToken ) override;
-        virtual void Defined( const Token& macroToken ) override;
-#else
         virtual void MacroDefined( const Token& macroToken, const MacroDirective* info ) override;
-#if CLANG_VERSION < 30700
-        virtual void MacroUndefined( const Token& macroToken, const MacroDirective* info ) override;
-        virtual void Ifdef( SourceLocation location, const Token& macroToken, const MacroDirective* info ) override;
-        virtual void Ifndef( SourceLocation location, const Token& macroToken, const MacroDirective* info ) override;
-#else
-        virtual void MacroUndefined( const Token& macroToken, const MacroDefinition& info ) override;
-        virtual void Ifdef( SourceLocation location, const Token& macroToken, const MacroDefinition& info ) override;
-        virtual void Ifndef( SourceLocation location, const Token& macroToken, const MacroDefinition& info ) override;
-#endif
-#if CLANG_VERSION < 30400
-        virtual void Defined( const Token& macroToken, const MacroDirective* info ) override;
-#elif CLANG_VERSION < 30700
-        virtual void Defined( const Token& macroToken, const MacroDirective* info, SourceRange Range ) override;
-#else
-        virtual void Defined( const Token& macroToken, const MacroDefinition& info, SourceRange Range ) override;
-#endif
-#endif
+        virtual void MacroUndefined( const Token& macroToken, MacroDefinition const &, MacroDirective const * ) override;
+        virtual void Ifdef( SourceLocation location, const Token& macroToken, MacroDefinition const & ) override;
+        virtual void Ifndef( SourceLocation location, const Token& macroToken, MacroDefinition const & ) override;
+        virtual void Defined( const Token& macroToken, MacroDefinition const &, SourceRange Range ) override;
         enum { isPPCallback = true };
     private:
         void checkMacro( const Token& macroToken, SourceLocation location );
-        std::set< string > configMacros;
+        std::set< std::string > configMacros;
     };
 
 CheckConfigMacros::CheckConfigMacros( const InstantiationData& data )
     : Plugin( data )
     {
-    compat::addPPCallbacks(compiler.getPreprocessor(), this);
+    compiler.getPreprocessor().addPPCallbacks(std::unique_ptr<PPCallbacks>(this));
     }
 
 void CheckConfigMacros::run()
@@ -76,67 +58,35 @@ void CheckConfigMacros::run()
     // nothing, only check preprocessor usage
     }
 
-#if CLANG_VERSION < 30300
-void CheckConfigMacros::MacroDefined( const Token& macroToken, const MacroInfo* info )
-    {
-    SourceLocation location = info->getDefinitionLoc();
-#else
 void CheckConfigMacros::MacroDefined( const Token& macroToken, const MacroDirective* info )
     {
     SourceLocation location = info->getLocation();
-#endif
     const char* filename = compiler.getSourceManager().getPresumedLoc( location ).getFilename();
     if( filename != NULL
-        && ( strncmp( filename, BUILDDIR "/config_host/", strlen( BUILDDIR "/config_host/" )) == 0
-            || strncmp( filename, BUILDDIR "/config_build/", strlen( BUILDDIR "/config_build/" )) == 0 ))
+        && ( hasPathnamePrefix(filename, BUILDDIR "/config_host/")
+            || hasPathnamePrefix(filename, BUILDDIR "/config_build/") ))
         {
 //        fprintf(stderr,"DEF: %s %s\n", macroToken.getIdentifierInfo()->getName().data(), filename );
         configMacros.insert( macroToken.getIdentifierInfo()->getName());
         }
     }
 
-#if CLANG_VERSION < 30300
-void CheckConfigMacros::MacroUndefined( const Token& macroToken, const MacroInfo* )
-#elif CLANG_VERSION < 30700
-void CheckConfigMacros::MacroUndefined( const Token& macroToken, const MacroDirective* )
-#else
-void CheckConfigMacros::MacroUndefined( const Token& macroToken, const MacroDefinition& )
-#endif
+void CheckConfigMacros::MacroUndefined( const Token& macroToken, MacroDefinition const &, MacroDirective const * )
     {
     configMacros.erase( macroToken.getIdentifierInfo()->getName());
     }
 
-#if CLANG_VERSION < 30300
-void CheckConfigMacros::Ifdef( SourceLocation location, const Token& macroToken )
-#elif CLANG_VERSION < 30700
-void CheckConfigMacros::Ifdef( SourceLocation location, const Token& macroToken, const MacroDirective* )
-#else
-void CheckConfigMacros::Ifdef( SourceLocation location, const Token& macroToken, const MacroDefinition& )
-#endif
+void CheckConfigMacros::Ifdef( SourceLocation location, const Token& macroToken, MacroDefinition const & )
     {
     checkMacro( macroToken, location );
     }
 
-#if CLANG_VERSION < 30300
-void CheckConfigMacros::Ifndef( SourceLocation location, const Token& macroToken )
-#elif CLANG_VERSION < 30700
-void CheckConfigMacros::Ifndef( SourceLocation location, const Token& macroToken, const MacroDirective* )
-#else
-void CheckConfigMacros::Ifndef( SourceLocation location, const Token& macroToken, const MacroDefinition& )
-#endif
+void CheckConfigMacros::Ifndef( SourceLocation location, const Token& macroToken, MacroDefinition const & )
     {
     checkMacro( macroToken, location );
     }
 
-#if CLANG_VERSION < 30300
-void CheckConfigMacros::Defined( const Token& macroToken )
-#elif CLANG_VERSION < 30400
-void CheckConfigMacros::Defined( const Token& macroToken, const MacroDirective* )
-#elif CLANG_VERSION < 30700
-void CheckConfigMacros::Defined( const Token& macroToken, const MacroDirective* , SourceRange )
-#else
-void CheckConfigMacros::Defined( const Token& macroToken, const MacroDefinition& , SourceRange )
-#endif
+void CheckConfigMacros::Defined( const Token& macroToken, MacroDefinition const &, SourceRange )
     {
     checkMacro( macroToken, macroToken.getLocation());
     }
@@ -147,7 +97,7 @@ void CheckConfigMacros::checkMacro( const Token& macroToken, SourceLocation loca
         {
         const char* filename = compiler.getSourceManager().getPresumedLoc( location ).getFilename();
         if( filename == NULL
-            || strncmp( filename, SRCDIR "/include/LibreOfficeKit/", strlen( SRCDIR "/include/LibreOfficeKit/" )) != 0 )
+            || !hasPathnamePrefix(filename, SRCDIR "/include/LibreOfficeKit/") )
             {
             report( DiagnosticsEngine::Error, "checking whether a config macro %0 is defined",
                 location ) << macroToken.getIdentifierInfo()->getName();

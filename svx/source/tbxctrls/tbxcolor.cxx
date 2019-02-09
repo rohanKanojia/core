@@ -18,9 +18,11 @@
  */
 
 
-#include "svx/tbxcolor.hxx"
+#include <svx/tbxcolor.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 
 namespace svx
@@ -34,11 +36,8 @@ namespace svx
     #define TOOLBAR_RESNAME         "private:resource/toolbar/"
     #define PROPNAME_LAYOUTMANAGER  "LayoutManager"
 
-    ToolboxAccess::ToolboxAccess( const ::rtl::OUString& rToolboxName ) :
-
-        m_bDocking          ( false ),
+    ToolboxAccess::ToolboxAccess( const OUString& rToolboxName ) :
         m_sToolboxResName   ( TOOLBAR_RESNAME )
-
     {
         m_sToolboxResName += rToolboxName;
 
@@ -77,11 +76,6 @@ namespace svx
                 {
                     xManager->createElement( m_sToolboxResName );
                     xManager->showElement( m_sToolboxResName );
-                    css::awt::Point aPos;
-
-                    if ( m_bDocking )
-                        xManager->dockWindow( m_sToolboxResName,
-                            css::ui::DockingArea_DOCKINGAREA_BOTTOM, aPos );
                 }
             }
         }

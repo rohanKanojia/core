@@ -22,7 +22,7 @@
 #include <vcl/window.hxx>
 #include <vcl/graph.hxx>
 #include <tools/urlobj.hxx>
-#include "svx/svxdllapi.h"
+#include <svx/svxdllapi.h>
 
 class SfxBindings;
 
@@ -39,11 +39,9 @@ namespace svx { namespace sidebar {
 class SVX_DLLPUBLIC GalleryControl : public vcl::Window
 {
 public:
-    GalleryControl (
-        SfxBindings* pBindings,
-        vcl::Window* pParentWindow);
+    GalleryControl( vcl::Window* pParentWindow );
 
-    bool GalleryKeyInput( const KeyEvent& rKEvt, vcl::Window* pWindow);
+    bool GalleryKeyInput( const KeyEvent& rKEvt );
 
 private:
     Gallery* mpGallery;
@@ -58,11 +56,10 @@ private:
     virtual void Resize() override;
     virtual void GetFocus() override;
 
-    DECL_LINK_TYPED(SplitHdl, Splitter*, void);
+    DECL_LINK(SplitHdl, Splitter*, void);
 
 protected:
-    void ThemeSelectionHasChanged();
-    virtual ~GalleryControl();
+    virtual ~GalleryControl() override;
     virtual void dispose() override;
 };
 

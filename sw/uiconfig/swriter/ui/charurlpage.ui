@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkBox" id="CharURLPage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
+    <property name="valign">start</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
     <property name="border_width">6</property>
     <property name="orientation">vertical</property>
     <property name="spacing">12</property>
@@ -31,8 +34,10 @@
                   <object class="GtkLabel" id="label36">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="charurlpage|label36">URL:</property>
+                    <property name="use_underline">True</property>
+                    <property name="mnemonic_widget">urled</property>
                     <property name="xalign">1</property>
-                    <property name="label" translatable="yes">URL:</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -43,8 +48,10 @@
                   <object class="GtkLabel" id="label37">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="charurlpage|label37">Name:</property>
+                    <property name="use_underline">True</property>
+                    <property name="mnemonic_widget">nameed</property>
                     <property name="xalign">1</property>
-                    <property name="label" translatable="yes">Name:</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -55,8 +62,10 @@
                   <object class="GtkLabel" id="textft">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="charurlpage|textft">Text:</property>
+                    <property name="use_underline">True</property>
+                    <property name="mnemonic_widget">texted</property>
                     <property name="xalign">1</property>
-                    <property name="label" translatable="yes">Text:</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -67,8 +76,10 @@
                   <object class="GtkLabel" id="label39">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="charurlpage|label39">Target frame:</property>
+                    <property name="use_underline">True</property>
+                    <property name="mnemonic_widget">targetfrmlb</property>
                     <property name="xalign">1</property>
-                    <property name="label" translatable="yes">Target frame:</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -77,7 +88,7 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="eventpb">
-                    <property name="label" translatable="yes">Events...</property>
+                    <property name="label" translatable="yes" context="charurlpage|eventpb">Events...</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -93,7 +104,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">True</property>
-                    <property name="invisible_char">●</property>
+                    <property name="activates_default">True</property>
                     <property name="width_chars">32</property>
                   </object>
                   <packing>
@@ -105,7 +116,7 @@
                   <object class="GtkEntry" id="nameed">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="invisible_char">●</property>
+                    <property name="activates_default">True</property>
                     <property name="width_chars">32</property>
                   </object>
                   <packing>
@@ -117,7 +128,7 @@
                   <object class="GtkEntry" id="texted">
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
-                    <property name="invisible_char">●</property>
+                    <property name="activates_default">True</property>
                     <property name="width_chars">32</property>
                   </object>
                   <packing>
@@ -127,7 +138,7 @@
                 </child>
                 <child>
                   <object class="GtkButton" id="urlpb">
-                    <property name="label" translatable="yes">Browse...</property>
+                    <property name="label" translatable="yes" context="charurlpage|urlpb">Browse...</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">True</property>
@@ -146,6 +157,7 @@
                     <child internal-child="entry">
                       <object class="GtkEntry" id="comboboxtext-entry">
                         <property name="can_focus">False</property>
+                        <property name="activates_default">True</property>
                       </object>
                     </child>
                   </object>
@@ -177,7 +189,7 @@
           <object class="GtkLabel" id="label32">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Hyperlink</property>
+            <property name="label" translatable="yes" context="charurlpage|label32">Hyperlink</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>
@@ -212,8 +224,10 @@
                   <object class="GtkLabel" id="label34">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="charurlpage|label34">Visited links:</property>
+                    <property name="use_underline">True</property>
+                    <property name="mnemonic_widget">visitedlb</property>
                     <property name="xalign">1</property>
-                    <property name="label" translatable="yes">Visited links:</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -224,8 +238,10 @@
                   <object class="GtkLabel" id="label10">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
+                    <property name="label" translatable="yes" context="charurlpage|label10">Unvisited links:</property>
+                    <property name="use_underline">True</property>
+                    <property name="mnemonic_widget">unvisitedlb</property>
                     <property name="xalign">1</property>
-                    <property name="label" translatable="yes">Unvisited links:</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -233,7 +249,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkComboBox" id="visitedlb">
+                  <object class="GtkComboBoxText" id="visitedlb">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                   </object>
@@ -243,7 +259,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkComboBox" id="unvisitedlb">
+                  <object class="GtkComboBoxText" id="unvisitedlb">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                   </object>
@@ -260,7 +276,7 @@
           <object class="GtkLabel" id="label33">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Character Styles</property>
+            <property name="label" translatable="yes" context="charurlpage|label33">Character Styles</property>
             <attributes>
               <attribute name="weight" value="bold"/>
             </attributes>

@@ -19,11 +19,12 @@
 
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
+#include <osl/diagnose.h>
 
-#include "navcitem.hxx"
-#include "global.hxx"
-#include "navipi.hxx"
-#include "sc.hrc"
+#include <navcitem.hxx>
+#include <global.hxx>
+#include <navipi.hxx>
+#include <sc.hrc>
 
 ScNavigatorControllerItem::ScNavigatorControllerItem( sal_uInt16          nIdP,
                                                       ScNavigatorDlg& rDlg,
@@ -47,7 +48,7 @@ void ScNavigatorControllerItem::StateChanged( sal_uInt16 /* nSID */, SfxItemStat
 
                 if ( pCellPosItem )
                 {
-                    OUString  aAddress( pCellPosItem->GetValue() );
+                    const OUString&  aAddress( pCellPosItem->GetValue() );
                     ScAddress aScAddress;
                     aScAddress.Parse( aAddress );
 
@@ -67,7 +68,7 @@ void ScNavigatorControllerItem::StateChanged( sal_uInt16 /* nSID */, SfxItemStat
 
                 OSL_ENSURE( pTabItem, "SfxUInt16Item expected!" );
 
-                //  Tabelle fuer Basic ist 1-basiert
+                //  table for Basic is 1-based
                 if ( pTabItem && pTabItem->GetValue() )
                 {
                     SCTAB nTab = pTabItem->GetValue() - 1;
@@ -81,7 +82,7 @@ void ScNavigatorControllerItem::StateChanged( sal_uInt16 /* nSID */, SfxItemStat
 
         case SID_CURRENTDOC:
 
-            //  gar nix mehr, wird ueber SFX_HINT_DOCCHANGED erledigt
+            //  nothing is done via SfxHintId::DocChanged
 
             break;
 

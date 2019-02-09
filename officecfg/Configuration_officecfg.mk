@@ -29,7 +29,6 @@ $(eval $(call gb_Configuration_add_datas,registry,officecfg/registry/data,\
 	org/openoffice/System.xcu \
 	org/openoffice/UserProfile.xcu \
 	org/openoffice/VCL.xcu \
-	org/openoffice/FirstStartWizard.xcu \
 	org/openoffice/Interaction.xcu \
 	org/openoffice/Office/Calc.xcu \
 	org/openoffice/Office/BasicIDE.xcu \
@@ -85,6 +84,7 @@ $(eval $(call gb_Configuration_add_spool_modules,registry,officecfg/registry/dat
 	org/openoffice/Office/Common-macosx.xcu \
 	org/openoffice/Office/Common-wnt.xcu \
 	org/openoffice/Office/Common-UseOOoFileDialogs.xcu \
+	org/openoffice/Office/Common-32bit.xcu \
 	org/openoffice/Office/Jobs-impress.xcu \
 	org/openoffice/Office/Linguistic-ForceDefaultLanguage.xcu \
 	org/openoffice/Office/ProtocolHandler-impress.xcu \
@@ -99,6 +99,8 @@ $(eval $(call gb_Configuration_add_spool_modules,registry,officecfg/registry/dat
 	org/openoffice/Office/Paths-unixdesktop.xcu \
 	org/openoffice/Office/Paths-internallibexttextcatdata.xcu \
 	org/openoffice/Office/Paths-externallibexttextcatdata.xcu \
+	org/openoffice/Office/Paths-internallibnumbertextdata.xcu \
+	org/openoffice/Office/Paths-externallibnumbertextdata.xcu \
 	org/openoffice/Office/Writer-cjk.xcu \
 	org/openoffice/Office/Impress-ogltrans.xcu \
 	org/openoffice/Office/Embedding-calc.xcu \
@@ -138,7 +140,6 @@ $(eval $(call gb_Configuration_add_localized_datas,registry,officecfg/registry/d
 	org/openoffice/Office/UI.xcu \
 	org/openoffice/Office/Embedding.xcu \
 	org/openoffice/Office/ExtendedColorScheme.xcu \
-	org/openoffice/Office/WebWizard.xcu \
 	org/openoffice/Office/FormWizard.xcu \
 	org/openoffice/Office/Writer.xcu \
 	org/openoffice/Office/UI/BasicIDECommands.xcu \
@@ -160,7 +161,6 @@ $(eval $(call gb_Configuration_add_localized_datas,registry,officecfg/registry/d
 	org/openoffice/Office/UI/Effects.xcu \
 	org/openoffice/Office/UI/GenericCommands.xcu \
 	org/openoffice/Office/UI/MathCommands.xcu \
-	org/openoffice/Office/UI/StartModuleCommands.xcu \
 	org/openoffice/Office/UI/BasicIDEWindowState.xcu \
 	org/openoffice/Office/UI/CalcWindowState.xcu \
 	org/openoffice/Office/UI/DrawWindowState.xcu \
@@ -175,5 +175,6 @@ $(eval $(call gb_Configuration_add_localized_datas,registry,officecfg/registry/d
 	org/openoffice/Office/UI/WriterWebWindowState.xcu \
 	org/openoffice/Office/UI/WriterCommands.xcu \
 	org/openoffice/Office/UI/GenericCategories.xcu \
+	org/openoffice/Office/UI/ToolbarMode.xcu \
 ))
 

@@ -20,9 +20,11 @@
 #include <sfx2/sidebar/SidebarChildWindow.hxx>
 #include <sfx2/sidebar/SidebarController.hxx>
 
+#include <comphelper/processfactory.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <tools/link.hxx>
+#include <tools/gen.hxx>
 
 using namespace css;
 using namespace css::uno;
@@ -33,6 +35,7 @@ SidebarDockingWindow::SidebarDockingWindow(SfxBindings* pSfxBindings, SidebarChi
                                            vcl::Window* pParentWindow, WinBits nBits)
     : SfxDockingWindow(pSfxBindings, &rChildWindow, pParentWindow, nBits)
     , mpSidebarController()
+    , mbIsReadyToDrag(false)
 {
     // Get the XFrame from the bindings.
     if (pSfxBindings==nullptr || pSfxBindings->GetDispatcher()==nullptr)
@@ -44,7 +47,7 @@ SidebarDockingWindow::SidebarDockingWindow(SfxBindings* pSfxBindings, SidebarChi
     {
         const SfxViewFrame* pViewFrame = pSfxBindings->GetDispatcher()->GetFrame();
         const SfxFrame& rFrame = pViewFrame->GetFrame();
-        mpSidebarController.set(new sfx2::sidebar::SidebarController(this, rFrame.GetFrameInterface()));
+        mpSidebarController.set(sfx2::sidebar::SidebarController::create(this, rFrame.GetFrameInterface()).get());
     }
 }
 
@@ -72,14 +75,17 @@ void SidebarDockingWindow::DoDispose()
 void SidebarDockingWindow::GetFocus()
 {
     if (mpSidebarController.is())
+    {
+        mpSidebarController->RequestOpenDeck();
         mpSidebarController->GetFocusManager().GrabFocus();
+    }
     else
         SfxDockingWindow::GetFocus();
 }
 
-// fdo#87217
 bool SidebarDockingWindow::Close()
 {
+    mpSidebarController->SetFloatingDeckClosed( true );
     return SfxDockingWindow::Close();
 }
 
@@ -108,6 +114,63 @@ SfxChildAlignment SidebarDockingWindow::CheckAlignment (
         default:
             return eRequestedAlignment;
     }
+}
+
+bool SidebarDockingWindow::EventNotify(NotifyEvent& rEvent)
+{
+    MouseNotifyEvent nType = rEvent.GetType();
+    if (MouseNotifyEvent::KEYINPUT == nType)
+    {
+        const vcl::KeyCode& rKeyCode = rEvent.GetKeyEvent()->GetKeyCode();
+        if (!(rKeyCode.GetCode() == KEY_F10 && rKeyCode.GetModifier() &&
+            rKeyCode.IsShift() && rKeyCode.IsMod1()))
+        {
+            if (!mpAccel)
+            {
+                mpAccel = svt::AcceleratorExecute::createAcceleratorHelper();
+                mpAccel->init(comphelper::getProcessComponentContext(), mpSidebarController->getXFrame());
+            }
+            const OUString aCommand(mpAccel->findCommand(svt::AcceleratorExecute::st_VCLKey2AWTKey(rKeyCode)));
+            if (".uno:DesignerDialog" == aCommand)
+            {
+                std::shared_ptr<PanelDescriptor> xPanelDescriptor =
+                    mpSidebarController->GetResourceManager()->GetPanelDescriptor( "StyleListPanel" );
+                if ( xPanelDescriptor && mpSidebarController->IsDeckVisible( xPanelDescriptor->msDeckId ) )
+                    Close();
+                return true;
+            }
+            if (".uno:Sidebar" != aCommand)
+                return true;
+        }
+    }
+    else if (MouseNotifyEvent::MOUSEBUTTONDOWN == nType)
+    {
+        const MouseEvent *mEvt = rEvent.GetMouseEvent();
+        if (mEvt->IsLeft())
+        {
+            tools::Rectangle aGrip = mpSidebarController->GetDeckDragArea();
+            if ( aGrip.IsInside( mEvt->GetPosPixel() ) )
+                SetReadyToDrag( true );
+        }
+    }
+    else if (MouseNotifyEvent::MOUSEMOVE == nType)
+    {
+        const MouseEvent *mEvt = rEvent.GetMouseEvent();
+        tools::Rectangle aGrip = mpSidebarController->GetDeckDragArea();
+        if (mEvt->IsLeft() && aGrip.IsInside( mEvt->GetPosPixel() ) && IsReadyToDrag() )
+        {
+            Point aPos = mEvt->GetPosPixel();
+            vcl::Window* pWindow = rEvent.GetWindow();
+            if ( pWindow != this )
+            {
+                aPos = pWindow->OutputToScreenPixel( aPos );
+                aPos = ScreenToOutputPixel( aPos );
+            }
+            ImplStartDocking( aPos );
+        }
+    }
+
+    return SfxDockingWindow::EventNotify(rEvent);
 }
 
 } } // end of namespace sfx2::sidebar

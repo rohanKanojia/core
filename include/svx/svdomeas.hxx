@@ -24,10 +24,6 @@
 #include <svx/svxdllapi.h>
 #include <editeng/measfld.hxx>
 
-
-//  Initial Declarations
-
-
 class SdrOutliner;
 struct ImpMeasureRec;
 struct ImpMeasurePoly;
@@ -35,10 +31,6 @@ struct ImpMeasurePoly;
 namespace sdr { namespace properties {
     class MeasureProperties;
 }}
-
-
-//   Auxiliary Class SdrMeasureObjGeoData
-
 
 class SdrMeasureObjGeoData : public SdrTextObjGeoData
 {
@@ -48,12 +40,8 @@ public:
 
 public:
     SdrMeasureObjGeoData();
-    virtual ~SdrMeasureObjGeoData();
+    virtual ~SdrMeasureObjGeoData() override;
 };
-
-
-//   SdrMeasureObj
-
 
 class SVX_DLLPUBLIC SdrMeasureObj : public SdrTextObj
 {
@@ -64,8 +52,8 @@ private:
     friend class                SdrMeasureField;
 
 protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
-    virtual sdr::properties::BaseProperties* CreateObjectSpecificProperties() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::properties::BaseProperties> CreateObjectSpecificProperties() override;
 
     Point                       aPt1;
     Point                       aPt2;
@@ -84,22 +72,30 @@ protected:
     virtual void SaveGeoData(SdrObjGeoData& rGeo) const override;
     virtual void RestGeoData(const SdrObjGeoData& rGeo) override;
 
+    // protected destructor
+    virtual ~SdrMeasureObj() override;
+
 public:
-    SdrMeasureObj();
-    SdrMeasureObj(const Point& rPt1, const Point& rPt2);
-    virtual ~SdrMeasureObj();
+    SdrMeasureObj(SdrModel& rSdrModel);
+    SdrMeasureObj(
+        SdrModel& rSdrModel,
+        const Point& rPt1,
+        const Point& rPt2);
 
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
     virtual sal_uInt16 GetObjIdentifier() const override;
-    virtual void TakeUnrotatedSnapRect(Rectangle& rRect) const override;
-    virtual SdrMeasureObj* Clone() const override;
+    virtual void TakeUnrotatedSnapRect(tools::Rectangle& rRect) const override;
+    virtual SdrMeasureObj* CloneSdrObject(SdrModel& rTargetModel) const override;
+
+    // implemented mainly for the purposes of Clone()
+    SdrMeasureObj& operator=(const SdrMeasureObj& rObj);
 
     virtual OUString TakeObjNameSingul() const override;
     virtual OUString TakeObjNamePlural() const override;
 
     virtual basegfx::B2DPolyPolygon TakeXorPoly() const override;
     virtual sal_uInt32 GetHdlCount() const override;
-    virtual SdrHdl* GetHdl(sal_uInt32 nHdlNum) const override;
+    virtual void AddToHdlList(SdrHdlList& rHdlList) const override;
 
     // special drag methods
     virtual bool hasSpecialDrag() const override;
@@ -135,16 +131,16 @@ public:
 
     virtual bool BegTextEdit(SdrOutliner& rOutl) override;
     virtual const Size& GetTextSize() const override;
-    virtual void TakeTextRect( SdrOutliner& rOutliner, Rectangle& rTextRect, bool bNoEditText = false,
-        Rectangle* pAnchorRect=nullptr, bool bLineWidth = true ) const override;
-    virtual void TakeTextAnchorRect(Rectangle& rAnchorRect) const override;
-    virtual void TakeTextEditArea(Size* pPaperMin, Size* pPaperMax, Rectangle* pViewInit, Rectangle* pViewMin) const override;
-    virtual sal_uInt16 GetOutlinerViewAnchorMode() const override;
-    virtual void NbcSetOutlinerParaObject(OutlinerParaObject* pTextObject) override;
+    virtual void TakeTextRect( SdrOutliner& rOutliner, tools::Rectangle& rTextRect, bool bNoEditText,
+        tools::Rectangle* pAnchorRect, bool bLineWidth = true ) const override;
+    virtual void TakeTextAnchorRect(tools::Rectangle& rAnchorRect) const override;
+    virtual void TakeTextEditArea(Size* pPaperMin, Size* pPaperMax, tools::Rectangle* pViewInit, tools::Rectangle* pViewMin) const override;
+    virtual EEAnchorMode GetOutlinerViewAnchorMode() const override;
+    virtual void NbcSetOutlinerParaObject(std::unique_ptr<OutlinerParaObject> pTextObject) override;
     virtual OutlinerParaObject* GetOutlinerParaObject() const override;
 
     virtual bool CalcFieldValue(const SvxFieldItem& rField, sal_Int32 nPara, sal_uInt16 nPos,
-        bool bEdit, Color*& rpTxtColor, Color*& rpFldColor, OUString& rRet) const override;
+        bool bEdit, boost::optional<Color>& rpTxtColor, boost::optional<Color>& rpFldColor, OUString& rRet) const override;
 
     // #i97878#
     virtual bool TRGetBaseGeometry(basegfx::B2DHomMatrix& rMatrix, basegfx::B2DPolyPolygon& rPolyPolygon) const override;
@@ -178,14 +174,14 @@ public:
 //    Default=8mm
 // 3. The distance from the dimension line to the reference edge (= to the dimensioned object)
 // 4. dimension line below the reference edge (default=no))
-// 5. excess lenth of the auxiliary dimension lines beyond the reference edge (2x, default=0)
-// 6. excess lenth of the auxiliary dimension lines past the dimension line (default=2mm)
+// 5. excess length of the auxiliary dimension lines beyond the reference edge (2x, default=0)
+// 6. excess length of the auxiliary dimension lines past the dimension line (default=2mm)
 // 7. distance between the auxiliary dimension line and the reference edge
 //
 // Dragging:                    Handle          Shift
 // ~~~~~~~~~
 // -  reference points        SolidQuadHdl   only the length
-// 1.+2. Anpacken des Textes
+// 1.+2. Seizing the text
 // 3.+4. Hdl on arrow (2x)    SolidQuadHdl   only the  Bool
 // 5.    Hdl one end point      CircHdl        both lengths ?
 // 6.+7. no dragging

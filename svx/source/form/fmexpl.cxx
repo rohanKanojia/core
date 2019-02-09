@@ -18,25 +18,25 @@
  */
 
 
-#include "svx/fmresids.hrc"
-#include "fmexpl.hxx"
+#include <svx/strings.hrc>
+#include <fmexpl.hxx>
 
-#include "fmhelp.hrc"
+#include <helpids.h>
 #include <svx/fmglob.hxx>
-#include "fmservs.hxx"
+#include <fmservs.hxx>
 #include <svx/fmmodel.hxx>
-#include "fmexch.hxx"
-#include "fmundo.hxx"
-#include "fmpgeimp.hxx"
+#include <fmexch.hxx>
+#include <fmundo.hxx>
+#include <fmpgeimp.hxx>
 
 #include <svx/svxids.hrc>
 
-#include "fmprop.hrc"
+#include <fmprop.hxx>
+#include <bitmaps.hlst>
 #include <svx/dialmgr.hxx>
-#include "svx/svditer.hxx"
+#include <svx/svditer.hxx>
 #include <svx/svdouno.hxx>
 #include <svx/svdobj.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/viewsh.hxx>
@@ -50,15 +50,12 @@
 
 #include <vcl/wrkwin.hxx>
 #include <svx/fmshell.hxx>
-#include "fmshimp.hxx"
+#include <fmshimp.hxx>
 #include <svx/fmpage.hxx>
 #include <com/sun/star/io/XPersistObject.hpp>
-#include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <comphelper/property.hxx>
-#include <comphelper/processfactory.hxx>
-#include <osl/diagnose.h>
+#include <comphelper/types.hxx>
 
 using namespace ::svxform;
 using namespace ::com::sun::star::uno;
@@ -135,40 +132,33 @@ FmEntryDataList::~FmEntryDataList()
 }
 
 
-FmEntryData* FmEntryDataList::remove( FmEntryData* pItem )
+void FmEntryDataList::removeNoDelete( FmEntryData* pItem )
 {
-    for ( FmEntryDataBaseList::iterator it = maEntryDataList.begin();
-          it != maEntryDataList.end();
-          ++it
-        )
+    auto it = std::find_if(maEntryDataList.begin(), maEntryDataList.end(),
+        [&pItem](const std::unique_ptr<FmEntryData>& rEntryData) { return rEntryData.get() == pItem; });
+    if (it != maEntryDataList.end())
     {
-        if ( *it == pItem )
-        {
-            maEntryDataList.erase( it );
-            break;
-        }
+        it->release();
+        maEntryDataList.erase( it );
+        return;
     }
-    return pItem;
+    assert(false);
 }
 
 
-void FmEntryDataList::insert( FmEntryData* pItem, size_t Index )
+void FmEntryDataList::insert( std::unique_ptr<FmEntryData> pItem, size_t Index )
 {
     if ( Index < maEntryDataList.size() )
     {
-        FmEntryDataBaseList::iterator it = maEntryDataList.begin();
-        ::std::advance( it, Index );
-        maEntryDataList.insert( it, pItem );
+        maEntryDataList.insert( maEntryDataList.begin() + Index, std::move(pItem) );
     }
     else
-        maEntryDataList.push_back( pItem );
+        maEntryDataList.push_back( std::move(pItem) );
 }
 
 
 void FmEntryDataList::clear()
 {
-    for ( size_t i = 0, n = maEntryDataList.size(); i < n; ++i )
-        delete maEntryDataList[ i ];
     maEntryDataList.clear();
 }
 
@@ -176,7 +166,7 @@ void FmEntryDataList::clear()
 FmEntryData::FmEntryData( FmEntryData* pParentData, const Reference< XInterface >& _rxIFace )
     :pParent( pParentData )
 {
-    pChildList = new FmEntryDataList();
+    pChildList.reset( new FmEntryDataList() );
 
     newObject( _rxIFace );
 }
@@ -184,8 +174,7 @@ FmEntryData::FmEntryData( FmEntryData* pParentData, const Reference< XInterface 
 
 FmEntryData::~FmEntryData()
 {
-    Clear();
-    delete pChildList;
+    pChildList->clear();
 }
 
 
@@ -200,7 +189,7 @@ void FmEntryData::newObject( const css::uno::Reference< css::uno::XInterface >& 
 
 FmEntryData::FmEntryData( const FmEntryData& rEntryData )
 {
-    pChildList = new FmEntryDataList();
+    pChildList.reset( new FmEntryDataList() );
     aText = rEntryData.GetText();
     m_aNormalImage = rEntryData.GetNormalImage();
     pParent = rEntryData.GetParent();
@@ -210,8 +199,8 @@ FmEntryData::FmEntryData( const FmEntryData& rEntryData )
     for( size_t i = 0; i < nEntryCount; i++ )
     {
         pChildData = rEntryData.GetChildList()->at( i );
-        FmEntryData* pNewChildData = pChildData->Clone();
-        pChildList->insert( pNewChildData, size_t(-1) );
+        std::unique_ptr<FmEntryData> pNewChildData = pChildData->Clone();
+        pChildList->insert( std::move(pNewChildData), size_t(-1) );
     }
 
     m_xNormalizedIFace = rEntryData.m_xNormalizedIFace;
@@ -219,11 +208,6 @@ FmEntryData::FmEntryData( const FmEntryData& rEntryData )
     m_xChild = rEntryData.m_xChild;
 }
 
-
-void FmEntryData::Clear()
-{
-    GetChildList()->clear();
-}
 
 
 bool FmEntryData::IsEqualWithoutChildren( FmEntryData* pEntryData )
@@ -234,7 +218,7 @@ bool FmEntryData::IsEqualWithoutChildren( FmEntryData* pEntryData )
     if( !pEntryData )
         return false;
 
-    if( !aText.equals(pEntryData->GetText()))
+    if( aText != pEntryData->GetText() )
         return false;
 
     if( !pEntryData->GetParent() && pParent )
@@ -252,22 +236,14 @@ bool FmEntryData::IsEqualWithoutChildren( FmEntryData* pEntryData )
     return true;
 }
 
-
-FmFormData::FmFormData(
-    const Reference< XForm >& _rxForm,
-    const ImageList& _rNormalImages,
-    FmFormData* _pParent
-)
-:   FmEntryData( _pParent, _rxForm ),
-    m_xForm( _rxForm )
+FmFormData::FmFormData(const Reference< XForm >& _rxForm, FmFormData* _pParent)
+    : FmEntryData(_pParent, _rxForm)
+    , m_xForm(_rxForm)
 {
+    // set images
+    m_aNormalImage = Image(RID_SVXBMP_FORM);
 
-    // Images setzen
-
-    m_aNormalImage = _rNormalImages.GetImage( RID_SVXIMG_FORM );
-
-
-    // Titel setzen
+    // set title
     if (m_xForm.is())
     {
         Reference< XPropertySet >  xSet(m_xForm, UNO_QUERY);
@@ -281,11 +257,9 @@ FmFormData::FmFormData(
         SetText( OUString() );
 }
 
-
 FmFormData::~FmFormData()
 {
 }
-
 
 FmFormData::FmFormData( const FmFormData& rFormData )
     :FmEntryData( rFormData )
@@ -294,9 +268,9 @@ FmFormData::FmFormData( const FmFormData& rFormData )
 }
 
 
-FmEntryData* FmFormData::Clone()
+std::unique_ptr<FmEntryData> FmFormData::Clone()
 {
-    return new FmFormData( *this );
+    return std::unique_ptr<FmEntryData>(new FmFormData( *this ));
 }
 
 
@@ -313,21 +287,16 @@ bool FmFormData::IsEqualWithoutChildren( FmEntryData* pEntryData )
     return FmEntryData::IsEqualWithoutChildren( pFormData );
 }
 
-
-FmControlData::FmControlData(
-    const Reference< XFormComponent >& _rxComponent,
-    const ImageList& _rNormalImages,
-    FmFormData* _pParent
-)
+FmControlData::FmControlData(const Reference< XFormComponent >& _rxComponent, FmFormData* _pParent)
 :   FmEntryData( _pParent, _rxComponent ),
     m_xFormComponent( _rxComponent )
 {
 
-    // Images setzen
-    m_aNormalImage = GetImage( _rNormalImages );
+    // set images
+    m_aNormalImage = GetImage();
 
 
-    // Titel setzen
+    // set title
     Reference< XPropertySet >  xSet(m_xFormComponent, UNO_QUERY);
     if( xSet.is() )
     {
@@ -348,17 +317,16 @@ FmControlData::FmControlData( const FmControlData& rControlData )
 }
 
 
-FmEntryData* FmControlData::Clone()
+std::unique_ptr<FmEntryData> FmControlData::Clone()
 {
-    return new FmControlData( *this );
+    return std::unique_ptr<FmEntryData>(new FmControlData( *this ));
 }
 
 
-Image FmControlData::GetImage(const ImageList& ilNavigatorImages) const
+Image FmControlData::GetImage() const
 {
-
     // Default-Image
-    Image aImage = ilNavigatorImages.GetImage( RID_SVXIMG_CONTROL );
+    Image aImage(StockImage::Yes, RID_SVXBMP_CONTROL);
 
     Reference< XServiceInfo > xInfo( m_xFormComponent, UNO_QUERY );
     if (!m_xFormComponent.is())
@@ -370,97 +338,96 @@ Image FmControlData::GetImage(const ImageList& ilNavigatorImages) const
     switch (nObjectType)
     {
     case OBJ_FM_BUTTON:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_BUTTON );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_BUTTON);
         break;
 
     case OBJ_FM_FIXEDTEXT:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_FIXEDTEXT );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_FIXEDTEXT);
         break;
 
     case OBJ_FM_EDIT:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_EDIT );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_EDITBOX);
         break;
 
     case OBJ_FM_RADIOBUTTON:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_RADIOBUTTON );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_RADIOBUTTON);
         break;
 
     case OBJ_FM_CHECKBOX:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_CHECKBOX );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_CHECKBOX);
         break;
 
     case OBJ_FM_LISTBOX:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_LISTBOX );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_LISTBOX);
         break;
 
     case OBJ_FM_COMBOBOX:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_COMBOBOX );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_COMBOBOX);
         break;
 
     case OBJ_FM_NAVIGATIONBAR:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_NAVIGATIONBAR );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_NAVIGATIONBAR);
         break;
 
     case OBJ_FM_GROUPBOX:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_GROUPBOX );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_GROUPBOX);
         break;
 
     case OBJ_FM_IMAGEBUTTON:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_IMAGEBUTTON );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_IMAGEBUTTON);
         break;
 
     case OBJ_FM_FILECONTROL:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_FILECONTROL );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_FILECONTROL);
         break;
 
     case OBJ_FM_HIDDEN:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_HIDDEN );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_HIDDEN);
         break;
 
     case OBJ_FM_DATEFIELD:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_DATEFIELD );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_DATEFIELD);
         break;
 
     case OBJ_FM_TIMEFIELD:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_TIMEFIELD );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_TIMEFIELD);
         break;
 
     case OBJ_FM_NUMERICFIELD:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_NUMERICFIELD );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_NUMERICFIELD);
         break;
 
     case OBJ_FM_CURRENCYFIELD:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_CURRENCYFIELD );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_CURRENCYFIELD);
         break;
 
     case OBJ_FM_PATTERNFIELD:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_PATTERNFIELD );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_PATTERNFIELD);
         break;
 
     case OBJ_FM_IMAGECONTROL:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_IMAGECONTROL );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_IMAGECONTROL);
         break;
 
     case OBJ_FM_FORMATTEDFIELD:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_FORMATTEDFIELD );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_FORMATTEDFIELD);
         break;
 
     case OBJ_FM_GRID:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_GRID );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_GRID);
         break;
 
     case OBJ_FM_SCROLLBAR:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_SCROLLBAR );
+        aImage = Image(StockImage::Yes, RID_SVXBMP_SCROLLBAR);
         break;
 
     case OBJ_FM_SPINBUTTON:
-        aImage = ilNavigatorImages.GetImage( RID_SVXIMG_SPINBUTTON);
+        aImage = Image(StockImage::Yes, RID_SVXBMP_SPINBUTTON);
         break;
     }
 
     return aImage;
 }
-
 
 bool FmControlData::IsEqualWithoutChildren( FmEntryData* pEntryData )
 {
@@ -477,19 +444,13 @@ bool FmControlData::IsEqualWithoutChildren( FmEntryData* pEntryData )
     return FmEntryData::IsEqualWithoutChildren( pControlData );
 }
 
-
-void FmControlData::ModelReplaced(
-    const Reference< XFormComponent >& _rxNew,
-    const ImageList& _rNormalImages
-)
+void FmControlData::ModelReplaced(const Reference< XFormComponent >& _rxNew)
 {
     m_xFormComponent = _rxNew;
     newObject( m_xFormComponent );
-
-    // Images neu setzen
-    m_aNormalImage = GetImage( _rNormalImages );
+    // set images anew
+    m_aNormalImage = GetImage();
 }
-
 
 namespace svxform
 {
@@ -503,7 +464,7 @@ namespace svxform
 
         m_pNavigatorTree = VclPtr<NavigatorTree>::Create( this );
         m_pNavigatorTree->Show();
-        SetText( SVX_RES(RID_STR_FMEXPLORER) );
+        SetText( SvxResId(RID_STR_FMEXPLORER) );
         SfxDockingWindow::SetFloatingSize( Size(200,200) );
     }
 
@@ -586,13 +547,13 @@ namespace svxform
     {
         SfxDockingWindow::Resize();
 
-        Size aLogOutputSize = PixelToLogic( GetOutputSizePixel(), MAP_APPFONT );
+        Size aLogOutputSize = PixelToLogic(GetOutputSizePixel(), MapMode(MapUnit::MapAppFont));
         Size aLogExplSize = aLogOutputSize;
-        aLogExplSize.Width() -= 6;
-        aLogExplSize.Height() -= 6;
+        aLogExplSize.AdjustWidth( -6 );
+        aLogExplSize.AdjustHeight( -6 );
 
-        Point aExplPos = LogicToPixel( Point(3,3), MAP_APPFONT );
-        Size aExplSize = LogicToPixel( aLogExplSize, MAP_APPFONT );
+        Point aExplPos = LogicToPixel(Point(3, 3), MapMode(MapUnit::MapAppFont));
+        Size aExplSize = LogicToPixel(aLogExplSize, MapMode(MapUnit::MapAppFont));
 
         m_pNavigatorTree->SetPosSizePixel( aExplPos, aExplSize );
     }
@@ -611,9 +572,6 @@ namespace svxform
         SetWindow( VclPtr<NavigatorFrame>::Create( _pBindings, this, _pParent ) );
         static_cast<SfxDockingWindow*>(GetWindow())->Initialize( _pInfo );
     }
-
-
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

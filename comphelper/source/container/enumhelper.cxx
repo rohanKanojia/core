@@ -51,12 +51,12 @@ OEnumerationByName::~OEnumerationByName()
 }
 
 
-sal_Bool SAL_CALL OEnumerationByName::hasMoreElements(  ) throw(css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OEnumerationByName::hasMoreElements(  )
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
     if (m_xAccess.is() && m_aNames.getLength() > m_nPos)
-        return sal_True;
+        return true;
 
     if (m_xAccess.is())
     {
@@ -64,12 +64,11 @@ sal_Bool SAL_CALL OEnumerationByName::hasMoreElements(  ) throw(css::uno::Runtim
         m_xAccess.clear();
     }
 
-    return sal_False;
+    return false;
 }
 
 
 css::uno::Any SAL_CALL OEnumerationByName::nextElement(  )
-        throw(css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
@@ -91,7 +90,6 @@ css::uno::Any SAL_CALL OEnumerationByName::nextElement(  )
 
 
 void SAL_CALL OEnumerationByName::disposing(const css::lang::EventObject& aEvent)
-        throw(css::uno::RuntimeException, std::exception)
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
@@ -150,12 +148,12 @@ OEnumerationByIndex::~OEnumerationByIndex()
 }
 
 
-sal_Bool SAL_CALL OEnumerationByIndex::hasMoreElements(  ) throw(css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OEnumerationByIndex::hasMoreElements(  )
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
     if (m_xAccess.is() && m_xAccess->getCount() > m_nPos)
-        return sal_True;
+        return true;
 
     if (m_xAccess.is())
     {
@@ -163,24 +161,22 @@ sal_Bool SAL_CALL OEnumerationByIndex::hasMoreElements(  ) throw(css::uno::Runti
         m_xAccess.clear();
     }
 
-    return sal_False;
+    return false;
 }
 
 
 css::uno::Any SAL_CALL OEnumerationByIndex::nextElement(  )
-        throw(css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
     css::uno::Any aRes;
-    if (m_xAccess.is())
-    {
+    if (m_xAccess.is() && m_nPos < m_xAccess->getCount())
         aRes = m_xAccess->getByIndex(m_nPos++);
-        if (m_nPos >= m_xAccess->getCount())
-        {
-            impl_stopDisposeListening();
-            m_xAccess.clear();
-        }
+
+    if (m_xAccess.is() && m_nPos >= m_xAccess->getCount())
+    {
+        impl_stopDisposeListening();
+        m_xAccess.clear();
     }
 
     if (!aRes.hasValue())
@@ -190,7 +186,6 @@ css::uno::Any SAL_CALL OEnumerationByIndex::nextElement(  )
 
 
 void SAL_CALL OEnumerationByIndex::disposing(const css::lang::EventObject& aEvent)
-        throw(css::uno::RuntimeException, std::exception)
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
@@ -246,7 +241,7 @@ OAnyEnumeration::~OAnyEnumeration()
 }
 
 
-sal_Bool SAL_CALL OAnyEnumeration::hasMoreElements(  ) throw(css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OAnyEnumeration::hasMoreElements(  )
 {
     ::osl::ResettableMutexGuard aLock(m_aLock);
 
@@ -255,7 +250,6 @@ sal_Bool SAL_CALL OAnyEnumeration::hasMoreElements(  ) throw(css::uno::RuntimeEx
 
 
 css::uno::Any SAL_CALL OAnyEnumeration::nextElement(  )
-        throw(css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
     if ( ! hasMoreElements())
         throw css::container::NoSuchElementException();

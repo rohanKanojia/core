@@ -21,33 +21,27 @@
 #define INCLUDED_SC_SOURCE_UI_INC_UNDODAT_HXX
 
 #include "undobase.hxx"
-#include "rangeutl.hxx"
-#include "rangelst.hxx"
-#include "sortparam.hxx"
-#include "queryparam.hxx"
-#include "subtotalparam.hxx"
-#include "pivot.hxx"
+#include "refundo.hxx"
+#include <dpobject.hxx>
+#include <olinetab.hxx>
+#include <rangeutl.hxx>
+#include <rangelst.hxx>
+#include <queryparam.hxx>
+#include <subtotalparam.hxx>
 
 #include <memory>
 
 class ScDocShell;
-class ScDocument;
-class ScOutlineTable;
-class ScRangeName;
-class ScDBData;
-class ScDBCollection;
-class ScDPObject;
 class SdrUndoAction;
-class ScMarkData;
 
 class ScUndoDoOutline: public ScSimpleUndo
 {
 public:
                     ScUndoDoOutline( ScDocShell* pNewDocShell,
                             SCCOLROW nNewStart, SCCOLROW nNewEnd, SCTAB nNewTab,
-                            ScDocument* pNewUndoDoc, bool bNewColumns,
+                            ScDocumentUniquePtr pNewUndoDoc, bool bNewColumns,
                             sal_uInt16 nNewLevel, sal_uInt16 nNewEntry, bool bNewShow );
-    virtual         ~ScUndoDoOutline();
+    virtual         ~ScUndoDoOutline() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -57,14 +51,15 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    SCCOLROW        nStart;
-    SCCOLROW        nEnd;
-    SCTAB           nTab;
-    ScDocument*     pUndoDoc;
-    bool            bColumns;
-    sal_uInt16      nLevel;
-    sal_uInt16      nEntry;
-    bool            bShow;
+    SCCOLROW const        nStart;
+    SCCOLROW const        nEnd;
+    SCTAB const           nTab;
+    ScDocumentUniquePtr
+                          pUndoDoc;
+    bool const            bColumns;
+    sal_uInt16 const      nLevel;
+    sal_uInt16 const      nEntry;
+    bool const            bShow;
 };
 
 class ScUndoMakeOutline: public ScSimpleUndo
@@ -73,9 +68,9 @@ public:
                     ScUndoMakeOutline( ScDocShell* pNewDocShell,
                             SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
                             SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
-                            ScOutlineTable* pNewUndoTab,
+                            std::unique_ptr<ScOutlineTable> pNewUndoTab,
                             bool bNewColumns, bool bNewMake );
-    virtual         ~ScUndoMakeOutline();
+    virtual         ~ScUndoMakeOutline() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -85,21 +80,21 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScAddress       aBlockStart;
-    ScAddress       aBlockEnd;
-    ScOutlineTable* pUndoTable;
-    bool            bColumns;
-    bool            bMake;
+    ScAddress const       aBlockStart;
+    ScAddress const       aBlockEnd;
+    std::unique_ptr<ScOutlineTable>
+                          pUndoTable;
+    bool const            bColumns;
+    bool const            bMake;
 };
 
 class ScUndoOutlineLevel: public ScSimpleUndo
 {
 public:
-                    ScUndoOutlineLevel( ScDocShell* pNewDocShell,
-                            SCCOLROW nNewStart, SCCOLROW nNewEnd, SCTAB nNewTab,
-                            ScDocument* pNewUndoDoc, ScOutlineTable* pNewUndoTab,
-                            bool bNewColumns, sal_uInt16 nNewLevel );
-    virtual         ~ScUndoOutlineLevel();
+    ScUndoOutlineLevel(ScDocShell* pNewDocShell,
+                       SCCOLROW nNewStart, SCCOLROW nNewEnd, SCTAB nNewTab,
+                       ScDocumentUniquePtr pNewUndoDoc, std::unique_ptr<ScOutlineTable> pNewUndoTab,
+                       bool bNewColumns, sal_uInt16 nNewLevel);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -109,24 +104,23 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    SCCOLROW        nStart;
-    SCCOLROW        nEnd;
-    SCTAB           nTab;
-    ScDocument*     pUndoDoc;
-    ScOutlineTable* pUndoTable;
-    bool            bColumns;
-    sal_uInt16      nLevel;
+    SCCOLROW const        nStart;
+    SCCOLROW const        nEnd;
+    SCTAB const           nTab;
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScOutlineTable> xUndoTable;
+    bool const            bColumns;
+    sal_uInt16 const      nLevel;
 };
 
 class ScUndoOutlineBlock: public ScSimpleUndo
 {
 public:
-                    ScUndoOutlineBlock( ScDocShell* pNewDocShell,
-                            SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
-                            SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
-                            ScDocument* pNewUndoDoc, ScOutlineTable* pNewUndoTab,
-                            bool bNewShow );
-    virtual         ~ScUndoOutlineBlock();
+    ScUndoOutlineBlock(ScDocShell* pNewDocShell,
+                       SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
+                       SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
+                       ScDocumentUniquePtr pNewUndoDoc, std::unique_ptr<ScOutlineTable> pNewUndoTab,
+                       bool bNewShow);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -136,21 +130,20 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScAddress       aBlockStart;
-    ScAddress       aBlockEnd;
-    ScDocument*     pUndoDoc;
-    ScOutlineTable* pUndoTable;
-    bool            bShow;
+    ScAddress const       aBlockStart;
+    ScAddress const       aBlockEnd;
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScOutlineTable> xUndoTable;
+    bool const            bShow;
 };
 
 class ScUndoRemoveAllOutlines: public ScSimpleUndo
 {
 public:
-                    ScUndoRemoveAllOutlines( ScDocShell* pNewDocShell,
-                            SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
-                            SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
-                            ScDocument* pNewUndoDoc, ScOutlineTable* pNewUndoTab );
-    virtual         ~ScUndoRemoveAllOutlines();
+    ScUndoRemoveAllOutlines(ScDocShell* pNewDocShell,
+            SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
+            SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
+            ScDocumentUniquePtr pNewUndoDoc, std::unique_ptr<ScOutlineTable> pNewUndoTab);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -160,20 +153,19 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScAddress       aBlockStart;
-    ScAddress       aBlockEnd;
-    ScDocument*     pUndoDoc;
-    ScOutlineTable* pUndoTable;
+    ScAddress const       aBlockStart;
+    ScAddress const       aBlockEnd;
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScOutlineTable> xUndoTable;
 };
 
 class ScUndoAutoOutline: public ScSimpleUndo
 {
 public:
-                    ScUndoAutoOutline( ScDocShell* pNewDocShell,
-                            SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
-                            SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
-                            ScDocument* pNewUndoDoc, ScOutlineTable* pNewUndoTab );
-    virtual         ~ScUndoAutoOutline();
+    ScUndoAutoOutline(ScDocShell* pNewDocShell,
+                      SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
+                      SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
+                      ScDocumentUniquePtr pNewUndoDoc, std::unique_ptr<ScOutlineTable> pNewUndoTab);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -183,21 +175,19 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScAddress       aBlockStart;
-    ScAddress       aBlockEnd;
-    ScDocument*     pUndoDoc;
-    ScOutlineTable* pUndoTable;
+    ScAddress const       aBlockStart;
+    ScAddress const       aBlockEnd;
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScOutlineTable> xUndoTable;
 };
 
 class ScUndoSubTotals: public ScDBFuncUndo
 {
 public:
-                    ScUndoSubTotals( ScDocShell* pNewDocShell, SCTAB nNewTab,
-                            const ScSubTotalParam& rNewParam, SCROW nNewEndY,
-                            ScDocument* pNewUndoDoc, ScOutlineTable* pNewUndoTab,
-//                          ScDBData* pNewData,
-                            ScRangeName* pNewUndoRange, ScDBCollection* pNewUndoDB );
-    virtual         ~ScUndoSubTotals();
+    ScUndoSubTotals(ScDocShell* pNewDocShell, SCTAB nNewTab,
+                    const ScSubTotalParam& rNewParam, SCROW nNewEndY,
+                    ScDocumentUniquePtr pNewUndoDoc, std::unique_ptr<ScOutlineTable> pNewUndoTab,
+                    std::unique_ptr<ScRangeName> pNewUndoRange, std::unique_ptr<ScDBCollection> pNewUndoDB);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -207,24 +197,23 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    SCTAB           nTab;
-    ScSubTotalParam aParam;                         // The original passed parameter
-    SCROW           nNewEndRow;                     // Size of result
-    ScDocument*     pUndoDoc;
-    ScOutlineTable* pUndoTable;
-//  ScDBData*       pUndoDBData;
-    ScRangeName*    pUndoRange;
-    ScDBCollection* pUndoDB;
+    SCTAB const           nTab;
+    ScSubTotalParam const aParam;                         // The original passed parameter
+    SCROW const           nNewEndRow;                     // Size of result
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScOutlineTable> xUndoTable;
+    std::unique_ptr<ScRangeName> xUndoRange;
+    std::unique_ptr<ScDBCollection> xUndoDB;
 };
 
 class ScUndoQuery: public ScDBFuncUndo
 {
 public:
                     ScUndoQuery( ScDocShell* pNewDocShell, SCTAB nNewTab,
-                            const ScQueryParam& rParam, ScDocument* pNewUndoDoc,
-                            ScDBCollection* pNewUndoDB, const ScRange* pOld,
+                            const ScQueryParam& rParam, ScDocumentUniquePtr pNewUndoDoc,
+                            std::unique_ptr<ScDBCollection> pNewUndoDB, const ScRange* pOld,
                             bool bSize, const ScRange* pAdvSrc );
-    virtual         ~ScUndoQuery();
+    virtual         ~ScUndoQuery() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -234,30 +223,30 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    SdrUndoAction*  pDrawUndo;
-    SCTAB           nTab;
-    ScQueryParam    aQueryParam;
-    ScDocument*     pUndoDoc;
-    ScDBCollection* pUndoDB;                // due to source and target range
-    ScRange         aOldDest;
-    ScRange         aAdvSource;
-    bool            bIsAdvanced;
-    bool            bDestArea;
-    bool            bDoSize;
+    std::unique_ptr<SdrUndoAction> pDrawUndo;
+    SCTAB const           nTab;
+    ScQueryParam const    aQueryParam;
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScDBCollection> xUndoDB;                // due to source and target range
+    ScRange               aOldDest;
+    ScRange               aAdvSource;
+    bool                  bIsAdvanced;
+    bool                  bDestArea;
+    bool const            bDoSize;
 };
 
 class ScUndoAutoFilter: public ScDBFuncUndo
 {
 private:
-    OUString aDBName;
-    bool            bFilterSet;
+    OUString const  aDBName;
+    bool const      bFilterSet;
 
     void            DoChange( bool bUndo );
 
 public:
                     ScUndoAutoFilter( ScDocShell* pNewDocShell, const ScRange& rRange,
                                       const OUString& rName, bool bSet );
-    virtual         ~ScUndoAutoFilter();
+    virtual         ~ScUndoAutoFilter() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -271,8 +260,9 @@ class ScUndoDBData: public ScSimpleUndo
 {
 public:
                     ScUndoDBData( ScDocShell* pNewDocShell,
-                            ScDBCollection* pNewUndoColl, ScDBCollection* pNewRedoColl );
-    virtual         ~ScUndoDBData();
+                            std::unique_ptr<ScDBCollection> pNewUndoColl,
+                            std::unique_ptr<ScDBCollection> pNewRedoColl );
+    virtual         ~ScUndoDBData() override;
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -282,19 +272,18 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScDBCollection* pUndoColl;
-    ScDBCollection* pRedoColl;
+    std::unique_ptr<ScDBCollection> pUndoColl;
+    std::unique_ptr<ScDBCollection> pRedoColl;
 };
 
 class ScUndoImportData: public ScSimpleUndo
 {
 public:
-                    ScUndoImportData( ScDocShell* pNewDocShell, SCTAB nNewTab,
-                            const ScImportParam& rParam, SCCOL nNewEndX, SCROW nNewEndY,
-                            SCCOL nNewFormula,
-                            ScDocument* pNewUndoDoc, ScDocument* pNewRedoDoc,
-                            ScDBData* pNewUndoData, ScDBData* pNewRedoData );
-    virtual         ~ScUndoImportData();
+    ScUndoImportData(ScDocShell* pNewDocShell, SCTAB nNewTab,
+                     const ScImportParam& rParam, SCCOL nNewEndX, SCROW nNewEndY,
+                     SCCOL nNewFormula,
+                     ScDocumentUniquePtr pNewUndoDoc, ScDocumentUniquePtr pNewRedoDoc,
+                     std::unique_ptr<ScDBData> pNewUndoData, std::unique_ptr<ScDBData> pNewRedoData);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -304,28 +293,27 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    SCTAB           nTab;
-    ScImportParam   aImportParam;
-    SCCOL           nEndCol;
-    SCROW           nEndRow;
-    ScDocument*     pUndoDoc;
-    ScDocument*     pRedoDoc;
-    ScDBData*       pUndoDBData;
-    ScDBData*       pRedoDBData;
-    SCCOL           nFormulaCols;
-    bool            bRedoFilled;
+    SCTAB const           nTab;
+    ScImportParam const   aImportParam;
+    SCCOL const           nEndCol;
+    SCROW const           nEndRow;
+    ScDocumentUniquePtr   xUndoDoc;
+    ScDocumentUniquePtr   xRedoDoc;
+    std::unique_ptr<ScDBData> xUndoDBData;
+    std::unique_ptr<ScDBData> xRedoDBData;
+    SCCOL const           nFormulaCols;
+    bool                  bRedoFilled;
 };
 
 class ScUndoRepeatDB: public ScSimpleUndo
 {
 public:
-                    ScUndoRepeatDB( ScDocShell* pNewDocShell, SCTAB nNewTab,
-                            SCCOL nStartX, SCROW nStartY, SCCOL nEndX, SCROW nEndY,
-                            SCROW nResultEndRow, SCCOL nCurX, SCROW nCurY,
-                            ScDocument* pNewUndoDoc, ScOutlineTable* pNewUndoTab,
-                            ScRangeName* pNewUndoRange, ScDBCollection* pNewUndoDB,
-                            const ScRange* pOldQ, const ScRange* pNewQ );
-    virtual         ~ScUndoRepeatDB();
+    ScUndoRepeatDB(ScDocShell* pNewDocShell, SCTAB nNewTab,
+                   SCCOL nStartX, SCROW nStartY, SCCOL nEndX, SCROW nEndY,
+                   SCROW nResultEndRow, SCCOL nCurX, SCROW nCurY,
+                   ScDocumentUniquePtr pNewUndoDoc, std::unique_ptr<ScOutlineTable> pNewUndoTab,
+                   std::unique_ptr<ScRangeName> pNewUndoRange, std::unique_ptr<ScDBCollection> pNewUndoDB,
+                   const ScRange* pOldQ, const ScRange* pNewQ);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -335,27 +323,26 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScAddress       aBlockStart;
-    ScAddress       aBlockEnd;
-    SCROW           nNewEndRow;
-    ScAddress       aCursorPos;
-    ScDocument*     pUndoDoc;
-    ScOutlineTable* pUndoTable;
-    ScRangeName*    pUndoRange;
-    ScDBCollection* pUndoDB;
-    ScRange         aOldQuery;
-    ScRange         aNewQuery;
-    bool            bQuerySize;
+    ScAddress const       aBlockStart;
+    ScAddress const       aBlockEnd;
+    SCROW const           nNewEndRow;
+    ScAddress const       aCursorPos;
+    ScDocumentUniquePtr   xUndoDoc;
+    std::unique_ptr<ScOutlineTable> xUndoTable;
+    std::unique_ptr<ScRangeName> xUndoRange;
+    std::unique_ptr<ScDBCollection> xUndoDB;
+    ScRange               aOldQuery;
+    ScRange               aNewQuery;
+    bool                  bQuerySize;
 };
 
 class ScUndoDataPilot: public ScSimpleUndo
 {
 public:
-                    ScUndoDataPilot( ScDocShell* pNewDocShell,
-                            ScDocument* pOldDoc, ScDocument* pNewDoc,
-                            const ScDPObject* pOldObj, const ScDPObject* pNewObj,
-                            bool bMove );
-    virtual         ~ScUndoDataPilot();
+    ScUndoDataPilot(ScDocShell* pNewDocShell,
+                    ScDocumentUniquePtr pOldDoc, ScDocumentUniquePtr pNewDoc,
+                    const ScDPObject* pOldObj, const ScDPObject* pNewObj,
+                    bool bMove);
 
     virtual void    Undo() override;
     virtual void    Redo() override;
@@ -365,22 +352,21 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScDocument*     pOldUndoDoc;
-    ScDocument*     pNewUndoDoc;
-    ScDPObject*     pOldDPObject;
-    ScDPObject*     pNewDPObject;
-    bool            bAllowMove;
+    ScDocumentUniquePtr xOldUndoDoc;
+    ScDocumentUniquePtr xNewUndoDoc;
+    std::unique_ptr<ScDPObject> xOldDPObject;
+    std::unique_ptr<ScDPObject> xNewDPObject;
+    bool const            bAllowMove;
 };
 
 class ScUndoConsolidate: public ScSimpleUndo
 {
 public:
-                        ScUndoConsolidate( ScDocShell* pNewDocShell,
-                                const ScArea& rArea, const ScConsolidateParam& rPar,
-                                ScDocument* pNewUndoDoc, bool bReference,
-                                SCROW nInsCount, ScOutlineTable* pTab,
-                                ScDBData* pData );
-    virtual             ~ScUndoConsolidate();
+    ScUndoConsolidate(ScDocShell* pNewDocShell,
+                      const ScArea& rArea, const ScConsolidateParam& rPar,
+                      ScDocumentUniquePtr pNewUndoDoc, bool bReference,
+                      SCROW nInsCount, std::unique_ptr<ScOutlineTable> pTab,
+                      std::unique_ptr<ScDBData> pData);
 
     virtual void        Undo() override;
     virtual void        Redo() override;
@@ -390,13 +376,13 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    ScArea              aDestArea;
-    ScDocument*         pUndoDoc;
-    ScConsolidateParam  aParam;
-    bool                bInsRef;
-    SCSIZE              nInsertCount;
-    ScOutlineTable*     pUndoTab;
-    ScDBData*           pUndoData;
+    ScArea const              aDestArea;
+    ScDocumentUniquePtr       xUndoDoc;
+    ScConsolidateParam const  aParam;
+    bool const                bInsRef;
+    SCSIZE const              nInsertCount;
+    std::unique_ptr<ScOutlineTable> xUndoTab;
+    std::unique_ptr<ScDBData> xUndoData;
 };
 
 class ScUndoChartData: public ScSimpleUndo
@@ -408,7 +394,7 @@ public:
                         ScUndoChartData( ScDocShell* pNewDocShell,
                                 const OUString& rName, const ScRangeListRef& rNew,
                                 bool bColHdr, bool bRowHdr, bool bAdd );
-    virtual             ~ScUndoChartData();
+    virtual             ~ScUndoChartData() override;
 
     virtual void        Undo() override;
     virtual void        Redo() override;
@@ -418,15 +404,15 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    OUString            aChartName;
+    OUString const      aChartName;
     ScRangeListRef      aOldRangeListRef;
     bool                bOldColHeaders;
     bool                bOldRowHeaders;
 //  ScRange             aNewRange;
     ScRangeListRef      aNewRangeListRef;
-    bool                bNewColHeaders;
-    bool                bNewRowHeaders;
-    bool                bAddRange;
+    bool const          bNewColHeaders;
+    bool const          bNewRowHeaders;
+    bool const          bAddRange;
 
     void                Init();
 };
@@ -434,16 +420,12 @@ private:
 class ScUndoDataForm: public ScBlockUndo
 {
 public:
-                    ScUndoDataForm( ScDocShell* pNewDocShell,
-                                SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
-                                SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
-                                const ScMarkData& rMark,
-                                ScDocument* pNewUndoDoc, ScDocument* pNewRedoDoc,
-                                InsertDeleteFlags nNewFlags,
-                                ScRefUndoData* pRefData, void* pFill1, void* pFill2, void* pFill3
-                                 );
-    virtual     ~ScUndoDataForm();
-
+    ScUndoDataForm(ScDocShell* pNewDocShell,
+                   SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
+                   SCCOL nEndX, SCROW nEndY, SCTAB nEndZ,
+                   const ScMarkData& rMark,
+                   ScDocumentUniquePtr pNewUndoDoc, ScDocumentUniquePtr pNewRedoDoc,
+                   std::unique_ptr<ScRefUndoData> pRefData);
     virtual void    Undo() override;
     virtual void    Redo() override;
     virtual void    Repeat(SfxRepeatTarget& rTarget) override;
@@ -452,18 +434,14 @@ public:
     virtual OUString GetComment() const override;
 
 private:
-    std::unique_ptr<ScMarkData> mpMarkData;
-    ScDocument*     pUndoDoc;
-    ScDocument*     pRedoDoc;
-    InsertDeleteFlags nFlags;
-    ScRefUndoData*  pRefUndoData;
-    ScRefUndoData*  pRefRedoData;
-    sal_uLong       nStartChangeAction;
-    sal_uLong       nEndChangeAction;
+    std::unique_ptr<ScMarkData> mxMarkData;
+    ScDocumentUniquePtr const xUndoDoc;
+    ScDocumentUniquePtr xRedoDoc;
+    std::unique_ptr<ScRefUndoData> xRefUndoData;
+    std::unique_ptr<ScRefUndoData> xRefRedoData;
     bool            bRedoFilled;
 
     void            DoChange( const bool bUndo );
-    void            SetChangeTrack();
 };
 
 #endif

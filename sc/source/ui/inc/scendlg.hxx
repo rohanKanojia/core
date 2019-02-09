@@ -20,39 +20,40 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_SCENDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_SCENDLG_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/button.hxx>
-#include <svtools/svmedit.hxx>
-#include <svtools/ctrlbox.hxx>
+#include <vcl/weld.hxx>
 
-class ScNewScenarioDlg : public ModalDialog
+enum class ScScenarioFlags;
+
+class ColorListBox;
+
+class ScNewScenarioDlg : public weld::GenericDialogController
 {
 public:
-    ScNewScenarioDlg(vcl::Window* pParent, const OUString& rName, bool bEdit = false, bool bSheetProtected = false);
-    virtual ~ScNewScenarioDlg();
-    virtual void dispose() override;
+    ScNewScenarioDlg(weld::Window* pParent, const OUString& rName, bool bEdit, bool bSheetProtected);
+    virtual ~ScNewScenarioDlg() override;
     void SetScenarioData( const OUString& rName, const OUString& rComment,
-                          const Color& rColor, sal_uInt16 nFlags );
+                          const Color& rColor, ScScenarioFlags nFlags );
 
-    void GetScenarioData( OUString& rName, OUString& rComment,
-                          Color& rColor, sal_uInt16& rFlags ) const;
+    void GetScenarioData(OUString& rName, OUString& rComment,
+                          Color& rColor, ScScenarioFlags &rFlags) const;
 
 private:
-    VclPtr<Edit>               m_pEdName;
-    VclPtr<VclMultiLineEdit>   m_pEdComment;
-    VclPtr<CheckBox>           m_pCbShowFrame;
-    VclPtr<ColorListBox>       m_pLbColor;
-    VclPtr<CheckBox>           m_pCbTwoWay;
-    VclPtr<CheckBox>           m_pCbCopyAll;
-    VclPtr<CheckBox>           m_pCbProtect;
-    VclPtr<OKButton>           m_pBtnOk;
     const OUString      aDefScenarioName;
-    bool                bIsEdit;
+    bool const                bIsEdit;
+    std::unique_ptr<weld::Entry> m_xEdName;
+    std::unique_ptr<weld::TextView> m_xEdComment;
+    std::unique_ptr<weld::CheckButton> m_xCbShowFrame;
+    std::unique_ptr<ColorListBox> m_xLbColor;
+    std::unique_ptr<weld::CheckButton> m_xCbTwoWay;
+    std::unique_ptr<weld::CheckButton> m_xCbCopyAll;
+    std::unique_ptr<weld::CheckButton> m_xCbProtect;
+    std::unique_ptr<weld::Button> m_xBtnOk;
+    std::unique_ptr<weld::Label> m_xAltTitle;
+    std::unique_ptr<weld::Label> m_xCreatedFt;
+    std::unique_ptr<weld::Label> m_xOnFt;
 
-    DECL_LINK_TYPED( OkHdl, Button*, void);
-    DECL_LINK_TYPED( EnableHdl, Button*, void );
+    DECL_LINK(OkHdl, weld::Button&, void);
+    DECL_LINK(EnableHdl, weld::ToggleButton&, void);
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_SCENDLG_HXX

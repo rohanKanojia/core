@@ -20,16 +20,15 @@
 
 #include "XFormsInstanceContext.hxx"
 
-#include "DomBuilderContext.hxx"
+#include <DomBuilderContext.hxx>
 #include "xformsapi.hxx"
 
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/xforms/XModel2.hpp>
-#include <tools/debug.hxx>
 #include <osl/diagnose.h>
 
 #include <xmloff/xmlnmspe.hxx>
@@ -43,12 +42,9 @@ using com::sun::star::uno::Reference;
 using com::sun::star::uno::makeAny;
 using com::sun::star::uno::Sequence;
 using com::sun::star::xforms::XModel2;
-using com::sun::star::beans::XPropertySet;
 using com::sun::star::beans::PropertyValue;
 using com::sun::star::xml::sax::XAttributeList;
 
-using xmloff::token::IsXMLToken;
-using xmloff::token::XML_INSTANCE;
 using xmloff::token::XML_SRC;
 using xmloff::token::XML_ID;
 
@@ -67,14 +63,10 @@ XFormsInstanceContext::XFormsInstanceContext(
         TokenContext( rImport, nPrefix, rLocalName, aAttributes, aEmptyMap ),
         mxModel( xModel )
 {
-    DBG_ASSERT( mxModel.is(), "need model" );
+    SAL_WARN_IF( !mxModel.is(), "xmloff", "need model" );
 }
 
-XFormsInstanceContext::~XFormsInstanceContext()
-{
-}
-
-SvXMLImportContext* XFormsInstanceContext::CreateChildContext(
+SvXMLImportContextRef XFormsInstanceContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList>& )
@@ -98,7 +90,7 @@ SvXMLImportContext* XFormsInstanceContext::CreateChildContext(
         pContext = pInstance;
     }
 
-    DBG_ASSERT( pContext != nullptr, "no context!" );
+    SAL_WARN_IF( pContext == nullptr, "xmloff", "no context!" );
     return pContext;
 
 }

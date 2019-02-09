@@ -17,28 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
+#include <hintids.hxx>
 
 #include <sfx2/htmlmode.hxx>
 #include <svx/svxids.hrc>
 #include <sfx2/app.hxx>
-#include <vcl/msgbox.hxx>
 
-#include "swtypes.hxx"
-#include "wrtsh.hxx"
-#include "viewopt.hxx"
-#include "macassgn.hxx"
-#include "swevent.hxx"
-#include "docsh.hxx"
-#include "globals.hrc"
-#include "view.hxx"
+#include <swtypes.hxx>
+#include <wrtsh.hxx>
+#include <viewopt.hxx>
+#include <macassgn.hxx>
+#include <swevent.hxx>
+#include <docsh.hxx>
+#include <globals.hrc>
+#include <strings.hrc>
+#include <view.hxx>
 #include <sfx2/viewfrm.hxx>
 
 #include <svx/svxdlg.hxx>
 
 #include <doc.hxx>
 
-using ::com::sun::star::frame::XFrame;
 
 SfxEventNamesItem SwMacroAssignDlg::AddEvents( DlgEventType eType )
 {
@@ -50,54 +49,54 @@ SfxEventNamesItem SwMacroAssignDlg::AddEvents( DlgEventType eType )
     switch( eType )
     {
     case MACASSGN_AUTOTEXT:
-        aItem.AddEvent( OUString( SW_RES(STR_EVENT_START_INS_GLOSSARY) ), OUString(),
-                            SW_EVENT_START_INS_GLOSSARY );
-        aItem.AddEvent( OUString( SW_RES(STR_EVENT_END_INS_GLOSSARY) ), OUString(),
-                            SW_EVENT_END_INS_GLOSSARY);
+        aItem.AddEvent( SwResId(STR_EVENT_START_INS_GLOSSARY), OUString(),
+                            SvMacroItemId::SwStartInsGlossary );
+        aItem.AddEvent( SwResId(STR_EVENT_END_INS_GLOSSARY), OUString(),
+                            SvMacroItemId::SwEndInsGlossary);
         // in order for the new handler to become active!
         break;
     case MACASSGN_ALLFRM:
     case MACASSGN_GRAPHIC:          // graphics
         {
-            aItem.AddEvent( OUString( SW_RES(STR_EVENT_IMAGE_ERROR) ), OUString(),
-                                SVX_EVENT_IMAGE_ERROR);
-            aItem.AddEvent( OUString( SW_RES(STR_EVENT_IMAGE_ABORT) ), OUString(),
-                                SVX_EVENT_IMAGE_ABORT);
-            aItem.AddEvent( OUString( SW_RES(STR_EVENT_IMAGE_LOAD) ), OUString(),
-                                SVX_EVENT_IMAGE_LOAD);
+            aItem.AddEvent( SwResId(STR_EVENT_IMAGE_ERROR), OUString(),
+                                SvMacroItemId::OnImageLoadError);
+            aItem.AddEvent( SwResId(STR_EVENT_IMAGE_ABORT), OUString(),
+                                SvMacroItemId::OnImageLoadCancel);
+            aItem.AddEvent( SwResId(STR_EVENT_IMAGE_LOAD), OUString(),
+                                SvMacroItemId::OnImageLoadDone);
         }
-        // no break;
+        [[fallthrough]];
     case MACASSGN_FRMURL:           // Frame - URL-Attributes
         {
             if( !bHtmlMode &&
                 (MACASSGN_FRMURL == eType || MACASSGN_ALLFRM == eType))
             {
-                aItem.AddEvent( OUString( SW_RES( STR_EVENT_FRM_KEYINPUT_A ) ), OUString(),
-                                SW_EVENT_FRM_KEYINPUT_ALPHA );
-                aItem.AddEvent( OUString( SW_RES( STR_EVENT_FRM_KEYINPUT_NOA ) ), OUString(),
-                                SW_EVENT_FRM_KEYINPUT_NOALPHA );
-                aItem.AddEvent( OUString( SW_RES( STR_EVENT_FRM_RESIZE ) ), OUString(),
-                                SW_EVENT_FRM_RESIZE );
-                aItem.AddEvent( OUString( SW_RES( STR_EVENT_FRM_MOVE ) ), OUString(),
-                                SW_EVENT_FRM_MOVE );
+                aItem.AddEvent( SwResId( STR_EVENT_FRM_KEYINPUT_A ), OUString(),
+                                SvMacroItemId::SwFrmKeyInputAlpha );
+                aItem.AddEvent( SwResId( STR_EVENT_FRM_KEYINPUT_NOA ), OUString(),
+                                SvMacroItemId::SwFrmKeyInputNoAlpha );
+                aItem.AddEvent( SwResId( STR_EVENT_FRM_RESIZE ), OUString(),
+                                SvMacroItemId::SwFrmResize );
+                aItem.AddEvent( SwResId( STR_EVENT_FRM_MOVE ), OUString(),
+                                SvMacroItemId::SwFrmMove );
             }
         }
-        // no break;
+        [[fallthrough]];
     case MACASSGN_OLE:              // OLE
         {
             if( !bHtmlMode )
-                aItem.AddEvent( OUString( SW_RES(STR_EVENT_OBJECT_SELECT) ), OUString(),
-                                SW_EVENT_OBJECT_SELECT );
+                aItem.AddEvent( SwResId(STR_EVENT_OBJECT_SELECT), OUString(),
+                                SvMacroItemId::SwObjectSelect );
         }
-        // no break;
+        [[fallthrough]];
     case MACASSGN_INETFMT:          // INetFormat-Attributes
         {
-            aItem.AddEvent( OUString( SW_RES(STR_EVENT_MOUSEOVER_OBJECT) ), OUString(),
-                                SFX_EVENT_MOUSEOVER_OBJECT );
-            aItem.AddEvent( OUString( SW_RES(STR_EVENT_MOUSECLICK_OBJECT) ), OUString(),
-                                SFX_EVENT_MOUSECLICK_OBJECT);
-            aItem.AddEvent( OUString( SW_RES(STR_EVENT_MOUSEOUT_OBJECT) ), OUString(),
-                                SFX_EVENT_MOUSEOUT_OBJECT);
+            aItem.AddEvent( SwResId(STR_EVENT_MOUSEOVER_OBJECT), OUString(),
+                                SvMacroItemId::OnMouseOver );
+            aItem.AddEvent( SwResId(STR_EVENT_MOUSECLICK_OBJECT), OUString(),
+                                SvMacroItemId::OnClick);
+            aItem.AddEvent( SwResId(STR_EVENT_MOUSEOUT_OBJECT), OUString(),
+                                SvMacroItemId::OnMouseOut);
         }
         break;
     }
@@ -105,14 +104,14 @@ SfxEventNamesItem SwMacroAssignDlg::AddEvents( DlgEventType eType )
     return aItem;
 }
 
-bool SwMacroAssignDlg::INetFormatDlg( vcl::Window* pParent, SwWrtShell& rSh,
-                                    SvxMacroItem*& rpINetItem )
+bool SwMacroAssignDlg::INetFormatDlg(weld::Window* pParent, SwWrtShell& rSh,
+                                     std::unique_ptr<SvxMacroItem>& rpINetItem )
 {
     bool bRet = false;
-    SfxItemSet aSet( rSh.GetAttrPool(), RES_FRMMACRO, RES_FRMMACRO, SID_EVENTCONFIG, SID_EVENTCONFIG, 0 );
+    SfxItemSet aSet( rSh.GetAttrPool(), svl::Items<RES_FRMMACRO, RES_FRMMACRO, SID_EVENTCONFIG, SID_EVENTCONFIG>{} );
     SvxMacroItem aItem( RES_FRMMACRO );
     if( !rpINetItem )
-        rpINetItem = new SvxMacroItem( RES_FRMMACRO );
+        rpINetItem.reset(new SvxMacroItem( RES_FRMMACRO ));
     else
         aItem.SetMacroTable( rpINetItem->GetMacroTable() );
 
@@ -120,9 +119,8 @@ bool SwMacroAssignDlg::INetFormatDlg( vcl::Window* pParent, SwWrtShell& rSh,
     aSet.Put( AddEvents( MACASSGN_INETFMT ) );
 
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    SfxAbstractDialog* pMacroDlg = pFact->CreateSfxDialog( pParent, aSet,
-        rSh.GetView().GetViewFrame()->GetFrame().GetFrameInterface(),
-        SID_EVENTCONFIG );
+    ScopedVclPtr<SfxAbstractDialog> pMacroDlg( pFact->CreateEventConfigDialog(pParent, aSet,
+        rSh.GetView().GetViewFrame()->GetFrame().GetFrameInterface() ) );
     if ( pMacroDlg && pMacroDlg->Execute() == RET_OK )
     {
         const SfxItemSet* pOutSet = pMacroDlg->GetOutputItemSet();

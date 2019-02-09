@@ -20,21 +20,12 @@
 #ifndef INCLUDED_STARMATH_INC_RECT_HXX
 #define INCLUDED_STARMATH_INC_RECT_HXX
 
-#include <new>
-
 #include <rtl/ustring.hxx>
 #include <sal/log.hxx>
 #include <tools/gen.hxx>
 #include <vcl/outdev.hxx>
-#include <vcl/metric.hxx>
 
-#include "format.hxx"
-
-
-bool SmGetGlyphBoundRect(const OutputDevice &rDev,
-                         const OUString &rText, Rectangle &rRect);
-
-bool SmIsMathAlpha(const OUString &rText);
+class SmFormat;
 
 
 inline long SmFromTo(long nFrom, long nTo, double fRelDist)
@@ -108,13 +99,6 @@ class SmRect
     bool    bHasBaseline,
             bHasAlignInfo;
 
-protected:
-            void BuildRect (const OutputDevice &rDev, const SmFormat *pFormat,
-                            const OUString &rText, sal_uInt16 nBorderWidth);
-            void Init(const OutputDevice &rDev, const SmFormat *pFormat,
-                      const OUString &rText, sal_uInt16 nBorderWidth);
-
-            void ClearBaseline()    { bHasBaseline = false; };
     inline  void CopyMBL(const SmRect& rRect);
             void CopyAlignInfo(const SmRect& rRect);
 
@@ -123,16 +107,15 @@ protected:
 public:
             SmRect();
             SmRect(const OutputDevice &rDev, const SmFormat *pFormat,
-                   const OUString &rText, long nBorderWidth);
+                   const OUString &rText, sal_uInt16 nBorderWidth);
             SmRect(long nWidth, long nHeight);
-            SmRect(const SmRect &rRect);
 
 
             sal_uInt16  GetBorderWidth() const  { return nBorderWidth; }
 
             void SetItalicSpaces(long nLeftSpace, long nRightSpace);
 
-            void SetWidth(sal_uLong nWidth)     { aSize.Width()  = nWidth; }
+            void SetWidth(sal_uLong nWidth)     { aSize.setWidth(nWidth); }
 
             void SetLeft(long nLeft);
             void SetRight(long nRight);
@@ -196,9 +179,7 @@ public:
             bool    IsInsideRect(const Point &rPoint) const;
             bool    IsInsideItalicRect(const Point &rPoint) const;
 
-    inline  SmRect & operator = (const SmRect &rRect);
-
-    inline  Rectangle   AsRectangle() const;
+    inline  tools::Rectangle   AsRectangle() const;
             SmRect      AsGlyphRect() const;
 };
 
@@ -228,16 +209,9 @@ inline long SmRect::GetBaseline() const
 }
 
 
-inline SmRect & SmRect::operator = (const SmRect &rRect)
+inline tools::Rectangle SmRect::AsRectangle() const
 {
-    new (this) SmRect(rRect);   // placement new
-    return *this;
-}
-
-
-inline Rectangle SmRect::AsRectangle() const
-{
-    return Rectangle(Point(GetItalicLeft(), GetTop()), GetItalicSize());
+    return tools::Rectangle(Point(GetItalicLeft(), GetTop()), GetItalicSize());
 }
 
 #endif

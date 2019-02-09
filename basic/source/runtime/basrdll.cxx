@@ -17,30 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <vcl/svapp.hxx>
 #include <svl/solar.hrc>
 #include <tools/debug.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/settings.hxx>
 
 #include <basic/sbstar.hxx>
 #include <basic/basrdll.hxx>
-#include <basrid.hxx>
-#include <sb.hrc>
+#include <unotools/resmgr.hxx>
+#include <strings.hrc>
 #include <sbxbase.hxx>
+#include <config_features.h>
 
 struct BasicDLL::Impl
 {
     bool        bDebugMode;
     bool        bBreakEnabled;
 
-    std::unique_ptr<ResMgr> xBasResMgr;
     std::unique_ptr<SbxAppData> xSbxAppData;
 
     Impl()
         : bDebugMode(false)
         , bBreakEnabled(true)
-        , xBasResMgr(ResMgr::CreateResMgr("sb", Application::GetSettings().GetUILanguageTag()))
         , xSbxAppData(new SbxAppData)
     { }
 };
@@ -49,11 +49,6 @@ namespace {
 
 BasicDLL * BASIC_DLL;
 
-}
-
-BasResId::BasResId( sal_uInt32 nId ) :
-    ResId( nId, *(BASIC_DLL->GetBasResMgr()) )
-{
 }
 
 BasicDLL::BasicDLL()
@@ -65,8 +60,6 @@ BasicDLL::BasicDLL()
 BasicDLL::~BasicDLL()
 {
 }
-
-ResMgr* BasicDLL::GetBasResMgr() const { return m_xImpl->xBasResMgr.get(); }
 
 void BasicDLL::EnableBreak( bool bEnable )
 {
@@ -93,6 +86,7 @@ void BasicDLL::BasicBreak()
 {
     BasicDLL* pThis = BASIC_DLL;
     DBG_ASSERT( pThis, "BasicDLL::EnableBreak: No instance yet!" );
+#if HAVE_FEATURE_SCRIPTING
     if ( pThis )
     {
         // bJustStopping: if there's someone pressing STOP like crazy umpteen times,
@@ -103,10 +97,14 @@ void BasicDLL::BasicBreak()
         {
             bJustStopping = true;
             StarBASIC::Stop();
-            ScopedVclPtr<InfoBox>::Create( nullptr, BasResId(IDS_SBERR_TERMINATED).toString() )->Execute();
+            std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(nullptr,
+                                                          VclMessageType::Info, VclButtonsType::Ok,
+                                                          BasResId(IDS_SBERR_TERMINATED)));
+            xInfoBox->run();
             bJustStopping = false;
         }
     }
+#endif
 }
 
 SbxAppData& GetSbxData_Impl()

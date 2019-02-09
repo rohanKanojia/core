@@ -19,8 +19,8 @@
 #ifndef INCLUDED_SW_INC_FMTWRAPINFLUENCEONOBJPOS_HXX
 #define INCLUDED_SW_INC_FMTWRAPINFLUENCEONOBJPOS_HXX
 
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 #include <svl/poolitem.hxx>
 #include <com/sun/star/text/WrapInfluenceOnPosition.hpp>
 
@@ -34,12 +34,12 @@ public:
     // #i35017# - constant name has changed
     SwFormatWrapInfluenceOnObjPos(
             sal_Int16 _nWrapInfluenceOnPosition = css::text::WrapInfluenceOnPosition::ONCE_CONCURRENT );
-    SwFormatWrapInfluenceOnObjPos(
-            const SwFormatWrapInfluenceOnObjPos& _rCpy );
-    virtual ~SwFormatWrapInfluenceOnObjPos();
+    virtual ~SwFormatWrapInfluenceOnObjPos() override;
 
-    SwFormatWrapInfluenceOnObjPos& operator=(
-            const SwFormatWrapInfluenceOnObjPos& _rSource );
+    SwFormatWrapInfluenceOnObjPos(SwFormatWrapInfluenceOnObjPos const &) = default;
+    SwFormatWrapInfluenceOnObjPos(SwFormatWrapInfluenceOnObjPos &&) = default;
+    SwFormatWrapInfluenceOnObjPos & operator =(SwFormatWrapInfluenceOnObjPos const &) = delete; // due to SfxPoolItem
+    SwFormatWrapInfluenceOnObjPos & operator =(SwFormatWrapInfluenceOnObjPos &&) = delete; // due to SfxPoolItem
 
     /// pure virtual methods of class <SfxPoolItem>
     virtual bool operator==( const SfxPoolItem& _rAttr ) const override;
@@ -59,7 +59,7 @@ public:
 };
 
 inline const SwFormatWrapInfluenceOnObjPos& SwAttrSet::GetWrapInfluenceOnObjPos(bool bInP) const
-    { return static_cast<const SwFormatWrapInfluenceOnObjPos&>(Get( RES_WRAP_INFLUENCE_ON_OBJPOS,bInP)); }
+    { return Get( RES_WRAP_INFLUENCE_ON_OBJPOS,bInP); }
 
  inline const SwFormatWrapInfluenceOnObjPos& SwFormat::GetWrapInfluenceOnObjPos(bool bInP) const
     { return m_aSet.GetWrapInfluenceOnObjPos(bInP); }

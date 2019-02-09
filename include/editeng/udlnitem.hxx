@@ -22,6 +22,7 @@
 #include <svl/eitem.hxx>
 #include <vcl/vclenum.hxx>
 #include <tools/color.hxx>
+#include <tools/fontenum.hxx>
 #include <editeng/editengdllapi.h>
 
 class SvXMLUnitConverter;
@@ -30,51 +31,48 @@ class SvXMLUnitConverter;
 
 /* Value container for underline and overline font effects */
 
-class EDITENG_DLLPUBLIC SvxTextLineItem : public SfxEnumItem
+class EDITENG_DLLPUBLIC SvxTextLineItem : public SfxEnumItem<FontLineStyle>
 {
     Color mColor;
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxTextLineItem( const FontLineStyle eSt,
                      const sal_uInt16 nId );
 
     // "pure virtual Methods" from SfxPoolItem
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                            SfxMapUnit eCoreMetric,
-                            SfxMapUnit ePresMetric,
-                            OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual SfxPoolItem*    Create(SvStream &, sal_uInt16) const override;
     virtual SvStream&       Store(SvStream &, sal_uInt16 nItemVersion) const override;
-    virtual OUString   GetValueTextByPos( sal_uInt16 nPos ) const override;
+    virtual OUString        GetValueTextByPos( sal_uInt16 nPos ) const;
     virtual sal_uInt16      GetValueCount() const override;
 
     virtual bool            QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool            PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    // MS VC4.0 messes things up
-    void                    SetValue( sal_uInt16 nNewVal )
-                                {SfxEnumItem::SetValue(nNewVal); }
+    using SfxEnumItem::SetValue;
     virtual bool            HasBoolValue() const override;
     virtual bool            GetBoolValue() const override;
     virtual void            SetBoolValue( bool bVal ) override;
 
     virtual bool            operator==( const SfxPoolItem& ) const override;
 
-    inline SvxTextLineItem& operator=(const SvxTextLineItem& rTextLine)
+    SvxTextLineItem& operator=(const SvxTextLineItem& rTextLine)
         {
             SetValue( rTextLine.GetValue() );
             SetColor( rTextLine.GetColor() );
             return *this;
         }
+    SvxTextLineItem(SvxTextLineItem const &) = default; // SfxPoolItem copy function dichotomy
 
     // enum cast
     FontLineStyle           GetLineStyle() const
-                                { return (FontLineStyle)GetValue(); }
+                                { return GetValue(); }
     void                    SetLineStyle( FontLineStyle eNew )
-                                { SetValue((sal_uInt16) eNew); }
+                                { SetValue(eNew); }
 
     const Color&            GetColor() const                { return mColor; }
     void                    SetColor( const Color& rCol )   { mColor = rCol; }

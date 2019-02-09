@@ -19,12 +19,11 @@
 
 #include <comphelper/accimplaccess.hxx>
 #include <com/sun/star/accessibility/XAccessible.hpp>
-#include <com/sun/star/accessibility/XAccessibleContext.hpp>
 #include <cppuhelper/typeprovider.hxx>
-#include <osl/diagnose.h>
 
 #include <set>
 #include <string.h>
+#include <memory>
 
 
 namespace comphelper
@@ -33,53 +32,27 @@ namespace comphelper
 
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::uno::Sequence;
-    using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::RuntimeException;
-    using ::com::sun::star::lang::XUnoTunnel;
     using ::com::sun::star::accessibility::XAccessible;
-    using ::com::sun::star::accessibility::XAccessibleContext;
-
-    struct OAccImpl_Impl
-    {
-        Reference< XAccessible >    m_xAccParent;
-        sal_Int64                   m_nForeignControlledStates;
-    };
 
     OAccessibleImplementationAccess::OAccessibleImplementationAccess( )
-        :m_pImpl( new OAccImpl_Impl )
     {
     }
 
 
     OAccessibleImplementationAccess::~OAccessibleImplementationAccess( )
     {
-        delete m_pImpl;
-        m_pImpl = nullptr;
     }
-
-
-    const Reference< XAccessible >& OAccessibleImplementationAccess::implGetForeignControlledParent( ) const
-    {
-        return m_pImpl->m_xAccParent;
-    }
-
-
-    sal_Int64 OAccessibleImplementationAccess::implGetForeignControlledStates( ) const
-    {
-        return m_pImpl->m_nForeignControlledStates;
-    }
-
-    namespace { struct lcl_ImplId : public rtl::Static< ::cppu::OImplementationId, lcl_ImplId > {}; }
-
 
     const Sequence< sal_Int8 > OAccessibleImplementationAccess::getUnoTunnelImplementationId()
     {
-        ::cppu::OImplementationId &rID = lcl_ImplId::get();
-        return rID.getImplementationId();
+        static cppu::OImplementationId implID;
+
+        return implID.getImplementationId();
     }
 
 
-    sal_Int64 SAL_CALL OAccessibleImplementationAccess::getSomething( const Sequence< sal_Int8 >& _rIdentifier ) throw (RuntimeException, std::exception)
+    sal_Int64 SAL_CALL OAccessibleImplementationAccess::getSomething( const Sequence< sal_Int8 >& _rIdentifier )
     {
         sal_Int64 nReturn( 0 );
 

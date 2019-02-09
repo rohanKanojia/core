@@ -19,13 +19,14 @@
 
 #include "property_description.hxx"
 #include "property_meta_data.hxx"
-#include "forms/form_handler_factory.hxx"
+#include <forms/form_handler_factory.hxx>
 #include "strings.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 
 #include <tools/debug.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <unordered_map>
 
@@ -64,11 +65,11 @@ namespace xmloff { namespace metadata
         // TODO: instead of having all of the below static, it should be some per-instance data. This way, the
         // approach used here would scale much better.
         // That is, if you have multiple "meta data instances", which manage a small, but closed set of properties,
-        // then looking looking through those multiple instances would probably be faster than searching within
+        // then looking through those multiple instances would probably be faster than searching within
         // one big instance, since in this case, every instance can quickly decide whether it is responsible
         // for some attribute or property, and otherwise delegate to the next instance.
 
-        typedef std::unordered_map< OUString, const PropertyDescription*, OUStringHash > DescriptionsByName;
+        typedef std::unordered_map< OUString, const PropertyDescription* > DescriptionsByName;
 
         const DescriptionsByName& lcl_getPropertyDescriptions()
         {
@@ -105,7 +106,7 @@ namespace xmloff { namespace metadata
             return s_indexedPropertyGroups;
         }
 
-        typedef std::unordered_map< OUString, XMLTokenEnum, OUStringHash > ReverseTokenLookup;
+        typedef std::unordered_map< OUString, XMLTokenEnum > ReverseTokenLookup;
 
         const ReverseTokenLookup& getReverseTokenLookup()
         {
@@ -123,7 +124,7 @@ namespace xmloff { namespace metadata
             return s_reverseTokenLookup;
         }
 
-        struct AttributeHash : public ::std::unary_function< AttributeDescription, size_t >
+        struct AttributeHash
         {
             size_t operator()( const AttributeDescription& i_attribute ) const
             {
@@ -143,7 +144,7 @@ namespace xmloff { namespace metadata
                 while ( !desc->propertyName.isEmpty() )
                 {
                     if ( desc->propertyGroup != NO_GROUP )
-                        s_attributeGroups.insert( AttributeGroups::value_type( desc->attribute, desc->propertyGroup ) );
+                        s_attributeGroups.emplace( desc->attribute, desc->propertyGroup );
                     ++desc;
                 }
             }

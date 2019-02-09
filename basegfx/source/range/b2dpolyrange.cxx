@@ -84,7 +84,14 @@ namespace basegfx
 
         B2DPolyPolygon solveCrossovers() const
         {
-            return tools::solveCrossovers(maRanges,maOrient);
+            return utils::solveCrossovers(maRanges,maOrient);
+        }
+
+        void transform(const basegfx::B2DHomMatrix& rTranslate)
+        {
+            maBounds.transform(rTranslate);
+            for (auto &a : maRanges)
+                a.transform(rTranslate);
         }
 
     private:
@@ -93,22 +100,13 @@ namespace basegfx
         std::vector<B2VectorOrientation> maOrient;
     };
 
-    B2DPolyRange::B2DPolyRange() :
-        mpImpl()
-    {}
+    B2DPolyRange::B2DPolyRange() = default;
 
-    B2DPolyRange::~B2DPolyRange()
-    {}
+    B2DPolyRange::~B2DPolyRange() = default;
 
-    B2DPolyRange::B2DPolyRange( const B2DPolyRange& rRange ) :
-        mpImpl( rRange.mpImpl )
-    {}
+    B2DPolyRange::B2DPolyRange( const B2DPolyRange& ) = default;
 
-    B2DPolyRange& B2DPolyRange::operator=( const B2DPolyRange& rRange )
-    {
-        mpImpl = rRange.mpImpl;
-        return *this;
-    }
+    B2DPolyRange& B2DPolyRange::operator=( const B2DPolyRange& ) = default;
 
     bool B2DPolyRange::operator==(const B2DPolyRange& rRange) const
     {
@@ -146,6 +144,11 @@ namespace basegfx
     bool B2DPolyRange::overlaps( const B2DRange& rRange ) const
     {
         return mpImpl->overlaps(rRange);
+    }
+
+    void B2DPolyRange::transform(const basegfx::B2DHomMatrix& rTranslate)
+    {
+        mpImpl->transform(rTranslate);
     }
 
     B2DPolyPolygon B2DPolyRange::solveCrossovers() const

@@ -18,15 +18,14 @@
  */
 
 #include "DragMethod_PieSegment.hxx"
+#include <DrawViewWrapper.hxx>
 
-#include "Strings.hrc"
-#include "ResId.hxx"
-#include "macros.hxx"
-#include "ObjectIdentifier.hxx"
-#include <rtl/math.hxx>
-#include <svx/svdpagv.hxx>
+#include <strings.hrc>
+#include <ResId.hxx>
+#include <ObjectIdentifier.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <basegfx/matrix/b2dhommatrix.hxx>
+#include <tools/diagnose_ex.h>
 
 namespace chart
 {
@@ -63,7 +62,7 @@ DragMethod_PieSegment::DragMethod_PieSegment( DrawViewWrapper& rDrawViewWrapper
     B2DVector aMaxVector( aMaximumPosition.X, aMaximumPosition.Y );
     m_aDragDirection = aMaxVector - aMinVector;
     m_fDragRange = m_aDragDirection.scalar( m_aDragDirection );
-    if( ::rtl::math::approxEqual( m_fDragRange, 0.0 ) )
+    if( m_fDragRange == 0.0 )
         m_fDragRange = 1.0;
 }
 DragMethod_PieSegment::~DragMethod_PieSegment()
@@ -71,7 +70,7 @@ DragMethod_PieSegment::~DragMethod_PieSegment()
 }
 void DragMethod_PieSegment::TakeSdrDragComment(OUString& rStr) const
 {
-    rStr = SCH_RESSTR(STR_STATUS_PIE_SEGMENT_EXPLODED);
+    rStr = SchResId(STR_STATUS_PIE_SEGMENT_EXPLODED);
     rStr = rStr.replaceFirst( "%PERCENTVALUE", OUString::number( static_cast<sal_Int32>((m_fAdditionalOffset+m_fInitialOffset)*100.0) ));
 }
 bool DragMethod_PieSegment::BeginSdrDrag()
@@ -86,7 +85,7 @@ void DragMethod_PieSegment::MoveSdrDrag(const Point& rPnt)
     if( DragStat().CheckMinMoved(rPnt) )
     {
         //calculate new offset
-        B2DVector aShiftVector(( B2DVector( rPnt.X(), rPnt.Y() ) - m_aStartVector ));
+        B2DVector aShiftVector( B2DVector( rPnt.X(), rPnt.Y() ) - m_aStartVector );
         m_fAdditionalOffset = m_aDragDirection.scalar( aShiftVector )/m_fDragRange; // projection
 
         if( m_fAdditionalOffset < -m_fInitialOffset )
@@ -95,7 +94,7 @@ void DragMethod_PieSegment::MoveSdrDrag(const Point& rPnt)
             m_fAdditionalOffset = 1.0 - m_fInitialOffset;
 
         B2DVector aNewPosVector = m_aStartVector + (m_aDragDirection * m_fAdditionalOffset);
-        Point aNewPos = Point( (long)(aNewPosVector.getX()), (long)(aNewPosVector.getY()) );
+        Point aNewPos = Point( static_cast<long>(aNewPosVector.getX()), static_cast<long>(aNewPosVector.getY()) );
         if( aNewPos != DragStat().GetNow() )
         {
             Hide();
@@ -110,18 +109,18 @@ bool DragMethod_PieSegment::EndSdrDrag(bool /*bCopy*/)
 
     try
     {
-        Reference< frame::XModel > xChartModel( this->getChartModel() );
+        Reference< frame::XModel > xChartModel( getChartModel() );
         if( xChartModel.is() )
         {
             Reference< beans::XPropertySet > xPointProperties(
                 ObjectIdentifier::getObjectPropertySet( m_aObjectCID, xChartModel ) );
             if( xPointProperties.is() )
-                xPointProperties->setPropertyValue( "Offset", uno::makeAny( m_fAdditionalOffset+m_fInitialOffset ));
+                xPointProperties->setPropertyValue( "Offset", uno::Any( m_fAdditionalOffset+m_fInitialOffset ));
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return true;
@@ -142,7 +141,7 @@ void DragMethod_PieSegment::createSdrDragEntries()
     if( pObj && pPV )
     {
         const basegfx::B2DPolyPolygon aNewPolyPolygon(pObj->TakeXorPoly());
-        addSdrDragEntry(new SdrDragEntryPolyPolygon(aNewPolyPolygon));
+        addSdrDragEntry(std::unique_ptr<SdrDragEntry>(new SdrDragEntryPolyPolygon(aNewPolyPolygon)));
     }
 }
 } //namespace chart

@@ -22,7 +22,7 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b3dpolygon.hxx>
 #include <drawinglayer/primitive3d/sdrdecompositiontools3d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/primitive3d/drawinglayer_primitivetypes3d.hxx>
 #include <drawinglayer/attribute/sdrfillattribute.hxx>
 #include <drawinglayer/attribute/sdrlineattribute.hxx>
@@ -44,7 +44,7 @@ namespace drawinglayer
                 || css::drawing::NormalsKind_SPHERE == getSdr3DObjectAttribute().getNormalsKind());
 
             // create unit geometry
-            basegfx::B3DPolyPolygon aFill(basegfx::tools::createSphereFillPolyPolygonFromB3DRange(aUnitRange,
+            basegfx::B3DPolyPolygon aFill(basegfx::utils::createSphereFillPolyPolygonFromB3DRange(aUnitRange,
                 getHorizontalSegments(), getVerticalSegments(), bCreateNormals));
 
             // normal inversion
@@ -54,7 +54,7 @@ namespace drawinglayer
                 && aFill.areNormalsUsed())
             {
                 // invert normals
-                aFill = basegfx::tools::invertNormals(aFill);
+                aFill = basegfx::utils::invertNormals(aFill);
             }
 
             // texture coordinates
@@ -73,8 +73,8 @@ namespace drawinglayer
                 if(bParallelX || bParallelY)
                 {
                     // apply parallel texture coordinates in X and/or Y
-                    const basegfx::B3DRange aRange(basegfx::tools::getRange(aFill));
-                    aFill = basegfx::tools::applyDefaultTextureCoordinatesParallel(aFill, aRange, bParallelX, bParallelY);
+                    const basegfx::B3DRange aRange(basegfx::utils::getRange(aFill));
+                    aFill = basegfx::utils::applyDefaultTextureCoordinatesParallel(aFill, aRange, bParallelX, bParallelY);
                 }
 
                 if(bSphereX || bObjectSpecificX || bSphereY || bObjectSpecificY)
@@ -87,16 +87,16 @@ namespace drawinglayer
                         // different from forced to sphere texture coordinates,
                         // create a old version from it by rotating to old state before applying
                         // the texture coordinates to emulate old behaviour
-                        fRelativeAngle = F_2PI * ((double)((getHorizontalSegments() >> 1L)  - 1L) / (double)getHorizontalSegments());
+                        fRelativeAngle = F_2PI * (static_cast<double>((getHorizontalSegments() >> 1)  - 1) / static_cast<double>(getHorizontalSegments()));
                         basegfx::B3DHomMatrix aRot;
                         aRot.rotate(0.0, fRelativeAngle, 0.0);
                         aFill.transform(aRot);
                     }
 
                     // apply spherical texture coordinates in X and/or Y
-                    const basegfx::B3DRange aRange(basegfx::tools::getRange(aFill));
+                    const basegfx::B3DRange aRange(basegfx::utils::getRange(aFill));
                     const basegfx::B3DPoint aCenter(aRange.getCenter());
-                    aFill = basegfx::tools::applyDefaultTextureCoordinatesSphere(aFill, aCenter,
+                    aFill = basegfx::utils::applyDefaultTextureCoordinatesSphere(aFill, aCenter,
                         bSphereX || bObjectSpecificX, bSphereY || bObjectSpecificY);
 
                     if(bObjectSpecificX)
@@ -115,11 +115,11 @@ namespace drawinglayer
             }
 
             // build vector of PolyPolygons
-            ::std::vector< basegfx::B3DPolyPolygon > a3DPolyPolygonVector;
+            std::vector< basegfx::B3DPolyPolygon > a3DPolyPolygonVector;
 
-            for(sal_uInt32 a(0L); a < aFill.count(); a++)
+            for(sal_uInt32 a(0); a < aFill.count(); a++)
             {
-                a3DPolyPolygonVector.push_back(basegfx::B3DPolyPolygon(aFill.getB3DPolygon(a)));
+                a3DPolyPolygonVector.emplace_back(aFill.getB3DPolygon(a));
             }
 
             if(!getSdrLFSAttribute().getFill().isDefault())
@@ -146,7 +146,7 @@ namespace drawinglayer
             // add line
             if(!getSdrLFSAttribute().getLine().isDefault())
             {
-                basegfx::B3DPolyPolygon aSphere(basegfx::tools::createSpherePolyPolygonFromB3DRange(aUnitRange, getHorizontalSegments(), getVerticalSegments()));
+                basegfx::B3DPolyPolygon aSphere(basegfx::utils::createSpherePolyPolygonFromB3DRange(aUnitRange, getHorizontalSegments(), getVerticalSegments()));
                 const Primitive3DContainer aLines(create3DPolyPolygonLinePrimitives(
                     aSphere, getTransform(), getSdrLFSAttribute().getLine()));
                 aRetval.append(aLines);

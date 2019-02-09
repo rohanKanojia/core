@@ -24,29 +24,24 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/dllapi.h>
 #include <sal/types.h>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 
 #include <set>
+
+namespace com { namespace sun { namespace star { namespace util { class XNumberFormats; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XNumberFormatsSupplier; } } } }
 
 class SvXMLExport;
 
 struct XMLNumberFormat
 {
     OUString   sCurrency;
-    sal_Int32  nNumberFormat;
+    sal_Int32 const  nNumberFormat;
     sal_Int16  nType;
     bool       bIsStandard : 1;
-    XMLNumberFormat()
-        : nNumberFormat(0)
-        , nType(0)
-        , bIsStandard(false)
-    {
-    }
 
-    XMLNumberFormat(const OUString& sTempCurrency, sal_Int32 nTempFormat)
-        : sCurrency(sTempCurrency)
-        , nNumberFormat(nTempFormat)
+    XMLNumberFormat(sal_Int32 nTempFormat)
+        : nNumberFormat(nTempFormat)
         , nType(0)
         , bIsStandard(false)
     {
@@ -67,20 +62,16 @@ class XMLOFF_DLLPUBLIC XMLNumberFormatAttributesExportHelper
 {
     css::uno::Reference< css::util::XNumberFormats > xNumberFormats;
     SvXMLExport*        pExport;
-    const OUString sStandardFormat;
-    const OUString sType;
     const OUString sAttrValue;
     const OUString sAttrDateValue;
     const OUString sAttrTimeValue;
     const OUString sAttrBooleanValue;
     const OUString sAttrStringValue;
     const OUString sAttrCurrency;
-    const OUString msCurrencySymbol;
-    const OUString msCurrencyAbbreviation;
     XMLNumberFormatSet  aNumberFormats;
 public:
-    XMLNumberFormatAttributesExportHelper(css::uno::Reference< css::util::XNumberFormatsSupplier >& xNumberFormatsSupplier);
-    XMLNumberFormatAttributesExportHelper(css::uno::Reference< css::util::XNumberFormatsSupplier >& xNumberFormatsSupplier,
+    XMLNumberFormatAttributesExportHelper(css::uno::Reference< css::util::XNumberFormatsSupplier > const & xNumberFormatsSupplier);
+    XMLNumberFormatAttributesExportHelper(css::uno::Reference< css::util::XNumberFormatsSupplier > const & xNumberFormatsSupplier,
                                             SvXMLExport& rExport );
     ~XMLNumberFormatAttributesExportHelper();
 
@@ -89,11 +80,11 @@ public:
                                 const sal_Int16 nTypeKey,
                                 const double& rValue,
                                 const OUString& rCurrencySymbol,
-                                bool bExportValue = true);
+                                bool bExportValue);
     static bool GetCurrencySymbol(const sal_Int32 nNumberFormat, OUString& rCurrencySymbol,
-        css::uno::Reference< css::util::XNumberFormatsSupplier > & xNumberFormatsSupplier);
+        css::uno::Reference< css::util::XNumberFormatsSupplier > const & xNumberFormatsSupplier);
     static sal_Int16 GetCellType(const sal_Int32 nNumberFormat, bool& bIsStandard,
-        css::uno::Reference< css::util::XNumberFormatsSupplier > & xNumberFormatsSupplier);
+        css::uno::Reference< css::util::XNumberFormatsSupplier > const & xNumberFormatsSupplier);
     static void SetNumberFormatAttributes(SvXMLExport& rXMLExport,
                                           const sal_Int32 nNumberFormat,
                                           const double& rValue,
@@ -101,7 +92,7 @@ public:
     static void SetNumberFormatAttributes(SvXMLExport& rXMLExport,
                                           const OUString& rValue,
                                           const OUString& rCharacters,
-                                          bool bExportValue = true,
+                                          bool bExportValue,
                                           bool bExportTypeAttribute = true);
 
     bool GetCurrencySymbol(const sal_Int32 nNumberFormat, OUString& rCurrencySymbol);
@@ -109,7 +100,7 @@ public:
     void WriteAttributes(const sal_Int16 nTypeKey,
                                           const double& rValue,
                                           const OUString& rCurrencySymbol,
-                                          bool bExportValue = true, sal_uInt16 nNamespace = XML_NAMESPACE_OFFICE);
+                                          bool bExportValue, sal_uInt16 nNamespace = XML_NAMESPACE_OFFICE);
     void SetNumberFormatAttributes(const sal_Int32 nNumberFormat,
                                           const double& rValue,
                                           bool bExportValue = true,

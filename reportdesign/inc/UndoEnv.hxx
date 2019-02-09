@@ -22,7 +22,6 @@
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/beans/PropertyChangeEvent.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
-#include <com/sun/star/report/XReportDefinition.hpp>
 
 #include <cppuhelper/compbase.hxx>
 #include <memory>
@@ -46,7 +45,7 @@ namespace rptui
         OXUndoEnvironment& operator=(const OXUndoEnvironment&) = delete;
 
     protected:
-        virtual ~OXUndoEnvironment();
+        virtual ~OXUndoEnvironment() override;
 
         void SetUndoMode(bool _bUndo);
 
@@ -106,30 +105,28 @@ namespace rptui
         *
         * \param _pPage
         */
-        void RemoveSection(OReportPage* _pPage);
+        void RemoveSection(OReportPage const * _pPage);
 
     protected:
         // XEventListener
-        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
 
         // XPropertyChangeListener
-        virtual void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt) override;
 
         // XContainerListener
-        virtual void SAL_CALL elementInserted(const css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementReplaced(const css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL elementRemoved(const css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL elementInserted(const css::container::ContainerEvent& rEvent) override;
+        virtual void SAL_CALL elementReplaced(const css::container::ContainerEvent& rEvent) override;
+        virtual void SAL_CALL elementRemoved(const css::container::ContainerEvent& rEvent) override;
 
         // XModifyListener
-        virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL modified( const css::lang::EventObject& aEvent ) override;
 
         void ModeChanged();
 
         virtual void Notify( SfxBroadcaster& rBC, const SfxHint& rHint ) override;
 
     private:
-        void TogglePropertyListening(const css::uno::Reference< css::uno::XInterface>& Element);
-
         void    implSetModified();
 
         void    switchListening( const css::uno::Reference< css::container::XIndexAccess >& _rxContainer, bool _bStartListening );

@@ -20,10 +20,10 @@
 #include "typeselectionpage.hxx"
 #include "addresssettings.hxx"
 #include "abspilot.hxx"
-#include <vcl/layout.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <com/sun/star/sdbc/XDriver.hpp>
 #include <com/sun/star/sdbc/DriverManager.hpp>
-#include <comphelper/processfactory.hxx>
 
 namespace abp
 {
@@ -31,7 +31,7 @@ namespace abp
     using namespace ::com::sun::star::sdbc;
 
     // TypeSelectionPage
-    TypeSelectionPage::TypeSelectionPage( OAddessBookSourcePilot* _pParent )
+    TypeSelectionPage::TypeSelectionPage( OAddressBookSourcePilot* _pParent )
       : AddressBookSourcePage(_pParent, "SelectTypePage",
           "modules/sabpilot/ui/selecttypepage.ui")
     {
@@ -47,7 +47,7 @@ namespace abp
         //TODO:  For now, try to keep offering the same choices like before the
         // Mozilla/MORK cleanup, even if the status of what driver actually
         // provides which functionality is somewhat unclear, see the discussions
-        // of fdo#57285 "Address Book Data Source Wizard lists 'Mac OS X address
+        // of fdo#57285 "Address Book Data Source Wizard lists 'macOS address
         // book' on Linux" and fdo#57322 "Moz-free LDAP Address Book driver."
         // In accordance with ancient OOo 3.3, this is as follows:
         //
@@ -57,7 +57,7 @@ namespace abp
         // - KAB (if applicable)
         // - OTHER
         //
-        // On Mac OS X:
+        // On macOS:
         // - MACAB (if applicable)
         // - MORK (via mork driver, which is built unconditionally)
         // - OTHER
@@ -66,11 +66,10 @@ namespace abp
         // - MORK, THUNDERBIRD
         // - OTHER
 
+#if !defined(_WIN32)
         bool bHaveEvolution = false;
         bool bHaveKab = false;
         bool bHaveMacab = false;
-
-#if !defined(_WIN32)
 
         Reference< XDriverManager2 > xManager = DriverManager::create( _pParent->getORB() );
 
@@ -98,7 +97,7 @@ namespace abp
 
         try
         {
-            // check whether Mac OS X address book is available
+            // check whether macOS address book is available
             Reference< XDriver > xDriver( xManager->getDriverByURL("sdbc:address:macab") );
             if ( xDriver.is() )
                 bHaveMacab = true;
@@ -106,7 +105,10 @@ namespace abp
         catch(...)
         {
         }
-
+#else
+        bool const bHaveEvolution = false;
+        bool const bHaveKab = false;
+        bool const bHaveMacab = false;
 #endif
 
         // Items are displayed in list order
@@ -120,16 +122,14 @@ namespace abp
         m_aAllTypes.push_back( ButtonItem( m_pOther, AST_OTHER, true ) );
 
         Link<Button*,void> aTypeSelectionHandler = LINK(this, TypeSelectionPage, OnTypeSelected );
-        for ( ::std::vector< ButtonItem >::const_iterator loop = m_aAllTypes.begin();
-              loop != m_aAllTypes.end(); ++loop )
+        for (auto const& elem : m_aAllTypes)
         {
-            ButtonItem aItem = *loop;
-            if (!aItem.m_bVisible)
-                aItem.m_pItem->Hide();
+            if (!elem.m_bVisible)
+                elem.m_pItem->Hide();
             else
             {
-                aItem.m_pItem->SetClickHdl( aTypeSelectionHandler );
-                aItem.m_pItem->Show();
+                elem.m_pItem->SetClickHdl( aTypeSelectionHandler );
+                elem.m_pItem->Show();
             }
         }
     }
@@ -142,10 +142,9 @@ namespace abp
 
     void TypeSelectionPage::dispose()
     {
-        for ( ::std::vector< ButtonItem >::iterator loop = m_aAllTypes.begin();
-              loop != m_aAllTypes.end(); ++loop )
+        for (auto & elem : m_aAllTypes)
         {
-            loop->m_bVisible = false;
+            elem.m_bVisible = false;
         }
         m_pEvolution.clear();
         m_pEvolutionGroupwise.clear();
@@ -163,13 +162,11 @@ namespace abp
     {
         AddressBookSourcePage::ActivatePage();
 
-        for ( ::std::vector< ButtonItem >::const_iterator loop = m_aAllTypes.begin();
-              loop != m_aAllTypes.end(); ++loop )
+        for (auto const& elem : m_aAllTypes)
         {
-            const ButtonItem& rItem = (*loop);
-            if( rItem.m_pItem->IsChecked() && rItem.m_bVisible )
+            if( elem.m_pItem->IsChecked() && elem.m_bVisible )
             {
-                rItem.m_pItem->GrabFocus();
+                elem.m_pItem->GrabFocus();
                 break;
             }
         }
@@ -187,23 +184,19 @@ namespace abp
 
     void TypeSelectionPage::selectType( AddressSourceType _eType )
     {
-        for ( ::std::vector< ButtonItem >::const_iterator loop = m_aAllTypes.begin();
-              loop != m_aAllTypes.end(); ++loop )
+        for (auto const& elem : m_aAllTypes)
         {
-            ButtonItem aItem = (*loop);
-            aItem.m_pItem->Check( _eType == aItem.m_eType );
+            elem.m_pItem->Check( _eType == elem.m_eType );
         }
     }
 
 
     AddressSourceType TypeSelectionPage::getSelectedType() const
     {
-        for ( ::std::vector< ButtonItem >::const_iterator loop = m_aAllTypes.begin();
-              loop != m_aAllTypes.end(); ++loop )
+        for (auto const& elem : m_aAllTypes)
         {
-            ButtonItem aItem = (*loop);
-            if ( aItem.m_pItem->IsChecked() && aItem.m_bVisible )
-                return aItem.m_eType;
+            if ( elem.m_pItem->IsChecked() && elem.m_bVisible )
+                return elem.m_eType;
         }
 
         return AST_INVALID;
@@ -226,8 +219,10 @@ namespace abp
 
         if (AST_INVALID == getSelectedType( ))
         {
-            ScopedVclPtrInstance< MessageDialog > aError(this, ModuleRes(RID_STR_NEEDTYPESELECTION));
-            aError->Execute();
+            std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                      VclMessageType::Warning, VclButtonsType::Ok,
+                                                      compmodule::ModuleRes(RID_STR_NEEDTYPESELECTION)));
+            xBox->run();
             return false;
         }
 
@@ -245,7 +240,7 @@ namespace abp
     }
 
 
-    IMPL_LINK_NOARG_TYPED( TypeSelectionPage, OnTypeSelected, Button*, void )
+    IMPL_LINK_NOARG( TypeSelectionPage, OnTypeSelected, Button*, void )
     {
         getDialog()->typeSelectionChanged( getSelectedType() );
         updateDialogTravelUI();

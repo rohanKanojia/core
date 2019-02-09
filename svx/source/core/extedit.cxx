@@ -11,6 +11,7 @@
 
 #include <vcl/svapp.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <vcl/cvtgrf.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <svx/xoutbmp.hxx>
@@ -18,10 +19,10 @@
 #include <svx/svdpagv.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/fmview.hxx>
-#include <svtools/grfmgr.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/bindings.hxx>
 #include <salhelper/thread.hxx>
+#include <sal/log.hxx>
 #include <osl/file.hxx>
 #include <osl/thread.hxx>
 #include <osl/process.h>
@@ -96,14 +97,14 @@ void ExternalToolEditThread::execute()
     }
     catch (Exception const& e)
     {
-        SAL_WARN("svx", "ExternalToolEditThread: exception: " << e.Message);
+        SAL_WARN("svx", "ExternalToolEditThread: " << e);
     }
 }
 
 void ExternalToolEdit::Edit(GraphicObject const*const pGraphicObject)
 {
     //Get the graphic from the GraphicObject
-    const Graphic aGraphic = pGraphicObject->GetGraphic();
+    const Graphic& aGraphic = pGraphicObject->GetGraphic();
 
     //get the Preferred File Extension for this graphic
     OUString fExtension;
@@ -122,7 +123,7 @@ void ExternalToolEdit::Edit(GraphicObject const*const pGraphicObject)
     }
 
     // Move it to a file name with image extension properly set
-    aTempFileName = aTempFileBase + "." + OUString(fExtension);
+    aTempFileName = aTempFileBase + "." + fExtension;
     // FIXME: this is pretty stupid, need a better osl temp file API
     rc = osl::File::move(aTempFileBase, aTempFileName);
     if (osl::FileBase::E_None != rc)
@@ -138,7 +139,7 @@ void ExternalToolEdit::Edit(GraphicObject const*const pGraphicObject)
     OUString aFilter(rGraphicFilter.GetExportFormatShortName(nFilter));
 
     // Write the Graphic to the file now
-    XOutBitmap::WriteGraphic(aGraphic, aTempFileName, aFilter, XOUTBMP_USE_NATIVE_IF_POSSIBLE | XOUTBMP_DONT_EXPAND_FILENAME);
+    XOutBitmap::WriteGraphic(aGraphic, aTempFileName, aFilter, XOutFlags::UseNativeIfPossible | XOutFlags::DontExpandFilename);
 
     // There is a possibility that sPath extension might have been changed if the
     // provided extension is not writable
@@ -154,12 +155,13 @@ void ExternalToolEdit::Edit(GraphicObject const*const pGraphicObject)
 }
 
 SdrExternalToolEdit::SdrExternalToolEdit(
-        FmFormView *const pView, SdrObject *const pObj)
-    : m_pView(pView)
-    , m_pObj(pObj)
+    FmFormView* pView,
+    SdrObject* pObj)
+:   m_pView(pView)
+    ,m_pObj(pObj)
 {
     assert(m_pObj && m_pView);
-    StartListening(*m_pObj->GetModel());
+    StartListening(m_pObj->getSdrModelFromSdrObject());
 }
 
 
@@ -167,9 +169,9 @@ void SdrExternalToolEdit::Notify(SfxBroadcaster & rBC, SfxHint const& rHint)
 {
     SdrHint const*const pSdrHint(dynamic_cast<SdrHint const*>(&rHint));
     if (pSdrHint
-        && (HINT_MODELCLEARED == pSdrHint->GetKind()
+        && (SdrHintKind::ModelCleared == pSdrHint->GetKind()
             || (pSdrHint->GetObject() == m_pObj
-                && HINT_OBJREMOVED == pSdrHint->GetKind())))
+                && SdrHintKind::ObjectRemoved == pSdrHint->GetKind())))
     {
         m_pView = nullptr;
         m_pObj = nullptr;
@@ -184,7 +186,7 @@ void SdrExternalToolEdit::Update(Graphic & rGraphic)
     SdrPageView *const pPageView = m_pView->GetSdrPageView();
     if (pPageView)
     {
-        SdrGrafObj *const pNewObj(static_cast<SdrGrafObj*>(m_pObj->Clone()));
+        SdrGrafObj *const pNewObj(static_cast<SdrGrafObj*>(m_pObj->CloneSdrObject(m_pObj->getSdrModelFromSdrObject())));
         assert(pNewObj);
         OUString const description =
             m_pView->GetDescriptionOfMarkedObjects() + " External Edit";

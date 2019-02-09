@@ -17,30 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <cmdid.h>
 #include <swtypes.hxx>
 #include <unotools/confignode.hxx>
 #include <comphelper/processfactory.hxx>
 #include <sfx2/basedlgs.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/htmlmode.hxx>
 #include <viewopt.hxx>
 #include <docsh.hxx>
 #include <fldwrap.hxx>
-#include <flddb.hxx>
-#include <flddinf.hxx>
-#include <fldvar.hxx>
-#include <flddok.hxx>
-#include <fldfunc.hxx>
-#include <fldref.hxx>
+#include "flddb.hxx"
+#include "flddinf.hxx"
+#include "fldvar.hxx"
+#include "flddok.hxx"
+#include "fldfunc.hxx"
+#include "fldref.hxx"
 #include <wrtsh.hxx>
 #include <view.hxx>
 #include <fldtdlg.hxx>
 #include <swmodule.hxx>
 
-#include <helpid.h>
-#include <fldui.hrc>
 #include <globals.hrc>
 
 #include <com/sun/star/document/XDocumentProperties.hpp>
@@ -66,14 +65,14 @@ SwFieldDlg::SwFieldDlg(SfxBindings* pB, SwChildWinWrapper* pCW, vcl::Window *pPa
 
     GetOKButton().SetClickHdl(LINK(this, SwFieldDlg, OKHdl));
 
-    m_nDokId = AddTabPage("document", SwFieldDokPage::Create, nullptr);
-    m_nVarId = AddTabPage("variables", SwFieldVarPage::Create, nullptr);
-    m_nDokInf = AddTabPage("docinfo", SwFieldDokInfPage::Create, nullptr);
+    m_nDokId = AddTabPage("document", SwFieldDokPage::Create);
+    m_nVarId = AddTabPage("variables", SwFieldVarPage::Create);
+    m_nDokInf = AddTabPage("docinfo", SwFieldDokInfPage::Create);
 
     if (!m_bHtmlMode)
     {
-        m_nRefId = AddTabPage("ref", SwFieldRefPage::Create, nullptr);
-        m_nFuncId = AddTabPage("functions", SwFieldFuncPage::Create, nullptr);
+        m_nRefId = AddTabPage("ref", SwFieldRefPage::Create);
+        m_nFuncId = AddTabPage("functions", SwFieldFuncPage::Create);
 
         utl::OConfigurationTreeRoot aCfgRoot
             = utl::OConfigurationTreeRoot::createWithComponentContext(
@@ -82,13 +81,15 @@ SwFieldDlg::SwFieldDlg(SfxBindings* pB, SwChildWinWrapper* pCW, vcl::Window *pPa
                 -1,
                 utl::OConfigurationTreeRoot::CM_READONLY);
 
+#if HAVE_FEATURE_DBCONNECTIVITY
         bool bDatabaseFields = true;
         aCfgRoot.getNodeValue(
             OUString("DatabaseFields")) >>= bDatabaseFields;
 
         if (bDatabaseFields)
-            m_nDbId = AddTabPage("database", SwFieldDBPage::Create, nullptr);
+            m_nDbId = AddTabPage("database", SwFieldDBPage::Create);
         else
+#endif
             RemoveTabPage("database");
     }
     else
@@ -111,7 +112,7 @@ bool SwFieldDlg::Close()
     return true;
 }
 
-void SwFieldDlg::Initialize(SfxChildWinInfo *pInfo)
+void SwFieldDlg::Initialize(SfxChildWinInfo const *pInfo)
 {
     Point aPos;
     Size aSize;
@@ -135,34 +136,34 @@ void SwFieldDlg::Initialize(SfxChildWinInfo *pInfo)
         aSize = GetSizePixel();
 
         Size aParentSize = GetParent()->GetOutputSizePixel();
-        aPos.X() += ( aParentSize.Width() - aSize.Width() ) / 2;
-        aPos.Y() += ( aParentSize.Height() - aSize.Height() ) / 2;
+        aPos.AdjustX(( aParentSize.Width() - aSize.Width() ) / 2 );
+        aPos.AdjustY(( aParentSize.Height() - aSize.Height() ) / 2 );
     }
 
     Point aPoint;
-    Rectangle aRect = GetDesktopRectPixel();
-    aPoint.X() = aRect.Right() - aSize.Width();
-    aPoint.Y() = aRect.Bottom() - aSize.Height();
+    tools::Rectangle aRect = GetDesktopRectPixel();
+    aPoint.setX( aRect.Right() - aSize.Width() );
+    aPoint.setY( aRect.Bottom() - aSize.Height() );
 
     aPoint = OutputToScreenPixel( aPoint );
 
     if ( aPos.X() > aPoint.X() )
-        aPos.X() = aPoint.X() ;
+        aPos.setX( aPoint.X() ) ;
     if ( aPos.Y() > aPoint.Y() )
-        aPos.Y() = aPoint.Y();
+        aPos.setY( aPoint.Y() );
 
-    if ( aPos.X() < 0 ) aPos.X() = 0;
-    if ( aPos.Y() < 0 ) aPos.Y() = 0;
+    if ( aPos.X() < 0 ) aPos.setX( 0 );
+    if ( aPos.Y() < 0 ) aPos.setY( 0 );
 
     SetPosPixel( aPos );
 }
 
 SfxItemSet* SwFieldDlg::CreateInputItemSet( sal_uInt16 nID  )
 {
-    if ( nID == m_nDokInf )
+    SwDocShell *const pDocSh(static_cast<SwDocShell*>(SfxObjectShell::Current()));
+    if (nID == m_nDokInf && pDocSh) // might not have a shell if the dialog is restored on startup
     {
-        SwDocShell* pDocSh = static_cast<SwDocShell*>(SfxObjectShell::Current());
-        SfxItemSet* pISet = new SfxItemSet( pDocSh->GetPool(), SID_DOCINFO, SID_DOCINFO );
+        SfxItemSet* pISet = new SfxItemSet( pDocSh->GetPool(), svl::Items<SID_DOCINFO, SID_DOCINFO>{} );
         using namespace ::com::sun::star;
         uno::Reference<document::XDocumentPropertiesSupplier> xDPS(
             pDocSh->GetModel(), uno::UNO_QUERY_THROW);
@@ -179,7 +180,7 @@ SfxItemSet* SwFieldDlg::CreateInputItemSet( sal_uInt16 nID  )
 }
 
 // kick off inserting of new fields
-IMPL_LINK_NOARG_TYPED(SwFieldDlg, OKHdl, Button*, void)
+IMPL_LINK_NOARG(SwFieldDlg, OKHdl, Button*, void)
 {
     if (GetOKButton().IsEnabled())
     {
@@ -190,7 +191,7 @@ IMPL_LINK_NOARG_TYPED(SwFieldDlg, OKHdl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SwFieldDlg, CancelHdl, Button*, void)
+IMPL_LINK_NOARG(SwFieldDlg, CancelHdl, Button*, void)
 {
     Close();
 }
@@ -279,6 +280,7 @@ void SwFieldDlg::InsertHdl()
 
 void SwFieldDlg::ActivateDatabasePage()
 {
+#if HAVE_FEATURE_DBCONNECTIVITY
     m_bDataBaseMode = true;
     ShowPage(m_nDbId);
     SfxTabPage* pDBPage = GetTabPage(m_nDbId);
@@ -292,6 +294,7 @@ void SwFieldDlg::ActivateDatabasePage()
     RemoveTabPage("docinfo");
     RemoveTabPage("ref");
     RemoveTabPage("functions");
+#endif
 }
 
 void SwFieldDlg::ShowReferencePage()
@@ -301,6 +304,7 @@ void SwFieldDlg::ShowReferencePage()
 
 void SwFieldDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
 {
+#if HAVE_FEATURE_DBCONNECTIVITY
     if (nId == m_nDbId)
     {
         SfxDispatcher* pDispatch = m_pBindings->GetDispatcher();
@@ -316,6 +320,10 @@ void SwFieldDlg::PageCreated(sal_uInt16 nId, SfxTabPage& rPage)
                 static_cast<SwFieldDBPage&>(rPage).SetWrtShell(static_cast<SwView*>(pViewShell)->GetWrtShell());
         }
     }
+#else
+    (void) nId;
+    (void) rPage;
+#endif
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

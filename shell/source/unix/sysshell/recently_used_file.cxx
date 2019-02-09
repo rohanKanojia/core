@@ -19,6 +19,7 @@
 
 #include "recently_used_file.hxx"
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <osl/process.h>
 #include <osl/security.hxx>
 #include <osl/thread.h>
@@ -30,15 +31,14 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-const OUString RECENTLY_USED_FILE_NAME(".recently-used");
-const OUString SLASH("/");
+const char SLASH[] = "/";
 
-namespace /* private */ {
+namespace {
 
-inline void ensure_final_slash(/*inout*/ OUString& path)
+void ensure_final_slash(/*inout*/ OUString& path)
 {
     if (!path.isEmpty() &&
-        (SLASH.pData->buffer[0] != path.pData->buffer[path.getLength() - 1]))
+        (SLASH[0] != path.pData->buffer[path.getLength() - 1]))
         path += SLASH;
 }
 
@@ -51,37 +51,35 @@ recently_used_file::recently_used_file() :
     osl::Security sec;
     OUString homedir_url;
 
-    if (sec.getHomeDir(homedir_url))
-    {
-        OUString homedir;
-        osl::FileBase::getSystemPathFromFileURL(homedir_url, homedir);
+    if (!sec.getHomeDir(homedir_url))
+        throw "Cannot determine user home directory";
 
-        OUString rufn = homedir;
-        ensure_final_slash(rufn);
-        rufn += RECENTLY_USED_FILE_NAME;
+    OUString homedir;
+    osl::FileBase::getSystemPathFromFileURL(homedir_url, homedir);
 
-        OString tmp =
-            OUStringToOString(rufn, osl_getThreadTextEncoding());
+    OUString rufn = homedir;
+    ensure_final_slash(rufn);
+    rufn += ".recently-used";
 
-        int fd = open(tmp.getStr(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-        if (fd != -1) {
-            file_ = fdopen(fd, "w+");
-            if (file_ == nullptr) {
-                close(fd);
-            }
-        }
+    OString tmp =
+        OUStringToOString(rufn, osl_getThreadTextEncoding());
 
-        if (nullptr == file_)
-            throw "I/O error opening ~/.recently-used";
-
-        if (lockf(fileno(file_), F_LOCK, 0) != 0)
-        {
-            fclose(file_);
-            throw "Cannot lock ~/.recently-used";
+    int fd = open(tmp.getStr(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd != -1) {
+        file_ = fdopen(fd, "w+");
+        if (file_ == nullptr) {
+            close(fd);
         }
     }
-    else
-        throw "Cannot determine user home directory";
+
+    if (nullptr == file_)
+        throw "I/O error opening ~/.recently-used";
+
+    if (lockf(fileno(file_), F_LOCK, 0) != 0)
+    {
+        fclose(file_);
+        throw "Cannot lock ~/.recently-used";
+    }
 }
 
 

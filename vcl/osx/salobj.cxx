@@ -18,13 +18,20 @@
  */
 
 #include <string.h>
+#include <tools/debug.hxx>
+#include <vcl/opengl/OpenGLContext.hxx>
+#include <vcl/opengl/OpenGLHelper.hxx>
+#include <opengl/zone.hxx>
 
-#include "osx/saldata.hxx"
-#include "osx/salobj.h"
-#include "osx/salframe.h"
+#include <osx/saldata.hxx>
+#include <osx/salframe.h>
+#include <osx/salinst.h>
+#include <osx/salobj.h>
+#include <osx/runinmain.hxx>
+
 #include <AppKit/NSOpenGLView.h>
 
-AquaSalObject::AquaSalObject( AquaSalFrame* pFrame, SystemWindowData* pWindowData ) :
+AquaSalObject::AquaSalObject( AquaSalFrame* pFrame, SystemWindowData const * pWindowData ) :
     mpFrame( pFrame ),
     mnClipX( -1 ),
     mnClipY( -1 ),
@@ -50,41 +57,88 @@ AquaSalObject::AquaSalObject( AquaSalFrame* pFrame, SystemWindowData* pWindowDat
     if (pWindowData && pWindowData->bOpenGL)
     {
         maSysData.mbOpenGL = true;
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+            // "'NSOpenGLPixelFormat' is deprecated: first deprecated in macOS 10.14 - Please use
+            // Metal or MetalKit."
         NSOpenGLPixelFormat* pixFormat = nullptr;
+SAL_WNODEPRECATED_DECLARATIONS_POP
 
         if (pWindowData->bLegacy)
         {
-            NSOpenGLPixelFormatAttribute aAttributes[] =
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+                // "'NSOpenGLPixelFormatAttribute' is deprecated: first deprecated in macOS 10.14"
+            NSOpenGLPixelFormatAttribute const aAttributes[] =
+SAL_WNODEPRECATED_DECLARATIONS_POP
             {
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+                    // "'NSOpenGLPFADoubleBuffer' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFAAlphaSize' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFAColorSize' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFADepthSize' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFAMultisample' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFASampleBuffers' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPixelFormatAttribute' is deprecated: first deprecated in macOS
+                    // 10.14",
+                    // "'NSOpenGLPFASamples' is deprecated: first deprecated in macOS 10.14"
                 NSOpenGLPFADoubleBuffer,
                 NSOpenGLPFAAlphaSize, 8,
                 NSOpenGLPFAColorSize, 24,
                 NSOpenGLPFADepthSize, 24,
                 NSOpenGLPFAMultisample,
-                NSOpenGLPFASampleBuffers, (NSOpenGLPixelFormatAttribute)1,
-                NSOpenGLPFASamples, (NSOpenGLPixelFormatAttribute)4,
+                NSOpenGLPFASampleBuffers, NSOpenGLPixelFormatAttribute(1),
+                NSOpenGLPFASamples, NSOpenGLPixelFormatAttribute(4),
+SAL_WNODEPRECATED_DECLARATIONS_POP
                 0
             };
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+                // "'NSOpenGLPixelFormat' is deprecated: first deprecated in macOS 10.14 - Please
+                // use Metal or MetalKit."
             pixFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:aAttributes];
+SAL_WNODEPRECATED_DECLARATIONS_POP
         }
         else
         {
-            NSOpenGLPixelFormatAttribute aAttributes[] =
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+                // "'NSOpenGLPixelFormatAttribute' is deprecated: first deprecated in macOS 10.14"
+            NSOpenGLPixelFormatAttribute const aAttributes[] =
+SAL_WNODEPRECATED_DECLARATIONS_POP
             {
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+                    // "'NSOpenGLPFAOpenGLProfile' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLProfileVersion3_2Core' is deprecated: first deprecated in macOS
+                    // 10.14",
+                    // "'NSOpenGLPFADoubleBuffer' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFAAlphaSize' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFAColorSize' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFADepthSize' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFAMultisample' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPFASampleBuffers' is deprecated: first deprecated in macOS 10.14",
+                    // "'NSOpenGLPixelFormatAttribute' is deprecated: first deprecated in macOS
+                    // 10.14",
+                    // "'NSOpenGLPFASamples' is deprecated: first deprecated in macOS 10.14"
                 NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
                 NSOpenGLPFADoubleBuffer,
                 NSOpenGLPFAAlphaSize, 8,
                 NSOpenGLPFAColorSize, 24,
                 NSOpenGLPFADepthSize, 24,
                 NSOpenGLPFAMultisample,
-                NSOpenGLPFASampleBuffers, (NSOpenGLPixelFormatAttribute)1,
-                NSOpenGLPFASamples, (NSOpenGLPixelFormatAttribute)4,
+                NSOpenGLPFASampleBuffers, NSOpenGLPixelFormatAttribute(1),
+                NSOpenGLPFASamples, NSOpenGLPixelFormatAttribute(4),
+SAL_WNODEPRECATED_DECLARATIONS_POP
                 0
             };
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+                // "'NSOpenGLPixelFormat' is deprecated: first deprecated in macOS 10.14 - Please
+                // use Metal or MetalKit."
             pixFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:aAttributes];
+SAL_WNODEPRECATED_DECLARATIONS_POP
         }
 
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+            // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+            // instead."
         maSysData.mpNSView = [[NSOpenGLView alloc] initWithFrame: aInitFrame pixelFormat:pixFormat];
+SAL_WNODEPRECATED_DECLARATIONS_POP
     }
     else
     {
@@ -100,6 +154,8 @@ AquaSalObject::AquaSalObject( AquaSalFrame* pFrame, SystemWindowData* pWindowDat
 
 AquaSalObject::~AquaSalObject()
 {
+    assert( GetSalData()->mpInstance->IsMainThread() );
+
     if( maSysData.mpNSView )
     {
         NSView *pView = maSysData.mpNSView;
@@ -189,6 +245,8 @@ void AquaSalObject::SetPosSize( long nX, long nY, long nWidth, long nHeight )
 
 void AquaSalObject::setClippedPosSize()
 {
+    OSX_SALDATA_RUNINMAIN( setClippedPosSize() )
+
     NSRect aViewRect = { NSZeroPoint, NSMakeSize( mnWidth, mnHeight) };
     if( maSysData.mpNSView )
     {
@@ -217,13 +275,165 @@ void AquaSalObject::setClippedPosSize()
 
 void AquaSalObject::Show( bool bVisible )
 {
-    if( mpClipView )
-        [mpClipView setHidden: (bVisible ? NO : YES)];
+    if( !mpClipView )
+        return;
+
+    OSX_SALDATA_RUNINMAIN( Show( bVisible ) )
+
+    [mpClipView setHidden: (bVisible ? NO : YES)];
 }
 
 const SystemEnvData* AquaSalObject::GetSystemData() const
 {
     return &maSysData;
+}
+
+class AquaOpenGLContext : public OpenGLContext
+{
+public:
+    virtual void initWindow() override;
+
+private:
+    GLWindow m_aGLWin;
+
+    virtual const GLWindow& getOpenGLWindow() const override { return m_aGLWin; }
+    virtual GLWindow& getModifiableOpenGLWindow() override { return m_aGLWin; }
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+        // instead."
+    NSOpenGLView* getOpenGLView();
+SAL_WNODEPRECATED_DECLARATIONS_POP
+    virtual bool ImplInit() override;
+    virtual SystemWindowData generateWinData(vcl::Window* pParent, bool bRequestLegacyContext) override;
+    virtual void makeCurrent() override;
+    virtual void destroyCurrentContext() override;
+    virtual void resetCurrent() override;
+    virtual void swapBuffers() override;
+};
+
+void AquaOpenGLContext::resetCurrent()
+{
+    OSX_SALDATA_RUNINMAIN( resetCurrent() )
+
+    clearCurrent();
+
+    OpenGLZone aZone;
+
+    (void) this; // loplugin:staticmethods
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLContext' is deprecated: first deprecated in macOS 10.14 - Please use Metal or
+        // MetalKit."
+    [NSOpenGLContext clearCurrentContext];
+SAL_WNODEPRECATED_DECLARATIONS_POP
+}
+
+void AquaOpenGLContext::makeCurrent()
+{
+    OSX_SALDATA_RUNINMAIN( makeCurrent() )
+
+    if (isCurrent())
+        return;
+
+    OpenGLZone aZone;
+
+    clearCurrent();
+
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+        // instead."
+    NSOpenGLView* pView = getOpenGLView();
+SAL_WNODEPRECATED_DECLARATIONS_POP
+    [[pView openGLContext] makeCurrentContext];
+
+    registerAsCurrent();
+}
+
+void AquaOpenGLContext::swapBuffers()
+{
+    OSX_SALDATA_RUNINMAIN( swapBuffers() )
+
+    OpenGLZone aZone;
+
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+        // instead."
+    NSOpenGLView* pView = getOpenGLView();
+SAL_WNODEPRECATED_DECLARATIONS_POP
+    [[pView openGLContext] flushBuffer];
+
+    BuffersSwapped();
+}
+
+SystemWindowData AquaOpenGLContext::generateWinData(vcl::Window* /*pParent*/, bool bRequestLegacyContext)
+{
+    SystemWindowData aWinData;
+    aWinData.bOpenGL = true;
+    aWinData.bLegacy = bRequestLegacyContext;
+    return aWinData;
+}
+
+void AquaOpenGLContext::destroyCurrentContext()
+{
+    OSX_SALDATA_RUNINMAIN( destroyCurrentContext() )
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLContext' is deprecated: first deprecated in macOS 10.14 - Please use Metal or
+        // MetalKit."
+    [NSOpenGLContext clearCurrentContext];
+SAL_WNODEPRECATED_DECLARATIONS_POP
+}
+
+void AquaOpenGLContext::initWindow()
+{
+    OSX_SALDATA_RUNINMAIN( initWindow() )
+
+    if( !m_pChildWindow )
+    {
+        SystemWindowData winData = generateWinData(mpWindow, mbRequestLegacyContext);
+        m_pChildWindow = VclPtr<SystemChildWindow>::Create(mpWindow, 0, &winData, false);
+    }
+
+    if (m_pChildWindow)
+    {
+        InitChildWindow(m_pChildWindow.get());
+    }
+}
+
+bool AquaOpenGLContext::ImplInit()
+{
+    OSX_SALDATA_RUNINMAIN_UNION( ImplInit(), boolean )
+
+    OpenGLZone aZone;
+
+    VCL_GL_INFO("OpenGLContext::ImplInit----start");
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+        // instead."
+    NSOpenGLView* pView = getOpenGLView();
+SAL_WNODEPRECATED_DECLARATIONS_POP
+    [[pView openGLContext] makeCurrentContext];
+
+    bool bRet = InitGL();
+    InitGLDebugging();
+    return bRet;
+}
+
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+        // instead."
+NSOpenGLView* AquaOpenGLContext::getOpenGLView()
+SAL_WNODEPRECATED_DECLARATIONS_POP
+{
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'NSOpenGLView' is deprecated: first deprecated in macOS 10.14 - Please use MTKView
+        // instead."
+    return reinterpret_cast<NSOpenGLView*>(m_pChildWindow->GetSystemData()->mpNSView);
+SAL_WNODEPRECATED_DECLARATIONS_POP
+}
+
+OpenGLContext* AquaSalInstance::CreateOpenGLContext()
+{
+    OSX_SALDATA_RUNINMAIN_POINTER( CreateOpenGLContext(), OpenGLContext* )
+    return new AquaOpenGLContext;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

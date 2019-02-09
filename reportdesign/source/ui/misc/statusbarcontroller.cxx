@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "statusbarcontroller.hxx"
+#include <statusbarcontroller.hxx>
 
 #include <cppuhelper/supportsservice.hxx>
+#include <comphelper/types.hxx>
 #include <svx/zoomsliderctrl.hxx>
 #include <svx/zoomctrl.hxx>
 #include <svx/svxids.hrc>
@@ -30,6 +31,7 @@
 #include <vcl/status.hxx>
 #include <osl/mutex.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
 
 namespace rptui
 {
@@ -40,28 +42,28 @@ namespace rptui
     using namespace ::com::sun::star::frame;
     using namespace ::com::sun::star::util;
 
-OUString SAL_CALL OStatusbarController::getImplementationName() throw( RuntimeException, std::exception )
+OUString SAL_CALL OStatusbarController::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
-OUString OStatusbarController::getImplementationName_Static() throw( RuntimeException )
+OUString OStatusbarController::getImplementationName_Static()
 {
     return OUString("com.sun.star.report.comp.StatusbarController");
 }
 
-Sequence< OUString> OStatusbarController::getSupportedServiceNames_Static() throw( RuntimeException )
+Sequence< OUString> OStatusbarController::getSupportedServiceNames_Static()
 {
     Sequence<OUString> aSupported { "com.sun.star.frame.StatusbarController" };
     return aSupported;
 }
 
-sal_Bool SAL_CALL OStatusbarController::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatusbarController::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-Sequence< OUString> SAL_CALL OStatusbarController::getSupportedServiceNames() throw(RuntimeException, std::exception)
+Sequence< OUString> SAL_CALL OStatusbarController::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
@@ -79,7 +81,7 @@ OStatusbarController::OStatusbarController(const Reference< XComponentContext >&
 {
 }
 
-void SAL_CALL OStatusbarController::initialize( const Sequence< Any >& _rArguments ) throw (Exception, RuntimeException, std::exception)
+void SAL_CALL OStatusbarController::initialize( const Sequence< Any >& _rArguments )
 {
     StatusbarController::initialize(_rArguments);
     SolarMutexGuard aSolarMutexGuard;
@@ -102,11 +104,13 @@ void SAL_CALL OStatusbarController::initialize( const Sequence< Any >& _rArgumen
         SfxStatusBarControl *pController = nullptr;
         if ( m_aCommandURL == ".uno:ZoomSlider" )
         {
-            pController = new SvxZoomSliderControl(m_nSlotId = SID_ATTR_ZOOMSLIDER,m_nId,*pStatusBar);
+            m_nSlotId = SID_ATTR_ZOOMSLIDER;
+            pController = new SvxZoomSliderControl(m_nSlotId,m_nId,*pStatusBar);
         }
         else if ( m_aCommandURL == ".uno:Zoom" )
         {
-            pController = new SvxZoomStatusBarControl(m_nSlotId = SID_ATTR_ZOOM,m_nId,*pStatusBar);
+            m_nSlotId = SID_ATTR_ZOOM;
+            pController = new SvxZoomStatusBarControl(m_nSlotId,m_nId,*pStatusBar);
         }
 
         if ( pController )
@@ -124,7 +128,7 @@ void SAL_CALL OStatusbarController::initialize( const Sequence< Any >& _rArgumen
     }
 }
 // XStatusListener
-void SAL_CALL OStatusbarController::statusChanged( const FeatureStateEvent& _aEvent)throw ( RuntimeException, std::exception )
+void SAL_CALL OStatusbarController::statusChanged( const FeatureStateEvent& _aEvent)
 {
     SolarMutexGuard aSolarGuard;
     ::osl::MutexGuard aGuard(m_aMutex);
@@ -155,17 +159,17 @@ void SAL_CALL OStatusbarController::statusChanged( const FeatureStateEvent& _aEv
 }
 
 // XStatusbarController
-sal_Bool SAL_CALL OStatusbarController::mouseButtonDown(const css::awt::MouseEvent& _aEvent)throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatusbarController::mouseButtonDown(const css::awt::MouseEvent& _aEvent)
 {
     return m_rController.is() && m_rController->mouseButtonDown(_aEvent);
 }
 
-sal_Bool SAL_CALL OStatusbarController::mouseMove(    const css::awt::MouseEvent& _aEvent)throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatusbarController::mouseMove(    const css::awt::MouseEvent& _aEvent)
 {
     return m_rController.is() && m_rController->mouseMove(_aEvent);
 }
 
-sal_Bool SAL_CALL OStatusbarController::mouseButtonUp(    const css::awt::MouseEvent& _aEvent)throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatusbarController::mouseButtonUp(    const css::awt::MouseEvent& _aEvent)
 {
     return m_rController.is() && m_rController->mouseButtonUp(_aEvent);
 }
@@ -175,7 +179,6 @@ void SAL_CALL OStatusbarController::command(
     ::sal_Int32 nCommand,
     sal_Bool bMouseEvent,
     const css::uno::Any& aData )
-throw (css::uno::RuntimeException, std::exception)
 {
     if ( m_rController.is() )
         m_rController->command( aPos, nCommand, bMouseEvent, aData );
@@ -185,7 +188,6 @@ void SAL_CALL OStatusbarController::paint(
     const css::uno::Reference< css::awt::XGraphics >& xGraphics,
     const css::awt::Rectangle& rOutputRectangle,
     ::sal_Int32 nStyle )
-throw (css::uno::RuntimeException, std::exception)
 {
     if ( m_rController.is() )
         m_rController->paint( xGraphics, rOutputRectangle, nStyle );
@@ -193,7 +195,6 @@ throw (css::uno::RuntimeException, std::exception)
 
 void SAL_CALL OStatusbarController::click(
     const css::awt::Point& aPos )
-throw (css::uno::RuntimeException, std::exception)
 {
     if ( m_rController.is() )
         m_rController->click( aPos );
@@ -201,13 +202,12 @@ throw (css::uno::RuntimeException, std::exception)
 
 void SAL_CALL OStatusbarController::doubleClick(
     const css::awt::Point& aPos )
-throw (css::uno::RuntimeException, std::exception)
 {
     if ( m_rController.is() )
         m_rController->doubleClick( aPos );
 }
 
-void SAL_CALL OStatusbarController::update() throw ( RuntimeException, std::exception )
+void SAL_CALL OStatusbarController::update()
 {
     ::svt::StatusbarController::update();
     if ( m_rController.is() )
@@ -215,7 +215,7 @@ void SAL_CALL OStatusbarController::update() throw ( RuntimeException, std::exce
 }
 
 // XComponent
-void SAL_CALL OStatusbarController::dispose() throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL OStatusbarController::dispose()
 {
     if ( m_rController.is() )
         ::comphelper::disposeComponent( m_rController );

@@ -21,6 +21,7 @@
 #define  DECLARE_FN_POINTERS 1
 #include "EApi.h"
 static const char *eBookLibNames[] = {
+    "libebook-1.2.so.19", // evolution-data-server 3.24+
     "libebook-1.2.so.16",
     "libebook-1.2.so.15",
     "libebook-1.2.so.14", // bumped again (evolution-3.6)
@@ -33,7 +34,7 @@ static const char *eBookLibNames[] = {
     "libebook.so.8"       // evolution-2.0
 };
 
-typedef void (*SymbolFunc) (void);
+typedef void (*SymbolFunc) ();
 
 #define SYM_MAP(a) { #a, reinterpret_cast<SymbolFunc *>(&a) }
 struct ApiMap
@@ -172,9 +173,7 @@ bool EApiInit()
 
 ESourceRegistry *get_e_source_registry()
 {
-    static ESourceRegistry *theInstance;
-    if (!theInstance)
-        theInstance = e_source_registry_new_sync(nullptr, nullptr);
+    static ESourceRegistry *theInstance = e_source_registry_new_sync(nullptr, nullptr);
     return theInstance;
 }
 

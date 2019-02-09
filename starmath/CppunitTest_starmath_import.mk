@@ -16,10 +16,7 @@ $(eval $(call gb_CppunitTest_set_include,starmath_import,\
 
 $(eval $(call gb_CppunitTest_use_external,starmath_import,boost_headers))
 
-$(eval $(call gb_CppunitTest_use_api,starmath_import,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,starmath_import))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,starmath_import,\
     starmath/qa/extras/mmlimport-test \
@@ -53,7 +50,6 @@ $(eval $(call gb_CppunitTest_use_libraries,starmath_import,\
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,starmath_import))
@@ -80,6 +76,7 @@ $(eval $(call gb_CppunitTest_use_components,starmath_import,\
     svl/util/svl \
     svx/util/svx \
     unoxml/source/service/unoxml \
+    uui/util/uui \
     xmloff/util/xo \
 ))
 

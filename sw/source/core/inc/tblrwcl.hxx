@@ -39,21 +39,19 @@ class SwContentNode;
 class SfxPoolItem;
 class SwShareBoxFormats;
 class SwFormatFrameSize;
-struct _CpyPara;
-struct _InsULPara;
 
 void sw_LineSetHeadCondColl( const SwTableLine* pLine );
 
 #ifdef DBG_UTIL
-void _CheckBoxWidth( const SwTableLine& rLine, SwTwips nSize );
+void CheckBoxWidth( const SwTableLine& rLine, SwTwips nSize );
 #endif
 
-void _InsTableBox( SwDoc* pDoc, SwTableNode* pTableNd,
+void InsTableBox( SwDoc* pDoc, SwTableNode* pTableNd,
                 SwTableLine* pLine, SwTableBoxFormat* pBoxFrameFormat,
                 SwTableBox* pBox, sal_uInt16 nInsPos, sal_uInt16 nCnt = 1 );
 
-SW_DLLPUBLIC void _DeleteBox( SwTable& rTable, SwTableBox* pBox, SwUndo* pUndo = nullptr,
-                bool bCalcNewSize = true, const bool bCorrBorder = true,
+SW_DLLPUBLIC void DeleteBox_( SwTable& rTable, SwTableBox* pBox, SwUndo* pUndo,
+                bool bCalcNewSize, const bool bCorrBorder,
                 SwShareBoxFormats* pShareFormats = nullptr );
 
 /**
@@ -61,19 +59,20 @@ SW_DLLPUBLIC void _DeleteBox( SwTable& rTable, SwTableBox* pBox, SwUndo* pUndo =
  * Collects the uppermost or lowermost Lines of a Box from a Line in an array.
  * We also store their positions.
  *
- * @see implementation in im ndtbl.cxx
+ * @see implementation in ndtbl.cxx
  */
 class SwCollectTableLineBoxes
 {
     std::vector<sal_uInt16> aPosArr;
     std::vector<SwTableBox*> m_Boxes;
     SwHistory* pHst;
-    sal_uInt16 nMode, nWidth;
+    SplitTable_HeadlineOption const nMode;
+    sal_uInt16 nWidth;
     bool bGetFromTop : 1;
     bool bGetValues : 1;
 
 public:
-    SwCollectTableLineBoxes( bool bTop, sal_uInt16 nMd = 0, SwHistory* pHist=nullptr )
+    SwCollectTableLineBoxes( bool bTop, SplitTable_HeadlineOption nMd = SplitTable_HeadlineOption::NONE, SwHistory* pHist=nullptr )
         :
         pHst( pHist ), nMode( nMd ), nWidth( 0 ),
         bGetFromTop( bTop ), bGetValues( true )
@@ -97,7 +96,7 @@ public:
     bool IsGetFromTop() const           { return bGetFromTop; }
     bool IsGetValues() const            { return bGetValues; }
 
-    sal_uInt16 GetMode() const              { return nMode; }
+    SplitTable_HeadlineOption GetMode() const { return nMode; }
     void SetValues( bool bFlag )        { bGetValues = false; nWidth = 0;
                                           bGetFromTop = bFlag; }
     bool Resize( sal_uInt16 nOffset, sal_uInt16 nWidth );
@@ -114,31 +113,31 @@ void sw_BoxSetSplitBoxFormats( SwTableBox* pBox, SwCollectTableLineBoxes* pSplPa
  */
 struct SwSaveRowSpan
 {
-    sal_uInt16 mnSplitLine; // the line number where the table has been splitted
+    sal_uInt16 const mnSplitLine; // the line number where the table has been splitted
     std::vector< long > mnRowSpans; // the row span attributes in this line
     SwSaveRowSpan( SwTableBoxes& rBoxes, sal_uInt16 nSplitLn );
 };
 
-struct _SwGCLineBorder
+struct SwGCLineBorder
 {
     const SwTableLines* pLines;
     SwShareBoxFormats* pShareFormats;
     sal_uInt16 nLinePos;
 
-    _SwGCLineBorder( const SwTable& rTable )
+    SwGCLineBorder( const SwTable& rTable )
         : pLines( &rTable.GetTabLines() ), pShareFormats(nullptr), nLinePos( 0 )  {}
 
-    _SwGCLineBorder( const SwTableBox& rBox )
+    SwGCLineBorder( const SwTableBox& rBox )
         : pLines( &rBox.GetTabLines() ), pShareFormats(nullptr), nLinePos( 0 )  {}
-    bool IsLastLine() const { return nLinePos + 1 >= (sal_uInt16)pLines->size(); }
+    bool IsLastLine() const { return nLinePos + 1 >= static_cast<sal_uInt16>(pLines->size()); }
 };
 
-class _SwGCBorder_BoxBrd
+class SwGCBorder_BoxBrd
 {
     const editeng::SvxBorderLine* pBrdLn;
     bool bAnyBorderFnd;
 public:
-    _SwGCBorder_BoxBrd() : pBrdLn( nullptr ), bAnyBorderFnd( false ) {}
+    SwGCBorder_BoxBrd() : pBrdLn( nullptr ), bAnyBorderFnd( false ) {}
 
     void SetBorder( const editeng::SvxBorderLine& rBorderLine )
         { pBrdLn = &rBorderLine; bAnyBorderFnd = false; }
@@ -152,7 +151,7 @@ public:
     bool IsAnyBorderFound() const { return bAnyBorderFnd; }
 };
 
-void sw_GC_Line_Border( const SwTableLine* pLine, _SwGCLineBorder* pGCPara );
+void sw_GC_Line_Border( const SwTableLine* pLine, SwGCLineBorder* pGCPara );
 
 class SwShareBoxFormat
 {

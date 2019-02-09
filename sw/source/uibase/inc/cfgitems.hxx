@@ -21,7 +21,7 @@
 
 #include <tools/color.hxx>
 #include <svl/poolitem.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 #include <printdata.hxx>
 
 #include <cmdid.h>
@@ -55,15 +55,11 @@ class SW_DLLPUBLIC SwDocDisplayItem : public SfxPoolItem
     bool bShowHiddenPara    :1;
 
 public:
-                                SwDocDisplayItem( sal_uInt16 nWhich = FN_PARAM_DOCDISP );
-                                SwDocDisplayItem(
-                                    const SwDocDisplayItem& rSwDocDisplayItem );
-                                SwDocDisplayItem( const SwViewOption& rVOpt,
-                                                                sal_uInt16 nWhich );
+                                SwDocDisplayItem();
+                                SwDocDisplayItem( const SwViewOption& rVOpt );
 
     virtual SfxPoolItem*        Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool                operator==( const SfxPoolItem& ) const override;
-    void                        operator=( const SwDocDisplayItem& );
     void                        FillViewOptions( SwViewOption& rVOpt) const;
 };
 
@@ -83,24 +79,23 @@ class SW_DLLPUBLIC SwElemItem : public SfxPoolItem
     bool bDrawing           :1;
     bool bFieldName         :1;
     bool bNotes             :1;
+    bool bShowInlineTooltips :1;
 
     friend class SwContentOptPage;
 
 public:
-                            SwElemItem( sal_uInt16 nWhich = FN_PARAM_ELEM );
-                            SwElemItem(const SwElemItem& rElemItem);
-                            SwElemItem(const SwViewOption& rVOpt, sal_uInt16 nWhich);
+                            SwElemItem();
+                            SwElemItem(const SwViewOption& rVOpt);
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
-    void                    operator=( const SwElemItem& );
 
     void                    FillViewOptions( SwViewOption& rVOpt) const;
 
 };
 
 // OS 12.01.95
-// Item for settings dialog - printer/add ons
+// Item for settings dialog - printer/add-ons
 class SW_DLLPUBLIC SwAddPrinterItem : public SfxPoolItem, public SwPrintData
 {
     friend class SwAddPrinterTabPage;
@@ -108,9 +103,8 @@ class SW_DLLPUBLIC SwAddPrinterItem : public SfxPoolItem, public SwPrintData
     using  SwPrintData::operator ==;
 
 public:
-    SwAddPrinterItem( sal_uInt16 nWhich = FN_PARAM_ADDPRINTER );
-    SwAddPrinterItem( sal_uInt16 nWhich, const SwPrintData& rPrtData );
-    SwAddPrinterItem( const SwAddPrinterItem& rAddPrinterItem);
+    SwAddPrinterItem();
+    SwAddPrinterItem( const SwPrintData& rPrtData );
 
     virtual SfxPoolItem* Clone( SfxItemPool *pPool = nullptr ) const override;
 
@@ -125,13 +119,11 @@ class SW_DLLPUBLIC SwShadowCursorItem : public SfxPoolItem
     sal_uInt8 eMode;
     bool bOn;
 public:
-    SwShadowCursorItem( sal_uInt16 nWhich = FN_PARAM_SHADOWCURSOR );
-    SwShadowCursorItem( const SwShadowCursorItem& rElemItem );
-    SwShadowCursorItem( const SwViewOption& rVOpt, sal_uInt16 nWhich );
+    SwShadowCursorItem();
+    SwShadowCursorItem( const SwViewOption& rVOpt );
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;
-    void                    operator=( const SwShadowCursorItem& );
 
     void FillViewOptions( SwViewOption& rVOpt) const;
 
@@ -163,9 +155,7 @@ class SW_DLLPUBLIC SwTestItem : public SfxPoolItem
     bool    bTest10:1;
 
 public:
-                            SwTestItem( sal_uInt16 _nWhich):
-                                            SfxPoolItem(_nWhich){};
-                            SwTestItem( const SwTestItem& pTestItem);
+                            SwTestItem() : SfxPoolItem(FN_PARAM_SWTEST) {};
 
     virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
     virtual bool            operator==( const SfxPoolItem& ) const override;

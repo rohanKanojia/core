@@ -29,10 +29,13 @@ public:
     /// This one doesn't.
     OString makeStringAndClear();
     bool isGraphic() const;
+    OStringBuffer& getBuffer() { return m_aBuffer; }
+    const OStringBuffer& getBuffer() const { return m_aBuffer; }
 
+private:
     OStringBuffer m_aBuffer;
-    const SwFlyFrameFormat* m_pFlyFrameFormat;
-    const SwGrfNode* m_pGrfNode;
+    const SwFlyFrameFormat* m_pFlyFrameFormat = nullptr;
+    const SwGrfNode* m_pGrfNode = nullptr;
 };
 
 /// Wrapper around OStringBuffers, so less hexdump of graphics have to be kept in memory during RTF export.
@@ -55,8 +58,9 @@ public:
     void append(const SwFlyFrameFormat* pFlyFrameFormat, const SwGrfNode* pGrfNode);
     /// Append all contained buffers and clear the argument.
     void appendAndClear(RtfStringBuffer& rBuf);
+
 private:
-    typedef std::vector<RtfStringBufferValue> Values_t;
+    using Values_t = std::vector<RtfStringBufferValue>;
     Values_t m_aValues;
 };
 

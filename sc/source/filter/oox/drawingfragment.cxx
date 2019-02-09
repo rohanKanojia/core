@@ -17,29 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingfragment.hxx"
+#include <drawingfragment.hxx>
 
+#include <basegfx/matrix/b2dhommatrix.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameReplace.hpp>
 #include <com/sun/star/document/XEventsSupplier.hpp>
 #include <com/sun/star/drawing/XControlShape.hpp>
+#include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/script/ScriptEventDescriptor.hpp>
 #include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <rtl/strbuf.hxx>
 #include <svx/svdobj.hxx>
-#include "drwlayer.hxx"
-#include "userdat.hxx"
+#include <drwlayer.hxx>
+#include <userdat.hxx>
+#include <oox/core/filterbase.hxx>
 #include <oox/drawingml/connectorshapecontext.hxx>
 #include <oox/drawingml/graphicshapecontext.hxx>
 #include <oox/helper/attributelist.hxx>
 #include <oox/helper/propertyset.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 #include <oox/vml/vmlshape.hxx>
 #include <oox/vml/vmlshapecontainer.hxx>
-#include "formulaparser.hxx"
-#include "stylesbuffer.hxx"
-#include "themebuffer.hxx"
-#include "unitconverter.hxx"
-#include "worksheetbuffer.hxx"
+#include <formulaparser.hxx>
+#include <stylesbuffer.hxx>
+#include <themebuffer.hxx>
+#include <unitconverter.hxx>
+#include <worksheetbuffer.hxx>
 namespace oox {
 namespace xls {
 
@@ -48,9 +55,7 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::script;
-using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::xml::sax;
 using namespace ::oox::core;
 using namespace ::oox::drawingml;
 using namespace ::oox::ole;
@@ -116,7 +121,7 @@ void Shape::finalizeXShape( XmlFilterBase& rFilter, const Reference< XShapes >& 
     }
 }
 
-GroupShapeContext::GroupShapeContext( ContextHandler2Helper& rParent,
+GroupShapeContext::GroupShapeContext( const ContextHandler2Helper& rParent,
         const WorksheetHelper& rHelper, const ShapePtr& rxParentShape, const ShapePtr& rxShape ) :
     ShapeGroupContext( rParent, rxParentShape, rxShape ),
     WorksheetHelper( rHelper )
@@ -151,7 +156,7 @@ GroupShapeContext::GroupShapeContext( ContextHandler2Helper& rParent,
         {
             ShapePtr xShape( new Shape( rHelper, rAttribs, "com.sun.star.drawing.GraphicObjectShape" ) );
             if( pxShape ) *pxShape = xShape;
-            return new GraphicalObjectFrameContext( rParent, rxParentShape, xShape, rHelper.getSheetType() != SHEETTYPE_CHARTSHEET );
+            return new GraphicalObjectFrameContext( rParent, rxParentShape, xShape, rHelper.getSheetType() != WorksheetType::Chart );
         }
         case XDR_TOKEN( grpSp ):
         {
@@ -252,9 +257,9 @@ void DrawingFragment::onEndElement()
             if( mxDrawPage.is() && mxShape.get() && mxAnchor.get() )
             {
                 // Rotation is decided by orientation of shape determined
-                // by the anchor position given by 'twoCellAnchor'
-                if ( getCurrentElement() == XDR_TOKEN( twoCellAnchor ) )
-                    mxShape->setRotation(0);
+                // by the anchor position given by 'editAs="oneCell"'
+                if ( mxAnchor->getEditAs() != ShapeAnchor::ANCHOR_ONECELL )
+                        mxShape->setRotation(0);
                 EmuRectangle aShapeRectEmu = mxAnchor->calcAnchorRectEmu( getDrawPageSize() );
                 const bool bIsShapeVisible = mxAnchor->isAnchorValid();
                 if( (aShapeRectEmu.X >= 0) && (aShapeRectEmu.Y >= 0) && (aShapeRectEmu.Width >= 0) && (aShapeRectEmu.Height >= 0) )
@@ -267,20 +272,20 @@ void DrawingFragment::onEndElement()
                         getLimitedValue< sal_Int32, sal_Int64 >( aShapeRectEmu.Height, 0, SAL_MAX_INT32 ) );
 
                     // Make sure to set the position and size *before* calling addShape().
-                    mxShape->setPosition(Point(aShapeRectEmu.X, aShapeRectEmu.Y));
-                    mxShape->setSize(Size(aShapeRectEmu.Width, aShapeRectEmu.Height));
+                    mxShape->setPosition(Point(aShapeRectEmu32.X, aShapeRectEmu32.Y));
+                    mxShape->setSize(Size(aShapeRectEmu32.Width, aShapeRectEmu32.Height));
 
                     basegfx::B2DHomMatrix aTransformation;
                     if ( !bIsShapeVisible)
                         mxShape->setHidden(true);
 
-                    mxShape->addShape( getOoxFilter(), &getTheme(), mxDrawPage, aTransformation, mxShape->getFillProperties(), &aShapeRectEmu32 );
+                    mxShape->addShape( getOoxFilter(), &getTheme(), mxDrawPage, aTransformation, mxShape->getFillProperties() );
 
                     /*  Collect all shape positions in the WorksheetHelper base
                         class. But first, scale EMUs to 1/100 mm. */
                     Rectangle aShapeRectHmm(
-                        convertEmuToHmm( aShapeRectEmu.X ), convertEmuToHmm( aShapeRectEmu.Y ),
-                        convertEmuToHmm( aShapeRectEmu.Width ), convertEmuToHmm( aShapeRectEmu.Height ) );
+                        convertEmuToHmm(aShapeRectEmu32.X ), convertEmuToHmm(aShapeRectEmu32.Y ),
+                        convertEmuToHmm(aShapeRectEmu32.Width ), convertEmuToHmm(aShapeRectEmu32.Height ) );
                     extendShapeBoundingBox( aShapeRectHmm );
                     // set cell Anchoring
                     if ( mxAnchor->getEditAs() != ShapeAnchor::ANCHOR_ABSOLUTE )
@@ -288,7 +293,8 @@ void DrawingFragment::onEndElement()
                         SdrObject* pObj = SdrObject::getSdrObjectFromXShape( mxShape->getXShape() );
                         if ( pObj )
                         {
-                             ScDrawLayer::SetCellAnchoredFromPosition( *pObj, getScDocument(), static_cast<SCTAB>( getSheetIndex() ) );
+                            bool bResizeWithCell = mxAnchor->getEditAs() == ShapeAnchor::ANCHOR_TWOCELL;
+                            ScDrawLayer::SetCellAnchoredFromPosition( *pObj, getScDocument(), getSheetIndex(), bResizeWithCell );
                         }
                     }
                 }
@@ -306,17 +312,17 @@ namespace {
 class VmlFindNoteFunc
 {
 public:
-    explicit            VmlFindNoteFunc( const CellAddress& rPos );
+    explicit            VmlFindNoteFunc( const ScAddress& rPos );
     bool                operator()( const ::oox::vml::ShapeBase& rShape ) const;
 
 private:
-    sal_Int32           mnCol;
-    sal_Int32           mnRow;
+    sal_Int32 const           mnCol;
+    sal_Int32 const           mnRow;
 };
 
-VmlFindNoteFunc::VmlFindNoteFunc( const CellAddress& rPos ) :
-    mnCol( rPos.Column ),
-    mnRow( rPos.Row )
+VmlFindNoteFunc::VmlFindNoteFunc( const ScAddress& rPos ) :
+    mnCol( rPos.Col() ),
+    mnRow( rPos.Row() )
 {
 }
 
@@ -402,7 +408,7 @@ VmlDrawing::VmlDrawing( const WorksheetHelper& rHelper ) :
     maListBoxFont.monSize = 160;
 }
 
-const ::oox::vml::ShapeBase* VmlDrawing::getNoteShape( const CellAddress& rPos ) const
+const ::oox::vml::ShapeBase* VmlDrawing::getNoteShape( const ScAddress& rPos ) const
 {
     return getShapes().findShape( VmlFindNoteFunc( rPos ) );
 }
@@ -506,7 +512,7 @@ Reference< XShape > VmlDrawing::createAndInsertClientXShape( const ::oox::vml::S
                     instead the top border of the caption text. */
                 if( const ::oox::vml::TextFontModel* pFontModel = pTextBox ? pTextBox->getFirstFont() : nullptr )
                 {
-                    sal_Int32 nFontHeightHmm = getUnitConverter().scaleToMm100( pFontModel->monSize.get( 160 ), UNIT_TWIP );
+                    sal_Int32 nFontHeightHmm = getUnitConverter().scaleToMm100( pFontModel->monSize.get( 160 ), Unit::Twip );
                     sal_Int32 nYDiff = ::std::min< sal_Int32 >( nFontHeightHmm / 2, aShapeRect.Y );
                     aShapeRect.Y -= nYDiff;
                     aShapeRect.Height += nYDiff;
@@ -530,6 +536,9 @@ Reference< XShape > VmlDrawing::createAndInsertClientXShape( const ::oox::vml::S
             case XML_Radio:
             {
                 AxOptionButtonModel& rAxModel = aControl.createModel< AxOptionButtonModel >();
+
+                // unique name to prevent autoGrouping with ActiveX controls and which a GroupBox may override - see vmldrawing.cxx.
+                rAxModel.maGroupName = "autoGroup_formControl";
                 convertControlText( rAxModel.maFontData, rAxModel.mnTextColor, rAxModel.maCaption, pTextBox, pClientData->mnTextHAlign );
                 convertControlBackground( rAxModel, rShape );
                 rAxModel.maValue = OUString::number( pClientData->mnChecked );
@@ -687,7 +696,7 @@ sal_uInt32 VmlDrawing::convertControlTextColor( const OUString& rTextColor ) con
     /*  Predefined color names or system color names (resolve to RGB to detect
         valid color name). */
     sal_Int32 nColorToken = AttributeConversion::decodeToken( rTextColor );
-    sal_Int32 nRgbValue = Color::getVmlPresetColor( nColorToken, API_RGB_TRANSPARENT );
+    ::Color nRgbValue = Color::getVmlPresetColor( nColorToken, API_RGB_TRANSPARENT );
     if( nRgbValue == API_RGB_TRANSPARENT )
         nRgbValue = rGraphicHelper.getSystemColor( nColorToken );
     if( nRgbValue != API_RGB_TRANSPARENT )
@@ -706,12 +715,12 @@ void VmlDrawing::convertControlFontData( AxFontData& rAxFontData, sal_uInt32& rn
     rAxFontData.setHeightPoints( static_cast< sal_Int16 >( (rFontModel.monSize.get( 200 ) + 10) / 20 ) );
 
     // font effects
-    rAxFontData.mnFontEffects = 0;
-    setFlag( rAxFontData.mnFontEffects, AX_FONTDATA_BOLD, rFontModel.mobBold.get( false ) );
-    setFlag( rAxFontData.mnFontEffects, AX_FONTDATA_ITALIC, rFontModel.mobItalic.get( false ) );
-    setFlag( rAxFontData.mnFontEffects, AX_FONTDATA_STRIKEOUT, rFontModel.mobStrikeout.get( false ) );
+    rAxFontData.mnFontEffects = AxFontFlags::NONE;
+    setFlag( rAxFontData.mnFontEffects, AxFontFlags::Bold, rFontModel.mobBold.get( false ) );
+    setFlag( rAxFontData.mnFontEffects, AxFontFlags::Italic, rFontModel.mobItalic.get( false ) );
+    setFlag( rAxFontData.mnFontEffects, AxFontFlags::Strikeout, rFontModel.mobStrikeout.get( false ) );
     sal_Int32 nUnderline = rFontModel.monUnderline.get( XML_none );
-    setFlag( rAxFontData.mnFontEffects, AX_FONTDATA_UNDERLINE, nUnderline != XML_none );
+    setFlag( rAxFontData.mnFontEffects, AxFontFlags::Underline, nUnderline != XML_none );
     rAxFontData.mbDblUnderline = nUnderline == XML_double;
 
     // font color
@@ -730,10 +739,10 @@ void VmlDrawing::convertControlText( AxFontData& rAxFontData, sal_uInt32& rnOleT
 
     switch( nTextHAlign )
     {
-        case XML_Left:      rAxFontData.mnHorAlign = AX_FONTDATA_LEFT;      break;
-        case XML_Center:    rAxFontData.mnHorAlign = AX_FONTDATA_CENTER;    break;
-        case XML_Right:     rAxFontData.mnHorAlign = AX_FONTDATA_RIGHT;     break;
-        default:            rAxFontData.mnHorAlign = AX_FONTDATA_LEFT;
+        case XML_Left:      rAxFontData.mnHorAlign = AxHorizontalAlign::Left;      break;
+        case XML_Center:    rAxFontData.mnHorAlign = AxHorizontalAlign::Center;    break;
+        case XML_Right:     rAxFontData.mnHorAlign = AxHorizontalAlign::Right;     break;
+        default:            rAxFontData.mnHorAlign = AxHorizontalAlign::Left;
     }
 }
 
@@ -745,9 +754,9 @@ void VmlDrawing::convertControlBackground( AxMorphDataModelBase& rAxModel, const
     if( bHasFill )
     {
         const GraphicHelper& rGraphicHelper = getBaseFilter().getGraphicHelper();
-        sal_Int32 nSysWindowColor = rGraphicHelper.getSystemColor( XML_window, API_RGB_WHITE );
+        ::Color nSysWindowColor = rGraphicHelper.getSystemColor( XML_window, API_RGB_WHITE );
         ::oox::drawingml::Color aColor = ::oox::vml::ConversionHelper::decodeColor( rGraphicHelper, rFillModel.moColor, rFillModel.moOpacity, nSysWindowColor );
-        sal_Int32 nRgbValue = aColor.getColor( rGraphicHelper );
+        ::Color nRgbValue = aColor.getColor( rGraphicHelper );
         rAxModel.mnBackColor = OleHelper::encodeOleColor( nRgbValue );
     }
 }

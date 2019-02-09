@@ -17,32 +17,45 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <vcl/errinf.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <editeng/outlobj.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
-#include "drawdoc.hxx"
-#include "Outliner.hxx"
+#include <sfx2/sfxsids.hrc>
+#include <sot/storage.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <Outliner.hxx>
 #include <unotools/streamwrap.hxx>
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 #include <svx/xmlgrhlp.hxx>
 
-#include "../../ui/inc/DrawDocShell.hxx"
+#include <DrawDocShell.hxx>
 
-#include "sdxmlwrp.hxx"
-#include "strmname.h"
+#include <sdxmlwrp.hxx>
+#include <strmname.h>
 #include <svx/xmleohlp.hxx>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/XFastParser.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/document/XExporter.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/document/XGraphicObjectResolver.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/document/XGraphicStorageHandler.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/packages/WrongPasswordException.hpp>
 #include <com/sun/star/packages/zip/ZipIOException.hpp>
 
 #include <com/sun/star/xml/sax/XErrorHandler.hpp>
@@ -63,10 +76,11 @@
 #include <svl/stritem.hxx>
 #include <svtools/sfxecode.hxx>
 
-#include "sderror.hxx"
-#include "sdresid.hxx"
+#include <sddll.hxx>
+#include <sderror.hxx>
+#include <sdresid.hxx>
 #include "sdtransform.hxx"
-#include "glob.hrc"
+#include <strings.hrc>
 
 #include <sfx2/frame.hxx>
 
@@ -76,12 +90,7 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::document;
 using namespace comphelper;
 
-#define SD_XML_READERROR 1234
-
-char const sXML_metaStreamName[] = "meta.xml";
-char const sXML_styleStreamName[] = "styles.xml";
-char const sXML_contentStreamName[] = "content.xml";
-char const sXML_settingsStreamName[] = "settings.xml";
+#define SD_XML_READERROR ErrCode(1234)
 
 char const sXML_export_impress_meta_oasis_service[] = "com.sun.star.comp.Impress.XMLOasisMetaExporter";
 char const sXML_export_impress_styles_oasis_service[] = "com.sun.star.comp.Impress.XMLOasisStylesExporter";
@@ -138,9 +147,9 @@ struct XML_SERVICES
     const sal_Char* mpSettings;
 };
 
-XML_SERVICES* getServices( bool bImport, bool bDraw, sal_uLong nStoreVer )
+static XML_SERVICES const * getServices( bool bImport, bool bDraw, sal_uLong nStoreVer )
 {
-    static XML_SERVICES gServices[] =
+    static XML_SERVICES const gServices[] =
     {
         { sXML_export_impress_meta_oasis_service, sXML_export_impress_styles_oasis_service, sXML_export_impress_content_oasis_service, sXML_export_impress_settings_oasis_service },
         { sXML_export_draw_meta_oasis_service, sXML_export_draw_styles_oasis_service, sXML_export_draw_content_oasis_service, sXML_export_draw_settings_oasis_service },
@@ -169,11 +178,11 @@ SdXMLFilter::~SdXMLFilter()
 namespace
 {
 
-sal_Int32 ReadThroughComponent(
+ErrCode ReadThroughComponent(
     const Reference<io::XInputStream>& xInputStream,
     const Reference<XComponent>& xModelComponent,
     const OUString& rStreamName,
-    Reference<uno::XComponentContext> & rxContext,
+    Reference<uno::XComponentContext> const & rxContext,
     const sal_Char* pFilterName,
     const Sequence<Any>& rFilterArguments,
     const OUString& rName,
@@ -212,11 +221,18 @@ sal_Int32 ReadThroughComponent(
     // connect model and filter
     Reference < XImporter > xImporter( xFilter, UNO_QUERY );
     xImporter->setTargetDocument( xModelComponent );
+
+    uno::Reference< xml::sax::XFastParser > xFastParser = dynamic_cast<
+                            xml::sax::XFastParser* >( xFilter.get() );
+
     // finally, parser the stream
     SAL_INFO( "sd.filter", "parsing stream" );
     try
     {
-        xParser->parseStream( aParserInput );
+        if( xFastParser.is() )
+            xFastParser->parseStream( aParserInput );
+        else
+            xParser->parseStream( aParserInput );
     }
     catch (const xml::sax::SAXParseException& r)
     {
@@ -241,9 +257,7 @@ sal_Int32 ReadThroughComponent(
         if( bEncrypted )
             return ERRCODE_SFX_WRONGPASSWORD;
 
-#if OSL_DEBUG_LEVEL > 1
-        SAL_WARN( "sd.filter", "SAX parse exception caught while importing:" << r.Message);
-#endif
+        SAL_WARN( "sd.filter", "SAX parse exception caught while importing:" << r);
 
         OUString sErr( OUString::number( r.LineNumber ));
         sErr += ",";
@@ -255,13 +269,13 @@ sal_Int32 ReadThroughComponent(
                             (bMustBeSuccessfull ? ERR_FORMAT_FILE_ROWCOL
                                                     : WARN_FORMAT_FILE_ROWCOL),
                             rStreamName, sErr,
-                            ERRCODE_BUTTON_OK | ERRCODE_MSG_ERROR );
+                            DialogMask::ButtonsOk | DialogMask::MessageError );
         }
         else
         {
             DBG_ASSERT( bMustBeSuccessfull, "Warnings are not supported" );
             return *new StringErrorInfo( ERR_FORMAT_ROWCOL, sErr,
-                             ERRCODE_BUTTON_OK | ERRCODE_MSG_ERROR );
+                             DialogMask::ButtonsOk | DialogMask::MessageError );
         }
     }
     catch (const xml::sax::SAXException& r)
@@ -273,49 +287,35 @@ sal_Int32 ReadThroughComponent(
         if( bEncrypted )
             return ERRCODE_SFX_WRONGPASSWORD;
 
-#if OSL_DEBUG_LEVEL > 1
-        SAL_WARN( "sd.filter", "SAX exception caught while importing:" << r.Message);
-#endif
+        SAL_WARN( "sd.filter", "SAX exception caught while importing:" << r);
         return SD_XML_READERROR;
     }
     catch (const packages::zip::ZipIOException& r)
     {
-#if OSL_DEBUG_LEVEL > 1
-        SAL_WARN( "sd.filter", "Zip exception caught while importing:" << r.Message);
-#else
-        (void)r;
-#endif
+        SAL_WARN( "sd.filter", "Zip exception caught while importing:" << r);
         return ERRCODE_IO_BROKENPACKAGE;
     }
     catch (const io::IOException& r)
     {
-#if OSL_DEBUG_LEVEL > 1
-        SAL_WARN( "sd.filter", "IO exception caught while importing:" << r.Message);
-#else
-        (void)r;
-#endif
+        SAL_WARN( "sd.filter", "IO exception caught while importing:" << r);
         return SD_XML_READERROR;
     }
     catch (const uno::Exception& r)
     {
-#if OSL_DEBUG_LEVEL > 1
-        SAL_WARN( "sd.filter", "uno exception caught while importing:" << r.Message);
-#else
-        (void)r;
-#endif
+        SAL_WARN( "sd.filter", "uno exception caught while importing:" << r);
         return SD_XML_READERROR;
     }
 
     // success!
-    return 0;
+    return ERRCODE_NONE;
 }
 
-sal_Int32 ReadThroughComponent(
+ErrCode ReadThroughComponent(
     const uno::Reference < embed::XStorage >& xStorage,
     const Reference<XComponent>& xModelComponent,
     const sal_Char* pStreamName,
     const sal_Char* pCompatibilityStreamName,
-    Reference<uno::XComponentContext> & rxContext,
+    Reference<uno::XComponentContext> const & rxContext,
     const sal_Char* pFilterName,
     const Sequence<Any>& rFilterArguments,
     const OUString& rName,
@@ -342,7 +342,7 @@ sal_Int32 ReadThroughComponent(
 
         // do we even have an alternative name?
         if ( nullptr == pCompatibilityStreamName )
-            return 0;
+            return ERRCODE_NONE;
 
         // if so, does the stream exist?
         sStreamName = OUString::createFromAscii(pCompatibilityStreamName);
@@ -355,7 +355,7 @@ sal_Int32 ReadThroughComponent(
         }
 
         if (! bContainsStream )
-            return 0;
+            return ERRCODE_NONE;
     }
 
     // set Base URL
@@ -379,8 +379,8 @@ sal_Int32 ReadThroughComponent(
 
         Any aAny = xProps->getPropertyValue( "Encrypted" );
 
-        bool bEncrypted = aAny.getValueType() == cppu::UnoType<bool>::get() &&
-                *static_cast<sal_Bool const *>(aAny.getValue());
+        bool bEncrypted = false;
+        aAny >>= bEncrypted;
 
         Reference <io::XInputStream> xInputStream = xStream->getInputStream();
 
@@ -416,18 +416,18 @@ sal_Int32 ReadThroughComponent(
 //But there exist documents which were saved previous to that modification
 //so here we detect such cases and fix them up to ensure the previews
 //numbering level matches that of the outline level it previews
-void fixupOutlinePlaceholderNumberingDepths(SdDrawDocument* pDoc)
+static void fixupOutlinePlaceholderNumberingDepths(SdDrawDocument* pDoc)
 {
-    for (sal_uInt16 i = 0; i < pDoc->GetMasterSdPageCount(PK_STANDARD); ++i)
+    for (sal_uInt16 i = 0; i < pDoc->GetMasterSdPageCount(PageKind::Standard); ++i)
     {
-        SdPage *pMasterPage = pDoc->GetMasterSdPage(i, PK_STANDARD);
+        SdPage *pMasterPage = pDoc->GetMasterSdPage(i, PageKind::Standard);
         SdrObject* pMasterOutline = pMasterPage->GetPresObj(PRESOBJ_OUTLINE);
         if (!pMasterOutline)
             continue;
         OutlinerParaObject* pOutlParaObj = pMasterOutline->GetOutlinerParaObject();
         if (!pOutlParaObj)
             continue;
-        ::sd::Outliner* pOutliner = pDoc->GetInternalOutliner();
+        SdOutliner* pOutliner = pDoc->GetInternalOutliner();
         pOutliner->Clear();
         pOutliner->SetText(*pOutlParaObj);
         bool bInconsistent = false;
@@ -465,13 +465,14 @@ void fixupOutlinePlaceholderNumberingDepths(SdDrawDocument* pDoc)
 
 bool SdXMLFilter::Import( ErrCode& nError )
 {
-    sal_uInt32  nRet = 0;
+    ErrCode nRet = ERRCODE_NONE;
 
     // Get service factory
     Reference< uno::XComponentContext > rxContext =
             comphelper::getProcessComponentContext();
 
     SdDrawDocument* pDoc = mrDocShell.GetDoc();
+    bool const bWasUndo(pDoc->IsUndoEnabled());
     pDoc->EnableUndo(false);
     pDoc->NewOrLoadCompleted( NEW_DOC );
     pDoc->CreateFirstPages();
@@ -518,12 +519,10 @@ bool SdXMLFilter::Import( ErrCode& nError )
         }
     }
 
-    Reference< io::XActiveDataSource > xSource;
-    Reference< XInterface > xPipe;
-    Reference< document::XGraphicObjectResolver > xGraphicResolver;
-    SvXMLGraphicHelper *pGraphicHelper = nullptr;
+    uno::Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
+    rtl::Reference<SvXMLGraphicHelper> xGraphicHelper;
     Reference< document::XEmbeddedObjectResolver > xObjectResolver;
-    SvXMLEmbeddedObjectHelper *pObjectHelper = nullptr;
+    rtl::Reference<SvXMLEmbeddedObjectHelper> xObjectHelper;
 
     Reference< lang::XComponent > xModelComp( mxModel, uno::UNO_QUERY );
 
@@ -543,8 +542,7 @@ bool SdXMLFilter::Import( ErrCode& nError )
         if(mxStatusIndicator.is())
         {
             sal_Int32 nProgressRange(1000000);
-            sal_Int32 nProgressCurrent(0);
-            OUString aMsg(SD_RESSTR(STR_LOAD_DOC));
+            OUString aMsg(SvxResId(RID_SVXSTR_DOC_LOAD));
             mxStatusIndicator->start(aMsg, nProgressRange);
 
             // set ProgressRange
@@ -554,7 +552,7 @@ bool SdXMLFilter::Import( ErrCode& nError )
 
             // set ProgressCurrent
             uno::Any aProgCurrent;
-            aProgCurrent <<= nProgressCurrent;
+            aProgCurrent <<= sal_Int32(0);
             xInfoSet->setPropertyValue( "ProgressCurrent" , aProgCurrent);
         }
     }
@@ -562,26 +560,22 @@ bool SdXMLFilter::Import( ErrCode& nError )
     // get the input stream (storage or stream)
 
     tools::SvRef<SotStorageStream> xDocStream;
-    Reference<io::XInputStream> xInputStream;
     uno::Reference < embed::XStorage > xStorage = mrMedium.GetStorage();
 
-    OUString sSourceStorage( "SourceStorage");
-    xInfoSet->setPropertyValue( sSourceStorage, Any( xStorage ) );
+    xInfoSet->setPropertyValue( "SourceStorage", Any( xStorage ) );
 
     if( !xStorage.is() )
         nRet = SD_XML_READERROR;
 
-    if( 0 == nRet )
+    if( ERRCODE_NONE == nRet )
     {
-        pGraphicHelper = SvXMLGraphicHelper::Create( xStorage,
-                                                     GRAPHICHELPER_MODE_READ,
-                                                     false );
-        xGraphicResolver = pGraphicHelper;
-        pObjectHelper = SvXMLEmbeddedObjectHelper::Create(
+        xGraphicHelper = SvXMLGraphicHelper::Create( xStorage,
+                                                     SvXMLGraphicHelperMode::Read );
+        xGraphicStorageHandler = xGraphicHelper.get();
+        xObjectHelper = SvXMLEmbeddedObjectHelper::Create(
                                     xStorage, *pDoc->GetPersist(),
-                                    EMBEDDEDOBJECTHELPER_MODE_READ,
-                                    false );
-        xObjectResolver = pObjectHelper;
+                                    SvXMLEmbeddedObjectHelperMode::Read );
+        xObjectResolver = xObjectHelper.get();
     }
 
     // Set base URI
@@ -590,7 +584,7 @@ bool SdXMLFilter::Import( ErrCode& nError )
     SAL_INFO_IF(baseURI.isEmpty(), "sd.filter", "SdXMLFilter: no base URL");
     xInfoSet->setPropertyValue("BaseURI", makeAny(baseURI));
 
-    if( 0 == nRet && SfxObjectCreateMode::EMBEDDED == mrDocShell.GetCreateMode() )
+    if( ERRCODE_NONE == nRet && SfxObjectCreateMode::EMBEDDED == mrDocShell.GetCreateMode() )
     {
         OUString aName;
         if ( mrMedium.GetItemSet() )
@@ -608,16 +602,16 @@ bool SdXMLFilter::Import( ErrCode& nError )
     }
 
     if (SDXMLMODE_Organizer == meFilterMode)
-        xInfoSet->setPropertyValue("OrganizerMode", uno::makeAny(sal_True));
+        xInfoSet->setPropertyValue("OrganizerMode", uno::makeAny(true));
 
-    if( 0 == nRet )
+    if( ERRCODE_NONE == nRet )
     {
 
         // prepare filter arguments
         Sequence<Any> aFilterArgs( 4 );
         Any *pArgs = aFilterArgs.getArray();
         *pArgs++ <<= xInfoSet;
-        *pArgs++ <<= xGraphicResolver;
+        *pArgs++ <<= xGraphicStorageHandler;
         *pArgs++ <<= xObjectResolver;
         *pArgs++ <<= mxStatusIndicator;
 
@@ -628,10 +622,10 @@ bool SdXMLFilter::Import( ErrCode& nError )
 
         const OUString aName( mrMedium.GetName() );
 
-        XML_SERVICES* pServices = getServices( true, IsDraw(), mnStoreVer );
+        XML_SERVICES const * pServices = getServices( true, IsDraw(), mnStoreVer );
 
-        sal_uInt32 nWarn = 0;
-        sal_uInt32 nWarn2 = 0;
+        ErrCode nWarn = ERRCODE_NONE;
+        ErrCode nWarn2 = ERRCODE_NONE;
         // read storage streams
         // #i103539#: always read meta.xml for generator
         nWarn = ReadThroughComponent(
@@ -667,11 +661,13 @@ bool SdXMLFilter::Import( ErrCode& nError )
         }
     }
 
-    if( pGraphicHelper )
-        SvXMLGraphicHelper::Destroy( pGraphicHelper );
-    xGraphicResolver = nullptr;
-    if( pObjectHelper )
-        SvXMLEmbeddedObjectHelper::Destroy( pObjectHelper );
+    if( xGraphicHelper )
+        xGraphicHelper->dispose();
+    xGraphicHelper.clear();
+    xGraphicStorageHandler = nullptr;
+    if( xObjectHelper.is() )
+        xObjectHelper->dispose();
+    xObjectHelper.clear();
     xObjectResolver = nullptr;
 
     if( mxStatusIndicator.is() )
@@ -680,27 +676,19 @@ bool SdXMLFilter::Import( ErrCode& nError )
     if( mxModel.is() )
         mxModel->unlockControllers();
 
-    if( nRet == 0 )
+    if( nRet == ERRCODE_NONE )
         pDoc->UpdateAllLinks();
 
-    switch( nRet )
+    if( nRet.anyOf( ERRCODE_NONE, SD_XML_READERROR ) )
+        ;
+    else if( nRet == ERRCODE_IO_BROKENPACKAGE && xStorage.is() )
+        nError = ERRCODE_IO_BROKENPACKAGE;
+    else
     {
-    case 0: break;
-    case SD_XML_READERROR: break;
-    case ERRCODE_IO_BROKENPACKAGE:
-        if( xStorage.is() )
-        {
-            nError = ERRCODE_IO_BROKENPACKAGE;
-            break;
-        }
-        // fall through intended
-    default:
-        {
-            // TODO/LATER: this is completely wrong! Filter code should never call ErrorHandler directly!
-            ErrorHandler::HandleError( nRet );
-            if( IsWarning( nRet ) )
-                nRet = 0;
-        }
+        // TODO/LATER: this is completely wrong! Filter code should never call ErrorHandler directly!
+        ErrorHandler::HandleError( nRet );
+        if( nRet.IsWarning() )
+            nRet = ERRCODE_NONE;
     }
 
     // clear unused named items from item pool
@@ -760,7 +748,7 @@ bool SdXMLFilter::Import( ErrCode& nError )
 
             bool bTransform = false;
 
-            if( nRet == 0 )
+            if( nRet == ERRCODE_NONE )
             {
                 if( !sBuildId.isEmpty() )
                 {
@@ -802,15 +790,15 @@ bool SdXMLFilter::Import( ErrCode& nError )
 
     fixupOutlinePlaceholderNumberingDepths(pDoc);
 
-    pDoc->EnableUndo(true);
+    pDoc->EnableUndo(bWasUndo);
     mrDocShell.ClearUndoBuffer();
-    return nRet == 0;
+    return nRet == ERRCODE_NONE;
 }
 
 bool SdXMLFilter::Export()
 {
-    SvXMLEmbeddedObjectHelper*  pObjectHelper = nullptr;
-    SvXMLGraphicHelper*         pGraphicHelper = nullptr;
+    rtl::Reference<SvXMLEmbeddedObjectHelper> xObjectHelper;
+    rtl::Reference<SvXMLGraphicHelper> xGraphicHelper;
     bool                    bDocRet = false;
 
     if( !mxModel.is() )
@@ -857,9 +845,8 @@ bool SdXMLFilter::Export()
         uno::Reference< beans::XPropertySet > xInfoSet( GenericPropertySet_CreateInstance( new PropertySetInfo( aExportInfoMap ) ) );
 
         SvtSaveOptions aSaveOpt;
-        OUString sUsePrettyPrinting("UsePrettyPrinting");
         bool bUsePrettyPrinting( aSaveOpt.IsPrettyPrinting() );
-        xInfoSet->setPropertyValue( sUsePrettyPrinting, makeAny( bUsePrettyPrinting ) );
+        xInfoSet->setPropertyValue( "UsePrettyPrinting", makeAny( bUsePrettyPrinting ) );
 
         const uno::Reference < embed::XStorage >& xStorage = mrMedium.GetOutputStorage();
 
@@ -867,8 +854,7 @@ bool SdXMLFilter::Export()
         OUString sPropName( "BaseURI" );
         xInfoSet->setPropertyValue( sPropName, makeAny( mrMedium.GetBaseURL( true ) ) );
 
-        OUString sTargetStorage( "TargetStorage" );
-        xInfoSet->setPropertyValue( sTargetStorage, Any( xStorage ) );
+        xInfoSet->setPropertyValue( "TargetStorage", Any( xStorage ) );
 
         if( SfxObjectCreateMode::EMBEDDED == mrDocShell.GetCreateMode() )
         {
@@ -893,28 +879,27 @@ bool SdXMLFilter::Export()
         beans::PropertyValue* pProps = aDescriptor.getArray();
 
         pProps[0].Name = "FileName";
-        pProps[0].Value <<= OUString( mrMedium.GetName() );
+        pProps[0].Value <<= mrMedium.GetName();
 
         {
             uno::Reference< document::XEmbeddedObjectResolver > xObjectResolver;
-            uno::Reference< document::XGraphicObjectResolver >  xGrfResolver;
+            uno::Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
 
             // create helper for graphic and ole export if we have a storage
             if( xStorage.is() )
             {
-                pObjectHelper = SvXMLEmbeddedObjectHelper::Create( xStorage, *mrDocShell.GetDoc()->GetPersist(), EMBEDDEDOBJECTHELPER_MODE_WRITE, false );
-                xObjectResolver = pObjectHelper;
+                xObjectHelper = SvXMLEmbeddedObjectHelper::Create( xStorage, *mrDocShell.GetDoc()->GetPersist(), SvXMLEmbeddedObjectHelperMode::Write );
+                xObjectResolver = xObjectHelper.get();
 
-                pGraphicHelper = SvXMLGraphicHelper::Create( xStorage, GRAPHICHELPER_MODE_WRITE, false );
-                xGrfResolver = pGraphicHelper;
+                xGraphicHelper = SvXMLGraphicHelper::Create( xStorage, SvXMLGraphicHelperMode::Write );
+                xGraphicStorageHandler = xGraphicHelper.get();
             }
 
             CreateStatusIndicator();
             if(mxStatusIndicator.is())
             {
                 sal_Int32 nProgressRange(1000000);
-                sal_Int32 nProgressCurrent(0);
-                OUString aMsg(SD_RESSTR(STR_SAVE_DOC));
+                OUString aMsg(SdResId(STR_SAVE_DOC));
                 mxStatusIndicator->start(aMsg, nProgressRange);
 
                 // set ProgressRange
@@ -924,28 +909,28 @@ bool SdXMLFilter::Export()
 
                 // set ProgressCurrent
                 uno::Any aProgCurrent;
-                aProgCurrent <<= nProgressCurrent;
+                aProgCurrent <<= sal_Int32(0);
                 xInfoSet->setPropertyValue( "ProgressCurrent" , aProgCurrent);
             }
 
             uno::Reference< lang::XComponent > xComponent( mxModel, uno::UNO_QUERY );
 
-            XML_SERVICES* pServiceNames = getServices( false, IsDraw(), mnStoreVer );
+            XML_SERVICES const * pServiceNames = getServices( false, IsDraw(), mnStoreVer );
 
             XML_SERVICEMAP aServices[5]; sal_uInt16 i = 0;
             aServices[i  ].mpService = pServiceNames->mpStyles;
-            aServices[i++].mpStream  = sXML_styleStreamName;
+            aServices[i++].mpStream  = "styles.xml";
 
             aServices[i  ].mpService = pServiceNames->mpContent;
-            aServices[i++].mpStream  = sXML_contentStreamName;
+            aServices[i++].mpStream  = "content.xml";
 
             aServices[i  ].mpService = pServiceNames->mpSettings;
-            aServices[i++].mpStream  = sXML_settingsStreamName;
+            aServices[i++].mpStream  = "settings.xml";
 
             if( mrDocShell.GetCreateMode() != SfxObjectCreateMode::EMBEDDED )
             {
                 aServices[i  ].mpService = pServiceNames->mpMeta;
-                aServices[i++].mpStream  = sXML_metaStreamName;
+                aServices[i++].mpStream  = "meta.xml";
             };
 
             aServices[i].mpService = nullptr;
@@ -975,9 +960,7 @@ bool SdXMLFilter::Export()
                     if( !xDocOut.is() || !xProps.is() )
                         return false;
 
-                    uno::Any aAny;
-                    aAny <<= OUString( "text/xml");
-                    xProps->setPropertyValue( "MediaType" , aAny);
+                    xProps->setPropertyValue( "MediaType", Any(OUString( "text/xml")));
 
                     // encrypt all streams
                     xProps->setPropertyValue( "UseCommonStoragePasswordEncryption",
@@ -990,12 +973,15 @@ bool SdXMLFilter::Export()
                 uno::Reference< io::XActiveDataSource > xDocSrc( xWriter, uno::UNO_QUERY );
                 xDocSrc->setOutputStream( xDocOut );
 
-                uno::Sequence< uno::Any > aArgs( 2 + ( mxStatusIndicator.is() ? 1 : 0 ) + ( xGrfResolver.is() ? 1 : 0 ) + ( xObjectResolver.is() ? 1 : 0 ) );
+                uno::Sequence< uno::Any > aArgs( 2 + ( mxStatusIndicator.is() ? 1 : 0 ) + ( xGraphicStorageHandler.is() ? 1 : 0 ) + ( xObjectResolver.is() ? 1 : 0 ) );
                 uno::Any* pArgs = aArgs.getArray();
                 *pArgs++ <<= xInfoSet;
-                if( xGrfResolver.is() )         *pArgs++ <<= xGrfResolver;
-                if( xObjectResolver.is() )      *pArgs++ <<= xObjectResolver;
-                if( mxStatusIndicator.is() )    *pArgs++ <<= mxStatusIndicator;
+                if (xGraphicStorageHandler.is())
+                    *pArgs++ <<= xGraphicStorageHandler;
+                if (xObjectResolver.is())
+                    *pArgs++ <<= xObjectResolver;
+                if (mxStatusIndicator.is())
+                    *pArgs++ <<= mxStatusIndicator;
 
                 *pArgs   <<= xWriter;
 
@@ -1021,23 +1007,112 @@ bool SdXMLFilter::Export()
     }
     catch (const uno::Exception &e)
     {
-#if OSL_DEBUG_LEVEL > 1
-        SAL_WARN( "sd.filter", "uno Exception caught while exporting:" << e.Message);
-#else
-        (void)e;
-#endif
+        SAL_WARN( "sd.filter", "uno Exception caught while exporting:" << e);
         bDocRet = false;
     }
     if ( !bLocked )
         mxModel->unlockControllers();
 
-    if( pGraphicHelper )
-        SvXMLGraphicHelper::Destroy( pGraphicHelper );
+    if( xGraphicHelper )
+        xGraphicHelper->dispose();
+    xGraphicHelper.clear();
 
-    if( pObjectHelper )
-        SvXMLEmbeddedObjectHelper::Destroy( pObjectHelper );
+    if( xObjectHelper )
+        xObjectHelper->dispose();
+    xObjectHelper.clear();
 
     return bDocRet;
 }
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportFODP(SvStream &rStream)
+{
+    SdDLL::Init();
+
+    sd::DrawDocShellRef xDocSh(new sd::DrawDocShell(SfxObjectCreateMode::EMBEDDED, false, DocumentType::Impress));
+    xDocSh->DoInitNew();
+    uno::Reference<frame::XModel> xModel(xDocSh->GetModel());
+
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
+    uno::Reference<io::XInputStream> xStream(new ::utl::OSeekableInputStreamWrapper(rStream));
+    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance("com.sun.star.comp.Writer.XmlFilterAdaptor"), uno::UNO_QUERY_THROW);
+
+    css::uno::Sequence<OUString> aUserData(7);
+    aUserData[0] = "com.sun.star.comp.filter.OdfFlatXml";
+    aUserData[2] = "com.sun.star.comp.Impress.XMLOasisImporter";
+    aUserData[3] = "com.sun.star.comp.Impress.XMLOasisExporter";
+    aUserData[6] = "true";
+    uno::Sequence<beans::PropertyValue> aAdaptorArgs(comphelper::InitPropertySequence(
+    {
+        { "UserData", uno::Any(aUserData) },
+    }));
+    css::uno::Sequence<uno::Any> aOuterArgs(1);
+    aOuterArgs[0] <<= aAdaptorArgs;
+
+    uno::Reference<lang::XInitialization> xInit(xInterface, uno::UNO_QUERY_THROW);
+    xInit->initialize(aOuterArgs);
+
+    uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY_THROW);
+    uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence(
+    {
+        { "InputStream", uno::Any(xStream) },
+        { "URL", uno::Any(OUString("private:stream")) },
+    }));
+    xImporter->setTargetDocument(xModel);
+
+    uno::Reference<document::XFilter> xFilter(xInterface, uno::UNO_QUERY_THROW);
+    //SetLoading hack because the document properties will be re-initted
+    //by the xml filter and during the init, while its considered uninitialized,
+    //setting a property will inform the document its modified, which attempts
+    //to update the properties, which throws cause the properties are uninitialized
+    xDocSh->SetLoading(SfxLoadedFlags::NONE);
+    bool ret = xFilter->filter(aArgs);
+    xDocSh->SetLoading(SfxLoadedFlags::ALL);
+
+    xDocSh->DoClose();
+
+    return ret;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportPPTX(SvStream &rStream)
+{
+    SdDLL::Init();
+
+    sd::DrawDocShellRef xDocSh(new sd::DrawDocShell(SfxObjectCreateMode::EMBEDDED, false, DocumentType::Impress));
+    xDocSh->DoInitNew();
+    uno::Reference<frame::XModel> xModel(xDocSh->GetModel());
+
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
+    uno::Reference<io::XInputStream> xStream(new utl::OSeekableInputStreamWrapper(rStream));
+
+    uno::Reference<document::XFilter> xFilter(xMultiServiceFactory->createInstance("com.sun.star.comp.oox.ppt.PowerPointImport"), uno::UNO_QUERY_THROW);
+
+    uno::Reference<document::XImporter> xImporter(xFilter, uno::UNO_QUERY_THROW);
+    uno::Sequence<beans::PropertyValue> aArgs(comphelper::InitPropertySequence(
+    {
+        { "InputStream", uno::makeAny(xStream) },
+        { "InputMode", uno::makeAny(true) },
+    }));
+    xImporter->setTargetDocument(xModel);
+
+    //SetLoading hack because the document properties will be re-initted
+    //by the xml filter and during the init, while its considered uninitialized,
+    //setting a property will inform the document its modified, which attempts
+    //to update the properties, which throws cause the properties are uninitialized
+    xDocSh->SetLoading(SfxLoadedFlags::NONE);
+    bool ret = false;
+    try
+    {
+        ret = xFilter->filter(aArgs);
+    }
+    catch (...)
+    {
+    }
+    xDocSh->SetLoading(SfxLoadedFlags::ALL);
+
+    xDocSh->DoClose();
+
+    return ret;
+}
+
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

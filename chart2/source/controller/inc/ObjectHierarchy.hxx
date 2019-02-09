@@ -19,11 +19,10 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_OBJECTHIERARCHY_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_OBJECTHIERARCHY_HXX
 
-#include "ObjectIdentifier.hxx"
+#include <ObjectIdentifier.hxx>
 
-#include <rtl/ustring.hxx>
-#include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/awt/KeyEvent.hpp>
+namespace com { namespace sun { namespace star { namespace awt { struct KeyEvent; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XChartDocument; } } } }
 
 #include <memory>
 #include <vector>
@@ -41,8 +40,7 @@ class ImplObjectHierarchy;
 class ObjectHierarchy
 {
 public:
-    typedef ObjectIdentifier tOID;
-    typedef ::std::vector< tOID > tChildContainer;
+    typedef std::vector< ObjectIdentifier > tChildContainer;
 
     /** @param bFlattenDiagram
             If <TRUE/>, the content of the diagram (data series, wall, floor,
@@ -51,43 +49,43 @@ public:
      */
     explicit ObjectHierarchy(
         const css::uno::Reference< css::chart2::XChartDocument > & xChartDocument,
-        ExplicitValueProvider * pExplicitValueProvider = nullptr,
+        ExplicitValueProvider * pExplicitValueProvider,
         bool bFlattenDiagram = false,
         bool bOrderingForElementSelector = false );
     ~ObjectHierarchy();
 
-    static tOID      getRootNodeOID();
-    static bool      isRootNode( const tOID& rOID );
+    static ObjectIdentifier      getRootNodeOID();
+    static bool      isRootNode( const ObjectIdentifier& rOID );
 
     /// equal to getChildren( getRootNodeOID())
     tChildContainer  getTopLevelChildren() const;
-    bool             hasChildren( const tOID& rParent ) const;
-    tChildContainer  getChildren( const tOID& rParent ) const;
+    bool             hasChildren( const ObjectIdentifier& rParent ) const;
+    tChildContainer  getChildren( const ObjectIdentifier& rParent ) const;
 
-    tChildContainer  getSiblings( const tOID& rNode ) const;
+    tChildContainer  getSiblings( const ObjectIdentifier& rNode ) const;
 
     /// The result is empty, if the node cannot be found in the tree
-    tOID             getParent( const tOID& rNode ) const;
+    ObjectIdentifier             getParent( const ObjectIdentifier& rNode ) const;
     /// @returns -1, if no parent can be determined
-    sal_Int32        getIndexInParent( const tOID& rNode ) const;
+    sal_Int32        getIndexInParent( const ObjectIdentifier& rNode ) const;
 
 private:
 
-    ::std::unique_ptr< impl::ImplObjectHierarchy > m_apImpl;
+    std::unique_ptr< impl::ImplObjectHierarchy > m_apImpl;
 };
 
 class ObjectKeyNavigation
 {
 public:
-    explicit ObjectKeyNavigation( const ObjectHierarchy::tOID & rCurrentOID,
+    explicit ObjectKeyNavigation( const ObjectIdentifier & rCurrentOID,
                                   const css::uno::Reference< css::chart2::XChartDocument > & xChartDocument,
-                                  ExplicitValueProvider * pExplicitValueProvider = nullptr );
+                                  ExplicitValueProvider * pExplicitValueProvider );
 
     bool handleKeyEvent( const css::awt::KeyEvent & rEvent );
-    ObjectHierarchy::tOID getCurrentSelection() const { return m_aCurrentOID;}
+    const ObjectIdentifier& getCurrentSelection() const { return m_aCurrentOID;}
 
 private:
-    void setCurrentSelection( const ObjectHierarchy::tOID& rOID );
+    void setCurrentSelection( const ObjectIdentifier& rOID );
     bool first();
     bool last();
     bool next();
@@ -97,10 +95,9 @@ private:
     bool veryFirst();
     bool veryLast();
 
-    ObjectHierarchy::tOID m_aCurrentOID;
+    ObjectIdentifier m_aCurrentOID;
     css::uno::Reference< css::chart2::XChartDocument > m_xChartDocument;
     ExplicitValueProvider * m_pExplicitValueProvider;
-    bool m_bStepDownInDiagram;
 };
 
 } //  namespace chart

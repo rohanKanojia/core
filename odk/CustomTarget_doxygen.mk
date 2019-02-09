@@ -9,8 +9,8 @@
 
 $(eval $(call gb_CustomTarget_CustomTarget,odk/docs))
 
-odk_cpp_INCDIRLIST := sal salhelper rtl osl typelib uno cppu cppuhelper \
-	$(if $(filter WNT,$(OS)),systools)
+odk_cpp_INCDIRLIST := sal salhelper rtl osl typelib uno cppu cppuhelper
+
 odk_cpp_INCFILELIST := com/sun/star/uno/Any.h \
 	com/sun/star/uno/Any.hxx \
 	com/sun/star/uno/genfunc.h \
@@ -51,7 +51,8 @@ $(call gb_CustomTarget_get_workdir,odk/docs)/cpp/doxygen.log : \
 		$(call gb_CustomTarget_get_workdir,odk/docs)/cpp/Doxyfile \
 		$(SRCDIR)/include/sal/log-areas.dox \
 		$(SRCDIR)/odk/docs/cpp/main.dox \
-		$(call gb_PackageSet_get_target,odk_headers)
+		$(call gb_Package_get_target,odk_headers) \
+		$(call gb_Package_get_target,odk_headers_generated)
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),GEN,1)
 	rm -rf $(odk_cpp_DOXY_WORKDIR)/ && $(DOXYGEN) $< > $@
 

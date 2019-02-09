@@ -27,17 +27,15 @@ class SdDrawDocument;
 
 namespace sd {
 
-class FuConstructBezierPolygon
+class FuConstructBezierPolygon final
     : public FuConstruct
 {
 public:
 
     static rtl::Reference<FuPoor> Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq, bool bPermanent );
-    virtual void DoExecute( SfxRequest& rReq ) override;
+    void DoExecute( SfxRequest& rReq ) override;
 
     // Mouse- & Key-Events
-    virtual bool KeyInput(const KeyEvent& rKEvt) override;
-    virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
 
@@ -49,9 +47,14 @@ public:
     void    SetEditMode(sal_uInt16 nMode);
     sal_uInt16  GetEditMode() { return nEditMode; }
 
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    /**
+     * set attribute for the object to be created
+     */
+    void SetAttributes(SfxItemSet& rAttr);
 
-protected:
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle) override;
+
+private:
     FuConstructBezierPolygon (
         ViewShell* pViewSh,
         ::sd::Window* pWin,
@@ -59,9 +62,13 @@ protected:
         SdDrawDocument* pDoc,
         SfxRequest& rReq);
 
-    sal_uInt16      nEditMode;
-
+    sal_uInt16    nEditMode;
     css::uno::Any maTargets;   // used for creating a path for custom animations
+
+    //Extra attributes coming from parameters
+    sal_uInt16  mnTransparence;  // Default: 0
+    OUString    msColor;         // Default: ""
+    sal_uInt16  mnWidth;         // Default: 0
 };
 
 } // end of namespace sd

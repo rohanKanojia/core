@@ -37,17 +37,14 @@ class TargetDragContext: public WeakImplHelper<XDropTargetDragContext>
     // to non-interface functions of m_pDropTarget
     DropTarget* m_pDropTarget;
 
-    TargetDragContext();
-    TargetDragContext( const TargetDragContext&);
-    TargetDragContext &operator= ( const TargetDragContext&);
 public:
     explicit TargetDragContext(DropTarget* pTarget);
-    ~TargetDragContext();
+    ~TargetDragContext() override;
+    TargetDragContext( const TargetDragContext&) = delete;
+    TargetDragContext &operator= ( const TargetDragContext&) = delete;
 
-    virtual void SAL_CALL acceptDrag( sal_Int8 dragOperation )
-        throw( RuntimeException);
-    virtual void SAL_CALL rejectDrag(  )
-        throw( RuntimeException);
+    virtual void SAL_CALL acceptDrag( sal_Int8 dragOperation ) override;
+    virtual void SAL_CALL rejectDrag(  ) override;
 };
 
 #endif

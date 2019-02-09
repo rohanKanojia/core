@@ -22,7 +22,9 @@
 
 #include <sal/config.h>
 
+#include <array>
 #include <list>
+#include <memory>
 
 #include <sal/types.h>
 
@@ -61,40 +63,35 @@ struct HBox
  */
         virtual bool Read(HWPFile &hwpf);
 
-        virtual hchar_string GetString();
     private:
         static int boxCount;
 };
 
 /**
- * @short Class for saving data to be skipped.
+ * @short Class for skipping data.
  */
 struct SkipData: public HBox
 {
-    uint data_block_len;
-    hchar dummy;
-    char  *data_block;
-
     explicit SkipData(hchar);
-    virtual ~SkipData();
+    virtual ~SkipData() override;
     virtual bool Read(HWPFile &hwpf) override;
 };
+
 struct DateCode;
 struct FieldCode : public HBox
 {
     uchar type[2];                    /* 2/0 - Formula, 3/0-document summary, 3/1 Personal Information, 3/2-creation date, 4/0-pressing mold */
-    char *reserved1;
+    std::array<char, 4> reserved1;
     unsigned short location_info;     /* 0 - End code, 1 - start code */
-    char *reserved2;
-    hchar *str1;
-    hchar *str2;
-    hchar *str3;
-    char *bin;
+    std::array<char, 22> reserved2;
+    std::unique_ptr<hchar[]> str1;
+    std::unique_ptr<hchar[]> str2;
+    std::unique_ptr<hchar[]> str3;
 
-     DateCode *m_pDate;
+    std::unique_ptr<DateCode> m_pDate;
 
     FieldCode();
-    virtual ~FieldCode();
+    virtual ~FieldCode() override;
     virtual bool Read(HWPFile &hwpf) override;
 };
 /**
@@ -119,7 +116,7 @@ struct Bookmark: public HBox
     unsigned short    type;
 
     Bookmark();
-    virtual ~Bookmark();
+    virtual ~Bookmark() override;
     virtual bool Read(HWPFile &hwpf) override;
 };
 
@@ -159,7 +156,7 @@ struct DateCode: public HBox
     DateCode();
     virtual bool Read(HWPFile &hwpf) override;
 
-    virtual hchar_string GetString() override;
+    hchar_string GetString();
 };
 
 /**
@@ -231,7 +228,7 @@ struct Cell                                       // Cell
     unsigned char diagonal;                       // { 0=none,\=1,/=2,X=3}
     unsigned char protect;
 
-    void  Read( HWPFile &hwpf );
+    bool  Read(HWPFile &hwpf);
 };
 
 /**
@@ -281,7 +278,7 @@ struct FBoxStyle
         , boxnum(0)
         , boxtype(0)
         , cap_len(0)
-        , cell(NULL)
+        , cell(nullptr)
     {
         memset(margin, 0, sizeof(margin));
     }
@@ -319,10 +316,8 @@ struct FBox: public HBox
     short     pgx, pgy;                           // physical xpos, ypos
     short     pgno, showpg;                       // pageno where code is
 
-    FBox      *prev, *next;
-
     explicit FBox( hchar hch );
-    virtual ~FBox();
+    virtual ~FBox() override;
 };
 
 struct Table;
@@ -358,28 +353,24 @@ struct TxtBox: public FBox
  */
     short     nCell;                              //:=1    offset 80
 /**
- * If value of protect is 1, size of cell cann't change.
+ * If value of protect is 1, size of cell can't change.
  */
     short     protect;                            //1=size lock
 
-    Cell      *cell;
-     Table *m_pTable;
+    std::unique_ptr<Cell[]> cell;
+    Table *m_pTable;
 /**
  * Paragraph list
  */
-    std::list<HWPPara*> *plists;
+    std::vector<std::vector<std::unique_ptr<HWPPara>>> plists;
+
 /**
  * Caption
  */
-    std::list<HWPPara*> caption;
+    std::vector<std::unique_ptr<HWPPara>> caption;
 
     TxtBox();
-    virtual ~TxtBox();
-
-/**
- * @returns Count of cell.
- */
-    int NCell()   { return nCell; }
+    virtual ~TxtBox() override;
 
     virtual bool Read(HWPFile &hwpf) override;
 };
@@ -390,27 +381,25 @@ struct TxtBox: public FBox
 
 struct Columns
 {
-     int *data;
+     std::unique_ptr<int[]> data;
      size_t nCount;
      size_t nTotal;
      Columns(){
           nCount = 0;
           nTotal = INIT_SIZE;
-          data = new int[nTotal];
+          data.reset(new int[nTotal]);
      }
-     ~Columns(){ delete[] data; }
 
      void AddColumnsSize(){
-          int *tmp = data;
           if (nTotal + ADD_AMOUNT < nTotal) // overflow
           {
               throw ::std::bad_alloc();
           }
-          data = new int[nTotal + ADD_AMOUNT];
+          int* tmp = new int[nTotal + ADD_AMOUNT];
           for (size_t i = 0 ; i < nTotal ; i++)
-                data[i] = tmp[i];
+                tmp[i] = data[i];
           nTotal += ADD_AMOUNT;
-          delete[] tmp;
+          data.reset(tmp);
      }
 
      void insert(int pos){
@@ -451,27 +440,25 @@ struct Columns
 
 struct Rows
 {
-     int *data;
+     std::unique_ptr<int[]> data;
      size_t nCount;
      size_t nTotal;
      Rows(){
           nCount = 0;
           nTotal = INIT_SIZE;
-          data = new int[nTotal];
+          data.reset( new int[nTotal] );
      }
-     ~Rows(){ delete[] data; }
 
      void AddRowsSize(){
-          int *tmp = data;
           if (nTotal + ADD_AMOUNT < nTotal) // overflow
           {
               throw ::std::bad_alloc();
           }
-          data = new int[nTotal + ADD_AMOUNT];
+          int* tmp = new int[nTotal + ADD_AMOUNT];
           for (size_t i = 0 ; i < nTotal ; i++)
-                data[i] = tmp[i];
+                tmp[i] = data[i];
           nTotal += ADD_AMOUNT;
-          delete[] tmp;
+          data.reset(tmp);
      }
 
      void insert(int pos){
@@ -521,16 +508,11 @@ struct TCell
 
 struct Table
 {
-     Table() : box(NULL) {};
-     ~Table() {
-          std::list<TCell*>::iterator it = cells.begin();
-          for( ; it != cells.end(); ++it)
-                delete *it;
-     };
+     Table() : box(nullptr) {};
 
      Columns columns;
      Rows    rows;
-     std::list<TCell*> cells;
+     std::vector<std::unique_ptr<TCell>> cells;
      TxtBox *box;
 };
 
@@ -567,12 +549,14 @@ struct PicDefOle
     void  *hwpole;
 };
 
+struct HWPDrawingObject;
+
 /**
  * @short Drawing object of hwp
  */
 struct PicDefDraw
 {
-    void      *hdo;
+    HWPDrawingObject *hdo;
     uint      zorder;
     ZZRect    vrect;
     int       mbrcnt;
@@ -638,16 +622,16 @@ struct Picture: public FBox
     PicDef    picinfo;
     char      reserved3[9];
 
-    std::list<HWPPara*> caption;
+    std::vector<std::unique_ptr<HWPPara>> caption;
 /**
  * It's for the Drawing object
  */
-    unsigned char *follow;                        /* When the type of image is drawing, gives additional information. */
+    std::vector<unsigned char> follow;                        /* When the type of image is drawing, gives additional information. */
 
     bool ishyper;
 
     Picture();
-    virtual ~Picture();
+    virtual ~Picture() override;
 
     virtual bool Read    (HWPFile &hwpf) override;
 };
@@ -681,10 +665,10 @@ struct Hidden: public HBox
     hchar     dummy;
 
     unsigned char info[8];                        // h, next, dummy
-    std::list<HWPPara*> plist;
+    std::vector<std::unique_ptr<HWPPara>> plist;
 
     Hidden();
-    virtual ~Hidden();
+    virtual ~Hidden() override;
 
     virtual bool Read(HWPFile &hwpf) override;
 };
@@ -710,10 +694,10 @@ struct HeaderFooter: public HBox
 /**
  * Paragraph list of header or footer
  */
-    std::list<HWPPara*> plist;
+    std::vector<std::unique_ptr<HWPPara>> plist;
 
     HeaderFooter();
-    virtual ~HeaderFooter();
+    virtual ~HeaderFooter() override;
 
     virtual bool Read(HWPFile &hwpf) override;
 };
@@ -743,10 +727,10 @@ struct Footnote: public HBox
 /**
  * Paragraph list of Footnote objects
  */
-    std::list<HWPPara*> plist;
+    std::vector<std::unique_ptr<HWPPara>> plist;
 
     Footnote();
-    virtual ~Footnote();
+    virtual ~Footnote() override;
 
     virtual bool Read(HWPFile &hwpf) override;
 };
@@ -849,10 +833,10 @@ struct MailMerge: public HBox
     MailMerge();
 
     virtual bool Read(HWPFile &hwpf) override;
-    virtual hchar_string GetString() override;
+    static hchar_string GetString();
 };
 
-// char compositon(23)
+// char composition(23)
 /**
  * The compose struct displays characters at position. The maximum character count for composition is three.
  * @short Composition several characters

@@ -20,7 +20,6 @@
 #ifndef INCLUDED_VCL_SALNATIVEWIDGETS_HXX
 #define INCLUDED_VCL_SALNATIVEWIDGETS_HXX
 
-#include <rtl/ustring.hxx>
 #include <vcl/dllapi.h>
 #include <tools/gen.hxx>
 #include <o3tl/typed_flags_set.hxx>
@@ -32,111 +31,82 @@
  *   control if it were composite).
  */
 
-typedef sal_uInt32      ControlType;
-
+enum class ControlType {
 // for use in general purpose ImplControlValue
-#define CTRL_GENERIC            0
-
+    Generic            =   0,
 // Normal PushButton/Command Button
-#define CTRL_PUSHBUTTON         1
-
+    Pushbutton         =   1,
 // Normal single radio button
-#define CTRL_RADIOBUTTON            2
-
+    Radiobutton        =   2,
 // Normal single checkbox
-#define CTRL_CHECKBOX           10
-
+    Checkbox           =  10,
 // Combobox, i.e. a ListBox
 // that allows data entry by user
-#define CTRL_COMBOBOX           20
-
+    Combobox           =  20,
 // Control that allows text entry
-#define CTRL_EDITBOX            30
-
+    Editbox            =  30,
 // Control that allows text entry, but without the usual border
 // Has to be handled separately, because this one cannot handle
-// HAS_BACKGROUND_TEXTURE, which is drawn in the edit box'es
+// ControlPart::HasBackgroundTexture, which is drawn in the edit box'es
 // border window.
-#define CTRL_EDITBOX_NOBORDER   31
-
+    EditboxNoBorder    =  31,
 // Control that allows text entry
 // ( some systems distinguish between single and multi line edit boxes )
-#define CTRL_MULTILINE_EDITBOX 32
-
+    MultilineEditbox   =  32,
 // Control that pops up a menu,
 // but does NOT allow data entry
-#define CTRL_LISTBOX            35
-
+    Listbox            =  35,
 // An edit field together with two little
 // buttons on the side (aka spin field)
-#define CTRL_SPINBOX            40
-
+    Spinbox            =  40,
 // Two standalone spin buttons
 // without an edit field
-#define CTRL_SPINBUTTONS        45
-
+    SpinButtons        =  45,
 // A single tab
-#define CTRL_TAB_ITEM           50
-
+    TabItem            =  50,
 // The border around a tab area,
 // but without the tabs themselves.
 // May have a gap at the top for
 // the active tab
-#define CTRL_TAB_PANE           55
-
+    TabPane            =  55,
 // The background to the tab area
-#define CTRL_TAB_HEADER         56
-
+    TabHeader          =  56,
 // Background of a Tab Pane
-#define CTRL_TAB_BODY           57
-
+    TabBody            =  57,
 // Normal scrollbar, including
 // all parts like slider, buttons
-#define CTRL_SCROLLBAR          60
-
-#define CTRL_SLIDER             65
-
-// Border around a group of related
-// items, perhaps also displaying
-// a label of identification
-#define CTRL_GROUPBOX           70
-
+    Scrollbar          =  60,
+    Slider             =  65,
 // A separator line
-#define CTRL_FIXEDLINE          80
-
+    Fixedline          =  80,
 // A toolbar control with buttons and a grip
-#define CTRL_TOOLBAR            100
-
+    Toolbar            = 100,
 // The menubar
-#define CTRL_MENUBAR            120
+    Menubar            = 120,
 // popup menu
-#define CTRL_MENU_POPUP         121
-
-#define CTRL_PROGRESS           131
+    MenuPopup          = 121,
+    Progress           = 131,
 // Progress bar for the intro window
 // (aka splash screen), in case some
 // wants native progress bar in the
 // application but not for the splash
 // screen (used in desktop/)
-#define CTRL_INTROPROGRESS      132
-
+    IntroProgress      = 132,
 // tool tips
-#define CTRL_TOOLTIP            140
-
+    Tooltip            = 140,
 // to draw the implemented theme
-#define CTRL_WINDOW_BACKGROUND  150
-
+    WindowBackground   = 150,
 //to draw border of frames natively
-#define CTRL_FRAME              160
-
+    Frame              = 160,
 // for nodes in listviews
 // used in svtools/source/contnr/svtreebx.cxx
-#define CTRL_LISTNODE           170
+    ListNode           = 170,
 // nets between elements of listviews
 // with nodes
-#define CTRL_LISTNET            171
+    ListNet            = 171,
 // for list headers
-#define CTRL_LISTHEADER         172
+    ListHeader         = 172,
+};
 
 
 /* Control Parts:
@@ -145,57 +115,58 @@ typedef sal_uInt32      ControlType;
  *   for example the slider of a scroll bar.
  */
 
-typedef sal_uInt32      ControlPart;
-
-#define PART_ENTIRE_CONTROL         1
-#define PART_WINDOW                 5       // the static listbox window containing the list
-#define PART_BUTTON                 100
-#define PART_BUTTON_UP              101
-#define PART_BUTTON_DOWN            102 // Also for ComboBoxes/ListBoxes
-#define PART_BUTTON_LEFT            103
-#define PART_BUTTON_RIGHT           104
-#define PART_ALL_BUTTONS            105
-#define PART_SEPARATOR_HORZ         106
-#define PART_SEPARATOR_VERT         107
-#define PART_TRACK_HORZ_LEFT        200
-#define PART_TRACK_VERT_UPPER       201
-#define PART_TRACK_HORZ_RIGHT       202
-#define PART_TRACK_VERT_LOWER       203
-#define PART_TRACK_HORZ_AREA        204
-#define PART_TRACK_VERT_AREA        205
-#define PART_THUMB_HORZ             210 // Also used as toolbar grip
-#define PART_THUMB_VERT             211 // Also used as toolbar grip
-#define PART_ARROW                  220
-#define PART_MENU_ITEM              250
-#define PART_MENU_ITEM_CHECK_MARK   251
-#define PART_MENU_ITEM_RADIO_MARK   252
-#define PART_MENU_SEPARATOR         253
-#define PART_MENU_SUBMENU_ARROW     254
+enum class ControlPart
+{
+    NONE               = 0,
+    Entire             = 1,
+    ListboxWindow      = 5,   // the static listbox window containing the list
+    Button             = 100,
+    ButtonUp           = 101,
+    ButtonDown         = 102, // Also for ComboBoxes/ListBoxes
+    ButtonLeft         = 103,
+    ButtonRight        = 104,
+    AllButtons         = 105,
+    SeparatorHorz      = 106,
+    SeparatorVert      = 107,
+    TrackHorzLeft      = 200,
+    TrackVertUpper     = 201,
+    TrackHorzRight     = 202,
+    TrackVertLower     = 203,
+    TrackHorzArea      = 204,
+    TrackVertArea      = 205,
+    Arrow              = 220,
+    ThumbHorz          = 210, // Also used as toolbar grip
+    ThumbVert          = 211, // Also used as toolbar grip
+    MenuItem           = 250,
+    MenuItemCheckMark  = 251,
+    MenuItemRadioMark  = 252,
+    Separator          = 253,
+    SubmenuArrow       = 254,
 
 /*  #i77549#
     HACK: for scrollbars in case of thumb rect, page up and page down rect we
-    abuse the HitTestNativeControl interface. All theming engines but aqua
+    abuse the HitTestNativeScrollbar interface. All theming engines but aqua
     are actually able to draw the thumb according to our internal representation.
     However aqua draws a little outside. The canonical way would be to enhance the
-    HitTestNativeControl passing a ScrollbarValue additionally so all necessary
+    HitTestNativeScrollbar passing a ScrollbarValue additionally so all necessary
     information is available in the call.
     .
     However since there is only this one small exception we will deviate a little and
     instead pass the respective rect as control region to allow for a small correction.
 
-    So all places using HitTestNativeControl on PART_THUMB_HORZ, PART_THUMB_VERT,
-    PART_TRACK_HORZ_LEFT, PART_TRACK_HORZ_RIGHT, PART_TRACK_VERT_UPPER, PART_TRACK_VERT_LOWER
-    do not use the control rectangle as region but the actuall part rectangle, making
+    So all places using HitTestNativeScrollbar on ControlPart::ThumbHorz, ControlPart::ThumbVert,
+    ControlPart::TrackHorzLeft, ControlPart::TrackHorzRight, ControlPart::TrackVertUpper, ControlPart::TrackVertLower
+    do not use the control rectangle as region but the actual part rectangle, making
     only small deviations feasible.
 */
 
 /** The edit field part of a control, e.g. of the combo box.
 
     Currently used just for combo boxes and just for GetNativeControlRegion().
-    It is valid only if GetNativeControlRegion() supports PART_BUTTON_DOWN as
+    It is valid only if GetNativeControlRegion() supports ControlPart::ButtonDown as
     well.
 */
-#define PART_SUB_EDIT           300
+    SubEdit                 = 300,
 
 // For controls that require the entire background
 // to be drawn first, and then other pieces over top.
@@ -203,30 +174,31 @@ typedef sal_uInt32      ControlPart;
 // in to draw this part is expected to be the entire
 // area of the control.
 // A control may respond to one or both.
-#define PART_DRAW_BACKGROUND_HORZ       1000
-#define PART_DRAW_BACKGROUND_VERT       1001
+    DrawBackgroundHorz      = 1000,
+    DrawBackgroundVert      = 1001,
 
 // GTK+ also draws tabs right->left since there is a
 // hardcoded 2 pixel overlap between adjacent tabs
-#define PART_TABS_DRAW_RTL          3000
+    TabsDrawRtl             = 3000,
 
 // For themes that do not want to have the focus
 // rectangle part drawn by VCL but take care of the
 // whole inner control part by themselves
 // eg, listboxes or comboboxes or spinbuttons
-#define HAS_BACKGROUND_TEXTURE  4000
+    HasBackgroundTexture    = 4000,
 
 // For scrollbars that have 3 buttons (most KDE themes)
-#define HAS_THREE_BUTTONS       5000
+    HasThreeButtons         = 5000,
 
-#define PART_BACKGROUND_WINDOW  6000
-#define PART_BACKGROUND_DIALOG  6001
+    BackgroundWindow        = 6000,
+    BackgroundDialog        = 6001,
 
 //to draw natively the border of frames
-#define PART_BORDER             7000
+    Border                  = 7000,
 
 //to draw natively the focus rects
-#define PART_FOCUS              8000
+    Focus                   = 8000
+};
 
 /* Control State:
  *
@@ -243,7 +215,6 @@ enum class ControlState {
     FOCUSED         = 0x0002,
     PRESSED         = 0x0004,
     ROLLOVER        = 0x0008,
-    HIDDEN          = 0x0010,
     DEFAULT         = 0x0020,
     SELECTED        = 0x0040,
     DOUBLEBUFFERING = 0x4000,  ///< Set when the control is painted using double-buffering via VirtualDevice.
@@ -251,60 +222,8 @@ enum class ControlState {
 };
 namespace o3tl
 {
-    template<> struct typed_flags<ControlState> : is_typed_flags<ControlState, 0xc07f> {};
+    template<> struct typed_flags<ControlState> : is_typed_flags<ControlState, 0xc06f> {};
 }
-
-class ControlCacheKey
-{
-public:
-    ControlType mnType;
-    ControlPart mnPart;
-    ControlState mnState;
-    Size maSize;
-
-    ControlCacheKey(ControlType nType, ControlPart nPart, ControlState nState, const Size& rSize)
-        : mnType(nType)
-        , mnPart(nPart)
-        , mnState(nState)
-        , maSize(rSize)
-    {}
-
-    bool operator==(ControlCacheKey const& aOther) const
-    {
-        return mnType == aOther.mnType
-            && mnPart == aOther.mnPart
-            && mnState == aOther.mnState
-            && maSize.Width() == aOther.maSize.Width()
-            && maSize.Height() == aOther.maSize.Height();
-    }
-
-    bool canCacheControl()
-    {
-        switch(mnType)
-        {
-            case CTRL_CHECKBOX:
-            case CTRL_RADIOBUTTON:
-            case CTRL_LISTNODE:
-            case CTRL_SLIDER:
-            // FIXME: these guys have complex state hidden in ImplControlValue
-            // structs which affects rendering, needs to be a and needs to be
-            // part of the key to our cache.
-            case CTRL_SPINBOX:
-            case CTRL_SPINBUTTONS:
-            case CTRL_TAB_ITEM:
-                return false;
-
-            case CTRL_MENUBAR:
-                if (mnPart == PART_ENTIRE_CONTROL)
-                    return false;
-                break;
-
-            default:
-                break;
-        }
-        return true;
-    }
-};
 
 /* ButtonValue:
  *
@@ -312,11 +231,11 @@ public:
  *   that buttons allow
  */
 
-enum ButtonValue {
-    BUTTONVALUE_DONTKNOW,
-    BUTTONVALUE_ON,
-    BUTTONVALUE_OFF,
-    BUTTONVALUE_MIXED
+enum class ButtonValue {
+    DontKnow,
+    On,
+    Off,
+    Mixed
 };
 
 /* ImplControlValue:
@@ -329,35 +248,40 @@ class VCL_DLLPUBLIC ImplControlValue
     friend class SalFrame;
 
     private:
-        ControlType     mType;
+        ControlType const mType;
         ButtonValue     mTristate;    // Tristate value: on, off, mixed
         long            mNumber;      // numeric value
     protected:
         ImplControlValue( ControlType i_eType, long i_nNumber )
         : mType( i_eType )
-        , mTristate( BUTTONVALUE_DONTKNOW )
+        , mTristate( ButtonValue::DontKnow )
         , mNumber( i_nNumber )
         {}
 
     public:
         explicit ImplControlValue( ButtonValue nTristate )
-            : mType( CTRL_GENERIC ), mTristate(nTristate), mNumber(0) {}
+            : mType( ControlType::Generic ), mTristate(nTristate), mNumber(0) {}
         explicit ImplControlValue( long nNumeric )
-            : mType( CTRL_GENERIC ), mTristate(BUTTONVALUE_DONTKNOW), mNumber( nNumeric) {}
-        inline ImplControlValue()
-            : mType( CTRL_GENERIC ), mTristate(BUTTONVALUE_DONTKNOW), mNumber(0) {}
+            : mType( ControlType::Generic ), mTristate(ButtonValue::DontKnow), mNumber( nNumeric) {}
+        ImplControlValue()
+            : mType( ControlType::Generic ), mTristate(ButtonValue::DontKnow), mNumber(0) {}
 
         virtual ~ImplControlValue();
+
+        ImplControlValue(ImplControlValue const &) = default;
+        ImplControlValue(ImplControlValue &&) = default;
+        ImplControlValue & operator =(ImplControlValue const &) = delete; // due to const mType
+        ImplControlValue & operator =(ImplControlValue &&) = delete; // due to const mType
 
         virtual ImplControlValue* clone() const;
 
         ControlType getType() const { return mType; }
 
-        inline ButtonValue      getTristateVal() const { return mTristate; }
-        inline void         setTristateVal( ButtonValue nTristate ) { mTristate = nTristate; }
+        ButtonValue  getTristateVal() const { return mTristate; }
+        void         setTristateVal( ButtonValue nTristate ) { mTristate = nTristate; }
 
-        inline long         getNumericVal() const { return mNumber; }
-        inline void         setNumericVal( long nNumeric ) { mNumber = nNumeric; }
+        long         getNumericVal() const { return mNumber; }
+        void         setNumericVal( long nNumeric ) { mNumber = nNumeric; }
 };
 
 /* ScrollbarValue:
@@ -371,24 +295,29 @@ class VCL_DLLPUBLIC ScrollbarValue : public ImplControlValue
         long            mnMax;
         long            mnCur;
         long            mnVisibleSize;
-        Rectangle       maThumbRect;
-        Rectangle       maButton1Rect;
-        Rectangle       maButton2Rect;
+        tools::Rectangle       maThumbRect;
+        tools::Rectangle       maButton1Rect;
+        tools::Rectangle       maButton2Rect;
         ControlState    mnButton1State;
         ControlState    mnButton2State;
         ControlState    mnThumbState;
         ControlState    mnPage1State;
         ControlState    mnPage2State;
 
-        inline ScrollbarValue()
-        : ImplControlValue( CTRL_SCROLLBAR, 0 )
+        ScrollbarValue()
+        : ImplControlValue( ControlType::Scrollbar, 0 )
         {
             mnMin = 0; mnMax = 0; mnCur = 0; mnVisibleSize = 0;
             mnButton1State = ControlState::NONE; mnButton2State = ControlState::NONE;
             mnThumbState = ControlState::NONE; mnPage1State = ControlState::NONE; mnPage2State = ControlState::NONE;
         };
-        virtual ~ScrollbarValue();
+        virtual ~ScrollbarValue() override;
         virtual ScrollbarValue* clone() const override;
+
+        ScrollbarValue(ScrollbarValue const &) = default;
+        ScrollbarValue(ScrollbarValue &&) = default;
+        ScrollbarValue & operator =(ScrollbarValue const &) = delete; // due to ImplControlValue
+        ScrollbarValue & operator =(ScrollbarValue &&) = delete; // due to ImplControlValue
 };
 
 class VCL_DLLPUBLIC SliderValue : public ImplControlValue
@@ -397,15 +326,20 @@ class VCL_DLLPUBLIC SliderValue : public ImplControlValue
         long            mnMin;
         long            mnMax;
         long            mnCur;
-        Rectangle       maThumbRect;
+        tools::Rectangle       maThumbRect;
         ControlState    mnThumbState;
 
         SliderValue()
-        : ImplControlValue( CTRL_SLIDER, 0 )
+        : ImplControlValue( ControlType::Slider, 0 )
         , mnMin( 0 ), mnMax( 0 ), mnCur( 0 ), mnThumbState( ControlState::NONE )
         {}
-        virtual ~SliderValue();
+        virtual ~SliderValue() override;
         virtual SliderValue* clone() const override;
+
+        SliderValue(SliderValue const &) = default;
+        SliderValue(SliderValue &&) = default;
+        SliderValue & operator =(SliderValue const &) = delete; // due to ImplControlValue
+        SliderValue & operator =(SliderValue &&) = delete; // due to ImplControlValue
 };
 
 /* TabitemValue:
@@ -431,16 +365,21 @@ class VCL_DLLPUBLIC TabitemValue : public ImplControlValue
 {
     public:
         TabitemFlags    mnAlignment;
-        Rectangle       maContentRect;
+        tools::Rectangle       maContentRect;
 
-        TabitemValue(const Rectangle &rContentRect)
-            : ImplControlValue( CTRL_TAB_ITEM, 0 )
+        TabitemValue(const tools::Rectangle &rContentRect)
+            : ImplControlValue( ControlType::TabItem, 0 )
             , mnAlignment(TabitemFlags::NONE)
             , maContentRect(rContentRect)
         {
         }
-        virtual ~TabitemValue();
+        virtual ~TabitemValue() override;
         virtual TabitemValue* clone() const override;
+
+        TabitemValue(TabitemValue const &) = default;
+        TabitemValue(TabitemValue &&) = default;
+        TabitemValue & operator =(TabitemValue const &) = delete; // due to ImplControlValue
+        TabitemValue & operator =(TabitemValue &&) = delete; // due to ImplControlValue
 
         bool isLeftAligned() const  { return bool(mnAlignment & TabitemFlags::LeftAligned); }
         bool isRightAligned() const { return bool(mnAlignment & TabitemFlags::RightAligned); }
@@ -448,7 +387,7 @@ class VCL_DLLPUBLIC TabitemValue : public ImplControlValue
         bool isNotAligned() const   { return !(mnAlignment & (TabitemFlags::LeftAligned | TabitemFlags::RightAligned)); }
         bool isFirst() const        { return bool(mnAlignment & TabitemFlags::FirstInGroup); }
         bool isLast() const         { return bool(mnAlignment & TabitemFlags::LastInGroup); }
-        const Rectangle& getContentRect() const { return maContentRect; }
+        const tools::Rectangle& getContentRect() const { return maContentRect; }
 };
 
 /* SpinbuttonValue:
@@ -460,24 +399,29 @@ class VCL_DLLPUBLIC TabitemValue : public ImplControlValue
 class VCL_DLLPUBLIC SpinbuttonValue : public ImplControlValue
 {
     public:
-        Rectangle       maUpperRect;
-        Rectangle       maLowerRect;
+        tools::Rectangle       maUpperRect;
+        tools::Rectangle       maLowerRect;
         ControlState    mnUpperState;
         ControlState    mnLowerState;
-        int         mnUpperPart;
-        int         mnLowerPart;
+        ControlPart     mnUpperPart;
+        ControlPart     mnLowerPart;
 
         SpinbuttonValue()
-            : ImplControlValue( CTRL_SPINBUTTONS, 0 )
+            : ImplControlValue( ControlType::SpinButtons, 0 )
             , mnUpperState(ControlState::NONE)
             , mnLowerState(ControlState::NONE)
-            , mnUpperPart(0)
-            , mnLowerPart(0)
+            , mnUpperPart(ControlPart::NONE)
+            , mnLowerPart(ControlPart::NONE)
         {
         }
 
-        virtual ~SpinbuttonValue();
+        virtual ~SpinbuttonValue() override;
         virtual SpinbuttonValue* clone() const override;
+
+        SpinbuttonValue(SpinbuttonValue const &) = default;
+        SpinbuttonValue(SpinbuttonValue &&) = default;
+        SpinbuttonValue & operator =(SpinbuttonValue const &) = delete; // due to ImplControlValue
+        SpinbuttonValue & operator =(SpinbuttonValue &&) = delete; // due to ImplControlValue
 };
 
 /*  Toolbarvalue:
@@ -487,13 +431,19 @@ class VCL_DLLPUBLIC SpinbuttonValue : public ImplControlValue
 class VCL_DLLPUBLIC ToolbarValue : public ImplControlValue
 {
 public:
-    ToolbarValue() : ImplControlValue( CTRL_TOOLBAR, 0 )
+    ToolbarValue() : ImplControlValue( ControlType::Toolbar, 0 )
     { mbIsTopDockingArea = false; }
-    virtual ~ToolbarValue();
+    virtual ~ToolbarValue() override;
     virtual ToolbarValue* clone() const override;
-    Rectangle           maGripRect;
+
+    ToolbarValue(ToolbarValue const &) = default;
+    ToolbarValue(ToolbarValue &&) = default;
+    ToolbarValue & operator =(ToolbarValue const &) = delete; // due to ImplControlValue
+    ToolbarValue & operator =(ToolbarValue &&) = delete; // due to ImplControlValue
+
+    tools::Rectangle           maGripRect;
     bool                mbIsTopDockingArea; // indicates that this is the top aligned dockingarea
-                                            // adjacent to the menubar
+                                            // adjacent to the menubar, only used on Windows
 };
 
 /*  MenubarValue:
@@ -503,10 +453,14 @@ public:
 class VCL_DLLPUBLIC MenubarValue : public ImplControlValue
 {
 public:
-    MenubarValue() : ImplControlValue( CTRL_MENUBAR, 0 )
+    MenubarValue() : ImplControlValue( ControlType::Menubar, 0 )
     { maTopDockingAreaHeight=0; }
-    virtual ~MenubarValue();
+    virtual ~MenubarValue() override;
     virtual MenubarValue* clone() const override;
+    MenubarValue(MenubarValue const &) = default;
+    MenubarValue(MenubarValue &&) = default;
+    MenubarValue & operator =(MenubarValue const &) = delete; // due to ImplControlValue
+    MenubarValue & operator =(MenubarValue &&) = delete; // due to ImplControlValue
     int             maTopDockingAreaHeight;
 };
 
@@ -518,15 +472,17 @@ public:
 class VCL_DLLPUBLIC MenupopupValue : public ImplControlValue
 {
 public:
-    MenupopupValue() : ImplControlValue( CTRL_MENU_POPUP, 0 )
-    {}
-    MenupopupValue( long i_nGutterWidth, const Rectangle& i_rItemRect )
-    : ImplControlValue( CTRL_MENU_POPUP, i_nGutterWidth )
+    MenupopupValue( long i_nGutterWidth, const tools::Rectangle& i_rItemRect )
+    : ImplControlValue( ControlType::MenuPopup, i_nGutterWidth )
     , maItemRect( i_rItemRect )
     {}
-    virtual ~MenupopupValue();
+    virtual ~MenupopupValue() override;
     virtual MenupopupValue* clone() const override;
-    Rectangle       maItemRect;
+    MenupopupValue(MenupopupValue const &) = default;
+    MenupopupValue(MenupopupValue &&) = default;
+    MenupopupValue & operator =(MenupopupValue const &) = delete; // due to ImplControlValue
+    MenupopupValue & operator =(MenupopupValue &&) = delete; // due to ImplControlValue
+    tools::Rectangle       maItemRect;
 };
 
 /*  PushButtonValue:
@@ -537,13 +493,23 @@ class VCL_DLLPUBLIC PushButtonValue : public ImplControlValue
 {
 public:
     PushButtonValue()
-    : ImplControlValue( CTRL_PUSHBUTTON, 0 )
-    , mbBevelButton( false ), mbSingleLine( true ) {}
-    virtual ~PushButtonValue();
+        : ImplControlValue( ControlType::Pushbutton, 0 )
+        , mbBevelButton(false)
+        , mbSingleLine(true)
+        , mbIsAction(false)
+    {}
+
+    virtual ~PushButtonValue() override;
     virtual PushButtonValue* clone() const override;
 
-    bool            mbBevelButton:1;
-    bool            mbSingleLine:1;
+    PushButtonValue(PushButtonValue const &) = default;
+    PushButtonValue(PushButtonValue &&) = default;
+    PushButtonValue & operator =(PushButtonValue const &) = delete; // due to ImplControlValue
+    PushButtonValue & operator =(PushButtonValue &&) = delete; // due to ImplControlValue
+
+    bool mbBevelButton:1; // only used on OSX
+    bool mbSingleLine:1;  // only used on OSX
+    bool mbIsAction:1;
 };
 
 

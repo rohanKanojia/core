@@ -24,8 +24,8 @@
 #include <svx/svdtext.hxx>
 #include <svx/svdotext.hxx>
 
-#include "drawdoc.hxx"
-#include "../source/ui/inc/DrawDocShell.hxx"
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
 
 #include <osl/process.h>
 #include <osl/thread.h>
@@ -65,12 +65,12 @@ bool SdFiltersTest::load(const OUString &rFilter, const OUString &rURL,
 {
     std::shared_ptr<const SfxFilter> pFilter(new SfxFilter(
         rFilter,
-        OUString(), nFilterFlags, nClipboardID, OUString(), 0, OUString(),
+        OUString(), nFilterFlags, nClipboardID, OUString(), OUString(),
         rUserData, OUString() ));
     const_cast<SfxFilter*>(pFilter.get())->SetVersion(nFilterVersion);
 
-    ::sd::DrawDocShellRef xDocShRef = new ::sd::DrawDocShell();
-    SfxMedium* pSrcMed = new SfxMedium(rURL, STREAM_STD_READ);
+    ::sd::DrawDocShellRef xDocShRef = new ::sd::DrawDocShell(SfxObjectCreateMode::EMBEDDED, false, DocumentType::Impress);
+    SfxMedium* pSrcMed = new SfxMedium(rURL, StreamMode::STD_READ);
     pSrcMed->SetFilter(pFilter);
     bool bLoaded = xDocShRef->DoLoad(pSrcMed);
     xDocShRef->DoClose();

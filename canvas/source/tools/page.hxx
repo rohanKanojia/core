@@ -26,7 +26,6 @@
 #include <canvas/rendering/irendermodule.hxx>
 #include <canvas/rendering/isurface.hxx>
 
-#include <list>
 #include <memory>
 #include <vector>
 #include "surfacerect.hxx"
@@ -42,20 +41,20 @@ namespace canvas
     class Page
     {
     public:
-        explicit Page( const IRenderModuleSharedPtr& rRenderModule );
+        explicit Page( const std::shared_ptr<IRenderModule>& rRenderModule );
 
         FragmentSharedPtr        allocateSpace( const ::basegfx::B2ISize& rSize );
         bool                     nakedFragment( const FragmentSharedPtr& pFragment );
         void                     free( const FragmentSharedPtr& pFragment );
-        const ISurfaceSharedPtr& getSurface() const { return mpSurface; }
+        const std::shared_ptr<ISurface>& getSurface() const { return mpSurface; }
         bool                     isValid() const;
         void                     validate();
 
     private:
-        typedef std::list<FragmentSharedPtr> FragmentContainer_t;
+        typedef std::vector<FragmentSharedPtr> FragmentContainer_t;
 
-        IRenderModuleSharedPtr  mpRenderModule;
-        ISurfaceSharedPtr       mpSurface;
+        std::shared_ptr<IRenderModule>  mpRenderModule;
+        std::shared_ptr<ISurface>       mpSurface;
         FragmentContainer_t     mpFragments;
 
         bool insert( SurfaceRect& r );
@@ -92,7 +91,7 @@ namespace canvas
         const SurfaceRect&          getRect() const { return maRect; }
         const ::basegfx::B2IPoint&  getPos() const { return maRect.maPos; }
         const ::basegfx::B2ISize&   getSize() const { return maRect.maSize; }
-        void                        setColorBuffer( const IColorBufferSharedPtr& pColorBuffer ) { mpBuffer=pColorBuffer; }
+        void                        setColorBuffer( const std::shared_ptr<IColorBuffer>& pColorBuffer ) { mpBuffer=pColorBuffer; }
         void                        setSourceOffset( const ::basegfx::B2IPoint& rOffset ) { maSourceOffset=rOffset; }
         void                        setPage( Page* pPage ) { mpPage=pPage; }
 
@@ -112,7 +111,7 @@ namespace canvas
             if(!(mpPage))
                 return false;
 
-            ISurfaceSharedPtr pSurface(mpPage->getSurface());
+            std::shared_ptr<ISurface> pSurface(mpPage->getSurface());
 
             // select this surface before wiping the contents
             // since a specific implementation could trigger
@@ -129,7 +128,7 @@ namespace canvas
             if(!(mpPage))
                 return false;
 
-            ISurfaceSharedPtr pSurface(mpPage->getSurface());
+            std::shared_ptr<ISurface> pSurface(mpPage->getSurface());
 
             return pSurface->update( maRect.maPos,
                                      ::basegfx::B2IRectangle(
@@ -141,7 +140,7 @@ namespace canvas
     private:
         Page*                 mpPage;
         SurfaceRect           maRect;
-        IColorBufferSharedPtr mpBuffer;
+        std::shared_ptr<IColorBuffer> mpBuffer;
         ::basegfx::B2IPoint   maSourceOffset;
     };
 }

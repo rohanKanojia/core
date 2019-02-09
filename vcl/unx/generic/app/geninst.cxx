@@ -33,108 +33,23 @@
 #if HAVE_FEATURE_OPENGL
 #include <vcl/opengl/OpenGLContext.hxx>
 #endif
-#include "unx/geninst.h"
+#include <unx/geninst.h>
 
 // SalYieldMutex
 
 SalYieldMutex::SalYieldMutex()
 {
-    mnCount     = 0;
-    mnThreadId  = 0;
-    ::comphelper::SolarMutex::setSolarMutex( this );
+#if HAVE_FEATURE_OPENGL
+    SetBeforeReleaseHandler( &OpenGLContext::prepareForYield );
+#endif
 }
 
 SalYieldMutex::~SalYieldMutex()
 {
-    ::comphelper::SolarMutex::setSolarMutex( nullptr );
-}
-
-void SalYieldMutex::acquire()
-{
-    m_mutex.acquire();
-    mnThreadId = osl::Thread::getCurrentIdentifier();
-    mnCount++;
-}
-
-void SalYieldMutex::release()
-{
-    assert(mnCount != 0);
-    assert(mnThreadId == osl::Thread::getCurrentIdentifier());
-    if ( mnCount == 1 )
-    {
-#if HAVE_FEATURE_OPENGL
-        OpenGLContext::prepareForYield();
-#endif
-        mnThreadId = 0;
-    }
-    mnCount--;
-    m_mutex.release();
-}
-
-bool SalYieldMutex::tryToAcquire()
-{
-    if ( m_mutex.tryToAcquire() )
-    {
-        mnThreadId = osl::Thread::getCurrentIdentifier();
-        mnCount++;
-        return true;
-    }
-    else
-        return false;
-}
-
-comphelper::SolarMutex* SalGenericInstance::GetYieldMutex()
-{
-    return mpSalYieldMutex;
-}
-
-sal_uLong SalGenericInstance::ReleaseYieldMutex()
-{
-    SalYieldMutex* pYieldMutex = mpSalYieldMutex;
-    if ( pYieldMutex->GetThreadId() ==
-         osl::Thread::getCurrentIdentifier() )
-    {
-        sal_uLong nCount = pYieldMutex->GetAcquireCount();
-        sal_uLong n = nCount;
-        while ( n )
-        {
-            pYieldMutex->release();
-            n--;
-        }
-
-        return nCount;
-    }
-    else
-        return 0;
-}
-
-void SalGenericInstance::AcquireYieldMutex( sal_uLong nCount )
-{
-    SalYieldMutex* pYieldMutex = mpSalYieldMutex;
-    while ( nCount )
-    {
-        pYieldMutex->acquire();
-        nCount--;
-    }
-}
-
-bool SalGenericInstance::CheckYieldMutex()
-{
-    bool bRet = true;
-
-    SalYieldMutex* pYieldMutex = mpSalYieldMutex;
-    if ( pYieldMutex->GetThreadId() != osl::Thread::getCurrentIdentifier() )
-    {
-        SAL_WARN("vcl", "CheckYieldMutex: " << pYieldMutex->GetThreadId() << "!=" << osl::Thread::getCurrentIdentifier() );
-        bRet = false;
-    }
-
-    return bRet;
 }
 
 SalGenericInstance::~SalGenericInstance()
 {
-    delete mpSalYieldMutex;
 }
 
 OUString SalGenericInstance::getOSVersion()
@@ -150,9 +65,8 @@ OUString SalGenericInstance::getOSVersion()
         if ( fgets ( aVerBuffer, 511, pVersion ) )
         {
             aKernelVer = OUString::createFromAscii( aVerBuffer );
-            sal_Int32 nIndex = 0;
             // "Linux version 3.16.7-29-desktop ..."
-            OUString aVers = aKernelVer.getToken( 2, ' ', nIndex );
+            OUString aVers = aKernelVer.getToken( 2, ' ' );
             // "3.16.7-29-desktop ..."
             sal_Int32 nTooDetailed = aVers.indexOf( '.', 2);
             if (nTooDetailed < 1 || nTooDetailed > 8)

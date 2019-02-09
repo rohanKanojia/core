@@ -19,18 +19,25 @@
 #ifndef INCLUDED_SC_SOURCE_UI_VBA_EXCELVBAHELPER_HXX
 #define INCLUDED_SC_SOURCE_UI_VBA_EXCELVBAHELPER_HXX
 
-#include <vbahelper/vbahelper.hxx>
-#include "docsh.hxx"
-#include <com/sun/star/sheet/XDatabaseRange.hpp>
-#include <com/sun/star/sheet/XUnnamedDatabaseRanges.hpp>
-#include <com/sun/star/table/XCellRange.hpp>
-#include <com/sun/star/sheet/XSheetCellRangeContainer.hpp>
-#include <com/sun/star/sheet/XSpreadsheet.hpp>
-#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include <ooo/vba/XHelperInterface.hpp>
+#include <vector>
+#include <global.hxx>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
+namespace com { namespace sun { namespace star { namespace sheet { class XDatabaseRange; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XUnnamedDatabaseRanges; } } } }
+namespace com { namespace sun { namespace star { namespace table { class XCell; } } } }
+namespace com { namespace sun { namespace star { namespace table { class XCellRange; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XSheetCellRangeContainer; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XSpreadsheet; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XSpreadsheetDocument; } } } }
+namespace ooo { namespace vba { class XHelperInterface; } }
 
 class ScCellRangesBase;
+class ScTabViewShell;
+class SfxViewFrame;
 
 namespace ooo {
 namespace vba {
@@ -47,16 +54,24 @@ ScDocShell* getDocShell( const css::uno::Reference< css::frame::XModel>& xModel 
 ScTabViewShell* getCurrentBestViewShell( const css::uno::Reference< css::uno::XComponentContext >& xContext );
 SfxViewFrame* getViewFrame( const css::uno::Reference< css::frame::XModel >& xModel );
 
-css::uno::Reference< css::sheet::XUnnamedDatabaseRanges > GetUnnamedDataBaseRanges( ScDocShell* pShell ) throw ( css::uno::RuntimeException );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< css::sheet::XUnnamedDatabaseRanges > GetUnnamedDataBaseRanges( const ScDocShell* pShell );
 
-css::uno::Reference< css::sheet::XDatabaseRange > GetAutoFiltRange( ScDocShell* pShell, sal_Int16 nSheet ) throw ( css::uno::RuntimeException );
-css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::sheet::XSpreadsheet >& xSheet ) throw ( css::uno::RuntimeException, std::exception );
-css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::sheet::XSheetCellRangeContainer >& xRanges ) throw ( css::uno::RuntimeException, std::exception );
-css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::table::XCellRange >& xRange ) throw ( css::uno::RuntimeException, std::exception );
-css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::table::XCell >& xCell ) throw ( css::uno::RuntimeException, std::exception );
-css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::frame::XModel >& xModel, SCTAB nTab ) throw ( css::uno::RuntimeException, std::exception );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< css::sheet::XDatabaseRange > GetAutoFiltRange( const ScDocShell* pShell, sal_Int16 nSheet );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::sheet::XSpreadsheet >& xSheet );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::sheet::XSheetCellRangeContainer >& xRanges );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::table::XCellRange >& xRange );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::table::XCell >& xCell );
+/// @throws css::uno::RuntimeException
+css::uno::Reference< ooo::vba::XHelperInterface > getUnoSheetModuleObj( const css::uno::Reference< css::frame::XModel >& xModel, SCTAB nTab );
 
-ScDocShell* GetDocShellFromRange( const css::uno::Reference< css::uno::XInterface >& xRange ) throw ( css::uno::RuntimeException );
+/// @throws css::uno::RuntimeException
+ScDocShell* GetDocShellFromRange( const css::uno::Reference< css::uno::XInterface >& xRange );
 void setUpDocumentModules( const css::uno::Reference< css::sheet::XSpreadsheetDocument >& xDoc );
 
 class ScVbaCellRangeAccess
@@ -65,16 +80,17 @@ public:
     static SfxItemSet* GetDataSet( ScCellRangesBase* pRangeObj );
 };
 
-// Extracts a implementation object ( via XUnoTunnel ) from an uno object
-// by default will throw if unsuccessful.
+// Extracts a implementation object ( via XUnoTunnel ) from an uno object.
+// Will throw if unsuccessful.
+/// @throws css::uno::RuntimeException
 template < typename ImplObject >
-    ImplObject* getImplFromDocModuleWrapper( const css::uno::Reference< css::uno::XInterface >& rxWrapperIf, bool bThrow = true ) throw (css::uno::RuntimeException)
+    ImplObject* getImplFromDocModuleWrapper( const css::uno::Reference< css::uno::XInterface >& rxWrapperIf )
     {
         ImplObject* pObj = nullptr;
         css::uno::Reference< css::lang::XUnoTunnel >  xTunnel( rxWrapperIf, css::uno::UNO_QUERY );
         if ( xTunnel.is() )
             pObj = reinterpret_cast<ImplObject*>( xTunnel->getSomething(ImplObject::getUnoTunnelId()));
-        if ( bThrow && !pObj )
+        if ( !pObj )
             throw css::uno::RuntimeException("Internal error, can't extract implementation object", rxWrapperIf );
         return pObj;
     }

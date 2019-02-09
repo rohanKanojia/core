@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SC_INC_SEGMENTTREE_HXX
 #define INCLUDED_SC_INC_SEGMENTTREE_HXX
 
-#include "address.hxx"
+#include "types.hxx"
 
 #include <memory>
 
@@ -41,6 +41,7 @@ public:
     public:
         explicit ForwardIterator(ScFlatBoolRowSegments& rSegs);
 
+        [[nodiscard]]
         bool getValue(SCROW nPos, bool& rVal);
         SCROW getLastPos() const { return mnLastPos;}
 
@@ -135,6 +136,7 @@ public:
     ~ScFlatUInt16RowSegments();
 
     void setValue(SCROW nRow1, SCROW nRow2, sal_uInt16 nValue);
+    void setValueIf(SCROW nRow1, SCROW nRow2, sal_uInt16 nValue, const std::function<bool(sal_uInt16)>& rPredicate);
     sal_uInt16 getValue(SCROW nRow);
     sal_uInt32 getSumValue(SCROW nRow1, SCROW nRow2);
     bool getRangeData(SCROW nRow, RangeData& rData);

@@ -35,20 +35,17 @@ class StgDirEntry : public StgAvlNode
     friend class StgIterator;
     friend class StgDirStrm;
     StgEntry     m_aSave;                     // original dir entry
-    StgDirEntry*  m_pUp;                      // parent directory
-    StgDirEntry*  m_pDown;                    // child directory for storages
-    StgDirEntry** m_ppRoot;                   // root of TOC tree
+    StgDirEntry* m_pUp;                      // parent directory
+    StgDirEntry* m_pDown;                    // child directory for storages
     StgStrm*     m_pStgStrm;                  // storage stream
     StgTmpStrm*  m_pTmpStrm;                  // temporary stream
     StgTmpStrm*  m_pCurStrm;                  // temp stream after commit
     sal_Int32    m_nEntry;                    // entry # in TOC stream (temp)
     sal_Int32    m_nPos;                      // current position
     bool         m_bDirty;                    // dirty directory entry
-    bool         m_bCreated;                  // newly created entry
     bool         m_bRemoved;                  // removed per Invalidate()
-    bool         m_bRenamed;                  // renamed
     void         InitMembers();             // ctor helper
-    virtual short Compare( const StgAvlNode* ) const override;
+    virtual sal_Int32 Compare( const StgAvlNode* ) const override;
     bool         StoreStream( StgIo& );     // store the stream
     bool         StoreStreams( StgIo& );    // store all streams
     void         RevertAll();               // revert the whole tree
@@ -65,13 +62,12 @@ public:
     StgDirEntry(const void* pBuffer, sal_uInt32 nBufferLen,
                 sal_uInt64 nUnderlyingStreamSize, bool * pbOk);
     explicit StgDirEntry( const StgEntry& );
-    virtual ~StgDirEntry();
+    virtual ~StgDirEntry() override;
 
-    void Invalidate( bool=false );          // invalidate all open entries
-    void Enum( sal_Int32& );                    // enumerate entries for iteration
+    void Invalidate( bool );                // invalidate all open entries
+    void Enum( sal_Int32& );                // enumerate entries for iteration
     void DelTemp( bool );                   // delete temporary entries
     bool Store( StgDirStrm& );              // save entry into dir strm
-    bool IsContained( StgDirEntry* );       // check if subentry
 
     void SetDirty()  { m_bDirty = true; }
     bool IsDirty();
@@ -80,7 +76,7 @@ public:
 
     void  OpenStream( StgIo& );     // set up an appropriate stream
     void  Close();
-    sal_Int32 GetSize();
+    sal_Int32 GetSize() const;
     bool  SetSize( sal_Int32 );
     sal_Int32 Seek( sal_Int32 );
     sal_Int32 Read( void*, sal_Int32 );
@@ -92,16 +88,15 @@ class StgDirStrm : public StgDataStrm
 {
     friend class StgIterator;
     StgDirEntry* m_pRoot;                         // root of dir tree
-    short        m_nEntries;                      // entries per page
     void         SetupEntry( sal_Int32, StgDirEntry* );
 public:
     explicit StgDirStrm( StgIo& );
-    virtual ~StgDirStrm();
+    virtual ~StgDirStrm() override;
     virtual bool SetSize( sal_Int32 ) override;              // change the size
     bool         Store();
-    void*        GetEntry( sal_Int32 n, bool=false );// get an entry
+    void*        GetEntry( sal_Int32 n, bool );// get an entry
     StgDirEntry* GetRoot() { return m_pRoot; }
-    StgDirEntry* Find( StgDirEntry&, const OUString& );
+    static StgDirEntry* Find( StgDirEntry&, const OUString& );
     StgDirEntry* Create( StgDirEntry&, const OUString&, StgEntryType );
 };
 

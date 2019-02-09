@@ -18,10 +18,12 @@
  */
 
 #include "WrappedAutomaticPositionProperties.hxx"
-#include "FastPropertyIdRanges.hxx"
-#include "macros.hxx"
+#include <FastPropertyIdRanges.hxx>
+#include <WrappedProperty.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/chart2/RelativePosition.hpp>
+#include <com/sun/star/beans/XPropertyState.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Any;
@@ -37,26 +39,18 @@ class WrappedAutomaticPositionProperty : public WrappedProperty
 {
 public:
     WrappedAutomaticPositionProperty();
-    virtual ~WrappedAutomaticPositionProperty();
 
-    virtual void setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                                    throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException) override;
-    virtual Any getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                                    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException) override;
-    virtual Any getPropertyDefault( const Reference< beans::XPropertyState >& xInnerPropertyState ) const
-                                    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException) override;
+    virtual void setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const override;
+    virtual Any getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const override;
+    virtual Any getPropertyDefault( const Reference< beans::XPropertyState >& xInnerPropertyState ) const override;
 };
 
 WrappedAutomaticPositionProperty::WrappedAutomaticPositionProperty()
     : ::chart::WrappedProperty( "AutomaticPosition" , OUString() )
 {
 }
-WrappedAutomaticPositionProperty::~WrappedAutomaticPositionProperty()
-{
-}
 
 void WrappedAutomaticPositionProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     if( xInnerPropertySet.is() )
     {
@@ -73,15 +67,14 @@ void WrappedAutomaticPositionProperty::setPropertyValue( const Any& rOuterValue,
                     xInnerPropertySet->setPropertyValue( "RelativePosition", Any() );
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 }
 
 Any WrappedAutomaticPositionProperty::getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet( getPropertyDefault( Reference< beans::XPropertyState >( xInnerPropertySet, uno::UNO_QUERY ) ) );
     if( xInnerPropertySet.is() )
@@ -94,7 +87,6 @@ Any WrappedAutomaticPositionProperty::getPropertyValue( const Reference< beans::
 }
 
 Any WrappedAutomaticPositionProperty::getPropertyDefault( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     aRet <<= false;
@@ -108,26 +100,20 @@ enum
     PROP_CHART_AUTOMATIC_POSITION = FAST_PROPERTY_ID_START_CHART_AUTOPOSITION_PROP
 };
 
-void lcl_addWrappedProperties( std::vector< WrappedProperty* >& rList )
-{
-    rList.push_back( new WrappedAutomaticPositionProperty() );
-}
-
 }//anonymous namespace
 
-void WrappedAutomaticPositionProperties::addProperties( ::std::vector< Property > & rOutProperties )
+void WrappedAutomaticPositionProperties::addProperties( std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "AutomaticPosition",
+    rOutProperties.emplace_back( "AutomaticPosition",
                   PROP_CHART_AUTOMATIC_POSITION,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
-void WrappedAutomaticPositionProperties::addWrappedProperties( std::vector< WrappedProperty* >& rList )
+void WrappedAutomaticPositionProperties::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList )
 {
-    lcl_addWrappedProperties( rList );
+    rList.emplace_back( new WrappedAutomaticPositionProperty() );
 }
 
 } //namespace wrapper

@@ -20,6 +20,10 @@
 #include "SlsQueueProcessor.hxx"
 #include "SlsCacheConfiguration.hxx"
 #include "SlsRequestQueue.hxx"
+#include "SlsBitmapCache.hxx"
+
+#include <sdpage.hxx>
+#include <comphelper/profilezone.hxx>
 
 namespace sd { namespace slidesorter { namespace cache {
 
@@ -33,9 +37,6 @@ QueueProcessor::QueueProcessor (
     const SharedCacheContext& rpCacheContext)
     : maMutex(),
       maTimer(),
-      mnTimeBetweenHighPriorityRequests (10/*ms*/),
-      mnTimeBetweenLowPriorityRequests (100/*ms*/),
-      mnTimeBetweenRequestsWhenNotIdle (1000/*ms*/),
       maPreviewSize(rPreviewSize),
       mbDoSuperSampling(bDoSuperSampling),
       mpCacheContext(rpCacheContext),
@@ -44,22 +45,9 @@ QueueProcessor::QueueProcessor (
       maBitmapFactory(),
       mbIsPaused(false)
 {
-    // Look into the configuration if there for overriding values.
-    css::uno::Any aTimeBetweenReqeusts;
-    aTimeBetweenReqeusts = CacheConfiguration::Instance()->GetValue("TimeBetweenHighPriorityRequests");
-    if (aTimeBetweenReqeusts.has<sal_Int32>())
-        aTimeBetweenReqeusts >>= mnTimeBetweenHighPriorityRequests;
-
-    aTimeBetweenReqeusts = CacheConfiguration::Instance()->GetValue("TimeBetweenLowPriorityRequests");
-    if (aTimeBetweenReqeusts.has<sal_Int32>())
-        aTimeBetweenReqeusts >>= mnTimeBetweenLowPriorityRequests;
-
-    aTimeBetweenReqeusts = CacheConfiguration::Instance()->GetValue("TimeBetweenRequestsDuringShow");
-    if (aTimeBetweenReqeusts.has<sal_Int32>())
-        aTimeBetweenReqeusts >>= mnTimeBetweenRequestsWhenNotIdle;
-
-    maTimer.SetTimeoutHdl (LINK(this,QueueProcessor,ProcessRequestHdl));
+    maTimer.SetInvokeHandler (LINK(this,QueueProcessor,ProcessRequestHdl));
     maTimer.SetTimeout (10);
+    maTimer.SetDebugName ("sd::QueueProcessor maTimer");
 }
 
 QueueProcessor::~QueueProcessor()
@@ -106,14 +94,14 @@ void QueueProcessor::SetPreviewSize (
     mbDoSuperSampling = bDoSuperSampling;
 }
 
-IMPL_LINK_NOARG_TYPED(QueueProcessor, ProcessRequestHdl, Timer *, void)
+IMPL_LINK_NOARG(QueueProcessor, ProcessRequestHdl, Timer *, void)
 {
     ProcessRequests();
 }
 
 void QueueProcessor::ProcessRequests()
 {
-    OSL_ASSERT(mpCacheContext.get()!=nullptr);
+    assert(mpCacheContext.get()!=nullptr);
 
     // Never process more than one request at a time in order to prevent the
     // lock up of the edit view.
@@ -144,6 +132,10 @@ void QueueProcessor::ProcessRequests()
         ::osl::MutexGuard aGuard (mrQueue.GetMutex());
         if ( ! mrQueue.IsEmpty())
             Start(mrQueue.GetFrontPriorityClass());
+        else
+        {
+            comphelper::ProfileZone aZone("QueueProcessor finished processing all elements");
+        }
     }
 }
 
@@ -156,18 +148,17 @@ void QueueProcessor::ProcessOneRequest (
         ::osl::MutexGuard aGuard (maMutex);
 
         // Create a new preview bitmap and store it in the cache.
-        if (mpCache.get() != nullptr
-            && mpCacheContext.get() != nullptr)
+        if (mpCache != nullptr && mpCacheContext.get() != nullptr)
         {
             const SdPage* pSdPage = dynamic_cast<const SdPage*>(mpCacheContext->GetPage(aKey));
             if (pSdPage != nullptr)
             {
-                const Bitmap aPreview (
+                const BitmapEx aPreview (
                     maBitmapFactory.CreateBitmap(*pSdPage, maPreviewSize, mbDoSuperSampling));
                 mpCache->SetBitmap (pSdPage, aPreview, ePriorityClass!=NOT_VISIBLE);
 
                 // Initiate a repaint of the new preview.
-                mpCacheContext->NotifyPreviewCreation(aKey, aPreview);
+                mpCacheContext->NotifyPreviewCreation(aKey);
             }
         }
     }

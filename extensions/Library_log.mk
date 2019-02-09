@@ -26,6 +26,7 @@ $(eval $(call gb_Library_add_exception_objects,log,\
 	extensions/source/logging/loghandler \
 	extensions/source/logging/logrecord \
 	extensions/source/logging/plaintextformatter \
+	extensions/source/logging/simpletextformatter \
 ))
 
 $(eval $(call gb_Library_use_libraries,log,\
@@ -34,7 +35,6 @@ $(eval $(call gb_Library_use_libraries,log,\
 	cppu \
 	sal \
 	tl \
-	$(gb_UWINAPI) \
 ))
 
 # vim:set noet sw=4 ts=4:

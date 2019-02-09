@@ -19,9 +19,9 @@
 
 #include <sfx2/linkmgr.hxx>
 
-#include "areasave.hxx"
-#include "arealink.hxx"
-#include "document.hxx"
+#include <areasave.hxx>
+#include <arealink.hxx>
+#include <document.hxx>
 #include <documentlinkmgr.hxx>
 
 ScAreaLinkSaver::ScAreaLinkSaver( const ScAreaLink& rSource ) :
@@ -34,22 +34,12 @@ ScAreaLinkSaver::ScAreaLinkSaver( const ScAreaLink& rSource ) :
 {
 }
 
-ScAreaLinkSaver::ScAreaLinkSaver( const ScAreaLinkSaver& rCopy ) :
-    aFileName   ( rCopy.aFileName ),
-    aFilterName ( rCopy.aFilterName ),
-    aOptions    ( rCopy.aOptions ),
-    aSourceArea ( rCopy.aSourceArea ),
-    aDestArea   ( rCopy.aDestArea ),
-    nRefresh    ( rCopy.nRefresh )
-{
-}
-
 bool ScAreaLinkSaver::IsEqualSource( const ScAreaLink& rCompare ) const
 {
-    return ( aFileName.equals(rCompare.GetFile()) &&
-             aFilterName.equals(rCompare.GetFilter()) &&
-             aOptions.equals(rCompare.GetOptions()) &&
-             aSourceArea.equals(rCompare.GetSource()) &&
+    return ( aFileName == rCompare.GetFile() &&
+             aFilterName == rCompare.GetFilter() &&
+             aOptions == rCompare.GetOptions() &&
+             aSourceArea == rCompare.GetSource() &&
              nRefresh == rCompare.GetRefreshDelay() );
 }
 
@@ -85,9 +75,6 @@ void ScAreaLinkSaver::InsertNewLink( ScDocument* pDoc )
 }
 
 ScAreaLinkSaveCollection::ScAreaLinkSaveCollection() {}
-
-ScAreaLinkSaveCollection::ScAreaLinkSaveCollection( const ScAreaLinkSaveCollection& r ) :
-    maData(r.maData) {}
 
 ScAreaLinkSaveCollection::~ScAreaLinkSaveCollection() {}
 
@@ -159,9 +146,9 @@ void ScAreaLinkSaveCollection::Restore( ScDocument* pDoc )
     }
 }
 
-ScAreaLinkSaveCollection* ScAreaLinkSaveCollection::CreateFromDoc( const ScDocument* pDoc )
+std::unique_ptr<ScAreaLinkSaveCollection> ScAreaLinkSaveCollection::CreateFromDoc( const ScDocument* pDoc )
 {
-    ScAreaLinkSaveCollection* pColl = nullptr;
+    std::unique_ptr<ScAreaLinkSaveCollection> pColl;
 
     sfx2::LinkManager* pLinkManager = const_cast<ScDocument*>(pDoc)->GetLinkManager();
     if (pLinkManager)
@@ -174,7 +161,7 @@ ScAreaLinkSaveCollection* ScAreaLinkSaveCollection::CreateFromDoc( const ScDocum
             if (dynamic_cast<const ScAreaLink*>( pBase) != nullptr)
             {
                 if (!pColl)
-                    pColl = new ScAreaLinkSaveCollection;
+                    pColl.reset(new ScAreaLinkSaveCollection);
 
                 pColl->push_back( ScAreaLinkSaver( *static_cast<ScAreaLink*>(pBase ) ) );
             }

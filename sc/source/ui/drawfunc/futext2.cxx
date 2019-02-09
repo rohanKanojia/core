@@ -21,24 +21,24 @@
 #include <svx/svdoutl.hxx>
 #include <svx/svdetc.hxx>
 
-#include "futext.hxx"
-#include "tabvwsh.hxx"
+#include <futext.hxx>
+#include <tabvwsh.hxx>
 
-SdrOutliner* FuText::MakeOutliner()
+std::unique_ptr<SdrOutliner> FuText::MakeOutliner()
 {
-    ScViewData& rViewData = pViewShell->GetViewData();
-    SdrOutliner* pOutl = SdrMakeOutliner(OUTLINERMODE_OUTLINEOBJECT, *pDrDoc);
+    ScViewData& rViewData = rViewShell.GetViewData();
+    std::unique_ptr<SdrOutliner> pOutl = SdrMakeOutliner(OutlinerMode::OutlineObject, *pDrDoc);
 
     rViewData.UpdateOutlinerFlags(*pOutl);
 
-    //  Die EditEngine benutzt beim RTF Export (Clipboard / Drag&Drop)
-    //  den MapMode des RefDevices, um die Fontgroesse zu setzen
+    //  The EditEngine uses during RTF export (Clipboard / Drag&Drop)
+    //  the MapMode of RefDevice to set the font size
 
     //  #i10426# The ref device isn't set to the EditEngine before SdrBeginTextEdit now,
     //  so the device must be taken from the model here.
     OutputDevice* pRef = pDrDoc->GetRefDevice();
     if (pRef && pRef != pWindow)
-        pRef->SetMapMode( MapMode(MAP_100TH_MM) );
+        pRef->SetMapMode( MapMode(MapUnit::Map100thMM) );
 
     return pOutl;
 }

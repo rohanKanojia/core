@@ -19,36 +19,30 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_SELGLOS_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_SELGLOS_HXX
 
-#include <vcl/dialog.hxx>
+#include <vcl/weld.hxx>
 
-#include <vcl/lstbox.hxx>
-#include <vcl/fixed.hxx>
-
-#include <vcl/button.hxx>
-
-class SwSelGlossaryDlg : public ModalDialog
+class SwSelGlossaryDlg final : public weld::GenericDialogController
 {
-protected:
-    VclPtr<ListBox>  m_pGlosBox;
+    std::unique_ptr<weld::Frame> m_xFrame;
+    std::unique_ptr<weld::TreeView> m_xGlosBox;
 
-    DECL_LINK_TYPED(DoubleClickHdl, ListBox&, void);
+    DECL_LINK(DoubleClickHdl, weld::TreeView&, void);
 public:
-    SwSelGlossaryDlg(vcl::Window * pParent, const OUString &rShortName);
-    virtual ~SwSelGlossaryDlg();
-    virtual void dispose() override;
+    SwSelGlossaryDlg(weld::Window * pParent, const OUString &rShortName);
+    virtual ~SwSelGlossaryDlg() override;
 
     void InsertGlos(const OUString &rRegion, const OUString &rGlosName)
     {
         const OUString aTmp = rRegion + ":" + rGlosName;
-        m_pGlosBox->InsertEntry(aTmp);
+        m_xGlosBox->append_text(aTmp);
     }
     sal_Int32 GetSelectedIdx() const
     {
-        return m_pGlosBox->GetSelectEntryPos();
+        return m_xGlosBox->get_selected_index();
     }
     void SelectEntryPos(sal_Int32 nIdx)
     {
-        m_pGlosBox->SelectEntryPos(nIdx);
+        m_xGlosBox->select(nIdx);
     }
 };
 

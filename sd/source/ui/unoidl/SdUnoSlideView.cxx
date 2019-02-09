@@ -19,17 +19,17 @@
 
 #include <cppuhelper/supportsservice.hxx>
 
-#include "DrawController.hxx"
-#include "SdUnoSlideView.hxx"
+#include <DrawController.hxx>
+#include <SdUnoSlideView.hxx>
 
-#include "SlideSorter.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "sdpage.hxx"
+#include <SlideSorter.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <sdpage.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace ::com::sun::star;
@@ -51,10 +51,7 @@ SdUnoSlideView::~SdUnoSlideView() throw()
 //----- XSelectionSupplier ----------------------------------------------------
 
 sal_Bool SAL_CALL SdUnoSlideView::select (const Any& aSelection)
-      throw(lang::IllegalArgumentException, RuntimeException, std::exception)
 {
-    bool bOk = true;
-
     slidesorter::controller::SlideSorterController& rSlideSorterController
         = mrSlideSorter.GetController();
     slidesorter::controller::PageSelector& rSelector (rSlideSorterController.GetPageSelector());
@@ -81,11 +78,10 @@ sal_Bool SAL_CALL SdUnoSlideView::select (const Any& aSelection)
         }
     }
 
-    return bOk;
+    return true;
 }
 
 Any SAL_CALL SdUnoSlideView::getSelection()
-      throw(RuntimeException, std::exception)
 {
     Any aResult;
 
@@ -108,24 +104,17 @@ Any SAL_CALL SdUnoSlideView::getSelection()
 }
 
 void SAL_CALL SdUnoSlideView::addSelectionChangeListener (
-    const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rxListener;
-}
+    const css::uno::Reference<css::view::XSelectionChangeListener>&)
+{}
 
 void SAL_CALL SdUnoSlideView::removeSelectionChangeListener (
-    const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rxListener;
-}
+    const css::uno::Reference<css::view::XSelectionChangeListener>&)
+{}
 
 //----- XDrawView -------------------------------------------------------------
 
 void SAL_CALL SdUnoSlideView::setCurrentPage (
     const css::uno::Reference<css::drawing::XDrawPage>& rxDrawPage)
-    throw(css::uno::RuntimeException, std::exception)
 {
     Reference<beans::XPropertySet> xProperties (rxDrawPage, UNO_QUERY);
     if (xProperties.is())
@@ -141,7 +130,6 @@ void SAL_CALL SdUnoSlideView::setCurrentPage (
 
 css::uno::Reference<css::drawing::XDrawPage > SAL_CALL
     SdUnoSlideView::getCurrentPage()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return mrSlideSorter.GetController().GetCurrentSlideManager()->GetCurrentSlide()->GetXDrawPage();
 }
@@ -150,45 +138,32 @@ css::uno::Reference<css::drawing::XDrawPage > SAL_CALL
 
 void SdUnoSlideView::setFastPropertyValue (
     sal_Int32 nHandle,
-        const Any& rValue)
-    throw(css::beans::UnknownPropertyException,
-        css::beans::PropertyVetoException,
-        css::lang::IllegalArgumentException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
+        const Any&)
 {
-    (void)nHandle;
-    (void)rValue;
-
-    throw beans::UnknownPropertyException();
+    throw beans::UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
 }
 
 Any SAL_CALL SdUnoSlideView::getFastPropertyValue (
     sal_Int32 nHandle)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
-    (void)nHandle;
-
     if( nHandle != DrawController::PROPERTY_VIEWOFFSET )
-        throw beans::UnknownPropertyException();
+        throw beans::UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
 
     return Any();
 }
 
 // XServiceInfo
-OUString SAL_CALL SdUnoSlideView::getImplementationName(  ) throw (RuntimeException, std::exception)
+OUString SAL_CALL SdUnoSlideView::getImplementationName(  )
 {
     return OUString( "com.sun.star.comp.sd.SdUnoSlideView" );
 }
 
-sal_Bool SAL_CALL SdUnoSlideView::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL SdUnoSlideView::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL SdUnoSlideView::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL SdUnoSlideView::getSupportedServiceNames(  )
 {
     OUString aSN( "com.sun.star.presentation.SlidesView" );
     uno::Sequence< OUString > aSeq( &aSN, 1 );

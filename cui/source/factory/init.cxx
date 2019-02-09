@@ -17,22 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/msgbox.hxx>
-#include "cuicharmap.hxx"
+#include <cuicharmap.hxx>
 
 // hook to call special character dialog for edits
 // caution: needs C-Linkage since dynamically loaded via symbol name
 extern "C"
 {
-SAL_DLLPUBLIC_EXPORT bool GetSpecialCharsForEdit(vcl::Window* i_pParent, const vcl::Font& i_rFont, OUString& o_rResult)
+SAL_DLLPUBLIC_EXPORT bool GetSpecialCharsForEdit(vcl::Window const * i_pParent, const vcl::Font& i_rFont, OUString& o_rResult)
 {
     bool bRet = false;
-    VclPtrInstance< SvxCharacterMap > aDlg( i_pParent );
-    aDlg->DisableFontSelection();
-    aDlg->SetCharFont(i_rFont);
-    if ( aDlg->Execute() == RET_OK )
+    SvxCharacterMap aDlg(i_pParent ? i_pParent->GetFrameWeld() : nullptr, nullptr, false);
+    aDlg.DisableFontSelection();
+    aDlg.SetCharFont(i_rFont);
+    if (aDlg.run() == RET_OK)
     {
-        o_rResult = aDlg->GetCharacters();
+        sal_UCS4 cChar = aDlg.GetChar();
+        // using the new UCS4 constructor
+        OUString aOUStr( &cChar, 1 );
+        o_rResult = aOUStr;
         bRet = true;
     }
     return bRet;

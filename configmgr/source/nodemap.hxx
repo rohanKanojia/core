@@ -23,7 +23,7 @@
 #include <sal/config.h>
 #include "config_map.hxx"
 #include <rtl/ref.hxx>
-#include <node.hxx>
+#include "node.hxx"
 
 namespace configmgr {
 
@@ -32,16 +32,14 @@ class NodeMap
 {
     NodeMapImpl maImpl;
 
-    NodeMap(const NodeMap &rMap) :
-        maImpl(rMap.maImpl) { clearCache(); }
+    NodeMap(const NodeMap &rMap) = delete;
 
   public:
     typedef NodeMapImpl::iterator iterator;
     typedef NodeMapImpl::const_iterator const_iterator;
     typedef NodeMapImpl::value_type value_type;
 
-     NodeMap() { clearCache(); }
-    ~NodeMap() {}
+    NodeMap() { clearCache(); }
     bool empty() const { return maImpl.empty(); }
     iterator find(const OUString &aStr) { return maImpl.find( aStr ); }
 

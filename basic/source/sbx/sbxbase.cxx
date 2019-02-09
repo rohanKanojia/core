@@ -17,23 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <tools/debug.hxx>
 #include <tools/stream.hxx>
 #include <vcl/svapp.hxx>
 
 #include <basic/sbx.hxx>
 #include <basic/sbxfac.hxx>
-#include "sbxbase.hxx"
+#include <sbxbase.hxx>
 
 #include <rtl/instance.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 // AppData-Structure for SBX:
 
 
 SbxAppData::SbxAppData()
-    : eSbxError(ERRCODE_SBX_OK)
-    , pBasicFormater(nullptr)
+    : eErrCode(ERRCODE_NONE)
     , eBasicFormaterLangType(LANGUAGE_DONTKNOW)
 {
 }
@@ -42,7 +43,7 @@ SbxAppData::~SbxAppData()
 {
     SolarMutexGuard g;
 
-    delete pBasicFormater;
+    pBasicFormater.reset();
     m_Factories.clear();
 }
 
@@ -72,15 +73,6 @@ SbxDataType SbxBase::GetType() const
     return SbxEMPTY;
 }
 
-SbxClassType SbxBase::GetClass() const
-{
-    return SbxCLASS_DONTCARE;
-}
-
-void SbxBase::Clear()
-{
-}
-
 bool SbxBase::IsFixed() const
 {
     return IsSet( SbxFlagBits::Fixed );
@@ -96,44 +88,36 @@ void SbxBase::SetModified( bool b )
         ResetFlag( SbxFlagBits::Modified );
 }
 
-SbxError SbxBase::GetError()
+ErrCode const & SbxBase::GetError()
 {
-    return GetSbxData_Impl().eSbxError;
+    return GetSbxData_Impl().eErrCode;
 }
 
-void SbxBase::SetError( SbxError e )
+void SbxBase::SetError( ErrCode e )
 {
     SbxAppData& r = GetSbxData_Impl();
-    if( e && r.eSbxError == ERRCODE_SBX_OK )
-        r.eSbxError = e;
+    if( e && r.eErrCode == ERRCODE_NONE )
+        r.eErrCode = e;
 }
 
 bool SbxBase::IsError()
 {
-    return GetSbxData_Impl().eSbxError != ERRCODE_SBX_OK;
+    return GetSbxData_Impl().eErrCode != ERRCODE_NONE;
 }
 
 void SbxBase::ResetError()
 {
-    GetSbxData_Impl().eSbxError = ERRCODE_SBX_OK;
+    GetSbxData_Impl().eErrCode = ERRCODE_NONE;
 }
 
 void SbxBase::AddFactory( SbxFactory* pFac )
 {
     SbxAppData& r = GetSbxData_Impl();
 
-    // From 1996-03-06: take the HandleLast-Flag into account
-    sal_uInt16 nPos = r.m_Factories.size(); // Insert position
-    if( !pFac->IsHandleLast() )         // Only if not self HandleLast
-    {
-        // Rank new factory in front of factories with HandleLast
-        while (nPos > 0 && r.m_Factories[ nPos-1 ]->IsHandleLast())
-            nPos--;
-    }
-    r.m_Factories.insert(r.m_Factories.begin() + nPos, std::unique_ptr<SbxFactory>(pFac));
+    r.m_Factories.insert(r.m_Factories.begin(), std::unique_ptr<SbxFactory>(pFac));
 }
 
-void SbxBase::RemoveFactory( SbxFactory* pFac )
+void SbxBase::RemoveFactory( SbxFactory const * pFac )
 {
     SbxAppData& r = GetSbxData_Impl();
     for (auto it = r.m_Factories.begin(); it != r.m_Factories.end(); ++it)
@@ -142,7 +126,7 @@ void SbxBase::RemoveFactory( SbxFactory* pFac )
         {
             std::unique_ptr<SbxFactory> tmp(std::move(*it));
             r.m_Factories.erase( it );
-            tmp.release();
+            (void)tmp.release();
             break;
         }
     }
@@ -165,9 +149,9 @@ SbxBase* SbxBase::Create( sal_uInt16 nSbxId, sal_uInt32 nCreator )
         case SBXID_ARRAY:       return new SbxArray;
         case SBXID_DIMARRAY:    return new SbxDimArray;
         case SBXID_OBJECT:      return new SbxObject( "" );
-        case SBXID_COLLECTION:  return new SbxCollection( "" );
+        case SBXID_COLLECTION:  return new SbxCollection;
         case SBXID_FIXCOLLECTION:
-                                return new SbxStdCollection( "", "" );
+                                return new SbxStdCollection;
         case SBXID_METHOD:      return new SbxMethod( "", SbxEMPTY );
         case SBXID_PROPERTY:    return new SbxProperty( "", SbxEMPTY );
     }
@@ -209,7 +193,7 @@ SbxBase* SbxBase::Load( SvStream& rStrm )
     if( nFlags & SbxFlagBits::Reserved )
         nFlags = ( nFlags & ~SbxFlagBits::Reserved ) | SbxFlagBits::GlobalSearch;
 
-    sal_Size nOldPos = rStrm.Tell();
+    sal_uInt64 nOldPos = rStrm.Tell();
     rStrm.ReadUInt32( nSize );
     SbxBase* p = Create( nSbxId, nCreator );
     if( p )
@@ -217,7 +201,7 @@ SbxBase* SbxBase::Load( SvStream& rStrm )
         p->nFlags = nFlags;
         if( p->LoadData( rStrm, nVer ) )
         {
-            sal_Size nNewPos = rStrm.Tell();
+            sal_uInt64 const nNewPos = rStrm.Tell();
             nOldPos += nSize;
             DBG_ASSERT( nOldPos >= nNewPos, "SBX: Too much data loaded" );
             if( nOldPos != nNewPos )
@@ -242,35 +226,22 @@ SbxBase* SbxBase::Load( SvStream& rStrm )
     return p;
 }
 
-// Skip the Sbx-Object inside the stream
-void SbxBase::Skip( SvStream& rStrm )
-{
-    sal_uInt16 nSbxId, nFlags, nVer;
-    sal_uInt32 nCreator, nSize;
-    rStrm.ReadUInt32( nCreator ).ReadUInt16( nSbxId ).ReadUInt16( nFlags ).ReadUInt16( nVer );
-
-    sal_Size nStartPos = rStrm.Tell();
-    rStrm.ReadUInt32( nSize );
-
-    rStrm.Seek( nStartPos + nSize );
-}
-
 bool SbxBase::Store( SvStream& rStrm )
 {
     if( ( nFlags & SbxFlagBits::DontStore ) == SbxFlagBits::NONE )
     {
-        rStrm.WriteUInt32( GetCreator() )
+        rStrm.WriteUInt32( SBXCR_SBX )
              .WriteUInt16( GetSbxId() )
              .WriteUInt16( static_cast<sal_uInt16>(GetFlags()) )
              .WriteUInt16( GetVersion() );
-        sal_Size nOldPos = rStrm.Tell();
-        rStrm.WriteUInt32( 0L );
+        sal_uInt64 const nOldPos = rStrm.Tell();
+        rStrm.WriteUInt32( 0 );
         bool bRes = StoreData( rStrm );
-        sal_Size nNewPos = rStrm.Tell();
+        sal_uInt64 const nNewPos = rStrm.Tell();
         rStrm.Seek( nOldPos );
         rStrm.WriteUInt32( nNewPos - nOldPos );
         rStrm.Seek( nNewPos );
-        if( rStrm.GetError() != SVSTREAM_OK )
+        if( rStrm.GetError() != ERRCODE_NONE )
             bRes = false;
         if( bRes )
             bRes = true;
@@ -278,16 +249,6 @@ bool SbxBase::Store( SvStream& rStrm )
     }
     else
         return true;
-}
-
-bool SbxBase::LoadData( SvStream&, sal_uInt16 )
-{
-    return false;
-}
-
-bool SbxBase::StoreData( SvStream& ) const
-{
-    return false;
 }
 
 bool SbxBase::LoadCompleted()
@@ -318,7 +279,7 @@ SbxInfo::~SbxInfo()
 
 void SbxInfo::AddParam(const OUString& rName, SbxDataType eType, SbxFlagBits nFlags)
 {
-    m_Params.push_back(std::unique_ptr<SbxParamInfo>(new SbxParamInfo(rName, eType, nFlags)));
+    m_Params.push_back(std::make_unique<SbxParamInfo>(rName, eType, nFlags));
 }
 
 const SbxParamInfo* SbxInfo::GetParam( sal_uInt16 n ) const
@@ -348,7 +309,7 @@ void SbxInfo::LoadData( SvStream& rStrm, sal_uInt16 nVer )
         SbxFlagBits nFlags = static_cast<SbxFlagBits>(nFlagsTmp);
         if( nVer > 1 )
             rStrm.ReadUInt32( nUserData );
-        AddParam( aName, (SbxDataType) nType, nFlags );
+        AddParam( aName, static_cast<SbxDataType>(nType), nFlags );
         SbxParamInfo& p(*m_Params.back());
         p.nUserData = nUserData;
     }

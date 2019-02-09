@@ -18,6 +18,7 @@
  */
 
 #include <cstdio>
+#include <o3tl/any.hxx>
 #include <unotools/configitem.hxx>
 
 #include "X11_selection.hxx"
@@ -37,7 +38,6 @@ class DtransX11ConfigItem : public ::utl::ConfigItem
 
 public:
     DtransX11ConfigItem();
-    virtual ~DtransX11ConfigItem();
 
     sal_Int32 getSelectionTimeout() const { return m_nSelectionTimeout; }
 };
@@ -66,8 +66,8 @@ sal_Int32 SelectionManager::getSelectionTimeout()
  */
 
 DtransX11ConfigItem::DtransX11ConfigItem() :
-    ConfigItem( OUString( SETTINGS_CONFIGNODE ),
-                ConfigItemMode::DelayedUpdate ),
+    ConfigItem( SETTINGS_CONFIGNODE,
+                ConfigItemMode::NONE ),
     m_nSelectionTimeout( 3 )
 {
     Sequence<OUString> aKeys { SELECTION_PROPERTY };
@@ -75,12 +75,10 @@ DtransX11ConfigItem::DtransX11ConfigItem() :
 #if OSL_DEBUG_LEVEL > 1
     fprintf( stderr, "found %" SAL_PRIdINT32 " properties for %s\n", aValues.getLength(), SELECTION_PROPERTY );
 #endif
-    Any* pValue = aValues.getArray();
-    for( int i = 0; i < aValues.getLength(); i++, pValue++ )
+    for( Any const & value : aValues )
     {
-        if( pValue->getValueTypeClass() == TypeClass_STRING )
+        if( auto pLine = o3tl::tryAccess<OUString>(value) )
         {
-            const OUString* pLine = static_cast<const OUString*>(pValue->getValue());
             if( !pLine->isEmpty() )
             {
                 m_nSelectionTimeout = pLine->toInt32();
@@ -95,17 +93,9 @@ DtransX11ConfigItem::DtransX11ConfigItem() :
 #if OSL_DEBUG_LEVEL > 1
         else
             fprintf( stderr, "found SelectionTimeout of type \"%s\"\n",
-                     OUStringToOString( pValue->getValueType().getTypeName(), osl_getThreadTextEncoding() ).getStr() );
+                     OUStringToOString( value.getValueType().getTypeName(), osl_getThreadTextEncoding() ).getStr() );
 #endif
     }
-}
-
-/*
- *  DtransX11ConfigItem destructor
- */
-
-DtransX11ConfigItem::~DtransX11ConfigItem()
-{
 }
 
 void DtransX11ConfigItem::ImplCommit()

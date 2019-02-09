@@ -22,7 +22,7 @@
 
 #include "richstring.hxx"
 #include "worksheethelper.hxx"
-#include "tabprotection.hxx"
+#include <tabprotection.hxx>
 
 namespace oox {
 namespace xls {
@@ -43,7 +43,11 @@ struct SheetSettingsModel
 /** Sheet protection settings. */
 struct SheetProtectionModel
 {
-    sal_uInt16          mnPasswordHash;         /// Hash value from sheet protection password.
+    OUString            maAlgorithmName;        /// Algorithm name, "SHA-512", "SHA-1", ...
+    OUString            maHashValue;            /// Hash value computed by the algorithm, base-64 encoded
+    OUString            maSaltValue;            /// Salt value to be prepended to the password, base-64 encoded
+    sal_uInt32          mnSpinCount;            /// Spin count, iterations to run algorithm
+    sal_uInt16          mnPasswordHash;         /// Hash value from sheet protection password. (unrelated to the above)
     bool                mbSheet;                /// True = sheet protection enabled, locked cells are protected.
     bool                mbObjects;              /// True = objects locked.
     bool                mbScenarios;            /// True = scenarios locked.
@@ -81,8 +85,6 @@ public:
     void                importOutlinePr( const AttributeList& rAttribs );
     /** Imports protection settings from the sheetProtection element. */
     void                importSheetProtection( const AttributeList& rAttribs );
-    /** Imports enhanced protection settings from the protectedRanges element. */
-    static void         importProtectedRanges( const AttributeList& rAttribs );
     /** Imports enhanced protection settings from the protectedRange element. */
     void                importProtectedRange( const AttributeList& rAttribs );
     /** Imports protection settings from the sheetProtection element of a chart sheet. */

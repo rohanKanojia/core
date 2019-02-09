@@ -19,6 +19,7 @@
 
 #include <unotools/closeveto.hxx>
 
+#include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 
 #include <cppuhelper/implbase.hxx>
@@ -51,16 +52,16 @@ namespace utl
         }
 
         // XCloseListener
-        virtual void SAL_CALL queryClosing( const EventObject& Source, sal_Bool GetsOwnership ) throw (CloseVetoException, RuntimeException, std::exception) override;
-        virtual void SAL_CALL notifyClosing( const EventObject& Source ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL queryClosing( const EventObject& Source, sal_Bool GetsOwnership ) override;
+        virtual void SAL_CALL notifyClosing( const EventObject& Source ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const EventObject& Source) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const EventObject& Source) override;
 
         bool hasOwnership() const { return m_bHasOwnership; }
 
     protected:
-        virtual ~CloseListener_Impl()
+        virtual ~CloseListener_Impl() override
         {
         }
 
@@ -68,25 +69,17 @@ namespace utl
         bool    m_bHasOwnership;
     };
 
-    void SAL_CALL CloseListener_Impl::queryClosing( const EventObject& i_source, sal_Bool i_deliverOwnership ) throw (CloseVetoException, RuntimeException, std::exception)
+    void SAL_CALL CloseListener_Impl::queryClosing( const EventObject&, sal_Bool i_deliverOwnership )
     {
-        (void)i_source;
-
         if ( !m_bHasOwnership )
             m_bHasOwnership = i_deliverOwnership;
 
         throw CloseVetoException();
     }
 
-    void SAL_CALL CloseListener_Impl::notifyClosing( const EventObject& i_source ) throw (RuntimeException, std::exception)
-    {
-        (void)i_source;
-    }
+    void SAL_CALL CloseListener_Impl::notifyClosing( const EventObject& ) {}
 
-    void SAL_CALL CloseListener_Impl::disposing( const EventObject& i_source ) throw (RuntimeException, std::exception)
-    {
-        (void)i_source;
-    }
+    void SAL_CALL CloseListener_Impl::disposing( const EventObject& ) {}
 
     //= CloseVeto_Data
 
@@ -111,7 +104,7 @@ namespace utl
             i_data.xCloseable->addCloseListener( i_data.pListener.get() );
         }
 
-        void lcl_deinit( CloseVeto_Data& i_data )
+        void lcl_deinit( CloseVeto_Data const & i_data )
         {
             if ( !i_data.xCloseable.is() )
                 return;
@@ -121,12 +114,12 @@ namespace utl
             {
                 try
                 {
-                    i_data.xCloseable->close( sal_True );
+                    i_data.xCloseable->close( true );
                 }
                 catch( const CloseVetoException& ) { }
                 catch( const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("unotools");
                 }
             }
         }

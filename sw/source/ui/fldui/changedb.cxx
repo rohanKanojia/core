@@ -17,8 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svtools/stdctrl.hxx>
-#include <vcl/msgbox.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/sdb/DatabaseContext.hpp>
@@ -26,7 +24,7 @@
 #include <com/sun/star/sdb/XDatabaseAccess.hpp>
 #include <comphelper/processfactory.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
 #include <view.hxx>
 #include <wrtsh.hxx>
@@ -39,9 +37,9 @@
 #include <dbfld.hxx>
 #include <changedb.hxx>
 
-#include <fldui.hrc>
 #include <globals.hrc>
-#include <utlui.hrc>
+#include <strings.hrc>
+#include <bitmaps.hlst>
 
 #include <unomid.h>
 
@@ -51,10 +49,9 @@ using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::uno;
 
 // edit insert-field
-SwChangeDBDlg::SwChangeDBDlg(SwView& rVw)
+SwChangeDBDlg::SwChangeDBDlg(SwView const & rVw)
     : SvxStandardDialog(&rVw.GetViewFrame()->GetWindow(), "ExchangeDatabasesDialog",
         "modules/swriter/ui/exchangedatabases.ui")
-    , aImageList(SW_RES(ILIST_DB_DLG))
     , pSh(rVw.GetWrtShellPtr())
 {
     get(m_pUsedDBTLB, "inuselb");
@@ -69,10 +66,11 @@ SwChangeDBDlg::SwChangeDBDlg(SwView& rVw)
     m_pDefineBT->SetClickHdl(LINK(this, SwChangeDBDlg, ButtonHdl));
     m_pAddDBPB->SetClickHdl(LINK(this, SwChangeDBDlg, AddDBHdl));
 
-    m_pUsedDBTLB->SetSelectionMode(MULTIPLE_SELECTION);
+    m_pUsedDBTLB->SetSelectionMode(SelectionMode::Multiple);
     m_pUsedDBTLB->SetStyle(m_pUsedDBTLB->GetStyle()|WB_HASLINES|WB_CLIPCHILDREN|WB_SORT|WB_HASBUTTONS|WB_HASBUTTONSATROOT|WB_HSCROLL);
     m_pUsedDBTLB->SetSpaceBetweenEntries(0);
-    m_pUsedDBTLB->SetNodeBitmaps( aImageList.GetImage(IMG_COLLAPSE), aImageList.GetImage(IMG_EXPAND));
+    m_pUsedDBTLB->SetNodeBitmaps(Image(StockImage::Yes, RID_BMP_COLLAPSE),
+                                 Image(StockImage::Yes, RID_BMP_EXPAND));
 
     Link<SvTreeListBox*,void> aLink = LINK(this, SwChangeDBDlg, TreeSelectHdl);
 
@@ -89,14 +87,15 @@ void SwChangeDBDlg::FillDBPopup()
     Reference< XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
     Reference<XDatabaseContext> xDBContext = DatabaseContext::create(xContext);
     const SwDBData& rDBData = pSh->GetDBData();
-    m_pAvailDBTLB->Select(rDBData.sDataSource, rDBData.sCommand, aEmptyOUStr);
+    m_pAvailDBTLB->Select(rDBData.sDataSource, rDBData.sCommand, OUString());
 
     std::vector<OUString> aAllDBNames;
 
     Sequence< OUString > aDBNames = xDBContext->getElementNames();
     const OUString* pDBNames = aDBNames.getConstArray();
     sal_Int32 nDBCount = aDBNames.getLength();
-    for(sal_Int32 i = 0; i < nDBCount; i++)
+    aAllDBNames.reserve(nDBCount);
+    for (sal_Int32 i = 0; i < nDBCount; i++)
     {
         aAllDBNames.push_back(pDBNames[i]);
     }
@@ -126,18 +125,19 @@ void SwChangeDBDlg::FillDBPopup()
 
 SvTreeListEntry* SwChangeDBDlg::Insert(const OUString& rDBName)
 {
-    const OUString sDBName(rDBName.getToken(0, DB_DELIM));
-    const OUString sTableName(rDBName.getToken(1, DB_DELIM));
-    sal_IntPtr nCommandType = rDBName.getToken(2, DB_DELIM).toInt32();
+    sal_Int32 nIdx{ 0 };
+    const OUString sDBName(rDBName.getToken(0, DB_DELIM, nIdx));
+    const OUString sTableName(rDBName.getToken(0, DB_DELIM, nIdx));
+    sal_IntPtr nCommandType = rDBName.getToken(0, DB_DELIM, nIdx).toInt32();
     SvTreeListEntry* pParent;
     SvTreeListEntry* pChild;
 
     sal_uLong nParent = 0;
     sal_uLong nChild = 0;
 
-    Image aTableImg = aImageList.GetImage(IMG_DBTABLE);
-    Image aDBImg = aImageList.GetImage(IMG_DB);
-    Image aQueryImg = aImageList.GetImage(IMG_DBQUERY);
+    Image aTableImg(StockImage::Yes, RID_BMP_DBTABLE);
+    Image aDBImg(StockImage::Yes, RID_BMP_DB);
+    Image aQueryImg(StockImage::Yes, RID_BMP_DBQUERY);
     Image& rToInsert = nCommandType ? aQueryImg : aTableImg;
     while ((pParent = m_pUsedDBTLB->GetEntry(nParent++)) != nullptr)
     {
@@ -192,8 +192,8 @@ void SwChangeDBDlg::UpdateFields()
         if( m_pUsedDBTLB->GetParent( pEntry ))
         {
             OUString sTmp(m_pUsedDBTLB->GetEntryText( m_pUsedDBTLB->GetParent( pEntry )) +
-                          OUString(DB_DELIM) + m_pUsedDBTLB->GetEntryText( pEntry ) + OUString(DB_DELIM) +
-                          OUString::number((int)reinterpret_cast<sal_uLong>(pEntry->GetUserData())));
+                          OUStringLiteral1(DB_DELIM) + m_pUsedDBTLB->GetEntryText( pEntry ) + OUStringLiteral1(DB_DELIM) +
+                          OUString::number(static_cast<int>(reinterpret_cast<sal_uLong>(pEntry->GetUserData()))));
             aDBNames.push_back(sTmp);
         }
         pEntry = m_pUsedDBTLB->NextSelected(pEntry);
@@ -202,12 +202,12 @@ void SwChangeDBDlg::UpdateFields()
     pSh->StartAllAction();
     OUString sTableName;
     OUString sColumnName;
-    sal_Bool bIsTable = sal_False;
+    sal_Bool bIsTable = false;
     const OUString DBName(m_pAvailDBTLB->GetDBName(sTableName, sColumnName, &bIsTable));
     const OUString sTemp = DBName
-        + OUString(DB_DELIM)
+        + OUStringLiteral1(DB_DELIM)
         + sTableName
-        + OUString(DB_DELIM)
+        + OUStringLiteral1(DB_DELIM)
         + OUString::number(bIsTable
                             ? CommandType::TABLE
                             : CommandType::QUERY);
@@ -215,12 +215,12 @@ void SwChangeDBDlg::UpdateFields()
     pSh->EndAllAction();
 }
 
-IMPL_LINK_NOARG_TYPED(SwChangeDBDlg, ButtonHdl, Button*, void)
+IMPL_LINK_NOARG(SwChangeDBDlg, ButtonHdl, Button*, void)
 {
     OUString sTableName;
     OUString sColumnName;
     SwDBData aData;
-    sal_Bool bIsTable = sal_False;
+    sal_Bool bIsTable = false;
     aData.sDataSource = m_pAvailDBTLB->GetDBName(sTableName, sColumnName, &bIsTable);
     aData.sCommand = sTableName;
     aData.nCommandType = bIsTable ? 0 : 1;
@@ -229,7 +229,7 @@ IMPL_LINK_NOARG_TYPED(SwChangeDBDlg, ButtonHdl, Button*, void)
     EndDialog(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED(SwChangeDBDlg, TreeSelectHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(SwChangeDBDlg, TreeSelectHdl, SvTreeListBox*, void)
 {
     SvTreeListEntry* pEntry = m_pAvailDBTLB->GetCurEntry();
 
@@ -247,7 +247,7 @@ void SwChangeDBDlg::ShowDBName(const SwDBData& rDBData)
 {
     if (rDBData.sDataSource.isEmpty() && rDBData.sCommand.isEmpty())
     {
-        m_pDocDBNameFT->SetText(SW_RESSTR(SW_STR_NONE));
+        m_pDocDBNameFT->SetText(SwResId(SW_STR_NONE));
     }
     else
     {
@@ -256,9 +256,9 @@ void SwChangeDBDlg::ShowDBName(const SwDBData& rDBData)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SwChangeDBDlg, AddDBHdl, Button*, void)
+IMPL_LINK_NOARG(SwChangeDBDlg, AddDBHdl, Button*, void)
 {
-    const OUString sNewDB = SwDBManager::LoadAndRegisterDataSource();
+    const OUString sNewDB = SwDBManager::LoadAndRegisterDataSource(GetFrameWeld());
     if (!sNewDB.isEmpty())
         m_pAvailDBTLB->AddDataSource(sNewDB);
 }

@@ -24,6 +24,7 @@
 #include <svx/svditer.hxx>
 #include <svx/xfillit0.hxx>
 #include <vcl/outdev.hxx>
+#include <svx/svdmodel.hxx>
 
 using namespace com::sun::star;
 
@@ -36,13 +37,23 @@ namespace sdr
         {
         }
 
-        BaseProperties::BaseProperties(const BaseProperties& /*rProps*/, SdrObject& rObj)
-        :   mrObject(rObj)
+        BaseProperties::~BaseProperties()
         {
         }
 
-        BaseProperties::~BaseProperties()
+        void BaseProperties::applyDefaultStyleSheetFromSdrModel()
         {
+            SfxStyleSheet* pDefaultStyleSheet(GetSdrObject().getSdrModelFromSdrObject().GetDefaultStyleSheet());
+
+            // tdf#118139 Only do this when StyleSheet really differs. It may e.g.
+            // be the case that nullptr == pDefaultStyleSheet and there is none set yet,
+            // so indeed no need to set it (needed for some strange old MSWord2003
+            // documents with CustomShape-'Group' and added Text-Frames, see task description)
+            if(pDefaultStyleSheet != GetStyleSheet())
+            {
+                // do not delete hard attributes when setting dsefault Style
+                SetStyleSheet(pDefaultStyleSheet, true);
+            }
         }
 
         const SdrObject& BaseProperties::GetSdrObject() const
@@ -85,24 +96,6 @@ namespace sdr
             ClearObjectItem(nWhich);
         }
 
-        void BaseProperties::Scale(const Fraction& /*rScale*/)
-        {
-            // default implementation does nothing; override where
-            // an ItemSet is implemented.
-        }
-
-        void BaseProperties::MoveToItemPool(SfxItemPool* /*pSrcPool*/, SfxItemPool* /*pDestPool*/, SdrModel* /*pNewModel*/)
-        {
-            // Move properties to a new ItemPool. Default implementation does nothing.
-            // Override where an ItemSet is implemented.
-        }
-
-        void BaseProperties::SetModel(SdrModel* /*pOldModel*/, SdrModel* /*pNewModel*/)
-        {
-            // Set new model. Default implementation does nothing.
-            // Override where an ItemSet is implemented.
-        }
-
         void BaseProperties::ForceStyleToHardAttributes()
         {
             // force all attributes which come from styles to hard attributes
@@ -132,37 +125,26 @@ namespace sdr
         {
             const sal_uInt32 nCount(rChange.GetRectangleCount());
 
-            // #110094#-14 Reduce to do only second change
-            //// invalidate all remembered rectangles
-            //for(sal_uInt32 a(0); a < nCount; a++)
-            //{
-            //  GetSdrObject().BroadcastObjectChange(rChange.GetRectangle(a));
-            //}
-
             // invalidate all new rectangles
             if(dynamic_cast<const SdrObjGroup*>( &GetSdrObject() ) != nullptr)
             {
-                SdrObjListIter aIter(static_cast<SdrObjGroup&>(GetSdrObject()), IM_DEEPNOGROUPS);
+                SdrObjListIter aIter(static_cast<SdrObjGroup&>(GetSdrObject()), SdrIterMode::DeepNoGroups);
 
                 while(aIter.IsMore())
                 {
                     SdrObject* pObj = aIter.Next();
-                    // This is done with ItemSetChanged
-                    // pObj->SetChanged();
                     pObj->BroadcastObjectChange();
                 }
             }
             else
             {
-                // This is done with ItemSetChanged
-                // GetSdrObject().SetChanged();
                 GetSdrObject().BroadcastObjectChange();
             }
 
             // also send the user calls
-            for(sal_uInt32 a(0L); a < nCount; a++)
+            for(sal_uInt32 a(0); a < nCount; a++)
             {
-                GetSdrObject().SendUserCall(SDRUSERCALL_CHGATTR, rChange.GetRectangle(a));
+                GetSdrObject().SendUserCall(SdrUserCallType::ChangeAttr, rChange.GetRectangle(a));
             }
         }
 
@@ -178,7 +160,7 @@ namespace sdr
             const bool bFillHatch = rItemSet.GetItemState(XATTR_FILLHATCH, false) == SfxItemState::SET;
             if( bFillBitmap || bFillGradient || bFillHatch )
             {
-                const XFillStyleItem* pFillStyleItem = dynamic_cast< const XFillStyleItem* >( rItemSet.GetItem(XATTR_FILLSTYLE) );
+                const XFillStyleItem* pFillStyleItem = rItemSet.GetItem(XATTR_FILLSTYLE);
                 if( pFillStyleItem )
                 {
                     if( bFillBitmap && (pFillStyleItem->GetValue() != drawing::FillStyle_BITMAP) )

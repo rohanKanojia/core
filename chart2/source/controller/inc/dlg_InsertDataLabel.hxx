@@ -19,31 +19,24 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_DLG_INSERTDATALABEL_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_DLG_INSERTDATALABEL_HXX
 
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
+#include <vcl/weld.hxx>
 #include <svl/itemset.hxx>
 #include <memory>
-#include "../dialogs/res_DataLabel.hxx"
 
 class SvNumberFormatter;
 
 namespace chart
 {
+class DataLabelResources;
 
-class DataLabelsDialog : public ModalDialog
+class DataLabelsDialog : public weld::GenericDialogController
 {
 private:
-//     OKButton            m_aBtnOK;
-//     CancelButton        m_aBtnCancel;
-//     HelpButton          m_aBtnHelp;
-    std::unique_ptr < DataLabelResources >    m_apDataLabelResources;
-
-    const SfxItemSet&   m_rInAttrs;
-
-    void Reset();
+    std::unique_ptr<DataLabelResources> m_apDataLabelResources;
 
 public:
-    DataLabelsDialog(vcl::Window* pParent, const SfxItemSet& rInAttrs, SvNumberFormatter* pFormatter);
+    DataLabelsDialog(weld::Window* pParent, const SfxItemSet& rInAttrs, SvNumberFormatter* pFormatter);
+    virtual ~DataLabelsDialog() override;
 
     void FillItemSet(SfxItemSet& rOutAttrs);
 };

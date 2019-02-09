@@ -17,15 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <limits.h>
-
-#include "olinetab.hxx"
-#include "global.hxx"
-#include "rechead.hxx"
-#include "address.hxx"
-#include "table.hxx"
-
-#include <o3tl/make_unique.hxx>
+#include <olinetab.hxx>
+#include <address.hxx>
+#include <table.hxx>
 
 #include <osl/diagnose.h>
 
@@ -50,7 +44,7 @@ SCCOLROW ScOutlineEntry::GetEnd() const
     return nStart+nSize-1;
 }
 
-void ScOutlineEntry::Move( SCsCOLROW nDelta )
+void ScOutlineEntry::Move( SCCOLROW nDelta )
 {
     SCCOLROW nNewPos = nStart + nDelta;
     if (nNewPos<0)
@@ -153,7 +147,7 @@ ScOutlineArray::ScOutlineArray( const ScOutlineArray& rArray ) :
         for (; it != itEnd; ++it)
         {
             const ScOutlineEntry *const pEntry = &it->second;
-            aCollections[nLevel].insert(ScOutlineEntry(*pEntry));
+            aCollections[nLevel].insert(*pEntry);
         }
     }
 }
@@ -203,28 +197,25 @@ bool ScOutlineArray::Insert(
         if (nStartLevel == nEndLevel && nStartIndex == nEndIndex && nStartLevel < SC_OL_MAXDEPTH)
             bFound = true;
 
-        if (!bFound)
+        if (!bFound && nFindMax>0)
         {
-            if (nFindMax>0)
+            --nFindMax;
+            if (nStartLevel)
             {
-                --nFindMax;
-                if (nStartLevel)
-                {
-                    ScOutlineCollection::const_iterator it = aCollections[nStartLevel-1].begin();
-                    std::advance(it, nStartIndex);
-                    if (it->second.GetStart() == nStartCol)
-                        FindEntry(nStartCol, nStartLevel, nStartIndex, nFindMax);
-                }
-
-                if (nEndLevel)
-                {
-                    ScOutlineCollection::const_iterator it = aCollections[nEndLevel-1].begin();
-                    std::advance(it, nEndIndex);
-                    if (it->second.GetEnd() == nEndCol)
-                        FindEntry(nEndCol, nEndLevel, nEndIndex, nFindMax);
-                }
-                bCont = true;
+                ScOutlineCollection::const_iterator it = aCollections[nStartLevel-1].begin();
+                std::advance(it, nStartIndex);
+                if (it->second.GetStart() == nStartCol)
+                    FindEntry(nStartCol, nStartLevel, nStartIndex, nFindMax);
             }
+
+            if (nEndLevel)
+            {
+                ScOutlineCollection::const_iterator it = aCollections[nEndLevel-1].begin();
+                std::advance(it, nEndIndex);
+                if (it->second.GetEnd() == nEndCol)
+                    FindEntry(nEndCol, nEndLevel, nEndIndex, nFindMax);
+            }
+            bCont = true;
         }
     }
     while ( !bFound && bCont );
@@ -253,7 +244,7 @@ bool ScOutlineArray::Insert(
                         rSizeChanged = false; // No more room
                         return false;
                     }
-                    aCollections[nMoveLevel+1].insert(ScOutlineEntry(*pEntry));
+                    aCollections[nMoveLevel+1].insert(*pEntry);
                     size_t nPos = std::distance(rColl.begin(), it);
                     rColl.erase(it);
                     it = rColl.begin();
@@ -317,60 +308,6 @@ bool ScOutlineArray::FindTouchedLevel(
     return bFound;
 }
 
-void ScOutlineArray::RemoveSub(SCCOLROW nStartPos, SCCOLROW nEndPos, size_t nLevel)
-{
-    if ( nLevel >= nDepth )
-        return;
-
-    ScOutlineCollection& rColl = aCollections[nLevel];
-
-    ScOutlineCollection::iterator it = rColl.begin(), itEnd = rColl.end();
-    while (it != itEnd)
-    {
-        ScOutlineEntry *const pEntry = &it->second;
-        SCCOLROW nStart = pEntry->GetStart();
-        SCCOLROW nEnd   = pEntry->GetEnd();
-        if (nStart >= nStartPos && nEnd <= nEndPos)
-        {
-            // Overlaps
-            RemoveSub( nStart, nEnd, nLevel+1 );
-
-            // Re-calc iterator positions after the tree gets invalidated
-            size_t nPos = std::distance(rColl.begin(), it);
-            rColl.erase(it);
-            it = rColl.begin();
-            std::advance(it, nPos);
-            itEnd = rColl.end();
-        }
-        else
-            ++it;
-    }
-
-    it = rColl.begin();
-    itEnd = rColl.end();
-
-    while (it != itEnd)
-    {
-        ScOutlineEntry *const pEntry = &it->second;
-        SCCOLROW nStart = pEntry->GetStart();
-        SCCOLROW nEnd   = pEntry->GetEnd();
-
-        if (nStart >= nStartPos && nEnd <= nEndPos)
-        {
-            RemoveSub( nStart, nEnd, nLevel+1 );
-
-            // Re-calc iterator positions after the tree gets invalidated
-            size_t nPos = std::distance(rColl.begin(), it);
-            rColl.erase(it);
-            it = rColl.begin();
-            std::advance(it, nPos);
-            itEnd = rColl.end();
-        }
-        else
-            ++it;
-    }
-}
-
 void ScOutlineArray::PromoteSub(SCCOLROW nStartPos, SCCOLROW nEndPos, size_t nStartLevel)
 {
     if (nStartLevel==0)
@@ -390,7 +327,7 @@ void ScOutlineArray::PromoteSub(SCCOLROW nStartPos, SCCOLROW nEndPos, size_t nSt
             SCCOLROW nEnd   = pEntry->GetEnd();
             if (nStart >= nStartPos && nEnd <= nEndPos)
             {
-                aCollections[nLevel-1].insert(ScOutlineEntry(*pEntry));
+                aCollections[nLevel-1].insert(*pEntry);
 
                 // Re-calc iterator positions after the tree gets invalidated
                 size_t nPos = std::distance(rColl.begin(), it);
@@ -413,7 +350,7 @@ void ScOutlineArray::PromoteSub(SCCOLROW nStartPos, SCCOLROW nEndPos, size_t nSt
             SCCOLROW nEnd   = pEntry->GetEnd();
             if (nStart >= nStartPos && nEnd <= nEndPos)
             {
-                aCollections[nLevel-1].insert(ScOutlineEntry(*pEntry));
+                aCollections[nLevel-1].insert(*pEntry);
 
                 // Re-calc iterator positions after the tree gets invalidated
                 size_t nPos = std::distance(rColl.begin(), it);
@@ -669,7 +606,7 @@ void ScOutlineArray::InsertSpace(SCCOLROW nStartPos, SCSIZE nSize)
     while ((pEntry = aIter.GetNext()) != nullptr)
     {
         if ( pEntry->GetStart() >= nStartPos )
-            pEntry->Move(static_cast<SCsCOLROW>(nSize));
+            pEntry->Move(static_cast<SCCOLROW>(nSize));
         else
         {
             SCCOLROW nEnd = pEntry->GetEnd();
@@ -702,7 +639,7 @@ bool ScOutlineArray::DeleteSpace(SCCOLROW nStartPos, SCSIZE nSize)
         if ( nEntryEnd >= nStartPos )
         {
             if ( nEntryStart > nEndPos ) // Right
-                pEntry->Move(-(static_cast<SCsCOLROW>(nSize)));
+                pEntry->Move(-static_cast<SCCOLROW>(nSize));
             else if ( nEntryStart < nStartPos && nEntryEnd >= nEndPos ) // Outside
                 pEntry->SetSize( nEntrySize-nSize );
             else
@@ -769,7 +706,7 @@ void ScOutlineArray::RemoveAll()
     nDepth = 0;
 }
 
-void ScOutlineArray::finalizeImport(ScTable& rTable)
+void ScOutlineArray::finalizeImport(const ScTable& rTable)
 {
     ScSubOutlineIterator aIter( this );
     ScOutlineEntry* pEntry;
@@ -912,7 +849,7 @@ void ScSubOutlineIterator::DeleteLast()
 
     --nSubEntry;
     ScOutlineCollection& rColl = pArray->aCollections[nSubLevel];
-    OSL_ASSERT(nSubEntry < rColl.size());
+    assert(nSubEntry < rColl.size());
     ScOutlineCollection::iterator it = rColl.begin();
     std::advance(it, nSubEntry);
     rColl.erase(it);

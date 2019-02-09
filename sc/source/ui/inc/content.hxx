@@ -20,9 +20,8 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_CONTENT_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_CONTENT_HXX
 
-#include <svtools/treelistbox.hxx>
-#include "global.hxx"
-#include "address.hxx"
+#include <vcl/treelistbox.hxx>
+#include <address.hxx>
 #include <tools/solar.h>
 #include <o3tl/enumarray.hxx>
 
@@ -30,7 +29,6 @@ class ScNavigatorDlg;
 class ScDocument;
 class ScDocShell;
 class ScAreaLink;
-class SdrPage;
 
 enum class ScContentId {
     ROOT, TABLE, RANGENAME, DBAREA,
@@ -43,7 +41,6 @@ const sal_uLong SC_CONTENT_NOCHILD  = ~0UL;
 class ScContentTree : public SvTreeListBox
 {
     VclPtr<ScNavigatorDlg>  pParentWindow;
-    ImageList               aEntryImages;
     o3tl::enumarray<ScContentId, SvTreeListEntry*> pRootNodes;
     ScContentId             nRootType;          // set as Root
     OUString                aManualDoc;         // Switched in Navigator (Title)
@@ -98,11 +95,8 @@ class ScContentTree : public SvTreeListBox
 
     ScDocument* GetSourceDocument();
 
-    DECL_LINK_TYPED( ContentDoubleClickHdl, SvTreeListBox*, bool );
-    DECL_LINK_TYPED( ExecDragHdl, void*, void );
-public:
-    SvTreeListEntry* pTmpEntry;
-    bool m_bFirstPaint;
+    DECL_LINK( ContentDoubleClickHdl, SvTreeListBox*, bool );
+    DECL_LINK( ExecDragHdl, void*, void );
 
 protected:
 
@@ -118,18 +112,19 @@ protected:
     virtual void        InitEntry(SvTreeListEntry*,const OUString&,const Image&,const Image&, SvLBoxButtonKind) override;
 
 public:
-            ScContentTree( vcl::Window* pParent, const ResId& rResId );
-            virtual ~ScContentTree();
+    ScContentTree(vcl::Window* pParent, ScNavigatorDlg* pNavigatorDlg);
+    virtual ~ScContentTree() override;
     virtual void dispose() override;
 
     OUString getAltLongDescText(SvTreeListEntry* pEntry, bool isAltText) const;
     OUString GetEntryAltText( SvTreeListEntry* pEntry ) const override;
     OUString GetEntryLongDescription( SvTreeListEntry* pEntry ) const override;
 
-    void     ObjectFresh( ScContentId nType, SvTreeListEntry* pEntry = nullptr);
+    void     ObjectFresh( ScContentId nType, const SvTreeListEntry* pEntry = nullptr);
     void     SetNavigatorDlgFlag(bool isInNavigateDlg){ bisInNavigatoeDlg=isInNavigateDlg;};
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void    KeyInput( const KeyEvent& rKEvt ) override;
+    virtual Size    GetOptimalSize() const override;
 
     void    InitWindowBits( bool bButtons );
 
@@ -142,8 +137,9 @@ public:
     void    ActiveDocChanged();
     void    ResetManualDoc();
     void    SetManualDoc(const OUString& rName);
-    bool    LoadFile(const OUString& rUrl);
+    void    LoadFile(const OUString& rUrl);
     void    SelectDoc(const OUString& rName);
+    void    SelectEntryByName(const ScContentId nRoot, const OUString& rName);
 
     const OUString& GetHiddenTitle() const    { return aHiddenTitle; }
 

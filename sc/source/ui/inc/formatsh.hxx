@@ -21,11 +21,11 @@
 #define INCLUDED_SC_SOURCE_UI_INC_FORMATSH_HXX
 
 #include <sfx2/shell.hxx>
-#include "shellids.hxx"
-#include <sfx2/module.hxx>
-#include <svx/svdmark.hxx>
+#include <shellids.hxx>
 
+class SfxModule;
 class ScViewData;
+enum class SvNumFormatType : sal_Int16;
 
 class ScFormatShell: public SfxShell
 {
@@ -44,7 +44,7 @@ private:
 
 public:
                 ScFormatShell(ScViewData* pData);
-    virtual     ~ScFormatShell();
+    virtual     ~ScFormatShell() override;
 
     void        ExecuteNumFormat( SfxRequest& rReq );
     void        GetNumFormatState( SfxItemSet& rSet );
@@ -63,14 +63,14 @@ public:
     void        ExecuteStyle( SfxRequest& rReq );
     void        GetStyleState( SfxItemSet& rSet );
 
-    void        ExecuteTextDirection( SfxRequest& rReq );
+    void        ExecuteTextDirection( const SfxRequest& rReq );
     void        GetTextDirectionState( SfxItemSet& rSet );
 
-    void        ExecFormatPaintbrush( SfxRequest& rReq );
+    void        ExecFormatPaintbrush( const SfxRequest& rReq );
     void        StateFormatPaintbrush( SfxItemSet& rSet );
 
 private:
-    short       GetCurrentNumberFormatType();
+    SvNumFormatType GetCurrentNumberFormatType();
 };
 
 #endif

@@ -19,11 +19,11 @@
 #ifndef INCLUDED_SW_INC_FMTCNCT_HXX
 #define INCLUDED_SW_INC_FMTCNCT_HXX
 
-#include <hintids.hxx>
+#include "hintids.hxx"
 #include <svl/poolitem.hxx>
-#include <format.hxx>
-#include <calbck.hxx>
-#include <frmfmt.hxx>
+#include "format.hxx"
+#include "calbck.hxx"
+#include "frmfmt.hxx"
 
 class IntlWrapper;
 
@@ -43,10 +43,10 @@ public:
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
 
@@ -65,7 +65,7 @@ SwFormatChain &SwFormatChain::operator=( const SwFormatChain &rCpy )
 }
 
 inline const SwFormatChain &SwAttrSet::GetChain(bool bInP) const
-    { return static_cast<const SwFormatChain&>(Get( RES_CHAIN,bInP)); }
+    { return Get( RES_CHAIN,bInP); }
 
 inline const SwFormatChain &SwFormat::GetChain(bool bInP) const
     { return m_aSet.GetChain(bInP); }

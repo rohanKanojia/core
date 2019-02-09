@@ -22,41 +22,29 @@
 
 #include <com/sun/star/uno/Sequence.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <svtools/stdctrl.hxx>
-
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/field.hxx>
-
 #include <vcl/FilterConfigItem.hxx>
+#include <vcl/weld.hxx>
 
-
-class ResMgr;
-namespace vcl { class Window; }
-
-
-class ImpSWFDialog : public ModalDialog
+class ImpSWFDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<NumericField> mpNumFldQuality;
-    VclPtr<CheckBox>     mpCheckExportAll;
-    VclPtr<CheckBox>     mpCheckExportBackgrounds;
-    VclPtr<CheckBox>     mpCheckExportBackgroundObjects;
-    VclPtr<CheckBox>     mpCheckExportSlideContents;
-    VclPtr<CheckBox>     mpCheckExportSound;
-    VclPtr<CheckBox>     mpCheckExportOLEAsJPEG;
-    VclPtr<CheckBox>     mpCheckExportMultipleFiles;
-
     FilterConfigItem    maConfigItem;
 
-    DECL_LINK_TYPED( OnToggleCheckbox, CheckBox&, void );
+    std::unique_ptr<weld::SpinButton> mxNumFldQuality;
+    std::unique_ptr<weld::CheckButton> mxCheckExportAll;
+    std::unique_ptr<weld::CheckButton> mxCheckExportBackgrounds;
+    std::unique_ptr<weld::CheckButton> mxCheckExportBackgroundObjects;
+    std::unique_ptr<weld::CheckButton> mxCheckExportSlideContents;
+    std::unique_ptr<weld::CheckButton> mxCheckExportSound;
+    std::unique_ptr<weld::CheckButton> mxCheckExportOLEAsJPEG;
+    std::unique_ptr<weld::CheckButton> mxCheckExportMultipleFiles;
+
+    DECL_LINK(OnToggleCheckbox, weld::ToggleButton&, void);
 
 public:
-    ImpSWFDialog( vcl::Window* pParent,
-                  css::uno::Sequence< css::beans::PropertyValue >& rFilterData );
-    virtual ~ImpSWFDialog();
-    virtual void dispose() override;
+    ImpSWFDialog(weld::Window* pParent,
+                 css::uno::Sequence< css::beans::PropertyValue >& rFilterData );
+    virtual ~ImpSWFDialog() override;
 
     css::uno::Sequence< css::beans::PropertyValue > GetFilterData();
 };

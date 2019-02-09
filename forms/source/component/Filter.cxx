@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <string_view>
+
 #include "Filter.hxx"
-#include "FormComponent.hxx"
-#include "frm_resource.hrc"
-#include "frm_resource.hxx"
-#include "property.hrc"
-#include "property.hxx"
-#include "services.hxx"
+#include <FormComponent.hxx>
+#include <strings.hrc>
+#include <frm_resource.hxx>
+#include <property.hxx>
+#include <services.hxx>
 
 #include <com/sun/star/awt/VclWindowPeerAttribute.hpp>
 #include <com/sun/star/awt/XCheckBox.hpp>
@@ -48,16 +51,14 @@
 #include <com/sun/star/util/NumberFormatter.hpp>
 #include <com/sun/star/awt/XItemList.hpp>
 
-#include <comphelper/numbers.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/property.hxx>
+#include <comphelper/types.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <connectivity/dbconversion.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/formattedcolumnvalue.hxx>
 #include <connectivity/predicateinput.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <unotools/localedatawrapper.hxx>
 #include <vcl/stdtext.hxx>
@@ -131,7 +132,7 @@ namespace frm
     }
 
 
-    Any SAL_CALL OFilterControl::queryAggregation( const Type & rType ) throw(RuntimeException, std::exception)
+    Any SAL_CALL OFilterControl::queryAggregation( const Type & rType )
     {
         Any aRet = UnoControl::queryAggregation( rType);
         if(!aRet.hasValue())
@@ -169,7 +170,7 @@ namespace frm
 
     // XComponent
 
-    void OFilterControl::dispose() throw( RuntimeException, std::exception  )
+    void OFilterControl::dispose()
     {
         EventObject aEvt(*this);
         m_aTextListeners.disposeAndClear( aEvt );
@@ -177,7 +178,7 @@ namespace frm
     }
 
 
-    void OFilterControl::createPeer( const Reference< XToolkit > & rxToolkit, const Reference< XWindowPeer >  & rParentPeer ) throw(RuntimeException, std::exception)
+    void OFilterControl::createPeer( const Reference< XToolkit > & rxToolkit, const Reference< XWindowPeer >  & rParentPeer )
     {
         UnoControl::createPeer( rxToolkit, rParentPeer );
 
@@ -211,14 +212,14 @@ namespace frm
                 {
                     Reference< XListBox >  xListBox( getPeer(), UNO_QUERY_THROW );
                     xListBox->addItemListener( this );
+                    [[fallthrough]];
                 }
-                // no break
 
                 case FormComponentType::COMBOBOX:
                 {
                     xVclWindow->setProperty(PROPERTY_AUTOCOMPLETE, makeAny( true ) );
+                    [[fallthrough]];
                 }
-                // no break
 
                 default:
                 {
@@ -240,7 +241,7 @@ namespace frm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
 
         if (m_bFilterList)
@@ -267,14 +268,14 @@ namespace frm
 
     // XEventListener
 
-    void SAL_CALL OFilterControl::disposing(const EventObject& Source) throw( RuntimeException, std::exception )
+    void SAL_CALL OFilterControl::disposing(const EventObject& Source)
     {
         UnoControl::disposing(Source);
     }
 
     // XItemListener
 
-    void SAL_CALL OFilterControl::itemStateChanged( const ItemEvent& rEvent ) throw(RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::itemStateChanged( const ItemEvent& rEvent )
     {
 #if !HAVE_FEATURE_DBCONNECTIVITY
         (void) rEvent;
@@ -310,7 +311,7 @@ namespace frm
                     // To fix this, we would probably have to revert here to always return "1" or "0" as normalized
                     // filter, and change our client code to properly translate this (which could be some effort).
                     if ( nMarkerPos == 0 )
-                        aText.append( sText.copy( sExpressionMarker.getLength() ) );
+                        aText.append( std::u16string_view(sText).substr(sExpressionMarker.getLength()) );
                     else
                     {
                         // fallback
@@ -342,7 +343,7 @@ namespace frm
                 }
                 catch( const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("forms.component");
                 }
             }
             break;
@@ -356,7 +357,7 @@ namespace frm
         }
 
         OUString sText( aText.makeStringAndClear() );
-        if ( m_aText.compareTo( sText ) )
+        if ( m_aText != sText )
         {
             m_aText = sText;
             TextEvent aEvt;
@@ -474,14 +475,14 @@ namespace frm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
 #endif
     }
 
     // XFocusListener
 
-    void SAL_CALL OFilterControl::focusGained(const FocusEvent& /*e*/)  throw( RuntimeException, std::exception  )
+    void SAL_CALL OFilterControl::focusGained(const FocusEvent& /*e*/)
     {
         // should we fill the combobox?
         if (m_bFilterList && !m_bFilterListFilled)
@@ -489,17 +490,17 @@ namespace frm
     }
 
 
-    void SAL_CALL OFilterControl::focusLost(const FocusEvent& /*e*/) throw( RuntimeException, std::exception )
+    void SAL_CALL OFilterControl::focusLost(const FocusEvent& /*e*/)
     {
     }
 
 
-    sal_Bool SAL_CALL OFilterControl::commit() throw(RuntimeException, std::exception)
+    sal_Bool SAL_CALL OFilterControl::commit()
     {
 #if HAVE_FEATURE_DBCONNECTIVITY
         if ( !ensureInitialized( ) )
             // already asserted in ensureInitialized
-            return sal_True;
+            return true;
 
         OUString aText;
         switch (m_nControlClass)
@@ -512,9 +513,9 @@ namespace frm
                     aText = xText->getText();
             }   break;
             default:
-                return sal_True;
+                return true;
         }
-        if (m_aText.compareTo(aText))
+        if ( m_aText != aText )
         {
             // check the text with the SQL-Parser
             OUString aNewText(aText);
@@ -530,7 +531,7 @@ namespace frm
                     aError.Message = FRM_RES_STRING( RID_STR_SYNTAXERROR );
                     aError.Details = sErrorMessage;
                     displayException( aError );
-                    return sal_False;
+                    return false;
                 }
             }
 
@@ -542,24 +543,24 @@ namespace frm
                 static_cast< XTextListener* >( aIt.next() )->textChanged( aEvt );
         }
 #endif
-        return sal_True;
+        return true;
     }
 
     // XTextComponent
 
-    void SAL_CALL OFilterControl::addTextListener(const Reference< XTextListener > & l) throw(RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::addTextListener(const Reference< XTextListener > & l)
     {
         m_aTextListeners.addInterface( l );
     }
 
 
-    void SAL_CALL OFilterControl::removeTextListener(const Reference< XTextListener > & l) throw(RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::removeTextListener(const Reference< XTextListener > & l)
     {
         m_aTextListeners.removeInterface( l );
     }
 
 
-    void SAL_CALL OFilterControl::setText( const OUString& aText ) throw(RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::setText( const OUString& aText )
     {
         if ( !ensureInitialized( ) )
             // already asserted in ensureInitialized
@@ -578,14 +579,14 @@ namespace frm
                         ||  aText.equalsIgnoreAsciiCase("IS TRUE")
                         )
                     {
-                        aValue <<= (sal_Int32)TRISTATE_TRUE;
+                        aValue <<= sal_Int32(TRISTATE_TRUE);
                     }
                     else if ( aText == "0" || aText.equalsIgnoreAsciiCase("FALSE") )
                     {
-                        aValue <<= (sal_Int32)TRISTATE_FALSE;
+                        aValue <<= sal_Int32(TRISTATE_FALSE);
                     }
                     else
-                        aValue <<= (sal_Int32)TRISTATE_INDET;
+                        aValue <<= sal_Int32(TRISTATE_INDET);
 
                     m_aText = aText;
                     xVclWindow->setProperty( PROPERTY_STATE, aValue );
@@ -599,9 +600,9 @@ namespace frm
                     OUString aRefText = ::comphelper::getString(css::uno::Reference< XPropertySet > (getModel(), UNO_QUERY)->getPropertyValue(PROPERTY_REFVALUE));
                     Any aValue;
                     if (aText == aRefText)
-                        aValue <<= (sal_Int32)TRISTATE_TRUE;
+                        aValue <<= sal_Int32(TRISTATE_TRUE);
                     else
-                        aValue <<= (sal_Int32)TRISTATE_FALSE;
+                        aValue <<= sal_Int32(TRISTATE_FALSE);
                     m_aText = aText;
                     xVclWindow->setProperty(PROPERTY_STATE, aValue);
                 }
@@ -634,12 +635,12 @@ namespace frm
                     {
                         while ( xListBox->getSelectedItemPos() >= 0 )
                         {
-                            xListBox->selectItemPos( xListBox->getSelectedItemPos(), sal_False );
+                            xListBox->selectItemPos( xListBox->getSelectedItemPos(), false );
                         }
                     }
                     else
                     {
-                        xListBox->selectItem( m_aText, sal_True );
+                        xListBox->selectItem( m_aText, true );
                     }
                 }
             }
@@ -658,7 +659,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OFilterControl::insertText( const css::awt::Selection& rSel, const OUString& aText ) throw(css::uno::RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::insertText( const css::awt::Selection& rSel, const OUString& aText )
     {
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
         if (xText.is())
@@ -669,13 +670,13 @@ namespace frm
     }
 
 
-    OUString SAL_CALL OFilterControl::getText() throw(RuntimeException, std::exception)
+    OUString SAL_CALL OFilterControl::getText()
     {
         return m_aText;
     }
 
 
-    OUString SAL_CALL OFilterControl::getSelectedText() throw(RuntimeException, std::exception)
+    OUString SAL_CALL OFilterControl::getSelectedText()
     {
         OUString aSelected;
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
@@ -686,7 +687,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OFilterControl::setSelection( const css::awt::Selection& aSelection ) throw(css::uno::RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::setSelection( const css::awt::Selection& aSelection )
     {
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
         if (xText.is())
@@ -694,7 +695,7 @@ namespace frm
     }
 
 
-    css::awt::Selection SAL_CALL OFilterControl::getSelection() throw(css::uno::RuntimeException, std::exception)
+    css::awt::Selection SAL_CALL OFilterControl::getSelection()
     {
         css::awt::Selection aSel;
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
@@ -704,14 +705,14 @@ namespace frm
     }
 
 
-    sal_Bool SAL_CALL OFilterControl::isEditable() throw(RuntimeException, std::exception)
+    sal_Bool SAL_CALL OFilterControl::isEditable()
     {
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
         return xText.is() && xText->isEditable();
     }
 
 
-    void SAL_CALL OFilterControl::setEditable( sal_Bool bEditable ) throw(RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::setEditable( sal_Bool bEditable )
     {
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
         if (xText.is())
@@ -719,14 +720,14 @@ namespace frm
     }
 
 
-    sal_Int16 SAL_CALL OFilterControl::getMaxTextLen() throw(RuntimeException, std::exception)
+    sal_Int16 SAL_CALL OFilterControl::getMaxTextLen()
     {
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
         return xText.is() ? xText->getMaxTextLen() : 0;
     }
 
 
-    void SAL_CALL OFilterControl::setMaxTextLen( sal_Int16 nLength ) throw(RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::setMaxTextLen( sal_Int16 nLength )
     {
         Reference< XTextComponent >  xText( getPeer(), UNO_QUERY );
         if (xText.is())
@@ -743,12 +744,12 @@ namespace frm
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
     }
 
 
-    void SAL_CALL OFilterControl::initialize( const Sequence< Any >& aArguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL OFilterControl::initialize( const Sequence< Any >& aArguments )
     {
         const Any* pArguments = aArguments.getConstArray();
         const Any* pArgumentsEnd = pArguments + aArguments.getLength();
@@ -810,7 +811,7 @@ namespace frm
         }
     }
 
-    void OFilterControl::initControlModel(Reference< XPropertySet >& xControlModel)
+    void OFilterControl::initControlModel(Reference< XPropertySet > const & xControlModel)
     {
 #if !HAVE_FEATURE_DBCONNECTIVITY
         (void) xControlModel;
@@ -871,36 +872,24 @@ namespace frm
 #endif
     }
 
-    OUString SAL_CALL OFilterControl::getImplementationName(  ) throw (RuntimeException, std::exception)
-    {
-        return getImplementationName_Static();
-    }
-
-    sal_Bool SAL_CALL OFilterControl::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
-    {
-        return cppu::supportsService(this, ServiceName);
-    }
-
-    Sequence< OUString > SAL_CALL OFilterControl::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
-    {
-        return getSupportedServiceNames_Static();
-    }
-
-    OUString SAL_CALL OFilterControl::getImplementationName_Static()
+    OUString SAL_CALL OFilterControl::getImplementationName(  )
     {
         return OUString( "com.sun.star.comp.forms.OFilterControl" );
     }
 
-    Sequence< OUString > SAL_CALL OFilterControl::getSupportedServiceNames_Static()
+    sal_Bool SAL_CALL OFilterControl::supportsService( const OUString& ServiceName )
     {
-        Sequence< OUString > aNames( 2 );
-        aNames[ 0 ] = "com.sun.star.form.control.FilterControl";
-        aNames[ 1 ] = "com.sun.star.awt.UnoControl";
-        return aNames;
+        return cppu::supportsService(this, ServiceName);
+    }
+
+    Sequence< OUString > SAL_CALL OFilterControl::getSupportedServiceNames(  )
+    {
+        return { "com.sun.star.form.control.FilterControl",
+                 "com.sun.star.awt.UnoControl" };
     }
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_forms_OFilterControl_get_implementation(css::uno::XComponentContext* context,
         css::uno::Sequence<css::uno::Any> const &)
 {

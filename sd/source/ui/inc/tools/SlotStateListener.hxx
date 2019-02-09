@@ -20,15 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_TOOLS_SLOTSTATELISTENER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_TOOLS_SLOTSTATELISTENER_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 #include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/FeatureStateEvent.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/lang/DisposedException.hpp>
-#include <com/sun/star/lang/XComponent.hpp>
 #include <cppuhelper/compbase.hxx>
 #include <tools/link.hxx>
+
+namespace com { namespace sun { namespace star { namespace frame { class XDispatch; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XDispatchProvider; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XStatusListener; } } } }
+namespace com { namespace sun { namespace star { namespace frame { struct FeatureStateEvent; } } } }
 
 namespace sd { namespace tools {
 
@@ -51,14 +51,14 @@ public:
         explanations about the parameters.
     */
     SlotStateListener (
-        Link<const OUString&,void>& rCallback,
+        Link<const OUString&,void> const & rCallback,
         const css::uno::Reference<css::frame::XDispatchProvider>& rxDispatchProvider,
         const OUString& rSlotName);
 
     /** The constructor de-registers all remaining listeners.  Usually a prior
         dispose() call should have done that already.
     */
-    virtual ~SlotStateListener();
+    virtual ~SlotStateListener() override;
 
     /** Set the callback to the given value.  Whenever one of the observed
         slots changes its state this callback is informed about it.
@@ -87,19 +87,17 @@ public:
     //=====  frame::XStatusListener  ==========================================
 
     /** Called by slot state change broadcasters.  In turn the callback is
-        informed about the state chage.
+        informed about the state change.
         @throws DisposedException
     */
     virtual void SAL_CALL
         statusChanged (
-            const css::frame::FeatureStateEvent& rState)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::frame::FeatureStateEvent& rState) override;
 
     //=====  lang::XEventListener  ============================================
 
     virtual void SAL_CALL
-        disposing(const css::lang::EventObject& rEvent)
-        throw(css::uno::RuntimeException, std::exception) override;
+        disposing(const css::lang::EventObject& rEvent) override;
 
 protected:
     /** This method is called by the WeakComponentImplHelper base class in
@@ -123,11 +121,10 @@ private:
     */
     void ReleaseListeners();
 
-    /** This method throws a DisposedException when the object has already been
+    /** @throws css::lang::DisposedException when the object has already been
         disposed.
     */
-    void ThrowIfDisposed()
-        throw (css::lang::DisposedException);
+    void ThrowIfDisposed();
 
     /** Transform the given string into a URL object.
     */

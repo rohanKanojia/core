@@ -36,7 +36,7 @@ static ::osl::Mutex& getHashMapMutex()
 struct TokenTable
 {
     const char*                         pS;
-    PPPOptimizerTokenEnum               pE;
+    PPPOptimizerTokenEnum const         pE;
 };
 
 static const TokenTable pTokenTableArray[] =
@@ -152,6 +152,9 @@ static const TokenTable pTokenTableArray[] =
     { "STR_OPTIMIZING_GRAPHICS",    STR_OPTIMIZING_GRAPHICS },
     { "STR_CREATING_OLE_REPLACEMENTS",STR_CREATING_OLE_REPLACEMENTS },
     { "STR_FileSizeSeparator",      STR_FILESIZESEPARATOR },
+    { "STR_FILENAME_SUFFIX",        STR_FILENAME_SUFFIX },
+    { "STR_WARN_UNSAVED_PRESENTATION", STR_WARN_UNSAVED_PRESENTATION },
+
 
     { "NotFound",           TK_NotFound }
 };
@@ -175,7 +178,7 @@ PPPOptimizerTokenEnum TKGet( const OUString& rToken )
     int i, nLen = rToken.getLength();
     std::unique_ptr<char[]> pBuf(new char[ nLen + 1 ]);
     for ( i = 0; i < nLen; i++ )
-        pBuf[ i ] = (char)rToken[ i ];
+        pBuf[ i ] = static_cast<char>(rToken[ i ]);
     pBuf[ i ] = 0;
     TypeNameHashMap::iterator aHashIter( pHashMap->find( pBuf.get() ) );
     if ( aHashIter != pHashMap->end() )

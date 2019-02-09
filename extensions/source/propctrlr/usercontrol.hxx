@@ -21,8 +21,9 @@
 #define INCLUDED_EXTENSIONS_SOURCE_PROPCTRLR_USERCONTROL_HXX
 
 #include "commoncontrol.hxx"
-#include <svtools/fmtfield.hxx>
+#include <vcl/fmtfield.hxx>
 #include <svtools/fileurlbox.hxx>
+#include <svl/zforlist.hxx>
 #include "standardcontrol.hxx"
 
 class SvNumberFormatsSupplierObj;
@@ -59,14 +60,14 @@ namespace pcr
     class OFormatSampleControl : public OFormatSampleControl_Base
     {
     public:
-        OFormatSampleControl( vcl::Window* pParent, WinBits nWinStyle );
+        explicit OFormatSampleControl( vcl::Window* pParent );
 
         // XPropertyControl
-        virtual css::uno::Any SAL_CALL getValue() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setValue( const css::uno::Any& _value ) throw (css::beans::IllegalTypeException, css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Type SAL_CALL getValueType() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getValue() override;
+        virtual void SAL_CALL setValue( const css::uno::Any& _value ) override;
+        virtual css::uno::Type SAL_CALL getValueType() override;
 
-        inline void SetFormatSupplier( const SvNumberFormatsSupplierObj* _pSupplier )
+        void SetFormatSupplier( const SvNumberFormatsSupplierObj* _pSupplier )
         {
             getTypedControlWindow()->SetFormatSupplier( _pSupplier );
         }
@@ -77,7 +78,7 @@ namespace pcr
         * \param _nFormatKey the format key
         * \return current date or time or the value 1234.56789
         */
-        static double getPreviewValue(SvNumberFormatter* _pNF,sal_Int32 _nFormatKey);
+        static double getPreviewValue(SvNumberFormatter const * _pNF, sal_Int32 _nFormatKey);
 
     private:
         static double getPreviewValue( const SvNumberformat& i_rEntry );
@@ -98,27 +99,24 @@ namespace pcr
     typedef CommonBehaviourControl< css::inspection::XPropertyControl, FormattedField > OFormattedNumericControl_Base;
     class OFormattedNumericControl : public OFormattedNumericControl_Base
     {
-    private:
-        sal_Int32   m_nLastDecimalDigits;
-
     public:
-        OFormattedNumericControl( vcl::Window* pParent, WinBits nWinStyle = WB_TABSTOP);
+        OFormattedNumericControl( vcl::Window* pParent, WinBits nWinStyle);
 
         // XPropertyControl
-        virtual css::uno::Any SAL_CALL getValue() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setValue( const css::uno::Any& _value ) throw (css::beans::IllegalTypeException, css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Type SAL_CALL getValueType() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getValue() override;
+        virtual void SAL_CALL setValue( const css::uno::Any& _value ) override;
+        virtual css::uno::Type SAL_CALL getValueType() override;
 
         void SetFormatDescription( const FormatDescription& rDesc );
 
         // make some FormattedField methods available
-        void SetDecimalDigits(sal_uInt16 nPrecision) { getTypedControlWindow()->SetDecimalDigits(nPrecision); m_nLastDecimalDigits = nPrecision; }
+        void SetDecimalDigits(sal_uInt16 nPrecision) { getTypedControlWindow()->SetDecimalDigits(nPrecision); }
         void SetDefaultValue(double dDef) { getTypedControlWindow()->SetDefaultValue(dDef); }
         void EnableEmptyField(bool bEnable) { getTypedControlWindow()->EnableEmptyField(bEnable); }
         void SetThousandsSep(bool bEnable) { getTypedControlWindow()->SetThousandsSep(bEnable); }
 
     protected:
-        virtual ~OFormattedNumericControl();
+        virtual ~OFormattedNumericControl() override;
     };
 
 
@@ -128,15 +126,15 @@ namespace pcr
     class OFileUrlControl : public OFileUrlControl_Base
     {
     public:
-        OFileUrlControl( vcl::Window* pParent, WinBits nWinStyle );
+        explicit OFileUrlControl( vcl::Window* pParent );
 
         // XPropertyControl
-        virtual css::uno::Any SAL_CALL getValue() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL setValue( const css::uno::Any& _value ) throw (css::beans::IllegalTypeException, css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Type SAL_CALL getValueType() throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getValue() override;
+        virtual void SAL_CALL setValue( const css::uno::Any& _value ) override;
+        virtual css::uno::Type SAL_CALL getValueType() override;
 
     protected:
-        virtual ~OFileUrlControl();
+        virtual ~OFileUrlControl() override;
     };
 
 
@@ -145,14 +143,14 @@ namespace pcr
     class OTimeDurationControl : public ONumericControl
     {
     public:
-        OTimeDurationControl( vcl::Window* pParent, WinBits nWinStyle );
-        virtual ~OTimeDurationControl();
+        explicit OTimeDurationControl( vcl::Window* pParent );
+        virtual ~OTimeDurationControl() override;
 
         // XPropertyControl
-        ::sal_Int16 SAL_CALL getControlType() throw (css::uno::RuntimeException) override;
+        ::sal_Int16 SAL_CALL getControlType() override;
 
     private:
-        DECL_LINK_TYPED( OnCustomConvert, MetricFormatter&, void );
+        DECL_LINK( OnCustomConvert, MetricFormatter&, void );
     };
 
 

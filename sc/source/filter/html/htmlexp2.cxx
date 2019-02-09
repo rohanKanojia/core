@@ -23,19 +23,15 @@
 #include <svx/svdpage.hxx>
 #include <svx/xoutbmp.hxx>
 #include <svx/svdxcgv.hxx>
-#include <sot/exchange.hxx>
 #include <svtools/htmlkywd.hxx>
 #include <svtools/htmlout.hxx>
-#include <svtools/transfer.hxx>
-#include <svtools/embedtransfer.hxx>
 #include <svl/urihelper.hxx>
 #include <tools/urlobj.hxx>
 
-#include "htmlexp.hxx"
-#include "global.hxx"
-#include "document.hxx"
-#include "drwlayer.hxx"
-#include "ftools.hxx"
+#include <htmlexp.hxx>
+#include <global.hxx>
+#include <document.hxx>
+#include <drwlayer.hxx>
 #include <rtl/strbuf.hxx>
 
 using namespace com::sun::star;
@@ -69,14 +65,14 @@ void ScHTMLExport::FillGraphList( const SdrPage* pPage, SCTAB nTab,
 {
     if ( pPage->GetObjCount() )
     {
-        Rectangle aRect;
+        tools::Rectangle aRect;
         if ( !bAll )
             aRect = pDoc->GetMMRect( nStartCol, nStartRow, nEndCol, nEndRow, nTab );
-        SdrObjListIter aIter( *pPage, IM_FLAT );
+        SdrObjListIter aIter( pPage, SdrIterMode::Flat );
         SdrObject* pObject = aIter.Next();
         while ( pObject )
         {
-            Rectangle aObjRect = pObject->GetCurrentBoundRect();
+            tools::Rectangle aObjRect = pObject->GetCurrentBoundRect();
             if ( (bAll || aRect.IsInside( aObjRect )) && !ScDrawLayer::IsNoteCaption(pObject) )
             {
                 Size aSpace;
@@ -96,18 +92,18 @@ void ScHTMLExport::FillGraphList( const SdrPage* pPage, SCTAB nTab,
                     == static_cast< SCSIZE >( nRow2 - nRow1 ));    // rows-1 !
                 if ( bInCell )
                 {   // Spacing in spanning cell
-                    Rectangle aCellRect = pDoc->GetMMRect(
+                    tools::Rectangle aCellRect = pDoc->GetMMRect(
                         nCol1, nRow1, nCol2, nRow2, nTab );
                     aSpace = MMToPixel( Size(
                         aCellRect.GetWidth() - aObjRect.GetWidth(),
                         aCellRect.GetHeight() - aObjRect.GetHeight() ));
-                    aSpace.Width() += (nCol2-nCol1) * (nCellSpacing+1);
-                    aSpace.Height() += (nRow2-nRow1) * (nCellSpacing+1);
-                    aSpace.Width() /= 2;
-                    aSpace.Height() /= 2;
+                    aSpace.AdjustWidth((nCol2-nCol1) * (nCellSpacing+1) );
+                    aSpace.AdjustHeight((nRow2-nRow1) * (nCellSpacing+1) );
+                    aSpace.setWidth( aSpace.Width() / 2 );
+                    aSpace.setHeight( aSpace.Height() / 2 );
                 }
-                aGraphList.push_back( ScHTMLGraphEntry( pObject,
-                    aR, aSize, bInCell, aSpace ) );
+                aGraphList.emplace_back( pObject,
+                    aR, aSize, bInCell, aSpace );
             }
             pObject = aIter.Next();
         }
@@ -140,11 +136,11 @@ void ScHTMLExport::WriteGraphEntry( ScHTMLGraphEntry* pE )
                     ( pGeo->bMirrored ? 3 : 4 ) : ( pGeo->bMirrored ? 2 : 1 ));
             bool bHMirr = ( ( nMirrorCase == 2 ) || ( nMirrorCase == 4 ) );
             bool bVMirr = ( ( nMirrorCase == 3 ) || ( nMirrorCase == 4 ) );
-            sal_uLong nXOutFlags = 0;
+            XOutFlags nXOutFlags = XOutFlags::NONE;
             if ( bHMirr )
-                nXOutFlags |= XOUTBMP_MIRROR_HORZ;
+                nXOutFlags |= XOutFlags::MirrorHorz;
             if ( bVMirr )
-                nXOutFlags |= XOUTBMP_MIRROR_VERT;
+                nXOutFlags |= XOutFlags::MirrorVert;
             OUString aLinkName;
             if ( pSGO->IsLinkedGraphic() )
                 aLinkName = pSGO->GetFileName();
@@ -165,8 +161,7 @@ void ScHTMLExport::WriteGraphEntry( ScHTMLGraphEntry* pE )
         break;
         default:
         {
-            Graphic aGraph( SdrExchangeView::GetObjGraphic(
-                pDoc->GetDrawLayer(), pObject ) );
+            Graphic aGraph(SdrExchangeView::GetObjGraphic(*pObject));
             OUString aLinkName;
             WriteImage( aLinkName, aGraph, aOpt );
             pE->bWritten = true;
@@ -175,7 +170,7 @@ void ScHTMLExport::WriteGraphEntry( ScHTMLGraphEntry* pE )
 }
 
 void ScHTMLExport::WriteImage( OUString& rLinkName, const Graphic& rGrf,
-            const OString& rImgOptions, sal_uLong nXOutFlags )
+            const OString& rImgOptions, XOutFlags nXOutFlags )
 {
     // Embedded graphic -> create an image file
     if( rLinkName.isEmpty() )
@@ -184,8 +179,8 @@ void ScHTMLExport::WriteImage( OUString& rLinkName, const Graphic& rGrf,
         {
             // Save as a PNG
             OUString aGrfNm( aStreamPath );
-            nXOutFlags |= XOUTBMP_USE_NATIVE_IF_POSSIBLE;
-            sal_uInt16 nErr = XOutBitmap::WriteGraphic( rGrf, aGrfNm,
+            nXOutFlags |= XOutFlags::UseNativeIfPossible;
+            ErrCode nErr = XOutBitmap::WriteGraphic( rGrf, aGrfNm,
                 "PNG", nXOutFlags );
 
             // If it worked, create a URL for the IMG tag
@@ -195,19 +190,15 @@ void ScHTMLExport::WriteImage( OUString& rLinkName, const Graphic& rGrf,
                         INetURLObject(aBaseURL),
                         aGrfNm,
                         URIHelper::GetMaybeFileHdl());
-                if ( HasCId() )
-                    MakeCIdURL( rLinkName );
             }
         }
     }
     else
     {
         // Linked graphic - figure out the URL for the IMG tag
-        if( bCopyLocalFileToINet || HasCId() )
+        if( bCopyLocalFileToINet )
         {
             CopyLocalFileToINet( rLinkName, aStreamPath );
-            if ( HasCId() )
-                MakeCIdURL( rLinkName );
         }
         else
             rLinkName = URIHelper::SmartRel2Abs(

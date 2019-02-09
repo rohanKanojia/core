@@ -21,7 +21,6 @@
 #include <vcl/bitmap.hxx>
 #include <vcl/introwin.hxx>
 
-#include <impbmp.hxx>
 #include <svdata.hxx>
 #include <salframe.hxx>
 
@@ -32,7 +31,7 @@ void IntroWindow::ImplInitIntroWindowData()
 }
 
 IntroWindow::IntroWindow( ) :
-    WorkWindow( WINDOW_INTROWINDOW )
+    WorkWindow( WindowType::INTROWINDOW )
 {
     ImplInitIntroWindowData();
     WorkWindow::ImplInit( nullptr, WB_INTROWIN );

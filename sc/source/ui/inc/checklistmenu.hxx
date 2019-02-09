@@ -13,12 +13,14 @@
 #include <vcl/popupmenuwindow.hxx>
 #include <vcl/button.hxx>
 #include <vcl/edit.hxx>
-#include <vcl/scrbar.hxx>
 #include <vcl/timer.hxx>
-#include <svx/checklbx.hxx>
+#include <vcl/svlbitm.hxx>
 
 #include <memory>
+#include <unordered_set>
 #include <unordered_map>
+#include <map>
+#include <set>
 
 namespace com { namespace sun { namespace star {
 
@@ -34,7 +36,8 @@ class ScAccessibleFilterMenu;
 class ScMenuFloatingWindow : public PopupMenuFloatingWindow
 {
 public:
-    static size_t MENU_NOT_SELECTED;
+    static constexpr size_t MENU_NOT_SELECTED = 999;
+
     /**
      * Action to perform when an event takes place.  Create a sub-class of
      * this to implement the desired action.
@@ -47,7 +50,7 @@ public:
     };
 
     explicit ScMenuFloatingWindow(vcl::Window* pParent, ScDocument* pDoc, sal_uInt16 nMenuStackLevel = 0);
-    virtual ~ScMenuFloatingWindow();
+    virtual ~ScMenuFloatingWindow() override;
      void dispose() override;
 
     virtual void PopupModeEnd() override;
@@ -55,7 +58,7 @@ public:
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
     virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual void KeyInput(const KeyEvent& rKEvt) override;
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
 
     void addMenuItem(const OUString& rText, Action* pAction);
@@ -102,13 +105,13 @@ protected:
 
 private:
     struct SubMenuItemData;
-    void handleMenuTimeout(SubMenuItemData* pTimer);
+    void handleMenuTimeout(const SubMenuItemData* pTimer);
 
     void resizeToFitMenuItems();
     void highlightMenuItem(vcl::RenderContext& rRenderContext, size_t nPos, bool bSelected);
 
     size_t getEnclosingMenuItem(const Point& rPos) const;
-    size_t getSubMenuPos(ScMenuFloatingWindow* pSubMenu);
+    size_t getSubMenuPos(const ScMenuFloatingWindow* pSubMenu);
 
     /**
      * Fire a menu highlight event since the accessibility framework needs
@@ -121,7 +124,7 @@ private:
      * close timer is not active, and the correct menu item associated with
      * the submenu is highlighted.
      */
-    void setSubMenuFocused(ScMenuFloatingWindow* pSubMenu);
+    void setSubMenuFocused(const ScMenuFloatingWindow* pSubMenu);
 
     /**
      * When a menu item of an invisible submenu is selected, we need to make
@@ -164,7 +167,7 @@ private:
         VclPtr<ScMenuFloatingWindow>   mpSubMenu;
         size_t                  mnMenuPos;
 
-        DECL_LINK_TYPED( TimeoutHdl, Timer*, void );
+        DECL_LINK( TimeoutHdl, Timer*, void );
 
         SubMenuItemData(ScMenuFloatingWindow* pParent);
         void reset();
@@ -215,31 +218,33 @@ public:
     void AddTabStop( vcl::Window* pWin );
     void SetTabStop( vcl::Window* pWin );
     void CycleFocus( bool bReverse = false );
-    vcl::Window* GetCurrentControl();
     void clear();
 };
 
+struct ScCheckListMember;
+
 class ScCheckListBox : public SvTreeListBox
 {
-    SvLBoxButtonData*   mpCheckButton;
+    std::unique_ptr<SvLBoxButtonData> mpCheckButton;
     ScTabStops*         mpTabStops;
     bool                mbSeenMouseButtonDown;
     void            CountCheckedEntries( SvTreeListEntry* pParent, sal_uLong& nCount ) const;
-    void            CheckAllChildren( SvTreeListEntry* pEntry, bool bCheck = true );
+    void            CheckAllChildren( SvTreeListEntry* pEntry, bool bCheck );
 
     public:
 
-    ScCheckListBox( vcl::Window* pParent, WinBits nWinStyle = 0 );
-    virtual ~ScCheckListBox() { disposeOnce(); }
-    virtual void dispose() override { delete mpCheckButton; SvTreeListBox::dispose(); }
+    ScCheckListBox( vcl::Window* pParent );
+    virtual ~ScCheckListBox() override { disposeOnce(); }
+    virtual void dispose() override { mpCheckButton.reset(); SvTreeListBox::dispose(); }
     void Init();
-    void CheckEntry( const OUString& sName, SvTreeListEntry* pParent, bool bCheck = true );
-    void CheckEntry( SvTreeListEntry* pEntry, bool bCheck = true );
-    void ShowCheckEntry( const OUString& sName, SvTreeListEntry* pParent, bool bShow = true, bool bCheck = true );
+    void CheckEntry( const OUString& sName, SvTreeListEntry* pParent, bool bCheck );
+    void CheckEntry( SvTreeListEntry* pEntry, bool bCheck );
+    SvTreeListEntry* ShowCheckEntry( const OUString& sName, ScCheckListMember& rMember, bool bShow = true, bool bCheck = true );
+    void GetRecursiveChecked( SvTreeListEntry* pEntry, std::unordered_set<OUString>& vOut, OUString& rLabel );
+    std::unordered_set<OUString> GetAllChecked();
     bool IsChecked( const OUString& sName, SvTreeListEntry* pParent );
     SvTreeListEntry* FindEntry( SvTreeListEntry* pParent, const OUString& sNode );
     sal_uInt16 GetCheckedEntryCount() const;
-    void         ExpandChildren( SvTreeListEntry* pParent );
     virtual void KeyInput( const KeyEvent& rKEvt ) override;
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
     virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
@@ -255,12 +260,32 @@ public:
         : Edit(pParent)
         , mpTabStops(nullptr)
     {
+        set_id("search_edit");
     }
-
-    virtual ~ScSearchEdit() {}
 
     virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
     void SetTabStopsContainer( ScTabStops* pTabStops )  { mpTabStops = pTabStops; }
+};
+
+struct ScCheckListMember
+{
+    enum DatePartType
+    {
+        YEAR,
+        MONTH,
+        DAY,
+    };
+
+    OUString                 maName; // node name
+    OUString                 maRealName;
+    bool                     mbVisible;
+    bool                     mbDate;
+    bool                     mbLeaf;
+    DatePartType             meDatePartType;
+    // To store Year and Month if the member if DAY type
+    std::vector<OUString>    maDateParts;
+    ScCheckListMember();
+    SvTreeListEntry* mpParent;
 };
 
 /**
@@ -270,7 +295,18 @@ public:
 class ScCheckListMenuWindow : public ScMenuFloatingWindow
 {
 public:
-    typedef std::unordered_map<OUString, bool, OUStringHash> ResultType;
+    struct ResultEntry
+    {
+        OUString aName;
+        bool bValid;
+        bool bDate;
+
+        bool operator<(const ResultEntry& rhs) const
+        {
+            return aName < rhs.aName;
+        }
+    };
+    typedef std::set<ResultEntry> ResultType;
 
     /**
      * Extended data that the client code may need to store.  Create a
@@ -293,15 +329,16 @@ public:
     };
 
     explicit ScCheckListMenuWindow(vcl::Window* pParent, ScDocument* pDoc);
-    virtual ~ScCheckListMenuWindow();
+    virtual ~ScCheckListMenuWindow() override;
     virtual void dispose() override;
 
     virtual void MouseMove(const MouseEvent& rMEvt) override;
-    virtual bool Notify(NotifyEvent& rNEvt) override;
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual bool EventNotify(NotifyEvent& rNEvt) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
 
     void setMemberSize(size_t n);
+    void setHasDates(bool bHasDates);
     void addDateMember(const OUString& rName, double nVal, bool bVisible);
     void addMember(const OUString& rName, bool bVisible);
     void initMembers();
@@ -309,7 +346,7 @@ public:
 
     bool isAllSelected() const;
     void getResult(ResultType& rResult);
-    void launch(const Rectangle& rRect);
+    void launch(const tools::Rectangle& rRect);
     void close(bool bOK);
 
     /**
@@ -317,7 +354,7 @@ public:
      * popup window class manages its life time; no explicit deletion of the
      * instance is needed in the client code.
      */
-    void setExtendedData(ExtendedData* p);
+    void setExtendedData(std::unique_ptr<ExtendedData> p);
 
     /**
      * Get the store auxiliary data, or NULL if no such data is stored.
@@ -331,23 +368,12 @@ protected:
     virtual void handlePopupEnd() override;
 
 private:
-    struct Member
-    {
-        OUString maName; // node name
-        OUString maRealName;
-        bool            mbVisible;
-        bool            mbDate;
-        bool            mbLeaf;
-
-        Member();
-        SvTreeListEntry* mpParent;
-    };
 
     class CancelButton : public ::CancelButton
     {
     public:
         CancelButton(ScCheckListMenuWindow* pParent);
-        virtual ~CancelButton();
+        virtual ~CancelButton() override;
         virtual void dispose() override;
 
         virtual void Click() override;
@@ -377,12 +403,12 @@ private:
     void packWindow();
     void setAllMemberState(bool bSet);
     void selectCurrentMemberOnly(bool bSet);
-    void cycleFocus(bool bReverse = false);
+    void updateMemberParents( const SvTreeListEntry* pLeaf, size_t nIdx );
 
-    DECL_LINK_TYPED( ButtonHdl, Button*, void );
-    DECL_LINK_TYPED( TriStateHdl, Button*, void );
-    DECL_LINK_TYPED( CheckHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( EdModifyHdl, Edit&, void );
+    DECL_LINK( ButtonHdl, Button*, void );
+    DECL_LINK( TriStateHdl, Button*, void );
+    DECL_LINK( CheckHdl, SvTreeListBox*, void );
+    DECL_LINK( EdModifyHdl, Edit&, void );
 
 private:
     VclPtr<ScSearchEdit>   maEdSearch;
@@ -395,7 +421,10 @@ private:
     VclPtr<OKButton>        maBtnOk;
     VclPtr<CancelButton>    maBtnCancel;
 
-    std::vector<Member>           maMembers;
+    std::vector<ScCheckListMember> maMembers;
+    // For Dates
+    std::map<OUString, size_t>    maYearMonthMap;
+
     std::unique_ptr<ExtendedData> mpExtendedData;
     std::unique_ptr<Action>       mpOKAction;
     std::unique_ptr<Action>       mpPopupEndAction;

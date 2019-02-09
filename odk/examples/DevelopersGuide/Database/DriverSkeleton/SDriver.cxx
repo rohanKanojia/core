@@ -63,7 +63,7 @@ void SkeletonDriver::disposing()
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
-    // when driver will be destroied so all our connections have to be destroied as well
+    // when driver will be destroyed so all our connections have to be destroyed as well
     for (OWeakRefArray::iterator i = m_xConnections.begin(); m_xConnections.end() != i; ++i)
     {
         Reference< XComponent > xComp(i->get(), UNO_QUERY);
@@ -88,7 +88,8 @@ Sequence< ::rtl::OUString > SkeletonDriver::getSupportedServiceNames_Static(  ) 
 {
     /// which service is supported
     /// for more information @see com.sun.star.sdbc.Driver
-    Sequence<OUString> aSNS { ::rtl::OUString("com.sun.star.sdbc.Driver") };
+    Sequence< ::rtl::OUString > aSNS( 1 );
+    aSNS[0] = ::rtl::OUString("com.sun.star.sdbc.Driver");
     return aSNS;
 }
 

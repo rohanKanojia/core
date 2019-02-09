@@ -19,7 +19,6 @@
 
 #include <osl/file.hxx>
 #include <osl/module.hxx>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/document/XViewDataSupplier.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -42,11 +41,10 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::document;
 using namespace com::sun::star::beans;
 using namespace com::sun::star::container;
-using namespace com::sun::star::frame;
 using namespace com::sun::star::ui::dialogs;
 
-#include "pres.hxx"
-#include "sdabstdlg.hxx"
+#include <pres.hxx>
+#include <sdabstdlg.hxx>
 #include <memory>
 
 class SdHtmlOptionsDialog : public cppu::WeakImplHelper
@@ -66,45 +64,34 @@ class SdHtmlOptionsDialog : public cppu::WeakImplHelper
 public:
 
     SdHtmlOptionsDialog();
-    virtual ~SdHtmlOptionsDialog();
 
     // XInterface
     virtual void SAL_CALL acquire() throw() override;
     virtual void SAL_CALL release() throw() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence< Any > & aArguments ) throw ( Exception, RuntimeException, std::exception ) override;
+    virtual void SAL_CALL initialize( const Sequence< Any > & aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw ( RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw ( RuntimeException, std::exception ) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw ( RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XPropertyAccess
-    virtual Sequence< PropertyValue > SAL_CALL getPropertyValues() throw ( RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setPropertyValues( const css::uno::Sequence< css::beans::PropertyValue > & aProps )
-        throw ( css::beans::UnknownPropertyException, css::beans::PropertyVetoException,
-                css::lang::IllegalArgumentException, css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception ) override;
+    virtual Sequence< PropertyValue > SAL_CALL getPropertyValues() override;
+    virtual void SAL_CALL setPropertyValues( const css::uno::Sequence< css::beans::PropertyValue > & aProps ) override;
 
     // XExecuteDialog
-    virtual sal_Int16 SAL_CALL execute()
-        throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setTitle( const OUString& aTitle )
-        throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Int16 SAL_CALL execute() override;
+    virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc )
-        throw ( css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setSourceDocument( const css::uno::Reference< css::lang::XComponent >& xDoc ) override;
 
 };
 
 SdHtmlOptionsDialog::SdHtmlOptionsDialog() :
-    meDocType   ( DOCUMENT_TYPE_DRAW )
-{
-}
-
-SdHtmlOptionsDialog::~SdHtmlOptionsDialog()
+    meDocType   ( DocumentType::Draw )
 {
 }
 
@@ -120,25 +107,21 @@ void SAL_CALL SdHtmlOptionsDialog::release() throw()
 
 // XInitialization
 void SAL_CALL SdHtmlOptionsDialog::initialize( const Sequence< Any > & )
-    throw ( Exception, RuntimeException, std::exception )
 {
 }
 
 // XServiceInfo
 OUString SAL_CALL SdHtmlOptionsDialog::getImplementationName()
-    throw( RuntimeException, std::exception )
 {
     return OUString( "com.sun.star.comp.draw.SdHtmlOptionsDialog" );
 }
 
 sal_Bool SAL_CALL SdHtmlOptionsDialog::supportsService( const OUString& rServiceName )
-    throw( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > SAL_CALL SdHtmlOptionsDialog::getSupportedServiceNames()
-    throw ( RuntimeException, std::exception )
 {
     Sequence< OUString > aRet { "com.sun.star.ui.dialog.FilterOptionsDialog" };
     return aRet;
@@ -146,7 +129,6 @@ Sequence< OUString > SAL_CALL SdHtmlOptionsDialog::getSupportedServiceNames()
 
 // XPropertyAccess
 Sequence< PropertyValue > SdHtmlOptionsDialog::getPropertyValues()
-        throw ( RuntimeException, std::exception )
 {
     sal_Int32 i, nCount;
     for ( i = 0, nCount = maMediaDescriptor.getLength(); i < nCount; i++ )
@@ -164,9 +146,6 @@ Sequence< PropertyValue > SdHtmlOptionsDialog::getPropertyValues()
 }
 
 void SdHtmlOptionsDialog::setPropertyValues( const Sequence< PropertyValue > & aProps )
-        throw ( UnknownPropertyException, PropertyVetoException,
-                IllegalArgumentException, WrappedTargetException,
-                RuntimeException, std::exception )
 {
     maMediaDescriptor = aProps;
 
@@ -183,39 +162,30 @@ void SdHtmlOptionsDialog::setPropertyValues( const Sequence< PropertyValue > & a
 
 // XExecutableDialog
 void SdHtmlOptionsDialog::setTitle( const OUString& aTitle )
-    throw ( RuntimeException, std::exception )
 {
     aDialogTitle = aTitle;
 }
 
 sal_Int16 SdHtmlOptionsDialog::execute()
-    throw ( RuntimeException, std::exception )
 {
     sal_Int16 nRet = ExecutableDialogResults::CANCEL;
 
     SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
-    if( pFact )
+    ScopedVclPtr<AbstractSdPublishingDlg> pDlg(pFact->CreateSdPublishingDlg( Application::GetDefDialogParent(), meDocType ));
+    if( pDlg->Execute() )
     {
-        std::unique_ptr<AbstractSdPublishingDlg> pDlg(pFact->CreateSdPublishingDlg( Application::GetDefDialogParent(), meDocType ));
-        if( pDlg )
-        {
-            if( pDlg->Execute() )
-            {
-                pDlg->GetParameterSequence( maFilterDataSequence );
-                nRet = ExecutableDialogResults::OK;
-            }
-            else
-            {
-                nRet = ExecutableDialogResults::CANCEL;
-            }
-        }
+        pDlg->GetParameterSequence( maFilterDataSequence );
+        nRet = ExecutableDialogResults::OK;
+    }
+    else
+    {
+        nRet = ExecutableDialogResults::CANCEL;
     }
     return nRet;
 }
 
 // XEmporter
 void SdHtmlOptionsDialog::setSourceDocument( const Reference< XComponent >& xDoc )
-        throw ( IllegalArgumentException, RuntimeException, std::exception )
 {
     // try to set the corresponding metric unit
     Reference< XServiceInfo > xServiceInfo(xDoc, UNO_QUERY);
@@ -223,12 +193,12 @@ void SdHtmlOptionsDialog::setSourceDocument( const Reference< XComponent >& xDoc
     {
         if ( xServiceInfo->supportsService( "com.sun.star.presentation.PresentationDocument" ) )
         {
-            meDocType = DOCUMENT_TYPE_IMPRESS;
+            meDocType = DocumentType::Impress;
             return;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.drawing.DrawingDocument" ) )
         {
-            meDocType = DOCUMENT_TYPE_DRAW;
+            meDocType = DocumentType::Draw;
             return;
         }
     }
@@ -236,7 +206,7 @@ void SdHtmlOptionsDialog::setSourceDocument( const Reference< XComponent >& xDoc
 }
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_draw_SdHtmlOptionsDialog_get_implementation(css::uno::XComponentContext*,
                                                               css::uno::Sequence<css::uno::Any> const &)
 {

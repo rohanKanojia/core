@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuconrec.hxx"
+#include <fuconrec.hxx>
 #include <svx/svdpagv.hxx>
 
 #include <svx/svxids.hrc>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
 
-#include "app.hrc"
+#include <app.hrc>
 #include <svl/aeitem.hxx>
+#include <svl/itemset.hxx>
 #include <svx/xlnstwit.hxx>
 #include <svx/xlnedwit.hxx>
 #include <svx/xlnedit.hxx>
@@ -42,25 +43,28 @@
 #include <sfx2/request.hxx>
 #include <editeng/adjustitem.hxx>
 #include <svx/xtable.hxx>
+#include <svx/xfltrit.hxx>
+#include <svx/xfillit.hxx>
 
 #include <svx/svdocapt.hxx>
 
 #include <svx/svdomeas.hxx>
-#include "ViewShell.hxx"
-#include "ViewShellBase.hxx"
-#include "ToolBarManager.hxx"
+#include <ViewShell.hxx>
+#include <ViewShellBase.hxx>
+#include <ToolBarManager.hxx>
 #include <editeng/writingmodeitem.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 
-#include "sdresid.hxx"
-#include "View.hxx"
-#include "sdpage.hxx"
-#include "Window.hxx"
-#include "stlpool.hxx"
-#include "drawdoc.hxx"
-#include "res_bmp.hrc"
-#include "glob.hrc"
+#include <sdresid.hxx>
+#include <View.hxx>
+#include <sdpage.hxx>
+#include <Window.hxx>
+#include <stlpool.hxx>
+#include <drawdoc.hxx>
+#include <unokywds.hxx>
+
+#include <strings.hrc>
 
 namespace sd {
 
@@ -72,7 +76,28 @@ FuConstructRectangle::FuConstructRectangle (
     SdDrawDocument* pDoc,
     SfxRequest&     rReq)
     : FuConstruct(pViewSh, pWin, pView, pDoc, rReq)
+    , mnFillTransparence(0)
+    , mnLineStyle(SAL_MAX_UINT16)
 {
+}
+
+namespace{
+
+/// Checks to see if the request has a parameter of IsSticky:bool=true
+/// It means that the selected command/button will stay selected after use
+bool isSticky(SfxRequest& rReq)
+{
+    const SfxItemSet *pArgs = rReq.GetArgs ();
+    if (pArgs)
+    {
+        const SfxBoolItem* pIsSticky = rReq.GetArg<SfxBoolItem>(FN_PARAM_4);
+        if (pIsSticky && pIsSticky->GetValue())
+            return true;
+    }
+
+    return false;
+}
+
 }
 
 rtl::Reference<FuPoor> FuConstructRectangle::Create( ViewShell* pViewSh, ::sd::Window* pWin, ::sd::View* pView, SdDrawDocument* pDoc, SfxRequest& rReq, bool bPermanent )
@@ -80,7 +105,7 @@ rtl::Reference<FuPoor> FuConstructRectangle::Create( ViewShell* pViewSh, ::sd::W
     FuConstructRectangle* pFunc;
     rtl::Reference<FuPoor> xFunc( pFunc = new FuConstructRectangle( pViewSh, pWin, pView, pDoc, rReq ) );
     xFunc->DoExecute(rReq);
-    pFunc->SetPermanent(bPermanent);
+    pFunc->SetPermanent(bPermanent || isSticky(rReq));
     return xFunc;
 }
 
@@ -89,7 +114,7 @@ void FuConstructRectangle::DoExecute( SfxRequest& rReq )
     FuConstruct::DoExecute( rReq );
 
     mpViewShell->GetViewShellBase().GetToolBarManager()->SetToolBar(
-        ToolBarManager::TBG_FUNCTION,
+        ToolBarManager::ToolBarGroup::Function,
         ToolBarManager::msDrawingObjectToolBar);
 
     const SfxItemSet *pArgs = rReq.GetArgs ();
@@ -105,11 +130,17 @@ void FuConstructRectangle::DoExecute( SfxRequest& rReq )
                 const SfxUInt32Item* pAxisX = rReq.GetArg<SfxUInt32Item>(ID_VAL_AXIS_X);
                 const SfxUInt32Item* pAxisY = rReq.GetArg<SfxUInt32Item>(ID_VAL_AXIS_Y);
 
-                Rectangle   aNewRectangle (pCenterX->GetValue () - pAxisX->GetValue () / 2,
+                if (!pCenterX || !pCenterY || !pAxisX || !pAxisY)
+                    break;
+
+                ::tools::Rectangle   aNewRectangle (pCenterX->GetValue () - pAxisX->GetValue () / 2,
                                            pCenterY->GetValue () - pAxisY->GetValue () / 2,
                                            pCenterX->GetValue () + pAxisX->GetValue () / 2,
                                            pCenterY->GetValue () + pAxisY->GetValue () / 2);
-                SdrCircObj  *pNewCircle = new SdrCircObj (OBJ_CIRC, aNewRectangle);
+                SdrCircObj  *pNewCircle = new SdrCircObj(
+                    mpView->getSdrModelFromSdrView(),
+                    OBJ_CIRC,
+                    aNewRectangle);
                 SdrPageView *pPV = mpView->GetSdrPageView();
 
                 mpView->InsertObjectAtView(pNewCircle, *pPV, SdrInsertFlags::SETDEFLAYER | SdrInsertFlags::SETDEFATTR);
@@ -118,16 +149,37 @@ void FuConstructRectangle::DoExecute( SfxRequest& rReq )
 
             case SID_DRAW_RECT :
             {
-                const SfxUInt32Item* pMouseStartX = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSESTART_X);
-                const SfxUInt32Item* pMouseStartY = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSESTART_Y);
-                const SfxUInt32Item* pMouseEndX = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSEEND_X);
-                const SfxUInt32Item* pMouseEndY = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSEEND_Y);
+                const SfxUInt32Item* pMouseStartX       = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSESTART_X);
+                const SfxUInt32Item* pMouseStartY       = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSESTART_Y);
+                const SfxUInt32Item* pMouseEndX         = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSEEND_X);
+                const SfxUInt32Item* pMouseEndY         = rReq.GetArg<SfxUInt32Item>(ID_VAL_MOUSEEND_Y);
+                const SfxUInt16Item* pFillTransparence  = rReq.GetArg<SfxUInt16Item>(FN_PARAM_1);
+                const SfxStringItem* pFillColor         = rReq.GetArg<SfxStringItem>(FN_PARAM_2);
+                const SfxUInt16Item* pLineStyle         = rReq.GetArg<SfxUInt16Item>(FN_PARAM_3);
 
-                Rectangle   aNewRectangle (pMouseStartX->GetValue (),
+                if (pFillTransparence && pFillTransparence->GetValue() > 0)
+                {
+                    mnFillTransparence = pFillTransparence->GetValue();
+                }
+                if (pFillColor && !pFillColor->GetValue().isEmpty())
+                {
+                    msFillColor = pFillColor->GetValue();
+                }
+                if (pLineStyle)
+                {
+                    mnLineStyle = pLineStyle->GetValue();
+                }
+
+                if (!pMouseStartX || !pMouseStartY || !pMouseEndX || !pMouseEndY)
+                    break;
+
+                ::tools::Rectangle   aNewRectangle (pMouseStartX->GetValue (),
                                            pMouseStartY->GetValue (),
                                            pMouseEndX->GetValue (),
                                            pMouseEndY->GetValue ());
-                SdrRectObj  *pNewRect = new SdrRectObj (aNewRectangle);
+                SdrRectObj  *pNewRect = new SdrRectObj(
+                    mpView->getSdrModelFromSdrView(),
+                    aNewRectangle);
                 SdrPageView *pPV = mpView->GetSdrPageView();
 
                 mpView->InsertObjectAtView(pNewRect, *pPV, SdrInsertFlags::SETDEFLAYER | SdrInsertFlags::SETDEFATTR);
@@ -205,7 +257,7 @@ bool FuConstructRectangle::MouseButtonDown(const MouseEvent& rMEvt)
             SfxItemSet aAttr(mpDoc->GetPool());
             SetStyleSheet(aAttr, pObj);
             SetAttributes(aAttr, pObj);
-            SetLineEnds(aAttr, pObj);
+            SetLineEnds(aAttr, *pObj);
             pObj->SetMergedItemSet(aAttr);
 
             if( nSlotId == SID_DRAW_CAPTION_VERTICAL )
@@ -213,11 +265,6 @@ bool FuConstructRectangle::MouseButtonDown(const MouseEvent& rMEvt)
         }
     }
     return bReturn;
-}
-
-bool FuConstructRectangle::MouseMove(const MouseEvent& rMEvt)
-{
-    return FuConstruct::MouseMove(rMEvt);
 }
 
 bool FuConstructRectangle::MouseButtonUp(const MouseEvent& rMEvt)
@@ -228,13 +275,12 @@ bool FuConstructRectangle::MouseButtonUp(const MouseEvent& rMEvt)
     {
         SdrObject* pObj = mpView->GetCreateObj();
 
-        if(pObj && mpView->EndCreateObj(SDRCREATE_FORCEEND))
+        if(pObj && mpView->EndCreateObj(SdrCreateCmd::ForceEnd))
         {
             if(SID_DRAW_MEASURELINE == nSlotId)
             {
                 SdrLayerAdmin& rAdmin = mpDoc->GetLayerAdmin();
-                OUString aStr(SD_RESSTR(STR_LAYER_MEASURELINES));
-                pObj->SetLayer(rAdmin.GetLayerID(aStr, false));
+                pObj->SetLayer(rAdmin.GetLayerID(sUNO_LayerName_measurelines));
             }
 
             // init text position when vertical caption object is created
@@ -266,15 +312,6 @@ bool FuConstructRectangle::MouseButtonUp(const MouseEvent& rMEvt)
     return bReturn;
 }
 
-/**
- * Process keyboard input
- * @returns sal_True if a KeyEvent is being processed, sal_False otherwise
- */
-bool FuConstructRectangle::KeyInput(const KeyEvent& rKEvt)
-{
-    return FuConstruct::KeyInput(rKEvt);
-}
-
 void FuConstructRectangle::Activate()
 {
     SdrObjKind aObjKind;
@@ -289,7 +326,7 @@ void FuConstructRectangle::Activate()
         case SID_LINE_ARROW_SQUARE:
         case SID_LINE_SQUARE_ARROW:
             mpView->SetGlueVisible();
-            // no break !
+            [[fallthrough]];
         case SID_DRAW_LINE :
         case SID_DRAW_XLINE:
             aObjKind = OBJ_LINE;
@@ -371,7 +408,7 @@ void FuConstructRectangle::Activate()
         break;
     }
 
-    mpView->SetCurrentObj((sal_uInt16)aObjKind);
+    mpView->SetCurrentObj(static_cast<sal_uInt16>(aObjKind));
 
     FuConstruct::Activate();
 }
@@ -419,6 +456,24 @@ void FuConstructRectangle::Deactivate()
     FuConstruct::Deactivate();
 }
 
+namespace {
+/// Returns the color based on the color names listed in core/include/tools/color.hxx
+/// Feel free to extend with more color names from color.hxx
+Color strToColor(const OUString& sColor)
+{
+    Color aColor = COL_AUTO;
+
+    if (sColor == "COL_GRAY")
+        aColor = COL_GRAY;
+    else if (sColor == "COL_GRAY3")
+        aColor = COL_GRAY3;
+    else if (sColor == "COL_GRAY7")
+        aColor = COL_GRAY7;
+
+    return aColor;
+}
+}
+
 /**
  * set attribute for the object to be created
  */
@@ -441,7 +496,7 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
              nSlotId == SID_CONNECTOR_LINE_CIRCLES)
     {
         // direct connector
-        rAttr.Put(SdrEdgeKindItem(SDREDGE_ONELINE));
+        rAttr.Put(SdrEdgeKindItem(SdrEdgeKind::OneLine));
     }
     else if (nSlotId == SID_CONNECTOR_LINES              ||
              nSlotId == SID_CONNECTOR_LINES_ARROW_START  ||
@@ -452,7 +507,7 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
              nSlotId == SID_CONNECTOR_LINES_CIRCLES)
     {
         // line connector
-        rAttr.Put(SdrEdgeKindItem(SDREDGE_THREELINES));
+        rAttr.Put(SdrEdgeKindItem(SdrEdgeKind::ThreeLines));
     }
     else if (nSlotId == SID_CONNECTOR_CURVE              ||
              nSlotId == SID_CONNECTOR_CURVE_ARROW_START  ||
@@ -463,7 +518,7 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
              nSlotId == SID_CONNECTOR_CURVE_CIRCLES)
     {
         // curve connector
-        rAttr.Put(SdrEdgeKindItem(SDREDGE_BEZIER));
+        rAttr.Put(SdrEdgeKindItem(SdrEdgeKind::Bezier));
     }
     else if ( nSlotId == SID_DRAW_CAPTION || nSlotId == SID_DRAW_CAPTION_VERTICAL )
     {
@@ -480,7 +535,7 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
         else
             rAttr.Put( SdrTextVertAdjustItem( SDRTEXTVERTADJUST_BLOCK ) );
 
-        rAttr.Put( SvxAdjustItem( SVX_ADJUST_CENTER, EE_PARA_JUST ) );
+        rAttr.Put( SvxAdjustItem( SvxAdjust::Center, EE_PARA_JUST ) );
         rAttr.Put( makeSdrTextLeftDistItem( 100 ) );
         rAttr.Put( makeSdrTextRightDistItem( 100 ) );
         rAttr.Put( makeSdrTextUpperDistItem( 100 ) );
@@ -490,10 +545,10 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
     {
         // dimension line
         SdPage* pPage = static_cast<SdPage*>( mpView->GetSdrPageView()->GetPage() );
-        OUString aName(SD_RESSTR(STR_POOLSHEET_MEASURE));
-        SfxStyleSheet* pSheet = static_cast<SfxStyleSheet*>( pPage->GetModel()->
-                                     GetStyleSheetPool()->
-                                     Find(aName, SD_STYLE_FAMILY_GRAPHICS));
+        OUString aName(SdResId(STR_POOLSHEET_MEASURE));
+        SfxStyleSheet* pSheet(
+            static_cast< SfxStyleSheet* >(
+                pPage->getSdrModelFromSdrPage().GetStyleSheetPool()->Find(aName, SfxStyleFamily::Para)));
         DBG_ASSERT(pSheet, "StyleSheet missing");
 
         if (pSheet)
@@ -502,30 +557,49 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
         }
 
         SdrLayerAdmin& rAdmin = mpDoc->GetLayerAdmin();
-        OUString aStr(SD_RESSTR(STR_LAYER_MEASURELINES));
-        pObj->SetLayer(rAdmin.GetLayerID(aStr, false));
+        pObj->SetLayer(rAdmin.GetLayerID(sUNO_LayerName_measurelines));
     }
-    else if (nSlotId == OBJ_CUSTOMSHAPE )
+    else if (nSlotId == SID_DRAW_RECT)
     {
+        if (mnFillTransparence > 0 && mnFillTransparence <= 100)
+            rAttr.Put(XFillTransparenceItem(mnFillTransparence));
+        if (!msFillColor.isEmpty())
+            rAttr.Put(XFillColorItem(OUString(), strToColor(msFillColor)));
+
+        switch(mnLineStyle)
+        {
+        case 0:
+            rAttr.Put( XLineStyleItem(css::drawing::LineStyle_NONE ) );
+            break;
+        case 1:
+            rAttr.Put( XLineStyleItem(css::drawing::LineStyle_SOLID ) );
+            break;
+        case 2:
+            rAttr.Put( XLineStyleItem(css::drawing::LineStyle_DASH ) );
+            break;
+        default:
+            // Leave it to the defaults
+            break;
+        }
     }
 }
 
 /**
  * set line starts and ends for the object to be created
  */
-::basegfx::B2DPolyPolygon getPolygon( sal_uInt16 nResId, SdrModel* pDoc )
+static ::basegfx::B2DPolyPolygon getPolygon(const char* pResId, const SdrModel& rModel)
 {
     ::basegfx::B2DPolyPolygon aRetval;
-    XLineEndListRef pLineEndList = pDoc->GetLineEndList();
+    XLineEndListRef pLineEndList(rModel.GetLineEndList());
 
     if( pLineEndList.is() )
     {
-        OUString aArrowName( SVX_RES(nResId) );
+        OUString aArrowName(SvxResId(pResId));
         long nCount = pLineEndList->Count();
         long nIndex;
-        for( nIndex = 0L; nIndex < nCount; nIndex++ )
+        for( nIndex = 0; nIndex < nCount; nIndex++ )
         {
-            XLineEndEntry* pEntry = pLineEndList->GetLineEnd(nIndex);
+            const XLineEndEntry* pEntry = pLineEndList->GetLineEnd(nIndex);
             if( pEntry->GetName() == aArrowName )
             {
                 aRetval = pEntry->GetLineEnd();
@@ -537,9 +611,9 @@ void FuConstructRectangle::SetAttributes(SfxItemSet& rAttr, SdrObject* pObj)
     return aRetval;
 }
 
-void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
+void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject const & rObj)
 {
-    if ( (pObj->GetObjIdentifier() == OBJ_EDGE &&
+    if ( (rObj.GetObjIdentifier() == OBJ_EDGE &&
           nSlotId != SID_TOOL_CONNECTOR        &&
           nSlotId != SID_CONNECTOR_LINE        &&
           nSlotId != SID_CONNECTOR_LINES       &&
@@ -553,9 +627,10 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
           nSlotId == SID_LINE_SQUARE_ARROW )
     {
         // set attributes of line start and ends
+        SdrModel& rModel(rObj.getSdrModelFromSdrObject());
 
         // arrowhead
-        ::basegfx::B2DPolyPolygon aArrow( getPolygon( RID_SVXSTR_ARROW, mpDoc ) );
+        ::basegfx::B2DPolyPolygon aArrow( getPolygon( RID_SVXSTR_ARROW, rModel ) );
         if( !aArrow.count() )
         {
             ::basegfx::B2DPolygon aNewArrow;
@@ -567,17 +642,17 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
         }
 
         // Circles
-        ::basegfx::B2DPolyPolygon aCircle( getPolygon( RID_SVXSTR_CIRCLE, mpDoc ) );
+        ::basegfx::B2DPolyPolygon aCircle( getPolygon( RID_SVXSTR_CIRCLE, rModel ) );
         if( !aCircle.count() )
         {
             ::basegfx::B2DPolygon aNewCircle;
-            aNewCircle = ::basegfx::tools::createPolygonFromEllipse(::basegfx::B2DPoint(0.0, 0.0), 250.0, 250.0);
+            aNewCircle = ::basegfx::utils::createPolygonFromEllipse(::basegfx::B2DPoint(0.0, 0.0), 250.0, 250.0);
             aNewCircle.setClosed(true);
             aCircle.append(aNewCircle);
         }
 
         // Square
-        ::basegfx::B2DPolyPolygon aSquare( getPolygon( RID_SVXSTR_SQUARE, mpDoc ) );
+        ::basegfx::B2DPolyPolygon aSquare( getPolygon( RID_SVXSTR_SQUARE, rModel ) );
         if( !aSquare.count() )
         {
             ::basegfx::B2DPolygon aNewSquare;
@@ -600,7 +675,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
         // determine line width and calculate with it the line end width
         if( aSet.GetItemState( XATTR_LINEWIDTH ) != SfxItemState::DONTCARE )
         {
-            long nValue = static_cast<const XLineWidthItem&>( aSet.Get( XATTR_LINEWIDTH ) ).GetValue();
+            long nValue = aSet.Get( XATTR_LINEWIDTH ).GetValue();
             if( nValue > 0 )
                 nWidth = nValue * 3;
         }
@@ -614,9 +689,9 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_ARROWS:
             {
                 // connector with arrow ends
-                rAttr.Put(XLineStartItem(SVX_RESSTR(RID_SVXSTR_ARROW), aArrow));
+                rAttr.Put(XLineStartItem(SvxResId(RID_SVXSTR_ARROW), aArrow));
                 rAttr.Put(XLineStartWidthItem(nWidth));
-                rAttr.Put(XLineEndItem(SVX_RESSTR(RID_SVXSTR_ARROW), aArrow));
+                rAttr.Put(XLineEndItem(SvxResId(RID_SVXSTR_ARROW), aArrow));
                 rAttr.Put(XLineEndWidthItem(nWidth));
             }
             break;
@@ -630,7 +705,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_ARROW_SQUARE:
             {
                 // connector with arrow start
-                rAttr.Put(XLineStartItem(SVX_RESSTR(RID_SVXSTR_ARROW), aArrow));
+                rAttr.Put(XLineStartItem(SvxResId(RID_SVXSTR_ARROW), aArrow));
                 rAttr.Put(XLineStartWidthItem(nWidth));
             }
             break;
@@ -644,7 +719,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_SQUARE_ARROW:
             {
                 // connector with arrow end
-                rAttr.Put(XLineEndItem(SVX_RESSTR(RID_SVXSTR_ARROW), aArrow));
+                rAttr.Put(XLineEndItem(SvxResId(RID_SVXSTR_ARROW), aArrow));
                 rAttr.Put(XLineEndWidthItem(nWidth));
             }
             break;
@@ -655,9 +730,9 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_CONNECTOR_CURVE_CIRCLES:
             {
                 // connector with circle ends
-                rAttr.Put(XLineStartItem(SVX_RESSTR(RID_SVXSTR_CIRCLE), aCircle));
+                rAttr.Put(XLineStartItem(SvxResId(RID_SVXSTR_CIRCLE), aCircle));
                 rAttr.Put(XLineStartWidthItem(nWidth));
-                rAttr.Put(XLineEndItem(SVX_RESSTR(RID_SVXSTR_CIRCLE), aCircle));
+                rAttr.Put(XLineEndItem(SvxResId(RID_SVXSTR_CIRCLE), aCircle));
                 rAttr.Put(XLineEndWidthItem(nWidth));
             }
             break;
@@ -668,7 +743,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_CONNECTOR_CURVE_CIRCLE_START:
             {
                 // connector with circle start
-                rAttr.Put(XLineStartItem(SVX_RESSTR(RID_SVXSTR_CIRCLE), aCircle));
+                rAttr.Put(XLineStartItem(SvxResId(RID_SVXSTR_CIRCLE), aCircle));
                 rAttr.Put(XLineStartWidthItem(nWidth));
             }
             break;
@@ -679,7 +754,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_CONNECTOR_CURVE_CIRCLE_END:
             {
                 // connector with circle ends
-                rAttr.Put(XLineEndItem(SVX_RESSTR(RID_SVXSTR_CIRCLE), aCircle));
+                rAttr.Put(XLineEndItem(SvxResId(RID_SVXSTR_CIRCLE), aCircle));
                 rAttr.Put(XLineEndWidthItem(nWidth));
             }
             break;
@@ -691,7 +766,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_ARROW_CIRCLE:
             {
                 // circle end
-                rAttr.Put(XLineEndItem(SVX_RESSTR(RID_SVXSTR_CIRCLE), aCircle));
+                rAttr.Put(XLineEndItem(SvxResId(RID_SVXSTR_CIRCLE), aCircle));
                 rAttr.Put(XLineEndWidthItem(nWidth));
             }
             break;
@@ -699,7 +774,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_CIRCLE_ARROW:
             {
                 // circle start
-                rAttr.Put(XLineStartItem(SVX_RESSTR(RID_SVXSTR_CIRCLE), aCircle));
+                rAttr.Put(XLineStartItem(SvxResId(RID_SVXSTR_CIRCLE), aCircle));
                 rAttr.Put(XLineStartWidthItem(nWidth));
             }
             break;
@@ -707,7 +782,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_ARROW_SQUARE:
             {
                 // square end
-                rAttr.Put(XLineEndItem(SVX_RESSTR(RID_SVXSTR_SQUARE), aSquare));
+                rAttr.Put(XLineEndItem(SvxResId(RID_SVXSTR_SQUARE), aSquare));
                 rAttr.Put(XLineEndWidthItem(nWidth));
             }
             break;
@@ -715,7 +790,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
             case SID_LINE_SQUARE_ARROW:
             {
                 // square start
-                rAttr.Put(XLineStartItem(SVX_RESSTR(RID_SVXSTR_SQUARE), aSquare));
+                rAttr.Put(XLineStartItem(SvxResId(RID_SVXSTR_SQUARE), aSquare));
                 rAttr.Put(XLineStartWidthItem(nWidth));
             }
             break;
@@ -723,7 +798,7 @@ void FuConstructRectangle::SetLineEnds(SfxItemSet& rAttr, SdrObject* pObj)
     }
 }
 
-SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle)
+SdrObjectUniquePtr FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle)
 {
     DBG_ASSERT( (nID != SID_DRAW_FONTWORK) && (nID != SID_DRAW_FONTWORK_VERTICAL ), "FuConstRectangle::CreateDefaultObject can not create Fontwork shapes!" );
 
@@ -780,13 +855,14 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
     // case SID_CONNECTOR_LINES_CIRCLE_END:
     // case SID_CONNECTOR_LINES_CIRCLES:
 
-    SdrObject* pObj = SdrObjFactory::MakeNewObject(
-        mpView->GetCurrentObjInventor(), mpView->GetCurrentObjIdentifier(),
-        nullptr, mpDoc);
+    SdrObjectUniquePtr pObj(SdrObjFactory::MakeNewObject(
+        mpView->getSdrModelFromSdrView(),
+        mpView->GetCurrentObjInventor(),
+        mpView->GetCurrentObjIdentifier()));
 
     if(pObj)
     {
-        Rectangle aRect(rRectangle);
+        ::tools::Rectangle aRect(rRectangle);
 
         if(SID_DRAW_SQUARE == nID ||
             SID_DRAW_SQUARE_NOFILL == nID ||
@@ -814,14 +890,14 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
             case SID_LINE_ARROW_SQUARE:
             case SID_LINE_SQUARE_ARROW:
             {
-                if( dynamic_cast< const SdrPathObj *>( pObj ) !=  nullptr)
+                if( auto pPathObj = dynamic_cast<SdrPathObj *>( pObj.get() ) )
                 {
                     sal_Int32 nYMiddle((aRect.Top() + aRect.Bottom()) / 2);
 
                     ::basegfx::B2DPolygon aB2DPolygon;
                     aB2DPolygon.append(::basegfx::B2DPoint(aStart.X(), nYMiddle));
                     aB2DPolygon.append(::basegfx::B2DPoint(aEnd.X(), nYMiddle));
-                    static_cast<SdrPathObj*>(pObj)->SetPathPoly(::basegfx::B2DPolyPolygon(aB2DPolygon));
+                    pPathObj->SetPathPoly(::basegfx::B2DPolyPolygon(aB2DPolygon));
                 }
                 else
                 {
@@ -833,11 +909,11 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
 
             case SID_DRAW_MEASURELINE:
             {
-                if( dynamic_cast< SdrMeasureObj *>( pObj ) !=  nullptr)
+                if( auto pMeasureObj = dynamic_cast< SdrMeasureObj *>( pObj.get() ) )
                 {
                     sal_Int32 nYMiddle((aRect.Top() + aRect.Bottom()) / 2);
-                    static_cast<SdrMeasureObj*>(pObj)->SetPoint(Point(aStart.X(), nYMiddle), 0);
-                    static_cast<SdrMeasureObj*>(pObj)->SetPoint(Point(aEnd.X(), nYMiddle), 1);
+                    pMeasureObj->SetPoint(Point(aStart.X(), nYMiddle), 0);
+                    pMeasureObj->SetPoint(Point(aEnd.X(), nYMiddle), 1);
                 }
                 else
                 {
@@ -876,10 +952,10 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
             case SID_CONNECTOR_LINES_CIRCLE_END:
             case SID_CONNECTOR_LINES_CIRCLES:
             {
-                if( dynamic_cast< SdrEdgeObj *>( pObj ) !=  nullptr)
+                if( auto pEdgeObj = dynamic_cast< SdrEdgeObj *>( pObj.get() ) )
                 {
-                    static_cast<SdrEdgeObj*>(pObj)->SetTailPoint(false, aStart);
-                    static_cast<SdrEdgeObj*>(pObj)->SetTailPoint(true, aEnd);
+                    pEdgeObj->SetTailPoint(false, aStart);
+                    pEdgeObj->SetTailPoint(true, aEnd);
                 }
                 else
                 {
@@ -891,11 +967,11 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
             case SID_DRAW_CAPTION:
             case SID_DRAW_CAPTION_VERTICAL:
             {
-                if( dynamic_cast< SdrCaptionObj *>( pObj ) !=  nullptr)
+                if( auto pCaptionObj = dynamic_cast< SdrCaptionObj *>( pObj.get() ) )
                 {
                     bool bIsVertical(SID_DRAW_CAPTION_VERTICAL == nID);
 
-                    static_cast<SdrTextObj*>(pObj)->SetVerticalWriting(bIsVertical);
+                    pCaptionObj->SetVerticalWriting(bIsVertical);
 
                     if(bIsVertical)
                     {
@@ -907,8 +983,8 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
 
                     // The default text is not inserted anymore.
 
-                    static_cast<SdrCaptionObj*>(pObj)->SetLogicRect(aRect);
-                    static_cast<SdrCaptionObj*>(pObj)->SetTailPos(
+                    pCaptionObj->SetLogicRect(aRect);
+                    pCaptionObj->SetTailPos(
                         aRect.TopLeft() - Point(aRect.GetWidth() / 2, aRect.GetHeight() / 2));
                 }
                 else
@@ -928,9 +1004,9 @@ SdrObject* FuConstructRectangle::CreateDefaultObject(const sal_uInt16 nID, const
         }
 
         SfxItemSet aAttr(mpDoc->GetPool());
-        SetStyleSheet(aAttr, pObj);
-        SetAttributes(aAttr, pObj);
-        SetLineEnds(aAttr, pObj);
+        SetStyleSheet(aAttr, pObj.get());
+        SetAttributes(aAttr, pObj.get());
+        SetLineEnds(aAttr, *pObj);
         pObj->SetMergedItemSet(aAttr);
     }
 

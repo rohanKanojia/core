@@ -22,12 +22,11 @@
 #include <memory>
 
 #include <basegfx/polygon/b2dpolypolygon.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/rendering/FontRequest.hpp>
 #include <com/sun/star/rendering/PanoseProportion.hpp>
 #include <com/sun/star/rendering/XCanvasFont.hpp>
 #include <comphelper/scopeguard.hxx>
-#include <comphelper/sequence.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <tools/color.hxx>
 #include <tools/diagnose_ex.h>
@@ -69,7 +68,8 @@ namespace dxcanvas
         const css::uno::Reference<
             css::rendering::XCanvasFont >&     rCanvasFont,
         const css::geometry::Matrix2D&         rFontMatrix,
-        bool                                   bAlphaSurface )
+        bool                                   bAlphaSurface,
+        bool bIsRTL)
     {
         HDC hdc = rGraphics->GetHDC();
 
@@ -89,7 +89,7 @@ namespace dxcanvas
 
         if(rText.Length)
         {
-            sal_Bool test = mxGraphicDevice.is();
+            bool test = mxGraphicDevice.is();
             ENSURE_OR_THROW( test,
                               "TextLayoutDrawHelper::drawText(): Invalid GraphicDevice" );
 
@@ -112,7 +112,7 @@ namespace dxcanvas
 
             aFont.SetAlignment( ALIGN_BASELINE );
             aFont.SetCharSet( (rFontRequest.FontDescription.IsSymbolFont==css::util::TriState_YES) ? RTL_TEXTENCODING_SYMBOL : RTL_TEXTENCODING_UNICODE );
-            aFont.SetVertical( (rFontRequest.FontDescription.IsVertical==css::util::TriState_YES) ? sal_True : sal_False );
+            aFont.SetVertical( rFontRequest.FontDescription.IsVertical==css::util::TriState_YES );
             aFont.SetWeight( static_cast<FontWeight>(rFontRequest.FontDescription.FontDescription.Weight) );
             aFont.SetItalic( (rFontRequest.FontDescription.FontDescription.Letterform<=8) ? ITALIC_NONE : ITALIC_NORMAL );
             aFont.SetPitch(
@@ -125,12 +125,16 @@ namespace dxcanvas
             aFont.SetColor( aColor );
             aFont.SetFillColor( aColor );
 
+            CanvasFont::ImplRef pFont(tools::canvasFontFromXFont(rCanvasFont));
+            if (pFont.is() && pFont->getEmphasisMark())
+                aFont.SetEmphasisMark(FontEmphasisMark(pFont->getEmphasisMark()));
+
             // adjust to stretched font
             if(!::rtl::math::approxEqual(rFontMatrix.m00, rFontMatrix.m11))
             {
                 const Size aSize = xVirtualDevice->GetFontMetric( aFont ).GetFontSize();
                 const double fDividend( rFontMatrix.m10 + rFontMatrix.m11 );
-                double fStretch = (rFontMatrix.m00 + rFontMatrix.m01);
+                double fStretch = rFontMatrix.m00 + rFontMatrix.m01;
 
                 if( !::basegfx::fTools::equalZero( fDividend) )
                     fStretch /= fDividend;
@@ -179,12 +183,12 @@ namespace dxcanvas
 
             // set world transform
             XFORM aXForm;
-            aXForm.eM11 = (FLOAT)aWorldTransform.get(0, 0);
-            aXForm.eM12 = (FLOAT)aWorldTransform.get(1, 0);
-            aXForm.eM21 = (FLOAT)aWorldTransform.get(0, 1);
-            aXForm.eM22 = (FLOAT)aWorldTransform.get(1, 1);
-            aXForm.eDx = (FLOAT)aWorldTransform.get(0, 2);
-            aXForm.eDy = (FLOAT)aWorldTransform.get(1, 2);
+            aXForm.eM11 = static_cast<FLOAT>(aWorldTransform.get(0, 0));
+            aXForm.eM12 = static_cast<FLOAT>(aWorldTransform.get(1, 0));
+            aXForm.eM21 = static_cast<FLOAT>(aWorldTransform.get(0, 1));
+            aXForm.eM22 = static_cast<FLOAT>(aWorldTransform.get(1, 1));
+            aXForm.eDx = static_cast<FLOAT>(aWorldTransform.get(0, 2));
+            aXForm.eDy = static_cast<FLOAT>(aWorldTransform.get(1, 2));
 
             // TODO(F3): This is NOT supported on 95/98/ME!
             SetGraphicsMode(hdc, GM_ADVANCED);
@@ -201,7 +205,7 @@ namespace dxcanvas
             {
                 // create the DXArray
                 const sal_Int32 nLen( rLogicalAdvancements.getLength() );
-                ::std::unique_ptr<sal_Int32[]> pDXArray( new sal_Int32[nLen] );
+                std::unique_ptr<sal_Int32[]> pDXArray( new sal_Int32[nLen] );
                 for( sal_Int32 i=0; i<nLen; ++i )
                     pDXArray[i] = basegfx::fround( rLogicalAdvancements[i] );
 
@@ -210,7 +214,8 @@ namespace dxcanvas
                                               aText,
                                               pDXArray.get(),
                                               rText.StartPosition,
-                                              rText.Length );
+                                              rText.Length,
+                                              bIsRTL ? SalLayoutFlags::BiDiRtl : SalLayoutFlags::NONE);
             }
             else
             {
@@ -235,7 +240,7 @@ namespace dxcanvas
         // metrics when e.g. formatting for a printer!
         SystemGraphicsData aSystemGraphicsData;
         aSystemGraphicsData.nSize = sizeof(SystemGraphicsData);
-        aSystemGraphicsData.hDC = reinterpret_cast< ::HDC >(GetDC( NULL ));
+        aSystemGraphicsData.hDC = reinterpret_cast< ::HDC >(GetDC( nullptr ));
         ScopedVclPtrInstance<VirtualDevice> xVirtualDevice(&aSystemGraphicsData, Size(1, 1), DeviceFormat::DEFAULT);
 
         // create the font
@@ -247,7 +252,7 @@ namespace dxcanvas
 
         aFont.SetAlignment( ALIGN_BASELINE );
         aFont.SetCharSet( (rFontRequest.FontDescription.IsSymbolFont==css::util::TriState_YES) ? RTL_TEXTENCODING_SYMBOL : RTL_TEXTENCODING_UNICODE );
-        aFont.SetVertical( (rFontRequest.FontDescription.IsVertical==css::util::TriState_YES) ? sal_True : sal_False );
+        aFont.SetVertical( rFontRequest.FontDescription.IsVertical==css::util::TriState_YES );
         aFont.SetWeight( static_cast<FontWeight>(rFontRequest.FontDescription.FontDescription.Weight) );
         aFont.SetItalic( (rFontRequest.FontDescription.FontDescription.Letterform<=8) ? ITALIC_NONE : ITALIC_NORMAL );
         aFont.SetPitch(
@@ -259,7 +264,7 @@ namespace dxcanvas
         {
             const Size aSize = xVirtualDevice->GetFontMetric( aFont ).GetFontSize();
             const double fDividend( rFontMatrix.m10 + rFontMatrix.m11 );
-            double fStretch = (rFontMatrix.m00 + rFontMatrix.m01);
+            double fStretch = rFontMatrix.m00 + rFontMatrix.m01;
 
             if( !::basegfx::fTools::equalZero( fDividend) )
                 fStretch /= fDividend;
@@ -268,6 +273,10 @@ namespace dxcanvas
 
             aFont.SetAverageFontWidth( nNewWidth );
         }
+
+        CanvasFont::ImplRef pFont(tools::canvasFontFromXFont(rCanvasFont));
+        if (pFont.is() && pFont->getEmphasisMark())
+            aFont.SetEmphasisMark(FontEmphasisMark(pFont->getEmphasisMark()));
 
         // set font
         xVirtualDevice->SetFont(aFont);

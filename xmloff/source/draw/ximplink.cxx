@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include"xmloff/xmlnmspe.hxx"
+#include<xmloff/xmlnmspe.hxx>
 #include "ximplink.hxx"
 #include <xmloff/xmltoken.hxx>
 
@@ -25,7 +25,7 @@ using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
 
-SdXMLShapeLinkContext::SdXMLShapeLinkContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName, const uno::Reference< xml::sax::XAttributeList>& xAttrList, uno::Reference< drawing::XShapes >& rShapes)
+SdXMLShapeLinkContext::SdXMLShapeLinkContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName, const uno::Reference< xml::sax::XAttributeList>& xAttrList, uno::Reference< drawing::XShapes > const & rShapes)
 : SvXMLShapeContext( rImport, nPrfx, rLocalName, false )
 , mxParent( rShapes )
 {
@@ -48,7 +48,7 @@ SdXMLShapeLinkContext::~SdXMLShapeLinkContext()
 {
 }
 
-SvXMLImportContext* SdXMLShapeLinkContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef SdXMLShapeLinkContext::CreateChildContext( sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList )
 {
@@ -63,16 +63,6 @@ SvXMLImportContext* SdXMLShapeLinkContext::CreateChildContext( sal_uInt16 nPrefi
     // call parent when no own context was created
     return SvXMLImportContext::CreateChildContext( nPrefix, rLocalName, xAttrList);
 
-}
-
-void SdXMLShapeLinkContext::StartElement(const uno::Reference< xml::sax::XAttributeList>& xAttr )
-{
-    SvXMLImportContext::StartElement( xAttr );
-}
-
-void SdXMLShapeLinkContext::EndElement()
-{
-    SvXMLImportContext::EndElement();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

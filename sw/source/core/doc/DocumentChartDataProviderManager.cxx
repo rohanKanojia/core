@@ -27,6 +27,7 @@
 #include <frmfmt.hxx>
 #include <ndole.hxx>
 #include <com/sun/star/chart2/XChartDocument.hpp>
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
 
 
 using namespace com::sun::star;
@@ -35,8 +36,7 @@ using namespace com::sun::star::uno;
 namespace sw {
 
 DocumentChartDataProviderManager::DocumentChartDataProviderManager( SwDoc& i_rSwdoc ) : m_rDoc( i_rSwdoc ),
-                                                                                        maChartDataProviderImplRef(),
-                                                                                        mpChartControllerHelper( nullptr )
+                                                                                        maChartDataProviderImplRef()
 {
 
 }
@@ -74,7 +74,7 @@ void DocumentChartDataProviderManager::CreateChartInternalDataProviders( const S
                 {
                     uno::Reference< chart2::XChartDocument > xChart( xIP->getComponent(), UNO_QUERY );
                     if (xChart.is())
-                        xChart->createInternalDataProvider( sal_True );
+                        xChart->createInternalDataProvider( true );
 
                     // there may be more than one chart for each table thus we need to continue the loop...
                 }
@@ -88,7 +88,7 @@ SwChartLockController_Helper & DocumentChartDataProviderManager::GetChartControl
 {
     if (!mpChartControllerHelper)
     {
-        mpChartControllerHelper = new SwChartLockController_Helper( & m_rDoc );
+        mpChartControllerHelper.reset(new SwChartLockController_Helper( & m_rDoc ));
     }
     return *mpChartControllerHelper;
 }
@@ -100,7 +100,6 @@ DocumentChartDataProviderManager::~DocumentChartDataProviderManager()
     // since all UNO API related functionality requires an existing SwDocShell
     // this assures that dispose gets called if there is need for it.
     maChartDataProviderImplRef.clear();
-    delete mpChartControllerHelper;
 }
 
 }

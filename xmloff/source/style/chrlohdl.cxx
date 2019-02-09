@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <chrlohdl.hxx>
+#include "chrlohdl.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <unotools/saveopt.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/lang/Locale.hpp>
 
@@ -146,7 +147,7 @@ bool XMLCharScriptHdl::equals( const css::uno::Any& r1, const css::uno::Any& r2 
         bool bEmptyVariant2 = aLocale2.Variant.isEmpty();
         if (bEmptyVariant1 && bEmptyVariant2)
             bRet = true;
-        else if ((bEmptyVariant1 && !bEmptyVariant2) || (!bEmptyVariant1 && bEmptyVariant2))
+        else if (bEmptyVariant1 != bEmptyVariant2)
             ;   // stays false
         else
         {
@@ -241,10 +242,7 @@ bool XMLCharScriptHdl::exportXML( OUString& rStrExpValue, const uno::Any& rValue
     // For non-ISO language it does not make sense to write *:script if
     // *:language is not written either, does it? It's all in
     // *:rfc-language-tag
-    if (aLanguage.isEmpty() || rStrExpValue.isEmpty())
-        return false;
-
-    return true;
+    return !aLanguage.isEmpty() && !rStrExpValue.isEmpty();
 }
 
 XMLCharCountryHdl::~XMLCharCountryHdl()

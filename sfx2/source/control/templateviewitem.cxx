@@ -15,23 +15,26 @@
 #include <drawinglayer/primitive2d/fillgraphicprimitive2d.hxx>
 #include <drawinglayer/primitive2d/polygonprimitive2d.hxx>
 #include <drawinglayer/primitive2d/polypolygonprimitive2d.hxx>
+#include <drawinglayer/primitive2d/discretebitmapprimitive2d.hxx>
 #include <drawinglayer/primitive2d/textlayoutdevice.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <drawinglayer/processor2d/baseprocessor2d.hxx>
 #include <vcl/button.hxx>
 #include <vcl/graph.hxx>
 
-#define SUBTITLE_SCALE_FACTOR 0.85
+#include <bitmaps.hlst>
 
 using namespace basegfx;
-using namespace basegfx::tools;
+using namespace basegfx::utils;
 using namespace drawinglayer::attribute;
 using namespace drawinglayer::primitive2d;
 
 TemplateViewItem::TemplateViewItem (ThumbnailView &rView, sal_uInt16 nId)
     : ThumbnailViewItem(rView, nId),
       mnRegionId(USHRT_MAX),
-      mnDocId(USHRT_MAX)
+      mnDocId(USHRT_MAX),
+      maDefaultBitmap(BMP_DEFAULT),
+      mbIsDefaultTemplate(false)
 {
 }
 
@@ -39,28 +42,14 @@ TemplateViewItem::~TemplateViewItem ()
 {
 }
 
-void TemplateViewItem::calculateItemsPosition(const long nThumbnailHeight, const long nDisplayHeight,
-                                              const long nPadding, sal_uInt32 nMaxTextLength,
-                                              const ThumbnailItemAttributes *pAttrs)
+::tools::Rectangle TemplateViewItem::getDefaultIconArea() const
 {
-    ThumbnailViewItem::calculateItemsPosition(nThumbnailHeight,nDisplayHeight,nPadding,nMaxTextLength, pAttrs);
+    ::tools::Rectangle aArea(getDrawArea());
+    Size aSize(maDefaultBitmap.GetSizePixel());
 
-    if (!maSubTitle.isEmpty())
-    {
-        Size aRectSize = maDrawArea.GetSize();
-
-        drawinglayer::primitive2d::TextLayouterDevice aTextDev;
-        aTextDev.setFontAttribute(pAttrs->aFontAttr,
-                                  pAttrs->aFontSize.getX(), pAttrs->aFontSize.getY(),
-                                  css::lang::Locale() );
-
-        long nSpace = (nDisplayHeight + nPadding - 2*aTextDev.getTextHeight()) / 3;
-
-        // Set subtitle position
-        maSubTitlePos.setY(maTextPos.getY() + nSpace + aTextDev.getTextHeight());
-        maSubTitlePos.setX(maDrawArea.Left() +
-                           (aRectSize.Width() - aTextDev.getTextWidth(maSubTitle,0,nMaxTextLength)*SUBTITLE_SCALE_FACTOR)/2);
-    }
+    return ::tools::Rectangle(
+            Point(aArea.Left() + THUMBNAILVIEW_ITEM_CORNER, aArea.Top() + THUMBNAILVIEW_ITEM_CORNER),
+            aSize);
 }
 
 void TemplateViewItem::Paint(drawinglayer::processor2d::BaseProcessor2D *pProcessor,
@@ -68,12 +57,13 @@ void TemplateViewItem::Paint(drawinglayer::processor2d::BaseProcessor2D *pProces
 {
     BColor aFillColor = pAttrs->aFillColor;
 
-    int nCount = maSubTitle.isEmpty() ? 5 : 6;
-    drawinglayer::primitive2d::Primitive2DContainer aSeq(nCount);
+    drawinglayer::primitive2d::Primitive2DContainer aSeq(5);
     double fTransparence = 0.0;
 
     // Draw background
-    if ( mbSelected || mbHover )
+    if( mbSelected && mbHover)
+        aFillColor = pAttrs->aSelectHighlightColor;
+    else if (mbSelected || mbHover)
         aFillColor = pAttrs->aHighlightColor;
 
     if (mbHover)
@@ -102,7 +92,7 @@ void TemplateViewItem::Paint(drawinglayer::processor2d::BaseProcessor2D *pProces
     aBounds.setClosed(true);
 
     aSeq[1] = drawinglayer::primitive2d::Primitive2DReference( new PolyPolygonColorPrimitive2D(
-                                        B2DPolyPolygon(aBounds), Color(COL_WHITE).getBColor()));
+                                        B2DPolyPolygon(aBounds), COL_WHITE.getBColor()));
 
     aSeq[2] = drawinglayer::primitive2d::Primitive2DReference( new FillGraphicPrimitive2D(
                                         createTranslateB2DHomMatrix(maPrev1Pos.X(),maPrev1Pos.Y()),
@@ -116,12 +106,15 @@ void TemplateViewItem::Paint(drawinglayer::processor2d::BaseProcessor2D *pProces
     // draw thumbnail borders
     aSeq[3] = drawinglayer::primitive2d::Primitive2DReference(createBorderLine(aBounds));
 
-    addTextPrimitives(maTitle, pAttrs, maTextPos, aSeq);
-
-    if (!maSubTitle.isEmpty())
+    if(mbIsDefaultTemplate)
     {
-        addTextPrimitives(maSubTitle, pAttrs, maSubTitlePos, aSeq);
+        Point aIconPos(getDefaultIconArea().TopLeft());
+
+        aSeq[4] = drawinglayer::primitive2d::Primitive2DReference(new DiscreteBitmapPrimitive2D( maDefaultBitmap,
+                    B2DPoint(aIconPos.X(), aIconPos.Y())));
     }
+
+    addTextPrimitives(maTitle, pAttrs, maTextPos, aSeq);
 
     pProcessor->process(aSeq);
 }

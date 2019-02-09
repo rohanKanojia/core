@@ -20,27 +20,17 @@
 #ifndef INCLUDED_FILTER_SOURCE_SVG_SVGFILTER_HXX
 #define INCLUDED_FILTER_SOURCE_SVG_SVGFILTER_HXX
 
-#include <com/sun/star/animations/XAnimationNodeSupplier.hpp>
-#include <com/sun/star/drawing/XMasterPageTarget.hpp>
-#include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
-#include <com/sun/star/container/XNamed.hpp>
+#include <memory>
 
-#include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
-#include <com/sun/star/presentation/XPresentationSupplier.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/document/XExtendedFilterDetection.hpp>
-#include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/text/XText.hpp>
-#include <com/sun/star/style/ParagraphAdjust.hpp>
-#include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/xml/sax/XWriter.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
 
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
@@ -48,14 +38,13 @@
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolygonclipper.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <comphelper/processfactory.hxx>
+#include <editeng/flditem.hxx>
 #include <unotools/tempfile.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <unotools/streamwrap.hxx>
 #include <vcl/cvtgrf.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/outdev.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <svx/unoapi.hxx>
 #include <svx/svdxcgv.hxx>
 #include <svx/svdobj.hxx>
@@ -64,20 +53,13 @@
 #include <unordered_set>
 #include <unordered_map>
 
-using namespace ::com::sun::star::animations;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::document;
-using namespace ::com::sun::star::drawing;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::presentation;
-using namespace ::com::sun::star::style;
-using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star;
 using namespace ::com::sun::star::xml::sax;
-
-using namespace ::std;
 
 #define SVG_EXPORT_ALLPAGES ((sal_Int32)-1)
 
@@ -87,9 +69,8 @@ static const OUString sPlaceholderTag( "<[:isPlaceholder:]>" );
 
 class SVGExport : public SvXMLExport
 {
-    typedef ::std::list< ::basegfx::B2DPolyPolygon > B2DPolyPolygonList;
-
     bool    mbIsUseTinyProfile;
+    bool    mbIsUseDTDString;
     bool    mbIsEmbedFonts;
     bool    mbIsUseOpacity;
     bool    mbIsUseNativeTextDecoration;
@@ -101,9 +82,10 @@ public:
                 const Reference< XDocumentHandler >& rxHandler,
                 const Sequence< PropertyValue >& rFilterData );
 
-    virtual ~SVGExport();
+    virtual ~SVGExport() override;
 
     bool IsUseTinyProfile() const { return mbIsUseTinyProfile; };
+    bool IsUseDTDString() const { return mbIsUseDTDString; };
     bool IsEmbedFonts() const { return mbIsEmbedFonts; };
     bool IsUseOpacity() const { return mbIsUseOpacity; };
     bool IsUseNativeTextDecoration() const { return mbIsUseNativeTextDecoration; };
@@ -117,11 +99,7 @@ protected:
     virtual void            ExportAutoStyles_() override {}
     virtual void            ExportContent_() override {}
     virtual void            ExportMasterStyles_() override {}
-    virtual sal_uInt32        exportDoc( enum ::xmloff::token::XMLTokenEnum /* eClass */ ) override { return 0; }
-
-private:
-
-    SVGExport();
+    virtual ErrCode         exportDoc( enum ::xmloff::token::XMLTokenEnum /* eClass */ ) override { return ERRCODE_NONE; }
 };
 
 class ObjectRepresentation
@@ -129,21 +107,19 @@ class ObjectRepresentation
 private:
 
     Reference< XInterface >         mxObject;
-    GDIMetaFile*                    mpMtf;
+    std::unique_ptr<GDIMetaFile>    mxMtf;
 
 public:
+    ObjectRepresentation();
+    ObjectRepresentation(const Reference< XInterface >& rxIf,
+                         const GDIMetaFile& rMtf);
+    ObjectRepresentation(const ObjectRepresentation& rPresentation);
 
-                                      ObjectRepresentation();
-                                      ObjectRepresentation( const Reference< XInterface >& rxIf,
-                                                            const GDIMetaFile& rMtf );
-                                      ObjectRepresentation( const ObjectRepresentation& rPresentation );
-                                      ~ObjectRepresentation();
-
-    ObjectRepresentation&             operator=( const ObjectRepresentation& rPresentation );
+    ObjectRepresentation& operator=(const ObjectRepresentation& rPresentation);
 
     const Reference< XInterface >&    GetObject() const { return mxObject; }
-    bool                          HasRepresentation() const { return mpMtf != nullptr; }
-    const GDIMetaFile&                GetRepresentation() const { return *mpMtf; }
+    bool                              HasRepresentation() const { return static_cast<bool>(mxMtf); }
+    const GDIMetaFile&                GetRepresentation() const { return *mxMtf; }
 };
 
 struct PagePropertySet
@@ -154,13 +130,21 @@ struct PagePropertySet
     bool               bIsDateTimeFieldVisible;
     bool               bIsFooterFieldVisible;
     bool               bIsHeaderFieldVisible;
-    sal_Int32              nPageNumberingType;
+    sal_Int32          nPageNumberingType;
     bool               bIsDateTimeFieldFixed;
-    sal_Int16              nPageNumber;
-    sal_Int32              nDateTimeFormat;
-    OUString        sDateTimeText;
-    OUString        sFooterText;
-    OUString        sHeaderText;
+    SvxDateFormat      nDateTimeFormat;
+    PagePropertySet()
+        : bIsBackgroundVisible(false)
+        , bAreBackgroundObjectsVisible(false)
+        , bIsPageNumberFieldVisible(false)
+        , bIsDateTimeFieldVisible(false)
+        , bIsFooterFieldVisible(false)
+        , bIsHeaderFieldVisible(false)
+        , nPageNumberingType(0)
+        , bIsDateTimeFieldFixed(false)
+        , nDateTimeFormat(SvxDateFormat::AppDefault)
+    {
+    }
 };
 
 struct HashReferenceXInterface
@@ -199,10 +183,9 @@ class SVGFilter : public cppu::WeakImplHelper < XFilter,
 public:
     typedef std::unordered_map< Reference< XInterface >, ObjectRepresentation, HashReferenceXInterface >    ObjectMap;
     typedef std::unordered_set< Reference< XInterface >, HashReferenceXInterface >                          ObjectSet;
-    typedef Sequence< Reference< XInterface > >                                                                 ObjectSequence;
 
     typedef std::unordered_set< sal_Unicode, HashUChar >                                                    UCharSet;
-    typedef std::unordered_map< OUString, UCharSet, OUStringHash >                                          UCharSetMap;
+    typedef std::unordered_map< OUString, UCharSet >                                          UCharSetMap;
     typedef std::unordered_map< Reference< XInterface >, UCharSetMap, HashReferenceXInterface >             UCharSetMapMap;
 
     typedef std::unordered_map< Reference< XInterface >, OUString, HashReferenceXInterface >         UOStringMap;
@@ -211,45 +194,55 @@ public:
 
 private:
 
+    /// Generally use members
+
     Reference< XComponentContext >      mxContext;
     SvXMLElementExport*                 mpSVGDoc;
     SVGExport*                          mpSVGExport;
     SVGFontExport*                      mpSVGFontExport;
     SVGActionWriter*                    mpSVGWriter;
-    SdrPage*                            mpDefaultSdrPage;
-    SdrModel*                           mpSdrModel;
-    bool                            mbPresentation;
-    bool                            mbSinglePage;
+    bool                                mbSinglePage;
     sal_Int32                           mnVisiblePage;
-    PagePropertySet                     mVisiblePagePropSet;
-    OUString                     msClipPathId;
-    UCharSetMapMap                      mTextFieldCharSets;
-    Reference< XInterface >             mCreateOjectsCurrentMasterPage;
-    UOStringMap                         mTextShapeIdListMap;
-#ifndef DISABLE_EXPORT
-    MetaBitmapActionSet                 mEmbeddedBitmapActionSet;
-    ObjectMap                           mEmbeddedBitmapActionMap;
-#endif
     ObjectMap*                          mpObjects;
     Reference< XComponent >             mxSrcDoc;
     Reference< XComponent >             mxDstDoc;
-    Reference< XDrawPage >              mxDefaultPage;
-    Sequence< PropertyValue >           maFilterData;
     // #i124608# explicit ShapeSelection for export when export of the selection is wanted
-    Reference< XShapes >                maShapeSelection;
+    Reference< css::drawing::XShapes >  maShapeSelection;
     bool                                mbExportShapeSelection;
-    std::vector< Reference< XDrawPage > > mSelectedPages;
-    std::vector< Reference< XDrawPage > > mMasterPageTargets;
+    Sequence< PropertyValue >           maFilterData;
+    Reference< css::drawing::XDrawPage > mxDefaultPage;
+    std::vector< Reference< css::drawing::XDrawPage > > mSelectedPages;
+
+    bool                                mbWriterFilter;
+    bool                                mbCalcFilter;
+    bool                                mbImpressFilter;
+
+
+    /// Impress / draw only members
+
+    SdrPage*                            mpDefaultSdrPage;
+    bool                                mbPresentation;
+    PagePropertySet                     mVisiblePagePropSet;
+    OUString                            msClipPathId;
+    UCharSetMapMap                      mTextFieldCharSets;
+    Reference< XInterface >             mCreateOjectsCurrentMasterPage;
+    UOStringMap                         mTextShapeIdListMap;
+    MetaBitmapActionSet                 mEmbeddedBitmapActionSet;
+    ObjectMap                           mEmbeddedBitmapActionMap;
+    std::vector< Reference< css::drawing::XDrawPage > > mMasterPageTargets;
 
     Link<EditFieldInfo*,void>           maOldFieldHdl;
     Link<EditFieldInfo*,void>           maNewFieldHdl;
 
-    bool                            implImport( const Sequence< PropertyValue >& rDescriptor ) throw (RuntimeException, std::exception);
+    /// @throws css::uno::RuntimeException
+    bool                            implExport( const Sequence< PropertyValue >& rDescriptor );
+    bool                            implExportImpressOrDraw( const Reference< XOutputStream >& rxOStm );
+    bool                            implExportWriterOrCalc( const Reference< XOutputStream >& rxOStm );
+    bool                            implExportWriterTextGraphic( const Reference< view::XSelectionSupplier >& xSelectionSupplier );
 
-    bool                            implExport( const Sequence< PropertyValue >& rDescriptor ) throw (RuntimeException, std::exception);
     static Reference< XWriter >     implCreateExportDocumentHandler( const Reference< XOutputStream >& rxOStm );
 
-    void                            implGetPagePropSet( const Reference< XDrawPage > & rxPage );
+    void                            implGetPagePropSet( const Reference< css::drawing::XDrawPage > & rxPage );
     void                            implGenerateMetaData();
     void                            implExportTextShapeIndex();
     void                            implEmbedBulletGlyphs();
@@ -258,28 +251,32 @@ private:
     void                            implGenerateScript();
 
     bool                            implExportDocument();
+    void                            implExportDocumentHeaderImpressOrDraw(sal_Int32 nDocX, sal_Int32 nDocY,
+                                                                          sal_Int32 nDocWidth, sal_Int32 nDocHeight);
+    void                            implExportDocumentHeaderWriterOrCalc(sal_Int32 nDocX, sal_Int32 nDocY,
+                                                                         sal_Int32 nDocWidth, sal_Int32 nDocHeight);
     void                            implExportAnimations();
 
-    bool                            implExportMasterPages( const std::vector< Reference< XDrawPage > >& rxPages,
+    bool                            implExportMasterPages( const std::vector< Reference< css::drawing::XDrawPage > >& rxPages,
                                                                sal_Int32 nFirstPage, sal_Int32 nLastPage );
-    void                            implExportDrawPages( const std::vector< Reference< XDrawPage > >& rxPages,
+    void                            implExportDrawPages( const std::vector< Reference< css::drawing::XDrawPage > >& rxPages,
                                                              sal_Int32 nFirstPage, sal_Int32 nLastPage );
     bool                            implExportPage( const OUString & sPageId,
-                                                        const Reference< XDrawPage > & rxPage,
-                                                        const Reference< XShapes > & xShapes,
+                                                        const Reference< css::drawing::XDrawPage > & rxPage,
+                                                        const Reference< css::drawing::XShapes > & xShapes,
                                                         bool bMaster );
 
-    bool                            implExportShapes( const Reference< XShapes >& rxShapes,
+    bool                            implExportShapes( const Reference< css::drawing::XShapes >& rxShapes,
                                                           bool bMaster );
-    bool                            implExportShape( const Reference< XShape >& rxShape,
+    bool                            implExportShape( const Reference< css::drawing::XShape >& rxShape,
                                                          bool bMaster );
 
     bool                            implCreateObjects();
-    bool                            implCreateObjectsFromShapes( const Reference< XDrawPage > & rxPage, const Reference< XShapes >& rxShapes );
-    bool                            implCreateObjectsFromShape( const Reference< XDrawPage > & rxPage, const Reference< XShape >& rxShape );
-    void                            implCreateObjectsFromBackground( const Reference< XDrawPage >& rxMasterPage );
+    bool                            implCreateObjectsFromShapes( const Reference< css::drawing::XDrawPage > & rxPage, const Reference< css::drawing::XShapes >& rxShapes );
+    bool                            implCreateObjectsFromShape( const Reference< css::drawing::XDrawPage > & rxPage, const Reference< css::drawing::XShape >& rxShape );
+    void                            implCreateObjectsFromBackground( const Reference< css::drawing::XDrawPage >& rxMasterPage );
 
-    static OUString                 implGetClassFromShape( const Reference< XShape >& rxShape );
+    static OUString                 implGetClassFromShape( const Reference< css::drawing::XShape >& rxShape );
     void                            implRegisterInterface( const Reference< XInterface >& rxIf );
     const OUString &                implGetValidIDFromInterface( const Reference< XInterface >& rxIf );
     static OUString                 implGetInterfaceName( const Reference< XInterface >& rxIf );
@@ -287,30 +284,30 @@ private:
     static Any                      implSafeGetPagePropSet( const OUString & sPropertyName,
                                                                 const Reference< XPropertySet > & rxPropSet,
                                                                 const Reference< XPropertySetInfo > & rxPropSetInfo );
-    DECL_LINK_TYPED( CalcFieldHdl, EditFieldInfo*, void );
+    DECL_LINK( CalcFieldHdl, EditFieldInfo*, void );
 
-    static bool isStreamGZip(const css::uno::Reference<css::io::XInputStream>& xInput);
-    static bool isStreamSvg(const css::uno::Reference<css::io::XInputStream>& xInput);
+    bool filterImpressOrDraw( const Sequence< PropertyValue >& rDescriptor );
+    bool filterWriterOrCalc( const Sequence< PropertyValue >& rDescriptor );
 
 protected:
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& rDescriptor ) throw(RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel( ) throw (RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& rDescriptor ) override;
+    virtual void SAL_CALL cancel( ) override;
 
     // XImporter
-    virtual void SAL_CALL setTargetDocument( const Reference< XComponent >& xDoc ) throw(IllegalArgumentException, RuntimeException, std::exception) override;
+    virtual void SAL_CALL setTargetDocument( const Reference< XComponent >& xDoc ) override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) throw(IllegalArgumentException, RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) override;
 
     // XExtendedFilterDetection
-    virtual OUString SAL_CALL detect( Sequence< PropertyValue >& io_rDescriptor ) throw (RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL detect( Sequence< PropertyValue >& io_rDescriptor ) override;
 
 public:
 
     explicit SVGFilter( const Reference< XComponentContext >& rxCtx );
-    virtual    ~SVGFilter();
+    virtual    ~SVGFilter() override;
 };
 
 #endif // INCLUDED_FILTER_SOURCE_SVG_SVGFILTER_HXX

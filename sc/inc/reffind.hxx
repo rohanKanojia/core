@@ -27,16 +27,16 @@ class ScDocument;
 class ScRefFinder
 {
     OUString maFormula;
-    formula::FormulaGrammar::AddressConvention meConv;
-    ScDocument* mpDoc;
-    ScAddress maPos;
+    formula::FormulaGrammar::AddressConvention const meConv;
+    ScDocument* const mpDoc;
+    ScAddress const maPos;
     sal_Int32 mnFound;
     sal_Int32 mnSelStart;
     sal_Int32 mnSelEnd;
 
 public:
     ScRefFinder(
-        const OUString& rFormula, const ScAddress& rPos, ScDocument* pDoc = nullptr,
+        const OUString& rFormula, const ScAddress& rPos, ScDocument* pDoc,
         formula::FormulaGrammar::AddressConvention eConvP = formula::FormulaGrammar::CONV_OOO );
     ~ScRefFinder();
 

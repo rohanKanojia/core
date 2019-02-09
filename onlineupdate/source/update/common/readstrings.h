@@ -10,21 +10,15 @@
 #define MAX_TEXT_LEN 600
 
 #ifdef _WIN32
-# define UNICODE
 # include <windows.h>
-  typedef WCHAR NS_tchar;
-#else
-  typedef char NS_tchar;
 #endif
 
-#ifndef NULL
-#define NULL 0
-#endif
+#include "types.hxx"
 
 struct StringTable
 {
-  char title[MAX_TEXT_LEN];
-  char info[MAX_TEXT_LEN];
+    char title[MAX_TEXT_LEN];
+    char info[MAX_TEXT_LEN];
 };
 
 /**

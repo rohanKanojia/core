@@ -26,7 +26,6 @@
 
 
 #include <vector>
-typedef ::std::vector< OUString > StringVector;
 
 struct SbiParseStack;
 
@@ -54,7 +53,7 @@ class SbiParser : public SbiTokenizer
     void CloseBlock();
     bool Channel( bool bAlways=false );     // parse channel number
     void StmntBlock( SbiToken );
-    void DefType( bool bPrivate );  // Parse type declaration
+    void DefType();  // Parse type declaration
     void DefEnum( bool bPrivate );  // Parse enum declaration
     void DefDeclare( bool bPrivate );
     void EnableCompatibility();
@@ -69,19 +68,18 @@ public:
     SbiSymPool    aRtlSyms;         // Runtime-Library
     SbiCodeGen    aGen;             // Code-Generator
     SbiSymPool*   pPool;
-    SbiExprType   eCurExpr;
     short         nBase;            // OPTION BASE-value
-    bool          bText;            // OPTION COMPARE TEXT
     bool          bExplicit;        // true: OPTION EXPLICIT
     bool          bClassModule;     // true: OPTION ClassModule
-    StringVector  aIfaceVector;     // Holds all interfaces implemented by a class module
-    StringVector  aRequiredTypes;   // Types used in Dim As New <type> outside subs
+    std::vector<OUString> aIfaceVector;     // Holds all interfaces implemented by a class module
+    std::vector<OUString> aRequiredTypes;   // Types used in Dim As New <type> outside subs
 #   define N_DEF_TYPES 26
     SbxDataType   eDefTypes[N_DEF_TYPES];    // DEFxxx data types
 
     SbiParser( StarBASIC*, SbModule* );
+    ~SbiParser( );
     bool Parse();
-    void SetCodeCompleting( const bool& b );
+    void SetCodeCompleting( bool b );
     bool IsCodeCompleting() const { return bCodeCompleting;}
     SbiExprNode* GetWithVar();
 
@@ -96,7 +94,7 @@ public:
     bool TestComma();
     void TestEoln();
 
-    void Symbol( const KeywordSymbolInfo* pKeywordSymbolInfo = nullptr );  // let or call
+    void Symbol( const KeywordSymbolInfo* pKeywordSymbolInfo );  // let or call
     void ErrorStmnt();              // ERROR n
     void BadBlock();                // LOOP/WEND/NEXT
     void NoIf();                    // ELSE/ELSE IF without IF

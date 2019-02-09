@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "file/FTables.hxx"
-#include "file/FTable.hxx"
+#include <file/FTables.hxx>
+#include <file/FTable.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
-#include "file/FCatalog.hxx"
-#include "file/FConnection.hxx"
+#include <file/FCatalog.hxx>
+#include <file/FConnection.hxx>
 
 using namespace connectivity;
 using namespace connectivity::file;
@@ -40,18 +40,12 @@ sdbcx::ObjectType OTables::createObject(const OUString& /*_rName*/)
     return sdbcx::ObjectType();
 }
 
-void OTables::impl_refresh(  ) throw(RuntimeException)
+void OTables::impl_refresh(  )
 {
     static_cast<OFileCatalog&>(m_rParent).refreshTables();
 }
 
-void OTables::disposing()
-{
-m_xMetaData.clear();
-    OCollection::disposing();
-}
-
-Any SAL_CALL OTables::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OTables::queryInterface( const Type & rType )
 {
     if( rType == cppu::UnoType<XColumnLocate>::get()||
         rType == cppu::UnoType<XDataDescriptorFactory>::get()||

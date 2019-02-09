@@ -26,8 +26,8 @@ public:
     ScAutoFormatDlg(vcl::Window* pParent,
                     ScAutoFormat* pAutoFormat,
                     const ScAutoFormatData* pSelFormatData,
-                    ScViewData *pViewData);
-    virtual ~ScAutoFormatDlg();
+                    const ScViewData *pViewData);
+    virtual ~ScAutoFormatDlg() override;
     virtual void dispose() override;
 
     sal_uInt16 GetIndex() const { return nIndex; }
@@ -47,11 +47,11 @@ private:
     VclPtr<CheckBox>       m_pBtnPattern;
     VclPtr<CheckBox>       m_pBtnAlignment;
     VclPtr<CheckBox>       m_pBtnAdjust;
-    OUString        aStrTitle;
-    OUString        aStrLabel;
-    OUString        aStrClose;
-    OUString        aStrDelMsg;
-    OUString        aStrRename;
+    OUString const        aStrTitle;
+    OUString const        aStrLabel;
+    OUString const        aStrClose;
+    OUString const        aStrDelMsg;
+    OUString const        aStrRename;
 
     ScAutoFormat*           pFormat;
     const ScAutoFormatData* pSelFmtData;
@@ -62,13 +62,13 @@ private:
     void Init           ();
     void UpdateChecks   ();
 
-    DECL_LINK_TYPED( CheckHdl, Button*, void );
-    DECL_LINK_TYPED( AddHdl, Button*, void );
-    DECL_LINK_TYPED( RemoveHdl, Button*, void );
-    DECL_LINK_TYPED( SelFmtHdl, ListBox&, void );
-    DECL_LINK_TYPED( CloseHdl, Button *, void );
-    DECL_LINK_TYPED( DblClkHdl, ListBox&, void );
-    DECL_LINK_TYPED( RenameHdl, Button*, void );
+    DECL_LINK( CheckHdl, Button*, void );
+    DECL_LINK( AddHdl, Button*, void );
+    DECL_LINK( RemoveHdl, Button*, void );
+    DECL_LINK( SelFmtHdl, ListBox&, void );
+    DECL_LINK( CloseHdl, Button *, void );
+    DECL_LINK( DblClkHdl, ListBox&, void );
+    DECL_LINK( RenameHdl, Button*, void );
 
 };
 #endif

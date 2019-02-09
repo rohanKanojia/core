@@ -20,10 +20,11 @@
 
 #include "pdfiadaptor.hxx"
 #include "filterdet.hxx"
-#include "treevisitorfactory.hxx"
+#include <treevisitorfactory.hxx>
 
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implementationentry.hxx>
+#include <com/sun/star/lang/XSingleComponentFactory.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -43,7 +44,6 @@ namespace
         pdfi::PDFIRawAdaptor* pAdaptor = new pdfi::PDFIRawAdaptor( "org.libreoffice.comp.documents.WriterPDFImport", _rxContext );
 
         pAdaptor->setTreeVisitorFactory(pdfi::createWriterTreeVisitorFactory());
-        pAdaptor->enableToplevelText(); // TEMP! TEMP!
 
         return uno::Reference<uno::XInterface>(static_cast<xml::XImportFilter*>(pAdaptor));
     }
@@ -74,13 +74,13 @@ namespace
 
 namespace
 {
-    typedef Reference< XInterface > (SAL_CALL * ComponentFactory)( const Reference< XComponentContext >& );
+    typedef Reference< XInterface > (* ComponentFactory)( const Reference< XComponentContext >& );
 
     struct ComponentDescription
     {
         const sal_Char*     pAsciiServiceName;
         const sal_Char*     pAsciiImplementationName;
-        ComponentFactory    pFactory;
+        ComponentFactory const    pFactory;
 
         ComponentDescription()
             :pAsciiServiceName( nullptr )
@@ -110,7 +110,7 @@ namespace
     }
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL pdfimport_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* pdfimport_component_getFactory(
     const sal_Char* pImplementationName,
     SAL_UNUSED_PARAMETER void* /*pServiceManager*/,
     SAL_UNUSED_PARAMETER void* /*pRegistryKey*/ )

@@ -17,24 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlg_CreationWizard_UNO.hxx"
-#include "dlg_CreationWizard.hxx"
-#include "macros.hxx"
-#include "servicenames.hxx"
-#include "ContainerHelper.hxx"
-#include "TimerTriggeredControllerLock.hxx"
-#include <osl/mutex.hxx>
+#include <dlg_CreationWizard_UNO.hxx>
+#include <dlg_CreationWizard.hxx>
+#include <servicenames.hxx>
+#include <TimerTriggeredControllerLock.hxx>
 #include <vcl/svapp.hxx>
 #include <toolkit/awt/vclxwindow.hxx>
-#include <vcl/msgbox.hxx>
-#include <cppuhelper/typeprovider.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include <comphelper/servicehelper.hxx>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <comphelper/sequence.hxx>
+#include <tools/diagnose_ex.h>
 
 namespace chart
 {
@@ -42,9 +36,7 @@ using namespace ::com::sun::star;
 
 CreationWizardUnoDlg::CreationWizardUnoDlg( const uno::Reference< uno::XComponentContext >& xContext )
                     : OComponentHelper( m_aMutex )
-                    , m_xChartModel( nullptr )
                     , m_xCC( xContext )
-                    , m_xParentWindow( nullptr )
                     , m_pDialog( nullptr )
                     , m_bUnlockControllersOnExecute(false)
 {
@@ -59,36 +51,22 @@ CreationWizardUnoDlg::~CreationWizardUnoDlg()
 }
 // lang::XServiceInfo
 OUString SAL_CALL CreationWizardUnoDlg::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString CreationWizardUnoDlg::getImplementationName_Static()
 {
     return OUString(CHART_WIZARD_DIALOG_SERVICE_IMPLEMENTATION_NAME);
 }
 
 sal_Bool SAL_CALL CreationWizardUnoDlg::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL CreationWizardUnoDlg::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
-}
-
-uno::Sequence< OUString > CreationWizardUnoDlg::getSupportedServiceNames_Static()
-{
-    uno::Sequence<OUString> aSNS { CHART_WIZARD_DIALOG_SERVICE_NAME };
-    return aSNS;
+    return { CHART_WIZARD_DIALOG_SERVICE_NAME };
 }
 
 // XInterface
-uno::Any SAL_CALL CreationWizardUnoDlg::queryInterface( const uno::Type& aType ) throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL CreationWizardUnoDlg::queryInterface( const uno::Type& aType )
 {
     return OComponentHelper::queryInterface( aType );
 }
@@ -100,7 +78,7 @@ void SAL_CALL CreationWizardUnoDlg::release() throw ()
 {
     OComponentHelper::release();
 }
-uno::Any SAL_CALL CreationWizardUnoDlg::queryAggregation( uno::Type const & rType ) throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL CreationWizardUnoDlg::queryAggregation( uno::Type const & rType )
 {
     if (rType == cppu::UnoType<ui::dialogs::XExecutableDialog>::get())
     {
@@ -109,7 +87,7 @@ uno::Any SAL_CALL CreationWizardUnoDlg::queryAggregation( uno::Type const & rTyp
     }
     else if (rType == cppu::UnoType<lang::XServiceInfo>::get())
     {
-        void * p = static_cast< lang::XTypeProvider * >( this );
+        void * p = static_cast< lang::XServiceInfo * >( this );
         return uno::Any( &p, rType );
     }
     else if (rType == cppu::UnoType<lang::XInitialization>::get())
@@ -130,59 +108,43 @@ uno::Any SAL_CALL CreationWizardUnoDlg::queryAggregation( uno::Type const & rTyp
     return OComponentHelper::queryAggregation( rType );
 }
 
-uno::Sequence< uno::Type > CreationWizardUnoDlg::getTypes() throw(uno::RuntimeException, std::exception)
+uno::Sequence< uno::Type > CreationWizardUnoDlg::getTypes()
 {
-    static uno::Sequence< uno::Type > aTypeList;
-
-    ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-    if( !aTypeList.getLength() )
-    {
-        ::std::vector< uno::Type > aTypes;
-        aTypes.push_back( cppu::UnoType<lang::XComponent>::get() );
-        aTypes.push_back( cppu::UnoType<lang::XTypeProvider>::get() );
-        aTypes.push_back( cppu::UnoType<uno::XAggregation>::get() );
-        aTypes.push_back( cppu::UnoType<uno::XWeak>::get() );
-        aTypes.push_back( cppu::UnoType<lang::XServiceInfo>::get() );
-        aTypes.push_back( cppu::UnoType<lang::XInitialization>::get() );
-        aTypes.push_back( cppu::UnoType<frame::XTerminateListener>::get() );
-        aTypes.push_back( cppu::UnoType<ui::dialogs::XExecutableDialog>::get() );
-        aTypes.push_back( cppu::UnoType<beans::XPropertySet>::get() );
-        aTypeList = comphelper::containerToSequence( aTypes );
-    }
+    static uno::Sequence<uno::Type> aTypeList{ cppu::UnoType<lang::XComponent>::get(),
+                                               cppu::UnoType<lang::XTypeProvider>::get(),
+                                               cppu::UnoType<uno::XAggregation>::get(),
+                                               cppu::UnoType<uno::XWeak>::get(),
+                                               cppu::UnoType<lang::XServiceInfo>::get(),
+                                               cppu::UnoType<lang::XInitialization>::get(),
+                                               cppu::UnoType<frame::XTerminateListener>::get(),
+                                               cppu::UnoType<ui::dialogs::XExecutableDialog>::get(),
+                                               cppu::UnoType<beans::XPropertySet>::get() };
 
     return aTypeList;
 }
 
-uno::Sequence< sal_Int8 > SAL_CALL CreationWizardUnoDlg::getImplementationId() throw( uno::RuntimeException, std::exception )
+uno::Sequence< sal_Int8 > SAL_CALL CreationWizardUnoDlg::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 // XTerminateListener
-void SAL_CALL CreationWizardUnoDlg::queryTermination( const lang::EventObject& /*Event*/ ) throw( frame::TerminationVetoException, uno::RuntimeException, std::exception)
+void SAL_CALL CreationWizardUnoDlg::queryTermination( const lang::EventObject& /*Event*/ )
 {
-    SolarMutexGuard aSolarGuard;
-
-    // we will never give a veto here
-    if( m_pDialog && !m_pDialog->isClosable() )
-    {
-        m_pDialog->ToTop();
-        throw frame::TerminationVetoException();
-    }
 }
 
-void SAL_CALL CreationWizardUnoDlg::notifyTermination( const lang::EventObject& /*Event*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL CreationWizardUnoDlg::notifyTermination( const lang::EventObject& /*Event*/ )
 {
     // we are going down, so dispose us!
     dispose();
 }
 
-void SAL_CALL CreationWizardUnoDlg::disposing( const lang::EventObject& /*Source*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL CreationWizardUnoDlg::disposing( const lang::EventObject& /*Source*/ )
 {
     //Listener should deregister himself and release all references to the closing object.
 }
 
-void SAL_CALL CreationWizardUnoDlg::setTitle( const OUString& /*rTitle*/ ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL CreationWizardUnoDlg::setTitle( const OUString& /*rTitle*/ )
 {
 }
 void CreationWizardUnoDlg::createDialogOnDemand()
@@ -207,7 +169,7 @@ void CreationWizardUnoDlg::createDialogOnDemand()
         {
             VCLXWindow* pImplementation = VCLXWindow::GetImplementation(m_xParentWindow);
             if (pImplementation)
-                pParent = pImplementation->GetWindow();
+                pParent = pImplementation->GetWindow().get();
         }
         uno::Reference< XComponent > xComp( this );
         if( m_xChartModel.is() )
@@ -217,13 +179,13 @@ void CreationWizardUnoDlg::createDialogOnDemand()
         }
     }
 }
-IMPL_LINK_TYPED( CreationWizardUnoDlg, DialogEventHdl, VclWindowEvent&, rEvent, void )
+IMPL_LINK( CreationWizardUnoDlg, DialogEventHdl, VclWindowEvent&, rEvent, void )
 {
-    if(rEvent.GetId() == VCLEVENT_OBJECT_DYING)
+    if(rEvent.GetId() == VclEventId::ObjectDying)
         m_pDialog = nullptr;//avoid duplicate destruction of m_pDialog
 }
 
-sal_Int16 SAL_CALL CreationWizardUnoDlg::execute(  ) throw(uno::RuntimeException, std::exception)
+sal_Int16 SAL_CALL CreationWizardUnoDlg::execute(  )
 {
     sal_Int16 nRet = RET_CANCEL;
     {
@@ -239,13 +201,12 @@ sal_Int16 SAL_CALL CreationWizardUnoDlg::execute(  ) throw(uno::RuntimeException
     return nRet;
 }
 
-void SAL_CALL CreationWizardUnoDlg::initialize( const uno::Sequence< uno::Any >& aArguments ) throw(uno::Exception, uno::RuntimeException, std::exception)
+void SAL_CALL CreationWizardUnoDlg::initialize( const uno::Sequence< uno::Any >& aArguments )
 {
-    const uno::Any* pArguments = aArguments.getConstArray();
-    for(sal_Int32 i=0; i<aArguments.getLength(); ++i, ++pArguments)
+    for(const uno::Any& rArgument : aArguments)
     {
         beans::PropertyValue aProperty;
-        if(*pArguments >>= aProperty)
+        if(rArgument >>= aProperty)
         {
             if( aProperty.Name == "ParentWindow" )
             {
@@ -275,15 +236,14 @@ void SAL_CALL CreationWizardUnoDlg::disposing()
         uno::Reference< frame::XTerminateListener > xListener( this );
         xDesktop->removeTerminateListener( xListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 //XPropertySet
 uno::Reference< beans::XPropertySetInfo > SAL_CALL CreationWizardUnoDlg::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     OSL_FAIL("not implemented");
     return nullptr;
@@ -291,8 +251,6 @@ uno::Reference< beans::XPropertySetInfo > SAL_CALL CreationWizardUnoDlg::getProp
 
 void SAL_CALL CreationWizardUnoDlg::setPropertyValue( const OUString& rPropertyName
                                                      , const uno::Any& rValue )
-    throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException
-          , lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     if( rPropertyName == "Position" )
     {
@@ -307,7 +265,7 @@ void SAL_CALL CreationWizardUnoDlg::setPropertyValue( const OUString& rPropertyN
         if( m_pDialog )
         {
             m_pDialog->SetPosPixel( Point(0,0) );
-            Rectangle aRect( m_pDialog->GetWindowExtentsRelative( nullptr ) );
+            tools::Rectangle aRect( m_pDialog->GetWindowExtentsRelative( nullptr ) );
 
             Point aNewOuterPos = Point( aPos.X - aRect.Left(), aPos.Y - aRect.Top() );
             m_pDialog->SetPosPixel( aNewOuterPos );
@@ -327,7 +285,6 @@ void SAL_CALL CreationWizardUnoDlg::setPropertyValue( const OUString& rPropertyN
 }
 
 uno::Any SAL_CALL CreationWizardUnoDlg::getPropertyValue( const OUString& rPropertyName )
-    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     uno::Any aRet;
     if( rPropertyName == "Position" )
@@ -338,9 +295,9 @@ uno::Any SAL_CALL CreationWizardUnoDlg::getPropertyValue( const OUString& rPrope
         createDialogOnDemand();
         if( m_pDialog )
         {
-            Rectangle aRect( m_pDialog->GetWindowExtentsRelative( nullptr ) );
+            tools::Rectangle aRect( m_pDialog->GetWindowExtentsRelative( nullptr ) );
             awt::Point aPoint(aRect.Left(),aRect.Top());
-            aRet = uno::makeAny( aPoint );
+            aRet <<= aPoint;
         }
     }
     else if( rPropertyName == "Size" )
@@ -351,14 +308,14 @@ uno::Any SAL_CALL CreationWizardUnoDlg::getPropertyValue( const OUString& rPrope
         createDialogOnDemand();
         if( m_pDialog )
         {
-            Rectangle aRect( m_pDialog->GetWindowExtentsRelative( nullptr ) );
+            tools::Rectangle aRect( m_pDialog->GetWindowExtentsRelative( nullptr ) );
             awt::Size aSize(aRect.GetWidth(),aRect.GetHeight());
-            aRet = uno::makeAny( aSize );
+            aRet <<= aSize;
         }
     }
     else if( rPropertyName == "UnlockControllersOnExecute" )
     {
-        aRet = uno::makeAny( m_bUnlockControllersOnExecute );
+        aRet <<= m_bUnlockControllersOnExecute;
     }
     else
         throw beans::UnknownPropertyException( "unknown property was tried to get from chart wizard" , nullptr );
@@ -367,32 +324,28 @@ uno::Any SAL_CALL CreationWizardUnoDlg::getPropertyValue( const OUString& rPrope
 
 void SAL_CALL CreationWizardUnoDlg::addPropertyChangeListener(
         const OUString& /* aPropertyName */, const uno::Reference< beans::XPropertyChangeListener >& /* xListener */ )
-        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     OSL_FAIL("not implemented");
 }
 void SAL_CALL CreationWizardUnoDlg::removePropertyChangeListener(
     const OUString& /* aPropertyName */, const uno::Reference< beans::XPropertyChangeListener >& /* aListener */ )
-    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     OSL_FAIL("not implemented");
 }
 
 void SAL_CALL CreationWizardUnoDlg::addVetoableChangeListener( const OUString& /* PropertyName */, const uno::Reference< beans::XVetoableChangeListener >& /* aListener */ )
-    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     OSL_FAIL("not implemented");
 }
 
 void SAL_CALL CreationWizardUnoDlg::removeVetoableChangeListener( const OUString& /* PropertyName */, const uno::Reference< beans::XVetoableChangeListener >& /* aListener */ )
-    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     OSL_FAIL("not implemented");
 }
 
 } //namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_chart2_WizardDialog_get_implementation(css::uno::XComponentContext *context,
                                                          css::uno::Sequence<css::uno::Any> const &)
 {

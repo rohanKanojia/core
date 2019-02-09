@@ -45,8 +45,8 @@ class SettingsTable : public LoggedProperties, public LoggedTable
     std::unique_ptr<SettingsTable_Impl> m_pImpl;
 
  public:
-    SettingsTable();
-    virtual ~SettingsTable();
+    SettingsTable(const DomainMapper& rDomainMapper);
+    virtual ~SettingsTable() override;
 
     //returns default TabStop in 1/100th mm
     int GetDefaultTabStop() const;
@@ -56,6 +56,9 @@ class SettingsTable : public LoggedProperties, public LoggedTable
 
     /// What's the zoom factor set in percents?
     sal_Int16 GetZoomFactor() const;
+
+    /// Gets the type of the zoom.
+    sal_Int16 GetZoomType() const;
 
     /// What's the requested view? E.g. "web".
     Id GetView() const;
@@ -70,13 +73,20 @@ class SettingsTable : public LoggedProperties, public LoggedTable
     bool GetDoNotUseHTMLParagraphAutoSpacing() const;
     bool GetSplitPgBreakAndParaMark() const;
     bool GetMirrorMarginSettings() const;
+    bool GetDisplayBackgroundShape() const;
+    bool GetDoNotExpandShiftReturn() const;
     bool GetNoColumnBalance() const;
+    bool GetProtectForm() const;
 
-    css::uno::Sequence<css::beans::PropertyValue> GetThemeFontLangProperties() const;
+    css::uno::Sequence<css::beans::PropertyValue> const & GetThemeFontLangProperties() const;
 
     css::uno::Sequence<css::beans::PropertyValue> GetCompatSettings() const;
 
+    css::uno::Sequence<css::beans::PropertyValue> GetDocumentProtectionSettings() const;
+
     void ApplyProperties(css::uno::Reference<css::text::XTextDocument> const& xDoc);
+
+    sal_Int32 GetWordCompatibilityMode() const;
 
  private:
     // Properties
@@ -87,7 +97,7 @@ class SettingsTable : public LoggedProperties, public LoggedTable
     virtual void lcl_entry(int pos, writerfilter::Reference<Properties>::Pointer_t ref) override;
 
 };
-typedef std::shared_ptr< SettingsTable >          SettingsTablePtr;
+typedef tools::SvRef< SettingsTable >          SettingsTablePtr;
 }}
 
 #endif

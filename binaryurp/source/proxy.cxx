@@ -17,21 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <exception>
 #include <vector>
 
-#include "cppuhelper/exc_hlp.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "typelib/typedescription.h"
-#include "typelib/typedescription.hxx"
-#include "uno/any2.h"
-#include "uno/dispatcher.h"
-#include "uno/dispatcher.hxx"
+#include <cppuhelper/exc_hlp.hxx>
+#include <o3tl/runtimetooustring.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <typelib/typedescription.h>
+#include <typelib/typedescription.hxx>
+#include <uno/any2.h>
+#include <uno/dispatcher.h>
+#include <uno/dispatcher.hxx>
 
 #include "binaryany.hxx"
 #include "bridge.hxx"
@@ -41,17 +42,17 @@ namespace binaryurp {
 
 namespace {
 
-extern "C" void SAL_CALL proxy_acquireInterface(uno_Interface * pInterface) {
+extern "C" void proxy_acquireInterface(uno_Interface * pInterface) {
     assert(pInterface != nullptr);
     static_cast< Proxy * >(pInterface)->do_acquire();
 }
 
-extern "C" void SAL_CALL proxy_releaseInterface(uno_Interface * pInterface) {
+extern "C" void proxy_releaseInterface(uno_Interface * pInterface) {
     assert(pInterface != nullptr);
     static_cast< Proxy * >(pInterface)->do_release();
 }
 
-extern "C" void SAL_CALL proxy_dispatchInterface(
+extern "C" void proxy_dispatchInterface(
     uno_Interface * pUnoI, typelib_TypeDescription const * pMemberType,
     void * pReturn, void ** pArgs, uno_Any ** ppException)
 {
@@ -75,13 +76,13 @@ Proxy::Proxy(
 
 
 void Proxy::do_acquire() {
-    if (osl_atomic_increment(&references_) == 1) {
+    if (++references_ == 1) {
         bridge_->resurrectProxy(*this);
     }
 }
 
 void Proxy::do_release() {
-    if (osl_atomic_decrement(&references_) == 0) {
+    if (--references_ == 0) {
         bridge_->revokeProxy(*this);
     }
 }
@@ -100,10 +101,7 @@ void Proxy::do_dispatch(
             do_dispatch_throw(member, returnValue, arguments, exception);
         } catch (const std::exception & e) {
             throw css::uno::RuntimeException(
-                "caught C++ exception: " +
-                OStringToOUString(
-                    OString(e.what()), RTL_TEXTENCODING_ASCII_US));
-                // best-effort string conversion
+                "caught C++ exception: " + o3tl::runtimeToOUString(e.what()));
         }
     } catch (const css::uno::RuntimeException &) {
         css::uno::Any exc(cppu::getCaughtException());
@@ -138,14 +136,13 @@ void Proxy::do_dispatch_throw(
     case typelib_TypeClass_INTERFACE_ATTRIBUTE:
         bSetter = returnValue == nullptr;
         if (bSetter) {
-            inArgs.push_back(
-                BinaryAny(
+            inArgs.emplace_back(
                     css::uno::TypeDescription(
                         reinterpret_cast<
                             typelib_InterfaceAttributeTypeDescription const * >(
                                 member)->
                         pAttributeTypeRef),
-                    arguments[0]));
+                    arguments[0]);
         }
         break;
     case typelib_TypeClass_INTERFACE_METHOD:
@@ -155,10 +152,9 @@ void Proxy::do_dispatch_throw(
                     typelib_InterfaceMethodTypeDescription const * >(member);
             for (sal_Int32 i = 0; i != mtd->nParams; ++i) {
                 if (mtd->pParams[i].bIn) {
-                    inArgs.push_back(
-                        BinaryAny(
+                    inArgs.emplace_back(
                             css::uno::TypeDescription(mtd->pParams[i].pTypeRef),
-                            arguments[i]));
+                            arguments[i]);
                 }
             }
             break;

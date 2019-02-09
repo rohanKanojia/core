@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "flat/ECatalog.hxx"
+#include <flat/ECatalog.hxx>
 
-#include "flat/EConnection.hxx"
-#include "flat/ETables.hxx"
+#include <flat/EConnection.hxx>
+#include <flat/ETables.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 
@@ -39,7 +39,7 @@ OFlatCatalog::OFlatCatalog(OFlatConnection* _pCon) : file::OFileCatalog(_pCon)
 
 void OFlatCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
     Sequence< OUString > aTypes;
     Reference< XResultSet > xResult = m_xMetaData->getTables(Any(),
         "%", "%", aTypes);
@@ -53,7 +53,7 @@ void OFlatCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OFlatTables(m_xMetaData,*this,m_aMutex,aVector);
+        m_pTables.reset( new OFlatTables(m_xMetaData,*this,m_aMutex,aVector) );
 }
 
 

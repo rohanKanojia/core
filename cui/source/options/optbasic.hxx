@@ -21,7 +21,6 @@
 #define INCLUDED_CUI_SOURCE_OPTIONS_OPTBASIC_HXX
 
 #include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
 #include <sfx2/tabdlg.hxx>
 
 class SvxBasicIDEOptionsPage: public SfxTabPage
@@ -38,10 +37,10 @@ private:
 
 public:
     SvxBasicIDEOptionsPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxBasicIDEOptionsPage();
+    virtual ~SvxBasicIDEOptionsPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* rSet );
+    static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* rSet );
     virtual bool FillItemSet( SfxItemSet* rSet ) override;
     virtual void Reset( const SfxItemSet* rSet ) override;
     virtual void FillUserData() override;

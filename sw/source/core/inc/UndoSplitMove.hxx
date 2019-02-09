@@ -24,18 +24,18 @@
 
 class SwUndoSplitNode: public SwUndo
 {
-    SwHistory* pHistory;
-    SwRedlineData* pRedlData;
+    std::unique_ptr<SwHistory> m_pHistory;
+    std::unique_ptr<SwRedlineData> pRedlData;
     sal_uLong nNode;
-    sal_Int32 nContent;
+    sal_Int32 const nContent;
     bool bTableFlag : 1;
-    bool bChkTableStt : 1;
+    bool const bChkTableStt : 1;
     sal_uInt32 nParRsid;
 
 public:
     SwUndoSplitNode( SwDoc* pDoc, const SwPosition& rPos, bool bChkTable );
 
-    virtual ~SwUndoSplitNode();
+    virtual ~SwUndoSplitNode() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -49,16 +49,16 @@ class SwUndoMove : public SwUndo, private SwUndRng, private SwUndoSaveContent
     // nDest.. - destination range of move (after move!)
     // nIns..  - source Position of move (after move!)
     // nMv..   - destination position of move (before move!); for REDO
-    sal_uLong nDestSttNode, nDestEndNode, nInsPosNode, nMvDestNode;
-    sal_Int32 nDestSttContent, nDestEndContent, nInsPosContent, nMvDestContent;
+    sal_uLong m_nDestStartNode, m_nDestEndNode, m_nInsPosNode, m_nMoveDestNode;
+    sal_Int32 m_nDestStartContent, m_nDestEndContent, m_nInsPosContent, m_nMoveDestContent;
 
-    sal_uInt16 nFootnoteStt; // StartPos of Footnotes in History
+    sal_uInt16 m_nFootnoteStart; // StartPos of Footnotes in History
 
-    bool bJoinNext : 1,
-         bJoinPrev : 1,
-         bMoveRange : 1;
+    bool m_bJoinNext : 1,
+         m_bJoinPrev : 1,
+         m_bMoveRange : 1;
 
-    bool bMoveRedlines; // use DOC_MOVEREDLINES when calling SwDoc::Move
+    bool m_bMoveRedlines; // use DOC_MOVEREDLINES when calling SwDoc::Move
 
     void DelFootnote( const SwPaM& );
 
@@ -74,12 +74,12 @@ public:
     void SetDestRange( const SwNodeIndex& rStt, const SwNodeIndex& rEnd,
                         const SwNodeIndex& rInsPos );
 
-    bool IsMoveRange() const        { return bMoveRange; }
+    bool IsMoveRange() const        { return m_bMoveRange; }
     sal_uLong GetEndNode() const        { return nEndNode; }
-    sal_uLong GetDestSttNode() const    { return nDestSttNode; }
-    sal_Int32 GetDestSttContent() const  { return nDestSttContent; }
+    sal_uLong GetDestSttNode() const    { return m_nDestStartNode; }
+    sal_Int32 GetDestSttContent() const  { return m_nDestStartContent; }
 
-    void SetMoveRedlines( bool b )       { bMoveRedlines = b; }
+    void SetMoveRedlines( bool b )       { m_bMoveRedlines = b; }
 };
 
 #endif // INCLUDED_SW_SOURCE_CORE_INC_UNDOSPLITMOVE_HXX

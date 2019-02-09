@@ -19,11 +19,12 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDSCENEPROPERTY_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDSCENEPROPERTY_HXX
 
-#include "WrappedProperty.hxx"
-#include "Chart2ModelContact.hxx"
+#include <WrappedProperty.hxx>
 
 #include <memory>
 #include <vector>
+
+namespace chart { namespace wrapper { class Chart2ModelContact; } }
 
 namespace chart
 {
@@ -33,7 +34,7 @@ namespace wrapper
 class WrappedSceneProperty
 {
 public:
-    static void addWrappedProperties( std::vector< WrappedProperty* >& rList
+    static void addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
         , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact );
 };
 
@@ -41,17 +42,12 @@ class WrappedD3DTransformMatrixProperty : public WrappedProperty
 {
 public:
     explicit WrappedD3DTransformMatrixProperty(
-        std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedD3DTransformMatrixProperty();
+        const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
+    virtual ~WrappedD3DTransformMatrixProperty() override;
 
-    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
-
-    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
 private:
     std::shared_ptr< Chart2ModelContact >   m_spChart2ModelContact;

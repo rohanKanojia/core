@@ -27,9 +27,10 @@ $(eval $(call gb_Library_use_libraries,embobj,\
 	cppuhelper \
 	sal \
 	svt \
+	utl \
 	vcl \
 	tl \
-	$(gb_UWINAPI) \
+	i18nlangtag \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,embobj,\

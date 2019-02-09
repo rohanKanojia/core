@@ -19,13 +19,36 @@
 #ifndef INCLUDED_SVX_CHARMAP_HXX
 #define INCLUDED_SVX_CHARMAP_HXX
 
-#include <vcl/ctrl.hxx>
-#include <vcl/metric.hxx>
-#include <vcl/scrbar.hxx>
-#include <vcl/vclptr.hxx>
+#include <sal/config.h>
+
+#include <deque>
 #include <map>
 #include <memory>
+
+#include <sal/types.h>
+#include <rtl/ref.hxx>
 #include <svx/svxdllapi.h>
+#include <tools/gen.hxx>
+#include <tools/link.hxx>
+#include <vcl/ctrl.hxx>
+#include <vcl/event.hxx>
+#include <vcl/fontcharmap.hxx>
+#include <vcl/outdev.hxx>
+#include <vcl/metric.hxx>
+#include <vcl/vclptr.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/window.hxx>
+#include <vcl/textview.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
+
+namespace com { namespace sun { namespace star {
+    namespace accessibility { class XAccessible; }
+} } }
+
+namespace vcl { class Font; }
+
+using namespace ::com::sun::star;
 
 #define COLUMN_COUNT    16
 #define ROW_COUNT        8
@@ -33,70 +56,86 @@
 namespace svx
 {
     struct SvxShowCharSetItem;
-    class SvxShowCharSetVirtualAcc;
+    class SvxShowCharSetAcc;
 }
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxShowCharSet : public Control
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxShowCharSet : public weld::CustomWidgetController
 {
+protected:
+    VclPtr<VirtualDevice> mxVirDev;
+    vcl::Font maFont;
+    std::unique_ptr<weld::ScrolledWindow> mxScrollArea;
 public:
-                    SvxShowCharSet( vcl::Window* pParent );
-                    virtual ~SvxShowCharSet();
-    virtual void    dispose() override;
-    virtual void    ApplySettings(vcl::RenderContext& rRenderContext) override;
+    SvxShowCharSet(std::unique_ptr<weld::ScrolledWindow> pScrollArea, const VclPtr<VirtualDevice>& rVirDev);
+    virtual ~SvxShowCharSet() override;
 
-    void            RecalculateFont(vcl::RenderContext& rRenderContext);
+    virtual void            RecalculateFont(vcl::RenderContext& rRenderContext);
 
-    void            SelectCharacter( sal_uInt32 cNew );
-    sal_UCS4        GetSelectCharacter() const;
+    void                    SelectCharacter( sal_uInt32 cNew );
+    virtual sal_UCS4        GetSelectCharacter() const;
+    void                    createContextMenu();
 
     void            SetDoubleClickHdl( const Link<SvxShowCharSet*,void>& rLink ) { aDoubleClkHdl = rLink; }
     void            SetSelectHdl( const Link<SvxShowCharSet*,void>& rHdl ) { aSelectHdl = rHdl; }
     void            SetHighlightHdl( const Link<SvxShowCharSet*,void>& rHdl ) { aHighHdl = rHdl; }
     void            SetPreSelectHdl( const Link<SvxShowCharSet*,void>& rHdl ) { aPreSelectHdl = rHdl; }
+    void            SetFavClickHdl( const Link<SvxShowCharSet*,void>& rHdl ) { aFavClickHdl = rHdl; }
     static sal_uInt32& getSelectedChar();
     void            SetFont( const vcl::Font& rFont );
+    vcl::Font const & GetFont() const { return maFont; }
+    FontCharMapRef  GetFontCharMap();
+    bool            isFavChar(const OUString& sTitle, const OUString& rFont);
+    void            getFavCharacterList(); //gets both Fav char and Fav char font list
+    void            updateFavCharacterList(const OUString& rChar, const OUString& rFont);
 
-    svx::SvxShowCharSetItem*    ImplGetItem( int _nPos );
+    virtual svx::SvxShowCharSetItem*    ImplGetItem( int _nPos );
     int                         FirstInView() const;
-    int                         LastInView() const;
+    virtual int                         LastInView() const;
     int                         PixelToMapIndex( const Point&) const;
-    void                        SelectIndex( int index, bool bFocus = false );
+    virtual void                        SelectIndex( int index, bool bFocus = false );
     void                        OutputIndex( int index );
     void                        DeSelect();
-    inline bool                 IsSelected(sal_uInt16 _nPos) const { return _nPos == nSelectedIndex; }
-    inline sal_uInt16           GetSelectIndexId() const { return sal::static_int_cast<sal_uInt16>(nSelectedIndex); }
+    static void                 CopyToClipboard(const OUString& str);
+    bool                 IsSelected(sal_uInt16 _nPos) const { return _nPos == nSelectedIndex; }
+    sal_uInt16           GetSelectIndexId() const { return sal::static_int_cast<sal_uInt16>(nSelectedIndex); }
     static sal_uInt16           GetRowPos(sal_uInt16 _nPos);
     static sal_uInt16           GetColumnPos(sal_uInt16 _nPos);
 
-    ScrollBar&                  getScrollBar() { return *aVscrollSB.get();}
-    void                        ReleaseAccessible();
-    sal_Int32                   getMaxCharCount() const;
+    virtual sal_Int32                   getMaxCharCount() const;
 
-    virtual void    Resize() override;
+    void Show() { mxScrollArea->show(); }
+    void Hide() { mxScrollArea->hide(); }
 
-protected:
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& ) override;
-    virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void    MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void    MouseMove( const MouseEvent& rMEvt ) override;
-    virtual void    Command( const CommandEvent& rCEvt ) override;
-    virtual void    KeyInput( const KeyEvent& rKEvt ) override;
-    virtual void    GetFocus() override;
-    virtual void    LoseFocus() override;
-    virtual void    StateChanged( StateChangedType nStateChange ) override;
-    virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
-
-    virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
+    uno::Reference<css::accessibility::XAccessible> getAccessibleParent() { return GetDrawingArea()->get_accessible_parent(); }
 
 private:
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
+    virtual void Resize() override;
+    virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
+    virtual void MouseMove(const MouseEvent& rMEvt) override;
+    virtual void MouseButtonUp(const MouseEvent& rMEvt) override;
+    virtual void GetFocus() override;
+    virtual void LoseFocus() override;
+    virtual bool KeyInput(const KeyEvent&) override;
+
+    virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
+    virtual FactoryFunction GetUITestFactory() const override;
+
+protected:
     typedef std::map<sal_Int32, std::shared_ptr<svx::SvxShowCharSetItem> > ItemsMap;
     ItemsMap        m_aItems;
     Link<SvxShowCharSet*,void>     aDoubleClkHdl;
     Link<SvxShowCharSet*,void>     aSelectHdl;
+    Link<SvxShowCharSet*,void>     aFavClickHdl;
     Link<SvxShowCharSet*,void>     aHighHdl;
     Link<SvxShowCharSet*,void>     aPreSelectHdl;
-    svx::SvxShowCharSetVirtualAcc* m_pAccessible;
-    css::uno::Reference<css::accessibility::XAccessible> m_xAccessible;
+
+    std::deque<OUString>           maFavCharList;
+    std::deque<OUString>           maFavCharFontList;
+
+    rtl::Reference<svx::SvxShowCharSetAcc> m_xAccessible;
+    uno::Reference< uno::XComponentContext > mxContext;
     long            nX;
     long            nY;
     long            m_nXGap;
@@ -105,24 +144,25 @@ private:
 
     sal_Int32       nSelectedIndex;
 
-    FontCharMapPtr  mxFontCharMap;
+    FontCharMapRef  mxFontCharMap;
     Size            maFontSize;
-    VclPtr<ScrollBar>  aVscrollSB;
+    Point           maPosition;
 
     bool mbRecalculateFont  : 1;
     bool mbUpdateForeground : 1;
     bool mbUpdateBackground : 1;
 
 
-private:
-    void            DrawChars_Impl(vcl::RenderContext& rRenderContext, int n1, int n2);
+protected:
+    virtual void            DrawChars_Impl(vcl::RenderContext& rRenderContext, int n1, int n2);
     void            InitSettings(vcl::RenderContext& rRenderContext);
     // abstraction layers are: Unicode<->MapIndex<->Pixel
     Point           MapIndexToPixel( int) const;
-    DECL_LINK_TYPED(VscrollHdl, ScrollBar*, void);
+    DECL_LINK(VscrollHdl, weld::ScrolledWindow&, void);
+    void ContextMenuSelect(const OString& rIdent);
 
     void            init();
-    Rectangle       getGridRectangle(const Point &rPointUL, const Size &rOutputSize);
+    tools::Rectangle       getGridRectangle(const Point &rPointUL, const Size &rOutputSize);
 };
 
 #endif

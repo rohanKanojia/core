@@ -21,11 +21,23 @@
 #include "vbaglobals.hxx"
 #include "vbafont.hxx"
 
+#include <com/sun/star/beans/XPropertySet.hpp>
+
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-ScVbaCharacters::ScVbaCharacters( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const ScVbaPalette& dPalette, const uno::Reference< text::XSimpleText>& xRange,const css::uno::Any& Start, const css::uno::Any& Length, bool Replace  ) throw ( css::lang::IllegalArgumentException, css::uno::RuntimeException ) : ScVbaCharacters_BASE( xParent, xContext ), m_xSimpleText(xRange), m_aPalette( dPalette),  nLength(-1), nStart(1), bReplace( Replace )
+ScVbaCharacters::ScVbaCharacters( const uno::Reference< XHelperInterface >& xParent,
+                                  const uno::Reference< uno::XComponentContext >& xContext,
+                                  const ScVbaPalette& dPalette,
+                                  const uno::Reference< text::XSimpleText>& xRange,
+                                  const css::uno::Any& Start,
+                                  const css::uno::Any& Length,
+                                  bool Replace  )
+    : ScVbaCharacters_BASE( xParent, xContext ),
+      m_xSimpleText(xRange), m_aPalette( dPalette), bReplace( Replace )
 {
+    sal_Int16 nLength(-1);
+    sal_Int16 nStart(1);
     Start >>= nStart;
     if ( nStart < 1 )
         nStart = 1; // silently correct user error ( as ms )
@@ -41,49 +53,49 @@ ScVbaCharacters::ScVbaCharacters( const uno::Reference< XHelperInterface >& xPar
         xTextCursor->goRight( nStart, false );
     }
     if ( nLength < 0 ) // expand to end
-        xTextCursor->gotoEnd( sal_True );
+        xTextCursor->gotoEnd( true );
     else
-        xTextCursor->goRight( nLength, sal_True );
+        xTextCursor->goRight( nLength, true );
     m_xTextRange.set( xTextCursor, uno::UNO_QUERY_THROW );
 
 }
 
 OUString SAL_CALL
-ScVbaCharacters::getCaption() throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::getCaption()
 {
     return m_xTextRange->getString();
 }
 void SAL_CALL
-ScVbaCharacters::setCaption( const OUString& _caption ) throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::setCaption( const OUString& _caption )
 {
     m_xTextRange->setString( _caption );
 
 }
 
 ::sal_Int32 SAL_CALL
-ScVbaCharacters::getCount() throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::getCount()
 {
     return getCaption().getLength();
 }
 
 OUString SAL_CALL
-ScVbaCharacters::getText() throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::getText()
 {
     return getCaption();
 }
 void SAL_CALL
-ScVbaCharacters::setText( const OUString& _text ) throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::setText( const OUString& _text )
 {
     setCaption( _text );
 }
 uno::Reference< excel::XFont > SAL_CALL
-ScVbaCharacters::getFont() throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::getFont()
 {
     uno::Reference< beans::XPropertySet > xProps( m_xTextRange, uno::UNO_QUERY_THROW );
     return uno::Reference< excel::XFont >( new ScVbaFont( this, mxContext, m_aPalette, xProps ) );
 }
 void SAL_CALL
-ScVbaCharacters::setFont( const uno::Reference< excel::XFont >& /*_font*/ ) throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::setFont( const uno::Reference< excel::XFont >& /*_font*/ )
 {
     // #TODO #FIXME needs implementation, or can't be done?
     throw uno::RuntimeException("Not Implemented" );
@@ -91,13 +103,13 @@ ScVbaCharacters::setFont( const uno::Reference< excel::XFont >& /*_font*/ ) thro
 
 // Methods
 void SAL_CALL
-ScVbaCharacters::Insert( const OUString& rString ) throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::Insert( const OUString& rString )
 {
     m_xSimpleText->insertString( m_xTextRange, rString, bReplace );
 }
 
 void SAL_CALL
-ScVbaCharacters::Delete(  ) throw (css::uno::RuntimeException, std::exception)
+ScVbaCharacters::Delete(  )
 {
     // #FIXME #TODO is this a bit suspect?, I wonder should the contents
     // of the cell be deleted from the parent ( range )
@@ -113,12 +125,10 @@ ScVbaCharacters::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaCharacters::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.Characters";
-    }
+        "ooo.vba.excel.Characters"
+    };
     return aServiceNames;
 }
 

@@ -61,6 +61,7 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRAMELAYOUT_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRAMELAYOUT_HXX
 
+#include <memory>
 #include "lwplayout.hxx"
 #include "lwpstory.hxx"
 #include "lwpmarker.hxx"
@@ -74,8 +75,8 @@ class LwpFrame
 public:
     explicit LwpFrame(LwpPlacableLayout* pLayout);
     ~LwpFrame();
-    void RegisterStyle(XFFrameStyle* pFrameStyle);
-    void Parse(XFFrame* pXFFrame, sal_Int32 nPageNo = 0);
+    void RegisterStyle(std::unique_ptr<XFFrameStyle>& rFrameStyle);
+    void Parse(XFFrame* pXFFrame, sal_Int32 nPageNo);
     void XFConvert(XFContentContainer* pCont);
 private:
     void ApplyWrapType(XFFrameStyle* pFrameStyle);
@@ -122,8 +123,8 @@ private:
 class LwpFrameLayout: public LwpPlacableLayout
 {
 public:
-    LwpFrameLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpFrameLayout();
+    LwpFrameLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpFrameLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_FRAME_LAYOUT;}
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
@@ -140,7 +141,8 @@ private:
 
 private:
     LwpFrameLink m_Link;
-    LwpFrame* m_pFrame;
+    std::unique_ptr<LwpFrame> m_pFrame;
+    bool m_bGettingMaxWidth;
 };
 
 /**
@@ -150,8 +152,8 @@ private:
 class LwpGroupLayout: public LwpPlacableLayout
 {
 public:
-    LwpGroupLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpGroupLayout();
+    LwpGroupLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpGroupLayout() override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_GROUP_LAYOUT;}
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
@@ -159,7 +161,7 @@ public:
 protected:
     void Read() override;
 private:
-    LwpFrame* m_pFrame;
+    std::unique_ptr<LwpFrame> m_pFrame;
 
 };
 
@@ -170,8 +172,8 @@ private:
 class LwpGroupFrame: public LwpContent
 {
 public:
-    LwpGroupFrame(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpGroupFrame();
+    LwpGroupFrame(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpGroupFrame() override;
     virtual void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
 protected:
@@ -183,15 +185,13 @@ class LwpFoundry;
 class LwpDropcapLayout : public LwpFrameLayout
 {
 public:
-    LwpDropcapLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpDropcapLayout(){}
+    LwpDropcapLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_DROPCAP_LAYOUT;}
     virtual void Parse(IXFStream* pOutputStream) override;
     virtual void XFConvert(XFContentContainer* pCont) override;
     sal_uInt16 GetLines(){return m_nLines;}
     void SetChars(sal_uInt32 nChars){ m_nChars += nChars;}
     sal_uInt32 GetChars() const {return m_nChars;}
-    LwpStory* GetContentStory();
     void RegisterStyle(LwpFoundry* pFoundry);
     void RegisterStyle() override;
 protected:
@@ -204,8 +204,7 @@ private:
 class LwpRubyLayout : public LwpFrameLayout
 {
 public:
-    LwpRubyLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpRubyLayout(){}
+    LwpRubyLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
     LwpRubyMarker* GetMarker();
     void ConvertContentText();
     LwpStory* GetContentStory();

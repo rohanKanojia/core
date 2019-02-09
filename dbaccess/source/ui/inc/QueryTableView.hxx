@@ -33,8 +33,7 @@ namespace dbaui
     class OQueryTableView : public OJoinTableView
     {
     protected:
-        virtual void ConnDoubleClicked(OTableConnection* pConnection) override;
-        virtual void KeyInput(const KeyEvent& rEvt) override;
+        virtual void ConnDoubleClicked(VclPtr<OTableConnection>& rConnection) override;
 
         virtual VclPtr<OTableWindow> createWindow(const TTableWindowData::value_type& _pData) override;
 
@@ -55,15 +54,15 @@ namespace dbaui
         virtual void RemoveTabWin(OTableWindow* pTabWin) override;
 
         /// AddTabWin, setting an alias
-        void    AddTabWin(const OUString& strDatabase, const OUString& strTableName, const OUString& strAlias, bool bNewTable = false);
+        void    AddTabWin(const OUString& strDatabase, const OUString& strTableName, const OUString& strAlias, bool bNewTable);
         /// search TabWin
         OQueryTableWindow*  FindTable(const OUString& rAliasName);
-        bool                FindTableFromField(const OUString& rFieldName, OTableFieldDescRef& rInfo, sal_uInt16& rCnt);
+        bool                FindTableFromField(const OUString& rFieldName, OTableFieldDescRef const & rInfo, sal_uInt16& rCnt);
 
         /// base class overwritten: create and delete Connections
         virtual void AddConnection(const OJoinExchangeData& jxdSource, const OJoinExchangeData& jxdDest) override;
 
-        virtual bool RemoveConnection( OTableConnection* _pConn ,bool _bDelete) override;
+        virtual bool RemoveConnection(VclPtr<OTableConnection>& rConn, bool bDelete) override;
 
         // transfer of connections from and to UndoAction
 
@@ -74,7 +73,7 @@ namespace dbaui
             This results effectively in complete reset of request form, as all
             windows are hidden, as are all Connections to these windows and all
             request columns based on those tables */
-        void DropConnection(OQueryTableConnection* pConn);
+        void DropConnection(VclPtr<OQueryTableConnection> const & rConn);
 
         // show and hide TabWin (NOT create or delete)
         bool ShowTabWin(OQueryTableWindow* pTabWin, OQueryTabWinUndoAct* pUndoAction, bool _bAppend);

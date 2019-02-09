@@ -21,7 +21,7 @@
 #include <com/sun/star/animations/Timing.hpp>
 
 #include <tools.hxx>
-#include <nodetools.hxx>
+#include "nodetools.hxx"
 
 
 using namespace ::com::sun::star;
@@ -81,13 +81,7 @@ namespace slideshow
 
             animations::Timing eTiming;
 
-            if( !(rAny >>= eTiming) ||
-                eTiming != animations::Timing_INDEFINITE )
-            {
-                return false;
-            }
-
-            return true;
+            return (rAny >>= eTiming) && eTiming == animations::Timing_INDEFINITE;
         }
 
     }

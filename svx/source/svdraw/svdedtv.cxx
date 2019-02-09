@@ -29,71 +29,69 @@
 #include <svx/svdpagv.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdpoev.hxx>
-#include "svx/svdstr.hrc"
-#include "svdglob.hxx"
+#include <svx/strings.hrc>
+#include <svx/dialmgr.hxx>
 #include <svx/e3dsceneupdater.hxx>
 #include <rtl/strbuf.hxx>
 #include <svx/svdview.hxx>
 #include <clonelist.hxx>
+#include <svx/svdogrp.hxx>
+#include <svx/scene3d.hxx>
+
 
 using namespace com::sun::star;
 
 void SdrEditView::ImpResetPossibilityFlags()
 {
-    bReadOnly               =false;
+    m_bReadOnly               =false;
 
-    bGroupPossible          =false;
-    bUnGroupPossible        =false;
-    bGrpEnterPossible       =false;
-    bDeletePossible         =false;
-    bToTopPossible          =false;
-    bToBtmPossible          =false;
-    bReverseOrderPossible   =false;
+    m_bGroupPossible          =false;
+    m_bUnGroupPossible        =false;
+    m_bGrpEnterPossible       =false;
+    m_bToTopPossible          =false;
+    m_bToBtmPossible          =false;
+    m_bReverseOrderPossible   =false;
 
-    bImportMtfPossible      =false;
-    bCombinePossible        =false;
-    bDismantlePossible      =false;
-    bCombineNoPolyPolyPossible =false;
-    bDismantleMakeLinesPossible=false;
-    bOrthoDesiredOnMarked   =false;
+    m_bImportMtfPossible      =false;
+    m_bCombinePossible        =false;
+    m_bDismantlePossible      =false;
+    m_bCombineNoPolyPolyPossible =false;
+    m_bDismantleMakeLinesPossible=false;
+    m_bOrthoDesiredOnMarked   =false;
 
-    bMoreThanOneNotMovable  =false;
-    bOneOrMoreMovable       =false;
-    bMoreThanOneNoMovRot    =false;
-    bContortionPossible     =false;
-    bAllPolys               =false;
-    bOneOrMorePolys         =false;
-    bMoveAllowed            =false;
-    bResizeFreeAllowed      =false;
-    bResizePropAllowed      =false;
-    bRotateFreeAllowed      =false;
-    bRotate90Allowed        =false;
-    bMirrorFreeAllowed      =false;
-    bMirror45Allowed        =false;
-    bMirror90Allowed        =false;
-    bTransparenceAllowed    =false;
-    bCropAllowed            =false;
-    bGradientAllowed        =false;
-    bShearAllowed           =false;
-    bEdgeRadiusAllowed      =false;
-    bCanConvToPath          =false;
-    bCanConvToPoly          =false;
-    bCanConvToContour       =false;
-    bCanConvToPathLineToArea=false;
-    bCanConvToPolyLineToArea=false;
-    bMoveProtect            =false;
-    bResizeProtect          =false;
+    m_bOneOrMoreMovable       =false;
+    m_bMoreThanOneNoMovRot    =false;
+    m_bContortionPossible     =false;
+    m_bMoveAllowed            =false;
+    m_bResizeFreeAllowed      =false;
+    m_bResizePropAllowed      =false;
+    m_bRotateFreeAllowed      =false;
+    m_bRotate90Allowed        =false;
+    m_bMirrorFreeAllowed      =false;
+    m_bMirror45Allowed        =false;
+    m_bMirror90Allowed        =false;
+    m_bTransparenceAllowed    =false;
+    m_bCropAllowed            =false;
+    m_bGradientAllowed        =false;
+    m_bShearAllowed           =false;
+    m_bEdgeRadiusAllowed      =false;
+    m_bCanConvToPath          =false;
+    m_bCanConvToPoly          =false;
+    m_bCanConvToContour       =false;
+    m_bMoveProtect            =false;
+    m_bResizeProtect          =false;
 }
 
 void SdrEditView::ImpClearVars()
 {
     ImpResetPossibilityFlags();
-    bPossibilitiesDirty=true;   // << Purify didn't like this
-    bBundleVirtObj=false;
+    m_bPossibilitiesDirty=true;   // << Purify didn't like this
 }
 
-SdrEditView::SdrEditView(SdrModel* pModel1, OutputDevice* pOut):
-    SdrMarkView(pModel1,pOut)
+SdrEditView::SdrEditView(
+    SdrModel& rSdrModel,
+    OutputDevice* pOut)
+:   SdrMarkView(rSdrModel, pOut)
 {
     ImpClearVars();
 }
@@ -101,7 +99,6 @@ SdrEditView::SdrEditView(SdrModel* pModel1, OutputDevice* pOut):
 SdrEditView::~SdrEditView()
 {
 }
-
 
 void SdrEditView::InsertNewLayer(const OUString& rName, sal_uInt16 nPos)
 {
@@ -116,10 +113,7 @@ void SdrEditView::InsertNewLayer(const OUString& rName, sal_uInt16 nPos)
     mpModel->SetChanged();
 }
 
-#include <svx/svdogrp.hxx>
-#include <svx/scene3d.hxx>
-
-bool SdrEditView::ImpDelLayerCheck(SdrObjList* pOL, SdrLayerID nDelID) const
+bool SdrEditView::ImpDelLayerCheck(SdrObjList const * pOL, SdrLayerID nDelID) const
 {
     bool bDelAll(true);
 
@@ -198,29 +192,28 @@ void SdrEditView::ImpDelLayerDelObjs(SdrObjList* pOL, SdrLayerID nDelID)
 void SdrEditView::DeleteLayer(const OUString& rName)
 {
     SdrLayerAdmin& rLA = mpModel->GetLayerAdmin();
-    SdrLayer* pLayer = rLA.GetLayer(rName, true);
-    sal_uInt16 nLayerNum(rLA.GetLayerPos(pLayer));
+    SdrLayer* pLayer = rLA.GetLayer(rName);
 
-    if(SDRLAYER_NOTFOUND != nLayerNum)
+    if(pLayer)
     {
-
+        sal_uInt16 nLayerNum(rLA.GetLayerPos(pLayer));
         SdrLayerID nDelID = pLayer->GetID();
 
         const bool bUndo = IsUndoEnabled();
         if( bUndo )
-            BegUndo(ImpGetResStr(STR_UndoDelLayer));
+            BegUndo(SvxResId(STR_UndoDelLayer));
 
         bool bMaPg(true);
 
         for(sal_uInt16 nPageKind(0); nPageKind < 2; nPageKind++)
         {
             // MasterPages and DrawPages
-            sal_uInt16 nPgAnz(bMaPg ? mpModel->GetMasterPageCount() : mpModel->GetPageCount());
+            sal_uInt16 nPgCount(bMaPg ? mpModel->GetMasterPageCount() : mpModel->GetPageCount());
 
-            for(sal_uInt16 nPgNum(0); nPgNum < nPgAnz; nPgNum++)
+            for(sal_uInt16 nPgNum(0); nPgNum < nPgCount; nPgNum++)
             {
                 // over all pages
-                SdrPage* pPage = (bMaPg) ? mpModel->GetMasterPage(nPgNum) : mpModel->GetPage(nPgNum);
+                SdrPage* pPage = bMaPg ? mpModel->GetMasterPage(nPgNum) : mpModel->GetPage(nPgNum);
                 const size_t nObjCount(pPage->GetObjCount());
 
                 // make sure OrdNums are correct
@@ -268,12 +261,12 @@ void SdrEditView::DeleteLayer(const OUString& rName)
         if( bUndo )
         {
             AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoDeleteLayer(nLayerNum, rLA, *mpModel));
-            rLA.RemoveLayer(nLayerNum);
+            rLA.RemoveLayer(nLayerNum).release();
             EndUndo();
         }
         else
         {
-            delete rLA.RemoveLayer(nLayerNum);
+            rLA.RemoveLayer(nLayerNum);
         }
 
         mpModel->SetChanged();
@@ -286,7 +279,7 @@ void SdrEditView::EndUndo()
     // #i13033#
     // Comparison changed to 1L since EndUndo() is called later now
     // and EndUndo WILL change count to count-1
-    if(1L == mpModel->GetUndoBracketLevel())
+    if(1 == mpModel->GetUndoBracketLevel())
     {
         ImpBroadcastEdgesOfMarkedNodes();
     }
@@ -341,9 +334,9 @@ void SdrEditView::ImpBroadcastEdgesOfMarkedNodes()
         }
     }
 
-    const size_t nMarkedEdgeAnz = GetMarkedEdgesOfMarkedNodes().GetMarkCount();
+    const size_t nMarkedEdgeCnt = GetMarkedEdgesOfMarkedNodes().GetMarkCount();
 
-    for (size_t i=0; i<nMarkedEdgeAnz; ++i) {
+    for (size_t i=0; i<nMarkedEdgeCnt; ++i) {
         SdrMark* pEM = GetMarkedEdgesOfMarkedNodes().GetMark(i);
         SdrObject* pEdgeTmp=pEM->GetMarkedSdrObj();
         SdrEdgeObj* pEdge=dynamic_cast<SdrEdgeObj*>( pEdgeTmp );
@@ -360,69 +353,69 @@ void SdrEditView::ImpBroadcastEdgesOfMarkedNodes()
 void SdrEditView::MarkListHasChanged()
 {
     SdrMarkView::MarkListHasChanged();
-    bPossibilitiesDirty=true;
+    m_bPossibilitiesDirty=true;
 }
 
 void SdrEditView::ModelHasChanged()
 {
     SdrMarkView::ModelHasChanged();
-    bPossibilitiesDirty=true;
+    m_bPossibilitiesDirty=true;
 }
 
 bool SdrEditView::IsResizeAllowed(bool bProp) const
 {
     ForcePossibilities();
-    if (bResizeProtect) return false;
-    if (bProp) return bResizePropAllowed;
-    return bResizeFreeAllowed;
+    if (m_bResizeProtect) return false;
+    if (bProp) return m_bResizePropAllowed;
+    return m_bResizeFreeAllowed;
 }
 
 bool SdrEditView::IsRotateAllowed(bool b90Deg) const
 {
     ForcePossibilities();
-    if (bMoveProtect) return false;
-    if (b90Deg) return bRotate90Allowed;
-    return bRotateFreeAllowed;
+    if (m_bMoveProtect) return false;
+    if (b90Deg) return m_bRotate90Allowed;
+    return m_bRotateFreeAllowed;
 }
 
 bool SdrEditView::IsMirrorAllowed(bool b45Deg, bool b90Deg) const
 {
     ForcePossibilities();
-    if (bMoveProtect) return false;
-    if (b90Deg) return bMirror90Allowed;
-    if (b45Deg) return bMirror45Allowed;
-    return bMirrorFreeAllowed && !bMoveProtect;
+    if (m_bMoveProtect) return false;
+    if (b90Deg) return m_bMirror90Allowed;
+    if (b45Deg) return m_bMirror45Allowed;
+    return m_bMirrorFreeAllowed;
 }
 
 bool SdrEditView::IsTransparenceAllowed() const
 {
     ForcePossibilities();
-    return bTransparenceAllowed;
+    return m_bTransparenceAllowed;
 }
 
 bool SdrEditView::IsCropAllowed() const
 {
     ForcePossibilities();
-    return bCropAllowed;
+    return m_bCropAllowed;
 }
 
 bool SdrEditView::IsGradientAllowed() const
 {
     ForcePossibilities();
-    return bGradientAllowed;
+    return m_bGradientAllowed;
 }
 
 bool SdrEditView::IsShearAllowed() const
 {
     ForcePossibilities();
-    if (bResizeProtect) return false;
-    return bShearAllowed;
+    if (m_bResizeProtect) return false;
+    return m_bShearAllowed;
 }
 
 bool SdrEditView::IsEdgeRadiusAllowed() const
 {
     ForcePossibilities();
-    return bEdgeRadiusAllowed;
+    return m_bEdgeRadiusAllowed;
 }
 
 bool SdrEditView::IsCrookAllowed(bool bNoContortion) const
@@ -430,10 +423,10 @@ bool SdrEditView::IsCrookAllowed(bool bNoContortion) const
     // CrookMode missing here (no rotations allowed when shearing ...)
     ForcePossibilities();
     if (bNoContortion) {
-        if (!bRotateFreeAllowed) return false;
-        return !bMoveProtect && bMoveAllowed;
+        if (!m_bRotateFreeAllowed) return false;
+        return !m_bMoveProtect && m_bMoveAllowed;
     } else {
-        return !bResizeProtect && bContortionPossible;
+        return !m_bResizeProtect && m_bContortionPossible;
     }
 }
 
@@ -443,29 +436,30 @@ bool SdrEditView::IsDistortAllowed(bool bNoContortion) const
     if (bNoContortion) {
         return false;
     } else {
-        return !bResizeProtect && bContortionPossible;
+        return !m_bResizeProtect && m_bContortionPossible;
     }
 }
 
 bool SdrEditView::IsCombinePossible(bool bNoPolyPoly) const
 {
     ForcePossibilities();
-    if (bNoPolyPoly) return bCombineNoPolyPolyPossible;
-    else return bCombinePossible;
+    if (bNoPolyPoly) return m_bCombineNoPolyPolyPossible;
+    else return m_bCombinePossible;
 }
 
 bool SdrEditView::IsDismantlePossible(bool bMakeLines) const
 {
     ForcePossibilities();
-    if (bMakeLines) return bDismantleMakeLinesPossible;
-    else return bDismantlePossible;
+    if (bMakeLines) return m_bDismantleMakeLinesPossible;
+    else return m_bDismantlePossible;
 }
 
 void SdrEditView::CheckPossibilities()
 {
-    if (mbSomeObjChgdFlag) bPossibilitiesDirty=true;
+    if (mbSomeObjChgdFlag)
+        m_bPossibilitiesDirty=true;
 
-    if(mbSomeObjChgdFlag)
+    if (mbSomeObjChgdFlag)
     {
         // This call IS necessary to correct the MarkList, in which
         // no longer to the model belonging objects still can reside.
@@ -473,17 +467,20 @@ void SdrEditView::CheckPossibilities()
         CheckMarked();
     }
 
-    if (bPossibilitiesDirty) {
+    if (m_bPossibilitiesDirty)
+    {
         ImpResetPossibilityFlags();
         SortMarkedObjects();
-        const size_t nMarkCount=GetMarkedObjectCount();
-        if (nMarkCount!=0) {
-            bReverseOrderPossible=nMarkCount>=2;
+        const size_t nMarkCount = GetMarkedObjectCount();
+        if (nMarkCount != 0)
+        {
+            m_bReverseOrderPossible = (nMarkCount >= 2);
 
             size_t nMovableCount=0;
-            bGroupPossible=nMarkCount>=2;
-            bCombinePossible=nMarkCount>=2;
-            if (nMarkCount==1) {
+            m_bGroupPossible=nMarkCount>=2;
+            m_bCombinePossible=nMarkCount>=2;
+            if (nMarkCount==1)
+            {
                 // check bCombinePossible more thoroughly
                 // still missing ...
                 const SdrObject* pObj=GetMarkedObjectByIndex(0);
@@ -491,30 +488,29 @@ void SdrEditView::CheckPossibilities()
                 bool bGroup=pObj->GetSubList()!=nullptr;
                 bool bHasText=pObj->GetOutlinerParaObject()!=nullptr;
                 if (bGroup || bHasText) {
-                    bCombinePossible=true;
+                    m_bCombinePossible=true;
                 }
             }
-            bCombineNoPolyPolyPossible=bCombinePossible;
-            bDeletePossible=true;
+            m_bCombineNoPolyPolyPossible=m_bCombinePossible;
             // accept transformations for now
-            bMoveAllowed      =true;
-            bResizeFreeAllowed=true;
-            bResizePropAllowed=true;
-            bRotateFreeAllowed=true;
-            bRotate90Allowed  =true;
-            bMirrorFreeAllowed=true;
-            bMirror45Allowed  =true;
-            bMirror90Allowed  =true;
-            bShearAllowed     =true;
-            bEdgeRadiusAllowed=false;
-            bContortionPossible=true;
-            bCanConvToContour = true;
+            m_bMoveAllowed      =true;
+            m_bResizeFreeAllowed=true;
+            m_bResizePropAllowed=true;
+            m_bRotateFreeAllowed=true;
+            m_bRotate90Allowed  =true;
+            m_bMirrorFreeAllowed=true;
+            m_bMirror45Allowed  =true;
+            m_bMirror90Allowed  =true;
+            m_bShearAllowed     =true;
+            m_bEdgeRadiusAllowed=false;
+            m_bContortionPossible=true;
+            m_bCanConvToContour = true;
 
             // these ones are only allowed when single object is selected
-            bTransparenceAllowed = (nMarkCount == 1);
-            bGradientAllowed = (nMarkCount == 1);
-            bCropAllowed = (nMarkCount == 1);
-            if(bGradientAllowed)
+            m_bTransparenceAllowed = (nMarkCount == 1);
+            m_bGradientAllowed = (nMarkCount == 1);
+            m_bCropAllowed = (nMarkCount == 1);
+            if(m_bGradientAllowed)
             {
                 // gradient depends on fill style
                 const SdrMark* pM = GetSdrMarkByIndex(0);
@@ -527,11 +523,11 @@ void SdrEditView::CheckPossibilities()
                 if(SfxItemState::DONTCARE != eState)
                 {
                     // If state is not DONTCARE, test the item
-                    drawing::FillStyle eFillStyle = static_cast<const XFillStyleItem&>(rSet.Get(XATTR_FILLSTYLE)).GetValue();
+                    drawing::FillStyle eFillStyle = rSet.Get(XATTR_FILLSTYLE).GetValue();
 
                     if(eFillStyle != drawing::FillStyle_GRADIENT)
                     {
-                        bGradientAllowed = false;
+                        m_bGradientAllowed = false;
                     }
                 }
             }
@@ -544,7 +540,7 @@ void SdrEditView::CheckPossibilities()
                 const SdrObject* pObj=pM->GetMarkedSdrObj();
                 const SdrPageView* pPV=pM->GetPageView();
                 if (pPV!=pPV0) {
-                    if (pPV->IsReadOnly()) bReadOnly=true;
+                    if (pPV->IsReadOnly()) m_bReadOnly=true;
                     pPV0=pPV;
                 }
 
@@ -553,95 +549,96 @@ void SdrEditView::CheckPossibilities()
                 bool bMovPrt=pObj->IsMoveProtect();
                 bool bSizPrt=pObj->IsResizeProtect();
                 if (!bMovPrt && aInfo.bMoveAllowed) nMovableCount++; // count MovableObjs
-                if (bMovPrt) bMoveProtect=true;
-                if (bSizPrt) bResizeProtect=true;
+                if (bMovPrt) m_bMoveProtect=true;
+                if (bSizPrt) m_bResizeProtect=true;
 
                 // not allowed when not allowed at one object
                 if(!aInfo.bTransparenceAllowed)
-                    bTransparenceAllowed = false;
+                    m_bTransparenceAllowed = false;
 
                 // If one of these can't do something, none can
-                if (!aInfo.bMoveAllowed      ) bMoveAllowed      =false;
-                if (!aInfo.bResizeFreeAllowed) bResizeFreeAllowed=false;
-                if (!aInfo.bResizePropAllowed) bResizePropAllowed=false;
-                if (!aInfo.bRotateFreeAllowed) bRotateFreeAllowed=false;
-                if (!aInfo.bRotate90Allowed  ) bRotate90Allowed  =false;
-                if (!aInfo.bMirrorFreeAllowed) bMirrorFreeAllowed=false;
-                if (!aInfo.bMirror45Allowed  ) bMirror45Allowed  =false;
-                if (!aInfo.bMirror90Allowed  ) bMirror90Allowed  =false;
-                if (!aInfo.bShearAllowed     ) bShearAllowed     =false;
-                if (aInfo.bEdgeRadiusAllowed) bEdgeRadiusAllowed=true;
-                if (aInfo.bNoContortion      ) bContortionPossible=false;
+                if (!aInfo.bMoveAllowed      ) m_bMoveAllowed      =false;
+                if (!aInfo.bResizeFreeAllowed) m_bResizeFreeAllowed=false;
+                if (!aInfo.bResizePropAllowed) m_bResizePropAllowed=false;
+                if (!aInfo.bRotateFreeAllowed) m_bRotateFreeAllowed=false;
+                if (!aInfo.bRotate90Allowed  ) m_bRotate90Allowed  =false;
+                if (!aInfo.bMirrorFreeAllowed) m_bMirrorFreeAllowed=false;
+                if (!aInfo.bMirror45Allowed  ) m_bMirror45Allowed  =false;
+                if (!aInfo.bMirror90Allowed  ) m_bMirror90Allowed  =false;
+                if (!aInfo.bShearAllowed     ) m_bShearAllowed     =false;
+                if (aInfo.bEdgeRadiusAllowed) m_bEdgeRadiusAllowed=true;
+                if (aInfo.bNoContortion      ) m_bContortionPossible=false;
                 // For Crook with Contortion: all objects have to be
                 // Movable and Rotatable, except for a maximum of 1 of them
-                if (!bMoreThanOneNoMovRot) {
+                if (!m_bMoreThanOneNoMovRot) {
                     if (!aInfo.bMoveAllowed || !aInfo.bResizeFreeAllowed) {
-                        bMoreThanOneNoMovRot=bNoMovRotFound;
+                        m_bMoreThanOneNoMovRot=bNoMovRotFound;
                         bNoMovRotFound=true;
                     }
                 }
 
-                // Must be resizeable to allow cropping
+                // Must be resizable to allow cropping
                 if (!aInfo.bResizeFreeAllowed && !aInfo.bResizePropAllowed)
-                    bCropAllowed = false;
+                    m_bCropAllowed = false;
 
                 // if one member cannot be converted, no conversion is possible
                 if(!aInfo.bCanConvToContour)
-                    bCanConvToContour = false;
+                    m_bCanConvToContour = false;
 
                 // Ungroup
-                if (!bUnGroupPossible) bUnGroupPossible=pObj->GetSubList()!=nullptr;
+                if (!m_bUnGroupPossible) m_bUnGroupPossible=pObj->GetSubList()!=nullptr;
                 // ConvertToCurve: If at least one can be converted, that is fine.
-                if (aInfo.bCanConvToPath          ) bCanConvToPath          =true;
-                if (aInfo.bCanConvToPoly          ) bCanConvToPoly          =true;
-                if (aInfo.bCanConvToPathLineToArea) bCanConvToPathLineToArea=true;
-                if (aInfo.bCanConvToPolyLineToArea) bCanConvToPolyLineToArea=true;
+                if (aInfo.bCanConvToPath          ) m_bCanConvToPath          =true;
+                if (aInfo.bCanConvToPoly          ) m_bCanConvToPoly          =true;
 
                 // Combine/Dismantle
-                if(bCombinePossible)
+                if(m_bCombinePossible)
                 {
-                    bCombinePossible = ImpCanConvertForCombine(pObj);
-                    bCombineNoPolyPolyPossible = bCombinePossible;
+                    m_bCombinePossible = ImpCanConvertForCombine(pObj);
+                    m_bCombineNoPolyPolyPossible = m_bCombinePossible;
                 }
 
-                if (!bDismantlePossible) bDismantlePossible = ImpCanDismantle(pObj, false);
-                if (!bDismantleMakeLinesPossible) bDismantleMakeLinesPossible = ImpCanDismantle(pObj, true);
+                if (!m_bDismantlePossible) m_bDismantlePossible = ImpCanDismantle(pObj, false);
+                if (!m_bDismantleMakeLinesPossible) m_bDismantleMakeLinesPossible = ImpCanDismantle(pObj, true);
                 // check OrthoDesiredOnMarked
-                if (!bOrthoDesiredOnMarked && !aInfo.bNoOrthoDesired) bOrthoDesiredOnMarked=true;
+                if (!m_bOrthoDesiredOnMarked && !aInfo.bNoOrthoDesired) m_bOrthoDesiredOnMarked=true;
                 // check ImportMtf
 
-                if (!bImportMtfPossible)
+                if (!m_bImportMtfPossible)
                 {
                     const SdrGrafObj* pSdrGrafObj = dynamic_cast< const SdrGrafObj* >(pObj);
-                    const SdrOle2Obj* pSdrOle2Obj = dynamic_cast< const SdrOle2Obj* >(pObj);
-
-                    if(pSdrGrafObj && ((pSdrGrafObj->HasGDIMetaFile() && !pSdrGrafObj->IsEPS()) || pSdrGrafObj->isEmbeddedSvg()))
+                    if (pSdrGrafObj != nullptr)
                     {
-                        bImportMtfPossible = true;
+                        if ((pSdrGrafObj->HasGDIMetaFile() && !pSdrGrafObj->IsEPS()) ||
+                            pSdrGrafObj->isEmbeddedVectorGraphicData() ||
+                            pSdrGrafObj->isEmbeddedPdfData())
+                        {
+                            m_bImportMtfPossible = true;
+                        }
                     }
 
-                    if(pSdrOle2Obj)
+                    const SdrOle2Obj* pSdrOle2Obj = dynamic_cast< const SdrOle2Obj* >(pObj);
+                    if (pSdrOle2Obj)
                     {
-                        bImportMtfPossible = pSdrOle2Obj->GetObjRef().is();
+                        m_bImportMtfPossible = pSdrOle2Obj->GetObjRef().is();
                     }
                 }
             }
 
-            bMoreThanOneNotMovable=nMovableCount<nMarkCount-1;
-            bOneOrMoreMovable=nMovableCount!=0;
-            bGrpEnterPossible=bUnGroupPossible;
+            m_bOneOrMoreMovable=nMovableCount!=0;
+            m_bGrpEnterPossible=m_bUnGroupPossible;
         }
         ImpCheckToTopBtmPossible();
         static_cast<SdrPolyEditView*>(this)->ImpCheckPolyPossibilities();
-        bPossibilitiesDirty=false;
+        m_bPossibilitiesDirty=false;
 
-        if (bReadOnly) {
-            bool bMerker1=bGrpEnterPossible;
+        if (m_bReadOnly) {
+            bool bMerker1=m_bGrpEnterPossible;
             ImpResetPossibilityFlags();
-            bReadOnly=true;
-            bGrpEnterPossible=bMerker1;
+            m_bReadOnly=true;
+            m_bGrpEnterPossible=bMerker1;
         }
-        if (bMoveAllowed) {
+        if (m_bMoveAllowed) {
             // Don't allow moving glued connectors.
             // Currently only implemented for single selection.
             if (nMarkCount==1) {
@@ -650,7 +647,7 @@ void SdrEditView::CheckPossibilities()
                 if (pEdge!=nullptr) {
                     SdrObject* pNode1=pEdge->GetConnectedNode(true);
                     SdrObject* pNode2=pEdge->GetConnectedNode(false);
-                    if (pNode1!=nullptr || pNode2!=nullptr) bMoveAllowed=false;
+                    if (pNode1!=nullptr || pNode2!=nullptr) m_bMoveAllowed=false;
                 }
             }
         }
@@ -664,8 +661,8 @@ void SdrEditView::ForceMarkedObjToAnotherPage()
     for (size_t nm=0; nm<GetMarkedObjectCount(); ++nm) {
         SdrMark* pM=GetSdrMarkByIndex(nm);
         SdrObject* pObj=pM->GetMarkedSdrObj();
-        Rectangle aObjRect(pObj->GetCurrentBoundRect());
-        Rectangle aPgRect(pM->GetPageView()->GetPageRect());
+        tools::Rectangle aObjRect(pObj->GetCurrentBoundRect());
+        tools::Rectangle aPgRect(pM->GetPageView()->GetPageRect());
         if (!aObjRect.IsOver(aPgRect)) {
             bool bFnd=false;
             SdrPageView* pPV = GetSdrPageView();
@@ -678,8 +675,7 @@ void SdrEditView::ForceMarkedObjToAnotherPage()
             if(bFnd)
             {
                 pM->GetPageView()->GetObjList()->RemoveObject(pObj->GetOrdNum());
-                SdrInsertReason aReason(SDRREASON_VIEWCALL);
-                pPV->GetObjList()->InsertObject(pObj, SAL_MAX_SIZE, &aReason);
+                pPV->GetObjList()->InsertObject(pObj, SAL_MAX_SIZE);
                 pM->SetPageView(pPV);
                 InvalidateAllWin(aObjRect);
                 bFlg=true;
@@ -691,8 +687,9 @@ void SdrEditView::ForceMarkedObjToAnotherPage()
     }
 }
 
-void SdrEditView::DeleteMarkedList(const SdrMarkList& rMark)
+std::vector<SdrObject*> SdrEditView::DeleteMarkedList(SdrMarkList const& rMark)
 {
+    std::vector<SdrObject*> ret;
     if (rMark.GetMarkCount()!=0)
     {
         rMark.ForceSort();
@@ -715,8 +712,7 @@ void SdrEditView::DeleteMarkedList(const SdrMarkList& rMark)
                     SdrObject* pObj = pM->GetMarkedSdrObj();
 
                     // extra undo actions for changed connector which now may hold its laid out path (SJ)
-                    std::vector< SdrUndoAction* > vConnectorUndoActions( CreateConnectorUndo( *pObj ) );
-                    AddUndoActions( vConnectorUndoActions );
+                    AddUndoActions(CreateConnectorUndo( *pObj ));
 
                     AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoDeleteObject(*pObj));
                 }
@@ -725,14 +721,12 @@ void SdrEditView::DeleteMarkedList(const SdrMarkList& rMark)
             // make sure, OrderNums are correct:
             rMark.GetMark(0)->GetMarkedSdrObj()->GetOrdNum();
 
-            std::vector< SdrObject* > aRemoved3DObjects;
-
             for(size_t nm = nMarkCount; nm > 0;)
             {
                 --nm;
                 SdrMark* pM = rMark.GetMark(nm);
                 SdrObject* pObj = pM->GetMarkedSdrObj();
-                SdrObjList*  pOL = pObj->GetObjList();
+                SdrObjList*  pOL = pObj->getParentSdrObjListFromSdrObject();
                 const size_t nOrdNum(pObj->GetOrdNumDirect());
 
                 bool bIs3D = dynamic_cast< E3dObject* >(pObj);
@@ -746,10 +740,8 @@ void SdrEditView::DeleteMarkedList(const SdrMarkList& rMark)
 
                 if( !bUndo )
                 {
-                    if( bIs3D )
-                        aRemoved3DObjects.push_back( pObj ); // may be needed later
-                    else
-                        SdrObject::Free(pObj);
+                    // tdf#108863 don't delete objects before EndUndo()
+                    ret.push_back(pObj);
                 }
             }
 
@@ -759,20 +751,21 @@ void SdrEditView::DeleteMarkedList(const SdrMarkList& rMark)
                 delete aUpdaters.back();
                 aUpdaters.pop_back();
             }
-
-            if( !bUndo )
-            {
-                // now delete removed scene objects
-                while(!aRemoved3DObjects.empty())
-                {
-                    SdrObject::Free( aRemoved3DObjects.back() );
-                    aRemoved3DObjects.pop_back();
-                }
-            }
         }
 
         if( bUndo )
             EndUndo();
+    }
+    return ret;
+}
+
+static void lcl_LazyDelete(std::vector<SdrObject*> & rLazyDelete)
+{
+    // now delete removed scene objects
+    while (!rLazyDelete.empty())
+    {
+        SdrObject::Free( rLazyDelete.back() );
+        rLazyDelete.pop_back();
     }
 }
 
@@ -786,8 +779,9 @@ void SdrEditView::DeleteMarkedObj()
 
     // moved breaking action and undo start outside loop
     BrkAction();
-    BegUndo(ImpGetResStr(STR_EditDelete),GetDescriptionOfMarkedObjects(),SDRREPFUNC_OBJ_DELETE);
+    BegUndo(SvxResId(STR_EditDelete),GetDescriptionOfMarkedObjects(),SdrRepeatFunc::Delete);
 
+    std::vector<SdrObject*> lazyDeleteObjects;
     // remove as long as something is selected. This allows to schedule objects for
     // removal for a next run as needed
     while(GetMarkedObjectCount())
@@ -802,9 +796,9 @@ void SdrEditView::DeleteMarkedObj()
             for(size_t a = 0; a < nCount; ++a)
             {
                 // in the first run, add all found parents, but only once
-                SdrMark* pMark = rMarkList.GetMark(a);
-                SdrObject* pObject = pMark->GetMarkedSdrObj();
-                SdrObject* pParent = pObject->GetObjList()->GetOwnerObj();
+                SdrMark* pMark(rMarkList.GetMark(a));
+                SdrObject* pObject(pMark->GetMarkedSdrObj());
+                SdrObject* pParent(pObject->getParentSdrObjectFromSdrObject());
 
                 if(pParent)
                 {
@@ -848,11 +842,15 @@ void SdrEditView::DeleteMarkedObj()
 
         // original stuff: remove selected objects. Handle clear will
         // do something only once
-        DeleteMarkedList(GetMarkedObjectList());
+        auto temp(DeleteMarkedList(GetMarkedObjectList()));
+        for (auto p : temp)
+        {
+            lazyDeleteObjects.push_back(p);
+        }
         GetMarkedObjectListWriteAccess().Clear();
         maHdlList.Clear();
 
-        while(aParents.size() && !GetMarkedObjectCount())
+        while(!aParents.empty() && !GetMarkedObjectCount())
         {
             // iterate over remembered parents
             SdrObject* pParent = aParents.back();
@@ -862,8 +860,8 @@ void SdrEditView::DeleteMarkedObj()
             {
                 // we detected an empty parent, a candidate to leave group/3DScene
                 // if entered
-                if(GetSdrPageView()->GetAktGroup()
-                    && GetSdrPageView()->GetAktGroup() == pParent)
+                if(GetSdrPageView()->GetCurrentGroup()
+                    && GetSdrPageView()->GetCurrentGroup() == pParent)
                 {
                     GetSdrPageView()->LeaveOneGroup();
                 }
@@ -878,6 +876,8 @@ void SdrEditView::DeleteMarkedObj()
     // end undo and change messaging moved at the end
     EndUndo();
     MarkListHasChanged();
+
+    lcl_LazyDelete(lazyDeleteObjects);
 }
 
 void SdrEditView::CopyMarkedObj()
@@ -887,8 +887,8 @@ void SdrEditView::CopyMarkedObj()
     SdrMarkList aSourceObjectsForCopy(GetMarkedObjectList());
     // The following loop is used instead of MarkList::Merge(), to be
     // able to flag the MarkEntries.
-    const size_t nEdgeAnz = GetEdgesOfMarkedNodes().GetMarkCount();
-    for (size_t nEdgeNum=0; nEdgeNum<nEdgeAnz; ++nEdgeNum) {
+    const size_t nEdgeCnt = GetEdgesOfMarkedNodes().GetMarkCount();
+    for (size_t nEdgeNum=0; nEdgeNum<nEdgeCnt; ++nEdgeNum) {
         SdrMark aM(*GetEdgesOfMarkedNodes().GetMark(nEdgeNum));
         aM.SetUser(1);
         aSourceObjectsForCopy.InsertEntry(aM);
@@ -906,10 +906,10 @@ void SdrEditView::CopyMarkedObj()
     const size_t nMarkCount=aSourceObjectsForCopy.GetMarkCount();
     for (size_t nm=0; nm<nMarkCount; ++nm) {
         SdrMark* pM=aSourceObjectsForCopy.GetMark(nm);
-        SdrObject* pO=pM->GetMarkedSdrObj()->Clone();
+        SdrObject* pSource(pM->GetMarkedSdrObj());
+        SdrObject* pO(pSource->CloneSdrObject(pSource->getSdrModelFromSdrObject()));
         if (pO!=nullptr) {
-            SdrInsertReason aReason(SDRREASON_VIEWCALL);
-            pM->GetPageView()->GetObjList()->InsertObject(pO, SAL_MAX_SIZE, &aReason);
+            pM->GetPageView()->GetObjList()->InsertObject(pO, SAL_MAX_SIZE);
 
             if( bUndo )
                 AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoCopyObject(*pO));
@@ -958,8 +958,8 @@ void SdrEditView::CopyMarkedObj()
 bool SdrEditView::InsertObjectAtView(SdrObject* pObj, SdrPageView& rPV, SdrInsertFlags nOptions)
 {
     if (nOptions & SdrInsertFlags::SETDEFLAYER) {
-        SdrLayerID nLayer=rPV.GetPage()->GetLayerAdmin().GetLayerID(maActualLayer,true);
-        if (nLayer==SDRLAYER_NOTFOUND) nLayer=0;
+        SdrLayerID nLayer=rPV.GetPage()->GetLayerAdmin().GetLayerID(maActualLayer);
+        if (nLayer==SDRLAYER_NOTFOUND) nLayer=SdrLayerID(0);
         if (rPV.GetLockedLayers().IsSet(nLayer) || !rPV.GetVisibleLayers().IsSet(nLayer)) {
             SdrObject::Free( pObj ); // Layer locked or invisible
             return false;
@@ -971,12 +971,7 @@ bool SdrEditView::InsertObjectAtView(SdrObject* pObj, SdrPageView& rPV, SdrInser
         pObj->SetMergedItemSet(maDefaultAttr);
     }
     if (!pObj->IsInserted()) {
-        SdrInsertReason aReason(SDRREASON_VIEWCALL);
-        if (nOptions & SdrInsertFlags::NOBROADCAST) {
-            rPV.GetObjList()->NbcInsertObject(pObj, SAL_MAX_SIZE, &aReason);
-        } else {
-            rPV.GetObjList()->InsertObject(pObj, SAL_MAX_SIZE, &aReason);
-        }
+        rPV.GetObjList()->InsertObject(pObj, SAL_MAX_SIZE);
     }
     if( IsUndoEnabled() )
         AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoNewObject(*pObj));
@@ -995,12 +990,12 @@ void SdrEditView::ReplaceObjectAtView(SdrObject* pOldObj, SdrPageView& rPV, SdrO
 #ifdef DBG_UTIL
         if(dynamic_cast< SdrTextObj* >(pOldObj) && static_cast< SdrTextObj* >(pOldObj)->IsTextEditActive())
         {
-            OSL_ENSURE(false, "OldObject is in TextEdit mode, this has to be ended before replacing it usnig SdrEndTextEdit (!)");
+            OSL_ENSURE(false, "OldObject is in TextEdit mode, this has to be ended before replacing it using SdrEndTextEdit (!)");
         }
 
         if(dynamic_cast< SdrTextObj* >(pNewObj) && static_cast< SdrTextObj* >(pNewObj)->IsTextEditActive())
         {
-            OSL_ENSURE(false, "NewObject is in TextEdit mode, this has to be ended before replacing it usnig SdrEndTextEdit (!)");
+            OSL_ENSURE(false, "NewObject is in TextEdit mode, this has to be ended before replacing it using SdrEndTextEdit (!)");
         }
 #endif
 
@@ -1012,7 +1007,7 @@ void SdrEditView::ReplaceObjectAtView(SdrObject* pOldObj, SdrPageView& rPV, SdrO
             pSdrView->SdrEndTextEdit();
     }
 
-    SdrObjList* pOL=pOldObj->GetObjList();
+    SdrObjList* pOL=pOldObj->getParentSdrObjListFromSdrObject();
     const bool bUndo = IsUndoEnabled();
     if( bUndo  )
         AddUndo(GetModel()->GetSdrUndoFactory().CreateUndoReplaceObject(*pOldObj,*pNewObj));

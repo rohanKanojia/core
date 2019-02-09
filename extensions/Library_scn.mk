@@ -13,7 +13,12 @@ $(eval $(call gb_Library_Library,scn))
 
 $(eval $(call gb_Library_use_externals,scn,\
 	boost_headers \
-    sane_headers \
+	$(if $(filter-out WNT,$(OS)),sane_headers) \
+))
+
+$(eval $(call gb_Library_set_include,scn,\
+    -I$(SRCDIR)/extensions/inc \
+    $$(INCLUDE) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,scn,extensions/source/scanner/scn))
@@ -21,16 +26,17 @@ $(eval $(call gb_Library_set_componentfile,scn,extensions/source/scanner/scn))
 $(eval $(call gb_Library_use_sdk_api,scn))
 
 $(eval $(call gb_Library_use_libraries,scn,\
+	comphelper \
+	cppu \
+	cppuhelper \
+	i18nlangtag \
+	sal \
+	$(if $(filter WNT,$(OS)),salhelper) \
 	svt \
-	vcl \
+	$(if $(filter WNT,$(OS)),tk) \
 	tl \
 	utl \
-	comphelper \
-	cppuhelper \
-	cppu \
-	sal \
-	i18nlangtag \
-	$(gb_UWINAPI) \
+	vcl \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,scn,\

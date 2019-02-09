@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/textliststyle.hxx"
-#include <osl/diagnose.h>
+#include <drawingml/textliststyle.hxx>
+#include <sal/log.hxx>
 
 namespace oox { namespace drawingml {
 
@@ -26,8 +26,8 @@ TextListStyle::TextListStyle()
 {
     for ( int i = 0; i < 9; i++ )
     {
-        maListStyle.push_back( TextParagraphPropertiesPtr( new TextParagraphProperties() ) );
-        maAggregationListStyle.push_back( TextParagraphPropertiesPtr( new TextParagraphProperties() ) );
+        maListStyle.push_back( std::make_shared<TextParagraphProperties>( ) );
+        maAggregationListStyle.push_back( std::make_shared<TextParagraphProperties>( ) );
     }
 }
 
@@ -41,8 +41,8 @@ TextListStyle::TextListStyle(const TextListStyle& rStyle)
     assert(rStyle.maAggregationListStyle.size() == 9);
     for ( size_t i = 0; i < 9; i++ )
     {
-        maListStyle.push_back( TextParagraphPropertiesPtr( new TextParagraphProperties(*rStyle.maListStyle[i]) ) );
-        maAggregationListStyle.push_back( TextParagraphPropertiesPtr( new TextParagraphProperties(*rStyle.maAggregationListStyle[i]) ) );
+        maListStyle.push_back( std::make_shared<TextParagraphProperties>( *rStyle.maListStyle[i] ) );
+        maAggregationListStyle.push_back( std::make_shared<TextParagraphProperties>( *rStyle.maAggregationListStyle[i] ) );
     }
 }
 
@@ -63,20 +63,18 @@ TextListStyle& TextListStyle::operator=(const TextListStyle& rStyle)
     return *this;
 }
 
-void applyStyleList( const TextParagraphPropertiesVector& rSourceListStyle, TextParagraphPropertiesVector& rDestListStyle )
+static void applyStyleList( const TextParagraphPropertiesVector& rSourceListStyle, TextParagraphPropertiesVector& rDestListStyle )
 {
-    TextParagraphPropertiesVector::const_iterator aSourceListStyleIter( rSourceListStyle.begin() );
     TextParagraphPropertiesVector::iterator aDestListStyleIter( rDestListStyle.begin() );
-    while( aSourceListStyleIter != rSourceListStyle.end() )
+    for (auto const& elemSource : rSourceListStyle)
     {
         if ( aDestListStyleIter != rDestListStyle.end() )
         {
-            (*aDestListStyleIter)->apply( **aSourceListStyleIter );
+            (*aDestListStyleIter)->apply(*elemSource);
             ++aDestListStyleIter;
         }
         else
-            rDestListStyle.push_back( TextParagraphPropertiesPtr( new TextParagraphProperties( **aSourceListStyleIter ) ) );
-        ++aSourceListStyleIter;
+            rDestListStyle.push_back( std::make_shared<TextParagraphProperties>(*elemSource) );
     }
 }
 

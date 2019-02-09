@@ -19,8 +19,9 @@
 
 interface CellSelection
 {
-    // Slot's die in der DrawShell disabled werden. {
+    // slots which are disabled in the DrawShell {
     FID_DEFINE_NAME             [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_DEFINE_CURRENT_NAME     [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
     FID_ADD_NAME                [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
     SID_DEFINE_COLROWNAMERANGES [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
     SID_OPENDLG_SOLVE           [ ExecMethod = Execute; StateMethod = GetState; ]
@@ -38,7 +39,7 @@ interface CellSelection
     // no Exec/StateMethod needed, but SfxDispatcher complains if the slot is not included in the shell
     SID_VALIDITY_REFERENCE []
 
-    // Datenbank-Operationen {
+    // database operations {
     SID_SORT_ASCENDING      [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_SORT_DESCENDING     [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_REIMPORT_DATA       [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
@@ -48,6 +49,8 @@ interface CellSelection
     SID_DATA_STREAMS        [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_DATA_STREAMS_PLAY   [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_DATA_STREAMS_STOP   [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
+    SID_DATA_PROVIDER       [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
+    SID_DATA_PROVIDER_REFRESH [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_MANAGE_XML_SOURCE   [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_SORT                [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_DATA_FORM           [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
@@ -58,12 +61,12 @@ interface CellSelection
     SID_SUBTOTALS           [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     SID_PIVOT_TABLE         [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
     FID_VALIDATION          [ ExecMethod = ExecuteDB; StateMethod = GetBlockState; ]
+    FID_CURRENTVALIDATION   [ ExecMethod = ExecuteDB; StateMethod = GetState; ]
     SID_TEXT_TO_COLUMNS     [ ExecMethod = ExecuteDB; StateMethod = GetDBState; ]
 
-    // } Datenbank-Operationen
+    // } database operations
 
 
-    SID_BORDER_OBJECT   [ StateMethod = GetState; ]
     SID_RANGE_ADDRESS   [ StateMethod = GetState; ]
 
     SID_HYPERLINK_SETLINK   [ ExecMethod = ExecuteEdit; ]
@@ -73,7 +76,6 @@ interface CellSelection
     SID_RANGE_ROW           [ StateMethod = GetState; ]
     SID_RANGE_COL           [ StateMethod = GetState; ]
     SID_RANGE_TABLE         [ StateMethod = GetState; ]
-    SID_RANGE_VALUE         [ StateMethod = GetState; ]
     SID_RANGE_FORMULA       [ StateMethod = GetState; ]
     SID_RANGE_TEXTVALUE     [ StateMethod = GetState; ]
     SID_RANGE_NOTETEXT      [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
@@ -132,7 +134,7 @@ interface CellSelection
     [
         ExecMethod = ExecuteEdit ;
         StateMethod = GetBlockState ;
-        GroupId = GID_EDIT ;  //FS
+        GroupId = SfxGroupId::Edit ;  //FS
         MenuConfig , AccelConfig ;
     ]
     SID_DELETE_CONTENTS [ ExecMethod = ExecuteEdit; StateMethod = GetBlockState; ]
@@ -170,7 +172,7 @@ interface CellSelection
     SID_COPY            [ ExecMethod = ExecuteEdit; StateMethod = GetBlockState; ]
     SID_PASTE           [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
     SID_PASTE_SPECIAL   [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
-    SID_PASTE_ONLY   [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
+    SID_PASTE_UNFORMATTED [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
     SID_PASTE_ONLY_TEXT   [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
     SID_PASTE_ONLY_FORMULA   [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
     SID_PASTE_ONLY_VALUE   [ ExecMethod = ExecuteEdit; StateMethod = GetClipState; ]
@@ -188,32 +190,44 @@ interface CellSelection
     FID_INPUTLINE_BLOCK     [ ExecMethod = Execute; StateMethod = GetState; ]
     FID_INPUTLINE_MATRIX    [ ExecMethod = Execute; StateMethod = GetState; ]
     SID_CHARMAP [ ExecMethod = ExecuteEdit; StateMethod = GetCellState; ]
+    SID_EMOJI_CONTROL [ ExecMethod = ExecuteEdit; StateMethod = GetCellState; ]
+    SID_CHARMAP_CONTROL [ ExecMethod = ExecuteEdit; StateMethod = GetCellState; ]
 
     SID_INSERT_POSTIT   [ ExecMethod = ExecuteEdit; StateMethod = GetCellState; ]
-    SID_EDIT_POSTIT   [ ExecMethod = ExecuteEdit; StateMethod = GetCellState; ]
+    SID_EDIT_POSTIT
+    [
+        ExecMethod = ExecuteEdit; StateMethod = GetCellState;
+        ToolBoxConfig, MenuConfig , AccelConfig;
+    ]
 
-    SID_COLLABORATION       [ ExecMethod = Execute; ]
-    SID_TABOP               [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_CONSOLIDATE         [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    FID_INSERT_NAME [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    FID_USE_NAME    [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_CANCEL      [ ExecMethod = Execute; ]
-    SID_TOGGLE_REL  [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_POPUP_CONDFRMT []
-    SID_OPENDLG_CONDFRMT    [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_OPENDLG_COLORSCALE  [ ExecMethod = ExecuteEdit; ]
-    SID_OPENDLG_DATABAR     [ ExecMethod = ExecuteEdit; ]
-    SID_OPENDLG_ICONSET     [ ExecMethod = ExecuteEdit; ]
-    SID_OPENDLG_CONDDATE    [ ExecMethod = ExecuteEdit; ]
-    SID_OPENDLG_CONDFRMT_MANAGER    [ ExecMethod = ExecuteEdit; ]
-    SID_COLORSCALE          [ ExecMethod = ExecuteEdit; ]
-    SID_DATABAR             [ ExecMethod = ExecuteEdit; ]
-    FID_NOTE_VISIBLE        [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    FID_HIDE_NOTE           [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    FID_SHOW_NOTE           [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_DELETE_NOTE         [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_DEC_INDENT          [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
-    SID_INC_INDENT          [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_TABOP                           [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_CONSOLIDATE                     [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_INSERT_NAME                     [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_USE_NAME                        [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_CANCEL                          [ ExecMethod = Execute; ]
+    SID_TOGGLE_REL                      [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_POPUP_CONDFRMT                  []
+    SID_COLUMN_OPERATIONS               [ ExecMethod = ExecuteEdit; StateMethod = GetBlockState; ]
+    SID_ROW_OPERATIONS                  [ ExecMethod = ExecuteEdit; StateMethod = GetBlockState; ]
+    SID_OPENDLG_CURRENTCONDFRMT         [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_OPENDLG_CONDFRMT                [ ExecMethod = ExecuteEdit; ]
+    SID_OPENDLG_COLORSCALE              [ ExecMethod = ExecuteEdit; ]
+    SID_OPENDLG_DATABAR                 [ ExecMethod = ExecuteEdit; ]
+    SID_OPENDLG_ICONSET                 [ ExecMethod = ExecuteEdit; ]
+    SID_OPENDLG_CONDDATE                [ ExecMethod = ExecuteEdit; ]
+    SID_OPENDLG_CONDFRMT_MANAGER        [ ExecMethod = ExecuteEdit; ]
+    SID_OPENDLG_CURRENTCONDFRMT_MANAGER [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_NOTE_VISIBLE                    [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_HIDE_NOTE                       [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_SHOW_NOTE                       [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_TOGGLE_NOTES                    [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_HIDE_ALL_NOTES                  [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_SHOW_ALL_NOTES                  [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    FID_DELETE_ALL_NOTES                [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_DELETE_NOTE                     [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_DEC_INDENT                      [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_INC_INDENT                      [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
+    SID_SELECT_UNPROTECTED_CELLS        [ ExecMethod = ExecuteEdit;]
 
     SID_THESAURUS   [ ExecMethod = ExecuteEdit; StateMethod = GetCellState; ]
     SID_SPELL_DIALOG [ ExecMethod = ExecuteEdit; StateMethod = GetState; ]
@@ -232,6 +246,7 @@ interface CellSelection
     SID_TRANSLITERATE_FULLWIDTH [ ExecMethod = ExecuteTrans; StateMethod = GetBlockState; ]
     SID_TRANSLITERATE_HIRAGANA  [ ExecMethod = ExecuteTrans; StateMethod = GetBlockState; ]
     SID_TRANSLITERATE_KATAGANA  [ ExecMethod = ExecuteTrans; StateMethod = GetBlockState; ]
+    SID_AUTO_SUM  [ ExecMethod = ExecuteEdit; ]
 }
 
 
@@ -403,21 +418,13 @@ interface CellMovement
     SID_ATTR_POSITION   [ StateMethod = GetState; ]
     SID_TABLE_CELL
     [
-         // "Tabellenzelle" soll nicht im Anpassen-Dialog auftauchen:
+        // "table cell" should not appear in change dialog
         StateMethod = GetState ;
     ]
     SID_DATA_SELECT         [ ExecMethod = Execute; StateMethod = GetState; ]
     SID_DETECTIVE_FILLMODE  [ ExecMethod = Execute; StateMethod = GetState; ] // api:
 }
 
-
-interface RangeSelection
-{
-    import CellSelection;
-    import FormatForSelection;
-    import TableFont ".Font";
-    import BaseSelection;
-}
 
 interface Cell
 {

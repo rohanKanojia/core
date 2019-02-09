@@ -49,11 +49,6 @@ namespace svt { namespace table
         {
         }
 
-        ColumnSort( ColPos const i_columnPos, ColumnSortDirection const i_sortDirection )
-            :nColumnPos( i_columnPos )
-            ,eSortDirection( i_sortDirection )
-        {
-        }
     };
 
 
@@ -70,7 +65,7 @@ namespace svt { namespace table
 
         /** retrieves the current sort order of the data
 
-            If the <code>nColumnIndex</code> member of the returned srtructure is <code>COL_INVALID</code>, then
+            If the <code>nColumnIndex</code> member of the returned structure is <code>COL_INVALID</code>, then
             the data is currently not sorted.
         */
         virtual ColumnSort  getCurrentSortOrder() const = 0;

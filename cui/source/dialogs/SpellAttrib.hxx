@@ -44,14 +44,11 @@ struct SpellErrorDescription
     css::uno::Sequence< OUString >  aSuggestions;
     OUString                                     sRuleId;
 
-    SpellErrorDescription() :
-        bIsGrammarError( false ){}
-
     SpellErrorDescription( bool bGrammar,
                       const OUString& rText,
                       const css::lang::Locale& rLocale,
                       const css::uno::Sequence< OUString >& rSuggestions,
-                      css::uno::Reference< css::linguistic2::XProofreader > rxGrammarChecker,
+                      css::uno::Reference< css::linguistic2::XProofreader > const & rxGrammarChecker,
                       const OUString* pDialogTitle = nullptr,
                       const OUString* pExplanation = nullptr,
                       const OUString* pRuleId = nullptr,
@@ -78,15 +75,15 @@ struct SpellErrorDescription
     bool operator==( const SpellErrorDescription& rDesc ) const
     {
         return bIsGrammarError == rDesc.bIsGrammarError &&
-                sErrorText.equals( rDesc.sErrorText ) &&
-                aLocale.Language.equals( rDesc.aLocale.Language ) &&
-                aLocale.Country.equals( rDesc.aLocale.Country ) &&
-                aLocale.Variant.equals( rDesc.aLocale.Variant ) &&
+                sErrorText == rDesc.sErrorText &&
+                aLocale.Language == rDesc.aLocale.Language &&
+                aLocale.Country == rDesc.aLocale.Country &&
+                aLocale.Variant == rDesc.aLocale.Variant &&
                 aSuggestions == rDesc.aSuggestions &&
                 xGrammarChecker == rDesc.xGrammarChecker &&
-                sDialogTitle.equals( rDesc.sDialogTitle ) &&
-                sExplanation.equals( rDesc.sExplanation ) &&
-                sExplanationURL.equals( rDesc.sExplanationURL ) &&
+                sDialogTitle == rDesc.sDialogTitle &&
+                sExplanation == rDesc.sExplanation &&
+                sExplanationURL == rDesc.sExplanationURL &&
                 sRuleId == rDesc.sRuleId;
     }
 };
@@ -99,18 +96,14 @@ public:
 private:
     SpellErrorDescription        m_aSpellErrorDescription;
 
-                            //not accessible
-                            SpellErrorAttrib();
 public:
                             SpellErrorAttrib( const SpellErrorDescription& );
-                            SpellErrorAttrib( const SpellErrorAttrib& rAttr );
-                            virtual ~SpellErrorAttrib();
 
     const SpellErrorDescription& GetErrorDescription() const { return m_aSpellErrorDescription; }
 
 
     virtual void            SetFont( vcl::Font& rFont ) const override;
-    virtual TextAttrib*     Clone() const override;
+    virtual std::unique_ptr<TextAttrib> Clone() const override;
     virtual bool            operator==( const TextAttrib& rAttr ) const override;
 };
 
@@ -119,18 +112,13 @@ class SpellLanguageAttrib : public TextAttrib
 {
     LanguageType m_eLanguage;
 
-                            //not accessible
-                            SpellLanguageAttrib();
-
 public:
                             SpellLanguageAttrib(LanguageType eLanguage);
-                            SpellLanguageAttrib( const SpellLanguageAttrib& rAttr );
-                            virtual ~SpellLanguageAttrib();
 
     LanguageType            GetLanguage() const {return m_eLanguage;}
 
     virtual void            SetFont( vcl::Font& rFont ) const override;
-    virtual TextAttrib*     Clone() const override;
+    virtual std::unique_ptr<TextAttrib> Clone() const override;
     virtual bool            operator==( const TextAttrib& rAttr ) const override;
 };
 
@@ -139,16 +127,11 @@ class SpellBackgroundAttrib : public TextAttrib
 {
     Color   m_aBackgroundColor;
 
-                            //not accessible
-                            SpellBackgroundAttrib();
-
 public:
                             SpellBackgroundAttrib(const Color& rCol);
-                            SpellBackgroundAttrib( const SpellBackgroundAttrib& rAttr );
-                            virtual ~SpellBackgroundAttrib();
 
     virtual void            SetFont( vcl::Font& rFont ) const override;
-    virtual TextAttrib*     Clone() const override;
+    virtual std::unique_ptr<TextAttrib> Clone() const override;
     virtual bool            operator==( const TextAttrib& rAttr ) const override;
 };
 }//namespace svx

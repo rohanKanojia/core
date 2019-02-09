@@ -20,16 +20,10 @@
 #ifndef INCLUDED_SD_INC_SDRESID_HXX
 #define INCLUDED_SD_INC_SDRESID_HXX
 
-#include <tools/resid.hxx>
+#include <rtl/ustring.hxx>
 #include "sddllapi.h"
 
-class SD_DLLPUBLIC SdResId : public ResId
-{
-public:
-    SdResId(sal_uInt16 nId);
-};
-
-#define SD_RESSTR(x) SdResId(x).toString()
+SD_DLLPUBLIC OUString SdResId(const char* pId);
 
 #endif /* _SD_SDRESID_HXX */
 

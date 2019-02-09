@@ -17,18 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "indexfieldscontrol.hxx"
-#include "dbu_dlg.hrc"
+#include <core_resource.hxx>
+#include <indexfieldscontrol.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
 #include <osl/diagnose.h>
-#include "dbaccess_helpid.hrc"
+#include <helpids.h>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
+#include <vcl/svapp.hxx>
 
 namespace dbaui
 {
 
-#define BROWSER_STANDARD_FLAGS      BrowserMode::COLUMNSELECTION | BrowserMode::HLINES | BrowserMode::VLINES | \
-                                    BrowserMode::HIDECURSOR | BrowserMode::HIDESELECT | BrowserMode::AUTO_HSCROLL | BrowserMode::AUTO_VSCROLL
+static constexpr auto BROWSER_STANDARD_FLAGS = BrowserMode::COLUMNSELECTION | BrowserMode::HLINES | BrowserMode::VLINES |
+                                    BrowserMode::HIDECURSOR | BrowserMode::HIDESELECT | BrowserMode::AUTO_HSCROLL | BrowserMode::AUTO_VSCROLL;
 
 #define COLUMN_ID_FIELDNAME     1
 #define COLUMN_ID_ORDER         2
@@ -72,17 +75,12 @@ namespace dbaui
         , m_aSeekRow(m_aFields.end())
         , m_pSortingCell(nullptr)
         , m_pFieldNameCell(nullptr)
-        , m_nMaxColumnsInIndex(0)
         , m_bAddIndexAppendix(false)
     {
-
-        SetUniqueId( UID_DLGINDEX_INDEXDETAILS_BACK );
-        GetDataWindow().SetUniqueId( UID_DLGINDEX_INDEXDETAILS_MAIN );
     }
 
-    VCL_BUILDER_DECL_FACTORY(DbaIndexFieldsControl)
+    extern "C" SAL_DLLPUBLIC_EXPORT void makeDbaIndexFieldsControl(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap &)
     {
-        (void)rMap;
         rRet = VclPtr<IndexFieldsControl>::Create(pParent, WB_BORDER | WB_NOTABSTOP);
     }
 
@@ -116,10 +114,10 @@ namespace dbaui
         return true;
     }
 
-    void IndexFieldsControl::PaintCell( OutputDevice& _rDev, const Rectangle& _rRect, sal_uInt16 _nColumnId ) const
+    void IndexFieldsControl::PaintCell( OutputDevice& _rDev, const tools::Rectangle& _rRect, sal_uInt16 _nColumnId ) const
     {
         Point aPos(_rRect.TopLeft());
-        aPos.X() += 1;
+        aPos.AdjustX(1 );
 
         OUString aText = GetRowCellText(m_aSeekRow,_nColumnId);
         Size TxtSize(GetDataWindow().GetTextWidth(aText), GetDataWindow().GetTextHeight());
@@ -168,13 +166,11 @@ namespace dbaui
     {
         // do not just copy the array, we may have empty field names (which should not be copied)
         _rFields.resize(m_aFields.size());
-        IndexFields::const_iterator aSource = m_aFields.begin();
-        IndexFields::const_iterator aSourceEnd = m_aFields.end();
         IndexFields::iterator aDest = _rFields.begin();
-        for (; aSource != aSourceEnd; ++aSource)
-            if (!aSource->sFieldName.isEmpty())
+        for (auto const& source : m_aFields)
+            if (!source.sFieldName.isEmpty())
             {
-                *aDest = *aSource;
+                *aDest = source;
                 ++aDest;
             }
 
@@ -188,14 +184,13 @@ namespace dbaui
             sal_Int32 nWidthAsc = GetTextWidth(m_sAscendingText) + GetSettings().GetStyleSettings().GetScrollBarSize();
             sal_Int32 nWidthDesc = GetTextWidth(m_sDescendingText) + GetSettings().GetStyleSettings().GetScrollBarSize();
             // maximum plus some additional space
-            return (nWidthAsc > nWidthDesc ? nWidthAsc : nWidthDesc) + GetTextWidth(OUString('0')) * 2;
+            return std::max(nWidthAsc, nWidthDesc) + GetTextWidth(OUString('0')) * 2;
         }
         return EditBrowseBox::GetTotalCellWidth(_nRow, _nColId);
     }
 
-    void IndexFieldsControl::Init(const Sequence< OUString >& _rAvailableFields, sal_Int32 _nMaxColumnsInIndex,bool _bAddIndexAppendix)
+    void IndexFieldsControl::Init(const Sequence< OUString >& _rAvailableFields, bool _bAddIndexAppendix)
     {
-        m_nMaxColumnsInIndex = _nMaxColumnsInIndex;
         m_bAddIndexAppendix = _bAddIndexAppendix;
 
         RemoveColumns();
@@ -205,20 +200,20 @@ namespace dbaui
 
         if ( m_bAddIndexAppendix )
         {
-            m_sAscendingText = ModuleRes(STR_ORDER_ASCENDING);
-            m_sDescendingText = ModuleRes(STR_ORDER_DESCENDING);
+            m_sAscendingText = DBA_RES(STR_ORDER_ASCENDING);
+            m_sDescendingText = DBA_RES(STR_ORDER_DESCENDING);
 
             // the "sort order" column
-            OUString sColumnName = ModuleRes(STR_TAB_INDEX_SORTORDER);
+            OUString sColumnName = DBA_RES(STR_TAB_INDEX_SORTORDER);
             // the width of the order column is the maximum widths of the texts used
             // (the title of the column)
             sal_Int32 nSortOrderColumnWidth = GetTextWidth(sColumnName);
             // ("ascending" + scrollbar width)
             sal_Int32 nOther = GetTextWidth(m_sAscendingText) + GetSettings().GetStyleSettings().GetScrollBarSize();
-            nSortOrderColumnWidth = nSortOrderColumnWidth > nOther ? nSortOrderColumnWidth : nOther;
+            nSortOrderColumnWidth = std::max(nSortOrderColumnWidth, nOther);
             // ("descending" + scrollbar width)
             nOther = GetTextWidth(m_sDescendingText) + GetSettings().GetStyleSettings().GetScrollBarSize();
-            nSortOrderColumnWidth = nSortOrderColumnWidth > nOther ? nSortOrderColumnWidth : nOther;
+            nSortOrderColumnWidth = std::max(nSortOrderColumnWidth, nOther);
             // (plus some additional space)
             nSortOrderColumnWidth += GetTextWidth(OUString('0')) * 2;
             InsertDataColumn(COLUMN_ID_ORDER, sColumnName, nSortOrderColumnWidth, HeaderBarItemBits::STDSTYLE, 1);
@@ -234,7 +229,7 @@ namespace dbaui
         nFieldNameWidth -= aSystemStyle.GetScrollBarSize();
         nFieldNameWidth -= 8;
         // the "field name" column
-        OUString sColumnName = ModuleRes(STR_TAB_INDEX_FIELD);
+        OUString sColumnName = DBA_RES(STR_TAB_INDEX_FIELD);
         InsertDataColumn(COLUMN_ID_FIELDNAME, sColumnName, nFieldNameWidth, HeaderBarItemBits::STDSTYLE, 0);
 
         // create the cell controllers
@@ -281,15 +276,10 @@ namespace dbaui
     bool IndexFieldsControl::implGetFieldDesc(long _nRow, IndexFields::const_iterator& _rPos)
     {
         _rPos = m_aFields.end();
-        if ((_nRow < 0) || (_nRow >= (sal_Int32)m_aFields.size()))
+        if ((_nRow < 0) || (_nRow >= static_cast<sal_Int32>(m_aFields.size())))
             return false;
         _rPos = m_aFields.begin() + _nRow;
         return true;
-    }
-
-    bool IndexFieldsControl::IsModified() const
-    {
-        return EditBrowseBox::IsModified();
     }
 
     bool IndexFieldsControl::SaveModified()
@@ -301,7 +291,7 @@ namespace dbaui
         {
             case COLUMN_ID_FIELDNAME:
             {
-                OUString sFieldSelected = m_pFieldNameCell->GetSelectEntry();
+                OUString sFieldSelected = m_pFieldNameCell->GetSelectedEntry();
                 bool bEmptySelected = sFieldSelected.isEmpty();
                 if (isNewField())
                 {
@@ -317,7 +307,7 @@ namespace dbaui
                 else
                 {
                     sal_Int32 nRow = GetCurRow();
-                    OSL_ENSURE(nRow < (sal_Int32)m_aFields.size(), "IndexFieldsControl::SaveModified: invalid current row!");
+                    OSL_ENSURE(nRow < static_cast<sal_Int32>(m_aFields.size()), "IndexFieldsControl::SaveModified: invalid current row!");
                     if (nRow >= 0)  // may be -1 in case the control was empty
                     {
                         // remove the field from the selection
@@ -347,7 +337,7 @@ namespace dbaui
             {
                 OSL_ENSURE(!isNewField(), "IndexFieldsControl::SaveModified: why the hell ...!!!");
                 // selected entry
-                sal_Int32 nPos = m_pSortingCell->GetSelectEntryPos();
+                sal_Int32 nPos = m_pSortingCell->GetSelectedEntryPos();
                 OSL_ENSURE(LISTBOX_ENTRY_NOTFOUND != nPos, "IndexFieldsControl::SaveModified: how did you get this selection??");
                 // adjust the sort flag in the index field description
                 OIndexField& rCurrentField = m_aFields[GetCurRow()];
@@ -383,7 +373,7 @@ namespace dbaui
         }
     }
 
-    IMPL_LINK_TYPED( IndexFieldsControl, OnListEntrySelected, DbaMouseDownListBoxController&, rController, void )
+    IMPL_LINK( IndexFieldsControl, OnListEntrySelected, DbaMouseDownListBoxController&, rController, void )
     {
         ListBoxControl& rListBox = rController.GetListBox();
         if (!rListBox.IsTravelSelect())
@@ -393,23 +383,23 @@ namespace dbaui
         {   // a field has been selected
             if (GetCurRow() >= GetRowCount() - 2)
             {   // and we're in one of the last two rows
-                OUString sSelectedEntry = m_pFieldNameCell->GetSelectEntry();
+                OUString sSelectedEntry = m_pFieldNameCell->GetSelectedEntry();
                 sal_Int32 nCurrentRow = GetCurRow();
                 sal_Int32 rowCount = GetRowCount();
 
-                OSL_ENSURE(((sal_Int32)(m_aFields.size() + 1)) == rowCount, "IndexFieldsControl::OnListEntrySelected: inconsistence!");
+                OSL_ENSURE((static_cast<sal_Int32>(m_aFields.size() + 1)) == rowCount, "IndexFieldsControl::OnListEntrySelected: inconsistence!");
 
                 if (!sSelectedEntry.isEmpty() && (nCurrentRow == rowCount - 1) /*&& (!m_nMaxColumnsInIndex || rowCount < m_nMaxColumnsInIndex )*/ )
                 {   // in the last row, an non-empty string has been selected
                     // -> insert a new row
-                    m_aFields.push_back(OIndexField());
+                    m_aFields.emplace_back();
                     RowInserted(GetRowCount());
                     Invalidate(GetRowRectPixel(nCurrentRow));
                 }
                 else if (sSelectedEntry.isEmpty() && (nCurrentRow == rowCount - 2))
                 {   // in the (last-1)th row, an empty entry has been selected
                     // -> remove the last row
-                    m_aFields.erase(m_aFields.end() - 1);
+                    m_aFields.pop_back();
                     RowRemoved(GetRowCount() - 1);
                     Invalidate(GetRowRectPixel(nCurrentRow));
                 }

@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <rtl/instance.hxx>
 
 #include <globals.hxx>
 #include <database.hxx>
@@ -34,18 +35,13 @@ IdlDll & GetIdlApp()
 }
 
 IdlDll::IdlDll()
-    : pHashTable( nullptr )
-    , pGlobalNames( nullptr )
-
 {}
 
 IdlDll::~IdlDll()
 {
-    delete pGlobalNames;
-    delete pHashTable;
 }
 
-inline SvStringHashEntry * INS( const OString& rName )
+static SvStringHashEntry * INS( const OString& rName )
 {
     sal_uInt32  nIdx;
     GetIdlApp().pHashTable->Insert( rName, &nIdx );
@@ -74,7 +70,6 @@ SvGlobalHashNames::SvGlobalHashNames()
     A_ENTRY(float)
     A_ENTRY(double)
     A_ENTRY(item)
-    A_ENTRY(PseudoSlots)
     A_ENTRY(import)
     A_ENTRY(SlotIdFile)
     A_ENTRY(include)
@@ -82,7 +77,6 @@ SvGlobalHashNames::SvGlobalHashNames()
     A_ENTRY(StateMethod)
     A_ENTRY(GroupId)
     A_ENTRY(Export)
-    A_ENTRY(PseudoPrefix)
     A_ENTRY(define)
     A_ENTRY(MenuConfig)
     A_ENTRY(ToolBoxConfig)
@@ -90,11 +84,8 @@ SvGlobalHashNames::SvGlobalHashNames()
     A_ENTRY(FastCall)
     A_ENTRY(SbxObject)
     A_ENTRY(Container)
-    A_ENTRY(ImageRotation)
-    A_ENTRY(ImageReflection)
     A_ENTRY(ReadOnlyDoc)
     A_ENTRY(struct)
-    A_ENTRY(SlotType)
     A_ENTRY(DisableFlags)
 {}
 

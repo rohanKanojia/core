@@ -31,27 +31,34 @@
 #include <calbck.hxx>
 #include <swtable.hxx>
 
-SwTableBoxNumFormat::SwTableBoxNumFormat( sal_uInt32 nFormat, bool bFlag )
-    : SfxUInt32Item( RES_BOXATR_FORMAT, nFormat ), bAuto( bFlag )
+// The % SV_COUNTRY_LANGUAGE_OFFSET result checks if nFormat is a mere built-in
+// @ Text format of *any* locale and if so uses the default text format. Text
+// is text, the locale doesn't matter for Writer's number formatting purposes.
+// The advantage is that this is the pool's default item value and some places
+// benefit from this special treatment in that they don't have to handle/store
+// attribute specifics, especially when writing a document.
+SwTableBoxNumFormat::SwTableBoxNumFormat( sal_uInt32 nFormat )
+    : SfxUInt32Item( RES_BOXATR_FORMAT,
+            (((nFormat % SV_COUNTRY_LANGUAGE_OFFSET) == getSwDefaultTextFormat()) ?
+             getSwDefaultTextFormat() : nFormat))
 {
 }
 
 bool SwTableBoxNumFormat::operator==( const SfxPoolItem& rAttr ) const
 {
     assert(SfxPoolItem::operator==(rAttr));
-    return GetValue() == static_cast<const SwTableBoxNumFormat&>(rAttr).GetValue() &&
-           bAuto == static_cast<const SwTableBoxNumFormat&>(rAttr).bAuto;
+    return GetValue() == static_cast<const SwTableBoxNumFormat&>(rAttr).GetValue();
 }
 
 SfxPoolItem* SwTableBoxNumFormat::Clone( SfxItemPool* ) const
 {
-    return new SwTableBoxNumFormat( GetValue(), bAuto );
+    return new SwTableBoxNumFormat( GetValue() );
 }
 
 SwTableBoxFormula::SwTableBoxFormula( const OUString& rFormula )
     : SfxPoolItem( RES_BOXATR_FORMULA ),
     SwTableFormula( rFormula ),
-    pDefinedIn( nullptr )
+    m_pDefinedIn( nullptr )
 {
 }
 
@@ -59,7 +66,7 @@ bool SwTableBoxFormula::operator==( const SfxPoolItem& rAttr ) const
 {
     assert(SfxPoolItem::operator==(rAttr));
     return GetFormula() == static_cast<const SwTableBoxFormula&>(rAttr).GetFormula() &&
-           pDefinedIn == static_cast<const SwTableBoxFormula&>(rAttr).pDefinedIn;
+           m_pDefinedIn == static_cast<const SwTableBoxFormula&>(rAttr).m_pDefinedIn;
 }
 
 SfxPoolItem* SwTableBoxFormula::Clone( SfxItemPool* ) const
@@ -72,17 +79,17 @@ SfxPoolItem* SwTableBoxFormula::Clone( SfxItemPool* ) const
 
 /** Get node type of the node containing this formula
 
-    E.g. TextFeld -> TextNode, or
-     BoxAttribute -> BoxStartNode
+    E.g. TextField -> TextNode, or
+      BoxAttribute -> BoxStartNode
 
     Caution: Must override when inheriting.
 */
 const SwNode* SwTableBoxFormula::GetNodeOfFormula() const
 {
     const SwNode* pRet = nullptr;
-    if( pDefinedIn )
+    if( m_pDefinedIn )
     {
-        SwTableBox* pBox = SwIterator<SwTableBox,SwModify>( *pDefinedIn ).First();
+        SwTableBox* pBox = SwIterator<SwTableBox,SwModify>( *m_pDefinedIn ).First();
         if( pBox )
             pRet = pBox->GetSttNd();
     }
@@ -92,14 +99,14 @@ const SwNode* SwTableBoxFormula::GetNodeOfFormula() const
 SwTableBox* SwTableBoxFormula::GetTableBox()
 {
     SwTableBox* pBox = nullptr;
-    if( pDefinedIn )
-        pBox = SwIterator<SwTableBox,SwModify>( *pDefinedIn ).First();
+    if( m_pDefinedIn )
+        pBox = SwIterator<SwTableBox,SwModify>( *m_pDefinedIn ).First();
     return pBox;
 }
 
 void SwTableBoxFormula::ChangeState( const SfxPoolItem* pItem )
 {
-    if( !pDefinedIn )
+    if( !m_pDefinedIn )
         return ;
 
     SwTableFormulaUpdate* pUpdateField;
@@ -115,8 +122,10 @@ void SwTableBoxFormula::ChangeState( const SfxPoolItem* pItem )
     // detect table that contains this attribute
     const SwTableNode* pTableNd;
     const SwNode* pNd = GetNodeOfFormula();
-    if( pNd && &pNd->GetNodes() == &pNd->GetDoc()->GetNodes() &&
-        nullptr != ( pTableNd = pNd->FindTableNode() ))
+    if (!pNd || &pNd->GetNodes() != &pNd->GetDoc()->GetNodes())
+        return;
+    pTableNd = pNd->FindTableNode();
+    if( pTableNd != nullptr )
     {
         switch( pUpdateField->m_eFlags )
         {
@@ -149,7 +158,7 @@ void SwTableBoxFormula::ChangeState( const SfxPoolItem* pItem )
             }
             else
                 pUpdateField->m_bBehindSplitLine = false;
-            // no break
+            [[fallthrough]];
         case TBL_MERGETBL:
             if( pUpdateField->m_pHistory )
             {
@@ -177,13 +186,13 @@ void SwTableBoxFormula::ChangeState( const SfxPoolItem* pItem )
 
 void SwTableBoxFormula::Calc( SwTableCalcPara& rCalcPara, double& rValue )
 {
-    if( !rCalcPara.rCalc.IsCalcError() )
+    if( !rCalcPara.m_rCalc.IsCalcError() )
     {
         // create pointers from box names
-        BoxNmToPtr( rCalcPara.pTable );
+        BoxNmToPtr( rCalcPara.m_pTable );
         const OUString sFormula( MakeFormula( rCalcPara ));
-        if( !rCalcPara.rCalc.IsCalcError() )
-            rValue = rCalcPara.rCalc.Calculate( sFormula ).GetDouble();
+        if( !rCalcPara.m_rCalc.IsCalcError() )
+            rValue = rCalcPara.m_rCalc.Calculate( sFormula ).GetDouble();
         else
             rValue = DBL_MAX;
         ChgValid( !rCalcPara.IsStackOverflow() ); // value is now valid again
@@ -191,12 +200,12 @@ void SwTableBoxFormula::Calc( SwTableCalcPara& rCalcPara, double& rValue )
 }
 
 SwTableBoxValue::SwTableBoxValue()
-    : SfxPoolItem( RES_BOXATR_VALUE ), nValue( 0 )
+    : SfxPoolItem( RES_BOXATR_VALUE ), m_nValue( 0 )
 {
 }
 
 SwTableBoxValue::SwTableBoxValue( const double nVal )
-    : SfxPoolItem( RES_BOXATR_VALUE ), nValue( nVal )
+    : SfxPoolItem( RES_BOXATR_VALUE ), m_nValue( nVal )
 {
 }
 
@@ -205,14 +214,14 @@ bool SwTableBoxValue::operator==( const SfxPoolItem& rAttr ) const
     assert(SfxPoolItem::operator==(rAttr));
     SwTableBoxValue const& rOther( static_cast<SwTableBoxValue const&>(rAttr) );
     // items with NaN should be equal to enable pooling
-    return ::rtl::math::isNan( nValue )
-        ?   ::rtl::math::isNan( rOther.nValue )
-        :   ( nValue == rOther.nValue );
+    return ::rtl::math::isNan( m_nValue )
+        ?   ::rtl::math::isNan( rOther.m_nValue )
+        :   ( m_nValue == rOther.m_nValue );
 }
 
 SfxPoolItem* SwTableBoxValue::Clone( SfxItemPool* ) const
 {
-    return new SwTableBoxValue( nValue );
+    return new SwTableBoxValue( m_nValue );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

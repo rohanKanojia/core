@@ -17,15 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
 #include <cppuhelper/implementationentry.hxx>
-#include "ReportController.hxx"
-#include "toolboxcontroller.hxx"
-#include "statusbarcontroller.hxx"
-#include "DefaultInspection.hxx"
-#include "ReportComponentHandler.hxx"
-#include "GeometryHandler.hxx"
-#include "DataProviderHandler.hxx"
+#include <ReportController.hxx>
+#include <statusbarcontroller.hxx>
+#include <DefaultInspection.hxx>
+#include <ReportComponentHandler.hxx>
+#include <GeometryHandler.hxx>
+#include <DataProviderHandler.hxx>
 
 /********************************************************************************************/
 
@@ -39,10 +37,8 @@ using namespace ::com::sun::star::registry;
 namespace
 {
 
-cppu::ImplementationEntry entries[] = {
+cppu::ImplementationEntry const entries[] = {
     { &OReportController::create, &OReportController::getImplementationName_Static, &OReportController::getSupportedServiceNames_Static,
-        &cppu::createSingleComponentFactory, nullptr, 0 },
-    { &OToolboxController::create, &OToolboxController::getImplementationName_Static, &OToolboxController::getSupportedServiceNames_Static,
         &cppu::createSingleComponentFactory, nullptr, 0 },
     { &OStatusbarController::create, &OStatusbarController::getImplementationName_Static, &OStatusbarController::getSupportedServiceNames_Static,
         &cppu::createSingleComponentFactory, nullptr, 0 },
@@ -58,7 +54,7 @@ cppu::ImplementationEntry entries[] = {
 };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL rptui_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * rptui_component_getFactory(
     char const * implName, void * serviceManager, void * registryKey)
 {
     return cppu::component_getFactoryHelper(

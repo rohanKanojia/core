@@ -27,7 +27,7 @@
 #include <cppuhelper/basemutex.hxx>
 
 #include "UITools.hxx"
-#include "UndoActions.hxx"
+#include <UndoActions.hxx>
 #include "StartMarker.hxx"
 #include "EndMarker.hxx"
 #include "ReportSection.hxx"
@@ -55,8 +55,8 @@ namespace rptui
         ::rtl::Reference< comphelper::OPropertyChangeMultiplexer> m_pSectionMulti;
         ::rtl::Reference< comphelper::OPropertyChangeMultiplexer> m_pGroupMulti;
 
-        OSectionWindow(OSectionWindow&) = delete;
-        void operator =(OSectionWindow&) = delete;
+        OSectionWindow(OSectionWindow const &) = delete;
+        void operator =(OSectionWindow const &) = delete;
 
         /** set the title of the group header or footer
         *
@@ -66,7 +66,11 @@ namespace rptui
         * \param _pIsSectionOn
         * @return sal_True when title was set otherwise FALSE
         */
-        bool setGroupSectionTitle(const css::uno::Reference< css::report::XGroup>& _xGroup,sal_uInt16 _nResId,::std::mem_fun_t< css::uno::Reference< css::report::XSection> , OGroupHelper> _pGetSection, const ::std::mem_fun_t<bool, OGroupHelper>& _pIsSectionOn);
+        bool setGroupSectionTitle(
+            const css::uno::Reference<css::report::XGroup>& _xGroup, const char* pResId,
+            const ::std::function<css::uno::Reference<css::report::XSection>(OGroupHelper*)>&
+                _pGetSection,
+            const ::std::function<bool(OGroupHelper*)>& _pIsSectionOn);
 
         /** set the title of the (report/page) header or footer
         *
@@ -76,13 +80,17 @@ namespace rptui
         * \param _pIsSectionOn
         * @return sal_True when title was set otherwise FALSE
         */
-        bool setReportSectionTitle(const css::uno::Reference< css::report::XReportDefinition>& _xReport,sal_uInt16 _nResId,::std::mem_fun_t< css::uno::Reference< css::report::XSection> , OReportHelper> _pGetSection, const ::std::mem_fun_t<bool, OReportHelper>& _pIsSectionOn);
+        bool setReportSectionTitle(
+            const css::uno::Reference<css::report::XReportDefinition>& _xReport, const char* pResId,
+            const ::std::function<css::uno::Reference<css::report::XSection>(OReportHelper*)>&
+                _pGetSection,
+            const ::std::function<bool(OReportHelper*)>& _pIsSectionOn);
         void ImplInitSettings();
 
-        DECL_LINK_TYPED(Collapsed, OColorListener&, void);
-        DECL_LINK_TYPED(StartSplitHdl, Splitter*, void);
-        DECL_LINK_TYPED(SplitHdl, Splitter*, void);
-        DECL_LINK_TYPED(EndSplitHdl, Splitter*, void);
+        DECL_LINK(Collapsed, OColorListener&, void);
+        DECL_LINK(StartSplitHdl, Splitter*, void);
+        DECL_LINK(SplitHdl, Splitter*, void);
+        DECL_LINK(EndSplitHdl, Splitter*, void);
 
 
         virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
@@ -90,19 +98,18 @@ namespace rptui
         virtual void Resize() override;
 
     protected:
-        virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) override;
     public:
         OSectionWindow( OViewsWindow* _pParent
                         ,const css::uno::Reference< css::report::XSection >& _xSection
                         ,const OUString& _sColorEntry);
-        virtual ~OSectionWindow();
+        virtual ~OSectionWindow() override;
         virtual void dispose() override;
 
-        inline OStartMarker&    getStartMarker()    { return *m_aStartMarker.get();     }
-        inline OReportSection&  getReportSection()  { return *m_aReportSection.get();   }
-        inline OEndMarker&      getEndMarker()      { return *m_aEndMarker.get();       }
-        inline OViewsWindow*    getViewsWindow()    { return m_pParent;          }
+        OStartMarker&    getStartMarker()    { return *m_aStartMarker.get();     }
+        OReportSection&  getReportSection()  { return *m_aReportSection.get();   }
+        OEndMarker&      getEndMarker()      { return *m_aEndMarker.get();       }
+        OViewsWindow*    getViewsWindow()    { return m_pParent;          }
 
         void    setCollapsed(bool _bCollapsed);
 

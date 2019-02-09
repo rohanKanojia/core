@@ -11,6 +11,8 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_SWRULER_HXX
 
 #include <svx/ruler.hxx>
+#include <vcl/timer.hxx>
+#include <vcl/virdev.hxx>
 
 class SwViewShell;
 class View;
@@ -18,12 +20,11 @@ namespace vcl { class Window; }
 class SwEditWin;
 
 /**
- * An horizontal ruler with a control for comment panel visibility fo Writer.
+ * An horizontal ruler with a control for comment panel visibility for Writer.
  *
  * The comment control only appears when the document has comments already.
  */
-class SwCommentRuler
-    : public SvxRuler
+class SwCommentRuler final : public SvxRuler
 {
 public:
     SwCommentRuler (
@@ -33,16 +34,17 @@ public:
         SvxRulerSupportFlags nRulerFlags,
         SfxBindings& rBindings,
         WinBits nWinStyle);
-    virtual ~SwCommentRuler ();
+    virtual ~SwCommentRuler () override;
     virtual void dispose() override;
 
     /**
      * Paint the ruler.
      * \param rRect ignored
      */
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
+    const std::string CreateJsonNotification();
 
-protected:
+private:
     SwViewShell * mpViewShell;     //< Shell to check if there is any comments on doc and their visibility
     VclPtr<SwEditWin> mpSwWin;         //< Used to get SwView to change the SideBar visibility
     bool        mbIsHighlighted; //< If comment control is highlighted (mouse is over it)
@@ -50,6 +52,7 @@ protected:
     int         mnFadeRate;      //< From 0 to 100. 0 means not highlighted.
     ScopedVclPtr<VirtualDevice> maVirDev;      //< VirtualDevice of this window. Just for convenience.
 
+    void NotifyKit();
     /**
      * Callback function to handle a mouse button down event.
      *
@@ -82,7 +85,7 @@ protected:
      * It is horizontally aligned to the SideBar panel.
      * \return The area where the comment control is.
      */
-    Rectangle GetCommentControlRegion();
+    tools::Rectangle GetCommentControlRegion();
 
     /**
      * Paint the comment control on VirtualDevice.
@@ -107,7 +110,7 @@ protected:
     Color GetFadedColor(const Color &rHighColor, const Color &rLowColor);
 
     /// Fade timer callback.
-    DECL_LINK_TYPED(FadeHandler, Timer *, void);
+    DECL_LINK(FadeHandler, Timer *, void);
 };
 
 #endif

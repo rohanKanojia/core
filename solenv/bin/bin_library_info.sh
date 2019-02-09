@@ -14,8 +14,8 @@ in git.
 
 syntax: bin_library_info.sh -m|--module <top_level_module> -l|--location <TARFILE_LOCATION> -s|--srcdir <SRCDIR> -b <BUILDDIR> -r|--tarfile <LIBRARY_TARFILE> [ -m|--mode verify|name ]
 
-the default mode is 'name' which just print the assocaited binary tarfile name.
-in 'verify' mode the programe print the name if the assocaited binary tarfile exist
+the default mode is 'name' which just print the associated binary tarfile name.
+in 'verify' mode the program print the name if the associated binary tarfile exist
 and print nothing and return an error code if the file does not exist
 
 Note: --location --builddir and --srcdir are optional if they are already in the env in the form of TARFILE_LOCATION and BUILDDIR SRCDIR respectively
@@ -26,15 +26,15 @@ exit 0;
 
 die()
 {
-    [ $V ] && echo "Error:" "$@"
+    [ "$V" ] && echo "Error:" "$@"
     exit -1;
 }
 
 
 get_config_sha()
 {
-    pushd ${SRCDIR?} > /dev/null
-    cat ${BUILDDIR?}/config_host.mk | git hash-object --stdin
+    pushd "${SRCDIR?}" > /dev/null
+    git hash-object "${BUILDDIR?}"/config_host.mk
     popd > /dev/null
 }
 
@@ -42,7 +42,7 @@ get_library_gbuild_sha()
 {
     local module="$1"
 
-    pushd ${SRCDIR?} > /dev/null
+    pushd "${SRCDIR?}" > /dev/null
     if [ -d "${SRCDIR}/external/${module?}" ] ; then
         git ls-tree -d HEAD "external/${module?}" | cut -f 1 | cut -d " " -f 3
     else

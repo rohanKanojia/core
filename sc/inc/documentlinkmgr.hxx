@@ -13,9 +13,8 @@
 #include <rtl/ustring.hxx>
 #include <memory>
 
-class ScDocument;
 class SfxObjectShell;
-namespace vcl { class Window; }
+namespace weld { class Window; }
 
 namespace sfx2 {
 
@@ -55,14 +54,16 @@ public:
     bool idleCheckLinks();
 
     bool hasDdeLinks() const;
+    bool hasDdeOrOleOrWebServiceLinks() const;
 
-    bool updateDdeLinks( vcl::Window* pWin );
+    bool updateDdeOrOleOrWebServiceLinks(weld::Window* pWin);
 
     void updateDdeLink( const OUString& rAppl, const OUString& rTopic, const OUString& rItem );
 
     size_t getDdeLinkCount() const;
 
-    void disconnectDdeLinks();
+private:
+    bool hasDdeOrOleOrWebServiceLinks(bool bDde, bool bOle, bool bWebService) const;
 };
 
 }

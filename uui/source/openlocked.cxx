@@ -17,38 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ids.hrc"
+#include <strings.hrc>
 #include "openlocked.hxx"
+#include <unotools/resmgr.hxx>
+#include <vcl/button.hxx>
+#include <vcl/svapp.hxx>
 
-OpenLockedQueryBox::OpenLockedQueryBox( vcl::Window* pParent, ResMgr* pResMgr, const OUString& aMessage ) :
-    MessBox(pParent, 0,
-            ResId(STR_OPENLOCKED_TITLE, *pResMgr).toString(),
-            aMessage )
+OpenLockedQueryBox::OpenLockedQueryBox(weld::Window* pParent, const std::locale& rResLocale, const OUString& rMessage, bool bEnableOverride)
+    : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Question, VclButtonsType::NONE, rMessage))
 {
-    SetImage( QueryBox::GetStandardImage() );
-
-    AddButton(ResId(STR_OPENLOCKED_OPENREADONLY_BTN, *pResMgr).toString(), RET_YES,
-            ButtonDialogFlags::Default | ButtonDialogFlags::OK | ButtonDialogFlags::Focus);
-
-    AddButton(ResId(STR_OPENLOCKED_OPENCOPY_BTN, *pResMgr).toString(), RET_NO);
-
-    AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
-    SetButtonHelpText( RET_YES, OUString() );
-    SetButtonHelpText( RET_NO, OUString() );
-
-#ifdef _WIN32
-    // bnc#656566
-    // Yes, it is silly to do this only for this dialog but not the
-    // other similar ones. But hey, it was about this dialog that the
-    // customer complained. You who read this and feel the itch, feel
-    // free to fix the problem in a better way.
-    EnableAlwaysOnTop( true );
-#endif
+    m_xQueryBox->set_title(Translate::get(STR_OPENLOCKED_TITLE, rResLocale));
+    m_xQueryBox->add_button(Translate::get(STR_OPENLOCKED_OPENREADONLY_BTN, rResLocale), RET_YES);
+    m_xQueryBox->add_button(Translate::get(STR_OPENLOCKED_OPENCOPY_BTN, rResLocale), RET_NO);
+    if (bEnableOverride)
+    {
+        // Present option to ignore the (stale?) lock file and open the document
+        m_xQueryBox->add_button(Translate::get(STR_ALREADYOPEN_OPEN_BTN, rResLocale), RET_IGNORE);
+    }
+    m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
 }
-
-OpenLockedQueryBox::~OpenLockedQueryBox()
-{
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

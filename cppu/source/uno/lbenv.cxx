@@ -17,27 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
+#ifdef DISABLE_DYNLOADING
+#include <config_java.h>
+#endif
 
-#include "cppu/EnvDcp.hxx"
+#include <cppu/EnvDcp.hxx>
 
-#include "sal/log.hxx"
-#include "osl/diagnose.h"
-#include "osl/interlck.h"
-#include "osl/mutex.hxx"
-#include "osl/module.h"
-#include "osl/process.h"
-#include "rtl/process.h"
-#include "rtl/string.hxx"
-#include "rtl/ustring.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/instance.hxx"
-#include "typelib/typedescription.h"
-#include "uno/dispatcher.h"
-#include "uno/environment.h"
-#include "uno/lbnames.h"
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
+#include <osl/interlck.h>
+#include <osl/mutex.hxx>
+#include <osl/module.hxx>
+#include <osl/process.h>
+#include <rtl/process.h>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/instance.hxx>
+#include <typelib/typedescription.h>
+#include <uno/dispatcher.h>
+#include <uno/environment.h>
+#include <uno/lbnames.h>
 #include "prim.hxx"
-#include "destr.hxx"
 #include "loadmodule.hxx"
 
 #include <unordered_map>
@@ -45,15 +46,12 @@
 #include <stdio.h>
 
 
-using ::rtl::OUString;
-using ::rtl::OUStringHash;
-
 namespace
 {
 
 
-inline bool td_equals( typelib_InterfaceTypeDescription * pTD1,
-                              typelib_InterfaceTypeDescription * pTD2 )
+bool td_equals( typelib_InterfaceTypeDescription const * pTD1,
+                       typelib_InterfaceTypeDescription const * pTD2 )
 {
     return (pTD1 == pTD2 ||
             (pTD1->aBase.pTypeName->length == pTD2->aBase.pTypeName->length &&
@@ -62,7 +60,6 @@ inline bool td_equals( typelib_InterfaceTypeDescription * pTD1,
                  pTD2->aBase.pTypeName->buffer ) == 0));
 }
 
-struct ObjectEntry;
 struct uno_DefaultEnvironment;
 
 
@@ -81,20 +78,19 @@ struct ObjectEntry
     std::vector< InterfaceEntry > aInterfaces;
     bool mixedObject;
 
-    explicit inline ObjectEntry( const OUString & rOId_ );
+    explicit ObjectEntry( const OUString & rOId_ );
 
-    inline void append(
+    void append(
         uno_DefaultEnvironment * pEnv,
         void * pInterface, typelib_InterfaceTypeDescription * pTypeDescr,
         uno_freeProxyFunc fpFreeProxy );
-    inline InterfaceEntry * find(
+    InterfaceEntry * find(
         typelib_InterfaceTypeDescription * pTypeDescr );
-    inline sal_Int32 find( void * iface_ptr, std::size_t pos );
+    sal_Int32 find( void const * iface_ptr, std::size_t pos ) const;
 };
 
 
-struct FctPtrHash :
-    public std::unary_function< const void *, std::size_t >
+struct FctPtrHash
 {
     std::size_t operator () ( const void * pKey ) const
         { return reinterpret_cast< std::size_t>( pKey ); }
@@ -103,14 +99,14 @@ struct FctPtrHash :
 
 // mapping from environment name to environment
 typedef std::unordered_map<
-    OUString, uno_Environment *, OUStringHash > OUString2EnvironmentMap;
+    OUString, uno_Environment * > OUString2EnvironmentMap;
 
 // mapping from ptr to object entry
 typedef std::unordered_map<
     void *, ObjectEntry *, FctPtrHash > Ptr2ObjectMap;
 // mapping from oid to object entry
 typedef std::unordered_map<
-    OUString, ObjectEntry *, OUStringHash > OId2ObjectMap;
+    OUString, ObjectEntry * > OId2ObjectMap;
 
 struct EnvironmentsData
 {
@@ -120,10 +116,10 @@ struct EnvironmentsData
     EnvironmentsData() : isDisposing(false) {}
     ~EnvironmentsData();
 
-    inline void getEnvironment(
+    void getEnvironment(
         uno_Environment ** ppEnv, const OUString & rEnvDcp, void * pContext );
-    inline void registerEnvironment( uno_Environment ** ppEnv );
-    inline void getRegisteredEnvironments(
+    void registerEnvironment( uno_Environment ** ppEnv );
+    void getRegisteredEnvironments(
         uno_Environment *** pppEnvs, sal_Int32 * pnLen,
         uno_memAlloc memAlloc, const OUString & rEnvDcp );
 
@@ -147,7 +143,7 @@ struct uno_DefaultEnvironment : public uno_ExtEnvironment
 };
 
 
-inline ObjectEntry::ObjectEntry( OUString const & rOId_ )
+ObjectEntry::ObjectEntry( OUString const & rOId_ )
     : oid( rOId_ ),
       nRef( 0 ),
       mixedObject( false )
@@ -156,7 +152,7 @@ inline ObjectEntry::ObjectEntry( OUString const & rOId_ )
 }
 
 
-inline void ObjectEntry::append(
+void ObjectEntry::append(
     uno_DefaultEnvironment * pEnv,
     void * pInterface, typelib_InterfaceTypeDescription * pTypeDescr,
     uno_freeProxyFunc fpFreeProxy )
@@ -171,8 +167,7 @@ inline void ObjectEntry::append(
     aNewEntry.pTypeDescr = pTypeDescr;
 
     std::pair< Ptr2ObjectMap::iterator, bool > i(
-        pEnv->aPtr2ObjectMap.insert( Ptr2ObjectMap::value_type(
-                                         pInterface, this ) ) );
+        pEnv->aPtr2ObjectMap.emplace( pInterface, this ) );
     SAL_WARN_IF(
         !i.second && (find(pInterface, 0) == -1 || i.first->second != this),
         "cppu",
@@ -182,7 +177,7 @@ inline void ObjectEntry::append(
 }
 
 
-inline InterfaceEntry * ObjectEntry::find(
+InterfaceEntry * ObjectEntry::find(
     typelib_InterfaceTypeDescription * pTypeDescr_ )
 {
     OSL_ASSERT( ! aInterfaces.empty() );
@@ -213,8 +208,8 @@ inline InterfaceEntry * ObjectEntry::find(
 }
 
 
-inline sal_Int32 ObjectEntry::find(
-    void * iface_ptr, std::size_t pos )
+sal_Int32 ObjectEntry::find(
+    void const * iface_ptr, std::size_t pos ) const
 {
     std::size_t size = aInterfaces.size();
     for ( ; pos < size; ++pos )
@@ -229,7 +224,7 @@ extern "C"
 {
 
 
-static void SAL_CALL defenv_registerInterface(
+static void defenv_registerInterface(
     uno_ExtEnvironment * pEnv, void ** ppInterface,
     rtl_uString * pOId, typelib_InterfaceTypeDescription * pTypeDescr )
 {
@@ -242,7 +237,7 @@ static void SAL_CALL defenv_registerInterface(
 
     // try to insert dummy 0:
     std::pair<OId2ObjectMap::iterator, bool> const insertion(
-        that->aOId2ObjectMap.insert( OId2ObjectMap::value_type( rOId, nullptr ) ) );
+        that->aOId2ObjectMap.emplace(  rOId, nullptr ) );
     if (insertion.second)
     {
         ObjectEntry * pOEntry = new ObjectEntry( rOId );
@@ -276,7 +271,7 @@ static void SAL_CALL defenv_registerInterface(
 }
 
 
-static void SAL_CALL defenv_registerProxyInterface(
+static void defenv_registerProxyInterface(
     uno_ExtEnvironment * pEnv, void ** ppInterface, uno_freeProxyFunc freeProxy,
     rtl_uString * pOId, typelib_InterfaceTypeDescription * pTypeDescr )
 {
@@ -290,7 +285,7 @@ static void SAL_CALL defenv_registerProxyInterface(
 
     // try to insert dummy 0:
     std::pair<OId2ObjectMap::iterator, bool> const insertion(
-        that->aOId2ObjectMap.insert( OId2ObjectMap::value_type( rOId, nullptr ) ) );
+        that->aOId2ObjectMap.emplace(  rOId, nullptr ) );
     if (insertion.second)
     {
         ObjectEntry * pOEntry = new ObjectEntry( rOId );
@@ -334,7 +329,7 @@ static void SAL_CALL defenv_registerProxyInterface(
 }
 
 
-static void SAL_CALL s_stub_defenv_revokeInterface(va_list * pParam)
+static void s_stub_defenv_revokeInterface(va_list * pParam)
 {
     uno_ExtEnvironment * pEnv       = va_arg(*pParam, uno_ExtEnvironment *);
     void               * pInterface = va_arg(*pParam, void *);
@@ -421,13 +416,13 @@ static void SAL_CALL s_stub_defenv_revokeInterface(va_list * pParam)
     }
 }
 
-static void SAL_CALL defenv_revokeInterface(uno_ExtEnvironment * pEnv, void * pInterface)
+static void defenv_revokeInterface(uno_ExtEnvironment * pEnv, void * pInterface)
 {
     uno_Environment_invoke(&pEnv->aBase, s_stub_defenv_revokeInterface, pEnv, pInterface);
 }
 
 
-static void SAL_CALL defenv_getObjectIdentifier(
+static void defenv_getObjectIdentifier(
     uno_ExtEnvironment * pEnv, rtl_uString ** ppOId, void * pInterface )
 {
     OSL_ENSURE( pEnv && ppOId && pInterface, "### null ptr!" );
@@ -457,7 +452,7 @@ static void SAL_CALL defenv_getObjectIdentifier(
 }
 
 
-static void SAL_CALL defenv_getRegisteredInterface(
+static void defenv_getRegisteredInterface(
     uno_ExtEnvironment * pEnv, void ** ppInterface,
     rtl_uString * pOId, typelib_InterfaceTypeDescription * pTypeDescr )
 {
@@ -487,7 +482,7 @@ static void SAL_CALL defenv_getRegisteredInterface(
 }
 
 
-static void SAL_CALL defenv_getRegisteredInterfaces(
+static void defenv_getRegisteredInterfaces(
     uno_ExtEnvironment * pEnv, void *** pppInterfaces, sal_Int32 * pnLen,
     uno_memAlloc memAlloc )
 {
@@ -513,7 +508,7 @@ static void SAL_CALL defenv_getRegisteredInterfaces(
 }
 
 
-static void SAL_CALL defenv_acquire( uno_Environment * pEnv )
+static void defenv_acquire( uno_Environment * pEnv )
 {
     uno_DefaultEnvironment * that = reinterpret_cast<uno_DefaultEnvironment *>(pEnv);
     osl_atomic_increment( &that->nWeakRef );
@@ -521,7 +516,7 @@ static void SAL_CALL defenv_acquire( uno_Environment * pEnv )
 }
 
 
-static void SAL_CALL defenv_release( uno_Environment * pEnv )
+static void defenv_release( uno_Environment * pEnv )
 {
     uno_DefaultEnvironment * that = reinterpret_cast<uno_DefaultEnvironment *>(pEnv);
     if (! osl_atomic_decrement( &that->nRef ))
@@ -542,14 +537,14 @@ static void SAL_CALL defenv_release( uno_Environment * pEnv )
 }
 
 
-static void SAL_CALL defenv_acquireWeak( uno_Environment * pEnv )
+static void defenv_acquireWeak( uno_Environment * pEnv )
 {
     uno_DefaultEnvironment * that = reinterpret_cast<uno_DefaultEnvironment *>(pEnv);
     osl_atomic_increment( &that->nWeakRef );
 }
 
 
-static void SAL_CALL defenv_releaseWeak( uno_Environment * pEnv )
+static void defenv_releaseWeak( uno_Environment * pEnv )
 {
     uno_DefaultEnvironment * that = reinterpret_cast<uno_DefaultEnvironment *>(pEnv);
     if (! osl_atomic_decrement( &that->nWeakRef ))
@@ -559,7 +554,7 @@ static void SAL_CALL defenv_releaseWeak( uno_Environment * pEnv )
 }
 
 
-static void SAL_CALL defenv_harden(
+static void defenv_harden(
     uno_Environment ** ppHardEnv, uno_Environment * pEnv )
 {
     if (*ppHardEnv)
@@ -587,7 +582,7 @@ static void SAL_CALL defenv_harden(
 }
 
 
-static void SAL_CALL defenv_dispose( SAL_UNUSED_PARAMETER uno_Environment * )
+static void defenv_dispose( SAL_UNUSED_PARAMETER uno_Environment * )
 {
 }
 }
@@ -656,7 +651,7 @@ void writeLine(
                     }
                     else
                     {
-                        OSL_TRACE( "%s", pLine );
+                        SAL_WARN("cppu", pLine );
                     }
                 }
             }
@@ -680,7 +675,7 @@ void writeLine(
 void writeLine(
     void * stream, const OUString & rLine, const sal_Char * pFilter )
 {
-    ::rtl::OString aLine( ::rtl::OUStringToOString(
+    OString aLine( OUStringToOString(
                               rLine, RTL_TEXTENCODING_ASCII_US ) );
     writeLine( stream, aLine.getStr(), pFilter );
 }
@@ -692,7 +687,7 @@ extern "C" void SAL_CALL uno_dumpEnvironment(
     SAL_THROW_EXTERN_C()
 {
     OSL_ENSURE( pEnv, "### null ptr!" );
-    ::rtl::OUStringBuffer buf;
+    OUStringBuffer buf;
 
     if (! pEnv->pExtEnv)
     {
@@ -784,7 +779,7 @@ extern "C" void SAL_CALL uno_dumpEnvironmentByName(
     }
     else
     {
-        ::rtl::OUStringBuffer buf( 32 );
+        OUStringBuffer buf( 32 );
         buf.append( "environment \"" );
         buf.append( pEnvDcp );
         buf.append( "\" does not exist!" );
@@ -801,7 +796,7 @@ namespace
     public:
         makeOIdPart()
         {
-            ::rtl::OUStringBuffer aRet( 64 );
+            OUStringBuffer aRet( 64 );
             aRet.append( "];" );
             // pid
             oslProcessInfo info;
@@ -809,7 +804,7 @@ namespace
             if (::osl_getProcessInfo( nullptr, osl_Process_IDENTIFIER, &info ) ==
                 osl_Process_E_None)
             {
-                aRet.append( (sal_Int64)info.Ident, 16 );
+                aRet.append( static_cast<sal_Int64>(info.Ident), 16 );
             }
             else
             {
@@ -819,8 +814,8 @@ namespace
             sal_uInt8 ar[16];
             ::rtl_getGlobalProcessId( ar );
             aRet.append( ';' );
-            for ( sal_Int32 i = 0; i < 16; ++i )
-                aRet.append( (sal_Int32)ar[i], 16 );
+            for (unsigned char i : ar)
+                aRet.append( static_cast<sal_Int32>(i), 16 );
 
             m_sOidPart = aRet.makeStringAndClear();
         }
@@ -829,7 +824,7 @@ namespace
 
     class theStaticOIdPart : public rtl::Static<makeOIdPart, theStaticOIdPart> {};
 
-inline const OUString & unoenv_getStaticOIdPart()
+const OUString & unoenv_getStaticOIdPart()
 {
     return theStaticOIdPart::get().getOIdPart();
 }
@@ -840,7 +835,7 @@ extern "C"
 {
 
 
-static void SAL_CALL unoenv_computeObjectIdentifier(
+static void unoenv_computeObjectIdentifier(
     uno_ExtEnvironment * pEnv, rtl_uString ** ppOId, void * pInterface )
 {
     assert(pEnv && ppOId && pInterface && "### null ptr!");
@@ -858,7 +853,7 @@ static void SAL_CALL unoenv_computeObjectIdentifier(
     {
         (*pUnoI->release)( pUnoI );
         // interface
-        ::rtl::OUStringBuffer oid( 64 );
+        OUStringBuffer oid( 64 );
         oid.append( reinterpret_cast< sal_Int64 >(pUnoI), 16 );
         oid.append( ';' );
         // environment[context]
@@ -875,7 +870,7 @@ static void SAL_CALL unoenv_computeObjectIdentifier(
 }
 
 
-static void SAL_CALL unoenv_acquireInterface(
+static void unoenv_acquireInterface(
     SAL_UNUSED_PARAMETER uno_ExtEnvironment *, void * pUnoI_ )
 {
     uno_Interface * pUnoI = static_cast< uno_Interface * >(pUnoI_);
@@ -883,7 +878,7 @@ static void SAL_CALL unoenv_acquireInterface(
 }
 
 
-static void SAL_CALL unoenv_releaseInterface(
+static void unoenv_releaseInterface(
     SAL_UNUSED_PARAMETER uno_ExtEnvironment *, void * pUnoI_ )
 {
     uno_Interface * pUnoI = static_cast< uno_Interface * >(pUnoI_);
@@ -915,7 +910,7 @@ EnvironmentsData::~EnvironmentsData()
 }
 
 
-inline void EnvironmentsData::getEnvironment(
+void EnvironmentsData::getEnvironment(
     uno_Environment ** ppEnv, const OUString & rEnvDcp, void * pContext )
 {
     if (*ppEnv)
@@ -924,9 +919,7 @@ inline void EnvironmentsData::getEnvironment(
         *ppEnv = nullptr;
     }
 
-    OUString aKey(
-        OUString::number( reinterpret_cast< sal_IntPtr >(pContext) ) );
-    aKey += rEnvDcp;
+    OUString aKey = OUString::number( reinterpret_cast< sal_IntPtr >(pContext) ) + rEnvDcp;
 
     // try to find registered mapping
     OUString2EnvironmentMap::const_iterator const iFind(
@@ -939,7 +932,7 @@ inline void EnvironmentsData::getEnvironment(
 }
 
 
-inline void EnvironmentsData::registerEnvironment( uno_Environment ** ppEnv )
+void EnvironmentsData::registerEnvironment( uno_Environment ** ppEnv )
 {
     OSL_ENSURE( ppEnv, "### null ptr!" );
     uno_Environment * pEnv =  *ppEnv;
@@ -955,8 +948,7 @@ inline void EnvironmentsData::registerEnvironment( uno_Environment ** ppEnv )
     {
         (*pEnv->acquireWeak)( pEnv );
         std::pair< OUString2EnvironmentMap::iterator, bool > insertion (
-            aName2EnvMap.insert(
-                OUString2EnvironmentMap::value_type( aKey, pEnv ) ) );
+            aName2EnvMap.emplace( aKey, pEnv ) );
         SAL_WARN_IF( !insertion.second, "cppu", "key " << aKey << " already in env map" );
     }
     else
@@ -979,7 +971,7 @@ inline void EnvironmentsData::registerEnvironment( uno_Environment ** ppEnv )
 }
 
 
-inline void EnvironmentsData::getRegisteredEnvironments(
+void EnvironmentsData::getRegisteredEnvironments(
     uno_Environment *** pppEnvs, sal_Int32 * pnLen, uno_memAlloc memAlloc,
     const OUString & rEnvDcp )
 {
@@ -995,7 +987,7 @@ inline void EnvironmentsData::getRegisteredEnvironments(
     {
         uno_Environment * pWeak = iPos->second;
         if (rEnvDcp.isEmpty() ||
-            rEnvDcp.equals( pWeak->pTypeName ))
+            rEnvDcp == pWeak->pTypeName )
         {
             aFounds[nSize] = nullptr;
             (*pWeak->harden)( &aFounds[nSize], pWeak );
@@ -1090,7 +1082,7 @@ static uno_Environment * initDefaultEnvironment(
         OUString envPurpose = cppu::EnvDcp::getPurpose(rEnvDcp);
         if (!envPurpose.isEmpty())
         {
-            rtl::OUString libStem(
+            OUString libStem(
                 envPurpose.copy(envPurpose.lastIndexOf(':') + 1) + "_uno_uno");
             if(!loadEnv(libStem, pEnv))
             {

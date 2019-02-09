@@ -18,11 +18,10 @@
  */
 
 #include "GroupBox.hxx"
-#include "property.hxx"
-#include "property.hrc"
-#include "services.hxx"
+#include <property.hxx>
+#include <services.hxx>
+#include <comphelper/property.hxx>
 #include <tools/debug.hxx>
-#include <comphelper/processfactory.hxx>
 
 namespace frm
 {
@@ -57,7 +56,7 @@ OGroupBoxModel::OGroupBoxModel( const OGroupBoxModel* _pOriginal, const Referenc
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> SAL_CALL OGroupBoxModel::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OGroupBoxModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OControlModel::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -85,14 +84,13 @@ void OGroupBoxModel::describeAggregateProperties( Sequence< Property >& _rAggreg
 }
 
 
-OUString SAL_CALL OGroupBoxModel::getServiceName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OGroupBoxModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_GROUPBOX);  // old (non-sun) name for compatibility !
 }
 
 
 void SAL_CALL OGroupBoxModel::write(const Reference< XObjectOutputStream>& _rxOutStream)
-    throw(IOException, RuntimeException, std::exception)
 {
     OControlModel::write(_rxOutStream);
 
@@ -102,7 +100,7 @@ void SAL_CALL OGroupBoxModel::write(const Reference< XObjectOutputStream>& _rxOu
 }
 
 
-void SAL_CALL OGroupBoxModel::read(const Reference< XObjectInputStream>& _rxInStream) throw(IOException, RuntimeException, std::exception)
+void SAL_CALL OGroupBoxModel::read(const Reference< XObjectInputStream>& _rxInStream)
 {
     OControlModel::read( _rxInStream );
 
@@ -128,7 +126,7 @@ OGroupBoxControl::OGroupBoxControl(const Reference<XComponentContext>& _rxFactor
 }
 
 
-css::uno::Sequence<OUString> SAL_CALL OGroupBoxControl::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OGroupBoxControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -141,7 +139,7 @@ css::uno::Sequence<OUString> SAL_CALL OGroupBoxControl::getSupportedServiceNames
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OGroupBoxModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
@@ -149,7 +147,7 @@ com_sun_star_form_OGroupBoxModel_get_implementation(css::uno::XComponentContext*
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OGroupBoxControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

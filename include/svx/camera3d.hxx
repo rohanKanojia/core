@@ -20,6 +20,8 @@
 #ifndef INCLUDED_SVX_CAMERA3D_HXX
 #define INCLUDED_SVX_CAMERA3D_HXX
 
+#include <basegfx/point/b3dpoint.hxx>
+#include <sal/types.h>
 #include <svx/viewpt3d.hxx>
 #include <svx/svxdllapi.h>
 
@@ -29,13 +31,10 @@
 |*
 \************************************************************************/
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC Camera3D : public Viewport3D
+class SAL_WARN_UNUSED SVX_DLLPUBLIC Camera3D final : public Viewport3D
 {
- protected:
     basegfx::B3DPoint   aResetPos;
     basegfx::B3DPoint   aResetLookAt;
-    double      fResetFocalLength;
-    double      fResetBankAngle;
 
     basegfx::B3DPoint   aPosition;
     basegfx::B3DPoint   aLookAt;
@@ -44,13 +43,12 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC Camera3D : public Viewport3D
 
     bool bAutoAdjustProjection;
 
- public:
+public:
     Camera3D(const basegfx::B3DPoint& rPos, const basegfx::B3DPoint& rLookAt,
-             double fFocalLen = 35.0, double fBankAng = 0);
+             double fFocalLen = 35.0);
     Camera3D();
 
-    void SetDefaults(const basegfx::B3DPoint& rPos, const basegfx::B3DPoint& rLookAt,
-                     double fFocalLen = 35.0, double fBankAng = 0);
+    void SetDefaults(const basegfx::B3DPoint& rPos, const basegfx::B3DPoint& rLookAt);
 
     void SetViewWindow(double fX, double fY, double fW, double fH);
 
@@ -63,10 +61,10 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC Camera3D : public Viewport3D
     void    SetFocalLength(double fLen);
     double  GetFocalLength() const { return fFocalLength; }
 
-    // Bank angle links/rechts
+    // Bank angle left/right
     void    SetBankAngle(double fAngle);
 
-    void SetAutoAdjustProjection(bool bAdjust = true)
+    void SetAutoAdjustProjection(bool bAdjust)
         { bAutoAdjustProjection = bAdjust; }
 };
 

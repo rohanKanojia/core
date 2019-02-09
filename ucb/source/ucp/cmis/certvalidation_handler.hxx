@@ -12,7 +12,15 @@
 #ifndef INCLUDED_UCB_SOURCE_UCP_CMIS_CERTVALIDATION_HANDLER_HXX
 #define INCLUDED_UCB_SOURCE_UCP_CMIS_CERTVALIDATION_HANDLER_HXX
 
+#if defined __GNUC__ && !defined __clang__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+#pragma GCC diagnostic ignored "-Wunused-but-set-parameter"
+#endif
 #include <libcmis/libcmis.hxx>
+#if defined __GNUC__ && !defined __clang__
+#pragma GCC diagnostic pop
+#endif
 
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 
@@ -22,7 +30,7 @@ namespace cmis
     {
         const css::uno::Reference< css::ucb::XCommandEnvironment>& m_xEnv;
         const css::uno::Reference< css::uno::XComponentContext >& m_xContext;
-        OUString m_sHostname;
+        OUString const m_sHostname;
 
         public:
             CertValidationHandler (

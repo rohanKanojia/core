@@ -20,41 +20,32 @@
 #ifndef INCLUDED_EDITENG_SOURCE_EDITENG_EEOBJ_HXX
 #define INCLUDED_EDITENG_SOURCE_EDITENG_EEOBJ_HXX
 
-#include <cppuhelper/weak.hxx>
+#include <cppuhelper/implbase.hxx>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 
 #include <tools/stream.hxx>
 
-class EditDataObject :  public css::datatransfer::XTransferable,
-                        public ::cppu::OWeakObject
-
+class EditDataObject :  public ::cppu::WeakImplHelper<css::datatransfer::XTransferable>
 {
 private:
-    SvMemoryStream  maBinData;
     SvMemoryStream  maRTFData;
+    SvMemoryStream  maODFData;
     OUString        maText;
-
     OUString        maOfficeBookmark;
 
 public:
                     EditDataObject();
-                    virtual ~EditDataObject();
+                    virtual ~EditDataObject() override;
 
-    SvMemoryStream& GetStream() { return maBinData; }
     SvMemoryStream& GetRTFStream() { return maRTFData; }
+    SvMemoryStream& GetODFStream() { return maODFData; }
     OUString&       GetString() { return maText; }
     OUString&       GetURL()    { return maOfficeBookmark; }
 
-
-    // css::uno::XInterface
-    css::uno::Any                               SAL_CALL queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception) override;
-    void                                        SAL_CALL acquire() throw() override  { OWeakObject::acquire(); }
-    void                                        SAL_CALL release() throw() override  { OWeakObject::release(); }
-
     // css::datatransfer::XTransferable
-    css::uno::Any SAL_CALL getTransferData( const css::datatransfer::DataFlavor& aFlavor ) throw(css::datatransfer::UnsupportedFlavorException, css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    css::uno::Sequence< css::datatransfer::DataFlavor > SAL_CALL getTransferDataFlavors(  ) throw(css::uno::RuntimeException, std::exception) override;
-    sal_Bool SAL_CALL isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) throw(css::uno::RuntimeException, std::exception) override;
+    css::uno::Any SAL_CALL getTransferData( const css::datatransfer::DataFlavor& aFlavor ) override;
+    css::uno::Sequence< css::datatransfer::DataFlavor > SAL_CALL getTransferDataFlavors(  ) override;
+    sal_Bool SAL_CALL isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) override;
 };
 
 #endif // INCLUDED_EDITENG_SOURCE_EDITENG_EEOBJ_HXX

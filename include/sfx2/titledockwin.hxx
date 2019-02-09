@@ -34,10 +34,10 @@ namespace sfx2
     public:
         TitledDockingWindow(
             SfxBindings* i_pBindings, SfxChildWindow* i_pChildWindow,
-            vcl::Window* i_pParent, WinBits i_nStyle = 0
+            vcl::Window* i_pParent
         );
 
-        virtual ~TitledDockingWindow();
+        virtual ~TitledDockingWindow() override;
         virtual void dispose() override;
 
         /** sets a title to be displayed in the docking window
@@ -57,14 +57,11 @@ namespace sfx2
 
     protected:
         // Window overridables
-        virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& i_rArea) override;
+        virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& i_rArea) override;
         virtual void Resize() override;
         virtual void StateChanged( StateChangedType i_nType ) override;
         virtual void DataChanged( const DataChangedEvent& i_rDataChangedEvent ) override;
         virtual void SetText( const OUString& i_rText ) override;
-
-        // DockingWindow overridables
-        void EndDocking(const Rectangle& rRect, bool bFloatMode) override;
 
         virtual void ApplySettings(vcl::RenderContext& rRenderContext) override;
     protected:
@@ -72,14 +69,8 @@ namespace sfx2
         */
         void    impl_resetToolBox();
 
-        /** returns the current title.
-
-            If no title has been set via SetTitle, then the window text (Window::GetText) is returned.
-        */
-        OUString  impl_getTitle() const;
-
     private:
-        DECL_LINK_TYPED( OnToolboxItemSelected, ToolBox*, void );
+        DECL_LINK( OnToolboxItemSelected, ToolBox*, void );
 
         void    impl_construct();
         void    impl_layout();
@@ -89,8 +80,6 @@ namespace sfx2
         OUString            m_sTitle;
         VclPtr<ToolBox>     m_aToolbox;
         VclPtr<Window>      m_aContentWindow;
-
-        Link<TitledDockingWindow*,void>  m_aEndDockingHdl;
 
         /** The border that is painted around the inner window.  The bevel
             shadow lines are part of the border, so where the border is 0 no

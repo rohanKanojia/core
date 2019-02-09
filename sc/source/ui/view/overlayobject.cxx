@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "overlayobject.hxx"
+#include <overlayobject.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/lineinfo.hxx>
 #include <tools/fract.hxx>
@@ -31,9 +31,8 @@
 
 using sdr::overlay::OverlayObject;
 using sdr::overlay::OverlayManager;
-using ::drawinglayer::primitive2d::Primitive2DSequence;
 
-#define DASH_UPDATE_INTERVAL 180    // in msec
+#define DASH_UPDATE_INTERVAL 500    // in msec
 
 ScOverlayDashedBorder::ScOverlayDashedBorder(const ::basegfx::B2DRange& rRange, const Color& rColor) :
     OverlayObject(rColor),
@@ -54,7 +53,7 @@ void ScOverlayDashedBorder::Trigger(sal_uInt32 nTime)
     {
         SetTime(nTime + DASH_UPDATE_INTERVAL);
         mbToggle = !mbToggle;
-        pMgr->InsertEvent(this);
+        pMgr->InsertEvent(*this);
         objectChange();
     }
 }
@@ -78,7 +77,7 @@ drawinglayer::primitive2d::Primitive2DContainer ScOverlayDashedBorder::createOve
     if (!mbToggle)
         ::std::swap(aColorA, aColorB);
 
-    const basegfx::B2DPolygon aPoly = basegfx::tools::createPolygonFromRect(maRange);
+    const basegfx::B2DPolygon aPoly = basegfx::utils::createPolygonFromRect(maRange);
     B2DPolyPolygon aPolygon(aPoly);
     const drawinglayer::primitive2d::Primitive2DReference aReference(
         new drawinglayer::primitive2d::PolyPolygonMarkerPrimitive2D(

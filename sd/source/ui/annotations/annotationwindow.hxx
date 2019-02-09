@@ -20,16 +20,12 @@
 #ifndef INCLUDED_SD_SOURCE_UI_ANNOTATIONS_ANNOTATIONWINDOW_HXX
 #define INCLUDED_SD_SOURCE_UI_ANNOTATIONS_ANNOTATIONWINDOW_HXX
 
-#include <com/sun/star/office/XAnnotation.hpp>
-
 #include <vcl/ctrl.hxx>
-#include <vcl/lineinfo.hxx>
 #include <vcl/floatwin.hxx>
 
 #include <basegfx/polygon/b2dpolygon.hxx>
 
-#include <svx/sdr/overlay/overlayobject.hxx>
-#include <editeng/editstat.hxx>
+namespace com { namespace sun { namespace star { namespace office { class XAnnotation; } } } }
 
 class OutlinerView;
 class Outliner;
@@ -44,7 +40,6 @@ class AnnotationManagerImpl;
 class AnnotationWindow;
 class DrawDocShell;
 class TextApiObject;
-class View;
 
 class AnnotationTextWindow : public Control
 {
@@ -53,25 +48,22 @@ private:
     VclPtr<AnnotationWindow>   mpAnnotationWindow;
 
 protected:
-    virtual void    Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect) override;
+    virtual void    Paint( vcl::RenderContext& /*rRenderContext*/, const ::tools::Rectangle& rRect) override;
     virtual void    KeyInput( const KeyEvent& rKeyEvt ) override;
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonUp( const MouseEvent& rMEvt ) override;
     virtual void    Command( const CommandEvent& rCEvt ) override;
-    virtual void    LoseFocus() override;
 
 public:
     AnnotationTextWindow( AnnotationWindow* pParent, WinBits nBits );
-    virtual ~AnnotationTextWindow();
+    virtual ~AnnotationTextWindow() override;
     virtual void dispose() override;
 
     void SetOutlinerView( OutlinerView* pOutlinerView ) { mpOutlinerView = pOutlinerView; }
 
     virtual OUString GetSurroundingText() const override;
     virtual Selection GetSurroundingTextSelection() const override;
-
-    virtual void    GetFocus() override;
 };
 
 class AnnotationWindow : public FloatingWindow
@@ -81,39 +73,35 @@ class AnnotationWindow : public FloatingWindow
         DrawDocShell*           mpDocShell;
         SdDrawDocument*         mpDoc;
 
-        OutlinerView*           mpOutlinerView;
-        ::Outliner*             mpOutliner;
+        std::unique_ptr<OutlinerView> mpOutlinerView;
+        std::unique_ptr<::Outliner>   mpOutliner;
         VclPtr<ScrollBar>       mpVScrollbar;
         css::uno::Reference< css::office::XAnnotation > mxAnnotation;
-        bool                    mbReadonly;
+        bool const              mbReadonly;
         bool                    mbProtected;
         bool                    mbMouseOverButton;
         VclPtr<AnnotationTextWindow>   mpTextWindow;
         VclPtr<MultiLineEdit>   mpMeta;
-        Rectangle               maRectMetaButton;
+        ::tools::Rectangle               maRectMetaButton;
         basegfx::B2DPolygon     maPopupTriangle;
 
     protected:
-        void            SetSizePixel( const Size& rNewSize ) override;
-
-        DECL_LINK_TYPED(ScrollHdl, ScrollBar*, void);
+        DECL_LINK(ScrollHdl, ScrollBar*, void);
 
     public:
         AnnotationWindow( AnnotationManagerImpl& rManager, DrawDocShell* pDocShell, vcl::Window* pParent );
-        virtual ~AnnotationWindow();
+        virtual ~AnnotationWindow() override;
         virtual void dispose() override;
 
         void StartEdit();
-
-        SvxLanguageItem GetLanguage();
 
         void setAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation );
 
         void ExecuteSlot( sal_uInt16 nSID );
 
         DrawDocShell*           DocShell()      { return mpDocShell; }
-        OutlinerView*           getView()       { return mpOutlinerView; }
-        ::Outliner*             Engine()        { return mpOutliner; }
+        OutlinerView*           getView()       { return mpOutlinerView.get(); }
+        ::Outliner*             Engine()        { return mpOutliner.get(); }
         SdDrawDocument*         Doc()           { return mpDoc; }
 
         long            GetPostItTextHeight();
@@ -134,7 +122,7 @@ class AnnotationWindow : public FloatingWindow
         void            ToggleInsMode();
 
         virtual void    Deactivate() override;
-        virtual void    Paint( vcl::RenderContext& /*rRenderContext*/, const Rectangle& rRect) override;
+        virtual void    Paint( vcl::RenderContext& /*rRenderContext*/, const ::tools::Rectangle& rRect) override;
         virtual void    MouseMove( const MouseEvent& rMEvt ) override;
         virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
         virtual void    Command( const CommandEvent& rCEvt ) override;

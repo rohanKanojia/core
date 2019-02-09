@@ -20,43 +20,50 @@
 #include <sal/config.h>
 
 #include <sal/log.hxx>
+#include <unotools/localedatawrapper.hxx>
+#include <unotools/charclass.hxx>
 #include <unotools/configmgr.hxx>
 #include <unotools/syslocale.hxx>
 #include <unotools/syslocaleoptions.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/lok.hxx>
 #include <comphelper/sequence.hxx>
 #include <rtl/tencinfo.h>
 #include <rtl/locale.h>
 #include <osl/thread.h>
 #include <osl/nlsupport.h>
+
 #include <vector>
+#include <memory>
 
 using namespace osl;
 using namespace com::sun::star;
 
-SvtSysLocale_Impl*  SvtSysLocale::pImpl = nullptr;
-sal_Int32           SvtSysLocale::nRefCount = 0;
+namespace {
+
+std::weak_ptr<SvtSysLocale_Impl> g_pSysLocale;
+
+}
 
 class SvtSysLocale_Impl : public utl::ConfigurationListener
 {
 public:
-        SvtSysLocaleOptions     aSysLocaleOptions;
-        LocaleDataWrapper*      pLocaleData;
-        CharClass*              pCharClass;
+        SvtSysLocaleOptions                    aSysLocaleOptions;
+        std::unique_ptr<LocaleDataWrapper>      pLocaleData;
+        std::unique_ptr<CharClass>              pCharClass;
 
                                 SvtSysLocale_Impl();
-    virtual                     ~SvtSysLocale_Impl();
+    virtual                     ~SvtSysLocale_Impl() override;
 
     CharClass*                  GetCharClass();
-    virtual void                ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 ) override;
+    virtual void                ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints ) override;
 
 private:
     void                        setDateAcceptancePatternsConfig();
 };
 
-SvtSysLocale_Impl::SvtSysLocale_Impl() : pCharClass(nullptr)
+SvtSysLocale_Impl::SvtSysLocale_Impl()
 {
-    pLocaleData = new LocaleDataWrapper( aSysLocaleOptions.GetRealLanguageTag() );
+    pLocaleData.reset(new LocaleDataWrapper( aSysLocaleOptions.GetRealLanguageTag() ));
     setDateAcceptancePatternsConfig();
 
     // listen for further changes
@@ -66,28 +73,26 @@ SvtSysLocale_Impl::SvtSysLocale_Impl() : pCharClass(nullptr)
 SvtSysLocale_Impl::~SvtSysLocale_Impl()
 {
     aSysLocaleOptions.RemoveListener( this );
-    delete pCharClass;
-    delete pLocaleData;
 }
 
 CharClass* SvtSysLocale_Impl::GetCharClass()
 {
     if ( !pCharClass )
-        pCharClass = new CharClass( aSysLocaleOptions.GetRealLanguageTag() );
-    return pCharClass;
+        pCharClass.reset(new CharClass( aSysLocaleOptions.GetRealLanguageTag() ));
+    return pCharClass.get();
 }
 
-void SvtSysLocale_Impl::ConfigurationChanged( utl::ConfigurationBroadcaster*, sal_uInt32 nHint )
+void SvtSysLocale_Impl::ConfigurationChanged( utl::ConfigurationBroadcaster*, ConfigurationHints nHint )
 {
     MutexGuard aGuard( SvtSysLocale::GetMutex() );
 
-    if ( nHint & SYSLOCALEOPTIONS_HINT_LOCALE )
+    if ( nHint & ConfigurationHints::Locale )
     {
         const LanguageTag& rLanguageTag = aSysLocaleOptions.GetRealLanguageTag();
         pLocaleData->setLanguageTag( rLanguageTag );
         GetCharClass()->setLanguageTag( rLanguageTag );
     }
-    if ( nHint & SYSLOCALEOPTIONS_HINT_DATEPATTERNS )
+    if ( nHint & ConfigurationHints::DatePatterns )
     {
         setDateAcceptancePatternsConfig();
     }
@@ -114,37 +119,29 @@ void SvtSysLocale_Impl::setDateAcceptancePatternsConfig()
 SvtSysLocale::SvtSysLocale()
 {
     MutexGuard aGuard( GetMutex() );
+    pImpl = g_pSysLocale.lock();
     if ( !pImpl )
-        pImpl = new SvtSysLocale_Impl;
-    ++nRefCount;
+    {
+        pImpl = std::make_shared<SvtSysLocale_Impl>();
+        g_pSysLocale = pImpl;
+    }
 }
 
 SvtSysLocale::~SvtSysLocale()
 {
     MutexGuard aGuard( GetMutex() );
-    if ( !--nRefCount )
-    {
-        delete pImpl;
-        pImpl = nullptr;
-    }
+    pImpl.reset();
 }
 
 // static
 Mutex& SvtSysLocale::GetMutex()
 {
-    static Mutex* pMutex = nullptr;
-    if( !pMutex )
-    {
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-        if( !pMutex )
-        {
-            // #i77768# Due to a static reference in the toolkit lib
-            // we need a mutex that lives longer than the svl library.
-            // Otherwise the dtor would use a destructed mutex!!
-            pMutex = new Mutex;
-        }
-    }
-    return *pMutex;
+    // #i77768# Due to a static reference in the toolkit lib
+    // we need a mutex that lives longer than the svl library.
+    // Otherwise the dtor would use a destructed mutex!!
+    static Mutex* persistentMutex(new Mutex);
+
+    return *persistentMutex;
 }
 
 const LocaleDataWrapper& SvtSysLocale::GetLocaleData() const
@@ -154,7 +151,7 @@ const LocaleDataWrapper& SvtSysLocale::GetLocaleData() const
 
 const LocaleDataWrapper* SvtSysLocale::GetLocaleDataPtr() const
 {
-    return pImpl->pLocaleData;
+    return pImpl->pLocaleData.get();
 }
 
 const CharClass& SvtSysLocale::GetCharClass() const
@@ -174,11 +171,17 @@ SvtSysLocaleOptions& SvtSysLocale::GetOptions() const
 
 const LanguageTag& SvtSysLocale::GetLanguageTag() const
 {
+    if (comphelper::LibreOfficeKit::isActive())
+        return comphelper::LibreOfficeKit::getLanguageTag();
+
     return pImpl->aSysLocaleOptions.GetRealLanguageTag();
 }
 
 const LanguageTag& SvtSysLocale::GetUILanguageTag() const
 {
+    if (comphelper::LibreOfficeKit::isActive())
+        return comphelper::LibreOfficeKit::getLanguageTag();
+
     return pImpl->aSysLocaleOptions.GetRealUILanguageTag();
 }
 

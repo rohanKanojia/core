@@ -41,14 +41,14 @@ public:
         const OUString& rLName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
         SvXMLStylesContext& rStyles, sal_uInt16 nFamily );
-    virtual ~XMLChartStyleContext();
+    virtual ~XMLChartStyleContext() override;
 
     /// is called after all styles have been read to apply styles
     void FillPropertySet(
         const css::uno::Reference<css::beans::XPropertySet > & rPropSet ) override;
 
     /// necessary for property context (element-property symbol-image)
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

@@ -18,25 +18,25 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <vcl/svapp.hxx>
 #include <vcl/sysdata.hxx>
 
 #ifdef MACOSX
-#include "osx/salinst.h"
-#include "osx/saldata.hxx"
-#include "osx/salframe.h"
+#include <osx/salinst.h>
+#include <osx/saldata.hxx>
+#include <osx/salframe.h>
 #else
 #include "headless/svpframe.hxx"
-#include "headless/svpgdi.hxx"
 #include "headless/svpinst.hxx"
 #include "headless/svpvd.hxx"
 #endif
-#include "quartz/salgdi.h"
-#include "quartz/salvd.h"
-#include "quartz/utils.h"
+#include <quartz/salgdi.h>
+#include <quartz/salvd.h>
+#include <quartz/utils.h>
 
-SalVirtualDevice* AquaSalInstance::CreateVirtualDevice( SalGraphics* pGraphics,
+std::unique_ptr<SalVirtualDevice> AquaSalInstance::CreateVirtualDevice( SalGraphics* pGraphics,
                                                         long &nDX, long &nDY,
                                                         DeviceFormat eFormat,
                                                         const SystemGraphicsData *pData )
@@ -47,18 +47,18 @@ SalVirtualDevice* AquaSalInstance::CreateVirtualDevice( SalGraphics* pGraphics,
 #ifdef IOS
     if( pData )
     {
-        return new AquaSalVirtualDevice( static_cast< AquaSalGraphics* >( pGraphics ),
-                                         nDX, nDY, eFormat, pData );
+        return std::unique_ptr<SalVirtualDevice>(new AquaSalVirtualDevice( static_cast< AquaSalGraphics* >( pGraphics ),
+                                         nDX, nDY, eFormat, pData ));
     }
     else
     {
-        AquaSalVirtualDevice* pNew = new AquaSalVirtualDevice( NULL, nDX, nDY, eFormat, NULL );
+        std::unique_ptr<SalVirtualDevice> pNew(new AquaSalVirtualDevice( NULL, nDX, nDY, eFormat, NULL ));
         pNew->SetSize( nDX, nDY );
         return pNew;
     }
 #else
-    return new AquaSalVirtualDevice( static_cast< AquaSalGraphics* >( pGraphics ),
-                                     nDX, nDY, eFormat, pData );
+    return std::unique_ptr<SalVirtualDevice>(new AquaSalVirtualDevice( static_cast< AquaSalGraphics* >( pGraphics ),
+                                     nDX, nDY, eFormat, pData ));
 #endif
 }
 
@@ -182,7 +182,7 @@ void AquaSalVirtualDevice::Destroy()
     if( mxBitmapContext )
     {
         void* pRawData = CGBitmapContextGetData( mxBitmapContext );
-        rtl_freeMemory( pRawData );
+        std::free( pRawData );
         SAL_INFO( "vcl.cg",  "CGContextRelease(" << mxBitmapContext << ")" );
         CGContextRelease( mxBitmapContext );
         mxBitmapContext = nullptr;
@@ -207,7 +207,7 @@ void AquaSalVirtualDevice::ReleaseGraphics( SalGraphics* )
 bool AquaSalVirtualDevice::SetSize( long nDX, long nDY )
 {
     SAL_INFO( "vcl.virdev", "AquaSalVirtualDevice::SetSize() this=" << this <<
-              " (" << nDX << "x" << nDY << ") mbForeignContext=" << mbForeignContext );
+              " (" << nDX << "x" << nDY << ") mbForeignContext=" << (mbForeignContext ? "YES" : "NO"));
 
     if( mbForeignContext )
     {
@@ -235,13 +235,7 @@ bool AquaSalVirtualDevice::SetSize( long nDX, long nDY )
         mnBitmapDepth = 8;  // TODO: are 1bit vdevs worth it?
         const int nBytesPerRow = (mnBitmapDepth * nDX + 7) / 8;
 
-        void* pRawData = rtl_allocateMemory( nBytesPerRow * nDY );
-#ifdef DBG_UTIL
-        for (ssize_t i = 0; i < nBytesPerRow * nDY; i++)
-        {
-            static_cast<sal_uInt8*>(pRawData)[i] = (i & 0xFF);
-        }
-#endif
+        void* pRawData = std::malloc( nBytesPerRow * nDY );
         mxBitmapContext = CGBitmapContextCreate( pRawData, nDX, nDY,
                                                  mnBitmapDepth, nBytesPerRow,
                                                  GetSalData()->mxGraySpace, kCGImageAlphaNone );
@@ -255,19 +249,10 @@ bool AquaSalVirtualDevice::SetSize( long nDX, long nDY )
         AquaSalFrame* pSalFrame = mpGraphics->getGraphicsFrame();
         if( !pSalFrame || !AquaSalFrame::isAlive( pSalFrame ))
         {
-            if( !GetSalData()->maFrames.empty() )
-            {
-                // get the first matching frame
-                pSalFrame = *GetSalData()->maFrames.begin();
-            }
-            else
-            {
-                // ensure we don't reuse a dead AquaSalFrame on the very
-                // unlikely case of no other frame to use
-                pSalFrame = nullptr;
-            }
-            // update the frame reference
-            mpGraphics->setGraphicsFrame( pSalFrame );
+            pSalFrame = static_cast<AquaSalFrame*>( GetSalData()->mpInstance->anyFrame() );
+            if ( pSalFrame )
+                // update the frame reference
+                mpGraphics->setGraphicsFrame( pSalFrame );
         }
         if( pSalFrame )
         {
@@ -278,44 +263,29 @@ bool AquaSalVirtualDevice::SetSize( long nDX, long nDY )
                 NSGraphicsContext* pNSContext = [NSGraphicsContext graphicsContextWithWindow: pNSWindow];
                 if( pNSContext )
                 {
-                    xCGContext = static_cast<CGContextRef>([pNSContext graphicsPort]);
+                    xCGContext = [pNSContext CGContext];
                 }
-            }
-            else
-            {
-                // fall back to a bitmap context
-                mnBitmapDepth = 32;
-
-                const int nBytesPerRow = (mnBitmapDepth * nDX) / 8;
-                void* pRawData = rtl_allocateMemory( nBytesPerRow * nDY );
-#ifdef DBG_UTIL
-                for (ssize_t i = 0; i < nBytesPerRow * nDY; i++)
-                {
-                    static_cast<sal_uInt8*>(pRawData)[i] = (i & 0xFF);
-                }
-#endif
-                mxBitmapContext = CGBitmapContextCreate( pRawData, nDX, nDY,
-                                                         8, nBytesPerRow, GetSalData()->mxRGBSpace, kCGImageAlphaNoneSkipFirst );
-                SAL_INFO( "vcl.cg",  "CGBitmapContextCreate(" << nDX << "x" << nDY << "x32) = " << mxBitmapContext );
-                xCGContext = mxBitmapContext;
             }
         }
-#else
-        mnBitmapDepth = 32;
+#endif
 
-        const int nBytesPerRow = (mnBitmapDepth * nDX) / 8;
-        void* pRawData = rtl_allocateMemory( nBytesPerRow * nDY );
-#ifdef DBG_UTIL
-        for (ssize_t i = 0; i < nBytesPerRow * nDY; i++)
+        if (!xCGContext)
         {
-            ((sal_uInt8*)pRawData)[i] = (i & 0xFF);
+            // assert(Application::IsBitmapRendering());
+            mnBitmapDepth = 32;
+
+            const int nBytesPerRow = (mnBitmapDepth * nDX) / 8;
+            void* pRawData = std::malloc( nBytesPerRow * nDY );
+#ifdef MACOSX
+            const int nFlags = kCGImageAlphaNoneSkipFirst;
+#else
+            const int nFlags = kCGImageAlphaNoneSkipFirst | kCGImageByteOrder32Little;
+#endif
+            mxBitmapContext = CGBitmapContextCreate(pRawData, nDX, nDY, 8, nBytesPerRow,
+                                                    GetSalData()->mxRGBSpace, nFlags);
+            SAL_INFO( "vcl.cg", "CGBitmapContextCreate(" << nDX << "x" << nDY << "x32) = " << mxBitmapContext );
+            xCGContext = mxBitmapContext;
         }
-#endif
-        mxBitmapContext = CGBitmapContextCreate( pRawData, nDX, nDY,
-                                                 8, nBytesPerRow, GetSalData()->mxRGBSpace, kCGImageAlphaNoneSkipFirst );
-        SAL_INFO( "vcl.cg",  "CGBitmapContextCreate(" << nDX << "x" << nDY << "x32) = " << mxBitmapContext );
-        xCGContext = mxBitmapContext;
-#endif
     }
 
     SAL_WARN_IF( !xCGContext, "vcl.quartz", "No context" );

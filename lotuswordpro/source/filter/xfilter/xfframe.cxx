@@ -57,34 +57,24 @@
  * @file
  * Frame whose anchor is not page.
  ************************************************************************/
-#include "xfframe.hxx"
-#include "xfparagraph.hxx"
+#include <xfilter/xfframe.hxx>
+#include <xfilter/xfparagraph.hxx>
 #define     ZINDEX_MIN 0
+
 XFFrame::XFFrame()
-{
-    m_isTextBox = false;
-    m_eAnchor = enumXFAnchorPara;
-    m_nAnchorPage = 0;
-    m_nZIndex = ZINDEX_MIN;
-    //give it a default name:
-    m_strName = XFGlobal::GenFrameName();
-    m_fMinHeight = 0;
-    m_fMaxHeight = 0;
-    m_nFlag = 0;
-    m_eType = enumXFFrameTextbox;
-}
-XFFrame::XFFrame(bool isTextBox):m_isTextBox(isTextBox)
-{
-    m_eAnchor = enumXFAnchorPara;
-    m_nAnchorPage = 0;
-    m_nZIndex = ZINDEX_MIN;
-    //give it a default name:
-    m_strName = XFGlobal::GenFrameName();
-    m_fMinHeight = 0;
-    m_fMaxHeight = 0;
-    m_nFlag = 0;
-    m_eType = enumXFFrameTextbox;
-}
+    : XFFrame::XFFrame(false)
+{}
+
+XFFrame::XFFrame(bool isTextBox)
+    : m_eAnchor(enumXFAnchorPara)
+    , m_nAnchorPage(0)
+    , m_strName(XFGlobal::GenFrameName())  // give it a default name
+    , m_nZIndex(ZINDEX_MIN)
+    , m_fMinHeight(0)
+    , m_eType(enumXFFrameTextbox)
+    , m_nFrameFlag(0)
+    , m_isTextBox(isTextBox)
+{}
 
 XFFrame::~XFFrame()
 {
@@ -168,11 +158,11 @@ void    XFFrame::StartFrame(IXFStream *pStrm)
     pAttrList->AddAttribute( "svg:x", OUString::number(m_aRect.GetX()) + "cm" );
     pAttrList->AddAttribute( "svg:y", OUString::number(m_aRect.GetY()) + "cm" );
     pAttrList->AddAttribute( "svg:width", OUString::number(m_aRect.GetWidth()) + "cm" );
-    if( m_nFlag& XFFRAME_FLAG_MINHEIGHT )
+    if( m_nFrameFlag& XFFRAME_FLAG_MINHEIGHT )
     {
         pAttrList->AddAttribute( "fo:min-height", OUString::number(m_fMinHeight) + "cm" );
-        if( m_nFlag&XFFRAME_FLAG_MAXHEIGHT )
-            pAttrList->AddAttribute( "fo:max-height", OUString::number(m_fMaxHeight) + "cm" );
+        if( m_nFrameFlag&XFFRAME_FLAG_MAXHEIGHT )
+            pAttrList->AddAttribute( "fo:max-height", OUString::number(0) + "cm" );
     }
     else
         pAttrList->AddAttribute( "svg:height", OUString::number(m_aRect.GetHeight()) + "cm" );

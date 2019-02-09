@@ -21,45 +21,59 @@
 #define INCLUDED_VCL_TIMER_HXX
 
 #include <tools/link.hxx>
-#include <vcl/scheduler.hxx>
+#include <vcl/task.hxx>
 
-class VCL_DLLPUBLIC Timer : public Scheduler
+class VCL_DLLPUBLIC Timer : public Task
 {
-protected:
-    Link<Timer *, void> maTimeoutHdl;          // Callback Link
-    sal_uInt64      mnTimeout;
-    bool            mbAuto;
+    Link<Timer *, void> maInvokeHandler;   ///< Callback Link
+    sal_uInt64          mnTimeout;
+    const bool          mbAuto;
 
+protected:
     virtual void SetDeletionFlags() override;
-    virtual bool ReadyForSchedule( bool bTimerOnly, sal_uInt64 nTimeNow ) const override;
-    virtual bool IsIdle() const override;
-    virtual sal_uInt64 UpdateMinPeriod( sal_uInt64 nMinPeriod, sal_uInt64 nTime ) const override;
+    virtual sal_uInt64 UpdateMinPeriod(
+        sal_uInt64 nMinPeriod, sal_uInt64 nTimeNow ) const override;
+
+    Timer( bool bAuto, const sal_Char *pDebugName );
 
 public:
     Timer( const sal_Char *pDebugName = nullptr );
     Timer( const Timer& rTimer );
+    virtual ~Timer() override;
+    Timer& operator=( const Timer& rTimer );
 
-    /// Make it possible to associate a callback with this timer handler
-    /// of course, you can also sub-class and override 'Invoke'
-    void            SetTimeoutHdl( const Link<Timer *, void>& rLink ) { maTimeoutHdl = rLink; }
-    const Link<Timer *, void>& GetTimeoutHdl() const { return maTimeoutHdl; }
+    /**
+     * Calls the maInvokeHandler with the parameter this.
+     */
+    virtual void    Invoke() override;
+    /**
+     * Calls the maInvokeHandler with the parameter.
+     *
+     * Convenience Invoke function, mainly used to call with nullptr.
+     *
+     * @param arg parameter for the Link::Call function
+     */
+    void            Invoke( Timer *arg );
+    void            SetInvokeHandler( const Link<Timer *, void>& rLink ) { maInvokeHandler = rLink; }
+    void            ClearInvokeHandler() { SetInvokeHandler( Link<Timer *, void>() ); }
+
     void            SetTimeout( sal_uInt64 nTimeoutMs );
     sal_uInt64      GetTimeout() const { return mnTimeout; }
-    virtual void    Invoke() override;
-    void            Timeout() { Invoke(); }
-    Timer&          operator=( const Timer& rTimer );
+    /**
+     * Activates the timer task
+     *
+     * If the timer is already active, it's reset!
+     * Check with Task::IsActive() to prevent reset.
+     */
     virtual void    Start() override;
 };
 
 /// An auto-timer is a multi-shot timer re-emitting itself at
-/// interval until destroyed.
+/// interval until destroyed or stopped.
 class VCL_DLLPUBLIC AutoTimer : public Timer
 {
 public:
-                    AutoTimer();
-                    AutoTimer( const AutoTimer& rTimer );
-
-    AutoTimer&      operator=( const AutoTimer& rTimer );
+    AutoTimer( const sal_Char *pDebugName = nullptr );
 };
 
 #endif // INCLUDED_VCL_TIMER_HXX

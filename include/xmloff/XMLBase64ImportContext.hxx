@@ -22,8 +22,9 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <xmloff/xmlictxt.hxx>
+
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XAttributeList; } } } } }
 
 namespace com { namespace sun { namespace star { namespace io {
     class XOutputStream; } } } }
@@ -40,7 +41,7 @@ public:
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
         const css::uno::Reference< css::io::XOutputStream >& rOut );
 
-    virtual ~XMLBase64ImportContext();
+    virtual ~XMLBase64ImportContext() override;
 
     virtual void EndElement() override;
 

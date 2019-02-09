@@ -24,6 +24,10 @@
 
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/document/XActionLockable.hpp>
+#include <com/sun/star/drawing/Alignment.hpp>
+#include <com/sun/star/drawing/CircleKind.hpp>
+#include <com/sun/star/drawing/ConnectorType.hpp>
+#include <com/sun/star/drawing/EscapeDirection.hpp>
 #include <com/sun/star/container/XIdentifierContainer.hpp>
 #include <xmloff/xmlictxt.hxx>
 #include "sdxmlimp_impl.hxx"
@@ -31,11 +35,13 @@
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/awt/Point.hpp>
-#include "xexptran.hxx"
+#include <xexptran.hxx>
 #include <vector>
 #include <xmloff/shapeimport.hxx>
-#include <xmloff/xmlmultiimagehelper.hxx>
+#include <xmlmultiimagehelper.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
+
+template<typename EnumT> struct SvXMLEnumMapEntry;
 
 // common shape context
 
@@ -92,8 +98,7 @@ protected:
     void AddShape(OUString const & serviceName);
     void SetTransformation();
 
-    SvXMLImport& GetImport() { return SvXMLImportContext::GetImport(); }
-    const SvXMLImport& GetImport() const { return SvXMLImportContext::GetImport(); }
+    using SvXMLImportContext::GetImport;
 
     void addGluePoint( const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList );
 
@@ -105,22 +110,19 @@ public:
         sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLShapeContext();
+    virtual ~SdXMLShapeContext() override;
 
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
     virtual void processAttribute( sal_uInt16 nPrefix, const OUString& rLocalName, const OUString& rValue );
 
-    // allow to copy evtl. useful data from another temporary import context, e.g. used to
-    // support multiple images
-    virtual void onDemandRescueUsefulDataFromTemporary( const SvXMLImportContext& rCandidate ) override;
 };
 
 // draw:rect context
@@ -134,9 +136,9 @@ public:
     SdXMLRectShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLRectShapeContext();
+    virtual ~SdXMLRectShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -157,9 +159,9 @@ public:
     SdXMLLineShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLLineShapeContext();
+    virtual ~SdXMLLineShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -175,7 +177,7 @@ class SdXMLEllipseShapeContext : public SdXMLShapeContext
     sal_Int32                   mnRX;
     sal_Int32                   mnRY;
 
-    sal_uInt16                      meKind;
+    css::drawing::CircleKind    meKind;
     sal_Int32                   mnStartAngle;
     sal_Int32                   mnEndAngle;
 public:
@@ -183,9 +185,9 @@ public:
     SdXMLEllipseShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLEllipseShapeContext();
+    virtual ~SdXMLEllipseShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -198,15 +200,15 @@ class SdXMLPolygonShapeContext : public SdXMLShapeContext
 {
     OUString               maPoints;
     OUString               maViewBox;
-    bool                    mbClosed;
+    bool const             mbClosed;
 
 public:
 
     SdXMLPolygonShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes, bool bClosed, bool bTemporaryShape);
-    virtual ~SdXMLPolygonShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes, bool bClosed, bool bTemporaryShape);
+    virtual ~SdXMLPolygonShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -225,9 +227,9 @@ public:
     SdXMLPathShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLPathShapeContext();
+    virtual ~SdXMLPathShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -246,8 +248,8 @@ public:
     SdXMLTextBoxShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLTextBoxShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLTextBoxShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -266,9 +268,9 @@ public:
     SdXMLControlShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLControlShapeContext();
+    virtual ~SdXMLControlShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -283,7 +285,8 @@ private:
     css::awt::Point maStart;
     css::awt::Point maEnd;
 
-    sal_uInt16      mnType;
+    css::drawing::ConnectorType
+                    mnType;
 
     OUString        maStartShapeId;
     sal_Int32       mnStartGlueId;
@@ -301,9 +304,9 @@ public:
     SdXMLConnectorShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLConnectorShapeContext();
+    virtual ~SdXMLConnectorShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -323,9 +326,9 @@ public:
     SdXMLMeasureShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLMeasureShapeContext();
+    virtual ~SdXMLMeasureShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
     virtual void EndElement() override;
 
@@ -344,9 +347,9 @@ public:
     SdXMLPageShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLPageShapeContext();
+    virtual ~SdXMLPageShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -366,9 +369,9 @@ public:
     SdXMLCaptionShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLCaptionShapeContext();
+    virtual ~SdXMLCaptionShapeContext() override;
     virtual void StartElement(const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -388,12 +391,12 @@ public:
     SdXMLGraphicObjectShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLGraphicObjectShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLGraphicObjectShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -404,21 +407,20 @@ public:
 
 class SdXMLChartShapeContext : public SdXMLShapeContext
 {
-    SvXMLImportContext*         mpChartContext;
+    SvXMLImportContextRef mxChartContext;
 
 public:
 
     SdXMLChartShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLChartShapeContext();
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
     virtual void Characters( const OUString& rChars ) override;
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 };
 
@@ -437,13 +439,13 @@ public:
     SdXMLObjectShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLObjectShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLObjectShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -467,13 +469,13 @@ public:
     SdXMLAppletShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLAppletShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLAppletShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -496,21 +498,19 @@ public:
     SdXMLPluginShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLPluginShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLPluginShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
     virtual void processAttribute( sal_uInt16 nPrefix, const OUString& rLocalName, const OUString& rValue ) override;
 
-#if !HAVE_FEATURE_GLTF
     const OUString& getMimeType() const { return maMimeType; }
-#endif
 };
 
 // draw:floating-frame
@@ -526,8 +526,8 @@ public:
     SdXMLFloatingFrameShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLFloatingFrameShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLFloatingFrameShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
@@ -547,19 +547,20 @@ private:
 
 protected:
     /// helper to get the created xShape instance, needs to be overridden
-    virtual OUString getGraphicURLFromImportContext(const SvXMLImportContext& rContext) const override;
-    virtual void removeGraphicFromImportContext(const SvXMLImportContext& rContext) const override;
+    void removeGraphicFromImportContext(const SvXMLImportContext& rContext) override;
+    OUString getGraphicPackageURLFromImportContext(const SvXMLImportContext& rContext) const override;
+    css::uno::Reference<css::graphic::XGraphic> getGraphicFromImportContext(const SvXMLImportContext& rContext) const override;
 
 public:
 
     SdXMLFrameShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes,
+        css::uno::Reference< css::drawing::XShapes > const & rShapes,
         bool bTemporaryShape);
-    virtual ~SdXMLFrameShapeContext();
+    virtual ~SdXMLFrameShapeContext() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
@@ -570,9 +571,6 @@ public:
 
 class SdXMLCustomShapeContext : public SdXMLShapeContext
 {
-
-protected:
-
     OUString maCustomShapeEngine;
     OUString maCustomShapeData;
 
@@ -583,13 +581,13 @@ public:
 
     SdXMLCustomShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes);
-    virtual ~SdXMLCustomShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes);
+    virtual ~SdXMLCustomShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
@@ -605,13 +603,13 @@ public:
     SdXMLTableShapeContext( SvXMLImport& rImport, sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-        css::uno::Reference< css::drawing::XShapes >& rShapes );
-    virtual ~SdXMLTableShapeContext();
+        css::uno::Reference< css::drawing::XShapes > const & rShapes );
+    virtual ~SdXMLTableShapeContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 
     // this is called from the parent group for each unparsed attribute in the attribute list
     virtual void processAttribute( sal_uInt16 nPrefix, const OUString& rLocalName, const OUString& rValue ) override;
@@ -619,8 +617,11 @@ public:
 private:
     SvXMLImportContextRef mxTableImportContext;
     OUString msTemplateStyleName;
-    sal_Bool maTemplateStylesUsed[6];
+    bool maTemplateStylesUsed[6];
 };
+
+extern SvXMLEnumMapEntry<css::drawing::Alignment> const aXML_GlueAlignment_EnumMap[];
+extern SvXMLEnumMapEntry<css::drawing::EscapeDirection> const aXML_GlueEscapeDirection_EnumMap[];
 
 #endif // INCLUDED_XMLOFF_SOURCE_DRAW_XIMPSHAP_HXX
 

@@ -17,16 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-// prevent internal compiler error with MSVC6SP3
-#include <utility>
 #include <i18nutil/widthfolding.hxx>
-#include <comphelper/string.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 #include "widthfolding_data.h"
 
 using namespace com::sun::star::uno;
 
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18nutil {
 
 sal_Unicode widthfolding::decompose_ja_voiced_sound_marksChar2Char (sal_Unicode inChar)
 {
@@ -85,7 +83,7 @@ OUString widthfolding::decompose_ja_voiced_sound_marks (const OUString& inStr, s
     if (useOffset)
         *p ++ = position ++;
   }
-  *dst = (sal_Unicode) 0;
+  *dst = u'\0';
 
   newStr->length = sal_Int32(dst - newStr->buffer);
   if (useOffset)
@@ -163,7 +161,7 @@ OUString widthfolding::compose_ja_voiced_sound_marks (const OUString& inStr, sal
         bCompose = true;
 
       // not to use combined KATAKANA LETTER VU
-      if ( previousChar == 0x30a6 && (nFlags & WIDTHFOLDNIG_DONT_USE_COMBINED_VU) )
+      if ( previousChar == 0x30a6 && (nFlags & WIDTHFOLDING_DONT_USE_COMBINED_VU) )
         bCompose = false;
 
       if( bCompose ){
@@ -189,7 +187,7 @@ OUString widthfolding::compose_ja_voiced_sound_marks (const OUString& inStr, sal
     *dst ++ = previousChar;
   }
 
-  *dst = (sal_Unicode) 0;
+  *dst = u'\0';
 
   newStr->length = sal_Int32(dst - newStr->buffer);
  }
@@ -216,29 +214,6 @@ oneToOneMapping& widthfolding::getfull2halfTableForASC()
     static oneToOneMappingWithFlag table(full2half, sizeof(full2half), FULL2HALF_ASC_FUNCTION);
     table.makeIndex();
 
-    // bluedwarf: dirty hack!
-    // There is an exception. Additional conversion is required following:
-    //  0xFFE5 (FULLWIDTH YEN SIGN)  --> 0x005C (REVERSE SOLIDUS)
-    //
-    //  See the following page for detail:
-    // http://wiki.openoffice.org/wiki/Calc/Features/JIS_and_ASC_functions
-    int i, j;
-    int n = sizeof(full2halfASCException) / sizeof(UnicodePairWithFlag);
-    for( i = 0; i < n; i++ )
-    {
-        const int high = (full2halfASCException[i].first >> 8) & 0xFF;
-        const int low  = (full2halfASCException[i].first)      & 0xFF;
-
-        if( !table.mpIndex[high] )
-        {
-            table.mpIndex[high] = new UnicodePairWithFlag*[256];
-
-            for( j = 0; j < 256; j++ )
-                table.mpIndex[high][j] = nullptr;
-        }
-        table.mpIndex[high][low] = &full2halfASCException[i];
-    }
-
     return table;
 }
 
@@ -246,32 +221,6 @@ oneToOneMapping& widthfolding::gethalf2fullTableForJIS()
 {
     static oneToOneMappingWithFlag table(half2full, sizeof(half2full), HALF2FULL_JIS_FUNCTION);
     table.makeIndex();
-
-    // bluedwarf: dirty hack!
-    //  There are some exceptions. Additional conversion are required following:
-    //  0x0022 (QUOTATION MARK)  --> 0x201D (RIGHT DOUBLE QUOTATION MARK)
-    //  0x0027 (APOSTROPHE)      --> 0x2019 (RIGHT SINGLE QUOTATION MARK)
-    //  0x005C (REVERSE SOLIDUS) --> 0xFFE5 (FULLWIDTH YEN SIGN)
-    //  0x0060 (GRAVE ACCENT)    --> 0x2018 (LEFT SINGLE QUOTATION MARK)
-    //
-    //  See the following page for detail:
-    // http://wiki.openoffice.org/wiki/Calc/Features/JIS_and_ASC_functions
-    int i, j;
-    int n = sizeof(half2fullJISException) / sizeof(UnicodePairWithFlag);
-    for( i = 0; i < n; i++ )
-    {
-        const int high = (half2fullJISException[i].first >> 8) & 0xFF;
-        const int low  = (half2fullJISException[i].first)      & 0xFF;
-
-        if( !table.mpIndex[high] )
-        {
-            table.mpIndex[high] = new UnicodePairWithFlag*[256];
-
-            for( j = 0; j < 256; j++ )
-                table.mpIndex[high][j] = nullptr;
-        }
-        table.mpIndex[high][low] = &half2fullJISException[i];
-    }
 
     return table;
 }
@@ -290,6 +239,6 @@ oneToOneMapping& widthfolding::gethalfKana2fullKanaTable()
     return table;
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

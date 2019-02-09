@@ -22,6 +22,7 @@
 
 #include <undobj.hxx>
 #include <calbck.hxx>
+#include <o3tl/deleter.hxx>
 #include <rtl/ustring.hxx>
 #include <redline.hxx>
 
@@ -52,7 +53,7 @@ public:
 
     ~SwRedlineSaveData();
 
-    void RedlineToDoc( SwPaM& rPam );
+    void RedlineToDoc( SwPaM const & rPam );
 
     SwNodeIndex* GetMvSttIdx() const
     {
@@ -66,7 +67,7 @@ public:
 
 class SwRedlineSaveDatas {
 private:
-    std::vector<std::unique_ptr<SwRedlineSaveData>> m_Data;
+    std::vector<std::unique_ptr<SwRedlineSaveData, o3tl::default_delete<SwRedlineSaveData>>> m_Data;
 
 public:
     SwRedlineSaveDatas() : m_Data() {}
@@ -74,7 +75,7 @@ public:
     void clear() { m_Data.clear(); }
     bool empty() const { return m_Data.empty(); }
     size_t size() const { return m_Data.size(); }
-    void push_back(std::unique_ptr<SwRedlineSaveData> pNew) { m_Data.push_back(std::move(pNew)); }
+    void push_back(std::unique_ptr<SwRedlineSaveData, o3tl::default_delete<SwRedlineSaveData>> pNew) { m_Data.push_back(std::move(pNew)); }
     const SwRedlineSaveData& operator[](size_t const nIdx) const { return *m_Data[ nIdx ]; }
     SwRedlineSaveData& operator[](size_t const nIdx) { return *m_Data[ nIdx ]; }
 };
@@ -144,23 +145,23 @@ private:
 class SwUndoFormatColl : public SwUndo, private SwUndRng
 {
     OUString aFormatName;
-    SwHistory* pHistory;
-    SwFormatColl* pFormatColl;
+    std::unique_ptr<SwHistory> pHistory;
+    SwFormatColl* const pFormatColl;
     // for correct <ReDo(..)> and <Repeat(..)>
-    // boolean, which indicates that the attributes are reseted at the nodes
+    // boolean, which indicates that the attributes are reset at the nodes
     // before the format has been applied.
     const bool mbReset;
-    // boolean, which indicates that the list attributes had been reseted at
+    // boolean, which indicates that the list attributes had been reset at
     // the nodes before the format has been applied.
     const bool mbResetListAttrs;
 
-    void DoSetFormatColl(SwDoc & rDoc, SwPaM & rPaM);
+    void DoSetFormatColl(SwDoc & rDoc, SwPaM const & rPaM);
 
 public:
     SwUndoFormatColl( const SwPaM&, SwFormatColl*,
                    const bool bReset,
                    const bool bResetListAttrs );
-    virtual ~SwUndoFormatColl();
+    virtual ~SwUndoFormatColl() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -181,19 +182,19 @@ public:
     */
     virtual SwRewriter GetRewriter() const override;
 
-    SwHistory* GetHistory() { return pHistory; }
+    SwHistory* GetHistory() { return pHistory.get(); }
 
 };
 
 class SwUndoSetFlyFormat : public SwUndo, public SwClient
 {
     SwFrameFormat* pFrameFormat;                  // saved FlyFormat
-    SwFrameFormat* pOldFormat;
+    SwFrameFormat* const pOldFormat;
     SwFrameFormat* pNewFormat;
-    SfxItemSet* pItemSet;               // the re-/ set attributes
+    std::unique_ptr<SfxItemSet> pItemSet;               // the re-/ set attributes
     sal_uLong nOldNode, nNewNode;
     sal_Int32 nOldContent, nNewContent;
-    sal_uInt16 nOldAnchorTyp, nNewAnchorTyp;
+    RndStdIds nOldAnchorTyp, nNewAnchorTyp;
     bool bAnchorChgd;
 
     void PutAttr( sal_uInt16 nWhich, const SfxPoolItem* pItem );
@@ -202,18 +203,17 @@ class SwUndoSetFlyFormat : public SwUndo, public SwClient
 
 public:
     SwUndoSetFlyFormat( SwFrameFormat& rFlyFormat, SwFrameFormat& rNewFrameFormat );
-    virtual ~SwUndoSetFlyFormat();
+    virtual ~SwUndoSetFlyFormat() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
 
     virtual SwRewriter GetRewriter() const override;
-    void DeRegisterFromFormat( SwFormat& );
 };
 
 class SwUndoOutlineLeftRight : public SwUndo, private SwUndRng
 {
-    short nOffset;
+    short const nOffset;
 
 public:
     SwUndoOutlineLeftRight( const SwPaM& rPam, short nOffset );

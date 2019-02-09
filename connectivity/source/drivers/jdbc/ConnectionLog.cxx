@@ -18,7 +18,7 @@
  */
 
 
-#include "java/sql/ConnectionLog.hxx"
+#include <java/sql/ConnectionLog.hxx>
 
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/Time.hpp>
@@ -42,7 +42,7 @@ namespace connectivity { namespace java { namespace sql {
         }
     }
 
-    ConnectionLog::ConnectionLog( const ::comphelper::ResourceBasedEventLogger& _rDriverLog )
+    ConnectionLog::ConnectionLog( const ::comphelper::EventLogger& _rDriverLog )
         :ConnectionLog_Base( _rDriverLog )
         ,m_nObjectID( lcl_getFreeID( CONNECTION ) )
     {
@@ -81,7 +81,7 @@ namespace comphelper { namespace log { namespace convert
         char buffer[ 30 ];
         const size_t buffer_size = sizeof( buffer );
         snprintf( buffer, buffer_size, "%04i-%02i-%02i",
-            (int)_rDate.Year, (int)_rDate.Month, (int)_rDate.Day );
+            static_cast<int>(_rDate.Year), static_cast<int>(_rDate.Month), static_cast<int>(_rDate.Day) );
         return OUString::createFromAscii( buffer );
     }
 
@@ -91,18 +91,19 @@ namespace comphelper { namespace log { namespace convert
         char buffer[ 30 ];
         const size_t buffer_size = sizeof( buffer );
         snprintf( buffer, buffer_size, "%02i:%02i:%02i.%09i",
-            (int)_rTime.Hours, (int)_rTime.Minutes, (int)_rTime.Seconds, (int)_rTime.NanoSeconds );
+            static_cast<int>(_rTime.Hours), static_cast<int>(_rTime.Minutes), static_cast<int>(_rTime.Seconds), static_cast<int>(_rTime.NanoSeconds) );
         return OUString::createFromAscii( buffer );
     }
 
 
     OUString convertLogArgToString( const DateTime& _rDateTime )
     {
-        char buffer[ 30 ];
+        char buffer[ sizeof("-32768-65535-65535 65535:65535:65535.4294967295") ];
+            // reserve enough space for hypothetical max length
         const size_t buffer_size = sizeof( buffer );
-        snprintf( buffer, buffer_size, "%04i-%02i-%02i %02i:%02i:%02i.%09i",
-            (int)_rDateTime.Year, (int)_rDateTime.Month, (int)_rDateTime.Day,
-            (int)_rDateTime.Hours, (int)_rDateTime.Minutes, (int)_rDateTime.Seconds, (int)_rDateTime.NanoSeconds );
+        snprintf( buffer, buffer_size, "%04" SAL_PRIdINT32 "-%02" SAL_PRIuUINT32 "-%02" SAL_PRIuUINT32 " %02" SAL_PRIuUINT32 ":%02" SAL_PRIuUINT32 ":%02" SAL_PRIuUINT32 ".%09" SAL_PRIuUINT32,
+            static_cast<sal_Int32>(_rDateTime.Year), static_cast<sal_uInt32>(_rDateTime.Month), static_cast<sal_uInt32>(_rDateTime.Day),
+            static_cast<sal_uInt32>(_rDateTime.Hours), static_cast<sal_uInt32>(_rDateTime.Minutes), static_cast<sal_uInt32>(_rDateTime.Seconds), _rDateTime.NanoSeconds );
         return OUString::createFromAscii( buffer );
     }
 

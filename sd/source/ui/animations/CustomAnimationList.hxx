@@ -24,15 +24,14 @@
 
 #include <memory>
 
-#include <com/sun/star/drawing/XShape.hpp>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
+#include <vcl/builder.hxx>
 #include <CustomAnimationEffect.hxx>
-#include "CustomAnimationPreset.hxx"
-#include "CustomAnimation.hrc"
+
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
 
 namespace sd {
 
-class CustomAnimationEffect;
 typedef std::shared_ptr< CustomAnimationEffect > CustomAnimationEffectPtr;
 
 class ICustomAnimationListController
@@ -40,7 +39,8 @@ class ICustomAnimationListController
 public:
     virtual void onSelect() = 0;
     virtual void onDoubleClick() = 0;
-    virtual void onContextMenu( sal_uInt16 nSelectedPopupEntry ) = 0;
+    virtual void onContextMenu(const OString &rIdent) = 0;
+    virtual void onDragNDropComplete( std::vector< CustomAnimationEffectPtr > pEffectsDragged, CustomAnimationEffectPtr pEffectInsertBefore ) = 0;
     virtual ~ICustomAnimationListController() {}
 };
 
@@ -51,7 +51,7 @@ class CustomAnimationList : public SvTreeListBox, public ISequenceListener
 
 public:
     explicit CustomAnimationList( vcl::Window* pParent );
-    virtual ~CustomAnimationList();
+    virtual ~CustomAnimationList() override;
     virtual void dispose() override;
 
     // methods
@@ -74,22 +74,19 @@ public:
     virtual void    SelectHdl() override;
     virtual bool    DoubleClickHdl() override;
 
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect ) override;
 
-    virtual std::unique_ptr<PopupMenu> CreateContextMenu() override;
-    virtual void    ExcecuteContextMenuAction( sal_uInt16 nSelectedPopupEntry ) override;
+    virtual VclPtr<PopupMenu> CreateContextMenu() override;
+    virtual void    ExecuteContextMenuAction( sal_uInt16 nSelectedPopupEntry ) override;
 
     virtual void KeyInput( const KeyEvent& rKEvt ) override;
 
-    virtual void    SetTabs() override;
-
     virtual void notify_change() override;
 
-    const Image& getImage( sal_uInt16 nId );
-
     bool isExpanded( const CustomAnimationEffectPtr& pEffect ) const;
+    bool isVisible( const CustomAnimationEffectPtr& pEffect ) const;
 
-    /// clears all entries from the listbox
+    // clears all entries from the listbox
     void clear();
 
     void setController( ICustomAnimationListController* pController )
@@ -97,7 +94,21 @@ public:
         mpController = pController;
     };
 
+
+protected:
+    // drag & drop
+    virtual void         StartDrag( sal_Int8 nAction, const Point& rPosPixel ) override;
+    virtual DragDropMode NotifyStartDrag( TransferDataContainer& rData, SvTreeListEntry* pEntry ) override;
+    virtual sal_Int8     AcceptDrop( const AcceptDropEvent& rEvt ) override;
+            void         ReparentChildrenDuringDrag();
+            void         ReorderEffectsInUiDuringDragOver( SvTreeListEntry* pOverEntry);
+    virtual sal_Int8     ExecuteDrop( const ExecuteDropEvent& rEvt ) override;
+    virtual void         DragFinished( sal_Int8 nDropAction ) override;
+
 private:
+    std::unique_ptr<VclBuilder> mxBuilder;
+    VclPtr<PopupMenu> mxMenu;
+
     bool    mbIgnorePaint;
 
     /** appends the given effect to the list*/
@@ -107,17 +118,19 @@ private:
 
     MainSequencePtr mpMainSequence;
 
-    Image maImages[ IMG_CUSTOMANIMATION_MEDIA_STOP - IMG_CUSTOMANIMATION_ON_CLICK + 1];
-
     css::uno::Reference< css::drawing::XShape > mxLastTargetShape;
     sal_Int32 mnLastGroupId;
     SvTreeListEntry* mpLastParentEntry;
 
+    // drag & drop
+    SvTreeListEntry* mpDndEffectDragging;
+    SvTreeListEntry* mpDndEffectInsertBefore;
+    std::vector< SvTreeListEntry* > mDndEffectsSelected;
 };
 
 OUString getPropertyName( sal_Int32 nPropertyType );
 
-OUString getShapeDescription( const css::uno::Reference< css::drawing::XShape >& xShape, bool bWithText = true );
+OUString getShapeDescription( const css::uno::Reference< css::drawing::XShape >& xShape, bool bWithText );
 
 }
 

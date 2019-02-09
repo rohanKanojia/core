@@ -21,12 +21,12 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
+#include <com/sun/star/ui/XStatusbarItem.hpp>
 #include <cppuhelper/queryinterface.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <vcl/status.hxx>
@@ -34,6 +34,7 @@
 #include <svtools/miscopt.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/processfactory.hxx>
+#include <cppuhelper/interfacecontainer.hxx>
 
 using namespace ::cppu;
 using namespace css::awt;
@@ -94,7 +95,6 @@ Reference< XURLTransformer > StatusbarController::getURLTransformer() const
 
 // XInterface
 Any SAL_CALL StatusbarController::queryInterface( const Type& rType )
-throw ( RuntimeException, std::exception )
 {
     Any a = ::cppu::queryInterface(
                 rType ,
@@ -122,7 +122,6 @@ void SAL_CALL StatusbarController::release() throw ()
 }
 
 void SAL_CALL StatusbarController::initialize( const Sequence< Any >& aArguments )
-throw ( Exception, RuntimeException, std::exception )
 {
     bool bInitialized( true );
 
@@ -135,43 +134,42 @@ throw ( Exception, RuntimeException, std::exception )
         bInitialized = m_bInitialized;
     }
 
-    if ( !bInitialized )
+    if ( bInitialized )
+        return;
+
+    SolarMutexGuard aSolarMutexGuard;
+    m_bInitialized = true;
+
+    PropertyValue aPropValue;
+    for ( int i = 0; i < aArguments.getLength(); i++ )
     {
-        SolarMutexGuard aSolarMutexGuard;
-        m_bInitialized = true;
-
-        PropertyValue aPropValue;
-        for ( int i = 0; i < aArguments.getLength(); i++ )
+        if ( aArguments[i] >>= aPropValue )
         {
-            if ( aArguments[i] >>= aPropValue )
+            if ( aPropValue.Name == "Frame" )
+                aPropValue.Value >>= m_xFrame;
+            else if ( aPropValue.Name == "CommandURL" )
+                aPropValue.Value >>= m_aCommandURL;
+            else if ( aPropValue.Name == "ServiceManager" )
             {
-                if ( aPropValue.Name == "Frame" )
-                    aPropValue.Value >>= m_xFrame;
-                else if ( aPropValue.Name == "CommandURL" )
-                    aPropValue.Value >>= m_aCommandURL;
-                else if ( aPropValue.Name == "ServiceManager" )
-                {
-                    Reference<XMultiServiceFactory> xMSF;
-                    aPropValue.Value >>= xMSF;
-                    if( xMSF.is() )
-                        m_xContext = comphelper::getComponentContext(xMSF);
-                }
-                else if ( aPropValue.Name == "ParentWindow" )
-                    aPropValue.Value >>= m_xParentWindow;
-                else if ( aPropValue.Name == "Identifier" )
-                    aPropValue.Value >>= m_nID;
-                else if ( aPropValue.Name == "StatusbarItem" )
-                    aPropValue.Value >>= m_xStatusbarItem;
+                Reference<XMultiServiceFactory> xMSF;
+                aPropValue.Value >>= xMSF;
+                if( xMSF.is() )
+                    m_xContext = comphelper::getComponentContext(xMSF);
             }
+            else if ( aPropValue.Name == "ParentWindow" )
+                aPropValue.Value >>= m_xParentWindow;
+            else if ( aPropValue.Name == "Identifier" )
+                aPropValue.Value >>= m_nID;
+            else if ( aPropValue.Name == "StatusbarItem" )
+                aPropValue.Value >>= m_xStatusbarItem;
         }
-
-        if ( !m_aCommandURL.isEmpty() )
-            m_aListenerMap.insert( URLToDispatchMap::value_type( m_aCommandURL, Reference< XDispatch >() ));
     }
+
+    if ( !m_aCommandURL.isEmpty() )
+        m_aListenerMap.emplace( m_aCommandURL, Reference< XDispatch >() );
 }
 
 void SAL_CALL StatusbarController::update()
-throw ( RuntimeException, std::exception )
 {
     {
         SolarMutexGuard aSolarMutexGuard;
@@ -185,7 +183,6 @@ throw ( RuntimeException, std::exception )
 
 // XComponent
 void SAL_CALL StatusbarController::dispose()
-throw (css::uno::RuntimeException, std::exception)
 {
     Reference< XComponent > xThis( static_cast< OWeakObject* >(this), UNO_QUERY );
 
@@ -201,14 +198,13 @@ throw (css::uno::RuntimeException, std::exception)
     SolarMutexGuard aSolarMutexGuard;
     Reference< XStatusListener > xStatusListener( static_cast< OWeakObject* >( this ), UNO_QUERY );
     Reference< XURLTransformer > xURLTransformer = getURLTransformer();
-    URLToDispatchMap::iterator pIter = m_aListenerMap.begin();
     css::util::URL aTargetURL;
-    while ( pIter != m_aListenerMap.end() )
+    for (auto const& listener : m_aListenerMap)
     {
         try
         {
-            Reference< XDispatch > xDispatch( pIter->second );
-            aTargetURL.Complete = pIter->first;
+            Reference< XDispatch > xDispatch(listener.second);
+            aTargetURL.Complete = listener.first;
             xURLTransformer->parseStrict( aTargetURL );
 
             if ( xDispatch.is() && xStatusListener.is() )
@@ -217,8 +213,6 @@ throw (css::uno::RuntimeException, std::exception)
         catch ( Exception& )
         {
         }
-
-        ++pIter;
     }
 
     // clear hash map
@@ -235,20 +229,17 @@ throw (css::uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL StatusbarController::addEventListener( const Reference< XEventListener >& xListener )
-throw ( RuntimeException, std::exception )
 {
     m_aListenerContainer.addInterface( cppu::UnoType<XEventListener>::get(), xListener );
 }
 
 void SAL_CALL StatusbarController::removeEventListener( const Reference< XEventListener >& aListener )
-throw ( RuntimeException, std::exception )
 {
     m_aListenerContainer.removeInterface( cppu::UnoType<XEventListener>::get(), aListener );
 }
 
 // XEventListener
 void SAL_CALL StatusbarController::disposing( const EventObject& Source )
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -267,30 +258,27 @@ throw ( RuntimeException, std::exception )
     if ( !xDispatch.is() )
         return;
 
-    URLToDispatchMap::iterator pIter = m_aListenerMap.begin();
-    while ( pIter != m_aListenerMap.end() )
+    for (auto & listener : m_aListenerMap)
     {
         // Compare references and release dispatch references if they are equal.
-        if ( xDispatch == pIter->second )
-            pIter->second.clear();
-        ++pIter;
+        if ( xDispatch == listener.second )
+            listener.second.clear();
     }
 }
 
 // XStatusListener
 void SAL_CALL StatusbarController::statusChanged( const FeatureStateEvent& Event )
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
 
     if ( m_bDisposed )
         return;
 
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow( m_xParentWindow );
-    if ( pWindow && pWindow->GetType() == WINDOW_STATUSBAR && m_nID != 0 )
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( m_xParentWindow );
+    if ( pWindow && pWindow->GetType() == WindowType::STATUSBAR && m_nID != 0 )
     {
         OUString   aStrValue;
-        StatusBar* pStatusBar = static_cast<StatusBar *>(pWindow);
+        StatusBar* pStatusBar = static_cast<StatusBar *>(pWindow.get());
 
         if ( Event.State >>= aStrValue )
             pStatusBar->SetItemText( m_nID, aStrValue );
@@ -302,23 +290,20 @@ throw ( RuntimeException, std::exception )
 // XStatusbarController
 sal_Bool SAL_CALL StatusbarController::mouseButtonDown(
     const css::awt::MouseEvent& )
-throw (css::uno::RuntimeException, std::exception)
 {
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL StatusbarController::mouseMove(
     const css::awt::MouseEvent& )
-throw (css::uno::RuntimeException, std::exception)
 {
-    return sal_False;
+    return false;
 }
 
 sal_Bool SAL_CALL StatusbarController::mouseButtonUp(
     const css::awt::MouseEvent& )
-throw (css::uno::RuntimeException, std::exception)
 {
-    return sal_False;
+    return false;
 }
 
 void SAL_CALL StatusbarController::command(
@@ -326,7 +311,6 @@ void SAL_CALL StatusbarController::command(
     ::sal_Int32,
     sal_Bool,
     const css::uno::Any& )
-throw (css::uno::RuntimeException, std::exception)
 {
 }
 
@@ -334,16 +318,14 @@ void SAL_CALL StatusbarController::paint(
     const css::uno::Reference< css::awt::XGraphics >&,
     const css::awt::Rectangle&,
     ::sal_Int32 )
-throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL StatusbarController::click( const css::awt::Point& )
-throw (css::uno::RuntimeException, std::exception)
 {
 }
 
-void SAL_CALL StatusbarController::doubleClick( const css::awt::Point& ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL StatusbarController::doubleClick( const css::awt::Point& )
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -369,16 +351,16 @@ void StatusbarController::addStatusListener( const OUString& aCommandURL )
             return;
 
         // Check if we are already initialized. Implementation starts adding itself as status listener when
-        // intialize is called.
+        // initialize is called.
         if ( !m_bInitialized )
         {
             // Put into the unordered_map of status listener. Will be activated when initialized is called
-            m_aListenerMap.insert( URLToDispatchMap::value_type( aCommandURL, Reference< XDispatch >() ));
+            m_aListenerMap.emplace( aCommandURL, Reference< XDispatch >() );
             return;
         }
         else
         {
-            // Add status listener directly as intialize has already been called.
+            // Add status listener directly as initialize has already been called.
             Reference< XDispatchProvider > xDispatchProvider( m_xFrame, UNO_QUERY );
             if ( m_xContext.is() && xDispatchProvider.is() )
             {
@@ -404,7 +386,7 @@ void StatusbarController::addStatusListener( const OUString& aCommandURL )
                     }
                 }
                 else
-                    m_aListenerMap.insert( URLToDispatchMap::value_type( aCommandURL, xDispatch ));
+                    m_aListenerMap.emplace( aCommandURL, xDispatch );
             }
         }
     }
@@ -436,15 +418,14 @@ void StatusbarController::bindListener()
         if ( m_xContext.is() && xDispatchProvider.is() )
         {
             xStatusListener.set( static_cast< OWeakObject* >( this ), UNO_QUERY );
-            URLToDispatchMap::iterator pIter = m_aListenerMap.begin();
-            while ( pIter != m_aListenerMap.end() )
+            for (auto & listener : m_aListenerMap)
             {
                 Reference< XURLTransformer > xURLTransformer = getURLTransformer();
                 css::util::URL aTargetURL;
-                aTargetURL.Complete = pIter->first;
+                aTargetURL.Complete = listener.first;
                 xURLTransformer->parseStrict( aTargetURL );
 
-                Reference< XDispatch > xDispatch( pIter->second );
+                Reference< XDispatch > xDispatch(listener.second);
                 if ( xDispatch.is() )
                 {
                     // We already have a dispatch object => we have to requery.
@@ -458,7 +439,7 @@ void StatusbarController::bindListener()
                     }
                 }
 
-                pIter->second.clear();
+                listener.second.clear();
                 xDispatch.clear();
 
                 // Query for dispatch object. Old dispatch will be released with this, too.
@@ -469,11 +450,10 @@ void StatusbarController::bindListener()
                 catch ( Exception& )
                 {
                 }
-                pIter->second = xDispatch;
+                listener.second = xDispatch;
 
                 Listener aListener( aTargetURL, xDispatch );
                 aDispatchVector.push_back( aListener );
-                ++pIter;
             }
         }
     }
@@ -482,11 +462,10 @@ void StatusbarController::bindListener()
     if ( !xStatusListener.is() )
         return;
 
-    for ( size_t i = 0; i < aDispatchVector.size(); i++ )
+    for (Listener & rListener : aDispatchVector)
     {
         try
         {
-            Listener& rListener = aDispatchVector[i];
             if ( rListener.xDispatch.is() )
                 rListener.xDispatch->addStatusListener( xStatusListener, rListener.aURL );
             else if ( rListener.aURL.Complete == m_aCommandURL )
@@ -495,7 +474,7 @@ void StatusbarController::bindListener()
                 // UI disables the button. Catch exception as we release our mutex, it is possible
                 // that someone else already disposed this instance!
                 FeatureStateEvent aFeatureStateEvent;
-                aFeatureStateEvent.IsEnabled = sal_False;
+                aFeatureStateEvent.IsEnabled = false;
                 aFeatureStateEvent.FeatureURL = rListener.aURL;
                 aFeatureStateEvent.State = Any();
                 xStatusListener->statusChanged( aFeatureStateEvent );
@@ -505,9 +484,9 @@ void StatusbarController::bindListener()
     }
 }
 
-::Rectangle StatusbarController::getControlRect() const
+::tools::Rectangle StatusbarController::getControlRect() const
 {
-    ::Rectangle aRect;
+    ::tools::Rectangle aRect;
 
     {
         SolarMutexGuard aSolarMutexGuard;
@@ -518,7 +497,7 @@ void StatusbarController::bindListener()
         if ( m_xParentWindow.is() )
         {
             VclPtr< StatusBar > pStatusBar = dynamic_cast< StatusBar* >( VCLUnoHelper::GetWindow( m_xParentWindow ).get() );
-            if ( pStatusBar && pStatusBar->GetType() == WINDOW_STATUSBAR )
+            if ( pStatusBar && pStatusBar->GetType() == WindowType::STATUSBAR )
                 aRect = pStatusBar->GetItemRect( m_nID );
         }
     }
@@ -551,19 +530,19 @@ void StatusbarController::execute( const css::uno::Sequence< css::beans::Propert
         }
     }
 
-    if ( xDispatch.is() && xURLTransformer.is() )
-    {
-        try
-        {
-            css::util::URL aTargetURL;
+    if ( !(xDispatch.is() && xURLTransformer.is()) )
+        return;
 
-            aTargetURL.Complete = aCommandURL;
-            xURLTransformer->parseStrict( aTargetURL );
-            xDispatch->dispatch( aTargetURL, aArgs );
-        }
-        catch ( DisposedException& )
-        {
-        }
+    try
+    {
+        css::util::URL aTargetURL;
+
+        aTargetURL.Complete = aCommandURL;
+        xURLTransformer->parseStrict( aTargetURL );
+        xDispatch->dispatch( aTargetURL, aArgs );
+    }
+    catch ( DisposedException& )
+    {
     }
 }
 

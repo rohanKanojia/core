@@ -25,7 +25,6 @@ struct FloatPoint
         double          X;
         double          Y;
         FloatPoint():X(0), Y(0){};
-        FloatPoint( const double& rX, const double& rY ) { X = rX; Y = rY; };
 };
 
 struct FloatRect
@@ -35,13 +34,6 @@ struct FloatRect
         double          Right;
         double          Bottom;
         FloatRect():Left(0), Top(0), Right(0), Bottom(0){};
-        FloatRect( const FloatPoint& rTopLeft, const FloatPoint& rBottomRight )
-        {
-            Left = rTopLeft.X;
-            Top = rTopLeft.Y;
-            Right = rBottomRight.X;
-            Bottom = rBottomRight.Y;
-        }
         void Justify()
         {
             double fTemp;
@@ -113,14 +105,14 @@ enum TextAlignmentV     { TAV_NORMAL = 0, TAV_TOP = 1, TAV_CAP = 2, TAV_HALF = 3
 enum UnderlineMode      { UM_OFF = 0, UM_LOW = 1, UM_HIGH = 2, UM_STRIKEOUT = 4, UM_OVERSCORE = 8 };
 enum FinalFlag          { FF_NOT_FINAL = 0, FF_FINAL = 1 };
 
-enum LineType           { LT_SOLID = 1, LT_DASH = 2, LT_DOT = 3, LT_DASHDOT = 4, LT_DASHDOTDOT = 5,     // Standart
+enum LineType           { LT_SOLID = 1, LT_DASH = 2, LT_DOT = 3, LT_DASHDOT = 4, LT_DASHDOTDOT = 5,     // Standard
                             LT_NONE = -4, LT_DOTDOTSPACE = -3, LT_LONGDASH = -2, LT_DASHDASHDOT = -1 }; // GDSF Styles
 enum SpecMode           { SM_ABSOLUTE = 0, SM_SCALED = 1 };
 enum LineCapType        { LCT_BUTT = 0, LCT_ROUND = 1, LCT_SQUARE = 2, LCT_TRIANGLE = 3, LCT_ARROW = 4, LCT_NONE = -1 };
 enum LineJoinType       { LJT_MITER = 0, LJT_ROUND = 1, LJT_BEVEL = 2, LJT_NONE = -1 };
 
 
-enum EdgeType           { ET_SOLID = 1, ET_DASH = 2, ET_DOT = 3, ET_DASHDOT = 4, ET_DASHDOTDOT = 5,     // Standart
+enum EdgeType           { ET_SOLID = 1, ET_DASH = 2, ET_DOT = 3, ET_DASHDOT = 4, ET_DASHDOTDOT = 5,     // Standard
                             ET_NONE = -4, ET_DOTDOTSPACE = -3, ET_LONGDASH = -2, ET_DASHDASHDOT = -1 }; // GDSF Styles
 enum EdgeVisibility     { EV_OFF = 0, EV_ON = 1 };
 

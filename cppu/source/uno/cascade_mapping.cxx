@@ -17,26 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/interlck.h"
-#include "rtl/ustring.hxx"
-#include "uno/environment.hxx"
+#include <osl/interlck.h>
+#include <rtl/ustring.hxx>
+#include <uno/environment.hxx>
 #include <uno/lbnames.h>
-#include "uno/mapping.hxx"
-#include "uno/dispatcher.h"
+#include <uno/mapping.hxx>
+#include <uno/dispatcher.h>
 
-#include "cppu/EnvDcp.hxx"
+#include <cppu/EnvDcp.hxx>
 
 #include "cascade_mapping.hxx"
-
-#ifdef LOG_LIFECYLE_MediatorMapping
-#  include <iostream>
-#  define LOG_LIFECYLE_MediatorMapping_emit(x) x
-
-#else
-#  define LOG_LIFECYLE_MediatorMapping_emit(x)
-
-#endif
-
 
 using namespace com::sun::star;
 
@@ -61,23 +51,22 @@ public:
     MediatorMapping(uno_Environment * pFrom,
                     uno_Environment * pInterm,
                     uno_Environment * pTo);
-    ~MediatorMapping();
 };
 
 extern "C" {
-static void SAL_CALL s_acquire(uno_Mapping * mapping)
+static void s_acquire(uno_Mapping * mapping)
 {
     MediatorMapping * pMediatorMapping = static_cast<MediatorMapping *>(mapping);
     pMediatorMapping->acquire();
 }
 
-static void SAL_CALL s_release(uno_Mapping * mapping)
+static void s_release(uno_Mapping * mapping)
 {
     MediatorMapping * pMediatorMapping = static_cast<MediatorMapping *>(mapping);
     pMediatorMapping->release();
 }
 
-static void SAL_CALL s_mapInterface(
+static void s_mapInterface(
     uno_Mapping                      * mapping,
     void                            ** ppOut,
     void                             * pInterface,
@@ -98,8 +87,6 @@ MediatorMapping::MediatorMapping(uno_Environment * pFrom,
       m_interm  (pInterm),
       m_to      (pTo)
 {
-    LOG_LIFECYLE_MediatorMapping_emit(std::cerr << __FUNCTION__ << std::endl);
-
     if (!m_from2uno.get() || !m_uno2to.get())
         abort();
 
@@ -108,22 +95,13 @@ MediatorMapping::MediatorMapping(uno_Environment * pFrom,
     uno_Mapping::mapInterface = s_mapInterface;
 }
 
-MediatorMapping::~MediatorMapping()
-{
-    LOG_LIFECYLE_MediatorMapping_emit(std::cerr << __FUNCTION__ << std::endl);
-}
-
 void MediatorMapping::acquire()
 {
-    LOG_LIFECYLE_MediatorMapping_emit(std::cerr << __FUNCTION__ << std::endl);
-
     osl_atomic_increment(&m_refCount);
 }
 
 void MediatorMapping::release()
 {
-    LOG_LIFECYLE_MediatorMapping_emit(std::cerr << __FUNCTION__ << std::endl);
-
     if (osl_atomic_decrement(&m_refCount) == 0)
     {
         ::uno_revokeMapping(this);
@@ -166,33 +144,33 @@ void MediatorMapping::mapInterface(
     *ppOut = ret;
 }
 
-extern "C" { static void SAL_CALL s_MediatorMapping_free(uno_Mapping * pMapping)
+extern "C" { static void s_MediatorMapping_free(uno_Mapping * pMapping)
     SAL_THROW_EXTERN_C()
 {
     delete static_cast<MediatorMapping *>(pMapping);
 }}
 
 
-static rtl::OUString getPrefix(rtl::OUString const & str1, rtl::OUString const & str2)
+static OUString getPrefix(OUString const & str1, OUString const & str2)
 {
     sal_Int32 nIndex1 = 0;
     sal_Int32 nIndex2 = 0;
     sal_Int32 sim = 0;
 
-    rtl::OUString token1;
-    rtl::OUString token2;
+    OUString token1;
+    OUString token2;
 
     do
     {
         token1 = str1.getToken(0, ':', nIndex1);
         token2 = str2.getToken(0, ':', nIndex2);
 
-        if (token1.equals(token2))
+        if (token1 == token2)
             sim += token1.getLength() + 1;
     }
-    while(nIndex1 == nIndex2 && nIndex1 >= 0 && token1.equals(token2));
+    while(nIndex1 == nIndex2 && nIndex1 >= 0 && token1 == token2);
 
-    rtl::OUString result;
+    OUString result;
 
     if (sim)
         result = str1.copy(0, sim - 1);
@@ -200,12 +178,12 @@ static rtl::OUString getPrefix(rtl::OUString const & str1, rtl::OUString const &
     return result;
 }
 
-//  rtl::OUString str1("abc:def:ghi");
-//  rtl::OUString str2("abc:def");
-//  rtl::OUString str3("abc");
-//  rtl::OUString str4("");
+//  OUString str1("abc:def:ghi");
+//  OUString str2("abc:def");
+//  OUString str3("abc");
+//  OUString str4("");
 
-//  rtl::OUString pref;
+//  OUString pref;
 
 //  pref = getPrefix(str1, str1);
 //  pref = getPrefix(str1, str2);
@@ -225,16 +203,16 @@ void getCascadeMapping(uno_Mapping     ** ppMapping,
     if (pAddPurpose && pAddPurpose->length)
         return;
 
-    rtl::OUString uno_envType(UNO_LB_UNO);
+    OUString uno_envType(UNO_LB_UNO);
 
-    rtl::OUString from_envType    = cppu::EnvDcp::getTypeName(pFrom->pTypeName);
-    rtl::OUString to_envType      = cppu::EnvDcp::getTypeName(pTo->pTypeName);
-    rtl::OUString from_envPurpose = cppu::EnvDcp::getPurpose(pFrom->pTypeName);
-    rtl::OUString to_envPurpose   = cppu::EnvDcp::getPurpose(pTo->pTypeName);
+    OUString from_envType    = cppu::EnvDcp::getTypeName(pFrom->pTypeName);
+    OUString to_envType      = cppu::EnvDcp::getTypeName(pTo->pTypeName);
+    OUString from_envPurpose = cppu::EnvDcp::getPurpose(pFrom->pTypeName);
+    OUString to_envPurpose   = cppu::EnvDcp::getPurpose(pTo->pTypeName);
 
 #ifdef LOG_CALLING_named_purpose_getMapping
-    rtl::OString s_from_name = rtl::OUStringToOString(pFrom->pTypeName, RTL_TEXTENCODING_ASCII_US);
-    rtl::OString s_to_name   = rtl::OUStringToOString(pTo->pTypeName,   RTL_TEXTENCODING_ASCII_US);
+    OString s_from_name = OUStringToOString(pFrom->pTypeName, RTL_TEXTENCODING_ASCII_US);
+    OString s_to_name   = OUStringToOString(pTo->pTypeName,   RTL_TEXTENCODING_ASCII_US);
 
     std::cerr << __FUNCTION__ << " - creating mediation ";
     std::cerr << "pFrom: " << s_from_name.getStr();
@@ -251,16 +229,16 @@ void getCascadeMapping(uno_Mapping     ** ppMapping,
     // chained uno -> uno
     if (from_envType == uno_envType && to_envType == uno_envType)
     {
-        rtl::OUString purpose = getPrefix(from_envPurpose, to_envPurpose);
+        OUString purpose = getPrefix(from_envPurpose, to_envPurpose);
 
-        rtl::OUString uno_envDcp = uno_envType;
+        OUString uno_envDcp = uno_envType;
         uno_envDcp += purpose;
 
         // direct mapping possible?
         // uno:bla-->uno:bla:blubb
-        if (from_envPurpose.equals(purpose))
+        if (from_envPurpose == purpose)
         {
-            rtl::OUString rest = to_envPurpose.copy(purpose.getLength());
+            OUString rest = to_envPurpose.copy(purpose.getLength());
 
             sal_Int32 index = rest.indexOf(':', 1);
             if (index == -1)
@@ -271,9 +249,9 @@ void getCascadeMapping(uno_Mapping     ** ppMapping,
 
             uno_envDcp += rest.copy(0, index);
         }
-        else if (to_envPurpose.equals(purpose))
+        else if (to_envPurpose == purpose)
         {
-            rtl::OUString rest = from_envPurpose.copy(purpose.getLength());
+            OUString rest = from_envPurpose.copy(purpose.getLength());
 
             sal_Int32 index = rest.indexOf(':', 1);
             if (index == -1)
@@ -290,25 +268,25 @@ void getCascadeMapping(uno_Mapping     ** ppMapping,
     else if (from_envType != uno_envType && to_envType == uno_envType) // <ANY> -> UNO ?
         // mediate via uno:purpose(fromEnv)
     {
-        rtl::OUString     envDcp = uno_envType;
+        OUString     envDcp = uno_envType;
 
         envDcp += from_envPurpose;
-         uno_getEnvironment(&pInterm, envDcp.pData, nullptr);
+        uno_getEnvironment(&pInterm, envDcp.pData, nullptr);
     }
     else if (from_envType == uno_envType && to_envType != uno_envType) // UNO -> <ANY>?
         // mediate via uno(context)
     {
-        rtl::OUString     envDcp = uno_envType;
+        OUString     envDcp = uno_envType;
 
-         envDcp += to_envPurpose;
+        envDcp += to_envPurpose;
         uno_getEnvironment(&pInterm, envDcp.pData, nullptr);
     }
     else // everything else
         // mediate via uno:purpose
     {
-        rtl::OUString purpose = getPrefix(from_envPurpose, to_envPurpose);
+        OUString purpose = getPrefix(from_envPurpose, to_envPurpose);
 
-        rtl::OUString uno_envDcp = uno_envType;
+        OUString uno_envDcp = uno_envType;
         uno_envDcp += purpose;
 
         uno_getEnvironment(&pInterm, uno_envDcp.pData, nullptr);

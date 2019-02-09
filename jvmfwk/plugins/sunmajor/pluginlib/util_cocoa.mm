@@ -24,8 +24,8 @@ bool JvmfwkUtil_isLoadableJVM( OUString const & aURL )
             NSURL *pURL = nil;
 
             // Ignore all but Oracle's JDK as loading Apple's Java and Oracle's
-            // JRE will cause OS X's JavaVM framework to display a dialog and
-            // invoke exit() when loaded via JNI on OS X 10.10
+            // JRE will cause macOS's JavaVM framework to display a dialog and
+            // invoke exit() when loaded via JNI on macOS 10.10
             NSURL *pTmpURL = [NSURL URLWithString:pString];
             if ( pTmpURL )
                 pTmpURL = [pTmpURL filePathURL];
@@ -69,9 +69,9 @@ bool JvmfwkUtil_isLoadableJVM( OUString const & aURL )
                         // Make sure that this bundle's Info.plist has the
                         // proper JVM keys to supports loading via JNI. If
                         // this bundle is a valid JVM and these keys
-                        // are missing, loading the JVM will cause OS X's
+                        // are missing, loading the JVM will cause macOS's
                         // JavaVM framework to display a dialog and invoke
-                        // exit() when loaded via JNI on OS X 10.10.
+                        // exit() when loaded via JNI on macOS 10.10.
                         NSDictionary *pInfo = [pBundle infoDictionary];
                         if ( pInfo )
                         {
@@ -85,7 +85,7 @@ bool JvmfwkUtil_isLoadableJVM( OUString const & aURL )
                                     {
                                         if ( [pJVMCapabilities isKindOfClass:[NSMutableArray class]] )
                                         {
-                                            [(NSMutableArray *)pJVMCapabilities addObject:@"JNI"];
+                                            [static_cast<NSMutableArray *>(pJVMCapabilities) addObject:@"JNI"];
                                             bRet = true;
                                         }
                                         else if ( [pJavaVM isKindOfClass:[NSMutableDictionary class]] )
@@ -94,7 +94,7 @@ bool JvmfwkUtil_isLoadableJVM( OUString const & aURL )
                                             if ( pNewJVMCapabilities )
                                             {
                                                 [pNewJVMCapabilities addObject:@"JNI"];
-                                                [(NSMutableDictionary *)pJavaVM setObject:pNewJVMCapabilities forKey:@"JVMCapabilities"];
+                                                [static_cast<NSMutableDictionary *>(pJavaVM) setObject:pNewJVMCapabilities forKey:@"JVMCapabilities"];
                                                 bRet = true;
                                             }
                                         }

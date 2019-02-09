@@ -22,37 +22,33 @@
 
 #include <rtl/ref.hxx>
 
-#include <vcl/field.hxx>
 #include <sfx2/viewsh.hxx>
 #include <vcl/prntypes.hxx>
-#include <svtools/transfer.hxx>
-#include "glob.hxx"
-#include "pres.hxx"
-#include "cfgids.hxx"
+#include <o3tl/deleter.hxx>
+#include <pres.hxx>
 #include "View.hxx"
-#include "sddllapi.h"
+#include "fupoor.hxx"
+#include <sddllapi.h>
 
-#include <com/sun/star/drawing/XDrawSubController.hpp>
 #include <memory>
 
 class SdPage;
 class SvxRuler;
 class SdrOle2Obj;       // for the ones, who have undefined parts of SVDRAW
-class ScrollBarBox;
 class SdDrawDocument;
-class ScrollBar;
 
-namespace com { namespace sun { namespace star {
-namespace embed {
-    class XEmbeddedObject;
-}}}}
+namespace weld
+{
+    class Window;
+}
+
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawSubController; } } } }
 
 namespace sd {
 
 class DrawDocShell;
 class FrameView;
 class LayerTabBar;
-class View;
 class ViewShellBase;
 class Window;
 class WindowUpdater;
@@ -78,7 +74,7 @@ static const DrawModeFlags OUTPUT_DRAWMODE_CONTRAST
 
     <p>Despite its name this class is not a descendant of SfxViewShell
     but of SfxShell.  Its name expresses the fact that it acts like a
-    view shell.  Being a stacked shell rather then being an actual view shell
+    view shell.  Being a stacked shell rather than being an actual view shell
     there can be several instances of this class that
     <ul>
     <li>all are based on the same view shell and thus show the same
@@ -110,10 +106,9 @@ public:
 
 
     ViewShell (
-        SfxViewFrame *pFrame,
         vcl::Window* pParentWindow,
         ViewShellBase& rViewShellBase);
-    virtual ~ViewShell();
+    virtual ~ViewShell() override;
 
     /** The Init method has to be called from the outside directly
         after a new object of this class has been created.  It can be
@@ -140,9 +135,11 @@ public:
     /** Return the window that is the parent of all controls of this view
         shell.  This may or may not be the window of the frame.
     */
-    inline vcl::Window* GetParentWindow() const { return mpParentWindow; }
+    vcl::Window* GetParentWindow() const { return mpParentWindow; }
 
-    inline ::sd::View* GetView() const { return mpView; }
+    sd::Window* GetContentWindow() const;
+
+    ::sd::View* GetView() const { return mpView; }
     inline SdrView* GetDrawView() const;
     SD_DLLPUBLIC DrawDocShell* GetDocSh() const;
 
@@ -154,6 +151,7 @@ public:
         show running then the active window is a ShowWindow.
     */
     ::sd::Window* GetActiveWindow() const { return mpActiveWindow;}
+    SD_DLLPUBLIC weld::Window* GetFrameWeld() const;
 
     /** Set the active window.  When the shell is displayed in the center
         pane then the window of the ViewShellBase is also set to the given
@@ -168,28 +166,30 @@ public:
             The rectangle is returned in screen coordinates, i.e. pixel
             values relative to the upper left corner of the screen?.
     */
-    const Rectangle& GetAllWindowRect();
+    const ::tools::Rectangle& GetAllWindowRect();
 
     // Mouse- & Key-Events
     virtual void PrePaint();
-    virtual void Paint (const Rectangle& rRect, ::sd::Window* pWin);
+    virtual void Paint (const ::tools::Rectangle& rRect, ::sd::Window* pWin);
     virtual bool KeyInput(const KeyEvent& rKEvt, ::sd::Window* pWin);
     virtual void MouseMove(const MouseEvent& rMEvt, ::sd::Window* pWin);
     virtual void MouseButtonUp(const MouseEvent& rMEvt, ::sd::Window* pWin);
     virtual void MouseButtonDown(const MouseEvent& rMEvt, ::sd::Window* pWin);
     virtual void Command(const CommandEvent& rCEvt, ::sd::Window* pWin);
-    bool RequestHelp( const HelpEvent& rEvt, ::sd::Window* pWin );
-    bool Notify( NotifyEvent& rNEvt, ::sd::Window* pWin );
+    bool RequestHelp( const HelpEvent& rEvt );
+    bool Notify( NotifyEvent const & rNEvt, ::sd::Window* pWin );
 
     bool HandleScrollCommand(const CommandEvent& rCEvt, ::sd::Window* pWin);
 
-    virtual void SetUIUnit(FieldUnit eUnit);
+    void SetUIUnit(FieldUnit eUnit);
     void SetDefTabHRuler( sal_uInt16 nDefTab );
 
     const SfxPoolItem* GetNumBulletItem(SfxItemSet& aNewAttr, sal_uInt16& nNumItemId);
 
     bool HasRuler() { return mbHasRulers;}
     void SetRuler(bool bRuler);
+    // Hides horizontal, vertical scrollbar as well as scrollbox
+    void SetScrollBarsVisible(bool bVisible);
 
     /** Set internal values of all scroll bars that determine thumb size and
         position.  The external values like size and position of the scroll
@@ -199,7 +199,8 @@ public:
     void    Scroll(long nX, long nY);
     void    ScrollLines(long nX, long nY);
     virtual void    SetZoom(long nZoom);
-    virtual void    SetZoomRect(const Rectangle& rZoomRect);
+    long    GetZoom() const;
+    virtual void    SetZoomRect(const ::tools::Rectangle& rZoomRect);
     void    InitWindows(const Point& rViewOrigin, const Size& rViewSize,
                         const Point& rWinPos, bool bUpdate = false);
     void    InvalidateWindows();
@@ -209,11 +210,11 @@ public:
     */
     virtual void UpdatePreview (SdPage* pPage, bool bInit = false);
 
-    void    DrawMarkRect(const Rectangle& rRect) const;
+    void    DrawMarkRect(const ::tools::Rectangle& rRect) const;
 
     void    ExecReq( SfxRequest &rReq );
 
-    ZoomList* GetZoomList() { return mpZoomList;}
+    ZoomList* GetZoomList() { return mpZoomList.get();}
 
     FrameView* GetFrameView() { return mpFrameView; }
     /** Setting a frame view triggers ReadFrameViewData() for the new
@@ -224,8 +225,8 @@ public:
     void SetFrameView (FrameView* pFrameView);
     virtual void  ReadFrameViewData(FrameView* pView);
     virtual void  WriteFrameViewData();
-    void  WriteUserData(OUString& rString);
-    void  ReadUserData(const OUString& rString);
+    void  WriteUserData();
+    void  ReadUserData();
 
     virtual bool  ActivateObject(SdrOle2Obj* pObj, long nVerb);
 
@@ -242,9 +243,9 @@ public:
     */
     virtual SdPage* getCurrentPage() const = 0;
 
-    rtl::Reference<FuPoor> GetOldFunction() const { return mxOldFunction; }
+    const rtl::Reference<FuPoor>& GetOldFunction() const { return mxOldFunction; }
     bool HasOldFunction() const { return mxOldFunction.is(); }
-    rtl::Reference<FuPoor> GetCurrentFunction() const { return mxCurrentFunction; }
+    const rtl::Reference<FuPoor>& GetCurrentFunction() const { return mxCurrentFunction; }
     bool HasCurrentFunction( sal_uInt16 nSID ) { return mxCurrentFunction.is() && (mxCurrentFunction->GetSlotID() == nSID ); }
     bool HasCurrentFunction() { return mxCurrentFunction.is(); }
 
@@ -257,7 +258,7 @@ public:
                             bool bScaleAll, Orientation eOrient, sal_uInt16 nPaperBin,
                             bool bBackgroundFullSize );
 
-    void    SetStartShowWithDialog( bool bIn = true ) { mbStartShowWithDialog = bIn; }
+    void    SetStartShowWithDialog( bool bIn ) { mbStartShowWithDialog = bIn; }
     bool    IsStartShowWithDialog() const { return mbStartShowWithDialog; }
 
     sal_uInt16 GetPrintedHandoutPageNum() const { return mnPrintedHandoutPageNum; }
@@ -271,15 +272,15 @@ public:
     void GetMenuState(SfxItemSet& rSet);
 
     virtual sal_Int8 AcceptDrop( const AcceptDropEvent& rEvt, DropTargetHelper& rTargetHelper,
-                                 ::sd::Window* pTargetWindow, sal_uInt16 nPage, sal_uInt16 nLayer );
+                                 ::sd::Window* pTargetWindow, sal_uInt16 nPage, SdrLayerID nLayer );
     virtual sal_Int8 ExecuteDrop( const ExecuteDropEvent& rEvt, DropTargetHelper& rTargetHelper,
-                                  ::sd::Window* pTargetWindow, sal_uInt16 nPage, sal_uInt16 nLayer );
+                                  ::sd::Window* pTargetWindow, sal_uInt16 nPage, SdrLayerID nLayer );
 
-    virtual void WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >&, bool bBrowse = false );
-    virtual void ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >&, bool bBrowse = false );
+    virtual void WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& );
+    virtual void ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& );
 
     /** this method is called when the visible area of the view from this viewshell is changed */
-    virtual void VisAreaChanged(const Rectangle& rRect);
+    virtual void VisAreaChanged(const ::tools::Rectangle& rRect);
 
     /** Create an accessible object representing the specified window.
         Override this method to provide view mode specific objects.  The
@@ -298,8 +299,8 @@ public:
     void    NotifyAccUpdate();
     void    fireSwitchCurrentPage(sal_Int32 pageIndex);
     void SetWinViewPos(const Point& rWinPos);
-    Point GetWinViewPos() const;
-    Point GetViewOrigin() const;
+    Point const & GetWinViewPos() const;
+    Point const & GetViewOrigin() const;
 
     /** Return the window updater of this view shell.
         @return
@@ -310,17 +311,8 @@ public:
 
     /** Return the border that is drawn around the actual document view.
         The border contains typically rulers and scroll bars.
-        @param bOuterResize
-            When this flag is <TRUE/> then the border is used for an
-            OuterResizePixel(), i.e. there is a given window size and the
-            border elements are placed inside so that the document view has
-            the given window size minus the border.
-            When the flag is <FALSE/> then the border is used for an
-            InnerResizePixel(), i.e. the document view has a given size and
-            the border is placed outside.  In this scenario the parent
-            window has the size of the document view plus the border.
     */
-    SvBorder GetBorder (bool bOuterResize);
+    SvBorder GetBorder();
 
     /** Notify the view shell that its parent window has been resized.
         The ViewShell places and resizes its UI elements accordingly.
@@ -361,7 +353,7 @@ public:
 
     /** Return the type of the shell.
     */
-    ShellType GetShellType() const;
+    SD_DLLPUBLIC ShellType GetShellType() const; //Export for unit test
 
     /** This method is more or less an alias to Deactivate().  It is called
         before an object of this class is taken from the stack of view
@@ -385,7 +377,7 @@ public:
     /** Show controls of the UI or hide them, depending on the given flag.
         As a result the border is adapted.
     */
-    virtual void ShowUIControls (bool bVisible = true);
+    virtual void ShowUIControls (bool bVisible);
     bool IsPageFlipMode() const;
 
     /** Set the given window as new parent window.  This is not possible for
@@ -417,12 +409,6 @@ public:
         SdPage* pPage,
         const sal_Int32 nInsertPosition = -1);
 
-    /// Same as MouseButtonDown(), but coordinates are in logic unit.
-    void LogicMouseButtonDown(const MouseEvent& rMouseEvent);
-    /// Same as MouseButtonUp(), but coordinates are in logic unit.
-    void LogicMouseButtonUp(const MouseEvent& rMouseEvent);
-    /// Same as MouseMove(), but coordinates are in logic unit.
-    void LogicMouseMove(const MouseEvent& rMouseEvent);
     /// Allows adjusting the point or mark of the selection to a document coordinate.
     void SetCursorMm100Position(const Point& rPosition, bool bPoint, bool bClearMark);
     /// Gets the currently selected text.
@@ -468,13 +454,11 @@ protected:
 
     rtl::Reference<FuPoor>   mxCurrentFunction;
     rtl::Reference<FuPoor>   mxOldFunction;
-    ZoomList*   mpZoomList;
+    std::unique_ptr<ZoomList> mpZoomList;
 
     Point       maViewPos;
     Size        maViewSize;
     Size        maScrBarWH;
-
-    bool        mbCenterAllowed;          // will be forwarded to window
 
     bool        mbStartShowWithDialog;    // presentation is started by dialog
     sal_uInt16      mnPrintedHandoutPageNum; // Page number of the handout page that is to be printed.
@@ -491,30 +475,30 @@ protected:
         GetAllWindowRectangle() into screen coordinates (relative to the
         upper left corner of the screen.
     */
-    Rectangle maAllWindowRectangle;
+    ::tools::Rectangle maAllWindowRectangle;
 
     /// The type of the shell.  Returned by GetShellType().
     ShellType meShellType;
 
-    ::std::unique_ptr<Implementation> mpImpl;
+    std::unique_ptr<Implementation, o3tl::default_delete<Implementation>> mpImpl;
 
     // Support methods for centralized UNDO/REDO
-    virtual ::svl::IUndoManager* ImpGetUndoManager() const;
+    virtual SfxUndoManager* ImpGetUndoManager() const;
     void ImpGetUndoStrings(SfxItemSet &rSet) const;
     void ImpGetRedoStrings(SfxItemSet &rSet) const;
-    void ImpSidUndo(bool bDrawViewShell, SfxRequest& rReq);
-    void ImpSidRedo(bool bDrawViewShell, SfxRequest& rReq);
+    void ImpSidUndo(SfxRequest& rReq);
+    void ImpSidRedo(SfxRequest& rReq);
 
-    DECL_LINK_TYPED( HScrollHdl, ScrollBar *, void );
-    DECL_LINK_TYPED( VScrollHdl, ScrollBar *, void );
+    DECL_LINK( HScrollHdl, ScrollBar *, void );
+    DECL_LINK( VScrollHdl, ScrollBar *, void );
 
     // virtual scroll handler, here, derivative classes can add themselves here
     virtual void VirtHScrollHdl(ScrollBar* pHScroll);
     virtual void VirtVScrollHdl(ScrollBar* pVScroll);
 
     // virtual functions ruler handling
-    virtual SvxRuler* CreateHRuler(::sd::Window* pWin);
-    virtual SvxRuler* CreateVRuler(::sd::Window* pWin);
+    virtual VclPtr<SvxRuler> CreateHRuler(::sd::Window* pWin);
+    virtual VclPtr<SvxRuler> CreateVRuler(::sd::Window* pWin);
     virtual void UpdateHRuler();
     virtual void UpdateVRuler();
 
@@ -538,7 +522,7 @@ protected:
         i.e. construct calls Show, and if a11y is enabled this
         reenters the not-fully constructed object and calls
         CreateAccessibleDocumentView, so if construct is called
-        from the ctor then if a derived class is contructed the base-case
+        from the ctor then if a derived class is constructed the base-case
         CreateAccessibleDocumentView is used, not the derived
         CreateAccessibleDocumentView. i.e. run smoketest under a11y with
         debugging assertions enabled

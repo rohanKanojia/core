@@ -21,7 +21,6 @@
 #include "PresenterGeometryHelper.hxx"
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
-#include <osl/mutex.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -34,7 +33,6 @@ namespace sdext { namespace presenter {
 PresenterSpritePane::PresenterSpritePane (const Reference<XComponentContext>& rxContext,
         const ::rtl::Reference<PresenterController>& rpPresenterController)
     : PresenterPaneBase(rxContext, rpPresenterController),
-      mxParentWindow(),
       mxParentCanvas(),
       mpSprite(new PresenterSprite())
 {
@@ -54,7 +52,6 @@ PresenterSpritePane::~PresenterSpritePane()
 void PresenterSpritePane::disposing()
 {
     mpSprite->SetFactory(nullptr);
-    mxParentWindow = nullptr;
     mxParentCanvas = nullptr;
     PresenterPaneBase::disposing();
 }
@@ -62,14 +59,12 @@ void PresenterSpritePane::disposing()
 //----- XPane -----------------------------------------------------------------
 
 Reference<awt::XWindow> SAL_CALL PresenterSpritePane::getWindow()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return mxContentWindow;
 }
 
 Reference<rendering::XCanvas> SAL_CALL PresenterSpritePane::getCanvas()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
 
@@ -82,9 +77,7 @@ Reference<rendering::XCanvas> SAL_CALL PresenterSpritePane::getCanvas()
 //----- XWindowListener -------------------------------------------------------
 
 void SAL_CALL PresenterSpritePane::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowResized(rEvent);
 
     mpSprite->Resize(geometry::RealSize2D(rEvent.Width, rEvent.Height));
@@ -93,9 +86,7 @@ void SAL_CALL PresenterSpritePane::windowResized (const awt::WindowEvent& rEvent
 }
 
 void SAL_CALL PresenterSpritePane::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowMoved(rEvent);
 
     awt::Rectangle aBox (
@@ -105,9 +96,7 @@ void SAL_CALL PresenterSpritePane::windowMoved (const awt::WindowEvent& rEvent)
 }
 
 void SAL_CALL PresenterSpritePane::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowShown(rEvent);
 
     mpSprite->Show();
@@ -116,27 +105,23 @@ void SAL_CALL PresenterSpritePane::windowShown (const lang::EventObject& rEvent)
     if (mxContentWindow.is())
     {
         LayoutContextWindow();
-        mxContentWindow->setVisible(sal_True);
+        mxContentWindow->setVisible(true);
     }
 }
 
 void SAL_CALL PresenterSpritePane::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowHidden(rEvent);
 
     mpSprite->Hide();
     if (mxContentWindow.is())
-        mxContentWindow->setVisible(sal_False);
+        mxContentWindow->setVisible(false);
 }
 
 //----- XPaintListener --------------------------------------------------------
 
-void SAL_CALL PresenterSpritePane::windowPaint (const awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
+void SAL_CALL PresenterSpritePane::windowPaint (const awt::PaintEvent&)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 
     /*
@@ -147,7 +132,7 @@ void SAL_CALL PresenterSpritePane::windowPaint (const awt::PaintEvent& rEvent)
 }
 
 
-std::shared_ptr<PresenterSprite> PresenterSpritePane::GetSprite()
+const std::shared_ptr<PresenterSprite>& PresenterSpritePane::GetSprite()
 {
     return mpSprite;
 }
@@ -156,10 +141,7 @@ void PresenterSpritePane::UpdateCanvases()
 {
     Reference<XComponent> xContentCanvasComponent (mxContentCanvas, UNO_QUERY);
     if (xContentCanvasComponent.is())
-    {
-        if (xContentCanvasComponent.is())
-            xContentCanvasComponent->dispose();
-    }
+        xContentCanvasComponent->dispose();
 
     // The border canvas is the content canvas of the sprite.
     mxBorderCanvas = mpSprite->GetCanvas();
@@ -178,12 +160,9 @@ void PresenterSpritePane::UpdateCanvases()
 }
 
 void PresenterSpritePane::CreateCanvases (
-    const css::uno::Reference<css::awt::XWindow>& rxParentWindow,
     const css::uno::Reference<css::rendering::XSpriteCanvas>& rxParentCanvas)
 {
-    OSL_ASSERT(!mxParentWindow.is() || mxParentWindow==rxParentWindow);
     OSL_ASSERT(!mxParentCanvas.is() || mxParentCanvas==rxParentCanvas);
-    mxParentWindow = rxParentWindow;
     mxParentCanvas = rxParentCanvas;
 
     mpSprite->SetFactory(mxParentCanvas);

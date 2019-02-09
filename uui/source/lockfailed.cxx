@@ -17,27 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ids.hrc"
+#include <strings.hrc>
 #include "lockfailed.hxx"
-
+#include <unotools/resmgr.hxx>
 #include <vcl/button.hxx>
+#include <vcl/svapp.hxx>
 
-LockFailedQueryBox::LockFailedQueryBox( vcl::Window* pParent, ResMgr* pResMgr ) :
-    MessBox(pParent, 0,
-            ResId(STR_LOCKFAILED_TITLE, *pResMgr).toString(),
-            OUString() )
+LockFailedQueryBox::LockFailedQueryBox(weld::Window* pParent, const std::locale& rLocale)
+    : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Error,
+                  VclButtonsType::NONE, Translate::get(STR_LOCKFAILED_MSG, rLocale)))
 {
-    SetImage( ErrorBox::GetStandardImage() );
-
-    AddButton( StandardButtonType::OK, RET_OK, ButtonDialogFlags::OK );
-    AddButton( StandardButtonType::Cancel, RET_CANCEL, ButtonDialogFlags::Cancel );
-
-    SetMessText(ResId(STR_LOCKFAILED_MSG, *pResMgr ).toString());
-    SetCheckBoxText(ResId(STR_LOCKFAILED_DONTSHOWAGAIN, *pResMgr).toString());
-}
-
-LockFailedQueryBox::~LockFailedQueryBox()
-{
+    m_xQueryBox->set_title(Translate::get(STR_LOCKFAILED_TITLE, rLocale));
+    m_xQueryBox->add_button(Translate::get(STR_LOCKFAILED_OPENREADONLY_BTN, rLocale), RET_OK);
+    m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+    m_xQueryBox->set_default_response(RET_OK);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

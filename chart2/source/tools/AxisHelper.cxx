@@ -17,35 +17,37 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AxisHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "ChartTypeHelper.hxx"
-#include "macros.hxx"
-#include "AxisIndexDefines.hxx"
-#include "LinePropertiesHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "servicenames_coosystems.hxx"
-#include "DataSeriesHelper.hxx"
-#include "Scaling.hxx"
-#include "ChartModelHelper.hxx"
-#include "DataSourceHelper.hxx"
+#include <AxisHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <AxisIndexDefines.hxx>
+#include <LinePropertiesHelper.hxx>
+#include <servicenames_coosystems.hxx>
+#include <DataSeriesHelper.hxx>
+#include <Scaling.hxx>
+#include <ChartModel.hxx>
+#include <ChartModelHelper.hxx>
+#include <DataSourceHelper.hxx>
+#include <ReferenceSizeProvider.hxx>
+#include <ExplicitCategoriesProvider.hxx>
 #include <unonames.hxx>
 
 #include <unotools/saveopt.hxx>
 
 #include <com/sun/star/chart/ChartAxisPosition.hpp>
-
+#include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
 #include <com/sun/star/chart2/data/XDataSource.hpp>
 
-#include <rtl/ustrbuf.hxx>
 #include <rtl/math.hxx>
+#include <sal/log.hxx>
 
-#include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/lang/XServiceName.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <comphelper/sequence.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <map>
 
@@ -103,7 +105,7 @@ chart2::ScaleData AxisHelper::getDateCheckedScale( const Reference< chart2::XAxi
     {
         sal_Int32 nDimensionIndex=0; sal_Int32 nAxisIndex=0;
         AxisHelper::getIndicesForAxis(xAxis, xCooSys, nDimensionIndex, nAxisIndex );
-        bool bChartTypeAllowsDateAxis = ChartTypeHelper::isSupportingDateAxis( AxisHelper::getChartTypeByIndex( xCooSys, 0 ), 2, nDimensionIndex );
+        bool bChartTypeAllowsDateAxis = ChartTypeHelper::isSupportingDateAxis( AxisHelper::getChartTypeByIndex( xCooSys, 0 ), nDimensionIndex );
         if( bChartTypeAllowsDateAxis )
             aScale.AxisType = AxisType::DATE;
     }
@@ -149,8 +151,6 @@ sal_Int32 AxisHelper::getExplicitNumberFormatKeyForAxis(
     bool bLinkToSource = true;
     xProp->getPropertyValue(CHART_UNONAME_LINK_TO_SRC_NUMFMT) >>= bLinkToSource;
     xProp->getPropertyValue(CHART_UNONAME_NUMFMT) >>= nNumberFormatKey;
-
-    sal_Int32 nOldNumberFormat = nNumberFormatKey;
 
     if (bLinkToSource)
     {
@@ -198,8 +198,8 @@ sal_Int32 AxisHelper::getExplicitNumberFormatKeyForAxis(
                     Reference< data::XDataSource > xSource( DataSourceHelper::getUsedData( xChartDoc ) );
                     if( xSource.is() )
                     {
-                        ::std::vector< Reference< chart2::data::XLabeledDataSequence > > aXValues(
-                            DataSeriesHelper::getAllDataSequencesByRole( xSource->getDataSequences(), "values-x", true ) );
+                        std::vector< Reference< chart2::data::XLabeledDataSequence > > aXValues(
+                            DataSeriesHelper::getAllDataSequencesByRole( xSource->getDataSequences(), "values-x" ) );
                         if( aXValues.empty() )
                         {
                             Reference< data::XLabeledDataSequence > xCategories( DiagramHelper::getCategoriesFromDiagram( xDiagram ) );
@@ -233,86 +233,82 @@ sal_Int32 AxisHelper::getExplicitNumberFormatKeyForAxis(
 
         if( !bFormatSet )
         {
-            typedef ::std::map< sal_Int32, sal_Int32 > tNumberformatFrequency;
+            typedef std::map< sal_Int32, sal_Int32 > tNumberformatFrequency;
             tNumberformatFrequency aKeyMap;
             bool bNumberFormatKeyFoundViaAttachedData = false;
 
             try
             {
                 Reference< XChartTypeContainer > xCTCnt( xCorrespondingCoordinateSystem, uno::UNO_QUERY_THROW );
-                if( xCTCnt.is() )
+                OUString aRoleToMatch;
+                if( nDimensionIndex == 0 )
+                    aRoleToMatch = "values-x";
+                Sequence< Reference< XChartType > > aChartTypes( xCTCnt->getChartTypes());
+                for( sal_Int32 nCTIdx=0; nCTIdx<aChartTypes.getLength(); ++nCTIdx )
                 {
-                    OUString aRoleToMatch;
-                    if( nDimensionIndex == 0 )
-                        aRoleToMatch = "values-x";
-                    Sequence< Reference< XChartType > > aChartTypes( xCTCnt->getChartTypes());
-                    for( sal_Int32 nCTIdx=0; nCTIdx<aChartTypes.getLength(); ++nCTIdx )
+                    if( nDimensionIndex != 0 )
+                        aRoleToMatch = ChartTypeHelper::getRoleOfSequenceForYAxisNumberFormatDetection( aChartTypes[nCTIdx] );
+                    Reference< XDataSeriesContainer > xDSCnt( aChartTypes[nCTIdx], uno::UNO_QUERY_THROW );
+                    Sequence< Reference< XDataSeries > > aDataSeriesSeq( xDSCnt->getDataSeries());
+                    for( sal_Int32 nSeriesIdx=0; nSeriesIdx<aDataSeriesSeq.getLength(); ++nSeriesIdx )
                     {
-                        if( nDimensionIndex != 0 )
-                            aRoleToMatch = ChartTypeHelper::getRoleOfSequenceForYAxisNumberFormatDetection( aChartTypes[nCTIdx] );
-                        Reference< XDataSeriesContainer > xDSCnt( aChartTypes[nCTIdx], uno::UNO_QUERY_THROW );
-                        Sequence< Reference< XDataSeries > > aDataSeriesSeq( xDSCnt->getDataSeries());
-                        for( sal_Int32 nSeriesIdx=0; nSeriesIdx<aDataSeriesSeq.getLength(); ++nSeriesIdx )
+                        Reference< chart2::XDataSeries > xDataSeries(aDataSeriesSeq[nSeriesIdx]);
+                        Reference< data::XDataSource > xSource( xDataSeries, uno::UNO_QUERY_THROW );
+
+                        if( nDimensionIndex == 1 )
                         {
-                            Reference< chart2::XDataSeries > xDataSeries(aDataSeriesSeq[nSeriesIdx]);
-                            Reference< data::XDataSource > xSource( xDataSeries, uno::UNO_QUERY_THROW );
+                            //only take those series into account that are attached to this axis
+                            sal_Int32 nAttachedAxisIndex = DataSeriesHelper::getAttachedAxisIndex(xDataSeries);
+                            if( nAttachedAxisIndex != nAxisIndex )
+                                continue;
+                        }
 
-                            if( nDimensionIndex == 1 )
+                        Reference< data::XLabeledDataSequence > xLabeledSeq(
+                            DataSeriesHelper::getDataSequenceByRole( xSource, aRoleToMatch ) );
+
+                        if( !xLabeledSeq.is() && nDimensionIndex==0 )
+                        {
+                            ScaleData aData = xAxis->getScaleData();
+                            xLabeledSeq = aData.Categories;
+                        }
+
+                        if( xLabeledSeq.is() )
+                        {
+                            Reference< data::XDataSequence > xSeq( xLabeledSeq->getValues());
+                            if( xSeq.is() )
                             {
-                                //only take those series into account that are attached to this axis
-                                sal_Int32 nAttachedAxisIndex = DataSeriesHelper::getAttachedAxisIndex(xDataSeries);
-                                if( nAttachedAxisIndex != nAxisIndex )
-                                    continue;
-                            }
-
-                            Reference< data::XLabeledDataSequence > xLabeledSeq(
-                                DataSeriesHelper::getDataSequenceByRole( xSource, aRoleToMatch ) );
-
-                            if( !xLabeledSeq.is() && nDimensionIndex==0 )
-                            {
-                                ScaleData aData = xAxis->getScaleData();
-                                xLabeledSeq = aData.Categories;
-                            }
-
-                            if( xLabeledSeq.is() )
-                            {
-                                Reference< data::XDataSequence > xSeq( xLabeledSeq->getValues());
-                                if( xSeq.is() )
-                                {
-                                    sal_Int32 nKey = xSeq->getNumberFormatKeyByIndex( -1 );
-                                    // initialize the value
-                                    if( aKeyMap.find( nKey ) == aKeyMap.end())
-                                        aKeyMap[ nKey ] = 0;
-                                    // increase frequency
-                                    aKeyMap[ nKey ] = (aKeyMap[ nKey ] + 1);
-                                }
+                                sal_Int32 nKey = xSeq->getNumberFormatKeyByIndex( -1 );
+                                // initialize the value
+                                if( aKeyMap.find( nKey ) == aKeyMap.end())
+                                    aKeyMap[ nKey ] = 0;
+                                // increase frequency
+                                aKeyMap[ nKey ] = (aKeyMap[ nKey ] + 1);
                             }
                         }
                     }
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
 
             if( ! aKeyMap.empty())
             {
                 sal_Int32 nMaxFreq = 0;
                 // find most frequent key
-                for( tNumberformatFrequency::const_iterator aIt = aKeyMap.begin();
-                    aIt != aKeyMap.end(); ++aIt )
+                for (auto const& elem : aKeyMap)
                 {
                     SAL_INFO(
                         "chart2.tools",
-                        "NumberFormatKey " << (*aIt).first << " appears "
-                            << (*aIt).second << " times");
+                        "NumberFormatKey " << elem.first << " appears "
+                            << elem.second << " times");
                     // all values must at least be 1
-                    if( (*aIt).second > nMaxFreq )
+                    if( elem.second > nMaxFreq )
                     {
-                        nNumberFormatKey = (*aIt).first;
+                        nNumberFormatKey = elem.first;
                         bNumberFormatKeyFoundViaAttachedData = true;
-                        nMaxFreq = (*aIt).second;
+                        nMaxFreq = elem.second;
                     }
                 }
             }
@@ -329,9 +325,6 @@ sal_Int32 AxisHelper::getExplicitNumberFormatKeyForAxis(
                 }
             }
         }
-
-        if (nOldNumberFormat != nNumberFormatKey)
-            xProp->setPropertyValue(CHART_UNONAME_NUMFMT, uno::makeAny(nNumberFormatKey));
     }
 
     return nNumberFormatKey;
@@ -380,14 +373,14 @@ Reference< XAxis > AxisHelper::createAxis(
                 {
                     css::chart::ChartAxisPosition eMainAxisPos( css::chart::ChartAxisPosition_ZERO );
                     xMainProp->getPropertyValue("CrossoverPosition") >>= eMainAxisPos;
-                    if( css::chart::ChartAxisPosition_END == eMainAxisPos )
+                    if( eMainAxisPos == css::chart::ChartAxisPosition_END )
                         eNewAxisPos = css::chart::ChartAxisPosition_START;
                 }
             }
 
             Reference< beans::XPropertySet > xProp( xAxis, uno::UNO_QUERY );
             if( xProp.is() )
-                xProp->setPropertyValue("CrossoverPosition", uno::makeAny(eNewAxisPos) );
+                xProp->setPropertyValue("CrossoverPosition", uno::Any(eNewAxisPos) );
         }
 
         Reference< beans::XPropertySet > xProp( xAxis, uno::UNO_QUERY );
@@ -399,7 +392,7 @@ Reference< XAxis > AxisHelper::createAxis(
         }
         catch( const uno::Exception& e )
         {
-            ASSERT_EXCEPTION( e );
+            SAL_WARN("chart2", "Exception caught. " << e );
         }
     }
     return xAxis;
@@ -415,8 +408,7 @@ Reference< XAxis > AxisHelper::createAxis( sal_Int32 nDimensionIndex, bool bMain
         return nullptr;
 
     sal_Int32 nAxisIndex = bMainAxis ? MAIN_AXIS_INDEX : SECONDARY_AXIS_INDEX;
-    sal_Int32 nCooSysIndex = 0;
-    Reference< XCoordinateSystem > xCooSys = AxisHelper::getCoordinateSystemByIndex( xDiagram, nCooSysIndex );
+    Reference< XCoordinateSystem > xCooSys = AxisHelper::getCoordinateSystemByIndex( xDiagram, 0 );
 
     // create axis
     return AxisHelper::createAxis(
@@ -446,8 +438,7 @@ void AxisHelper::showAxis( sal_Int32 nDimensionIndex, bool bMainAxis
 }
 
 void AxisHelper::showGrid( sal_Int32 nDimensionIndex, sal_Int32 nCooSysIndex, bool bMainGrid
-                , const Reference< XDiagram >& xDiagram
-                , const Reference< uno::XComponentContext >& /*xContext*/ )
+                , const Reference< XDiagram >& xDiagram )
 {
     if( !xDiagram.is() )
         return;
@@ -479,9 +470,9 @@ void AxisHelper::makeAxisVisible( const Reference< XAxis >& xAxis )
     Reference< beans::XPropertySet > xProps( xAxis, uno::UNO_QUERY );
     if( xProps.is() )
     {
-        xProps->setPropertyValue( "Show", uno::makeAny( sal_True ) );
+        xProps->setPropertyValue( "Show", uno::Any( true ) );
         LinePropertiesHelper::SetLineVisible( xProps );
-        xProps->setPropertyValue( "DisplayLabels", uno::makeAny( sal_True ) );
+        xProps->setPropertyValue( "DisplayLabels", uno::Any( true ) );
     }
 }
 
@@ -489,7 +480,7 @@ void AxisHelper::makeGridVisible( const Reference< beans::XPropertySet >& xGridP
 {
     if( xGridProperties.is() )
     {
-        xGridProperties->setPropertyValue( "Show", uno::makeAny( sal_True ) );
+        xGridProperties->setPropertyValue( "Show", uno::Any( true ) );
         LinePropertiesHelper::SetLineVisible( xGridProperties );
     }
 }
@@ -505,7 +496,7 @@ void AxisHelper::makeAxisInvisible( const Reference< XAxis >& xAxis )
     Reference< beans::XPropertySet > xProps( xAxis, uno::UNO_QUERY );
     if( xProps.is() )
     {
-        xProps->setPropertyValue( "Show", uno::makeAny( sal_False ) );
+        xProps->setPropertyValue( "Show", uno::Any( false ) );
     }
 }
 
@@ -513,11 +504,10 @@ void AxisHelper::hideAxisIfNoDataIsAttached( const Reference< XAxis >& xAxis, co
 {
     //axis is hidden if no data is attached anymore but data is available
     bool bOtherSeriesAttachedToThisAxis = false;
-    ::std::vector< Reference< chart2::XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
-    ::std::vector< Reference< chart2::XDataSeries > >::const_iterator aIt = aSeriesVector.begin();
-    for( ; aIt != aSeriesVector.end(); ++aIt)
+    std::vector< Reference< chart2::XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
+    for (auto const& series : aSeriesVector)
     {
-        uno::Reference< chart2::XAxis > xCurrentAxis( DiagramHelper::getAttachedAxis( *aIt, xDiagram ), uno::UNO_QUERY );
+        uno::Reference< chart2::XAxis > xCurrentAxis( DiagramHelper::getAttachedAxis(series, xDiagram ), uno::UNO_QUERY );
         if( xCurrentAxis==xAxis )
         {
             bOtherSeriesAttachedToThisAxis = true;
@@ -556,7 +546,7 @@ void AxisHelper::makeGridInvisible( const Reference< beans::XPropertySet >& xGri
 {
     if( xGridProperties.is() )
     {
-        xGridProperties->setPropertyValue( "Show", uno::makeAny( sal_False ) );
+        xGridProperties->setPropertyValue( "Show", uno::Any( false ) );
     }
 }
 
@@ -637,7 +627,7 @@ Reference< XAxis > AxisHelper::getCrossingMainAxis( const Reference< XAxis >& xA
     sal_Int32 nDimensionIndex = 0;
     sal_Int32 nAxisIndex = 0;
     AxisHelper::getIndicesForAxis( xAxis, xCooSys, nDimensionIndex, nAxisIndex );
-    if( 2==nDimensionIndex )
+    if( nDimensionIndex==2 )
     {
         nDimensionIndex=1;
         bool bSwapXY = false;
@@ -645,7 +635,7 @@ Reference< XAxis > AxisHelper::getCrossingMainAxis( const Reference< XAxis >& xA
         if( xCooSysProp.is() && (xCooSysProp->getPropertyValue( "SwapXAndYAxis" ) >>= bSwapXY) && bSwapXY )
             nDimensionIndex=0;
     }
-    else if( 1==nDimensionIndex )
+    else if( nDimensionIndex==1 )
         nDimensionIndex=0;
     else
         nDimensionIndex=1;
@@ -730,7 +720,7 @@ Reference< beans::XPropertySet > AxisHelper::getGridProperties(
         else
         {
             Sequence< Reference< beans::XPropertySet > > aSubGrids( xAxis->getSubGridProperties() );
-            if( nSubGridIndex >= 0 && nSubGridIndex < aSubGrids.getLength() )
+            if (nSubGridIndex < aSubGrids.getLength())
                 xRet.set( aSubGrids[nSubGridIndex] );
         }
     }
@@ -841,9 +831,9 @@ std::vector< Reference< XAxis > > AxisHelper::getAllAxesOfCoordinateSystem(
                                 aAxisVector.push_back( xAxis );
                         }
                     }
-                    catch( const uno::Exception & ex )
+                    catch( const uno::Exception & )
                     {
-                        ASSERT_EXCEPTION( ex );
+                        DBG_UNHANDLED_EXCEPTION("chart2");
                     }
                 }
             }
@@ -916,7 +906,7 @@ void AxisHelper::getAxisOrGridPossibilities( Sequence< sal_Bool >& rPossibilityL
         rPossibilityList[nIndex]=ChartTypeHelper::isSupportingMainAxis(xChartType,nDimensionCount,nIndex);
     for(nIndex=3;nIndex<6;nIndex++)
         if( bAxis )
-            rPossibilityList[nIndex]=ChartTypeHelper::isSupportingSecondaryAxis(xChartType,nDimensionCount,nIndex-3);
+            rPossibilityList[nIndex]=ChartTypeHelper::isSupportingSecondaryAxis(xChartType,nDimensionCount);
         else
             rPossibilityList[nIndex] = rPossibilityList[nIndex-3];
 }
@@ -967,7 +957,7 @@ bool AxisHelper::shouldAxisBeDisplayed( const Reference< XAxis >& xAxis
             if( bMainAxis )
                 bRet = ChartTypeHelper::isSupportingMainAxis(xChartType,nDimensionCount,nDimensionIndex);
             else
-                bRet = ChartTypeHelper::isSupportingSecondaryAxis(xChartType,nDimensionCount,nDimensionIndex);
+                bRet = ChartTypeHelper::isSupportingSecondaryAxis(xChartType,nDimensionCount);
         }
     }
 
@@ -982,7 +972,6 @@ void AxisHelper::getAxisOrGridExcistence( Sequence< sal_Bool >& rExistenceList
     if(bAxis)
     {
         sal_Int32 nN;
-        Reference< XAxis > xAxis;
         for(nN=0;nN<3;nN++)
             rExistenceList[nN] = AxisHelper::isAxisShown( nN, true, xDiagram );
         for(nN=3;nN<6;nN++)
@@ -1024,8 +1013,7 @@ bool AxisHelper::changeVisibilityOfAxes( const Reference< XDiagram >& xDiagram
 
 bool AxisHelper::changeVisibilityOfGrids( const Reference< XDiagram >& xDiagram
                         , const Sequence< sal_Bool >& rOldExistenceList
-                        , const Sequence< sal_Bool >& rNewExistenceList
-                        , const Reference< uno::XComponentContext >& xContext )
+                        , const Sequence< sal_Bool >& rNewExistenceList )
 {
     bool bChanged = false;
     for(sal_Int32 nN=0;nN<6;nN++)
@@ -1034,7 +1022,7 @@ bool AxisHelper::changeVisibilityOfGrids( const Reference< XDiagram >& xDiagram
         {
             bChanged = true;
             if(rNewExistenceList[nN])
-                AxisHelper::showGrid( nN%3, 0, nN<3, xDiagram, xContext );
+                AxisHelper::showGrid( nN%3, 0, nN<3, xDiagram );
             else
                 AxisHelper::hideGrid( nN%3, 0, nN<3, xDiagram );
         }
@@ -1058,8 +1046,8 @@ Reference< XCoordinateSystem > AxisHelper::getCoordinateSystemOfAxis(
             xCooSys = aCooSysList[nCooSysIndex];
             std::vector< Reference< XAxis > > aAllAxis( AxisHelper::getAllAxesOfCoordinateSystem( xCooSys ) );
 
-            ::std::vector< Reference< XAxis > >::iterator aFound =
-                  ::std::find( aAllAxis.begin(), aAllAxis.end(), xAxis );
+            std::vector< Reference< XAxis > >::iterator aFound =
+                  std::find( aAllAxis.begin(), aAllAxis.end(), xAxis );
             if( aFound != aAllAxis.end())
             {
                 xRet.set( xCooSys );
@@ -1120,9 +1108,9 @@ void AxisHelper::setRTLAxisLayout( const Reference< XCoordinateSystem >& xCooSys
                     xVerticalMainAxis->setScaleData(aScale);
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2" );
             }
 
             try
@@ -1145,9 +1133,9 @@ void AxisHelper::setRTLAxisLayout( const Reference< XCoordinateSystem >& xCooSys
                     xVerticalSecondaryAxis->setScaleData(aScale);
                 }
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -1156,14 +1144,13 @@ void AxisHelper::setRTLAxisLayout( const Reference< XCoordinateSystem >& xCooSys
 Reference< XChartType > AxisHelper::getFirstChartTypeWithSeriesAttachedToAxisIndex( const Reference< chart2::XDiagram >& xDiagram, const sal_Int32 nAttachedAxisIndex )
 {
     Reference< XChartType > xChartType;
-    ::std::vector< Reference< XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
-    ::std::vector< Reference< XDataSeries > >::const_iterator aIter = aSeriesVector.begin();
-    for( ; aIter != aSeriesVector.end(); ++aIter )
+    std::vector< Reference< XDataSeries > > aSeriesVector( DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
+    for (auto const& series : aSeriesVector)
     {
-        sal_Int32 nCurrentIndex = DataSeriesHelper::getAttachedAxisIndex( *aIter );
+        sal_Int32 nCurrentIndex = DataSeriesHelper::getAttachedAxisIndex(series);
         if( nAttachedAxisIndex == nCurrentIndex )
         {
-            xChartType = DiagramHelper::getChartTypeOfSeries( xDiagram, *aIter );
+            xChartType = DiagramHelper::getChartTypeOfSeries(xDiagram, series);
             if(xChartType.is())
                 break;
         }

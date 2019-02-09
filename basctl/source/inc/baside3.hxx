@@ -23,15 +23,7 @@
 #include "layout.hxx"
 #include "bastypes.hxx"
 #include "propbrw.hxx"
-
 #include <svl/undo.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/button.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/fixed.hxx>
-
-#include <com/sun/star/script/XLibraryContainer.hpp>
-
 #include <memory>
 
 class Printer;
@@ -51,18 +43,19 @@ class DlgEdView;
 class DialogWindowLayout;
 class ObjectCatalog;
 
-bool implImportDialog( vcl::Window* pWin, const OUString& rCurPath, const ScriptDocument& rDocument, const OUString& aLibName );
+bool implImportDialog(weld::Window* pWin, const OUString& rCurPath, const ScriptDocument& rDocument, const OUString& rLibName);
 
 class DialogWindow: public BaseWindow
 {
 private:
-    DialogWindowLayout& rLayout;
-    std::unique_ptr<DlgEditor> pEditor;
-    std::unique_ptr<SfxUndoManager> pUndoMgr; // never nullptr
-    OUString            aCurPath;
+    DialogWindowLayout& m_rLayout;
+    std::unique_ptr<DlgEditor> m_pEditor;
+    std::unique_ptr<SfxUndoManager> m_pUndoMgr; // never nullptr
+    OUString            m_sCurPath;
+    sal_uInt16          m_nControlSlotId;
 
 protected:
-    virtual void        Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void        Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
     virtual void        Resize() override;
     virtual void        dispose() override;
 
@@ -73,7 +66,7 @@ protected:
     virtual void        Command( const CommandEvent& rCEvt ) override;
     virtual void        LoseFocus() override;
 
-    DECL_STATIC_LINK_TYPED( DialogWindow, NotifyUndoActionHdl, SdrUndoAction *, void );
+    static void         NotifyUndoActionHdl( std::unique_ptr<SdrUndoAction> );
     virtual void        DoInit() override;
     virtual void        DoScroll( ScrollBar* pCurScrollBar ) override;
     virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;
@@ -81,12 +74,11 @@ protected:
 
 public:
     DialogWindow (DialogWindowLayout* pParent, ScriptDocument const& rDocument, const OUString& aLibName, const OUString& aName, css::uno::Reference<css::container::XNameContainer> const& xDialogModel);
-    DialogWindow( DialogWindow* pCurView ); // never implemented
 
     virtual void        ExecuteCommand( SfxRequest& rReq ) override;
     virtual void        GetState( SfxItemSet& ) override;
-    DlgEditor&          GetEditor() const   { return *pEditor; }
-    css::uno::Reference< css::container::XNameContainer > GetDialog() const;
+    DlgEditor&          GetEditor() const   { return *m_pEditor; }
+    css::uno::Reference< css::container::XNameContainer > const & GetDialog() const;
     DlgEdModel&         GetModel() const;
     DlgEdPage&          GetPage() const;
     DlgEdView&          GetView() const;
@@ -103,9 +95,9 @@ public:
 
     virtual void        StoreData() override;
     virtual bool        IsModified() override;
-    virtual bool        IsPasteAllowed() override;
+    bool                IsPasteAllowed();
 
-    virtual svl::IUndoManager* GetUndoManager() override;
+    virtual SfxUndoManager* GetUndoManager() override;
     // return number of pages to be printed
     virtual sal_Int32 countPages( Printer* pPrinter ) override;
     // print page
@@ -127,7 +119,7 @@ class DialogWindowLayout : public Layout
 {
 public:
     DialogWindowLayout (vcl::Window* pParent, ObjectCatalog&);
-    virtual ~DialogWindowLayout();
+    virtual ~DialogWindowLayout() override;
     virtual void dispose() override;
 public:
     void ShowPropertyBrowser ();

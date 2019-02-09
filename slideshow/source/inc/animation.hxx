@@ -20,9 +20,9 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_INC_ANIMATION_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_INC_ANIMATION_HXX
 
-#include <animatableshape.hxx>
-#include <shapeattributelayer.hxx>
-#include <disposable.hxx>
+#include "animatableshape.hxx"
+#include "shapeattributelayer.hxx"
+#include "disposable.hxx"
 
 
 /* Definition of Animation interface */
@@ -47,8 +47,6 @@ namespace slideshow
         class Animation : public virtual SharedPtrAble
         {
         public:
-            virtual ~Animation() {}
-
             /** Notify that the animation going active soon.
 
                 Implementers should preload any buffers, and create

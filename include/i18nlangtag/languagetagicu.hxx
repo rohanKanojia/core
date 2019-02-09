@@ -24,7 +24,7 @@ class LanguageTag;
     makefiles) with ICU header file inclusion, only the few code actually using
     this needs to know about ICU, which it did anyway.
 */
-class I18NLANGTAG_DLLPUBLIC LanguageTagIcu
+class SAL_WARN_UNUSED I18NLANGTAG_DLLPUBLIC LanguageTagIcu
 {
 public:
 
@@ -41,13 +41,12 @@ public:
     /** Obtain language tag as ICU icu::Locale, adding variant data.
 
         From the LanguageTag only language and country are used to construct
-        the icu:Locale, the variant field is copied from rVariant. For example
-        needed to create an icu::Collator instance where the variant field
-        denotes the algorithm to be used.
+        the icu:Locale, the variant field is copied from rVariant.
+        The 4th arg of icu::Locale "keywords" (eg: for collation)
 
         Always resolves an empty tag to the system locale.
      */
-    static  icu::Locale     getIcuLocale( const LanguageTag & rLanguageTag, const OUString & rVariant );
+    static  icu::Locale     getIcuLocale( const LanguageTag & rLanguageTag, const OUString & rVariant, const OUString & rKeywords);
 };
 
 #endif  // INCLUDED_I18NLANGTAG_LANGUAGETAGICU_HXX

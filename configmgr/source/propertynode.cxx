@@ -23,7 +23,6 @@
 
 #include <com/sun/star/beans/Optional.hpp>
 #include <com/sun/star/uno/Any.hxx>
-#include <osl/mutex.hxx>
 #include <rtl/ref.hxx>
 #include <rtl/ustring.h>
 #include <rtl/ustring.hxx>
@@ -48,7 +47,7 @@ rtl::Reference< Node > PropertyNode::clone(bool) const {
 }
 
 
-css::uno::Any PropertyNode::getValue(Components & components) {
+css::uno::Any const & PropertyNode::getValue(Components & components) {
     if (!externalDescriptor_.isEmpty()) {
         css::beans::Optional< css::uno::Any > val(
             components.getExternalValue(externalDescriptor_));
@@ -81,13 +80,6 @@ void PropertyNode::setExternal(int layer, OUString const & descriptor) {
     setLayer(layer);
     externalDescriptor_ = descriptor;
 }
-
-
-PropertyNode::PropertyNode(PropertyNode const & other):
-    Node(other), staticType_(other.staticType_), nillable_(other.nillable_),
-    extension_(other.extension_), externalDescriptor_(other.externalDescriptor_),
-    value_(other.value_)
-{}
 
 PropertyNode::~PropertyNode() {}
 

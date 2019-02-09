@@ -20,18 +20,17 @@
 #ifndef INCLUDED_COMPHELPER_TYPES_HXX
 #define INCLUDED_COMPHELPER_TYPES_HXX
 
-#include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/lang/XTypeProvider.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <comphelper/comphelperdllapi.h>
-#include <cppu/unotype.hxx>
 
 namespace com { namespace sun { namespace star { namespace awt {
     struct FontDescriptor;
 } } } }
+
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 
 namespace comphelper
@@ -90,16 +89,8 @@ namespace comphelper
     COMPHELPER_DLLPUBLIC OUString       getString(const css::uno::Any& _rAny);
     COMPHELPER_DLLPUBLIC bool           getBOOL(const css::uno::Any& _rAny);
 
-    COMPHELPER_DLLPUBLIC sal_Int32      getEnumAsINT32(const css::uno::Any& _rAny) throw(css::lang::IllegalArgumentException);
-
-//= replacement of some former UsrAny.setXXX methods - can be used with rvalues
-    inline void setBOOL(css::uno::Any& _rAny, bool _b)
-    { _rAny.setValue(&_b, cppu::UnoType<bool>::get()); }
-
-//= extension of ::cppu::makeAny()
-    inline css::uno::Any makeBoolAny(bool _b)
-    { return css::uno::Any(&_b, cppu::UnoType<bool>::get()); }
-
+    /// @throws css::lang::IllegalArgumentException
+    COMPHELPER_DLLPUBLIC sal_Int32      getEnumAsINT32(const css::uno::Any& _rAny);
 
 }   // namespace comphelper
 

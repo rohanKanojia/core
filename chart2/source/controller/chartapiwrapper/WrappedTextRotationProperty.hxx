@@ -19,21 +19,20 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDTEXTROTATIONPROPERTY_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDTEXTROTATIONPROPERTY_HXX
 
-#include "WrappedProperty.hxx"
+#include <WrappedProperty.hxx>
 
 namespace chart
 {
 
-class WrappedTextRotationProperty : public WrappedProperty
+class WrappedTextRotationProperty final : public WrappedProperty
 {
 public:
     explicit WrappedTextRotationProperty( bool bDirectState=false );
-    virtual ~WrappedTextRotationProperty();
+    virtual ~WrappedTextRotationProperty() override;
 
-    virtual css::beans::PropertyState getPropertyState( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const
-                        throw (css::beans::UnknownPropertyException, css::uno::RuntimeException) override;
+    virtual css::beans::PropertyState getPropertyState( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const override;
 
-protected:
+private:
     virtual css::uno::Any convertInnerToOuterValue( const css::uno::Any& rInnerValue ) const override;
     virtual css::uno::Any convertOuterToInnerValue( const css::uno::Any& rOuterValue ) const override;
 

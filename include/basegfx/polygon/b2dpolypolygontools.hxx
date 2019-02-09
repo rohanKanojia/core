@@ -21,15 +21,14 @@
 #define INCLUDED_BASEGFX_POLYGON_B2DPOLYPOLYGONTOOLS_HXX
 
 #include <basegfx/point/b2dpoint.hxx>
-#include <basegfx/vector/b2dvector.hxx>
-#include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b3dpolypolygon.hxx>
 #include <com/sun/star/drawing/PointSequenceSequence.hpp>
-#include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
 #include <vector>
 #include <set>
 #include <basegfx/basegfxdllapi.h>
 
+
+namespace com { namespace sun { namespace star { namespace drawing { struct PolyPolygonBezierCoords; } } } }
 
 namespace basegfx
 {
@@ -37,7 +36,7 @@ namespace basegfx
     class B2DPolyPolygon;
     class B2DRange;
 
-    namespace tools
+    namespace utils
     {
         // B2DPolyPolygon tools
 
@@ -52,7 +51,7 @@ namespace basegfx
         BASEGFX_DLLPUBLIC B2DPolyPolygon correctOutmostPolygon(const B2DPolyPolygon& rCandidate);
 
         // Subdivide all contained curves. Use distanceBound value if given.
-        BASEGFX_DLLPUBLIC B2DPolyPolygon adaptiveSubdivideByDistance(const B2DPolyPolygon& rCandidate, double fDistanceBound = 0.0);
+        BASEGFX_DLLPUBLIC B2DPolyPolygon adaptiveSubdivideByDistance(const B2DPolyPolygon& rCandidate, double fDistanceBound);
 
         // Subdivide all contained curves. Use distanceBound value if given. Else, a convenient one
         // is created.
@@ -89,7 +88,6 @@ namespace basegfx
             const B2DPolyPolygon& rCandidate,
             const ::std::vector<double>& rDotDashArray,
             B2DPolyPolygon* pLineTarget,
-            B2DPolyPolygon* pGapTarget = nullptr,
             double fFullDashDotLen = 0.0);
 
         // test if point is inside epsilon-range around the given PolyPolygon. Can be used
@@ -162,12 +160,6 @@ namespace basegfx
         // with the given amount. Value may be negative.
         BASEGFX_DLLPUBLIC B2DPolyPolygon growInNormalDirection(const B2DPolyPolygon& rCandidate, double fValue);
 
-        // This method will correct a pair of polyPolygons where the goal is to keep same point count
-        // to allow direct point association and also to remove self-intersections produced by shrinks.
-        // This method might possibly change both polyPolygons to reach that goal because there are cases
-        // where it is necessary to add new cut points to the original
-        BASEGFX_DLLPUBLIC void correctGrowShrinkPolygonPair(B2DPolyPolygon& rOriginal, B2DPolyPolygon& rGrown);
-
         // force all sub-polygons to a point count of nSegments
         BASEGFX_DLLPUBLIC B2DPolyPolygon reSegmentPolyPolygon(const B2DPolyPolygon& rCandidate, sal_uInt32 nSegments);
 
@@ -235,6 +227,12 @@ namespace basegfx
             polygon is kept; this is needed to read odf files.
             If false, pure svg is used; this is needed for svg import.
 
+            @param bOOXMLMotionPath
+            If set to true, export string format that is acceptable for
+            for animation motion path for PowerPoint: always space delimited,
+            never neglect command char, always end with E, and do not export
+            H or V.
+
             @return the generated SVG-D statement (the XML d attribute
             value alone, without any "<path ...>" or "d="...")
          */
@@ -242,7 +240,8 @@ namespace basegfx
             const B2DPolyPolygon& rPolyPoly,
             bool bUseRelativeCoordinates,
             bool bDetectQuadraticBeziers,
-            bool bHandleRelativeNextPointCompatible);
+            bool bHandleRelativeNextPointCompatible,
+            bool bOOXMLMotionPath = false);
 
         // #i76891# Try to remove existing curve segments if they are simply edges
         BASEGFX_DLLPUBLIC B2DPolyPolygon simplifyCurveSegments(const B2DPolyPolygon& rCandidate);
@@ -265,7 +264,7 @@ namespace basegfx
             are 'lit' for the given number. Return un-lit segments
             otherwise.
          */
-        B2DPolyPolygon createSevenSegmentPolyPolygon(sal_Char cNumber, bool bLitSegments=true);
+        B2DPolyPolygon createSevenSegmentPolyPolygon(sal_Char cNumber, bool bLitSegments);
 
         /** snap some polygon coordinates to discrete coordinates
 
@@ -283,21 +282,19 @@ namespace basegfx
 
         /// converters for css::drawing::PointSequence
         BASEGFX_DLLPUBLIC B2DPolyPolygon UnoPointSequenceSequenceToB2DPolyPolygon(
-            const css::drawing::PointSequenceSequence& rPointSequenceSequenceSource,
-            bool bCheckClosed = true);
+            const css::drawing::PointSequenceSequence& rPointSequenceSequenceSource);
         BASEGFX_DLLPUBLIC void B2DPolyPolygonToUnoPointSequenceSequence(
             const B2DPolyPolygon& rPolyPolygon,
             css::drawing::PointSequenceSequence& rPointSequenceSequenceRetval);
 
         /// converters for css::drawing::PolyPolygonBezierCoords (curved polygons)
         BASEGFX_DLLPUBLIC B2DPolyPolygon UnoPolyPolygonBezierCoordsToB2DPolyPolygon(
-            const css::drawing::PolyPolygonBezierCoords& rPolyPolygonBezierCoordsSource,
-            bool bCheckClosed = true);
+            const css::drawing::PolyPolygonBezierCoords& rPolyPolygonBezierCoordsSource);
         BASEGFX_DLLPUBLIC void B2DPolyPolygonToUnoPolyPolygonBezierCoords(
             const B2DPolyPolygon& rPolyPolygon,
             css::drawing::PolyPolygonBezierCoords& rPolyPolygonBezierCoordsRetval);
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 #endif // INCLUDED_BASEGFX_POLYGON_B2DPOLYPOLYGONTOOLS_HXX

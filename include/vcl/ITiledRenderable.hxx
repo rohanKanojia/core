@@ -11,14 +11,78 @@
 #ifndef INCLUDED_VCL_ITILEDRENDERABLE_HXX
 #define INCLUDED_VCL_ITILEDRENDERABLE_HXX
 
-#include <LibreOfficeKit/LibreOfficeKitTypes.h>
 #include <tools/gen.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
+#include <vcl/vclevent.hxx>
 #include <vcl/pointr.hxx>
-#include <vcl/virdev.hxx>
-#include <com/sun/star/datatransfer/clipboard/XClipboardEx.hpp>
+#include <vcl/ptrstyle.hxx>
+#include <map>
+
+namespace com { namespace sun { namespace star { namespace beans { struct PropertyValue; } } } }
 
 namespace vcl
 {
+    /*
+     * Map directly to css cursor styles to avoid further mapping in the client.
+     * Gtk (via gdk_cursor_new_from_name) also supports the same css cursor styles.
+     *
+     * This was created partially with help of the mappings in gtkdata.cxx.
+     * The list is incomplete as some cursor style simply aren't supported
+     * by css, it might turn out to be worth mapping some of these missing cursors
+     * to available cursors?
+     */
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning( disable : 4592)
+#endif
+    static const std::map <PointerStyle, OString> gaLOKPointerMap {
+    { PointerStyle::Arrow, "default" },
+    // PointerStyle::Null ?
+    { PointerStyle::Wait, "wait" },
+    { PointerStyle::Text, "text" },
+    { PointerStyle::Help, "help" },
+    { PointerStyle::Cross, "crosshair" },
+    { PointerStyle::Fill, "fill" },
+    { PointerStyle::Move, "move" },
+    { PointerStyle::NSize, "n-resize" },
+    { PointerStyle::SSize, "s-resize" },
+    { PointerStyle::WSize, "w-resize" },
+    { PointerStyle::ESize, "e-resize" },
+    { PointerStyle::NWSize, "ne-resize" },
+    { PointerStyle::NESize, "ne-resize" },
+    { PointerStyle::SWSize, "sw-resize" },
+    { PointerStyle::SESize, "se-resize" },
+    // WindowNSize through WindowSESize
+    { PointerStyle::HSplit, "col-resize" },
+    { PointerStyle::VSplit, "row-resize" },
+    { PointerStyle::HSizeBar, "col-resize" },
+    { PointerStyle::VSizeBar, "row-resize" },
+    { PointerStyle::Hand, "grab" },
+    { PointerStyle::RefHand, "pointer" },
+    // Pen, Magnify, Fill, Rotate
+    // HShear, VShear
+    // Mirror, Crook, Crop, MovePoint, MoveBezierWeight
+    // MoveData
+    { PointerStyle::CopyData, "copy" },
+    { PointerStyle::LinkData, "alias" },
+    // MoveDataLink, CopyDataLink
+    //MoveFile, CopyFile, LinkFile
+    // MoveFileLink, CopyFileLink, MoveFiless, CopyFiles
+    { PointerStyle::NotAllowed, "not-allowed" },
+    // DrawLine through DrawCaption
+    // Chart, Detective, PivotCol, PivotRow, PivotField, Chain, ChainNotAllowed
+    // TimeEventMove, TimeEventSize
+    // AutoScrollN through AutoScrollNSWE
+    // Airbrush
+    { PointerStyle::TextVertical, "vertical-text" }
+    // Pivot Delete, TabSelectS through TabSelectSW
+    // PaintBrush, HideWhiteSpace, ShowWhiteSpace
+    };
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 
 class VCL_DLLPUBLIC ITiledRenderable
 {
@@ -26,6 +90,57 @@ protected:
     int mnTilePixelWidth, mnTilePixelHeight;
     int mnTileTwipWidth, mnTileTwipHeight;
 public:
+    struct LOKAsyncEventData
+    {
+        VclPtr<vcl::Window> mpWindow;
+        VclEventId mnEvent;
+        MouseEvent maMouseEvent;
+        KeyEvent maKeyEvent;
+    };
+
+    static void LOKPostAsyncEvent(void* pEv, void*)
+    {
+        LOKAsyncEventData* pLOKEv = static_cast<LOKAsyncEventData*>(pEv);
+        if (pLOKEv->mpWindow->IsDisposed())
+            return;
+
+        switch (pLOKEv->mnEvent)
+        {
+        case VclEventId::WindowKeyInput:
+            pLOKEv->mpWindow->KeyInput(pLOKEv->maKeyEvent);
+            break;
+        case VclEventId::WindowKeyUp:
+            pLOKEv->mpWindow->KeyUp(pLOKEv->maKeyEvent);
+            break;
+        case VclEventId::WindowMouseButtonDown:
+            pLOKEv->mpWindow->LogicMouseButtonDown(pLOKEv->maMouseEvent);
+            // Invoke the context menu
+            if (pLOKEv->maMouseEvent.GetButtons() & MOUSE_RIGHT)
+            {
+                const CommandEvent aCEvt(pLOKEv->maMouseEvent.GetPosPixel(), CommandEventId::ContextMenu, true, nullptr);
+                pLOKEv->mpWindow->Command(aCEvt);
+            }
+            break;
+        case VclEventId::WindowMouseButtonUp:
+            pLOKEv->mpWindow->LogicMouseButtonUp(pLOKEv->maMouseEvent);
+
+            // sometimes MouseButtonDown captures mouse and starts tracking, and VCL
+            // will not take care of releasing that with tiled rendering
+            if (pLOKEv->mpWindow->IsTracking())
+                pLOKEv->mpWindow->EndTracking();
+
+            break;
+        case VclEventId::WindowMouseMove:
+            pLOKEv->mpWindow->LogicMouseMove(pLOKEv->maMouseEvent);
+            break;
+        default:
+            assert(false);
+            break;
+        }
+
+        delete pLOKEv;
+    }
+
     virtual ~ITiledRenderable();
 
     /**
@@ -51,10 +166,7 @@ public:
      * Set the document "part", i.e. slide for a slideshow, and
      * tab for a spreadsheet.
      */
-    virtual void setPart( int nPart )
-    {
-        (void) nPart;
-    }
+    virtual void setPart( int ) {}
 
     /**
      * Get the number of parts -- see setPart for further details.
@@ -77,32 +189,30 @@ public:
      * Get the name of the currently displayed part, i.e. sheet in a spreadsheet
      * or slide in a presentation.
      */
-    virtual OUString getPartName(int nPart)
+    virtual OUString getPartName(int)
     {
-        (void) nPart;
-        return OUString("");
+        return OUString();
     }
 
+    /**
+     * Get the vcl::Window for the document being edited
+     */
+    virtual VclPtr<vcl::Window> getDocWindow() = 0;
+
+    /**
+     * Get the hash of the currently displayed part, i.e. sheet in a spreadsheet
+     * or slide in a presentation.
+     */
+    virtual OUString getPartHash(int nPart) = 0;
+
     /// @see lok::Document::setPartMode().
-    virtual void setPartMode(int nPartMode)
-    {
-        (void) nPartMode;
-    }
+    virtual void setPartMode(int) {}
 
     /**
      * Setup various document properties that are needed for the document to
      * be renderable via tiled rendering.
      */
     virtual void initializeForTiledRendering(const css::uno::Sequence<css::beans::PropertyValue>& rArguments) = 0;
-
-    /**
-     * Registers a callback that will be invoked whenever the tiled renderer
-     * wants to notify the client about an event.
-     *
-     * @param pCallback is the callback function
-     * @param pData is private data of the client that will be sent back when the callback is invoked
-     */
-    virtual void registerCallback(LibreOfficeKitCallback pCallback, void* pData) = 0;
 
     /**
      * Posts a keyboard event on the document.
@@ -158,9 +268,8 @@ public:
      * @param rRectangle - if not empty, then limit the output only to the area of this rectangle
      * @return a JSON describing position/content of rows/columns
      */
-    virtual OUString getRowColumnHeaders(const Rectangle& rRectangle)
+    virtual OUString getRowColumnHeaders(const tools::Rectangle& /*rRectangle*/)
     {
-        (void) rRectangle;
         return OUString();
     }
 
@@ -192,23 +301,75 @@ public:
      * @param nTileTwipWidth - tile width in twips
      * @param nTileTwipHeight - tile height in twips
      */
-    virtual void setClientZoom(int nTilePixelWidth,
-                               int nTilePixelHeight,
-                               int nTileTwipWidth,
-                               int nTileTwipHeight)
-    {
-        (void) nTilePixelWidth;
-        (void) nTilePixelHeight;
-        (void) nTileTwipWidth;
-        (void) nTileTwipHeight;
-    }
+    virtual void setClientZoom(int /*nTilePixelWidth*/,
+                               int /*nTilePixelHeight*/,
+                               int /*nTileTwipWidth*/,
+                               int /*nTileTwipHeight*/)
+    {}
 
     /// @see lok::Document::setClientVisibleArea().
-    virtual void setClientVisibleArea(const Rectangle& /*rRectangle*/)
+    virtual void setClientVisibleArea(const tools::Rectangle& /*rRectangle*/)
     {
     }
-};
 
+    /**
+     * Show/Hide a single row/column header outline for Calc documents.
+     *
+     * @param bColumn - if we are dealing with a column or row group
+     * @param nLevel - the level to which the group belongs
+     * @param nIndex - the group entry index
+     * @param bHidden - the new group state (collapsed/expanded)
+     */
+    virtual void setOutlineState(bool /*bColumn*/, int /*nLevel*/, int /*nIndex*/, bool /*bHidden*/)
+    {
+        return;
+    }
+
+    /// Implementation for
+    /// lok::Document::getCommandValues(".uno:AcceptTrackedChanges") when there
+    /// is no matching UNO API.
+    virtual OUString getTrackedChanges()
+    {
+        return OUString();
+    }
+
+    /// Implementation for
+    /// lok::Document::getCommandValues(".uno:TrackedChangeAuthors").
+    virtual OUString getTrackedChangeAuthors()
+    {
+        return OUString();
+    }
+
+    /// Implementation for
+    /// lok::Document::getCommandValues(".uno:ViewAnnotations");
+    virtual OUString getPostIts()
+    {
+        return OUString();
+    }
+
+    /// Implementation for
+    /// lok::Document::getCommandValues(".uno:ViewAnnotationsPosition");
+    virtual OUString getPostItsPos()
+    {
+        return OUString();
+    }
+
+    /// Implementation for
+    /// lok::Document::getCommandValues(".uno:RulerState");
+    virtual OUString getRulerState()
+    {
+        return OUString();
+    }
+
+    /*
+     * Used for sheets in spreadsheet documents.
+     */
+    virtual OUString getPartInfo(int /*nPart*/)
+    {
+        return OUString();
+    }
+
+};
 } // namespace vcl
 
 #endif // INCLUDED_VCL_ITILEDRENDERABLE_HXX

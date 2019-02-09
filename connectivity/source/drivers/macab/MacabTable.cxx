@@ -61,7 +61,7 @@ MacabTable::MacabTable( sdbcx::OCollection* _pTables,
 
 void MacabTable::refreshColumns()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     if (!isNew())
     {
@@ -76,10 +76,10 @@ void MacabTable::refreshColumns()
         }
     }
 
-    if (m_pColumns)
-        m_pColumns->reFill(aVector);
+    if (m_xColumns)
+        m_xColumns->reFill(aVector);
     else
-        m_pColumns  = new MacabColumns(this,m_aMutex,aVector);
+        m_xColumns  = new MacabColumns(this,m_aMutex,aVector);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

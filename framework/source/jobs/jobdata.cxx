@@ -71,7 +71,7 @@ JobData::JobData( const JobData& rCopy )
     @param  rCopy
                 the original instance, from which we must copy all data
 */
-void JobData::operator=( const JobData& rCopy )
+JobData& JobData::operator=( const JobData& rCopy )
 {
     SolarMutexGuard g;
     // Please don't copy the uno service manager reference.
@@ -84,6 +84,7 @@ void JobData::operator=( const JobData& rCopy )
     m_sEvent               = rCopy.m_sEvent;
     m_lArguments           = rCopy.m_lArguments;
     m_aLastExecutionResult = rCopy.m_aLastExecutionResult;
+    return *this;
 }
 
 /**
@@ -108,7 +109,7 @@ JobData::~JobData()
 void JobData::setAlias( const OUString& sAlias )
 {
     SolarMutexGuard g;
-    // delete all old information! Otherwhise we mix it with the new one ...
+    // delete all old information! Otherwise we mix it with the new one ...
     impl_reset();
 
     // take over the new information
@@ -174,7 +175,7 @@ void JobData::setAlias( const OUString& sAlias )
 void JobData::setService( const OUString& sService )
 {
     SolarMutexGuard g;
-    // delete all old information! Otherwhise we mix it with the new one ...
+    // delete all old information! Otherwise we mix it with the new one ...
     impl_reset();
     // take over the new information
     m_sService = sService;
@@ -189,7 +190,7 @@ void JobData::setService( const OUString& sService )
                 the underlying configuration! (That must be done from outside.
                 Because the caller must have the configuration already open to
                 get the values for sEvent and sAlias! And doing so it can perform
-                only, if the time stamp values are readed outside too.
+                only, if the time stamp values are read outside too.
                 Further it make no sense to initialize and start a disabled job.
                 So this initialization method will be called for enabled jobs only.)
 
@@ -206,7 +207,7 @@ void JobData::setEvent( const OUString& sEvent ,
     setAlias(sAlias);
 
     SolarMutexGuard g;
-    // take over the new information - which differ against set on of method setAlias()!
+    // take over the new information - which differ against set one of method setAlias()!
     m_sEvent = sEvent;
     m_eMode  = E_EVENT;
 }
@@ -215,7 +216,7 @@ void JobData::setEvent( const OUString& sEvent ,
     @short      set the new job specific arguments
     @descr      If a job finish his work, it can give us a new list of arguments (which
                 will not interpreted by us). We write it back to the configuration only
-                (if this job has it's own configuration!).
+                (if this job has its own configuration!).
                 So a job can have persistent data without implementing anything
                 or define own config areas for that.
 
@@ -263,7 +264,7 @@ void JobData::setJobConfig( const std::vector< css::beans::NamedValue >& lArgume
 }
 
 /**
-    @short      set a new excution result
+    @short      set a new execution result
     @descr      Every executed job can have returned a result.
                 We set it here, so our user can use it may be later.
                 But the outside code can use it too, to analyze it and
@@ -290,7 +291,7 @@ void JobData::setResult( const JobResult& aResult )
     @short  set a new environment descriptor for this job
     @descr  It must(!) be done every time this container is initialized
             with new job datas e.g.: setAlias()/setEvent()/setService() ...
-            Otherwhise the environment will be unknown!
+            Otherwise the environment will be unknown!
  */
 void JobData::setEnvironment( EEnvironment eEnvironment )
 {
@@ -440,18 +441,15 @@ void JobData::disableJob()
     aConfig.close();
 }
 
-/**
- */
-bool isEnabled( const OUString& sAdminTime ,
+static bool isEnabled( const OUString& sAdminTime ,
                     const OUString& sUserTime  )
 {
     /*Attention!
         To prevent interpreting of TriGraphs inside next const string value,
-        we have to encode all '?' signs. Otherwhise e.g. "??-" will be translated
+        we have to encode all '?' signs. Otherwise e.g. "??-" will be translated
         to "~" ...
      */
-    static const char PATTERN_ISO8601[] = "\?\?\?\?-\?\?-\?\?*";
-    WildCard aISOPattern(PATTERN_ISO8601);
+    WildCard aISOPattern("\?\?\?\?-\?\?-\?\?*");
 
     bool bValidAdmin = aISOPattern.Matches(sAdminTime);
     bool bValidUser  = aISOPattern.Matches(sUserTime );
@@ -465,8 +463,6 @@ bool isEnabled( const OUString& sAdminTime ,
            );
 }
 
-/**
- */
 void JobData::appendEnabledJobsForEvent( const css::uno::Reference< css::uno::XComponentContext >&              rxContext,
                                          const OUString&                                                 sEvent ,
                                                ::std::vector< JobData::TJob2DocEventBinding >& lJobs  )
@@ -482,8 +478,6 @@ void JobData::appendEnabledJobsForEvent( const css::uno::Reference< css::uno::XC
     }
 }
 
-/**
- */
 bool JobData::hasCorrectContext(const OUString& rModuleIdent) const
 {
     sal_Int32 nContextLen  = m_sContext.getLength();
@@ -498,7 +492,7 @@ bool JobData::hasCorrectContext(const OUString& rModuleIdent) const
         if ( nIndex >= 0 && ( nIndex+nModuleIdLen <= nContextLen ))
     {
         OUString sContextModule = m_sContext.copy( nIndex, nModuleIdLen );
-        return sContextModule.equals( rModuleIdent );
+        return sContextModule == rModuleIdent;
     }
     }
 
@@ -531,22 +525,21 @@ std::vector< OUString > JobData::getEnabledJobsForEvent( const css::uno::Referen
         return std::vector< OUString >();
 
     // get all alias names of jobs, which are part of this job list
-    // But Some of them can be disabled by its time stamp values.
-    // We create an additional job name list with the same size, then the original list ...
-    // step over all job entries ... check her time stamps ... and put only job names to the
+    // But Some of them can be disabled by its timestamp values.
+    // We create an additional job name list with the same size, then the original list...
+    // step over all job entries... check her timestamps... and put only job names to the
     // destination list, which represent an enabled job.
     css::uno::Sequence< OUString > lAllJobs = xJobList->getElementNames();
-    OUString* pAllJobs = lAllJobs.getArray();
     sal_Int32 c = lAllJobs.getLength();
 
     std::vector< OUString > lEnabledJobs(c);
     sal_Int32 d = 0;
 
-    for (sal_Int32 s=0; s<c; ++s)
+    for (OUString const & jobName : lAllJobs)
     {
         css::uno::Reference< css::beans::XPropertySet > xJob;
         if (
-            !(xJobList->getByName(pAllJobs[s]) >>= xJob) ||
+            !(xJobList->getByName(jobName) >>= xJob) ||
             !(xJob.is()     )
            )
         {
@@ -562,7 +555,7 @@ std::vector< OUString > JobData::getEnabledJobsForEvent( const css::uno::Referen
         if (!isEnabled(sAdminTime, sUserTime))
             continue;
 
-        lEnabledJobs[d] = pAllJobs[s];
+        lEnabledJobs[d] = jobName;
         ++d;
     }
     lEnabledJobs.resize(d);
@@ -576,7 +569,7 @@ std::vector< OUString > JobData::getEnabledJobsForEvent( const css::uno::Referen
     @short      reset all internal structures
     @descr      If someone recycles this instance, he can switch from one
                 using mode to another one. But then we have to reset all currently
-                used information. Otherwhise we mix it and they can make trouble.
+                used information. Otherwise we mix it and they can make trouble.
 
                 But note: that does not set defaults for internal used members, which
                 does not relate to any job property! e.g. the reference to the global

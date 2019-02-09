@@ -10,9 +10,11 @@
 #include <config_features.h>
 
 #include <test/bootstrapfixture.hxx>
-#include <tools/errinf.hxx>
+#include <test/setupvcl.hxx>
+#include <vcl/errinf.hxx>
 #include <rtl/strbuf.hxx>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
 #include <cppuhelper/bootstrap.hxx>
 #include <comphelper/processfactory.hxx>
 
@@ -24,14 +26,15 @@
 
 #include <i18nlangtag/mslangid.hxx>
 #include <vcl/svapp.hxx>
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
 #include <tools/link.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <unotools/syslocaleoptions.hxx>
 #include <osl/file.hxx>
 #include <unotools/tempfile.hxx>
+#include <vcl/scheduler.hxx>
 
-#include <isheadless.hxx>
+#include "isheadless.hxx"
 
 #include <memory>
 #include <cstring>
@@ -60,11 +63,11 @@ test::BootstrapFixture::BootstrapFixture( bool bAssertOnDialog, bool bNeedUCB )
 extern "C"
 {
 
-void test_init_impl(bool bAssertOnDialog, bool bNeedUCB,
+static void test_init_impl(bool bAssertOnDialog, bool bNeedUCB,
         lang::XMultiServiceFactory * pSFactory)
 {
     if (bAssertOnDialog)
-        ErrorHandler::RegisterDisplay( aBasicErrorFunc );
+        ErrorRegistry::RegisterDisplay( aBasicErrorFunc );
 
     // Make GraphicConverter work, normally done in desktop::Desktop::Main()
     Application::SetFilterHdl(
@@ -75,21 +78,13 @@ void test_init_impl(bool bAssertOnDialog, bool bNeedUCB,
         // initialise unconfigured UCB:
         uno::Reference<ucb::XUniversalContentBroker> xUcb(pSFactory->createInstance("com.sun.star.ucb.UniversalContentBroker"), uno::UNO_QUERY_THROW);
         uno::Reference<ucb::XContentProvider> xFileProvider(pSFactory->createInstance("com.sun.star.ucb.FileContentProvider"), uno::UNO_QUERY_THROW);
-        xUcb->registerContentProvider(xFileProvider, "file", sal_True);
+        xUcb->registerContentProvider(xFileProvider, "file", true);
         uno::Reference<ucb::XContentProvider> xTdocProvider(pSFactory->createInstance("com.sun.star.ucb.TransientDocumentsContentProvider"), uno::UNO_QUERY);
         if (xTdocProvider.is())
         {
-            xUcb->registerContentProvider(xTdocProvider, "vnd.sun.star.tdoc", sal_True);
+            xUcb->registerContentProvider(xTdocProvider, "vnd.sun.star.tdoc", true);
         }
     }
-}
-
-struct InitHook {
-    DECL_STATIC_LINK_TYPED(InitHook, deinitHook, LinkParamNone*, void);
-};
-
-IMPL_STATIC_LINK_NOARG_TYPED(InitHook, deinitHook, LinkParamNone*, void) {
-    // nothing to do for now
 }
 
 // this is called from pyuno
@@ -98,28 +93,16 @@ SAL_DLLPUBLIC_EXPORT void test_init(lang::XMultiServiceFactory *pFactory)
     try
     {
         ::comphelper::setProcessServiceFactory(pFactory);
-
-        // force locale (and resource files loaded) to en-US
-        OUString aLangISO( "en-US" );
-        ResMgr::SetDefaultLocale( LanguageTag( aLangISO) );
-
-        SvtSysLocaleOptions aLocalOptions;
-        aLocalOptions.SetLocaleConfigString( aLangISO );
-        aLocalOptions.SetUILocaleConfigString( aLangISO );
-
-        MsLangId::setConfiguredSystemUILanguage(LANGUAGE_ENGLISH_US);
-        LanguageTag::setConfiguredSystemLanguage(LANGUAGE_ENGLISH_US);
-
-        InitVCL();
-        if (test::isHeadless())
-            Application::EnableHeadlessMode(true);
-
-        // avoid VCLXToolkit thinking that InitVCL hasn't been called
-        Application::setDeInitHook(LINK(nullptr, InitHook, deinitHook));
-
+        test::setUpVcl(true); // hard-code python tests to headless
         test_init_impl(false, true, pFactory);
     }
     catch (...) { abort(); }
+}
+
+// this is called from pyuno
+SAL_DLLPUBLIC_EXPORT void test_deinit()
+{
+    DeInitVCL();
 }
 
 } // extern "C"
@@ -129,11 +112,10 @@ void test::BootstrapFixture::setUp()
     test::BootstrapFixtureBase::setUp();
 
     test_init_impl(m_bAssertOnDialog, m_bNeedUCB, m_xSFactory.get());
-}
 
-void test::BootstrapFixture::tearDown()
-{
-    test::BootstrapFixtureBase::tearDown();
+#if OSL_DEBUG_LEVEL > 0
+    Scheduler::ProcessEventsToIdle();
+#endif
 }
 
 test::BootstrapFixture::~BootstrapFixture()
@@ -147,7 +129,7 @@ OString loadFile(const OUString& rURL)
 {
     osl::File aFile(rURL);
     osl::FileBase::RC eStatus = aFile.open(osl_File_OpenFlag_Read);
-    CPPUNIT_ASSERT_EQUAL(eStatus, osl::FileBase::E_None);
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None, eStatus);
     sal_uInt64 nSize;
     aFile.getSize(nSize);
     std::unique_ptr<char[]> aBytes(new char[nSize]);
@@ -162,20 +144,26 @@ OString loadFile(const OUString& rURL)
 }
 #endif
 
-void test::BootstrapFixture::validate(const OUString& rPath, test::ValidationFormat eFormat )
+void test::BootstrapFixture::validate(const OUString& rPath, test::ValidationFormat eFormat) const
 {
-    (void)rPath;
-    (void)eFormat;
-
 #if HAVE_EXPORT_VALIDATION
     OUString var;
     if( eFormat == test::OOXML )
     {
         var = "OFFICEOTRON";
     }
-    else
+    else if ( eFormat == test::ODF )
     {
         var = "ODFVALIDATOR";
+    }
+    else if ( eFormat == test::MSBINARY )
+    {
+#if HAVE_BFFVALIDATOR
+        var = "BFFVALIDATOR";
+#else
+        // Binary Format Validator is disabled
+        return;
+#endif
     }
     OUString aValidator;
     oslProcessError e = osl_getEnvironment(var.pData, &aValidator.pData);
@@ -185,12 +173,25 @@ void test::BootstrapFixture::validate(const OUString& rPath, test::ValidationFor
     CPPUNIT_ASSERT_MESSAGE(
         OUString("empty get env var " + var).toUtf8().getStr(),
         !aValidator.isEmpty());
-    aValidator += " ";
+
+    if (eFormat == test::ODF)
+    {
+        // invoke without -e so that we know when something new is written
+        // in loext namespace that isn't yet in the custom schema
+        aValidator += " -M "
+            + m_directories.getPathFromSrc("/schema/libreoffice/OpenDocument-manifest-schema-v1.3+libreoffice.rng")
+            + " -D "
+            + m_directories.getPathFromSrc("/schema/libreoffice/OpenDocument-dsig-schema-v1.3+libreoffice.rng")
+            + " -O "
+            + m_directories.getPathFromSrc("/schema/libreoffice/OpenDocument-schema-v1.3+libreoffice.rng")
+            + " -m "
+            + m_directories.getPathFromSrc("/schema/mathml2/mathml2.xsd");
+    }
 
     utl::TempFile aOutput;
     aOutput.EnableKillingFile();
     OUString aOutputFile = aOutput.GetFileName();
-    OUString aCommand = aValidator + rPath + " > " + aOutputFile;
+    OUString aCommand = aValidator + " " + rPath + " > " + aOutputFile;
 
     int returnValue = system(OUStringToOString(aCommand, RTL_TEXTENCODING_UTF8).getStr());
     CPPUNIT_ASSERT_EQUAL_MESSAGE(
@@ -230,10 +231,13 @@ void test::BootstrapFixture::validate(const OUString& rPath, test::ValidationFor
             CPPUNIT_FAIL(aContentString.getStr());
         }
     }
+#else
+    (void)rPath;
+    (void)eFormat;
 #endif
 }
 
-IMPL_STATIC_LINK_TYPED(
+IMPL_STATIC_LINK(
         test::BootstrapFixture, ImplInitFilterHdl, ConvertData&, rData, bool)
 {
     return GraphicFilter::GetGraphicFilter().GetFilterCallback().Call( rData );

@@ -5,15 +5,9 @@
 
 #include "writerperfectdllapi.h"
 
-#include <tools/resid.hxx>
+#include <unotools/resmgr.hxx>
 
-struct WRITERPERFECT_DLLPUBLIC WPFTResMgr
-{
-    static ResMgr &GetResMgr();
-};
-
-#define WPFT_RES(i) ResId((i), WPFTResMgr::GetResMgr())
-#define WPFT_RESSTR(i) WPFT_RES(i).toString()
+inline OUString WpResId(const char* pId) { return Translate::get(pId, Translate::Create("wpt")); }
 
 #endif
 

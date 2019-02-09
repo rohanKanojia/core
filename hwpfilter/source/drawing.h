@@ -85,7 +85,7 @@ HWPDOFuncType HWPDOFuncTbl[] =
     HWPDOFreeFormFunc,
 };
 
-static HMemIODev *hmem = NULL;
+static HIODev *hmem = nullptr;
 
 static int count = 0;
 
@@ -107,14 +107,14 @@ static bool SkipPrivateBlock(int type)
     {
         if (!hmem->read4b(n))
             return false;
-        if (hmem->state() || hmem->skipBlock(n) != n)
+        if (hmem->state() || hmem->skipBlock(n) != static_cast<size_t>(n))
             return false;
     }
     if (!hmem->read4b(n))
         return false;
     if (hmem->state())
         return false;
-    return hmem->skipBlock(n) == n;
+    return hmem->skipBlock(n) == static_cast<size_t>(n);
 }
 
 static int SizeExpected;
@@ -299,7 +299,7 @@ static bool LoadCommonHeader(HWPDrawingObject * hdo, unsigned short * link_info)
         hdo->property.contrast = 0;
         hdo->property.greyscale = 0;
     }
-    hdo->property.pPara = NULL;
+    hdo->property.pPara = nullptr;
 
     if( ( size > common_size ) && (hdo->property.flag & HWPDO_FLAG_AS_TEXTBOX) )
     {
@@ -316,19 +316,17 @@ static bool LoadCommonHeader(HWPDrawingObject * hdo, unsigned short * link_info)
      return hmem->skipBlock(size - common_size ) != 0;
 }
 
-static HWPDrawingObject *LoadDrawingObject(void)
+static std::unique_ptr<HWPDrawingObject> LoadDrawingObject(void)
 {
-    fprintf(stderr, "LoadDrawingObject\n");
-
-    HWPDrawingObject *hdo, *head, *prev;
+    HWPDrawingObject *prev = nullptr;
+    std::unique_ptr<HWPDrawingObject> hdo, head;
 
     unsigned short link_info;
 
-    head = prev = NULL;
     do
     {
-        hdo = new HWPDrawingObject;
-        if (!LoadCommonHeader(hdo, &link_info))
+        hdo.reset(new HWPDrawingObject);
+        if (!LoadCommonHeader(hdo.get(), &link_info))
         {
             goto error;
         }
@@ -342,7 +340,7 @@ static HWPDrawingObject *LoadDrawingObject(void)
         }
         else
         {
-            switch (int res = HWPDOFunc(hdo, OBJFUNC_LOAD, NULL, 0))
+            switch (int res = HWPDOFunc(hdo.get(), OBJFUNC_LOAD, nullptr, 0))
             {
                 case OBJRET_FILE_ERROR:
                     goto error;
@@ -358,41 +356,44 @@ static HWPDrawingObject *LoadDrawingObject(void)
         if (link_info & HDOFILE_HAS_CHILD)
         {
             hdo->child = LoadDrawingObject();
-            if (hdo->child == NULL)
+            if (hdo->child == nullptr)
             {
                 goto error;
             }
         }
-        if (prev == NULL)
-            head = hdo;
+        if (prev == nullptr)
+        {
+            head = std::move(hdo);
+            prev = head.get();
+        }
         else
-            prev->next = hdo;
-        prev = hdo;
+        {
+            prev->next = std::move(hdo);
+            prev = prev->next.get();
+        }
     }
     while (link_info & HDOFILE_HAS_NEXT);
 
     return head;
-    error:
+
+error:
 // drawing object can be list.
 // hdo = current item, head = list;
 
-    if (hdo != NULL)
+    if (hdo->type < 0 || hdo->type >= HWPDO_NITEMS)
     {
-        if (hdo->type < 0 || hdo->type >= HWPDO_NITEMS)
-        {
-            hdo->type = HWPDO_RECT;
-        }
-
-        HWPDOFunc(hdo, OBJFUNC_FREE, NULL, 0);
-        delete hdo;
+        hdo->type = HWPDO_RECT;
     }
+    HWPDOFunc(hdo.get(), OBJFUNC_FREE, nullptr, 0);
+    hdo.reset();
+
     if( prev )
     {
-        prev->next = NULL;
+        prev->next = nullptr;
         return head;
     }
     else
-        return NULL;
+        return nullptr;
 }
 
 
@@ -422,15 +423,15 @@ static bool LoadDrawingObjectBlock(Picture * pic)
         !hmem->skipBlock(size - HDOFILE_HEADER_SIZE))
         return false;
 
-    pic->picinfo.picdraw.hdo = LoadDrawingObject();
-    if (pic->picinfo.picdraw.hdo == NULL)
+    pic->picinfo.picdraw.hdo = LoadDrawingObject().release();
+    if (pic->picinfo.picdraw.hdo == nullptr)
         return false;
     return true;
 }
 
 // object manipulation function
 static int
-HWPDODefaultFunc(int , HWPDrawingObject * , int cmd, void *, int)
+HWPDODefaultFunc(int cmd)
 {
     if (cmd == OBJFUNC_LOAD)
         return OBJRET_FILE_NO_PRIVATE_BLOCK;
@@ -438,7 +439,7 @@ HWPDODefaultFunc(int , HWPDrawingObject * , int cmd, void *, int)
 }
 
 static int
-HWPDOLineFunc(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
+HWPDOLineFunc(int /*type*/, HWPDrawingObject * hdo, int cmd, void * /*argp*/, int /*argv*/)
 {
     int ret = OBJRET_FILE_OK;
     switch (cmd)
@@ -455,7 +456,7 @@ HWPDOLineFunc(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
             ret = OBJRET_FILE_NO_PRIVATE_BLOCK_2;
             break;
         default:
-            ret = HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+            ret = HWPDODefaultFunc(cmd);
             break;
     }
     return ret;
@@ -465,25 +466,25 @@ HWPDOLineFunc(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
 // rectangle
 
 static int
-HWPDORectFunc(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
+HWPDORectFunc(int /*type*/, HWPDrawingObject * /*hdo*/, int cmd, void * /*argp*/, int /*argv*/)
 {
-    return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+    return HWPDODefaultFunc(cmd);
 }
 
 
 // ellipse
 
 static int
-HWPDOEllipseFunc(int type, HWPDrawingObject * hdo,
-int cmd, void *argp, int argv)
+HWPDOEllipseFunc(int /*type*/, HWPDrawingObject * /*hdo*/,
+int cmd, void * /*argp*/, int /*argv*/)
 {
-    return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+    return HWPDODefaultFunc(cmd);
 }
 
 #define WTMM(x)     ((double)(x) / 1800. * 25.4)
 static int
-HWPDOEllipse2Func(int type, HWPDrawingObject * hdo,
-int cmd, void *argp, int argv)
+HWPDOEllipse2Func(int /*type*/, HWPDrawingObject * hdo,
+int cmd, void * /*argp*/, int /*argv*/)
 {
     switch (cmd)
     {
@@ -502,7 +503,7 @@ int cmd, void *argp, int argv)
                 return OBJRET_FILE_ERROR;
             break;
         default:
-            return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+            return HWPDODefaultFunc(cmd);
     }
     return OBJRET_FILE_OK;
 }
@@ -511,7 +512,7 @@ int cmd, void *argp, int argv)
 // arc
 
 static int
-HWPDOArcFunc(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
+HWPDOArcFunc(int /*type*/, HWPDrawingObject * hdo, int cmd, void * /*argp*/, int /*argv*/)
 {
     switch (cmd)
     {
@@ -526,14 +527,14 @@ HWPDOArcFunc(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
                 return OBJRET_FILE_ERROR;
             break;
         default:
-            return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+            return HWPDODefaultFunc(cmd);
     }
     return OBJRET_FILE_OK;
 }
 
 
 static int
-HWPDOArc2Func(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
+HWPDOArc2Func(int /*type*/, HWPDrawingObject * /*hdo*/, int cmd, void * /*argp*/, int /*argv*/)
 {
     int ret = OBJRET_FILE_OK;
     switch (cmd)
@@ -542,7 +543,7 @@ HWPDOArc2Func(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
             ret = OBJRET_FILE_NO_PRIVATE_BLOCK;
             break;
         default:
-            ret = HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+            ret = HWPDODefaultFunc(cmd);
             break;
     }
     return ret;
@@ -550,14 +551,14 @@ HWPDOArc2Func(int type, HWPDrawingObject * hdo, int cmd, void *argp, int argv)
 
 
 static int
-HWPDOFreeFormFunc(int type, HWPDrawingObject * hdo,
-int cmd, void *argp, int argv)
+HWPDOFreeFormFunc(int /*type*/, HWPDrawingObject * hdo,
+int cmd, void * /*argp*/, int /*argv*/)
 {
     switch (cmd)
     {
         case OBJFUNC_LOAD:
         {
-            hdo->u.freeform.pt = NULL;
+            hdo->u.freeform.pt = nullptr;
             if (ReadSizeField(4) < 4)
                 return OBJRET_FILE_ERROR;
             if (!hmem->read4b(hdo->u.freeform.npt))
@@ -575,7 +576,7 @@ int cmd, void *argp, int argv)
             {
                 hdo->u.freeform.pt =
                     ::comphelper::newArray_null<ZZPoint>(hdo->u.freeform.npt);
-                if (hdo->u.freeform.pt == NULL)
+                if (hdo->u.freeform.pt == nullptr)
                 {
                     hdo->u.freeform.npt = 0;
                     return OBJRET_FILE_ERROR;
@@ -606,7 +607,7 @@ int cmd, void *argp, int argv)
                 delete[]hdo->u.freeform.pt;
             break;
         default:
-            return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+            return HWPDODefaultFunc(cmd);
     }
     return OBJRET_FILE_OK;
 }
@@ -625,23 +626,24 @@ static void FreeParaList(HWPPara * para)
 static HWPPara *LoadParaList()
 {
     if (!hmem)
-        return NULL;
+        return nullptr;
 
     HWPFile *hwpf = GetCurrentDoc();
-    HIODev *hio = hwpf->SetIODevice(hmem);
+    std::unique_ptr<HIODev> hio = hwpf->SetIODevice(std::unique_ptr<HIODev>(hmem));
 
-    std::list < HWPPara* > plist;
+    std::vector< HWPPara* > plist;
 
     hwpf->ReadParaList(plist);
-    hwpf->SetIODevice(hio);
+    std::unique_ptr<HIODev> orighmem = hwpf->SetIODevice(std::move(hio));
+    hmem = orighmem.release();
 
-    return plist.size()? plist.front() : NULL;
+    return plist.size()? plist.front() : nullptr;
 }
 
 
 static int
-HWPDOTextBoxFunc(int type, HWPDrawingObject * hdo,
-int cmd, void *argp, int argv)
+HWPDOTextBoxFunc(int /*type*/, HWPDrawingObject * hdo,
+int cmd, void * /*argp*/, int /*argv*/)
 {
     switch (cmd)
     {
@@ -656,11 +658,11 @@ int cmd, void *argp, int argv)
             if (hdo->u.textbox.h)
             {
                 FreeParaList(hdo->u.textbox.h);
-                hdo->u.textbox.h = NULL;
+                hdo->u.textbox.h = nullptr;
             }
             break;
         default:
-            return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+            return HWPDODefaultFunc(cmd);
     }
     return OBJRET_FILE_OK;
 }
@@ -668,29 +670,28 @@ int cmd, void *argp, int argv)
 
 
 static int
-HWPDOContainerFunc(int type, HWPDrawingObject * hdo,
-int cmd, void *argp, int argv)
+HWPDOContainerFunc(int /*type*/, HWPDrawingObject * /*hdo*/,
+int cmd, void * /*argp*/, int /*argv*/)
 {
-    return HWPDODefaultFunc(type, hdo, cmd, argp, argv);
+    return HWPDODefaultFunc(cmd);
 }
 
 
-HWPDrawingObject::HWPDrawingObject()
+HWPDrawingObject::HWPDrawingObject():
+    type(0), offset{0, 0}, offset2{0, 0}, extent{0, 0}, vrect{0, 0, 0, 0}
 {
-    memset(this, 0, sizeof(HWPDrawingObject));
+    memset(&property, 0, sizeof property);
+    memset(&u, 0, sizeof u);
     index = ++count;
 }
 
 
 HWPDrawingObject::~HWPDrawingObject()
 {
-    if (child)
-        delete child;
+    if (property.pPara)
+        FreeParaList(property.pPara);
 
-    if (next)
-        delete next;
-
-    HWPDOFunc(this, OBJFUNC_FREE, NULL, 0);
+    HWPDOFunc(this, OBJFUNC_FREE, nullptr, 0);
 }
 #endif
 

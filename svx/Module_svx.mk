@@ -23,17 +23,20 @@ $(eval $(call gb_Module_add_targets,svx,\
     Library_svx \
     Library_svxcore \
     Library_textconversiondlgs \
+    UIConfig_svx \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,svx,\
-    AllLangResTarget_svx \
-    AllLangResTarget_ofa \
-    AllLangResTarget_gal \
-    UIConfig_svx \
+    AllLangMoTarget_svx \
 ))
 
 $(eval $(call gb_Module_add_check_targets,svx,\
 	CppunitTest_svx_unit \
+))
+
+# screenshots
+$(eval $(call gb_Module_add_screenshot_targets,svx,\
+    CppunitTest_svx_dialogs_test \
 ))
 
 ifneq (,$(filter DESKTOP,$(BUILD_TYPE)))
@@ -41,8 +44,6 @@ $(eval $(call gb_Module_add_targets,svx,\
     Executable_gengal \
     $(if $(filter-out MACOSX WNT,$(OS)), \
 		Package_gengal) \
-    $(if $(filter-out WNT,$(OS)), \
-        Executable_pixelctl) \
 ))
 endif
 

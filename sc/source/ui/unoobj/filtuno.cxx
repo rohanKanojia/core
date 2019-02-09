@@ -19,30 +19,34 @@
 
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
 #include <tools/urlobj.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
 #include <unotools/ucbstreamhelper.hxx>
+#include <connectivity/dbtools.hxx>
 
-#include "editutil.hxx"
-#include "filtuno.hxx"
-#include "miscuno.hxx"
-#include "scdll.hxx"
-#include "imoptdlg.hxx"
-#include "asciiopt.hxx"
-#include "docsh.hxx"
-#include "globstr.hrc"
+#include <editutil.hxx>
+#include <filtuno.hxx>
+#include <miscuno.hxx>
+#include <scdll.hxx>
+#include <imoptdlg.hxx>
+#include <asciiopt.hxx>
+#include <docsh.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
-#include "sc.hrc"
-#include "scabstdlg.hxx"
+#include <sc.hrc>
+#include <scabstdlg.hxx>
 #include <i18nlangtag/lang.h>
 
 #include <optutil.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
+#include <comphelper/namedvaluecollection.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <memory>
 
 using namespace com::sun::star;
 using namespace com::sun::star::uno;
+using namespace connectivity::dbase;
 
 #define SCFILTEROPTIONSOBJ_SERVICE      "com.sun.star.ui.dialogs.FilterOptionsDialog"
 #define SCFILTEROPTIONSOBJ_IMPLNAME     "com.sun.star.comp.Calc.FilterOptionsDialog"
@@ -58,44 +62,62 @@ SC_SIMPLE_SERVICE_INFO( ScFilterOptionsObj, SCFILTEROPTIONSOBJ_IMPLNAME, SCFILTE
 #define DBF_SEP_PATH_IMPORT         "Office.Calc/Dialogs/DBFImport"
 #define DBF_SEP_PATH_EXPORT         "Office.Calc/Dialogs/DBFExport"
 
-static void load_CharSet( rtl_TextEncoding &nCharSet, bool bExport )
+namespace
 {
-    Sequence<Any> aValues;
-    const Any *pProperties;
-    Sequence<OUString> aNames { DBF_CHAR_SET };
-    ScLinkConfigItem aItem( OUString::createFromAscii(
-                                bExport?DBF_SEP_PATH_EXPORT:DBF_SEP_PATH_IMPORT ) );
 
-    aValues = aItem.GetProperties( aNames );
-    pProperties = aValues.getConstArray();
-
-    // Default choice
-    nCharSet = RTL_TEXTENCODING_IBM_850;
-
-    if( pProperties[0].hasValue() )
+    enum class charsetSource
     {
-        sal_Int32 nChar = 0;
-        pProperties[0] >>= nChar;
-        if( nChar >= 0)
+        charset_from_file,
+        charset_from_user_setting,
+        charset_default
+    };
+
+    charsetSource load_CharSet(rtl_TextEncoding &nCharSet, bool bExport, SvStream* dbf_Stream)
+    {
+        if (dbf_Stream && dbfReadCharset(nCharSet, dbf_Stream))
         {
-            nCharSet = (rtl_TextEncoding) nChar;
+            return charsetSource::charset_from_file;
         }
+
+        Sequence<Any> aValues;
+        const Any *pProperties;
+        Sequence<OUString> aNames { DBF_CHAR_SET };
+        ScLinkConfigItem aItem( OUString::createFromAscii(
+                                    bExport?DBF_SEP_PATH_EXPORT:DBF_SEP_PATH_IMPORT ) );
+
+        aValues = aItem.GetProperties( aNames );
+        pProperties = aValues.getConstArray();
+
+        if( pProperties[0].hasValue() )
+        {
+            sal_Int32 nChar = 0;
+            pProperties[0] >>= nChar;
+            if( nChar >= 0)
+            {
+                nCharSet = static_cast<rtl_TextEncoding>(nChar);
+                return charsetSource::charset_from_user_setting;
+            }
+        }
+
+        // Default choice
+        nCharSet = RTL_TEXTENCODING_IBM_850;
+        return charsetSource::charset_default;
     }
-}
 
-static void save_CharSet( rtl_TextEncoding nCharSet, bool bExport )
-{
-    Sequence<Any> aValues;
-    Any *pProperties;
-    Sequence<OUString> aNames { DBF_CHAR_SET };
-    ScLinkConfigItem aItem( OUString::createFromAscii(
-                                bExport?DBF_SEP_PATH_EXPORT:DBF_SEP_PATH_IMPORT ) );
+    void save_CharSet( rtl_TextEncoding nCharSet, bool bExport )
+    {
+        Sequence<Any> aValues;
+        Any *pProperties;
+        Sequence<OUString> aNames { DBF_CHAR_SET };
+        ScLinkConfigItem aItem( OUString::createFromAscii(
+                                    bExport?DBF_SEP_PATH_EXPORT:DBF_SEP_PATH_IMPORT ) );
 
-    aValues = aItem.GetProperties( aNames );
-    pProperties = aValues.getArray();
-    pProperties[0] <<= (sal_Int32) nCharSet;
+        aValues = aItem.GetProperties( aNames );
+        pProperties = aValues.getArray();
+        pProperties[0] <<= static_cast<sal_Int32>(nCharSet);
 
-    aItem.PutProperties(aNames, aValues);
+        aItem.PutProperties(aNames, aValues);
+    }
 }
 
 ScFilterOptionsObj::ScFilterOptionsObj() :
@@ -107,7 +129,7 @@ ScFilterOptionsObj::~ScFilterOptionsObj()
 {
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 Calc_FilterOptionsDialog_get_implementation(css::uno::XComponentContext*, css::uno::Sequence<css::uno::Any> const &)
 {
     SolarMutexGuard aGuard;
@@ -117,20 +139,14 @@ Calc_FilterOptionsDialog_get_implementation(css::uno::XComponentContext*, css::u
 
 // XPropertyAccess
 
-uno::Sequence<beans::PropertyValue> SAL_CALL ScFilterOptionsObj::getPropertyValues() throw(uno::RuntimeException, std::exception)
+uno::Sequence<beans::PropertyValue> SAL_CALL ScFilterOptionsObj::getPropertyValues()
 {
-    uno::Sequence<beans::PropertyValue> aRet(1);
-    beans::PropertyValue* pArray = aRet.getArray();
-
-    pArray[0].Name = SC_UNONAME_FILTEROPTIONS;
-    pArray[0].Value <<= aFilterOptions;
-
-    return aRet;
+    return comphelper::InitPropertySequence({
+        { SC_UNONAME_FILTEROPTIONS, Any(aFilterOptions) }
+    });
 }
 
 void SAL_CALL ScFilterOptionsObj::setPropertyValues( const uno::Sequence<beans::PropertyValue>& aProps )
-                    throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                            lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     const beans::PropertyValue* pPropArray = aProps.getConstArray();
     long nPropCount = aProps.getLength();
@@ -152,19 +168,18 @@ void SAL_CALL ScFilterOptionsObj::setPropertyValues( const uno::Sequence<beans::
 
 // XExecutableDialog
 
-void SAL_CALL ScFilterOptionsObj::setTitle( const OUString& /* aTitle */ ) throw(uno::RuntimeException, std::exception)
+void SAL_CALL ScFilterOptionsObj::setTitle( const OUString& /* aTitle */ )
 {
     // not used
 }
 
-sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, std::exception)
+sal_Int16 SAL_CALL ScFilterOptionsObj::execute()
 {
     sal_Int16 nRet = ui::dialogs::ExecutableDialogResults::CANCEL;
 
     OUString aFilterString( aFilterName );
 
     ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "ScAbstractFactory create fail!");
 
     if ( !bExport && aFilterString == ScDocShell::GetAsciiFilterName() )
     {
@@ -174,10 +189,9 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
         OUString aPrivDatName(aURL.getName());
         std::unique_ptr<SvStream> pInStream;
         if ( xInputStream.is() )
-            pInStream.reset(utl::UcbStreamHelper::CreateStream( xInputStream ));
+            pInStream = utl::UcbStreamHelper::CreateStream( xInputStream );
 
-        std::unique_ptr<AbstractScImportAsciiDlg> pDlg(pFact->CreateScImportAsciiDlg( aPrivDatName, pInStream.get(), SC_IMPORTFILE));
-        OSL_ENSURE(pDlg, "Dialog create fail!");
+        ScopedVclPtr<AbstractScImportAsciiDlg> pDlg(pFact->CreateScImportAsciiDlg(nullptr, aPrivDatName, pInStream.get(), SC_IMPORTFILE));
         if ( pDlg->Execute() == RET_OK )
         {
             ScAsciiOptions aOptions;
@@ -194,17 +208,17 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
         else
         {
             // HTML import.
-            std::unique_ptr<AbstractScTextImportOptionsDlg> pDlg(
-                pFact->CreateScTextImportOptionsDlg());
+            ScopedVclPtr<AbstractScTextImportOptionsDlg> pDlg(
+                pFact->CreateScTextImportOptionsDlg(Application::GetFrameWeld(xDialogParent)));
 
             if (pDlg->Execute() == RET_OK)
             {
                 LanguageType eLang = pDlg->GetLanguageType();
                 OUStringBuffer aBuf;
 
-                aBuf.append(OUString::number(static_cast<sal_Int32>(eLang)));
+                aBuf.append(OUString::number(static_cast<sal_uInt16>(eLang)));
                 aBuf.append(' ');
-                aBuf.append(pDlg->IsDateConversionSet() ? sal_Unicode('1') : sal_Unicode('0'));
+                aBuf.append(pDlg->IsDateConversionSet() ? u'1' : u'0');
                 aFilterOptions = aBuf.makeStringAndClear();
                 nRet = ui::dialogs::ExecutableDialogResults::OK;
             }
@@ -212,11 +226,11 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
     }
     else
     {
-        bool bMultiByte = true;
         bool bDBEnc     = false;
         bool bAscii     = false;
+        bool skipDialog = false;
 
-        sal_Unicode cStrDel = '"';
+        sal_Unicode const cStrDel = '"';
         sal_Unicode cAsciiDel = ';';
         rtl_TextEncoding eEncoding = RTL_TEXTENCODING_DONTKNOW;
 
@@ -233,7 +247,7 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
             else
                 cAsciiDel = '\t';
 
-            aTitle = ScGlobal::GetRscString( STR_EXPORT_ASCII );
+            aTitle = ScResId( STR_EXPORT_ASCII );
             bAscii = true;
         }
         else if ( aFilterString == ScDocShell::GetLotusFilterName() )
@@ -241,7 +255,7 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
             //  lotus is only imported
             OSL_ENSURE( !bExport, "Filter Options for Lotus Export is not implemented" );
 
-            aTitle = ScGlobal::GetRscString( STR_IMPORT_LOTUS );
+            aTitle = ScResId( STR_IMPORT_LOTUS );
             eEncoding = RTL_TEXTENCODING_IBM_437;
         }
         else if ( aFilterString == ScDocShell::GetDBaseFilterName() )
@@ -249,47 +263,76 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
             if ( bExport )
             {
                 //  dBase export
-                aTitle = ScGlobal::GetRscString( STR_EXPORT_DBF );
+                aTitle = ScResId( STR_EXPORT_DBF );
             }
             else
             {
                 //  dBase import
-                aTitle = ScGlobal::GetRscString( STR_IMPORT_DBF );
+                aTitle = ScResId( STR_IMPORT_DBF );
             }
-            load_CharSet( eEncoding, bExport );
+
+            std::unique_ptr<SvStream> pInStream;
+            if ( xInputStream.is() )
+                pInStream = utl::UcbStreamHelper::CreateStream( xInputStream );
+            switch(load_CharSet( eEncoding, bExport, pInStream.get()))
+            {
+                case charsetSource::charset_from_file:
+                  skipDialog = true;
+                  break;
+                case charsetSource::charset_from_user_setting:
+                case charsetSource::charset_default:
+                   break;
+            }
             bDBEnc = true;
+            // pInStream goes out of scope, the stream is automatically closed
         }
         else if ( aFilterString == ScDocShell::GetDifFilterName() )
         {
             if ( bExport )
             {
                 //  DIF export
-                aTitle = ScGlobal::GetRscString( STR_EXPORT_DIF );
+                aTitle = ScResId( STR_EXPORT_DIF );
             }
             else
             {
                 //  DIF import
-                aTitle = ScGlobal::GetRscString( STR_IMPORT_DIF );
+                aTitle = ScResId( STR_IMPORT_DIF );
             }
             // common for DIF import/export
             eEncoding = RTL_TEXTENCODING_MS_1252;
         }
 
         ScImportOptions aOptions( cAsciiDel, cStrDel, eEncoding);
-
-        std::unique_ptr<AbstractScImportOptionsDlg> pDlg(pFact->CreateScImportOptionsDlg(
-                                                                            bAscii, &aOptions, &aTitle, bMultiByte, bDBEnc,
-                                                                            !bExport));
-        OSL_ENSURE(pDlg, "Dialog create fail!");
-        if ( pDlg->Execute() == RET_OK )
+        if(skipDialog)
         {
-            pDlg->GetImportOptions( aOptions );
-            save_CharSet( aOptions.eCharSet, bExport );
+            // TODO: check we are not missing some of the stuff that ScImportOptionsDlg::GetImportOptions
+            // (file sc/source/ui/dbgui/scuiimoptdlg.cxx) does
+            // that is, if the dialog sets options that are not selected by the user (!)
+            // then we are missing them here.
+            // Then we may need to rip them out of the dialog.
+            // Or we actually change the dialog to not display if skipDialog==true
+            // in that case, add an argument skipDialog to CreateScImportOptionsDlg
+            nRet = ui::dialogs::ExecutableDialogResults::OK;
+        }
+        else
+        {
+            ScopedVclPtr<AbstractScImportOptionsDlg> pDlg(pFact->CreateScImportOptionsDlg(
+                                                                            bAscii, &aOptions, &aTitle,
+                                                                            bDBEnc, !bExport));
+            if ( pDlg->Execute() == RET_OK )
+            {
+                pDlg->SaveImportOptions();
+                pDlg->GetImportOptions( aOptions );
+                save_CharSet( aOptions.eCharSet, bExport );
+                nRet = ui::dialogs::ExecutableDialogResults::OK;
+            }
+        }
+        if (nRet == ui::dialogs::ExecutableDialogResults::OK)
+        {
             if ( bAscii )
                 aFilterOptions = aOptions.BuildString();
             else
                 aFilterOptions = aOptions.aStrFont;
-            nRet = ui::dialogs::ExecutableDialogResults::OK;
         }
     }
 
@@ -301,7 +344,6 @@ sal_Int16 SAL_CALL ScFilterOptionsObj::execute() throw(uno::RuntimeException, st
 // XImporter
 
 void SAL_CALL ScFilterOptionsObj::setTargetDocument( const uno::Reference<lang::XComponent>& /* xDoc */ )
-                            throw(lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     bExport = false;
 }
@@ -309,9 +351,17 @@ void SAL_CALL ScFilterOptionsObj::setTargetDocument( const uno::Reference<lang::
 // XExporter
 
 void SAL_CALL ScFilterOptionsObj::setSourceDocument( const uno::Reference<lang::XComponent>& /* xDoc */ )
-                            throw(lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     bExport = true;
+}
+
+// XInitialization
+
+void SAL_CALL ScFilterOptionsObj::initialize(const uno::Sequence<uno::Any>& rArguments)
+{
+    ::comphelper::NamedValueCollection aProperties(rArguments);
+    if (aProperties.has("ParentWindow"))
+        aProperties.get("ParentWindow") >>= xDialogParent;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

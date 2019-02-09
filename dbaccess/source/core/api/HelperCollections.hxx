@@ -19,7 +19,7 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_CORE_API_HELPERCOLLECTIONS_HXX
 #define INCLUDED_DBACCESS_SOURCE_CORE_API_HELPERCOLLECTIONS_HXX
 
-#include "connectivity/sdbcx/VCollection.hxx"
+#include <connectivity/sdbcx/VCollection.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/dbconversion.hxx>
 #include <connectivity/PColumn.hxx>
@@ -47,7 +47,7 @@ namespace dbaccess
         ::rtl::Reference< ::connectivity::OSQLColumns>  m_aColumns;
     protected:
         virtual connectivity::sdbcx::ObjectType createObject(const OUString& _rName) override;
-        virtual void impl_refresh() throw(RuntimeException) override {}
+        virtual void impl_refresh() override {}
         virtual Reference< XPropertySet > createDescriptor() override
         {
             return nullptr;
@@ -57,20 +57,20 @@ namespace dbaccess
                         bool _bCase,
                         ::cppu::OWeakObject& _rParent,
                         ::osl::Mutex& _rMutex,
-                        const ::std::vector< OUString> &_rVector,
+                        const std::vector< OUString> &_rVector,
                         bool _bUseAsIndex = false
                     );
 
         /** creates a columns instance as above, but taking the names from the columns itself
         */
-        static OPrivateColumns* createWithIntrinsicNames(
+        static std::unique_ptr<OPrivateColumns> createWithIntrinsicNames(
             const ::rtl::Reference< ::connectivity::OSQLColumns >& _rColumns,
             bool _bCase,
             ::cppu::OWeakObject& _rParent,
             ::osl::Mutex& _rMutex
         );
 
-        virtual void SAL_CALL disposing() override;
+        virtual void disposing() override;
     };
     typedef connectivity::sdbcx::OCollection OPrivateTables_BASE;
 
@@ -80,7 +80,7 @@ namespace dbaccess
         OSQLTables  m_aTables;
     protected:
         virtual connectivity::sdbcx::ObjectType createObject(const OUString& _rName) override;
-        virtual void impl_refresh() throw(RuntimeException) override {}
+        virtual void impl_refresh() override {}
         virtual Reference< XPropertySet > createDescriptor() override
         {
             return nullptr;
@@ -90,12 +90,12 @@ namespace dbaccess
                         bool _bCase,
                         ::cppu::OWeakObject& _rParent,
                         ::osl::Mutex& _rMutex,
-                        const ::std::vector< OUString> &_rVector
+                        const std::vector< OUString> &_rVector
                     ) : sdbcx::OCollection(_rParent,_bCase,_rMutex,_rVector)
                         ,m_aTables(_rTables)
         {
         }
-        virtual void SAL_CALL disposing() override
+        virtual void disposing() override
         {
             clear_NoDispose();
                 // we're not owner of the objects we're holding, instead the object we got in our ctor is

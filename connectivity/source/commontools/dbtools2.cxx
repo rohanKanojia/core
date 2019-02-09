@@ -22,8 +22,8 @@
 #include <connectivity/dbcharset.hxx>
 #include <connectivity/SQLStatementHelper.hxx>
 #include <unotools/confignode.hxx>
-#include "resource/sharedresources.hxx"
-#include "resource/common_res.hrc"
+#include <resource/sharedresources.hxx>
+#include <strings.hrc>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
@@ -38,20 +38,23 @@
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <connectivity/sdbcx/VColumn.hxx>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/container/XChild.hpp>
 
+#include <comphelper/types.hxx>
 #include <tools/diagnose_ex.h>
 #include <unotools/sharedunocomponent.hxx>
 #include <algorithm>
+#include <string_view>
 
 namespace dbtools
 {
 
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::beans;
+    using namespace ::com::sun::star::sdb;
     using namespace ::com::sun::star::sdbc;
     using namespace ::com::sun::star::sdbcx;
     using namespace ::com::sun::star::lang;
@@ -130,7 +133,7 @@ OUString createStandardTypePart(const Reference< XPropertySet >& xColProp,const 
         }
         else
         {
-            aSql.append(sTypeName.copy(0,++nParenPos));
+            aSql.append(std::u16string_view(sTypeName).substr(0, ++nParenPos));
         }
 
         if ( nPrecision > 0 && nDataType != DataType::TIMESTAMP )
@@ -147,7 +150,7 @@ OUString createStandardTypePart(const Reference< XPropertySet >& xColProp,const 
         else
         {
             nParenPos = sTypeName.indexOf(')',nParenPos);
-            aSql.append(sTypeName.copy(nParenPos));
+            aSql.append(std::u16string_view(sTypeName).substr(nParenPos));
         }
     }
     else
@@ -249,20 +252,20 @@ namespace
         ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
 
         const OUString sQuote(_xMetaData->getIdentifierQuoteString());
-        OUString sSql( " (" );
+        OUStringBuffer sSql( " (" );
         Reference< XPropertySet > xColProp;
 
         sal_Int32 nColCount  = _xColumns->getCount();
         for(sal_Int32 i=0;i<nColCount;++i)
         {
             if ( (_xColumns->getByIndex(i) >>= xColProp) && xColProp.is() )
-                sSql += ::dbtools::quoteName(sQuote,::comphelper::getString(xColProp->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_NAME))))
-                        + ",";
+                sSql.append( ::dbtools::quoteName(sQuote,::comphelper::getString(xColProp->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_NAME)))) )
+                        .append(",");
         }
 
         if ( nColCount )
-            sSql = sSql.replaceAt(sSql.getLength()-1, 1, ")");
-        return sSql;
+            sSql[sSql.getLength()-1] = ')';
+        return sSql.makeStringAndClear();
     }
 }
 
@@ -373,11 +376,9 @@ OUString createStandardKeyStatement(const Reference< XPropertySet >& descriptor,
 }
 
 OUString createSqlCreateTableStatement(  const Reference< XPropertySet >& descriptor,
-                                                const Reference< XConnection>& _xConnection,
-                                                ISQLStatementHelper* _pHelper,
-                                                const OUString& _sCreatePattern)
+                                         const Reference< XConnection>& _xConnection)
 {
-    OUString aSql = ::dbtools::createStandardCreateStatement(descriptor,_xConnection,_pHelper,_sCreatePattern);
+    OUString aSql = ::dbtools::createStandardCreateStatement(descriptor,_xConnection,nullptr,OUString());
     const OUString sKeyStmt = ::dbtools::createStandardKeyStatement(descriptor,_xConnection);
     if ( !sKeyStmt.isEmpty() )
         aSql += sKeyStmt;
@@ -536,7 +537,6 @@ Reference<XPropertySet> createSDBCXColumn(const Reference<XPropertySet>& _xTable
         return xProp;
 
     ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
-    Reference<XDatabaseMetaData> xMetaData = _xConnection->getMetaData();
     Any aCatalog;
     aCatalog = _xTable->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME));
     OUString sCatalog;
@@ -591,7 +591,7 @@ bool getBooleanDataSourceSetting( const Reference< XConnection >& _rxConnection,
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
     }
     return bValue;
 }
@@ -638,16 +638,17 @@ bool isDataSourcePropertyEnabled(const Reference<XInterface>& _xProp, const OUSt
         {
             Sequence< PropertyValue > aInfo;
             xProp->getPropertyValue("Info") >>= aInfo;
-            const PropertyValue* pValue =::std::find_if(aInfo.getConstArray(),
-                                                aInfo.getConstArray() + aInfo.getLength(),
-                                                ::std::bind2nd(TPropertyValueEqualFunctor(),_sProperty));
-            if ( pValue && pValue != (aInfo.getConstArray() + aInfo.getLength()) )
+            const PropertyValue* pValue =std::find_if(aInfo.begin(),
+                                                aInfo.end(),
+                                                [&_sProperty](const PropertyValue& lhs)
+                                                { return lhs.Name == _sProperty; });
+            if ( pValue != aInfo.end() )
                 pValue->Value >>= bEnabled;
         }
     }
     catch(SQLException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
     }
     return bEnabled;
 }
@@ -671,7 +672,7 @@ Reference< XTablesSupplier> getDataDefinitionByURLAndConnection(
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
     }
     return xTablesSup;
 }
@@ -709,18 +710,8 @@ sal_Int32 getTablePrivileges(const Reference< XDatabaseMetaData>& _xMetaData,
             OUString sPrivilege, sGrantee;
             while ( xPrivileges->next() )
             {
-#ifdef DBG_UTIL
-                OUString sCat, sSchema, sName, sGrantor, sGrantable;
-                sCat        = xCurrentRow->getString(1);
-                sSchema     = xCurrentRow->getString(2);
-                sName       = xCurrentRow->getString(3);
-                sGrantor    = xCurrentRow->getString(4);
-#endif
                 sGrantee    = xCurrentRow->getString(5);
                 sPrivilege  = xCurrentRow->getString(6);
-#ifdef DBG_UTIL
-                sGrantable  = xCurrentRow->getString(7);
-#endif
 
                 if (!sUserWorkingFor.equalsIgnoreAsciiCase(sGrantee))
                     continue;
@@ -758,19 +749,8 @@ sal_Int32 getTablePrivileges(const Reference< XDatabaseMetaData>& _xMetaData,
             OUString sPrivilege, sGrantee;
             while ( xColumnPrivileges->next() )
             {
-#ifdef DBG_UTIL
-                OUString sCat, sSchema, sTableName, sColumnName, sGrantor, sGrantable;
-                sCat        = xColumnCurrentRow->getString(1);
-                sSchema     = xColumnCurrentRow->getString(2);
-                sTableName  = xColumnCurrentRow->getString(3);
-                sColumnName = xColumnCurrentRow->getString(4);
-                sGrantor    = xColumnCurrentRow->getString(5);
-#endif
                 sGrantee    = xColumnCurrentRow->getString(6);
                 sPrivilege  = xColumnCurrentRow->getString(7);
-#ifdef DBG_UTIL
-                sGrantable  = xColumnCurrentRow->getString(8);
-#endif
 
                 if (!sUserWorkingFor.equalsIgnoreAsciiCase(sGrantee))
                     continue;
@@ -839,13 +819,13 @@ void collectColumnInformation(const Reference< XConnection>& _xConnection,
         OSL_ENSURE( nCount != 0, "::dbtools::collectColumnInformation: result set has empty (column-less) meta data!" );
         for (sal_Int32 i=1; i <= nCount ; ++i)
         {
-            _rInfo.insert(ColumnInformationMap::value_type(xMeta->getColumnName(i),
-                ColumnInformation(TBoolPair(xMeta->isAutoIncrement(i),xMeta->isCurrency(i)),xMeta->getColumnType(i))));
+            _rInfo.emplace( xMeta->getColumnName(i),
+                ColumnInformation(TBoolPair(xMeta->isAutoIncrement(i),xMeta->isCurrency(i)),xMeta->getColumnType(i)));
         }
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
     }
 }
 
@@ -927,7 +907,7 @@ sal_Int32 DBTypeConversion::convertUnicodeString( const OUString& _rSource, OStr
         throw SQLException(
             sMessage,
             nullptr,
-            OUString( "22018" ),
+            "22018",
             22018,
             Any()
         );
@@ -953,25 +933,25 @@ sal_Int32 DBTypeConversion::convertUnicodeStringToLength( const OUString& _rSour
         throw SQLException(
             sMessage,
             nullptr,
-            OUString( "22001" ),
+            "22001",
             22001,
             Any()
         );
     }
 
-   return nLen;
+    return nLen;
 }
-OUString lcl_getReportEngines()
+static OUString lcl_getReportEngines()
 {
     return OUString("org.openoffice.Office.DataAccess/ReportEngines");
 }
 
-OUString lcl_getDefaultReportEngine()
+static OUString lcl_getDefaultReportEngine()
 {
     return OUString("DefaultReportEngine");
 }
 
-OUString lcl_getReportEngineNames()
+static OUString lcl_getReportEngineNames()
 {
     return OUString("ReportEngineNames");
 }
@@ -1005,6 +985,40 @@ OUString getDefaultReportEngineServiceName(const Reference< XComponentContext >&
     else
         return OUString("org.libreoffice.report.pentaho.SOReportJobFactory");
     return OUString();
+}
+
+bool isAggregateColumn(const Reference< XSingleSelectQueryComposer > &_xParser, const Reference< XPropertySet > &_xField)
+{
+    OUString sName;
+    _xField->getPropertyValue("Name") >>= sName;
+    Reference< XColumnsSupplier > xColumnsSupplier(_xParser, UNO_QUERY);
+    Reference< css::container::XNameAccess >  xCols;
+    if (xColumnsSupplier.is())
+        xCols = xColumnsSupplier->getColumns();
+
+    return isAggregateColumn(xCols, sName);
+}
+
+bool isAggregateColumn(const Reference< XNameAccess > &_xColumns, const OUString &_sName)
+{
+    if ( _xColumns.is() && _xColumns->hasByName(_sName) )
+    {
+        Reference<XPropertySet> xProp(_xColumns->getByName(_sName),UNO_QUERY);
+        assert(xProp.is());
+        return isAggregateColumn( xProp );
+    }
+    return false;
+}
+
+bool isAggregateColumn( const Reference< XPropertySet > &_xColumn )
+{
+    bool bAgg(false);
+
+    static const char sAgg[] = "AggregateFunction";
+    if ( _xColumn->getPropertySetInfo()->hasPropertyByName(sAgg) )
+        _xColumn->getPropertyValue(sAgg) >>= bAgg;
+
+    return bAgg;
 }
 
 

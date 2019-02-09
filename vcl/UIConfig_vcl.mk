@@ -11,14 +11,20 @@ $(eval $(call gb_UIConfig_UIConfig,vcl))
 
 $(eval $(call gb_UIConfig_add_uifiles,vcl,\
 	vcl/uiconfig/ui/cupspassworddialog \
+	vcl/uiconfig/ui/editmenu \
 	vcl/uiconfig/ui/errornocontentdialog \
 	vcl/uiconfig/ui/errornoprinterdialog \
+	vcl/uiconfig/ui/moreoptionsdialog \
 	vcl/uiconfig/ui/printdialog \
 	vcl/uiconfig/ui/printerdevicepage \
 	vcl/uiconfig/ui/printerpaperpage \
 	vcl/uiconfig/ui/printerpropertiesdialog \
 	vcl/uiconfig/ui/printprogressdialog \
 	vcl/uiconfig/ui/querydialog \
+))
+
+$(eval $(call gb_UIConfig_add_a11yerrors_uifiles,vcl,\
+	vcl/qa/cppunit/builder/demo \
 ))
 
 # vim: set noet sw=4 ts=4:

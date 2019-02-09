@@ -18,19 +18,18 @@
  */
 
 #include <svx/svxids.hrc>
-#include <vcl/msgbox.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svx/svdview.hxx>
 #include <svx/drawitem.hxx>
 
 #include <svx/xtable.hxx>
-#include "view.hxx"
-#include "wrtsh.hxx"
-#include "docsh.hxx"
-#include "cmdid.h"
+#include <view.hxx>
+#include <wrtsh.hxx>
+#include <docsh.hxx>
+#include <cmdid.h>
 
-#include "drawsh.hxx"
+#include <drawsh.hxx>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <memory>
@@ -53,21 +52,37 @@ void SwDrawShell::ExecDrawDlg(SfxRequest& rReq)
         case FN_DRAWTEXT_ATTR_DLG:
         {
             SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-            if ( pFact )
-            {
-                std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateTextTabDialog( nullptr, &aNewAttr, pView ));
-                sal_uInt16 nResult = pDlg->Execute();
+            ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateTextTabDialog(rReq.GetFrameWeld(), &aNewAttr, pView));
+            sal_uInt16 nResult = pDlg->Execute();
 
-                if (nResult == RET_OK)
+            if (nResult == RET_OK)
+            {
+                if (pView->AreObjectsMarked())
                 {
-                    if (pView->AreObjectsMarked())
-                    {
-                        pSh->StartAction();
-                        pView->SetAttributes(*pDlg->GetOutputItemSet());
-                        rReq.Done(*(pDlg->GetOutputItemSet()));
-                        pSh->EndAction();
-                    }
+                    pSh->StartAction();
+                    pView->SetAttributes(*pDlg->GetOutputItemSet());
+                    rReq.Done(*(pDlg->GetOutputItemSet()));
+                    pSh->EndAction();
                 }
+            }
+        }
+        break;
+
+        case SID_MEASURE_DLG:
+        {
+            bool bHasMarked = pView->AreObjectsMarked();
+
+            SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
+            ScopedVclPtr<SfxAbstractDialog> pDlg(pFact->CreateSfxDialog(rReq.GetFrameWindow(),
+                                                 aNewAttr, pView, RID_SVXPAGE_MEASURE));
+            if (pDlg->Execute() == RET_OK)
+            {
+                pSh->StartAction();
+                if (bHasMarked)
+                    pView->SetAttrToMarked(*pDlg->GetOutputItemSet(), false);
+                else
+                    pView->SetDefaultAttr(*pDlg->GetOutputItemSet(), false);
+                pSh->EndAction();
             }
         }
         break;
@@ -77,7 +92,7 @@ void SwDrawShell::ExecDrawDlg(SfxRequest& rReq)
             bool bHasMarked = pView->AreObjectsMarked();
 
             SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-            std::unique_ptr<AbstractSvxAreaTabDialog> pDlg(pFact->CreateSvxAreaTabDialog( nullptr,
+            ScopedVclPtr<AbstractSvxAreaTabDialog> pDlg(pFact->CreateSvxAreaTabDialog(rReq.GetFrameWeld(),
                                                                             &aNewAttr,
                                                                             pDoc,
                                                                             true));
@@ -118,13 +133,11 @@ void SwDrawShell::ExecDrawDlg(SfxRequest& rReq)
                 pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
 
             SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-            OSL_ENSURE(pFact, "Dialog creation failed!");
-            std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateSvxLineTabDialog( nullptr,
+            ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateSvxLineTabDialog(rReq.GetFrameWeld(),
                     &aNewAttr,
                 pDoc,
                 pObj,
                 bHasMarked));
-            OSL_ENSURE(pDlg, "Dialog creation failed!");
             if (pDlg->Execute() == RET_OK)
             {
                 pSh->StartAction();
@@ -164,7 +177,7 @@ void SwDrawShell::ExecDrawDlg(SfxRequest& rReq)
             pDoc->SetChanged();
 }
 
-void SwDrawShell::ExecDrawAttrArgs(SfxRequest& rReq)
+void SwDrawShell::ExecDrawAttrArgs(SfxRequest const & rReq)
 {
     SwWrtShell* pSh   = &GetShell();
     SdrView*    pView = pSh->GetDrawView();

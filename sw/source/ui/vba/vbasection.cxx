@@ -25,7 +25,7 @@
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-SwVbaSection::SwVbaSection( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< frame::XModel >& xModel, const uno::Reference< beans::XPropertySet >& xProps ) throw ( uno::RuntimeException ) :
+SwVbaSection::SwVbaSection( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< frame::XModel >& xModel, const uno::Reference< beans::XPropertySet >& xProps ) :
     SwVbaSection_BASE( rParent, rContext ), mxModel( xModel ), mxPageProps( xProps )
 {
 }
@@ -34,16 +34,16 @@ SwVbaSection::~SwVbaSection()
 {
 }
 
-sal_Bool SAL_CALL SwVbaSection::getProtectedForForms() throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL SwVbaSection::getProtectedForForms()
 {
-    return sal_False;
+    return false;
 }
 
-void SAL_CALL SwVbaSection::setProtectedForForms( sal_Bool /*_protectedforforms*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwVbaSection::setProtectedForForms( sal_Bool /*_protectedforforms*/ )
 {
 }
 
-uno::Any SAL_CALL SwVbaSection::Headers( const uno::Any& index ) throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL SwVbaSection::Headers( const uno::Any& index )
 {
     uno::Reference< XCollection > xCol( new SwVbaHeadersFooters( this, mxContext, mxModel, mxPageProps, true ) );
     if ( index.hasValue() )
@@ -51,7 +51,7 @@ uno::Any SAL_CALL SwVbaSection::Headers( const uno::Any& index ) throw (uno::Run
     return uno::makeAny( xCol );
 }
 
-uno::Any SAL_CALL SwVbaSection::Footers( const uno::Any& index ) throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL SwVbaSection::Footers( const uno::Any& index )
 {
     uno::Reference< XCollection > xCol( new SwVbaHeadersFooters( this, mxContext, mxModel, mxPageProps, false ) );
     if ( index.hasValue() )
@@ -60,7 +60,7 @@ uno::Any SAL_CALL SwVbaSection::Footers( const uno::Any& index ) throw (uno::Run
 }
 
 uno::Any SAL_CALL
-SwVbaSection::PageSetup( ) throw (uno::RuntimeException, std::exception)
+SwVbaSection::PageSetup( )
 {
     return uno::makeAny( uno::Reference< word::XPageSetup >( new SwVbaPageSetup( this, mxContext, mxModel, mxPageProps ) ) );
 }
@@ -74,12 +74,10 @@ SwVbaSection::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaSection::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Section";
-    }
+        "ooo.vba.word.Section"
+    };
     return aServiceNames;
 }
 

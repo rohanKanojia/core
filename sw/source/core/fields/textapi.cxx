@@ -23,6 +23,7 @@
 #include <docsh.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/editeng.hxx>
+#include <editeng/outlobj.hxx>
 
 #include <com/sun/star/text/XTextField.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -52,16 +53,16 @@ static const SvxItemPropertySet* ImplGetSvxTextPortionPropertySet()
     return &aSvxTextPortionPropertySet;
 }
 
-SwTextAPIObject::SwTextAPIObject( SwTextAPIEditSource* p )
-: SvxUnoText( p, ImplGetSvxTextPortionPropertySet(), uno::Reference < text::XText >() )
-, pSource(p)
+SwTextAPIObject::SwTextAPIObject( std::unique_ptr<SwTextAPIEditSource> p )
+: SvxUnoText( p.get(), ImplGetSvxTextPortionPropertySet(), uno::Reference < text::XText >() )
+, pSource(std::move(p))
 {
 }
 
 SwTextAPIObject::~SwTextAPIObject() throw()
 {
     pSource->Dispose();
-    delete pSource;
+    pSource.reset();
 }
 
 struct SwTextAPIEditSource_Impl
@@ -69,8 +70,8 @@ struct SwTextAPIEditSource_Impl
     // needed for "internal" refcounting
     SfxItemPool*                    mpPool;
     SwDoc*                          mpDoc;
-    Outliner*                       mpOutliner;
-    SvxOutlinerForwarder*           mpTextForwarder;
+    std::unique_ptr<Outliner> mpOutliner;
+    std::unique_ptr<SvxOutlinerForwarder> mpTextForwarder;
     sal_Int32                       mnRef;
 };
 
@@ -82,9 +83,9 @@ SwTextAPIEditSource::SwTextAPIEditSource( const SwTextAPIEditSource& rSource )
     pImpl->mnRef++;
 }
 
-SvxEditSource* SwTextAPIEditSource::Clone() const
+std::unique_ptr<SvxEditSource> SwTextAPIEditSource::Clone() const
 {
-    return new SwTextAPIEditSource( *this );
+    return std::unique_ptr<SvxEditSource>(new SwTextAPIEditSource( *this ));
 }
 
 void SwTextAPIEditSource::UpdateData()
@@ -97,8 +98,6 @@ SwTextAPIEditSource::SwTextAPIEditSource(SwDoc* pDoc)
 {
     pImpl->mpPool = &pDoc->GetDocShell()->GetPool();
     pImpl->mpDoc = pDoc;
-    pImpl->mpOutliner = nullptr;
-    pImpl->mpTextForwarder = nullptr;
     pImpl->mnRef = 1;
 }
 
@@ -112,8 +111,8 @@ void SwTextAPIEditSource::Dispose()
 {
     pImpl->mpPool=nullptr;
     pImpl->mpDoc=nullptr;
-    DELETEZ(pImpl->mpTextForwarder);
-    DELETEZ(pImpl->mpOutliner);
+    pImpl->mpTextForwarder.reset();
+    pImpl->mpOutliner.reset();
 }
 
 SvxTextForwarder* SwTextAPIEditSource::GetTextForwarder()
@@ -125,17 +124,19 @@ SvxTextForwarder* SwTextAPIEditSource::GetTextForwarder()
     {
         //init draw model first
         pImpl->mpDoc->getIDocumentDrawModelAccess().GetOrCreateDrawModel();
-        pImpl->mpOutliner = new Outliner( pImpl->mpPool, OUTLINERMODE_TEXTOBJECT );
-        pImpl->mpDoc->SetCalcFieldValueHdl( pImpl->mpOutliner );
+        pImpl->mpOutliner.reset(new Outliner(pImpl->mpPool, OutlinerMode::TextObject));
+        pImpl->mpDoc->SetCalcFieldValueHdl(pImpl->mpOutliner.get());
     }
 
     if( !pImpl->mpTextForwarder )
-        pImpl->mpTextForwarder = new SvxOutlinerForwarder( *pImpl->mpOutliner, false );
+    {
+        pImpl->mpTextForwarder.reset(new SvxOutlinerForwarder(*pImpl->mpOutliner, false));
+    }
 
-    return pImpl->mpTextForwarder;
+    return pImpl->mpTextForwarder.get();
 }
 
-void SwTextAPIEditSource::SetText( OutlinerParaObject& rText )
+void SwTextAPIEditSource::SetText( OutlinerParaObject const & rText )
 {
     if ( pImpl->mpPool )
     {
@@ -143,8 +144,8 @@ void SwTextAPIEditSource::SetText( OutlinerParaObject& rText )
         {
             //init draw model first
             pImpl->mpDoc->getIDocumentDrawModelAccess().GetOrCreateDrawModel();
-            pImpl->mpOutliner = new Outliner( pImpl->mpPool, OUTLINERMODE_TEXTOBJECT );
-            pImpl->mpDoc->SetCalcFieldValueHdl( pImpl->mpOutliner );
+            pImpl->mpOutliner.reset(new Outliner(pImpl->mpPool, OutlinerMode::TextObject));
+            pImpl->mpDoc->SetCalcFieldValueHdl(pImpl->mpOutliner.get());
         }
 
         pImpl->mpOutliner->SetText( rText );
@@ -159,8 +160,8 @@ void SwTextAPIEditSource::SetString( const OUString& rText )
         {
             //init draw model first
             pImpl->mpDoc->getIDocumentDrawModelAccess().GetOrCreateDrawModel();
-            pImpl->mpOutliner = new Outliner( pImpl->mpPool, OUTLINERMODE_TEXTOBJECT );
-            pImpl->mpDoc->SetCalcFieldValueHdl( pImpl->mpOutliner );
+            pImpl->mpOutliner.reset(new Outliner(pImpl->mpPool, OutlinerMode::TextObject));
+            pImpl->mpDoc->SetCalcFieldValueHdl(pImpl->mpOutliner.get());
         }
         else
             pImpl->mpOutliner->Clear();
@@ -168,7 +169,7 @@ void SwTextAPIEditSource::SetString( const OUString& rText )
     }
 }
 
-OutlinerParaObject* SwTextAPIEditSource::CreateText()
+std::unique_ptr<OutlinerParaObject> SwTextAPIEditSource::CreateText()
 {
     if ( pImpl->mpPool && pImpl->mpOutliner )
         return pImpl->mpOutliner->CreateParaObject();

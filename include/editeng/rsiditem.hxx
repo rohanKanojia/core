@@ -19,13 +19,14 @@
 class EDITENG_DLLPUBLIC SvxRsidItem : public SfxUInt32Item
 {
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxRsidItem( sal_uInt32 nRsid, sal_uInt16 nId ) : SfxUInt32Item( nId, nRsid ) {}
-    SvxRsidItem( SvStream& rIn, sal_uInt16 nId ) : SfxUInt32Item( nId, rIn ) {}
+
+    virtual bool GetPresentation( SfxItemPresentation ePres,
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem* Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual SfxPoolItem* Create( SvStream& rIn, sal_uInt16 nVer ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;

@@ -36,11 +36,10 @@
 #include <connectivity/formattedcolumnvalue.hxx>
 #include <connectivity/dbconversion.hxx>
 
+#include <comphelper/property.hxx>
+#include <comphelper/types.hxx>
 #include <tools/diagnose_ex.h>
-
-#include <comphelper/container.hxx>
-#include <comphelper/numbers.hxx>
-#include <comphelper/processfactory.hxx>
+#include <sal/log.hxx>
 
 using namespace dbtools;
 
@@ -62,17 +61,13 @@ using namespace ::com::sun::star::form::binding;
 
 Sequence<Type> OEditControl::_getTypes()
 {
-    static Sequence<Type> aTypes;
-    if (!aTypes.getLength())
-    {
         // my two base classes
-        aTypes = concatSequences(OBoundControl::_getTypes(), OEditControl_BASE::getTypes());
-    }
+    static Sequence<Type> const aTypes = concatSequences(OBoundControl::_getTypes(), OEditControl_BASE::getTypes());
     return aTypes;
 }
 
 
-Any SAL_CALL OEditControl::queryAggregation(const Type& _rType) throw (RuntimeException, std::exception)
+Any SAL_CALL OEditControl::queryAggregation(const Type& _rType)
 {
     Any aReturn = OBoundControl::queryAggregation(_rType);
     if (!aReturn.hasValue())
@@ -116,13 +111,13 @@ OEditControl::~OEditControl()
 
 // XChangeBroadcaster
 
-void OEditControl::addChangeListener(const Reference<XChangeListener>& l) throw ( css::uno::RuntimeException, std::exception)
+void OEditControl::addChangeListener(const Reference<XChangeListener>& l)
 {
     m_aChangeListeners.addInterface( l );
 }
 
 
-void OEditControl::removeChangeListener(const Reference<XChangeListener>& l) throw ( css::uno::RuntimeException, std::exception)
+void OEditControl::removeChangeListener(const Reference<XChangeListener>& l)
 {
     m_aChangeListeners.removeInterface( l );
 }
@@ -139,7 +134,7 @@ void OEditControl::disposing()
 
 // XServiceInfo
 
-css::uno::Sequence<OUString>  OEditControl::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString>  OEditControl::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControl::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 3);
@@ -153,14 +148,14 @@ css::uno::Sequence<OUString>  OEditControl::getSupportedServiceNames() throw(std
 
 // XEventListener
 
-void OEditControl::disposing(const EventObject& Source) throw( RuntimeException, std::exception )
+void OEditControl::disposing(const EventObject& Source)
 {
     OBoundControl::disposing(Source);
 }
 
 // XFocusListener
 
-void OEditControl::focusGained( const FocusEvent& /*e*/ ) throw ( css::uno::RuntimeException, std::exception)
+void OEditControl::focusGained( const FocusEvent& /*e*/ )
 {
     Reference<XPropertySet>  xSet(getModel(), UNO_QUERY);
     if (xSet.is())
@@ -168,7 +163,7 @@ void OEditControl::focusGained( const FocusEvent& /*e*/ ) throw ( css::uno::Runt
 }
 
 
-void OEditControl::focusLost( const FocusEvent& /*e*/ ) throw ( css::uno::RuntimeException, std::exception)
+void OEditControl::focusLost( const FocusEvent& /*e*/ )
 {
     Reference<XPropertySet>  xSet(getModel(), UNO_QUERY);
     if (xSet.is())
@@ -185,7 +180,7 @@ void OEditControl::focusLost( const FocusEvent& /*e*/ ) throw ( css::uno::Runtim
 
 // XKeyListener
 
-void OEditControl::keyPressed(const css::awt::KeyEvent& e) throw ( css::uno::RuntimeException, std::exception)
+void OEditControl::keyPressed(const css::awt::KeyEvent& e)
 {
     if( e.KeyCode != KEY_RETURN || e.Modifiers != 0 )
         return;
@@ -242,12 +237,12 @@ void OEditControl::keyPressed(const css::awt::KeyEvent& e) throw ( css::uno::Run
 }
 
 
-void OEditControl::keyReleased(const css::awt::KeyEvent& /*e*/) throw ( css::uno::RuntimeException, std::exception)
+void OEditControl::keyReleased(const css::awt::KeyEvent& /*e*/)
 {
 }
 
 
-IMPL_LINK_NOARG_TYPED(OEditControl, OnKeyPressed, void*, void)
+IMPL_LINK_NOARG(OEditControl, OnKeyPressed, void*, void)
 {
     m_nKeyEvent = nullptr;
 
@@ -258,17 +253,6 @@ IMPL_LINK_NOARG_TYPED(OEditControl, OnKeyPressed, void*, void)
         xSubmit->submit( Reference<XControl>(), css::awt::MouseEvent() );
 }
 
-
-void SAL_CALL OEditControl::createPeer( const Reference< XToolkit>& _rxToolkit, const Reference< XWindowPeer>& _rxParent ) throw ( RuntimeException, std::exception )
-{
-    OBoundControl::createPeer(_rxToolkit, _rxParent);
-}
-
-
-Sequence<Type> OEditModel::_getTypes()
-{
-    return OEditBaseModel::_getTypes();
-}
 
 
 OEditModel::OEditModel(const Reference<XComponentContext>& _rxFactory)
@@ -318,14 +302,14 @@ void OEditModel::disposing()
 
 // XPersistObject
 
-OUString SAL_CALL OEditModel::getServiceName() throw ( css::uno::RuntimeException, std::exception)
+OUString SAL_CALL OEditModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_EDIT);  // old (non-sun) name for compatibility !
 }
 
 // XServiceInfo
 
-css::uno::Sequence<OUString> SAL_CALL OEditModel::getSupportedServiceNames() throw(std::exception)
+css::uno::Sequence<OUString> SAL_CALL OEditModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OBoundControlModel::getSupportedServiceNames();
 
@@ -404,7 +388,7 @@ bool OEditModel::implActsAsRichText( ) const
 }
 
 
-void SAL_CALL OEditModel::reset(  ) throw(RuntimeException, std::exception)
+void SAL_CALL OEditModel::reset(  )
 {
     // no reset if we currently act as rich text control
     if ( implActsAsRichText() )
@@ -435,50 +419,34 @@ namespace
             }
 
             Sequence< Property > aSourceProps( xSourceInfo->getProperties() );
-            const Property* pSourceProps = aSourceProps.getConstArray();
-            const Property* pSourcePropsEnd = aSourceProps.getConstArray() + aSourceProps.getLength();
-            while ( pSourceProps != pSourcePropsEnd )
+            for ( auto const & sourceprop : aSourceProps )
             {
-                if ( !xDestInfo->hasPropertyByName( pSourceProps->Name ) )
+                if ( !xDestInfo->hasPropertyByName( sourceprop.Name ) )
                 {
-                    ++pSourceProps;
                     continue;
                 }
 
-                Property aDestProp( xDestInfo->getPropertyByName( pSourceProps->Name ) );
+                Property aDestProp( xDestInfo->getPropertyByName( sourceprop.Name ) );
                 if ( 0 != ( aDestProp.Attributes & PropertyAttribute::READONLY ) )
                 {
-                    ++pSourceProps;
                     continue;
                 }
 
                 try
                 {
-                    _rxDest->setPropertyValue( pSourceProps->Name, _rxSource->getPropertyValue( pSourceProps->Name ) );
+                    _rxDest->setPropertyValue( sourceprop.Name, _rxSource->getPropertyValue( sourceprop.Name ) );
                 }
                 catch(const IllegalArgumentException& e)
                 {
-#if OSL_DEBUG_LEVEL > 0
-                    OString sMessage( "could not transfer the property named '" );
-                    sMessage += OString( pSourceProps->Name.getStr(), pSourceProps->Name.getLength(), RTL_TEXTENCODING_ASCII_US );
-                    sMessage += OString( "'." );
-                    if ( !e.Message.isEmpty() )
-                    {
-                        sMessage += OString( "\n\nMessage:\n" );
-                        sMessage += OString( e.Message.getStr(), e.Message.getLength(), RTL_TEXTENCODING_ASCII_US );
-                    }
-                    OSL_FAIL( sMessage.getStr() );
-#else
-                    (void)e;
-#endif
+                    SAL_WARN( "forms.component", "could not transfer the property named '"
+                                << sourceprop.Name
+                                << "'. " << e );
                 }
-
-                ++pSourceProps;
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
     }
 }
@@ -525,7 +493,7 @@ void OEditModel::readAggregate( const Reference< XObjectInputStream >& _rxInStre
 }
 
 
-void OEditModel::write(const Reference<XObjectOutputStream>& _rxOutStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OEditModel::write(const Reference<XObjectOutputStream>& _rxOutStream)
 {
     Any aCurrentText;
     sal_Int16 nOldTextLen = 0;
@@ -537,7 +505,7 @@ void OEditModel::write(const Reference<XObjectOutputStream>& _rxOutStream) throw
         aCurrentText = m_xAggregateSet->getPropertyValue(PROPERTY_TEXT);
 
         m_xAggregateSet->getPropertyValue(PROPERTY_MAXTEXTLEN) >>= nOldTextLen;
-        m_xAggregateSet->setPropertyValue(PROPERTY_MAXTEXTLEN, makeAny((sal_Int16)0));
+        m_xAggregateSet->setPropertyValue(PROPERTY_MAXTEXTLEN, makeAny(sal_Int16(0)));
     }
 
     OEditBaseModel::write(_rxOutStream);
@@ -547,7 +515,7 @@ void OEditModel::write(const Reference<XObjectOutputStream>& _rxOutStream) throw
         m_xAggregateSet->setPropertyValue(PROPERTY_MAXTEXTLEN, makeAny(nOldTextLen));
         // and reset the text
         // First we set it to an empty string : Without this the second setPropertyValue would not do anything as it thinks
-        // we aren't changing the prop (it didn't notify the - implicite - change of the text prop while setting the max text len)
+        // we aren't changing the prop (it didn't notify the - implicit - change of the text prop while setting the max text len)
         // This seems to be a bug with in toolkit's EditControl-implementation.
         m_xAggregateSet->setPropertyValue(PROPERTY_TEXT, makeAny(OUString()));
         m_xAggregateSet->setPropertyValue(PROPERTY_TEXT, aCurrentText);
@@ -555,7 +523,7 @@ void OEditModel::write(const Reference<XObjectOutputStream>& _rxOutStream) throw
 }
 
 
-void OEditModel::read(const Reference<XObjectInputStream>& _rxInStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OEditModel::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     OEditBaseModel::read(_rxInStream);
 
@@ -603,10 +571,10 @@ void OEditModel::onConnectedDbColumn( const Reference< XInterface >& _rxForm )
                 sal_Int32 nFieldLen = 0;
                 xField->getPropertyValue("Precision") >>= nFieldLen;
 
-                if (nFieldLen && nFieldLen <= USHRT_MAX)
+                if (nFieldLen > 0 && nFieldLen <= SAL_MAX_INT16)
                 {
                     Any aVal;
-                    aVal <<= (sal_Int16)nFieldLen;
+                    aVal <<= static_cast<sal_Int16>(nFieldLen);
                     m_xAggregateSet->setPropertyValue(PROPERTY_MAXTEXTLEN, aVal);
 
                     m_bMaxTextLenModified = true;
@@ -628,7 +596,7 @@ void OEditModel::onDisconnectedDbColumn()
     if ( hasField() && m_bMaxTextLenModified )
     {
         Any aVal;
-        aVal <<= (sal_Int16)0;  // Only if it was 0, I switched it in onConnectedDbColumn
+        aVal <<= sal_Int16(0);  // Only if it was 0, I switched it in onConnectedDbColumn
         m_xAggregateSet->setPropertyValue(PROPERTY_MAXTEXTLEN, aVal);
         m_bMaxTextLenModified = false;
     }
@@ -642,12 +610,6 @@ bool OEditModel::approveDbColumnType( sal_Int32 _nColumnType )
         return false;
 
     return OEditBaseModel::approveDbColumnType( _nColumnType );
-}
-
-
-void OEditModel::resetNoBroadcast()
-{
-    OEditBaseModel::resetNoBroadcast();
 }
 
 
@@ -668,10 +630,11 @@ bool OEditModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
     }
     else
     {
-        OSL_PRECOND( m_pValueFormatter.get(), "OEditModel::commitControlValueToDbColumn: no value formatter!" );
+        OSL_PRECOND(m_pValueFormatter,
+                    "OEditModel::commitControlValueToDbColumn: no value formatter!");
         try
         {
-            if ( m_pValueFormatter.get() )
+            if (m_pValueFormatter)
             {
                 if ( !m_pValueFormatter->setFormattedValue( sNewValue ) )
                     return false;
@@ -691,9 +654,10 @@ bool OEditModel::commitControlValueToDbColumn( bool /*_bPostReset*/ )
 
 Any OEditModel::translateDbColumnToControlValue()
 {
-    OSL_PRECOND( m_pValueFormatter.get(), "OEditModel::translateDbColumnToControlValue: no value formatter!" );
+    OSL_PRECOND(m_pValueFormatter,
+                "OEditModel::translateDbColumnToControlValue: no value formatter!");
     Any aRet;
-    if ( m_pValueFormatter.get() )
+    if (m_pValueFormatter)
     {
         OUString sValue( m_pValueFormatter->getFormattedValue() );
         if  (   sValue.isEmpty()
@@ -727,14 +691,14 @@ Any OEditModel::getDefaultForReset() const
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OEditModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new frm::OEditModel(component));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OEditControl_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

@@ -17,29 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cmdid.h"
+#include <cmdid.h>
 #include <svx/svdview.hxx>
 #include <svl/srchitem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/whiter.hxx>
 #include <svx/svdopath.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/objface.hxx>
 
-#include "wrtsh.hxx"
-#include "view.hxx"
-#include "edtwin.hxx"
-#include "helpid.h"
-#include "globals.hrc"
-#include "drawbase.hxx"
-#include "beziersh.hxx"
-#include "popup.hrc"
-#include "shells.hrc"
-#define SwBezierShell
+#include <wrtsh.hxx>
+#include <view.hxx>
+#include <edtwin.hxx>
+#include <globals.hrc>
+#include <drawbase.hxx>
+#include <beziersh.hxx>
+#define ShellClass_SwBezierShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
+#include <swslots.hxx>
 
 #include <unomid.h>
 
@@ -49,7 +46,7 @@ void SwBezierShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("draw");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_BEZIER_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Bezier_Toolbox_Sw);
 }
 
 
@@ -57,16 +54,15 @@ SwBezierShell::SwBezierShell(SwView &_rView):
     SwBaseShell( _rView )
 {
     SetName("Bezier");
-    SetHelpId(SW_BEZIERSHELL);
 
     SwWrtShell *pSh = &GetShell();
     SdrView*    pSdrView = pSh->GetDrawView();
-    pSdrView->SetEliminatePolyPointLimitAngle(1500L);
+    pSdrView->SetEliminatePolyPointLimitAngle(1500);
 
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Draw));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Draw));
 }
 
-void SwBezierShell::Execute(SfxRequest &rReq)
+void SwBezierShell::Execute(SfxRequest const &rReq)
 {
     SwWrtShell *pSh = &GetShell();
     SdrView*    pSdrView = pSh->GetDrawView();
@@ -160,7 +156,7 @@ void SwBezierShell::Execute(SfxRequest &rReq)
 
                     case SID_BEZIER_CONVERT:
                     {
-                        pSdrView->SetMarkedSegmentsKind(SDRPATHSEGMENT_TOGGLE);
+                        pSdrView->SetMarkedSegmentsKind(SdrPathSegmentKind::Toggle);
                         break;
                     }
 
@@ -168,13 +164,13 @@ void SwBezierShell::Execute(SfxRequest &rReq)
                     case SID_BEZIER_SMOOTH:
                     case SID_BEZIER_SYMMTR:
                     {
-                        SdrPathSmoothKind eKind = SDRPATHSMOOTH_ASYMMETRIC;
+                        SdrPathSmoothKind eKind = SdrPathSmoothKind::Asymmetric;
 
                         switch (nSlotId)
                         {
-                            case SID_BEZIER_EDGE:   eKind = SDRPATHSMOOTH_ANGULAR; break;
-                            case SID_BEZIER_SMOOTH: eKind = SDRPATHSMOOTH_ASYMMETRIC; break;
-                            case SID_BEZIER_SYMMTR: eKind = SDRPATHSMOOTH_SYMMETRIC; break;
+                            case SID_BEZIER_EDGE:   eKind = SdrPathSmoothKind::Angular; break;
+                            case SID_BEZIER_SMOOTH: eKind = SdrPathSmoothKind::Asymmetric; break;
+                            case SID_BEZIER_SYMMTR: eKind = SdrPathSmoothKind::Symmetric; break;
                         }
 
                         SdrPathSmoothKind eSmooth = pSdrView->GetMarkedPointsSmooth();
@@ -265,9 +261,9 @@ void SwBezierShell::GetState(SfxItemSet &rSet)
                     SdrPathSegmentKind eSegm = pSdrView->GetMarkedSegmentsKind();
                     switch (eSegm)
                     {
-                        case SDRPATHSEGMENT_DONTCARE: rSet.InvalidateItem(SID_BEZIER_CONVERT); break;
-                        case SDRPATHSEGMENT_LINE    : rSet.Put(SfxBoolItem(SID_BEZIER_CONVERT,false)); break; // Button pressed = curve
-                        case SDRPATHSEGMENT_CURVE   : rSet.Put(SfxBoolItem(SID_BEZIER_CONVERT,true));  break;
+                        case SdrPathSegmentKind::DontCare: rSet.InvalidateItem(SID_BEZIER_CONVERT); break;
+                        case SdrPathSegmentKind::Line    : rSet.Put(SfxBoolItem(SID_BEZIER_CONVERT,false)); break; // Button pressed = curve
+                        case SdrPathSegmentKind::Curve   : rSet.Put(SfxBoolItem(SID_BEZIER_CONVERT,true));  break;
                         default:; //prevent warning
                     }
                 }
@@ -284,15 +280,15 @@ void SwBezierShell::GetState(SfxItemSet &rSet)
                     bool bEnable = false;
                     switch (eSmooth)
                     {
-                        case SDRPATHSMOOTH_DONTCARE  :
+                        case SdrPathSmoothKind::DontCare  :
                             break;
-                        case SDRPATHSMOOTH_ANGULAR   :
+                        case SdrPathSmoothKind::Angular   :
                             bEnable = nWhich == SID_BEZIER_EDGE;
                             break;
-                        case SDRPATHSMOOTH_ASYMMETRIC:
+                        case SdrPathSmoothKind::Asymmetric:
                             bEnable = nWhich == SID_BEZIER_SMOOTH;
                             break;
-                        case SDRPATHSMOOTH_SYMMETRIC :
+                        case SdrPathSmoothKind::Symmetric :
                             bEnable = nWhich == SID_BEZIER_SYMMTR;
                             break;
                     }
@@ -310,9 +306,9 @@ void SwBezierShell::GetState(SfxItemSet &rSet)
                     SdrObjClosedKind eClose = pSdrView->GetMarkedObjectsClosedState();
                     switch (eClose)
                     {
-                        case SDROBJCLOSED_DONTCARE: rSet.InvalidateItem(SID_BEZIER_CLOSE); break;
-                        case SDROBJCLOSED_OPEN    : rSet.Put(SfxBoolItem(SID_BEZIER_CLOSE,false)); break;
-                        case SDROBJCLOSED_CLOSED  : rSet.Put(SfxBoolItem(SID_BEZIER_CLOSE,true)); break;
+                        case SdrObjClosedKind::DontCare: rSet.InvalidateItem(SID_BEZIER_CLOSE); break;
+                        case SdrObjClosedKind::Open    : rSet.Put(SfxBoolItem(SID_BEZIER_CLOSE,false)); break;
+                        case SdrObjClosedKind::Closed  : rSet.Put(SfxBoolItem(SID_BEZIER_CLOSE,true)); break;
                         default:; //prevent warning
                     }
                 }

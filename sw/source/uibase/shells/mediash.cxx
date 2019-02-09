@@ -19,7 +19,6 @@
 
 #include <cmdid.h>
 #include <hintids.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/stritem.hxx>
 #include <svl/whiter.hxx>
 #include <svl/urihelper.hxx>
@@ -54,19 +53,17 @@
 #include <usrpref.hxx>
 #include <edtwin.hxx>
 #include <swwait.hxx>
-#include <shells.hrc>
-#include <popup.hrc>
 
 #include <sfx2/objface.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <svx/svdomedia.hxx>
 #include <svx/sdr/contact/viewcontactofsdrmediaobj.hxx>
 #include <avmedia/mediaitem.hxx>
 
-#define SwMediaShell
+#define ShellClass_SwMediaShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
-#include "swabstdlg.hxx"
+#include <swslots.hxx>
+#include <swabstdlg.hxx>
 #include <memory>
 
 SFX_IMPL_INTERFACE(SwMediaShell, SwBaseShell)
@@ -75,10 +72,10 @@ void SwMediaShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("media");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_MEDIA_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Media_Toolbox);
 }
 
-void SwMediaShell::ExecMedia(SfxRequest &rReq)
+void SwMediaShell::ExecMedia(SfxRequest const &rReq)
 {
     SwWrtShell* pSh = &GetShell();
     SdrView*    pSdrView = pSh->GetDrawView();
@@ -124,7 +121,7 @@ void SwMediaShell::ExecMedia(SfxRequest &rReq)
                         {
                             SdrObject* pObj = pMarkList->GetMark( 0 )->GetMarkedSdrObj();
 
-                            if( pObj && dynamic_cast< const SdrMediaObj *>( pObj ) !=  nullptr )
+                            if( dynamic_cast< const SdrMediaObj *>( pObj ) )
                             {
                                 static_cast< sdr::contact::ViewContactOfSdrMediaObj& >( pObj->GetViewContact() ).executeMediaItem(
                                     static_cast< const ::avmedia::MediaItem& >( *pItem ) );
@@ -167,7 +164,7 @@ void SwMediaShell::GetMediaState(SfxItemSet &rSet)
                 {
                     SdrObject* pObj = pMarkList->GetMark( 0 )->GetMarkedSdrObj();
 
-                    if( pObj && dynamic_cast< const SdrMediaObj *>( pObj ) !=  nullptr )
+                    if( dynamic_cast< const SdrMediaObj *>( pObj ) )
                     {
                         ::avmedia::MediaItem aItem( SID_AVMEDIA_TOOLBOX );
 
@@ -191,8 +188,7 @@ SwMediaShell::SwMediaShell(SwView &_rView) :
 
 {
     SetName("Media Playback");
-    SetHelpId(SW_MEDIASHELL);
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Media));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Media));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

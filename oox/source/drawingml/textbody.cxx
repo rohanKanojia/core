@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/textbody.hxx"
+#include <drawingml/textbody.hxx>
 #include <com/sun/star/text/XText.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include "drawingml/textparagraph.hxx"
+#include <drawingml/textparagraph.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/token/properties.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::frame;
+using namespace ::com::sun::star::beans;
 
 namespace oox { namespace drawingml {
 
@@ -33,7 +35,7 @@ TextBody::TextBody()
 {
 }
 
-TextBody::TextBody( TextBodyPtr pBody )
+TextBody::TextBody( const TextBodyPtr& pBody )
 {
     if( pBody.get() ) {
         maTextProperties = pBody->maTextProperties;
@@ -52,6 +54,11 @@ TextParagraph& TextBody::addParagraph()
     return *xPara;
 }
 
+void TextBody::appendParagraph(std::shared_ptr<TextParagraph> pTextParagraph)
+{
+    maParagraphs.push_back(pTextParagraph);
+}
+
 void TextBody::insertAt(
         const ::oox::core::XmlFilterBase& rFilterBase,
         const Reference < XText > & xText,
@@ -65,24 +72,62 @@ void TextBody::insertAt(
 
     Reference<css::beans::XPropertySet> xPropertySet(xAt, UNO_QUERY);
     float nCharHeight = xPropertySet->getPropertyValue("CharHeight").get<float>();
-    for( TextParagraphVector::const_iterator aBeg = maParagraphs.begin(), aIt = aBeg, aEnd = maParagraphs.end(); aIt != aEnd; ++aIt )
-        (*aIt)->insertAt( rFilterBase, xText, xAt, rTextStyleProperties, aCombinedTextStyle, aIt == aBeg, nCharHeight );
+    size_t nIndex = 0;
+    for (auto const& paragraph : maParagraphs)
+    {
+        paragraph->insertAt( rFilterBase, xText, xAt, rTextStyleProperties, aCombinedTextStyle, (nIndex == 0), nCharHeight );
+        ++nIndex;
+    }
 }
 
-bool TextBody::isEmpty()
+bool TextBody::isEmpty() const
 {
-    if ( maParagraphs.size() <= 0 )
+    if (maParagraphs.empty())
         return true;
     if ( maParagraphs.size() > 1 )
         return false;
 
     const TextRunVector aRuns = maParagraphs[0]->getRuns();
-    if ( aRuns.size() <= 0 )
+    if ( aRuns.empty() )
         return true;
     if ( aRuns.size() > 1 )
         return false;
 
     return aRuns[0]->getText().getLength() <= 0;
+}
+
+void TextBody::ApplyStyleEmpty(
+    const ::oox::core::XmlFilterBase& rFilterBase,
+    const Reference < XText > & xText,
+    const TextCharacterProperties& rTextStyleProperties,
+    const TextListStylePtr& pMasterTextListStylePtr) const
+{
+    assert(isEmpty());
+
+    if (maParagraphs.empty())
+        return;
+
+    // Apply character properties
+    TextListStyle aCombinedTextStyle;
+    aCombinedTextStyle.apply( *pMasterTextListStylePtr );
+    aCombinedTextStyle.apply( maTextListStyle );
+
+    PropertySet aPropSet(xText);
+    TextCharacterProperties aTextCharacterProps(maParagraphs[0]->getCharacterStyle(rTextStyleProperties, aCombinedTextStyle));
+    aTextCharacterProps.pushToPropSet(aPropSet, rFilterBase);
+
+    // Apply paragraph properties
+    TextParagraphPropertiesPtr pTextParagraphStyle = maParagraphs[0]->getParagraphStyle(aCombinedTextStyle);
+    if (pTextParagraphStyle.get())
+    {
+        Reference< XPropertySet > xProps(xText, UNO_QUERY);
+        PropertyMap aioBulletList;
+        aioBulletList.setProperty< sal_Int32 >(PROP_LeftMargin, 0); // Init bullets left margin to 0 (no bullets).
+        float nCharHeight = xProps->getPropertyValue("CharHeight").get<float>();
+        TextParagraphProperties aParaProp;
+        aParaProp.apply(*pTextParagraphStyle);
+        aParaProp.pushToPropSet(&rFilterBase, xProps, aioBulletList, &pTextParagraphStyle->getBulletList(), true, nCharHeight, true);
+    }
 }
 
 } }

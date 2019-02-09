@@ -21,7 +21,7 @@
 #define INCLUDED_VCL_INC_OSX_SALOBJ_H
 
 #include <vcl/sysdata.hxx>
-#include "salobj.hxx"
+#include <salobj.hxx>
 
 class AquaSalFrame;
 class AquaSalObject;
@@ -51,8 +51,8 @@ public:
 
     void setClippedPosSize();
 
-    AquaSalObject( AquaSalFrame* pFrame, SystemWindowData* pWinData );
-    virtual ~AquaSalObject();
+    AquaSalObject( AquaSalFrame* pFrame, SystemWindowData const * pWinData );
+    virtual ~AquaSalObject() override;
 
     virtual void                    ResetClipRegion() override;
     virtual void                    BeginSetClipRegion( sal_uLong nRects ) override;

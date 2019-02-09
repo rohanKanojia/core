@@ -17,27 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
+#include <cppinterfaceproxy.hxx>
 
-#include "guardedarray.hxx"
+#include <bridge.hxx>
+#include <vtablefactory.hxx>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
-
-#include "com/sun/star/uno/XInterface.hpp"
-#include "osl/getglobalmutex.hxx"
-#include "osl/interlck.h"
-#include "osl/mutex.hxx"
-#include "rtl/instance.hxx"
-#include "typelib/typedescription.h"
+#include <com/sun/star/uno/XInterface.hpp>
+#include <osl/getglobalmutex.hxx>
+#include <osl/mutex.hxx>
+#include <rtl/instance.hxx>
+#include <typelib/typedescription.h>
 
 #include <cstddef>
+#include <memory>
 #include <new>
 
 
 static bridges::cpp_uno::shared::VtableFactory * pInstance;
 
-#if defined(__GNUG__) && !defined(__MINGW32__)
+#if defined(__GNUG__)
 extern "C" void dso_init() __attribute__((constructor));
 extern "C" void dso_exit() __attribute__((destructor));
 #endif
@@ -104,7 +102,7 @@ com::sun::star::uno::XInterface * CppInterfaceProxy::create(
         reinterpret_cast< typelib_TypeDescription ** >(&pTypeDescr));
     bridges::cpp_uno::shared::VtableFactory::Vtables aVtables(
         getVtableFactory()->getVtables(pTypeDescr));
-    bridges::cpp_uno::shared::GuardedArray< char > pMemory(
+    std::unique_ptr< char[] > pMemory(
         new char[
             sizeof (CppInterfaceProxy)
             + (aVtables.count - 1) * sizeof (void **)]);
@@ -120,7 +118,7 @@ com::sun::star::uno::XInterface * CppInterfaceProxy::create(
 
 void CppInterfaceProxy::acquireProxy()
 {
-    if (1 == osl_atomic_increment( &nRef ))
+    if (++nRef == 1)
     {
         // rebirth of proxy zombie
         // register at cpp env
@@ -134,7 +132,7 @@ void CppInterfaceProxy::acquireProxy()
 
 void CppInterfaceProxy::releaseProxy()
 {
-    if (! osl_atomic_decrement( &nRef )) // last release
+    if (! --nRef ) // last release
     {
         // revoke from cpp env
         (*pBridge->getCppEnv()->revokeInterface)(

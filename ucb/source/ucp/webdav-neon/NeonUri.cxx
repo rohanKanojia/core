@@ -26,13 +26,13 @@
  *
  ************************************************************************/
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <string.h>
 #include <rtl/uri.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
-#include "ne_alloc.h"
+#include <ne_alloc.h>
 #include "NeonUri.hxx"
 #include "DAVException.hxx"
 
@@ -73,7 +73,6 @@ const ne_uri g_sUriDefaultsFTP   = { const_cast<char *>("ftp"),
 } // namespace
 
 NeonUri::NeonUri( const ne_uri * inUri )
-    throw ( DAVException )
 {
     if ( inUri == nullptr )
         throw DAVException( DAVException::DAV_INVALID_ARG );
@@ -90,7 +89,6 @@ NeonUri::NeonUri( const ne_uri * inUri )
 }
 
 NeonUri::NeonUri( const OUString & inUri )
-    throw ( DAVException )
 {
     if ( inUri.isEmpty() )
         throw DAVException( DAVException::DAV_INVALID_ARG );
@@ -147,10 +145,6 @@ void NeonUri::init( const OString & rUri, const ne_uri * pUri )
     {
         mPath += "#" + OStringToOUString( pUri->fragment,  RTL_TEXTENCODING_UTF8 );
     }
-}
-
-NeonUri::~NeonUri( )
-{
 }
 
 void NeonUri::calculateURI ()

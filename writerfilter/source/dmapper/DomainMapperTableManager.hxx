@@ -22,7 +22,7 @@
 #include "TablePropertiesHandler.hxx"
 #include "TablePositionHandler.hxx"
 
-#include <TableManager.hxx>
+#include "TableManager.hxx"
 #include "PropertyMap.hxx"
 #include "StyleSheetTable.hxx"
 #include <com/sun/star/text/XTextRange.hpp>
@@ -44,7 +44,6 @@ class DomainMapperTableManager : public TableManager
     sal_uInt32      m_nGridSpan;
     sal_uInt32      m_nGridBefore; ///< number of grid columns in the parent table's table grid which must be skipped before the contents of this table row are added to the parent table
     sal_uInt32      m_nGridAfter; ///< number of grid columns in the parent table's table grid which shall be left after the last cell in the table row
-    sal_uInt32      m_nCellBorderIndex; //borders are provided for all cells and need counting
     sal_Int32       m_nHeaderRepeat; //counter of repeated headers - if == -1 then the repeating stops
     sal_Int32       m_nTableWidth; //might be set directly or has to be calculated from the column positions
     /// Are we in a shape (text append stack is not empty) or in the body document?
@@ -55,7 +54,6 @@ class DomainMapperTableManager : public TableManager
     std::vector< TablePositionHandlerPtr > m_aTablePositions;
     std::vector< TablePositionHandlerPtr > m_aTmpPosition; ///< Temporarily stores the position to compare it later
     std::vector< TablePropertyMapPtr > m_aTmpTableProperties; ///< Temporarily stores the table properties until end of row
-    PropertyMapPtr  m_pTableStyleTextProperies;
 
     ::std::vector< IntVectorPtr >  m_aTableGrid;
     ::std::vector< IntVectorPtr >  m_aGridSpans;
@@ -71,7 +69,6 @@ class DomainMapperTableManager : public TableManager
     bool m_bTableSizeTypeInserted;
     /// Table layout algorithm, IOW if we should consider fixed column width or not.
     sal_uInt32 m_nLayoutType;
-    sal_Int32 m_nMaxFixedWidth;
 
     std::unique_ptr<TablePropertiesHandler> m_pTablePropsHandler;
     PropertyMapPtr            m_pStyleProps;
@@ -81,14 +78,14 @@ class DomainMapperTableManager : public TableManager
 public:
 
     DomainMapperTableManager();
-    virtual ~DomainMapperTableManager();
+    virtual ~DomainMapperTableManager() override;
 
     // use this method to avoid adding the properties for the table
     // but in the provided properties map.
-    inline void SetStyleProperties( PropertyMapPtr pProperties ) { m_pStyleProps = pProperties; };
+    void SetStyleProperties( PropertyMapPtr pProperties ) { m_pStyleProps = pProperties; };
 
     virtual bool sprm(Sprm & rSprm) override;
-    bool attribute(Id nName, Value & val);
+    bool attribute(Id nName, Value const & val);
 
     virtual void startLevel( ) override;
     virtual void endLevel( ) override;
@@ -96,9 +93,10 @@ public:
     virtual void endOfCellAction() override;
     virtual void endOfRowAction() override;
 
-    IntVectorPtr getCurrentGrid( );
-    IntVectorPtr getCurrentSpans( );
-    IntVectorPtr getCurrentCellWidths( );
+    IntVectorPtr const & getCurrentGrid( );
+    bool hasCurrentSpans() const;
+    IntVectorPtr const & getCurrentSpans( );
+    IntVectorPtr const & getCurrentCellWidths( );
 
     /// Turn the attributes collected so far in m_aTableLook into a property and clear the container.
     void finishTableLook();
@@ -108,23 +106,15 @@ public:
     virtual void cellProps(const TablePropertyMapPtr& pProps) override
     {
         if ( m_pStyleProps.get( ) )
-            m_pStyleProps->InsertProps(pProps);
+            m_pStyleProps->InsertProps(pProps.get());
         else
            TableManager::cellProps( pProps );
-    };
-
-    virtual void cellPropsByCell(unsigned int i, const TablePropertyMapPtr& pProps) override
-    {
-        if ( m_pStyleProps.get( ) )
-            m_pStyleProps->InsertProps(pProps);
-        else
-           TableManager::cellPropsByCell( i, pProps );
     };
 
     virtual void insertRowProps(const TablePropertyMapPtr& pProps) override
     {
         if ( m_pStyleProps.get( ) )
-            m_pStyleProps->InsertProps(pProps);
+            m_pStyleProps->InsertProps(pProps.get());
         else
            TableManager::insertRowProps( pProps );
     };
@@ -132,9 +122,9 @@ public:
     virtual void insertTableProps(const TablePropertyMapPtr& pProps) override
     {
         if ( m_pStyleProps.get( ) )
-            m_pStyleProps->InsertProps(pProps);
+            m_pStyleProps->InsertProps(pProps.get());
         else
-            m_aTmpTableProperties.back()->InsertProps(pProps);
+            m_aTmpTableProperties.back()->InsertProps(pProps.get());
     };
 
     bool IsRowSizeTypeInserted() const
@@ -152,10 +142,7 @@ public:
         m_nLayoutType = nLayoutType;
     }
 
-    bool isInCell()
-    {
-        return TableManager::isInCell();
-    }
+    using TableManager::isInCell;
 
     void setIsInShape(bool bIsInShape);
 

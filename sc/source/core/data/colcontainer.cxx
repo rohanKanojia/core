@@ -18,68 +18,19 @@
  */
 
 
-#include "colcontainer.hxx"
-#include "column.hxx"
-#include "document.hxx"
+#include <colcontainer.hxx>
+#include <column.hxx>
 
-ScColContainer::ScColContainer( ScDocument* pDoc ):
-    aCols( ScColumnVector() ),
-    pDocument( pDoc )
-{}
-
-ScColContainer::ScColContainer( ScDocument* pDoc, const size_t nSize )
+ScColContainer::ScColContainer( const size_t nSize )
 {
-    pDocument = pDoc;
     aCols.resize( nSize );
     for ( size_t nCol = 0; nCol < nSize; ++nCol )
-        aCols[nCol] = new ScColumn;
+        aCols[nCol].reset( new ScColumn );
 }
 
-ScColContainer::~ScColContainer()
+ScColContainer::~ScColContainer() COVERITY_NOEXCEPT_FALSE
 {
     Clear();
-}
-
-void ScColContainer::CreateCol( SCCOL nColIdx, SCTAB nTab )
-{
-    assert( nColIdx >= 0 );
-    SCCOL nSize = size();
-    if ( nColIdx < nSize )
-        return;
-    else
-    {
-        aCols.resize( nColIdx + 1, nullptr );
-        for ( SCCOL nNewColIdx = nSize; nNewColIdx <= nColIdx; ++nNewColIdx )
-        {
-            aCols[nNewColIdx] = new ScColumn;
-            aCols[nNewColIdx]->Init( nNewColIdx, nTab, pDocument );
-            // TODO: Apply any full row formatting / document formatting
-        }
-    }
-}
-
-void ScColContainer::DeleteLastCols( SCSIZE nCols )
-{
-    SCCOL nSize = size();
-    SCCOL nFirstColToDelete = nSize - nCols;
-    if ( !ColumnExists( nFirstColToDelete ) )
-        return;
-
-    for ( SCCOL nColToDelete = nFirstColToDelete; nColToDelete < nSize; ++nColToDelete )
-    {
-        if ( !pDocument->IsInDtorClear() )
-            aCols[nColToDelete]->FreeNotes();
-        aCols[nColToDelete]->PrepareBroadcastersForDestruction();
-        delete aCols[nColToDelete];
-        aCols.resize( static_cast<size_t>( nFirstColToDelete ) );
-    }
-}
-
-bool ScColContainer::ColumnExists( SCCOL nColIdx ) const
-{
-    if ( nColIdx < 0 || nColIdx >= size() )
-        return false;
-    return true;
 }
 
 void ScColContainer::Clear()
@@ -88,8 +39,17 @@ void ScColContainer::Clear()
     for ( SCCOL nIdx = 0; nIdx < nSize; ++nIdx )
     {
         aCols[nIdx]->PrepareBroadcastersForDestruction();
-        delete aCols[nIdx];
+        aCols[nIdx].reset();
     }
     aCols.clear();
 }
+
+void ScColContainer::resize( const size_t aNewColSize )
+{
+    size_t aOldColSize = aCols.size();
+    aCols.resize( aNewColSize );
+    for ( size_t nCol = aOldColSize; nCol < aNewColSize; ++nCol )
+        aCols[nCol].reset(new ScColumn);
+}
+
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

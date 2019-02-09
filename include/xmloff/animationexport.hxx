@@ -22,12 +22,13 @@
 
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
-#include <sal/types.h>
 
-#include <com/sun/star/animations/XAnimationNode.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <salhelper/simplereferenceobject.hxx>
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace animations { class XAnimationNode; } } } }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Reference; } } } }
 
 class SvXMLExport;
 
@@ -41,7 +42,7 @@ class XMLOFF_DLLPUBLIC AnimationsExporter : public salhelper::SimpleReferenceObj
 
 public:
     AnimationsExporter( SvXMLExport& rExport, const css::uno::Reference< css::beans::XPropertySet >& xPageProps  );
-    virtual ~AnimationsExporter();
+    virtual ~AnimationsExporter() override;
 
     void prepare( const css::uno::Reference< css::animations::XAnimationNode >& xRootNode );
     void exportAnimations( const css::uno::Reference< css::animations::XAnimationNode >& xRootNode );

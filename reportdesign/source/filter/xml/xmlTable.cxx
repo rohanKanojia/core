@@ -22,16 +22,16 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmluconv.hxx>
-#include "RptDef.hxx"
+#include <xmloff/ProgressBarHelper.hxx>
+#include <RptDef.hxx>
 #include "xmlHelper.hxx"
 #include "xmlEnums.hxx"
 #include "xmlColumn.hxx"
 #include <com/sun/star/report/ForceNewPage.hpp>
 #include "xmlCondPrtExpr.hxx"
 #include "xmlStyleImport.hxx"
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include <connectivity/dbtools.hxx>
-#include <tools/debug.hxx>
 #include <com/sun/star/report/XShape.hpp>
 #include <com/sun/star/report/XFixedLine.hpp>
 
@@ -46,10 +46,10 @@ namespace rptxml
     using namespace ::com::sun::star::xml::sax;
     using ::com::sun::star::xml::sax::XAttributeList;
 
-    sal_uInt16 lcl_getForceNewPageOption(const OUString& _sValue)
+    static sal_Int16 lcl_getForceNewPageOption(const OUString& _sValue)
     {
-        sal_uInt16 nRet = report::ForceNewPage::NONE;
-        const SvXMLEnumMapEntry* aXML_EnumMap = OXMLHelper::GetForceNewPageOptions();
+        sal_Int16 nRet = report::ForceNewPage::NONE;
+        const SvXMLEnumMapEntry<sal_Int16>* aXML_EnumMap = OXMLHelper::GetForceNewPageOptions();
         (void)SvXMLUnitConverter::convertEnum( nRet,_sValue,aXML_EnumMap );
         return nRet;
     }
@@ -109,7 +109,7 @@ OXMLTable::OXMLTable( ORptFilter& rImport
     }
     catch(Exception&)
     {
-        OSL_FAIL("Exception catched while filling the section props");
+        OSL_FAIL("Exception caught while filling the section props");
     }
 }
 
@@ -117,8 +117,7 @@ OXMLTable::~OXMLTable()
 {
 }
 
-
-SvXMLImportContext* OXMLTable::CreateChildContext(
+SvXMLImportContextRef OXMLTable::CreateChildContext(
         sal_uInt16 _nPrefix,
         const OUString& _rLocalName,
         const Reference< XAttributeList > & xAttrList )
@@ -252,7 +251,7 @@ void OXMLTable::EndElement()
                                     (*aCellIter)->setSize(awt::Size(nWidth,nHeight));
                                     (*aCellIter)->setPosition(awt::Point(nPosX,nPosY));
                                 }
-                                catch(beans::PropertyVetoException)
+                                catch(const beans::PropertyVetoException &)
                                 {
                                     OSL_FAIL("Could not set the correct position or size!");
                                 }
@@ -267,7 +266,7 @@ void OXMLTable::EndElement()
     }
     catch(Exception&)
     {
-        OSL_FAIL("OXMLTable::EndElement -> exception catched");
+        OSL_FAIL("OXMLTable::EndElement -> exception caught");
     }
 }
 

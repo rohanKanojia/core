@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "spellcheckcontext.hxx"
+#include <spellcheckcontext.hxx>
 
 namespace sc {
 
@@ -72,7 +72,7 @@ void SpellCheckContext::setMisspellRanges(
     if (pRanges)
     {
         if (it == maMisspellCells.end())
-            maMisspellCells.insert(CellMapType::value_type(aPos, *pRanges));
+            maMisspellCells.emplace(aPos, *pRanges);
         else
             it->second = *pRanges;
     }

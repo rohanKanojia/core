@@ -19,13 +19,13 @@
 #ifndef INCLUDED_SW_INC_SWTABLE_HXX
 #define INCLUDED_SW_INC_SWTABLE_HXX
 
-#include <tools/mempool.hxx>
+#include <tools/solar.h>
 #include <tools/ref.hxx>
-#include <tblenum.hxx>
-#include <swtypes.hxx>
-#include <calbck.hxx>
-#include <swrect.hxx>
-#include <swtblfmt.hxx>
+#include "tblenum.hxx"
+#include "swtypes.hxx"
+#include "calbck.hxx"
+#include "swrect.hxx"
+#include "swtblfmt.hxx"
 
 #include <memory>
 #include <vector>
@@ -35,10 +35,6 @@
 class SwStartNode;
 class SwFormat;
 class Color;
-class SwFrameFormat;
-class SwTableFormat;
-class SwTableLineFormat;
-class SwTableBoxFormat;
 class SwHTMLTableLayout;
 class SwTableLine;
 class SwTableBox;
@@ -62,10 +58,39 @@ class SwServerObject;
 
 void sw_GetTableBoxColStr( sal_uInt16 nCol, OUString& rNm );
 
-class SwTableLines : public std::vector<SwTableLine*> {
+class SwTableLines
+{
+    std::vector<SwTableLine*> m_vLines;
+
 public:
+    typedef std::vector<SwTableLine*>::size_type size_type;
+    typedef std::vector<SwTableLine*>::iterator iterator;
+    typedef std::vector<SwTableLine*>::const_iterator const_iterator;
+
     // free's any remaining child objects
     ~SwTableLines();
+
+    bool empty() const { return m_vLines.empty(); }
+    size_type size() const { return m_vLines.size(); }
+    iterator begin() { return m_vLines.begin(); }
+    const_iterator begin() const { return m_vLines.begin(); }
+    iterator end() { return m_vLines.end(); }
+    const_iterator end() const { return m_vLines.end(); }
+    SwTableLine* front() const { return m_vLines.front(); }
+    SwTableLine* back() const { return m_vLines.back(); }
+    void clear() { m_vLines.clear(); }
+    iterator erase( iterator aIt ) { return m_vLines.erase( aIt ); }
+    iterator erase( iterator aFirst, iterator aLast ) { return m_vLines.erase( aFirst, aLast ); }
+    iterator insert( iterator aIt, SwTableLine* pLine ) { return m_vLines.insert( aIt, pLine ); }
+    template<typename TInputIterator>
+    void insert( iterator aIt, TInputIterator aFirst, TInputIterator aLast )
+    {
+        m_vLines.insert( aIt, aFirst, aLast );
+    }
+    void push_back( SwTableLine* pLine ) { m_vLines.push_back( pLine ); }
+    void reserve( size_type nSize ) { m_vLines.reserve( nSize ); }
+    SwTableLine*& operator[]( size_type nPos ) { return m_vLines[ nPos ]; }
+    SwTableLine* operator[]( size_type nPos ) const { return m_vLines[ nPos ]; }
 
     // return USHRT_MAX if not found, else index of position
     sal_uInt16 GetPos(const SwTableLine* pBox) const
@@ -75,15 +100,7 @@ public:
     }
 };
 
-class SwTableBoxes : public std::vector<SwTableBox*> {
-public:
-    // return USHRT_MAX if not found, else index of position
-    sal_uInt16 GetPos(const SwTableBox* pBox) const
-    {
-        const_iterator it = std::find(begin(), end(), pBox);
-        return it == end() ? USHRT_MAX : it - begin();
-    }
-};
+using SwTableBoxes = std::vector<SwTableBox*>;
 
 // Save content-bearing box-pointers additionally in a sorted array
 // (for calculation in table).
@@ -98,7 +115,7 @@ protected:
     SwTableSortBoxes m_TabSortContentBoxes;
     tools::SvRef<SwServerObject> m_xRefObj;   // In case DataServer -> pointer is set.
 
-    SwHTMLTableLayout *m_pHTMLLayout;
+    std::shared_ptr<SwHTMLTableLayout> m_xHTMLLayout;
 
     // Usually, the table node of a SwTable can be accessed by getting a box
     // out of m_TabSortContentBoxes, which know their SwStartNode. But in some rare
@@ -118,14 +135,8 @@ protected:
 
     bool        m_bModifyLocked   :1;
     bool        m_bNewModel       :1; // false: old SubTableModel; true: new RowSpanModel
-#ifdef DBG_UTIL
-    /// This is set by functions (like Merge()) to forbid a late model change.
-    bool m_bDontChangeModel;
-#endif
 
-    bool IsModifyLocked(){ return m_bModifyLocked;}
-
-   virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew ) override;
+    virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem* pNew ) override;
 
 public:
     enum SearchType
@@ -136,36 +147,33 @@ public:
     };
 
 
-    // single argument ctors shall be explicit.
-    explicit SwTable( SwTableFormat* );
-    virtual ~SwTable();
+    explicit SwTable();
+    virtual ~SwTable() override;
 
     // @@@ public copy ctor, but no copy assignment?
     SwTable( const SwTable& rTable );       // no copy of the lines !!
 private:
     // @@@ public copy ctor, but no copy assignment?
     SwTable & operator= (const SwTable &) = delete;
-    // no default ctor.
-    SwTable();
     bool OldMerge( SwDoc*, const SwSelBoxes&, SwTableBox*, SwUndoTableMerge* );
     bool OldSplitRow( SwDoc*, const SwSelBoxes&, sal_uInt16, bool );
     bool NewMerge( SwDoc*, const SwSelBoxes&, const SwSelBoxes& rMerged,
-                   SwTableBox*, SwUndoTableMerge* );
+                   SwUndoTableMerge* );
     bool NewSplitRow( SwDoc*, const SwSelBoxes&, sal_uInt16, bool );
-    SwBoxSelection* CollectBoxSelection( const SwPaM& rPam ) const;
+    std::unique_ptr<SwBoxSelection> CollectBoxSelection( const SwPaM& rPam ) const;
     void InsertSpannedRow( SwDoc* pDoc, sal_uInt16 nIdx, sal_uInt16 nCnt );
-    bool _InsertRow( SwDoc*, const SwSelBoxes&, sal_uInt16 nCnt, bool bBehind );
+    bool InsertRow_( SwDoc*, const SwSelBoxes&, sal_uInt16 nCnt, bool bBehind );
     bool NewInsertCol( SwDoc*, const SwSelBoxes& rBoxes, sal_uInt16 nCnt, bool );
-    void _FindSuperfluousRows( SwSelBoxes& rBoxes, SwTableLine*, SwTableLine* );
+    void FindSuperfluousRows_( SwSelBoxes& rBoxes, SwTableLine*, SwTableLine* );
     void AdjustWidths( const long nOld, const long nNew );
     void NewSetTabCols( Parm &rP, const SwTabCols &rNew, const SwTabCols &rOld,
                         const SwTableBox *pStart, bool bCurRowOnly );
 
 public:
 
-    SwHTMLTableLayout *GetHTMLTableLayout() { return m_pHTMLLayout; }
-    const SwHTMLTableLayout *GetHTMLTableLayout() const { return m_pHTMLLayout; }
-    void SetHTMLTableLayout( SwHTMLTableLayout *p );    //Change of property!
+    SwHTMLTableLayout *GetHTMLTableLayout() { return m_xHTMLLayout.get(); }
+    const SwHTMLTableLayout *GetHTMLTableLayout() const { return m_xHTMLLayout.get(); }
+    void SetHTMLTableLayout(std::shared_ptr<SwHTMLTableLayout> const& r);    //Change of property!
 
     sal_uInt16 IncGrfsThatResize() { return ++m_nGraphicsThatResize; }
     sal_uInt16 DecGrfsThatResize() { return m_nGraphicsThatResize ? --m_nGraphicsThatResize : 0; }
@@ -177,13 +185,12 @@ public:
     bool IsNewModel() const { return m_bNewModel; }
 
     /// Return the table style name of this table.
-    OUString GetTableStyleName() const { return maTableStyleName; }
+    const OUString& GetTableStyleName() const { return maTableStyleName; }
 
     /// Set the new table style name for this table.
     void SetTableStyleName(const OUString& rName) { maTableStyleName = rName; }
 
-    sal_uInt16 GetRowsToRepeat() const { return std::min( (sal_uInt16)GetTabLines().size(), m_nRowsToRepeat ); }
-    sal_uInt16 _GetRowsToRepeat() const { return m_nRowsToRepeat; }
+    sal_uInt16 GetRowsToRepeat() const { return std::min( static_cast<sal_uInt16>(GetTabLines().size()), m_nRowsToRepeat ); }
     void SetRowsToRepeat( sal_uInt16 nNumOfRows ) { m_nRowsToRepeat = nNumOfRows; }
 
     bool IsHeadline( const SwTableLine& rLine ) const;
@@ -210,7 +217,7 @@ public:
     // SwSavRowSpan is the structure needed by Undo to undo the split operation
     // CleanUpRowSpan corrects the (top of the) second table and delivers the structure
     // for Undo
-    SwSaveRowSpan* CleanUpTopRowSpan( sal_uInt16 nSplitLine );
+    std::unique_ptr<SwSaveRowSpan> CleanUpTopRowSpan( sal_uInt16 nSplitLine );
     // RestoreRowSpan is called by Undo to restore the old row span values
     void RestoreRowSpan( const SwSaveRowSpan& );
     // CleanUpBottomRowSpan corrects the overhanging row spans at the end of the first table
@@ -220,20 +227,14 @@ public:
 // It's not allowed to change the table model after the first call of one of these functions.
 
     bool Merge( SwDoc* pDoc, const SwSelBoxes& rBoxes, const SwSelBoxes& rMerged,
-                SwTableBox* pMergeBox, SwUndoTableMerge* pUndo = nullptr )
+                SwTableBox* pMergeBox, SwUndoTableMerge* pUndo )
     {
-#ifdef DBG_UTIL
-        m_bDontChangeModel = true;
-#endif
-        return m_bNewModel ? NewMerge( pDoc, rBoxes, rMerged, pMergeBox, pUndo ) :
-                           OldMerge( pDoc, rBoxes, pMergeBox, pUndo );
+        return m_bNewModel ? NewMerge( pDoc, rBoxes, rMerged, pUndo ) :
+                             OldMerge( pDoc, rBoxes, pMergeBox, pUndo );
     }
-    bool SplitRow( SwDoc* pDoc, const SwSelBoxes& rBoxes, sal_uInt16 nCnt=1,
-                   bool bSameHeight = false )
+    bool SplitRow( SwDoc* pDoc, const SwSelBoxes& rBoxes, sal_uInt16 nCnt,
+                   bool bSameHeight )
     {
-#ifdef DBG_UTIL
-        m_bDontChangeModel = true;
-#endif
         return m_bNewModel ? NewSplitRow( pDoc, rBoxes, nCnt, bSameHeight ) :
                            OldSplitRow( pDoc, rBoxes, nCnt, bSameHeight );
     }
@@ -243,16 +244,16 @@ public:
     void PrepareDeleteCol( long nMin, long nMax );
 
     bool InsertCol( SwDoc*, const SwSelBoxes& rBoxes,
-                    sal_uInt16 nCnt = 1, bool bBehind = true );
+                    sal_uInt16 nCnt, bool bBehind );
     bool InsertRow( SwDoc*, const SwSelBoxes& rBoxes,
-                    sal_uInt16 nCnt = 1, bool bBehind = true );
+                    sal_uInt16 nCnt, bool bBehind );
     void PrepareDelBoxes( const SwSelBoxes& rBoxes );
     bool DeleteSel( SwDoc*, const SwSelBoxes& rBoxes, const SwSelBoxes* pMerged,
         SwUndo* pUndo, const bool bDelMakeFrames, const bool bCorrBorder );
-    bool SplitCol( SwDoc* pDoc, const SwSelBoxes& rBoxes, sal_uInt16 nCnt=1 );
+    bool SplitCol( SwDoc* pDoc, const SwSelBoxes& rBoxes, sal_uInt16 nCnt );
 
     void FindSuperfluousRows( SwSelBoxes& rBoxes )
-        { _FindSuperfluousRows( rBoxes, nullptr, nullptr ); }
+        { FindSuperfluousRows_( rBoxes, nullptr, nullptr ); }
     void CheckRowSpan( SwTableLine* &rpLine, bool bUp ) const;
 
           SwTableSortBoxes& GetTabSortBoxes()       { return m_TabSortContentBoxes; }
@@ -262,7 +263,7 @@ public:
 
     // #i80314#
     // add 3rd parameter in order to control validation check on <rStr>
-    static sal_uInt16 _GetBoxNum( OUString& rStr,
+    static sal_uInt16 GetBoxNum( OUString& rStr,
                               bool bFirst = false,
                               const bool bPerformValidCheck = false );
 
@@ -270,7 +271,7 @@ public:
 
     // #i80314#
     // add 2nd parameter in order to control validation check in called method
-    // <_GetBoxNum(..)>
+    // <GetBoxNum(..)>
     const SwTableBox* GetTableBox( const OUString& rName,
                                  const bool bPerformValidCheck = false ) const;
     // Copy selected boxes to another document.
@@ -278,13 +279,13 @@ public:
                     bool bCpyName = false ) const;
     // Copy table in this
     bool InsTable( const SwTable& rCpyTable, const SwNodeIndex&,
-                    SwUndoTableCpyTable* pUndo = nullptr );
+                    SwUndoTableCpyTable* pUndo );
     bool InsTable( const SwTable& rCpyTable, const SwSelBoxes&,
-                    SwUndoTableCpyTable* pUndo = nullptr );
+                    SwUndoTableCpyTable* pUndo );
     bool InsNewTable( const SwTable& rCpyTable, const SwSelBoxes&,
                       SwUndoTableCpyTable* pUndo );
-    // Copy headline of table (with content!) into an other one.
-    bool CopyHeadlineIntoTable( SwTableNode& rTableNd );
+    // Copy headline of table (with content!) into another one.
+    void CopyHeadlineIntoTable( SwTableNode& rTableNd );
 
     // Get box, whose start index is set on nBoxStt.
           SwTableBox* GetTableBox( sal_uLong nSttIdx );
@@ -299,7 +300,6 @@ public:
 
     // Search all content-bearing boxes of the base line on which this box stands.
     // rBoxes as a return value for immediate use.
-    // steht. rBoxes auch als Return-Wert, um es gleich weiter zu benutzen
     // bToTop = true -> up to base line, false-> else only line of box.
     static SwSelBoxes& SelLineFromBox( const SwTableBox* pBox,
                             SwSelBoxes& rBoxes, bool bToTop = true );
@@ -319,8 +319,8 @@ public:
 
     // Data server methods.
     void SetRefObject( SwServerObject* );
-    const SwServerObject* GetObject() const     {  return &m_xRefObj; }
-          SwServerObject* GetObject()           {  return &m_xRefObj; }
+    const SwServerObject* GetObject() const     {  return m_xRefObj.get(); }
+          SwServerObject* GetObject()           {  return m_xRefObj.get(); }
 
     // Fill data for chart.
     void UpdateCharts() const;
@@ -328,10 +328,10 @@ public:
     TableChgMode GetTableChgMode() const        { return m_eTableChgMode; }
     void SetTableChgMode( TableChgMode eMode )  { m_eTableChgMode = eMode; }
 
-    bool SetColWidth( SwTableBox& rAktBox, sal_uInt16 eType,
-                        SwTwips nAbsDiff, SwTwips nRelDiff, SwUndo** ppUndo );
-    bool SetRowHeight( SwTableBox& rAktBox, sal_uInt16 eType,
-                        SwTwips nAbsDiff, SwTwips nRelDiff, SwUndo** ppUndo );
+    bool SetColWidth( SwTableBox& rCurrentBox, TableChgWidthHeightType eType,
+                        SwTwips nAbsDiff, SwTwips nRelDiff, std::unique_ptr<SwUndo>* ppUndo );
+    bool SetRowHeight( SwTableBox& rCurrentBox, TableChgWidthHeightType eType,
+                        SwTwips nAbsDiff, SwTwips nRelDiff, std::unique_ptr<SwUndo>* ppUndo );
     void RegisterToFormat( SwFormat& rFormat );
 #ifdef DBG_UTIL
     void CheckConsistency() const;
@@ -348,13 +348,16 @@ class SW_DLLPUBLIC SwTableLine: public SwClient     // Client of FrameFormat.
 
 public:
 
-    SwTableLine() : m_pUpper(nullptr) {}
-
     SwTableLine( SwTableLineFormat*, sal_uInt16 nBoxes, SwTableBox *pUp );
-    virtual ~SwTableLine();
+    virtual ~SwTableLine() override;
 
           SwTableBoxes &GetTabBoxes() { return m_aBoxes; }
     const SwTableBoxes &GetTabBoxes() const { return m_aBoxes; }
+    sal_uInt16 GetBoxPos(const SwTableBox* pBox) const
+    {
+        SwTableBoxes::const_iterator it = std::find(m_aBoxes.begin(), m_aBoxes.end(), pBox);
+        return it == m_aBoxes.end() ? USHRT_MAX : it - m_aBoxes.begin();
+    }
 
           SwTableBox *GetUpper() { return m_pUpper; }
     const SwTableBox *GetUpper() const { return m_pUpper; }
@@ -383,7 +386,7 @@ public:
 class SW_DLLPUBLIC SwTableBox: public SwClient      //Client of FrameFormat.
 {
     friend class SwNodes;           // Transpose index.
-    friend void DelBoxNode(SwTableSortBoxes&);  // Delete StartNode* !
+    friend void DelBoxNode(SwTableSortBoxes const &);  // Delete StartNode* !
     friend class SwXMLTableContext;
 
     SwTableBox( const SwTableBox & ) = delete;
@@ -407,12 +410,10 @@ class SW_DLLPUBLIC SwTableBox: public SwClient      //Client of FrameFormat.
 
 public:
 
-    SwTableBox();
-
-    SwTableBox( SwTableBoxFormat*, sal_uInt16 nLines, SwTableLine *pUp = nullptr );
-    SwTableBox( SwTableBoxFormat*, const SwStartNode&, SwTableLine *pUp = nullptr );
-    SwTableBox( SwTableBoxFormat*, const SwNodeIndex&, SwTableLine *pUp = nullptr );
-    virtual ~SwTableBox();
+    SwTableBox( SwTableBoxFormat*, sal_uInt16 nLines, SwTableLine *pUp );
+    SwTableBox( SwTableBoxFormat*, const SwStartNode&, SwTableLine *pUp );
+    SwTableBox( SwTableBoxFormat*, const SwNodeIndex&, SwTableLine *pUp );
+    virtual ~SwTableBox() override;
 
           SwTableLines &GetTabLines() { return m_aLines; }
     const SwTableLines &GetTabLines() const { return m_aLines; }
@@ -439,9 +440,9 @@ public:
     sal_uLong GetSttIdx() const;
 
     // Search next/previous box with content.
-    SwTableBox* FindNextBox( const SwTable&, const SwTableBox* =nullptr,
+    SwTableBox* FindNextBox( const SwTable&, const SwTableBox*,
                             bool bOvrTableLns=true ) const;
-    SwTableBox* FindPreviousBox( const SwTable&, const SwTableBox* =nullptr ) const;
+    SwTableBox* FindPreviousBox( const SwTable&, const SwTableBox* ) const;
     // Return name of this box. It is determined dynamically and
     // is calculated from the position in the lines/boxes/table.
     OUString GetName() const;
@@ -452,7 +453,7 @@ public:
     // width or height when inserting cols or rows
     Point GetCoordinates() const;
 
-    bool IsInHeadline( const SwTable* pTable = nullptr ) const;
+    bool IsInHeadline( const SwTable* pTable ) const;
 
     // Contains box contents, that can be formatted as a number?
     bool HasNumContent( double& rNum, sal_uInt32& rFormatIndex,
@@ -470,8 +471,6 @@ public:
     // Loading of a document requires an actualization of cells with values
     void ActualiseValueBox();
 
-    DECL_FIXEDMEMPOOL_NEWDEL(SwTableBox)
-
     // Access on internal data - currently used for the NumFormatter.
     inline const Color* GetSaveUserColor()  const;
     inline const Color* GetSaveNumFormatColor() const;
@@ -488,9 +487,9 @@ public:
         sal_uInt16 nMaxStep = USHRT_MAX ) const
         { return const_cast<SwTableBox*>(this)->FindStartOfRowSpan( rTable, nMaxStep ); }
 
-    SwTableBox& FindEndOfRowSpan( const SwTable&, sal_uInt16 nMaxStep = USHRT_MAX );
+    SwTableBox& FindEndOfRowSpan( const SwTable&, sal_uInt16 nMaxStep );
     const SwTableBox& FindEndOfRowSpan( const SwTable& rTable,
-        sal_uInt16 nMaxStep = USHRT_MAX ) const
+        sal_uInt16 nMaxStep ) const
         { return const_cast<SwTableBox*>(this)->FindEndOfRowSpan( rTable, nMaxStep ); }
     void RegisterToFormat( SwFormat& rFormat ) ;
 };
@@ -499,7 +498,7 @@ class SwCellFrame;
 class SW_DLLPUBLIC SwTableCellInfo
 {
     struct Impl;
-    ::std::unique_ptr<Impl> m_pImpl;
+    std::unique_ptr<Impl> m_pImpl;
 
     const SwCellFrame * getCellFrame() const;
 

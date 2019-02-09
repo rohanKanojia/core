@@ -20,10 +20,9 @@
 #include <rtl/ustring.hxx>
 #include <svl/aeitem.hxx>
 
+#include <climits>
+#include <cstddef>
 #include <vector>
-
-SfxPoolItem* SfxAllEnumItem::CreateDefault() { return new SfxAllEnumItem; }
-
 
 struct SfxAllEnumValue_Impl
 {
@@ -34,56 +33,32 @@ struct SfxAllEnumValue_Impl
 class SfxAllEnumValueArr : public std::vector<SfxAllEnumValue_Impl> {};
 
 
-SfxAllEnumItem::SfxAllEnumItem() :
-    SfxEnumItem(),
-    pValues( nullptr ),
-    pDisabledValues( nullptr )
-{
-}
-
 SfxAllEnumItem::SfxAllEnumItem(sal_uInt16 which, sal_uInt16 nVal):
-    SfxEnumItem(which, nVal),
-    pValues( nullptr ),
-    pDisabledValues( nullptr )
+    SfxAllEnumItem_Base(which, nVal)
 {
     InsertValue( nVal );
 }
 
 SfxAllEnumItem::SfxAllEnumItem( sal_uInt16 which, SvStream &rStream ):
-    SfxEnumItem(which, rStream),
-    pValues( nullptr ),
-    pDisabledValues( nullptr )
+    SfxAllEnumItem_Base(which, rStream)
 {
     InsertValue( GetValue() );
 }
 
 SfxAllEnumItem::SfxAllEnumItem(sal_uInt16 which):
-    SfxEnumItem(which, 0),
-    pValues( nullptr ),
-    pDisabledValues( nullptr )
+    SfxAllEnumItem_Base(which, 0)
 {
 }
 
 SfxAllEnumItem::SfxAllEnumItem(const SfxAllEnumItem &rCopy):
-    SfxEnumItem(rCopy),
-    pValues(nullptr),
-    pDisabledValues( nullptr )
+    SfxAllEnumItem_Base(rCopy)
 {
-    if ( !rCopy.pValues )
-        return;
-
-    pValues = new SfxAllEnumValueArr(*rCopy.pValues);
-
-    if( rCopy.pDisabledValues )
-    {
-        pDisabledValues = new std::vector<sal_uInt16>( *(rCopy.pDisabledValues) );
-    }
+    if ( rCopy.pValues )
+        pValues.reset( new SfxAllEnumValueArr(*rCopy.pValues) );
 }
 
 SfxAllEnumItem::~SfxAllEnumItem()
 {
-    delete pValues;
-    delete pDisabledValues;
 }
 
 sal_uInt16 SfxAllEnumItem::GetValueCount() const
@@ -91,15 +66,15 @@ sal_uInt16 SfxAllEnumItem::GetValueCount() const
     return pValues ? pValues->size() : 0;
 }
 
-OUString SfxAllEnumItem::GetValueTextByPos( sal_uInt16 nPos ) const
+OUString const & SfxAllEnumItem::GetValueTextByPos( sal_uInt16 nPos ) const
 {
-    DBG_ASSERT( pValues && nPos < pValues->size(), "enum overflow" );
+    assert(pValues && nPos < pValues->size());
     return (*pValues)[nPos].aText;
 }
 
 sal_uInt16 SfxAllEnumItem::GetValueByPos( sal_uInt16 nPos ) const
 {
-    DBG_ASSERT( pValues && nPos < pValues->size(), "enum overflow" );
+    assert(pValues && nPos < pValues->size());
     return (*pValues)[nPos].nValue;
 }
 
@@ -114,33 +89,32 @@ SfxPoolItem* SfxAllEnumItem::Create( SvStream & rStream, sal_uInt16 ) const
 }
 
 /**
- * In contrast to @see SfxEnumItemInterface::GetPosByValue(sal_uInt16) const
+ * In contrast to @see GetPosByValue(sal_uInt16) const
  * this internal method returns the position the value would be for non-present values.
  */
-sal_uInt16 SfxAllEnumItem::GetPosByValue_( sal_uInt16 nVal ) const
+std::size_t SfxAllEnumItem::GetPosByValue_( sal_uInt16 nVal ) const
 {
     if ( !pValues )
         return 0;
 
     //FIXME: Optimisation: use binary search or SortArray
-    sal_uInt16 nPos;
+    std::size_t nPos;
     for ( nPos = 0; nPos < pValues->size(); ++nPos )
         if ( (*pValues)[nPos].nValue >= nVal )
             return nPos;
     return nPos;
 }
 
-/**
- * In contrast to @see SfxEnumItemInterface::GetPosByValue(sal_uInt16) const
- * this method always returns nValue, as long as not at least one value has
- * been inserted using the SfxAllEnumItem::InsertValue() methods
- */
 sal_uInt16 SfxAllEnumItem::GetPosByValue( sal_uInt16 nValue ) const
 {
     if ( !pValues || pValues->empty() )
         return nValue;
 
-    return SfxEnumItem::GetPosByValue( nValue );
+    sal_uInt16 nCount = GetValueCount();
+    for (sal_uInt16 i = 0; i < nCount; ++i)
+        if (GetValueByPos(i) == nValue)
+            return i;
+    return USHRT_MAX;
 }
 
 void SfxAllEnumItem::InsertValue( sal_uInt16 nValue, const OUString &rValue )
@@ -149,7 +123,7 @@ void SfxAllEnumItem::InsertValue( sal_uInt16 nValue, const OUString &rValue )
     aVal.nValue = nValue;
     aVal.aText = rValue;
     if ( !pValues )
-        pValues = new SfxAllEnumValueArr;
+        pValues.reset( new SfxAllEnumValueArr );
     else if ( GetPosByValue( nValue ) != USHRT_MAX )
         // remove when exists
         RemoveValue( nValue );
@@ -163,36 +137,15 @@ void SfxAllEnumItem::InsertValue( sal_uInt16 nValue )
     aVal.nValue = nValue;
     aVal.aText = OUString::number(nValue);
     if ( !pValues )
-        pValues = new SfxAllEnumValueArr;
+        pValues.reset( new SfxAllEnumValueArr );
 
     pValues->insert(pValues->begin() + GetPosByValue_(nValue), aVal); // FIXME: Duplicates?
 }
 
-void SfxAllEnumItem::DisableValue( sal_uInt16 nValue )
-{
-    if ( !pDisabledValues )
-        pDisabledValues = new std::vector<sal_uInt16>;
-
-    pDisabledValues->push_back( nValue );
-}
-
-bool SfxAllEnumItem::IsEnabled( sal_uInt16 nValue ) const
-{
-    if ( pDisabledValues )
-    {
-        for ( size_t i=0; i<pDisabledValues->size(); i++ )
-            if ( (*pDisabledValues)[i] == nValue )
-                return false;
-    }
-
-    return true;
-}
-
-
 void SfxAllEnumItem::RemoveValue( sal_uInt16 nValue )
 {
     sal_uInt16 nPos = GetPosByValue(nValue);
-    DBG_ASSERT( nPos != USHRT_MAX, "removing value not in enum" );
+    assert(nPos != USHRT_MAX);
     pValues->erase( pValues->begin() + nPos );
 }
 

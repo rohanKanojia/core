@@ -20,6 +20,7 @@
 #include <svtools/fileurlbox.hxx>
 #include <osl/file.h>
 #include <svl/filenotation.hxx>
+#include <vcl/event.hxx>
 
 
 namespace svt
@@ -75,7 +76,7 @@ namespace svt
         return SvtURLBox::PreNotify(_rNEvt);
     }
 
-    bool FileURLBox::Notify( NotifyEvent& _rNEvt )
+    bool FileURLBox::EventNotify( NotifyEvent& _rNEvt )
     {
         if (_rNEvt.GetType() == MouseNotifyEvent::KEYINPUT)
         {
@@ -84,13 +85,13 @@ namespace svt
                 &&  ( IsInDropDown()                                             )
                 )
             {
-                bool bReturn = SvtURLBox::Notify(_rNEvt);
+                bool bReturn = SvtURLBox::EventNotify(_rNEvt);
                 DisplayURL( m_sPreservedText );
                 return bReturn;
             }
         }
 
-        return SvtURLBox::Notify(_rNEvt);
+        return SvtURLBox::EventNotify(_rNEvt);
     }
 
 }   // namespace svt

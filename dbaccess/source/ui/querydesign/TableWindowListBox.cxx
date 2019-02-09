@@ -17,15 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableWindowListBox.hxx"
-#include "TableWindow.hxx"
-#include "QueryDesignView.hxx"
-#include "QueryTableView.hxx"
-#include "querycontroller.hxx"
-#include "JoinExchange.hxx"
+#include <TableWindowListBox.hxx>
+#include <TableWindow.hxx>
+#include <QueryDesignView.hxx>
+#include <QueryTableView.hxx>
+#include <querycontroller.hxx>
+#include <JoinExchange.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
 #include <vcl/svapp.hxx>
+#include <vcl/commandevent.hxx>
+#include <vcl/event.hxx>
 
 using namespace dbaui;
 using namespace ::com::sun::star::sdbc;
@@ -51,7 +53,7 @@ OTableWindowListBox::OTableWindowListBox( OTableWindow* pParent )
     m_aScrollTimer.SetTimeout( SCROLLING_TIMESPAN );
     SetDoubleClickHdl( LINK(this, OTableWindowListBox, OnDoubleClick) );
 
-    SetSelectionMode(SINGLE_SELECTION);
+    SetSelectionMode(SelectionMode::Single);
 
     SetHighlightRange( );
 }
@@ -94,7 +96,7 @@ SvTreeListEntry* OTableWindowListBox::GetEntryFromText( const OUString& rEntryTe
     try
     {
         bool bCase = false;
-        Reference<XConnection> xConnection = rController.getConnection();
+        const Reference<XConnection>& xConnection = rController.getConnection();
         if(xConnection.is())
         {
             Reference<XDatabaseMetaData> xMeta = xConnection->getMetaData();
@@ -103,7 +105,7 @@ SvTreeListEntry* OTableWindowListBox::GetEntryFromText( const OUString& rEntryTe
         }
         while( pEntry )
         {
-            if((bCase ? rEntryText == GetEntryText(pEntry) : rEntryText.equalsIgnoreAsciiCase(GetEntryText(pEntry))))
+            if(bCase ? rEntryText == GetEntryText(pEntry) : rEntryText.equalsIgnoreAsciiCase(GetEntryText(pEntry)))
             {
                 return pEntry;
             }
@@ -167,7 +169,7 @@ bool OTableWindowListBox::PreNotify(NotifyEvent& rNEvt)
     return true;
 }
 
-IMPL_LINK_NOARG_TYPED( OTableWindowListBox, ScrollUpHdl, Timer*, void )
+IMPL_LINK_NOARG( OTableWindowListBox, ScrollUpHdl, Timer*, void )
 {
     SvTreeListEntry* pEntry = GetEntry( m_aMousePos );
     if( !pEntry )
@@ -181,7 +183,7 @@ IMPL_LINK_NOARG_TYPED( OTableWindowListBox, ScrollUpHdl, Timer*, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED( OTableWindowListBox, ScrollDownHdl, Timer*, void )
+IMPL_LINK_NOARG( OTableWindowListBox, ScrollDownHdl, Timer*, void )
 {
     SvTreeListEntry* pEntry = GetEntry( m_aMousePos );
     if( !pEntry )
@@ -206,8 +208,7 @@ void OTableWindowListBox::StartDrag( sal_Int8 /*nAction*/, const Point& /*rPosPi
         // create a description of the source
         OJoinExchangeData jxdSource(this);
         // put it into a exchange object
-        OJoinExchObj* pJoin = new OJoinExchObj(jxdSource,bFirstNotAllowed);
-        Reference< XTransferable > xEnsureDelete(pJoin);
+        rtl::Reference<OJoinExchObj> pJoin = new OJoinExchObj(jxdSource,bFirstNotAllowed);
         pJoin->StartDrag(this, DND_ACTION_LINK, this);
     }
 }
@@ -233,26 +234,25 @@ sal_Int8 OTableWindowListBox::AcceptDrop( const AcceptDropEvent& _rEvt )
                 return DND_ACTION_NONE;
 
             // Scrolling Areas
-            Rectangle aBottomScrollArea( Point(0, aOutputSize.Height()-LISTBOX_SCROLLING_AREA),
+            tools::Rectangle aBottomScrollArea( Point(0, aOutputSize.Height()-LISTBOX_SCROLLING_AREA),
                                          Size(aOutputSize.Width(), LISTBOX_SCROLLING_AREA) );
-            Rectangle aTopScrollArea( Point(0,0), Size(aOutputSize.Width(), LISTBOX_SCROLLING_AREA) );
+            tools::Rectangle aTopScrollArea( Point(0,0), Size(aOutputSize.Width(), LISTBOX_SCROLLING_AREA) );
 
              // scroll up if the pointer is on the upper scroll area
             if( aBottomScrollArea.IsInside(m_aMousePos) )
             {
                 if( !m_aScrollTimer.IsActive() )
                 {
-                    m_aScrollTimer.SetTimeoutHdl( LINK(this, OTableWindowListBox, ScrollUpHdl) );
+                    m_aScrollTimer.SetInvokeHandler( LINK(this, OTableWindowListBox, ScrollUpHdl) );
                     ScrollUpHdl( nullptr );
                 }
             }
-
-           // scroll down if the pointer is on the lower scroll area
-           else if( aTopScrollArea.IsInside(m_aMousePos) )
+            // scroll down if the pointer is on the lower scroll area
+            else if( aTopScrollArea.IsInside(m_aMousePos) )
             {
                 if( !m_aScrollTimer.IsActive() )
                 {
-                    m_aScrollTimer.SetTimeoutHdl( LINK(this, OTableWindowListBox, ScrollDownHdl) );
+                    m_aScrollTimer.SetInvokeHandler( LINK(this, OTableWindowListBox, ScrollDownHdl) );
                     ScrollDownHdl( nullptr );
                 }
             }
@@ -263,7 +263,7 @@ sal_Int8 OTableWindowListBox::AcceptDrop( const AcceptDropEvent& _rEvt )
             }
 
             // automatically select right entry when dragging
-            if ((FirstSelected() != pEntry) || (FirstSelected() && NextSelected(FirstSelected())))
+            if ((FirstSelected() != pEntry) || NextSelected(FirstSelected()))
                 SelectAll(false);
             Select(pEntry);
 
@@ -275,13 +275,13 @@ sal_Int8 OTableWindowListBox::AcceptDrop( const AcceptDropEvent& _rEvt )
     return nDND_Action;
 }
 
-IMPL_LINK_NOARG_TYPED( OTableWindowListBox, LookForUiHdl, void*, void )
+IMPL_LINK_NOARG( OTableWindowListBox, LookForUiHdl, void*, void )
 {
     m_nUiEvent = nullptr;
     m_pTabWin->getTableView()->lookForUiActivities();
 }
 
-IMPL_LINK_NOARG_TYPED( OTableWindowListBox, DropHdl, void*, void )
+IMPL_LINK_NOARG( OTableWindowListBox, DropHdl, void*, void )
 {
     // create the connection
     m_nDropEvent = nullptr;
@@ -342,11 +342,11 @@ void OTableWindowListBox::GetFocus()
     SvTreeListBox::GetFocus();
 }
 
-IMPL_LINK_NOARG_TYPED( OTableWindowListBox, OnDoubleClick, SvTreeListBox *, bool )
+IMPL_LINK_NOARG( OTableWindowListBox, OnDoubleClick, SvTreeListBox *, bool )
 {
     // tell my parent
     vcl::Window* pParent = Window::GetParent();
-    OSL_ENSURE(pParent != nullptr, "OTableWindowListBox::OnDoubleClick : habe kein Parent !");
+    OSL_ENSURE(pParent != nullptr, "OTableWindowListBox::OnDoubleClick : have no Parent !");
 
     static_cast<OTableWindow*>(pParent)->OnEntryDoubleClicked(GetHdlEntry());
 

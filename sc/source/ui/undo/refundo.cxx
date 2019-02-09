@@ -17,54 +17,47 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "refundo.hxx"
-#include "undobase.hxx"
-#include "document.hxx"
-#include "dbdata.hxx"
-#include "rangenam.hxx"
-#include "pivot.hxx"
-#include "chartarr.hxx"
-#include "stlpool.hxx"
-#include "detdata.hxx"
-#include "prnsave.hxx"
-#include "chartlis.hxx"
-#include "dpobject.hxx"
-#include "areasave.hxx"
-#include "unoreflist.hxx"
+#include <refundo.hxx>
+#include <undobase.hxx>
+#include <document.hxx>
+#include <dbdata.hxx>
+#include <rangenam.hxx>
+#include <pivot.hxx>
+#include <chartarr.hxx>
+#include <stlpool.hxx>
+#include <detdata.hxx>
+#include <prnsave.hxx>
+#include <chartlis.hxx>
+#include <dpobject.hxx>
+#include <areasave.hxx>
+#include <unoreflist.hxx>
 #include <scopetools.hxx>
 #include <refupdatecontext.hxx>
 
 ScRefUndoData::ScRefUndoData( const ScDocument* pDoc ) :
-    pDBCollection(nullptr),
-    pRangeName(nullptr),
-    pPrintRanges(pDoc->CreatePrintRangeSaver()),
-    pDPCollection(nullptr),
-    pDetOpList(nullptr),
-    pChartListenerCollection(nullptr),
-    pAreaLinks(nullptr),
-    pUnoRefs(nullptr)
+    pPrintRanges(pDoc->CreatePrintRangeSaver())
 {
     const ScDBCollection* pOldDBColl = pDoc->GetDBCollection();
     if (pOldDBColl && !pOldDBColl->empty())
-        pDBCollection = new ScDBCollection(*pOldDBColl);
+        pDBCollection.reset(new ScDBCollection(*pOldDBColl));
 
     const ScRangeName* pOldRanges = pDoc->GetRangeName();
     if (pOldRanges && !pOldRanges->empty())
-        pRangeName = new ScRangeName(*pOldRanges);
+        pRangeName.reset(new ScRangeName(*pOldRanges));
 
     // when handling Pivot solely keep the range?
 
     const ScDPCollection* pOldDP = pDoc->GetDPCollection();
     if (pOldDP && pOldDP->GetCount())
-        pDPCollection = new ScDPCollection(*pOldDP);
+        pDPCollection.reset(new ScDPCollection(*pOldDP));
 
     const ScDetOpList* pOldDetOp = pDoc->GetDetOpList();
     if (pOldDetOp && pOldDetOp->Count())
-        pDetOpList = new ScDetOpList(*pOldDetOp);
+        pDetOpList.reset(new ScDetOpList(*pOldDetOp));
 
     const ScChartListenerCollection* pOldChartLisColl = pDoc->GetChartListenerCollection();
     if (pOldChartLisColl)
-        pChartListenerCollection = new ScChartListenerCollection(*pOldChartLisColl);
+        pChartListenerCollection.reset(new ScChartListenerCollection(*pOldChartLisColl));
 
     pAreaLinks = ScAreaLinkSaveCollection::CreateFromDoc(pDoc);     // returns NULL if empty
 
@@ -73,14 +66,13 @@ ScRefUndoData::ScRefUndoData( const ScDocument* pDoc ) :
 
 ScRefUndoData::~ScRefUndoData()
 {
-    delete pDBCollection;
-    delete pRangeName;
-    delete pPrintRanges;
-    delete pDPCollection;
-    delete pDetOpList;
-    delete pChartListenerCollection;
-    delete pAreaLinks;
-    delete pUnoRefs;
+    pDBCollection.reset();
+    pRangeName.reset();
+    pPrintRanges.reset();
+    pDPCollection.reset();
+    pDetOpList.reset();
+    pChartListenerCollection.reset();
+    pAreaLinks.reset();
 }
 
 void ScRefUndoData::DeleteUnchanged( const ScDocument* pDoc )
@@ -89,35 +81,34 @@ void ScRefUndoData::DeleteUnchanged( const ScDocument* pDoc )
     {
         ScDBCollection* pNewDBColl = pDoc->GetDBCollection();
         if ( pNewDBColl && *pDBCollection == *pNewDBColl )
-            DELETEZ(pDBCollection);
+            pDBCollection.reset();
     }
     if (pRangeName)
     {
         ScRangeName* pNewRanges = pDoc->GetRangeName();
         if ( pNewRanges && *pRangeName == *pNewRanges )
-            DELETEZ(pRangeName);
+            pRangeName.reset();
     }
 
     if (pPrintRanges)
     {
-        ScPrintRangeSaver* pNewRanges = pDoc->CreatePrintRangeSaver();
+        std::unique_ptr<ScPrintRangeSaver> pNewRanges = pDoc->CreatePrintRangeSaver();
         if ( pNewRanges && *pPrintRanges == *pNewRanges )
-            DELETEZ(pPrintRanges);
-        delete pNewRanges;
+            pPrintRanges.reset();
     }
 
     if (pDPCollection)
     {
         ScDPCollection* pNewDP = const_cast<ScDocument*>(pDoc)->GetDPCollection();    //! const
         if ( pNewDP && pDPCollection->RefsEqual(*pNewDP) )
-            DELETEZ(pDPCollection);
+            pDPCollection.reset();
     }
 
     if (pDetOpList)
     {
         ScDetOpList* pNewDetOp = pDoc->GetDetOpList();
         if ( pNewDetOp && *pDetOpList == *pNewDetOp )
-            DELETEZ(pDetOpList);
+            pDetOpList.reset();
     }
 
     if ( pChartListenerCollection )
@@ -126,13 +117,13 @@ void ScRefUndoData::DeleteUnchanged( const ScDocument* pDoc )
             pDoc->GetChartListenerCollection();
         if ( pNewChartListenerCollection &&
                 *pChartListenerCollection == *pNewChartListenerCollection )
-            DELETEZ( pChartListenerCollection );
+            pChartListenerCollection.reset();
     }
 
     if (pAreaLinks)
     {
         if ( pAreaLinks->IsEqual( pDoc ) )
-            DELETEZ(pAreaLinks);
+            pAreaLinks.reset();
     }
 
     if ( pDoc->HasUnoRefUndo() )
@@ -140,7 +131,7 @@ void ScRefUndoData::DeleteUnchanged( const ScDocument* pDoc )
         pUnoRefs = const_cast<ScDocument*>(pDoc)->EndUnoRefUndo();
         if ( pUnoRefs && pUnoRefs->IsEmpty() )
         {
-            DELETEZ( pUnoRefs );
+            pUnoRefs.reset();
         }
     }
 }
@@ -148,9 +139,9 @@ void ScRefUndoData::DeleteUnchanged( const ScDocument* pDoc )
 void ScRefUndoData::DoUndo( ScDocument* pDoc, bool bUndoRefFirst )
 {
     if (pDBCollection)
-        pDoc->SetDBCollection( new ScDBCollection(*pDBCollection) );
+        pDoc->SetDBCollection( std::unique_ptr<ScDBCollection>(new ScDBCollection(*pDBCollection)) );
     if (pRangeName)
-        pDoc->SetRangeName( new ScRangeName(*pRangeName) );
+        pDoc->SetRangeName( std::unique_ptr<ScRangeName>(new ScRangeName(*pRangeName)) );
 
     if (pPrintRanges)
         pDoc->RestorePrintRanges(*pPrintRanges);
@@ -163,11 +154,11 @@ void ScRefUndoData::DoUndo( ScDocument* pDoc, bool bUndoRefFirst )
     }
 
     if (pDetOpList)
-        pDoc->SetDetOpList( new ScDetOpList(*pDetOpList) );
+        pDoc->SetDetOpList( std::unique_ptr<ScDetOpList>(new ScDetOpList(*pDetOpList)) );
 
     // bUndoRefFirst is bSetChartRangeLists
     if ( pChartListenerCollection )
-        pDoc->SetChartListenerCollection( new ScChartListenerCollection(
+        pDoc->SetChartListenerCollection( std::make_unique<ScChartListenerCollection>(
             *pChartListenerCollection ), bUndoRefFirst );
 
     if (pDBCollection || pRangeName)

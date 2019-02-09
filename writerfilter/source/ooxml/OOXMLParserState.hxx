@@ -39,7 +39,7 @@ struct SavedAlternateState
     bool m_bTookChoice; ///< Did we take the Choice or want Fallback instead?
 };
 
-class OOXMLParserState
+class OOXMLParserState final : public virtual SvRefBase
 {
     bool mbInSectionGroup;
     bool mbInParagraphGroup;
@@ -59,12 +59,13 @@ class OOXMLParserState
     bool savedInCharacterGroup;
     bool savedLastParagraphInSection;
     std::vector<SavedAlternateState> maSavedAlternateStates;
+    std::vector<OOXMLPropertySet::Pointer_t> mvPostponedBreaks;
 
 public:
-    typedef std::shared_ptr<OOXMLParserState> Pointer_t;
+    typedef tools::SvRef<OOXMLParserState> Pointer_t;
 
     OOXMLParserState();
-    virtual ~OOXMLParserState();
+    ~OOXMLParserState() override;
 
     bool isInSectionGroup() const { return mbInSectionGroup;}
     void setInSectionGroup(bool bInSectionGroup);
@@ -102,6 +103,9 @@ public:
     void setRowProperties(const OOXMLPropertySet::Pointer_t& pProps);
     void resolveTableProperties(Stream & rStream);
     void setTableProperties(const OOXMLPropertySet::Pointer_t& pProps);
+    // tdf#108714
+    void resolvePostponedBreak(Stream & rStream);
+    void setPostponedBreak(const OOXMLPropertySet::Pointer_t& pProps);
 
     void startTable();
     void endTable();

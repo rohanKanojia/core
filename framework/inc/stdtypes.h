@@ -42,7 +42,7 @@ struct KeyEventHashCode
 {
     size_t operator()( const css::awt::KeyEvent& aEvent ) const
     {
-        return (size_t)(aEvent.KeyCode  +
+        return static_cast<size_t>(aEvent.KeyCode  +
                         //aEvent.KeyChar  +
                         //aEvent.KeyFunc  +
                         aEvent.Modifiers);
@@ -62,12 +62,6 @@ struct KeyEventEqualsFunc
                );
     }
 };
-
-/**
-    Basic OUString hash.
-    Key and values are OUStrings.
-*/
-typedef std::unordered_map<OUString, OUString, OUStringHash> OUStringHashMap;
 
 /**
     It can be used to map names (e.g. of properties) to her corresponding handles.

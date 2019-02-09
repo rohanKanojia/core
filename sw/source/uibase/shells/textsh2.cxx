@@ -25,40 +25,29 @@
 #include <sfx2/event.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/stritem.hxx>
 #include <svl/itemset.hxx>
 #include <sfx2/request.hxx>
 #include <com/sun/star/sdb/CommandType.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/sdbc/XDataSource.hpp>
-#include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
-#include <com/sun/star/sdb/XQueriesSupplier.hpp>
-#include <com/sun/star/sdb/XDatabaseAccess.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/container/XChild.hpp>
-#include <comphelper/processfactory.hxx>
-#include <com/sun/star/sdbc/XRowSet.hpp>
+#include <comphelper/types.hxx>
 #include <sfx2/frame.hxx>
 #include <fldmgr.hxx>
 #include <fldbas.hxx>
-#include "dbmgr.hxx"
-#include <comphelper/uno3.hxx>
+#include <dbmgr.hxx>
 #include <svx/dataaccessdescriptor.hxx>
 
 #include <vcl/svapp.hxx>
 
-#include "view.hxx"
-#include "wrtsh.hxx"
-#include "swtypes.hxx"
-#include "cmdid.h"
-#include "swevent.hxx"
-#include "shells.hrc"
-#include "textsh.hxx"
-#include "swabstdlg.hxx"
-#include "dbui.hrc"
+#include <view.hxx>
+#include <wrtsh.hxx>
+#include <swtypes.hxx>
+#include <cmdid.h>
+#include <swevent.hxx>
+#include <textsh.hxx>
+#include <swabstdlg.hxx>
+#include <dbui.hrc>
 
 #include <unomid.h>
 
@@ -83,7 +72,7 @@ struct DBTextStruct_Impl
     Reference<XConnection>  xConnection;
 };
 
-void SwTextShell::ExecDB(SfxRequest &rReq)
+void SwTextShell::ExecDB(SfxRequest const &rReq)
 {
     const SfxItemSet *pArgs = rReq.GetArgs();
     SwDBManager* pDBManager = GetShell().GetDBManager();
@@ -102,32 +91,33 @@ void SwTextShell::ExecDB(SfxRequest &rReq)
 
     Sequence<Any> aSelection;
     if(pSelectionItem)
-        static_cast<const SfxUsrAnyItem*>(pSelectionItem)->GetValue() >>= aSelection;
+        static_cast<const SfxUnoAnyItem*>(pSelectionItem)->GetValue() >>= aSelection;
 
     // get the data source name
     pArgs->GetItemState(FN_DB_DATA_SOURCE_ANY, false, &pSourceItem);
     if(pSourceItem)
-        static_cast<const SfxUsrAnyItem*>(pSourceItem)->GetValue() >>= sSourceArg;
+        static_cast<const SfxUnoAnyItem*>(pSourceItem)->GetValue() >>= sSourceArg;
 
     // get the command
     pArgs->GetItemState(FN_DB_DATA_COMMAND_ANY, false, &pCommandItem);
     if(pCommandItem)
-        static_cast<const SfxUsrAnyItem*>(pCommandItem)->GetValue() >>= sCommandArg;
+        static_cast<const SfxUnoAnyItem*>(pCommandItem)->GetValue() >>= sCommandArg;
 
     // get the command type
     pArgs->GetItemState(FN_DB_DATA_COMMAND_TYPE_ANY, false, &pCommandTypeItem);
     if(pCommandTypeItem)
-        static_cast<const SfxUsrAnyItem*>(pCommandTypeItem)->GetValue() >>= nCommandTypeArg;
+        static_cast<const SfxUnoAnyItem*>(pCommandTypeItem)->GetValue() >>= nCommandTypeArg;
 
     Reference<XConnection> xConnection;
     pArgs->GetItemState(FN_DB_CONNECTION_ANY, false, &pConnectionItem);
     if ( pConnectionItem )
-        static_cast<const SfxUsrAnyItem*>(pConnectionItem)->GetValue() >>= xConnection;
+        static_cast<const SfxUnoAnyItem*>(pConnectionItem)->GetValue() >>= xConnection;
     // may be we even get no connection
     if ( !xConnection.is() )
     {
         Reference<XDataSource> xSource;
-        xConnection = SwDBManager::GetConnection(sSourceArg, xSource);
+        SwView &rSwView = GetView();
+        xConnection = SwDBManager::GetConnection(sSourceArg, xSource, &rSwView);
     }
     if(!xConnection.is())
         return ;
@@ -136,7 +126,7 @@ void SwTextShell::ExecDB(SfxRequest &rReq)
     Reference<XResultSet> xCursor;
     pArgs->GetItemState(FN_DB_DATA_CURSOR_ANY, false, &pCursorItem);
     if ( pCursorItem )
-        static_cast<const SfxUsrAnyItem*>(pCursorItem)->GetValue() >>= xCursor;
+        static_cast<const SfxUnoAnyItem*>(pCursorItem)->GetValue() >>= xCursor;
 
     switch (rReq.GetSlot())
     {
@@ -166,16 +156,17 @@ void SwTextShell::ExecDB(SfxRequest &rReq)
                 bool bDisposeResultSet = false;
                 if ( !xCursor.is() )
                 {
-                    xCursor = SwDBManager::createCursor(sSourceArg,sCommandArg,nCommandTypeArg,xConnection);
+                    SwView &rSwView = GetView();
+                    xCursor = SwDBManager::createCursor(sSourceArg,sCommandArg,nCommandTypeArg,xConnection,&rSwView);
                     bDisposeResultSet = xCursor.is();
                 }
 
                 ODataAccessDescriptor aDescriptor;
                 aDescriptor.setDataSource(sSourceArg);
-                aDescriptor[daCommand]      <<= sCommandArg;
-                aDescriptor[daCursor]       <<= xCursor;
-                aDescriptor[daSelection]    <<= aSelection;
-                aDescriptor[daCommandType]  <<= nCommandTypeArg;
+                aDescriptor[DataAccessDescriptorProperty::Command]      <<= sCommandArg;
+                aDescriptor[DataAccessDescriptorProperty::Cursor]       <<= xCursor;
+                aDescriptor[DataAccessDescriptorProperty::Selection]    <<= aSelection;
+                aDescriptor[DataAccessDescriptorProperty::CommandType]  <<= nCommandTypeArg;
 
                 SwMergeDescriptor aMergeDesc( DBMGR_MERGE, *GetShellPtr(), aDescriptor );
                 pDBManager->Merge(aMergeDesc);
@@ -195,21 +186,18 @@ void SwTextShell::ExecDB(SfxRequest &rReq)
 
                 OUString sColumnName;
                 if(pColumnNameItem)
-                    static_cast<const SfxUsrAnyItem*>(pColumnNameItem)->GetValue() >>= sColumnName;
-                OUString sDBName = sSourceArg;
-                sDBName += OUString(DB_DELIM);
-                sDBName += sCommandArg;
-                sDBName += OUString(DB_DELIM);
-                sDBName += OUString::number(nCommandTypeArg);
-                sDBName += OUString(DB_DELIM);
-                sDBName += sColumnName;
+                    static_cast<const SfxUnoAnyItem*>(pColumnNameItem)->GetValue() >>= sColumnName;
+                OUString sDBName = sSourceArg + OUStringLiteral1(DB_DELIM)
+                    + sCommandArg + OUStringLiteral1(DB_DELIM)
+                    + OUString::number(nCommandTypeArg)
+                    + OUStringLiteral1(DB_DELIM) + sColumnName;
 
                 SwFieldMgr aFieldMgr(GetShellPtr());
                 SwInsertField_Data aData(TYP_DBFLD, 0, sDBName, OUString(), 0);
                 if(pConnectionItem)
-                    aData.m_aDBConnection = static_cast<const SfxUsrAnyItem*>(pConnectionItem)->GetValue();
+                    aData.m_aDBConnection = static_cast<const SfxUnoAnyItem*>(pConnectionItem)->GetValue();
                 if(pColumnItem)
-                    aData.m_aDBColumn = static_cast<const SfxUsrAnyItem*>(pColumnItem)->GetValue();
+                    aData.m_aDBColumn = static_cast<const SfxUnoAnyItem*>(pColumnItem)->GetValue();
                 aFieldMgr.InsertField(aData);
                 SfxViewFrame* pViewFrame = GetView().GetViewFrame();
                 uno::Reference< XDispatchRecorder > xRecorder =
@@ -233,7 +221,7 @@ void SwTextShell::ExecDB(SfxRequest &rReq)
     }
 }
 
-IMPL_LINK_TYPED( SwBaseShell, InsertDBTextHdl, void*, p, void )
+IMPL_LINK( SwBaseShell, InsertDBTextHdl, void*, p, void )
 {
     DBTextStruct_Impl* pDBStruct = static_cast<DBTextStruct_Impl*>(p);
     if( pDBStruct )
@@ -247,7 +235,8 @@ IMPL_LINK_TYPED( SwBaseShell, InsertDBTextHdl, void*, p, void )
 
         if ( !xConnection.is()  )
         {
-            xConnection = SwDBManager::GetConnection(pDBStruct->aDBData.sDataSource, xSource);
+            SwView &rSwView = GetView();
+            xConnection = SwDBManager::GetConnection(pDBStruct->aDBData.sDataSource, xSource, &rSwView);
             bDispose = true;
         }
 
@@ -262,8 +251,7 @@ IMPL_LINK_TYPED( SwBaseShell, InsertDBTextHdl, void*, p, void )
         {
             SwDBData aDBData = pDBStruct->aDBData;
             SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-            OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-            std::unique_ptr<AbstractSwInsertDBColAutoPilot>pDlg (pFact->CreateSwInsertDBColAutoPilot(GetView(),
+            ScopedVclPtr<AbstractSwInsertDBColAutoPilot>pDlg (pFact->CreateSwInsertDBColAutoPilot(GetView(),
                                                                                                 xSource,
                                                                                                 xColSupp,
                                                                                                 aDBData));

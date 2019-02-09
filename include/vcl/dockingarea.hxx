@@ -21,6 +21,7 @@
 #define INCLUDED_VCL_DOCKINGAREA_HXX
 
 #include <vcl/window.hxx>
+#include <memory>
 
 //  A simple container for docked toolbars
 //  - its main purpose is theming support
@@ -29,14 +30,14 @@ class VCL_DLLPUBLIC DockingAreaWindow : public vcl::Window
     class ImplData;
 
 private:
-    ImplData*       mpImplData;
+    std::unique_ptr<ImplData> mpImplData;
 
                     DockingAreaWindow (const DockingAreaWindow &) = delete;
                     DockingAreaWindow & operator= (const DockingAreaWindow &) = delete;
 
 public:
     explicit        DockingAreaWindow( vcl::Window* pParent );
-    virtual         ~DockingAreaWindow();
+    virtual         ~DockingAreaWindow() override;
     virtual void    dispose() override;
 
     void            SetAlign( WindowAlign eNewAlign );
@@ -44,7 +45,7 @@ public:
     bool            IsHorizontal() const;
 
     virtual void    ApplySettings(vcl::RenderContext& rRenderContext) override;
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void    Resize() override;
     virtual void    DataChanged( const DataChangedEvent& rDCEvt ) override;
     virtual void    StateChanged( StateChangedType nType ) override;

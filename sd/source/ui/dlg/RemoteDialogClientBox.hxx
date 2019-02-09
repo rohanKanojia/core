@@ -20,23 +20,16 @@
 #ifndef INCLUDED_SD_SOURCE_UI_DLG_REMOTEDIALOGCLIENTBOX_HXX
 #define INCLUDED_SD_SOURCE_UI_DLG_REMOTEDIALOGCLIENTBOX_HXX
 
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 #include <vcl/scrbar.hxx>
-#include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
 #include <vcl/field.hxx>
 
-#include "svtools/extensionlistbox.hxx"
 #include <cppuhelper/implbase.hxx>
 
-#include "com/sun/star/lang/Locale.hpp"
-#include "com/sun/star/lang/XEventListener.hpp"
-#include "com/sun/star/deployment/XPackage.hpp"
+#include <com/sun/star/lang/XEventListener.hpp>
 
 #include <memory>
-
-#include "sdresid.hxx"
 
 namespace sd {
 
@@ -59,7 +52,7 @@ struct ClientBoxEntry
     bool m_bActive :1;
     std::shared_ptr<ClientInfo> m_pClientInfo;
 
-    explicit ClientBoxEntry(std::shared_ptr<ClientInfo> pClientInfo);
+    explicit ClientBoxEntry(const std::shared_ptr<ClientInfo>& pClientInfo);
    ~ClientBoxEntry();
 
 };
@@ -77,11 +70,10 @@ public:
     {
         m_pParent = pParent;
     }
-    virtual ~ClientRemovedListener();
+    virtual ~ClientRemovedListener() override;
 
     // XEventListener
-    virtual void SAL_CALL disposing(css::lang::EventObject const & evt)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(css::lang::EventObject const & evt) override;
 };
 
 class ClientBox : public Control
@@ -89,9 +81,7 @@ class ClientBox : public Control
     bool m_bHasScrollBar : 1;
     bool m_bHasActive : 1;
     bool m_bNeedsRecalc : 1;
-    bool m_bInCheckMode : 1;
     bool m_bAdjustActive : 1;
-    bool m_bInDelete : 1;
     //Must be guarded together with m_vEntries to ensure a valid index at all times.
     //Use m_entriesMutex as guard.
     long m_nActive;
@@ -101,11 +91,11 @@ class ClientBox : public Control
 
     VclPtr<NumericBox> m_aPinBox;
     VclPtr<PushButton> m_aDeauthoriseButton;
-    Rectangle m_sPinTextRect;
+    ::tools::Rectangle m_sPinTextRect;
 
     VclPtr<ScrollBar> m_aScrollBar;
 
-    css::uno::Reference< ClientRemovedListener > m_xRemoveListener;
+    rtl::Reference< ClientRemovedListener > m_xRemoveListener;
 
     //This mutex is used for synchronizing access to m_vEntries.
     //Currently it is used to synchronize adding, removing entries and
@@ -116,38 +106,36 @@ class ClientBox : public Control
     //while new entries are added / removed in a separate thread.
     mutable ::osl::Mutex    m_entriesMutex;
     std::vector< TClientBoxEntry > m_vEntries;
-    std::vector< TClientBoxEntry > m_vRemovedEntries;
 
-    void CalcActiveHeight( const long nPos );
+    void CalcActiveHeight();
     long GetTotalHeight() const;
     void SetupScrollBar();
-    void DrawRow(vcl::RenderContext& rRenderContext, const Rectangle& rRect, const TClientBoxEntry& rEntry);
+    void DrawRow(vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect, const TClientBoxEntry& rEntry);
     bool HandleCursorKey( sal_uInt16 nKeyCode );
-    void DeleteRemoved();
 
-    DECL_DLLPRIVATE_LINK_TYPED( ScrollHdl, ScrollBar*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( DeauthoriseHdl, Button*, void );
+    DECL_LINK( ScrollHdl, ScrollBar*, void );
+    DECL_LINK( DeauthoriseHdl, Button*, void );
 
 public:
     ClientBox( vcl::Window* pParent, WinBits nStyle );
-    virtual ~ClientBox();
+    virtual ~ClientBox() override;
     virtual void dispose() override;
 
     void MouseButtonDown( const MouseEvent& rMEvt ) override;
-    void Paint( vcl::RenderContext& rRenderContext, const Rectangle &rPaintRect ) override;
+    void Paint( vcl::RenderContext& rRenderContext, const ::tools::Rectangle &rPaintRect ) override;
     void Resize() override;
     Size GetOptimalSize() const override;
-    bool Notify( NotifyEvent& rNEvt ) override;
+    bool EventNotify( NotifyEvent& rNEvt ) override;
 
-    TClientBoxEntry GetEntryData( long nPos ) { return m_vEntries[ nPos ]; }
+    TClientBoxEntry const & GetEntryData( long nPos ) { return m_vEntries[ nPos ]; }
     long GetActiveEntryIndex();
-    Rectangle GetEntryRect( const long nPos ) const;
+    ::tools::Rectangle GetEntryRect( const long nPos ) const;
     long PointToPos( const Point& rPos );
     void DoScroll( long nDelta );
     void RecalcAll();
 
     void selectEntry( const long nPos );
-    long addEntry(const std::shared_ptr<ClientInfo>& pClientInfo);
+    void addEntry(const std::shared_ptr<ClientInfo>& pClientInfo);
     void clearEntries();
 
     OUString getPin();

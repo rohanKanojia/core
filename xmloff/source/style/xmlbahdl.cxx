@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <xmlbahdl.hxx>
+#include "xmlbahdl.hxx"
 
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
+#include <o3tl/any.hxx>
 #include <sax/tools/converter.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <xmloff/xmltoken.hxx>
+
+#include <limits.h>
 
 using namespace ::com::sun::star::uno;
 using namespace ::xmloff::token;
@@ -37,14 +40,14 @@ static void lcl_xmloff_setAny( Any& rValue, sal_Int32 nValue, sal_Int8 nBytes )
             nValue = SCHAR_MIN;
         else if( nValue > SCHAR_MAX )
             nValue = SCHAR_MAX;
-        rValue <<= (sal_Int8)nValue;
+        rValue <<= static_cast<sal_Int8>(nValue);
         break;
     case 2:
         if( nValue < SHRT_MIN )
             nValue = SHRT_MIN;
         else if( nValue > SHRT_MAX )
             nValue = SHRT_MAX;
-        rValue <<= (sal_Int16)nValue;
+        rValue <<= static_cast<sal_Int16>(nValue);
         break;
     case 4:
         rValue <<= nValue;
@@ -101,12 +104,10 @@ bool XMLNumberPropHdl::exportXML( OUString& rStrExpValue, const Any& rValue, con
 {
     bool bRet = false;
     sal_Int32 nValue;
-      OUStringBuffer aOut;
 
     if( lcl_xmloff_getAny( rValue, nValue, nBytes ) )
     {
-        ::sax::Converter::convertNumber( aOut, nValue );
-        rStrExpValue = aOut.makeStringAndClear();
+        rStrExpValue = OUString::number( nValue );
 
         bRet = true;
     }
@@ -158,18 +159,14 @@ bool XMLNumberNonePropHdl::exportXML( OUString& rStrExpValue, const Any& rValue,
 
     if( lcl_xmloff_getAny( rValue, nValue, nBytes ) )
     {
-          OUStringBuffer aOut;
-
         if( nValue == 0 )
         {
-            aOut.append( sZeroStr );
+            rStrExpValue = sZeroStr;
         }
         else
         {
-            ::sax::Converter::convertNumber( aOut, nValue );
+            rStrExpValue = OUString::number( nValue );
         }
-
-        rStrExpValue = aOut.makeStringAndClear();
 
         bRet = true;
     }
@@ -223,7 +220,7 @@ bool XMLBoolFalsePropHdl::importXML( const OUString&, Any&, const SvXMLUnitConve
 
 bool XMLBoolFalsePropHdl::exportXML( OUString& rStrExpValue, const Any& /*rValue*/, const SvXMLUnitConverter& rCnv) const
 {
-    return XMLBoolPropHdl::exportXML( rStrExpValue, makeAny( sal_False ), rCnv );
+    return XMLBoolPropHdl::exportXML( rStrExpValue, makeAny( false ), rCnv );
 }
 
 // class XMLBoolPropHdl
@@ -333,7 +330,7 @@ bool XMLDoublePercentPropHdl::importXML( const OUString& rStrImpValue, Any& rVal
 
     double fValue = 1.0;
 
-    if( rStrImpValue.indexOf( (sal_Unicode)'%' ) == -1 )
+    if( rStrImpValue.indexOf( '%' ) == -1 )
     {
         fValue = rStrImpValue.toDouble();
     }
@@ -341,7 +338,7 @@ bool XMLDoublePercentPropHdl::importXML( const OUString& rStrImpValue, Any& rVal
     {
         sal_Int32 nValue = 0;
         bRet = ::sax::Converter::convertPercent( nValue, rStrImpValue );
-        fValue = ((double)nValue) / 100.0;
+        fValue = static_cast<double>(nValue) / 100.0;
     }
     rValue <<= fValue;
 
@@ -358,7 +355,7 @@ bool XMLDoublePercentPropHdl::exportXML( OUString& rStrExpValue, const Any& rVal
         fValue *= 100.0;
         if( fValue > 0 ) fValue += 0.5; else    fValue -= 0.5;
 
-        sal_Int32 nValue = (sal_Int32)fValue;
+        sal_Int32 nValue = static_cast<sal_Int32>(fValue);
 
         OUStringBuffer aOut;
         ::sax::Converter::convertPercent( aOut, nValue );
@@ -493,7 +490,9 @@ bool XMLColorPropHdl::exportXML( OUString& rStrExpValue, const Any& rValue, cons
         Sequence< double > aHSL;
         if( (rValue >>= aHSL) && (aHSL.getLength() == 3) )
         {
-            aOut.append( "hsl(" + OUString::number(aHSL[0]) + "," + OUString::number(aHSL[1] * 100.0) + "%," + OUString::number(aHSL[2] * 100.0) + "%)" );
+            aOut.append( "hsl(" ).append( OUString::number(aHSL[0]) ).append( "," )
+                .append( OUString::number(aHSL[1] * 100.0) ).append( "%," )
+                .append( OUString::number(aHSL[2] * 100.0) ).append( "%)" );
             rStrExpValue = aOut.makeStringAndClear();
 
             bRet = true;
@@ -680,7 +679,7 @@ XMLIsTransparentPropHdl::~XMLIsTransparentPropHdl()
 
 bool XMLIsTransparentPropHdl::importXML( const OUString& rStrImpValue, Any& rValue, const SvXMLUnitConverter& ) const
 {
-    bool bValue = ( (bool) (rStrImpValue == sTransparent) == bTransPropValue);
+    bool bValue = ( (rStrImpValue == sTransparent) == bTransPropValue);
     rValue <<= bValue;
 
     return true;
@@ -693,7 +692,7 @@ bool XMLIsTransparentPropHdl::exportXML( OUString& rStrExpValue, const Any& rVal
     // MIB: This looks a bit strange, because bTransPropValue == bValue should
     // do the same, but this only applies if 'true' is represented by the same
     // 8 bit value in bValue and bTransPropValue. Who will ensure this?
-    bool bValue = *static_cast<sal_Bool const *>(rValue.getValue());
+    bool bValue = *o3tl::doAccess<bool>(rValue);
     bool bIsTrans = bTransPropValue ? bValue : !bValue;
 
     if( bIsTrans )
@@ -768,7 +767,7 @@ bool XMLIsAutoColorPropHdl::importXML( const OUString& rStrImpValue, Any& rValue
     bool bValue;
     bool const bRet = ::sax::Converter::convertBool( bValue, rStrImpValue );
     if( bRet && bValue )
-        rValue <<= (sal_Int32)-1;
+        rValue <<= sal_Int32(-1);
 
     return true;
 }
@@ -799,13 +798,13 @@ XMLCompareOnlyPropHdl::~XMLCompareOnlyPropHdl()
 
 bool XMLCompareOnlyPropHdl::importXML( const OUString&, Any&, const SvXMLUnitConverter& ) const
 {
-    DBG_ASSERT( false, "importXML called for compare-only-property" );
+    SAL_WARN( "xmloff", "importXML called for compare-only-property" );
     return false;
 }
 
 bool XMLCompareOnlyPropHdl::exportXML( OUString&, const Any&, const SvXMLUnitConverter& ) const
 {
-    DBG_ASSERT( false, "exportXML called for compare-only-property" );
+    SAL_WARN( "xmloff", "exportXML called for compare-only-property" );
     return false;
 }
 
@@ -841,9 +840,7 @@ bool XMLNumberWithoutZeroPropHdl::exportXML( OUString& rStrExpValue, const Any& 
 
     if( bRet )
     {
-          OUStringBuffer aBuffer;
-        ::sax::Converter::convertNumber( aBuffer, nValue );
-        rStrExpValue = aBuffer.makeStringAndClear();
+        rStrExpValue = OUString::number(nValue);
     }
 
     return bRet;
@@ -884,9 +881,7 @@ bool XMLNumberWithAutoInsteadZeroPropHdl::exportXML( OUString& rStrExpValue, con
         rStrExpValue = GetXMLToken( XML_AUTO );
     else
     {
-        OUStringBuffer aBuffer;
-        ::sax::Converter::convertNumber( aBuffer, nValue );
-        rStrExpValue = aBuffer.makeStringAndClear();
+        rStrExpValue = OUString::number(nValue);
     }
 
     return true;

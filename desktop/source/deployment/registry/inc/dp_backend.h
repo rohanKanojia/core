@@ -20,9 +20,10 @@
 #ifndef INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_REGISTRY_INC_DP_BACKEND_H
 #define INCLUDED_DESKTOP_SOURCE_DEPLOYMENT_REGISTRY_INC_DP_BACKEND_H
 
-#include "dp_misc.h"
-#include "dp_resource.h"
-#include "dp_interact.h"
+#include <dp_misc.h>
+#include <dp_resource.h>
+#include <dp_shared.hxx>
+#include <dp_interact.h>
 #include <rtl/ref.hxx>
 #include <cppuhelper/weakref.hxx>
 #include <cppuhelper/implbase.hxx>
@@ -31,9 +32,8 @@
 #include <com/sun/star/deployment/XPackageRegistry.hpp>
 #include <com/sun/star/deployment/XPackageManager.hpp>
 #include <com/sun/star/deployment/InvalidRemovedParameterException.hpp>
-#include <list>
 #include <unordered_map>
-#include "dp_registry.hrc"
+#include <strings.hrc>
 
 namespace dp_registry
 {
@@ -89,7 +89,7 @@ protected:
         css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
         = 0;
 
-    virtual ~Package();
+    virtual ~Package() override;
     Package( ::rtl::Reference<PackageRegistryBackend> const & myBackend,
              OUString const & url,
              OUString const & name,
@@ -107,156 +107,87 @@ public:
         const OUString m_mediaType;
         const OUString m_fileFilter;
         const OUString m_shortDescr;
-        const sal_uInt16 m_smallIcon;
     public:
-        virtual ~TypeInfo();
+        virtual ~TypeInfo() override;
         TypeInfo( OUString const & mediaType,
                   OUString const & fileFilter,
-                  OUString const & shortDescr,
-                  sal_uInt16 smallIcon)
+                  OUString const & shortDescr )
             : m_mediaType(mediaType), m_fileFilter(fileFilter),
-              m_shortDescr(shortDescr),
-              m_smallIcon(smallIcon)
+              m_shortDescr(shortDescr)
             {}
         // XPackageTypeInfo
-        virtual OUString SAL_CALL getMediaType()
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getDescription()
-            throw (css::deployment::ExtensionRemovedException,
-                   css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getShortDescription()
-            throw (css::deployment::ExtensionRemovedException,
-                   css::uno::RuntimeException, std::exception) override;
-        virtual OUString SAL_CALL getFileFilter()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getMediaType() override;
+        virtual OUString SAL_CALL getDescription() override;
+        virtual OUString SAL_CALL getShortDescription() override;
+        virtual OUString SAL_CALL getFileFilter() override;
         virtual css::uno::Any SAL_CALL getIcon( sal_Bool highContrast,
-                                                sal_Bool smallIcon )
-            throw (css::uno::RuntimeException, std::exception) override;
+                                                sal_Bool smallIcon ) override;
     };
 
     // XComponent
-    virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
     virtual void SAL_CALL addEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::lang::XEventListener> const & xListener ) override;
     virtual void SAL_CALL removeEventListener(
-        css::uno::Reference<css::lang::XEventListener> const & xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::lang::XEventListener> const & xListener ) override;
 
     // XModifyBroadcaster
     virtual void SAL_CALL addModifyListener(
-        css::uno::Reference<css::util::XModifyListener> const & xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::util::XModifyListener> const & xListener ) override;
     virtual void SAL_CALL removeModifyListener(
-        css::uno::Reference<css::util::XModifyListener> const & xListener )
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::util::XModifyListener> const & xListener ) override;
 
     // XPackage
     virtual css::uno::Reference<css::task::XAbortChannel> SAL_CALL
-    createAbortChannel() throw (css::uno::RuntimeException, std::exception) override;
+    createAbortChannel() override;
     virtual css::beans::Optional< css::beans::Ambiguous<sal_Bool> >
     SAL_CALL isRegistered(
         css::uno::Reference<css::task::XAbortChannel> const & xAbortChannel,
-        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
-        throw (css::deployment::DeploymentException,
-               css::ucb::CommandFailedException,
-               css::ucb::CommandAbortedException,
-               css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv ) override;
 
     virtual ::sal_Int32 SAL_CALL checkPrerequisites(
         const css::uno::Reference< css::task::XAbortChannel >& xAbortChannel,
         const css::uno::Reference< css::ucb::XCommandEnvironment >& xCmdEnv,
-        sal_Bool noLicenseChecking)
-        throw (css::deployment::DeploymentException,
-               css::deployment::ExtensionRemovedException,
-               css::ucb::CommandFailedException,
-               css::ucb::CommandAbortedException,
-               css::uno::RuntimeException, std::exception) override;
+        sal_Bool noLicenseChecking) override;
 
     virtual ::sal_Bool SAL_CALL checkDependencies(
-        const css::uno::Reference< css::ucb::XCommandEnvironment >& xCmdEnv )
-        throw (css::deployment::DeploymentException,
-               css::deployment::ExtensionRemovedException,
-               css::ucb::CommandFailedException,
-               css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::ucb::XCommandEnvironment >& xCmdEnv ) override;
 
     virtual void SAL_CALL registerPackage(
         sal_Bool startup,
         css::uno::Reference<css::task::XAbortChannel> const & xAbortChannel,
-        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
-        throw (css::deployment::DeploymentException,
-               css::deployment::ExtensionRemovedException,
-               css::ucb::CommandFailedException,
-               css::ucb::CommandAbortedException,
-               css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv ) override;
     virtual void SAL_CALL revokePackage(
         sal_Bool startup,
         css::uno::Reference<css::task::XAbortChannel> const & xAbortChannel,
-        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
-        throw (css::deployment::DeploymentException,
-               css::ucb::CommandFailedException,
-               css::ucb::CommandAbortedException,
-               css::lang::IllegalArgumentException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isBundle()
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv ) override;
+    virtual sal_Bool SAL_CALL isBundle() override;
     virtual css::uno::Sequence< css::uno::Reference<css::deployment::XPackage> >
     SAL_CALL getBundle(
         css::uno::Reference<css::task::XAbortChannel> const & xAbortChannel,
-        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
-        throw (css::deployment::DeploymentException,
-               css::ucb::CommandFailedException,
-               css::ucb::CommandAbortedException,
-               css::lang::IllegalArgumentException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getName()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::beans::Optional< OUString > SAL_CALL getIdentifier()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getVersion()
-        throw (css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getURL()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getDisplayName()
-        throw (css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getDescription()
-        throw (css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getLicenseText()
-        throw (css::deployment::DeploymentException,
-               css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv ) override;
+    virtual OUString SAL_CALL getName() override;
+    virtual css::beans::Optional< OUString > SAL_CALL getIdentifier() override;
+    virtual OUString SAL_CALL getVersion() override;
+    virtual OUString SAL_CALL getURL() override;
+    virtual OUString SAL_CALL getDisplayName() override;
+    virtual OUString SAL_CALL getDescription() override;
+    virtual OUString SAL_CALL getLicenseText() override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-    getUpdateInformationURLs()
-        throw (css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual css::beans::StringPair SAL_CALL getPublisherInfo()
-        throw (css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
+    getUpdateInformationURLs() override;
+    virtual css::beans::StringPair SAL_CALL getPublisherInfo() override;
     virtual css::uno::Reference< css::graphic::XGraphic > SAL_CALL
-    getIcon( sal_Bool bHighContrast )
-        throw (css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
+    getIcon( sal_Bool bHighContrast ) override;
     virtual css::uno::Reference<css::deployment::XPackageTypeInfo> SAL_CALL
-    getPackageType() throw (css::uno::RuntimeException, std::exception) override;
+    getPackageType() override;
     virtual void SAL_CALL exportTo(
         OUString const & destFolderURL,
         OUString const & newTitle,
         sal_Int32 nameClashAction,
-        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
-        throw (css::deployment::ExtensionRemovedException,
-               css::ucb::CommandFailedException, css::ucb::CommandAbortedException,
-               css::ucb::ContentCreationException, css::uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getRepositoryName()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::beans::Optional< OUString > SAL_CALL getRegistrationDataURL()
-        throw (css::deployment::DeploymentException,
-               css::deployment::ExtensionRemovedException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isRemoved()
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv ) override;
+    virtual OUString SAL_CALL getRepositoryName() override;
+    virtual css::beans::Optional< OUString > SAL_CALL getRegistrationDataURL() override;
+    virtual sal_Bool SAL_CALL isRemoved() override;
 
 };
 
@@ -276,8 +207,7 @@ class PackageRegistryBackend
     //of bindPackage calls which are costly. Therefore we keep hard references in
     //the map now.
     typedef std::unordered_map<
-        OUString, css::uno::Reference<css::deployment::XPackage>,
-        OUStringHash > t_string2ref;
+        OUString, css::uno::Reference<css::deployment::XPackage> > t_string2ref;
     t_string2ref m_bound;
 
 protected:
@@ -286,17 +216,12 @@ protected:
 
     OUString m_context;
     // currently only for library containers:
-    enum {
-        CONTEXT_UNKNOWN,
-        CONTEXT_USER, CONTEXT_SHARED,CONTEXT_BUNDLED, CONTEXT_TMP,
-        CONTEXT_DOCUMENT
+    enum class Context {
+        Unknown, User, Shared, Bundled, Tmp, Document
     } m_eContext;
-    bool m_readOnly;
 
-    struct StrCannotDetectMediaType : public ::dp_misc::StaticResourceString<
-        StrCannotDetectMediaType, RID_STR_CANNOT_DETECT_MEDIA_TYPE> {};
-    struct StrUnsupportedMediaType : public ::dp_misc::StaticResourceString<
-        StrUnsupportedMediaType, RID_STR_UNSUPPORTED_MEDIA_TYPE> {};
+    static OUString StrCannotDetectMediaType() { return DpResId(RID_STR_CANNOT_DETECT_MEDIA_TYPE); }
+    static OUString StrUnsupportedMediaType() { return DpResId(RID_STR_UNSUPPORTED_MEDIA_TYPE); }
 
     // @@@ to be implemented by specific backend:
     virtual css::uno::Reference<css::deployment::XPackage> bindPackage_(
@@ -308,7 +233,7 @@ protected:
     void check();
     virtual void SAL_CALL disposing() override;
 
-    virtual ~PackageRegistryBackend();
+    virtual ~PackageRegistryBackend() override;
     PackageRegistryBackend(
         css::uno::Sequence<css::uno::Any> const & args,
         css::uno::Reference<css::uno::XComponentContext> const & xContext );
@@ -318,7 +243,6 @@ protected:
        at a location relative to that folder specified by url.
     */
     OUString createFolder(
-        OUString const & relUrl,
         css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv);
     /* deletes folders and files.
 
@@ -326,8 +250,7 @@ protected:
        not used are deleted.
      */
     void deleteUnusedFolders(
-        OUString const & relUrl,
-        ::std::list< OUString> const & usedFolders);
+        std::vector< OUString> const & usedFolders);
     /* deletes one folder with a "temporary" name and the corresponding
        tmp file, which was used to derive the folder name.
     */
@@ -335,32 +258,25 @@ protected:
         OUString const & folderUrl);
 
 public:
-    struct StrRegisteringPackage : public ::dp_misc::StaticResourceString<
-        StrRegisteringPackage, RID_STR_REGISTERING_PACKAGE> {};
-    struct StrRevokingPackage : public ::dp_misc::StaticResourceString<
-        StrRevokingPackage, RID_STR_REVOKING_PACKAGE> {};
+    static OUString StrRegisteringPackage() { return DpResId(RID_STR_REGISTERING_PACKAGE); }
+    static OUString StrRevokingPackage() { return DpResId(RID_STR_REVOKING_PACKAGE); }
 
-    inline css::uno::Reference<css::uno::XComponentContext> const &
+    css::uno::Reference<css::uno::XComponentContext> const &
     getComponentContext() const { return m_xComponentContext; }
 
-    inline OUString const & getCachePath() const { return m_cachePath; }
-    inline bool transientMode() const { return m_cachePath.isEmpty(); }
+    OUString const & getCachePath() const { return m_cachePath; }
+    bool transientMode() const { return m_cachePath.isEmpty(); }
 
-    inline OUString getContext() const {return m_context; }
+    const OUString& getContext() const {return m_context; }
 
     // XEventListener
-    virtual void SAL_CALL disposing( css::lang::EventObject const & evt )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( css::lang::EventObject const & evt ) override;
 
     // XPackageRegistry
     virtual css::uno::Reference<css::deployment::XPackage> SAL_CALL bindPackage(
         OUString const & url, OUString const & mediaType,
         sal_Bool bRemoved, OUString const & identifier,
-        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv )
-        throw (css::deployment::DeploymentException,
-               css::deployment::InvalidRemovedParameterException,
-               css::ucb::CommandFailedException,
-               css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+        css::uno::Reference<css::ucb::XCommandEnvironment> const & xCmdEnv ) override;
 
 //     virtual void SAL_CALL packageRemoved(
 //         OUString const & url, OUString const & mediaType)

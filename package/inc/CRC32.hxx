@@ -25,24 +25,23 @@
 namespace com { namespace sun { namespace star {
     namespace io { class XInputStream; }
 } } }
-class CRC32
+class CRC32 final
 {
-protected:
     sal_uInt32 nCRC;
 public:
     CRC32();
     ~CRC32();
 
-    sal_Int64 SAL_CALL updateStream (css::uno::Reference < css::io::XInputStream > & xStream)
-        throw(css::uno::RuntimeException);
-    void SAL_CALL updateSegment(const css::uno::Sequence< sal_Int8 > &b, sal_Int32 len)
-        throw(css::uno::RuntimeException);
-    void SAL_CALL update(const css::uno::Sequence< sal_Int8 > &b)
-        throw(css::uno::RuntimeException);
-    sal_Int32 SAL_CALL getValue()
-        throw(css::uno::RuntimeException);
-    void SAL_CALL reset()
-        throw(css::uno::RuntimeException);
+    /// @throws css::uno::RuntimeException
+    sal_Int64 updateStream (css::uno::Reference < css::io::XInputStream > const & xStream);
+    /// @throws css::uno::RuntimeException
+    void updateSegment(const css::uno::Sequence< sal_Int8 > &b, sal_Int32 len);
+    /// @throws css::uno::RuntimeException
+    void update(const css::uno::Sequence< sal_Int8 > &b);
+    /// @throws css::uno::RuntimeException
+    sal_Int32 getValue();
+    /// @throws css::uno::RuntimeException
+    void reset();
 };
 
 #endif

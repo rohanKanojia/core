@@ -25,13 +25,23 @@
 
 #include "sal/config.h"
 
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <idlc/idlc.hxx>
-#include <idlc/errorhandler.hxx>
-#include <idlc/fehelper.hxx>
+#include <rtl/character.hxx>
+
+#if defined _MSC_VER
+#pragma warning ( push )
+// Silence warnings about redefinition of INT8_MIN etc in stdint.h
+// The flex-generated workdir/LexTarget/idlc/source/scanner.cxx defines them prior to these includes
+#pragma warning ( disable : 4005 )
+#endif
+#include <idlc.hxx>
+#if defined _MSC_VER
+#pragma warning ( pop )
+#endif
+#include <errorhandler.hxx>
+#include <fehelper.hxx>
 
 #include "attributeexceptions.hxx"
 
@@ -48,7 +58,7 @@ int yycolumn = 1;
     yycolumn += yyleng;
 
 sal_Int32		beginLine = 0;
-::rtl::OString	docu;
+OString	docu;
 
 static int asciiToInteger(char const * s, sal_Int64  * sval, sal_uInt64 * uval) {
     bool neg = false;
@@ -192,12 +202,12 @@ static double asciiToFloat(const sal_Char *s)
 
 static void	idlParsePragma(sal_Char* pPragma)
 {
-	::rtl::OString pragma(pPragma);
+	OString pragma(pPragma);
 	sal_Int32 index = pragma.indexOf("include");
 	sal_Char* begin = pPragma + index + 8;
 	sal_Char* offset = begin;
 	while (*offset != ',') offset++;
-	//::rtl::OString include = pragma.copy(index + 8, offset - begin);
+	//OString include = pragma.copy(index + 8, offset - begin);
 	//unused// idlc()->insertInclude(pragma.copy(index + 8, (sal_Int32)(offset - begin)));
 }	
 
@@ -212,7 +222,7 @@ static void parseLineAndFile(sal_Char* pBuf)
 		return;
 
 	/* Find line number */
-	for (r++; *r == ' ' || *r == '\t' || isalpha(*r); r++) ;
+	for (r++; *r == ' ' || *r == '\t' || rtl::isAsciiAlpha(static_cast<unsigned char>(*r)); r++) ;
 	h = r;
 	for (; *r != '\0' && *r != ' ' && *r != '\t'; r++) ;
 	*r++ = 0;
@@ -229,9 +239,9 @@ static void parseLineAndFile(sal_Char* pBuf)
 	for (; *r != '"'; r++) ;
 	*r = 0;
 	if (*h == '\0')
-		idlc()->setFileName(::rtl::OString("standard input"));
+		idlc()->setFileName(OString("standard input"));
 	else
-		idlc()->setFileName(::rtl::OString(h));
+		idlc()->setFileName(OString(h));
 
 	bIsInMain = idlc()->getFileName() == idlc()->getRealFileName();
 	idlc()->setInMainfile(bIsInMain);		
@@ -242,7 +252,6 @@ static void parseLineAndFile(sal_Char* pBuf)
 #pragma GCC diagnostic ignored "-Wunused-function"
 #pragma GCC diagnostic ignored "-Wunused-label"
 #elif defined _MSC_VER
-#pragma warning(push, 1)
 /**/
 #ifdef yywrap
 #undef  yywrap
@@ -355,7 +364,7 @@ published       return IDL_PUBLISHED;
             }
 
 {IDENTIFIER}	{
-				yylval.sval = new ::rtl::OString(yytext);
+				yylval.sval = new OString(yytext);
 				return IDL_IDENTIFIER;
 			}
 
@@ -374,26 +383,26 @@ published       return IDL_PUBLISHED;
 
 "/*"	{ 
 			BEGIN( COMMENT );
-			docu = ::rtl::OString();
+			docu = OString();
 			beginLine = idlc()->getLineNumber();
 		}
 
 "/***"	{ 
 			BEGIN( COMMENT );
-			docu = ::rtl::OString();
+			docu = OString();
 			beginLine = idlc()->getLineNumber();
 		}
 
 <COMMENT>[^*]+	{
-				docu += ::rtl::OString(yytext);
+				docu += OString(yytext);
 			} 
 
 <COMMENT>"*"[^*/]+ 	{
-				docu += ::rtl::OString(yytext);
+				docu += OString(yytext);
 			}
 
 <COMMENT>"**" 	{
-				docu += ::rtl::OString(yytext);
+				docu += OString(yytext);
 			}
 
 <COMMENT>[*]+"/"  {
@@ -407,26 +416,26 @@ published       return IDL_PUBLISHED;
 
 "/**"	{
 			BEGIN( DOCU );
-			docu = ::rtl::OString();
+			docu = OString();
 			beginLine = idlc()->getLineNumber();
 		}
 
 <DOCU>[^*\n]+	{
-				docu += ::rtl::OString(yytext);
+				docu += OString(yytext);
 			}
 
 <DOCU>"\n"[ \t]*"*"{1} 	{
 				idlc()->setLineNumber( idlc()->getLineNumber()  + 1);
-				docu += ::rtl::OString("\n");
+				docu += OString("\n");
 			}
 
 <DOCU>"\n"	{
 				idlc()->setLineNumber( idlc()->getLineNumber()  + 1);
-				docu += ::rtl::OString(yytext);
+				docu += OString(yytext);
 			}
 
 <DOCU>"*"[^*^/\n]* 	{
-				docu += ::rtl::OString(yytext);
+				docu += OString(yytext);
 			}
 
 <DOCU>"\n"[ \t]*"*/" 	{
@@ -438,7 +447,7 @@ published       return IDL_PUBLISHED;
 				if ( (nIndex = docu.indexOf("/*")) >= 0 || (nIndex = docu.indexOf("///")) >= 0 )
 				{
                     if ( 0 != nIndex &&
-                         (docu.getStr()[nIndex - 1] != '"' && docu.getStr()[nIndex - 1] != ':') )
+                         (docu[nIndex - 1] != '"' && docu[nIndex - 1] != ':') )
                         ErrorHandler::syntaxError(PS_NoState, idlc()->getLineNumber(),
                                                      "nested documentation strings are not allowed!");
 				}
@@ -455,7 +464,7 @@ published       return IDL_PUBLISHED;
 				if ( docu.indexOf("/*") >= 0 || docu.indexOf("//") >= 0 )
 				{
                     if ( 0 != nIndex &&
-                         (docu.getStr()[nIndex - 1] != '"' && docu.getStr()[nIndex - 1] != ':') )
+                         (docu[nIndex - 1] != '"' && docu[nIndex - 1] != ':') )
                         ErrorHandler::syntaxError(PS_NoState, idlc()->getLineNumber(),
                                                      "nested documentation strings are not allowed!");
 				}
@@ -465,7 +474,7 @@ published       return IDL_PUBLISHED;
 
 "//"[^/]{1}.*"\n" {
 				/* only a comment */
-				::rtl::OString docStr(yytext);
+				OString docStr(yytext);
 				docStr = docStr.copy( 0, docStr.lastIndexOf('\n') );
 				docStr = docStr.copy( docStr.lastIndexOf('/')+1 );
 				docStr = docStr.trim();
@@ -473,7 +482,7 @@ published       return IDL_PUBLISHED;
 			}
 
 "///".*"\n"  {
-				::rtl::OString docStr(yytext);
+				OString docStr(yytext);
 				docStr = docStr.copy( 0, docStr.lastIndexOf('\n') );
 				docStr = docStr.copy( docStr.lastIndexOf('/')+1 );
 				docStr = docStr.trim();

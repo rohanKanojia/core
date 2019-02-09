@@ -61,7 +61,6 @@ protected:
 public:
 
     Collection() {}
-    virtual ~Collection() {}
 
     const T& getItem( sal_Int32 n ) const
     {
@@ -145,105 +144,79 @@ protected:
 public:
 
     // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType()
-        throw( css::uno::RuntimeException, std::exception ) override
+    virtual css::uno::Type SAL_CALL getElementType() override
     {
         return cppu::UnoType<T>::get();
     }
 
-    virtual sal_Bool SAL_CALL hasElements()
-        throw( css::uno::RuntimeException, std::exception ) override
+    virtual sal_Bool SAL_CALL hasElements() override
     {
         return hasItems();
     }
 
     // XIndexAccess : XElementAccess
-    virtual sal_Int32 SAL_CALL getCount()
-        throw( css::uno::RuntimeException, std::exception ) override
+    virtual sal_Int32 SAL_CALL getCount() override
     {
         return countItems();
     }
 
-    virtual css::uno::Any SAL_CALL getByIndex( sal_Int32 nIndex )
-        throw( css::lang::IndexOutOfBoundsException,
-               css::lang::WrappedTargetException,
-               css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Any SAL_CALL getByIndex( sal_Int32 nIndex ) override
     {
-        if( isValidIndex( nIndex ) )
-            return css::uno::makeAny( getItem( nIndex ) );
-        else
+        if( !isValidIndex( nIndex ) )
             throw css::lang::IndexOutOfBoundsException();
+        return css::uno::makeAny( getItem( nIndex ) );
     }
 
     // XIndexReplace : XIndexAccess
     virtual void SAL_CALL replaceByIndex( sal_Int32 nIndex,
-                                          const css::uno::Any& aElement )
-        throw( css::lang::IllegalArgumentException,
-               css::lang::IndexOutOfBoundsException,
-               css::lang::WrappedTargetException,
-               css::uno::RuntimeException, std::exception) override
+                                          const css::uno::Any& aElement ) override
     {
         T t;
-        if( isValidIndex( nIndex) )
-            if( ( aElement >>= t )  &&  isValid( t ) )
-                setItem( nIndex, t );
-            else
-                throw css::lang::IllegalArgumentException();
-        else
+        if( !isValidIndex( nIndex) )
             throw css::lang::IndexOutOfBoundsException();
+        if( !( aElement >>= t ) || !isValid( t ) )
+            throw css::lang::IllegalArgumentException();
+        setItem( nIndex, t );
     }
 
     // XEnumerationAccess : XElementAccess
-    virtual css::uno::Reference<css::container::XEnumeration> SAL_CALL createEnumeration()
-        throw( css::uno::RuntimeException, std::exception ) override
+    virtual css::uno::Reference<css::container::XEnumeration> SAL_CALL createEnumeration() override
     {
         return new Enumeration( this );
     }
 
 
     // XSet : XEnumerationAccess
-    virtual sal_Bool SAL_CALL has( const css::uno::Any& aElement )
-        throw( css::uno::RuntimeException, std::exception ) override
+    virtual sal_Bool SAL_CALL has( const css::uno::Any& aElement ) override
     {
         T t;
-        return ( aElement >>= t ) ? hasItem( t ) : sal_False;
+        return ( aElement >>= t ) && hasItem( t );
     }
 
-    virtual void SAL_CALL insert( const css::uno::Any& aElement )
-        throw( css::lang::IllegalArgumentException,
-               css::container::ElementExistException,
-               css::uno::RuntimeException, std::exception ) override
+    virtual void SAL_CALL insert( const css::uno::Any& aElement ) override
     {
         T t;
-        if( ( aElement >>= t )  &&  isValid( t ) )
-            if( ! hasItem( t ) )
-                addItem( t );
-            else
-                throw css::container::ElementExistException();
-        else
+        if( !( aElement >>= t )  || !isValid( t ) )
             throw css::lang::IllegalArgumentException();
+        if( hasItem( t ) )
+            throw css::container::ElementExistException();
+        addItem( t );
     }
 
-    virtual void SAL_CALL remove( const css::uno::Any& aElement )
-        throw( css::lang::IllegalArgumentException,
-               css::container::NoSuchElementException,
-               css::uno::RuntimeException, std::exception ) override
+    virtual void SAL_CALL remove( const css::uno::Any& aElement ) override
     {
         T t;
-        if( aElement >>= t )
-            if( hasItem( t ) )
-                removeItem( t );
-            else
-                throw css::container::NoSuchElementException();
-        else
+        if( !(aElement >>= t) )
             throw css::lang::IllegalArgumentException();
+        if( !hasItem( t ) )
+            throw css::container::NoSuchElementException();
+        removeItem( t );
     }
 
 
     // XContainer
     virtual void SAL_CALL addContainerListener(
-        const css::uno::Reference<css::container::XContainerListener>& xListener )
-        throw( css::uno::RuntimeException, std::exception ) override
+        const css::uno::Reference<css::container::XContainerListener>& xListener ) override
     {
         OSL_ENSURE( xListener.is(), "need listener!" );
         if( std::find( maListeners.begin(), maListeners.end(), xListener)
@@ -252,8 +225,7 @@ public:
     }
 
     virtual void SAL_CALL removeContainerListener(
-        const css::uno::Reference<css::container::XContainerListener>& xListener )
-        throw( css::uno::RuntimeException, std::exception ) override
+        const css::uno::Reference<css::container::XContainerListener>& xListener ) override
     {
         OSL_ENSURE( xListener.is(), "need listener!" );
         Listeners_t::iterator aIter =
@@ -273,11 +245,9 @@ protected:
             css::uno::makeAny( nPos ),
             css::uno::makeAny( getItem( nPos ) ),
             css::uno::Any() );
-        for( Listeners_t::iterator aIter = maListeners.begin();
-             aIter != maListeners.end();
-             ++aIter )
+        for (auto const& listener : maListeners)
         {
-            (*aIter)->elementInserted( aEvent );
+            listener->elementInserted( aEvent );
         }
     }
 
@@ -288,11 +258,9 @@ protected:
             css::uno::Any(),
             css::uno::makeAny( aOld ),
             css::uno::Any() );
-        for( Listeners_t::iterator aIter = maListeners.begin();
-             aIter != maListeners.end();
-             ++aIter )
+        for (auto const& listener : maListeners)
         {
-            (*aIter)->elementRemoved( aEvent );
+            listener->elementRemoved( aEvent );
         }
     }
 
@@ -304,11 +272,9 @@ protected:
             css::uno::makeAny( nPos ),
             css::uno::makeAny( getItem( nPos ) ),
             css::uno::makeAny( aNew ) );
-        for( Listeners_t::iterator aIter = maListeners.begin();
-             aIter != maListeners.end();
-             ++aIter )
+        for (auto const& listener : maListeners)
         {
-            (*aIter)->elementReplaced( aEvent );
+            listener->elementReplaced( aEvent );
         }
     }
 

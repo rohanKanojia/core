@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
+#include <vcl/event.hxx>
 #include <vcl/status.hxx>
 #include <vcl/prgsbar.hxx>
 #include <vcl/settings.hxx>
+#include <sal/log.hxx>
 
 #define PROGRESSBAR_OFFSET          3
 #define PROGRESSBAR_WIN_OFFSET      2
@@ -34,12 +35,12 @@ void ProgressBar::ImplInit()
     ImplInitSettings( true, true, true );
 }
 
-static WinBits clearProgressBarBorder( vcl::Window* pParent, WinBits nOrgStyle )
+static WinBits clearProgressBarBorder( vcl::Window const * pParent, WinBits nOrgStyle )
 {
     WinBits nOutStyle = nOrgStyle;
     if( pParent && (nOrgStyle & WB_BORDER) != 0 )
     {
-        if( pParent->IsNativeControlSupported( CTRL_PROGRESS, PART_ENTIRE_CONTROL ) )
+        if( pParent->IsNativeControlSupported( ControlType::Progress, ControlPart::Entire ) )
             nOutStyle &= WB_BORDER;
     }
     return nOutStyle;
@@ -76,9 +77,9 @@ void ProgressBar::ImplInitSettings( bool bFont,
     if ( bBackground )
     {
         if( !IsControlBackground() &&
-            IsNativeControlSupported( CTRL_PROGRESS, PART_ENTIRE_CONTROL ) )
+            IsNativeControlSupported( ControlType::Progress, ControlPart::Entire ) )
         {
-            if( (GetStyle() & WB_BORDER) )
+            if( GetStyle() & WB_BORDER )
                 SetBorderStyle( WindowBorderStyle::REMOVEBORDER );
             EnableChildTransparentMode();
             SetPaintTransparent( true );
@@ -126,9 +127,9 @@ void ProgressBar::ImplDrawProgress(vcl::RenderContext& rRenderContext, sal_uInt1
         Size aSize(GetOutputSizePixel());
         mnPrgsHeight = aSize.Height() - (PROGRESSBAR_WIN_OFFSET * 2);
         mnPrgsWidth = (mnPrgsHeight * 2) / 3;
-        maPos.Y() = PROGRESSBAR_WIN_OFFSET;
-        long nMaxWidth = (aSize.Width() - (PROGRESSBAR_WIN_OFFSET * 2) + PROGRESSBAR_OFFSET);
-        sal_uInt16 nMaxCount = (sal_uInt16)(nMaxWidth / (mnPrgsWidth+PROGRESSBAR_OFFSET));
+        maPos.setY( PROGRESSBAR_WIN_OFFSET );
+        long nMaxWidth = aSize.Width() - (PROGRESSBAR_WIN_OFFSET * 2) + PROGRESSBAR_OFFSET;
+        sal_uInt16 nMaxCount = static_cast<sal_uInt16>(nMaxWidth / (mnPrgsWidth+PROGRESSBAR_OFFSET));
         if (nMaxCount <= 1)
         {
             nMaxCount = 1;
@@ -142,15 +143,15 @@ void ProgressBar::ImplDrawProgress(vcl::RenderContext& rRenderContext, sal_uInt1
         }
         mnPercentCount = 10000 / nMaxCount;
         nMaxWidth = ((10000 / (10000 / nMaxCount)) * (mnPrgsWidth + PROGRESSBAR_OFFSET)) - PROGRESSBAR_OFFSET;
-        maPos.X() = (aSize.Width() - nMaxWidth) / 2;
+        maPos.setX( (aSize.Width() - nMaxWidth) / 2 );
     }
 
     ::DrawProgress(this, rRenderContext, maPos, PROGRESSBAR_OFFSET, mnPrgsWidth, mnPrgsHeight,
                    nOldPerc * 100, nNewPerc * 100, mnPercentCount,
-                   Rectangle(Point(), GetSizePixel()));
+                   tools::Rectangle(Point(), GetSizePixel()));
 }
 
-void ProgressBar::Paint(vcl::RenderContext& rRenderContext, const Rectangle& /*rRect*/)
+void ProgressBar::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& /*rRect*/)
 {
     ImplDrawProgress(rRenderContext, mnPreviousPercent, mnPercent);
 }

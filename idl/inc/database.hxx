@@ -20,11 +20,10 @@
 #ifndef INCLUDED_IDL_INC_DATABASE_HXX
 #define INCLUDED_IDL_INC_DATABASE_HXX
 
-#include <module.hxx>
-#include <hash.hxx>
-#include <lex.hxx>
+#include "module.hxx"
+#include "hash.hxx"
+#include "lex.hxx"
 #include <rtl/string.hxx>
-#include <tools/pstm.hxx>
 
 #include <rtl/ustring.hxx>
 #include <set>
@@ -45,21 +44,14 @@ public:
     const OString&  GetText() const { return aText; }
     void            SetText( const OString& rT ) { aText = rT; }
     bool            IsError() const { return nLine != 0; }
-    SvIdlError &    operator = ( const SvIdlError & rRef )
-                    {
-                        aText   = rRef.aText;
-                        nLine   = rRef.nLine;
-                        nColumn = rRef.nColumn;
-                        return *this;
-                    }
 };
 
 class SvParseException : public std::exception
 {
 public:
     SvIdlError aError;
-    SvParseException( SvTokenStream & rInStm, const OString& rError );
-    SvParseException( const OString& rError, SvToken& rTok );
+    SvParseException( SvTokenStream const & rInStm, const OString& rError );
+    SvParseException( const OString& rError, SvToken const & rTok );
 };
 
 
@@ -70,8 +62,8 @@ class SvIdlDataBase
     OUString                    aExportFile;
     sal_uInt32                  nUniqueId;
     sal_uInt32                  nVerbosity;
-    StringList                  aIdFileList;
-    SvStringHashTable *         pIdTable;
+    std::vector<OUString>       aIdFileList;
+    std::unique_ptr<SvStringHashTable> pIdTable;
 
     SvRefMemberList<SvMetaType *>      aTypeList;
     SvRefMemberList<SvMetaClass *>     aClassList;
@@ -86,7 +78,6 @@ protected:
     void WriteReset()
     {
         aUsedTypes.clear();
-        aIFaceName.clear();
     }
 public:
     OUString sSlotMapFile;
@@ -94,14 +85,12 @@ public:
                 explicit SvIdlDataBase( const SvCommand& rCmd );
                 ~SvIdlDataBase();
 
-    SvRefMemberList<SvMetaSlot *>&     GetSlotList() { return aSlotList; }
     SvRefMemberList<SvMetaType *>&     GetTypeList();
     SvRefMemberList<SvMetaClass *>&    GetClassList()  { return aClassList; }
     SvRefMemberList<SvMetaModule *>&   GetModuleList() { return aModuleList; }
 
     // list of used types while writing
     SvRefMemberList<SvMetaType *>    aUsedTypes;
-    OString                          aIFaceName;
 
     void                    StartNewFile( const OUString& rName );
     void                    SetExportFile( const OUString& rName )
@@ -115,14 +104,14 @@ public:
     void                    SetPath(const OUString &s) { aPath = s; }
     SvRefMemberList<SvMetaObject *>& GetStack() { return aContextStack; }
 
-    void                    Write(const OString& rText);
+    void                    Write(const OString& rText) const;
     void                    WriteError( SvTokenStream & rInStm );
-    void                    SetError( const OString& rError, SvToken& rTok );
+    void                    SetError( const OString& rError, SvToken const & rTok );
     void                    SetAndWriteError( SvTokenStream & rInStm, const OString& rError );
     void                    Push( SvMetaObject * pObj );
     sal_uInt32              GetUniqueId() { return ++nUniqueId; }
     bool                    FindId( const OString& rIdName, sal_uLong * pVal );
-    bool                    InsertId( const OString& rIdName, sal_uLong nVal );
+    void                    InsertId( const OString& rIdName, sal_uLong nVal );
     bool                    ReadIdFile( const OString& rFileName );
 
     SvMetaType *            FindType( const OString& rName );
@@ -130,7 +119,7 @@ public:
 
     SvMetaType *            ReadKnownType( SvTokenStream & rInStm );
     SvMetaAttribute *       ReadKnownAttr( SvTokenStream & rInStm,
-                                            SvMetaType * pType = nullptr );
+                                            SvMetaType * pType );
     SvMetaAttribute *       FindKnownAttr( const SvIdentifier& );
     SvMetaClass *           ReadKnownClass( SvTokenStream & rInStm );
     SvMetaClass *           FindKnownClass( const OString& aName );

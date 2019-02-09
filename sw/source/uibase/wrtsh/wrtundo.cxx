@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/resid.hxx>
 #include <sfx2/app.hxx>
 #include <svl/slstitm.hxx>
 #include <wrtsh.hxx>
@@ -25,9 +24,8 @@
 #include <IDocumentUndoRedo.hxx>
 #include <swdtflvr.hxx>
 #include <svtools/svtresid.hxx>
-#include <svtools/svtools.hrc>
-#include <wrtsh.hrc>
-#include <sfx2/sfx.hrc>
+#include <svtools/strings.hrc>
+#include <vcl/mnemonic.hxx>
 
 // Undo ends all modes. If a selection is emerged by the Undo,
 // this must be considered for further action.
@@ -97,21 +95,21 @@ void SwWrtShell::Do( DoType eDoType, sal_uInt16 nCnt )
 OUString SwWrtShell::GetDoString( DoType eDoType ) const
 {
     OUString aUndoStr;
-    sal_uInt16 nResStr = STR_UNDO;
+    const char* pResStr = STR_UNDO;
     switch( eDoType )
     {
     case UNDO:
-        nResStr = STR_UNDO;
-        (void)GetLastUndoInfo(&aUndoStr, nullptr);
+        pResStr = STR_UNDO;
+        (void)GetLastUndoInfo(&aUndoStr, nullptr, &m_rView);
         break;
     case REDO:
-        nResStr = STR_REDO;
-        (void)GetFirstRedoInfo(&aUndoStr);
+        pResStr = STR_REDO;
+        (void)GetFirstRedoInfo(&aUndoStr, nullptr, &m_rView);
         break;
     default:;//prevent warning
     }
 
-    return  SvtResId( nResStr ).toString() + aUndoStr;
+    return MnemonicGenerator::EraseAllMnemonicChars(SvtResId(pResStr)) + aUndoStr;
 }
 
 void SwWrtShell::GetDoStrings( DoType eDoType, SfxStringListItem& rStrs ) const
@@ -128,13 +126,13 @@ void SwWrtShell::GetDoStrings( DoType eDoType, SfxStringListItem& rStrs ) const
     default:;//prevent warning
     }
 
-    OUString buf;
-    for (size_t i = 0; i < comments.size(); ++i)
+    OUStringBuffer buf;
+    for (const OUString & comment : comments)
     {
-        OSL_ENSURE(!comments[i].isEmpty(), "no Undo/Redo Text set");
-        buf += comments[i] + "\n";
+        OSL_ENSURE(!comment.isEmpty(), "no Undo/Redo Text set");
+        buf.append(comment).append("\n");
     }
-    rStrs.SetString(buf);
+    rStrs.SetString(buf.makeStringAndClear());
 }
 
 OUString SwWrtShell::GetRepeatString() const
@@ -147,7 +145,7 @@ OUString SwWrtShell::GetRepeatString() const
         return str;
     }
 
-    return SvtResId(STR_REPEAT).toString() + str;
+    return SvtResId(STR_REPEAT) + str;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

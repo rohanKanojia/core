@@ -17,46 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/msgbox.hxx>
+#include <vcl/svapp.hxx>
 
-#include "ids.hrc"
+#include <ids.hxx>
 #include "sslwarndlg.hxx"
 
-#include <comphelper/processfactory.hxx>
 #include <com/sun/star/security/DocumentDigitalSignatures.hpp>
 
 using namespace css;
 
-void SSLWarnDialog::ViewCert()
+IMPL_LINK_NOARG(SSLWarnDialog, ViewCertHdl, weld::Button&, void)
 {
     uno::Reference< css::security::XDocumentDigitalSignatures > xDocumentDigitalSignatures;
 
     xDocumentDigitalSignatures = css::security::DocumentDigitalSignatures::createDefault( m_xContext );
 
-    xDocumentDigitalSignatures.get()->showCertificate(getCert());
+    xDocumentDigitalSignatures.get()->showCertificate(m_rXCert);
 }
 
-
-SSLWarnDialog::SSLWarnDialog(vcl::Window* pParent,
+SSLWarnDialog::SSLWarnDialog(weld::Window* pParent,
     const css::uno::Reference< css::security::XCertificate >& rXCert,
     const css::uno::Reference< css::uno::XComponentContext >& xContext)
-    : MessageDialog(pParent, "SSLWarnDialog", "uui/ui/sslwarndialog.ui")
+    : MessageDialogController(pParent, "uui/ui/sslwarndialog.ui", "SSLWarnDialog")
+    , m_xView(m_xBuilder->weld_button("view"))
     , m_xContext(xContext)
     , m_rXCert(rXCert)
 {
-}
-
-void SSLWarnDialog::response(short nResponseId)
-{
-    switch (nResponseId)
-    {
-        case -1:
-            ViewCert();
-            break;
-        default:
-            MessageDialog::response(nResponseId);
-            break;
-    }
+    m_xView->connect_clicked(LINK(this, SSLWarnDialog, ViewCertHdl));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

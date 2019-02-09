@@ -59,7 +59,7 @@ namespace dbaxml
                 const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
                 SvXMLStylesContext& rStyles, sal_uInt16 nFamily );
 
-        virtual ~OTableStyleContext();
+        virtual ~OTableStyleContext() override;
 
         virtual void FillPropertySet(const css::uno::Reference<
                     css::beans::XPropertySet > & rPropSet ) override;
@@ -71,9 +71,6 @@ namespace dbaxml
 
     class OTableStylesContext : public SvXMLStylesContext
     {
-        const OUString sTableStyleServiceName;
-        const OUString sColumnStyleServiceName;
-        const OUString sCellStyleServiceName;
         sal_Int32 m_nNumberFormatIndex;
         sal_Int32 m_nMasterPageNameIndex;
         bool bAutoStyles : 1;
@@ -100,7 +97,7 @@ namespace dbaxml
                 const OUString& rLName ,
                 const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
                 const bool bAutoStyles );
-        virtual ~OTableStylesContext();
+        virtual ~OTableStylesContext() override;
 
         virtual void EndElement() override;
 

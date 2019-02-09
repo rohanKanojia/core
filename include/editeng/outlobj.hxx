@@ -23,10 +23,12 @@
 #include <editeng/paragraphdata.hxx>
 #include <editeng/editengdllapi.h>
 #include <rtl/ustring.hxx>
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 #include <o3tl/cow_wrapper.hxx>
+#include <memory>
 
 class EditTextObject;
+enum class OutlinerMode;
 
 /**
  * This is the guts of OutlinerParaObject, refcounted and shared among
@@ -35,14 +37,17 @@ class EditTextObject;
 struct OutlinerParaObjData
 {
     // data members
-    EditTextObject*                 mpEditTextObject;
-    ParagraphDataVector             maParagraphDataVector;
-    bool                            mbIsEditDoc;
+    std::unique_ptr<EditTextObject>  mpEditTextObject;
+    ParagraphDataVector              maParagraphDataVector;
+    bool                             mbIsEditDoc;
 
-    // constuctor
-    OutlinerParaObjData( EditTextObject* pEditTextObject, const ParagraphDataVector& rParagraphDataVector, bool bIsEditDoc );
+    // constructor
+    OutlinerParaObjData( std::unique_ptr<EditTextObject> pEditTextObject, const ParagraphDataVector& rParagraphDataVector, bool bIsEditDoc );
 
     OutlinerParaObjData( const OutlinerParaObjData& r );
+
+    // assignment operator
+    OutlinerParaObjData& operator=(const OutlinerParaObjData& rCandidate) = delete;
 
     // destructor
     ~OutlinerParaObjData();
@@ -59,8 +64,9 @@ class EDITENG_DLLPUBLIC OutlinerParaObject
 
 public:
     // constructors/destructor
-    OutlinerParaObject( const EditTextObject&, const ParagraphDataVector&, bool bIsEditDoc = true);
+    OutlinerParaObject( const EditTextObject&, const ParagraphDataVector&, bool bIsEditDoc);
     OutlinerParaObject( const EditTextObject&);
+    OutlinerParaObject( std::unique_ptr<EditTextObject> );
     OutlinerParaObject( const OutlinerParaObject&);
     ~OutlinerParaObject();
 
@@ -74,18 +80,18 @@ public:
     bool isWrongListEqual(const OutlinerParaObject& rCompare) const;
 
     // outliner mode access
-    sal_uInt16 GetOutlinerMode() const;
-    void SetOutlinerMode(sal_uInt16 nNew);
+    OutlinerMode GetOutlinerMode() const;
+    void SetOutlinerMode(OutlinerMode nNew);
 
     // vertical access
     bool IsVertical() const;
-    void SetVertical(bool bNew);
+    bool IsTopToBottom() const;
+    void SetVertical(bool bNew, bool bTopToBottom = true);
 
     // data read access
     sal_Int32 Count() const;
     sal_Int16 GetDepth(sal_Int32 nPara) const;
     const EditTextObject& GetTextObject() const;
-    bool IsEditDoc() const;
     const ParagraphData& GetParagraphData(sal_Int32 nIndex) const;
 
     // portion info support

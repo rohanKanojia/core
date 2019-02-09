@@ -19,7 +19,7 @@
 This script is meant to
 	1) Identify installed instances of the product
 	2) check whether the user has write-access (and if not
-	ask for authentification)
+	ask for authentication)
 	3) install the shipped tarball
 *)
 
@@ -143,6 +143,14 @@ end if
 -- touch extensions folder to have LO register bundled dictionaries
 set tarCommand to "/usr/bin/tar -C " & quoted form of (choice as string) & " -xjf " & quoted form of sourcedir & "/tarball.tar.bz2 && touch " & quoted form of (choice as string) & "/Contents/Resources/extensions"
 try
+	(* A start of unchanged LO must take place so Gatekeeper will verify
+	   the signature prior to installing the languagepack
+	*)
+	if application choice is not running then
+		-- this will flash the startcenter once...
+		tell application choice to activate
+		tell application choice to quit
+	end if
 	do shell script tarCommand
 	
 on error errMSG number errNUM

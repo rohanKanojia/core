@@ -21,16 +21,11 @@
 #define INCLUDED_SC_SOURCE_UI_UNOOBJ_SCDETECT_HXX
 
 #include <com/sun/star/document/XExtendedFilterDetection.hpp>
-#include <com/sun/star/uno/Exception.hpp>
-#include <com/sun/star/uno/Reference.h>
 #include <cppuhelper/implbase.hxx>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/lang/XSingleServiceFactory.hpp>
-#include <cppuhelper/factory.hxx>
 
 #include <rtl/ustring.hxx>
-#include <sfx2/sfxuno.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace beans { struct PropertyValue; }
@@ -39,18 +34,17 @@ namespace com { namespace sun { namespace star {
 class ScFilterDetect : public ::cppu::WeakImplHelper< css::document::XExtendedFilterDetection, css::lang::XServiceInfo >
 {
 public:
-    explicit ScFilterDetect( const css::uno::Reference<css::uno::XComponentContext>& xContext );
-    virtual ~ScFilterDetect();
+    explicit ScFilterDetect();
+    virtual ~ScFilterDetect() override;
 
     /* XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName() throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& sServiceName ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& sServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XExtendedFilterDetect
 
-    virtual OUString SAL_CALL detect( css::uno::Sequence<css::beans::PropertyValue>& lDescriptor )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL detect( css::uno::Sequence<css::beans::PropertyValue>& lDescriptor ) override;
 };
 
 #endif

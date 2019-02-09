@@ -21,9 +21,10 @@
 
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <comphelper/processfactory.hxx>
-#include <cuires.hrc>
+#include <strings.hrc>
 #include <svl/filenotation.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <ucbhelper/content.hxx>
 #include <dialmgr.hxx>
 #include <tools/urlobj.hxx>
@@ -42,14 +43,13 @@ namespace svx
     ODocumentLinkDialog::ODocumentLinkDialog( vcl::Window* _pParent, bool _bCreateNew )
         : ModalDialog(_pParent, "DatabaseLinkDialog",
             "cui/ui/databaselinkdialog.ui")
-        ,m_bCreatingNew(_bCreateNew)
     {
         get(m_pURL, "url");
         get(m_pOK, "ok");
         get(m_pName, "name");
         get(m_pBrowseFile, "browse");
 
-        if (!m_bCreatingNew)
+        if (!_bCreateNew)
             SetText(get<FixedText>("alttitle")->GetText());
 
         m_pURL->SetFilter("*.odb");
@@ -103,7 +103,7 @@ namespace svx
     }
 
 
-    IMPL_LINK_NOARG_TYPED(ODocumentLinkDialog, OnOk, Button*, void)
+    IMPL_LINK_NOARG(ODocumentLinkDialog, OnOk, Button*, void)
     {
         // get the current URL
         OUString sURL = m_pURL->GetText();
@@ -124,19 +124,21 @@ namespace svx
 
         if (!bFileExists)
         {
-            OUString sMsg = CUI_RES(STR_LINKEDDOC_DOESNOTEXIST);
+            OUString sMsg = CuiResId(STR_LINKEDDOC_DOESNOTEXIST);
             sMsg = sMsg.replaceFirst("$file$", m_pURL->GetText());
-            ScopedVclPtrInstance< MessageDialog > aError(this, sMsg);
-            aError->Execute();
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                           VclMessageType::Warning, VclButtonsType::Ok, sMsg));
+            xErrorBox->run();
             return;
         } // if (!bFileExists)
         INetURLObject aURL( sURL );
         if ( aURL.GetProtocol() != INetProtocol::File )
         {
-            OUString sMsg = CUI_RES(STR_LINKEDDOC_NO_SYSTEM_FILE);
+            OUString sMsg = CuiResId(STR_LINKEDDOC_NO_SYSTEM_FILE);
             sMsg = sMsg.replaceFirst("$file$", m_pURL->GetText());
-            ScopedVclPtrInstance< MessageDialog > aError(this, sMsg);
-            aError->Execute();
+            std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                           VclMessageType::Warning, VclButtonsType::Ok, sMsg));
+            xErrorBox->run();
             return;
         }
 
@@ -145,10 +147,11 @@ namespace svx
         {
             if ( !m_aNameValidator.Call( sCurrentText ) )
             {
-                OUString sMsg = CUI_RES(STR_NAME_CONFLICT);
+                OUString sMsg = CuiResId(STR_NAME_CONFLICT);
                 sMsg = sMsg.replaceFirst("$file$", sCurrentText);
-                ScopedVclPtrInstance< MessageDialog > aError(this, sMsg, VCL_MESSAGE_INFO);
-                aError->Execute();
+                std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                               VclMessageType::Info, VclButtonsType::Ok, sMsg));
+                xErrorBox->run();
 
                 m_pName->SetSelection(Selection(0,sCurrentText.getLength()));
                 m_pName->GrabFocus();
@@ -159,11 +162,10 @@ namespace svx
         EndDialog(RET_OK);
     }
 
-
-    IMPL_LINK_NOARG_TYPED(ODocumentLinkDialog, OnBrowseFile, Button*, void)
+    IMPL_LINK_NOARG(ODocumentLinkDialog, OnBrowseFile, Button*, void)
     {
         ::sfx2::FileDialogHelper aFileDlg(
-                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION, 0);
+                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION, FileDialogFlags::NONE, GetFrameWeld());
         std::shared_ptr<const SfxFilter> pFilter = SfxFilter::GetFilterByName("StarOffice XML (Base)");
         if ( pFilter )
         {
@@ -178,7 +180,7 @@ namespace svx
             aFileDlg.SetDisplayDirectory( aTransformer.get( OFileNotation::N_URL ) );
         }
 
-        if (0 != aFileDlg.Execute())
+        if (ERRCODE_NONE != aFileDlg.Execute())
             return;
 
         if (m_pName->GetText().isEmpty())
@@ -188,7 +190,7 @@ namespace svx
             aParser.SetSmartProtocol(INetProtocol::File);
             aParser.SetSmartURL(aFileDlg.GetPath());
 
-            m_pName->SetText(aParser.getBase(INetURLObject::LAST_SEGMENT, true, INetURLObject::DECODE_WITH_CHARSET));
+            m_pName->SetText(aParser.getBase(INetURLObject::LAST_SEGMENT, true, INetURLObject::DecodeMechanism::WithCharset));
 
             m_pName->SetSelection(Selection(0,m_pName->GetText().getLength()));
             m_pName->GrabFocus();
@@ -203,8 +205,7 @@ namespace svx
         validate();
     }
 
-
-    IMPL_LINK_NOARG_TYPED(ODocumentLinkDialog, OnTextModified, Edit&, void)
+    IMPL_LINK_NOARG(ODocumentLinkDialog, OnTextModified, Edit&, void)
     {
         validate( );
     }

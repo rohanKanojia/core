@@ -29,7 +29,6 @@
 
 using namespace css;
 using namespace css::lang;
-using namespace css::frame;
 
 namespace sc_apitest {
 
@@ -69,7 +68,9 @@ private:
 bool CheckDataPilotField::isPropertyIgnored(const OUString& rName)
 {
     return rName == "Function"
-        || rName == "Subtotals";
+        || rName == "Subtotals"
+        || rName == "Function2"
+        || rName == "Subtotals2";
 }
 
 CheckDataPilotField::CheckDataPilotField()
@@ -88,7 +89,6 @@ uno::Reference< uno::XInterface > CheckDataPilotField::init()
         return mxObject;
 
     uno::Reference< sheet::XSpreadsheetDocument > xSheetDoc(mxComponent, uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_MESSAGE("no calc document!", xSheetDoc.is());
 
     // the cell range
     table::CellRangeAddress sCellRangeAdress;
@@ -168,8 +168,8 @@ uno::Reference< uno::XInterface > CheckDataPilotField::init()
 
     uno::Reference< container::XIndexAccess > IA = DPDsc->getDataPilotFields();
     uno::Reference<uno::XInterface> xDataPilotFieldObject;
-    uno::Any mAny = IA->getByIndex(0);
-    CPPUNIT_ASSERT(mAny >>= xDataPilotFieldObject);
+    data = IA->getByIndex(0);
+    CPPUNIT_ASSERT(data >>= xDataPilotFieldObject);
     mxObject = xDataPilotFieldObject;
 
     return xDataPilotFieldObject;

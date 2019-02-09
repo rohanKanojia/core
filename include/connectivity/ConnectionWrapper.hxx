@@ -26,7 +26,6 @@
 #include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include <comphelper/broadcasthelper.hxx>
 #include <connectivity/CommonTools.hxx>
 #include <connectivity/dbtoolsdllapi.hxx>
 
@@ -62,11 +61,11 @@ namespace connectivity
 
         // XServiceInfo
         DECLARE_SERVICE_INFO();
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& _rType ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& _rType ) override;
+        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
 
         // css::lang::XUnoTunnel
-        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) throw(css::uno::RuntimeException, std::exception) override;
+        virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
         static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
         /** method to create unique ids
             @param  _rURL

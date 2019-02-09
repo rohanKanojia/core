@@ -22,28 +22,57 @@
 
 #include <tools/gen.hxx>
 #include <tools/lineend.hxx>
+#include <tools/stream.hxx>
 #include <vcl/dllapi.h>
 #include <vcl/dndhelp.hxx>
 #include <vcl/textdata.hxx>
-#include <vcl/window.hxx>
+#include <vcl/outdev.hxx>
 #include <memory>
 
 class TextEngine;
-class OutputDevice;
 
 class KeyEvent;
 class MouseEvent;
 class CommandEvent;
-class TextSelFunctionSet;
-class SelectionEngine;
-class VirtualDevice;
-struct TextDDInfo;
+namespace vcl { class Window; }
 
-namespace com { namespace sun { namespace star { namespace datatransfer { namespace clipboard {
-    class XClipboard;
+namespace com { namespace sun { namespace star {
+    namespace datatransfer { namespace clipboard {
+        class XClipboard;
 }}}}}
+namespace i18nutil {
+    struct SearchOptions;
+}
+
 
 struct ImpTextView;
+class ExtTextEngine;
+
+class VCL_DLLPUBLIC TETextDataObject :    public css::datatransfer::XTransferable,
+                        public ::cppu::OWeakObject
+
+{
+private:
+    OUString        maText;
+    SvMemoryStream  maHTMLStream;
+
+public:
+    explicit TETextDataObject( const OUString& rText );
+
+    OUString&        GetText() { return maText; }
+    SvMemoryStream& GetHTMLStream() { return maHTMLStream; }
+
+    // css::uno::XInterface
+    css::uno::Any                               SAL_CALL queryInterface( const css::uno::Type & rType ) override;
+    void                                        SAL_CALL acquire() throw() override  { OWeakObject::acquire(); }
+    void                                        SAL_CALL release() throw() override  { OWeakObject::release(); }
+
+    // css::datatransfer::XTransferable
+    css::uno::Any SAL_CALL getTransferData( const css::datatransfer::DataFlavor& aFlavor ) override;
+    css::uno::Sequence< css::datatransfer::DataFlavor > SAL_CALL getTransferDataFlavors(  ) override;
+    sal_Bool SAL_CALL isDataFlavorSupported( const css::datatransfer::DataFlavor& aFlavor ) override;
+};
+
 
 class VCL_DLLPUBLIC TextView : public vcl::unohelper::DragAndDropClient
 {
@@ -51,26 +80,24 @@ class VCL_DLLPUBLIC TextView : public vcl::unohelper::DragAndDropClient
     friend class        TextUndo;
     friend class        TextUndoManager;
     friend class        TextSelFunctionSet;
-    friend class        ExtTextView;
 
-private:
     std::unique_ptr<ImpTextView>  mpImpl;
 
                         TextView( const TextView& ) = delete;
     TextView&           operator=( const TextView& ) = delete;
 
-protected:
+    bool                ImpIndentBlock( bool bRight );
     void                ShowSelection();
     void                HideSelection();
     void                ShowSelection( const TextSelection& rSel );
-    void                ImpShowHideSelection( bool bShow, const TextSelection* pRange = nullptr );
+    void                ImpShowHideSelection( const TextSelection* pRange = nullptr );
 
-    TextSelection       ImpMoveCursor( const KeyEvent& rKeyEvent );
+    TextSelection const & ImpMoveCursor( const KeyEvent& rKeyEvent );
     TextPaM             ImpDelete( sal_uInt8 nMode, sal_uInt8 nDelMode );
     bool                IsInSelection( const TextPaM& rPaM );
 
-    void                ImpPaint(vcl::RenderContext& rRenderContext, const Point& rStartPos, Rectangle const* pPaintArea, TextSelection const* pPaintRange = nullptr, TextSelection const* pSelection = nullptr);
-    void                ImpPaint(vcl::RenderContext& rRenderContext, const Rectangle& rRect);
+    void                ImpPaint(vcl::RenderContext& rRenderContext, const Point& rStartPos, tools::Rectangle const* pPaintArea, TextSelection const* pSelection);
+    void                ImpPaint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect);
     void                ImpShowCursor( bool bGotoCursor, bool bForceVisCursor, bool bEndKey );
     void                ImpHighlight( const TextSelection& rSel );
     void                ImpSetSelection( const TextSelection& rSelection );
@@ -82,23 +109,21 @@ protected:
     bool                ImplTruncateNewText( OUString& rNewText ) const;
     bool                ImplCheckTextLen( const OUString& rNewText );
 
-    VirtualDevice*      GetVirtualDevice();
-
     // DragAndDropClient
-    virtual void        dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void        dragDropEnd( const css::datatransfer::dnd::DragSourceDropEvent& dsde ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void        drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void        dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void        dragExit( const css::datatransfer::dnd::DropTargetEvent& dte ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void        dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void        dragGestureRecognized( const css::datatransfer::dnd::DragGestureEvent& dge ) override;
+    virtual void        dragDropEnd( const css::datatransfer::dnd::DragSourceDropEvent& dsde ) override;
+    virtual void        drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) override;
+    virtual void        dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtdee ) override;
+    virtual void        dragExit( const css::datatransfer::dnd::DropTargetEvent& dte ) override;
+    virtual void        dragOver( const css::datatransfer::dnd::DropTargetDragEvent& dtde ) override;
 
             using       DragAndDropClient::dragEnter;
             using       DragAndDropClient::dragExit;
             using       DragAndDropClient::dragOver;
 
 public:
-                        TextView( TextEngine* pEng, vcl::Window* pWindow );
-    virtual            ~TextView();
+                        TextView( ExtTextEngine* pEng, vcl::Window* pWindow );
+    virtual            ~TextView() override;
 
     TextEngine*         GetTextEngine() const;
     vcl::Window*             GetWindow() const;
@@ -125,7 +150,7 @@ public:
     void                InsertText( const OUString& rNew );
 
     bool                KeyInput( const KeyEvent& rKeyEvent );
-    void                Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect);
+    void                Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect);
     void                MouseButtonUp( const MouseEvent& rMouseEvent );
     void                MouseButtonDown( const MouseEvent& rMouseEvent );
     void                MouseMove( const MouseEvent& rMouseEvent );
@@ -135,13 +160,13 @@ public:
     void                Copy();
     void                Paste();
 
-    void                Copy( css::uno::Reference< css::datatransfer::clipboard::XClipboard >& rxClipboard );
-    void                Paste( css::uno::Reference< css::datatransfer::clipboard::XClipboard >& rxClipboard );
+    void                Copy( css::uno::Reference< css::datatransfer::clipboard::XClipboard > const & rxClipboard );
+    void                Paste( css::uno::Reference< css::datatransfer::clipboard::XClipboard > const & rxClipboard );
 
     void                Undo();
     void                Redo();
 
-    bool            Read( SvStream& rInput );
+    void                Read( SvStream& rInput );
 
     void                SetStartDocPos( const Point& rPos );
     const Point&        GetStartDocPos() const;
@@ -150,25 +175,23 @@ public:
     Point               GetWindowPos( const Point& rDocPos ) const;
 
     void                SetInsertMode( bool bInsert );
-    bool            IsInsertMode() const;
+    bool                IsInsertMode() const;
 
     void                SetAutoIndentMode( bool bAutoIndent );
 
     void                SetReadOnly( bool bReadOnly );
-    bool            IsReadOnly() const;
+    bool                IsReadOnly() const;
 
     void                SetAutoScroll( bool bAutoScroll );
-    bool            IsAutoScroll() const;
+    bool                IsAutoScroll() const;
 
-    bool            SetCursorAtPoint( const Point& rPointPixel );
-    bool            IsSelectionAtPoint( const Point& rPointPixel );
+    void                SetCursorAtPoint( const Point& rPointPixel );
+    bool                IsSelectionAtPoint( const Point& rPointPixel );
 
     void                SetPaintSelection( bool bPaint);
 
-    void                EraseVirtualDevice();
-
-    // aus dem protected Teil hierher verschoben
-    // For 'SvtXECTextCursor' (TL). Must ggf nochmal anders gel?st werden.
+    // Moved in here from the protected part.
+    // For 'SvtXECTextCursor' (TL). Possibly needs to be solved again differently.
     TextPaM             PageUp( const TextPaM& rPaM );
     TextPaM             PageDown( const TextPaM& rPaM );
     TextPaM             CursorUp( const TextPaM& rPaM );
@@ -196,6 +219,14 @@ public:
         if enabled, -1 otherwise.
      */
     sal_Int32           GetLineNumberOfCursorInSelection() const;
+
+    void                MatchGroup();
+
+    bool                Search( const i18nutil::SearchOptions& rSearchOptions, bool bForward );
+    sal_uInt16          Replace( const i18nutil::SearchOptions& rSearchOptions, bool bAll, bool bForward );
+
+    bool                IndentBlock();
+    bool                UnindentBlock();
 };
 
 #endif

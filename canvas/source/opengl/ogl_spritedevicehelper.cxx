@@ -8,14 +8,14 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
-#include <basegfx/tools/canvastools.hxx>
-#include <basegfx/tools/unopolypolygon.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/unopolypolygon.hxx>
 #include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/rendering/XColorSpace.hpp>
 #include <com/sun/star/rendering/XIntegerBitmapColorSpace.hpp>
 #include <com/sun/star/uno/Reference.hxx>
-#include <osl/mutex.hxx>
 #include <rtl/instance.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/canvastools.hxx>
@@ -53,19 +53,19 @@ static void initContext()
     glShadeModel(GL_FLAT);
 }
 
-static void initTransformation(const ::Size& rSize, bool bMirror=false)
+static void initTransformation(const ::Size& rSize)
 {
     // use whole window
     glViewport( 0,0,
-                (GLsizei)rSize.Width(),
-                (GLsizei)rSize.Height() );
+                static_cast<GLsizei>(rSize.Width()),
+                static_cast<GLsizei>(rSize.Height()) );
 
     // model coordinate system is already in device pixel
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    glTranslated(-1.0, (bMirror ? -1.0 : 1.0), 0.0);
+    glTranslated(-1.0, 1.0, 0.0);
     glScaled( 2.0  / rSize.Width(),
-              (bMirror ? 2.0 : -2.0) / rSize.Height(),
+              -2.0 / rSize.Height(),
               1.0 );
 
     // clear to black
@@ -77,7 +77,6 @@ namespace oglcanvas
 {
 
     SpriteDeviceHelper::SpriteDeviceHelper() :
-        mpDevice(nullptr),
         mpSpriteCanvas(nullptr),
         maActiveSprites(),
         maLastUpdate(),
@@ -138,7 +137,6 @@ namespace oglcanvas
     {
         // release all references
         mpSpriteCanvas = nullptr;
-        mpDevice = nullptr;
         mpTextureCache.reset();
 
         if( mxContext->isInitialized() )
@@ -160,7 +158,7 @@ namespace oglcanvas
         // Map a one-by-one millimeter box to pixel
         SystemChildWindow* pChildWindow = mxContext->getChildWindow();
         const MapMode aOldMapMode( pChildWindow->GetMapMode() );
-        pChildWindow->SetMapMode( MapMode(MAP_MM) );
+        pChildWindow->SetMapMode( MapMode(MapUnit::MapMM) );
         const Size aPixelSize( pChildWindow->LogicToPixel(Size(1,1)) );
         pChildWindow->SetMapMode( aOldMapMode );
 
@@ -175,7 +173,7 @@ namespace oglcanvas
         // Map the pixel dimensions of the output window to millimeter
         SystemChildWindow* pChildWindow = mxContext->getChildWindow();
         const MapMode aOldMapMode( pChildWindow->GetMapMode() );
-        pChildWindow->SetMapMode( MapMode(MAP_MM) );
+        pChildWindow->SetMapMode( MapMode(MapUnit::MapMM) );
         const Size aLogSize( pChildWindow->PixelToLogic(pChildWindow->GetOutputSizePixel()) );
         pChildWindow->SetMapMode( aOldMapMode );
 
@@ -219,8 +217,7 @@ namespace oglcanvas
         return uno::Reference< rendering::XBitmap >(
             new CanvasBitmap( size,
                               mpSpriteCanvas,
-                              *this,
-                              false ) );
+                              *this ) );
     }
 
     uno::Reference< rendering::XVolatileBitmap > SpriteDeviceHelper::createVolatileBitmap(
@@ -241,8 +238,7 @@ namespace oglcanvas
         return uno::Reference< rendering::XBitmap >(
             new CanvasBitmap( size,
                               mpSpriteCanvas,
-                              *this,
-                              true ) );
+                              *this ) );
     }
 
     uno::Reference< rendering::XVolatileBitmap > SpriteDeviceHelper::createVolatileAlphaBitmap(
@@ -271,14 +267,13 @@ namespace oglcanvas
         };
     }
 
-    bool SpriteDeviceHelper::showBuffer( bool bIsVisible, bool /*bUpdateAll*/ )
+    bool SpriteDeviceHelper::showBuffer( bool bIsVisible, SAL_UNUSED_PARAMETER bool /*bUpdateAll*/ )
     {
         // hidden or disposed?
         if( !bIsVisible || !mxContext->isInitialized() || !mpSpriteCanvas )
             return false;
 
-        if( !activateWindowContext() )
-            return false;
+        mxContext->makeCurrent();
 
         SystemChildWindow* pChildWindow = mxContext->getChildWindow();
         const ::Size& rOutputSize = pChildWindow->GetSizePixel();
@@ -348,13 +343,13 @@ namespace oglcanvas
 
     uno::Any SpriteDeviceHelper::isAccelerated() const
     {
-        return css::uno::makeAny(false);
+        return css::uno::Any(false);
     }
 
     uno::Any SpriteDeviceHelper::getDeviceHandle() const
     {
         const SystemChildWindow* pChildWindow = mxContext->getChildWindow();
-        return uno::makeAny( reinterpret_cast< sal_Int64 >(pChildWindow) );
+        return uno::Any( reinterpret_cast< sal_Int64 >(pChildWindow) );
     }
 
     uno::Any SpriteDeviceHelper::getSurfaceHandle() const
@@ -507,32 +502,23 @@ namespace oglcanvas
             setupUniforms(mnRectangularTwoColorGradientProgram, pColors[0], pColors[1], rTexTransform);
     }
 
-    bool SpriteDeviceHelper::activateWindowContext()
-    {
-        mxContext->makeCurrent();
-        return true;
-    }
-
     namespace
     {
 
         class BufferContextImpl : public IBufferContext
         {
-            ::basegfx::B2IVector       maSize;
             GLuint mnFrambufferId;
             GLuint mnDepthId;
             GLuint mnTextureId;
 
-            virtual bool startBufferRendering() override
+            virtual void startBufferRendering() override
             {
                 glBindFramebuffer(GL_FRAMEBUFFER, mnFrambufferId);
-                return true;
             }
 
-            virtual bool endBufferRendering() override
+            virtual void endBufferRendering() override
             {
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
-                return true;
             }
 
             virtual GLuint getTextureId() override
@@ -542,16 +528,15 @@ namespace oglcanvas
 
         public:
             explicit BufferContextImpl(const ::basegfx::B2IVector& rSize) :
-                maSize(rSize),
                 mnFrambufferId(0),
                 mnDepthId(0),
                 mnTextureId(0)
             {
-                OpenGLHelper::createFramebuffer(maSize.getX(), maSize.getY(), mnFrambufferId,
-                        mnDepthId, mnTextureId, false);
+                OpenGLHelper::createFramebuffer(rSize.getX(), rSize.getY(), mnFrambufferId,
+                        mnDepthId, mnTextureId);
             }
 
-            virtual ~BufferContextImpl()
+            virtual ~BufferContextImpl() override
             {
                 glDeleteTextures(1, &mnTextureId);
                 glDeleteRenderbuffers(1, &mnDepthId);

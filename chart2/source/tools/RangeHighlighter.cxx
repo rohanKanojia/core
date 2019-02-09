@@ -17,21 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RangeHighlighter.hxx"
-#include "WeakListenerAdapter.hxx"
-#include "ChartModelHelper.hxx"
-#include "DataSourceHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "macros.hxx"
-#include "ObjectIdentifier.hxx"
-#include "DataSeriesHelper.hxx"
+#include <RangeHighlighter.hxx>
+#include <WeakListenerAdapter.hxx>
+#include <ChartModelHelper.hxx>
+#include <DataSourceHelper.hxx>
+#include <ObjectIdentifier.hxx>
+#include <DataSeriesHelper.hxx>
 
-#include <com/sun/star/chart2/XDataSeries.hpp>
+#include <com/sun/star/chart2/ScaleData.hpp>
+#include <com/sun/star/chart2/XAxis.hpp>
 #include <com/sun/star/chart/ErrorBarStyle.hpp>
+#include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <comphelper/sequence.hxx>
-
-#define PREFERED_DEFAULT_COLOR 0x0000ff
+#include <tools/diagnose_ex.h>
+#include <tools/color.hxx>
 
 using namespace ::com::sun::star;
 
@@ -41,18 +42,20 @@ using ::com::sun::star::uno::Sequence;
 namespace
 {
 
+const Color defaultPreferredColor = COL_LIGHTBLUE;
+
 void lcl_fillRanges(
     Sequence< chart2::data::HighlightedRange > & rOutRanges,
     const Sequence< OUString >& aRangeStrings,
-    sal_Int32 nPreferredColor = PREFERED_DEFAULT_COLOR,
+    Color nPreferredColor,
     sal_Int32 nIndex = -1 )
 {
     rOutRanges.realloc( aRangeStrings.getLength());
     for( sal_Int32 i=0; i<aRangeStrings.getLength(); ++i )
     {
         rOutRanges[i].RangeRepresentation = aRangeStrings[i];
-        rOutRanges[i].PreferredColor = nPreferredColor;
-        rOutRanges[i].AllowMerginigWithOtherRanges = sal_False;
+        rOutRanges[i].PreferredColor = sal_Int32(nPreferredColor);
+        rOutRanges[i].AllowMerginigWithOtherRanges = false;
         rOutRanges[i].Index = nIndex;
     }
 }
@@ -76,7 +79,6 @@ RangeHighlighter::~RangeHighlighter()
 
 // ____ XRangeHighlighter ____
 Sequence< chart2::data::HighlightedRange > SAL_CALL RangeHighlighter::getSelectedRanges()
-    throw (uno::RuntimeException, std::exception)
 {
     return m_aSelectedRanges;
 }
@@ -109,24 +111,24 @@ void RangeHighlighter::determineRanges()
                     ObjectType eObjectType = ObjectIdentifier::getObjectType( aCID );
                     sal_Int32 nIndex = ObjectIdentifier::getIndexFromParticleOrCID( aCID );
                     Reference< chart2::XDataSeries > xDataSeries( ObjectIdentifier::getDataSeriesForCID( aCID, xChartModel ) );
-                    if( OBJECTTYPE_LEGEND_ENTRY == eObjectType )
+                    if( eObjectType == OBJECTTYPE_LEGEND_ENTRY )
                     {
                         OUString aParentParticel( ObjectIdentifier::getFullParentParticle( aCID ) );
                         ObjectType eParentObjectType = ObjectIdentifier::getObjectType( aParentParticel );
                         eObjectType = eParentObjectType;
-                        if( OBJECTTYPE_DATA_POINT == eObjectType )
+                        if( eObjectType == OBJECTTYPE_DATA_POINT )
                             nIndex = ObjectIdentifier::getIndexFromParticleOrCID( aParentParticel );
                     }
 
-                    if( OBJECTTYPE_DATA_POINT == eObjectType || OBJECTTYPE_DATA_LABEL == eObjectType )
+                    if( eObjectType == OBJECTTYPE_DATA_POINT || eObjectType == OBJECTTYPE_DATA_LABEL )
                     {
                         // Data Point
                         fillRangesForDataPoint( xDataSeries, nIndex );
                         return;
                     }
-                    else if( OBJECTTYPE_DATA_ERRORS_X == eObjectType ||
-                             OBJECTTYPE_DATA_ERRORS_Y == eObjectType ||
-                             OBJECTTYPE_DATA_ERRORS_Z == eObjectType )
+                    else if( eObjectType == OBJECTTYPE_DATA_ERRORS_X ||
+                             eObjectType == OBJECTTYPE_DATA_ERRORS_Y ||
+                             eObjectType == OBJECTTYPE_DATA_ERRORS_Z )
                     {
                         // select error bar ranges, or data series, if the style is
                         // not set to FROM_DATA
@@ -139,7 +141,7 @@ void RangeHighlighter::determineRanges()
                         fillRangesForDataSeries( xDataSeries );
                         return;
                     }
-                    else if( OBJECTTYPE_AXIS == eObjectType )
+                    else if( eObjectType == OBJECTTYPE_AXIS )
                     {
                         // Axis (Categories)
                         Reference< chart2::XAxis > xAxis( ObjectIdentifier::getObjectPropertySet( aCID, xChartModel ), uno::UNO_QUERY );
@@ -149,10 +151,10 @@ void RangeHighlighter::determineRanges()
                             return;
                         }
                     }
-                    else if( OBJECTTYPE_PAGE == eObjectType
-                             || OBJECTTYPE_DIAGRAM == eObjectType
-                             || OBJECTTYPE_DIAGRAM_WALL == eObjectType
-                             || OBJECTTYPE_DIAGRAM_FLOOR == eObjectType
+                    else if( eObjectType == OBJECTTYPE_PAGE
+                             || eObjectType == OBJECTTYPE_DIAGRAM
+                             || eObjectType == OBJECTTYPE_DIAGRAM_WALL
+                             || eObjectType == OBJECTTYPE_DIAGRAM_FLOOR
                         )
                     {
                         // Diagram
@@ -183,9 +185,9 @@ void RangeHighlighter::determineRanges()
                 return;
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 }
@@ -199,8 +201,8 @@ void RangeHighlighter::fillRangesForDiagram( const Reference< chart2::XDiagram >
     {
         m_aSelectedRanges[i].RangeRepresentation = aSelectedRanges[i];
         m_aSelectedRanges[i].Index = -1;
-        m_aSelectedRanges[i].PreferredColor = PREFERED_DEFAULT_COLOR;
-        m_aSelectedRanges[i].AllowMerginigWithOtherRanges = sal_True;
+        m_aSelectedRanges[i].PreferredColor = sal_Int32(defaultPreferredColor);
+        m_aSelectedRanges[i].AllowMerginigWithOtherRanges = true;
     }
 }
 
@@ -209,10 +211,9 @@ void RangeHighlighter::fillRangesForDataSeries( const uno::Reference< chart2::XD
     Reference< chart2::data::XDataSource > xSource( xSeries, uno::UNO_QUERY );
     if( xSource.is())
     {
-        sal_Int32 nPreferredColor = PREFERED_DEFAULT_COLOR;
         lcl_fillRanges( m_aSelectedRanges,
                         ::chart::DataSourceHelper::getRangesFromDataSource( xSource ),
-                        nPreferredColor );
+                        defaultPreferredColor );
     }
 }
 
@@ -230,9 +231,9 @@ void RangeHighlighter::fillRangesForErrorBars(
               (xErrorBar->getPropertyValue( "ErrorBarStyle") >>= nStyle) &&
               nStyle == css::chart::ErrorBarStyle::FROM_DATA );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     if( bUsesRangesAsErrorBars )
@@ -240,10 +241,9 @@ void RangeHighlighter::fillRangesForErrorBars(
         Reference< chart2::data::XDataSource > xSource( xErrorBar, uno::UNO_QUERY );
         if( xSource.is())
         {
-            sal_Int32 nPreferredColor = PREFERED_DEFAULT_COLOR;
             lcl_fillRanges( m_aSelectedRanges,
                             ::chart::DataSourceHelper::getRangesFromDataSource( xSource ),
-                            nPreferredColor );
+                            defaultPreferredColor );
         }
     }
     else
@@ -258,7 +258,8 @@ void RangeHighlighter::fillRangesForCategories( const Reference< chart2::XAxis >
         return;
     chart2::ScaleData aData( xAxis->getScaleData());
     lcl_fillRanges( m_aSelectedRanges,
-                    DataSourceHelper::getRangesFromLabeledDataSequence( aData.Categories ));
+                    DataSourceHelper::getRangesFromLabeledDataSequence( aData.Categories ),
+                    defaultPreferredColor );
 }
 
 void RangeHighlighter::fillRangesForDataPoint( const Reference< uno::XInterface > & xDataSeries, sal_Int32 nIndex )
@@ -268,8 +269,8 @@ void RangeHighlighter::fillRangesForDataPoint( const Reference< uno::XInterface 
         Reference< chart2::data::XDataSource > xSource( xDataSeries, uno::UNO_QUERY );
         if( xSource.is() )
         {
-            sal_Int32 nPreferredColor = PREFERED_DEFAULT_COLOR;
-            ::std::vector< chart2::data::HighlightedRange > aHilightedRanges;
+            Color nPreferredColor = defaultPreferredColor;
+            std::vector< chart2::data::HighlightedRange > aHilightedRanges;
             Sequence< Reference< chart2::data::XLabeledDataSequence > > aLSeqSeq( xSource->getDataSequences());
             for( sal_Int32 i=0; i<aLSeqSeq.getLength(); ++i )
             {
@@ -277,21 +278,19 @@ void RangeHighlighter::fillRangesForDataPoint( const Reference< uno::XInterface 
                 Reference< chart2::data::XDataSequence > xValues( aLSeqSeq[i]->getValues());
 
                 if( xLabel.is())
-                    aHilightedRanges.push_back(
-                        chart2::data::HighlightedRange(
+                    aHilightedRanges.emplace_back(
                             xLabel->getSourceRangeRepresentation(),
                             -1,
-                            nPreferredColor,
-                            sal_False ));
+                            sal_Int32(nPreferredColor),
+                            false );
 
                 sal_Int32 nUnhiddenIndex = DataSeriesHelper::translateIndexFromHiddenToFullSequence( nIndex, xValues, !m_bIncludeHiddenCells );
                 if( xValues.is())
-                    aHilightedRanges.push_back(
-                        chart2::data::HighlightedRange(
+                    aHilightedRanges.emplace_back(
                             xValues->getSourceRangeRepresentation(),
                             nUnhiddenIndex,
-                            nPreferredColor,
-                            sal_False ));
+                            sal_Int32(nPreferredColor),
+                            false );
             }
             m_aSelectedRanges = comphelper::containerToSequence( aHilightedRanges );
         }
@@ -299,7 +298,6 @@ void RangeHighlighter::fillRangesForDataPoint( const Reference< uno::XInterface 
 }
 
 void SAL_CALL RangeHighlighter::addSelectionChangeListener( const Reference< view::XSelectionChangeListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     if(!xListener.is())
         return;
@@ -315,7 +313,6 @@ void SAL_CALL RangeHighlighter::addSelectionChangeListener( const Reference< vie
 }
 
 void SAL_CALL RangeHighlighter::removeSelectionChangeListener( const Reference< view::XSelectionChangeListener >& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     rBHelper.removeListener( cppu::UnoType<decltype(xListener)>::get(), xListener );
     --m_nAddedListenerCount;
@@ -325,7 +322,6 @@ void SAL_CALL RangeHighlighter::removeSelectionChangeListener( const Reference< 
 
 // ____ XSelectionChangeListener ____
 void SAL_CALL RangeHighlighter::selectionChanged( const lang::EventObject& /*aEvent*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     determineRanges();
 
@@ -352,7 +348,6 @@ void RangeHighlighter::fireSelectionEvent()
 }
 
 void SAL_CALL RangeHighlighter::disposing( const lang::EventObject& Source )
-    throw (uno::RuntimeException, std::exception)
 {
     if( Source.Source == m_xSelectionSupplier )
     {

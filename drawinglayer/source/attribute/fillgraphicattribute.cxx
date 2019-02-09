@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
 #include <drawinglayer/attribute/fillgraphicattribute.hxx>
 #include <vcl/graph.hxx>
 
@@ -31,7 +35,6 @@ namespace drawinglayer
             Graphic                                 maGraphic;
             basegfx::B2DRange                       maGraphicRange;
 
-            // bitfield
             bool                                    mbTiling : 1;
 
             // tiling definitions, offsets in X/Y in percent for each 2nd row.
@@ -51,6 +54,12 @@ namespace drawinglayer
                 mfOffsetX(fOffsetX),
                 mfOffsetY(fOffsetY)
             {
+                // access once to ensure that the buffered bitmap exists, else
+                // the SolarMutex may be needed to create it. This may not be
+                // available when a renderer works with multi-treading.
+                // When changing this, please check if it is still possible to
+                // use a metafile as texture for a 3D object
+                maGraphic.GetBitmapEx();
             }
 
             ImpFillGraphicAttribute()
@@ -93,30 +102,21 @@ namespace drawinglayer
             double fOffsetY)
         :   mpFillGraphicAttribute(ImpFillGraphicAttribute(
                 rGraphic, rGraphicRange, bTiling,
-                    basegfx::clamp(fOffsetX, 0.0, 1.0),
-                    basegfx::clamp(fOffsetY, 0.0, 1.0)))
+                    std::clamp(fOffsetX, 0.0, 1.0),
+                    std::clamp(fOffsetY, 0.0, 1.0)))
         {
         }
 
-        FillGraphicAttribute::FillGraphicAttribute(const FillGraphicAttribute& rCandidate)
-        :   mpFillGraphicAttribute(rCandidate.mpFillGraphicAttribute)
-        {
-        }
+        FillGraphicAttribute::FillGraphicAttribute(const FillGraphicAttribute&) = default;
 
-        FillGraphicAttribute::~FillGraphicAttribute()
-        {
-        }
+        FillGraphicAttribute::~FillGraphicAttribute() = default;
 
         bool FillGraphicAttribute::isDefault() const
         {
             return mpFillGraphicAttribute.same_object(theGlobalDefault::get());
         }
 
-        FillGraphicAttribute& FillGraphicAttribute::operator=(const FillGraphicAttribute& rCandidate)
-        {
-            mpFillGraphicAttribute = rCandidate.mpFillGraphicAttribute;
-            return *this;
-        }
+        FillGraphicAttribute& FillGraphicAttribute::operator=(const FillGraphicAttribute&) = default;
 
         bool FillGraphicAttribute::operator==(const FillGraphicAttribute& rCandidate) const
         {

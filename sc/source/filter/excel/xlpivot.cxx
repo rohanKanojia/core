@@ -17,14 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dpgroup.hxx"
-#include "dpsave.hxx"
-#include "xestream.hxx"
-#include "xistream.hxx"
-#include "xestring.hxx"
-#include "xlpivot.hxx"
+#include <dpsave.hxx>
+#include <xestream.hxx>
+#include <xistream.hxx>
+#include <xestring.hxx>
+#include <xlpivot.hxx>
+#include <generalfunction.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <com/sun/star/sheet/DataPilotFieldGroupBy.hpp>
+#include <com/sun/star/sheet/DataPilotFieldSortMode.hpp>
+#include <com/sun/star/sheet/DataPilotFieldShowItemsMode.hpp>
+#include <com/sun/star/sheet/DataPilotFieldLayoutMode.hpp>
+#include <com/sun/star/sheet/DataPilotFieldReferenceType.hpp>
+#include <com/sun/star/sheet/DataPilotFieldReferenceItemType.hpp>
 
 using ::com::sun::star::sheet::GeneralFunction;
 using ::com::sun::star::sheet::DataPilotFieldOrientation;
@@ -59,19 +65,17 @@ void XclPCItem::SetText( const OUString& rText )
     maText = rText;
 }
 
-void XclPCItem::SetDouble( double fValue )
+void XclPCItem::SetDouble( double fValue, const OUString& rText )
 {
     meType = EXC_PCITEM_DOUBLE;
-    //TODO convert double to string
-    maText.clear();
+    maText = rText;
     mfValue = fValue;
 }
 
-void XclPCItem::SetDateTime( const DateTime& rDateTime )
+void XclPCItem::SetDateTime( const DateTime& rDateTime, const OUString& rText )
 {
     meType = EXC_PCITEM_DATETIME;
-    //TODO convert date to string
-    maText.clear();
+    maText = rText;
     maDateTime = rDateTime;
 }
 
@@ -100,11 +104,10 @@ void XclPCItem::SetError( sal_uInt16 nError )
     }
 }
 
-void XclPCItem::SetBool( bool bValue )
+void XclPCItem::SetBool( bool bValue, const OUString& rText )
 {
     meType = EXC_PCITEM_BOOL;
-    //TODO convert boolean to string
-    maText.clear();
+    maText = rText;
     mbValue = bValue;
 }
 
@@ -158,6 +161,11 @@ const sal_uInt16* XclPCItem::GetError() const
 const bool* XclPCItem::GetBool() const
 {
     return (meType == EXC_PCITEM_BOOL) ? &mbValue : nullptr;
+}
+
+XclPCItemType XclPCItem::GetType() const
+{
+    return meType;
 }
 
 // Field settings =============================================================
@@ -227,7 +235,7 @@ sal_Int32 XclPCNumGroupInfo::GetScDateType() const
         case EXC_SXNUMGROUP_TYPE_MONTH: nScType = ScDPGroupBy::MONTHS;    break;
         case EXC_SXNUMGROUP_TYPE_QUART: nScType = ScDPGroupBy::QUARTERS;  break;
         case EXC_SXNUMGROUP_TYPE_YEAR:  nScType = ScDPGroupBy::YEARS;     break;
-        default:    OSL_TRACE( "XclPCNumGroupInfo::GetScDateType - unexpected date type %d", GetXclDataType() );
+        default:    SAL_WARN("sc.filter",  "XclPCNumGroupInfo::GetScDateType - unexpected date type " << GetXclDataType() );
     }
     return nScType;
 }
@@ -406,7 +414,7 @@ XclExpStream& operator<<( XclExpStream& rStrm, const XclPTCachedName& rCachedNam
     if( rCachedName.mbUseCache )
         rStrm << EXC_PT_NOSTRING;
     else
-        rStrm << XclExpString( rCachedName.maName, EXC_STR_DEFAULT, EXC_PT_MAXSTRLEN );
+        rStrm << XclExpString( rCachedName.maName, XclStrFlags::NONE, EXC_PT_MAXSTRLEN );
     return rStrm;
 }
 
@@ -494,41 +502,40 @@ void XclPTFieldInfo::GetSubtotals( XclPTSubtotalVec& rSubtotals ) const
     rSubtotals.clear();
     rSubtotals.reserve( 16 );
 
-    using namespace ::com::sun::star::sheet;
-    if( mnSubtotals & EXC_SXVD_SUBT_DEFAULT )   rSubtotals.push_back( GeneralFunction_AUTO );
-    if( mnSubtotals & EXC_SXVD_SUBT_SUM )       rSubtotals.push_back( GeneralFunction_SUM );
-    if( mnSubtotals & EXC_SXVD_SUBT_COUNT )     rSubtotals.push_back( GeneralFunction_COUNT );
-    if( mnSubtotals & EXC_SXVD_SUBT_AVERAGE )   rSubtotals.push_back( GeneralFunction_AVERAGE );
-    if( mnSubtotals & EXC_SXVD_SUBT_MAX )       rSubtotals.push_back( GeneralFunction_MAX );
-    if( mnSubtotals & EXC_SXVD_SUBT_MIN )       rSubtotals.push_back( GeneralFunction_MIN );
-    if( mnSubtotals & EXC_SXVD_SUBT_PROD )      rSubtotals.push_back( GeneralFunction_PRODUCT );
-    if( mnSubtotals & EXC_SXVD_SUBT_COUNTNUM )  rSubtotals.push_back( GeneralFunction_COUNTNUMS );
-    if( mnSubtotals & EXC_SXVD_SUBT_STDDEV )    rSubtotals.push_back( GeneralFunction_STDEV );
-    if( mnSubtotals & EXC_SXVD_SUBT_STDDEVP )   rSubtotals.push_back( GeneralFunction_STDEVP );
-    if( mnSubtotals & EXC_SXVD_SUBT_VAR )       rSubtotals.push_back( GeneralFunction_VAR );
-    if( mnSubtotals & EXC_SXVD_SUBT_VARP )      rSubtotals.push_back( GeneralFunction_VARP );
+    if( mnSubtotals & EXC_SXVD_SUBT_DEFAULT )   rSubtotals.push_back( ScGeneralFunction::AUTO );
+    if( mnSubtotals & EXC_SXVD_SUBT_SUM )       rSubtotals.push_back( ScGeneralFunction::SUM );
+    if( mnSubtotals & EXC_SXVD_SUBT_COUNT )     rSubtotals.push_back( ScGeneralFunction::COUNT );
+    if( mnSubtotals & EXC_SXVD_SUBT_AVERAGE )   rSubtotals.push_back( ScGeneralFunction::AVERAGE );
+    if( mnSubtotals & EXC_SXVD_SUBT_MAX )       rSubtotals.push_back( ScGeneralFunction::MAX );
+    if( mnSubtotals & EXC_SXVD_SUBT_MIN )       rSubtotals.push_back( ScGeneralFunction::MIN );
+    if( mnSubtotals & EXC_SXVD_SUBT_PROD )      rSubtotals.push_back( ScGeneralFunction::PRODUCT );
+    if( mnSubtotals & EXC_SXVD_SUBT_COUNTNUM )  rSubtotals.push_back( ScGeneralFunction::COUNTNUMS );
+    if( mnSubtotals & EXC_SXVD_SUBT_STDDEV )    rSubtotals.push_back( ScGeneralFunction::STDEV );
+    if( mnSubtotals & EXC_SXVD_SUBT_STDDEVP )   rSubtotals.push_back( ScGeneralFunction::STDEVP );
+    if( mnSubtotals & EXC_SXVD_SUBT_VAR )       rSubtotals.push_back( ScGeneralFunction::VAR );
+    if( mnSubtotals & EXC_SXVD_SUBT_VARP )      rSubtotals.push_back( ScGeneralFunction::VARP );
 }
 
 void XclPTFieldInfo::SetSubtotals( const XclPTSubtotalVec& rSubtotals )
 {
     mnSubtotals = EXC_SXVD_SUBT_NONE;
-    using namespace ::com::sun::star::sheet;
-    for( XclPTSubtotalVec::const_iterator aIt = rSubtotals.begin(), aEnd = rSubtotals.end(); aIt != aEnd; ++aIt )
+    for( const auto& rSubtotal : rSubtotals )
     {
-        switch( *aIt )
+        switch( rSubtotal )
         {
-            case GeneralFunction_AUTO:      mnSubtotals |= EXC_SXVD_SUBT_DEFAULT;   break;
-            case GeneralFunction_SUM:       mnSubtotals |= EXC_SXVD_SUBT_SUM;       break;
-            case GeneralFunction_COUNT:     mnSubtotals |= EXC_SXVD_SUBT_COUNT;     break;
-            case GeneralFunction_AVERAGE:   mnSubtotals |= EXC_SXVD_SUBT_AVERAGE;   break;
-            case GeneralFunction_MAX:       mnSubtotals |= EXC_SXVD_SUBT_MAX;       break;
-            case GeneralFunction_MIN:       mnSubtotals |= EXC_SXVD_SUBT_MIN;       break;
-            case GeneralFunction_PRODUCT:   mnSubtotals |= EXC_SXVD_SUBT_PROD;      break;
-            case GeneralFunction_COUNTNUMS: mnSubtotals |= EXC_SXVD_SUBT_COUNTNUM;  break;
-            case GeneralFunction_STDEV:     mnSubtotals |= EXC_SXVD_SUBT_STDDEV;    break;
-            case GeneralFunction_STDEVP:    mnSubtotals |= EXC_SXVD_SUBT_STDDEVP;   break;
-            case GeneralFunction_VAR:       mnSubtotals |= EXC_SXVD_SUBT_VAR;       break;
-            case GeneralFunction_VARP:      mnSubtotals |= EXC_SXVD_SUBT_VARP;      break;
+            case ScGeneralFunction::AUTO:      mnSubtotals |= EXC_SXVD_SUBT_DEFAULT;   break;
+            case ScGeneralFunction::SUM:       mnSubtotals |= EXC_SXVD_SUBT_SUM;       break;
+            case ScGeneralFunction::COUNT:     mnSubtotals |= EXC_SXVD_SUBT_COUNT;     break;
+            case ScGeneralFunction::AVERAGE:   mnSubtotals |= EXC_SXVD_SUBT_AVERAGE;   break;
+            case ScGeneralFunction::MAX:       mnSubtotals |= EXC_SXVD_SUBT_MAX;       break;
+            case ScGeneralFunction::MIN:       mnSubtotals |= EXC_SXVD_SUBT_MIN;       break;
+            case ScGeneralFunction::PRODUCT:   mnSubtotals |= EXC_SXVD_SUBT_PROD;      break;
+            case ScGeneralFunction::COUNTNUMS: mnSubtotals |= EXC_SXVD_SUBT_COUNTNUM;  break;
+            case ScGeneralFunction::STDEV:     mnSubtotals |= EXC_SXVD_SUBT_STDDEV;    break;
+            case ScGeneralFunction::STDEVP:    mnSubtotals |= EXC_SXVD_SUBT_STDDEVP;   break;
+            case ScGeneralFunction::VAR:       mnSubtotals |= EXC_SXVD_SUBT_VAR;       break;
+            case ScGeneralFunction::VARP:      mnSubtotals |= EXC_SXVD_SUBT_VARP;      break;
+            default: break;
         }
     }
 
@@ -566,8 +573,7 @@ XclPTFieldExtInfo::XclPTFieldExtInfo() :
     mnFlags( EXC_SXVDEX_DEFAULTFLAGS ),
     mnSortField( EXC_SXVDEX_SORT_OWN ),
     mnShowField( EXC_SXVDEX_SHOW_NONE ),
-    mnNumFmt(0),
-    mpFieldTotalName(nullptr)
+    mnNumFmt(0)
 {
 }
 
@@ -635,7 +641,7 @@ XclImpStream& operator>>( XclImpStream& rStrm, XclPTFieldExtInfo& rInfo )
     rStrm.Ignore(10);
     if (nNameLen != 0xFF)
         // Custom field total name is used.  Pick it up.
-        rInfo.mpFieldTotalName.reset(new OUString(rStrm.ReadUniString(nNameLen, 0)));
+        rInfo.mpFieldTotalName = rStrm.ReadUniString(nNameLen, 0);
 
     return rStrm;
 }
@@ -647,7 +653,7 @@ XclExpStream& operator<<( XclExpStream& rStrm, const XclPTFieldExtInfo& rInfo )
             << rInfo.mnShowField
             << EXC_SXVDEX_FORMAT_NONE;
 
-    if (rInfo.mpFieldTotalName.get() && !rInfo.mpFieldTotalName->isEmpty())
+    if (rInfo.mpFieldTotalName && !rInfo.mpFieldTotalName->isEmpty())
     {
         OUString aFinalName = *rInfo.mpFieldTotalName;
         if (aFinalName.getLength() >= 254)
@@ -655,7 +661,7 @@ XclExpStream& operator<<( XclExpStream& rStrm, const XclPTFieldExtInfo& rInfo )
         sal_uInt8 nNameLen = static_cast<sal_uInt8>(aFinalName.getLength());
         rStrm << nNameLen;
         rStrm.WriteZeroBytes(10);
-        rStrm << XclExpString(aFinalName, EXC_STR_NOHEADER);
+        rStrm << XclExpString(aFinalName, XclStrFlags::NoHeader);
     }
     else
     {
@@ -702,45 +708,43 @@ XclPTDataFieldInfo::XclPTDataFieldInfo() :
 {
 }
 
-GeneralFunction XclPTDataFieldInfo::GetApiAggFunc() const
+ScGeneralFunction XclPTDataFieldInfo::GetApiAggFunc() const
 {
-    using namespace ::com::sun::star::sheet;
-    GeneralFunction eAggFunc;
+    ScGeneralFunction eAggFunc;
     switch( mnAggFunc )
     {
-        case EXC_SXDI_FUNC_SUM:         eAggFunc = GeneralFunction_SUM;         break;
-        case EXC_SXDI_FUNC_COUNT:       eAggFunc = GeneralFunction_COUNT;       break;
-        case EXC_SXDI_FUNC_AVERAGE:     eAggFunc = GeneralFunction_AVERAGE;     break;
-        case EXC_SXDI_FUNC_MAX:         eAggFunc = GeneralFunction_MAX;         break;
-        case EXC_SXDI_FUNC_MIN:         eAggFunc = GeneralFunction_MIN;         break;
-        case EXC_SXDI_FUNC_PRODUCT:     eAggFunc = GeneralFunction_PRODUCT;     break;
-        case EXC_SXDI_FUNC_COUNTNUM:    eAggFunc = GeneralFunction_COUNTNUMS;   break;
-        case EXC_SXDI_FUNC_STDDEV:      eAggFunc = GeneralFunction_STDEV;       break;
-        case EXC_SXDI_FUNC_STDDEVP:     eAggFunc = GeneralFunction_STDEVP;      break;
-        case EXC_SXDI_FUNC_VAR:         eAggFunc = GeneralFunction_VAR;         break;
-        case EXC_SXDI_FUNC_VARP:        eAggFunc = GeneralFunction_VARP;        break;
-        default:                        eAggFunc = GeneralFunction_SUM;
+        case EXC_SXDI_FUNC_SUM:         eAggFunc = ScGeneralFunction::SUM;         break;
+        case EXC_SXDI_FUNC_COUNT:       eAggFunc = ScGeneralFunction::COUNT;       break;
+        case EXC_SXDI_FUNC_AVERAGE:     eAggFunc = ScGeneralFunction::AVERAGE;     break;
+        case EXC_SXDI_FUNC_MAX:         eAggFunc = ScGeneralFunction::MAX;         break;
+        case EXC_SXDI_FUNC_MIN:         eAggFunc = ScGeneralFunction::MIN;         break;
+        case EXC_SXDI_FUNC_PRODUCT:     eAggFunc = ScGeneralFunction::PRODUCT;     break;
+        case EXC_SXDI_FUNC_COUNTNUM:    eAggFunc = ScGeneralFunction::COUNTNUMS;   break;
+        case EXC_SXDI_FUNC_STDDEV:      eAggFunc = ScGeneralFunction::STDEV;       break;
+        case EXC_SXDI_FUNC_STDDEVP:     eAggFunc = ScGeneralFunction::STDEVP;      break;
+        case EXC_SXDI_FUNC_VAR:         eAggFunc = ScGeneralFunction::VAR;         break;
+        case EXC_SXDI_FUNC_VARP:        eAggFunc = ScGeneralFunction::VARP;        break;
+        default:                        eAggFunc = ScGeneralFunction::SUM;
     }
     return eAggFunc;
 }
 
-void XclPTDataFieldInfo::SetApiAggFunc( GeneralFunction eAggFunc )
+void XclPTDataFieldInfo::SetApiAggFunc( ScGeneralFunction eAggFunc )
 {
-    using namespace ::com::sun::star::sheet;
     switch( eAggFunc )
     {
-        case GeneralFunction_SUM:       mnAggFunc = EXC_SXDI_FUNC_SUM;      break;
-        case GeneralFunction_COUNT:     mnAggFunc = EXC_SXDI_FUNC_COUNT;    break;
-        case GeneralFunction_AVERAGE:   mnAggFunc = EXC_SXDI_FUNC_AVERAGE;  break;
-        case GeneralFunction_MAX:       mnAggFunc = EXC_SXDI_FUNC_MAX;      break;
-        case GeneralFunction_MIN:       mnAggFunc = EXC_SXDI_FUNC_MIN;      break;
-        case GeneralFunction_PRODUCT:   mnAggFunc = EXC_SXDI_FUNC_PRODUCT;  break;
-        case GeneralFunction_COUNTNUMS: mnAggFunc = EXC_SXDI_FUNC_COUNTNUM; break;
-        case GeneralFunction_STDEV:     mnAggFunc = EXC_SXDI_FUNC_STDDEV;   break;
-        case GeneralFunction_STDEVP:    mnAggFunc = EXC_SXDI_FUNC_STDDEVP;  break;
-        case GeneralFunction_VAR:       mnAggFunc = EXC_SXDI_FUNC_VAR;      break;
-        case GeneralFunction_VARP:      mnAggFunc = EXC_SXDI_FUNC_VARP;     break;
-        default:                        mnAggFunc = EXC_SXDI_FUNC_SUM;
+        case ScGeneralFunction::SUM:       mnAggFunc = EXC_SXDI_FUNC_SUM;      break;
+        case ScGeneralFunction::COUNT:     mnAggFunc = EXC_SXDI_FUNC_COUNT;    break;
+        case ScGeneralFunction::AVERAGE:   mnAggFunc = EXC_SXDI_FUNC_AVERAGE;  break;
+        case ScGeneralFunction::MAX:       mnAggFunc = EXC_SXDI_FUNC_MAX;      break;
+        case ScGeneralFunction::MIN:       mnAggFunc = EXC_SXDI_FUNC_MIN;      break;
+        case ScGeneralFunction::PRODUCT:   mnAggFunc = EXC_SXDI_FUNC_PRODUCT;  break;
+        case ScGeneralFunction::COUNTNUMS: mnAggFunc = EXC_SXDI_FUNC_COUNTNUM; break;
+        case ScGeneralFunction::STDEV:     mnAggFunc = EXC_SXDI_FUNC_STDDEV;   break;
+        case ScGeneralFunction::STDEVP:    mnAggFunc = EXC_SXDI_FUNC_STDDEVP;  break;
+        case ScGeneralFunction::VAR:       mnAggFunc = EXC_SXDI_FUNC_VAR;      break;
+        case ScGeneralFunction::VARP:      mnAggFunc = EXC_SXDI_FUNC_VARP;     break;
+        default:                           mnAggFunc = EXC_SXDI_FUNC_SUM;
     }
 }
 
@@ -990,7 +994,7 @@ void XclPTViewEx9Info::Init( const ScDPObject& rDPObj )
     const ScDPSaveData* pData = rDPObj.GetSaveData();
     if (pData)
     {
-        const OUString* pGrandTotal = pData->GetGrandTotalName();
+        const boost::optional<OUString> & pGrandTotal = pData->GetGrandTotalName();
         if (pGrandTotal)
             maGrandTotalName = *pGrandTotal;
     }
@@ -1016,7 +1020,25 @@ XclExpStream& operator<<( XclExpStream& rStrm, const XclPTViewEx9Info& rInfo )
         << EXC_PT_AUTOFMT_FLAGS
         << rInfo.mnAutoFormat
         << rInfo.mnGridLayout
-        << XclExpString(rInfo.maGrandTotalName, EXC_STR_DEFAULT, EXC_PT_MAXSTRLEN);
+        << XclExpString(rInfo.maGrandTotalName, XclStrFlags::NONE, EXC_PT_MAXSTRLEN);
+}
+
+XclPTAddl::XclPTAddl() :
+    mbCompactMode(false)
+{
+}
+
+XclImpStream& operator>>(XclImpStream& rStrm, XclPTAddl& rInfo)
+{
+    rStrm.Ignore(4);
+    sal_uInt8 sxc = rStrm.ReaduInt8();
+    sal_uInt8 sxd = rStrm.ReaduInt8();
+    if(sxc == 0x00 && sxd == 0x19) // SxcView / sxdVer12Info
+    {
+        sal_uInt32 nFlags = rStrm.ReaduInt32();
+        rInfo.mbCompactMode = ((nFlags & 0x00000008) != 0);
+    }
+    return rStrm;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

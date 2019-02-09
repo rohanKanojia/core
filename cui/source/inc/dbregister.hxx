@@ -38,9 +38,6 @@ namespace svx
     class DbRegistrationOptionsPage : public SfxTabPage
     {
     private:
-        OUString            m_aTypeText;
-        OUString            m_aPathText;
-
         VclPtr<SvSimpleTableContainer> m_pPathCtrl;
         VclPtr<PushButton>         m_pNew;
         VclPtr<PushButton>         m_pEdit;
@@ -51,17 +48,16 @@ namespace svx
         sal_uLong               m_nOldCount;
         bool                m_bModified;
 
-#ifdef INCLUDED_CUI_SOURCE_INC_DBREGISTER_HXX
-        DECL_LINK_TYPED( NewHdl, Button*, void );
-        DECL_LINK_TYPED( EditHdl, Button*, void );
-        DECL_LINK_TYPED( DeleteHdl, Button*, void );
-        DECL_LINK_TYPED( PathBoxDoubleClickHdl, SvTreeListBox*, bool);
+        DECL_LINK( NewHdl, Button*, void );
+        DECL_LINK( EditHdl, Button*, void );
+        DECL_LINK( DeleteHdl, Button*, void );
+        DECL_LINK( PathBoxDoubleClickHdl, SvTreeListBox*, bool);
 
-        DECL_LINK_TYPED( PathSelect_Impl, SvTreeListBox*, void);
+        DECL_LINK( PathSelect_Impl, SvTreeListBox*, void);
 
-        DECL_LINK_TYPED( HeaderSelect_Impl, HeaderBar *, void );
-        DECL_LINK_TYPED( HeaderEndDrag_Impl, HeaderBar *, void );
-        DECL_LINK_TYPED( NameValidator, const OUString&, bool);
+        DECL_LINK( HeaderSelect_Impl, HeaderBar *, void );
+        DECL_LINK( HeaderEndDrag_Impl, HeaderBar *, void );
+        DECL_LINK( NameValidator, const OUString&, bool);
 
 
         /** inserts a new entry in the tablistbox
@@ -80,16 +76,14 @@ namespace svx
             @param  _pEntry
                 The entry to remove if the entry will be changed
         */
-        void openLinkDialog(const OUString& _sOldName,const OUString& _sOldLocation,SvTreeListEntry* _pEntry = nullptr);
-
-#endif
+        void openLinkDialog(const OUString& _sOldName,const OUString& _sOldLocation,SvTreeListEntry const * _pEntry = nullptr);
 
     public:
         DbRegistrationOptionsPage( vcl::Window* pParent, const SfxItemSet& rSet );
-        virtual ~DbRegistrationOptionsPage();
+        virtual ~DbRegistrationOptionsPage() override;
         virtual void dispose() override;
 
-        static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rSet );
+        static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rSet );
 
         virtual bool        FillItemSet( SfxItemSet* rSet ) override;
         virtual void        Reset( const SfxItemSet* rSet ) override;

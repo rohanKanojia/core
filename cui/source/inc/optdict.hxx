@@ -23,7 +23,6 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/combobox.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/edit.hxx>
@@ -47,27 +46,22 @@ namespace linguistic2{
 
 // class SvxNewDictionaryDialog ------------------------------------------
 
-class SvxNewDictionaryDialog : public ModalDialog
+class SvxNewDictionaryDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<Edit>                pNameEdit;
-    VclPtr<SvxLanguageBox>      pLanguageLB;
-    VclPtr<CheckBox>            pExceptBtn;
-    VclPtr<OKButton>            pOKBtn;
-    css::uno::Reference<
-        css::linguistic2::XDictionary >    xNewDic;
+    std::unique_ptr<weld::Entry> m_xNameEdit;
+    std::unique_ptr<LanguageBox> m_xLanguageLB;
+    std::unique_ptr<weld::CheckButton> m_xExceptBtn;
+    std::unique_ptr<weld::Button> m_xOKBtn;
+    css::uno::Reference<css::linguistic2::XDictionary> m_xNewDic;
 
-    DECL_LINK_TYPED(OKHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(ModifyHdl_Impl, Edit&, void);
+    DECL_LINK(OKHdl_Impl, weld::Button&, void);
+    DECL_LINK(ModifyHdl_Impl, weld::Entry&, void);
 
 public:
-    SvxNewDictionaryDialog( vcl::Window* pParent );
-    virtual ~SvxNewDictionaryDialog();
-    virtual void dispose() override;
+    SvxNewDictionaryDialog(weld::Window* pParent);
 
-    css::uno::Reference<
-        css::linguistic2::XDictionary >
-                GetNewDictionary() { return xNewDic; }
+    const css::uno::Reference<css::linguistic2::XDictionary>& GetNewDictionary() { return m_xNewDic; }
 };
 
 // class SvxDictEdit ----------------------------------------------------
@@ -78,8 +72,6 @@ class SvxDictEdit : public Edit
     bool                     bSpaces;
 
     public:
-                    SvxDictEdit(vcl::Window* pParent, const ResId& rResId) :
-                        Edit(pParent, rResId), bSpaces(false){}
                     SvxDictEdit(vcl::Window* pParent, WinBits aWB) :
                         Edit(pParent, aWB), bSpaces(false){}
 
@@ -111,31 +103,31 @@ private:
 
     OUString                sModify;
     OUString                sNew;
+    OUString                sReplaceFT_Text;
 
     css::uno::Sequence<
         css::uno::Reference<
             css::linguistic2::XDictionary >  > aDics;  //! snapshot copy to work on
 
-    short               nOld;
     long                nWidth;
     bool            bFirstSelect;
     bool            bDoNothing;
     bool                bDicIsReadonly;
 
-    DECL_LINK_TYPED(SelectBookHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(SelectLangHdl_Impl, ListBox&, void);
-    DECL_LINK_TYPED(SelectHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(NewDelButtonHdl, Button*, void);
-    DECL_LINK_TYPED(NewDelActionHdl, SvxDictEdit&, bool);
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
-    bool NewDelHdl(void*);
+    DECL_LINK(SelectBookHdl_Impl, ListBox&, void);
+    DECL_LINK(SelectLangHdl_Impl, ListBox&, void);
+    DECL_LINK(SelectHdl, SvTreeListBox*, void);
+    DECL_LINK(NewDelButtonHdl, Button*, void);
+    DECL_LINK(NewDelActionHdl, SvxDictEdit&, bool);
+    DECL_LINK(ModifyHdl, Edit&, void);
+    bool NewDelHdl(void const *);
 
 
     void            ShowWords_Impl( sal_uInt16 nId );
-    void            SetLanguage_Impl( css::util::Language nLanguage );
+    void            SetLanguage_Impl( LanguageType nLanguage );
     bool            IsDicReadonly_Impl() const { return bDicIsReadonly; }
     void            SetDicReadonly_Impl( css::uno::Reference<
-                            css::linguistic2::XDictionary >  &xDic );
+                            css::linguistic2::XDictionary > const &xDic );
 
     void            RemoveDictEntry(SvTreeListEntry* pEntry);
     sal_uLong       GetLBInsertPos(const OUString &rDicWord);
@@ -143,7 +135,7 @@ private:
 public:
     SvxEditDictionaryDialog( vcl::Window* pParent,
             const OUString& rName );
-    virtual ~SvxEditDictionaryDialog();
+    virtual ~SvxEditDictionaryDialog() override;
     virtual void dispose() override;
 };
 

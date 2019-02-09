@@ -20,12 +20,13 @@
 #ifndef INCLUDED_SDEXT_SOURCE_PDFIMPORT_TREE_STYLE_HXX
 #define INCLUDED_SDEXT_SOURCE_PDFIMPORT_TREE_STYLE_HXX
 
-#include "pdfihelper.hxx"
+#include <pdfihelper.hxx>
+#include <numeric>
 #include <unordered_map>
 #include <vector>
 #include <rtl/ustring.hxx>
 #include <rtl/string.hxx>
-#include "treevisiting.hxx"
+#include <treevisiting.hxx>
 
 namespace pdfi
 {
@@ -37,13 +38,12 @@ namespace pdfi
     public:
         struct Style
         {
-            OString             Name;
-            PropertyMap              Properties;
-            OUString            Contents;
+            OString const            Name;
+            PropertyMap const        Properties;
+            OUString const           Contents;
             Element*                 ContainedElement;
             std::vector< Style* >    SubStyles;
 
-            Style() : ContainedElement( nullptr )  {}
             Style( const OString& rName, const PropertyMap& rProps ) :
                 Name( rName ),
                 Properties( rProps ),
@@ -61,29 +61,15 @@ namespace pdfi
             std::vector<sal_Int32>  SubStyles;
 
             bool                    IsSubStyle;
-            sal_Int32               RefCount;
 
-            HashedStyle() : ContainedElement( nullptr ), IsSubStyle( true ), RefCount( 0 ) {}
-
-            HashedStyle( const HashedStyle& rRight ) :
-                Name( rRight.Name ),
-                Properties( rRight.Properties ),
-                Contents( rRight.Contents ),
-                ContainedElement( rRight.ContainedElement ),
-                SubStyles( rRight.SubStyles ),
-                IsSubStyle( rRight.IsSubStyle ),
-                RefCount( 0 )
-            {}
+            HashedStyle() : ContainedElement( nullptr ), IsSubStyle( true ) {}
 
             size_t hashCode() const
             {
-                size_t nRet = size_t(Name.hashCode());
-                for( PropertyMap::const_iterator it = Properties.begin();
-                     it != Properties.end(); ++it )
-                {
-                     nRet ^= size_t(it->first.hashCode());
-                     nRet ^= size_t(it->second.hashCode());
-                }
+                size_t nRet = std::accumulate(Properties.begin(), Properties.end(), size_t(Name.hashCode()),
+                    [](const size_t& sum, const PropertyMap::value_type& rEntry) {
+                        return sum ^ size_t(rEntry.first.hashCode()) ^ size_t(rEntry.second.hashCode());
+                    });
                 nRet ^= size_t(Contents.hashCode());
                 nRet ^= size_t(ContainedElement);
                 for( size_t n = 0; n < SubStyles.size(); ++n )
@@ -109,6 +95,11 @@ namespace pdfi
             }
         };
 
+        struct RefCountedHashedStyle {
+            HashedStyle style;
+            sal_Int32 RefCount = 0;
+        };
+
         struct StyleHash;
         friend struct StyleHash;
         struct StyleHash
@@ -123,28 +114,28 @@ namespace pdfi
         friend struct StyleIdNameSort;
         struct StyleIdNameSort
         {
-            const std::unordered_map< sal_Int32, HashedStyle >* m_pMap;
+            const std::unordered_map< sal_Int32, RefCountedHashedStyle >* m_pMap;
 
-            explicit StyleIdNameSort( const std::unordered_map< sal_Int32, HashedStyle >* pMap ) :
+            explicit StyleIdNameSort( const std::unordered_map< sal_Int32, RefCountedHashedStyle >* pMap ) :
                 m_pMap(pMap)
             {}
             bool operator()( sal_Int32 nLeft, sal_Int32 nRight )
             {
-                const std::unordered_map< sal_Int32, HashedStyle >::const_iterator left_it =
+                const std::unordered_map< sal_Int32, RefCountedHashedStyle >::const_iterator left_it =
                     m_pMap->find( nLeft );
-                const std::unordered_map< sal_Int32, HashedStyle >::const_iterator right_it =
+                const std::unordered_map< sal_Int32, RefCountedHashedStyle >::const_iterator right_it =
                     m_pMap->find( nRight );
                 if( left_it == m_pMap->end() )
                     return false;
                 else if( right_it == m_pMap->end() )
                     return true;
                 else
-                    return left_it->second.Name < right_it->second.Name;
+                    return left_it->second.style.Name < right_it->second.style.Name;
             }
         };
 
         sal_Int32                                               m_nNextId;
-        std::unordered_map< sal_Int32, HashedStyle >                 m_aIdToStyle;
+        std::unordered_map< sal_Int32, RefCountedHashedStyle > m_aIdToStyle;
         std::unordered_map< HashedStyle, sal_Int32, StyleHash >      m_aStyleToId;
 
         void impl_emitStyle( sal_Int32           nStyleId,

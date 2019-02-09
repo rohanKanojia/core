@@ -36,7 +36,6 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <connectivity/CommonTools.hxx>
 #include <com/sun/star/container/XContainer.hpp>
-#include <connectivity/StdTypeDefs.hxx>
 #include <connectivity/dbtoolsdllapi.hxx>
 #include <memory>
 
@@ -69,7 +68,7 @@ namespace connectivity
             virtual void swapAll() = 0;
             virtual void swap() = 0;
             virtual void clear() = 0;
-            virtual void reFill(const TStringVector &_rVector) = 0;
+            virtual void reFill(const ::std::vector< OUString> &_rVector) = 0;
             virtual void insert(const OUString& _sName, const ObjectType& _xObject) = 0;
             virtual bool rename(const OUString& _sOldName, const OUString& _sNewName) = 0;
             virtual sal_Int32 size() = 0;
@@ -101,7 +100,8 @@ namespace connectivity
             bool                                    m_bUseIndexOnly;    // is only TRUE when only an indexaccess is needed
 
             // the implementing class should refresh their elements
-            virtual void impl_refresh() throw(css::uno::RuntimeException) = 0;
+            /// @throws css::uno::RuntimeException
+            virtual void impl_refresh() = 0;
 
             // will be called when a object was requested by one of the accessing methods like getByIndex
             virtual ObjectType createObject(const OUString& _rName) = 0;
@@ -146,7 +146,7 @@ namespace connectivity
             OCollection(::cppu::OWeakObject& _rParent,
                         bool _bCase,
                         ::osl::Mutex& _rMutex,
-                        const TStringVector &_rVector,
+                        const ::std::vector< OUString> &_rVector,
                         bool _bUseIndexOnly = false,
                         bool _bUseHardRef = true);
 
@@ -170,49 +170,49 @@ namespace connectivity
             virtual ~OCollection();
             DECLARE_SERVICE_INFO();
 
-            void reFill(const TStringVector &_rVector);
-            inline bool isCaseSensitive() const { return m_pElements->isCaseSensitive(); }
+            void reFill(const ::std::vector< OUString> &_rVector);
+            bool isCaseSensitive() const { return m_pElements->isCaseSensitive(); }
             void renameObject(const OUString& _sOldName, const OUString& _sNewName);
 
             // only the name is identical to ::cppu::OComponentHelper
-            virtual void SAL_CALL disposing();
+            virtual void disposing();
             // dispatch the refcounting to the parent
             virtual void SAL_CALL acquire() throw() override;
             virtual void SAL_CALL release() throw() override;
 
             // XInterface
-            virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) throw (css::uno::RuntimeException, std::exception) override;
-            virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() throw (css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
+            virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() override;
 
             // css::container::XElementAccess
-            virtual css::uno::Type SAL_CALL getElementType(  ) throw(css::uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL hasElements(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Type SAL_CALL getElementType(  ) override;
+            virtual sal_Bool SAL_CALL hasElements(  ) override;
             // css::container::XIndexAccess
-            virtual sal_Int32 SAL_CALL getCount(  ) throw(css::uno::RuntimeException, std::exception) override;
-            virtual css::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) throw(css::lang::IndexOutOfBoundsException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+            virtual sal_Int32 SAL_CALL getCount(  ) override;
+            virtual css::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
 
                 // css::container::XNameAccess
-            virtual css::uno::Any SAL_CALL getByName( const OUString& aName ) throw(css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-            virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw(css::uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Any SAL_CALL getByName( const OUString& aName ) override;
+            virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
+            virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override;
             // XEnumerationAccess
-            virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::container::XEnumeration > SAL_CALL createEnumeration(  ) override;
                         // css::util::XRefreshable
-            virtual void SAL_CALL refresh(  ) throw(css::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) throw(css::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL refresh(  ) override;
+            virtual void SAL_CALL addRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
+            virtual void SAL_CALL removeRefreshListener( const css::uno::Reference< css::util::XRefreshListener >& l ) override;
             // XDataDescriptorFactory
-            virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
             // XAppend
-            virtual void SAL_CALL appendByDescriptor( const css::uno::Reference< css::beans::XPropertySet >& descriptor ) throw(css::sdbc::SQLException, css::container::ElementExistException, css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL appendByDescriptor( const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
             // XDrop
-            virtual void SAL_CALL dropByName( const OUString& elementName ) throw(css::sdbc::SQLException, css::container::NoSuchElementException, css::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL dropByIndex( sal_Int32 index ) throw(css::sdbc::SQLException, css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL dropByName( const OUString& elementName ) override;
+            virtual void SAL_CALL dropByIndex( sal_Int32 index ) override;
             // XColumnLocate
-            virtual sal_Int32 SAL_CALL findColumn( const OUString& columnName ) throw(css::sdbc::SQLException, css::uno::RuntimeException, std::exception) override;
+            virtual sal_Int32 SAL_CALL findColumn( const OUString& columnName ) override;
             // css::container::XContainer
-            virtual void SAL_CALL addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) throw(css::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) throw(css::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL addContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
+            virtual void SAL_CALL removeContainerListener( const css::uno::Reference< css::container::XContainerListener >& xListener ) override;
         private:
             void notifyElementRemoved(const OUString& _sName);
             void disposeElements();

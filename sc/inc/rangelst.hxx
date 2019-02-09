@@ -22,47 +22,49 @@
 
 #include "global.hxx"
 #include "address.hxx"
+#include <ostream>
 #include <vector>
 #include <sal/types.h>
 
 class ScDocument;
 
-class SC_DLLPUBLIC ScRangeList : public SvRefBase
+
+class SAL_WARN_UNUSED SC_DLLPUBLIC ScRangeList final : public SvRefBase
 {
 public:
     ScRangeList();
     ScRangeList( const ScRangeList& rList );
+    ScRangeList( const ScRangeList&& rList );
     ScRangeList( const ScRange& rRange );
-    virtual ~ScRangeList();
+    virtual ~ScRangeList() override;
 
     ScRangeList& operator=(const ScRangeList& rList);
-    void Append( const ScRange& rRange );
+    ScRangeList& operator=(ScRangeList&& rList);
 
-    ScRefFlags Parse( const OUString&, ScDocument* = nullptr,
-                      ScRefFlags nMask = ScRefFlags::VALID,
-                      formula::FormulaGrammar::AddressConvention eConv = formula::FormulaGrammar::CONV_OOO,
-                      SCTAB nDefaultTab = 0, sal_Unicode cDelimiter = 0 );
+    ScRefFlags      Parse( const OUString&, const ScDocument*,
+                           formula::FormulaGrammar::AddressConvention eConv = formula::FormulaGrammar::CONV_OOO,
+                           SCTAB nDefaultTab = 0, sal_Unicode cDelimiter = 0 );
 
-    void            Format( OUString&, ScRefFlags nFlags = ScRefFlags::ZERO, ScDocument* = nullptr,
+    void            Format( OUString&, ScRefFlags nFlags, ScDocument*,
                             formula::FormulaGrammar::AddressConvention eConv = formula::FormulaGrammar::CONV_OOO,
-                            sal_Unicode cDelimiter = 0 ) const;
+                            sal_Unicode cDelimiter = 0, bool bFullAddressNotation = false ) const;
 
     void            Join( const ScRange&, bool bIsInList = false );
 
-    bool            UpdateReference( UpdateRefMode, ScDocument*,
+    bool            UpdateReference( UpdateRefMode, const ScDocument*,
                                      const ScRange& rWhere,
-                                     SCsCOL nDx,
-                                     SCsROW nDy,
-                                     SCsTAB nDz
+                                     SCCOL nDx,
+                                     SCROW nDy,
+                                     SCTAB nDz
                                    );
 
-    void InsertRow( SCTAB nTab, SCCOL nColStart, SCCOL nColEnd, SCROW nRowPos, SCSIZE nSize );
-    void InsertCol( SCTAB nTab, SCROW nRowStart, SCROW nRowEnd, SCCOL nColPos, SCSIZE nSize );
+    void            InsertRow( SCTAB nTab, SCCOL nColStart, SCCOL nColEnd, SCROW nRowPos, SCSIZE nSize );
+    void            InsertCol( SCTAB nTab, SCROW nRowStart, SCROW nRowEnd, SCCOL nColPos, SCSIZE nSize );
 
     /** For now this method assumes that nTab1 == nTab2
      * The algorithm will be much more complicated if nTab1 != nTab2
      */
-    void            DeleteArea( SCCOL nCol1, SCROW nRow1, SCTAB nTab1, SCCOL nCol2,
+    bool            DeleteArea( SCCOL nCol1, SCROW nRow1, SCTAB nTab1, SCCOL nCol2,
                                     SCROW nRow2, SCTAB nTab2 );
 
     const ScRange*  Find( const ScAddress& ) const;
@@ -76,30 +78,44 @@ public:
 
     ScRangeList     GetIntersectedRange(const ScRange& rRange) const;
 
-    ScRange*        Remove(size_t nPos);
+    void            Remove(size_t nPos);
     void            RemoveAll();
 
     ScRange         Combine() const;
 
-    bool            empty() const;
-    size_t          size() const;
-    ScRange*        operator[](size_t idx);
-    const ScRange*  operator[](size_t idx) const;
-    ScRange*        front();
-    const ScRange*  front() const;
-    ScRange*        back();
-    const ScRange*  back() const;
-    void            push_back(ScRange* p);
+    bool            empty() const { return maRanges.empty(); }
+    size_t          size() const { return maRanges.size(); }
+    ScRange&        operator[](size_t idx) { return maRanges[idx]; }
+    const ScRange&  operator[](size_t idx) const { return maRanges[idx]; }
+    ScRange&        front() { return maRanges.front(); }
+    const ScRange&  front() const { return maRanges.front(); }
+    ScRange&        back() { return maRanges.back(); }
+    const ScRange&  back() const { return maRanges.back(); }
+    void            push_back(const ScRange & rRange);
 
     void swap( ScRangeList& r );
 
 private:
-    ::std::vector<ScRange*> maRanges;
+    ::std::vector<ScRange> maRanges;
     SCROW           mnMaxRowUsed;
-    typedef std::vector<ScRange*>::iterator iterator;
-    typedef std::vector<ScRange*>::const_iterator const_iterator;
 };
 typedef tools::SvRef<ScRangeList> ScRangeListRef;
+
+// For use in SAL_DEBUG etc. Output format not guaranteed to be stable.
+template<typename charT, typename traits>
+inline std::basic_ostream<charT, traits> & operator <<(std::basic_ostream<charT, traits> & stream, const ScRangeList& rRangeList)
+{
+    stream << "(";
+    for (size_t i = 0; i < rRangeList.size(); ++i)
+    {
+        if (i > 0)
+            stream << ",";
+        stream << rRangeList[i];
+    }
+    stream << ")";
+
+    return stream;
+}
 
 // RangePairList:
 //    aRange[0]: actual range,
@@ -107,36 +123,36 @@ typedef tools::SvRef<ScRangeList> ScRangeListRef;
 class SC_DLLPUBLIC ScRangePairList : public SvRefBase
 {
 public:
-    virtual             ~ScRangePairList();
+    virtual             ~ScRangePairList() override;
     ScRangePairList*    Clone() const;
     void                Append( const ScRangePair& rRangePair )
                         {
-                            ScRangePair* pR = new ScRangePair( rRangePair );
-                            maPairs.push_back( pR );
+                            maPairs.push_back( rRangePair );
                         }
     void                Join( const ScRangePair&, bool bIsInList = false );
-    void                UpdateReference( UpdateRefMode, ScDocument*,
+    void                UpdateReference( UpdateRefMode, const ScDocument*,
                                     const ScRange& rWhere,
-                                    SCsCOL nDx, SCsROW nDy, SCsTAB nDz );
+                                    SCCOL nDx, SCROW nDy, SCTAB nDz );
     void                DeleteOnTab( SCTAB nTab );
-    ScRangePair*        Find( const ScAddress& ) const;
-    ScRangePair*        Find( const ScRange& ) const;
-    ScRangePair**       CreateNameSortedArray( size_t& nCount, ScDocument* ) const;
+    ScRangePair*        Find( const ScAddress& );
+    ScRangePair*        Find( const ScRange& );
+    std::vector<const ScRangePair*>
+                        CreateNameSortedArray( ScDocument* ) const;
 
     void                Remove(size_t nPos);
-    ScRangePair*        Remove(ScRangePair* pAdr);
+    void                Remove(const ScRangePair & rAdr);
 
     size_t              size() const;
-    ScRangePair*        operator[](size_t idx);
-    const ScRangePair*  operator[](size_t idx) const;
+    ScRangePair&        operator[](size_t idx);
+    const ScRangePair&  operator[](size_t idx) const;
 
 private:
-    ::std::vector< ScRangePair* > maPairs;
+    ::std::vector< ScRangePair > maPairs;
 };
 typedef tools::SvRef<ScRangePairList> ScRangePairListRef;
 
 extern "C"
-int SAL_CALL ScRangePairList_QsortNameCompare( const void*, const void* );
+int ScRangePairList_QsortNameCompare( const void*, const void* );
 
 #endif
 

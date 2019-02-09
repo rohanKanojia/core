@@ -22,6 +22,7 @@
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/PropertyState.hpp>
+#include <com/sun/star/form/FormButtonType.hpp>
 
 
 namespace pcr
@@ -30,9 +31,8 @@ namespace pcr
 
     //= PushButtonNavigation
 
-    class PushButtonNavigation
+    class PushButtonNavigation final
     {
-    protected:
         css::uno::Reference< css::beans::XPropertySet >
                     m_xControlModel;
         bool        m_bIsPushButton;
@@ -89,7 +89,7 @@ namespace pcr
         bool    hasNonEmptyCurrentTargetURL() const;
 
     private:
-        sal_Int32 implGetCurrentButtonType() const;
+        css::form::FormButtonType implGetCurrentButtonType() const;
     };
 
 

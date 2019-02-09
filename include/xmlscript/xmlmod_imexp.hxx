@@ -19,9 +19,12 @@
 #ifndef INCLUDED_XMLSCRIPT_XMLMOD_IMEXP_HXX
 #define INCLUDED_XMLSCRIPT_XMLMOD_IMEXP_HXX
 
-#include <com/sun/star/xml/sax/XWriter.hpp>
-#include <xmlscript/xmlns.h>
+#include <com/sun/star/uno/Reference.hxx>
+#include <rtl/ustring.hxx>
 #include <xmlscript/xmlscriptdllapi.h>
+
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XDocumentHandler; } } } } }
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XWriter; } } } } }
 
 namespace xmlscript
 {
@@ -29,7 +32,7 @@ namespace xmlscript
 
 // Script module import/export
 // HACK C++ struct to transport info. Later the container
-// itself should do the export/import and use exportet XML
+// itself should do the export/import and use exported XML
 // functionality from xmlscript
 struct XMLSCRIPT_DLLPUBLIC ModuleDescriptor
 {
@@ -40,12 +43,12 @@ struct XMLSCRIPT_DLLPUBLIC ModuleDescriptor
 };
 
 XMLSCRIPT_DLLPUBLIC void
-SAL_CALL exportScriptModule(
+exportScriptModule(
     css::uno::Reference< css::xml::sax::XWriter > const & xOut,
     const ModuleDescriptor& rMod );
 
 XMLSCRIPT_DLLPUBLIC css::uno::Reference< css::xml::sax::XDocumentHandler >
-SAL_CALL importScriptModule( ModuleDescriptor& rMod );
+importScriptModule( ModuleDescriptor& rMod );
 
 }
 

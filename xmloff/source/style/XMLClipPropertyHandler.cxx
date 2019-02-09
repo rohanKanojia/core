@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLClipPropertyHandler.hxx"
+#include <XMLClipPropertyHandler.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/text/GraphicCrop.hpp>
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/xmltoken.hxx>

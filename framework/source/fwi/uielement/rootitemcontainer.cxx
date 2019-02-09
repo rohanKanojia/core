@@ -19,6 +19,7 @@
 
 #include <string.h>
 
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <comphelper/servicehelper.hxx>
 #include <comphelper/sequence.hxx>
 #include <uielement/rootitemcontainer.hxx>
@@ -46,13 +47,13 @@ namespace framework
 
 RootItemContainer::RootItemContainer()
     :   ::cppu::OBroadcastHelperVar< ::cppu::OMultiTypeInterfaceContainerHelper, ::cppu::OMultiTypeInterfaceContainerHelper::keyType >( m_aMutex )
-    ,   ::cppu::OPropertySetHelper  ( *(static_cast< ::cppu::OBroadcastHelper* >(this)) )
+    ,   ::cppu::OPropertySetHelper  ( *static_cast< ::cppu::OBroadcastHelper* >(this) )
 {
 }
 
 RootItemContainer::RootItemContainer( const Reference< XIndexAccess >& rSourceContainer )
     :   ::cppu::OBroadcastHelperVar< ::cppu::OMultiTypeInterfaceContainerHelper, ::cppu::OMultiTypeInterfaceContainerHelper::keyType >( m_aMutex )
-    ,   ::cppu::OPropertySetHelper  ( *(static_cast< ::cppu::OBroadcastHelper* >(this)) )
+    ,   ::cppu::OPropertySetHelper  ( *static_cast< ::cppu::OBroadcastHelper* >(this) )
 {
     // We also have to copy the UIName property
     try
@@ -106,7 +107,7 @@ RootItemContainer::~RootItemContainer()
 {
 }
 
-Any SAL_CALL RootItemContainer::queryInterface( const Type& _rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL RootItemContainer::queryInterface( const Type& _rType )
 {
     Any aRet = RootItemContainer_BASE::queryInterface( _rType );
     if ( !aRet.hasValue() )
@@ -114,7 +115,7 @@ Any SAL_CALL RootItemContainer::queryInterface( const Type& _rType ) throw(Runti
     return aRet;
 }
 
-Sequence< Type > SAL_CALL RootItemContainer::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL RootItemContainer::getTypes(  )
 {
     return comphelper::concatSequences(
         RootItemContainer_BASE::getTypes(),
@@ -140,7 +141,7 @@ Reference< XIndexAccess > RootItemContainer::deepCopyContainer( const Reference<
 }
 
 // XUnoTunnel
-sal_Int64 RootItemContainer::getSomething( const css::uno::Sequence< sal_Int8 >& rIdentifier ) throw(css::uno::RuntimeException, std::exception)
+sal_Int64 RootItemContainer::getSomething( const css::uno::Sequence< sal_Int8 >& rIdentifier )
 {
     if( ( rIdentifier.getLength() == 16 ) && ( 0 == memcmp( RootItemContainer::GetUnoTunnelId().getConstArray(), rIdentifier.getConstArray(), 16 ) ) )
         return sal::static_int_cast< sal_Int64 >( reinterpret_cast< sal_IntPtr >( this ));
@@ -166,7 +167,6 @@ RootItemContainer* RootItemContainer::GetImplementation( const css::uno::Referen
 
 // XElementAccess
 sal_Bool SAL_CALL RootItemContainer::hasElements()
-throw ( RuntimeException, std::exception )
 {
     ShareGuard aLock( m_aShareMutex );
     return ( !m_aItemVector.empty() );
@@ -174,81 +174,68 @@ throw ( RuntimeException, std::exception )
 
 // XIndexAccess
 sal_Int32 SAL_CALL RootItemContainer::getCount()
-throw ( RuntimeException, std::exception )
 {
     ShareGuard aLock( m_aShareMutex );
     return m_aItemVector.size();
 }
 
 Any SAL_CALL RootItemContainer::getByIndex( sal_Int32 Index )
-throw ( IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
 {
     ShareGuard aLock( m_aShareMutex );
-    if ( sal_Int32( m_aItemVector.size()) > Index )
-        return makeAny( m_aItemVector[Index] );
-    else
+    if ( sal_Int32( m_aItemVector.size()) <= Index )
         throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    return makeAny( m_aItemVector[Index] );
 }
 
 // XIndexContainer
 void SAL_CALL RootItemContainer::insertByIndex( sal_Int32 Index, const Any& aItem )
-throw ( IllegalArgumentException, IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
 {
     Sequence< PropertyValue > aSeq;
-    if ( aItem >>= aSeq )
-    {
-        ShareGuard aLock( m_aShareMutex );
-        if ( sal_Int32( m_aItemVector.size()) == Index )
-            m_aItemVector.push_back( aSeq );
-        else if ( sal_Int32( m_aItemVector.size()) >Index )
-        {
-            std::vector< Sequence< PropertyValue > >::iterator aIter = m_aItemVector.begin();
-            aIter += Index;
-            m_aItemVector.insert( aIter, aSeq );
-        }
-        else
-            throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
-    }
-    else
+    if ( !(aItem >>= aSeq) )
         throw IllegalArgumentException( WRONG_TYPE_EXCEPTION, static_cast<OWeakObject *>(this), 2 );
-}
 
-void SAL_CALL RootItemContainer::removeByIndex( sal_Int32 nIndex )
-throw ( IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
-{
     ShareGuard aLock( m_aShareMutex );
-    if ( (sal_Int32)m_aItemVector.size() > nIndex )
+    if ( sal_Int32( m_aItemVector.size()) == Index )
+        m_aItemVector.push_back( aSeq );
+    else if ( sal_Int32( m_aItemVector.size()) >Index )
     {
-        m_aItemVector.erase(m_aItemVector.begin() + nIndex);
+        std::vector< Sequence< PropertyValue > >::iterator aIter = m_aItemVector.begin();
+        aIter += Index;
+        m_aItemVector.insert( aIter, aSeq );
     }
     else
         throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
 }
 
+void SAL_CALL RootItemContainer::removeByIndex( sal_Int32 nIndex )
+{
+    ShareGuard aLock( m_aShareMutex );
+    if ( static_cast<sal_Int32>(m_aItemVector.size()) <= nIndex )
+        throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    m_aItemVector.erase(m_aItemVector.begin() + nIndex);
+}
+
 void SAL_CALL RootItemContainer::replaceByIndex( sal_Int32 Index, const Any& aItem )
-throw ( IllegalArgumentException, IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
 {
     Sequence< PropertyValue > aSeq;
-    if ( aItem >>= aSeq )
-    {
-        ShareGuard aLock( m_aShareMutex );
-        if ( sal_Int32( m_aItemVector.size()) > Index )
-            m_aItemVector[Index] = aSeq;
-        else
-            throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
-    }
-    else
+    if ( !(aItem >>= aSeq) )
         throw IllegalArgumentException( WRONG_TYPE_EXCEPTION, static_cast<OWeakObject *>(this), 2 );
+
+    ShareGuard aLock( m_aShareMutex );
+    if ( sal_Int32( m_aItemVector.size()) <= Index )
+        throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    m_aItemVector[Index] = aSeq;
 }
 
 Reference< XInterface > SAL_CALL RootItemContainer::createInstanceWithContext( const Reference< XComponentContext >& )
-throw ( Exception, RuntimeException, std::exception)
 {
     return static_cast<OWeakObject *>(new ItemContainer( m_aShareMutex ));
 }
 
 Reference< XInterface > SAL_CALL RootItemContainer::createInstanceWithArgumentsAndContext( const Sequence< Any >&, const Reference< XComponentContext >& )
-throw (Exception, RuntimeException, std::exception)
 {
     return static_cast<OWeakObject *>(new ItemContainer( m_aShareMutex ));
 }
@@ -258,7 +245,6 @@ sal_Bool SAL_CALL RootItemContainer::convertFastPropertyValue( Any&       aConve
                                                                Any&       aOldValue       ,
                                                                sal_Int32  nHandle         ,
                                                                const Any& aValue             )
-throw( css::lang::IllegalArgumentException )
 {
     //  Initialize state with sal_False !!!
     //  (Handle can be invalid)
@@ -281,7 +267,6 @@ throw( css::lang::IllegalArgumentException )
 
 void SAL_CALL RootItemContainer::setFastPropertyValue_NoBroadcast( sal_Int32               nHandle ,
                                                                    const css::uno::Any&    aValue  )
-throw( css::uno::Exception, std::exception )
 {
     switch( nHandle )
     {
@@ -304,53 +289,21 @@ void SAL_CALL RootItemContainer::getFastPropertyValue( css::uno::Any& aValue  ,
 
 ::cppu::IPropertyArrayHelper& SAL_CALL RootItemContainer::getInfoHelper()
 {
-    // Optimize this method !
-    // We initialize a static variable only one time. And we don't must use a mutex at every call!
-    // For the first call; pInfoHelper is NULL - for the second call pInfoHelper is different from NULL!
-    static ::cppu::OPropertyArrayHelper* pInfoHelper = nullptr;
+    // Define static member to give structure of properties to baseclass "OPropertySetHelper".
+    // "impl_getStaticPropertyDescriptor" is a non exported and static function, who will define a static propertytable.
+    // "true" say: Table is sorted by name.
+    static ::cppu::OPropertyArrayHelper ourInfoHelper( impl_getStaticPropertyDescriptor(), true );
 
-    if( pInfoHelper == nullptr )
-    {
-        // Ready for multithreading
-        osl::MutexGuard aGuard( osl::Mutex::getGlobalMutex() );
-
-        // Control this pointer again, another instance can be faster then these!
-        if( pInfoHelper == nullptr )
-        {
-            // Define static member to give structure of properties to baseclass "OPropertySetHelper".
-            // "impl_getStaticPropertyDescriptor" is a non exported and static function, who will define a static propertytable.
-            // "sal_True" say: Table is sorted by name.
-            static ::cppu::OPropertyArrayHelper aInfoHelper( impl_getStaticPropertyDescriptor(), sal_True );
-            pInfoHelper = &aInfoHelper;
-        }
-    }
-
-    return(*pInfoHelper);
+    return ourInfoHelper;
 }
 
 css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL RootItemContainer::getPropertySetInfo()
-throw (css::uno::RuntimeException, std::exception)
 {
-    // Optimize this method !
-    // We initialize a static variable only one time. And we don't must use a mutex at every call!
-    // For the first call; pInfo is NULL - for the second call pInfo is different from NULL!
-    static css::uno::Reference< css::beans::XPropertySetInfo >* pInfo = nullptr;
+    // Create structure of propertysetinfo for baseclass "OPropertySetHelper".
+    // (Use method "getInfoHelper()".)
+    static css::uno::Reference< css::beans::XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
 
-    if( pInfo == nullptr )
-    {
-        // Ready for multithreading
-        osl::MutexGuard aGuard( osl::Mutex::getGlobalMutex() );
-        // Control this pointer again, another instance can be faster then these!
-        if( pInfo == nullptr )
-        {
-            // Create structure of propertysetinfo for baseclass "OPropertySetHelper".
-            // (Use method "getInfoHelper()".)
-            static css::uno::Reference< css::beans::XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
-            pInfo = &xInfo;
-        }
-    }
-
-    return (*pInfo);
+    return xInfo;
 }
 
 const css::uno::Sequence< css::beans::Property > RootItemContainer::impl_getStaticPropertyDescriptor()
@@ -364,9 +317,9 @@ const css::uno::Sequence< css::beans::Property > RootItemContainer::impl_getStat
 
     const css::beans::Property pProperties[] =
     {
-        css::beans::Property( OUString(PROPNAME_UINAME), PROPHANDLE_UINAME ,
-                                         cppu::UnoType<OUString>::get(),
-                                         css::beans::PropertyAttribute::TRANSIENT )
+        css::beans::Property( PROPNAME_UINAME, PROPHANDLE_UINAME ,
+                              cppu::UnoType<OUString>::get(),
+                              css::beans::PropertyAttribute::TRANSIENT )
     };
     // Use it to initialize sequence!
     const css::uno::Sequence< css::beans::Property > lPropertyDescriptor( pProperties, PROPCOUNT );

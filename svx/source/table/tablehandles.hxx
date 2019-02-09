@@ -61,7 +61,7 @@ protected:
     virtual void CreateB2dIAObject() override;
 
 private:
-    bool mbHorizontal;
+    bool const mbHorizontal;
     sal_Int32 mnMin, mnMax;
     TableEdgeVector maEdges;
 };
@@ -70,7 +70,7 @@ class TableBorderHdl : public SdrHdl
 {
 public:
     TableBorderHdl(
-        const Rectangle& rRect,
+        const tools::Rectangle& rRect,
         bool bAnimate);
 
     virtual Pointer GetPointer() const override;
@@ -81,10 +81,9 @@ protected:
     virtual void CreateB2dIAObject() override;
 
 private:
-    Rectangle maRectangle;
+    tools::Rectangle const maRectangle;
 
-    /// bitfield
-    bool            mbAnimate : 1;
+    bool const            mbAnimate : 1;
 };
 
 } // end of namespace table

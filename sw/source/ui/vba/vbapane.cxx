@@ -25,7 +25,7 @@ using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
 SwVbaPane::SwVbaPane( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext,
-    const uno::Reference< frame::XModel >& xModel ) throw ( uno::RuntimeException ) :
+    const uno::Reference< frame::XModel >& xModel ) :
     SwVbaPane_BASE( rParent, rContext ), mxModel( xModel )
 {
 }
@@ -35,13 +35,13 @@ SwVbaPane::~SwVbaPane()
 }
 
 uno::Any SAL_CALL
-SwVbaPane::View() throw ( css::uno::RuntimeException, std::exception )
+SwVbaPane::View()
 {
     return uno::makeAny( uno::Reference< word::XView >( new SwVbaView( this,  mxContext, mxModel ) ) );
 }
 
 void SAL_CALL
-SwVbaPane::Close( ) throw ( css::uno::RuntimeException, std::exception )
+SwVbaPane::Close( )
 {
     OUString url = ".uno:CloseWin";
     dispatchRequests( mxModel,url );
@@ -56,12 +56,10 @@ SwVbaPane::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaPane::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Pane";
-    }
+        "ooo.vba.word.Pane"
+    };
     return aServiceNames;
 }
 

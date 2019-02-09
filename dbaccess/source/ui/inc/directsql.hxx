@@ -32,7 +32,6 @@
 
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <unotools/eventlisteneradapter.hxx>
-#include "moduledbu.hxx"
 #include <osl/mutex.hxx>
 
 #include <svtools/editbrowsebox.hxx>
@@ -41,12 +40,10 @@ namespace dbaui
 {
 
     // DirectSQLDialog
-    class DirectSQLDialog
+    class DirectSQLDialog final
             :public ModalDialog
             ,public ::utl::OEventListenerAdapter
     {
-    protected:
-        OModuleClient m_aModuleClient;
         ::osl::Mutex    m_aMutex;
 
         VclPtr<MultiLineEditSyntaxHighlight>    m_pSQL;
@@ -57,11 +54,10 @@ namespace dbaui
         VclPtr<VclMultiLineEdit> m_pOutput;
         VclPtr<PushButton>       m_pClose;
 
-        typedef ::std::deque< OUString >  StringQueue;
+        typedef std::deque< OUString >  StringQueue;
         StringQueue     m_aStatementHistory;    // previous statements
         StringQueue     m_aNormalizedHistory;   // previous statements, normalized to be used in the list box
 
-        sal_Int32       m_nHistoryLimit;
         sal_Int32       m_nStatusCount;
 
         css::uno::Reference< css::sdbc::XConnection >
@@ -71,27 +67,25 @@ namespace dbaui
         DirectSQLDialog(
             vcl::Window* _pParent,
             const css::uno::Reference< css::sdbc::XConnection >& _rxConn);
-        virtual ~DirectSQLDialog();
+        virtual ~DirectSQLDialog() override;
         virtual void dispose() override;
 
         /// number of history entries
         sal_Int32 getHistorySize() const;
 
-    protected:
+    private:
         void executeCurrent();
         void switchToHistory(sal_Int32 _nHistoryPos);
 
         // OEventListenerAdapter
         virtual void _disposing( const css::lang::EventObject& _rSource ) override;
 
-    protected:
-        DECL_LINK_TYPED( OnExecute, Button*, void );
-        DECL_LINK_TYPED( OnClose, void*, void );
-        DECL_LINK_TYPED( OnCloseClick, Button*, void );
-        DECL_LINK_TYPED( OnListEntrySelected, ListBox&, void );
-        DECL_LINK_TYPED( OnStatementModified, Edit&, void );
+        DECL_LINK( OnExecute, Button*, void );
+        DECL_LINK( OnClose, void*, void );
+        DECL_LINK( OnCloseClick, Button*, void );
+        DECL_LINK( OnListEntrySelected, ListBox&, void );
+        DECL_LINK( OnStatementModified, Edit&, void );
 
-    private:
         /// adds a statement to the statement history
         void implAddToStatementHistory(const OUString& _rStatement);
 
@@ -106,6 +100,9 @@ namespace dbaui
 
         /// adds a status text to the output list
         void addOutputText(const OUString& _rMessage);
+
+        /// displays resultset
+        void display(const css::uno::Reference< css::sdbc::XResultSet >& xRS);
 
 #ifdef DBG_UTIL
         const sal_Char* impl_CheckInvariants() const;

@@ -60,16 +60,13 @@ namespace frm
         ControlFeatureInterception( const css::uno::Reference< css::uno::XComponentContext >& _rxORB );
 
         // XDispatchProviderInterception
-        void SAL_CALL registerDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor ) throw (css::uno::RuntimeException );
-        void SAL_CALL releaseDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor ) throw (css::uno::RuntimeException );
+        /// @throws css::uno::RuntimeException
+        void registerDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor );
+        /// @throws css::uno::RuntimeException
+        void releaseDispatchProviderInterceptor( const css::uno::Reference< css::frame::XDispatchProviderInterceptor >& Interceptor );
 
         // XComponent
-        void SAL_CALL dispose();
-
-        /** queries the interceptor chain for the given dispatch
-        */
-        css::uno::Reference< css::frame::XDispatch >
-            queryDispatch( const css::util::URL& _rURL, const OUString& _rTargetFrameName );
+        void dispose();
 
         /** queries the interceptor chain for the given dispatch, with a blank target frame and no frame search flags
         */

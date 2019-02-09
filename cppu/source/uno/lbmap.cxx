@@ -17,42 +17,38 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
+#ifdef DISABLE_DYNLOADING
+#include <config_java.h>
+#endif
 
 #include "IdentityMapping.hxx"
 
-#include <algorithm>
 #include <cassert>
 #include <set>
 #include <unordered_map>
 
-#include "rtl/ustring.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "osl/module.h"
-#include "osl/diagnose.h"
-#include "osl/mutex.hxx"
-#include "osl/interlck.h"
-#include "sal/log.hxx"
+#include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <osl/module.hxx>
+#include <osl/diagnose.h>
+#include <osl/mutex.hxx>
+#include <osl/interlck.h>
+#include <sal/log.hxx>
 
-#include "uno/dispatcher.h"
-#include "uno/mapping.h"
-#include "uno/lbnames.h"
-#include "uno/environment.hxx"
+#include <uno/dispatcher.h>
+#include <uno/mapping.h>
+#include <uno/lbnames.h>
+#include <uno/environment.hxx>
 
-#include "typelib/typedescription.h"
+#include <typelib/typedescription.h>
 
-#include "cppu/EnvDcp.hxx"
+#include <cppu/EnvDcp.hxx>
 #include "cascade_mapping.hxx"
 #include "loadmodule.hxx"
 
 using namespace std;
 using namespace osl;
 using namespace com::sun::star::uno;
-using ::rtl::OUString;
-using ::rtl::OUStringBuffer;
-using ::rtl::OUStringToOString;
-using ::rtl::OUStringHash;
-using ::rtl::OString;
 
 namespace cppu
 {
@@ -64,13 +60,23 @@ class Mapping
 public:
     inline explicit Mapping( uno_Mapping * pMapping = nullptr );
     inline Mapping( const Mapping & rMapping );
+    Mapping(Mapping && other): _pMapping(other._pMapping)
+    { other._pMapping = nullptr; }
     inline ~Mapping();
-    inline Mapping & SAL_CALL operator = ( uno_Mapping * pMapping );
-    inline Mapping & SAL_CALL operator = ( const Mapping & rMapping )
+    inline Mapping & operator = ( uno_Mapping * pMapping );
+    Mapping & operator = ( const Mapping & rMapping )
         { return operator = ( rMapping._pMapping ); }
-    inline uno_Mapping * SAL_CALL get() const
+    Mapping & operator =(Mapping && other) {
+        if (_pMapping != nullptr) {
+            (*_pMapping->release)(_pMapping);
+        }
+        _pMapping = other._pMapping;
+        other._pMapping = nullptr;
+        return *this;
+    }
+    uno_Mapping * get() const
         { return _pMapping; }
-    inline bool SAL_CALL is() const
+    bool is() const
         { return (_pMapping != nullptr); }
 };
 
@@ -122,19 +128,18 @@ struct MappingEntry
         {}
 };
 
-struct FctPtrHash : public std::unary_function< uno_Mapping *, size_t >
+struct FctPtrHash
 {
     size_t operator()( uno_Mapping * pKey ) const
         { return reinterpret_cast<size_t>(pKey); }
 };
 
 typedef std::unordered_map<
-    OUString, MappingEntry *, OUStringHash > t_OUString2Entry;
+    OUString, MappingEntry * > t_OUString2Entry;
 typedef std::unordered_map<
-    uno_Mapping *, MappingEntry *, FctPtrHash, equal_to< uno_Mapping * > > t_Mapping2Entry;
+    uno_Mapping *, MappingEntry *, FctPtrHash > t_Mapping2Entry;
 
 typedef set< uno_getMappingFunc > t_CallbackSet;
-typedef set< OUString > t_OUStringSet;
 
 
 struct MappingsData
@@ -147,22 +152,15 @@ struct MappingsData
     t_CallbackSet       aCallbacks;
 
     Mutex               aNegativeLibsMutex;
-    t_OUStringSet       aNegativeLibs;
+    set<OUString>       aNegativeLibs;
 };
 
 static MappingsData & getMappingsData()
 {
-    static MappingsData * s_p = nullptr;
-    if (! s_p)
-    {
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-        if (! s_p)
-        {
-            //TODO  This memory is leaked; see #i63473# for when this should be
-            // changed again:
-            s_p = new MappingsData;
-        }
-    }
+    //TODO  This memory is leaked; see #i63473# for when this should be
+    // changed again:
+    static MappingsData * s_p(new MappingsData);
+
     return *s_p;
 }
 
@@ -190,12 +188,12 @@ struct uno_Mediate_Mapping : public uno_Mapping
 extern "C"
 {
 
-static void SAL_CALL mediate_free( uno_Mapping * pMapping )
+static void mediate_free( uno_Mapping * pMapping )
 {
     delete static_cast< uno_Mediate_Mapping * >( pMapping );
 }
 
-static void SAL_CALL mediate_acquire( uno_Mapping * pMapping )
+static void mediate_acquire( uno_Mapping * pMapping )
 {
     if (1 == osl_atomic_increment(
         & static_cast< uno_Mediate_Mapping * >( pMapping )->nRef ))
@@ -208,7 +206,7 @@ static void SAL_CALL mediate_acquire( uno_Mapping * pMapping )
     }
 }
 
-static void SAL_CALL mediate_release( uno_Mapping * pMapping )
+static void mediate_release( uno_Mapping * pMapping )
 {
     if (! osl_atomic_decrement(
         & static_cast< uno_Mediate_Mapping * >( pMapping )->nRef ))
@@ -217,7 +215,7 @@ static void SAL_CALL mediate_release( uno_Mapping * pMapping )
     }
 }
 
-static void SAL_CALL mediate_mapInterface(
+static void mediate_mapInterface(
     uno_Mapping * pMapping,
     void ** ppOut, void * pInterface,
     typelib_InterfaceTypeDescription * pInterfaceTypeDescr )
@@ -269,7 +267,7 @@ uno_Mediate_Mapping::uno_Mediate_Mapping(
 }
 
 
-static inline OUString getMappingName(
+static OUString getMappingName(
     const Environment & rFrom, const Environment & rTo, const OUString & rAddPurpose )
 {
     OUStringBuffer aKey( 64 );
@@ -286,7 +284,7 @@ static inline OUString getMappingName(
     return aKey.makeStringAndClear();
 }
 
-static inline OUString getBridgeName(
+static OUString getBridgeName(
     const Environment & rFrom, const Environment & rTo, const OUString & rAddPurpose )
 {
     OUStringBuffer aBridgeName( 16 );
@@ -303,7 +301,7 @@ static inline OUString getBridgeName(
 
 #ifndef DISABLE_DYNLOADING
 
-static inline void setNegativeBridge( const OUString & rBridgeName )
+static void setNegativeBridge( const OUString & rBridgeName )
 {
     MappingsData & rData = getMappingsData();
     MutexGuard aGuard( rData.aNegativeLibsMutex );
@@ -338,13 +336,13 @@ static uno_ext_getMappingFunc selectMapFunc( const OUString & rBridgeName )
 
 #else
 
-static inline bool loadModule(osl::Module & rModule, const OUString & rBridgeName)
+static bool loadModule(osl::Module & rModule, const OUString & rBridgeName)
 {
     bool bNeg;
     {
     MappingsData & rData = getMappingsData();
     MutexGuard aGuard( rData.aNegativeLibsMutex );
-    const t_OUStringSet::const_iterator iFind( rData.aNegativeLibs.find( rBridgeName ) );
+    const auto iFind( rData.aNegativeLibs.find( rBridgeName ) );
     bNeg = (iFind != rData.aNegativeLibs.end());
     }
 
@@ -417,11 +415,20 @@ static Mapping loadExternalMapping(
         OUString aName;
 
         if ( EnvDcp::getTypeName(rFrom.getTypeName()) == UNO_LB_UNO )
-            bModule = loadModule( aModule, aName = getBridgeName( rTo, rFrom, rAddPurpose ) );
+        {
+            aName = getBridgeName( rTo, rFrom, rAddPurpose );
+            bModule = loadModule( aModule, aName );
+        }
         if (!bModule)
-            bModule = loadModule( aModule, aName = getBridgeName( rFrom, rTo, rAddPurpose ) );
+        {
+            aName = getBridgeName( rFrom, rTo, rAddPurpose );
+            bModule = loadModule( aModule, aName );
+        }
         if (!bModule)
-            bModule = loadModule( aModule, aName = getBridgeName( rTo, rFrom, rAddPurpose ) );
+        {
+            aName = getBridgeName( rTo, rFrom, rAddPurpose );
+            bModule = loadModule( aModule, aName );
+        }
 
         if (bModule)
         {
@@ -467,16 +474,13 @@ static Mapping getDirectMapping(
             aGuard.clear();
             return loadExternalMapping( rFrom, rTo, rAddPurpose );
         }
-        else
-        {
-            return Mapping( (*iFind).second->pMapping );
-        }
+        return Mapping( (*iFind).second->pMapping );
     }
     return Mapping();
 }
 
 
-static inline Mapping createMediateMapping(
+static Mapping createMediateMapping(
     const Environment & rFrom, const Environment & rTo,
     const Mapping & rFrom2Uno, const Mapping & rUno2To,
     const OUString & rAddPurpose )

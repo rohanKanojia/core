@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svggradientnode.hxx>
-#include <svgio/svgreader/svgdocument.hxx>
-#include <svgio/svgreader/svggradientstopnode.hxx>
+#include <svggradientnode.hxx>
+#include <svgdocument.hxx>
+#include <svggradientstopnode.hxx>
 
 namespace svgio
 {
@@ -49,27 +49,23 @@ namespace svgio
             maFx(),
             maFy(),
             maGradientUnits(objectBoundingBox),
-            maSpreadMethod(drawinglayer::primitive2d::Spread_pad),
-            mpaGradientTransform(nullptr),
+            maSpreadMethod(drawinglayer::primitive2d::SpreadMethod::Pad),
+            mbResolvingLink(false),
             maXLink(),
             mpXLink(nullptr)
         {
-            OSL_ENSURE(aType == SVGTokenLinearGradient || aType == SVGTokenRadialGradient, "SvgGradientNode should ony be used for Linear and Radial gradient (!)");
+            OSL_ENSURE(aType == SVGTokenLinearGradient || aType == SVGTokenRadialGradient, "SvgGradientNode should only be used for Linear and Radial gradient (!)");
         }
 
         SvgGradientNode::~SvgGradientNode()
         {
-            delete mpaGradientTransform;
             // do NOT delete mpXLink, it's only referenced, not owned
         }
 
         const SvgStyleAttributes* SvgGradientNode::getSvgStyleAttributes() const
         {
-            OUString aClassStrA("linearGradient");
-            OUString aClassStrB("radialGradient");
-
             return checkForCssStyle(
-                SVGTokenLinearGradient == getType() ? aClassStrA : aClassStrB,
+                SVGTokenLinearGradient == getType() ? OUString("linearGradient") : OUString("radialGradient"),
                 maSvgStyleAttributes);
         }
 
@@ -79,7 +75,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -95,7 +91,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setX1(aNum);
+                        maX1 = aNum;
                     }
                     break;
                 }
@@ -105,7 +101,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setY1(aNum);
+                        maY1 = aNum;
                     }
                     break;
                 }
@@ -115,7 +111,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setX2(aNum);
+                        maX2 = aNum;
                     }
                     break;
                 }
@@ -125,7 +121,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setY2(aNum);
+                        maY2 = aNum;
                     }
                     break;
                 }
@@ -135,7 +131,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setCx(aNum);
+                        maCx = aNum;
                     }
                     break;
                 }
@@ -145,7 +141,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setCy(aNum);
+                        maCy = aNum;
                     }
                     break;
                 }
@@ -155,7 +151,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setFx(aNum);
+                        maFx = aNum;
                     }
                     break;
                 }
@@ -165,7 +161,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setFy(aNum);
+                        maFy = aNum;
                     }
                     break;
                 }
@@ -177,7 +173,7 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setR(aNum);
+                            maR = aNum;
                         }
                     }
                     break;
@@ -203,15 +199,15 @@ namespace svgio
                     {
                         if(aContent.startsWith("pad"))
                         {
-                            setSpreadMethod(drawinglayer::primitive2d::Spread_pad);
+                            setSpreadMethod(drawinglayer::primitive2d::SpreadMethod::Pad);
                         }
                         else if(aContent.startsWith("reflect"))
                         {
-                            setSpreadMethod(drawinglayer::primitive2d::Spread_reflect);
+                            setSpreadMethod(drawinglayer::primitive2d::SpreadMethod::Reflect);
                         }
                         else if(aContent.startsWith("repeat"))
                         {
-                            setSpreadMethod(drawinglayer::primitive2d::Spread_repeat);
+                            setSpreadMethod(drawinglayer::primitive2d::SpreadMethod::Repeat);
                         }
                     }
                     break;
@@ -250,9 +246,11 @@ namespace svgio
             {
                 const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-                if(mpXLink)
+                if (mpXLink && !mbResolvingLink)
                 {
+                    mbResolvingLink = true;
                     mpXLink->collectGradientEntries(aVector);
+                    mbResolvingLink = false;
                 }
             }
             else
@@ -261,7 +259,7 @@ namespace svgio
 
                 for(sal_uInt32 a(0); a < nCount; a++)
                 {
-                    const SvgGradientStopNode* pCandidate = dynamic_cast< const SvgGradientStopNode* >(getChildren()[a]);
+                    const SvgGradientStopNode* pCandidate = dynamic_cast< const SvgGradientStopNode* >(getChildren()[a].get());
 
                     if(pCandidate)
                     {
@@ -293,11 +291,10 @@ namespace svgio
                                 fOffset = 1.0;
                             }
 
-                            aVector.push_back(
-                                drawinglayer::primitive2d::SvgGradientEntry(
+                            aVector.emplace_back(
                                     fOffset,
                                     pStyle->getStopColor(),
-                                    pStyle->getStopOpacity().solve(*this)));
+                                    pStyle->getStopOpacity().solve(*this));
                         }
                         else
                         {
@@ -317,9 +314,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getX1();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getX1();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 0%
@@ -335,9 +335,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getY1();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getY1();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 0%
@@ -353,9 +356,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getX2();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getX2();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 100%
@@ -371,9 +377,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getY2();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getY2();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 0%
@@ -389,9 +398,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getCx();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getCx();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 50%
@@ -407,9 +419,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getCy();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getCy();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 50%
@@ -425,9 +440,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getR();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getR();
+                mbResolvingLink = false;
+                return ret;
             }
 
             // default is 50%
@@ -443,9 +461,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getFx();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getFx();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;
@@ -460,9 +481,12 @@ namespace svgio
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getFy();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getFy();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;
@@ -472,14 +496,17 @@ namespace svgio
         {
             if(mpaGradientTransform)
             {
-                return mpaGradientTransform;
+                return mpaGradientTransform.get();
             }
 
             const_cast< SvgGradientNode* >(this)->tryToFindLink();
 
-            if(mpXLink)
+            if (mpXLink && !mbResolvingLink)
             {
-                return mpXLink->getGradientTransform();
+                mbResolvingLink = true;
+                auto ret = mpXLink->getGradientTransform();
+                mbResolvingLink = false;
+                return ret;
             }
 
             return nullptr;
@@ -487,15 +514,11 @@ namespace svgio
 
         void SvgGradientNode::setGradientTransform(const basegfx::B2DHomMatrix* pMatrix)
         {
-            if(mpaGradientTransform)
-            {
-                delete mpaGradientTransform;
-                mpaGradientTransform = nullptr;
-            }
+            mpaGradientTransform.reset();
 
             if(pMatrix)
             {
-                mpaGradientTransform = new basegfx::B2DHomMatrix(*pMatrix);
+                mpaGradientTransform.reset(new basegfx::B2DHomMatrix(*pMatrix) );
             }
         }
 

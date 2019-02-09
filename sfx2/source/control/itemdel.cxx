@@ -19,68 +19,66 @@
 
 #include <sal/config.h>
 
-#include "itemdel.hxx"
-#include <vcl/svapp.hxx>
-#include <tools/errcode.hxx>
-#include <limits.h>
-#include <vector>
+#include <itemdel.hxx>
+#include <vcl/idle.hxx>
 
 #include <svl/itempool.hxx>
+#include <tools/debug.hxx>
 
 class SfxItemDisruptor_Impl
 {
-    SfxPoolItem *           pItem;
-    Link<Application*,void> aLink;
+    std::unique_ptr<SfxPoolItem> pItem;
+    Idle m_Idle;
 
 private:
-    DECL_LINK_TYPED( Delete, Application*, void );
+    DECL_LINK( Delete, Timer*, void );
 
 public:
-    explicit SfxItemDisruptor_Impl(SfxPoolItem *pItemToDesrupt);
+    explicit SfxItemDisruptor_Impl(std::unique_ptr<SfxPoolItem> pItemToDesrupt);
     void LaunchDeleteOnIdle();
     ~SfxItemDisruptor_Impl();
     SfxItemDisruptor_Impl(const SfxItemDisruptor_Impl&) = delete;
     SfxItemDisruptor_Impl& operator=(const SfxItemDisruptor_Impl&) = delete;
 };
 
-SfxItemDisruptor_Impl::SfxItemDisruptor_Impl( SfxPoolItem *pItemToDesrupt ):
-    pItem(pItemToDesrupt),
-    aLink( LINK(this, SfxItemDisruptor_Impl, Delete) )
+SfxItemDisruptor_Impl::SfxItemDisruptor_Impl(std::unique_ptr<SfxPoolItem> pItemToDisrupt)
+    : pItem(std::move(pItemToDisrupt))
+    , m_Idle("sfx SfxItemDisruptor_Impl::Delete")
 {
+    m_Idle.SetInvokeHandler(LINK(this, SfxItemDisruptor_Impl, Delete));
+    m_Idle.SetPriority(TaskPriority::DEFAULT_IDLE);
+    m_Idle.SetDebugName("sfx::SfxItemDisruptor_Impl m_Idle");
 
     DBG_ASSERT( 0 == pItem->GetRefCount(), "disrupting pooled item" );
-    pItem->SetKind( SFX_ITEMS_DELETEONIDLE );
+    pItem->SetKind(SfxItemKind::DeleteOnIdle);
 }
 
 void SfxItemDisruptor_Impl::LaunchDeleteOnIdle()
 {
-    // process in Idle
-    Application::InsertIdleHdl( aLink, 1 );
+    m_Idle.Start();
 }
 
 SfxItemDisruptor_Impl::~SfxItemDisruptor_Impl()
 {
-
-    // remove from Idle-Handler
-    Application::RemoveIdleHdl( aLink );
+    m_Idle.Stop();
 
     // reset RefCount (was set to SFX_ITEMS_SPECIAL before!)
     pItem->SetRefCount( 0 );
 
-    delete pItem;
+    pItem.reset();
 }
 
-IMPL_LINK_NOARG_TYPED(SfxItemDisruptor_Impl, Delete, Application*, void)
+IMPL_LINK_NOARG(SfxItemDisruptor_Impl, Delete, Timer*, void)
 {
     delete this;
 }
 
-void DeleteItemOnIdle(SfxPoolItem* pItem)
+void DeleteItemOnIdle(std::unique_ptr<SfxPoolItem> pItem)
 {
     DBG_ASSERT( 0 == pItem->GetRefCount(), "deleting item in use" );
-    SfxItemDisruptor_Impl *pDesruptor = new SfxItemDisruptor_Impl(pItem);
+    SfxItemDisruptor_Impl *pDesruptor = new SfxItemDisruptor_Impl(std::move(pItem));
     pDesruptor->LaunchDeleteOnIdle();
-    // coverity[leaked_storage] pDesruptor takes care of its own destruction at idle time
+    // coverity[leaked_storage] - pDesruptor takes care of its own destruction at idle time
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

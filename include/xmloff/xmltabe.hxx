@@ -22,6 +22,7 @@
 
 // prevent funny things like "#define sun 1" from the compiler
 #include <sal/config.h>
+#include <sal/types.h>
 
 class SvXMLExport;
 namespace com { namespace sun { namespace star {
@@ -30,18 +31,16 @@ namespace com { namespace sun { namespace star {
 } } }
 
 
-class SvxXMLTabStopExport
+class SvxXMLTabStopExport final
 {
     SvXMLExport& rExport;   // for access to document handler
-
-protected:
 
     void exportTabStop( const css::style::TabStop* pTabStop );
 
 public:
 
     SvxXMLTabStopExport(  SvXMLExport& rExport );
-    virtual ~SvxXMLTabStopExport();
+    ~SvxXMLTabStopExport();
 
     // core API
     void Export( const css::uno::Any& rAny );

@@ -41,68 +41,60 @@
 
 namespace pq_sdbc_driver
 {
-class Indexes : public Container
+class Indexes final : public Container
 {
     OUString m_schemaName;
     OUString m_tableName;
 
 public: // instances Columns 'exception safe'
-    static com::sun::star::uno::Reference< com::sun::star::container::XNameAccess > create(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+    static css::uno::Reference< css::container::XNameAccess > create(
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings,
         const OUString &schemaName,
         const OUString &tableName);
 
-protected:
+private:
     Indexes(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings,
         const OUString &schemaName,
         const OUString &tableName);
 
-    virtual ~Indexes();
+    virtual ~Indexes() override;
 
 public: // XAppend
     virtual void SAL_CALL appendByDescriptor(
-        const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor )
-        throw (::com::sun::star::sdbc::SQLException,
-               ::com::sun::star::container::ElementExistException,
-               ::com::sun::star::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
 
 public: // XDrop
-    virtual void SAL_CALL dropByIndex( sal_Int32 index )
-        throw (::com::sun::star::sdbc::SQLException,
-               ::com::sun::star::lang::IndexOutOfBoundsException,
-               ::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dropByIndex( sal_Int32 index ) override;
 
 public: // XRefreshable
-    virtual void SAL_CALL refresh(  ) throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL refresh(  ) override;
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL createDataDescriptor(  )
-        throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
 };
 
 
-class IndexDescriptors : public Container
+class IndexDescriptors final : public Container
 {
 public: // instances IndexDescriptors 'exception safe'
-    static com::sun::star::uno::Reference< com::sun::star::container::XNameAccess > create(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+    static css::uno::Reference< css::container::XNameAccess > create(
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings );
 
-protected:
+private:
     IndexDescriptors(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings );
 
 public: // XDataDescriptorFactory
-    virtual ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > SAL_CALL createDataDescriptor(  )
-        throw (::com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL createDataDescriptor(  ) override;
 
 };
 

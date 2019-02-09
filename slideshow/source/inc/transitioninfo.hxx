@@ -33,8 +33,8 @@ struct TransitionInfo
 
     // {
 
-    sal_Int16       mnTransitionType;
-    sal_Int16       mnTransitionSubType;
+    sal_Int16 const       mnTransitionType;
+    sal_Int16 const       mnTransitionSubType;
 
     // }
 
@@ -54,16 +54,16 @@ struct TransitionInfo
     };
 
     /// class of effect handling
-    TransitionClass meTransitionClass;
+    TransitionClass const meTransitionClass;
 
     /// Rotation angle of clip polygon
-    double          mnRotationAngle;
+    double const          mnRotationAngle;
 
     /// X scaling of clip polygon (negative values mirror)
-    double          mnScaleX;
+    double const          mnScaleX;
 
     /// Y scaling of clip polygon (negative values mirror)
-    double          mnScaleY;
+    double const          mnScaleY;
 
     /** This enum determines the method how to reverse
         a parametric clip polygon transition.
@@ -75,36 +75,26 @@ struct TransitionInfo
         the target in the outer area (instead of in the inner
         area, as in normal mode).
     */
-    enum ReverseMethod
+    enum class ReverseMethod
     {
         /** Ignore direction attribute altogether
             (if it has no sensible meaning for this transition)
         */
-        REVERSEMETHOD_IGNORE,
+        Ignore,
 
-        /** Revert by changing the direction of the parameter sweep
-            (from 1->0 instead of 0->1)
+        /** Combination of ReverseMethod::InvertSweep and
+            ReverseMethod::SubtractPolygon.
         */
-        REVERSEMETHOD_INVERT_SWEEP,
-
-        /** Revert by subtracting the generated polygon from the
-            target bound rect
-        */
-        REVERSEMETHOD_SUBTRACT_POLYGON,
-
-        /** Combination of REVERSEMETHOD_INVERT_SWEEP and
-            REVERSEMETHOD_SUBTRACT_POLYGON.
-        */
-        REVERSEMETHOD_SUBTRACT_AND_INVERT,
+        SubtractAndInvert,
 
         /// Reverse by rotating polygon 180 degrees
-        REVERSEMETHOD_ROTATE_180,
+        Rotate180,
 
         /// Reverse by flipping polygon at the y (!) axis
-        REVERSEMETHOD_FLIP_X,
+        FlipX,
 
         /// Reverse by flipping polygon at the x (!) axis
-        REVERSEMETHOD_FLIP_Y
+        FlipY
     };
 
     /** Indicating the method to use when transition
@@ -112,7 +102,7 @@ struct TransitionInfo
 
         @see ReverseMethod
     */
-    ReverseMethod   meReverseMethod;
+    ReverseMethod const   meReverseMethod;
 
     /** When true, transition 'out' effects are realized
         by inverting the parameter sweep direction (1->0
@@ -120,20 +110,20 @@ struct TransitionInfo
         realized by changing inside and outside areas of
         the parametric poly-polygon.
     */
-    bool            mbOutInvertsSweep;
+    bool const            mbOutInvertsSweep;
 
-    /** when true, scale clip polygon isotrophically to
+    /** when true, scale clip polygon isotropically to
         target size.  when false, scale is
-        anisotrophically.
+        anisotropically.
     */
-    bool            mbScaleIsotrophically;
+    bool const            mbScaleIsotrophically;
 
 
     /// Compare against type and subtype
     class Comparator
     {
-        sal_Int16 mnTransitionType;
-        sal_Int16 mnTransitionSubType;
+        sal_Int16 const mnTransitionType;
+        sal_Int16 const mnTransitionSubType;
     public:
         Comparator( sal_Int16 nTransitionType,
                     sal_Int16 nTransitionSubType )

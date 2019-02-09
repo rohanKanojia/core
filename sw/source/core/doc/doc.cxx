@@ -20,6 +20,7 @@
 #include <config_features.h>
 
 #include <doc.hxx>
+#include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
 #include <DocumentFieldsManager.hxx>
 #include <DocumentSettingManager.hxx>
 #include <DocumentDrawModelManager.hxx>
@@ -42,16 +43,8 @@
 #include <hintids.hxx>
 #include <tools/globname.hxx>
 #include <svx/svxids.hrc>
-#include <rtl/random.h>
 
-#include <com/sun/star/i18n/WordType.hpp>
-#include <com/sun/star/i18n/ForbiddenCharacters.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
-#include <com/sun/star/document/XDocumentProperties.hpp>
-#include <comphelper/string.hxx>
+#include <comphelper/random.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/poly.hxx>
 #include <tools/multisel.hxx>
@@ -62,7 +55,6 @@
 #include <unotools/syslocale.hxx>
 #include <sfx2/printer.hxx>
 #include <editeng/keepitem.hxx>
-#include <editeng/charsetcoloritem.hxx>
 #include <editeng/formatbreakitem.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <svx/svdmodel.hxx>
@@ -112,8 +104,7 @@
 #include <swbaslnk.hxx>
 #include <printdata.hxx>
 #include <cmdid.h>
-#include <statstr.hrc>
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <SwUndoTOXChange.hxx>
 #include <unocrsr.hxx>
 #include <docsh.hxx>
@@ -144,22 +135,24 @@
 
 using namespace ::com::sun::star;
 
-/* IInterface */
 sal_Int32 SwDoc::acquire()
 {
-    OSL_ENSURE(mReferenceCount >= 0, "Negative reference count detected! This is a sign for unbalanced acquire/release calls.");
+    assert(mReferenceCount >= 0);
     return osl_atomic_increment(&mReferenceCount);
 }
 
 sal_Int32 SwDoc::release()
 {
-    OSL_PRECOND(mReferenceCount >= 1, "Object is already released! Releasing it again leads to a negative reference count.");
-    return osl_atomic_decrement(&mReferenceCount);
+    assert(mReferenceCount >= 1);
+    auto x = osl_atomic_decrement(&mReferenceCount);
+    if (x == 0)
+        delete this;
+    return x;
 }
 
 sal_Int32 SwDoc::getReferenceCount() const
 {
-    OSL_ENSURE(mReferenceCount >= 0, "Negative reference count detected! This is a sign for unbalanced acquire/release calls.");
+    assert(mReferenceCount >= 0);
     return mReferenceCount;
 }
 
@@ -245,10 +238,8 @@ void SwDoc::setRsid( sal_uInt32 nVal )
     {
         // Increase the rsid with a random number smaller than 2^17. This way we
         // expect to be able to edit a document 2^12 times before rsid overflows.
-        static rtlRandomPool aPool = rtl_random_createPool();
-        rtl_random_getBytes( aPool, &nIncrease, sizeof ( nIncrease ) );
-        nIncrease &= ( 1<<17 ) - 1;
-        nIncrease++; // make sure the new rsid is not the same
+        // start from 1 to ensure the new rsid is not the same
+        nIncrease = comphelper::rng::uniform_uint_distribution(1, (1 << 17) - 1);
     }
     mnRsid = nVal + nIncrease;
 }
@@ -496,14 +487,16 @@ void SwDoc::ChgDBData(const SwDBData& rNewData)
     {
         maDBData = rNewData;
         getIDocumentState().SetModified();
+        if (m_pDBManager)
+            m_pDBManager->CommitLastRegistrations();
     }
-    getIDocumentFieldsAccess().GetSysFieldType(RES_DBNAMEFLD)->UpdateFields();
+    getIDocumentFieldsAccess().GetSysFieldType(SwFieldIds::DatabaseName)->UpdateFields();
 }
 
-struct _PostItField : public _SetGetExpField
+struct PostItField_ : public SetGetExpField
 {
-    _PostItField( const SwNodeIndex& rNdIdx, const SwTextField* pField,  const SwIndex* pIdx = nullptr )
-        : _SetGetExpField( rNdIdx, pField, pIdx ) {}
+    PostItField_( const SwNodeIndex& rNdIdx, const SwTextField* pField )
+        : SetGetExpField( rNdIdx, pField, nullptr ) {}
 
     sal_uInt16 GetPageNo( const StringRangeEnumerator &rRangeEnum,
             const std::set< sal_Int32 > &rPossiblePages,
@@ -515,7 +508,7 @@ struct _PostItField : public _SetGetExpField
     }
 };
 
-sal_uInt16 _PostItField::GetPageNo(
+sal_uInt16 PostItField_::GetPageNo(
     const StringRangeEnumerator &rRangeEnum,
     const std::set< sal_Int32 > &rPossiblePages,
     /* out */ sal_uInt16& rVirtPgNo, /* out */ sal_uInt16& rLineNo )
@@ -526,17 +519,18 @@ sal_uInt16 _PostItField::GetPageNo(
     //Probably only once. For the page number we don't select a random one,
     //but the PostIt's first occurrence in the selected area.
     rVirtPgNo = 0;
-    const sal_Int32 nPos = GetContent();
-    SwIterator<SwTextFrame,SwTextNode> aIter( GetTextField()->GetTextNode() );
+    SwIterator<SwTextFrame, SwTextNode, sw::IteratorMode::UnwrapMulti> aIter(GetTextField()->GetTextNode());
     for( SwTextFrame* pFrame = aIter.First(); pFrame;  pFrame = aIter.Next() )
     {
+        TextFrameIndex const nPos = pFrame->MapModelToView(
+                &GetTextField()->GetTextNode(), GetContent());
         if( pFrame->GetOfst() > nPos ||
             (pFrame->HasFollow() && pFrame->GetFollow()->GetOfst() <= nPos) )
             continue;
         sal_uInt16 nPgNo = pFrame->GetPhyPageNum();
         if( rRangeEnum.hasValue( nPgNo, &rPossiblePages ))
         {
-            rLineNo = (sal_uInt16)(pFrame->GetLineCount( nPos ) +
+            rLineNo = static_cast<sal_uInt16>(pFrame->GetLineCount( nPos ) +
                       pFrame->GetAllLines() - pFrame->GetThisLines());
             rVirtPgNo = pFrame->GetVirtPageNum();
             return nPgNo;
@@ -546,13 +540,13 @@ sal_uInt16 _PostItField::GetPageNo(
 }
 
 bool sw_GetPostIts(
-    IDocumentFieldsAccess* pIDFA,
-    _SetGetExpFields * pSrtLst )
+    IDocumentFieldsAccess const * pIDFA,
+    SetGetExpFields * pSrtLst )
 {
     bool bHasPostIts = false;
 
-    SwFieldType* pFieldType = pIDFA->GetSysFieldType( RES_POSTITFLD );
-    OSL_ENSURE( pFieldType, "no PostItType ? ");
+    SwFieldType* pFieldType = pIDFA->GetSysFieldType( SwFieldIds::Postit );
+    assert(pFieldType);
 
     if( pFieldType->HasWriterListeners() )
     {
@@ -568,8 +562,8 @@ bool sw_GetPostIts(
                 if (pSrtLst)
                 {
                     SwNodeIndex aIdx( pTextField->GetTextNode() );
-                    _PostItField* pNew = new _PostItField( aIdx, pTextField );
-                    pSrtLst->insert( pNew );
+                    std::unique_ptr<PostItField_> pNew(new PostItField_( aIdx, pTextField ));
+                    pSrtLst->insert( std::move(pNew) );
                 }
                 else
                     break;  // we just wanted to check for the existence of postits ...
@@ -589,11 +583,11 @@ static void lcl_FormatPostIt(
 {
     static char const sTmp[] = " : ";
 
-    OSL_ENSURE( SwViewShell::GetShellRes(), "missing ShellRes" );
+    assert(SwViewShell::GetShellRes());
 
     if (bNewPage)
     {
-        pIDCO->InsertPoolItem( aPam, SvxFormatBreakItem( SVX_BREAK_PAGE_AFTER, RES_BREAK ) );
+        pIDCO->InsertPoolItem( aPam, SvxFormatBreakItem( SvxBreak::PageAfter, RES_BREAK ) );
         pIDCO->SplitNode( *aPam.GetPoint(), false );
     }
     else if (!bIsFirstPostIt)
@@ -627,7 +621,7 @@ static void lcl_FormatPostIt(
     aStr = pField->GetPar2();
 #if defined(_WIN32)
     // Throw out all CR in Windows
-    aStr = comphelper::string::remove(aStr, '\r');
+    aStr = aStr.replaceAll("\r", "");
 #endif
     pIDCO->InsertString( aPam, aStr );
 }
@@ -648,6 +642,46 @@ static sal_Int32 lcl_GetPaperBin( const SwPageFrame *pStartFrame )
     return nRes;
 }
 
+namespace
+{
+// tdf#:114663 Translates a range string from user input (with page numbering possibly not
+// taking blank pages into account) to equivalent string which references physical page numbers.
+// rUIPages2PhyPagesMap must contain a contiguous sequence of UI page numbers
+OUString UIPages2PhyPages(const OUString& rUIPageRange, const std::map< sal_Int32, sal_Int32 >& rUIPages2PhyPagesMap)
+{
+    if (rUIPages2PhyPagesMap.empty())
+        return OUString();
+    auto iMin = rUIPages2PhyPagesMap.begin();
+    const sal_Int32 nUIPageMin = iMin->first, nPhyPageMin = iMin->second;
+    auto iMax = rUIPages2PhyPagesMap.rbegin();
+    const sal_Int32 nUIPageMax = iMax->first, nPhyPageMax = iMax->second;
+    OUStringBuffer aOut(rUIPageRange.getLength());
+    OUStringBuffer aNumber(16);
+    const sal_Unicode* pInput = rUIPageRange.getStr();
+    while (*pInput)
+    {
+        while (*pInput >= '0' && *pInput <= '9')
+            aNumber.append(*pInput++);
+        if (!aNumber.isEmpty())
+        {
+            sal_Int32 nNumber = aNumber.makeStringAndClear().toInt32();
+            if (nNumber < nUIPageMin)
+                nNumber = nPhyPageMin-1;
+            else if (nNumber > nUIPageMax)
+                nNumber = nPhyPageMax+1;
+            else
+                nNumber = rUIPages2PhyPagesMap.at(nNumber);
+            aOut.append(nNumber);
+        }
+
+        while (*pInput && (*pInput < '0' || *pInput > '9'))
+            aOut.append(*pInput++);
+    }
+
+    return aOut.makeStringAndClear();
+}
+}
+
 void SwDoc::CalculatePagesForPrinting(
     const SwRootFrame& rLayout,
     /* out */ SwRenderData &rData,
@@ -656,7 +690,7 @@ void SwDoc::CalculatePagesForPrinting(
     sal_Int32 nDocPageCount )
 {
     const sal_Int64 nContent = rOptions.getIntValue( "PrintContent", 0 );
-    const bool bPrintSelection = nContent == 2;
+    const bool bPrintSelection = nContent == 4;
 
     // properties to take into account when calculating the set of pages
     // (PDF export UI does not allow for selecting left or right pages only)
@@ -667,16 +701,19 @@ void SwDoc::CalculatePagesForPrinting(
 
     std::map< sal_Int32, sal_Int32 > &rPrinterPaperTrays = rData.GetPrinterPaperTrays();
     std::set< sal_Int32 > &rValidPages = rData.GetValidPagesSet();
+    // Map page numbers from user input (possibly ignoring blanks) to physical page numbers
+    std::map< sal_Int32, sal_Int32 > aUIPages2PhyPagesMap;
     rValidPages.clear();
 
-    sal_Int32 nPageNum = 1;
+    sal_Int32 nPageNum = 1, nUIPageNum = 1;
     const SwPageFrame *pStPage = dynamic_cast<const SwPageFrame*>( rLayout.Lower() );
     while (pStPage && nPageNum <= nDocPageCount)
     {
+        const bool bNonEmptyPage = pStPage->getFrameArea().Height() != 0;
         const bool bPrintThisPage =
             ( (bPrintRightPages && pStPage->OnRightPage()) ||
               (bPrintLeftPages && !pStPage->OnRightPage()) ) &&
-            ( bPrintEmptyPages || pStPage->Frame().Height() );
+            ( bPrintEmptyPages || bNonEmptyPage );
 
         if (bPrintThisPage)
         {
@@ -684,6 +721,10 @@ void SwDoc::CalculatePagesForPrinting(
             rPrinterPaperTrays[ nPageNum ] = lcl_GetPaperBin( pStPage );
         }
 
+        if ( bPrintEmptyPages || bNonEmptyPage )
+        {
+            aUIPages2PhyPagesMap[nUIPageNum++] = nPageNum;
+        }
         ++nPageNum;
         pStPage = static_cast<const SwPageFrame*>(pStPage->GetNext());
     }
@@ -701,14 +742,16 @@ void SwDoc::CalculatePagesForPrinting(
         // PageContent :
         // 0 -> print all pages (default if aPageRange is empty)
         // 1 -> print range according to PageRange
-        // 2 -> print selection
+        // 2 -> print even pages
+        // 3 -> print odd pages
+        // 4 -> print selection
         if (1 == nContent)
             aPageRange = rOptions.getStringValue( "PageRange" );
-        if (2 == nContent)
+        if (4 == nContent)
         {
             // note that printing selections is actually implemented by copying
             // the selection to a new temporary document and printing all of that one.
-            // Thus for Writer "PrintContent" must never be 2.
+            // Thus for Writer "PrintContent" must never be 4.
             // See SwXTextDocument::GetRenderDoc for evaluating if a selection is to be
             // printed and for creating the temporary document.
         }
@@ -720,193 +763,157 @@ void SwDoc::CalculatePagesForPrinting(
         // set page range to print to 'all pages'
         aPageRange = OUString::number( 1 ) + "-" + OUString::number( nDocPageCount );
     }
+    else
+    {
+        // Convert page numbers from user input to physical page numbers
+        aPageRange = UIPages2PhyPages(aPageRange, aUIPages2PhyPagesMap);
+    }
     rData.SetPageRange( aPageRange );
 
     // get vector of pages to print according to PageRange and valid pages set from above
     // (result may be an empty vector, for example if the range string is not correct)
     // If excluding empty pages, allow range to specify range of printable pages
-    if (bPrintEmptyPages || nContent == 0)
-    {
-        // Use range enumerator directly
-        StringRangeEnumerator::getRangesFromString(
-            aPageRange, rData.GetPagesToPrint(),
-            1, nDocPageCount, 0, &rData.GetValidPagesSet() );
-    }
-    else // not printing blanks and not printing all
-    {
-        // Use range enumerator to adjust for empty pages - numbers in range are
-        // essentially indexes into the valid page number set
-        StringRangeEnumerator aEnum( aPageRange, 1, nDocPageCount, 0);
-        rData.GetPagesToPrint().clear();
-        rData.GetPagesToPrint().reserve(static_cast<size_t>(aEnum.size()));
-
-        std::set<sal_Int32>::iterator valIt = rData.GetValidPagesSet().begin();
-        sal_Int32 lastRangeValue = 1;
-        for (StringRangeEnumerator::Iterator it = aEnum.begin(); it != aEnum.end(); ++it)
-        {
-            // Move valid page set iterator forward/back by diff between current
-            // and previous numbers expressed in range
-            if ((*it) - lastRangeValue > 0)
-            {
-                // Fast-forward
-                for (sal_Int32 i = 0;
-                     i < (*it) - lastRangeValue && valIt != rData.GetValidPagesSet().end();
-                     ++i, ++valIt)
-                    ;
-            }
-            else if (lastRangeValue - (*it) > 0)
-            {
-                // Rewind
-                for (sal_Int32 i = 0;
-                     i < lastRangeValue - (*it) && valIt != rData.GetValidPagesSet().begin();
-                     ++i, --valIt)
-                    ;
-            }
-
-            // Range encompasses more values than are listed as valid
-            if (valIt == rData.GetValidPagesSet().end())
-                break;
-
-            rData.GetPagesToPrint().push_back(*valIt);
-
-            lastRangeValue = *it;
-        }
-    }
+    StringRangeEnumerator::getRangesFromString( aPageRange, rData.GetPagesToPrint(),
+                                                1, nDocPageCount, 0, &rData.GetValidPagesSet() );
 }
 
 void SwDoc::UpdatePagesForPrintingWithPostItData(
     /* out */ SwRenderData &rData,
     const SwPrintUIOptions &rOptions,
-    bool /*bIsPDFExport*/,
     sal_Int32 nDocPageCount )
 {
 
     SwPostItMode nPostItMode = static_cast<SwPostItMode>( rOptions.getIntValue( "PrintAnnotationMode", 0 ) );
-    OSL_ENSURE(nPostItMode == SwPostItMode::NONE || rData.HasPostItData(),
-            "print post-its without post-it data?" );
-    const _SetGetExpFields::size_type nPostItCount =
+    assert((nPostItMode == SwPostItMode::NONE || rData.HasPostItData())
+            && "print post-its without post-it data?");
+    const SetGetExpFields::size_type nPostItCount =
         rData.HasPostItData() ? rData.m_pPostItFields->size() : 0;
-    if (nPostItMode != SwPostItMode::NONE && nPostItCount > 0)
+    if (nPostItMode == SwPostItMode::NONE || nPostItCount <= 0)
+        return;
+
+    SET_CURR_SHELL( rData.m_pPostItShell.get() );
+
+    // clear document and move to end of it
+    SwDoc & rPostItDoc(*rData.m_pPostItShell->GetDoc());
+    SwPaM aPam(rPostItDoc.GetNodes().GetEndOfContent());
+    aPam.Move( fnMoveBackward, GoInDoc );
+    aPam.SetMark();
+    aPam.Move( fnMoveForward, GoInDoc );
+    rPostItDoc.getIDocumentContentOperations().DeleteRange( aPam );
+
+    const StringRangeEnumerator aRangeEnum( rData.GetPageRange(), 1, nDocPageCount, 0 );
+
+    // For mode SwPostItMode::EndPage:
+    // maps a physical page number to the page number in post-it document that holds
+    // the first post-it for that physical page . Needed to relate the correct start frames
+    // from the post-it doc to the physical page of the document
+    std::map< sal_Int32, sal_Int32 >  aPostItLastStartPageNum;
+
+    // add all post-its on valid pages within the page range to the
+    // temporary post-it document.
+    // Since the array of post-it fields is sorted by page and line number we will
+    // already get them in the correct order
+    sal_uInt16 nVirtPg = 0, nLineNo = 0, nLastPageNum = 0, nPhyPageNum = 0;
+    bool bIsFirstPostIt = true;
+    for (SetGetExpFields::size_type i = 0; i < nPostItCount; ++i)
     {
-        SET_CURR_SHELL( rData.m_pPostItShell.get() );
-
-        // clear document and move to end of it
-        SwDoc & rPostItDoc(*rData.m_pPostItShell->GetDoc());
-        SwPaM aPam(rPostItDoc.GetNodes().GetEndOfContent());
-        aPam.Move( fnMoveBackward, fnGoDoc );
-        aPam.SetMark();
-        aPam.Move( fnMoveForward, fnGoDoc );
-        rPostItDoc.getIDocumentContentOperations().DeleteRange( aPam );
-
-        const StringRangeEnumerator aRangeEnum( rData.GetPageRange(), 1, nDocPageCount, 0 );
-
-        // For mode SwPostItMode::EndPage:
-        // maps a physical page number to the page number in post-it document that holds
-        // the first post-it for that physical page . Needed to relate the correct start frames
-        // from the post-it doc to the physical page of the document
-        std::map< sal_Int32, sal_Int32 >  aPostItLastStartPageNum;
-
-        // add all post-its on valid pages within the page range to the
-        // temporary post-it document.
-        // Since the array of post-it fields is sorted by page and line number we will
-        // already get them in the correct order
-        sal_uInt16 nVirtPg = 0, nLineNo = 0, nLastPageNum = 0, nPhyPageNum = 0;
-        bool bIsFirstPostIt = true;
-        for (_SetGetExpFields::size_type i = 0; i < nPostItCount; ++i)
+        PostItField_& rPostIt = static_cast<PostItField_&>(*(*rData.m_pPostItFields)[ i ]);
+        nLastPageNum = nPhyPageNum;
+        nPhyPageNum = rPostIt.GetPageNo(
+                aRangeEnum, rData.GetValidPagesSet(), nVirtPg, nLineNo );
+        if (nPhyPageNum)
         {
-            _PostItField& rPostIt = static_cast<_PostItField&>(*(*rData.m_pPostItFields)[ i ]);
-            nLastPageNum = nPhyPageNum;
-            nPhyPageNum = rPostIt.GetPageNo(
-                    aRangeEnum, rData.GetValidPagesSet(), nVirtPg, nLineNo );
-            if (nPhyPageNum)
+            // need to insert a page break?
+            // In SwPostItMode::EndPage mode for each document page the following
+            // post-it page needs to start on a new page
+            const bool bNewPage = nPostItMode == SwPostItMode::EndPage &&
+                    !bIsFirstPostIt && nPhyPageNum != nLastPageNum;
+
+            lcl_FormatPostIt( &rData.m_pPostItShell->GetDoc()->getIDocumentContentOperations(), aPam,
+                    rPostIt.GetPostIt(), bNewPage, bIsFirstPostIt, nVirtPg, nLineNo );
+            bIsFirstPostIt = false;
+
+            if (nPostItMode == SwPostItMode::EndPage)
             {
-                // need to insert a page break?
-                // In SwPostItMode::EndPage mode for each document page the following
-                // post-it page needs to start on a new page
-                const bool bNewPage = nPostItMode == SwPostItMode::EndPage &&
-                        !bIsFirstPostIt && nPhyPageNum != nLastPageNum;
-
-                lcl_FormatPostIt( &rData.m_pPostItShell->GetDoc()->getIDocumentContentOperations(), aPam,
-                        rPostIt.GetPostIt(), bNewPage, bIsFirstPostIt, nVirtPg, nLineNo );
-                bIsFirstPostIt = false;
-
-                if (nPostItMode == SwPostItMode::EndPage)
-                {
-                    // get the correct number of current pages for the post-it document
-                    rData.m_pPostItShell->CalcLayout();
-                    const sal_Int32 nPages = rData.m_pPostItShell->GetPageCount();
-                    aPostItLastStartPageNum[ nPhyPageNum ] = nPages;
-                }
+                // get the correct number of current pages for the post-it document
+                rData.m_pPostItShell->CalcLayout();
+                const sal_Int32 nPages = rData.m_pPostItShell->GetPageCount();
+                aPostItLastStartPageNum[ nPhyPageNum ] = nPages;
             }
-        }
-
-        // format post-it doc to get correct number of pages
-        rData.m_pPostItShell->CalcLayout();
-        const sal_Int32 nPostItDocPageCount = rData.m_pPostItShell->GetPageCount();
-
-        if (nPostItMode == SwPostItMode::Only || nPostItMode == SwPostItMode::EndDoc)
-        {
-            // now add those post-it pages to the vector of pages to print
-            // or replace them if only post-its should be printed
-
-            if (nPostItMode == SwPostItMode::Only)
-            {
-                // no document page to be printed
-                rData.GetPagesToPrint().clear();
-            }
-
-            // now we just need to add the post-it pages to be printed to the
-            // end of the vector of pages to print
-            sal_Int32 nPageNum = 0;
-            const SwPageFrame * pPageFrame = static_cast<SwPageFrame*>(rData.m_pPostItShell->GetLayout()->Lower());
-            while( pPageFrame && nPageNum < nPostItDocPageCount )
-            {
-                OSL_ENSURE( pPageFrame, "Empty page frame. How are we going to print this?" );
-                ++nPageNum;
-                // negative page number indicates page is from the post-it doc
-                rData.GetPagesToPrint().push_back( -nPageNum );
-                OSL_ENSURE( pPageFrame, "pPageFrame is NULL!" );
-                pPageFrame = static_cast<const SwPageFrame*>(pPageFrame->GetNext());
-            }
-            OSL_ENSURE( nPageNum == nPostItDocPageCount, "unexpected number of pages" );
-        }
-        else if (nPostItMode == SwPostItMode::EndPage)
-        {
-            // the next step is to find all the pages from the post-it
-            // document that should be printed for a given physical page
-            // of the document
-
-            std::vector< sal_Int32 >            aTmpPagesToPrint;
-            sal_Int32 nLastPostItPage(0);
-            const size_t nNum = rData.GetPagesToPrint().size();
-            for (size_t i = 0 ;  i < nNum;  ++i)
-            {
-                // add the physical page to print from the document
-                const sal_Int32 nPhysPage = rData.GetPagesToPrint()[i];
-                aTmpPagesToPrint.push_back( nPhysPage );
-
-                // add the post-it document pages to print, i.e those
-                // post-it pages that have the data for the above physical page
-                ::std::map<sal_Int32, sal_Int32>::const_iterator const iter(
-                        aPostItLastStartPageNum.find(nPhysPage));
-                if (iter != aPostItLastStartPageNum.end())
-                {
-                    for (sal_Int32 j = nLastPostItPage + 1;
-                            j <= iter->second; ++j)
-                    {
-                        // negative page number indicates page is from the
-                        aTmpPagesToPrint.push_back(-j); // post-it document
-                    }
-                    nLastPostItPage = iter->second;
-                }
-            }
-
-            // finally we need to assign those vectors to the resulting ones.
-            // swapping the data should be more efficient than assigning since
-            // we won't need the temporary vectors anymore
-            rData.GetPagesToPrint().swap( aTmpPagesToPrint );
         }
     }
+
+    // format post-it doc to get correct number of pages
+    rData.m_pPostItShell->CalcLayout();
+
+    SwRootFrame* pPostItRoot = rData.m_pPostItShell->GetLayout();
+    //tdf#103313 print dialog maxes out cpu as Idles never get to
+    //complete this postitshell's desire to complete formatting
+    pPostItRoot->ResetIdleFormat();
+
+    const sal_Int32 nPostItDocPageCount = rData.m_pPostItShell->GetPageCount();
+
+    if (nPostItMode == SwPostItMode::Only || nPostItMode == SwPostItMode::EndDoc)
+    {
+        // now add those post-it pages to the vector of pages to print
+        // or replace them if only post-its should be printed
+
+        if (nPostItMode == SwPostItMode::Only)
+        {
+            // no document page to be printed
+            rData.GetPagesToPrint().clear();
+        }
+
+        // now we just need to add the post-it pages to be printed to the
+        // end of the vector of pages to print
+        sal_Int32 nPageNum = 0;
+        const SwPageFrame * pPageFrame = static_cast<SwPageFrame*>(pPostItRoot->Lower());
+        while( pPageFrame && nPageNum < nPostItDocPageCount )
+        {
+            ++nPageNum;
+            // negative page number indicates page is from the post-it doc
+            rData.GetPagesToPrint().push_back( -nPageNum );
+            pPageFrame = static_cast<const SwPageFrame*>(pPageFrame->GetNext());
+        }
+        OSL_ENSURE( nPageNum == nPostItDocPageCount, "unexpected number of pages" );
+    }
+    else if (nPostItMode == SwPostItMode::EndPage)
+    {
+        // the next step is to find all the pages from the post-it
+        // document that should be printed for a given physical page
+        // of the document
+
+        std::vector< sal_Int32 >            aTmpPagesToPrint;
+        sal_Int32 nLastPostItPage(0);
+        const size_t nNum = rData.GetPagesToPrint().size();
+        for (size_t i = 0 ;  i < nNum;  ++i)
+        {
+            // add the physical page to print from the document
+            const sal_Int32 nPhysPage = rData.GetPagesToPrint()[i];
+            aTmpPagesToPrint.push_back( nPhysPage );
+
+            // add the post-it document pages to print, i.e those
+            // post-it pages that have the data for the above physical page
+            std::map<sal_Int32, sal_Int32>::const_iterator const iter(
+                    aPostItLastStartPageNum.find(nPhysPage));
+            if (iter != aPostItLastStartPageNum.end())
+            {
+                for (sal_Int32 j = nLastPostItPage + 1;
+                        j <= iter->second; ++j)
+                {
+                    // negative page number indicates page is from the
+                    aTmpPagesToPrint.push_back(-j); // post-it document
+                }
+                nLastPostItPage = iter->second;
+            }
+        }
+
+        // finally we need to assign those vectors to the resulting ones.
+        // swapping the data should be more efficient than assigning since
+        // we won't need the temporary vectors anymore
+        rData.GetPagesToPrint().swap( aTmpPagesToPrint );
+    }
+
 }
 
 void SwDoc::CalculatePagePairsForProspectPrinting(
@@ -927,7 +934,9 @@ void SwDoc::CalculatePagePairsForProspectPrinting(
     // PageContent :
     // 0 -> print all pages (default if aPageRange is empty)
     // 1 -> print range according to PageRange
-    // 2 -> print selection
+    // 2 -> print even pages
+    // 3 -> print odd pages
+    // 4 -> print selection
     const sal_Int64 nContent = rOptions.getIntValue( "PrintContent", 0 );
     if (nContent == 1)
         aPageRange = rOptions.getStringValue( "PageRange" );
@@ -953,7 +962,6 @@ void SwDoc::CalculatePagePairsForProspectPrinting(
     const SwPageFrame *pPageFrame  = dynamic_cast<const SwPageFrame*>( rLayout.Lower() );
     while( pPageFrame && nPageNum < nDocPageCount )
     {
-        OSL_ENSURE( pPageFrame, "Empty page frame. How are we going to print this?" );
         ++nPageNum;
         rValidPagesSet.insert( nPageNum );
         validStartFrames[ nPageNum ] = pPageFrame;
@@ -982,9 +990,8 @@ void SwDoc::CalculatePagePairsForProspectPrinting(
     // now fill the vector for calculating the page pairs with the start frames
     // from the above obtained vector
     std::vector< const SwPageFrame * > aVec;
-    for ( std::vector< sal_Int32 >::size_type i = 0; i < aPagesToPrint.size(); ++i)
+    for (sal_Int32 nPage : aPagesToPrint)
     {
-        const sal_Int32 nPage = aPagesToPrint[i];
         const SwPageFrame *pFrame = validStartFrames[ nPage ];
         aVec.push_back( pFrame );
     }
@@ -1047,7 +1054,7 @@ void SwDoc::CalculatePagePairsForProspectPrinting(
 
             pStPage = pNxtPage;
         }
-        rPagePairs.push_back( std::pair< sal_Int32, sal_Int32 >(nFirst, nSecond) );
+        rPagePairs.emplace_back(nFirst, nSecond );
 
         nSPg = nSPg + nStep;
         nEPg = nEPg - nStep;
@@ -1123,8 +1130,8 @@ sal_uInt16 SwDoc::GetRefMarks( std::vector<OUString>* pNames ) const
         {
             if( pNames )
             {
-                OUString pTmp(static_cast<const SwFormatRefMark*>(pItem)->GetRefName());
-                pNames->insert(pNames->begin() + nCount, pTmp);
+                OUString aTmp(static_cast<const SwFormatRefMark*>(pItem)->GetRefName());
+                pNames->insert(pNames->begin() + nCount, aTmp);
             }
             ++nCount;
         }
@@ -1187,7 +1194,7 @@ static bool lcl_CheckSmartTagsAgain( const SwNodePtr& rpNd, void*  )
 void SwDoc::SpellItAgainSam( bool bInvalid, bool bOnlyWrong, bool bSmartTags )
 {
     std::set<SwRootFrame*> aAllLayouts = GetAllLayouts();
-    OSL_ENSURE( getIDocumentLayoutAccess().GetCurrentLayout(), "SpellAgain: Where's my RootFrame?" );
+    assert(getIDocumentLayoutAccess().GetCurrentLayout() && "SpellAgain: Where's my RootFrame?");
     if( bInvalid )
     {
         for ( auto aLayout : aAllLayouts )
@@ -1231,7 +1238,7 @@ const SwFormatINetFormat* SwDoc::FindINetAttr( const OUString& rName ) const
     sal_uInt32 n, nMaxItems = GetAttrPool().GetItemCount2( RES_TXTATR_INETFMT );
     for( n = 0; n < nMaxItems; ++n )
     {
-        pItem = static_cast<const SwFormatINetFormat*>( GetAttrPool().GetItem2( RES_TXTATR_INETFMT, n ) );
+        pItem = GetAttrPool().GetItem2( RES_TXTATR_INETFMT, n );
         if( nullptr != pItem &&
             pItem->GetName() == rName &&
             nullptr != ( pTextAttr = pItem->GetTextINetFormat()) &&
@@ -1275,7 +1282,7 @@ void SwDoc::Summary( SwDoc* pExtDoc, sal_uInt8 nLevel, sal_uInt8 nPara, bool bIm
             }
 
             SwNodeRange aRange( *rOutNds[ i ], 0, *rOutNds[ i ], nEndOfs );
-            GetNodes()._Copy( aRange, aEndOfDoc );
+            GetNodes().Copy_( aRange, aEndOfDoc );
         }
         const SwTextFormatColls *pColl = pExtDoc->GetTextFormatColls();
         for( SwTextFormatColls::size_type i = 0; i < pColl->size(); ++i )
@@ -1316,41 +1323,115 @@ void SwDoc::Summary( SwDoc* pExtDoc, sal_uInt8 nLevel, sal_uInt8 nPara, bool bIm
     }
 }
 
+namespace
+{
+void RemoveOrDeleteContents(SwTextNode* pTextNd, IDocumentContentOperations& xOperations)
+{
+    SwPaM aPam(*pTextNd, 0, *pTextNd, pTextNd->GetText().getLength());
+
+    // Remove hidden paragraph or delete contents:
+    // Delete contents if
+    // 1. removing the paragraph would result in an empty section or
+    // 2. if the paragraph is the last paragraph in the section and
+    //    there is no paragraph in front of the paragraph:
+    if ((2 == pTextNd->EndOfSectionIndex() - pTextNd->StartOfSectionIndex())
+        || (1 == pTextNd->EndOfSectionIndex() - pTextNd->GetIndex()
+            && !pTextNd->GetNodes()[pTextNd->GetIndex() - 1]->GetTextNode()))
+    {
+        xOperations.DeleteRange(aPam);
+    }
+    else
+    {
+        aPam.DeleteMark();
+        xOperations.DelFullPara(aPam);
+    }
+}
+// Returns if the data was actually modified
+bool HandleHidingField(SwFormatField& rFormatField, const SwNodes& rNodes,
+                       IDocumentContentOperations& xOperations)
+{
+    SwTextNode* pTextNd;
+    if (rFormatField.GetTextField()
+        && nullptr != (pTextNd = rFormatField.GetTextField()->GetpTextNode())
+        && pTextNd->GetpSwpHints() && pTextNd->IsHiddenByParaField()
+        && &pTextNd->GetNodes() == &rNodes)
+    {
+        RemoveOrDeleteContents(pTextNd, xOperations);
+        return true;
+    }
+    return false;
+}
+}
+
+// The greater the returned value, the more weight has this field type on deciding the final
+// paragraph state
+int SwDoc::FieldCanHideParaWeight(SwFieldIds eFieldId) const
+{
+    switch (eFieldId)
+    {
+        case SwFieldIds::HiddenPara:
+            return 20;
+        case SwFieldIds::Database:
+            return GetDocumentSettingManager().get(DocumentSettingId::EMPTY_DB_FIELD_HIDES_PARA)
+                       ? 10
+                       : 0;
+        default:
+            return 0;
+    }
+}
+
+bool SwDoc::FieldHidesPara(const SwField& rField) const
+{
+    switch (rField.GetTyp()->Which())
+    {
+        case SwFieldIds::HiddenPara:
+            return static_cast<const SwHiddenParaField&>(rField).IsHidden();
+        case SwFieldIds::Database:
+            return FieldCanHideParaWeight(SwFieldIds::Database)
+                   && rField.ExpandField(true, nullptr).isEmpty();
+        default:
+            return false;
+    }
+}
+
 /// Remove the invisible content from the document e.g. hidden areas, hidden paragraphs
+// Returns if the data was actually modified
 bool SwDoc::RemoveInvisibleContent()
 {
     bool bRet = false;
-    GetIDocumentUndoRedo().StartUndo( UNDO_UI_DELETE_INVISIBLECNTNT, nullptr );
+    GetIDocumentUndoRedo().StartUndo( SwUndoId::UI_DELETE_INVISIBLECNTNT, nullptr );
 
     {
-        SwTextNode* pTextNd;
-        SwIterator<SwFormatField,SwFieldType> aIter( *getIDocumentFieldsAccess().GetSysFieldType( RES_HIDDENPARAFLD )  );
-        for( SwFormatField* pFormatField = aIter.First(); pFormatField;  pFormatField = aIter.Next() )
+        class FieldTypeGuard : public SwClient
         {
-            if( pFormatField->GetTextField() &&
-                nullptr != ( pTextNd = pFormatField->GetTextField()->GetpTextNode() ) &&
-                pTextNd->GetpSwpHints() && pTextNd->HasHiddenParaField() &&
-                &pTextNd->GetNodes() == &GetNodes() )
+        public:
+            explicit FieldTypeGuard(SwFieldType* pType)
+                : SwClient(pType)
             {
-                bRet = true;
-                SwPaM aPam(*pTextNd, 0, *pTextNd, pTextNd->GetText().getLength());
-
-                // Remove hidden paragraph or delete contents:
-                // Delete contents if
-                // 1. removing the paragraph would result in an empty section or
-                // 2. if the paragraph is the last paragraph in the section and
-                //    there is no paragraph in front of the paragraph:
-                if ( ( 2 == pTextNd->EndOfSectionIndex() - pTextNd->StartOfSectionIndex() ) ||
-                     ( 1 == pTextNd->EndOfSectionIndex() - pTextNd->GetIndex() &&
-                       !GetNodes()[ pTextNd->GetIndex() - 1 ]->GetTextNode() ) )
-                {
-                    getIDocumentContentOperations().DeleteRange( aPam );
-                }
-                else
-                {
-                    aPam.DeleteMark();
-                    getIDocumentContentOperations().DelFullPara( aPam );
-                }
+            }
+            const SwFieldType* get() const
+            {
+                return static_cast<const SwFieldType*>(GetRegisteredIn());
+            }
+        };
+        // Removing some nodes for one SwFieldIds::Database type might remove the type from
+        // document's field types, invalidating iterators. So, we need to create own list of
+        // matching types prior to processing them.
+        std::vector<std::unique_ptr<FieldTypeGuard>> aHidingFieldTypes;
+        for (SwFieldType* pType : *getIDocumentFieldsAccess().GetFieldTypes())
+        {
+            if (FieldCanHideParaWeight(pType->Which()))
+                aHidingFieldTypes.push_back(std::make_unique<FieldTypeGuard>(pType));
+        }
+        for (const auto& pTypeGuard : aHidingFieldTypes)
+        {
+            if (const SwFieldType* pType = pTypeGuard->get())
+            {
+                SwIterator<SwFormatField, SwFieldType> aIter(*pType);
+                for (SwFormatField* pFormatField = aIter.First(); pFormatField;
+                     pFormatField = aIter.Next())
+                    bRet |= HandleHidingField(*pFormatField, GetNodes(),
+                                              getIDocumentContentOperations());
             }
         }
     }
@@ -1367,23 +1448,7 @@ bool SwDoc::RemoveInvisibleContent()
             {
                 bRemoved = true;
                 bRet = true;
-
-                // Remove hidden paragraph or delete contents:
-                // Delete contents if
-                // 1. removing the paragraph would result in an empty section or
-                // 2. if the paragraph is the last paragraph in the section and
-                //    there is no paragraph in front of the paragraph:
-                if ( ( 2 == pTextNd->EndOfSectionIndex() - pTextNd->StartOfSectionIndex() ) ||
-                     ( 1 == pTextNd->EndOfSectionIndex() - pTextNd->GetIndex() &&
-                       !GetNodes()[ pTextNd->GetIndex() - 1 ]->GetTextNode() ) )
-                {
-                    getIDocumentContentOperations().DeleteRange( aPam );
-                }
-                else
-                {
-                    aPam.DeleteMark();
-                    getIDocumentContentOperations().DelFullPara( aPam );
-                }
+                RemoveOrDeleteContents(pTextNd, getIDocumentContentOperations());
             }
             else if ( pTextNd->HasHiddenCharAttribute( false ) )
             {
@@ -1481,25 +1546,22 @@ bool SwDoc::RemoveInvisibleContent()
 
     if( bRet )
         getIDocumentState().SetModified();
-    GetIDocumentUndoRedo().EndUndo( UNDO_UI_DELETE_INVISIBLECNTNT, nullptr );
+    GetIDocumentUndoRedo().EndUndo( SwUndoId::UI_DELETE_INVISIBLECNTNT, nullptr );
     return bRet;
 }
 
 bool SwDoc::HasInvisibleContent() const
 {
-    if(SwIterator<SwFormatField,SwFieldType>(*getIDocumentFieldsAccess().GetSysFieldType( RES_HIDDENPARAFLD)).First())
+    if(SwIterator<SwFormatField,SwFieldType>(*getIDocumentFieldsAccess().GetSysFieldType( SwFieldIds::HiddenPara)).First())
         return true;
 
     // Search for any hidden paragraph (hidden text attribute)
     for( sal_uLong n = GetNodes().Count()-1; n; --n)
     {
         SwTextNode* pTextNd = GetNodes()[ n ]->GetTextNode();
-        if ( pTextNd )
-        {
-            SwPaM aPam(*pTextNd, 0, *pTextNd, pTextNd->GetText().getLength());
-            if( pTextNd->HasHiddenCharAttribute( true ) ||  ( pTextNd->HasHiddenCharAttribute( false ) ) )
-                return true;
-        }
+        if ( pTextNd &&
+             ( pTextNd->HasHiddenCharAttribute( true ) || pTextNd->HasHiddenCharAttribute( false ) ) )
+            return true;
     }
 
     for(auto pSectFormat : GetSections())
@@ -1516,9 +1578,9 @@ bool SwDoc::HasInvisibleContent() const
 
 bool SwDoc::RestoreInvisibleContent()
 {
-    SwUndoId nLastUndoId(UNDO_EMPTY);
+    SwUndoId nLastUndoId(SwUndoId::EMPTY);
     if (GetIDocumentUndoRedo().GetLastUndoInfo(nullptr, & nLastUndoId)
-        && (UNDO_UI_DELETE_INVISIBLECNTNT == nLastUndoId))
+        && (SwUndoId::UI_DELETE_INVISIBLECNTNT == nLastUndoId))
     {
         GetIDocumentUndoRedo().Undo();
         GetIDocumentUndoRedo().ClearRedo();
@@ -1527,11 +1589,11 @@ bool SwDoc::RestoreInvisibleContent()
     return false;
 }
 
-bool SwDoc::ConvertFieldsToText()
+bool SwDoc::ConvertFieldsToText(SwRootFrame const& rLayout)
 {
     bool bRet = false;
     getIDocumentFieldsAccess().LockExpFields();
-    GetIDocumentUndoRedo().StartUndo( UNDO_UI_REPLACE, nullptr );
+    GetIDocumentUndoRedo().StartUndo( SwUndoId::UI_REPLACE, nullptr );
 
     const SwFieldTypes* pMyFieldTypes = getIDocumentFieldsAccess().GetFieldTypes();
     const SwFieldTypes::size_type nCount = pMyFieldTypes->size();
@@ -1540,19 +1602,17 @@ bool SwDoc::ConvertFieldsToText()
     {
         const SwFieldType *pCurType = (*pMyFieldTypes)[nType - 1];
 
-        if ( RES_POSTITFLD == pCurType->Which() )
+        if ( SwFieldIds::Postit == pCurType->Which() )
             continue;
 
         SwIterator<SwFormatField,SwFieldType> aIter( *pCurType );
-        ::std::vector<const SwFormatField*> aFieldFormats;
+        std::vector<const SwFormatField*> aFieldFormats;
         for( SwFormatField* pCurFieldFormat = aIter.First(); pCurFieldFormat; pCurFieldFormat = aIter.Next() )
             aFieldFormats.push_back(pCurFieldFormat);
 
-        ::std::vector<const SwFormatField*>::iterator aBegin = aFieldFormats.begin();
-        ::std::vector<const SwFormatField*>::iterator aEnd = aFieldFormats.end();
-        while(aBegin != aEnd)
+        for(const auto& rpFieldFormat : aFieldFormats)
         {
-            const SwTextField *pTextField = (*aBegin)->GetTextField();
+            const SwTextField *pTextField = rpFieldFormat->GetTextField();
             // skip fields that are currently not in the document
             // e.g. fields in undo or redo array
 
@@ -1566,20 +1626,20 @@ bool SwDoc::ConvertFieldsToText()
                 const SwField*  pField = rFormatField.GetField();
 
                 //#i55595# some fields have to be excluded in headers/footers
-                sal_uInt16 nWhich = pField->GetTyp()->Which();
+                SwFieldIds nWhich = pField->GetTyp()->Which();
                 if(!bInHeaderFooter ||
-                        (nWhich != RES_PAGENUMBERFLD &&
-                        nWhich != RES_CHAPTERFLD &&
-                        nWhich != RES_GETEXPFLD&&
-                        nWhich != RES_SETEXPFLD&&
-                        nWhich != RES_INPUTFLD&&
-                        nWhich != RES_REFPAGEGETFLD&&
-                        nWhich != RES_REFPAGESETFLD))
+                        (nWhich != SwFieldIds::PageNumber &&
+                        nWhich != SwFieldIds::Chapter &&
+                        nWhich != SwFieldIds::GetExp&&
+                        nWhich != SwFieldIds::SetExp&&
+                        nWhich != SwFieldIds::Input&&
+                        nWhich != SwFieldIds::RefPageGet&&
+                        nWhich != SwFieldIds::RefPageSet))
                 {
-                    OUString sText = pField->ExpandField(true);
+                    OUString sText = pField->ExpandField(true, &rLayout);
 
                     // database fields should not convert their command into text
-                    if( RES_DBFLD == pCurType->Which() && !static_cast<const SwDBField*>(pField)->IsInitialized())
+                    if( SwFieldIds::Database == pCurType->Which() && !static_cast<const SwDBField*>(pField)->IsInitialized())
                         sText.clear();
 
                     SwPaM aInsertPam(*pTextField->GetpTextNode(), pTextField->GetStart());
@@ -1620,13 +1680,12 @@ bool SwDoc::ConvertFieldsToText()
                     bRet = true;
                 }
             }
-            ++aBegin;
         }
     }
 
     if( bRet )
         getIDocumentState().SetModified();
-    GetIDocumentUndoRedo().EndUndo( UNDO_UI_REPLACE, nullptr );
+    GetIDocumentUndoRedo().EndUndo( SwUndoId::UI_REPLACE, nullptr );
     getIDocumentFieldsAccess().UnlockExpFields();
     return bRet;
 
@@ -1655,35 +1714,35 @@ void SwDoc::AppendUndoForInsertFromDB( const SwPaM& rPam, bool bIsTable )
         const SwTableNode* pTableNd = rPam.GetPoint()->nNode.GetNode().FindTableNode();
         if( pTableNd )
         {
-            SwUndoCpyTable* pUndo = new SwUndoCpyTable;
+            std::unique_ptr<SwUndoCpyTable> pUndo(new SwUndoCpyTable(this));
             pUndo->SetTableSttIdx( pTableNd->GetIndex() );
-            GetIDocumentUndoRedo().AppendUndo( pUndo );
+            GetIDocumentUndoRedo().AppendUndo( std::move(pUndo) );
         }
     }
     else if( rPam.HasMark() )
     {
-        SwUndoCpyDoc* pUndo = new SwUndoCpyDoc( rPam );
+        std::unique_ptr<SwUndoCpyDoc> pUndo(new SwUndoCpyDoc( rPam ));
         pUndo->SetInsertRange( rPam, false );
-        GetIDocumentUndoRedo().AppendUndo( pUndo );
+        GetIDocumentUndoRedo().AppendUndo( std::move(pUndo) );
     }
 }
 
-void SwDoc::ChgTOX(SwTOXBase & rTOX, const SwTOXBase & rNew)
+void SwDoc::ChangeTOX(SwTOXBase & rTOX, const SwTOXBase & rNew,
+        SwRootFrame const& rLayout)
 {
     if (GetIDocumentUndoRedo().DoesUndo())
     {
         GetIDocumentUndoRedo().DelAllUndoObj();
 
-        SwUndo * pUndo = new SwUndoTOXChange(&rTOX, rNew);
-
-        GetIDocumentUndoRedo().AppendUndo(pUndo);
+        GetIDocumentUndoRedo().AppendUndo(
+            std::make_unique<SwUndoTOXChange>(this, &rTOX, rNew));
     }
 
     rTOX = rNew;
 
     if (dynamic_cast<const SwTOXBaseSection*>( &rTOX) !=  nullptr)
     {
-        static_cast<SwTOXBaseSection &>(rTOX).Update();
+        static_cast<SwTOXBaseSection &>(rTOX).Update(nullptr, &rLayout);
         static_cast<SwTOXBaseSection &>(rTOX).UpdatePageNum();
     }
 }
@@ -1699,16 +1758,16 @@ OUString SwDoc::GetPaMDescr(const SwPaM & rPam)
             const sal_Int32 nStart = rPam.Start()->nContent.GetIndex();
             const sal_Int32 nEnd = rPam.End()->nContent.GetIndex();
 
-            return SW_RESSTR(STR_START_QUOTE)
+            return SwResId(STR_START_QUOTE)
                 + ShortenString(pTextNode->GetText().copy(nStart, nEnd - nStart),
                                 nUndoStringLength,
-                                SW_RESSTR(STR_LDOTS))
-                + SW_RESSTR(STR_END_QUOTE);
+                                SwResId(STR_LDOTS))
+                + SwResId(STR_END_QUOTE);
         }
     }
     else
     {
-        return SW_RESSTR(STR_PARAGRAPHS);
+        return SwResId(STR_PARAGRAPHS);
     }
 
     return OUString("??");
@@ -1744,11 +1803,11 @@ void SwDoc::ChkCondColls()
      {
         SwTextFormatColl *pColl = (*mpTextFormatCollTable)[n];
         if (RES_CONDTXTFMTCOLL == pColl->Which())
-            pColl->CallSwClientNotify( SwAttrHint(RES_CONDTXTFMTCOLL) );
+            pColl->CallSwClientNotify( SwAttrHint() );
      }
 }
 
-uno::Reference< script::vba::XVBAEventProcessor >
+uno::Reference< script::vba::XVBAEventProcessor > const &
 SwDoc::GetVbaEventProcessor()
 {
 #if HAVE_FEATURE_SCRIPTING
@@ -1768,5 +1827,14 @@ SwDoc::GetVbaEventProcessor()
 #endif
     return mxVbaEvents;
 }
+
+void SwDoc::SetMissingDictionaries( bool bIsMissing )
+{
+    if( bIsMissing && meDictionaryMissing == MissingDictionary::Undefined )
+        meDictionaryMissing = MissingDictionary::True;
+    else if( !bIsMissing )
+        meDictionaryMissing = MissingDictionary::False;
+};
+
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

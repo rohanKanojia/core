@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include "dbpservices.hxx"
 #include "wizardservices.hxx"
@@ -27,23 +27,23 @@
 #include "gridwizard.hxx"
 
 // the registration methods
-extern "C" void SAL_CALL createRegistryInfo_OGroupBoxWizard()
+extern "C" void createRegistryInfo_OGroupBoxWizard()
 {
-    static ::dbp::OMultiInstanceAutoRegistration<
+    static compmodule::OMultiInstanceAutoRegistration<
         ::dbp::OUnoAutoPilot< ::dbp::OGroupBoxWizard, ::dbp::OGroupBoxSI >
     > aAutoRegistration;
 }
 
-extern "C" void SAL_CALL createRegistryInfo_OListComboWizard()
+extern "C" void createRegistryInfo_OListComboWizard()
 {
-    static ::dbp::OMultiInstanceAutoRegistration<
+    static compmodule::OMultiInstanceAutoRegistration<
         ::dbp::OUnoAutoPilot< ::dbp::OListComboWizard, ::dbp::OListComboSI >
     > aAutoRegistration;
 }
 
-extern "C" void SAL_CALL createRegistryInfo_OGridWizard()
+extern "C" void createRegistryInfo_OGridWizard()
 {
-    static ::dbp::OMultiInstanceAutoRegistration<
+    static compmodule::OMultiInstanceAutoRegistration<
         ::dbp::OUnoAutoPilot< ::dbp::OGridWizard, ::dbp::OGridSI >
     > aAutoRegistration;
 }

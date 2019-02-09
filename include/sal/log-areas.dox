@@ -22,17 +22,18 @@ certain functionality.
 
 @li @c sal.bootstrap - SAL bootstrap
 @li @c sal.debug - SAL debugging functionality
-@li @c sal.file
+@li @c sal.file - file system operations
+@li @c sal.fileio - file I/O
 @li @c sal.osl - SAL OSL library
 @li @c sal.osl.condition
 @li @c sal.osl.mutex
 @li @c sal.osl.pipe
 @li @c sal.rtl - SAL RTL library
-@li @c sal.rtl.xub - SAL RTL warnings related to possible String->OUString conversion issues.
 @li @c sal.textenc - the textencoding SAL library
 
 @section basctl
 
+@li @c basctl
 @li @c basctl.basicide
 
 @section basic
@@ -59,17 +60,22 @@ certain functionality.
 
 @li @c chart2
 @li @c chart2.3dopengl
+@li @c chart2.accessibility
 @li @c chart2.areachart
+@li @c chart2.main
 @li @c chart2.opengl
 @li @c chart2.pie.label.bestfit
 @li @c chart2.pie.label.bestfit.inside
+@li @c chart2.template
 @li @c chart2.tools
 
 @section connectivity
 
+@li @c connectivity.ado
 @li @c connectivity.commontools
 @li @c connectivity.cpool
-@li @c connectivity.drivers
+@li @c connectivity.dbase
+@li @c connectivity.drivers - a bit overly general, maybe it should be removed?
 @li @c connectivity.evoab2
 @li @c connectivity.firebird
 @li @c connectivity.flat
@@ -77,20 +83,29 @@ certain functionality.
 @li @c connectivity.jdbc
 @li @c connectivity.kab
 @li @c connectivity.macab
+@li @c connectivity.manager
 @li @c connectivity.mork
+@li @c connectivity.mozab
+@li @c connectivity.mysqlc
 @li @c connectivity.odbc
 @li @c connectivity.parse
 @li @c connectivity.postgresql
+@li @c connectivity.writer
 
 @section comphelper
 
 @li @c comphelper
+@li @c comphelper.backupfilehelper
 @li @c comphelper.container - EmbeddedObjectContainer
+@li @c comphelper.crypto
+@li @c comphelper.lok
 
 @section cppu
 
 @li @c cppu
+@li @c cppu.affinebridge
 @li @c cppu.log
+@li @c cppu.purpenv
 @li @c cppu.threadpool
 @li @c cppu.typelib
 @li @c cppu.unsafebridge
@@ -113,6 +128,14 @@ certain functionality.
 @li @c cui.options
 @li @c cui.tabpages
 
+@section drawinglayer
+
+@li @c drawinglayer
+
+@section emfio
+
+@li @c emfio - EMF and VMF image file formats import module
+
 @section Calc
 
 @li @c sc
@@ -121,23 +144,27 @@ certain functionality.
 @li @c sc.core.formulagroup
 @li @c sc.core.grouparealistener - sc::FormulaGroupAreaListener
 @li @c sc.filter - Calc filter
+@li @c sc.lok.docsize
+@li @c sc.lok.header
+@li @c sc.lok.poshelper
 @li @c sc.opencl - OpenCL-related stuff in general
 @li @c sc.opencl.source - Generated OpenCL source code
-@li @c sc.opencl.thread - Background thread to compile OpenCL kernels
 @li @c sc.orcus
 @li @c sc.orcus.autofilter
 @li @c sc.orcus.condformat
 @li @c sc.orcus.style
 @li @c sc.orcus.table
 @li @c sc.qa
+@li @c sc.threaded
+@li @c sc.timing
 @li @c sc.ui - Calc UI
+@li @c sc.uitest - Calc UI Test part
 @li @c sc.viewdata
 
 @section desktop
 
 @li @c desktop
 @li @c desktop.app
-@li @c destkop.crashreport
 @li @c desktop.deployment
 @li @c desktop.lib
 @li @c desktop.migration
@@ -145,11 +172,13 @@ certain functionality.
 @li @c desktop.opengl
 @li @c desktop.splash
 @li @c desktop.test
+@li @c desktop.updater
 
 @section Draw
 
 @li @c sd
 @li @c sd.core
+@li @c sd.eppt
 @li @c sd.filter
 @li @c sd.fwk
 @li @c sd.slideshow
@@ -183,22 +212,30 @@ certain functionality.
 
 @li @c extensions.abpilot
 @li @c extensions.biblio
+@li @c extensions.config
 @li @c extensions.dbpilots
+@li @c extensions.evoab
+@li @c extensions.logging
+@li @c extensions.olebridge - OLE automation bridge
 @li @c extensions.plugin
 @li @c extensions.propctrlr
 @li @c extensions.scanner
 @li @c extensions.update
-@li @c extensions.olebridge - OLE automation bridge
 
 @section Filter
 
 @li @c filter.config
+@li @c filter.eps
+@li @c filter.flash
+@li @c filter.icgm
 @li @c filter.ms - escher import/export
 @li @c filter.odfflatxml
 @li @c filter.os2met
 @li @c filter.pdf
 @li @c filter.pict
+@li @c filter.ras
 @li @c filter.svg
+@li @c filter.tga
 @li @c filter.tiff
 @li @c filter.xmlfa
 @li @c filter.xslt - xslt import/export
@@ -214,14 +251,17 @@ certain functionality.
 @li @c oox.ppt - pptx filter
 @li @c oox.shape
 @li @c oox.storage - ZipStorage class
+@li @c oox.vml - VML
 @li @c oox.xmlstream - XmlStream class
 
 @section forms
 
 @li @c forms.component
+@li @c forms.helper
 @li @c forms.misc
 @li @c forms.richtext
 @li @c forms.runtime
+@li @c forms.xforms
 
 @section formula
 
@@ -245,6 +285,7 @@ certain functionality.
 @li @c fwk.joburl
 @li @c fwk.loadenv
 @li @c fwk.session
+@li @c fwk.session.debug
 @li @c fwk.uiconfiguration
 @li @c fwk.uielement
 
@@ -262,6 +303,7 @@ certain functionality.
 
 @section io
 
+@li @c io.connector
 @li @c io.streams
 
 @section jvmfwk
@@ -274,6 +316,7 @@ certain functionality.
 
 @li @c lok
 @li @c lok.tiledrendering
+@li @c lok.dialog
 
 @section l10ntools
 
@@ -293,6 +336,7 @@ certain functionality.
 
 @section sdext
 
+@li @c sdext
 @li @c sdext.minimizer
 @li @c sdext.pdfimport
 @li @c sdext.pdfimport.pdfparse
@@ -309,7 +353,6 @@ certain functionality.
 @li @c sfx.doc
 @li @c sfx.notify
 @li @c sfx.sidebar
-@li @c sfx.tiledrendering
 @li @c sfx.view
 
 @section slideshow
@@ -326,6 +369,7 @@ certain functionality.
 @section svl
 
 @li @c svl
+@li @c svl.crypto
 @li @c svl.items
 @li @c svl.numbers
 
@@ -387,6 +431,7 @@ certain functionality.
 
 @section unotools
 
+@li @c unotools
 @li @c unotools.config
 @li @c unotools.i18n
 @li @c unotools.misc
@@ -400,6 +445,7 @@ certain functionality.
 @section sax
 
 @li @c sax.cppunit
+@li @c sax.fastparser
 
 @section stoc
 
@@ -410,15 +456,17 @@ certain functionality.
 @li @c vcl
 @li @c vcl.a11y
 @li @c vcl.app
-@li @c vcl.cg - CoreGraphics calls on OS X and iOS
+@li @c vcl.cg - CoreGraphics calls on macOS and iOS
 @li @c vcl.control
-@li @c vcl.ct - CoreText-using code for OS X and iOS
+@li @c vcl.ct - CoreText-using code for macOS and iOS
 @li @c vcl.debugevent
 @li @c vcl.emf - EMF/EMF+ processing
 @li @c vcl.eventtesting
 @li @c vcl.filter
 @li @c vcl.fonts - font-specific code
+@li @c vcl.fonts.detail
 @li @c vcl.gdi - the GDI part of VCL, devices, bitmaps, etc.
+@li @c vcl.gdi.wndproc - Windows Procedure part of VCL
 @li @c vcl.gdi.fontmetric
 @li @c vcl.gtk - Gtk+ 2/3 plugin
 @li @c vcl.gtk3
@@ -426,23 +474,29 @@ certain functionality.
 @li @c vcl.headless - bitmap-based backend
 @li @c vcl.helper
 @li @c vcl.icontest
-@li @c vcl.kde - KDE
-@li @c vcl.kde4 - KDE4
+@li @c vcl.kde5 - KDE5
 @li @c vcl.layout - Widget layout
 @li @c vcl.lazydelete
-@li @c vcl.pdfwriter
-@li @c vcl.plugadapt - the Unix/X11 backend plugin mechanism
 @li @c vcl.opengl
+@li @c vcl.opengl.qt5 - QT5 OpenGL
 @li @c vcl.osx
 @li @c vcl.osx.print
+@li @c vcl.pdfwriter
+@li @c vcl.plugadapt - the Unix/X11 backend plugin mechanism
+@li @c vcl.qt5 - QT5
 @li @c vcl.quartz
 @li @c vcl.schedule - scheduler / main-loop information
+@li @c vcl.schedule.deinit
 @li @c vcl.screensaverinhibitor
 @li @c vcl.scrollbar - Scroll Bars
-@li @c vcl.sm - Session Manager
+@li @c vcl.se - VCL Session Manager
+@li @c vcl.se.debug
+@li @c vcl.sm - Session Manager Client
+@li @c vcl.sm.debug
+@li @c vcl.uitest - The UI testing framework code
 @li @c vcl.unity
-@li @c vcl.unx.print
 @li @c vcl.unx.dtrans
+@li @c vcl.unx.print
 @li @c vcl.virdev
 @li @c vcl.window
 @li @c vcl.wmf
@@ -454,32 +508,38 @@ certain functionality.
 @section Writer
 
 @li @c sw
-@li @c sw.core - Writer core
 @li @c sw.a11y - accessibility
+@li @c sw.calc - formula calculation
+@li @c sw.core - Writer core
 @li @c sw.createcopy
 @li @c sw.doc
 @li @c sw.docappend
 @li @c sw.docx
 @li @c sw.envelp
 @li @c sw.filter
+@li @c sw.html - Writer HTML import/export
 @li @c sw.idle
+@li @c sw.layout - Writer core view: document layout
+@li @c sw.layout.debug - Writer layout dbg_lay output
 @li @c sw.level2
 @li @c sw.mailmerge - Writer mail merge
+@li @c sw.pageframe - debug lifecycle of SwPageFrame
 @li @c sw.rtf - .rtf export filter
 @li @c sw.tiled
 @li @c sw.ui
 @li @c sw.uno - Writer UNO interfaces
+@li @c sw.vba - Writer VBA
 @li @c sw.ww8 - .doc/.docx export filter, .doc import filter (not writerfilter)
 @li @c sw.ww8.level2 - further info for sw.ww8
-@li @c sw.html - Writer HTML import/export
+@li @c sw.xml - Writer .odt import/export
 
 @section writerfilter
 
 @li @c writerfilter
 @li @c writerfilter.dmapper
-@li @c writerfilter.rtf
 @li @c writerfilter.ooxml
 @li @c writerfilter.profile - load times of filters
+@li @c writerfilter.rtf
 
 @section writerperfect
 
@@ -493,14 +553,20 @@ certain functionality.
 @li @c xmloff.draw
 @li @c xmloff.forms
 @li @c xmloff.style
+@li @c xmloff.table
 @li @c xmloff.text
 @li @c xmloff.transform
 
 @section xmlsecurity
 
+@li @c xmlsecurity.comp - xml security component
 @li @c xmlsecurity.dialogs - xml security dialogs
 @li @c xmlsecurity.helper
+@li @c xmlsecurity.ooxml - OOXML signature support
+@li @c xmlsecurity.pdfio - signing of existing PDF
+@li @c xmlsecurity.pdfio.test
 @li @c xmlsecurity.xmlsec - xmlsec wrapper
+@li @c xmlsecurity.xmlsec.gpg - gpg xmlsec component
 
 @section xmlscript
 
@@ -527,19 +593,22 @@ certain functionality.
 @section other
 
 @li @c accessibility
+@li @c animations
 @li @c basegfx
 @li @c binaryurp
+@li @c cli
 @li @c configmgr
 @li @c configmgr.dconf
 @li @c cppcanvas
 @li @c cppcanvas.emf
-@li @c drawinglayer
+@li @c dtrans
 @li @c helpcompiler
+@li @c idl
+@li @c javaunohelper
 @li @c jvmaccess
 @li @c lingucomponent
 @li @c linguistic
 @li @c lwp - lotuswordpro
-@li @c mysqlc
 @li @c opencl
 @li @c opencl.device
 @li @c opencl.file
@@ -553,6 +622,7 @@ certain functionality.
 @li @c stoc
 @li @c store
 @li @c svg
+@li @c svgio
 @li @c test
 @li @c ucbhelper
 @li @c unodevtools

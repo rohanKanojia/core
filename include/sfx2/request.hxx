@@ -29,6 +29,7 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/XDispatchRecorder.hpp>
+#include <memory>
 
 class SfxPoolItem;
 class SfxAllItemSet;
@@ -40,13 +41,16 @@ class SfxViewFrame;
 struct SfxRequest_Impl;
 enum class SfxCallMode : sal_uInt16;
 
+namespace vcl { class Window; }
+namespace weld { class Window; }
+
 class SFX2_DLLPUBLIC SfxRequest: public SfxHint
 {
 friend struct SfxRequest_Impl;
 
     sal_uInt16          nSlot;
-    SfxAllItemSet*      pArgs;
-    SfxRequest_Impl*    pImp;
+    std::unique_ptr<SfxAllItemSet>        pArgs;
+    std::unique_ptr< SfxRequest_Impl >    pImpl;
 
 public:
     SAL_DLLPRIVATE void Record_Impl( SfxShell &rSh, const SfxSlot &rSlot,
@@ -55,24 +59,24 @@ public:
 private:
     SAL_DLLPRIVATE void Done_Impl( const SfxItemSet *pSet );
 
-
 public:
                         SfxRequest( SfxViewFrame*, sal_uInt16 nSlotId );
                         SfxRequest( sal_uInt16 nSlot, SfxCallMode nCallMode, SfxItemPool &rPool );
                         SfxRequest( const SfxSlot* pSlot, const css::uno::Sequence < css::beans::PropertyValue >& rArgs,
                                             SfxCallMode nCallMode, SfxItemPool &rPool );
-                        SfxRequest( sal_uInt16 nSlot, SfxCallMode nCallMode, const SfxAllItemSet& rSfxArgs );
+                        SfxRequest(sal_uInt16 nSlot, SfxCallMode nCallMode, const SfxAllItemSet& rSfxArgs);
+                        SfxRequest( sal_uInt16 nSlot, SfxCallMode nCallMode, const SfxAllItemSet& rSfxArgs, const SfxAllItemSet& rSfxInternalArgs );
                         SfxRequest( const SfxRequest& rOrig );
-                        virtual ~SfxRequest();
+                        virtual ~SfxRequest() override;
 
     sal_uInt16              GetSlot() const { return nSlot; }
     void                SetSlot(sal_uInt16 nNewSlot) { nSlot = nNewSlot; }
 
-    sal_uInt16              GetModifier() const;
+    sal_uInt16          GetModifier() const;
     void                SetModifier( sal_uInt16 nModi );
-    SAL_DLLPRIVATE void SetInternalArgs_Impl( const SfxAllItemSet& rArgs );
+    void                SetInternalArgs_Impl( const SfxAllItemSet& rArgs );
     SAL_DLLPRIVATE const SfxItemSet* GetInternalArgs_Impl() const;
-    const SfxItemSet*   GetArgs() const { return pArgs; }
+    const SfxItemSet*   GetArgs() const { return pArgs.get(); }
     void                SetArgs( const SfxAllItemSet& rArgs );
     void                AppendItem(const SfxPoolItem &);
     void                RemoveItem( sal_uInt16 nSlotId );
@@ -93,8 +97,8 @@ public:
     void                SetReturnValue(const SfxPoolItem &);
     const SfxPoolItem*  GetReturnValue() const;
 
-    static css::uno::Reference< css::frame::XDispatchRecorder > GetMacroRecorder( SfxViewFrame* pFrame=nullptr );
-    static bool         HasMacroRecorder( SfxViewFrame* pFrame=nullptr );
+    static css::uno::Reference< css::frame::XDispatchRecorder > GetMacroRecorder( SfxViewFrame const * pFrame );
+    static bool         HasMacroRecorder( SfxViewFrame const * pFrame );
     SfxCallMode         GetCallMode() const;
     void                AllowRecording( bool );
     bool                AllowsRecording() const;
@@ -112,6 +116,10 @@ public:
 
     void                ForgetAllArgs();
 
+    /** Return the window that should be used as the parent for any dialogs this request creates
+    */
+    vcl::Window* GetFrameWindow() const;
+    weld::Window* GetFrameWeld() const;
 private:
     const SfxRequest&   operator=(const SfxRequest &) = delete;
 };

@@ -46,20 +46,20 @@ void SwURLStateChanged::Notify( SfxBroadcaster& , const SfxHint& rHint )
     {
         // This URL has been changed:
         const INetURLObject* pIURL = static_cast<const INetURLHistoryHint&>(rHint).GetObject();
-        OUString sURL( pIURL->GetMainURL( INetURLObject::NO_DECODE ) ), sBkmk;
+        OUString sURL( pIURL->GetMainURL( INetURLObject::DecodeMechanism::NONE ) ), sBkmk;
 
         SwEditShell* pESh = pDoc->GetEditShell();
 
         if( pDoc->GetDocShell() && pDoc->GetDocShell()->GetMedium() &&
             // If this is our Doc, we can also have local jumps!
-            pDoc->GetDocShell()->GetMedium()->GetName().equals(sURL) )
+            pDoc->GetDocShell()->GetMedium()->GetName() == sURL )
             sBkmk = "#" + pIURL->GetMark();
 
         bool bAction = false, bUnLockView = false;
         sal_uInt32 nMaxItems = pDoc->GetAttrPool().GetItemCount2( RES_TXTATR_INETFMT );
         for( sal_uInt32 n = 0; n < nMaxItems; ++n )
         {
-            const SwFormatINetFormat* pItem = static_cast<const SwFormatINetFormat*>(pDoc->GetAttrPool().GetItem2(RES_TXTATR_INETFMT, n ));
+            const SwFormatINetFormat* pItem = pDoc->GetAttrPool().GetItem2(RES_TXTATR_INETFMT, n );
             if( pItem != nullptr &&
                 ( pItem->GetValue() == sURL || ( !sBkmk.isEmpty() && pItem->GetValue() == sBkmk )))
             {
@@ -117,7 +117,7 @@ bool SwDoc::IsVisitedURL( const OUString& rURL )
         if( !mpURLStateChgd )
         {
             SwDoc* pD = this;
-            pD->mpURLStateChgd = new SwURLStateChanged( this );
+            pD->mpURLStateChgd.reset( new SwURLStateChanged( this ) );
         }
     }
     return bRet;

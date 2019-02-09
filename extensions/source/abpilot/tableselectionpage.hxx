@@ -28,30 +28,27 @@
 namespace abp
 {
 
-    class TableSelectionPage : public AddressBookSourcePage
+    class TableSelectionPage final : public AddressBookSourcePage
     {
-    protected:
         VclPtr<ListBox>        m_pTableList;
 
     public:
-        explicit TableSelectionPage( OAddessBookSourcePilot* _pParent );
-        virtual ~TableSelectionPage();
+        explicit TableSelectionPage( OAddressBookSourcePilot* _pParent );
+        virtual ~TableSelectionPage() override;
         virtual void dispose() override;
-    protected:
+    private:
         // OWizardPage overridables
         virtual void        initializePage() override;
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
 
         // TabDialog overridables
         virtual void        ActivatePage() override;
-        virtual void        DeactivatePage() override;
 
         // OImportPage overridables
         virtual bool        canAdvance() const override;
 
-    private:
-        DECL_LINK_TYPED( OnTableSelected, ListBox&, void );
-        DECL_LINK_TYPED( OnTableDoubleClicked, ListBox&, void );
+        DECL_LINK( OnTableSelected, ListBox&, void );
+        DECL_LINK( OnTableDoubleClicked, ListBox&, void );
     };
 
 

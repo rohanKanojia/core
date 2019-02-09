@@ -20,8 +20,8 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_CONDEDIT_HXX
 
 #include <vcl/edit.hxx>
-#include <svtools/transfer.hxx>
-#include "swdllapi.h"
+#include <vcl/transfer.hxx>
+#include <swdllapi.h>
 
 class SW_DLLPUBLIC ConditionEdit : public Edit, public DropTargetHelper
 {

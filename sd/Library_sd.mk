@@ -94,8 +94,7 @@ $(eval $(call gb_Library_use_libraries,sd,\
 	ucbhelper \
 	utl \
 	vcl \
-	xmlsecurity \
-	$(gb_UWINAPI) \
+	$(if $(ENABLE_NSS),xmlsecurity) \
 ))
 
 $(eval $(call gb_Library_use_externals,sd,\
@@ -108,6 +107,15 @@ $(eval $(call gb_Library_use_externals,sd,\
 	) \
 	icu_headers \
 ))
+
+ifneq ($(DBUS_HAVE_GLIB),)
+$(eval $(call gb_Library_add_defs,sd,\
+	$(DBUS_GLIB_CFLAGS) \
+))
+$(eval $(call gb_Library_add_libs,sd,\
+	$(DBUS_GLIB_LIBS) \
+))
+endif
 
 ifeq ($(OS),WNT)
 $(eval $(call gb_Library_use_system_win32_libs,sd,\
@@ -135,9 +143,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/core/drawdoc4 \
 	sd/source/core/drawdoc_animations \
 	sd/source/core/pglink \
-	sd/source/core/sdattr \
 	sd/source/core/sdiocmpt \
-	sd/source/core/sdobjfac \
 	sd/source/core/sdpage \
 	sd/source/core/sdpage2 \
 	sd/source/core/sdpage_animations \
@@ -157,6 +163,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/filter/html/buttonset \
 	sd/source/filter/html/htmlex \
 	sd/source/filter/html/sdhtmlfilter \
+	sd/source/filter/pdf/sdpdffilter \
 	sd/source/filter/sdfilter \
 	sd/source/filter/sdpptwrp \
 	sd/source/filter/xml/sdtransform \
@@ -174,12 +181,14 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/accessibility/AccessibleSlideSorterView \
 	sd/source/ui/accessibility/AccessibleViewForwarder \
 	sd/source/ui/accessibility/SdShapeTypes \
-    sd/source/ui/animations/CategoryListBox \
+	sd/source/ui/animations/CategoryListBox \
+	sd/source/ui/animations/CustomAnimationBox \
 	sd/source/ui/animations/CustomAnimationDialog \
 	sd/source/ui/animations/CustomAnimationList \
 	sd/source/ui/animations/CustomAnimationPane \
 	sd/source/ui/animations/STLPropertySet \
 	sd/source/ui/animations/SlideTransitionPane \
+	sd/source/ui/animations/SlideTransitionBox \
 	sd/source/ui/animations/motionpathtag \
 	sd/source/ui/annotations/annotationmanager \
 	sd/source/ui/annotations/annotationtag \
@@ -190,7 +199,6 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/app/sdmod1 \
 	sd/source/ui/app/sdmod2 \
 	sd/source/ui/app/sdpopup \
-	sd/source/ui/app/sdresid \
 	sd/source/ui/app/sdxfer \
 	sd/source/ui/app/tmplctrl \
 	sd/source/ui/controller/slidelayoutcontroller \
@@ -206,7 +214,6 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/dlg/animobjs \
 	sd/source/ui/dlg/assclass \
 	sd/source/ui/dlg/diactrl \
-	sd/source/ui/dlg/dlgctrls \
 	sd/source/ui/dlg/docprev \
 	sd/source/ui/dlg/filedlg \
 	sd/source/ui/dlg/gluectrl \
@@ -249,11 +256,9 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/framework/module/ImpressModule \
 	sd/source/ui/framework/module/ModuleController \
 	sd/source/ui/framework/module/PresentationModule \
-	sd/source/ui/framework/module/ResourceManager \
 	sd/source/ui/framework/module/ShellStackGuard \
 	sd/source/ui/framework/module/SlideSorterModule \
 	sd/source/ui/framework/module/ToolBarModule \
-	sd/source/ui/framework/module/ToolPanelModule \
 	sd/source/ui/framework/module/ViewTabBarModule \
 	sd/source/ui/framework/tools/FrameworkHelper \
 	sd/source/ui/func/bulmaper \
@@ -287,7 +292,6 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/func/fuoaprms \
 	sd/source/ui/func/fuolbull \
 	sd/source/ui/func/fuoltext \
-	sd/source/ui/func/fuoutl \
 	sd/source/ui/func/fupage \
 	sd/source/ui/func/fuparagr \
 	sd/source/ui/func/fupoor \
@@ -306,7 +310,6 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/func/futxtatt \
 	sd/source/ui/func/fuvect \
 	sd/source/ui/func/fuzoom \
-	sd/source/ui/func/sdundo \
 	sd/source/ui/func/sdundogr \
 	sd/source/ui/func/smarttag \
 	sd/source/ui/func/undoback \
@@ -341,6 +344,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/sidebar/RecentlyUsedMasterPages \
 	sd/source/ui/sidebar/RecentMasterPagesSelector \
 	sd/source/ui/sidebar/SlideTransitionPanel \
+	sd/source/ui/sidebar/SlideBackground \
 	sd/source/ui/sidebar/TableDesignPanel \
 	sd/source/ui/slideshow/PaneHider \
 	sd/source/ui/slideshow/SlideShowRestarter \
@@ -397,6 +401,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/slidesorter/view/SlsTheme \
 	sd/source/ui/slidesorter/view/SlsToolTip \
 	sd/source/ui/slidesorter/view/SlsViewCacheContext \
+	sd/source/ui/table/TableDesignBox \
 	sd/source/ui/table/TableDesignPane \
 	sd/source/ui/table/tablefunction \
 	sd/source/ui/table/tableobjectbar \
@@ -410,6 +415,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/tools/SdGlobalResourceContainer \
 	sd/source/ui/tools/SlotStateListener \
 	sd/source/ui/tools/TimerBasedTaskExecution \
+	sd/source/ui/uitest/uiobject \
 	sd/source/ui/unoidl/DrawController \
 	sd/source/ui/unoidl/SdUnoDrawView \
 	sd/source/ui/unoidl/SdUnoOutlineView \
@@ -471,6 +477,7 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/ui/view/drviewsh \
 	sd/source/ui/view/drviewsi \
 	sd/source/ui/view/drviewsj \
+	sd/source/ui/view/drviewsk \
 	sd/source/ui/view/drvwshrg \
 	sd/source/ui/view/frmview \
 	sd/source/ui/view/grviewsh \

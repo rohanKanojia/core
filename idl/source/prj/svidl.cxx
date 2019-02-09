@@ -28,21 +28,21 @@
 #include <memory>
 
 #define BR 0x8000
-bool FileMove_Impl( const OUString & rFile1, const OUString & rFile2, bool bImmerVerschieben )
+static bool FileMove_Impl( const OUString & rFile1, const OUString & rFile2, bool bMoveAlways )
 {
     //printf( "Move from %s to %s\n", rFile2.GetStr(), rFile1.GetStr() );
     sal_uLong nC1 = 0;
     sal_uLong nC2 = 1;
-    if( !bImmerVerschieben )
+    if( !bMoveAlways )
     {
-        SvFileStream aOutStm1( rFile1, STREAM_STD_READ );
-        SvFileStream aOutStm2( rFile2, STREAM_STD_READ );
-        if( aOutStm1.GetError() == SVSTREAM_OK )
+        SvFileStream aOutStm1( rFile1, StreamMode::STD_READ );
+        SvFileStream aOutStm2( rFile2, StreamMode::STD_READ );
+        if( aOutStm1.GetError() == ERRCODE_NONE )
         {
             std::unique_ptr<sal_uInt8[]> pBuf1(new sal_uInt8[ BR ]);
             std::unique_ptr<sal_uInt8[]> pBuf2(new sal_uInt8[ BR ]);
-            nC1 = aOutStm1.Read( pBuf1.get(), BR );
-            nC2 = aOutStm2.Read( pBuf2.get(), BR );
+            nC1 = aOutStm1.ReadBytes(pBuf1.get(), BR);
+            nC2 = aOutStm2.ReadBytes(pBuf2.get(), BR);
             while( nC1 == nC2 )
             {
                 if( memcmp( pBuf1.get(), pBuf2.get(), nC1 ) )
@@ -54,8 +54,8 @@ bool FileMove_Impl( const OUString & rFile1, const OUString & rFile2, bool bImme
                 {
                     if( 0x8000 != nC1 )
                         break;
-                    nC1 = aOutStm1.Read( pBuf1.get(), BR );
-                    nC2 = aOutStm2.Read( pBuf2.get(), BR );
+                    nC1 = aOutStm1.ReadBytes(pBuf1.get(), BR);
+                    nC2 = aOutStm2.ReadBytes(pBuf2.get(), BR);
                 }
             }
         }
@@ -81,7 +81,7 @@ bool FileMove_Impl( const OUString & rFile1, const OUString & rFile2, bool bImme
 
 //This function gets a system path to a file [fname], creates a temp file in
 //the same folder as [fname] and returns the system path of the temp file.
-inline OUString tempFileHelper(OUString const & fname)
+static OUString tempFileHelper(OUString const & fname)
 {
     OUString aTmpFile;
 
@@ -130,7 +130,7 @@ int main ( int argc, char ** argv)
         if( nExit == 0 && !aCommand.aSlotMapFile.isEmpty() )
         {
             aTmpSlotMapFile = tempFileHelper(aCommand.aSlotMapFile);
-            SvFileStream aOutStm( aTmpSlotMapFile, STREAM_READWRITE | StreamMode::TRUNC );
+            SvFileStream aOutStm( aTmpSlotMapFile, StreamMode::READWRITE | StreamMode::TRUNC );
             if( !pDataBase->WriteSfx( aOutStm ) )
             {
                 nExit = -1;
@@ -142,9 +142,9 @@ int main ( int argc, char ** argv)
         if (nExit == 0 && !aCommand.m_DepFile.isEmpty())
         {
             aTmpDepFile = tempFileHelper(aCommand.m_DepFile);
-            SvFileStream aOutStm( aTmpDepFile, STREAM_READWRITE | StreamMode::TRUNC );
+            SvFileStream aOutStm( aTmpDepFile, StreamMode::READWRITE | StreamMode::TRUNC );
             pDataBase->WriteDepFile(aOutStm, aCommand.aTargetFile);
-            if( aOutStm.GetError() != SVSTREAM_OK )
+            if( aOutStm.GetError() != ERRCODE_NONE )
             {
                 nExit = -1;
                 fprintf( stderr, "cannot write dependency file: %s\n",
@@ -161,9 +161,9 @@ int main ( int argc, char ** argv)
         bool bErr = false;
         bool bDoMove = aCommand.aTargetFile.isEmpty();
         OUString aErrFile, aErrFile2;
-        if( !bErr && !aCommand.aSlotMapFile.isEmpty() )
+        if (!aCommand.aSlotMapFile.isEmpty())
         {
-            bErr |= !FileMove_Impl( aCommand.aSlotMapFile, aTmpSlotMapFile, bDoMove );
+            bErr = !FileMove_Impl( aCommand.aSlotMapFile, aTmpSlotMapFile, bDoMove );
             if( bErr ) {
                 aErrFile = aCommand.aSlotMapFile;
                 aErrFile2 = aTmpSlotMapFile;
@@ -195,7 +195,7 @@ int main ( int argc, char ** argv)
             {
                 // stamp file, because idl passed through correctly
                 SvFileStream aOutStm( aCommand.aTargetFile,
-                                STREAM_READWRITE | StreamMode::TRUNC );
+                                StreamMode::READWRITE | StreamMode::TRUNC );
             }
         }
     }

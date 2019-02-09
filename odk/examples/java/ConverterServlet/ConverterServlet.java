@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  *
  *  The Contents of this file are made available subject to the terms of
@@ -253,7 +254,7 @@ public class ConverterServlet extends HttpServlet {
 
             /* A desktop environment contains tasks with one or more
                frames in which components can be loaded. Desktop is the
-               environment for components which can instanciate within
+               environment for components which can instantiate within
                frames. */
             XComponentLoader xcomponentloader = UnoRuntime.queryInterface( XComponentLoader.class,
                                        xmulticomponentfactory.createInstanceWithContext(
@@ -320,3 +321,5 @@ public class ConverterServlet extends HttpServlet {
         return stringConvertedFile;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

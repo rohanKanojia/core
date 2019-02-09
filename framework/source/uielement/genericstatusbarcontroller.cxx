@@ -23,16 +23,14 @@
 #include <vcl/svapp.hxx>
 #include <vcl/status.hxx>
 #include <vcl/image.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <toolkit/helper/convert.hxx>
 
 #include <com/sun/star/ui/ItemStyle.hpp>
+#include <com/sun/star/ui/XStatusbarItem.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/ImageDrawMode.hpp>
 #include <com/sun/star/awt/XGraphics2.hpp>
 #include <com/sun/star/graphic/GraphicType.hpp>
-
-using ::rtl::OUString;
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
@@ -70,7 +68,6 @@ GenericStatusbarController::~GenericStatusbarController()
 }
 
 void SAL_CALL GenericStatusbarController::dispose()
-throw ( RuntimeException, std::exception )
 {
     svt::StatusbarController::dispose();
 
@@ -83,7 +80,6 @@ throw ( RuntimeException, std::exception )
 
 void SAL_CALL GenericStatusbarController::statusChanged(
     const FeatureStateEvent& rEvent)
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aGuard;
 
@@ -92,7 +88,7 @@ throw ( RuntimeException, std::exception )
 
     m_bEnabled = rEvent.IsEnabled;
 
-    rtl::OUString aStrValue;
+    OUString aStrValue;
     Reference< graphic::XGraphic > aGraphic;
 
     if ( rEvent.State >>= aStrValue )
@@ -124,9 +120,7 @@ void SAL_CALL GenericStatusbarController::paint(
     const Reference< awt::XGraphics >& xGraphics,
     const awt::Rectangle& rOutputRectangle,
     ::sal_Int32 /*nStyle*/ )
-throw ( RuntimeException, std::exception )
 {
-    OSL_TRACE("framework::GenericStatusbarController::paint");
     SolarMutexGuard aGuard;
 
     const Reference< awt::XGraphics2 > xGraphics2(xGraphics, UNO_QUERY);

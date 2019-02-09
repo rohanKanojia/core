@@ -32,36 +32,36 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/bindings.hxx>
 #include <svx/svdpagv.hxx>
-#include <svtools/imapobj.hxx>
+#include <vcl/imapobj.hxx>
 #include <svx/svxids.hrc>
 #include <svx/obj3d.hxx>
-#include <svx/polysc3d.hxx>
+#include <svx/scene3d.hxx>
 #include <sfx2/viewfrm.hxx>
 
-#include "anminfo.hxx"
-#include "imapinfo.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
+#include <anminfo.hxx>
+#include <imapinfo.hxx>
+#include <app.hrc>
+#include <strings.hrc>
 
-#include "sdmod.hxx"
-#include "GraphicDocShell.hxx"
-#include "fudraw.hxx"
-#include "ViewShell.hxx"
-#include "FrameView.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "Client.hxx"
-#include "sdresid.hxx"
-#include "drawview.hxx"
-#include "fusel.hxx"
+
+#include <sdmod.hxx>
+#include <GraphicDocShell.hxx>
+#include <fudraw.hxx>
+#include <ViewShell.hxx>
+#include <FrameView.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <Client.hxx>
+#include <sdresid.hxx>
+#include <drawview.hxx>
+#include <fusel.hxx>
 #include <svl/aeitem.hxx>
-#include <vcl/msgbox.hxx>
-#include "slideshow.hxx"
+#include <vcl/weld.hxx>
+#include <slideshow.hxx>
 #include <svx/sdrhittesthelper.hxx>
+#include <unotools/securityoptions.hxx>
 
 using namespace ::com::sun::star;
 
@@ -205,7 +205,7 @@ bool FuDraw::MouseButtonDown(const MouseEvent& rMEvt)
 
         if ( bHelpLine
             && !mpView->IsCreateObj()
-            && ((mpView->GetEditMode() == SDREDITMODE_EDIT && !bHitHdl) || (rMEvt.IsShift() && bSnapModPressed)) )
+            && ((mpView->GetEditMode() == SdrViewEditMode::Edit && !bHitHdl) || (rMEvt.IsShift() && bSnapModPressed)) )
         {
             mpWindow->CaptureMouse();
             mpView->BegDragHelpLine(nHelpLine, pPV);
@@ -285,7 +285,7 @@ bool FuDraw::MouseButtonUp(const MouseEvent& rMEvt)
 
     if ( bDragHelpLine )
     {
-        Rectangle aOutputArea(Point(0,0), mpWindow->GetOutputSizePixel());
+        ::tools::Rectangle aOutputArea(Point(0,0), mpWindow->GetOutputSizePixel());
 
         if (mpView && !aOutputArea.IsInside(rMEvt.GetPosPixel()))
             mpView->GetSdrPageView()->DeleteHelpLine(nHelpLine);
@@ -340,21 +340,13 @@ bool FuDraw::KeyInput(const KeyEvent& rKEvt)
             {
                 if (mpView->IsPresObjSelected(false, true, false, true))
                 {
-                    ScopedVclPtr<InfoBox>::Create(mpWindow, SD_RESSTR(STR_ACTION_NOTPOSSIBLE) )->Execute();
+                    std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(mpWindow->GetFrameWeld(),
+                                                                  VclMessageType::Info, VclButtonsType::Ok,
+                                                                  SdResId(STR_ACTION_NOTPOSSIBLE)));
+                    xInfoBox->run();
                 }
                 else
                 {
-                    /* If IP-Client active, we reset the pointer to the OLE- and
-                       to the old graphic object of SdClient. With this, we
-                       avoid the restoration of an no more existing object in
-                       ::SelectionHasChanged after deletion. All other OLE
-                       objects are not affected. */
-                    OSL_ASSERT (mpViewShell->GetViewShell()!=nullptr);
-                    Client* pIPClient = static_cast<Client*>(
-                        mpViewShell->GetViewShell()->GetIPClient());
-                    if (pIPClient && pIPClient->IsObjectInPlaceActive())
-                        pIPClient->SetSdrGrafObj(nullptr);
-
                     // wait-mousepointer while deleting object
                     WaitObject aWait( static_cast<vcl::Window*>(mpViewShell->GetActiveWindow()) );
                     // delete object
@@ -384,7 +376,7 @@ bool FuDraw::KeyInput(const KeyEvent& rKEvt)
                 if(!mpView->MarkNextObj( !aCode.IsShift() ))
                 {
                     //If there is only one object, don't do the UnmarkAllObj() & MarkNextObj().
-                    if ( mpView->GetMarkableObjCount() > 1 && mpView->AreObjectsMarked() )
+                    if ( mpView->HasMultipleMarkableObjects() && mpView->AreObjectsMarked() )
                     {
                         // No next object: go over open end and get first from
                         // the other side
@@ -459,11 +451,6 @@ void FuDraw::Activate()
     ForcePointer();
 }
 
-void FuDraw::Deactivate()
-{
-    FuPoor::Deactivate();
-}
-
 /**
  * Toggle mouse-pointer
  */
@@ -521,7 +508,7 @@ void FuDraw::ForcePointer(const MouseEvent* pMEvt)
             SdrObject* pObj = nullptr;
             SdrPageView* pPV = nullptr;
             SdrViewEvent aVEvt;
-            SdrHitKind eHit = SDRHIT_NONE;
+            SdrHitKind eHit = SdrHitKind::NONE;
             SdrDragMode eDragMode = mpView->GetDragMode();
 
             if (pMEvt)
@@ -529,31 +516,31 @@ void FuDraw::ForcePointer(const MouseEvent* pMEvt)
                 eHit = mpView->PickAnything(*pMEvt, SdrMouseEventKind::MOVE, aVEvt);
             }
 
-            if ((eDragMode == SDRDRAG_ROTATE) && (eHit == SDRHIT_MARKEDOBJECT))
+            if ((eDragMode == SdrDragMode::Rotate) && (eHit == SdrHitKind::MarkedObject))
             {
-                // The goal of this request is show always the rotation-arrow for 3D-objects at rotation-modus
-                // Independent of the settings at Extras->Optionen->Grafik "Objekte immer verschieben"
-                // 2D-objects acquit in an other way. Otherwise, the rotation of 3d-objects around any axes
+                // The goal of this request is show always the rotation arrow for 3D-objects at rotation mode
+                // Independent of the settings at Tools->Options->Draw "Objects always moveable"
+                // 2D-objects acquit in another way. Otherwise, the rotation of 3d-objects around any axes
                 // wouldn't be possible per default.
                 const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
                 SdrObject* pObject = rMarkList.GetMark(0)->GetMarkedSdrObj();
                 if ((dynamic_cast<const E3dObject* >(pObject) !=  nullptr) && (rMarkList.GetMarkCount() == 1))
                 {
                     mpWindow->SetPointer(Pointer(PointerStyle::Rotate));
-                    bDefPointer = false;     // Otherwise it'll be calles Joes routine and the mousepointer will reconfigurate again
+                    bDefPointer = false;     // Otherwise it'll be called Joe's routine and the mousepointer will reconfigurate again
                 }
             }
 
-            if (eHit == SDRHIT_NONE)
+            if (eHit == SdrHitKind::NONE)
             {
                 // found nothing -> look after at the masterpage
-                mpView->PickObj(aPnt, mpView->getHitTolLog(), pObj, pPV, SdrSearchOptions::ALSOONMASTER);
+                pObj = mpView->PickObj(aPnt, mpView->getHitTolLog(), pPV, SdrSearchOptions::ALSOONMASTER);
             }
-            else if (eHit == SDRHIT_UNMARKEDOBJECT)
+            else if (eHit == SdrHitKind::UnmarkedObject)
             {
                 pObj = aVEvt.pObj;
             }
-            else if (eHit == SDRHIT_TEXTEDITOBJ && dynamic_cast< const FuSelection *>( this ) !=  nullptr)
+            else if (eHit == SdrHitKind::TextEditObj && dynamic_cast< const FuSelection *>( this ) !=  nullptr)
             {
                 sal_uInt16 nSdrObjKind = aVEvt.pObj->GetObjIdentifier();
 
@@ -573,10 +560,11 @@ void FuDraw::ForcePointer(const MouseEvent* pMEvt)
                 // test for animation or ImageMap
                 bDefPointer = !SetPointer(pObj, aPnt);
 
-                if (bDefPointer && (dynamic_cast< const SdrObjGroup *>( pObj ) != nullptr || dynamic_cast< const E3dPolyScene* >(pObj) !=  nullptr))
+                if (bDefPointer && (dynamic_cast< const SdrObjGroup *>( pObj ) != nullptr || dynamic_cast< const E3dScene* >(pObj) !=  nullptr))
                 {
                     // take a glance into the group
-                    if (mpView->PickObj(aPnt, mpView->getHitTolLog(), pObj, pPV, SdrSearchOptions::ALSOONMASTER | SdrSearchOptions::DEEP))
+                    pObj = mpView->PickObj(aPnt, mpView->getHitTolLog(), pPV, SdrSearchOptions::ALSOONMASTER | SdrSearchOptions::DEEP);
+                    if (pObj)
                         bDefPointer = !SetPointer(pObj, aPnt);
                 }
             }
@@ -598,16 +586,16 @@ bool FuDraw::SetPointer(SdrObject* pObj, const Point& rPos)
     bool bSet = false;
 
     bool bAnimationInfo = dynamic_cast< const GraphicDocShell *>( mpDocSh ) ==  nullptr &&
-                          mpDoc->GetAnimationInfo(pObj);
+                          SdDrawDocument::GetAnimationInfo(pObj);
 
     bool bImageMapInfo = false;
 
     if (!bAnimationInfo)
-        bImageMapInfo = mpDoc->GetIMapInfo(pObj) != nullptr;
+        bImageMapInfo = SdDrawDocument::GetIMapInfo(pObj) != nullptr;
 
     if (bAnimationInfo || bImageMapInfo)
     {
-        const SetOfByte* pVisiLayer = &mpView->GetSdrPageView()->GetVisibleLayers();
+        const SdrLayerIDSet* pVisiLayer = &mpView->GetSdrPageView()->GetVisibleLayers();
         sal_uInt16 nHitLog(sal_uInt16 (mpWindow->PixelToLogic(Size(HITPIX,0)).Width()));
         long  n2HitLog(nHitLog * 2);
         Point aHitPosR(rPos);
@@ -615,10 +603,10 @@ bool FuDraw::SetPointer(SdrObject* pObj, const Point& rPos)
         Point aHitPosT(rPos);
         Point aHitPosB(rPos);
 
-        aHitPosR.X() += n2HitLog;
-        aHitPosL.X() -= n2HitLog;
-        aHitPosT.Y() += n2HitLog;
-        aHitPosB.Y() -= n2HitLog;
+        aHitPosR.AdjustX(n2HitLog );
+        aHitPosL.AdjustX( -n2HitLog );
+        aHitPosT.AdjustY(n2HitLog );
+        aHitPosB.AdjustY( -n2HitLog );
 
         if ( !pObj->IsClosedObj() ||
             ( SdrObjectPrimitiveHit(*pObj, aHitPosR, nHitLog, *mpView->GetSdrPageView(), pVisiLayer, false) &&
@@ -635,7 +623,7 @@ bool FuDraw::SetPointer(SdrObject* pObj, const Point& rPos)
                 /******************************************************
                 * Click-Action
                 ******************************************************/
-                SdAnimationInfo* pInfo = mpDoc->GetAnimationInfo(pObj);
+                SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo(pObj);
 
                 if(( dynamic_cast< const DrawView *>( mpView ) !=  nullptr &&
                       (pInfo->meClickAction == presentation::ClickAction_BOOKMARK  ||
@@ -664,7 +652,7 @@ bool FuDraw::SetPointer(SdrObject* pObj, const Point& rPos)
                     }
             }
             else if (bImageMapInfo &&
-                     mpDoc->GetHitIMapObject(pObj, rPos, *mpWindow))
+                     SdDrawDocument::GetHitIMapObject(pObj, rPos))
             {
                 /******************************************************
                 * ImageMap
@@ -694,10 +682,10 @@ void FuDraw::DoubleClick(const MouseEvent& rMEvt)
             SdrMark* pMark = rMarkList.GetMark(0);
             SdrObject* pObj = pMark->GetMarkedSdrObj();
 
-            sal_uInt32 nInv = pObj->GetObjInventor();
-            sal_uInt16 nSdrObjKind = pObj->GetObjIdentifier();
+            SdrInventor nInv = pObj->GetObjInventor();
+            sal_uInt16  nSdrObjKind = pObj->GetObjIdentifier();
 
-            if (nInv == SdrInventor && nSdrObjKind == OBJ_OLE2)
+            if (nInv == SdrInventor::Default && nSdrObjKind == OBJ_OLE2)
             {
                 DrawDocShell* pDocSh = mpDoc->GetDocSh();
 
@@ -709,7 +697,7 @@ void FuDraw::DoubleClick(const MouseEvent& rMEvt)
                     mpViewShell->ActivateObject( static_cast<SdrOle2Obj*>(pObj), 0);
                 }
             }
-            else if (nInv == SdrInventor &&  nSdrObjKind == OBJ_GRAF && pObj->IsEmptyPresObj() )
+            else if (nInv == SdrInventor::Default &&  nSdrObjKind == OBJ_GRAF && pObj->IsEmptyPresObj() )
             {
                 mpViewShell->GetViewFrame()->
                     GetDispatcher()->Execute( SID_INSERT_GRAPHIC,
@@ -726,7 +714,7 @@ void FuDraw::DoubleClick(const MouseEvent& rMEvt)
                         SfxCallMode::ASYNCHRON | SfxCallMode::RECORD,
                         { &aItem });
             }
-            else if (nInv == SdrInventor &&  nSdrObjKind == OBJ_GRUP)
+            else if (nInv == SdrInventor::Default &&  nSdrObjKind == OBJ_GRUP)
             {
                 // hit group -> select subobject
                 mpView->UnMarkAll();
@@ -752,20 +740,21 @@ bool FuDraw::RequestHelp(const HelpEvent& rHEvt)
 
         SdrObject* pObj = aVEvt.pObj;
 
-        if (eHit != SDRHIT_NONE && pObj != nullptr)
+        if (eHit != SdrHitKind::NONE && pObj != nullptr)
         {
             Point aPosPixel = rHEvt.GetMousePosPixel();
 
             bReturn = SetHelpText(pObj, aPosPixel, aVEvt);
 
-            if (!bReturn && (dynamic_cast< const SdrObjGroup *>( pObj ) != nullptr || dynamic_cast< const E3dPolyScene* >(pObj) !=  nullptr))
+            if (!bReturn && (dynamic_cast< const SdrObjGroup *>( pObj ) != nullptr || dynamic_cast< const E3dScene* >(pObj) != nullptr))
             {
                 // take a glance into the group
                 SdrPageView* pPV = nullptr;
 
                 Point aPos(mpWindow->PixelToLogic(mpWindow->ScreenToOutputPixel(aPosPixel)));
 
-                if (mpView->PickObj(aPos, mpView->getHitTolLog(), pObj, pPV, SdrSearchOptions::ALSOONMASTER | SdrSearchOptions::DEEP))
+                pObj = mpView->PickObj(aPos, mpView->getHitTolLog(), pPV, SdrSearchOptions::ALSOONMASTER | SdrSearchOptions::DEEP);
+                if (pObj)
                     bReturn = SetHelpText(pObj, aPosPixel, aVEvt);
             }
         }
@@ -775,6 +764,9 @@ bool FuDraw::RequestHelp(const HelpEvent& rHEvt)
     {
         bReturn = FuPoor::RequestHelp(rHEvt);
     }
+
+    if (!bReturn)
+       bReturn = mpView->RequestHelp(rHEvt);
 
     return bReturn;
 }
@@ -786,9 +778,9 @@ bool FuDraw::SetHelpText(SdrObject* pObj, const Point& rPosPixel, const SdrViewE
     Point aPos(mpWindow->PixelToLogic(mpWindow->ScreenToOutputPixel(rPosPixel)));
 
     // URL for IMapObject underneath pointer is help text
-    if ( mpDoc->GetIMapInfo(pObj) )
+    if ( SdDrawDocument::GetIMapInfo(pObj) )
     {
-        IMapObject* pIMapObj = mpDoc->GetHitIMapObject(pObj, aPos, *mpWindow );
+        IMapObject* pIMapObj = SdDrawDocument::GetHitIMapObject(pObj, aPos);
 
         if ( pIMapObj )
         {
@@ -798,75 +790,104 @@ bool FuDraw::SetHelpText(SdrObject* pObj, const Point& rPosPixel, const SdrViewE
             if (aHelpText.isEmpty())
             {
                 // show url if no name is available
-                aHelpText = INetURLObject::decode( pIMapObj->GetURL(), INetURLObject::DECODE_WITH_CHARSET );
+                aHelpText = INetURLObject::decode( pIMapObj->GetURL(), INetURLObject::DecodeMechanism::WithCharset );
             }
         }
     }
-    else if (dynamic_cast< GraphicDocShell *>( mpDocSh ) ==  nullptr && mpDoc->GetAnimationInfo(pObj))
+    else if (rVEvt.pURLField)
     {
-        SdAnimationInfo* pInfo = mpDoc->GetAnimationInfo(pObj);
+        /**************************************************************
+        * URL-Field
+        **************************************************************/
+        OUString aURL = INetURLObject::decode(rVEvt.pURLField->GetURL(), INetURLObject::DecodeMechanism::WithCharset);
+
+        SvtSecurityOptions aSecOpt;
+        if (aSecOpt.IsOptionSet(SvtSecurityOptions::EOption::CtrlClickHyperlink))
+        {
+            // Hint about Ctrl-click to open hyperlink, but need to detect "Ctrl" key for MacOs
+            vcl::KeyCode aCode(KEY_SPACE);
+            vcl::KeyCode aModifiedCode(KEY_SPACE, KEY_MOD1);
+            OUString aModStr(aModifiedCode.GetName());
+            aModStr = aModStr.replaceFirst(aCode.GetName(), "");
+            aModStr = aModStr.replaceAll("+", "");
+
+            OUString aCtrlClickHlinkStr = SdResId(STR_CTRLCLICKHYPERLINK);
+
+            aCtrlClickHlinkStr = aCtrlClickHlinkStr.replaceAll("%s", aModStr);
+
+            aHelpText = aCtrlClickHlinkStr + aURL;
+        }
+        else
+        {
+            // Hint about just clicking hyperlink
+            aHelpText = SdResId(STR_CLICKHYPERLINK) + aURL;
+        }
+    }
+    else if (dynamic_cast< GraphicDocShell *>( mpDocSh ) ==  nullptr && SdDrawDocument::GetAnimationInfo(pObj))
+    {
+        SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo(pObj);
 
         switch (pInfo->meClickAction)
         {
             case presentation::ClickAction_PREVPAGE:
             {
                 // jump to the prior page
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_PREVPAGE);
+                aHelpText = SdResId(STR_CLICK_ACTION_PREVPAGE);
             }
             break;
 
             case presentation::ClickAction_NEXTPAGE:
             {
                 // jump to the next page
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_NEXTPAGE);
+                aHelpText = SdResId(STR_CLICK_ACTION_NEXTPAGE);
             }
             break;
 
             case presentation::ClickAction_FIRSTPAGE:
             {
                 // jump to the first page
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_FIRSTPAGE);
+                aHelpText = SdResId(STR_CLICK_ACTION_FIRSTPAGE);
             }
             break;
 
             case presentation::ClickAction_LASTPAGE:
             {
                 // jump to the last page
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_LASTPAGE);
+                aHelpText = SdResId(STR_CLICK_ACTION_LASTPAGE);
             }
             break;
 
             case presentation::ClickAction_BOOKMARK:
             {
                 // jump to object/page
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_BOOKMARK);
+                aHelpText = SdResId(STR_CLICK_ACTION_BOOKMARK);
                 aHelpText += ": ";
-                aHelpText += INetURLObject::decode( pInfo->GetBookmark(), INetURLObject::DECODE_WITH_CHARSET );
+                aHelpText += INetURLObject::decode( pInfo->GetBookmark(), INetURLObject::DecodeMechanism::WithCharset );
             }
             break;
 
             case presentation::ClickAction_DOCUMENT:
             {
                 // jump to document (object/page)
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_DOCUMENT);
+                aHelpText = SdResId(STR_CLICK_ACTION_DOCUMENT);
                 aHelpText += ": ";
-                aHelpText += INetURLObject::decode( pInfo->GetBookmark(), INetURLObject::DECODE_WITH_CHARSET );
+                aHelpText += INetURLObject::decode( pInfo->GetBookmark(), INetURLObject::DecodeMechanism::WithCharset );
             }
             break;
 
             case presentation::ClickAction_PROGRAM:
             {
                 // execute program
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_PROGRAM);
+                aHelpText = SdResId(STR_CLICK_ACTION_PROGRAM);
                 aHelpText += ": ";
-                aHelpText += INetURLObject::decode( pInfo->GetBookmark(), INetURLObject::DECODE_WITH_CHARSET );
+                aHelpText += INetURLObject::decode( pInfo->GetBookmark(), INetURLObject::DecodeMechanism::WithCharset );
             }
             break;
 
             case presentation::ClickAction_MACRO:
             {
                 // execute program
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_MACRO);
+                aHelpText = SdResId(STR_CLICK_ACTION_MACRO);
                 aHelpText += ": ";
 
                 if ( SfxApplication::IsXScriptURL( pInfo->GetBookmark() ) )
@@ -888,40 +909,33 @@ bool FuDraw::SetHelpText(SdrObject* pObj, const Point& rPosPixel, const SdrViewE
             case presentation::ClickAction_SOUND:
             {
                 // play-back sound
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_SOUND);
+                aHelpText = SdResId(STR_CLICK_ACTION_SOUND);
             }
             break;
 
             case presentation::ClickAction_VERB:
             {
                 // execute OLE-verb
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_VERB);
+                aHelpText = SdResId(STR_CLICK_ACTION_VERB);
             }
             break;
 
             case presentation::ClickAction_STOPPRESENTATION:
             {
                 // quit presentation
-                aHelpText = SD_RESSTR(STR_CLICK_ACTION_STOPPRESENTATION);
+                aHelpText = SdResId(STR_CLICK_ACTION_STOPPRESENTATION);
             }
             break;
             default:
                 break;
         }
     }
-    else if (rVEvt.pURLField)
-    {
-        /**************************************************************
-        * URL-Field
-        **************************************************************/
-        aHelpText = INetURLObject::decode( rVEvt.pURLField->GetURL(), INetURLObject::DECODE_WITH_CHARSET );
-    }
 
     if (!aHelpText.isEmpty())
     {
         bSet = true;
-        Rectangle aLogicPix = mpWindow->LogicToPixel(pObj->GetLogicRect());
-        Rectangle aScreenRect(mpWindow->OutputToScreenPixel(aLogicPix.TopLeft()),
+        ::tools::Rectangle aLogicPix = mpWindow->LogicToPixel(pObj->GetLogicRect());
+        ::tools::Rectangle aScreenRect(mpWindow->OutputToScreenPixel(aLogicPix.TopLeft()),
                               mpWindow->OutputToScreenPixel(aLogicPix.BottomRight()));
 
         if (Help::IsBalloonHelpEnabled())
@@ -964,7 +978,7 @@ bool FuDraw::cancel()
 
         if(pHdl)
         {
-            ((SdrHdlList&)rHdlList).ResetFocusHdl();
+            const_cast<SdrHdlList&>(rHdlList).ResetFocusHdl();
         }
         else
         {

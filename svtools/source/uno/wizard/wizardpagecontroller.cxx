@@ -21,7 +21,6 @@
 #include "wizardpagecontroller.hxx"
 #include "wizardshell.hxx"
 
-#include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/awt/XControl.hpp>
 
 #include <toolkit/helper/vclunohelper.hxx>
@@ -33,14 +32,11 @@ namespace svt { namespace uno
 
 
     using css::uno::Reference;
-    using css::uno::XInterface;
     using css::uno::UNO_QUERY_THROW;
     using css::uno::UNO_SET_THROW;
     using css::uno::Exception;
-    using css::uno::RuntimeException;
     using css::ui::dialogs::XWizardController;
     using css::awt::XWindow;
-    using css::lang::XComponent;
     using css::awt::XControl;
 
     using namespace ::com::sun::star;
@@ -53,18 +49,17 @@ namespace svt { namespace uno
             const sal_Int16 i_nPageId )
         :m_xController( i_rController )
         ,m_xWizardPage()
-        ,m_nPageId( i_nPageId )
     {
         ENSURE_OR_THROW( m_xController.is(), "no controller" );
         try
         {
             m_xWizardPage.set( m_xController->createPage(
                 Reference< XWindow >( i_rParent.GetComponentInterface(), UNO_QUERY_THROW ),
-                m_nPageId
+                i_nPageId
             ), UNO_SET_THROW );
 
             Reference< XWindow > xPageWindow( m_xWizardPage->getWindow(), UNO_SET_THROW );
-            xPageWindow->setVisible( sal_True );
+            xPageWindow->setVisible( true );
 
             TabPage* pTabPage( getTabPage() );
             if ( pTabPage )
@@ -72,7 +67,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
     }
 
@@ -86,7 +81,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
     }
 
@@ -97,8 +92,8 @@ namespace svt { namespace uno
         try
         {
             Reference< XWindow > xPageWindow( m_xWizardPage->getWindow(), UNO_SET_THROW );
-            vcl::Window* pPageWindow = VCLUnoHelper::GetWindow( xPageWindow );
-            if ( pPageWindow == nullptr )
+            VclPtr<vcl::Window> pPageWindow = VCLUnoHelper::GetWindow( xPageWindow );
+            if ( pPageWindow )
             {
                 // windows created via the XContainerWindowProvider might be controls, not real windows, so resolve
                 // that one indirection
@@ -107,12 +102,12 @@ namespace svt { namespace uno
                 pPageWindow = VCLUnoHelper::GetWindow( xPageWindow );
             }
 
-            OSL_ENSURE( pPageWindow != nullptr, "WizardPageController::getTabPage: unable to find the Window implementation for the page's window!" );
-            return dynamic_cast< TabPage* >( pPageWindow );
+            OSL_ENSURE( pPageWindow, "WizardPageController::getTabPage: unable to find the Window implementation for the page's window!" );
+            return dynamic_cast< TabPage* >( pPageWindow.get() );
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
         return nullptr;
     }
@@ -129,7 +124,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
     }
 
@@ -145,7 +140,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
 
         return true;
@@ -163,7 +158,7 @@ namespace svt { namespace uno
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
 
         return true;

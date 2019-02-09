@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "Ruler.hxx"
+#include <Ruler.hxx>
 #include <svl/ptitem.hxx>
 #include <svx/ruler.hxx>
 #include <svx/svxids.hrc>
 #include <sfx2/ctrlitem.hxx>
 #include <sfx2/bindings.hxx>
 
-#include "View.hxx"
-#include "DrawViewShell.hxx"
-#include "Window.hxx"
+#include <View.hxx>
+#include <DrawViewShell.hxx>
+#include <Window.hxx>
 
-#include "helpids.h"
+#include <helpids.h>
 
 namespace sd {
 
@@ -44,11 +44,11 @@ class RulerCtrlItem : public SfxControllerItem
                                 const SfxPoolItem* pItem ) override;
 
  public:
-    RulerCtrlItem(sal_uInt16 nId, Ruler& rRlr, SfxBindings& rBind);
+    RulerCtrlItem(Ruler& rRlr, SfxBindings& rBind);
 };
 
-RulerCtrlItem::RulerCtrlItem(sal_uInt16 _nId, Ruler& rRlr, SfxBindings& rBind)
-: SfxControllerItem(_nId, rBind)
+RulerCtrlItem::RulerCtrlItem(Ruler& rRlr, SfxBindings& rBind)
+: SfxControllerItem(SID_RULER_NULL_OFFSET, rBind)
 , rRuler(rRlr)
 {
 }
@@ -70,11 +70,10 @@ void RulerCtrlItem::StateChanged( sal_uInt16 nSId, SfxItemState, const SfxPoolIt
 
 Ruler::Ruler( DrawViewShell& rViewSh, vcl::Window* pParent, ::sd::Window* pWin, SvxRulerSupportFlags nRulerFlags,  SfxBindings& rBindings, WinBits nWinStyle)
     : SvxRuler(pParent, pWin, nRulerFlags, rBindings, nWinStyle)
-    , pSdWin(pWin)
     , pDrViewShell(&rViewSh)
 {
     rBindings.EnterRegistrations();
-    pCtrlItem = new RulerCtrlItem(SID_RULER_NULL_OFFSET, *this, rBindings);
+    pCtrlItem.reset( new RulerCtrlItem(*this, rBindings) );
     rBindings.LeaveRegistrations();
 
     if ( nWinStyle & WB_HSCROLL )
@@ -98,9 +97,8 @@ void Ruler::dispose()
 {
     SfxBindings& rBindings = pCtrlItem->GetBindings();
     rBindings.EnterRegistrations();
-    DELETEZ( pCtrlItem );
+    pCtrlItem.reset();
     rBindings.LeaveRegistrations();
-    pSdWin.clear();
     SvxRuler::dispose();
 }
 
@@ -111,22 +109,12 @@ void Ruler::MouseButtonDown(const MouseEvent& rMEvt)
 
     if ( !pDrViewShell->GetView()->IsTextEdit() &&
         rMEvt.IsLeft() && rMEvt.GetClicks() == 1 &&
-        (eType == RULER_TYPE_DONTKNOW || eType == RULER_TYPE_OUTSIDE) )
+        (eType == RulerType::DontKnow || eType == RulerType::Outside) )
     {
         pDrViewShell->StartRulerDrag(*this, rMEvt);
     }
     else
         SvxRuler::MouseButtonDown(rMEvt);
-}
-
-void Ruler::MouseMove(const MouseEvent& rMEvt)
-{
-    SvxRuler::MouseMove(rMEvt);
-}
-
-void Ruler::MouseButtonUp(const MouseEvent& rMEvt)
-{
-    SvxRuler::MouseButtonUp(rMEvt);
 }
 
 void Ruler::SetNullOffset(const Point& rOffset)

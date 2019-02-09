@@ -8,6 +8,7 @@
  */
 
 #include "plugin.hxx"
+#include "check.hxx"
 
 namespace {
 
@@ -26,8 +27,12 @@ Expr const * stripCtor(Expr const * expr) {
     if (e3 == nullptr) {
         return expr;
     }
-    auto const n = e3->getConstructor()->getQualifiedNameAsString();
-    if (n != "rtl::OString::OString" && n != "rtl::OUString::OUString") {
+    auto qt = loplugin::DeclCheck(e3->getConstructor());
+    if (!((qt.MemberFunction().Class("OString").Namespace("rtl")
+           .GlobalNamespace())
+          || (qt.MemberFunction().Class("OUString").Namespace("rtl")
+              .GlobalNamespace())))
+    {
         return expr;
     }
     if (e3->getNumArgs() != 2) {
@@ -36,20 +41,20 @@ Expr const * stripCtor(Expr const * expr) {
     return e3->getArg(0)->IgnoreParenImpCasts();
 }
 
-bool isStringLiteral(Expr const * expr) {
-    return isa<StringLiteral>(stripCtor(expr));
-}
-
 class StringConcat:
-    public RecursiveASTVisitor<StringConcat>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<StringConcat>
 {
 public:
-    explicit StringConcat(InstantiationData const & data): Plugin(data) {}
+    explicit StringConcat(loplugin::InstantiationData const & data):
+        FilteringPlugin(data) {}
 
     void run() override
     { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
 
     bool VisitCallExpr(CallExpr const * expr);
+
+private:
+    bool isStringLiteral(Expr const * expr);
 };
 
 bool StringConcat::VisitCallExpr(CallExpr const * expr) {
@@ -71,7 +76,7 @@ bool StringConcat::VisitCallExpr(CallExpr const * expr) {
     SourceLocation leftLoc;
     auto const leftExpr = expr->getArg(0)->IgnoreParenImpCasts();
     if (isStringLiteral(leftExpr)) {
-        leftLoc = leftExpr->getLocStart();
+        leftLoc = compat::getBeginLoc(leftExpr);
     } else {
         CallExpr const * left = dyn_cast<CallExpr>(leftExpr);
         if (left == nullptr) {
@@ -89,13 +94,15 @@ bool StringConcat::VisitCallExpr(CallExpr const * expr) {
         {
             return true;
         }
-        leftLoc = left->getArg(1)->getLocStart();
+        leftLoc = compat::getBeginLoc(left->getArg(1));
     }
     StringRef name {
-        compiler.getSourceManager().getFilename(
-            compiler.getSourceManager().getSpellingLoc(expr->getLocStart())) };
-    if (name == SRCDIR "/sal/qa/rtl/strings/test_ostring_concat.cxx"
-        || name == SRCDIR "/sal/qa/rtl/strings/test_oustring_concat.cxx")
+        getFileNameOfSpellingLoc(
+            compiler.getSourceManager().getSpellingLoc(compat::getBeginLoc(expr))) };
+    if (loplugin::isSamePathname(
+            name, SRCDIR "/sal/qa/rtl/strings/test_ostring_concat.cxx")
+        || loplugin::isSamePathname(
+            name, SRCDIR "/sal/qa/rtl/strings/test_oustring_concat.cxx"))
     {
         return true;
     }
@@ -105,8 +112,26 @@ bool StringConcat::VisitCallExpr(CallExpr const * expr) {
         "replace '%0' between string literals with juxtaposition",
         op == nullptr ? expr->getExprLoc() : op->getOperatorLoc())
         << (oo == OverloadedOperatorKind::OO_Plus ? "+" : "<<")
-        << SourceRange(leftLoc, expr->getArg(1)->getLocEnd());
+        << SourceRange(leftLoc, compat::getEndLoc(expr->getArg(1)));
     return true;
+}
+
+bool StringConcat::isStringLiteral(Expr const * expr) {
+    expr = stripCtor(expr);
+    if (!isa<clang::StringLiteral>(expr)) {
+        return false;
+    }
+    // OSL_THIS_FUNC may be defined as "" in include/osl/diagnose.h, so don't
+    // warn about expressions like 'SAL_INFO(..., OSL_THIS_FUNC << ":")' or
+    // 'OUString(OSL_THIS_FUNC) + ":"':
+    auto loc = compat::getBeginLoc(expr);
+    while (compiler.getSourceManager().isMacroArgExpansion(loc)) {
+        loc = compiler.getSourceManager().getImmediateMacroCallerLoc(loc);
+    }
+    return !compiler.getSourceManager().isMacroBodyExpansion(loc)
+        || (Lexer::getImmediateMacroName(
+                loc, compiler.getSourceManager(), compiler.getLangOpts())
+            != "OSL_THIS_FUNC");
 }
 
 loplugin::Plugin::Registration<StringConcat> X("stringconcat");

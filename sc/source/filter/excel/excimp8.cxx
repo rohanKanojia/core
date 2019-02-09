@@ -19,91 +19,45 @@
 
 #include <config_features.h>
 
-#include "excimp8.hxx"
+#include <excimp8.hxx>
 
 #include <scitems.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/sequence.hxx>
 #include <unotools/fltrcfg.hxx>
 
-#include <vcl/wmf.hxx>
-
-#include <editeng/eeitem.hxx>
-
 #include <sfx2/docfile.hxx>
 #include <sfx2/objsh.hxx>
-#include <sfx2/request.hxx>
-#include <sfx2/app.hxx>
 #include <sfx2/docinf.hxx>
-#include <sfx2/frame.hxx>
-
-#include <editeng/brushitem.hxx>
-#include <editeng/editdata.hxx>
-#include <editeng/editeng.hxx>
-#include <editeng/editobj.hxx>
-#include <editeng/editstat.hxx>
-#include <editeng/colritem.hxx>
-#include <editeng/udlnitem.hxx>
-#include <editeng/wghtitem.hxx>
-#include <editeng/postitem.hxx>
-#include <editeng/crossedoutitem.hxx>
-#include <editeng/flditem.hxx>
-#include <svx/xflclit.hxx>
-
-#include <vcl/graph.hxx>
-#include <vcl/bitmapaccess.hxx>
-#include <sot/exchange.hxx>
-
-#include <svl/stritem.hxx>
+#include <sot/storage.hxx>
 #include <svl/sharedstringpool.hxx>
 
 #include <rtl/math.hxx>
 #include <rtl/ustring.hxx>
 #include <unotools/localedatawrapper.hxx>
-#include <unotools/charclass.hxx>
-#include <drwlayer.hxx>
 
-#include "formulacell.hxx"
-#include "document.hxx"
-#include "patattr.hxx"
-#include "docpool.hxx"
-#include "attrib.hxx"
-#include "conditio.hxx"
-#include "dbdata.hxx"
-#include "globalnames.hxx"
-#include "editutil.hxx"
-#include "markdata.hxx"
-#include "rangenam.hxx"
-#include "docoptio.hxx"
-#include "globstr.hrc"
-#include "fprogressbar.hxx"
-#include "xltracer.hxx"
-#include "xihelper.hxx"
-#include "xipage.hxx"
-#include "xicontent.hxx"
-#include "xilink.hxx"
-#include "xiescher.hxx"
-#include "xipivot.hxx"
+#include <document.hxx>
+#include <attrib.hxx>
+#include <dbdata.hxx>
+#include <globalnames.hxx>
+#include <docoptio.hxx>
+#include <xihelper.hxx>
+#include <xicontent.hxx>
+#include <xilink.hxx>
+#include <xiescher.hxx>
+#include <xistyle.hxx>
+#include <excdefs.hxx>
 
-#include "excform.hxx"
-#include "scextopt.hxx"
-#include "stlpool.hxx"
-#include "stlsheet.hxx"
-#include "detfunc.hxx"
-#include "macromgr.hxx"
-#include "queryentry.hxx"
+#include <excform.hxx>
+#include <queryentry.hxx>
 
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
-#include <com/sun/star/script/ModuleInfo.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
-#include <cppuhelper/component_context.hxx>
 #include <cppuhelper/implbase.hxx>
 #include "xltoolbar.hxx"
 #include <oox/ole/vbaproject.hxx>
 #include <oox/ole/olestorage.hxx>
-#include <unotools/streamwrap.hxx>
-#include <o3tl/make_unique.hxx>
 
 using namespace com::sun::star;
 using namespace ::comphelper;
@@ -113,38 +67,38 @@ using namespace ::comphelper;
 class OleNameOverrideContainer : public ::cppu::WeakImplHelper< container::XNameContainer >
 {
 private:
-    typedef std::unordered_map< OUString, uno::Reference< container::XIndexContainer >, OUStringHash > NamedIndexToOleName;
+    typedef std::unordered_map< OUString, uno::Reference< container::XIndexContainer > > NamedIndexToOleName;
     NamedIndexToOleName  IdToOleNameHash;
     ::osl::Mutex m_aMutex;
 public:
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType(  ) throw (uno::RuntimeException, std::exception) override { return  cppu::UnoType<container::XIndexContainer>::get(); }
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Type SAL_CALL getElementType(  ) override { return  cppu::UnoType<container::XIndexContainer>::get(); }
+    virtual sal_Bool SAL_CALL hasElements(  ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         return ( !IdToOleNameHash.empty() );
     }
-    // XNameAcess
-    virtual uno::Any SAL_CALL getByName( const OUString& aName ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    // XNameAccess
+    virtual uno::Any SAL_CALL getByName( const OUString& aName ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( !hasByName(aName) )
             throw container::NoSuchElementException();
         return uno::makeAny( IdToOleNameHash[ aName ] );
     }
-    virtual uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw (uno::RuntimeException, std::exception) override
+    virtual uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         return comphelper::mapKeysToSequence( IdToOleNameHash);
     }
-    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) throw (uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         return ( IdToOleNameHash.find( aName ) != IdToOleNameHash.end() );
     }
 
     // XNameContainer
-    virtual void SAL_CALL insertByName( const OUString& aName, const uno::Any& aElement ) throw(lang::IllegalArgumentException, container::ElementExistException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL insertByName( const OUString& aName, const uno::Any& aElement ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( hasByName( aName ) )
@@ -154,14 +108,13 @@ public:
             throw lang::IllegalArgumentException();
        IdToOleNameHash[ aName ] = xElement;
     }
-    virtual void SAL_CALL removeByName( const OUString& aName ) throw(container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL removeByName( const OUString& aName ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        if ( !hasByName( aName ) )
+        if ( IdToOleNameHash.erase( aName ) == 0 )
             throw container::NoSuchElementException();
-        IdToOleNameHash.erase( IdToOleNameHash.find( aName ) );
     }
-    virtual void SAL_CALL replaceByName( const OUString& aName, const uno::Any& aElement ) throw(lang::IllegalArgumentException, container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL replaceByName( const OUString& aName, const uno::Any& aElement ) override
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         if ( !hasByName( aName ) )
@@ -191,8 +144,8 @@ ImportExcel8::ImportExcel8( XclImpRootData& rImpData, SvStream& rStrm ) :
     ImportExcel( rImpData, rStrm )
 {
     // replace BIFF2-BIFF5 formula importer with BIFF8 formula importer
-    delete pFormConv;
-    pFormConv = pExcRoot->pFmlaConverter = new ExcelToSc8( GetRoot() );
+    pFormConv.reset(new ExcelToSc8( GetRoot() ));
+    pExcRoot->pFmlaConverter = pFormConv.get();
 }
 
 ImportExcel8::~ImportExcel8()
@@ -241,7 +194,7 @@ void ImportExcel8::Boundsheet()
     OUString aName( aIn.ReadUniString( nLen ) );
     GetTabInfo().AppendXclTabName( aName, nBdshtTab );
 
-    SCTAB nScTab = static_cast< SCTAB >( nBdshtTab );
+    SCTAB nScTab = nBdshtTab;
     if( nScTab > 0 )
     {
         OSL_ENSURE( !pD->HasTable( nScTab ), "ImportExcel8::Boundsheet - sheet exists already" );
@@ -272,7 +225,7 @@ void ImportExcel8::Scenman()
 
 void ImportExcel8::Scenario()
 {
-    maScenList.aEntries.push_back( o3tl::make_unique<ExcScenario>( aIn, *pExcRoot ) );
+    maScenList.aEntries.push_back( std::make_unique<ExcScenario>( aIn, *pExcRoot ) );
 }
 
 void ImportExcel8::Labelsst()
@@ -352,7 +305,7 @@ void ImportExcel8::Feat()
         sal_uInt32 nCbSD = aIn.ReaduInt32();
         // TODO: could here be some sanity check applied to not allocate 4GB?
         aProt.maSecurityDescriptor.resize( nCbSD);
-        sal_Size nRead = aIn.Read( &aProt.maSecurityDescriptor.front(), nCbSD);
+        std::size_t nRead = aIn.Read(aProt.maSecurityDescriptor.data(), nCbSD);
         if (nRead < nCbSD)
             aProt.maSecurityDescriptor.resize( nRead);
     }
@@ -365,7 +318,7 @@ void ImportExcel8::ReadBasic()
     SfxObjectShell* pShell = GetDocShell();
     tools::SvRef<SotStorage> xRootStrg = GetRootStorage();
     const SvtFilterOptions& rFilterOpt = SvtFilterOptions::Get();
-    if( pShell && xRootStrg.Is() ) try
+    if( pShell && xRootStrg.is() ) try
     {
         // #FIXME need to get rid of this, we can also do this from within oox
         // via the "ooo.vba.VBAGlobals" service
@@ -374,8 +327,8 @@ void ImportExcel8::ReadBasic()
             rFilterOpt.IsLoadExcelBasicExecutable() )
         {
             // see if we have the XCB stream
-            tools::SvRef<SotStorageStream> xXCB = xRootStrg->OpenSotStream( "XCB", STREAM_STD_READ | StreamMode::NOCREATE  );
-            if ( xXCB.Is()|| SVSTREAM_OK == xXCB->GetError() )
+            tools::SvRef<SotStorageStream> xXCB = xRootStrg->OpenSotStream( "XCB", StreamMode::STD_READ );
+            if ( xXCB.is()|| ERRCODE_NONE == xXCB->GetError() )
             {
                 ScCTBWrapper wrapper;
                 if ( wrapper.Read( *xXCB ) )
@@ -438,7 +391,7 @@ void ImportExcel8::PostDocLoad()
     ImportExcel::PostDocLoad();
 
     // check scenarios; Attention: This increases the table count of the document!!
-    if( !pD->IsClipboard() && maScenList.aEntries.size() )
+    if( !pD->IsClipboard() && !maScenList.aEntries.empty() )
     {
         pD->UpdateChartListenerCollection();    // references in charts must be updated
 
@@ -446,29 +399,23 @@ void ImportExcel8::PostDocLoad()
     }
 
     // read doc info (no docshell while pasting from clipboard)
-    LoadDocumentProperties();
-
-    // #i45843# Pivot tables are now handled outside of PostDocLoad, so they are available
-    // when formula cells are calculated, for the GETPIVOTDATA function.
-}
-
-void ImportExcel8::LoadDocumentProperties()
-{
-    // no docshell while pasting from clipboard
     if( SfxObjectShell* pShell = GetDocShell() )
     {
         // BIFF5+ without storage is possible
         tools::SvRef<SotStorage> xRootStrg = GetRootStorage();
-        if( xRootStrg.Is() ) try
+        if( xRootStrg.is() ) try
         {
             uno::Reference< document::XDocumentPropertiesSupplier > xDPS( pShell->GetModel(), uno::UNO_QUERY_THROW );
             uno::Reference< document::XDocumentProperties > xDocProps( xDPS->getDocumentProperties(), uno::UNO_SET_THROW );
-            sfx2::LoadOlePropertySet( xDocProps, xRootStrg );
+            sfx2::LoadOlePropertySet( xDocProps, xRootStrg.get() );
         }
         catch( uno::Exception& )
         {
         }
     }
+
+    // #i45843# Pivot tables are now handled outside of PostDocLoad, so they are available
+    // when formula cells are calculated, for the GETPIVOTDATA function.
 }
 
 // autofilter
@@ -540,8 +487,8 @@ void XclImpAutoFilterData::SetCellAttribs()
     ScDocument& rDoc = pExcRoot->pIR->GetDoc();
     for ( SCCOL nCol = StartCol(); nCol <= EndCol(); nCol++ )
     {
-        sal_Int16 nFlag = static_cast<const ScMergeFlagAttr*>( rDoc.GetAttr( nCol, StartRow(), Tab(), ATTR_MERGE_FLAG ))->GetValue();
-        rDoc.ApplyAttr( nCol, StartRow(), Tab(), ScMergeFlagAttr( nFlag | SC_MF_AUTO) );
+        ScMF nFlag = rDoc.GetAttr( nCol, StartRow(), Tab(), ATTR_MERGE_FLAG )->GetValue();
+        rDoc.ApplyAttr( nCol, StartRow(), Tab(), ScMergeFlagAttr( nFlag | ScMF::Auto) );
     }
 }
 
@@ -552,9 +499,7 @@ void XclImpAutoFilterData::InsertQueryParam()
         ScRange aAdvRange;
         bool    bHasAdv = pCurrDBData->GetAdvancedQuerySource( aAdvRange );
         if( bHasAdv )
-            pExcRoot->pIR->GetDoc().CreateQueryParam( aAdvRange.aStart.Col(),
-                aAdvRange.aStart.Row(), aAdvRange.aEnd.Col(), aAdvRange.aEnd.Row(),
-                aAdvRange.aStart.Tab(), aParam );
+            pExcRoot->pIR->GetDoc().CreateQueryParam(aAdvRange, aParam);
 
         pCurrDBData->SetQueryParam( aParam );
         if( bHasAdv )
@@ -727,7 +672,7 @@ void XclImpAutoFilterData::ReadAutoFilter(
     }
     else
     {
-        OSL_ASSERT(eConn == SC_OR);
+        assert( eConn == SC_OR && "eConn should be SC_AND or SC_OR");
         // Import only when both conditions are for simple equality, else
         // import only the 1st condition due to conflict with the ordering of
         // conditions. #i39464#.
@@ -788,24 +733,12 @@ void XclImpAutoFilterData::SetExtractPos( const ScAddress& rAddr )
 
 void XclImpAutoFilterData::Apply()
 {
-    CreateScDBData();
-
-    if( bActive )
-    {
-        InsertQueryParam();
-    }
-}
-
-void XclImpAutoFilterData::CreateScDBData()
-{
-
     // Create the ScDBData() object if the AutoFilter is activated
     // or if we need to create the Advanced Filter.
     if( bActive || bCriteria)
     {
         ScDocument& rDoc = pExcRoot->pIR->GetDocRef();
-        OUString aNewName(STR_DB_LOCAL_NONAME);
-        pCurrDBData = new ScDBData(aNewName , Tab(),
+        pCurrDBData = new ScDBData(STR_DB_LOCAL_NONAME, Tab(),
                                 StartCol(),StartRow(), EndCol(),EndRow() );
         if(bCriteria)
         {
@@ -816,9 +749,13 @@ void XclImpAutoFilterData::CreateScDBData()
         }
         else
             pCurrDBData->SetAdvancedQuerySource(nullptr);
-        rDoc.SetAnonymousDBData(Tab(), pCurrDBData);
+        rDoc.SetAnonymousDBData(Tab(), std::unique_ptr<ScDBData>(pCurrDBData));
     }
 
+    if( bActive )
+    {
+        InsertQueryParam();
+    }
 }
 
 void XclImpAutoFilterData::EnableRemoveFilter()
@@ -838,7 +775,7 @@ void XclImpAutoFilterData::EnableRemoveFilter()
 void XclImpAutoFilterBuffer::Insert( RootData* pRoot, const ScRange& rRange)
 {
     if( !GetByTab( rRange.aStart.Tab() ) )
-        maFilters.push_back( XclImpAutoFilterSharePtr(new XclImpAutoFilterData( pRoot, rRange) ));
+        maFilters.push_back( std::make_shared<XclImpAutoFilterData>( pRoot, rRange ));
 }
 
 void XclImpAutoFilterBuffer::AddAdvancedRange( const ScRange& rRange )

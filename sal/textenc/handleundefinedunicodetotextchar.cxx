@@ -7,10 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "handleundefinedunicodetotextchar.hxx"
 #include "tenchelp.hxx"
@@ -90,7 +90,7 @@ bool sal::detail::textenc::handleUndefinedUnicodeToTextChar(
     {
         if ( nFlags & RTL_UNICODETOTEXT_FLAGS_PRIVATE_MAPTO0 )
         {
-            **ppDestBuf = (char)(unsigned char)(c-RTL_TEXTCVT_BYTE_PRIVATE_START);
+            **ppDestBuf = static_cast<char>(static_cast<unsigned char>(c-RTL_TEXTCVT_BYTE_PRIVATE_START));
             (*ppDestBuf)++;
             (*ppSrcBuf)++;
             return true;
@@ -125,12 +125,12 @@ bool sal::detail::textenc::handleUndefinedUnicodeToTextChar(
                 *pInfo |= RTL_UNICODETOTEXT_INFO_ERROR;
                 return false;
             }
-            else if ( (nFlags & RTL_UNICODETOTEXT_FLAGS_INVALID_MASK) == RTL_UNICODETOTEXT_FLAGS_INVALID_IGNORE )
+            if ( (nFlags & RTL_UNICODETOTEXT_FLAGS_INVALID_MASK) == RTL_UNICODETOTEXT_FLAGS_INVALID_IGNORE )
             {
                 (*ppSrcBuf)++;
                 return true;
             }
-            else if (ImplGetInvalidAsciiMultiByte(nFlags,
+            if (ImplGetInvalidAsciiMultiByte(nFlags,
                                                   *ppDestBuf,
                                                   pEndDestBuf - *ppDestBuf))
             {
@@ -138,12 +138,8 @@ bool sal::detail::textenc::handleUndefinedUnicodeToTextChar(
                 ++*ppDestBuf;
                 return true;
             }
-            else
-            {
-                *pInfo |= RTL_UNICODETOTEXT_INFO_ERROR
-                              | RTL_UNICODETOTEXT_INFO_DESTBUFFERTOSMALL;
-                return false;
-            }
+            *pInfo |= RTL_UNICODETOTEXT_INFO_ERROR | RTL_UNICODETOTEXT_INFO_DESTBUFFERTOSMALL;
+            return false;
         }
     }
 
@@ -153,7 +149,7 @@ bool sal::detail::textenc::handleUndefinedUnicodeToTextChar(
         *pInfo |= RTL_UNICODETOTEXT_INFO_ERROR;
         return false;
     }
-    else if ( (nFlags & RTL_UNICODETOTEXT_FLAGS_UNDEFINED_MASK) == RTL_UNICODETOTEXT_FLAGS_UNDEFINED_IGNORE )
+    if ( (nFlags & RTL_UNICODETOTEXT_FLAGS_UNDEFINED_MASK) == RTL_UNICODETOTEXT_FLAGS_UNDEFINED_IGNORE )
         (*ppSrcBuf)++;
     else if (ImplGetUndefinedAsciiMultiByte(nFlags,
                                             *ppDestBuf,

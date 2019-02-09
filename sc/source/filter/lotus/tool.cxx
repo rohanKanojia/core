@@ -17,22 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <svx/algitem.hxx>
+#include <scitems.hxx>
 #include <editeng/justifyitem.hxx>
 #include <svl/zforlist.hxx>
+#include <sal/log.hxx>
 
-#include "rangenam.hxx"
-#include "compiler.hxx"
+#include <attrib.hxx>
+#include <document.hxx>
 
-#include "tool.h"
-#include "decl.h"
-#include "root.hxx"
-#include "lotrange.hxx"
-#include "namebuff.hxx"
-#include "ftools.hxx"
-#include "stringutil.hxx"
-#include "tokenarray.hxx"
+#include <tool.h>
+#include <root.hxx>
+#include <lotrange.hxx>
+#include <namebuff.hxx>
+#include <stringutil.hxx>
+#include <tokenarray.hxx>
 #include "lotfilter.hxx"
 
 #include <math.h>
@@ -40,7 +38,7 @@
 void PutFormString(LotusContext& rContext, SCCOL nCol, SCROW nRow, SCTAB nTab, sal_Char* pString)
 {
     // evaluate Label-Format
-    OSL_ENSURE( pString != nullptr, "PutFormString(): pString == NULL" );
+    SAL_WARN_IF( pString == nullptr, "sc.filter", "PutFormString(): pString == NULL" );
     if (!pString)
         return;
 
@@ -120,10 +118,10 @@ double SnumToDouble( sal_Int16 nVal )
     if( nVal & 0x0001 )
     {
         fVal = pFacts[ ( nVal >> 1 ) & 0x0007 ];
-        fVal *= ( sal_Int16 ) ( nVal >> 4 );
+        fVal *= static_cast<sal_Int16>( nVal >> 4 );
     }
     else
-        fVal = ( sal_Int16 ) ( nVal >> 1 );
+        fVal = static_cast<sal_Int16>( nVal >> 1 );
 
     return fVal;
 }
@@ -137,46 +135,39 @@ double Snum32ToDouble( sal_uInt32 nValue )
     if (temp)
     {
         if (nValue & 0x00000010)
-                fValue /= pow((double)10, temp);
+                fValue /= pow(double(10), temp);
         else
-        fValue *= pow((double)10, temp);
+        fValue *= pow(double(10), temp);
     }
 
-    if ((nValue & 0x00000020))
+    if (nValue & 0x00000020)
         fValue = -fValue;
     return fValue;
 }
 
-FormCache::FormCache( ScDocument* pDoc1, sal_uInt8 nNewDefaultFormat )
+FormCache::FormCache( const ScDocument* pDoc1 )
     : nIndex(0)
-{   // Default format is 'Default'
-    nDefaultFormat = nNewDefaultFormat;
+{
     pFormTable = pDoc1->GetFormatTable();
-    for( sal_uInt16 nC = 0 ; nC < nSize_ ; nC++ )
-        bValid[ nC ] = false;
+    for(bool & rb : bValid)
+        rb = false;
     eLanguage = ScGlobal::eLnge;
 }
 
 FormCache::~FormCache()
 {
-    for( sal_uInt16 nC = 0 ; nC < nSize_ ; nC++ )
-        delete aIdents[ nC ].GetAttr();
 }
 
 SfxUInt32Item* FormCache::NewAttr( sal_uInt8 nFormat, sal_uInt8 nSt )
 {
     // setup new Format
     sal_uInt8       nL, nH; // Low-/High-Nibble
-    sal_uInt8       nForm = nFormat;
-    OUString          aFormString;
-    sal_Int16       eType = css::util::NumberFormat::ALL;
+    OUString        aFormString;
+    SvNumFormatType eType = SvNumFormatType::ALL;
     sal_uInt32      nIndex1;
     sal_uInt32      nHandle;
     NfIndexTableOffset eIndexTableOffset = NF_NUMERIC_START;
-    bool        bDefault = false;
-
-    if( nForm == 0xFF ) // Default-Format?
-        nForm = nDefaultFormat;
+    bool            bDefault = false;
 
     // split into Low and High byte
     nL = nFormat & 0x0F;
@@ -188,52 +179,51 @@ SfxUInt32Item* FormCache::NewAttr( sal_uInt8 nFormat, sal_uInt8 nSt )
         case 0x00:  // fixed-point number
             //fStandard;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::NUMBER, eLanguage );
+                SvNumFormatType::NUMBER, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, false, false, nL);
             break;
         case 0x01:  // scientific notation
             //fExponent;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::SCIENTIFIC, eLanguage );
+                SvNumFormatType::SCIENTIFIC, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, false, false, nL);
             break;
         case 0x02:  // currency
             //fMoney;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::CURRENCY, eLanguage );
+                SvNumFormatType::CURRENCY, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, false, false, nL);
             break;
         case 0x03:  // percentage
             //fPercent;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::PERCENT, eLanguage );
+                SvNumFormatType::PERCENT, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, false, false, nL);
             break;
         case 0x04:  // Decimal
             //fStandard;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::NUMBER, eLanguage );
+                SvNumFormatType::NUMBER, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, true, false, nL);
             break;
         case 0x05:  // unspecified
             //fStandard;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::NUMBER, eLanguage );
+                SvNumFormatType::NUMBER, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, false, false, nL);
             break;
         case 0x06:  // unspecified
             //fStandard;nL;
             nIndex1 = pFormTable->GetStandardFormat(
-                css::util::NumberFormat::NUMBER, eLanguage );
+                SvNumFormatType::NUMBER, eLanguage );
             aFormString = pFormTable->GenerateFormat(nIndex1,
                 eLanguage, false, false, nL);
-            nIndex1 = 0;
             break;
         case 0x07:  // Special format
             switch( nL )
@@ -241,74 +231,74 @@ SfxUInt32Item* FormCache::NewAttr( sal_uInt8 nFormat, sal_uInt8 nSt )
                 case 0x00:  // +/-
                     //fStandard;nSt;
                     nIndex1 = pFormTable->GetStandardFormat(
-                        css::util::NumberFormat::NUMBER, eLanguage );
+                        SvNumFormatType::NUMBER, eLanguage );
                     aFormString = pFormTable->GenerateFormat(nIndex1,
                         eLanguage, false, true, nSt);
                     break;
                 case 0x01:  // general Format
                     //fStandard;nSt;
                     nIndex1 = pFormTable->GetStandardFormat(
-                        css::util::NumberFormat::NUMBER, eLanguage );
+                        SvNumFormatType::NUMBER, eLanguage );
                     aFormString = pFormTable->GenerateFormat(nIndex1,
                         eLanguage, false, false, nSt);
                     break;
                 case 0x02:  // Date: Day, Month, Year
                     //fDate;dfDayMonthYearLong;
-                    eType = css::util::NumberFormat::DATE;
+                    eType = SvNumFormatType::DATE;
                     eIndexTableOffset = NF_DATE_SYS_DDMMYYYY;
                     break;
                 case 0x03:  // Date: Day, Month
                     //fDate;dfDayMonthLong;
-                    eType = css::util::NumberFormat::DATE;
+                    eType = SvNumFormatType::DATE;
                     aFormString = pFormTable->GetKeyword( eLanguage, NF_KEY_DD);
                     aFormString += pFormTable->GetDateSep();    // matches last eLanguage
                     aFormString += pFormTable->GetKeyword( eLanguage, NF_KEY_MMMM);
                     break;
                 case 0x04:  // Date: Month, Year
                     //fDate;dfMonthYearLong;
-                    eType = css::util::NumberFormat::DATE;
+                    eType = SvNumFormatType::DATE;
                     aFormString = pFormTable->GetKeyword( eLanguage, NF_KEY_MM);
                     aFormString += pFormTable->GetDateSep();    // matches last eLanguage
                     aFormString += pFormTable->GetKeyword( eLanguage, NF_KEY_YYYY);
                     break;
                 case 0x05:  // Text formats
                     //fString;nSt;
-                    eType = css::util::NumberFormat::TEXT;
+                    eType = SvNumFormatType::TEXT;
                     eIndexTableOffset = NF_TEXT;
                     break;
                 case 0x06:  // hidden
                     //wFlag |= paHideAll;bSetFormat = sal_False;
-                    eType = css::util::NumberFormat::NUMBER;
+                    eType = SvNumFormatType::NUMBER;
                     aFormString = "\"\"";
                     break;
                 case 0x07:  // Time: hour, min, sec
                     //fTime;tfHourMinSec24;
-                    eType = css::util::NumberFormat::TIME;
+                    eType = SvNumFormatType::TIME;
                     eIndexTableOffset = NF_TIME_HHMMSS;
                     break;
                 case 0x08:  // Time: hour, min
                     //fTime;tfHourMin24;
-                    eType = css::util::NumberFormat::TIME;
+                    eType = SvNumFormatType::TIME;
                     eIndexTableOffset = NF_TIME_HHMM;
                     break;
                 case 0x09:  // Date, intern sal_Int32 1
                     //fDate;dfDayMonthYearLong;
-                    eType = css::util::NumberFormat::DATE;
+                    eType = SvNumFormatType::DATE;
                     eIndexTableOffset = NF_DATE_SYS_DDMMYYYY;
                     break;
                 case 0x0A:  // Date, intern sal_Int32 2
                     //fDate;dfDayMonthYearLong;
-                    eType = css::util::NumberFormat::DATE;
+                    eType = SvNumFormatType::DATE;
                     eIndexTableOffset = NF_DATE_SYS_DDMMYYYY;
                     break;
                 case 0x0B:  // Time, intern sal_Int32 1
                     //fTime;tfHourMinSec24;
-                    eType = css::util::NumberFormat::TIME;
+                    eType = SvNumFormatType::TIME;
                     eIndexTableOffset = NF_TIME_HHMMSS;
                     break;
                 case 0x0C:  // Time, intern sal_Int32 2
                     //fTime;tfHourMinSec24;
-                    eType = css::util::NumberFormat::TIME;
+                    eType = SvNumFormatType::TIME;
                     eIndexTableOffset = NF_TIME_HHMMSS;
                     break;
                 case 0x0F:  // Default
@@ -374,8 +364,7 @@ LotusRange::LotusRange( const LotusRange& rCpy )
     Copy( rCpy );
 }
 
-LotusRangeList::LotusRangeList(LOTUS_ROOT* pLotRoot)
-    : m_pLotRoot(pLotRoot)
+LotusRangeList::LotusRangeList()
 {
     aComplRef.InitFlags();
 
@@ -395,77 +384,61 @@ LotusRangeList::LotusRangeList(LOTUS_ROOT* pLotRoot)
     pSingRef->SetFlag3D( false );
 }
 
-SCCOL LotusRangeList::nEingCol;
-SCROW LotusRangeList::nEingRow;
-
 LotusRangeList::~LotusRangeList ()
 {
-    std::vector<LotusRange*>::iterator pIter;
-    for (pIter = maRanges.begin(); pIter != maRanges.end(); ++pIter)
-        delete (*pIter);
 }
 
 LR_ID LotusRangeList::GetIndex( const LotusRange &rRef )
 {
-    std::vector<LotusRange*>::iterator pIter;
-    for (pIter = maRanges.begin(); pIter != maRanges.end(); ++pIter)
-    {
-        if (rRef == *(*pIter))
-            return (*pIter)->nId;
-    }
+    auto pIter = std::find_if(maRanges.begin(), maRanges.end(),
+        [&rRef](const std::unique_ptr<LotusRange>& pRange) { return rRef == *pRange; });
+    if (pIter != maRanges.end())
+        return (*pIter)->nId;
 
     return ID_FAIL;
 }
 
-void LotusRangeList::Append( LotusRange* pLR, const OUString& rName )
+void LotusRangeList::Append( std::unique_ptr<LotusRange> pLR )
 {
-    OSL_ENSURE( pLR, "*LotusRangeList::Append(): no pointer!" );
-    maRanges.push_back(pLR);
+    assert( pLR );
+    auto pLRTmp = pLR.get();
+    maRanges.push_back(std::move(pLR));
 
     ScTokenArray    aTokArray;
 
     ScSingleRefData*    pSingRef = &aComplRef.Ref1;
 
-    pSingRef->SetAbsCol(pLR->nColStart);
-    pSingRef->SetAbsRow(pLR->nRowStart);
+    pSingRef->SetAbsCol(pLRTmp->nColStart);
+    pSingRef->SetAbsRow(pLRTmp->nRowStart);
 
-    if( pLR->IsSingle() )
+    if( pLRTmp->IsSingle() )
         aTokArray.AddSingleReference( *pSingRef );
     else
     {
         pSingRef = &aComplRef.Ref2;
-        pSingRef->SetAbsCol(pLR->nColEnd);
-        pSingRef->SetAbsRow(pLR->nRowEnd);
+        pSingRef->SetAbsCol(pLRTmp->nColEnd);
+        pSingRef->SetAbsRow(pLRTmp->nRowEnd);
         aTokArray.AddDoubleReference( aComplRef );
     }
 
-    ScRangeData*    pData = new ScRangeData(
-        m_pLotRoot->pDoc, rName, aTokArray );
-
-    m_pLotRoot->pScRangeName->insert( pData );
-
-    pLR->SetId( nIdCnt );
+    pLRTmp->SetId( nIdCnt );
 
     nIdCnt++;
 }
 
-RangeNameBufferWK3::RangeNameBufferWK3(LOTUS_ROOT* pLotRoot)
-    : m_pLotRoot(pLotRoot)
+RangeNameBufferWK3::RangeNameBufferWK3()
+    : pScTokenArray( new ScTokenArray )
 {
-    pScTokenArray = new ScTokenArray;
     nIntCount = 1;
 }
 
 RangeNameBufferWK3::~RangeNameBufferWK3()
 {
-    delete pScTokenArray;
 }
 
 void RangeNameBufferWK3::Add( const OUString& rOrgName, const ScComplexRefData& rCRD )
 {
-    OUString aScName = ScfTools::ConvertToScDefinedName(rOrgName);
-
-    Entry aInsert( rOrgName, aScName, rCRD );
+    Entry aInsert( rOrgName, rCRD );
 
     pScTokenArray->Clear();
 
@@ -484,28 +457,22 @@ void RangeNameBufferWK3::Add( const OUString& rOrgName, const ScComplexRefData& 
         aInsert.bSingleRef = false;
     }
 
-    ScRangeData*        pData = new ScRangeData( m_pLotRoot->pDoc, aScName, *pScTokenArray );
-
     aInsert.nRelInd = nIntCount;
-    pData->SetIndex( nIntCount );
     nIntCount++;
 
     maEntries.push_back( aInsert );
-    m_pLotRoot->pScRangeName->insert( pData );
 }
 
 bool RangeNameBufferWK3::FindRel( const OUString& rRef, sal_uInt16& rIndex )
 {
     StringHashEntry     aRef( rRef );
 
-    std::vector<Entry>::const_iterator itr;
-    for ( itr = maEntries.begin(); itr != maEntries.end(); ++itr )
+    std::vector<Entry>::const_iterator itr = std::find_if(maEntries.begin(), maEntries.end(),
+        [&aRef](const Entry& rEntry) { return aRef == rEntry.aStrHashEntry; });
+    if (itr != maEntries.end())
     {
-        if ( aRef == itr->aStrHashEntry )
-        {
-            rIndex = itr->nRelInd;
-            return true;
-        }
+        rIndex = itr->nRelInd;
+        return true;
     }
 
     return false;
@@ -517,45 +484,38 @@ bool RangeNameBufferWK3::FindAbs( const OUString& rRef, sal_uInt16& rIndex )
     aTmp = aTmp.copy(1);
     StringHashEntry     aRef( aTmp ); // search w/o '$'!
 
-    std::vector<Entry>::iterator itr;
-    for ( itr = maEntries.begin(); itr != maEntries.end(); ++itr )
+    std::vector<Entry>::iterator itr = std::find_if(maEntries.begin(), maEntries.end(),
+        [&aRef](const Entry& rEntry) { return aRef == rEntry.aStrHashEntry; });
+    if (itr != maEntries.end())
     {
-        if ( aRef == itr->aStrHashEntry )
+        // setup new range if needed
+        if( itr->nAbsInd )
+            rIndex = itr->nAbsInd;
+        else
         {
-            // setup new range if needed
-            if( itr->nAbsInd )
-                rIndex = itr->nAbsInd;
+            ScSingleRefData*        pRef = &itr->aScComplexRefDataRel.Ref1;
+            pScTokenArray->Clear();
+
+            pRef->SetColRel( false );
+            pRef->SetRowRel( false );
+            pRef->SetTabRel( true );
+
+            if( itr->bSingleRef )
+                pScTokenArray->AddSingleReference( *pRef );
             else
             {
-                ScSingleRefData*        pRef = &itr->aScComplexRefDataRel.Ref1;
-                pScTokenArray->Clear();
-
+                pRef = &itr->aScComplexRefDataRel.Ref2;
                 pRef->SetColRel( false );
                 pRef->SetRowRel( false );
                 pRef->SetTabRel( true );
-
-                if( itr->bSingleRef )
-                    pScTokenArray->AddSingleReference( *pRef );
-                else
-                {
-                    pRef = &itr->aScComplexRefDataRel.Ref2;
-                    pRef->SetColRel( false );
-                    pRef->SetRowRel( false );
-                    pRef->SetTabRel( true );
-                    pScTokenArray->AddDoubleReference( itr->aScComplexRefDataRel );
-                }
-
-                ScRangeData*    pData = new ScRangeData( m_pLotRoot->pDoc, itr->aScAbsName, *pScTokenArray );
-
-                rIndex = itr->nAbsInd = nIntCount;
-                pData->SetIndex( rIndex );
-                nIntCount++;
-
-                m_pLotRoot->pScRangeName->insert( pData );
+                pScTokenArray->AddDoubleReference( itr->aScComplexRefDataRel );
             }
 
-            return true;
+            rIndex = itr->nAbsInd = nIntCount;
+            nIntCount++;
         }
+
+        return true;
     }
 
     return false;

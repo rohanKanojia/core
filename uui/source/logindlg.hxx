@@ -20,66 +20,63 @@
 #ifndef INCLUDED_UUI_SOURCE_LOGINDLG_HXX
 #define INCLUDED_UUI_SOURCE_LOGINDLG_HXX
 
-#include <svtools/stdctrl.hxx>
-#include <vcl/button.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
+#include <o3tl/typed_flags_set.hxx>
 
 
-#define LF_NO_PATH              0x0001  // hide "path"
-#define LF_NO_USERNAME          0x0002  // hide "name"
-#define LF_NO_PASSWORD          0x0004  // hide "password"
-#define LF_NO_SAVEPASSWORD      0x0008  // hide "save password"
-#define LF_NO_ERRORTEXT         0x0010  // hide message
-#define LF_PATH_READONLY        0x0020  // "path" readonly
-#define LF_USERNAME_READONLY    0x0040  // "name" readonly
-#define LF_NO_ACCOUNT           0x0080  // hide "account"
-#define LF_NO_USESYSCREDS       0x0100  // hide "use system credentials"
+enum class LoginFlags {
+    NONE                = 0x0000,
+    NoSavePassword      = 0x0008,  // hide "save password"
+    NoErrorText         = 0x0010,  // hide message
+    UsernameReadonly    = 0x0040,  // "name" readonly
+    NoAccount           = 0x0080,  // hide "account"
+    NoUseSysCreds       = 0x0100,  // hide "use system credentials"
+};
+namespace o3tl {
+    template<> struct typed_flags<LoginFlags> : is_typed_flags<LoginFlags, 0x01d8> {};
+}
 
 
-class LoginDialog : public ModalDialog
+class LoginDialog : public weld::GenericDialogController
 {
-    VclPtr<FixedText>      m_pErrorFT;
-    VclPtr<FixedText>      m_pErrorInfo;
-    VclPtr<FixedText>      m_pRequestInfo;
-    VclPtr<FixedText>      m_pPathFT;
-    VclPtr<Edit>           m_pPathED;
-    VclPtr<PushButton>     m_pPathBtn;
-    VclPtr<FixedText>      m_pNameFT;
-    VclPtr<Edit>           m_pNameED;
-    VclPtr<FixedText>      m_pPasswordFT;
-    VclPtr<Edit>           m_pPasswordED;
-    VclPtr<FixedText>      m_pAccountFT;
-    VclPtr<Edit>           m_pAccountED;
-    VclPtr<CheckBox>       m_pSavePasswdBtn;
-    VclPtr<CheckBox>       m_pUseSysCredsCB;
-    VclPtr<OKButton>       m_pOKBtn;
+    std::unique_ptr<weld::Label> m_xErrorFT;
+    std::unique_ptr<weld::Label> m_xErrorInfo;
+    std::unique_ptr<weld::Label> m_xRequestInfo;
+    std::unique_ptr<weld::Label> m_xNameFT;
+    std::unique_ptr<weld::Entry> m_xNameED;
+    std::unique_ptr<weld::Label> m_xPasswordFT;
+    std::unique_ptr<weld::Entry> m_xPasswordED;
+    std::unique_ptr<weld::Label> m_xAccountFT;
+    std::unique_ptr<weld::Entry> m_xAccountED;
+    std::unique_ptr<weld::CheckButton> m_xSavePasswdBtn;
+    std::unique_ptr<weld::CheckButton> m_xUseSysCredsCB;
+    std::unique_ptr<weld::Button> m_xOKBtn;
+    OUString const m_server;
+    OUString const m_realm;
 
-    void            HideControls_Impl( sal_uInt16 nFlags );
+    void            HideControls_Impl( LoginFlags nFlags );
     void            EnableUseSysCredsControls_Impl( bool bUseSysCredsEnabled );
+    void            SetRequest();
 
-    DECL_LINK_TYPED(OKHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(PathHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(UseSysCredsHdl_Impl, Button*, void);
+    DECL_LINK(OKHdl_Impl, weld::Button&, void);
+    DECL_LINK(UseSysCredsHdl_Impl, weld::Button&, void);
 
 public:
-    LoginDialog(vcl::Window* pParent, sal_uInt16 nFlags,
+    LoginDialog(weld::Window* pParent, LoginFlags nFlags,
         const OUString& rServer, const OUString &rRealm);
-    virtual ~LoginDialog();
-    virtual void    dispose() override;
+    virtual ~LoginDialog() override;
 
-    OUString        GetName() const                             { return m_pNameED->GetText(); }
-    void            SetName( const OUString& rNewName )           { m_pNameED->SetText( rNewName ); }
-    OUString        GetPassword() const                         { return m_pPasswordED->GetText(); }
-    void            SetPassword( const OUString& rNew )           { m_pPasswordED->SetText( rNew ); }
-    OUString        GetAccount() const                          { return m_pAccountED->GetText(); }
-    bool            IsSavePassword() const                      { return m_pSavePasswdBtn->IsChecked(); }
-    void            SetSavePassword( bool bSave )               { m_pSavePasswdBtn->Check( bSave ); }
-    void            SetSavePasswordText( const OUString& rTxt )   { m_pSavePasswdBtn->SetText( rTxt ); }
-    bool            IsUseSystemCredentials() const              { return m_pUseSysCredsCB->IsChecked(); }
+    OUString        GetName() const                             { return m_xNameED->get_text(); }
+    void            SetName( const OUString& rNewName )           { m_xNameED->set_text( rNewName ); }
+    OUString        GetPassword() const                         { return m_xPasswordED->get_text(); }
+    void            SetPassword( const OUString& rNew );
+    OUString        GetAccount() const                          { return m_xAccountED->get_text(); }
+    bool            IsSavePassword() const                      { return m_xSavePasswdBtn->get_active(); }
+    void            SetSavePassword( bool bSave )               { m_xSavePasswdBtn->set_active( bSave ); }
+    void            SetSavePasswordText( const OUString& rTxt )   { m_xSavePasswdBtn->set_label( rTxt ); }
+    bool            IsUseSystemCredentials() const              { return m_xUseSysCredsCB->get_active(); }
     void            SetUseSystemCredentials( bool bUse );
-    void            SetErrorText( const OUString& rTxt )          { m_pErrorInfo->SetText( rTxt ); }
+    void            SetErrorText( const OUString& rTxt )          { m_xErrorInfo->set_label( rTxt ); }
     void            ClearPassword();
     void            ClearAccount();
 };

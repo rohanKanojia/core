@@ -17,9 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
-#include <tools/rc.h>
 
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
 // declare system types in sysdata.hxx
@@ -41,13 +40,15 @@ void WorkWindow::ImplInitWorkWindowData()
     mbPresentationVisible   = false;
     mbPresentationFull      = false;
     mbFullScreenMode        = false;
+
+    maLayoutIdle.SetDebugName( "vcl::WorkWindow maLayoutIdle" );
 }
 
 void WorkWindow::ImplInit( vcl::Window* pParent, WinBits nStyle, SystemParentData* pSystemParentData )
 {
-    sal_uInt16 nFrameStyle = BORDERWINDOW_STYLE_FRAME;
+    BorderWindowStyle nFrameStyle = BorderWindowStyle::Frame;
     if ( nStyle & WB_APP )
-        nFrameStyle |= BORDERWINDOW_STYLE_APP;
+        nFrameStyle |= BorderWindowStyle::App;
 
     VclPtrInstance<ImplBorderWindow> pBorderWin( pParent, pSystemParentData, nStyle, nFrameStyle );
     Window::ImplInit( pBorderWin, nStyle & (WB_3DLOOK | WB_CLIPCHILDREN | WB_DIALOGCONTROL | WB_SYSTEMFLOATWIN), nullptr );
@@ -60,7 +61,7 @@ void WorkWindow::ImplInit( vcl::Window* pParent, WinBits nStyle, SystemParentDat
     if ( nStyle & WB_APP )
     {
         ImplSVData* pSVData = ImplGetSVData();
-        DBG_ASSERT( !pSVData->maWinData.mpAppWin, "WorkWindow::WorkWindow(): More than one window with style WB_APP" );
+        SAL_WARN_IF( pSVData->maWinData.mpAppWin, "vcl", "WorkWindow::WorkWindow(): More than one window with style WB_APP" );
         pSVData->maWinData.mpAppWin = this;
     }
 
@@ -74,7 +75,7 @@ void WorkWindow::ImplInit( vcl::Window* pParent, WinBits nStyle, const css::uno:
         css::uno::Sequence< sal_Int8 > aSeq;
         aSystemWorkWindowToken >>= aSeq;
         SystemParentData* pData = reinterpret_cast<SystemParentData*>(aSeq.getArray());
-        DBG_ASSERT( aSeq.getLength() == sizeof( SystemParentData ) && pData->nSize == sizeof( SystemParentData ), "WorkWindow::WorkWindow( vcl::Window*, const Any&, WinBits ) called with invalid Any" );
+        SAL_WARN_IF( aSeq.getLength() != sizeof( SystemParentData ) || pData->nSize != sizeof( SystemParentData ), "vcl", "WorkWindow::WorkWindow( vcl::Window*, const Any&, WinBits ) called with invalid Any" );
         // init with style 0 as does WorkWindow::WorkWindow( SystemParentData* );
         ImplInit( pParent, 0, pData );
     }
@@ -89,14 +90,14 @@ WorkWindow::WorkWindow( WindowType nType ) :
 }
 
 WorkWindow::WorkWindow( vcl::Window* pParent, WinBits nStyle ) :
-    SystemWindow( WINDOW_WORKWINDOW )
+    SystemWindow( WindowType::WORKWINDOW )
 {
     ImplInitWorkWindowData();
     ImplInit( pParent, nStyle );
 }
 
 WorkWindow::WorkWindow( vcl::Window* pParent, const css::uno::Any& aSystemWorkWindowToken, WinBits nStyle ) :
-    SystemWindow( WINDOW_WORKWINDOW )
+    SystemWindow( WindowType::WORKWINDOW )
 {
     ImplInitWorkWindowData();
     mbSysChild = true;
@@ -104,7 +105,7 @@ WorkWindow::WorkWindow( vcl::Window* pParent, const css::uno::Any& aSystemWorkWi
 }
 
 WorkWindow::WorkWindow( SystemParentData* pParent ) :
-    SystemWindow( WINDOW_WORKWINDOW )
+    SystemWindow( WindowType::WORKWINDOW )
 {
     ImplInitWorkWindowData();
     mbSysChild = true;
@@ -160,7 +161,7 @@ void WorkWindow::StartPresentationMode( PresentationFlags nFlags )
     return StartPresentationMode( false/*bPresentation*/, nFlags, GetScreenNumber());
 }
 
-void WorkWindow::StartPresentationMode( bool bPresentation, PresentationFlags nFlags, sal_uInt32 nDisplayScreen )
+void WorkWindow::StartPresentationMode( bool bPresentation, PresentationFlags nFlags, sal_Int32 nDisplayScreen )
 {
     if ( !bPresentation == !mbPresentationMode )
         return;
@@ -172,19 +173,16 @@ void WorkWindow::StartPresentationMode( bool bPresentation, PresentationFlags nF
         mbPresentationFull      = mbFullScreenMode;
         mnPresentationFlags     = nFlags;
 
-        if ( !(mnPresentationFlags & PresentationFlags::NoFullScreen) )
-            ShowFullScreenMode( true, nDisplayScreen );
+        ShowFullScreenMode( true, nDisplayScreen );
         if ( !mbSysChild )
         {
             if ( mnPresentationFlags & PresentationFlags::HideAllApps )
                 mpWindowImpl->mpFrame->SetAlwaysOnTop( true );
-            if ( !(mnPresentationFlags & PresentationFlags::NoAutoShow) )
-                ToTop();
+            ToTop();
             mpWindowImpl->mpFrame->StartPresentation( true );
         }
 
-        if ( !(mnPresentationFlags & PresentationFlags::NoAutoShow) )
-            Show();
+        Show();
     }
     else
     {
@@ -208,50 +206,50 @@ bool WorkWindow::IsMinimized() const
 {
     //return mpWindowImpl->mpFrameData->mbMinimized;
     SalFrameState aState;
-    mpWindowImpl->mpFrame->GetWindowState(&aState);
-    return (( aState.mnState & WINDOWSTATE_STATE_MINIMIZED ) != 0);
+    if (mpWindowImpl->mpFrame->GetWindowState(&aState))
+        return bool(aState.mnState & WindowStateState::Minimized);
+    else
+        return false;
 }
 
-bool WorkWindow::SetPluginParent( SystemParentData* pParent )
+void WorkWindow::SetPluginParent( SystemParentData* pParent )
 {
-    DBG_ASSERT( ! mbPresentationMode && ! mbFullScreenMode, "SetPluginParent in fullscreen or presentation mode !" );
+    SAL_WARN_IF( mbPresentationMode || mbFullScreenMode, "vcl", "SetPluginParent in fullscreen or presentation mode !" );
 
     bool bWasDnd = Window::ImplStopDnd();
 
     bool bShown = IsVisible();
     Show( false );
-    bool bRet = mpWindowImpl->mpFrame->SetPluginParent( pParent );
+    mpWindowImpl->mpFrame->SetPluginParent( pParent );
     Show( bShown );
 
     if( bWasDnd )
         Window::ImplStartDnd();
-
-    return bRet;
 }
 
-void WorkWindow::ImplSetFrameState( sal_uLong aFrameState )
+void WorkWindow::ImplSetFrameState( WindowStateState aFrameState )
 {
     SalFrameState   aState;
-    aState.mnMask   = WINDOWSTATE_MASK_STATE;
+    aState.mnMask   = WindowStateMask::State;
     aState.mnState  = aFrameState;
     mpWindowImpl->mpFrame->SetWindowState( &aState );
 }
 
 void WorkWindow::Minimize()
 {
-    ImplSetFrameState( WINDOWSTATE_STATE_MINIMIZED );
+    ImplSetFrameState( WindowStateState::Minimized );
 }
 
 void WorkWindow::Restore()
 {
-    ImplSetFrameState( WINDOWSTATE_STATE_NORMAL );
+    ImplSetFrameState( WindowStateState::Normal );
 }
 
 bool WorkWindow::Close()
 {
     bool bCanClose = SystemWindow::Close();
 
-    // Ist es das Applikationsfenster, dann beende die Applikation
+    // if it's the application window then close the application
     if ( bCanClose && ( ImplGetSVData()->maWinData.mpAppWin == this ) )
         Application::Quit();
 
@@ -260,7 +258,7 @@ bool WorkWindow::Close()
 
 void WorkWindow::Maximize( bool bMaximize )
 {
-    ImplSetFrameState( bMaximize ? WINDOWSTATE_STATE_MAXIMIZED : WINDOWSTATE_STATE_NORMAL );
+    ImplSetFrameState( bMaximize ? WindowStateState::Maximized : WindowStateState::Normal );
 }
 
 bool WorkWindow::IsMaximized() const
@@ -270,9 +268,9 @@ bool WorkWindow::IsMaximized() const
     SalFrameState aState;
     if( mpWindowImpl->mpFrame->GetWindowState( &aState ) )
     {
-        if( aState.mnState & (WINDOWSTATE_STATE_MAXIMIZED          |
-                              WINDOWSTATE_STATE_MAXIMIZED_HORZ     |
-                              WINDOWSTATE_STATE_MAXIMIZED_VERT ) )
+        if( aState.mnState & (WindowStateState::Maximized          |
+                              WindowStateState::MaximizedHorz     |
+                              WindowStateState::MaximizedVert ) )
             bRet = true;
     }
     return bRet;

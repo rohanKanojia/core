@@ -41,11 +41,6 @@ namespace com{namespace sun{ namespace star{
 
 class SvxBrushItem;
 class SvxNumRule;
-struct SvxBmpItemInfo
-{
-    SvxBrushItem*   pBrushItem;
-    sal_uInt16          nItemId;
-};
 
 enum class NumberingPageType
 {
@@ -58,8 +53,7 @@ enum class NumberingPageType
 class SVX_DLLPUBLIC SvxNumValueSet : public ValueSet
 {
     NumberingPageType ePageType;
-    bool            bHTMLMode;
-    Rectangle       aOrgRect;
+    tools::Rectangle       aOrgRect;
     VclPtr<VirtualDevice> pVDev;
 
     css::uno::Reference<css::text::XNumberingFormatter> xFormatter;
@@ -74,9 +68,9 @@ class SVX_DLLPUBLIC SvxNumValueSet : public ValueSet
             css::container::XIndexAccess> > aOutlineSettings;
 
 public:
-    SvxNumValueSet(vcl::Window* pParent, WinBits nWinBits = WB_TABSTOP);
+    SvxNumValueSet(vcl::Window* pParent, WinBits nWinBits);
     void init(NumberingPageType eType);
-    virtual ~SvxNumValueSet();
+    virtual ~SvxNumValueSet() override;
     virtual void dispose() override;
 
     virtual void    UserDraw( const UserDrawEvent& rUDEvt ) override;
@@ -84,33 +78,67 @@ public:
     void            SetNumberingSettings(
         const css::uno::Sequence<
                   css::uno::Sequence<css::beans::PropertyValue> >& aNum,
-        css::uno::Reference<css::text::XNumberingFormatter>& xFormatter,
+        css::uno::Reference<css::text::XNumberingFormatter> const & xFormatter,
         const css::lang::Locale& rLocale );
 
     void            SetOutlineNumberingSettings(
             css::uno::Sequence<
-                css::uno::Reference<css::container::XIndexAccess> >& rOutline,
-            css::uno::Reference<css::text::XNumberingFormatter>& xFormatter,
+                css::uno::Reference<css::container::XIndexAccess> > const & rOutline,
+            css::uno::Reference<css::text::XNumberingFormatter> const & xFormatter,
             const css::lang::Locale& rLocale);
 };
 
-class SVX_DLLPUBLIC SvxBmpNumValueSet : public SvxNumValueSet
+class SVX_DLLPUBLIC NumValueSet : public SvtValueSet
+{
+    NumberingPageType ePageType;
+    tools::Rectangle       aOrgRect;
+    VclPtr<VirtualDevice> pVDev;
+
+    css::uno::Reference<css::text::XNumberingFormatter> xFormatter;
+    css::lang::Locale aLocale;
+
+    css::uno::Sequence<
+        css::uno::Sequence<
+            css::beans::PropertyValue> > aNumSettings;
+
+    css::uno::Sequence<
+        css::uno::Reference<
+            css::container::XIndexAccess> > aOutlineSettings;
+
+public:
+    NumValueSet(std::unique_ptr<weld::ScrolledWindow> pScrolledWindow);
+    void init(NumberingPageType eType);
+    virtual ~NumValueSet() override;
+
+    virtual void    UserDraw( const UserDrawEvent& rUDEvt ) override;
+
+    void            SetNumberingSettings(
+        const css::uno::Sequence<
+                  css::uno::Sequence<css::beans::PropertyValue> >& aNum,
+        css::uno::Reference<css::text::XNumberingFormatter> const & xFormatter,
+        const css::lang::Locale& rLocale );
+
+    void            SetOutlineNumberingSettings(
+            css::uno::Sequence<
+                css::uno::Reference<css::container::XIndexAccess> > const & rOutline,
+            css::uno::Reference<css::text::XNumberingFormatter> const & xFormatter,
+            const css::lang::Locale& rLocale);
+};
+
+
+class SVX_DLLPUBLIC SvxBmpNumValueSet final : public NumValueSet
 {
     Idle        aFormatIdle;
     bool        bGrfNotFound;
 
-    void init();
-
-protected:
-        DECL_LINK_TYPED(FormatHdl_Impl, Idle *, void);
+    DECL_LINK(FormatHdl_Impl, Timer *, void);
 
 public:
-    SvxBmpNumValueSet(vcl::Window* pParent, WinBits nWinBits = WB_TABSTOP);
-    virtual ~SvxBmpNumValueSet();
-    virtual void dispose() override;
+    SvxBmpNumValueSet(std::unique_ptr<weld::ScrolledWindow> pScrolledWindow);
+    void init();
+    virtual ~SvxBmpNumValueSet() override;
 
     virtual void    UserDraw( const UserDrawEvent& rUDEvt ) override;
-
 };
 
 #endif

@@ -26,6 +26,8 @@
 #include "WrapPolygonHandler.hxx"
 #include "util.hxx"
 
+#include <sal/log.hxx>
+
 namespace writerfilter {
 
 using namespace com::sun::star;
@@ -100,8 +102,8 @@ WrapPolygon::Pointer_t WrapPolygon::correctWordWrapPolygon(const awt::Size & rSr
     awt::Point aMovePoint(aMove.operator long(), 0);
     pResult = move(aMovePoint);
 
-    Fraction aScaleX(nWrap100Percent, Fraction(nWrap100Percent) + aMove);
-    Fraction aScaleY(nWrap100Percent, Fraction(nWrap100Percent) - aMove);
+    Fraction aScaleX = nWrap100Percent / (nWrap100Percent + aMove);
+    Fraction aScaleY = nWrap100Percent / (nWrap100Percent - aMove);
     pResult = pResult->scale(aScaleX, aScaleY);
 
     Fraction aScaleSrcX(rSrcSize.Width, nWrap100Percent);
@@ -136,7 +138,7 @@ WrapPolygon::Pointer_t WrapPolygon::correctWordWrapPolygonPixel(const awt::Size 
 
 drawing::PointSequenceSequence WrapPolygon::getPointSequenceSequence() const
 {
-    drawing::PointSequenceSequence aPolyPolygon(1L);
+    drawing::PointSequenceSequence aPolyPolygon(1);
     drawing::PointSequence aPolygon = comphelper::containerToSequence(mPoints);
     aPolyPolygon[0] = aPolygon;
     return aPolyPolygon;

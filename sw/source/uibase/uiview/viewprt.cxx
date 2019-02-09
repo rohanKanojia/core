@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/text/NotePrintMode.hpp>
 #include <cstdarg>
+#include <libxml/xmlwriter.h>
 #include <cmdid.h>
 #include <sfx2/request.hxx>
 #include <sfx2/progress.hxx>
 #include <sfx2/app.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/oldprintadaptor.hxx>
 #include <sfx2/printer.hxx>
 #include <sfx2/prnmon.hxx>
 #include <editeng/paperinf.hxx>
 #include <sfx2/dispatch.hxx>
 #include <unotools/misccfg.hxx>
-#include <svx/prtqry.hxx>
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 #include <svx/svdview.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
@@ -49,7 +50,7 @@
 #include <cfgitems.hxx>
 #include <dbmgr.hxx>
 #include <docstat.hxx>
-#include <viewfunc.hxx>
+#include "viewfunc.hxx"
 #include <swmodule.hxx>
 #include <wview.hxx>
 #include <doc.hxx>
@@ -57,13 +58,14 @@
 #include <IDocumentDeviceAccess.hxx>
 
 #include <globals.hrc>
-#include <view.hrc>
+#include <strings.hrc>
 #include <app.hrc>
 #include <swwrtshitem.hxx>
-#include "swabstdlg.hxx"
+#include <swabstdlg.hxx>
 #include <svl/slstitm.hxx>
 
 #include <unomid.h>
+#include <uivwimp.hxx>
 
 using namespace ::com::sun::star;
 
@@ -84,7 +86,7 @@ SfxPrinter* SwView::GetPrinter( bool bCreate )
 
 // Propagate printer change
 
-void SetPrinter( IDocumentDeviceAccess* pIDDA, SfxPrinter* pNew, bool bWeb )
+void SetPrinter( IDocumentDeviceAccess* pIDDA, SfxPrinter const * pNew, bool bWeb )
 {
     SwPrintOptions* pOpt = SW_MOD()->GetPrtOptions(bWeb);
     if( !pOpt)
@@ -145,12 +147,33 @@ bool SwView::HasPrintOptionsPage() const
     return true;
 }
 
+namespace
+{
+    class SvxPrtQryBox
+    {
+    private:
+        std::unique_ptr<weld::MessageDialog> m_xQueryBox;
+    public:
+        SvxPrtQryBox(weld::Window* pParent)
+            : m_xQueryBox(Application::CreateMessageDialog(pParent, VclMessageType::Question, VclButtonsType::NONE, SvxResId(RID_SVXSTR_QRY_PRINT_MSG)))
+        {
+            m_xQueryBox->set_title(SvxResId(RID_SVXSTR_QRY_PRINT_TITLE));
+
+            m_xQueryBox->add_button(SvxResId(RID_SVXSTR_QRY_PRINT_SELECTION), RET_OK);
+            m_xQueryBox->add_button(SvxResId(RID_SVXSTR_QRY_PRINT_ALL), 2);
+            m_xQueryBox->add_button(Button::GetStandardText(StandardButtonType::Cancel), RET_CANCEL);
+            m_xQueryBox->set_default_response(RET_OK);
+        }
+        short run() { return m_xQueryBox->run(); }
+    };
+}
+
 // TabPage for application-specific print options
 
-VclPtr<SfxTabPage> SwView::CreatePrintOptionsPage(vcl::Window* pParent,
+VclPtr<SfxTabPage> SwView::CreatePrintOptionsPage(TabPageParent pParent,
                                                   const SfxItemSet& rSet)
 {
-    return ::CreatePrintOptionsPage( pParent, rSet, false );
+    return ::CreatePrintOptionsPage(pParent, rSet, false);
 }
 
 // Print dispatcher
@@ -164,7 +187,7 @@ void SwView::ExecutePrint(SfxRequest& rReq)
         case FN_FAX:
         {
             SwPrintOptions* pPrintOptions = SW_MOD()->GetPrtOptions(bWeb);
-            OUString sFaxName(pPrintOptions->GetFaxName());
+            const OUString& sFaxName(pPrintOptions->GetFaxName());
             if (!sFaxName.isEmpty())
             {
                 SfxStringItem aPrinterName(SID_PRINTER_NAME, sFaxName);
@@ -175,10 +198,12 @@ void SwView::ExecutePrint(SfxRequest& rReq)
             }
             else
             {
-                ScopedVclPtrInstance< MessageDialog > aInfoBox(&GetEditWin(), SW_RES(STR_ERR_NO_FAX), VCL_MESSAGE_INFO);
-                sal_uInt16 nResNo = bWeb ? STR_WEBOPTIONS : STR_TEXTOPTIONS;
-                aInfoBox->set_primary_text(aInfoBox->get_primary_text().replaceFirst("%1", OUString(SW_RES(nResNo))));
-                aInfoBox->Execute();
+                std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetEditWin().GetFrameWeld(),
+                                                              VclMessageType::Info, VclButtonsType::Ok,
+                                                              SwResId(STR_ERR_NO_FAX)));
+                const char* pResId = bWeb ? STR_WEBOPTIONS : STR_TEXTOPTIONS;
+                xInfoBox->set_primary_text(xInfoBox->get_primary_text().replaceFirst("%1", SwResId(pResId)));
+                xInfoBox->run();
                 SfxUInt16Item aDefPage(SID_SW_EDITOPTIONS, TP_OPTPRINT_PAGE);
                 GetViewFrame()->GetDispatcher()->ExecuteList(SID_SW_EDITOPTIONS,
                             SfxCallMode::SYNCHRON|SfxCallMode::RECORD,
@@ -196,14 +221,13 @@ void SwView::ExecutePrint(SfxRequest& rReq)
             if(pPrintFromMergeItem)
                 rReq.RemoveItem(FN_QRY_MERGE);
             bool bFromMerge = pPrintFromMergeItem && pPrintFromMergeItem->GetValue();
-            SwMiscConfig aMiscConfig;
             bool bPrintSelection = false;
             if(!bSilent && !bFromMerge &&
                     SW_MOD()->GetModuleConfig()->IsAskForMailMerge() && pSh->IsAnyDatabaseFieldInDoc())
             {
-                ScopedVclPtrInstance<MessageDialog> aBox(&GetEditWin(), "PrintMergeDialog",
-                                   "modules/swriter/ui/printmergedialog.ui");
-                short nRet = aBox->Execute();
+                std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetEditWin().GetFrameWeld(), "modules/swriter/ui/printmergedialog.ui"));
+                std::unique_ptr<weld::MessageDialog> xBox(xBuilder->weld_message_dialog("PrintMergeDialog"));
+                short nRet = xBox->run();
                 if(RET_NO != nRet)
                 {
                     if(RET_YES == nRet)
@@ -219,9 +243,10 @@ void SwView::ExecutePrint(SfxRequest& rReq)
             }
             else if( rReq.GetSlot() == SID_PRINTDOCDIRECT && ! bSilent )
             {
-                if( ( pSh->IsSelection() || pSh->IsFrameSelected() || pSh->IsObjSelected() ) )
+                if( pSh->IsSelection() || pSh->IsFrameSelected() || pSh->IsObjSelected() )
                 {
-                    short nBtn = ScopedVclPtr<SvxPrtQryBox>::Create(&GetEditWin())->Execute();
+                    SvxPrtQryBox aBox(GetEditWin().GetFrameWeld());
+                    short nBtn = aBox.run();
                     if( RET_CANCEL == nBtn )
                         return;
 
@@ -233,7 +258,7 @@ void SwView::ExecutePrint(SfxRequest& rReq)
             //#i61455# if master documents are printed silently without loaded links then update the links now
             if( bSilent && pSh->IsGlobalDoc() && !pSh->IsGlblDocSaveLinks() )
             {
-                pSh->GetLinkManager().UpdateAllLinks( false, false );
+                pSh->GetLinkManager().UpdateAllLinks( false, false, nullptr );
             }
             SfxRequest aReq( rReq );
             SfxBoolItem aBool(SID_SELECTION, bPrintSelection);
@@ -247,49 +272,76 @@ void SwView::ExecutePrint(SfxRequest& rReq)
     }
 }
 
+int SwView::getPart() const
+{
+    return 0;
+}
+
+void SwView::dumpAsXml(xmlTextWriterPtr pWriter) const
+{
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SwView"));
+    SfxViewShell::dumpAsXml(pWriter);
+    if (m_pWrtShell)
+        m_pWrtShell->dumpAsXml(pWriter);
+    xmlTextWriterEndElement(pWriter);
+}
+
+void SwView::SetRedlineAuthor(const OUString& rAuthor)
+{
+    m_pViewImpl->m_sRedlineAuthor = rAuthor;
+}
+
+const OUString& SwView::GetRedlineAuthor()
+{
+    return m_pViewImpl->m_sRedlineAuthor;
+}
+
+void SwView::NotifyCursor(SfxViewShell* pViewShell) const
+{
+    m_pWrtShell->NotifyCursor(pViewShell);
+}
+
 // Create page printer/additions for SwView and SwPagePreview
 
-VclPtr<SfxTabPage> CreatePrintOptionsPage( vcl::Window *pParent,
-                                           const SfxItemSet &rOptions,
-                                           bool bPreview )
+VclPtr<SfxTabPage> CreatePrintOptionsPage(TabPageParent pParent,
+                                          const SfxItemSet &rOptions,
+                                          bool bPreview)
 {
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "No Print Dialog");
-    if (!pFact)
-        return nullptr;
 
     ::CreateTabPage fnCreatePage = pFact->GetTabPageCreatorFunc(TP_OPTPRINT_PAGE);
     OSL_ENSURE(pFact, "No Page Creator");
     if (!fnCreatePage)
         return nullptr;
 
-    VclPtr<SfxTabPage> pPage = fnCreatePage(pParent, &rOptions);
-    OSL_ENSURE(pPage, "No page");
-    if (!pPage)
+    VclPtr<SfxTabPage> pSfxPage = fnCreatePage(pParent, &rOptions);
+    OSL_ENSURE(pSfxPage, "No page");
+    if (!pSfxPage)
         return nullptr;
 
     SfxAllItemSet aSet(*(rOptions.GetPool()));
     aSet.Put(SfxBoolItem(SID_PREVIEWFLAG_TYPE, bPreview));
     aSet.Put(SfxBoolItem(SID_FAX_LIST, true));
-    pPage->PageCreated(aSet);
-    return pPage;
+    pSfxPage->PageCreated(aSet);
+    return pSfxPage;
 }
 
 void SetAppPrintOptions( SwViewShell* pSh, bool bWeb )
 {
     const IDocumentDeviceAccess& rIDDA = pSh->getIDocumentDeviceAccess();
-    SwPrintData aPrtData = rIDDA.getPrintData();
+    const SwPrintData& aPrtData = rIDDA.getPrintData();
 
     if( rIDDA.getPrinter( false ) )
     {
         // Close application own printing options in SfxPrinter.
-        SwAddPrinterItem aAddPrinterItem (FN_PARAM_ADDPRINTER, aPrtData);
-        SfxItemSet aSet( pSh->GetAttrPool(),
-                    FN_PARAM_ADDPRINTER,        FN_PARAM_ADDPRINTER,
-                    SID_HTML_MODE,              SID_HTML_MODE,
-                    SID_PRINTER_NOTFOUND_WARN,  SID_PRINTER_NOTFOUND_WARN,
-                    SID_PRINTER_CHANGESTODOC,   SID_PRINTER_CHANGESTODOC,
-                    0 );
+        SwAddPrinterItem aAddPrinterItem(aPrtData);
+        SfxItemSet aSet(
+            pSh->GetAttrPool(),
+            svl::Items<
+                SID_PRINTER_NOTFOUND_WARN, SID_PRINTER_NOTFOUND_WARN,
+                SID_PRINTER_CHANGESTODOC, SID_PRINTER_CHANGESTODOC,
+                SID_HTML_MODE, SID_HTML_MODE,
+                FN_PARAM_ADDPRINTER, FN_PARAM_ADDPRINTER>{});
 
         utl::MiscCfg aMisc;
 

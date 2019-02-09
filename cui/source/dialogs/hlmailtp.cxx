@@ -17,17 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <sfx2/request.hxx>
 
-#include <comphelper/processfactory.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/moduleoptions.hxx>
 
-#include "hlmailtp.hxx"
+#include <hlmailtp.hxx>
+#include <bitmaps.hlst>
 
 using namespace ::com::sun::star;
 
@@ -37,16 +35,14 @@ using namespace ::com::sun::star;
 |*
 |************************************************************************/
 
-SvxHyperlinkMailTp::SvxHyperlinkMailTp ( vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet& rItemSet)
+SvxHyperlinkMailTp::SvxHyperlinkMailTp ( vcl::Window *pParent, IconChoiceDialog* pDlg, const SfxItemSet* pItemSet)
 :   SvxHyperlinkTabPageBase ( pParent, pDlg, "HyperlinkMailPage", "cui/ui/hyperlinkmailpage.ui",
-                              rItemSet )
+                              pItemSet )
 {
     get(m_pCbbReceiver, "receiver");
     m_pCbbReceiver->SetSmartProtocol(INetProtocol::Mailto);
     get(m_pBtAdrBook, "adressbook");
-    BitmapEx aBitmap = Image(CUI_RES(RID_SVXBMP_ADRESSBOOK)).GetBitmapEx();
-    aBitmap.Scale(GetDPIScaleFactor(),GetDPIScaleFactor(),BmpScaleFlag::BestQuality );
-    m_pBtAdrBook->SetModeImage(Image(aBitmap));
+    m_pBtAdrBook->SetModeImage(Image(StockImage::Yes, RID_SVXBMP_ADRESSBOOK));
     get(m_pFtSubject, "subject_label");
     get(m_pEdSubject, "subject");
 
@@ -56,7 +52,6 @@ SvxHyperlinkMailTp::SvxHyperlinkMailTp ( vcl::Window *pParent, IconChoiceDialog*
     InitStdControls();
 
     m_pCbbReceiver->Show();
-    m_pCbbReceiver->SetHelpId( HID_HYPERDLG_MAIL_PATH );
 
     SetExchangeSupport ();
 
@@ -155,14 +150,13 @@ OUString SvxHyperlinkMailTp::CreateAbsoluteURL() const
     {
         if ( !m_pEdSubject->GetText().isEmpty() )
         {
-            OUString aQuery("subject=");
-            aQuery += m_pEdSubject->GetText();
+            OUString aQuery = "subject=" + m_pEdSubject->GetText();
             aURL.SetParam(aQuery);
         }
     }
 
     if ( aURL.GetProtocol() != INetProtocol::NotValid )
-        return aURL.GetMainURL( INetURLObject::DECODE_WITH_CHARSET );
+        return aURL.GetMainURL( INetURLObject::DecodeMechanism::WithCharset );
     else //#105788# always create a URL even if it is not valid
         return aStrURL;
 }
@@ -173,9 +167,9 @@ OUString SvxHyperlinkMailTp::CreateAbsoluteURL() const
 |*
 |************************************************************************/
 
-VclPtr<IconChoicePage> SvxHyperlinkMailTp::Create( vcl::Window* pWindow, IconChoiceDialog* pDlg, const SfxItemSet& rItemSet )
+VclPtr<IconChoicePage> SvxHyperlinkMailTp::Create( vcl::Window* pWindow, IconChoiceDialog* pDlg, const SfxItemSet* pItemSet )
 {
-    return VclPtr<SvxHyperlinkMailTp>::Create( pWindow, pDlg, rItemSet );
+    return VclPtr<SvxHyperlinkMailTp>::Create( pWindow, pDlg, pItemSet );
 }
 
 /*************************************************************************
@@ -225,11 +219,11 @@ void SvxHyperlinkMailTp::RemoveImproperProtocol(const OUString& aProperScheme)
 
 /*************************************************************************
 |*
-|* Contens of editfield "receiver" modified
+|* Contents of editfield "receiver" modified
 |*
 |************************************************************************/
 
-IMPL_LINK_NOARG_TYPED(SvxHyperlinkMailTp, ModifiedReceiverHdl_Impl, Edit&, void)
+IMPL_LINK_NOARG(SvxHyperlinkMailTp, ModifiedReceiverHdl_Impl, Edit&, void)
 {
     OUString aScheme = GetSchemeFromURL( m_pCbbReceiver->GetText() );
     if(!aScheme.isEmpty())
@@ -242,7 +236,7 @@ IMPL_LINK_NOARG_TYPED(SvxHyperlinkMailTp, ModifiedReceiverHdl_Impl, Edit&, void)
 |*
 |************************************************************************/
 
-IMPL_STATIC_LINK_NOARG_TYPED(SvxHyperlinkMailTp, ClickAdrBookHdl_Impl, Button*, void)
+IMPL_STATIC_LINK_NOARG(SvxHyperlinkMailTp, ClickAdrBookHdl_Impl, Button*, void)
 {
     SfxViewFrame* pViewFrame = SfxViewFrame::Current();
     if( pViewFrame )

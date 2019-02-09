@@ -22,29 +22,26 @@
 
 #include <vcl/button.hxx>
 #include <vcl/dllapi.h>
+#include <memory>
 
 class Timer;
 class PopupMenu;
-class VclBuilder;
-class VclSimpleEvent;
-
-#define MENUBUTTON_MENUMODE_TIMED       ((sal_uInt16)0x0001)
 
 class VCL_DLLPUBLIC MenuButton : public PushButton
 {
 private:
     friend class VclBuilder;
 
-    Timer*          mpMenuTimer;
-    PopupMenu*      mpOwnMenu;
-    PopupMenu*      mpMenu;
+    std::unique_ptr<Timer> mpMenuTimer;
+    VclPtr<PopupMenu> mpMenu;
+    VclPtr<Window>  mpFloatingWindow;
+    OString         msCurItemIdent;
     sal_uInt16      mnCurItemId;
-    sal_uInt16      mnMenuMode;
+    bool            mbDelayMenu;
     Link<MenuButton*,void> maActivateHdl;
     Link<MenuButton*,void> maSelectHdl;
 
-    SAL_DLLPRIVATE void    ImplInitMenuButtonData();
-    DECL_DLLPRIVATE_LINK_TYPED( ImplMenuTimeoutHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( ImplMenuTimeoutHdl, Timer*, void );
 
                            MenuButton( const MenuButton & ) = delete;
                            MenuButton& operator=( const MenuButton & ) = delete;
@@ -55,7 +52,7 @@ protected:
 
 public:
     explicit        MenuButton( vcl::Window* pParent, WinBits nStyle = 0 );
-    virtual         ~MenuButton();
+    virtual         ~MenuButton() override;
     virtual void    dispose() override;
 
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
@@ -65,17 +62,37 @@ public:
     virtual void    Select();
 
     void            ExecuteMenu();
+    bool            MenuShown() const;
+    void            CancelMenu();
 
-    void            SetMenuMode(sal_uInt16 nMode) { mnMenuMode = nMode; }
+    //if false then the whole button launches the menu
+    //if true, then the button has a separator
+    //where the right portion launches the menu immediately
+    //where the left portion activates the underlying Button handlers
+    //before launching the menu in an idle, allowing it to be cancelled
+    //before being shown
+    void            SetDelayMenu(bool bDelay) { mbDelayMenu = bDelay; }
 
-    void            SetPopupMenu( PopupMenu* pNewMenu );
+    void            SetPopupMenu(PopupMenu* pNewMenu);
     PopupMenu*      GetPopupMenu() const { return mpMenu; }
 
+    void            SetPopover(Window* pWindow);
+
     sal_uInt16      GetCurItemId() const { return mnCurItemId; }
-    OString         GetCurItemIdent() const;
+    OString         GetCurItemIdent() const { return msCurItemIdent; }
 
     void            SetActivateHdl( const Link<MenuButton *, void>& rLink ) { maActivateHdl = rLink; }
     void            SetSelectHdl( const Link<MenuButton *, void>& rLink ) { maSelectHdl = rLink; }
+};
+
+
+class VCL_DLLPUBLIC MenuToggleButton : public MenuButton
+{
+public:
+    explicit        MenuToggleButton( vcl::Window* pParent, WinBits nStyle );
+    virtual         ~MenuToggleButton() override;
+
+    void            SetActive( bool bSel );
 };
 
 #endif // INCLUDED_VCL_MENUBTN_HXX

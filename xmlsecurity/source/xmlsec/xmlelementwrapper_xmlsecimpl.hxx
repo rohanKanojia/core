@@ -27,12 +27,13 @@
 #include <cppuhelper/implbase.hxx>
 
 #include <libxml/tree.h>
+#include <xsecxmlsecdllapi.h>
 
 namespace com { namespace sun { namespace star { namespace uno {
     class XComponentContext;
 } } } }
 
-class XMLElementWrapper_XmlSecImpl : public cppu::WeakImplHelper
+class XSECXMLSEC_DLLPUBLIC XMLElementWrapper_XmlSecImpl : public cppu::WeakImplHelper
 <
     css::xml::wrapper::XXMLElementWrapper,
     css::lang::XUnoTunnel,
@@ -50,27 +51,22 @@ class XMLElementWrapper_XmlSecImpl : public cppu::WeakImplHelper
 {
 private:
     /* the libxml2 node wrapped by this object */
-    xmlNodePtr m_pElement;
+    xmlNodePtr const m_pElement;
 
 public:
     explicit XMLElementWrapper_XmlSecImpl(const xmlNodePtr pNode);
-    virtual ~XMLElementWrapper_XmlSecImpl() {};
 
     /* XXMLElementWrapper */
 
     /* css::lang::XUnoTunnel */
-    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
-        throw (css::uno::RuntimeException, std::exception) override;
-    static css::uno::Sequence < sal_Int8 > getUnoTunnelImplementationId()
-        throw(css::uno::RuntimeException);
+    virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+    /// @throws css::uno::RuntimeException
+    static css::uno::Sequence < sal_Int8 > getUnoTunnelImplementationId();
 
     /* css::lang::XServiceInfo */
-    virtual OUString SAL_CALL getImplementationName(  )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
 public:
     /*
@@ -84,19 +80,7 @@ public:
     *  pNode - the libxml2 node wrapped by this object
     */
     xmlNodePtr getNativeElement( ) const { return m_pElement;}
-    void setNativeElement(const xmlNodePtr pNode);
 };
-
-OUString XMLElementWrapper_XmlSecImpl_getImplementationName()
-    throw ( css::uno::RuntimeException );
-
-css::uno::Sequence< OUString > SAL_CALL XMLElementWrapper_XmlSecImpl_getSupportedServiceNames(  )
-    throw ( css::uno::RuntimeException );
-
-css::uno::Reference< css::uno::XInterface >
-SAL_CALL XMLElementWrapper_XmlSecImpl_createInstance(
-    const css::uno::Reference< css::uno::XComponentContext > &)
-    throw ( css::uno::Exception );
 
 #endif
 

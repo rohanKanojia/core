@@ -20,183 +20,165 @@
 
 #include <cclass_unicode.hxx>
 #include <unicode/uchar.h>
+#include <rtl/character.hxx>
 #include <rtl/math.hxx>
 #include <rtl/ustring.hxx>
 #include <com/sun/star/i18n/KParseTokens.hpp>
 #include <com/sun/star/i18n/KParseType.hpp>
 #include <com/sun/star/i18n/UnicodeType.hpp>
-#include <com/sun/star/i18n/LocaleData.hpp>
+#include <com/sun/star/i18n/LocaleData2.hpp>
 #include <com/sun/star/i18n/NativeNumberMode.hpp>
 #include <com/sun/star/i18n/NativeNumberSupplier.hpp>
-#include <comphelper/processfactory.hxx>
 
 #include <string.h>
+#include <string_view>
 
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+#define TOKEN_DIGIT_FLAGS (ParserFlags::CHAR_VALUE | ParserFlags::VALUE | ParserFlags::VALUE_EXP | ParserFlags::VALUE_EXP_VALUE | ParserFlags::VALUE_DIGIT)
 
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_ILLEGAL       = 0x00000000;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_CHAR          = 0x00000001;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_CHAR_BOOL = 0x00000002;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_CHAR_WORD = 0x00000004;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_CHAR_VALUE    = 0x00000008;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_CHAR_STRING   = 0x00000010;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_CHAR_DONTCARE= 0x00000020;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_BOOL          = 0x00000040;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_WORD          = 0x00000080;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_WORD_SEP      = 0x00000100;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_VALUE     = 0x00000200;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_VALUE_SEP = 0x00000400;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_VALUE_EXP = 0x00000800;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_VALUE_SIGN    = 0x00001000;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_VALUE_EXP_VALUE   = 0x00002000;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_VALUE_DIGIT   = 0x00004000;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_NAME_SEP      = 0x20000000;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_STRING_SEP    = 0x40000000;
-const UPT_FLAG_TYPE cclass_Unicode::TOKEN_EXCLUDED      = 0x80000000;
-
-#define TOKEN_DIGIT_FLAGS (TOKEN_CHAR_VALUE | TOKEN_VALUE | TOKEN_VALUE_EXP | TOKEN_VALUE_EXP_VALUE | TOKEN_VALUE_DIGIT)
+namespace i18npool {
 
 // Default identifier/name specification is [A-Za-z_][A-Za-z0-9_]*
 
 const sal_uInt8 cclass_Unicode::nDefCnt = 128;
-const UPT_FLAG_TYPE cclass_Unicode::pDefaultParserTable[ nDefCnt ] =
+const ParserFlags cclass_Unicode::pDefaultParserTable[ nDefCnt ] =
 {
 // (...) == Calc formula compiler specific, commented out and modified
 
-    /* \0 */    TOKEN_EXCLUDED,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-    /*  9 \t */ TOKEN_CHAR_DONTCARE | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,     // (TOKEN_ILLEGAL)
-                TOKEN_ILLEGAL,
-    /* 11 \v */ TOKEN_CHAR_DONTCARE | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,     // (TOKEN_ILLEGAL)
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-                TOKEN_ILLEGAL,
-    /*  32   */ TOKEN_CHAR_DONTCARE | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  33 ! */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  34 " */ TOKEN_CHAR_STRING | TOKEN_STRING_SEP,
-    /*  35 # */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_WORD_SEP)
-    /*  36 $ */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_CHAR_WORD | TOKEN_WORD)
-    /*  37 % */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_VALUE)
-    /*  38 & */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  39 ' */ TOKEN_NAME_SEP,
-    /*  40 ( */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  41 ) */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  42 * */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  43 + */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP | TOKEN_VALUE_EXP | TOKEN_VALUE_SIGN,
-    /*  44 , */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_CHAR_VALUE | TOKEN_VALUE)
-    /*  45 - */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP | TOKEN_VALUE_EXP | TOKEN_VALUE_SIGN,
-    /*  46 . */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_WORD | TOKEN_CHAR_VALUE | TOKEN_VALUE)
-    /*  47 / */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
+    /* \0 */    ParserFlags::EXCLUDED,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+    /*  9 \t */ ParserFlags::CHAR_DONTCARE | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,     // (ParserFlags::ILLEGAL)
+                ParserFlags::ILLEGAL,
+    /* 11 \v */ ParserFlags::CHAR_DONTCARE | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,     // (ParserFlags::ILLEGAL)
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+                ParserFlags::ILLEGAL,
+    /*  32   */ ParserFlags::CHAR_DONTCARE | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  33 ! */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  34 " */ ParserFlags::CHAR_STRING | ParserFlags::STRING_SEP,
+    /*  35 # */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::WORD_SEP)
+    /*  36 $ */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::CHAR_WORD | ParserFlags::WORD)
+    /*  37 % */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::VALUE)
+    /*  38 & */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  39 ' */ ParserFlags::NAME_SEP,
+    /*  40 ( */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  41 ) */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  42 * */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  43 + */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP | ParserFlags::VALUE_EXP | ParserFlags::VALUE_SIGN,
+    /*  44 , */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::CHAR_VALUE | ParserFlags::VALUE)
+    /*  45 - */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP | ParserFlags::VALUE_EXP | ParserFlags::VALUE_SIGN,
+    /*  46 . */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::WORD | ParserFlags::CHAR_VALUE | ParserFlags::VALUE)
+    /*  47 / */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
     //for ( i = 48; i < 58; i++ )
-    /*  48 0 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  49 1 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  50 2 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  51 3 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  52 4 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  53 5 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  54 6 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  55 7 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  56 8 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  57 9 */ TOKEN_DIGIT_FLAGS | TOKEN_WORD,
-    /*  58 : */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_WORD)
-    /*  59 ; */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  60 < */ TOKEN_CHAR_BOOL | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  61 = */ TOKEN_CHAR | TOKEN_BOOL | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  62 > */ TOKEN_CHAR_BOOL | TOKEN_BOOL | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  63 ? */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_CHAR_WORD | TOKEN_WORD)
-    /*  64 @ */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
+    /*  48 0 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  49 1 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  50 2 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  51 3 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  52 4 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  53 5 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  54 6 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  55 7 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  56 8 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  57 9 */ TOKEN_DIGIT_FLAGS | ParserFlags::WORD,
+    /*  58 : */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::WORD)
+    /*  59 ; */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  60 < */ ParserFlags::CHAR_BOOL | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  61 = */ ParserFlags::CHAR | ParserFlags::BOOL | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  62 > */ ParserFlags::CHAR_BOOL | ParserFlags::BOOL | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  63 ? */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::CHAR_WORD | ParserFlags::WORD)
+    /*  64 @ */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
     //for ( i = 65; i < 91; i++ )
-    /*  65 A */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  66 B */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  67 C */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  68 D */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  69 E */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  70 F */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  71 G */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  72 H */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  73 I */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  74 J */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  75 K */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  76 L */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  77 M */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  78 N */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  79 O */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  80 P */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  81 Q */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  82 R */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  83 S */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  84 T */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  85 U */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  86 V */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  87 W */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  88 X */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  89 Y */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  90 Z */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  91 [ */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /*  92 \ */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /*  93 ] */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /*  94 ^ */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,
-    /*  95 _ */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  96 ` */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
+    /*  65 A */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  66 B */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  67 C */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  68 D */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  69 E */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  70 F */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  71 G */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  72 H */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  73 I */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  74 J */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  75 K */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  76 L */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  77 M */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  78 N */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  79 O */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  80 P */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  81 Q */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  82 R */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  83 S */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  84 T */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  85 U */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  86 V */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  87 W */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  88 X */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  89 Y */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  90 Z */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  91 [ */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /*  92 \ */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /*  93 ] */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /*  94 ^ */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,
+    /*  95 _ */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  96 ` */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
     //for ( i = 97; i < 123; i++ )
-    /*  97 a */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  98 b */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /*  99 c */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 100 d */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 101 e */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 102 f */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 103 g */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 104 h */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 105 i */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 106 j */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 107 k */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 108 l */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 109 m */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 110 n */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 111 o */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 112 p */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 113 q */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 114 r */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 115 s */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 116 t */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 117 u */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 118 v */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 119 w */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 120 x */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 121 y */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 122 z */ TOKEN_CHAR_WORD | TOKEN_WORD,
-    /* 123 { */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /* 124 | */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /* 125 } */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /* 126 ~ */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP,  // (TOKEN_ILLEGAL // UNUSED)
-    /* 127   */ TOKEN_CHAR | TOKEN_WORD_SEP | TOKEN_VALUE_SEP   // (TOKEN_ILLEGAL // UNUSED)
+    /*  97 a */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  98 b */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /*  99 c */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 100 d */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 101 e */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 102 f */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 103 g */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 104 h */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 105 i */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 106 j */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 107 k */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 108 l */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 109 m */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 110 n */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 111 o */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 112 p */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 113 q */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 114 r */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 115 s */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 116 t */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 117 u */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 118 v */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 119 w */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 120 x */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 121 y */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 122 z */ ParserFlags::CHAR_WORD | ParserFlags::WORD,
+    /* 123 { */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /* 124 | */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /* 125 } */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /* 126 ~ */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP,  // (ParserFlags::ILLEGAL // UNUSED)
+    /* 127   */ ParserFlags::CHAR | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP   // (ParserFlags::ILLEGAL // UNUSED)
 };
 
 
@@ -337,13 +319,15 @@ const sal_Int32 cclass_Unicode::pParseTokensType[ nDefCnt ] =
 
 
 // static
-const sal_Unicode* cclass_Unicode::StrChr( const sal_Unicode* pStr, sal_Unicode c )
+const sal_Unicode* cclass_Unicode::StrChr( const sal_Unicode* pStr, sal_uInt32 c )
 {
     if ( !pStr )
         return nullptr;
+    sal_Unicode cs[2];
+    auto const n = rtl::splitSurrogates(c, cs);
     while ( *pStr )
     {
-        if ( *pStr == c )
+        if ( *pStr == cs[0] && (n == 1 || pStr[1] == cs[1]) )
             return pStr;
         pStr++;
     }
@@ -372,7 +356,7 @@ sal_Int32 cclass_Unicode::getParseTokensType(sal_uInt32 const c, bool const isFi
             case U_OTHER_LETTER :
                 // Non_Spacing_Mark could not be as leading character
                 if (isFirst) break;
-                // fall through, treat it as Other_Letter.
+                [[fallthrough]]; // treat it as Other_Letter.
             case U_NON_SPACING_MARK :
                 return KParseTokens::UNI_OTHER_LETTER;
             case U_DECIMAL_DIGIT_NUMBER :
@@ -387,7 +371,7 @@ sal_Int32 cclass_Unicode::getParseTokensType(sal_uInt32 const c, bool const isFi
     }
 }
 
-bool cclass_Unicode::setupInternational( const Locale& rLocale )
+void cclass_Unicode::setupInternational( const Locale& rLocale )
 {
     bool bChanged = (aParserLocale.Language != rLocale.Language
         || aParserLocale.Country != rLocale.Country
@@ -400,9 +384,8 @@ bool cclass_Unicode::setupInternational( const Locale& rLocale )
     }
     if ( !mxLocaleData.is() )
     {
-        mxLocaleData.set( LocaleData::create(m_xContext) );
+        mxLocaleData.set( LocaleData2::create(m_xContext) );
     }
-    return bChanged;
 }
 
 
@@ -431,18 +414,16 @@ void cclass_Unicode::initParserTable( const Locale& rLocale, sal_Int32 startChar
     setupInternational( rLocale );
     // Memory of pTable is reused.
     if ( !pTable )
-        pTable = new UPT_FLAG_TYPE[nDefCnt];
-    memcpy( pTable, pDefaultParserTable, sizeof(UPT_FLAG_TYPE) * nDefCnt );
+        pTable.reset(new ParserFlags[nDefCnt]);
+    memcpy( pTable.get(), pDefaultParserTable, sizeof(ParserFlags) * nDefCnt );
     // Start and cont tables only need reallocation if different length.
     if ( pStart && userDefinedCharactersStart.getLength() != aStartChars.getLength() )
     {
-        delete [] pStart;
-        pStart = nullptr;
+        pStart.reset();
     }
     if ( pCont && userDefinedCharactersCont.getLength() != aContChars.getLength() )
     {
-        delete [] pCont;
-        pCont = nullptr;
+        pCont.reset();
     }
     nStartTypes = startCharTokenType;
     nContTypes = contCharTokenType;
@@ -452,18 +433,28 @@ void cclass_Unicode::initParserTable( const Locale& rLocale, sal_Int32 startChar
     // specials
     if( mxLocaleData.is() )
     {
-        LocaleDataItem aItem =
-            mxLocaleData->getLocaleItem( aParserLocale );
+        LocaleDataItem2 aItem =
+            mxLocaleData->getLocaleItem2( aParserLocale );
 //!TODO: theoretically separators may be a string, adjustment would have to be
 //! done here and in parsing and in ::rtl::math::stringToDouble()
         cGroupSep = aItem.thousandSeparator[0];
         cDecimalSep = aItem.decimalSeparator[0];
+        cDecimalSepAlt = aItem.decimalSeparatorAlternative.toChar();
     }
 
-    if ( cGroupSep < nDefCnt )
-        pTable[cGroupSep] |= TOKEN_VALUE;
+    if (nContTypes & KParseTokens::GROUP_SEPARATOR_IN_NUMBER)
+    {
+        if ( cGroupSep < nDefCnt )
+            pTable[cGroupSep] |= ParserFlags::VALUE;
+    }
+    else
+    {
+        cGroupSep = 0;
+    }
     if ( cDecimalSep < nDefCnt )
-        pTable[cDecimalSep] |= TOKEN_CHAR_VALUE | TOKEN_VALUE;
+        pTable[cDecimalSep] |= ParserFlags::CHAR_VALUE | ParserFlags::VALUE;
+    if ( cDecimalSepAlt && cDecimalSepAlt < nDefCnt )
+        pTable[cDecimalSepAlt] |= ParserFlags::CHAR_VALUE | ParserFlags::VALUE;
 
     // Modify characters according to KParseTokens definitions.
     {
@@ -472,58 +463,58 @@ void cclass_Unicode::initParserTable( const Locale& rLocale, sal_Int32 startChar
 
         if ( !(nStartTypes & ASC_UPALPHA) )
             for ( i = 65; i < 91; i++ )
-                pTable[i] &= ~TOKEN_CHAR_WORD;  // not allowed as start character
+                pTable[i] &= ~ParserFlags::CHAR_WORD;  // not allowed as start character
         if ( !(nContTypes & ASC_UPALPHA) )
             for ( i = 65; i < 91; i++ )
-                pTable[i] &= ~TOKEN_WORD;       // not allowed as cont character
+                pTable[i] &= ~ParserFlags::WORD;       // not allowed as cont character
 
         if ( !(nStartTypes & ASC_LOALPHA) )
             for ( i = 97; i < 123; i++ )
-                pTable[i] &= ~TOKEN_CHAR_WORD;  // not allowed as start character
+                pTable[i] &= ~ParserFlags::CHAR_WORD;  // not allowed as start character
         if ( !(nContTypes & ASC_LOALPHA) )
             for ( i = 97; i < 123; i++ )
-                pTable[i] &= ~TOKEN_WORD;       // not allowed as cont character
+                pTable[i] &= ~ParserFlags::WORD;       // not allowed as cont character
 
         if ( nStartTypes & ASC_DIGIT )
             for ( i = 48; i < 58; i++ )
-                pTable[i] |= TOKEN_CHAR_WORD;   // allowed as start character
+                pTable[i] |= ParserFlags::CHAR_WORD;   // allowed as start character
         if ( !(nContTypes & ASC_DIGIT) )
             for ( i = 48; i < 58; i++ )
-                pTable[i] &= ~TOKEN_WORD;       // not allowed as cont character
+                pTable[i] &= ~ParserFlags::WORD;       // not allowed as cont character
 
         if ( !(nStartTypes & ASC_UNDERSCORE) )
-            pTable[95] &= ~TOKEN_CHAR_WORD;     // not allowed as start character
+            pTable[95] &= ~ParserFlags::CHAR_WORD;     // not allowed as start character
         if ( !(nContTypes & ASC_UNDERSCORE) )
-            pTable[95] &= ~TOKEN_WORD;          // not allowed as cont character
+            pTable[95] &= ~ParserFlags::WORD;          // not allowed as cont character
 
         if ( nStartTypes & ASC_DOLLAR )
-            pTable[36] |= TOKEN_CHAR_WORD;      // allowed as start character
+            pTable[36] |= ParserFlags::CHAR_WORD;      // allowed as start character
         if ( nContTypes & ASC_DOLLAR )
-            pTable[36] |= TOKEN_WORD;           // allowed as cont character
+            pTable[36] |= ParserFlags::WORD;           // allowed as cont character
 
         if ( nStartTypes & ASC_DOT )
-            pTable[46] |= TOKEN_CHAR_WORD;      // allowed as start character
+            pTable[46] |= ParserFlags::CHAR_WORD;      // allowed as start character
         if ( nContTypes & ASC_DOT )
-            pTable[46] |= TOKEN_WORD;           // allowed as cont character
+            pTable[46] |= ParserFlags::WORD;           // allowed as cont character
 
         if ( nStartTypes & ASC_COLON )
-            pTable[58] |= TOKEN_CHAR_WORD;      // allowed as start character
+            pTable[58] |= ParserFlags::CHAR_WORD;      // allowed as start character
         if ( nContTypes & ASC_COLON )
-            pTable[58] |= TOKEN_WORD;           // allowed as cont character
+            pTable[58] |= ParserFlags::WORD;           // allowed as cont character
 
         if ( nStartTypes & ASC_CONTROL )
             for ( i = 1; i < 32; i++ )
-                pTable[i] |= TOKEN_CHAR_WORD;   // allowed as start character
+                pTable[i] |= ParserFlags::CHAR_WORD;   // allowed as start character
         if ( nContTypes & ASC_CONTROL )
             for ( i = 1; i < 32; i++ )
-                pTable[i] |= TOKEN_WORD;        // allowed as cont character
+                pTable[i] |= ParserFlags::WORD;        // allowed as cont character
 
         if ( nStartTypes & ASC_ANY_BUT_CONTROL )
             for ( i = 32; i < nDefCnt; i++ )
-                pTable[i] |= TOKEN_CHAR_WORD;   // allowed as start character
+                pTable[i] |= ParserFlags::CHAR_WORD;   // allowed as start character
         if ( nContTypes & ASC_ANY_BUT_CONTROL )
             for ( i = 32; i < nDefCnt; i++ )
-                pTable[i] |= TOKEN_WORD;        // allowed as cont character
+                pTable[i] |= ParserFlags::WORD;        // allowed as cont character
 
     }
 
@@ -533,13 +524,13 @@ void cclass_Unicode::initParserTable( const Locale& rLocale, sal_Int32 startChar
     if ( nLen )
     {
         if ( !pStart )
-            pStart = new UPT_FLAG_TYPE[ nLen ];
+            pStart.reset(new ParserFlags[ nLen ]);
         const sal_Unicode* p = aStartChars.getStr();
         for ( sal_Int32 j=0; j<nLen; j++, p++ )
         {
-            pStart[j] = TOKEN_CHAR_WORD;
+            pStart[j] = ParserFlags::CHAR_WORD;
             if ( *p < nDefCnt )
-                pTable[*p] |= TOKEN_CHAR_WORD;
+                pTable[*p] |= ParserFlags::CHAR_WORD;
         }
     }
     // ContChars
@@ -547,13 +538,13 @@ void cclass_Unicode::initParserTable( const Locale& rLocale, sal_Int32 startChar
     if ( nLen )
     {
         if ( !pCont )
-            pCont = new UPT_FLAG_TYPE[ nLen ];
+            pCont.reset(new ParserFlags[ nLen ]);
         const sal_Unicode* p = aContChars.getStr();
         for ( sal_Int32 j=0; j<nLen; j++ )
         {
-            pCont[j] = TOKEN_WORD;
+            pCont[j] = ParserFlags::WORD;
             if ( *p < nDefCnt )
-                pTable[*p] |= TOKEN_WORD;
+                pTable[*p] |= ParserFlags::WORD;
         }
     }
 }
@@ -561,18 +552,15 @@ void cclass_Unicode::initParserTable( const Locale& rLocale, sal_Int32 startChar
 
 void cclass_Unicode::destroyParserTable()
 {
-    if ( pCont )
-        delete [] pCont;
-    if ( pStart )
-        delete [] pStart;
-    if ( pTable )
-        delete [] pTable;
+    pCont.reset();
+    pStart.reset();
+    pTable.reset();
 }
 
 
-UPT_FLAG_TYPE cclass_Unicode::getFlags(sal_uInt32 const c)
+ParserFlags cclass_Unicode::getFlags(sal_uInt32 const c)
 {
-    UPT_FLAG_TYPE nMask;
+    ParserFlags nMask;
     if ( c < nDefCnt )
         nMask = pTable[ sal_uInt8(c) ];
     else
@@ -583,20 +571,20 @@ UPT_FLAG_TYPE cclass_Unicode::getFlags(sal_uInt32 const c)
         case ssRewindFromValue :
         case ssIgnoreLeadingInRewind :
         case ssGetWordFirstChar :
-            if ( !(nMask & TOKEN_CHAR_WORD) )
+            if ( !(nMask & ParserFlags::CHAR_WORD) )
             {
                 nMask |= getStartCharsFlags( c );
-                if ( nMask & TOKEN_CHAR_WORD )
-                    nMask &= ~TOKEN_EXCLUDED;
+                if ( nMask & ParserFlags::CHAR_WORD )
+                    nMask &= ~ParserFlags::EXCLUDED;
             }
         break;
         case ssGetValue :
         case ssGetWord :
-            if ( !(nMask & TOKEN_WORD) )
+            if ( !(nMask & ParserFlags::WORD) )
             {
                 nMask |= getContCharsFlags( c );
-                if ( nMask & TOKEN_WORD )
-                    nMask &= ~TOKEN_EXCLUDED;
+                if ( nMask & ParserFlags::WORD )
+                    nMask &= ~ParserFlags::EXCLUDED;
             }
         break;
         default:
@@ -606,13 +594,14 @@ UPT_FLAG_TYPE cclass_Unicode::getFlags(sal_uInt32 const c)
 }
 
 
-UPT_FLAG_TYPE cclass_Unicode::getFlagsExtended(sal_uInt32 const c)
+ParserFlags cclass_Unicode::getFlagsExtended(sal_uInt32 const c)
 {
     if ( c == cGroupSep )
-        return TOKEN_VALUE;
+        return ParserFlags::VALUE;
     else if ( c == cDecimalSep )
-        return TOKEN_CHAR_VALUE | TOKEN_VALUE;
-    using namespace i18n;
+        return ParserFlags::CHAR_VALUE | ParserFlags::VALUE;
+    else if ( cDecimalSepAlt && c == cDecimalSepAlt )
+        return ParserFlags::CHAR_VALUE | ParserFlags::VALUE;
     bool bStart = (eState == ssGetChar || eState == ssGetWordFirstChar ||
             eState == ssRewindFromValue || eState == ssIgnoreLeadingInRewind);
     sal_Int32 nTypes = (bStart ? nStartTypes : nContTypes);
@@ -622,66 +611,66 @@ UPT_FLAG_TYPE cclass_Unicode::getFlagsExtended(sal_uInt32 const c)
     {
         case U_UPPERCASE_LETTER :
             return (nTypes & KParseTokens::UNI_UPALPHA) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL;
         case U_LOWERCASE_LETTER :
             return (nTypes & KParseTokens::UNI_LOALPHA) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL;
         case U_TITLECASE_LETTER :
             return (nTypes & KParseTokens::UNI_TITLE_ALPHA) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL;
         case U_MODIFIER_LETTER :
             return (nTypes & KParseTokens::UNI_MODIFIER_LETTER) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL;
         case U_NON_SPACING_MARK :
         case U_COMBINING_SPACING_MARK :
             // Non_Spacing_Mark can't be a leading character,
             // nor can a spacing combining mark.
             if (bStart)
-                return TOKEN_ILLEGAL;
-            // fall through, treat it as Other_Letter.
+                return ParserFlags::ILLEGAL;
+            [[fallthrough]]; // treat it as Other_Letter.
         case U_OTHER_LETTER :
             return (nTypes & KParseTokens::UNI_OTHER_LETTER) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL;
         case U_DECIMAL_DIGIT_NUMBER :
             return ((nTypes & KParseTokens::UNI_DIGIT) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL) | TOKEN_DIGIT_FLAGS;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL) | TOKEN_DIGIT_FLAGS;
         case U_LETTER_NUMBER :
             return ((nTypes & KParseTokens::UNI_LETTER_NUMBER) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL) | TOKEN_DIGIT_FLAGS;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL) | TOKEN_DIGIT_FLAGS;
         case U_OTHER_NUMBER :
             return ((nTypes & KParseTokens::UNI_OTHER_NUMBER) ?
-                (bStart ? TOKEN_CHAR_WORD : TOKEN_WORD) :
-                TOKEN_ILLEGAL) | TOKEN_DIGIT_FLAGS;
+                (bStart ? ParserFlags::CHAR_WORD : ParserFlags::WORD) :
+                ParserFlags::ILLEGAL) | TOKEN_DIGIT_FLAGS;
         case U_SPACE_SEPARATOR :
             return ((nTypes & KParseTokens::IGNORE_LEADING_WS) ?
-                TOKEN_CHAR_DONTCARE : (bStart ? TOKEN_CHAR_WORD : (TOKEN_CHAR_DONTCARE | TOKEN_WORD_SEP | TOKEN_VALUE_SEP) ));
+                ParserFlags::CHAR_DONTCARE : (bStart ? ParserFlags::CHAR_WORD : (ParserFlags::CHAR_DONTCARE | ParserFlags::WORD_SEP | ParserFlags::VALUE_SEP) ));
         case U_OTHER_PUNCTUATION:
             // fdo#61754 Lets see (if we not at the start) if this is midletter
             // punctuation and allow it in a word if it is similarly to
             // U_NON_SPACING_MARK
             if (bStart || U_WB_MIDLETTER != u_getIntPropertyValue(c, UCHAR_WORD_BREAK))
-                return TOKEN_ILLEGAL;
+                return ParserFlags::ILLEGAL;
             else
             {
                 //allowing it to continue the word
                 return (nTypes & KParseTokens::UNI_OTHER_LETTER) ?
-                    TOKEN_WORD : TOKEN_ILLEGAL;
+                    ParserFlags::WORD : ParserFlags::ILLEGAL;
             }
             break;
     }
 
-    return TOKEN_ILLEGAL;
+    return ParserFlags::ILLEGAL;
 }
 
 
-UPT_FLAG_TYPE cclass_Unicode::getStartCharsFlags( sal_Unicode c )
+ParserFlags cclass_Unicode::getStartCharsFlags( sal_uInt32 c )
 {
     if ( pStart )
     {
@@ -690,11 +679,11 @@ UPT_FLAG_TYPE cclass_Unicode::getStartCharsFlags( sal_Unicode c )
         if ( p )
             return pStart[ p - pStr ];
     }
-    return TOKEN_ILLEGAL;
+    return ParserFlags::ILLEGAL;
 }
 
 
-UPT_FLAG_TYPE cclass_Unicode::getContCharsFlags( sal_Unicode c )
+ParserFlags cclass_Unicode::getContCharsFlags( sal_Unicode c )
 {
     if ( pCont )
     {
@@ -703,18 +692,17 @@ UPT_FLAG_TYPE cclass_Unicode::getContCharsFlags( sal_Unicode c )
         if ( p )
             return pCont[ p - pStr ];
     }
-    return TOKEN_ILLEGAL;
+    return ParserFlags::ILLEGAL;
 }
 
 
 void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32 nPos, sal_Int32 nTokenType )
 {
     assert(r.LeadingWhiteSpace == 0);
-    using namespace i18n;
     eState = ssGetChar;
 
     //! All the variables below (plus ParseResult) have to be resetted on ssRewindFromValue!
-    OUString aSymbol;
+    OUStringBuffer aSymbol;
     bool isFirst(true);
     sal_Int32 index(nPos); // index of next code point after current
     sal_Int32 postSymbolIndex(index); // index of code point following last quote
@@ -725,22 +713,23 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
     bool bQuote = false;
     bool bMightBeWord = true;
     bool bMightBeWordLast = true;
+    bool bDecSepAltUsed = false;
     //! All the variables above (plus ParseResult) have to be resetted on ssRewindFromValue!
     sal_Int32 nextCharIndex(nPos); // == index of nextChar
 
     while ((current != 0) && (eState != ssStop))
     {
         ++nCodePoints;
-        UPT_FLAG_TYPE nMask = getFlags(current);
-        if ( nMask & TOKEN_EXCLUDED )
+        ParserFlags nMask = getFlags(current);
+        if ( nMask & ParserFlags::EXCLUDED )
             eState = ssBounce;
         if ( bMightBeWord )
         {   // only relevant for ssGetValue fall back
             if ( eState == ssGetChar || eState == ssRewindFromValue ||
                     eState == ssIgnoreLeadingInRewind )
-                bMightBeWord = ((nMask & TOKEN_CHAR_WORD) != 0);
+                bMightBeWord = bool(nMask & ParserFlags::CHAR_WORD);
             else
-                bMightBeWord = ((nMask & TOKEN_WORD) != 0);
+                bMightBeWord = bool(nMask & ParserFlags::WORD);
         }
         sal_Int32 nParseTokensType = getParseTokensType(current, isFirst);
         isFirst = false;
@@ -753,18 +742,18 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             case ssRewindFromValue :
             case ssIgnoreLeadingInRewind :
             {
-                if ( (nMask & TOKEN_CHAR_VALUE) && eState != ssRewindFromValue
+                if ( (nMask & ParserFlags::CHAR_VALUE) && eState != ssRewindFromValue
                         && eState != ssIgnoreLeadingInRewind )
                 {   //! must be first, may fall back to ssGetWord via bMightBeWord
                     eState = ssGetValue;
-                    if ( nMask & TOKEN_VALUE_DIGIT )
+                    if ( nMask & ParserFlags::VALUE_DIGIT )
                     {
                         if (128 <= current)
                             r.TokenType = KParseType::UNI_NUMBER;
                         else
                             r.TokenType = KParseType::ASC_NUMBER;
                     }
-                    else if (current == cDecimalSep)
+                    else if (current == cDecimalSep || (bDecSepAltUsed = (cDecimalSepAlt && current == cDecimalSepAlt)))
                     {
                         if (nextChar)
                             ++nDecSeps;
@@ -773,12 +762,12 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                             // retry for ONE_SINGLE_CHAR or others
                     }
                 }
-                else if ( nMask & TOKEN_CHAR_WORD )
+                else if ( nMask & ParserFlags::CHAR_WORD )
                 {
                     eState = ssGetWord;
                     r.TokenType = KParseType::IDENTNAME;
                 }
-                else if ( nMask & TOKEN_NAME_SEP )
+                else if ( nMask & ParserFlags::NAME_SEP )
                 {
                     eState = ssGetWordFirstChar;
                     bQuote = true;
@@ -786,14 +775,14 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                     nParseTokensType = 0;   // will be taken of first real character
                     r.TokenType = KParseType::SINGLE_QUOTE_NAME;
                 }
-                else if ( nMask & TOKEN_CHAR_STRING )
+                else if ( nMask & ParserFlags::CHAR_STRING )
                 {
                     eState = ssGetString;
                     postSymbolIndex = nextCharIndex;
                     nParseTokensType = 0;   // will be taken of first real character
                     r.TokenType = KParseType::DOUBLE_QUOTE_STRING;
                 }
-                else if ( nMask & TOKEN_CHAR_DONTCARE )
+                else if ( nMask & ParserFlags::CHAR_DONTCARE )
                 {
                     if ( nStartTypes & KParseTokens::IGNORE_LEADING_WS )
                     {
@@ -808,12 +797,12 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                     else
                         eState = ssBounce;
                 }
-                else if ( nMask & TOKEN_CHAR_BOOL )
+                else if ( nMask & ParserFlags::CHAR_BOOL )
                 {
                     eState = ssGetBool;
                     r.TokenType = KParseType::BOOLEAN;
                 }
-                else if ( nMask & TOKEN_CHAR )
+                else if ( nMask & ParserFlags::CHAR )
                 {   //! must be last
                     eState = ssStop;
                     r.TokenType = KParseType::ONE_SINGLE_CHAR;
@@ -824,16 +813,29 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             break;
             case ssGetValue :
             {
-                if ( nMask & TOKEN_VALUE_DIGIT )
+                if ( nMask & ParserFlags::VALUE_DIGIT )
                 {
                     if (128 <= current)
                         r.TokenType = KParseType::UNI_NUMBER;
                     else if ( r.TokenType != KParseType::UNI_NUMBER )
                         r.TokenType = KParseType::ASC_NUMBER;
                 }
-                if ( nMask & TOKEN_VALUE )
+                if ( nMask & ParserFlags::VALUE )
                 {
-                    if (current == cDecimalSep && ++nDecSeps > 1)
+                    if (current == cGroupSep)
+                    {
+                        if (getFlags(nextChar) & ParserFlags::VALUE_DIGIT)
+                            nParseTokensType |= KParseTokens::GROUP_SEPARATOR_IN_NUMBER;
+                        else
+                        {
+                            // Trailing group separator character is not a
+                            // group separator.
+                            eState = ssStopBack;
+                        }
+                    }
+                    else if ((current == cDecimalSep ||
+                                (bDecSepAltUsed = (cDecimalSepAlt && current == cDecimalSepAlt))) &&
+                            ++nDecSeps > 1)
                     {
                         if (nCodePoints == 2)
                             eState = ssRewindFromValue;
@@ -845,10 +847,10 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                 }
                 else if (current == 'E' || current == 'e')
                 {
-                    UPT_FLAG_TYPE nNext = getFlags(nextChar);
-                    if ( nNext & TOKEN_VALUE_EXP )
+                    ParserFlags nNext = getFlags(nextChar);
+                    if ( nNext & ParserFlags::VALUE_EXP )
                         ;   // keep it going
-                    else if (bMightBeWord && ((nNext & TOKEN_WORD) || !nextChar))
+                    else if (bMightBeWord && ((nNext & ParserFlags::WORD) || !nextChar))
                     {   // might be a numerical name (1.2efg)
                         eState = ssGetWord;
                         r.TokenType = KParseType::IDENTNAME;
@@ -856,14 +858,14 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                     else
                         eState = ssStopBack;
                 }
-                else if ( nMask & TOKEN_VALUE_SIGN )
+                else if ( nMask & ParserFlags::VALUE_SIGN )
                 {
                     if ( (cLast == 'E') || (cLast == 'e') )
                     {
-                        UPT_FLAG_TYPE nNext = getFlags(nextChar);
-                        if ( nNext & TOKEN_VALUE_EXP_VALUE )
+                        ParserFlags nNext = getFlags(nextChar);
+                        if ( nNext & ParserFlags::VALUE_EXP_VALUE )
                             ;   // keep it going
-                        else if (bMightBeWord && ((nNext & TOKEN_WORD) || !nextChar))
+                        else if (bMightBeWord && ((nNext & ParserFlags::WORD) || !nextChar))
                         {   // might be a numerical name (1.2e+fg)
                             eState = ssGetWord;
                             r.TokenType = KParseType::IDENTNAME;
@@ -879,7 +881,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                     else
                         eState = ssStopBack;
                 }
-                else if ( bMightBeWord && (nMask & TOKEN_WORD) )
+                else if ( bMightBeWord && (nMask & ParserFlags::WORD) )
                 {   // might be a numerical name (1995.A1)
                     eState = ssGetWord;
                     r.TokenType = KParseType::IDENTNAME;
@@ -890,24 +892,24 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             break;
             case ssGetWordFirstChar :
                 eState = ssGetWord;
-                // fall through
+                [[fallthrough]];
             case ssGetWord :
             {
-                if ( nMask & TOKEN_WORD )
+                if ( nMask & ParserFlags::WORD )
                     ;   // keep it going
-                else if ( nMask & TOKEN_NAME_SEP )
+                else if ( nMask & ParserFlags::NAME_SEP )
                 {
                     if ( bQuote )
                     {
                         if ( cLast == '\\' )
                         {   // escaped
-                            aSymbol += rText.copy(postSymbolIndex, nextCharIndex - postSymbolIndex - 2);
-                            aSymbol += OUString(&current, 1);
+                            aSymbol.append(std::u16string_view(rText).substr(postSymbolIndex, nextCharIndex - postSymbolIndex - 2));
+                            aSymbol.append(OUString(&current, 1));
                         }
                         else
                         {
                             eState = ssStop;
-                            aSymbol += rText.copy(postSymbolIndex, nextCharIndex - postSymbolIndex - 1);
+                            aSymbol.append(std::u16string_view(rText).substr(postSymbolIndex, nextCharIndex - postSymbolIndex - 1));
                         }
                         postSymbolIndex = nextCharIndex;
                     }
@@ -922,17 +924,17 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             break;
             case ssGetString :
             {
-                if ( nMask & TOKEN_STRING_SEP )
+                if ( nMask & ParserFlags::STRING_SEP )
                 {
                     if ( cLast == '\\' )
                     {   // escaped
-                        aSymbol += rText.copy(postSymbolIndex, nextCharIndex - postSymbolIndex - 2);
-                        aSymbol += OUString(&current, 1);
+                        aSymbol.append(std::u16string_view(rText).substr(postSymbolIndex, nextCharIndex - postSymbolIndex - 2));
+                        aSymbol.append(OUString(&current, 1));
                     }
                     else if (current == nextChar &&
                             !(nContTypes & KParseTokens::TWO_DOUBLE_QUOTES_BREAK_STRING) )
                     {   // "" => literal " escaped
-                        aSymbol += rText.copy(postSymbolIndex, nextCharIndex - postSymbolIndex);
+                        aSymbol.append(std::u16string_view(rText).substr(postSymbolIndex, nextCharIndex - postSymbolIndex));
                         nextCharIndex = index;
                         if (index < rText.getLength()) { ++nCodePoints; }
                         nextChar = (index < rText.getLength()) ? rText.iterateCodePoints(&index) : 0;
@@ -940,7 +942,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                     else
                     {
                         eState = ssStop;
-                        aSymbol += rText.copy(postSymbolIndex, nextCharIndex - postSymbolIndex - 1);
+                        aSymbol.append(std::u16string_view(rText).substr(postSymbolIndex, nextCharIndex - postSymbolIndex - 1));
                     }
                     postSymbolIndex = nextCharIndex;
                 }
@@ -948,7 +950,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             break;
             case ssGetBool :
             {
-                if ( (nMask & TOKEN_BOOL) )
+                if ( nMask & ParserFlags::BOOL )
                     eState = ssStop;    // maximum 2: <, >, <>, <=, >=
                 else
                     eState = ssStopBack;
@@ -966,7 +968,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             index = nPos;
             postSymbolIndex = nPos;
             nextCharIndex = nPos;
-            aSymbol.clear();
+            aSymbol.setLength(0);
             current = (index < rText.getLength()) ? rText.iterateCodePoints(&index) : 0;
             nCodePoints = (nPos < rText.getLength()) ? 1 : 0;
             isFirst = true;
@@ -975,6 +977,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
             bQuote = false;
             bMightBeWord = true;
             bMightBeWordLast = true;
+            bDecSepAltUsed = false;
         }
         else
         {
@@ -985,7 +988,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
                     ;   // keep a number that might be a word
                 else if (r.LeadingWhiteSpace == (nextCharIndex - nPos))
                     ;   // keep ignored white space
-                else if ( !r.TokenType && eState == ssGetValue && (nMask & TOKEN_VALUE_SEP) )
+                else if ( !r.TokenType && eState == ssGetValue && (nMask & ParserFlags::VALUE_SEP) )
                     ;   // keep uncertain value
                 else
                     eState = ssBounce;
@@ -1022,7 +1025,7 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
     if ( r.TokenType & KParseType::ASC_NUMBER )
     {
         r.Value = rtl_math_uStringToDouble(rText.getStr() + nPos + r.LeadingWhiteSpace,
-            rText.getStr() + r.EndPos, cDecimalSep, cGroupSep, nullptr, nullptr);
+            rText.getStr() + r.EndPos, (bDecSepAltUsed ? cDecimalSepAlt : cDecimalSep), cGroupSep, nullptr, nullptr);
         if ( bMightBeWord )
             r.TokenType |= KParseType::IDENTNAME;
     }
@@ -1048,13 +1051,13 @@ void cclass_Unicode::parseText( ParseResult& r, const OUString& rText, sal_Int32
     {
         if (postSymbolIndex < nextCharIndex)
         {   //! open quote
-            aSymbol += rText.copy(postSymbolIndex, nextCharIndex - postSymbolIndex - 1);
+            aSymbol.append(std::u16string_view(rText).substr(postSymbolIndex, nextCharIndex - postSymbolIndex - 1));
             r.TokenType |= KParseType::MISSING_QUOTE;
         }
-        r.DequotedNameOrString = aSymbol;
+        r.DequotedNameOrString = aSymbol.toString();
     }
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

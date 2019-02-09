@@ -18,13 +18,14 @@
  */
 
 #include "FormattedString.hxx"
-#include "ContainerHelper.hxx"
 
-#include "CharacterProperties.hxx"
-#include "PropertyHelper.hxx"
-#include "macros.hxx"
-#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <CharacterProperties.hxx>
+#include <PropertyHelper.hxx>
+#include <ModifyListenerHelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <tools/diagnose_ex.h>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 using namespace ::com::sun::star;
 
@@ -40,13 +41,8 @@ struct StaticFormattedStringDefaults_Initializer
     ::chart::tPropertyValueMap* operator()()
     {
         static ::chart::tPropertyValueMap aStaticDefaults;
-        lcl_AddDefaultsToMap( aStaticDefaults );
+        ::chart::CharacterProperties::AddDefaultsToMap( aStaticDefaults );
         return &aStaticDefaults;
-    }
-private:
-    static void lcl_AddDefaultsToMap( ::chart::tPropertyValueMap & rOutMap )
-    {
-        ::chart::CharacterProperties::AddDefaultsToMap( rOutMap );
     }
 };
 
@@ -65,10 +61,10 @@ struct StaticFormattedStringInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         ::chart::CharacterProperties::AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -99,18 +95,21 @@ struct StaticFormattedStringInfo : public rtl::StaticAggregate< uno::Reference< 
 namespace chart
 {
 
-FormattedString::FormattedString(
-        uno::Reference< uno::XComponentContext > const & /* xContext */ ) :
+FormattedString::FormattedString() :
         ::property::OPropertySet( m_aMutex ),
     m_aString(),
+    m_aType(chart2::DataPointCustomLabelFieldType::DataPointCustomLabelFieldType_TEXT),
+    m_aGuid(),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {}
 
 FormattedString::FormattedString( const FormattedString & rOther ) :
         MutexContainer(),
-        impl::FormattedString_Base(),
+        impl::FormattedString_Base(rOther),
         ::property::OPropertySet( rOther, m_aMutex ),
     m_aString( rOther.m_aString ),
+    m_aType(rOther.m_aType),
+    m_aGuid(rOther.m_aGuid),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {}
 
@@ -119,21 +118,18 @@ FormattedString::~FormattedString()
 
 // ____ XCloneable ____
 uno::Reference< util::XCloneable > SAL_CALL FormattedString::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< util::XCloneable >( new FormattedString( *this ));
 }
 
 // ____ XFormattedString ____
 OUString SAL_CALL FormattedString::getString()
-    throw (uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( GetMutex());
     return m_aString;
 }
 
 void SAL_CALL FormattedString::setString( const OUString& String )
-    throw (uno::RuntimeException, std::exception)
 {
     {
         MutexGuard aGuard( GetMutex());
@@ -144,45 +140,76 @@ void SAL_CALL FormattedString::setString( const OUString& String )
 
 }
 
+// ____ XDataPointCustomLabelField ____
+css::chart2::DataPointCustomLabelFieldType SAL_CALL FormattedString::getFieldType()
+{
+    MutexGuard aGuard(GetMutex());
+    return m_aType;
+}
+
+void SAL_CALL
+FormattedString::setFieldType(const css::chart2::DataPointCustomLabelFieldType Type)
+{
+    {
+        MutexGuard aGuard(GetMutex());
+        m_aType = Type;
+    }
+    //don't keep the mutex locked while calling out
+    fireModifyEvent();
+}
+
+OUString SAL_CALL FormattedString::getGuid()
+{
+    MutexGuard aGuard( GetMutex());
+    return m_aGuid;
+}
+
+void SAL_CALL FormattedString::setGuid( const OUString& guid )
+{
+    {
+        MutexGuard aGuard( GetMutex());
+        m_aGuid= guid;
+    }
+    //don't keep the mutex locked while calling out
+    fireModifyEvent();
+
+}
+
 // ____ XModifyBroadcaster ____
 void SAL_CALL FormattedString::addModifyListener( const uno::Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL FormattedString::removeModifyListener( const uno::Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 // ____ XModifyListener ____
 void SAL_CALL FormattedString::modified( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xModifyEventForwarder->modified( aEvent );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL FormattedString::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
     // nothing
 }
@@ -198,18 +225,8 @@ void FormattedString::fireModifyEvent()
     m_xModifyEventForwarder->modified( lang::EventObject( static_cast< uno::XWeak* >( this )));
 }
 
-Sequence< OUString > FormattedString::getSupportedServiceNames_Static()
-{
-    Sequence< OUString > aServices( 2 );
-
-    aServices[ 0 ] = "com.sun.star.chart2.FormattedString";
-    aServices[ 1 ] = "com.sun.star.beans.PropertySet";
-    return aServices;
-}
-
 // ____ OPropertySet ____
 uno::Any FormattedString::GetDefaultValue( sal_Int32 nHandle ) const
-    throw (beans::UnknownPropertyException, uno::RuntimeException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticFormattedStringDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -226,7 +243,6 @@ uno::Any FormattedString::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL FormattedString::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticFormattedStringInfo::get();
 }
@@ -240,35 +256,30 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2( FormattedString, FormattedString_Base, ::prope
 
 // implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL FormattedString::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString FormattedString::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart.FormattedString");
 }
 
 sal_Bool SAL_CALL FormattedString::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL FormattedString::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        "com.sun.star.chart2.DataPointCustomLabelField",
+        "com.sun.star.chart2.FormattedString",
+        "com.sun.star.beans.PropertySet" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart_FormattedString_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart_FormattedString_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::FormattedString(context));
+    return cppu::acquire(new ::chart::FormattedString);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

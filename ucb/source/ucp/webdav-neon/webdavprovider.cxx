@@ -26,18 +26,19 @@
  *
  ************************************************************************/
 
+#include <sal/config.h>
 
-/**************************************************************************
-                                TODO
- **************************************************************************
-
- *************************************************************************/
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
 #include <comphelper/processfactory.hxx>
 #include <ucbhelper/contentidentifier.hxx>
+#include <ucbhelper/getcomponentcontext.hxx>
+#include <ucbhelper/macros.hxx>
+#include <cppuhelper/queryinterface.hxx>
 #include "webdavprovider.hxx"
 #include "webdavcontent.hxx"
 
-#include "osl/mutex.hxx"
+#include <osl/mutex.hxx>
+#include <tools/urlobj.hxx>
 
 using namespace com::sun::star;
 using namespace webdav_ucp;
@@ -49,8 +50,7 @@ using namespace webdav_ucp;
 ContentProvider::ContentProvider(
                 const uno::Reference< uno::XComponentContext >& rxContext )
 : ::ucbhelper::ContentProviderImplHelper( rxContext ),
-  m_xDAVSessionFactory( new DAVSessionFactory() ),
-  m_pProps( nullptr )
+  m_xDAVSessionFactory( new DAVSessionFactory )
 {
 }
 
@@ -58,7 +58,6 @@ ContentProvider::ContentProvider(
 // virtual
 ContentProvider::~ContentProvider()
 {
-    delete m_pProps;
 }
 
 
@@ -77,12 +76,11 @@ void SAL_CALL ContentProvider::release()
 }
 
 css::uno::Any SAL_CALL ContentProvider::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-    (static_cast< lang::XTypeProvider* >(this)),
-    (static_cast< lang::XServiceInfo* >(this)),
-    (static_cast< ucb::XContentProvider* >(this))
+                        static_cast< lang::XTypeProvider* >(this),
+                        static_cast< lang::XServiceInfo* >(this),
+                        static_cast< ucb::XContentProvider* >(this)
                     );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -98,11 +96,23 @@ XTYPEPROVIDER_IMPL_3( ContentProvider,
 
 // XServiceInfo methods.
 
+XSERVICEINFO_COMMOM_IMPL( ContentProvider,
+                          OUString( "com.sun.star.comp.WebDAVContentProvider" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+ContentProvider_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & rSMgr )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new ContentProvider( ucbhelper::getComponentContext(rSMgr) ));
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
 
-XSERVICEINFO_IMPL_1_CTX( ContentProvider,
-                     OUString( "com.sun.star.comp.WebDAVContentProvider" ),
-                     WEBDAV_CONTENT_PROVIDER_SERVICE_NAME );
-
+css::uno::Sequence< OUString >
+ContentProvider::getSupportedServiceNames_Static()
+{
+    css::uno::Sequence< OUString > aSNS { WEBDAV_CONTENT_PROVIDER_SERVICE_NAME };
+    return aSNS;
+}
 
 // Service factory implementation.
 
@@ -118,80 +128,36 @@ uno::Reference< ucb::XContent > SAL_CALL
 ContentProvider::queryContent(
             const uno::Reference<
                     ucb::XContentIdentifier >& Identifier )
-    throw( ucb::IllegalIdentifierException,
-           uno::RuntimeException, std::exception )
 {
     // Check URL scheme...
+    INetURLObject aURL( Identifier->getContentIdentifier() );
 
-    const OUString aScheme
-        = Identifier->getContentProviderScheme().toAsciiLowerCase();
-    if ( aScheme != HTTP_URL_SCHEME && aScheme != HTTPS_URL_SCHEME
-         && aScheme != WEBDAV_URL_SCHEME && aScheme != WEBDAVS_URL_SCHEME
-      && aScheme != DAV_URL_SCHEME && aScheme != DAVS_URL_SCHEME && aScheme != FTP_URL_SCHEME )
+    if ( aURL.isSchemeEqualTo( INetProtocol::NotValid ) )
         throw ucb::IllegalIdentifierException();
 
-    // Normalize URL and create new Id, if nessacary.
-    OUString aURL = Identifier->getContentIdentifier();
-
-    // At least: <scheme> + "://"
-    if ( aURL.getLength() < ( aScheme.getLength() + 3 ) )
-        throw ucb::IllegalIdentifierException();
-
-    if ( aURL.copy( aScheme.getLength(), 3 ) != "://" )
+    if ( !aURL.isAnyKnownWebDAVScheme() )
         throw ucb::IllegalIdentifierException();
 
     uno::Reference< ucb::XContentIdentifier > xCanonicId;
 
-    bool bNewId = false;
-    if ( aScheme == WEBDAV_URL_SCHEME )
+    if (aURL.isSchemeEqualTo( INetProtocol::VndSunStarWebdav ) ||
+        aURL.isSchemeEqualTo(DAV_URL_SCHEME) ||
+        aURL.isSchemeEqualTo( WEBDAV_URL_SCHEME ) )
     {
-        aURL = aURL.replaceAt( 0,
-                               WEBDAV_URL_SCHEME_LENGTH,
-                               HTTP_URL_SCHEME );
-        bNewId = true;
+        aURL.changeScheme( INetProtocol::Http );
+        xCanonicId = new ::ucbhelper::ContentIdentifier( aURL.getExternalURL() );
     }
-    else if ( aScheme == WEBDAVS_URL_SCHEME )
+    else if ( aURL.isSchemeEqualTo( VNDSUNSTARWEBDAVS_URL_SCHEME ) ||
+        aURL.isSchemeEqualTo( DAVS_URL_SCHEME ) ||
+        aURL.isSchemeEqualTo( WEBDAVS_URL_SCHEME ))
     {
-        aURL = aURL.replaceAt( 0,
-                               WEBDAVS_URL_SCHEME_LENGTH,
-                               HTTPS_URL_SCHEME );
-        bNewId = true;
+        aURL.changeScheme( INetProtocol::Https );
+        xCanonicId = new ::ucbhelper::ContentIdentifier( aURL.getExternalURL() );
     }
-    else if ( aScheme == DAV_URL_SCHEME )
-    {
-        aURL = aURL.replaceAt( 0,
-                               DAV_URL_SCHEME_LENGTH,
-                               HTTP_URL_SCHEME );
-        bNewId = true;
-    }
-    else if ( aScheme == DAVS_URL_SCHEME )
-    {
-        aURL = aURL.replaceAt( 0,
-                               DAVS_URL_SCHEME_LENGTH,
-                               HTTPS_URL_SCHEME );
-        bNewId = true;
-    }
-
-    sal_Int32 nPos = aURL.lastIndexOf( '/' );
-    if ( nPos != aURL.getLength() - 1 )
-    {
-        // Find second slash in URL.
-        nPos = aURL.indexOf( '/', aURL.indexOf( '/' ) + 1 );
-        if ( nPos == -1 )
-            throw ucb::IllegalIdentifierException();
-
-        nPos = aURL.indexOf( '/', nPos + 1 );
-        if ( nPos == -1 )
-        {
-            aURL += "/";
-            bNewId = true;
-        }
-    }
-
-    if ( bNewId )
-        xCanonicId = new ::ucbhelper::ContentIdentifier( aURL );
     else
+    {
         xCanonicId = Identifier;
+    }
 
     osl::MutexGuard aGuard( m_aMutex );
 

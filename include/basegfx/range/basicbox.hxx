@@ -21,12 +21,11 @@
 #define INCLUDED_BASEGFX_RANGE_BASICBOX_HXX
 
 #include <basegfx/range/basicrange.hxx>
-#include <basegfx/basegfxdllapi.h>
 
 
 namespace basegfx
 {
-    /** Explicitely different from BasicRange, handling the inside predicates
+    /** Explicitly different from BasicRange, handling the inside predicates
         differently.
 
         This is modelled after how polygon fill algorithms set pixel -

@@ -23,7 +23,9 @@
 #include <assert.h>
 
 #include <tools/solar.h>
-#include <swdllapi.h>
+#include "swdllapi.h"
+#include <array>
+#include <memory>
 
 struct BlockInfo;
 class BigPtrArray;
@@ -31,16 +33,15 @@ class BigPtrArray;
 class BigPtrEntry
 {
     friend class BigPtrArray;
-    BlockInfo* pBlock;
-    sal_uInt16 nOffset;
+    BlockInfo*  m_pBlock;
+    sal_uInt16  m_nOffset;
 public:
-    BigPtrEntry() : pBlock(nullptr), nOffset(0) {}
+    BigPtrEntry() : m_pBlock(nullptr), m_nOffset(0) {}
     virtual ~BigPtrEntry() {}
 
     inline sal_uLong GetPos() const;
     inline BigPtrArray& GetArray() const;
 };
-typedef BigPtrEntry* ElementPtr;
 
 // 1000 entries per Block = a bit less then 4K
 #define MAXENTRY 1000
@@ -51,22 +52,25 @@ typedef BigPtrEntry* ElementPtr;
 // if complete compression is desired, 100 has to be specified
 #define COMPRESSLVL 80
 
-struct BlockInfo {                  // block info:
-    BigPtrArray* pBigArr;           ///< in this array the block is located
-    ElementPtr* pData;              ///< data block
-    sal_uLong nStart, nEnd;         ///< start- and end index
-    sal_uInt16 nElem;               ///< number of elements
+struct BlockInfo final
+{
+    BigPtrArray* pBigArr;              ///< in this array the block is located
+    std::array<BigPtrEntry*, MAXENTRY>
+                 mvData;               ///< data block
+    sal_uLong    nStart, nEnd;         ///< start- and end index
+    sal_uInt16   nElem;                ///< number of elements
 };
 
 class SW_DLLPUBLIC BigPtrArray
 {
 protected:
-    BlockInfo**     ppInf;              // block info
-    sal_uLong       nSize;              ///< number of elements
-    sal_uInt16      nMaxBlock;          ///< current max. number of blocks
-    sal_uInt16      nBlock;             ///< number of blocks
+    std::unique_ptr<BlockInfo*[]>
+                    m_ppInf;              ///< block info
+    sal_uLong       m_nSize;              ///< number of elements
+    sal_uInt16      m_nMaxBlock;          ///< current max. number of blocks
+    sal_uInt16      m_nBlock;             ///< number of blocks
     mutable
-        sal_uInt16  nCur;               ///< last used block
+        sal_uInt16  m_nCur;               ///< last used block
 
     sal_uInt16  Index2Block( sal_uLong ) const; ///< block search
     BlockInfo*  InsBlock( sal_uInt16 );         ///< insert block
@@ -80,25 +84,25 @@ public:
     BigPtrArray();
     ~BigPtrArray();
 
-    sal_uLong Count() const { return nSize; }
+    sal_uLong Count() const { return m_nSize; }
 
-    void Insert( const ElementPtr& r, sal_uLong pos );
+    void Insert( BigPtrEntry* p, sal_uLong pos );
     void Remove( sal_uLong pos, sal_uLong n = 1 );
     void Move( sal_uLong from, sal_uLong to );
-    void Replace( sal_uLong pos, const ElementPtr& r);
+    void Replace( sal_uLong pos, BigPtrEntry* p);
 
-    ElementPtr operator[]( sal_uLong ) const;
+    BigPtrEntry* operator[]( sal_uLong ) const;
 };
 
 inline sal_uLong BigPtrEntry::GetPos() const
 {
-    assert(this == pBlock->pData[ nOffset ]); // element not in the block
-    return pBlock->nStart + nOffset;
+    assert(this == m_pBlock->mvData[ m_nOffset ]); // element not in the block
+    return m_pBlock->nStart + m_nOffset;
 }
 
 inline BigPtrArray& BigPtrEntry::GetArray() const
 {
-    return *pBlock->pBigArr;
+    return *m_pBlock->pBigArr;
 }
 
 #endif

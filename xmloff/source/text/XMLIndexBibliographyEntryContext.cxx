@@ -26,6 +26,7 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <com/sun/star/text/BibliographyDataField.hpp>
 
 
@@ -33,7 +34,6 @@ using namespace ::com::sun::star::text;
 using namespace ::xmloff::token;
 
 using ::com::sun::star::beans::PropertyValue;
-using ::com::sun::star::beans::PropertyValues;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Any;
@@ -46,7 +46,7 @@ XMLIndexBibliographyEntryContext::XMLIndexBibliographyEntryContext(
     sal_uInt16 nPrfx,
     const OUString& rLocalName ) :
         XMLIndexSimpleEntryContext(rImport,
-                                   rTemplate.sTokenBibliographyDataField,
+                                   "TokenBibliographyDataField",
                                    rTemplate,
                                    nPrfx, rLocalName),
         nBibliographyInfo(BibliographyDataField::IDENTIFIER),
@@ -58,7 +58,7 @@ XMLIndexBibliographyEntryContext::~XMLIndexBibliographyEntryContext()
 {
 }
 
-const SvXMLEnumMapEntry aBibliographyDataFieldMap[] =
+const SvXMLEnumMapEntry<sal_uInt16> aBibliographyDataFieldMap[] =
 {
     { XML_ADDRESS,              BibliographyDataField::ADDRESS },
     { XML_ANNOTE,               BibliographyDataField::ANNOTE },
@@ -155,10 +155,8 @@ void XMLIndexBibliographyEntryContext::FillPropertyValues(
 
     // bibliography data field
     sal_Int32 nIndex = bCharStyleNameOK ? 2 : 1;
-    rValues[nIndex].Name = rTemplateContext.sBibliographyDataField;
-    Any aAny;
-    aAny <<= nBibliographyInfo;
-    rValues[nIndex].Value = aAny;
+    rValues[nIndex].Name = "BibliographyDataField";
+    rValues[nIndex].Value <<= nBibliographyInfo;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

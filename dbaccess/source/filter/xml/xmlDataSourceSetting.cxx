@@ -17,7 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <map>
 
@@ -28,10 +29,10 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
 #include <rtl/strbuf.hxx>
-#include <tools/debug.hxx>
 
 namespace dbaxml
 {
@@ -70,18 +71,19 @@ OXMLDataSourceSetting::OXMLDataSourceSetting( ODBFilter& rImport
             case XML_TOK_DATA_SOURCE_SETTING_TYPE:
                 {
                     // needs to be translated into a css::uno::Type
-                    static std::map< OUString, css::uno::Type > s_aTypeNameMap;
-                    if (s_aTypeNameMap.empty())
+                    static std::map< OUString, css::uno::Type > s_aTypeNameMap = [&]()
                     {
-                        s_aTypeNameMap[GetXMLToken( XML_BOOLEAN)]   = cppu::UnoType<bool>::get();
+                        std::map< OUString, css::uno::Type > tmp;
+                        tmp[GetXMLToken( XML_BOOLEAN)]   = cppu::UnoType<bool>::get();
                         // Not a copy paste error, see comment xmloff/source/forms/propertyimport.cxx lines 244-248
-                        s_aTypeNameMap[GetXMLToken( XML_FLOAT)]     = ::cppu::UnoType<double>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_DOUBLE)]    = ::cppu::UnoType<double>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_STRING)]    = ::cppu::UnoType<OUString>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_INT)]       = ::cppu::UnoType<sal_Int32>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_SHORT)]     = ::cppu::UnoType<sal_Int16>::get();
-                        s_aTypeNameMap[GetXMLToken( XML_VOID)]      = cppu::UnoType<void>::get();
-                    }
+                        tmp[GetXMLToken( XML_FLOAT)]     = ::cppu::UnoType<double>::get();
+                        tmp[GetXMLToken( XML_DOUBLE)]    = ::cppu::UnoType<double>::get();
+                        tmp[GetXMLToken( XML_STRING)]    = ::cppu::UnoType<OUString>::get();
+                        tmp[GetXMLToken( XML_INT)]       = ::cppu::UnoType<sal_Int32>::get();
+                        tmp[GetXMLToken( XML_SHORT)]     = ::cppu::UnoType<sal_Int16>::get();
+                        tmp[GetXMLToken( XML_VOID)]      = cppu::UnoType<void>::get();
+                        return tmp;
+                    }();
 
                     const std::map< OUString, css::uno::Type >::const_iterator aTypePos = s_aTypeNameMap.find(sValue);
                     OSL_ENSURE(s_aTypeNameMap.end() != aTypePos, "OXMLDataSourceSetting::OXMLDataSourceSetting: invalid type!");
@@ -101,7 +103,7 @@ OXMLDataSourceSetting::~OXMLDataSourceSetting()
 {
 }
 
-SvXMLImportContext* OXMLDataSourceSetting::CreateChildContext(
+SvXMLImportContextRef OXMLDataSourceSetting::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
@@ -196,9 +198,9 @@ Any OXMLDataSourceSetting::convertString(const css::uno::Type& _rExpectedType, c
                     "OXMLDataSourceSetting::convertString: could not convert \""
                     << _rReadCharacters << "\" into an integer!");
                 if (TypeClass_SHORT == _rExpectedType.getTypeClass())
-                    aReturn <<= (sal_Int16)nValue;
+                    aReturn <<= static_cast<sal_Int16>(nValue);
                 else
-                    aReturn <<= (sal_Int32)nValue;
+                    aReturn <<= nValue;
                 break;
             }
         case TypeClass_HYPER:
@@ -214,7 +216,7 @@ Any OXMLDataSourceSetting::convertString(const css::uno::Type& _rExpectedType, c
             SAL_WARN_IF(!bSuccess, "dbaccess",
                 "OXMLDataSourceSetting::convertString: could not convert \""
                 << _rReadCharacters << "\" into a double!");
-            aReturn <<= (double)nValue;
+            aReturn <<= nValue;
         }
         break;
         case TypeClass_STRING:

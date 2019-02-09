@@ -22,8 +22,6 @@
 #include <sfx2/tbxctrl.hxx>
 #include <svx/svxdllapi.h>
 
-// class SvxTableToolBoxControl ------------------------------------------
-
 class SVX_DLLPUBLIC SvxTableToolBoxControl : public SfxToolBoxControl
 {
 private:
@@ -38,10 +36,8 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SvxTableToolBoxControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxTableToolBoxControl();
+    virtual ~SvxTableToolBoxControl() override;
 };
-
-// class SvxColumnsToolBoxControl ----------------------------------------
 
 class SVX_DLLPUBLIC SvxColumnsToolBoxControl : public SfxToolBoxControl
 {
@@ -52,13 +48,12 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SvxColumnsToolBoxControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SvxColumnsToolBoxControl();
+    virtual ~SvxColumnsToolBoxControl() override;
 
     virtual void                StateChanged( sal_uInt16 nSID,
                                               SfxItemState eState,
                                               const SfxPoolItem* pState ) override;
 };
-
 
 #endif
 

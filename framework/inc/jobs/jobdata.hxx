@@ -28,7 +28,6 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/frame/DispatchResultEvent.hpp>
 
 #include <rtl/ustring.hxx>
 
@@ -41,7 +40,7 @@ namespace framework{
             (or proxy) for all config data of a registered job.
             But it doesn't implement any execute functionality!
  */
-class JobData
+class JobData final
 {
     public:
 
@@ -138,13 +137,13 @@ class JobData
 
         /**
             the uno implementation name of this job.
-            It's readed from the configuration. Don't set it from outside!
+            It's read from the configuration. Don't set it from outside!
          */
         OUString m_sService;
 
         /**
             the module context list of this job.
-            It's readed from the configuration. Don't set it from outside!
+            It's read from the configuration. Don't set it from outside!
          */
         OUString m_sContext;
 
@@ -160,8 +159,8 @@ class JobData
         OUString m_sEvent;
 
         /**
-            job specific configuration items ... unknown for us!
-            It's readed from the configuration. Don't set it from outside!
+            job specific configuration items... unknown for us!
+            It's read from the configuration. Don't set it from outside!
          */
         std::vector< css::beans::NamedValue > m_lArguments;
 
@@ -180,9 +179,9 @@ class JobData
 
                  JobData( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
                  JobData( const JobData&                                                rCopy );
-        virtual ~JobData(                                                                     );
+                 ~JobData(                                                                     );
 
-        void operator=( const JobData& rCopy );
+        JobData& operator=( const JobData& rCopy );
 
         EMode                                        getMode                 () const;
         EEnvironment                                 getEnvironment          () const;

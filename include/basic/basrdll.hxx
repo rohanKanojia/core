@@ -23,8 +23,6 @@
 #include <basic/basicdllapi.h>
 #include <memory>
 
-class ResMgr;
-
 class BASIC_DLLPUBLIC BasicDLL
 {
 public:
@@ -32,10 +30,8 @@ public:
     std::unique_ptr<Impl> m_xImpl;
 
 public:
-                BasicDLL();
-                ~BasicDLL();
-
-    ResMgr*     GetBasResMgr() const;
+    BasicDLL();
+    ~BasicDLL();
 
     static void BasicBreak();
 

@@ -24,7 +24,7 @@
 #include <com/sun/star/table/XColumnRowRange.hpp>
 
 #include <rtl/ustring.hxx>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 #include <iostream>
 
 using namespace css;
@@ -48,11 +48,11 @@ void XDatabaseRange::testDataArea()
     xDBRange->setDataArea(aCellAddress);
     table::CellRangeAddress aValue;
     aValue = xDBRange->getDataArea();
-    CPPUNIT_ASSERT( aCellAddress.Sheet == aValue.Sheet );
-    CPPUNIT_ASSERT( aCellAddress.StartRow == aValue.StartRow );
-    CPPUNIT_ASSERT( aCellAddress.EndRow == aValue.EndRow );
-    CPPUNIT_ASSERT( aCellAddress.StartColumn == aValue.StartColumn );
-    CPPUNIT_ASSERT( aCellAddress.EndColumn == aValue.EndColumn );
+    CPPUNIT_ASSERT_EQUAL( aCellAddress.Sheet, aValue.Sheet );
+    CPPUNIT_ASSERT_EQUAL( aCellAddress.StartRow, aValue.StartRow );
+    CPPUNIT_ASSERT_EQUAL( aCellAddress.EndRow, aValue.EndRow );
+    CPPUNIT_ASSERT_EQUAL( aCellAddress.StartColumn, aValue.StartColumn );
+    CPPUNIT_ASSERT_EQUAL( aCellAddress.EndColumn, aValue.EndColumn );
 }
 
 void XDatabaseRange::testGetSubtotalDescriptor()
@@ -68,60 +68,60 @@ void XDatabaseRange::testGetSortDescriptor()
     uno::Sequence< beans::PropertyValue > xSortDescr = xDBRange->getSortDescriptor();
     for (sal_Int32 i = 0; i < xSortDescr.getLength(); ++i)
     {
-        beans::PropertyValue xProp = xSortDescr[i];
-        //std::cout << "Prop " << i << " Name: " << OUString(xProp.Name) << std::endl;
+        beans::PropertyValue aProp = xSortDescr[i];
+        //std::cout << "Prop " << i << " Name: " << OUString(aProp.Name) << std::endl;
 
-        if (xProp.Name == "IsSortColumns")
+        if (aProp.Name == "IsSortColumns")
         {
             bool bIsSortColumns = true;
-            xProp.Value >>= bIsSortColumns;
+            aProp.Value >>= bIsSortColumns;
             CPPUNIT_ASSERT(bIsSortColumns);
         }
-        else if (xProp.Name == "ContainsHeader")
+        else if (aProp.Name == "ContainsHeader")
         {
             bool bContainsHeader = true;
-            xProp.Value >>= bContainsHeader;
+            aProp.Value >>= bContainsHeader;
             CPPUNIT_ASSERT(bContainsHeader);
         }
-        else if (xProp.Name == "MaxFieldCount")
+        else if (aProp.Name == "MaxFieldCount")
         {
             sal_Int32 nMaxFieldCount = 0;
-            xProp.Value >>= nMaxFieldCount;
+            aProp.Value >>= nMaxFieldCount;
             std::cout << "Value: " << nMaxFieldCount << std::endl;
 
         }
-        else if (xProp.Name == "SortFields")
+        else if (aProp.Name == "SortFields")
         {
 
         }
-        else if (xProp.Name == "BindFormatsToContent")
+        else if (aProp.Name == "BindFormatsToContent")
         {
             bool bBindFormatsToContent = false;
-            xProp.Value >>= bBindFormatsToContent;
+            aProp.Value >>= bBindFormatsToContent;
             CPPUNIT_ASSERT(bBindFormatsToContent);
         }
-        else if (xProp.Name == "CopyOutputData")
+        else if (aProp.Name == "CopyOutputData")
         {
             bool bCopyOutputData = true;
-            xProp.Value >>= bCopyOutputData;
+            aProp.Value >>= bCopyOutputData;
             CPPUNIT_ASSERT(!bCopyOutputData);
         }
-        else if (xProp.Name == "OutputPosition")
+        else if (aProp.Name == "OutputPosition")
         {
 
         }
-        else if (xProp.Name == "IsUserListEnabled")
+        else if (aProp.Name == "IsUserListEnabled")
         {
             bool bIsUserListEnabled  = true;
-            xProp.Value >>= bIsUserListEnabled;
+            aProp.Value >>= bIsUserListEnabled;
             CPPUNIT_ASSERT(!bIsUserListEnabled);
 
         }
-        else if (xProp.Name == "UserListIndex")
+        else if (aProp.Name == "UserListIndex")
         {
             sal_Int32 nUserListIndex = 1;
-            xProp.Value >>= nUserListIndex;
-            CPPUNIT_ASSERT(nUserListIndex == 0);
+            aProp.Value >>= nUserListIndex;
+            CPPUNIT_ASSERT_EQUAL(sal_Int32(0), nUserListIndex);
         }
     }
 }
@@ -130,7 +130,6 @@ void XDatabaseRange::testGetFilterDescriptor()
 {
     uno::Reference< sheet::XDatabaseRange > xDBRange( init("FilterDescriptor"), UNO_QUERY_THROW);
     uno::Reference< uno::XInterface > xFilterDescr( xDBRange->getFilterDescriptor(), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xFilterDescr.is());
 }
 
 void XDatabaseRange::testGetImportDescriptor()

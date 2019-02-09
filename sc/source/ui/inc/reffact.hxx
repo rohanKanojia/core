@@ -23,15 +23,13 @@
 #include <sfx2/childwin.hxx>
 #include "ChildWindowWrapper.hxx"
 
-#include "dbfunc.hxx"
-
-#include "sc.hrc"
+#include <sc.hrc>
 
 #define DECL_WRAPPER_WITHID(Class) \
     class Class : public SfxChildWindow                                         \
     {                                                                           \
     public:                                                                     \
-        Class( vcl::Window*, sal_uInt16, SfxBindings*, SfxChildWinInfo* );           \
+        Class( vcl::Window*, sal_uInt16, SfxBindings*, const SfxChildWinInfo* ); \
         SFX_DECL_CHILDWINDOW_WITHID(Class);                                     \
     };
 
@@ -183,9 +181,9 @@ class SC_DLLPUBLIC ScValidityRefChildWin : public SfxChildWindow
     bool    m_bFreeWindowLock:1;
     VclPtr<vcl::Window> m_pSavedWndParent;
 public:
-    ScValidityRefChildWin( vcl::Window*, sal_uInt16, SfxBindings*, SfxChildWinInfo* );
+    ScValidityRefChildWin( vcl::Window*, sal_uInt16, const SfxBindings*, SfxChildWinInfo* );
     SFX_DECL_CHILDWINDOW_WITHID(ScValidityRefChildWin);
-    virtual ~ScValidityRefChildWin();
+    virtual ~ScValidityRefChildWin() override;
     bool    LockVisible( bool bLock ){ bool bVis = m_bVisibleLock; m_bVisibleLock = bLock; return bVis; }
     bool    LockFreeWindow( bool bLock ){ bool bFreeWindow = m_bFreeWindowLock; m_bFreeWindowLock = bLock; return bFreeWindow; }
     void                Hide() override { if( !m_bVisibleLock) SfxChildWindow::Hide(); }

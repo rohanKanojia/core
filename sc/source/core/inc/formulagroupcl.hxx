@@ -10,7 +10,7 @@
 #ifndef INCLUDED_SC_SOURCE_CORE_INC_FORMULAGROUPCL_HXX
 #define INCLUDED_SC_SOURCE_CORE_INC_FORMULAGROUPCL_HXX
 
-#include "formulagroup.hxx"
+#include <formulagroup.hxx>
 
 namespace sc { namespace opencl {
 
@@ -18,7 +18,7 @@ class FormulaGroupInterpreterOpenCL : public FormulaGroupInterpreter
 {
 public:
     FormulaGroupInterpreterOpenCL();
-    virtual ~FormulaGroupInterpreterOpenCL();
+    virtual ~FormulaGroupInterpreterOpenCL() override;
 
     virtual ScMatrixRef inverseMatrix( const ScMatrix& rMat ) override;
     virtual bool interpret( ScDocument& rDoc, const ScAddress& rTopPos,

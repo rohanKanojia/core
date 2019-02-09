@@ -24,8 +24,14 @@
 #include <svx/svxdllapi.h>
 #include <svx/rectenum.hxx>
 #include <vcl/graph.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/virdev.hxx>
 #include <svx/xtable.hxx>
+#include <rtl/ref.hxx>
 #include <o3tl/typed_flags_set.hxx>
+#include <memory>
+#include <array>
 
 class XOBitmap;
 class XOutdevItemPool;
@@ -43,11 +49,11 @@ class SAL_WARN_UNUSED SvxTabPage : public SfxTabPage
 {
 
 public:
-    SvxTabPage(vcl::Window *pParent, const OString& rID, const OUString& rUIXMLDescription, const SfxItemSet &rAttrSet)
-        : SfxTabPage(pParent, rID, rUIXMLDescription, &rAttrSet)
+    SvxTabPage(TabPageParent pParent, const OUString& rUIXMLDescription, const OString& rID, const SfxItemSet &rAttrSet)
+        : SfxTabPage(pParent, rUIXMLDescription, rID, &rAttrSet)
     {
     }
-    virtual void PointChanged( vcl::Window* pWindow, RECT_POINT eRP ) = 0;
+    virtual void PointChanged(weld::DrawingArea* pArea, RectPoint eRP) = 0;
 };
 
 /*************************************************************************
@@ -69,152 +75,131 @@ namespace o3tl
 class SvxRectCtlAccessibleContext;
 class SvxPixelCtlAccessible;
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxRectCtl : public Control
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxRectCtl : public weld::CustomWidgetController
 {
 private:
-    SVX_DLLPRIVATE void             InitSettings(vcl::RenderContext& rRenderContext);
+    VclPtr<SvxTabPage> m_pPage;
+
+    SVX_DLLPRIVATE static void      InitSettings(vcl::RenderContext& rRenderContext);
     SVX_DLLPRIVATE void             InitRectBitmap();
-    SVX_DLLPRIVATE Bitmap&          GetRectBitmap();
-    SVX_DLLPRIVATE void             Resize_Impl();
+    SVX_DLLPRIVATE BitmapEx&        GetRectBitmap();
+    SVX_DLLPRIVATE void             Resize_Impl(const Size& rSize);
+
+    SvxRectCtl(const SvxRectCtl&) = delete;
+    SvxRectCtl& operator=(const SvxRectCtl&) = delete;
 
 protected:
-    SvxRectCtlAccessibleContext* pAccContext;
+    rtl::Reference<SvxRectCtlAccessibleContext> pAccContext;
     sal_uInt16 nBorderWidth;
-    sal_uInt16 nRadius;
-    Size aSize;
     Point aPtLT, aPtMT, aPtRT;
     Point aPtLM, aPtMM, aPtRM;
     Point aPtLB, aPtMB, aPtRB;
     Point aPtNew;
-    RECT_POINT eRP, eDefRP;
-    CTL_STYLE eCS;
-    Bitmap* pBitmap;
+    RectPoint eRP, eDefRP;
+    std::unique_ptr<BitmapEx> pBitmap;
     CTL_STATE m_nState;
 
     bool mbCompleteDisable : 1;
-    bool mbUpdateForeground : 1;
-    bool mbUpdateBackground : 1;
 
-    void MarkToResetSettings(bool bUpdateForeground, bool bUpdateBackground);
-
-    RECT_POINT          GetRPFromPoint( Point, bool bRTL = false ) const;
-    Point               GetPointFromRP( RECT_POINT ) const;
-    void                SetFocusRect();
-    Point               SetActualRPWithoutInvalidate( RECT_POINT eNewRP );  // returns the last point
-
-    virtual void        GetFocus() override;
-    virtual void        LoseFocus() override;
+    RectPoint           GetRPFromPoint( Point, bool bRTL = false ) const;
+    const Point&        GetPointFromRP( RectPoint ) const;
+    Point               SetActualRPWithoutInvalidate( RectPoint eNewRP );  // returns the last point
 
     Point               GetApproxLogPtFromPixPt( const Point& rRoughPixelPoint ) const;
 public:
-    SvxRectCtl( vcl::Window* pParent, RECT_POINT eRpt = RP_MM,
-                sal_uInt16 nBorder = 200, sal_uInt16 nCircle = 80 );
-    void SetControlSettings(RECT_POINT eRpt = RP_MM, sal_uInt16 nBorder = 200,
-        sal_uInt16 nCircle = 80);
-    virtual ~SvxRectCtl();
-    virtual void dispose() override;
+    SvxRectCtl(SvxTabPage* pPage, RectPoint eRpt = RectPoint::MM, sal_uInt16 nBorder = 200);
+    void SetControlSettings(RectPoint eRpt, sal_uInt16 nBorder);
+    virtual ~SvxRectCtl() override;
 
-    virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
-    virtual void        MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void        KeyInput( const KeyEvent& rKeyEvt ) override;
-    virtual void        StateChanged( StateChangedType nStateChange ) override;
-    virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;
-    virtual void        Resize() override;
-    virtual Size        GetOptimalSize() const override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
+    virtual void Resize() override;
+    virtual void MouseButtonDown(const MouseEvent&) override;
+    virtual bool KeyInput(const KeyEvent&) override;
+    virtual void GetFocus() override;
+    virtual void LoseFocus() override;
+    virtual tools::Rectangle GetFocusRect() override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual void StyleUpdated() override;
 
     void                Reset();
-    RECT_POINT          GetActualRP() const { return eRP;}
-    void                SetActualRP( RECT_POINT eNewRP );
+    RectPoint           GetActualRP() const { return eRP;}
+    void                SetActualRP( RectPoint eNewRP );
 
     void                SetState( CTL_STATE nState );
 
-    sal_uInt8               GetNumOfChildren() const;   // returns number of usable radio buttons
+    static const sal_uInt8 NO_CHILDREN = 9;   // returns number of usable radio buttons
 
-    Rectangle           CalculateFocusRectangle() const;
-    Rectangle           CalculateFocusRectangle( RECT_POINT eRectPoint ) const;
+    tools::Rectangle           CalculateFocusRectangle() const;
+    tools::Rectangle           CalculateFocusRectangle( RectPoint eRectPoint ) const;
 
-    virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
+    css::uno::Reference<css::accessibility::XAccessible> getAccessibleParent() { return GetDrawingArea()->get_accessible_parent(); }
+    virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
+    a11yrelationset get_accessible_relation_set() { return GetDrawingArea()->get_accessible_relation_set(); }
 
-    RECT_POINT          GetApproxRPFromPixPt( const css::awt::Point& rPixelPoint ) const;
+    RectPoint          GetApproxRPFromPixPt( const css::awt::Point& rPixelPoint ) const;
 
     bool IsCompletelyDisabled() const { return mbCompleteDisable; }
     void DoCompletelyDisable(bool bNew);
-    void SetCS(CTL_STYLE eNew);
-};
-
-/*************************************************************************
-|* Preview control for the display of bitmaps
-\************************************************************************/
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxBitmapCtl
-{
-protected:
-    sal_uInt16      nLines;
-    Color           aPixelColor, aBackgroundColor;
-    const sal_uInt16*   pBmpArray;
-
-public:
-            SvxBitmapCtl();
-            ~SvxBitmapCtl();
-
-    BitmapEx GetBitmapEx();
-
-    void    SetBmpArray( const sal_uInt16* pPixel ) { pBmpArray = pPixel; }
-    void    SetLines( sal_uInt16 nLns ) { nLines = nLns; }
-    void    SetPixelColor( Color aColor ) { aPixelColor = aColor; }
-    void    SetBackgroundColor( Color aColor ) { aBackgroundColor = aColor; }
 };
 
 /*************************************************************************
 |* Control for editing bitmaps
 \************************************************************************/
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxPixelCtl : public Control
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxPixelCtl final : public weld::CustomWidgetController
 {
 private:
-    using OutputDevice::SetLineColor;
+    static sal_uInt16 constexpr nLines = 8;
+    static sal_uInt16 constexpr nSquares = nLines * nLines;
 
-protected:
-    sal_uInt16      nLines, nSquares;
+    VclPtr<SvxTabPage> m_pPage;
+
     Color       aPixelColor;
     Color       aBackgroundColor;
-    Color       aLineColor;
     Size        aRectSize;
-    sal_uInt16* pPixel;
+    std::array<sal_uInt8,nSquares> maPixelData;
     bool        bPaintable;
     //Add member identifying position
     Point       aFocusPosition;
-    Rectangle   implCalFocusRect( const Point& aPosition );
+    rtl::Reference<SvxPixelCtlAccessible>  m_xAccess;
+
+    tools::Rectangle   implCalFocusRect( const Point& aPosition );
     void    ChangePixel( sal_uInt16 nPixel );
 
+    SvxPixelCtl(SvxPixelCtl const&) = delete;
+    SvxPixelCtl(SvxPixelCtl&&) = delete;
+    SvxPixelCtl& operator=(SvxPixelCtl const&) = delete;
+    SvxPixelCtl& operator=(SvxPixelCtl&&) = delete;
+
 public:
-    SvxPixelCtl( vcl::Window* pParent, sal_uInt16 nNumber = 8 );
+    SvxPixelCtl(SvxTabPage* pPage);
 
-    virtual ~SvxPixelCtl();
-    virtual void dispose() override;
+    virtual ~SvxPixelCtl() override;
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void Resize() override;
-    virtual Size GetOptimalSize() const override;
+    virtual tools::Rectangle GetFocusRect() override;
 
     void    SetXBitmap( const BitmapEx& rBitmapEx );
 
     void    SetPixelColor( const Color& rCol ) { aPixelColor = rCol; }
     void    SetBackgroundColor( const Color& rCol ) { aBackgroundColor = rCol; }
-    void    SetLineColor( const Color& rCol ) { aLineColor = rCol; }
 
-    sal_uInt16  GetLineCount() const { return nLines; }
+    static sal_uInt16 GetLineCount() { return nLines; }
 
-    sal_uInt16  GetBitmapPixel( const sal_uInt16 nPixelNumber );
-    sal_uInt16* GetBitmapPixelPtr() { return pPixel; }
+    sal_uInt8  GetBitmapPixel( const sal_uInt16 nPixelNumber ) const;
+    std::array<sal_uInt8,64> const & GetBitmapPixelPtr() const { return maPixelData; }
 
     void    SetPaintable( bool bTmp ) { bPaintable = bTmp; }
     void    Reset();
-    SvxPixelCtlAccessible*  m_pAccess;
-    css::uno::Reference< css::accessibility::XAccessible >        m_xAccess;
-    virtual css::uno::Reference< css::accessibility::XAccessible > CreateAccessible() override;
-    long GetSquares() const { return nSquares ; }
+
+    css::uno::Reference<css::accessibility::XAccessible> getAccessibleParent() { return GetDrawingArea()->get_accessible_parent(); }
+    virtual css::uno::Reference<css::accessibility::XAccessible> CreateAccessible() override;
+    a11yrelationset get_accessible_relation_set() { return GetDrawingArea()->get_accessible_relation_set(); }
+
+    static long GetSquares() { return nSquares ; }
     long GetWidth() const { return aRectSize.getWidth() ; }
     long GetHeight() const { return aRectSize.getHeight() ; }
 
@@ -223,89 +208,11 @@ public:
 
     long PointToIndex(const Point &pt) const;
     Point IndexToPoint(long nIndex) const ;
-    long GetFoucsPosIndex() const ;
+    long GetFocusPosIndex() const ;
     //Keyboard function for key input and focus handling function
-    virtual void        KeyInput( const KeyEvent& rKEvt ) override;
+    virtual bool        KeyInput( const KeyEvent& rKEvt ) override;
     virtual void        GetFocus() override;
     virtual void        LoseFocus() override;
-};
-
-/************************************************************************/
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC ColorLB : public ColorListBox
-{
-
-public:
-         ColorLB( vcl::Window* pParent, ResId Id ) : ColorListBox( pParent, Id ) {}
-         ColorLB( vcl::Window* pParent, WinBits aWB ) : ColorListBox( pParent, aWB ) {}
-
-    void Fill( const XColorListRef &pTab );
-
-    void Append( const XColorEntry& rEntry );
-    void Modify( const XColorEntry& rEntry, sal_Int32 nPos );
-};
-
-/************************************************************************/
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC HatchingLB : public ListBox
-{
-    XHatchListRef mpList;
-public:
-    explicit HatchingLB(vcl::Window* pParent, WinBits aWB);
-
-    void Fill( const XHatchListRef &pList );
-
-    void    Append( const XHatchEntry& rEntry, const Bitmap& rBitmap );
-    void    Modify( const XHatchEntry& rEntry, sal_Int32 nPos, const Bitmap& rBitmap );
-};
-
-/************************************************************************/
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC GradientLB : public ListBox
-{
-    XGradientListRef mpList;
-public:
-    explicit GradientLB(vcl::Window* pParent, WinBits aWB);
-
-    void Fill( const XGradientListRef &pList );
-
-    void    Append( const XGradientEntry& rEntry, const Bitmap& rBitmap );
-    void    Modify( const XGradientEntry& rEntry, sal_Int32 nPos, const Bitmap& rBitmap );
-    void    SelectEntryByList( const XGradientListRef &pList, const OUString& rStr,
-                               const XGradient& rXGradient );
-};
-
-/************************************************************************/
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC BitmapLB : public ListBox
-{
-public:
-    explicit BitmapLB(vcl::Window* pParent, WinBits aWB);
-
-    void Fill(const XBitmapListRef &pList);
-
-    void Append(const Size& rSize, const XBitmapEntry& rEntry);
-    void Modify(const Size& rSize, const XBitmapEntry& rEntry, sal_Int32 nPos);
-
-private:
-    BitmapEx        maBitmapEx;
-
-    XBitmapListRef  mpList;
-};
-
-/************************************************************************/
-
-class SAL_WARN_UNUSED SVX_DLLPUBLIC FillAttrLB : public ColorListBox
-{
-private:
-    BitmapEx        maBitmapEx;
-
-public:
-    FillAttrLB( vcl::Window* pParent, WinBits aWB );
-
-    void Fill( const XHatchListRef    &pList );
-    void Fill( const XGradientListRef &pList );
-    void Fill( const XBitmapListRef   &pList );
 };
 
 /************************************************************************/
@@ -314,7 +221,6 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC FillTypeLB : public ListBox
 {
 
 public:
-         FillTypeLB( vcl::Window* pParent, ResId Id ) : ListBox( pParent, Id ) {}
          FillTypeLB( vcl::Window* pParent, WinBits aWB ) : ListBox( pParent, aWB ) {}
 
     void Fill();
@@ -322,67 +228,107 @@ public:
 
 /************************************************************************/
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC LineLB : public ListBox
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxLineLB
 {
 private:
-    /// bitfield
+    std::unique_ptr<weld::ComboBox> m_xControl;
+
     /// defines if standard fields (none, solid) are added, default is true
     bool        mbAddStandardFields : 1;
 
 public:
-    LineLB(vcl::Window* pParent, WinBits aWB);
+    SvxLineLB(std::unique_ptr<weld::ComboBox> pControl);
 
     void Fill(const XDashListRef &pList);
     bool getAddStandardFields() const { return mbAddStandardFields; }
     void setAddStandardFields(bool bNew);
 
-    void Append(const XDashEntry& rEntry, const Bitmap& rBitmap );
-    void Modify(const XDashEntry& rEntry, sal_Int32 nPos, const Bitmap& rBitmap );
-};
+    void Append(const XDashEntry& rEntry, const BitmapEx& rBitmap );
+    void Modify(const XDashEntry& rEntry, sal_Int32 nPos, const BitmapEx& rBitmap );
 
+    void clear() { m_xControl->clear(); }
+    void remove(int nPos) { m_xControl->remove(nPos); }
+    int get_active() const { return m_xControl->get_active(); }
+    void set_active(int nPos) { m_xControl->set_active(nPos); }
+    void set_active_text(const OUString& rStr) { m_xControl->set_active_text(rStr); }
+    OUString get_active_text() const { return m_xControl->get_active_text(); }
+    void connect_changed(const Link<weld::ComboBox&, void>& rLink) { m_xControl->connect_changed(rLink); }
+    int get_count() const { return m_xControl->get_count(); }
+    void append_text(const OUString& rStr) { m_xControl->append_text(rStr); }
+    bool get_value_changed_from_saved() const { return m_xControl->get_value_changed_from_saved(); }
+    void save_value() { m_xControl->save_value(); }
+    void set_sensitive(bool bSensitive) { m_xControl->set_sensitive(bSensitive); }
+    bool get_sensitive() const { return m_xControl->get_sensitive(); }
+};
 
 /************************************************************************/
 
-class SAL_WARN_UNUSED SVX_DLLPUBLIC LineEndLB : public ListBox
+class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxLineEndLB
 {
+private:
+    std::unique_ptr<weld::ComboBox> m_xControl;
 
 public:
-    LineEndLB( vcl::Window* pParent, WinBits aWB );
+    SvxLineEndLB(std::unique_ptr<weld::ComboBox> pControl);
 
     void Fill( const XLineEndListRef &pList, bool bStart = true );
 
-    void    Append( const XLineEndEntry& rEntry, const Bitmap& rBitmap );
-    void    Modify( const XLineEndEntry& rEntry, sal_Int32 nPos, const Bitmap& rBitmap );
-};
+    void    Append( const XLineEndEntry& rEntry, const BitmapEx& rBitmap );
+    void    Modify( const XLineEndEntry& rEntry, sal_Int32 nPos, const BitmapEx& rBitmap );
 
+    void clear() { m_xControl->clear(); }
+    void remove(int nPos) { m_xControl->remove(nPos); }
+    int get_active() const { return m_xControl->get_active(); }
+    void set_active(int nPos) { m_xControl->set_active(nPos); }
+    void set_active_text(const OUString& rStr) { m_xControl->set_active_text(rStr); }
+    OUString get_active_text() const { return m_xControl->get_active_text(); }
+    void connect_changed(const Link<weld::ComboBox&, void>& rLink) { m_xControl->connect_changed(rLink); }
+    int get_count() const { return m_xControl->get_count(); }
+    void append_text(const OUString& rStr) { m_xControl->append_text(rStr); }
+    bool get_value_changed_from_saved() const { return m_xControl->get_value_changed_from_saved(); }
+    void save_value() { m_xControl->save_value(); }
+    void set_sensitive(bool bSensitive) { m_xControl->set_sensitive(bSensitive); }
+    bool get_sensitive() const { return m_xControl->get_sensitive(); }
+};
 
 class SdrObject;
 class SdrPathObj;
 class SdrModel;
 
-class SAL_WARN_UNUSED SvxPreviewBase : public Control
+class SAL_WARN_UNUSED SAL_DLLPUBLIC_RTTI SvxPreviewBase : public weld::CustomWidgetController
 {
 private:
-    SdrModel*             mpModel;
+    std::unique_ptr<SdrModel> mpModel;
     VclPtr<VirtualDevice> mpBufferDevice;
 
 protected:
-    void InitSettings(bool bForeground, bool bBackground);
+    void InitSettings();
+
+    tools::Rectangle GetPreviewSize() const;
 
     // prepare buffered paint
-    void LocalPrePaint(vcl::RenderContext& rRenderContext);
+    void LocalPrePaint(vcl::RenderContext const & rRenderContext);
 
     // end and output buffered paint
     void LocalPostPaint(vcl::RenderContext& rRenderContext);
 
 public:
-    SvxPreviewBase(vcl::Window* pParent);
-    virtual ~SvxPreviewBase();
-    virtual void dispose() override;
+    SvxPreviewBase();
+    virtual void SetDrawingArea(weld::DrawingArea*) override;
+    virtual ~SvxPreviewBase() override;
 
     // change support
-    virtual void StateChanged(StateChangedType nStateChange) override;
-    virtual void DataChanged(const DataChangedEvent& rDCEvt) override;
+    virtual void StyleUpdated() override;
+
+    void SetDrawMode(DrawModeFlags nDrawMode)
+    {
+        mpBufferDevice->SetDrawMode(nDrawMode);
+    }
+
+    Size GetOutputSize() const
+    {
+        return mpBufferDevice->PixelToLogic(GetOutputSizePixel());
+    }
 
     // dada read access
     SdrModel& getModel() const
@@ -394,6 +340,7 @@ public:
         return *mpBufferDevice;
     }
 };
+
 
 /*************************************************************************
 |*
@@ -413,9 +360,9 @@ private:
     Size                                            maSymbolSize;
 
 public:
-    SvxXLinePreview( vcl::Window* pParent );
-    virtual ~SvxXLinePreview();
-    virtual void dispose() override;
+    SvxXLinePreview();
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual ~SvxXLinePreview() override;
 
     void SetLineAttributes(const SfxItemSet& rItemSet);
 
@@ -423,30 +370,23 @@ public:
     void SetSymbol( Graphic* p, const Size& s );
     void ResizeSymbol( const Size& s );
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void Resize() override;
-    virtual Size GetOptimalSize() const override;
 };
-
-/*************************************************************************
-|*
-|* SvxXRectPreview
-|*
-\************************************************************************/
 
 class SAL_WARN_UNUSED SVX_DLLPUBLIC SvxXRectPreview : public SvxPreviewBase
 {
 private:
-    SdrObject*                                      mpRectangleObject;
+    SdrObject* mpRectangleObject;
 
 public:
-    SvxXRectPreview(vcl::Window* pParent);
-    virtual ~SvxXRectPreview();
-    virtual void dispose() override;
+    SvxXRectPreview();
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual ~SvxXRectPreview() override;
 
     void SetAttributes(const SfxItemSet& rItemSet);
 
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void Resize() override;
 };
 
@@ -465,16 +405,15 @@ private:
     SdrObject* mpRectangleShadow;
 
 public:
-    SvxXShadowPreview(vcl::Window *pParent);
-
-    virtual ~SvxXShadowPreview();
-    virtual void dispose() override;
+    SvxXShadowPreview();
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
+    virtual ~SvxXShadowPreview() override;
 
     void SetRectangleAttributes(const SfxItemSet& rItemSet);
     void SetShadowAttributes(const SfxItemSet& rItemSet);
     void SetShadowPosition(const Point& rPos);
 
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
 };
 
 #endif // INCLUDED_SVX_DLGCTRL_HXX

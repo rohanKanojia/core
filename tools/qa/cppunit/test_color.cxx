@@ -8,10 +8,10 @@
  */
 
 #include <sal/types.h>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 #include <tools/color.hxx>
 #include <tools/stream.hxx>
 
@@ -36,53 +36,50 @@ void Test::test_asRGBColor()
 {
     Color aColor;
     aColor = COL_BLACK;
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("000000"));
+    CPPUNIT_ASSERT_EQUAL(OUString("000000"), aColor.AsRGBHexString());
 
     aColor = COL_WHITE;
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("ffffff"));
+    CPPUNIT_ASSERT_EQUAL(OUString("ffffff"), aColor.AsRGBHexString());
 
     aColor = COL_RED;
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("800000"));
+    CPPUNIT_ASSERT_EQUAL(OUString("800000"), aColor.AsRGBHexString());
 
     aColor = COL_TRANSPARENT;
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("ffffff"));
+    CPPUNIT_ASSERT_EQUAL(OUString("ffffff"), aColor.AsRGBHexString());
 
     aColor = COL_BLUE;
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("000080"));
+    CPPUNIT_ASSERT_EQUAL(OUString("000080"), aColor.AsRGBHexString());
 
     aColor.SetRed(0x12);
     aColor.SetGreen(0x34);
     aColor.SetBlue(0x56);
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("123456"));
+    CPPUNIT_ASSERT_EQUAL(OUString("123456"), aColor.AsRGBHexString());
 
     aColor = COL_AUTO;
-    CPPUNIT_ASSERT_EQUAL(aColor.AsRGBHexString(), OUString("ffffff"));
+    CPPUNIT_ASSERT_EQUAL(OUString("ffffff"), aColor.AsRGBHexString());
 }
 
 void Test::test_readAndWriteStream()
 {
-    {
-        SvMemoryStream aStream;
-        Color aWriteColor(0x12, 0x34, 0x56);
-        Color aReadColor;
+    SvMemoryStream aStream;
+    Color aReadColor;
 
-        WriteColor(aStream, aWriteColor);
+    WriteColor(aStream, Color(0x12, 0x34, 0x56));
 
-        aStream.Seek(STREAM_SEEK_TO_BEGIN);
+    aStream.Seek(STREAM_SEEK_TO_BEGIN);
 
-        ReadColor(aStream, aReadColor);
+    ReadColor(aStream, aReadColor);
 
-        CPPUNIT_ASSERT_EQUAL(sal_uInt8(0x12), aReadColor.GetRed());
-        CPPUNIT_ASSERT_EQUAL(sal_uInt8(0x34), aReadColor.GetGreen());
-        CPPUNIT_ASSERT_EQUAL(sal_uInt8(0x56), aReadColor.GetBlue());
-    }
+    CPPUNIT_ASSERT_EQUAL(sal_uInt8(0x12), aReadColor.GetRed());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt8(0x34), aReadColor.GetGreen());
+    CPPUNIT_ASSERT_EQUAL(sal_uInt8(0x56), aReadColor.GetBlue());
 }
 
 OUString createTintShade(sal_uInt8 nR, sal_uInt8 nG, sal_uInt8 nB, OUString const & sReference, sal_Int16 nTintShade)
 {
     Color aColor(nR, nG, nB);
     if (sReference != aColor.AsRGBHexString())
-        return OUString("");
+        return OUString();
     aColor.ApplyTintOrShade(nTintShade);
     return aColor.AsRGBHexString();
 }

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_UTIL_DATE_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_UTIL_DATE_HXX
 
-#include "java/lang/Object.hxx"
+#include <java/lang/Object.hxx>
 #include <com/sun/star/util/Date.hpp>
 
 namespace connectivity
@@ -37,7 +37,7 @@ namespace connectivity
         static jclass theClass;
     public:
         virtual jclass getMyClass() const override;
-        virtual ~java_util_Date();
+        virtual ~java_util_Date() override;
         // A ctor that is needed for returning the object
         java_util_Date( JNIEnv * pEnv, jobject myObj ) : java_lang_Object( pEnv, myObj ){}
     };

@@ -62,7 +62,7 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
     private int m_nCurrentSelection = -1;
     private int pageStart = 0;
     public int helpURL = 0;
-    private IImageRenderer renderer;
+    private IRenderer renderer;
     private ListModel listModel;
     private IRenderer counterRenderer = new SimpleCounterRenderer();
     private static final int LINE_HEIGHT = 8;
@@ -195,7 +195,6 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
 
         m_aButtons = new XControl[rows * cols];
 
-
         m_aButtonHeight = Integer.valueOf(m_aButtonSize.Height);
         m_aButtonWidth = Integer.valueOf(m_aButtonSize.Width);
 
@@ -285,20 +284,10 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
         }
         for (int i = 0; i < m_aButtons.length; i++)
         {
-            Object oObj = getObjectFor(i);
-            if (oObj == null)
+            String oResource = getObjectFor(i);
+            if (oResource == null)
                 continue;
-            Object[] oResources = renderer.getImageUrls(oObj);
-            if (oResources == null)
-                continue;
-            if (oResources.length == 1)
-            {
-                Helper.setUnoPropertyValue(m_aButtons[i].getModel(), PropertyNames.PROPERTY_IMAGEURL, oResources[0]);
-            }
-            else if (oResources.length == 2)
-            {
-                oUnoDialog.getPeerConfiguration().setImageUrl(m_aButtons[i].getModel(), oResources[0], oResources[1]);
-            }
+            oUnoDialog.getPeerConfiguration().setImageUrl(m_aButtons[i].getModel(), oResource);
             boolean bTabStop = Boolean.TRUE; // focusable ? Boolean.TRUE : Boolean.FALSE;
             Helper.setUnoPropertyValue(m_aButtons[i].getModel(), "Tabstop", bTabStop);
             if (refreshOverNull)
@@ -336,9 +325,9 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
 
     /**
      * @param i
-     * @return the Object in the list model corresponding to the given image index.
+     * @return the String in the list model corresponding to the given image url
      */
-    private Object getObjectFor(int i)
+    private String getObjectFor(int i)
     {
         int ii = getIndexFor(i);
         if (listModel.getSize() <= ii)
@@ -347,7 +336,7 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
         }
         else
         {
-            return listModel.getElementAt(ii);
+            return (String)listModel.getElementAt(ii);
         }
     }
 
@@ -449,7 +438,7 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
         pos = _size;
     }
 
-    public void setRenderer(IImageRenderer _renderer)
+    public void setRenderer(IRenderer _renderer)
     {
         this.renderer = _renderer;
     }
@@ -475,14 +464,19 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
         fireItemSelected();
     }
 
-
     /**
      * set the text under the button list
      */
     private void refreshImageText()
     {
+        String sText;
         Object item = m_nCurrentSelection >= 0 ? getListModel().getElementAt(m_nCurrentSelection) : null;
-        final String sText = PropertyNames.SPACE + renderer.render(item);
+        if (item != null) {
+            sText = PropertyNames.SPACE + renderer.render(item);
+        }
+        else {
+            sText = "";
+        }
         Helper.setUnoPropertyValue(getModel(lblImageText), PropertyNames.PROPERTY_LABEL, sText);
     }
 
@@ -527,16 +521,6 @@ public class ButtonList implements XItemEventBroadcaster, XActionListener
     private Object getModel(Object control)
     {
         return UnoRuntime.queryInterface(XControl.class, control).getModel();
-    }
-
-    public interface IImageRenderer extends IRenderer
-    {
-
-        /**
-         * @return two resource ids for an image referenced in the imaglist resourcefile of the
-         * wizards project; The second one of them is designed to be used for High Contrast Mode.
-         */
-        Object[] getImageUrls(Object listItem);
     }
 
     private static class SimpleCounterRenderer implements IRenderer

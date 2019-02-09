@@ -17,128 +17,29 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "componentmodule.hxx"
-#include <tools/resmgr.hxx>
+#include <unotools/resmgr.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
 #include <svl/solar.hrc>
-#include <comphelper/sequence.hxx>
 #include <tools/debug.hxx>
 #include <rtl/strbuf.hxx>
+#include <osl/diagnose.h>
 
-#define ENTER_MOD_METHOD()  \
-    ::osl::MutexGuard aGuard(s_aMutex); \
-    ensureImpl()
-
-
-namespace COMPMOD_NAMESPACE
+namespace compmodule
 {
-
-
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::registry;
-    using namespace ::comphelper;
     using namespace ::cppu;
 
-    // implementation for <type>OModule</type>. not threadsafe, has to be guarded by its owner
-    class OModuleImpl
+    OUString ModuleRes(const char* pId)
     {
-        ResMgr*     m_pResources;
-        bool    m_bInitialized;
-        OString m_sFilePrefix;
-
-    public:
-        /// ctor
-        OModuleImpl();
-        ~OModuleImpl();
-
-        /// get the manager for the resources of the module
-        ResMgr* getResManager();
-        void    setResourceFilePrefix(const OString& _rPrefix) { m_sFilePrefix = _rPrefix; }
-    };
-
-
-    OModuleImpl::OModuleImpl()
-        :m_pResources(nullptr)
-        ,m_bInitialized(false)
-    {
+        return Translate::get(pId, Translate::Create("pcr"));
     }
-
-
-    OModuleImpl::~OModuleImpl()
-    {
-        delete m_pResources;
-    }
-
-
-    ResMgr* OModuleImpl::getResManager()
-    {
-        // note that this method is not threadsafe, which counts for the whole class !
-        if (!m_pResources && !m_bInitialized)
-        {
-            DBG_ASSERT(!m_sFilePrefix.isEmpty(), "OModuleImpl::getResManager: no resource file prefix!");
-            // create a manager with a fixed prefix
-            m_pResources = ResMgr::CreateResMgr(m_sFilePrefix.getStr());
-            DBG_ASSERT(m_pResources,
-                    OStringBuffer("OModuleImpl::getResManager: could not create the resource manager (file name: ")
-                .append(m_sFilePrefix)
-                .append(")!").getStr());
-
-            m_bInitialized = true;
-        }
-        return m_pResources;
-    }
-
-
-    ::osl::Mutex    OModule::s_aMutex;
-    sal_Int32       OModule::s_nClients = 0;
-    OModuleImpl*    OModule::s_pImpl = nullptr;
-    OString  OModule::s_sResPrefix;
-
-    ResMgr* OModule::getResManager()
-    {
-        ENTER_MOD_METHOD();
-        return s_pImpl->getResManager();
-    }
-
-
-    void OModule::setResourceFilePrefix(const OString& _rPrefix)
-    {
-        ::osl::MutexGuard aGuard(s_aMutex);
-        s_sResPrefix = _rPrefix;
-        if (s_pImpl)
-            s_pImpl->setResourceFilePrefix(_rPrefix);
-    }
-
-
-    void OModule::registerClient()
-    {
-        ::osl::MutexGuard aGuard(s_aMutex);
-        ++s_nClients;
-    }
-
-
-    void OModule::revokeClient()
-    {
-        ::osl::MutexGuard aGuard(s_aMutex);
-        if (!--s_nClients && s_pImpl)
-        {
-            delete s_pImpl;
-            s_pImpl = nullptr;
-        }
-    }
-
-
-    void OModule::ensureImpl()
-    {
-        if (s_pImpl)
-            return;
-        s_pImpl = new OModuleImpl();
-        s_pImpl->setResourceFilePrefix(s_sResPrefix);
-    }
-
 
     //- registration helper
-
 
     std::vector< OUString >*                OModule::s_pImplementationNames = nullptr;
     std::vector< Sequence< OUString > >*    OModule::s_pSupportedServices = nullptr;
@@ -233,9 +134,6 @@ namespace COMPMOD_NAMESPACE
             "OModule::getComponentFactory : inconsistent state !");
 
 
-        Reference< XInterface > xReturn;
-
-
         sal_Int32 nLen = s_pImplementationNames->size();
 
         for (sal_Int32 i=0; i<nLen; ++i)
@@ -244,14 +142,10 @@ namespace COMPMOD_NAMESPACE
             {
                 const FactoryInstantiation FactoryInstantiationFunction = (*s_pFactoryFunctionPointers)[i];
 
-                xReturn = FactoryInstantiationFunction( _rxServiceManager, _rImplementationName,
+                Reference< XInterface > xReturn = FactoryInstantiationFunction( _rxServiceManager, _rImplementationName,
                     (*s_pCreationFunctionPointers)[i],
                     (*s_pSupportedServices)[i], nullptr);
-                if (xReturn.is())
-                {
-                    xReturn->acquire();
-                    return xReturn.get();
-                }
+                return xReturn;
             }
         }
 
@@ -259,7 +153,7 @@ namespace COMPMOD_NAMESPACE
     }
 
 
-}   // namespace COMPMOD_NAMESPACE
+}   // namespace compmodule
 
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

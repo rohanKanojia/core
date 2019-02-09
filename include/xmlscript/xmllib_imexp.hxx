@@ -19,11 +19,14 @@
 #ifndef INCLUDED_XMLSCRIPT_XMLLIB_IMEXP_HXX
 #define INCLUDED_XMLSCRIPT_XMLLIB_IMEXP_HXX
 
-#include <com/sun/star/xml/sax/XWriter.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
 
-#include <xmlscript/xmlns.h>
 #include <xmlscript/xmlscriptdllapi.h>
+
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XDocumentHandler; } } } } }
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XWriter; } } } } }
 
 namespace xmlscript
 {
@@ -31,7 +34,7 @@ namespace xmlscript
 
 // Library container export
 // HACK C++ struct to transport info. Later the container
-// itself should do the export/import and use exportet XML
+// itself should do the export/import and use exported XML
 // functionality from xmlscript
 struct XMLSCRIPT_DLLPUBLIC LibDescriptor
 {
@@ -46,7 +49,7 @@ struct XMLSCRIPT_DLLPUBLIC LibDescriptor
 
 struct XMLSCRIPT_DLLPUBLIC LibDescriptorArray
 {
-    LibDescriptor* mpLibs;
+    std::unique_ptr<LibDescriptor[]> mpLibs;
     sal_Int32 mnLibCount;
 
     LibDescriptorArray() { mpLibs = nullptr; mnLibCount = 0; }
@@ -57,23 +60,23 @@ struct XMLSCRIPT_DLLPUBLIC LibDescriptorArray
 };
 
 XMLSCRIPT_DLLPUBLIC void
-SAL_CALL exportLibraryContainer(
+exportLibraryContainer(
     css::uno::Reference< css::xml::sax::XWriter > const & xOut,
     const LibDescriptorArray* pLibArray );
 
 XMLSCRIPT_DLLPUBLIC css::uno::Reference<
     css::xml::sax::XDocumentHandler >
-SAL_CALL importLibraryContainer( LibDescriptorArray* pLibArray );
+importLibraryContainer( LibDescriptorArray* pLibArray );
 
 
 XMLSCRIPT_DLLPUBLIC void
-SAL_CALL exportLibrary(
+exportLibrary(
     css::uno::Reference< css::xml::sax::XWriter > const & xOut,
     const LibDescriptor& rLib );
 
 XMLSCRIPT_DLLPUBLIC css::uno::Reference<
     css::xml::sax::XDocumentHandler >
-SAL_CALL importLibrary( LibDescriptor& rLib );
+importLibrary( LibDescriptor& rLib );
 
 }
 

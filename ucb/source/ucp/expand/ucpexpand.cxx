@@ -18,23 +18,24 @@
  */
 
 
-#include "rtl/uri.hxx"
-#include "osl/mutex.hxx"
+#include <rtl/uri.hxx>
+#include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <cppuhelper/compbase.hxx>
-#include "cppuhelper/factory.hxx"
-#include "cppuhelper/implementationentry.hxx"
+#include <cppuhelper/factory.hxx>
+#include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "ucbhelper/content.hxx"
-#include "com/sun/star/uno/XComponentContext.hpp"
-#include "com/sun/star/lang/DisposedException.hpp"
-#include "com/sun/star/lang/XServiceInfo.hpp"
-#include "com/sun/star/lang/XMultiServiceFactory.hpp"
-#include "com/sun/star/registry/XRegistryKey.hpp"
-#include "com/sun/star/util/theMacroExpander.hpp"
-#include "com/sun/star/ucb/XContentProvider.hpp"
+#include <ucbhelper/content.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/registry/XRegistryKey.hpp>
+#include <com/sun/star/util/theMacroExpander.hpp>
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
+#include <com/sun/star/ucb/XContentProvider.hpp>
 
 #define EXPAND_PROTOCOL "vnd.sun.star.expand"
-#define ARLEN(x) sizeof (x) / sizeof *(x)
 
 
 using namespace ::com::sun::star;
@@ -59,7 +60,7 @@ class ExpandContentProviderImpl : protected MutexHolder, public t_impl_helper
         uno::Reference< ucb::XContentIdentifier > const & xIdentifier ) const;
 
 protected:
-    inline void check() const;
+    void check() const;
     virtual void SAL_CALL disposing() override;
 
 public:
@@ -69,28 +70,22 @@ public:
           m_xComponentContext( xComponentContext ),
           m_xMacroExpander( util::theMacroExpander::get(xComponentContext) )
         {}
-    virtual ~ExpandContentProviderImpl() throw ();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( OUString const & serviceName )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw (uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( OUString const & serviceName ) override;
+    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XContentProvider
     virtual uno::Reference< ucb::XContent > SAL_CALL queryContent(
-        uno::Reference< ucb::XContentIdentifier > const & xIdentifier )
-        throw (ucb::IllegalIdentifierException, uno::RuntimeException, std::exception) override;
+        uno::Reference< ucb::XContentIdentifier > const & xIdentifier ) override;
     virtual sal_Int32 SAL_CALL compareContentIds(
         uno::Reference< ucb::XContentIdentifier > const & xId1,
-        uno::Reference< ucb::XContentIdentifier > const & xId2 )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference< ucb::XContentIdentifier > const & xId2 ) override;
 };
 
 
-inline void ExpandContentProviderImpl::check() const
+void ExpandContentProviderImpl::check() const
 {
     // xxx todo guard?
 //     MutexGuard guard( m_mutex );
@@ -104,18 +99,12 @@ inline void ExpandContentProviderImpl::check() const
     }
 }
 
-
-ExpandContentProviderImpl::~ExpandContentProviderImpl() throw ()
-{
-}
-
-
 void ExpandContentProviderImpl::disposing()
 {
 }
 
 
-uno::Reference< uno::XInterface > SAL_CALL create(
+uno::Reference< uno::XInterface > create(
     uno::Reference< uno::XComponentContext > const & xComponentContext )
 {
     return static_cast< ::cppu::OWeakObject * >(
@@ -123,25 +112,23 @@ uno::Reference< uno::XInterface > SAL_CALL create(
 }
 
 
-OUString SAL_CALL implName()
+OUString implName()
 {
     return OUString("com.sun.star.comp.ucb.ExpandContentProvider");
 }
 
 
-uno::Sequence< OUString > SAL_CALL supportedServices()
+uno::Sequence< OUString > supportedServices()
 {
-    OUString names [] = {
+    return uno::Sequence< OUString > {
         OUString("com.sun.star.ucb.ExpandContentProvider"),
         OUString("com.sun.star.ucb.ContentProvider")
     };
-    return uno::Sequence< OUString >( names, ARLEN(names) );
 }
 
 // XServiceInfo
 
 OUString ExpandContentProviderImpl::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
     check();
     return implName();
@@ -149,14 +136,12 @@ OUString ExpandContentProviderImpl::getImplementationName()
 
 
 uno::Sequence< OUString > ExpandContentProviderImpl::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     check();
     return supportedServices();
 }
 
 sal_Bool ExpandContentProviderImpl::supportsService(OUString const & serviceName )
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, serviceName);
 }
@@ -185,7 +170,6 @@ OUString ExpandContentProviderImpl::expandUri(
 
 uno::Reference< ucb::XContent > ExpandContentProviderImpl::queryContent(
     uno::Reference< ucb::XContentIdentifier > const & xIdentifier )
-    throw (ucb::IllegalIdentifierException, uno::RuntimeException, std::exception)
 {
     check();
     OUString uri( expandUri( xIdentifier ) );
@@ -207,7 +191,6 @@ uno::Reference< ucb::XContent > ExpandContentProviderImpl::queryContent(
 sal_Int32 ExpandContentProviderImpl::compareContentIds(
     uno::Reference< ucb::XContentIdentifier > const & xId1,
     uno::Reference< ucb::XContentIdentifier > const & xId2 )
-    throw (uno::RuntimeException, std::exception)
 {
     check();
     try
@@ -218,10 +201,7 @@ sal_Int32 ExpandContentProviderImpl::compareContentIds(
     }
     catch (const ucb::IllegalIdentifierException & exc)
     {
-        (void) exc; // unused
-        OSL_FAIL(
-            OUStringToOString(
-                exc.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "ucb", exc );
         return -1;
     }
 }
@@ -243,7 +223,7 @@ static const ::cppu::ImplementationEntry s_entries [] =
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL ucpexpand1_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * ucpexpand1_component_getFactory(
     const sal_Char * pImplName,
     void * pServiceManager,
     void * pRegistryKey )

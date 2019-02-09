@@ -21,25 +21,30 @@
 #define INCLUDED_SW_INC_IDOCUMENTOUTLINENODES_HXX
 
 #include <rtl/ustring.hxx>
-#include <sal/types.h>
 #include <vector>
+
 class SwTextNode;
+class SwRootFrame;
 
 /** Provides outline nodes of a document.
 */
 class IDocumentOutlineNodes
 {
 public:
-    typedef ::std::vector< const SwTextNode* > tSortedOutlineNodeList;
+    typedef std::vector< const SwTextNode* > tSortedOutlineNodeList;
 
-    virtual sal_Int32 getOutlineNodesCount() const = 0;
+    virtual tSortedOutlineNodeList::size_type getOutlineNodesCount() const = 0;
 
-    virtual int getOutlineLevel( const sal_Int32 nIdx ) const = 0;
-    virtual OUString getOutlineText( const sal_Int32 nIdx,
+    virtual int getOutlineLevel( const tSortedOutlineNodeList::size_type nIdx ) const = 0;
+    virtual OUString getOutlineText( const tSortedOutlineNodeList::size_type nIdx,
+                                   SwRootFrame const* pLayout,
                                    const bool bWithNumber = true,
                                    const bool bWithSpacesForLevel = false,
                                    const bool bWithFootnote = true ) const = 0;
-    virtual SwTextNode* getOutlineNode( const sal_Int32 nIdx ) const = 0;
+    virtual SwTextNode* getOutlineNode( const tSortedOutlineNodeList::size_type nIdx ) const = 0;
+
+    virtual bool isOutlineInLayout(tSortedOutlineNodeList::size_type nIdx,
+            SwRootFrame const& rLayout) const = 0;
 
     virtual void getOutlineNodes( IDocumentOutlineNodes::tSortedOutlineNodeList& orOutlineNodeList ) const = 0;
 

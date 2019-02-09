@@ -17,38 +17,38 @@ namespace op {
 
 
 template<typename T>
-struct _Op
+struct Op_
 {
     const double mInitVal;
     const T maOp;
-    _Op(double InitVal, T aOp):
+    Op_(double InitVal, T aOp):
         mInitVal(InitVal), maOp(aOp)
     {
     }
-    void operator()(double& rAccum, double fVal)
+    void operator()(double& rAccum, double fVal) const
     {
         maOp(rAccum, fVal);
     }
 };
 
-using Op = _Op<std::function<void(double&, double)>>;
+using Op = Op_<std::function<void(double&, double)>>;
 
 struct Sum
 {
     static const double InitVal;
-    void operator()(double& rAccum, double fVal);
+    void operator()(double& rAccum, double fVal) const;
 };
 
 struct SumSquare
 {
     static const double InitVal;
-    void operator()(double& rAccum, double fVal);
+    void operator()(double& rAccum, double fVal) const;
 };
 
 struct Product
 {
     static const double InitVal;
-    void operator()(double& rAccum, double fVal);
+    void operator()(double& rAccum, double fVal) const;
 };
 
 }

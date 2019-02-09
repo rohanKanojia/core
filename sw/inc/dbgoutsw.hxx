@@ -22,7 +22,8 @@
 #ifdef DBG_UTIL
 
 #include <rtl/ustring.hxx>
-#include <tox.hxx>
+#include <rtl/ustrbuf.hxx>
+#include "tox.hxx"
 #include <cstdio>
 #include <unordered_map>
 
@@ -40,8 +41,6 @@ class SwUndo;
 class SwRect;
 class SwFrameFormat;
 class SwFrameFormats;
-class SwNodes;
-class SwRewriter;
 class SwNumRuleTable;
 class SwNumRule;
 class SwOutlineNodes;
@@ -64,13 +63,11 @@ SW_DLLPUBLIC const char * dbg_out(const SwpHints &rHints);
 SW_DLLPUBLIC const char * dbg_out(const SfxPoolItem & rItem);
 SW_DLLPUBLIC const char * dbg_out(const SfxPoolItem * pItem);
 SW_DLLPUBLIC const char * dbg_out(const SfxItemSet & rSet);
-SW_DLLPUBLIC const char * dbg_out(SwNodes & rNodes);
 SW_DLLPUBLIC const char * dbg_out(const SwPosition & rPos);
 SW_DLLPUBLIC const char * dbg_out(const SwPaM & rPam);
 SW_DLLPUBLIC const char * dbg_out(const SwNodeNum & rNum);
 SW_DLLPUBLIC const char * dbg_out(const SwUndo & rUndo);
-SW_DLLPUBLIC const char * dbg_out(SwOutlineNodes & rNodes);
-SW_DLLPUBLIC const char * dbg_out(const SwRewriter & rRewriter);
+SW_DLLPUBLIC const char * dbg_out(SwOutlineNodes const & rNodes);
 SW_DLLPUBLIC const char * dbg_out(const SwNumRule & rRule);
 SW_DLLPUBLIC const char * dbg_out(const SwTextFormatColl & rFormat);
 SW_DLLPUBLIC const char * dbg_out(const SwFrameFormats & rFrameFormats);
@@ -80,25 +77,25 @@ SW_DLLPUBLIC const char * dbg_out(const SwNodeRange & rRange);
 template<typename tKey, typename tMember, typename fHashFunction>
 OUString lcl_dbg_out(const std::unordered_map<tKey, tMember, fHashFunction> & rMap)
 {
-    OUString aResult("[");
+    OUStringBuffer aResult("[");
 
     typename std::unordered_map<tKey, tMember, fHashFunction>::const_iterator aIt;
 
-    for (aIt = rMap.begin(); aIt != rMap.end(); aIt++)
+    for (aIt = rMap.begin(); aIt != rMap.end(); ++aIt)
     {
         if (aIt != rMap.begin())
-            aResult += ", ";
+            aResult.append(", ");
 
         aResult += aIt->first;
 
         char sBuffer[256];
         sprintf(sBuffer, "(%p)", aIt->second);
-        aResult += OUString(sBuffer, strlen(sBuffer), RTL_TEXTENCODING_ASCII_US);
+        aResult.appendAscii(sBuffer);
     }
 
-    aResult += "]";
+    aResult.append("]");
 
-    return aResult;
+    return aResult.makeStringAndClear();
 }
 
 template<typename tKey, typename tMember, typename fHashFunction>

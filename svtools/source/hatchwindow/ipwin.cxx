@@ -19,6 +19,8 @@
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 
+#include <osl/diagnose.h>
+#include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
@@ -34,7 +36,6 @@
 SvResizeHelper::SvResizeHelper()
     : aBorder( 5, 5 )
     , nGrab( -1 )
-    , bResizeable( true )
 {
 }
 
@@ -43,39 +44,39 @@ SvResizeHelper::SvResizeHelper()
 |*
 |*    Description: the eight handles to magnify
 *************************************************************************/
-void SvResizeHelper::FillHandleRectsPixel( Rectangle aRects[ 8 ] ) const
+void SvResizeHelper::FillHandleRectsPixel( tools::Rectangle aRects[ 8 ] ) const
 {
     // only because of EMPTY_RECT
     Point aBottomRight = aOuter.BottomRight();
 
     // upper left
-    aRects[ 0 ] = Rectangle( aOuter.TopLeft(), aBorder );
+    aRects[ 0 ] = tools::Rectangle( aOuter.TopLeft(), aBorder );
     // upper middle
-    aRects[ 1 ] = Rectangle( Point( aOuter.Center().X() - aBorder.Width() / 2,
+    aRects[ 1 ] = tools::Rectangle( Point( aOuter.Center().X() - aBorder.Width() / 2,
                                     aOuter.Top() ),
                             aBorder );
     // upper right
-    aRects[ 2 ] = Rectangle( Point( aBottomRight.X() - aBorder.Width() +1,
+    aRects[ 2 ] = tools::Rectangle( Point( aBottomRight.X() - aBorder.Width() +1,
                                     aOuter.Top() ),
                             aBorder );
     // middle right
-    aRects[ 3 ] = Rectangle( Point( aBottomRight.X() - aBorder.Width() +1,
+    aRects[ 3 ] = tools::Rectangle( Point( aBottomRight.X() - aBorder.Width() +1,
                                     aOuter.Center().Y() - aBorder.Height() / 2 ),
                             aBorder );
     // lower right
-    aRects[ 4 ] = Rectangle( Point( aBottomRight.X() - aBorder.Width() +1,
+    aRects[ 4 ] = tools::Rectangle( Point( aBottomRight.X() - aBorder.Width() +1,
                                     aBottomRight.Y() - aBorder.Height() +1 ),
                             aBorder );
     // lower middle
-    aRects[ 5 ] = Rectangle( Point( aOuter.Center().X() - aBorder.Width() / 2,
+    aRects[ 5 ] = tools::Rectangle( Point( aOuter.Center().X() - aBorder.Width() / 2,
                                     aBottomRight.Y() - aBorder.Height() +1),
                             aBorder );
     // lower left
-    aRects[ 6 ] = Rectangle( Point( aOuter.Left(),
+    aRects[ 6 ] = tools::Rectangle( Point( aOuter.Left(),
                                     aBottomRight.Y() - aBorder.Height() +1),
                             aBorder );
     // middle left
-    aRects[ 7 ] = Rectangle( Point( aOuter.Left(),
+    aRects[ 7 ] = tools::Rectangle( Point( aOuter.Left(),
                                     aOuter.Center().Y() - aBorder.Height() / 2 ),
                             aBorder );
 }
@@ -85,20 +86,20 @@ void SvResizeHelper::FillHandleRectsPixel( Rectangle aRects[ 8 ] ) const
 |*
 |*    Description: the four edges are calculated
 *************************************************************************/
-void SvResizeHelper::FillMoveRectsPixel( Rectangle aRects[ 4 ] ) const
+void SvResizeHelper::FillMoveRectsPixel( tools::Rectangle aRects[ 4 ] ) const
 {
     // upper
     aRects[ 0 ] = aOuter;
-    aRects[ 0 ].Bottom() = aRects[ 0 ].Top() + aBorder.Height() -1;
+    aRects[ 0 ].SetBottom( aRects[ 0 ].Top() + aBorder.Height() -1 );
     // right
     aRects[ 1 ] = aOuter;
-    aRects[ 1 ].Left() = aRects[ 1 ].Right() - aBorder.Width() -1;
+    aRects[ 1 ].SetLeft( aRects[ 1 ].Right() - aBorder.Width() -1 );
     // lower
     aRects[ 2 ] = aOuter;
-    aRects[ 2 ].Top() = aRects[ 2 ].Bottom() - aBorder.Height() -1;
+    aRects[ 2 ].SetTop( aRects[ 2 ].Bottom() - aBorder.Height() -1 );
     // left
     aRects[ 3 ] = aOuter;
-    aRects[ 3 ].Right() = aRects[ 3 ].Left() + aBorder.Width() -1;
+    aRects[ 3 ].SetRight( aRects[ 3 ].Left() + aBorder.Width() -1 );
 }
 
 /*************************************************************************
@@ -110,26 +111,21 @@ void SvResizeHelper::Draw(vcl::RenderContext& rRenderContext)
 {
     rRenderContext.Push();
     rRenderContext.SetMapMode( MapMode() );
-    Color aColBlack;
-    Color aFillColor( COL_LIGHTGRAY );
 
-    rRenderContext.SetFillColor( aFillColor );
+    rRenderContext.SetFillColor( COL_LIGHTGRAY );
     rRenderContext.SetLineColor();
 
-    Rectangle aMoveRects[ 4 ];
+    tools::Rectangle aMoveRects[ 4 ];
     FillMoveRectsPixel( aMoveRects );
     sal_uInt16 i;
     for (i = 0; i < 4; i++)
         rRenderContext.DrawRect(aMoveRects[i]);
-    if (bResizeable)
-    {
-        // draw handles
-        rRenderContext.SetFillColor(aColBlack);
-        Rectangle aRects[ 8 ];
-        FillHandleRectsPixel(aRects);
-        for (i = 0; i < 8; i++)
-            rRenderContext.DrawRect( aRects[ i ] );
-    }
+    // draw handles
+    rRenderContext.SetFillColor(Color()); // black
+    tools::Rectangle aRects[ 8 ];
+    FillHandleRectsPixel(aRects);
+    for (i = 0; i < 8; i++)
+        rRenderContext.DrawRect( aRects[ i ] );
     rRenderContext.Pop();
 }
 
@@ -140,10 +136,10 @@ void SvResizeHelper::Draw(vcl::RenderContext& rRenderContext)
 *************************************************************************/
 void SvResizeHelper::InvalidateBorder( vcl::Window * pWin )
 {
-    Rectangle   aMoveRects[ 4 ];
+    tools::Rectangle   aMoveRects[ 4 ];
     FillMoveRectsPixel( aMoveRects );
-    for( sal_uInt16 i = 0; i < 4; i++ )
-        pWin->Invalidate( aMoveRects[ i ] );
+    for(const auto & rMoveRect : aMoveRects)
+        pWin->Invalidate( rMoveRect );
 }
 
 /*************************************************************************
@@ -175,24 +171,21 @@ short SvResizeHelper::SelectMove( vcl::Window * pWin, const Point & rPos )
 {
     if( -1 == nGrab )
     {
-        if( bResizeable )
-        {
-            Rectangle aRects[ 8 ];
-            FillHandleRectsPixel( aRects );
-            for( sal_uInt16 i = 0; i < 8; i++ )
-                if( aRects[ i ].IsInside( rPos ) )
-                    return i;
-        }
+        tools::Rectangle aRects[ 8 ];
+        FillHandleRectsPixel( aRects );
+        for( sal_uInt16 i = 0; i < 8; i++ )
+            if( aRects[ i ].IsInside( rPos ) )
+                return i;
         // Move-Rect overlaps Handles
-        Rectangle aMoveRects[ 4 ];
+        tools::Rectangle aMoveRects[ 4 ];
         FillMoveRectsPixel( aMoveRects );
-        for( sal_uInt16 i = 0; i < 4; i++ )
-            if( aMoveRects[ i ].IsInside( rPos ) )
+        for(const auto & rMoveRect : aMoveRects)
+            if( rMoveRect.IsInside( rPos ) )
                 return 8;
     }
     else
     {
-        Rectangle aRect( GetTrackRectPixel( rPos ) );
+        tools::Rectangle aRect( GetTrackRectPixel( rPos ) );
         aRect.SetSize( pWin->PixelToLogic( aRect.GetSize() ) );
         aRect.SetPos( pWin->PixelToLogic( aRect.TopLeft() ) );
         pWin->ShowTracking( aRect );
@@ -200,12 +193,12 @@ short SvResizeHelper::SelectMove( vcl::Window * pWin, const Point & rPos )
     return nGrab;
 }
 
-Point SvResizeHelper::GetTrackPosPixel( const Rectangle & rRect ) const
+Point SvResizeHelper::GetTrackPosPixel( const tools::Rectangle & rRect ) const
 {
     // not important how the rectangle is returned, it is important
     // which handle has been touched
     Point aPos;
-    Rectangle aRect( rRect );
+    tools::Rectangle aRect( rRect );
     aRect.Justify();
     // only because of EMPTY_RECT
     Point aBR = aOuter.BottomRight();
@@ -221,7 +214,7 @@ Point SvResizeHelper::GetTrackPosPixel( const Rectangle & rRect ) const
             aPos = aRect.TopLeft() - aOuter.TopLeft();
             break;
         case 1:
-            aPos.Y() =  aRect.Top() - aOuter.Top();
+            aPos.setY(  aRect.Top() - aOuter.Top() );
             break;
         case 2:
             // FIXME: disable it for RTL because it's wrong calculations
@@ -231,9 +224,9 @@ Point SvResizeHelper::GetTrackPosPixel( const Rectangle & rRect ) const
             break;
         case 3:
             if( bRTL )
-                aPos.X() = aRect.Left() - aTR.X();
+                aPos.setX( aRect.Left() - aTR.X() );
             else
-                aPos.X() = aRect.Right() - aTR.X();
+                aPos.setX( aRect.Right() - aTR.X() );
             break;
         case 4:
             // FIXME: disable it for RTL because it's wrong calculations
@@ -242,7 +235,7 @@ Point SvResizeHelper::GetTrackPosPixel( const Rectangle & rRect ) const
             aPos =  aRect.BottomRight() - aBR;
             break;
         case 5:
-            aPos.Y() = aRect.Bottom() - aBR.Y();
+            aPos.setY( aRect.Bottom() - aBR.Y() );
             break;
         case 6:
             // FIXME: disable it for RTL because it's wrong calculations
@@ -252,9 +245,9 @@ Point SvResizeHelper::GetTrackPosPixel( const Rectangle & rRect ) const
             break;
         case 7:
             if( bRTL )
-                aPos.X() = aRect.Right() + aOuter.Right() - aOuter.TopRight().X();
+                aPos.setX( aRect.Right() + aOuter.Right() - aOuter.TopRight().X() );
             else
-                aPos.X() = aRect.Left() - aOuter.Left();
+                aPos.setX( aRect.Left() - aOuter.Left() );
             break;
         case 8:
             aPos = aRect.TopLeft() - aOuter.TopLeft();
@@ -268,9 +261,9 @@ Point SvResizeHelper::GetTrackPosPixel( const Rectangle & rRect ) const
 |*
 |*    Description
 *************************************************************************/
-Rectangle SvResizeHelper::GetTrackRectPixel( const Point & rTrackPos ) const
+tools::Rectangle SvResizeHelper::GetTrackRectPixel( const Point & rTrackPos ) const
 {
-    Rectangle aTrackRect;
+    tools::Rectangle aTrackRect;
     if( -1 != nGrab )
     {
         Point aDiff = rTrackPos - aSelPos;
@@ -280,60 +273,60 @@ Rectangle SvResizeHelper::GetTrackRectPixel( const Point & rTrackPos ) const
         switch( nGrab )
         {
             case 0:
-                aTrackRect.Top() += aDiff.Y();
+                aTrackRect.AdjustTop(aDiff.Y() );
                 // ugly solution for resizing OLE objects in RTL
                 if( bRTL )
-                    aTrackRect.Right() = aBR.X() - aDiff.X();
+                    aTrackRect.SetRight( aBR.X() - aDiff.X() );
                 else
-                    aTrackRect.Left() += aDiff.X();
+                    aTrackRect.AdjustLeft(aDiff.X() );
                 break;
             case 1:
-                aTrackRect.Top() += aDiff.Y();
+                aTrackRect.AdjustTop(aDiff.Y() );
                 break;
             case 2:
-                aTrackRect.Top() += aDiff.Y();
+                aTrackRect.AdjustTop(aDiff.Y() );
                 // ugly solution for resizing OLE objects in RTL
                 if( bRTL )
-                    aTrackRect.Left() -= aDiff.X();
+                    aTrackRect.AdjustLeft( -(aDiff.X()) );
                 else
-                    aTrackRect.Right() = aBR.X() + aDiff.X();
+                    aTrackRect.SetRight( aBR.X() + aDiff.X() );
                 break;
             case 3:
                 // ugly solution for resizing OLE objects in RTL
                 if( bRTL )
-                    aTrackRect.Left() -= aDiff.X();
+                    aTrackRect.AdjustLeft( -(aDiff.X()) );
                 else
-                    aTrackRect.Right() = aBR.X() + aDiff.X();
+                    aTrackRect.SetRight( aBR.X() + aDiff.X() );
                 break;
             case 4:
-                aTrackRect.Bottom() = aBR.Y() + aDiff.Y();
+                aTrackRect.SetBottom( aBR.Y() + aDiff.Y() );
                 // ugly solution for resizing OLE objects in RTL
                 if( bRTL )
-                    aTrackRect.Left() -= aDiff.X();
+                    aTrackRect.AdjustLeft( -(aDiff.X()) );
                 else
-                    aTrackRect.Right() = aBR.X() + aDiff.X();
+                    aTrackRect.SetRight( aBR.X() + aDiff.X() );
                 break;
             case 5:
-                aTrackRect.Bottom() = aBR.Y() + aDiff.Y();
+                aTrackRect.SetBottom( aBR.Y() + aDiff.Y() );
                 break;
             case 6:
-                aTrackRect.Bottom() = aBR.Y() + aDiff.Y();
+                aTrackRect.SetBottom( aBR.Y() + aDiff.Y() );
                 // ugly solution for resizing OLE objects in RTL
                 if( bRTL )
-                    aTrackRect.Right() = aBR.X() - aDiff.X();
+                    aTrackRect.SetRight( aBR.X() - aDiff.X() );
                 else
-                    aTrackRect.Left() += aDiff.X();
+                    aTrackRect.AdjustLeft(aDiff.X() );
                 break;
             case 7:
                 // ugly solution for resizing OLE objects in RTL
                 if( bRTL )
-                    aTrackRect.Right() = aBR.X() - aDiff.X();
+                    aTrackRect.SetRight( aBR.X() - aDiff.X() );
                 else
-                    aTrackRect.Left() += aDiff.X();
+                    aTrackRect.AdjustLeft(aDiff.X() );
                 break;
             case 8:
                 if( bRTL )
-                    aDiff.X() = -aDiff.X(); // workaround for move in RTL mode
+                    aDiff.setX( -aDiff.X() ); // workaround for move in RTL mode
                 aTrackRect.SetPos( aTrackRect.TopLeft() + aDiff );
                 break;
         }
@@ -341,57 +334,57 @@ Rectangle SvResizeHelper::GetTrackRectPixel( const Point & rTrackPos ) const
     return aTrackRect;
 }
 
-void SvResizeHelper::ValidateRect( Rectangle & rValidate ) const
+void SvResizeHelper::ValidateRect( tools::Rectangle & rValidate ) const
 {
     switch( nGrab )
     {
         case 0:
             if( rValidate.Top() > rValidate.Bottom() )
-                rValidate.Top() = rValidate.Bottom();
+                rValidate.SetTop( rValidate.Bottom() );
             if( rValidate.Left() > rValidate.Right() )
-                rValidate.Left() = rValidate.Right();
+                rValidate.SetLeft( rValidate.Right() );
             break;
         case 1:
             if( rValidate.Top() > rValidate.Bottom() )
-                rValidate.Top() = rValidate.Bottom();
+                rValidate.SetTop( rValidate.Bottom() );
             break;
         case 2:
             if( rValidate.Top() > rValidate.Bottom() )
-                rValidate.Top() = rValidate.Bottom();
+                rValidate.SetTop( rValidate.Bottom() );
             if( rValidate.Left() > rValidate.Right() )
-                rValidate.Right() = rValidate.Left();
+                rValidate.SetRight( rValidate.Left() );
             break;
         case 3:
             if( rValidate.Left() > rValidate.Right() )
-                rValidate.Right() = rValidate.Left();
+                rValidate.SetRight( rValidate.Left() );
             break;
         case 4:
             if( rValidate.Top() > rValidate.Bottom() )
-                rValidate.Bottom() = rValidate.Top();
+                rValidate.SetBottom( rValidate.Top() );
             if( rValidate.Left() > rValidate.Right() )
-                rValidate.Right() = rValidate.Left();
+                rValidate.SetRight( rValidate.Left() );
             break;
         case 5:
             if( rValidate.Top() > rValidate.Bottom() )
-                rValidate.Bottom() = rValidate.Top();
+                rValidate.SetBottom( rValidate.Top() );
             break;
         case 6:
             if( rValidate.Top() > rValidate.Bottom() )
-                rValidate.Bottom() = rValidate.Top();
+                rValidate.SetBottom( rValidate.Top() );
             if( rValidate.Left() > rValidate.Right() )
-                rValidate.Left() = rValidate.Right();
+                rValidate.SetLeft( rValidate.Right() );
             break;
         case 7:
             if( rValidate.Left() > rValidate.Right() )
-                rValidate.Left() = rValidate.Right();
+                rValidate.SetLeft( rValidate.Right() );
             break;
     }
 
     // Mindestgr"osse 5 x 5
     if( rValidate.Left() + 5 > rValidate.Right() )
-        rValidate.Right() = rValidate.Left() + 5;
+        rValidate.SetRight( rValidate.Left() + 5 );
     if( rValidate.Top() + 5 > rValidate.Bottom() )
-        rValidate.Bottom() = rValidate.Top() + 5;
+        rValidate.SetBottom( rValidate.Top() + 5 );
 }
 
 /*************************************************************************
@@ -400,7 +393,7 @@ void SvResizeHelper::ValidateRect( Rectangle & rValidate ) const
 |*    Description
 *************************************************************************/
 bool SvResizeHelper::SelectRelease( vcl::Window * pWin, const Point & rPos,
-                                    Rectangle & rOutPosSize )
+                                    tools::Rectangle & rOutPosSize )
 {
     if( -1 != nGrab )
     {
@@ -444,10 +437,10 @@ SvResizeWindow::SvResizeWindow
     , m_bActive( false )
     , m_pWrapper( pWrapper )
 {
-    OSL_ENSURE( pParent != nullptr && pWrapper != nullptr, "Wrong initialization of hatch window!\n" );
+    OSL_ENSURE( pParent != nullptr && pWrapper != nullptr, "Wrong initialization of hatch window!" );
     SetBackground();
     SetAccessibleRole( css::accessibility::AccessibleRole::EMBEDDED_OBJECT );
-    m_aResizer.SetOuterRectPixel( Rectangle( Point(), GetOutputSizePixel() ) );
+    m_aResizer.SetOuterRectPixel( tools::Rectangle( Point(), GetOutputSizePixel() ) );
 }
 
 /*************************************************************************
@@ -470,31 +463,32 @@ void SvResizeWindow::SelectMouse( const Point & rPos )
     short nGrab = m_aResizer.SelectMove( this, rPos );
     if( nGrab >= 4 )
         nGrab -= 4;
-    if( m_nMoveGrab != nGrab )
-    { // Pointer did change
-        if( -1 == nGrab )
-            SetPointer( m_aOldPointer );
-        else
+    if( m_nMoveGrab == nGrab )
+        return;
+
+    // Pointer did change
+    if( -1 == nGrab )
+        SetPointer( m_aOldPointer );
+    else
+    {
+        PointerStyle aStyle = PointerStyle::Move;
+        if( nGrab == 3 )
+            aStyle = PointerStyle::ESize;
+        else if( nGrab == 2 )
+            aStyle = PointerStyle::NESize;
+        else if( nGrab == 1 )
+            aStyle = PointerStyle::SSize;
+        else if( nGrab == 0 )
+            aStyle = PointerStyle::SESize;
+        if( m_nMoveGrab == -1 ) // the first time
         {
-            PointerStyle aStyle = PointerStyle::Move;
-            if( nGrab == 3 )
-                aStyle = PointerStyle::ESize;
-            else if( nGrab == 2 )
-                aStyle = PointerStyle::NESize;
-            else if( nGrab == 1 )
-                aStyle = PointerStyle::SSize;
-            else if( nGrab == 0 )
-                aStyle = PointerStyle::SESize;
-            if( m_nMoveGrab == -1 ) // the first time
-            {
-                m_aOldPointer = GetPointer();
-                SetPointer( Pointer( aStyle ) );
-            }
-            else
-                SetPointer( Pointer( aStyle ) );
+            m_aOldPointer = GetPointer();
+            SetPointer( Pointer( aStyle ) );
         }
-        m_nMoveGrab = nGrab;
+        else
+            SetPointer( Pointer( aStyle ) );
     }
+    m_nMoveGrab = nGrab;
 }
 
 /*************************************************************************
@@ -519,7 +513,7 @@ void SvResizeWindow::MouseMove( const MouseEvent & rEvt )
         SelectMouse( rEvt.GetPosPixel() );
     else
     {
-        Rectangle aRect( m_aResizer.GetTrackRectPixel( rEvt.GetPosPixel() ) );
+        tools::Rectangle aRect( m_aResizer.GetTrackRectPixel( rEvt.GetPosPixel() ) );
         Point aDiff = GetPosPixel();
         aRect.SetPos( aRect.TopLeft() + aDiff );
         m_aResizer.ValidateRect( aRect );
@@ -539,23 +533,23 @@ void SvResizeWindow::MouseMove( const MouseEvent & rEvt )
 *************************************************************************/
 void SvResizeWindow::MouseButtonUp( const MouseEvent & rEvt )
 {
-    if( m_aResizer.GetGrab() != -1 )
+    if( m_aResizer.GetGrab() == -1 )
+        return;
+
+    tools::Rectangle aRect( m_aResizer.GetTrackRectPixel( rEvt.GetPosPixel() ) );
+    Point aDiff = GetPosPixel();
+    aRect.SetPos( aRect.TopLeft() + aDiff );
+    // aRect -= GetAllBorderPixel();
+    m_aResizer.ValidateRect( aRect );
+
+    m_pWrapper->QueryObjAreaPixel( aRect );
+
+    tools::Rectangle aOutRect;
+    if( m_aResizer.SelectRelease( this, rEvt.GetPosPixel(), aOutRect ) )
     {
-        Rectangle aRect( m_aResizer.GetTrackRectPixel( rEvt.GetPosPixel() ) );
-        Point aDiff = GetPosPixel();
-        aRect.SetPos( aRect.TopLeft() + aDiff );
-        // aRect -= GetAllBorderPixel();
-        m_aResizer.ValidateRect( aRect );
-
-        m_pWrapper->QueryObjAreaPixel( aRect );
-
-        Rectangle aOutRect;
-        if( m_aResizer.SelectRelease( this, rEvt.GetPosPixel(), aOutRect ) )
-        {
-            m_nMoveGrab = -1;
-            SetPointer( m_aOldPointer );
-            m_pWrapper->RequestObjAreaPixel( aRect );
-        }
+        m_nMoveGrab = -1;
+        SetPointer( m_aOldPointer );
+        m_pWrapper->RequestObjAreaPixel( aRect );
     }
 }
 
@@ -581,7 +575,7 @@ void SvResizeWindow::KeyInput( const KeyEvent & rEvt )
 void SvResizeWindow::Resize()
 {
     m_aResizer.InvalidateBorder( this ); // old area
-    m_aResizer.SetOuterRectPixel( Rectangle( Point(), GetOutputSizePixel() ) );
+    m_aResizer.SetOuterRectPixel( tools::Rectangle( Point(), GetOutputSizePixel() ) );
     m_aResizer.InvalidateBorder( this ); // new area
 }
 
@@ -590,7 +584,7 @@ void SvResizeWindow::Resize()
 |*
 |*    Description
 *************************************************************************/
-void SvResizeWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle & /*rRect*/ )
+void SvResizeWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle & /*rRect*/ )
 {
     m_aResizer.Draw(rRenderContext);
 }
@@ -606,7 +600,7 @@ bool SvResizeWindow::PreNotify( NotifyEvent& rEvt )
     return Window::PreNotify(rEvt);
 }
 
-bool SvResizeWindow::Notify( NotifyEvent& rEvt )
+bool SvResizeWindow::EventNotify( NotifyEvent& rEvt )
 {
     if ( rEvt.GetType() == MouseNotifyEvent::LOSEFOCUS && m_bActive )
     {
@@ -618,7 +612,7 @@ bool SvResizeWindow::Notify( NotifyEvent& rEvt )
         }
     }
 
-    return Window::Notify(rEvt);
+    return Window::EventNotify(rEvt);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

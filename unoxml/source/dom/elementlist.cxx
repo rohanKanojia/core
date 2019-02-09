@@ -23,9 +23,10 @@
 
 #include <cppuhelper/implbase.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-#include <element.hxx>
-#include <document.hxx>
+#include "element.hxx"
+#include "document.hxx"
 
 using namespace css::uno;
 using namespace css::xml::dom;
@@ -44,12 +45,7 @@ namespace
         {
         }
 
-        virtual ~WeakEventListener()
-        {
-        }
-
-        virtual void SAL_CALL handleEvent(const css::uno::Reference<css::xml::dom::events::XEvent>& rEvent)
-            throw(css::uno::RuntimeException, std::exception) override
+        virtual void SAL_CALL handleEvent(const css::uno::Reference<css::xml::dom::events::XEvent>& rEvent) override
         {
             css::uno::Reference<css::xml::dom::events::XEventListener> xOwner(mxOwner.get(),
                 css::uno::UNO_QUERY);
@@ -87,7 +83,7 @@ namespace DOM
         : m_pElement(pElement)
         , m_rMutex(rMutex)
         , m_pName(lcl_initXmlString(rName))
-        , m_pURI((pURI) ? lcl_initXmlString(*pURI) : nullptr)
+        , m_pURI(pURI ? lcl_initXmlString(*pURI) : nullptr)
         , m_bRebuild(true)
     {
     }
@@ -100,8 +96,7 @@ namespace DOM
             assert(xTarget.is());
             if (!xTarget.is())
                 return;
-            bool capture = false;
-            xTarget->removeEventListener("DOMSubtreeModified", m_xEventListener, capture);
+            xTarget->removeEventListener("DOMSubtreeModified", m_xEventListener, false/*capture*/);
         }
     }
 
@@ -110,14 +105,10 @@ namespace DOM
         try {
             Reference< XEventTarget > const xTarget(
                     static_cast<XElement*>(& rElement), UNO_QUERY_THROW);
-            bool capture = false;
             m_xEventListener = new WeakEventListener(this);
-            xTarget->addEventListener("DOMSubtreeModified",
-                    m_xEventListener, capture);
+            xTarget->addEventListener("DOMSubtreeModified", m_xEventListener, false/*capture*/);
         } catch (const Exception &e){
-            OString aMsg("Exception caught while registering NodeList as listener:\n");
-            aMsg += OUStringToOString(e.Message, RTL_TEXTENCODING_ASCII_US);
-            OSL_FAIL(aMsg.getStr());
+            SAL_WARN( "unoxml", "Exception caught while registering NodeList as listener: " << e);
         }
     }
 
@@ -159,7 +150,7 @@ namespace DOM
     /**
     The number of nodes in the list.
     */
-    sal_Int32 SAL_CALL CElementListImpl::getLength() throw (RuntimeException, std::exception)
+    sal_Int32 SAL_CALL CElementListImpl::getLength()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -173,7 +164,6 @@ namespace DOM
     Returns the indexth item in the collection.
     */
     Reference< XNode > SAL_CALL CElementListImpl::item(sal_Int32 index)
-        throw (RuntimeException, std::exception)
     {
         if (index < 0) throw RuntimeException();
 
@@ -192,7 +182,6 @@ namespace DOM
 
     // tree mutations can change the list
     void SAL_CALL CElementListImpl::handleEvent(Reference< XEvent > const&)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 

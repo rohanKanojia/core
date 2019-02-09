@@ -22,7 +22,7 @@ interface StarImpress
     [
         ExecMethod = Execute ;
         StateMethod = GetState ;
-        GroupId = GID_APPLICATION ;
+        GroupId = SfxGroupId::Application ;
         Container ;
     ]
 
@@ -30,12 +30,6 @@ interface StarImpress
     [
         ExecMethod = Execute;
         StateMethod = GetState;
-    ]
-
-    SID_SD_AUTOPILOT // ole : ?, status : ?
-    [
-        ExecMethod = Execute ;
-        StateMethod = GetState ;
     ]
 
     SID_NEWSD // ole : ?, status : ?

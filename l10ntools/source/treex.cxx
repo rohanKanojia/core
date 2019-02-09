@@ -9,12 +9,12 @@
 
 #include <iostream>
 #include <cstring>
-#include "sal/main.h"
+#include <sal/main.h>
 
-#include "common.hxx"
-#include "treemerge.hxx"
+#include <common.hxx>
+#include <treemerge.hxx>
 
-void WriteUsage()
+static void WriteUsage()
 {
     std::cout
         << ("Syntax: Treex [-r Root] -i FileIn -o FileOut"

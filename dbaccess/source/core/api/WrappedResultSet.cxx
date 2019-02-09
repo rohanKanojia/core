@@ -18,8 +18,6 @@
  */
 
 #include "WrappedResultSet.hxx"
-#include "core_resource.hxx"
-#include "core_resource.hrc"
 #include <com/sun/star/sdbc/XResultSetUpdate.hpp>
 #include <connectivity/dbexception.hxx>
 
@@ -49,7 +47,7 @@ void WrappedResultSet::reset(const Reference< XResultSet>& _xDriverSet)
     construct(_xDriverSet, m_sRowSetFilter);
 }
 
-Any SAL_CALL WrappedResultSet::getBookmark() throw(SQLException, RuntimeException)
+Any WrappedResultSet::getBookmark()
 {
     if ( m_xRowLocate.is() )
     {
@@ -58,27 +56,27 @@ Any SAL_CALL WrappedResultSet::getBookmark() throw(SQLException, RuntimeExceptio
     return makeAny(m_xDriverSet->getRow());
 }
 
-bool SAL_CALL WrappedResultSet::moveToBookmark( const Any& bookmark ) throw(SQLException, RuntimeException)
+bool WrappedResultSet::moveToBookmark( const Any& bookmark )
 {
     return m_xRowLocate->moveToBookmark( bookmark );
 }
 
-sal_Int32 SAL_CALL WrappedResultSet::compareBookmarks( const Any& _first, const Any& _second ) throw(SQLException, RuntimeException)
+sal_Int32 WrappedResultSet::compareBookmarks( const Any& _first, const Any& _second )
 {
     return m_xRowLocate->compareBookmarks( _first,_second );
 }
 
-bool SAL_CALL WrappedResultSet::hasOrderedBookmarks(  ) throw(SQLException, RuntimeException)
+bool WrappedResultSet::hasOrderedBookmarks(  )
 {
     return m_xRowLocate->hasOrderedBookmarks();
 }
 
-sal_Int32 SAL_CALL WrappedResultSet::hashBookmark( const Any& bookmark ) throw(SQLException, RuntimeException)
+sal_Int32 WrappedResultSet::hashBookmark( const Any& bookmark )
 {
     return m_xRowLocate->hashBookmark(bookmark);
 }
 
-void SAL_CALL WrappedResultSet::insertRow( const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& /*_xTable*/ ) throw(SQLException, RuntimeException)
+void WrappedResultSet::insertRow( const ORowSetRow& _rInsertRow,const connectivity::OSQLTable& /*_xTable*/ )
 {
     m_xUpd->moveToInsertRow();
     sal_Int32 i = 1;
@@ -92,7 +90,7 @@ void SAL_CALL WrappedResultSet::insertRow( const ORowSetRow& _rInsertRow,const c
     (*_rInsertRow->get().begin()) = getBookmark();
 }
 
-void SAL_CALL WrappedResultSet::updateRow(const ORowSetRow& _rInsertRow ,const ORowSetRow& _rOriginalRow,const connectivity::OSQLTable& /*_xTable*/  ) throw(SQLException, RuntimeException)
+void WrappedResultSet::updateRow(const ORowSetRow& _rInsertRow ,const ORowSetRow& _rOriginalRow,const connectivity::OSQLTable& /*_xTable*/  )
 {
     sal_Int32 i = 1;
     connectivity::ORowVector< ORowSetValue > ::Vector::const_iterator aOrgIter = _rOriginalRow->get().begin()+1;
@@ -105,14 +103,9 @@ void SAL_CALL WrappedResultSet::updateRow(const ORowSetRow& _rInsertRow ,const O
     m_xUpd->updateRow();
 }
 
-void SAL_CALL WrappedResultSet::deleteRow(const ORowSetRow& /*_rDeleteRow*/ ,const connectivity::OSQLTable& /*_xTable*/  ) throw(SQLException, RuntimeException)
+void WrappedResultSet::deleteRow(const ORowSetRow& /*_rDeleteRow*/ ,const connectivity::OSQLTable& /*_xTable*/  )
 {
     m_xUpd->deleteRow();
-}
-
-void WrappedResultSet::fillValueRow(ORowSetRow& _rRow,sal_Int32 _nPosition)
-{
-    OCacheSet::fillValueRow(_rRow,_nPosition);
 }
 
 void WrappedResultSet::updateColumn(sal_Int32 nPos, const Reference< XRowUpdate >& _xParameter, const ORowSetValue& _rValue)

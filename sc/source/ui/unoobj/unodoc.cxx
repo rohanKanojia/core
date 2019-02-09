@@ -22,28 +22,28 @@
 #include <sfx2/sfxmodelfactory.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
-#include "appluno.hxx"
-#include "scmod.hxx"
-#include <osl/mutex.hxx>
+#include <appluno.hxx>
+#include <scmod.hxx>
+#include <scdll.hxx>
 #include <vcl/svapp.hxx>
 
-#include "docsh.hxx"
+#include <docsh.hxx>
 
 using namespace ::com::sun::star;
 
-OUString SAL_CALL ScDocument_getImplementationName() throw()
+OUString ScDocument_getImplementationName() throw()
 {
     return OUString( "com.sun.star.comp.Calc.SpreadsheetDocument" );
 }
 
-uno::Sequence< OUString > SAL_CALL ScDocument_getSupportedServiceNames() throw()
+uno::Sequence< OUString > ScDocument_getSupportedServiceNames() throw()
 {
     uno::Sequence<OUString> aSeq { "com.sun.star.sheet.SpreadsheetDocument" };
     return aSeq;
 }
 
-uno::Reference< uno::XInterface > SAL_CALL ScDocument_createInstance(
-                const uno::Reference< lang::XMultiServiceFactory > & /* rSMgr */, SfxModelFlags _nCreationFlags ) throw( uno::Exception, std::exception )
+uno::Reference< uno::XInterface > ScDocument_createInstance(
+                const uno::Reference< lang::XMultiServiceFactory > & /* rSMgr */, SfxModelFlags _nCreationFlags )
 {
     SolarMutexGuard aGuard;
     ScDLL::Init();

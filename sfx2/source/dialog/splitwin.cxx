@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifdef SOLARIS
+#ifdef __sun
 #include <ctime>
 #endif
 
@@ -25,19 +25,19 @@
 
 #include <vcl/wrkwin.hxx>
 #include <unotools/viewoptions.hxx>
+#include <sal/log.hxx>
 
 #include <vcl/menu.hxx>
 #include <vcl/timer.hxx>
 
-#include "splitwin.hxx"
-#include "workwin.hxx"
+#include <splitwin.hxx>
+#include <workwin.hxx>
 #include <sfx2/dockwin.hxx>
 #include <sfx2/app.hxx>
-#include "dialog.hrc"
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/msgpool.hxx>
 #include <sfx2/viewfrm.hxx>
 
+#include <memory>
 #include <vector>
 #include <utility>
 
@@ -105,16 +105,15 @@ public:
                             , bEndAutoHide( false )
                             , nState( 1 )
                         {
-                            aTimer.SetTimeoutHdl(
+                            aTimer.SetInvokeHandler(
                                 LINK(pOwner, SfxSplitWindow, TimerHdl ) );
                             aTimer.SetTimeout( 200 );
                             SetAlign( pOwner->GetAlign() );
                             Actualize();
-                            ShowAutoHideButton( pOwner->IsAutoHideButtonVisible() );
                             ShowFadeInHideButton();
                         }
 
-                        virtual ~SfxEmptySplitWin_Impl()
+                        virtual ~SfxEmptySplitWin_Impl() override
                         { disposeOnce(); }
    virtual void         dispose() override
                         {
@@ -123,8 +122,6 @@ public:
                             SplitWindow::dispose();
                         }
 
-    virtual void        MouseMove( const MouseEvent& ) override;
-    virtual void        AutoHide() override;
     virtual void        FadeIn() override;
     void                Actualize();
 };
@@ -136,23 +133,15 @@ void SfxEmptySplitWin_Impl::Actualize()
     {
         case WindowAlign::Left:
         case WindowAlign::Right:
-            aSize.Width() = GetFadeInSize();
+            aSize.setWidth( GetFadeInSize() );
             break;
         case WindowAlign::Top:
         case WindowAlign::Bottom:
-            aSize.Height() = GetFadeInSize();
+            aSize.setHeight( GetFadeInSize() );
             break;
     }
 
     SetSizePixel( aSize );
-}
-
-void SfxEmptySplitWin_Impl::AutoHide()
-{
-    pOwner->SetPinned_Impl( !pOwner->bPinned );
-    pOwner->SaveConfig_Impl();
-    bAutoHide = true;
-    FadeIn();
 }
 
 void SfxEmptySplitWin_Impl::FadeIn()
@@ -179,14 +168,8 @@ void SfxSplitWindow::MouseButtonDown( const MouseEvent& rMEvt )
         SplitWindow::MouseButtonDown( rMEvt );
 }
 
-void SfxEmptySplitWin_Impl::MouseMove( const MouseEvent& rMEvt )
-{
-    SplitWindow::MouseMove( rMEvt );
-}
-
-
 SfxSplitWindow::SfxSplitWindow( vcl::Window* pParent, SfxChildAlignment eAl,
-        SfxWorkWindow *pW, bool bWithButtons, WinBits nBits )
+        SfxWorkWindow *pW, bool bWithButtons )
 
 /*  [Description]
 
@@ -196,18 +179,15 @@ SfxSplitWindow::SfxSplitWindow( vcl::Window* pParent, SfxChildAlignment eAl,
     the arrangement of the SfxDockingWindows.
 */
 
-:   SplitWindow ( pParent, nBits | WB_HIDE ),
+:   SplitWindow ( pParent, WB_BORDER | WB_SIZEABLE | WB_3DLOOK | WB_HIDE ),
     eAlign(eAl),
     pWorkWin(pW),
-    pDockArr( new SfxDockArr_Impl ),
-    bLocked(false),
     bPinned(true),
     pEmptyWin(nullptr),
     pActive(nullptr)
 {
-    if ( bWithButtons )
+    if (bWithButtons)
     {
-        ShowAutoHideButton( false );    // no autohide button (pin) anymore
         ShowFadeOutButton();
     }
 
@@ -245,8 +225,8 @@ SfxSplitWindow::SfxSplitWindow( vcl::Window* pParent, SfxChildAlignment eAl,
     {
         //  Read Configuration
         OUString aWindowId("SplitWindow");
-        aWindowId += OUString::number( (sal_Int32) eTbxAlign );
-        SvtViewOptions aWinOpt( E_WINDOW, aWindowId );
+        aWindowId += OUString::number( static_cast<sal_Int32>(eTbxAlign) );
+        SvtViewOptions aWinOpt( EViewType::Window, aWindowId );
         OUString aWinData;
         Any aUserItem = aWinOpt.GetUserItem( USERITEM_NAME );
         OUString aTemp;
@@ -254,35 +234,34 @@ SfxSplitWindow::SfxSplitWindow( vcl::Window* pParent, SfxChildAlignment eAl,
             aWinData = aTemp;
         if ( aWinData.startsWith("V") )
         {
-            pEmptyWin->nState = (sal_uInt16) aWinData.getToken( 1, ',' ).toInt32();
+            pEmptyWin->nState = static_cast<sal_uInt16>(aWinData.getToken( 1, ',' ).toInt32());
             if ( pEmptyWin->nState & 2 )
                 pEmptyWin->bFadeIn = true;
             bPinned = true; // always assume pinned - floating mode not used anymore
 
             sal_uInt16 i=2;
-            sal_uInt16 nCount = (sal_uInt16) aWinData.getToken(i++, ',').toInt32();
+            sal_uInt16 nCount = static_cast<sal_uInt16>(aWinData.getToken(i++, ',').toInt32());
             for ( sal_uInt16 n=0; n<nCount; n++ )
             {
-                SfxDock_Impl *pDock = new SfxDock_Impl;
+                std::unique_ptr<SfxDock_Impl> pDock(new SfxDock_Impl);
                 pDock->pWin = nullptr;
                 pDock->bNewLine = false;
                 pDock->bHide = true;
-                pDock->nType = (sal_uInt16) aWinData.getToken(i++, ',').toInt32();
+                pDock->nType = static_cast<sal_uInt16>(aWinData.getToken(i++, ',').toInt32());
                 if ( !pDock->nType )
                 {
                     // could mean NewLine
-                    pDock->nType = (sal_uInt16) aWinData.getToken(i++, ',').toInt32();
+                    pDock->nType = static_cast<sal_uInt16>(aWinData.getToken(i++, ',').toInt32());
                     if ( !pDock->nType )
                     {
                         // Read error
-                        delete pDock;
                         break;
                     }
                     else
                         pDock->bNewLine = true;
                 }
 
-                pDockArr->insert(pDockArr->begin() + n, std::unique_ptr<SfxDock_Impl>(pDock));
+                maDockArr.insert(maDockArr.begin() + n, std::move(pDock));
             }
         }
     }
@@ -292,9 +271,6 @@ SfxSplitWindow::SfxSplitWindow( vcl::Window* pParent, SfxChildAlignment eAl,
         pEmptyWin->bFadeIn = true;
         pEmptyWin->nState = 2;
     }
-
-    SetAutoHideState( !bPinned );
-    pEmptyWin->SetAutoHideState( !bPinned );
 }
 
 
@@ -305,8 +281,7 @@ SfxSplitWindow::~SfxSplitWindow()
 
 void SfxSplitWindow::dispose()
 {
-    if ( !pWorkWin->GetParent_Impl() )
-        SaveConfig_Impl();
+    SaveConfig_Impl();
 
     if ( pEmptyWin )
     {
@@ -316,7 +291,7 @@ void SfxSplitWindow::dispose()
     }
     pEmptyWin.disposeAndClear();
 
-    delete pDockArr;
+    maDockArr.clear();
     pActive.clear();
     SplitWindow::dispose();
 }
@@ -332,30 +307,27 @@ void SfxSplitWindow::SaveConfig_Impl()
     aWinData.append(',');
 
     sal_uInt16 nCount = 0;
-    sal_uInt16 n;
-    for ( n=0; n<pDockArr->size(); n++ )
+    for ( auto const & rDock: maDockArr )
     {
-        const SfxDock_Impl& rDock = *(*pDockArr)[n].get();
-        if ( rDock.bHide || rDock.pWin )
+        if ( rDock->bHide || rDock->pWin )
             nCount++;
     }
 
     aWinData.append(static_cast<sal_Int32>(nCount));
 
-    for ( n=0; n<pDockArr->size(); n++ )
+    for ( auto const & rDock: maDockArr )
     {
-        const SfxDock_Impl& rDock = *(*pDockArr)[n].get();
-        if ( !rDock.bHide && !rDock.pWin )
+        if ( !rDock->bHide && !rDock->pWin )
             continue;
-        if ( rDock.bNewLine )
+        if ( rDock->bNewLine )
             aWinData.append(",0");
         aWinData.append(',');
-        aWinData.append(static_cast<sal_Int32>(rDock.nType));
+        aWinData.append(static_cast<sal_Int32>(rDock->nType));
     }
 
     OUString aWindowId("SplitWindow");
-    aWindowId += OUString::number( (sal_Int32) GetAlign() );
-    SvtViewOptions aWinOpt( E_WINDOW, aWindowId );
+    aWindowId += OUString::number( static_cast<sal_Int32>(GetAlign()) );
+    SvtViewOptions aWinOpt( EViewType::Window, aWindowId );
     aWinOpt.SetUserItem( USERITEM_NAME, makeAny( aWinData.makeStringAndClear() ) );
 }
 
@@ -371,7 +343,7 @@ void SfxSplitWindow::StartSplit()
         pEmptyWin->bSplit = true;
     }
 
-    Rectangle aRect = pWorkWin->GetFreeArea( !bPinned );
+    tools::Rectangle aRect = pWorkWin->GetFreeArea( !bPinned );
     switch ( GetAlign() )
     {
         case WindowAlign::Left:
@@ -409,10 +381,10 @@ void SfxSplitWindow::Split()
 
     std::vector< std::pair< sal_uInt16, long > > aNewOrgSizes;
 
-    sal_uInt16 nCount = pDockArr->size();
+    sal_uInt16 nCount = maDockArr.size();
     for ( sal_uInt16 n=0; n<nCount; n++ )
     {
-        const SfxDock_Impl& rD = *(*pDockArr)[n].get();
+        const SfxDock_Impl& rD = *maDockArr[n].get();
         if ( rD.pWin )
         {
             const sal_uInt16 nId = rD.nType;
@@ -422,28 +394,28 @@ void SfxSplitWindow::Split()
 
             if ( IsHorizontal() )
             {
-                aSize.Width()  = nSize;
-                aSize.Height() = nSetSize;
+                aSize.setWidth( nSize );
+                aSize.setHeight( nSetSize );
             }
             else
             {
-                aSize.Width()  = nSetSize;
-                aSize.Height() = nSize;
+                aSize.setWidth( nSetSize );
+                aSize.setHeight( nSize );
             }
 
             rD.pWin->SetItemSize_Impl( aSize );
 
-            aNewOrgSizes.push_back( std::pair< sal_uInt16, long >( nId, nSize ) );
+            aNewOrgSizes.emplace_back( nId, nSize );
         }
     }
 
-    // workaround insuffiency of <SplitWindow> regarding dock layouting:
+    // workaround insufficiency of <SplitWindow> regarding dock layouting:
     // apply FIXED item size as 'original' item size to improve layouting of undock-dock-cycle of a window
     {
         DeactivateUpdateMode aDeactivateUpdateMode( *this );
-        for ( size_t i = 0; i < aNewOrgSizes.size(); ++i )
+        for (const std::pair< sal_uInt16, long > & rNewOrgSize : aNewOrgSizes)
         {
-            SetItemSize( aNewOrgSizes[i].first, aNewOrgSizes[i].second );
+            SetItemSize( rNewOrgSize.first, rNewOrgSize.second );
         }
     }
 
@@ -465,10 +437,10 @@ void SfxSplitWindow::InsertWindow( SfxDockingWindow* pDockWin, const Size& rSize
     bool bNewLine = true;
     bool bSaveConfig = false;
     SfxDock_Impl *pFoundDock=nullptr;
-    sal_uInt16 nCount = pDockArr->size();
+    sal_uInt16 nCount = maDockArr.size();
     for ( sal_uInt16 n=0; n<nCount; n++ )
     {
-        SfxDock_Impl& rDock = *(*pDockArr)[n].get();
+        SfxDock_Impl& rDock = *maDockArr[n].get();
         if ( rDock.bNewLine )
         {
             // The window opens a new line
@@ -488,7 +460,7 @@ void SfxSplitWindow::InsertWindow( SfxDockingWindow* pDockWin, const Size& rSize
             {
                 // Not known until now in which real line it is located
                 GetWindowPos( rDock.pWin, nL, nPos );
-                nLine = (short) nL;
+                nLine = static_cast<short>(nL);
             }
 
             if ( !pFoundDock )
@@ -525,7 +497,7 @@ void SfxSplitWindow::InsertWindow( SfxDockingWindow* pDockWin, const Size& rSize
         // Not found, insert at end
         pFoundDock = new SfxDock_Impl;
         pFoundDock->bHide = true;
-        pDockArr->push_back( std::unique_ptr<SfxDock_Impl>(pFoundDock) );
+        maDockArr.push_back( std::unique_ptr<SfxDock_Impl>(pFoundDock) );
         pFoundDock->nType = pDockWin->GetType();
         nLine++;
         nPos = 0;
@@ -542,20 +514,20 @@ void SfxSplitWindow::InsertWindow( SfxDockingWindow* pDockWin, const Size& rSize
 }
 
 
-void SfxSplitWindow::ReleaseWindow_Impl(SfxDockingWindow *pDockWin, bool bSave)
+void SfxSplitWindow::ReleaseWindow_Impl(SfxDockingWindow const *pDockWin, bool bSave)
 {
 //  The docking window is no longer stored in the internal data.
-    sal_uInt16 nCount = pDockArr->size();
+    sal_uInt16 nCount = maDockArr.size();
     for ( sal_uInt16 n=0; n<nCount; n++ )
     {
-        const SfxDock_Impl& rDock = *(*pDockArr)[n].get();
+        const SfxDock_Impl& rDock = *maDockArr[n].get();
         if ( rDock.nType == pDockWin->GetType() )
         {
             if ( rDock.bNewLine && n<nCount-1 )
-                (*pDockArr)[n+1]->bNewLine = true;
+                maDockArr[n+1]->bNewLine = true;
 
             // Window has a position, this we forget
-            pDockArr->erase(pDockArr->begin() + n);
+            maDockArr.erase(maDockArr.begin() + n);
             break;
         }
     }
@@ -610,18 +582,18 @@ void SfxSplitWindow::InsertWindow( SfxDockingWindow* pDockWin, const Size& rSize
 
     // The window must be inserted before the first window so that it has the
     // same or a greater position than pDockWin.
-    sal_uInt16 nCount = pDockArr->size();
+    sal_uInt16 nCount = maDockArr.size();
     sal_uInt16 nLastWindowIdx(0);
 
     // If no window is found, a first window is inserted
     sal_uInt16 nInsertPos = 0;
     for ( sal_uInt16 n=0; n<nCount; n++ )
     {
-        SfxDock_Impl& rD = *(*pDockArr)[n].get();
+        SfxDock_Impl& rD = *maDockArr[n].get();
 
         if (rD.pWin)
         {
-            // A docked window has been found. If no suitable window behind the
+            // A docked window has been found. If no suitable window behind
             // the desired insertion point s found, then insertion is done at
             // the end.
             nInsertPos = nCount;
@@ -651,13 +623,13 @@ void SfxSplitWindow::InsertWindow( SfxDockingWindow* pDockWin, const Size& rSize
         nInsertPos = nLastWindowIdx + 1;    // ignore all non-windows after the last window
     }
 
-    pDockArr->insert(pDockArr->begin() + nInsertPos, std::unique_ptr<SfxDock_Impl>(pDock));
+    maDockArr.insert(maDockArr.begin() + nInsertPos, std::unique_ptr<SfxDock_Impl>(pDock));
     InsertWindow_Impl( pDock, rSize, nLine, nPos, bNewLine );
     SaveConfig_Impl();
 }
 
 
-void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
+void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl const * pDock,
                         const Size& rSize,
                         sal_uInt16 nLine, sal_uInt16 nPos, bool bNewLine)
 
@@ -670,7 +642,7 @@ void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
 {
     SfxDockingWindow* pDockWin = pDock->pWin;
 
-    SplitWindowItemFlags nItemBits = pDockWin->GetWinBits_Impl();
+    SplitWindowItemFlags nItemBits = SplitWindowItemFlags::NONE;
 
     long nWinSize, nSetSize;
     if ( IsHorizontal() )
@@ -684,9 +656,7 @@ void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
         nWinSize = rSize.Height();
     }
 
-    pDock->nSize = nWinSize;
-
-    DeactivateUpdateMode* pDeactivateUpdateMode = new DeactivateUpdateMode( *this );
+    std::unique_ptr<DeactivateUpdateMode> pDeactivateUpdateMode(new DeactivateUpdateMode( *this ));
 
     if ( bNewLine || nLine == GetItemCount() )
     {
@@ -712,7 +682,6 @@ void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
     // "pixel" actually only makes sense if also items with percentage or
     // relative sizes are present.
     nItemBits |= SplitWindowItemFlags::PercentSize;
-    bLocked = true;
     sal_uInt16 nSet = GetItemId( nLine );
     InsertItem( pDockWin->GetType(), pDockWin, nWinSize, nPos, nSet, nItemBits );
 
@@ -729,8 +698,8 @@ void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
             pEmptyWin->bFadeIn = false;
             SetPinned_Impl( false );
             pEmptyWin->Actualize();
-            OSL_TRACE( "SfxSplitWindow::InsertWindow_Impl - registering empty Splitwindow" );
-            pWorkWin->RegisterChild_Impl( *GetSplitWindow(), eAlign, true )->nVisible = SfxChildVisibility::VISIBLE;
+            SAL_INFO("sfx", "SfxSplitWindow::InsertWindow_Impl - registering empty Splitwindow" );
+            pWorkWin->RegisterChild_Impl( *GetSplitWindow(), eAlign )->nVisible = SfxChildVisibility::VISIBLE;
             pWorkWin->ArrangeChildren_Impl();
             if ( bFadeIn )
                 FadeIn();
@@ -740,17 +709,15 @@ void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
             bool bFadeIn = ( pEmptyWin->nState & 2 ) != 0;
             pEmptyWin->bFadeIn = false;
             pEmptyWin->Actualize();
-#ifdef DBG_UTIL
             if ( !bPinned || !pEmptyWin->bFadeIn )
             {
-                OSL_TRACE( "SfxSplitWindow::InsertWindow_Impl - registering empty Splitwindow" );
+                SAL_INFO("sfx", "SfxSplitWindow::InsertWindow_Impl - registering empty Splitwindow" );
             }
             else
             {
-                OSL_TRACE( "SfxSplitWindow::InsertWindow_Impl - registering real Splitwindow" );
+                SAL_INFO("sfx", "SfxSplitWindow::InsertWindow_Impl - registering real Splitwindow" );
             }
-#endif
-            pWorkWin->RegisterChild_Impl( *GetSplitWindow(), eAlign, true )->nVisible = SfxChildVisibility::VISIBLE;
+            pWorkWin->RegisterChild_Impl( *GetSplitWindow(), eAlign )->nVisible = SfxChildVisibility::VISIBLE;
             pWorkWin->ArrangeChildren_Impl();
             if ( bFadeIn )
                 FadeIn();
@@ -759,36 +726,35 @@ void SfxSplitWindow::InsertWindow_Impl( SfxDock_Impl* pDock,
         pWorkWin->ShowChildren_Impl();
     }
 
-    delete pDeactivateUpdateMode;
-    bLocked = false;
+    pDeactivateUpdateMode.reset();
 
-    // workaround insuffiency of <SplitWindow> regarding dock layouting:
+    // workaround insufficiency of <SplitWindow> regarding dock layouting:
     // apply FIXED item size as 'original' item size to improve layouting of undock-dock-cycle of a window
     {
         std::vector< std::pair< sal_uInt16, long > > aNewOrgSizes;
         // get FIXED item sizes
-        sal_uInt16 nCount = pDockArr->size();
+        sal_uInt16 nCount = maDockArr.size();
         for ( sal_uInt16 n=0; n<nCount; ++n )
         {
-            const SfxDock_Impl& rD = *(*pDockArr)[n].get();
+            const SfxDock_Impl& rD = *maDockArr[n].get();
             if ( rD.pWin )
             {
                 const sal_uInt16 nId = rD.nType;
                 const long nSize    = GetItemSize( nId, SplitWindowItemFlags::Fixed );
-                aNewOrgSizes.push_back( std::pair< sal_uInt16, long >( nId, nSize ) );
+                aNewOrgSizes.emplace_back( nId, nSize );
             }
         }
         // apply new item sizes
         DeactivateUpdateMode aDeactivateUpdateMode( *this );
-        for ( size_t i = 0; i < aNewOrgSizes.size(); ++i )
+        for (const std::pair< sal_uInt16, long > & rNewOrgSize : aNewOrgSizes)
         {
-            SetItemSize( aNewOrgSizes[i].first, aNewOrgSizes[i].second );
+            SetItemSize( rNewOrgSize.first, rNewOrgSize.second );
         }
     }
 }
 
 
-void SfxSplitWindow::RemoveWindow( SfxDockingWindow* pDockWin, bool bHide )
+void SfxSplitWindow::RemoveWindow( SfxDockingWindow const * pDockWin, bool bHide )
 
 /*  [Description]
 
@@ -811,11 +777,11 @@ void SfxSplitWindow::RemoveWindow( SfxDockingWindow* pDockWin, bool bHide )
 #ifdef DBG_UTIL
         if ( !bPinned || !pEmptyWin->bFadeIn )
         {
-            OSL_TRACE( "SfxSplitWindow::RemoveWindow - releasing empty Splitwindow" );
+            SAL_INFO("sfx", "SfxSplitWindow::RemoveWindow - releasing empty Splitwindow" );
         }
         else
         {
-            OSL_TRACE( "SfxSplitWindow::RemoveWindow - releasing real Splitwindow" );
+            SAL_INFO("sfx", "SfxSplitWindow::RemoveWindow - releasing real Splitwindow" );
         }
 #endif
         pWorkWin->ReleaseChild_Impl( *GetSplitWindow() );
@@ -823,10 +789,10 @@ void SfxSplitWindow::RemoveWindow( SfxDockingWindow* pDockWin, bool bHide )
         pWorkWin->ArrangeAutoHideWindows( this );
     }
 
-    sal_uInt16 nCount = pDockArr->size();
+    sal_uInt16 nCount = maDockArr.size();
     for ( sal_uInt16 n=0; n<nCount; n++ )
     {
-        SfxDock_Impl& rDock = *(*pDockArr)[n].get();
+        SfxDock_Impl& rDock = *maDockArr[n].get();
         if ( rDock.nType == pDockWin->GetType() )
         {
             rDock.pWin = nullptr;
@@ -837,16 +803,12 @@ void SfxSplitWindow::RemoveWindow( SfxDockingWindow* pDockWin, bool bHide )
 
     // Remove Windows, and if it was the last of the line, then also remove
     // the line (line = itemset)
-    DeactivateUpdateMode* pDeactivateUpdateMode = new DeactivateUpdateMode( *this );
-    bLocked = true;
+    std::unique_ptr<DeactivateUpdateMode> pDeactivateUpdateMode( new DeactivateUpdateMode( *this ) );
 
     RemoveItem( pDockWin->GetType() );
 
     if ( nSet && !GetItemCount( nSet ) )
         RemoveItem( nSet );
-
-    delete pDeactivateUpdateMode;
-    bLocked = false;
 };
 
 
@@ -935,13 +897,7 @@ sal_uInt16 SfxSplitWindow::GetWindowCount() const
 }
 
 
-void SfxSplitWindow::Command( const CommandEvent& rCEvt )
-{
-    SplitWindow::Command( rCEvt );
-}
-
-
-IMPL_LINK_TYPED( SfxSplitWindow, TimerHdl, Timer*, pTimer, void)
+IMPL_LINK( SfxSplitWindow, TimerHdl, Timer*, pTimer, void)
 {
     if ( pTimer )
         pTimer->Stop();
@@ -1019,7 +975,7 @@ bool SfxSplitWindow::CursorIsOverRect() const
     Point aPos = pEmptyWin->GetParent()->OutputToScreenPixel( pEmptyWin->GetPosPixel() );
     Size aSize = pEmptyWin->GetSizePixel();
 
-    Rectangle aRect( aPos, aSize );
+    tools::Rectangle aRect( aPos, aSize );
 
     if ( bVisible )
     {
@@ -1027,18 +983,16 @@ bool SfxSplitWindow::CursorIsOverRect() const
         Size aVisSize = GetSizePixel();
 
         // Extend with +/- a few pixels, otherwise it is too nervous
-        aVisPos.X() -= nPixel;
-        aVisPos.Y() -= nPixel;
-        aVisSize.Width() += 2 * nPixel;
-        aVisSize.Height() += 2 * nPixel;
+        aVisPos.AdjustX( -(nPixel) );
+        aVisPos.AdjustY( -(nPixel) );
+        aVisSize.AdjustWidth(2 * nPixel );
+        aVisSize.AdjustHeight(2 * nPixel );
 
-        Rectangle aVisRect( aVisPos, aVisSize );
+        tools::Rectangle aVisRect( aVisPos, aVisSize );
         aRect = aRect.GetUnion( aVisRect );
     }
 
-    if ( aRect.IsInside( OutputToScreenPixel( static_cast<vcl::Window*>(const_cast<SfxSplitWindow *>(this))->GetPointerPosPixel() ) ) )
-        return true;
-    return false;
+    return aRect.IsInside( OutputToScreenPixel( static_cast<vcl::Window*>(const_cast<SfxSplitWindow *>(this))->GetPointerPosPixel() ) );
 }
 
 
@@ -1076,12 +1030,12 @@ void SfxSplitWindow::SetPinned_Impl( bool bOn )
         if ( pEmptyWin->bFadeIn )
         {
             // Unregister replacement windows
-            OSL_TRACE( "SfxSplitWindow::SetPinned_Impl - releasing real Splitwindow" );
+            SAL_INFO("sfx", "SfxSplitWindow::SetPinned_Impl - releasing real Splitwindow" );
             pWorkWin->ReleaseChild_Impl( *this );
             Hide();
             pEmptyWin->Actualize();
-            OSL_TRACE( "SfxSplitWindow::SetPinned_Impl - registering empty Splitwindow" );
-            pWorkWin->RegisterChild_Impl( *pEmptyWin, eAlign, true )->nVisible = SfxChildVisibility::VISIBLE;
+            SAL_INFO("sfx", "SfxSplitWindow::SetPinned_Impl - registering empty Splitwindow" );
+            pWorkWin->RegisterChild_Impl( *pEmptyWin, eAlign )->nVisible = SfxChildVisibility::VISIBLE;
         }
 
         Point aPos( GetPosPixel() );
@@ -1102,18 +1056,14 @@ void SfxSplitWindow::SetPinned_Impl( bool bOn )
         if ( pEmptyWin->bFadeIn )
         {
             // Unregister replacement windows
-            OSL_TRACE( "SfxSplitWindow::SetPinned_Impl - releasing empty Splitwindow" );
+            SAL_INFO("sfx", "SfxSplitWindow::SetPinned_Impl - releasing empty Splitwindow" );
             pWorkWin->ReleaseChild_Impl( *pEmptyWin );
             pEmptyWin->Hide();
-            OSL_TRACE( "SfxSplitWindow::SetPinned_Impl - registering real Splitwindow" );
-            pWorkWin->RegisterChild_Impl( *this, eAlign, true )->nVisible = SfxChildVisibility::VISIBLE;
+            SAL_INFO("sfx", "SfxSplitWindow::SetPinned_Impl - registering real Splitwindow" );
+            pWorkWin->RegisterChild_Impl( *this, eAlign )->nVisible = SfxChildVisibility::VISIBLE;
         }
     }
-
-    SetAutoHideState( !bPinned );
-    pEmptyWin->SetAutoHideState( !bPinned );
 }
-
 
 void SfxSplitWindow::SetFadeIn_Impl( bool bOn )
 {
@@ -1135,11 +1085,11 @@ void SfxSplitWindow::SetFadeIn_Impl( bool bOn )
         }
         else
         {
-            OSL_TRACE( "SfxSplitWindow::SetFadeIn_Impl - releasing empty Splitwindow" );
+            SAL_INFO("sfx", "SfxSplitWindow::SetFadeIn_Impl - releasing empty Splitwindow" );
             pWorkWin->ReleaseChild_Impl( *pEmptyWin );
             pEmptyWin->Hide();
-            OSL_TRACE( "SfxSplitWindow::SetFadeIn_Impl - registering real Splitwindow" );
-            pWorkWin->RegisterChild_Impl( *this, eAlign, true )->nVisible = SfxChildVisibility::VISIBLE;
+            SAL_INFO("sfx", "SfxSplitWindow::SetFadeIn_Impl - registering real Splitwindow" );
+            pWorkWin->RegisterChild_Impl( *this, eAlign )->nVisible = SfxChildVisibility::VISIBLE;
             pWorkWin->ArrangeChildren_Impl();
             pWorkWin->ShowChildren_Impl();
         }
@@ -1151,12 +1101,12 @@ void SfxSplitWindow::SetFadeIn_Impl( bool bOn )
         if ( !IsFloatingMode() )
         {
             // The window is not "floating", should be hidden
-            OSL_TRACE( "SfxSplitWindow::SetFadeIn_Impl - releasing real Splitwindow" );
+            SAL_INFO("sfx", "SfxSplitWindow::SetFadeIn_Impl - releasing real Splitwindow" );
             pWorkWin->ReleaseChild_Impl( *this );
             Hide();
             pEmptyWin->Actualize();
-            OSL_TRACE( "SfxSplitWindow::SetFadeIn_Impl - registering empty Splitwindow" );
-            pWorkWin->RegisterChild_Impl( *pEmptyWin, eAlign, true )->nVisible = SfxChildVisibility::VISIBLE;
+            SAL_INFO("sfx", "SfxSplitWindow::SetFadeIn_Impl - registering empty Splitwindow" );
+            pWorkWin->RegisterChild_Impl( *pEmptyWin, eAlign )->nVisible = SfxChildVisibility::VISIBLE;
             pWorkWin->ArrangeChildren_Impl();
             pWorkWin->ShowChildren_Impl();
             pWorkWin->ArrangeAutoHideWindows( this );
@@ -1167,28 +1117,6 @@ void SfxSplitWindow::SetFadeIn_Impl( bool bOn )
             pWorkWin->ArrangeAutoHideWindows( this );
         }
     }
-}
-
-void SfxSplitWindow::AutoHide()
-{
-    // If this handler is called in the "real" SplitWindow, it is
-    // either docked and should be displayed as floating, or vice versa
-    if ( !bPinned )
-    {
-        // It "floats", thus dock it again
-        SetPinned_Impl( true );
-        pWorkWin->ArrangeChildren_Impl();
-    }
-    else
-    {
-        // In "limbo"
-        SetPinned_Impl( false );
-        pWorkWin->ArrangeChildren_Impl();
-        pWorkWin->ArrangeAutoHideWindows( this );
-    }
-
-    pWorkWin->ShowChildren_Impl();
-    SaveConfig_Impl();
 }
 
 void SfxSplitWindow::FadeOut_Impl()

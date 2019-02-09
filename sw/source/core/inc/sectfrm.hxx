@@ -18,11 +18,9 @@
  */
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_SECTFRM_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_SECTFRM_HXX
-#include <tools/mempool.hxx>
 
 #include "layfrm.hxx"
 #include "flowfrm.hxx"
-#include <set>
 
 class SwSection;
 class SwSectionFormat;
@@ -44,19 +42,19 @@ class SwSectionFrame: public SwLayoutFrame, public SwFlowFrame
     bool m_bOwnFootnoteNum; // special numbering of footnotes
     bool m_bFootnoteLock; // ftn, don't leave this section bwd
 
-    void _UpdateAttr( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 &,
+    void UpdateAttr_( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 &,
                       SwAttrSetChg *pa = nullptr, SwAttrSetChg *pb = nullptr );
-    void _Cut( bool bRemove );
+    void Cut_( bool bRemove );
     // Is there a FootnoteContainer?
     // An empty sectionfrm without FootnoteCont is superfluous
     bool IsSuperfluous() const { return !ContainsAny() && !ContainsFootnoteCont(); }
     void CalcFootnoteAtEndFlag();
     void CalcEndAtEndFlag();
-    const SwSectionFormat* _GetEndSectFormat() const;
+    const SwSectionFormat* GetEndSectFormat_() const;
     bool IsEndnoteAtMyEnd() const;
 
     virtual void DestroyImpl() override;
-    virtual ~SwSectionFrame();
+    virtual ~SwSectionFrame() override;
 
 protected:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
@@ -83,10 +81,10 @@ public:
 
                  SwContentFrame *FindLastContent( SwFindMode nMode = SwFindMode::None );
     inline const SwContentFrame *FindLastContent() const;
-    inline SwSection* GetSection() { return m_pSection; }
-    inline const SwSection* GetSection() const { return m_pSection; }
-    inline void ColLock()       { mbColLocked = true; }
-    inline void ColUnlock()     { mbColLocked = false; }
+    SwSection* GetSection() { return m_pSection; }
+    const SwSection* GetSection() const { return m_pSection; }
+    void ColLock()       { mbColLocked = true; }
+    void ColUnlock()     { mbColLocked = false; }
 
     void CalcFootnoteContent();
     void SimpleFormat();
@@ -102,8 +100,8 @@ public:
     void DelEmpty( bool bRemove ); // Like Cut(), except for that Follow chaining is maintained
     SwFootnoteContFrame* ContainsFootnoteCont( const SwFootnoteContFrame* pCont = nullptr ) const;
     bool Growable() const;
-    SwTwips _Shrink( SwTwips, bool bTst );
-    SwTwips _Grow  ( SwTwips, bool bTst );
+    SwTwips Shrink_( SwTwips, bool bTst );
+    SwTwips Grow_  ( SwTwips, bool bTst );
 
     /**
      * A sectionfrm has to maximize, if he has a follow or a ftncontainer at
@@ -111,7 +109,7 @@ public:
      * if bCheckFollow is set.
      */
     bool ToMaximize( bool bCheckFollow ) const;
-    inline bool _ToMaximize() const {
+    bool ToMaximize_() const {
         if( !m_pSection ) return false;
         return ToMaximize( false );
     }
@@ -131,12 +129,12 @@ public:
     SwTwips CalcUndersize() const;
 
     /// Adapt size to surroundings
-    void _CheckClipping( bool bGrow, bool bMaximize );
+    void CheckClipping( bool bGrow, bool bMaximize );
 
     void InvalidateFootnotePos();
     void CollectEndnotes( SwLayouter* pLayouter );
     const SwSectionFormat* GetEndSectFormat() const {
-        if( IsEndnAtEnd() ) return _GetEndSectFormat();
+        if( IsEndnAtEnd() ) return GetEndSectFormat_();
         return nullptr;
     }
 
@@ -157,11 +155,7 @@ public:
 
     void SetFootnoteLock( bool bNew ) { m_bFootnoteLock = bNew; }
     bool IsFootnoteLock() const { return m_bFootnoteLock; }
-
-    DECL_FIXEDMEMPOOL_NEWDEL(SwSectionFrame)
 };
-
-class SwDestroyList : public std::set<SwSectionFrame*> {};
 
 inline const SwSectionFrame *SwSectionFrame::GetFollow() const
 {

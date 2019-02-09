@@ -17,9 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tools/SdGlobalResourceContainer.hxx"
+#include <tools/SdGlobalResourceContainer.hxx>
+
+#include <../cache/SlsCacheConfiguration.hxx>
+
+#include <comphelper/processfactory.hxx>
+#include <comphelper/unique_disposing_ptr.hxx>
+
+#include <com/sun/star/frame/Desktop.hpp>
+
+#include <o3tl/deleter.hxx>
+#include <rtl/instance.hxx>
+#include <sal/log.hxx>
+#include <tools/debug.hxx>
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 using namespace ::com::sun::star;
@@ -27,21 +40,37 @@ using namespace ::com::sun::star::uno;
 
 namespace sd {
 
+class SdGlobalResourceContainerInstance
+    : public comphelper::unique_disposing_solar_mutex_reset_ptr<SdGlobalResourceContainer>
+{
+public:
+    SdGlobalResourceContainerInstance()
+        : comphelper::unique_disposing_solar_mutex_reset_ptr<SdGlobalResourceContainer>(
+            uno::Reference<lang::XComponent>(frame::Desktop::create(comphelper::getProcessComponentContext()), uno::UNO_QUERY_THROW),
+            new SdGlobalResourceContainer, true)
+    {
+    }
+};
+
+namespace {
+
+struct theSdGlobalResourceContainerInstance : public rtl::Static<SdGlobalResourceContainerInstance, theSdGlobalResourceContainerInstance> {};
+
+} // namespace
+
 //===== SdGlobalResourceContainer::Implementation =============================
 
 class SdGlobalResourceContainer::Implementation
 {
 private:
     friend class SdGlobalResourceContainer;
-    static SdGlobalResourceContainer* mpInstance;
 
     ::osl::Mutex maMutex;
 
     /** All instances of SdGlobalResource in this vector are owned by the
         container and will be destroyed when the container is destroyed.
     */
-    typedef ::std::vector<SdGlobalResource*> ResourceList;
-    ResourceList maResources;
+    std::vector<std::unique_ptr<SdGlobalResource>> maResources;
 
     typedef ::std::vector<std::shared_ptr<SdGlobalResource> > SharedResourceList;
     SharedResourceList maSharedResources;
@@ -53,39 +82,25 @@ private:
 // static
 SdGlobalResourceContainer& SdGlobalResourceContainer::Instance()
 {
-    DBG_ASSERT(Implementation::mpInstance!=nullptr,
-        "SdGlobalResourceContainer::Instance(): instance has been deleted");
-    // Maybe we should throw an exception when the instance has been deleted.
-    return *Implementation::mpInstance;
+    SdGlobalResourceContainer *const pRet(theSdGlobalResourceContainerInstance::get().get());
+    assert(pRet); // error if it has been deleted and is null
+    return *pRet;
 }
-
-SdGlobalResourceContainer*
-    SdGlobalResourceContainer::Implementation::mpInstance = nullptr;
 
 //===== SdGlobalResourceContainer =============================================
 
 void SdGlobalResourceContainer::AddResource (
-    ::std::unique_ptr<SdGlobalResource> && pResource)
+    ::std::unique_ptr<SdGlobalResource> pResource)
 {
     ::osl::MutexGuard aGuard (mpImpl->maMutex);
 
-    Implementation::ResourceList::iterator iResource;
-    iResource = ::std::find (
-        mpImpl->maResources.begin(),
-        mpImpl->maResources.end(),
-        pResource.get());
-    if (iResource == mpImpl->maResources.end())
-        mpImpl->maResources.push_back(pResource.get());
-    else
-    {
-        // Because the given resource is a unique_ptr it is highly unlikely
-        // that we come here.  But who knows?
-        DBG_ASSERT (false,
-            "SdGlobalResourceContainer:AddResource(): Resource added twice.");
-    }
-    // We can not put the unique_ptr into the vector so we release the
-    // unique_ptr and document that we take ownership explicitly.
-    pResource.release();
+    assert( std::none_of(
+                mpImpl->maResources.begin(),
+                mpImpl->maResources.end(),
+                [&](const std::unique_ptr<SdGlobalResource>& p) { return p == pResource; })
+            && "duplicate resource?");
+
+    mpImpl->maResources.push_back(std::move(pResource));
 }
 
 void SdGlobalResourceContainer::AddResource (
@@ -102,7 +117,7 @@ void SdGlobalResourceContainer::AddResource (
         mpImpl->maSharedResources.push_back(pResource);
     else
     {
-        DBG_ASSERT (false,
+        SAL_WARN ("sd.tools",
             "SdGlobalResourceContainer:AddResource(): Resource added twice.");
     }
 }
@@ -120,15 +135,14 @@ void SdGlobalResourceContainer::AddResource (const Reference<XInterface>& rxReso
         mpImpl->maXInterfaceResources.push_back(rxResource);
     else
     {
-        DBG_ASSERT (false,
+        SAL_WARN ("sd.tools",
             "SdGlobalResourceContainer:AddResource(): Resource added twice.");
     }
 }
 
 SdGlobalResourceContainer::SdGlobalResourceContainer()
-    : mpImpl (new SdGlobalResourceContainer::Implementation())
+    : mpImpl (new SdGlobalResourceContainer::Implementation)
 {
-    Implementation::mpInstance = this;
 }
 
 SdGlobalResourceContainer::~SdGlobalResourceContainer()
@@ -139,13 +153,13 @@ SdGlobalResourceContainer::~SdGlobalResourceContainer()
     // container.  This is because a resource A added before resource B
     // may have been created due to a request of B.  Thus B depends on A and
     // should be destroyed first.
-    Implementation::ResourceList::reverse_iterator iResource;
-    for (iResource = mpImpl->maResources.rbegin();
+    for (auto iResource = mpImpl->maResources.rbegin();
          iResource != mpImpl->maResources.rend();
          ++iResource)
     {
-        delete *iResource;
+        iResource->reset();
     }
+
 
     // The SharedResourceList has not to be released manually.  We just
     // assert resources that are still held by someone other than us.
@@ -154,12 +168,12 @@ SdGlobalResourceContainer::~SdGlobalResourceContainer()
          iSharedResource != mpImpl->maSharedResources.rend();
          ++iSharedResource)
     {
-        if ( ! iSharedResource->unique())
+        if (iSharedResource->use_count() > 1)
         {
             SdGlobalResource* pResource = iSharedResource->get();
             SAL_INFO(
                 "sd.tools", pResource << " " << iSharedResource->use_count());
-            DBG_ASSERT(iSharedResource->unique(),
+            DBG_ASSERT(iSharedResource->use_count() == 1,
                 "SdGlobalResource still held in ~SdGlobalResourceContainer");
         }
     }
@@ -175,9 +189,7 @@ SdGlobalResourceContainer::~SdGlobalResourceContainer()
             xComponent->dispose();
     }
 
-    DBG_ASSERT(Implementation::mpInstance == this,
-        "~SdGlobalResourceContainer(): more than one instance of singleton");
-    Implementation::mpInstance = nullptr;
+    sd::slidesorter::cache::CacheConfiguration::Shutdown();
 }
 
 } // end of namespace sd

@@ -37,20 +37,20 @@ Deflater::~Deflater()
 }
 void Deflater::init (sal_Int32 nLevelArg, bool bNowrap)
 {
-    pStream = new z_stream;
+    pStream.reset(new z_stream);
     /* Memset it to 0...sets zalloc/zfree/opaque to NULL */
-    memset (pStream, 0, sizeof(*pStream));
+    memset (pStream.get(), 0, sizeof(*pStream));
 
-    switch (deflateInit2(pStream, nLevelArg, Z_DEFLATED, bNowrap? -MAX_WBITS : MAX_WBITS,
+    switch (deflateInit2(pStream.get(), nLevelArg, Z_DEFLATED, bNowrap? -MAX_WBITS : MAX_WBITS,
                 DEF_MEM_LEVEL, DEFAULT_STRATEGY))
     {
         case Z_OK:
             break;
         case Z_MEM_ERROR:
-            delete pStream;
+            pStream.reset();
             break;
         case Z_STREAM_ERROR:
-            delete pStream;
+            pStream.reset();
             break;
         default:
              break;
@@ -75,14 +75,15 @@ sal_Int32 Deflater::doDeflateBytes (uno::Sequence < sal_Int8 > &rBuffer, sal_Int
     pStream->avail_out = nNewLength;
 
 #if !defined Z_PREFIX
-    nResult = deflate(pStream, bFinish ? Z_FINISH : Z_NO_FLUSH);
+    nResult = deflate(pStream.get(), bFinish ? Z_FINISH : Z_NO_FLUSH);
 #else
-    nResult = z_deflate(pStream, bFinish ? Z_FINISH : Z_NO_FLUSH);
+    nResult = z_deflate(pStream.get(), bFinish ? Z_FINISH : Z_NO_FLUSH);
 #endif
     switch (nResult)
     {
         case Z_STREAM_END:
             bFinished = true;
+            [[fallthrough]];
         case Z_OK:
             nOffset += nLength - pStream->avail_in;
             nLength = pStream->avail_in;
@@ -92,57 +93,56 @@ sal_Int32 Deflater::doDeflateBytes (uno::Sequence < sal_Int8 > &rBuffer, sal_Int
     }
 }
 
-void SAL_CALL Deflater::setInputSegment( const uno::Sequence< sal_Int8 >& rBuffer )
+void Deflater::setInputSegment( const uno::Sequence< sal_Int8 >& rBuffer )
 {
     sInBuffer = rBuffer;
     nOffset = 0;
     nLength = rBuffer.getLength();
 }
 
-bool SAL_CALL Deflater::needsInput(  )
+bool Deflater::needsInput(  )
 {
     return nLength <=0;
 }
-void SAL_CALL Deflater::finish(  )
+void Deflater::finish(  )
 {
     bFinish = true;
 }
-sal_Int32 SAL_CALL Deflater::doDeflateSegment( uno::Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength )
+sal_Int32 Deflater::doDeflateSegment( uno::Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewLength )
 {
-    OSL_ASSERT( !(nNewOffset < 0 || nNewLength < 0 || nNewOffset + nNewLength > rBuffer.getLength()));
-    return doDeflateBytes(rBuffer, nNewOffset, nNewLength);
+    OSL_ASSERT( !(nNewLength < 0 || nNewLength > rBuffer.getLength()));
+    return doDeflateBytes(rBuffer, /*nNewOffset*/0, nNewLength);
 }
-sal_Int64 SAL_CALL Deflater::getTotalIn(  )
+sal_Int64 Deflater::getTotalIn(  )
 {
     return pStream->total_in; // FIXME64: zlib doesn't look 64bit clean here
 }
-sal_Int64 SAL_CALL Deflater::getTotalOut(  )
+sal_Int64 Deflater::getTotalOut(  )
 {
     return pStream->total_out; // FIXME64: zlib doesn't look 64bit clean here
 }
-void SAL_CALL Deflater::reset(  )
+void Deflater::reset(  )
 {
 #if !defined Z_PREFIX
-    deflateReset(pStream);
+    deflateReset(pStream.get());
 #else
-    z_deflateReset(pStream);
+    z_deflateReset(pStream.get());
 #endif
     bFinish = false;
     bFinished = false;
     nOffset = nLength = 0;
 }
-void SAL_CALL Deflater::end(  )
+void Deflater::end(  )
 {
-    if (pStream != nullptr)
+    if (pStream)
     {
 #if !defined Z_PREFIX
-        deflateEnd(pStream);
+        deflateEnd(pStream.get());
 #else
-        z_deflateEnd(pStream);
+        z_deflateEnd(pStream.get());
 #endif
-        delete pStream;
+        pStream.reset();
     }
-    pStream = nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

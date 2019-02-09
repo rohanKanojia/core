@@ -23,31 +23,33 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <sal/types.h>
-#include <com/sun/star/xml/sax/XAttributeList.hpp>
 #include <com/sun/star/xml/sax/XFastContextHandler.hpp>
-#include <tools/ref.hxx>
 #include <rtl/ustring.hxx>
-#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <memory>
 
-class SvXMLNamespaceMap;
+namespace com { namespace sun { namespace star { namespace xml { namespace sax { class XAttributeList; } } } } }
+
 class SvXMLImport;
 
-class XMLOFF_DLLPUBLIC SvXMLImportContext : public SvRefBase,
-        public ::cppu::WeakImplHelper1< ::css::xml::sax::XFastContextHandler >
+class SvXMLImportContext;
+
+typedef rtl::Reference<SvXMLImportContext> SvXMLImportContextRef;
+
+class XMLOFF_DLLPUBLIC SvXMLImportContext : public cppu::WeakImplHelper< css::xml::sax::XFastContextHandler >
 {
     friend class SvXMLImport;
 
     SvXMLImport& mrImport;
 
-    sal_uInt16       mnPrefix;
-    OUString maLocalName;
+    sal_uInt16 const       mnPrefix;
+    OUString const maLocalName;
 
-    std::unique_ptr<SvXMLNamespaceMap>   mxRewindMap;
+    std::unique_ptr<SvXMLNamespaceMap> m_pRewindMap;
 
-    SAL_DLLPRIVATE SvXMLNamespaceMap *TakeRewindMap() { return mxRewindMap.release(); }
-    SAL_DLLPRIVATE void PutRewindMap( SvXMLNamespaceMap *p ) { mxRewindMap.reset(p); }
+    SAL_DLLPRIVATE std::unique_ptr<SvXMLNamespaceMap> TakeRewindMap() { return std::move(m_pRewindMap); }
+    SAL_DLLPRIVATE void PutRewindMap(std::unique_ptr<SvXMLNamespaceMap> p) { m_pRewindMap = std::move(p); }
 
 protected:
 
@@ -72,11 +74,11 @@ public:
      * ends. By default, nothing is done.
      * Note that virtual methods cannot be used inside destructors. Use
      * EndElement instead if this is required. */
-    virtual ~SvXMLImportContext();
+    virtual ~SvXMLImportContext() override;
 
     /** Create a children element context. By default, the import's
      * CreateContext method is called to create a new default context. */
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList );
 
@@ -96,38 +98,24 @@ public:
 
     // css::xml::sax::XFastContextHandler:
     virtual void SAL_CALL startFastElement (sal_Int32 Element,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs) override;
 
     virtual void SAL_CALL startUnknownElement(const OUString & Namespace, const OUString & Name,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void SAL_CALL endFastElement(sal_Int32 Element)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL endFastElement(sal_Int32 Element) override;
 
-    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+    virtual void SAL_CALL endUnknownElement(const OUString & Namespace, const OUString & Name) override;
 
     virtual css::uno::Reference< XFastContextHandler >  SAL_CALL createFastChildContext(sal_Int32 Element,
-        const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference<css::xml::sax::XFastAttributeList>& Attribs) override;
 
     virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext(
         const OUString & Namespace, const OUString & Name,
-        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
+        const css::uno::Reference< css::xml::sax::XFastAttributeList > & Attribs) override;
 
-    virtual void SAL_CALL characters(const OUString & aChars)
-        throw (css::uno::RuntimeException, css::xml::sax::SAXException, std::exception) override;
-
-    // #i124143# allow to copy evtl. useful data from another temporary import context, e.g. used to
-    // support multiple images and to rescue evtl. GluePoints imported with one of the
-    // to be deprecated contents
-    virtual void onDemandRescueUsefulDataFromTemporary( const SvXMLImportContext& rCandidate );
+    virtual void SAL_CALL characters(const OUString & aChars) override;
 };
-
-typedef tools::SvRef<SvXMLImportContext> SvXMLImportContextRef;
 
 #endif // INCLUDED_XMLOFF_XMLICTXT_HXX
 

@@ -30,28 +30,28 @@ SotClipboardFormatId ReadClipboardFormat( SvStream & rStm )
     SotClipboardFormatId nFormat = SotClipboardFormatId::NONE;
     sal_Int32 nLen = 0;
     rStm.ReadInt32( nLen );
-    if( rStm.IsEof() )
+    if( rStm.eof() )
         rStm.SetError( SVSTREAM_GENERALERROR );
     if( nLen > 0 )
     {
         // get a string name
         std::unique_ptr<sal_Char[]> p(new( ::std::nothrow ) sal_Char[ nLen ]);
-        if( p && rStm.Read( p.get(), nLen ) == (sal_uLong) nLen )
+        if (p && rStm.ReadBytes(p.get(), nLen) == static_cast<std::size_t>(nLen))
         {
             nFormat = SotExchange::RegisterFormatName(OUString(p.get(), nLen-1, RTL_TEXTENCODING_ASCII_US));
         }
         else
             rStm.SetError( SVSTREAM_GENERALERROR );
     }
-    else if( nLen == -1L )
+    else if( nLen == -1 )
     {
         // Windows clipboard format
-        // SV und Win stimmen ueberein (bis einschl. SotClipboardFormatId::GDIMETAFILE)
+        // SV and Win match (up to and including SotClipboardFormatId::GDIMETAFILE)
         sal_uInt32 nTmp;
         rStm.ReadUInt32( nTmp );
         nFormat = static_cast<SotClipboardFormatId>(nTmp);
     }
-    else if( nLen == -2L )
+    else if( nLen == -2 )
     {
         sal_uInt32 nTmp;
         rStm.ReadUInt32( nTmp );

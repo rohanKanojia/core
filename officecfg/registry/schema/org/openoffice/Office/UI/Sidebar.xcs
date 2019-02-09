@@ -245,6 +245,20 @@
           <desc>Contains all registered sidebar content panels.</desc>
         </info>
       </set>
+      <prop oor:name="LastActiveDeck" oor:type="oor:string-list" oor:nillable="false">
+        <info>
+	  <desc>Contains IDs of the decks that were active last time the application was closed.
+	    Each entry is a string of 2 comma-separated values, application name and DeckID. Valid
+	    values for application name are the same as those in ContextList, for example:
+
+	    WriterVariants, StyleListDeck;
+	    Impress, PropertyDeck;
+	  </desc>
+	</info>
+	<value>
+	  <it>any,PropertyDeck</it>
+	</value>
+      </prop>
     </group>
   </component>
 </oor:component-schema>

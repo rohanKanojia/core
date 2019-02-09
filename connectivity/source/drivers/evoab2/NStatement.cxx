@@ -20,19 +20,19 @@
 #include <osl/diagnose.h>
 #include <osl/thread.h>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/sdbc/ResultSetConcurrency.hpp>
 #include <com/sun/star/sdbc/ResultSetType.hpp>
 #include <com/sun/star/sdbc/FetchDirection.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <cppuhelper/typeprovider.hxx>
-#include "propertyids.hxx"
+#include <propertyids.hxx>
 #include "NStatement.hxx"
 #include "NConnection.hxx"
 #include "NDatabaseMetaData.hxx"
 #include "NResultSet.hxx"
-#include "resource/evoab2_res.hrc"
-#include "sqlbison.hxx"
-#include <resource/common_res.hrc>
+#include <sqlbison.hxx>
+#include <strings.hrc>
 #include <connectivity/dbexception.hxx>
 #include <tools/diagnose_ex.h>
 
@@ -71,11 +71,10 @@ EBookQuery * createTest( const OUString &aColumnName,
 OCommonStatement::OCommonStatement(OEvoabConnection* _pConnection)
     : OCommonStatement_IBase(m_aMutex)
     , ::comphelper::OPropertyContainer(OCommonStatement_IBase::rBHelper)
-    , OStatement_CBase( static_cast<cppu::OWeakObject*>(_pConnection), this )
     , m_xResultSet(nullptr)
-    , m_pConnection(_pConnection)
+    , m_xConnection(_pConnection)
     , m_aParser(_pConnection->getDriver().getComponentContext())
-    , m_aSQLIterator( _pConnection, _pConnection->createCatalog()->getTables(), m_aParser, nullptr )
+    , m_aSQLIterator( _pConnection, _pConnection->createCatalog()->getTables(), m_aParser )
     , m_pParseTree(nullptr)
     , m_nMaxFieldSize(0)
     , m_nMaxRows(0)
@@ -86,8 +85,6 @@ OCommonStatement::OCommonStatement(OEvoabConnection* _pConnection)
     , m_nResultSetConcurrency(ResultSetConcurrency::UPDATABLE)
     , m_bEscapeProcessing(true)
 {
-    m_pConnection->acquire();
-
 #define REGISTER_PROP( id, member ) \
     registerProperty( \
         OMetaConnection::getPropMap().getNameByIndex( id ), \
@@ -127,15 +124,12 @@ void OCommonStatement::disposing()
 
     disposeResultSet();
 
-    if (m_pConnection)
-        m_pConnection->release();
-    m_pConnection = nullptr;
+    m_xConnection.clear();
 
-    dispose_ChildImpl();
     OCommonStatement_IBase::disposing();
 }
 
-Any SAL_CALL OCommonStatement::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OCommonStatement::queryInterface( const Type & rType )
 {
     Any aRet = OCommonStatement_IBase::queryInterface(rType);
     if(!aRet.hasValue())
@@ -143,7 +137,7 @@ Any SAL_CALL OCommonStatement::queryInterface( const Type & rType ) throw(Runtim
     return aRet;
 }
 
-Sequence< Type > SAL_CALL OCommonStatement::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OCommonStatement::getTypes(  )
 {
     ::cppu::OTypeCollection aTypes( cppu::UnoType<XMultiPropertySet>::get(),
                                     cppu::UnoType<XFastPropertySet>::get(),
@@ -161,7 +155,7 @@ Sequence< Type > SAL_CALL OCommonStatement::getTypes(  ) throw(RuntimeException,
 //}
 
 
-void SAL_CALL OCommonStatement::close(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OCommonStatement::close(  )
 {
     {
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -199,7 +193,7 @@ OUString OCommonStatement::impl_getColumnRefColumnName_throw( const OSQLParseNod
     }
 
     if ( !sColumnName.getLength() )
-        m_pConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
+        m_xConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
 
     return sColumnName;
 }
@@ -231,7 +225,7 @@ void OCommonStatement::orderByAnalysis( const OSQLParseNode* _pOrderByClause, So
 
         // column name -> column field
         if ( !SQL_ISRULE( pColumnRef, column_ref ) )
-            m_pConnection->throwGenericSQLException( STR_SORT_BY_COL_ONLY, *this );
+            m_xConnection->throwGenericSQLException( STR_SORT_BY_COL_ONLY, *this );
         const OUString sColumnName( impl_getColumnRefColumnName_throw( *pColumnRef ) );
         guint nField = evoab::findEvoabField( sColumnName );
         // ascending/descending?
@@ -288,28 +282,28 @@ EBookQuery *OCommonStatement::whereAnalysis( const OSQLParseNode* parseTree )
         OSQLParseNode* pLHS = parseTree->getChild( 0 );
         OSQLParseNode* pRHS = parseTree->getChild( 2 );
 
-        if  (   (   !( SQL_ISRULE( pLHS, column_ref ) )         // on the LHS, we accept a column or a constant int value
+        if  (   (   ! SQL_ISRULE( pLHS, column_ref )         // on the LHS, we accept a column or a constant int value
                 &&  ( pLHS->getNodeType() != SQLNodeType::IntNum )
                 )
             ||  (   ( pRHS->getNodeType() != SQLNodeType::String )  // on the RHS, certain literals are acceptable
                 &&  ( pRHS->getNodeType() != SQLNodeType::IntNum )
                 &&  ( pRHS->getNodeType() != SQLNodeType::ApproxNum )
-                &&  !( SQL_ISTOKEN( pRHS, TRUE ) )
-                &&  !( SQL_ISTOKEN( pRHS, FALSE ) )
+                &&  ! SQL_ISTOKEN( pRHS, TRUE )
+                &&  ! SQL_ISTOKEN( pRHS, FALSE )
                 )
             ||  (   ( pLHS->getNodeType() == SQLNodeType::IntNum )  // an int on LHS requires an int on RHS
                 &&  ( pRHS->getNodeType() != SQLNodeType::IntNum )
                 )
             )
         {
-            m_pConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
+            m_xConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
         }
 
         if  (   ( pPrec->getNodeType() != SQLNodeType::Equal )
             &&  ( pPrec->getNodeType() != SQLNodeType::NotEqual )
             )
         {
-            m_pConnection->throwGenericSQLException( STR_OPERATOR_TOO_COMPLEX, *this );
+            m_xConnection->throwGenericSQLException( STR_OPERATOR_TOO_COMPLEX, *this );
         }
 
         // recognize the special "0 = 1" condition
@@ -343,7 +337,7 @@ EBookQuery *OCommonStatement::whereAnalysis( const OSQLParseNode* parseTree )
         const OSQLParseNode* pPart2 = parseTree->getChild(1);
 
         if( ! SQL_ISRULE( parseTree->getChild( 0 ), column_ref) )
-            m_pConnection->throwGenericSQLException(STR_QUERY_INVALID_LIKE_COLUMN,*this);
+            m_xConnection->throwGenericSQLException(STR_QUERY_INVALID_LIKE_COLUMN,*this);
 
         OUString aColumnName( impl_getColumnRefColumnName_throw( *parseTree->getChild( 0 ) ) );
 
@@ -359,7 +353,7 @@ EBookQuery *OCommonStatement::whereAnalysis( const OSQLParseNode* parseTree )
             SAL_INFO(
                 "connectivity.evoab2",
                 "analyseSQL : pAtom->count() = " << pAtom->count());
-            m_pConnection->throwGenericSQLException(STR_QUERY_INVALID_LIKE_STRING,*this);
+            m_xConnection->throwGenericSQLException(STR_QUERY_INVALID_LIKE_STRING,*this);
         }
 
         const sal_Unicode WILDCARD = '%';
@@ -368,7 +362,7 @@ EBookQuery *OCommonStatement::whereAnalysis( const OSQLParseNode* parseTree )
         aMatchString = pAtom->getTokenValue();
 
         // Determine where '%' character is...
-        if( aMatchString == OUStringLiteral1<WILDCARD>() )
+        if( aMatchString == OUStringLiteral1(WILDCARD) )
         {
             // String containing only a '%' and nothing else matches everything
             pResult = createTest( aColumnName, E_BOOK_QUERY_CONTAINS,
@@ -384,25 +378,25 @@ EBookQuery *OCommonStatement::whereAnalysis( const OSQLParseNode* parseTree )
         else if( bNotLike )
         {
             // We currently can't handle a 'NOT LIKE' when there are '%'
-            m_pConnection->throwGenericSQLException(STR_QUERY_NOT_LIKE_TOO_COMPLEX,*this);
+            m_xConnection->throwGenericSQLException(STR_QUERY_NOT_LIKE_TOO_COMPLEX,*this);
         }
-        else if( (aMatchString.indexOf ( WILDCARD ) == aMatchString.lastIndexOf ( WILDCARD ) ) )
+        else if( aMatchString.indexOf ( WILDCARD ) == aMatchString.lastIndexOf ( WILDCARD ) )
         {   // One occurrence of '%'  matches...
-            if ( aMatchString.startsWith(OUStringLiteral1<WILDCARD>()) )
+            if ( aMatchString.startsWith(OUStringLiteral1(WILDCARD)) )
                 pResult = createTest( aColumnName, E_BOOK_QUERY_ENDS_WITH, aMatchString.copy( 1 ) );
             else if ( aMatchString.indexOf ( WILDCARD ) == aMatchString.getLength() - 1 )
                 pResult = createTest( aColumnName, E_BOOK_QUERY_BEGINS_WITH, aMatchString.copy( 0, aMatchString.getLength() - 1 ) );
             else
-                m_pConnection->throwGenericSQLException(STR_QUERY_LIKE_WILDCARD,*this);
+                m_xConnection->throwGenericSQLException(STR_QUERY_LIKE_WILDCARD,*this);
         }
         else if( aMatchString.getLength() >= 3 &&
-                 aMatchString.startsWith(OUStringLiteral1<WILDCARD>()) &&
+                 aMatchString.startsWith(OUStringLiteral1(WILDCARD)) &&
                  aMatchString.indexOf ( WILDCARD, 1) == aMatchString.getLength() - 1 ) {
             // one '%' at the start and another at the end
             pResult = createTest( aColumnName, E_BOOK_QUERY_CONTAINS, aMatchString.copy (1, aMatchString.getLength() - 2) );
         }
         else
-            m_pConnection->throwGenericSQLException(STR_QUERY_LIKE_WILDCARD_MANY,*this);
+            m_xConnection->throwGenericSQLException(STR_QUERY_LIKE_WILDCARD_MANY,*this);
     }
 
     return pResult;
@@ -448,7 +442,7 @@ void OCommonStatement::parseSql( const OUString& sql, QueryData& _out_rQueryData
     _out_rQueryData.eFilterType = eFilterOther;
 
     OUString aErr;
-    m_pParseTree = m_aParser.parseTree( aErr, sql );
+    m_pParseTree = m_aParser.parseTree( aErr, sql ).release();
     m_aSQLIterator.setParseTree( m_pParseTree );
     m_aSQLIterator.traverseAll();
 
@@ -490,7 +484,7 @@ void OCommonStatement::parseSql( const OUString& sql, QueryData& _out_rQueryData
 }
 
 
-Reference< XConnection > SAL_CALL OStatement::getConnection(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XConnection > SAL_CALL OStatement::getConnection(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OCommonStatement_IBase::rBHelper.bDisposed);
@@ -500,7 +494,7 @@ Reference< XConnection > SAL_CALL OStatement::getConnection(  ) throw(SQLExcepti
 }
 
 
-Any SAL_CALL OCommonStatement::getWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+Any SAL_CALL OCommonStatement::getWarnings(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OCommonStatement_IBase::rBHelper.bDisposed);
@@ -510,7 +504,7 @@ Any SAL_CALL OCommonStatement::getWarnings(  ) throw(SQLException, RuntimeExcept
 }
 
 
-void SAL_CALL OCommonStatement::clearWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OCommonStatement::clearWarnings(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OCommonStatement_IBase::rBHelper.bDisposed);
@@ -537,7 +531,7 @@ void SAL_CALL OCommonStatement::acquire() throw()
 
 void SAL_CALL OCommonStatement::release() throw()
 {
-    relase_ChildImpl();
+    OCommonStatement_IBase::release();
 }
 
 
@@ -553,12 +547,12 @@ QueryData OCommonStatement::impl_getEBookQuery_throw( const OUString& _rSql )
 #endif
 
     if ( !aData.getQuery() )
-        m_pConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
+        m_xConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
 
     // a postcondition of this method is that we properly determined the SELECT columns
     aData.xSelectColumns = m_aSQLIterator.getSelectColumns();
     if ( !aData.xSelectColumns.is() )
-        m_pConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
+        m_xConnection->throwGenericSQLException( STR_QUERY_TOO_COMPLEX, *this );
 
     return aData;
 }
@@ -567,7 +561,7 @@ QueryData OCommonStatement::impl_getEBookQuery_throw( const OUString& _rSql )
 Reference< XResultSet > OCommonStatement::impl_executeQuery_throw( const QueryData& _rQueryData )
 {
     // create result set
-    OEvoabResultSet* pResult = new OEvoabResultSet( this, m_pConnection );
+    OEvoabResultSet* pResult = new OEvoabResultSet( this, m_xConnection.get() );
     Reference< XResultSet > xRS = pResult;
     pResult->construct( _rQueryData );
 
@@ -579,7 +573,7 @@ Reference< XResultSet > OCommonStatement::impl_executeQuery_throw( const QueryDa
 
 Reference< XResultSet > OCommonStatement::impl_executeQuery_throw( const OUString& _rSql )
 {
-    SAL_INFO( "connectivity.evoab2", "OCommonStatement::impl_executeQuery_throw(" << _rSql << "%s)\n" );
+    SAL_INFO( "connectivity.evoab2", "OCommonStatement::impl_executeQuery_throw " << _rSql );
 
 #if OSL_DEBUG_LEVEL > 1
     g_message( "Parse SQL '%s'\n",
@@ -590,7 +584,7 @@ Reference< XResultSet > OCommonStatement::impl_executeQuery_throw( const OUStrin
 }
 
 
-Reference< XPropertySetInfo > SAL_CALL OCommonStatement::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+Reference< XPropertySetInfo > SAL_CALL OCommonStatement::getPropertySetInfo(  )
 {
     return ::cppu::OPropertySetHelper::createPropertySetInfo( getInfoHelper() );
 }
@@ -608,7 +602,7 @@ IMPLEMENT_FORWARD_XINTERFACE2( OStatement, OCommonStatement, OStatement_IBase )
 IMPLEMENT_FORWARD_XTYPEPROVIDER2( OStatement, OCommonStatement, OStatement_IBase )
 
 
-sal_Bool SAL_CALL OStatement::execute( const OUString& _sql ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatement::execute( const OUString& _sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OCommonStatement_IBase::rBHelper.bDisposed);
@@ -618,7 +612,7 @@ sal_Bool SAL_CALL OStatement::execute( const OUString& _sql ) throw(SQLException
 }
 
 
-Reference< XResultSet > SAL_CALL OStatement::executeQuery( const OUString& _sql ) throw(SQLException, RuntimeException, std::exception)
+Reference< XResultSet > SAL_CALL OStatement::executeQuery( const OUString& _sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OCommonStatement_IBase::rBHelper.bDisposed);
@@ -627,7 +621,7 @@ Reference< XResultSet > SAL_CALL OStatement::executeQuery( const OUString& _sql 
 }
 
 
-sal_Int32 SAL_CALL OStatement::executeUpdate( const OUString& /*sql*/ ) throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OStatement::executeUpdate( const OUString& /*sql*/ )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OCommonStatement_IBase::rBHelper.bDisposed);

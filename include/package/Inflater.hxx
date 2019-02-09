@@ -22,30 +22,30 @@
 
 #include <com/sun/star/uno/Sequence.hxx>
 #include <package/packagedllapi.hxx>
+#include <memory>
 
 struct z_stream_s;
 
 namespace ZipUtils {
 
-class DLLPUBLIC_PACKAGE Inflater
+class DLLPUBLIC_PACKAGE Inflater final
 {
     typedef struct z_stream_s z_stream;
 
-protected:
-    bool                    bFinished, bSetParams, bNeedDict;
+    bool                    bFinished, bNeedDict;
     sal_Int32               nOffset, nLength, nLastInflateError;
-    z_stream*               pStream;
+    std::unique_ptr<z_stream>  pStream;
     css::uno::Sequence < sal_Int8 >  sInBuffer;
     sal_Int32   doInflateBytes (css::uno::Sequence < sal_Int8 > &rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength);
 
 public:
-    Inflater(bool bNoWrap = false);
+    Inflater(bool bNoWrap);
     ~Inflater();
-    void SAL_CALL setInput( const css::uno::Sequence< sal_Int8 >& rBuffer );
-    bool SAL_CALL needsDictionary(  ) { return bNeedDict;}
-    bool SAL_CALL finished(  ) { return bFinished;}
-    sal_Int32 SAL_CALL doInflateSegment( css::uno::Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength );
-    void SAL_CALL end(  );
+    void setInput( const css::uno::Sequence< sal_Int8 >& rBuffer );
+    bool needsDictionary(  ) { return bNeedDict;}
+    bool finished(  ) { return bFinished;}
+    sal_Int32 doInflateSegment( css::uno::Sequence< sal_Int8 >& rBuffer, sal_Int32 nNewOffset, sal_Int32 nNewLength );
+    void end(  );
 
     sal_Int32 getLastInflateError() { return nLastInflateError; }
 };

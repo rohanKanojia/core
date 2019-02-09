@@ -58,11 +58,6 @@ class DocumentPreview(object):
                 ps[item] = propValues[index]
             return self.setDocument(self.url, ps.getProperties1())
 
-    def reload(self, xmsf):
-        self.closeFrame()
-        self.createPreviewFrame(xmsf, self.xControl)
-        self.setDocument(self.url, self.loadArgs)
-
     def closeFrame(self):
         if self.xFrame is not None:
             self.xFrame.close(False)
@@ -72,9 +67,9 @@ class DocumentPreview(object):
     which is not part of the global frame tree.
 
     Attention:
-    a) This frame wont be destroyed by the office. It must be closed by you!
+    a) This frame won't be destroyed by the office. It must be closed by you!
        Do so - please call XCloseable::close().
-    b) The container window is part of the frame. Dont hold it alive - nor try to kill it.
+    b) The container window is part of the frame. Don't hold it alive - nor try to kill it.
        It will be destroyed inside close().
     '''
 

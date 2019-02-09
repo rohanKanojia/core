@@ -18,9 +18,9 @@
  */
 
 
-#include "fmcontrolbordermanager.hxx"
+#include <fmcontrolbordermanager.hxx>
 
-#include "fmprop.hrc"
+#include <fmprop.hxx>
 
 #include <com/sun/star/form/validation/XValidatableFormComponent.hpp>
 #include <com/sun/star/awt/XTextComponent.hpp>
@@ -67,21 +67,21 @@ namespace svxform
     }
 
 
-    static void getBorder( const Reference< XVclWindowPeer >& _rxPeer, BorderDescriptor& _rBoder )
+    static void getBorder( const Reference< XVclWindowPeer >& _rxPeer, BorderDescriptor& _rBorder )
     {
         OSL_ENSURE( _rxPeer.is(), "getBorder: invalid peer!" );
 
-        OSL_VERIFY( _rxPeer->getProperty( FM_PROP_BORDER ) >>= _rBoder.nBorderType );
-        OSL_VERIFY( _rxPeer->getProperty( FM_PROP_BORDERCOLOR ) >>= _rBoder.nBorderColor );
+        OSL_VERIFY( _rxPeer->getProperty( FM_PROP_BORDER ) >>= _rBorder.nBorderType );
+        OSL_VERIFY( _rxPeer->getProperty( FM_PROP_BORDERCOLOR ) >>= _rBorder.nBorderColor );
     }
 
 
-    static void setBorder( const Reference< XVclWindowPeer >& _rxPeer, const BorderDescriptor& _rBoder )
+    static void setBorder( const Reference< XVclWindowPeer >& _rxPeer, const BorderDescriptor& _rBorder )
     {
         OSL_ENSURE( _rxPeer.is(), "setBorder: invalid peer!" );
 
-        _rxPeer->setProperty( FM_PROP_BORDER, makeAny( _rBoder.nBorderType ) );
-        _rxPeer->setProperty( FM_PROP_BORDERCOLOR, makeAny( _rBoder.nBorderColor ) );
+        _rxPeer->setProperty( FM_PROP_BORDER, makeAny( _rBorder.nBorderType ) );
+        _rxPeer->setProperty( FM_PROP_BORDERCOLOR, makeAny( _rBorder.nBorderColor ) );
     }
 
     ControlBorderManager::ControlBorderManager()
@@ -135,37 +135,37 @@ namespace svxform
 
     ControlStatus ControlBorderManager::getControlStatus( const Reference< XControl >& _rxControl )
     {
-        ControlStatus nStatus = CONTROL_STATUS_NONE;
+        ControlStatus nStatus = ControlStatus::NONE;
 
         if ( _rxControl.get() == m_aFocusControl.xControl.get() )
-            nStatus |= CONTROL_STATUS_FOCUSED;
+            nStatus |= ControlStatus::Focused;
 
         if ( _rxControl.get() == m_aMouseHoverControl.xControl.get() )
-            nStatus |= CONTROL_STATUS_MOUSE_HOVER;
+            nStatus |= ControlStatus::MouseHover;
 
         if ( m_aInvalidControls.find( ControlData( _rxControl ) ) != m_aInvalidControls.end() )
-            nStatus |= CONTROL_STATUS_INVALID;
+            nStatus |= ControlStatus::Invalid;
 
         return nStatus;
     }
 
 
-    sal_Int32 ControlBorderManager::getControlColorByStatus( ControlStatus _nStatus )
+    Color ControlBorderManager::getControlColorByStatus( ControlStatus _nStatus )
     {
         // "invalid" is ranked highest
-        if ( _nStatus & CONTROL_STATUS_INVALID )
+        if ( _nStatus & ControlStatus::Invalid )
             return m_nInvalidColor;
 
         // then, "focused" is more important than ...
-        if ( _nStatus & CONTROL_STATUS_FOCUSED )
+        if ( _nStatus & ControlStatus::Focused )
             return m_nFocusColor;
 
         // ... "mouse over"
-        if ( _nStatus & CONTROL_STATUS_MOUSE_HOVER )
+        if ( _nStatus & ControlStatus::MouseHover )
             return m_nMouseHoveColor;
 
         OSL_FAIL( "ControlBorderManager::getControlColorByStatus: invalid status!" );
-        return 0x00000000;
+        return Color(0);
     }
 
 
@@ -175,10 +175,10 @@ namespace svxform
 
         ControlStatus nStatus = getControlStatus( _rxControl );
         BorderDescriptor aBorder;
-        aBorder.nBorderType =   ( nStatus == CONTROL_STATUS_NONE )
+        aBorder.nBorderType =   ( nStatus == ControlStatus::NONE )
                             ?   _rFallback.nBorderType
                             :   VisualEffect::FLAT;
-        aBorder.nBorderColor =   ( nStatus == CONTROL_STATUS_NONE )
+        aBorder.nBorderColor =   ( nStatus == ControlStatus::NONE )
                              ?   _rFallback.nBorderColor
                              :   getControlColorByStatus( nStatus );
         setBorder( _rxPeer, aBorder );
@@ -282,17 +282,17 @@ namespace svxform
     }
 
 
-    void ControlBorderManager::setStatusColor( ControlStatus _nStatus, sal_Int32 _nColor )
+    void ControlBorderManager::setStatusColor( ControlStatus _nStatus, Color _nColor )
     {
         switch ( _nStatus )
         {
-        case CONTROL_STATUS_FOCUSED:
+        case ControlStatus::Focused:
             m_nFocusColor = _nColor;
             break;
-        case CONTROL_STATUS_MOUSE_HOVER:
+        case ControlStatus::MouseHover:
             m_nMouseHoveColor = _nColor;
             break;
-        case CONTROL_STATUS_INVALID:
+        case ControlStatus::Invalid:
             m_nInvalidColor = _nColor;
             break;
         default:
@@ -311,17 +311,14 @@ namespace svxform
         ControlBag aInvalidControls;
         m_aInvalidControls.swap( aInvalidControls );
 
-        for ( ControlBag::const_iterator loop = aInvalidControls.begin();
-              loop != aInvalidControls.end();
-              ++loop
-            )
+        for (const auto& rControl : aInvalidControls)
         {
-            Reference< XVclWindowPeer > xPeer( loop->xControl->getPeer(), UNO_QUERY );
+            Reference< XVclWindowPeer > xPeer( rControl.xControl->getPeer(), UNO_QUERY );
             if ( xPeer.is() )
             {
-                updateBorderStyle( loop->xControl, xPeer, *loop );
-                xPeer->setProperty( FM_PROP_HELPTEXT, makeAny( loop->sOriginalHelpText ) );
-                setUnderline( xPeer, *loop );
+                updateBorderStyle( rControl.xControl, xPeer, rControl );
+                xPeer->setProperty( FM_PROP_HELPTEXT, makeAny( rControl.sOriginalHelpText ) );
+                setUnderline( xPeer, rControl );
             }
         }
     }

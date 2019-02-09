@@ -18,6 +18,7 @@
  */
 
 #include "elementexport.hxx"
+
 #include "strings.hxx"
 #include <xmloff/xmlnmspe.hxx>
 #include "eventexport.hxx"
@@ -59,6 +60,7 @@
 #include <tools/diagnose_ex.h>
 #include <comphelper/extract.hxx>
 #include <sal/macros.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
@@ -92,13 +94,11 @@ namespace xmloff
         const Sequence< ScriptEventDescriptor >& _rEvents)
         :OPropertyExport(_rContext, _rxProps)
         ,m_aEvents(_rEvents)
-        ,m_pXMLElement(nullptr)
     {
     }
 
     OElementExport::~OElementExport()
     {
-        implEndElement();
     }
 
     void OElementExport::doExport()
@@ -142,13 +142,12 @@ namespace xmloff
 
     void OElementExport::implStartElement(const sal_Char* _pName)
     {
-        m_pXMLElement = new SvXMLElementExport(m_rContext.getGlobalContext(), XML_NAMESPACE_FORM, _pName, true, true);
+        m_pXMLElement = std::make_unique<SvXMLElementExport>(m_rContext.getGlobalContext(), XML_NAMESPACE_FORM, _pName, true, true);
     }
 
     void OElementExport::implEndElement()
     {
-        delete m_pXMLElement;
-        m_pXMLElement = nullptr;
+        m_pXMLElement.reset();
     }
 
     void OElementExport::exportServiceNameAttribute()
@@ -210,8 +209,8 @@ namespace xmloff
 
         // now write this
         AddAttribute(
-            OAttributeMetaData::getCommonControlAttributeNamespace(CCA_SERVICE_NAME),
-            OAttributeMetaData::getCommonControlAttributeName(CCA_SERVICE_NAME),
+            OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::ServiceName),
+            OAttributeMetaData::getCommonControlAttributeName(CCAFlags::ServiceName),
             sToWriteServiceName);
     }
 
@@ -234,44 +233,38 @@ namespace xmloff
         ,m_sReferringControls(_rReferringControls)
         ,m_nClassId(FormComponentType::CONTROL)
         ,m_eType( UNKNOWN )
-        ,m_nIncludeCommon(0)
-        ,m_nIncludeDatabase(0)
-        ,m_nIncludeSpecial(0)
-        ,m_nIncludeEvents(0)
-        ,m_nIncludeBindings(0)
-        ,m_pOuterElement(nullptr)
+        ,m_nIncludeCommon(CCAFlags::NONE)
+        ,m_nIncludeDatabase(DAFlags::NONE)
+        ,m_nIncludeSpecial(SCAFlags::NONE)
+        ,m_nIncludeEvents(EAFlags::NONE)
+        ,m_nIncludeBindings(BAFlags::NONE)
     {
         OSL_ENSURE(m_xProps.is(), "OControlExport::OControlExport: invalid arguments!");
-    }
-
-    OControlExport::~OControlExport()
-    {
-        implEndElement();
     }
 
     void OControlExport::exportOuterAttributes()
     {
         // the control id
-        if (CCA_NAME & m_nIncludeCommon)
+        if (CCAFlags::Name & m_nIncludeCommon)
         {
             exportStringPropertyAttribute(
-                OAttributeMetaData::getCommonControlAttributeNamespace(CCA_NAME),
-                OAttributeMetaData::getCommonControlAttributeName(CCA_NAME),
+                OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Name),
+                OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Name),
                 PROPERTY_NAME
                 );
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_NAME;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::Name;
         #endif
         }
 
         // the service name
-        if (m_nIncludeCommon & CCA_SERVICE_NAME)
+        if (m_nIncludeCommon & CCAFlags::ServiceName)
         {
             exportServiceNameAttribute();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_SERVICE_NAME;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::ServiceName;
         #endif
         }
     }
@@ -279,14 +272,14 @@ namespace xmloff
     void OControlExport::exportInnerAttributes()
     {
         // the control id
-        if (CCA_CONTROL_ID & m_nIncludeCommon)
+        if (CCAFlags::ControlId & m_nIncludeCommon)
         {
             OSL_ENSURE(!m_sControlId.isEmpty(), "OControlExport::exportInnerAttributes: have no control id for the control!");
             m_rContext.getGlobalContext().AddAttributeIdLegacy(
                 XML_NAMESPACE_FORM, m_sControlId);
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_CONTROL_ID;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::ControlId;
         #endif
         }
 
@@ -300,7 +293,7 @@ namespace xmloff
         exportDatabaseAttributes();
 
         // attributes related to external bindings
-        exportBindingAtributes();
+        exportBindingAttributes();
 
         // attributes special to the respective control type
         exportSpecialAttributes();
@@ -314,7 +307,7 @@ namespace xmloff
         exportOuterAttributes();
     }
 
-    void OControlExport::exportSubTags() throw (Exception, std::exception)
+    void OControlExport::exportSubTags()
     {
         // for the upcoming exportRemainingProperties:
         // if a control has the LabelControl property, this is not stored with the control itself, but instead with
@@ -412,8 +405,8 @@ namespace xmloff
                     {
                         m_rContext.getGlobalContext().ClearAttrList();
                         AddAttribute(
-                            OAttributeMetaData::getCommonControlAttributeNamespace(CCA_LABEL),
-                            OAttributeMetaData::getCommonControlAttributeName(CCA_LABEL),
+                            OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Label),
+                            OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Label),
                             *pListItems);
                         SvXMLElementExport aFormElement(m_rContext.getGlobalContext(), XML_NAMESPACE_FORM, "item", true, true);
                     }
@@ -446,16 +439,13 @@ namespace xmloff
     void OControlExport::exportGenericHandlerAttributes()
     {
         const Sequence< Property > aProperties = m_xPropertyInfo->getProperties();
-        for (   const Property* prop = aProperties.getConstArray();
-                prop != aProperties.getConstArray() + aProperties.getLength();
-                ++prop
-            )
+        for ( auto const & prop : aProperties )
         {
             try
             {
                 // see if this property can already be handled with an IPropertyHandler (which, on the long
                 // term, should be the case for most, if not all, properties)
-                const PropertyDescription* propDescription = metadata::getPropertyDescription( prop->Name );
+                const PropertyDescription* propDescription = metadata::getPropertyDescription( prop.Name );
                 if ( propDescription == nullptr )
                     continue;
 
@@ -472,15 +462,15 @@ namespace xmloff
                 if ( propDescription->propertyGroup == NO_GROUP )
                 {
                     // that's a property which has a direct mapping to an attribute
-                    if ( !shouldExportProperty( prop->Name ) )
+                    if ( !shouldExportProperty( prop.Name ) )
                         // TODO: in the future, we surely need a more sophisticated approach to this, involving the property
                         // handler, or the property description
                     {
-                        exportedProperty( prop->Name );
+                        exportedProperty( prop.Name );
                         continue;
                     }
 
-                    const Any propValue = m_xProps->getPropertyValue( prop->Name );
+                    const Any propValue = m_xProps->getPropertyValue( prop.Name );
                     attributeValue = handler->getAttributeValue( propValue );
                 }
                 else
@@ -494,14 +484,11 @@ namespace xmloff
 
                     // retrieve the values for all those properties
                     PropertyValues aValues;
-                    for (   PropertyDescriptionList::iterator desc = descriptions.begin();
-                            desc != descriptions.end();
-                            ++desc
-                        )
+                    for ( const auto& desc : descriptions )
                     {
                         // TODO: XMultiPropertySet?
-                        const Any propValue = m_xProps->getPropertyValue( (*desc)->propertyName );
-                        aValues[ (*desc)->propertyId ] = propValue;
+                        const Any propValue = m_xProps->getPropertyValue( desc->propertyName );
+                        aValues[ desc->propertyId ] = propValue;
                     }
 
                     // let the handler translate into an XML attribute value
@@ -514,11 +501,11 @@ namespace xmloff
                     attributeValue
                 );
 
-                exportedProperty( prop->Name );
+                exportedProperty( prop.Name );
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("xmloff.forms");
             }
         }
     }
@@ -538,9 +525,9 @@ namespace xmloff
         // some string properties
         {
             // the attribute ids of all properties which are expected to be of type string
-            static const sal_Int32 nStringPropertyAttributeIds[] =
+            static const CCAFlags nStringPropertyAttributeIds[] =
             {
-                CCA_LABEL, CCA_TITLE
+                CCAFlags::Label, CCAFlags::Title
             };
             // the names of all properties which are expected to be of type string
             static const char * aStringPropertyNames[] =
@@ -568,9 +555,9 @@ namespace xmloff
 
         // some boolean properties
         {
-            static const sal_Int32 nBooleanPropertyAttributeIds[] =
+            static const CCAFlags nBooleanPropertyAttributeIds[] =
             {   // attribute flags
-                CCA_CURRENT_SELECTED, CCA_DISABLED, CCA_DROPDOWN, CCA_PRINTABLE, CCA_READONLY, CCA_SELECTED, CCA_TAB_STOP, CCA_ENABLEVISIBLE
+                CCAFlags::CurrentSelected, CCAFlags::Disabled, CCAFlags::Dropdown, CCAFlags::Printable, CCAFlags::ReadOnly, CCAFlags::Selected, CCAFlags::TabStop, CCAFlags::EnableVisible
             };
             static const char * pBooleanPropertyNames[] =
             {   // property names
@@ -579,9 +566,9 @@ namespace xmloff
                 PROPERTY_READONLY, PROPERTY_DEFAULT_STATE,
                 PROPERTY_TABSTOP, PROPERTY_ENABLEVISIBLE
             };
-            static const sal_Int8 nBooleanPropertyAttrFlags[] =
+            static const BoolAttrFlags nBooleanPropertyAttrFlags[] =
             {   // attribute defaults
-                BOOLATTR_DEFAULT_FALSE, BOOLATTR_DEFAULT_FALSE | BOOLATTR_INVERSE_SEMANTICS, BOOLATTR_DEFAULT_FALSE, BOOLATTR_DEFAULT_TRUE, BOOLATTR_DEFAULT_FALSE, BOOLATTR_DEFAULT_FALSE, BOOLATTR_DEFAULT_VOID, BOOLATTR_DEFAULT_FALSE
+                BoolAttrFlags::DefaultFalse, BoolAttrFlags::DefaultFalse | BoolAttrFlags::InverseSemantics, BoolAttrFlags::DefaultFalse, BoolAttrFlags::DefaultTrue, BoolAttrFlags::DefaultFalse, BoolAttrFlags::DefaultFalse, BoolAttrFlags::DefaultVoid, BoolAttrFlags::DefaultFalse
             };
         #if OSL_DEBUG_LEVEL > 0
             static const sal_Int32 nIdCount = SAL_N_ELEMENTS(nBooleanPropertyAttributeIds);
@@ -608,9 +595,9 @@ namespace xmloff
         // some integer properties
         {
             // now the common handling
-            static sal_Int32 nIntegerPropertyAttributeIds[] =
+            static const CCAFlags nIntegerPropertyAttributeIds[] =
             {   // attribute flags
-                CCA_SIZE, CCA_TAB_INDEX
+                CCAFlags::Size, CCAFlags::TabIndex
             };
             static const char * pIntegerPropertyNames[] =
             {   // property names
@@ -621,7 +608,7 @@ namespace xmloff
                 5, 0
             };
 
-            if ( m_nIncludeCommon & CCA_MAX_LENGTH )
+            if ( m_nIncludeCommon & CCAFlags::MaxLength )
                 exportedProperty(PROPERTY_MAXTEXTLENGTH);
 
         #if OSL_DEBUG_LEVEL > 0
@@ -649,46 +636,46 @@ namespace xmloff
 
         // some enum properties
         {
-            if (m_nIncludeCommon & CCA_BUTTON_TYPE)
+            if (m_nIncludeCommon & CCAFlags::ButtonType)
             {
                 exportEnumPropertyAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_BUTTON_TYPE),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_BUTTON_TYPE),
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::ButtonType),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::ButtonType),
                     PROPERTY_BUTTONTYPE,
-                    OEnumMapper::getEnumMap(OEnumMapper::epButtonType),
+                    aFormButtonTypeMap,
                     FormButtonType_PUSH);
         #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeCommon = m_nIncludeCommon & ~CCA_BUTTON_TYPE;
+                m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::ButtonType;
         #endif
             }
-            if ( m_nIncludeCommon & CCA_ORIENTATION )
+            if ( m_nIncludeCommon & CCAFlags::Orientation )
             {
                 exportEnumPropertyAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace( CCA_ORIENTATION ),
-                    OAttributeMetaData::getCommonControlAttributeName( CCA_ORIENTATION ),
+                    OAttributeMetaData::getCommonControlAttributeNamespace( CCAFlags::Orientation ),
+                    OAttributeMetaData::getCommonControlAttributeName( CCAFlags::Orientation ),
                     PROPERTY_ORIENTATION,
-                    OEnumMapper::getEnumMap( OEnumMapper::epOrientation ),
+                    aOrientationMap,
                     ScrollBarOrientation::HORIZONTAL
                 );
         #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeCommon = m_nIncludeCommon & ~CCA_ORIENTATION;
+                m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::Orientation;
         #endif
             }
 
-            if ( m_nIncludeCommon & CCA_VISUAL_EFFECT )
+            if ( m_nIncludeCommon & CCAFlags::VisualEffect )
             {
                 exportEnumPropertyAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace( CCA_VISUAL_EFFECT ),
-                    OAttributeMetaData::getCommonControlAttributeName( CCA_VISUAL_EFFECT ),
+                    OAttributeMetaData::getCommonControlAttributeNamespace( CCAFlags::VisualEffect ),
+                    OAttributeMetaData::getCommonControlAttributeName( CCAFlags::VisualEffect ),
                     PROPERTY_VISUAL_EFFECT,
-                    OEnumMapper::getEnumMap( OEnumMapper::epVisualEffect ),
+                    aVisualEffectMap,
                     VisualEffect::LOOK3D
                 );
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeCommon = m_nIncludeCommon & ~CCA_VISUAL_EFFECT;
+                m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::VisualEffect;
             #endif
             }
         }
@@ -696,17 +683,17 @@ namespace xmloff
         // some properties which require a special handling
 
         // the target frame
-        if (m_nIncludeCommon & CCA_TARGET_FRAME)
+        if (m_nIncludeCommon & CCAFlags::TargetFrame)
         {
             exportTargetFrameAttribute();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_TARGET_FRAME;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::TargetFrame;
         #endif
         }
 
         // max text length
-        if ( m_nIncludeCommon & CCA_MAX_LENGTH )
+        if ( m_nIncludeCommon & CCAFlags::MaxLength )
         {
             // normally, the respective property would be "MaxTextLen"
             // However, if the model has a property "PersistenceMaxTextLength", then we prefer this
@@ -718,8 +705,8 @@ namespace xmloff
 
             // export it
             exportInt16PropertyAttribute(
-                OAttributeMetaData::getCommonControlAttributeNamespace( CCA_MAX_LENGTH ),
-                OAttributeMetaData::getCommonControlAttributeName( CCA_MAX_LENGTH ),
+                OAttributeMetaData::getCommonControlAttributeNamespace( CCAFlags::MaxLength ),
+                OAttributeMetaData::getCommonControlAttributeName( CCAFlags::MaxLength ),
                 sTextLenPropertyName,
                 0
             );
@@ -730,47 +717,47 @@ namespace xmloff
 
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_MAX_LENGTH;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::MaxLength;
         #endif
         }
 
-        if (m_nIncludeCommon & CCA_TARGET_LOCATION)
+        if (m_nIncludeCommon & CCAFlags::TargetLocation)
         {
             exportTargetLocationAttribute(false);
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_TARGET_LOCATION;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::TargetLocation;
         #endif
         }
 
         // OJ #99721#
-        if (m_nIncludeCommon & CCA_IMAGE_DATA)
+        if (m_nIncludeCommon & CCAFlags::ImageData)
         {
             exportImageDataAttribute();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_IMAGE_DATA;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::ImageData;
         #endif
         }
 
         // the for attribute
         // the target frame
-        if (m_nIncludeCommon & CCA_FOR)
+        if (m_nIncludeCommon & CCAFlags::For)
         {
             if (!m_sReferringControls.isEmpty())
             {   // there is at least one control referring to the one we're handling currently
                 AddAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_FOR),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_FOR),
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::For),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::For),
                     m_sReferringControls);
             }
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~CCA_FOR;
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags::For;
         #endif
         }
 
-        if ((CCA_CURRENT_VALUE | CCA_VALUE) & m_nIncludeCommon)
+        if ((CCAFlags::CurrentValue | CCAFlags::Value) & m_nIncludeCommon)
         {
             const sal_Char* pCurrentValuePropertyName = nullptr;
             const sal_Char* pValuePropertyName = nullptr;
@@ -778,44 +765,47 @@ namespace xmloff
             // get the property names
             getValuePropertyNames(m_eType, m_nClassId, pCurrentValuePropertyName, pValuePropertyName);
 
-            static const sal_Char* pCurrentValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_CURRENT_VALUE);
-            static const sal_Char* pValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCA_VALUE);
-            static const sal_uInt16 nCurrentValueAttributeNamespaceKey = OAttributeMetaData::getCommonControlAttributeNamespace(CCA_CURRENT_VALUE);
-            static const sal_uInt16 nValueAttributeNamespaceKey = OAttributeMetaData::getCommonControlAttributeNamespace(CCA_VALUE);
-
             // add the attributes if necessary and possible
-            if (pCurrentValuePropertyName && (CCA_CURRENT_VALUE & m_nIncludeCommon))
+            if (pCurrentValuePropertyName && (CCAFlags::CurrentValue & m_nIncludeCommon))
             {
+                static const sal_Char* pCurrentValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::CurrentValue);
                 // don't export the current-value if this value originates from a data binding
                 // #i26944#
                 if ( controlHasActiveDataBinding() )
                     exportedProperty( OUString::createFromAscii( pCurrentValuePropertyName ) );
                 else
+                {
+                    static const sal_uInt16 nCurrentValueAttributeNamespaceKey = OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::CurrentValue);
                     exportGenericPropertyAttribute(
                         nCurrentValueAttributeNamespaceKey,
                         pCurrentValueAttributeName,
                         pCurrentValuePropertyName
                     );
+                }
             }
 
-            if (pValuePropertyName && (CCA_VALUE & m_nIncludeCommon))
+            if (pValuePropertyName && (CCAFlags::Value & m_nIncludeCommon))
+            {
+                static const sal_Char* pValueAttributeName = OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Value);
+                static const sal_uInt16 nValueAttributeNamespaceKey = OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Value);
                 exportGenericPropertyAttribute(
                     nValueAttributeNamespaceKey,
                     pValueAttributeName,
                     pValuePropertyName);
+            }
 
-            OSL_ENSURE((nullptr == pValuePropertyName) == (0 == (CCA_VALUE & m_nIncludeCommon)),
+            OSL_ENSURE((nullptr == pValuePropertyName) == (CCAFlags::NONE == (CCAFlags::Value & m_nIncludeCommon)),
                 "OControlExport::exportCommonControlAttributes: no property found for the value attribute!");
-            OSL_ENSURE((nullptr == pCurrentValuePropertyName ) == (0 == (CCA_CURRENT_VALUE & m_nIncludeCommon)),
+            OSL_ENSURE((nullptr == pCurrentValuePropertyName ) == (CCAFlags::NONE == (CCAFlags::CurrentValue & m_nIncludeCommon)),
                 "OControlExport::exportCommonControlAttributes: no property found for the current-value attribute!");
 
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeCommon = m_nIncludeCommon & ~(CCA_CURRENT_VALUE | CCA_VALUE);
+            m_nIncludeCommon = m_nIncludeCommon & ~CCAFlags(CCAFlags::CurrentValue | CCAFlags::Value);
         #endif
         }
 
-        OSL_ENSURE(0 == m_nIncludeCommon,
+        OSL_ENSURE(CCAFlags::NONE == m_nIncludeCommon,
             "OControlExport::exportCommonControlAttributes: forgot some flags!");
             // in the dbg_util version, we should have removed every bit we handled from the mask, so it should
             // be 0 now ...
@@ -824,135 +814,135 @@ namespace xmloff
     void OControlExport::exportDatabaseAttributes()
     {
 #if OSL_DEBUG_LEVEL > 0
-        sal_Int32 nIncludeDatabase = m_nIncludeDatabase;
+        DAFlags nIncludeDatabase = m_nIncludeDatabase;
 #endif
         // the only string property: DataField
-        if (DA_DATA_FIELD & m_nIncludeDatabase)
+        if (DAFlags::DataField & m_nIncludeDatabase)
         {
             exportStringPropertyAttribute(
-                OAttributeMetaData::getDatabaseAttributeNamespace(DA_DATA_FIELD),
-                OAttributeMetaData::getDatabaseAttributeName(DA_DATA_FIELD),
+                OAttributeMetaData::getDatabaseAttributeNamespace(),
+                OAttributeMetaData::getDatabaseAttributeName(DAFlags::DataField),
                 PROPERTY_DATAFIELD);
-            RESET_BIT( nIncludeDatabase, DA_DATA_FIELD );
+            RESET_BIT( nIncludeDatabase, DAFlags::DataField );
         }
 
         // InputRequired
-        if ( DA_INPUT_REQUIRED & m_nIncludeDatabase )
+        if ( DAFlags::InputRequired & m_nIncludeDatabase )
         {
             exportBooleanPropertyAttribute(
-                OAttributeMetaData::getDatabaseAttributeNamespace( DA_INPUT_REQUIRED ),
-                OAttributeMetaData::getDatabaseAttributeName( DA_INPUT_REQUIRED ),
+                OAttributeMetaData::getDatabaseAttributeNamespace(),
+                OAttributeMetaData::getDatabaseAttributeName( DAFlags::InputRequired ),
                 PROPERTY_INPUT_REQUIRED,
-                BOOLATTR_DEFAULT_TRUE
+                BoolAttrFlags::DefaultFalse | BoolAttrFlags::DefaultVoid
             );
-            RESET_BIT( nIncludeDatabase, DA_INPUT_REQUIRED );
+            RESET_BIT( nIncludeDatabase, DAFlags::InputRequired );
         }
 
         // the only int16 property: BoundColumn
-        if (DA_BOUND_COLUMN & m_nIncludeDatabase)
+        if (DAFlags::BoundColumn & m_nIncludeDatabase)
         {
             exportInt16PropertyAttribute(
-                OAttributeMetaData::getDatabaseAttributeNamespace(DA_BOUND_COLUMN),
-                OAttributeMetaData::getDatabaseAttributeName(DA_BOUND_COLUMN),
+                OAttributeMetaData::getDatabaseAttributeNamespace(),
+                OAttributeMetaData::getDatabaseAttributeName(DAFlags::BoundColumn),
                 PROPERTY_BOUNDCOLUMN,
                 0,
                 true);
-            RESET_BIT( nIncludeDatabase, DA_BOUND_COLUMN );
+            RESET_BIT( nIncludeDatabase, DAFlags::BoundColumn );
         }
 
         // ConvertEmptyToNull
-        if (DA_CONVERT_EMPTY & m_nIncludeDatabase)
+        if (DAFlags::ConvertEmpty & m_nIncludeDatabase)
         {
             exportBooleanPropertyAttribute(
-                OAttributeMetaData::getDatabaseAttributeNamespace(DA_CONVERT_EMPTY),
-                OAttributeMetaData::getDatabaseAttributeName(DA_CONVERT_EMPTY),
+                OAttributeMetaData::getDatabaseAttributeNamespace(),
+                OAttributeMetaData::getDatabaseAttributeName(DAFlags::ConvertEmpty),
                 PROPERTY_EMPTY_IS_NULL,
-                BOOLATTR_DEFAULT_FALSE
+                BoolAttrFlags::DefaultFalse
                 );
-            RESET_BIT( nIncludeDatabase, DA_CONVERT_EMPTY );
+            RESET_BIT( nIncludeDatabase, DAFlags::ConvertEmpty );
         }
 
         // the only enum property: ListSourceType
-        if (DA_LIST_SOURCE_TYPE & m_nIncludeDatabase)
+        if (DAFlags::ListSource_TYPE & m_nIncludeDatabase)
         {
             exportEnumPropertyAttribute(
-                OAttributeMetaData::getDatabaseAttributeNamespace(DA_LIST_SOURCE_TYPE),
-                OAttributeMetaData::getDatabaseAttributeName(DA_LIST_SOURCE_TYPE),
+                OAttributeMetaData::getDatabaseAttributeNamespace(),
+                OAttributeMetaData::getDatabaseAttributeName(DAFlags::ListSource_TYPE),
                 PROPERTY_LISTSOURCETYPE,
-                OEnumMapper::getEnumMap(OEnumMapper::epListSourceType),
+                aListSourceTypeMap,
                 ListSourceType_VALUELIST
                 );
-            RESET_BIT( nIncludeDatabase, DA_LIST_SOURCE_TYPE );
+            RESET_BIT( nIncludeDatabase, DAFlags::ListSource_TYPE );
         }
 
-        if (m_nIncludeDatabase & DA_LIST_SOURCE)
+        if (m_nIncludeDatabase & DAFlags::ListSource)
         {
             exportListSourceAsAttribute();
-            RESET_BIT( nIncludeDatabase, DA_LIST_SOURCE );
+            RESET_BIT( nIncludeDatabase, DAFlags::ListSource );
         }
 
 #if OSL_DEBUG_LEVEL > 0
-        OSL_ENSURE(0 == nIncludeDatabase,
+        OSL_ENSURE(DAFlags::NONE == nIncludeDatabase,
             "OControlExport::exportDatabaseAttributes: forgot some flags!");
             // in the dbg_util version, we should have removed every bit we handled from the mask, so it should
             // be 0 now ...
 #endif
     }
 
-    void OControlExport::exportBindingAtributes()
+    void OControlExport::exportBindingAttributes()
     {
 #if OSL_DEBUG_LEVEL > 0
-        sal_Int32 nIncludeBinding = m_nIncludeBindings;
+        BAFlags nIncludeBinding = m_nIncludeBindings;
 #endif
 
-        if ( m_nIncludeBindings & BA_LINKED_CELL )
+        if ( m_nIncludeBindings & BAFlags::LinkedCell )
         {
-            exportCellBindingAttributes( ( m_nIncludeBindings & BA_LIST_LINKING_TYPE ) != 0 );
+            exportCellBindingAttributes( bool(m_nIncludeBindings & BAFlags::ListLinkingType) );
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            nIncludeBinding = nIncludeBinding & ~( BA_LINKED_CELL | BA_LIST_LINKING_TYPE );
+            nIncludeBinding = nIncludeBinding & ~BAFlags( BAFlags::LinkedCell | BAFlags::ListLinkingType );
         #endif
         }
 
-        if ( m_nIncludeBindings & BA_LIST_CELL_RANGE )
+        if ( m_nIncludeBindings & BAFlags::ListCellRange )
         {
             exportCellListSourceRange();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            nIncludeBinding = nIncludeBinding & ~BA_LIST_CELL_RANGE;
+            nIncludeBinding = nIncludeBinding & ~BAFlags::ListCellRange;
         #endif
         }
 
-        if ( m_nIncludeBindings & BA_XFORMS_BIND )
+        if ( m_nIncludeBindings & BAFlags::XFormsBind )
         {
             exportXFormsBindAttributes();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            nIncludeBinding = nIncludeBinding & ~BA_XFORMS_BIND;
+            nIncludeBinding = nIncludeBinding & ~BAFlags::XFormsBind;
         #endif
         }
 
-        if ( m_nIncludeBindings & BA_XFORMS_LISTBIND )
+        if ( m_nIncludeBindings & BAFlags::XFormsListBind )
         {
             exportXFormsListAttributes();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            nIncludeBinding = nIncludeBinding & ~BA_XFORMS_LISTBIND;
+            nIncludeBinding = nIncludeBinding & ~BAFlags::XFormsListBind;
         #endif
         }
 
-        if ( m_nIncludeBindings & BA_XFORMS_SUBMISSION )
+        if ( m_nIncludeBindings & BAFlags::XFormsSubmission )
         {
             exportXFormsSubmissionAttributes();
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            nIncludeBinding = nIncludeBinding & ~BA_XFORMS_SUBMISSION;
+            nIncludeBinding = nIncludeBinding & ~BAFlags::XFormsSubmission;
         #endif
         }
 
         #if OSL_DEBUG_LEVEL > 0
-        OSL_ENSURE( 0 == nIncludeBinding,
-            "OControlExport::exportBindingAtributes: forgot some flags!");
+        OSL_ENSURE( BAFlags::NONE == nIncludeBinding,
+            "OControlExport::exportBindingAttributes: forgot some flags!");
             // in the debug version, we should have removed every bit we handled from the mask, so it should
             // be 0 now ...
         #endif
@@ -964,10 +954,10 @@ namespace xmloff
 
         // the boolean properties
         {
-            static const sal_Int32 nBooleanPropertyAttributeIds[] =
+            static const SCAFlags nBooleanPropertyAttributeIds[] =
             {   // attribute flags
-                SCA_VALIDATION, SCA_MULTI_LINE, SCA_AUTOMATIC_COMPLETION, SCA_MULTIPLE, SCA_DEFAULT_BUTTON, SCA_IS_TRISTATE,
-                SCA_TOGGLE, SCA_FOCUS_ON_CLICK
+                SCAFlags::Validation, SCAFlags::MultiLine, SCAFlags::AutoCompletion, SCAFlags::Multiple, SCAFlags::DefaultButton, SCAFlags::IsTristate,
+                SCAFlags::Toggle, SCAFlags::FocusOnClick
             };
             static const char * pBooleanPropertyNames[] =
             {   // property names
@@ -983,7 +973,7 @@ namespace xmloff
             OSL_ENSURE((nIdCount == nNameCount),
                 "OControlExport::exportSpecialAttributes: somebody tampered with the maps (1)!");
         #endif
-            const sal_Int32* pAttributeId = nBooleanPropertyAttributeIds;
+            const SCAFlags* pAttributeId = nBooleanPropertyAttributeIds;
             for ( i = 0; i < nIdCount; ++i, ++pAttributeId )
             {
                 if ( *pAttributeId & m_nIncludeSpecial)
@@ -992,7 +982,7 @@ namespace xmloff
                         OAttributeMetaData::getSpecialAttributeNamespace( *pAttributeId ),
                         OAttributeMetaData::getSpecialAttributeName( *pAttributeId ),
                         OUString::createFromAscii(pBooleanPropertyNames[i]),
-                        ( *pAttributeId == SCA_FOCUS_ON_CLICK ) ? BOOLATTR_DEFAULT_TRUE : BOOLATTR_DEFAULT_FALSE
+                        ( *pAttributeId == SCAFlags::FocusOnClick ) ? BoolAttrFlags::DefaultTrue : BoolAttrFlags::DefaultFalse
                     );
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
@@ -1004,9 +994,9 @@ namespace xmloff
 
         // the integer properties
         {
-            static sal_Int32 nIntegerPropertyAttributeIds[] =
+            static const SCAFlags nIntegerPropertyAttributeIds[] =
             {   // attribute flags
-                SCA_PAGE_STEP_SIZE
+                SCAFlags::PageStepSize
             };
             static const char * pIntegerPropertyNames[] =
             {   // property names
@@ -1041,7 +1031,7 @@ namespace xmloff
             #endif
                 }
 
-            if ( SCA_STEP_SIZE & m_nIncludeSpecial )
+            if ( SCAFlags::StepSize & m_nIncludeSpecial )
             {
                 OUString sPropertyName;
                 if ( m_xPropertyInfo->hasPropertyByName( PROPERTY_LINE_INCREMENT ) )
@@ -1053,15 +1043,15 @@ namespace xmloff
 
                 if ( !sPropertyName.isEmpty() )
                     exportInt32PropertyAttribute(
-                        OAttributeMetaData::getSpecialAttributeNamespace( SCA_STEP_SIZE ),
-                        OAttributeMetaData::getSpecialAttributeName( SCA_STEP_SIZE ),
+                        OAttributeMetaData::getSpecialAttributeNamespace( SCAFlags::StepSize ),
+                        OAttributeMetaData::getSpecialAttributeName( SCAFlags::StepSize ),
                         sPropertyName,
                         1
                     );
 
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeSpecial = m_nIncludeSpecial & ~SCA_STEP_SIZE;
+                m_nIncludeSpecial = m_nIncludeSpecial & ~SCAFlags::StepSize;
             #endif
             }
 
@@ -1069,31 +1059,31 @@ namespace xmloff
 
         // the enum properties
         {
-            if (SCA_STATE & m_nIncludeSpecial)
+            if (SCAFlags::State & m_nIncludeSpecial)
             {
                 exportEnumPropertyAttribute(
-                    OAttributeMetaData::getSpecialAttributeNamespace(SCA_STATE),
-                    OAttributeMetaData::getSpecialAttributeName(SCA_STATE),
+                    OAttributeMetaData::getSpecialAttributeNamespace(SCAFlags::State),
+                    OAttributeMetaData::getSpecialAttributeName(SCAFlags::State),
                     PROPERTY_DEFAULT_STATE,
-                    OEnumMapper::getEnumMap(OEnumMapper::epCheckState),
+                    aCheckStateMap,
                     TRISTATE_FALSE);
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeSpecial = m_nIncludeSpecial & ~SCA_STATE;
+                m_nIncludeSpecial = m_nIncludeSpecial & ~SCAFlags::State;
             #endif
             }
 
-            if (SCA_CURRENT_STATE & m_nIncludeSpecial)
+            if (SCAFlags::CurrentState & m_nIncludeSpecial)
             {
                 exportEnumPropertyAttribute(
-                    OAttributeMetaData::getSpecialAttributeNamespace(SCA_CURRENT_STATE),
-                    OAttributeMetaData::getSpecialAttributeName(SCA_CURRENT_STATE),
+                    OAttributeMetaData::getSpecialAttributeNamespace(SCAFlags::CurrentState),
+                    OAttributeMetaData::getSpecialAttributeName(SCAFlags::CurrentState),
                     PROPERTY_STATE,
-                    OEnumMapper::getEnumMap(OEnumMapper::epCheckState),
+                    aCheckStateMap,
                     TRISTATE_FALSE);
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeSpecial = m_nIncludeSpecial & ~SCA_CURRENT_STATE;
+                m_nIncludeSpecial = m_nIncludeSpecial & ~SCAFlags::CurrentState;
             #endif
             }
         }
@@ -1101,7 +1091,7 @@ namespace xmloff
         // some properties which require a special handling
         // the repeat delay
         {
-            if ( m_nIncludeSpecial & SCA_REPEAT_DELAY )
+            if ( m_nIncludeSpecial & SCAFlags::RepeatDelay )
             {
                 DBG_CHECK_PROPERTY( PROPERTY_REPEAT_DELAY, sal_Int32 );
 
@@ -1117,22 +1107,22 @@ namespace xmloff
 
                 OUStringBuffer buf;
                 ::sax::Converter::convertDuration(buf, aDuration);
-                AddAttribute(OAttributeMetaData::getSpecialAttributeNamespace( SCA_REPEAT_DELAY )
-                            ,OAttributeMetaData::getSpecialAttributeName( SCA_REPEAT_DELAY )
+                AddAttribute(OAttributeMetaData::getSpecialAttributeNamespace( SCAFlags::RepeatDelay )
+                            ,OAttributeMetaData::getSpecialAttributeName( SCAFlags::RepeatDelay )
                             ,buf.makeStringAndClear());
 
                 exportedProperty( PROPERTY_REPEAT_DELAY );
 
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeSpecial = m_nIncludeSpecial & ~SCA_REPEAT_DELAY;
+                m_nIncludeSpecial = m_nIncludeSpecial & ~SCAFlags::RepeatDelay;
             #endif
             }
         }
 
         // the EchoChar property needs special handling, cause it's a Int16, but must be stored as one-character-string
         {
-            if (SCA_ECHO_CHAR & m_nIncludeSpecial)
+            if (SCAFlags::EchoChar & m_nIncludeSpecial)
             {
                 DBG_CHECK_PROPERTY( PROPERTY_ECHO_CHAR, sal_Int16 );
                 sal_Int16 nValue(0);
@@ -1141,27 +1131,27 @@ namespace xmloff
                 {
                     OUString sCharacter(reinterpret_cast<const sal_Unicode*>(&nValue), 1);
                     AddAttribute(
-                        OAttributeMetaData::getSpecialAttributeNamespace(SCA_ECHO_CHAR),
-                        OAttributeMetaData::getSpecialAttributeName(SCA_ECHO_CHAR),
+                        OAttributeMetaData::getSpecialAttributeNamespace(SCAFlags::EchoChar),
+                        OAttributeMetaData::getSpecialAttributeName(SCAFlags::EchoChar),
                         sCharacter);
                 }
                 exportedProperty(PROPERTY_ECHO_CHAR);
             #if OSL_DEBUG_LEVEL > 0
                 //  reset the bit for later checking
-                m_nIncludeSpecial = m_nIncludeSpecial & ~SCA_ECHO_CHAR;
+                m_nIncludeSpecial = m_nIncludeSpecial & ~SCAFlags::EchoChar;
             #endif
             }
         }
 
         // the string properties
         {
-            static const sal_Int32 nStringPropertyAttributeIds[] =
+            static const SCAFlags nStringPropertyAttributeIds[] =
             {   // attribute flags
-                SCA_GROUP_NAME
+                SCAFlags::GroupName
             };
-            static const OUString pStringPropertyNames[] =
+            static const OUStringLiteral pStringPropertyNames[] =
             {   // property names
-                OUString(PROPERTY_GROUP_NAME)
+                PROPERTY_GROUP_NAME
             };
 
             static const sal_Int32 nIdCount = SAL_N_ELEMENTS( nStringPropertyAttributeIds );
@@ -1185,7 +1175,7 @@ namespace xmloff
                 }
         }
 
-        if ((SCA_MIN_VALUE | SCA_MAX_VALUE) & m_nIncludeSpecial)
+        if ((SCAFlags::MinValue | SCAFlags::MaxValue) & m_nIncludeSpecial)
         {
             // need to export the min value and the max value as attributes
             // It depends on the real type (FormComponentType) of the control, which properties hold these
@@ -1194,41 +1184,41 @@ namespace xmloff
             const sal_Char* pMaxValuePropertyName = nullptr;
             getValueLimitPropertyNames(m_nClassId, pMinValuePropertyName, pMaxValuePropertyName);
 
-            OSL_ENSURE((nullptr == pMinValuePropertyName) == (0 == (SCA_MIN_VALUE & m_nIncludeSpecial)),
+            OSL_ENSURE((nullptr == pMinValuePropertyName) == (SCAFlags::NONE == (SCAFlags::MinValue & m_nIncludeSpecial)),
                 "OControlExport::exportCommonControlAttributes: no property found for the min value attribute!");
-            OSL_ENSURE((nullptr == pMaxValuePropertyName) == (0 == (SCA_MAX_VALUE & m_nIncludeSpecial)),
+            OSL_ENSURE((nullptr == pMaxValuePropertyName) == (SCAFlags::NONE == (SCAFlags::MaxValue & m_nIncludeSpecial)),
                 "OControlExport::exportCommonControlAttributes: no property found for the max value attribute!");
 
             // add the two attributes
-            static const sal_Char* pMinValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCA_MIN_VALUE);
-            static const sal_Char* pMaxValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCA_MAX_VALUE);
-            static const sal_uInt16 nMinValueNamespaceKey = OAttributeMetaData::getSpecialAttributeNamespace(SCA_MIN_VALUE);
-            static const sal_uInt16 nMaxValueNamespaceKey = OAttributeMetaData::getSpecialAttributeNamespace(SCA_MAX_VALUE);
+            static const sal_Char* pMinValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCAFlags::MinValue);
+            static const sal_Char* pMaxValueAttributeName = OAttributeMetaData::getSpecialAttributeName(SCAFlags::MaxValue);
+            static const sal_uInt16 nMinValueNamespaceKey = OAttributeMetaData::getSpecialAttributeNamespace(SCAFlags::MinValue);
+            static const sal_uInt16 nMaxValueNamespaceKey = OAttributeMetaData::getSpecialAttributeNamespace(SCAFlags::MaxValue);
 
-            if (pMinValuePropertyName && (SCA_MIN_VALUE & m_nIncludeSpecial))
+            if (pMinValuePropertyName && (SCAFlags::MinValue & m_nIncludeSpecial))
                 exportGenericPropertyAttribute(
                     nMinValueNamespaceKey,
                     pMinValueAttributeName,
                     pMinValuePropertyName);
 
-            if (pMaxValuePropertyName && (SCA_MAX_VALUE & m_nIncludeSpecial))
+            if (pMaxValuePropertyName && (SCAFlags::MaxValue & m_nIncludeSpecial))
                 exportGenericPropertyAttribute(
                     nMaxValueNamespaceKey,
                     pMaxValueAttributeName,
                     pMaxValuePropertyName);
         #if OSL_DEBUG_LEVEL > 0
             //  reset the bit for later checking
-            m_nIncludeSpecial = m_nIncludeSpecial & ~(SCA_MIN_VALUE | SCA_MAX_VALUE);
+            m_nIncludeSpecial = m_nIncludeSpecial & ~SCAFlags(SCAFlags::MinValue | SCAFlags::MaxValue);
         #endif
         }
 
-        if ( SCA_IMAGE_POSITION & m_nIncludeSpecial )
+        if ( SCAFlags::ImagePosition & m_nIncludeSpecial )
         {
             exportImagePositionAttributes();
-            RESET_BIT( m_nIncludeSpecial, SCA_IMAGE_POSITION );
+            RESET_BIT( m_nIncludeSpecial, SCAFlags::ImagePosition );
         }
 
-        OSL_ENSURE(0 == m_nIncludeSpecial,
+        OSL_ENSURE(SCAFlags::NONE == m_nIncludeSpecial,
             "OControlExport::exportSpecialAttributes: forgot some flags!");
             // in the dbg_util version, we should have removed every bit we handled from the mask, so it should
             // be 0 now ...
@@ -1250,15 +1240,15 @@ namespace xmloff
 
     void OControlExport::exportListSourceAsAttribute()
     {
-        // DA_LIST_SOURCE needs some special handling
+        // DAFlags::ListSource needs some special handling
         DBG_CHECK_PROPERTY_NO_TYPE( PROPERTY_LISTSOURCE );
 
         OUString sListSource = getScalarListSourceValue();
         if ( !sListSource.isEmpty() )
         {   // the ListSource property needs to be exported as attribute, and it is not empty
             AddAttribute(
-                OAttributeMetaData::getDatabaseAttributeNamespace(DA_LIST_SOURCE),
-                OAttributeMetaData::getDatabaseAttributeName(DA_LIST_SOURCE),
+                OAttributeMetaData::getDatabaseAttributeNamespace(),
+                OAttributeMetaData::getDatabaseAttributeName(DAFlags::ListSource),
                 sListSource);
         }
 
@@ -1284,7 +1274,7 @@ namespace xmloff
         m_xProps->getPropertyValue(PROPERTY_STRING_ITEM_LIST) >>= aItems;
 
         DBG_CHECK_PROPERTY( PROPERTY_LISTSOURCE, Sequence< OUString > );
-        if ( 0 == ( m_nIncludeDatabase & DA_LIST_SOURCE ) )
+        if ( DAFlags::NONE == ( m_nIncludeDatabase & DAFlags::ListSource ) )
             m_xProps->getPropertyValue(PROPERTY_LISTSOURCE) >>= aValues;
         // if we exported the list source as attribute, we do not repeat it as sub elements
 
@@ -1306,7 +1296,7 @@ namespace xmloff
         sal_Int32 nItems = aItems.getLength();
         sal_Int32 nValues = aValues.getLength();
 
-        sal_Int16 nMaxLen = (sal_Int16)std::max(nItems, nValues);
+        sal_Int16 nMaxLen = static_cast<sal_Int16>(std::max(nItems, nValues));
 
         for (sal_Int16 i=0; i<nMaxLen; ++i )
         {
@@ -1315,8 +1305,8 @@ namespace xmloff
             {
                 // there is an item at this position
                 AddAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_LABEL),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_LABEL),
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Label),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Label),
                     *pItems);
                 ++pItems;
             }
@@ -1324,8 +1314,8 @@ namespace xmloff
             {
                 // there is an value at this position
                 AddAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_VALUE),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_VALUE),
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Value),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Value),
                     *pValues);
                 ++pValues;
             }
@@ -1334,8 +1324,8 @@ namespace xmloff
             if (aSelection.end() != aSelectedPos)
             {   // the item at this position is selected
                 AddAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_CURRENT_SELECTED),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_CURRENT_SELECTED),
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::CurrentSelected),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::CurrentSelected),
                     sTrue
                     );
                 aSelection.erase(aSelectedPos);
@@ -1345,8 +1335,8 @@ namespace xmloff
             if (aDefaultSelection.end() != aDefaultSelectedPos)
             {   // the item at this position is selected as default
                 AddAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_SELECTED),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_SELECTED),
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Selected),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Selected),
                     sTrue
                     );
                 aDefaultSelection.erase(aDefaultSelectedPos);
@@ -1380,8 +1370,8 @@ namespace xmloff
                 if (aSelection.end() != aSelection.find(i))
                 {   // the (not existent) item at this position is selected
                     AddAttribute(
-                        OAttributeMetaData::getCommonControlAttributeNamespace(CCA_CURRENT_SELECTED),
-                        OAttributeMetaData::getCommonControlAttributeName(CCA_CURRENT_SELECTED),
+                        OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::CurrentSelected),
+                        OAttributeMetaData::getCommonControlAttributeName(CCAFlags::CurrentSelected),
                         sTrue
                         );
                 }
@@ -1389,8 +1379,8 @@ namespace xmloff
                 if (aDefaultSelection.end() != aDefaultSelection.find(i))
                 {   // the (not existent) item at this position is selected as default
                     AddAttribute(
-                        OAttributeMetaData::getCommonControlAttributeNamespace(CCA_SELECTED),
-                        OAttributeMetaData::getCommonControlAttributeName(CCA_SELECTED),
+                        OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Selected),
+                        OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Selected),
                         sTrue
                         );
                 }
@@ -1403,13 +1393,12 @@ namespace xmloff
     {
         // before we let the base class start it's outer element, we add a wrapper element
         const sal_Char *pOuterElementName = getOuterXMLElementName();
-        m_pOuterElement = pOuterElementName
-                               ? new SvXMLElementExport(
+        if (pOuterElementName)
+            m_pOuterElement = std::make_unique<SvXMLElementExport>(
                                         m_rContext.getGlobalContext(),
                                         XML_NAMESPACE_FORM,
                                         pOuterElementName, true,
-                                        true)
-                            : nullptr;
+                                        true);
 
         // add the attributes for the inner element
         exportInnerAttributes();
@@ -1424,8 +1413,7 @@ namespace xmloff
         OElementExport::implEndElement();
 
         // end the outer element if it exists
-        delete m_pOuterElement;
-        m_pOuterElement = nullptr;
+        m_pOuterElement.reset();
     }
 
     const sal_Char* OControlExport::getOuterXMLElementName() const
@@ -1440,8 +1428,8 @@ namespace xmloff
 
     void OControlExport::examine()
     {
-        OSL_ENSURE( ( m_nIncludeCommon == 0 ) && ( m_nIncludeSpecial == 0 ) && ( m_nIncludeDatabase == 0 )
-                 && ( m_nIncludeEvents == 0 ) && ( m_nIncludeBindings == 0),
+        OSL_ENSURE( ( m_nIncludeCommon == CCAFlags::NONE ) && ( m_nIncludeSpecial == SCAFlags::NONE ) && ( m_nIncludeDatabase == DAFlags::NONE )
+                 && ( m_nIncludeEvents == EAFlags::NONE ) && ( m_nIncludeBindings == BAFlags::NONE),
                  "OControlExport::examine: called me twice? Not initialized?" );
 
         // get the class id to decide which kind of element we need in the XML stream
@@ -1454,15 +1442,15 @@ namespace xmloff
             case FormComponentType::DATEFIELD:
                 m_eType = DATE;
                 knownType = true;
-                // NO BREAK
+                [[fallthrough]];
             case FormComponentType::TIMEFIELD:
                 if ( !knownType )
                 {
                     m_eType = TIME;
                     knownType = true;
                 }
-                m_nIncludeSpecial |= SCA_VALIDATION;
-                // NO BREAK
+                m_nIncludeSpecial |= SCAFlags::Validation;
+                [[fallthrough]];
             case FormComponentType::NUMERICFIELD:
             case FormComponentType::CURRENCYFIELD:
             case FormComponentType::PATTERNFIELD:
@@ -1471,7 +1459,7 @@ namespace xmloff
                     m_eType = FORMATTED_TEXT;
                     knownType = true;
                 }
-                // NO BREAK
+                [[fallthrough]];
             case FormComponentType::TEXTFIELD:
             {   // it's some kind of edit. To know which type we need further investigation
 
@@ -1495,7 +1483,7 @@ namespace xmloff
                         if (nEchoChar)
                         {
                             m_eType = PASSWORD;
-                            m_nIncludeSpecial |= SCA_ECHO_CHAR;
+                            m_nIncludeSpecial |= SCAFlags::EchoChar;
                         }
                         else
                         {
@@ -1517,44 +1505,44 @@ namespace xmloff
                 // attributes which are common to all the types:
                 // common attributes
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED |
-                    CCA_PRINTABLE | CCA_TAB_INDEX | CCA_TAB_STOP | CCA_TITLE;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled |
+                    CCAFlags::Printable | CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Title;
 
                 if  (   ( m_nClassId != FormComponentType::DATEFIELD )
                     &&  ( m_nClassId != FormComponentType::TIMEFIELD )
                     )
                     // date and time field values are handled differently nowadays
-                    m_nIncludeCommon |= CCA_VALUE;
+                    m_nIncludeCommon |= CCAFlags::Value;
 
                 // database attributes
-                m_nIncludeDatabase = DA_DATA_FIELD | DA_INPUT_REQUIRED;
+                m_nIncludeDatabase = DAFlags::DataField | DAFlags::InputRequired;
 
                 // event attributes
-                m_nIncludeEvents = EA_CONTROL_EVENTS | EA_ON_CHANGE | EA_ON_SELECT;
+                m_nIncludeEvents = EAFlags::ControlEvents | EAFlags::OnChange | EAFlags::OnSelect;
 
                 // only text and pattern fields have a ConvertEmptyToNull property
                 if  (   ( m_nClassId == FormComponentType::TEXTFIELD )
                     ||  ( m_nClassId == FormComponentType::PATTERNFIELD )
                     )
-                    m_nIncludeDatabase |= DA_CONVERT_EMPTY;
+                    m_nIncludeDatabase |= DAFlags::ConvertEmpty;
 
                 // all controls but the file control fields have a readonly property
                 if ( m_nClassId != FormComponentType::FILECONTROL )
-                    m_nIncludeCommon |= CCA_READONLY;
+                    m_nIncludeCommon |= CCAFlags::ReadOnly;
 
                 // a text field has a max text len
                 if ( m_nClassId == FormComponentType::TEXTFIELD )
-                    m_nIncludeCommon |= CCA_MAX_LENGTH;
+                    m_nIncludeCommon |= CCAFlags::MaxLength;
 
                 // max and min values and validation:
                 if (FORMATTED_TEXT == m_eType)
                 {   // in general all controls represented as formatted-text have these props
                     if  ( FormComponentType::PATTERNFIELD != m_nClassId )   // except the PatternField
-                        m_nIncludeSpecial |= SCA_MAX_VALUE | SCA_MIN_VALUE;
+                        m_nIncludeSpecial |= SCAFlags::MaxValue | SCAFlags::MinValue;
 
                     if (FormComponentType::TEXTFIELD != m_nClassId)
                         // and the FormattedField does not have a validation flag
-                        m_nIncludeSpecial |= SCA_VALIDATION;
+                        m_nIncludeSpecial |= SCAFlags::Validation;
                 }
 
                 // if it's not a password field or rich text control, the CurrentValue needs to be stored, too
@@ -1563,7 +1551,7 @@ namespace xmloff
                     &&  ( TIME != m_eType )
                     )
                 {
-                    m_nIncludeCommon |= CCA_CURRENT_VALUE;
+                    m_nIncludeCommon |= CCAFlags::CurrentValue;
                 }
             }
             break;
@@ -1571,40 +1559,40 @@ namespace xmloff
             case FormComponentType::FILECONTROL:
                 m_eType = FILE;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_CURRENT_VALUE | CCA_DISABLED |
-                    CCA_PRINTABLE | CCA_TAB_INDEX | CCA_TAB_STOP | CCA_TITLE |
-                    CCA_VALUE;
-                m_nIncludeEvents = EA_CONTROL_EVENTS | EA_ON_CHANGE | EA_ON_SELECT;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::CurrentValue | CCAFlags::Disabled |
+                    CCAFlags::Printable | CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Title |
+                    CCAFlags::Value;
+                m_nIncludeEvents = EAFlags::ControlEvents | EAFlags::OnChange | EAFlags::OnSelect;
                 break;
 
             case FormComponentType::FIXEDTEXT:
                 m_eType = FIXED_TEXT;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_LABEL |
-                    CCA_PRINTABLE | CCA_TITLE | CCA_FOR;
-                m_nIncludeSpecial = SCA_MULTI_LINE;
-                m_nIncludeEvents = EA_CONTROL_EVENTS;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::Label |
+                    CCAFlags::Printable | CCAFlags::Title | CCAFlags::For;
+                m_nIncludeSpecial = SCAFlags::MultiLine;
+                m_nIncludeEvents = EAFlags::ControlEvents;
                 break;
 
             case FormComponentType::COMBOBOX:
                 m_eType = COMBOBOX;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_CURRENT_VALUE |
-                    CCA_DISABLED | CCA_DROPDOWN | CCA_MAX_LENGTH | CCA_PRINTABLE | CCA_READONLY | CCA_SIZE |
-                    CCA_TAB_INDEX | CCA_TAB_STOP | CCA_TITLE | CCA_VALUE;
-                m_nIncludeSpecial = SCA_AUTOMATIC_COMPLETION;
-                m_nIncludeDatabase = DA_CONVERT_EMPTY | DA_DATA_FIELD | DA_INPUT_REQUIRED | DA_LIST_SOURCE | DA_LIST_SOURCE_TYPE;
-                m_nIncludeEvents = EA_CONTROL_EVENTS | EA_ON_CHANGE | EA_ON_SELECT;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::CurrentValue |
+                    CCAFlags::Disabled | CCAFlags::Dropdown | CCAFlags::MaxLength | CCAFlags::Printable | CCAFlags::ReadOnly | CCAFlags::Size |
+                    CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Title | CCAFlags::Value;
+                m_nIncludeSpecial = SCAFlags::AutoCompletion;
+                m_nIncludeDatabase = DAFlags::ConvertEmpty | DAFlags::DataField | DAFlags::InputRequired | DAFlags::ListSource | DAFlags::ListSource_TYPE;
+                m_nIncludeEvents = EAFlags::ControlEvents | EAFlags::OnChange | EAFlags::OnSelect;
                 break;
 
             case FormComponentType::LISTBOX:
                 m_eType = LISTBOX;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_DROPDOWN |
-                    CCA_PRINTABLE | CCA_SIZE | CCA_TAB_INDEX | CCA_TAB_STOP | CCA_TITLE;
-                m_nIncludeSpecial = SCA_MULTIPLE;
-                m_nIncludeDatabase = DA_BOUND_COLUMN | DA_DATA_FIELD | DA_INPUT_REQUIRED | DA_LIST_SOURCE_TYPE;
-                m_nIncludeEvents = EA_CONTROL_EVENTS | EA_ON_CHANGE | EA_ON_CLICK | EA_ON_DBLCLICK;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::Dropdown |
+                    CCAFlags::Printable | CCAFlags::Size | CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Title;
+                m_nIncludeSpecial = SCAFlags::Multiple;
+                m_nIncludeDatabase = DAFlags::BoundColumn | DAFlags::DataField | DAFlags::InputRequired | DAFlags::ListSource_TYPE;
+                m_nIncludeEvents = EAFlags::ControlEvents | EAFlags::OnChange | EAFlags::OnClick | EAFlags::OnDoubleClick;
                 // check if we need to export the ListSource as attribute
                 {
                     // for a list box, if the ListSourceType is VALUE_LIST, no ListSource is stored, but instead
@@ -1615,7 +1603,7 @@ namespace xmloff
                     OSL_ENSURE(bSuccess, "OControlExport::examineControl: could not retrieve the ListSourceType!");
                     if (ListSourceType_VALUELIST != eListSourceType)
                     {
-                        m_nIncludeDatabase |= DA_LIST_SOURCE;
+                        m_nIncludeDatabase |= DAFlags::ListSource;
                     }
                 }
 
@@ -1623,9 +1611,9 @@ namespace xmloff
 
             case FormComponentType::COMMANDBUTTON:
                 m_eType = BUTTON;
-                m_nIncludeCommon |= CCA_TAB_STOP | CCA_LABEL;
-                m_nIncludeSpecial = SCA_DEFAULT_BUTTON | SCA_TOGGLE | SCA_FOCUS_ON_CLICK | SCA_IMAGE_POSITION | SCA_REPEAT_DELAY;
-                // NO BREAK !
+                m_nIncludeCommon |= CCAFlags::TabStop | CCAFlags::Label;
+                m_nIncludeSpecial = SCAFlags::DefaultButton | SCAFlags::Toggle | SCAFlags::FocusOnClick | SCAFlags::ImagePosition | SCAFlags::RepeatDelay;
+                [[fallthrough]];
             case FormComponentType::IMAGEBUTTON:
                 if (BUTTON != m_eType)
                 {
@@ -1633,81 +1621,81 @@ namespace xmloff
                     m_eType = IMAGE;
                 }
                 m_nIncludeCommon |=
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_BUTTON_TYPE | CCA_DISABLED |
-                    CCA_IMAGE_DATA | CCA_PRINTABLE | CCA_TAB_INDEX | CCA_TARGET_FRAME |
-                    CCA_TARGET_LOCATION | CCA_TITLE;
-                m_nIncludeEvents = EA_CONTROL_EVENTS | EA_ON_CLICK  | EA_ON_DBLCLICK;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::ButtonType | CCAFlags::Disabled |
+                    CCAFlags::ImageData | CCAFlags::Printable | CCAFlags::TabIndex | CCAFlags::TargetFrame |
+                    CCAFlags::TargetLocation | CCAFlags::Title;
+                m_nIncludeEvents = EAFlags::ControlEvents | EAFlags::OnClick  | EAFlags::OnDoubleClick;
                 break;
 
             case FormComponentType::CHECKBOX:
                 m_eType = CHECKBOX;
-                m_nIncludeSpecial = SCA_CURRENT_STATE | SCA_IS_TRISTATE | SCA_STATE;
-                // NO BREAK !
+                m_nIncludeSpecial = SCAFlags::CurrentState | SCAFlags::IsTristate | SCAFlags::State;
+                [[fallthrough]];
             case FormComponentType::RADIOBUTTON:
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_LABEL | CCA_PRINTABLE |
-                    CCA_TAB_INDEX | CCA_TAB_STOP | CCA_TITLE | CCA_VALUE | CCA_VISUAL_EFFECT;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::Label | CCAFlags::Printable |
+                    CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Title | CCAFlags::Value | CCAFlags::VisualEffect;
                 if (CHECKBOX != m_eType)
                 {   // not coming from the previous case
                     m_eType = RADIO;
-                    m_nIncludeCommon |= CCA_CURRENT_SELECTED | CCA_SELECTED;
+                    m_nIncludeCommon |= CCAFlags::CurrentSelected | CCAFlags::Selected;
                 }
                 if ( m_xPropertyInfo->hasPropertyByName( PROPERTY_IMAGE_POSITION ) )
-                    m_nIncludeSpecial |= SCA_IMAGE_POSITION;
+                    m_nIncludeSpecial |= SCAFlags::ImagePosition;
                 if ( m_xPropertyInfo->hasPropertyByName( PROPERTY_GROUP_NAME ) )
-                    m_nIncludeSpecial |= SCA_GROUP_NAME;
-                m_nIncludeDatabase = DA_DATA_FIELD | DA_INPUT_REQUIRED;
-                m_nIncludeEvents = EA_CONTROL_EVENTS | EA_ON_CHANGE;
+                    m_nIncludeSpecial |= SCAFlags::GroupName;
+                m_nIncludeDatabase = DAFlags::DataField | DAFlags::InputRequired;
+                m_nIncludeEvents = EAFlags::ControlEvents | EAFlags::OnChange;
                 break;
 
             case FormComponentType::GROUPBOX:
                 m_eType = FRAME;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_LABEL |
-                    CCA_PRINTABLE | CCA_TITLE | CCA_FOR;
-                m_nIncludeEvents = EA_CONTROL_EVENTS;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::Label |
+                    CCAFlags::Printable | CCAFlags::Title | CCAFlags::For;
+                m_nIncludeEvents = EAFlags::ControlEvents;
                 break;
 
             case FormComponentType::IMAGECONTROL:
                 m_eType = IMAGE_FRAME;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_IMAGE_DATA |
-                    CCA_PRINTABLE | CCA_READONLY | CCA_TITLE;
-                m_nIncludeDatabase = DA_DATA_FIELD | DA_INPUT_REQUIRED;
-                m_nIncludeEvents = EA_CONTROL_EVENTS;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::ImageData |
+                    CCAFlags::Printable | CCAFlags::ReadOnly | CCAFlags::Title;
+                m_nIncludeDatabase = DAFlags::DataField | DAFlags::InputRequired;
+                m_nIncludeEvents = EAFlags::ControlEvents;
                 break;
 
             case FormComponentType::HIDDENCONTROL:
                 m_eType = HIDDEN;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_VALUE;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Value;
                 break;
 
             case FormComponentType::GRIDCONTROL:
                 m_eType = GRID;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_PRINTABLE |
-                    CCA_TAB_INDEX | CCA_TAB_STOP | CCA_TITLE;
-                m_nIncludeEvents = EA_CONTROL_EVENTS;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::Printable |
+                    CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Title;
+                m_nIncludeEvents = EAFlags::ControlEvents;
                 break;
 
             case FormComponentType::SCROLLBAR:
             case FormComponentType::SPINBUTTON:
                 m_eType = VALUERANGE;
                 m_nIncludeCommon =
-                    CCA_NAME | CCA_SERVICE_NAME | CCA_DISABLED | CCA_PRINTABLE |
-                    CCA_TITLE | CCA_CURRENT_VALUE | CCA_VALUE | CCA_ORIENTATION;
-                m_nIncludeSpecial = SCA_MAX_VALUE | SCA_STEP_SIZE | SCA_MIN_VALUE | SCA_REPEAT_DELAY;
+                    CCAFlags::Name | CCAFlags::ServiceName | CCAFlags::Disabled | CCAFlags::Printable |
+                    CCAFlags::Title | CCAFlags::CurrentValue | CCAFlags::Value | CCAFlags::Orientation;
+                m_nIncludeSpecial = SCAFlags::MaxValue | SCAFlags::StepSize | SCAFlags::MinValue | SCAFlags::RepeatDelay;
 
                 if ( m_nClassId == FormComponentType::SCROLLBAR )
-                    m_nIncludeSpecial |= SCA_PAGE_STEP_SIZE ;
+                    m_nIncludeSpecial |= SCAFlags::PageStepSize ;
 
-                m_nIncludeEvents = EA_CONTROL_EVENTS;
+                m_nIncludeEvents = EAFlags::ControlEvents;
                 break;
 
             default:
                 OSL_FAIL("OControlExport::examineControl: unknown control type (class id)!");
-                // NO break!
+                [[fallthrough]];
 
             case FormComponentType::NAVIGATIONBAR:
                 // TODO: should we have an own file format for this?
@@ -1716,17 +1704,17 @@ namespace xmloff
             case FormComponentType::CONTROL:
                 m_eType = GENERIC_CONTROL;
                 // unknown control type
-                m_nIncludeCommon = CCA_NAME | CCA_SERVICE_NAME;
+                m_nIncludeCommon = CCAFlags::Name | CCAFlags::ServiceName;
                     // at least a name should be there, 'cause without a name the control could never have been
                     // inserted into its parent container
                     // In addition, the service name is absolutely necessary to create the control upon reading.
-                m_nIncludeEvents = EA_CONTROL_EVENTS;
+                m_nIncludeEvents = EAFlags::ControlEvents;
                     // we always should be able to export events - this is not control type dependent
                 break;
         }
 
         // in general, all control types need to export the control id
-        m_nIncludeCommon |= CCA_CONTROL_ID;
+        m_nIncludeCommon |= CCAFlags::ControlId;
 
         // is it a control bound to a calc cell?
         if ( FormCellBindingHelper::livesInSpreadsheetDocument( m_xProps ) )
@@ -1735,35 +1723,35 @@ namespace xmloff
             {
                 if ( FormCellBindingHelper::isCellBinding( aHelper.getCurrentBinding( ) ) )
                 {
-                    m_nIncludeBindings |= BA_LINKED_CELL;
+                    m_nIncludeBindings |= BAFlags::LinkedCell;
                     if ( m_nClassId == FormComponentType::LISTBOX )
-                        m_nIncludeBindings |= BA_LIST_LINKING_TYPE;
+                        m_nIncludeBindings |= BAFlags::ListLinkingType;
                 }
             }
 
             // is it a list-like control which uses a calc cell range as list source?
             {
                 if ( FormCellBindingHelper::isCellRangeListSource( aHelper.getCurrentListSource( ) ) )
-                    m_nIncludeBindings |= BA_LIST_CELL_RANGE;
+                    m_nIncludeBindings |= BAFlags::ListCellRange;
             }
         }
 
         // is control bound to XForms?
         if( !getXFormsBindName( m_xProps ).isEmpty() )
         {
-            m_nIncludeBindings |= BA_XFORMS_BIND;
+            m_nIncludeBindings |= BAFlags::XFormsBind;
         }
 
         // is (list-)control bound to XForms list?
         if( !getXFormsListBindName( m_xProps ).isEmpty() )
         {
-            m_nIncludeBindings |= BA_XFORMS_LISTBIND;
+            m_nIncludeBindings |= BAFlags::XFormsListBind;
         }
 
         // does the control have an XForms submission?
         if( !getXFormsSubmissionName( m_xProps ).isEmpty() )
         {
-            m_nIncludeBindings |= BA_XFORMS_SUBMISSION;
+            m_nIncludeBindings |= BAFlags::XFormsSubmission;
         }
     }
 
@@ -1777,8 +1765,8 @@ namespace xmloff
             if ( xBinding.is() )
             {
                 AddAttribute(
-                    OAttributeMetaData::getBindingAttributeNamespace( BA_LINKED_CELL ),
-                    OAttributeMetaData::getBindingAttributeName( BA_LINKED_CELL ),
+                    OAttributeMetaData::getBindingAttributeNamespace(),
+                    OAttributeMetaData::getBindingAttributeName( BAFlags::LinkedCell ),
                     aHelper.getStringAddressFromCellBinding( xBinding )
                 );
 
@@ -1789,13 +1777,13 @@ namespace xmloff
                     OUStringBuffer sBuffer;
                     SvXMLUnitConverter::convertEnum(
                         sBuffer,
-                        (sal_uInt16)nLinkageType,
-                        OEnumMapper::getEnumMap( OEnumMapper::epListLinkageType )
+                        nLinkageType,
+                        aListLinkageMap
                     );
 
                     AddAttribute(
-                        OAttributeMetaData::getBindingAttributeNamespace( BA_LIST_LINKING_TYPE ),
-                        OAttributeMetaData::getBindingAttributeName( BA_LIST_LINKING_TYPE ),
+                        OAttributeMetaData::getBindingAttributeNamespace(),
+                        OAttributeMetaData::getBindingAttributeName( BAFlags::ListLinkingType ),
                         sBuffer.makeStringAndClear()
                     );
                 }
@@ -1804,8 +1792,8 @@ namespace xmloff
         }
         catch( const Exception& )
         {
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
             OSL_FAIL( "OControlExport::exportCellBindingAttributes: caught an exception!" );
-            DBG_UNHANDLED_EXCEPTION();
         }
     }
 
@@ -1838,16 +1826,16 @@ namespace xmloff
                 FormCellBindingHelper aHelper( m_xProps, nullptr );
 
                 AddAttribute(
-                    OAttributeMetaData::getBindingAttributeNamespace( BA_LIST_CELL_RANGE ),
-                    OAttributeMetaData::getBindingAttributeName( BA_LIST_CELL_RANGE ),
+                    OAttributeMetaData::getBindingAttributeNamespace(),
+                    OAttributeMetaData::getBindingAttributeName( BAFlags::ListCellRange ),
                     aHelper.getStringAddressFromCellListSource( xSource )
                 );
             }
         }
         catch( const Exception& )
         {
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
             OSL_FAIL( "OControlExport::exportCellListSourceRange: caught an exception!" );
-            DBG_UNHANDLED_EXCEPTION();
         }
     }
 
@@ -1870,11 +1858,11 @@ namespace xmloff
             }
             else
             {
-                XMLTokenEnum eXmlImagePositions[] =
+                const XMLTokenEnum eXmlImagePositions[] =
                 {
                     XML_START, XML_END, XML_TOP, XML_BOTTOM
                 };
-                XMLTokenEnum eXmlImageAligns[] =
+                const XMLTokenEnum eXmlImageAligns[] =
                 {
                     XML_START, XML_CENTER, XML_END
                 };
@@ -1894,7 +1882,7 @@ namespace xmloff
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
         }
     }
 
@@ -1919,8 +1907,8 @@ namespace xmloff
         }
         catch( const Exception& )
         {
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
             OSL_FAIL( "OColumnExport::controlHasActiveDataBinding: caught an exception!" );
-            DBG_UNHANDLED_EXCEPTION();
         }
 
         return false;
@@ -1950,8 +1938,7 @@ namespace xmloff
         }
         catch( const Exception& )
         {
-            OSL_FAIL( "OControlExport::controlHasUserSuppliedListEntries: caught an exception!" );
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
         }
 
         OSL_FAIL( "OControlExport::controlHasUserSuppliedListEntries: unreachable code!" );
@@ -1968,7 +1955,6 @@ namespace xmloff
 
     OColumnExport::~OColumnExport()
     {
-        implEndElement();
     }
 
     void OColumnExport::exportServiceNameAttribute()
@@ -1987,8 +1973,8 @@ namespace xmloff
             m_rContext.getGlobalContext().GetNamespaceMap().GetQNameByKey(
                 XML_NAMESPACE_OOO, sColumnServiceName );
         // add the attribute
-        AddAttribute( OAttributeMetaData::getCommonControlAttributeNamespace(CCA_SERVICE_NAME)
-                    , OAttributeMetaData::getCommonControlAttributeName(CCA_SERVICE_NAME)
+        AddAttribute( OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::ServiceName)
+                    , OAttributeMetaData::getCommonControlAttributeName(CCAFlags::ServiceName)
                     , sColumnServiceName);
         // flag the property as "handled"
         exportedProperty(PROPERTY_COLUMNSERVICENAME);
@@ -2006,8 +1992,8 @@ namespace xmloff
 
         // the attribute "label"
         exportStringPropertyAttribute(
-            OAttributeMetaData::getCommonControlAttributeNamespace(CCA_LABEL),
-            OAttributeMetaData::getCommonControlAttributeName(CCA_LABEL),
+            OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::Label),
+            OAttributeMetaData::getCommonControlAttributeName(CCAFlags::Label),
             PROPERTY_LABEL);
 
         // the style attribute
@@ -2015,8 +2001,8 @@ namespace xmloff
         if ( !sStyleName.isEmpty() )
         {
             AddAttribute(
-                OAttributeMetaData::getSpecialAttributeNamespace( SCA_COLUMN_STYLE_NAME ),
-                OAttributeMetaData::getSpecialAttributeName( SCA_COLUMN_STYLE_NAME ),
+                OAttributeMetaData::getSpecialAttributeNamespace( SCAFlags::ColumnStyleName ),
+                OAttributeMetaData::getSpecialAttributeName( SCAFlags::ColumnStyleName ),
                 sStyleName
             );
         }
@@ -2027,12 +2013,12 @@ namespace xmloff
         OControlExport::examine();
 
         // grid columns miss some properties of the controls they're representing
-        m_nIncludeCommon &= ~(CCA_FOR | CCA_PRINTABLE | CCA_TAB_INDEX | CCA_TAB_STOP | CCA_LABEL);
-        m_nIncludeSpecial &= ~(SCA_ECHO_CHAR | SCA_AUTOMATIC_COMPLETION | SCA_MULTIPLE | SCA_MULTI_LINE);
+        m_nIncludeCommon &= ~CCAFlags(CCAFlags::For | CCAFlags::Printable | CCAFlags::TabIndex | CCAFlags::TabStop | CCAFlags::Label);
+        m_nIncludeSpecial &= ~SCAFlags(SCAFlags::EchoChar | SCAFlags::AutoCompletion | SCAFlags::Multiple | SCAFlags::MultiLine);
 
         if (FormComponentType::DATEFIELD != m_nClassId)
             // except date fields, no column has the DropDown property
-            m_nIncludeCommon &= ~CCA_DROPDOWN;
+            m_nIncludeCommon &= ~CCAFlags::Dropdown;
     }
 
     //= OFormExport
@@ -2060,9 +2046,9 @@ namespace xmloff
                 m_xProps->getPropertyValue( PROPERTY_URL ) >>= sPropValue;
             if ( !sPropValue.isEmpty() )
                 AddAttribute(
-                    OAttributeMetaData::getCommonControlAttributeNamespace(CCA_TARGET_LOCATION),
-                    OAttributeMetaData::getCommonControlAttributeName(CCA_TARGET_LOCATION),
-                    sPropValue);
+                    OAttributeMetaData::getCommonControlAttributeNamespace(CCAFlags::TargetLocation),
+                    OAttributeMetaData::getCommonControlAttributeName(CCAFlags::TargetLocation),
+                    m_rContext.getGlobalContext().GetRelativeReference(sPropValue));
             if ( m_rContext.getGlobalContext().GetAttrList().getLength() )
             {
                 SvXMLElementExport aFormElement(m_rContext.getGlobalContext(), XML_NAMESPACE_FORM, xmloff::token::XML_CONNECTION_RESOURCE, true, true);
@@ -2142,9 +2128,9 @@ namespace xmloff
                 PROPERTY_ESCAPEPROCESSING,
                 PROPERTY_IGNORERESULT
             };
-            static const sal_Int8 nBooleanPropertyAttrFlags[] =
+            static const BoolAttrFlags nBooleanPropertyAttrFlags[] =
             {
-                BOOLATTR_DEFAULT_TRUE, BOOLATTR_DEFAULT_TRUE, BOOLATTR_DEFAULT_TRUE, BOOLATTR_DEFAULT_FALSE, BOOLATTR_DEFAULT_TRUE, BOOLATTR_DEFAULT_FALSE
+                BoolAttrFlags::DefaultTrue, BoolAttrFlags::DefaultTrue, BoolAttrFlags::DefaultTrue, BoolAttrFlags::DefaultFalse, BoolAttrFlags::DefaultTrue, BoolAttrFlags::DefaultFalse
             };
             static const sal_Int32 nIdCount = SAL_N_ELEMENTS(eBooleanPropertyIds);
         #if OSL_DEBUG_LEVEL > 0
@@ -2164,44 +2150,46 @@ namespace xmloff
 
         // the enum properties
         {
-            static const FormAttributes eEnumPropertyIds[] =
-            {
-                faEnctype, faMethod, faCommandType, faNavigationMode, faTabbingCycle
-            };
-            static const char * pEnumPropertyNames[] =
-            {
-                PROPERTY_SUBMIT_ENCODING, PROPERTY_SUBMIT_METHOD, PROPERTY_COMMAND_TYPE, PROPERTY_NAVIGATION, PROPERTY_CYCLE
-            };
-            static const OEnumMapper::EnumProperties eEnumPropertyMaps[] =
-            {
-                OEnumMapper::epSubmitEncoding, OEnumMapper::epSubmitMethod, OEnumMapper::epCommandType, OEnumMapper::epNavigationType, OEnumMapper::epTabCyle
-            };
-            static const sal_Int32 nEnumPropertyAttrDefaults[] =
-            {
-                FormSubmitEncoding_URL, FormSubmitMethod_GET, CommandType::COMMAND, NavigationBarMode_CURRENT, TabulatorCycle_RECORDS
-            };
-            static const sal_Bool nEnumPropertyAttrDefaultFlags[] =
-            {
-                sal_False, sal_False, sal_False, sal_False, sal_True
-            };
-            static const sal_Int32 nIdCount = SAL_N_ELEMENTS(eEnumPropertyIds);
-        #if OSL_DEBUG_LEVEL > 0
-            static const sal_Int32 nNameCount = SAL_N_ELEMENTS(pEnumPropertyNames);
-            static const sal_Int32 nDefaultCount = SAL_N_ELEMENTS(nEnumPropertyAttrDefaults);
-            static const sal_Int32 nDefaultFlagCount = SAL_N_ELEMENTS(nEnumPropertyAttrDefaultFlags);
-            static const sal_Int32 nMapCount = SAL_N_ELEMENTS(eEnumPropertyMaps);
-            OSL_ENSURE((nIdCount == nNameCount) && (nNameCount == nDefaultCount) && (nDefaultCount == nDefaultFlagCount) && (nDefaultFlagCount == nMapCount),
-                "OFormExport::exportAttributes: somebody tampered with the maps (3)!");
-        #endif
-            for (i=0; i<nIdCount; ++i)
-                exportEnumPropertyAttribute(
-                    OAttributeMetaData::getFormAttributeNamespace(eEnumPropertyIds[i]),
-                    OAttributeMetaData::getFormAttributeName(eEnumPropertyIds[i]),
-                    OUString::createFromAscii(pEnumPropertyNames[i]),
-                    OEnumMapper::getEnumMap(eEnumPropertyMaps[i]),
-                    nEnumPropertyAttrDefaults[i],
-                    nEnumPropertyAttrDefaultFlags[i]
-                );
+            exportEnumPropertyAttribute(
+                OAttributeMetaData::getFormAttributeNamespace(faEnctype),
+                OAttributeMetaData::getFormAttributeName(faEnctype),
+                PROPERTY_SUBMIT_ENCODING,
+                aSubmitEncodingMap,
+                FormSubmitEncoding_URL,
+                false
+            );
+            exportEnumPropertyAttribute(
+                OAttributeMetaData::getFormAttributeNamespace(faMethod),
+                OAttributeMetaData::getFormAttributeName(faMethod),
+                PROPERTY_SUBMIT_METHOD,
+                aSubmitMethodMap,
+                FormSubmitMethod_GET,
+                false
+            );
+            exportEnumPropertyAttribute(
+                OAttributeMetaData::getFormAttributeNamespace(faCommandType),
+                OAttributeMetaData::getFormAttributeName(faCommandType),
+                PROPERTY_COMMAND_TYPE,
+                aCommandTypeMap,
+                CommandType::COMMAND,
+                false
+            );
+            exportEnumPropertyAttribute(
+                OAttributeMetaData::getFormAttributeNamespace(faNavigationMode),
+                OAttributeMetaData::getFormAttributeName(faNavigationMode),
+                PROPERTY_NAVIGATION,
+                aNavigationTypeMap,
+                NavigationBarMode_CURRENT,
+                false
+            );
+            exportEnumPropertyAttribute(
+                OAttributeMetaData::getFormAttributeNamespace(faTabbingCycle),
+                OAttributeMetaData::getFormAttributeName(faTabbingCycle),
+                PROPERTY_CYCLE,
+                aTabulatorCycleMap,
+                TabulatorCycle_RECORDS,
+                true
+            );
         }
 
         // the service name

@@ -18,10 +18,10 @@
  */
 
 #include "FixedText.hxx"
-#include "services.hxx"
-#include "property.hrc"
-#include "property.hxx"
-#include <comphelper/processfactory.hxx>
+#include <services.hxx>
+#include <property.hxx>
+
+#include <comphelper/property.hxx>
 
 
 namespace frm
@@ -62,7 +62,7 @@ OFixedTextModel::~OFixedTextModel( )
 IMPLEMENT_DEFAULT_CLONING( OFixedTextModel )
 
 
-css::uno::Sequence<OUString> SAL_CALL OFixedTextModel::getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OFixedTextModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OControlModel::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -81,14 +81,13 @@ void OFixedTextModel::describeAggregateProperties( Sequence< Property >& _rAggre
 }
 
 
-OUString SAL_CALL OFixedTextModel::getServiceName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OFixedTextModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_FIXEDTEXT); // old (non-sun) name for compatibility !
 }
 
 
 void SAL_CALL OFixedTextModel::write(const Reference<XObjectOutputStream>& _rxOutStream)
-    throw(IOException, RuntimeException, std::exception)
 {
     OControlModel::write(_rxOutStream);
 
@@ -98,7 +97,7 @@ void SAL_CALL OFixedTextModel::write(const Reference<XObjectOutputStream>& _rxOu
 }
 
 
-void SAL_CALL OFixedTextModel::read(const Reference<XObjectInputStream>& _rxInStream) throw(IOException, RuntimeException, std::exception)
+void SAL_CALL OFixedTextModel::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     OControlModel::read(_rxInStream);
 
@@ -110,7 +109,7 @@ void SAL_CALL OFixedTextModel::read(const Reference<XObjectInputStream>& _rxInSt
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OFixedTextModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

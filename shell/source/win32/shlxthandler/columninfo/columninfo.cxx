@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "columninfo.hxx"
-#include "fileextensions.hxx"
-#include "metainforeader.hxx"
-#include "utilities.hxx"
-#include "config.hxx"
+#include <global.hxx>
+#include <columninfo.hxx>
+#include <fileextensions.hxx>
+#include <metainforeader.hxx>
+#include <utilities.hxx>
+#include <config.hxx>
 
 #include <sal/macros.h>
 #include <malloc.h>
@@ -40,6 +40,18 @@ namespace /* private */
     };
 
     size_t ColumnInfoTableSize = SAL_N_ELEMENTS(ColumnInfoTable);
+
+bool IsOOFileExtension(wchar_t const * Extension)
+{
+    for (size_t i = 0; i < OOFileExtensionTableSize; i++)
+    {
+        if (0 == _wcsicmp(Extension, OOFileExtensionTable[i].ExtensionU))
+            return true;
+    }
+
+    return false;
+}
+
 }
 
 
@@ -61,7 +73,7 @@ CColumnInfo::~CColumnInfo()
 
 HRESULT STDMETHODCALLTYPE CColumnInfo::QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject)
 {
-    *ppvObject = 0;
+    *ppvObject = nullptr;
 
     if (IID_IUnknown == riid || IID_IColumnProvider == riid)
     {
@@ -127,7 +139,7 @@ HRESULT STDMETHODCALLTYPE CColumnInfo::GetItemData(LPCSHCOLUMNID pscid, LPCSHCOL
         {
             std::wstring fname = getShortPathName( std::wstring( pscd->wszFile ) );
 
-            CMetaInfoReader meta_info_accessor(WStringToString(fname));
+            CMetaInfoReader meta_info_accessor(fname);
 
             VariantClear(pvarData);
 
@@ -181,18 +193,6 @@ HRESULT STDMETHODCALLTYPE CColumnInfo::GetItemData(LPCSHCOLUMNID pscid, LPCSHCOL
     }
 
     return S_FALSE;
-}
-
-
-bool CColumnInfo::IsOOFileExtension(wchar_t* Extension) const
-{
-    for (size_t i = 0; i < OOFileExtensionTableSize; i++)
-    {
-        if (0 == _wcsicmp(Extension, OOFileExtensionTable[i].ExtensionUnicode))
-            return true;
-    }
-
-    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

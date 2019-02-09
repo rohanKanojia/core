@@ -21,12 +21,15 @@
 
 #include <cstdlib>
 
-#include "controller/SlsVisibleAreaManager.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsProperties.hxx"
-#include "controller/SlsAnimationFunction.hxx"
-#include "controller/SlsScrollBarManager.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
+#include <controller/SlsVisibleAreaManager.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsProperties.hxx>
+#include <controller/SlsAnimationFunction.hxx>
+#include <controller/SlsScrollBarManager.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <Window.hxx>
+#include <SlideSorter.hxx>
+#include <view/SlideSorterView.hxx>
 
 namespace sd { namespace slidesorter { namespace controller {
 
@@ -51,9 +54,7 @@ namespace {
 VisibleAreaManager::VisibleAreaManager (SlideSorter& rSlideSorter)
     : mrSlideSorter(rSlideSorter),
       maVisibleRequests(),
-      mnScrollAnimationId(Animator::NotAnAnimationId),
       maRequestedVisibleTopLeft(),
-      meRequestedAnimationMode(Animator::AM_Immediate),
       mbIsCurrentSlideTrackingActive(true),
       mnDisableCount(0)
 {
@@ -104,7 +105,7 @@ void VisibleAreaManager::MakeVisible()
     if (maVisibleRequests.empty())
         return;
 
-    sd::Window *pWindow (mrSlideSorter.GetContentWindow());
+    sd::Window *pWindow (mrSlideSorter.GetContentWindow().get());
     if ( ! pWindow)
         return;
     const Point aCurrentTopLeft (pWindow->PixelToLogic(Point(0,0)));
@@ -114,49 +115,27 @@ void VisibleAreaManager::MakeVisible()
     if ( ! aNewVisibleTopLeft)
         return;
 
-    // We now know what the visible area shall be.  Scroll accordingly
-    // unless that is not already the visible area or a running scroll
-    // animation has it as its target area.
-    if (mnScrollAnimationId!=Animator::NotAnAnimationId
-        && maRequestedVisibleTopLeft==aNewVisibleTopLeft)
-        return;
-
-    // Stop a running animation.
-    if (mnScrollAnimationId != Animator::NotAnAnimationId)
-        mrSlideSorter.GetController().GetAnimator()->RemoveAnimation(mnScrollAnimationId);
-
     maRequestedVisibleTopLeft = aNewVisibleTopLeft.get();
     VisibleAreaScroller aAnimation(
         mrSlideSorter,
         aCurrentTopLeft,
         maRequestedVisibleTopLeft);
-    if (meRequestedAnimationMode==Animator::AM_Animated
-        && mrSlideSorter.GetProperties()->IsSmoothSelectionScrolling())
-    {
-        mnScrollAnimationId = mrSlideSorter.GetController().GetAnimator()->AddAnimation(
-            aAnimation,
-            300);
-    }
-    else
-    {
-        // Execute the animation at its final value.
-        aAnimation(1.0);
-    }
-    meRequestedAnimationMode = Animator::AM_Immediate;
+    // Execute the animation at its final value.
+    aAnimation(1.0);
 }
 
 ::boost::optional<Point> VisibleAreaManager::GetRequestedTopLeft() const
 {
-    sd::Window *pWindow (mrSlideSorter.GetContentWindow());
+    sd::Window *pWindow (mrSlideSorter.GetContentWindow().get());
     if ( ! pWindow)
         return ::boost::optional<Point>();
 
     // Get the currently visible area and the model area.
-    const Rectangle aVisibleArea (pWindow->PixelToLogic(
-        Rectangle(
+    const ::tools::Rectangle aVisibleArea (pWindow->PixelToLogic(
+        ::tools::Rectangle(
             Point(0,0),
             pWindow->GetOutputSizePixel())));
-    const Rectangle aModelArea (mrSlideSorter.GetView().GetModelArea());
+    const ::tools::Rectangle aModelArea (mrSlideSorter.GetView().GetModelArea());
 
     sal_Int32 nVisibleTop (aVisibleArea.Top());
     const sal_Int32 nVisibleWidth (aVisibleArea.GetWidth());
@@ -164,21 +143,17 @@ void VisibleAreaManager::MakeVisible()
     const sal_Int32 nVisibleHeight (aVisibleArea.GetHeight());
 
     // Find the longest run of boxes whose union fits into the visible area.
-    for (::std::vector<Rectangle>::const_iterator
-             iBox(maVisibleRequests.begin()),
-             iEnd(maVisibleRequests.end());
-         iBox!=iEnd;
-         ++iBox)
+    for (const auto& rBox : maVisibleRequests)
     {
-        if (nVisibleTop+nVisibleHeight <= iBox->Bottom())
-            nVisibleTop = iBox->Bottom()-nVisibleHeight;
-        if (nVisibleTop > iBox->Top())
-            nVisibleTop = iBox->Top();
+        if (nVisibleTop+nVisibleHeight <= rBox.Bottom())
+            nVisibleTop = rBox.Bottom()-nVisibleHeight;
+        if (nVisibleTop > rBox.Top())
+            nVisibleTop = rBox.Top();
 
-        if (nVisibleLeft+nVisibleWidth <= iBox->Right())
-            nVisibleLeft = iBox->Right()-nVisibleWidth;
-        if (nVisibleLeft > iBox->Left())
-            nVisibleLeft = iBox->Left();
+        if (nVisibleLeft+nVisibleWidth <= rBox.Right())
+            nVisibleLeft = rBox.Right()-nVisibleWidth;
+        if (nVisibleLeft > rBox.Left())
+            nVisibleLeft = rBox.Left();
 
         // Make sure the visible area does not move outside the model area.
         if (nVisibleTop + nVisibleHeight > aModelArea.Bottom())
@@ -201,7 +176,7 @@ void VisibleAreaManager::MakeVisible()
 
 //===== VisibleAreaManager::TemporaryDisabler =================================
 
-VisibleAreaManager::TemporaryDisabler::TemporaryDisabler (SlideSorter& rSlideSorter)
+VisibleAreaManager::TemporaryDisabler::TemporaryDisabler (SlideSorter const & rSlideSorter)
     : mrVisibleAreaManager(rSlideSorter.GetController().GetVisibleAreaManager())
 {
     ++mrVisibleAreaManager.mnDisableCount;
@@ -235,16 +210,16 @@ VisibleAreaScroller::VisibleAreaScroller (
     if (std::abs(rStart.X()-rEnd.X()) > gnMaxScrollDistance)
     {
         if (rStart.X() < rEnd.X())
-            maStart.X() = rEnd.X()-gnMaxScrollDistance;
+            maStart.setX( rEnd.X()-gnMaxScrollDistance );
         else
-            maStart.X() = rEnd.X()+gnMaxScrollDistance;
+            maStart.setX( rEnd.X()+gnMaxScrollDistance );
     }
     if (std::abs(rStart.Y()-rEnd.Y()) > gnMaxScrollDistance)
     {
         if (rStart.Y() < rEnd.Y())
-            maStart.Y() = rEnd.Y()-gnMaxScrollDistance;
+            maStart.setY( rEnd.Y()-gnMaxScrollDistance );
         else
-            maStart.Y() = rEnd.Y()+gnMaxScrollDistance;
+            maStart.setY( rEnd.Y()+gnMaxScrollDistance );
     }
 }
 

@@ -19,16 +19,14 @@
 
 #include "svtxgridcontrol.hxx"
 #include <com/sun/star/view/SelectionType.hpp>
-#include "table/tablecontrolinterface.hxx"
-#include "table/gridtablerenderer.hxx"
-#include "table/tablecontrol.hxx"
+#include <table/tablecontrolinterface.hxx>
+#include <table/gridtablerenderer.hxx>
+#include <table/tablecontrol.hxx>
 #include "unocontroltablemodel.hxx"
-#include <comphelper/sequence.hxx>
 #include <rtl/ref.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 #include <toolkit/helper/property.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/processfactory.hxx>
 #include <com/sun/star/awt/grid/XGridColumn.hpp>
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/grid/GridInvalidDataException.hpp>
@@ -37,6 +35,7 @@
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/util/Color.hpp>
 #include <com/sun/star/awt/FontDescriptor.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 #include <vcl/svapp.hxx>
 
@@ -66,7 +65,6 @@ using css::awt::grid::XGridColumn;
 using css::container::ContainerEvent;
 using css::awt::grid::GridDataEvent;
 using css::awt::grid::GridInvalidModelException;
-using css::util::VetoException;
 
 namespace AccessibleEventId = css::accessibility::AccessibleEventId;
 namespace AccessibleStateType = css::accessibility::AccessibleStateType;
@@ -108,7 +106,7 @@ void SVTXGridControl::impl_checkRowIndex_throw( ::svt::table::TableControl const
 }
 
 
-sal_Int32 SAL_CALL SVTXGridControl::getRowAtPoint(::sal_Int32 x, ::sal_Int32 y) throw (RuntimeException, std::exception)
+sal_Int32 SAL_CALL SVTXGridControl::getRowAtPoint(::sal_Int32 x, ::sal_Int32 y)
 {
     SolarMutexGuard aGuard;
 
@@ -120,7 +118,7 @@ sal_Int32 SAL_CALL SVTXGridControl::getRowAtPoint(::sal_Int32 x, ::sal_Int32 y) 
 }
 
 
-sal_Int32 SAL_CALL SVTXGridControl::getColumnAtPoint(::sal_Int32 x, ::sal_Int32 y) throw (RuntimeException, std::exception)
+sal_Int32 SAL_CALL SVTXGridControl::getColumnAtPoint(::sal_Int32 x, ::sal_Int32 y)
 {
     SolarMutexGuard aGuard;
 
@@ -132,7 +130,7 @@ sal_Int32 SAL_CALL SVTXGridControl::getColumnAtPoint(::sal_Int32 x, ::sal_Int32 
 }
 
 
-sal_Int32 SAL_CALL SVTXGridControl::getCurrentColumn(  ) throw (RuntimeException, std::exception)
+sal_Int32 SAL_CALL SVTXGridControl::getCurrentColumn(  )
 {
     SolarMutexGuard aGuard;
 
@@ -144,7 +142,7 @@ sal_Int32 SAL_CALL SVTXGridControl::getCurrentColumn(  ) throw (RuntimeException
 }
 
 
-sal_Int32 SAL_CALL SVTXGridControl::getCurrentRow(  ) throw (RuntimeException, std::exception)
+sal_Int32 SAL_CALL SVTXGridControl::getCurrentRow(  )
 {
     SolarMutexGuard aGuard;
 
@@ -156,7 +154,7 @@ sal_Int32 SAL_CALL SVTXGridControl::getCurrentRow(  ) throw (RuntimeException, s
 }
 
 
-void SAL_CALL SVTXGridControl::goToCell( ::sal_Int32 i_columnIndex, ::sal_Int32 i_rowIndex ) throw (RuntimeException, IndexOutOfBoundsException, VetoException, std::exception)
+void SAL_CALL SVTXGridControl::goToCell( ::sal_Int32 i_columnIndex, ::sal_Int32 i_rowIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -170,19 +168,19 @@ void SAL_CALL SVTXGridControl::goToCell( ::sal_Int32 i_columnIndex, ::sal_Int32 
 }
 
 
-void SAL_CALL SVTXGridControl::addSelectionListener(const Reference< XGridSelectionListener > & listener) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::addSelectionListener(const Reference< XGridSelectionListener > & listener)
 {
     m_aSelectionListeners.addInterface(listener);
 }
 
 
-void SAL_CALL SVTXGridControl::removeSelectionListener(const Reference< XGridSelectionListener > & listener) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::removeSelectionListener(const Reference< XGridSelectionListener > & listener)
 {
     m_aSelectionListeners.removeInterface(listener);
 }
 
 
-void SVTXGridControl::setProperty( const OUString& PropertyName, const Any& aValue) throw(RuntimeException, std::exception)
+void SVTXGridControl::setProperty( const OUString& PropertyName, const Any& aValue)
 {
     SolarMutexGuard aGuard;
 
@@ -212,7 +210,7 @@ void SVTXGridControl::setProperty( const OUString& PropertyName, const Any& aVal
             sal_Int32 columnHeaderHeight = 0;
             if ( !aValue.hasValue() )
             {
-                columnHeaderHeight = pTable->PixelToLogic( Size( 0, pTable->GetTextHeight() + 3 ), MAP_APPFONT ).Height();
+                columnHeaderHeight = pTable->PixelToLogic(Size(0, pTable->GetTextHeight() + 3), MapMode(MapUnit::MapAppFont)).Height();
             }
             else
             {
@@ -252,7 +250,7 @@ void SVTXGridControl::setProperty( const OUString& PropertyName, const Any& aVal
             sal_Int32 rowHeight = 0;
             if ( !aValue.hasValue() )
             {
-                rowHeight = pTable->PixelToLogic( Size( 0, pTable->GetTextHeight() + 3 ), MAP_APPFONT ).Height();
+                rowHeight = pTable->PixelToLogic(Size(0, pTable->GetTextHeight() + 3), MapMode(MapUnit::MapAppFont)).Height();
             }
             else
             {
@@ -290,10 +288,10 @@ void SVTXGridControl::setProperty( const OUString& PropertyName, const Any& aVal
                 SelectionMode eSelMode;
                 switch( eSelectionType )
                 {
-                case SelectionType_SINGLE:  eSelMode = SINGLE_SELECTION; break;
-                case SelectionType_RANGE:   eSelMode = RANGE_SELECTION; break;
-                case SelectionType_MULTI:   eSelMode = MULTIPLE_SELECTION; break;
-                default:                    eSelMode = NO_SELECTION; break;
+                case SelectionType_SINGLE:  eSelMode = SelectionMode::Single; break;
+                case SelectionType_RANGE:   eSelMode = SelectionMode::Range; break;
+                case SelectionType_MULTI:   eSelMode = SelectionMode::Multiple; break;
+                default:                    eSelMode = SelectionMode::NONE; break;
                 }
                 if( pTable->getSelEngine()->GetSelectionMode() != eSelMode )
                     pTable->getSelEngine()->SetSelectionMode( eSelMode );
@@ -434,25 +432,25 @@ void SVTXGridControl::setProperty( const OUString& PropertyName, const Any& aVal
 
 void SVTXGridControl::impl_checkTableModelInit()
 {
-    if ( !m_bTableModelInitCompleted && m_xTableModel->hasColumnModel() && m_xTableModel->hasDataModel() )
-    {
-        VclPtr< TableControl > pTable = GetAsDynamic< TableControl >();
-        if ( pTable )
-        {
-            pTable->SetModel( PTableModel( m_xTableModel ) );
+    if ( !(!m_bTableModelInitCompleted && m_xTableModel->hasColumnModel() && m_xTableModel->hasDataModel()) )
+        return;
 
-            m_bTableModelInitCompleted = true;
+    VclPtr< TableControl > pTable = GetAsDynamic< TableControl >();
+    if ( !pTable )
+        return;
 
-            // ensure default columns exist, if they have not previously been added
-            Reference< XGridDataModel > const xDataModel( m_xTableModel->getDataModel(), UNO_QUERY_THROW );
-            Reference< XGridColumnModel > const xColumnModel( m_xTableModel->getColumnModel(), UNO_QUERY_THROW );
+    pTable->SetModel( PTableModel( m_xTableModel ) );
 
-            sal_Int32 const nDataColumnCount = xDataModel->getColumnCount();
-            if ( ( nDataColumnCount > 0 ) && ( xColumnModel->getColumnCount() == 0 ) )
-                xColumnModel->setDefaultColumns( nDataColumnCount );
-                // this will trigger notifications, which in turn will let us update our m_xTableModel
-        }
-    }
+    m_bTableModelInitCompleted = true;
+
+    // ensure default columns exist, if they have not previously been added
+    Reference< XGridDataModel > const xDataModel( m_xTableModel->getDataModel(), UNO_QUERY_THROW );
+    Reference< XGridColumnModel > const xColumnModel( m_xTableModel->getColumnModel(), UNO_QUERY_THROW );
+
+    sal_Int32 const nDataColumnCount = xDataModel->getColumnCount();
+    if ( ( nDataColumnCount > 0 ) && ( xColumnModel->getColumnCount() == 0 ) )
+        xColumnModel->setDefaultColumns( nDataColumnCount );
+        // this will trigger notifications, which in turn will let us update our m_xTableModel
 }
 
 namespace
@@ -462,11 +460,11 @@ namespace
         if ( !i_color )
             o_colorValue.clear();
         else
-            o_colorValue <<= i_color->GetColor();
+            o_colorValue <<= sal_Int32(*i_color);
     }
 }
 
-Any SVTXGridControl::getProperty( const OUString& PropertyName ) throw(RuntimeException, std::exception)
+Any SVTXGridControl::getProperty( const OUString& PropertyName )
 {
     SolarMutexGuard aGuard;
 
@@ -485,9 +483,9 @@ Any SVTXGridControl::getProperty( const OUString& PropertyName ) throw(RuntimeEx
         SelectionMode eSelMode = pTable->getSelEngine()->GetSelectionMode();
         switch( eSelMode )
         {
-            case SINGLE_SELECTION:  eSelectionType = SelectionType_SINGLE; break;
-            case RANGE_SELECTION:   eSelectionType = SelectionType_RANGE; break;
-            case MULTIPLE_SELECTION:eSelectionType = SelectionType_MULTI; break;
+            case SelectionMode::Single:  eSelectionType = SelectionType_SINGLE; break;
+            case SelectionMode::Range:   eSelectionType = SelectionType_RANGE; break;
+            case SelectionMode::Multiple:eSelectionType = SelectionType_MULTI; break;
             default:                eSelectionType = SelectionType_NONE; break;
         }
         aPropertyValue <<= eSelectionType;
@@ -548,7 +546,7 @@ Any SVTXGridControl::getProperty( const OUString& PropertyName ) throw(RuntimeEx
             Sequence< css::util::Color > aAPIColors( aColors->size() );
             for ( size_t i=0; i<aColors->size(); ++i )
             {
-                aAPIColors[i] = aColors->at(i).GetColor();
+                aAPIColors[i] = sal_Int32(aColors->at(i));
             }
             aPropertyValue <<= aAPIColors;
         }
@@ -600,7 +598,7 @@ Any SVTXGridControl::getProperty( const OUString& PropertyName ) throw(RuntimeEx
 }
 
 
-void SAL_CALL SVTXGridControl::rowsInserted( const GridDataEvent& i_event ) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::rowsInserted( const GridDataEvent& i_event )
 {
     SolarMutexGuard aGuard;
     m_xTableModel->notifyRowsInserted( i_event );
@@ -608,14 +606,14 @@ void SAL_CALL SVTXGridControl::rowsInserted( const GridDataEvent& i_event ) thro
 
 
 void SAL_CALL
- SVTXGridControl::rowsRemoved( const GridDataEvent& i_event ) throw (RuntimeException, std::exception)
+ SVTXGridControl::rowsRemoved( const GridDataEvent& i_event )
 {
     SolarMutexGuard aGuard;
     m_xTableModel->notifyRowsRemoved( i_event );
 }
 
 
-void SAL_CALL SVTXGridControl::dataChanged( const GridDataEvent& i_event ) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::dataChanged( const GridDataEvent& i_event )
 {
     SolarMutexGuard aGuard;
 
@@ -625,11 +623,11 @@ void SAL_CALL SVTXGridControl::dataChanged( const GridDataEvent& i_event ) throw
     // So, just in case, invalidate the column header area, too.
     VclPtr< TableControl > pTable = GetAsDynamic< TableControl >();
     ENSURE_OR_RETURN_VOID( pTable, "SVTXGridControl::dataChanged: no control (anymore)!" );
-    pTable->getTableControlInterface().invalidate( TableAreaColumnHeaders );
+    pTable->getTableControlInterface().invalidate( TableArea::ColumnHeaders );
 }
 
 
-void SAL_CALL SVTXGridControl::rowHeadingChanged( const GridDataEvent& ) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::rowHeadingChanged( const GridDataEvent& )
 {
     SolarMutexGuard aGuard;
 
@@ -637,11 +635,11 @@ void SAL_CALL SVTXGridControl::rowHeadingChanged( const GridDataEvent& ) throw (
     ENSURE_OR_RETURN_VOID( pTable, "SVTXGridControl::rowHeadingChanged: no control (anymore)!" );
 
     // TODO: we could do better than this - invalidate the header area only
-    pTable->getTableControlInterface().invalidate( TableAreaRowHeaders );
+    pTable->getTableControlInterface().invalidate( TableArea::RowHeaders );
 }
 
 
-void SAL_CALL SVTXGridControl::elementInserted( const ContainerEvent& i_event ) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::elementInserted( const ContainerEvent& i_event )
 {
     SolarMutexGuard aGuard;
 
@@ -653,7 +651,7 @@ void SAL_CALL SVTXGridControl::elementInserted( const ContainerEvent& i_event ) 
 }
 
 
-void SAL_CALL SVTXGridControl::elementRemoved( const ContainerEvent& i_event ) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::elementRemoved( const ContainerEvent& i_event )
 {
     SolarMutexGuard aGuard;
 
@@ -663,7 +661,7 @@ void SAL_CALL SVTXGridControl::elementRemoved( const ContainerEvent& i_event ) t
 }
 
 
-void SAL_CALL SVTXGridControl::elementReplaced( const ContainerEvent& ) throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::elementReplaced( const ContainerEvent& )
 {
     OSL_ENSURE( false, "SVTXGridControl::elementReplaced: not implemented!" );
         // at the moment, the XGridColumnModel API does not allow replacing columns
@@ -671,13 +669,13 @@ void SAL_CALL SVTXGridControl::elementReplaced( const ContainerEvent& ) throw (R
 }
 
 
-void SAL_CALL SVTXGridControl::disposing( const EventObject& Source ) throw(RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::disposing( const EventObject& Source )
 {
     VCLXWindow::disposing( Source );
 }
 
 
-void SAL_CALL SVTXGridControl::selectRow( ::sal_Int32 i_rowIndex ) throw (RuntimeException, IndexOutOfBoundsException, std::exception )
+void SAL_CALL SVTXGridControl::selectRow( ::sal_Int32 i_rowIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -690,7 +688,7 @@ void SAL_CALL SVTXGridControl::selectRow( ::sal_Int32 i_rowIndex ) throw (Runtim
 }
 
 
-void SAL_CALL SVTXGridControl::selectAllRows() throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::selectAllRows()
 {
     SolarMutexGuard aGuard;
 
@@ -701,7 +699,7 @@ void SAL_CALL SVTXGridControl::selectAllRows() throw (RuntimeException, std::exc
 }
 
 
-void SAL_CALL SVTXGridControl::deselectRow( ::sal_Int32 i_rowIndex ) throw (RuntimeException, IndexOutOfBoundsException, std::exception )
+void SAL_CALL SVTXGridControl::deselectRow( ::sal_Int32 i_rowIndex )
 {
     SolarMutexGuard aGuard;
 
@@ -714,7 +712,7 @@ void SAL_CALL SVTXGridControl::deselectRow( ::sal_Int32 i_rowIndex ) throw (Runt
 }
 
 
-void SAL_CALL SVTXGridControl::deselectAllRows() throw (RuntimeException, std::exception)
+void SAL_CALL SVTXGridControl::deselectAllRows()
 {
     SolarMutexGuard aGuard;
 
@@ -725,7 +723,7 @@ void SAL_CALL SVTXGridControl::deselectAllRows() throw (RuntimeException, std::e
 }
 
 
-Sequence< ::sal_Int32 > SAL_CALL SVTXGridControl::getSelectedRows() throw (RuntimeException, std::exception)
+Sequence< ::sal_Int32 > SAL_CALL SVTXGridControl::getSelectedRows()
 {
     SolarMutexGuard aGuard;
 
@@ -740,29 +738,29 @@ Sequence< ::sal_Int32 > SAL_CALL SVTXGridControl::getSelectedRows() throw (Runti
 }
 
 
-sal_Bool SAL_CALL SVTXGridControl::hasSelectedRows() throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL SVTXGridControl::hasSelectedRows()
 {
     SolarMutexGuard aGuard;
 
     VclPtr< TableControl > pTable = GetAsDynamic< TableControl >();
-    ENSURE_OR_RETURN( pTable, "SVTXGridControl::hasSelectedRows: no control (anymore)!", sal_True );
+    ENSURE_OR_RETURN( pTable, "SVTXGridControl::hasSelectedRows: no control (anymore)!", true );
 
     return pTable->GetSelectedRowCount() > 0;
 }
 
 
-sal_Bool SAL_CALL SVTXGridControl::isRowSelected( ::sal_Int32 index ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL SVTXGridControl::isRowSelected( ::sal_Int32 index )
 {
     SolarMutexGuard aGuard;
 
     VclPtr< TableControl > pTable = GetAsDynamic< TableControl >();
-    ENSURE_OR_RETURN( pTable, "SVTXGridControl::isRowSelected: no control (anymore)!", sal_False );
+    ENSURE_OR_RETURN( pTable, "SVTXGridControl::isRowSelected: no control (anymore)!", false );
 
     return pTable->IsRowSelected( index );
 }
 
 
-void SVTXGridControl::dispose() throw(RuntimeException, std::exception)
+void SVTXGridControl::dispose()
 {
     EventObject aObj;
     aObj.Source = static_cast<cppu::OWeakObject*>(this);
@@ -783,7 +781,7 @@ void SVTXGridControl::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent 
     bool handled = false;
     switch ( rVclWindowEvent.GetId() )
     {
-        case VCLEVENT_TABLEROW_SELECT:
+        case VclEventId::TableRowSelect:
         {
             if ( m_aSelectionListeners.getLength() )
                 ImplCallItemListeners();
@@ -791,12 +789,12 @@ void SVTXGridControl::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent 
         }
         break;
 
-        case VCLEVENT_CONTROL_GETFOCUS:
+        case VclEventId::ControlGetFocus:
         {
             // TODO: this doesn't belong here. It belongs into the TableControl/_Impl, so A11Y also
             // works when the control is used outside the UNO context
-             if ( pTable->GetRowCount()>0 )
-             {
+            if ( pTable->GetRowCount()>0 )
+            {
                 pTable->commitCellEventIfAccessibleAlive(
                     AccessibleEventId::STATE_CHANGED,
                     makeAny( AccessibleStateType::FOCUSED ),
@@ -815,11 +813,11 @@ void SVTXGridControl::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent 
                     makeAny( AccessibleStateType::FOCUSED ),
                     Any()
                 );
-             }
+            }
         }
         break;
 
-        case VCLEVENT_CONTROL_LOSEFOCUS:
+        case VclEventId::ControlLoseFocus:
         {
             // TODO: this doesn't belong here. It belongs into the TableControl/_Impl, so A11Y also
             // works when the control is used outside the UNO context
@@ -841,6 +839,8 @@ void SVTXGridControl::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent 
             }
         }
         break;
+
+        default: break;
     }
 
     if ( !handled )
@@ -848,12 +848,12 @@ void SVTXGridControl::ProcessWindowEvent( const VclWindowEvent& rVclWindowEvent 
 }
 
 
-void SVTXGridControl::setEnable( sal_Bool bEnable ) throw(css::uno::RuntimeException, std::exception)
+void SVTXGridControl::setEnable( sal_Bool bEnable )
 {
     SolarMutexGuard aGuard;
 
     m_xTableModel->setEnabled( bEnable );
-    vcl::Window * pWindow = GetWindow();
+    VclPtr<vcl::Window> pWindow = GetWindow();
     if ( pWindow )
     {
         pWindow->Enable( bEnable );
@@ -892,23 +892,20 @@ void SVTXGridControl::impl_updateColumnsFromModel_nothrow()
     try
     {
         const Sequence< Reference< XGridColumn > > columns = xColumnModel->getColumns();
-        for (   const Reference< XGridColumn >* colRef = columns.getConstArray();
-                colRef != columns.getConstArray() + columns.getLength();
-                ++colRef
-            )
+        for ( auto const & colRef : columns )
         {
-            if ( !colRef->is() )
+            if ( !colRef.is() )
             {
                 SAL_WARN( "svtools.uno", "illegal column!" );
                 continue;
             }
 
-            m_xTableModel->appendColumn( *colRef );
+            m_xTableModel->appendColumn( colRef );
         }
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("svtools.uno");
     }
 }
 

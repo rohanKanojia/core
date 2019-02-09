@@ -21,10 +21,11 @@
 
 #include <svl/svldllapi.h>
 #include <sal/types.h>
+#include <o3tl/typed_flags_set.hxx>
 #include <unotools/configitem.hxx>
 #include <unotools/options.hxx>
 #include <i18nlangtag/lang.h>
-#include <o3tl/typed_flags_set.hxx>
+#include <memory>
 
 // class SvtLanguageOptions ----------------------------------------------------
 
@@ -49,8 +50,8 @@ class SvtCTLOptions;
 class SVL_DLLPUBLIC SvtLanguageOptions : public ::utl::detail::Options
 {
 private:
-    SvtCJKOptions*  m_pCJKOptions;
-    SvtCTLOptions*  m_pCTLOptions;
+    std::unique_ptr<SvtCJKOptions>  m_pCJKOptions;
+    std::unique_ptr<SvtCTLOptions>  m_pCTLOptions;
 
 public:
     enum EOption
@@ -75,7 +76,7 @@ public:
 
     // bDontLoad is for referencing purposes only
     SvtLanguageOptions( bool _bDontLoad = false );
-    virtual ~SvtLanguageOptions();
+    virtual ~SvtLanguageOptions() override;
 
     // CJK options
     bool    IsCJKFontEnabled() const;
@@ -98,14 +99,14 @@ public:
     bool    IsReadOnly(EOption eOption) const;
 
     // returns for a language the scripttype
-    static  SvtScriptType GetScriptTypeOfLanguage( sal_uInt16 nLang );
+    static  SvtScriptType GetScriptTypeOfLanguage( LanguageType nLang );
 
     // convert from css::i18n::ScriptType constants to SvtScriptType
     static SvtScriptType FromI18NToSvtScriptType( sal_Int16 nI18NType );
 
     static sal_Int16 FromSvtScriptTypeToI18N( SvtScriptType nI18NType );
 
-    static sal_Int16 GetI18NScriptTypeOfLanguage( sal_uInt16 nLang );
+    static sal_Int16 GetI18NScriptTypeOfLanguage( LanguageType nLang );
 
 };
 
@@ -122,13 +123,12 @@ private:
 
 public:
     SvtSystemLanguageOptions();
-    virtual ~SvtSystemLanguageOptions();
+    virtual ~SvtSystemLanguageOptions() override;
 
     virtual void    Notify( const css::uno::Sequence< OUString >& rPropertyNames ) override;
 
     LanguageType    GetWin16SystemLanguage() const;
 
-    bool            isCTLKeyboardLayoutInstalled() const;
     bool            isCJKKeyboardLayoutInstalled() const;
 };
 

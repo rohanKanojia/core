@@ -20,22 +20,10 @@
 #ifndef INCLUDED_SHELL_INC_INTERNAL_THUMBVIEWER_HXX
 #define INCLUDED_SHELL_INC_INTERNAL_THUMBVIEWER_HXX
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable:4917)
-#endif
 #include <objidl.h>
 #include <shlobj.h>
-#ifdef __MINGW32__
-#include <algorithm>
-using std::min;
-using std::max;
-#endif
 #ifndef DONT_HAVE_GDIPLUS
 #include <gdiplus.h>
-#endif
-#if defined _MSC_VER
-#pragma warning(pop)
 #endif
 #include <string>
 
@@ -51,17 +39,17 @@ public:
 
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(
             REFIID riid,
-            void __RPC_FAR *__RPC_FAR *ppvObject);
+            void __RPC_FAR *__RPC_FAR *ppvObject) override;
 
-    virtual ULONG STDMETHODCALLTYPE AddRef();
+    virtual ULONG STDMETHODCALLTYPE AddRef() override;
 
-    virtual ULONG STDMETHODCALLTYPE Release();
+    virtual ULONG STDMETHODCALLTYPE Release() override;
 
 
     // IExtractImage methods
 
 
-    virtual HRESULT STDMETHODCALLTYPE Extract(HBITMAP *phBmpImage);
+    virtual HRESULT STDMETHODCALLTYPE Extract(HBITMAP *phBmpImage) override;
 
     virtual HRESULT STDMETHODCALLTYPE GetLocation(
         LPWSTR pszPathBuffer,
@@ -69,36 +57,33 @@ public:
         DWORD *pdwPriority,
         const SIZE *prgSize,
         DWORD dwRecClrDepth,
-        DWORD *pdwFlags);
+        DWORD *pdwFlags) override;
 
 
     // IPersist methods
 
 
-    virtual HRESULT STDMETHODCALLTYPE GetClassID(CLSID* pClassID);
+    virtual HRESULT STDMETHODCALLTYPE GetClassID(CLSID* pClassID) override;
 
 
     // IPersistFile methods
 
 
-    virtual HRESULT STDMETHODCALLTYPE IsDirty();
+    virtual HRESULT STDMETHODCALLTYPE IsDirty() override;
 
     virtual HRESULT STDMETHODCALLTYPE Load(
             /* [in] */ LPCOLESTR pszFileName,
-            /* [in] */ DWORD dwMode);
+            /* [in] */ DWORD dwMode) override;
 
     virtual HRESULT STDMETHODCALLTYPE Save(
             /* [unique][in] */ LPCOLESTR pszFileName,
-            /* [in] */ BOOL fRemember);
+            /* [in] */ BOOL fRemember) override;
 
     virtual HRESULT STDMETHODCALLTYPE SaveCompleted(
-            /* [unique][in] */ LPCOLESTR pszFileName);
+            /* [unique][in] */ LPCOLESTR pszFileName) override;
 
     virtual HRESULT STDMETHODCALLTYPE GetCurFile(
-            /* [out] */ LPOLESTR __RPC_FAR *ppszFileName);
-
-private:
-    Gdiplus::Rect CalcScaledAspectRatio(const Gdiplus::Rect& src, const Gdiplus::Rect& dest);
+            /* [out] */ LPOLESTR __RPC_FAR *ppszFileName) override;
 
 private:
     long         ref_count_;

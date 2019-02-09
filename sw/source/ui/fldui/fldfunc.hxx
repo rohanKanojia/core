@@ -23,10 +23,9 @@
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <vcl/button.hxx>
-#include <vcl/group.hxx>
 #include <vcl/edit.hxx>
 
-#include "condedit.hxx"
+#include <condedit.hxx>
 #include "fldpage.hxx"
 #include <actctrl.hxx>
 
@@ -66,32 +65,31 @@ class SwFieldFuncPage : public SwFieldPage
     sal_uLong           nOldFormat;
     bool            bDropDownLBChanged;
 
-    DECL_LINK_TYPED( TypeHdl, ListBox&, void );
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( InsertMacroHdl, ListBox&, void );
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( ListModifyReturnActionHdl, ReturnActionEdit&, void );
-    DECL_LINK_TYPED( ListModifyButtonHdl, Button*, void );
-    DECL_LINK_TYPED( ListEnableHdl, Edit&, void );
-    DECL_LINK_TYPED( ListEnableListBoxHdl, ListBox&, void );
-    void ListModifyHdl(Control*);
+    DECL_LINK( TypeHdl, ListBox&, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
+    DECL_LINK( InsertMacroHdl, ListBox&, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
+    DECL_LINK( ListModifyReturnActionHdl, ReturnActionEdit&, void );
+    DECL_LINK( ListModifyButtonHdl, Button*, void );
+    DECL_LINK( ListEnableHdl, Edit&, void );
+    DECL_LINK( ListEnableListBoxHdl, ListBox&, void );
+    void ListModifyHdl(Control const *);
 
     // select Macro
-    DECL_LINK_TYPED( MacroHdl, Button *, void );
+    DECL_LINK( MacroHdl, Button *, void );
 
     void                UpdateSubType();
-    static OUString     TurnMacroString(const OUString &rMacro);
 
 protected:
     virtual sal_uInt16      GetGroup() override;
 
 public:
-                        SwFieldFuncPage(vcl::Window* pParent, const SfxItemSet& rSet);
+                        SwFieldFuncPage(vcl::Window* pParent, const SfxItemSet* pSet);
 
-                        virtual ~SwFieldFuncPage();
+                        virtual ~SwFieldFuncPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create(vcl::Window* pParent, const SfxItemSet* rAttrSet);
+    static VclPtr<SfxTabPage>  Create(TabPageParent pParent, const SfxItemSet* rAttrSet);
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

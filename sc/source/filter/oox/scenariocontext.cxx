@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scenariocontext.hxx"
+#include <scenariocontext.hxx>
+#include <biffhelper.hxx>
 
-#include "scenariobuffer.hxx"
+#include <scenariobuffer.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {

@@ -25,15 +25,16 @@
 #include <vcl/canvastools.hxx>
 
 #include <basegfx/range/b2drectangle.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <canvas/canvastools.hxx>
+#include <sal/log.hxx>
 
 #include "cachedprimitivebase.hxx"
 #include "polypolyaction.hxx"
-#include "outdevstate.hxx"
+#include <outdevstate.hxx>
 #include "mtftools.hxx"
 
 
@@ -91,7 +92,7 @@ namespace cppcanvas
                                             bool                                bStroke ) :
                 CachedPrimitiveBase( rCanvas, false ),
                 mxPolyPoly( ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon( rCanvas->getUNOCanvas()->getDevice(), rPolyPoly) ),
-                maBounds( ::basegfx::tools::getRange(rPolyPoly) ),
+                maBounds( ::basegfx::utils::getRange(rPolyPoly) ),
                 mpCanvas( rCanvas ),
                 maState(),
                 maFillColor()
@@ -113,7 +114,7 @@ namespace cppcanvas
                                             int                                 nTransparency ) :
                 CachedPrimitiveBase( rCanvas, false ),
                 mxPolyPoly( ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon( rCanvas->getUNOCanvas()->getDevice(), rPolyPoly) ),
-                maBounds( ::basegfx::tools::getRange(rPolyPoly) ),
+                maBounds( ::basegfx::utils::getRange(rPolyPoly) ),
                 mpCanvas( rCanvas ),
                 maState(),
                 maFillColor()
@@ -264,7 +265,7 @@ namespace cppcanvas
                                                             const rendering::Texture&        rTexture ) :
                 CachedPrimitiveBase( rCanvas, true ),
                 mxPolyPoly( ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon( rCanvas->getUNOCanvas()->getDevice(), rPolyPoly) ),
-                maBounds( ::basegfx::tools::getRange(rPolyPoly) ),
+                maBounds( ::basegfx::utils::getRange(rPolyPoly) ),
                 mpCanvas( rCanvas ),
                 maState(),
                 maTexture( rTexture )
@@ -375,7 +376,7 @@ namespace cppcanvas
                                                           const rendering::StrokeAttributes&    rStrokeAttributes ) :
                 CachedPrimitiveBase( rCanvas, false ),
                 mxPolyPoly( ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon( rCanvas->getUNOCanvas()->getDevice(), rPolyPoly) ),
-                maBounds( ::basegfx::tools::getRange(rPolyPoly) ),
+                maBounds( ::basegfx::utils::getRange(rPolyPoly) ),
                 mpCanvas( rCanvas ),
                 maState(),
                 maStrokeAttributes( rStrokeAttributes )
@@ -449,55 +450,55 @@ namespace cppcanvas
             }
         }
 
-        ActionSharedPtr PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
                                                                      const CanvasSharedPtr&           rCanvas,
                                                                      const OutDevState&               rState    )
         {
             OSL_ENSURE( rState.isLineColorSet || rState.isFillColorSet,
                         "PolyPolyActionFactory::createPolyPolyAction() with empty line and fill color" );
-            return ActionSharedPtr( new PolyPolyAction( rPoly, rCanvas, rState,
+            return std::shared_ptr<Action>( new PolyPolyAction( rPoly, rCanvas, rState,
                                                         rState.isFillColorSet,
                                                         rState.isLineColorSet ) );
         }
 
-        ActionSharedPtr PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon&   rPoly,
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon&   rPoly,
                                                                      const CanvasSharedPtr&             rCanvas,
                                                                      const OutDevState&                 rState,
                                                                      const rendering::Texture&          rTexture )
         {
-            return ActionSharedPtr( new TexturedPolyPolyAction( rPoly, rCanvas, rState, rTexture ) );
+            return std::shared_ptr<Action>( new TexturedPolyPolyAction( rPoly, rCanvas, rState, rTexture ) );
         }
 
-        ActionSharedPtr PolyPolyActionFactory::createLinePolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+        std::shared_ptr<Action> PolyPolyActionFactory::createLinePolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
                                                                          const CanvasSharedPtr&           rCanvas,
                                                                          const OutDevState&               rState )
         {
             OSL_ENSURE( rState.isLineColorSet,
                         "PolyPolyActionFactory::createLinePolyPolyAction() called with empty line color" );
 
-            return ActionSharedPtr( new PolyPolyAction( rPoly, rCanvas, rState,
+            return std::shared_ptr<Action>( new PolyPolyAction( rPoly, rCanvas, rState,
                                                         false,
                                                         rState.isLineColorSet ) );
         }
 
-        ActionSharedPtr PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon&   rPoly,
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon&   rPoly,
                                                                      const CanvasSharedPtr&             rCanvas,
                                                                      const OutDevState&                 rState,
                                                                      const rendering::StrokeAttributes& rStrokeAttributes )
         {
             OSL_ENSURE( rState.isLineColorSet,
                         "PolyPolyActionFactory::createPolyPolyAction() for strokes called with empty line color" );
-            return ActionSharedPtr( new StrokedPolyPolyAction( rPoly, rCanvas, rState, rStrokeAttributes ) );
+            return std::shared_ptr<Action>( new StrokedPolyPolyAction( rPoly, rCanvas, rState, rStrokeAttributes ) );
         }
 
-        ActionSharedPtr PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
+        std::shared_ptr<Action> PolyPolyActionFactory::createPolyPolyAction( const ::basegfx::B2DPolyPolygon& rPoly,
                                                                      const CanvasSharedPtr&           rCanvas,
                                                                      const OutDevState&               rState,
                                                                      int                              nTransparency     )
         {
             OSL_ENSURE( rState.isLineColorSet || rState.isFillColorSet,
                         "PolyPolyActionFactory::createPolyPolyAction() with empty line and fill color" );
-            return ActionSharedPtr( new PolyPolyAction( rPoly, rCanvas, rState,
+            return std::shared_ptr<Action>( new PolyPolyAction( rPoly, rCanvas, rState,
                                                         rState.isFillColorSet,
                                                         rState.isLineColorSet,
                                                         nTransparency ) );

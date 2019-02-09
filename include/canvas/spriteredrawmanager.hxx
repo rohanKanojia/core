@@ -28,7 +28,6 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <canvas/base/spritesurface.hxx>
 
-#include <list>
 #include <vector>
 #include <algorithm>
 
@@ -143,15 +142,7 @@ namespace canvas
          */
         struct SpriteChangeRecord
         {
-            enum class ChangeType { none=0, move, update };
-
-            SpriteChangeRecord() :
-                meChangeType( ChangeType::none ),
-                mpAffectedSprite(),
-                maOldPos(),
-                maUpdateArea()
-            {
-            }
+            enum class ChangeType { move, update };
 
             SpriteChangeRecord( const Sprite::Reference&    rSprite,
                                 const ::basegfx::B2DPoint&  rOldPos,
@@ -186,7 +177,6 @@ namespace canvas
         };
 
         typedef ::std::vector< SpriteChangeRecord >             VectorOfChangeRecords;
-        typedef ::std::list< Sprite::Reference >                ListOfSprites;
         typedef ::basegfx::B2DConnectedRanges< SpriteInfo >     SpriteConnectedRanges;
         typedef SpriteConnectedRanges::ComponentType            AreaComponent;
         typedef SpriteConnectedRanges::ConnectedComponents      UpdateArea;
@@ -336,17 +326,11 @@ namespace canvas
                         // involved. Have to sort component lists for
                         // sprite prio.
                         VectorOfSprites aSortedUpdateSprites;
-                        SpriteConnectedRanges::ComponentListType::const_iterator aCurr(
-                            rUpdateArea.maComponentList.begin() );
-                        const SpriteConnectedRanges::ComponentListType::const_iterator aEnd(
-                            rUpdateArea.maComponentList.end() );
-                        while( aCurr != aEnd )
+                        for (auto const& elem : rUpdateArea.maComponentList)
                         {
-                            const Sprite::Reference& rSprite( aCurr->second.getSprite() );
+                            const Sprite::Reference& rSprite( elem.second.getSprite() );
                             if( rSprite.is() )
                                 aSortedUpdateSprites.push_back( rSprite );
-
-                            ++aCurr;
                         }
 
                         ::std::sort( aSortedUpdateSprites.begin(),
@@ -402,7 +386,7 @@ namespace canvas
                                  ::std::size_t          nNumSprites ) const;
 
 
-        ListOfSprites                   maSprites; // list of active
+        VectorOfSprites                 maSprites; // list of active
                                                    // sprite
                                                    // objects. this
                                                    // list is only

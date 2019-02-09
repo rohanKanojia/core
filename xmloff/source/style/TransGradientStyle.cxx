@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TransGradientStyle.hxx"
+#include <TransGradientStyle.hxx>
 
 #include <com/sun/star/awt/Gradient.hpp>
 
@@ -29,11 +29,12 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <tools/color.hxx>
-#include <tools/debug.hxx>
 #include <xmloff/xmltkmap.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmlimp.hxx>
+#include <xmloff/xmlement.hxx>
 
 using namespace ::com::sun::star;
 
@@ -49,11 +50,10 @@ enum SvXMLTokenMapAttrs
     XML_TOK_GRADIENT_START,
     XML_TOK_GRADIENT_END,
     XML_TOK_GRADIENT_ANGLE,
-    XML_TOK_GRADIENT_BORDER,
-    XML_TOK_TABSTOP_END=XML_TOK_UNKNOWN
+    XML_TOK_GRADIENT_BORDER
 };
 
-SvXMLEnumMapEntry const pXML_GradientStyle_Enum[] =
+SvXMLEnumMapEntry<awt::GradientStyle> const pXML_GradientStyle_Enum[] =
 {
     { XML_GRADIENTSTYLE_LINEAR,         awt::GradientStyle_LINEAR },
     { XML_GRADIENTSTYLE_AXIAL,          awt::GradientStyle_AXIAL },
@@ -61,7 +61,7 @@ SvXMLEnumMapEntry const pXML_GradientStyle_Enum[] =
     { XML_GRADIENTSTYLE_ELLIPSOID,      awt::GradientStyle_ELLIPTICAL },
     { XML_GRADIENTSTYLE_SQUARE,         awt::GradientStyle_SQUARE },
     { XML_GRADIENTSTYLE_RECTANGULAR,    awt::GradientStyle_RECT },
-    { XML_TOKEN_INVALID,                0 }
+    { XML_TOKEN_INVALID,                awt::GradientStyle(0) }
 };
 
 // Import
@@ -100,7 +100,9 @@ void XMLTransGradientStyleImport::importXML(
         { XML_NAMESPACE_DRAW, XML_START, XML_TOK_GRADIENT_START },
         { XML_NAMESPACE_DRAW, XML_END, XML_TOK_GRADIENT_END },
         { XML_NAMESPACE_DRAW, XML_GRADIENT_ANGLE, XML_TOK_GRADIENT_ANGLE },
-        { XML_NAMESPACE_DRAW, XML_GRADIENT_BORDER, XML_TOK_GRADIENT_BORDER },
+        { XML_NAMESPACE_DRAW, XML_GRADIENT_BORDER, XML_TOK_GRADIENT_BORDER,
+            XML_ELEMENT( DRAW, XML_BORDER ) },
+        //  XML_GRADIENT_BORDER is a duplicate of XML_BORDER
         XML_TOKEN_MAP_END
     };
 
@@ -131,11 +133,7 @@ void XMLTransGradientStyleImport::importXML(
             break;
         case XML_TOK_GRADIENT_STYLE:
             {
-                sal_uInt16 eValue;
-                if( SvXMLUnitConverter::convertEnum( eValue, rStrValue, pXML_GradientStyle_Enum ) )
-                {
-                    aGradient.Style = (awt::GradientStyle) eValue;
-                }
+                SvXMLUnitConverter::convertEnum( aGradient.Style, rStrValue, pXML_GradientStyle_Enum );
             }
             break;
         case XML_TOK_GRADIENT_CX:
@@ -155,7 +153,7 @@ void XMLTransGradientStyleImport::importXML(
                     ( (100 - aStartTransparency) * 255 ) / 100 );
 
                 Color aColor( n, n, n );
-                aGradient.StartColor = (sal_Int32)( aColor.GetColor() );
+                aGradient.StartColor = static_cast<sal_Int32>( aColor );
             }
             break;
         case XML_TOK_GRADIENT_END:
@@ -167,7 +165,7 @@ void XMLTransGradientStyleImport::importXML(
                     ( (100 - aEndTransparency) * 255 ) / 100 );
 
                 Color aColor( n, n, n );
-                aGradient.EndColor = (sal_Int32)( aColor.GetColor() );
+                aGradient.EndColor = static_cast<sal_Int32>( aColor );
             }
             break;
         case XML_TOK_GRADIENT_ANGLE:
@@ -252,15 +250,15 @@ void XMLTransGradientStyleExport::exportXML(
                 Color aColor;
 
                 // Transparency start
-                aColor.SetColor( aGradient.StartColor );
-                sal_Int32 aStartValue = 100 - (sal_Int32)(((aColor.GetRed() + 1) * 100) / 255);
+                aColor = Color(aGradient.StartColor);
+                sal_Int32 aStartValue = 100 - static_cast<sal_Int32>(((aColor.GetRed() + 1) * 100) / 255);
                 ::sax::Converter::convertPercent( aOut, aStartValue );
                 aStrValue = aOut.makeStringAndClear();
                 rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_START, aStrValue );
 
                 // Transparency end
-                aColor.SetColor( aGradient.EndColor );
-                sal_Int32 aEndValue = 100 - (sal_Int32)(((aColor.GetRed() + 1) * 100) / 255);
+                aColor = Color(aGradient.EndColor);
+                sal_Int32 aEndValue = 100 - static_cast<sal_Int32>(((aColor.GetRed() + 1) * 100) / 255);
                 ::sax::Converter::convertPercent( aOut, aEndValue );
                 aStrValue = aOut.makeStringAndClear();
                 rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_END, aStrValue );

@@ -42,7 +42,6 @@ SvxClipBoardControl::SvxClipBoardControl(
         sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx ) :
 
     SfxToolBoxControl( nSlotId, nId, rTbx ),
-    pClipboardFmtItem( nullptr ),
     pPopup( nullptr ),
     bDisabled( false )
 {
@@ -56,19 +55,18 @@ SvxClipBoardControl::SvxClipBoardControl(
 SvxClipBoardControl::~SvxClipBoardControl()
 {
     DelPopup();
-    delete pClipboardFmtItem;
 }
 
 
 VclPtr<SfxPopupWindow> SvxClipBoardControl::CreatePopupWindow()
 {
-    const SvxClipboardFormatItem* pFmtItem = dynamic_cast<SvxClipboardFormatItem*>( pClipboardFmtItem  );
+    const SvxClipboardFormatItem* pFmtItem = dynamic_cast<SvxClipboardFormatItem*>( pClipboardFmtItem.get()  );
     if ( pFmtItem )
     {
         if (pPopup)
             pPopup->Clear();
         else
-            pPopup = new PopupMenu;
+            pPopup = VclPtr<PopupMenu>::Create();
 
         sal_uInt16 nCount = pFmtItem->Count();
         for (sal_uInt16 i = 0;  i < nCount;  ++i)
@@ -77,7 +75,7 @@ VclPtr<SfxPopupWindow> SvxClipBoardControl::CreatePopupWindow()
             OUString aFmtStr( pFmtItem->GetClipbrdFormatName( i ) );
             if (aFmtStr.isEmpty())
               aFmtStr = SvPasteObjectHelper::GetSotFormatUIName( nFmtID );
-            pPopup->InsertItem( (sal_uInt16)nFmtID, aFmtStr );
+            pPopup->InsertItem( static_cast<sal_uInt16>(nFmtID), aFmtStr );
         }
 
         ToolBox& rBox = GetToolBox();
@@ -111,10 +109,10 @@ void SvxClipBoardControl::StateChanged( sal_uInt16 nSID, SfxItemState eState, co
 {
     if ( SID_CLIPBOARD_FORMAT_ITEMS == nSID )
     {
-        DELETEZ( pClipboardFmtItem );
+        pClipboardFmtItem.reset();
         if ( eState >= SfxItemState::DEFAULT )
         {
-            pClipboardFmtItem = pState->Clone();
+            pClipboardFmtItem.reset( pState->Clone() );
             GetToolBox().SetItemBits( GetId(), GetToolBox().GetItemBits( GetId() ) | ToolBoxItemBits::DROPDOWN );
         }
         else if ( !bDisabled )
@@ -134,8 +132,7 @@ void SvxClipBoardControl::DelPopup()
 {
     if(pPopup)
     {
-        delete pPopup;
-        pPopup = nullptr;
+        pPopup.disposeAndClear();
     }
 }
 

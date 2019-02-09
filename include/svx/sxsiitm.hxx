@@ -23,11 +23,8 @@
 
 class SdrScaleItem: public SdrFractionItem {
 public:
-    SdrScaleItem(sal_uInt16 nId=0): SdrFractionItem(nId,Fraction(1,1)) {}
     SdrScaleItem(sal_uInt16 nId, const Fraction& rVal): SdrFractionItem(nId,rVal) {}
-    SdrScaleItem(sal_uInt16 nId, SvStream& rIn): SdrFractionItem(nId,rIn) {}
-    virtual bool GetPresentation(SfxItemPresentation ePresentation, SfxMapUnit eCoreMetric, SfxMapUnit ePresentationMetric, OUString &rText, const IntlWrapper * = nullptr) const override;
-    virtual SfxPoolItem*     Create(SvStream&, sal_uInt16 nVer) const override;
+    virtual bool GetPresentation(SfxItemPresentation ePresentation, MapUnit eCoreMetric, MapUnit ePresentationMetric, OUString &rText, const IntlWrapper&) const override;
     virtual SfxPoolItem*     Clone(SfxItemPool *pPool=nullptr) const override;
 };
 

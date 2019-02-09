@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "addinhelpid.hxx"
-#include "sc.hrc"
+#include <addinhelpid.hxx>
+#include <sc.hrc>
+#include <helpids.h>
 
 // A struct containing the built-in function name and the built-in help ID.
 struct ScUnoAddInHelpId

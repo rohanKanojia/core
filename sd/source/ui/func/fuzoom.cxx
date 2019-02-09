@@ -17,24 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuzoom.hxx"
+#include <fuzoom.hxx>
 
 #include <svx/svxids.hrc>
 #include <sfx2/bindings.hxx>
 #include <sfx2/viewfrm.hxx>
-#include "app.hrc"
+#include <app.hrc>
 #include <svx/svdpagv.hxx>
 
-#include "FrameView.hxx"
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "zoomlist.hxx"
+#include <FrameView.hxx>
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <zoomlist.hxx>
 
 namespace sd {
 
-sal_uInt16 SidArrayZoom[] = {
+const sal_uInt16 SidArrayZoom[] = {
                     SID_ATTR_ZOOM,
                     SID_ZOOM_OUT,
                     SID_ZOOM_IN,
@@ -117,15 +117,15 @@ bool FuZoom::MouseMove(const MouseEvent& rMEvt)
             {
                 Size aWorkSize = mpView->GetWorkArea().GetSize();
                 Size aPageSize = mpView->GetSdrPageView()->GetPage()->GetSize();
-                aScroll.X() /= aWorkSize.Width()  / aPageSize.Width();
-                aScroll.Y() /= aWorkSize.Height() / aPageSize.Height();
+                aScroll.setX( aScroll.X() / ( aWorkSize.Width()  / aPageSize.Width()) );
+                aScroll.setY( aScroll.Y() / ( aWorkSize.Height() / aPageSize.Height()) );
                 mpViewShell->Scroll(aScroll.X(), aScroll.Y());
                 aBeginPosPix = aPosPix;
             }
         }
         else
         {
-            Rectangle aRect(aBeginPos, aEndPos);
+            ::tools::Rectangle aRect(aBeginPos, aEndPos);
             aZoomRect = aRect;
             aZoomRect.Justify();
             mpViewShell->DrawMarkRect(aZoomRect);
@@ -156,23 +156,23 @@ bool FuZoom::MouseButtonUp(const MouseEvent& rMEvt)
         Size aZoomSizePixel = mpWindow->LogicToPixel(aZoomRect).GetSize();
         sal_uLong nTol = DRGPIX + DRGPIX;
 
-        if ( ( aZoomSizePixel.Width() < (long) nTol && aZoomSizePixel.Height() < (long) nTol ) || rMEvt.IsMod1() )
+        if ( ( aZoomSizePixel.Width() < static_cast<long>(nTol) && aZoomSizePixel.Height() < static_cast<long>(nTol) ) || rMEvt.IsMod1() )
         {
             // click at place: double zoom factor
             Point aPos = mpWindow->PixelToLogic(aPosPix);
             Size aSize = mpWindow->PixelToLogic(mpWindow->GetOutputSizePixel());
             if ( rMEvt.IsMod1() )
             {
-                aSize.Width() *= 2;
-                aSize.Height() *= 2;
+                aSize.setWidth( aSize.Width() * 2 );
+                aSize.setHeight( aSize.Height() * 2 );
             }
             else
             {
-                aSize.Width() /= 2;
-                aSize.Height() /= 2;
+                aSize.setWidth( aSize.Width() / 2 );
+                aSize.setHeight( aSize.Height() / 2 );
             }
-            aPos.X() -= aSize.Width() / 2;
-            aPos.Y() -= aSize.Height() / 2;
+            aPos.AdjustX( -(aSize.Width() / 2) );
+            aPos.AdjustY( -(aSize.Height() / 2) );
             aZoomRect.SetPos(aPos);
             aZoomRect.SetSize(aSize);
         }
@@ -181,7 +181,7 @@ bool FuZoom::MouseButtonUp(const MouseEvent& rMEvt)
         mpViewShell->GetViewFrame()->GetBindings().Invalidate( SidArrayZoom );
     }
 
-    Rectangle aVisAreaWin = mpWindow->PixelToLogic(Rectangle(Point(0,0),
+    ::tools::Rectangle aVisAreaWin = mpWindow->PixelToLogic(::tools::Rectangle(Point(0,0),
                                            mpWindow->GetOutputSizePixel()));
     mpViewShell->GetZoomList()->InsertZoomRect(aVisAreaWin);
 

@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
-#include "ndtxt.hxx"
-#include "frmfmt.hxx"
-#include "paratr.hxx"
-#include "flyfrm.hxx"
-#include "pam.hxx"
-#include "swselectionlist.hxx"
+#include <hintids.hxx>
+#include <ndtxt.hxx>
+#include <doc.hxx>
+#include <frmfmt.hxx>
+#include <paratr.hxx>
+#include <flyfrm.hxx>
+#include <pam.hxx>
+#include <swselectionlist.hxx>
 #include <sortedobjs.hxx>
 #include <editeng/protitem.hxx>
 #include <editeng/adjustitem.hxx>
@@ -37,14 +38,14 @@
 #include <pagefrm.hxx>
 
 #include "itrtxt.hxx"
-#include "txtfrm.hxx"
-#include "flyfrms.hxx"
+#include <txtfrm.hxx>
+#include <flyfrms.hxx>
 #include "porglue.hxx"
 #include "porfld.hxx"
 #include "porfly.hxx"
 #include "pordrop.hxx"
-#include "crstate.hxx"
-#include <pormulti.hxx>
+#include <crstate.hxx>
+#include "pormulti.hxx"
 #include <numrule.hxx>
 #include <com/sun/star/i18n/ScriptType.hpp>
 
@@ -84,12 +85,12 @@ static void lcl_GetCharRectInsideField( SwTextSizeInfo& rInf, SwRect& rOrig,
                 nFieldLen = 0;
             }
 
-            if ( ! pPor->GetPortion() || nFieldIdx + nFieldLen > nCharOfst )
+            if ( ! pPor->GetNextPortion() || nFieldIdx + nFieldLen > nCharOfst )
                 break;
 
             nFieldIdx = nFieldIdx + nFieldLen;
-            rOrig.Pos().X() += pPor->Width();
-            pPor = pPor->GetPortion();
+            rOrig.Pos().AdjustX(pPor->Width() );
+            pPor = pPor->GetNextPortion();
 
         } while ( true );
 
@@ -99,10 +100,10 @@ static void lcl_GetCharRectInsideField( SwTextSizeInfo& rInf, SwRect& rOrig,
         if ( pString )
         {
             // get script for field portion
-            rInf.GetFont()->SetActual( SwScriptInfo::WhichFont( 0, pString, nullptr ) );
+            rInf.GetFont()->SetActual( SwScriptInfo::WhichFont(0, *pString) );
 
-            sal_Int32 nOldLen = pPor->GetLen();
-            const_cast<SwLinePortion*>(pPor)->SetLen( nLen - 1 );
+            TextFrameIndex const nOldLen = pPor->GetLen();
+            const_cast<SwLinePortion*>(pPor)->SetLen(TextFrameIndex(nLen - 1));
             const SwTwips nX1 = pPor->GetLen() ?
                                 pPor->GetTextSize( rInf ).Width() :
                                 0;
@@ -110,13 +111,13 @@ static void lcl_GetCharRectInsideField( SwTextSizeInfo& rInf, SwRect& rOrig,
             SwTwips nX2 = 0;
             if ( rCMS.m_bRealWidth )
             {
-                const_cast<SwLinePortion*>(pPor)->SetLen( nLen );
+                const_cast<SwLinePortion*>(pPor)->SetLen(TextFrameIndex(nLen));
                 nX2 = pPor->GetTextSize( rInf ).Width();
             }
 
             const_cast<SwLinePortion*>(pPor)->SetLen( nOldLen );
 
-            rOrig.Pos().X() += nX1;
+            rOrig.Pos().AdjustX(nX1 );
             rOrig.Width( ( nX2 > nX1 ) ?
                          ( nX2 - nX1 ) :
                            1 );
@@ -164,13 +165,13 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
 
     m_pInf = pNewInf;
     GetInfo().SetFont( GetFnt() );
-    const SwTextNode *pNode = m_pFrame->GetTextNode();
+    const SwTextNode *const pNode = m_pFrame->GetTextNodeForParaProps();
 
-    const SvxLRSpaceItem &rSpace = m_pFrame->GetTextNode()->GetSwAttrSet().GetLRSpace();
+    const SvxLRSpaceItem &rSpace = pNode->GetSwAttrSet().GetLRSpace();
     // #i95907#
     // #i111284#
     const bool bListLevelIndentsApplicableAndLabelAlignmentActive(
-        AreListLevelIndentsApplicableAndLabelAlignmentActive( *(m_pFrame->GetTextNode()) ) );
+        AreListLevelIndentsApplicableAndLabelAlignmentActive( *(m_pFrame->GetTextNodeForParaProps()) ) );
 
     // Carefully adjust the text formatting ranges.
 
@@ -187,8 +188,8 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
     if ( m_pFrame->IsRightToLeft() )
     {
         // this calculation is identical this the calculation for L2R layout - see below
-        nLeft = m_pFrame->Frame().Left() +
-                m_pFrame->Prt().Left() +
+        nLeft = m_pFrame->getFrameArea().Left() +
+                m_pFrame->getFramePrintArea().Left() +
                 nLMWithNum -
                 pNode->GetLeftMarginWithNum() -
                 // #i95907#
@@ -206,8 +207,8 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
              !pNode->getIDocumentSettingAccess()->get(DocumentSettingId::IGNORE_FIRST_LINE_INDENT_IN_NUMBERING) )
         {
             // this calculation is identical this the calculation for R2L layout - see above
-            nLeft = m_pFrame->Frame().Left() +
-                    m_pFrame->Prt().Left() +
+            nLeft = m_pFrame->getFrameArea().Left() +
+                    m_pFrame->getFramePrintArea().Left() +
                     nLMWithNum -
                     pNode->GetLeftMarginWithNum() -
                     // #i95907#
@@ -218,13 +219,13 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
         }
         else
         {
-            nLeft = m_pFrame->Frame().Left() +
+            nLeft = m_pFrame->getFrameArea().Left() +
                     std::max( long( rSpace.GetTextLeft() + nLMWithNum ),
-                         m_pFrame->Prt().Left() );
+                         m_pFrame->getFramePrintArea().Left() );
         }
     }
 
-    nRight = m_pFrame->Frame().Left() + m_pFrame->Prt().Left() + m_pFrame->Prt().Width();
+    nRight = m_pFrame->getFrameArea().Left() + m_pFrame->getFramePrintArea().Left() + m_pFrame->getFramePrintArea().Width();
 
     if( nLeft >= nRight &&
          // #i53066# Omit adjustment of nLeft for numbered
@@ -233,7 +234,7 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
           !m_pFrame->IsInTab() ||
           !nLMWithNum ) )
     {
-        nLeft = m_pFrame->Prt().Left() + m_pFrame->Frame().Left();
+        nLeft = m_pFrame->getFramePrintArea().Left() + m_pFrame->getFrameArea().Left();
         if( nLeft >= nRight )   // e.g. with large paragraph indentations in slim table columns
             nRight = nLeft + 1; // einen goennen wir uns immer
     }
@@ -248,7 +249,8 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
             rSpace.IsAutoFirst() )
         {
             nFirstLineOfs = GetFnt()->GetSize( GetFnt()->GetActual() ).Height();
-            LanguageType aLang = pNode->GetLang( 0, 1, css::i18n::ScriptType::ASIAN);
+            LanguageType const aLang = m_pFrame->GetLangOfChar(
+                    TextFrameIndex(0), css::i18n::ScriptType::ASIAN);
             if (aLang != LANGUAGE_KOREAN && aLang != LANGUAGE_JAPANESE)
                 nFirstLineOfs<<=1;
 
@@ -257,24 +259,24 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
             {
                 switch( pSpace->GetLineSpaceRule() )
                 {
-                    case SVX_LINE_SPACE_AUTO:
+                    case SvxLineSpaceRule::Auto:
                     break;
-                    case SVX_LINE_SPACE_MIN:
+                    case SvxLineSpaceRule::Min:
                     {
                         if( nFirstLineOfs < pSpace->GetLineHeight() )
                             nFirstLineOfs = pSpace->GetLineHeight();
                         break;
                     }
-                    case SVX_LINE_SPACE_FIX:
+                    case SvxLineSpaceRule::Fix:
                         nFirstLineOfs = pSpace->GetLineHeight();
                     break;
                     default: OSL_FAIL( ": unknown LineSpaceRule" );
                 }
                 switch( pSpace->GetInterLineSpaceRule() )
                 {
-                    case SVX_INTER_LINE_SPACE_OFF:
+                    case SvxInterLineSpaceRule::Off:
                     break;
-                    case SVX_INTER_LINE_SPACE_PROP:
+                    case SvxInterLineSpaceRule::Prop:
                     {
                         long nTmp = pSpace->GetPropLineSpace();
                         // 50% is the minimum, at 0% we switch to
@@ -289,7 +291,7 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
                         nFirstLineOfs = nTmp;
                         break;
                     }
-                    case SVX_INTER_LINE_SPACE_FIX:
+                    case SvxInterLineSpaceRule::Fix:
                     {
                         nFirstLineOfs += pSpace->GetInterLineSpace();
                         break;
@@ -311,9 +313,9 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
         }
         else
         {
-              nFirst = m_pFrame->Frame().Left() +
+              nFirst = m_pFrame->getFrameArea().Left() +
                      std::max( rSpace.GetTextLeft() + nLMWithNum+ nFirstLineOfs,
-                          m_pFrame->Prt().Left() );
+                          m_pFrame->getFramePrintArea().Left() );
         }
 
         // Note: <SwTextFrame::GetAdditionalFirstLineOffset()> returns a negative
@@ -325,33 +327,25 @@ void SwTextMargin::CtorInitTextMargin( SwTextFrame *pNewFrame, SwTextSizeInfo *p
         if( nFirst >= nRight )
             nFirst = nRight - 1;
     }
-    const SvxAdjustItem& rAdjust = m_pFrame->GetTextNode()->GetSwAttrSet().GetAdjust();
-    nAdjust = static_cast<sal_uInt16>(rAdjust.GetAdjust());
+    const SvxAdjustItem& rAdjust = m_pFrame->GetTextNodeForParaProps()->GetSwAttrSet().GetAdjust();
+    nAdjust = rAdjust.GetAdjust();
 
     // left is left and right is right
     if ( m_pFrame->IsRightToLeft() )
     {
-        if ( SVX_ADJUST_LEFT == nAdjust )
-            nAdjust = SVX_ADJUST_RIGHT;
-        else if ( SVX_ADJUST_RIGHT == nAdjust )
-            nAdjust = SVX_ADJUST_LEFT;
+        if ( SvxAdjust::Left == nAdjust )
+            nAdjust = SvxAdjust::Right;
+        else if ( SvxAdjust::Right == nAdjust )
+            nAdjust = SvxAdjust::Left;
     }
 
-    m_bOneBlock = rAdjust.GetOneWord() == SVX_ADJUST_BLOCK;
-    m_bLastBlock = rAdjust.GetLastBlock() == SVX_ADJUST_BLOCK;
-    m_bLastCenter = rAdjust.GetLastBlock() == SVX_ADJUST_CENTER;
+    m_bOneBlock = rAdjust.GetOneWord() == SvxAdjust::Block;
+    m_bLastBlock = rAdjust.GetLastBlock() == SvxAdjust::Block;
+    m_bLastCenter = rAdjust.GetLastBlock() == SvxAdjust::Center;
 
     // #i91133#
     mnTabLeft = pNode->GetLeftMarginForTabCalculation();
 
-#if OSL_DEBUG_LEVEL > 1
-    static bool bOne = false;
-    static bool bLast = false;
-    static bool bCenter = false;
-    bOneBlock |= bOne;
-    bLastBlock |= bLast;
-    bLastCenter |= bCenter;
-#endif
     DropInit();
 }
 
@@ -376,14 +370,14 @@ void SwTextMargin::DropInit()
 SwTwips SwTextMargin::GetLineStart() const
 {
     SwTwips nRet = GetLeftMargin();
-    if( GetAdjust() != SVX_ADJUST_LEFT &&
+    if( GetAdjust() != SvxAdjust::Left &&
         !m_pCurr->GetFirstPortion()->IsMarginPortion() )
     {
         // If the first portion is a Margin, then the
         // adjustment is expressed by the portions.
-        if( GetAdjust() == SVX_ADJUST_RIGHT )
+        if( GetAdjust() == SvxAdjust::Right )
             nRet = Right() - CurrWidth();
-        else if( GetAdjust() == SVX_ADJUST_CENTER )
+        else if( GetAdjust() == SvxAdjust::Center )
             nRet += (GetLineWidth() - CurrWidth()) / 2;
     }
     return nRet;
@@ -397,7 +391,7 @@ void SwTextCursor::CtorInitTextCursor( SwTextFrame *pNewFrame, SwTextSizeInfo *p
 }
 
 // 1170: Ancient bug: Shift-End forgets the last character ...
-bool SwTextCursor::GetEndCharRect( SwRect* pOrig, const sal_Int32 nOfst,
+void SwTextCursor::GetEndCharRect(SwRect* pOrig, const TextFrameIndex nOfst,
                                   SwCursorMoveState* pCMS, const long nMax )
 {
     // 1170: Ambiguity of document positions
@@ -410,13 +404,16 @@ bool SwTextCursor::GetEndCharRect( SwRect* pOrig, const sal_Int32 nOfst,
     if( nOfst != GetStart() || !m_pCurr->GetLen() )
     {
         // 8810: Master line RightMargin, after that LeftMargin
-        const bool bRet = GetCharRect( pOrig, nOfst, pCMS, nMax );
-        bRightMargin = nOfst >= GetEnd() && nOfst < GetInfo().GetText().getLength();
-        return bRet;
+        GetCharRect( pOrig, nOfst, pCMS, nMax );
+        bRightMargin = nOfst >= GetEnd() && nOfst < TextFrameIndex(GetInfo().GetText().getLength());
+        return;
     }
 
     if( !GetPrev() || !GetPrev()->GetLen() || !PrevLine() )
-        return GetCharRect( pOrig, nOfst, pCMS, nMax );
+    {
+        GetCharRect( pOrig, nOfst, pCMS, nMax );
+        return;
+    }
 
     // If necessary, as catch up, do the adjustment
     GetAdjusted();
@@ -441,28 +438,26 @@ bool SwTextCursor::GetEndCharRect( SwRect* pOrig, const sal_Int32 nOfst,
             nPorHeight = pPor->Height();
             nPorAscent = pPor->GetAscent();
         }
-        pPor = pPor->GetPortion();
+        pPor = pPor->GetNextPortion();
     }
 
     const Size aCharSize( 1, nTmpHeight );
     pOrig->Pos( GetTopLeft() );
     pOrig->SSize( aCharSize );
-    pOrig->Pos().X() += nLast;
+    pOrig->Pos().AdjustX(nLast );
     const SwTwips nTmpRight = Right() - 1;
     if( pOrig->Left() > nTmpRight )
-        pOrig->Pos().X() = nTmpRight;
+        pOrig->Pos().setX( nTmpRight );
 
     if ( pCMS && pCMS->m_bRealHeight )
     {
         if ( nTmpAscent > nPorAscent )
-            pCMS->m_aRealHeight.X() = nTmpAscent - nPorAscent;
+            pCMS->m_aRealHeight.setX( nTmpAscent - nPorAscent );
         else
-            pCMS->m_aRealHeight.X() = 0;
+            pCMS->m_aRealHeight.setX( 0 );
         OSL_ENSURE( nPorHeight, "GetCharRect: Missing Portion-Height" );
-        pCMS->m_aRealHeight.Y() = nPorHeight;
+        pCMS->m_aRealHeight.setY( nPorHeight );
     }
-
-    return true;
 }
 
 // internal function, called by SwTextCursor::GetCharRect() to calculate
@@ -471,7 +466,7 @@ bool SwTextCursor::GetEndCharRect( SwRect* pOrig, const sal_Int32 nOfst,
 // pCMS is used for restricting the cursor, if there are different font
 // heights in one line ( first value = offset to y of pOrig, second
 // value = real height of (shortened) cursor
-void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
+void SwTextCursor::GetCharRect_( SwRect* pOrig, TextFrameIndex const nOfst,
     SwCursorMoveState* pCMS )
 {
     const OUString aText = GetInfo().GetText();
@@ -498,8 +493,8 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
     {
         if ( pCMS && pCMS->m_bRealHeight )
         {
-            pCMS->m_aRealHeight.X() = 0;
-            pCMS->m_aRealHeight.Y() = nTmpHeight;
+            pCMS->m_aRealHeight.setX( 0 );
+            pCMS->m_aRealHeight.setY( nTmpHeight );
         }
     }
     else
@@ -510,6 +505,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
         SwTwips nTmpFirst = 0;
         SwLinePortion *pPor = m_pCurr->GetFirstPortion();
         SwBidiPortion* pLastBidiPor = nullptr;
+        TextFrameIndex nLastBidiIdx(-1);
         SwTwips nLastBidiPorWidth = 0;
         std::deque<sal_uInt16>* pKanaComp = m_pCurr->GetpKanaComp();
         sal_uInt16 nSpaceIdx = 0;
@@ -520,7 +516,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
 
         // First all portions without Len at beginning of line are skipped.
         // Exceptions are the mean special portions from WhichFirstPortion:
-        // Num, ErgoSum, FootnoteNum, FeldReste
+        // Num, ErgoSum, FootnoteNum, FieldRests
         // 8477: but also the only Textportion of an empty line with
         // Right/Center-Adjustment! So not just pPor->GetExpandPortion() ...
         while( pPor && !pPor->GetLen() && ! bInsideFirstField )
@@ -569,7 +565,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                         ++nKanaIdx;
                 }
             }
-            pPor = pPor->GetPortion();
+            pPor = pPor->GetNextPortion();
         }
 
         if( !pPor )
@@ -600,9 +596,10 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                 // For common portions (including BidiPortions) we want to add
                 // the portion width to nX. For MultiPortions, nExtra = 0,
                 // therefore we go to the 'else' branch and start a recursion.
-                const sal_Int32 nExtra = pPor->IsMultiPortion() &&
-                                    ! static_cast<SwMultiPortion*>(pPor)->IsBidi() &&
-                                    ! bWidth ? 0 : 1;
+                const TextFrameIndex nExtra( (pPor->IsMultiPortion()
+                             && !static_cast<SwMultiPortion*>(pPor)->IsBidi()
+                             && !bWidth)
+                        ? 0 : 1 );
                 if ( aInf.GetIdx() + pPor->GetLen() < nOfst + nExtra )
                 {
                     if ( pPor->InSpaceGrp() && nSpaceAdd )
@@ -626,8 +623,8 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                                 )
                                 ++nKanaIdx;
                         }
-                        if ( !pPor->IsFlyPortion() || ( pPor->GetPortion() &&
-                                !pPor->GetPortion()->IsMarginPortion() ) )
+                        if ( !pPor->IsFlyPortion() || ( pPor->GetNextPortion() &&
+                                !pPor->GetNextPortion()->IsMarginPortion() ) )
                             nX += pPor->PrtWidth();
                     }
                     if( pPor->IsMultiPortion() )
@@ -654,13 +651,14 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                              aInf.GetIdx() + pPor->GetLen() == nOfst )
                         {
                              pLastBidiPor = static_cast<SwBidiPortion*>(pPor);
+                             nLastBidiIdx = aInf.GetIdx();
                              nLastBidiPorWidth = pLastBidiPor->Width() +
                                                  pLastBidiPor->CalcSpacing( nSpaceAdd, aInf );
                         }
                     }
 
                     aInf.SetIdx( aInf.GetIdx() + pPor->GetLen() );
-                    pPor = pPor->GetPortion();
+                    pPor = pPor->GetNextPortion();
                 }
                 else
                 {
@@ -668,14 +666,14 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                     {
                         nTmpAscent = AdjustBaseLine( *m_pCurr, pPor );
                         GetInfo().SetMulti( true );
-                        pOrig->Pos().Y() += nTmpAscent - nPorAscent;
+                        pOrig->Pos().AdjustY(nTmpAscent - nPorAscent );
 
                         if( pCMS && pCMS->m_b2Lines )
                         {
-                            const bool bRecursion = pCMS->m_p2Lines;
+                            const bool bRecursion (pCMS->m_p2Lines);
                             if ( !bRecursion )
                             {
-                                pCMS->m_p2Lines = new Sw2LinesPos;
+                                pCMS->m_p2Lines.reset(new Sw2LinesPos);
                                 pCMS->m_p2Lines->aLine = SwRect(aCharPos, aCharSize);
                             }
 
@@ -709,7 +707,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                         // In a multi-portion we use GetCharRect()-function
                         // recursively and must add the x-position
                         // of the multi-portion.
-                        sal_Int32 nOldStart = m_nStart;
+                        TextFrameIndex const nOldStart = m_nStart;
                         SwTwips nOldY = m_nY;
                         sal_uInt8 nOldProp = GetPropFont();
                         m_nStart = aInf.GetIdx();
@@ -738,7 +736,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                             else
                                 nOffset = GetLineHeight();
 
-                            pOrig->Pos().Y() += nOffset;
+                            pOrig->Pos().AdjustY(nOffset );
                             Next();
                         }
 
@@ -769,7 +767,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                                 static_cast<SwBidiPortion*>(pPor)->GetLevel() % 2 );
                         }
 
-                        _GetCharRect( pOrig, nOfst, pCMS );
+                        GetCharRect_( pOrig, nOfst, pCMS );
 
                         if ( bChgHeight )
                         {
@@ -784,8 +782,6 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                         {
                             // the recursion may have damaged our font size
                             SetPropFont( nOldProp );
-                            if ( !nOldProp )
-                                nOldProp = 100;
                             GetInfo().GetFont()->SetProportion( 100 );
 
                             if ( m_pCurr == &static_cast<SwMultiPortion*>(pPor)->GetRoot() )
@@ -820,52 +816,52 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                             if ( nTmp )
                                 nTmp--;
 
-                            pOrig->Pos().X() = nX + aOldPos.X();
+                            pOrig->Pos().setX( nX + aOldPos.X() );
                             if( static_cast<SwMultiPortion*>(pPor)->IsRevers() )
-                                pOrig->Pos().Y() = aOldPos.Y() + nTmp;
+                                pOrig->Pos().setY( aOldPos.Y() + nTmp );
                             else
-                                pOrig->Pos().Y() = aOldPos.Y()
-                                    + pPor->Height() - nTmp - pOrig->Height();
+                                pOrig->Pos().setY( aOldPos.Y()
+                                    + pPor->Height() - nTmp - pOrig->Height() );
                             if ( pCMS && pCMS->m_bRealHeight )
                             {
-                                pCMS->m_aRealHeight.Y() = -pCMS->m_aRealHeight.Y();
+                                pCMS->m_aRealHeight.setY( -pCMS->m_aRealHeight.Y() );
                                 // result for rotated multi portion is not
                                 // correct for reverse (270 degree) portions
                                 if( static_cast<SwMultiPortion*>(pPor)->IsRevers() )
                                 {
-                                    if ( SvxParaVertAlignItem::AUTOMATIC ==
+                                    if ( SvxParaVertAlignItem::Align::Automatic ==
                                          GetLineInfo().GetVertAlign() )
                                         // if vertical alignment is set to auto,
                                         // we switch from base line alignment
                                         // to centered alignment
-                                        pCMS->m_aRealHeight.X() =
+                                        pCMS->m_aRealHeight.setX(
                                             ( pOrig->Width() +
-                                              pCMS->m_aRealHeight.Y() ) / 2;
+                                              pCMS->m_aRealHeight.Y() ) / 2 );
                                     else
-                                        pCMS->m_aRealHeight.X() =
-                                            ( pOrig->Width() -
-                                              pCMS->m_aRealHeight.X() +
-                                              pCMS->m_aRealHeight.Y() );
+                                        pCMS->m_aRealHeight.setX(
+                                            pOrig->Width() -
+                                            pCMS->m_aRealHeight.X() +
+                                            pCMS->m_aRealHeight.Y() );
                                 }
                             }
                         }
                         else
                         {
-                            pOrig->Pos().Y() += aOldPos.Y();
+                            pOrig->Pos().AdjustY(aOldPos.Y() );
                             if ( static_cast<SwMultiPortion*>(pPor)->IsBidi() )
                             {
                                 const SwTwips nPorWidth = pPor->Width() +
                                                          pPor->CalcSpacing( nSpaceAdd, aInf );
                                 const SwTwips nInsideOfst = pOrig->Pos().X();
-                                pOrig->Pos().X() = nX + nPorWidth -
-                                                   nInsideOfst - pOrig->Width();
+                                pOrig->Pos().setX( nX + nPorWidth -
+                                                   nInsideOfst - pOrig->Width() );
                             }
                             else
-                                pOrig->Pos().X() += nX;
+                                pOrig->Pos().AdjustX(nX );
 
                             if( static_cast<SwMultiPortion*>(pPor)->HasBrackets() )
-                                pOrig->Pos().X() +=
-                                    static_cast<SwDoubleLinePortion*>(pPor)->PreWidth();
+                                pOrig->Pos().AdjustX(
+                                    static_cast<SwDoubleLinePortion*>(pPor)->PreWidth() );
                         }
 
                         if( bSpaceChg )
@@ -880,14 +876,14 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                     }
                     if ( pPor->PrtWidth() )
                     {
-                        sal_Int32 nOldLen = pPor->GetLen();
+                        TextFrameIndex const nOldLen = pPor->GetLen();
                         pPor->SetLen( nOfst - aInf.GetIdx() );
                         aInf.SetLen( pPor->GetLen() );
                         if( nX || !pPor->InNumberGrp() )
                         {
                             SeekAndChg( aInf );
                             const bool bOldOnWin = aInf.OnWin();
-                            aInf.SetOnWin( false ); // keine BULLETs!
+                            aInf.SetOnWin( false ); // no BULLETs!
                             SwTwips nTmp = nX;
                             aInf.SetKanaComp( pKanaComp );
                             aInf.SetKanaIdx( nKanaIdx );
@@ -897,9 +893,9 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                                 nX += pPor->CalcSpacing( nSpaceAdd, aInf );
                             if( bWidth )
                             {
-                                pPor->SetLen( pPor->GetLen() + 1 );
+                                pPor->SetLen(pPor->GetLen() + TextFrameIndex(1));
                                 aInf.SetLen( pPor->GetLen() );
-                                aInf.SetOnWin( false ); // keine BULLETs!
+                                aInf.SetOnWin( false ); // no BULLETs!
                                 nTmp += pPor->GetTextSize( aInf ).Width();
                                 aInf.SetOnWin( bOldOnWin );
                                 if ( pPor->InSpaceGrp() && nSpaceAdd )
@@ -918,7 +914,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                             {
                                 SwDropPortion* pDrop = static_cast<SwDropPortion*>(pPor);
                                 const SwDropPortionPart* pCurrPart = pDrop->GetPart();
-                                sal_Int16 nSumLength = 0;
+                                TextFrameIndex nSumLength(0);
                                 while( pCurrPart && (nSumLength += pCurrPart->GetLen()) < nOfst - aInf.GetIdx() )
                                 {
                                     pCurrPart = pCurrPart->GetFollow();
@@ -951,12 +947,12 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                 while( pTmp->HasFollow() && pTmp->GetExp().isEmpty() )
                 {
                     sal_uInt16 nAddX = pTmp->Width();
-                    SwLinePortion *pNext = pTmp->GetPortion();
+                    SwLinePortion *pNext = pTmp->GetNextPortion();
                     while( pNext && !pNext->InFieldGrp() )
                     {
                         OSL_ENSURE( !pNext->GetLen(), "Where's my field follow?" );
                         nAddX = nAddX + pNext->Width();
-                        pNext = pNext->GetPortion();
+                        pNext = pNext->GetNextPortion();
                     }
                     if( !pNext )
                         break;
@@ -991,8 +987,8 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                         if( pKanaComp && ( nKanaIdx + 1 ) < pKanaComp->size() )
                             ++nKanaIdx;
                     }
-                    if ( !pPor->IsFlyPortion() || ( pPor->GetPortion() &&
-                            !pPor->GetPortion()->IsMarginPortion() ) )
+                    if ( !pPor->IsFlyPortion() || ( pPor->GetNextPortion() &&
+                            !pPor->GetNextPortion()->IsMarginPortion() ) )
                         nX += pPor->PrtWidth();
                 }
                 if( pPor->IsMultiPortion() &&
@@ -1014,11 +1010,11 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                     nPorHeight = pPor->Height();
                     nPorAscent = pPor->GetAscent();
                 }
-                pPor = pPor->GetPortion();
+                pPor = pPor->GetNextPortion();
             }
 
             if( aInf.GetIdx() == nOfst && pPor && pPor->InHyphGrp() &&
-                pPor->GetPortion() && pPor->GetPortion()->InFixGrp() )
+                pPor->GetNextPortion() && pPor->GetNextPortion()->InFixGrp() )
             {
                 // All special portions have to be skipped
                 // Taking the German word "zusammen" as example: zu-[FLY]sammen, 'u' == 19, 's' == 20; Right()
@@ -1032,7 +1028,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                         nPorHeight = pPor->Height();
                         nPorAscent = pPor->GetAscent();
                     }
-                    pPor = pPor->GetPortion();
+                    pPor = pPor->GetNextPortion();
                 }
             }
             if( pPor && pCMS )
@@ -1065,7 +1061,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                         nPorAscent = pPor->GetAscent();
                     }
                     SwTwips nTmp;
-                    if( 2 > pPor->GetLen() )
+                    if (TextFrameIndex(2) > pPor->GetLen())
                     {
                         nTmp = pPor->Width();
                         if ( pPor->InSpaceGrp() && nSpaceAdd )
@@ -1074,11 +1070,11 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                     else
                     {
                         const bool bOldOnWin = aInf.OnWin();
-                        sal_Int32 nOldLen = pPor->GetLen();
-                        pPor->SetLen( 1 );
+                        TextFrameIndex const nOldLen = pPor->GetLen();
+                        pPor->SetLen( TextFrameIndex(1) );
                         aInf.SetLen( pPor->GetLen() );
                         SeekAndChg( aInf );
-                        aInf.SetOnWin( false ); // keine BULLETs!
+                        aInf.SetOnWin( false ); // no BULLETs!
                         aInf.SetKanaComp( pKanaComp );
                         aInf.SetKanaIdx( nKanaIdx );
                         nTmp = pPor->GetTextSize( aInf ).Width();
@@ -1118,7 +1114,7 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                 {
                     // we came from inside the bidi portion, we want to blink
                     // behind the portion
-                    pOrig->Pos().X() -= nLastBidiPorWidth;
+                    pOrig->Pos().AdjustX( -nLastBidiPorWidth );
 
                     // Again, there is a special case: logically behind
                     // the portion can actually mean that the cursor is inside
@@ -1132,8 +1128,12 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                     {
                         OSL_ENSURE( static_cast<const SwMultiPortion*>(pLast)->IsBidi(),
                                  "Non-BidiPortion inside BidiPortion" );
-                        pOrig->Pos().X() += pLast->Width() +
-                                            pLast->CalcSpacing( nSpaceAdd, aInf );
+                        TextFrameIndex const nIdx = aInf.GetIdx();
+                        // correct the index before using CalcSpacing.
+                        aInf.SetIdx(nLastBidiIdx);
+                        pOrig->Pos().AdjustX(pLast->Width() +
+                                            pLast->CalcSpacing( nSpaceAdd, aInf ) );
+                        aInf.SetIdx(nIdx);
                     }
                 }
             }
@@ -1145,31 +1145,31 @@ void SwTextCursor::_GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
                 {
                     // we came from inside the bidi portion, we want to blink
                     // behind the portion
-                    pOrig->Pos().X() += pPor->Width() +
-                                        pPor->CalcSpacing( nSpaceAdd, aInf );
+                    pOrig->Pos().AdjustX(pPor->Width() +
+                                        pPor->CalcSpacing( nSpaceAdd, aInf ) );
                 }
             }
         }
 
-        pOrig->Pos().X() += nX;
+        pOrig->Pos().AdjustX(nX );
 
         if ( pCMS && pCMS->m_bRealHeight )
         {
             nTmpAscent = AdjustBaseLine( *m_pCurr, nullptr, nPorHeight, nPorAscent );
             if ( nTmpAscent > nPorAscent )
-                pCMS->m_aRealHeight.X() = nTmpAscent - nPorAscent;
+                pCMS->m_aRealHeight.setX( nTmpAscent - nPorAscent );
             else
-                pCMS->m_aRealHeight.X() = 0;
+                pCMS->m_aRealHeight.setX( 0 );
             OSL_ENSURE( nPorHeight, "GetCharRect: Missing Portion-Height" );
             if ( nTmpHeight > nPorHeight )
-                pCMS->m_aRealHeight.Y() = nPorHeight;
+                pCMS->m_aRealHeight.setY( nPorHeight );
             else
-                pCMS->m_aRealHeight.Y() = nTmpHeight;
+                pCMS->m_aRealHeight.setY( nTmpHeight );
         }
     }
 }
 
-bool SwTextCursor::GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
+void SwTextCursor::GetCharRect( SwRect* pOrig, TextFrameIndex const nOfst,
                                SwCursorMoveState* pCMS, const long nMax )
 {
     CharCursorToLine(nOfst);
@@ -1177,7 +1177,7 @@ bool SwTextCursor::GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
     // Indicates that a position inside a special portion (field, number portion)
     // is requested.
     const bool bSpecialPos = pCMS && pCMS->m_pSpecialPos;
-    sal_Int32 nFindOfst = nOfst;
+    TextFrameIndex nFindOfst = nOfst;
 
     if ( bSpecialPos )
     {
@@ -1199,29 +1199,28 @@ bool SwTextCursor::GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
     GetAdjusted();
 
     const Point aCharPos( GetTopLeft() );
-    bool bRet = true;
 
-    _GetCharRect( pOrig, nFindOfst, pCMS );
+    GetCharRect_( pOrig, nFindOfst, pCMS );
 
     // This actually would have to be "-1 LogicToPixel", but that seems too
     // expensive, so it's a value (-12), that should hopefully be OK.
     const SwTwips nTmpRight = Right() - 12;
 
-    pOrig->Pos().X() += aCharPos.X();
-    pOrig->Pos().Y() += aCharPos.Y();
+    pOrig->Pos().AdjustX(aCharPos.X() );
+    pOrig->Pos().AdjustY(aCharPos.Y() );
 
     if( pCMS && pCMS->m_b2Lines && pCMS->m_p2Lines )
     {
-        pCMS->m_p2Lines->aLine.Pos().X() += aCharPos.X();
-        pCMS->m_p2Lines->aLine.Pos().Y() += aCharPos.Y();
-        pCMS->m_p2Lines->aPortion.Pos().X() += aCharPos.X();
-        pCMS->m_p2Lines->aPortion.Pos().Y() += aCharPos.Y();
+        pCMS->m_p2Lines->aLine.Pos().AdjustX(aCharPos.X() );
+        pCMS->m_p2Lines->aLine.Pos().AdjustY(aCharPos.Y() );
+        pCMS->m_p2Lines->aPortion.Pos().AdjustX(aCharPos.X() );
+        pCMS->m_p2Lines->aPortion.Pos().AdjustY(aCharPos.Y() );
     }
 
-    const bool bTabOverMargin = GetTextFrame()->GetTextNode()->getIDocumentSettingAccess()->get(DocumentSettingId::TAB_OVER_MARGIN);
+    const bool bTabOverMargin = GetTextFrame()->GetDoc().getIDocumentSettingAccess().get(DocumentSettingId::TAB_OVER_MARGIN);
     // Make sure the cursor respects the right margin, unless in compat mode, where the tab size has priority over the margin size.
     if( pOrig->Left() > nTmpRight && !bTabOverMargin)
-        pOrig->Pos().X() = nTmpRight;
+        pOrig->Pos().setX( nTmpRight );
 
     if( nMax )
     {
@@ -1236,41 +1235,40 @@ bool SwTextCursor::GetCharRect( SwRect* pOrig, const sal_Int32 nOfst,
             long nTmp = pCMS->m_aRealHeight.X() + pOrig->Top();
             if( nTmp >= nMax )
             {
-                pCMS->m_aRealHeight.X() = nMax - pOrig->Top();
-                pCMS->m_aRealHeight.Y() = 0;
+                pCMS->m_aRealHeight.setX( nMax - pOrig->Top() );
+                pCMS->m_aRealHeight.setY( 0 );
             }
             else if( nTmp + pCMS->m_aRealHeight.Y() > nMax )
-                pCMS->m_aRealHeight.Y() = nMax - nTmp;
+                pCMS->m_aRealHeight.setY( nMax - nTmp );
         }
     }
-    long nOut = pOrig->Right() - GetTextFrame()->Frame().Right();
+    long nOut = pOrig->Right() - GetTextFrame()->getFrameArea().Right();
     if( nOut > 0 )
     {
-        if( GetTextFrame()->Frame().Width() < GetTextFrame()->Prt().Left()
-                                   + GetTextFrame()->Prt().Width() )
-            nOut += GetTextFrame()->Frame().Width() - GetTextFrame()->Prt().Left()
-                    - GetTextFrame()->Prt().Width();
+        if( GetTextFrame()->getFrameArea().Width() < GetTextFrame()->getFramePrintArea().Left()
+                                   + GetTextFrame()->getFramePrintArea().Width() )
+            nOut += GetTextFrame()->getFrameArea().Width() - GetTextFrame()->getFramePrintArea().Left()
+                    - GetTextFrame()->getFramePrintArea().Width();
         if( nOut > 0 )
-            pOrig->Pos().X() -= nOut + 10;
+            pOrig->Pos().AdjustX( -(nOut + 10) );
     }
-
-    return bRet;
 }
 
 // Return: Offset in String
-sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
+TextFrameIndex SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                                     bool bChgNode, SwCursorMoveState* pCMS ) const
 {
     // If necessary, as catch up, do the adjustment
     GetAdjusted();
 
     const OUString &rText = GetInfo().GetText();
-    sal_Int32 nOffset = 0;
+    TextFrameIndex nOffset(0);
 
     // x is the horizontal offset within the line.
     SwTwips x = rPoint.X();
     const SwTwips nLeftMargin  = GetLineStart();
-    SwTwips nRightMargin = GetLineEnd() + GetCurr()->GetHangingMargin();
+    SwTwips nRightMargin = GetLineEnd() +
+        ( GetCurr()->IsHanging() ? GetCurr()->GetHangingMargin() : 0 );
     if( nRightMargin == nLeftMargin )
         nRightMargin += 30;
 
@@ -1291,12 +1289,12 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
     // If there are attribute changes in the line, search for the paragraph,
     // in which nX is situated.
     SwLinePortion *pPor = m_pCurr->GetFirstPortion();
-    sal_Int32 nCurrStart  = m_nStart;
+    TextFrameIndex nCurrStart = m_nStart;
     bool bHolePortion = false;
     bool bLastHyph = false;
 
     std::deque<sal_uInt16> *pKanaComp = m_pCurr->GetpKanaComp();
-    sal_Int32 nOldIdx = GetInfo().GetIdx();
+    TextFrameIndex const nOldIdx = GetInfo().GetIdx();
     sal_uInt16 nSpaceIdx = 0;
     size_t nKanaIdx = 0;
     long nSpaceAdd = m_pCurr->IsSpaceAdd() ? m_pCurr->GetLLSpaceAdd( 0 ) : 0;
@@ -1343,12 +1341,12 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                      30 :
                      nWidth;
 
-    while( pPor->GetPortion() && nWidth30 < nX && !pPor->IsBreakPortion() )
+    while( pPor->GetNextPortion() && nWidth30 < nX && !pPor->IsBreakPortion() )
     {
         nX = nX - nWidth;
         nCurrStart = nCurrStart + pPor->GetLen();
         bHolePortion = pPor->IsHolePortion();
-        pPor = pPor->GetPortion();
+        pPor = pPor->GetNextPortion();
         nWidth = pPor->Width();
         if ( m_pCurr->IsSpaceAdd() || pKanaComp )
         {
@@ -1390,41 +1388,38 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
             bLastHyph = pPor->InHyphGrp();
     }
 
-    const bool bLastPortion = (nullptr == pPor->GetPortion());
+    const bool bLastPortion = (nullptr == pPor->GetNextPortion());
 
     if( nX==nWidth )
     {
-        SwLinePortion *pNextPor = pPor->GetPortion();
+        SwLinePortion *pNextPor = pPor->GetNextPortion();
         while( pNextPor && pNextPor->InFieldGrp() && !pNextPor->Width() )
         {
             nCurrStart = nCurrStart + pPor->GetLen();
             pPor = pNextPor;
             if( !pPor->IsFlyPortion() && !pPor->IsMarginPortion() )
                 bLastHyph = pPor->InHyphGrp();
-            pNextPor = pPor->GetPortion();
+            pNextPor = pPor->GetNextPortion();
         }
     }
 
     const_cast<SwTextSizeInfo&>(GetInfo()).SetIdx( nOldIdx );
 
-    sal_Int32 nLength = pPor->GetLen();
+    TextFrameIndex nLength = pPor->GetLen();
 
     const bool bFieldInfo = pCMS && pCMS->m_bFieldInfo;
 
     if( bFieldInfo && ( nWidth30 < nX || bRightOver || bLeftOver ||
         ( pPor->InNumberGrp() && !pPor->IsFootnoteNumPortion() ) ||
         ( pPor->IsMarginPortion() && nWidth > nX + 30 ) ) )
-        static_cast<SwCursorMoveState*>(pCMS)->m_bPosCorr = true;
+        pCMS->m_bPosCorr = true;
 
     // #i27615#
-    if (pCMS)
+    if (pCMS && pCMS->m_bInFrontOfLabel)
     {
-        if( pCMS->m_bInFrontOfLabel)
-        {
-            if (! (2 * nX < nWidth && pPor->InNumberGrp() &&
-                   !pPor->IsFootnoteNumPortion()))
-                pCMS->m_bInFrontOfLabel = false;
-        }
+        if (! (2 * nX < nWidth && pPor->InNumberGrp() &&
+               !pPor->IsFootnoteNumPortion()))
+            pCMS->m_bInFrontOfLabel = false;
     }
 
     // 7684: We are exactly ended up at their HyphPortion. It is our task to
@@ -1435,28 +1430,28 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
         if( pCMS )
         {
             if( pPor->IsFlyPortion() && bFieldInfo )
-                static_cast<SwCursorMoveState*>(pCMS)->m_bPosCorr = true;
+                pCMS->m_bPosCorr = true;
 
             if (!bRightOver && nX)
             {
                 if( pPor->IsFootnoteNumPortion())
-                    static_cast<SwCursorMoveState*>(pCMS)->m_bFootnoteNoInfo = true;
+                    pCMS->m_bFootnoteNoInfo = true;
                 else if (pPor->InNumberGrp() ) // #i23726#
                 {
-                    static_cast<SwCursorMoveState*>(pCMS)->m_nInNumPostionOffset = nX;
-                    static_cast<SwCursorMoveState*>(pCMS)->m_bInNumPortion = true;
+                    pCMS->m_nInNumPortionOffset = nX;
+                    pCMS->m_bInNumPortion = true;
                 }
             }
         }
         if( !nCurrStart )
-            return 0;
+            return TextFrameIndex(0);
 
         // 7849, 7816: pPor->GetHyphPortion is mandatory!
         if( bHolePortion || ( !bRightAllowed && bLastHyph ) ||
-            ( pPor->IsMarginPortion() && !pPor->GetPortion() &&
+            ( pPor->IsMarginPortion() && !pPor->GetNextPortion() &&
               // 46598: Consider the situation: We might end up behind the last character,
               // in the last line of a centered paragraph
-              nCurrStart < rText.getLength() ) )
+              nCurrStart < TextFrameIndex(rText.getLength())))
             --nCurrStart;
         else if( pPor->InFieldGrp() && static_cast<SwFieldPortion*>(pPor)->IsFollow()
                  && nWidth > nX )
@@ -1474,12 +1469,14 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
         }
         return nCurrStart;
     }
-    if ( 1 == nLength )
+    if (TextFrameIndex(1) == nLength)
     {
         if ( nWidth )
         {
-            // Else we may not enter the character-supplying frame...
-            if( !( bChgNode && pPos && pPor->IsFlyCntPortion() ) )
+            // no quick return for as-character frames, we want to peek inside
+            if (!(bChgNode && pPos && pPor->IsFlyCntPortion())
+            // if we want to get the position inside the field, we should not return
+                && (!pCMS || !pCMS->m_pSpecialPos))
             {
                 if ( pPor->InFieldGrp() ||
                      ( pPor->IsMultiPortion() &&
@@ -1498,19 +1495,17 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                           !static_cast<SwFieldPortion*>(pPor)->HasFollow() ) )
                         ++nCurrStart;
                 }
-                else if ( ( !pPor->IsFlyPortion() || ( pPor->GetPortion() &&
-                    !pPor->GetPortion()->IsMarginPortion() &&
-                    !pPor->GetPortion()->IsHolePortion() ) )
+                else if ( ( !pPor->IsFlyPortion() || ( pPor->GetNextPortion() &&
+                    !pPor->GetNextPortion()->IsMarginPortion() &&
+                    !pPor->GetNextPortion()->IsHolePortion() ) )
                          && ( nWidth/2 < nX ) &&
                          ( !bFieldInfo ||
-                            ( pPor->GetPortion() &&
-                              pPor->GetPortion()->IsPostItsPortion() ) )
+                            ( pPor->GetNextPortion() &&
+                              pPor->GetNextPortion()->IsPostItsPortion() ) )
                          && ( bRightAllowed || !bLastHyph ))
                     ++nCurrStart;
 
-                // if we want to get the position inside the field, we should not return
-                if ( !pCMS || !pCMS->m_pSpecialPos )
-                    return nCurrStart;
+                return nCurrStart;
             }
         }
         else
@@ -1529,7 +1524,7 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
 
     // Skip space at the end of the line
     if( bLastPortion && (m_pCurr->GetNext() || m_pFrame->GetFollow() )
-        && rText[nCurrStart + nLength - 1] == ' ' )
+        && rText[sal_Int32(nCurrStart + nLength) - 1] == ' ' )
         --nLength;
 
     if( nWidth > nX ||
@@ -1555,7 +1550,7 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                  ! static_cast<SwMultiPortion*>(pPor)->OnTop() )
                 nTmpY = 0;
 
-            SwTextCursorSave aSave( const_cast<SwTextCursor*>(static_cast<const SwTextCursor*>(this)), static_cast<SwMultiPortion*>(pPor),
+            SwTextCursorSave aSave( const_cast<SwTextCursor*>(this), static_cast<SwMultiPortion*>(pPor),
                  nTmpY, nX, nCurrStart, nSpaceAdd );
 
             SwLayoutModeModifier aLayoutModeModifier( *GetInfo().GetOut() );
@@ -1572,7 +1567,7 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                     nTmpY = pPor->Height() - nTmpY;
                 if( nTmpY < 0 )
                     nTmpY = 0;
-                nX = (sal_uInt16)nTmpY;
+                nX = static_cast<sal_uInt16>(nTmpY);
             }
 
             if( static_cast<SwMultiPortion*>(pPor)->HasBrackets() )
@@ -1622,14 +1617,14 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                     sal_uInt16 nSumWidth = 0;
                     sal_uInt16 nSumBorderWidth = 0;
                     // Shift offset with the right and left border of previous parts and left border of actual one
-                    while( pCurrPart && nSumWidth <= nX - nCurrStart )
+                    while (pCurrPart && nSumWidth <= nX - sal_Int32(nCurrStart))
                     {
                         nSumWidth += pCurrPart->GetWidth();
                         if( pCurrPart->GetFont().GetLeftBorder() && !pCurrPart->GetJoinBorderWithPrev() )
                         {
                             nSumBorderWidth += pCurrPart->GetFont().GetLeftBorderSpace();
                         }
-                        if( nSumWidth <= nX - nCurrStart && pCurrPart->GetFont().GetRightBorder() &&
+                        if (nSumWidth <= nX - sal_Int32(nCurrStart) && pCurrPart->GetFont().GetRightBorder() &&
                             !pCurrPart->GetJoinBorderWithNext() )
                         {
                             nSumBorderWidth += pCurrPart->GetFont().GetRightBorderSpace();
@@ -1648,16 +1643,16 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
 
                 if ( nSpaceAdd )
                 {
-                    sal_Int32 nCharCnt = 0;
+                    TextFrameIndex nCharCnt(0);
                     // #i41860# Thai justified alignment needs some
                     // additional information:
                     aDrawInf.SetNumberOfBlanks( pPor->InTextGrp() ?
                                                 static_cast<const SwTextPortion*>(pPor)->GetSpaceCnt( aSizeInf, nCharCnt ) :
-                                                0 );
+                                                TextFrameIndex(0) );
                 }
 
                 if ( pPor->InFieldGrp() && pCMS && pCMS->m_pSpecialPos )
-                    aDrawInf.SetLen( COMPLETE_STRING );
+                    aDrawInf.SetLen( TextFrameIndex(COMPLETE_STRING) );
 
                 aDrawInf.SetSpace( nSpaceAdd );
                 aDrawInf.SetFont( aSizeInf.GetFont() );
@@ -1670,23 +1665,23 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                     ! pPor->InFieldGrp() )
                     aDrawInf.SetKanaComp( nKanaComp );
 
-                nLength = aSizeInf.GetFont()->_GetCursorOfst( aDrawInf );
+                nLength = aSizeInf.GetFont()->GetCursorOfst_( aDrawInf );
 
                 // get position inside field portion?
                 if ( pPor->InFieldGrp() && pCMS && pCMS->m_pSpecialPos )
                 {
-                    pCMS->m_pSpecialPos->nCharOfst = nLength;
-                    nLength = 0;
+                    pCMS->m_pSpecialPos->nCharOfst = sal_Int32(nLength);
+                    nLength = TextFrameIndex(0);
                 }
 
                 // set cursor bidi level
                 if ( pCMS )
-                    static_cast<SwCursorMoveState*>(pCMS)->m_nCursorBidiLevel =
+                    pCMS->m_nCursorBidiLevel =
                         aDrawInf.GetCursorBidiLevel();
 
                 if( bFieldInfo && nLength == pPor->GetLen() &&
-                    ( ! pPor->GetPortion() ||
-                      ! pPor->GetPortion()->IsPostItsPortion() ) )
+                    ( ! pPor->GetNextPortion() ||
+                      ! pPor->GetNextPortion()->IsPostItsPortion() ) )
                     --nLength;
             }
             if( nOldProp )
@@ -1694,13 +1689,13 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
         }
         else
         {
-            if( bChgNode && pPos && pPor->IsFlyCntPortion()
-                && !static_cast<SwFlyCntPortion*>(pPor)->IsDraw() )
+            sw::FlyContentPortion* pFlyPor(nullptr);
+            if(bChgNode && pPos && (pFlyPor = dynamic_cast<sw::FlyContentPortion*>(pPor)))
             {
                 // JP 24.11.94: if the Position is not in Fly, then
                 //              we many not return with COMPLETE_STRING as value!
                 //              (BugId: 9692 + Change in feshview)
-                SwFlyInContentFrame *pTmp = static_cast<SwFlyCntPortion*>(pPor)->GetFlyFrame();
+                SwFlyInContentFrame *pTmp = pFlyPor->GetFlyFrame();
                 SwFrame* pLower = pTmp->GetLower();
                 bool bChgNodeInner = pLower
                     && (pLower->IsTextFrame() || pLower->IsLayoutFrame());
@@ -1712,11 +1707,10 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
                 if ( m_pFrame->IsVertical() )
                     m_pFrame->SwitchHorizontalToVertical( aTmpPoint );
 
-                if( bChgNodeInner && pTmp->Frame().IsInside( aTmpPoint ) &&
+                if( bChgNodeInner && pTmp->getFrameArea().IsInside( aTmpPoint ) &&
                     !( pTmp->IsProtected() ) )
                 {
-                    nLength = static_cast<SwFlyCntPortion*>(pPor)->
-                              GetFlyCursorOfst( nX, aTmpPoint, pPos, pCMS );
+                    pFlyPor->GetFlyCursorOfst(aTmpPoint, *pPos, pCMS);
                     // After a change of the frame, our font must be still
                     // available for/in the OutputDevice.
                     // For comparison: Paint and new SwFlyCntPortion !
@@ -1724,7 +1718,7 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
 
                     // 6776: The pIter->GetCursorOfst is returning here
                     // from a nesting with COMPLETE_STRING.
-                    return COMPLETE_STRING;
+                    return TextFrameIndex(COMPLETE_STRING);
                 }
             }
             else
@@ -1736,8 +1730,8 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
     // 7684: We end up in front of the HyphPortion. We must assure
     // that we end up in the string.
     // If we are at end of line in front of FlyFrames, we must proceed the same way.
-    if( nOffset && pPor->GetLen() == nLength && pPor->GetPortion() &&
-        !pPor->GetPortion()->GetLen() && pPor->GetPortion()->InHyphGrp() )
+    if( nOffset && pPor->GetLen() == nLength && pPor->GetNextPortion() &&
+        !pPor->GetNextPortion()->GetLen() && pPor->GetNextPortion()->InHyphGrp() )
         --nOffset;
 
     return nOffset;
@@ -1763,18 +1757,15 @@ sal_Int32 SwTextCursor::GetCursorOfst( SwPosition *pPos, const Point &rPoint,
 bool SwTextFrame::FillSelection( SwSelectionList& rSelList, const SwRect& rRect ) const
 {
     bool bRet = false;
-    // PaintArea() instead Frame() for negative indents
-    SwRect aTmpFrame( PaintArea() );
+    // GetPaintArea() instead getFrameArea() for negative indents
+    SwRect aTmpFrame( GetPaintArea() );
     if( !rRect.IsOver( aTmpFrame ) )
         return false;
     if( rSelList.checkContext( this ) )
     {
         SwRect aRect( aTmpFrame );
         aRect.Intersection( rRect );
-        // rNode without const to create SwPaMs
-        SwContentNode &rNode = const_cast<SwContentNode&>( *GetNode() );
-        SwNodeIndex aIdx( rNode );
-        SwPosition aPosL( aIdx, SwIndex( &rNode, 0 ) );
+        SwPosition aPosL( MapViewToModelPos(TextFrameIndex(0)) );
         if( IsEmpty() )
         {
             SwPaM *pPam = new SwPaM( aPosL, aPosL );
@@ -1782,17 +1773,17 @@ bool SwTextFrame::FillSelection( SwSelectionList& rSelList, const SwRect& rRect 
         }
         else if( aRect.HasArea() )
         {
-            sal_Int32 nOld = -1;
+            SwPosition aOld(aPosL.nNode.GetNodes().GetEndOfContent());
             SwPosition aPosR( aPosL );
             Point aPoint;
             SwTextInfo aInf( const_cast<SwTextFrame*>(this) );
             SwTextIter aLine( const_cast<SwTextFrame*>(this), &aInf );
             // We have to care for top-to-bottom layout, where right becomes top etc.
-            SWRECTFN( this )
-            SwTwips nTop = (aRect.*fnRect->fnGetTop)();
-            SwTwips nBottom = (aRect.*fnRect->fnGetBottom)();
-            SwTwips nLeft = (aRect.*fnRect->fnGetLeft)();
-            SwTwips nRight = (aRect.*fnRect->fnGetRight)();
+            SwRectFnSet aRectFnSet(this);
+            SwTwips nTop = aRectFnSet.GetTop(aRect);
+            SwTwips nBottom = aRectFnSet.GetBottom(aRect);
+            SwTwips nLeft = aRectFnSet.GetLeft(aRect);
+            SwTwips nRight = aRectFnSet.GetRight(aRect);
             SwTwips nY = aLine.Y(); // Top position of the first line
             SwTwips nLastY = nY;
             while( nY < nTop && aLine.Next() ) // line above rectangle
@@ -1816,41 +1807,41 @@ bool SwTextFrame::FillSelection( SwSelectionList& rSelList, const SwRect& rRect 
                 {
                     nLastY += nY;
                     nLastY /= 2;
-                    if( bVert )
+                    if( aRectFnSet.IsVert() )
                     {
-                        aPoint.X() = nLastY;
-                        aPoint.Y() = nLeft;
+                        aPoint.setX( nLastY );
+                        aPoint.setY( nLeft );
                     }
                     else
                     {
-                        aPoint.X() = nLeft;
-                        aPoint.Y() = nLastY;
+                        aPoint.setX( nLeft );
+                        aPoint.setY( nLastY );
                     }
                     // Looking for the position of the left border of the rectangle
                     // in this text line
                     SwCursorMoveState aState( MV_UPDOWN );
                     if( GetCursorOfst( &aPosL, aPoint, &aState ) )
                     {
-                        if( bVert )
+                        if( aRectFnSet.IsVert() )
                         {
-                            aPoint.X() = nLastY;
-                            aPoint.Y() = nRight;
+                            aPoint.setX( nLastY );
+                            aPoint.setY( nRight );
                         }
                         else
                         {
-                            aPoint.X() = nRight;
-                            aPoint.Y() = nLastY;
+                            aPoint.setX( nRight );
+                            aPoint.setY( nLastY );
                         }
                         // If we get a right position and if the left position
                         // is not the same like the left position of the line before
-                        // which cound happen e.g. for field portions or fly frames
+                        // which could happen e.g. for field portions or fly frames
                         // a SwPaM will be inserted with these positions
                         if( GetCursorOfst( &aPosR, aPoint, &aState ) &&
-                            nOld != aPosL.nContent.GetIndex() )
+                            aOld != aPosL)
                         {
                             SwPaM *pPam = new SwPaM( aPosL, aPosR );
                             rSelList.insertPaM( pPam );
-                            nOld = aPosL.nContent.GetIndex();
+                            aOld = aPosL;
                         }
                     }
                 }
@@ -1873,9 +1864,8 @@ bool SwTextFrame::FillSelection( SwSelectionList& rSelList, const SwRect& rRect 
     if( GetDrawObjs() )
     {
         const SwSortedObjs &rObjs = *GetDrawObjs();
-        for ( size_t i = 0; i < rObjs.size(); ++i )
+        for (SwAnchoredObject* pAnchoredObj : rObjs)
         {
-            const SwAnchoredObject* pAnchoredObj = rObjs[i];
             if( dynamic_cast< const SwFlyFrame *>( pAnchoredObj ) ==  nullptr )
                 continue;
             const SwFlyFrame* pFly = static_cast<const SwFlyFrame*>(pAnchoredObj);

@@ -21,12 +21,16 @@
 #define INCLUDED_VCL_KEYCOD_HXX
 
 #include <rtl/ustring.hxx>
-#include <tools/resid.hxx>
 #include <vcl/dllapi.h>
 #include <vcl/keycodes.hxx>
-#include <vcl/vclenum.hxx>
 
 namespace vcl { class Window; }
+
+enum class KeyFuncType : sal_Int32 { DONTKNOW, NEW, OPEN, SAVE,
+                   SAVEAS, PRINT, CLOSE, QUIT,
+                   CUT, COPY, PASTE, UNDO,
+                   REDO, DELETE, REPEAT, FIND,
+                   FINDBACKWARD, PROPERTIES, FRONT };
 
 namespace vcl
 {
@@ -39,7 +43,6 @@ private:
 
 public:
                     KeyCode() { nKeyCodeAndModifiers = 0; eFunc = KeyFuncType::DONTKNOW; }
-                    KeyCode( const ResId& rResId );
                     KeyCode( sal_uInt16 nKey, sal_uInt16 nModifier = 0 );
                     KeyCode( sal_uInt16 nKey, bool bShift, bool bMod1, bool bMod2, bool bMod3 );
                     KeyCode( KeyFuncType eFunction );
@@ -70,7 +73,6 @@ public:
 
     KeyFuncType     GetFunction() const;
 
-    KeyCode&        operator = ( const KeyCode& rKeyCode );
     bool            operator ==( const KeyCode& rKeyCode ) const;
     bool            operator !=( const KeyCode& rKeyCode ) const;
 };
@@ -111,14 +113,6 @@ inline bool vcl::KeyCode::operator !=( const vcl::KeyCode& rKeyCode ) const
         return (nKeyCodeAndModifiers != rKeyCode.nKeyCodeAndModifiers);
     else
         return (GetFunction() != rKeyCode.GetFunction());
-}
-
-inline vcl::KeyCode& vcl::KeyCode::operator = ( const vcl::KeyCode& rKeyCode )
-{
-    nKeyCodeAndModifiers = rKeyCode.nKeyCodeAndModifiers;
-    eFunc = rKeyCode.eFunc;
-
-    return *this;
 }
 
 #endif // INCLUDED_VCL_KEYCOD_HXX

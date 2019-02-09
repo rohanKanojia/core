@@ -18,17 +18,15 @@
  */
 #ifndef INCLUDED_SW_INC_SWATRSET_HXX
 #define INCLUDED_SW_INC_SWATRSET_HXX
-#include <tools/solar.h>
-#include <tools/mempool.hxx>
+
 #include <svl/itemset.hxx>
 #include <svl/itempool.hxx>
-#include <swdllapi.h>
+#include "swdllapi.h"
 
 class SwModify;
 class SwDoc;
 class OutputDevice;
 class IDocumentSettingAccess;
-class SfxBoolItem;
 class SvxPostureItem;
 class SvxWeightItem;
 class SvxShadowedItem;
@@ -40,10 +38,8 @@ class SvxUnderlineItem;
 class SvxOverlineItem;
 class SvxCrossedOutItem;
 class SvxFontHeightItem;
-class SvxPropSizeItem;
 class SvxFontItem;
 class SvxColorItem;
-class SvxCharSetColorItem;
 class SvxLanguageItem;
 class SvxEscapementItem;
 class SvxCaseMapItem;
@@ -74,8 +70,6 @@ class SwFormatHoriOrient;
 class SwFormatAnchor;
 class SvxBoxItem;
 class SvxBrushItem;
-class XFillStyleItem;
-class XFillGradientItem;
 class SvxShadowItem;
 class SwFormatPageDesc;
 class SvxFormatBreakItem;
@@ -92,7 +86,6 @@ class SwFormatFootnoteAtTextEnd;
 class SwFormatEndAtTextEnd;
 class SwFormatNoBalancedColumns;
 class SvxFrameDirectionItem;
-class SwTextGridItem;
 class SwHeaderAndFooterEatSpacingItem;
 class SwFormatFollowTextFlow;
 class SwFormatWrapInfluenceOnObjPos;
@@ -138,31 +131,22 @@ class SwTableBoxValue;
 class SwAttrPool : public SfxItemPool
 {
 private:
-    //UUUU helpers to add/rmove DrawingLayer ItemPool, used in constructor
+    // helpers to add/rmove DrawingLayer ItemPool, used in constructor
     // and destructor; still isolated to evtl. allow other use later, but
     // used bz default now to have it instantly as needed for DrawingLayer
     // FillStyle support
     void createAndAddSecondaryPools();
     void removeAndDeleteSecondaryPools();
 
-    friend void _InitCore();            // For creating/deleting of version maps.
-    friend void _FinitCore();
-    static sal_uInt16* pVersionMap1;
-    static sal_uInt16* pVersionMap2;
-    static sal_uInt16* pVersionMap3;
-    static sal_uInt16* pVersionMap4;
-    // due to extension of attribute set a new version
-    // map for binary filter is necessary (version map 5).
-    static sal_uInt16* pVersionMap5;
-    static sal_uInt16* pVersionMap6;
-    static sal_uInt16* pVersionMap7;
+    friend void InitCore();            // For creating/deleting of version maps.
+    friend void FinitCore();
 
-    SwDoc* m_pDoc;
+    SwDoc* const m_pDoc;
 
 public:
     SwAttrPool( SwDoc* pDoc );
 protected:
-    virtual ~SwAttrPool();
+    virtual ~SwAttrPool() override;
 public:
 
           SwDoc* GetDoc()           { return m_pDoc; }
@@ -184,7 +168,7 @@ public:
     SwAttrSet( SwAttrPool&, const sal_uInt16* nWhichPairTable );
     SwAttrSet( const SwAttrSet& );
 
-    virtual SfxItemSet* Clone(bool bItems = true, SfxItemPool *pToPool = nullptr) const override;
+    virtual std::unique_ptr<SfxItemSet> Clone(bool bItems = true, SfxItemPool *pToPool = nullptr) const override;
 
     bool Put_BC( const SfxPoolItem& rAttr, SwAttrSet* pOld, SwAttrSet* pNew );
     bool Put_BC( const SfxItemSet& rSet, SwAttrSet* pOld, SwAttrSet* pNew );
@@ -197,7 +181,7 @@ public:
     int Intersect_BC( const SfxItemSet& rSet, SwAttrSet* pOld, SwAttrSet* pNew );
 
     void GetPresentation( SfxItemPresentation ePres,
-        SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric, OUString &rText ) const;
+        MapUnit eCoreMetric, MapUnit ePresMetric, OUString &rText ) const;
 
     SwAttrPool* GetPool() const { return static_cast<SwAttrPool*>(SfxItemSet::GetPool()); }
 
@@ -329,8 +313,6 @@ public:
     inline  const SwTableBoxNumFormat       &GetTableBoxNumFormat( bool = true ) const;
     inline  const SwTableBoxFormula     &GetTableBoxFormula( bool = true ) const;
     inline  const SwTableBoxValue           &GetTableBoxValue( bool = true ) const;
-
-    DECL_FIXEDMEMPOOL_NEWDEL(SwAttrSet)
 };
 
 //Helper for filters to find true lineheight of a font

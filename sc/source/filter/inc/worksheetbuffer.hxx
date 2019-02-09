@@ -24,11 +24,9 @@
 #include <oox/helper/refmap.hxx>
 #include <oox/helper/refvector.hxx>
 #include "workbookhelper.hxx"
-#include "documentimport.hxx"
 
-namespace com { namespace sun { namespace star {
-    namespace i18n { class XCharacterClassification; }
-} } }
+namespace oox { class SequenceInputStream; }
+namespace oox { class AttributeList; }
 
 namespace oox {
 namespace xls {
@@ -88,9 +86,9 @@ public:
 private:
     struct SheetInfo : public SheetInfoModel
     {
-        OUString     maCalcName;
-        OUString     maCalcQuotedName;
-        sal_Int16           mnCalcSheet;
+        OUString const      maCalcName;
+        OUString const      maCalcQuotedName;
+        sal_Int16 const     mnCalcSheet;
 
         explicit            SheetInfo( const SheetInfoModel& rModel, sal_Int16 nCalcSheet, const OUString& rCalcName );
     };

@@ -21,12 +21,15 @@
 #define INCLUDED_UNOTOOLS_INTLWRAPPER_HXX
 
 #include <unotools/unotoolsdllapi.h>
-#include <unotools/charclass.hxx>
-#include <unotools/localedatawrapper.hxx>
-#include <unotools/calendarwrapper.hxx>
-#include <unotools/collatorwrapper.hxx>
-#include <i18nlangtag/lang.h>
+#include <com/sun/star/uno/Reference.h>
+
 #include <i18nlangtag/languagetag.hxx>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
+class CollatorWrapper;
+class LocaleDataWrapper;
 
 /**
     A wrapper of I18N wrappers. Using this is more expensive than using some
@@ -47,48 +50,39 @@
 class UNOTOOLS_DLLPUBLIC IntlWrapper
 {
 private:
-
-            LanguageTag         maLanguageTag;
+    LanguageTag const         maLanguageTag;
     css::uno::Reference< css::uno::XComponentContext > m_xContext;
 
-            LocaleDataWrapper*  pLocaleData;
-            CollatorWrapper*    pCollator;
-            CollatorWrapper*    pCaseCollator;
+    std::unique_ptr<LocaleDataWrapper>  pLocaleData;
+    std::unique_ptr<CollatorWrapper>    pCollator;
+    std::unique_ptr<CollatorWrapper>    pCaseCollator;
 
-            void                ImplNewLocaleData() const;
-            void                ImplNewCollator( bool bCaseSensitive ) const;
+    void                ImplNewLocaleData() const;
+    void                ImplNewCollator( bool bCaseSensitive ) const;
 
 public:
-                                IntlWrapper(
-                                    const css::uno::Reference< css::uno::XComponentContext > & rxContext,
-                                    const LanguageTag& rLanguageTag
-                                    );
-                                IntlWrapper(
-                                    const LanguageTag& rLanguageTag
-                                    );
-                                ~IntlWrapper();
-
-    const LanguageTag&          getLanguageTag() const { return maLanguageTag; }
+    IntlWrapper(const LanguageTag& rLanguageTag);
+    ~IntlWrapper();
 
     const LocaleDataWrapper*    getLocaleData() const
                                     {
                                         if ( !pLocaleData )
                                             ImplNewLocaleData();
-                                        return pLocaleData;
+                                        return pLocaleData.get();
                                     }
     /// case insensitive collator, simple IGNORE_CASE
     const CollatorWrapper*      getCollator() const
                                     {
                                         if ( !pCollator )
                                             ImplNewCollator( false );
-                                        return pCollator;
+                                        return pCollator.get();
                                     }
     /// case sensitive collator
     const CollatorWrapper*      getCaseCollator() const
                                     {
                                         if ( !pCaseCollator )
                                             ImplNewCollator( true );
-                                        return pCaseCollator;
+                                        return pCaseCollator.get();
                                     }
 };
 

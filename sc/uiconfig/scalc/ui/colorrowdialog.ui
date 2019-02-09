@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="ColOrRowDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Copy List</property>
+    <property name="title" translatable="yes" context="colorrowdialog|ColOrRowDialog">Copy List</property>
     <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="can_focus">False</property>
@@ -90,7 +96,7 @@
                     <property name="spacing">6</property>
                     <child>
                       <object class="GtkRadioButton" id="columns">
-                        <property name="label" translatable="yes">_Columns</property>
+                        <property name="label" translatable="yes" context="colorrowdialog|columns">_Columns</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -98,7 +104,6 @@
                         <property name="xalign">0</property>
                         <property name="active">True</property>
                         <property name="draw_indicator">True</property>
-                        <property name="group">rows</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -108,7 +113,7 @@
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="rows">
-                        <property name="label" translatable="yes">_Rows</property>
+                        <property name="label" translatable="yes" context="colorrowdialog|rows">_Rows</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -131,7 +136,7 @@
               <object class="GtkLabel" id="label">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">List From</property>
+                <property name="label" translatable="yes" context="colorrowdialog|label">List From</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -147,9 +152,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

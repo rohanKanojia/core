@@ -19,14 +19,15 @@
 
 #include <rtl/ref.hxx>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
 
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/servicefactory.hxx>
 #include <cppuhelper/interfacecontainer.hxx>
 #include <cppuhelper/compbase.hxx>
+#include <cppuhelper/basemutex.hxx>
 
 #include <comphelper/processfactory.hxx>
-#include <comphelper/broadcasthelper.hxx>
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
@@ -36,12 +37,12 @@
 #include <com/sun/star/rendering/XSpriteCanvas.hpp>
 #include <com/sun/star/presentation/SlideShow.hpp>
 #include <com/sun/star/presentation/XSlideShowView.hpp>
-#include "com/sun/star/animations/TransitionType.hpp"
-#include "com/sun/star/animations/TransitionSubType.hpp"
+#include <com/sun/star/animations/TransitionType.hpp>
+#include <com/sun/star/animations/TransitionSubType.hpp>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/range/b2drectangle.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -66,7 +67,7 @@ using namespace ::com::sun::star;
 namespace {
 
 typedef ::cppu::WeakComponentImplHelper< presentation::XSlideShowView > ViewBase;
-class View : public ::comphelper::OBaseMutex,
+class View : public ::cppu::BaseMutex,
              public ViewBase
 {
 public:
@@ -86,7 +87,7 @@ public:
     {
         maSize = rNewSize;
         const sal_Int32 nSize( std::min( rNewSize.Width(), rNewSize.Height() ) - 10);
-        maTransform = basegfx::tools::createScaleTranslateB2DHomMatrix(
+        maTransform = basegfx::utils::createScaleTranslateB2DHomMatrix(
             nSize, nSize, (rNewSize.Width() - nSize) / 2, (rNewSize.Height() - nSize) / 2);
 
         lang::EventObject aEvent( *this );
@@ -113,7 +114,7 @@ private:
 
     virtual void SAL_CALL clear(  ) throw (uno::RuntimeException)
     {
-        ::basegfx::B2DPolygon aPoly( ::basegfx::tools::createPolygonFromRect(
+        ::basegfx::B2DPolygon aPoly( ::basegfx::utils::createPolygonFromRect(
                                          ::basegfx::B2DRectangle(0.0,0.0,
                                                                  maSize.Width(),
                                                                  maSize.Height() )));
@@ -202,7 +203,7 @@ private:
 
 typedef ::cppu::WeakComponentImplHelper< drawing::XDrawPage,
                                           beans::XPropertySet > SlideBase;
-class DummySlide : public ::comphelper::OBaseMutex,
+class DummySlide : public ::cppu::BaseMutex,
                    public SlideBase
 {
 public:
@@ -301,7 +302,7 @@ class DemoApp : public Application
 {
 public:
     virtual void Main();
-    virtual sal_uInt16  Exception( sal_uInt16 nError );
+    virtual void  Exception( ExceptionCategory nCategory );
 };
 
 class ChildWindow : public vcl::Window
@@ -355,8 +356,7 @@ void ChildWindow::init()
     }
     catch (const uno::Exception &e)
     {
-        OSL_TRACE( "Exception '%s' thrown\n" ,
-                   OUStringToOString( e.Message, RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_INFO("slideshow", e );
     }
 }
 
@@ -369,9 +369,7 @@ void ChildWindow::Paint( const Rectangle& /*rRect*/ )
     }
     catch (const uno::Exception &e)
     {
-        OSL_TRACE( "Exception '%s' thrown\n" ,
-                   OUStringToOString( e.Message,
-                                             RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_INFO("slideshow", e );
     }
 }
 
@@ -390,7 +388,7 @@ public:
 
 private:
     void init();
-    DECL_LINK_TYPED( updateHdl, Timer*, void );
+    DECL_LINK( updateHdl, Timer*, void );
 
     ChildWindow                                maLeftChild;
     ChildWindow                                maRightTopChild;
@@ -418,7 +416,7 @@ DemoWindow::DemoWindow() :
     maRightBottomChild.SetPosSizePixel( Point(320,240), Size(320,240) );
     Show();
 
-    maUpdateTimer.SetTimeoutHdl(LINK(this, DemoWindow, updateHdl));
+    maUpdateTimer.SetInvokeHandler(LINK(this, DemoWindow, updateHdl));
     maUpdateTimer.SetTimeout( (sal_uLong)30 );
     maUpdateTimer.Start();
 }
@@ -457,13 +455,11 @@ void DemoWindow::init()
     }
     catch (const uno::Exception &e)
     {
-        OSL_TRACE( "Exception '%s' thrown\n" ,
-                   OUStringToOString( e.Message,
-                                             RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_INFO("slideshow", e );
     }
 }
 
-IMPL_LINK_NOARG_TYPED(DemoWindow, updateHdl, Timer*, void)
+IMPL_LINK_NOARG(DemoWindow, updateHdl, Timer*, void)
 {
     init();
 
@@ -481,15 +477,14 @@ void DemoWindow::Resize()
     // TODO
 }
 
-sal_uInt16 DemoApp::Exception( sal_uInt16 nError )
+void DemoApp::Exception( ExceptionCategory nCategory )
 {
-    switch( nError & EXCEPTION_MAJORTYPE )
+    switch( nCategory )
     {
-        case EXCEPTION_RESOURCENOTLOADED:
+        case ExceptionCategory::ResourceNotLoaded:
             Abort( "Error: could not load language resources.\nPlease check your installation.\n" );
             break;
     }
-    return 0;
 }
 
 void DemoApp::Main()
@@ -525,14 +520,12 @@ void DemoApp::Main()
     }
     catch( uno::Exception& )
     {
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString( cppu::getCaughtException() ),
-                        RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
     }
 
     if( !xFactory.is() )
     {
-        OSL_TRACE( "Could not bootstrap UNO, installation must be in disorder. Exiting." );
+        SAL_INFO("slideshow", "Could not bootstrap UNO, installation must be in disorder. Exiting." );
         exit( 1 );
     }
 

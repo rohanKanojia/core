@@ -20,11 +20,12 @@
 
 #include <tools/diagnose_ex.h>
 
+#include <sal/log.hxx>
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
 #include "slideanimations.hxx"
-#include "animationnodefactory.hxx"
+#include <animationnodefactory.hxx>
 
 using namespace ::com::sun::star;
 
@@ -42,23 +43,20 @@ namespace slideshow
                               "SlideAnimations::SlideAnimations(): Invalid SlideShowContext" );
         }
 
-        SlideAnimations::~SlideAnimations()
+        SlideAnimations::~SlideAnimations() COVERITY_NOEXCEPT_FALSE
         {
-            if( mpRootNode )
-            {
-                SHOW_NODE_TREE( mpRootNode );
+            if( !mpRootNode )
+                return;
 
-                try
-                {
-                    mpRootNode->dispose();
-                }
-                catch (uno::Exception &)
-                {
-                    OSL_FAIL( OUStringToOString(
-                                    comphelper::anyToString(
-                                        cppu::getCaughtException() ),
-                                    RTL_TEXTENCODING_UTF8 ).getStr() );
-                }
+            SHOW_NODE_TREE( mpRootNode );
+
+            try
+            {
+                mpRootNode->dispose();
+            }
+            catch (uno::Exception &)
+            {
+                SAL_WARN( "slideshow", comphelper::anyToString(cppu::getCaughtException() ) );
             }
         }
 

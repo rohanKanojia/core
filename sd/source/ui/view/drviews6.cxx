@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <config_features.h>
+
+#include <DrawViewShell.hxx>
 #include <vcl/metaact.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svxids.hrc>
@@ -30,26 +32,26 @@
 #include <svx/imapdlg.hxx>
 #include <svx/SvxColorChildWindow.hxx>
 #include <svx/f3dchild.hxx>
-#include "optsitem.hxx"
+#include <optsitem.hxx>
 #include <svx/extrusionbar.hxx>
 #include <svx/fontworkbar.hxx>
 #include <avmedia/mediaplayer.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
+#include <app.hrc>
+#include <strings.hrc>
 
-#include "sdmod.hxx"
-#include "animobjs.hxx"
-#include "AnimationChildWindow.hxx"
-#include "NavigatorChildWindow.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "drawview.hxx"
-#include "FrameView.hxx"
-#include "Window.hxx"
-#include "DrawDocShell.hxx"
-#include "sdabstdlg.hxx"
-#include "framework/FrameworkHelper.hxx"
+#include <sdmod.hxx>
+#include <animobjs.hxx>
+#include <AnimationChildWindow.hxx>
+#include <NavigatorChildWindow.hxx>
+#include <sdresid.hxx>
+#include <drawdoc.hxx>
+#include <drawview.hxx>
+#include <FrameView.hxx>
+#include <Window.hxx>
+#include <DrawDocShell.hxx>
+#include <sdabstdlg.hxx>
+#include <framework/FrameworkHelper.hxx>
 #include <svx/svdoashp.hxx>
 #include <sfx2/sidebar/Sidebar.hxx>
 
@@ -87,15 +89,6 @@ void DrawViewShell::GetFormTextState(SfxItemSet& rSet)
 {
     const SdrMarkList& rMarkList = mpDrawView->GetMarkedObjectList();
     const SdrObject* pObj = nullptr;
-    SvxFontWorkDialog* pDlg = nullptr;
-
-    sal_uInt16 nId = SvxFontWorkChildWindow::GetChildWindowId();
-
-    if (GetViewFrame()->HasChildWindow(nId))
-    {
-        SfxChildWindow* pWnd = GetViewFrame()->GetChildWindow(nId);
-        pDlg = pWnd ? static_cast<SvxFontWorkDialog*>(pWnd->GetWindow()) : nullptr;
-    }
 
     if ( rMarkList.GetMarkCount() == 1 )
         pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
@@ -125,9 +118,6 @@ void DrawViewShell::GetFormTextState(SfxItemSet& rSet)
     }
     else
     {
-        if ( pDlg )
-            pDlg->SetColorList(GetDoc()->GetColorList());
-
         SfxItemSet aSet( GetDoc()->GetPool() );
         mpDrawView->GetAttributes( aSet );
         rSet.Set( aSet );
@@ -195,12 +185,12 @@ void DrawViewShell::GetAnimationWinState( SfxItemSet& rSet )
     else // 1 Object
     {
         const SdrObject* pObj = rMarkList.GetMark( 0 )->GetMarkedSdrObj();
-        sal_uInt32 nInv = pObj->GetObjInventor();
-        sal_uInt16 nId  = pObj->GetObjIdentifier();
+        SdrInventor nInv = pObj->GetObjInventor();
+        sal_uInt16  nId  = pObj->GetObjIdentifier();
         // 1 selected group object
-        if( nInv == SdrInventor && nId == OBJ_GRUP )
+        if( nInv == SdrInventor::Default && nId == OBJ_GRUP )
             nValue = 3;
-        else if( nInv == SdrInventor && nId == OBJ_GRAF ) // Animated GIF ?
+        else if( nInv == SdrInventor::Default && nId == OBJ_GRAF ) // Animated GIF ?
         {
             sal_uInt16 nCount = 0;
 
@@ -237,8 +227,7 @@ void DrawViewShell::SetChildWindowState( SfxItemSet& rSet )
     }
     if( SfxItemState::DEFAULT == rSet.GetItemState( SID_NAVIGATOR ) )
     {
-        sal_uInt16 nId = SID_NAVIGATOR;
-        rSet.Put( SfxBoolItem( SID_NAVIGATOR, GetViewFrame()->HasChildWindow( nId ) ) );
+        rSet.Put( SfxBoolItem( SID_NAVIGATOR, GetViewFrame()->HasChildWindow( SID_NAVIGATOR ) ) );
     }
     if( SfxItemState::DEFAULT == rSet.GetItemState( SID_BMPMASK ) )
     {
@@ -255,17 +244,19 @@ void DrawViewShell::SetChildWindowState( SfxItemSet& rSet )
         sal_uInt16 nId = Svx3DChildWindow::GetChildWindowId();
         rSet.Put( SfxBoolItem( SID_3D_WIN, GetViewFrame()->HasChildWindow( nId ) ) );
     }
+#if HAVE_FEATURE_AVMEDIA
     if( SfxItemState::DEFAULT == rSet.GetItemState( SID_AVMEDIA_PLAYER ) )
     {
         sal_uInt16 nId = ::avmedia::MediaPlayer::GetChildWindowId();
         rSet.Put( SfxBoolItem( SID_AVMEDIA_PLAYER, GetViewFrame()->HasChildWindow( nId ) ) );
     }
+#endif
 }
 
 /**
  * Handle SfxRequests for pipette
  */
-void DrawViewShell::ExecBmpMask( SfxRequest& rReq )
+void DrawViewShell::ExecBmpMask( SfxRequest const & rReq )
 {
     // nothing is executed during a slide show!
     if (HasCurrentFunction(SID_PRESENTATION))
@@ -288,20 +279,19 @@ void DrawViewShell::ExecBmpMask( SfxRequest& rReq )
 
             if ( pObj && !mpDrawView->IsTextEdit() )
             {
-                SdrGrafObj* pNewObj = pObj->Clone();
+                typedef std::unique_ptr< SdrGrafObj, SdrObjectFreeOp > SdrGrafObjPtr;
+                SdrGrafObjPtr xNewObj(pObj->CloneSdrObject(pObj->getSdrModelFromSdrObject()));
                 bool bCont = true;
 
-                if( pNewObj->IsLinkedGraphic() )
+                if (xNewObj->IsLinkedGraphic())
                 {
-                    ScopedVclPtrInstance< MessageDialog > aQueryBox( static_cast<vcl::Window*>(GetActiveWindow()),"QueryUnlinkImageDialog","modules/sdraw/ui/queryunlinkimagedialog.ui");
+                    std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetFrameWeld(), "modules/sdraw/ui/queryunlinkimagedialog.ui"));
+                    std::unique_ptr<weld::MessageDialog> xQueryBox(xBuilder->weld_message_dialog("QueryUnlinkImageDialog"));
 
-                    if (RET_YES == aQueryBox->Execute())
-                        pNewObj->ReleaseGraphicLink();
+                    if (RET_YES == xQueryBox->run())
+                        xNewObj->ReleaseGraphicLink();
                     else
-                    {
-                        delete pNewObj;
                         bCont = false;
-                    }
                 }
 
                 SfxChildWindow* pWnd = GetViewFrame()->GetChildWindow(
@@ -310,21 +300,21 @@ void DrawViewShell::ExecBmpMask( SfxRequest& rReq )
                 assert(pBmpMask);
                 if (bCont && pBmpMask)
                 {
-                    const Graphic&  rOldGraphic = pNewObj->GetGraphic();
+                    const Graphic&  rOldGraphic = xNewObj->GetGraphic();
                     const Graphic   aNewGraphic(pBmpMask->Mask(rOldGraphic));
 
                     if( aNewGraphic != rOldGraphic )
                     {
                         SdrPageView* pPV = mpDrawView->GetSdrPageView();
 
-                        pNewObj->SetEmptyPresObj( false );
-                        pNewObj->SetGraphic(pBmpMask->Mask(pNewObj->GetGraphic()));
+                        xNewObj->SetEmptyPresObj(false);
+                        xNewObj->SetGraphic(pBmpMask->Mask(xNewObj->GetGraphic()));
 
                         OUString aStr( mpDrawView->GetDescriptionOfMarkedObjects() );
-                        aStr += " " + SD_RESSTR(STR_EYEDROPPER);
+                        aStr += " " + SdResId(STR_EYEDROPPER);
 
                         mpDrawView->BegUndo( aStr );
-                        mpDrawView->ReplaceObjectAtView( pObj, *pPV, pNewObj );
+                        mpDrawView->ReplaceObjectAtView(pObj, *pPV, xNewObj.release());
                         mpDrawView->EndUndo();
                     }
                 }
@@ -341,22 +331,13 @@ void DrawViewShell::GetBmpMaskState( SfxItemSet& rSet )
 {
     const SdrMarkList&  rMarkList = mpDrawView->GetMarkedObjectList();
     const SdrObject*    pObj = nullptr;
-    sal_uInt16              nId = SvxBmpMaskChildWindow::GetChildWindowId();
     bool                bEnable = false;
-
-    if ( GetViewFrame()->HasChildWindow( nId ) )
-    {
-        SfxChildWindow* pWnd = GetViewFrame()->GetChildWindow(nId);
-        SvxBmpMask* pDlg = pWnd ? static_cast<SvxBmpMask*>(pWnd->GetWindow()) : nullptr;
-        if (pDlg && pDlg->NeedsColorList())
-            pDlg->SetColorList(GetDoc()->GetColorList());
-    }
 
     if ( rMarkList.GetMarkCount() == 1 )
         pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
 
     // valid graphic object?
-    if( pObj && dynamic_cast< const SdrGrafObj *>( pObj ) !=  nullptr &&
+    if( dynamic_cast< const SdrGrafObj *>( pObj ) &&
         !static_cast<const SdrGrafObj*>(pObj)->IsEPS() &&
         !mpDrawView->IsTextEdit() )
     {

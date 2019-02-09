@@ -17,19 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uielement/comboboxtoolbarcontroller.hxx"
+#include <uielement/comboboxtoolbarcontroller.hxx>
 
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/status/ItemStatus.hpp>
-#include <com/sun/star/frame/status/ItemState.hpp>
-#include <com/sun/star/frame/status/Visibility.hpp>
-#include <com/sun/star/frame/XControlNotificationListener.hpp>
 #include <com/sun/star/util/Color.hpp>
 
 #include <svtools/toolboxcontroller.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
 #include <vcl/toolbox.hxx>
@@ -40,7 +34,6 @@ using namespace css::uno;
 using namespace css::beans;
 using namespace css::lang;
 using namespace css::frame;
-using namespace css::frame::status;
 using namespace css::util;
 
 namespace framework
@@ -54,7 +47,7 @@ class ComboBoxControl : public ComboBox
 {
     public:
         ComboBoxControl( vcl::Window* pParent, WinBits nStyle, ComboboxToolbarController* pComboboxToolbarController );
-        virtual ~ComboBoxControl();
+        virtual ~ComboBoxControl() override;
         virtual void dispose() override;
 
         virtual void Select() override;
@@ -139,7 +132,7 @@ ComboboxToolbarController::ComboboxToolbarController(
 
     // default dropdown size
     ::Size aLogicalSize( 8, 160 );
-    ::Size aPixelSize = m_pComboBox->LogicToPixel( aLogicalSize, MAP_APPFONT );
+    ::Size aPixelSize = m_pComboBox->LogicToPixel(aLogicalSize, MapMode(MapUnit::MapAppFont));
 
     m_pComboBox->SetSizePixel( ::Size( nWidth, aPixelSize.Height() ));
     m_pToolbar->SetItemWindow( m_nID, m_pComboBox );
@@ -150,7 +143,6 @@ ComboboxToolbarController::~ComboboxToolbarController()
 }
 
 void SAL_CALL ComboboxToolbarController::dispose()
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -199,7 +191,7 @@ void ComboboxToolbarController::LoseFocus()
     notifyFocusLost();
 }
 
-bool ComboboxToolbarController::PreNotify( NotifyEvent& rNEvt )
+bool ComboboxToolbarController::PreNotify( NotifyEvent const & rNEvt )
 {
     switch ( rNEvt.GetType() )
     {
@@ -271,14 +263,13 @@ void ComboboxToolbarController::executeControlCommand( const css::frame::Control
     }
     else if ( rControlCommand.Command == "AddEntry" )
     {
-        sal_Int32      nPos( COMBOBOX_APPEND );
         OUString   aText;
         for ( sal_Int32 i = 0; i < rControlCommand.Arguments.getLength(); i++ )
         {
             if ( rControlCommand.Arguments[i].Name == "Text" )
             {
                 if ( rControlCommand.Arguments[i].Value >>= aText )
-                    m_pComboBox->InsertEntry( aText, nPos );
+                    m_pComboBox->InsertEntry( aText, COMBOBOX_APPEND );
                 break;
             }
         }
@@ -295,7 +286,7 @@ void ComboboxToolbarController::executeControlCommand( const css::frame::Control
                 if ( rControlCommand.Arguments[i].Value >>= nTmpPos )
                 {
                     if (( nTmpPos >= 0 ) &&
-                        ( nTmpPos < sal_Int32( m_pComboBox->GetEntryCount() )))
+                        ( nTmpPos < m_pComboBox->GetEntryCount() ))
                         nPos = nTmpPos;
                 }
             }
@@ -314,7 +305,7 @@ void ComboboxToolbarController::executeControlCommand( const css::frame::Control
                 sal_Int32 nPos( -1 );
                 if ( rControlCommand.Arguments[i].Value >>= nPos )
                 {
-                    if ( 0 <= nPos && nPos < sal_Int32( m_pComboBox->GetEntryCount() ))
+                    if ( 0 <= nPos && nPos <  m_pComboBox->GetEntryCount() )
                         m_pComboBox->RemoveEntryAt(nPos);
                 }
                 break;

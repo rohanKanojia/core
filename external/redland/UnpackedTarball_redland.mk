@@ -11,6 +11,11 @@ $(eval $(call gb_UnpackedTarball_UnpackedTarball,redland))
 
 $(eval $(call gb_UnpackedTarball_set_tarball,redland,$(REDLAND_TARBALL),,redland))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,redland,\
+	build \
+	libltdl/config \
+))
+
 # configure generated files for MSVC
 $(eval $(call gb_UnpackedTarball_add_file,redland,src/librdf.h,external/redland/redland/librdf.h))
 
@@ -19,17 +24,15 @@ $(eval $(call gb_UnpackedTarball_set_patchlevel,redland,0))
 # redland-format.patch.0 sent upstream as
 #  <https://github.com/dajobe/librdf/pull/6>
 $(eval $(call gb_UnpackedTarball_add_patches,redland,\
-	external/redland/redland/redland-query-rasqal-avoid-assert.patch.1 \
-	external/redland/redland/redland-pkgconfig.patch.1 \
 	external/redland/redland/redland-freebsd.patch.1 \
 	external/redland/redland/redland-msvc.patch.1 \
 	$(if $(filter-out WNT,$(OS)),external/redland/redland/redland-bundled-soname.patch.1) \
 	$(if $(filter ANDROID,$(OS)),external/redland/redland/redland-android.patch.1) \
-	$(if $(filter WNTGCC,$(OS)$(COM)),external/redland/redland/redland-mingw.patch.1) \
 	$(if $(CROSS_COMPILING),external/redland/redland/redland-xcompile.patch.1) \
 	external/redland/redland/redland-format.patch.0 \
 	external/redland/redland/rpath.patch \
 	external/redland/redland/clang-cl.patch \
+	external/redland/redland/libtool.patch \
 ))
 
 # vim: set noet sw=4 ts=4:

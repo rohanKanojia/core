@@ -17,27 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <hintids.hxx>
 #include <comphelper/classids.hxx>
+#include <o3tl/any.hxx>
 #include <tools/stream.hxx>
+#include <tools/fontenum.hxx>
 #include <vcl/svapp.hxx>
-#include <svl/mailenum.hxx>
 #include <svx/svxids.hrc>
 #include <editeng/svxenum.hxx>
 #include <osl/diagnose.h>
 
+#include <tools/mapunit.hxx>
 #include <tools/globname.hxx>
 #include <swtypes.hxx>
 #include <itabenum.hxx>
 #include <modcfg.hxx>
 #include <fldupde.hxx>
-#include <unotools/configmgr.hxx>
-#include <unotools/syslocaleoptions.hxx>
 #include <caption.hxx>
 
 #include <unomid.h>
 
-using namespace utl;
 using namespace com::sun::star::uno;
 
 #define GLOB_NAME_CALC      0
@@ -77,11 +77,11 @@ const InsCaptionOpt* SwModuleOptions::GetCapOption(
         {
             bool bFound = false;
             for( sal_uInt16 nId = 0; nId <= GLOB_NAME_CHART && !bFound; nId++)
-                bFound = *pOleId == aInsertConfig.aGlobalNames[nId  ];
+                bFound = *pOleId == m_aInsertConfig.m_aGlobalNames[nId  ];
             if(!bFound)
-                return aInsertConfig.pOLEMiscOpt;
+                return m_aInsertConfig.m_pOLEMiscOpt.get();
         }
-        return aInsertConfig.pCapOptions->Find(eType, pOleId);
+        return m_aInsertConfig.m_pCapOptions->Find(eType, pOleId);
     }
 }
 
@@ -99,17 +99,17 @@ bool SwModuleOptions::SetCapOption(bool bHTML, const InsCaptionOpt* pOpt)
         {
             bool bFound = false;
             for( sal_uInt16 nId = 0; nId <= GLOB_NAME_CHART; nId++)
-                bFound = pOpt->GetOleId() == aInsertConfig.aGlobalNames[nId  ];
+                bFound = pOpt->GetOleId() == m_aInsertConfig.m_aGlobalNames[nId  ];
             if(!bFound)
             {
-                if(aInsertConfig.pOLEMiscOpt)
-                    *aInsertConfig.pOLEMiscOpt = *pOpt;
+                if(m_aInsertConfig.m_pOLEMiscOpt)
+                    *m_aInsertConfig.m_pOLEMiscOpt = *pOpt;
                 else
-                    aInsertConfig.pOLEMiscOpt = new InsCaptionOpt(*pOpt);
+                    m_aInsertConfig.m_pOLEMiscOpt.reset(new InsCaptionOpt(*pOpt));
             }
         }
 
-        InsCaptionOptArr& rArr = *aInsertConfig.pCapOptions;
+        InsCaptionOptArr& rArr = *m_aInsertConfig.m_pCapOptions;
         InsCaptionOpt *pObj = rArr.Find(pOpt->GetObjType(), &pOpt->GetOleId());
 
         if (pObj)
@@ -119,7 +119,7 @@ bool SwModuleOptions::SetCapOption(bool bHTML, const InsCaptionOpt* pOpt)
         else
             rArr.Insert(new InsCaptionOpt(*pOpt));
 
-        aInsertConfig.SetModified();
+        m_aInsertConfig.SetModified();
         bRet = true;
     }
 
@@ -127,17 +127,17 @@ bool SwModuleOptions::SetCapOption(bool bHTML, const InsCaptionOpt* pOpt)
 }
 
 SwModuleOptions::SwModuleOptions() :
-    aInsertConfig(false),
-    aWebInsertConfig(true),
-    aTableConfig(false),
-    aWebTableConfig(true),
-    bHideFieldTips(false)
+    m_aInsertConfig(false),
+    m_aWebInsertConfig(true),
+    m_aTableConfig(false),
+    m_aWebTableConfig(true),
+    m_bHideFieldTips(false)
 {
 }
 
 OUString SwModuleOptions::ConvertWordDelimiter(const OUString& rDelim, bool bFromUI)
 {
-    OUString sReturn;
+    OUStringBuffer sReturn;
     const sal_Int32 nDelimLen = rDelim.getLength();
     if(bFromUI)
     {
@@ -149,9 +149,9 @@ OUString SwModuleOptions::ConvertWordDelimiter(const OUString& rDelim, bool bFro
             {
                 switch (rDelim[i++])
                 {
-                    case 'n':   sReturn += "\n";    break;
-                    case 't':   sReturn += "\t";    break;
-                    case '\\':  sReturn += "\\";    break;
+                    case 'n':   sReturn.append("\n");    break;
+                    case 't':   sReturn.append("\t");    break;
+                    case '\\':  sReturn.append("\\");    break;
 
                     case 'x':
                     {
@@ -177,18 +177,18 @@ OUString SwModuleOptions::ConvertWordDelimiter(const OUString& rDelim, bool bFro
                             nChar += nVal;
                         }
                         if( bValidData )
-                            sReturn += OUString(nChar);
+                            sReturn.append(nChar);
                         break;
                     }
 
                     default:    // Unknown, so insert backslash
-                        sReturn += "\\";
+                        sReturn.append("\\");
                         i--;
                         break;
                 }
             }
             else
-                sReturn += OUString(c);
+                sReturn.append(c);
         }
     }
     else
@@ -199,34 +199,29 @@ OUString SwModuleOptions::ConvertWordDelimiter(const OUString& rDelim, bool bFro
 
             switch (c)
             {
-                case '\n':  sReturn += "\\n"; break;
-                case '\t':  sReturn += "\\t"; break;
-                case '\\':  sReturn += "\\\\"; break;
+                case '\n':  sReturn.append("\\n"); break;
+                case '\t':  sReturn.append("\\t"); break;
+                case '\\':  sReturn.append("\\\\"); break;
 
                 default:
                     if( c <= 0x1f || c >= 0x7f )
                     {
-                        sReturn += "\\x" + OUString::number( c, 16 );
+                        sReturn.append("\\x").append(OUString::number( c, 16 ));
                     }
                     else
                     {
-                        sReturn += OUString(c);
+                        sReturn.append(c);
                     }
             }
         }
     }
-    return sReturn;
+    return sReturn.makeStringAndClear();
 }
 
 const Sequence<OUString>& SwRevisionConfig::GetPropertyNames()
 {
-    static Sequence<OUString> aNames;
-    if(!aNames.getLength())
+    static Sequence<OUString> const aNames
     {
-        const int nCount = 8;
-        aNames.realloc(nCount);
-        static const char* aPropNames[] =
-        {
             "TextDisplay/Insert/Attribute",             // 0
             "TextDisplay/Insert/Color",                 // 1
             "TextDisplay/Delete/Attribute",             // 2
@@ -235,28 +230,24 @@ const Sequence<OUString>& SwRevisionConfig::GetPropertyNames()
             "TextDisplay/ChangedAttribute/Color",       // 5
             "LinesChanged/Mark",                        // 6
             "LinesChanged/Color"                        // 7
-        };
-        OUString* pNames = aNames.getArray();
-        for(int i = 0; i < nCount; i++)
-            pNames[i] = OUString::createFromAscii(aPropNames[i]);
-    }
+    };
     return aNames;
 }
 
 SwRevisionConfig::SwRevisionConfig() :
-    ConfigItem("Office.Writer/Revision",
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree)
+    ConfigItem("Office.Writer/Revision", ConfigItemMode::ReleaseTree)
 {
-    aInsertAttr.nItemId = SID_ATTR_CHAR_UNDERLINE;
-    aInsertAttr.nAttr = LINESTYLE_SINGLE;
-    aInsertAttr.nColor = COL_TRANSPARENT;
-    aDeletedAttr.nItemId = SID_ATTR_CHAR_STRIKEOUT;
-    aDeletedAttr.nAttr = STRIKEOUT_SINGLE;
-    aDeletedAttr.nColor = COL_TRANSPARENT;
-    aFormatAttr.nItemId = SID_ATTR_CHAR_WEIGHT;
-    aFormatAttr.nAttr = WEIGHT_BOLD;
-    aFormatAttr.nColor = COL_BLACK;
-
+    m_aInsertAttr.m_nItemId = SID_ATTR_CHAR_UNDERLINE;
+    m_aInsertAttr.m_nAttr = LINESTYLE_SINGLE;
+    m_aInsertAttr.m_nColor = COL_TRANSPARENT;
+    m_aDeletedAttr.m_nItemId = SID_ATTR_CHAR_STRIKEOUT;
+    // coverity[mixed_enums : FALSE] - unhelpfully warns different enum than LINESTYLE_SINGLE above
+    m_aDeletedAttr.m_nAttr = STRIKEOUT_SINGLE;
+    m_aDeletedAttr.m_nColor = COL_TRANSPARENT;
+    m_aFormatAttr.m_nItemId = SID_ATTR_CHAR_WEIGHT;
+    // coverity[mixed_enums : FALSE] - unhelpfully warns different enum than STRIKEOUT_SINGLE above
+    m_aFormatAttr.m_nAttr = WEIGHT_BOLD;
+    m_aFormatAttr.m_nColor = COL_BLACK;
     Load();
 }
 
@@ -267,20 +258,21 @@ SwRevisionConfig::~SwRevisionConfig()
 static sal_Int32 lcl_ConvertAttrToCfg(const AuthorCharAttr& rAttr)
 {
     sal_Int32 nRet = 0;
-    switch(rAttr.nItemId)
+    switch(rAttr.m_nItemId)
     {
         case  SID_ATTR_CHAR_WEIGHT: nRet = 1; break;
         case  SID_ATTR_CHAR_POSTURE: nRet = 2; break;
-        case  SID_ATTR_CHAR_UNDERLINE: nRet = LINESTYLE_SINGLE == rAttr.nAttr ? 3 : 4; break;
+        case  SID_ATTR_CHAR_UNDERLINE: nRet = LINESTYLE_SINGLE == rAttr.m_nAttr ? 3 : 4; break;
         case  SID_ATTR_CHAR_STRIKEOUT: nRet = 3; break;
         case  SID_ATTR_CHAR_CASEMAP:
         {
-            switch(rAttr.nAttr)
+            switch(static_cast<SvxCaseMap>(rAttr.m_nAttr))
             {
-                case  SVX_CASEMAP_VERSALIEN   : nRet = 5;break;
-                case  SVX_CASEMAP_GEMEINE     : nRet = 6;break;
-                case  SVX_CASEMAP_KAPITAELCHEN: nRet = 7;break;
-                case  SVX_CASEMAP_TITEL       : nRet = 8;break;
+                case  SvxCaseMap::Uppercase : nRet = 5;break;
+                case  SvxCaseMap::Lowercase : nRet = 6;break;
+                case  SvxCaseMap::SmallCaps : nRet = 7;break;
+                case  SvxCaseMap::Capitalize: nRet = 8;break;
+                default: break;
             }
         }
         break;
@@ -299,47 +291,45 @@ void SwRevisionConfig::ImplCommit()
 
     for(int nProp = 0; nProp < aNames.getLength(); nProp++)
     {
-        sal_Int32 nVal = -1;
         switch(nProp)
         {
-            case 0 : nVal = lcl_ConvertAttrToCfg(aInsertAttr); break;
-            case 1 : nVal = aInsertAttr.nColor  ; break;
-            case 2 : nVal = lcl_ConvertAttrToCfg(aDeletedAttr); break;
-            case 3 : nVal = aDeletedAttr.nColor ; break;
-            case 4 : nVal = lcl_ConvertAttrToCfg(aFormatAttr); break;
-            case 5 : nVal = aFormatAttr.nColor  ; break;
-            case 6 : nVal = nMarkAlign          ; break;
-            case 7 : nVal = aMarkColor.GetColor(); break;
+            case 0 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aInsertAttr); break;
+            case 1 : pValues[nProp] <<= m_aInsertAttr.m_nColor;   break;
+            case 2 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aDeletedAttr); break;
+            case 3 : pValues[nProp] <<= m_aDeletedAttr.m_nColor;  break;
+            case 4 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aFormatAttr); break;
+            case 5 : pValues[nProp] <<= m_aFormatAttr.m_nColor;   break;
+            case 6 : pValues[nProp] <<= m_nMarkAlign;             break;
+            case 7 : pValues[nProp] <<= m_aMarkColor;             break;
         }
-        pValues[nProp] <<= nVal;
     }
     PutProperties(aNames, aValues);
 }
 
 static void lcl_ConvertCfgToAttr(sal_Int32 nVal, AuthorCharAttr& rAttr, bool bDelete = false)
 {
-    rAttr.nItemId = rAttr.nAttr = 0;
+    rAttr.m_nItemId = rAttr.m_nAttr = 0;
     switch(nVal)
     {
-        case 1: rAttr.nItemId = SID_ATTR_CHAR_WEIGHT;   rAttr.nAttr = WEIGHT_BOLD              ; break;
-        case 2: rAttr.nItemId = SID_ATTR_CHAR_POSTURE;  rAttr.nAttr = ITALIC_NORMAL            ; break;
+        case 1: rAttr.m_nItemId = SID_ATTR_CHAR_WEIGHT;   rAttr.m_nAttr = WEIGHT_BOLD              ; break;
+        case 2: rAttr.m_nItemId = SID_ATTR_CHAR_POSTURE;  rAttr.m_nAttr = ITALIC_NORMAL            ; break;
         case 3: if(bDelete)
                 {
-                    rAttr.nItemId = SID_ATTR_CHAR_STRIKEOUT;
-                    rAttr.nAttr = STRIKEOUT_SINGLE;
+                    rAttr.m_nItemId = SID_ATTR_CHAR_STRIKEOUT;
+                    rAttr.m_nAttr = STRIKEOUT_SINGLE;
                 }
                 else
                 {
-                    rAttr.nItemId = SID_ATTR_CHAR_UNDERLINE;
-                    rAttr.nAttr = LINESTYLE_SINGLE;
+                    rAttr.m_nItemId = SID_ATTR_CHAR_UNDERLINE;
+                    rAttr.m_nAttr = LINESTYLE_SINGLE;
                 }
         break;
-        case 4: rAttr.nItemId = SID_ATTR_CHAR_UNDERLINE;rAttr.nAttr = LINESTYLE_DOUBLE         ; break;
-        case 5: rAttr.nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.nAttr = SVX_CASEMAP_VERSALIEN    ; break;
-        case 6: rAttr.nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.nAttr = SVX_CASEMAP_GEMEINE      ; break;
-        case 7: rAttr.nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.nAttr = SVX_CASEMAP_KAPITAELCHEN ; break;
-        case 8: rAttr.nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.nAttr = SVX_CASEMAP_TITEL        ; break;
-        case 9: rAttr.nItemId = SID_ATTR_BRUSH; break;
+        case 4: rAttr.m_nItemId = SID_ATTR_CHAR_UNDERLINE;rAttr.m_nAttr = LINESTYLE_DOUBLE         ; break;
+        case 5: rAttr.m_nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.m_nAttr = sal_uInt16(SvxCaseMap::Uppercase); break;
+        case 6: rAttr.m_nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.m_nAttr = sal_uInt16(SvxCaseMap::Lowercase); break;
+        case 7: rAttr.m_nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.m_nAttr = sal_uInt16(SvxCaseMap::SmallCaps); break;
+        case 8: rAttr.m_nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.m_nAttr = sal_uInt16(SvxCaseMap::Capitalize); break;
+        case 9: rAttr.m_nItemId = SID_ATTR_BRUSH; break;
     }
 }
 void SwRevisionConfig::Load()
@@ -356,14 +346,14 @@ void SwRevisionConfig::Load()
             pValues[nProp] >>= nVal;
             switch (nProp)
             {
-                case 0 : lcl_ConvertCfgToAttr(nVal, aInsertAttr); break;
-                case 1 : aInsertAttr.nColor     = nVal; break;
-                case 2 : lcl_ConvertCfgToAttr(nVal, aDeletedAttr, true); break;
-                case 3 : aDeletedAttr.nColor    = nVal; break;
-                case 4 : lcl_ConvertCfgToAttr(nVal, aFormatAttr); break;
-                case 5 : aFormatAttr.nColor     = nVal; break;
-                case 6 : nMarkAlign = sal::static_int_cast< sal_uInt16, sal_Int32>(nVal); break;
-                case 7 : aMarkColor.SetColor(nVal); break;
+                case 0 : lcl_ConvertCfgToAttr(nVal, m_aInsertAttr); break;
+                case 1 : m_aInsertAttr.m_nColor     = Color(nVal); break;
+                case 2 : lcl_ConvertCfgToAttr(nVal, m_aDeletedAttr, true); break;
+                case 3 : m_aDeletedAttr.m_nColor    = Color(nVal); break;
+                case 4 : lcl_ConvertCfgToAttr(nVal, m_aFormatAttr); break;
+                case 5 : m_aFormatAttr.m_nColor     = Color(nVal); break;
+                case 6 : m_nMarkAlign = sal::static_int_cast< sal_uInt16, sal_Int32>(nVal); break;
+                case 7 : m_aMarkColor = Color(nVal); break;
             }
         }
     }
@@ -468,12 +458,8 @@ enum InsertConfigProp
 };
 const Sequence<OUString>& SwInsertConfig::GetPropertyNames()
 {
-    static Sequence<OUString> aNames;
-    static Sequence<OUString> aWebNames;
-    if(!aNames.getLength())
+    static Sequence<OUString> aNames
     {
-        static const char* aPropNames[] =
-        {
             "Table/Header",                                                 // 0
             "Table/RepeatHeader",                                           // 1
             "Table/Border",                                                 // 2
@@ -568,47 +554,34 @@ const Sequence<OUString>& SwInsertConfig::GetPropertyNames()
             "Caption/OfficeObject/OLEMisc/Settings/Position",               //91
             "Caption/OfficeObject/OLEMisc/Settings/CharacterStyle",         //92
             "Caption/OfficeObject/OLEMisc/Settings/ApplyAttributes"         //93
-        };
-        const int nCount = INS_PROP_CAP_OBJECT_OLEMISC_APPLYATTRIBUTES + 1;
-        const int nWebCount = INS_PROP_TABLE_BORDER + 1;
-        aNames.realloc(nCount);
-        aWebNames.realloc(nWebCount);
-        OUString* pNames = aNames.getArray();
-        OUString* pWebNames = aWebNames.getArray();
-        int i;
-        for(i = 0; i < nCount; i++)
-            pNames[i] = OUString::createFromAscii(aPropNames[i]);
-        for(i = 0; i < nWebCount; i++)
-            pWebNames[i] = OUString::createFromAscii(aPropNames[i]);
-    }
-    return bIsWeb ? aWebNames : aNames;
+    };
+    static Sequence<OUString> const aWebNames(aNames.getArray(), INS_PROP_TABLE_BORDER + 1);
+    return m_bIsWeb ? aWebNames : aNames;
 }
 
 SwInsertConfig::SwInsertConfig(bool bWeb) :
     ConfigItem(bWeb ? OUString("Office.WriterWeb/Insert") : OUString("Office.Writer/Insert"),
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree),
-    pCapOptions(nullptr),
-    pOLEMiscOpt(nullptr),
-    bInsWithCaption( false ),
-    bCaptionOrderNumberingFirst( false ),
-    aInsTableOpts(0,0),
-    bIsWeb(bWeb)
+        ConfigItemMode::ReleaseTree),
+    m_bInsWithCaption( false ),
+    m_bCaptionOrderNumberingFirst( false ),
+    m_aInsTableOpts(SwInsertTableFlags::NONE,0),
+    m_bIsWeb(bWeb)
 {
-    aGlobalNames[GLOB_NAME_CALC   ] = SvGlobalName(SO3_SC_CLASSID);
-    aGlobalNames[GLOB_NAME_IMPRESS] = SvGlobalName(SO3_SIMPRESS_CLASSID);
-    aGlobalNames[GLOB_NAME_DRAW   ] = SvGlobalName(SO3_SDRAW_CLASSID);
-    aGlobalNames[GLOB_NAME_MATH   ] = SvGlobalName(SO3_SM_CLASSID);
-    aGlobalNames[GLOB_NAME_CHART  ] = SvGlobalName(SO3_SCH_CLASSID);
-    if(!bIsWeb)
-        pCapOptions = new InsCaptionOptArr;
+    m_aGlobalNames[GLOB_NAME_CALC   ] = SvGlobalName(SO3_SC_CLASSID);
+    m_aGlobalNames[GLOB_NAME_IMPRESS] = SvGlobalName(SO3_SIMPRESS_CLASSID);
+    m_aGlobalNames[GLOB_NAME_DRAW   ] = SvGlobalName(SO3_SDRAW_CLASSID);
+    m_aGlobalNames[GLOB_NAME_MATH   ] = SvGlobalName(SO3_SM_CLASSID);
+    m_aGlobalNames[GLOB_NAME_CHART  ] = SvGlobalName(SO3_SCH_CLASSID);
+    if(!m_bIsWeb)
+        m_pCapOptions.reset(new InsCaptionOptArr);
 
     Load();
 }
 
 SwInsertConfig::~SwInsertConfig()
 {
-    delete pCapOptions;
-    delete pOLEMiscOpt;
+    m_pCapOptions.reset();
+    m_pOLEMiscOpt.reset();
 }
 
 static void lcl_WriteOpt(const InsCaptionOpt& rOpt, Any* pValues, sal_Int32 nProp, sal_Int32 nOffset)
@@ -616,14 +589,14 @@ static void lcl_WriteOpt(const InsCaptionOpt& rOpt, Any* pValues, sal_Int32 nPro
     switch(nOffset)
     {
         case 0: pValues[nProp] <<= rOpt.UseCaption(); break;//Enable
-        case 1: pValues[nProp] <<= OUString(rOpt.GetCategory()); break;//Category
-        case 2: pValues[nProp] <<= (sal_Int32)rOpt.GetNumType(); break;//Numbering",
+        case 1: pValues[nProp] <<= rOpt.GetCategory(); break;//Category
+        case 2: pValues[nProp] <<= static_cast<sal_Int32>(rOpt.GetNumType()); break;//Numbering",
         case 3: pValues[nProp] <<= rOpt.GetNumSeparator(); break;//NumberingSeparator",
-        case 4: pValues[nProp] <<= OUString(rOpt.GetCaption());  break;//CaptionText",
-        case 5: pValues[nProp] <<= OUString(rOpt.GetSeparator());break;//Delimiter",
-        case 6: pValues[nProp] <<= (sal_Int32)rOpt.GetLevel();   break;//Level",
-        case 7: pValues[nProp] <<= (sal_Int32)rOpt.GetPos();     break;//Position",
-        case 8: pValues[nProp] <<= (OUString&)rOpt.GetCharacterStyle(); break; //CharacterStyle
+        case 4: pValues[nProp] <<= rOpt.GetCaption();  break;//CaptionText",
+        case 5: pValues[nProp] <<= rOpt.GetSeparator();break;//Delimiter",
+        case 6: pValues[nProp] <<= static_cast<sal_Int32>(rOpt.GetLevel());   break;//Level",
+        case 7: pValues[nProp] <<= static_cast<sal_Int32>(rOpt.GetPos());     break;//Position",
+        case 8: pValues[nProp] <<= rOpt.GetCharacterStyle(); break; //CharacterStyle
         case 9: pValues[nProp] <<= rOpt.CopyAttributes(); break; //ApplyAttributes
     }
 }
@@ -646,36 +619,36 @@ void SwInsertConfig::ImplCommit()
         const InsCaptionOpt* pOLEChartOpt = nullptr;
         const InsCaptionOpt* pOLEFormulaOpt = nullptr;
         const InsCaptionOpt* pOLEDrawOpt = nullptr;
-        if(pCapOptions)
+        if(m_pCapOptions)
         {
-            pWriterTableOpt = pCapOptions->Find(TABLE_CAP);
-            pWriterFrameOpt = pCapOptions->Find(FRAME_CAP);
-            pWriterGraphicOpt = pCapOptions->Find(GRAPHIC_CAP);
-            pOLECalcOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_CALC]);
-            pOLEImpressOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_IMPRESS]);
-            pOLEDrawOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_DRAW   ]);
-            pOLEFormulaOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_MATH   ]);
-            pOLEChartOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_CHART  ]);
+            pWriterTableOpt = m_pCapOptions->Find(TABLE_CAP);
+            pWriterFrameOpt = m_pCapOptions->Find(FRAME_CAP);
+            pWriterGraphicOpt = m_pCapOptions->Find(GRAPHIC_CAP);
+            pOLECalcOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_CALC]);
+            pOLEImpressOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_IMPRESS]);
+            pOLEDrawOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_DRAW   ]);
+            pOLEFormulaOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_MATH   ]);
+            pOLEChartOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_CHART  ]);
         }
         switch(nProp)
         {
             case INS_PROP_TABLE_HEADER:
-                pValues[nProp] <<= 0 != (aInsTableOpts.mnInsMode & tabopts::HEADLINE);
+                pValues[nProp] <<= bool(m_aInsTableOpts.mnInsMode & SwInsertTableFlags::Headline);
             break;//"Table/Header",
             case INS_PROP_TABLE_REPEATHEADER:
-                pValues[nProp] <<= aInsTableOpts.mnRowsToRepeat > 0;
+                pValues[nProp] <<= m_aInsTableOpts.mnRowsToRepeat > 0;
             break;//"Table/RepeatHeader",
             case INS_PROP_TABLE_BORDER:
-                pValues[nProp] <<= 0 != (aInsTableOpts.mnInsMode & tabopts::DEFAULT_BORDER );
+                pValues[nProp] <<= bool(m_aInsTableOpts.mnInsMode & SwInsertTableFlags::DefaultBorder);
             break;//"Table/Border",
             case INS_PROP_TABLE_SPLIT:
-                pValues[nProp] <<= 0 != (aInsTableOpts.mnInsMode & tabopts::SPLIT_LAYOUT);
+                pValues[nProp] <<= bool(m_aInsTableOpts.mnInsMode & SwInsertTableFlags::SplitLayout);
             break;//"Table/Split",
             case INS_PROP_CAP_AUTOMATIC:
-                pValues[nProp] <<= bInsWithCaption;
+                pValues[nProp] <<= m_bInsWithCaption;
             break;//"Caption/Automatic",
             case INS_PROP_CAP_CAPTIONORDERNUMBERINGFIRST:
-                pValues[nProp] <<= bCaptionOrderNumberingFirst;
+                pValues[nProp] <<= m_bCaptionOrderNumberingFirst;
             break;//"Caption/CaptionOrderNumberingFirst"
 
             case INS_PROP_CAP_OBJECT_TABLE_ENABLE:
@@ -790,8 +763,8 @@ void SwInsertConfig::ImplCommit()
             case INS_PROP_CAP_OBJECT_OLEMISC_POSITION:
             case INS_PROP_CAP_OBJECT_OLEMISC_CHARACTERSTYLE:
             case INS_PROP_CAP_OBJECT_OLEMISC_APPLYATTRIBUTES:
-                    if(pOLEMiscOpt)
-                        lcl_WriteOpt(*pOLEMiscOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_OLEMISC_ENABLE);
+                    if(m_pOLEMiscOpt)
+                        lcl_WriteOpt(*m_pOLEMiscOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_OLEMISC_ENABLE);
             break;
 
         }
@@ -804,7 +777,7 @@ static void lcl_ReadOpt(InsCaptionOpt& rOpt, const Any* pValues, sal_Int32 nProp
     switch(nOffset)
     {
         case 0:
-            rOpt.UseCaption() = *static_cast<sal_Bool const *>(pValues[nProp].getValue());
+            rOpt.UseCaption() = *o3tl::doAccess<bool>(pValues[nProp]);
         break;//Enable
         case 1:
         {
@@ -880,56 +853,56 @@ void SwInsertConfig::Load()
     InsCaptionOpt* pOLEChartOpt = nullptr;
     InsCaptionOpt* pOLEFormulaOpt = nullptr;
     InsCaptionOpt* pOLEDrawOpt = nullptr;
-    if (pCapOptions)
+    if (m_pCapOptions)
     {
-        pWriterTableOpt = pCapOptions->Find(TABLE_CAP);
-        pWriterFrameOpt = pCapOptions->Find(FRAME_CAP);
-        pWriterGraphicOpt = pCapOptions->Find(GRAPHIC_CAP);
-        pOLECalcOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_CALC]);
-        pOLEImpressOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_IMPRESS]);
-        pOLEDrawOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_DRAW   ]);
-        pOLEFormulaOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_MATH   ]);
-        pOLEChartOpt = pCapOptions->Find(OLE_CAP, &aGlobalNames[GLOB_NAME_CHART  ]);
+        pWriterTableOpt = m_pCapOptions->Find(TABLE_CAP);
+        pWriterFrameOpt = m_pCapOptions->Find(FRAME_CAP);
+        pWriterGraphicOpt = m_pCapOptions->Find(GRAPHIC_CAP);
+        pOLECalcOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_CALC]);
+        pOLEImpressOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_IMPRESS]);
+        pOLEDrawOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_DRAW   ]);
+        pOLEFormulaOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_MATH   ]);
+        pOLEChartOpt = m_pCapOptions->Find(OLE_CAP, &m_aGlobalNames[GLOB_NAME_CHART  ]);
     }
-    else if (!bIsWeb)
+    else if (!m_bIsWeb)
         return;
 
-    sal_uInt16 nInsTableFlags = 0;
+    SwInsertTableFlags nInsTableFlags = SwInsertTableFlags::NONE;
     for (sal_Int32 nProp = 0; nProp < aNames.getLength(); ++nProp)
     {
         if (pValues[nProp].hasValue())
         {
-            bool bBool = nProp < INS_PROP_CAP_OBJECT_TABLE_ENABLE && *static_cast<sal_Bool const *>(pValues[nProp].getValue());
+            bool bBool = nProp < INS_PROP_CAP_OBJECT_TABLE_ENABLE && *o3tl::doAccess<bool>(pValues[nProp]);
             switch (nProp)
             {
                 case INS_PROP_TABLE_HEADER:
                 {
                     if(bBool)
-                        nInsTableFlags|= tabopts::HEADLINE;
+                        nInsTableFlags |= SwInsertTableFlags::Headline;
                 }
                 break;//"Table/Header",
                 case INS_PROP_TABLE_REPEATHEADER:
                 {
-                    aInsTableOpts.mnRowsToRepeat = bBool? 1 : 0;
+                    m_aInsTableOpts.mnRowsToRepeat = bBool? 1 : 0;
 
                 }
                 break;//"Table/RepeatHeader",
                 case INS_PROP_TABLE_BORDER:
                 {
                     if(bBool)
-                        nInsTableFlags|= tabopts::DEFAULT_BORDER;
+                        nInsTableFlags |= SwInsertTableFlags::DefaultBorder;
                 }
                 break;//"Table/Border",
                 case INS_PROP_TABLE_SPLIT:
                 {
                     if(bBool)
-                        nInsTableFlags|= tabopts::SPLIT_LAYOUT;
+                        nInsTableFlags |= SwInsertTableFlags::SplitLayout;
                 }
                 break;//"Table/Split",
                 case INS_PROP_CAP_AUTOMATIC:
-                    bInsWithCaption = bBool;
+                    m_bInsWithCaption = bBool;
                 break;
-                case INS_PROP_CAP_CAPTIONORDERNUMBERINGFIRST: bCaptionOrderNumberingFirst = bBool; break;
+                case INS_PROP_CAP_CAPTIONORDERNUMBERINGFIRST: m_bCaptionOrderNumberingFirst = bBool; break;
                 case INS_PROP_CAP_OBJECT_TABLE_ENABLE:
                 case INS_PROP_CAP_OBJECT_TABLE_CATEGORY:
                 case INS_PROP_CAP_OBJECT_TABLE_NUMBERING:
@@ -942,7 +915,7 @@ void SwInsertConfig::Load()
                     if(!pWriterTableOpt)
                     {
                         pWriterTableOpt = new InsCaptionOpt(TABLE_CAP);
-                        pCapOptions->Insert(pWriterTableOpt);
+                        m_pCapOptions->Insert(pWriterTableOpt);
                     }
                     lcl_ReadOpt(*pWriterTableOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_TABLE_ENABLE);
                 break;
@@ -958,7 +931,7 @@ void SwInsertConfig::Load()
                     if(!pWriterFrameOpt)
                     {
                         pWriterFrameOpt = new InsCaptionOpt(FRAME_CAP);
-                        pCapOptions->Insert(pWriterFrameOpt);
+                        m_pCapOptions->Insert(pWriterFrameOpt);
                     }
                     lcl_ReadOpt(*pWriterFrameOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_FRAME_ENABLE);
                 break;
@@ -975,7 +948,7 @@ void SwInsertConfig::Load()
                     if(!pWriterGraphicOpt)
                     {
                         pWriterGraphicOpt = new InsCaptionOpt(GRAPHIC_CAP);
-                        pCapOptions->Insert(pWriterGraphicOpt);
+                        m_pCapOptions->Insert(pWriterGraphicOpt);
                     }
                     lcl_ReadOpt(*pWriterGraphicOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_GRAPHIC_ENABLE);
                 break;
@@ -991,8 +964,8 @@ void SwInsertConfig::Load()
                 case INS_PROP_CAP_OBJECT_CALC_APPLYATTRIBUTES:
                     if(!pOLECalcOpt)
                     {
-                        pOLECalcOpt = new InsCaptionOpt(OLE_CAP, &aGlobalNames[GLOB_NAME_CALC]);
-                        pCapOptions->Insert(pOLECalcOpt);
+                        pOLECalcOpt = new InsCaptionOpt(OLE_CAP, &m_aGlobalNames[GLOB_NAME_CALC]);
+                        m_pCapOptions->Insert(pOLECalcOpt);
                     }
                     lcl_ReadOpt(*pOLECalcOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_CALC_ENABLE);
                 break;
@@ -1008,8 +981,8 @@ void SwInsertConfig::Load()
                 case INS_PROP_CAP_OBJECT_IMPRESS_APPLYATTRIBUTES:
                     if(!pOLEImpressOpt)
                     {
-                        pOLEImpressOpt = new InsCaptionOpt(OLE_CAP, &aGlobalNames[GLOB_NAME_IMPRESS]);
-                        pCapOptions->Insert(pOLEImpressOpt);
+                        pOLEImpressOpt = new InsCaptionOpt(OLE_CAP, &m_aGlobalNames[GLOB_NAME_IMPRESS]);
+                        m_pCapOptions->Insert(pOLEImpressOpt);
                     }
                     lcl_ReadOpt(*pOLEImpressOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_IMPRESS_ENABLE);
                 break;
@@ -1025,8 +998,8 @@ void SwInsertConfig::Load()
                 case INS_PROP_CAP_OBJECT_CHART_APPLYATTRIBUTES:
                     if(!pOLEChartOpt)
                     {
-                        pOLEChartOpt = new InsCaptionOpt(OLE_CAP, &aGlobalNames[GLOB_NAME_CHART]);
-                        pCapOptions->Insert(pOLEChartOpt);
+                        pOLEChartOpt = new InsCaptionOpt(OLE_CAP, &m_aGlobalNames[GLOB_NAME_CHART]);
+                        m_pCapOptions->Insert(pOLEChartOpt);
                     }
                     lcl_ReadOpt(*pOLEChartOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_CHART_ENABLE);
                 break;
@@ -1042,8 +1015,8 @@ void SwInsertConfig::Load()
                 case INS_PROP_CAP_OBJECT_FORMULA_APPLYATTRIBUTES:
                     if(!pOLEFormulaOpt)
                     {
-                        pOLEFormulaOpt = new InsCaptionOpt(OLE_CAP, &aGlobalNames[GLOB_NAME_MATH]);
-                        pCapOptions->Insert(pOLEFormulaOpt);
+                        pOLEFormulaOpt = new InsCaptionOpt(OLE_CAP, &m_aGlobalNames[GLOB_NAME_MATH]);
+                        m_pCapOptions->Insert(pOLEFormulaOpt);
                     }
                     lcl_ReadOpt(*pOLEFormulaOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_FORMULA_ENABLE);
                 break;
@@ -1059,8 +1032,8 @@ void SwInsertConfig::Load()
                 case INS_PROP_CAP_OBJECT_DRAW_APPLYATTRIBUTES:
                     if(!pOLEDrawOpt)
                     {
-                        pOLEDrawOpt = new InsCaptionOpt(OLE_CAP, &aGlobalNames[GLOB_NAME_DRAW]);
-                        pCapOptions->Insert(pOLEDrawOpt);
+                        pOLEDrawOpt = new InsCaptionOpt(OLE_CAP, &m_aGlobalNames[GLOB_NAME_DRAW]);
+                        m_pCapOptions->Insert(pOLEDrawOpt);
                     }
                     lcl_ReadOpt(*pOLEDrawOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_DRAW_ENABLE);
                 break;
@@ -1074,34 +1047,26 @@ void SwInsertConfig::Load()
                 case INS_PROP_CAP_OBJECT_OLEMISC_POSITION:
                 case INS_PROP_CAP_OBJECT_OLEMISC_CHARACTERSTYLE:
                 case INS_PROP_CAP_OBJECT_OLEMISC_APPLYATTRIBUTES:
-                    if(!pOLEMiscOpt)
+                    if(!m_pOLEMiscOpt)
                     {
-                        pOLEMiscOpt = new InsCaptionOpt(OLE_CAP);
+                        m_pOLEMiscOpt.reset(new InsCaptionOpt(OLE_CAP));
                     }
-                    lcl_ReadOpt(*pOLEMiscOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_OLEMISC_ENABLE);
+                    lcl_ReadOpt(*m_pOLEMiscOpt, pValues, nProp, nProp - INS_PROP_CAP_OBJECT_OLEMISC_ENABLE);
                 break;
             }
         }
         else if (nProp == INS_PROP_CAP_CAPTIONORDERNUMBERINGFIRST)
         {
-            if (!utl::ConfigManager::IsAvoidConfig())
-            {
-                //#i61007#  initialize caption order, right now only HUNGARIAN seems to need a different order
-                SvtSysLocaleOptions aSysLocaleOptions;
-                OUString sLang = aSysLocaleOptions.GetLocaleConfigString();
-                bCaptionOrderNumberingFirst = sLang.startsWith( "hu" );
-            }
+            m_bCaptionOrderNumberingFirst = false;
         }
 
     }
-    aInsTableOpts.mnInsMode = nInsTableFlags;
+    m_aInsTableOpts.mnInsMode = nInsTableFlags;
 }
 
 const Sequence<OUString>& SwTableConfig::GetPropertyNames()
 {
-    const int nCount = 8;
-    static Sequence<OUString> aNames(nCount);
-    static const char* aPropNames[] =
+    static Sequence<OUString> const aNames
     {
         "Shift/Row",                    //  0
         "Shift/Column",                 //  1
@@ -1112,15 +1077,20 @@ const Sequence<OUString>& SwTableConfig::GetPropertyNames()
         "Input/NumberFormatRecognition",//  6
         "Input/Alignment"               //  7
     };
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < nCount; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
     return aNames;
 }
 
-SwTableConfig::SwTableConfig(bool bWeb) :
-    ConfigItem(bWeb ? OUString("Office.WriterWeb/Table") : OUString("Office.Writer/Table"),
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree)
+SwTableConfig::SwTableConfig(bool bWeb)
+    : ConfigItem(bWeb ? OUString("Office.WriterWeb/Table") : OUString("Office.Writer/Table"),
+        ConfigItemMode::ReleaseTree)
+    , m_nTableHMove(0)
+    , m_nTableVMove(0)
+    , m_nTableHInsert(0)
+    , m_nTableVInsert(0)
+    , m_eTableChgMode(TableChgMode::FixedWidthChangeAbs)
+    , m_bInsTableFormatNum(false)
+    , m_bInsTableChangeNumFormat(false)
+    , m_bInsTableAlignNum(false)
 {
     Load();
 }
@@ -1141,14 +1111,14 @@ void SwTableConfig::ImplCommit()
     {
         switch(nProp)
         {
-            case 0 : pValues[nProp] <<= (sal_Int32)convertTwipToMm100(nTableHMove); break;   //"Shift/Row",
-            case 1 : pValues[nProp] <<= (sal_Int32)convertTwipToMm100(nTableVMove); break;     //"Shift/Column",
-            case 2 : pValues[nProp] <<= (sal_Int32)convertTwipToMm100(nTableHInsert); break;   //"Insert/Row",
-            case 3 : pValues[nProp] <<= (sal_Int32)convertTwipToMm100(nTableVInsert); break;   //"Insert/Column",
-            case 4 : pValues[nProp] <<= (sal_Int32)eTableChgMode; break;   //"Change/Effect",
-            case 5 : pValues[nProp] <<= bInsTableFormatNum; break;  //"Input/NumberRecognition",
-            case 6 : pValues[nProp] <<= bInsTableChangeNumFormat; break;  //"Input/NumberFormatRecognition",
-            case 7 : pValues[nProp] <<= bInsTableAlignNum; break;  //"Input/Alignment"
+            case 0 : pValues[nProp] <<= static_cast<sal_Int32>(convertTwipToMm100(m_nTableHMove)); break;   //"Shift/Row",
+            case 1 : pValues[nProp] <<= static_cast<sal_Int32>(convertTwipToMm100(m_nTableVMove)); break;     //"Shift/Column",
+            case 2 : pValues[nProp] <<= static_cast<sal_Int32>(convertTwipToMm100(m_nTableHInsert)); break;   //"Insert/Row",
+            case 3 : pValues[nProp] <<= static_cast<sal_Int32>(convertTwipToMm100(m_nTableVInsert)); break;   //"Insert/Column",
+            case 4 : pValues[nProp] <<= static_cast<sal_Int32>(m_eTableChgMode); break;   //"Change/Effect",
+            case 5 : pValues[nProp] <<= m_bInsTableFormatNum; break;  //"Input/NumberRecognition",
+            case 6 : pValues[nProp] <<= m_bInsTableChangeNumFormat; break;  //"Input/NumberFormatRecognition",
+            case 7 : pValues[nProp] <<= m_bInsTableAlignNum; break;  //"Input/Alignment"
         }
     }
     PutProperties(aNames, aValues);
@@ -1167,30 +1137,29 @@ void SwTableConfig::Load()
             sal_Int32 nTemp = 0;
             switch (nProp)
             {
-                case 0 : pValues[nProp] >>= nTemp; nTableHMove = (sal_uInt16)convertMm100ToTwip(nTemp); break;  //"Shift/Row",
-                case 1 : pValues[nProp] >>= nTemp; nTableVMove = (sal_uInt16)convertMm100ToTwip(nTemp); break;     //"Shift/Column",
-                case 2 : pValues[nProp] >>= nTemp; nTableHInsert = (sal_uInt16)convertMm100ToTwip(nTemp); break;   //"Insert/Row",
-                case 3 : pValues[nProp] >>= nTemp; nTableVInsert = (sal_uInt16)convertMm100ToTwip(nTemp); break;   //"Insert/Column",
-                case 4 : pValues[nProp] >>= nTemp; eTableChgMode = (TableChgMode)nTemp; break;   //"Change/Effect",
-                case 5 : bInsTableFormatNum = *static_cast<sal_Bool const *>(pValues[nProp].getValue());  break;  //"Input/NumberRecognition",
-                case 6 : bInsTableChangeNumFormat = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;  //"Input/NumberFormatRecognition",
-                case 7 : bInsTableAlignNum = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;  //"Input/Alignment"
+                case 0 : pValues[nProp] >>= nTemp; m_nTableHMove = static_cast<sal_uInt16>(convertMm100ToTwip(nTemp)); break;  //"Shift/Row",
+                case 1 : pValues[nProp] >>= nTemp; m_nTableVMove = static_cast<sal_uInt16>(convertMm100ToTwip(nTemp)); break;     //"Shift/Column",
+                case 2 : pValues[nProp] >>= nTemp; m_nTableHInsert = static_cast<sal_uInt16>(convertMm100ToTwip(nTemp)); break;   //"Insert/Row",
+                case 3 : pValues[nProp] >>= nTemp; m_nTableVInsert = static_cast<sal_uInt16>(convertMm100ToTwip(nTemp)); break;   //"Insert/Column",
+                case 4 : pValues[nProp] >>= nTemp; m_eTableChgMode = static_cast<TableChgMode>(nTemp); break;   //"Change/Effect",
+                case 5 : m_bInsTableFormatNum = *o3tl::doAccess<bool>(pValues[nProp]);  break;  //"Input/NumberRecognition",
+                case 6 : m_bInsTableChangeNumFormat = *o3tl::doAccess<bool>(pValues[nProp]); break;  //"Input/NumberFormatRecognition",
+                case 7 : m_bInsTableAlignNum = *o3tl::doAccess<bool>(pValues[nProp]); break;  //"Input/Alignment"
             }
         }
     }
 }
 
 SwMiscConfig::SwMiscConfig() :
-    ConfigItem("Office.Writer",
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree),
-    bDefaultFontsInCurrDocOnly(false),
-    bShowIndexPreview(false),
-    bGrfToGalleryAsLnk(true),
-    bNumAlignSize(true),
-    bSinglePrintJob(false),
-    bIsNameFromColumn(true),
-    bAskForMailMergeInPrint(true),
-    nMailingFormats(MailTextFormats::NONE)
+    ConfigItem("Office.Writer", ConfigItemMode::ReleaseTree),
+    m_bDefaultFontsInCurrDocOnly(false),
+    m_bShowIndexPreview(false),
+    m_bGrfToGalleryAsLnk(true),
+    m_bNumAlignSize(true),
+    m_bSinglePrintJob(false),
+    m_bIsNameFromColumn(true),
+    m_bAskForMailMergeInPrint(true),
+    m_nMailingFormats(MailTextFormats::NONE)
 {
     Load();
 }
@@ -1201,13 +1170,8 @@ SwMiscConfig::~SwMiscConfig()
 
 const Sequence<OUString>& SwMiscConfig::GetPropertyNames()
 {
-    static Sequence<OUString> aNames;
-    if(!aNames.getLength())
+    static Sequence<OUString> const aNames
     {
-        const int nCount = 12;
-        aNames.realloc(nCount);
-        static const char* aPropNames[] =
-        {
             "Statistics/WordNumber/Delimiter",          // 0
             "DefaultFont/Document",                     // 1
             "Index/ShowPreview",                        // 2
@@ -1220,11 +1184,7 @@ const Sequence<OUString>& SwMiscConfig::GetPropertyNames()
             "FormLetter/FileOutput/FileName/FromManualSetting",   // 9
             "FormLetter/FileOutput/FileName/Generation",//10
             "FormLetter/PrintOutput/AskForMerge"        //11
-        };
-        OUString* pNames = aNames.getArray();
-        for(int i = 0; i < nCount; i++)
-            pNames[i] = OUString::createFromAscii(aPropNames[i]);
-    }
+    };
     return aNames;
 }
 
@@ -1242,19 +1202,19 @@ void SwMiscConfig::ImplCommit()
         {
             case 0 :
                 pValues[nProp] <<=
-                    SwModuleOptions::ConvertWordDelimiter(sWordDelimiter, false);
+                    SwModuleOptions::ConvertWordDelimiter(m_sWordDelimiter, false);
             break;
-            case 1 : pValues[nProp] <<= bDefaultFontsInCurrDocOnly; break;
-            case 2 : pValues[nProp] <<= bShowIndexPreview; break;
-            case 3 : pValues[nProp] <<= bGrfToGalleryAsLnk; break;
-            case 4 : pValues[nProp] <<= bNumAlignSize; break;
-            case 5 : pValues[nProp] <<= bSinglePrintJob; break;
-            case 6 : pValues[nProp] <<= static_cast<sal_uInt8>(nMailingFormats); break;
-            case 7 : pValues[nProp] <<= sNameFromColumn;  break;
-            case 8 : pValues[nProp] <<= sMailingPath;     break;
-            case 9 : pValues[nProp] <<= sMailName;        break;
-            case 10: pValues[nProp] <<= bIsNameFromColumn; break;
-            case 11: pValues[nProp] <<= bAskForMailMergeInPrint; break;
+            case 1 : pValues[nProp] <<= m_bDefaultFontsInCurrDocOnly; break;
+            case 2 : pValues[nProp] <<= m_bShowIndexPreview; break;
+            case 3 : pValues[nProp] <<= m_bGrfToGalleryAsLnk; break;
+            case 4 : pValues[nProp] <<= m_bNumAlignSize; break;
+            case 5 : pValues[nProp] <<= m_bSinglePrintJob; break;
+            case 6 : pValues[nProp] <<= static_cast<sal_Int32>(m_nMailingFormats); break;
+            case 7 : pValues[nProp] <<= m_sNameFromColumn;  break;
+            case 8 : pValues[nProp] <<= m_sMailingPath;     break;
+            case 9 : pValues[nProp] <<= m_sMailName;        break;
+            case 10: pValues[nProp] <<= m_bIsNameFromColumn; break;
+            case 11: pValues[nProp] <<= m_bAskForMailMergeInPrint; break;
         }
     }
     PutProperties(aNames, aValues);
@@ -1274,19 +1234,19 @@ void SwMiscConfig::Load()
             switch (nProp)
             {
                 case 0 : pValues[nProp] >>= sTmp;
-                    sWordDelimiter = SwModuleOptions::ConvertWordDelimiter(sTmp, true);
+                    m_sWordDelimiter = SwModuleOptions::ConvertWordDelimiter(sTmp, true);
                 break;
-                case 1 : bDefaultFontsInCurrDocOnly = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 2 : bShowIndexPreview = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 3 : bGrfToGalleryAsLnk = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 4 : bNumAlignSize = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 5 : bSinglePrintJob = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 6 : nMailingFormats = static_cast<MailTextFormats>(*static_cast<sal_uInt8 const *>(pValues[nProp].getValue())); break;
-                case 7 : pValues[nProp] >>= sTmp; sNameFromColumn = sTmp; break;
-                case 8 : pValues[nProp] >>= sTmp; sMailingPath = sTmp;  break;
-                case 9 : pValues[nProp] >>= sTmp; sMailName = sTmp;     break;
-                case 10: bIsNameFromColumn = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 11: pValues[nProp] >>= bAskForMailMergeInPrint; break;
+                case 1 : m_bDefaultFontsInCurrDocOnly = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 2 : m_bShowIndexPreview = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 3 : m_bGrfToGalleryAsLnk = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 4 : m_bNumAlignSize = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 5 : m_bSinglePrintJob = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 6 : m_nMailingFormats = static_cast<MailTextFormats>(*o3tl::doAccess<sal_Int32>(pValues[nProp])); break;
+                case 7 : pValues[nProp] >>= sTmp; m_sNameFromColumn = sTmp; break;
+                case 8 : pValues[nProp] >>= sTmp; m_sMailingPath = sTmp;  break;
+                case 9 : pValues[nProp] >>= sTmp; m_sMailName = sTmp;     break;
+                case 10: m_bIsNameFromColumn = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 11: pValues[nProp] >>= m_bAskForMailMergeInPrint; break;
             }
         }
     }
@@ -1294,35 +1254,25 @@ void SwMiscConfig::Load()
 
 const Sequence<OUString>& SwCompareConfig::GetPropertyNames()
 {
-    static Sequence<OUString> aNames;
-    if(!aNames.getLength())
+    static Sequence<OUString> const aNames
     {
-        const int nCount = 5;
-        aNames.realloc(nCount);
-        static const char* aPropNames[] =
-        {
             "Mode",                         // 0
             "UseRSID",                      // 1
             "IgnorePieces",             // 2
             "IgnoreLength", // 3
             "StoreRSID" // 4
-        };
-        OUString* pNames = aNames.getArray();
-        for(int i = 0; i < nCount; i++)
-            pNames[i] = OUString::createFromAscii(aPropNames[i]);
-    }
+    };
     return aNames;
 }
 
 SwCompareConfig::SwCompareConfig() :
-    ConfigItem("Office.Writer/Comparison",
-        ConfigItemMode::DelayedUpdate|ConfigItemMode::ReleaseTree)
+    ConfigItem("Office.Writer/Comparison", ConfigItemMode::ReleaseTree)
     ,m_bStoreRsid(true)
 {
-    eCmpMode = SVX_CMP_AUTO;
-    bUseRsid = false;
-    bIgnorePieces = false;
-    nPieceLen = 1;
+    m_eCmpMode = SwCompareMode::Auto;
+    m_bUseRsid = false;
+    m_bIgnorePieces = false;
+    m_nPieceLen = 1;
 
     Load();
 }
@@ -1337,10 +1287,10 @@ void SwCompareConfig::ImplCommit()
     Sequence<Any> aValues(aNames.getLength());
     Any* pValues = aValues.getArray();
 
-    pValues[0] <<= (sal_Int32) eCmpMode;
-    pValues[1] <<= bUseRsid;
-    pValues[2] <<= bIgnorePieces;
-    pValues[3] <<= (sal_Int32) nPieceLen;
+    pValues[0] <<= static_cast<sal_Int32>(m_eCmpMode);
+    pValues[1] <<= m_bUseRsid;
+    pValues[2] <<= m_bIgnorePieces;
+    pValues[3] <<= static_cast<sal_Int32>(m_nPieceLen);
     pValues[4] <<= m_bStoreRsid;
 
     PutProperties(aNames, aValues);
@@ -1361,11 +1311,11 @@ void SwCompareConfig::Load()
 
             switch(nProp)
             {
-                case 0 : eCmpMode = (SvxCompareMode) nVal; break;
-                case 1 : bUseRsid = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 2 : bIgnorePieces = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
-                case 3 : nPieceLen = nVal; break;
-                case 4 : m_bStoreRsid = *static_cast<sal_Bool const *>(pValues[nProp].getValue()); break;
+                case 0 : m_eCmpMode = static_cast<SwCompareMode>(nVal); break;
+                case 1 : m_bUseRsid = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 2 : m_bIgnorePieces = *o3tl::doAccess<bool>(pValues[nProp]); break;
+                case 3 : m_nPieceLen = nVal; break;
+                case 4 : m_bStoreRsid = *o3tl::doAccess<bool>(pValues[nProp]); break;
             }
         }
     }

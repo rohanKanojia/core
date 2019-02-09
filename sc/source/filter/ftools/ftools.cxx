@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ftools.hxx"
+#include <memory>
+#include <ftools.hxx>
 #include <osl/diagnose.h>
 #include <osl/thread.h>
-#include <rtl/strbuf.hxx>
 #include <tools/color.hxx>
 #include <unotools/charclass.hxx>
 #include <svl/itempool.hxx>
@@ -29,17 +29,12 @@
 #include <sot/storage.hxx>
 
 #include <math.h>
-#include "global.hxx"
-#include "document.hxx"
-#include "stlpool.hxx"
-#include "stlsheet.hxx"
-#include "compiler.hxx"
+#include <global.hxx>
+#include <stlpool.hxx>
+#include <stlsheet.hxx>
+#include <compiler.hxx>
 
-#include <config_orcus.h>
-
-#if ENABLE_ORCUS
-#include "orcusfiltersimpl.hxx"
-#endif
+#include <orcusfiltersimpl.hxx>
 
 
 // ScFilterTools::ReadLongDouble()
@@ -70,25 +65,25 @@ SEEEEEEE EEEEEEEE IMMMMMMM MMMMMMMM MMMMMMMM MMMMMMMM MMMMMMMM MMMMMMMM MMMMMMMM
 */
 
     long double lfDouble;
-    long double lfFakt = 256.0;
+    long double lfFactor = 256.0;
     sal_uInt8 pDouble10[ 10 ];
 
-    rStrm.Read( pDouble10, 10 );            // Intel-10 in pDouble10
+    rStrm.ReadBytes(pDouble10, 10);            // Intel-10 in pDouble10
 
     lfDouble  = static_cast< long double >( pDouble10[ 7 ] );   // Byte 7
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 6 ] );   // Byte 6
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 5 ] );   // Byte 5
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 4 ] );   // Byte 4
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 3 ] );   // Byte 3
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 2 ] );   // Byte 2
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 1 ] );   // Byte 1
-    lfDouble *= lfFakt;
+    lfDouble *= lfFactor;
     lfDouble += static_cast< long double >( pDouble10[ 0 ] );   // Byte 0
 
     //  For value 0.0 all bits are zero; pow(2.0,-16446) does not work with CSet compilers
@@ -122,12 +117,10 @@ rtl_TextEncoding ScfTools::GetSystemTextEncoding()
 OUString ScfTools::GetHexStr( sal_uInt16 nValue )
 {
     const sal_Char pHex[] = "0123456789ABCDEF";
-    OUString aStr;
-
-    aStr += OUString( pHex[ nValue >> 12 ] );
-    aStr += OUString( pHex[ (nValue >> 8) & 0x000F ] );
-    aStr += OUString( pHex[ (nValue >> 4) & 0x000F ] );
-    aStr += OUString( pHex[ nValue & 0x000F ] );
+    OUString aStr = OUString( pHex[ nValue >> 12 ] )
+                  + OUString( pHex[ (nValue >> 8) & 0x000F ] )
+                  + OUString( pHex[ (nValue >> 4) & 0x000F ] )
+                  + OUString( pHex[ nValue & 0x000F ] );
     return aStr;
 }
 
@@ -152,49 +145,49 @@ Color ScfTools::GetMixedColor( const Color& rFore, const Color& rBack, sal_uInt8
 OUString ScfTools::ConvertToScDefinedName(const OUString& rName )
 {
     //fdo#37872: we don't allow points in range names any more
-    OUString sName = rName.replace(static_cast<sal_Unicode>('.'),
-        static_cast<sal_Unicode>('_'));
+    OUString sName = rName.replace(u'.',
+        u'_');
     sal_Int32 nLen = sName.getLength();
-    if( nLen && !ScCompiler::IsCharFlagAllConventions( sName, 0, SC_COMPILER_C_CHAR_NAME ) )
+    if( nLen && !ScCompiler::IsCharFlagAllConventions( sName, 0, ScCharFlags::CharName ) )
         sName = sName.replaceAt( 0, 1, "_" );
     for( sal_Int32 nPos = 1; nPos < nLen; ++nPos )
-        if( !ScCompiler::IsCharFlagAllConventions( sName, nPos, SC_COMPILER_C_NAME ) )
+        if( !ScCompiler::IsCharFlagAllConventions( sName, nPos, ScCharFlags::Name ) )
             sName = sName.replaceAt( nPos, 1, "_" );
     return sName;
 }
 
 // *** streams and storages *** -----------------------------------------------
 
-tools::SvRef<SotStorage> ScfTools::OpenStorageRead( tools::SvRef<SotStorage> xStrg, const OUString& rStrgName )
+tools::SvRef<SotStorage> ScfTools::OpenStorageRead( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrgName )
 {
     tools::SvRef<SotStorage> xSubStrg;
-    if( xStrg.Is() && xStrg->IsContained( rStrgName ) )
-        xSubStrg = xStrg->OpenSotStorage( rStrgName, STREAM_STD_READ );
+    if( xStrg.is() && xStrg->IsContained( rStrgName ) )
+        xSubStrg = xStrg->OpenSotStorage( rStrgName, StreamMode::STD_READ );
     return xSubStrg;
 }
 
-tools::SvRef<SotStorage> ScfTools::OpenStorageWrite( tools::SvRef<SotStorage> xStrg, const OUString& rStrgName )
+tools::SvRef<SotStorage> ScfTools::OpenStorageWrite( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrgName )
 {
     tools::SvRef<SotStorage> xSubStrg;
-    if( xStrg.Is() )
-        xSubStrg = xStrg->OpenSotStorage( rStrgName, STREAM_STD_WRITE );
+    if( xStrg.is() )
+        xSubStrg = xStrg->OpenSotStorage( rStrgName, StreamMode::STD_WRITE );
     return xSubStrg;
 }
 
-tools::SvRef<SotStorageStream> ScfTools::OpenStorageStreamRead( tools::SvRef<SotStorage> xStrg, const OUString& rStrmName )
+tools::SvRef<SotStorageStream> ScfTools::OpenStorageStreamRead( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrmName )
 {
     tools::SvRef<SotStorageStream> xStrm;
-    if( xStrg.Is() && xStrg->IsContained( rStrmName ) && xStrg->IsStream( rStrmName ) )
-        xStrm = xStrg->OpenSotStream( rStrmName, STREAM_STD_READ );
+    if( xStrg.is() && xStrg->IsContained( rStrmName ) && xStrg->IsStream( rStrmName ) )
+        xStrm = xStrg->OpenSotStream( rStrmName, StreamMode::STD_READ );
     return xStrm;
 }
 
-tools::SvRef<SotStorageStream> ScfTools::OpenStorageStreamWrite( tools::SvRef<SotStorage> xStrg, const OUString& rStrmName )
+tools::SvRef<SotStorageStream> ScfTools::OpenStorageStreamWrite( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrmName )
 {
-    OSL_ENSURE( !xStrg || !xStrg->IsContained( rStrmName ), "ScfTools::OpenStorageStreamWrite - stream exists already" );
+    OSL_ENSURE( !xStrg.is() || !xStrg->IsContained( rStrmName ), "ScfTools::OpenStorageStreamWrite - stream exists already" );
     tools::SvRef<SotStorageStream> xStrm;
-    if( xStrg.Is() )
-        xStrm = xStrg->OpenSotStream( rStrmName, STREAM_STD_WRITE | StreamMode::TRUNC );
+    if( xStrg.is() )
+        xStrm = xStrg->OpenSotStream( rStrmName, StreamMode::STD_WRITE | StreamMode::TRUNC );
     return xStrm;
 }
 
@@ -217,7 +210,10 @@ bool ScfTools::CheckItems( const SfxItemSet& rItemSet, const sal_uInt16* pnWhich
 void ScfTools::PutItem( SfxItemSet& rItemSet, const SfxPoolItem& rItem, sal_uInt16 nWhichId, bool bSkipPoolDef )
 {
     if( !bSkipPoolDef || (rItem != rItemSet.GetPool()->GetDefaultItem( nWhichId )) )
-        rItemSet.Put( rItem, nWhichId );
+    {
+        std::unique_ptr<SfxPoolItem> pNewItem(rItem.CloneSetWhich(nWhichId));
+        rItemSet.Put( *pNewItem );
+    }
 }
 
 void ScfTools::PutItem( SfxItemSet& rItemSet, const SfxPoolItem& rItem, bool bSkipPoolDef )
@@ -250,19 +246,19 @@ ScStyleSheet& lclMakeStyleSheet( ScStyleSheetPool& rPool, const OUString& rStyle
     }
 
     // create new style sheet
-    return static_cast< ScStyleSheet& >( rPool.Make( aNewName, eFamily, SFXSTYLEBIT_USERDEF ) );
+    return static_cast< ScStyleSheet& >( rPool.Make( aNewName, eFamily, SfxStyleSearchBits::UserDefined ) );
 }
 
 } // namespace
 
 ScStyleSheet& ScfTools::MakeCellStyleSheet( ScStyleSheetPool& rPool, const OUString& rStyleName, bool bForceName )
 {
-    return lclMakeStyleSheet( rPool, rStyleName, SFX_STYLE_FAMILY_PARA, bForceName );
+    return lclMakeStyleSheet( rPool, rStyleName, SfxStyleFamily::Para, bForceName );
 }
 
 ScStyleSheet& ScfTools::MakePageStyleSheet( ScStyleSheetPool& rPool, const OUString& rStyleName, bool bForceName )
 {
-    return lclMakeStyleSheet( rPool, rStyleName, SFX_STYLE_FAMILY_PAGE, bForceName );
+    return lclMakeStyleSheet( rPool, rStyleName, SfxStyleFamily::Page, bForceName );
 }
 
 // *** byte string import operations *** --------------------------------------
@@ -354,15 +350,11 @@ ScFormatFilterPluginImpl::~ScFormatFilterPluginImpl() {}
 
 ScOrcusFilters* ScFormatFilterPluginImpl::GetOrcusFilters()
 {
-#if ENABLE_ORCUS
     static ScOrcusFiltersImpl aImpl;
     return &aImpl;
-#else
-    return NULL;
-#endif
 }
 
-ScFormatFilterPlugin * SAL_CALL ScFilterCreate()
+ScFormatFilterPlugin * ScFilterCreate()
 {
     return new ScFormatFilterPluginImpl();
 }

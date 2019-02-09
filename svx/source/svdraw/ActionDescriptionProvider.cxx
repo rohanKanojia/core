@@ -18,54 +18,48 @@
  */
 
 
-#include "svx/ActionDescriptionProvider.hxx"
-#include "svdglob.hxx"
-#include "svx/svdstr.hrc"
+#include <svx/ActionDescriptionProvider.hxx>
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 
 OUString ActionDescriptionProvider::createDescription( ActionType eActionType
                         , const OUString& rObjectName )
 {
-    sal_uInt16 nResID=0;
+    const char* pResID = nullptr;
     switch( eActionType )
     {
-    case INSERT:
-        nResID=STR_UndoInsertObj;
+    case ActionType::Insert:
+        pResID=STR_UndoInsertObj;
         break;
-    case DELETE:
-        nResID= STR_EditDelete;
+    case ActionType::Delete:
+        pResID= STR_EditDelete;
         break;
-    case CUT:
-        nResID= STR_ExchangeClpCut;
+    case ActionType::Move:
+        pResID= STR_EditMove;
         break;
-    case MOVE:
-        nResID= STR_EditMove;
+    case ActionType::Resize:
+        pResID= STR_EditResize;
         break;
-    case RESIZE:
-        nResID= STR_EditResize;
+    case ActionType::Rotate:
+        pResID= STR_EditRotate;
         break;
-    case ROTATE:
-        nResID= STR_EditRotate;
+    case ActionType::Format:
+        pResID= STR_EditSetAttributes;
         break;
-    case TRANSFORM:
-        nResID= STR_EditTransform;
+    case ActionType::MoveToTop:
+        pResID= STR_EditMovToTop;
         break;
-    case FORMAT:
-        nResID= STR_EditSetAttributes;
+    case ActionType::MoveToBottom:
+        pResID= STR_EditMovToBtm;
         break;
-    case MOVE_TOTOP:
-        nResID= STR_EditMovToTop;
-        break;
-    case MOVE_TOBOTTOM:
-        nResID= STR_EditMovToBtm;
-        break;
-    case POS_SIZE:
-        nResID = STR_EditPosSize;
+    case ActionType::PosSize:
+        pResID = STR_EditPosSize;
         break;
     }
-    if(!nResID)
+    if (!pResID)
         return OUString();
 
-    OUString aStr(ImpGetResStr(nResID));
+    OUString aStr(SvxResId(pResID));
     return aStr.replaceAll("%1", rObjectName);
 }
 

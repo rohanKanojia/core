@@ -101,7 +101,7 @@ namespace sdr
 
         void OverlayManagerBuffered::ImpRestoreBackground() const
         {
-            const Rectangle aRegionRectanglePixel(
+            const tools::Rectangle aRegionRectanglePixel(
                 maBufferRememberedRangePixel.getMinX(), maBufferRememberedRangePixel.getMinY(),
                 maBufferRememberedRangePixel.getMaxX(), maBufferRememberedRangePixel.getMaxY());
             const vcl::Region aRegionPixel(aRegionRectanglePixel);
@@ -121,7 +121,7 @@ namespace sdr
             RectangleVector aRectangles;
             rRegionPixel.GetRegionRectangles(aRectangles);
 
-            for(RectangleVector::const_iterator aRectIter(aRectangles.begin()); aRectIter != aRectangles.end(); ++aRectIter)
+            for(const auto& rRect : aRectangles)
             {
 #ifdef DBG_UTIL
                 // #i72754# possible graphical region test only with non-pro
@@ -131,18 +131,18 @@ namespace sdr
                 {
                     getOutputDevice().SetLineColor(COL_LIGHTGREEN);
                     getOutputDevice().SetFillColor();
-                    getOutputDevice().DrawRect(*aRectIter);
+                    getOutputDevice().DrawRect(rRect);
                 }
 #endif
 
                 // restore the area
-                const Point aTopLeft(aRectIter->TopLeft());
-                const Size aSize(aRectIter->GetSize());
+                const Point aTopLeft(rRect.TopLeft());
+                const Size aSize(rRect.GetSize());
 
                 getOutputDevice().DrawOutDev(
                     aTopLeft, aSize, // destination
                     aTopLeft, aSize, // source
-                    *mpBufferDevice.get());
+                    *mpBufferDevice);
             }
 
             // restore MapModes
@@ -153,7 +153,7 @@ namespace sdr
         void OverlayManagerBuffered::ImpSaveBackground(const vcl::Region& rRegion, OutputDevice* pPreRenderDevice)
         {
             // prepare source
-            OutputDevice& rSource = (pPreRenderDevice) ? *pPreRenderDevice : getOutputDevice();
+            OutputDevice& rSource = pPreRenderDevice ? *pPreRenderDevice : getOutputDevice();
 
             // Ensure buffer is valid
             ImpPrepareBufferDevice();
@@ -175,7 +175,7 @@ namespace sdr
             }
 
             // also limit to buffer size
-            const Rectangle aBufferDeviceRectanglePixel(Point(), mpBufferDevice->GetOutputSizePixel());
+            const tools::Rectangle aBufferDeviceRectanglePixel(Point(), mpBufferDevice->GetOutputSizePixel());
             aRegion.Intersect(aBufferDeviceRectanglePixel);
 
             // MapModes off
@@ -188,11 +188,11 @@ namespace sdr
             RectangleVector aRectangles;
             aRegion.GetRegionRectangles(aRectangles);
 
-            for(RectangleVector::const_iterator aRectIter(aRectangles.begin()); aRectIter != aRectangles.end(); ++aRectIter)
+            for(const auto& rRect : aRectangles)
             {
                 // for each rectangle, save the area
-                const Point aTopLeft(aRectIter->TopLeft());
-                const Size aSize(aRectIter->GetSize());
+                const Point aTopLeft(rRect.TopLeft());
+                const Size aSize(rRect.GetSize());
 
                 mpBufferDevice->DrawOutDev(
                     aTopLeft, aSize, // destination
@@ -205,7 +205,7 @@ namespace sdr
             mpBufferDevice->EnableMapMode(bMapModeWasEnabledSource);
         }
 
-        IMPL_LINK_NOARG_TYPED(OverlayManagerBuffered, ImpBufferTimerHandler, Idle*, void)
+        IMPL_LINK_NOARG(OverlayManagerBuffered, ImpBufferTimerHandler, Timer*, void)
         {
             //Resolves: fdo#46728 ensure this exists until end of scope
             rtl::Reference<OverlayManager> xRef(this);
@@ -238,7 +238,7 @@ namespace sdr
                     }
                 }
 
-                if(DoRefreshWithPreRendering())
+                // refresh with prerendering
                 {
                     // #i73602# ensure valid and sized mpOutputBufferDevice
                     const Size aDestinationSizePixel(mpBufferDevice->GetOutputSizePixel());
@@ -256,31 +256,31 @@ namespace sdr
                     mpOutputBufferDevice->SetAntialiasing(mpBufferDevice->GetAntialiasing());
 
                     // calculate sizes
-                    Rectangle aRegionRectanglePixel(
+                    tools::Rectangle aRegionRectanglePixel(
                         maBufferRememberedRangePixel.getMinX(), maBufferRememberedRangePixel.getMinY(),
                         maBufferRememberedRangePixel.getMaxX(), maBufferRememberedRangePixel.getMaxY());
 
                     // truncate aRegionRectanglePixel to destination pixel size, more does
                     // not need to be prepared since destination is a buffer for a window. So,
                     // maximum size indirectly shall be limited to getOutputDevice().GetOutputSizePixel()
-                    if(aRegionRectanglePixel.Left() < 0L)
+                    if(aRegionRectanglePixel.Left() < 0)
                     {
-                        aRegionRectanglePixel.Left() = 0L;
+                        aRegionRectanglePixel.SetLeft( 0 );
                     }
 
-                    if(aRegionRectanglePixel.Top() < 0L)
+                    if(aRegionRectanglePixel.Top() < 0)
                     {
-                        aRegionRectanglePixel.Top() = 0L;
+                        aRegionRectanglePixel.SetTop( 0 );
                     }
 
                     if(aRegionRectanglePixel.Right() > aDestinationSizePixel.getWidth())
                     {
-                        aRegionRectanglePixel.Right() = aDestinationSizePixel.getWidth();
+                        aRegionRectanglePixel.SetRight( aDestinationSizePixel.getWidth() );
                     }
 
                     if(aRegionRectanglePixel.Bottom() > aDestinationSizePixel.getHeight())
                     {
-                        aRegionRectanglePixel.Bottom() = aDestinationSizePixel.getHeight();
+                        aRegionRectanglePixel.SetBottom( aDestinationSizePixel.getHeight() );
                     }
 
                     // get sizes
@@ -294,7 +294,7 @@ namespace sdr
                         mpOutputBufferDevice->DrawOutDev(
                             aTopLeft, aSize, // destination
                             aTopLeft, aSize, // source
-                            *mpBufferDevice.get());
+                            *mpBufferDevice);
 
                         // restore MapModes
                         mpBufferDevice->EnableMapMode(bMapModeWasEnabledDest);
@@ -303,7 +303,7 @@ namespace sdr
                     // paint overlay content for remembered region, use
                     // method from base class directly
                     mpOutputBufferDevice->EnableMapMode();
-                    OverlayManager::ImpDrawMembers(aBufferRememberedRangeLogic, *mpOutputBufferDevice.get());
+                    OverlayManager::ImpDrawMembers(aBufferRememberedRangeLogic, *mpOutputBufferDevice);
                     mpOutputBufferDevice->EnableMapMode(false);
 
                     // copy to output
@@ -314,25 +314,16 @@ namespace sdr
                         getOutputDevice().DrawOutDev(
                             aTopLeft, aSize, // destination
                             aTopLeft, aSize, // source
-                            *mpOutputBufferDevice.get());
+                            *mpOutputBufferDevice);
 
                         // debug
-                        /*getOutputDevice().SetLineColor(COL_RED);
+                        /*getOutputDevice().SetLineCOL_RED);
                         getOutputDevice().SetFillColor();
                         getOutputDevice().DrawRect(Rectangle(aTopLeft, aSize));*/
 
                         // restore MapModes
                         getOutputDevice().EnableMapMode(bMapModeWasEnabledDest);
                     }
-                }
-                else
-                {
-                    // Restore all rectangles for remembered region from buffer
-                    ImpRestoreBackground();
-
-                    // paint overlay content for remembered region, use
-                    // method from base class directly
-                    OverlayManager::ImpDrawMembers(aBufferRememberedRangeLogic, getOutputDevice());
                 }
 
                 // VCL hack for transparent child windows
@@ -342,12 +333,12 @@ namespace sdr
                 // care for a repaint of the child window. A transparent child window is NOT
                 // a window which always keeps it's content consistent over the parent, but it's
                 // more like just a paint flag for the parent.
-                // To get the update, the windows in question are updated manulally here.
+                // To get the update, the windows in question are updated manually here.
                 if(bTargetIsWindow)
                 {
                     vcl::Window& rWindow = static_cast< vcl::Window& >(mrOutputDevice);
 
-                    const Rectangle aRegionRectanglePixel(
+                    const tools::Rectangle aRegionRectanglePixel(
                         maBufferRememberedRangePixel.getMinX(),
                         maBufferRememberedRangePixel.getMinY(),
                         maBufferRememberedRangePixel.getMaxX(),
@@ -374,24 +365,22 @@ namespace sdr
         }
 
         OverlayManagerBuffered::OverlayManagerBuffered(
-            OutputDevice& rOutputDevice,
-            bool bRefreshWithPreRendering)
+            OutputDevice& rOutputDevice)
         :   OverlayManager(rOutputDevice),
             mpBufferDevice(VclPtr<VirtualDevice>::Create()),
             mpOutputBufferDevice(VclPtr<VirtualDevice>::Create()),
-            mbRefreshWithPreRendering(bRefreshWithPreRendering)
+            maBufferIdle("sdr overlay OverlayManagerBuffered Idle")
         {
             // Init timer
-            maBufferIdle.SetPriority( SchedulerPriority::POST_PAINT );
-            maBufferIdle.SetIdleHdl(LINK(this, OverlayManagerBuffered, ImpBufferTimerHandler));
+            maBufferIdle.SetPriority( TaskPriority::POST_PAINT );
+            maBufferIdle.SetInvokeHandler(LINK(this, OverlayManagerBuffered, ImpBufferTimerHandler));
+            maBufferIdle.SetDebugName( "sdr::overlay::OverlayManagerBuffered maBufferIdle" );
         }
 
         rtl::Reference<OverlayManager> OverlayManagerBuffered::create(
-            OutputDevice& rOutputDevice,
-            bool bRefreshWithPreRendering)
+            OutputDevice& rOutputDevice)
         {
-            return rtl::Reference<OverlayManager>(new OverlayManagerBuffered(rOutputDevice,
-                bRefreshWithPreRendering));
+            return rtl::Reference<OverlayManager>(new OverlayManagerBuffered(rOutputDevice));
         }
 
         OverlayManagerBuffered::~OverlayManagerBuffered()
@@ -424,16 +413,6 @@ namespace sdr
             ImpBufferTimerHandler(nullptr);
         }
 
-        void OverlayManagerBuffered::restoreBackground(const vcl::Region& rRegion) const
-        {
-            // restore
-            const vcl::Region aRegionPixel(getOutputDevice().LogicToPixel(rRegion));
-            ImpRestoreBackground(aRegionPixel);
-
-            // call parent
-            OverlayManager::restoreBackground(rRegion);
-        }
-
         void OverlayManagerBuffered::invalidateRange(const basegfx::B2DRange& rRange)
         {
             if(!rRange.isEmpty())
@@ -456,19 +435,19 @@ namespace sdr
                     // assume AA needs one pixel more and invalidate one pixel more
                     const double fDiscreteOne(getDiscreteOne());
                     const basegfx::B2IPoint aTopLeft(
-                        (sal_Int32)floor(aDiscreteRange.getMinX() - fDiscreteOne),
-                        (sal_Int32)floor(aDiscreteRange.getMinY() - fDiscreteOne));
+                        static_cast<sal_Int32>(floor(aDiscreteRange.getMinX() - fDiscreteOne)),
+                        static_cast<sal_Int32>(floor(aDiscreteRange.getMinY() - fDiscreteOne)));
                     const basegfx::B2IPoint aBottomRight(
-                        (sal_Int32)ceil(aDiscreteRange.getMaxX() + fDiscreteOne),
-                        (sal_Int32)ceil(aDiscreteRange.getMaxY() + fDiscreteOne));
+                        static_cast<sal_Int32>(ceil(aDiscreteRange.getMaxX() + fDiscreteOne)),
+                        static_cast<sal_Int32>(ceil(aDiscreteRange.getMaxY() + fDiscreteOne)));
 
                     maBufferRememberedRangePixel.expand(aTopLeft);
                     maBufferRememberedRangePixel.expand(aBottomRight);
                 }
                 else
                 {
-                    const basegfx::B2IPoint aTopLeft((sal_Int32)floor(aDiscreteRange.getMinX()), (sal_Int32)floor(aDiscreteRange.getMinY()));
-                    const basegfx::B2IPoint aBottomRight((sal_Int32)ceil(aDiscreteRange.getMaxX()), (sal_Int32)ceil(aDiscreteRange.getMaxY()));
+                    const basegfx::B2IPoint aTopLeft(static_cast<sal_Int32>(floor(aDiscreteRange.getMinX())), static_cast<sal_Int32>(floor(aDiscreteRange.getMinY())));
+                    const basegfx::B2IPoint aBottomRight(static_cast<sal_Int32>(ceil(aDiscreteRange.getMaxX())), static_cast<sal_Int32>(ceil(aDiscreteRange.getMaxY())));
 
                     maBufferRememberedRangePixel.expand(aTopLeft);
                     maBufferRememberedRangePixel.expand(aBottomRight);

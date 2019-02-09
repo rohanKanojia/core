@@ -21,7 +21,7 @@
 #define INCLUDED_SVX_XMLEXCHG_HXX
 
 #include <rtl/ustring.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svx/svxdllapi.h>
 
 namespace com {
@@ -48,9 +48,9 @@ namespace svx
         OUString szServiceName;
         css::uno::Reference< css::beans::XPropertySet >   xPropSet;
 
-        inline OXFormsDescriptor() {}
-        inline OXFormsDescriptor( const OXFormsDescriptor &rhs ) { *this=rhs; }
-        inline OXFormsDescriptor &operator = ( const OXFormsDescriptor &rhs ) {
+        OXFormsDescriptor() {}
+        OXFormsDescriptor( const OXFormsDescriptor &rhs ) { *this=rhs; }
+        OXFormsDescriptor &operator = ( const OXFormsDescriptor &rhs ) {
             szName = rhs.szName;
             szServiceName = rhs.szServiceName;
             xPropSet = rhs.xPropSet;
@@ -61,15 +61,13 @@ namespace svx
 
     //= OXFormsTransferable
 
-    class SVX_DLLPUBLIC OXFormsTransferable : public TransferableHelper {
-
-        protected:
+    class SVX_DLLPUBLIC OXFormsTransferable final : public TransferableHelper {
 
             // TransferableHelper overridables
             virtual void        AddSupportedFormats() override;
             virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
 
-            OXFormsDescriptor m_aDescriptor;
+            OXFormsDescriptor const m_aDescriptor;
 
         public:
 

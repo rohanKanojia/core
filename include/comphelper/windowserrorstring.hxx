@@ -13,6 +13,7 @@
 #include <prewin.h>
 #include <postwin.h>
 #include <rtl/ustring.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 namespace {
 
@@ -20,23 +21,44 @@ inline OUString WindowsErrorString(DWORD nErrorCode)
 {
     LPWSTR pMsgBuf;
 
-    if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                       NULL,
+    if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr,
                        nErrorCode,
                        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                       (LPWSTR)&pMsgBuf,
+                       reinterpret_cast<LPWSTR>(&pMsgBuf),
                        0,
-                       NULL) == 0)
+                       nullptr) == 0)
         return OUString::number(nErrorCode, 16);
 
-    if (pMsgBuf[wcslen(pMsgBuf)-1] == '\n')
-        pMsgBuf[wcslen(pMsgBuf)-1] = '\0';
+    OUString result(o3tl::toU(pMsgBuf));
+    result.endsWith("\r\n", &result);
 
-    OUString result(pMsgBuf);
-
-    LocalFree(pMsgBuf);
+    HeapFree(GetProcessHeap(), 0, pMsgBuf);
 
     return result;
+}
+
+inline OUString WindowsErrorStringFromHRESULT(HRESULT hr)
+{
+    // See https://blogs.msdn.microsoft.com/oldnewthing/20061103-07/?p=29133
+    // Also https://social.msdn.microsoft.com/Forums/vstudio/en-US/c33d9a4a-1077-4efd-99e8-0c222743d2f8
+    // (which refers to https://msdn.microsoft.com/en-us/library/aa382475)
+    // explains why can't we just reinterpret_cast HRESULT to DWORD Win32 error:
+    // we might actually have a Win32 error code converted using HRESULT_FROM_WIN32 macro
+
+    DWORD nErrorCode = DWORD(hr);
+    if (HRESULT(hr & 0xFFFF0000) == MAKE_HRESULT(SEVERITY_ERROR, FACILITY_WIN32, 0) || hr == S_OK)
+    {
+        nErrorCode = HRESULT_CODE(hr);
+        // https://msdn.microsoft.com/en-us/library/ms679360 mentions that the codes might have
+        // high word bits set (e.g., bit 29 could be set if error comes from a 3rd-party library).
+        // So try to restore the original error code to avoid wrong error messages
+        DWORD nLastError = GetLastError();
+        if ((nLastError & 0xFFFF) == nErrorCode)
+            nErrorCode = nLastError;
+    }
+
+    return WindowsErrorString(nErrorCode);
 }
 
 } // anonymous namespace

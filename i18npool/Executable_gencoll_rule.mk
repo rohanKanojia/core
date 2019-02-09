@@ -16,12 +16,12 @@ $(eval $(call gb_Executable_set_include,gencoll_rule,\
 
 $(eval $(call gb_Executable_use_libraries,gencoll_rule,\
 	sal \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Executable_use_externals,gencoll_rule,\
 	icui18n \
 	icuuc \
+	$(if $(filter TRUE,$(DISABLE_DYNLOADING)),icudata) \
 	icu_headers \
 ))
 

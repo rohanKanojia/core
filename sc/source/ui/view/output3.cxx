@@ -27,51 +27,53 @@
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
-#include "output.hxx"
-#include "drwlayer.hxx"
-#include "document.hxx"
-#include "tabvwsh.hxx"
-#include "fillinfo.hxx"
+#include <output.hxx>
+#include <drwlayer.hxx>
+#include <document.hxx>
+#include <tabvwsh.hxx>
+#include <fillinfo.hxx>
 
 #include <svx/fmview.hxx>
 
 // #i72502#
 Point ScOutputData::PrePrintDrawingLayer(long nLogStX, long nLogStY )
 {
-    Rectangle aRect;
+    tools::Rectangle aRect;
     SCCOL nCol;
     Point aOffset;
     long nLayoutSign(bLayoutRTL ? -1 : 1);
 
     for (nCol=0; nCol<nX1; nCol++)
-        aOffset.X() -= mpDoc->GetColWidth( nCol, nTab ) * nLayoutSign;
-    aOffset.Y() -= mpDoc->GetRowHeight( 0, nY1-1, nTab );
+        aOffset.AdjustX( -(mpDoc->GetColWidth( nCol, nTab ) * nLayoutSign) );
+    aOffset.AdjustY( -sal_Int32(mpDoc->GetRowHeight( 0, nY1-1, nTab )) );
 
     long nDataWidth = 0;
     for (nCol=nX1; nCol<=nX2; nCol++)
         nDataWidth += mpDoc->GetColWidth( nCol, nTab );
 
     if ( bLayoutRTL )
-        aOffset.X() += nDataWidth;
+        aOffset.AdjustX(nDataWidth );
 
-    aRect.Left() = aRect.Right()  = -aOffset.X();
-    aRect.Top()  = aRect.Bottom() = -aOffset.Y();
+    aRect.SetLeft( -aOffset.X() );
+    aRect.SetRight( -aOffset.X() );
+    aRect.SetTop( -aOffset.Y() );
+    aRect.SetBottom( -aOffset.Y() );
 
     Point aMMOffset( aOffset );
-    aMMOffset.X() = (long)(aMMOffset.X() * HMM_PER_TWIPS);
-    aMMOffset.Y() = (long)(aMMOffset.Y() * HMM_PER_TWIPS);
+    aMMOffset.setX( static_cast<long>(aMMOffset.X() * HMM_PER_TWIPS) );
+    aMMOffset.setY( static_cast<long>(aMMOffset.Y() * HMM_PER_TWIPS) );
 
     if (!bMetaFile)
         aMMOffset += Point( nLogStX, nLogStY );
 
     for (nCol=nX1; nCol<=nX2; nCol++)
-        aRect.Right() += mpDoc->GetColWidth( nCol, nTab );
-    aRect.Bottom() += mpDoc->GetRowHeight( nY1, nY2, nTab );
+        aRect.AdjustRight(mpDoc->GetColWidth( nCol, nTab ) );
+    aRect.AdjustBottom(mpDoc->GetRowHeight( nY1, nY2, nTab ) );
 
-    aRect.Left()   = (long) (aRect.Left()   * HMM_PER_TWIPS);
-    aRect.Top()    = (long) (aRect.Top()    * HMM_PER_TWIPS);
-    aRect.Right()  = (long) (aRect.Right()  * HMM_PER_TWIPS);
-    aRect.Bottom() = (long) (aRect.Bottom() * HMM_PER_TWIPS);
+    aRect.SetLeft( static_cast<long>(aRect.Left()   * HMM_PER_TWIPS) );
+    aRect.SetTop( static_cast<long>(aRect.Top()    * HMM_PER_TWIPS) );
+    aRect.SetRight( static_cast<long>(aRect.Right()  * HMM_PER_TWIPS) );
+    aRect.SetBottom( static_cast<long>(aRect.Bottom() * HMM_PER_TWIPS) );
 
     if(pViewShell || pDrawView)
     {
@@ -82,7 +84,7 @@ Point ScOutputData::PrePrintDrawingLayer(long nLogStX, long nLogStY )
             // #i76114# MapMode has to be set because BeginDrawLayers uses GetPaintRegion
             MapMode aOldMode = mpDev->GetMapMode();
             if (!bMetaFile)
-                mpDev->SetMapMode( MapMode( MAP_100TH_MM, aMMOffset, aOldMode.GetScaleX(), aOldMode.GetScaleY() ) );
+                mpDev->SetMapMode( MapMode( MapUnit::Map100thMM, aMMOffset, aOldMode.GetScaleX(), aOldMode.GetScaleY() ) );
 
             // #i74769# work with SdrPaintWindow directly
             // #i76114# pass bDisableIntersect = true, because the intersection of the table area
@@ -108,7 +110,7 @@ void ScOutputData::PostPrintDrawingLayer(const Point& rMMOffset) // #i74768#
 
     if (!bMetaFile)
     {
-        mpDev->SetMapMode( MapMode( MAP_100TH_MM, rMMOffset, aOldMode.GetScaleX(), aOldMode.GetScaleY() ) );
+        mpDev->SetMapMode( MapMode( MapUnit::Map100thMM, rMMOffset, aOldMode.GetScaleX(), aOldMode.GetScaleY() ) );
     }
 
     if(pViewShell || pDrawView)
@@ -131,7 +133,7 @@ void ScOutputData::PostPrintDrawingLayer(const Point& rMMOffset) // #i74768#
 }
 
 // #i72502#
-void ScOutputData::PrintDrawingLayer(const sal_uInt16 nLayer, const Point& rMMOffset)
+void ScOutputData::PrintDrawingLayer(SdrLayerID nLayer, const Point& rMMOffset)
 {
     bool bHideAllDrawingLayer(false);
 
@@ -155,7 +157,7 @@ void ScOutputData::PrintDrawingLayer(const sal_uInt16 nLayer, const Point& rMMOf
 
     if (!bMetaFile)
     {
-        mpDev->SetMapMode( MapMode( MAP_100TH_MM, rMMOffset, aOldMode.GetScaleX(), aOldMode.GetScaleY() ) );
+        mpDev->SetMapMode( MapMode( MapUnit::Map100thMM, rMMOffset, aOldMode.GetScaleX(), aOldMode.GetScaleY() ) );
     }
 
     DrawSelectiveObjects( nLayer );
@@ -166,7 +168,7 @@ void ScOutputData::PrintDrawingLayer(const sal_uInt16 nLayer, const Point& rMMOf
     }
 }
 
-void ScOutputData::DrawSelectiveObjects(const sal_uInt16 nLayer)
+void ScOutputData::DrawSelectiveObjects(SdrLayerID nLayer)
 {
     ScDrawLayer* pModel = mpDoc->GetDrawLayer();
     if (!pModel)
@@ -178,7 +180,7 @@ void ScOutputData::DrawSelectiveObjects(const sal_uInt16 nLayer)
     SdrOutliner& rOutl = pModel->GetDrawOutliner();
     rOutl.EnableAutoColor( mbUseStyleColor );
     rOutl.SetDefaultHorizontalTextDirection(
-                (EEHorizontalTextDirection)mpDoc->GetEditTextDirection( nTab ) );
+                mpDoc->GetEditTextDirection( nTab ) );
 
     //  #i69767# The hyphenator must be set (used to be before drawing a text shape with hyphenation).
     //  LinguMgr::GetHyphenator (EditEngine) uses a wrapper now that creates the real hyphenator on demand,
@@ -209,34 +211,6 @@ void ScOutputData::DrawSelectiveObjects(const sal_uInt16 nLayer)
     }
 
     mpDev->SetDrawMode(nOldDrawMode);
-}
-
-// parts only for the screen
-
-void ScOutputData::DrawingSingle(const sal_uInt16 nLayer)
-{
-    bool    bHad    = false;
-    SCSIZE  nArrY;
-    for (nArrY=1; nArrY+1<nArrCount; nArrY++)
-    {
-        RowInfo* pThisRowInfo = &pRowInfo[nArrY];
-
-        if ( pThisRowInfo->bChanged )
-        {
-            if (!bHad)
-            {
-                bHad = true;
-            }
-        }
-        else if (bHad)
-        {
-            DrawSelectiveObjects( nLayer );
-            bHad = false;
-        }
-    }
-
-    if (bHad)
-        DrawSelectiveObjects( nLayer );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

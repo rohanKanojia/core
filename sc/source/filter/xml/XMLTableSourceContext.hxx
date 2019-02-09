@@ -20,11 +20,12 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLESOURCECONTEXT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLESOURCECONTEXT_HXX
 
-#include <xmloff/xmlictxt.hxx>
 #include <com/sun/star/sheet/SheetLinkMode.hpp>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-class ScXMLTableSourceContext : public SvXMLImportContext
+namespace sax_fastparser { class FastAttributeList; }
+
+class ScXMLTableSourceContext : public ScXMLImportContext
 {
     OUString                           sLink;
     OUString                           sTableName;
@@ -33,20 +34,16 @@ class ScXMLTableSourceContext : public SvXMLImportContext
     sal_Int32                          nRefresh;
     css::sheet::SheetLinkMode          nMode;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
 public:
-    ScXMLTableSourceContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList);
+    ScXMLTableSourceContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList );
 
-    virtual ~ScXMLTableSourceContext();
+    virtual ~ScXMLTableSourceContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
 #endif

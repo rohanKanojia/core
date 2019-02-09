@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/fehelper.hxx>
-#include <idlc/errorhandler.hxx>
-#include "idlc/idlc.hxx"
+#include <fehelper.hxx>
+#include <errorhandler.hxx>
+#include <idlc.hxx>
 
 FeDeclarator::FeDeclarator(const OString& name)
     : m_name(name)
@@ -30,17 +30,14 @@ FeDeclarator::~FeDeclarator()
 {
 }
 
-bool FeDeclarator::checkType(AstDeclaration const * type)
+bool FeDeclarator::checkType(AstDeclaration const * type) const
 {
     OString tmp(m_name);
     sal_Int32 count = m_name.lastIndexOf( ':' );
     if( count != -1 )
         tmp = m_name.copy( count+1 );
 
-    if (tmp == type->getLocalName())
-        return false;
-    else
-        return true;
+    return tmp != type->getLocalName();
 }
 
 AstType const * FeDeclarator::compose(AstDeclaration const * pDecl)
@@ -58,8 +55,8 @@ AstType const * FeDeclarator::compose(AstDeclaration const * pDecl)
 }
 
 FeInheritanceHeader::FeInheritanceHeader(
-    NodeType nodeType, OString* pName, OString* pInherits,
-    std::vector< OString > * typeParameters)
+    NodeType nodeType, OString* pName, OString const * pInherits,
+    std::vector< OString > const * typeParameters)
     : m_nodeType(nodeType)
     , m_pName(pName)
     , m_pInherits(nullptr)
@@ -70,7 +67,7 @@ FeInheritanceHeader::FeInheritanceHeader(
     initializeInherits(pInherits);
 }
 
-void FeInheritanceHeader::initializeInherits(OString* pInherits)
+void FeInheritanceHeader::initializeInherits(OString const * pInherits)
 {
     if ( pInherits )
     {

@@ -21,25 +21,29 @@
 #define INCLUDED_SC_SOURCE_UI_INC_SCUIIMOPTDLG_HXX
 
 #include <vcl/layout.hxx>
-#include "imoptdlg.hxx"
+#include <vcl/dialog.hxx>
+#include <svx/txencbox.hxx>
 
 class ScDelimiterTable;
+class ScImportOptions;
 
 class ScImportOptionsDlg : public ModalDialog
 {
 public:
-    ScImportOptionsDlg( vcl::Window*                 pParent,
-                        bool                    bAscii = true,
-                        const ScImportOptions*  pOptions = nullptr,
-                        const OUString*         pStrTitle = nullptr,
-                        bool                    bMultiByte = false,
-                        bool                    bOnlyDbtoolsEncodings = false,
-                        bool                    bImport = true );
+    ScImportOptionsDlg( vcl::Window*            pParent,
+                        bool                    bAscii,
+                        const ScImportOptions*  pOptions,
+                        const OUString*         pStrTitle,
+                        bool                    bMultiByte,
+                        bool                    bOnlyDbtoolsEncodings,
+                        bool                    bImport );
 
-    virtual ~ScImportOptionsDlg();
+    virtual ~ScImportOptionsDlg() override;
     virtual void dispose() override;
 
     void GetImportOptions( ScImportOptions& rOptions ) const;
+    void SaveImportOptions() const;
+    virtual OString GetScreenshotId() const override;
 
 private:
     VclPtr<VclFrame>           m_pFieldFrame;
@@ -57,14 +61,16 @@ private:
     VclPtr<OKButton>           m_pBtnOk;
 
 
-    ScDelimiterTable*   pFieldSepTab;
-    ScDelimiterTable*   pTextSepTab;
+    std::unique_ptr<ScDelimiterTable> pFieldSepTab;
+    std::unique_ptr<ScDelimiterTable> pTextSepTab;
+
+    bool const m_bIsAsciiImport;
 
 private:
     sal_uInt16 GetCodeFromCombo( const ComboBox& rEd ) const;
 
-    DECL_LINK_TYPED( FixedWidthHdl, Button*, void );
-    DECL_LINK_TYPED( DoubleClickHdl, ListBox&, void );
+    DECL_LINK( FixedWidthHdl, Button*, void );
+    DECL_LINK( DoubleClickHdl, ListBox&, void );
 };
 
 #endif

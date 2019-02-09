@@ -36,13 +36,11 @@ class ScDocument;
 struct ScSortParam;
 struct ScQueryParam;
 struct ScSubTotalParam;
-struct ScImportParam;
 
 /** Enum used to indicate which portion of the DBArea is to be considered. */
 enum class ScDBDataPortion
 {
     TOP_LEFT,   ///< top left cell of area
-    HEADER,     ///< header row of area, if headers are present
     AREA        ///< entire area
 };
 
@@ -102,7 +100,7 @@ private:
     using ScRefreshTimer::operator==;
 
 public:
-    struct less : public ::std::binary_function<std::unique_ptr<ScDBData>, std::unique_ptr<ScDBData>, bool>
+    struct less
     {
         bool operator() (const std::unique_ptr<ScDBData>& left, const std::unique_ptr<ScDBData>& right) const;
     };
@@ -113,7 +111,7 @@ public:
              bool bByR = true, bool bHasH = true, bool bTotals = false);
     ScDBData(const ScDBData& rData);
     ScDBData(const OUString& rName, const ScDBData& rData);
-    virtual ~ScDBData();
+    virtual ~ScDBData() override;
 
     virtual void Notify( const SfxHint& rHint ) override;
 
@@ -123,6 +121,7 @@ public:
 
     const OUString& GetName() const { return aName; }
     const OUString& GetUpperName() const { return aUpper; }
+    SCTAB       GetTab() const                  { return nTable; }
     void        GetArea(SCTAB& rTab, SCCOL& rCol1, SCROW& rRow1, SCCOL& rCol2, SCROW& rRow2) const;
     SC_DLLPUBLIC void GetArea(ScRange& rRange) const;
     void        SetArea(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2);
@@ -209,12 +208,12 @@ public:
     void        SetModified(bool bMod)      { bModified = bMod; }
 
     void    UpdateMoveTab( SCTAB nOldPos, SCTAB nNewPos );
-    void    UpdateReference(ScDocument* pDoc, UpdateRefMode eUpdateRefMode,
+    void    UpdateReference(const ScDocument* pDoc, UpdateRefMode eUpdateRefMode,
                         SCCOL nCol1, SCROW nRow1, SCTAB nTab1,
                         SCCOL nCol2, SCROW nRow2, SCTAB nTab2,
-                        SCsCOL nDx, SCsROW nDy, SCsTAB nDz);
+                        SCCOL nDx, SCROW nDy, SCTAB nDz);
 
-    void ExtendDataArea(ScDocument* pDoc);
+    void ExtendDataArea(const ScDocument* pDoc);
     void CalcSaveFilteredCount(SCSIZE nNonFilteredRowCount);
     void GetFilterSelCount(SCSIZE& nSelected, SCSIZE& nTotal);
 
@@ -241,8 +240,9 @@ public:
         DBsType m_DBs;
         ScDBCollection& mrParent;
         NamedDBs(ScDBCollection& rParent, ScDocument& rDoc);
-        NamedDBs(const NamedDBs& r);
-        virtual ~NamedDBs();
+        NamedDBs(const NamedDBs& r, ScDBCollection& rParent);
+        NamedDBs(const NamedDBs&) = delete;
+        virtual ~NamedDBs() override;
         NamedDBs & operator=(NamedDBs const&) = delete;
         void initInserted( ScDBData* p );
 
@@ -257,8 +257,13 @@ public:
         ScDBData* findByIndex(sal_uInt16 nIndex);
         ScDBData* findByUpperName(const OUString& rName);
         iterator findByUpperName2(const OUString& rName);
-        // Takes ownership of p iff it returns true:
-        SAL_WARN_UNUSED_RESULT bool insert(ScDBData* p);
+
+        /** Takes ownership of p and attempts to insert it into the collection.
+            Deletes p if it could not be inserted, i.e. duplicate name.
+            @return <TRUE/> if inserted, else <FALSE/>.
+         */
+        bool insert(std::unique_ptr<ScDBData> p);
+
         void erase(const iterator& itr);
         bool empty() const;
         size_t size() const;
@@ -325,7 +330,7 @@ public:
     void    UpdateReference(UpdateRefMode eUpdateRefMode,
                                 SCCOL nCol1, SCROW nRow1, SCTAB nTab1,
                                 SCCOL nCol2, SCROW nRow2, SCTAB nTab2,
-                                SCsCOL nDx, SCsROW nDy, SCsTAB nDz);
+                                SCCOL nDx, SCROW nDy, SCTAB nDz);
     void    UpdateMoveTab( SCTAB nOldPos, SCTAB nNewPos );
 
     void            SetRefreshHandler( const Link<Timer *, void>& rLink )

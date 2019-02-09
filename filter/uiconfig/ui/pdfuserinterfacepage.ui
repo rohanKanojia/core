@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="flt">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">1</property>
     <property name="upper">10</property>
@@ -12,6 +12,8 @@
   <object class="GtkBox" id="PdfUserInterfacePage">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
+    <property name="hexpand">True</property>
+    <property name="vexpand">True</property>
     <property name="border_width">6</property>
     <property name="orientation">vertical</property>
     <property name="spacing">6</property>
@@ -21,7 +23,6 @@
         <property name="can_focus">False</property>
         <property name="row_spacing">12</property>
         <property name="column_spacing">12</property>
-        <property name="column_homogeneous">True</property>
         <child>
           <object class="GtkFrame" id="frame1">
             <property name="visible">True</property>
@@ -41,7 +42,7 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="center">
-                        <property name="label" translatable="yes">_Center window on screen</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|center">_Center window on screen</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -57,7 +58,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="resize">
-                        <property name="label" translatable="yes">_Resize window to initial page</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|resize">_Resize window to initial page</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -73,7 +74,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="open">
-                        <property name="label" translatable="yes">_Open in full screen mode</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|open">_Open in full screen mode</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -89,7 +90,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="display">
-                        <property name="label" translatable="yes">_Display document title</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|display">_Display document title</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -111,7 +112,7 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Window Options</property>
+                <property name="label" translatable="yes" context="pdfuserinterfacepage|label1">Window Options</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -142,7 +143,7 @@
                     <property name="row_spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="toolbar">
-                        <property name="label" translatable="yes">Hide _toolbar</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|toolbar">Hide _toolbar</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -158,7 +159,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="menubar">
-                        <property name="label" translatable="yes">Hide _menubar</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|menubar">Hide _menubar</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -174,7 +175,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="window">
-                        <property name="label" translatable="yes">Hide _window controls</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|window">Hide _window controls</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -196,7 +197,7 @@
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">User Interface Options</property>
+                <property name="label" translatable="yes" context="pdfuserinterfacepage|label2">User Interface Options</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -226,7 +227,7 @@
                     <property name="can_focus">False</property>
                     <child>
                       <object class="GtkCheckButton" id="effects">
-                        <property name="label" translatable="yes">_Use transition effects</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|effects">_Use transition effects</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -248,7 +249,7 @@
               <object class="GtkLabel" id="label3">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Transitions</property>
+                <property name="label" translatable="yes" context="pdfuserinterfacepage|label3">Transitions</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -280,7 +281,7 @@
                     <property name="column_spacing">12</property>
                     <child>
                       <object class="GtkRadioButton" id="allbookmarks">
-                        <property name="label" translatable="yes">_All bookmark levels</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|allbookmarks">_All bookmark levels</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -288,7 +289,6 @@
                         <property name="xalign">0</property>
                         <property name="active">True</property>
                         <property name="draw_indicator">True</property>
-                        <property name="group">visiblebookmark</property>
                       </object>
                       <packing>
                         <property name="left_attach">0</property>
@@ -297,7 +297,7 @@
                     </child>
                     <child>
                       <object class="GtkRadioButton" id="visiblebookmark">
-                        <property name="label" translatable="yes">_Visible bookmark levels:</property>
+                        <property name="label" translatable="yes" context="pdfuserinterfacepage|visiblebookmark">_Visible bookmark levels:</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -319,7 +319,6 @@
                       <object class="GtkSpinButton" id="visiblelevel">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="invisible_char">•</property>
                         <property name="adjustment">adjustment1</property>
                         <accessibility>
                           <relation type="labelled-by" target="visiblebookmark"/>
@@ -341,7 +340,7 @@
               <object class="GtkLabel" id="label4">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Bookmarks</property>
+                <property name="label" translatable="yes" context="pdfuserinterfacepage|label4">Bookmarks</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>

@@ -17,16 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#define UNICODE
 #include "ddeimp.hxx"
 #include <algorithm>
+#include <memory>
 #include <comphelper/string.hxx>
 #include <rtl/ustring.hxx>
 #include <svl/svdde.hxx>
-#include <tools/debug.hxx>
 #include <osl/thread.h>
 #include <o3tl/sorted_vector.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 enum DdeItemType
 {
@@ -36,33 +35,15 @@ enum DdeItemType
 
 struct DdeItemImpData
 {
-    sal_uLong nHCnv;
+    HCONV nHCnv;
     sal_uInt16 nCnt;
 
-    explicit DdeItemImpData( sal_uLong nH ) : nHCnv( nH ), nCnt( 1 ) {}
-};
-
-class DdeItemImp {
-public:
-    DdeItemImp() : mvData() {}
-
-    size_t size() const { return mvData.size(); }
-
-    std::vector<DdeItemImpData>::iterator begin() { return mvData.begin(); }
-
-    void erase(std::vector<DdeItemImpData>::iterator it) { mvData.erase(it); }
-
-    void push_back(const DdeItemImpData& rData) { mvData.push_back(rData); }
-
-    DdeItemImpData& operator[](size_t i) { return mvData[i]; }
-
-private:
-    std::vector<DdeItemImpData> mvData;
+    explicit DdeItemImpData( HCONV nH ) : nHCnv( nH ), nCnt( 1 ) {}
 };
 
 HDDEDATA CALLBACK DdeInternal::SvrCallback(
-            WORD nCode, WORD nCbType, HCONV hConv, HSZ hText1, HSZ hText2,
-            HDDEDATA hData, DWORD, DWORD )
+            UINT nCode, UINT nCbType, HCONV hConv, HSZ hText1, HSZ hText2,
+            HDDEDATA hData, ULONG_PTR, ULONG_PTR )
 {
     DdeServices&    rAll = DdeService::GetServices();
     DdeService*     pService;
@@ -72,7 +53,7 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
     Conversation*   pC;
 
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
 
     switch( nCode )
     {
@@ -80,14 +61,14 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
         {
             int nTopics = 0;
 
-            TCHAR chTopicBuf[250];
+            WCHAR chTopicBuf[250];
             if( hText1 )
-                DdeQueryString( pInst->hDdeInstSvr, hText1, chTopicBuf,
-                                sizeof(chTopicBuf)/sizeof(TCHAR), CP_WINUNICODE );
+                DdeQueryStringW( pInst->hDdeInstSvr, hText1, chTopicBuf,
+                                SAL_N_ELEMENTS(chTopicBuf), CP_WINUNICODE );
 
-            for (DdeServices::iterator aI = rAll.begin(); aI != rAll.end(); ++aI)
+            for (auto& rpService : rAll)
             {
-                pService = *aI;
+                pService = rpService;
                 if ( !hText2 || ( *pService->pName == hText2 ) )
                 {
                     OUString sTopics( pService->Topics() );
@@ -99,7 +80,7 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
                             while( -1 != n )
                             {
                                 OUString s( sTopics.getToken( 0, '\t', n ));
-                                if( s == reinterpret_cast<const sal_Unicode*>(chTopicBuf) )
+                                if( s == o3tl::toU(chTopicBuf) )
                                     ++nTopics;
                             }
                         }
@@ -110,14 +91,14 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
             }
 
             if( !nTopics )
-                return (HDDEDATA)NULL;
+                return nullptr;
 
-            HSZPAIR* pPairs = new HSZPAIR [nTopics + 1];
+            auto pPairs = std::unique_ptr<HSZPAIR[]>(new HSZPAIR [nTopics + 1]);
 
-            HSZPAIR* q = pPairs;
-            for (DdeServices::iterator aI = rAll.begin(); aI != rAll.end(); ++aI)
+            HSZPAIR* q = pPairs.get();
+            for (auto& rpService : rAll)
             {
-                pService = *aI;
+                pService = rpService;
                 if ( !hText2 || (*pService->pName == hText2 ) )
                 {
                     OUString sTopics( pService->Topics() );
@@ -125,16 +106,15 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
                     while( -1 != n )
                     {
                         OUString s( sTopics.getToken( 0, '\t', n ));
-                        s = comphelper::string::remove(s, '\n');
-                        s = comphelper::string::remove(s, '\r');
-                        if( !hText1 || s == reinterpret_cast<const sal_Unicode*>(chTopicBuf) )
+                        s = s.replaceAll("\n", "").replaceAll("\r", "");
+                        if( !hText1 || s == o3tl::toU(chTopicBuf) )
                         {
                             DdeString aDStr( pInst->hDdeInstSvr, s );
-                            pTopic = FindTopic( *pService, (HSZ)aDStr );
+                            pTopic = FindTopic( *pService, aDStr.getHSZ() );
                             if( pTopic )
                             {
-                                q->hszSvc   = *pService->pName;
-                                q->hszTopic = *pTopic->pName;
+                                q->hszSvc   = pService->pName->getHSZ();
+                                q->hszTopic = pTopic->pName->getHSZ();
                                 q++;
                             }
                         }
@@ -142,13 +122,13 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
                 }
             }
 
-            q->hszSvc   = NULL;
-            q->hszTopic = NULL;
+            q->hszSvc   = nullptr;
+            q->hszTopic = nullptr;
             HDDEDATA h = DdeCreateDataHandle(
-                            pInst->hDdeInstSvr, (LPBYTE) pPairs,
+                            pInst->hDdeInstSvr,
+                            reinterpret_cast<LPBYTE>(pPairs.get()),
                             sizeof(HSZPAIR) * (nTopics+1),
-                            0, NULL, nCbType, 0);
-            delete [] pPairs;
+                            0, nullptr, nCbType, 0);
             return h;
         }
 
@@ -157,11 +137,11 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
             if ( pService)
                 pTopic = FindTopic( *pService, hText1 );
             else
-                pTopic = NULL;
+                pTopic = nullptr;
             if ( pTopic )
-                return (HDDEDATA)DDE_FACK;
+                return reinterpret_cast<HDDEDATA>(DDE_FACK);
             else
-                return (HDDEDATA) NULL;
+                return nullptr;
 
         case XTYP_CONNECT_CONFIRM:
             pService = FindService( hText2 );
@@ -173,41 +153,34 @@ HDDEDATA CALLBACK DdeInternal::SvrCallback(
                     pC = new Conversation;
                     pC->hConv = hConv;
                     pC->pTopic = pTopic;
-                    pService->pConv->push_back( pC );
+                    pService->m_vConv.emplace_back( pC );
                 }
             }
-            return (HDDEDATA)NULL;
+            return nullptr;
     }
 
-    for (DdeServices::iterator aI = rAll.begin(); aI != rAll.end(); ++aI)
+    for (auto& rpService : rAll)
     {
-        pService = *aI;
-        for ( size_t i = 0, n = pService->pConv->size(); i < n; ++i )
+        pService = rpService;
+        for ( size_t i = 0, n = pService->m_vConv.size(); i < n; ++i )
         {
-            pC = (*pService->pConv)[ i ];
+            pC = pService->m_vConv[ i ].get();
             if ( pC->hConv == hConv )
                 goto found;
         }
     }
 
-    return (HDDEDATA) DDE_FNOTPROCESSED;
+    return reinterpret_cast<HDDEDATA>(DDE_FNOTPROCESSED);
 
 found:
     if ( nCode == XTYP_DISCONNECT)
     {
-        pC->pTopic->Disconnect( (sal_IntPtr) hConv );
-        for ( ConvList::iterator it = pService->pConv->begin();
-              it != pService->pConv->end();
-              ++it
-        ) {
-            if ( *it == pC )
-            {
-                delete *it;
-                pService->pConv->erase( it );
-                break;
-            }
-        }
-        return (HDDEDATA)NULL;
+        DisconnectTopic(*pC->pTopic, hConv);
+        auto it = std::find_if(pService->m_vConv.begin(), pService->m_vConv.end(),
+            [&pC](const std::unique_ptr<Conversation>& rxConv) { return rxConv.get() == pC; });
+        if (it != pService->m_vConv.end())
+            pService->m_vConv.erase( it );
+        return nullptr;
     }
 
     bool bExec = nCode == XTYP_EXECUTE;
@@ -215,19 +188,18 @@ found:
     if ( pTopic && !bExec )
         pItem = FindItem( *pTopic, hText2 );
     else
-        pItem = NULL;
+        pItem = nullptr;
 
     if ( !bExec && !pService->HasCbFormat( nCbType ) )
-        pItem = NULL;
+        pItem = nullptr;
     if ( !pItem && !bExec )
-        return (HDDEDATA)DDE_FNOTPROCESSED;
+        return static_cast<HDDEDATA>(DDE_FNOTPROCESSED);
     if ( pItem )
         pTopic->aItem = pItem->GetName();
     else
-        (pTopic->aItem).clear();
+        pTopic->aItem.clear();
 
     bool bRes = false;
-    pInst->hCurConvSvr = (sal_IntPtr)hConv;
     switch( nCode )
     {
     case XTYP_REQUEST:
@@ -236,15 +208,15 @@ found:
             OUString aRes; // Must be free not until the end!
             if ( pTopic->IsSystemTopic() )
             {
-                if ( pTopic->aItem == reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_TOPICS) )
+                if ( pTopic->aItem == SZDDESYS_ITEM_TOPICS )
                     aRes = pService->Topics();
-                else if ( pTopic->aItem == reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_SYSITEMS) )
+                else if ( pTopic->aItem == SZDDESYS_ITEM_SYSITEMS )
                     aRes = pService->SysItems();
-                else if ( pTopic->aItem == reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_STATUS) )
+                else if ( pTopic->aItem == SZDDESYS_ITEM_STATUS )
                     aRes = pService->Status();
-                else if ( pTopic->aItem == reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_FORMATS) )
+                else if ( pTopic->aItem == SZDDESYS_ITEM_FORMATS )
                     aRes = pService->Formats();
-                else if ( pTopic->aItem ==  reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_HELP) )
+                else if ( pTopic->aItem == SZDDESYS_ITEM_HELP )
                     aRes = OUString();
                 else
                     aRes = OUString();
@@ -252,11 +224,11 @@ found:
                 if ( !aRes.isEmpty() )
                     pData = new DdeData( aRes );
                 else
-                    pData = NULL;
+                    pData = nullptr;
             }
             else if( DDEGETPUTITEM == pItem->nType )
             {
-                pData = ((DdeGetPutItem*)pItem)->Get( DdeData::GetInternalFormat( nCbType ) );
+                pData = static_cast<DdeGetPutItem*>(pItem)->Get( DdeData::GetInternalFormat( nCbType ) );
             }
             else
             {
@@ -266,11 +238,11 @@ found:
             if ( pData )
             {
                 return DdeCreateDataHandle( pInst->hDdeInstSvr,
-                                            (LPBYTE)pData->pImp->pData,
-                                            pData->pImp->nData,
+                                            static_cast<LPBYTE>(const_cast<void *>(pData->xImp->pData)),
+                                            pData->xImp->nData,
                                             0, hText2,
                                             DdeData::GetExternalFormat(
-                                                pData->pImp->nFmt ),
+                                                pData->xImp->nFmt ),
                                             0 );
             }
         }
@@ -280,19 +252,18 @@ found:
         if ( !pTopic->IsSystemTopic() )
         {
             DdeData d;
-            d.pImp->hData = hData;
-            d.pImp->nFmt  = DdeData::GetInternalFormat( nCbType );
+            d.xImp->hData = hData;
+            d.xImp->nFmt  = DdeData::GetInternalFormat( nCbType );
             d.Lock();
             if( DDEGETPUTITEM == pItem->nType )
-                bRes = ((DdeGetPutItem*)pItem)->Put( &d );
+                bRes = static_cast<DdeGetPutItem*>(pItem)->Put( &d );
             else
                 bRes = pTopic->Put( &d );
         }
-        pInst->hCurConvSvr = 0;
         if ( bRes )
-            return (HDDEDATA)DDE_FACK;
+            return reinterpret_cast<HDDEDATA>(DDE_FACK);
         else
-            return (HDDEDATA) DDE_FNOTPROCESSED;
+            return reinterpret_cast<HDDEDATA>(DDE_FNOTPROCESSED);
 
     case XTYP_ADVSTART:
         {
@@ -307,106 +278,80 @@ found:
                     pTopic->aItems.erase(it);
 
                 std::vector<DdeItem*>::iterator iter;
-                for( iter = pTopic->aItems.begin();
-                     iter != pTopic->aItems.end();
-                     ++iter )
+                iter = std::find_if(pTopic->aItems.begin(), pTopic->aItems.end(),
+                    [&hText2](const DdeItem* pDdeItem) { return *pDdeItem->pName == hText2; });
+                if (iter != pTopic->aItems.end())
                 {
-                    if( *(*iter)->pName == hText2 )
-                    {
-                        // It was exchanged indeed
-                        delete pItem;
-                        pItem = 0;
-                        break;
-                    }
+                    // It was exchanged indeed
+                    delete pItem;
+                    pItem = nullptr;
                 }
 
                 if( pItem )
                     // It was not exchange, so back in
                     pTopic->aItems.push_back(pItem);
                 else
-                    pItem = iter != pTopic->aItems.end() ? *iter : NULL;
+                    pItem = iter != pTopic->aItems.end() ? *iter : nullptr;
             }
 
             if (pItem)
             {
-                pItem->IncMonitor( (sal_IntPtr)hConv );
-                pInst->hCurConvSvr = 0;
+                IncMonitor(pItem, hConv);
             }
         }
-        return (HDDEDATA)sal_True;
+        return reinterpret_cast<HDDEDATA>(TRUE);
 
     case XTYP_ADVSTOP:
-        pItem->DecMonitor( (sal_IntPtr)hConv );
-        pInst->hCurConvSvr = 0;
-        return (HDDEDATA)sal_True;
+        DecMonitor(pItem, hConv);
+        return reinterpret_cast<HDDEDATA>(TRUE);
 
     case XTYP_EXECUTE:
         {
             DdeData aExec;
-            aExec.pImp->hData = hData;
-            aExec.pImp->nFmt  = DdeData::GetInternalFormat( nCbType );
+            aExec.xImp->hData = hData;
+            aExec.xImp->nFmt  = DdeData::GetInternalFormat( nCbType );
             aExec.Lock();
             OUString aName;
 
-            aName = (const sal_Unicode *)aExec.pImp->pData;
+            aName = static_cast<const sal_Unicode *>(aExec.xImp->pData);
 
             if( pTopic->IsSystemTopic() )
                 bRes = false;
             else
                 bRes = pTopic->Execute( &aName );
         }
-        pInst->hCurConvSvr = 0;
         if ( bRes )
-            return (HDDEDATA)DDE_FACK;
+            return reinterpret_cast<HDDEDATA>(DDE_FACK);
         else
-            return (HDDEDATA)DDE_FNOTPROCESSED;
+            return reinterpret_cast<HDDEDATA>(DDE_FNOTPROCESSED);
     }
 
-    return (HDDEDATA)NULL;
+    return nullptr;
 }
 
 DdeService* DdeInternal::FindService( HSZ hService )
 {
     DdeServices& rSvc = DdeService::GetServices();
-    for (DdeServices::iterator aI = rSvc.begin(); aI != rSvc.end(); ++aI)
-    {
-        DdeService*  s = *aI;
-        if ( *s->pName == hService )
-            return s;
-    }
+    auto aI = std::find_if(rSvc.begin(), rSvc.end(),
+        [&hService](const DdeService* s) { return *s->pName == hService; });
+    if (aI != rSvc.end())
+        return *aI;
 
-    return NULL;
+    return nullptr;
 }
 
 DdeTopic* DdeInternal::FindTopic( DdeService& rService, HSZ hTopic )
 {
-    std::vector<DdeTopic*>::iterator iter;
     std::vector<DdeTopic*> &rTopics = rService.aTopics;
-    bool bContinue = false;
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
 
-    do
-    {   // middle check loop
-        for ( iter = rTopics.begin(); iter != rTopics.end(); ++iter )
-        {
-            if ( *(*iter)->pName == hTopic )
-                return *iter;
-        }
+    auto iter = std::find_if(rTopics.begin(), rTopics.end(),
+        [&hTopic](const DdeTopic* pTopic) { return *pTopic->pName == hTopic; });
+    if (iter != rTopics.end())
+        return *iter;
 
-        bContinue = !bContinue;
-        if( !bContinue )
-            break;
-
-        // Let's query our subclass
-        TCHAR chBuf[250];
-        DdeQueryString(pInst->hDdeInstSvr,hTopic,chBuf,sizeof(chBuf)/sizeof(TCHAR),CP_WINUNICODE );
-        bContinue = false;
-        // We need to search again
-    }
-    while( bContinue );
-
-    return 0;
+    return nullptr;
 }
 
 DdeItem* DdeInternal::FindItem( DdeTopic& rTopic, HSZ hItem )
@@ -414,29 +359,28 @@ DdeItem* DdeInternal::FindItem( DdeTopic& rTopic, HSZ hItem )
     std::vector<DdeItem*>::iterator iter;
     std::vector<DdeItem*> &rItems = rTopic.aItems;
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     bool bContinue = false;
 
     do
     {   // middle check loop
-        for ( iter = rItems.begin(); iter != rItems.end(); ++iter )
-        {
-            if ( *(*iter)->pName == hItem )
-                return *iter;
-        }
+        iter = std::find_if(rItems.begin(), rItems.end(),
+            [&hItem](const DdeItem* pItem) { return *pItem->pName == hItem; });
+        if (iter != rItems.end())
+            return *iter;
         bContinue = !bContinue;
         if( !bContinue )
             break;
 
         // Let's query our subclass
-        TCHAR chBuf[250];
-        DdeQueryString(pInst->hDdeInstSvr,hItem,chBuf,sizeof(chBuf)/sizeof(TCHAR),CP_WINUNICODE );
-        bContinue = rTopic.MakeItem( reinterpret_cast<const sal_Unicode*>(chBuf) );
+        WCHAR chBuf[250];
+        DdeQueryStringW(pInst->hDdeInstSvr,hItem,chBuf,SAL_N_ELEMENTS(chBuf),CP_WINUNICODE );
+        bContinue = rTopic.MakeItem( o3tl::toU(chBuf) );
         // We need to search again
     }
     while( bContinue );
 
-    return 0;
+    return nullptr;
 }
 
 DdeService::DdeService( const OUString& rService )
@@ -450,17 +394,15 @@ DdeService::DdeService( const OUString& rService )
     if ( !pInst->hDdeInstSvr )
     {
         nStatus = sal::static_int_cast< short >(
-            DdeInitialize( &pInst->hDdeInstSvr,
-                           (PFNCALLBACK)DdeInternal::SvrCallback,
-                           APPCLASS_STANDARD |
-                           CBF_SKIP_REGISTRATIONS |
-                           CBF_SKIP_UNREGISTRATIONS, 0L ) );
+            DdeInitializeW( &pInst->hDdeInstSvr,
+                            DdeInternal::SvrCallback,
+                            APPCLASS_STANDARD |
+                            CBF_SKIP_REGISTRATIONS |
+                            CBF_SKIP_UNREGISTRATIONS, 0L ) );
         pInst->pServicesSvr = new DdeServices;
     }
     else
         nStatus = DMLERR_NO_ERROR;
-
-    pConv = new ConvList;
 
     if ( pInst->pServicesSvr )
         pInst->pServicesSvr->push_back( this );
@@ -468,26 +410,26 @@ DdeService::DdeService( const OUString& rService )
     pName = new DdeString( pInst->hDdeInstSvr, rService );
     if ( nStatus == DMLERR_NO_ERROR )
     {
-        if ( !DdeNameService( pInst->hDdeInstSvr, *pName, NULL,
+        if ( !DdeNameService( pInst->hDdeInstSvr, pName->getHSZ(), nullptr,
                               DNS_REGISTER | DNS_FILTEROFF ) )
         {
             nStatus = DMLERR_SYS_ERROR;
         }
     }
     AddFormat( SotClipboardFormatId::STRING );
-    pSysTopic = new DdeTopic( reinterpret_cast<const sal_Unicode*>(SZDDESYS_TOPIC) );
-    pSysTopic->AddItem( DdeItem( reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_TOPICS) ) );
-    pSysTopic->AddItem( DdeItem( reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_SYSITEMS) ) );
-    pSysTopic->AddItem( DdeItem( reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_STATUS) ) );
-    pSysTopic->AddItem( DdeItem( reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_FORMATS) ) );
-    pSysTopic->AddItem( DdeItem( reinterpret_cast<const sal_Unicode*>(SZDDESYS_ITEM_HELP) ) );
+    pSysTopic = new DdeTopic( SZDDESYS_TOPIC );
+    pSysTopic->AddItem( DdeItem( SZDDESYS_ITEM_TOPICS ) );
+    pSysTopic->AddItem( DdeItem( SZDDESYS_ITEM_SYSITEMS ) );
+    pSysTopic->AddItem( DdeItem( SZDDESYS_ITEM_STATUS ) );
+    pSysTopic->AddItem( DdeItem( SZDDESYS_ITEM_FORMATS ) );
+    pSysTopic->AddItem( DdeItem( SZDDESYS_ITEM_HELP ) );
     AddTopic( *pSysTopic );
 }
 
 DdeService::~DdeService()
 {
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     if ( pInst->pServicesSvr )
         pInst->pServicesSvr->erase(std::remove(pInst->pServicesSvr->begin(), pInst->pServicesSvr->end(), this), pInst->pServicesSvr->end());
 
@@ -502,12 +444,11 @@ DdeService::~DdeService()
         {
             pInst->hDdeInstSvr = 0;
             delete pInst->pServicesSvr;
-            pInst->pServicesSvr = NULL;
+            pInst->pServicesSvr = nullptr;
             if( pInst->nRefCount == 0)
                 ImpDeinitInstData();
         }
     }
-    delete pConv;
 }
 
 const OUString DdeService::GetName() const
@@ -518,91 +459,76 @@ const OUString DdeService::GetName() const
 DdeServices& DdeService::GetServices()
 {
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     return *(pInst->pServicesSvr);
 }
 
 void DdeService::AddTopic( const DdeTopic& rTopic )
 {
     RemoveTopic( rTopic );
-    aTopics.push_back((DdeTopic *) &rTopic);
+    aTopics.push_back(const_cast<DdeTopic *>(&rTopic));
 }
 
 void DdeService::RemoveTopic( const DdeTopic& rTopic )
 {
-    std::vector<DdeTopic*>::iterator iter;
-    for ( iter = aTopics.begin(); iter != aTopics.end(); ++iter )
+    auto iter = std::find_if(aTopics.begin(), aTopics.end(),
+        [&rTopic](const DdeTopic* pTopic) { return DdeCmpStringHandles(pTopic->pName->getHSZ(), rTopic.pName->getHSZ()) == 0; });
+    if (iter != aTopics.end())
     {
-        if ( !DdeCmpStringHandles (*(*iter)->pName, *rTopic.pName ) )
+        aTopics.erase(iter);
+        // Delete all conversions!
+        // Or else we work on deleted topics!
+        for( size_t n = m_vConv.size(); n; )
         {
-            aTopics.erase(iter);
-            // Delete all conversions!
-            // Or else we work on deleted topics!
-            for( size_t n = pConv->size(); n; )
-            {
-                Conversation* pC = (*pConv)[ --n ];
-                if( pC->pTopic == &rTopic )
-                {
-                    ConvList::iterator it = pConv->begin();
-                    ::std::advance( it, n );
-                    delete *it;
-                    pConv->erase( it );
-                }
-            }
-            break;
+            auto const& pC = m_vConv[ --n ];
+            if( pC->pTopic == &rTopic )
+                m_vConv.erase( m_vConv.begin() + n );
         }
     }
 }
 
 bool DdeService::HasCbFormat( sal_uInt16 nFmt )
 {
-    for ( size_t i = 0, n = aFormats.size(); i < n; ++i )
-        if ( aFormats[ i ] == nFmt )
-            return true;
-    return false;
+    return std::any_of(aFormats.begin(), aFormats.end(),
+        [nFmt](const long nFormat) { return nFormat == nFmt; });
 }
 
 bool DdeService::HasFormat(SotClipboardFormatId nFmt)
 {
-    return HasCbFormat( (sal_uInt16)DdeData::GetExternalFormat( nFmt ));
+    return HasCbFormat( static_cast<sal_uInt16>(DdeData::GetExternalFormat( nFmt )));
 }
 
 void DdeService::AddFormat(SotClipboardFormatId nFmt)
 {
     sal_uLong nExternalFmt = DdeData::GetExternalFormat( nFmt );
-    for ( size_t i = 0, n = aFormats.size(); i < n; ++i )
-        if ( (sal_uLong) aFormats[ i ] == nExternalFmt )
-            return;
+    if (std::any_of(aFormats.begin(), aFormats.end(),
+            [nExternalFmt](const long nFormat) { return static_cast<sal_uLong>(nFormat) == nExternalFmt; }))
+        return;
     aFormats.push_back( nExternalFmt );
 }
 
 void DdeService::RemoveFormat(SotClipboardFormatId nFmt)
 {
     sal_uLong nExternalFmt = DdeData::GetExternalFormat( nFmt );
-    for ( DdeFormats::iterator it = aFormats.begin(); it != aFormats.end(); ++it )
-    {
-        if ( (sal_uLong) *it == nExternalFmt )
-        {
-            aFormats.erase( it );
-            break;
-        }
-    }
+    auto it = std::find_if(aFormats.begin(), aFormats.end(),
+        [nExternalFmt](const long nFormat) { return static_cast<sal_uLong>(nFormat) == nExternalFmt; });
+    if (it != aFormats.end())
+        aFormats.erase( it );
 }
 
 DdeTopic::DdeTopic( const OUString& rName )
 {
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     pName = new DdeString( pInst->hDdeInstSvr, rName );
 }
 
 DdeTopic::~DdeTopic()
 {
-    std::vector<DdeItem*>::iterator iter;
-    for (iter = aItems.begin(); iter != aItems.end(); ++iter)
+    for (auto& rpItem : aItems)
     {
-        (*iter)->pMyTopic = 0;
-        delete *iter;
+        rpItem->pMyTopic = nullptr;
+        delete rpItem;
     }
 
     delete pName;
@@ -615,7 +541,7 @@ const OUString DdeTopic::GetName() const
 
 bool DdeTopic::IsSystemTopic()
 {
-    return GetName() == reinterpret_cast<const sal_Unicode*>(SZDDESYS_TOPIC);
+    return GetName() == SZDDESYS_TOPIC;
 }
 
 DdeItem* DdeTopic::AddItem( const DdeItem& r )
@@ -626,11 +552,8 @@ DdeItem* DdeTopic::AddItem( const DdeItem& r )
     else
         s = new DdeItem( r );
 
-    if ( s )
-    {
-        aItems.push_back( s );
-        s->pMyTopic = this;
-    }
+    aItems.push_back( s );
+    s->pMyTopic = this;
     return s;
 }
 
@@ -645,16 +568,12 @@ void DdeTopic::InsertItem( DdeItem* pNew )
 
 void DdeTopic::RemoveItem( const DdeItem& r )
 {
-    std::vector<DdeItem*>::iterator iter;
-    for (iter = aItems.begin(); iter != aItems.end(); ++iter)
-    {
-        if ( !DdeCmpStringHandles (*(*iter)->pName, *r.pName ) )
-            break;
-    }
+    auto iter = std::find_if(aItems.begin(), aItems.end(),
+        [&r](const DdeItem* pItem) { return DdeCmpStringHandles(pItem->pName->getHSZ(), r.pName->getHSZ()) == 0; });
 
     if ( iter != aItems.end() )
     {
-        (*iter)->pMyTopic = 0;
+        (*iter)->pMyTopic = nullptr;
         delete *iter;
         aItems.erase(iter);
     }
@@ -662,29 +581,25 @@ void DdeTopic::RemoveItem( const DdeItem& r )
 
 void DdeTopic::NotifyClient( const OUString& rItem )
 {
-    std::vector<DdeItem*>::iterator iter;
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
-    for ( iter = aItems.begin(); iter != aItems.end(); ++iter)
-    {
-        if ( (*iter)->GetName().equals(rItem) && (*iter)->pImpData)
-        {
-            DdePostAdvise( pInst->hDdeInstSvr, *pName, *(*iter)->pName );
-            break;
-        }
-    }
+    assert(pInst);
+    auto iter = std::find_if(aItems.begin(), aItems.end(),
+        [&rItem](const DdeItem* pItem) { return pItem->GetName().equals(rItem) && pItem->pImpData; });
+    if (iter != aItems.end())
+        DdePostAdvise( pInst->hDdeInstSvr, pName->getHSZ(), (*iter)->pName->getHSZ() );
 }
 
-void DdeTopic::Disconnect( sal_IntPtr nId )
+void DdeInternal::DisconnectTopic(DdeTopic & rTopic, HCONV nId)
 {
-    std::vector<DdeItem*>::iterator iter;
-    for (iter = aItems.begin(); iter != aItems.end(); ++iter)
-        (*iter)->DecMonitor( nId );
+    for (const auto& rpItem : rTopic.aItems)
+    {
+        DecMonitor(rpItem, nId);
+    }
 }
 
 DdeData* DdeTopic::Get(SotClipboardFormatId /*nFmt*/)
 {
-    return NULL;
+    return nullptr;
 }
 
 bool DdeTopic::Put( const DdeData* )
@@ -697,13 +612,6 @@ bool DdeTopic::Execute( const OUString* )
     return false;
 }
 
-long DdeTopic::GetConvId()
-{
-    DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
-    return pInst->hCurConvSvr;
-}
-
 bool DdeTopic::StartAdviseLoop()
 {
     return false;
@@ -712,31 +620,31 @@ bool DdeTopic::StartAdviseLoop()
 DdeItem::DdeItem( const sal_Unicode* p )
 {
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     pName = new DdeString( pInst->hDdeInstSvr, p );
     nType = DDEITEM;
-    pMyTopic = 0;
-    pImpData = 0;
+    pMyTopic = nullptr;
+    pImpData = nullptr;
 }
 
 DdeItem::DdeItem( const OUString& r)
 {
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     pName = new DdeString( pInst->hDdeInstSvr, r );
     nType = DDEITEM;
-    pMyTopic = 0;
-    pImpData = 0;
+    pMyTopic = nullptr;
+    pImpData = nullptr;
 }
 
 DdeItem::DdeItem( const DdeItem& r)
 {
     DdeInstData* pInst = ImpGetInstData();
-    DBG_ASSERT(pInst,"SVDDE:No instance data");
+    assert(pInst);
     pName = new DdeString( pInst->hDdeInstSvr, r.pName->toOUString() );
     nType = DDEITEM;
-    pMyTopic = 0;
-    pImpData = 0;
+    pMyTopic = nullptr;
+    pImpData = nullptr;
 }
 
 DdeItem::~DdeItem()
@@ -758,52 +666,59 @@ void DdeItem::NotifyClient()
     if( pMyTopic && pImpData )
     {
         DdeInstData* pInst = ImpGetInstData();
-        DBG_ASSERT(pInst,"SVDDE:No instance data");
-        DdePostAdvise( pInst->hDdeInstSvr, *pMyTopic->pName, *pName );
+        assert(pInst);
+        DdePostAdvise( pInst->hDdeInstSvr, pMyTopic->pName->getHSZ(), pName->getHSZ() );
     }
 }
 
-void DdeItem::IncMonitor( sal_uLong nHCnv )
+void DdeInternal::IncMonitor(DdeItem *const pItem, HCONV nHCnv)
 {
-    if( !pImpData )
+    if (!pItem->pImpData)
     {
-        pImpData = new DdeItemImp;
-        if( DDEGETPUTITEM == nType )
-            ((DdeGetPutItem*)this)->AdviseLoop( true );
+        pItem->pImpData = new std::vector<DdeItemImpData>;
+        if (DDEGETPUTITEM == pItem->nType)
+        {
+            static_cast<DdeGetPutItem*>(pItem)->AdviseLoop( true );
+        }
     }
     else
     {
-        for( sal_uInt16 n = pImpData->size(); n; )
-            if( (*pImpData)[ --n ].nHCnv == nHCnv )
+        for (size_t n = pItem->pImpData->size(); n; )
+        {
+            if ((*pItem->pImpData)[ --n ].nHCnv == nHCnv)
             {
-                ++(*pImpData)[ n ].nHCnv;
+                ++(*pItem->pImpData)[ n ].nHCnv;
                 return ;
             }
+        }
     }
 
-    pImpData->push_back( DdeItemImpData( nHCnv ) );
+    pItem->pImpData->push_back( DdeItemImpData( nHCnv ) );
 }
 
-void DdeItem::DecMonitor( sal_uLong nHCnv )
+void DdeInternal::DecMonitor(DdeItem *const pItem, HCONV nHCnv)
 {
-    if( pImpData )
+    if (pItem->pImpData)
     {
-        for( sal_uInt16 n = 0; n < pImpData->size(); ++n )
+        for( size_t n = 0; n < pItem->pImpData->size(); ++n )
         {
-            DdeItemImpData* pData = &(*pImpData)[n];
+            DdeItemImpData* pData = &(*pItem->pImpData)[n];
             if( pData->nHCnv == nHCnv )
             {
                 if( !pData->nCnt || !--pData->nCnt )
                 {
-                    if( 1 < pImpData->size() )
+                    if (1 < pItem->pImpData->size())
                     {
-                        pImpData->erase(pImpData->begin() + n);
+                        pItem->pImpData->erase(pItem->pImpData->begin() + n);
                     }
                     else
                     {
-                        delete pImpData, pImpData = 0;
-                        if( DDEGETPUTITEM == nType )
-                            ((DdeGetPutItem*)this)->AdviseLoop( false );
+                        delete pItem->pImpData;
+                        pItem->pImpData = nullptr;
+                        if (DDEGETPUTITEM == pItem->nType)
+                        {
+                            static_cast<DdeGetPutItem*>(pItem)->AdviseLoop(false);
+                        }
                     }
                 }
                 return ;
@@ -817,9 +732,9 @@ short DdeItem::GetLinks()
     short nCnt = 0;
     if( pImpData )
     {
-        for( sal_uInt16 n = pImpData->size(); n; )
+        for (const auto& rData : *pImpData)
         {
-            nCnt = nCnt + (*pImpData)[ --n ].nCnt;
+            nCnt += rData.nCnt;
         }
     }
     return nCnt;
@@ -845,7 +760,7 @@ DdeGetPutItem::DdeGetPutItem( const DdeItem& rItem )
 
 DdeData* DdeGetPutItem::Get(SotClipboardFormatId)
 {
-    return 0;
+    return nullptr;
 }
 
 bool DdeGetPutItem::Put( const DdeData* )
@@ -860,18 +775,17 @@ void DdeGetPutItem::AdviseLoop( bool )
 OUString DdeService::SysItems()
 {
     OUString s;
-    std::vector<DdeTopic*>::iterator iter;
-    std::vector<DdeItem*>::iterator iterItem;
-    for ( iter = aTopics.begin(); iter != aTopics.end(); ++iter )
+    for ( const auto& rpTopic : aTopics )
     {
-        if ( (*iter)->GetName() == reinterpret_cast<const sal_Unicode*>(SZDDESYS_TOPIC) )
+        if ( rpTopic->GetName() == SZDDESYS_TOPIC )
         {
             short n = 0;
-            for ( iterItem = (*iter)->aItems.begin(); iterItem != (*iter)->aItems.end(); ++iterItem, n++ )
+            for ( const auto& rpItem : rpTopic->aItems )
             {
                 if ( n )
                     s += "\t";
-                s += (*iterItem)->GetName();
+                s += rpItem->GetName();
+                n++;
             }
             s += "\r\n";
         }
@@ -883,14 +797,14 @@ OUString DdeService::SysItems()
 OUString DdeService::Topics()
 {
     OUString    s;
-    std::vector<DdeTopic*>::iterator iter;
     short       n = 0;
 
-    for ( iter = aTopics.begin(); iter != aTopics.end(); ++iter, n++ )
+    for ( const auto& rpTopic : aTopics )
     {
         if ( n )
             s += "\t";
-        s += (*iter)->GetName();
+        s += rpTopic->GetName();
+        n++;
     }
     s += "\r\n";
 
@@ -908,7 +822,7 @@ OUString DdeService::Formats()
         if ( n )
             s += "\t";
 
-        switch( (sal_uInt16)f )
+        switch( static_cast<sal_uInt16>(f) )
         {
         case CF_TEXT:
             s += "TEXT";
@@ -918,9 +832,9 @@ OUString DdeService::Formats()
             break;
         default:
             {
-                TCHAR buf[128];
-                GetClipboardFormatName( (UINT)f, buf, sizeof(buf) / sizeof(TCHAR) );
-                s += OUString(reinterpret_cast<sal_Unicode*>(buf));
+                WCHAR buf[128];
+                GetClipboardFormatNameW( static_cast<UINT>(f), buf, SAL_N_ELEMENTS(buf) );
+                s += o3tl::toU(buf);
             }
             break;
         }

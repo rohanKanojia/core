@@ -56,9 +56,9 @@ public:
     DomBuilderContext( SvXMLImport& rImport,
                        sal_uInt16 nPrefix,
                        const OUString& rLocalName,
-                       css::uno::Reference<css::xml::dom::XNode>& );
+                       css::uno::Reference<css::xml::dom::XNode> const & );
 
-    virtual ~DomBuilderContext();
+    virtual ~DomBuilderContext() override;
 
 
     // access to the DOM tree
@@ -71,7 +71,7 @@ public:
     // implement SvXMLImportContext methods:
 
 
-    virtual SvXMLImportContext* CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList >& xAttrList ) override;

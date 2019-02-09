@@ -23,6 +23,7 @@
 #include <vcl/graphicfilter.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <tools/stream.hxx>
 
 #include "jpeg/Exif.hxx"
 #include "jpeg/JpegTransform.hxx"
@@ -34,59 +35,37 @@ GraphicNativeTransform::GraphicNativeTransform(Graphic& rGraphic) :
 GraphicNativeTransform::~GraphicNativeTransform()
 {}
 
-bool GraphicNativeTransform::canBeRotated()
-{
-    GfxLink aLink = mrGraphic.GetLink();
-
-    // Don't allow rotation on animations for now
-    if (mrGraphic.IsAnimated())
-    {
-        return false;
-    }
-
-    if (   aLink.GetType() == GFX_LINK_TYPE_NATIVE_JPG
-        || aLink.GetType() == GFX_LINK_TYPE_NATIVE_PNG
-        || aLink.GetType() == GFX_LINK_TYPE_NATIVE_GIF
-        || aLink.GetType() == GFX_LINK_TYPE_NONE)
-    {
-        return true;
-    }
-
-    return false;
-}
-
-bool GraphicNativeTransform::rotate(sal_uInt16 aInputRotation)
+void GraphicNativeTransform::rotate(sal_uInt16 aInputRotation)
 {
     // Rotation can be between 0 and 3600
     sal_uInt16 aRotation = aInputRotation % 3600;
 
     if (aRotation == 0)
     {
-        return true; // No rotation is needed
+        return; // No rotation is needed
     }
     else if (aRotation != 900 && aRotation != 1800 && aRotation != 2700)
     {
-        return false;
+        return;
     }
 
-    GfxLink aLink = mrGraphic.GetLink();
-    if ( aLink.GetType() == GFX_LINK_TYPE_NATIVE_JPG )
+    GfxLink aLink = mrGraphic.GetGfxLink();
+    if ( aLink.GetType() == GfxLinkType::NativeJpg )
     {
-        return rotateJPEG(aRotation);
+        rotateJPEG(aRotation);
     }
-    else if ( aLink.GetType() == GFX_LINK_TYPE_NATIVE_PNG )
+    else if ( aLink.GetType() == GfxLinkType::NativePng )
     {
-        return rotateGeneric(aRotation, "png");
+        rotateGeneric(aRotation, "png");
     }
-    else if ( aLink.GetType() == GFX_LINK_TYPE_NATIVE_GIF )
+    else if ( aLink.GetType() == GfxLinkType::NativeGif )
     {
-        return rotateGeneric(aRotation, "gif");
+        rotateGeneric(aRotation, "gif");
     }
-    else if ( aLink.GetType() == GFX_LINK_TYPE_NONE )
+    else if ( aLink.GetType() == GfxLinkType::NONE )
     {
-        return rotateBitmapOnly(aRotation);
+        rotateBitmapOnly(aRotation);
     }
-    return false;
 }
 
 bool GraphicNativeTransform::rotateBitmapOnly(sal_uInt16 aRotation)
@@ -117,11 +96,11 @@ bool GraphicNativeTransform::rotateGeneric(sal_uInt16 aRotation, const OUString&
 
     css::uno::Sequence< css::beans::PropertyValue > aFilterData( 3 );
     aFilterData[ 0 ].Name = "Interlaced";
-    aFilterData[ 0 ].Value <<= (sal_Int32) 0;
+    aFilterData[ 0 ].Value <<= sal_Int32(0);
     aFilterData[ 1 ].Name = "Compression";
-    aFilterData[ 1 ].Value <<= (sal_Int32) 9;
+    aFilterData[ 1 ].Value <<= sal_Int32(9);
     aFilterData[ 2 ].Name = "Quality";
-    aFilterData[ 2 ].Value <<= (sal_Int32) 90;
+    aFilterData[ 2 ].Value <<= sal_Int32(90);
 
     sal_uInt16 nFilterFormat = rFilter.GetExportFormatNumberForShortName( aType );
 
@@ -138,7 +117,7 @@ bool GraphicNativeTransform::rotateGeneric(sal_uInt16 aRotation, const OUString&
     return true;
 }
 
-bool GraphicNativeTransform::rotateJPEG(sal_uInt16 aRotation)
+void GraphicNativeTransform::rotateJPEG(sal_uInt16 aRotation)
 {
     BitmapEx aBitmap = mrGraphic.GetBitmapEx();
 
@@ -149,10 +128,10 @@ bool GraphicNativeTransform::rotateJPEG(sal_uInt16 aRotation)
     }
     else
     {
-        GfxLink aLink = mrGraphic.GetLink();
+        GfxLink aLink = mrGraphic.GetGfxLink();
 
         SvMemoryStream aSourceStream;
-        aSourceStream.Write(aLink.GetData(), aLink.GetDataSize());
+        aSourceStream.WriteBytes(aLink.GetData(), aLink.GetDataSize());
         aSourceStream.Seek( STREAM_SEEK_TO_BEGIN );
 
         Orientation aOrientation = TOP_LEFT;
@@ -184,8 +163,6 @@ bool GraphicNativeTransform::rotateJPEG(sal_uInt16 aRotation)
         rFilter.ImportGraphic( aGraphic, OUString("import"), aTargetStream );
         mrGraphic = aGraphic;
     }
-
-    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

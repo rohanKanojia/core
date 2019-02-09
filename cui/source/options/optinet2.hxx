@@ -19,17 +19,17 @@
 #ifndef INCLUDED_CUI_SOURCE_OPTIONS_OPTINET2_HXX
 #define INCLUDED_CUI_SOURCE_OPTIONS_OPTINET2_HXX
 
+#include <memory>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <vcl/field.hxx>
-#include <vcl/group.hxx>
+#include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/lstbox.hxx>
-#include <svtools/stdctrl.hxx>
-#include <svtools/svtabbx.hxx>
+#include <vcl/svtabbx.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <unotools/configitem.hxx>
 
-#include <svtools/headbar.hxx>
+#include <vcl/headbar.hxx>
 
 namespace svx {
     class SecurityOptionsDialog;
@@ -49,7 +49,7 @@ public:
     {}
     virtual void KeyInput(const KeyEvent& rKEvent) override;
     virtual void Modify() override;
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    virtual bool set_property(const OString &rKey, const OUString &rValue) override;
 };
 
 // class SvxProxyTabPage -------------------------------------------------
@@ -81,34 +81,21 @@ private:
 
     css::uno::Reference< css::uno::XInterface > m_xConfigurationUpdateAccess;
 
-    void EnableControls_Impl(bool bEnable);
+    void EnableControls_Impl();
     void ReadConfigData_Impl();
     void ReadConfigDefaults_Impl();
     void RestoreConfigDefaults_Impl();
 
-    DECL_LINK_TYPED( ProxyHdl_Impl, ListBox&, void );
-    DECL_STATIC_LINK_TYPED( SvxProxyTabPage, LoseFocusHdl_Impl, Control&, void );
+    DECL_LINK( ProxyHdl_Impl, ListBox&, void );
+    DECL_STATIC_LINK( SvxProxyTabPage, LoseFocusHdl_Impl, Control&, void );
 
 public:
     SvxProxyTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxProxyTabPage();
+    virtual ~SvxProxyTabPage() override;
     virtual void dispose() override;
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
-};
-
-// #98647# class SvxScriptExecListBox ------------------------------------
-class SvxScriptExecListBox : public ListBox
-{ // for adding tooltips to ListBox
-public:
-    SvxScriptExecListBox( vcl::Window* pParent, WinBits nStyle = WB_BORDER )
-            :ListBox(pParent, nStyle) {}
-    SvxScriptExecListBox( vcl::Window* pParent, const ResId& rResId )
-            :ListBox(pParent, rResId) {}
-
-protected:
-    virtual void RequestHelp( const HelpEvent& rHEvt ) override;
 };
 
 // class SvxSecurityTabPage ---------------------------------------------
@@ -139,34 +126,34 @@ private:
     VclPtr<VclContainer>       m_pTSAURLsFrame;
     VclPtr<PushButton>         m_pTSAURLsPB;
 
-    SvtSecurityOptions*         mpSecOptions;
-    VclPtr<svx::SecurityOptionsDialog> mpSecOptDlg;
+    std::unique_ptr<SvtSecurityOptions>         mpSecOptions;
+    std::unique_ptr<svx::SecurityOptionsDialog> m_xSecOptDlg;
 
-    VclPtr<CertPathDialog> mpCertPathDlg;
+    std::unique_ptr<CertPathDialog> mpCertPathDlg;
 
     OUString            m_sPasswordStoringDeactivateStr;
 
-    DECL_LINK_TYPED(SecurityOptionsHdl, Button*, void);
-    DECL_LINK_TYPED(SavePasswordHdl, Button*, void);
-    DECL_STATIC_LINK_TYPED(SvxSecurityTabPage, MasterPasswordHdl, Button*, void);
-    DECL_LINK_TYPED(MasterPasswordCBHdl, Button*, void);
-    DECL_LINK_TYPED(ShowPasswordsHdl, Button*, void);
-    DECL_STATIC_LINK_TYPED(SvxSecurityTabPage, MacroSecPBHdl, Button*, void );
-    DECL_LINK_TYPED(CertPathPBHdl, Button*, void );
-    DECL_LINK_TYPED(TSAURLsPBHdl, Button*, void );
+    DECL_LINK(SecurityOptionsHdl, Button*, void);
+    DECL_LINK(SavePasswordHdl, Button*, void);
+    DECL_LINK(MasterPasswordHdl, Button*, void);
+    DECL_LINK(MasterPasswordCBHdl, Button*, void);
+    DECL_LINK(ShowPasswordsHdl, Button*, void);
+    DECL_STATIC_LINK(SvxSecurityTabPage, MacroSecPBHdl, Button*, void );
+    DECL_LINK(CertPathPBHdl, Button*, void );
+    DECL_LINK(TSAURLsPBHdl, Button*, void );
 
     void                InitControls();
 
                 SvxSecurityTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual     ~SvxSecurityTabPage();
+    virtual     ~SvxSecurityTabPage() override;
     virtual void dispose() override;
 
 protected:
     virtual void        ActivatePage( const SfxItemSet& rSet ) override;
-    virtual sfxpg       DeactivatePage( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC   DeactivatePage( SfxItemSet* pSet ) override;
 
 public:
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;
 };
@@ -184,16 +171,16 @@ class SvxEMailTabPage : public SfxTabPage
 
     OUString      m_sDefaultFilterName;
 
-    SvxEMailTabPage_Impl* pImpl;
+    std::unique_ptr<SvxEMailTabPage_Impl> pImpl;
 
-    DECL_LINK_TYPED(  FileDialogHdl_Impl, Button*, void );
+    DECL_LINK(  FileDialogHdl_Impl, Button*, void );
 
 public:
     SvxEMailTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxEMailTabPage();
+    virtual ~SvxEMailTabPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

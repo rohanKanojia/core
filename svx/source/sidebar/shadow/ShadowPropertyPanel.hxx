@@ -18,13 +18,12 @@
 #include <sfx2/sidebar/ControllerItem.hxx>
 #include <svx/sidebar/PanelLayout.hxx>
 #include <svl/intitem.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/field.hxx>
-#include <vcl/slider.hxx>
 #include <com/sun/star/ui/XUIElement.hpp>
 #include <sfx2/request.hxx>
 #include <svx/dlgctrl.hxx>
 
+class SvxColorListBox;
 
 namespace svx { namespace sidebar {
 
@@ -33,7 +32,7 @@ class ShadowPropertyPanel
     public ::sfx2::sidebar::ControllerItem::ItemUpdateReceiverInterface
 {
 public:
-    virtual ~ShadowPropertyPanel();
+    virtual ~ShadowPropertyPanel() override;
     virtual void dispose() override;
 
     static VclPtr<vcl::Window> Create(
@@ -60,10 +59,10 @@ public:
         SfxBindings* pBindings);
 
 private:
-    VclPtr<CheckBox>   mpShowShadow;
-    VclPtr<MetricBox>       mpShadowDistance;
-    VclPtr<ColorLB>       mpLBShadowColor;
-    VclPtr<MetricBox>       mpShadowAngle;
+    VclPtr<CheckBox>      mpShowShadow;
+    VclPtr<MetricBox>     mpShadowDistance;
+    VclPtr<SvxColorListBox> mpLBShadowColor;
+    VclPtr<MetricBox>     mpShadowAngle;
     VclPtr<FixedText>     mpFTAngle;
     VclPtr<FixedText>     mpFTDistance;
     VclPtr<FixedText>     mpFTTransparency;
@@ -77,18 +76,17 @@ private:
     ::sfx2::sidebar::ControllerItem maShadowXDistanceController;
     ::sfx2::sidebar::ControllerItem maShadowYDistanceController;
 
-    SfxBindings* mpBindings;
+    SfxBindings* const mpBindings;
     long nX,nY,nXY;
 
-    void InsertDistanceValues();
     void InsertAngleValues();
     void SetTransparencyValue(long);
     void UpdateControls();
-    DECL_LINK_TYPED(ClickShadowHdl, Button*, void);
-    DECL_LINK_TYPED(ModifyShadowColorHdl, ListBox&, void);
-    DECL_LINK_TYPED(ModifyShadowTransMetricHdl, Edit&, void);
-    DECL_LINK_TYPED(ModifyShadowDistanceHdl, Edit&, void);
-    DECL_LINK_TYPED(ModifyShadowTransSliderHdl, Slider*, void);
+    DECL_LINK(ClickShadowHdl, Button*, void);
+    DECL_LINK(ModifyShadowColorHdl, SvxColorListBox&, void);
+    DECL_LINK(ModifyShadowTransMetricHdl, Edit&, void);
+    DECL_LINK(ModifyShadowDistanceHdl, Edit&, void);
+    DECL_LINK(ModifyShadowTransSliderHdl, Slider*, void);
 };
 }
 }

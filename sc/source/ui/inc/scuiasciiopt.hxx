@@ -22,17 +22,16 @@
 
 #include <vcl/dialog.hxx>
 #include <svx/langbox.hxx>
+#include <tools/stream.hxx>
 
 #include "asciiopt.hxx"
 
 class Button;
 class CheckBox;
-class ComboBox;
 class Edit;
 class FixedText;
-class ListBox;
-class NumericField;
 class RadioButton;
+class NumericField;
 
 class ScCsvTableBox;
 class SvxTextEncodingBox;
@@ -41,7 +40,7 @@ class ScImportAsciiDlg : public ModalDialog
 {
     SvStream*                   mpDatStream;
     sal_uLong                       mnStreamPos;
-    sal_uLong*                      mpRowPosArray;
+    std::unique_ptr<sal_uLong[]>    mpRowPosArray;
     sal_uLong                       mnRowPosCount;
 
     OUString               maPreviewLine[ CSV_PREVIEW_LINES ];
@@ -63,6 +62,7 @@ class ScImportAsciiDlg : public ModalDialog
     VclPtr<CheckBox>                   pCkbTab;
     VclPtr<CheckBox>                   pCkbSemicolon;
     VclPtr<CheckBox>                   pCkbComma;
+    VclPtr<CheckBox>                   pCkbRemoveSpace;
     VclPtr<CheckBox>                   pCkbSpace;
     VclPtr<CheckBox>                   pCkbOther;
     VclPtr<Edit>                       pEdOther;
@@ -73,27 +73,26 @@ class ScImportAsciiDlg : public ModalDialog
 
     VclPtr<CheckBox>                   pCkbQuotedAsText;
     VclPtr<CheckBox>                   pCkbDetectNumber;
+    VclPtr<CheckBox>                   pCkbSkipEmptyCells;
 
     VclPtr<FixedText>                  pFtType;
     VclPtr<ListBox>                    pLbType;
 
     VclPtr<ScCsvTableBox>              mpTableBox;
 
-    OUString                    aCharSetUser;
-    OUString                    aColumnUser;
-    OUString                    aTextSepList;
     OUString                    maFieldSeparators;  // selected field separators
     sal_Unicode                 mcTextSep;
 
     rtl_TextEncoding            meCharSet;          /// Selected char set.
     bool                        mbCharSetSystem;    /// Is System char set selected?
-    ScImportAsciiCall           meCall;             /// How the dialog is called (see asciiopt.hxx)
+    ScImportAsciiCall const     meCall;             /// How the dialog is called (see asciiopt.hxx)
+    bool                        mbDetectSpaceSep;   /// Whether to detect a possible space separator.
 
 public:
                                 ScImportAsciiDlg(
                                     vcl::Window* pParent, const OUString& aDatName,
                                     SvStream* pInStream, ScImportAsciiCall eCall );
-                                virtual ~ScImportAsciiDlg();
+                                virtual ~ScImportAsciiDlg() override;
     virtual void                dispose() override;
 
     void                        GetOptions( ScAsciiOptions& rOpt );
@@ -110,20 +109,20 @@ private:
     /** Enables or disables all separator checkboxes and edit fields. */
     void                        SetupSeparatorCtrls();
 
-    bool                        GetLine( sal_uLong nLine, OUString &rText );
+    bool                        GetLine( sal_uLong nLine, OUString &rText, sal_Unicode& rcDetectSep );
     void                        UpdateVertical();
     inline bool                 Seek( sal_uLong nPos ); // synced to and from mnStreamPos
 
-                                DECL_LINK_TYPED( CharSetHdl, ListBox&, void );
-                                DECL_LINK_TYPED( FirstRowHdl, Edit&, void );
-                                DECL_LINK_TYPED( RbSepFixHdl, Button*, void );
-                                DECL_LINK_TYPED( SeparatorEditHdl, Edit&, void );
-                                DECL_LINK_TYPED( SeparatorClickHdl, Button*, void );
-                                DECL_LINK_TYPED( SeparatorComboBoxHdl, ComboBox&, void );
-                                void SeparatorHdl(Control*);
-                                DECL_LINK_TYPED( LbColTypeHdl, ListBox&, void );
-                                DECL_LINK_TYPED( UpdateTextHdl, ScCsvTableBox&, void );
-                                DECL_LINK_TYPED( ColTypeHdl, ScCsvTableBox&, void );
+                                DECL_LINK( CharSetHdl, ListBox&, void );
+                                DECL_LINK( FirstRowHdl, Edit&, void );
+                                DECL_LINK( RbSepFixHdl, Button*, void );
+                                DECL_LINK( SeparatorEditHdl, Edit&, void );
+                                DECL_LINK( SeparatorClickHdl, Button*, void );
+                                DECL_LINK( SeparatorComboBoxHdl, ComboBox&, void );
+                                void SeparatorHdl(const Control*);
+                                DECL_LINK( LbColTypeHdl, ListBox&, void );
+                                DECL_LINK( UpdateTextHdl, ScCsvTableBox&, void );
+                                DECL_LINK( ColTypeHdl, ScCsvTableBox&, void );
 };
 
 inline bool ScImportAsciiDlg::Seek(sal_uLong nPos)

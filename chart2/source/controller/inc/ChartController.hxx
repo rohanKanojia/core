@@ -19,40 +19,46 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_CHARTCONTROLLER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_MAIN_CHARTCONTROLLER_HXX
 
-#include "LifeTime.hxx"
+#include <LifeTime.hxx>
 #include "CommandDispatchContainer.hxx"
 #include "SelectionHelper.hxx"
 
 #include <svx/svdtypes.hxx>
 #include <vcl/timer.hxx>
-#include <vcl/event.hxx>
 
 #include <cppuhelper/implbase.hxx>
 
-#include <com/sun/star/accessibility/XAccessible.hpp>
-#include <com/sun/star/document/XUndoManager.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/ui/XContextMenuInterception.hpp>
-#include <com/sun/star/uno/XWeak.hpp>
-#include <com/sun/star/util/XCloseListener.hpp>
-#include <com/sun/star/util/XCloseable.hpp>
-#include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/lang/XServiceInfo.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/util/XModifyListener.hpp>
 #include <com/sun/star/util/XModeChangeListener.hpp>
-#include <com/sun/star/awt/Point.hpp>
-#include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/util/XURLTransformer.hpp>
+#include <com/sun/star/util/XCloseListener.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
+#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XLayoutManagerListener.hpp>
-#include <com/sun/star/frame/XLayoutManagerEventBroadcaster.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <memory>
 #include <set>
+
+namespace com { namespace sun { namespace star { namespace accessibility { class XAccessible; } } } }
+namespace com { namespace sun { namespace star { namespace accessibility { class XAccessibleContext; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XFocusListener; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XKeyListener; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XMouseListener; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XMouseMotionListener; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XPaintListener; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XWindow; } } } }
+namespace com { namespace sun { namespace star { namespace awt { class XWindowListener; } } } }
+namespace com { namespace sun { namespace star { namespace awt { struct Point; } } } }
+namespace com { namespace sun { namespace star { namespace document { class XUndoManager; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XDispatch; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XLayoutManagerEventBroadcaster; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XInitialization; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XCloseable; } } } }
+namespace com { namespace sun { namespace star { namespace view { class XSelectionSupplier; } } } }
+
 
 class SdrModel;
 
@@ -101,243 +107,187 @@ class ChartController   : public ::cppu::WeakImplHelper <
         ,css::frame::XLayoutManagerListener
         >
 {
-    friend class DrawCommandDispatch;
-    friend class ShapeController;
-
 public:
     ChartController() = delete;
     explicit ChartController(css::uno::Reference< css::uno::XComponentContext > const & xContext);
-    virtual ~ChartController();
+    virtual ~ChartController() override;
 
     OUString GetContextName();
 
     // css::lang::XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-            throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw( css::uno::RuntimeException, std::exception ) override;
-
-    static OUString getImplementationName_Static();
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // css::frame::XController (required interface)
     virtual void SAL_CALL
-        attachFrame( const css::uno::Reference< css::frame::XFrame > & xFrame )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        attachFrame( const css::uno::Reference< css::frame::XFrame > & xFrame ) override;
 
     virtual sal_Bool SAL_CALL
-        attachModel( const css::uno::Reference< css::frame::XModel > & xModel )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        attachModel( const css::uno::Reference< css::frame::XModel > & xModel ) override;
 
     virtual css::uno::Reference< css::frame::XFrame > SAL_CALL
-        getFrame()          throw (css::uno::RuntimeException, std::exception) override;
+        getFrame() override;
 
     virtual css::uno::Reference< css::frame::XModel > SAL_CALL
-        getModel()          throw (css::uno::RuntimeException, std::exception) override;
+        getModel() override;
 
     virtual css::uno::Any SAL_CALL
-        getViewData()       throw (css::uno::RuntimeException, std::exception) override;
+        getViewData() override;
 
     virtual void SAL_CALL
-        restoreViewData( const css::uno::Any& rValue )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        restoreViewData( const css::uno::Any& rValue ) override;
 
     virtual sal_Bool SAL_CALL
-        suspend( sal_Bool bSuspend )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        suspend( sal_Bool bSuspend ) override;
 
     // css::lang::XComponent (base of XController)
     virtual void SAL_CALL
-        dispose()           throw (css::uno::RuntimeException, std::exception) override;
+        dispose() override;
 
     virtual void SAL_CALL
-        addEventListener( const css::uno::Reference< css::lang::XEventListener > & xListener )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        addEventListener( const css::uno::Reference< css::lang::XEventListener > & xListener ) override;
 
     virtual void SAL_CALL
-        removeEventListener( const css::uno::Reference< css::lang::XEventListener > & xListener )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        removeEventListener( const css::uno::Reference< css::lang::XEventListener > & xListener ) override;
 
     // css::frame::XDispatchProvider (required interface)
     virtual css::uno::Reference< css::frame::XDispatch> SAL_CALL
         queryDispatch( const css::util::URL& rURL
                             , const OUString& rTargetFrameName
-                            , sal_Int32 nSearchFlags)
-                            throw (css::uno::RuntimeException, std::exception) override;
+                            , sal_Int32 nSearchFlags) override;
 
     virtual css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL
-        queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor > & xDescripts)
-                            throw (css::uno::RuntimeException, std::exception) override;
+        queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor > & xDescripts) override;
 
     // css::view::XSelectionSupplier (optional interface)
     virtual sal_Bool SAL_CALL
-        select( const css::uno::Any& rSelection )
-            throw (css::lang::IllegalArgumentException,
-                   css::uno::RuntimeException, std::exception) override;
+        select( const css::uno::Any& rSelection ) override;
 
     virtual css::uno::Any  SAL_CALL
-        getSelection() throw (css::uno::RuntimeException, std::exception) override;
+        getSelection() override;
 
     virtual void SAL_CALL
-        addSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener > & xListener )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        addSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener > & xListener ) override;
 
     virtual void SAL_CALL
-        removeSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener > & xListener )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        removeSelectionChangeListener( const css::uno::Reference< css::view::XSelectionChangeListener > & xListener ) override;
 
     // css::ui::XContextMenuInterception (optional interface)
     virtual void SAL_CALL
-        registerContextMenuInterceptor( const css::uno::Reference< css::ui::XContextMenuInterceptor > & xInterceptor)
-                            throw (css::uno::RuntimeException, std::exception) override;
+        registerContextMenuInterceptor( const css::uno::Reference< css::ui::XContextMenuInterceptor > & xInterceptor) override;
 
     virtual void SAL_CALL
-        releaseContextMenuInterceptor( const css::uno::Reference< css::ui::XContextMenuInterceptor > & xInterceptor)
-                            throw (css::uno::RuntimeException, std::exception) override;
+        releaseContextMenuInterceptor( const css::uno::Reference< css::ui::XContextMenuInterceptor > & xInterceptor) override;
 
     //additional interfaces
 
     // css::util::XCloseListener
     virtual void SAL_CALL
         queryClosing( const css::lang::EventObject& Source
-                            , sal_Bool GetsOwnership )
-                            throw (css::util::CloseVetoException
-                                 , css::uno::RuntimeException, std::exception) override;
+                            , sal_Bool GetsOwnership ) override;
 
     virtual void SAL_CALL
-        notifyClosing( const css::lang::EventObject& Source )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        notifyClosing( const css::lang::EventObject& Source ) override;
 
     // css::util::XEventListener (base of XCloseListener and XModifyListener)
     virtual void SAL_CALL
-        disposing( const css::lang::EventObject& Source )
-                            throw (css::uno::RuntimeException, std::exception) override;
+        disposing( const css::lang::EventObject& Source ) override;
 
     // css::frame::XDispatch
 
     virtual void SAL_CALL
         dispatch( const css::util::URL& aURL
-                    , const css::uno::Sequence< css::beans::PropertyValue >& aArgs )
-                    throw (css::uno::RuntimeException,
-                           std::exception) override;
+                    , const css::uno::Sequence< css::beans::PropertyValue >& aArgs ) override;
 
     virtual void SAL_CALL
         addStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl
-                    , const css::util::URL& aURL )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                    , const css::util::URL& aURL ) override;
 
     virtual void SAL_CALL
         removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >& xControl
-                    , const css::util::URL& aURL )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                    , const css::util::URL& aURL ) override;
 
     // css::awt::XWindow
     virtual void SAL_CALL
         setPosSize( sal_Int32 X, sal_Int32 Y
-                    , sal_Int32 Width, sal_Int32 Height, sal_Int16 Flags )
-                    throw (css::uno::RuntimeException, std::exception) override;
+                    , sal_Int32 Width, sal_Int32 Height, sal_Int16 Flags ) override;
 
     virtual css::awt::Rectangle SAL_CALL
-        getPosSize()
-                    throw (css::uno::RuntimeException, std::exception) override;
+        getPosSize() override;
 
     virtual void SAL_CALL
-        setVisible( sal_Bool Visible )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        setVisible( sal_Bool Visible ) override;
 
     virtual void SAL_CALL
-        setEnable( sal_Bool Enable )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        setEnable( sal_Bool Enable ) override;
 
     virtual void SAL_CALL
-        setFocus()  throw (css::uno::RuntimeException, std::exception) override;
+        setFocus() override;
 
     virtual void SAL_CALL
-        addWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        addWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) override;
 
     virtual void SAL_CALL
-        removeWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        removeWindowListener( const css::uno::Reference< css::awt::XWindowListener >& xListener ) override;
 
     virtual void SAL_CALL
-        addFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        addFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) override;
 
     virtual void SAL_CALL
-        removeFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        removeFocusListener( const css::uno::Reference< css::awt::XFocusListener >& xListener ) override;
 
     virtual void SAL_CALL
-        addKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        addKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
 
     virtual void SAL_CALL
-        removeKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        removeKeyListener( const css::uno::Reference< css::awt::XKeyListener >& xListener ) override;
 
     virtual void SAL_CALL
-        addMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        addMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) override;
 
     virtual void SAL_CALL
-        removeMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        removeMouseListener( const css::uno::Reference< css::awt::XMouseListener >& xListener ) override;
 
     virtual void SAL_CALL
-        addMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        addMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
 
     virtual void SAL_CALL
-        removeMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        removeMouseMotionListener( const css::uno::Reference< css::awt::XMouseMotionListener >& xListener ) override;
 
     virtual void SAL_CALL
-        addPaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        addPaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) override;
 
     virtual void SAL_CALL
-        removePaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener )
-                    throw (css::uno::RuntimeException, std::exception) override;
+        removePaintListener( const css::uno::Reference< css::awt::XPaintListener >& xListener ) override;
 
     // css::lang XMultiServiceFactory
     virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
-        createInstance( const OUString& aServiceSpecifier )
-            throw (css::uno::Exception,
-                   css::uno::RuntimeException, std::exception) override;
+        createInstance( const OUString& aServiceSpecifier ) override;
     virtual css::uno::Reference< css::uno::XInterface > SAL_CALL
         createInstanceWithArguments( const OUString& ServiceSpecifier,
                                      const css::uno::Sequence<
-                                         css::uno::Any >& Arguments )
-            throw (css::uno::Exception,
-                   css::uno::RuntimeException, std::exception) override;
+                                         css::uno::Any >& Arguments ) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getAvailableServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        getAvailableServiceNames() override;
 
     // css::util::XModifyListener
     virtual void SAL_CALL modified(
-        const css::lang::EventObject& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& aEvent ) override;
 
     // css::util::XModeChangeListener
     virtual void SAL_CALL modeChanged(
-        const css::util::ModeChangeEvent& _rSource )
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+        const css::util::ModeChangeEvent& _rSource ) override;
 
     // css::frame::XLayoutManagerListener
     virtual void SAL_CALL layoutEvent(
         const css::lang::EventObject& aSource,
         ::sal_Int16 eLayoutEvent,
-        const css::uno::Any& aInfo )
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Any& aInfo ) override;
 
     // WindowController stuff
-    void PrePaint(vcl::RenderContext& rRenderContext);
-    void execute_Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect);
+    void PrePaint();
+    void execute_Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect);
     void execute_MouseButtonDown( const MouseEvent& rMEvt );
     void execute_MouseMove( const MouseEvent& rMEvt );
     void execute_MouseButtonUp( const MouseEvent& rMEvt );
@@ -375,28 +325,30 @@ public:
 
     ViewElementListProvider getViewElementListProvider();
     DrawModelWrapper* GetDrawModelWrapper();
-
-    DECL_LINK_TYPED( NotifyUndoActionHdl, SdrUndoAction*, void );
-
-private:
     DrawViewWrapper* GetDrawViewWrapper();
+    VclPtr<ChartWindow> GetChartWindow();
+    weld::Window* GetChartFrame();
+    bool isAdditionalShapeSelected();
+    void SetAndApplySelection(const css::uno::Reference<css::drawing::XShape>& rxShape);
+    void StartTextEdit( const Point* pMousePixel = nullptr );
+
+    void NotifyUndoActionHdl( std::unique_ptr<SdrUndoAction> );
+
+    css::uno::Reference<css::uno::XInterface> const & getChartView();
 
 private:
-    class TheModelRef;
-    friend class ChartController::TheModelRef;
     class TheModel : public salhelper::SimpleReferenceObject
     {
         public:
             explicit TheModel( const css::uno::Reference<
                         css::frame::XModel > & xModel );
 
-            virtual ~TheModel();
+            virtual ~TheModel() override;
 
-            void        SetOwnership( bool bGetsOwnership );
             void        addListener( ChartController* pController );
             void        removeListener(  ChartController* pController );
             void        tryTermination();
-            css::uno::Reference< css::frame::XModel >
+            const css::uno::Reference< css::frame::XModel >&
                         getModel() const { return m_xModel;}
 
         private:
@@ -407,26 +359,24 @@ private:
             //each controller might consider himself as owner of the model first
             bool m_bOwnership;
     };
-    class TheModelRef
+    class TheModelRef final
     {
         public:
             TheModelRef( TheModel* pTheModel, ::osl::Mutex& rMutex );
             TheModelRef( const TheModelRef& rTheModel, ::osl::Mutex& rMutex );
             TheModelRef& operator=(ChartController::TheModel* pTheModel);
             TheModelRef& operator=(const TheModelRef& rTheModel);
-            virtual ~TheModelRef();
+            ~TheModelRef();
             bool is() const;
-                TheModel* operator->() const { return m_pTheModel; }
+            TheModel* operator->() const { return m_xTheModel.get(); }
         private:
-            TheModel*               m_pTheModel;
-            ::osl::Mutex&   m_rModelMutex;
+            rtl::Reference<TheModel>  m_xTheModel;
+            ::osl::Mutex&             m_rModelMutex;
     };
 
-private:
     mutable ::apphelper::LifeTimeManager m_aLifeTimeManager;
 
     bool m_bSuspended;
-    bool m_bCanClose;
 
     css::uno::Reference< css::uno::XComponentContext> m_xCC;
 
@@ -436,11 +386,10 @@ private:
     TheModelRef m_aModel;
 
     //view
-    VclPtr<ChartWindow> m_pChartWindow;
     css::uno::Reference<css::awt::XWindow> m_xViewWindow;
     css::uno::Reference<css::uno::XInterface> m_xChartView;
     std::shared_ptr< DrawModelWrapper > m_pDrawModelWrapper;
-    DrawViewWrapper* m_pDrawViewWrapper;
+    std::unique_ptr<DrawViewWrapper> m_pDrawViewWrapper;
 
     Selection m_aSelection;
     SdrDragMode m_eDragMode;
@@ -448,6 +397,7 @@ private:
     Timer m_aDoubleClickTimer;
     bool m_bWaitingForDoubleClick;
     bool m_bWaitingForMouseUp;
+    bool m_bFieldButtonDown;
 
     bool m_bConnectingToView;
     bool m_bDisposed;
@@ -467,11 +417,8 @@ private:
 
     rtl::Reference<svx::sidebar::SelectionChangeHandler> mpSelectionChangeHandler;
 
-private:
-    //private methods
-
     bool impl_isDisposedOrSuspended() const;
-    ReferenceSizeProvider* impl_createReferenceSizeProvider();
+    std::unique_ptr<ReferenceSizeProvider> impl_createReferenceSizeProvider();
     void impl_adaptDataSeriesAutoResize();
 
     void impl_createDrawViewController();
@@ -530,7 +477,6 @@ private:
     void executeDispatch_SourceData();
     void executeDispatch_MoveSeries( bool bForward );
 
-    void StartTextEdit( const Point* pMousePixel = nullptr );
     bool EndTextEdit();
 
     void executeDispatch_View3D();
@@ -549,11 +495,15 @@ private:
     void executeDispatch_ToggleGridHorizontal();
     void executeDispatch_ToggleGridVertical();
 
+    void executeDispatch_LOKSetTextSelection(int nType, int nX, int nY);
+
+    void sendPopupRequest(OUString const & rCID, tools::Rectangle aRectangle);
+
     void impl_ShapeControllerDispatch( const css::util::URL& rURL,
         const css::uno::Sequence< css::beans::PropertyValue >& rArgs );
 
-    DECL_LINK_TYPED( DoubleClickWaitingHdl, Timer*, void );
-    void execute_DoubleClick( const Point* pMousePixel = nullptr );
+    DECL_LINK( DoubleClickWaitingHdl, Timer*, void );
+    void execute_DoubleClick( const Point* pMousePixel );
     void startDoubleClickWaiting();
     void stopDoubleClickWaiting();
 
@@ -577,7 +527,7 @@ private:
         const OUString & rCID, eMoveOrResizeType eType, double fAmountLogicX, double fAmountLogicY );
     bool impl_DragDataPoint( const OUString & rCID, double fOffset );
 
-    static std::set< OUString > impl_getAvailableCommands();
+    static const std::set< OUString >& impl_getAvailableCommands();
 
     /** Creates a helper accessibility class that must be initialized via XInitialization.  For
         parameters see
@@ -589,7 +539,7 @@ private:
     css::uno::Reference< css::accessibility::XAccessibleContext >
         impl_createAccessibleTextContext();
 
-    void impl_PasteGraphic( css::uno::Reference< css::graphic::XGraphic > & xGraphic,
+    void impl_PasteGraphic( css::uno::Reference< css::graphic::XGraphic > const & xGraphic,
                             const ::Point & aPosition );
     void impl_PasteShapes( SdrModel* pModel );
     void impl_PasteStringAsTextShape( const OUString& rString, const css::awt::Point& rPosition );

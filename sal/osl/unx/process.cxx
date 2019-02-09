@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
-#include "rtl/ustring.hxx"
+#include <sal/config.h>
+#include <rtl/ustring.hxx>
 
 #include <cassert>
 
@@ -29,7 +29,7 @@
  *      - cleanup of resource transfer
  */
 
-#if defined(SOLARIS)
+#if defined(__sun)
   // The procfs may only be used without LFS in 32bits.
 # ifdef _FILE_OFFSET_BITS
 #   undef   _FILE_OFFSET_BITS
@@ -41,7 +41,8 @@
 #endif
 
 #include "system.hxx"
-#if defined(SOLARIS)
+#include "unixerrnostring.hxx"
+#if defined(__sun)
 # include <sys/procfs.h>
 #endif
 #include <osl/diagnose.h>
@@ -79,7 +80,6 @@ struct oslProcessImpl {
 struct ProcessData
 {
     const sal_Char*  m_pszArgs[MAX_ARGS + 1];
-    oslProcessOption m_options;
     const sal_Char*  m_pszDir;
     sal_Char*        m_pszEnv[MAX_ENVS + 1];
     uid_t            m_uid;
@@ -97,7 +97,7 @@ static oslMutex        ChildListMutex;
 
 } //Anonymous namespace
 
-oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
+static oslProcessError osl_psz_executeProcess(sal_Char *pszImageName,
                                                 sal_Char *pszArguments[],
                                                 oslProcessOption Options,
                                                 oslSecurity Security,
@@ -107,12 +107,6 @@ oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
                                                 oslFileHandle *pInputWrite,
                                                 oslFileHandle *pOutputRead,
                                                 oslFileHandle *pErrorRead );
-
-/******************************************************************************
- *
- *                  Functions for starting a process
- *
- *****************************************************************************/
 
 extern "C" {
 
@@ -176,21 +170,21 @@ static void ChildStatusProc(void *pData)
 
         if (channel[0] != -1) close(channel[0]);
 
-        if ((data.m_uid != (uid_t)-1) && ((data.m_uid != getuid()) || (data.m_gid != getgid())))
+        if ((data.m_uid != uid_t(-1)) && ((data.m_uid != getuid()) || (data.m_gid != getgid())))
         {
             OSL_ASSERT(geteuid() == 0);     /* must be root */
 
             if (! INIT_GROUPS(data.m_name, data.m_gid) || (setuid(data.m_uid) != 0))
-                OSL_TRACE("Failed to change uid and guid, errno=%d (%s)", errno, strerror(errno));
+                SAL_WARN("sal.osl", "Failed to change uid and guid: " << UnixErrnoString(errno));
 
-            const rtl::OUString envVar("HOME");
+            const OUString envVar("HOME");
             osl_clearEnvironment(envVar.pData);
         }
 
         if (data.m_pszDir)
             chstatus = chdir(data.m_pszDir);
 
-        if (chstatus == 0 && ((data.m_uid == (uid_t)-1) || ((data.m_uid == getuid()) && (data.m_gid == getgid()))))
+        if (chstatus == 0 && ((data.m_uid == uid_t(-1)) || ((data.m_uid == getuid()) && (data.m_gid == getgid()))))
         {
             int i;
             for (i = 0; data.m_pszEnv[i] != nullptr; i++)
@@ -204,8 +198,6 @@ static void ChildStatusProc(void *pData)
                     putenv(data.m_pszEnv[i]); /*TODO: check error return*/
                 }
             }
-
-            OSL_TRACE("ChildStatusProc : starting '%s'",data.m_pszArgs[0]);
 
             /* Connect std IO to pipe ends */
 
@@ -243,14 +235,14 @@ static void ChildStatusProc(void *pData)
             execv(data.m_pszArgs[0], const_cast<char **>(data.m_pszArgs));
         }
 
-        OSL_TRACE("Failed to exec, errno=%d (%s)", errno, strerror(errno));
+        SAL_WARN("sal.osl", "Failed to exec: " << UnixErrnoString(errno));
 
-        OSL_TRACE("ChildStatusProc : starting '%s' failed",data.m_pszArgs[0]);
+        SAL_WARN("sal.osl", "ChildStatusProc : starting '" << data.m_pszArgs[0] << "' failed");
 
         /* if we reach here, something went wrong */
         errno_copy = errno;
         if ( !safeWrite(channel[1], &errno_copy, sizeof(errno_copy)) )
-            OSL_TRACE("sendFdPipe : sending failed (%s)",strerror(errno));
+            SAL_WARN("sal.osl", "sendFdPipe : sending failed:  " << UnixErrnoString(errno));
 
         if ( channel[1] != -1 )
             close(channel[1]);
@@ -269,7 +261,7 @@ static void ChildStatusProc(void *pData)
 
         if (pid > 0)
         {
-            while (((i = read(channel[0], &status, sizeof(status))) < 0))
+            while ((i = read(channel[0], &status, sizeof(status))) < 0)
             {
                 if (errno != EINTR)
                     break;
@@ -309,10 +301,10 @@ static void ChildStatusProc(void *pData)
 
             if ( child_pid < 0)
             {
-                OSL_TRACE("Failed to wait for child process, errno=%d (%s)", errno, strerror(errno));
+                SAL_WARN("sal.osl", "Failed to wait for child process: " << UnixErrnoString(errno));
 
                 /*
-                We got an other error than EINTR. Anyway we have to wake up the
+                We got another error than EINTR. Anyway we have to wake up the
                 waiting thread under any circumstances */
 
                 child_pid = pid;
@@ -349,8 +341,8 @@ static void ChildStatusProc(void *pData)
         }
         else
         {
-            OSL_TRACE("ChildStatusProc : starting '%s' failed",data.m_pszArgs[0]);
-            OSL_TRACE("Failed to launch child process, child reports errno=%d (%s)", status, strerror(status));
+            SAL_WARN("sal.osl", "ChildStatusProc : starting '" << data.m_pszArgs[0] << "' failed");
+            SAL_WARN("sal.osl", "Failed to launch child process, child reports " << UnixErrnoString(status));
 
             /* Close pipe ends */
             if ( pdata->m_pInputWrite )
@@ -366,9 +358,9 @@ static void ChildStatusProc(void *pData)
             if (stdOutput[0] != -1) close( stdOutput[0] );
             if (stdError[0] != -1) close( stdError[0] );
 
-            //if pid > 0 then a process was created, even if it later failed
-            //e.g. bash searching for a command to execute, and we still
-            //need to clean it up to avoid "defunct" processes
+            /* if pid > 0 then a process was created, even if it later failed
+               e.g. bash searching for a command to execute, and we still
+               need to clean it up to avoid "defunct" processes */
             if (pid > 0)
             {
                 pid_t child_pid;
@@ -401,25 +393,25 @@ oslProcessError SAL_CALL osl_executeProcess_WithRedirectedIO(
                                             oslFileHandle   *pErrorRead
                                             )
 {
-    rtl::OUString image;
+    OUString image;
     if (ustrImageName == nullptr)
     {
         if (nArguments == 0)
         {
             return osl_Process_E_InvalidError;
         }
-        image = rtl::OUString::unacquired(ustrArguments);
+        image = OUString::unacquired(ustrArguments);
     }
     else
     {
         osl::FileBase::RC e = osl::FileBase::getSystemPathFromFileURL(
-            rtl::OUString::unacquired(&ustrImageName), image);
+            OUString::unacquired(&ustrImageName), image);
         if (e != osl::FileBase::E_None)
         {
             SAL_INFO(
                 "sal.osl",
                 "getSystemPathFromFileURL("
-                    << rtl::OUString::unacquired(&ustrImageName)
+                    << OUString::unacquired(&ustrImageName)
                     << ") failed with " << e);
             return osl_Process_E_Unknown;
         }
@@ -427,7 +419,7 @@ oslProcessError SAL_CALL osl_executeProcess_WithRedirectedIO(
 
     if ((Options & osl_Process_SEARCHPATH) != 0)
     {
-        rtl::OUString path;
+        OUString path;
         if (osl::detail::find_in_PATH(image, path))
         {
             image = path;
@@ -460,7 +452,7 @@ oslProcessError SAL_CALL osl_executeProcess_WithRedirectedIO(
         {
             SAL_INFO(
                 "sal.osl",
-                "FileURLToPath(" << rtl::OUString::unacquired(&ustrWorkDir)
+                "FileURLToPath(" << OUString::unacquired(&ustrWorkDir)
                     << ") failed with " << e);
             return osl_Process_E_Unknown;
         }
@@ -574,7 +566,7 @@ oslProcessError SAL_CALL osl_executeProcess(
         );
 }
 
-oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
+oslProcessError osl_psz_executeProcess(sal_Char *pszImageName,
                                                 sal_Char *pszArguments[],
                                                 oslProcessOption Options,
                                                 oslSecurity Security,
@@ -586,7 +578,7 @@ oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
                                                 oslFileHandle   *pErrorRead
                                                 )
 {
-    int     i;
+    int i;
     ProcessData Data;
     oslThread hThread;
 
@@ -612,7 +604,6 @@ oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
         Data.m_pszArgs[i+2] = nullptr;
     }
 
-    Data.m_options = Options;
     Data.m_pszDir  = (pszDirectory != nullptr) ? strdup(pszDirectory) : nullptr;
 
     if (pszEnvironments != nullptr)
@@ -631,7 +622,7 @@ oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
         Data.m_name = static_cast<oslSecurityImpl*>(Security)->m_pPasswd.pw_name;
     }
     else
-        Data.m_uid = (uid_t)-1;
+        Data.m_uid = uid_t(-1);
 
     Data.m_pProcImpl = static_cast<oslProcessImpl*>(malloc(sizeof(oslProcessImpl)));
     Data.m_pProcImpl->m_pid = 0;
@@ -682,12 +673,6 @@ oslProcessError SAL_CALL osl_psz_executeProcess(sal_Char *pszImageName,
     return osl_Process_E_Unknown;
 }
 
-/******************************************************************************
- *
- *                  Functions for processes
- *
- *****************************************************************************/
-
 oslProcessError SAL_CALL osl_terminateProcess(oslProcess Process)
 {
     if (Process == nullptr)
@@ -729,7 +714,7 @@ oslProcess SAL_CALL osl_getProcess(oslProcessIdentifier Ident)
         /* check if it is one of our child processes */
         while (pChild != nullptr)
         {
-            if (Ident == (sal_uInt32) pChild->m_pid)
+            if (Ident == static_cast<sal_uInt32>(pChild->m_pid))
                 break;
 
             pChild = pChild->m_pnext;
@@ -841,7 +826,7 @@ struct osl_procStat
     char signal[24];          /* pending signals */
     char blocked[24];         /* blocked signals */
     char sigignore[24];       /* ignored signals */
-    char sigcatch[24];        /* catched signals */
+    char sigcatch[24];        /* caught signals */
     unsigned long wchan;      /* 'channel' the process is waiting in */
     unsigned long nswap;      /* ? */
     unsigned long cnswap;     /* ? */
@@ -864,7 +849,7 @@ struct osl_procStat
     unsigned long vm_lib;     /* library size */
 };
 
-bool osl_getProcStat(pid_t pid, struct osl_procStat* procstat)
+static bool osl_getProcStat(pid_t pid, struct osl_procStat* procstat)
 {
     int fd = 0;
     bool bRet = false;
@@ -899,7 +884,7 @@ bool osl_getProcStat(pid_t pid, struct osl_procStat* procstat)
                "%lu %li %li %li"
                "%lu %lu %li %lu"
                "%lu %lu %lu %lu %lu"
-               "%s %s %s %s"
+               "%23s %23s %23s %23s"
                "%lu %lu %lu",
                &procstat->state,
                &procstat->ppid,      &procstat->pgrp,    &procstat->session,    &procstat->tty,         &procstat->tpgid,
@@ -920,7 +905,7 @@ bool osl_getProcStat(pid_t pid, struct osl_procStat* procstat)
     return bRet;
 }
 
-bool osl_getProcStatus(pid_t pid, struct osl_procStat* procstat)
+static bool osl_getProcStatus(pid_t pid, struct osl_procStat* procstat)
 {
     int fd = 0;
     char name[PATH_MAX + 1];
@@ -975,7 +960,7 @@ bool osl_getProcStatus(pid_t pid, struct osl_procStat* procstat)
         tmp = strstr(prstatusbuf,"SigPnd:");
         if(tmp)
         {
-            sscanf(tmp, "SigPnd: %s SigBlk: %s SigIgn: %s %*s %s",
+            sscanf(tmp, "SigPnd: %23s SigBlk: %23s SigIgn: %23s %*s %23s",
                    procstat->signal, procstat->blocked, procstat->sigignore, procstat->sigcatch
                 );
         }
@@ -1018,12 +1003,12 @@ oslProcessError SAL_CALL osl_getProcessInfo(oslProcess Process, oslProcessData F
     if (Fields & (osl_Process_HEAPUSAGE | osl_Process_CPUTIMES))
     {
 
-#if defined(SOLARIS)
+#if defined(__sun)
 
         int  fd;
         sal_Char name[PATH_MAX + 1];
 
-        snprintf(name, sizeof(name), "/proc/%u", pid);
+        snprintf(name, sizeof(name), "/proc/%ld", (long)pid);
 
         if ((fd = open(name, O_RDONLY)) >= 0)
         {
@@ -1082,7 +1067,7 @@ oslProcessError SAL_CALL osl_getProcessInfo(oslProcess Process, oslProcessData F
                 if (clktck < 0) {
                     return osl_Process_E_Unknown;
                 }
-                hz = (unsigned long) clktck;
+                hz = static_cast<unsigned long>(clktck);
 
                 userseconds = procstat.utime/hz;
                 systemseconds = procstat.stime/hz;
@@ -1116,9 +1101,8 @@ oslProcessError SAL_CALL osl_getProcessInfo(oslProcess Process, oslProcessData F
     return (pInfo->Fields == Fields) ? osl_Process_E_None : osl_Process_E_Unknown;
 }
 
-/***********************************************
- helper function for osl_joinProcessWithTimeout
- **********************************************/
+/** Helper function for osl_joinProcessWithTimeout
+ */
 
 static bool is_timeout(const struct timeval* tend)
 {
@@ -1127,21 +1111,15 @@ static bool is_timeout(const struct timeval* tend)
     return (tcurrent.tv_sec >= tend->tv_sec);
 }
 
-/**********************************************
- kill(pid, 0) is useful for checking if a
+/* kill(pid, 0) is useful for checking if a
  process is still alive, but remember that
  kill even returns 0 if the process is already
- a zombie.
- *********************************************/
+ a zombie. */
 
 static bool is_process_dead(pid_t pid)
 {
-    return ((-1 == kill(pid, 0)) && (ESRCH == errno));
+    return ((kill(pid, 0) == -1) && (ESRCH == errno));
 }
-
-/**********************************************
- osl_joinProcessWithTimeout
- *********************************************/
 
 oslProcessError SAL_CALL osl_joinProcessWithTimeout(oslProcess Process, const TimeValue* pTimeout)
 {
@@ -1151,7 +1129,7 @@ oslProcessError SAL_CALL osl_joinProcessWithTimeout(oslProcess Process, const Ti
     OSL_PRECOND(Process, "osl_joinProcess: Invalid parameter");
     OSL_ASSERT(ChildListMutex);
 
-    if (nullptr == Process || nullptr == ChildListMutex)
+    if (Process == nullptr || ChildListMutex == nullptr)
         return osl_Process_E_Unknown;
 
     osl_acquireMutex(ChildListMutex);
@@ -1171,9 +1149,9 @@ oslProcessError SAL_CALL osl_joinProcessWithTimeout(oslProcess Process, const Ti
     {
         oslConditionResult cond_res = osl_waitCondition(pChild->m_terminated, pTimeout);
 
-        if (osl_cond_result_timeout == cond_res)
+        if (cond_res == osl_cond_result_timeout)
             osl_error = osl_Process_E_TimedOut;
-        else if (osl_cond_result_ok != cond_res)
+        else if (cond_res != osl_cond_result_ok)
             osl_error = osl_Process_E_Unknown;
     }
     else /* alien process; StatusThread will not be able

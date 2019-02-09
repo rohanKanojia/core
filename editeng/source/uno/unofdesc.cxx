@@ -21,7 +21,6 @@
 #include <editeng/eeitem.hxx>
 #include <com/sun/star/uno/Any.hxx>
 
-#include <toolkit/helper/vclunohelper.hxx>
 #include <editeng/fontitem.hxx>
 #include <editeng/fhgtitem.hxx>
 #include <editeng/postitem.hxx>
@@ -29,8 +28,10 @@
 #include <editeng/wghtitem.hxx>
 #include <editeng/crossedoutitem.hxx>
 #include <editeng/wrlmitem.hxx>
-#include <editeng/memberids.hrc>
+#include <editeng/memberids.h>
 #include <svl/itempool.hxx>
+#include <vcl/unohelp.hxx>
+#include <tools/gen.hxx>
 
 #include <editeng/unofdesc.hxx>
 #include <editeng/svxfont.hxx>
@@ -43,15 +44,15 @@ void SvxUnoFontDescriptor::ConvertToFont( const awt::FontDescriptor& rDesc, vcl:
     rFont.SetFamilyName( rDesc.Name );
     rFont.SetStyleName( rDesc.StyleName );
     rFont.SetFontSize( Size( rDesc.Width, rDesc.Height ) );
-    rFont.SetFamily( (FontFamily)rDesc.Family );
-    rFont.SetCharSet( (rtl_TextEncoding)rDesc.CharSet );
-    rFont.SetPitch( (FontPitch)rDesc.Pitch );
-    rFont.SetOrientation( (short)(rDesc.Orientation*10) );
+    rFont.SetFamily( static_cast<FontFamily>(rDesc.Family) );
+    rFont.SetCharSet( static_cast<rtl_TextEncoding>(rDesc.CharSet) );
+    rFont.SetPitch( static_cast<FontPitch>(rDesc.Pitch) );
+    rFont.SetOrientation( static_cast<short>(rDesc.Orientation*10) );
     rFont.SetKerning( rDesc.Kerning ? FontKerning::FontSpecific : FontKerning::NONE );
-    rFont.SetWeight( VCLUnoHelper::ConvertFontWeight(rDesc.Weight) );
-    rFont.SetItalic( (FontItalic)rDesc.Slant );
-    rFont.SetUnderline( (FontLineStyle)rDesc.Underline );
-    rFont.SetStrikeout( (FontStrikeout)rDesc.Strikeout );
+    rFont.SetWeight( vcl::unohelper::ConvertFontWeight(rDesc.Weight) );
+    rFont.SetItalic( static_cast<FontItalic>(rDesc.Slant) );
+    rFont.SetUnderline( static_cast<FontLineStyle>(rDesc.Underline) );
+    rFont.SetStrikeout( static_cast<FontStrikeout>(rDesc.Strikeout) );
     rFont.SetWordLineMode( rDesc.WordLineMode );
 }
 
@@ -66,8 +67,8 @@ void SvxUnoFontDescriptor::ConvertFromFont( const vcl::Font& rFont, awt::FontDes
     rDesc.Pitch = sal::static_int_cast< sal_Int16 >(rFont.GetPitch());
     rDesc.Orientation = static_cast< float >(rFont.GetOrientation() / 10);
     rDesc.Kerning = rFont.IsKerning();
-    rDesc.Weight = VCLUnoHelper::ConvertFontWeight( rFont.GetWeight() );
-    rDesc.Slant = VCLUnoHelper::ConvertFontSlant( rFont.GetItalic() );
+    rDesc.Weight = vcl::unohelper::ConvertFontWeight( rFont.GetWeight() );
+    rDesc.Slant = vcl::unohelper::ConvertFontSlant( rFont.GetItalic() );
     rDesc.Underline = sal::static_int_cast< sal_Int16 >(rFont.GetUnderline());
     rDesc.Strikeout = sal::static_int_cast< sal_Int16 >(rFont.GetStrikeout());
     rDesc.WordLineMode = rFont.IsWordLineMode();
@@ -81,42 +82,42 @@ void SvxUnoFontDescriptor::FillItemSet( const awt::FontDescriptor& rDesc, SfxIte
         SvxFontItem aFontItem( EE_CHAR_FONTINFO );
         aFontItem.SetFamilyName( rDesc.Name);
         aFontItem.SetStyleName( rDesc.StyleName);
-        aFontItem.SetFamily( (FontFamily)rDesc.Family);
+        aFontItem.SetFamily( static_cast<FontFamily>(rDesc.Family));
         aFontItem.SetCharSet( rDesc.CharSet );
-        aFontItem.SetPitch( (FontPitch)rDesc.Pitch);
+        aFontItem.SetPitch( static_cast<FontPitch>(rDesc.Pitch));
         rSet.Put(aFontItem);
     }
 
     {
         SvxFontHeightItem aFontHeightItem( 0, 100, EE_CHAR_FONTHEIGHT );
-        aTemp <<= (float)rDesc.Height;
+        aTemp <<= static_cast<float>(rDesc.Height);
         static_cast<SfxPoolItem*>(&aFontHeightItem)->PutValue( aTemp, MID_FONTHEIGHT|CONVERT_TWIPS );
         rSet.Put(aFontHeightItem);
     }
 
     {
-        SvxPostureItem aPostureItem( (FontItalic)0, EE_CHAR_ITALIC );
+        SvxPostureItem aPostureItem( ITALIC_NONE, EE_CHAR_ITALIC );
         aTemp <<= rDesc.Slant;
         static_cast<SfxPoolItem*>(&aPostureItem)->PutValue( aTemp, MID_POSTURE );
         rSet.Put(aPostureItem);
     }
 
     {
-        SvxUnderlineItem aUnderlineItem( (FontLineStyle)0, EE_CHAR_UNDERLINE );
-        aTemp <<= (sal_Int16)rDesc.Underline;
+        SvxUnderlineItem aUnderlineItem( LINESTYLE_NONE, EE_CHAR_UNDERLINE );
+        aTemp <<= static_cast<sal_Int16>(rDesc.Underline);
         static_cast<SfxPoolItem*>(&aUnderlineItem)->PutValue( aTemp, MID_TL_STYLE );
         rSet.Put( aUnderlineItem );
     }
 
     {
-        SvxWeightItem aWeightItem( (FontWeight)0, EE_CHAR_WEIGHT );
+        SvxWeightItem aWeightItem( WEIGHT_DONTKNOW, EE_CHAR_WEIGHT );
         aTemp <<= rDesc.Weight;
         static_cast<SfxPoolItem*>(&aWeightItem)->PutValue( aTemp, MID_WEIGHT );
         rSet.Put( aWeightItem );
     }
 
     {
-        SvxCrossedOutItem aCrossedOutItem( (FontStrikeout)0, EE_CHAR_STRIKEOUT );
+        SvxCrossedOutItem aCrossedOutItem( STRIKEOUT_NONE, EE_CHAR_STRIKEOUT );
         aTemp <<= rDesc.Strikeout;
         static_cast<SfxPoolItem*>(&aCrossedOutItem)->PutValue( aTemp, MID_CROSS_OUT );
         rSet.Put( aCrossedOutItem );
@@ -132,7 +133,7 @@ void SvxUnoFontDescriptor::FillFromItemSet( const SfxItemSet& rSet, awt::FontDes
 {
     const SfxPoolItem* pItem = nullptr;
     {
-        const SvxFontItem* pFontItem = static_cast<const SvxFontItem*>(&rSet.Get( EE_CHAR_FONTINFO ));
+        const SvxFontItem* pFontItem = &rSet.Get( EE_CHAR_FONTINFO );
         rDesc.Name      = pFontItem->GetFamilyName();
         rDesc.StyleName = pFontItem->GetStyleName();
         rDesc.Family    = sal::static_int_cast< sal_Int16 >(
@@ -172,7 +173,7 @@ void SvxUnoFontDescriptor::FillFromItemSet( const SfxItemSet& rSet, awt::FontDes
             aStrikeOut >>= rDesc.Strikeout;
     }
     {
-        const SvxWordLineModeItem* pWLMItem = static_cast<const SvxWordLineModeItem*>(&rSet.Get( EE_CHAR_WLM ));
+        const SvxWordLineModeItem* pWLMItem = &rSet.Get( EE_CHAR_WLM );
         rDesc.WordLineMode = pWLMItem->GetValue();
     }
 }
@@ -190,13 +191,12 @@ void SvxUnoFontDescriptor::setPropertyToDefault( SfxItemSet& rSet )
 
 uno::Any SvxUnoFontDescriptor::getPropertyDefault( SfxItemPool* pPool )
 {
-    SfxItemSet aSet( *pPool, EE_CHAR_FONTINFO, EE_CHAR_FONTINFO,
-                             EE_CHAR_FONTHEIGHT, EE_CHAR_FONTHEIGHT,
-                             EE_CHAR_ITALIC, EE_CHAR_ITALIC,
-                             EE_CHAR_UNDERLINE, EE_CHAR_UNDERLINE,
-                             EE_CHAR_WEIGHT, EE_CHAR_WEIGHT,
-                             EE_CHAR_STRIKEOUT, EE_CHAR_STRIKEOUT,
-                             EE_CHAR_WLM, EE_CHAR_WLM, 0 );
+    SfxItemSet aSet(
+        *pPool,
+        svl::Items<
+            EE_CHAR_FONTINFO, EE_CHAR_FONTHEIGHT,
+            EE_CHAR_WEIGHT, EE_CHAR_ITALIC,
+            EE_CHAR_WLM, EE_CHAR_WLM>{});
 
     uno::Any aAny;
 

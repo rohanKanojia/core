@@ -18,29 +18,23 @@
  */
 
 #include "lotfilter.hxx"
-#include "lotimpop.hxx"
+#include <lotimpop.hxx>
 
 #include <sfx2/docfile.hxx>
 #include <tools/urlobj.hxx>
 
-#include "scerrors.hxx"
-#include "root.hxx"
-#include "filtopt.hxx"
-#include "ftools.hxx"
+#include <scerrors.hxx>
+#include <root.hxx>
+#include <filtopt.hxx>
+#include <ftools.hxx>
 
-FltError ScFormatFilterPluginImpl::ScImportLotus123( SfxMedium& rMedium, ScDocument* pDocument, rtl_TextEncoding eSrc )
+ErrCode ScFormatFilterPluginImpl::ScImportLotus123( SfxMedium& rMedium, ScDocument* pDocument, rtl_TextEncoding eSrc )
 {
-    ScFilterOptions aFilterOpt;
-    bool bWithWK3 = aFilterOpt.GetWK3Flag();
+    SvStream* pStream = rMedium.GetInStream();
+    if (!pStream)
+        return SCERR_IMPORT_OPEN;
 
-    SvStream*           pStream = rMedium.GetInStream();
-
-    if( !pStream )
-        return eERR_OPEN;
-
-    FltError            eRet;
-
-    pStream->Seek( 0UL );
+    pStream->Seek( 0 );
 
     pStream->SetBufferSize( 32768 );
 
@@ -48,38 +42,35 @@ FltError ScFormatFilterPluginImpl::ScImportLotus123( SfxMedium& rMedium, ScDocum
 
     ImportLotus aLotusImport(aContext, *pStream, pDocument, eSrc);
 
-    if( bWithWK3 )
+    ErrCode eRet;
+    if (ScFilterOptions().GetWK3Flag())
         eRet = aLotusImport.Read();
     else
-        eRet = 0xFFFFFFFF;  // WK1 /WKS erzwingen
+        eRet = ErrCode(0xFFFFFFFF);  // force WK1 /WKS
 
-    // ACHTUNG: QUICK-HACK fuer WK1 / WKS  <->  WK3 / WK4
-    if( eRet == 0xFFFFFFFF )
+    // WARNING: QUICK-HACK for WK1 / WKS  <->  WK3 / WK4
+    if( eRet == ErrCode(0xFFFFFFFF) )
     {
-        pStream->Seek( 0UL );
-
+        pStream->Seek( 0 );
         pStream->SetBufferSize( 32768 );
-
         eRet = ScImportLotus123old(aContext, *pStream, pDocument, eSrc);
-
         pStream->SetBufferSize( 0 );
-
         return eRet;
     }
 
-    if( eRet != eERR_OK )
+    if( eRet != ERRCODE_NONE )
         return eRet;
 
-    if (aContext.pLotusRoot->eFirstType == Lotus_WK3)
+    if (aContext.pLotusRoot->eFirstType == Lotus123Typ::WK3)
     {
-        // versuchen *.FM3-File zu laden
+        // try to load *.FM3 file
         INetURLObject aURL( rMedium.GetURLObject() );
         aURL.setExtension( "FM3" );
-        SfxMedium aMedium( aURL.GetMainURL(INetURLObject::NO_DECODE), STREAM_STD_READ );
+        SfxMedium aMedium( aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE), StreamMode::STD_READ );
         pStream = aMedium.GetInStream();
         if ( pStream )
         {
-            if( aLotusImport.Read( *pStream ) != eERR_OK )
+            if( aLotusImport.Read( *pStream ) != ERRCODE_NONE )
                 eRet = SCWARN_IMPORT_WRONG_FM3;
         }
         else

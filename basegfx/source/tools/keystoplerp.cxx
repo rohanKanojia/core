@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <basegfx/tools/keystoplerp.hxx>
+#include <basegfx/utils/keystoplerp.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <osl/diagnose.h>
 
@@ -25,23 +25,24 @@
 
 static void validateInput(const std::vector<double>& rKeyStops)
 {
-    (void)rKeyStops;
 #ifdef DBG_UTIL
     OSL_ENSURE( rKeyStops.size() > 1,
                 "KeyStopLerp::KeyStopLerp(): key stop vector must have two entries or more" );
 
     // rKeyStops must be sorted in ascending order
-    for( ::std::size_t i=1, len=rKeyStops.size(); i<len; ++i )
+    for( std::size_t i=1, len=rKeyStops.size(); i<len; ++i )
     {
         if( rKeyStops[i-1] > rKeyStops[i] )
             OSL_FAIL( "KeyStopLerp::KeyStopLerp(): time vector is not sorted in ascending order!" );
     }
+#else
+    (void)rKeyStops;
 #endif
 }
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         KeyStopLerp::KeyStopLerp( const std::vector<double>& rKeyStops ) :
             maKeyStops(rKeyStops),
@@ -85,7 +86,7 @@ namespace basegfx
             // everything)
             return ResultType(
                 mnLastIndex,
-                clamp(fRawLerp,0.0,1.0));
+                std::clamp(fRawLerp,0.0,1.0));
         }
     }
 }

@@ -18,7 +18,8 @@
  */
 
 #include "WrappedAddInProperty.hxx"
-#include "macros.hxx"
+#include <ChartDocumentWrapper.hxx>
+#include <com/sun/star/util/XRefreshable.hpp>
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Any;
@@ -39,7 +40,6 @@ WrappedAddInProperty::~WrappedAddInProperty()
 }
 
 void WrappedAddInProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Reference< util::XRefreshable > xAddIn;
     if( ! (rOuterValue >>= xAddIn) )
@@ -49,9 +49,8 @@ void WrappedAddInProperty::setPropertyValue( const Any& rOuterValue, const Refer
 }
 
 Any WrappedAddInProperty::getPropertyValue( const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
-    return uno::makeAny( m_rChartDocumentWrapper.getAddIn() );
+    return uno::Any( m_rChartDocumentWrapper.getAddIn() );
 }
 
 WrappedBaseDiagramProperty::WrappedBaseDiagramProperty( ChartDocumentWrapper& rChartDocumentWrapper )
@@ -64,7 +63,6 @@ WrappedBaseDiagramProperty::~WrappedBaseDiagramProperty()
 }
 
 void WrappedBaseDiagramProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     OUString aBaseDiagram;
     if( ! (rOuterValue >>= aBaseDiagram) )
@@ -74,9 +72,8 @@ void WrappedBaseDiagramProperty::setPropertyValue( const Any& rOuterValue, const
 }
 
 Any WrappedBaseDiagramProperty::getPropertyValue( const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
-    return uno::makeAny( m_rChartDocumentWrapper.getBaseDiagram() );
+    return uno::Any( m_rChartDocumentWrapper.getBaseDiagram() );
 }
 
 WrappedAdditionalShapesProperty::WrappedAdditionalShapesProperty( ChartDocumentWrapper& rChartDocumentWrapper )
@@ -89,15 +86,13 @@ WrappedAdditionalShapesProperty::~WrappedAdditionalShapesProperty()
 }
 
 void WrappedAdditionalShapesProperty::setPropertyValue( const Any& /*rOuterValue*/, const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     throw lang::IllegalArgumentException( "AdditionalShapes is a read only property", nullptr, 0 );
 }
 
 Any WrappedAdditionalShapesProperty::getPropertyValue( const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
-    return uno::makeAny( m_rChartDocumentWrapper.getAdditionalShapes() );
+    return uno::Any( m_rChartDocumentWrapper.getAdditionalShapes() );
 }
 
 WrappedRefreshAddInAllowedProperty::WrappedRefreshAddInAllowedProperty( ChartDocumentWrapper& rChartDocumentWrapper )
@@ -110,7 +105,6 @@ WrappedRefreshAddInAllowedProperty::~WrappedRefreshAddInAllowedProperty()
 }
 
 void WrappedRefreshAddInAllowedProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& /* xInnerPropertySet */ ) const
-                        throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     bool bUpdateAddIn = true;
     if( ! (rOuterValue >>= bUpdateAddIn) )
@@ -120,9 +114,8 @@ void WrappedRefreshAddInAllowedProperty::setPropertyValue( const Any& rOuterValu
 }
 
 Any WrappedRefreshAddInAllowedProperty::getPropertyValue( const Reference< beans::XPropertySet >& /* xInnerPropertySet */ ) const
-                    throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
-    return uno::makeAny( m_rChartDocumentWrapper.getUpdateAddIn() );
+    return uno::Any( m_rChartDocumentWrapper.getUpdateAddIn() );
 }
 
 } //namespace wrapper

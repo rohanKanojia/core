@@ -24,6 +24,7 @@
 #include <sfx2/dockwin.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <avmedia/avmediadllapi.h>
+#include <memory>
 
 namespace avmedia
 {
@@ -32,7 +33,7 @@ class AVMEDIA_DLLPUBLIC MediaPlayer : public SfxChildWindow
 {
 public:
                         MediaPlayer( vcl::Window*, sal_uInt16, SfxBindings*, SfxChildWinInfo* );
-                        virtual ~MediaPlayer();
+                        virtual ~MediaPlayer() override;
 
                         SFX_DECL_CHILDWINDOW_WITHID( MediaPlayer );
 };
@@ -44,7 +45,7 @@ class AVMEDIA_DLLPUBLIC MediaFloater : public SfxDockingWindow
 public:
 
                             MediaFloater( SfxBindings* pBindings, SfxChildWindow* pCW, vcl::Window* pParent );
-                            virtual ~MediaFloater();
+                            virtual ~MediaFloater() override;
     virtual void            dispose() override;
 
     void                    setURL( const OUString& rURL, const OUString& rReferer, bool bPlayImmediately );
@@ -56,7 +57,7 @@ private:
     virtual void            Resize() override;
     virtual void            ToggleFloatingMode() override;
 
-    MediaWindow*            mpMediaWindow;
+    std::unique_ptr<MediaWindow> mpMediaWindow;
 };
 
 inline MediaFloater * getMediaFloater() {

@@ -17,33 +17,33 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xihelper.hxx"
+#include <memory>
+#include <xihelper.hxx>
 #include <svl/itemset.hxx>
 #include <svl/sharedstringpool.hxx>
 #include <editeng/editobj.hxx>
 #include <tools/urlobj.hxx>
-#include "scitems.hxx"
 #include <editeng/eeitem.hxx>
 #include <editeng/flditem.hxx>
-#include "document.hxx"
-#include "rangelst.hxx"
-#include "editutil.hxx"
-#include "attrib.hxx"
-#include "xltracer.hxx"
-#include "xistream.hxx"
-#include "xistyle.hxx"
-#include "excform.hxx"
-#include "stringutil.hxx"
-#include "scmatrix.hxx"
-#include "documentimport.hxx"
-#include <o3tl/make_unique.hxx>
+#include <document.hxx>
+#include <rangelst.hxx>
+#include <editutil.hxx>
+#include <attrib.hxx>
+#include <xltracer.hxx>
+#include <xistream.hxx>
+#include <xistring.hxx>
+#include <xistyle.hxx>
+#include <excform.hxx>
+#include <scmatrix.hxx>
+#include <documentimport.hxx>
+#include <sal/log.hxx>
 
 // Excel->Calc cell address/range conversion ==================================
 
 namespace {
 
 /** Fills the passed Calc address with the passed Excel cell coordinates without checking any limits. */
-inline void lclFillAddress( ScAddress& rScPos, sal_uInt16 nXclCol, sal_uInt32 nXclRow, SCTAB nScTab )
+void lclFillAddress( ScAddress& rScPos, sal_uInt16 nXclCol, sal_uInt32 nXclRow, SCTAB nScTab )
 {
     rScPos.SetCol( static_cast< SCCOL >( nXclCol ) );
     rScPos.SetRow( static_cast< SCROW >( nXclRow ) );
@@ -126,11 +126,11 @@ void XclImpAddressConverter::ConvertRangeList( ScRangeList& rScRanges,
         const XclRangeList& rXclRanges, SCTAB nScTab, bool bWarn )
 {
     rScRanges.RemoveAll();
-    for( XclRangeVector::const_iterator aIt = rXclRanges.begin(), aEnd = rXclRanges.end(); aIt != aEnd; ++aIt )
+    for( const auto& rXclRange : rXclRanges )
     {
         ScRange aScRange( ScAddress::UNINITIALIZED );
-        if( ConvertRange( aScRange, *aIt, nScTab, nScTab, bWarn ) )
-            rScRanges.Append( aScRange );
+        if( ConvertRange( aScRange, rXclRange, nScTab, nScTab, bWarn ) )
+            rScRanges.push_back( aScRange );
     }
 }
 
@@ -138,10 +138,10 @@ void XclImpAddressConverter::ConvertRangeList( ScRangeList& rScRanges,
 
 namespace {
 
-EditTextObject* lclCreateTextObject( const XclImpRoot& rRoot,
+std::unique_ptr<EditTextObject> lclCreateTextObject( const XclImpRoot& rRoot,
         const XclImpString& rString, XclFontItemType eType, sal_uInt16 nXFIndex )
 {
-    EditTextObject* pTextObj = nullptr;
+    std::unique_ptr<EditTextObject> pTextObj;
 
     const XclImpXFBuffer& rXFBuffer = rRoot.GetXFBuffer();
     const XclImpFont* pFirstFont = rXFBuffer.GetFont( nXFIndex );
@@ -152,8 +152,7 @@ EditTextObject* lclCreateTextObject( const XclImpRoot& rRoot,
         const XclImpFontBuffer& rFontBuffer = rRoot.GetFontBuffer();
         const XclFormatRunVec& rFormats = rString.GetFormats();
 
-        ScEditEngineDefaulter& rEE = (eType == EXC_FONTITEM_NOTE) ?
-            static_cast< ScEditEngineDefaulter& >( rRoot.GetDoc().GetNoteEngine() ) : rRoot.GetEditEngine();
+        ScEditEngineDefaulter& rEE = rRoot.GetEditEngine();
         rEE.SetText( rString.GetText() );
 
         SfxItemSet aItemSet( rEE.GetEmptyItemSet() );
@@ -215,10 +214,10 @@ EditTextObject* lclCreateTextObject( const XclImpRoot& rRoot,
 
 } // namespace
 
-EditTextObject* XclImpStringHelper::CreateTextObject(
+std::unique_ptr<EditTextObject> XclImpStringHelper::CreateTextObject(
         const XclImpRoot& rRoot, const XclImpString& rString )
 {
-    return lclCreateTextObject( rRoot, rString, EXC_FONTITEM_EDITENG, 0 );
+    return lclCreateTextObject( rRoot, rString, XclFontItemType::Editeng, 0 );
 }
 
 void XclImpStringHelper::SetToDocument(
@@ -228,16 +227,16 @@ void XclImpStringHelper::SetToDocument(
     if (rString.GetText().isEmpty())
         return;
 
-    ::std::unique_ptr< EditTextObject > pTextObj( lclCreateTextObject( rRoot, rString, EXC_FONTITEM_EDITENG, nXFIndex ) );
+    ::std::unique_ptr< EditTextObject > pTextObj( lclCreateTextObject( rRoot, rString, XclFontItemType::Editeng, nXFIndex ) );
 
-    if (pTextObj.get())
+    if (pTextObj)
     {
-        rDoc.setEditCell(rPos, pTextObj.release());
+        rDoc.setEditCell(rPos, std::move(pTextObj));
     }
     else
     {
-        OUString aStr = rString.GetText();
-        if (aStr.indexOf('\n') != -1 || aStr.indexOf(CHAR_CR) != -1)
+        const OUString& aStr = rString.GetText();
+        if (aStr.indexOf('\n') != -1 || aStr.indexOf('\r') != -1)
         {
             // Multiline content.
             ScFieldEditEngine& rEngine = rDoc.getDoc().GetEditEngine();
@@ -283,9 +282,9 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
     meCurrObj = EXC_HF_CENTER;
 
     // parser temporaries
-    maCurrText.clear();
-    OUString aReadFont;           // current font name
-    OUString aReadStyle;          // current font style
+    maCurrText.truncate();
+    OUStringBuffer aReadFont;   // current font name
+    OUStringBuffer aReadStyle;  // current font style
     sal_uInt16 nReadHeight = 0; // current font height
     ResetFontData();
 
@@ -300,7 +299,7 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
     } eState = xlPSText;
 
     const sal_Unicode* pChar = rHFString.getStr();
-    const sal_Unicode* pNull = pChar + rHFString.getLength(); // pointer to teminating null char
+    const sal_Unicode* pNull = pChar + rHFString.getLength(); // pointer to terminating null char
     while( *pChar )
     {
         switch( eState )
@@ -321,7 +320,7 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                         InsertLineBreak();
                     break;
                     default:
-                        maCurrText += OUString(*pChar);
+                        maCurrText.append(OUStringLiteral1(*pChar));
                 }
             }
             break;
@@ -333,7 +332,7 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                 eState = xlPSText;
                 switch( *pChar )
                 {
-                    case '&':   maCurrText += "&";  break;  // the '&' character
+                    case '&':   maCurrText.append("&");  break;  // the '&' character
 
                     case 'L':   SetNewPortion( EXC_HF_LEFT );   break;  // Left portion
                     case 'C':   SetNewPortion( EXC_HF_CENTER ); break;  // Center portion
@@ -354,7 +353,7 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                         }
                     break;
                     case 'F':           // file name
-                        InsertField( SvxFieldItem( SvxExtFileField( EMPTY_OUSTRING, SVXFILETYPE_VAR, SVXFILEFORMAT_NAME_EXT ), EE_FEATURE_FIELD ) );
+                        InsertField( SvxFieldItem( SvxExtFileField( EMPTY_OUSTRING, SvxFileType::Var, SvxFileFormat::NameAndExt ), EE_FEATURE_FIELD ) );
                     break;
 
                     case 'U':           // underline
@@ -383,8 +382,8 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                     break;
 
                     case '\"':          // font name
-                        aReadFont.clear();
-                        aReadStyle.clear();
+                        aReadFont.setLength(0);
+                        aReadStyle.setLength(0);
                         eState = xlPSFont;
                     break;
                     default:
@@ -405,12 +404,12 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                 {
                     case '\"':
                         --pChar;
-                        // run through
+                        [[fallthrough]];
                     case ',':
                         eState = xlPSFontStyle;
                     break;
                     default:
-                        aReadFont += OUString(*pChar);
+                        aReadFont.append(*pChar);
                 }
             }
             break;
@@ -424,12 +423,12 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                     case '\"':
                         SetAttribs();
                         if( !aReadFont.isEmpty() )
-                            mxFontData->maName = aReadFont;
-                        mxFontData->maStyle = aReadStyle;
+                            mxFontData->maName = aReadFont.toString();
+                        mxFontData->maStyle = aReadStyle.toString();
                         eState = xlPSText;
                     break;
                     default:
-                        aReadStyle += OUString(*pChar);
+                        aReadStyle.append(*pChar);
                 }
             }
             break;
@@ -497,11 +496,6 @@ sal_uInt16 XclImpHFConverter::GetMaxLineHeight( XclImpHFPortion ePortion ) const
     return (nMaxHt == 0) ? mxFontData->mnHeight : nMaxHt;
 }
 
-sal_uInt16 XclImpHFConverter::GetCurrMaxLineHeight() const
-{
-    return GetMaxLineHeight( meCurrObj );
-}
-
 void XclImpHFConverter::UpdateMaxLineHeight( XclImpHFPortion ePortion )
 {
     sal_uInt16& rnMaxHt = maInfos[ ePortion ].mnMaxLineHt;
@@ -520,7 +514,7 @@ void XclImpHFConverter::SetAttribs()
     {
         SfxItemSet aItemSet( mrEE.GetEmptyItemSet() );
         XclImpFont aFont( GetRoot(), *mxFontData );
-        aFont.FillToItemSet( aItemSet, EXC_FONTITEM_HF );
+        aFont.FillToItemSet( aItemSet, XclFontItemType::HeaderFooter );
         mrEE.QuickSetAttribs( aItemSet, rSel );
         rSel.nStartPara = rSel.nEndPara;
         rSel.nStartPos = rSel.nEndPos;
@@ -543,9 +537,9 @@ void XclImpHFConverter::InsertText()
     if( !maCurrText.isEmpty() )
     {
         ESelection& rSel = GetCurrSel();
-        mrEE.QuickInsertText( maCurrText, ESelection( rSel.nEndPara, rSel.nEndPos, rSel.nEndPara, rSel.nEndPos ) );
-        rSel.nEndPos = rSel.nEndPos + maCurrText.getLength();
-        maCurrText.clear();
+        OUString sString(maCurrText.makeStringAndClear());
+        mrEE.QuickInsertText( sString, ESelection( rSel.nEndPara, rSel.nEndPos, rSel.nEndPara, rSel.nEndPos ) );
+        rSel.nEndPos = rSel.nEndPos + sString.getLength();
         UpdateCurrMaxLineHeight();
     }
 }
@@ -564,7 +558,7 @@ void XclImpHFConverter::InsertLineBreak()
     mrEE.QuickInsertText( OUString('\n'), ESelection( rSel.nEndPara, rSel.nEndPos, rSel.nEndPara, rSel.nEndPos ) );
     ++rSel.nEndPara;
     rSel.nEndPos = 0;
-    GetCurrInfo().mnHeight += GetCurrMaxLineHeight();
+    GetCurrInfo().mnHeight += GetMaxLineHeight( meCurrObj );
     GetCurrInfo().mnMaxLineHt = 0;
 }
 
@@ -572,7 +566,7 @@ void XclImpHFConverter::CreateCurrObject()
 {
     InsertText();
     SetAttribs();
-    GetCurrObj().reset( mrEE.CreateTextObject() );
+    GetCurrObj() = mrEE.CreateTextObject();
 }
 
 void XclImpHFConverter::SetNewPortion( XclImpHFPortion eNew )
@@ -600,7 +594,7 @@ void lclAppendUrlChar( OUString& rUrl, sal_Unicode cChar )
     {
         case '#':   rUrl += "%23";  break;
         case '%':   rUrl += "%25";  break;
-        default:    rUrl += OUString( cChar );
+        default:    rUrl += OUStringLiteral1( cChar );
     }
 }
 
@@ -623,7 +617,7 @@ void XclImpUrlHelper::DecodeUrl(
     rbSameWb = false;
 
     sal_Unicode cCurrDrive = 0;
-    OUString aDosBase( INetURLObject( rRoot.GetBasePath() ).getFSysPath( INetURLObject::FSYS_DOS ) );
+    OUString aDosBase( INetURLObject( rRoot.GetBasePath() ).getFSysPath( FSysStyle::Dos ) );
     if (!aDosBase.isEmpty() && aDosBase.match(":\\", 1))
         cCurrDrive = aDosBase[0];
 
@@ -688,13 +682,13 @@ void XclImpUrlHelper::DecodeUrl(
                             lclAppendUrlChar( rUrl, cCurrDrive );
                             rUrl += ":";
                         }
-                        // run through
+                        [[fallthrough]];
                     case EXC_URL_SUBDIR:
                         if( bEncoded )
                             rUrl += "\\";
                         else    // control character in raw name -> DDE link
                         {
-                            rUrl += OUStringLiteral1<EXC_DDE_DELIM>();
+                            rUrl += OUStringLiteral1(EXC_DDE_DELIM);
                             eState = xlUrlRaw;
                         }
                     break;
@@ -736,7 +730,7 @@ void XclImpUrlHelper::DecodeUrl(
 // --- sheet name ---
 
             case xlUrlSheetName:
-                rTabName += OUString( *pChar );
+                rTabName += OUStringLiteral1( *pChar );
             break;
 
 // --- raw read mode ---
@@ -797,10 +791,10 @@ XclImpCachedValue::XclImpCachedValue( XclImpStream& rStrm ) :
             mnBoolErr = rStrm.ReaduInt8();
             rStrm.Ignore( 7 );
 
-            const ScTokenArray* pScTokArr = rStrm.GetRoot().GetOldFmlaConverter().GetBoolErr(
+            std::unique_ptr<ScTokenArray> pScTokArr = rStrm.GetRoot().GetOldFmlaConverter().GetBoolErr(
                 XclTools::ErrorToEnum( fVal, mnType == EXC_CACHEDVAL_ERROR, mnBoolErr ) );
             if( pScTokArr )
-                mxTokArr.reset( pScTokArr->Clone() );
+                mxTokArr = std::move( pScTokArr );
         }
         break;
         default:
@@ -812,9 +806,9 @@ XclImpCachedValue::~XclImpCachedValue()
 {
 }
 
-sal_uInt16 XclImpCachedValue::GetScError() const
+FormulaError XclImpCachedValue::GetScError() const
 {
-    return (mnType == EXC_CACHEDVAL_ERROR) ? XclTools::GetScErrorCode( mnBoolErr ) : 0;
+    return (mnType == EXC_CACHEDVAL_ERROR) ? XclTools::GetScErrorCode( mnBoolErr ) : FormulaError::NONE;
 }
 
 // Matrix Cached Values ==============================================================
@@ -839,7 +833,7 @@ XclImpCachedMatrix::XclImpCachedMatrix( XclImpStream& rStrm ) :
         ++mnScRows;
     }
 
-    //assuming worse case scenario of unknown types
+    //assuming worst case scenario of unknown types
     const size_t nMinRecordSize = 1;
     const size_t nMaxRows = rStrm.GetRecLeft() / (nMinRecordSize * mnScCols);
     if (mnScRows > nMaxRows)
@@ -851,7 +845,7 @@ XclImpCachedMatrix::XclImpCachedMatrix( XclImpStream& rStrm ) :
 
     for( SCSIZE nScRow = 0; nScRow < mnScRows; ++nScRow )
         for( SCSIZE nScCol = 0; nScCol < mnScCols; ++nScCol )
-            maValueList.push_back( o3tl::make_unique<XclImpCachedValue>( rStrm ) );
+            maValueList.push_back( std::make_unique<XclImpCachedValue>( rStrm ) );
 }
 
 XclImpCachedMatrix::~XclImpCachedMatrix()
@@ -864,7 +858,7 @@ ScMatrixRef XclImpCachedMatrix::CreateScMatrix( svl::SharedStringPool& rPool ) c
     OSL_ENSURE( mnScCols * mnScRows == maValueList.size(), "XclImpCachedMatrix::CreateScMatrix - element count mismatch" );
     if( mnScCols && mnScRows && static_cast< sal_uLong >( mnScCols * mnScRows ) <= maValueList.size() )
     {
-        xScMatrix = new ScFullMatrix(mnScCols, mnScRows, 0.0);
+        xScMatrix = new ScMatrix(mnScCols, mnScRows, 0.0);
         XclImpValueList::const_iterator itValue = maValueList.begin();
         for( SCSIZE nScRow = 0; nScRow < mnScRows; ++nScRow )
         {

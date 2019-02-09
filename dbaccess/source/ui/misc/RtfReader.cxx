@@ -17,8 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RtfReader.hxx"
-#include <tools/debug.hxx>
+#include <RtfReader.hxx>
 #include <tools/stream.hxx>
 #include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
@@ -32,20 +31,18 @@
 #include <com/sun/star/awt/FontUnderline.hpp>
 #include <com/sun/star/util/NumberFormat.hpp>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
-#include "dbustrings.hrc"
+#include <core_resource.hxx>
+#include <stringconstants.hxx>
 #include <svtools/rtftoken.h>
 #include <toolkit/helper/vclunohelper.hxx>
-#include "dbu_misc.hrc"
-#include <vcl/msgbox.hxx>
+#include <strings.hrc>
 #include <connectivity/dbconversion.hxx>
 #include <connectivity/dbtools.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/string.hxx>
 #include <tools/color.hxx>
-#include "WExtendPages.hxx"
-#include "moduledbu.hxx"
-#include "QEnumTypes.hxx"
-#include "UITools.hxx"
+#include <WExtendPages.hxx>
+#include <QEnumTypes.hxx>
+#include <UITools.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
@@ -61,11 +58,9 @@ using namespace ::com::sun::star::awt;
 ORTFReader::ORTFReader( SvStream& rIn,
                         const SharedConnection& _rxConnection,
                         const Reference< css::util::XNumberFormatter >& _rxNumberF,
-                        const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                        const TColumnVector* pList,
-                        const OTypeInfoMap* _pInfoMap)
+                        const css::uno::Reference< css::uno::XComponentContext >& _rxContext)
     :SvRTFParser(rIn)
-    ,ODatabaseExport( _rxConnection, _rxNumberF, _rxContext, pList, _pInfoMap, rIn )
+    ,ODatabaseExport( _rxConnection, _rxNumberF, _rxContext, rIn )
 {
     m_bAppendFirstLine = false;
 }
@@ -94,8 +89,12 @@ SvParserState ORTFReader::CallParser()
     rInput.ResetError();
     SvParserState  eParseState = SvRTFParser::CallParser();
     SetColumnTypes(m_pColumnList,m_pInfoMap);
-    return m_bFoundTable ? eParseState : SVPAR_ERROR;
+    return m_bFoundTable ? eParseState : SvParserState::Error;
 }
+
+#if defined _MSC_VER
+#pragma warning(disable: 4702) // unreachable code, bug in MSVC2015
+#endif
 
 void ORTFReader::NextToken( int nToken )
 {
@@ -117,32 +116,28 @@ void ORTFReader::NextToken( int nToken )
                         {
                             switch(nTmpToken2)
                             {
-                                case RTF_RED:   aColor.SetRed((sal_uInt8)nTokenValue); break;
-                                case RTF_BLUE:  aColor.SetBlue((sal_uInt8)nTokenValue); break;
-                                case RTF_GREEN: aColor.SetGreen((sal_uInt8)nTokenValue); break;
+                                case RTF_RED:   aColor.SetRed(static_cast<sal_uInt8>(nTokenValue)); break;
+                                case RTF_BLUE:  aColor.SetBlue(static_cast<sal_uInt8>(nTokenValue)); break;
+                                case RTF_GREEN: aColor.SetGreen(static_cast<sal_uInt8>(nTokenValue)); break;
                                 default: break;
                             }
                             nTmpToken2 = GetNextToken();
                         }
-                        while(aToken[0] != ';' && eState != SVPAR_ERROR && eState != SVPAR_ACCEPTED);
+                        while(aToken[0] != ';' && eState != SvParserState::Error && eState != SvParserState::Accepted);
                         m_vecColor.push_back(aColor.GetRGBColor());
                         nTmpToken2 = GetNextToken();
                     }
-                    while(nTmpToken2 == RTF_RED && eState != SVPAR_ERROR && eState != SVPAR_ACCEPTED);
+                    while(nTmpToken2 == RTF_RED && eState != SvParserState::Error && eState != SvParserState::Accepted);
                     SkipToken();
                 }
                 break;
 
-            case RTF_DEFLANG:
-            case RTF_LANG: // inquire language
-                m_nDefToken = (rtl_TextEncoding)nTokenValue;
-                break;
             case RTF_TROWD:
                 {
                     bool bInsertRow = true;
                     if ( !m_xTable.is() ) // use first line as header
                     {
-                        sal_Size nTell = rInput.Tell(); // perhaps alters position of the stream
+                        sal_uInt64 const nTell = rInput.Tell(); // perhaps alters position of the stream
 
                         m_bError = !CreateTable(nToken);
                         bInsertRow = m_bAppendFirstLine;
@@ -223,7 +218,7 @@ void ORTFReader::NextToken( int nToken )
                 {
                     do
                     {}
-                    while(GetNextToken() != RTF_ROW && eState != SVPAR_ERROR && eState != SVPAR_ACCEPTED);
+                    while(GetNextToken() != RTF_ROW && eState != SvParserState::Error && eState != SvParserState::Accepted);
                     m_bHead = false;
                 }
                 break;
@@ -250,7 +245,7 @@ void ORTFReader::NextToken( int nToken )
 
 bool ORTFReader::CreateTable(int nToken)
 {
-    OUString aTableName(ModuleRes(STR_TBL_TITLE));
+    OUString aTableName(DBA_RES(STR_TBL_TITLE));
     aTableName = aTableName.getToken(0,' ');
     aTableName = ::dbtools::createUniqueName(m_xTables, aTableName);
 
@@ -281,7 +276,7 @@ bool ORTFReader::CreateTable(int nToken)
                 {
                     aColumnName = comphelper::string::strip(aColumnName, ' ');
                     if (aColumnName.isEmpty() || m_bAppendFirstLine )
-                        aColumnName = ModuleRes(STR_COLUMN_NAME);
+                        aColumnName = DBA_RES(STR_COLUMN_NAME);
 
                     CreateDefaultColumn(aColumnName);
                     aColumnName.clear();
@@ -304,7 +299,7 @@ bool ORTFReader::CreateTable(int nToken)
         }
         nToken = GetNextToken();
     }
-    while(nToken != RTF_TROWD && eState != SVPAR_ERROR && eState != SVPAR_ACCEPTED);
+    while(nToken != RTF_TROWD && eState != SvParserState::Error && eState != SvParserState::Accepted);
 
     bool bOk = !m_vDestVector.empty();
     if(bOk)
@@ -312,7 +307,7 @@ bool ORTFReader::CreateTable(int nToken)
         if ( !aColumnName.isEmpty() )
         {
             if ( m_bAppendFirstLine )
-                aColumnName = ModuleRes(STR_COLUMN_NAME);
+                aColumnName = DBA_RES(STR_COLUMN_NAME);
             CreateDefaultColumn(aColumnName);
         }
 
@@ -328,11 +323,6 @@ bool ORTFReader::CreateTable(int nToken)
         bOk = !executeWizard(aTableName,aTextColor,aFont) && m_xTable.is();
     }
     return bOk;
-}
-
-void ORTFReader::release()
-{
-    ReleaseRef();
 }
 
 TypeSelectionPageFactory ORTFReader::getTypeSelectionPageFactory()

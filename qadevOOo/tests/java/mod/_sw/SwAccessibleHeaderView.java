@@ -78,7 +78,7 @@ public class SwAccessibleHeaderView extends TestCase {
         XStyleFamiliesSupplier StyleFam = UnoRuntime.queryInterface(XStyleFamiliesSupplier.class, xTextDoc);
         XNameAccess StyleFamNames = StyleFam.getStyleFamilies();
 
-        // obtains style 'Standatd' from style family 'PageStyles'
+        // obtains style 'Standard' from style family 'PageStyles'
         PageStyles = (XNameAccess) AnyConverter.toObject(
             new Type(XNameAccess.class),StyleFamNames.getByName("PageStyles"));
         StdStyle = (XStyle) AnyConverter.toObject(
@@ -110,7 +110,7 @@ public class SwAccessibleHeaderView extends TestCase {
                             Integer.valueOf(1000));
                     } catch (com.sun.star.uno.Exception e) {
                         e.printStackTrace();
-                        throw new StatusException("Cann't change footer.", e);
+                        throw new StatusException("Can't change footer.", e);
                     }
                 }
             });

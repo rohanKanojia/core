@@ -17,11 +17,10 @@
 namespace sdr { namespace overlay {
 
 
-class SVX_DLLPUBLIC OverlayHandle : public OverlayObjectWithBasePosition
+class SVX_DLLPUBLIC OverlayHandle final : public OverlayObjectWithBasePosition
 {
-protected:
-    basegfx::B2DSize maSize;
-    Color maStrokeColor;
+    basegfx::B2DSize const maSize;
+    Color const maStrokeColor;
 
     // geometry creation for OverlayObject
     virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
@@ -29,10 +28,10 @@ protected:
 public:
     OverlayHandle(const basegfx::B2DPoint& rBasePos,
                   const basegfx::B2DSize& rSize,
-                  Color& rStrokeColor,
-                  Color& rFillColor);
+                  Color const & rStrokeColor,
+                  Color const & rFillColor);
 
-    virtual ~OverlayHandle();
+    virtual ~OverlayHandle() override;
 };
 
 }} // end of namespace sdr::overlay

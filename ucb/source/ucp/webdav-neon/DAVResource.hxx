@@ -32,8 +32,8 @@
 #include <config_lgpl.h>
 #include <vector>
 
-#include "rtl/ustring.hxx"
-#include "com/sun/star/uno/Any.hxx"
+#include <rtl/ustring.hxx>
+#include <com/sun/star/uno/Any.hxx>
 
 namespace webdav_ucp
 {
@@ -59,6 +59,11 @@ struct DAVResource
 struct DAVResourceInfo
 {
     std::vector < OUString > properties;
+
+    bool operator==( const struct DAVResourceInfo& a ) const
+    {
+        return (properties == a.properties );
+    }
 };
 
 } // namespace webdav_ucp

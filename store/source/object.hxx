@@ -20,18 +20,12 @@
 #ifndef INCLUDED_STORE_SOURCE_OBJECT_HXX
 #define INCLUDED_STORE_SOURCE_OBJECT_HXX
 
-#include "sal/types.h"
-#include "osl/interlck.h"
-#include "salhelper/simplereferenceobject.hxx"
+#include <sal/types.h>
+#include <salhelper/simplereferenceobject.hxx>
 
 namespace store
 {
 
-/*========================================================================
- *
- * OStoreObject interface.
- *
- *======================================================================*/
 class OStoreObject : public virtual salhelper::SimpleReferenceObject
 {
 public:
@@ -46,7 +40,7 @@ public:
 protected:
     /** Destruction.
      */
-    virtual ~OStoreObject() {}
+    virtual ~OStoreObject() override {}
 
 private:
     /** The IStoreHandle TypeId.
@@ -61,12 +55,6 @@ private:
 template<class store_handle_type>
 store_handle_type * SAL_CALL query (
     OStoreObject * pHandle, store_handle_type *);
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

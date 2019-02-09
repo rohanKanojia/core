@@ -25,6 +25,8 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
 
+import org.libreoffice.LOEvent;
+import org.libreoffice.LOKitShell;
 import org.libreoffice.LibreOfficeMainActivity;
 import org.libreoffice.R;
 import org.mozilla.gecko.OnInterceptTouchListener;
@@ -56,6 +58,8 @@ public class LayerView extends FrameLayout {
 
     private Listener mListener;
     private OnInterceptTouchListener mTouchIntercepter;
+    //TODO static because of registerCxxCompositor() function, should be fixed in the future
+    private static LibreOfficeMainActivity mContext;
 
     /* Flags used to determine when to show the painted surface. The integer
      * order must correspond to the order in which these states occur. */
@@ -83,6 +87,7 @@ public class LayerView extends FrameLayout {
 
     public LayerView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mContext = (LibreOfficeMainActivity) context;
 
         if (shouldUseTextureView()) {
             mTextureView = new TextureView(context);
@@ -167,18 +172,12 @@ public class LayerView extends FrameLayout {
 
     @Override
     public boolean onHoverEvent(MotionEvent event) {
-        if (mTouchIntercepter != null && mTouchIntercepter.onTouch(this, event)) {
-            return true;
-        }
-        return false;
+        return mTouchIntercepter != null && mTouchIntercepter.onTouch(this, event);
     }
 
     @Override
     public boolean onGenericMotionEvent(MotionEvent event) {
-        if (mPanZoomController != null && mPanZoomController.onMotionEvent(event)) {
-            return true;
-        }
-        return false;
+        return mPanZoomController != null && mPanZoomController.onMotionEvent(event);
     }
 
     public GeckoLayerClient getLayerClient() { return mLayerClient; }
@@ -201,37 +200,27 @@ public class LayerView extends FrameLayout {
 
     @Override
     public boolean onKeyPreIme(int keyCode, KeyEvent event) {
-        if (mInputConnectionHandler != null)
-            return mInputConnectionHandler.onKeyPreIme(keyCode, event);
-        return false;
+        return mInputConnectionHandler != null && mInputConnectionHandler.onKeyPreIme(keyCode, event);
     }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (mInputConnectionHandler != null)
-            return mInputConnectionHandler.onKeyDown(keyCode, event);
-        return false;
+        return mInputConnectionHandler != null && mInputConnectionHandler.onKeyDown(keyCode, event);
     }
 
     @Override
     public boolean onKeyLongPress(int keyCode, KeyEvent event) {
-        if (mInputConnectionHandler != null)
-            return mInputConnectionHandler.onKeyLongPress(keyCode, event);
-        return false;
+        return mInputConnectionHandler != null && mInputConnectionHandler.onKeyLongPress(keyCode, event);
     }
 
     @Override
     public boolean onKeyMultiple(int keyCode, int repeatCount, KeyEvent event) {
-        if (mInputConnectionHandler != null)
-            return mInputConnectionHandler.onKeyMultiple(keyCode, repeatCount, event);
-        return false;
+        return mInputConnectionHandler != null && mInputConnectionHandler.onKeyMultiple(keyCode, repeatCount, event);
     }
 
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        if (mInputConnectionHandler != null)
-            return mInputConnectionHandler.onKeyUp(keyCode, event);
-        return false;
+        return mInputConnectionHandler != null && mInputConnectionHandler.onKeyUp(keyCode, event);
     }
 
     public boolean isIMEEnabled() {
@@ -322,6 +311,8 @@ public class LayerView extends FrameLayout {
         if (mListener != null) {
             mListener.surfaceChanged(width, height);
         }
+
+        LOKitShell.sendEvent(new LOEvent(LOEvent.UPDATE_ZOOM_CONSTRAINTS));
     }
 
     private void onDestroyed() {
@@ -342,7 +333,7 @@ public class LayerView extends FrameLayout {
     /** This function is invoked by Gecko (compositor thread) via JNI; be careful when modifying signature. */
     public static GLController registerCxxCompositor() {
         try {
-            LayerView layerView = LibreOfficeMainActivity.getLayerClient().getView();
+            LayerView layerView = mContext.getLayerClient().getView();
             layerView.mListener.compositorCreated();
             return layerView.getGLController();
         } catch (Exception e) {

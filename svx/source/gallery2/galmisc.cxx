@@ -21,11 +21,11 @@
 
 #include <sot/storage.hxx>
 #include <unotools/streamwrap.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
 #include <ucbhelper/content.hxx>
-#include <tools/resmgr.hxx>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <unotools/resmgr.hxx>
 #include <tools/urlobj.hxx>
 #include <svl/solar.hrc>
 #include <svl/urihelper.hxx>
@@ -36,15 +36,16 @@
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <svx/svdpage.hxx>
+#include <svx/dialmgr.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/fmmodel.hxx>
 #include <svx/fmview.hxx>
 #include <svx/unomodel.hxx>
 #include "codec.hxx"
-#include "gallery.hrc"
-#include "svx/gallery1.hxx"
-#include "svx/galtheme.hxx"
-#include "svx/galmisc.hxx"
+#include <svx/strings.hrc>
+#include <svx/gallery1.hxx>
+#include <svx/galtheme.hxx>
+#include <svx/galmisc.hxx>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/ucb/XContentAccess.hpp>
 #include <com/sun/star/ucb/TransferInfo.hpp>
@@ -53,41 +54,22 @@
 
 using namespace ::com::sun::star;
 
-ResMgr* GetGalleryResMgr()
+BitmapEx GalleryResGetBitmapEx(const OUString &rId)
 {
-    static ResMgr* pGalleryResMgr = nullptr;
+    BitmapEx aBmpEx(rId);
 
-    if( !pGalleryResMgr )
-    {
-        pGalleryResMgr = ResMgr::CreateResMgr(
-            "gal", Application::GetSettings().GetUILanguageTag() );
-    }
-
-    return pGalleryResMgr;
-}
-
-BitmapEx GalleryResGetBitmapEx( sal_uInt32 nId )
-{
-    BitmapEx aBmpEx( GAL_RES( nId ) );
-
-    if( !aBmpEx.IsTransparent() )
-            aBmpEx = BitmapEx( aBmpEx.GetBitmap(), COL_LIGHTMAGENTA );
+    //TODO, check if any of these have no transparency layer
+    if (!aBmpEx.IsTransparent())
+        aBmpEx = BitmapEx(aBmpEx.GetBitmap(), COL_LIGHTMAGENTA);
 
     return aBmpEx;
 }
 
-IMPL_STATIC_LINK_TYPED(
-    SgaUserDataFactory, MakeUserData, SdrObjFactory*, pObjFactory, void )
-{
-    if ( pObjFactory->nInventor == IV_IMAPINFO && pObjFactory->nIdentifier == ID_IMAPINFO )
-        pObjFactory->pNewData = new SgaIMapInfo;
-}
-
 GalleryGraphicImportRet GalleryGraphicImport( const INetURLObject& rURL, Graphic& rGraphic,
-                             OUString& rFilterName, bool bShowProgress )
+                             OUString& rFilterName )
 {
     GalleryGraphicImportRet  nRet = GalleryGraphicImportRet::IMPORT_NONE;
-    SfxMedium   aMedium( rURL.GetMainURL( INetURLObject::NO_DECODE ), StreamMode::READ );
+    SfxMedium   aMedium( rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), StreamMode::READ );
 
     aMedium.Download();
 
@@ -96,10 +78,9 @@ GalleryGraphicImportRet GalleryGraphicImport( const INetURLObject& rURL, Graphic
     if( pIStm )
     {
         GraphicFilter& rGraphicFilter = GraphicFilter::GetGraphicFilter();
-        std::unique_ptr<GalleryProgress> pProgress(bShowProgress ? new GalleryProgress( &rGraphicFilter ) : nullptr);
         sal_uInt16              nFormat;
 
-        if( !rGraphicFilter.ImportGraphic( rGraphic, rURL.GetMainURL( INetURLObject::NO_DECODE ), *pIStm, GRFILTER_FORMAT_DONTKNOW, &nFormat ) )
+        if( !rGraphicFilter.ImportGraphic( rGraphic, rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), *pIStm, GRFILTER_FORMAT_DONTKNOW, &nFormat ) )
         {
             rFilterName = rGraphicFilter.GetImportFormatName( nFormat );
             nRet = GalleryGraphicImportRet::IMPORT_FILE;
@@ -120,7 +101,7 @@ bool GallerySvDrawImport( SvStream& rIStm, SdrModel& rModel )
         GalleryCodec    aCodec( rIStm );
 
         aCodec.Read( aMemStm );
-        aMemStm.Seek( 0UL );
+        aMemStm.Seek( 0 );
 
         if( 1 == nVersion )
         {
@@ -138,7 +119,7 @@ bool GallerySvDrawImport( SvStream& rIStm, SdrModel& rModel )
         // read as XML
         uno::Reference< io::XInputStream > xInputStream( new utl::OInputStreamWrapper( rIStm ) );
 
-        rModel.GetItemPool().SetDefaultMetric( SFX_MAPUNIT_100TH_MM );
+        rModel.GetItemPool().SetDefaultMetric( MapUnit::Map100thMM );
         uno::Reference< lang::XComponent > xComponent;
 
         bRet = SvxDrawingLayerImport( &rModel, xInputStream, xComponent, "com.sun.star.comp.Draw.XMLOasisImporter" );
@@ -171,7 +152,7 @@ bool CreateIMapGraphic( const FmFormModel& rModel, Graphic& rGraphic, ImageMap& 
             {
                 const SdrObjUserData* pUserData = pObj->GetUserData( i );
 
-                if ( ( pUserData->GetInventor() == IV_IMAPINFO ) && ( pUserData->GetId() == ID_IMAPINFO ) )
+                if ( ( pUserData->GetInventor() == SdrInventor::SgaImap ) && ( pUserData->GetId() == ID_IMAPINFO ) )
                 {
                     rGraphic = static_cast<const SdrGrafObj*>( pObj )->GetGraphic();
                     rImageMap = static_cast<const SgaIMapInfo*>( pUserData )->GetImageMap();
@@ -187,14 +168,14 @@ bool CreateIMapGraphic( const FmFormModel& rModel, Graphic& rGraphic, ImageMap& 
 
 OUString GetReducedString( const INetURLObject& rURL, sal_Int32 nMaxLen )
 {
-    OUString aReduced( rURL.GetMainURL( INetURLObject::DECODE_UNAMBIGUOUS ) );
+    OUString aReduced( rURL.GetMainURL( INetURLObject::DecodeMechanism::Unambiguous ) );
 
-    aReduced = aReduced.getToken( comphelper::string::getTokenCount(aReduced, '/') - 1, '/' );
+    aReduced = aReduced.copy(aReduced.lastIndexOf('/')+1);
 
     if( INetProtocol::PrivSoffice != rURL.GetProtocol() )
     {
         sal_Unicode     aDelimiter;
-        const OUString  aPath( rURL.getFSysPath( INetURLObject::FSYS_DETECT, &aDelimiter ) );
+        const OUString  aPath( rURL.getFSysPath( FSysStyle::Detect, &aDelimiter ) );
         const OUString  aName( aReduced );
 
         if( aPath.getLength() > nMaxLen )
@@ -203,17 +184,13 @@ OUString GetReducedString( const INetURLObject& rURL, sal_Int32 nMaxLen )
 
             if (nPathPrefixLen >= 0)
             {
-                aReduced = aPath.copy(0, nPathPrefixLen);
-                aReduced += "...";
-                aReduced += OUString(aDelimiter);
-                aReduced += aName;
+                aReduced = aPath.copy(0, nPathPrefixLen) + "..."
+                    + OUStringLiteral1(aDelimiter) + aName;
             }
             else
             {
-                aReduced += "...";
-                aReduced += OUString(aDelimiter);
-                aReduced += "...";
-                aReduced += aName.copy( aName.getLength() - (nMaxLen - 7) );
+                aReduced += "..." + OUStringLiteral1(aDelimiter) + "..."
+                    + aName.copy( aName.getLength() - (nMaxLen - 7) );
             }
         }
         else
@@ -228,9 +205,9 @@ OUString GetSvDrawStreamNameFromURL( const INetURLObject& rSvDrawObjURL )
     OUString aRet;
 
     if( rSvDrawObjURL.GetProtocol() == INetProtocol::PrivSoffice &&
-        comphelper::string::getTokenCount(rSvDrawObjURL.GetMainURL( INetURLObject::NO_DECODE ), '/') == 3 )
+        comphelper::string::getTokenCount(rSvDrawObjURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), '/') == 3 )
     {
-        aRet = rSvDrawObjURL.GetMainURL( INetURLObject::NO_DECODE ).getToken( 2, '/' );
+        aRet = rSvDrawObjURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ).getToken( 2, '/' );
     }
 
     return aRet;
@@ -244,7 +221,7 @@ bool FileExists( const INetURLObject& rURL )
     {
         try
         {
-            ::ucbhelper::Content        aCnt( rURL.GetMainURL( INetURLObject::NO_DECODE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
+            ::ucbhelper::Content        aCnt( rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
             OUString    aTitle;
 
             aCnt.getPropertyValue("Title") >>= aTitle;
@@ -273,16 +250,16 @@ bool CreateDir( const INetURLObject& rURL )
         try
         {
             uno::Reference< ucb::XCommandEnvironment >  aCmdEnv;
-            INetURLObject                           aNewFolderURL( rURL );
-            INetURLObject                           aParentURL( aNewFolderURL ); aParentURL.removeSegment();
-            ::ucbhelper::Content                    aParent( aParentURL.GetMainURL( INetURLObject::NO_DECODE ), aCmdEnv, comphelper::getProcessComponentContext() );
+            INetURLObject                           aParentURL( rURL );
+            aParentURL.removeSegment();
+            ::ucbhelper::Content                    aParent( aParentURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), aCmdEnv, comphelper::getProcessComponentContext() );
             uno::Sequence< OUString >               aProps( 1 );
             uno::Sequence< uno::Any >               aValues( 1 );
 
             aProps[0] = "Title";
-            aValues[0] = uno::makeAny( OUString( aNewFolderURL.GetName() ) );
+            aValues[0] <<= rURL.GetName();
 
-        ::ucbhelper::Content aContent( aNewFolderURL.GetMainURL( INetURLObject::NO_DECODE ), aCmdEnv, comphelper::getProcessComponentContext() );
+        ::ucbhelper::Content aContent( rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), aCmdEnv, comphelper::getProcessComponentContext() );
         bRet = aParent.insertNewContent( "application/vnd.sun.staroffice.fsys-folder", aProps, aValues, aContent );
         }
         catch( const ucb::ContentCreationException& )
@@ -305,10 +282,10 @@ bool CopyFile(  const INetURLObject& rSrcURL, const INetURLObject& rDstURL )
 
     try
     {
-        ::ucbhelper::Content aDestPath( rDstURL.GetMainURL( INetURLObject::NO_DECODE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
+        ::ucbhelper::Content aDestPath( rDstURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
 
         aDestPath.executeCommand( "transfer",
-                                  uno::makeAny( ucb::TransferInfo( sal_False, rSrcURL.GetMainURL( INetURLObject::NO_DECODE ),
+                                  uno::makeAny( ucb::TransferInfo( false, rSrcURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ),
                                                 rDstURL.GetName(), ucb::NameClash::OVERWRITE ) ) );
         bRet = true;
     }
@@ -333,7 +310,7 @@ bool KillFile( const INetURLObject& rURL )
     {
         try
         {
-            ::ucbhelper::Content aCnt( rURL.GetMainURL( INetURLObject::NO_DECODE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
+            ::ucbhelper::Content aCnt( rURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ), uno::Reference< ucb::XCommandEnvironment >(), comphelper::getProcessComponentContext() );
             aCnt.executeCommand( "delete", uno::makeAny( true ) );
         }
         catch( const ucb::ContentCreationException& )
@@ -354,8 +331,7 @@ bool KillFile( const INetURLObject& rURL )
 }
 
 
-GalleryProgress::GalleryProgress( GraphicFilter* pFilter ) :
-    mpFilter( pFilter )
+GalleryProgress::GalleryProgress( const GraphicFilter* pFilter )
 {
 
     uno::Reference< lang::XMultiServiceFactory > xMgr( ::comphelper::getProcessServiceFactory() );
@@ -371,17 +347,17 @@ GalleryProgress::GalleryProgress( GraphicFilter* pFilter ) :
         {
             OUString aProgressText;
 
-            if( mpFilter )
+            if( pFilter )
             {
-                aProgressText = GAL_RESSTR(RID_SVXSTR_GALLERY_FILTER);
-//              mpFilter->SetUpdatePercentHdl( LINK( this, GalleryProgress, Update ) );     // sj: progress wasn't working up from SO7 at all
+                aProgressText = SvxResId(RID_SVXSTR_GALLERY_FILTER);
+//              pFilter->SetUpdatePercentHdl( LINK( this, GalleryProgress, Update ) );     // sj: progress wasn't working up from SO7 at all
 //                                                                                          // so I am removing this. The gallery progress should
 //                                                                                          // be changed to use the XStatusIndicator instead of XProgressMonitor
             }
             else
                 aProgressText = "Gallery";
 
-            xMonitor->addText( "Gallery", aProgressText, sal_False ) ;
+            xMonitor->addText( "Gallery", aProgressText, false ) ;
             mxProgressBar->setRange( 0, GALLERY_PROGRESS_RANGE );
         }
     }
@@ -391,20 +367,18 @@ GalleryProgress::~GalleryProgress()
 {
 }
 
-void GalleryProgress::Update( sal_uIntPtr nVal, sal_uIntPtr nMaxVal )
+void GalleryProgress::Update( sal_Int32 nVal, sal_Int32 nMaxVal )
 {
     if( mxProgressBar.is() && nMaxVal )
-        mxProgressBar->setValue( std::min( (sal_uIntPtr)( (double) nVal / nMaxVal * GALLERY_PROGRESS_RANGE ), (sal_uIntPtr) GALLERY_PROGRESS_RANGE ) );
+        mxProgressBar->setValue( std::min<sal_Int32>( static_cast<double>(nVal) / nMaxVal * GALLERY_PROGRESS_RANGE,
+                                                      GALLERY_PROGRESS_RANGE ) );
 }
 
 
-GalleryTransferable::GalleryTransferable( GalleryTheme* pTheme, sal_uIntPtr nObjectPos, bool bLazy ) :
+GalleryTransferable::GalleryTransferable( GalleryTheme* pTheme, sal_uInt32 nObjectPos, bool bLazy ) :
     mpTheme( pTheme ),
     meObjectKind( mpTheme->GetObjectKind( nObjectPos ) ),
-    mnObjectPos( nObjectPos ),
-    mpGraphicObject( nullptr ),
-    mpImageMap( nullptr ),
-    mpURL( nullptr )
+    mnObjectPos( nObjectPos )
 {
 
     InitData( bLazy );
@@ -418,7 +392,7 @@ void GalleryTransferable::InitData( bool bLazy )
 {
     switch( meObjectKind )
     {
-        case SGA_OBJ_SVDRAW:
+        case SgaObjKind::SvDraw:
         {
             if( !bLazy )
             {
@@ -427,16 +401,16 @@ void GalleryTransferable::InitData( bool bLazy )
                     Graphic aGraphic;
 
                     if( mpTheme->GetGraphic( mnObjectPos, aGraphic ) )
-                        mpGraphicObject = new GraphicObject( aGraphic );
+                        mpGraphicObject.reset(new GraphicObject( aGraphic ));
                 }
 
-                if( !mxModelStream.Is() )
+                if( !mxModelStream.is() )
                 {
                     mxModelStream = new SotStorageStream( "" );
                     mxModelStream->SetBufferSize( 16348 );
 
                     if( !mpTheme->GetModelStream( mnObjectPos, mxModelStream ) )
-                        mxModelStream.Clear();
+                        mxModelStream.clear();
                     else
                         mxModelStream->Seek( 0 );
                 }
@@ -444,28 +418,27 @@ void GalleryTransferable::InitData( bool bLazy )
         }
         break;
 
-        case SGA_OBJ_ANIM:
-        case SGA_OBJ_BMP:
-        case SGA_OBJ_INET:
-        case SGA_OBJ_SOUND:
+        case SgaObjKind::Animation:
+        case SgaObjKind::Bitmap:
+        case SgaObjKind::Inet:
+        case SgaObjKind::Sound:
         {
             if( !mpURL )
             {
-                mpURL = new INetURLObject;
+                mpURL.reset(new INetURLObject);
 
                 if( !mpTheme->GetURL( mnObjectPos, *mpURL ) )
                 {
-                    delete mpURL;
-                    mpURL = nullptr;
+                    mpURL.reset();
                 }
             }
 
-            if( ( SGA_OBJ_SOUND != meObjectKind ) && !mpGraphicObject )
+            if( ( SgaObjKind::Sound != meObjectKind ) && !mpGraphicObject )
             {
                 Graphic aGraphic;
 
                 if( mpTheme->GetGraphic( mnObjectPos, aGraphic ) )
-                    mpGraphicObject = new GraphicObject( aGraphic );
+                    mpGraphicObject.reset(new GraphicObject( aGraphic ));
             }
         }
         break;
@@ -478,7 +451,7 @@ void GalleryTransferable::InitData( bool bLazy )
 
 void GalleryTransferable::AddSupportedFormats()
 {
-    if( SGA_OBJ_SVDRAW == meObjectKind )
+    if( SgaObjKind::SvDraw == meObjectKind )
     {
         AddFormat( SotClipboardFormatId::DRAWING );
         AddFormat( SotClipboardFormatId::SVXB );
@@ -494,7 +467,7 @@ void GalleryTransferable::AddSupportedFormats()
         {
             AddFormat( SotClipboardFormatId::SVXB );
 
-            if( mpGraphicObject->GetType() == GRAPHIC_GDIMETAFILE )
+            if( mpGraphicObject->GetType() == GraphicType::GdiMetafile )
             {
                 AddFormat( SotClipboardFormatId::GDIMETAFILE );
                 AddFormat( SotClipboardFormatId::BITMAP );
@@ -515,26 +488,21 @@ bool GalleryTransferable::GetData( const datatransfer::DataFlavor& rFlavor, cons
 
     InitData( false );
 
-    if( ( SotClipboardFormatId::DRAWING == nFormat ) && ( SGA_OBJ_SVDRAW == meObjectKind ) )
+    if( ( SotClipboardFormatId::DRAWING == nFormat ) && ( SgaObjKind::SvDraw == meObjectKind ) )
     {
-        bRet = ( mxModelStream.Is() && SetObject( &mxModelStream, SotClipboardFormatId::NONE, rFlavor ) );
-    }
-    else if( ( SotClipboardFormatId::SVIM == nFormat ) && mpImageMap )
-    {
-        // TODO/MBA: do we need a BaseURL here?!
-        bRet = SetImageMap( *mpImageMap, rFlavor );
+        bRet = ( mxModelStream.is() && SetObject( mxModelStream.get(), 0, rFlavor ) );
     }
     else if( ( SotClipboardFormatId::SIMPLE_FILE == nFormat ) && mpURL )
     {
-        bRet = SetString( mpURL->GetMainURL( INetURLObject::NO_DECODE ), rFlavor );
+        bRet = SetString( mpURL->GetMainURL( INetURLObject::DecodeMechanism::NONE ), rFlavor );
     }
     else if( ( SotClipboardFormatId::SVXB == nFormat ) && mpGraphicObject )
     {
-        bRet = SetGraphic( mpGraphicObject->GetGraphic(), rFlavor );
+        bRet = SetGraphic( mpGraphicObject->GetGraphic() );
     }
     else if( ( SotClipboardFormatId::GDIMETAFILE == nFormat ) && mpGraphicObject )
     {
-        bRet = SetGDIMetaFile( mpGraphicObject->GetGraphic().GetGDIMetaFile(), rFlavor );
+        bRet = SetGDIMetaFile( mpGraphicObject->GetGraphic().GetGDIMetaFile() );
     }
     else if( ( SotClipboardFormatId::BITMAP == nFormat ) && mpGraphicObject )
     {
@@ -545,7 +513,7 @@ bool GalleryTransferable::GetData( const datatransfer::DataFlavor& rFlavor, cons
 }
 
 bool GalleryTransferable::WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* pUserObject,
-                                           SotClipboardFormatId, const datatransfer::DataFlavor& )
+                                           sal_uInt32, const datatransfer::DataFlavor& )
 {
     bool bRet = false;
 
@@ -572,18 +540,9 @@ void GalleryTransferable::DragFinished( sal_Int8 nDropAction )
 
 void GalleryTransferable::ObjectReleased()
 {
-    mxModelStream.Clear();
-    delete mpGraphicObject;
-    mpGraphicObject = nullptr;
-    delete mpImageMap;
-    mpImageMap = nullptr;
-    delete mpURL;
-    mpURL = nullptr;
-}
-
-void GalleryTransferable::CopyToClipboard( vcl::Window* pWindow )
-{
-    TransferableHelper::CopyToClipboard( pWindow );
+    mxModelStream.clear();
+    mpGraphicObject.reset();
+    mpURL.reset();
 }
 
 void GalleryTransferable::StartDrag( vcl::Window* pWindow, sal_Int8 nDragSourceActions )

@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SW_INC_UNOTEXTBODYHF_HXX
 #define INCLUDED_SW_INC_UNOTEXTBODYHF_HXX
 
-#include <com/sun/star/lang/XUnoTunnel.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/implbase2.hxx>
 
-#include <unotext.hxx>
+#include "unotext.hxx"
 
 class SwDoc;
 class SwFrameFormat;
@@ -45,7 +44,7 @@ class SwXBodyText
 
 protected:
 
-    virtual ~SwXBodyText();
+    virtual ~SwXBodyText() override;
 
 public:
 
@@ -55,53 +54,41 @@ public:
 
     // XInterface
     virtual css::uno::Any SAL_CALL queryInterface(
-            const css::uno::Type& rType)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Type& rType) override;
     virtual void SAL_CALL acquire() throw() override { OWeakObject::acquire(); }
     virtual void SAL_CALL release() throw() override { OWeakObject::release(); }
 
     // XAggregation
     virtual css::uno::Any SAL_CALL queryAggregation(
-            const css::uno::Type& rType)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Type& rType) override;
 
     // XTypeProvider
     virtual css::uno::Sequence< css::uno::Type >
-        SAL_CALL getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getTypes() override;
     virtual css::uno::Sequence< sal_Int8 > SAL_CALL
-        getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationId() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL supportsService(
-            const OUString& rServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const OUString& rServiceName) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedServiceNames() override;
 
     // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     // XEnumerationAccess
     virtual css::uno::Reference< css::container::XEnumeration >  SAL_CALL
-        createEnumeration()
-        throw (css::uno::RuntimeException, std::exception) override;
+        createEnumeration() override;
 
     // XSimpleText
     virtual css::uno::Reference< css::text::XTextCursor >  SAL_CALL
-        createTextCursor()
-        throw (css::uno::RuntimeException, std::exception) override;
+        createTextCursor() override;
     virtual css::uno::Reference< css::text::XTextCursor >  SAL_CALL
         createTextCursorByRange(
-            const css::uno::Reference< css::text::XTextRange > & xTextPosition)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::text::XTextRange > & xTextPosition) override;
 
 };
 
@@ -110,24 +97,18 @@ typedef ::cppu::WeakImplHelper
 ,   css::container::XEnumerationAccess
 > SwXHeadFootText_Base;
 
-class SwXHeadFootText
+class SwXHeadFootText final
     : public SwXHeadFootText_Base
     , public SwXText
 {
-
-private:
-
     class Impl;
     ::sw::UnoImplPtr<Impl> m_pImpl;
 
-protected:
-
     virtual const SwStartNode *GetStartNode() const override;
     virtual css::uno::Reference< css::text::XTextCursor >
-        CreateCursor()
-        throw (css::uno::RuntimeException) override;
+        CreateCursor() override;
 
-    virtual ~SwXHeadFootText();
+    virtual ~SwXHeadFootText() override;
 
     SwXHeadFootText(SwFrameFormat & rHeadFootFormat, const bool bIsHeader);
 
@@ -135,52 +116,40 @@ public:
 
     static css::uno::Reference< css::text::XText >
         CreateXHeadFootText(SwFrameFormat & rHeadFootFormat, const bool bIsHeader);
-    static bool IsXHeadFootText(SwClient *const pClient);
 
     // XInterface
     virtual css::uno::Any SAL_CALL queryInterface(
-            const css::uno::Type& rType)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Type& rType) override;
     virtual void SAL_CALL acquire() throw() override { OWeakObject::acquire(); }
     virtual void SAL_CALL release() throw() override { OWeakObject::release(); }
 
     // XTypeProvider
     virtual css::uno::Sequence< css::uno::Type >
-        SAL_CALL getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getTypes() override;
     virtual css::uno::Sequence< sal_Int8 > SAL_CALL
-        getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getImplementationId() override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL supportsService(
-            const OUString& rServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const OUString& rServiceName) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedServiceNames() override;
 
     // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     // XEnumerationAccess
     virtual css::uno::Reference< css::container::XEnumeration >  SAL_CALL
-        createEnumeration()
-        throw (css::uno::RuntimeException, std::exception) override;
+        createEnumeration() override;
 
     // XSimpleText
     virtual css::uno::Reference< css::text::XTextCursor >  SAL_CALL
-        createTextCursor()
-        throw (css::uno::RuntimeException, std::exception) override;
+        createTextCursor() override;
     virtual css::uno::Reference< css::text::XTextCursor >  SAL_CALL
         createTextCursorByRange(
-            const css::uno::Reference< css::text::XTextRange > & xTextPosition)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::text::XTextRange > & xTextPosition) override;
 
 };
 

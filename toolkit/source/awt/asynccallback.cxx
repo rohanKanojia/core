@@ -20,14 +20,13 @@
 #include <sal/config.h>
 
 #include <vcl/svapp.hxx>
-#include "osl/mutex.hxx"
-#include "cppuhelper/factory.hxx"
-#include "cppuhelper/implementationentry.hxx"
+#include <cppuhelper/factory.hxx>
+#include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "com/sun/star/lang/XServiceInfo.hpp"
+#include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include "com/sun/star/awt/XRequestCallback.hpp"
+#include <com/sun/star/awt/XRequestCallback.hpp>
 
 /// anonymous implementation namespace
 namespace {
@@ -43,12 +42,12 @@ public:
     AsyncCallback& operator=(const AsyncCallback&) = delete;
 
     // css::lang::XServiceInfo:
-    virtual OUString SAL_CALL getImplementationName() throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // css::awt::XRequestCallback:
-    virtual void SAL_CALL addCallback(const css::uno::Reference< css::awt::XCallback > & xCallback, const css::uno::Any & aData) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addCallback(const css::uno::Reference< css::awt::XCallback > & xCallback, const css::uno::Any & aData) override;
 
 private:
 
@@ -58,45 +57,44 @@ private:
             xCallback( rCallback ), aData( rAny ) {}
 
         css::uno::Reference< css::awt::XCallback > xCallback;
-        css::uno::Any                              aData;
+        css::uno::Any const                        aData;
     };
 
-    DECL_STATIC_LINK_TYPED( AsyncCallback, Notify_Impl, void*, void );
+    DECL_STATIC_LINK( AsyncCallback, Notify_Impl, void*, void );
 
-    virtual ~AsyncCallback() {}
+    virtual ~AsyncCallback() override {}
 };
 
 // com.sun.star.uno.XServiceInfo:
-OUString SAL_CALL AsyncCallback::getImplementationName() throw (css::uno::RuntimeException, std::exception)
+OUString SAL_CALL AsyncCallback::getImplementationName()
 {
     return OUString("com.sun.star.awt.comp.AsyncCallback");
 }
 
-sal_Bool SAL_CALL AsyncCallback::supportsService(OUString const & serviceName) throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL AsyncCallback::supportsService(OUString const & serviceName)
 {
     return cppu::supportsService(this, serviceName);
 }
 
-css::uno::Sequence< OUString > SAL_CALL AsyncCallback::getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception)
+css::uno::Sequence< OUString > SAL_CALL AsyncCallback::getSupportedServiceNames()
 {
     css::uno::Sequence< OUString > s { "com.sun.star.awt.AsyncCallback" };
     return s;
 }
 
 // css::awt::XRequestCallback:
-void SAL_CALL AsyncCallback::addCallback(const css::uno::Reference< css::awt::XCallback > & xCallback, const css::uno::Any & aData) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL AsyncCallback::addCallback(const css::uno::Reference< css::awt::XCallback > & xCallback, const css::uno::Any & aData)
 {
     if ( Application::IsInMain() )
     {
-        SolarMutexGuard aSolarGuard;
-
+        // NOTE: We don't need SolarMutexGuard here as Application::PostUserEvent is thread-safe
         CallbackData* pCallbackData = new CallbackData( xCallback, aData );
         Application::PostUserEvent( LINK( this, AsyncCallback, Notify_Impl ), pCallbackData );
     }
 }
 
 // private asynchronous link to call reference to the callback object
-IMPL_STATIC_LINK_TYPED( AsyncCallback, Notify_Impl, void*, p, void )
+IMPL_STATIC_LINK( AsyncCallback, Notify_Impl, void*, p, void )
 {
     CallbackData* pCallbackData = static_cast<CallbackData*>(p);
     try
@@ -115,7 +113,7 @@ IMPL_STATIC_LINK_TYPED( AsyncCallback, Notify_Impl, void*, p, void )
 
 } // closing anonymous implementation namespace
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_awt_comp_AsyncCallback_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)

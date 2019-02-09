@@ -20,13 +20,17 @@
 #define INCLUDED_CHART2_SOURCE_INC_CHARTVIEW_DRAWMODELWRAPPER_HXX
 
 #include <svx/svdmodel.hxx>
-#include <svx/svdobj.hxx>
 
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/drawing/XDrawPage.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include "chartviewdllapi.hxx"
+#include <chartview/chartviewdllapi.hxx>
+
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
+namespace com { namespace sun { namespace star { namespace drawing { class XShapes; } } } }
+
+class SdrObjList;
+class SdrObject;
 
 namespace chart
 {
@@ -42,20 +46,17 @@ private:
     VclPtr<OutputDevice> m_pRefDevice;
 
 public:
-    DrawModelWrapper() = delete;
-
-    SAL_DLLPRIVATE DrawModelWrapper(
-        const css::uno::Reference<css::uno::XComponentContext>& xContext );
-    SAL_DLLPRIVATE virtual ~DrawModelWrapper();
+    SAL_DLLPRIVATE DrawModelWrapper();
+    SAL_DLLPRIVATE virtual ~DrawModelWrapper() override;
 
     css::uno::Reference< css::lang::XMultiServiceFactory > getShapeFactory();
 
     // the main page will contain the normal view objects
-    css::uno::Reference< css::drawing::XDrawPage > getMainDrawPage();
+    css::uno::Reference< css::drawing::XDrawPage > const & getMainDrawPage();
     SAL_DLLPRIVATE void clearMainDrawPage();
 
     // the extra page is not visible, but contains some extras like the symbols for data points
-    css::uno::Reference< css::drawing::XDrawPage > getHiddenDrawPage();
+    css::uno::Reference< css::drawing::XDrawPage > const & getHiddenDrawPage();
 
     static css::uno::Reference< css::drawing::XShapes >
          getChartRootShape( const css::uno::Reference< css::drawing::XDrawPage>& xPage );
@@ -79,9 +80,10 @@ public:
     XGradientListRef  GetGradientList() const;
     XHatchListRef     GetHatchList() const;
     XBitmapListRef    GetBitmapList() const;
+    XPatternListRef   GetPatternList() const;
 
     SdrObject* getNamedSdrObject( const OUString& rName );
-    static SdrObject* getNamedSdrObject( const OUString& rName, SdrObjList* pObjList );
+    static SdrObject* getNamedSdrObject( const OUString& rName, SdrObjList const * pObjList );
 
     static bool removeShape( const css::uno::Reference< css::drawing::XShape >& xShape );
 };

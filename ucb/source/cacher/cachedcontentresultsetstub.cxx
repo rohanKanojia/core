@@ -18,10 +18,12 @@
  */
 
 
-#include <cachedcontentresultsetstub.hxx>
+#include "cachedcontentresultsetstub.hxx"
 #include <com/sun/star/sdbc/FetchDirection.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/ucb/FetchError.hpp>
 #include <osl/diagnose.h>
+#include <cppuhelper/queryinterface.hxx>
 
 using namespace com::sun::star::beans;
 using namespace com::sun::star::lang;
@@ -32,7 +34,7 @@ using namespace com::sun::star::util;
 using namespace cppu;
 
 
-CachedContentResultSetStub::CachedContentResultSetStub( Reference< XResultSet > xOrigin )
+CachedContentResultSetStub::CachedContentResultSetStub( Reference< XResultSet > const & xOrigin )
                 : ContentResultSetWrapper( xOrigin )
                 , m_nColumnCount( 0 )
                 , m_bColumnCountCached( false )
@@ -67,7 +69,6 @@ void SAL_CALL CachedContentResultSetStub::release()
 
 Any SAL_CALL CachedContentResultSetStub
     ::queryInterface( const Type&  rType )
-    throw ( RuntimeException, std::exception )
 {
     //list all interfaces inclusive baseclasses of interfaces
 
@@ -90,9 +91,8 @@ Any SAL_CALL CachedContentResultSetStub
 
 
 //virtual
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_propertyChange( const PropertyChangeEvent& rEvt )
-    throw( RuntimeException )
 {
     impl_EnsureNotDisposed();
 
@@ -104,17 +104,15 @@ void SAL_CALL CachedContentResultSetStub
 
     PropertyChangeEvent aEvt( rEvt );
     aEvt.Source = static_cast< XPropertySet * >( this );
-    aEvt.Further = sal_False;
+    aEvt.Further = false;
 
     impl_notifyPropertyChangeListeners( aEvt );
 }
 
 
 //virtual
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_vetoableChange( const PropertyChangeEvent& rEvt )
-    throw( PropertyVetoException,
-           RuntimeException )
 {
     impl_EnsureNotDisposed();
 
@@ -126,7 +124,7 @@ void SAL_CALL CachedContentResultSetStub
 
     PropertyChangeEvent aEvt( rEvt );
     aEvt.Source = static_cast< XPropertySet * >( this );
-    aEvt.Further = sal_False;
+    aEvt.Further = false;
 
     impl_notifyVetoableChangeListeners( aEvt );
 }
@@ -139,168 +137,176 @@ XTYPEPROVIDER_COMMON_IMPL( CachedContentResultSetStub )
 //list all interfaces exclusive baseclasses
 Sequence< Type > SAL_CALL CachedContentResultSetStub
     ::getTypes()
-    throw( RuntimeException, std::exception )
 {
-    static Sequence< Type >* pTypes = nullptr;
-    if( !pTypes )
-    {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if( !pTypes )
-        {
-            pTypes = new Sequence< Type >(13);
-            (*pTypes)[0] = CPPU_TYPE_REF( XTypeProvider );
-            (*pTypes)[1] = CPPU_TYPE_REF( XServiceInfo );
-            (*pTypes)[2] = CPPU_TYPE_REF( XComponent );
-            (*pTypes)[3] = CPPU_TYPE_REF( XCloseable );
-            (*pTypes)[4] = CPPU_TYPE_REF( XResultSetMetaDataSupplier );
-            (*pTypes)[5] = CPPU_TYPE_REF( XPropertySet );
-            (*pTypes)[6] = CPPU_TYPE_REF( XPropertyChangeListener );
-            (*pTypes)[7] = CPPU_TYPE_REF( XVetoableChangeListener );
-            (*pTypes)[8] = CPPU_TYPE_REF( XResultSet );
-            (*pTypes)[9] = CPPU_TYPE_REF( XContentAccess );
-            (*pTypes)[10] = CPPU_TYPE_REF( XRow );
-            (*pTypes)[11] = CPPU_TYPE_REF( XFetchProvider );
-            (*pTypes)[12] = CPPU_TYPE_REF( XFetchProviderForContentAccess );
-        }
-    }
-    return *pTypes;
+    static Sequence<Type> ourTypes(
+                {   CPPU_TYPE_REF( XTypeProvider ),
+                    CPPU_TYPE_REF( XServiceInfo ),
+                    CPPU_TYPE_REF( XComponent ),
+                    CPPU_TYPE_REF( XCloseable ),
+                    CPPU_TYPE_REF( XResultSetMetaDataSupplier ),
+                    CPPU_TYPE_REF( XPropertySet ),
+                    CPPU_TYPE_REF( XPropertyChangeListener ),
+                    CPPU_TYPE_REF( XVetoableChangeListener ),
+                    CPPU_TYPE_REF( XResultSet ),
+                    CPPU_TYPE_REF( XContentAccess ),
+                    CPPU_TYPE_REF( XRow ),
+                    CPPU_TYPE_REF( XFetchProvider ),
+                    CPPU_TYPE_REF( XFetchProviderForContentAccess ) } );
+
+    return ourTypes;
 }
 
 
 // XServiceInfo methods.
 
+OUString SAL_CALL CachedContentResultSetStub::getImplementationName()
+{
+    return OUString( "com.sun.star.comp.ucb.CachedContentResultSetStub" );
+}
 
-XSERVICEINFO_NOFACTORY_IMPL_1( CachedContentResultSetStub,
-                        OUString( "com.sun.star.comp.ucb.CachedContentResultSetStub" ),
-                        CACHED_CRS_STUB_SERVICE_NAME );
+sal_Bool SAL_CALL CachedContentResultSetStub::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
+
+css::uno::Sequence< OUString > SAL_CALL CachedContentResultSetStub::getSupportedServiceNames()
+{
+    return { CACHED_CRS_STUB_SERVICE_NAME };
+}
+
 
 
 // XFetchProvider methods.
 
 
-#define FETCH_XXX( impl_loadRow, loadInterface ) \
-impl_EnsureNotDisposed(); \
-if( !m_xResultSetOrigin.is() ) \
-{ \
-    OSL_FAIL( "broadcaster was disposed already" ); \
-    throw RuntimeException(); \
-} \
-impl_propagateFetchSizeAndDirection( nRowCount, bDirection ); \
-FetchResult aRet; \
-aRet.StartIndex = nRowStartPosition; \
-aRet.Orientation = bDirection; \
-aRet.FetchError = FetchError::SUCCESS; /*ENDOFDATA, EXCEPTION*/ \
-sal_Int32 nOldOriginal_Pos = m_xResultSetOrigin->getRow(); \
-if( impl_isForwardOnly() ) \
-{ \
-    if( nOldOriginal_Pos != nRowStartPosition ) \
-    { \
-        /*@todo*/ \
-        aRet.FetchError = FetchError::EXCEPTION; \
-        return aRet; \
-    } \
-    if( nRowCount != 1 ) \
-        aRet.FetchError = FetchError::EXCEPTION; \
- \
-    aRet.Rows.realloc( 1 ); \
- \
-    try \
-    { \
-        impl_loadRow( aRet.Rows[0], loadInterface ); \
-    } \
-    catch( SQLException& ) \
-    { \
-        aRet.Rows.realloc( 0 ); \
-        aRet.FetchError = FetchError::EXCEPTION; \
-        return aRet; \
-    } \
-    return aRet; \
-} \
-aRet.Rows.realloc( nRowCount ); \
-bool bOldOriginal_AfterLast = false; \
-if( !nOldOriginal_Pos ) \
-    bOldOriginal_AfterLast = m_xResultSetOrigin->isAfterLast(); \
-sal_Int32 nN = 1; \
-bool bValidNewPos = false; \
-try \
-{ \
-    try \
-    { \
-        /*if( nOldOriginal_Pos != nRowStartPosition )*/ \
-        bValidNewPos = m_xResultSetOrigin->absolute( nRowStartPosition ); \
-    } \
-    catch( SQLException& ) \
-    { \
-        aRet.Rows.realloc( 0 ); \
-        aRet.FetchError = FetchError::EXCEPTION; \
-        return aRet; \
-    } \
-    if( !bValidNewPos ) \
-    { \
-        aRet.Rows.realloc( 0 ); \
-        aRet.FetchError = FetchError::EXCEPTION; \
- \
-        /*restore old position*/ \
-        if( nOldOriginal_Pos ) \
-            m_xResultSetOrigin->absolute( nOldOriginal_Pos ); \
-        else if( bOldOriginal_AfterLast ) \
-            m_xResultSetOrigin->afterLast(); \
-        else \
-            m_xResultSetOrigin->beforeFirst(); \
- \
-        return aRet; \
-    } \
-    for( ; nN <= nRowCount; ) \
-    { \
-        impl_loadRow( aRet.Rows[nN-1], loadInterface ); \
-        nN++; \
-        if( nN <= nRowCount ) \
-        { \
-            if( bDirection ) \
-            { \
-                if( !m_xResultSetOrigin->next() ) \
-                { \
-                    aRet.Rows.realloc( nN-1 ); \
-                    aRet.FetchError = FetchError::ENDOFDATA; \
-                    break; \
-                } \
-            } \
-            else \
-            { \
-                if( !m_xResultSetOrigin->previous() ) \
-                { \
-                    aRet.Rows.realloc( nN-1 ); \
-                    aRet.FetchError = FetchError::ENDOFDATA; \
-                    break; \
-                } \
-            } \
-        } \
-    } \
-} \
-catch( SQLException& ) \
-{ \
-    aRet.Rows.realloc( nN-1 ); \
-    aRet.FetchError = FetchError::EXCEPTION; \
-} \
-/*restore old position*/ \
-if( nOldOriginal_Pos ) \
-    m_xResultSetOrigin->absolute( nOldOriginal_Pos ); \
-else if( bOldOriginal_AfterLast ) \
-    m_xResultSetOrigin->afterLast(); \
-else \
-    m_xResultSetOrigin->beforeFirst(); \
-return aRet;
+FetchResult CachedContentResultSetStub::impl_fetchHelper(
+        sal_Int32 nRowStartPosition, sal_Int32 nRowCount, bool bDirection,
+        std::function<void( css::uno::Any& rRowContent)> impl_loadRow)
+{
+    impl_EnsureNotDisposed();
+    if( !m_xResultSetOrigin.is() )
+    {
+        OSL_FAIL( "broadcaster was disposed already" );
+        throw RuntimeException();
+    }
+    impl_propagateFetchSizeAndDirection( nRowCount, bDirection );
+    FetchResult aRet;
+    aRet.StartIndex = nRowStartPosition;
+    aRet.Orientation = bDirection;
+    aRet.FetchError = FetchError::SUCCESS; /*ENDOFDATA, EXCEPTION*/
+    sal_Int32 nOldOriginal_Pos = m_xResultSetOrigin->getRow();
+    if( impl_isForwardOnly() )
+    {
+        if( nOldOriginal_Pos != nRowStartPosition )
+        {
+            /*@todo*/
+            aRet.FetchError = FetchError::EXCEPTION;
+            return aRet;
+        }
+        if( nRowCount != 1 )
+            aRet.FetchError = FetchError::EXCEPTION;
+
+        aRet.Rows.realloc( 1 );
+
+        try
+        {
+            impl_loadRow( aRet.Rows[0] );
+        }
+        catch( SQLException& )
+        {
+            aRet.Rows.realloc( 0 );
+            aRet.FetchError = FetchError::EXCEPTION;
+            return aRet;
+        }
+        return aRet;
+    }
+    aRet.Rows.realloc( nRowCount );
+    bool bOldOriginal_AfterLast = false;
+    if( !nOldOriginal_Pos )
+        bOldOriginal_AfterLast = m_xResultSetOrigin->isAfterLast();
+    sal_Int32 nN = 1;
+    bool bValidNewPos = false;
+    try
+    {
+        try
+        {
+            /*if( nOldOriginal_Pos != nRowStartPosition )*/
+            bValidNewPos = m_xResultSetOrigin->absolute( nRowStartPosition );
+        }
+        catch( SQLException& )
+        {
+            aRet.Rows.realloc( 0 );
+            aRet.FetchError = FetchError::EXCEPTION;
+            return aRet;
+        }
+        if( !bValidNewPos )
+        {
+            aRet.Rows.realloc( 0 );
+            aRet.FetchError = FetchError::EXCEPTION;
+
+            /*restore old position*/
+            if( nOldOriginal_Pos )
+                m_xResultSetOrigin->absolute( nOldOriginal_Pos );
+            else if( bOldOriginal_AfterLast )
+                m_xResultSetOrigin->afterLast();
+            else
+                m_xResultSetOrigin->beforeFirst();
+
+            return aRet;
+        }
+        for( ; nN <= nRowCount; )
+        {
+            impl_loadRow( aRet.Rows[nN-1] );
+            nN++;
+            if( nN <= nRowCount )
+            {
+                if( bDirection )
+                {
+                    if( !m_xResultSetOrigin->next() )
+                    {
+                        aRet.Rows.realloc( nN-1 );
+                        aRet.FetchError = FetchError::ENDOFDATA;
+                        break;
+                    }
+                }
+                else
+                {
+                    if( !m_xResultSetOrigin->previous() )
+                    {
+                        aRet.Rows.realloc( nN-1 );
+                        aRet.FetchError = FetchError::ENDOFDATA;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    catch( SQLException& )
+    {
+        aRet.Rows.realloc( nN-1 );
+        aRet.FetchError = FetchError::EXCEPTION;
+    }
+    /*restore old position*/
+    if( nOldOriginal_Pos )
+        m_xResultSetOrigin->absolute( nOldOriginal_Pos );
+    else if( bOldOriginal_AfterLast )
+        m_xResultSetOrigin->afterLast();
+    else
+        m_xResultSetOrigin->beforeFirst();
+    return aRet;
+}
 
 FetchResult SAL_CALL CachedContentResultSetStub
     ::fetch( sal_Int32 nRowStartPosition
     , sal_Int32 nRowCount, sal_Bool bDirection )
-    throw( RuntimeException, std::exception )
 {
     impl_init_xRowOrigin();
-    FETCH_XXX( impl_getCurrentRowContent, m_xRowOrigin );
+    return impl_fetchHelper( nRowStartPosition, nRowCount, bDirection,
+        [&](css::uno::Any& rRowContent)
+        { return impl_getCurrentRowContent(rRowContent, m_xRowOrigin); });
 }
 
-sal_Int32 SAL_CALL CachedContentResultSetStub
+sal_Int32 CachedContentResultSetStub
     ::impl_getColumnCount()
 {
     sal_Int32 nCount;
@@ -330,10 +336,9 @@ sal_Int32 SAL_CALL CachedContentResultSetStub
     return m_nColumnCount;
 }
 
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_getCurrentRowContent( Any& rRowContent
-        , Reference< XRow > xRow )
-        throw ( SQLException, RuntimeException )
+        , const Reference< XRow >& xRow )
 {
     sal_Int32 nCount = impl_getColumnCount();
 
@@ -346,9 +351,8 @@ void SAL_CALL CachedContentResultSetStub
     rRowContent <<= aContent;
 }
 
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_propagateFetchSizeAndDirection( sal_Int32 nFetchSize, bool bFetchDirection )
-        throw ( RuntimeException )
 {
     //this is done only for the case, that there is another CachedContentResultSet in the chain of underlying ResultSets
 
@@ -435,26 +439,23 @@ void SAL_CALL CachedContentResultSetStub
 // XFetchProviderForContentAccess methods.
 
 
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_getCurrentContentIdentifierString( Any& rAny
-        , Reference< XContentAccess > xContentAccess )
-        throw ( RuntimeException )
+        , const Reference< XContentAccess >& xContentAccess )
 {
      rAny <<= xContentAccess->queryContentIdentifierString();
 }
 
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_getCurrentContentIdentifier( Any& rAny
-        , Reference< XContentAccess > xContentAccess )
-        throw ( RuntimeException )
+        , const Reference< XContentAccess >& xContentAccess )
 {
      rAny <<= xContentAccess->queryContentIdentifier();
 }
 
-void SAL_CALL CachedContentResultSetStub
+void CachedContentResultSetStub
     ::impl_getCurrentContent( Any& rAny
-        , Reference< XContentAccess > xContentAccess )
-        throw ( RuntimeException )
+        , const Reference< XContentAccess >& xContentAccess )
 {
      rAny <<= xContentAccess->queryContent();
 }
@@ -463,30 +464,33 @@ void SAL_CALL CachedContentResultSetStub
 FetchResult SAL_CALL CachedContentResultSetStub
     ::fetchContentIdentifierStrings( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, sal_Bool bDirection )
-        throw( css::uno::RuntimeException, std::exception )
 {
     impl_init_xContentAccessOrigin();
-    FETCH_XXX( impl_getCurrentContentIdentifierString, m_xContentAccessOrigin );
+    return impl_fetchHelper( nRowStartPosition, nRowCount, bDirection,
+        [&](css::uno::Any& rRowContent)
+        { return impl_getCurrentContentIdentifierString(rRowContent, m_xContentAccessOrigin); });
 }
 
 //virtual
 FetchResult SAL_CALL CachedContentResultSetStub
     ::fetchContentIdentifiers( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, sal_Bool bDirection )
-        throw( css::uno::RuntimeException, std::exception )
 {
     impl_init_xContentAccessOrigin();
-    FETCH_XXX( impl_getCurrentContentIdentifier, m_xContentAccessOrigin );
+    return impl_fetchHelper( nRowStartPosition, nRowCount, bDirection,
+        [&](css::uno::Any& rRowContent)
+        { return impl_getCurrentContentIdentifier(rRowContent, m_xContentAccessOrigin); });
 }
 
 //virtual
 FetchResult SAL_CALL CachedContentResultSetStub
     ::fetchContents( sal_Int32 nRowStartPosition
         , sal_Int32 nRowCount, sal_Bool bDirection )
-        throw( css::uno::RuntimeException, std::exception )
 {
     impl_init_xContentAccessOrigin();
-    FETCH_XXX( impl_getCurrentContent, m_xContentAccessOrigin );
+    return impl_fetchHelper( nRowStartPosition, nRowCount, bDirection,
+        [&](css::uno::Any& rRowContent)
+        { return impl_getCurrentContent(rRowContent, m_xContentAccessOrigin); });
 }
 
 
@@ -518,12 +522,11 @@ void SAL_CALL CachedContentResultSetStubFactory::release()
 }
 
 css::uno::Any SAL_CALL CachedContentResultSetStubFactory::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< XTypeProvider* >(this)),
-                                               (static_cast< XServiceInfo* >(this)),
-                                               (static_cast< XCachedContentResultSetStubFactory* >(this))
+                                               static_cast< XTypeProvider* >(this),
+                                               static_cast< XServiceInfo* >(this),
+                                               static_cast< XCachedContentResultSetStubFactory* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -539,11 +542,21 @@ XTYPEPROVIDER_IMPL_3( CachedContentResultSetStubFactory,
 
 // CachedContentResultSetStubFactory XServiceInfo methods.
 
-
-XSERVICEINFO_IMPL_1( CachedContentResultSetStubFactory,
-                     OUString( "com.sun.star.comp.ucb.CachedContentResultSetStubFactory" ),
-                     CACHED_CRS_STUB_FACTORY_NAME );
-
+XSERVICEINFO_COMMOM_IMPL( CachedContentResultSetStubFactory,
+                          OUString( "com.sun.star.comp.ucb.CachedContentResultSetStubFactory" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+CachedContentResultSetStubFactory_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & rSMgr )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new CachedContentResultSetStubFactory( rSMgr ));
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
+css::uno::Sequence< OUString >
+CachedContentResultSetStubFactory::getSupportedServiceNames_Static()
+{
+    return { CACHED_CRS_STUB_FACTORY_NAME };
+}
 
 // Service factory implementation.
 
@@ -558,7 +571,6 @@ ONE_INSTANCE_SERVICE_FACTORY_IMPL( CachedContentResultSetStubFactory );
 Reference< XResultSet > SAL_CALL CachedContentResultSetStubFactory
     ::createCachedContentResultSetStub(
             const Reference< XResultSet > & xSource )
-            throw( RuntimeException, std::exception )
 {
     if( xSource.is() )
     {

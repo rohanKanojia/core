@@ -32,8 +32,10 @@ $(eval $(call gb_UIConfig_add_popupmenufiles,modules/sdraw,\
 	sd/uiconfig/sdraw/popupmenu/measure \
 	sd/uiconfig/sdraw/popupmenu/media \
 	sd/uiconfig/sdraw/popupmenu/multiselect \
+	sd/uiconfig/sdraw/popupmenu/notebookbar \
 	sd/uiconfig/sdraw/popupmenu/oleobject \
-	sd/uiconfig/sdraw/popupmenu/outlinetext \
+	sd/uiconfig/sdraw/popupmenu/pagepanemaster \
+	sd/uiconfig/sdraw/popupmenu/pagepanenoselmaster \
 	sd/uiconfig/sdraw/popupmenu/pagepanenosel \
 	sd/uiconfig/sdraw/popupmenu/pagepane \
 	sd/uiconfig/sdraw/popupmenu/pagetab \
@@ -80,10 +82,12 @@ $(eval $(call gb_UIConfig_add_toolbarfiles,modules/sdraw,\
 	sd/uiconfig/sdraw/toolbar/masterviewtoolbar \
 	sd/uiconfig/sdraw/toolbar/mediaobjectbar \
 	sd/uiconfig/sdraw/toolbar/moreformcontrols \
+	sd/uiconfig/sdraw/toolbar/notebookbarshortcuts \
 	sd/uiconfig/sdraw/toolbar/optimizetablebar \
 	sd/uiconfig/sdraw/toolbar/optionsbar \
 	sd/uiconfig/sdraw/toolbar/positionbar \
 	sd/uiconfig/sdraw/toolbar/rectanglesbar \
+	sd/uiconfig/sdraw/toolbar/redactionbar \
 	sd/uiconfig/sdraw/toolbar/standardbar \
 	sd/uiconfig/sdraw/toolbar/starshapes \
 	sd/uiconfig/sdraw/toolbar/symbolshapes \
@@ -102,16 +106,18 @@ $(eval $(call gb_UIConfig_add_uifiles,modules/sdraw,\
 	sd/uiconfig/sdraw/ui/dlgsnap \
 	sd/uiconfig/sdraw/ui/copydlg \
 	sd/uiconfig/sdraw/ui/drawchardialog \
+	sd/uiconfig/sdraw/ui/drawprinteroptions \
 	sd/uiconfig/sdraw/ui/drawparadialog \
 	sd/uiconfig/sdraw/ui/drawpagedialog \
 	sd/uiconfig/sdraw/ui/drawprtldialog \
 	sd/uiconfig/sdraw/ui/insertlayer \
 	sd/uiconfig/sdraw/ui/insertslidesdialog \
 	sd/uiconfig/sdraw/ui/namedesign \
+	sd/uiconfig/sdraw/ui/notebookbar \
+	sd/uiconfig/sdraw/ui/notebookbar_groupedbar_compact \
+	sd/uiconfig/sdraw/ui/notebookbar_groupedbar_full \
 	sd/uiconfig/sdraw/ui/paranumberingtab \
-	sd/uiconfig/sdraw/ui/printeroptions \
 	sd/uiconfig/sdraw/ui/queryunlinkimagedialog \
-	sd/uiconfig/sdraw/ui/tabledesigndialog \
 	sd/uiconfig/sdraw/ui/vectorize \
 ))
 

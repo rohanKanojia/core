@@ -25,6 +25,7 @@
 #include <osl/mutex.hxx>
 #include <rtl/ustring.hxx>
 #include <vcl/dllapi.h>
+#include <memory>
 
 namespace com {
 namespace sun {
@@ -40,26 +41,21 @@ namespace utl {
 
 class LocaleDataWrapper;
 
-class Date;
-
 namespace vcl
 {
 
 class VCL_DLLPUBLIC I18nHelper
 {
-private:
     ::osl::Mutex                    maMutex;
-    LanguageTag                     maLanguageTag;
+    LanguageTag const               maLanguageTag;
     css::uno::Reference< css::uno::XComponentContext > m_xContext;
 
-    LocaleDataWrapper*              mpLocaleDataWrapper;
-    utl::TransliterationWrapper*    mpTransliterationWrapper;
+    std::unique_ptr<LocaleDataWrapper>              mpLocaleDataWrapper;
+    std::unique_ptr<utl::TransliterationWrapper>    mpTransliterationWrapper;
 
     bool                            mbTransliterateIgnoreCase;
 
     SAL_DLLPRIVATE void             ImplDestroyWrappers();
-
-protected:
 
     SAL_DLLPRIVATE utl::TransliterationWrapper&    ImplGetTransliterationWrapper() const;
     SAL_DLLPRIVATE LocaleDataWrapper&              ImplGetLocaleDataWrapper() const;

@@ -17,20 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "gridcols.hxx"
+#include <gridcols.hxx>
 #include <tools/debug.hxx>
-#include <comphelper/types.hxx>
-#include "fmservs.hxx"
-#include "svx/fmtools.hxx"
+#include <fmservs.hxx>
+#include <svx/fmtools.hxx>
 using namespace ::com::sun::star::uno;
 
 
-const css::uno::Sequence<OUString>& getColumnTypes()
+static const css::uno::Sequence<OUString>& getColumnTypes()
 {
-    static css::uno::Sequence<OUString> aColumnTypes(10);
-    if (aColumnTypes.getConstArray()[0].isEmpty())
+    static css::uno::Sequence<OUString> aColumnTypes = [&]()
     {
-        OUString* pNames = aColumnTypes.getArray();
+        css::uno::Sequence<OUString> tmp(10);
+        OUString* pNames = tmp.getArray();
         pNames[TYPE_CHECKBOX] = FM_COL_CHECKBOX;
         pNames[TYPE_COMBOBOX] = FM_COL_COMBOBOX;
         pNames[TYPE_CURRENCYFIELD] = FM_COL_CURRENCYFIELD;
@@ -41,15 +40,20 @@ const css::uno::Sequence<OUString>& getColumnTypes()
         pNames[TYPE_PATTERNFIELD] = FM_COL_PATTERNFIELD;
         pNames[TYPE_TEXTFIELD] = FM_COL_TEXTFIELD;
         pNames[TYPE_TIMEFIELD] = FM_COL_TIMEFIELD;
-    }
+        return tmp;
+    }();
     return aColumnTypes;
 }
 
 
-// Vergleichen von PropertyInfo
-extern "C" int SAL_CALL NameCompare(const void* pFirst, const void* pSecond)
+extern "C" {
+
+// comparison of PropertyInfo
+static int NameCompare(const void* pFirst, const void* pSecond)
 {
     return static_cast<OUString const *>(pFirst)->compareTo(*static_cast<OUString const *>(pSecond));
+}
+
 }
 
 namespace

@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SD_INC_ANIMATIONS_HXX
 #define INCLUDED_SD_INC_ANIMATIONS_HXX
 
-#include <sddllapi.h>
+#include "sddllapi.h"
 
 namespace sd
 {
@@ -32,17 +32,15 @@ struct AfterEffectNode
 {
     css::uno::Reference< css::animations::XAnimationNode > mxNode;
     css::uno::Reference< css::animations::XAnimationNode > mxMaster;
-    bool mbOnNextEffect;
+    bool const mbOnNextEffect;
 
     AfterEffectNode( const css::uno::Reference< css::animations::XAnimationNode >& xNode, const css::uno::Reference< css::animations::XAnimationNode >& xMaster, bool bOnNextEffect )
         : mxNode( xNode ), mxMaster( xMaster ), mbOnNextEffect( bOnNextEffect ) {}
 };
 
-typedef std::list< AfterEffectNode > AfterEffectNodeList;
-
 /** inserts the animation node in the given AfterEffectNode at the correct position
     in the timing hierarchy of its master */
-SD_DLLPUBLIC void stl_process_after_effect_node_func(AfterEffectNode& rNode);
+SD_DLLPUBLIC void stl_process_after_effect_node_func(AfterEffectNode const & rNode);
 
 } // namespace sd;
 

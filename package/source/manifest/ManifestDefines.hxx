@@ -24,8 +24,10 @@
 #define MANIFEST_NSPREFIX "manifest:"
 #define ELEMENT_MANIFEST "manifest:manifest"
 #define ATTRIBUTE_XMLNS "xmlns:manifest"
+#define ATTRIBUTE_XMLNS_LOEXT "xmlns:loext"
 #define MANIFEST_NAMESPACE "http://openoffice.org/2001/manifest"
 #define MANIFEST_OASIS_NAMESPACE "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
+#define MANIFEST_LOEXT_NAMESPACE "urn:org:documentfoundation:names:experimental:office:xmlns:loext:1.0"
 #define MANIFEST_DOCTYPE "<!DOCTYPE manifest:manifest PUBLIC \"-//OpenOffice.org//DTD Manifest 1.0//EN\" \"Manifest.dtd\">"
 #define ATTRIBUTE_CDATA "CDATA"
 
@@ -34,6 +36,25 @@
 #define ATTRIBUTE_VERSION "manifest:version"
 #define ATTRIBUTE_MEDIA_TYPE "manifest:media-type"
 #define ATTRIBUTE_SIZE "manifest:size"
+#define ELEMENT_MANIFEST_KEYINFO "loext:keyinfo"
+#define ELEMENT_ENCRYPTED_KEYINFO "loext:KeyInfo"
+#define ELEMENT_ENCRYPTEDKEY "loext:encrypted-key"
+#define ELEMENT_ENCRYPTIONMETHOD "loext:encryption-method"
+#define ELEMENT_PGPDATA "loext:PGPData"
+#define ELEMENT_PGPKEYID "loext:PGPKeyID"
+#define ELEMENT_PGPKEYPACKET "loext:PGPKeyPacket"
+#define ATTRIBUTE_ALGORITHM "loext:PGPAlgorithm"
+#define ELEMENT_CIPHERDATA "loext:CipherData"
+#define ELEMENT_CIPHERVALUE "loext:CipherValue"
+#define ELEMENT_MANIFEST13_KEYINFO "manifest:keyinfo"
+#define ELEMENT_ENCRYPTEDKEY13 "manifest:encrypted-key"
+#define ELEMENT_ENCRYPTIONMETHOD13 "manifest:encryption-method"
+#define ELEMENT_PGPDATA13 "manifest:PGPData"
+#define ELEMENT_PGPKEYID13 "manifest:PGPKeyID"
+#define ELEMENT_PGPKEYPACKET13 "manifest:PGPKeyPacket"
+#define ATTRIBUTE_ALGORITHM13 "manifest:PGPAlgorithm"
+#define ELEMENT_CIPHERDATA13 "manifest:CipherData"
+#define ELEMENT_CIPHERVALUE13 "manifest:CipherValue"
 
 #define ELEMENT_ENCRYPTION_DATA "manifest:encryption-data"
 #define ATTRIBUTE_CHECKSUM_TYPE "manifest:checksum-type"
@@ -52,7 +73,9 @@
 #define ATTRIBUTE_SALT "manifest:salt"
 #define ATTRIBUTE_ITERATION_COUNT "manifest:iteration-count"
 
-#define SHA256_URL "http://www.w3.org/2000/09/xmldsig#sha256"
+/// OFFICE-3708: wrong URL cited in ODF 1.2 and used since OOo 3.4 beta
+#define SHA256_URL_ODF12 "http://www.w3.org/2000/09/xmldsig#sha256"
+#define SHA256_URL "http://www.w3.org/2001/04/xmlenc#sha256"
 #define SHA1_NAME "SHA1"
 #define SHA1_URL "http://www.w3.org/2000/09/xmldsig#sha1"
 
@@ -67,6 +90,7 @@
 #define AES256_URL "http://www.w3.org/2001/04/xmlenc#aes256-cbc"
 
 #define PBKDF2_NAME "PBKDF2"
+#define PGP_NAME "PGP"
 #define PBKDF2_URL "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0#pbkdf2"
 
 #endif

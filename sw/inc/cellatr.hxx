@@ -24,48 +24,46 @@
 #include <svl/zforlist.hxx>
 #include "swdllapi.h"
 #include "format.hxx"
+#include "hintids.hxx"
 #include "cellfml.hxx"
 
-namespace rtl { class OUString; }
+/** The number formatter's default locale's @ Text format.
+    Not necessarily system locale, but the locale the formatter was constructed
+    with. For this SvNumberFormatter::IsTextFormat() always returns true.
+ */
+constexpr sal_uInt32 getSwDefaultTextFormat() { return NF_STANDARD_FORMAT_TEXT; }
 
 class SW_DLLPUBLIC SwTableBoxNumFormat : public SfxUInt32Item
 {
-    bool bAuto;     ///< automatically given flag
 public:
-    SwTableBoxNumFormat( sal_uInt32 nFormat = css::util::NumberFormat::TEXT,
-                        bool bAuto = false );
+    SwTableBoxNumFormat( sal_uInt32 nFormat = getSwDefaultTextFormat() );
 
     // "pure virtual methods" of SfxPoolItem
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
 
-    inline SwTableBoxNumFormat& operator=( const SwTableBoxNumFormat& rAttr )
+    SwTableBoxNumFormat& operator=( const SwTableBoxNumFormat& rAttr )
     {
         SetValue( rAttr.GetValue() );
-        SetAutoFlag( rAttr.GetAutoFlag() );
         return *this;
     }
-
-    bool GetAutoFlag() const                    { return bAuto; }
-    void SetAutoFlag( bool bFlag = true )       { bAuto = bFlag; }
 };
 
 class SwTableBoxFormula : public SfxPoolItem, public SwTableFormula
 {
-    SwModify* pDefinedIn;   // Modify object where the formula is located
+    SwModify* m_pDefinedIn;   // Modify object where the formula is located
                             // can only be TableBoxFormat
 
 public:
     SwTableBoxFormula( const OUString& rFormula );
-    virtual ~SwTableBoxFormula() {};
 
     // "pure virtual methods" of SfxPoolItem
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
 
-    inline const SwModify* GetDefinedIn() const { return pDefinedIn; }
-    inline void ChgDefinedIn( const SwModify* pNew )
-                                            { pDefinedIn = const_cast<SwModify*>(pNew); }
+    const SwModify* GetDefinedIn() const { return m_pDefinedIn; }
+    void ChgDefinedIn( const SwModify* pNew )
+                                            { m_pDefinedIn = const_cast<SwModify*>(pNew); }
     //  BoxAttribut -> BoxStartNode
     virtual const SwNode* GetNodeOfFormula() const override;
 
@@ -79,7 +77,7 @@ public:
 
 class SW_DLLPUBLIC SwTableBoxValue : public SfxPoolItem
 {
-    double nValue;
+    double m_nValue;
 public:
     SwTableBoxValue();
     SwTableBoxValue( const double aVal );
@@ -88,21 +86,21 @@ public:
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
 
-    inline SwTableBoxValue& operator=( const SwTableBoxValue& rCmp )
+    SwTableBoxValue& operator=( const SwTableBoxValue& rCmp )
     {
-        nValue = rCmp.nValue;
+        m_nValue = rCmp.m_nValue;
         return *this;
     }
 
-    double GetValue() const                     { return nValue; }
+    double GetValue() const                     { return m_nValue; }
 };
 
 inline const SwTableBoxNumFormat      &SwAttrSet::GetTableBoxNumFormat(bool bInP) const
-    {   return static_cast<const SwTableBoxNumFormat&>(Get( RES_BOXATR_FORMAT,bInP)); }
+    {   return Get( RES_BOXATR_FORMAT,bInP); }
 inline const SwTableBoxFormula        &SwAttrSet::GetTableBoxFormula(bool bInP) const
-    {   return static_cast<const SwTableBoxFormula&>(Get( RES_BOXATR_FORMULA,bInP)); }
+    {   return Get( RES_BOXATR_FORMULA,bInP); }
 inline const SwTableBoxValue          &SwAttrSet::GetTableBoxValue(bool bInP) const
-    {   return static_cast<const SwTableBoxValue&>(Get( RES_BOXATR_VALUE, bInP)); }
+    {   return Get( RES_BOXATR_VALUE, bInP); }
 
 inline const SwTableBoxNumFormat      &SwFormat::GetTableBoxNumFormat(bool bInP) const
     {   return m_aSet.GetTableBoxNumFormat(bInP); }

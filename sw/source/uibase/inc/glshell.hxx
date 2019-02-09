@@ -18,7 +18,7 @@
  */
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_GLSHELL_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_GLSHELL_HXX
-#include "wdocsh.hxx"
+#include <wdocsh.hxx>
 
 class SwGlosDocShell : public SwDocShell
 {
@@ -37,8 +37,8 @@ private:
     static void InitInterface_Impl();
 
 public:
-    SwGlosDocShell( bool bNewShow = true);
-    virtual ~SwGlosDocShell();
+    SwGlosDocShell( bool bNewShow);
+    virtual ~SwGlosDocShell() override;
 
     void            Execute( SfxRequest& );
     void            GetState( SfxItemSet& );
@@ -68,7 +68,7 @@ private:
 
 public:
     SwWebGlosDocShell();
-    virtual ~SwWebGlosDocShell();
+    virtual ~SwWebGlosDocShell() override;
 
     void            Execute( SfxRequest& );
     void            GetState( SfxItemSet& );

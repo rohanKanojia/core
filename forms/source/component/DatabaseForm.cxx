@@ -18,15 +18,14 @@
  */
 
 
-#include "componenttools.hxx"
+#include <componenttools.hxx>
 #include "DatabaseForm.hxx"
 #include "EventThread.hxx"
-#include "frm_resource.hrc"
-#include "frm_resource.hxx"
+#include <strings.hrc>
+#include <frm_resource.hxx>
 #include "GroupManager.hxx"
-#include "property.hrc"
-#include "property.hxx"
-#include "services.hxx"
+#include <property.hxx>
+#include <services.hxx>
 
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <com/sun/star/awt/XTextComponent.hpp>
@@ -56,14 +55,13 @@
 #include <com/sun/star/util/XModifiable2.hpp>
 
 #include <comphelper/basicio.hxx>
-#include <comphelper/container.hxx>
-#include <comphelper/enumhelper.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/property.hxx>
 #include <comphelper/seqstream.hxx>
 #include <comphelper/sequence.hxx>
 #include <connectivity/dbtools.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <comphelper/types.hxx>
 #include <rtl/math.hxx>
 #include <rtl/tencinfo.h>
 #include <svl/inettype.hxx>
@@ -78,25 +76,7 @@
 #include <vcl/timer.hxx>
 #include <osl/mutex.hxx>
 
-#include <ctype.h>
 #include <unordered_map>
-
-// compatibility: DatabaseCursorType is dead, but for compatibility reasons we still have to write it ...
-namespace com {
-namespace sun {
-namespace star {
-namespace data {
-
-enum DatabaseCursorType
-{
-    DatabaseCursorType_FORWARD = 0,
-    DatabaseCursorType_SNAPSHOT = 1,
-    DatabaseCursorType_KEYSET = 2,
-    DatabaseCursorType_DYNAMIC = 3,
-    DatabaseCursorType_MAKE_FIXED_SIZE = SAL_MAX_ENUM
-};
-
-} } } }
 
 using namespace ::dbtools;
 using namespace ::comphelper;
@@ -112,7 +92,6 @@ using namespace ::com::sun::star::form;
 using namespace ::com::sun::star::awt;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::data;
 using namespace ::com::sun::star::util;
 
 
@@ -142,7 +121,7 @@ private:
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
     }
 
@@ -193,13 +172,13 @@ void OFormSubmitResetThread::processEvent(
 
 //= ODatabaseForm
 
-Sequence<sal_Int8> SAL_CALL ODatabaseForm::getImplementationId() throw(RuntimeException, std::exception)
+Sequence<sal_Int8> SAL_CALL ODatabaseForm::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 
-Sequence<Type> SAL_CALL ODatabaseForm::getTypes() throw(RuntimeException, std::exception)
+Sequence<Type> SAL_CALL ODatabaseForm::getTypes()
 {
     // ask the aggregate
     Sequence<Type> aAggregateTypes;
@@ -215,7 +194,7 @@ Sequence<Type> SAL_CALL ODatabaseForm::getTypes() throw(RuntimeException, std::e
 }
 
 
-Any SAL_CALL ODatabaseForm::queryAggregation(const Type& _rType) throw(RuntimeException, std::exception)
+Any SAL_CALL ODatabaseForm::queryAggregation(const Type& _rType)
 {
     Any aReturn = ODatabaseForm_BASE1::queryInterface(_rType);
     // our own interfaces
@@ -260,12 +239,8 @@ ODatabaseForm::ODatabaseForm(const Reference<XComponentContext>& _rxContext)
     ,m_aErrorListeners(m_aMutex)
     ,m_aResetListeners( *this, m_aMutex )
     ,m_aPropertyBagHelper( *this )
-    ,m_pAggregatePropertyMultiplexer(nullptr)
-    ,m_pGroupManager( nullptr )
     ,m_aParameterManager( m_aMutex, _rxContext )
     ,m_aFilterManager()
-    ,m_pLoadTimer(nullptr)
-    ,m_pThread(nullptr)
     ,m_nResetsPending(0)
     ,m_nPrivileges(0)
     ,m_bInsertOnly( false )
@@ -298,12 +273,8 @@ ODatabaseForm::ODatabaseForm( const ODatabaseForm& _cloneSource )
     ,m_aErrorListeners( m_aMutex )
     ,m_aResetListeners( *this, m_aMutex )
     ,m_aPropertyBagHelper( *this )
-    ,m_pAggregatePropertyMultiplexer( nullptr )
-    ,m_pGroupManager( nullptr )
     ,m_aParameterManager( m_aMutex, _cloneSource.m_xContext )
     ,m_aFilterManager()
-    ,m_pLoadTimer( nullptr )
-    ,m_pThread( nullptr )
     ,m_nResetsPending( 0 )
     ,m_nPrivileges( 0 )
     ,m_bInsertOnly( _cloneSource.m_bInsertOnly )
@@ -345,12 +316,9 @@ ODatabaseForm::ODatabaseForm( const ODatabaseForm& _cloneSource )
             Reference< XPropertySetInfo > xDestPSI( getPropertySetInfo(), UNO_QUERY_THROW );
 
             Sequence< Property > aSourceProperties( xSourcePSI->getProperties() );
-            for (   const Property* pSourceProperty = aSourceProperties.getConstArray();
-                    pSourceProperty != aSourceProperties.getConstArray() + aSourceProperties.getLength();
-                    ++pSourceProperty
-                )
+            for ( auto const & sourceProperty : aSourceProperties )
             {
-                if ( xDestPSI->hasPropertyByName( pSourceProperty->Name ) )
+                if ( xDestPSI->hasPropertyByName( sourceProperty.Name ) )
                     continue;
 
                 // the initial value passed to XPropertyContainer is also used as default, usually. So, try
@@ -358,14 +326,14 @@ ODatabaseForm::ODatabaseForm( const ODatabaseForm& _cloneSource )
                 Any aInitialValue;
                 if ( xSourcePropState.is() )
                 {
-                    aInitialValue = xSourcePropState->getPropertyDefault( pSourceProperty->Name );
+                    aInitialValue = xSourcePropState->getPropertyDefault( sourceProperty.Name );
                 }
                 else
                 {
-                    aInitialValue = xSourceProps->getPropertyValue( pSourceProperty->Name );
+                    aInitialValue = xSourceProps->getPropertyValue( sourceProperty.Name );
                 }
-                addProperty( pSourceProperty->Name, pSourceProperty->Attributes, aInitialValue );
-                setPropertyValue( pSourceProperty->Name, xSourceProps->getPropertyValue( pSourceProperty->Name ) );
+                addProperty( sourceProperty.Name, sourceProperty.Attributes, aInitialValue );
+                setPropertyValue( sourceProperty.Name, xSourceProps->getPropertyValue( sourceProperty.Name ) );
             }
         }
         catch(const RuntimeException&)
@@ -398,10 +366,9 @@ void ODatabaseForm::impl_construct()
     // listen for the properties, important for Parameters
     if ( m_xAggregateSet.is() )
     {
-        m_pAggregatePropertyMultiplexer = new OPropertyChangeMultiplexer(this, m_xAggregateSet, false);
-        m_pAggregatePropertyMultiplexer->acquire();
-        m_pAggregatePropertyMultiplexer->addProperty(PROPERTY_COMMAND);
-        m_pAggregatePropertyMultiplexer->addProperty(PROPERTY_ACTIVE_CONNECTION);
+        m_xAggregatePropertyMultiplexer = new OPropertyChangeMultiplexer(this, m_xAggregateSet, false);
+        m_xAggregatePropertyMultiplexer->addProperty(PROPERTY_COMMAND);
+        m_xAggregatePropertyMultiplexer->addProperty(PROPERTY_ACTIVE_CONNECTION);
     }
 
     {
@@ -423,36 +390,27 @@ void ODatabaseForm::impl_construct()
     osl_atomic_decrement( &m_refCount );
 
     m_pGroupManager = new OGroupManager( this );
-    m_pGroupManager->acquire();
 }
 
 
 ODatabaseForm::~ODatabaseForm()
 {
-
-    m_pGroupManager->release();
-    m_pGroupManager = nullptr;
+    m_pGroupManager.clear();
 
     if (m_xAggregate.is())
         m_xAggregate->setDelegator( nullptr );
 
     m_aWarnings.setExternalWarnings( nullptr );
 
-    if (m_pAggregatePropertyMultiplexer)
+    if (m_xAggregatePropertyMultiplexer.is())
     {
-        m_pAggregatePropertyMultiplexer->dispose();
-        m_pAggregatePropertyMultiplexer->release();
-        m_pAggregatePropertyMultiplexer = nullptr;
+        m_xAggregatePropertyMultiplexer->dispose();
+        m_xAggregatePropertyMultiplexer.clear();
     }
 }
 
 
 // html tools
-
-OUString ODatabaseForm::GetDataURLEncoded(const Reference<XControl>& SubmitButton, const css::awt::MouseEvent& MouseEvt)
-{
-    return GetDataEncoded(true,SubmitButton,MouseEvt);
-}
 
 OUString ODatabaseForm::GetDataEncoded(bool _bURLEncoded,const Reference<XControl>& SubmitButton, const css::awt::MouseEvent& MouseEvt)
 {
@@ -461,7 +419,7 @@ OUString ODatabaseForm::GetDataEncoded(bool _bURLEncoded,const Reference<XContro
     FillSuccessfulList( aSuccObjList, SubmitButton, MouseEvt );
 
 
-    // Aggregate Liste to OUString
+    // Aggregate the list to OUString
     OUStringBuffer aResult;
     OUString aName;
     OUString aValue;
@@ -480,7 +438,7 @@ OUString ODatabaseForm::GetDataEncoded(bool _bURLEncoded,const Reference<XContro
             aURL.SetSmartProtocol(INetProtocol::File);
             aURL.SetSmartURL(aValue);
             if( INetProtocol::File == aURL.GetProtocol() )
-                aValue = INetURLObject::decode(aURL.PathToFileName(), INetURLObject::DECODE_UNAMBIGUOUS);
+                aValue = INetURLObject::decode(aURL.PathToFileName(), INetURLObject::DecodeMechanism::Unambiguous);
         }
         Encode( aName );
         Encode( aValue );
@@ -507,12 +465,6 @@ OUString ODatabaseForm::GetDataEncoded(bool _bURLEncoded,const Reference<XContro
 
 // html tools
 
-OUString ODatabaseForm::GetDataTextEncoded(const Reference<XControl>& SubmitButton, const css::awt::MouseEvent& MouseEvt)
-{
-    return GetDataEncoded(false,SubmitButton,MouseEvt);
-}
-
-
 Sequence<sal_Int8> ODatabaseForm::GetDataMultiPartEncoded(const Reference<XControl>& SubmitButton, const css::awt::MouseEvent& MouseEvt, OUString& rContentType)
 {
 
@@ -527,15 +479,12 @@ Sequence<sal_Int8> ODatabaseForm::GetDataMultiPartEncoded(const Reference<XContr
 
 
     // Aggregate Liste to OUString
-    for (   HtmlSuccessfulObjList::iterator pSuccObj = aSuccObjList.begin();
-            pSuccObj < aSuccObjList.end();
-            ++pSuccObj
-        )
+    for (auto const& succObj : aSuccObjList)
     {
-        if( pSuccObj->nRepresentation == SUCCESSFUL_REPRESENT_TEXT )
-            InsertTextPart( aParent, pSuccObj->aName, pSuccObj->aValue );
-        else if( pSuccObj->nRepresentation == SUCCESSFUL_REPRESENT_FILE )
-            InsertFilePart( aParent, pSuccObj->aName, pSuccObj->aValue );
+        if( succObj.nRepresentation == SUCCESSFUL_REPRESENT_TEXT )
+            InsertTextPart( aParent, succObj.aName, succObj.aValue );
+        else if( succObj.nRepresentation == SUCCESSFUL_REPRESENT_FILE )
+            InsertFilePart( aParent, succObj.aName, succObj.aValue );
     }
 
 
@@ -547,16 +496,18 @@ Sequence<sal_Int8> ODatabaseForm::GetDataMultiPartEncoded(const Reference<XContr
 
     // Copy MessageStream to SvStream
     SvMemoryStream aMemStream;
-    char* pBuf = new char[1025];
+    std::unique_ptr<char[]> pBuf(new char[1025]);
     int nRead;
-    while( (nRead = aMessStream.Read(pBuf, 1024)) > 0 )
-        aMemStream.Write( pBuf, nRead );
-    delete[] pBuf;
+    while( (nRead = aMessStream.Read(pBuf.get(), 1024)) > 0 )
+    {
+        aMemStream.WriteBytes(pBuf.get(), nRead);
+    }
+    pBuf.reset();
 
     aMemStream.Flush();
     aMemStream.Seek( 0 );
     void const * pData = aMemStream.GetData();
-    sal_Int32 nLen = aMemStream.Seek(STREAM_SEEK_TO_END);
+    sal_Int32 nLen = aMemStream.TellEnd();
 
     rContentType = aParent.GetContentType();
     return Sequence<sal_Int8>(static_cast<sal_Int8 const *>(pData), nLen);
@@ -613,7 +564,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                     // <name>=<label>
                     OUString aLabel;
                     xComponentSet->getPropertyValue( PROPERTY_LABEL ) >>= aLabel;
-                    rList.push_back( HtmlSuccessfulObj(aName, aLabel) );
+                    rList.emplace_back(aName, aLabel );
                 }
             }
         } break;
@@ -637,7 +588,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                         aLhs.append(".x");
                     else
                         aLhs.append("x");
-                    rList.push_back( HtmlSuccessfulObj(aLhs.makeStringAndClear(), aRhs) );
+                    rList.emplace_back(aLhs.makeStringAndClear(), aRhs );
 
                     aLhs.append(aName);
                     aRhs = OUString::number( MouseEvt.Y );
@@ -645,7 +596,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                         aLhs.append(".y");
                     else
                         aLhs.append("y");
-                    rList.push_back( HtmlSuccessfulObj(aLhs.makeStringAndClear(), aRhs) );
+                    rList.emplace_back(aLhs.makeStringAndClear(), aRhs );
                 }
             }
         } break;
@@ -666,7 +617,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
             if( hasProperty(PROPERTY_REFVALUE, xComponentSet) )
                 xComponentSet->getPropertyValue( PROPERTY_REFVALUE ) >>= aStrValue;
 
-            rList.push_back( HtmlSuccessfulObj(aName, aStrValue) );
+            rList.emplace_back(aName, aStrValue );
         } break;
 
         // Edit
@@ -688,17 +639,12 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                 Reference<XControlContainer>  xControlContainer(rxSubmitButton->getContext(), UNO_QUERY);
                 if( !xControlContainer.is() ) break;
 
-                Sequence<Reference<XControl> > aControlSeq = xControlContainer->getControls();
-                Reference<XControl>  xControl;
-                Reference<XFormComponent>  xControlComponent;
-
                 // Find the right control
-                sal_Int32 i;
-                for( i=0; i<aControlSeq.getLength(); i++ )
+                bool bFound = false;
+                for( auto const& xControl : xControlContainer->getControls() )
                 {
-                    xControl = aControlSeq.getConstArray()[i];
                     Reference<XPropertySet>  xModel(xControl->getModel(), UNO_QUERY);
-                    if (xModel == xComponentSet)
+                    if ((bFound = xModel == xComponentSet))
                     {
                         Reference<XTextComponent>  xTextComponent(xControl, UNO_QUERY);
                         if( xTextComponent.is() )
@@ -707,13 +653,13 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                     }
                 }
                 // Couldn't find control or it does not exist (edit in the grid)
-                if (i == aControlSeq.getLength())
+                if (!bFound)
                     xComponentSet->getPropertyValue( PROPERTY_TEXT ) >>= sText;
             }
             else
                 xComponentSet->getPropertyValue( PROPERTY_TEXT ) >>= sText;
 
-            rList.push_back( HtmlSuccessfulObj(aName, sText) );
+            rList.emplace_back(aName, sText );
         } break;
 
         // ComboBox, Patternfield
@@ -725,7 +671,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
             {
                 OUString aText;
                 xComponentSet->getPropertyValue( PROPERTY_TEXT ) >>= aText;
-                rList.push_back( HtmlSuccessfulObj(aName, aText) );
+                rList.emplace_back(aName, aText );
             }
         } break;
         case FormComponentType::CURRENCYFIELD:
@@ -745,7 +691,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                     xComponentSet->getPropertyValue( PROPERTY_DECIMAL_ACCURACY ) >>= nScale;
                     aText = ::rtl::math::doubleToUString(aDoubleVal, rtl_math_StringFormat_F, nScale, '.', true);
                 }
-                rList.push_back( HtmlSuccessfulObj(aName, aText) );
+                rList.emplace_back(aName, aText );
             }
         }   break;
         case FormComponentType::DATEFIELD:
@@ -768,7 +714,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                     appendDigits( aDate.GetYear(), 4, aBuffer );
                     aText = aBuffer.makeStringAndClear();
                 }
-                rList.push_back( HtmlSuccessfulObj(aName, aText) );
+                rList.emplace_back(aName, aText );
             }
         }   break;
         case FormComponentType::TIMEFIELD:
@@ -791,7 +737,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                     appendDigits( aTime.GetSec(), 2, aBuffer );
                     aText = aBuffer.makeStringAndClear();
                 }
-                rList.push_back( HtmlSuccessfulObj(aName, aText) );
+                rList.emplace_back(aName, aText );
             }
         }   break;
 
@@ -804,7 +750,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
             {
                 OUString aText;
                 xComponentSet->getPropertyValue( PROPERTY_HIDDEN_VALUE ) >>= aText;
-                rList.push_back( HtmlSuccessfulObj(aName, aText) );
+                rList.emplace_back(aName, aText );
             }
         } break;
 
@@ -817,7 +763,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
 
                 OUString aText;
                 xComponentSet->getPropertyValue( PROPERTY_TEXT ) >>= aText;
-                rList.push_back( HtmlSuccessfulObj(aName, aText, SUCCESSFUL_REPRESENT_FILE) );
+                rList.emplace_back(aName, aText, SUCCESSFUL_REPRESENT_FILE );
             }
         } break;
 
@@ -875,7 +821,7 @@ void ODatabaseForm::AppendComponent(HtmlSuccessfulObjList& rList, const Referenc
                 {
                     aSubValue = pStrings[nSelPos];
                 }
-                rList.push_back( HtmlSuccessfulObj(aName, aSubValue) );
+                rList.emplace_back(aName, aSubValue );
             }
         } break;
         case FormComponentType::GRIDCONTROL:
@@ -911,7 +857,6 @@ void ODatabaseForm::FillSuccessfulList( HtmlSuccessfulObjList& rList,
     rList.clear();
     // Iterate over Components
     Reference<XPropertySet> xComponentSet;
-    OUString aPrefix;
 
     // we know already how many objects should be appended,
     // so why not allocate the space for them
@@ -919,7 +864,7 @@ void ODatabaseForm::FillSuccessfulList( HtmlSuccessfulObjList& rList,
     for( sal_Int32 nIndex=0; nIndex < getCount(); nIndex++ )
     {
         getByIndex( nIndex ) >>= xComponentSet;
-        AppendComponent(rList, xComponentSet, aPrefix, rxSubmitButton, MouseEvt);
+        AppendComponent(rList, xComponentSet, OUString(), rxSubmitButton, MouseEvt);
     }
 }
 
@@ -939,7 +884,8 @@ void ODatabaseForm::Encode( OUString& rString )
         nCharCode = rString[nCurPos];
 
         // Handle chars, which are not an alphanumeric character and character codes > 127
-        if( (!isalnum(nCharCode) && nCharCode != ' ') || nCharCode > 127 )
+        if( (!rtl::isAsciiAlphanumeric(nCharCode) && nCharCode != ' ')
+            || nCharCode > 127 )
         {
             switch( nCharCode )
             {
@@ -960,13 +906,13 @@ void ODatabaseForm::Encode( OUString& rString )
                 default:
                 {
                     // Convert to hex
-                    short nHi = ((sal_Int16)nCharCode) / 16;
-                    short nLo = ((sal_Int16)nCharCode) - (nHi*16);
-                    if( nHi > 9 ) nHi += (int)'A'-10; else nHi += (int)'0';
-                    if( nLo > 9 ) nLo += (int)'A'-10; else nLo += (int)'0';
+                    short nHi = static_cast<sal_Int16>(nCharCode) / 16;
+                    short nLo = static_cast<sal_Int16>(nCharCode) - (nHi*16);
+                    if( nHi > 9 ) nHi += int('A')-10; else nHi += int('0');
+                    if( nLo > 9 ) nLo += int('A')-10; else nLo += int('0');
                     aResult.append('%');
-                    aResult.append((sal_Unicode)nHi);
-                    aResult.append((sal_Unicode)nLo);
+                    aResult.append(static_cast<sal_Unicode>(nHi));
+                    aResult.append(static_cast<sal_Unicode>(nLo));
                 }
             }
         }
@@ -982,12 +928,12 @@ void ODatabaseForm::Encode( OUString& rString )
 void ODatabaseForm::InsertTextPart( INetMIMEMessage& rParent, const OUString& rName,
     const OUString& rData )
 {
-
     // Create part as MessageChild
-    INetMIMEMessage* pChild = new INetMIMEMessage();
-
+    std::unique_ptr<INetMIMEMessage> pChild(new INetMIMEMessage);
 
     // Header
+    //TODO: Encode rName into a properly formatted Content-Disposition header
+    // field as per RFC 2231:
     OUStringBuffer aContentDisp;
     aContentDisp.append("form-data; name=\"");
     aContentDisp.append(rName);
@@ -1007,16 +953,16 @@ void ODatabaseForm::InsertTextPart( INetMIMEMessage& rParent, const OUString& rN
     pStream->Flush();
     pStream->Seek( 0 );
     pChild->SetDocumentLB( new SvLockBytes(pStream, true) );
-    rParent.AttachChild( *pChild );
+    rParent.AttachChild( std::move(pChild) );
 }
 
 
-bool ODatabaseForm::InsertFilePart( INetMIMEMessage& rParent, const OUString& rName,
+void ODatabaseForm::InsertFilePart( INetMIMEMessage& rParent, const OUString& rName,
     const OUString& rFileName )
 {
     OUString aFileName(rFileName);
     OUString aContentType(CONTENT_TYPE_STR_TEXT_PLAIN);
-    SvStream *pStream = nullptr;
+    std::unique_ptr<SvStream> pStream;
 
     if (!aFileName.isEmpty())
     {
@@ -1026,15 +972,14 @@ bool ODatabaseForm::InsertFilePart( INetMIMEMessage& rParent, const OUString& rN
         aURL.SetSmartURL(rFileName);
         if( INetProtocol::File == aURL.GetProtocol() )
         {
-            aFileName = INetURLObject::decode(aURL.PathToFileName(), INetURLObject::DECODE_UNAMBIGUOUS);
+            aFileName = INetURLObject::decode(aURL.PathToFileName(), INetURLObject::DecodeMechanism::Unambiguous);
             pStream = ::utl::UcbStreamHelper::CreateStream(aFileName, StreamMode::READ);
             if (!pStream || (pStream->GetError() != ERRCODE_NONE))
             {
-                delete pStream;
-                pStream = nullptr;
+                pStream.reset();
             }
             sal_Int32 nSepInd = aFileName.lastIndexOf('.');
-            OUString aExtension = aFileName.copy( nSepInd + 1, aFileName.getLength() - nSepInd - 1 );
+            OUString aExtension = aFileName.copy( nSepInd + 1 );
             INetContentType eContentType = INetContentTypes::GetContentType4Extension( aExtension );
             if (eContentType != CONTENT_TYPE_UNKNOWN)
                 aContentType = INetContentTypes::GetContentType(eContentType);
@@ -1043,14 +988,16 @@ bool ODatabaseForm::InsertFilePart( INetMIMEMessage& rParent, const OUString& rN
 
     // If something didn't work, we create an empty MemoryStream
     if( !pStream )
-        pStream = new SvMemoryStream;
+        pStream.reset( new SvMemoryStream );
 
 
     // Create part as MessageChild
-    INetMIMEMessage* pChild = new INetMIMEMessage;
+    std::unique_ptr<INetMIMEMessage> pChild(new INetMIMEMessage);
 
 
     // Header
+    //TODO: Encode rName and aFileName into a properly formatted
+    // Content-Disposition header field as per RFC 2231:
     OUStringBuffer aContentDisp;
     aContentDisp.append("form-data; name=\"");
     aContentDisp.append(rName);
@@ -1064,10 +1011,8 @@ bool ODatabaseForm::InsertFilePart( INetMIMEMessage& rParent, const OUString& rN
 
 
     // Body
-    pChild->SetDocumentLB( new SvLockBytes(pStream, true) );
-    rParent.AttachChild( *pChild );
-
-    return true;
+    pChild->SetDocumentLB( new SvLockBytes(pStream.release(), true) );
+    rParent.AttachChild( std::move(pChild) );
 }
 
 
@@ -1191,15 +1136,15 @@ bool ODatabaseForm::executeRowSet(::osl::ResettableMutexGuard& _rClearForNotifie
 
         // switch to "insert only" mode
         saveInsertOnlyState( );
-        m_xAggregateSet->setPropertyValue( PROPERTY_INSERTONLY, makeAny( sal_True ) );
+        m_xAggregateSet->setPropertyValue( PROPERTY_INSERTONLY, makeAny( true ) );
     }
     else if (m_bAllowInsert || m_bAllowUpdate || m_bAllowDelete)
         nConcurrency = ResultSetConcurrency::UPDATABLE;
     else
         nConcurrency = ResultSetConcurrency::READ_ONLY;
 
-    m_xAggregateSet->setPropertyValue( PROPERTY_RESULTSET_CONCURRENCY, makeAny( (sal_Int32)nConcurrency ) );
-    m_xAggregateSet->setPropertyValue( PROPERTY_RESULTSET_TYPE, makeAny( (sal_Int32)ResultSetType::SCROLL_SENSITIVE ) );
+    m_xAggregateSet->setPropertyValue( PROPERTY_RESULTSET_CONCURRENCY, makeAny( nConcurrency ) );
+    m_xAggregateSet->setPropertyValue( PROPERTY_RESULTSET_TYPE, makeAny( sal_Int32(ResultSetType::SCROLL_SENSITIVE) ) );
 
     bool bSuccess = false;
     try
@@ -1270,8 +1215,8 @@ bool ODatabaseForm::executeRowSet(::osl::ResettableMutexGuard& _rClearForNotifie
 
 void ODatabaseForm::disposing()
 {
-    if (m_pAggregatePropertyMultiplexer)
-        m_pAggregatePropertyMultiplexer->dispose();
+    if (m_xAggregatePropertyMultiplexer.is())
+        m_xAggregatePropertyMultiplexer->dispose();
 
     if (m_bLoaded)
         unload();
@@ -1279,11 +1224,7 @@ void ODatabaseForm::disposing()
     // cancel the submit/reset-thread
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        if (m_pThread)
-        {
-            m_pThread->release();
-            m_pThread = nullptr;
-        }
+        m_pThread.clear();
     }
 
     EventObject aEvt(static_cast<XWeak*>(this));
@@ -1332,7 +1273,7 @@ void ODatabaseForm::describeFixedAndAggregateProperties(
         Sequence< Property >& _rProps,
         Sequence< Property >& _rAggregateProps ) const
 {
-    _rProps.realloc( 22 );
+    _rProps.realloc( 23 );
     css::beans::Property* pProperties = _rProps.getArray();
 
     if (m_xAggregateSet.is())
@@ -1356,6 +1297,7 @@ void ODatabaseForm::describeFixedAndAggregateProperties(
     // (e.g. the ones which result from linking master fields to detail fields
     // via column names instead of parameters)
     RemoveProperty( _rAggregateProps, PROPERTY_FILTER );
+    RemoveProperty( _rAggregateProps, PROPERTY_HAVINGCLAUSE );
     RemoveProperty( _rAggregateProps, PROPERTY_APPLYFILTER );
 
     DECL_IFACE_PROP4( ACTIVE_CONNECTION,XConnection,             BOUND, TRANSIENT, MAYBEVOID, CONSTRAINED);
@@ -1366,6 +1308,7 @@ void ODatabaseForm::describeFixedAndAggregateProperties(
     DECL_PROP2      ( DATASOURCE,       OUString,                BOUND, CONSTRAINED             );
     DECL_PROP3      ( CYCLE,            TabulatorCycle,          BOUND, MAYBEVOID, MAYBEDEFAULT );
     DECL_PROP2      ( FILTER,           OUString,                BOUND, MAYBEDEFAULT            );
+    DECL_PROP2      ( HAVINGCLAUSE,     OUString,                BOUND, MAYBEDEFAULT            );
     DECL_BOOL_PROP2 ( INSERTONLY,                                BOUND, MAYBEDEFAULT            );
     DECL_PROP1      ( NAVIGATION,       NavigationBarMode,       BOUND                          );
     DECL_BOOL_PROP1 ( ALLOWADDITIONS,                            BOUND                          );
@@ -1396,49 +1339,49 @@ Reference< XMultiPropertySet > ODatabaseForm::getPropertiesInterface()
 }
 
 
-Reference< XPropertySetInfo > ODatabaseForm::getPropertySetInfo() throw( RuntimeException, std::exception )
+Reference< XPropertySetInfo > ODatabaseForm::getPropertySetInfo()
 {
     return createPropertySetInfo( getInfoHelper() );
 }
 
 
-void SAL_CALL ODatabaseForm::addProperty( const OUString& _rName, ::sal_Int16 _nAttributes, const Any& _rInitialValue ) throw (PropertyExistException, IllegalTypeException, IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::addProperty( const OUString& _rName, ::sal_Int16 _nAttributes, const Any& _rInitialValue )
 {
     m_aPropertyBagHelper.addProperty( _rName, _nAttributes, _rInitialValue );
 }
 
 
-void SAL_CALL ODatabaseForm::removeProperty( const OUString& _rName ) throw (UnknownPropertyException, NotRemoveableException, RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::removeProperty( const OUString& _rName )
 {
     m_aPropertyBagHelper.removeProperty( _rName );
 }
 
 
-Sequence< PropertyValue > SAL_CALL ODatabaseForm::getPropertyValues() throw (RuntimeException, std::exception)
+Sequence< PropertyValue > SAL_CALL ODatabaseForm::getPropertyValues()
 {
     return m_aPropertyBagHelper.getPropertyValues();
 }
 
 
-void SAL_CALL ODatabaseForm::setPropertyValues( const Sequence< PropertyValue >& _rProps ) throw (UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::setPropertyValues( const Sequence< PropertyValue >& _rProps )
 {
     m_aPropertyBagHelper.setPropertyValues( _rProps );
 }
 
 
-Any SAL_CALL ODatabaseForm::getWarnings(  ) throw (SQLException, RuntimeException, std::exception)
+Any SAL_CALL ODatabaseForm::getWarnings(  )
 {
     return m_aWarnings.getWarnings();
 }
 
 
-void SAL_CALL ODatabaseForm::clearWarnings(  ) throw (SQLException, RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::clearWarnings(  )
 {
     m_aWarnings.clearWarnings();
 }
 
 
-Reference< XCloneable > SAL_CALL ODatabaseForm::createClone(  ) throw (RuntimeException, std::exception)
+Reference< XCloneable > SAL_CALL ODatabaseForm::createClone(  )
 {
     ODatabaseForm* pClone = new ODatabaseForm( *this );
     osl_atomic_increment( &pClone->m_refCount );
@@ -1487,7 +1430,6 @@ void ODatabaseForm::fire( sal_Int32* pnHandles, const Any* pNewValues, const Any
 
 
 Any SAL_CALL ODatabaseForm::getFastPropertyValue( sal_Int32 nHandle )
-       throw(UnknownPropertyException, WrappedTargetException, RuntimeException, std::exception)
 {
     if ((nHandle == PROPERTY_ID_ISMODIFIED) && (m_nResetsPending > 0))
         return css::uno::Any(false);
@@ -1507,6 +1449,10 @@ void ODatabaseForm::getFastPropertyValue( Any& rValue, sal_Int32 nHandle ) const
 
         case PROPERTY_ID_FILTER:
             rValue <<= m_aFilterManager.getFilterComponent( FilterManager::FilterComponent::PublicFilter );
+            break;
+
+        case PROPERTY_ID_HAVINGCLAUSE:
+            rValue <<= m_aFilterManager.getFilterComponent( FilterManager::FilterComponent::PublicHaving );
             break;
 
         case PROPERTY_ID_APPLYFILTER:
@@ -1554,7 +1500,7 @@ void ODatabaseForm::getFastPropertyValue( Any& rValue, sal_Int32 nHandle ) const
             rValue <<= m_bAllowDelete;
             break;
         case PROPERTY_ID_PRIVILEGES:
-            rValue <<= (sal_Int32)m_nPrivileges;
+            rValue <<= m_nPrivileges;
             break;
         case PROPERTY_ID_DYNAMIC_CONTROL_BORDER:
             rValue = m_aDynamicControlBorder;
@@ -1577,9 +1523,8 @@ void ODatabaseForm::getFastPropertyValue( Any& rValue, sal_Int32 nHandle ) const
     }
 }
 
-
 sal_Bool ODatabaseForm::convertFastPropertyValue( Any& rConvertedValue, Any& rOldValue,
-                                                sal_Int32 nHandle, const Any& rValue ) throw( IllegalArgumentException )
+                                                sal_Int32 nHandle, const Any& rValue )
 {
     bool bModified(false);
     switch (nHandle)
@@ -1590,6 +1535,10 @@ sal_Bool ODatabaseForm::convertFastPropertyValue( Any& rConvertedValue, Any& rOl
 
         case PROPERTY_ID_FILTER:
             bModified = tryPropertyValue( rConvertedValue, rOldValue, rValue, m_aFilterManager.getFilterComponent( FilterManager::FilterComponent::PublicFilter ) );
+            break;
+
+        case PROPERTY_ID_HAVINGCLAUSE:
+            bModified = tryPropertyValue( rConvertedValue, rOldValue, rValue, m_aFilterManager.getFilterComponent( FilterManager::FilterComponent::PublicHaving ) );
             break;
 
         case PROPERTY_ID_APPLYFILTER:
@@ -1661,8 +1610,7 @@ sal_Bool ODatabaseForm::convertFastPropertyValue( Any& rConvertedValue, Any& rOl
     return bModified;
 }
 
-
-void ODatabaseForm::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue ) throw( Exception, std::exception )
+void ODatabaseForm::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const Any& rValue )
 {
     switch (nHandle)
     {
@@ -1679,6 +1627,14 @@ void ODatabaseForm::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const A
             OUString sNewFilter;
             rValue >>= sNewFilter;
             m_aFilterManager.setFilterComponent( FilterManager::FilterComponent::PublicFilter, sNewFilter );
+        }
+        break;
+
+        case PROPERTY_ID_HAVINGCLAUSE:
+        {
+            OUString sNewFilter;
+            rValue >>= sNewFilter;
+            m_aFilterManager.setFilterComponent( FilterManager::FilterComponent::PublicHaving, sNewFilter );
         }
         break;
 
@@ -1722,11 +1678,11 @@ void ODatabaseForm::setFastPropertyValue_NoBroadcast( sal_Int32 nHandle, const A
             break;
         case PROPERTY_ID_MASTERFIELDS:
             rValue >>= m_aMasterFields;
-            invlidateParameters();
+            invalidateParameters();
             break;
         case PROPERTY_ID_DETAILFIELDS:
             rValue >>= m_aDetailFields;
-            invlidateParameters();
+            invalidateParameters();
             break;
         case PROPERTY_ID_CYCLE:
             m_aCycle = rValue;
@@ -1827,6 +1783,13 @@ PropertyState ODatabaseForm::getPropertyStateByHandle(sal_Int32 nHandle)
                 eState = PropertyState_DIRECT_VALUE;
             break;
 
+        case PROPERTY_ID_HAVINGCLAUSE:
+            if ( m_aFilterManager.getFilterComponent( FilterManager::FilterComponent::PublicHaving ).isEmpty() )
+                eState = PropertyState_DEFAULT_VALUE;
+            else
+                eState = PropertyState_DIRECT_VALUE;
+            break;
+
         case PROPERTY_ID_APPLYFILTER:
             eState = m_aFilterManager.isApplyPublicFilter() ? PropertyState_DEFAULT_VALUE : PropertyState_DIRECT_VALUE;
             break;
@@ -1860,6 +1823,7 @@ void ODatabaseForm::setPropertyToDefaultByHandle(sal_Int32 nHandle)
     {
         case PROPERTY_ID_INSERTONLY:
         case PROPERTY_ID_FILTER:
+        case PROPERTY_ID_HAVINGCLAUSE:
         case PROPERTY_ID_APPLYFILTER:
         case PROPERTY_ID_NAVIGATION:
         case PROPERTY_ID_CYCLE:
@@ -1883,19 +1847,23 @@ Any ODatabaseForm::getPropertyDefaultByHandle( sal_Int32 nHandle ) const
     {
         case PROPERTY_ID_INSERTONLY:
         case PROPERTY_ID_DYNAMIC_CONTROL_BORDER:
-            aReturn <<= sal_False;
+            aReturn <<= false;
             break;
 
         case PROPERTY_ID_FILTER:
             aReturn <<= OUString();
             break;
 
+        case PROPERTY_ID_HAVINGCLAUSE:
+            aReturn <<= OUString();
+            break;
+
         case PROPERTY_ID_APPLYFILTER:
-            aReturn <<= sal_True;
+            aReturn <<= true;
             break;
 
         case PROPERTY_ID_NAVIGATION:
-            aReturn = makeAny(NavigationBarMode_CURRENT);
+            aReturn <<= NavigationBarMode_CURRENT;
             break;
 
         case PROPERTY_ID_CYCLE:
@@ -1917,7 +1885,7 @@ Any ODatabaseForm::getPropertyDefaultByHandle( sal_Int32 nHandle ) const
 
 // css::form::XReset
 
-void SAL_CALL ODatabaseForm::reset() throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::reset()
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
 
@@ -1935,10 +1903,9 @@ void SAL_CALL ODatabaseForm::reset() throw( RuntimeException, std::exception )
         ++m_nResetsPending;
         // create an own thread if we have (approve-)reset-listeners (so the listeners can't do that much damage
         // to this thread which is probably the main one)
-        if (!m_pThread)
+        if (!m_pThread.is())
         {
             m_pThread = new OFormSubmitResetThread(this);
-            m_pThread->acquire();
             m_pThread->create();
         }
         EventObject aEvt;
@@ -2005,7 +1972,7 @@ void ODatabaseForm::reset_impl(bool _bAproveByListeners)
                         }
                         catch(const Exception&)
                         {
-                            DBG_UNHANDLED_EXCEPTION();
+                            DBG_UNHANDLED_EXCEPTION("forms.component");
                         }
                     }
                 }
@@ -2077,13 +2044,13 @@ void ODatabaseForm::reset_impl(bool _bAproveByListeners)
 }
 
 
-void SAL_CALL ODatabaseForm::addResetListener(const Reference<XResetListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addResetListener(const Reference<XResetListener>& _rListener)
 {
     m_aResetListeners.addTypedListener( _rListener );
 }
 
 
-void SAL_CALL ODatabaseForm::removeResetListener(const Reference<XResetListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeResetListener(const Reference<XResetListener>& _rListener)
 {
     m_aResetListeners.removeTypedListener( _rListener );
 }
@@ -2092,7 +2059,7 @@ void SAL_CALL ODatabaseForm::removeResetListener(const Reference<XResetListener>
 // css::form::XSubmit
 
 void SAL_CALL ODatabaseForm::submit( const Reference<XControl>& Control,
-                              const css::awt::MouseEvent& MouseEvt ) throw( RuntimeException, std::exception )
+                              const css::awt::MouseEvent& MouseEvt )
 {
     {
         ::osl::MutexGuard aGuard(m_aMutex);
@@ -2106,10 +2073,9 @@ void SAL_CALL ODatabaseForm::submit( const Reference<XControl>& Control,
     {
         // create an own thread if we have (approve-)submit-listeners (so the listeners can't do that much damage
         // to this thread which is probably the main one)
-        if (!m_pThread)
+        if (!m_pThread.is())
         {
             m_pThread = new OFormSubmitResetThread(this);
-            m_pThread->acquire();
             m_pThread->create();
         }
         m_pThread->addEvent(&MouseEvt, Control, true);
@@ -2122,7 +2088,7 @@ void SAL_CALL ODatabaseForm::submit( const Reference<XControl>& Control,
     }
 }
 
-void lcl_dispatch(const Reference< XFrame >& xFrame,const Reference<XURLTransformer>& xTransformer,const OUString& aURLStr,const OUString& aReferer,const OUString& aTargetName
+static void lcl_dispatch(const Reference< XFrame >& xFrame,const Reference<XURLTransformer>& xTransformer,const OUString& aURLStr,const OUString& aReferer,const OUString& aTargetName
                   ,const OUString& aData,rtl_TextEncoding _eEncoding)
 {
     URL aURL;
@@ -2207,16 +2173,16 @@ void ODatabaseForm::submit_impl(const Reference<XControl>& Control, const css::a
         OUString aData;
         {
             SolarMutexGuard aGuard;
-            aData = GetDataURLEncoded( Control, MouseEvt );
+            aData = GetDataEncoded(true, Control, MouseEvt);
         }
 
         URL aURL;
         // FormMethod GET
         if( eSubmitMethod == FormSubmitMethod_GET )
         {
-            INetURLObject aUrlObj( aURLStr, INetURLObject::WAS_ENCODED );
-            aUrlObj.SetParam( aData, INetURLObject::ENCODE_ALL );
-            aURL.Complete = aUrlObj.GetMainURL( INetURLObject::DECODE_UNAMBIGUOUS );
+            INetURLObject aUrlObj( aURLStr, INetURLObject::EncodeMechanism::WasEncoded );
+            aUrlObj.SetParam( aData, INetURLObject::EncodeMechanism::All );
+            aURL.Complete = aUrlObj.GetMainURL( INetURLObject::DecodeMechanism::Unambiguous );
             if (xTransformer.is())
                 xTransformer->parseStrict(aURL);
 
@@ -2279,7 +2245,7 @@ void ODatabaseForm::submit_impl(const Reference<XControl>& Control, const css::a
         OUString aData;
         {
             SolarMutexGuard aGuard;
-            aData = GetDataTextEncoded( Reference<XControl> (), MouseEvt );
+            aData = GetDataEncoded(false, Reference<XControl> (), MouseEvt);
         }
 
         lcl_dispatch(xFrame,xTransformer,aURLStr,aReferer,aTargetName,aData,osl_getThreadTextEncoding());
@@ -2292,13 +2258,13 @@ void ODatabaseForm::submit_impl(const Reference<XControl>& Control, const css::a
 
 // XSubmit
 
-void SAL_CALL ODatabaseForm::addSubmitListener(const Reference<XSubmitListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addSubmitListener(const Reference<XSubmitListener>& _rListener)
 {
     m_aSubmitListeners.addInterface(_rListener);
 }
 
 
-void SAL_CALL ODatabaseForm::removeSubmitListener(const Reference<XSubmitListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeSubmitListener(const Reference<XSubmitListener>& _rListener)
 {
     m_aSubmitListeners.removeInterface(_rListener);
 }
@@ -2306,19 +2272,19 @@ void SAL_CALL ODatabaseForm::removeSubmitListener(const Reference<XSubmitListene
 
 // css::sdbc::XSQLErrorBroadcaster
 
-void SAL_CALL ODatabaseForm::addSQLErrorListener(const Reference<XSQLErrorListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addSQLErrorListener(const Reference<XSQLErrorListener>& _rListener)
 {
     m_aErrorListeners.addInterface(_rListener);
 }
 
 
-void SAL_CALL ODatabaseForm::removeSQLErrorListener(const Reference<XSQLErrorListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeSQLErrorListener(const Reference<XSQLErrorListener>& _rListener)
 {
     m_aErrorListeners.removeInterface(_rListener);
 }
 
 
-void ODatabaseForm::invlidateParameters()
+void ODatabaseForm::invalidateParameters()
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     m_aParameterManager.clearAllParameterInformation();
@@ -2327,7 +2293,7 @@ void ODatabaseForm::invlidateParameters()
 
 // OChangeListener
 
-void ODatabaseForm::_propertyChanged(const PropertyChangeEvent& evt) throw( RuntimeException )
+void ODatabaseForm::_propertyChanged(const PropertyChangeEvent& evt)
 {
     if (evt.PropertyName == PROPERTY_ACTIVE_CONNECTION && !m_bForwardingConnection)
     {
@@ -2339,14 +2305,14 @@ void ODatabaseForm::_propertyChanged(const PropertyChangeEvent& evt) throw( Runt
     else // it was one of the statement relevant props
     {
         // if the statement has changed we have to delete the parameter info
-        invlidateParameters();
+        invalidateParameters();
     }
 }
 
 
 // smartXChild
 
-void SAL_CALL ODatabaseForm::setParent(const css::uno::Reference<css::uno::XInterface>& Parent) throw ( css::lang::NoSupportException, css::uno::RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::setParent(const css::uno::Reference<css::uno::XInterface>& Parent)
 {
     // SYNCHRONIZED ----->
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
@@ -2367,7 +2333,7 @@ void SAL_CALL ODatabaseForm::setParent(const css::uno::Reference<css::uno::XInte
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
     }
 
@@ -2389,7 +2355,7 @@ void SAL_CALL ODatabaseForm::setParent(const css::uno::Reference<css::uno::XInte
         }
         catch(const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
     }
 
@@ -2407,7 +2373,7 @@ void SAL_CALL ODatabaseForm::setParent(const css::uno::Reference<css::uno::XInte
 
 // smartXTabControllerModel
 
-sal_Bool SAL_CALL ODatabaseForm::getGroupControl() throw(css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ODatabaseForm::getGroupControl()
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
 
@@ -2416,32 +2382,30 @@ sal_Bool SAL_CALL ODatabaseForm::getGroupControl() throw(css::uno::RuntimeExcept
     {
         sal_Int32 nCycle = 0;
         ::cppu::enum2int(nCycle, m_aCycle);
-        return nCycle != TabulatorCycle_PAGE;
+        return static_cast<TabulatorCycle>(nCycle) != TabulatorCycle_PAGE;
     }
 
     if (isLoaded() && getConnection().is())
-        return sal_True;
+        return true;
 
-    return sal_False;
+    return false;
 }
 
 
-void SAL_CALL ODatabaseForm::setControlModels(const Sequence<Reference<XControlModel> >& rControls) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setControlModels(const Sequence<Reference<XControlModel> >& rControls)
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
 
     // Set TabIndex in the order of the sequence
-    const Reference<XControlModel>* pControls = rControls.getConstArray();
     sal_Int32 nCount = getCount();
-    sal_Int32 nNewCount = rControls.getLength();
 
     // HiddenControls and forms are not listed
-    if (nNewCount <= nCount)
+    if (rControls.getLength() <= nCount)
     {
         sal_Int16 nTabIndex = 1;
-        for (sal_Int32 i=0; i < nNewCount; ++i, ++pControls)
+        for (auto const& rControl : rControls)
         {
-            Reference<XFormComponent>  xComp(*pControls, UNO_QUERY);
+            Reference<XFormComponent> xComp(rControl, UNO_QUERY);
             if (xComp.is())
             {
                 // Find component in the list
@@ -2463,26 +2427,25 @@ void SAL_CALL ODatabaseForm::setControlModels(const Sequence<Reference<XControlM
 }
 
 
-Sequence<Reference<XControlModel> > SAL_CALL ODatabaseForm::getControlModels() throw( RuntimeException, std::exception )
+Sequence<Reference<XControlModel> > SAL_CALL ODatabaseForm::getControlModels()
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     return m_pGroupManager->getControlModels();
 }
 
 
-void SAL_CALL ODatabaseForm::setGroup( const Sequence<Reference<XControlModel> >& _rGroup, const OUString& Name ) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setGroup( const Sequence<Reference<XControlModel> >& _rGroup, const OUString& Name )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
     // The controls are grouped by adjusting their names to the name of the
     // first control of the sequence
-    const Reference<XControlModel>* pControls = _rGroup.getConstArray();
     Reference< XPropertySet > xSet;
     OUString sGroupName( Name );
 
-    for( sal_Int32 i=0; i<_rGroup.getLength(); ++i, ++pControls )
+    for( auto const& rControl : _rGroup )
     {
-        xSet.set(*pControls, css::uno::UNO_QUERY);
+        xSet.set(rControl, css::uno::UNO_QUERY);
         if ( !xSet.is() )
         {
             // can't throw an exception other than a RuntimeException (which would not be appropriate),
@@ -2499,14 +2462,14 @@ void SAL_CALL ODatabaseForm::setGroup( const Sequence<Reference<XControlModel> >
 }
 
 
-sal_Int32 SAL_CALL ODatabaseForm::getGroupCount() throw( RuntimeException, std::exception )
+sal_Int32 SAL_CALL ODatabaseForm::getGroupCount()
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     return m_pGroupManager->getGroupCount();
 }
 
 
-void SAL_CALL ODatabaseForm::getGroup( sal_Int32 nGroup, Sequence<Reference<XControlModel> >& _rGroup, OUString& _rName ) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::getGroup( sal_Int32 nGroup, Sequence<Reference<XControlModel> >& _rGroup, OUString& _rName )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     _rGroup.realloc(0);
@@ -2518,7 +2481,7 @@ void SAL_CALL ODatabaseForm::getGroup( sal_Int32 nGroup, Sequence<Reference<XCon
 }
 
 
-void SAL_CALL ODatabaseForm::getGroupByName(const OUString& Name, Sequence< Reference<XControlModel>  >& _rGroup) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::getGroupByName(const OUString& Name, Sequence< Reference<XControlModel>  >& _rGroup)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     _rGroup.realloc(0);
@@ -2528,7 +2491,7 @@ void SAL_CALL ODatabaseForm::getGroupByName(const OUString& Name, Sequence< Refe
 
 // css::lang::XEventListener
 
-void SAL_CALL ODatabaseForm::disposing(const EventObject& Source) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::disposing(const EventObject& Source)
 {
     // does the call come from the connection which we are sharing with our parent?
     if ( isSharingConnection() )
@@ -2561,15 +2524,15 @@ void SAL_CALL ODatabaseForm::disposing(const EventObject& Source) throw( Runtime
 void ODatabaseForm::impl_createLoadTimer()
 {
     OSL_PRECOND( m_pLoadTimer == nullptr, "ODatabaseForm::impl_createLoadTimer: timer already exists!" );
-    m_pLoadTimer = new Timer("DatabaseFormLoadTimer");
+    m_pLoadTimer.reset(new Timer("DatabaseFormLoadTimer"));
     m_pLoadTimer->SetTimeout(100);
-    m_pLoadTimer->SetTimeoutHdl(LINK(this,ODatabaseForm,OnTimeout));
+    m_pLoadTimer->SetInvokeHandler(LINK(this,ODatabaseForm,OnTimeout));
 }
 
 
 // css::form::XLoadListener
 
-void SAL_CALL ODatabaseForm::loaded(const EventObject& /*aEvent*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::loaded(const EventObject& /*aEvent*/)
 {
     {
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -2583,7 +2546,7 @@ void SAL_CALL ODatabaseForm::loaded(const EventObject& /*aEvent*/) throw( Runtim
 }
 
 
-void SAL_CALL ODatabaseForm::unloading(const EventObject& /*aEvent*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::unloading(const EventObject& /*aEvent*/)
 {
     {
         // now stop the rowset listening if we are a subform
@@ -2591,7 +2554,7 @@ void SAL_CALL ODatabaseForm::unloading(const EventObject& /*aEvent*/) throw( Run
 
         if ( m_pLoadTimer && m_pLoadTimer->IsActive() )
             m_pLoadTimer->Stop();
-        DELETEZ( m_pLoadTimer );
+        m_pLoadTimer.reset();
 
         Reference< XRowSet > xParentRowSet( m_xParent, UNO_QUERY_THROW );
         xParentRowSet->removeRowSetListener( this );
@@ -2601,13 +2564,13 @@ void SAL_CALL ODatabaseForm::unloading(const EventObject& /*aEvent*/) throw( Run
 }
 
 
-void SAL_CALL ODatabaseForm::unloaded(const EventObject& /*aEvent*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::unloaded(const EventObject& /*aEvent*/)
 {
     // nothing to do
 }
 
 
-void SAL_CALL ODatabaseForm::reloading(const EventObject& /*aEvent*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::reloading(const EventObject& /*aEvent*/)
 {
     // now stop the rowset listening if we are a subform
     ::osl::MutexGuard aGuard(m_aMutex);
@@ -2620,7 +2583,7 @@ void SAL_CALL ODatabaseForm::reloading(const EventObject& /*aEvent*/) throw( Run
 }
 
 
-void SAL_CALL ODatabaseForm::reloaded(const EventObject& /*aEvent*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::reloaded(const EventObject& /*aEvent*/)
 {
     reload_impl(true);
     {
@@ -2632,7 +2595,7 @@ void SAL_CALL ODatabaseForm::reloaded(const EventObject& /*aEvent*/) throw( Runt
 }
 
 
-IMPL_LINK_NOARG_TYPED(ODatabaseForm, OnTimeout, Timer *, void)
+IMPL_LINK_NOARG(ODatabaseForm, OnTimeout, Timer *, void)
 {
     reload_impl(true);
 }
@@ -2640,7 +2603,7 @@ IMPL_LINK_NOARG_TYPED(ODatabaseForm, OnTimeout, Timer *, void)
 
 // css::form::XLoadable
 
-void SAL_CALL ODatabaseForm::load() throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::load()
 {
     load_impl(false);
 }
@@ -2809,8 +2772,7 @@ bool ODatabaseForm::implEnsureConnection()
         {
             Reference< XConnection >  xConnection = connectRowset(
                 Reference<XRowSet> (m_xAggregate, UNO_QUERY),
-                m_xContext,
-                true    // set a calculated connection as ActiveConnection
+                m_xContext
             );
             return xConnection.is();
         }
@@ -2821,14 +2783,14 @@ bool ODatabaseForm::implEnsureConnection()
     }
     catch(const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.component");
     }
 
     return false;
 }
 
 
-void ODatabaseForm::load_impl(bool bCausedByParentForm, bool bMoveToFirst, const Reference< XInteractionHandler >& _rxCompletionHandler ) throw( RuntimeException, std::exception )
+void ODatabaseForm::load_impl(bool bCausedByParentForm, bool bMoveToFirst, const Reference< XInteractionHandler >& _rxCompletionHandler )
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
 
@@ -2848,7 +2810,7 @@ void ODatabaseForm::load_impl(bool bCausedByParentForm, bool bMoveToFirst, const
     // a database form always uses caching
     // we use starting fetchsize with at least 10 rows
     if (bConnected)
-        m_xAggregateSet->setPropertyValue(PROPERTY_FETCHSIZE, makeAny((sal_Int32)40));
+        m_xAggregateSet->setPropertyValue(PROPERTY_FETCHSIZE, makeAny(sal_Int32(40)));
 
     // if we're loaded as sub form we got a "rowSetChanged" from the parent rowset _before_ we got the "loaded"
     // so we don't need to execute the statement again, this was already done
@@ -2877,13 +2839,13 @@ void ODatabaseForm::load_impl(bool bCausedByParentForm, bool bMoveToFirst, const
 }
 
 
-void SAL_CALL ODatabaseForm::unload() throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::unload()
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
     if (!isLoaded())
         return;
 
-    DELETEZ(m_pLoadTimer);
+    m_pLoadTimer.reset();
 
     aGuard.clear();
     EventObject aEvt(static_cast<XWeak*>(this));
@@ -2895,7 +2857,7 @@ void SAL_CALL ODatabaseForm::unload() throw( RuntimeException, std::exception )
         restoreInsertOnlyState( );
 
         // clear the parameters if there are any
-        invlidateParameters();
+        invalidateParameters();
 
         try
         {
@@ -2924,13 +2886,13 @@ void SAL_CALL ODatabaseForm::unload() throw( RuntimeException, std::exception )
 }
 
 
-void SAL_CALL ODatabaseForm::reload() throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::reload()
 {
     reload_impl(true);
 }
 
 
-void ODatabaseForm::reload_impl(bool bMoveToFirst, const Reference< XInteractionHandler >& _rxCompletionHandler ) throw( RuntimeException, std::exception )
+void ODatabaseForm::reload_impl(bool bMoveToFirst, const Reference< XInteractionHandler >& _rxCompletionHandler )
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
     if (!isLoaded())
@@ -2938,13 +2900,13 @@ void ODatabaseForm::reload_impl(bool bMoveToFirst, const Reference< XInteraction
 
     DocumentModifyGuard aModifyGuard( *this );
         // ensures the document is not marked as "modified" just because we change some control's content during
-        // reloading ...
+        // reloading...
 
     EventObject aEvent(static_cast<XWeak*>(this));
     {
         // only if there is no approve listener we can post the event at this time
         // otherwise see approveRowsetChange
-        // the approvement is done by the aggregate
+        // the approval is done by the aggregate
         if (!m_aRowSetApproveListeners.getLength())
         {
             ::comphelper::OInterfaceIteratorHelper2 aIter(m_aLoadListeners);
@@ -2985,26 +2947,26 @@ void ODatabaseForm::reload_impl(bool bMoveToFirst, const Reference< XInteraction
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::isLoaded() throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::isLoaded()
 {
     return m_bLoaded;
 }
 
 
-void SAL_CALL ODatabaseForm::addLoadListener(const Reference<XLoadListener>& aListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addLoadListener(const Reference<XLoadListener>& aListener)
 {
     m_aLoadListeners.addInterface(aListener);
 }
 
 
-void SAL_CALL ODatabaseForm::removeLoadListener(const Reference<XLoadListener>& aListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeLoadListener(const Reference<XLoadListener>& aListener)
 {
     m_aLoadListeners.removeInterface(aListener);
 }
 
 
 // css::sdbc::XCloseable
-void SAL_CALL ODatabaseForm::close() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::close()
 {
     // unload will close the aggregate
     unload();
@@ -3013,7 +2975,7 @@ void SAL_CALL ODatabaseForm::close() throw( SQLException, RuntimeException, std:
 
 // css::sdbc::XRowSetListener
 
-void SAL_CALL ODatabaseForm::cursorMoved(const EventObject& /*event*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::cursorMoved(const EventObject& /*event*/)
 {
     // reload the subform with the new parameters of the parent
     // do this handling delayed to provide of execute too many SQL Statements
@@ -3031,13 +2993,13 @@ void SAL_CALL ODatabaseForm::cursorMoved(const EventObject& /*event*/) throw( Ru
 }
 
 
-void SAL_CALL ODatabaseForm::rowChanged(const EventObject& /*event*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::rowChanged(const EventObject& /*event*/)
 {
     // ignore it
 }
 
 
-void SAL_CALL ODatabaseForm::rowSetChanged(const EventObject& /*event*/) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::rowSetChanged(const EventObject& /*event*/)
 {
     // not interested in :
     // if our parent is an ODatabaseForm, too, then after this rowSetChanged we'll get a "reloaded"
@@ -3074,20 +3036,20 @@ bool ODatabaseForm::impl_approveRowChange_throw( const EventObject& _rEvent, con
         }
         catch (const SQLException&)
         {
+            DBG_UNHANDLED_EXCEPTION("forms.component");
             if ( _bAllowSQLException )
                 throw;
-            DBG_UNHANDLED_EXCEPTION();
         }
         catch (const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.component");
         }
     }
     return true;
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::approveCursorMove(const EventObject& event) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::approveCursorMove(const EventObject& event)
 {
     // is our aggregate calling?
     if (event.Source == css::uno::Reference<css::uno::XInterface>(static_cast<XWeak*>(this)))
@@ -3105,7 +3067,7 @@ sal_Bool SAL_CALL ODatabaseForm::approveCursorMove(const EventObject& event) thr
             try
             {
                 if ( !xListener->approveCursorMove( event ) )
-                    return sal_False;
+                    return false;
             }
             catch (const DisposedException& e)
             {
@@ -3118,7 +3080,7 @@ sal_Bool SAL_CALL ODatabaseForm::approveCursorMove(const EventObject& event) thr
             }
             catch (const Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("forms.component");
             }
         }
         return true;
@@ -3130,13 +3092,13 @@ sal_Bool SAL_CALL ODatabaseForm::approveCursorMove(const EventObject& event) thr
         // ask our own RowSetChangesListeners, too
         ::osl::ClearableMutexGuard aGuard( m_aMutex );
         if ( !impl_approveRowChange_throw( event, false, aGuard ) )
-            return sal_False;
+            return false;
     }
-    return sal_True;
+    return true;
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::approveRowChange(const RowChangeEvent& event) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::approveRowChange(const RowChangeEvent& event)
 {
     // is our aggregate calling?
     if (event.Source == css::uno::Reference<css::uno::XInterface>(static_cast<XWeak*>(this)))
@@ -3167,23 +3129,23 @@ sal_Bool SAL_CALL ODatabaseForm::approveRowChange(const RowChangeEvent& event) t
             }
             catch (const Exception&)
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("forms.component");
             }
         }
         return true;
     }
-    return sal_True;
+    return true;
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::approveRowSetChange(const EventObject& event) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::approveRowSetChange(const EventObject& event)
 {
     if (event.Source == css::uno::Reference<css::uno::XInterface>(static_cast<XWeak*>(this))) // ignore our aggregate as we handle this approve ourself
     {
         ::osl::ClearableMutexGuard aGuard( m_aMutex );
         bool bWasLoaded = isLoaded();
         if ( !impl_approveRowChange_throw( event, false, aGuard ) )
-            return sal_False;
+            return false;
 
         if ( bWasLoaded )
         {
@@ -3197,15 +3159,15 @@ sal_Bool SAL_CALL ODatabaseForm::approveRowSetChange(const EventObject& event) t
         // ask our own RowSetChangesListeners, too
         ::osl::ClearableMutexGuard aGuard( m_aMutex );
         if ( !impl_approveRowChange_throw( event, false, aGuard ) )
-            return sal_False;
+            return false;
     }
-    return sal_True;
+    return true;
 }
 
 
 // css::sdb::XRowSetApproveBroadcaster
 
-void SAL_CALL ODatabaseForm::addRowSetApproveListener(const Reference<XRowSetApproveListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addRowSetApproveListener(const Reference<XRowSetApproveListener>& _rListener)
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
     m_aRowSetApproveListeners.addInterface(_rListener);
@@ -3223,7 +3185,7 @@ void SAL_CALL ODatabaseForm::addRowSetApproveListener(const Reference<XRowSetApp
 }
 
 
-void SAL_CALL ODatabaseForm::removeRowSetApproveListener(const Reference<XRowSetApproveListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeRowSetApproveListener(const Reference<XRowSetApproveListener>& _rListener)
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
     // do we have to remove the multiplex ?
@@ -3242,24 +3204,24 @@ void SAL_CALL ODatabaseForm::removeRowSetApproveListener(const Reference<XRowSet
 
 // com::sun:star::form::XDatabaseParameterBroadcaster
 
-void SAL_CALL ODatabaseForm::addDatabaseParameterListener(const Reference<XDatabaseParameterListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addDatabaseParameterListener(const Reference<XDatabaseParameterListener>& _rListener)
 {
     m_aParameterManager.addParameterListener( _rListener );
 }
 
-void SAL_CALL ODatabaseForm::removeDatabaseParameterListener(const Reference<XDatabaseParameterListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeDatabaseParameterListener(const Reference<XDatabaseParameterListener>& _rListener)
 {
     m_aParameterManager.removeParameterListener( _rListener );
 }
 
 
-void SAL_CALL ODatabaseForm::addParameterListener(const Reference<XDatabaseParameterListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addParameterListener(const Reference<XDatabaseParameterListener>& _rListener)
 {
     ODatabaseForm::addDatabaseParameterListener( _rListener );
 }
 
 
-void SAL_CALL ODatabaseForm::removeParameterListener(const Reference<XDatabaseParameterListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeParameterListener(const Reference<XDatabaseParameterListener>& _rListener)
 {
     ODatabaseForm::removeDatabaseParameterListener( _rListener );
 }
@@ -3267,7 +3229,7 @@ void SAL_CALL ODatabaseForm::removeParameterListener(const Reference<XDatabasePa
 
 // css::sdb::XCompletedExecution
 
-void SAL_CALL ODatabaseForm::executeWithCompletion( const Reference< XInteractionHandler >& _rxHandler ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::executeWithCompletion( const Reference< XInteractionHandler >& _rxHandler )
 {
     ::osl::ClearableMutexGuard aGuard(m_aMutex);
     // the difference between execute and load is, that we position on the first row in case of load
@@ -3283,7 +3245,7 @@ void SAL_CALL ODatabaseForm::executeWithCompletion( const Reference< XInteractio
         if ( !impl_approveRowChange_throw( event, true, aGuard ) )
             return;
 
-        // we're loaded and somebody want's to execute ourself -> this means a reload
+        // we're loaded and somebody wants to execute ourself -> this means a reload
         reload_impl(false, _rxHandler);
     }
 }
@@ -3291,7 +3253,7 @@ void SAL_CALL ODatabaseForm::executeWithCompletion( const Reference< XInteractio
 
 // css::sdbc::XRowSet
 
-void SAL_CALL ODatabaseForm::execute() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::execute()
 {
     ::osl::ResettableMutexGuard aGuard(m_aMutex);
     // if somebody calls an execute and we're not loaded we reroute this call to our load method.
@@ -3309,20 +3271,20 @@ void SAL_CALL ODatabaseForm::execute() throw( SQLException, RuntimeException, st
         if ( !impl_approveRowChange_throw( event, true, aGuard ) )
             return;
 
-        // we're loaded and somebody want's to execute ourself -> this means a reload
+        // we're loaded and somebody wants to execute ourself -> this means a reload
         reload_impl(false);
     }
 }
 
 
-void SAL_CALL ODatabaseForm::addRowSetListener(const Reference<XRowSetListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::addRowSetListener(const Reference<XRowSetListener>& _rListener)
 {
     if (m_xAggregateAsRowSet.is())
         m_xAggregateAsRowSet->addRowSetListener(_rListener);
 }
 
 
-void SAL_CALL ODatabaseForm::removeRowSetListener(const Reference<XRowSetListener>& _rListener) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::removeRowSetListener(const Reference<XRowSetListener>& _rListener)
 {
     if (m_xAggregateAsRowSet.is())
         m_xAggregateAsRowSet->removeRowSetListener(_rListener);
@@ -3331,109 +3293,109 @@ void SAL_CALL ODatabaseForm::removeRowSetListener(const Reference<XRowSetListene
 
 // css::sdbc::XResultSet
 
-sal_Bool SAL_CALL ODatabaseForm::next() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::next()
 {
     return m_xAggregateAsRowSet->next();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::isBeforeFirst() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::isBeforeFirst()
 {
     return m_xAggregateAsRowSet->isBeforeFirst();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::isAfterLast() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::isAfterLast()
 {
     return m_xAggregateAsRowSet->isAfterLast();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::isFirst() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::isFirst()
 {
     return m_xAggregateAsRowSet->isFirst();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::isLast() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::isLast()
 {
     return m_xAggregateAsRowSet->isLast();
 }
 
 
-void SAL_CALL ODatabaseForm::beforeFirst() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::beforeFirst()
 {
     m_xAggregateAsRowSet->beforeFirst();
 }
 
 
-void SAL_CALL ODatabaseForm::afterLast() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::afterLast()
 {
     m_xAggregateAsRowSet->afterLast();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::first() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::first()
 {
     return m_xAggregateAsRowSet->first();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::last() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::last()
 {
     return m_xAggregateAsRowSet->last();
 }
 
 
-sal_Int32 SAL_CALL ODatabaseForm::getRow() throw( SQLException, RuntimeException, std::exception )
+sal_Int32 SAL_CALL ODatabaseForm::getRow()
 {
     return m_xAggregateAsRowSet->getRow();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::absolute(sal_Int32 row) throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::absolute(sal_Int32 row)
 {
     return m_xAggregateAsRowSet->absolute(row);
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::relative(sal_Int32 rows) throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::relative(sal_Int32 rows)
 {
     return m_xAggregateAsRowSet->relative(rows);
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::previous() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::previous()
 {
     return m_xAggregateAsRowSet->previous();
 }
 
 
-void SAL_CALL ODatabaseForm::refreshRow() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::refreshRow()
 {
     m_xAggregateAsRowSet->refreshRow();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::rowUpdated() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::rowUpdated()
 {
     return m_xAggregateAsRowSet->rowUpdated();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::rowInserted() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::rowInserted()
 {
     return m_xAggregateAsRowSet->rowInserted();
 }
 
 
-sal_Bool SAL_CALL ODatabaseForm::rowDeleted() throw( SQLException, RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::rowDeleted()
 {
     return m_xAggregateAsRowSet->rowDeleted();
 }
 
 
-css::uno::Reference<css::uno::XInterface> SAL_CALL ODatabaseForm::getStatement() throw( SQLException, RuntimeException, std::exception )
+css::uno::Reference<css::uno::XInterface> SAL_CALL ODatabaseForm::getStatement()
 {
     return m_xAggregateAsRowSet->getStatement();
 }
@@ -3441,7 +3403,7 @@ css::uno::Reference<css::uno::XInterface> SAL_CALL ODatabaseForm::getStatement()
 // css::sdbc::XResultSetUpdate
 // exceptions during insert update and delete will be forwarded to the errorlistener
 
-void SAL_CALL ODatabaseForm::insertRow() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::insertRow()
 {
     try
     {
@@ -3461,7 +3423,7 @@ void SAL_CALL ODatabaseForm::insertRow() throw( SQLException, RuntimeException, 
 }
 
 
-void SAL_CALL ODatabaseForm::updateRow() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::updateRow()
 {
     try
     {
@@ -3481,7 +3443,7 @@ void SAL_CALL ODatabaseForm::updateRow() throw( SQLException, RuntimeException, 
 }
 
 
-void SAL_CALL ODatabaseForm::deleteRow() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::deleteRow()
 {
     try
     {
@@ -3501,7 +3463,7 @@ void SAL_CALL ODatabaseForm::deleteRow() throw( SQLException, RuntimeException, 
 }
 
 
-void SAL_CALL ODatabaseForm::cancelRowUpdates() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::cancelRowUpdates()
 {
     try
     {
@@ -3521,7 +3483,7 @@ void SAL_CALL ODatabaseForm::cancelRowUpdates() throw( SQLException, RuntimeExce
 }
 
 
-void SAL_CALL ODatabaseForm::moveToInsertRow() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::moveToInsertRow()
 {
     Reference<XResultSetUpdate>  xUpdate;
     if (query_aggregation( m_xAggregate, xUpdate))
@@ -3556,7 +3518,7 @@ void SAL_CALL ODatabaseForm::moveToInsertRow() throw( SQLException, RuntimeExcep
 }
 
 
-void SAL_CALL ODatabaseForm::moveToCurrentRow() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::moveToCurrentRow()
 {
     Reference<XResultSetUpdate>  xUpdate;
     if (query_aggregation( m_xAggregate, xUpdate))
@@ -3565,7 +3527,7 @@ void SAL_CALL ODatabaseForm::moveToCurrentRow() throw( SQLException, RuntimeExce
 
 // css::sdbcx::XDeleteRows
 
-Sequence<sal_Int32> SAL_CALL ODatabaseForm::deleteRows(const Sequence<Any>& rows) throw( SQLException, RuntimeException, std::exception )
+Sequence<sal_Int32> SAL_CALL ODatabaseForm::deleteRows(const Sequence<Any>& rows)
 {
     try
     {
@@ -3588,145 +3550,145 @@ Sequence<sal_Int32> SAL_CALL ODatabaseForm::deleteRows(const Sequence<Any>& rows
 
 // css::sdbc::XParameters
 
-void SAL_CALL ODatabaseForm::setNull(sal_Int32 parameterIndex, sal_Int32 sqlType) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setNull(sal_Int32 parameterIndex, sal_Int32 sqlType)
 {
     m_aParameterManager.setNull(parameterIndex, sqlType);
 }
 
 
-void SAL_CALL ODatabaseForm::setObjectNull(sal_Int32 parameterIndex, sal_Int32 sqlType, const OUString& typeName) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setObjectNull(sal_Int32 parameterIndex, sal_Int32 sqlType, const OUString& typeName)
 {
     m_aParameterManager.setObjectNull(parameterIndex, sqlType, typeName);
 }
 
 
-void SAL_CALL ODatabaseForm::setBoolean(sal_Int32 parameterIndex, sal_Bool x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setBoolean(sal_Int32 parameterIndex, sal_Bool x)
 {
     m_aParameterManager.setBoolean(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setByte(sal_Int32 parameterIndex, sal_Int8 x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setByte(sal_Int32 parameterIndex, sal_Int8 x)
 {
     m_aParameterManager.setByte(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setShort(sal_Int32 parameterIndex, sal_Int16 x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setShort(sal_Int32 parameterIndex, sal_Int16 x)
 {
     m_aParameterManager.setShort(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setInt(sal_Int32 parameterIndex, sal_Int32 x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setInt(sal_Int32 parameterIndex, sal_Int32 x)
 {
     m_aParameterManager.setInt(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setLong(sal_Int32 parameterIndex, sal_Int64 x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setLong(sal_Int32 parameterIndex, sal_Int64 x)
 {
     m_aParameterManager.setLong(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setFloat(sal_Int32 parameterIndex, float x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setFloat(sal_Int32 parameterIndex, float x)
 {
     m_aParameterManager.setFloat(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setDouble(sal_Int32 parameterIndex, double x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setDouble(sal_Int32 parameterIndex, double x)
 {
     m_aParameterManager.setDouble(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setString(sal_Int32 parameterIndex, const OUString& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setString(sal_Int32 parameterIndex, const OUString& x)
 {
     m_aParameterManager.setString(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setBytes(sal_Int32 parameterIndex, const Sequence< sal_Int8 >& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setBytes(sal_Int32 parameterIndex, const Sequence< sal_Int8 >& x)
 {
     m_aParameterManager.setBytes(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setDate(sal_Int32 parameterIndex, const css::util::Date& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setDate(sal_Int32 parameterIndex, const css::util::Date& x)
 {
     m_aParameterManager.setDate(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setTime(sal_Int32 parameterIndex, const css::util::Time& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setTime(sal_Int32 parameterIndex, const css::util::Time& x)
 {
     m_aParameterManager.setTime(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setTimestamp(sal_Int32 parameterIndex, const css::util::DateTime& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setTimestamp(sal_Int32 parameterIndex, const css::util::DateTime& x)
 {
     m_aParameterManager.setTimestamp(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setBinaryStream(sal_Int32 parameterIndex, const Reference<XInputStream>& x, sal_Int32 length) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setBinaryStream(sal_Int32 parameterIndex, const Reference<XInputStream>& x, sal_Int32 length)
 {
     m_aParameterManager.setBinaryStream(parameterIndex, x, length);
 }
 
 
-void SAL_CALL ODatabaseForm::setCharacterStream(sal_Int32 parameterIndex, const Reference<XInputStream>& x, sal_Int32 length) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setCharacterStream(sal_Int32 parameterIndex, const Reference<XInputStream>& x, sal_Int32 length)
 {
     m_aParameterManager.setCharacterStream(parameterIndex, x, length);
 }
 
 
-void SAL_CALL ODatabaseForm::setObjectWithInfo(sal_Int32 parameterIndex, const Any& x, sal_Int32 targetSqlType, sal_Int32 scale) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setObjectWithInfo(sal_Int32 parameterIndex, const Any& x, sal_Int32 targetSqlType, sal_Int32 scale)
 {
     m_aParameterManager.setObjectWithInfo(parameterIndex, x, targetSqlType, scale);
 }
 
 
-void SAL_CALL ODatabaseForm::setObject(sal_Int32 parameterIndex, const Any& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setObject(sal_Int32 parameterIndex, const Any& x)
 {
     m_aParameterManager.setObject(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setRef(sal_Int32 parameterIndex, const Reference<XRef>& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setRef(sal_Int32 parameterIndex, const Reference<XRef>& x)
 {
     m_aParameterManager.setRef(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setBlob(sal_Int32 parameterIndex, const Reference<XBlob>& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setBlob(sal_Int32 parameterIndex, const Reference<XBlob>& x)
 {
     m_aParameterManager.setBlob(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setClob(sal_Int32 parameterIndex, const Reference<XClob>& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setClob(sal_Int32 parameterIndex, const Reference<XClob>& x)
 {
     m_aParameterManager.setClob(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::setArray(sal_Int32 parameterIndex, const Reference<XArray>& x) throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setArray(sal_Int32 parameterIndex, const Reference<XArray>& x)
 {
     m_aParameterManager.setArray(parameterIndex, x);
 }
 
 
-void SAL_CALL ODatabaseForm::clearParameters() throw( SQLException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::clearParameters()
 {
     m_aParameterManager.clearParameters();
 }
 
 
-void SAL_CALL ODatabaseForm::propertyChange( const PropertyChangeEvent& evt ) throw (RuntimeException, std::exception)
+void SAL_CALL ODatabaseForm::propertyChange( const PropertyChangeEvent& evt )
 {
     if ( evt.Source == m_xParent )
     {
@@ -3744,27 +3706,13 @@ void SAL_CALL ODatabaseForm::propertyChange( const PropertyChangeEvent& evt ) th
 
 // css::lang::XServiceInfo
 
-OUString SAL_CALL ODatabaseForm::getImplementationName_Static()
+OUString SAL_CALL ODatabaseForm::getImplementationName()
 {
     return OUString( "com.sun.star.comp.forms.ODatabaseForm" );
 }
 
-Sequence< OUString > SAL_CALL ODatabaseForm::getSupportedServiceNames_Static()
-{
-    return css::uno::Sequence<OUString>{
-        FRM_SUN_FORMCOMPONENT, "com.sun.star.form.FormComponents",
-        FRM_SUN_COMPONENT_FORM, FRM_SUN_COMPONENT_HTMLFORM,
-        FRM_SUN_COMPONENT_DATAFORM, FRM_COMPONENT_FORM};
-}
 
-
-OUString SAL_CALL ODatabaseForm::getImplementationName() throw( RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-
-Sequence< OUString > SAL_CALL ODatabaseForm::getSupportedServiceNames() throw( RuntimeException, std::exception )
+Sequence< OUString > SAL_CALL ODatabaseForm::getSupportedServiceNames()
 {
     // the services of our aggregate
     Sequence< OUString > aServices;
@@ -3774,12 +3722,15 @@ Sequence< OUString > SAL_CALL ODatabaseForm::getSupportedServiceNames() throw( R
 
     // concat with out own services
     return ::comphelper::concatSequences(
-        getSupportedServiceNames_Static(),
+        css::uno::Sequence<OUString> {
+            FRM_SUN_FORMCOMPONENT, "com.sun.star.form.FormComponents",
+            FRM_SUN_COMPONENT_FORM, FRM_SUN_COMPONENT_HTMLFORM,
+            FRM_SUN_COMPONENT_DATAFORM, FRM_COMPONENT_FORM },
         aServices
     );
 }
 
-sal_Bool SAL_CALL ODatabaseForm::supportsService(const OUString& ServiceName) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ODatabaseForm::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
@@ -3788,12 +3739,12 @@ sal_Bool SAL_CALL ODatabaseForm::supportsService(const OUString& ServiceName) th
 const sal_uInt16 CYCLE              = 0x0001;
 const sal_uInt16 DONTAPPLYFILTER    = 0x0002;
 
-OUString ODatabaseForm::getServiceName() throw( RuntimeException, std::exception )
+OUString ODatabaseForm::getServiceName()
 {
     return OUString(FRM_COMPONENT_FORM);  // old (non-sun) name for compatibility !
 }
 
-void SAL_CALL ODatabaseForm::write(const Reference<XObjectOutputStream>& _rxOutStream) throw( IOException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::write(const Reference<XObjectOutputStream>& _rxOutStream)
 {
     DBG_ASSERT(m_xAggregateSet.is(), "ODatabaseForm::write : only to be called if the aggregate exists !");
 
@@ -3801,7 +3752,7 @@ void SAL_CALL ODatabaseForm::write(const Reference<XObjectOutputStream>& _rxOutS
     OFormComponents::write(_rxOutStream);
 
     // version
-    _rxOutStream->writeShort(0x0003);
+    _rxOutStream->writeShort(0x0005);
 
     // Name
     _rxOutStream << m_sName;
@@ -3841,10 +3792,10 @@ void SAL_CALL ODatabaseForm::write(const Reference<XObjectOutputStream>& _rxOutS
             default : OSL_FAIL("ODatabaseForm::write : wrong CommandType !");
         }
     }
-    _rxOutStream->writeShort((sal_Int16)eTranslated); // former DataSelectionType
+    _rxOutStream->writeShort(static_cast<sal_Int16>(eTranslated)); // former DataSelectionType
 
     // very old versions expect a CursorType here
-    _rxOutStream->writeShort(DatabaseCursorType_KEYSET);
+    _rxOutStream->writeShort(2); // DatabaseCursorType_KEYSET
 
     _rxOutStream->writeBoolean(m_eNavigation != NavigationBarMode_NONE);
 
@@ -3852,42 +3803,42 @@ void SAL_CALL ODatabaseForm::write(const Reference<XObjectOutputStream>& _rxOutS
     if (m_xAggregateSet.is())
         _rxOutStream->writeBoolean(getBOOL(m_xAggregateSet->getPropertyValue(PROPERTY_INSERTONLY)));
     else
-        _rxOutStream->writeBoolean(sal_False);
+        _rxOutStream->writeBoolean(false);
 
     _rxOutStream->writeBoolean(m_bAllowInsert);
     _rxOutStream->writeBoolean(m_bAllowUpdate);
     _rxOutStream->writeBoolean(m_bAllowDelete);
 
     // html form stuff
-    OUString sTmp = INetURLObject::decode( m_aTargetURL, INetURLObject::DECODE_UNAMBIGUOUS);
+    OUString sTmp = INetURLObject::decode( m_aTargetURL, INetURLObject::DecodeMechanism::Unambiguous);
     _rxOutStream << sTmp;
-    _rxOutStream->writeShort( (sal_Int16)m_eSubmitMethod );
-    _rxOutStream->writeShort( (sal_Int16)m_eSubmitEncoding );
+    _rxOutStream->writeShort( static_cast<sal_Int16>(m_eSubmitMethod) );
+    _rxOutStream->writeShort( static_cast<sal_Int16>(m_eSubmitEncoding) );
     _rxOutStream << m_aTargetFrame;
 
     // version 2 didn't know some options and the "default" state
-    sal_Int32 nCycle = TabulatorCycle_RECORDS;
+    sal_Int32 nCycle = sal_Int32(TabulatorCycle_RECORDS);
     if (m_aCycle.hasValue())
     {
         ::cppu::enum2int(nCycle, m_aCycle);
         if (m_aCycle == TabulatorCycle_PAGE)
                 // unknown in earlier versions
-            nCycle = TabulatorCycle_RECORDS;
+            nCycle = sal_Int32(TabulatorCycle_RECORDS);
     }
-    _rxOutStream->writeShort((sal_Int16) nCycle);
+    _rxOutStream->writeShort(static_cast<sal_Int16>(nCycle));
 
-    _rxOutStream->writeShort((sal_Int16)m_eNavigation);
+    _rxOutStream->writeShort(static_cast<sal_Int16>(m_eNavigation));
 
     OUString sFilter;
-    OUString sOrder;
+    OUString sSort;
     if (m_xAggregateSet.is())
     {
         m_xAggregateSet->getPropertyValue(PROPERTY_FILTER) >>= sFilter;
-        m_xAggregateSet->getPropertyValue(PROPERTY_SORT) >>= sOrder;
+        // version 4
+        m_xAggregateSet->getPropertyValue(PROPERTY_SORT) >>= sSort;
     }
     _rxOutStream << sFilter;
-    _rxOutStream << sOrder;
-
+    _rxOutStream << sSort;
 
     // version 3
     sal_uInt16 nAnyMask = 0;
@@ -3903,12 +3854,18 @@ void SAL_CALL ODatabaseForm::write(const Reference<XObjectOutputStream>& _rxOutS
     {
         sal_Int32 nRealCycle = 0;
         ::cppu::enum2int(nRealCycle, m_aCycle);
-        _rxOutStream->writeShort((sal_Int16)nRealCycle);
+        _rxOutStream->writeShort(static_cast<sal_Int16>(nRealCycle));
     }
+
+    // version 5
+    OUString sHaving;
+    if (m_xAggregateSet.is())
+        m_xAggregateSet->getPropertyValue(PROPERTY_HAVINGCLAUSE) >>= sHaving;
+    _rxOutStream << sHaving;
 }
 
 
-void SAL_CALL ODatabaseForm::read(const Reference<XObjectInputStream>& _rxInStream) throw( IOException, RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::read(const Reference<XObjectInputStream>& _rxInStream)
 {
     DBG_ASSERT(m_xAggregateSet.is(), "ODatabaseForm::read : only to be called if the aggregate exists !");
 
@@ -3932,7 +3889,7 @@ void SAL_CALL ODatabaseForm::read(const Reference<XObjectInputStream>& _rxInStre
 
     sal_Int16 nCursorSourceType = _rxInStream->readShort();
     sal_Int32 nCommandType = 0;
-    switch ((DataSelectionType)nCursorSourceType)
+    switch (static_cast<DataSelectionType>(nCursorSourceType))
     {
         case DataSelectionType_TABLE : nCommandType = CommandType::TABLE; break;
         case DataSelectionType_QUERY : nCommandType = CommandType::QUERY; break;
@@ -3940,7 +3897,7 @@ void SAL_CALL ODatabaseForm::read(const Reference<XObjectInputStream>& _rxInStre
         case DataSelectionType_SQLPASSTHROUGH:
         {
             nCommandType = CommandType::COMMAND;
-            bool bEscapeProcessing = ((DataSelectionType)nCursorSourceType) != DataSelectionType_SQLPASSTHROUGH;
+            bool bEscapeProcessing = static_cast<DataSelectionType>(nCursorSourceType) != DataSelectionType_SQLPASSTHROUGH;
             m_xAggregateSet->setPropertyValue(PROPERTY_ESCAPE_PROCESSING, makeAny(bEscapeProcessing));
         }
         break;
@@ -3969,23 +3926,26 @@ void SAL_CALL ODatabaseForm::read(const Reference<XObjectInputStream>& _rxInStre
     // html stuff
     OUString sTmp;
     _rxInStream >> sTmp;
-    m_aTargetURL = INetURLObject::decode( sTmp, INetURLObject::DECODE_UNAMBIGUOUS);
-    m_eSubmitMethod     = (FormSubmitMethod)_rxInStream->readShort();
-    m_eSubmitEncoding       = (FormSubmitEncoding)_rxInStream->readShort();
+    m_aTargetURL = INetURLObject::decode( sTmp, INetURLObject::DecodeMechanism::Unambiguous);
+    m_eSubmitMethod     = static_cast<FormSubmitMethod>(_rxInStream->readShort());
+    m_eSubmitEncoding       = static_cast<FormSubmitEncoding>(_rxInStream->readShort());
     _rxInStream >> m_aTargetFrame;
 
     if (nVersion > 1)
     {
         sal_Int32 nCycle = _rxInStream->readShort();
-        m_aCycle = ::cppu::int2enum(nCycle, cppu::UnoType<TabulatorCycle>::get());
-        m_eNavigation = (NavigationBarMode)_rxInStream->readShort();
-
-        _rxInStream >> sAggregateProp;
-        setPropertyValue(PROPERTY_FILTER, makeAny(sAggregateProp));
+        m_aCycle <<= TabulatorCycle(nCycle);
+        m_eNavigation = static_cast<NavigationBarMode>(_rxInStream->readShort());
 
         _rxInStream >> sAggregateProp;
         if (m_xAggregateSet.is())
-            m_xAggregateSet->setPropertyValue(PROPERTY_SORT, makeAny(sAggregateProp));
+            m_xAggregateSet->setPropertyValue(PROPERTY_FILTER, makeAny(sAggregateProp));
+        if(nVersion > 3)
+        {
+            _rxInStream >> sAggregateProp;
+            if (m_xAggregateSet.is())
+                m_xAggregateSet->setPropertyValue(PROPERTY_SORT, makeAny(sAggregateProp));
+        }
     }
 
     sal_uInt16 nAnyMask = 0;
@@ -3995,13 +3955,20 @@ void SAL_CALL ODatabaseForm::read(const Reference<XObjectInputStream>& _rxInStre
         if (nAnyMask & CYCLE)
         {
             sal_Int32 nCycle = _rxInStream->readShort();
-            m_aCycle = ::cppu::int2enum(nCycle, cppu::UnoType<TabulatorCycle>::get());
+            m_aCycle <<= TabulatorCycle(nCycle);
         }
         else
             m_aCycle.clear();
     }
     if (m_xAggregateSet.is())
         m_xAggregateSet->setPropertyValue(PROPERTY_APPLYFILTER, makeAny((nAnyMask & DONTAPPLYFILTER) == 0));
+
+    if(nVersion > 4)
+    {
+        _rxInStream >> sAggregateProp;
+        if (m_xAggregateSet.is())
+            m_xAggregateSet->setPropertyValue(PROPERTY_HAVINGCLAUSE, makeAny(sAggregateProp));
+    }
 }
 
 
@@ -4031,7 +3998,7 @@ void ODatabaseForm::implRemoved(const css::uno::Reference<css::uno::XInterface>&
     }
 }
 
-void SAL_CALL ODatabaseForm::errorOccured(const SQLErrorEvent& _rEvent) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::errorOccured(const SQLErrorEvent& _rEvent)
 {
     // give it to my own error listener
     onError(_rEvent);
@@ -4040,7 +4007,7 @@ void SAL_CALL ODatabaseForm::errorOccured(const SQLErrorEvent& _rEvent) throw( R
 }
 
 // css::container::XNamed
-OUString SAL_CALL ODatabaseForm::getName() throw( RuntimeException, std::exception )
+OUString SAL_CALL ODatabaseForm::getName()
 {
     OUString sReturn;
     try
@@ -4058,14 +4025,14 @@ OUString SAL_CALL ODatabaseForm::getName() throw( RuntimeException, std::excepti
     return sReturn;
 }
 
-void SAL_CALL ODatabaseForm::setName(const OUString& aName) throw( RuntimeException, std::exception )
+void SAL_CALL ODatabaseForm::setName(const OUString& aName)
 {
     setFastPropertyValue(PROPERTY_ID_NAME, makeAny(aName));
 }
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_forms_ODatabaseForm_get_implementation(css::uno::XComponentContext* context,
                                                          css::uno::Sequence<css::uno::Any> const &)
 {

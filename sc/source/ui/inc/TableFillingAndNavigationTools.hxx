@@ -11,21 +11,16 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_TABLEFILLINGANDNAVIGATIONTOOLS_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_TABLEFILLINGANDNAVIGATIONTOOLS_HXX
 
-#include "address.hxx"
-#include "rangelst.hxx"
+#include <address.hxx>
+#include <rangelst.hxx>
 
-#include "docsh.hxx"
-#include "document.hxx"
-#include "docfunc.hxx"
-#include "formulacell.hxx"
-
-#include <list>
+#include <vector>
 
 class FormulaTemplate
 {
 private:
     OUString            mTemplate;
-    ScDocument*         mpDoc;
+    ScDocument* const   mpDoc;
     bool                mbUse3D;
 
     typedef std::map<OUString, ScRange>   RangeReplacementMap;
@@ -42,11 +37,11 @@ public:
     const OUString& getTemplate();
 
     void      autoReplaceRange(const OUString& aVariable, const ScRange& rRange);
-    void      autoReplaceAddress(const OUString& aVariable, ScAddress aAddress);
-    void      autoReplaceUses3D(bool bUse3D = true) { mbUse3D = bUse3D; }
+    void      autoReplaceAddress(const OUString& aVariable, ScAddress const & aAddress);
+    void      autoReplaceUses3D(bool bUse3D) { mbUse3D = bUse3D; }
 
     void      applyRange(const OUString& aVariable, const ScRange& aRange, bool b3D = true);
-    void      applyRangeList(const OUString& aVariable, const ScRangeList& aRangeList);
+    void      applyRangeList(const OUString& aVariable, const ScRangeList& aRangeList, sal_Unicode cDelimiter );
     void      applyAddress(const OUString& aVariable, const ScAddress& aAddress, bool b3D = true);
     void      applyString(const OUString& aVariable, const OUString& aValue);
     void      applyNumber(const OUString& aVariable, sal_Int32 aValue);
@@ -55,14 +50,13 @@ public:
 class AddressWalker
 {
 public:
-    std::list<ScAddress> mAddressStack;
+    std::vector<ScAddress> mAddressStack;
 
     ScAddress mCurrentAddress;
-    ScAddress mMinimumAddress;
+    ScAddress const mMinimumAddress;
     ScAddress mMaximumAddress;
-    bool      mTrackRange;
 
-    AddressWalker(ScAddress aInitialAddress);
+    AddressWalker(const ScAddress& aInitialAddress);
 
     ScAddress current(SCCOL aRelativeCol = 0, SCROW aRelativeRow = 0, SCTAB aRelativeTab = 0);
 
@@ -80,30 +74,30 @@ class AddressWalkerWriter : public AddressWalker
 public:
     ScDocShell*                         mpDocShell;
     ScDocument*                         mpDocument;
-    formula::FormulaGrammar::Grammar    meGrammar;
+    formula::FormulaGrammar::Grammar const    meGrammar;
 
-    AddressWalkerWriter(ScAddress aInitialAddress, ScDocShell* pDocShell, ScDocument* pDocument,
+    AddressWalkerWriter(const ScAddress& aInitialAddress, ScDocShell* pDocShell, ScDocument* pDocument,
             formula::FormulaGrammar::Grammar eGrammar );
 
     void writeFormula(const OUString& aFormula);
-    void writeMatrixFormula(const OUString& aFormula);
+    void writeMatrixFormula(const OUString& aFormula, SCCOL nCols = 1, SCROW nRows = 1);
     void writeString(const OUString& aString);
     void writeString(const char* aCharArray);
     void writeBoldString(const OUString& aString);
     void writeValue(double aValue);
 };
 
-class DataCellIterator
+class DataCellIterator final
 {
 private:
-    ScRange mInputRange;
-    bool    mByColumn;
+    ScRange const mInputRange;
+    bool const    mByColumn;
     SCCOL   mCol;
     SCROW   mRow;
 
 public:
-    DataCellIterator(ScRange aInputRange, bool aByColumn);
-    virtual ~DataCellIterator();
+    DataCellIterator(const ScRange& aInputRange, bool aByColumn);
+    ~DataCellIterator();
 
     bool hasNext();
     ScAddress get();
@@ -114,11 +108,11 @@ public:
 class DataRangeIterator
 {
 protected:
-    ScRange   mInputRange;
+    ScRange const   mInputRange;
     sal_Int32 mIndex;
 
 public:
-    DataRangeIterator(ScRange aInputRange);
+    DataRangeIterator(const ScRange& aInputRange);
     virtual ~DataRangeIterator();
 
     virtual bool hasNext() = 0;
@@ -132,13 +126,12 @@ public:
     virtual DataCellIterator iterateCells() = 0;
 };
 
-class DataRangeByColumnIterator : public DataRangeIterator
+class DataRangeByColumnIterator final : public DataRangeIterator
 {
-protected:
     SCCOL mCol;
 
 public:
-    DataRangeByColumnIterator(ScRange aInputRange);
+    DataRangeByColumnIterator(const ScRange& aInputRange);
 
     virtual bool hasNext() override;
     virtual void next() override;
@@ -148,13 +141,12 @@ public:
     virtual DataCellIterator iterateCells() override;
 };
 
-class DataRangeByRowIterator : public DataRangeIterator
+class DataRangeByRowIterator final : public DataRangeIterator
 {
-protected:
     SCROW mRow;
 
 public:
-    DataRangeByRowIterator(ScRange aInputRange);
+    DataRangeByRowIterator(const ScRange& aInputRange);
 
     virtual bool hasNext() override;
     virtual void next() override;

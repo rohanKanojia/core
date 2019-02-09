@@ -7,7 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#ifdef ENABLE_QUICKSTART_LIBPNG
+#include "splashx.h"
+
+#if defined(ENABLE_QUICKSTART_LIBPNG) && !defined(LIBO_HEADLESS)
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
@@ -32,8 +34,6 @@
 #include <rtl/bootstrap.h>
 #include <rtl/ustrbuf.h>
 
-#include "splashx.h"
-
 typedef struct {
     unsigned char b, g, r;
 } color_t;
@@ -43,6 +43,10 @@ struct splash
     Display* display;
     int screen;
     int depth;
+    int display_width;
+    int display_height;
+    int display_x_pos;
+    int display_y_pos;
     Visual* visual;
 
     int width;
@@ -51,6 +55,8 @@ struct splash
     Colormap color_map;
     Window win;
     GC gc;
+    //true when intro-highres loaded successfully
+    sal_Bool bHasHiDpiImage;
 
 // Progress bar values
 // taken from desktop/source/splash/splash.cxx
@@ -113,7 +119,7 @@ static int splash_load_bmp( struct splash* splash, const char *filename )
     return 1;
 }
 
-static void setup_color( int val[3], color_t *col )
+static void setup_color( int const val[3], color_t *col )
 {
     if ( val[0] < 0 || val[1] < 0 || val[2] < 0 )
         return;
@@ -156,7 +162,7 @@ static void get_bootstrap_value( int *array, int size, rtlBootstrapHandle handle
 }
 
 // setup
-static void splash_setup( struct splash* splash, int barc[3], int framec[3], int posx, int posy, int w, int h )
+static void splash_setup( struct splash* splash, int const barc[3], int const framec[3], int posx, int posy, int w, int h )
 {
     if ( splash->width <= 500 )
     {
@@ -187,7 +193,7 @@ static void splash_setup( struct splash* splash, int barc[3], int framec[3], int
 #define SHIFT( x, bits ) ( ( (bits) >= 0 )? ( (x) << (bits) ): ( (x) >> -(bits) ) )
 
 // Position of the highest bit (more or less integer log2)
-static inline int HIGHEST_BIT( unsigned long x )
+static int HIGHEST_BIT( unsigned long x )
 {
     int i = 0;
     for ( ; x; ++i )
@@ -197,7 +203,7 @@ static inline int HIGHEST_BIT( unsigned long x )
 }
 
 // Number of bits set to 1
-static inline int BITS( unsigned long x )
+static int BITS( unsigned long x )
 {
     int i = 0;
     for ( ; x; x >>= 1 )
@@ -212,7 +218,6 @@ static void create_pixmap(struct splash* splash)
 {
     Pixmap pixmap;
     GC pixmap_gc;
-    unsigned long value_mask = 0;
     XGCValues values;
 
     if ( !splash->bitmap_rows )
@@ -221,32 +226,32 @@ static void create_pixmap(struct splash* splash)
     }
     pixmap = XCreatePixmap( splash->display, splash->win, splash->width, splash->height, splash->depth );
 
-    pixmap_gc = XCreateGC( splash->display, pixmap, value_mask, &values );
+    pixmap_gc = XCreateGC( splash->display, pixmap, 0/*value_mask*/, &values );
 
     if ( splash->visual->class == TrueColor )
     {
-        unsigned long red_mask   = splash->visual->red_mask;
-        unsigned long green_mask = splash->visual->green_mask;
-        unsigned long blue_mask  = splash->visual->blue_mask;
+        const unsigned long red_mask   = splash->visual->red_mask;
+        const unsigned long green_mask = splash->visual->green_mask;
+        const unsigned long blue_mask  = splash->visual->blue_mask;
 
-        unsigned long red_delta_mask   = ( 1UL << ( 8 - BITS( red_mask ) ) ) - 1;
-        unsigned long green_delta_mask = ( 1UL << ( 8 - BITS( green_mask ) ) ) - 1;
-        unsigned long blue_delta_mask  = ( 1UL << ( 8 - BITS( blue_mask ) ) ) - 1;
+        const unsigned long red_delta_mask   = ( 1UL << ( 8 - BITS( red_mask ) ) ) - 1;
+        const unsigned long green_delta_mask = ( 1UL << ( 8 - BITS( green_mask ) ) ) - 1;
+        const unsigned long blue_delta_mask  = ( 1UL << ( 8 - BITS( blue_mask ) ) ) - 1;
 
-        int red_shift   = HIGHEST_BIT( red_mask ) - 8;
-        int green_shift = HIGHEST_BIT( green_mask ) - 8;
-        int blue_shift  = HIGHEST_BIT( blue_mask ) - 8;
+        const int red_shift   = HIGHEST_BIT( red_mask ) - 8;
+        const int green_shift = HIGHEST_BIT( green_mask ) - 8;
+        const int blue_shift  = HIGHEST_BIT( blue_mask ) - 8;
 
         XImage* image = XCreateImage( splash->display, splash->visual, splash->depth, ZPixmap,
                                       0, NULL, splash->width, splash->height, 32, 0 );
 
-        int bytes_per_line = image->bytes_per_line;
-        int bpp = image->bits_per_pixel;
-        int byte_order = image->byte_order;
+        const int bytes_per_line = image->bytes_per_line;
+        const int bpp = image->bits_per_pixel;
+        const int byte_order = image->byte_order;
 #if defined OSL_LITENDIAN
-        int machine_byte_order = LSBFirst;
+        const int machine_byte_order = LSBFirst;
 #else /* OSL_BIGENDIAN */
-        int machine_byte_order = MSBFirst;
+        const int machine_byte_order = MSBFirst;
 #endif
 
         char *data = malloc( splash->height * bytes_per_line );
@@ -303,14 +308,18 @@ static void create_pixmap(struct splash* splash)
         }
         else if ( bpp == 24 )
         {
-            if ( machine_byte_order == byte_order && byte_order == LSBFirst )
+            if (machine_byte_order == byte_order)
+            {
+#if defined OSL_LITENDIAN
                 COPY_IN_OUT( 3, memcpy(out, &pixel, sizeof (color_t)); out += 3; )
-            else if ( machine_byte_order == byte_order && byte_order == MSBFirst )
+#else /* OSL_BIGENDIAN */
                 COPY_IN_OUT( 3, tmp = pixel;
                              *( (uint8_t *)out     ) = *( (uint8_t *)(&tmp) + 1 );
                              *( (uint8_t *)out + 1 ) = *( (uint8_t *)(&tmp) + 2 );
                              *( (uint8_t *)out + 2 ) = *( (uint8_t *)(&tmp) + 3 );
                              out += 3; )
+#endif
+            }
             else
                 COPY_IN_OUT( 3, tmp = pixel;
                              *( (uint8_t *)out     ) = *( (uint8_t *)(&tmp) + 3 );
@@ -388,24 +397,14 @@ static void suppress_decorations(struct splash* splash)
 }
 
 /**
- * Create the window for the splash screen
+ * Connects to the display and initializes splash with the screen details
  *
  * @return Success: 1; Failure: 0
  */
-static int splash_create_window( struct splash* splash, int argc, char** argv )
+static int splash_init_display( struct splash* splash, int argc, char** argv )
 {
     char *display_name = NULL;
     int i;
-    Window root_win;
-    int display_width = 0;
-    int display_height = 0;
-    int display_x_pos = 0;
-    int display_y_pos = 0;
-    unsigned long value_mask = 0;
-    XGCValues values;
-    const char* name = "LibreOffice";
-    const char* icon = "icon"; // FIXME
-    XSizeHints size_hints;
 #ifdef USE_XINERAMA
     int n_xinerama_screens = 1;
     XineramaScreenInfo* p_screens = NULL;
@@ -437,9 +436,10 @@ static int splash_create_window( struct splash* splash, int argc, char** argv )
     splash->color_map = DefaultColormap( splash->display, splash->screen );
     splash->visual = DefaultVisual( splash->display, splash->screen );
 
-    root_win = RootWindow( splash->display, splash->screen );
-    display_width = DisplayWidth( splash->display, splash->screen );
-    display_height = DisplayHeight( splash->display, splash->screen );
+    splash->display_width = DisplayWidth( splash->display, splash->screen );
+    splash->display_height = DisplayHeight( splash->display, splash->screen );
+    splash->display_x_pos = 0;
+    splash->display_y_pos = 0;
 
 #ifdef USE_XINERAMA
     p_screens = XineramaQueryScreens( splash->display, &n_xinerama_screens );
@@ -449,20 +449,37 @@ static int splash_create_window( struct splash* splash, int argc, char** argv )
         {
             if ( p_screens[i].screen_number == splash->screen )
             {
-                display_width = p_screens[i].width;
-                display_height = p_screens[i].height;
-                display_x_pos = p_screens[i].x_org;
-                display_y_pos = p_screens[i].y_org;
+                splash->display_width = p_screens[i].width;
+                splash->display_height = p_screens[i].height;
+                splash->display_x_pos = p_screens[i].x_org;
+                splash->display_y_pos = p_screens[i].y_org;
                 break;
             }
         }
         XFree( p_screens );
     }
 #endif
+    return 1;
+}
+
+/**
+ * Create the window for the splash screen
+ *
+ * @return Success: 1; Failure: 0
+ */
+static int splash_create_window(struct splash* splash)
+{
+    Window root_win;
+    XGCValues values;
+    const char* name = "LibreOffice";
+    const char* icon = "icon"; // FIXME
+    XSizeHints size_hints;
+
+    root_win = RootWindow( splash->display, splash->screen );
 
     splash->win = XCreateSimpleWindow( splash->display, root_win,
-            (display_x_pos + (display_width - splash->width)/2),
-            (display_y_pos + (display_height - splash->height)/2),
+            (splash->display_x_pos + (splash->display_width - splash->width)/2),
+            (splash->display_y_pos + (splash->display_height - splash->height)/2),
             splash->width, splash->height, 0,
             BlackPixel( splash->display, splash->screen ), BlackPixel( splash->display, splash->screen ) );
 
@@ -478,11 +495,11 @@ static int splash_create_window( struct splash* splash, int argc, char** argv )
     XAllocColor( splash->display, splash->color_map, &(splash->framecolor) );
 
     // not resizable, no decorations, etc.
-    splash->gc = XCreateGC( splash->display, splash->win, value_mask, &values );
+    splash->gc = XCreateGC( splash->display, splash->win, 0/*value_mask*/, &values );
 
     size_hints.flags = PPosition | PSize | PMinSize | PMaxSize;
-    size_hints.x = display_x_pos;
-    size_hints.y = display_y_pos;
+    size_hints.x = splash->display_x_pos;
+    size_hints.y = splash->display_y_pos;
     size_hints.width = splash->width;
     size_hints.height = splash->height;
     size_hints.min_width = splash->width;
@@ -531,6 +548,31 @@ static rtl_String* ustr_to_str( rtl_uString* pStr )
     return pOut;
 }
 
+static sal_Bool isHiDPI(struct splash* splash)
+{
+    const char* pValStr;
+    double nDPI;
+
+    /*
+     * GNOME currently enables hi-dpi support when the screen resolution is at least 192 dpi
+     * and the screen height (in device pixels) is at least 1200.
+     */
+
+    if (splash->display_height < 1200)
+        return sal_False;
+
+    pValStr = XGetDefault(splash->display, "Xft", "dpi");
+    /* if it's too old to have this, assume it's not hidpi */
+    if (!pValStr)
+        return sal_False;
+
+    nDPI = strtod(pValStr, NULL);
+    if (nDPI < 192)
+        return sal_False;
+
+    return sal_True;
+}
+
 #define IMG_SUFFIX           ".png"
 
 static void splash_load_image( struct splash* splash, rtl_uString* pUAppPath )
@@ -568,11 +610,23 @@ static void splash_load_image( struct splash* splash, rtl_uString* pUAppPath )
     strcat (pSuffix, pLocale);
     strcat (pSuffix, IMG_SUFFIX);
     if ( splash_load_bmp( splash, pBuffer ) )
-        goto cleanup;
+        goto cleanup; /* success */
 
+    /* load high resolution splash image */
+    splash->bHasHiDpiImage = sal_False;
+    if (isHiDPI(splash))
+    {
+        strcpy (pSuffix, "intro-highres" IMG_SUFFIX);
+        if ( splash_load_bmp( splash, pBuffer ) )
+        {
+            splash->bHasHiDpiImage = sal_True;
+            goto cleanup; /* success */
+        }
+    }
+    /* load standard resolution splash image */
     strcpy (pSuffix, "intro" IMG_SUFFIX);
     if ( splash_load_bmp( splash, pBuffer ) )
-        goto cleanup;
+        goto cleanup;   /* success */
 
     fprintf (stderr, "Failed to find intro image\n");
 
@@ -606,8 +660,16 @@ static void splash_load_defaults( struct splash* splash, rtl_uString* pAppPath, 
     get_bootstrap_value( logo,  1, handle, "Logo" );
     get_bootstrap_value( bar,   3, handle, "ProgressBarColor" );
     get_bootstrap_value( frame, 3, handle, "ProgressFrameColor" );
-    get_bootstrap_value( pos,   2, handle, "ProgressPosition" );
-    get_bootstrap_value( size,  2, handle, "ProgressSize" );
+    if (isHiDPI(splash) && splash->bHasHiDpiImage)
+    {
+       get_bootstrap_value( pos,   2, handle, "ProgressPositionHigh" );
+       get_bootstrap_value( size,  2, handle, "ProgressSizeHigh" );
+    }
+    else
+    {
+       get_bootstrap_value( pos,   2, handle, "ProgressPosition" );
+       get_bootstrap_value( size,  2, handle, "ProgressSize" );
+    }
 
     if ( logo[0] == 0 )
     {
@@ -688,42 +750,44 @@ struct splash* splash_create(rtl_uString* pAppPath, int argc, char** argv)
     sal_Bool bNoDefaults = sal_False;
 
     splash = calloc(1, sizeof(struct splash));
-    if(splash)
+    if (splash && !splash_init_display(splash, argc, argv))
     {
-        splash->width = WINDOW_WIDTH;
-        splash->height = WINDOW_HEIGHT;
-
-        splash->tlx = 212;
-        splash->tly = 216;
-        splash->barwidth = 263;
-        splash->barheight = 8;
-        splash->barspace = PROGRESS_BARSPACE;
-        splash->barcol.b = 18;
-        splash->barcol.g = 202;
-        splash->barcol.r = 157;
-        splash->framecol.b = 0xD3;
-        splash->framecol.g = 0xD3;
-        splash->framecol.r = 0xD3;
-
-        splash_load_image( splash, pAppPath );
-        splash_load_defaults( splash, pAppPath, &bNoDefaults );
-
-        if (!bNoDefaults && splash_create_window( splash, argc, argv ) )
-        {
-            splash_draw_progress( splash, 0 );
-        }
-        else
-        {
-            splash_destroy(splash);
-            splash = NULL;
-        }
+        splash_destroy(splash);
+        splash = NULL;
     }
-    return splash;
+
+    if (!splash)
+        return NULL;
+
+    splash->width = WINDOW_WIDTH;
+    splash->height = WINDOW_HEIGHT;
+
+    splash->tlx = 212;
+    splash->tly = 216;
+    splash->barwidth = 263;
+    splash->barheight = 8;
+    splash->barspace = PROGRESS_BARSPACE;
+    splash->barcol.b = 18;
+    splash->barcol.g = 202;
+    splash->barcol.r = 157;
+    splash->framecol.b = 0xD3;
+    splash->framecol.g = 0xD3;
+    splash->framecol.r = 0xD3;
+
+    splash_load_image( splash, pAppPath );
+    splash_load_defaults( splash, pAppPath, &bNoDefaults );
+
+    if (!bNoDefaults && splash_create_window(splash))
+    {
+        splash_draw_progress( splash, 0 );
+        return splash;
+    }
+
+    splash_destroy(splash);
+    return NULL;
 }
 
 #else /* not ENABLE_QUICKSTART_LIBPNG */
-
-#include <rtl/ustrbuf.h>
 
 struct splash
 {

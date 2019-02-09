@@ -35,7 +35,7 @@ namespace vcl
     pReadAccess->SetPixel()...
 
     Bitmap aBitmap2;
-    Bitmap::ScopedWriteAccess pWriteAccess( bCond ? aBitmap2.AcquireWriteAccess() : 0, aBitmap2 );
+    BitmapScopedWriteAccess pWriteAccess( bCond ? aBitmap2.AcquireWriteAccess() : 0, aBitmap2 );
     if ( pWriteAccess )...
 
     @attention for practical reasons, ScopedBitmapAccess stores a
@@ -45,32 +45,59 @@ namespace vcl
  */
 template < class Access, class Bitmap, Access* (Bitmap::* Acquire)() > class ScopedBitmapAccess
 {
-    typedef ScopedBitmapAccess< Access, Bitmap, Acquire > self_type;
-    typedef bool (self_type::* unspecified_bool_type)() const;
-
 public:
     explicit ScopedBitmapAccess( Bitmap& rBitmap ) :
         mpAccess( nullptr ),
-        mrBitmap( rBitmap )
+        mpBitmap( &rBitmap )
     {
-        mpAccess = (mrBitmap.*Acquire)();
+        mpAccess = (mpBitmap->*Acquire)();
     }
 
     ScopedBitmapAccess( Access* pAccess, Bitmap& rBitmap ) :
         mpAccess( pAccess ),
-        mrBitmap( rBitmap )
+        mpBitmap( &rBitmap )
     {
     }
 
-    ~ScopedBitmapAccess()
+    ScopedBitmapAccess( ) :
+        mpAccess( nullptr ),
+        mpBitmap( nullptr )
     {
-        mrBitmap.ReleaseAccess( mpAccess );
+    }
+
+    // Move semantics
+    ScopedBitmapAccess &operator=(ScopedBitmapAccess&&other)
+    {
+        mpAccess=other.mpAccess;
+        mpBitmap=other.mpBitmap;
+        other.mpAccess = nullptr;
+        other.mpBitmap = nullptr;
+        return *this;
+     }
+
+    // Disable copy from lvalue.
+    ScopedBitmapAccess(const ScopedBitmapAccess&) = delete;
+    ScopedBitmapAccess &operator=(const ScopedBitmapAccess&) = delete;
+
+    ~ScopedBitmapAccess() COVERITY_NOEXCEPT_FALSE
+    {
+        if (mpAccess)
+           mpBitmap->ReleaseAccess( mpAccess );
+    }
+
+    void reset()
+    {
+        if (mpAccess)
+        {
+           mpBitmap->ReleaseAccess( mpAccess );
+           mpAccess = nullptr;
+        }
     }
 
     bool operator!() const { return !mpAccess; }
-    operator unspecified_bool_type() const
+    explicit operator bool() const
     {
-        return mpAccess ? &self_type::operator! : 0;
+        return mpAccess;
     }
 
     Access*         get() { return mpAccess; }
@@ -84,7 +111,7 @@ public:
 
 private:
     Access*     mpAccess;
-    Bitmap&     mrBitmap;
+    Bitmap*     mpBitmap;
 };
 
 }

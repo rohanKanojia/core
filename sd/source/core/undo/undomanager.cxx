@@ -21,35 +21,30 @@
 
 using namespace sd;
 
-UndoManager::UndoManager( sal_uInt16 nMaxUndoActionCount /* = 20 */ )
-  : SdrUndoManager( nMaxUndoActionCount )
-  , mpLinkedUndoManager(nullptr)
+UndoManager::UndoManager()
+  : mpLinkedUndoManager(nullptr)
 {
 }
 
-void UndoManager::EnterListAction(const OUString &rComment, const OUString& rRepeatComment, sal_uInt16 nId /* =0 */)
-{
-    if( !IsDoing() )
-    {
-        ClearLinkedRedoActions();
-        SdrUndoManager::EnterListAction( rComment, rRepeatComment, nId );
-    }
-}
-
-void UndoManager::AddUndoAction( SfxUndoAction *pAction, bool bTryMerg /* = sal_False */ )
+void UndoManager::EnterListAction(const OUString &rComment, const OUString& rRepeatComment, sal_uInt16 nId, ViewShellId nViewShellId)
 {
     if( !IsDoing() )
     {
         ClearLinkedRedoActions();
-        SdrUndoManager::AddUndoAction( pAction, bTryMerg );
-    }
-    else
-    {
-        delete pAction;
+        SdrUndoManager::EnterListAction( rComment, rRepeatComment, nId, nViewShellId );
     }
 }
 
-void UndoManager::SetLinkedUndoManager (::svl::IUndoManager* pLinkedUndoManager)
+void UndoManager::AddUndoAction( std::unique_ptr<SfxUndoAction> pAction, bool bTryMerg /* = sal_False */ )
+{
+    if( !IsDoing() )
+    {
+        ClearLinkedRedoActions();
+        SdrUndoManager::AddUndoAction( std::move(pAction), bTryMerg );
+    }
+}
+
+void UndoManager::SetLinkedUndoManager (SfxUndoManager* pLinkedUndoManager)
 {
     mpLinkedUndoManager = pLinkedUndoManager;
 }

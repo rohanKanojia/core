@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rechead.hxx"
-#include "scerrors.hxx"
+#include <rechead.hxx>
+#include <scerrors.hxx>
 
 #include <osl/diagnose.h>
 
@@ -37,20 +37,20 @@ ScMultipleReadHeader::ScMultipleReadHeader(SvStream& rNewStream) :
     if (nID != SCID_SIZES)
     {
         OSL_FAIL("SCID_SIZES not found");
-        if ( rStream.GetError() == SVSTREAM_OK )
+        if ( rStream.GetError() == ERRCODE_NONE )
             rStream.SetError( SVSTREAM_FILEFORMAT_ERROR );
 
         //  everything to 0, so  BytesLeft() aborts at least
-        pBuf = nullptr; pMemStream = nullptr;
+        pBuf = nullptr; pMemStream.reset();
         nEntryEnd = nDataPos;
     }
     else
     {
         sal_uInt32 nSizeTableLen;
         rStream.ReadUInt32( nSizeTableLen );
-        pBuf = new sal_uInt8[nSizeTableLen];
-        rStream.Read( pBuf, nSizeTableLen );
-        pMemStream = new SvMemoryStream( pBuf, nSizeTableLen, StreamMode::READ );
+        pBuf.reset( new sal_uInt8[nSizeTableLen] );
+        rStream.ReadBytes( pBuf.get(), nSizeTableLen );
+        pMemStream.reset(new SvMemoryStream( pBuf.get(), nSizeTableLen, StreamMode::READ ));
     }
 
     nEndPos = rStream.Tell();
@@ -62,11 +62,10 @@ ScMultipleReadHeader::~ScMultipleReadHeader()
     if ( pMemStream && pMemStream->Tell() != pMemStream->GetEndOfData() )
     {
         OSL_FAIL( "Sizes not fully read" );
-        if ( rStream.GetError() == SVSTREAM_OK )
+        if ( rStream.GetError() == ERRCODE_NONE )
             rStream.SetError( SCWARN_IMPORT_INFOLOST );
     }
-    delete pMemStream;
-    delete[] pBuf;
+    pMemStream.reset();
 
     rStream.Seek(nEndPos);
 }
@@ -77,7 +76,7 @@ void ScMultipleReadHeader::EndEntry()
     OSL_ENSURE( nPos <= nEntryEnd, "read too much" );
     if ( nPos != nEntryEnd )
     {
-        if ( rStream.GetError() == SVSTREAM_OK )
+        if ( rStream.GetError() == ERRCODE_NONE )
             rStream.SetError( SCWARN_IMPORT_INFOLOST );
         rStream.Seek( nEntryEnd );          // ignore the rest
     }
@@ -122,7 +121,7 @@ ScMultipleWriteHeader::~ScMultipleWriteHeader()
 
     rStream.WriteUInt16( SCID_SIZES );
     rStream.WriteUInt32( aMemStream.Tell() );
-    rStream.Write( aMemStream.GetData(), aMemStream.Tell() );
+    rStream.WriteBytes( aMemStream.GetData(), aMemStream.Tell() );
 
     if ( nDataEnd - nDataPos != nDataSize )                 // matched default ?
     {

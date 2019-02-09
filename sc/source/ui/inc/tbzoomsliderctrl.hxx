@@ -22,16 +22,17 @@
 #include <vcl/window.hxx>
 #include <svl/poolitem.hxx>
 #include <sfx2/tbxctrl.hxx>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <svx/zoomslideritem.hxx>
+
+namespace com { namespace sun { namespace star { namespace frame { class XDispatchProvider; } } } }
+
+class SvxZoomSliderItem;
 
 class ScZoomSliderControl : public SfxToolBoxControl
 {
 public:
     SFX_DECL_TOOLBOX_CONTROL();
     ScZoomSliderControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~ScZoomSliderControl();
+    virtual ~ScZoomSliderControl() override;
 
     virtual void StateChanged( sal_uInt16 nSID, SfxItemState eState, const SfxPoolItem* pState ) override;
     virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window *pParent ) override;
@@ -41,25 +42,25 @@ class ScZoomSliderWnd: public vcl::Window
 {
 private:
     struct ScZoomSliderWnd_Impl;
-    ScZoomSliderWnd_Impl* mpImpl;
-    Size aLogicalSize;
+    std::unique_ptr<ScZoomSliderWnd_Impl> mpImpl;
+    Size const aLogicalSize;
     css::uno::Reference<css::frame::XDispatchProvider> m_xDispatchProvider;
 
     sal_uInt16 Offset2Zoom(long nOffset) const;
     long Zoom2Offset(sal_uInt16 nZoom) const;
-    void DoPaint(vcl::RenderContext& rRenderContext, const Rectangle& rRect);
+    void DoPaint(vcl::RenderContext& rRenderContext);
 
 public:
     ScZoomSliderWnd(vcl::Window* pParent, const css::uno::Reference<css::frame::XDispatchProvider >& rDispatchProvider,
                     sal_uInt16 nCurrentZoom);
-    virtual ~ScZoomSliderWnd();
+    virtual ~ScZoomSliderWnd() override;
     virtual void dispose() override;
     void UpdateFromItem( const SvxZoomSliderItem* pZoomSliderItem );
 
 protected:
     virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void MouseMove( const MouseEvent& rMEvt ) override;
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
 };
 #endif
 

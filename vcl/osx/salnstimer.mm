@@ -19,31 +19,22 @@
 
 #include <sal/config.h>
 
-#include "osx/saltimer.h"
-#include "osx/salnstimer.h"
-#include "osx/salinst.h"
-#include "osx/saldata.hxx"
-#include "svdata.hxx"
+#include <osx/saltimer.h>
+#include <osx/salnstimer.h>
+#include <osx/salinst.h>
+#include <osx/saldata.hxx>
+#include <svdata.hxx>
 
 @implementation TimerCallbackCaller
--(void)timerElapsed:(NSTimer*)pTimer
-{
-    (void)pTimer;
-    if( AquaSalTimer::bDispatchTimer )
-    {
-        SolarMutexGuard aGuard;
-        ImplSVData* pSVData = ImplGetSVData();
-        if( pSVData->mpSalTimer )
-        {
-            bool idle = true; // TODO
-            pSVData->mpSalTimer->CallCallback( idle );
 
-            // NSTimer does not end nextEventMatchingMask of NSApplication
-            // so we need to wakeup a waiting Yield to inform it something happened
-            GetSalData()->mpFirstInstance->wakeupYield();
-        }
-    }
+-(void)timerElapsed:(NSTimer*)pNSTimer
+{
+    (void) pNSTimer;
+    AquaSalTimer *pTimer = static_cast<AquaSalTimer*>( ImplGetSVData()->maSchedCtx.mpSalTimer );
+    if (pTimer)
+        pTimer->handleTimerElapsed();
 }
+
 @end
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

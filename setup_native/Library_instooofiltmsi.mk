@@ -29,9 +29,10 @@ $(eval $(call gb_Library_add_exception_objects,instooofiltmsi,\
 $(eval $(call gb_Library_use_system_win32_libs,instooofiltmsi,\
 	libcmt \
 	libcpmt \
-	$(if $(filter-out 120,$(VCVER)),libucrt) \
-	$(if $(filter-out 120,$(VCVER)),libvcruntime) \
+	libucrt \
+	libvcruntime \
 	kernel32 \
+	advapi32 \
 ))
 
 # vim: set noet sw=4 ts=4:

@@ -23,8 +23,8 @@
 #include <xmloff/xmlexppr.hxx>
 #include "txtdrope.hxx"
 #include <xmloff/xmltabe.hxx>
-#include "XMLTextColumnsExport.hxx"
-#include "XMLBackgroundImageExport.hxx"
+#include <XMLTextColumnsExport.hxx>
+#include <XMLBackgroundImageExport.hxx>
 
 class SvXMLExport;
 class XMLTextExportPropertySetMapper: public SvXMLExportPropertyMapper
@@ -47,7 +47,7 @@ class XMLTextExportPropertySetMapper: public SvXMLExportPropertyMapper
                 XMLPropertyState* pCharPropHeightState,
                 XMLPropertyState* pCharDiffHeightState );
 
-protected:
+private:
 //  SvXMLUnitConverter& mrUnitConverter;
 //  const Reference< xml::sax::XDocumentHandler > & mrHandler;
     XMLTextDropCapExport maDropCapExport;
@@ -67,22 +67,22 @@ public:
     XMLTextExportPropertySetMapper(
             const rtl::Reference< XMLPropertySetMapper >& rMapper,
             SvXMLExport& rExt );
-    virtual ~XMLTextExportPropertySetMapper();
+    virtual ~XMLTextExportPropertySetMapper() override;
 
     virtual void handleElementItem(
         SvXMLExport& rExport,
         const XMLPropertyState& rProperty,
         SvXmlExportFlags nFlags,
-        const ::std::vector< XMLPropertyState > *pProperties = nullptr,
-        sal_uInt32 nIdx = 0 ) const override;
+        const ::std::vector< XMLPropertyState > *pProperties,
+        sal_uInt32 nIdx ) const override;
 
     virtual void handleSpecialItem(
         SvXMLAttributeList& rAttrList,
         const XMLPropertyState& rProperty,
         const SvXMLUnitConverter& rUnitConverter,
         const SvXMLNamespaceMap& rNamespaceMap,
-        const ::std::vector< XMLPropertyState > *pProperties = nullptr,
-        sal_uInt32 nIdx = 0 ) const override;
+        const ::std::vector< XMLPropertyState > *pProperties,
+        sal_uInt32 nIdx ) const override;
 };
 
 

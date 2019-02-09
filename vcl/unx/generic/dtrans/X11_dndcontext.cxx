@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <X11_dndcontext.hxx>
-#include <X11_selection.hxx>
+#include "X11_dndcontext.hxx"
+#include "X11_selection.hxx"
 
 using namespace cppu;
 using namespace x11;
@@ -29,12 +29,9 @@ using namespace x11;
 
 DropTargetDropContext::DropTargetDropContext(
     ::Window aDropWindow,
-    Time aTimestamp,
     SelectionManager& rManager ) :
         m_aDropWindow( aDropWindow ),
-        m_nTimestamp( aTimestamp ),
-        m_rManager( rManager ),
-        m_xManagerRef( static_cast< OWeakObject* >(&rManager) )
+        m_xManager( &rManager )
 {
 }
 
@@ -42,19 +39,19 @@ DropTargetDropContext::~DropTargetDropContext()
 {
 }
 
-void DropTargetDropContext::acceptDrop( sal_Int8 dragOperation ) throw(std::exception)
+void DropTargetDropContext::acceptDrop( sal_Int8 dragOperation )
 {
-    m_rManager.accept( dragOperation, m_aDropWindow, m_nTimestamp );
+    m_xManager->accept( dragOperation, m_aDropWindow );
 }
 
-void DropTargetDropContext::rejectDrop() throw(std::exception)
+void DropTargetDropContext::rejectDrop()
 {
-    m_rManager.reject( m_aDropWindow, m_nTimestamp );
+    m_xManager->reject( m_aDropWindow );
 }
 
-void DropTargetDropContext::dropComplete( sal_Bool success ) throw(std::exception)
+void DropTargetDropContext::dropComplete( sal_Bool success )
 {
-    m_rManager.dropComplete( success, m_aDropWindow, m_nTimestamp );
+    m_xManager->dropComplete( success, m_aDropWindow );
 }
 
 /*
@@ -63,12 +60,9 @@ void DropTargetDropContext::dropComplete( sal_Bool success ) throw(std::exceptio
 
 DropTargetDragContext::DropTargetDragContext(
     ::Window aDropWindow,
-    Time aTimestamp,
     SelectionManager& rManager ) :
         m_aDropWindow( aDropWindow ),
-        m_nTimestamp( aTimestamp ),
-        m_rManager( rManager ),
-        m_xManagerRef( static_cast< OWeakObject* >(&rManager) )
+        m_xManager( &rManager )
 {
 }
 
@@ -76,14 +70,14 @@ DropTargetDragContext::~DropTargetDragContext()
 {
 }
 
-void DropTargetDragContext::acceptDrag( sal_Int8 dragOperation ) throw(std::exception)
+void DropTargetDragContext::acceptDrag( sal_Int8 dragOperation )
 {
-    m_rManager.accept( dragOperation, m_aDropWindow, m_nTimestamp );
+    m_xManager->accept( dragOperation, m_aDropWindow );
 }
 
-void DropTargetDragContext::rejectDrag() throw(std::exception)
+void DropTargetDragContext::rejectDrag()
 {
-    m_rManager.reject( m_aDropWindow, m_nTimestamp );
+    m_xManager->reject( m_aDropWindow );
 }
 
 /*
@@ -92,12 +86,9 @@ void DropTargetDragContext::rejectDrag() throw(std::exception)
 
 DragSourceContext::DragSourceContext(
     ::Window aDropWindow,
-    Time aTimestamp,
     SelectionManager& rManager ) :
         m_aDropWindow( aDropWindow ),
-        m_nTimestamp( aTimestamp ),
-        m_rManager( rManager ),
-        m_xManagerRef( static_cast< OWeakObject* >(&rManager) )
+        m_xManager( &rManager )
 {
 }
 
@@ -105,23 +96,23 @@ DragSourceContext::~DragSourceContext()
 {
 }
 
-sal_Int32 DragSourceContext::getCurrentCursor() throw(std::exception)
+sal_Int32 DragSourceContext::getCurrentCursor()
 {
-    return m_rManager.getCurrentCursor();
+    return m_xManager->getCurrentCursor();
 }
 
-void DragSourceContext::setCursor( sal_Int32 cursorId ) throw(std::exception)
+void DragSourceContext::setCursor( sal_Int32 cursorId )
 {
-    m_rManager.setCursor( cursorId, m_aDropWindow, m_nTimestamp );
+    m_xManager->setCursor( cursorId, m_aDropWindow );
 }
 
-void DragSourceContext::setImage( sal_Int32 ) throw(std::exception)
+void DragSourceContext::setImage( sal_Int32 )
 {
 }
 
-void DragSourceContext::transferablesFlavorsChanged() throw(std::exception)
+void DragSourceContext::transferablesFlavorsChanged()
 {
-    m_rManager.transferablesFlavorsChanged();
+    m_xManager->transferablesFlavorsChanged();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

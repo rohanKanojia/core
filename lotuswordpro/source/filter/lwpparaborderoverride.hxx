@@ -60,17 +60,17 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPPARABORDEROVERRIDE_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPPARABORDEROVERRIDE_HXX
 
-#include "lwpoverride.hxx"
+#include <lwpoverride.hxx>
 
 class LwpBorderStuff;
 class LwpShadow;
 class LwpMargins;
 
-class LwpParaBorderOverride : public LwpOverride
+class LwpParaBorderOverride final : public LwpOverride
 {
 public:
     LwpParaBorderOverride();
-    virtual ~LwpParaBorderOverride();
+    virtual ~LwpParaBorderOverride() override;
 
     virtual LwpParaBorderOverride* clone() const override;
 
@@ -81,12 +81,11 @@ public:
         PB_MARGINWIDTH  = 2,        /* Border extends to margins */
         PB_CUSTOMWIDTH  = 3         /* Border width is specified explicitly */
     };
-public:
     virtual void Read(LwpObjectStream *pStrm) override;
 
-    LwpShadow*  GetShadow(){ return m_pShadow; }
-    LwpBorderStuff* GetBorderStuff(){ return m_pBorderStuff; }
-    LwpMargins* GetMargins() { return m_pMargins; };
+    LwpShadow*  GetShadow(){ return m_pShadow.get(); }
+    LwpBorderStuff* GetBorderStuff(){ return m_pBorderStuff.get(); }
+    LwpMargins* GetMargins() { return m_pMargins.get(); };
 
     void Override(LwpParaBorderOverride* pOther);
 
@@ -104,10 +103,10 @@ public:
     inline bool IsRightWidthOverridden();
     inline bool IsBetweenMarginOverridden();
 
-    void OverrideBorderStuff(LwpBorderStuff* pBorderStuff);
-    void OverrideBetweenStuff(LwpBorderStuff* pBorderStuff);
-    void OverrideShadow(LwpShadow* pShadow);
-    void OverrideMargins(LwpMargins* pMargins);
+    void OverrideBorderStuff(LwpBorderStuff const * pBorderStuff);
+    void OverrideBetweenStuff(LwpBorderStuff const * pBorderStuff);
+    void OverrideShadow(LwpShadow const * pShadow);
+    void OverrideMargins(LwpMargins const * pMargins);
     void OverrideAboveType(BorderWidthType eNewType);
     void OverrideBelowType(BorderWidthType eNewType);
     void OverrideRightType(BorderWidthType eNewType);
@@ -134,13 +133,10 @@ public:
 
     friend class LwpParaBorderPiece;
 
-protected:
-    LwpParaBorderOverride(LwpParaBorderOverride const& rOther);
-
 private:
+    LwpParaBorderOverride(LwpParaBorderOverride const& rOther);
     LwpParaBorderOverride& operator=(LwpParaBorderOverride const& rOther) = delete;
 
-protected:
     enum
     {
         PBO_STUFF           = 0x0001,
@@ -158,11 +154,10 @@ protected:
         PBO_RIGHT           = 0x1000
     };
 
-private:
-    LwpBorderStuff      *m_pBorderStuff;
-    LwpBorderStuff      *m_pBetweenStuff;
-    LwpShadow           *m_pShadow;
-    LwpMargins          *m_pMargins;
+    std::unique_ptr<LwpBorderStuff> m_pBorderStuff;
+    std::unique_ptr<LwpBorderStuff> m_pBetweenStuff;
+    std::unique_ptr<LwpShadow>      m_pShadow;
+    std::unique_ptr<LwpMargins>     m_pMargins;
 
     BorderWidthType     m_eAboveType;
     BorderWidthType     m_eBelowType;

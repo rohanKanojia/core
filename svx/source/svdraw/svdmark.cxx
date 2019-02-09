@@ -17,24 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
+#include <osl/time.h>
 #include <svx/svdmark.hxx>
 #include <svx/svdetc.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdpage.hxx>
-#include "svx/svditer.hxx"
+#include <svx/svditer.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdopath.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/svdorect.hxx>
-#include "svx/svdstr.hrc"
-#include "svdglob.hxx"
+#include <svx/strings.hrc>
+#include <svx/dialmgr.hxx>
 
 
 #include <svx/obj3d.hxx>
 #include <svx/scene3d.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <svx/svdoedge.hxx>
+
+#include <cassert>
 
 void SdrMark::setTime()
 {
@@ -46,9 +50,6 @@ void SdrMark::setTime()
 SdrMark::SdrMark(SdrObject* pNewObj, SdrPageView* pNewPageView)
 :   mpSelectedSdrObject(pNewObj),
     mpPageView(pNewPageView),
-    mpPoints(nullptr),
-    mpLines(nullptr),
-    mpGluePoints(nullptr),
     mbCon1(false),
     mbCon2(false),
     mnUser(0)
@@ -65,9 +66,6 @@ SdrMark::SdrMark(const SdrMark& rMark)
     mnTimeStamp(0),
     mpSelectedSdrObject(nullptr),
     mpPageView(nullptr),
-    mpPoints(nullptr),
-    mpLines(nullptr),
-    mpGluePoints(nullptr),
     mbCon1(false),
     mbCon2(false),
     mnUser(0)
@@ -77,24 +75,9 @@ SdrMark::SdrMark(const SdrMark& rMark)
 
 SdrMark::~SdrMark()
 {
-    if(mpSelectedSdrObject)
+    if (mpSelectedSdrObject)
     {
         mpSelectedSdrObject->RemoveObjectUser( *this );
-    }
-
-    if(mpPoints)
-    {
-        delete mpPoints;
-    }
-
-    if(mpLines)
-    {
-        delete mpLines;
-    }
-
-    if(mpGluePoints)
-    {
-        delete mpGluePoints;
     }
 }
 
@@ -124,90 +107,32 @@ void SdrMark::SetMarkedSdrObj(SdrObject* pNewObj)
 SdrMark& SdrMark::operator=(const SdrMark& rMark)
 {
     SetMarkedSdrObj(rMark.mpSelectedSdrObject);
+
     mnTimeStamp = rMark.mnTimeStamp;
     mpPageView = rMark.mpPageView;
     mbCon1 = rMark.mbCon1;
     mbCon2 = rMark.mbCon2;
     mnUser = rMark.mnUser;
-
-    if(!rMark.mpPoints)
-    {
-        if(mpPoints)
-        {
-            delete mpPoints;
-            mpPoints = nullptr;
-        }
-    }
-    else
-    {
-        if(!mpPoints)
-        {
-            mpPoints = new SdrUShortCont(*rMark.mpPoints);
-        }
-        else
-        {
-            *mpPoints = *rMark.mpPoints;
-        }
-    }
-
-    if(!rMark.mpLines)
-    {
-        if(mpLines)
-        {
-            delete mpLines;
-            mpLines = nullptr;
-        }
-    }
-    else
-    {
-        if(!mpLines)
-        {
-            mpLines = new SdrUShortCont(*rMark.mpLines);
-        }
-        else
-        {
-            *mpLines = *rMark.mpLines;
-        }
-    }
-
-    if(!rMark.mpGluePoints)
-    {
-        if(mpGluePoints)
-        {
-            delete mpGluePoints;
-            mpGluePoints = nullptr;
-        }
-    }
-    else
-    {
-        if(!mpGluePoints)
-        {
-            mpGluePoints = new SdrUShortCont(*rMark.mpGluePoints);
-        }
-        else
-        {
-            *mpGluePoints = *rMark.mpGluePoints;
-        }
-    }
+    maPoints = rMark.maPoints;
+    maGluePoints = rMark.maGluePoints;
 
     return *this;
 }
 
-
-static bool ImpSdrMarkListSorter(SdrMark* const& lhs, SdrMark* const& rhs)
+static bool ImpSdrMarkListSorter(std::unique_ptr<SdrMark> const& lhs, std::unique_ptr<SdrMark> const& rhs)
 {
     SdrObject* pObj1 = lhs->GetMarkedSdrObj();
     SdrObject* pObj2 = rhs->GetMarkedSdrObj();
-    SdrObjList* pOL1 = (pObj1) ? pObj1->GetObjList() : nullptr;
-    SdrObjList* pOL2 = (pObj2) ? pObj2->GetObjList() : nullptr;
+    SdrObjList* pOL1 = pObj1 ? pObj1->getParentSdrObjListFromSdrObject() : nullptr;
+    SdrObjList* pOL2 = pObj2 ? pObj2->getParentSdrObjListFromSdrObject() : nullptr;
 
     if (pOL1 == pOL2)
     {
         // AF: Note that I reverted a change from sal_uInt32 to sal_uLong (made
         // for 64bit compliance, #i78198#) because internally in SdrObject
         // both nOrdNum and mnNavigationPosition are stored as sal_uInt32.
-        sal_uInt32 nObjOrd1((pObj1) ? pObj1->GetNavigationPosition() : 0);
-        sal_uInt32 nObjOrd2((pObj2) ? pObj2->GetNavigationPosition() : 0);
+        sal_uInt32 nObjOrd1(pObj1 ? pObj1->GetNavigationPosition() : 0);
+        sal_uInt32 nObjOrd2(pObj2 ? pObj2->GetNavigationPosition() : 0);
 
         return nObjOrd1 < nObjOrd2;
     }
@@ -236,17 +161,9 @@ void SdrMarkList::ImpForceSort()
         // remove invalid
         if(nCount > 0 )
         {
-            for(std::vector<SdrMark*>::iterator it = maList.begin(); it != maList.end(); )
-            {
-                SdrMark* pAkt = *it;
-                if(pAkt->GetMarkedSdrObj() == nullptr)
-                {
-                    it = maList.erase( it );
-                    delete pAkt;
-                }
-                else
-                    ++it;
-            }
+            maList.erase(std::remove_if(maList.begin(), maList.end(),
+                [](std::unique_ptr<SdrMark>& rItem) { return rItem.get()->GetMarkedSdrObj() == nullptr; }),
+                maList.end());
             nCount = maList.size();
         }
 
@@ -257,27 +174,27 @@ void SdrMarkList::ImpForceSort()
             // remove duplicates
             if(maList.size() > 1)
             {
-                SdrMark* pAkt = maList.back();
-                for (size_t i = maList.size() - 2; i; --i)
+                SdrMark* pCurrent = maList.back().get();
+                for (size_t count = maList.size() - 1; count; --count)
                 {
-                    SdrMark* pCmp = maList[i];
-                    if(pAkt->GetMarkedSdrObj() == pCmp->GetMarkedSdrObj() && pAkt->GetMarkedSdrObj())
+                    size_t i = count - 1;
+                    SdrMark* pCmp = maList[i].get();
+                    assert(pCurrent->GetMarkedSdrObj());
+                    if(pCurrent->GetMarkedSdrObj() == pCmp->GetMarkedSdrObj())
                     {
                         // Con1/Con2 Merging
                         if(pCmp->IsCon1())
-                            pAkt->SetCon1(true);
+                            pCurrent->SetCon1(true);
 
                         if(pCmp->IsCon2())
-                            pAkt->SetCon2(true);
+                            pCurrent->SetCon2(true);
 
                         // delete pCmp
                         maList.erase(maList.begin() + i);
-
-                        delete pCmp;
                     }
                     else
                     {
-                        pAkt = pCmp;
+                        pCurrent = pCmp;
                     }
                 }
             }
@@ -287,39 +204,36 @@ void SdrMarkList::ImpForceSort()
 
 void SdrMarkList::Clear()
 {
-    for(size_t i = 0; i < GetMarkCount(); ++i)
-    {
-        SdrMark* pMark = GetMark(i);
-        delete pMark;
-    }
-
     maList.clear();
+    mbSorted = true; //we're empty, so can be considered sorted
     SetNameDirty();
 }
 
-void SdrMarkList::operator=(const SdrMarkList& rLst)
+SdrMarkList& SdrMarkList::operator=(const SdrMarkList& rLst)
 {
-    Clear();
-
-    for(size_t i = 0; i < rLst.GetMarkCount(); ++i)
+    if (this != &rLst)
     {
-        SdrMark* pMark = rLst.GetMark(i);
-        SdrMark* pNeuMark = new SdrMark(*pMark);
-        maList.push_back(pNeuMark);
-    }
+        Clear();
 
-    maMarkName = rLst.maMarkName;
-    mbNameOk = rLst.mbNameOk;
-    maPointName = rLst.maPointName;
-    mbPointNameOk = rLst.mbPointNameOk;
-    maGluePointName = rLst.maGluePointName;
-    mbGluePointNameOk = rLst.mbGluePointNameOk;
-    mbSorted = rLst.mbSorted;
+        for(size_t i = 0; i < rLst.GetMarkCount(); ++i)
+        {
+            SdrMark* pMark = rLst.GetMark(i);
+            maList.emplace_back(new SdrMark(*pMark));
+        }
+
+        maMarkName = rLst.maMarkName;
+        mbNameOk = rLst.mbNameOk;
+        maPointName = rLst.maPointName;
+        mbPointNameOk = rLst.mbPointNameOk;
+        maGluePointName = rLst.maGluePointName;
+        mbSorted = rLst.mbSorted;
+    }
+    return *this;
 }
 
 SdrMark* SdrMarkList::GetMark(size_t nNum) const
 {
-    return (nNum < maList.size()) ? maList[nNum] : nullptr;
+    return (nNum < maList.size()) ? maList[nNum].get() : nullptr;
 }
 
 size_t SdrMarkList::FindObject(const SdrObject* pObj) const
@@ -333,7 +247,7 @@ size_t SdrMarkList::FindObject(const SdrObject* pObj) const
     // is not inserted in a object list.
     // Since this may be by purpose and necessary somewhere else i decided that it is
     // less dangerous to change this method then changing SdrObject::GetOrdNum().
-    if(pObj && !maList.empty())
+    if(pObj)
     {
         for(size_t a = 0; a < maList.size(); ++a)
         {
@@ -357,15 +271,15 @@ void SdrMarkList::InsertEntry(const SdrMark& rMark, bool bChkSort)
         if(!bChkSort)
             mbSorted = false;
 
-        maList.push_back(new SdrMark(rMark));
+        maList.emplace_back(new SdrMark(rMark));
     }
     else
     {
         SdrMark* pLast = GetMark(nCount - 1);
         const SdrObject* pLastObj = pLast->GetMarkedSdrObj();
-        const SdrObject* pNeuObj = rMark.GetMarkedSdrObj();
+        const SdrObject* pNewObj = rMark.GetMarkedSdrObj();
 
-        if(pLastObj == pNeuObj)
+        if(pLastObj == pNewObj)
         {
             // This one already exists.
             // Con1/Con2 Merging
@@ -377,19 +291,18 @@ void SdrMarkList::InsertEntry(const SdrMark& rMark, bool bChkSort)
         }
         else
         {
-            SdrMark* pKopie = new SdrMark(rMark);
-            maList.push_back(pKopie);
+            maList.emplace_back(new SdrMark(rMark));
 
             // now check if the sort is ok
-            const SdrObjList* pLastOL = pLastObj!=nullptr ? pLastObj->GetObjList() : nullptr;
-            const SdrObjList* pNeuOL = pNeuObj !=nullptr ? pNeuObj ->GetObjList() : nullptr;
+            const SdrObjList* pLastOL = pLastObj!=nullptr ? pLastObj->getParentSdrObjListFromSdrObject() : nullptr;
+            const SdrObjList* pNewOL = pNewObj !=nullptr ? pNewObj->getParentSdrObjListFromSdrObject() : nullptr;
 
-            if(pLastOL == pNeuOL)
+            if(pLastOL == pNewOL)
             {
                 const sal_uLong nLastNum(pLastObj!=nullptr ? pLastObj->GetOrdNum() : 0);
-                const sal_uLong nNeuNum(pNeuObj !=nullptr ? pNeuObj ->GetOrdNum() : 0);
+                const sal_uLong nNewNum(pNewObj !=nullptr ? pNewObj ->GetOrdNum() : 0);
 
-                if(nNeuNum < nLastNum)
+                if(nNewNum < nLastNum)
                 {
                     // at some point, we have to sort
                     mbSorted = false;
@@ -402,8 +315,6 @@ void SdrMarkList::InsertEntry(const SdrMark& rMark, bool bChkSort)
             }
         }
     }
-
-    return;
 }
 
 void SdrMarkList::DeleteMark(size_t nNum)
@@ -414,7 +325,8 @@ void SdrMarkList::DeleteMark(size_t nNum)
     if(pMark)
     {
         maList.erase(maList.begin() + nNum);
-        delete pMark;
+        if (maList.empty())
+            mbSorted = true; //we're empty, so can be considered sorted
         SetNameDirty();
     }
 }
@@ -426,10 +338,8 @@ void SdrMarkList::ReplaceMark(const SdrMark& rNewMark, size_t nNum)
 
     if(pMark)
     {
-        delete pMark;
         SetNameDirty();
-        SdrMark* pKopie = new SdrMark(rNewMark);
-        maList[nNum] = pKopie;
+        maList[nNum].reset(new SdrMark(rNewMark));
         mbSorted = false;
     }
 }
@@ -448,7 +358,7 @@ void SdrMarkList::Merge(const SdrMarkList& rSrcList, bool bReverse)
     {
         for(size_t i = 0; i < nCount; ++i)
         {
-            SdrMark* pM = rSrcList.maList[i];
+            SdrMark* pM = rSrcList.maList[i].get();
             InsertEntry(*pM);
         }
     }
@@ -457,7 +367,7 @@ void SdrMarkList::Merge(const SdrMarkList& rSrcList, bool bReverse)
         for(size_t i = nCount; i > 0;)
         {
             --i;
-            SdrMark* pM = rSrcList.maList[i];
+            SdrMark* pM = rSrcList.maList[i].get();
             InsertEntry(*pM);
         }
     }
@@ -467,14 +377,13 @@ bool SdrMarkList::DeletePageView(const SdrPageView& rPV)
 {
     bool bChgd(false);
 
-    for(std::vector<SdrMark*>::iterator it = maList.begin(); it != maList.end(); )
+    for(auto it = maList.begin(); it != maList.end(); )
     {
-        SdrMark* pMark = *it;
+        SdrMark* pMark = it->get();
 
         if(pMark->GetPageView()==&rPV)
         {
             it = maList.erase(it);
-            delete pMark;
             SetNameDirty();
             bChgd = true;
         }
@@ -499,8 +408,7 @@ bool SdrMarkList::InsertPageView(const SdrPageView& rPV)
 
         if(bDoIt)
         {
-            SdrMark* pM = new SdrMark(pObj, const_cast<SdrPageView*>(&rPV));
-            maList.push_back(pM);
+            maList.emplace_back(new SdrMark(pObj, const_cast<SdrPageView*>(&rPV)));
             SetNameDirty();
             bChgd = true;
         }
@@ -513,7 +421,7 @@ const OUString& SdrMarkList::GetMarkDescription() const
 {
     const size_t nCount(GetMarkCount());
 
-    if(mbNameOk && 1L == nCount)
+    if(mbNameOk && 1 == nCount)
     {
         // if it's a single selection, cache only text frame
         const SdrObject* pObj = GetMark(0)->GetMarkedSdrObj();
@@ -532,9 +440,9 @@ const OUString& SdrMarkList::GetMarkDescription() const
 
         if(!nCount)
         {
-            const_cast<SdrMarkList*>(this)->maMarkName = ImpGetResStr(STR_ObjNameNoObj);
+            const_cast<SdrMarkList*>(this)->maMarkName = SvxResId(STR_ObjNameNoObj);
         }
-        else if(1L == nCount)
+        else if(1 == nCount)
         {
             if(pMark->GetMarkedSdrObj())
             {
@@ -557,7 +465,7 @@ const OUString& SdrMarkList::GetMarkDescription() const
 
                 if(!bEq)
                 {
-                    aNam = ImpGetResStr(STR_ObjNamePlural);
+                    aNam = SvxResId(STR_ObjNamePlural);
                 }
             }
 
@@ -573,38 +481,37 @@ const OUString& SdrMarkList::GetMarkDescription() const
 
 const OUString& SdrMarkList::GetPointMarkDescription(bool bGlue) const
 {
-    bool& rNameOk = (bool&)(bGlue ? mbGluePointNameOk : mbPointNameOk);
+    bool& rNameOk = const_cast<bool&>(bGlue ? mbGluePointNameOk : mbPointNameOk);
     OUString& rName = const_cast<OUString&>(bGlue ? maGluePointName : maPointName);
     const size_t nMarkCount(GetMarkCount());
-    size_t nMarkPtAnz(0);
-    size_t nMarkPtObjAnz(0);
+    size_t nMarkPtCnt(0);
+    size_t nMarkPtObjCnt(0);
     size_t n1stMarkNum(SAL_MAX_SIZE);
 
     for(size_t nMarkNum = 0; nMarkNum < nMarkCount; ++nMarkNum)
     {
         const SdrMark* pMark = GetMark(nMarkNum);
-        const SdrUShortCont* pPts = bGlue ? pMark->GetMarkedGluePoints() : pMark->GetMarkedPoints();
-        const size_t nCount(pPts ? pPts->size() : 0);
+        const SdrUShortCont& rPts = bGlue ? pMark->GetMarkedGluePoints() : pMark->GetMarkedPoints();
 
-        if(nCount)
+        if (!rPts.empty())
         {
             if(n1stMarkNum == SAL_MAX_SIZE)
             {
                 n1stMarkNum = nMarkNum;
             }
 
-            nMarkPtAnz += nCount;
-            nMarkPtObjAnz++;
+            nMarkPtCnt += rPts.size();
+            nMarkPtObjCnt++;
         }
 
-        if(nMarkPtObjAnz > 1 && rNameOk)
+        if(nMarkPtObjCnt > 1 && rNameOk)
         {
             // preliminary decision
             return rName;
         }
     }
 
-    if(rNameOk && 1 == nMarkPtObjAnz)
+    if(rNameOk && 1 == nMarkPtObjCnt)
     {
         // if it's a single selection, cache only text frame
         const SdrObject* pObj = GetMark(0)->GetMarkedSdrObj();
@@ -616,7 +523,7 @@ const OUString& SdrMarkList::GetPointMarkDescription(bool bGlue) const
         }
     }
 
-    if(!nMarkPtObjAnz)
+    if(!nMarkPtObjCnt)
     {
         rName.clear();
         rNameOk = true;
@@ -626,7 +533,7 @@ const OUString& SdrMarkList::GetPointMarkDescription(bool bGlue) const
         const SdrMark* pMark = GetMark(n1stMarkNum);
         OUString aNam;
 
-        if(1L == nMarkPtObjAnz)
+        if(1 == nMarkPtObjCnt)
         {
             if(pMark->GetMarkedSdrObj())
             {
@@ -645,9 +552,9 @@ const OUString& SdrMarkList::GetPointMarkDescription(bool bGlue) const
             for(size_t i = n1stMarkNum + 1; i < GetMarkCount() && bEq; ++i)
             {
                 const SdrMark* pMark2 = GetMark(i);
-                const SdrUShortCont* pPts = bGlue ? pMark2->GetMarkedGluePoints() : pMark2->GetMarkedPoints();
+                const SdrUShortCont& rPts = bGlue ? pMark2->GetMarkedGluePoints() : pMark2->GetMarkedPoints();
 
-                if(pPts && !pPts->empty() && pMark2->GetMarkedSdrObj())
+                if (!rPts.empty() && pMark2->GetMarkedSdrObj())
                 {
                     OUString aStr1(pMark2->GetMarkedSdrObj()->TakeObjNamePlural());
                     bEq = aNam == aStr1;
@@ -656,22 +563,22 @@ const OUString& SdrMarkList::GetPointMarkDescription(bool bGlue) const
 
             if(!bEq)
             {
-                aNam = ImpGetResStr(STR_ObjNamePlural);
+                aNam = SvxResId(STR_ObjNamePlural);
             }
 
-            aNam = OUString::number( nMarkPtObjAnz ) + " " + aNam;
+            aNam = OUString::number( nMarkPtObjCnt ) + " " + aNam;
         }
 
         OUString aStr1;
 
-        if(1L == nMarkPtAnz)
+        if(1 == nMarkPtCnt)
         {
-            aStr1 = (ImpGetResStr(bGlue ? STR_ViewMarkedGluePoint : STR_ViewMarkedPoint));
+            aStr1 = SvxResId(bGlue ? STR_ViewMarkedGluePoint : STR_ViewMarkedPoint);
         }
         else
         {
-            aStr1 = (ImpGetResStr(bGlue ? STR_ViewMarkedGluePoints : STR_ViewMarkedPoints));
-            aStr1 = aStr1.replaceFirst("%2", OUString::number( nMarkPtAnz ));
+            aStr1 = SvxResId(bGlue ? STR_ViewMarkedGluePoints : STR_ViewMarkedPoints);
+            aStr1 = aStr1.replaceFirst("%2", OUString::number( nMarkPtCnt ));
         }
 
         aStr1 = aStr1.replaceFirst("%1", aNam);
@@ -682,10 +589,10 @@ const OUString& SdrMarkList::GetPointMarkDescription(bool bGlue) const
     return rName;
 }
 
-bool SdrMarkList::TakeBoundRect(SdrPageView* pPV, Rectangle& rRect) const
+bool SdrMarkList::TakeBoundRect(SdrPageView const * pPV, tools::Rectangle& rRect) const
 {
     bool bFnd(false);
-    Rectangle aR;
+    tools::Rectangle aR;
 
     for(size_t i = 0; i < GetMarkCount(); ++i)
     {
@@ -713,7 +620,7 @@ bool SdrMarkList::TakeBoundRect(SdrPageView* pPV, Rectangle& rRect) const
     return bFnd;
 }
 
-bool SdrMarkList::TakeSnapRect(SdrPageView* pPV, Rectangle& rRect) const
+bool SdrMarkList::TakeSnapRect(SdrPageView const * pPV, tools::Rectangle& rRect) const
 {
     bool bFnd(false);
 
@@ -725,7 +632,7 @@ bool SdrMarkList::TakeSnapRect(SdrPageView* pPV, Rectangle& rRect) const
         {
             if(pMark->GetMarkedSdrObj())
             {
-                Rectangle aR(pMark->GetMarkedSdrObj()->GetSnapRect());
+                tools::Rectangle aR(pMark->GetMarkedSdrObj()->GetSnapRect());
 
                 if(bFnd)
                 {
@@ -852,7 +759,7 @@ namespace sdr
                                 SfxListener* pLst = pBC->GetListener(nl);
                                 SdrEdgeObj* pEdge = dynamic_cast<SdrEdgeObj*>( pLst );
 
-                                if(pEdge && pEdge->IsInserted() && pEdge->GetPage() == pCandidate->GetPage())
+                                if(pEdge && pEdge->IsInserted() && pEdge->getSdrPageFromSdrObject() == pCandidate->getSdrPageFromSdrObject())
                                 {
                                     SdrMark aM(pEdge, maMarkedObjectList.GetMark(a)->GetPageView());
 

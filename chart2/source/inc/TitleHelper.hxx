@@ -19,14 +19,15 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_TITLEHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_TITLEHELPER_HXX
 
-#include "ReferenceSizeProvider.hxx"
+#include <com/sun/star/uno/Reference.h>
+#include <rtl/ustring.hxx>
 #include "charttoolsdllapi.hxx"
-#include <com/sun/star/chart2/XTitled.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
 
-#include "ChartModel.hxx"
+namespace chart { class ChartModel; }
+namespace chart { class ReferenceSizeProvider; }
+namespace com { namespace sun { namespace star { namespace chart2 { class XTitle; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace chart
 {
@@ -66,15 +67,25 @@ public:
                     , const css::uno::Reference< css::frame::XModel >& xModel
                     , const css::uno::Reference< css::uno::XComponentContext > & xContext
                     , ReferenceSizeProvider * pRefSizeProvider = nullptr );
+    static css::uno::Reference<
+            css::chart2::XTitle >
+          createOrShowTitle(  eTitleType nTitleIndex
+                    , const OUString& rTitleText
+                    , const css::uno::Reference< css::frame::XModel >& xModel
+                    , const css::uno::Reference< css::uno::XComponentContext > & xContex );
 
     static void removeTitle( eTitleType nTitleIndex
                     , const css::uno::Reference< css::frame::XModel >& xModel );
+
+    static void hideTitle( eTitleType nTitleIndex
+                    , const css::uno::Reference< css::frame::XModel >& xModel );
+
 
     static OUString getCompleteString( const css::uno::Reference< css::chart2::XTitle >& xTitle );
     static void setCompleteString( const OUString& rNewText
         , const css::uno::Reference< css::chart2::XTitle >& xTitle
         , const css::uno::Reference< css::uno::XComponentContext > & xContext
-        , float * pDefaultCharHeight = nullptr );
+        , const float * pDefaultCharHeight = nullptr );
 
     static bool getTitleType( eTitleType& rType
                     , const css::uno::Reference< css::chart2::XTitle >& xTitle

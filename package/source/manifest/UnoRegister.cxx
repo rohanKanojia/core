@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <ManifestReader.hxx>
-#include <ManifestWriter.hxx>
+#include "ManifestReader.hxx"
+#include "ManifestWriter.hxx"
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/registry/XRegistryKey.hpp>
-#include <osl/diagnose.h>
 #include <ZipPackage.hxx>
 
 #include <zipfileaccess.hxx>
@@ -40,7 +39,7 @@ using namespace ::com::sun::star::packages;
  * @param pRegistryKey registry data key to read and write component persistent data
  * @return a component factory (generic uno interface)
  */
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL package2_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * package2_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * /*pRegistryKey*/ )
 {
     void * pRet = nullptr;

@@ -27,14 +27,18 @@
 
  *************************************************************************/
 #include <com/sun/star/ucb/ListActionType.hpp>
+#include <com/sun/star/ucb/ListenerAlreadySetException.hpp>
+#include <com/sun/star/ucb/ServiceNotFoundException.hpp>
 #include <com/sun/star/ucb/WelcomeDynamicResultSetStruct.hpp>
 #include <com/sun/star/ucb/CachedDynamicResultSetStubFactory.hpp>
 #include <com/sun/star/ucb/XSourceInitialization.hpp>
 #include <cppuhelper/interfacecontainer.h>
+#include <cppuhelper/queryinterface.hxx>
 #include <ucbhelper/resultsethelper.hxx>
 #include <ucbhelper/getcomponentcontext.hxx>
+#include <ucbhelper/macros.hxx>
 
-#include "osl/diagnose.h"
+#include <osl/diagnose.h>
 
 using namespace com::sun::star;
 
@@ -48,8 +52,7 @@ namespace ucbhelper {
 ResultSetImplHelper::ResultSetImplHelper(
     const uno::Reference< uno::XComponentContext >& rxContext,
     const css::ucb::OpenCommandArgument2& rCommand )
-: m_pDisposeEventListeners( nullptr ),
-  m_bStatic( false ),
+: m_bStatic( false ),
   m_bInitDone( false ),
   m_aCommand( rCommand ),
   m_xContext( rxContext )
@@ -60,7 +63,6 @@ ResultSetImplHelper::ResultSetImplHelper(
 // virtual
 ResultSetImplHelper::~ResultSetImplHelper()
 {
-    delete m_pDisposeEventListeners;
 }
 
 
@@ -78,13 +80,12 @@ void SAL_CALL ResultSetImplHelper::release()
 }
 
 css::uno::Any SAL_CALL ResultSetImplHelper::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< lang::XTypeProvider* >(this)),
-                                               (static_cast< lang::XServiceInfo* >(this)),
-                                               (static_cast< lang::XComponent* >(this)),
-                                               (static_cast< css::ucb::XDynamicResultSet* >(this))
+                                               static_cast< lang::XTypeProvider* >(this),
+                                               static_cast< lang::XServiceInfo* >(this),
+                                               static_cast< lang::XComponent* >(this),
+                                               static_cast< css::ucb::XDynamicResultSet* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -100,19 +101,26 @@ XTYPEPROVIDER_IMPL_3( ResultSetImplHelper,
 
 // XServiceInfo methods.
 
+OUString SAL_CALL ResultSetImplHelper::getImplementationName()
+{
+    return OUString( "ResultSetImplHelper" );
+}
 
-XSERVICEINFO_NOFACTORY_IMPL_1( ResultSetImplHelper,
-                               OUString(
-                                   "ResultSetImplHelper" ),
-                               DYNAMICRESULTSET_SERVICE_NAME );
+sal_Bool SAL_CALL ResultSetImplHelper::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
 
+css::uno::Sequence< OUString > SAL_CALL ResultSetImplHelper::getSupportedServiceNames()
+{
+    return { DYNAMICRESULTSET_SERVICE_NAME };
+}
 
 // XComponent methods.
 
 
 // virtual
 void SAL_CALL ResultSetImplHelper::dispose()
-    throw( uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -128,13 +136,11 @@ void SAL_CALL ResultSetImplHelper::dispose()
 // virtual
 void SAL_CALL ResultSetImplHelper::addEventListener(
         const uno::Reference< lang::XEventListener >& Listener )
-    throw( uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
     if ( !m_pDisposeEventListeners )
-        m_pDisposeEventListeners
-            = new cppu::OInterfaceContainerHelper( m_aMutex );
+        m_pDisposeEventListeners.reset(new cppu::OInterfaceContainerHelper( m_aMutex ));
 
     m_pDisposeEventListeners->addInterface( Listener );
 }
@@ -143,7 +149,6 @@ void SAL_CALL ResultSetImplHelper::addEventListener(
 // virtual
 void SAL_CALL ResultSetImplHelper::removeEventListener(
         const uno::Reference< lang::XEventListener >& Listener )
-    throw( uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -158,8 +163,6 @@ void SAL_CALL ResultSetImplHelper::removeEventListener(
 // virtual
 uno::Reference< sdbc::XResultSet > SAL_CALL
 ResultSetImplHelper::getStaticResultSet()
-    throw( css::ucb::ListenerAlreadySetException,
-           uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( m_aMutex );
 
@@ -174,8 +177,6 @@ ResultSetImplHelper::getStaticResultSet()
 // virtual
 void SAL_CALL ResultSetImplHelper::setListener(
         const uno::Reference< css::ucb::XDynamicResultSetListener >& Listener )
-    throw( css::ucb::ListenerAlreadySetException,
-           uno::RuntimeException, std::exception )
 {
     osl::ClearableMutexGuard aGuard( m_aMutex );
 
@@ -216,7 +217,6 @@ void SAL_CALL ResultSetImplHelper::setListener(
 
 // virtual
 sal_Int16 SAL_CALL ResultSetImplHelper::getCapabilities()
-    throw( uno::RuntimeException, std::exception )
 {
     // ! css::ucb::ContentResultSetCapability::SORTED
     return 0;
@@ -226,10 +226,6 @@ sal_Int16 SAL_CALL ResultSetImplHelper::getCapabilities()
 // virtual
 void SAL_CALL ResultSetImplHelper::connectToCache(
         const uno::Reference< css::ucb::XDynamicResultSet > & xCache )
-    throw( css::ucb::ListenerAlreadySetException,
-           css::ucb::AlreadyInitializedException,
-           css::ucb::ServiceNotFoundException,
-           uno::RuntimeException, std::exception )
 {
     if ( m_xListener.is() )
         throw css::ucb::ListenerAlreadySetException();

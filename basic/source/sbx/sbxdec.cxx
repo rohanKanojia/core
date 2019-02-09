@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #include <basic/sbx.hxx>
+#include <basic/sberrors.hxx>
 #include "sbxconv.hxx"
 
 #include <com/sun/star/bridge/oleautomation/Decimal.hpp>
@@ -27,23 +29,24 @@
 
 // Implementation SbxDecimal
 SbxDecimal::SbxDecimal()
+    : mnRefCount(0)
 {
     setInt( 0 );
-    mnRefCount = 0;
 }
 
 SbxDecimal::SbxDecimal( const SbxDecimal& rDec )
+    : mnRefCount(0)
 {
 #ifdef _WIN32
     maDec = rDec.maDec;
 #else
     (void)rDec;
 #endif
-    mnRefCount = 0;
 }
 
 SbxDecimal::SbxDecimal
     ( const css::bridge::oleautomation::Decimal& rAutomationDec )
+    : mnRefCount(0)
 {
 #ifdef _WIN32
     maDec.scale = rAutomationDec.Scale;
@@ -54,7 +57,6 @@ SbxDecimal::SbxDecimal
 #else
     (void)rAutomationDec;
 #endif
-    mnRefCount = 0;
 }
 
 void SbxDecimal::fillAutomationDecimal
@@ -92,28 +94,28 @@ void releaseDecimalPtr( SbxDecimal*& rpDecimal )
 
 bool SbxDecimal::operator -= ( const SbxDecimal &r )
 {
-    HRESULT hResult = VarDecSub( &maDec, (LPDECIMAL)&r.maDec, &maDec );
+    HRESULT hResult = VarDecSub( &maDec, const_cast<LPDECIMAL>(&r.maDec), &maDec );
     bool bRet = ( hResult == S_OK );
     return bRet;
 }
 
 bool SbxDecimal::operator += ( const SbxDecimal &r )
 {
-    HRESULT hResult = VarDecAdd( &maDec, (LPDECIMAL)&r.maDec, &maDec );
+    HRESULT hResult = VarDecAdd( &maDec, const_cast<LPDECIMAL>(&r.maDec), &maDec );
     bool bRet = ( hResult == S_OK );
     return bRet;
 }
 
 bool SbxDecimal::operator /= ( const SbxDecimal &r )
 {
-    HRESULT hResult = VarDecDiv( &maDec, (LPDECIMAL)&r.maDec, &maDec );
+    HRESULT hResult = VarDecDiv( &maDec, const_cast<LPDECIMAL>(&r.maDec), &maDec );
     bool bRet = ( hResult == S_OK );
     return bRet;
 }
 
 bool SbxDecimal::operator *= ( const SbxDecimal &r )
 {
-    HRESULT hResult = VarDecMul( &maDec, (LPDECIMAL)&r.maDec, &maDec );
+    HRESULT hResult = VarDecMul( &maDec, const_cast<LPDECIMAL>(&r.maDec), &maDec );
     bool bRet = ( hResult == S_OK );
     return bRet;
 }
@@ -129,40 +131,40 @@ bool SbxDecimal::isZero()
 {
     SbxDecimal aZeroDec;
     aZeroDec.setLong( 0 );
-    bool bZero = ( EQ == compare( *this, aZeroDec ) );
+    bool bZero = CmpResult::EQ == compare( *this, aZeroDec );
     return bZero;
 }
 
 SbxDecimal::CmpResult compare( const SbxDecimal &rLeft, const SbxDecimal &rRight )
 {
-    HRESULT hResult = VarDecCmp( (LPDECIMAL)&rLeft.maDec, (LPDECIMAL)&rRight.maDec );
-    SbxDecimal::CmpResult eRes = (SbxDecimal::CmpResult)hResult;
+    HRESULT hResult = VarDecCmp( const_cast<LPDECIMAL>(&rLeft.maDec), const_cast<LPDECIMAL>(&rRight.maDec) );
+    SbxDecimal::CmpResult eRes = static_cast<SbxDecimal::CmpResult>(hResult);
     return eRes;
 }
 
 void SbxDecimal::setChar( sal_Unicode val )
 {
-    VarDecFromUI2( (sal_uInt16)val, &maDec );
+    VarDecFromUI2( static_cast<sal_uInt16>(val), &maDec );
 }
 
 void SbxDecimal::setByte( sal_uInt8 val )
 {
-    VarDecFromUI1( (sal_uInt8)val, &maDec );
+    VarDecFromUI1( val, &maDec );
 }
 
 void SbxDecimal::setShort( sal_Int16 val )
 {
-    VarDecFromI2( (short)val, &maDec );
+    VarDecFromI2( static_cast<short>(val), &maDec );
 }
 
 void SbxDecimal::setLong( sal_Int32 val )
 {
-    VarDecFromI4( (long)val, &maDec );
+    VarDecFromI4( static_cast<long>(val), &maDec );
 }
 
 void SbxDecimal::setUShort( sal_uInt16 val )
 {
-    VarDecFromUI2( (sal_uInt16)val, &maDec );
+    VarDecFromUI2( val, &maDec );
 }
 
 void SbxDecimal::setULong( sal_uInt32 val )
@@ -184,12 +186,12 @@ bool SbxDecimal::setDouble( double val )
 
 void SbxDecimal::setInt( int val )
 {
-    setLong( (sal_Int32)val );
+    setLong( static_cast<sal_Int32>(val) );
 }
 
 void SbxDecimal::setUInt( unsigned int val )
 {
-    setULong( (sal_uInt32)val );
+    setULong( static_cast<sal_uInt32>(val) );
 }
 
 bool SbxDecimal::setString( OUString* pOUString )
@@ -201,7 +203,8 @@ bool SbxDecimal::setString( OUString* pOUString )
     // Convert delimiter
     sal_Unicode cDecimalSep;
     sal_Unicode cThousandSep;
-    ImpGetIntntlSep( cDecimalSep, cThousandSep );
+    sal_Unicode cDecimalSepAlt;
+    ImpGetIntntlSep( cDecimalSep, cThousandSep, cDecimalSepAlt );
 
     bool bRet = false;
     HRESULT hResult;
@@ -212,25 +215,21 @@ bool SbxDecimal::setString( OUString* pOUString )
         pBuffer[nLen] = 0;
 
         const sal_Unicode* pSrc = pOUString->getStr();
-        int i;
-        for( i = 0 ; i < nLen ; ++i )
-            pBuffer[i] = pSrc[i];
-
-        sal_Unicode c;
-        i = 0;
-        while( (c = pBuffer[i]) != 0 )
+        for( int i = 0 ; i < nLen ; ++i )
         {
-            if( c == cDecimalSep )
-                pBuffer[i] = '.';
-            else if( c == cThousandSep )
-                pBuffer[i] = ',';
-            i++;
+            sal_Unicode c = pSrc[i];
+            if (c == cDecimalSep)
+                c = '.';
+            else if (c == cThousandSep)
+                c = ',';
+
+            pBuffer[i] = c;
         }
-        hResult = VarDecFromStr( (OLECHAR*)pBuffer.get(), nLANGID, 0, &maDec );
+        hResult = VarDecFromStr( o3tl::toW(pBuffer.get()), nLANGID, 0, &maDec );
     }
     else
     {
-        hResult = VarDecFromStr( (OLECHAR*)pOUString->getStr(), nLANGID, 0, &maDec );
+        hResult = VarDecFromStr( o3tl::toW(pOUString->getStr()), nLANGID, 0, &maDec );
     }
     bRet = ( hResult == S_OK );
     return bRet;
@@ -286,27 +285,23 @@ bool SbxDecimal::getDouble( double& rVal )
 #else
 // !WIN32
 
-bool SbxDecimal::operator -= ( const SbxDecimal &r )
+bool SbxDecimal::operator -= ( const SbxDecimal & )
 {
-    (void)r;
     return false;
 }
 
-bool SbxDecimal::operator += ( const SbxDecimal &r )
+bool SbxDecimal::operator += ( const SbxDecimal & )
 {
-    (void)r;
     return false;
 }
 
-bool SbxDecimal::operator /= ( const SbxDecimal &r )
+bool SbxDecimal::operator /= ( const SbxDecimal & )
 {
-    (void)r;
     return false;
 }
 
-bool SbxDecimal::operator *= ( const SbxDecimal &r )
+bool SbxDecimal::operator *= ( const SbxDecimal & )
 {
-    (void)r;
     return false;
 }
 
@@ -320,32 +315,30 @@ bool SbxDecimal::isZero()
     return false;
 }
 
-SbxDecimal::CmpResult compare( const SbxDecimal &rLeft, const SbxDecimal &rRight )
+SbxDecimal::CmpResult compare( SAL_UNUSED_PARAMETER const SbxDecimal &, SAL_UNUSED_PARAMETER const SbxDecimal & )
 {
-    (void)rLeft;
-    (void)rRight;
-    return (SbxDecimal::CmpResult)0;
+    return SbxDecimal::CmpResult::LT;
 }
 
-void SbxDecimal::setChar( sal_Unicode val )     { (void)val; }
-void SbxDecimal::setByte( sal_uInt8 val )           { (void)val; }
-void SbxDecimal::setShort( sal_Int16 val )          { (void)val; }
-void SbxDecimal::setLong( sal_Int32 val )           { (void)val; }
-void SbxDecimal::setUShort( sal_uInt16 val )        { (void)val; }
-void SbxDecimal::setULong( sal_uInt32 val )         { (void)val; }
-bool SbxDecimal::setSingle( float val )         { (void)val; return false; }
-bool SbxDecimal::setDouble( double val )        { (void)val; return false; }
-void SbxDecimal::setInt( int val )              { (void)val; }
-void SbxDecimal::setUInt( unsigned int val )    { (void)val; }
-bool SbxDecimal::setString( OUString* pOUString )    { (void)pOUString;  return false; }
+void SbxDecimal::setChar( SAL_UNUSED_PARAMETER sal_Unicode ) {}
+void SbxDecimal::setByte( SAL_UNUSED_PARAMETER sal_uInt8 ) {}
+void SbxDecimal::setShort( SAL_UNUSED_PARAMETER sal_Int16 ) {}
+void SbxDecimal::setLong( SAL_UNUSED_PARAMETER sal_Int32 ) {}
+void SbxDecimal::setUShort( SAL_UNUSED_PARAMETER sal_uInt16 ) {}
+void SbxDecimal::setULong( SAL_UNUSED_PARAMETER sal_uInt32 ) {}
+bool SbxDecimal::setSingle( SAL_UNUSED_PARAMETER float ) { return false; }
+bool SbxDecimal::setDouble( SAL_UNUSED_PARAMETER double ) { return false; }
+void SbxDecimal::setInt( SAL_UNUSED_PARAMETER int ) {}
+void SbxDecimal::setUInt( SAL_UNUSED_PARAMETER unsigned int ) {}
+bool SbxDecimal::setString( SAL_UNUSED_PARAMETER OUString* ) { return false; }
 
-bool SbxDecimal::getChar( sal_Unicode& rVal )   { (void)rVal; return false; }
-bool SbxDecimal::getShort( sal_Int16& rVal )        { (void)rVal; return false; }
-bool SbxDecimal::getLong( sal_Int32& rVal )         { (void)rVal; return false; }
-bool SbxDecimal::getUShort( sal_uInt16& rVal )      { (void)rVal; return false; }
-bool SbxDecimal::getULong( sal_uInt32& rVal )       { (void)rVal; return false; }
-bool SbxDecimal::getSingle( float& rVal )       { (void)rVal; return false; }
-bool SbxDecimal::getDouble( double& rVal )      { (void)rVal; return false; }
+bool SbxDecimal::getChar( SAL_UNUSED_PARAMETER sal_Unicode& ) { return false; }
+bool SbxDecimal::getShort( SAL_UNUSED_PARAMETER sal_Int16& ) { return false; }
+bool SbxDecimal::getLong( SAL_UNUSED_PARAMETER sal_Int32& ) { return false; }
+bool SbxDecimal::getUShort( SAL_UNUSED_PARAMETER sal_uInt16& ) { return false; }
+bool SbxDecimal::getULong( SAL_UNUSED_PARAMETER sal_uInt32& ) { return false; }
+bool SbxDecimal::getSingle( SAL_UNUSED_PARAMETER float& ) { return false; }
+bool SbxDecimal::getDouble( SAL_UNUSED_PARAMETER double& ) { return false; }
 
 #endif
 
@@ -354,35 +347,32 @@ void SbxDecimal::getString( OUString& rString )
 #ifdef _WIN32
     static LCID nLANGID = MAKELANGID( LANG_ENGLISH, SUBLANG_ENGLISH_US );
 
-    OLECHAR sz[100];
-    BSTR aBStr = SysAllocString( sz );
-    if( aBStr != NULL )
+    BSTR pBStr = nullptr;
+    // VarBstrFromDec allocates new BSTR that needs to be released with SysFreeString
+    HRESULT hResult = VarBstrFromDec( &maDec, nLANGID, 0, &pBStr );
+    if( hResult == S_OK )
     {
-        HRESULT hResult = VarBstrFromDec( &maDec, nLANGID, 0, &aBStr );
-        if( hResult == S_OK )
+        // Convert delimiter
+        sal_Unicode cDecimalSep;
+        sal_Unicode cThousandSep;
+        sal_Unicode cDecimalSepAlt;
+        ImpGetIntntlSep( cDecimalSep, cThousandSep, cDecimalSepAlt );
+
+        if( cDecimalSep != '.' || cThousandSep != ',' )
         {
-            // Convert delimiter
-            sal_Unicode cDecimalSep;
-            sal_Unicode cThousandSep;
-            ImpGetIntntlSep( cDecimalSep, cThousandSep );
-
-            if( cDecimalSep != '.' || cThousandSep != ',' )
+            sal_Unicode c;
+            int i = 0;
+            while( (c = pBStr[i]) != 0 )
             {
-                sal_Unicode c;
-                int i = 0;
-                while( (c = aBStr[i]) != 0 )
-                {
-                    if( c == '.' )
-                        aBStr[i] = cDecimalSep;
-                    else if( c == ',' )
-                        aBStr[i] = cThousandSep;
-                    i++;
-                }
+                if( c == '.' )
+                    pBStr[i] = cDecimalSep;
+                else if( c == ',' )
+                    pBStr[i] = cThousandSep;
+                i++;
             }
-            rString = reinterpret_cast<const sal_Unicode*>(aBStr);
         }
-
-        SysFreeString( aBStr );
+        rString = o3tl::toU( pBStr );
+        SysFreeString( pBStr );
     }
 #else
     (void)rString;
@@ -422,7 +412,8 @@ start:
     switch( +eType )
     {
         case SbxNULL:
-            SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+            SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
+            [[fallthrough]];
         case SbxEMPTY:
             pnDecRes->setShort( 0 ); break;
         case SbxCHAR:
@@ -441,24 +432,24 @@ start:
             pnDecRes->setULong( p->nULong ); break;
         case SbxSINGLE:
             if( !pnDecRes->setSingle( p->nSingle ) )
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
             break;
         case SbxCURRENCY:
             {
                 if( !pnDecRes->setDouble( ImpCurrencyToDouble( p->nInt64 ) ) )
-                    SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                    SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 break;
             }
         case SbxSALINT64:
             {
-                if( !pnDecRes->setDouble( (double)p->nInt64 ) )
-                    SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                if( !pnDecRes->setDouble( static_cast<double>(p->nInt64) ) )
+                    SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 break;
             }
         case SbxSALUINT64:
             {
-                if( !pnDecRes->setDouble( (double)p->uInt64 ) )
-                    SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                if( !pnDecRes->setDouble( static_cast<double>(p->uInt64) ) )
+                    SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 break;
             }
         case SbxDATE:
@@ -466,7 +457,7 @@ start:
         {
             double dVal = p->nDouble;
             if( !pnDecRes->setDouble( dVal ) )
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
             break;
         }
         case SbxLPSTR:
@@ -482,7 +473,7 @@ start:
                 pnDecRes->setDecimal( pVal->GetDecimal() );
             else
             {
-                SbxBase::SetError( ERRCODE_SBX_NO_OBJECT );
+                SbxBase::SetError( ERRCODE_BASIC_NO_OBJECT );
                 pnDecRes->setShort( 0 );
             }
             break;
@@ -519,7 +510,7 @@ start:
             p = &aTmp; goto start;
 
         default:
-            SbxBase::SetError( ERRCODE_SBX_CONVERSION ); pnDecRes->setShort( 0 );
+            SbxBase::SetError( ERRCODE_BASIC_CONVERSION ); pnDecRes->setShort( 0 );
     }
     return pnDecRes;
 }
@@ -600,21 +591,21 @@ start:
             if( pVal )
                 pVal->PutDecimal( pDec );
             else
-                SbxBase::SetError( ERRCODE_SBX_NO_OBJECT );
+                SbxBase::SetError( ERRCODE_BASIC_NO_OBJECT );
             break;
         }
 
         case SbxBYREF | SbxCHAR:
             if( !pDec->getChar( *p->pChar ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pChar = 0;
             }
             break;
         case SbxBYREF | SbxBYTE:
             if( !pDec->getChar( *p->pChar ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pByte = 0;
             }
             break;
@@ -622,7 +613,7 @@ start:
         case SbxBYREF | SbxBOOL:
             if( !pDec->getShort( *p->pInteger ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pInteger = 0;
             }
             break;
@@ -630,21 +621,21 @@ start:
         case SbxBYREF | SbxUSHORT:
             if( !pDec->getUShort( *p->pUShort ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pUShort = 0;
             }
             break;
         case SbxBYREF | SbxLONG:
             if( !pDec->getLong( *p->pLong ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pLong = 0;
             }
             break;
         case SbxBYREF | SbxULONG:
             if( !pDec->getULong( *p->pULong ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pULong = 0;
             }
             break;
@@ -652,7 +643,7 @@ start:
             {
             double d(0.0);
             if( !pDec->getDouble( d ) )
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
             *p->pnInt64 = ImpDoubleToCurrency( d );
             }
             break;
@@ -660,7 +651,7 @@ start:
             {
             double d(0.0);
             if( !pDec->getDouble( d ) )
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
             else
                 *p->pnInt64 = ImpDoubleToSalInt64( d );
             }
@@ -669,7 +660,7 @@ start:
             {
             double d(0.0);
             if( !pDec->getDouble( d ) )
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
             else
                 *p->puInt64 = ImpDoubleToSalUInt64( d );
             }
@@ -677,7 +668,7 @@ start:
         case SbxBYREF | SbxSINGLE:
             if( !pDec->getSingle( *p->pSingle ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pSingle = 0;
             }
             break;
@@ -685,12 +676,12 @@ start:
         case SbxBYREF | SbxDOUBLE:
             if( !pDec->getDouble( *p->pDouble ) )
             {
-                SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+                SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
                 *p->pDouble = 0;
             }
             break;
         default:
-            SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+            SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
     }
 }
 

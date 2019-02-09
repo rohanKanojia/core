@@ -17,18 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <vcl/svapp.hxx>
 
-#include "chartlis.hxx"
-#include "brdcst.hxx"
-#include "document.hxx"
-#include "reftokenhelper.hxx"
-
-#include <boost/checked_delete.hpp>
+#include <chartlis.hxx>
+#include <brdcst.hxx>
+#include <document.hxx>
+#include <reftokenhelper.hxx>
+#include <formula/token.hxx>
+#include <com/sun/star/chart/XChartDataChangeEventListener.hpp>
 
 using namespace com::sun::star;
 using ::std::vector;
-using ::std::unary_function;
 using ::std::for_each;
 
 // Update chart listeners quickly, to get a similar behavior to loaded charts
@@ -43,7 +43,6 @@ public:
             ScChartUnoData( const uno::Reference< chart::XChartDataChangeEventListener >& rL,
                             const uno::Reference< chart::XChartData >& rS ) :
                     xListener( rL ), xSource( rS ) {}
-            ~ScChartUnoData() {}
 
     const uno::Reference< chart::XChartDataChangeEventListener >& GetListener() const   { return xListener; }
     const uno::Reference< chart::XChartData >& GetSource() const                        { return xSource; }
@@ -96,76 +95,38 @@ void ScChartListener::ExternalRefListener::removeFileId(sal_uInt16 nFileId)
 ScChartListener::ScChartListener( const OUString& rName, ScDocument* pDocP,
         const ScRangeListRef& rRangeList ) :
     SvtListener(),
-    mpExtRefListener(nullptr),
     mpTokens(new vector<ScTokenRef>),
     maName(rName),
-    pUnoData( nullptr ),
     mpDoc( pDocP ),
     bUsed( false ),
-    bDirty( false ),
-    bSeriesRangesScheduled( false )
+    bDirty( false )
 {
     ScRefTokenHelper::getTokensFromRangeList(*mpTokens, *rRangeList);
 }
 
-ScChartListener::ScChartListener( const OUString& rName, ScDocument* pDocP, vector<ScTokenRef>* pTokens ) :
+ScChartListener::ScChartListener( const OUString& rName, ScDocument* pDocP, std::unique_ptr<vector<ScTokenRef>> pTokens ) :
     SvtListener(),
-    mpExtRefListener(nullptr),
-    mpTokens(pTokens),
+    mpTokens(std::move(pTokens)),
     maName(rName),
-    pUnoData( nullptr ),
     mpDoc( pDocP ),
     bUsed( false ),
-    bDirty( false ),
-    bSeriesRangesScheduled( false )
+    bDirty( false )
 {
-}
-
-ScChartListener::ScChartListener( const ScChartListener& r ) :
-    SvtListener(),
-    mpExtRefListener(nullptr),
-    mpTokens(new vector<ScTokenRef>(*r.mpTokens)),
-    maName(r.maName),
-    pUnoData( nullptr ),
-    mpDoc( r.mpDoc ),
-    bUsed( false ),
-    bDirty( r.bDirty ),
-    bSeriesRangesScheduled( r.bSeriesRangesScheduled )
-{
-    if ( r.pUnoData )
-        pUnoData = new ScChartUnoData( *r.pUnoData );
-
-    if (r.mpExtRefListener.get())
-    {
-        // Re-register this new listener for the files that the old listener
-        // was listening to.
-
-        ScExternalRefManager* pRefMgr = mpDoc->GetExternalRefManager();
-        const std::unordered_set<sal_uInt16>& rFileIds = r.mpExtRefListener->getAllFileIds();
-        mpExtRefListener.reset(new ExternalRefListener(*this, mpDoc));
-        std::unordered_set<sal_uInt16>::const_iterator itr = rFileIds.begin(), itrEnd = rFileIds.end();
-        for (; itr != itrEnd; ++itr)
-        {
-            pRefMgr->addLinkListener(*itr, mpExtRefListener.get());
-            mpExtRefListener->addFileId(*itr);
-        }
-    }
 }
 
 ScChartListener::~ScChartListener()
 {
     if ( HasBroadcaster() )
         EndListeningTo();
-    delete pUnoData;
+    pUnoData.reset();
 
-    if (mpExtRefListener.get())
+    if (mpExtRefListener)
     {
         // Stop listening to all external files.
         ScExternalRefManager* pRefMgr = mpDoc->GetExternalRefManager();
         const std::unordered_set<sal_uInt16>& rFileIds = mpExtRefListener->getAllFileIds();
-        std::unordered_set<sal_uInt16>::const_iterator itr = rFileIds.begin(), itrEnd = rFileIds.end();
-        for (; itr != itrEnd; ++itr)
-            pRefMgr->removeLinkListener(*itr, mpExtRefListener.get());
+        for (const auto& rFileId : rFileIds)
+            pRefMgr->removeLinkListener(rFileId, mpExtRefListener.get());
     }
 }
 
@@ -173,8 +134,7 @@ void ScChartListener::SetUno(
         const uno::Reference< chart::XChartDataChangeEventListener >& rListener,
         const uno::Reference< chart::XChartData >& rSource )
 {
-    delete pUnoData;
-    pUnoData = new ScChartUnoData( rListener, rSource );
+    pUnoData.reset( new ScChartUnoData( rListener, rSource ) );
 }
 
 uno::Reference< chart::XChartDataChangeEventListener > ScChartListener::GetUnoListener() const
@@ -194,7 +154,7 @@ uno::Reference< chart::XChartData > ScChartListener::GetUnoSource() const
 void ScChartListener::Notify( const SfxHint& rHint )
 {
     const ScHint* p = dynamic_cast<const ScHint*>(&rHint);
-    if (p && (p->GetId() & SC_HINT_DATACHANGED))
+    if (p && (p->GetId() == SfxHintId::ScDataChanged))
         SetUpdateQueue();
 }
 
@@ -239,7 +199,7 @@ void ScChartListener::SetRangeList( const ScRangeListRef& rNew )
 
 namespace {
 
-class StartEndListening : public unary_function<ScTokenRef, void>
+class StartEndListening
 {
 public:
     StartEndListening(ScDocument* pDoc, ScChartListener& rParent, bool bStart) :
@@ -296,14 +256,14 @@ private:
 private:
     ScDocument* mpDoc;
     ScChartListener& mrParent;
-    bool mbStart;
+    bool const mbStart;
 };
 
 }
 
 void ScChartListener::StartListeningTo()
 {
-    if (!mpTokens.get() || mpTokens->empty())
+    if (!mpTokens || mpTokens->empty())
         // no references to listen to.
         return;
 
@@ -312,7 +272,7 @@ void ScChartListener::StartListeningTo()
 
 void ScChartListener::EndListeningTo()
 {
-    if (!mpTokens.get() || mpTokens->empty())
+    if (!mpTokens || mpTokens->empty())
         // no references to listen to.
         return;
 
@@ -329,15 +289,6 @@ void ScChartListener::ChangeListening( const ScRangeListRef& rRangeListRef,
         SetDirty( true );
 }
 
-void ScChartListener::UpdateScheduledSeriesRanges()
-{
-    if ( bSeriesRangesScheduled )
-    {
-        bSeriesRangesScheduled = false;
-        UpdateSeriesRanges();
-    }
-}
-
 void ScChartListener::UpdateChartIntersecting( const ScRange& rRange )
 {
     ScTokenRef pToken;
@@ -350,16 +301,9 @@ void ScChartListener::UpdateChartIntersecting( const ScRange& rRange )
     }
 }
 
-void ScChartListener::UpdateSeriesRanges()
-{
-    ScRangeListRef pRangeList(new ScRangeList);
-    ScRefTokenHelper::getRangeListFromTokens(*pRangeList, *mpTokens, ScAddress());
-    mpDoc->SetChartRangeList(GetName(), pRangeList);
-}
-
 ScChartListener::ExternalRefListener* ScChartListener::GetExtRefListener()
 {
-    if (!mpExtRefListener.get())
+    if (!mpExtRefListener)
         mpExtRefListener.reset(new ExternalRefListener(*this, mpDoc));
 
     return mpExtRefListener.get();
@@ -377,7 +321,6 @@ bool ScChartListener::operator==( const ScChartListener& r ) const
     bool b2 = (r.mpTokens.get() && !r.mpTokens->empty());
 
     if (mpDoc != r.mpDoc || bUsed != r.bUsed || bDirty != r.bDirty ||
-        bSeriesRangesScheduled != r.bSeriesRangesScheduled ||
         GetName() != r.GetName() || b1 != b2)
         return false;
 
@@ -402,11 +345,18 @@ ScChartHiddenRangeListener::~ScChartHiddenRangeListener()
     // empty d'tor
 }
 
+void ScChartListenerCollection::Init()
+{
+    aIdle.SetInvokeHandler( LINK( this, ScChartListenerCollection, TimerHdl ) );
+    aIdle.SetPriority( TaskPriority::REPAINT );
+    aIdle.SetDebugName( "sc::ScChartListenerCollection aIdle" );
+}
+
 ScChartListenerCollection::ScChartListenerCollection( ScDocument* pDocP ) :
     meModifiedDuringUpdate( SC_CLCUPDATE_NONE ),
     pDoc( pDocP )
 {
-    aIdle.SetIdleHdl( LINK( this, ScChartListenerCollection, TimerHdl ) );
+    Init();
 }
 
 ScChartListenerCollection::ScChartListenerCollection(
@@ -414,7 +364,7 @@ ScChartListenerCollection::ScChartListenerCollection(
     meModifiedDuringUpdate( SC_CLCUPDATE_NONE ),
     pDoc( rColl.pDoc )
 {
-    aIdle.SetIdleHdl( LINK( this, ScChartListenerCollection, TimerHdl ) );
+    Init();
 }
 
 ScChartListenerCollection::~ScChartListenerCollection()
@@ -496,60 +446,31 @@ void ScChartListenerCollection::ChangeListening( const OUString& rName,
     pCL->StartListeningTo();
 }
 
-namespace {
-
-class InsertChartListener : public std::unary_function<ScChartListener*, void>
-{
-    ScChartListenerCollection::ListenersType& mrListeners;
-public:
-    explicit InsertChartListener(ScChartListenerCollection::ListenersType& rListeners) :
-        mrListeners(rListeners) {}
-
-    void operator() (ScChartListener* p)
-    {
-        OUString aName = p->GetName();
-        mrListeners.insert(std::make_pair(aName, std::unique_ptr<ScChartListener>(p)));
-    }
-};
-
-}
-
 void ScChartListenerCollection::FreeUnused()
 {
     if (meModifiedDuringUpdate == SC_CLCUPDATE_RUNNING)
         meModifiedDuringUpdate =  SC_CLCUPDATE_MODIFIED;
 
-    ListenersType aUsed, aUnused;
+    ListenersType aUsed;
 
-    // First, filter each listener into 'used' and 'unused' categories.
+    for (auto & pair : m_Listeners)
     {
-        while (!m_Listeners.empty())
+        ScChartListener* p = pair.second.get();
+        if (p->IsUno())
         {
-            std::unique_ptr<ScChartListener> p(std::move(m_Listeners.begin()->second));
-            if (p->IsUno())
-            {
-                // We don't delete UNO charts; they are to be deleted separately via FreeUno().
-                aUsed.insert(std::make_pair(m_Listeners.begin()->first, std::move(p)));
-                m_Listeners.erase(m_Listeners.begin());
-                continue;
-            }
+            // We don't delete UNO charts; they are to be deleted separately via FreeUno().
+            aUsed.insert(std::make_pair(pair.first, std::move(pair.second)));
+            continue;
+        }
 
-            if (p->IsUsed())
-            {
-                p->SetUsed(false);
-                aUsed.insert(std::make_pair(m_Listeners.begin()->first, std::move(p)));
-                m_Listeners.erase(m_Listeners.begin());
-            }
-            else
-            {
-                aUnused.insert(std::make_pair(m_Listeners.begin()->first, std::move(p)));
-                m_Listeners.erase(m_Listeners.begin());
-            }
-
+        if (p->IsUsed())
+        {
+            p->SetUsed(false);
+            aUsed.insert(std::make_pair(pair.first, std::move(pair.second)));
         }
     }
 
-    std::swap(aUsed, m_Listeners);
+    m_Listeners = std::move(aUsed);
 }
 
 void ScChartListenerCollection::FreeUno( const uno::Reference< chart::XChartDataChangeEventListener >& rListener,
@@ -558,42 +479,22 @@ void ScChartListenerCollection::FreeUno( const uno::Reference< chart::XChartData
     if (meModifiedDuringUpdate == SC_CLCUPDATE_RUNNING)
         meModifiedDuringUpdate =  SC_CLCUPDATE_MODIFIED;
 
-    std::vector<ScChartListener*> aUsed, aUnused;
-
-    // First, filter each listener into 'used' and 'unused' categories.
+    for (auto it = m_Listeners.begin(); it != m_Listeners.end(); )
     {
-        for (auto const& it : m_Listeners)
-        {
-            ScChartListener *const p = it.second.get();
-            if (p->IsUno() && p->GetUnoListener() == rListener && p->GetUnoSource() == rSource)
-                aUnused.push_back(p);
-            else
-                aUsed.push_back(p);
-        }
+        ScChartListener *const p = it->second.get();
+        if (p->IsUno() && p->GetUnoListener() == rListener && p->GetUnoSource() == rSource)
+            it = m_Listeners.erase(it);
+        else
+            ++it;
     }
-
-    // Release all pointers currently managed by the ptr_map container.
-    // coverity[leaked_storage] - no leak, because because we will take care of them below
-    for (auto & it : m_Listeners)
-    {
-        it.second.release();
-    }
-    m_Listeners.clear();
-
-    // Re-insert the listeners we need to keep.
-    std::for_each(aUsed.begin(), aUsed.end(), InsertChartListener(m_Listeners));
-
-    // Now, delete the ones no longer needed.
-    std::for_each(aUnused.begin(), aUnused.end(), boost::checked_deleter<ScChartListener>());
 }
 
 void ScChartListenerCollection::StartTimer()
 {
-    aIdle.SetPriority( SchedulerPriority::REPAINT );
     aIdle.Start();
 }
 
-IMPL_LINK_NOARG_TYPED(ScChartListenerCollection, TimerHdl, Idle *, void)
+IMPL_LINK_NOARG(ScChartListenerCollection, TimerHdl, Timer *, void)
 {
     if ( Application::AnyInput( VclInputFlags::KEYBOARD ) )
     {
@@ -642,7 +543,7 @@ void ScChartListenerCollection::SetDiffDirty(
     for (auto const& it : m_Listeners)
     {
         ScChartListener *const pCL = it.second.get();
-        OSL_ASSERT(pCL);
+        assert(pCL);
         const ScChartListener* pCLCmp = rCmp.findByName(pCL->GetName());
         if (!pCLCmp || *pCL != *pCLCmp)
         {
@@ -652,8 +553,8 @@ void ScChartListenerCollection::SetDiffDirty(
                 {
                     const ScRangeListRef& rList1 = pCL->GetRangeList();
                     const ScRangeListRef& rList2 = pCLCmp->GetRangeList();
-                    bool b1 = rList1.Is();
-                    bool b2 = rList2.Is();
+                    bool b1 = rList1.is();
+                    bool b2 = rList2.is();
                     if ( b1 != b2 || (b1 && b2 && (*rList1 != *rList2)) )
                         pDoc->SetChartRangeList( pCL->GetName(), rList1 );
                 }
@@ -675,7 +576,7 @@ void ScChartListenerCollection::SetRangeDirty( const ScRange& rRange )
     {
         ScChartListener *const pCL = it.second.get();
         const ScRangeListRef& rList = pCL->GetRangeList();
-        if ( rList.Is() && rList->Intersects( rRange ) )
+        if ( rList.is() && rList->Intersects( rRange ) )
         {
             bDirty = true;
             pCL->SetDirty( true );
@@ -685,20 +586,12 @@ void ScChartListenerCollection::SetRangeDirty( const ScRange& rRange )
         StartTimer();
 
     // New hidden range listener implementation
-    for (auto itr = maHiddenListeners.begin(); itr != maHiddenListeners.end(); ++itr)
+    for (auto& [pListener, rHiddenRange] : maHiddenListeners)
     {
-        if (itr->second.Intersects(rRange))
+        if (rHiddenRange.Intersects(rRange))
         {
-            itr->first->notify();
+            pListener->notify();
         }
-    }
-}
-
-void ScChartListenerCollection::UpdateScheduledSeriesRanges()
-{
-    for (auto const& it : m_Listeners)
-    {
-        it.second->UpdateScheduledSeriesRanges();
     }
 }
 
@@ -713,19 +606,15 @@ void ScChartListenerCollection::UpdateChartsContainingTab( SCTAB nTab )
 
 bool ScChartListenerCollection::operator==( const ScChartListenerCollection& r ) const
 {
-    // Do not use ScStrCollection::operator==() here that uses IsEqual und Compare.
+    // Do not use ScStrCollection::operator==() here that uses IsEqual and Compare.
     // Use ScChartListener::operator==() instead.
-    if (pDoc != r.pDoc || m_Listeners.size() != r.m_Listeners.size())
+    if (pDoc != r.pDoc)
         return false;
 
-    ListenersType::const_iterator it = m_Listeners.begin(), itEnd = m_Listeners.end();
-    ListenersType::const_iterator it2 = r.m_Listeners.begin();
-    for (; it != itEnd; ++it, ++it2)
-    {
-        if (it->first != it2->first || *it->second != *it2->second)
-            return false;
-    }
-    return true;
+    return std::equal(m_Listeners.begin(), m_Listeners.end(), r.m_Listeners.begin(), r.m_Listeners.end(),
+        [](const ListenersType::value_type& lhs, const ListenersType::value_type& rhs) {
+            return (lhs.first == rhs.first) && (*lhs.second == *rhs.second);
+        });
 }
 
 void ScChartListenerCollection::StartListeningHiddenRange( const ScRange& rRange, ScChartHiddenRangeListener* pListener )

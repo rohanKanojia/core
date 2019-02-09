@@ -18,7 +18,6 @@
  */
 
 #include <com/sun/star/awt/WindowEvent.hpp>
-#include <comphelper/processfactory.hxx>
 
 #include <toolkit/helper/vclunohelper.hxx>
 #include <toolkit/helper/convert.hxx>
@@ -28,91 +27,92 @@
 #include <toolkit/awt/vclxtopwindow.hxx>
 #include <toolkit/awt/vclxgraphics.hxx>
 
-#include "toolkit/dllapi.h"
+#include <toolkit/dllapi.h>
 #include <vcl/svapp.hxx>
 #include <vcl/syswin.hxx>
 #include <vcl/menu.hxx>
 
 #include <tools/debug.hxx>
 
-#include "helper/unowrapper.hxx"
+#include <helper/unowrapper.hxx>
 
 using namespace ::com::sun::star;
 
-css::uno::Reference< css::awt::XWindowPeer > CreateXWindow( vcl::Window* pWindow )
+static css::uno::Reference< css::awt::XWindowPeer > CreateXWindow( vcl::Window const * pWindow )
 {
     switch ( pWindow->GetType() )
     {
-        case WINDOW_IMAGEBUTTON:
-        case WINDOW_SPINBUTTON:
-        case WINDOW_MENUBUTTON:
-        case WINDOW_MOREBUTTON:
-        case WINDOW_PUSHBUTTON:
-        case WINDOW_HELPBUTTON:
-        case WINDOW_OKBUTTON:
-        case WINDOW_CANCELBUTTON:   return new VCLXButton;
-        case WINDOW_CHECKBOX:       return new VCLXCheckBox;
+        case WindowType::IMAGEBUTTON:
+        case WindowType::SPINBUTTON:
+        case WindowType::MENUBUTTON:
+        case WindowType::MOREBUTTON:
+        case WindowType::PUSHBUTTON:
+        case WindowType::HELPBUTTON:
+        case WindowType::OKBUTTON:
+        case WindowType::CANCELBUTTON:   return new VCLXButton;
+        case WindowType::CHECKBOX:       return new VCLXCheckBox;
         // #i95042#
         // A Window of type <MetricBox> is inherited from type <ComboBox>.
         // Thus, it does make more sense to return a <VCLXComboBox> instance
         // instead of only a <VCLXWindow> instance, especially regarding its
         // corresponding accessibility API.
-        case WINDOW_METRICBOX:
-        case WINDOW_COMBOBOX:       return new VCLXComboBox;
-        case WINDOW_SPINFIELD:
-        case WINDOW_NUMERICFIELD:
-        case WINDOW_CURRENCYFIELD:  return new VCLXNumericField;
-        case WINDOW_DATEFIELD:      return new VCLXDateField;
-        case WINDOW_MULTILINEEDIT:
-        case WINDOW_EDIT:           return new VCLXEdit;
-        case WINDOW_METRICFIELD:    return new VCLXSpinField;
-        case WINDOW_MESSBOX:
-        case WINDOW_INFOBOX:
-        case WINDOW_WARNINGBOX:
-        case WINDOW_QUERYBOX:
-        case WINDOW_ERRORBOX:       return new VCLXMessageBox;
-        case WINDOW_FIXEDIMAGE:     return new VCLXImageControl;
-        case WINDOW_FIXEDTEXT:      return new VCLXFixedText;
-        case WINDOW_MULTILISTBOX:
-        case WINDOW_LISTBOX:        return new VCLXListBox;
-        case WINDOW_LONGCURRENCYFIELD:  return new VCLXCurrencyField;
-        case WINDOW_DIALOG:
-        case WINDOW_MODALDIALOG:
-        case WINDOW_TABDIALOG:
-        case WINDOW_BUTTONDIALOG:
-        case WINDOW_MODELESSDIALOG: return new VCLXDialog;
-        case WINDOW_PATTERNFIELD:   return new VCLXPatternField;
-        case WINDOW_RADIOBUTTON:    return new VCLXRadioButton;
-        case WINDOW_SCROLLBAR:      return new VCLXScrollBar;
-        case WINDOW_TIMEFIELD:      return new VCLXTimeField;
+        case WindowType::METRICBOX:
+        case WindowType::COMBOBOX:       return new VCLXComboBox;
+        case WindowType::SPINFIELD:
+        case WindowType::NUMERICFIELD:
+        case WindowType::CURRENCYFIELD:  return new VCLXNumericField;
+        case WindowType::DATEFIELD:      return new VCLXDateField;
+        case WindowType::MULTILINEEDIT:
+        case WindowType::EDIT:           return new VCLXEdit;
+        case WindowType::METRICFIELD:    return new VCLXSpinField;
+        case WindowType::MESSBOX:
+        case WindowType::INFOBOX:
+        case WindowType::WARNINGBOX:
+        case WindowType::QUERYBOX:
+        case WindowType::ERRORBOX:       return new VCLXMessageBox;
+        case WindowType::FIXEDIMAGE:     return new VCLXImageControl;
+        case WindowType::FIXEDTEXT:      return new VCLXFixedText;
+        case WindowType::MULTILISTBOX:
+        case WindowType::LISTBOX:        return new VCLXListBox;
+        case WindowType::LONGCURRENCYFIELD:  return new VCLXCurrencyField;
+        case WindowType::DIALOG:
+        case WindowType::MODALDIALOG:
+        case WindowType::TABDIALOG:
+        case WindowType::BUTTONDIALOG:
+        case WindowType::MODELESSDIALOG: return new VCLXDialog;
+        case WindowType::PATTERNFIELD:   return new VCLXPatternField;
+        case WindowType::RADIOBUTTON:    return new VCLXRadioButton;
+        case WindowType::SCROLLBAR:      return new VCLXScrollBar;
+        case WindowType::TIMEFIELD:      return new VCLXTimeField;
 
-        case WINDOW_SYSWINDOW:
-        case WINDOW_WORKWINDOW:
-        case WINDOW_DOCKINGWINDOW:
-        case WINDOW_FLOATINGWINDOW:
-        case WINDOW_HELPTEXTWINDOW: return new VCLXTopWindow;
+        case WindowType::WORKWINDOW:
+        case WindowType::DOCKINGWINDOW:
+        case WindowType::FLOATINGWINDOW:
+        case WindowType::HELPTEXTWINDOW: return new VCLXTopWindow;
 
-        case WINDOW_WINDOW:
-        case WINDOW_TABPAGE:        return new VCLXContainer;
+        case WindowType::WINDOW:
+        case WindowType::TABPAGE:        return new VCLXContainer;
 
-        case WINDOW_TOOLBOX:        return new VCLXToolBox;
-        case WINDOW_TABCONTROL:     return new VCLXMultiPage;
+        case WindowType::TOOLBOX:        return new VCLXToolBox;
+        case WindowType::TABCONTROL:     return new VCLXMultiPage;
 
-        // case WINDOW_FIXEDLINE:
-        // case WINDOW_FIXEDBITMAP:
-        // case WINDOW_DATEBOX:
-        // case WINDOW_GROUPBOX:
-        // case WINDOW_LONGCURRENCYBOX:
-        // case WINDOW_SPLITTER:
-        // case WINDOW_STATUSBAR:
-        // case WINDOW_TABCONTROL:
-        // case WINDOW_NUMERICBOX:
-        // case WINDOW_TRISTATEBOX:
-        // case WINDOW_TIMEBOX:
-        // case WINDOW_SPLITWINDOW:
-        // case WINDOW_SCROLLBARBOX:
-        // case WINDOW_PATTERNBOX:
-        // case WINDOW_CURRENCYBOX:
+        case WindowType::HEADERBAR:     return new VCLXHeaderBar;
+
+        // case WindowType::FIXEDLINE:
+        // case WindowType::FIXEDBITMAP:
+        // case WindowType::DATEBOX:
+        // case WindowType::GROUPBOX:
+        // case WindowType::LONGCURRENCYBOX:
+        // case WindowType::SPLITTER:
+        // case WindowType::STATUSBAR:
+        // case WindowType::TABCONTROL:
+        // case WindowType::NUMERICBOX:
+        // case WindowType::TRISTATEBOX:
+        // case WindowType::TIMEBOX:
+        // case WindowType::SPLITWINDOW:
+        // case WindowType::SCROLLBARBOX:
+        // case WindowType::PATTERNBOX:
+        // case WindowType::CURRENCYBOX:
         default:                    return new VCLXWindow( true );
     }
 }
@@ -163,6 +163,11 @@ css::uno::Reference< css::awt::XWindowPeer> UnoWrapper::GetWindowInterface( vcl:
     return xPeer;
 }
 
+VclPtr<vcl::Window> UnoWrapper::GetWindow(const css::uno::Reference<css::awt::XWindow>& rWindow)
+{
+    return VCLUnoHelper::GetWindow(rWindow);
+}
+
 void UnoWrapper::SetWindowInterface( vcl::Window* pWindow, css::uno::Reference< css::awt::XWindowPeer> xIFace )
 {
     VCLXWindow* pVCLXWindow = VCLXWindow::GetImplementation( xIFace );
@@ -197,16 +202,15 @@ void UnoWrapper::ReleaseAllGraphics( OutputDevice* pOutDev )
     std::vector< VCLXGraphics* > *pLst = pOutDev->GetUnoGraphicsList();
     if ( pLst )
     {
-        for ( size_t n = 0; n < pLst->size(); n++ )
+        for (VCLXGraphics* pGrf : *pLst)
         {
-            VCLXGraphics* pGrf = (*pLst)[ n ];
             pGrf->SetOutputDevice( nullptr );
         }
     }
 
 }
 
-static bool lcl_ImplIsParent( vcl::Window* pParentWindow, vcl::Window* pPossibleChild )
+static bool lcl_ImplIsParent( vcl::Window const * pParentWindow, vcl::Window* pPossibleChild )
 {
     vcl::Window* pWindow = ( pPossibleChild != pParentWindow ) ? pPossibleChild : nullptr;
     while ( pWindow && ( pWindow != pParentWindow ) )
@@ -234,7 +238,7 @@ void UnoWrapper::WindowDestroyed( vcl::Window* pWindow )
         pChild = pNextChild;
     }
 
-    // System-Windows suchen...
+    // find system windows...
     VclPtr< vcl::Window > pOverlap = pWindow->GetWindow( GetWindowType::Overlap );
     if ( pOverlap )
     {
@@ -273,7 +277,7 @@ void UnoWrapper::WindowDestroyed( vcl::Window* pWindow )
         xWindowPeerComp->dispose();
 
     // #102132# Iterate over frames after setting Window peer to NULL,
-    // because while destroying other frames, we get get into the method again and try
+    // because while destroying other frames, we get into the method again and try
     // to destroy this window again...
     // #i42462#/#116855# no, don't loop: Instead, just ensure that all our top-window-children
     // are disposed, too (which should also be a valid fix for #102132#, but doesn't have the extreme
@@ -286,11 +290,7 @@ void UnoWrapper::WindowDestroyed( vcl::Window* pWindow )
 
         VclPtr< vcl::Window > pNextTopChild = pTopWindowChild->GetWindow( GetWindowType::NextTopWindowSibling );
 
-        //the window still could be on the stack, so we have to
-        // use lazy delete ( it will automatically
-        // disconnect from the currently destroyed parent window )
-        pTopWindowChild->doLazyDelete();
-
+        pTopWindowChild.disposeAndClear();
         pTopWindowChild = pNextTopChild;
     }
 }

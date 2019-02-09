@@ -21,15 +21,15 @@
 
 #include <vcl/virdev.hxx>
 
-#include "swtypes.hxx"
-#include "swrect.hxx"
+#include <swtypes.hxx>
+#include <swrect.hxx>
 
 class SwViewShell;
 #define VIRTUALHEIGHT 64
 
 class SwLayVout
 {
-    friend void _FrameFinit();    //deletes Vout
+    friend void FrameFinit();    //deletes Vout
 private:
     SwViewShell*      pSh;
     VclPtr<OutputDevice>  pOut;
@@ -49,12 +49,12 @@ public:
     void Enter( SwViewShell *pShell, SwRect &rRect, bool bOn );
     void Leave() { --nCount; Flush(); }
 
-    void SetOrgRect( SwRect &rRect ) { aOrgRect = rRect; }
+    void SetOrgRect( SwRect const &rRect ) { aOrgRect = rRect; }
     const SwRect& GetOrgRect() const { return aOrgRect; }
 
     bool IsFlushable() const { return bool(pOut); }
-    void _Flush();
-    void Flush() { if( pOut ) _Flush(); }
+    void Flush_();
+    void Flush() { if( pOut ) Flush_(); }
 };
 
 #endif

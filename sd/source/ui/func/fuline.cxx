@@ -17,23 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuline.hxx"
+#include <fuline.hxx>
 
 #include <svx/svxids.hrc>
 #include <svx/tabline.hxx>
 #include <svx/xenum.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
 #include <sfx2/request.hxx>
 #include <svx/xdef.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/viewfrm.hxx>
-#include "ViewShell.hxx"
-#include "View.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "app.hrc"
+#include <ViewShell.hxx>
+#include <View.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <app.hrc>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <memory>
@@ -60,44 +59,50 @@ rtl::Reference<FuPoor> FuLine::Create( ViewShell* pViewSh, ::sd::Window* pWin, :
 
 void FuLine::DoExecute( SfxRequest& rReq )
 {
-    bool        bHasMarked = mpView->AreObjectsMarked();
+    rReq.Ignore();
 
     const SfxItemSet* pArgs = rReq.GetArgs();
+    if (pArgs)
+        return;
 
-    if( !pArgs )
-    {
-        const SdrObject* pObj = nullptr;
-        const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
-        if( rMarkList.GetMarkCount() == 1 )
-            pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
+    const SdrObject* pObj = nullptr;
+    const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
+    if( rMarkList.GetMarkCount() == 1 )
+        pObj = rMarkList.GetMark(0)->GetMarkedSdrObj();
 
-        std::unique_ptr<SfxItemSet> pNewAttr(new SfxItemSet( mpDoc->GetPool() ));
-        mpView->GetAttributes( *pNewAttr );
+    std::unique_ptr<SfxItemSet> pNewAttr(new SfxItemSet( mpDoc->GetPool() ));
+    mpView->GetAttributes( *pNewAttr );
 
-        SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact ? pFact->CreateSvxLineTabDialog(nullptr,pNewAttr.get(),mpDoc,pObj,bHasMarked) : nullptr);
-        if( pDlg && (pDlg->Execute() == RET_OK) )
+    bool bHasMarked = mpView->AreObjectsMarked();
+    SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
+    VclPtr<SfxAbstractTabDialog> pDlg( pFact->CreateSvxLineTabDialog(mpViewShell->GetFrameWeld(), pNewAttr.get(), mpDoc, pObj, bHasMarked) );
+
+    pDlg->StartExecuteAsync([pDlg, this](sal_Int32 nResult){
+        if (nResult == RET_OK)
         {
             mpView->SetAttributes (*(pDlg->GetOutputItemSet ()));
+
+            // some attributes are changed, we have to update the listboxes in the objectbars
+            static const sal_uInt16 SidArray[] = {
+                SID_ATTR_LINE_STYLE,                // ( SID_SVX_START + 169 )
+                SID_ATTR_LINE_DASH,                 // ( SID_SVX_START + 170 )
+                SID_ATTR_LINE_WIDTH,                // ( SID_SVX_START + 171 )
+                SID_ATTR_LINE_COLOR,                // ( SID_SVX_START + 172 )
+                SID_ATTR_LINE_START,                // ( SID_SVX_START + 173 )
+                SID_ATTR_LINE_END,                  // ( SID_SVX_START + 174 )
+                SID_ATTR_LINE_TRANSPARENCE,         // (SID_SVX_START+1107)
+                SID_ATTR_LINE_JOINT,                // (SID_SVX_START+1110)
+                SID_ATTR_LINE_CAP,                  // (SID_SVX_START+1111)
+                0 };
+
+            mpViewShell->GetViewFrame()->GetBindings().Invalidate( SidArray );
         }
 
-        // some attributes are changed, we have to update the listboxes in the objectbars
-        static sal_uInt16 SidArray[] = {
-            SID_ATTR_LINE_STYLE,                // ( SID_SVX_START + 169 )
-            SID_ATTR_LINE_DASH,                 // ( SID_SVX_START + 170 )
-            SID_ATTR_LINE_WIDTH,                // ( SID_SVX_START + 171 )
-            SID_ATTR_LINE_COLOR,                // ( SID_SVX_START + 172 )
-            SID_ATTR_LINE_START,                // ( SID_SVX_START + 173 )
-            SID_ATTR_LINE_END,                  // ( SID_SVX_START + 174 )
-            SID_ATTR_LINE_TRANSPARENCE,         // (SID_SVX_START+1107)
-            SID_ATTR_LINE_JOINT,                // (SID_SVX_START+1110)
-            SID_ATTR_LINE_CAP,                  // (SID_SVX_START+1111)
-            0 };
+        // deferred until the dialog ends
+        mpViewShell->Cancel();
 
-        mpViewShell->GetViewFrame()->GetBindings().Invalidate( SidArray );
-    }
-
-    rReq.Ignore ();
+        pDlg->disposeOnce();
+    });
 }
 
 void FuLine::Activate()

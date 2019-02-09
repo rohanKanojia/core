@@ -17,22 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 #include <utility>
 #include <vector>
 
-#include "codemaker/global.hxx"
-#include "codemaker/typemanager.hxx"
-#include "codemaker/unotype.hxx"
+#include <codemaker/global.hxx>
+#include <codemaker/typemanager.hxx>
+#include <codemaker/unotype.hxx>
 
-#include "osl/diagnose.h"
-#include "rtl/ref.hxx"
-#include "rtl/string.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "unoidl/unoidl.hxx"
+#include <rtl/ref.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <unoidl/unoidl.hxx>
 
 #include "dependencies.hxx"
 
@@ -44,8 +43,7 @@ Dependencies::Dependencies(
     m_byteDependency(false), m_shortDependency(false),
     m_unsignedShortDependency(false), m_longDependency(false),
     m_unsignedLongDependency(false), m_hyperDependency(false),
-    m_unsignedHyperDependency(false), m_floatDependency(false),
-    m_doubleDependency(false), m_charDependency(false),
+    m_unsignedHyperDependency(false), m_charDependency(false),
     m_stringDependency(false), m_typeDependency(false), m_anyDependency(false),
     m_sequenceDependency(false)
 {
@@ -59,11 +57,11 @@ Dependencies::Dependencies(
             rtl::Reference< unoidl::PlainStructTypeEntity > ent2(
                 static_cast< unoidl::PlainStructTypeEntity * >(ent.get()));
             if (!ent2->getDirectBase().isEmpty()) {
-                insert(ent2->getDirectBase());
+                insert(ent2->getDirectBase(), KIND_NORMAL);
             }
             for (const unoidl::PlainStructTypeEntity::Member& member : ent2->getDirectMembers())
             {
-                insert(member.type);
+                insert(member.type, KIND_NORMAL);
             }
             break;
         }
@@ -75,7 +73,7 @@ Dependencies::Dependencies(
             for (const unoidl::PolymorphicStructTypeTemplateEntity::Member& member : ent2->getMembers())
             {
                 if (!member.parameterized) {
-                    insert(member.type);
+                    insert(member.type, KIND_NORMAL);
                 }
             }
             break;
@@ -85,11 +83,11 @@ Dependencies::Dependencies(
             rtl::Reference< unoidl::ExceptionTypeEntity > ent2(
                 static_cast< unoidl::ExceptionTypeEntity * >(ent.get()));
             if (!ent2->getDirectBase().isEmpty()) {
-                insert(ent2->getDirectBase());
+                insert(ent2->getDirectBase(), KIND_NORMAL);
             }
             for (const unoidl::ExceptionTypeEntity::Member& member : ent2->getDirectMembers())
             {
-                insert(member.type);
+                insert(member.type, KIND_NORMAL);
             }
             break;
         }
@@ -99,41 +97,43 @@ Dependencies::Dependencies(
                 static_cast< unoidl::InterfaceTypeEntity * >(ent.get()));
             for (const unoidl::AnnotatedReference& ar : ent2->getDirectMandatoryBases())
             {
-                insert(ar.name, true);
+                insert(ar.name, KIND_BASE);
             }
             if (!(ent2->getDirectAttributes().empty()
                   && ent2->getDirectMethods().empty()))
             {
-                insert("com.sun.star.uno.RuntimeException");
+                insert("com.sun.star.uno.RuntimeException", KIND_EXCEPTION);
             }
             for (const unoidl::InterfaceTypeEntity::Attribute& attr : ent2->getDirectAttributes())
             {
-                insert(attr.type);
+                insert(attr.type, KIND_NORMAL);
                 for (const OUString& ex : attr.getExceptions)
                 {
-                    insert(ex);
+                    insert(ex, KIND_EXCEPTION);
                 }
                 for (const OUString& ex : attr.setExceptions)
                 {
-                    insert(ex);
+                    insert(ex, KIND_EXCEPTION);
                 }
             }
             for (const unoidl::InterfaceTypeEntity::Method& method : ent2->getDirectMethods())
             {
-                insert(method.returnType);
+                insert(method.returnType, KIND_NORMAL);
                 for (const unoidl::InterfaceTypeEntity::Method::Parameter& param : method.parameters)
                 {
-                    insert(param.type);
+                    insert(param.type, KIND_NORMAL);
                 }
                 for (const OUString& ex : method.exceptions)
                 {
-                    insert(ex);
+                    insert(ex, KIND_EXCEPTION);
                 }
             }
             break;
         }
     case UnoType::Sort::Typedef:
-        insert(static_cast< unoidl::TypedefEntity * >(ent.get())->getType());
+        insert(
+            static_cast< unoidl::TypedefEntity * >(ent.get())->getType(),
+            KIND_NORMAL);
         break;
     case UnoType::Sort::ConstantGroup:
         {
@@ -167,10 +167,8 @@ Dependencies::Dependencies(
                     m_unsignedHyperDependency = true;
                     break;
                 case unoidl::ConstantValue::TYPE_FLOAT:
-                    m_floatDependency = true;
                     break;
                 case unoidl::ConstantValue::TYPE_DOUBLE:
-                    m_doubleDependency = true;
                     break;
                 }
             }
@@ -182,21 +180,21 @@ Dependencies::Dependencies(
                 static_cast< unoidl::SingleInterfaceBasedServiceEntity * >(
                     ent.get()));
             if (!ent2->getConstructors().empty()) {
-                insert(ent2->getBase());
+                insert(ent2->getBase(), KIND_NORMAL);
             }
             for (const unoidl::SingleInterfaceBasedServiceEntity::Constructor& cons : ent2->getConstructors())
             {
                 for (const unoidl::SingleInterfaceBasedServiceEntity::Constructor::Parameter& param
                          : cons.parameters)
                 {
-                    insert(param.type);
+                    insert(param.type, KIND_NORMAL);
                     if (param.rest) {
                         m_sequenceDependency = true;
                     }
                 }
                 for (const OUString& ex : cons.exceptions)
                 {
-                    insert(ex);
+                    insert(ex, KIND_EXCEPTION);
                 }
             }
             break;
@@ -204,7 +202,8 @@ Dependencies::Dependencies(
     case UnoType::Sort::InterfaceBasedSingleton:
         insert(
             static_cast< unoidl::InterfaceBasedSingletonEntity * >(ent.get())->
-            getBase());
+                getBase(),
+            KIND_NORMAL);
         break;
     default:
         assert(false); // this cannot happen
@@ -213,7 +212,7 @@ Dependencies::Dependencies(
 
 Dependencies::~Dependencies() {}
 
-void Dependencies::insert(OUString const & name, bool base) {
+void Dependencies::insert(OUString const & name, Kind kind) {
     sal_Int32 k;
     std::vector< OString > args;
     OUString n(b2u(UnoType::decompose(u2b(name), &k, &args)));
@@ -249,10 +248,8 @@ void Dependencies::insert(OUString const & name, bool base) {
         m_unsignedHyperDependency = true;
         break;
     case UnoType::Sort::Float:
-        m_floatDependency = true;
         break;
     case UnoType::Sort::Double:
-        m_doubleDependency = true;
         break;
     case UnoType::Sort::Char:
         m_charDependency = true;
@@ -269,9 +266,9 @@ void Dependencies::insert(OUString const & name, bool base) {
     case UnoType::Sort::PolymorphicStructTemplate:
         for (const OString& arg : args)
         {
-            insert(b2u(arg));
+            insert(b2u(arg), KIND_NORMAL);
         }
-        // fall through
+        [[fallthrough]];
     case UnoType::Sort::Sequence:
     case UnoType::Sort::Enum:
     case UnoType::Sort::PlainStruct:
@@ -280,9 +277,9 @@ void Dependencies::insert(OUString const & name, bool base) {
     case UnoType::Sort::Typedef:
         {
             std::pair< Map::iterator, bool > i(
-                m_map.insert(
-                    Map::value_type(n, base ? KIND_BASE : KIND_NO_BASE)));
-            if (!i.second && base) {
+                m_map.emplace(n, kind));
+            if (!i.second && kind == KIND_BASE) {
+                assert(i.first->second != KIND_EXCEPTION);
                 i.first->second = KIND_BASE;
             }
             break;

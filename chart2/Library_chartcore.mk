@@ -27,12 +27,11 @@ $(eval $(call gb_Library_set_precompiled_header,chartcore,$(SRCDIR)/chart2/inc/p
 
 $(eval $(call gb_Library_use_externals,chartcore,\
 	boost_headers \
-	glm_headers \
 ))
 
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(DISABLE_GUI),)
 $(eval $(call gb_Library_use_externals,chartcore,\
-    glew \
+    epoxy \
 ))
 endif
 
@@ -61,7 +60,6 @@ $(eval $(call gb_Library_use_libraries,chartcore,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,chartcore,chart2/source/chartcore))
@@ -110,7 +108,6 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/view/main/PolarLabelPositionHelper \
     chart2/source/view/main/PropertyMapper \
     chart2/source/view/main/ShapeFactory \
-    chart2/source/view/main/AbstractShapeFactory \
     chart2/source/view/main/Stripe \
     chart2/source/view/main/VDataSeries \
     chart2/source/view/main/VLegend \
@@ -118,15 +115,8 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/view/main/VLineProperties \
     chart2/source/view/main/VPolarTransformation \
     chart2/source/view/main/VTitle \
+    chart2/source/view/main/VButton \
 ))
-ifeq ($(ENABLE_OPENGL),TRUE)
-$(eval $(call gb_Library_add_exception_objects,chartcore,\
-    chart2/source/view/main/3DChartObjects \
-    chart2/source/view/main/GL3DPlotterBase \
-    chart2/source/view/main/GL3DRenderer \
-    chart2/source/view/charttypes/GL3DBarChart \
-))
-endif
 
 # model pieces ...
 $(eval $(call gb_Library_add_exception_objects,chartcore,\
@@ -166,8 +156,6 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/model/template/ColumnLineDataInterpreter \
     chart2/source/model/template/DataInterpreter \
     chart2/source/model/template/FilledNetChartType \
-    chart2/source/model/template/GL3DBarChartType \
-    chart2/source/model/template/GL3DBarChartTypeTemplate \
     chart2/source/model/template/LineChartType \
     chart2/source/model/template/LineChartTypeTemplate \
     chart2/source/model/template/NetChartType \
@@ -211,11 +199,9 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/tools/LifeTime \
     chart2/source/tools/LinearRegressionCurveCalculator \
     chart2/source/tools/LinePropertiesHelper \
-    chart2/source/tools/LineProperties \
     chart2/source/tools/LogarithmicRegressionCurveCalculator \
     chart2/source/tools/MeanValueRegressionCurveCalculator \
     chart2/source/tools/MediaDescriptorHelper \
-    chart2/source/tools/ModifyListenerCallBack \
     chart2/source/tools/ModifyListenerHelper \
     chart2/source/tools/MovingAverageRegressionCurveCalculator \
     chart2/source/tools/MutexContainer \
@@ -224,6 +210,7 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/tools/ObjectIdentifier \
     chart2/source/tools/OPropertySet \
     chart2/source/tools/PolynomialRegressionCurveCalculator \
+    chart2/source/tools/PopupRequest \
     chart2/source/tools/PotentialRegressionCurveCalculator \
     chart2/source/tools/PropertyHelper \
     chart2/source/tools/RangeHighlighter \
@@ -235,7 +222,6 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/tools/RelativePositionHelper \
     chart2/source/tools/RelativeSizeHelper \
     chart2/source/tools/ResId \
-    chart2/source/tools/ResourceManager \
     chart2/source/tools/Scaling \
     chart2/source/tools/SceneProperties \
     chart2/source/tools/StatisticsHelper \
@@ -253,26 +239,4 @@ $(eval $(call gb_Library_add_exception_objects,chartcore,\
     chart2/source/tools/XMLRangeHelper \
 ))
  
-ifeq ($(strip $(OS)),WNT)
-$(eval $(call gb_Library_use_system_win32_libs,chartcore,\
-	opengl32 \
-	gdi32 \
-))
-else ifeq ($(OS),MACOSX)
-$(eval $(call gb_Library_use_system_darwin_frameworks,chartcore,\
-	OpenGL \
-))
-else ifeq ($(OS), $(filter LINUX %BSD SOLARIS, $(OS)))
-$(eval $(call gb_Library_add_libs,chartcore,\
-	$(DLOPEN_LIBS) \
-))
-ifeq ($(ENABLE_OPENGL),TRUE)
-$(eval $(call gb_Library_add_libs,chartcore,\
-    -lGL \
-    -lX11 \
-))
-endif #ENABLE_OPENGL
-
-endif
-
 # vim: set noet sw=4 ts=4:

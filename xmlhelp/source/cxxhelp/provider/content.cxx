@@ -27,6 +27,7 @@
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/ucb/OpenCommandArgument2.hpp>
 #include <com/sun/star/ucb/OpenMode.hpp>
+#include <com/sun/star/ucb/UnsupportedCommandException.hpp>
 #include <com/sun/star/ucb/XCommandInfo.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
@@ -34,11 +35,10 @@
 #include <com/sun/star/ucb/UnsupportedDataSinkException.hpp>
 #include <com/sun/star/io/XActiveDataStreamer.hpp>
 #include <com/sun/star/ucb/XPersistentPropertySet.hpp>
-#include <osl/diagnose.h>
-#include <comphelper/processfactory.hxx>
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/propertyvalueset.hxx>
 #include <ucbhelper/cancelcommandexecution.hxx>
+#include <ucbhelper/macros.hxx>
 #include "content.hxx"
 #include "provider.hxx"
 #include "resultset.hxx"
@@ -69,25 +69,8 @@ Content::~Content()
 {
 }
 
-// XInterface methods.
-
-// virtual
-void SAL_CALL Content::acquire()
-    throw( )
-{
-    ContentImplHelper::acquire();
-}
-
-// virtual
-void SAL_CALL Content::release()
-    throw( )
-{
-    ContentImplHelper::release();
-}
-
 // virtual
 uno::Any SAL_CALL Content::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet;
      return aRet.hasValue() ? aRet : ContentImplHelper::queryInterface( rType );
@@ -99,17 +82,9 @@ XTYPEPROVIDER_COMMON_IMPL( Content );
 
 // virtual
 uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-
-    if ( !pCollection )
-    {
-        osl::MutexGuard aGuard( osl::Mutex::getGlobalMutex() );
-          if ( !pCollection )
-          {
-              static cppu::OTypeCollection aCollection(
-                CPPU_TYPE_REF( lang::XTypeProvider ),
+    static cppu::OTypeCollection ourTypeCollection(
+                   CPPU_TYPE_REF( lang::XTypeProvider ),
                    CPPU_TYPE_REF( lang::XServiceInfo ),
                    CPPU_TYPE_REF( lang::XComponent ),
                    CPPU_TYPE_REF( ucb::XContent ),
@@ -119,25 +94,20 @@ uno::Sequence< uno::Type > SAL_CALL Content::getTypes()
                    CPPU_TYPE_REF( beans::XPropertyContainer ),
                    CPPU_TYPE_REF( beans::XPropertySetInfoChangeNotifier ),
                    CPPU_TYPE_REF( container::XChild ) );
-              pCollection = &aCollection;
-        }
-    }
 
-    return (*pCollection).getTypes();
+    return ourTypeCollection.getTypes();
 }
 
 // XServiceInfo methods.
 
 // virtual
 OUString SAL_CALL Content::getImplementationName()
-    throw( uno::RuntimeException, std::exception )
 {
     return OUString( "CHelpContent" );
 }
 
 // virtual
 uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
-    throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence<OUString> aSNS { "com.sun.star.ucb.CHelpContent" };
 
@@ -148,7 +118,6 @@ uno::Sequence< OUString > SAL_CALL Content::getSupportedServiceNames()
 
 // virtual
 OUString SAL_CALL Content::getContentType()
-    throw( uno::RuntimeException, std::exception )
 {
     return OUString( MYUCP_CONTENT_TYPE );
 }
@@ -157,7 +126,6 @@ OUString SAL_CALL Content::getContentType()
 
 //virtual
 void SAL_CALL Content::abort( sal_Int32 /*CommandId*/ )
-    throw( uno::RuntimeException, std::exception )
 {
 }
 
@@ -168,9 +136,9 @@ private:
 
     uno::Reference< uno::XComponentContext >     m_xContext;
     uno::Reference< ucb::XContentProvider >      m_xProvider;
-    uno::Sequence< beans::Property >             m_seq;
-    URLParameter                                 m_aURLParameter;
-    Databases*                                   m_pDatabases;
+    uno::Sequence< beans::Property > const       m_seq;
+    URLParameter const                           m_aURLParameter;
+    Databases* const                             m_pDatabases;
 
 public:
 
@@ -205,9 +173,9 @@ private:
 
     uno::Reference< uno::XComponentContext >     m_xContext;
     uno::Reference< ucb::XContentProvider >      m_xProvider;
-    uno::Sequence< beans::Property >             m_seq;
+    uno::Sequence< beans::Property > const       m_seq;
     URLParameter                                 m_aURLParameter;
-    Databases*                                   m_pDatabases;
+    Databases* const                             m_pDatabases;
 
 public:
 
@@ -238,11 +206,8 @@ public:
 // virtual
 uno::Any SAL_CALL Content::execute(
         const ucb::Command& aCommand,
-        sal_Int32 CommandId,
+        sal_Int32,
         const uno::Reference< ucb::XCommandEnvironment >& Environment )
-    throw( uno::Exception,
-           ucb::CommandAbortedException,
-           uno::RuntimeException, std::exception )
 {
     uno::Any aRet;
 
@@ -303,10 +268,7 @@ uno::Any SAL_CALL Content::execute(
             aOpenCommand.Sink, uno::UNO_QUERY);
 
         if(xActiveDataSink.is())
-            m_aURLParameter.open(aCommand,
-                                 CommandId,
-                                 Environment,
-                                 xActiveDataSink);
+            m_aURLParameter.open(xActiveDataSink);
 
         uno::Reference< io::XActiveDataStreamer > xActiveDataStreamer(
             aOpenCommand.Sink, uno::UNO_QUERY);
@@ -320,10 +282,7 @@ uno::Any SAL_CALL Content::execute(
             aOpenCommand.Sink, uno::UNO_QUERY);
 
         if(xOutputStream.is() )
-            m_aURLParameter.open(aCommand,
-                                 CommandId,
-                                 Environment,
-                                 xOutputStream);
+            m_aURLParameter.open(xOutputStream);
 
         if( m_aURLParameter.isRoot() )
         {
@@ -331,7 +290,7 @@ uno::Any SAL_CALL Content::execute(
                 = new DynamicResultSet(
                     m_xContext,
                     aOpenCommand,
-                    new ResultSetForRootFactory(
+                    std::make_unique<ResultSetForRootFactory>(
                         m_xContext,
                         m_xProvider.get(),
                         aOpenCommand.Properties,
@@ -345,7 +304,7 @@ uno::Any SAL_CALL Content::execute(
                 = new DynamicResultSet(
                     m_xContext,
                     aOpenCommand,
-                    new ResultSetForQueryFactory(
+                    std::make_unique<ResultSetForQueryFactory>(
                         m_xContext,
                         m_xProvider.get(),
                         aOpenCommand.Properties,
@@ -459,9 +418,7 @@ uno::Reference< sdbc::XRow > Content::getPropertyValues(
                 uno::Sequence< OUString > seq( 2 );
                 seq[0] = "Heading";
                 seq[1] = "FullText";
-                uno::Any aAny;
-                aAny <<= seq;
-                xRow->appendObject( rProp,aAny );
+                xRow->appendObject( rProp, uno::Any(seq) );
             }
             else if ( rProp.Name == "Order" )
             {

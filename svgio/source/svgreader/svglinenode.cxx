@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svglinenode.hxx>
+#include <svglinenode.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 
@@ -33,14 +33,12 @@ namespace svgio
             maX1(0),
             maY1(0),
             maX2(0),
-            maY2(0),
-            mpaTransform(nullptr)
+            maY2(0)
         {
         }
 
         SvgLineNode::~SvgLineNode()
         {
-            delete mpaTransform;
         }
 
         const SvgStyleAttributes* SvgLineNode::getSvgStyleAttributes() const
@@ -54,7 +52,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -70,7 +68,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setX1(aNum);
+                        maX1 = aNum;
                     }
                     break;
                 }
@@ -80,7 +78,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setY1(aNum);
+                        maY1 = aNum;
                     }
                     break;
                 }
@@ -90,7 +88,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setX2(aNum);
+                        maX2 = aNum;
                     }
                     break;
                 }
@@ -100,7 +98,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setY2(aNum);
+                        maY2 = aNum;
                     }
                     break;
                 }
@@ -125,31 +123,31 @@ namespace svgio
         {
             const SvgStyleAttributes* pStyle = getSvgStyleAttributes();
 
-            if(pStyle)
+            if(!pStyle)
+                return;
+
+            const basegfx::B2DPoint X(
+                getX1().isSet() ? getX1().solve(*this, xcoordinate) : 0.0,
+                getY1().isSet() ? getY1().solve(*this, ycoordinate) : 0.0);
+            const basegfx::B2DPoint Y(
+                getX2().isSet() ? getX2().solve(*this, xcoordinate) : 0.0,
+                getY2().isSet() ? getY2().solve(*this, ycoordinate) : 0.0);
+
+            // X and Y may be equal, do not drop them. Markers or linecaps 'round' and 'square'
+            // need to be drawn for zero-length lines too.
+
+            basegfx::B2DPolygon aPath;
+
+            aPath.append(X);
+            aPath.append(Y);
+
+            drawinglayer::primitive2d::Primitive2DContainer aNewTarget;
+
+            pStyle->add_path(basegfx::B2DPolyPolygon(aPath), aNewTarget, nullptr);
+
+            if(!aNewTarget.empty())
             {
-                const basegfx::B2DPoint X(
-                    getX1().isSet() ? getX1().solve(*this, xcoordinate) : 0.0,
-                    getY1().isSet() ? getY1().solve(*this, ycoordinate) : 0.0);
-                const basegfx::B2DPoint Y(
-                    getX2().isSet() ? getX2().solve(*this, xcoordinate) : 0.0,
-                    getY2().isSet() ? getY2().solve(*this, ycoordinate) : 0.0);
-
-                // X and Y may be equal, do not drop them. Markers or linecaps 'round' and 'square'
-                // need to be drawn for zero-length lines too.
-
-                basegfx::B2DPolygon aPath;
-
-                aPath.append(X);
-                aPath.append(Y);
-
-                drawinglayer::primitive2d::Primitive2DContainer aNewTarget;
-
-                pStyle->add_path(basegfx::B2DPolyPolygon(aPath), aNewTarget, nullptr);
-
-                if(!aNewTarget.empty())
-                {
-                    pStyle->add_postProcess(rTarget, aNewTarget, getTransform());
-                }
+                pStyle->add_postProcess(rTarget, aNewTarget, getTransform());
             }
         }
     } // end of namespace svgreader

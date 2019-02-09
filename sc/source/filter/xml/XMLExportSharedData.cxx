@@ -26,22 +26,18 @@ using namespace com::sun::star;
 ScMySharedData::ScMySharedData(const sal_Int32 nTempTableCount) :
     nLastColumns(nTempTableCount, 0),
     nLastRows(nTempTableCount, 0),
-    pTableShapes(nullptr),
-    pDrawPages(nullptr),
-    pShapesContainer(nullptr),
     pDetectiveObjContainer(new ScMyDetectiveObjContainer()),
-    pNoteShapes(nullptr),
     nTableCount(nTempTableCount)
 {
 }
 
 ScMySharedData::~ScMySharedData()
 {
-    delete pShapesContainer;
-    delete pTableShapes;
-    delete pDrawPages;
-    delete pDetectiveObjContainer;
-    delete pNoteShapes;
+    pShapesContainer.reset();
+    pTableShapes.reset();
+    pDrawPages.reset();
+    pDetectiveObjContainer.reset();
+    pNoteShapes.reset();
 }
 
 void ScMySharedData::SetLastColumn(const sal_Int32 nTable, const sal_Int32 nCol)
@@ -67,7 +63,7 @@ sal_Int32 ScMySharedData::GetLastRow(const sal_Int32 nTable) const
 void ScMySharedData::AddDrawPage(const ScMyDrawPage& aDrawPage, const sal_Int32 nTable)
 {
     if (!pDrawPages)
-        pDrawPages = new ScMyDrawPages(nTableCount, ScMyDrawPage());
+        pDrawPages.reset(new ScMyDrawPages(nTableCount, ScMyDrawPage()));
     (*pDrawPages)[nTable] = aDrawPage;
 }
 
@@ -104,7 +100,7 @@ bool ScMySharedData::HasForm(const sal_Int32 nTable, uno::Reference<drawing::XDr
 void ScMySharedData::AddNewShape(const ScMyShape& aMyShape)
 {
     if (!pShapesContainer)
-        pShapesContainer = new ScMyShapesContainer();
+        pShapesContainer.reset(new ScMyShapesContainer());
     pShapesContainer->AddNewShape(aMyShape);
 }
 
@@ -123,14 +119,14 @@ bool ScMySharedData::HasShapes()
 void ScMySharedData::AddTableShape(const sal_Int32 nTable, const uno::Reference<drawing::XShape>& xShape)
 {
     if (!pTableShapes)
-        pTableShapes = new ScMyTableShapes(nTableCount);
+        pTableShapes.reset(new ScMyTableShapes(nTableCount));
     (*pTableShapes)[nTable].push_back(xShape);
 }
 
 void ScMySharedData::AddNoteObj(const uno::Reference<drawing::XShape>& xShape, const ScAddress& rPos)
 {
     if (!pNoteShapes)
-        pNoteShapes = new ScMyNoteShapesContainer();
+        pNoteShapes.reset( new ScMyNoteShapesContainer() );
     ScMyNoteShape aNote;
     aNote.xShape = xShape;
     aNote.aPos = rPos;

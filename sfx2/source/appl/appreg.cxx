@@ -18,21 +18,22 @@
  */
 
 
+#include <sal/log.hxx>
 #include <vcl/toolbox.hxx>
 
 #include <sfx2/app.hxx>
-#include "appdata.hxx"
+#include <appdata.hxx>
 #include <sfx2/sfxhelp.hxx>
 #include <sfx2/templdlg.hxx>
-#include "inettbc.hxx"
+#include <inettbc.hxx>
 #include <sfx2/stbitem.hxx>
 #include <sfx2/infobar.hxx>
 #include <sfx2/navigat.hxx>
 #include <sfx2/module.hxx>
 #include <sfx2/viewfrm.hxx>
-#include "partwnd.hxx"
+#include <partwnd.hxx>
 #include <sfx2/sfxsids.hrc>
-#include "recfloat.hxx"
+#include <recfloat.hxx>
 #include <ctrlfactoryimpl.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/viewsh.hxx>
@@ -70,9 +71,9 @@ void SfxApplication::RegisterToolBoxControl_Impl( SfxModule *pMod, const SfxTbxC
     }
 
 #ifdef DBG_UTIL
-    for ( size_t n=0; n<pAppData_Impl->pTbxCtrlFac->size(); n++ )
+    for ( size_t n=0; n<pImpl->pTbxCtrlFac->size(); n++ )
     {
-        SfxTbxCtrlFactory *pF = &(*pAppData_Impl->pTbxCtrlFac)[n];
+        SfxTbxCtrlFactory *pF = &(*pImpl->pTbxCtrlFac)[n];
         if ( pF->nTypeId == rFact.nTypeId &&
             (pF->nSlotId == rFact.nSlotId || pF->nSlotId == 0) )
         {
@@ -81,7 +82,7 @@ void SfxApplication::RegisterToolBoxControl_Impl( SfxModule *pMod, const SfxTbxC
     }
 #endif
 
-    pAppData_Impl->pTbxCtrlFac->push_back( rFact );
+    pImpl->pTbxCtrlFac->push_back( rFact );
 }
 
 
@@ -94,9 +95,9 @@ void SfxApplication::RegisterStatusBarControl_Impl( SfxModule *pMod, const SfxSt
     }
 
 #ifdef DBG_UTIL
-    for ( size_t n=0; n<pAppData_Impl->pStbCtrlFac->size(); n++ )
+    for ( size_t n=0; n<pImpl->pStbCtrlFac->size(); n++ )
     {
-        SfxStbCtrlFactory *pF = &(*pAppData_Impl->pStbCtrlFac)[n];
+        SfxStbCtrlFactory *pF = &(*pImpl->pStbCtrlFac)[n];
         if ( pF->nTypeId == rFact.nTypeId &&
             (pF->nSlotId == rFact.nSlotId || pF->nSlotId == 0) )
         {
@@ -105,7 +106,7 @@ void SfxApplication::RegisterStatusBarControl_Impl( SfxModule *pMod, const SfxSt
     }
 #endif
 
-    pAppData_Impl->pStbCtrlFac->push_back( rFact );
+    pImpl->pStbCtrlFac->push_back( rFact );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

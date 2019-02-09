@@ -18,17 +18,15 @@
  */
 
 #include "DragMethod_RotateDiagram.hxx"
+#include <DrawViewWrapper.hxx>
 
-#include "SelectionHelper.hxx"
-#include "CommonConverters.hxx"
-#include "ChartModelHelper.hxx"
-#include "macros.hxx"
-#include "DiagramHelper.hxx"
-#include "ChartTypeHelper.hxx"
-#include "ThreeDHelper.hxx"
-#include "defines.hxx"
+#include <SelectionHelper.hxx>
+#include <ChartModelHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <ThreeDHelper.hxx>
+#include <defines.hxx>
 #include <svx/sdr/overlay/overlaypolypolygon.hxx>
-#include <svx/sdr/overlay/overlaymanager.hxx>
 
 #include <svx/scene3d.hxx>
 #include <basegfx/matrix/b3dhommatrix.hxx>
@@ -47,7 +45,7 @@ DragMethod_RotateDiagram::DragMethod_RotateDiagram( DrawViewWrapper& rDrawViewWr
         , const OUString& rObjectCID
         , const Reference< frame::XModel >& xChartModel
         , RotationDirection eRotationDirection )
-    : DragMethod_Base( rDrawViewWrapper, rObjectCID, xChartModel, ActionDescriptionProvider::ROTATE )
+    : DragMethod_Base( rDrawViewWrapper, rObjectCID, xChartModel, ActionDescriptionProvider::ActionType::Rotate )
     , m_pScene(nullptr)
     , m_aReferenceRect(100,100,100,100)
     , m_aStartPos(0,0)
@@ -73,7 +71,7 @@ DragMethod_RotateDiagram::DragMethod_RotateDiagram( DrawViewWrapper& rDrawViewWr
 
         m_aWireframePolyPolygon = m_pScene->CreateWireframe();
 
-        uno::Reference< chart2::XDiagram > xDiagram( ChartModelHelper::findDiagram(this->getChartModel()) );
+        uno::Reference< chart2::XDiagram > xDiagram( ChartModelHelper::findDiagram(getChartModel()) );
         uno::Reference< beans::XPropertySet > xDiagramProperties( xDiagram, uno::UNO_QUERY );
         if( xDiagramProperties.is() )
         {
@@ -114,10 +112,10 @@ void DragMethod_RotateDiagram::MoveSdrDrag(const Point& rPnt)
         Hide();
 
         //calculate new angle
-        double fX = F_PI / 2.0 * (double)(rPnt.Y() - m_aStartPos.Y())
-            / (m_aReferenceRect.GetHeight() > 0 ? (double)m_aReferenceRect.GetHeight() : 1.0);
-        double fY = F_PI * (double)(rPnt.X() - m_aStartPos.X())
-            / (m_aReferenceRect.GetWidth() > 0 ? (double)m_aReferenceRect.GetWidth() : 1.0);
+        double fX = F_PI2 * static_cast<double>(rPnt.Y() - m_aStartPos.Y())
+            / (m_aReferenceRect.GetHeight() > 0 ? static_cast<double>(m_aReferenceRect.GetHeight()) : 1.0);
+        double fY = F_PI * static_cast<double>(rPnt.X() - m_aStartPos.X())
+            / (m_aReferenceRect.GetWidth() > 0 ? static_cast<double>(m_aReferenceRect.GetWidth()) : 1.0);
 
         if( m_eRotationDirection != ROTATIONDIRECTION_Y )
             m_fAdditionalYAngleRad = fY;
@@ -137,12 +135,12 @@ void DragMethod_RotateDiagram::MoveSdrDrag(const Point& rPnt)
             double fCx = m_aReferenceRect.Center().X();
             double fCy = m_aReferenceRect.Center().Y();
 
-            m_fAdditionalZAngleRad = atan((double)(fCx - m_aStartPos.X())/(m_aStartPos.Y()-fCy))
-                + atan((double)(fCx - rPnt.X())/(fCy-rPnt.Y()));
+            m_fAdditionalZAngleRad = atan((fCx - m_aStartPos.X())/(m_aStartPos.Y()-fCy))
+                + atan((fCx - rPnt.X())/(fCy-rPnt.Y()));
         }
 
-        m_nAdditionalHorizontalAngleDegree = static_cast<sal_Int32>(m_fAdditionalXAngleRad*180.0/F_PI);
-        m_nAdditionalVerticalAngleDegree = -static_cast<sal_Int32>(m_fAdditionalYAngleRad*180.0/F_PI);
+        m_nAdditionalHorizontalAngleDegree = static_cast<sal_Int32>(basegfx::rad2deg(m_fAdditionalXAngleRad));
+        m_nAdditionalVerticalAngleDegree = -static_cast<sal_Int32>(basegfx::rad2deg(m_fAdditionalYAngleRad));
 
         DragStat().NextMove(rPnt);
         Show();
@@ -161,18 +159,20 @@ bool DragMethod_RotateDiagram::EndSdrDrag(bool /*bCopy*/)
         if(m_bRightAngledAxes)
             ThreeDHelper::adaptRadAnglesForRightAngledAxes( fResultX, fResultY );
 
-        ThreeDHelper::setRotationAngleToDiagram( uno::Reference< beans::XPropertySet >( ChartModelHelper::findDiagram( this->getChartModel() ), uno::UNO_QUERY )
+        ThreeDHelper::setRotationAngleToDiagram( uno::Reference< beans::XPropertySet >( ChartModelHelper::findDiagram( getChartModel() ), uno::UNO_QUERY )
             , fResultX, fResultY, fResultZ );
     }
     else
     {
-        ThreeDHelper::setRotationToDiagram( ( uno::Reference< beans::XPropertySet >( ChartModelHelper::findDiagram( this->getChartModel() ), uno::UNO_QUERY ) )
+        ThreeDHelper::setRotationToDiagram( ( uno::Reference< beans::XPropertySet >( ChartModelHelper::findDiagram( getChartModel() ), uno::UNO_QUERY ) )
             , m_nInitialHorizontalAngleDegree+m_nAdditionalHorizontalAngleDegree, m_nInitialVerticalAngleDegree+m_nAdditionalVerticalAngleDegree );
     }
 
     return true;
 }
-void DragMethod_RotateDiagram::CreateOverlayGeometry(sdr::overlay::OverlayManager& rOverlayManager)
+void DragMethod_RotateDiagram::CreateOverlayGeometry(
+    sdr::overlay::OverlayManager& rOverlayManager,
+    const sdr::contact::ObjectContact& rObjectContact)
 {
     ::basegfx::B3DHomMatrix aCurrentTransform;
     aCurrentTransform.translate( -FIXED_SIZE_FOR_3D_CHART_VOLUME/2.0,
@@ -196,7 +196,7 @@ void DragMethod_RotateDiagram::CreateOverlayGeometry(sdr::overlay::OverlayManage
     else
     {
         ThreeDHelper::adaptRadAnglesForRightAngledAxes( fResultX, fResultY );
-        aCurrentTransform.shearXY(fResultY,-(fResultX));
+        aCurrentTransform.shearXY(fResultY,-fResultX);
     }
 
     if(m_aWireframePolyPolygon.count() && m_pScene)
@@ -207,15 +207,19 @@ void DragMethod_RotateDiagram::CreateOverlayGeometry(sdr::overlay::OverlayManage
         const basegfx::B3DHomMatrix aTransform(aWorldToView * aCurrentTransform);
 
         // transform to relative scene coordinates
-        basegfx::B2DPolyPolygon aPolyPolygon(basegfx::tools::createB2DPolyPolygonFromB3DPolyPolygon(m_aWireframePolyPolygon, aTransform));
+        basegfx::B2DPolyPolygon aPolyPolygon(basegfx::utils::createB2DPolyPolygonFromB3DPolyPolygon(m_aWireframePolyPolygon, aTransform));
 
         // transform to 2D view coordinates
         aPolyPolygon.transform(rVCScene.getObjectTransformation());
 
-        sdr::overlay::OverlayPolyPolygonStripedAndFilled* pNew = new sdr::overlay::OverlayPolyPolygonStripedAndFilled(
-            aPolyPolygon);
-        rOverlayManager.add(*pNew);
-        addToOverlayObjectList(*pNew);
+        std::unique_ptr<sdr::overlay::OverlayPolyPolygonStripedAndFilled> pNew(
+            new sdr::overlay::OverlayPolyPolygonStripedAndFilled(
+                aPolyPolygon));
+
+        insertNewlyCreatedOverlayObjectForSdrDragMethod(
+            std::move(pNew),
+            rObjectContact,
+            rOverlayManager);
     }
 }
 } //namespace chart

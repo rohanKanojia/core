@@ -20,12 +20,12 @@
 #ifndef INCLUDED_SVX_GRFFLT_HXX
 #define INCLUDED_SVX_GRFFLT_HXX
 
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <svx/svxdllapi.h>
 
-#define SVX_GRAPHICFILTER_ERRCODE_NONE              0x00000000
-#define SVX_GRAPHICFILTER_UNSUPPORTED_GRAPHICTYPE   0x00000001
-#define SVX_GRAPHICFILTER_UNSUPPORTED_SLOT          0x00000002
+enum class SvxGraphicFilterResult {
+    NONE, UnsupportedGraphicType, UnsupportedSlot
+};
 
 class SfxRequest;
 class SfxItemSet;
@@ -34,7 +34,7 @@ class SVX_DLLPUBLIC SvxGraphicFilter
 {
 public:
 
-    static sal_uLong    ExecuteGrfFilterSlot( SfxRequest& rReq, GraphicObject& rFilterObject );
+    static SvxGraphicFilterResult ExecuteGrfFilterSlot( SfxRequest const & rReq, GraphicObject& rFilterObject );
     static void     DisableGraphicFilterSlots( SfxItemSet& rSet );
 };
 

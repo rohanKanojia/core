@@ -7,11 +7,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "test/text/xtextcontent.hxx"
+#include <test/text/xtextcontent.hxx>
 #include <com/sun/star/text/XTextContent.hpp>
 #include <com/sun/star/text/XTextRange.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 using namespace css;
 using namespace css::uno;
@@ -28,7 +28,6 @@ void XTextContent::testGetAnchor()
 void XTextContent::testAttach()
 {
     uno::Reference< text::XTextContent > xTextContent(init(), UNO_QUERY_THROW);
-    uno::Reference< text::XTextRange > xAnchor = xTextContent->getAnchor();
 
     uno::Reference< text::XTextContent > xContent(getTextContent(), UNO_QUERY_THROW);
     uno::Reference< text::XTextRange > xRange(getTextRange(), UNO_QUERY_THROW);

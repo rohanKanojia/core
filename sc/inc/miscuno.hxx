@@ -20,9 +20,10 @@
 #ifndef INCLUDED_SC_INC_MISCUNO_HXX
 #define INCLUDED_SC_INC_MISCUNO_HXX
 
+#include <vector>
+
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XEnumeration.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
@@ -32,18 +33,15 @@
 
 #define SC_SIMPLE_SERVICE_INFO( ClassName, ClassNameAscii, ServiceAscii )            \
 OUString SAL_CALL ClassName::getImplementationName()                      \
-    throw(css::uno::RuntimeException, std::exception)                                   \
 {                                                                                    \
     return OUString(ClassNameAscii);                         \
 }                                                                                    \
 sal_Bool SAL_CALL ClassName::supportsService( const OUString& ServiceName ) \
-    throw(css::uno::RuntimeException, std::exception)                                   \
 {                                                                                    \
     return cppu::supportsService(this, ServiceName);                                \
 }                                                                                    \
 css::uno::Sequence< OUString >                                   \
     SAL_CALL ClassName::getSupportedServiceNames()                           \
-    throw(css::uno::RuntimeException, std::exception)                                   \
 {                                                                                    \
     css::uno::Sequence< OUString > aRet { ServiceAscii };                  \
     return aRet;                                                                     \
@@ -52,23 +50,15 @@ css::uno::Sequence< OUString >                                   \
 #define SC_IMPL_DUMMY_PROPERTY_LISTENER( ClassName )                                \
     void SAL_CALL ClassName::addPropertyChangeListener( const OUString&,       \
                             const uno::Reference<beans::XPropertyChangeListener>&)  \
-                            throw(beans::UnknownPropertyException,                  \
-                            lang::WrappedTargetException, uno::RuntimeException, std::exception)    \
     { OSL_FAIL("not implemented"); }                                                \
     void SAL_CALL ClassName::removePropertyChangeListener( const OUString&,    \
                             const uno::Reference<beans::XPropertyChangeListener>&)  \
-                            throw(beans::UnknownPropertyException,                  \
-                            lang::WrappedTargetException, uno::RuntimeException, std::exception)    \
     { OSL_FAIL("not implemented"); }                                                \
     void SAL_CALL ClassName::addVetoableChangeListener( const OUString&,       \
                             const uno::Reference<beans::XVetoableChangeListener>&)  \
-                            throw(beans::UnknownPropertyException,                  \
-                            lang::WrappedTargetException, uno::RuntimeException, std::exception)    \
     { OSL_FAIL("not implemented"); }                                                \
     void SAL_CALL ClassName::removeVetoableChangeListener( const OUString&,    \
                             const uno::Reference<beans::XVetoableChangeListener>&)  \
-                            throw(beans::UnknownPropertyException,                  \
-                            lang::WrappedTargetException, uno::RuntimeException, std::exception)    \
     { OSL_FAIL("not implemented"); }
 
 #define SC_QUERYINTERFACE(x)    \
@@ -88,28 +78,22 @@ class ScIndexEnumeration : public cppu::WeakImplHelper<
 {
 private:
     css::uno::Reference<css::container::XIndexAccess> xIndex;
-    OUString                sServiceName;
+    OUString const          sServiceName;
     sal_Int32               nPos;
 
 public:
                             ScIndexEnumeration(const css::uno::Reference<
                                 css::container::XIndexAccess>& rInd, const OUString& rServiceName);
-    virtual                 ~ScIndexEnumeration();
+    virtual                 ~ScIndexEnumeration() override;
 
                             // XEnumeration
-    virtual sal_Bool SAL_CALL hasMoreElements() throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL nextElement()
-                                throw(css::container::NoSuchElementException,
-                                        css::lang::WrappedTargetException,
-                                        css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasMoreElements() override;
+    virtual css::uno::Any SAL_CALL nextElement() override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 };
 
 //  new (uno 3) variant
@@ -124,27 +108,20 @@ private:
 public:
                             ScNameToIndexAccess(
                                 const css::uno::Reference< css::container::XNameAccess>& rNameObj );
-    virtual                 ~ScNameToIndexAccess();
+    virtual                 ~ScNameToIndexAccess() override;
 
                             // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount(  ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getByIndex( sal_Int32 Index )
-                                throw(css::lang::IndexOutOfBoundsException,
-                                        css::lang::WrappedTargetException,
-                                        css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getCount(  ) override;
+    virtual css::uno::Any SAL_CALL getByIndex( sal_Int32 Index ) override;
 
                             // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType(  )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType(  ) override;
+    virtual sal_Bool SAL_CALL hasElements(  ) override;
 
                             // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-                                throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-                                throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 };
 
 class SC_DLLPUBLIC ScUnoHelpFunctions
@@ -154,10 +131,15 @@ public:
                             AnyToInterface( const css::uno::Any& rAny );
     static bool             GetBoolProperty( const css::uno::Reference< css::beans::XPropertySet>& xProp,
                                             const OUString& rName, bool bDefault = false );
+    static sal_Int16        GetShortProperty( const css::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, sal_Int16 nDefault );
     static sal_Int32        GetLongProperty( const css::uno::Reference< css::beans::XPropertySet>& xProp,
                                             const OUString& rName );
-    static sal_Int32        GetEnumProperty( const css::uno::Reference< css::beans::XPropertySet>& xProp,
-                                            const OUString& rName, long nDefault );
+    template<typename EnumT>
+    static EnumT            GetEnumProperty( const css::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, EnumT nDefault )
+    { return static_cast<EnumT>(GetEnumPropertyImpl(xProp, rName, static_cast<sal_Int32>(nDefault))); }
+
     static OUString  GetStringProperty(
         const css::uno::Reference<css::beans::XPropertySet>& xProp,
         const OUString& rName, const OUString& rDefault );
@@ -166,15 +148,14 @@ public:
     static sal_Int16        GetInt16FromAny( const css::uno::Any& aAny );
     static sal_Int32        GetInt32FromAny( const css::uno::Any& aAny );
     static sal_Int32        GetEnumFromAny( const css::uno::Any& aAny );
-    static void             SetBoolInAny( css::uno::Any& rAny, bool bValue );
 
     static void             SetOptionalPropertyValue(
-        css::uno::Reference< css::beans::XPropertySet >& rPropSet,
+        const css::uno::Reference< css::beans::XPropertySet >& rPropSet,
         const sal_Char* pPropName, const css::uno::Any& rVal );
 
     template<typename ValueType>
     static void             SetOptionalPropertyValue(
-        css::uno::Reference< css::beans::XPropertySet >& rPropSet,
+        const css::uno::Reference< css::beans::XPropertySet >& rPropSet,
         const sal_Char* pPropName, const ValueType& rVal )
     {
         css::uno::Any any;
@@ -190,6 +171,9 @@ public:
 
         return css::uno::Sequence<ValueType>(&rVector[0], static_cast<sal_Int32>(rVector.size()));
     }
+private:
+    static sal_Int32        GetEnumPropertyImpl( const css::uno::Reference< css::beans::XPropertySet>& xProp,
+                                            const OUString& rName, sal_Int32 nDefault );
 };
 
 #endif

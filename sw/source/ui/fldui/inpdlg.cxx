@@ -17,8 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <comphelper/string.hxx>
-#include <vcl/msgbox.hxx>
 #include <unotools/charclass.hxx>
 #include <editeng/unolingu.hxx>
 #include <wrtsh.hxx>
@@ -28,41 +26,41 @@
 #include <inpdlg.hxx>
 #include <fldmgr.hxx>
 
-#include <fldui.hrc>
-
 // edit field-insert
-SwFieldInputDlg::SwFieldInputDlg( vcl::Window *pParent, SwWrtShell &rS,
-                              SwField* pField, bool bNextButton )
-    : SvxStandardDialog( pParent, "InputFieldDialog",
-        "modules/swriter/ui/inputfielddialog.ui")
+SwFieldInputDlg::SwFieldInputDlg(weld::Window *pParent, SwWrtShell &rS,
+                                 SwField* pField, bool bPrevButton, bool bNextButton)
+    : GenericDialogController(pParent, "modules/swriter/ui/inputfielddialog.ui", "InputFieldDialog")
     , rSh( rS )
     , pInpField(nullptr)
     , pSetField(nullptr)
     , pUsrType(nullptr)
+    , m_pPressedButton(nullptr)
+    , m_xLabelED(m_xBuilder->weld_entry("name"))
+    , m_xEditED(m_xBuilder->weld_text_view("text"))
+    , m_xPrevBT(m_xBuilder->weld_button("prev"))
+    , m_xNextBT(m_xBuilder->weld_button("next"))
+    , m_xOKBT(m_xBuilder->weld_button("ok"))
 {
-    get(m_pLabelED, "name");
-    get(m_pEditED, "text");
-    m_pEditED->set_height_request(m_pEditED->GetTextHeight() * 9);
-    get(m_pNextBT, "next");
-    get(m_pOKBT, "ok");
-    // switch font for Edit
-    vcl::Font aFont(m_pEditED->GetFont());
-    aFont.SetWeight(WEIGHT_LIGHT);
-    m_pEditED->SetFont(aFont);
+    m_xEditED->set_size_request(-1, m_xEditED->get_height_rows(8));
 
-    if( bNextButton )
+    if( bPrevButton || bNextButton )
     {
-        m_pNextBT->Show();
-        m_pNextBT->SetClickHdl(LINK(this, SwFieldInputDlg, NextHdl));
+        m_xPrevBT->show();
+        m_xPrevBT->connect_clicked(LINK(this, SwFieldInputDlg, PrevHdl));
+        m_xPrevBT->set_sensitive(bPrevButton);
+
+        m_xNextBT->show();
+        m_xNextBT->connect_clicked(LINK(this, SwFieldInputDlg, NextHdl));
+        m_xNextBT->set_sensitive(bNextButton);
     }
 
     // evaluation here
     OUString aStr;
-    if( RES_INPUTFLD == pField->GetTyp()->Which() )
+    if( SwFieldIds::Input == pField->GetTyp()->Which() )
     {   // it is an input field
 
         pInpField = static_cast<SwInputField*>(pField);
-        m_pLabelED->SetText( pInpField->GetPar2() );
+        m_xLabelED->set_text(pInpField->GetPar2());
         sal_uInt16 nSubType = pInpField->GetSubType();
 
         switch(nSubType & 0xff)
@@ -74,7 +72,7 @@ SwFieldInputDlg::SwFieldInputDlg( vcl::Window *pParent, SwWrtShell &rS,
             case INP_USR:
                 // user field
                 if( nullptr != ( pUsrType = static_cast<SwUserFieldType*>(rSh.GetFieldType(
-                            RES_USERFLD, pInpField->GetPar1() ) )  ) )
+                            SwFieldIds::User, pInpField->GetPar1() ) )  ) )
                     aStr = pUsrType->GetContent();
                 break;
         }
@@ -88,73 +86,61 @@ SwFieldInputDlg::SwFieldInputDlg( vcl::Window *pParent, SwWrtShell &rS,
         CharClass aCC( LanguageTag( pSetField->GetLanguage() ));
         if( aCC.isNumeric( sFormula ))
         {
-            aStr = pSetField->ExpandField(true);
+            aStr = pSetField->ExpandField(true, rS.GetLayout());
         }
         else
             aStr = sFormula;
-        m_pLabelED->SetText( pSetField->GetPromptText() );
+        m_xLabelED->set_text(pSetField->GetPromptText());
     }
 
     // JP 31.3.00: Inputfields in readonly regions must be allowed to
     //              input any content. - 74639
     bool bEnable = !rSh.IsCursorReadonly();
 
-    m_pOKBT->Enable( bEnable );
-    m_pEditED->SetReadOnly( !bEnable );
+    m_xOKBT->set_sensitive( bEnable );
+    m_xEditED->set_editable( bEnable );
 
     if( !aStr.isEmpty() )
-        m_pEditED->SetText(convertLineEnd(aStr, GetSystemLineEnd()));
+        m_xEditED->set_text(convertLineEnd(aStr, GetSystemLineEnd()));
+    m_xEditED->grab_focus();
+
+    // preselect all text to allow quickly changing the content
+    if (bEnable)
+        m_xEditED->select_region(0, -1);
 }
 
 SwFieldInputDlg::~SwFieldInputDlg()
 {
-    disposeOnce();
-}
-
-void SwFieldInputDlg::dispose()
-{
-    m_pLabelED.clear();
-    m_pEditED.clear();
-    m_pOKBT.clear();
-    m_pNextBT.clear();
-    SvxStandardDialog::dispose();
-}
-
-void SwFieldInputDlg::StateChanged( StateChangedType nType )
-{
-    if ( nType == StateChangedType::InitShow )
-        m_pEditED->GrabFocus();
-    SvxStandardDialog::StateChanged( nType );
 }
 
 // Close
 void SwFieldInputDlg::Apply()
 {
-    OUString aTmp(comphelper::string::remove(m_pEditED->GetText(), '\r'));
+    OUString aTmp = m_xEditED->get_text().replaceAll("\r", "");
     rSh.StartAllAction();
     bool bModified = false;
     if(pInpField)
     {
         if(pUsrType)
         {
-            if( !aTmp.equals(pUsrType->GetContent()) )
+            if( aTmp != pUsrType->GetContent() )
             {
                 pUsrType->SetContent(aTmp);
                 pUsrType->UpdateFields();
                 bModified = true;
             }
         }
-        else if( !aTmp.equals(pInpField->GetPar1()) )
+        else if( aTmp != pInpField->GetPar1() )
         {
             pInpField->SetPar1(aTmp);
-            rSh.SwEditShell::UpdateFields(*pInpField);
+            rSh.SwEditShell::UpdateOneField(*pInpField);
             bModified = true;
         }
     }
-    else if( !aTmp.equals(pSetField->GetPar2()) )
+    else if( aTmp != pSetField->GetPar2())
     {
         pSetField->SetPar2(aTmp);
-        rSh.SwEditShell::UpdateFields(*pSetField);
+        rSh.SwEditShell::UpdateOneField(*pSetField);
         bModified = true;
     }
 
@@ -164,9 +150,27 @@ void SwFieldInputDlg::Apply()
     rSh.EndAllAction();
 }
 
-IMPL_LINK_NOARG_TYPED(SwFieldInputDlg, NextHdl, Button*, void)
+bool SwFieldInputDlg::PrevButtonPressed() const
 {
-    EndDialog(RET_OK);
+    return m_pPressedButton == m_xPrevBT.get();
 }
+
+bool SwFieldInputDlg::NextButtonPressed() const
+{
+    return m_pPressedButton == m_xNextBT.get();
+}
+
+IMPL_LINK_NOARG(SwFieldInputDlg, PrevHdl, weld::Button&, void)
+{
+    m_pPressedButton = m_xPrevBT.get();
+    m_xDialog->response(RET_OK);
+}
+
+IMPL_LINK_NOARG(SwFieldInputDlg, NextHdl, weld::Button&, void)
+{
+    m_pPressedButton = m_xNextBT.get();
+    m_xDialog->response(RET_OK);
+}
+
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

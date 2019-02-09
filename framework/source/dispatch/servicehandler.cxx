@@ -23,8 +23,10 @@
 
 #include <com/sun/star/frame/DispatchResultState.hpp>
 #include <com/sun/star/task/XJobExecutor.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <vcl/svapp.hxx>
+#include <sal/log.hxx>
 
 namespace framework{
 
@@ -50,7 +52,7 @@ DEFINE_INIT_SERVICE(ServiceHandler,
 
 /**
     @short      standard ctor
-    @descr      This initializes a new instance of ths class with needed information for work.
+    @descr      This initializes a new instance of this class with needed information for work.
 
     @param      xFactory
                 reference to uno servicemanager for creation of new services
@@ -78,7 +80,7 @@ ServiceHandler::~ServiceHandler()
 */
 css::uno::Reference< css::frame::XDispatch > SAL_CALL ServiceHandler::queryDispatch( const css::util::URL&  aURL    ,
                                                                                      const OUString& /*sTarget*/ ,
-                                                                                           sal_Int32        /*nFlags*/  ) throw( css::uno::RuntimeException, std::exception )
+                                                                                           sal_Int32        /*nFlags*/  )
 {
     css::uno::Reference< css::frame::XDispatch > xDispatcher;
     if (aURL.Complete.startsWith(PROTOCOL_VALUE))
@@ -89,13 +91,13 @@ css::uno::Reference< css::frame::XDispatch > SAL_CALL ServiceHandler::queryDispa
 /**
     @short      do the same like dispatch() but for multiple requests at the same time
 */
-css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL ServiceHandler::queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor ) throw( css::uno::RuntimeException, std::exception )
+css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL ServiceHandler::queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptor )
 {
     sal_Int32 nCount = lDescriptor.getLength();
     css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > lDispatcher( nCount );
     for( sal_Int32 i=0; i<nCount; ++i )
     {
-        lDispatcher[i] = this->queryDispatch(
+        lDispatcher[i] = queryDispatch(
                             lDescriptor[i].FeatureURL,
                             lDescriptor[i].FrameName,
                             lDescriptor[i].SearchFlags);
@@ -114,12 +116,12 @@ css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL Serv
                     list of optional arguments for this request
 */
 void SAL_CALL ServiceHandler::dispatch( const css::util::URL&                                  aURL       ,
-                                    const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception )
+                                        const css::uno::Sequence< css::beans::PropertyValue >& /*lArguments*/ )
 {
     // dispatch() is an [oneway] call ... and may our user release his reference to us immediately.
     // So we should hold us self alive till this call ends.
     css::uno::Reference< css::frame::XNotifyingDispatch > xSelfHold(static_cast< ::cppu::OWeakObject* >(this), css::uno::UNO_QUERY);
-    implts_dispatch(aURL,lArguments);
+    implts_dispatch(aURL);
     // No notification for status listener!
 }
 
@@ -136,15 +138,15 @@ void SAL_CALL ServiceHandler::dispatch( const css::util::URL&                   
                     optional listener for state events
 */
 void SAL_CALL ServiceHandler::dispatchWithNotification( const css::util::URL&                                             aURL      ,
-                                                        const css::uno::Sequence< css::beans::PropertyValue >&            lArguments,
-                                                        const css::uno::Reference< css::frame::XDispatchResultListener >& xListener ) throw( css::uno::RuntimeException, std::exception )
+                                                        const css::uno::Sequence< css::beans::PropertyValue >&            /*lArguments*/,
+                                                        const css::uno::Reference< css::frame::XDispatchResultListener >& xListener )
 {
     // This class was designed to die by reference. And if user release his reference to us immediately after calling this method
     // we can run into some problems. So we hold us self alive till this method ends.
     // Another reason: We can use this reference as source of sending event at the end too.
     css::uno::Reference< css::frame::XNotifyingDispatch > xThis(static_cast< ::cppu::OWeakObject* >(this), css::uno::UNO_QUERY);
 
-    css::uno::Reference< css::uno::XInterface > xService = implts_dispatch(aURL,lArguments);
+    css::uno::Reference< css::uno::XInterface > xService = implts_dispatch(aURL);
     if (xListener.is())
     {
         css::frame::DispatchResultEvent aEvent;
@@ -167,15 +169,12 @@ void SAL_CALL ServiceHandler::dispatchWithNotification( const css::util::URL&   
 
     @param      aURL
                     uno URL which should be executed
-    @param      lArguments
-                    list of optional arguments for this request
 
-    @return     <NULL/> if requested service couldn't be created successullfy;
+    @return     <NULL/> if requested service couldn't be created successfully;
                 a valid reference otherwise. This return value can be used to indicate,
                 if dispatch was successfully or not.
 */
-css::uno::Reference< css::uno::XInterface > ServiceHandler::implts_dispatch( const css::util::URL&                                  aURL       ,
-                                                                             const css::uno::Sequence< css::beans::PropertyValue >& /*lArguments*/ ) throw( css::uno::RuntimeException )
+css::uno::Reference< css::uno::XInterface > ServiceHandler::implts_dispatch( const css::util::URL& aURL )
 {
     if (!m_xFactory.is())
         return css::uno::Reference< css::uno::XInterface >();
@@ -220,8 +219,7 @@ css::uno::Reference< css::uno::XInterface > ServiceHandler::implts_dispatch( con
     // because it contains syntax errors, which was detected at runtime...
     catch(const css::uno::Exception& e)
     {
-        SAL_WARN(
-            "fwk.dispatch", "ignored UNO Exception \"" << e.Message << '"');
+        SAL_WARN("fwk.dispatch", "ignored " << e);
         xService.clear();
     }
 
@@ -240,13 +238,13 @@ css::uno::Reference< css::uno::XInterface > ServiceHandler::implts_dispatch( con
                     URL about listener will be informed, if something occurred
 */
 void SAL_CALL ServiceHandler::addStatusListener( const css::uno::Reference< css::frame::XStatusListener >& /*xListener*/ ,
-                                                 const css::util::URL&                                     /*aURL*/      ) throw( css::uno::RuntimeException, std::exception )
+                                                 const css::util::URL&                                     /*aURL*/      )
 {
     // not supported yet
 }
 
 void SAL_CALL ServiceHandler::removeStatusListener( const css::uno::Reference< css::frame::XStatusListener >& /*xListener*/ ,
-                                                    const css::util::URL&                                     /*aURL*/      ) throw( css::uno::RuntimeException, std::exception )
+                                                    const css::util::URL&                                     /*aURL*/      )
 {
     // not supported yet
 }

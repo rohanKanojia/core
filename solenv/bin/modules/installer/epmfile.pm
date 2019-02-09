@@ -65,7 +65,7 @@ sub read_packagemap
     {
         my $packagemapref = installer::scriptitems::get_sourcepath_from_filename_and_includepath(\$onepackagemapname, $includepatharrayref, 0);
 
-        if ( $$packagemapref eq "" ) { installer::exiter::exit_program("ERROR: Could not find package map file \"$onepackagemapname\" (propery PACKAGEMAP)!", "read_packagemap"); }
+        if ( $$packagemapref eq "" ) { installer::exiter::exit_program("ERROR: Could not find package map file \"$onepackagemapname\" (property PACKAGEMAP)!", "read_packagemap"); }
 
         my $packagemapcontent = installer::files::read_file($$packagemapref);
 
@@ -759,7 +759,7 @@ sub set_patch_state
     while (<EPMPATCH>)
     {
         chop;
-        if ( $_ =~ /Patched for OpenOffice.org/ ) { $installer::globals::is_special_epm = 1; }
+        if ( $_ =~ /Patched for .*Office/ ) { $installer::globals::is_special_epm = 1; }
     }
 
     close (EPMPATCH);
@@ -789,17 +789,6 @@ sub set_patch_state
 }
 
 #################################################
-# LD_PRELOAD string for Debian packages
-#################################################
-
-sub get_ld_preload_string
-{
-    my $getuidlibrary = $ENV{'WORKDIR'} . '/LinkTarget/Library/libgetuid.so';
-    if ( ! -e $getuidlibrary ) { installer::exiter::exit_program("File $getuidlibrary does not exist!", "get_ld_preload_string"); }
-    return 'LD_PRELOAD=' . $getuidlibrary;
-}
-
-#################################################
 # Calling epm to create the installation sets
 #################################################
 
@@ -818,11 +807,11 @@ sub call_epm
     my $outdirstring = "";
     if ( $installer::globals::epmoutpath ne "" ) { $outdirstring = " --output-dir $installer::globals::epmoutpath"; }
 
-    # Debian package build needs a LD_PRELOAD for correct rights
+    # Debian package build needs to be run with fakeroot for correct ownerships/permissions
 
-    my $ldpreloadstring = "";
+    my $fakerootstring = "";
 
-    if ( $installer::globals::debian ) { $ldpreloadstring = get_ld_preload_string($includepatharrayref) . " "; }
+    if ( $installer::globals::debian ) { $fakerootstring = "fakeroot "; }
 
     my $extraflags = "";
         if ($ENV{'EPM_FLAGS'}) { $extraflags = $ENV{'EPM_FLAGS'}; }
@@ -832,7 +821,7 @@ sub call_epm
     my $verboseflag = "-v";
     if ( ! $installer::globals::quiet ) { $verboseflag = "-v2"; };
 
-    my $systemcall = $ldpreloadstring . $epmname . " -f " . $packageformat . " " . $extraflags . " " . $localpackagename . " " . $epmlistfilename . $outdirstring . " " . $verboseflag . " " . " 2\>\&1 |";
+    my $systemcall = $fakerootstring . $epmname . " -f " . $packageformat . " " . $extraflags . " " . $localpackagename . " " . $epmlistfilename . $outdirstring . " " . $verboseflag . " " . " 2\>\&1 |";
 
     installer::logger::print_message( "... $systemcall ...\n" );
 
@@ -1071,7 +1060,7 @@ sub set_solaris_parameter_in_pkginfo
 }
 
 #####################################################################
-# epm uses as archtecture for Solaris x86 "i86pc". This has to be
+# epm uses as architecture for Solaris x86 "i86pc". This has to be
 # changed to "i386".
 #####################################################################
 
@@ -1333,7 +1322,7 @@ sub replace_variables_in_shellscripts
 }
 
 ############################################################
-# Determinig the directory created by epm, in which the
+# Determining the directory created by epm, in which the
 # RPMS or Solaris packages are created.
 ############################################################
 
@@ -1504,7 +1493,7 @@ sub contains_extension_dir
 
     my $contains_extension_dir = 0;
 
-    # d none opt/openoffice.org3/share/extensions/
+    # d none opt/libreoffice/share/extensions/
 
     for ( my $i = 0; $i <= $#{$prototypefile}; $i++ )
     {
@@ -2478,7 +2467,7 @@ sub analyze_rootpath
     if ( $installer::globals::isdebbuild )
     {
         $$relocatablepathref = "";
-        # $$staticpathref is already "/opt/openoffice.org3", no additional $rootpath required.
+        # $$staticpathref is already "/opt/libreoffice", no additional $rootpath required.
     }
 
 }

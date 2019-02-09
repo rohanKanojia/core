@@ -18,12 +18,12 @@
  */
 
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "osl/module.h"
-#include "rtl/string.h"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/ustring.hxx"
+#include <osl/module.h>
+#include <osl/module.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/ustring.hxx>
 
 #include "loadmodule.hxx"
 
@@ -31,8 +31,8 @@ namespace cppu { namespace detail {
 
 #ifndef DISABLE_DYNLOADING
 
-bool loadModule(osl::Module& rModule, rtl::OUString const & name) {
-    rtl::OUStringBuffer b;
+bool loadModule(osl::Module& rModule, OUString const & name) {
+    OUStringBuffer b;
 #if defined SAL_DLLPREFIX
     b.append(SAL_DLLPREFIX);
 #endif

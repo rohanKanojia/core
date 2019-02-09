@@ -6,7 +6,7 @@ Dim result As String
 
 Function doUnitTest() As String
 result = verify_testReplace()
-If failCount <> 0 And passCount > 0 Then
+If failCount <> 0 Or passCount = 0 Then
     doUnitTest = result
 Else
     doUnitTest = "OK"
@@ -31,7 +31,7 @@ Function verify_testReplace() as String
     retStr = Replace("abcbcdbc", destStr, repStr)
     TestLog_ASSERT retStr = "aefefdef", "expression string:" & retStr
     retStr = Replace(srcStr, destStr, repStr, 1, -1, vbBinaryCompare)
-    TestLog_ASSERT retStr = "aefefdBc", "binanary compare:" & retStr
+    TestLog_ASSERT retStr = "aefefdBc", "binary compare:" & retStr
     retStr = Replace(srcStr, destStr, repStr, 1, -1, vbTextCompare)
     TestLog_ASSERT retStr = "aefefdef", "text compare:" & retStr
     retStr = Replace(srcStr, destStr, repStr, compare:=vbTextCompare)

@@ -19,6 +19,7 @@
 
 #include "NDriver.hxx"
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <osl/diagnose.h>
 
 using namespace connectivity::evoab;
@@ -27,7 +28,7 @@ using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::lang::XSingleServiceFactory;
 using ::com::sun::star::lang::XMultiServiceFactory;
 
-typedef Reference< XSingleServiceFactory > (SAL_CALL *createFactoryFunc)
+typedef Reference< XSingleServiceFactory > (*createFactoryFunc)
         (
             const Reference< XMultiServiceFactory > & rServiceManager,
             const OUString & rComponentName,
@@ -52,7 +53,6 @@ struct ProviderRequest
     {
     }
 
-    inline
     bool CREATE_PROVIDER(
                 const OUString& Implname,
                 const Sequence< OUString > & Services,
@@ -66,7 +66,7 @@ struct ProviderRequest
             {
                 xRet = creator( xServiceManager, sImplementationName,Factory, Services,nullptr);
             }
-            catch(const ::com::sun::star::uno::Exception&)
+            catch(const css::uno::Exception&)
             {
                 OSL_FAIL("Service Creation Exception");
             }
@@ -78,7 +78,7 @@ struct ProviderRequest
 };
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL evoab2_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* evoab2_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* /*pRegistryKey*/)

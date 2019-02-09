@@ -13,11 +13,13 @@
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
 #include <sax/tools/documenthandleradapter.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 
@@ -29,6 +31,7 @@
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 #include <com/sun/star/xml/sax/SAXException.hpp>
 #include <com/sun/star/xml/sax/Writer.hpp>
+#include <com/sun/star/xml/sax/XFastParser.hpp>
 
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
@@ -69,27 +72,21 @@ namespace filter {
             virtual sal_Bool SAL_CALL
             importer(const Sequence< PropertyValue >& sourceData,
                      const Reference< XDocumentHandler >& docHandler,
-                     const Sequence< OUString >& userData)
-                throw (IllegalArgumentException, RuntimeException, std::exception) override;
+                     const Sequence< OUString >& userData) override;
 
             // XExportFilter
             virtual sal_Bool SAL_CALL
             exporter(
                      const Sequence< PropertyValue >& sourceData,
-                     const Sequence< OUString >& userData)
-                throw (IllegalArgumentException,
-                       RuntimeException, std::exception) override;
+                     const Sequence< OUString >& userData) override;
 
-            OUString SAL_CALL getImplementationName()
-                throw (css::uno::RuntimeException, std::exception) override
+            OUString SAL_CALL getImplementationName() override
             { return OUString("com.sun.star.comp.filter.OdfFlatXml"); }
 
-            sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-                throw (css::uno::RuntimeException, std::exception) override
+            sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
             { return cppu::supportsService(this, ServiceName); }
 
-            css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-                throw (css::uno::RuntimeException, std::exception) override
+            css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
             {
                 return css::uno::Sequence<OUString>{
                     "com.sun.star.document.ImportFilter",
@@ -102,7 +99,7 @@ namespace filter {
 
             static Sequence< OUString > impl_getSupportedServiceNames();
 
-            static Reference< XInterface > impl_createInstance(const Reference< XMultiServiceFactory >& fact);
+            static Reference< XInterface > SAL_CALL impl_createInstance(const Reference< XMultiServiceFactory >& fact);
         };
     }
 }
@@ -114,7 +111,6 @@ OdfFlatXml::importer(
                      const Sequence< PropertyValue >& sourceData,
                      const Reference< XDocumentHandler >& docHandler,
                      const Sequence< OUString >& /* userData */)
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
     // Read InputStream to read from and an URL used for the system id
     // of the InputSource we create from the given sourceData sequence
@@ -134,7 +130,7 @@ OdfFlatXml::importer(
 
     OSL_ASSERT(inputStream.is());
     if (!inputStream.is())
-        return sal_False;
+        return false;
 
     Reference<XParser> saxParser = Parser::create(m_xContext);
 
@@ -142,6 +138,8 @@ OdfFlatXml::importer(
     inputSource.sSystemId = url;
     inputSource.sPublicId = url;
     inputSource.aInputStream = inputStream;
+    css::uno::Reference< css::xml::sax::XFastParser > xFastParser = dynamic_cast<
+                            css::xml::sax::XFastParser* >( docHandler.get() );
     saxParser->setDocumentHandler(docHandler);
     try
     {
@@ -149,22 +147,27 @@ OdfFlatXml::importer(
         if ( xSeekable.is() )
             xSeekable->seek( 0 );
 
-        saxParser->parseStream(inputSource);
+        if( xFastParser.is() )
+            xFastParser->parseStream( inputSource );
+        else
+            saxParser->parseStream(inputSource);
     }
     catch (const Exception &exc)
     {
-        SAL_WARN(
-            "filter.odfflatxml",
-            "caught exception \"" << exc.Message << "\"");
-        return sal_False;
+        SAL_WARN("filter.odfflatxml", exc);
+        return false;
     }
-    return sal_True;
+    catch (const std::exception &exc)
+    {
+        SAL_WARN("filter.odfflatxml", exc.what());
+        return false;
+    }
+    return true;
 }
 
 sal_Bool
 OdfFlatXml::exporter(const Sequence< PropertyValue >& sourceData,
                      const Sequence< OUString >& /*msUserData*/)
-    throw (IllegalArgumentException, RuntimeException, std::exception)
 {
     OUString paramName;
     OUString targetURL;
@@ -190,13 +193,13 @@ OdfFlatXml::exporter(const Sequence< PropertyValue >& sourceData,
     Reference<XActiveDataSource> dataSource(getDelegate(), UNO_QUERY);
     OSL_ASSERT(dataSource.is());
     if (!dataSource.is())
-        return sal_False;
+        return false;
     OSL_ASSERT(outputStream.is());
     if (!outputStream.is())
-        return sal_False;
+        return false;
     dataSource->setOutputStream(outputStream);
 
-    return sal_True;
+    return true;
 }
 
 
@@ -219,7 +222,7 @@ Reference< XInterface > SAL_CALL OdfFlatXml::impl_createInstance(const Reference
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT void*
 odfflatxml_component_getFactory( const sal_Char* pImplementationName,
                       void* pServiceManager,
                       void* /* pRegistryKey */ )

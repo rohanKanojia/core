@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uiconfiguration/globalsettings.hxx"
-#include "services.h"
+#include <uiconfiguration/globalsettings.hxx>
+#include <services.h>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -31,6 +31,7 @@
 
 #include <rtl/ustrbuf.hxx>
 #include <rtl/instance.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/implbase.hxx>
 
 //  Defines
@@ -38,13 +39,6 @@
 using namespace ::com::sun::star;
 
 //  Namespace
-
-static const char GLOBALSETTINGS_ROOT_ACCESS[]              = "/org.openoffice.Office.UI.GlobalSettings/Toolbars";
-
-static const char GLOBALSETTINGS_NODEREF_STATES[]           = "States";
-static const char GLOBALSETTINGS_PROPERTY_LOCKED[]          = "Locked";
-static const char GLOBALSETTINGS_PROPERTY_DOCKED[]          = "Docked";
-static const char GLOBALSETTINGS_PROPERTY_STATESENABLED[]   = "StatesEnabled";
 
 namespace framework
 {
@@ -57,19 +51,18 @@ class GlobalSettings_Access : public ::cppu::WeakImplHelper<
 {
     public:
         explicit GlobalSettings_Access( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
-        virtual ~GlobalSettings_Access();
 
         // XComponent
-        virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL dispose() override;
+        virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+        virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // settings access
-        bool HasStatesInfo( GlobalSettings::UIElementType eElementType );
-        bool GetStateInfo( GlobalSettings::UIElementType eElementType, GlobalSettings::StateInfo eStateInfo, css::uno::Any& aValue );
+        bool HasToolbarStatesInfo();
+        bool GetToolbarStateInfo( GlobalSettings::StateInfo eStateInfo, css::uno::Any& aValue );
 
     private:
         void impl_initConfigAccess();
@@ -88,21 +81,16 @@ class GlobalSettings_Access : public ::cppu::WeakImplHelper<
 GlobalSettings_Access::GlobalSettings_Access( const css::uno::Reference< css::uno::XComponentContext >& rxContext ) :
     m_bDisposed( false ),
     m_bConfigRead( false ),
-    m_aNodeRefStates( GLOBALSETTINGS_NODEREF_STATES ),
-    m_aPropStatesEnabled( GLOBALSETTINGS_PROPERTY_STATESENABLED ),
-    m_aPropLocked( GLOBALSETTINGS_PROPERTY_LOCKED ),
-    m_aPropDocked( GLOBALSETTINGS_PROPERTY_DOCKED ),
+    m_aNodeRefStates( "States" ),
+    m_aPropStatesEnabled( "StatesEnabled" ),
+    m_aPropLocked( "Locked" ),
+    m_aPropDocked( "Docked" ),
     m_xContext( rxContext )
-{
-}
-
-GlobalSettings_Access::~GlobalSettings_Access()
 {
 }
 
 // XComponent
 void SAL_CALL GlobalSettings_Access::dispose()
-throw ( css::uno::RuntimeException, std::exception )
 {
     osl::MutexGuard g(m_mutex);
     m_xConfigAccess.clear();
@@ -110,31 +98,24 @@ throw ( css::uno::RuntimeException, std::exception )
 }
 
 void SAL_CALL GlobalSettings_Access::addEventListener( const css::uno::Reference< css::lang::XEventListener >& )
-throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL GlobalSettings_Access::removeEventListener( const css::uno::Reference< css::lang::XEventListener >& )
-throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 // XEventListener
 void SAL_CALL GlobalSettings_Access::disposing( const css::lang::EventObject& )
-throw (css::uno::RuntimeException, std::exception)
 {
     osl::MutexGuard g(m_mutex);
     m_xConfigAccess.clear();
 }
 
 // settings access
-bool GlobalSettings_Access::HasStatesInfo( GlobalSettings::UIElementType eElementType )
+bool GlobalSettings_Access::HasToolbarStatesInfo()
 {
     osl::MutexGuard g(m_mutex);
-    if ( eElementType == GlobalSettings::UIELEMENT_TYPE_DOCKWINDOW )
-        return false;
-    else if ( eElementType == GlobalSettings::UIELEMENT_TYPE_STATUSBAR )
-        return false;
 
     if ( m_bDisposed )
         return false;
@@ -166,13 +147,9 @@ bool GlobalSettings_Access::HasStatesInfo( GlobalSettings::UIElementType eElemen
     return false;
 }
 
-bool GlobalSettings_Access::GetStateInfo( GlobalSettings::UIElementType eElementType, GlobalSettings::StateInfo eStateInfo, css::uno::Any& aValue )
+bool GlobalSettings_Access::GetToolbarStateInfo( GlobalSettings::StateInfo eStateInfo, css::uno::Any& aValue )
 {
     osl::MutexGuard g(m_mutex);
-    if ( eElementType == GlobalSettings::UIELEMENT_TYPE_DOCKWINDOW )
-        return false;
-    else if ( eElementType == GlobalSettings::UIELEMENT_TYPE_STATUSBAR )
-        return false;
 
     if ( m_bDisposed )
         return false;
@@ -214,9 +191,6 @@ bool GlobalSettings_Access::GetStateInfo( GlobalSettings::UIElementType eElement
 
 void GlobalSettings_Access::impl_initConfigAccess()
 {
-    css::uno::Sequence< css::uno::Any > aArgs( 2 );
-    css::beans::PropertyValue           aPropValue;
-
     try
     {
         if ( m_xContext.is() )
@@ -224,13 +198,10 @@ void GlobalSettings_Access::impl_initConfigAccess()
             css::uno::Reference< css::lang::XMultiServiceFactory > xConfigProvider =
                  css::configuration::theDefaultProvider::get( m_xContext );
 
-            aPropValue.Name  = "nodepath";
-            aPropValue.Value = css::uno::makeAny( OUString( GLOBALSETTINGS_ROOT_ACCESS ));
-            aArgs[0] = css::uno::makeAny( aPropValue );
-            aPropValue.Name = "lazywrite";
-            aPropValue.Value = css::uno::makeAny( sal_True );
-            aArgs[1] = css::uno::makeAny( aPropValue );
-
+            uno::Sequence<uno::Any> aArgs(comphelper::InitAnyPropertySequence(
+            {
+                {"nodepath", uno::Any(OUString("/org.openoffice.Office.UI.GlobalSettings/Toolbars"))}
+            }));
             m_xConfigAccess.set(xConfigProvider->createInstanceWithArguments(
                                     SERVICENAME_CFGREADACCESS, aArgs ),
                                 css::uno::UNO_QUERY );
@@ -273,22 +244,22 @@ GlobalSettings::~GlobalSettings()
 }
 
 // settings access
-bool GlobalSettings::HasStatesInfo( UIElementType eElementType )
+bool GlobalSettings::HasToolbarStatesInfo()
 {
     GlobalSettings_Access* pSettings( GetGlobalSettings( m_xContext ));
 
     if ( pSettings )
-        return pSettings->HasStatesInfo( eElementType );
+        return pSettings->HasToolbarStatesInfo();
     else
         return false;
 }
 
-bool GlobalSettings::GetStateInfo( UIElementType eElementType, StateInfo eStateInfo, css::uno::Any& aValue )
+bool GlobalSettings::GetToolbarStateInfo( StateInfo eStateInfo, css::uno::Any& aValue )
 {
     GlobalSettings_Access* pSettings( GetGlobalSettings( m_xContext ));
 
     if ( pSettings )
-        return pSettings->GetStateInfo( eElementType, eStateInfo, aValue );
+        return pSettings->GetToolbarStateInfo( eStateInfo, aValue );
     else
         return false;
 }

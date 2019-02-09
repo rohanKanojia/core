@@ -20,22 +20,21 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSSELECTIONFUNCTION_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSSELECTIONFUNCTION_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "controller/SlsInsertionIndicatorHandler.hxx"
-#include "fupoor.hxx"
-#include <svtools/transfer.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <fupoor.hxx>
 #include <memory>
 
 namespace sd { namespace slidesorter {
 class SlideSorter;
 } }
 
+struct AcceptDropEvent;
+
 namespace sd { namespace slidesorter { namespace controller {
 
 class SlideSorterController;
 
-class SelectionFunction
+class SelectionFunction final
     : public FuPoor
 {
 public:
@@ -49,9 +48,6 @@ public:
     virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
-
-    virtual void Activate() override;
-    virtual void Deactivate() override;
 
     /// Forward to the clipboard manager.
     virtual void DoCut() override;
@@ -86,8 +82,7 @@ public:
     {
         NormalMode,
         MultiSelectionMode,
-        DragAndDropMode,
-        ButtonMode
+        DragAndDropMode
     };
     void SwitchToNormalMode();
     void SwitchToDragAndDropMode(const Point& rMousePosition);
@@ -101,7 +96,7 @@ public:
     */
     void ResetMouseAnchor();
 
-protected:
+private:
     SlideSorter& mrSlideSorter;
     SlideSorterController& mrController;
 
@@ -109,16 +104,7 @@ protected:
         SlideSorter& rSlideSorter,
         SfxRequest& rRequest);
 
-    virtual ~SelectionFunction();
-
-private:
-    /** We use this flag to filter out the cases where MouseMotion() is called
-        with a pressed mouse button but without a prior MouseButtonDown()
-        call.  This is an indication that the mouse button was pressed over
-        another control, e.g. the view tab bar, and that a re-layout of the
-        controls moved the slide sorter under the mouse.
-    */
-    bool mbProcessingMouseButtonDown;
+    virtual ~SelectionFunction() override;
 
     /** Remember the slide where the shift key was pressed and started a
         multiselection via keyboard.

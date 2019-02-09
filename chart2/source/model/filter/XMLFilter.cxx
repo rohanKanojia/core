@@ -17,10 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLFilter.hxx"
-#include "macros.hxx"
-#include "MediaDescriptorHelper.hxx"
-#include "ContainerHelper.hxx"
+#include <XMLFilter.hxx>
+#include <MediaDescriptorHelper.hxx>
 
 #include <svtools/sfxecode.hxx>
 #include <unotools/saveopt.hxx>
@@ -30,10 +28,10 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <comphelper/sequence.hxx>
 
-#include <sot/storage.hxx>
 #include <osl/diagnose.h>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/xml/sax/InputSource.hpp>
 #include <com/sun/star/xml/sax/Writer.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
@@ -47,8 +45,10 @@
 #include <com/sun/star/xml/sax/Parser.hpp>
 #include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <com/sun/star/packages/zip/ZipIOException.hpp>
-#include <com/sun/star/document/GraphicObjectResolver.hpp>
+#include <com/sun/star/document/GraphicStorageHandler.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 
@@ -61,24 +61,7 @@ namespace
 char const sXML_metaStreamName[] = "meta.xml";
 char const sXML_styleStreamName[] = "styles.xml";
 char const sXML_contentStreamName[] = "content.xml";
-char const sXML_oldContentStreamName[] = "Content.xml";
 
-// soffice 6/7
-char const sXML_export_chart_styles_service[] = "com.sun.star.comp.Chart.XMLStylesExporter";
-char const sXML_export_chart_content_service[] = "com.sun.star.comp.Chart.XMLContentExporter";
-
-char const sXML_import_chart_styles_service[] = "com.sun.star.comp.Chart.XMLStylesImporter";
-char const sXML_import_chart_content_service[] = "com.sun.star.comp.Chart.XMLContentImporter";
-char const sXML_import_chart_old_content_service[] = "com.sun.star.office.sax.importer.Chart";
-
-// Oasis
-char const sXML_export_chart_oasis_styles_service[] = "com.sun.star.comp.Chart.XMLOasisStylesExporter";
-char const sXML_export_chart_oasis_content_service[] = "com.sun.star.comp.Chart.XMLOasisContentExporter";
-char const sXML_export_chart_oasis_meta_service[] = "com.sun.star.comp.Chart.XMLOasisMetaExporter";
-
-char const sXML_import_chart_oasis_styles_service[] = "com.sun.star.comp.Chart.XMLOasisStylesImporter";
-char const sXML_import_chart_oasis_content_service[] = "com.sun.star.comp.Chart.XMLOasisContentImporter";
-char const sXML_import_chart_oasis_meta_service[] = "com.sun.star.comp.Chart.XMLOasisMetaImporter";
 
 uno::Reference< embed::XStorage > lcl_getWriteStorage(
     const Sequence< beans::PropertyValue >& rMediaDescriptor,
@@ -96,7 +79,7 @@ uno::Reference< embed::XStorage > lcl_getWriteStorage(
         {
             Reference< lang::XSingleServiceFactory > xStorageFact( embed::StorageFactory::create( xContext ) );
 
-            ::std::vector< beans::PropertyValue > aPropertiesForStorage;
+            std::vector< beans::PropertyValue > aPropertiesForStorage;
 
             for( sal_Int32 i=rMediaDescriptor.getLength(); i--; )
             {
@@ -133,12 +116,12 @@ uno::Reference< embed::XStorage > lcl_getWriteStorage(
              ! ( xProp->getPropertyValue( "MediaType") >>= aMediaType ) ||
              ( aMediaType.isEmpty() ))
         {
-            xProp->setPropertyValue( "MediaType", uno::makeAny( _sMediaType ));
+            xProp->setPropertyValue( "MediaType", uno::Any( _sMediaType ));
         }
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return xStorage;
 }
@@ -160,7 +143,7 @@ uno::Reference< embed::XStorage > lcl_getReadStorage(
         {
             // get XStream from MediaDescriptor
             uno::Reference< io::XInputStream > xStream;
-            ::std::vector< beans::PropertyValue > aPropertiesForStorage;
+            std::vector< beans::PropertyValue > aPropertiesForStorage;
             for( sal_Int32 i=rMediaDescriptor.getLength(); i--; )
             {
                 if( rMediaDescriptor[i].Name == "InputStream" )
@@ -189,9 +172,9 @@ uno::Reference< embed::XStorage > lcl_getReadStorage(
 
         OSL_ENSURE( xStorage.is(), "No Storage" );
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xStorage;
@@ -213,7 +196,6 @@ XMLFilter::~XMLFilter()
 // ____ XFilter ____
 sal_Bool SAL_CALL XMLFilter::filter(
     const Sequence< beans::PropertyValue >& aDescriptor )
-    throw (uno::RuntimeException, std::exception)
 {
     bool bResult = false;
 
@@ -228,7 +210,7 @@ sal_Bool SAL_CALL XMLFilter::filter(
     {
         OSL_ENSURE( ! m_xTargetDoc.is(), "source doc is set -> target document should not be set" );
         if( impl_Export( m_xSourceDoc,
-                         aDescriptor ) == 0 )
+                         aDescriptor ) == ERRCODE_NONE )
         {
             m_xSourceDoc = nullptr;
             bResult = true;
@@ -237,7 +219,7 @@ sal_Bool SAL_CALL XMLFilter::filter(
     else if( m_xTargetDoc.is())
     {
         if( impl_Import( m_xTargetDoc,
-                         aDescriptor ) == 0 )
+                         aDescriptor ) == ERRCODE_NONE )
         {
             m_xTargetDoc = nullptr;
             bResult = true;
@@ -252,7 +234,6 @@ sal_Bool SAL_CALL XMLFilter::filter(
 }
 
 void SAL_CALL XMLFilter::cancel()
-    throw (uno::RuntimeException, std::exception)
 {
     // if mutex is locked set "cancel state"
     // note: is currently ignored in filter-method
@@ -265,8 +246,6 @@ void SAL_CALL XMLFilter::cancel()
 // ____ XImporter ____
 void SAL_CALL XMLFilter::setTargetDocument(
     const Reference< lang::XComponent >& Document )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( m_aMutex );
     OSL_ENSURE( ! m_xSourceDoc.is(), "Setting target doc while source doc is set" );
@@ -277,8 +256,6 @@ void SAL_CALL XMLFilter::setTargetDocument(
 // ____ XExporter ____
 void SAL_CALL XMLFilter::setSourceDocument(
     const Reference< lang::XComponent >& Document )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     MutexGuard aGuard( m_aMutex );
     OSL_ENSURE( ! m_xTargetDoc.is(), "Setting source doc while target doc is set" );
@@ -286,11 +263,11 @@ void SAL_CALL XMLFilter::setSourceDocument(
     m_xSourceDoc = Document;
 }
 
-sal_Int32 XMLFilter::impl_Import(
+ErrCode XMLFilter::impl_Import(
     const Reference< lang::XComponent > & xDocumentComp,
     const Sequence< beans::PropertyValue > & rMediaDescriptor )
 {
-    sal_Int32 nWarning = 0;
+    ErrCode nWarning = ERRCODE_NONE;
 
     OSL_ENSURE( xDocumentComp.is(), "Import: No Model" );
     OSL_ENSURE( m_xContext.is(), "Import: No ComponentContext" );
@@ -322,15 +299,15 @@ sal_Int32 XMLFilter::impl_Import(
         if( ! xStorage.is())
             return ERRCODE_SFX_GENERAL;
 
-        Reference< document::XGraphicObjectResolver > xGraphicObjectResolver;
-        uno::Reference< lang::XMultiServiceFactory > xServiceFactory( xFactory, uno::UNO_QUERY);
-        if( xServiceFactory.is())
+        uno::Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
+        uno::Reference<lang::XMultiServiceFactory> xServiceFactory(xFactory, uno::UNO_QUERY);
+        if (xServiceFactory.is())
         {
-            uno::Sequence< uno::Any > aArgs(1);
+            uno::Sequence<uno::Any> aArgs(1);
             aArgs[0] <<= xStorage;
-            xGraphicObjectResolver.set(
+            xGraphicStorageHandler.set(
                 xServiceFactory->createInstanceWithArguments(
-                    "com.sun.star.comp.Svx.GraphicImportHelper", aArgs ), uno::UNO_QUERY );
+                    "com.sun.star.comp.Svx.GraphicImportHelper", aArgs), uno::UNO_QUERY);
         }
 
         // create XPropertySet with extra informatio for the filter
@@ -376,47 +353,48 @@ sal_Int32 XMLFilter::impl_Import(
         // needed for relative URLs, but in clipboard copy/paste there may be none
         SAL_INFO_IF(aBaseUri.isEmpty(), "chart2", "chart::XMLFilter: no base URL");
         if( !aBaseUri.isEmpty() )
-            xImportInfo->setPropertyValue( "BaseURI", uno::makeAny( aBaseUri ) );
+            xImportInfo->setPropertyValue( "BaseURI", uno::Any( aBaseUri ) );
 
         if( !aHierarchName.isEmpty() )
-            xImportInfo->setPropertyValue( "StreamRelPath", uno::makeAny( aHierarchName ) );
+            xImportInfo->setPropertyValue( "StreamRelPath", uno::Any( aHierarchName ) );
 
         // import meta information
         if( bOasis )
-            nWarning |= impl_ImportStream(
+            nWarning = impl_ImportStream(
                 sXML_metaStreamName,
-                sXML_import_chart_oasis_meta_service,
-                xStorage, xSaxParser, xFactory, xGraphicObjectResolver, xImportInfo );
+                "com.sun.star.comp.Chart.XMLOasisMetaImporter",
+                xStorage, xSaxParser, xFactory, xGraphicStorageHandler, xImportInfo );
 
         // import styles
-        nWarning |= impl_ImportStream(
+        ErrCode nTmpErr = impl_ImportStream(
             sXML_styleStreamName,
             bOasis
-            ? OUString(sXML_import_chart_oasis_styles_service)
-            : OUString(sXML_import_chart_styles_service),
-            xStorage, xSaxParser, xFactory, xGraphicObjectResolver, xImportInfo );
+            ? OUString("com.sun.star.comp.Chart.XMLOasisStylesImporter")
+            : OUString("com.sun.star.comp.Chart.XMLStylesImporter"),
+            xStorage, xSaxParser, xFactory, xGraphicStorageHandler, xImportInfo );
+        nWarning = nWarning != ERRCODE_NONE ? nWarning : nTmpErr;
 
         // import content
-        sal_Int32 nContentWarning = impl_ImportStream(
+        ErrCode nContentWarning = impl_ImportStream(
             sXML_contentStreamName,
             bOasis
-            ? OUString(sXML_import_chart_oasis_content_service)
-            : OUString(sXML_import_chart_content_service),
-            xStorage, xSaxParser, xFactory, xGraphicObjectResolver, xImportInfo );
-        nWarning |= nContentWarning;
+            ? OUString("com.sun.star.comp.Chart.XMLOasisContentImporter")
+            : OUString("com.sun.star.comp.Chart.XMLContentImporter"),
+            xStorage, xSaxParser, xFactory, xGraphicStorageHandler, xImportInfo );
+        nWarning = nWarning != ERRCODE_NONE ? nWarning : nContentWarning;
 
         // import of "content.xml" didn't work - try old "Content.xml" stream
-        if( nContentWarning != 0 )
+        if( nContentWarning != ERRCODE_NONE )
         {
             nWarning = impl_ImportStream(
-                sXML_oldContentStreamName,
-                sXML_import_chart_old_content_service,
-                xStorage, xSaxParser, xFactory, xGraphicObjectResolver, xImportInfo );
+                "Content.xml", // old content stream name
+                "com.sun.star.office.sax.importer.Chart",
+                xStorage, xSaxParser, xFactory, xGraphicStorageHandler, xImportInfo );
         }
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
 
         // something went awry
         nWarning = ERRCODE_SFX_GENERAL;
@@ -425,24 +403,24 @@ sal_Int32 XMLFilter::impl_Import(
     return nWarning;
 }
 
-sal_Int32 XMLFilter::impl_ImportStream(
+ErrCode XMLFilter::impl_ImportStream(
     const OUString & rStreamName,
     const OUString & rServiceName,
     const Reference< embed::XStorage > & xStorage,
     const Reference< xml::sax::XParser > & xParser,
     const Reference< lang::XMultiComponentFactory > & xFactory,
-    const Reference< document::XGraphicObjectResolver > & xGraphicObjectResolver,
-    uno::Reference< beans::XPropertySet >& xImportInfo )
+    const Reference< document::XGraphicStorageHandler > & xGraphicStorageHandler,
+    uno::Reference< beans::XPropertySet > const & xImportInfo )
 {
-    sal_Int32 nWarning = ERRCODE_SFX_GENERAL;
+    ErrCode nWarning = ERRCODE_SFX_GENERAL;
 
     Reference< container::XNameAccess > xNameAcc( xStorage, uno::UNO_QUERY );
     if( ! (xNameAcc.is() &&
            xNameAcc->hasByName( rStreamName )))
-        return 0;
+        return ERRCODE_NONE;
 
     if( xImportInfo.is() )
-        xImportInfo->setPropertyValue( "StreamName", uno::makeAny( rStreamName ) );
+        xImportInfo->setPropertyValue( "StreamName", uno::Any( rStreamName ) );
 
     if( xStorage.is() &&
         xStorage->isStreamElement( rStreamName ) )
@@ -461,7 +439,7 @@ sal_Int32 XMLFilter::impl_ImportStream(
             if( aParserInput.aInputStream.is())
             {
                 sal_Int32 nArgs = 0;
-                if( xGraphicObjectResolver.is())
+                if( xGraphicStorageHandler.is())
                     nArgs++;
                 if( xImportInfo.is())
                     nArgs++;
@@ -469,8 +447,8 @@ sal_Int32 XMLFilter::impl_ImportStream(
                 uno::Sequence< uno::Any > aFilterCompArgs( nArgs );
 
                 nArgs = 0;
-                if( xGraphicObjectResolver.is())
-                    aFilterCompArgs[nArgs++] <<= xGraphicObjectResolver;
+                if( xGraphicStorageHandler.is())
+                    aFilterCompArgs[nArgs++] <<= xGraphicStorageHandler;
                 if( xImportInfo.is())
                     aFilterCompArgs[ nArgs++ ] <<= xImportInfo;
 
@@ -507,7 +485,7 @@ sal_Int32 XMLFilter::impl_ImportStream(
             }
 
             // load was successful
-            nWarning = 0;
+            nWarning = ERRCODE_NONE;
         }
         catch (const xml::sax::SAXParseException&)
         {
@@ -524,23 +502,23 @@ sal_Int32 XMLFilter::impl_ImportStream(
         catch (const io::IOException&)
         {
         }
-        catch (const uno::Exception& rEx)
+        catch (const uno::Exception&)
         {
-            ASSERT_EXCEPTION(rEx);
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
     return nWarning;
 }
 
-sal_Int32 XMLFilter::impl_Export(
+ErrCode XMLFilter::impl_Export(
     const Reference< lang::XComponent > & xDocumentComp,
     const Sequence< beans::PropertyValue > & rMediaDescriptor )
 {
     m_aMediaDescriptor = rMediaDescriptor;
     //save
 
-    sal_Int32 nWarning = 0;
+    ErrCode nWarning = ERRCODE_NONE;
 
     OSL_ENSURE( xDocumentComp.is(), "Export: No Model" );
     OSL_ENSURE( m_xContext.is(), "Export: No ComponentContext" );
@@ -599,8 +577,8 @@ sal_Int32 XMLFilter::impl_Export(
             }
         }
 
-        Reference< document::XGraphicObjectResolver > xGraphicObjectResolver = document::GraphicObjectResolver::createWithStorage(
-            m_xContext, xStorage );
+        Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
+        xGraphicStorageHandler.set(document::GraphicStorageHandler::createWithStorage(m_xContext, xStorage));
 
         // property map for export info set
         comphelper::PropertyMapEntry const aExportInfoMap[] =
@@ -617,14 +595,13 @@ sal_Int32 XMLFilter::impl_Export(
             comphelper::GenericPropertySet_CreateInstance( new comphelper::PropertySetInfo( aExportInfoMap ) );
 
         SvtSaveOptions aSaveOpt;
-        OUString sUsePrettyPrinting( "UsePrettyPrinting" );
         bool bUsePrettyPrinting( aSaveOpt.IsPrettyPrinting() );
-        xInfoSet->setPropertyValue( sUsePrettyPrinting, uno::makeAny( bUsePrettyPrinting ) );
+        xInfoSet->setPropertyValue( "UsePrettyPrinting", uno::Any( bUsePrettyPrinting ) );
         if( ! bOasis )
-            xInfoSet->setPropertyValue( "ExportTableNumberList", uno::makeAny( true ));
+            xInfoSet->setPropertyValue( "ExportTableNumberList", uno::Any( true ));
 
         sal_Int32 nArgs = 2;
-        if( xGraphicObjectResolver.is())
+        if( xGraphicStorageHandler.is())
             nArgs++;
 
         uno::Sequence< uno::Any > aFilterProperties( nArgs );
@@ -632,45 +609,46 @@ sal_Int32 XMLFilter::impl_Export(
             nArgs = 0;
             aFilterProperties[ nArgs++ ] <<= xInfoSet;
             aFilterProperties[ nArgs++ ] <<= xDocHandler;
-            if( xGraphicObjectResolver.is())
-                aFilterProperties[ nArgs++ ] <<= xGraphicObjectResolver;
+            if( xGraphicStorageHandler.is())
+                aFilterProperties[ nArgs++ ] <<= xGraphicStorageHandler;
         }
 
         // export meta information
         if( bOasis )
-            nWarning |= impl_ExportStream(
+            nWarning = impl_ExportStream(
                 sXML_metaStreamName,
-                sXML_export_chart_oasis_meta_service,
+                "com.sun.star.comp.Chart.XMLOasisMetaExporter",
                 xStorage, xSaxWriter, xServiceFactory, aFilterProperties );
 
         // export styles
-        nWarning |= impl_ExportStream(
+        ErrCode nTmp = impl_ExportStream(
             sXML_styleStreamName,
             bOasis
-            ? OUString(sXML_export_chart_oasis_styles_service)
-            : OUString(sXML_export_chart_styles_service),
+            ? OUString("com.sun.star.comp.Chart.XMLOasisStylesExporter")
+            : OUString("com.sun.star.comp.Chart.XMLStylesExporter"), // soffice 6/7
             xStorage, xSaxWriter, xServiceFactory, aFilterProperties );
+        nWarning = nWarning != ERRCODE_NONE ? nWarning : nTmp;
 
         // export content
-        sal_Int32 nContentWarning = impl_ExportStream(
+        ErrCode nContentWarning = impl_ExportStream(
             sXML_contentStreamName,
             bOasis
-            ? OUString(sXML_export_chart_oasis_content_service)
-            : OUString(sXML_export_chart_content_service),
+            ? OUString("com.sun.star.comp.Chart.XMLOasisContentExporter")
+            : OUString("com.sun.star.comp.Chart.XMLContentExporter"),
             xStorage, xSaxWriter, xServiceFactory, aFilterProperties );
-        nWarning |= nContentWarning;
+        nWarning = nWarning != ERRCODE_NONE ? nWarning : nContentWarning;
 
-        Reference< lang::XComponent > xComp( xGraphicObjectResolver, uno::UNO_QUERY );
-        if( xComp.is())
+        Reference< lang::XComponent > xComp(xGraphicStorageHandler, uno::UNO_QUERY);
+        if (xComp.is())
             xComp->dispose();
 
         uno::Reference<embed::XTransactedObject> xTransact( xStorage ,uno::UNO_QUERY);
         if ( xTransact.is() )
             xTransact->commit();
     }
-    catch (const uno::Exception& ex)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
 
         // something went awry
         nWarning = ERRCODE_SFX_GENERAL;
@@ -679,7 +657,7 @@ sal_Int32 XMLFilter::impl_Export(
     return nWarning;
 }
 
-sal_Int32 XMLFilter::impl_ExportStream(
+ErrCode XMLFilter::impl_ExportStream(
     const OUString & rStreamName,
     const OUString & rServiceName,
     const Reference< embed::XStorage > & xStorage,
@@ -687,8 +665,6 @@ sal_Int32 XMLFilter::impl_ExportStream(
     const Reference< lang::XMultiServiceFactory >& xServiceFactory,
     const Sequence< uno::Any > & rFilterProperties )
 {
-    sal_Int32 nWarning = 0;
-
     try
     {
         if( !xServiceFactory.is() )
@@ -709,13 +685,13 @@ sal_Int32 XMLFilter::impl_ExportStream(
         uno::Reference< beans::XPropertySet > xStreamProp( xOutputStream, uno::UNO_QUERY );
         if(xStreamProp.is()) try
         {
-            xStreamProp->setPropertyValue( "MediaType", uno::makeAny( OUString("text/xml") ) );
-            xStreamProp->setPropertyValue( "Compressed", uno::makeAny( sal_True ) );//@todo?
-            xStreamProp->setPropertyValue( "UseCommonStoragePasswordEncryption", uno::makeAny( sal_True ) );
+            xStreamProp->setPropertyValue( "MediaType", uno::Any( OUString("text/xml") ) );
+            xStreamProp->setPropertyValue( "Compressed", uno::Any( true ) );//@todo?
+            xStreamProp->setPropertyValue( "UseCommonStoragePasswordEncryption", uno::Any( true ) );
         }
-        catch (const uno::Exception& rEx)
+        catch (const uno::Exception&)
         {
-            ASSERT_EXCEPTION( rEx );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
 
         xActiveDataSource->setOutputStream(xOutputStream);
@@ -727,7 +703,7 @@ sal_Int32 XMLFilter::impl_ExportStream(
                 rFilterProperties.getConstArray()[0] >>= xInfoSet;
             OSL_ENSURE( xInfoSet.is(), "missing infoset for export" );
             if( xInfoSet.is() )
-                xInfoSet->setPropertyValue( "StreamName", uno::makeAny( rStreamName ) );
+                xInfoSet->setPropertyValue( "StreamName", uno::Any( rStreamName ) );
         }
 
         Reference< XExporter > xExporter( xServiceFactory->createInstanceWithArguments(
@@ -743,22 +719,11 @@ sal_Int32 XMLFilter::impl_ExportStream(
 
         xFilter->filter(m_aMediaDescriptor);
     }
-    catch (const uno::Exception& rEx)
+    catch (const uno::Exception&)
     {
-        ASSERT_EXCEPTION( rEx );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
-    return nWarning;
-}
-
-Sequence< OUString > XMLFilter::getSupportedServiceNames_Static()
-{
-    Sequence< OUString > aServices( 2 );
-    aServices[ 0 ] = "com.sun.star.document.ImportFilter";
-    aServices[ 1 ] = "com.sun.star.document.ExportFilter";
-
-    // todo: services are incomplete.  Missing:
-    // XInitialization, XNamed
-    return aServices;
+    return ERRCODE_NONE;
 }
 
 void XMLFilter::isOasisFormat(const Sequence< beans::PropertyValue >& _rMediaDescriptor, bool & rOutOASIS )
@@ -773,26 +738,23 @@ OUString XMLFilter::getMediaType(bool _bOasis)
 }
 
 OUString SAL_CALL XMLFilter::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString XMLFilter::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart2.XMLFilter");
 }
 
 sal_Bool SAL_CALL XMLFilter::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL XMLFilter::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        "com.sun.star.document.ImportFilter",
+        "com.sun.star.document.ExportFilter"
+    };
+    // todo: services are incomplete.  Missing:
+    // XInitialization, XNamed
 }
 
 void XMLReportFilterHelper::isOasisFormat(const Sequence< beans::PropertyValue >& _rMediaDescriptor, bool & rOutOASIS )
@@ -808,14 +770,14 @@ OUString XMLReportFilterHelper::getMediaType(bool )
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_chart2_XMLFilter_get_implementation(css::uno::XComponentContext *context,
         css::uno::Sequence<css::uno::Any> const &)
 {
     return cppu::acquire(new ::chart::XMLFilter(context));
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_chart2_report_XMLFilter_get_implementation(css::uno::XComponentContext *context,
         css::uno::Sequence<css::uno::Any> const &)
 {

@@ -22,11 +22,11 @@
 
 class SwScrollbar: public ScrollBar
 {
-    Size    aDocSz;
-    bool    bHori       :1;     // horizontal = salTrue, otherwise vertical
-    bool    bAuto       :1;     // for scrolling mode
-    bool    bVisible    :1;     // show/hide should only set this flag
-    bool    bSizeSet    :1;     // was the size already set?
+    Size        aDocSz;
+    bool const  bHori       :1;     // horizontal = salTrue, otherwise vertical
+    bool        bAuto       :1;     // for scrolling mode
+    bool        bVisible    :1;     // show/hide should only set this flag
+    bool        bSizeSet    :1;     // was the size already set?
 
     void    AutoShow();
 
@@ -41,15 +41,15 @@ public:
         // changing of document size
     void    DocSzChgd(const Size &rNewSize);
         // changing of visible region
-    void    ViewPortChgd(const Rectangle &rRectangle);
+    void    ViewPortChgd(const tools::Rectangle &rRectangle);
         // what is it??
     bool    IsHoriScroll() const { return bHori; }
 
     void    SetAuto(bool bSet);
     bool    IsAuto() { return bAuto;}
 
-    SwScrollbar(vcl::Window *pParent, bool bHori = true );
-    virtual ~SwScrollbar();
+    SwScrollbar(vcl::Window *pParent, bool bHori );
+    virtual ~SwScrollbar() override;
 };
 
 #endif

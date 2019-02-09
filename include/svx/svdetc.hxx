@@ -26,6 +26,8 @@
 #include <tools/link.hxx>
 #include <tools/fract.hxx>
 #include <vcl/outdev.hxx>
+#include <svx/svdobj.hxx>
+#include <memory>
 
 
 /**
@@ -53,7 +55,7 @@ namespace com { namespace sun { namespace star { namespace lang {
  * The resulting default font height, however, stays the same (the logical
  * font height is converted).
  */
-SVX_DLLPUBLIC SdrOutliner* SdrMakeOutliner(sal_uInt16 nOutlinerMode, SdrModel& rMod);
+SVX_DLLPUBLIC std::unique_ptr<SdrOutliner> SdrMakeOutliner(OutlinerMode nOutlinerMode, SdrModel& rMod);
 
 /**
  * Global default settings for the DrawingEngine.
@@ -61,41 +63,24 @@ SVX_DLLPUBLIC SdrOutliner* SdrMakeOutliner(sal_uInt16 nOutlinerMode, SdrModel& r
  * One should set these default settings as the first
  * thing at program start, before any other method is called.
  */
-class SVX_DLLPUBLIC SdrEngineDefaults
+namespace SdrEngineDefaults
 {
-friend class SdrAttrObj;
-    Color      aFontColor;
-    sal_uIntPtr      nFontHeight;
-    MapUnit    eMapUnit;
-    Fraction   aMapFraction;
-
-private:
-    static SdrEngineDefaults& GetDefaults();
-
-public:
-    SdrEngineDefaults();
-
-    // Default FontColor is COL_BLACK
-    static Color      GetFontColor()                       { return GetDefaults().aFontColor; }
+    // Default FontColor is COL_AUTO
+    inline Color GetFontColor() { return COL_AUTO; }
 
     // Default FontHeight is 847. The font height uses logical units (MapUnit/MapFraction
     // see below for further details). The default setting 847/100mm corresponds to about
-    // 24 Point. If e.g. one would use Twips (SetMapUnit(MAP_TWIP)) (20 Twip = 1 Point)
+    // 24 Point. If e.g. one would use Twips (SetMapUnit(MapUnit::MapTwip)) (20 Twip = 1 Point)
     // instead, one would need to set the font height to 480, in order to get a 24 Point height.
-    static sal_uIntPtr      GetFontHeight()                      { return GetDefaults().nFontHeight; }
+    inline size_t GetFontHeight() { return 847; }
 
     // The MapMode is needed for the global Outliner.
     // Incidentally, every newly instantiated SdrModel is assigned this MapMode by default.
-    // Default MapUnit is MAP_100TH_MM
-    static MapUnit    GetMapUnit()                         { return GetDefaults().eMapUnit; }
+    // Default MapUnit is MapUnit::Map100thMM
+    inline MapUnit GetMapUnit() { return MapUnit::Map100thMM; }
 
     // Default MapFraction is 1/1.
-    static Fraction   GetMapFraction()                     { return GetDefaults().aMapFraction; }
-
-    // Create an Outliner with the engine-global default values on the heap.
-    // If pMod != nullptr, the MapMode of the passed model is used.
-    // The resulting default font height, however, stays the same (the logical font height is converted).
-    friend SVX_DLLPUBLIC SdrOutliner* SdrMakeOutliner(sal_uInt16 nOutlinerMode, SdrModel& rMod);
+    inline Fraction GetMapFraction() { return Fraction(1, 1); }
 };
 
 class SfxItemSet;
@@ -118,7 +103,7 @@ bool SearchOutlinerItems(const SfxItemSet& rSet, bool bInklDefaults, bool* pbOnl
 /**
  * @returns a new WhichTable, which we need to squash at some point with a delete
  */
-sal_uInt16* RemoveWhichRange(const sal_uInt16* pOldWhichTable, sal_uInt16 nRangeBeg, sal_uInt16 nRangeEnd);
+std::unique_ptr<sal_uInt16[]> RemoveWhichRange(const sal_uInt16* pOldWhichTable, sal_uInt16 nRangeBeg, sal_uInt16 nRangeEnd);
 
 /**
  * Helper class for the communication between the dialog
@@ -128,67 +113,47 @@ sal_uInt16* RemoveWhichRange(const sal_uInt16* pOldWhichTable, sal_uInt16 nRange
 class SVX_DLLPUBLIC SvdProgressInfo
 {
 private:
-    sal_uIntPtr m_nSumActionCount; // Sum of all Actions
-    sal_uIntPtr m_nSumCurAction;   // Sum of all handled Actions
+    size_t      m_nSumCurAction;   // Sum of all handled Actions
 
-    sal_uIntPtr m_nActionCount;   // Count of Actions in the current object
-    sal_uIntPtr m_nCurAction;     // Count of handled Actions in the current object
+    size_t      m_nActionCount;   // Count of Actions in the current object
+    size_t      m_nCurAction;     // Count of handled Actions in the current object
 
-    sal_uIntPtr m_nInsertCount;   // Count of to-be-inserted Actions in the current object
-    sal_uIntPtr m_nCurInsert;     // Count of already inserted Actions
+    size_t      m_nInsertCount;   // Count of to-be-inserted Actions in the current object
+    size_t      m_nCurInsert;     // Count of already inserted Actions
 
-    sal_uIntPtr m_nObjCount;      // Count of selected objects
-    sal_uIntPtr m_nCurObj;        // Current object
+    size_t      m_nObjCount;      // Count of selected objects
+    size_t      m_nCurObj;        // Current object
 
     Link<void*,bool>  maLink;
 
 public:
     SvdProgressInfo( const Link<void*,bool>& _pLink );
 
-    void Init( sal_uIntPtr _nSumActionCount, sal_uIntPtr _nObjCount );
+    void Init( size_t _nObjCount );
 
     void SetNextObject();
 
-    void SetActionCount( sal_uIntPtr _nActionCount );
-    void SetInsertCount( sal_uIntPtr _nInsertCount );
+    void SetActionCount( size_t _nActionCount );
+    void SetInsertCount( size_t _nInsertCount );
 
-    bool ReportActions( sal_uIntPtr nActionCount );
-    void ReportInserts( sal_uIntPtr nInsertCount );
+    bool ReportActions( size_t nActionCount );
+    void ReportInserts( size_t nInsertCount );
 
-    sal_uIntPtr GetSumCurAction() const { return m_nSumCurAction; };
-    sal_uIntPtr GetObjCount() const { return m_nObjCount; };
-    sal_uIntPtr GetCurObj() const { return m_nCurObj; };
+    size_t      GetSumCurAction() const { return m_nSumCurAction; };
+    size_t      GetObjCount() const { return m_nObjCount; };
+    size_t      GetCurObj() const { return m_nCurObj; };
 
-    sal_uIntPtr GetActionCount() const { return m_nActionCount; };
-    sal_uIntPtr GetCurAction() const { return m_nCurAction; };
+    size_t      GetActionCount() const { return m_nActionCount; };
+    size_t      GetCurAction() const { return m_nCurAction; };
 
-    sal_uIntPtr GetInsertCount() const { return m_nInsertCount; };
-    sal_uIntPtr GetCurInsert() const { return m_nCurInsert; };
+    size_t      GetInsertCount() const { return m_nInsertCount; };
+    size_t      GetCurInsert() const { return m_nCurInsert; };
 
-    void ReportRescales( sal_uIntPtr nRescaleCount );
+    void ReportRescales( size_t nRescaleCount );
 };
 
 
-class SdrObjFactory;
-
-class SdrLinkList
-{
-    std::vector<Link<SdrObjFactory*,void> > aList;
-protected:
-    unsigned FindEntry(const Link<SdrObjFactory*,void>& rLink) const;
-public:
-    SdrLinkList(): aList()                   {}
-    ~SdrLinkList()                           { Clear(); }
-    SVX_DLLPUBLIC void Clear();
-    unsigned GetLinkCount() const            { return (unsigned)aList.size(); }
-    Link<SdrObjFactory*,void>& GetLink(unsigned nNum)           { return aList[nNum]; }
-    const Link<SdrObjFactory*,void>& GetLink(unsigned nNum) const { return aList[nNum]; }
-    void InsertLink(const Link<SdrObjFactory*,void>& rLink);
-    void RemoveLink(const Link<SdrObjFactory*,void>& rLink);
-};
-
-SdrLinkList& ImpGetUserMakeObjHdl();
-SdrLinkList& ImpGetUserMakeObjUserDataHdl();
+std::vector<Link<SdrObjCreatorParams, SdrObject*>>& ImpGetUserMakeObjHdl();
 
 class SdrOle2Obj;
 class AutoTimer;
@@ -198,11 +163,10 @@ class OLEObjCache
     std::vector<SdrOle2Obj*> maObjs;
 
     size_t         nSize;
-    AutoTimer*          pTimer;
+    std::unique_ptr<AutoTimer>  pTimer;
 
-    void UnloadOnDemand();
     static bool UnloadObj( SdrOle2Obj* pObj );
-    DECL_LINK_TYPED( UnloadCheckHdl, Timer*, void );
+    DECL_LINK( UnloadCheckHdl, Timer*, void );
 
 public:
     OLEObjCache();
@@ -222,10 +186,8 @@ class SVX_DLLPUBLIC SdrGlobalData
     const SvtSysLocale*         pSysLocale;     // follows always locale settings
     const LocaleDataWrapper*    pLocaleData;    // follows always SysLocale
 public:
-    SdrLinkList         aUserMakeObjHdl;
-    SdrLinkList         aUserMakeObjUserDataHdl;
-    SdrEngineDefaults*  pDefaults;
-    ResMgr*             pResMgr;
+    std::vector<Link<SdrObjCreatorParams, SdrObject*>>
+                        aUserMakeObjHdl;
     OLEObjCache         aOLEObjCache;
 
 
@@ -238,11 +200,6 @@ public:
 };
 
 SVX_DLLPUBLIC SdrGlobalData & GetSdrGlobalData();
-
-namespace sdr
-{
-    SVX_DLLPUBLIC OUString GetResourceString(sal_uInt16 nResID);
-}
 
 
 // #i101872# isolated GetTextEditBackgroundColor for tooling

@@ -19,57 +19,40 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLLABRI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLLABRI_HXX
 
-#include <xmloff/xmlictxt.hxx>
-#include "xmlimprt.hxx"
+#include "importcontext.hxx"
 
-class ScXMLLabelRangesContext : public SvXMLImportContext
+namespace sax_fastparser { class FastAttributeList; }
+
+class ScXMLLabelRangesContext : public ScXMLImportContext
 {
-private:
-    const ScXMLImport&          GetScImport() const     { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport&                GetScImport()           { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
                                 ScXMLLabelRangesContext(
-                                    ScXMLImport& rImport,
-                                    sal_uInt16 nPrefix,
-                                    const OUString& rLName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList
+                                    ScXMLImport& rImport
                                     );
-    virtual                     ~ScXMLLabelRangesContext();
+    virtual                     ~ScXMLLabelRangesContext() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
-                                    sal_uInt16 nPrefix,
-                                    const OUString& rLocalName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL
+                                createFastChildContext(
+                                    sal_Int32 nElement,
+                                    const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList
                                     ) override;
-    virtual void                EndElement() override;
 };
 
-class ScXMLLabelRangeContext : public SvXMLImportContext
+class ScXMLLabelRangeContext : public ScXMLImportContext
 {
 private:
-    OUString             sLabelRangeStr;
-    OUString             sDataRangeStr;
+    OUString                    sLabelRangeStr;
+    OUString                    sDataRangeStr;
     bool                        bColumnOrientation;
-
-    const ScXMLImport&          GetScImport() const     { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport&                GetScImport()           { return static_cast<ScXMLImport&>(GetImport()); }
 
 public:
                                 ScXMLLabelRangeContext(
                                     ScXMLImport& rImport,
-                                    sal_uInt16 nPrefix,
-                                    const OUString& rLName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList
+                                    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList
                                     );
-    virtual                     ~ScXMLLabelRangeContext();
+    virtual                     ~ScXMLLabelRangeContext() override;
 
-    virtual SvXMLImportContext* CreateChildContext(
-                                    sal_uInt16 nPrefix,
-                                    const OUString& rLocalName,
-                                    const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList
-                                    ) override;
-    virtual void                EndElement() override;
+    virtual void SAL_CALL       endFastElement( sal_Int32 nElement ) override;
 };
 
 #endif

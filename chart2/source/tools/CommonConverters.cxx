@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "CommonConverters.hxx"
+#include <CommonConverters.hxx>
+#include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/drawing/DoubleSequence.hpp>
-#include <com/sun/star/text/WritingMode2.hpp>
+#include <com/sun/star/drawing/PolyPolygonBezierCoords.hpp>
+#include <com/sun/star/chart2/data/XDataSequence.hpp>
 #include <com/sun/star/chart2/data/XNumericalDataSequence.hpp>
 #include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
 #include <rtl/math.hxx>
 #include <osl/diagnose.h>
 #include <basegfx/matrix/b3dhommatrix.hxx>
-
-#include <cstdarg>
 
 namespace chart
 {

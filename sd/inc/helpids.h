@@ -16,30 +16,13 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <sfx2/sfxcommands.h>
-#include <svx/svxcommands.h>
-#include "sdcommands.h"
+
+#ifndef INCLUDED_SD_INC_HELPIDS_H
+#define INCLUDED_SD_INC_HELPIDS_H
 
 #define HID_SDDRAWVIEWSHELL                                     "SD_HID_SDDRAWVIEWSHELL"
 #define HID_SDGRAPHICVIEWSHELL                                  "SD_HID_SDGRAPHICVIEWSHELL"
 #define HID_SDOUTLINEVIEWSHELL                                  "SD_HID_SDOUTLINEVIEWSHELL"
-#define HID_SD_WIN_DOCUMENT                                     "SD_HID_SD_WIN_DOCUMENT"
-#define HID_SD_NAVIGATOR_TLB                                    "SD_HID_SD_NAVIGATOR_TLB"
-#define HID_SD_NAVIGATOR                                        "SD_HID_SD_NAVIGATOR"
-#define HID_SD_NAVIGATOR_TBX                                    "SD_HID_SD_NAVIGATOR_TBX"
-#define HID_SD_NAVIGATOR_LB                                     "SD_HID_SD_NAVIGATOR_LB"
-#define HID_SD_NAVIGATOR_TBI_FIRST                              "SD_HID_SD_NAVIGATOR_TBI_FIRST"
-#define HID_SD_NAVIGATOR_TBI_PREV                               "SD_HID_SD_NAVIGATOR_TBI_PREV"
-#define HID_SD_NAVIGATOR_TBI_NEXT                               "SD_HID_SD_NAVIGATOR_TBI_NEXT"
-#define HID_SD_NAVIGATOR_TBI_LAST                               "SD_HID_SD_NAVIGATOR_TBI_LAST"
-#define HID_SD_NAVIGATOR_TBI_DRAGTYPE                           "SD_HID_SD_NAVIGATOR_TBI_DRAGTYPE"
-#define HID_SD_NAVIGATOR_TBI_SHAPE_FILTER                       "SD_HID_SD_NAVIGATOR_TBI_SHAPE_FILTER"
-
-// tool boxes
-#define HID_SD_DRAW_TOOLBOX                                     "SD_HID_SD_DRAW_TOOLBOX"
-#define HID_SD_DRAW_OBJ_TOOLBOX                                 "SD_HID_SD_DRAW_OBJ_TOOLBOX"
-#define HID_SD_DRAW_OPTIONS_TOOLBOX                             "SD_HID_SD_DRAW_OPTIONS_TOOLBOX"
-#define HID_SD_TEXT_TOOLBOX                                     "SD_HID_SD_TEXT_TOOLBOX"
 
 #define HID_SD_NAVIGATOR_MENU1                                  "SD_HID_SD_NAVIGATOR_MENU1"
 #define HID_SD_NAVIGATOR_MENU2                                  "SD_HID_SD_NAVIGATOR_MENU2"
@@ -86,12 +69,6 @@
 #define HID_SD_RULER_HORIZONTAL                                 "SD_HID_SD_RULER_HORIZONTAL"
 #define HID_SD_RULER_VERTICAL                                   "SD_HID_SD_RULER_VERTICAL"
 
-
-#define HID_MN_SUB_GRAPHIC                                      "SD_HID_MN_SUB_GRAPHIC"
-#define HID_MN_SUB_FIELD                                        "SD_HID_MN_SUB_FIELD"
-#define HID_MN_SUB_TEMPLATES                                    "SD_HID_MN_SUB_TEMPLATES"
-#define HID_MN_SUB_SPELLING                                     "SD_HID_MN_SUB_SPELLING"
-#define HID_MN_SUB_CONVERT                                      "SD_HID_MN_SUB_CONVERT"
-#define HID_MN_SUB_MIRROR                                       "SD_HID_MN_SUB_MIRROR"
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -18,9 +18,9 @@
  */
 
 
-#include "osx/salinst.h"
-#include "quartz/utils.h"
-#include "quartz/salgdi.h"
+#include <osx/salinst.h>
+#include <quartz/utils.h>
+#include <quartz/salgdi.h>
 
 #include "a11ytextattributeswrapper.h"
 
@@ -28,6 +28,8 @@
 #include <com/sun/star/awt/FontUnderline.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontStrikeout.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/text/TextMarkupType.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
 
@@ -106,20 +108,12 @@ using namespace ::com::sun::star::uno;
 @implementation AquaA11yTextAttributesWrapper : NSObject
 
 +(int)convertUnderlineStyle:(PropertyValue)property {
-#if MACOSX_SDK_VERSION >= 1090
     int underlineStyle = NSUnderlineStyleNone;
-#else
-    int underlineStyle = NSNoUnderlineStyle;
-#endif
     sal_Int16 value = 0;
     property.Value >>= value;
     if ( value != ::css_awt::FontUnderline::NONE
       && value != ::css_awt::FontUnderline::DONTKNOW) {
-#if MACOSX_SDK_VERSION >= 1090
         underlineStyle = NSUnderlineStyleSingle;
-#else
-        underlineStyle = NSSingleUnderlineStyle;
-#endif
     }
     return underlineStyle;
 }
@@ -139,7 +133,7 @@ using namespace ::com::sun::star::uno;
 
 +(int)convertItalicStyle:(PropertyValue)property {
     int italicStyle = NSUnitalicFontMask;
-    sal_Int16 value = property.Value.get< ::css_awt::FontSlant>();
+    ::css_awt::FontSlant value = property.Value.get< ::css_awt::FontSlant>();
     if ( value == ::css_awt::FontSlant_ITALIC ) {
         italicStyle = NSItalicFontMask;
     }
@@ -173,10 +167,10 @@ using namespace ::com::sun::star::uno;
     return [ NSNumber numberWithShort: value ];
 }
 
-+(void)addColor:(SalColor)nSalColor forAttribute:(NSString *)attribute andRange:(NSRange)range toString:(NSMutableAttributedString *)string {
-    if( nSalColor == COL_TRANSPARENT )
++(void)addColor:(Color)nColor forAttribute:(NSString *)attribute andRange:(NSRange)range toString:(NSMutableAttributedString *)string {
+    if( nColor == COL_TRANSPARENT )
         return;
-    const RGBAColor aRGBAColor( nSalColor);
+    const RGBAColor aRGBAColor( nColor);
     CGColorRef aColorRef = CGColorCreate ( CGColorSpaceCreateWithName ( kCGColorSpaceGenericRGB ), aRGBAColor.AsArray() );
     [ string addAttribute: attribute value: reinterpret_cast<id>(aColorRef) range: range ];
     CGColorRelease( aColorRef );
@@ -225,11 +219,7 @@ using namespace ::com::sun::star::uno;
         if ( property.Value.hasValue() ) {
             if ( property.Name.equals ( attrUnderline ) ) {
                 int style = [ AquaA11yTextAttributesWrapper convertUnderlineStyle: property ];
-#if MACOSX_SDK_VERSION >= 1090
                 if ( style != NSUnderlineStyleNone ) {
-#else
-                if ( style != NSNoUnderlineStyle ) {
-#endif
                     [ string addAttribute: NSAccessibilityUnderlineTextAttribute value: [ NSNumber numberWithInt: style ] range: range ];
                 }
             } else if ( property.Name.equals ( attrFontname ) ) {
@@ -272,13 +262,19 @@ using namespace ::com::sun::star::uno;
                 sal_Int32 alignment;
                 property.Value >>= alignment;
                 NSNumber *textAlignment = nil;
-                switch(alignment) {
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+    // 'NSCenterTextAlignment' is deprecated: first deprecated in macOS 10.12
+    // 'NSJustifiedTextAlignment' is deprecated: first deprecated in macOS 10.12
+    // 'NSLeftTextAlignment' is deprecated: first deprecated in macOS 10.12
+    // 'NSRightTextAlignment' is deprecated: first deprecated in macOS 10.12
+                switch(static_cast<css::style::ParagraphAdjust>(alignment)) {
                     case css::style::ParagraphAdjust_RIGHT : textAlignment = [NSNumber numberWithInteger:NSRightTextAlignment]    ; break;
                     case css::style::ParagraphAdjust_CENTER: textAlignment = [NSNumber numberWithInteger:NSCenterTextAlignment]   ; break;
                     case css::style::ParagraphAdjust_BLOCK : textAlignment = [NSNumber numberWithInteger:NSJustifiedTextAlignment]; break;
                     case css::style::ParagraphAdjust_LEFT  :
                     default                                             : textAlignment = [NSNumber numberWithInteger:NSLeftTextAlignment]     ; break;
                 }
+SAL_WNODEPRECATED_DECLARATIONS_POP
                 NSDictionary *paragraphStyle = [NSDictionary dictionaryWithObjectsAndKeys:textAlignment, @"AXTextAlignment", textAlignment, @"AXVisualTextAlignment", nil];
                 [string addAttribute:@"AXParagraphStyle" value:paragraphStyle range:range];
             }
@@ -314,7 +310,7 @@ using namespace ::com::sun::star::uno;
 }
 
 +(void)addMarkup:(XAccessibleTextMarkup*)markup toString:(NSMutableAttributedString*)string inRange:(NSRange)range {
-    [AquaA11yTextAttributesWrapper addMarkup:markup withType:(css::text::TextMarkupType::SPELLCHECK) toString:string inRange:range];
+    [AquaA11yTextAttributesWrapper addMarkup:markup withType:css::text::TextMarkupType::SPELLCHECK toString:string inRange:range];
 }
 
 +(NSMutableAttributedString *)createAttributedStringForElement:(AquaA11yWrapper *)wrapper inOrigRange:(id)origRange {

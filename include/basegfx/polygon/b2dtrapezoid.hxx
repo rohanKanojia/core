@@ -21,10 +21,12 @@
 #define INCLUDED_BASEGFX_POLYGON_B2DTRAPEZOID_HXX
 
 #include <basegfx/polygon/b2dpolygon.hxx>
-#include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <vector>
 #include <basegfx/basegfxdllapi.h>
 
+
+namespace basegfx { class B2DPolyPolygon; }
+namespace basegfx { class B2DPoint; }
 
 namespace basegfx
 {
@@ -75,7 +77,7 @@ namespace basegfx
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         // convert SourcePolyPolygon to trapezoids. The trapezoids will be appended to
         // ro_Result. ro_Result will not be cleared. If SourcePolyPolygon contains curves,
@@ -94,25 +96,17 @@ namespace basegfx
             B2DTrapezoidVector& ro_Result,
             const B2DPoint& rPointA,
             const B2DPoint& rPointB,
-            double fLineWidth = 1.0);
+            double fLineWidth);
 
         // create trapezoids for all edges of the given polygon. The closed state of
-        // the polygon is taken into account. If curves are contaned, the default
+        // the polygon is taken into account. If curves are contained, the default
         // AdaptiveSubdivision will be used.
         BASEGFX_DLLPUBLIC void createLineTrapezoidFromB2DPolygon(
             B2DTrapezoidVector& ro_Result,
             const B2DPolygon& rPolygon,
-            double fLineWidth = 1.0);
+            double fLineWidth);
 
-        // create trapezoids for all edges of the given polyPolygon. The closed state of
-        // the tools::PolyPolygon is taken into account. If curves are contaned, the default
-        // AdaptiveSubdivision will be used.
-        BASEGFX_DLLPUBLIC void createLineTrapezoidFromB2DPolyPolygon(
-            B2DTrapezoidVector& ro_Result,
-            const B2DPolyPolygon& rPolyPolygon,
-            double fLineWidth = 1.0);
-
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 

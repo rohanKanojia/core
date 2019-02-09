@@ -18,8 +18,9 @@
  */
 
 #include "Tickmarks_Equidistant.hxx"
-#include "ViewDefines.hxx"
 #include <rtl/math.hxx>
+#include <osl/diagnose.h>
+#include <float.h>
 
 #include <limits>
 
@@ -28,7 +29,6 @@ namespace chart
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 using namespace ::rtl::math;
-using ::basegfx::B2DVector;
 
 //static
 double EquidistantTickFactory::getMinimumAtIncrement( double fMin, const ExplicitIncrementData& rIncrement )
@@ -73,12 +73,10 @@ EquidistantTickFactory::EquidistantTickFactory(
           const ExplicitScaleData& rScale, const ExplicitIncrementData& rIncrement )
             : m_rScale( rScale )
             , m_rIncrement( rIncrement )
-            , m_xInverseScaling(nullptr)
-            , m_pfCurrentValues(nullptr)
 {
     //@todo: make sure that the scale is valid for the scaling
 
-    m_pfCurrentValues = new double[getTickDepth()];
+    m_pfCurrentValues.reset( new double[getTickDepth()] );
 
     if( m_rScale.Scaling.is() )
     {
@@ -129,7 +127,6 @@ EquidistantTickFactory::EquidistantTickFactory(
 
 EquidistantTickFactory::~EquidistantTickFactory()
 {
-    delete[] m_pfCurrentValues;
 }
 
 sal_Int32 EquidistantTickFactory::getTickDepth() const
@@ -139,7 +136,7 @@ sal_Int32 EquidistantTickFactory::getTickDepth() const
 
 void EquidistantTickFactory::addSubTicks( sal_Int32 nDepth, uno::Sequence< uno::Sequence< double > >& rParentTicks ) const
 {
-    EquidistantTickIter aIter( rParentTicks, m_rIncrement, 0, nDepth-1 );
+    EquidistantTickIter aIter( rParentTicks, m_rIncrement, nDepth-1 );
     double* pfNextParentTick = aIter.firstValue();
     if(!pfNextParentTick)
         return;
@@ -148,7 +145,7 @@ void EquidistantTickFactory::addSubTicks( sal_Int32 nDepth, uno::Sequence< uno::
     if(!pfNextParentTick)
         return;
 
-    sal_Int32 nMaxSubTickCount = this->getMaxTickCount( nDepth );
+    sal_Int32 nMaxSubTickCount = getMaxTickCount( nDepth );
     if(!nMaxSubTickCount)
         return;
 
@@ -161,7 +158,7 @@ void EquidistantTickFactory::addSubTicks( sal_Int32 nDepth, uno::Sequence< uno::
     {
         for( sal_Int32 nPartTick = 1; nPartTick<nIntervalCount; nPartTick++ )
         {
-            pValue = this->getMinorTick( nPartTick, nDepth
+            pValue = getMinorTick( nPartTick, nDepth
                         , fLastParentTick, *pfNextParentTick );
             if(!pValue)
                 continue;
@@ -312,22 +309,20 @@ bool EquidistantTickFactory::isVisible( double fScaledValue ) const
 
 void EquidistantTickFactory::getAllTicks( TickInfoArraysType& rAllTickInfos ) const
 {
-    uno::Sequence< uno::Sequence< double > > aAllTicks;
-
     //create point sequences for each tick depth
-    sal_Int32 nDepthCount = this->getTickDepth();
-    sal_Int32 nMaxMajorTickCount = this->getMaxTickCount();
+    const sal_Int32 nDepthCount = getTickDepth();
+    const sal_Int32 nMaxMajorTickCount = getMaxTickCount(0);
 
     if (nDepthCount <= 0 || nMaxMajorTickCount <= 0)
         return;
 
-    aAllTicks.realloc(nDepthCount);
+    uno::Sequence< uno::Sequence< double > > aAllTicks(nDepthCount);
     aAllTicks[0].realloc(nMaxMajorTickCount);
 
     sal_Int32 nRealMajorTickCount = 0;
     for( sal_Int32 nMajorTick=0; nMajorTick<nMaxMajorTickCount; nMajorTick++ )
     {
-        double* pValue = this->getMajorTick( nMajorTick );
+        double* pValue = getMajorTick( nMajorTick );
         if(!pValue)
             continue;
         aAllTicks[0][nRealMajorTickCount] = *pValue;
@@ -337,8 +332,7 @@ void EquidistantTickFactory::getAllTicks( TickInfoArraysType& rAllTickInfos ) co
         return;
     aAllTicks[0].realloc(nRealMajorTickCount);
 
-    if(nDepthCount>0)
-        this->addSubTicks( 1, aAllTicks );
+    addSubTicks(1, aAllTicks);
 
     //so far we have added all ticks between the outer major tick marks
     //this was necessary to create sub ticks correctly
@@ -415,33 +409,31 @@ void EquidistantTickFactory::getAllTicksShifted( TickInfoArraysType& rAllTickInf
 
 EquidistantTickIter::EquidistantTickIter( const uno::Sequence< uno::Sequence< double > >& rTicks
                    , const ExplicitIncrementData& rIncrement
-                   , sal_Int32 nMinDepth, sal_Int32 nMaxDepth )
+                   , sal_Int32 nMaxDepth )
                 : m_pSimpleTicks(&rTicks)
                 , m_pInfoTicks(nullptr)
                 , m_rIncrement(rIncrement)
                 , m_nMaxDepth(0)
-                , m_nTickCount(0), m_pnPositions(nullptr)
-                , m_pnPreParentCount(nullptr), m_pbIntervalFinished(nullptr)
+                , m_nTickCount(0)
                 , m_nCurrentDepth(-1), m_nCurrentPos(-1), m_fCurrentValue( 0.0 )
 {
-    initIter( nMinDepth, nMaxDepth );
+    initIter( nMaxDepth );
 }
 
 EquidistantTickIter::EquidistantTickIter( TickInfoArraysType& rTicks
                    , const ExplicitIncrementData& rIncrement
-                   , sal_Int32 nMinDepth, sal_Int32 nMaxDepth )
+                   , sal_Int32 nMaxDepth )
                 : m_pSimpleTicks(nullptr)
                 , m_pInfoTicks(&rTicks)
                 , m_rIncrement(rIncrement)
                 , m_nMaxDepth(0)
-                , m_nTickCount(0), m_pnPositions(nullptr)
-                , m_pnPreParentCount(nullptr), m_pbIntervalFinished(nullptr)
+                , m_nTickCount(0)
                 , m_nCurrentDepth(-1), m_nCurrentPos(-1), m_fCurrentValue( 0.0 )
 {
-    initIter( nMinDepth, nMaxDepth );
+    initIter( nMaxDepth );
 }
 
-void EquidistantTickIter::initIter( sal_Int32 /*nMinDepth*/, sal_Int32 nMaxDepth )
+void EquidistantTickIter::initIter( sal_Int32 nMaxDepth )
 {
     m_nMaxDepth = nMaxDepth;
     if(nMaxDepth<0 || m_nMaxDepth>getMaxDepth())
@@ -454,10 +446,10 @@ void EquidistantTickIter::initIter( sal_Int32 /*nMinDepth*/, sal_Int32 nMaxDepth
     if(!m_nTickCount)
         return;
 
-    m_pnPositions      = new sal_Int32[m_nMaxDepth+1];
+    m_pnPositions.reset( new sal_Int32[m_nMaxDepth+1] );
 
-    m_pnPreParentCount = new sal_Int32[m_nMaxDepth+1];
-    m_pbIntervalFinished = new bool[m_nMaxDepth+1];
+    m_pnPreParentCount.reset( new sal_Int32[m_nMaxDepth+1] );
+    m_pbIntervalFinished.reset( new bool[m_nMaxDepth+1] );
     m_pnPreParentCount[0] = 0;
     m_pbIntervalFinished[0] = false;
     double fParentValue = getTickValue(0,0);
@@ -486,9 +478,6 @@ void EquidistantTickIter::initIter( sal_Int32 /*nMinDepth*/, sal_Int32 nMaxDepth
 
 EquidistantTickIter::~EquidistantTickIter()
 {
-    delete[] m_pnPositions;
-    delete[] m_pnPreParentCount;
-    delete[] m_pbIntervalFinished;
 }
 
 sal_Int32 EquidistantTickIter::getStartDepth() const

@@ -22,7 +22,7 @@
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <connectivity/TTableHelper.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 
 using namespace connectivity;
 using namespace connectivity::sdbcx;
@@ -36,8 +36,8 @@ OIndexHelper::OIndexHelper( OTableHelper* _pTable) : connectivity::sdbcx::OIndex
                  , m_pTable(_pTable)
 {
     construct();
-    ::std::vector< OUString> aVector;
-    m_pColumns  = new OIndexColumns(this,m_aMutex,aVector);
+    std::vector< OUString> aVector;
+    m_pColumns = new OIndexColumns(this,m_aMutex,aVector);
 }
 
 OIndexHelper::OIndexHelper( OTableHelper* _pTable,
@@ -63,7 +63,7 @@ void OIndexHelper::refreshColumns()
     if ( !m_pTable )
         return;
 
-    ::std::vector< OUString> aVector;
+    std::vector< OUString> aVector;
     if ( !isNew() )
     {
         ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
@@ -73,7 +73,7 @@ void OIndexHelper::refreshColumns()
 
         Reference< XResultSet > xResult = m_pTable->getMetaData()->getIndexInfo(
             m_pTable->getPropertyValue(rPropMap.getNameByIndex(PROPERTY_ID_CATALOGNAME)),
-            aSchema,aTable,sal_False,sal_False);
+            aSchema,aTable,false,false);
 
         if ( xResult.is() )
         {
@@ -93,7 +93,7 @@ void OIndexHelper::refreshColumns()
     if(m_pColumns)
         m_pColumns->reFill(aVector);
     else
-        m_pColumns  = new OIndexColumns(this,m_aMutex,aVector);
+        m_pColumns = new OIndexColumns(this,m_aMutex,aVector);
 }
 
 

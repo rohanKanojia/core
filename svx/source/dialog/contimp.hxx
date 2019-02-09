@@ -25,8 +25,6 @@
 #include <vcl/status.hxx>
 #include <vcl/idle.hxx>
 
-#define CONT_RESID(nId)  ResId( nId, DIALOG_MGR() )
-
 class SvxSuperContourDlg;
 
 class SvxContourDlgItem : public SfxControllerItem
@@ -39,7 +37,7 @@ protected:
 
 public:
 
-    SvxContourDlgItem( sal_uInt16 nId, SvxSuperContourDlg& rDlg, SfxBindings& rBindings );
+    SvxContourDlgItem( SvxSuperContourDlg& rDlg, SfxBindings& rBindings );
 };
 
 class SvxSuperContourDlg : public SvxContourDlg
@@ -53,7 +51,6 @@ class SvxSuperContourDlg : public SvxContourDlg
     tools::PolyPolygon         aUpdatePolyPoly;
     Idle                aUpdateIdle;
     Idle                aCreateIdle;
-    Size                aLastSize;
     void*               pUpdateEditingObject;
     void*               pCheckObj;
     SvxContourDlgItem   aContourItem;
@@ -61,7 +58,7 @@ class SvxSuperContourDlg : public SvxContourDlg
     VclPtr<MetricField> m_pMtfTolerance;
     VclPtr<ContourWindow> m_pContourWnd;
     VclPtr<StatusBar>   m_pStbStatus;
-    sal_uIntPtr         nGrfChanged;
+    sal_Int32           mnGrfChanged;
     bool                bExecState;
     bool                bUpdateGraphicLinked;
     bool                bGraphicLinked;
@@ -83,42 +80,38 @@ class SvxSuperContourDlg : public SvxContourDlg
 
     virtual bool        Close() override;
 
-                        DECL_LINK_TYPED( Tbx1ClickHdl, ToolBox*, void );
-                        DECL_LINK_TYPED( MousePosHdl, GraphCtrl*, void );
-                        DECL_LINK_TYPED( GraphSizeHdl, GraphCtrl*, void );
-                        DECL_LINK_TYPED( UpdateHdl, Idle *, void );
-                        DECL_LINK_TYPED( CreateHdl, Idle *, void );
-                        DECL_LINK_TYPED( StateHdl, GraphCtrl*, void );
-                        DECL_LINK_TYPED( PipetteHdl, ContourWindow&, void );
-                        DECL_LINK_TYPED( PipetteClickHdl, ContourWindow&, void );
-                        DECL_LINK_TYPED( WorkplaceClickHdl, ContourWindow&, void );
-                        DECL_LINK_TYPED( MiscHdl, LinkParamNone*, void );
+                        DECL_LINK( Tbx1ClickHdl, ToolBox*, void );
+                        DECL_LINK( MousePosHdl, GraphCtrl*, void );
+                        DECL_LINK( GraphSizeHdl, GraphCtrl*, void );
+                        DECL_LINK( UpdateHdl, Timer *, void );
+                        DECL_LINK( CreateHdl, Timer *, void );
+                        DECL_LINK( StateHdl, GraphCtrl*, void );
+                        DECL_LINK( PipetteHdl, ContourWindow&, void );
+                        DECL_LINK( PipetteClickHdl, ContourWindow&, void );
+                        DECL_LINK( WorkplaceClickHdl, ContourWindow&, void );
+                        DECL_LINK( MiscHdl, LinkParamNone*, void );
 
 public:
 
                         SvxSuperContourDlg(SfxBindings *pBindings, SfxChildWindow *pCW,
                                            vcl::Window* pParent);
-                        virtual ~SvxSuperContourDlg();
+                        virtual ~SvxSuperContourDlg() override;
     virtual void        dispose() override;
 
     void                SetExecState( bool bEnable );
 
     void                SetGraphic( const Graphic& rGraphic );
     const Graphic&      GetGraphic() const { return aGraphic; }
-    bool                IsGraphicChanged() const { return nGrfChanged > 0UL; }
+    bool                IsGraphicChanged() const { return mnGrfChanged > 0; }
 
     void                SetPolyPolygon( const tools::PolyPolygon& rPolyPoly );
     tools::PolyPolygon  GetPolyPolygon();
 
-    void                SetEditingObject( void* pObj ) { pCheckObj = pObj; }
     const void*         GetEditingObject() const { return pCheckObj; }
 
-    bool                IsUndoPossible() const;
-    bool                IsRedoPossible() const;
-
     void                UpdateGraphic( const Graphic& rGraphic, bool bGraphicLinked,
-                                const tools::PolyPolygon* pPolyPoly = nullptr,
-                                void* pEditingObj = nullptr );
+                                const tools::PolyPolygon* pPolyPoly,
+                                void* pEditingObj );
 };
 
 

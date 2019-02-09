@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/postattr.hxx"
+#include <svx/postattr.hxx>
 #include <editeng/itemtype.hxx>
+#include <svx/strings.hrc>
 #include <svx/svxitems.hrc>
 #include <svx/dialmgr.hxx>
-
 
 SfxPoolItem* SvxPostItAuthorItem::CreateDefault() { return new SvxPostItAuthorItem(0); }
 SfxPoolItem* SvxPostItDateItem::CreateDefault() { return new SvxPostItDateItem(0); }
 SfxPoolItem* SvxPostItTextItem::CreateDefault() { return new SvxPostItTextItem(0); }
+SfxPoolItem* SvxPostItIdItem::CreateDefault() { return new SvxPostItIdItem(0); }
 
 SvxPostItAuthorItem::SvxPostItAuthorItem( sal_uInt16 _nWhich )
 {
@@ -43,18 +44,18 @@ SvxPostItAuthorItem::SvxPostItAuthorItem( const OUString& rAuthor,
 bool SvxPostItAuthorItem::GetPresentation
 (
     SfxItemPresentation ePres,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     switch ( ePres )
     {
-        case SFX_ITEM_PRESENTATION_NAMELESS:
+        case SfxItemPresentation::Nameless:
             rText = GetValue();
             return true;
-        case SFX_ITEM_PRESENTATION_COMPLETE:
-            rText = SVX_RESSTR(RID_SVXITEMS_AUTHOR_COMPLETE) + GetValue();
+        case SfxItemPresentation::Complete:
+            rText = SvxResId(RID_SVXITEMS_AUTHOR_COMPLETE) + GetValue();
             return true;
         default: ;//prevent warning
     }
@@ -83,18 +84,18 @@ SvxPostItDateItem::SvxPostItDateItem( const OUString& rDate, sal_uInt16 _nWhich 
 bool SvxPostItDateItem::GetPresentation
 (
     SfxItemPresentation ePres,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     switch ( ePres )
     {
-        case SFX_ITEM_PRESENTATION_NAMELESS:
+        case SfxItemPresentation::Nameless:
             rText = GetValue();
             return true;
-        case SFX_ITEM_PRESENTATION_COMPLETE:
-            rText = SVX_RESSTR(RID_SVXITEMS_DATE_COMPLETE) + GetValue();
+        case SfxItemPresentation::Complete:
+            rText = SvxResId(RID_SVXITEMS_DATE_COMPLETE) + GetValue();
             return true;
         default: ;//prevent warning
     }
@@ -112,40 +113,47 @@ SvxPostItTextItem::SvxPostItTextItem( sal_uInt16 _nWhich )
     SetWhich( _nWhich );
 }
 
-
 SvxPostItTextItem::SvxPostItTextItem( const OUString& rText, sal_uInt16 _nWhich ) :
 
     SfxStringItem( _nWhich, rText )
 {
 }
 
-
 bool SvxPostItTextItem::GetPresentation
 (
     SfxItemPresentation ePres,
-    SfxMapUnit          /*eCoreUnit*/,
-    SfxMapUnit          /*ePresUnit*/,
-    OUString&           rText, const IntlWrapper *
+    MapUnit             /*eCoreUnit*/,
+    MapUnit             /*ePresUnit*/,
+    OUString&           rText, const IntlWrapper&
 )   const
 {
     switch ( ePres )
     {
-        case SFX_ITEM_PRESENTATION_NAMELESS:
+        case SfxItemPresentation::Nameless:
             rText = GetValue();
             return true;
-        case SFX_ITEM_PRESENTATION_COMPLETE:
-            rText = SVX_RESSTR(RID_SVXITEMS_TEXT_COMPLETE) + GetValue();
+        case SfxItemPresentation::Complete:
+            rText = SvxResId(RID_SVXITEMS_TEXT_COMPLETE) + GetValue();
             return true;
         default: ;//prevent warning
     }
     return false;
 }
 
-
 SfxPoolItem* SvxPostItTextItem::Clone( SfxItemPool * ) const
 {
     return new SvxPostItTextItem( *this );
 }
 
+
+SvxPostItIdItem::SvxPostItIdItem( sal_uInt16 _nWhich )
+{
+    SetWhich( _nWhich );
+}
+
+SfxPoolItem* SvxPostItIdItem::Clone( SfxItemPool * ) const
+{
+    return new SvxPostItIdItem( *this );
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -18,26 +18,20 @@
  */
 
 #include "dsselect.hxx"
-#include "dbu_dlg.hrc"
-#include <vcl/msgbox.hxx>
-#include "localresaccess.hxx"
-#include <tools/rcid.h>
+#include <dbu_dlg.hxx>
 
 #include <com/sun/star/sdbcx/XCreateCatalog.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
-#include "dbustrings.hrc"
-#include <toolkit/helper/vclunohelper.hxx>
-#include <comphelper/extract.hxx>
-#include <comphelper/types.hxx>
-#include <comphelper/processfactory.hxx>
-#include "dsitems.hxx"
+#include <stringconstants.hxx>
+#include <dsitems.hxx>
 #include <svl/stritem.hxx>
 #include <svl/intitem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/itemset.hxx>
+#include <sal/log.hxx>
 
 namespace dbaui
 {
@@ -48,7 +42,7 @@ using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::ui::dialogs;
 using namespace ::comphelper;
 
-ODatasourceSelectDialog::ODatasourceSelectDialog(vcl::Window* _pParent, const StringBag& _rDatasources)
+ODatasourceSelectDialog::ODatasourceSelectDialog(vcl::Window* _pParent, const std::set<OUString>& _rDatasources)
     : ModalDialog(_pParent, "ChooseDataSourceDialog",
         "dbaccess/ui/choosedatasourcedialog.ui")
 {
@@ -62,7 +56,7 @@ ODatasourceSelectDialog::ODatasourceSelectDialog(vcl::Window* _pParent, const St
     get(m_pManageDatasources, "organize");
     m_pManageDatasources->Show();
 
-    // allow ODBC datasource managenment
+    // allow ODBC datasource management
     m_pManageDatasources->Show();
     m_pManageDatasources->Enable();
     m_pManageDatasources->SetClickHdl(LINK(this,ODatasourceSelectDialog,ManageClickHdl));
@@ -80,13 +74,16 @@ void ODatasourceSelectDialog::dispose()
     m_pDatasource.clear();
     m_pOk.clear();
     m_pCancel.clear();
+#if defined HAVE_ODBC_ADMINISTRATION
+    m_pManageDatasources.clear();
+#endif
     ModalDialog::dispose();
 }
 
 
-IMPL_LINK_TYPED( ODatasourceSelectDialog, ListDblClickHdl, ListBox&, rListBox, void )
+IMPL_LINK( ODatasourceSelectDialog, ListDblClickHdl, ListBox&, rListBox, void )
 {
-    if (rListBox.GetSelectEntryCount())
+    if (rListBox.GetSelectedEntryCount())
         EndDialog(RET_OK);
 }
 
@@ -94,14 +91,14 @@ bool ODatasourceSelectDialog::Close()
 {
 #ifdef HAVE_ODBC_ADMINISTRATION
     if ( m_pODBCManagement.get() && m_pODBCManagement->isRunning() )
-        return sal_False;
+        return false;
 #endif
 
     return ModalDialog::Close();
 }
 
 #ifdef HAVE_ODBC_ADMINISTRATION
-IMPL_LINK_NOARG_TYPED(ODatasourceSelectDialog, ManageClickHdl, Button*, void)
+IMPL_LINK_NOARG(ODatasourceSelectDialog, ManageClickHdl, Button*, void)
 {
     if ( !m_pODBCManagement.get() )
         m_pODBCManagement.reset( new OOdbcManagement( LINK( this, ODatasourceSelectDialog, ManageProcessFinished ) ) );
@@ -122,9 +119,9 @@ IMPL_LINK_NOARG_TYPED(ODatasourceSelectDialog, ManageClickHdl, Button*, void)
     SAL_WARN_IF( !m_pODBCManagement->isRunning(), "dbaccess.ui", "ODatasourceSelectDialog::ManageClickHdl: success, but not running - you were *fast*!" );
 }
 
-IMPL_LINK_NOARG_TYPED( ODatasourceSelectDialog, ManageProcessFinished, void*, void )
+IMPL_LINK_NOARG( ODatasourceSelectDialog, ManageProcessFinished, void*, void )
 {
-    StringBag aOdbcDatasources;
+    std::set<OUString> aOdbcDatasources;
     OOdbcEnumeration aEnumeration;
     aEnumeration.getDatasourceNames( aOdbcDatasources );
     fillListBox( aOdbcDatasources );
@@ -136,19 +133,16 @@ IMPL_LINK_NOARG_TYPED( ODatasourceSelectDialog, ManageProcessFinished, void*, vo
 }
 
 #endif
-void ODatasourceSelectDialog::fillListBox(const StringBag& _rDatasources)
+void ODatasourceSelectDialog::fillListBox(const std::set<OUString>& _rDatasources)
 {
     OUString sSelected;
     if (m_pDatasource->GetEntryCount())
-         sSelected = m_pDatasource->GetSelectEntry();
+         sSelected = m_pDatasource->GetSelectedEntry();
     m_pDatasource->Clear();
     // fill the list
-    for (   StringBag::const_iterator aDS = _rDatasources.begin();
-            aDS != _rDatasources.end();
-            ++aDS
-        )
+    for (auto const& datasource : _rDatasources)
     {
-        m_pDatasource->InsertEntry( *aDS );
+        m_pDatasource->InsertEntry(datasource);
     }
 
     if (m_pDatasource->GetEntryCount())

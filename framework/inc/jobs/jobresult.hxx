@@ -32,11 +32,11 @@ namespace framework{
 
 /**
     @short  represent a result of a finished job execution
-    @descr  Such result instance transport all neccessarry
+    @descr  Such result instance transport all necessary
             data from the code place where the job was finished
             to the outside code, where e.g. listener must be notified.
  */
-class JobResult
+class JobResult final
 {
 
     // types
@@ -63,12 +63,6 @@ class JobResult
 
     private:
 
-        /** hold the original pure result, which was given back by an
-            executed job
-            We analyze it and use it to set all our other members.
-         */
-        css::uno::Any m_aPureResult;
-
         /**
             an user of us must know, which (possible) parts of
             a "pure result" was really set by an executed job.
@@ -86,13 +80,6 @@ class JobResult
         std::vector< css::beans::NamedValue > m_lArguments;
 
         /**
-            an executed job can force his deactivation
-            But we provide this information here only.
-            Doing so is part of any user of us.
-         */
-        bool m_bDeactivate;
-
-        /**
             represent the part "DispatchResult"
             It's a fulfilled event type, which was given
             back by the executed job. Any user of us can send
@@ -107,9 +94,9 @@ class JobResult
                  JobResult(                                         );
                  JobResult( const css::uno::Any& aResult );
                  JobResult( const JobResult&                rCopy   );
-        virtual ~JobResult(                                         );
+                 ~JobResult(                                         );
 
-        void operator=( const JobResult& rCopy );
+        JobResult& operator=( const JobResult& rCopy );
 
         bool                                     existPart        ( sal_uInt32 eParts ) const;
         std::vector< css::beans::NamedValue >    getArguments     (                   ) const;

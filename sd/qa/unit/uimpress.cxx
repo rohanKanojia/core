@@ -8,10 +8,10 @@
  */
 
 #include <sal/types.h>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 
 #include <cppuhelper/bootstrap.hxx>
 #include <comphelper/processfactory.hxx>
@@ -23,6 +23,10 @@
 #include <iostream>
 #include <vector>
 
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
+
 using namespace ::com::sun::star;
 
 namespace {
@@ -30,7 +34,7 @@ namespace {
 class Test : public CppUnit::TestFixture {
 public:
     Test();
-    virtual ~Test();
+    virtual ~Test() override;
 
     virtual void setUp() override;
     virtual void tearDown() override;
@@ -45,11 +49,10 @@ public:
 
 private:
     uno::Reference< uno::XComponentContext > m_xContext;
-    SdDrawDocument* m_pDoc;
+    std::unique_ptr<SdDrawDocument> m_pDoc;
 };
 
 Test::Test()
-    : m_pDoc(nullptr)
 {
     m_xContext = cppu::defaultBootstrap_InitialComponentContext();
 
@@ -68,12 +71,12 @@ Test::Test()
 
 void Test::setUp()
 {
-    m_pDoc = new SdDrawDocument(DOCUMENT_TYPE_IMPRESS, nullptr);
+    m_pDoc.reset(new SdDrawDocument(DocumentType::Impress, nullptr));
 }
 
 void Test::tearDown()
 {
-    delete m_pDoc;
+    m_pDoc.reset();
 }
 
 Test::~Test()
@@ -85,19 +88,19 @@ void Test::testAddPage()
 {
     SdrPage* pPage = m_pDoc->AllocPage(false);
     m_pDoc->InsertPage(pPage);
-    CPPUNIT_ASSERT_MESSAGE("added one page to model",
-                           m_pDoc->GetPageCount()==1);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("added one page to model",
+                                 static_cast<sal_uInt16>(1), m_pDoc->GetPageCount());
     m_pDoc->DeletePage(0);
-    CPPUNIT_ASSERT_MESSAGE("removed one page to model",
-                           m_pDoc->GetPageCount()==0);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("removed one page to model",
+                                 static_cast<sal_uInt16>(0), m_pDoc->GetPageCount());
 
     SdrPage* pMasterPage = m_pDoc->AllocPage(true);
     m_pDoc->InsertMasterPage(pMasterPage);
-    CPPUNIT_ASSERT_MESSAGE("added one master page to model",
-                           m_pDoc->GetMasterPageCount()==1);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("added one master page to model",
+                                 static_cast<sal_uInt16>(1), m_pDoc->GetMasterPageCount());
     m_pDoc->DeleteMasterPage(0);
-    CPPUNIT_ASSERT_MESSAGE("removed one master page to model",
-                           m_pDoc->GetMasterPageCount()==0);
+    CPPUNIT_ASSERT_EQUAL_MESSAGE("removed one master page to model",
+                                 static_cast<sal_uInt16>(0), m_pDoc->GetMasterPageCount());
 }
 
 void Test::testCustomShow()

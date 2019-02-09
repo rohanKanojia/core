@@ -39,7 +39,7 @@ namespace drawinglayer
 
             if(getPolyPolygon3D().count())
             {
-                ::std::vector< basegfx::B3DPolyPolygon > aFill;
+                std::vector< basegfx::B3DPolyPolygon > aFill;
                 aFill.push_back(getPolyPolygon3D());
 
                 // get full range
@@ -153,7 +153,7 @@ namespace drawinglayer
 
             if(getPolyPolygon3D().count())
             {
-                aRetval = basegfx::tools::getRange(getPolyPolygon3D());
+                aRetval = basegfx::utils::getRange(getPolyPolygon3D());
                 aRetval.transform(getTransform());
 
                 if(!getSdrLFSAttribute().getLine().isDefault())

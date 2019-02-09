@@ -18,8 +18,9 @@
  */
 
 #include "ORealDriver.hxx"
-#include "odbc/ODriver.hxx"
+#include <odbc/ODriver.hxx>
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 using namespace connectivity::odbc;
 using ::com::sun::star::uno::Reference;
@@ -27,7 +28,7 @@ using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::lang::XSingleServiceFactory;
 using ::com::sun::star::lang::XMultiServiceFactory;
 
-typedef Reference< XSingleServiceFactory > (SAL_CALL *createFactoryFunc)
+typedef Reference< XSingleServiceFactory > (*createFactoryFunc)
         (
             const Reference< XMultiServiceFactory > & rServiceManager,
             const OUString & rComponentName,
@@ -52,7 +53,6 @@ struct ProviderRequest
     {
     }
 
-    inline
     bool CREATE_PROVIDER(
                 const OUString& Implname,
                 const Sequence< OUString > & Services,
@@ -77,7 +77,7 @@ struct ProviderRequest
 };
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL odbc_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void* odbc_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* /*pRegistryKey*/)

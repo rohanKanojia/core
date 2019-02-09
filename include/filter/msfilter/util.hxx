@@ -10,14 +10,20 @@
 #ifndef INCLUDED_FILTER_MSFILTER_UTIL_HXX
 #define INCLUDED_FILTER_MSFILTER_UTIL_HXX
 
-#include <rtl/textenc.h>
-#include <tools/datetime.hxx>
-#include <tools/color.hxx>
-#include <com/sun/star/lang/Locale.hpp>
 #include <filter/msfilter/msfilterdllapi.h>
 #include <svx/msdffdef.hxx>
-#include <com/sun/star/awt/Size.hpp>
-#include <filter/msfilter/escherex.hxx>
+#include <rtl/string.hxx>
+#include <rtl/textenc.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <tools/datetime.hxx>
+
+class Color;
+
+namespace com { namespace sun { namespace star {
+    namespace awt { struct Size; }
+    namespace lang { struct Locale; }
+} } }
 
 namespace msfilter {
 namespace util {
@@ -31,9 +37,6 @@ MSFILTER_DLLPUBLIC rtl_TextEncoding getBestTextEncodingFromLocale(const css::lan
 MSFILTER_DLLPUBLIC sal_uInt32 BGRToRGB(sal_uInt32 nColour);
 
 /** Convert from DTTM to Writer's DateTime
-
-  @author
-  <a href="mailto:mmaher@openoffice.org">Martin Maher</a
   */
 MSFILTER_DLLPUBLIC DateTime DTTM2DateTime( long lDTTM );
 
@@ -53,23 +56,12 @@ MSFILTER_DLLPUBLIC sal_Unicode bestFitOpenSymbolToMSFont(sal_Unicode cBullet,
     rtl_TextEncoding& r_ioChrSet, OUString& r_ioFontName);
 
 
-enum TextCategory
-{
-    latin,      //Latin
-    cs,         //Complex Script
-    ea,         //East Asian
-    sym         //Symbol
-};
-
-#define OOXML_COLOR_AUTO 0x0a
-
 /**
  * Converts tools Color to HTML color (without leading hashmark).
  *
  * @param rColor color to convert
- * @param bAutoColor if OOXML_COLOR_AUTO should be recognized as an auto color
  */
-MSFILTER_DLLPUBLIC OString ConvertColor( const Color &rColor, bool bAutoColor = false );
+MSFILTER_DLLPUBLIC OString ConvertColor( const Color &rColor );
 
 
 /** Paper size in 1/100 millimeters. */
@@ -102,7 +94,6 @@ private:
     sal_Int32 nSavPtr;
 public:
     WW8ReadFieldParams( const OUString& rData );
-    ~WW8ReadFieldParams();
 
     bool GoToTokenParam();
     sal_Int32 SkipToNextToken();

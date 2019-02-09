@@ -18,7 +18,7 @@
  */
 
 #include <drawinglayer/primitive2d/bitmapprimitive2d.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <drawinglayer/primitive2d/drawinglayer_primitivetypes2d.hxx>
 
 
@@ -56,6 +56,11 @@ namespace drawinglayer
             basegfx::B2DRange aRetval(0.0, 0.0, 1.0, 1.0);
             aRetval.transform(maTransform);
             return aRetval;
+        }
+
+        sal_Int64 SAL_CALL BitmapPrimitive2D::estimateUsage()
+        {
+            return getBitmapEx().GetSizeBytes();
         }
 
         // provide unique ID

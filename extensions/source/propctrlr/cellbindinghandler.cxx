@@ -24,12 +24,13 @@
 #include "pcrservices.hxx"
 
 #include <com/sun/star/form/binding/XValueBinding.hpp>
+#include <com/sun/star/lang/NullPointerException.hpp>
 #include <com/sun/star/table/CellAddress.hpp>
 #include <com/sun/star/inspection/XObjectInspectorUI.hpp>
 #include <tools/debug.hxx>
 
 
-extern "C" void SAL_CALL createRegistryInfo_CellBindingPropertyHandler()
+extern "C" void createRegistryInfo_CellBindingPropertyHandler()
 {
     ::pcr::CellBindingPropertyHandler::registerImplementation();
 }
@@ -56,13 +57,13 @@ namespace pcr
     }
 
 
-    OUString SAL_CALL CellBindingPropertyHandler::getImplementationName_static(  ) throw (RuntimeException)
+    OUString CellBindingPropertyHandler::getImplementationName_static(  )
     {
         return OUString( "com.sun.star.comp.extensions.CellBindingPropertyHandler" );
     }
 
 
-    Sequence< OUString > SAL_CALL CellBindingPropertyHandler::getSupportedServiceNames_static(  ) throw (RuntimeException)
+    Sequence< OUString > CellBindingPropertyHandler::getSupportedServiceNames_static(  )
     {
         Sequence<OUString> aSupported { "com.sun.star.form.inspection.CellBindingPropertyHandler" };
         return aSupported;
@@ -85,7 +86,7 @@ namespace pcr
     }
 
 
-    Sequence< OUString > SAL_CALL CellBindingPropertyHandler::getActuatingProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL CellBindingPropertyHandler::getActuatingProperties( )
     {
         Sequence< OUString > aInterestingProperties( 3 );
         aInterestingProperties[0] = PROPERTY_LIST_CELL_RANGE;
@@ -95,18 +96,19 @@ namespace pcr
     }
 
 
-    void SAL_CALL CellBindingPropertyHandler::actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& _rxInspectorUI, sal_Bool _bFirstTimeInit ) throw (NullPointerException, RuntimeException, std::exception)
+    void SAL_CALL CellBindingPropertyHandler::actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& _rxInspectorUI, sal_Bool _bFirstTimeInit )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nActuatingPropId( impl_getPropertyId_throwRuntime( _rActuatingPropertyName ) );
-        OSL_PRECOND( m_pHelper.get(), "CellBindingPropertyHandler::actuatingPropertyChanged: inconsistentcy!" );
-            // if we survived impl_getPropertyId_throwRuntime, we should have a helper, since no helper implies no properties
+        OSL_PRECOND(m_pHelper,
+                    "CellBindingPropertyHandler::actuatingPropertyChanged: inconsistentcy!");
+        // if we survived impl_getPropertyId_throwRuntime, we should have a helper, since no helper implies no properties
 
         OSL_PRECOND( _rxInspectorUI.is(), "FormComponentPropertyHandler::actuatingPropertyChanged: no access to the UI!" );
         if ( !_rxInspectorUI.is() )
             throw NullPointerException();
 
-        ::std::vector< PropertyId > aDependentProperties;
+        std::vector< PropertyId > aDependentProperties;
 
         switch ( nActuatingPropId )
         {
@@ -135,7 +137,7 @@ namespace pcr
                 // ensure that the "transfer selection as" property is reset. Since we can't remember
                 // it at the object itself, but derive it from the binding only, we have to normalize
                 // it now that there *is* no binding anymore.
-                setPropertyValue( PROPERTY_CELL_EXCHANGE_TYPE, makeAny( (sal_Int16) 0 ) );
+                setPropertyValue( PROPERTY_CELL_EXCHANGE_TYPE, makeAny( sal_Int16(0) ) );
             }
         }
         break;
@@ -161,7 +163,10 @@ namespace pcr
                 try
                 {
                     if ( !xSource.is() )
+                    {
                         setPropertyValue( PROPERTY_STRINGITEMLIST, makeAny( Sequence< OUString >() ) );
+                        setPropertyValue( PROPERTY_TYPEDITEMLIST, makeAny( Sequence< Any >() ) );
+                    }
                 }
                 catch( const Exception& )
                 {
@@ -185,12 +190,9 @@ namespace pcr
             OSL_FAIL( "CellBindingPropertyHandler::actuatingPropertyChanged: did not register for this property!" );
         }
 
-        for ( ::std::vector< PropertyId >::const_iterator loopAffected = aDependentProperties.begin();
-              loopAffected != aDependentProperties.end();
-              ++loopAffected
-            )
+        for (auto const& dependentProperty : aDependentProperties)
         {
-            impl_updateDependentProperty_nothrow( *loopAffected, _rxInspectorUI );
+            impl_updateDependentProperty_nothrow( dependentProperty, _rxInspectorUI );
         }
     }
 
@@ -223,13 +225,13 @@ namespace pcr
     }
 
 
-    Any SAL_CALL CellBindingPropertyHandler::getPropertyValue( const OUString& _rPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL CellBindingPropertyHandler::getPropertyValue( const OUString& _rPropertyName )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
 
-        OSL_ENSURE( m_pHelper.get(), "CellBindingPropertyHandler::getPropertyValue: inconsistency!" );
-            // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
+        OSL_ENSURE(m_pHelper, "CellBindingPropertyHandler::getPropertyValue: inconsistency!");
+        // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
 
         Any aReturn;
         switch ( nPropId )
@@ -257,7 +259,7 @@ namespace pcr
         case PROPERTY_ID_CELL_EXCHANGE_TYPE:
         {
             Reference< XValueBinding > xBinding( m_pHelper->getCurrentBinding() );
-            aReturn <<= (sal_Int16)( CellBindingHelper::isCellIntegerBinding( xBinding ) ? 1 : 0 );
+            aReturn <<= static_cast<sal_Int16>( CellBindingHelper::isCellIntegerBinding( xBinding ) ? 1 : 0 );
         }
         break;
 
@@ -269,13 +271,13 @@ namespace pcr
     }
 
 
-    void SAL_CALL CellBindingPropertyHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    void SAL_CALL CellBindingPropertyHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
 
-        OSL_ENSURE( m_pHelper.get(), "CellBindingPropertyHandler::setPropertyValue: inconsistency!" );
-            // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
+        OSL_ENSURE(m_pHelper, "CellBindingPropertyHandler::setPropertyValue: inconsistency!");
+        // if we survived impl_getPropertyId_throwUnknownProperty, we should have a helper, since no helper implies no properties
 
         try
         {
@@ -308,7 +310,7 @@ namespace pcr
                 if ( xBinding.is() )
                 {
                     bool bNeedIntegerBinding = ( nExchangeType == 1 );
-                    if ( (bool)bNeedIntegerBinding != CellBindingHelper::isCellIntegerBinding( xBinding ) )
+                    if ( bNeedIntegerBinding != CellBindingHelper::isCellIntegerBinding( xBinding ) )
                     {
                         CellAddress aAddress;
                         if ( m_pHelper->getAddressFromCellBinding( xBinding, aAddress ) )
@@ -341,13 +343,15 @@ namespace pcr
     }
 
 
-    Any SAL_CALL CellBindingPropertyHandler::convertToPropertyValue( const OUString& _rPropertyName, const Any& _rControlValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL CellBindingPropertyHandler::convertToPropertyValue( const OUString& _rPropertyName, const Any& _rControlValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         Any aPropertyValue;
 
-        OSL_ENSURE( m_pHelper.get(), "CellBindingPropertyHandler::convertToPropertyValue: we have no SupportedProperties!" );
-        if ( !m_pHelper.get() )
+        OSL_ENSURE(
+            m_pHelper,
+            "CellBindingPropertyHandler::convertToPropertyValue: we have no SupportedProperties!");
+        if (!m_pHelper)
             return aPropertyValue;
 
         PropertyId nPropId( m_pInfoService->getPropertyId( _rPropertyName ) );
@@ -390,13 +394,15 @@ namespace pcr
 
 
     Any SAL_CALL CellBindingPropertyHandler::convertToControlValue( const OUString& _rPropertyName,
-        const Any& _rPropertyValue, const Type& /*_rControlValueType*/ ) throw (UnknownPropertyException, RuntimeException, std::exception)
+        const Any& _rPropertyValue, const Type& /*_rControlValueType*/ )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         Any aControlValue;
 
-        OSL_ENSURE( m_pHelper.get(), "CellBindingPropertyHandler::convertToControlValue: we have no SupportedProperties!" );
-        if ( !m_pHelper.get() )
+        OSL_ENSURE(
+            m_pHelper,
+            "CellBindingPropertyHandler::convertToControlValue: we have no SupportedProperties!");
+        if (!m_pHelper)
             return aControlValue;
 
         PropertyId nPropId( m_pInfoService->getPropertyId( _rPropertyName ) );
@@ -438,9 +444,9 @@ namespace pcr
     }
 
 
-    Sequence< Property > SAL_CALL CellBindingPropertyHandler::doDescribeSupportedProperties() const
+    Sequence< Property > CellBindingPropertyHandler::doDescribeSupportedProperties() const
     {
-        ::std::vector< Property > aProperties;
+        std::vector< Property > aProperties;
 
         bool bAllowCellLinking      = m_pHelper.get() && m_pHelper->isCellBindingAllowed();
         bool bAllowCellIntLinking   = m_pHelper.get() && m_pHelper->isCellIntegerBindingAllowed();

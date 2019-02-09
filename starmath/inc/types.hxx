@@ -27,11 +27,6 @@
 enum SmPrintSize { PRINT_SIZE_NORMAL, PRINT_SIZE_SCALED, PRINT_SIZE_ZOOMED };
 
 
-inline bool IsInPrivateUseArea( sal_Unicode cChar ) { return 0xE000 <= cChar  &&  cChar <= 0xF8FF; }
-
-sal_Unicode ConvertMathToMathML( sal_Unicode cChar );
-
-
 // definitions for characters from the 'StarSymbol' font
 // (some chars have more than one alias!)
 //! Note: not listed here does not(!) mean "not used"
@@ -149,6 +144,8 @@ sal_Unicode const MS_COMBCHECK = 0x030C;
 sal_Unicode const MS_VEC = 0x20D7;
 sal_Unicode const MS_DOT = 0x02D9;
 sal_Unicode const MS_DDOT = 0x00A8;
+sal_Unicode const MS_COMBDOT = 0x0307;
+sal_Unicode const MS_COMBDDOT = 0x0308;
 sal_Unicode const MS_DDDOT = 0x20DB;
 sal_Unicode const MS_AND = 0x2227;
 sal_Unicode const MS_OR = 0x2228;

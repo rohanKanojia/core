@@ -21,7 +21,7 @@
 #include <com/sun/star/sheet/XCellRangeData.hpp>
 #include <com/sun/star/sheet/DataResult.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include "cppunit/extensions/HelperMacros.h"
+#include <cppunit/extensions/HelperMacros.h>
 
 using namespace css;
 using namespace css::uno;
@@ -63,10 +63,9 @@ void XDataPilotTable2::testGetDrillDownData()
     buildDataFields(xDPTable);
     buildResultCells(xDPTable);
 
-    for (std::vector<table::CellAddress>::iterator itr = maResultCells.begin();
-             itr != maResultCells.end(); ++itr)
+    for (const auto& rResultCell : maResultCells)
     {
-        sheet::DataPilotTablePositionData aPosData = xDPTable->getPositionData(*itr);
+        sheet::DataPilotTablePositionData aPosData = xDPTable->getPositionData(rResultCell);
         Any aTempAny = aPosData.PositionData;
         sheet::DataPilotTableResultData aResData;
         CPPUNIT_ASSERT(aTempAny >>= aResData);
@@ -74,7 +73,7 @@ void XDataPilotTable2::testGetDrillDownData()
         sheet::DataResult aRes = aResData.Result;
         double nVal = aRes.Value;
 
-        Sequence< Sequence<Any> > aData = xDPTable->getDrillDownData(*itr);
+        Sequence< Sequence<Any> > aData = xDPTable->getDrillDownData(rResultCell);
         double sum = 0;
 
         if( aData.getLength() > 1 )
@@ -88,8 +87,7 @@ void XDataPilotTable2::testGetDrillDownData()
             }
         }
 
-        std::cout << "Sum: " << sum << "; nVal: " << nVal << std::endl;
-        CPPUNIT_ASSERT(sum == nVal);
+        CPPUNIT_ASSERT_DOUBLES_EQUAL(nVal, sum, 1E-12);
     }
 
 
@@ -128,17 +126,17 @@ void XDataPilotTable2::testGetOutputRangeByType()
     CPPUNIT_ASSERT( maRangeWhole.EndRow - maRangeWhole.StartRow > 0);
 
     //table range must be of equal width with the whole range, and the same bottom
-    CPPUNIT_ASSERT( maRangeTable.Sheet == maRangeWhole.Sheet );
-    CPPUNIT_ASSERT( maRangeTable.EndRow == maRangeWhole.EndRow );
-    CPPUNIT_ASSERT( maRangeTable.StartColumn == maRangeWhole.StartColumn );
-    CPPUNIT_ASSERT( maRangeTable.EndColumn == maRangeWhole.EndColumn );
+    CPPUNIT_ASSERT_EQUAL( maRangeWhole.Sheet, maRangeTable.Sheet );
+    CPPUNIT_ASSERT_EQUAL( maRangeWhole.EndRow, maRangeTable.EndRow );
+    CPPUNIT_ASSERT_EQUAL( maRangeWhole.StartColumn, maRangeTable.StartColumn );
+    CPPUNIT_ASSERT_EQUAL( maRangeWhole.EndColumn, maRangeTable.EndColumn );
 
     //result range must be smaller than the table range, and must share the same lower-right corner
-    CPPUNIT_ASSERT( maRangeResult.Sheet == maRangeTable.Sheet );
+    CPPUNIT_ASSERT_EQUAL( maRangeTable.Sheet, maRangeResult.Sheet );
     CPPUNIT_ASSERT( maRangeResult.StartColumn >= maRangeTable.StartColumn );
     CPPUNIT_ASSERT( maRangeResult.StartRow >= maRangeTable.StartRow );
-    CPPUNIT_ASSERT( maRangeResult.EndRow == maRangeTable.EndRow );
-    CPPUNIT_ASSERT( maRangeResult.EndColumn == maRangeTable.EndColumn );
+    CPPUNIT_ASSERT_EQUAL( maRangeTable.EndRow, maRangeResult.EndRow );
+    CPPUNIT_ASSERT_EQUAL( maRangeTable.EndColumn, maRangeResult.EndColumn );
 
 }
 
@@ -162,7 +160,6 @@ void XDataPilotTable2::testInsertDrillDownSheet()
         {
             CPPUNIT_ASSERT(aData.getLength() >= 2);
             uno::Reference< sheet::XSpreadsheet > xSheet(xIA->getByIndex(aAddr.Sheet),UNO_QUERY_THROW);
-            CPPUNIT_ASSERT(xSheet.is());
 
             checkDrillDownSheetContent(xSheet, aData);
 
@@ -185,7 +182,7 @@ void XDataPilotTable2::testInsertDrillDownSheet()
     }
 }
 
-void XDataPilotTable2::buildResultCells( uno::Reference< sheet::XDataPilotTable2 > xDPTable)
+void XDataPilotTable2::buildResultCells( uno::Reference< sheet::XDataPilotTable2 > const & xDPTable)
 {
     getOutputRanges(xDPTable);
     maResultCells.clear();
@@ -208,14 +205,14 @@ void XDataPilotTable2::buildResultCells( uno::Reference< sheet::XDataPilotTable2
     }
 }
 
-void XDataPilotTable2::getOutputRanges( uno::Reference< sheet::XDataPilotTable2 > xDPTable)
+void XDataPilotTable2::getOutputRanges( uno::Reference< sheet::XDataPilotTable2 > const & xDPTable)
 {
     maRangeWhole = xDPTable->getOutputRangeByType(sheet::DataPilotOutputRangeType::WHOLE);
     maRangeTable = xDPTable->getOutputRangeByType(sheet::DataPilotOutputRangeType::TABLE);
     maRangeResult = xDPTable->getOutputRangeByType(sheet::DataPilotOutputRangeType::RESULT);
 }
 
-void XDataPilotTable2::buildDataFields( uno::Reference< sheet::XDataPilotTable2 > xDPTable )
+void XDataPilotTable2::buildDataFields( uno::Reference< sheet::XDataPilotTable2 > const & xDPTable )
 {
     uno::Reference< sheet::XDataPilotDescriptor > xDesc(xDPTable, UNO_QUERY_THROW);
     uno::Reference< container::XIndexAccess > xIndex(xDesc->getDataPilotFields(), UNO_QUERY_THROW);
@@ -237,7 +234,7 @@ void XDataPilotTable2::buildDataFields( uno::Reference< sheet::XDataPilotTable2 
 
 namespace {
 
-table::CellAddress getLastUsedCellAddress( uno::Reference< sheet::XSpreadsheet > xSheet, sal_Int32 nCol, sal_Int32 nRow )
+table::CellAddress getLastUsedCellAddress( uno::Reference< sheet::XSpreadsheet > const & xSheet, sal_Int32 nCol, sal_Int32 nRow )
 {
     uno::Reference< sheet::XSheetCellRange > xSheetRange( xSheet->getCellRangeByPosition(nCol, nRow, nCol, nRow), UNO_QUERY_THROW);
     uno::Reference< sheet::XSheetCellCursor > xCursor = xSheet->createCursorByRange(xSheetRange);
@@ -250,7 +247,7 @@ table::CellAddress getLastUsedCellAddress( uno::Reference< sheet::XSpreadsheet >
 
 }
 
-bool XDataPilotTable2::checkDrillDownSheetContent(uno::Reference< sheet::XSpreadsheet > xSheet, const uno::Sequence< uno::Sequence< Any > >& aData)
+void XDataPilotTable2::checkDrillDownSheetContent(uno::Reference< sheet::XSpreadsheet > const & xSheet, const uno::Sequence< uno::Sequence< Any > >& aData)
 {
     table::CellAddress aLastCell = getLastUsedCellAddress(xSheet, 0, 0);
     CPPUNIT_ASSERT(aData.getLength() > 0);
@@ -270,10 +267,9 @@ bool XDataPilotTable2::checkDrillDownSheetContent(uno::Reference< sheet::XSpread
         {
             Any& aCell1 = aSheetData[x][y];
             const Any& aCell2 = aData[x][y];
-            CPPUNIT_ASSERT(aCell1 == aCell2);
+            CPPUNIT_ASSERT_EQUAL(aCell2, aCell1);
         }
     }
-    return true;
 }
 
 }

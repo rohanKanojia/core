@@ -21,7 +21,11 @@ $(eval $(call gb_Library_set_include,scfilt,\
 
 $(eval $(call gb_Library_set_precompiled_header,scfilt,$(SRCDIR)/sc/inc/pch/precompiled_scfilt))
 
-$(eval $(call gb_Library_use_sdk_api,scfilt))
+$(eval $(call gb_Library_use_api,scfilt,\
+	udkapi \
+	offapi \
+	oovbaapi \
+))
 
 $(eval $(call gb_Library_use_custom_headers,scfilt,\
 	oox/generated \
@@ -61,7 +65,6 @@ $(eval $(call gb_Library_use_libraries,scfilt,\
 	utl \
 	vcl \
 	i18nlangtag \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,scfilt,\
@@ -145,7 +148,6 @@ $(eval $(call gb_Library_add_exception_objects,scfilt,\
 	sc/source/filter/lotus/op \
 	sc/source/filter/lotus/optab \
 	sc/source/filter/lotus/tool \
-	sc/source/filter/qpro/biff \
 	sc/source/filter/qpro/qpro \
 	sc/source/filter/qpro/qproform \
 	sc/source/filter/qpro/qprostyle \
@@ -154,9 +156,6 @@ $(eval $(call gb_Library_add_exception_objects,scfilt,\
 	sc/source/filter/rtf/rtfexp \
 	sc/source/filter/rtf/rtfimp \
 	sc/source/filter/rtf/rtfparse \
-	sc/source/filter/starcalc/collect \
-	sc/source/filter/starcalc/scflt \
-	sc/source/filter/starcalc/scfobj \
 	sc/source/filter/xcl97/XclExpChangeTrack \
 	sc/source/filter/xcl97/XclImpChangeTrack \
 	sc/source/filter/xcl97/xcl97esc \
@@ -165,9 +164,7 @@ $(eval $(call gb_Library_add_exception_objects,scfilt,\
 	sc/source/filter/oox/addressconverter \
 	sc/source/filter/oox/autofilterbuffer \
 	sc/source/filter/oox/autofiltercontext \
-	sc/source/filter/oox/biffcodec \
 	sc/source/filter/oox/biffhelper \
-	sc/source/filter/oox/biffinputstream \
 	sc/source/filter/oox/chartsheetfragment \
 	sc/source/filter/oox/commentsbuffer \
 	sc/source/filter/oox/commentsfragment \
@@ -178,7 +175,6 @@ $(eval $(call gb_Library_add_exception_objects,scfilt,\
 	sc/source/filter/oox/defnamesbuffer \
 	sc/source/filter/oox/drawingbase \
 	sc/source/filter/oox/drawingfragment \
-	sc/source/filter/oox/drawingmanager \
 	sc/source/filter/oox/excelchartconverter \
 	sc/source/filter/oox/excelhandlers \
 	sc/source/filter/oox/excelvbaproject \
@@ -224,7 +220,6 @@ $(eval $(call gb_Library_add_exception_objects,scfilt,\
 	sc/source/filter/oox/worksheetsettings \
 ))
 
-ifeq ($(ENABLE_ORCUS),TRUE)
 $(eval $(call gb_Library_use_externals,scfilt,\
 	orcus \
 	orcus-parser \
@@ -240,7 +235,5 @@ $(eval $(call gb_Library_add_exception_objects,scfilt,\
 	sc/source/filter/orcus/xmlcontext \
 	sc/source/filter/orcus/filterdetect \
 ))
-
-endif
 
 # vim: set noet sw=4 ts=4:

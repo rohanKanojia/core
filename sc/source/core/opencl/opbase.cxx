@@ -8,6 +8,8 @@
  */
 
 #include <opencl/openclwrapper.hxx>
+#include <formula/vectortoken.hxx>
+#include <sal/log.hxx>
 
 #include "opbase.hxx"
 
@@ -26,14 +28,17 @@ OpenCLError::OpenCLError( const std::string& function, cl_int error, const std::
     // CLInterpreterContext::launchKernel() where OpenCLError is
     // caught already uses SAL_WARN() to display it.
 
-    // SAL_INFO("sc.opencl", "OpenCL error: " << ::opencl::errorString(mError));
+    // SAL_INFO("sc.opencl", "OpenCL error: " << openclwrapper::errorString(mError));
 }
 
 Unhandled::Unhandled( const std::string& fn, int ln ) :
     mFile(fn), mLineNumber(ln) {}
 
+InvalidParameterCount::InvalidParameterCount( int parameterCount, const std::string& file, int ln ) :
+    mParameterCount(parameterCount), mFile(file), mLineNumber(ln) {}
+
 DynamicKernelArgument::DynamicKernelArgument( const ScCalcConfig& config, const std::string& s,
-    FormulaTreeNodeRef ft ) :
+    const FormulaTreeNodeRef& ft ) :
     mCalcConfig(config), mSymName(s), mFormulaTree(ft) { }
 
 std::string DynamicKernelArgument::GenDoubleSlidingWindowDeclRef( bool ) const
@@ -47,25 +52,10 @@ std::string DynamicKernelArgument::GenStringSlidingWindowDeclRef( bool ) const
     return std::string("");
 }
 
-bool DynamicKernelArgument::IsMixedArgument() const
-{
-    return false;
-}
-
 /// Generate use/references to the argument
 void DynamicKernelArgument::GenDeclRef( std::stringstream& ss ) const
 {
     ss << mSymName;
-}
-
-void DynamicKernelArgument::GenNumDeclRef( std::stringstream& ss ) const
-{
-    ss << ",";
-}
-
-void DynamicKernelArgument::GenStringDeclRef( std::stringstream& ss ) const
-{
-    ss << ",";
 }
 
 void DynamicKernelArgument::GenSlidingWindowFunction( std::stringstream& ) {}
@@ -92,7 +82,7 @@ bool DynamicKernelArgument::NeedParallelReduction() const
     return false;
 }
 
-VectorRef::VectorRef( const ScCalcConfig& config, const std::string& s, FormulaTreeNodeRef ft, int idx ) :
+VectorRef::VectorRef( const ScCalcConfig& config, const std::string& s, const FormulaTreeNodeRef& ft, int idx ) :
     DynamicKernelArgument(config, s, ft), mpClmem(nullptr), mnIndex(idx)
 {
     if (mnIndex)
@@ -109,7 +99,7 @@ VectorRef::~VectorRef()
     {
         cl_int err;
         err = clReleaseMemObject(mpClmem);
-        SAL_WARN_IF(err != CL_SUCCESS, "sc.opencl", "clReleaseMemObject failed: " << ::opencl::errorString(err));
+        SAL_WARN_IF(err != CL_SUCCESS, "sc.opencl", "clReleaseMemObject failed: " << openclwrapper::errorString(err));
     }
 }
 
@@ -157,7 +147,7 @@ size_t VectorRef::GetWindowSize() const
     }
     else
     {
-        throw Unhandled();
+        throw Unhandled(__FILE__, __LINE__);
     }
 }
 
@@ -207,7 +197,7 @@ void Normal::GenSlidingWindowFunction(
 }
 
 void CheckVariables::GenTmpVariables(
-    std::stringstream& ss, SubArguments& vSubArguments )
+    std::stringstream& ss, const SubArguments& vSubArguments )
 {
     for (size_t i = 0; i < vSubArguments.size(); i++)
     {
@@ -229,7 +219,7 @@ void CheckVariables::CheckSubArgumentIsNan( std::stringstream& ss,
         ss << "    if(singleIndex>=";
         ss << pTmpDVR1->GetArrayLength();
         ss << " ||";
-        ss << "isNan(";
+        ss << "isnan(";
         ss << vSubArguments[i]->GenSlidingWindowDeclRef(true);
         ss << "))\n";
         ss << "        tmp";
@@ -249,7 +239,7 @@ void CheckVariables::CheckSubArgumentIsNan( std::stringstream& ss,
         ss << "    if(doubleIndex>=";
         ss << pTmpDVR2->GetArrayLength();
         ss << " ||";
-        ss << "isNan(";
+        ss << "isnan(";
         ss << vSubArguments[i]->GenSlidingWindowDeclRef();
         ss << "))\n";
         ss << "        tmp";
@@ -265,7 +255,7 @@ void CheckVariables::CheckSubArgumentIsNan( std::stringstream& ss,
         vSubArguments[i]->GetFormulaToken()->GetOpCode() != ocPush)
     {
         ss << "    if(";
-        ss << "isNan(";
+        ss << "isnan(";
         ss << vSubArguments[i]->GenSlidingWindowDeclRef();
         ss << "))\n";
         ss << "        tmp";
@@ -319,7 +309,7 @@ void CheckVariables::CheckAllSubArgumentIsNan(
 }
 
 void CheckVariables::UnrollDoubleVector( std::stringstream& ss,
-    std::stringstream& unrollstr, const formula::DoubleVectorRefToken* pCurDVR,
+    const std::stringstream& unrollstr, const formula::DoubleVectorRefToken* pCurDVR,
     int nCurWindowSize )
 {
     int unrollSize = 16;

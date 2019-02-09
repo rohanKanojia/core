@@ -11,6 +11,7 @@
 #define INCLUDED_SVX_SVDOBJPLUSDATA_HXX
 
 #include <rtl/ustring.hxx>
+#include <memory>
 
 class SdrObject;
 class SfxBroadcaster;
@@ -18,13 +19,13 @@ class SdrObjUserDataList;
 class SdrGluePointList;
 
 // Bitsack for DrawObjects
-class SdrObjPlusData
+class SdrObjPlusData final
 {
     friend class                SdrObject;
 
-    SfxBroadcaster*             pBroadcast;    // broadcaster, if this object is referenced (bVirtObj=true). Also for connectors etc.
-    SdrObjUserDataList*         pUserDataList; // application specific data
-    SdrGluePointList*           pGluePoints;   // glue points for glueing object connectors
+    std::unique_ptr<SfxBroadcaster>      pBroadcast;    // broadcaster, if this object is referenced (bVirtObj=true). Also for connectors etc.
+    std::unique_ptr<SdrObjUserDataList>  pUserDataList; // application specific data
+    std::unique_ptr<SdrGluePointList>    pGluePoints;   // glue points for glueing object connectors
 
     // #i68101#
     // object name, title and description
@@ -34,7 +35,7 @@ class SdrObjPlusData
 
 public:
     SdrObjPlusData();
-    virtual ~SdrObjPlusData();
+    ~SdrObjPlusData();
     SdrObjPlusData* Clone(SdrObject* pObj1) const;
 
     void SetGluePoints(const SdrGluePointList& rPts);

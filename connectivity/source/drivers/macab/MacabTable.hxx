@@ -31,7 +31,7 @@ namespace connectivity
 
         class MacabTable : public MacabTable_TYPEDEF
         {
-            ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData > m_xMetaData;
+            css::uno::Reference< css::sdbc::XDatabaseMetaData > m_xMetaData;
             MacabConnection* m_pConnection;
 
         public:
@@ -49,8 +49,8 @@ namespace connectivity
 
             virtual void refreshColumns() override;
 
-            OUString getTableName() const { return m_Name; }
-            OUString getSchema() const { return m_SchemaName; }
+            OUString const & getTableName() const { return m_Name; }
+            OUString const & getSchema() const { return m_SchemaName; }
         };
     }
 }

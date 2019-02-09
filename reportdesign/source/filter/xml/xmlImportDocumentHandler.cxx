@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include "xmlImportDocumentHandler.hxx"
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/chart2/data/DatabaseDataProvider.hpp>
@@ -62,19 +63,18 @@ ImportDocumentHandler::~ImportDocumentHandler()
     }
 }
 IMPLEMENT_GET_IMPLEMENTATION_ID(ImportDocumentHandler)
-IMPLEMENT_FORWARD_REFCOUNT( ImportDocumentHandler, ImportDocumentHandler_BASE )
 
-OUString SAL_CALL ImportDocumentHandler::getImplementationName(  ) throw(uno::RuntimeException, std::exception)
+OUString SAL_CALL ImportDocumentHandler::getImplementationName(  )
 {
     return getImplementationName_Static();
 }
 
-sal_Bool SAL_CALL ImportDocumentHandler::supportsService( const OUString& ServiceName ) throw(uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ImportDocumentHandler::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
-uno::Sequence< OUString > SAL_CALL ImportDocumentHandler::getSupportedServiceNames(  ) throw(uno::RuntimeException, std::exception)
+uno::Sequence< OUString > SAL_CALL ImportDocumentHandler::getSupportedServiceNames(  )
 {
     uno::Sequence< OUString > aSupported;
     if ( m_xServiceInfo.is() )
@@ -82,38 +82,38 @@ uno::Sequence< OUString > SAL_CALL ImportDocumentHandler::getSupportedServiceNam
     return ::comphelper::concatSequences(getSupportedServiceNames_static(),aSupported);
 }
 
-OUString ImportDocumentHandler::getImplementationName_Static(  ) throw(uno::RuntimeException)
+OUString ImportDocumentHandler::getImplementationName_Static(  )
 {
     return OUString("com.sun.star.comp.report.ImportDocumentHandler");
 }
 
-uno::Sequence< OUString > ImportDocumentHandler::getSupportedServiceNames_static(  ) throw(uno::RuntimeException)
+uno::Sequence< OUString > ImportDocumentHandler::getSupportedServiceNames_static(  )
 {
     uno::Sequence< OUString > aSupported { "com.sun.star.report.ImportDocumentHandler" };
     return aSupported;
 }
 
 
-uno::Reference< uno::XInterface > SAL_CALL ImportDocumentHandler::create( const uno::Reference< uno::XComponentContext >& _rxContext )
+uno::Reference< uno::XInterface > ImportDocumentHandler::create( const uno::Reference< uno::XComponentContext >& _rxContext )
 {
     return *(new ImportDocumentHandler( _rxContext ));
 }
 // xml::sax::XDocumentHandler:
-void SAL_CALL ImportDocumentHandler::startDocument() throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::startDocument()
 {
     m_xDelegatee->startDocument();
 }
 
-void SAL_CALL ImportDocumentHandler::endDocument() throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::endDocument()
 {
     m_xDelegatee->endDocument();
     uno::Reference< chart2::data::XDataReceiver > xReceiver(m_xModel,uno::UNO_QUERY_THROW);
-    if ( xReceiver.is() && m_bImportedChart )
+    if ( m_bImportedChart )
     {
         // this fills the chart again
         ::comphelper::NamedValueCollection aArgs;
         aArgs.put( "CellRangeRepresentation", OUString("all") );
-        aArgs.put( "FirstCellAsLabel", uno::makeAny( sal_True ) );
+        aArgs.put( "FirstCellAsLabel", uno::makeAny( true ) );
         aArgs.put( "DataRowSource", uno::makeAny( chart::ChartDataRowSource_COLUMNS ) );
 
         bool bHasCategories = false;
@@ -154,7 +154,7 @@ void SAL_CALL ImportDocumentHandler::endDocument() throw (uno::RuntimeException,
     }
 }
 
-void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const uno::Reference< xml::sax::XAttributeList > & _xAttrList) throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const uno::Reference< xml::sax::XAttributeList > & _xAttrList)
 {
     uno::Reference< xml::sax::XAttributeList > xNewAttribs = _xAttrList;
     bool bExport = true;
@@ -169,18 +169,18 @@ void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const
                 OUString sLocalName;
                 const OUString sAttrName = _xAttrList->getNameByIndex( i );
                 const sal_Int32 nColonPos = sAttrName.indexOf( ':' );
-                if( -1L == nColonPos )
+                if( -1 == nColonPos )
                     sLocalName = sAttrName;
                 else
-                    sLocalName = sAttrName.copy( nColonPos + 1L );
+                    sLocalName = sAttrName.copy( nColonPos + 1 );
                 const OUString sValue = _xAttrList->getValueByIndex( i );
 
                 switch( m_pReportElemTokenMap->Get( XML_NAMESPACE_REPORT, sLocalName ) )
                 {
                     case XML_TOK_COMMAND_TYPE:
                         {
-                            sal_uInt16 nRet = static_cast<sal_uInt16>(sdb::CommandType::COMMAND);
-                            const SvXMLEnumMapEntry* aXML_EnumMap = OXMLHelper::GetCommandTypeOptions();
+                            sal_Int32 nRet = sdb::CommandType::COMMAND;
+                            const SvXMLEnumMapEntry<sal_Int32>* aXML_EnumMap = OXMLHelper::GetCommandTypeOptions();
                             (void)SvXMLUnitConverter::convertEnum( nRet, sValue, aXML_EnumMap );
                             m_xDatabaseDataProvider->setCommandType(nRet);
                         }
@@ -218,10 +218,10 @@ void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const
                 OUString sLocalName;
                 const OUString sAttrName = _xAttrList->getNameByIndex( i );
                 const sal_Int32 nColonPos = sAttrName.indexOf( ':' );
-                if( -1L == nColonPos )
+                if( -1 == nColonPos )
                     sLocalName = sAttrName;
                 else
-                    sLocalName = sAttrName.copy( nColonPos + 1L );
+                    sLocalName = sAttrName.copy( nColonPos + 1 );
                 const OUString sValue = _xAttrList->getValueByIndex( i );
 
                 switch( pMasterElemTokenMap->Get( XML_NAMESPACE_REPORT, sLocalName ) )
@@ -241,7 +241,7 @@ void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const
         }
         catch(uno::Exception&)
         {
-            OSL_FAIL("Exception catched while filling the report definition props");
+            OSL_FAIL("Exception caught while filling the report definition props");
         }
         bExport = false;
     }
@@ -261,10 +261,10 @@ void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const
             OUString sLocalName;
             const OUString sAttrName = _xAttrList->getNameByIndex( i );
             const sal_Int32 nColonPos = sAttrName.indexOf( ':' );
-            if( -1L == nColonPos )
+            if( -1 == nColonPos )
                 sLocalName = sAttrName;
             else
-                sLocalName = sAttrName.copy( nColonPos + 1L );
+                sLocalName = sAttrName.copy( nColonPos + 1 );
             if ( sLocalName == "data-source-has-labels" )
             {
                 const OUString sValue = _xAttrList->getValueByIndex( i );
@@ -272,13 +272,11 @@ void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const
                 break;
             }
         }
-        beans::PropertyValue* pArgIter = m_aArguments.getArray();
-        beans::PropertyValue* pArgEnd  = pArgIter + m_aArguments.getLength();
-        for(;pArgIter != pArgEnd;++pArgIter)
+        for(beans::PropertyValue & propVal : m_aArguments)
         {
-            if ( pArgIter->Name == "HasCategories" )
+            if ( propVal.Name == "HasCategories" )
             {
-                pArgIter->Value <<= bHasCategories;
+                propVal.Value <<= bHasCategories;
                 break;
             }
         }
@@ -294,7 +292,7 @@ void SAL_CALL ImportDocumentHandler::startElement(const OUString & _sName, const
         m_xDelegatee->startElement(_sName,xNewAttribs);
 }
 
-void SAL_CALL ImportDocumentHandler::endElement(const OUString & _sName) throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::endElement(const OUString & _sName)
 {
     bool bExport = true;
     OUString sNewName = _sName;
@@ -321,45 +319,42 @@ void SAL_CALL ImportDocumentHandler::endElement(const OUString & _sName) throw (
         m_xDelegatee->endElement(sNewName);
 }
 
-void SAL_CALL ImportDocumentHandler::characters(const OUString & aChars) throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::characters(const OUString & aChars)
 {
     m_xDelegatee->characters(aChars);
 }
 
-void SAL_CALL ImportDocumentHandler::ignorableWhitespace(const OUString & aWhitespaces) throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::ignorableWhitespace(const OUString & aWhitespaces)
 {
     m_xDelegatee->ignorableWhitespace(aWhitespaces);
 }
 
-void SAL_CALL ImportDocumentHandler::processingInstruction(const OUString & aTarget, const OUString & aData) throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::processingInstruction(const OUString & aTarget, const OUString & aData)
 {
     m_xDelegatee->processingInstruction(aTarget,aData);
 }
 
-void SAL_CALL ImportDocumentHandler::setDocumentLocator(const uno::Reference< xml::sax::XLocator > & xLocator) throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL ImportDocumentHandler::setDocumentLocator(const uno::Reference< xml::sax::XLocator > & xLocator)
 {
     m_xDelegatee->setDocumentLocator(xLocator);
 }
-void SAL_CALL ImportDocumentHandler::initialize( const uno::Sequence< uno::Any >& _aArguments ) throw (uno::Exception, uno::RuntimeException, std::exception)
+void SAL_CALL ImportDocumentHandler::initialize( const uno::Sequence< uno::Any >& _aArguments )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     comphelper::SequenceAsHashMap aArgs(_aArguments);
     m_xDelegatee = aArgs.getUnpackedValueOrDefault("DocumentHandler",m_xDelegatee);
     m_xModel = aArgs.getUnpackedValueOrDefault("Model",m_xModel);
 
-    OSL_ENSURE(m_xDelegatee.is(),"No document handler avialable!");
+    OSL_ENSURE(m_xDelegatee.is(),"No document handler available!");
     if ( !m_xDelegatee.is() || !m_xModel.is() )
-        throw uno::Exception();
+        throw uno::Exception("no delegatee and no model", nullptr);
 
     m_xDatabaseDataProvider.set(m_xModel->getDataProvider(),uno::UNO_QUERY);
     if ( !m_xDatabaseDataProvider.is() )
     {
         static const char s_sDatabaseDataProvider[] = "com.sun.star.chart2.data.DatabaseDataProvider";
         m_xDatabaseDataProvider.set(m_xContext->getServiceManager()->createInstanceWithContext(s_sDatabaseDataProvider
-            ,m_xContext),uno::UNO_QUERY);
-        if ( !m_xDatabaseDataProvider.is() )
-            throw uno::Exception();
-
+            ,m_xContext),uno::UNO_QUERY_THROW);
         m_xDatabaseDataProvider->setRowLimit(10);
 
         uno::Reference< chart2::data::XDataReceiver > xReceiver(m_xModel,uno::UNO_QUERY_THROW);
@@ -380,13 +375,13 @@ void SAL_CALL ImportDocumentHandler::initialize( const uno::Sequence< uno::Any >
     m_pReportElemTokenMap.reset(OXMLHelper::GetReportElemTokenMap());
 }
 
-uno::Any SAL_CALL ImportDocumentHandler::queryInterface( const uno::Type& _rType ) throw (uno::RuntimeException, std::exception)
+uno::Any SAL_CALL ImportDocumentHandler::queryInterface( const uno::Type& _rType )
 {
     uno::Any aReturn = ImportDocumentHandler_BASE::queryInterface(_rType);
     return aReturn.hasValue() ? aReturn : (m_xProxy.is() ? m_xProxy->queryAggregation(_rType) : aReturn);
 }
 
-uno::Sequence< uno::Type > SAL_CALL ImportDocumentHandler::getTypes(  ) throw (uno::RuntimeException, std::exception)
+uno::Sequence< uno::Type > SAL_CALL ImportDocumentHandler::getTypes(  )
 {
     if ( m_xTypeProvider.is() )
         return ::comphelper::concatSequences(

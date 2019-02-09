@@ -26,22 +26,22 @@
 #include "psputil.hxx"
 #include "glyphset.hxx"
 
-#include "unx/printerjob.hxx"
-#include "unx/printergfx.hxx"
+#include <unx/printerjob.hxx>
+#include <unx/printergfx.hxx>
 #include <vcl/ppdparser.hxx>
 #include <vcl/strhelper.hxx>
-#include <vcl/printerinfomanager.hxx>
+#include <printerinfomanager.hxx>
 
-#include "rtl/ustring.hxx"
-#include "rtl/strbuf.hxx"
-#include "rtl/ustrbuf.hxx"
+#include <rtl/ustring.hxx>
+#include <rtl/strbuf.hxx>
+#include <rtl/ustrbuf.hxx>
 
 #include <osl/thread.h>
 #include <osl/security.hxx>
-#include <sal/alloca.h>
 #include <sal/macros.h>
 
 #include <algorithm>
+#include <deque>
 #include <vector>
 
 using namespace psp;
@@ -51,24 +51,21 @@ using namespace psp;
 namespace psp
 {
 
-bool
+static bool
 AppendPS (FILE* pDst, osl::File* pSrc, unsigned char* pBuffer)
 {
-    sal_uInt32 nBlockSize = nBLOCKSIZE;
+    assert(pBuffer);
     if ((pDst == nullptr) || (pSrc == nullptr))
         return false;
 
     if (pSrc->setPos(osl_Pos_Absolut, 0) != osl::FileBase::E_None)
         return false;
 
-    if (pBuffer == nullptr)
-        pBuffer = static_cast<unsigned char*>(alloca (nBlockSize));
-
     sal_uInt64 nIn = 0;
     sal_uInt64 nOut = 0;
     do
     {
-        pSrc->read  (pBuffer, nBlockSize, nIn);
+        pSrc->read  (pBuffer, nBLOCKSIZE, nIn);
         if (nIn > 0)
             nOut = fwrite (pBuffer, 1, sal::static_int_cast<sal_uInt32>(nIn), pDst);
     }
@@ -83,11 +80,9 @@ AppendPS (FILE* pDst, osl::File* pSrc, unsigned char* pBuffer)
  * private convenience routines for file handling
  */
 
-osl::File*
+std::unique_ptr<osl::File>
 PrinterJob::CreateSpoolFile (const OUString& rName, const OUString& rExtension)
 {
-    osl::File*    pFile  = nullptr;
-
     OUString aFile = rName + rExtension;
     OUString aFileURL;
     osl::File::RC nError = osl::File::getFileURLFromSystemPath( aFile, aFileURL );
@@ -95,11 +90,10 @@ PrinterJob::CreateSpoolFile (const OUString& rName, const OUString& rExtension)
         return nullptr;
     aFileURL = maSpoolDirName + "/" + aFileURL;
 
-    pFile = new osl::File (aFileURL);
+    std::unique_ptr<osl::File> pFile( new osl::File (aFileURL) );
     nError = pFile->open (osl_File_OpenFlag_Read | osl_File_OpenFlag_Write | osl_File_OpenFlag_Create);
     if (nError != osl::File::E_None)
     {
-        delete pFile;
         return nullptr;
     }
 
@@ -159,15 +153,9 @@ PrinterJob::IsColorPrinter () const
 }
 
 osl::File*
-PrinterJob::GetCurrentPageHeader ()
-{
-    return maHeaderList.back();
-}
-
-osl::File*
 PrinterJob::GetCurrentPageBody ()
 {
-    return maPageList.back();
+    return maPageVector.back().get();
 }
 
 /*
@@ -175,8 +163,6 @@ PrinterJob::GetCurrentPageBody ()
  */
 PrinterJob::PrinterJob()
     : mnFileMode(0)
-    , mpJobHeader(nullptr)
-    , mpJobTrailer(nullptr)
     , m_pGraphics(nullptr)
     , mnResolution(96)
     , mnWidthPt(0)
@@ -197,7 +183,7 @@ PrinterJob::PrinterJob()
 
 /* remove all our temporary files, uses external program "rm", since
    osl functionality is inadequate */
-void
+static void
 removeSpoolDir (const OUString& rSpoolDir)
 {
     OUString aSysPath;
@@ -216,7 +202,7 @@ removeSpoolDir (const OUString& rSpoolDir)
 
 /* creates a spool directory with a "pidgin random" value based on
    current system time */
-OUString
+static OUString
 createSpoolDir ()
 {
     TimeValue aCur;
@@ -248,21 +234,13 @@ createSpoolDir ()
 
 PrinterJob::~PrinterJob ()
 {
-    std::list< osl::File* >::iterator pPage;
-    for (pPage = maPageList.begin(); pPage != maPageList.end(); ++pPage)
-    {
-        //(*pPage)->remove();
-        delete *pPage;
-    }
-    for (pPage = maHeaderList.begin(); pPage != maHeaderList.end(); ++pPage)
-    {
-        //(*pPage)->remove();
-        delete *pPage;
-    }
+    maPageVector.clear();
+    maHeaderVector.clear();
+
     // mpJobHeader->remove();
-    delete mpJobHeader;
+    mpJobHeader.reset();
     // mpJobTrailer->remove();
-    delete mpJobTrailer;
+    mpJobTrailer.reset();
 
     // XXX should really call osl::remove routines
     if( !maSpoolDirName.isEmpty() )
@@ -273,10 +251,10 @@ PrinterJob::~PrinterJob ()
 
 static void WriteLocalTimePS( osl::File *rFile )
 {
-    TimeValue m_start_time, tLocal;
+    TimeValue aStartTime, tLocal;
     oslDateTime date_time;
-    if (osl_getSystemTime( &m_start_time ) &&
-        osl_getLocalTimeFromSystemTime( &m_start_time, &tLocal ) &&
+    if (osl_getSystemTime( &aStartTime ) &&
+        osl_getLocalTimeFromSystemTime( &aStartTime, &tLocal ) &&
         osl_getDateTimeFromTimeValue( &tLocal, &date_time ))
     {
         char ar[ 256 ];
@@ -330,7 +308,7 @@ PrinterJob::StartJob (
         return false;
 
     // write document header according to Document Structuring Conventions (DSC)
-    WritePS (mpJobHeader,
+    WritePS (mpJobHeader.get(),
              "%!PS-Adobe-3.0\n"
              "%%BoundingBox: (atend)\n" );
 
@@ -338,24 +316,24 @@ PrinterJob::StartJob (
 
     // Creator (this application)
     aFilterWS = WhitespaceToSpace( rAppName, false );
-    WritePS (mpJobHeader, "%%Creator: (");
-    WritePS (mpJobHeader, aFilterWS);
-    WritePS (mpJobHeader, ")\n");
+    WritePS (mpJobHeader.get(), "%%Creator: (");
+    WritePS (mpJobHeader.get(), aFilterWS);
+    WritePS (mpJobHeader.get(), ")\n");
 
     // For (user name)
     osl::Security aSecurity;
     OUString aUserName;
     if( aSecurity.getUserName( aUserName ) )
     {
-        WritePS (mpJobHeader, "%%For: (");
-        WritePS (mpJobHeader, aUserName);
-        WritePS (mpJobHeader, ")\n");
+        WritePS (mpJobHeader.get(), "%%For: (");
+        WritePS (mpJobHeader.get(), aUserName);
+        WritePS (mpJobHeader.get(), ")\n");
     }
 
     // Creation Date (locale independent local time)
-    WritePS (mpJobHeader, "%%CreationDate: (");
-    WriteLocalTimePS (mpJobHeader);
-    WritePS (mpJobHeader, ")\n");
+    WritePS (mpJobHeader.get(), "%%CreationDate: (");
+    WriteLocalTimePS (mpJobHeader.get());
+    WritePS (mpJobHeader.get(), ")\n");
 
     // Document Title
     /* #i74335#
@@ -370,10 +348,7 @@ PrinterJob::StartJob (
     OUString aTitle( aFilterWS );
     if( ! isAscii( aTitle ) )
     {
-        sal_Int32 nIndex = 0;
-        while( nIndex != -1 )
-            aTitle = rFileName.getToken( 0, '/', nIndex );
-        aTitle = WhitespaceToSpace( aTitle, false );
+        aTitle = WhitespaceToSpace( rFileName.copy(rFileName.lastIndexOf('/')+1), false );
         if( ! isAscii( aTitle ) )
             aTitle.clear();
     }
@@ -381,28 +356,27 @@ PrinterJob::StartJob (
     maJobTitle = aFilterWS;
     if( !aTitle.isEmpty() )
     {
-        WritePS (mpJobHeader, "%%Title: (");
-        WritePS (mpJobHeader, aTitle);
-        WritePS (mpJobHeader, ")\n");
+        WritePS (mpJobHeader.get(), "%%Title: (");
+        WritePS (mpJobHeader.get(), aTitle);
+        WritePS (mpJobHeader.get(), ")\n");
     }
 
     // Language Level
-    sal_Char pLevel[16];
-    sal_Int32 nSz = getValueOf(GetPostscriptLevel(&rSetupData), pLevel);
-    pLevel[nSz++] = '\n';
-    pLevel[nSz  ] = '\0';
-    WritePS (mpJobHeader, "%%LanguageLevel: ");
-    WritePS (mpJobHeader, pLevel);
+    OStringBuffer pLevel;
+    getValueOf(GetPostscriptLevel(&rSetupData), pLevel);
+    pLevel.append('\n');
+    WritePS (mpJobHeader.get(), "%%LanguageLevel: ");
+    WritePS (mpJobHeader.get(), pLevel.makeStringAndClear());
 
     // Other
-    WritePS (mpJobHeader, "%%DocumentData: Clean7Bit\n");
-    WritePS (mpJobHeader, "%%Pages: (atend)\n");
-    WritePS (mpJobHeader, "%%Orientation: (atend)\n");
-    WritePS (mpJobHeader, "%%PageOrder: Ascend\n");
-    WritePS (mpJobHeader, "%%EndComments\n");
+    WritePS (mpJobHeader.get(), "%%DocumentData: Clean7Bit\n");
+    WritePS (mpJobHeader.get(), "%%Pages: (atend)\n");
+    WritePS (mpJobHeader.get(), "%%Orientation: (atend)\n");
+    WritePS (mpJobHeader.get(), "%%PageOrder: Ascend\n");
+    WritePS (mpJobHeader.get(), "%%EndComments\n");
 
     // write Prolog
-    writeProlog (mpJobHeader, rSetupData);
+    writeProlog (mpJobHeader.get(), rSetupData);
 
     // mark last job setup as not set
     m_aLastJobData.m_pParser = nullptr;
@@ -415,13 +389,13 @@ bool
 PrinterJob::EndJob()
 {
     // no pages ? that really means no print job
-    if( maPageList.empty() )
+    if( maPageVector.empty() )
         return false;
 
     // write document setup (done here because it
     // includes the accumulated fonts
     if( mpJobHeader )
-        writeSetup( mpJobHeader, m_aDocumentJobData );
+        writeSetup( mpJobHeader.get(), m_aDocumentJobData );
     m_pGraphics->OnEndJob();
     if( ! (mpJobHeader && mpJobTrailer) )
         return false;
@@ -430,17 +404,17 @@ PrinterJob::EndJob()
     OStringBuffer aTrailer(512);
     aTrailer.append( "%%Trailer\n" );
     aTrailer.append( "%%BoundingBox: 0 0 " );
-    aTrailer.append( (sal_Int32)mnMaxWidthPt );
+    aTrailer.append( static_cast<sal_Int32>(mnMaxWidthPt) );
     aTrailer.append( " " );
-    aTrailer.append( (sal_Int32)mnMaxHeightPt );
+    aTrailer.append( static_cast<sal_Int32>(mnMaxHeightPt) );
     if( mnLandscapes > mnPortraits )
         aTrailer.append("\n%%Orientation: Landscape");
     else
         aTrailer.append("\n%%Orientation: Portrait");
     aTrailer.append( "\n%%Pages: " );
-    aTrailer.append( (sal_Int32)maPageList.size() );
+    aTrailer.append( static_cast<sal_Int32>(maPageVector.size()) );
     aTrailer.append( "\n%%EOF\n" );
-    WritePS (mpJobTrailer, aTrailer.getStr());
+    WritePS (mpJobTrailer.get(), aTrailer.getStr());
 
     /*
      * spool the set of files to their final destination, this is U**X dependent
@@ -490,14 +464,14 @@ PrinterJob::EndJob()
 
     unsigned char pBuffer[ nBLOCKSIZE ];
 
-    AppendPS (pDestFILE, mpJobHeader, pBuffer);
+    AppendPS (pDestFILE, mpJobHeader.get(), pBuffer);
     mpJobHeader->close();
 
     bool bSuccess = true;
-    std::list< osl::File* >::iterator pPageBody;
-    std::list< osl::File* >::iterator pPageHead;
-    for (pPageBody  = maPageList.begin(), pPageHead  = maHeaderList.begin();
-         pPageBody != maPageList.end() && pPageHead != maHeaderList.end();
+    std::vector< std::unique_ptr<osl::File> >::iterator pPageBody;
+    std::vector< std::unique_ptr<osl::File> >::iterator pPageHead;
+    for (pPageBody  = maPageVector.begin(), pPageHead  = maHeaderVector.begin();
+         pPageBody != maPageVector.end() && pPageHead != maHeaderVector.end();
          ++pPageBody, ++pPageHead)
     {
         if( *pPageHead )
@@ -505,7 +479,7 @@ PrinterJob::EndJob()
             osl::File::RC nError = (*pPageHead)->open(osl_File_OpenFlag_Read);
             if (nError == osl::File::E_None)
             {
-                AppendPS (pDestFILE, *pPageHead, pBuffer);
+                AppendPS (pDestFILE, pPageHead->get(), pBuffer);
                 (*pPageHead)->close();
             }
         }
@@ -516,7 +490,7 @@ PrinterJob::EndJob()
             osl::File::RC nError = (*pPageBody)->open(osl_File_OpenFlag_Read);
             if (nError == osl::File::E_None)
             {
-                AppendPS (pDestFILE, *pPageBody, pBuffer);
+                AppendPS (pDestFILE, pPageBody->get(), pBuffer);
                 (*pPageBody)->close();
             }
         }
@@ -524,7 +498,7 @@ PrinterJob::EndJob()
             bSuccess = false;
     }
 
-    AppendPS (pDestFILE, mpJobTrailer, pBuffer);
+    AppendPS (pDestFILE, mpJobTrailer.get(), pBuffer);
     mpJobTrailer->close();
 
     /* well done */
@@ -573,8 +547,8 @@ PrinterJob::InitPaperSize (const JobData& rJobSetup)
     mnTMarginPt     = nUpper;
     mnBMarginPt     = nLower;
 
-    mfXScale        = (double)72.0 / (double)mnResolution;
-    mfYScale        = -1.0 * (double)72.0 / (double)mnResolution;
+    mfXScale        = 72.0 / static_cast<double>(mnResolution);
+    mfYScale        = -1.0 * 72.0 / static_cast<double>(mnResolution);
 }
 
 void
@@ -582,14 +556,14 @@ PrinterJob::StartPage (const JobData& rJobSetup)
 {
     InitPaperSize (rJobSetup);
 
-    OUString aPageNo = OUString::number ((sal_Int32)maPageList.size()+1); // sequential page number must start with 1
+    OUString aPageNo = OUString::number (static_cast<sal_Int32>(maPageVector.size())+1); // sequential page number must start with 1
     OUString aExt    = aPageNo + ".ps";
 
-    osl::File* pPageHeader = CreateSpoolFile ( "psp_pghead", aExt);
-    osl::File* pPageBody   = CreateSpoolFile ( "psp_pgbody", aExt);
+    maHeaderVector.push_back( CreateSpoolFile ( "psp_pghead", aExt) );
+    maPageVector.push_back( CreateSpoolFile ( "psp_pgbody", aExt) );
 
-    maHeaderList.push_back (pPageHeader);
-    maPageList.push_back (pPageBody);
+    osl::File* pPageHeader = maHeaderVector.back().get();
+    osl::File* pPageBody   = maPageVector.back().get();
 
     if( ! (pPageHeader && pPageBody) )
         return;
@@ -612,20 +586,19 @@ PrinterJob::StartPage (const JobData& rJobSetup)
         mnPortraits++;
     }
 
-    sal_Char  pBBox [256];
-    sal_Int32 nChar = 0;
+    OStringBuffer pBBox;
 
-    nChar  = psp::appendStr  ("%%PageBoundingBox: ",    pBBox);
-    nChar += psp::getValueOf (mnLMarginPt,              pBBox + nChar);
-    nChar += psp::appendStr  (" ",                      pBBox + nChar);
-    nChar += psp::getValueOf (mnBMarginPt,              pBBox + nChar);
-    nChar += psp::appendStr  (" ",                      pBBox + nChar);
-    nChar += psp::getValueOf (mnWidthPt  - mnRMarginPt, pBBox + nChar);
-    nChar += psp::appendStr  (" ",                      pBBox + nChar);
-    nChar += psp::getValueOf (mnHeightPt - mnTMarginPt, pBBox + nChar);
-    nChar += psp::appendStr  ("\n",                     pBBox + nChar);
+    psp::appendStr  ("%%PageBoundingBox: ",    pBBox);
+    psp::getValueOf (mnLMarginPt,              pBBox);
+    psp::appendStr  (" ",                      pBBox);
+    psp::getValueOf (mnBMarginPt,              pBBox);
+    psp::appendStr  (" ",                      pBBox);
+    psp::getValueOf (mnWidthPt  - mnRMarginPt, pBBox);
+    psp::appendStr  (" ",                      pBBox);
+    psp::getValueOf (mnHeightPt - mnTMarginPt, pBBox);
+    psp::appendStr  ("\n",                     pBBox);
 
-    WritePS (pPageHeader, pBBox, nChar);
+    WritePS (pPageHeader, pBBox.makeStringAndClear());
 
     /* #i7262# #i65491# write setup only before first page
      *  (to %%Begin(End)Setup, instead of %%Begin(End)PageSetup)
@@ -633,7 +606,7 @@ PrinterJob::StartPage (const JobData& rJobSetup)
      *  different.
      */
     bool bWriteFeatures = true;
-    if( 1 == maPageList.size() )
+    if( 1 == maPageVector.size() )
     {
         m_aDocumentJobData = rJobSetup;
         bWriteFeatures = false;
@@ -645,33 +618,30 @@ PrinterJob::StartPage (const JobData& rJobSetup)
     }
 }
 
-bool
+void
 PrinterJob::EndPage ()
 {
-    osl::File* pPageHeader = maHeaderList.back();
-    osl::File* pPageBody   = maPageList.back();
+    osl::File* pPageHeader = maHeaderVector.back().get();
+    osl::File* pPageBody   = maPageVector.back().get();
 
     if( ! (pPageBody && pPageHeader) )
-        return false;
+        return;
 
     // copy page to paper and write page trailer according to DSC
 
-    sal_Char pTrailer[256];
-    sal_Int32 nChar = 0;
-    nChar  = psp::appendStr ("grestore grestore\n", pTrailer);
-    nChar += psp::appendStr ("showpage\n",          pTrailer + nChar);
-    nChar += psp::appendStr ("%%PageTrailer\n\n",   pTrailer + nChar);
-    WritePS (pPageBody, pTrailer, nChar);
+    OStringBuffer pTrailer;
+    psp::appendStr ("grestore grestore\n", pTrailer);
+    psp::appendStr ("showpage\n",          pTrailer);
+    psp::appendStr ("%%PageTrailer\n\n",   pTrailer);
+    WritePS (pPageBody, pTrailer.makeStringAndClear());
 
     // this page is done for now, close it to avoid having too many open fd's
 
     pPageHeader->close();
     pPageBody->close();
-
-    return true;
 }
 
-struct less_ppd_key : public ::std::binary_function<double, double, bool>
+struct less_ppd_key
 {
     bool operator()(const PPDKey* left, const PPDKey* right)
     { return left->getOrderDependency() < right->getOrderDependency(); }
@@ -701,7 +671,7 @@ static bool writeFeature( osl::File* pFile, const PPDKey* pKey, const PPDValue* 
     aFeature.append( "\n} stopped cleartomark\n" );
     sal_uInt64 nWritten = 0;
     return !(pFile->write( aFeature.getStr(), aFeature.getLength(), nWritten )
-        || nWritten != (sal_uInt64)aFeature.getLength());
+        || nWritten != static_cast<sal_uInt64>(aFeature.getLength()));
 }
 
 bool PrinterJob::writeFeatureList( osl::File* pFile, const JobData& rJob, bool bDocumentSetup )
@@ -730,11 +700,11 @@ bool PrinterJob::writeFeatureList( osl::File* pFile, const JobData& rJob, bool b
             bool bEmit = false;
             if( bDocumentSetup )
             {
-                if( pKey->getSetupType()    == PPDKey::DocumentSetup )
+                if( pKey->getSetupType()    == PPDKey::SetupType::DocumentSetup )
                     bEmit = true;
             }
-            if( pKey->getSetupType()    == PPDKey::PageSetup        ||
-                pKey->getSetupType()    == PPDKey::AnySetup )
+            if( pKey->getSetupType()    == PPDKey::SetupType::PageSetup        ||
+                pKey->getSetupType()    == PPDKey::SetupType::AnySetup )
                 bEmit = true;
             if( bEmit )
             {
@@ -777,39 +747,38 @@ bool PrinterJob::writePageSetup( osl::File* pFile, const JobData& rJob, bool bWr
         bSuccess = writeFeatureList( pFile, rJob, false );
     WritePS (pFile, "%%EndPageSetup\n");
 
-    sal_Char  pTranslate [128];
-    sal_Int32 nChar = 0;
+    OStringBuffer pTranslate;
 
     if( rJob.m_eOrientation == orientation::Portrait )
     {
-        nChar  = psp::appendStr  ("gsave\n[",   pTranslate);
-        nChar += psp::getValueOfDouble (        pTranslate + nChar, mfXScale, 5);
-        nChar += psp::appendStr  (" 0 0 ",      pTranslate + nChar);
-        nChar += psp::getValueOfDouble (        pTranslate + nChar, mfYScale, 5);
-        nChar += psp::appendStr  (" ",          pTranslate + nChar);
-        nChar += psp::getValueOf (mnRMarginPt,  pTranslate + nChar);
-        nChar += psp::appendStr  (" ",          pTranslate + nChar);
-        nChar += psp::getValueOf (mnHeightPt-mnTMarginPt,
-                                  pTranslate + nChar);
-        nChar += psp::appendStr  ("] concat\ngsave\n",
-                                  pTranslate + nChar);
+        psp::appendStr  ("gsave\n[",   pTranslate);
+        psp::getValueOfDouble (        pTranslate, mfXScale, 5);
+        psp::appendStr  (" 0 0 ",      pTranslate);
+        psp::getValueOfDouble (        pTranslate, mfYScale, 5);
+        psp::appendStr  (" ",          pTranslate);
+        psp::getValueOf (mnRMarginPt,  pTranslate);
+        psp::appendStr  (" ",          pTranslate);
+        psp::getValueOf (mnHeightPt-mnTMarginPt,
+                                  pTranslate);
+        psp::appendStr  ("] concat\ngsave\n",
+                                  pTranslate);
     }
     else
     {
-        nChar  = psp::appendStr  ("gsave\n",    pTranslate);
-        nChar += psp::appendStr  ("[ 0 ",       pTranslate + nChar);
-        nChar += psp::getValueOfDouble (        pTranslate + nChar, -mfYScale, 5);
-        nChar += psp::appendStr  (" ",          pTranslate + nChar);
-        nChar += psp::getValueOfDouble (        pTranslate + nChar, mfXScale, 5);
-        nChar += psp::appendStr  (" 0 ",        pTranslate + nChar );
-        nChar += psp::getValueOfDouble (        pTranslate + nChar, mnLMarginPt, 5 );
-        nChar += psp::appendStr  (" ",          pTranslate + nChar);
-        nChar += psp::getValueOf (mnBMarginPt,  pTranslate + nChar );
-        nChar += psp::appendStr ("] concat\ngsave\n",
-                                 pTranslate + nChar);
+        psp::appendStr  ("gsave\n",    pTranslate);
+        psp::appendStr  ("[ 0 ",       pTranslate);
+        psp::getValueOfDouble (        pTranslate, -mfYScale, 5);
+        psp::appendStr  (" ",          pTranslate);
+        psp::getValueOfDouble (        pTranslate, mfXScale, 5);
+        psp::appendStr  (" 0 ",        pTranslate );
+        psp::getValueOfDouble (        pTranslate, mnLMarginPt, 5 );
+        psp::appendStr  (" ",          pTranslate);
+        psp::getValueOf (mnBMarginPt,  pTranslate );
+        psp::appendStr ("] concat\ngsave\n",
+                                 pTranslate);
     }
 
-    WritePS (pFile, pTranslate, nChar);
+    WritePS (pFile, pTranslate.makeStringAndClear());
 
     return bSuccess;
 }
@@ -829,7 +798,7 @@ void PrinterJob::writeJobPatch( osl::File* pFile, const JobData& rJobData )
     // order the patch files
     // according to PPD spec the JobPatchFile options must be int
     // and should be emitted in order
-    std::list< sal_Int32 > patch_order;
+    std::deque< sal_Int32 > patch_order;
     int nValueCount = pKey->countValues();
     for( int i = 0; i < nValueCount; i++ )
     {
@@ -846,19 +815,18 @@ void PrinterJob::writeJobPatch( osl::File* pFile, const JobData& rJobData )
         }
     }
 
-    patch_order.sort();
-    patch_order.unique();
+    std::sort(patch_order.begin(), patch_order.end());
+    patch_order.erase(std::unique(patch_order.begin(), patch_order.end()), patch_order.end());
 
-    while( patch_order.begin() != patch_order.end() )
+    for (auto const& elem : patch_order)
     {
         // note: this discards patch files not adhering to the "int" scheme
         // as there won't be a value for them
-        writeFeature( pFile, pKey, pKey->getValue( OUString::number( patch_order.front() ) ), false );
-        patch_order.pop_front();
+        writeFeature( pFile, pKey, pKey->getValue( OUString::number(elem) ), false );
     }
 }
 
-bool PrinterJob::writeProlog (osl::File* pFile, const JobData& rJobData )
+void PrinterJob::writeProlog (osl::File* pFile, const JobData& rJobData )
 {
     WritePS( pFile, "%%BeginProlog\n" );
 
@@ -953,8 +921,6 @@ bool PrinterJob::writeProlog (osl::File* pFile, const JobData& rJobData )
         "%%EndProlog\n"
     };
     WritePS (pFile, pProlog);
-
-    return true;
 }
 
 bool PrinterJob::writeSetup( osl::File* pFile, const JobData& rJob )
@@ -962,12 +928,12 @@ bool PrinterJob::writeSetup( osl::File* pFile, const JobData& rJob )
     WritePS (pFile, "%%BeginSetup\n%\n");
 
     // download fonts
-    std::list< OString > aFonts;
+    std::vector< OString > aFonts;
     m_pGraphics->writeResources( pFile, aFonts );
 
     if( !aFonts.empty() )
     {
-        std::list< OString >::const_iterator it = aFonts.begin();
+        std::vector< OString >::const_iterator it = aFonts.begin();
         OStringBuffer aLine( 256 );
         aLine.append( "%%DocumentSuppliedResources: font " );
         aLine.append( *it );

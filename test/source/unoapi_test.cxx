@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "test/unoapi_test.hxx"
+#include <test/unoapi_test.hxx>
 
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
@@ -29,17 +29,12 @@ void UnoApiTest::setUp()
     CPPUNIT_ASSERT_MESSAGE("no desktop!", mxDesktop.is());
 }
 
-void UnoApiTest::tearDown()
-{
-    test::BootstrapFixture::tearDown();
-}
-
 void UnoApiTest::createFileURL(const OUString& aFileBase, OUString& rFilePath)
 {
     rFilePath = m_directories.getSrcRootURL() + m_aBaseString + "/" + aFileBase;
 }
 
-void UnoApiTest::closeDocument( uno::Reference< lang::XComponent > xDocument )
+void UnoApiTest::closeDocument( uno::Reference< lang::XComponent > const & xDocument )
 {
     uno::Reference< util::XCloseable > xCloseable(xDocument, UNO_QUERY_THROW);
     xCloseable->close(false);

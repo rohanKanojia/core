@@ -24,7 +24,7 @@
 #include <basegfx/vector/b2dsize.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <cppcanvas/spritecanvas.hxx>
-#include <implcanvas.hxx>
+#include "implcanvas.hxx"
 
 namespace cppcanvas
 {
@@ -37,7 +37,7 @@ namespace cppcanvas
                                   css::rendering::XSpriteCanvas >& rCanvas );
             ImplSpriteCanvas(const ImplSpriteCanvas&);
 
-            virtual ~ImplSpriteCanvas();
+            virtual ~ImplSpriteCanvas() override;
 
             virtual void                    setTransformation( const ::basegfx::B2DHomMatrix& rMatrix ) override;
 
@@ -64,7 +64,7 @@ namespace cppcanvas
                 TransformationArbiter();
 
                 void                        setTransformation( const ::basegfx::B2DHomMatrix& rViewTransform );
-                ::basegfx::B2DHomMatrix     getTransformation() const {  return maTransformation; }
+                const ::basegfx::B2DHomMatrix& getTransformation() const {  return maTransformation; }
 
             private:
                 ::basegfx::B2DHomMatrix     maTransformation;

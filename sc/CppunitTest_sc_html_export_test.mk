@@ -49,7 +49,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_html_export_test, \
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_html_export_test,\
@@ -59,8 +58,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_html_export_test,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_html_export_test,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_html_export_test))
@@ -105,6 +105,8 @@ $(eval $(call gb_CppunitTest_use_components,sc_html_export_test,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     vbahelper/util/msforms \
     xmloff/util/xo \
 ))

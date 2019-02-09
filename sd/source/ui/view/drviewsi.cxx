@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <DrawViewShell.hxx>
 #include <svx/xtable.hxx>
-#include "sdattr.hxx"
+#include <sdattr.hxx>
 #include <svl/aeitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <sfx2/request.hxx>
@@ -33,25 +33,23 @@
 #include <svx/float3d.hxx>
 #include <svx/f3dchild.hxx>
 #include <svx/dialogs.hrc>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
+#include <app.hrc>
+#include <strings.hrc>
 
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "anminfo.hxx"
-#include "unoaprms.hxx"
-#include "sdundogr.hxx"
-#include "drawview.hxx"
-#include "Window.hxx"
-#include "sdresid.hxx"
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <anminfo.hxx>
+#include <unoaprms.hxx>
+#include <sdundogr.hxx>
+#include <drawview.hxx>
+#include <Window.hxx>
+#include <sdresid.hxx>
 
 using namespace ::com::sun::star;
 
 namespace sd {
-
-#define ITEMVALUE(ItemSet,Id,Cast)  static_cast<const Cast&>((ItemSet).Get(Id)).GetValue()
 
 /**
  * Handle SfxRequests for EffekteWindow
@@ -72,7 +70,7 @@ void DrawViewShell::ExecEffectWin( SfxRequest& rReq )
             {
                 Svx3DWin* p3DWin = static_cast<Svx3DWin*>( pWindow->GetWindow() );
                 if( p3DWin )
-                    p3DWin->InitColorLB( GetDoc() );
+                    p3DWin->InitColorLB();
             }
         }
         break;
@@ -121,18 +119,17 @@ void DrawViewShell::AssignFrom3DWindow()
             if(!GetView()->IsPresObjSelected())
             {
                 SfxItemSet aSet( GetDoc()->GetPool(),
-                    SDRATTR_START,  SDRATTR_END,
-                    0, 0);
+                    svl::Items<SDRATTR_START,  SDRATTR_END>{});
                 p3DWin->GetAttr( aSet );
 
                 // own UNDO-compounding also around transformation in 3D
-                GetView()->BegUndo(SD_RESSTR(STR_UNDO_APPLY_3D_FAVOURITE));
+                GetView()->BegUndo(SdResId(STR_UNDO_APPLY_3D_FAVOURITE));
 
                 if(GetView()->IsConvertTo3DObjPossible())
                 {
                     // assign only text-attribute
                     SfxItemSet aTextSet( GetDoc()->GetPool(),
-                        EE_ITEMS_START, EE_ITEMS_END, 0 );
+                        svl::Items<EE_ITEMS_START, EE_ITEMS_END>{} );
                     aTextSet.Put( aSet, false );
                     GetView()->SetAttributes( aTextSet );
 
@@ -145,7 +142,7 @@ void DrawViewShell::AssignFrom3DWindow()
 
                     // Determine if a FILL attribute is set.
                     // If not, hard set a fill attribute
-                    drawing::FillStyle eFillStyle = ITEMVALUE( aSet, XATTR_FILLSTYLE, XFillStyleItem );
+                    drawing::FillStyle eFillStyle = aSet.Get(XATTR_FILLSTYLE).GetValue();
                     if(eFillStyle == drawing::FillStyle_NONE)
                         aSet.Put(XFillStyleItem (drawing::FillStyle_SOLID));
 
@@ -165,10 +162,11 @@ void DrawViewShell::AssignFrom3DWindow()
             }
             else
             {
-                ScopedVclPtrInstance<InfoBox> aInfoBox (
-                    GetActiveWindow(),
-                    SD_RESSTR(STR_ACTION_NOTPOSSIBLE));
-                aInfoBox->Execute();
+                vcl::Window* pWindow = GetActiveWindow();
+                std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(pWindow ? pWindow->GetFrameWeld() : nullptr,
+                                                              VclMessageType::Info, VclButtonsType::Ok,
+                                                              SdResId(STR_ACTION_NOTPOSSIBLE)));
+                xInfoBox->run();
             }
 
             // get focus back

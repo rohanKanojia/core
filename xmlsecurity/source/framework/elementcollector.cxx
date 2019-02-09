@@ -27,16 +27,15 @@ namespace cssu = com::sun::star::uno;
 namespace cssxc = com::sun::star::xml::crypto;
 
 ElementCollector::ElementCollector(
-    sal_Int32 nSecurityId,
     sal_Int32 nBufferId,
     cssxc::sax::ElementMarkPriority nPriority,
     bool bToModify,
     const css::uno::Reference< css::xml::crypto::sax::XReferenceResolvedListener >& xReferenceResolvedListener)
-    :ElementMark(nSecurityId, nBufferId),
+    :ElementMark(cssxc::sax::ConstOfSecurityId::UNDEFINEDSECURITYID, nBufferId),
      m_nPriority(nPriority),
      m_bToModify(bToModify),
-      m_bAbleToNotify(false),
-      m_bNotified(false),
+     m_bAbleToNotify(false),
+     m_bNotified(false),
      m_xReferenceResolvedListener(xReferenceResolvedListener)
 /****** ElementCollector/ElementCollector *************************************
  *
@@ -136,43 +135,6 @@ void ElementCollector::doNotify()
         m_bNotified = true;
         m_xReferenceResolvedListener->referenceResolved(m_nBufferId);
     }
-}
-
-ElementCollector* ElementCollector::clone(
-    sal_Int32 nBufferId,
-    cssxc::sax::ElementMarkPriority nPriority ) const
-/****** ElementCollector/clone ************************************************
- *
- *   NAME
- *  clone -- duplicates this ElementCollector object
- *
- *   SYNOPSIS
- *  cloned = clone(nBufferId, nPriority);
- *
- *   FUNCTION
- *  duplicates this ElementCollector object with new buffer Id, priority.
- *
- *   INPUTS
- *  nBufferId - the buffer node's Id
- *  nPriority - the priority
- ******************************************************************************/
-{
-    ElementCollector* pClonedOne
-        = new ElementCollector(m_nSecurityId,
-                       nBufferId, nPriority, m_bToModify,
-                       m_xReferenceResolvedListener);
-
-    if (m_bAbleToNotify)
-    {
-        pClonedOne->notifyListener();
-    }
-
-    if (m_pBufferNode != nullptr)
-    {
-        m_pBufferNode->addElementCollector(pClonedOne);
-    }
-
-    return pClonedOne;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

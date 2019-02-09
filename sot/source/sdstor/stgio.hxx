@@ -20,8 +20,8 @@
 #ifndef INCLUDED_SOT_SOURCE_SDSTOR_STGIO_HXX
 #define INCLUDED_SOT_SOURCE_SDSTOR_STGIO_HXX
 
-#include <stgcache.hxx>
-#include <stgelem.hxx>
+#include "stgcache.hxx"
+#include "stgelem.hxx"
 #include <tools/link.hxx>
 #include <tools/solar.h>
 
@@ -29,23 +29,21 @@ class StgFATStrm;
 class StgDataStrm;
 class StgDirStrm;
 
-enum FAT_ERROR
+enum class FatError
 {
-    FAT_OK,
-    FAT_WRONGLENGTH,
-    FAT_UNREFCHAIN,
-    FAT_OVERWRITE,
-    FAT_OUTOFBOUNDS,
+    Ok,
+    WrongLength,
+    UnrefChain,
+    OutOfBounds,
 
-    FAT_INMEMORYERROR,
-    FAT_ONFILEERROR,
-    FAT_BOTHERROR
+    InMemoryError,
+    OnFileError,
+    BothError
 };
 
 struct StgLinkArg
 {
     OUString aFile;
-    sal_uLong nErr;
 };
 
 class StgIo : public StgCache {
@@ -59,14 +57,14 @@ public:
     StgDirStrm*  m_pTOC;              // TOC stream
     StgDataStrm* m_pDataFAT;          // small data FAT stream
     StgDataStrm* m_pDataStrm;         // small data stream
-    short        GetDataPageSize(); // get the logical data page size
+    short        GetDataPageSize() const; // get the logical data page size
     bool Load();                    // load a storage file
     bool Init();                    // set up an empty file
     bool CommitAll();               // commit everything (root commit)
 
     static void SetErrorLink( const Link<StgLinkArg&,void>& );
     static const Link<StgLinkArg&,void>& GetErrorLink();
-    sal_uLong ValidateFATs( );
+    FatError ValidateFATs( );
 };
 
 #endif

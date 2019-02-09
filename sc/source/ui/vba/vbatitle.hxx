@@ -20,16 +20,14 @@
 #define INCLUDED_SC_SOURCE_UI_VBA_VBATITLE_HXX
 
 #include <vbahelper/vbahelperinterface.hxx>
-#include "excelvbahelper.hxx"
 #include "vbainterior.hxx"
 #include "vbafont.hxx"
 #include "vbapalette.hxx"
-#include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <ooo/vba/excel/XTitle.hpp>
-#include <ooo/vba/excel/XCharacters.hpp>
 #include <basic/sberrors.hxx>
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
 
 template< typename... Ifc >
 class TitleImpl : public InheritedHelperInterfaceImpl< Ifc... >
@@ -40,14 +38,17 @@ protected:
     css::uno::Reference< css::drawing::XShape > xTitleShape;
     css::uno::Reference< css::beans::XPropertySet > xShapePropertySet;
     std::unique_ptr<ov::ShapeHelper> oShapeHelper;
-    ScVbaPalette m_Palette;
+    ScVbaPalette const m_Palette;
 public:
-    TitleImpl(  const css::uno::Reference< ov::XHelperInterface >& xParent,   const css::uno::Reference< css::uno::XComponentContext >& xContext, const css::uno::Reference< css::drawing::XShape >& _xTitleShape ) : BaseClass( xParent, xContext ), xTitleShape( _xTitleShape )
+    TitleImpl(  const css::uno::Reference< ov::XHelperInterface >& xParent,
+                const css::uno::Reference< css::uno::XComponentContext >& xContext,
+                const css::uno::Reference< css::drawing::XShape >& _xTitleShape )
+        : BaseClass( xParent, xContext ), xTitleShape( _xTitleShape ), m_Palette(nullptr)
     {
         xShapePropertySet.set( xTitleShape, css::uno::UNO_QUERY_THROW );
         oShapeHelper.reset( new ov::ShapeHelper(xTitleShape) );
     }
-    css::uno::Reference< ov::excel::XInterior > SAL_CALL Interior(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    css::uno::Reference< ov::excel::XInterior > SAL_CALL Interior(  ) override
     {
         // #TODO find out what the proper parent should be
         // leaving as set by the helperapi for the moment
@@ -55,14 +56,14 @@ public:
         // otherwise attempts to access the palette will fail
         return new ScVbaInterior( BaseClass::mxParent, BaseClass::mxContext, xShapePropertySet );
     }
-    css::uno::Reference< ov::excel::XFont > SAL_CALL Font(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    css::uno::Reference< ov::excel::XFont > SAL_CALL Font(  ) override
     {
         // #TODO find out what the proper parent should be
         // leaving as set by the helperapi for the moment
         return new ScVbaFont( BaseClass::mxParent, BaseClass::mxContext, m_Palette, xShapePropertySet );
 
     }
-    void SAL_CALL setText( const OUString& Text ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    void SAL_CALL setText( const OUString& Text ) override
     {
         try
         {
@@ -70,10 +71,10 @@ public:
         }
         catch ( css::uno::Exception& )
         {
-            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), ERRCODE_BASIC_METHOD_FAILED, OUString() );
+            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
         }
     }
-    OUString SAL_CALL getText(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    OUString SAL_CALL getText(  ) override
     {
         OUString sText;
         try
@@ -82,28 +83,28 @@ public:
         }
         catch ( css::uno::Exception& )
         {
-            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), ERRCODE_BASIC_METHOD_FAILED, OUString() );
+            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
         }
         return sText;
     }
 
-    void SAL_CALL setTop( double Top ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    void SAL_CALL setTop( double Top ) override
     {
         oShapeHelper->setTop( Top );
     }
-    double SAL_CALL getTop(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    double SAL_CALL getTop(  ) override
     {
         return oShapeHelper->getTop();
     }
-    void SAL_CALL setLeft( double Left ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    void SAL_CALL setLeft( double Left ) override
     {
         oShapeHelper->setLeft( Left );
     }
-    double SAL_CALL getLeft(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    double SAL_CALL getLeft(  ) override
     {
         return oShapeHelper->getLeft();
     }
-    void SAL_CALL setOrientation( ::sal_Int32 _nOrientation ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    void SAL_CALL setOrientation( ::sal_Int32 _nOrientation ) override
     {
         try
         {
@@ -111,10 +112,10 @@ public:
         }
         catch (css::uno::Exception& )
         {
-            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), ERRCODE_BASIC_METHOD_FAILED, OUString() );
+            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
         }
     }
-    ::sal_Int32 SAL_CALL getOrientation(  ) throw (css::script::BasicErrorException, css::uno::RuntimeException) SAL_OVERRIDE
+    ::sal_Int32 SAL_CALL getOrientation(  ) override
     {
         sal_Int32 nSOOrientation = 0;
         try
@@ -123,16 +124,16 @@ public:
         }
         catch (css::uno::Exception& )
         {
-            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), ERRCODE_BASIC_METHOD_FAILED, OUString() );
+            throw css::script::BasicErrorException( OUString(), css::uno::Reference< css::uno::XInterface >(), sal_uInt32(ERRCODE_BASIC_METHOD_FAILED), OUString() );
         }
         return static_cast< sal_Int32 >(nSOOrientation / 100) ;
     }
 // XHelperInterface
-    OUString getServiceImplName() SAL_OVERRIDE
+    OUString getServiceImplName() override
     {
         return OUString("TitleImpl");
     }
-    css::uno::Sequence< OUString > getServiceNames() SAL_OVERRIDE
+    css::uno::Sequence< OUString > getServiceNames() override
     {
         static css::uno::Sequence< OUString > aServiceNames;
         if ( aServiceNames.getLength() == 0 )

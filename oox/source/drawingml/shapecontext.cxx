@@ -23,17 +23,20 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "oox/helper/attributelist.hxx"
-#include "oox/drawingml/shapecontext.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/drawingml/shapecontext.hxx>
 #include <drawingml/shapepropertiescontext.hxx>
-#include "drawingml/shapestylecontext.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "oox/drawingml/lineproperties.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "drawingml/customshapegeometry.hxx"
-#include "drawingml/textbodycontext.hxx"
-#include "drawingml/textbodypropertiescontext.hxx"
+#include <drawingml/shapestylecontext.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/customshapegeometry.hxx>
+#include <drawingml/textbodycontext.hxx>
+#include <drawingml/textbodypropertiescontext.hxx>
 #include "hyperlinkcontext.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <sal/log.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -46,17 +49,17 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace drawingml {
 
 // CT_Shape
-ShapeContext::ShapeContext( ContextHandler2Helper& rParent, ShapePtr pMasterShapePtr, ShapePtr pShapePtr )
+ShapeContext::ShapeContext( ContextHandler2Helper const & rParent, ShapePtr const & pMasterShapePtr, ShapePtr const & pShapePtr )
 : ContextHandler2( rParent )
 , mpMasterShapePtr( pMasterShapePtr )
 , mpShapePtr( pShapePtr )
 {
+    if( mpMasterShapePtr.get() && mpShapePtr.get() )
+        mpMasterShapePtr->addChild( mpShapePtr );
 }
 
 ShapeContext::~ShapeContext()
 {
-    if ( mpMasterShapePtr.get() && mpShapePtr.get() )
-        mpMasterShapePtr->addChild( mpShapePtr );
 }
 
 ContextHandlerRef ShapeContext::onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs )
@@ -71,6 +74,7 @@ ContextHandlerRef ShapeContext::onCreateContext( sal_Int32 aElementToken, const 
         mpShapePtr->setHidden( rAttribs.getBool( XML_hidden, false ) );
         mpShapePtr->setId( rAttribs.getString( XML_id ).get() );
         mpShapePtr->setName( rAttribs.getString( XML_name ).get() );
+        mpShapePtr->setDescription( rAttribs.getString( XML_descr ).get() );
         break;
     }
     case XML_hlinkMouseOver:
@@ -93,12 +97,14 @@ ContextHandlerRef ShapeContext::onCreateContext( sal_Int32 aElementToken, const 
     case XML_txbxContent:
     {
         if (!mpShapePtr->getTextBody())
-            mpShapePtr->setTextBody( TextBodyPtr(new TextBody) );
-        return new TextBodyContext( *this, *mpShapePtr->getTextBody() );
+            mpShapePtr->setTextBody( std::make_shared<TextBody>() );
+        return new TextBodyContext( *this, mpShapePtr );
     }
     case XML_txXfrm:
     {
-        mpShapePtr->getTextBody()->getTextProperties().moRotation = rAttribs.getInteger( XML_rot );
+        const TextBodyPtr& rShapePtr = mpShapePtr->getTextBody();
+        if (rShapePtr)
+            rShapePtr->getTextProperties().moRotation = rAttribs.getInteger( XML_rot );
         return nullptr;
     }
     case XML_cNvSpPr:
@@ -107,8 +113,8 @@ ContextHandlerRef ShapeContext::onCreateContext( sal_Int32 aElementToken, const 
         break;
     case XML_bodyPr:
         if (!mpShapePtr->getTextBody())
-            mpShapePtr->setTextBody( TextBodyPtr(new TextBody) );
-        return new TextBodyPropertiesContext( *this, rAttribs, mpShapePtr->getTextBody()->getTextProperties() );
+            mpShapePtr->setTextBody( std::make_shared<TextBody>() );
+        return new TextBodyPropertiesContext( *this, rAttribs, mpShapePtr );
         break;
     case XML_txbx:
         break;

@@ -22,9 +22,8 @@
 
 #include "adminpages.hxx"
 #include <com/sun/star/i18n/XCollator.hpp>
-#include <osl/mutex.hxx>
 #include <vcl/layout.hxx>
-#include "tabletree.hxx"
+#include <tabletree.hxx>
 #include <com/sun/star/sdbc/XConnection.hpp>
 
 namespace dbaui
@@ -32,7 +31,7 @@ namespace dbaui
 
     // OTableSubscriptionPage
     class OTableSubscriptionDialog;
-    class OTableSubscriptionPage
+    class OTableSubscriptionPage final
             :public OGenericAdministrationPage
     {
     private:
@@ -50,25 +49,23 @@ namespace dbaui
 
     public:
         virtual bool            FillItemSet(SfxItemSet* _rCoreAttrs) override;
-        virtual sfxpg           DeactivatePage(SfxItemSet* _pSet) override;
+        virtual DeactivateRC    DeactivatePage(SfxItemSet* _pSet) override;
         using OGenericAdministrationPage::DeactivatePage;
 
         virtual void            StateChanged( StateChangedType nStateChange ) override;
         virtual void            DataChanged( const DataChangedEvent& rDCEvt ) override;
 
         OTableSubscriptionPage( vcl::Window* pParent, const SfxItemSet& _rCoreAttrs ,OTableSubscriptionDialog* _pTablesDlg);
-        virtual ~OTableSubscriptionPage();
+        virtual ~OTableSubscriptionPage() override;
         virtual void dispose() override;
 
-    protected:
-        virtual void fillControls(::std::vector< ISaveValueWrapper* >& _rControlList) override;
-        virtual void fillWindows(::std::vector< ISaveValueWrapper* >& _rControlList) override;
-
-        DECL_LINK_TYPED( OnTreeEntryCompare, const SvSortData&, sal_Int32 );
-        DECL_LINK_TYPED( OnTreeEntryChecked, void*, void );
-        DECL_LINK_TYPED( OnTreeEntryButtonChecked, SvTreeListBox*, void );
-
     private:
+        virtual void fillControls(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList) override;
+        virtual void fillWindows(std::vector< std::unique_ptr<ISaveValueWrapper> >& _rControlList) override;
+
+        DECL_LINK( OnTreeEntryCompare, const SvSortData&, sal_Int32 );
+        DECL_LINK( OnTreeEntryChecked, void*, void );
+        DECL_LINK( OnTreeEntryButtonChecked, SvTreeListBox*, void );
 
         /** check the tables in <member>m_aTablesList</member> according to <arg>_rTables</arg>
         */
@@ -87,7 +84,7 @@ namespace dbaui
         virtual void implInitControls(const SfxItemSet& _rSet, bool _bSaveValue) override;
 
         // checks the tables according to the filter given
-        // in oppsofite to implCheckTables, this method handles the case of an empty sequence, too ...
+        // in opposite to implCheckTables, this method handles the case of an empty sequence, too ...
         void implCompleteTablesCheck( const css::uno::Sequence< OUString >& _rTableFilter );
     };
 

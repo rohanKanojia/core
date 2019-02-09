@@ -19,14 +19,15 @@
 
 #include "resultcolumn.hxx"
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbc/XResultSetMetaDataSupplier.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <cppuhelper/typeprovider.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include "dbastrings.hrc"
-#include "apitools.hxx"
+#include <stringconstants.hxx>
+#include <apitools.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <cppuhelper/exc_hlp.hxx>
 #include <osl/thread.h>
@@ -92,7 +93,7 @@ void OResultColumn::impl_determineIsRowVersion_nothrow()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
@@ -101,18 +102,18 @@ OResultColumn::~OResultColumn()
 }
 
 // css::lang::XTypeProvider
-Sequence< sal_Int8 > OResultColumn::getImplementationId() throw (RuntimeException, std::exception)
+Sequence< sal_Int8 > OResultColumn::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 // XServiceInfo
-OUString OResultColumn::getImplementationName(  ) throw(RuntimeException, std::exception)
+OUString OResultColumn::getImplementationName(  )
 {
     return OUString("com.sun.star.sdb.OResultColumn");
 }
 
-Sequence< OUString > OResultColumn::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+Sequence< OUString > OResultColumn::getSupportedServiceNames(  )
 {
     Sequence< OUString > aSNS( 2 );
     aSNS[0] = SERVICE_SDBCX_COLUMN;
@@ -166,10 +167,10 @@ void OResultColumn::disposing()
 namespace
 {
     template< typename T >
-    void obtain( Any& _out_rValue, ::boost::optional< T > _rCache, const sal_Int32 _nPos, const Reference < XResultSetMetaData >& _rxResultMeta, T (SAL_CALL XResultSetMetaData::*Getter)( sal_Int32 ) )
+    void obtain( Any& _out_rValue, ::boost::optional< T > & _rCache, const sal_Int32 _nPos, const Reference < XResultSetMetaData >& _rxResultMeta, T (SAL_CALL XResultSetMetaData::*Getter)( sal_Int32 ) )
     {
         if ( !_rCache )
-            _rCache.reset( (_rxResultMeta.get()->*Getter)( _nPos ) );
+            _rCache = (_rxResultMeta.get()->*Getter)(_nPos);
         _out_rValue <<= *_rCache;
     }
 }
@@ -276,13 +277,11 @@ void OResultColumn::getFastPropertyValue( Any& rValue, sal_Int32 nHandle ) const
             case PROPERTY_ID_ISCURRENCY:
             case PROPERTY_ID_ISSIGNED:
             {
-                sal_Bool bVal = sal_False;
-                rValue.setValue(&bVal, cppu::UnoType<bool>::get());
+                rValue <<= false;
             }   break;
             case PROPERTY_ID_ISREADONLY:
             {
-                sal_Bool bVal = sal_True;
-                rValue.setValue(&bVal, cppu::UnoType<bool>::get());
+                rValue <<= true;
             }   break;
             case PROPERTY_ID_SCALE:
             case PROPERTY_ID_PRECISION:

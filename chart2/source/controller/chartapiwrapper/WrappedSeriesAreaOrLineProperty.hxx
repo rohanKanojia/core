@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDSERIESAREAORLINEPROPERTY_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_CHARTAPIWRAPPER_WRAPPEDSERIESAREAORLINEPROPERTY_HXX
 
-#include "WrappedProperty.hxx"
+#include <WrappedProperty.hxx>
 
 namespace chart
 {
@@ -33,7 +33,7 @@ public:
     WrappedSeriesAreaOrLineProperty( const OUString& rOuterName
         , const OUString& rInnerAreaTypeName, const OUString& rInnerLineTypeName
         , DataSeriesPointWrapper* pDataSeriesPointWrapper );
-    virtual ~WrappedSeriesAreaOrLineProperty();
+    virtual ~WrappedSeriesAreaOrLineProperty() override;
 
     virtual OUString getInnerName() const override;
 

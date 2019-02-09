@@ -42,7 +42,7 @@ GType                          lok_doc_view_get_type               (void) G_GNUC
 
 /**
  * lok_doc_view_new:
- * @pPath: (nullable): LibreOffice install path. Pass null to set it to default
+ * @pPath: (nullable) (allow-none): LibreOffice install path. Pass null to set it to default
  * path which in most cases would be $libdir/libreoffice/program
  * @cancellable: The cancellable object that you can use to cancel this
  * operation.
@@ -55,23 +55,41 @@ GtkWidget*                     lok_doc_view_new                    (const gchar*
                                                                     GError **error);
 
 /**
- * lok_doc_view_new_from_widget:
- * @pDocView: The #LOKDocView instance
+ * lok_doc_view_new_from_user_profile:
+ * @pPath: (nullable) (allow-none): LibreOffice install path. Pass null to set it to default
+ * path which in most cases would be $libdir/libreoffice/program
+ * @pUserProfile: (nullable) (allow-none): User profile URL. Must be either a file URL or a
+ * special vnd.sun.star.pathname URL. Pass non-null to be able to use this
+ * widget and LibreOffice itself in parallel.
+ * @cancellable: The cancellable object that you can use to cancel this
+ * operation.
+ * @error: The error that will be set if the object fails to initialize.
  *
  * Returns: (transfer none): The #LOKDocView widget instance.
  */
-GtkWidget*                     lok_doc_view_new_from_widget        (LOKDocView* pDocView);
+GtkWidget*                     lok_doc_view_new_from_user_profile  (const gchar* pPath,
+                                                                    const gchar* pUserProfile,
+                                                                    GCancellable *cancellable,
+                                                                    GError **error);
+
+/**
+ * lok_doc_view_new_from_widget:
+ * @pDocView: The #LOKDocView instance
+ * @pRenderingArguments: (nullable) (allow-none): lok::Document::initializeForRendering() arguments.
+ *
+ * Returns: (transfer none): The #LOKDocView widget instance.
+ */
+GtkWidget*                     lok_doc_view_new_from_widget        (LOKDocView* pDocView,
+                                                                    const gchar* pRenderingArguments);
 
 /**
  * lok_doc_view_open_document:
  * @pDocView: The #LOKDocView instance
  * @pPath: (transfer full): The path of the document that #LOKDocView widget should try to open
- * @pRenderingArguments: (nullable): lok::Document::initializeForRendering() arguments.
+ * @pRenderingArguments: (nullable) (allow-none): lok::Document::initializeForRendering() arguments.
  * @cancellable:
  * @callback:
  * @userdata:
- *
- * Returns: %TRUE if the document is loaded successfully, %FALSE otherwise
  */
 void                           lok_doc_view_open_document          (LOKDocView* pDocView,
                                                                     const gchar* pPath,
@@ -116,7 +134,7 @@ void                           lok_doc_view_set_zoom               (LOKDocView* 
 /**
  * lok_doc_view_set_visible_area:
  * @pDocView: The #LOKDocView instance
- * @fZoom: The new visible area of pDocView in twips.
+ * @pVisibleArea: The new visible area of pDocView in twips.
  *
  * Sets the new visible area of the widget. This helps e.g. the page down key
  * to jump the correct length, which depends on the amount of visible height of
@@ -288,14 +306,30 @@ gboolean                        lok_doc_view_paste                 (LOKDocView* 
 /**
  * lok_doc_view_set_document_password:
  * @pDocView: The #LOKDocView instance
- * @pUrl: the URL of the document to set password for, as sent with signal `password-required`
- * @pPassword: (nullable): the password, NULL for no password
+ * @pURL: the URL of the document to set password for, as sent with signal `password-required`
+ * @pPassword: (nullable) (allow-none): the password, NULL for no password
  *
  * Set the password for password protected documents
  */
 void                            lok_doc_view_set_document_password (LOKDocView* pDocView,
                                                                     const gchar* pURL,
                                                                     const gchar* pPassword);
+
+/**
+ * lok_doc_view_get_version_info:
+ * @pDocView: The #LOKDocView instance
+ *
+ * Get version information of the LOKit process
+ *
+ * Returns: JSON string containing version information in format:
+ * {ProductName: <>, ProductVersion: <>, ProductExtension: <>, BuildId: <>}
+ *
+ * Eg: {"ProductName": "LibreOffice",
+ * "ProductVersion": "5.3",
+ * "ProductExtension": ".0.0.alpha0",
+ * "BuildId": "<full 40 char git hash>"}
+ */
+gchar*                         lok_doc_view_get_version_info       (LOKDocView* pDocView);
 
 /**
  * lok_doc_view_pixel_to_twip:

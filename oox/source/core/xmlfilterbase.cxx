@@ -17,18 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/core/xmlfilterbase.hxx"
+#include <oox/core/xmlfilterbase.hxx>
 
 #include <cstdio>
 #include <set>
 #include <com/sun/star/beans/XPropertyAccess.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/embed/XRelationshipAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/xml/sax/InputSource.hpp>
 #include <com/sun/star/xml/sax/XFastParser.hpp>
 #include <com/sun/star/xml/sax/XFastSAXSerializable.hpp>
+#include <com/sun/star/xml/dom/XDocument.hpp>
+#include <com/sun/star/xml/sax/XSAXSerializable.hpp>
+#include <com/sun/star/xml/sax/Writer.hpp>
 #include <com/sun/star/document/XDocumentProperties.hpp>
+#include <o3tl/any.hxx>
 #include <unotools/mediadescriptor.hxx>
 #include <unotools/docinfohelper.hxx>
 #include <sax/fshelper.hxx>
@@ -36,28 +41,36 @@
 #include <rtl/ustrbuf.hxx>
 #include <rtl/instance.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <i18nlangtag/languagetag.hxx>
-#include "oox/core/fastparser.hxx"
-#include "oox/core/fragmenthandler.hxx"
-#include "oox/core/recordparser.hxx"
-#include "oox/core/relationshandler.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/helper/zipstorage.hxx"
-#include "oox/token/properties.hxx"
+#include <oox/core/fastparser.hxx>
+#include <oox/core/fragmenthandler.hxx>
+#include <oox/core/recordparser.hxx>
+#include <oox/core/relationshandler.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/helper/zipstorage.hxx>
+#include <oox/ole/olestorage.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/relationship.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/document/XOOXMLDocumentPropertiesImporter.hpp>
-#include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/xml/dom/DocumentBuilder.hpp>
 #include <comphelper/processfactory.hxx>
 #include <oox/core/filterdetect.hxx>
 #include <comphelper/storagehelper.hxx>
+#include <comphelper/sequence.hxx>
+#include <comphelper/ofopxmlhelper.hxx>
 
 #include <oox/crypto/DocumentEncryption.hxx>
 #include <tools/date.hxx>
 #include <tools/datetime.hxx>
 #include <com/sun/star/util/Duration.hpp>
 #include <sax/tools/converter.hxx>
+#include <oox/token/namespacemap.hxx>
+#include <editeng/unoprnms.hxx>
 
 using ::com::sun::star::xml::dom::DocumentBuilder;
 using ::com::sun::star::xml::dom::XDocument;
@@ -81,12 +94,6 @@ using ::sax_fastparser::FSHelperPtr;
 using ::sax_fastparser::FastSerializerHelper;
 
 namespace {
-
-bool lclHasSuffix( const OUString& rFragmentPath, const OUString& rSuffix )
-{
-    sal_Int32 nSuffixPos = rFragmentPath.getLength() - rSuffix.getLength();
-    return (nSuffixPos >= 0) && rFragmentPath.match( rSuffix, nSuffixPos );
-}
 
 struct NamespaceIds: public rtl::StaticWithInit<
     Sequence< beans::Pair< OUString, sal_Int32 > >,
@@ -141,7 +148,10 @@ struct NamespaceIds: public rtl::StaticWithInit<
             {"http://schemas.microsoft.com/office/powerpoint/2010/main",
              NMSP_p14},
             {"http://schemas.microsoft.com/office/powerpoint/2012/main",
-             NMSP_p15}};
+             NMSP_p15},
+            {"http://schemas.microsoft.com/office/spreadsheetml/2011/1/ac",
+             NMSP_x12ac},
+        };
     }
 };
 
@@ -155,8 +165,8 @@ void registerNamespaces( FastParser& rParser )
     for (sal_Int32 i = 0; i < ids.getLength(); ++i)
         aSet.insert(ids[i].Second);
 
-    for (std::set<sal_Int32>::iterator it = aSet.begin(); it != aSet.end(); ++it)
-        rParser.registerNamespace(*it);
+    for (auto const& elem : aSet)
+        rParser.registerNamespace(elem);
 }
 
 } // namespace
@@ -165,35 +175,31 @@ struct XmlFilterBaseImpl
 {
     typedef RefMap< OUString, Relations > RelationsMap;
 
-    Reference<XComponentContext>   mxContext;
     FastParser                     maFastParser;
-    const OUString                 maBinSuffix;
     RelationsMap                   maRelationsMap;
     TextFieldStack                 maTextFieldStack;
+    const NamespaceMap&            mrNamespaceMap;
 
-    explicit            XmlFilterBaseImpl( const Reference< XComponentContext >& rxContext ) throw( RuntimeException );
-    ~XmlFilterBaseImpl();
+    /// @throws RuntimeException
+    explicit            XmlFilterBaseImpl();
 };
 
-XmlFilterBaseImpl::XmlFilterBaseImpl( const Reference< XComponentContext >& rxContext ) throw( RuntimeException ) :
-    mxContext(rxContext),
-    maFastParser( rxContext ),
-    maBinSuffix( ".bin" )
+static const OUStringLiteral gaBinSuffix( ".bin" );
+
+XmlFilterBaseImpl::XmlFilterBaseImpl() :
+    mrNamespaceMap(StaticNamespaceMap::get())
 {
     // register XML namespaces
     registerNamespaces(maFastParser);
 }
 
-XmlFilterBaseImpl::~XmlFilterBaseImpl()
-{
-}
-
-XmlFilterBase::XmlFilterBase( const Reference< XComponentContext >& rxContext ) throw( RuntimeException ) :
+XmlFilterBase::XmlFilterBase( const Reference< XComponentContext >& rxContext ) :
     FilterBase( rxContext ),
-    mxImpl( new XmlFilterBaseImpl( rxContext ) ),
+    mxImpl( new XmlFilterBaseImpl ),
     mnRelId( 1 ),
     mnMaxDocId( 0 ),
-    mbMSO2007(false)
+    mbMSO2007(false),
+    mbMissingExtDrawing(false)
 {
 }
 
@@ -206,7 +212,7 @@ XmlFilterBase::~XmlFilterBase()
     // the following implicit destruction chain of ~XmlFilterBaseImpl, but in that
     // case it's member RelationsMap maRelationsMap will be destroyed, but maybe
     // still be used by ~FragmentHandler -> crash.
-    mxImpl->maFastParser.setDocumentHandler( nullptr );
+    mxImpl->maFastParser.clearDocumentHandler();
 }
 
 void XmlFilterBase::checkDocumentProperties(const Reference<XDocumentProperties>& xDocProps)
@@ -231,17 +237,46 @@ void XmlFilterBase::checkDocumentProperties(const Reference<XDocumentProperties>
     if (!aValue.startsWithIgnoreAsciiCase("12."))
         return;
 
-    SAL_WARN("oox", "a MSO 2007 document");
+    SAL_INFO("oox", "a MSO 2007 document");
     mbMSO2007 = true;
+}
+
+void XmlFilterBase::putPropertiesToDocumentGrabBag(const css::uno::Reference<css::lang::XComponent>& xDstDoc,
+                                                   const comphelper::SequenceAsHashMap& rProperties)
+{
+    try
+    {
+        uno::Reference<beans::XPropertySet> xDocProps(xDstDoc, uno::UNO_QUERY);
+        if (xDocProps.is())
+        {
+            uno::Reference<beans::XPropertySetInfo> xPropsInfo = xDocProps->getPropertySetInfo();
+
+            static const OUString aGrabBagPropName = "InteropGrabBag";
+            if (xPropsInfo.is() && xPropsInfo->hasPropertyByName(aGrabBagPropName))
+            {
+                // get existing grab bag
+                comphelper::SequenceAsHashMap aGrabBag(xDocProps->getPropertyValue(aGrabBagPropName));
+
+                // put the new items
+                aGrabBag.update(rProperties);
+
+                // put it back to the document
+                xDocProps->setPropertyValue(aGrabBagPropName, uno::Any(aGrabBag.getAsConstPropertyValueList()));
+            }
+        }
+    }
+    catch (const uno::Exception&)
+    {
+        SAL_WARN("oox","Failed to save documents grab bag");
+    }
 }
 
 void XmlFilterBase::importDocumentProperties()
 {
-    Reference< XMultiServiceFactory > xFactory( getComponentContext()->getServiceManager(), UNO_QUERY );
     MediaDescriptor aMediaDesc( getMediaDescriptor() );
     Reference< XInputStream > xInputStream;
     Reference< XComponentContext > xContext = getComponentContext();
-    Reference< ::oox::core::FilterDetect > xDetector( new ::oox::core::FilterDetect( xContext ) );
+    rtl::Reference< ::oox::core::FilterDetect > xDetector( new ::oox::core::FilterDetect( xContext ) );
     xInputStream = xDetector->extractUnencryptedPackage( aMediaDesc );
     Reference< XComponent > xModel( getModel(), UNO_QUERY );
     Reference< XStorage > xDocumentStorage (
@@ -254,11 +289,13 @@ void XmlFilterBase::importDocumentProperties()
     Reference< XDocumentProperties > xDocProps = xPropSupplier->getDocumentProperties();
     xImporter->importProperties( xDocumentStorage, xDocProps );
     checkDocumentProperties(xDocProps);
+
+    importCustomFragments(xDocumentStorage);
 }
 
-FastParser* XmlFilterBase::createParser() const
+FastParser* XmlFilterBase::createParser()
 {
-    FastParser* pParser = new FastParser(getComponentContext());
+    FastParser* pParser = new FastParser;
     registerNamespaces(*pParser);
     return pParser;
 }
@@ -293,7 +330,7 @@ OUString XmlFilterBase::getFragmentPathFromFirstTypeFromOfficeDoc( const OUStrin
 
 bool XmlFilterBase::importFragment( const rtl::Reference<FragmentHandler>& rxHandler )
 {
-    FastParser aParser(mxImpl->mxContext);
+    FastParser aParser;
     registerNamespaces(aParser);
     return importFragment(rxHandler, aParser);
 }
@@ -305,13 +342,13 @@ bool XmlFilterBase::importFragment( const rtl::Reference<FragmentHandler>& rxHan
         return false;
 
     // fragment handler must contain path to fragment stream
-    OUString aFragmentPath = rxHandler->getFragmentPath();
+    const OUString aFragmentPath = rxHandler->getFragmentPath();
     OSL_ENSURE( !aFragmentPath.isEmpty(), "XmlFilterBase::importFragment - missing fragment path" );
     if( aFragmentPath.isEmpty() )
         return false;
 
     // try to import binary streams (fragment extension must be '.bin')
-    if( lclHasSuffix( aFragmentPath, mxImpl->maBinSuffix ) )
+    if (aFragmentPath.endsWith(gaBinSuffix))
     {
         try
         {
@@ -383,8 +420,7 @@ Reference<XDocument> XmlFilterBase::importFragment( const OUString& aFragmentPat
         return xRet;
 
     // binary streams (fragment extension is '.bin') currently not supported
-    sal_Int32 nBinSuffixPos = aFragmentPath.getLength() - mxImpl->maBinSuffix.getLength();
-    if( (nBinSuffixPos >= 0) && aFragmentPath.match( mxImpl->maBinSuffix, nBinSuffixPos ) )
+    if (aFragmentPath.endsWith(gaBinSuffix))
         return xRet;
 
     // try to import XML stream
@@ -448,9 +484,8 @@ Reference< XOutputStream > XmlFilterBase::openFragmentStream( const OUString& rS
 
 FSHelperPtr XmlFilterBase::openFragmentStreamWithSerializer( const OUString& rStreamName, const OUString& rMediaType )
 {
-    bool bWriteHeader
-        = rMediaType.indexOf( "vml" ) < 0 || rMediaType.indexOf( "+xml" ) >= 0;
-    return FSHelperPtr( new FastSerializerHelper( openFragmentStream( rStreamName, rMediaType ), bWriteHeader ) );
+    const bool bWriteHeader = rMediaType.indexOf( "vml" ) < 0 || rMediaType.indexOf( "+xml" ) >= 0;
+    return std::make_shared<FastSerializerHelper>( openFragmentStream( rStreamName, rMediaType ), bWriteHeader );
 }
 
 TextFieldStack& XmlFilterBase::getTextFieldStack() const
@@ -462,7 +497,7 @@ namespace {
 
 OUString lclAddRelation( const Reference< XRelationshipAccess >& rRelations, sal_Int32 nId, const OUString& rType, const OUString& rTarget, bool bExternal )
 {
-    OUString sId = OUStringBuffer().append( "rId" ).append( nId ).makeStringAndClear();
+    OUString sId = "rId" + OUString::number( nId );
 
     Sequence< StringPair > aEntry( bExternal ? 3 : 2 );
     aEntry[0].First = "Type";
@@ -474,7 +509,7 @@ OUString lclAddRelation( const Reference< XRelationshipAccess >& rRelations, sal
         aEntry[2].First = "TargetMode";
         aEntry[2].Second = "External";
     }
-    rRelations->insertRelationshipByID( sId, aEntry, sal_True );
+    rRelations->insertRelationshipByID( sId, aEntry, true );
 
     return sId;
 }
@@ -570,7 +605,7 @@ writeElement( const FSHelperPtr& pDoc, sal_Int32 nXmlElement, const LanguageTag&
     // and obsoleted by RFC 5646, see
     // http://dublincore.org/documents/dcmi-terms/#terms-language
     // http://dublincore.org/documents/dcmi-terms/#elements-language
-    writeElement( pDoc, nXmlElement, rLanguageTag.getBcp47() );
+    writeElement( pDoc, nXmlElement, rLanguageTag.getBcp47MS() );
 }
 
 static void
@@ -587,11 +622,11 @@ writeCoreProperties( XmlFilterBase& rSelf, const Reference< XDocumentProperties 
             "docProps/core.xml",
             "application/vnd.openxmlformats-package.core-properties+xml" );
     pCoreProps->startElementNS( XML_cp, XML_coreProperties,
-            FSNS( XML_xmlns, XML_cp ),          "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
-            FSNS( XML_xmlns, XML_dc ),          "http://purl.org/dc/elements/1.1/",
-            FSNS( XML_xmlns, XML_dcterms ),     "http://purl.org/dc/terms/",
-            FSNS( XML_xmlns, XML_dcmitype ),    "http://purl.org/dc/dcmitype/",
-            FSNS( XML_xmlns, XML_xsi ),         "http://www.w3.org/2001/XMLSchema-instance",
+            FSNS( XML_xmlns, XML_cp ),          OUStringToOString(rSelf.getNamespaceURL(OOX_NS(packageMetaCorePr)), RTL_TEXTENCODING_UTF8).getStr(),
+            FSNS( XML_xmlns, XML_dc ),          OUStringToOString(rSelf.getNamespaceURL(OOX_NS(dc)), RTL_TEXTENCODING_UTF8).getStr(),
+            FSNS( XML_xmlns, XML_dcterms ),     OUStringToOString(rSelf.getNamespaceURL(OOX_NS(dcTerms)), RTL_TEXTENCODING_UTF8).getStr(),
+            FSNS( XML_xmlns, XML_dcmitype ),    OUStringToOString(rSelf.getNamespaceURL(OOX_NS(dcmiType)), RTL_TEXTENCODING_UTF8).getStr(),
+            FSNS( XML_xmlns, XML_xsi ),         OUStringToOString(rSelf.getNamespaceURL(OOX_NS(xsi)), RTL_TEXTENCODING_UTF8).getStr(),
             FSEND );
 
 #ifdef OOXTODO
@@ -630,8 +665,8 @@ writeAppProperties( XmlFilterBase& rSelf, const Reference< XDocumentProperties >
             "docProps/app.xml",
             "application/vnd.openxmlformats-officedocument.extended-properties+xml" );
     pAppProps->startElement( XML_Properties,
-            XML_xmlns,                  "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
-            FSNS( XML_xmlns, XML_vt ),  "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
+            XML_xmlns,                  OUStringToOString(rSelf.getNamespaceURL(OOX_NS(officeExtPr)), RTL_TEXTENCODING_UTF8).getStr(),
+            FSNS( XML_xmlns, XML_vt ),  OUStringToOString(rSelf.getNamespaceURL(OOX_NS(officeDocPropsVT)), RTL_TEXTENCODING_UTF8).getStr(),
             FSEND );
 
     writeElement( pAppProps, XML_Template,              xProperties->getTemplateName() );
@@ -716,14 +751,25 @@ writeAppProperties( XmlFilterBase& rSelf, const Reference< XDocumentProperties >
 }
 
 static void
-writeCustomProperties( XmlFilterBase& rSelf, const Reference< XDocumentProperties >& xProperties )
+writeCustomProperties( XmlFilterBase& rSelf, const Reference< XDocumentProperties >& xProperties, bool bSecurityOptOpenReadOnly )
 {
     uno::Reference<beans::XPropertyAccess> xUserDefinedProperties( xProperties->getUserDefinedProperties(), uno::UNO_QUERY );
-    Sequence< PropertyValue > aprop( xUserDefinedProperties->getPropertyValues() );
-    sal_Int32 nbCustomProperties = aprop.getLength();
+    auto aprop = comphelper::sequenceToContainer< std::vector<beans::PropertyValue> >(xUserDefinedProperties->getPropertyValues());
+    sal_Int32 nbCustomProperties = aprop.size();
     // tdf#89791 : if no custom properties, no need to add docProps/custom.x
-    if (!nbCustomProperties)
+    // tdf#107690: except the case of read-only documents, because that
+    // is handled by the _MarkAsFinal custom property in MSO.
+    if (!nbCustomProperties && !bSecurityOptOpenReadOnly)
         return;
+
+    if (bSecurityOptOpenReadOnly)
+    {
+        PropertyValue aPropertyValue;
+        // MSO custom property for read-only documents
+        aPropertyValue.Name = "_MarkAsFinal";
+        aPropertyValue.Value <<= true;
+        aprop.push_back(aPropertyValue);
+    }
 
     rSelf.addRelation(
             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties",
@@ -732,35 +778,34 @@ writeCustomProperties( XmlFilterBase& rSelf, const Reference< XDocumentPropertie
             "docProps/custom.xml",
             "application/vnd.openxmlformats-officedocument.custom-properties+xml" );
     pAppProps->startElement( XML_Properties,
-            XML_xmlns,                  "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
-            FSNS( XML_xmlns, XML_vt ),  "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
+            XML_xmlns,                  OUStringToOString(rSelf.getNamespaceURL(OOX_NS(officeCustomPr)), RTL_TEXTENCODING_UTF8).getStr(),
+            FSNS( XML_xmlns, XML_vt ),  OUStringToOString(rSelf.getNamespaceURL(OOX_NS(officeDocPropsVT)), RTL_TEXTENCODING_UTF8).getStr(),
             FSEND );
 
-    for ( sal_Int32 n = 0; n < nbCustomProperties; ++n )
+    for (auto aIt = aprop.begin(); aIt != aprop.end(); ++aIt)
     {
-        if ( !aprop[n].Name.isEmpty() )
+        if ( !aIt->Name.isEmpty() )
         {
-            OString aName = OUStringToOString( aprop[n].Name, RTL_TEXTENCODING_ASCII_US );
+            OString aName = OUStringToOString( aIt->Name, RTL_TEXTENCODING_ASCII_US );
             // pid starts from 2 not from 1 as MS supports pid from 2
             pAppProps->startElement( XML_property ,
                 XML_fmtid,  "{D5CDD505-2E9C-101B-9397-08002B2CF9AE}",
-                XML_pid,    OString::number(n + 2),
+                XML_pid,    OString::number((aIt - aprop.begin()) + 2),
                 XML_name,   aName,
                 FSEND);
 
-            switch ( ( aprop[n].Value ).getValueTypeClass() )
+            switch ( aIt->Value.getValueTypeClass() )
             {
                 case TypeClass_STRING:
                 {
                     OUString aValue;
-                    aprop[n].Value >>= aValue;
-                     writeElement( pAppProps, FSNS( XML_vt, XML_lpwstr ), aValue );
+                    aIt->Value >>= aValue;
+                    writeElement( pAppProps, FSNS( XML_vt, XML_lpwstr ), aValue );
                 }
                 break;
                 case TypeClass_BOOLEAN:
                 {
-                    bool val ;
-                    val = *static_cast<sal_Bool const *>(( aprop[n].Value ).getValue());
+                    bool val = *o3tl::forceAccess<bool>(aIt->Value);
                     writeElement( pAppProps, FSNS( XML_vt, XML_bool ), val ? 1 : 0);
                 }
                 break;
@@ -770,23 +815,23 @@ writeCustomProperties( XmlFilterBase& rSelf, const Reference< XDocumentPropertie
                     util::Date aDate;
                     util::Duration aDuration;
                     util::DateTime aDateTime;
-                    if ( ( aprop[n].Value ) >>= num )
+                    if ( ( aIt->Value ) >>= num )
                     {
                         writeElement( pAppProps, FSNS( XML_vt, XML_i4 ), num );
                     }
-                    else if ( ( aprop[n].Value ) >>= aDate )
+                    else if ( ( aIt->Value ) >>= aDate )
                     {
                         aDateTime = util::DateTime( 0, 0 , 0, 0, aDate.Year, aDate.Month, aDate.Day, true );
                         writeElement( pAppProps, FSNS( XML_vt, XML_filetime ), aDateTime);
                     }
-                    else if ( ( aprop[n].Value ) >>= aDuration )
+                    else if ( ( aIt->Value ) >>= aDuration )
                     {
                         OUStringBuffer buf;
                         ::sax::Converter::convertDuration( buf, aDuration );
-                        OUString pDuration = buf.makeStringAndClear();
-                        writeElement( pAppProps, FSNS( XML_vt, XML_lpwstr ), pDuration );
+                        OUString aDurationStr = buf.makeStringAndClear();
+                        writeElement( pAppProps, FSNS( XML_vt, XML_lpwstr ), aDurationStr );
                     }
-                    else if ( ( aprop[n].Value ) >>= aDateTime )
+                    else if ( ( aIt->Value ) >>= aDateTime )
                             writeElement( pAppProps, FSNS( XML_vt, XML_filetime ), aDateTime );
                     else
                         //no other options
@@ -800,15 +845,14 @@ writeCustomProperties( XmlFilterBase& rSelf, const Reference< XDocumentPropertie
     pAppProps->endElement( XML_Properties );
 }
 
-XmlFilterBase& XmlFilterBase::exportDocumentProperties( const Reference< XDocumentProperties >& xProperties )
+void XmlFilterBase::exportDocumentProperties( const Reference< XDocumentProperties >& xProperties, bool bSecurityOptOpenReadOnly )
 {
     if( xProperties.is() )
     {
         writeCoreProperties( *this, xProperties );
         writeAppProperties( *this, xProperties );
-        writeCustomProperties( *this, xProperties );
+        writeCustomProperties( *this, xProperties, bSecurityOptOpenReadOnly );
     }
-    return *this;
 }
 
 // protected ------------------------------------------------------------------
@@ -818,7 +862,7 @@ Reference< XInputStream > XmlFilterBase::implGetInputStream( MediaDescriptor& rM
     /*  Get the input stream directly from the media descriptor, or decrypt the
         package again. The latter is needed e.g. when the document is reloaded.
         All this is implemented in the detector service. */
-    Reference< FilterDetect > xDetector( new FilterDetect( getComponentContext() ) );
+    rtl::Reference< FilterDetect > xDetector( new FilterDetect( getComponentContext() ) );
     return xDetector->extractUnencryptedPackage( rMediaDesc );
 }
 
@@ -903,6 +947,201 @@ StorageRef XmlFilterBase::implCreateStorage( const Reference< XStream >& rxOutSt
 bool XmlFilterBase::isMSO2007Document() const
 {
     return mbMSO2007;
+}
+
+void XmlFilterBase::setMissingExtDrawing()
+{
+    mbMissingExtDrawing = true;
+}
+
+OUString XmlFilterBase::getNamespaceURL(sal_Int32 nNSID) const
+{
+    auto itr = mxImpl->mrNamespaceMap.maTransitionalNamespaceMap.find(nNSID);
+    if (itr == mxImpl->mrNamespaceMap.maTransitionalNamespaceMap.end())
+    {
+        SAL_WARN("oox", "missing namespace in the namespace map for : " << nNSID);
+        return OUString();
+    }
+
+    return itr->second;
+}
+
+void XmlFilterBase::importCustomFragments(css::uno::Reference<css::embed::XStorage> const & xDocumentStorage)
+{
+    Reference<XRelationshipAccess> xRelations(xDocumentStorage, UNO_QUERY);
+    if (xRelations.is())
+    {
+        uno::Sequence<uno::Sequence<beans::StringPair>> aSeqs = xRelations->getAllRelationships();
+
+        std::vector<StreamDataSequence> aCustomFragments;
+        std::vector<OUString> aCustomFragmentTypes;
+        std::vector<OUString> aCustomFragmentTargets;
+        for (sal_Int32 j = 0; j < aSeqs.getLength(); j++)
+        {
+            OUString sType;
+            OUString sTarget;
+            const uno::Sequence<beans::StringPair>& aSeq = aSeqs[j];
+            for (sal_Int32 i = 0; i < aSeq.getLength(); i++)
+            {
+                const beans::StringPair& aPair = aSeq[i];
+                if (aPair.First == "Target")
+                    sTarget = aPair.Second;
+                else if (aPair.First == "Type")
+                    sType = aPair.Second;
+            }
+
+            // Preserve non-standard (i.e. custom) entries.
+            if (!sType.match("http://schemas.openxmlformats.org"))
+            {
+                StreamDataSequence aDataSeq;
+                if (importBinaryData(aDataSeq, sTarget))
+                {
+                    aCustomFragments.emplace_back(aDataSeq);
+                    aCustomFragmentTypes.emplace_back(sType);
+                    aCustomFragmentTargets.emplace_back(sTarget);
+                }
+            }
+        }
+
+        // Adding the saved custom xml DOM
+        comphelper::SequenceAsHashMap aGrabBagProperties;
+        aGrabBagProperties["OOXCustomFragments"] <<= comphelper::containerToSequence(aCustomFragments);
+        aGrabBagProperties["OOXCustomFragmentTypes"] <<= comphelper::containerToSequence(aCustomFragmentTypes);
+        aGrabBagProperties["OOXCustomFragmentTargets"] <<= comphelper::containerToSequence(aCustomFragmentTargets);
+
+        std::vector<uno::Reference<xml::dom::XDocument>> aCustomXmlDomList;
+        std::vector<uno::Reference<xml::dom::XDocument>> aCustomXmlDomPropsList;
+        //FIXME: Ideally, we should get these the relations, but it seems that is not consistently set.
+        // In some cases it's stored in the workbook relationships, which is unexpected. So we discover them directly.
+        for (int i = 1; ; ++i)
+        {
+            Reference<XDocument> xCustDoc = importFragment("customXml/item" + OUString::number(i) + ".xml");
+            Reference<XDocument> xCustDocProps = importFragment("customXml/itemProps" + OUString::number(i) + ".xml");
+            if (xCustDoc && xCustDocProps)
+            {
+                aCustomXmlDomList.emplace_back(xCustDoc);
+                aCustomXmlDomPropsList.emplace_back(xCustDocProps);
+            }
+            else
+                break;
+        }
+
+        // Adding the saved custom xml DOM
+        aGrabBagProperties["OOXCustomXml"] <<= comphelper::containerToSequence(aCustomXmlDomList);
+        aGrabBagProperties["OOXCustomXmlProps"] <<= comphelper::containerToSequence(aCustomXmlDomPropsList);
+
+        // Save the [Content_Types].xml after parsing.
+        uno::Sequence<uno::Sequence<beans::StringPair>> aContentTypeInfo;
+        uno::Reference<io::XInputStream> xInputStream = openInputStream("[Content_Types].xml");
+        if (xInputStream.is())
+            aContentTypeInfo = comphelper::OFOPXMLHelper::ReadContentTypeSequence(xInputStream, getComponentContext());
+
+        aGrabBagProperties["OOXContentTypes"] <<= aContentTypeInfo;
+
+        Reference<XComponent> xModel(getModel(), UNO_QUERY);
+        oox::core::XmlFilterBase::putPropertiesToDocumentGrabBag(xModel, aGrabBagProperties);
+    }
+}
+
+void XmlFilterBase::exportCustomFragments()
+{
+    Reference<XComponent> xModel(getModel(), UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xPropSet(xModel, uno::UNO_QUERY_THROW);
+
+    uno::Reference<beans::XPropertySetInfo> xPropSetInfo = xPropSet->getPropertySetInfo();
+    static const OUString aName = UNO_NAME_MISC_OBJ_INTEROPGRABBAG;
+    if (!xPropSetInfo->hasPropertyByName(aName))
+        return;
+
+    uno::Sequence<uno::Reference<xml::dom::XDocument>> customXmlDomlist;
+    uno::Sequence<uno::Reference<xml::dom::XDocument>> customXmlDomPropslist;
+    uno::Sequence<StreamDataSequence> customFragments;
+    uno::Sequence<OUString> customFragmentTypes;
+    uno::Sequence<OUString> customFragmentTargets;
+    uno::Sequence<uno::Sequence<beans::StringPair>> aContentTypes;
+
+    uno::Sequence<beans::PropertyValue> propList;
+    xPropSet->getPropertyValue(aName) >>= propList;
+    for (sal_Int32 nProp = 0; nProp < propList.getLength(); ++nProp)
+    {
+        const OUString propName = propList[nProp].Name;
+        if (propName == "OOXCustomXml")
+        {
+            propList[nProp].Value >>= customXmlDomlist;
+        }
+        else if (propName == "OOXCustomXmlProps")
+        {
+            propList[nProp].Value >>= customXmlDomPropslist;
+        }
+        else if (propName == "OOXCustomFragments")
+        {
+            propList[nProp].Value >>= customFragments;
+        }
+        else if (propName == "OOXCustomFragmentTypes")
+        {
+            propList[nProp].Value >>= customFragmentTypes;
+        }
+        else if (propName == "OOXCustomFragmentTargets")
+        {
+            propList[nProp].Value >>= customFragmentTargets;
+        }
+        else if (propName == "OOXContentTypes")
+        {
+            propList[nProp].Value >>= aContentTypes;
+        }
+    }
+
+    // Expect customXmlDomPropslist.getLength() == customXmlDomlist.getLength().
+    for (sal_Int32 j = 0; j < customXmlDomlist.getLength(); j++)
+    {
+        uno::Reference<xml::dom::XDocument> customXmlDom = customXmlDomlist[j];
+        uno::Reference<xml::dom::XDocument> customXmlDomProps = customXmlDomPropslist[j];
+        const OUString fragmentPath = "customXml/item" + OUString::number((j+1)) + ".xml";
+        if (customXmlDom.is())
+        {
+            addRelation(oox::getRelationship(Relationship::CUSTOMXML), "../" + fragmentPath);
+
+            uno::Reference<xml::sax::XSAXSerializable> serializer(customXmlDom, uno::UNO_QUERY);
+            uno::Reference<xml::sax::XWriter> writer = xml::sax::Writer::create(comphelper::getProcessComponentContext());
+            writer->setOutputStream(openFragmentStream(fragmentPath, "application/xml"));
+            serializer->serialize(uno::Reference<xml::sax::XDocumentHandler>(writer, uno::UNO_QUERY_THROW),
+                                  uno::Sequence<beans::StringPair>());
+        }
+
+        if (customXmlDomProps.is())
+        {
+            uno::Reference<xml::sax::XSAXSerializable> serializer(customXmlDomProps, uno::UNO_QUERY);
+            uno::Reference<xml::sax::XWriter> writer = xml::sax::Writer::create(comphelper::getProcessComponentContext());
+            writer->setOutputStream(openFragmentStream("customXml/itemProps"+OUString::number((j+1))+".xml",
+                                    "application/vnd.openxmlformats-officedocument.customXmlProperties+xml"));
+            serializer->serialize(uno::Reference<xml::sax::XDocumentHandler>(writer, uno::UNO_QUERY_THROW),
+                                  uno::Sequence<beans::StringPair>());
+
+            // Adding itemprops's relationship entry to item.xml.rels file
+            addRelation(openFragmentStream(fragmentPath, "application/xml"),
+                        oox::getRelationship(Relationship::CUSTOMXMLPROPS),
+                        "itemProps"+OUString::number((j+1))+".xml");
+        }
+    }
+
+    // Expect customFragments.getLength() == customFragmentTypes.getLength() == customFragmentTargets.getLength().
+    for (sal_Int32 j = 0; j < customFragments.getLength(); j++)
+    {
+        addRelation(customFragmentTypes[j], customFragmentTargets[j]);
+        const OUString aFilename = customFragmentTargets[j];
+        Reference<XOutputStream> xOutStream = openOutputStream(aFilename);
+        if (xOutStream.is())
+        {
+            xOutStream->writeBytes(customFragments[j]);
+            uno::Reference<XPropertySet> xProps(xOutStream, uno::UNO_QUERY);
+            if (xProps.is())
+            {
+                const OUString aType = comphelper::OFOPXMLHelper::GetContentTypeByName(aContentTypes, aFilename);
+                const OUString aContentType = (aType.getLength() ? aType : OUString("application/octet-stream"));
+                xProps->setPropertyValue("MediaType", uno::makeAny(aContentType));
+            }
+        }
+    }
 }
 
 } // namespace core

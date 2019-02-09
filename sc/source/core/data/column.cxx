@@ -17,46 +17,41 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "column.hxx"
-#include "scitems.hxx"
-#include "formulacell.hxx"
-#include "document.hxx"
-#include "docpool.hxx"
-#include "attarray.hxx"
-#include "patattr.hxx"
-#include "compiler.hxx"
-#include "brdcst.hxx"
-#include "markdata.hxx"
-#include "detfunc.hxx"
-#include "postit.hxx"
-#include "globalnames.hxx"
-#include "cellvalue.hxx"
-#include "tokenarray.hxx"
-#include "cellform.hxx"
-#include "clipcontext.hxx"
-#include "types.hxx"
-#include "editutil.hxx"
-#include "mtvcellfunc.hxx"
-#include "columnspanset.hxx"
-#include "scopetools.hxx"
-#include "sharedformula.hxx"
-#include "refupdatecontext.hxx"
+#include <column.hxx>
+#include <scitems.hxx>
+#include <formulacell.hxx>
+#include <document.hxx>
+#include <table.hxx>
+#include <docpool.hxx>
+#include <attarray.hxx>
+#include <patattr.hxx>
+#include <compiler.hxx>
+#include <brdcst.hxx>
+#include <markdata.hxx>
+#include <postit.hxx>
+#include <cellvalue.hxx>
+#include <tokenarray.hxx>
+#include <clipcontext.hxx>
+#include <types.hxx>
+#include <editutil.hxx>
+#include <mtvcellfunc.hxx>
+#include <columnspanset.hxx>
+#include <scopetools.hxx>
+#include <sharedformula.hxx>
+#include <refupdatecontext.hxx>
 #include <listenercontext.hxx>
-#include <refhint.hxx>
-#include <stlalgorithm.hxx>
 #include <formulagroup.hxx>
+#include <drwlayer.hxx>
 
 #include <svl/poolcach.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/sharedstringpool.hxx>
-#include <editeng/scripttypeitem.hxx>
 #include <editeng/fieldupdater.hxx>
+#include <formula/errorcodes.hxx>
 #include <osl/diagnose.h>
 
-#include <cstring>
 #include <map>
 #include <cstdio>
-#include <boost/checked_delete.hpp>
 #include <memory>
 
 using ::editeng::SvxBorderLine;
@@ -64,7 +59,7 @@ using namespace formula;
 
 namespace {
 
-inline bool IsAmbiguousScriptNonZero( SvtScriptType nScript )
+bool IsAmbiguousScriptNonZero( SvtScriptType nScript )
 {
     //TODO: move to a header file
     return ( nScript != SvtScriptType::LATIN &&
@@ -84,40 +79,41 @@ ScColumn::ScColumn() :
     maCellTextAttrs(MAXROWCOUNT),
     maCellNotes(MAXROWCOUNT),
     maBroadcasters(MAXROWCOUNT),
-    maCells(MAXROWCOUNT),
+    maCellsEvent(this),
+    maCells(maCellsEvent),
+    mnBlkCountFormula(0),
     nCol( 0 ),
-    nTab( 0 ),
-    pAttrArray( nullptr ),
-    pDocument( nullptr ),
-    mbDirtyGroups(true)
+    nTab( 0 )
 {
+    maCells.resize(MAXROWCOUNT);
 }
 
-ScColumn::~ScColumn()
+ScColumn::~ScColumn() COVERITY_NOEXCEPT_FALSE
 {
     FreeAll();
-    delete pAttrArray;
 }
 
-void ScColumn::Init(SCCOL nNewCol, SCTAB nNewTab, ScDocument* pDoc)
+void ScColumn::Init(SCCOL nNewCol, SCTAB nNewTab, ScDocument* pDoc, bool bEmptyAttrArray)
 {
     nCol = nNewCol;
     nTab = nNewTab;
-    pDocument = pDoc;
-    pAttrArray = new ScAttrArray( nCol, nTab, pDocument );
+    if ( bEmptyAttrArray )
+        pAttrArray.reset(new ScAttrArray( nCol, nTab, pDoc, nullptr ));
+    else
+        pAttrArray.reset(new ScAttrArray( nCol, nTab, pDoc, &pDoc->maTabs[nTab]->aDefaultColAttrArray ));
 }
 
-SCsROW ScColumn::GetNextUnprotected( SCROW nRow, bool bUp ) const
+SCROW ScColumn::GetNextUnprotected( SCROW nRow, bool bUp ) const
 {
     return pAttrArray->GetNextUnprotected(nRow, bUp);
 }
 
-sal_uInt16 ScColumn::GetBlockMatrixEdges( SCROW nRow1, SCROW nRow2, sal_uInt16 nMask ) const
+sc::MatrixEdge ScColumn::GetBlockMatrixEdges( SCROW nRow1, SCROW nRow2, sc::MatrixEdge nMask ) const
 {
     using namespace sc;
 
     if (!ValidRow(nRow1) || !ValidRow(nRow2) || nRow1 > nRow2)
-        return 0;
+        return MatrixEdge::Nothing;
 
     ScAddress aOrigin(ScAddress::INITIALIZE_INVALID);
 
@@ -125,17 +121,17 @@ sal_uInt16 ScColumn::GetBlockMatrixEdges( SCROW nRow1, SCROW nRow2, sal_uInt16 n
     {
         std::pair<sc::CellStoreType::const_iterator,size_t> aPos = maCells.position(nRow1);
         if (aPos.first->type != sc::element_type_formula)
-            return 0;
+            return MatrixEdge::Nothing;
 
         const ScFormulaCell* pCell = sc::formula_block::at(*aPos.first->data, aPos.second);
-        if (!pCell->GetMatrixFlag())
-            return 0;
+        if (pCell->GetMatrixFlag() == ScMatrixMode::NONE)
+            return MatrixEdge::Nothing;
 
         return pCell->GetMatrixEdge(aOrigin);
     }
 
     bool bOpen = false;
-    sal_uInt16 nEdges = 0;
+    MatrixEdge nEdges = MatrixEdge::Nothing;
 
     std::pair<sc::CellStoreType::const_iterator,size_t> aPos = maCells.position(nRow1);
     sc::CellStoreType::const_iterator it = aPos.first;
@@ -158,33 +154,31 @@ sal_uInt16 ScColumn::GetBlockMatrixEdges( SCROW nRow1, SCROW nRow2, sal_uInt16 n
         {
             // Loop inside the formula block.
             const ScFormulaCell* pCell = *itCell;
-            if (!pCell->GetMatrixFlag())
+            if (pCell->GetMatrixFlag() == ScMatrixMode::NONE)
                 continue;
 
             nEdges = pCell->GetMatrixEdge(aOrigin);
-            if (!nEdges)
+            if (nEdges == MatrixEdge::Nothing)
                 continue;
 
-            if (nEdges & MatrixEdgeTop)
+            if (nEdges & MatrixEdge::Top)
                 bOpen = true;       // top edge opens, keep on looking
             else if (!bOpen)
-                return nEdges | MatrixEdgeOpen; // there's something that wasn't opened
-            else if (nEdges & MatrixEdgeInside)
+                return nEdges | MatrixEdge::Open; // there's something that wasn't opened
+            else if (nEdges & MatrixEdge::Inside)
                 return nEdges;      // inside
-            // (nMask & 16 and  (4 and not 16)) or
-            // (nMask & 4  and (16 and not 4))
-            if (((nMask & MatrixEdgeRight) && (nEdges & MatrixEdgeLeft)  && !(nEdges & MatrixEdgeRight)) ||
-                ((nMask & MatrixEdgeLeft)  && (nEdges & MatrixEdgeRight) && !(nEdges & MatrixEdgeLeft)))
+            if (((nMask & MatrixEdge::Right) && (nEdges & MatrixEdge::Left)  && !(nEdges & MatrixEdge::Right)) ||
+                ((nMask & MatrixEdge::Left)  && (nEdges & MatrixEdge::Right) && !(nEdges & MatrixEdge::Left)))
                 return nEdges;      // only left/right edge
 
-            if (nEdges & MatrixEdgeBottom)
+            if (nEdges & MatrixEdge::Bottom)
                 bOpen = false;      // bottom edge closes
         }
 
-        nRow += nEnd;
+        nRow += nEnd - nOffset;
     }
     if (bOpen)
-        nEdges |= MatrixEdgeOpen; // not closed, matrix continues
+        nEdges |= MatrixEdge::Open; // not closed, matrix continues
 
     return nEdges;
 }
@@ -203,7 +197,7 @@ bool ScColumn::HasSelectionMatrixFragment(const ScMarkData& rMark) const
     ScRangeList aRanges = rMark.GetMarkedRanges();
     for (size_t i = 0, n = aRanges.size(); i < n; ++i)
     {
-        const ScRange& r = *aRanges[i];
+        const ScRange& r = aRanges[i];
         if (nTab < r.aStart.Tab() || r.aEnd.Tab() < nTab)
             continue;
 
@@ -234,28 +228,28 @@ bool ScColumn::HasSelectionMatrixFragment(const ScMarkData& rMark) const
             {
                 // Loop inside the formula block.
                 const ScFormulaCell* pCell = *itCell;
-                if (!pCell->GetMatrixFlag())
+                if (pCell->GetMatrixFlag() == ScMatrixMode::NONE)
                     // cell is not a part of a matrix.
                     continue;
 
-                sal_uInt16 nEdges = pCell->GetMatrixEdge(aOrigin);
-                if (!nEdges)
+                MatrixEdge nEdges = pCell->GetMatrixEdge(aOrigin);
+                if (nEdges == MatrixEdge::Nothing)
                     continue;
 
                 bool bFound = false;
 
-                if (nEdges & MatrixEdgeTop)
+                if (nEdges & MatrixEdge::Top)
                     bOpen = true;   // top edge opens, keep on looking
                 else if (!bOpen)
                     return true;    // there's something that wasn't opened
-                else if (nEdges & MatrixEdgeInside)
+                else if (nEdges & MatrixEdge::Inside)
                     bFound = true;  // inside, all selected?
 
-                if ((((nEdges & MatrixEdgeLeft) | MatrixEdgeRight) ^ ((nEdges & MatrixEdgeRight) | MatrixEdgeLeft)))
+                if (((nEdges & MatrixEdge::Left) | MatrixEdge::Right) ^ ((nEdges & MatrixEdge::Right) | MatrixEdge::Left))
                     // either left or right, but not both.
                     bFound = true;  // only left/right edge, all selected?
 
-                if (nEdges & MatrixEdgeBottom)
+                if (nEdges & MatrixEdge::Bottom)
                     bOpen = false;  // bottom edge closes
 
                 if (bFound)
@@ -270,8 +264,8 @@ bool ScColumn::HasSelectionMatrixFragment(const ScMarkData& rMark) const
                     {   // new matrix to check?
                         aCurOrigin = aOrigin;
                         const ScFormulaCell* pFCell;
-                        if (pCell->GetMatrixFlag() == MM_REFERENCE)
-                            pFCell = pDocument->GetFormulaCell(aOrigin);
+                        if (pCell->GetMatrixFlag() == ScMatrixMode::Reference)
+                            pFCell = GetDoc()->GetFormulaCell(aOrigin);
                         else
                             pFCell = pCell;
 
@@ -294,18 +288,15 @@ bool ScColumn::HasSelectionMatrixFragment(const ScMarkData& rMark) const
         }
     }
 
-    if (bOpen)
-        return true;
-
-    return false;
+    return bOpen;
 }
 
-bool ScColumn::HasAttrib( SCROW nRow1, SCROW nRow2, sal_uInt16 nMask ) const
+bool ScColumn::HasAttrib( SCROW nRow1, SCROW nRow2, HasAttrFlags nMask ) const
 {
     return pAttrArray->HasAttrib( nRow1, nRow2, nMask );
 }
 
-bool ScColumn::HasAttribSelection( const ScMarkData& rMark, sal_uInt16 nMask ) const
+bool ScColumn::HasAttribSelection( const ScMarkData& rMark, HasAttrFlags nMask ) const
 {
     bool bFound = false;
 
@@ -361,10 +352,10 @@ void ScColumn::MergeBlockFrame( SvxBoxItem* pLineOuter, SvxBoxInfoItem* pLineInn
     pAttrArray->MergeBlockFrame( pLineOuter, pLineInner, rFlags, nStartRow, nEndRow, bLeft, nDistRight );
 }
 
-void ScColumn::ApplyBlockFrame( const SvxBoxItem* pLineOuter, const SvxBoxInfoItem* pLineInner,
-                            SCROW nStartRow, SCROW nEndRow, bool bLeft, SCCOL nDistRight )
+void ScColumn::ApplyBlockFrame(const SvxBoxItem& rLineOuter, const SvxBoxInfoItem* pLineInner,
+                               SCROW nStartRow, SCROW nEndRow, bool bLeft, SCCOL nDistRight)
 {
-    pAttrArray->ApplyBlockFrame( pLineOuter, pLineInner, nStartRow, nEndRow, bLeft, nDistRight );
+    pAttrArray->ApplyBlockFrame(rLineOuter, pLineInner, nStartRow, nEndRow, bLeft, nDistRight);
 }
 
 const ScPatternAttr* ScColumn::GetPattern( SCROW nRow ) const
@@ -383,7 +374,7 @@ const ScPatternAttr* ScColumn::GetMostUsedPattern( SCROW nStartRow, SCROW nEndRo
     const ScPatternAttr* pMaxPattern = nullptr;
     size_t nMaxCount = 0;
 
-    ScAttrIterator aAttrIter( pAttrArray, nStartRow, nEndRow );
+    ScAttrIterator aAttrIter( pAttrArray.get(), nStartRow, nEndRow, GetDoc()->GetDefPattern() );
     const ScPatternAttr* pPattern;
     SCROW nAttrRow1 = 0, nAttrRow2 = 0;
 
@@ -403,6 +394,7 @@ const ScPatternAttr* ScColumn::GetMostUsedPattern( SCROW nStartRow, SCROW nEndRo
 
 sal_uInt32 ScColumn::GetNumberFormat( SCROW nStartRow, SCROW nEndRow ) const
 {
+    ScDocument* pDocument = GetDoc();
     SCROW nPatStartRow, nPatEndRow;
     const ScPatternAttr* pPattern = pAttrArray->GetPatternRange(nPatStartRow, nPatEndRow, nStartRow);
     sal_uInt32 nFormat = pPattern->GetNumberFormat(pDocument->GetFormatTable());
@@ -417,12 +409,12 @@ sal_uInt32 ScColumn::GetNumberFormat( SCROW nStartRow, SCROW nEndRow ) const
     return nFormat;
 }
 
-sal_uInt32 ScColumn::GetNumberFormat( SCROW nRow ) const
+sal_uInt32 ScColumn::GetNumberFormat( const ScInterpreterContext& rContext, SCROW nRow ) const
 {
-    return pAttrArray->GetPattern( nRow )->GetNumberFormat( pDocument->GetFormatTable() );
+    return pAttrArray->GetPattern( nRow )->GetNumberFormat( rContext.GetFormatTable() );
 }
 
-SCsROW ScColumn::ApplySelectionCache( SfxItemPoolCache* pCache, const ScMarkData& rMark, ScEditDataArray* pDataArray )
+SCROW ScColumn::ApplySelectionCache( SfxItemPoolCache* pCache, const ScMarkData& rMark, ScEditDataArray* pDataArray, bool* const pIsChanged )
 {
     SCROW nTop = 0;
     SCROW nBottom = 0;
@@ -433,7 +425,7 @@ SCsROW ScColumn::ApplySelectionCache( SfxItemPoolCache* pCache, const ScMarkData
         ScMultiSelIter aMultiIter( rMark.GetMultiSelData(), nCol );
         while (aMultiIter.Next( nTop, nBottom ))
         {
-            pAttrArray->ApplyCacheArea( nTop, nBottom, pCache, pDataArray );
+            pAttrArray->ApplyCacheArea( nTop, nBottom, pCache, pDataArray, pIsChanged );
             bFound = true;
         }
     }
@@ -464,11 +456,23 @@ void ScColumn::ClearSelectionItems( const sal_uInt16* pWhich,const ScMarkData& r
     SCROW nTop;
     SCROW nBottom;
 
-    if ( pAttrArray && rMark.IsMultiMarked() )
+    if (pAttrArray)
     {
-        ScMultiSelIter aMultiIter( rMark.GetMultiSelData(), nCol );
-        while (aMultiIter.Next( nTop, nBottom ))
-            pAttrArray->ClearItems(nTop, nBottom, pWhich);
+        if (rMark.IsMultiMarked() )
+        {
+            ScMultiSelIter aMultiIter( rMark.GetMultiSelData(), nCol );
+            while (aMultiIter.Next( nTop, nBottom ))
+                pAttrArray->ClearItems(nTop, nBottom, pWhich);
+        }
+        else if (rMark.IsMarked())
+        {
+            ScRange aRange;
+            rMark.GetMarkArea(aRange);
+            if (aRange.aStart.Col() <= nCol && nCol <= aRange.aEnd.Col())
+            {
+                pAttrArray->ClearItems(aRange.aStart.Row(), aRange.aEnd.Row(), pWhich);
+            }
+        }
     }
 }
 
@@ -488,34 +492,32 @@ void ScColumn::DeleteSelection( InsertDeleteFlags nDelFlag, const ScMarkData& rM
 void ScColumn::ApplyPattern( SCROW nRow, const ScPatternAttr& rPatAttr )
 {
     const SfxItemSet* pSet = &rPatAttr.GetItemSet();
-    SfxItemPoolCache aCache( pDocument->GetPool(), pSet );
+    SfxItemPoolCache aCache( GetDoc()->GetPool(), pSet );
 
     const ScPatternAttr* pPattern = pAttrArray->GetPattern( nRow );
 
     //  true = keep old content
 
     const ScPatternAttr* pNewPattern = static_cast<const ScPatternAttr*>( &aCache.ApplyTo( *pPattern ) );
-    ScDocumentPool::CheckRef( *pPattern );
-    ScDocumentPool::CheckRef( *pNewPattern );
 
     if (pNewPattern != pPattern)
       pAttrArray->SetPattern( nRow, pNewPattern );
 }
 
 void ScColumn::ApplyPatternArea( SCROW nStartRow, SCROW nEndRow, const ScPatternAttr& rPatAttr,
-                                 ScEditDataArray* pDataArray )
+                                 ScEditDataArray* pDataArray, bool* const pIsChanged )
 {
     const SfxItemSet* pSet = &rPatAttr.GetItemSet();
-    SfxItemPoolCache aCache( pDocument->GetPool(), pSet );
-    pAttrArray->ApplyCacheArea( nStartRow, nEndRow, &aCache, pDataArray );
+    SfxItemPoolCache aCache( GetDoc()->GetPool(), pSet );
+    pAttrArray->ApplyCacheArea( nStartRow, nEndRow, &aCache, pDataArray, pIsChanged );
 }
 
 void ScColumn::ApplyPatternIfNumberformatIncompatible( const ScRange& rRange,
-        const ScPatternAttr& rPattern, short nNewType )
+        const ScPatternAttr& rPattern, SvNumFormatType nNewType )
 {
     const SfxItemSet* pSet = &rPattern.GetItemSet();
-    SfxItemPoolCache aCache( pDocument->GetPool(), pSet );
-    SvNumberFormatter* pFormatter = pDocument->GetFormatTable();
+    SfxItemPoolCache aCache( GetDoc()->GetPool(), pSet );
+    SvNumberFormatter* pFormatter = GetDoc()->GetFormatTable();
     SCROW nEndRow = rRange.aEnd.Row();
     for ( SCROW nRow = rRange.aStart.Row(); nRow <= nEndRow; nRow++ )
     {
@@ -523,8 +525,8 @@ void ScColumn::ApplyPatternIfNumberformatIncompatible( const ScRange& rRange,
         const ScPatternAttr* pPattern = pAttrArray->GetPatternRange(
             nRow1, nRow2, nRow );
         sal_uInt32 nFormat = pPattern->GetNumberFormat( pFormatter );
-        short nOldType = pFormatter->GetType( nFormat );
-        if ( nOldType == nNewType || pFormatter->IsCompatible( nOldType, nNewType ) )
+        SvNumFormatType nOldType = pFormatter->GetType( nFormat );
+        if ( nOldType == nNewType || SvNumberFormatter::IsCompatible( nOldType, nNewType ) )
             nRow = nRow2;
         else
         {
@@ -546,20 +548,17 @@ void ScColumn::RemoveCondFormat( SCROW nStartRow, SCROW nEndRow, sal_uInt32 nInd
     pAttrArray->RemoveCondFormat( nStartRow, nEndRow, nIndex );
 }
 
-void ScColumn::ApplyStyle( SCROW nRow, const ScStyleSheet& rStyle )
+void ScColumn::ApplyStyle( SCROW nRow, const ScStyleSheet* rStyle )
 {
     const ScPatternAttr* pPattern = pAttrArray->GetPattern(nRow);
     std::unique_ptr<ScPatternAttr> pNewPattern(new ScPatternAttr(*pPattern));
-    if (pNewPattern)
-    {
-        pNewPattern->SetStyleSheet(const_cast<ScStyleSheet*>(&rStyle));
-        pAttrArray->SetPattern(nRow, pNewPattern.get(), true);
-    }
+    pNewPattern->SetStyleSheet(const_cast<ScStyleSheet*>(rStyle));
+    pAttrArray->SetPattern(nRow, pNewPattern.get(), true);
 }
 
 void ScColumn::ApplyStyleArea( SCROW nStartRow, SCROW nEndRow, const ScStyleSheet& rStyle )
 {
-    pAttrArray->ApplyStyleArea(nStartRow, nEndRow, const_cast<ScStyleSheet*>(&rStyle));
+    pAttrArray->ApplyStyleArea(nStartRow, nEndRow, rStyle);
 }
 
 void ScColumn::ApplySelectionStyle(const ScStyleSheet& rStyle, const ScMarkData& rMark)
@@ -571,7 +570,7 @@ void ScColumn::ApplySelectionStyle(const ScStyleSheet& rStyle, const ScMarkData&
     {
         ScMultiSelIter aMultiIter( rMark.GetMultiSelData(), nCol );
         while (aMultiIter.Next( nTop, nBottom ))
-            pAttrArray->ApplyStyleArea(nTop, nBottom, const_cast<ScStyleSheet*>(&rStyle));
+            pAttrArray->ApplyStyleArea(nTop, nBottom, rStyle);
     }
 }
 
@@ -611,12 +610,13 @@ const ScStyleSheet* ScColumn::GetSelectionStyle( const ScMarkData& rMark, bool& 
     const ScStyleSheet* pStyle = nullptr;
     const ScStyleSheet* pNewStyle;
 
+    ScDocument* pDocument = GetDoc();
     ScMultiSelIter aMultiIter( rMark.GetMultiSelData(), nCol );
     SCROW nTop;
     SCROW nBottom;
     while (bEqual && aMultiIter.Next( nTop, nBottom ))
     {
-        ScAttrIterator aAttrIter( pAttrArray, nTop, nBottom );
+        ScAttrIterator aAttrIter( pAttrArray.get(), nTop, nBottom, pDocument->GetDefPattern() );
         SCROW nRow;
         SCROW nDummy;
         const ScPatternAttr* pPattern;
@@ -642,7 +642,7 @@ const ScStyleSheet* ScColumn::GetAreaStyle( bool& rFound, SCROW nRow1, SCROW nRo
     const ScStyleSheet* pStyle = nullptr;
     const ScStyleSheet* pNewStyle;
 
-    ScAttrIterator aAttrIter( pAttrArray, nRow1, nRow2 );
+    ScAttrIterator aAttrIter( pAttrArray.get(), nRow1, nRow2, GetDoc()->GetDefPattern() );
     SCROW nRow;
     SCROW nDummy;
     const ScPatternAttr* pPattern;
@@ -665,15 +665,15 @@ void ScColumn::FindStyleSheet( const SfxStyleSheetBase* pStyleSheet, ScFlatBoolR
 
 bool ScColumn::IsStyleSheetUsed( const ScStyleSheet& rStyle ) const
 {
-    return pAttrArray->IsStyleSheetUsed( rStyle, true/*bGatherAllStyles*/ );
+    return pAttrArray->IsStyleSheetUsed( rStyle );
 }
 
-bool ScColumn::ApplyFlags( SCROW nStartRow, SCROW nEndRow, sal_Int16 nFlags )
+bool ScColumn::ApplyFlags( SCROW nStartRow, SCROW nEndRow, ScMF nFlags )
 {
     return pAttrArray->ApplyFlags( nStartRow, nEndRow, nFlags );
 }
 
-bool ScColumn::RemoveFlags( SCROW nStartRow, SCROW nEndRow, sal_Int16 nFlags )
+bool ScColumn::RemoveFlags( SCROW nStartRow, SCROW nEndRow, ScMF nFlags )
 {
     return pAttrArray->RemoveFlags( nStartRow, nEndRow, nFlags );
 }
@@ -697,9 +697,9 @@ void ScColumn::SetPatternArea( SCROW nStartRow, SCROW nEndRow,
 void ScColumn::ApplyAttr( SCROW nRow, const SfxPoolItem& rAttr )
 {
     //  in order to only create a new SetItem, we don't need SfxItemPoolCache.
-    //TODO: Warning: SfxItemPoolCache seems to create to many Refs for the new SetItem ??
+    //TODO: Warning: SfxItemPoolCache seems to create too many Refs for the new SetItem ??
 
-    ScDocumentPool* pDocPool = pDocument->GetPool();
+    ScDocumentPool* pDocPool = GetDoc()->GetPool();
 
     const ScPatternAttr* pOldPattern = pAttrArray->GetPattern( nRow );
     std::unique_ptr<ScPatternAttr> pTemp(new ScPatternAttr(*pOldPattern));
@@ -786,7 +786,7 @@ const sc::CellTextAttr* ScColumn::GetCellTextAttr( sc::ColumnBlockConstPosition&
 
 bool ScColumn::TestInsertCol( SCROW nStartRow, SCROW nEndRow) const
 {
-    if (IsEmpty())
+    if (IsEmptyData() && IsEmptyAttr())
         return true;
 
     // Return false if we have any non-empty cells between nStartRow and nEndRow inclusive.
@@ -866,7 +866,6 @@ class CopyToClipHandler
     ScColumn& mrDestCol;
     sc::ColumnBlockPosition maDestPos;
     sc::ColumnBlockPosition* mpDestPos;
-    bool mbCopyNotes;
 
     void setDefaultAttrsToDest(size_t nRow, size_t nSize)
     {
@@ -875,14 +874,9 @@ class CopyToClipHandler
             maDestPos.miCellTextAttrPos, nRow, aAttrs.begin(), aAttrs.end());
     }
 
-    void duplicateNotes(SCROW nStartRow, size_t nDataSize )
-    {
-        mrSrcCol.DuplicateNotes(nStartRow, nDataSize, mrDestCol, maDestPos, false);
-    }
-
 public:
-    CopyToClipHandler(const ScColumn& rSrcCol, ScColumn& rDestCol, sc::ColumnBlockPosition* pDestPos, bool bCopyNotes) :
-        mrSrcCol(rSrcCol), mrDestCol(rDestCol), mpDestPos(pDestPos), mbCopyNotes(bCopyNotes)
+    CopyToClipHandler(const ScColumn& rSrcCol, ScColumn& rDestCol, sc::ColumnBlockPosition* pDestPos) :
+        mrSrcCol(rSrcCol), mrDestCol(rDestCol), mpDestPos(pDestPos)
     {
         if (mpDestPos)
             maDestPos = *mpDestPos;
@@ -933,7 +927,7 @@ public:
                 std::vector<EditTextObject*> aCloned;
                 aCloned.reserve(nDataSize);
                 for (; it != itEnd; ++it)
-                    aCloned.push_back(ScEditUtil::Clone(**it, mrDestCol.GetDoc()));
+                    aCloned.push_back(ScEditUtil::Clone(**it, *mrDestCol.GetDoc()).release());
 
                 maDestPos.miCellPos = mrDestCol.GetCellStore().set(
                     maDestPos.miCellPos, nTopRow, aCloned.begin(), aCloned.end());
@@ -952,10 +946,10 @@ public:
                 for (; it != itEnd; ++it, aDestPos.IncRow())
                 {
                     const ScFormulaCell& rOld = **it;
-                    if (rOld.GetDirty() && mrSrcCol.GetDoc().GetAutoCalc())
+                    if (rOld.GetDirty() && mrSrcCol.GetDoc()->GetAutoCalc())
                         const_cast<ScFormulaCell&>(rOld).Interpret();
 
-                    aCloned.push_back(new ScFormulaCell(rOld, mrDestCol.GetDoc(), aDestPos));
+                    aCloned.push_back(new ScFormulaCell(rOld, *mrDestCol.GetDoc(), aDestPos));
                 }
 
                 // Group the cloned formula cells.
@@ -986,8 +980,7 @@ public:
         if (bSet)
             setDefaultAttrsToDest(nTopRow, nDataSize);
 
-        if (mbCopyNotes)
-            duplicateNotes(nTopRow, nDataSize);
+        mrSrcCol.DuplicateNotes(nTopRow, nDataSize, mrDestCol, maDestPos, false);
     }
 };
 
@@ -1022,10 +1015,10 @@ void ScColumn::CopyToClip(
     sc::CopyToClipContext& rCxt, SCROW nRow1, SCROW nRow2, ScColumn& rColumn ) const
 {
     pAttrArray->CopyArea( nRow1, nRow2, 0, *rColumn.pAttrArray,
-                          rCxt.isKeepScenarioFlags() ? (SC_MF_ALL & ~SC_MF_SCENARIO) : SC_MF_ALL );
+                          rCxt.isKeepScenarioFlags() ? (ScMF::All & ~ScMF::Scenario) : ScMF::All );
 
     {
-        CopyToClipHandler aFunc(*this, rColumn, rCxt.getBlockPosition(rColumn.nTab, rColumn.nCol), rCxt.isCloneNotes());
+        CopyToClipHandler aFunc(*this, rColumn, rCxt.getBlockPosition(rColumn.nTab, rColumn.nCol));
         sc::ParseBlock(maCells.begin(), maCells, aFunc, nRow1, nRow2);
     }
 
@@ -1052,6 +1045,7 @@ void ScColumn::CopyStaticToDocument(
 
     aDestPos.miCellPos = rDestCol.maCells.begin();
 
+    ScDocument* pDocument = GetDoc();
     std::pair<sc::CellStoreType::const_iterator,size_t> aPos = maCells.position(nRow1);
     sc::CellStoreType::const_iterator it = aPos.first;
     size_t nOffset = aPos.second;
@@ -1120,11 +1114,11 @@ void ScColumn::CopyStaticToDocument(
                 {
                     SCROW nRow = nCurRow + i;
 
-                    ScFormulaCell& rFC = const_cast<ScFormulaCell&>(**itData);
+                    ScFormulaCell& rFC = **itData;
                     if (rFC.GetDirty() && pDocument->GetAutoCalc())
                         rFC.Interpret();
 
-                    if (rFC.GetErrCode())
+                    if (rFC.GetErrCode() != FormulaError::NONE)
                         // Skip cells with error.
                         break;
 
@@ -1147,10 +1141,10 @@ void ScColumn::CopyStaticToDocument(
             break;
     }
 
-    // Dont' forget to copy the number formats over.  Charts may reference them.
+    // Don't forget to copy the number formats over. Charts may reference them.
     for (SCROW nRow = nRow1; nRow <= nRow2; ++nRow)
     {
-        sal_uInt32 nNumFmt = GetNumberFormat(nRow);
+        sal_uInt32 nNumFmt = GetNumberFormat(pDocument->GetNonThreadedContext(), nRow);
         SvNumberFormatterMergeMap::const_iterator itNum = rMap.find(nNumFmt);
         if (itNum != rMap.end())
             nNumFmt = itNum->second;
@@ -1163,6 +1157,7 @@ void ScColumn::CopyStaticToDocument(
 
 void ScColumn::CopyCellToDocument( SCROW nSrcRow, SCROW nDestRow, ScColumn& rDestCol )
 {
+    ScDocument* pDocument = GetDoc();
     std::pair<sc::CellStoreType::const_iterator,size_t> aPos = maCells.position(nSrcRow);
     sc::CellStoreType::const_iterator it = aPos.first;
     bool bSet = true;
@@ -1177,10 +1172,10 @@ void ScColumn::CopyCellToDocument( SCROW nSrcRow, SCROW nDestRow, ScColumn& rDes
         case sc::element_type_edittext:
         {
             EditTextObject* p = sc::edittext_block::at(*it->data, aPos.second);
-            if (pDocument == rDestCol.pDocument)
-                rDestCol.maCells.set(nDestRow, p->Clone());
+            if (pDocument == rDestCol.GetDoc())
+                rDestCol.maCells.set(nDestRow, p->Clone().release());
             else
-                rDestCol.maCells.set(nDestRow, ScEditUtil::Clone(*p, *rDestCol.pDocument));
+                rDestCol.maCells.set(nDestRow, ScEditUtil::Clone(*p, *rDestCol.GetDoc()).release());
         }
         break;
         case sc::element_type_formula:
@@ -1191,7 +1186,7 @@ void ScColumn::CopyCellToDocument( SCROW nSrcRow, SCROW nDestRow, ScColumn& rDes
 
             ScAddress aDestPos = p->aPos;
             aDestPos.SetRow(nDestRow);
-            ScFormulaCell* pNew = new ScFormulaCell(*p, *rDestCol.pDocument, aDestPos);
+            ScFormulaCell* pNew = new ScFormulaCell(*p, *rDestCol.GetDoc(), aDestPos);
             rDestCol.SetFormulaCell(nDestRow, pNew);
         }
         break;
@@ -1206,9 +1201,17 @@ void ScColumn::CopyCellToDocument( SCROW nSrcRow, SCROW nDestRow, ScColumn& rDes
     {
         rDestCol.maCellTextAttrs.set(nDestRow, maCellTextAttrs.get<sc::CellTextAttr>(nSrcRow));
         ScPostIt* pNote = maCellNotes.get<ScPostIt*>(nSrcRow);
-        rDestCol.maCellNotes.set(nDestRow, pNote);
         if (pNote)
+        {
+            pNote = pNote->Clone(ScAddress(nCol, nSrcRow, nTab),
+                                 *rDestCol.GetDoc(),
+                                 ScAddress(rDestCol.nCol, nDestRow, rDestCol.nTab),
+                                 false).release();
+            rDestCol.maCellNotes.set(nDestRow, pNote);
             pNote->UpdateCaptionPos(ScAddress(rDestCol.nCol, nDestRow, rDestCol.nTab));
+        }
+        else
+            rDestCol.maCellNotes.set_empty(nDestRow, nDestRow);
     }
     else
     {
@@ -1223,9 +1226,9 @@ namespace {
 
 bool canCopyValue(const ScDocument& rDoc, const ScAddress& rPos, InsertDeleteFlags nFlags)
 {
-    sal_uInt32 nNumIndex = static_cast<const SfxUInt32Item*>(rDoc.GetAttr(rPos, ATTR_VALUE_FORMAT))->GetValue();
-    short nType = rDoc.GetFormatTable()->GetType(nNumIndex);
-    if ((nType == css::util::NumberFormat::DATE) || (nType == css::util::NumberFormat::TIME) || (nType == css::util::NumberFormat::DATETIME))
+    sal_uInt32 nNumIndex = rDoc.GetAttr(rPos, ATTR_VALUE_FORMAT)->GetValue();
+    SvNumFormatType nType = rDoc.GetFormatTable()->GetType(nNumIndex);
+    if ((nType == SvNumFormatType::DATE) || (nType == SvNumFormatType::TIME) || (nType == SvNumFormatType::DATETIME))
         return ((nFlags & InsertDeleteFlags::DATETIME) != InsertDeleteFlags::NONE);
 
     return (nFlags & InsertDeleteFlags::VALUE) != InsertDeleteFlags::NONE;
@@ -1237,7 +1240,7 @@ class CopyAsLinkHandler
     ScColumn& mrDestCol;
     sc::ColumnBlockPosition maDestPos;
     sc::ColumnBlockPosition* mpDestPos;
-    InsertDeleteFlags mnCopyFlags;
+    InsertDeleteFlags const mnCopyFlags;
 
     sc::StartListeningType meListenType;
 
@@ -1262,7 +1265,7 @@ class CopyAsLinkHandler
 
         ScTokenArray aArr;
         aArr.AddSingleReference(aRef);
-        return new ScFormulaCell(&mrDestCol.GetDoc(), ScAddress(mrDestCol.GetCol(), nRow, mrDestCol.GetTab()), aArr);
+        return new ScFormulaCell(mrDestCol.GetDoc(), ScAddress(mrDestCol.GetCol(), nRow, mrDestCol.GetTab()), aArr);
     }
 
     void createRefBlock(const sc::CellStoreType::value_type& aNode, size_t nOffset, size_t nDataSize)
@@ -1276,11 +1279,6 @@ class CopyAsLinkHandler
         }
 
         setDefaultAttrsToDest(nTopRow, nDataSize);
-    }
-
-    void duplicateNotes(SCROW nStartRow, size_t nDataSize, bool bCloneCaption )
-    {
-        mrSrcCol.DuplicateNotes(nStartRow, nDataSize, mrDestCol, maDestPos, bCloneCaption);
     }
 
 public:
@@ -1298,7 +1296,16 @@ public:
     ~CopyAsLinkHandler()
     {
         if (mpDestPos)
+        {
+            // Similar to CopyByCloneHandler, don't copy a singular iterator.
+            {
+                sc::ColumnBlockPosition aTempBlock;
+                mrDestCol.InitBlockPosition(aTempBlock);
+                maDestPos.miBroadcasterPos = aTempBlock.miBroadcasterPos;
+            }
+
             *mpDestPos = maDestPos;
+        }
     }
 
     void setStartListening( bool b )
@@ -1313,7 +1320,7 @@ public:
         if (mnCopyFlags & (InsertDeleteFlags::NOTE|InsertDeleteFlags::ADDNOTES))
         {
             bool bCloneCaption = (mnCopyFlags & InsertDeleteFlags::NOCAPTIONS) == InsertDeleteFlags::NONE;
-            duplicateNotes(nRow, nDataSize, bCloneCaption );
+            mrSrcCol.DuplicateNotes(nRow, nDataSize, mrDestCol, maDestPos, bCloneCaption);
         }
 
         switch (aNode.type)
@@ -1331,7 +1338,7 @@ public:
                 ScAddress aSrcPos(mrSrcCol.GetCol(), nRow, mrSrcCol.GetTab());
                 for (; it != itEnd; ++it, aSrcPos.IncRow(), ++nRow)
                 {
-                    if (!canCopyValue(mrSrcCol.GetDoc(), aSrcPos, mnCopyFlags))
+                    if (!canCopyValue(*mrSrcCol.GetDoc(), aSrcPos, mnCopyFlags))
                         continue;
 
                     maDestPos.miCellPos = mrDestCol.GetCellStore().set(maDestPos.miCellPos, nRow, createRefCell(nRow));
@@ -1369,10 +1376,10 @@ class CopyByCloneHandler
     sc::ColumnBlockPosition maDestPos;
     sc::ColumnBlockPosition* mpDestPos;
     svl::SharedStringPool* mpSharedStringPool;
-    InsertDeleteFlags mnCopyFlags;
+    InsertDeleteFlags const mnCopyFlags;
 
     sc::StartListeningType meListenType;
-    int mnFormulaCellCloneFlags;
+    ScCloneFlags const mnFormulaCellCloneFlags;
 
     void setDefaultAttrToDest(size_t nRow)
     {
@@ -1405,7 +1412,7 @@ class CopyByCloneHandler
             ScTokenArray* pCode = rSrcCell.GetCode();
             if (pCode && pCode->GetLen() == 1)
             {
-                const formula::FormulaToken* p = pCode->First();
+                const formula::FormulaToken* p = pCode->FirstToken();
                 if (p->GetOpCode() == ocTrue || p->GetOpCode() == ocFalse)
                     // This is a boolean formula.
                     bForceFormula = true;
@@ -1415,23 +1422,23 @@ class CopyByCloneHandler
         if (bForceFormula || bCloneFormula)
         {
             // Clone as formula cell.
-            ScFormulaCell* pCell = new ScFormulaCell(rSrcCell, mrDestCol.GetDoc(), aDestPos, mnFormulaCellCloneFlags);
+            ScFormulaCell* pCell = new ScFormulaCell(rSrcCell, *mrDestCol.GetDoc(), aDestPos, mnFormulaCellCloneFlags);
             pCell->SetDirtyVar();
-            mrDestCol.SetFormulaCell(maDestPos, nRow, pCell, meListenType);
+            mrDestCol.SetFormulaCell(maDestPos, nRow, pCell, meListenType, rSrcCell.NeedsNumberFormat());
             setDefaultAttrToDest(nRow);
             return;
         }
 
-        if (mrDestCol.GetDoc().IsUndo())
+        if (mrDestCol.GetDoc()->IsUndo())
             return;
 
         if (bCloneValue)
         {
-            sal_uInt16 nErr = rSrcCell.GetErrCode();
-            if (nErr)
+            FormulaError nErr = rSrcCell.GetErrCode();
+            if (nErr != FormulaError::NONE)
             {
                 // error codes are cloned with values
-                ScFormulaCell* pErrCell = new ScFormulaCell(&mrDestCol.GetDoc(), aDestPos);
+                ScFormulaCell* pErrCell = new ScFormulaCell(mrDestCol.GetDoc(), aDestPos);
                 pErrCell->SetErrCode(nErr);
                 mrDestCol.SetFormulaCell(maDestPos, nRow, pErrCell, meListenType);
                 setDefaultAttrToDest(nRow);
@@ -1443,7 +1450,7 @@ class CopyByCloneHandler
         {
             if (rSrcCell.IsValue())
             {
-                if (canCopyValue(mrSrcCol.GetDoc(), ScAddress(mrSrcCol.GetCol(), nRow, mrSrcCol.GetTab()), mnCopyFlags))
+                if (canCopyValue(*mrSrcCol.GetDoc(), ScAddress(mrSrcCol.GetCol(), nRow, mrSrcCol.GetTab()), mnCopyFlags))
                 {
                     maDestPos.miCellPos = mrDestCol.GetCellStore().set(
                         maDestPos.miCellPos, nRow, rSrcCell.GetValue());
@@ -1464,10 +1471,10 @@ class CopyByCloneHandler
             if (rSrcCell.IsMultilineResult())
             {
                 // Clone as an edit text object.
-                EditEngine& rEngine = mrDestCol.GetDoc().GetEditEngine();
+                EditEngine& rEngine = mrDestCol.GetDoc()->GetEditEngine();
                 rEngine.SetText(aStr.getString());
                 maDestPos.miCellPos =
-                    mrDestCol.GetCellStore().set(maDestPos.miCellPos, nRow, rEngine.CreateTextObject());
+                    mrDestCol.GetCellStore().set(maDestPos.miCellPos, nRow, rEngine.CreateTextObject().release());
             }
             else
             {
@@ -1479,11 +1486,6 @@ class CopyByCloneHandler
         }
     }
 
-    void duplicateNotes(SCROW nStartRow, size_t nDataSize, bool bCloneCaption )
-    {
-        mrSrcCol.DuplicateNotes(nStartRow, nDataSize, mrDestCol, maDestPos, bCloneCaption);
-    }
-
 public:
     CopyByCloneHandler(const ScColumn& rSrcCol, ScColumn& rDestCol, sc::ColumnBlockPosition* pDestPos,
             InsertDeleteFlags nCopyFlags, svl::SharedStringPool* pSharedStringPool, bool bGlobalNamesToLocal) :
@@ -1493,7 +1495,7 @@ public:
         mpSharedStringPool(pSharedStringPool),
         mnCopyFlags(nCopyFlags),
         meListenType(sc::SingleCellListening),
-        mnFormulaCellCloneFlags(bGlobalNamesToLocal ? SC_CLONECELL_NAMES_TO_LOCAL : 0)
+        mnFormulaCellCloneFlags(bGlobalNamesToLocal ? ScCloneFlags::NamesToLocal : ScCloneFlags::Default)
     {
         if (mpDestPos)
             maDestPos = *mpDestPos;
@@ -1502,7 +1504,27 @@ public:
     ~CopyByCloneHandler()
     {
         if (mpDestPos)
+        {
+            // If broadcasters were setup in the same column,
+            // maDestPos.miBroadcasterPos doesn't match
+            // mrDestCol.maBroadcasters because it is never passed anywhere.
+            // Assign a corresponding iterator before copying all over.
+            // Otherwise this may result in wrongly copying a singular
+            // iterator.
+
+            {
+                /* XXX Using a temporary ColumnBlockPosition just for
+                 * initializing from ScColumn::maBroadcasters.begin() is ugly,
+                 * on the other hand we don't want to expose
+                 * ScColumn::maBroadcasters to the outer world and have a
+                 * getter. */
+                sc::ColumnBlockPosition aTempBlock;
+                mrDestCol.InitBlockPosition(aTempBlock);
+                maDestPos.miBroadcasterPos = aTempBlock.miBroadcasterPos;
+            }
+
             *mpDestPos = maDestPos;
+        }
     }
 
     void setStartListening( bool b )
@@ -1517,7 +1539,7 @@ public:
         if (mnCopyFlags & (InsertDeleteFlags::NOTE|InsertDeleteFlags::ADDNOTES))
         {
             bool bCloneCaption = (mnCopyFlags & InsertDeleteFlags::NOCAPTIONS) == InsertDeleteFlags::NONE;
-            duplicateNotes(nRow, nDataSize, bCloneCaption );
+            mrSrcCol.DuplicateNotes(nRow, nDataSize, mrDestCol, maDestPos, bCloneCaption);
         }
 
         switch (aNode.type)
@@ -1535,7 +1557,7 @@ public:
                 ScAddress aSrcPos(mrSrcCol.GetCol(), nRow, mrSrcCol.GetTab());
                 for (; it != itEnd; ++it, aSrcPos.IncRow(), ++nRow)
                 {
-                    if (!canCopyValue(mrSrcCol.GetDoc(), aSrcPos, mnCopyFlags))
+                    if (!canCopyValue(*mrSrcCol.GetDoc(), aSrcPos, mnCopyFlags))
                         continue;
 
                     maDestPos.miCellPos = mrDestCol.GetCellStore().set(maDestPos.miCellPos, nRow, *it);
@@ -1596,7 +1618,7 @@ public:
                 std::vector<EditTextObject*> aCloned;
                 aCloned.reserve(nDataSize);
                 for (; it != itEnd; ++it)
-                    aCloned.push_back(ScEditUtil::Clone(**it, mrDestCol.GetDoc()));
+                    aCloned.push_back(ScEditUtil::Clone(**it, *mrDestCol.GetDoc()).release());
 
                 maDestPos.miCellPos = mrDestCol.GetCellStore().set(
                     maDestPos.miCellPos, nRow, aCloned.begin(), aCloned.end());
@@ -1611,8 +1633,17 @@ public:
                 sc::formula_block::const_iterator itEnd = it;
                 std::advance(itEnd, nDataSize);
 
+                if(nDataSize > 1024 && (mnCopyFlags & InsertDeleteFlags::FORMULA) != InsertDeleteFlags::NONE)
+                {
+                    // If the column to be replaced contains a long formula group (tdf#102364), there can
+                    // be so many listeners in a single vector that the quadratic cost of repeatedly removing
+                    // the first element becomes very high. Optimize this by removing them in one go.
+                    sc::EndListeningContext context(*mrDestCol.GetDoc());
+                    mrDestCol.EndListeningFormulaCells( context, nRow, nRow + nDataSize - 1, nullptr, nullptr );
+                }
+
                 for (; it != itEnd; ++it, ++nRow)
-                    cloneFormulaCell(nRow, const_cast<ScFormulaCell&>(**it));
+                    cloneFormulaCell(nRow, **it);
             }
             break;
             default:
@@ -1681,8 +1712,8 @@ void ScColumn::CopyToColumn(
             // Compare the ScDocumentPool* to determine if we are copying
             // within the same document. If not, re-intern shared strings.
             svl::SharedStringPool* pSharedStringPool =
-                (pDocument->GetPool() != rColumn.pDocument->GetPool()) ?
-                &rColumn.pDocument->GetSharedStringPool() : nullptr;
+                (GetDoc()->GetPool() != rColumn.GetDoc()->GetPool()) ?
+                &rColumn.GetDoc()->GetSharedStringPool() : nullptr;
             CopyByCloneHandler aFunc(*this, rColumn, rCxt.getBlockPosition(rColumn.nTab, rColumn.nCol), nFlags,
                     pSharedStringPool, bGlobalNamesToLocal);
             aFunc.setStartListening(rCxt.isStartListening());
@@ -1720,8 +1751,7 @@ void ScColumn::CopyUpdated( const ScColumn& rPosCol, ScColumn& rDestCol ) const
     sc::SingleColumnSpanSet::SpansType aRanges;
     aRangeSet.getSpans(aRanges);
 
-    bool bCopyNotes = true;
-    CopyToClipHandler aFunc(*this, rDestCol, nullptr, bCopyNotes);
+    CopyToClipHandler aFunc(*this, rDestCol, nullptr);
     sc::CellStoreType::const_iterator itPos = maCells.begin();
     sc::SingleColumnSpanSet::SpansType::const_iterator it = aRanges.begin(), itEnd = aRanges.end();
     for (; it != itEnd; ++it)
@@ -1733,16 +1763,17 @@ void ScColumn::CopyUpdated( const ScColumn& rPosCol, ScColumn& rDestCol ) const
 void ScColumn::CopyScenarioFrom( const ScColumn& rSrcCol )
 {
     //  This is the scenario table, the data is copied into it
-    ScAttrIterator aAttrIter( pAttrArray, 0, MAXROW );
+    ScDocument* pDocument = GetDoc();
+    ScAttrIterator aAttrIter( pAttrArray.get(), 0, MAXROW, pDocument->GetDefPattern() );
     SCROW nStart = -1, nEnd = -1;
     const ScPatternAttr* pPattern = aAttrIter.Next( nStart, nEnd );
     while (pPattern)
     {
-        if ( static_cast<const ScMergeFlagAttr&>(pPattern->GetItem( ATTR_MERGE_FLAG )).IsScenario() )
+        if ( pPattern->GetItem( ATTR_MERGE_FLAG ).IsScenario() )
         {
             DeleteArea( nStart, nEnd, InsertDeleteFlags::CONTENTS );
             sc::CopyToDocContext aCxt(*pDocument);
-            ((ScColumn&)rSrcCol).
+            rSrcCol.
                 CopyToColumn(aCxt, nStart, nEnd, InsertDeleteFlags::CONTENTS, false, *this);
 
             //  UpdateUsed not needed, already done in TestCopyScenario (obsolete comment ?)
@@ -1754,9 +1785,6 @@ void ScColumn::CopyScenarioFrom( const ScColumn& rSrcCol )
             UpdateReferenceOnCopy(aRefCxt);
             UpdateCompile();
         }
-
-        //TODO: make CopyToColumn "const" !!! (obsolete comment ?)
-
         pPattern = aAttrIter.Next( nStart, nEnd );
     }
 }
@@ -1764,18 +1792,17 @@ void ScColumn::CopyScenarioFrom( const ScColumn& rSrcCol )
 void ScColumn::CopyScenarioTo( ScColumn& rDestCol ) const
 {
     //  This is the scenario table, the data is copied to the other
-    ScAttrIterator aAttrIter( pAttrArray, 0, MAXROW );
+    ScDocument* pDocument = GetDoc();
+    ScAttrIterator aAttrIter( pAttrArray.get(), 0, MAXROW, pDocument->GetDefPattern() );
     SCROW nStart = -1, nEnd = -1;
     const ScPatternAttr* pPattern = aAttrIter.Next( nStart, nEnd );
     while (pPattern)
     {
-        if ( static_cast<const ScMergeFlagAttr&>(pPattern->GetItem( ATTR_MERGE_FLAG )).IsScenario() )
+        if ( pPattern->GetItem( ATTR_MERGE_FLAG ).IsScenario() )
         {
             rDestCol.DeleteArea( nStart, nEnd, InsertDeleteFlags::CONTENTS );
-            sc::CopyToDocContext aCxt(*rDestCol.pDocument);
+            sc::CopyToDocContext aCxt(*rDestCol.GetDoc());
             CopyToColumn(aCxt, nStart, nEnd, InsertDeleteFlags::CONTENTS, false, rDestCol);
-
-            //  UpdateUsed not needed, is already done in TestCopyScenario (obsolete comment ?)
 
             sc::RefUpdateContext aRefCxt(*pDocument);
             aRefCxt.meMode = URM_COPY;
@@ -1784,9 +1811,6 @@ void ScColumn::CopyScenarioTo( ScColumn& rDestCol ) const
             rDestCol.UpdateReferenceOnCopy(aRefCxt);
             rDestCol.UpdateCompile();
         }
-
-        //TODO: make CopyToColumn "const" !!! (obsolete comment ?)
-
         pPattern = aAttrIter.Next( nStart, nEnd );
     }
 }
@@ -1794,13 +1818,13 @@ void ScColumn::CopyScenarioTo( ScColumn& rDestCol ) const
 bool ScColumn::TestCopyScenarioTo( const ScColumn& rDestCol ) const
 {
     bool bOk = true;
-    ScAttrIterator aAttrIter( pAttrArray, 0, MAXROW );
+    ScAttrIterator aAttrIter( pAttrArray.get(), 0, MAXROW, GetDoc()->GetDefPattern() );
     SCROW nStart = 0, nEnd = 0;
     const ScPatternAttr* pPattern = aAttrIter.Next( nStart, nEnd );
     while (pPattern && bOk)
     {
-        if ( static_cast<const ScMergeFlagAttr&>(pPattern->GetItem( ATTR_MERGE_FLAG )).IsScenario() )
-            if ( rDestCol.pAttrArray->HasAttrib( nStart, nEnd, HASATTR_PROTECTED ) )
+        if ( pPattern->GetItem( ATTR_MERGE_FLAG ).IsScenario() )
+            if ( rDestCol.pAttrArray->HasAttrib( nStart, nEnd, HasAttrFlags::Protected ) )
                 bOk = false;
 
         pPattern = aAttrIter.Next( nStart, nEnd );
@@ -1812,12 +1836,12 @@ void ScColumn::MarkScenarioIn( ScMarkData& rDestMark ) const
 {
     ScRange aRange( nCol, 0, nTab );
 
-    ScAttrIterator aAttrIter( pAttrArray, 0, MAXROW );
+    ScAttrIterator aAttrIter( pAttrArray.get(), 0, MAXROW, GetDoc()->GetDefPattern() );
     SCROW nStart = -1, nEnd = -1;
     const ScPatternAttr* pPattern = aAttrIter.Next( nStart, nEnd );
     while (pPattern)
     {
-        if ( static_cast<const ScMergeFlagAttr&>(pPattern->GetItem( ATTR_MERGE_FLAG )).IsScenario() )
+        if ( pPattern->GetItem( ATTR_MERGE_FLAG ).IsScenario() )
         {
             aRange.aStart.SetRow( nStart );
             aRange.aEnd.SetRow( nEnd );
@@ -1850,8 +1874,8 @@ void resetColumnPosition(sc::CellStoreType& rCells, SCCOL nCol)
 
 class NoteCaptionUpdater
 {
-    SCCOL mnCol;
-    SCTAB mnTab;
+    SCCOL const mnCol;
+    SCTAB const mnTab;
 public:
     NoteCaptionUpdater( SCCOL nCol, SCTAB nTab ) : mnCol(nCol), mnTab(nTab) {}
 
@@ -1869,6 +1893,43 @@ void ScColumn::UpdateNoteCaptions( SCROW nRow1, SCROW nRow2 )
     sc::ProcessNote(maCellNotes.begin(), maCellNotes, nRow1, nRow2, aFunc);
 }
 
+void ScColumn::UpdateDrawObjects(std::vector<std::vector<SdrObject*>>& pObjects, SCROW nRowStart, SCROW nRowEnd)
+{
+    assert(static_cast<int>(pObjects.size()) >= nRowEnd - nRowStart + 1);
+
+    int nObj = 0;
+    for (SCROW nCurrentRow = nRowStart; nCurrentRow <= nRowEnd; nCurrentRow++, nObj++)
+    {
+        if (pObjects[nObj].empty())
+            continue; // No draw objects in this row
+
+        UpdateDrawObjectsForRow(pObjects[nObj], nCol, nCurrentRow);
+    }
+}
+
+void ScColumn::UpdateDrawObjectsForRow( std::vector<SdrObject*>& pObjects, SCCOL nTargetCol, SCROW nTargetRow )
+{
+    for (auto &pObject : pObjects)
+    {
+        ScAddress aNewAddress = ScAddress(nTargetCol, nTargetRow, nTab);
+
+        // Update draw object according to new anchor
+        ScDrawLayer* pDrawLayer = GetDoc()->GetDrawLayer();
+        if (pDrawLayer)
+            pDrawLayer->MoveObject(pObject, aNewAddress);
+    }
+}
+
+bool ScColumn::IsDrawObjectsEmptyBlock(SCROW nStartRow, SCROW nEndRow) const
+{
+    ScDrawLayer* pDrawLayer = GetDoc()->GetDrawLayer();
+    if (!pDrawLayer)
+        return true;
+
+    ScRange aRange(nCol, nStartRow, nTab, nCol, nEndRow, nTab);
+    return !pDrawLayer->HasObjectsAnchoredInRange(aRange);
+}
+
 void ScColumn::SwapCol(ScColumn& rCol)
 {
     maBroadcasters.swap(rCol.maBroadcasters);
@@ -1876,19 +1937,18 @@ void ScColumn::SwapCol(ScColumn& rCol)
     maCellTextAttrs.swap(rCol.maCellTextAttrs);
     maCellNotes.swap(rCol.maCellNotes);
 
+    // Swap all CellStoreEvent mdds event_func related.
+    std::swap( mnBlkCountFormula, rCol.mnBlkCountFormula);
+
     // notes update caption
     UpdateNoteCaptions(0, MAXROW);
     rCol.UpdateNoteCaptions(0, MAXROW);
 
-    ScAttrArray* pTempAttr = rCol.pAttrArray;
-    rCol.pAttrArray = pAttrArray;
-    pAttrArray = pTempAttr;
+    std::swap(pAttrArray, rCol.pAttrArray);
 
     // AttrArray needs to have the right column number
     pAttrArray->SetCol(nCol);
     rCol.pAttrArray->SetCol(rCol.nCol);
-
-    std::swap(mbDirtyGroups, rCol.mbDirtyGroups);
 
     // Reset column positions in formula cells.
     resetColumnPosition(maCells, nCol);
@@ -1948,7 +2008,8 @@ void ScColumn::MoveTo(SCROW nStartRow, SCROW nEndRow, ScColumn& rCol)
     rCol.CellStorageModified();
 
     // Broadcast on moved ranges. Area-broadcast only.
-    ScHint aHint(SC_HINT_DATACHANGED, ScAddress(nCol, 0, nTab));
+    ScDocument* pDocument = GetDoc();
+    ScHint aHint(SfxHintId::ScDataChanged, ScAddress(nCol, 0, nTab));
     ScAddress& rPos = aHint.GetAddress();
     sc::SingleColumnSpanSet::SpansType::const_iterator itRange = aRanges.begin(), itRangeEnd = aRanges.end();
     for (; itRange != itRangeEnd; ++itRange)
@@ -1963,9 +2024,15 @@ void ScColumn::MoveTo(SCROW nStartRow, SCROW nEndRow, ScColumn& rCol)
 
 namespace {
 
-class SharedTopFormulaCellPicker : public std::unary_function<sc::CellStoreType::value_type, void>
+class SharedTopFormulaCellPicker
 {
 public:
+    SharedTopFormulaCellPicker() = default;
+    SharedTopFormulaCellPicker(SharedTopFormulaCellPicker const &) = default;
+    SharedTopFormulaCellPicker(SharedTopFormulaCellPicker &&) = default;
+    SharedTopFormulaCellPicker & operator =(SharedTopFormulaCellPicker const &) = default;
+    SharedTopFormulaCellPicker & operator =(SharedTopFormulaCellPicker &&) = default;
+
     virtual ~SharedTopFormulaCellPicker() {}
 
     void operator() ( sc::CellStoreType::value_type& node )
@@ -2010,7 +2077,7 @@ public:
 class UpdateRefOnCopy
 {
     const sc::RefUpdateContext& mrCxt;
-    ScDocument* mpUndoDoc;
+    ScDocument* const mpUndoDoc;
     bool mbUpdated;
 
 public:
@@ -2037,21 +2104,22 @@ public:
     }
 };
 
-class UpdateRefOnNonCopy : public std::unary_function<sc::FormulaGroupEntry, void>
+class UpdateRefOnNonCopy
 {
     SCCOL mnCol;
     SCROW mnTab;
     const sc::RefUpdateContext* mpCxt;
     ScDocument* mpUndoDoc;
     bool mbUpdated;
+    bool mbClipboardSource;
 
     void recompileTokenArray( ScFormulaCell& rTopCell )
     {
         // We need to re-compile the token array when a range name is
         // modified, to correctly reflect the new references in the
         // name.
-        ScCompiler aComp(&mpCxt->mrDoc, rTopCell.aPos, *rTopCell.GetCode());
-        aComp.SetGrammar(mpCxt->mrDoc.GetGrammar());
+        ScCompiler aComp(&mpCxt->mrDoc, rTopCell.aPos, *rTopCell.GetCode(), mpCxt->mrDoc.GetGrammar(),
+                         true, rTopCell.GetMatrixFlag() != ScMatrixMode::NONE);
         aComp.CompileTokenArray();
     }
 
@@ -2148,8 +2216,11 @@ class UpdateRefOnNonCopy : public std::unary_function<sc::FormulaGroupEntry, voi
         ScAddress aPos = pTop->aPos;
         ScAddress aOldPos = aPos;
 
+        bool bCellMoved;
         if (mpCxt->maRange.In(aPos))
         {
+            bCellMoved = true;
+
             // The cell is being moved or copied to a new position. The
             // position has already been updated prior to this call.
             // Determine its original position before the move which will be
@@ -2160,6 +2231,10 @@ class UpdateRefOnNonCopy : public std::unary_function<sc::FormulaGroupEntry, voi
                 aPos.Row() - mpCxt->mnRowDelta,
                 aPos.Tab() - mpCxt->mnTabDelta);
         }
+        else
+        {
+            bCellMoved = false;
+        }
 
         bool bRecalcOnMove = pCode->IsRecalcModeOnRefMove();
         if (bRecalcOnMove)
@@ -2169,7 +2244,7 @@ class UpdateRefOnNonCopy : public std::unary_function<sc::FormulaGroupEntry, voi
 
         if (aRes.mbReferenceModified || aRes.mbNameModified || bRecalcOnMove)
         {
-            sc::AutoCalcSwitch(mpCxt->mrDoc, false);
+            sc::AutoCalcSwitch aACSwitch(mpCxt->mrDoc, false);
 
             if (aRes.mbNameModified)
                 recompileTokenArray(*pTop);
@@ -2196,7 +2271,12 @@ class UpdateRefOnNonCopy : public std::unary_function<sc::FormulaGroupEntry, voi
                 p->SetDirty();
             }
 
-            fillUndoDoc(aOldPos, rGroup.mnLength, *pOldCode);
+            mbUpdated = true;
+
+            // Move from clipboard is Cut&Paste, then do not copy the original
+            // positions' formula cells to the Undo document.
+            if (!mbClipboardSource || !bCellMoved)
+                fillUndoDoc(aOldPos, rGroup.mnLength, *pOldCode);
         }
     }
 
@@ -2228,7 +2308,7 @@ class UpdateRefOnNonCopy : public std::unary_function<sc::FormulaGroupEntry, voi
 
         if (!mpUndoDoc->SetFormulaCells(rOldPos, aCells))
             // Insertion failed.  Delete all formula cells.
-            std::for_each(aCells.begin(), aCells.end(), boost::checked_deleter<ScFormulaCell>());
+            std::for_each(aCells.begin(), aCells.end(), std::default_delete<ScFormulaCell>());
     }
 
 public:
@@ -2236,7 +2316,8 @@ public:
         SCCOL nCol, SCTAB nTab, const sc::RefUpdateContext* pCxt,
         ScDocument* pUndoDoc) :
         mnCol(nCol), mnTab(nTab), mpCxt(pCxt),
-        mpUndoDoc(pUndoDoc), mbUpdated(false) {}
+        mpUndoDoc(pUndoDoc), mbUpdated(false),
+        mbClipboardSource(pCxt->mrDoc.IsClipboardSource()){}
 
     void operator() ( sc::FormulaGroupEntry& rGroup )
     {
@@ -2282,8 +2363,6 @@ public:
     UpdateRefGroupBoundChecker(const sc::RefUpdateContext& rCxt, std::vector<SCROW>& rBounds) :
         mrCxt(rCxt), mrBounds(rBounds) {}
 
-    virtual ~UpdateRefGroupBoundChecker() {}
-
     virtual void processSharedTop( ScFormulaCell** ppCells, size_t /*nRow*/, size_t /*nLength*/ ) override
     {
         // Check its tokens and record its reference boundaries.
@@ -2303,8 +2382,6 @@ public:
     UpdateRefExpandGroupBoundChecker(const sc::RefUpdateContext& rCxt, std::vector<SCROW>& rBounds) :
         mrCxt(rCxt), mrBounds(rBounds) {}
 
-    virtual ~UpdateRefExpandGroupBoundChecker() {}
-
     virtual void processSharedTop( ScFormulaCell** ppCells, size_t /*nRow*/, size_t /*nLength*/ ) override
     {
         // Check its tokens and record its reference boundaries.
@@ -2322,16 +2399,14 @@ class FormulaGroupPicker : public SharedTopFormulaCellPicker
 public:
     explicit FormulaGroupPicker( std::vector<sc::FormulaGroupEntry>& rGroups ) : mrGroups(rGroups) {}
 
-    virtual ~FormulaGroupPicker() {}
-
     virtual void processNonShared( ScFormulaCell* pCell, size_t nRow ) override
     {
-        mrGroups.push_back(sc::FormulaGroupEntry(pCell, nRow));
+        mrGroups.emplace_back(pCell, nRow);
     }
 
     virtual void processSharedTop( ScFormulaCell** ppCells, size_t nRow, size_t nLength ) override
     {
-        mrGroups.push_back(sc::FormulaGroupEntry(ppCells, nRow, nLength));
+        mrGroups.emplace_back(ppCells, nRow, nLength);
     }
 };
 
@@ -2364,7 +2439,7 @@ bool ScColumn::UpdateReference( sc::RefUpdateContext& rCxt, ScDocument* pUndoDoc
     if (rCxt.meMode == URM_COPY)
         return UpdateReferenceOnCopy(rCxt, pUndoDoc);
 
-    if (IsEmptyData() || pDocument->IsClipOrUndo())
+    if (IsEmptyData() || GetDoc()->IsClipOrUndo())
         // Cells in this column are all empty, or clip or undo doc. No update needed.
         return false;
 
@@ -2436,9 +2511,9 @@ class UpdateTransHandler
 {
     ScColumn& mrColumn;
     sc::CellStoreType::iterator miPos;
-    ScRange maSource;
-    ScAddress maDest;
-    ScDocument* mpUndoDoc;
+    ScRange const maSource;
+    ScAddress const maDest;
+    ScDocument* const mpUndoDoc;
 public:
     UpdateTransHandler(ScColumn& rColumn, const ScRange& rSource, const ScAddress& rDest, ScDocument* pUndoDoc) :
         mrColumn(rColumn),
@@ -2459,9 +2534,9 @@ class UpdateGrowHandler
 {
     ScColumn& mrColumn;
     sc::CellStoreType::iterator miPos;
-    ScRange maArea;
-    SCCOL mnGrowX;
-    SCROW mnGrowY;
+    ScRange const maArea;
+    SCCOL const mnGrowX;
+    SCROW const mnGrowY;
 public:
     UpdateGrowHandler(ScColumn& rColumn, const ScRange& rArea, SCCOL nGrowX, SCROW nGrowY) :
         mrColumn(rColumn),
@@ -2483,7 +2558,7 @@ class InsertTabUpdater
     sc::RefUpdateInsertTabContext& mrCxt;
     sc::CellTextAttrStoreType& mrTextAttrs;
     sc::CellTextAttrStoreType::iterator miAttrPos;
-    SCTAB mnTab;
+    SCTAB const mnTab;
     bool mbModified;
 
 public:
@@ -2516,7 +2591,7 @@ class DeleteTabUpdater
     sc::RefUpdateDeleteTabContext& mrCxt;
     sc::CellTextAttrStoreType& mrTextAttrs;
     sc::CellTextAttrStoreType::iterator miAttrPos;
-    SCTAB mnTab;
+    SCTAB const mnTab;
     bool mbModified;
 public:
     DeleteTabUpdater(sc::RefUpdateDeleteTabContext& rCxt, sc::CellTextAttrStoreType& rTextAttrs, SCTAB nTab) :
@@ -2547,8 +2622,8 @@ class InsertAbsTabUpdater
 {
     sc::CellTextAttrStoreType& mrTextAttrs;
     sc::CellTextAttrStoreType::iterator miAttrPos;
-    SCTAB mnTab;
-    SCTAB mnNewPos;
+    SCTAB const mnTab;
+    SCTAB const mnNewPos;
     bool mbModified;
 public:
     InsertAbsTabUpdater(sc::CellTextAttrStoreType& rTextAttrs, SCTAB nTab, SCTAB nNewPos) :
@@ -2580,7 +2655,7 @@ class MoveTabUpdater
     sc::RefUpdateMoveTabContext& mrCxt;
     sc::CellTextAttrStoreType& mrTextAttrs;
     sc::CellTextAttrStoreType::iterator miAttrPos;
-    SCTAB mnTab;
+    SCTAB const mnTab;
     bool mbModified;
 public:
     MoveTabUpdater(sc::RefUpdateMoveTabContext& rCxt, sc::CellTextAttrStoreType& rTextAttrs, SCTAB nTab) :
@@ -2609,7 +2684,7 @@ public:
 
 class UpdateCompileHandler
 {
-    bool mbForceIfNameInUse:1;
+    bool const mbForceIfNameInUse:1;
 public:
     explicit UpdateCompileHandler(bool bForceIfNameInUse) :
         mbForceIfNameInUse(bForceIfNameInUse) {}
@@ -2622,7 +2697,7 @@ public:
 
 class TabNoSetter
 {
-    SCTAB mnTab;
+    SCTAB const mnTab;
 public:
     explicit TabNoSetter(SCTAB nTab) : mnTab(nTab) {}
 
@@ -2641,6 +2716,29 @@ public:
     void operator() (size_t /*nRow*/, const ScFormulaCell* pCell)
     {
         pCell->FindRangeNamesInUse(mrIndexes);
+    }
+};
+
+class CheckVectorizationHandler
+{
+public:
+    CheckVectorizationHandler()
+    {}
+
+    void operator() (size_t /*nRow*/, ScFormulaCell* p)
+    {
+        ScTokenArray* pCode = p->GetCode();
+        if (pCode && pCode->IsFormulaVectorDisabled())
+        {
+            pCode->ResetVectorState();
+            FormulaTokenArrayPlainIterator aIter(*pCode);
+            FormulaToken* pFT = aIter.First();
+            while (pFT)
+            {
+                pCode->CheckToken(*pFT);
+                pFT = aIter.Next();
+            }
+        }
     }
 };
 
@@ -2706,7 +2804,7 @@ public:
     {
         std::vector<SCROW> aRows;
         maValueRanges.getRows(aRows);
-        mrColumn.BroadcastCells(aRows, SC_HINT_DATACHANGED);
+        mrColumn.BroadcastCells(aRows, SfxHintId::ScDataChanged);
     }
 
     void fillBroadcastSpans( sc::ColumnSpanSet& rBroadcastSpans ) const
@@ -2750,7 +2848,7 @@ public:
     {
         std::vector<SCROW> aRows;
         maValueRanges.getRows(aRows);
-        mrColumn.BroadcastCells(aRows, SC_HINT_TABLEOPDIRTY);
+        mrColumn.BroadcastCells(aRows, SfxHintId::ScTableOpDirty);
     }
 };
 
@@ -2785,7 +2883,7 @@ struct SetDirtyIfPostponedHandler
 {
     void operator() (size_t /*nRow*/, ScFormulaCell* pCell)
     {
-        if (pCell->IsPostponedDirty() || pCell->HasRelNameReference())
+        if (pCell->IsPostponedDirty() || (pCell->HasRelNameReference() != ScFormulaCell::RelNameRef::NONE))
             pCell->SetDirty();
     }
 };
@@ -2823,7 +2921,7 @@ public:
     {
         // for unconditional compilation
         // bCompile=true and pCode->nError=0
-        pCell->GetCode()->SetCodeError(0);
+        pCell->GetCode()->SetCodeError(FormulaError::NONE);
         pCell->SetCompile(true);
         pCell->CompileTokenArray(mrCxt);
     }
@@ -2842,14 +2940,14 @@ public:
 
     void operator() (size_t nRow, ScFormulaCell* pCell)
     {
-        sal_uInt32 nFormat = mrCol.GetNumberFormat(nRow);
+        sal_uInt32 nFormat = mrCol.GetNumberFormat(mrCol.GetDoc()->GetNonThreadedContext(), nRow);
         if( (nFormat % SV_COUNTRY_LANGUAGE_OFFSET) != 0)
             // Non-default number format is set.
             pCell->SetNeedNumberFormat(false);
         else if (pCell->NeedsNumberFormat())
             pCell->SetDirtyVar();
 
-        if (pCell->GetMatrixFlag())
+        if (pCell->GetMatrixFlag() != ScMatrixMode::NONE)
             pCell->SetDirtyVar();
 
         pCell->CompileXML(mrCxt, mrProgress);
@@ -2861,10 +2959,10 @@ class CompileErrorCellsHandler
     sc::CompileFormulaContext& mrCxt;
     ScColumn& mrColumn;
     sc::CellStoreType::iterator miPos;
-    sal_uInt16 mnErrCode;
+    FormulaError const mnErrCode;
     bool mbCompiled;
 public:
-    CompileErrorCellsHandler( sc::CompileFormulaContext& rCxt, ScColumn& rColumn, sal_uInt16 nErrCode ) :
+    CompileErrorCellsHandler( sc::CompileFormulaContext& rCxt, ScColumn& rColumn, FormulaError nErrCode ) :
         mrCxt(rCxt),
         mrColumn(rColumn),
         miPos(mrColumn.GetCellStore().begin()),
@@ -2875,19 +2973,19 @@ public:
 
     void operator() (size_t nRow, ScFormulaCell* pCell)
     {
-        sal_uInt16 nCurError = pCell->GetRawError();
-        if (!nCurError)
+        FormulaError nCurError = pCell->GetRawError();
+        if (nCurError == FormulaError::NONE)
             // It's not an error cell. Skip it.
             return;
 
-        if (mnErrCode && nCurError != mnErrCode)
+        if (mnErrCode != FormulaError::NONE && nCurError != mnErrCode)
             // Error code is specified, and it doesn't match. Skip it.
             return;
 
         sc::CellStoreType::position_type aPos = mrColumn.GetCellStore().position(miPos, nRow);
         miPos = aPos.first;
         sc::SharedFormulaUtil::unshareFormulaCell(aPos, *pCell);
-        pCell->GetCode()->SetCodeError(0);
+        pCell->GetCode()->SetCodeError(FormulaError::NONE);
         OUString aFormula = pCell->GetFormula(mrCxt);
         pCell->Compile(mrCxt, aFormula);
         ScColumn::JoinNewFormulaCell(aPos, *pCell);
@@ -2901,7 +2999,7 @@ public:
 class CalcAfterLoadHandler
 {
     sc::CompileFormulaContext& mrCxt;
-    bool mbStartListening;
+    bool const mbStartListening;
 
 public:
     CalcAfterLoadHandler( sc::CompileFormulaContext& rCxt, bool bStartListening ) :
@@ -2928,7 +3026,7 @@ class FindEditCellsHandler
 {
     ScColumn& mrColumn;
     sc::CellTextAttrStoreType::iterator miAttrPos;
-    sc::CellStoreType::iterator miCellPos;
+    sc::CellStoreType::iterator const miCellPos;
 
 public:
     explicit FindEditCellsHandler(ScColumn& rCol) :
@@ -3089,11 +3187,18 @@ bool ScColumn::IsFormulaDirty( SCROW nRow ) const
     return p->GetDirty();
 }
 
+void ScColumn::CheckVectorizationState()
+{
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
+    CheckVectorizationHandler aFunc;
+    sc::ProcessFormula(maCells, aFunc);
+}
+
 void ScColumn::SetAllFormulasDirty( const sc::SetFormulaDirtyContext& rCxt )
 {
     // is only done documentwide, no FormulaTracking
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
-    SetDirtyHandler aFunc(*pDocument, rCxt);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
+    SetDirtyHandler aFunc(*GetDoc(), rCxt);
     sc::ProcessFormula(maCells, aFunc);
 }
 
@@ -3101,7 +3206,7 @@ void ScColumn::SetDirtyFromClip( SCROW nRow1, SCROW nRow2, sc::ColumnSpanSet& rB
 {
     // Set all formula cells in the range dirty, and pick up all non-formula
     // cells for later broadcasting.  We don't broadcast here.
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
 
     SetDirtyOnRangeHandler aHdl(*this);
     sc::ProcessFormula(maCells.begin(), maCells, nRow1, nRow2, aHdl, aHdl);
@@ -3147,7 +3252,7 @@ bool ScColumn::BroadcastBroadcasters( SCROW nRow1, SCROW nRow2, ScHint& rHint )
 void ScColumn::SetDirty( SCROW nRow1, SCROW nRow2, BroadcastMode eMode )
 {
     // broadcasts everything within the range, with FormulaTracking
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
 
     switch (eMode)
     {
@@ -3172,8 +3277,15 @@ void ScColumn::SetDirty( SCROW nRow1, SCROW nRow2, BroadcastMode eMode )
                 SetDirtyOnRangeHandler aHdl(*this);
                 sc::ProcessFormula(maCells.begin(), maCells, nRow1, nRow2, aHdl);
                 // Broadcast all broadcasters in range.
-                ScHint aHint( SC_HINT_DATACHANGED, ScAddress( nCol, nRow1, nTab));
-                BroadcastBroadcasters( nRow1, nRow2, aHint);
+                ScHint aHint( SfxHintId::ScDataChanged, ScAddress( nCol, nRow1, nTab));
+                if (BroadcastBroadcasters( nRow1, nRow2, aHint))
+                {
+                    // SetDirtyOnRangeHandler implicitly tracks notified
+                    // formulas via ScDocument::Broadcast(), which
+                    // BroadcastBroadcastersHandler doesn't, so explicitly
+                    // track them here.
+                    GetDoc()->TrackFormulas();
+                }
             }
             break;
     }
@@ -3181,7 +3293,7 @@ void ScColumn::SetDirty( SCROW nRow1, SCROW nRow2, BroadcastMode eMode )
 
 void ScColumn::SetTableOpDirty( const ScRange& rRange )
 {
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
 
     SCROW nRow1 = rRange.aStart.Row(), nRow2 = rRange.aEnd.Row();
     SetTableOpDirtyOnRangeHandler aHdl(*this);
@@ -3191,7 +3303,7 @@ void ScColumn::SetTableOpDirty( const ScRange& rRange )
 
 void ScColumn::SetDirtyAfterLoad()
 {
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
     SetDirtyAfterLoadHandler aFunc;
     sc::ProcessFormula(maCells, aFunc);
 }
@@ -3218,17 +3330,17 @@ public:
 
 void ScColumn::SetDirtyIfPostponed()
 {
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
     SetDirtyIfPostponedHandler aFunc;
     sc::ProcessFormula(maCells, aFunc);
 }
 
 void ScColumn::BroadcastRecalcOnRefMove()
 {
-    sc::AutoCalcSwitch aSwitch(*pDocument, false);
+    sc::AutoCalcSwitch aSwitch(*GetDoc(), false);
     RecalcOnRefMoveCollector aFunc;
     sc::ProcessFormula(maCells, aFunc);
-    BroadcastCells(aFunc.getDirtyRows(), SC_HINT_DATACHANGED);
+    BroadcastCells(aFunc.getDirtyRows(), SfxHintId::ScDataChanged);
 }
 
 namespace {
@@ -3236,11 +3348,10 @@ namespace {
 class TransferListenersHandler
 {
 public:
-    typedef std::vector<SvtListener*> ListenersType;
     struct Entry
     {
         size_t mnRow;
-        ListenersType maListeners;
+        std::vector<SvtListener*> maListeners;
     };
     typedef std::vector<Entry> ListenerListType;
 
@@ -3253,22 +3364,14 @@ public:
     {
         assert(pBroadcaster);
 
-        // It's important to make a copy here.
-        SvtBroadcaster::ListenersType aLis = pBroadcaster->GetAllListeners();
-        if (aLis.empty())
+        // It's important to make a copy of the broadcasters listener list here
+        Entry aEntry { nRow, pBroadcaster->GetAllListeners() };
+        if (aEntry.maListeners.empty())
             // No listeners to transfer.
             return;
 
-        Entry aEntry;
-        aEntry.mnRow = nRow;
-
-        SvtBroadcaster::ListenersType::iterator it = aLis.begin(), itEnd = aLis.end();
-        for (; it != itEnd; ++it)
-        {
-            SvtListener* pLis = *it;
+        for (SvtListener* pLis : aEntry.maListeners)
             pLis->EndListening(*pBroadcaster);
-            aEntry.maListeners.push_back(pLis);
-        }
 
         maListenerList.push_back(aEntry);
 
@@ -3284,14 +3387,14 @@ class RemoveEmptyBroadcasterHandler
 {
     sc::ColumnSpanSet maSet;
     ScDocument& mrDoc;
-    SCCOL mnCol;
-    SCTAB mnTab;
+    SCCOL const mnCol;
+    SCTAB const mnTab;
 
 public:
     RemoveEmptyBroadcasterHandler( ScDocument& rDoc, SCCOL nCol, SCTAB nTab ) :
         maSet(false), mrDoc(rDoc), mnCol(nCol), mnTab(nTab) {}
 
-    void operator() ( size_t nRow, SvtBroadcaster* pBroadcaster )
+    void operator() ( size_t nRow, const SvtBroadcaster* pBroadcaster )
     {
         if (!pBroadcaster->HasListeners())
             maSet.set(mnTab, mnCol, nRow, true);
@@ -3366,7 +3469,7 @@ void ScColumn::TransferListeners(
     }
 
     // Remove any broadcasters that have no listeners.
-    RemoveEmptyBroadcasterHandler aFuncRemoveEmpty(*pDocument, nCol, nTab);
+    RemoveEmptyBroadcasterHandler aFuncRemoveEmpty(*GetDoc(), nCol, nTab);
     sc::ProcessBroadcaster(maBroadcasters.begin(), maBroadcasters, nRow1, nRow2, aFuncRemoveEmpty);
     aFuncRemoveEmpty.purge();
 }
@@ -3390,7 +3493,7 @@ void ScColumn::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rProgres
     RegroupFormulaCells();
 }
 
-bool ScColumn::CompileErrorCells( sc::CompileFormulaContext& rCxt, sal_uInt16 nErrCode )
+bool ScColumn::CompileErrorCells( sc::CompileFormulaContext& rCxt, FormulaError nErrCode )
 {
     CompileErrorCellsHandler aHdl(rCxt, *this, nErrCode);
     sc::ProcessFormula(maCells, aHdl);
@@ -3424,8 +3527,8 @@ bool ScColumn::HasEditCells(SCROW nStartRow, SCROW nEndRow, SCROW& rFirst)
     return true;
 }
 
-SCsROW ScColumn::SearchStyle(
-    SCsROW nRow, const ScStyleSheet* pSearchStyle, bool bUp, bool bInSelection,
+SCROW ScColumn::SearchStyle(
+    SCROW nRow, const ScStyleSheet* pSearchStyle, bool bUp, bool bInSelection,
     const ScMarkData& rMark) const
 {
     if (bInSelection)
@@ -3443,7 +3546,7 @@ SCsROW ScColumn::SearchStyle(
 }
 
 bool ScColumn::SearchStyleRange(
-    SCsROW& rRow, SCsROW& rEndRow, const ScStyleSheet* pSearchStyle, bool bUp,
+    SCROW& rRow, SCROW& rEndRow, const ScStyleSheet* pSearchStyle, bool bUp,
     bool bInSelection, const ScMarkData& rMark) const
 {
     if (bInSelection)

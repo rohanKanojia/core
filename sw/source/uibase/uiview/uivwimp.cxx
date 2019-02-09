@@ -20,18 +20,13 @@
 #include <config_features.h>
 
 #include <cmdid.h>
-#include "globals.hrc"
+#include <globals.hrc>
 
 #include <com/sun/star/scanner/XScannerManager2.hpp>
-#include <com/sun/star/datatransfer/clipboard/XClipboardNotifier.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <comphelper/processfactory.hxx>
-#include <osl/mutex.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/bindings.hxx>
 
@@ -46,7 +41,7 @@
 #include <edtwin.hxx>
 #include <mmconfigitem.hxx>
 
-#include <view.hrc>
+#include <strings.hrc>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -57,16 +52,7 @@ using namespace ::com::sun::star::datatransfer::clipboard;
 SwView_Impl::SwView_Impl(SwView* pShell)
     : mxXTextView()
     , pView(pShell)
-    , pScanEvtLstnr(nullptr)
-    , pClipEvtLstnr(nullptr)
-    , eShellMode(SHELL_MODE_TEXT)
-#if HAVE_FEATURE_DBCONNECTIVITY
-    , pConfigItem(nullptr)
-    , nMailMergeRestartPage(0)
-    , bMailMergeSourceView(true)
-#endif
-    , m_pDocInserter(nullptr)
-    , m_pRequest(nullptr)
+    , eShellMode(ShellMode::Text)
     , m_nParam(0)
     , m_bSelectObject(false)
     , m_bEditingPositionSet(false)
@@ -89,21 +75,21 @@ SwView_Impl::~SwView_Impl()
     view::XSelectionSupplier* pTextView = mxXTextView.get();
     static_cast<SwXTextView*>(pTextView)->Invalidate();
     mxXTextView.clear();
-    if( xScanEvtLstnr.is() )
-           pScanEvtLstnr->ViewDestroyed();
-    if( xClipEvtLstnr.is() )
+    if( mxScanEvtLstnr.is() )
+           mxScanEvtLstnr->ViewDestroyed();
+    if( mxClipEvtLstnr.is() )
     {
-        pClipEvtLstnr->AddRemoveListener( false );
-        pClipEvtLstnr->ViewDestroyed();
+        mxClipEvtLstnr->AddRemoveListener( false );
+        mxClipEvtLstnr->ViewDestroyed();
     }
 #if HAVE_FEATURE_DBCONNECTIVITY
-    delete pConfigItem;
+    xConfigItem.reset();
 #endif
-    delete m_pDocInserter;
-    delete m_pRequest;
+    m_pDocInserter.reset();
+    m_pRequest.reset();
 }
 
-void SwView_Impl::SetShellMode(ShellModes eSet)
+void SwView_Impl::SetShellMode(ShellMode eSet)
 {
     eShellMode = eSet;
 }
@@ -182,7 +168,10 @@ void SwView_Impl::ExecuteScan( SfxRequest& rReq )
 
             if( !bDone )
             {
-                ScopedVclPtrInstance<MessageDialog>::Create( nullptr, SW_RES(STR_SCAN_NOSOURCE), VCL_MESSAGE_INFO )->Execute();
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(nullptr,
+                                                          VclMessageType::Info, VclButtonsType::Ok,
+                                                          SwResId(STR_SCAN_NOSOURCE)));
+                xBox->run();
                 rReq.Ignore();
             }
             else
@@ -199,32 +188,35 @@ void SwView_Impl::ExecuteScan( SfxRequest& rReq )
 
 SwScannerEventListener& SwView_Impl::GetScannerEventListener()
 {
-    if(!xScanEvtLstnr.is())
-        xScanEvtLstnr = pScanEvtLstnr = new SwScannerEventListener(*pView);
-    return *pScanEvtLstnr;
+    if(!mxScanEvtLstnr.is())
+        mxScanEvtLstnr = new SwScannerEventListener(*pView);
+    return *mxScanEvtLstnr;
 }
 
 void SwView_Impl::AddClipboardListener()
 {
-    if(!xClipEvtLstnr.is())
+    if(!mxClipEvtLstnr.is())
     {
-        xClipEvtLstnr = pClipEvtLstnr = new SwClipboardChangeListener( *pView );
-        pClipEvtLstnr->AddRemoveListener( true );
+        mxClipEvtLstnr = new SwClipboardChangeListener( *pView );
+        mxClipEvtLstnr->AddRemoveListener( true );
     }
 }
 
 void SwView_Impl::Invalidate()
 {
     GetUNOObject_Impl()->Invalidate();
-    Reference< XUnoTunnel > xTunnel(xTransferable.get(), UNO_QUERY);
-    if(xTunnel.is())
-
+    for (const auto& xTransferable: mxTransferables)
     {
-        SwTransferable* pTransferable = reinterpret_cast< SwTransferable * >(
-                sal::static_int_cast< sal_IntPtr >(
-                xTunnel->getSomething(SwTransferable::getUnoTunnelId())));
-        if(pTransferable)
-            pTransferable->Invalidate();
+        Reference< XUnoTunnel > xTunnel(xTransferable.get(), UNO_QUERY);
+        if(xTunnel.is())
+
+        {
+            SwTransferable* pTransferable = reinterpret_cast< SwTransferable * >(
+                    sal::static_int_cast< sal_IntPtr >(
+                    xTunnel->getSomething(SwTransferable::getUnoTunnelId())));
+            if(pTransferable)
+                pTransferable->Invalidate();
+        }
     }
 }
 
@@ -233,39 +225,61 @@ void SwView_Impl::AddTransferable(SwTransferable& rTransferable)
     //prevent removing of the non-referenced SwTransferable
     rTransferable.m_refCount++;
     {
-        xTransferable = Reference<XUnoTunnel> (&rTransferable);
+        // Remove previously added, but no longer existing weak references.
+        mxTransferables.erase(std::remove_if(mxTransferables.begin(), mxTransferables.end(),
+            [](const css::uno::WeakReference<css::lang::XUnoTunnel>& rTunnel) {
+                uno::Reference<lang::XUnoTunnel> xTunnel(rTunnel.get(), uno::UNO_QUERY);
+                return !xTunnel.is();
+            }), mxTransferables.end());
+
+        mxTransferables.emplace_back(uno::Reference<lang::XUnoTunnel>(&rTransferable));
     }
     rTransferable.m_refCount--;
 }
 
-void SwView_Impl::StartDocumentInserter( const OUString& rFactory, const Link<sfx2::FileDialogHelper*,void>& rEndDialogHdl )
+void SwView_Impl::StartDocumentInserter(
+    const OUString& rFactory,
+    const Link<sfx2::FileDialogHelper*,void>& rEndDialogHdl,
+    const sal_uInt16 nSlotId
+)
 {
-    delete m_pDocInserter;
-    m_pDocInserter = new ::sfx2::DocumentInserter( rFactory );
+    sfx2::DocumentInserter::Mode mode {sfx2::DocumentInserter::Mode::Insert};
+    switch( nSlotId )
+    {
+        case SID_DOCUMENT_MERGE:
+            mode = sfx2::DocumentInserter::Mode::Merge;
+            break;
+        case SID_DOCUMENT_COMPARE:
+            mode = sfx2::DocumentInserter::Mode::Compare;
+            break;
+        default:
+            break;
+    }
+
+    m_pDocInserter.reset(new ::sfx2::DocumentInserter(pView->GetFrameWeld(), rFactory, mode));
     m_pDocInserter->StartExecuteModal( rEndDialogHdl );
 }
 
-SfxMedium* SwView_Impl::CreateMedium()
+std::unique_ptr<SfxMedium> SwView_Impl::CreateMedium()
 {
     return m_pDocInserter->CreateMedium();
 }
 
 void SwView_Impl::InitRequest( const SfxRequest& rRequest )
 {
-    delete m_pRequest;
-    m_pRequest = new SfxRequest( rRequest );
+    m_pRequest.reset(new SfxRequest( rRequest ));
 }
 
 SwScannerEventListener::~SwScannerEventListener()
 {
 }
 
-void SAL_CALL SwScannerEventListener::disposing( const EventObject& rEventObject) throw(uno::RuntimeException, std::exception)
+void SAL_CALL SwScannerEventListener::disposing( const EventObject& /*rEventObject*/)
 {
 #if defined(_WIN32) || defined UNX
     SolarMutexGuard aGuard;
     if( pView )
-        pView->ScannerEventHdl( rEventObject );
+        pView->ScannerEventHdl();
 #endif
 }
 
@@ -274,12 +288,10 @@ SwClipboardChangeListener::~SwClipboardChangeListener()
 }
 
 void SAL_CALL SwClipboardChangeListener::disposing( const EventObject& /*rEventObject*/ )
-    throw ( RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL SwClipboardChangeListener::changedContents( const css::datatransfer::clipboard::ClipboardEvent& rEventObject )
-    throw (RuntimeException, std::exception)
 
 {
     const SolarMutexGuard aGuard;

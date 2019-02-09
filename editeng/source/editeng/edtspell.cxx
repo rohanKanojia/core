@@ -18,12 +18,9 @@
  */
 
 
-#include <vcl/wrkwin.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/svapp.hxx>
-
-#include <impedit.hxx>
+#include "impedit.hxx"
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <editeng/editview.hxx>
 #include <editeng/editeng.hxx>
 #include <edtspell.hxx>
@@ -46,8 +43,8 @@ EditSpellWrapper::EditSpellWrapper( vcl::Window* _pWin,
 {
     SAL_WARN_IF( !pView, "editeng", "One view has to be abandoned!" );
     // Keep IgnoreList, delete ReplaceList...
-    if (SvxGetChangeAllList().is())
-        SvxGetChangeAllList()->clear();
+    if (LinguMgr::GetChangeAllList().is())
+        LinguMgr::GetChangeAllList()->clear();
     pEditView = pView;
 }
 
@@ -57,7 +54,7 @@ void EditSpellWrapper::SpellStart( SvxSpellArea eArea )
     ImpEditEngine* pImpEE = pEditView->GetImpEditEngine();
     SpellInfo* pSpellInfo = pImpEE->GetSpellInfo();
 
-    if ( eArea == SVX_SPELL_BODY_START )
+    if ( eArea == SvxSpellArea::BodyStart )
     {
         // Is called when
         // a) Spell-Forward has arrived at the end and should restart at the top
@@ -76,7 +73,7 @@ void EditSpellWrapper::SpellStart( SvxSpellArea eArea )
                     pEE->GetEditDoc().GetStartPaM() );
         }
     }
-    else if ( eArea == SVX_SPELL_BODY_END )
+    else if ( eArea == SvxSpellArea::BodyEnd )
     {
         // Is called when
         // a) Spell-Forward is launched
@@ -95,7 +92,7 @@ void EditSpellWrapper::SpellStart( SvxSpellArea eArea )
                     pEE->GetEditDoc().GetEndPaM() );
         }
     }
-    else if ( eArea == SVX_SPELL_BODY )
+    else if ( eArea == SvxSpellArea::Body )
     {
         ;   // Is handled by the App through SpellNextDocument
     }
@@ -108,12 +105,6 @@ void EditSpellWrapper::SpellStart( SvxSpellArea eArea )
 void EditSpellWrapper::SpellContinue()
 {
     SetLast( pEditView->GetImpEditEngine()->ImpSpell( pEditView ) );
-}
-
-void EditSpellWrapper::SpellEnd()
-{
-    // Base class will show language errors...
-    SvxSpellWrapper::SpellEnd();
 }
 
 bool EditSpellWrapper::HasOtherCnt()
@@ -130,10 +121,9 @@ bool EditSpellWrapper::SpellMore()
     if ( pSpellInfo->bMultipleDoc )
     {
         bMore = pEE->SpellNextDocument();
-        SetCurTextObj( nullptr );
         if ( bMore )
         {
-            // The text has been entered into the engine, when backwords then
+            // The text has been entered into the engine, when backwards then
             // it must be behind the selection.
             pEditView->GetImpEditView()->SetEditSelection(
                         pEE->GetEditDoc().GetStartPaM() );
@@ -142,8 +132,7 @@ bool EditSpellWrapper::SpellMore()
     return bMore;
 }
 
-void EditSpellWrapper::ReplaceAll( const OUString &rNewText,
-            sal_Int16 )
+void EditSpellWrapper::ReplaceAll( const OUString &rNewText )
 {
     // Is called when the word is in ReplaceList of the spell checker
     pEditView->InsertText( rNewText );
@@ -165,17 +154,7 @@ void EditSpellWrapper::CheckSpellTo()
     }
 }
 
-size_t WrongList::Valid = std::numeric_limits<size_t>::max();
-
 WrongList::WrongList() : mnInvalidStart(0), mnInvalidEnd(Valid) {}
-
-WrongList::WrongList(const WrongList& r) :
-    maRanges(r.maRanges),
-    mnInvalidStart(r.mnInvalidStart),
-    mnInvalidEnd(r.mnInvalidEnd) {}
-
-WrongList::~WrongList() {}
-
 
 void WrongList::SetRanges( const std::vector<editeng::MisspellRange>& rRanges )
 {
@@ -271,7 +250,6 @@ void WrongList::TextInserted( size_t nPos, size_t nLength, bool bPosIsSep )
         }
         SAL_WARN_IF(bRefIsValid && rWrong.mnStart >= rWrong.mnEnd, "editeng",
                 "TextInserted, editeng::MisspellRange: Start >= End?!");
-        (void)bRefIsValid;
     }
 
     SAL_WARN_IF(DbgIsBuggy(), "editeng", "InsertWrong: WrongList broken!");
@@ -299,7 +277,7 @@ void WrongList::TextDeleted( size_t nPos, size_t nLength )
         }
     }
 
-    for (WrongList::iterator i = begin(); i != end(); )
+    for (WrongList::iterator i = maRanges.begin(); i != maRanges.end(); )
     {
         bool bDelWrong = false;
         if (i->mnEnd >= nPos)
@@ -351,12 +329,12 @@ bool WrongList::NextWrong( size_t& rnStart, size_t& rnEnd ) const
         rnStart get the start position, is possibly adjusted wrt. Wrong start
         rnEnd does not have to be initialized.
     */
-    for (WrongList::const_iterator i = begin(); i != end(); ++i)
+    for (auto const& range : maRanges)
     {
-        if (i->mnEnd > rnStart)
+        if (range.mnEnd > rnStart)
         {
-            rnStart = i->mnStart;
-            rnEnd = i->mnEnd;
+            rnStart = range.mnStart;
+            rnEnd = range.mnEnd;
             return true;
         }
     }
@@ -365,11 +343,11 @@ bool WrongList::NextWrong( size_t& rnStart, size_t& rnEnd ) const
 
 bool WrongList::HasWrong( size_t nStart, size_t nEnd ) const
 {
-    for (WrongList::const_iterator i = begin(); i != end(); ++i)
+    for (auto const& range : maRanges)
     {
-        if (i->mnStart == nStart && i->mnEnd == nEnd)
+        if (range.mnStart == nStart && range.mnEnd == nEnd)
             return true;
-        else if (i->mnStart >= nStart)
+        else if (range.mnStart >= nStart)
             break;
     }
     return false;
@@ -377,11 +355,11 @@ bool WrongList::HasWrong( size_t nStart, size_t nEnd ) const
 
 bool WrongList::HasAnyWrong( size_t nStart, size_t nEnd ) const
 {
-    for (WrongList::const_iterator i = begin(); i != end(); ++i)
+    for (auto const& range : maRanges)
     {
-        if (i->mnEnd >= nStart && i->mnStart < nEnd)
+        if (range.mnEnd >= nStart && range.mnStart < nEnd)
             return true;
-        else if (i->mnStart >= nEnd)
+        else if (range.mnStart >= nEnd)
             break;
     }
     return false;
@@ -390,7 +368,7 @@ bool WrongList::HasAnyWrong( size_t nStart, size_t nEnd ) const
 void WrongList::ClearWrongs( size_t nStart, size_t nEnd,
             const ContentNode* pNode )
 {
-    for (WrongList::iterator i = begin(); i != end(); )
+    for (WrongList::iterator i = maRanges.begin(); i != maRanges.end(); )
     {
         if (i->mnEnd > nStart && i->mnStart < nEnd)
         {
@@ -398,7 +376,7 @@ void WrongList::ClearWrongs( size_t nStart, size_t nEnd,
             {
                 i->mnStart = nEnd;
                 // Blanks?
-                while (i->mnStart < (size_t)pNode->Len() &&
+                while (i->mnStart < static_cast<size_t>(pNode->Len()) &&
                        (pNode->GetChar(i->mnStart) == ' ' ||
                         pNode->IsFeature(i->mnStart)))
                 {
@@ -423,8 +401,8 @@ void WrongList::ClearWrongs( size_t nStart, size_t nEnd,
 
 void WrongList::InsertWrong( size_t nStart, size_t nEnd )
 {
-    WrongList::iterator nPos = end();
-    for (WrongList::iterator i = begin(); i != end(); ++i)
+    WrongList::iterator nPos = maRanges.end();
+    for (WrongList::iterator i = maRanges.begin(); i != maRanges.end(); ++i)
     {
         if (i->mnStart >= nStart)
         {
@@ -445,7 +423,7 @@ void WrongList::InsertWrong( size_t nStart, size_t nEnd )
     if (nPos != maRanges.end())
         maRanges.insert(nPos, editeng::MisspellRange(nStart, nEnd));
     else
-        maRanges.push_back(editeng::MisspellRange(nStart, nEnd));
+        maRanges.emplace_back(nStart, nEnd);
 
     SAL_WARN_IF(DbgIsBuggy(), "editeng", "InsertWrong: WrongList broken!");
 }
@@ -470,13 +448,13 @@ bool WrongList::operator==(const WrongList& rCompare) const
         || maRanges.size() != rCompare.maRanges.size())
         return false;
 
-    WrongList::const_iterator rCA = maRanges.begin();
     WrongList::const_iterator rCB = rCompare.maRanges.begin();
 
-    for (; rCA != maRanges.end(); ++rCA, ++rCB)
+    for (auto const& rangeA : maRanges)
     {
-        if(rCA->mnStart != rCB->mnStart || rCA->mnEnd != rCB->mnEnd)
+        if(rangeA.mnStart != rCB->mnStart || rangeA.mnEnd != rCB->mnEnd)
             return false;
+        ++rCB;
     }
 
     return true;
@@ -526,9 +504,9 @@ bool WrongList::DbgIsBuggy() const
 {
     // Check if the ranges overlap.
     bool bError = false;
-    for (WrongList::const_iterator i = begin(); !bError && (i != end()); ++i)
+    for (WrongList::const_iterator i = maRanges.begin(); !bError && (i != maRanges.end()); ++i)
     {
-        for (WrongList::const_iterator j = i + 1; !bError && (j != end()); ++j)
+        for (WrongList::const_iterator j = i + 1; !bError && (j != maRanges.end()); ++j)
         {
             // 1) Start before, End after the second Start
             if (i->mnStart <= j->mnStart && i->mnEnd >= j->mnStart)
@@ -553,7 +531,7 @@ EdtAutoCorrDoc::EdtAutoCorrDoc(
 EdtAutoCorrDoc::~EdtAutoCorrDoc()
 {
     if ( bUndoAction )
-        mpEditEngine->UndoActionEnd( EDITUNDO_INSERT );
+        mpEditEngine->UndoActionEnd();
 }
 
 bool EdtAutoCorrDoc::Delete(sal_Int32 nStt, sal_Int32 nEnd)
@@ -630,7 +608,7 @@ void EdtAutoCorrDoc::SetAttr(sal_Int32 nStt, sal_Int32 nEnd,
 
         EditSelection aSel( EditPaM( pCurNode, nStt ), EditPaM( pCurNode, nEnd ) );
         aSel.Max().SetIndex( nEnd );    // ???
-        mpEditEngine->SetAttribs( aSel, aSet, ATTRSPECIAL_EDGE );
+        mpEditEngine->SetAttribs( aSel, aSet, SetAttribsMode::Edge );
         bAllowUndoAction = false;
     }
 }
@@ -645,7 +623,7 @@ bool EdtAutoCorrDoc::SetINetAttr(sal_Int32 nStt, sal_Int32 nEnd,
     SAL_WARN_IF(nCursor < nEnd, "editeng",
             "Cursor in the heart of the action?!");
     nCursor -= ( nEnd-nStt );
-    SvxFieldItem aField( SvxURLField( rURL, aText, SVXURLFORMAT_REPR ),
+    SvxFieldItem aField( SvxURLField( rURL, aText, SvxURLFormat::Repr ),
                                       EE_FEATURE_FIELD  );
     mpEditEngine->InsertField(aSel, aField);
     nCursor++;
@@ -665,14 +643,12 @@ OUString const* EdtAutoCorrDoc::GetPrevPara(bool const)
     sal_Int32 nPos = rNodes.GetPos( pCurNode );
 
     // Special case: Bullet => Paragraph start => simply return NULL...
-    const SfxBoolItem& rBulletState = static_cast<const SfxBoolItem&>(
-            mpEditEngine->GetParaAttrib( nPos, EE_PARA_BULLETSTATE ));
+    const SfxBoolItem& rBulletState = mpEditEngine->GetParaAttrib( nPos, EE_PARA_BULLETSTATE );
     bool bBullet = rBulletState.GetValue();
     if ( !bBullet && (mpEditEngine->GetControlWord() & EEControlBits::OUTLINER) )
     {
         // The Outliner has still a Bullet at Level 0.
-        const SfxInt16Item& rLevel = static_cast<const SfxInt16Item&>(
-                mpEditEngine->GetParaAttrib( nPos, EE_PARA_OUTLLEVEL ));
+        const SfxInt16Item& rLevel = mpEditEngine->GetParaAttrib( nPos, EE_PARA_OUTLLEVEL );
         if ( rLevel.GetValue() == 0 )
             bBullet = true;
     }

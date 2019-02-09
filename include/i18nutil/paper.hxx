@@ -22,11 +22,11 @@
 
 #include <i18nutil/i18nutildllapi.h>
 #include <rtl/string.hxx>
-#include <com/sun/star/lang/Locale.hpp>
 
-//!! WARNING: be aware of cui/source/tabpages/page.h where someone had the broken idea
-//!! of duplicating the values of this enum in order to use those defines within
-//!! src files.
+namespace com { namespace sun { namespace star { namespace lang { struct Locale; } } } }
+
+//!! The values of the following enumerators must correspond to the array position
+//!! of the respective paper size in the file i18nutil/source/utility/paper.cxx
 //!! Thus don't reorder the enum values here without changing the code there as well.
 enum Paper
 {
@@ -109,11 +109,13 @@ enum Paper
     PAPER_ARCHD,
     PAPER_ARCHE,
     PAPER_SCREEN_16_9,
-    PAPER_SCREEN_16_10
+    PAPER_SCREEN_16_10,
+    PAPER_16K_195x270,
+    PAPER_16K_197x273
 };
 
 // defined for 'equal size' test with the implementation array
-#define NUM_PAPER_ENTRIES   (PAPER_SCREEN_16_10 - PAPER_A0 + 1)
+#define NUM_PAPER_ENTRIES   (PAPER_16K_197x273 - PAPER_A0 + 1)
 
 
 class I18NUTIL_DLLPUBLIC PaperInfo
@@ -129,7 +131,7 @@ public:
     long getWidth() const { return m_nPaperWidth; }
     long getHeight() const { return m_nPaperHeight; }
     bool sloppyEqual(const PaperInfo &rOther) const;
-    bool doSloppyFit();
+    void doSloppyFit();
 
     static PaperInfo getSystemDefaultPaper();
     static PaperInfo getDefaultPaperForLocale(const css::lang::Locale & rLocale);

@@ -18,7 +18,7 @@
  */
 
 
-#include <main.hxx>
+#include "main.hxx"
 
 
 void CGM::ImplDoClass2()
@@ -103,7 +103,7 @@ void CGM::ImplDoClass2()
         break;
         case 0x09 : /*Device Viewport Specification Mode*/
         {
-            nUInteger = ImplGetUI16( 8 );
+            nUInteger = ImplGetUI16();
             switch( nUInteger )
             {
                 case 0 : pElement->eDeviceViewPortMode = DVPM_FRACTION; break;
@@ -144,20 +144,26 @@ void CGM::ImplDoClass2()
         {
             LineBundle  aTempLineBundle;
             aTempLineBundle.SetIndex( ImplGetI( pElement->nIndexPrecision ) );
-            aTempLineBundle.eLineType = (LineType)ImplGetI( pElement->nIndexPrecision );
+            aTempLineBundle.eLineType = static_cast<LineType>(ImplGetI( pElement->nIndexPrecision ));
             aTempLineBundle.nLineWidth = ImplGetFloat( pElement->eRealPrecision, pElement->nRealSize );
             aTempLineBundle.SetColor( ImplGetBitmapColor() );
+            const bool bUpdateLineBundle = aTempLineBundle.GetIndex() == pElement->pLineBundle->GetIndex();
             CGMElements::InsertBundle( pElement->aLineList, aTempLineBundle );
+            if (bUpdateLineBundle)
+                pElement->pLineBundle = static_cast<LineBundle*>(CGMElements::GetBundleIndex(aTempLineBundle.GetIndex(), pElement->aLineList, pElement->aLineBundle));
         }
         break;
         case 0x0c : /*Marker Representation*/
         {
             MarkerBundle aTempMarkerBundle;
             aTempMarkerBundle.SetIndex( ImplGetI( pElement->nIndexPrecision ) );
-            aTempMarkerBundle.eMarkerType = (MarkerType)ImplGetI( pElement->nIndexPrecision );
+            aTempMarkerBundle.eMarkerType = static_cast<MarkerType>(ImplGetI( pElement->nIndexPrecision ));
             aTempMarkerBundle.nMarkerSize = ImplGetFloat( pElement->eRealPrecision, pElement->nRealSize );
             aTempMarkerBundle.SetColor( ImplGetBitmapColor() );
+            const bool bUpdateMarkerBundle = aTempMarkerBundle.GetIndex() == pElement->pMarkerBundle->GetIndex();
             CGMElements::InsertBundle( pElement->aMarkerList, aTempMarkerBundle );
+            if (bUpdateMarkerBundle)
+                pElement->pMarkerBundle = static_cast<MarkerBundle*>(CGMElements::GetBundleIndex(aTempMarkerBundle.GetIndex(), pElement->aMarkerList, pElement->aMarkerBundle));
         }
         break;
         case 0x0d : /*Text Representation*/
@@ -165,32 +171,41 @@ void CGM::ImplDoClass2()
             TextBundle aTempTextBundle;
             aTempTextBundle.SetIndex( ImplGetI( pElement->nIndexPrecision ) );
             aTempTextBundle.nTextFontIndex = ImplGetI( pElement->nIndexPrecision );
-            aTempTextBundle.eTextPrecision = (TextPrecision)ImplGetI( pElement->nIndexPrecision );
+            aTempTextBundle.eTextPrecision = static_cast<TextPrecision>(ImplGetI( pElement->nIndexPrecision ));
             aTempTextBundle.nCharacterSpacing = ImplGetFloat( pElement->eRealPrecision, pElement->nRealSize );
             aTempTextBundle.nCharacterExpansion = ImplGetFloat( pElement->eRealPrecision, pElement->nRealSize );
             aTempTextBundle.SetColor( ImplGetBitmapColor() );
+            const bool bUpdateTextBundle = aTempTextBundle.GetIndex() == pElement->pTextBundle->GetIndex();
             CGMElements::InsertBundle( pElement->aTextList, aTempTextBundle );
+            if (bUpdateTextBundle)
+                pElement->pTextBundle = static_cast<TextBundle*>(CGMElements::GetBundleIndex(aTempTextBundle.GetIndex(), pElement->aTextList, pElement->aTextBundle));
         }
         break;
         case 0x0e : /*Fill Representation*/
         {
             FillBundle aTempFillBundle;
             aTempFillBundle.SetIndex( ImplGetI( pElement->nIndexPrecision ) );
-            aTempFillBundle.eFillInteriorStyle = (FillInteriorStyle)ImplGetI( pElement->nIndexPrecision );
+            aTempFillBundle.eFillInteriorStyle = static_cast<FillInteriorStyle>(ImplGetI( pElement->nIndexPrecision ));
             aTempFillBundle.SetColor( ImplGetBitmapColor() );
             aTempFillBundle.nFillPatternIndex = ImplGetI( pElement->nIndexPrecision );
             aTempFillBundle.nFillHatchIndex = ImplGetI( pElement->nIndexPrecision );
+            const bool bUpdateFillBundle = aTempFillBundle.GetIndex() == pElement->pFillBundle->GetIndex();
             CGMElements::InsertBundle( pElement->aFillList, aTempFillBundle );
+            if (bUpdateFillBundle)
+                pElement->pFillBundle = static_cast<FillBundle*>(CGMElements::GetBundleIndex(aTempFillBundle.GetIndex(), pElement->aFillList, pElement->aFillBundle));
         }
         break;
         case 0x0f : /*Edge Representation*/
         {
             EdgeBundle aTempEdgeBundle;
             aTempEdgeBundle.SetIndex( ImplGetI( pElement->nIndexPrecision ) );
-            aTempEdgeBundle.eEdgeType = (EdgeType)ImplGetI( pElement->nIndexPrecision );
+            aTempEdgeBundle.eEdgeType = static_cast<EdgeType>(ImplGetI( pElement->nIndexPrecision ));
             aTempEdgeBundle.nEdgeWidth = ImplGetFloat( pElement->eRealPrecision, pElement->nRealSize );
             aTempEdgeBundle.SetColor( ImplGetBitmapColor() );
+            const bool bUpdateEdgeBundle = aTempEdgeBundle.GetIndex() == pElement->pEdgeBundle->GetIndex();
             CGMElements::InsertBundle( pElement->aEdgeList, aTempEdgeBundle );
+            if (bUpdateEdgeBundle)
+                pElement->pEdgeBundle = static_cast<EdgeBundle*>(CGMElements::GetBundleIndex(aTempEdgeBundle.GetIndex(), pElement->aEdgeList, pElement->aEdgeBundle));
         }
         break;
         case 0x10 : /*Interior Style Specification Mode */break;    // NS

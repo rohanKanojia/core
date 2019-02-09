@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkDialog" id="GoalSeekDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Goal Seek</property>
+    <property name="title" translatable="yes" context="goalseekdlg|GoalSeekDialog">Goal Seek</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -94,7 +94,7 @@
                       <object class="GtkLabel" id="formulatext">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">_Formula cell:</property>
+                        <property name="label" translatable="yes" context="goalseekdlg|formulatext">_Formula cell:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">formulaedit</property>
                       </object>
@@ -107,7 +107,7 @@
                       <object class="GtkLabel" id="label3">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Target _value:</property>
+                        <property name="label" translatable="yes" context="goalseekdlg|label3">Target _value:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">target</property>
                       </object>
@@ -120,7 +120,7 @@
                       <object class="GtkLabel" id="vartext">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">Variable _cell:</property>
+                        <property name="label" translatable="yes" context="goalseekdlg|vartext">Variable _cell:</property>
                         <property name="use_underline">True</property>
                         <property name="mnemonic_widget">varedit</property>
                       </object>
@@ -141,7 +141,6 @@
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -173,7 +172,6 @@
                         <property name="can_focus">True</property>
                         <property name="valign">center</property>
                         <property name="hexpand">True</property>
-                        <property name="invisible_char">•</property>
                       </object>
                       <packing>
                         <property name="left_attach">1</property>
@@ -192,7 +190,6 @@
                             <property name="can_focus">True</property>
                             <property name="valign">center</property>
                             <property name="hexpand">True</property>
-                            <property name="invisible_char">•</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -226,7 +223,7 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Default Settings</property>
+                <property name="label" translatable="yes" context="goalseekdlg|label1">Default Settings</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -242,9 +239,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

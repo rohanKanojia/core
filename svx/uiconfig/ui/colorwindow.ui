@@ -1,45 +1,74 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.10"/>
-  <requires lib="LibreOffice" version="1.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="svx">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkImage" id="auto_icon">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="pixbuf">cmd/sc_square_unfilled.png</property>
+    <property name="icon_name">cmd/sc_square_unfilled.png</property>
   </object>
   <object class="GtkImage" id="custom_color_icon">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
     <property name="margin_right">6</property>
     <property name="xalign">0</property>
-    <property name="pixbuf">cmd/sc_colorsettings.png</property>
+    <property name="icon_name">cmd/sc_colorsettings.png</property>
     <property name="icon_size">1</property>
   </object>
-  <object class="GtkWindow" id="palette_popup_window">
+  <object class="GtkImage" id="none_icon">
+    <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="hexpand">True</property>
-    <property name="vexpand">True</property>
+    <property name="icon_name">cmd/sc_square_unfilled.png</property>
+  </object>
+  <object class="GtkPopover" id="palette_popup_window">
+    <property name="can_focus">False</property>
+    <property name="no_show_all">True</property>
     <property name="border_width">4</property>
-    <property name="resizable">False</property>
-    <property name="destroy_with_parent">True</property>
-    <property name="type_hint">popup-menu</property>
-    <property name="skip_pager_hint">True</property>
-    <property name="decorated">False</property>
-    <property name="deletable">False</property>
     <child>
       <object class="GtkBox" id="box1">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
         <child>
-          <object class="GtkButton" id="auto_color_button">
+          <object class="GtkBox">
             <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="image">auto_icon</property>
-            <property name="relief">none</property>
-            <property name="xalign">0</property>
+            <property name="can_focus">False</property>
+            <property name="spacing">6</property>
+            <property name="homogeneous">True</property>
+            <child>
+              <object class="GtkButton" id="auto_color_button">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="can_default">True</property>
+                <property name="receives_default">True</property>
+                <property name="no_show_all">True</property>
+                <property name="image">auto_icon</property>
+                <property name="relief">none</property>
+                <property name="xalign">0</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="none_color_button">
+                <property name="label" translatable="yes" context="colorwindow|none_color_button">None</property>
+                <property name="can_focus">True</property>
+                <property name="can_default">True</property>
+                <property name="receives_default">True</property>
+                <property name="no_show_all">True</property>
+                <property name="image">none_icon</property>
+                <property name="relief">none</property>
+                <property name="xalign">0</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -59,7 +88,7 @@
           </packing>
         </child>
         <child>
-          <object class="GtkComboBox" id="palette_listbox">
+          <object class="GtkComboBoxText" id="palette_listbox">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
           </object>
@@ -70,15 +99,29 @@
           </packing>
         </child>
         <child>
-          <object class="svxcorelo-SvxColorValueSet" id="colorset">
-            <property name="width_request">200</property>
-            <property name="height_request">150</property>
+          <object class="GtkScrolledWindow" id="colorsetwin">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
+            <property name="hscrollbar_policy">never</property>
+            <property name="vscrollbar_policy">never</property>
+            <property name="shadow_type">in</property>
+            <child>
+              <object class="GtkViewport">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <child>
+                  <object class="GtkDrawingArea" id="colorset">
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="events">GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+                  </object>
+                </child>
+              </object>
+            </child>
           </object>
           <packing>
-            <property name="expand">True</property>
+            <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">3</property>
           </packing>
@@ -98,7 +141,9 @@
           <object class="GtkLabel" id="label1">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Recent</property>
+            <property name="label" translatable="yes" context="colorwindow|label1">Recent</property>
+            <property name="use_underline">True</property>
+            <property name="mnemonic_widget">recent_colorset</property>
             <property name="xalign">0</property>
           </object>
           <packing>
@@ -108,10 +153,11 @@
           </packing>
         </child>
         <child>
-          <object class="svxcorelo-SvxColorValueSet" id="recent_colorset">
+          <object class="GtkDrawingArea" id="recent_colorset">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
+            <property name="events">GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -132,7 +178,7 @@
         </child>
         <child>
           <object class="GtkButton" id="color_picker_button">
-            <property name="label" translatable="yes">Custom Color…</property>
+            <property name="label" translatable="yes" context="colorwindow|color_picker_button">Custom Color…</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>

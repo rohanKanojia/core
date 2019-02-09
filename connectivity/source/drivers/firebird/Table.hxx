@@ -33,7 +33,7 @@ namespace connectivity
              * Get the ALTER TABLE [TABLE] ALTER [COLUMN] String.
              * Includes a trailing space.
              */
-            ::rtl::OUString getAlterTableColumn(const ::rtl::OUString& rColumn);
+            OUString getAlterTableColumn(const OUString& rColumn);
 
         protected:
             void construct() override;
@@ -41,49 +41,41 @@ namespace connectivity
         public:
             Table(Tables* pTables,
                   ::osl::Mutex& rMutex,
-                  const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XConnection >& _xConnection);
+                  const css::uno::Reference< css::sdbc::XConnection >& _xConnection);
             Table(Tables* pTables,
                   ::osl::Mutex& rMutex,
-                  const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XConnection >& _xConnection,
-                  const ::rtl::OUString& rName,
-                  const ::rtl::OUString& rType,
-                  const ::rtl::OUString& rDescription);
+                  const css::uno::Reference< css::sdbc::XConnection >& _xConnection,
+                  const OUString& rName,
+                  const OUString& rType,
+                  const OUString& rDescription);
 
             // OTableHelper
             virtual ::connectivity::sdbcx::OCollection* createColumns(
-                const ::connectivity::TStringVector& rNames) override;
+                const ::std::vector< OUString>& rNames) override;
             virtual ::connectivity::sdbcx::OCollection* createKeys(
-                const ::connectivity::TStringVector& rNames) override;
+                const ::std::vector< OUString>& rNames) override;
             virtual ::connectivity::sdbcx::OCollection* createIndexes(
-                const ::connectivity::TStringVector& rNames) override;
+                const ::std::vector< OUString>& rNames) override;
 
             // XAlterTable
             /**
-             * See ::com::sun::star::sdbcx::ColumnDescriptor for details of
+             * See css::sdbcx::ColumnDescriptor for details of
              * rDescriptor.
              */
             virtual void SAL_CALL alterColumnByName(
-                    const ::rtl::OUString& rColName,
-                    const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& rDescriptor)
-                throw(::com::sun::star::sdbc::SQLException,
-                      ::com::sun::star::container::NoSuchElementException,
-                      ::com::sun::star::uno::RuntimeException, std::exception) override;
+                    const OUString& rColName,
+                    const css::uno::Reference< css::beans::XPropertySet >& rDescriptor) override;
 
             // XRename -- UNSUPPORTED
-            virtual void SAL_CALL rename(const ::rtl::OUString& sName)
-                throw(::com::sun::star::sdbc::SQLException,
-                      ::com::sun::star::container::ElementExistException,
-                      ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL rename(const OUString& sName) override;
 
             //XInterface
-            virtual ::com::sun::star::uno::Any
-                    SAL_CALL queryInterface(const ::com::sun::star::uno::Type & rType)
-                throw(::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Any
+                    SAL_CALL queryInterface(const css::uno::Type & rType) override;
 
             //XTypeProvider
-            virtual ::com::sun::star::uno::Sequence< ::com::sun::star::uno::Type >
-                    SAL_CALL getTypes()
-                throw(::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Sequence< css::uno::Type >
+                    SAL_CALL getTypes() override;
 
         };
 

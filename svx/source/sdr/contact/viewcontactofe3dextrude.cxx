@@ -56,13 +56,13 @@ namespace sdr
             // calculate texture size; use size of top/bottom cap to get a perfect mapping
             // for the caps. The in-between geometry will get a stretched size with a
             // relative factor size of caps to extrude depth
-            const basegfx::B2DRange aRange(basegfx::tools::getRange(aPolyPolygon));
+            const basegfx::B2DRange aRange(basegfx::utils::getRange(aPolyPolygon));
             const basegfx::B2DVector aTextureSize(aRange.getWidth(), aRange.getHeight());
 
             // get more data
-            const double fDepth((double)GetE3dExtrudeObj().GetExtrudeDepth());
-            const double fDiagonal((double)GetE3dExtrudeObj().GetPercentDiagonal() / 100.0);
-            const double fBackScale((double)GetE3dExtrudeObj().GetPercentBackScale() / 100.0);
+            const double fDepth(static_cast<double>(GetE3dExtrudeObj().GetExtrudeDepth()));
+            const double fDiagonal(static_cast<double>(GetE3dExtrudeObj().GetPercentDiagonal()) / 100.0);
+            const double fBackScale(static_cast<double>(GetE3dExtrudeObj().GetPercentBackScale()) / 100.0);
             const bool bSmoothNormals(GetE3dExtrudeObj().GetSmoothNormals()); // Plane itself
             const bool bSmoothLids(GetE3dExtrudeObj().GetSmoothLids()); // Front/back
             const bool bCharacterMode(GetE3dExtrudeObj().GetCharacterMode());
@@ -74,7 +74,7 @@ namespace sdr
             const drawinglayer::primitive3d::Primitive3DReference xReference(
                 new drawinglayer::primitive3d::SdrExtrudePrimitive3D(
                     aWorldTransform, aTextureSize, aAttribute, *pSdr3DObjectAttribute,
-                    aPolyPolygon, fDepth, fDiagonal, fBackScale, bSmoothNormals, true, bSmoothLids,
+                    aPolyPolygon, fDepth, fDiagonal, fBackScale, bSmoothNormals, bSmoothLids,
                     bCharacterMode, bCloseFront, bCloseBack));
             xRetval = { xReference };
 

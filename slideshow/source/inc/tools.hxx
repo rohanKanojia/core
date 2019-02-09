@@ -28,6 +28,7 @@
 #include <com/sun/star/container/XEnumeration.hpp>
 #include <comphelper/random.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <vector>
 
 #include <cppcanvas/color.hxx>
@@ -38,7 +39,6 @@
 #include "hslcolor.hxx"
 
 #include <memory>
-#include <functional>
 #include <cstdlib>
 #include <string.h>
 #include <algorithm>
@@ -78,7 +78,7 @@ namespace slideshow
 
         // xxx todo: remove with boost::hash when 1.33 is available
         template <typename T>
-        struct hash : ::std::unary_function<T, ::std::size_t>
+        struct hash
         {
             ::std::size_t operator()( T const& val ) const {
                 return hash_value(val);
@@ -105,17 +105,6 @@ namespace slideshow
 {
     namespace internal
     {
-        /** Cycle mode of intrinsic animations
-         */
-        enum CycleMode
-        {
-            /// loop the animation back to back
-            CYCLE_LOOP,
-            /// loop, but play backwards from end to start
-            CYCLE_PINGPONGLOOP
-        };
-
-
         // Value extraction from Any
         // =========================
 
@@ -273,13 +262,13 @@ namespace slideshow
         RGBColor unoColor2RGBColor( sal_Int32 );
         /** Convert an IntSRGBA to plain UNO API 32 bit int
          */
-        sal_Int32 RGBAColor2UnoColor( cppcanvas::Color::IntSRGBA );
+        sal_Int32 RGBAColor2UnoColor( cppcanvas::IntSRGBA );
 
         /** Fill a plain rectangle on the given canvas with the given color
          */
         void fillRect( const std::shared_ptr< cppcanvas::Canvas >& rCanvas,
                        const basegfx::B2DRange&                      rRect,
-                       cppcanvas::Color::IntSRGBA                    aFillColor );
+                       cppcanvas::IntSRGBA                    aFillColor );
 
         /** Init canvas with default background (white)
          */
@@ -292,20 +281,6 @@ namespace slideshow
             return comphelper::rng::uniform_size_distribution(0, n-1);
         }
 
-        /// To work around ternary operator in initializer lists
-        /// (Solaris compiler problems)
-#ifdef SOLARIS
-        template <typename T>
-        inline T const & ternary_op(
-            const bool cond, T const & arg1, T const & arg2 )
-        {
-            if (cond)
-                return arg1;
-            else
-                return arg2;
-        }
-#endif
-
         template <typename ValueType>
         inline bool getPropertyValue(
             ValueType & rValue,
@@ -316,15 +291,11 @@ namespace slideshow
             try {
                 const css::uno::Any& a(
                     xPropSet->getPropertyValue( propName ) );
-                bool const bRet = (a >>= rValue);
+                bool const bRet = css::uno::fromAny(a, &rValue);
 #if OSL_DEBUG_LEVEL > 0
                 if( !bRet )
-                    OSL_TRACE( "%s: while retrieving property %s, cannot extract Any of type %s\n",
-                               OUStringToOString( propName,
-                                                         RTL_TEXTENCODING_ASCII_US ).getStr(),
-                               OSL_THIS_FUNC,
-                               OUStringToOString( a.getValueTypeRef()->pTypeName,
-                                                         RTL_TEXTENCODING_ASCII_US ).getStr() );
+                    SAL_INFO("slideshow", OSL_THIS_FUNC << ": while retrieving property " << propName << ", cannot extract Any of type "
+                               << a.getValueTypeRef()->pTypeName);
 #endif
                 return bRet;
             }
@@ -352,12 +323,8 @@ namespace slideshow
                 bool const bRet = rIfc.is();
 #if OSL_DEBUG_LEVEL > 0
                 if( !bRet )
-                    OSL_TRACE( "%s: while retrieving property %s, cannot extract Any of type %s to interface\n",
-                               OUStringToOString( propName,
-                                                         RTL_TEXTENCODING_ASCII_US ).getStr(),
-                               OSL_THIS_FUNC,
-                               OUStringToOString( a.getValueTypeRef()->pTypeName,
-                                                         RTL_TEXTENCODING_ASCII_US ).getStr() );
+                    SAL_INFO("slideshow", OSL_THIS_FUNC << ": while retrieving property " << propName << ", cannot extract Any of type "
+                               << a.getValueTypeRef()->pTypeName << " to interface");
 #endif
                 return bRet;
             }

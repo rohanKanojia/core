@@ -19,31 +19,26 @@
 
 #include <unotools/fltrcfg.hxx>
 
+#include <osl/diagnose.h>
 #include <sfx2/objsh.hxx>
 #include <sfx2/docinf.hxx>
 #include <filter/msfilter/svxmsbas.hxx>
 
 #include <oox/ole/vbaexport.hxx>
 
-#include "scerrors.hxx"
-#include "scextopt.hxx"
+#include <scerrors.hxx>
 
-#include "root.hxx"
-#include "excdoc.hxx"
-#include "exp_op.hxx"
+#include <root.hxx>
+#include <excdoc.hxx>
+#include <exp_op.hxx>
 
-#include "xcl97esc.hxx"
-
-#include "document.hxx"
-#include "rangenam.hxx"
-#include "filtopt.hxx"
-#include "xltools.hxx"
-#include "xelink.hxx"
+#include <xehelper.hxx>
 
 #include <officecfg/Office/Calc.hxx>
 
-#include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
+
+namespace com { namespace sun { namespace star { namespace document { class XDocumentProperties; } } } }
 
 namespace {
 
@@ -57,28 +52,27 @@ enum class VBAExportMode
 }
 
 ExportBiff5::ExportBiff5( XclExpRootData& rExpData, SvStream& rStrm ):
-    ExportTyp( rStrm, &rExpData.mrDoc, rExpData.meTextEnc ),
+    ExportTyp( rStrm ),
     XclExpRoot( rExpData )
 {
     // only need part of the Root data
     pExcRoot = &GetOldRoot();
     pExcRoot->pER = this;   // ExcRoot -> XclExpRoot
     pExcRoot->eDateiTyp = Biff5;
-    pExcDoc = new ExcDocument( *this );
+    pExcDoc.reset( new ExcDocument( *this ) );
 }
 
 ExportBiff5::~ExportBiff5()
 {
-    delete pExcDoc;
 }
 
-FltError ExportBiff5::Write()
+ErrCode ExportBiff5::Write()
 {
     SfxObjectShell* pDocShell = GetDocShell();
     OSL_ENSURE( pDocShell, "ExportBiff5::Write - no document shell" );
 
     tools::SvRef<SotStorage> xRootStrg = GetRootStorage();
-    OSL_ENSURE( xRootStrg.Is(), "ExportBiff5::Write - no root storage" );
+    OSL_ENSURE( xRootStrg.is(), "ExportBiff5::Write - no root storage" );
 
     VBAExportMode eVbaExportMode = VBAExportMode::NONE;
     if( GetBiff() == EXC_BIFF8 )
@@ -93,27 +87,27 @@ FltError ExportBiff5::Write()
         }
     }
 
-    if ( pDocShell && xRootStrg.Is() && eVbaExportMode == VBAExportMode::FULL_EXPORT)
+    if ( pDocShell && xRootStrg.is() && eVbaExportMode == VBAExportMode::FULL_EXPORT)
     {
         VbaExport aExport(pDocShell->GetModel());
         if (aExport.containsVBAProject())
         {
-            SotStorage* pVBARoot = xRootStrg->OpenSotStorage("_VBA_PROJECT_CUR");
-            aExport.exportVBA(pVBARoot);
+            tools::SvRef<SotStorage> xVBARoot = xRootStrg->OpenSotStorage("_VBA_PROJECT_CUR");
+            aExport.exportVBA( xVBARoot.get() );
         }
     }
-    else if( pDocShell && xRootStrg.Is() && eVbaExportMode == VBAExportMode::REEXPORT_STREAM )
+    else if( pDocShell && xRootStrg.is() && eVbaExportMode == VBAExportMode::REEXPORT_STREAM )
     {
         SvxImportMSVBasic aBasicImport( *pDocShell, *xRootStrg );
         const ErrCode nErr = aBasicImport.SaveOrDelMSVBAStorage( true, EXC_STORAGE_VBA_PROJECT );
         if( nErr != ERRCODE_NONE )
-            pDocShell->SetError( nErr, OSL_LOG_PREFIX );
+            pDocShell->SetError(nErr);
     }
 
     pExcDoc->ReadDoc();         // ScDoc -> ExcDoc
     pExcDoc->Write( aOut );     // wechstreamen
 
-    if( pDocShell && xRootStrg.Is() )
+    if( pDocShell && xRootStrg.is() )
     {
         using namespace ::com::sun::star;
         uno::Reference<document::XDocumentPropertiesSupplier> xDPS(
@@ -124,12 +118,12 @@ FltError ExportBiff5::Write()
         {
             std::shared_ptr<GDIMetaFile> xMetaFile =
                 pDocShell->GetPreviewMetaFile();
-            uno::Sequence<sal_uInt8> metaFile(
+            uno::Sequence<sal_Int8> metaFile(
                 sfx2::convertMetaFile(xMetaFile.get()));
-            sfx2::SaveOlePropertySet(xDocProps, xRootStrg, &metaFile);
+            sfx2::SaveOlePropertySet( xDocProps, xRootStrg.get(), &metaFile );
         }
         else
-            sfx2::SaveOlePropertySet(xDocProps, xRootStrg );
+            sfx2::SaveOlePropertySet( xDocProps, xRootStrg.get() );
     }
 
     const XclExpAddressConverter& rAddrConv = GetAddressConverter();
@@ -140,7 +134,7 @@ FltError ExportBiff5::Write()
     if( rAddrConv.IsTabTruncated() )
         return SCWARN_EXPORT_MAXTAB;
 
-    return eERR_OK;
+    return ERRCODE_NONE;
 }
 
 ExportBiff8::ExportBiff8( XclExpRootData& rExpData, SvStream& rStrm ) :

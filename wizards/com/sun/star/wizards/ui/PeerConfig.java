@@ -59,15 +59,12 @@ public class PeerConfig implements XWindowListener
 
     private static class ImageUrlTask
     {
-
         Object oModel;
-        Object oResource;
-        Object oHCResource;
+        String oResource;
 
-        public ImageUrlTask(Object _oModel, Object _oResource, Object _oHCResource)
+        public ImageUrlTask(Object _oModel, String _oResource)
         {
             oResource = _oResource;
-            oHCResource = _oHCResource;
             oModel = _oModel;
         }
     }
@@ -96,15 +93,7 @@ public class PeerConfig implements XWindowListener
             for (int i = 0; i < this.aImageUrlTasks.size(); i++)
             {
                 ImageUrlTask aImageUrlTask = aImageUrlTasks.get(i);
-                String sImageUrl = PropertyNames.EMPTY_STRING;
-                if (AnyConverter.isInt(aImageUrlTask.oResource))
-                {
-                    sImageUrl = oUnoDialog.getWizardImageUrl(((Integer) aImageUrlTask.oResource).intValue(), ((Integer) aImageUrlTask.oHCResource).intValue());
-                }
-                else if (AnyConverter.isString(aImageUrlTask.oResource))
-                {
-                    sImageUrl = oUnoDialog.getImageUrl(((String) aImageUrlTask.oResource), ((String) aImageUrlTask.oHCResource));
-                }
+                String sImageUrl = aImageUrlTask.oResource;
                 if (!sImageUrl.equals(PropertyNames.EMPTY_STRING))
                 {
                     Helper.setUnoPropertyValue(aImageUrlTask.oModel, PropertyNames.PROPERTY_IMAGEURL, sImageUrl);
@@ -154,20 +143,9 @@ public class PeerConfig implements XWindowListener
      * Assigns an image to the property 'ImageUrl' of a dialog control. The image ids that the Resource urls point to
      * may be assigned in a Resource file outside the wizards project
      */
-    public void setImageUrl(Object _ocontrolmodel, String _sResourceUrl, String _sHCResourceUrl)
+    public void setImageUrl(Object _ocontrolmodel, String _sResourceUrl)
     {
-        ImageUrlTask oImageUrlTask = new ImageUrlTask(_ocontrolmodel, _sResourceUrl, _sHCResourceUrl);
-        this.aImageUrlTasks.add(oImageUrlTask);
-    }
-
-    /**
-     * Assigns an image to the property 'ImageUrl' of a dialog control. The image id must be assigned in a resource file
-     * within the wizards project
-     * wizards project
-     */
-    public void setImageUrl(Object _ocontrolmodel, Object _oResource, Object _oHCResource)
-    {
-        ImageUrlTask oImageUrlTask = new ImageUrlTask(_ocontrolmodel, _oResource, _oHCResource);
+        ImageUrlTask oImageUrlTask = new ImageUrlTask(_ocontrolmodel, _sResourceUrl);
         this.aImageUrlTasks.add(oImageUrlTask);
     }
 }

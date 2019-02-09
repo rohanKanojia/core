@@ -29,7 +29,6 @@
 #include <svl/lstner.hxx>
 #include <vcl/dockwin.hxx>
 #include <svx/svdmark.hxx>
-#include "ModuleHelper.hxx"
 
 namespace rptui
 {
@@ -41,10 +40,8 @@ class OObjectBase;
 // PropBrw
 
 
-class PropBrw : public DockingWindow , public SfxListener, public SfxBroadcaster
+class PropBrw final : public DockingWindow , public SfxListener, public SfxBroadcaster
 {
-private:
-    OModuleClient       m_aModuleClient;
     css::uno::Reference< css::uno::XComponentContext >
                         m_xInspectorContext;
     css::uno::Reference< css::uno::XComponentContext >
@@ -62,9 +59,8 @@ private:
     OSectionView*       m_pView;
     bool                m_bInitialStateChange;
 
-    PropBrw(PropBrw&) = delete;
-    void operator =(PropBrw&) = delete;
-protected:
+    PropBrw(PropBrw const &) = delete;
+    void operator =(PropBrw const &) = delete;
 
     virtual void Resize() override;
     virtual bool Close() override;
@@ -83,13 +79,13 @@ protected:
     css::uno::Reference< css::uno::XInterface> CreateComponentPair(
              const css::uno::Reference< css::uno::XInterface>& _xFormComponent
             ,const css::uno::Reference< css::uno::XInterface>& _xReportComponent);
-    DECL_LINK_TYPED( OnAsyncGetFocus, void*, void );
+    DECL_LINK( OnAsyncGetFocus, void*, void );
 
 public:
     PropBrw(const css::uno::Reference< css::uno::XComponentContext >& _xORB
             ,Window* pParent
             ,ODesignView*  _pDesignView);
-    virtual ~PropBrw();
+    virtual ~PropBrw() override;
     virtual void dispose() override;
 
     virtual void LoseFocus() override;

@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgtextpathnode.hxx>
-#include <svgio/svgreader/svgstyleattributes.hxx>
-#include <svgio/svgreader/svgpathnode.hxx>
-#include <svgio/svgreader/svgdocument.hxx>
-#include <svgio/svgreader/svgtrefnode.hxx>
+#include <svgtextpathnode.hxx>
+#include <svgstyleattributes.hxx>
+#include <svgpathnode.hxx>
+#include <svgdocument.hxx>
+#include <svgtrefnode.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <drawinglayer/primitive2d/textbreakuphelper.hxx>
@@ -44,7 +44,7 @@ namespace svgio
             const sal_uInt32                mnMaxIndex;
             sal_uInt32                      mnIndex;
             basegfx::B2DCubicBezier         maCurrentSegment;
-            basegfx::B2DCubicBezierHelper*  mpB2DCubicBezierHelper;
+            std::unique_ptr<basegfx::B2DCubicBezierHelper> mpB2DCubicBezierHelper;
             double                          mfCurrentSegmentLength;
             double                          mfSegmentStartPosition;
 
@@ -64,7 +64,7 @@ namespace svgio
                 const double fBasegfxPathLength,
                 double fPosition,
                 const basegfx::B2DPoint& rTextStart);
-            virtual ~pathTextBreakupHelper();
+            virtual ~pathTextBreakupHelper() override;
 
             // read access to evtl. advanced position
             double getPosition() const { return mfPosition; }
@@ -72,21 +72,17 @@ namespace svgio
 
         void pathTextBreakupHelper::freeB2DCubicBezierHelper()
         {
-            if(mpB2DCubicBezierHelper)
-            {
-                delete mpB2DCubicBezierHelper;
-                mpB2DCubicBezierHelper = nullptr;
-            }
+            mpB2DCubicBezierHelper.reset();
         }
 
         basegfx::B2DCubicBezierHelper* pathTextBreakupHelper::getB2DCubicBezierHelper()
         {
             if(!mpB2DCubicBezierHelper && maCurrentSegment.isBezier())
             {
-                mpB2DCubicBezierHelper = new basegfx::B2DCubicBezierHelper(maCurrentSegment);
+                mpB2DCubicBezierHelper.reset(new basegfx::B2DCubicBezierHelper(maCurrentSegment));
             }
 
-            return mpB2DCubicBezierHelper;
+            return mpB2DCubicBezierHelper.get();
         }
 
         void pathTextBreakupHelper::advanceToPosition(double fNewPosition)
@@ -124,7 +120,6 @@ namespace svgio
             mnMaxIndex(rPolygon.isClosed() ? rPolygon.count() : rPolygon.count() - 1),
             mnIndex(0),
             maCurrentSegment(),
-            mpB2DCubicBezierHelper(nullptr),
             mfCurrentSegmentLength(0.0),
             mfSegmentStartPosition(0.0)
         {
@@ -251,9 +246,7 @@ namespace svgio
         :   SvgNode(SVGTokenTextPath, rDocument, pParent),
             maSvgStyleAttributes(*this),
             maXLink(),
-            maStartOffset(),
-            mbMethod(true),
-            mbSpacing(false)
+            maStartOffset()
         {
         }
 
@@ -272,7 +265,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -290,39 +283,17 @@ namespace svgio
                     {
                         if(aNum.isPositive())
                         {
-                            setStartOffset(aNum);
+                            maStartOffset = aNum;
                         }
                     }
                     break;
                 }
                 case SVGTokenMethod:
                 {
-                    if(!aContent.isEmpty())
-                    {
-                        if(aContent.startsWith("align"))
-                        {
-                            setMethod(true);
-                        }
-                        else if(aContent.startsWith("stretch"))
-                        {
-                            setMethod(false);
-                        }
-                    }
                     break;
                 }
                 case SVGTokenSpacing:
                 {
-                    if(!aContent.isEmpty())
-                    {
-                        if(aContent.startsWith("auto"))
-                        {
-                            setSpacing(true);
-                        }
-                        else if(aContent.startsWith("exact"))
-                        {
-                            setSpacing(false);
-                        }
-                    }
                     break;
                 }
                 case SVGTokenXlinkHref:
@@ -365,14 +336,9 @@ namespace svgio
                 return false;
             }
 
-            const double fBasegfxPathLength(basegfx::tools::getLength(aPolygon));
+            const double fBasegfxPathLength(basegfx::utils::getLength(aPolygon));
 
-            if(basegfx::fTools::equalZero(fBasegfxPathLength))
-            {
-                return false;
-            }
-
-            return true;
+            return !basegfx::fTools::equalZero(fBasegfxPathLength);
         }
 
         void SvgTextPathNode::decomposePathNode(
@@ -380,96 +346,96 @@ namespace svgio
             drawinglayer::primitive2d::Primitive2DContainer& rTarget,
             const basegfx::B2DPoint& rTextStart) const
         {
-            if(!rPathContent.empty())
+            if(rPathContent.empty())
+                return;
+
+            const SvgPathNode* pSvgPathNode = dynamic_cast< const SvgPathNode* >(getDocument().findSvgNodeById(maXLink));
+
+            if(!pSvgPathNode)
+                return;
+
+            const basegfx::B2DPolyPolygon* pPolyPolyPath = pSvgPathNode->getPath();
+
+            if(!(pPolyPolyPath && pPolyPolyPath->count()))
+                return;
+
+            basegfx::B2DPolygon aPolygon(pPolyPolyPath->getB2DPolygon(0));
+
+            if(pSvgPathNode->getTransform())
             {
-                const SvgPathNode* pSvgPathNode = dynamic_cast< const SvgPathNode* >(getDocument().findSvgNodeById(maXLink));
+                aPolygon.transform(*pSvgPathNode->getTransform());
+            }
 
-                if(pSvgPathNode)
+            const double fBasegfxPathLength(basegfx::utils::getLength(aPolygon));
+
+            if(basegfx::fTools::equalZero(fBasegfxPathLength))
+                return;
+
+            double fUserToBasegfx(1.0); // multiply: user->basegfx, divide: basegfx->user
+
+            if(pSvgPathNode->getPathLength().isSet())
+            {
+                const double fUserLength(pSvgPathNode->getPathLength().solve(*this));
+
+                if(fUserLength > 0.0 && !basegfx::fTools::equal(fUserLength, fBasegfxPathLength))
                 {
-                    const basegfx::B2DPolyPolygon* pPolyPolyPath = pSvgPathNode->getPath();
-
-                    if(pPolyPolyPath && pPolyPolyPath->count())
-                    {
-                        basegfx::B2DPolygon aPolygon(pPolyPolyPath->getB2DPolygon(0));
-
-                        if(pSvgPathNode->getTransform())
-                        {
-                            aPolygon.transform(*pSvgPathNode->getTransform());
-                        }
-
-                        const double fBasegfxPathLength(basegfx::tools::getLength(aPolygon));
-
-                        if(!basegfx::fTools::equalZero(fBasegfxPathLength))
-                        {
-                            double fUserToBasegfx(1.0); // multiply: user->basegfx, divide: basegfx->user
-
-                            if(pSvgPathNode->getPathLength().isSet())
-                            {
-                                const double fUserLength(pSvgPathNode->getPathLength().solve(*this));
-
-                                if(fUserLength > 0.0 && !basegfx::fTools::equal(fUserLength, fBasegfxPathLength))
-                                {
-                                    fUserToBasegfx = fUserLength / fBasegfxPathLength;
-                                }
-                            }
-
-                            double fPosition(0.0);
-
-                            if(getStartOffset().isSet())
-                            {
-                                if(Unit_percent == getStartOffset().getUnit())
-                                {
-                                    // percent are relative to path length
-                                    fPosition = getStartOffset().getNumber() * 0.01 * fBasegfxPathLength;
-                                }
-                                else
-                                {
-                                    fPosition = getStartOffset().solve(*this) * fUserToBasegfx;
-                                }
-                            }
-
-                            if(fPosition >= 0.0)
-                            {
-                                const sal_Int32 nLength(rPathContent.size());
-                                sal_Int32 nCurrent(0);
-
-                                while(fPosition < fBasegfxPathLength && nCurrent < nLength)
-                                {
-                                    const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* pCandidate = nullptr;
-                                    const drawinglayer::primitive2d::Primitive2DReference xReference(rPathContent[nCurrent]);
-
-                                    if(xReference.is())
-                                    {
-                                        pCandidate = dynamic_cast< const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* >(xReference.get());
-                                    }
-
-                                    if(pCandidate)
-                                    {
-                                        const pathTextBreakupHelper aPathTextBreakupHelper(
-                                            *pCandidate,
-                                            aPolygon,
-                                            fBasegfxPathLength,
-                                            fPosition,
-                                            rTextStart);
-
-                                        const drawinglayer::primitive2d::Primitive2DContainer aResult(
-                                            aPathTextBreakupHelper.getResult());
-
-                                        if(!aResult.empty())
-                                        {
-                                            rTarget.append(aResult);
-                                        }
-
-                                        // advance position to consumed
-                                        fPosition = aPathTextBreakupHelper.getPosition();
-                                    }
-
-                                    nCurrent++;
-                                }
-                            }
-                        }
-                    }
+                    fUserToBasegfx = fUserLength / fBasegfxPathLength;
                 }
+            }
+
+            double fPosition(0.0);
+
+            if(getStartOffset().isSet())
+            {
+                if(Unit_percent == getStartOffset().getUnit())
+                {
+                    // percent are relative to path length
+                    fPosition = getStartOffset().getNumber() * 0.01 * fBasegfxPathLength;
+                }
+                else
+                {
+                    fPosition = getStartOffset().solve(*this) * fUserToBasegfx;
+                }
+            }
+
+            if(fPosition < 0.0)
+                return;
+
+            const sal_Int32 nLength(rPathContent.size());
+            sal_Int32 nCurrent(0);
+
+            while(fPosition < fBasegfxPathLength && nCurrent < nLength)
+            {
+                const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* pCandidate = nullptr;
+                const drawinglayer::primitive2d::Primitive2DReference xReference(rPathContent[nCurrent]);
+
+                if(xReference.is())
+                {
+                    pCandidate = dynamic_cast< const drawinglayer::primitive2d::TextSimplePortionPrimitive2D* >(xReference.get());
+                }
+
+                if(pCandidate)
+                {
+                    const pathTextBreakupHelper aPathTextBreakupHelper(
+                        *pCandidate,
+                        aPolygon,
+                        fBasegfxPathLength,
+                        fPosition,
+                        rTextStart);
+
+                    const drawinglayer::primitive2d::Primitive2DContainer& aResult(
+                        aPathTextBreakupHelper.getResult());
+
+                    if(!aResult.empty())
+                    {
+                        rTarget.append(aResult);
+                    }
+
+                    // advance position to consumed
+                    fPosition = aPathTextBreakupHelper.getPosition();
+                }
+
+                nCurrent++;
             }
         }
 

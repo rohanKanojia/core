@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "dpnumgroupinfo.hxx"
+#include <dpnumgroupinfo.hxx>
 
 ScDPNumGroupInfo::ScDPNumGroupInfo() :
     mbEnable(false),
@@ -17,18 +17,7 @@ ScDPNumGroupInfo::ScDPNumGroupInfo() :
     mbIntegerOnly(true),
     mfStart(0.0), mfEnd(0.0), mfStep(0.0) {}
 
-ScDPNumGroupInfo::ScDPNumGroupInfo(const ScDPNumGroupInfo& r) :
-    mbEnable(r.mbEnable),
-    mbDateValues(r.mbDateValues),
-    mbAutoStart(r.mbAutoStart),
-    mbAutoEnd(r.mbAutoEnd),
-    mbIntegerOnly(r.mbIntegerOnly),
-    mfStart(r.mfStart),
-    mfEnd(r.mfEnd), mfStep(r.mfStep) {}
-
-#if DEBUG_PIVOT_TABLE
-using std::cout;
-using std::endl;
+#if DUMP_PIVOT_TABLE
 
 void ScDPNumGroupInfo::Dump() const
 {

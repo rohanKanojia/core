@@ -21,9 +21,11 @@
 
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 #include <svx/svxdllapi.h>
+#include <o3tl/cow_wrapper.hxx>
+#include <tools/poly.hxx>
 
 class Point;
-class Rectangle;
+namespace tools { class Rectangle; }
 class SvStream;
 namespace tools {
     class Polygon;
@@ -35,25 +37,13 @@ class OutputDevice;
 #define XPOLY_APPEND         0xFFFF
 
 
-// point-styles in XPolygon:
-// NORMAL : start-/endpoint of a curve or a line
-// SMOOTH : smooth transition between curves
-// SYMMTR : smooth and symmetrical transition between curves
-// CONTROL: control handles of a  Bezier curve
-
-enum XPolyFlags { XPOLY_NORMAL, XPOLY_SMOOTH, XPOLY_CONTROL, XPOLY_SYMMTR };
-
-// Class XPolygon;has a point-array and a flag-array, which contains information about a particular point
+// Class XPolygon has a point-array and a flag-array, which contains information about a particular point
 
 class ImpXPolygon;
 
-class SVX_DLLPUBLIC XPolygon
+class SVX_DLLPUBLIC XPolygon final
 {
-protected:
-    ImpXPolygon*    pImpXPolygon;
-
-    // check ImpXPolygon-ReferenceCount and decouple if necessary
-    void    CheckReference();
+    o3tl::cow_wrapper< ImpXPolygon > pImpXPolygon;
 
     // auxiliary functions for Bezier conversion
     void    SubdivideBezier(sal_uInt16 nPos, bool bCalcFirst, double fT);
@@ -63,10 +53,11 @@ protected:
     static bool CheckAngles(sal_uInt16& nStart, sal_uInt16 nEnd, sal_uInt16& nA1, sal_uInt16& nA2);
 
 public:
-    XPolygon( sal_uInt16 nSize=16, sal_uInt16 nResize=16 );
-    XPolygon( const XPolygon& rXPoly );
+    XPolygon( sal_uInt16 nSize=16 );
+    XPolygon( const XPolygon& );
+    XPolygon( XPolygon&& );
     XPolygon( const tools::Polygon& rPoly );
-    XPolygon( const Rectangle& rRect, long nRx = 0, long nRy = 0 );
+    XPolygon( const tools::Rectangle& rRect, long nRx = 0, long nRy = 0 );
     XPolygon( const Point& rCenter, long nRx, long nRy,
               sal_uInt16 nStartAngle = 0, sal_uInt16 nEndAngle = 3600,
               bool bClose = true );
@@ -78,19 +69,20 @@ public:
     void        SetPointCount( sal_uInt16 nPoints );
     sal_uInt16      GetPointCount() const;
 
-    void        Insert( sal_uInt16 nPos, const Point& rPt, XPolyFlags eFlags );
+    void        Insert( sal_uInt16 nPos, const Point& rPt, PolyFlags eFlags );
     void        Insert( sal_uInt16 nPos, const XPolygon& rXPoly );
     void        Remove( sal_uInt16 nPos, sal_uInt16 nCount );
     void        Move( long nHorzMove, long nVertMove );
-    Rectangle   GetBoundRect() const;
+    tools::Rectangle   GetBoundRect() const;
 
     const Point&    operator[]( sal_uInt16 nPos ) const;
           Point&    operator[]( sal_uInt16 nPos );
-    XPolygon&       operator=( const XPolygon& rXPoly );
+    XPolygon&       operator=( const XPolygon& );
+    XPolygon&       operator=( XPolygon&& );
     bool            operator==( const XPolygon& rXPoly ) const;
 
-    XPolyFlags  GetFlags( sal_uInt16 nPos ) const;
-    void        SetFlags( sal_uInt16 nPos, XPolyFlags eFlags );
+    PolyFlags  GetFlags( sal_uInt16 nPos ) const;
+    void        SetFlags( sal_uInt16 nPos, PolyFlags eFlags );
     bool        IsControl(sal_uInt16 nPos) const;
     bool        IsSmooth(sal_uInt16 nPos) const;
 
@@ -104,7 +96,7 @@ public:
 
     // transformations
     void Scale(double fSx, double fSy);
-    void Distort(const Rectangle& rRefRect, const XPolygon& rDistortedRect);
+    void Distort(const tools::Rectangle& rRefRect, const XPolygon& rDistortedRect);
 
     // #116512# convert to basegfx::B2DPolygon and return
     basegfx::B2DPolygon getB2DPolygon() const;
@@ -118,38 +110,36 @@ public:
 
 class ImpXPolyPolygon;
 
-class SVX_DLLPUBLIC XPolyPolygon
+class SVX_DLLPUBLIC XPolyPolygon final
 {
-protected:
-    ImpXPolyPolygon* pImpXPolyPolygon;
-
-    // check ImpXPolyPolygon-ReferenceCount and decouple if necessary
-    void    CheckReference();
+    o3tl::cow_wrapper< ImpXPolyPolygon > pImpXPolyPolygon;
 
 public:
-                    XPolyPolygon( sal_uInt16 nInitSize = 16, sal_uInt16 nResize = 16 );
-                    XPolyPolygon( const XPolyPolygon& rXPolyPoly );
+                    XPolyPolygon();
+                    XPolyPolygon( const XPolyPolygon& );
+                    XPolyPolygon( XPolyPolygon&& );
 
                     ~XPolyPolygon();
 
-    void            Insert( const XPolygon& rXPoly );
+    void            Insert( XPolygon&& rXPoly );
     void            Insert( const XPolyPolygon& rXPoly );
-    XPolygon        Remove( sal_uInt16 nPos );
+    void            Remove( sal_uInt16 nPos );
     const XPolygon& GetObject( sal_uInt16 nPos ) const;
 
     void            Clear();
     sal_uInt16          Count() const;
 
-    Rectangle       GetBoundRect() const;
+    tools::Rectangle       GetBoundRect() const;
 
     const XPolygon& operator[]( sal_uInt16 nPos ) const
                         { return GetObject( nPos ); }
     XPolygon&       operator[]( sal_uInt16 nPos );
 
-    XPolyPolygon&   operator=( const XPolyPolygon& rXPolyPoly );
+    XPolyPolygon&   operator=( const XPolyPolygon& );
+    XPolyPolygon&   operator=( XPolyPolygon&& );
 
     // transformations
-    void Distort(const Rectangle& rRefRect, const XPolygon& rDistortedRect);
+    void Distort(const tools::Rectangle& rRefRect, const XPolygon& rDistortedRect);
 
     // #116512# convert to basegfx::B2DPolyPolygon and return
     basegfx::B2DPolyPolygon getB2DPolyPolygon() const;

@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <fstream>
 #include <string>
-#include <util.hxx>
+#include "util.hxx"
 
 namespace writerfilter
 {
@@ -27,15 +27,26 @@ namespace dmapper
 {
 using namespace com::sun::star;
 
-std::string XTextRangeToString(uno::Reference< text::XTextRange > textRange)
+std::string XTextRangeToString(uno::Reference< text::XTextRange > const & textRange)
 {
     std::string result;
 
-    (void) textRange;
 #ifdef DEBUG_WRITERFILTER
     if (textRange.get())
     {
-        OUString aOUStr = textRange->getString();
+        OUString aOUStr;
+
+        try
+        {
+            aOUStr = textRange->getString();
+        }
+        catch (const uno::Exception& rException)
+        {
+            result += "(exception: ";
+            result += rException.Message.toUtf8().getStr();
+            result += ")";
+        }
+
         OString aOStr(aOUStr.getStr(), aOUStr.getLength(),  RTL_TEXTENCODING_ASCII_US );
 
         result = aOStr.getStr();
@@ -44,6 +55,8 @@ std::string XTextRangeToString(uno::Reference< text::XTextRange > textRange)
     {
         result="(nil)";
     }
+#else
+    (void) textRange;
 #endif
 
     return result;

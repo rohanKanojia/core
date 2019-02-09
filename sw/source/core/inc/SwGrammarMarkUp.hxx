@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_SWGRAMMARMARKUP_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_SWGRAMMARMARKUP_HXX
 
-#include <wrong.hxx>
+#include "wrong.hxx"
 #include <vector>
 
 /* SwGrammarMarkUp extends the functionality of a "normal" SwWrongList by memorizing
@@ -39,9 +39,8 @@ class SwGrammarMarkUp : public SwWrongList
 
 public:
     SwGrammarMarkUp() : SwWrongList( WRONGLIST_GRAMMAR ) {}
-    SwGrammarMarkUp( const SwGrammarMarkUp* );
 
-    virtual ~SwGrammarMarkUp();
+    virtual ~SwGrammarMarkUp() override;
     virtual SwWrongList* Clone() override;
     virtual void CopyFrom( const SwWrongList& rCopy ) override;
 
@@ -53,7 +52,7 @@ public:
     void JoinGrammarList( SwGrammarMarkUp* pNext, sal_Int32 nInsertPos );
     /* SwWrongList::ClearList() + handling of maSentence */
     void ClearGrammarList( sal_Int32 nSentenceEnd = COMPLETE_STRING );
-    /* setSentence to define the start positionof a sentence,
+    /* setSentence to define the start position of a sentence,
        at the moment the end position is given by the next start position */
     void setSentence( sal_Int32 nStart );
     /* getSentenceStart returns the last start position of a sentence

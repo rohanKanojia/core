@@ -19,8 +19,9 @@
 #ifndef INCLUDED_CPPUHELPER_PROPTYPEHLP_H
 #define INCLUDED_CPPUHELPER_PROPTYPEHLP_H
 
-#include <com/sun/star/uno/Any.h>
+#include "sal/types.h"
 
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
 
 namespace cppu {
 
@@ -34,12 +35,11 @@ namespace cppu {
 template < class target >
 inline void SAL_CALL convertPropertyValue( target &value , const  css::uno::Any & a);
 
-template < class target >
-inline void SAL_CALL convertPropertyValue( target &value ,  css::uno::Any & a);
-
 /**
   conversion of basic types
 */
+inline void SAL_CALL convertPropertyValue( sal_Bool & target  , const css::uno::Any & source );
+inline void SAL_CALL convertPropertyValue( bool & target      , const css::uno::Any & source );
 inline void SAL_CALL convertPropertyValue( sal_Int64 & target , const css::uno::Any & source );
 inline void SAL_CALL convertPropertyValue( sal_uInt64 & target, const css::uno::Any & source );
 inline void SAL_CALL convertPropertyValue( sal_Int32 & target , const css::uno::Any & source );
@@ -49,7 +49,6 @@ inline void SAL_CALL convertPropertyValue( sal_uInt16 & target, const css::uno::
 inline void SAL_CALL convertPropertyValue( sal_Int8 & target  , const css::uno::Any & source );
 inline void SAL_CALL convertPropertyValue( float & target     , const css::uno::Any & source );
 inline void SAL_CALL convertPropertyValue( double &target     , const css::uno::Any &source );
-inline void SAL_CALL convertPropertyValue( ::rtl::OUString &target  , const css::uno::Any &source );
 
 } // end namespace cppu
 

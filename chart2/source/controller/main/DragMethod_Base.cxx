@@ -18,17 +18,13 @@
  */
 
 #include "DragMethod_Base.hxx"
+#include <DrawViewWrapper.hxx>
 
-#include "Strings.hrc"
-#include "ResId.hxx"
-#include "macros.hxx"
-#include "ObjectNameProvider.hxx"
-#include "ObjectIdentifier.hxx"
+#include <ObjectNameProvider.hxx>
+#include <ObjectIdentifier.hxx>
 
-#include <rtl/math.hxx>
-#include <svx/svdpagv.hxx>
 #include <svx/ActionDescriptionProvider.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 
 namespace chart
 {

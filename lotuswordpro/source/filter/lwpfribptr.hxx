@@ -61,10 +61,10 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBPTR_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBPTR_HXX
 
-#include "lwpobjstrm.hxx"
-#include "lwpfrib.hxx"
+#include <lwpobjstrm.hxx>
+#include <lwpfrib.hxx>
 #include "lwpstory.hxx"
-#include "xfilter/xfparagraph.hxx"
+#include <xfilter/xfparagraph.hxx>
 
 class LwpPara;
 class LwpFribPtr
@@ -84,10 +84,9 @@ public:
     XFParagraph* GetXFPara(){return m_pXFPara;}
     void SetPara(LwpPara* para){m_pPara=para;}
     void RegisterStyle();
-    void FindLayouts();// for register pagelayout
     LwpFrib* GetFribs(){return m_pFribs;}
     LwpFrib* HasFrib(sal_uInt8 nType);
-    bool ComparePagePosition(LwpVirtualLayout* pPreLayout, LwpVirtualLayout* pNextLayout);
+    bool ComparePagePosition(LwpVirtualLayout const * pPreLayout, LwpVirtualLayout const * pNextLayout);
     void GatherAllText();
 };
 

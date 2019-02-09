@@ -21,9 +21,8 @@
 
 #include <sal/types.h>
 #include <sal/log.hxx>
-#include <osl/diagnose.h>
 
-#include "store/types.h"
+#include <store/types.h>
 #include "storbase.hxx"
 #include "storbios.hxx"
 
@@ -212,14 +211,14 @@ storeError OStoreIndirectionPageObject::verify (sal_uInt32 nAddr) const
 storeError OStoreIndirectionPageObject::read (
     sal_uInt16             nSingle,
     OStoreDataPageObject  &rData,
-    OStorePageBIOS        &rBIOS)
+    OStorePageBIOS        &rBIOS) const
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page const & rPage = (*xImpl);
+    page const & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
-    if (!(nSingle < nLimit))
+    if (nSingle >= nLimit)
         return store_E_InvalidAccess;
 
     // Obtain data page location.
@@ -238,10 +237,10 @@ storeError OStoreIndirectionPageObject::read (
     sal_uInt16             nDouble,
     sal_uInt16             nSingle,
     OStoreDataPageObject  &rData,
-    OStorePageBIOS        &rBIOS)
+    OStorePageBIOS        &rBIOS) const
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page const & rPage = (*xImpl);
+    page const & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
@@ -271,10 +270,10 @@ storeError OStoreIndirectionPageObject::read (
     sal_uInt16             nDouble,
     sal_uInt16             nSingle,
     OStoreDataPageObject  &rData,
-    OStorePageBIOS        &rBIOS)
+    OStorePageBIOS        &rBIOS) const
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page const & rPage = (*xImpl);
+    page const & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
@@ -305,11 +304,11 @@ storeError OStoreIndirectionPageObject::write (
     OStorePageBIOS        &rBIOS)
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page & rPage = (*xImpl);
+    page & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
-    if (!(nSingle < nLimit))
+    if (nSingle >= nLimit)
         return store_E_InvalidAccess;
 
     // Obtain data page location.
@@ -344,7 +343,7 @@ storeError OStoreIndirectionPageObject::write (
     OStorePageBIOS        &rBIOS)
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page & rPage = (*xImpl);
+    page & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
@@ -380,7 +379,7 @@ storeError OStoreIndirectionPageObject::write (
     OStorePageBIOS        &rBIOS)
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page & rPage = (*xImpl);
+    page & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
@@ -413,11 +412,11 @@ storeError OStoreIndirectionPageObject::truncate (
     OStorePageBIOS & rBIOS)
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page & rPage = (*xImpl);
+    page & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
-    if (!(nSingle < nLimit))
+    if (nSingle >= nLimit)
         return store_E_InvalidAccess;
 
     // Truncate.
@@ -459,7 +458,7 @@ storeError OStoreIndirectionPageObject::truncate (
     OStorePageBIOS        &rBIOS)
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page & rPage = (*xImpl);
+    page & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
@@ -514,7 +513,7 @@ storeError OStoreIndirectionPageObject::truncate (
     OStorePageBIOS        &rBIOS)
 {
     PageHolderObject< page > xImpl (m_xPage);
-    page & rPage = (*xImpl);
+    page & rPage = *xImpl;
 
     // Check arguments.
     sal_uInt16 const nLimit = rPage.capacityCount();
@@ -602,7 +601,7 @@ OStoreDirectoryPageObject::scope (
         index0 = nPage;
 
         // Setup LinkDescriptor indices.
-        rDescr.m_nIndex0 = (sal_uInt16)(index0 & 0xffff);
+        rDescr.m_nIndex0 = static_cast<sal_uInt16>(index0 & 0xffff);
 
         // Done.
         return page::SCOPE_DIRECT;
@@ -631,8 +630,8 @@ OStoreDirectoryPageObject::scope (
         }
 
         // Setup LinkDescriptor indices.
-        rDescr.m_nIndex0 = (sal_uInt16)(index0 & 0xffff);
-        rDescr.m_nIndex1 = (sal_uInt16)(index1 & 0xffff);
+        rDescr.m_nIndex0 = static_cast<sal_uInt16>(index0 & 0xffff);
+        rDescr.m_nIndex1 = static_cast<sal_uInt16>(index1 & 0xffff);
 
         // Done.
         return page::SCOPE_SINGLE;
@@ -665,9 +664,9 @@ OStoreDirectoryPageObject::scope (
         }
 
         // Setup LinkDescriptor indices.
-        rDescr.m_nIndex0 = (sal_uInt16)(index0 & 0xffff);
-        rDescr.m_nIndex1 = (sal_uInt16)(index1 & 0xffff);
-        rDescr.m_nIndex2 = (sal_uInt16)(index2 & 0xffff);
+        rDescr.m_nIndex0 = static_cast<sal_uInt16>(index0 & 0xffff);
+        rDescr.m_nIndex1 = static_cast<sal_uInt16>(index1 & 0xffff);
+        rDescr.m_nIndex2 = static_cast<sal_uInt16>(index2 & 0xffff);
 
         // Done.
         return page::SCOPE_DOUBLE;
@@ -705,10 +704,10 @@ OStoreDirectoryPageObject::scope (
         }
 
         // Setup LinkDescriptor indices.
-        rDescr.m_nIndex0 = (sal_uInt16)(index0 & 0xffff);
-        rDescr.m_nIndex1 = (sal_uInt16)(index1 & 0xffff);
-        rDescr.m_nIndex2 = (sal_uInt16)(index2 & 0xffff);
-        rDescr.m_nIndex3 = (sal_uInt16)(index3 & 0xffff);
+        rDescr.m_nIndex0 = static_cast<sal_uInt16>(index0 & 0xffff);
+        rDescr.m_nIndex1 = static_cast<sal_uInt16>(index1 & 0xffff);
+        rDescr.m_nIndex2 = static_cast<sal_uInt16>(index2 & 0xffff);
+        rDescr.m_nIndex3 = static_cast<sal_uInt16>(index3 & 0xffff);
 
         // Done.
         return page::SCOPE_TRIPLE;
@@ -724,7 +723,7 @@ OStoreDirectoryPageObject::scope (
 storeError OStoreDirectoryPageObject::read (
     sal_uInt32             nPage,
     OStoreDataPageObject  &rData,
-    OStorePageBIOS        &rBIOS)
+    OStorePageBIOS        &rBIOS) const
 {
     // Determine scope and link indices.
     page::DataBlock::LinkDescriptor aLink;
@@ -786,7 +785,7 @@ storeError OStoreDirectoryPageObject::read (
     else
     {
         // Unknown scope.
-        OSL_TRACE("OStoreDirectoryPageObject::get(): scope failed");
+        SAL_WARN("store", "OStoreDirectoryPageObject::get(): scope failed");
         eErrCode = store_E_Unknown;
     }
 
@@ -873,7 +872,7 @@ storeError OStoreDirectoryPageObject::write (
     else
     {
         // Unknown scope.
-        OSL_TRACE("OStoreDirectoryPageObject::put(): scope failed");
+        SAL_WARN("store", "OStoreDirectoryPageObject::put(): scope failed");
         eErrCode = store_E_Unknown;
     }
 
@@ -995,7 +994,7 @@ storeError OStoreDirectoryPageObject::truncate (
     else
     {
         // Unknown scope.
-        OSL_TRACE("OStoreDirectoryPageObject::put(): scope failed");
+        SAL_WARN("store", "OStoreDirectoryPageObject::put(): scope failed");
         eErrCode = store_E_Unknown;
     }
 
@@ -1016,8 +1015,7 @@ storeError OStoreDirectoryPageObject::truncate (
     if (eScope == page::SCOPE_DIRECT)
     {
         // Truncate direct data pages.
-        sal_uInt16 i, n = OStoreDirectoryDataBlock::directCount;
-        for (i = n; i > nRemain; i--)
+        for (sal_uInt16 i = OStoreDirectoryDataBlock::directCount; i > nRemain; i--)
         {
             // Obtain data page location.
             sal_uInt32 nAddr = directLink (i - 1);
@@ -1039,8 +1037,7 @@ storeError OStoreDirectoryPageObject::truncate (
     if (eScope == page::SCOPE_SINGLE)
     {
         // Truncate single indirect pages.
-        sal_uInt16 i, n = OStoreDirectoryDataBlock::singleCount;
-        for (i = n; i > nRemain; i--)
+        for (sal_uInt16 i = OStoreDirectoryDataBlock::singleCount; i > nRemain; i--)
         {
             // Truncate single indirect page to zero data pages.
             eErrCode = store_truncate_Impl (singleLink (i - 1), 0, rBIOS);
@@ -1058,8 +1055,7 @@ storeError OStoreDirectoryPageObject::truncate (
     if (eScope == page::SCOPE_DOUBLE)
     {
         // Truncate double indirect pages.
-        sal_uInt16 i, n = OStoreDirectoryDataBlock::doubleCount;
-        for (i = n; i > nRemain; i--)
+        for (sal_uInt16 i = OStoreDirectoryDataBlock::doubleCount; i > nRemain; i--)
         {
             // Truncate double indirect page to zero single indirect pages.
             eErrCode = store_truncate_Impl (doubleLink (i - 1), 0, 0, rBIOS);
@@ -1077,8 +1073,7 @@ storeError OStoreDirectoryPageObject::truncate (
     if (eScope == page::SCOPE_TRIPLE)
     {
         // Truncate triple indirect pages.
-        sal_uInt16 i, n = OStoreDirectoryDataBlock::tripleCount;
-        for (i = n; i > nRemain; i--)
+        for (sal_uInt16 i = OStoreDirectoryDataBlock::tripleCount; i > nRemain; i--)
         {
             // Truncate to zero double indirect pages.
             eErrCode = store_truncate_Impl (tripleLink (i - 1), 0, 0, 0, rBIOS);

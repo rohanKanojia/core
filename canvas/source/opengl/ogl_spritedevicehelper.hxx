@@ -112,19 +112,7 @@ namespace oglcanvas
         /// Get instance of internal texture cache
         TextureCache& getTextureCache() const;
 
-        bool activateWindowContext();
-
     private:
-        void resize( const ::basegfx::B2IVector& rNewSize );
-
-        /** Phyical output device
-
-            Deliberately not a refcounted reference, because of
-            potential circular references for canvas. Needed to
-            create bitmaps
-         */
-        css::rendering::XGraphicDevice*                    mpDevice;
-
         /// Pointer to sprite canvas (owner of this helper), needed to create bitmaps
         SpriteCanvas*                                      mpSpriteCanvas;
 

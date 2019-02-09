@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLImageMapContext.hxx"
+#include <XMLImageMapContext.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -25,7 +25,6 @@
 #include <com/sun/star/xml/sax/XAttributeList.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/drawing/PointSequenceSequence.hpp>
 #include <com/sun/star/document/XEventsSupplier.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <xmloff/xmltoken.hxx>
@@ -34,10 +33,10 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmluconv.hxx>
-#include "xexptran.hxx"
+#include <xexptran.hxx>
 #include <xmloff/xmlerror.hxx>
 #include <xmloff/XMLEventsImportContext.hxx>
-#include "XMLStringBufferImportContext.hxx"
+#include <XMLStringBufferImportContext.hxx>
 #include <tools/debug.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -54,7 +53,6 @@ using ::com::sun::star::uno::UNO_QUERY;
 using ::com::sun::star::xml::sax::XAttributeList;
 using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::uno::Any;
-using ::com::sun::star::drawing::PointSequenceSequence;
 using ::com::sun::star::document::XEventsSupplier;
 
 
@@ -75,7 +73,7 @@ enum XMLImageMapToken: decltype(XML_TOK_UNKNOWN)
     XML_TOK_IMAP_TARGET
 };
 
-static SvXMLTokenMapEntry aImageMapObjectTokenMap[] =
+static const SvXMLTokenMapEntry aImageMapObjectTokenMap[] =
 {
     { XML_NAMESPACE_XLINK,  XML_HREF,           XML_TOK_IMAP_URL            },
     { XML_NAMESPACE_OFFICE, XML_NAME,           XML_TOK_IMAP_NAME           },
@@ -99,17 +97,6 @@ class XMLImageMapObjectContext : public SvXMLImportContext
 
 protected:
 
-    const OUString sBoundary;
-    const OUString sCenter;
-    const OUString sTitle;
-    const OUString sDescription;
-    const OUString sIsActive;
-    const OUString sName;
-    const OUString sPolygon;
-    const OUString sRadius;
-    const OUString sTarget;
-    const OUString sURL;
-
     Reference<XIndexContainer> xImageMap;   /// the image map
     Reference<XPropertySet> xMapEntry;      /// one map-entry (one area)
 
@@ -128,7 +115,7 @@ public:
         SvXMLImport& rImport,
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        css::uno::Reference<css::container::XIndexContainer> xMap,
+        css::uno::Reference<css::container::XIndexContainer> const & xMap,
         const sal_Char* pServiceName);
 
     void StartElement(
@@ -136,7 +123,7 @@ public:
 
     void EndElement() override;
 
-    SvXMLImportContext *CreateChildContext(
+    SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList ) override;
@@ -156,19 +143,9 @@ XMLImageMapObjectContext::XMLImageMapObjectContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
-    Reference<XIndexContainer> xMap,
+    Reference<XIndexContainer> const & xMap,
     const sal_Char* pServiceName) :
         SvXMLImportContext(rImport, nPrefix, rLocalName),
-        sBoundary("Boundary"),
-        sCenter("Center"),
-        sTitle("Title"),
-        sDescription("Description"),
-        sIsActive("IsActive"),
-        sName("Name"),
-        sPolygon("Polygon"),
-        sRadius("Radius"),
-        sTarget("Target"),
-        sURL("URL"),
         xImageMap(xMap),
         bIsActive(true),
         bValid(false)
@@ -208,7 +185,7 @@ void XMLImageMapObjectContext::StartElement(
         OUString sValue = xAttrList->getValueByIndex(nAttr);
 
         ProcessAttribute(
-            (enum XMLImageMapToken)aMap.Get(nPrefix, sLocalName), sValue);
+            static_cast<enum XMLImageMapToken>(aMap.Get(nPrefix, sLocalName)), sValue);
     }
 }
 
@@ -222,14 +199,12 @@ void XMLImageMapObjectContext::EndElement()
         Prepare( xMapEntry );
 
         // insert into image map
-        Any aAny;
-        aAny <<= xMapEntry;
-        xImageMap->insertByIndex( xImageMap->getCount(), aAny );
+        xImageMap->insertByIndex( xImageMap->getCount(), Any(xMapEntry) );
     }
     // else: not valid -> don't create and insert
 }
 
-SvXMLImportContext* XMLImageMapObjectContext::CreateChildContext(
+SvXMLImportContextRef XMLImageMapObjectContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
@@ -289,12 +264,12 @@ void XMLImageMapObjectContext::ProcessAttribute(
 void XMLImageMapObjectContext::Prepare(
     Reference<XPropertySet> & rPropertySet)
 {
-    rPropertySet->setPropertyValue( sURL, Any( sUrl ) );
-    rPropertySet->setPropertyValue( sTitle, Any( sTitleBuffer.makeStringAndClear() ) );
-    rPropertySet->setPropertyValue( sDescription, Any( sDescriptionBuffer.makeStringAndClear() ) );
-    rPropertySet->setPropertyValue( sTarget, Any( sTargt ) );
-    rPropertySet->setPropertyValue( sIsActive, Any( bIsActive ) );
-    rPropertySet->setPropertyValue( sName, Any( sNam ) );
+    rPropertySet->setPropertyValue( "URL", Any( sUrl ) );
+    rPropertySet->setPropertyValue( "Title", Any( sTitleBuffer.makeStringAndClear() ) );
+    rPropertySet->setPropertyValue( "Description", Any( sDescriptionBuffer.makeStringAndClear() ) );
+    rPropertySet->setPropertyValue( "Target", Any( sTargt ) );
+    rPropertySet->setPropertyValue( "IsActive", Any( bIsActive ) );
+    rPropertySet->setPropertyValue( "Name", Any( sNam ) );
 }
 
 
@@ -313,9 +288,7 @@ public:
         SvXMLImport& rImport,
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        css::uno::Reference<css::container::XIndexContainer> xMap);
-
-    virtual ~XMLImageMapRectangleContext();
+        css::uno::Reference<css::container::XIndexContainer> const & xMap);
 
 protected:
     virtual void ProcessAttribute(
@@ -331,17 +304,13 @@ XMLImageMapRectangleContext::XMLImageMapRectangleContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
-    Reference<XIndexContainer> xMap) :
+    Reference<XIndexContainer> const & xMap) :
         XMLImageMapObjectContext(rImport, nPrefix, rLocalName, xMap,
                                  "com.sun.star.image.ImageMapRectangleObject"),
         bXOK(false),
         bYOK(false),
         bWidthOK(false),
         bHeightOK(false)
-{
-}
-
-XMLImageMapRectangleContext::~XMLImageMapRectangleContext()
 {
 }
 
@@ -394,9 +363,7 @@ void XMLImageMapRectangleContext::ProcessAttribute(
 void XMLImageMapRectangleContext::Prepare(
     Reference<XPropertySet> & rPropertySet)
 {
-    Any aAny;
-    aAny <<= aRectangle;
-    rPropertySet->setPropertyValue( sBoundary, aAny );
+    rPropertySet->setPropertyValue( "Boundary", uno::Any(aRectangle) );
 
     // common properties handled by super class
     XMLImageMapObjectContext::Prepare(rPropertySet);
@@ -417,9 +384,7 @@ public:
         SvXMLImport& rImport,
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        css::uno::Reference<css::container::XIndexContainer> xMap);
-
-    virtual ~XMLImageMapPolygonContext();
+        css::uno::Reference<css::container::XIndexContainer> const & xMap);
 
 protected:
     virtual void ProcessAttribute(
@@ -435,15 +400,11 @@ XMLImageMapPolygonContext::XMLImageMapPolygonContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
-    Reference<XIndexContainer> xMap) :
+    Reference<XIndexContainer> const & xMap) :
         XMLImageMapObjectContext(rImport, nPrefix, rLocalName, xMap,
                                  "com.sun.star.image.ImageMapPolygonObject"),
         bViewBoxOK(false),
         bPointsOK(false)
-{
-}
-
-XMLImageMapPolygonContext::~XMLImageMapPolygonContext()
 {
 }
 
@@ -477,16 +438,13 @@ void XMLImageMapPolygonContext::Prepare(Reference<XPropertySet> & rPropertySet)
     // get polygon sequence
     basegfx::B2DPolygon aPolygon;
 
-    if(basegfx::tools::importFromSvgPoints(aPolygon, sPointsString))
+    if(basegfx::utils::importFromSvgPoints(aPolygon, sPointsString))
     {
         if(aPolygon.count())
         {
             css::drawing::PointSequence aPointSequence;
-            uno::Any aAny;
-
-            basegfx::tools::B2DPolygonToUnoPointSequence(aPolygon, aPointSequence);
-            aAny <<= aPointSequence;
-            rPropertySet->setPropertyValue(sPolygon, aAny);
+            basegfx::utils::B2DPolygonToUnoPointSequence(aPolygon, aPointSequence);
+            rPropertySet->setPropertyValue("Polygon", Any(aPointSequence));
         }
     }
 
@@ -509,9 +467,7 @@ public:
         SvXMLImport& rImport,
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        css::uno::Reference<css::container::XIndexContainer> xMap);
-
-    virtual ~XMLImageMapCircleContext();
+        css::uno::Reference<css::container::XIndexContainer> const & xMap);
 
 protected:
     virtual void ProcessAttribute(
@@ -527,17 +483,13 @@ XMLImageMapCircleContext::XMLImageMapCircleContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
-    Reference<XIndexContainer> xMap)
+    Reference<XIndexContainer> const & xMap)
     : XMLImageMapObjectContext(rImport, nPrefix, rLocalName, xMap,
           "com.sun.star.image.ImageMapCircleObject")
     , nRadius(0)
     , bXOK(false)
     , bYOK(false)
     , bRadiusOK(false)
-{
-}
-
-XMLImageMapCircleContext::~XMLImageMapCircleContext()
 {
 }
 
@@ -583,35 +535,31 @@ void XMLImageMapCircleContext::Prepare(
     Reference<XPropertySet> & rPropertySet)
 {
     // center (x,y)
-    Any aAny;
-    aAny <<= aCenter;
-    rPropertySet->setPropertyValue( sCenter, aAny );
-
+    rPropertySet->setPropertyValue( "Center", uno::Any(aCenter) );
     // radius
-    aAny <<= nRadius;
-    rPropertySet->setPropertyValue( sRadius, aAny );
+    rPropertySet->setPropertyValue( "Radius", uno::Any(nRadius) );
 
     // common properties handled by super class
     XMLImageMapObjectContext::Prepare(rPropertySet);
 }
 
 
+static const OUStringLiteral gsImageMap("ImageMap");
+
 XMLImageMapContext::XMLImageMapContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
-    Reference<XPropertySet> & rPropertySet) :
+    Reference<XPropertySet> const & rPropertySet) :
         SvXMLImportContext(rImport, nPrefix, rLocalName),
-        sImageMap("ImageMap"),
         xPropertySet(rPropertySet)
-
 {
     try
     {
         Reference < XPropertySetInfo > xInfo =
             xPropertySet->getPropertySetInfo();
-        if( xInfo.is() && xInfo->hasPropertyByName( sImageMap ) )
-            xPropertySet->getPropertyValue(sImageMap) >>= xImageMap;
+        if( xInfo.is() && xInfo->hasPropertyByName( gsImageMap ) )
+            xPropertySet->getPropertyValue(gsImageMap) >>= xImageMap;
     }
     catch(const css::uno::Exception& e)
     {
@@ -624,44 +572,44 @@ XMLImageMapContext::~XMLImageMapContext()
 {
 }
 
-SvXMLImportContext *XMLImageMapContext::CreateChildContext(
+SvXMLImportContextRef XMLImageMapContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if ( XML_NAMESPACE_DRAW == nPrefix )
     {
         if ( IsXMLToken(rLocalName, XML_AREA_RECTANGLE) )
         {
-            pContext = new XMLImageMapRectangleContext(
+            xContext = new XMLImageMapRectangleContext(
                 GetImport(), nPrefix, rLocalName, xImageMap);
         }
         else if ( IsXMLToken(rLocalName, XML_AREA_POLYGON) )
         {
-            pContext = new XMLImageMapPolygonContext(
+            xContext = new XMLImageMapPolygonContext(
                 GetImport(), nPrefix, rLocalName, xImageMap);
         }
         else if ( IsXMLToken(rLocalName, XML_AREA_CIRCLE) )
         {
-            pContext = new XMLImageMapCircleContext(
+            xContext = new XMLImageMapCircleContext(
                 GetImport(), nPrefix, rLocalName, xImageMap);
         }
     }
     else
-        pContext = SvXMLImportContext::CreateChildContext(nPrefix, rLocalName,
+        xContext = SvXMLImportContext::CreateChildContext(nPrefix, rLocalName,
                                                           xAttrList);
 
-    return pContext;
+    return xContext;
 }
 
 void XMLImageMapContext::EndElement()
 {
     Reference < XPropertySetInfo > xInfo =
         xPropertySet->getPropertySetInfo();
-    if( xInfo.is() && xInfo->hasPropertyByName( sImageMap ) )
-        xPropertySet->setPropertyValue(sImageMap, uno::makeAny( xImageMap ) );
+    if( xInfo.is() && xInfo->hasPropertyByName( gsImageMap ) )
+        xPropertySet->setPropertyValue(gsImageMap, uno::makeAny( xImageMap ) );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

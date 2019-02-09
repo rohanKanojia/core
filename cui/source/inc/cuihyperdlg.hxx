@@ -20,6 +20,10 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_CUIHYPERDLG_HXX
 #define INCLUDED_CUI_SOURCE_INC_CUIHYPERDLG_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <svx/hlnkitem.hxx>
 #include <sfx2/childwin.hxx>
 #include <sfx2/ctrlitem.hxx>
@@ -27,6 +31,16 @@
 #include <vcl/image.hxx>
 
 #include "iconcdlg.hxx"
+
+// hyperlink dialog
+enum class HyperLinkPageType
+{
+    Internet,
+    Mail,
+    Document,
+    NewDocument,
+    NONE = USHRT_MAX
+};
 
 /*************************************************************************
 |*
@@ -62,15 +76,14 @@ class SvxHpLinkDlg : public IconChoiceDialog
 private:
     SvxHlinkCtrl        maCtrl;         ///< Controller
     SfxBindings*        mpBindings;
-    SfxItemSet*         mpItemSet;
+    std::unique_ptr<SfxItemSet> mpItemSet;
 
     bool            mbGrabFocus : 1;
-    bool            mbReadOnly  : 1;
     bool            mbIsHTMLDoc : 1;
 
-    DECL_LINK_TYPED (ClickOkHdl_Impl, Button *, void );
-    DECL_LINK_TYPED (ClickApplyHdl_Impl, Button *, void );
-    DECL_LINK_TYPED (ClickCloseHdl_Impl, Button *, void );
+    DECL_LINK (ClickOkHdl_Impl, Button *, void );
+    DECL_LINK (ClickApplyHdl_Impl, Button *, void );
+    DECL_LINK (ClickCloseHdl_Impl, Button *, void );
 
 protected:
     virtual bool            Close() override;
@@ -79,17 +92,16 @@ protected:
 
 public:
     SvxHpLinkDlg (vcl::Window* pParent, SfxBindings* pBindings );
-    virtual ~SvxHpLinkDlg ();
+    virtual ~SvxHpLinkDlg () override;
     virtual void dispose() override;
 
-    virtual void            PageCreated( sal_uInt16 nId, IconChoicePage& rPage ) override;
+    virtual void            PageCreated( HyperLinkPageType nId, IconChoicePage& rPage ) override;
 
-    void                    SetPage( SvxHyperlinkItem* pItem );
+    void                    SetPage( SvxHyperlinkItem const * pItem );
     void                    SetReadOnlyMode( bool bReadOnly );
-    inline bool             IsHTMLDoc() const { return mbIsHTMLDoc; }
+    bool             IsHTMLDoc() const { return mbIsHTMLDoc; }
 
-    inline SfxBindings*     GetBindings() const { return mpBindings; };
-    inline SfxDispatcher*   GetDispatcher() const { return mpBindings->GetDispatcher(); }
+    SfxDispatcher*   GetDispatcher() const { return mpBindings->GetDispatcher(); }
 };
 
 

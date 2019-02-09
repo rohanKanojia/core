@@ -18,12 +18,11 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
-#include <basegfx/tools/canvastools.hxx>
-#include <basegfx/tools/unopolypolygon.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/unopolypolygon.hxx>
 #include <com/sun/star/lang/NoSupportException.hpp>
-#include <osl/mutex.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <vcl/cairo.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/syschild.hxx>
@@ -82,7 +81,7 @@ namespace cairocanvas
 
     uno::Any SpriteDeviceHelper::isAccelerated() const
     {
-        return css::uno::makeAny(true);
+        return css::uno::Any(true);
     }
 
     uno::Any SpriteDeviceHelper::getDeviceHandle() const
@@ -125,7 +124,7 @@ namespace cairocanvas
         setSize( ::basegfx::B2ISize(rBounds.Width, rBounds.Height) );
     }
 
-    SurfaceSharedPtr SpriteDeviceHelper::getWindowSurface()
+    SurfaceSharedPtr const & SpriteDeviceHelper::getWindowSurface()
     {
         return DeviceHelper::getSurface();
     }
@@ -138,7 +137,7 @@ namespace cairocanvas
         return SurfaceSharedPtr();
     }
 
-    SurfaceSharedPtr SpriteDeviceHelper::createSurface( BitmapSystemData& rData, const Size& rSize )
+    SurfaceSharedPtr SpriteDeviceHelper::createSurface( BitmapSystemData const & rData, const Size& rSize )
     {
         OutputDevice *pDevice = getOutputDevice();
         if (pDevice)

@@ -20,7 +20,8 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_TOOLS_ICONCACHE_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_TOOLS_ICONCACHE_HXX
 
-#include "SdGlobalResourceContainer.hxx"
+#include <memory>
+#include <tools/SdGlobalResourceContainer.hxx>
 #include <vcl/image.hxx>
 
 namespace sd {
@@ -49,7 +50,7 @@ public:
             given id or an error occurred.  Should not happen under normal
             circumstances.
     */
-    Image GetIcon (sal_uInt16 nResourceId);
+    Image GetIcon(const OUString& rResourceId);
 
 private:
     class Implementation;
@@ -63,7 +64,7 @@ private:
 
     /** This destructor is called by SdGlobalResourceContainer.
     */
-    virtual ~IconCache();
+    virtual ~IconCache() override;
 };
 
 } // end of namespace sd

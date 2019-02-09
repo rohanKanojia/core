@@ -23,6 +23,7 @@
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/ucb/InsertCommandArgument.hpp>
 #include <com/sun/star/ucb/InteractiveIOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/WrongFormatException.hpp>
 
 #include <osl/time.h>
@@ -52,30 +53,8 @@ namespace svt {
 
 
 ShareControlFile::ShareControlFile( const OUString& aOrigURL )
-: LockFileCommon( aOrigURL, OUString( ".~sharing."  ) )
+: LockFileCommon( aOrigURL, ".~sharing." )
 {
-    OpenStream();
-
-    if ( !IsValid() )
-        throw io::NotConnectedException();
-}
-
-
-ShareControlFile::~ShareControlFile()
-{
-    try
-    {
-        Close();
-    }
-    catch( uno::Exception& )
-    {}
-}
-
-
-void ShareControlFile::OpenStream()
-{
-    // if it is called outside of constructor the mutex must be locked already
-
     if ( !m_xStream.is() && !m_aURL.isEmpty() )
     {
         uno::Reference< ucb::XCommandEnvironment > xDummyEnv;
@@ -104,12 +83,12 @@ void ShareControlFile::OpenStream()
                 uno::Reference< io::XInputStream > xInput( new ::utl::OInputStreamWrapper( aStream ) );
                 ucb::InsertCommandArgument aInsertArg;
                 aInsertArg.Data = xInput;
-                aInsertArg.ReplaceExisting = sal_False;
+                aInsertArg.ReplaceExisting = false;
                 aContent.executeCommand( "insert", uno::makeAny( aInsertArg ) );
 
                 // try to let the file be hidden if possible
                 try {
-                    aContent.setPropertyValue("IsHidden", uno::makeAny( sal_True ) );
+                    aContent.setPropertyValue("IsHidden", uno::makeAny( true ) );
                 } catch( uno::Exception& ) {}
 
                 // Try to open one more time
@@ -125,32 +104,44 @@ void ShareControlFile::OpenStream()
         m_xTruncate.set( m_xOutputStream, uno::UNO_QUERY_THROW );
         m_xStream = xStream;
     }
+
+    if ( !IsValid() )
+        throw io::NotConnectedException();
 }
 
+ShareControlFile::~ShareControlFile()
+{
+    try
+    {
+        Close();
+    }
+    catch( uno::Exception& )
+    {}
+}
 
 void ShareControlFile::Close()
 {
     // if it is called outside of destructor the mutex must be locked
 
-    if ( m_xStream.is() )
-    {
-        try
-        {
-            if ( m_xInputStream.is() )
-                m_xInputStream->closeInput();
-            if ( m_xOutputStream.is() )
-                m_xOutputStream->closeOutput();
-        }
-        catch( uno::Exception& )
-        {}
+    if ( !m_xStream.is() )
+        return;
 
-        m_xStream.clear();
-        m_xInputStream.clear();
-        m_xOutputStream.clear();
-        m_xSeekable.clear();
-        m_xTruncate.clear();
-        m_aUsersData.clear();
+    try
+    {
+        if ( m_xInputStream.is() )
+            m_xInputStream->closeInput();
+        if ( m_xOutputStream.is() )
+            m_xOutputStream->closeOutput();
     }
+    catch( uno::Exception& )
+    {}
+
+    m_xStream.clear();
+    m_xInputStream.clear();
+    m_xOutputStream.clear();
+    m_xSeekable.clear();
+    m_xTruncate.clear();
+    m_aUsersData.clear();
 }
 
 
@@ -167,20 +158,20 @@ std::vector< o3tl::enumarray< LockFileComponent, OUString > > ShareControlFile::
         if ( nLength > SAL_MAX_INT32 )
             throw uno::RuntimeException();
 
-        uno::Sequence< sal_Int8 > aBuffer( (sal_Int32)nLength );
+        uno::Sequence< sal_Int8 > aBuffer( static_cast<sal_Int32>(nLength) );
         m_xSeekable->seek( 0 );
 
-        sal_Int32 nRead = m_xInputStream->readBytes( aBuffer, (sal_Int32)nLength );
+        sal_Int32 nRead = m_xInputStream->readBytes( aBuffer, static_cast<sal_Int32>(nLength) );
         nLength -= nRead;
         while ( nLength > 0 )
         {
-            uno::Sequence< sal_Int8 > aTmpBuf( (sal_Int32)nLength );
-            nRead = m_xInputStream->readBytes( aTmpBuf, (sal_Int32)nLength );
+            uno::Sequence< sal_Int8 > aTmpBuf( static_cast<sal_Int32>(nLength) );
+            nRead = m_xInputStream->readBytes( aTmpBuf, static_cast<sal_Int32>(nLength) );
             if ( nRead > nLength )
                 throw uno::RuntimeException();
 
             for ( sal_Int32 nInd = 0; nInd < nRead; nInd++ )
-                aBuffer[aBuffer.getLength() - (sal_Int32)nLength + nInd] = aTmpBuf[nInd];
+                aBuffer[aBuffer.getLength() - static_cast<sal_Int32>(nLength) + nInd] = aTmpBuf[nInd];
             nLength -= nRead;
         }
 
@@ -205,11 +196,11 @@ void ShareControlFile::SetUsersDataAndStore( const std::vector< LockFileEntry >&
     m_xSeekable->seek( 0 );
 
     OUStringBuffer aBuffer;
-    for ( size_t nInd = 0; nInd < aUsersData.size(); nInd++ )
+    for (const auto & rData : aUsersData)
     {
         for ( LockFileComponent nEntryInd : o3tl::enumrange<LockFileComponent>() )
         {
-            aBuffer.append( EscapeCharacters( aUsersData[nInd][nEntryInd] ) );
+            aBuffer.append( EscapeCharacters( rData[nEntryInd] ) );
             if ( nEntryInd < LockFileComponent::LAST )
                 aBuffer.append( ',' );
             else
@@ -237,11 +228,11 @@ LockFileEntry ShareControlFile::InsertOwnEntry()
 
     bool bExists = false;
     sal_Int32 nNewInd = 0;
-    for ( size_t nInd = 0; nInd < m_aUsersData.size(); nInd++ )
+    for (LockFileEntry & rEntry : m_aUsersData)
     {
-        if ( m_aUsersData[nInd][LockFileComponent::LOCALHOST] == aNewEntry[LockFileComponent::LOCALHOST]
-             && m_aUsersData[nInd][LockFileComponent::SYSUSERNAME] == aNewEntry[LockFileComponent::SYSUSERNAME]
-             && m_aUsersData[nInd][LockFileComponent::USERURL] == aNewEntry[LockFileComponent::USERURL] )
+        if ( rEntry[LockFileComponent::LOCALHOST] == aNewEntry[LockFileComponent::LOCALHOST]
+             && rEntry[LockFileComponent::SYSUSERNAME] == aNewEntry[LockFileComponent::SYSUSERNAME]
+             && rEntry[LockFileComponent::USERURL] == aNewEntry[LockFileComponent::USERURL] )
         {
             if ( !bExists )
             {
@@ -251,7 +242,7 @@ LockFileEntry ShareControlFile::InsertOwnEntry()
         }
         else
         {
-            aNewData[nNewInd] = m_aUsersData[nInd];
+            aNewData[nNewInd] = rEntry;
         }
 
         nNewInd++;
@@ -278,11 +269,11 @@ bool ShareControlFile::HasOwnEntry()
     GetUsersData();
     LockFileEntry aEntry = GenerateOwnEntry();
 
-    for ( size_t nInd = 0; nInd < m_aUsersData.size(); ++nInd )
+    for (LockFileEntry & rEntry : m_aUsersData)
     {
-        if ( m_aUsersData[nInd][LockFileComponent::LOCALHOST] == aEntry[LockFileComponent::LOCALHOST] &&
-             m_aUsersData[nInd][LockFileComponent::SYSUSERNAME] == aEntry[LockFileComponent::SYSUSERNAME] &&
-             m_aUsersData[nInd][LockFileComponent::USERURL] == aEntry[LockFileComponent::USERURL] )
+        if ( rEntry[LockFileComponent::LOCALHOST] == aEntry[LockFileComponent::LOCALHOST] &&
+             rEntry[LockFileComponent::SYSUSERNAME] == aEntry[LockFileComponent::SYSUSERNAME] &&
+             rEntry[LockFileComponent::USERURL] == aEntry[LockFileComponent::USERURL] )
         {
             return true;
         }
@@ -308,13 +299,13 @@ void ShareControlFile::RemoveEntry( const LockFileEntry& aEntry )
 
     std::vector< LockFileEntry > aNewData;
 
-    for ( size_t nInd = 0; nInd < m_aUsersData.size(); nInd++ )
+    for (LockFileEntry & rEntry : m_aUsersData)
     {
-        if ( m_aUsersData[nInd][LockFileComponent::LOCALHOST] != aEntry[LockFileComponent::LOCALHOST]
-             || m_aUsersData[nInd][LockFileComponent::SYSUSERNAME] != aEntry[LockFileComponent::SYSUSERNAME]
-             || m_aUsersData[nInd][LockFileComponent::USERURL] != aEntry[LockFileComponent::USERURL] )
+        if ( rEntry[LockFileComponent::LOCALHOST] != aEntry[LockFileComponent::LOCALHOST]
+             || rEntry[LockFileComponent::SYSUSERNAME] != aEntry[LockFileComponent::SYSUSERNAME]
+             || rEntry[LockFileComponent::USERURL] != aEntry[LockFileComponent::USERURL] )
         {
-            aNewData.push_back( m_aUsersData[nInd] );
+            aNewData.push_back( rEntry );
         }
     }
 

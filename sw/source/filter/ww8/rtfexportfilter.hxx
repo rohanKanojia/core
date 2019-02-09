@@ -22,50 +22,53 @@
 
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XExporter.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <shellio.hxx>
+
+namespace com
+{
+namespace sun
+{
+namespace star
+{
+namespace uno
+{
+class XComponentContext;
+}
+}
+}
+}
 
 /// Dummy Writer implementation to be able to use the string format methods of the base class
 class RtfWriter : public Writer
 {
 protected:
-    sal_uLong WriteStream() override
-    {
-        return 0;
-    }
+    ErrCode WriteStream() override { return ERRCODE_NONE; }
 };
 
 /// The physical access to the RTF document (for writing).
-class RtfExportFilter : public cppu::WeakImplHelper
-    <
-    css::document::XFilter,
-    css::document::XExporter
-    >
+class RtfExportFilter final
+    : public cppu::WeakImplHelper<css::document::XFilter, css::document::XExporter>
 {
-protected:
     css::uno::Reference<css::uno::XComponentContext> m_xCtx;
     css::uno::Reference<css::lang::XComponent> m_xSrcDoc;
+    RtfWriter m_aWriter;
+
 public:
-    explicit RtfExportFilter(const css::uno::Reference<css::uno::XComponentContext>& xCtx);
-    virtual ~RtfExportFilter();
+    explicit RtfExportFilter(css::uno::Reference<css::uno::XComponentContext> xCtx);
+    ~RtfExportFilter() override;
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter(const css::uno::Sequence<css::beans::PropertyValue>& aDescriptor) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel() throw(css::uno::RuntimeException, std::exception) override;
+    sal_Bool SAL_CALL
+    filter(const css::uno::Sequence<css::beans::PropertyValue>& aDescriptor) override;
+    void SAL_CALL cancel() override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument(const css::uno::Reference<css::lang::XComponent>& xDoc)
-    throw(css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
+    void SAL_CALL
+    setSourceDocument(const css::uno::Reference<css::lang::XComponent>& xDoc) override;
 
-    RtfWriter m_aWriter;
+    Writer& GetWriter() { return m_aWriter; }
 };
-
-OUString RtfExport_getImplementationName();
-css::uno::Sequence<OUString> SAL_CALL RtfExport_getSupportedServiceNames() throw();
-css::uno::Reference<css::uno::XInterface> SAL_CALL RtfExport_createInstance(const css::uno::Reference<css::uno::XComponentContext>& xCtx) throw(css::uno::Exception);
-
-#define IMPL_NAME_RTFEXPORT "com.sun.star.comp.Writer.RtfExport"
 
 #endif // INCLUDED_SW_SOURCE_FILTER_WW8_RTFEXPORTFILTER_HXX
 

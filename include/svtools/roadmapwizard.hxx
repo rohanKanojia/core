@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SVTOOLS_ROADMAPWIZARD_HXX
 #define INCLUDED_SVTOOLS_ROADMAPWIZARD_HXX
 
+#include <memory>
 #include <svtools/svtdllapi.h>
 #include <svtools/wizardmachine.hxx>
 
 
 namespace svt
 {
-
-
     struct RoadmapWizardImpl;
     class RoadmapWizard;
 
@@ -64,19 +63,13 @@ namespace svt
     class SVT_DLLPUBLIC RoadmapWizard : public OWizardMachine, public RoadmapWizardTypes
     {
     private:
-        RoadmapWizardImpl*  m_pImpl;
+        std::unique_ptr<RoadmapWizardImpl>  m_pImpl;
 
     public:
         RoadmapWizard(
-            vcl::Window* _pParent,
-            const WinBits i_nStyle,
-            WizardButtonFlags _nButtonFlags = WizardButtonFlags::NEXT | WizardButtonFlags::PREVIOUS | WizardButtonFlags::FINISH | WizardButtonFlags::CANCEL | WizardButtonFlags::HELP
+            vcl::Window* _pParent
         );
-        RoadmapWizard(
-            vcl::Window* _pParent,
-            WizardButtonFlags _nButtonFlags = WizardButtonFlags::NEXT | WizardButtonFlags::PREVIOUS | WizardButtonFlags::FINISH | WizardButtonFlags::CANCEL | WizardButtonFlags::HELP
-        );
-        virtual ~RoadmapWizard( );
+        virtual ~RoadmapWizard( ) override;
         virtual void dispose() override;
 
         void            SetRoadmapHelpId( const OString& _rId );
@@ -107,13 +100,7 @@ namespace svt
             @param _nId
                 the unique id you wish to give this path. This id can later on be used
                 to refer to the path which you just declared
-
-            @param _nFirstState
-                the first state in this path. Must not be WZS_INVALID_STATE.<br/>
-                Declare an arbitrary number of states after this one, and terminate the sequence
-                with a WZS_INVALID_STATE.
         */
-        void    declarePath( PathId _nPathId, WizardState _nFirstState, ... );
         void    declarePath( PathId _nPathId, const WizardPath& _lWizardStates);
 
         /** provides basic information about a state
@@ -216,7 +203,7 @@ namespace svt
         void    updateRoadmapItemLabel( WizardState _nState );
 
     private:
-        DECL_DLLPRIVATE_LINK_TYPED( OnRoadmapItemSelected, LinkParamNone*, void );
+        DECL_DLLPRIVATE_LINK( OnRoadmapItemSelected, LinkParamNone*, void );
 
         /** updates the roadmap control to show the given path, as far as possible
             (modulo conflicts with other paths)

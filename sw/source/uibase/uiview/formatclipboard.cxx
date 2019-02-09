@@ -17,7 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formatclipboard.hxx"
+#include <memory>
+#include <utility>
+
+#include <formatclipboard.hxx>
 
 #include <svx/svxids.hrc>
 #include <cmdid.h>
@@ -35,53 +38,60 @@
 #include <editeng/frmdiritem.hxx>
 #include <fmtpdsc.hxx>
 #include <fmtrowsplt.hxx>
+#include <frmatr.hxx>
 
 namespace
 {
-#define FORMAT_PAINTBRUSH_FRAME_IDS \
-RES_FRMATR_BEGIN, RES_FILL_ORDER, \
-/* no RES_FRM_SIZE */ \
-RES_PAPER_BIN, RES_SURROUND, \
-/* no RES_VERT_ORIENT */ \
-/* no RES_HORI_ORIENT */ \
-/* no RES_ANCHOR */ \
-RES_BACKGROUND, RES_SHADOW, \
-/* no RES_FRMMACRO */ \
-RES_COL, RES_KEEP, \
-/* no RES_URL */ \
-RES_EDIT_IN_READONLY, RES_LAYOUT_SPLIT, \
-/* no RES_CHAIN */ \
-RES_TEXTGRID, RES_FRMATR_END-1,
 
-#define FORMAT_PAINTBRUSH_PARAGRAPH_IDS \
-RES_PARATR_BEGIN, RES_PARATR_END -1, \
-RES_PARATR_LIST_BEGIN, RES_PARATR_LIST_END -1, \
-FORMAT_PAINTBRUSH_FRAME_IDS
-
-SfxItemSet* lcl_CreateEmptyItemSet( int nSelectionType, SfxItemPool& rPool, bool bNoParagraphFormats = false )
+std::unique_ptr<SfxItemSet> lcl_CreateEmptyItemSet( SelectionType nSelectionType, SfxItemPool& rPool, bool bNoParagraphFormats = false )
 {
-    SfxItemSet* pItemSet = nullptr;
-    if( nSelectionType & (nsSelectionType::SEL_FRM | nsSelectionType::SEL_OLE | nsSelectionType::SEL_GRF) )
+    std::unique_ptr<SfxItemSet> pItemSet;
+    if( nSelectionType & (SelectionType::Frame | SelectionType::Ole | SelectionType::Graphic) )
     {
-        pItemSet = new SfxItemSet(rPool,
-                        FORMAT_PAINTBRUSH_FRAME_IDS
-                        0);
+        pItemSet = std::make_unique<SfxItemSet>(
+            rPool,
+            svl::Items<
+                RES_FRMATR_BEGIN, RES_FILL_ORDER,
+                // no RES_FRM_SIZE
+                RES_PAPER_BIN, RES_SURROUND,
+                // no RES_VERT_ORIENT
+                // no RES_HORI_ORIENT
+                // no RES_ANCHOR
+                RES_BACKGROUND, RES_SHADOW,
+                // no RES_FRMMACRO
+                RES_COL, RES_KEEP,
+                // no RES_URL
+                RES_EDIT_IN_READONLY, RES_LAYOUT_SPLIT,
+                // no RES_CHAIN
+                RES_TEXTGRID, RES_FRMATR_END - 1>{});
     }
-    else if( nSelectionType & nsSelectionType::SEL_DRW )
+    else if( nSelectionType & SelectionType::DrawObject )
     {
         //is handled different
     }
-    else if( nSelectionType & nsSelectionType::SEL_TXT )
+    else if( nSelectionType & SelectionType::Text )
     {
         if( bNoParagraphFormats )
-            pItemSet = new SfxItemSet(rPool,
-                    RES_CHRATR_BEGIN, RES_CHRATR_END - 1,
-                    0);
+            pItemSet = std::make_unique<SfxItemSet>(rPool,
+                    svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END - 1>{});
         else
-            pItemSet = new SfxItemSet(rPool,
+            pItemSet = std::make_unique<SfxItemSet>(
+                rPool,
+                svl::Items<
                     RES_CHRATR_BEGIN, RES_CHRATR_END - 1,
-                    FORMAT_PAINTBRUSH_PARAGRAPH_IDS
-                    0);
+                    RES_PARATR_BEGIN, RES_FILL_ORDER,
+                    // no RES_FRM_SIZE
+                    RES_PAPER_BIN, RES_SURROUND,
+                    // no RES_VERT_ORIENT
+                    // no RES_HORI_ORIENT
+                    // no RES_ANCHOR
+                    RES_BACKGROUND, RES_SHADOW,
+                    // no RES_FRMMACRO
+                    RES_COL, RES_KEEP,
+                    // no RES_URL
+                    RES_EDIT_IN_READONLY, RES_LAYOUT_SPLIT,
+                    // no RES_CHAIN
+                    RES_TEXTGRID, RES_FRMATR_END - 1>{});
     }
     return pItemSet;
 }
@@ -92,19 +102,26 @@ void lcl_getTableAttributes( SfxItemSet& rSet, SwWrtShell &rSh )
      rSh.GetBoxBackground(aBrush);
     rSet.Put( aBrush );
     if(rSh.GetRowBackground(aBrush))
-        rSet.Put( aBrush, SID_ATTR_BRUSH_ROW );
+    {
+        aBrush.SetWhich(SID_ATTR_BRUSH_ROW);
+        rSet.Put( aBrush );
+    }
     else
         rSet.InvalidateItem(SID_ATTR_BRUSH_ROW);
     rSh.GetTabBackground(aBrush);
-    rSet.Put( aBrush, SID_ATTR_BRUSH_TABLE );
+    aBrush.SetWhich(SID_ATTR_BRUSH_TABLE);
+    rSet.Put( aBrush );
 
     SvxBoxInfoItem aBoxInfo( SID_ATTR_BORDER_INNER );
     rSet.Put(aBoxInfo);
     rSh.GetTabBorders( rSet );
 
-    SvxFrameDirectionItem aBoxDirection( FRMDIR_ENVIRONMENT, RES_FRAMEDIR );
+    SvxFrameDirectionItem aBoxDirection( SvxFrameDirection::Environment, RES_FRAMEDIR );
     if(rSh.GetBoxDirection( aBoxDirection ))
-        rSet.Put(aBoxDirection, FN_TABLE_BOX_TEXTORIENTATION);
+    {
+        aBoxDirection.SetWhich(FN_TABLE_BOX_TEXTORIENTATION);
+        rSet.Put(aBoxDirection);
+    }
 
     rSet.Put(SfxUInt16Item(FN_TABLE_SET_VERT_ALIGN, rSh.GetBoxAlign()));
 
@@ -121,8 +138,7 @@ void lcl_getTableAttributes( SfxItemSet& rSet, SwWrtShell &rSh )
         rSet.Put( pFrameFormat->GetFrameDir() );
     }
 
-    SwFormatRowSplit* pSplit = nullptr;
-    rSh.GetRowSplit(pSplit);
+    std::unique_ptr<SwFormatRowSplit> pSplit = rSh.GetRowSplit();
     if(pSplit)
         rSet.Put(*pSplit);
 }
@@ -202,13 +218,13 @@ void lcl_setTableAttributes( const SfxItemSet& rSet, SwWrtShell &rSh )
 
     if( SfxItemState::SET == rSet.GetItemState( FN_TABLE_BOX_TEXTORIENTATION, false, &pItem) )
     {
-        SvxFrameDirectionItem aDirection( FRMDIR_ENVIRONMENT, RES_FRAMEDIR );
+        SvxFrameDirectionItem aDirection( SvxFrameDirection::Environment, RES_FRAMEDIR );
         aDirection.SetValue(static_cast< const SvxFrameDirectionItem* >(pItem)->GetValue());
         rSh.SetBoxDirection(aDirection);
     }
 
     if( SfxItemState::SET == rSet.GetItemState( FN_TABLE_SET_VERT_ALIGN, false, &pItem))
-        rSh.SetBoxAlign(static_cast<const SfxUInt16Item*>((pItem))->GetValue());
+        rSh.SetBoxAlign(static_cast<const SfxUInt16Item*>(pItem)->GetValue());
 
     if( SfxItemState::SET == rSet.GetItemState( RES_ROW_SPLIT, false, &pItem) )
         rSh.SetRowSplit(*static_cast<const SwFormatRowSplit*>(pItem));
@@ -216,18 +232,9 @@ void lcl_setTableAttributes( const SfxItemSet& rSet, SwWrtShell &rSh )
 }//end anonymous namespace
 
 SwFormatClipboard::SwFormatClipboard()
-        : m_nSelectionType(0)
-        , m_pItemSet_TextAttr(nullptr)
-        , m_pItemSet_ParAttr(nullptr)
-        , m_pTableItemSet(nullptr)
+        : m_nSelectionType(SelectionType::NONE)
         , m_bPersistentCopy(false)
 {
-}
-SwFormatClipboard::~SwFormatClipboard()
-{
-    delete m_pItemSet_TextAttr;
-    delete m_pItemSet_ParAttr;
-    delete m_pTableItemSet;
 }
 
 bool SwFormatClipboard::HasContent() const
@@ -239,7 +246,7 @@ bool SwFormatClipboard::HasContent() const
         || !m_aParaStyle.isEmpty()
         ;
 }
-bool SwFormatClipboard::HasContentForThisType( int nSelectionType ) const
+bool SwFormatClipboard::HasContentForThisType( SelectionType nSelectionType ) const
 {
     if( !HasContent() )
         return false;
@@ -247,35 +254,34 @@ bool SwFormatClipboard::HasContentForThisType( int nSelectionType ) const
     if( m_nSelectionType == nSelectionType )
         return true;
 
-    if(   ( nSelectionType & (nsSelectionType::SEL_FRM | nsSelectionType::SEL_OLE | nsSelectionType::SEL_GRF) )
+    if(   ( nSelectionType   & (SelectionType::Frame | SelectionType::Ole | SelectionType::Graphic) )
         &&
-        ( m_nSelectionType & (nsSelectionType::SEL_FRM | nsSelectionType::SEL_OLE | nsSelectionType::SEL_GRF) )
+          ( m_nSelectionType & (SelectionType::Frame | SelectionType::Ole | SelectionType::Graphic) )
         )
         return true;
 
-    if( nSelectionType & nsSelectionType::SEL_TXT && m_nSelectionType & nsSelectionType::SEL_TXT )
+    if( nSelectionType & SelectionType::Text && m_nSelectionType & SelectionType::Text )
         return true;
 
     return false;
 }
 
-bool SwFormatClipboard::CanCopyThisType( int nSelectionType )
+bool SwFormatClipboard::CanCopyThisType( SelectionType nSelectionType )
 {
-    if( nSelectionType & (nsSelectionType::SEL_FRM | nsSelectionType::SEL_OLE | nsSelectionType::SEL_GRF
-         | nsSelectionType::SEL_TXT | nsSelectionType::SEL_DRW | nsSelectionType::SEL_TBL | nsSelectionType::SEL_TBL_CELLS ) )
-         return true;
-    return false;
+    return bool(nSelectionType
+                & (SelectionType::Frame | SelectionType::Ole | SelectionType::Graphic
+                   | SelectionType::Text | SelectionType::DrawObject | SelectionType::Table | SelectionType::TableCell ));
 }
 
 void SwFormatClipboard::Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bPersistentCopy )
 {
     // first clear the previously stored attributes
-    this->Erase();
+    Erase();
     m_bPersistentCopy = bPersistentCopy;
 
-    int nSelectionType = rWrtShell.GetSelectionType();
-    SfxItemSet* pItemSet_TextAttr = lcl_CreateEmptyItemSet( nSelectionType, rPool, true );
-    SfxItemSet* pItemSet_ParAttr = lcl_CreateEmptyItemSet( nSelectionType, rPool );
+    SelectionType nSelectionType = rWrtShell.GetSelectionType();
+    auto pItemSet_TextAttr = lcl_CreateEmptyItemSet( nSelectionType, rPool, true );
+    auto pItemSet_ParAttr = lcl_CreateEmptyItemSet( nSelectionType, rPool );
 
     rWrtShell.StartAction();
     rWrtShell.Push();
@@ -283,7 +289,7 @@ void SwFormatClipboard::Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bP
     // modify the "Point and Mark" of the cursor
     // in order to select only the last character of the
     // selection(s) and then to get the attributes of this single character
-    if( nSelectionType == nsSelectionType::SEL_TXT )
+    if( nSelectionType == SelectionType::Text )
     {
         // get the current PaM, the cursor
         // if there several selection it currently point
@@ -339,14 +345,14 @@ void SwFormatClipboard::Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bP
 
     if(pItemSet_TextAttr)
     {
-        if( nSelectionType & (nsSelectionType::SEL_FRM | nsSelectionType::SEL_OLE | nsSelectionType::SEL_GRF) )
+        if( nSelectionType & (SelectionType::Frame | SelectionType::Ole | SelectionType::Graphic) )
             rWrtShell.GetFlyFrameAttr(*pItemSet_TextAttr);
         else
         {
             // get the text attributes from named and automatic formatting
             rWrtShell.GetCurAttr(*pItemSet_TextAttr);
 
-            if( nSelectionType & nsSelectionType::SEL_TXT )
+            if( nSelectionType & SelectionType::Text )
             {
                 // get the paragraph attributes (could be character properties)
                 // from named and automatic formatting
@@ -354,48 +360,47 @@ void SwFormatClipboard::Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bP
             }
         }
     }
-    else if ( nSelectionType & nsSelectionType::SEL_DRW )
+    else if ( nSelectionType & SelectionType::DrawObject )
     {
         SdrView* pDrawView = rWrtShell.GetDrawView();
         if(pDrawView)
         {
             if( pDrawView->AreObjectsMarked() )
             {
-                bool bOnlyHardAttr = true;
-                pItemSet_TextAttr = new SfxItemSet( pDrawView->GetAttrFromMarked(bOnlyHardAttr) );
+                pItemSet_TextAttr = std::make_unique<SfxItemSet>( pDrawView->GetAttrFromMarked(true/*bOnlyHardAttr*/) );
                 //remove attributes defining the type/data of custom shapes
                 pItemSet_TextAttr->ClearItem(SDRATTR_CUSTOMSHAPE_ENGINE);
                 pItemSet_TextAttr->ClearItem(SDRATTR_CUSTOMSHAPE_DATA);
                 pItemSet_TextAttr->ClearItem(SDRATTR_CUSTOMSHAPE_GEOMETRY);
-                pItemSet_TextAttr->ClearItem(SDRATTR_CUSTOMSHAPE_REPLACEMENT_URL);
             }
         }
     }
 
-    if( nSelectionType & nsSelectionType::SEL_TBL_CELLS )//only copy table attributes if really cells are selected (not only text in tables)
+    if( nSelectionType & SelectionType::TableCell )//only copy table attributes if really cells are selected (not only text in tables)
     {
-        m_pTableItemSet = new SfxItemSet(rPool,
-                        SID_ATTR_BORDER_INNER,  SID_ATTR_BORDER_SHADOW, //SID_ATTR_BORDER_OUTER is inbetween
-                        RES_BACKGROUND,         RES_SHADOW, //RES_BOX is inbetween
-                        SID_ATTR_BRUSH_ROW,     SID_ATTR_BRUSH_TABLE,
-                        RES_BREAK,              RES_BREAK,
-                        RES_PAGEDESC,           RES_PAGEDESC,
-                        RES_LAYOUT_SPLIT,       RES_LAYOUT_SPLIT,
-                        RES_ROW_SPLIT,          RES_ROW_SPLIT,
-                        RES_KEEP,               RES_KEEP,
-                        RES_FRAMEDIR,           RES_FRAMEDIR,
-                        FN_PARAM_TABLE_HEADLINE, FN_PARAM_TABLE_HEADLINE,
-                        FN_TABLE_BOX_TEXTORIENTATION, FN_TABLE_BOX_TEXTORIENTATION,
-                        FN_TABLE_SET_VERT_ALIGN, FN_TABLE_SET_VERT_ALIGN,
-                        0);
+        m_pTableItemSet = std::make_unique<SfxItemSet>(
+            rPool,
+            svl::Items<
+                RES_PAGEDESC, RES_BREAK,
+                RES_BACKGROUND, RES_SHADOW, // RES_BOX is inbetween
+                RES_KEEP, RES_KEEP,
+                RES_LAYOUT_SPLIT, RES_LAYOUT_SPLIT,
+                RES_FRAMEDIR, RES_FRAMEDIR,
+                RES_ROW_SPLIT, RES_ROW_SPLIT,
+                SID_ATTR_BORDER_INNER, SID_ATTR_BORDER_SHADOW,
+                    // SID_ATTR_BORDER_OUTER is inbetween
+                SID_ATTR_BRUSH_ROW, SID_ATTR_BRUSH_TABLE,
+                FN_TABLE_SET_VERT_ALIGN, FN_TABLE_SET_VERT_ALIGN,
+                FN_TABLE_BOX_TEXTORIENTATION, FN_TABLE_BOX_TEXTORIENTATION,
+                FN_PARAM_TABLE_HEADLINE, FN_PARAM_TABLE_HEADLINE>{});
         lcl_getTableAttributes( *m_pTableItemSet, rWrtShell );
     }
 
     m_nSelectionType = nSelectionType;
-    m_pItemSet_TextAttr = pItemSet_TextAttr;
-    m_pItemSet_ParAttr = pItemSet_ParAttr;
+    m_pItemSet_TextAttr = std::move(pItemSet_TextAttr);
+    m_pItemSet_ParAttr = std::move(pItemSet_ParAttr);
 
-    if( nSelectionType & nsSelectionType::SEL_TXT )
+    if( nSelectionType & SelectionType::Text )
     {
         // if text is selected save the named character format
         SwFormat* pFormat = rWrtShell.GetCurCharFormat();
@@ -408,7 +413,7 @@ void SwFormatClipboard::Copy( SwWrtShell& rWrtShell, SfxItemPool& rPool, bool bP
             m_aParaStyle = pFormat->GetName();
     }
 
-    rWrtShell.Pop(false);
+    rWrtShell.Pop(SwCursorShell::PopMode::DeleteCurrent);
     rWrtShell.EndAction();
 }
 
@@ -434,37 +439,34 @@ static void lcl_AppendSetItems( ItemVector& rItemVector, const SfxItemSet& rStyl
 // remove all items that are inherited from the styles
 static void lcl_RemoveEqualItems( SfxItemSet& rTemplateItemSet, const ItemVector& rItemVector )
 {
-    ItemVector::const_iterator aEnd = rItemVector.end();
-    ItemVector::const_iterator aIter = rItemVector.begin();
-    while( aIter != aEnd )
+    for( const auto& rItem : rItemVector )
     {
         const SfxPoolItem* pItem;
-        if( SfxItemState::SET == rTemplateItemSet.GetItemState( (*aIter)->Which(), true, &pItem ) &&
-            *pItem == *(*aIter) )
+        if( SfxItemState::SET == rTemplateItemSet.GetItemState( rItem->Which(), true, &pItem ) &&
+            *pItem == *rItem )
         {
-            rTemplateItemSet.ClearItem( (*aIter)->Which() );
+            rTemplateItemSet.ClearItem( rItem->Which() );
         }
-        ++aIter;
     }
 }
 
 void SwFormatClipboard::Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPool
                               , bool bNoCharacterFormats, bool bNoParagraphFormats )
 {
-    int nSelectionType = rWrtShell.GetSelectionType();
-    if( !this->HasContentForThisType(nSelectionType) )
+    SelectionType nSelectionType = rWrtShell.GetSelectionType();
+    if( !HasContentForThisType(nSelectionType) )
     {
         if(!m_bPersistentCopy)
-            this->Erase();
+            Erase();
         return;
     }
 
     rWrtShell.StartAction();
-    rWrtShell.StartUndo(UNDO_INSATTR);
+    rWrtShell.StartUndo(SwUndoId::INSATTR);
 
     ItemVector aItemVector;
 
-    if( nSelectionType & nsSelectionType::SEL_TXT )
+    if( nSelectionType & SelectionType::Text )
     {
         // apply the named text and paragraph formatting
         if( pPool )
@@ -473,7 +475,7 @@ void SwFormatClipboard::Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPo
             if(!m_aCharStyle.isEmpty() && !bNoCharacterFormats )
             {
                 // look for the named text format in the pool
-                SwDocStyleSheet* pStyle = static_cast<SwDocStyleSheet*>(pPool->Find(m_aCharStyle, SFX_STYLE_FAMILY_CHAR));
+                SwDocStyleSheet* pStyle = static_cast<SwDocStyleSheet*>(pPool->Find(m_aCharStyle, SfxStyleFamily::Char));
 
                 // if the style is found
                 if( pStyle )
@@ -492,7 +494,7 @@ void SwFormatClipboard::Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPo
             if(!m_aParaStyle.isEmpty() && !bNoParagraphFormats )
             {
                 // look for the named pragraph format in the pool
-                SwDocStyleSheet* pStyle = static_cast<SwDocStyleSheet*>(pPool->Find(m_aParaStyle, SFX_STYLE_FAMILY_PARA));
+                SwDocStyleSheet* pStyle = static_cast<SwDocStyleSheet*>(pPool->Find(m_aParaStyle, SfxStyleFamily::Para));
                 if( pStyle )
                 {
                     // store the attributes from this style in aItemVector in order
@@ -530,13 +532,12 @@ void SwFormatClipboard::Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPo
 
     if(m_pItemSet_TextAttr)
     {
-        if( nSelectionType & nsSelectionType::SEL_DRW )
+        if( nSelectionType & SelectionType::DrawObject )
         {
             SdrView* pDrawView = rWrtShell.GetDrawView();
             if(pDrawView)
             {
-                bool bReplaceAll = true;
-                pDrawView->SetAttrToMarked(*m_pItemSet_TextAttr, bReplaceAll);
+                pDrawView->SetAttrToMarked(*m_pItemSet_TextAttr, true/*bReplaceAll*/);
             }
         }
         else
@@ -555,7 +556,7 @@ void SwFormatClipboard::Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPo
                 lcl_RemoveEqualItems( *pTemplateItemSet, aItemVector );
 
                 // apply the character automatic attributes
-                if( nSelectionType & (nsSelectionType::SEL_FRM | nsSelectionType::SEL_OLE | nsSelectionType::SEL_GRF) )
+                if( nSelectionType & (SelectionType::Frame | SelectionType::Ole | SelectionType::Graphic) )
                     rWrtShell.SetFlyFrameAttr(*pTemplateItemSet);
                 else if ( !bNoCharacterFormats )
                     rWrtShell.SetAttrSet(*pTemplateItemSet);
@@ -563,28 +564,25 @@ void SwFormatClipboard::Paste( SwWrtShell& rWrtShell, SfxStyleSheetBasePool* pPo
         }
     }
 
-    if( m_pTableItemSet && nSelectionType & (nsSelectionType::SEL_TBL | nsSelectionType::SEL_TBL_CELLS) )
+    if( m_pTableItemSet && nSelectionType & (SelectionType::Table | SelectionType::TableCell) )
         lcl_setTableAttributes( *m_pTableItemSet, rWrtShell );
 
-    rWrtShell.EndUndo(UNDO_INSATTR);
+    rWrtShell.EndUndo(SwUndoId::INSATTR);
     rWrtShell.EndAction();
 
     if(!m_bPersistentCopy)
-        this->Erase();
+        Erase();
 }
 
 void SwFormatClipboard::Erase()
 {
-    m_nSelectionType = 0;
+    m_nSelectionType = SelectionType::NONE;
 
-    delete m_pItemSet_TextAttr;
-    m_pItemSet_TextAttr = nullptr;
+    m_pItemSet_TextAttr.reset();
 
-    delete m_pItemSet_ParAttr;
-    m_pItemSet_ParAttr = nullptr;
+    m_pItemSet_ParAttr.reset();
 
-    delete m_pTableItemSet;
-    m_pTableItemSet = nullptr;
+    m_pTableItemSet.reset();
 
     if( !m_aCharStyle.isEmpty() )
         m_aCharStyle.clear();

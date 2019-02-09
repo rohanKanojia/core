@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SW_SOURCE_UI_ENVELP_SWUILABIMP_HXX
 #define INCLUDED_SW_SOURCE_UI_ENVELP_SWUILABIMP_HXX
 
-#include "labimp.hxx"
+#include <labimp.hxx>
 #include <com/sun/star/text/XAutoTextContainer2.hpp>
 #include <vcl/layout.hxx>
 
@@ -29,30 +29,26 @@ class SwLabPage : public SfxTabPage
     OUString      sActDBName;
     SwLabItem     aItem;
 
-    VclPtr<VclContainer> m_pAddressFrame;
+    std::unique_ptr<weld::Widget> m_xAddressFrame;
+    std::unique_ptr<weld::CheckButton> m_xAddrBox;
+    std::unique_ptr<weld::TextView> m_xWritingEdit;
+    std::unique_ptr<weld::ComboBox> m_xDatabaseLB;
+    std::unique_ptr<weld::ComboBox> m_xTableLB;
+    std::unique_ptr<weld::Button> m_xInsertBT;
+    std::unique_ptr<weld::ComboBox> m_xDBFieldLB;
+    std::unique_ptr<weld::RadioButton> m_xContButton;
+    std::unique_ptr<weld::RadioButton> m_xSheetButton;
+    std::unique_ptr<weld::ComboBox> m_xMakeBox;
+    std::unique_ptr<weld::ComboBox> m_xTypeBox;
+    std::unique_ptr<weld::ComboBox> m_xHiddenSortTypeBox;
+    std::unique_ptr<weld::Label> m_xFormatInfo;
 
-    VclPtr<CheckBox>         m_pAddrBox;
-    VclPtr<VclMultiLineEdit> m_pWritingEdit;
-    VclPtr<ListBox>          m_pDatabaseLB;
-    VclPtr<ListBox>          m_pTableLB;
-    VclPtr<PushButton>       m_pInsertBT;
-    VclPtr<ListBox>          m_pDBFieldLB;
-
-    VclPtr<RadioButton>      m_pContButton;
-    VclPtr<RadioButton>      m_pSheetButton;
-    VclPtr<ListBox>          m_pMakeBox;
-    VclPtr<ListBox>          m_pTypeBox;
-    VclPtr<ListBox>          m_pHiddenSortTypeBox;
-    VclPtr<FixedText>        m_pFormatInfo;
-
-    bool        m_bLabel;
-
-    DECL_LINK_TYPED(AddrHdl, Button*, void);
-    DECL_LINK_TYPED(DatabaseHdl, ListBox&, void );
-    DECL_LINK_TYPED(FieldHdl, Button *, void);
-    DECL_LINK_TYPED(PageHdl, Button *, void);
-    DECL_LINK_TYPED(MakeHdl, ListBox&, void);
-    DECL_LINK_TYPED(TypeHdl, ListBox&, void);
+    DECL_LINK(AddrHdl, weld::ToggleButton&, void);
+    DECL_LINK(DatabaseHdl, weld::ComboBox&, void );
+    DECL_LINK(FieldHdl, weld::Button&, void);
+    DECL_LINK(PageHdl, weld::ToggleButton&, void);
+    DECL_LINK(MakeHdl, weld::ComboBox&, void);
+    DECL_LINK(TypeHdl, weld::ComboBox&, void);
 
     void DisplayFormat  ();
     SwLabRec* GetSelectedEntryPos();
@@ -61,143 +57,91 @@ class SwLabPage : public SfxTabPage
     using TabPage::DeactivatePage;
 
 public:
-    SwLabPage(vcl::Window* pParent, const SfxItemSet& rSet);
+    SwLabPage(TabPageParent pParent, const SfxItemSet& rSet);
 
-    virtual ~SwLabPage();
-    virtual void dispose() override;
+    virtual ~SwLabPage() override;
 
-    static VclPtr<SfxTabPage> Create(vcl::Window* pParent, const SfxItemSet* rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet* rSet);
 
     virtual void ActivatePage(const SfxItemSet& rSet) override;
-    virtual sfxpg DeactivatePage(SfxItemSet* pSet = nullptr) override;
+    virtual DeactivateRC DeactivatePage(SfxItemSet* pSet) override;
             void FillItem(SwLabItem& rItem);
     virtual bool FillItemSet(SfxItemSet* rSet) override;
     virtual void Reset(const SfxItemSet* rSet) override;
 
-    SwLabDlg* GetParentSwLabDlg() {return static_cast<SwLabDlg*>(GetParentDialog());}
+    SwLabDlg* GetParentSwLabDlg() {return static_cast<SwLabDlg*>(GetDialogController());}
 
     void    SetToBusinessCard();
 
     void InitDatabaseBox();
-    inline void SetDBManager(SwDBManager* pDBManager_) { pDBManager = pDBManager_; }
-    inline SwDBManager* GetDBManager() const { return pDBManager; }
-};
-
-class SwOneExampleFrame;
-class SwVisitingCardPage : public SfxTabPage
-{
-    VclPtr<SvTreeListBox>  m_pAutoTextLB;
-    VclPtr<ListBox>        m_pAutoTextGroupLB;
-    VclPtr<vcl::Window>    m_pExampleWIN;
-
-    SwLabItem       aLabItem;
-
-    SwOneExampleFrame*  pExampleFrame;
-    css::uno::Reference< css::text::XAutoTextContainer2 > m_xAutoText;
-
-    DECL_LINK_TYPED( AutoTextSelectTreeListBoxHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( AutoTextSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( FrameControlInitializedHdl, SwOneExampleFrame&, void );
-
-    void            InitFrameControl();
-    void            UpdateFields();
-
-    void            ClearUserData();
-
-    using SfxTabPage::SetUserData;
-    void            SetUserData( sal_uInt32 nCnt,
-                                    const OUString* pNames,
-                                    const OUString* pValues );
-
-    virtual ~SwVisitingCardPage();
-    virtual void dispose() override;
-
-    using TabPage::ActivatePage;
-    using TabPage::DeactivatePage;
-
-public:
-    SwVisitingCardPage(vcl::Window* pParent, const SfxItemSet& rSet);
-
-    static VclPtr<SfxTabPage> Create(vcl::Window* pParent, const SfxItemSet* rSet);
-
-    virtual void ActivatePage(const SfxItemSet& rSet) override;
-    virtual sfxpg DeactivatePage(SfxItemSet* pSet = nullptr) override;
-    virtual bool FillItemSet(SfxItemSet* rSet) override;
-    virtual void Reset(const SfxItemSet* rSet) override;
+    void SetDBManager(SwDBManager* pDBManager_) { pDBManager = pDBManager_; }
+    SwDBManager* GetDBManager() const { return pDBManager; }
 };
 
 class SwPrivateDataPage : public SfxTabPage
 {
-    VclPtr<Edit> m_pFirstNameED;
-    VclPtr<Edit> m_pNameED;
-    VclPtr<Edit> m_pShortCutED;
-
-    VclPtr<Edit> m_pFirstName2ED;
-    VclPtr<Edit> m_pName2ED;
-    VclPtr<Edit> m_pShortCut2ED;
-
-    VclPtr<Edit> m_pStreetED;
-    VclPtr<Edit> m_pZipED;
-    VclPtr<Edit> m_pCityED;
-    VclPtr<Edit> m_pCountryED;
-    VclPtr<Edit> m_pStateED;
-    VclPtr<Edit> m_pTitleED;
-    VclPtr<Edit> m_pProfessionED;
-    VclPtr<Edit> m_pPhoneED;
-    VclPtr<Edit> m_pMobilePhoneED;
-    VclPtr<Edit> m_pFaxED;
-    VclPtr<Edit> m_pHomePageED;
-    VclPtr<Edit> m_pMailED;
+    std::unique_ptr<weld::Entry> m_xFirstNameED;
+    std::unique_ptr<weld::Entry> m_xNameED;
+    std::unique_ptr<weld::Entry> m_xShortCutED;
+    std::unique_ptr<weld::Entry> m_xFirstName2ED;
+    std::unique_ptr<weld::Entry> m_xName2ED;
+    std::unique_ptr<weld::Entry> m_xShortCut2ED;
+    std::unique_ptr<weld::Entry> m_xStreetED;
+    std::unique_ptr<weld::Entry> m_xZipED;
+    std::unique_ptr<weld::Entry> m_xCityED;
+    std::unique_ptr<weld::Entry> m_xCountryED;
+    std::unique_ptr<weld::Entry> m_xStateED;
+    std::unique_ptr<weld::Entry> m_xTitleED;
+    std::unique_ptr<weld::Entry> m_xProfessionED;
+    std::unique_ptr<weld::Entry> m_xPhoneED;
+    std::unique_ptr<weld::Entry> m_xMobilePhoneED;
+    std::unique_ptr<weld::Entry> m_xFaxED;
+    std::unique_ptr<weld::Entry> m_xHomePageED;
+    std::unique_ptr<weld::Entry> m_xMailED;
 
     using TabPage::ActivatePage;
     using TabPage::DeactivatePage;
 
 public:
-    SwPrivateDataPage(vcl::Window* pParent, const SfxItemSet& rSet);
-    virtual ~SwPrivateDataPage();
-    virtual void dispose() override;
+    SwPrivateDataPage(TabPageParent pParent, const SfxItemSet& rSet);
+    virtual ~SwPrivateDataPage() override;
 
-    static VclPtr<SfxTabPage> Create(vcl::Window* pParent, const SfxItemSet* rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet* rSet);
 
     virtual void ActivatePage(const SfxItemSet& rSet) override;
-    virtual sfxpg DeactivatePage(SfxItemSet* pSet = nullptr) override;
+    virtual DeactivateRC DeactivatePage(SfxItemSet* pSet) override;
     virtual bool FillItemSet(SfxItemSet* rSet) override;
     virtual void Reset(const SfxItemSet* rSet) override;
 };
 
 class SwBusinessDataPage : public SfxTabPage
 {
-    VclPtr<Edit> m_pCompanyED;
-    VclPtr<Edit> m_pCompanyExtED;
-    VclPtr<Edit> m_pSloganED;
-
-    VclPtr<Edit> m_pStreetED;
-    VclPtr<Edit> m_pZipED;
-    VclPtr<Edit> m_pCityED;
-    VclPtr<Edit> m_pCountryED;
-    VclPtr<Edit> m_pStateED;
-
-    VclPtr<Edit> m_pPositionED;
-
-    VclPtr<Edit> m_pPhoneED;
-    VclPtr<Edit> m_pMobilePhoneED;
-    VclPtr<Edit> m_pFaxED;
-
-    VclPtr<Edit> m_pHomePageED;
-    VclPtr<Edit> m_pMailED;
+    std::unique_ptr<weld::Entry> m_xCompanyED;
+    std::unique_ptr<weld::Entry> m_xCompanyExtED;
+    std::unique_ptr<weld::Entry> m_xSloganED;
+    std::unique_ptr<weld::Entry> m_xStreetED;
+    std::unique_ptr<weld::Entry> m_xZipED;
+    std::unique_ptr<weld::Entry> m_xCityED;
+    std::unique_ptr<weld::Entry> m_xCountryED;
+    std::unique_ptr<weld::Entry> m_xStateED;
+    std::unique_ptr<weld::Entry> m_xPositionED;
+    std::unique_ptr<weld::Entry> m_xPhoneED;
+    std::unique_ptr<weld::Entry> m_xMobilePhoneED;
+    std::unique_ptr<weld::Entry> m_xFaxED;
+    std::unique_ptr<weld::Entry> m_xHomePageED;
+    std::unique_ptr<weld::Entry> m_xMailED;
 
     using TabPage::ActivatePage;
     using TabPage::DeactivatePage;
 
 public:
-    SwBusinessDataPage(vcl::Window* pParent, const SfxItemSet& rSet);
-    virtual ~SwBusinessDataPage();
-    virtual void dispose() override;
+    SwBusinessDataPage(TabPageParent pParent, const SfxItemSet& rSet);
+    virtual ~SwBusinessDataPage() override;
 
-    static VclPtr<SfxTabPage> Create(vcl::Window* pParent, const SfxItemSet* rSet);
+    static VclPtr<SfxTabPage> Create(TabPageParent pParent, const SfxItemSet* rSet);
 
     virtual void ActivatePage(const SfxItemSet& rSet) override;
-    virtual sfxpg DeactivatePage(SfxItemSet* pSet = nullptr) override;
+    virtual DeactivateRC DeactivatePage(SfxItemSet* pSet) override;
     virtual bool FillItemSet(SfxItemSet* rSet) override;
     virtual void Reset(const SfxItemSet* rSet) override;
 };

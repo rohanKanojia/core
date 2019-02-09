@@ -29,6 +29,7 @@
 
 #include <com/sun/star/rendering/ColorSpaceType.hpp>
 #include <com/sun/star/rendering/RenderingIntent.hpp>
+#include <com/sun/star/rendering/VolatileContentDestroyedException.hpp>
 #include <com/sun/star/rendering/XGraphicDevice.hpp>
 #include <com/sun/star/rendering/XBitmap.hpp>
 #include <com/sun/star/rendering/XPolyPolygon2D.hpp>
@@ -44,9 +45,11 @@
 #include <basegfx/point/b2ipoint.hxx>
 #include <basegfx/range/b2irectangle.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
 
+#include <sal/log.hxx>
+#include <tools/helpers.hxx>
 #include <tools/poly.hxx>
 #include <tools/diagnose_ex.h>
 #include <rtl/uuid.h>
@@ -57,6 +60,7 @@
 
 #include <canvasbitmap.hxx>
 #include <vcl/canvastools.hxx>
+#include <bitmapwriteaccess.hxx>
 
 using namespace ::com::sun::star;
 
@@ -64,8 +68,7 @@ namespace vcl
 {
     namespace unotools
     {
-        uno::Reference< rendering::XBitmap > xBitmapFromBitmapEx( const uno::Reference< rendering::XGraphicDevice >&    /*xGraphicDevice*/,
-                                                                  const ::BitmapEx&                                     inputBitmap )
+        uno::Reference< rendering::XBitmap > xBitmapFromBitmapEx(const ::BitmapEx& inputBitmap )
         {
             SAL_INFO( "vcl.helper", "vcl::unotools::xBitmapFromBitmapEx()" );
 
@@ -74,7 +77,7 @@ namespace vcl
 
         namespace
         {
-            inline bool equalsLayout( const rendering::IntegerBitmapLayout& rLHS,
+            bool equalsLayout( const rendering::IntegerBitmapLayout& rLHS,
                                     const rendering::IntegerBitmapLayout& rRHS )
             {
                 return
@@ -89,8 +92,8 @@ namespace vcl
                           sal_Int32                                                  nHeight,
                           const rendering::IntegerBitmapLayout&                      rLayout,
                           const uno::Reference< rendering::XIntegerReadOnlyBitmap >& xInputBitmap,
-                          Bitmap::ScopedWriteAccess&                                   rWriteAcc,
-                          Bitmap::ScopedWriteAccess&                                   rAlphaAcc )
+                          BitmapScopedWriteAccess&                                   rWriteAcc,
+                          BitmapScopedWriteAccess&                                   rAlphaAcc )
             {
                 rendering::IntegerBitmapLayout      aCurrLayout;
                 geometry::IntegerRectangle2D        aRect;
@@ -113,8 +116,10 @@ namespace vcl
                     if( !equalsLayout(aCurrLayout, rLayout) )
                         return false; // re-read bmp from the start
 
+                    Scanline pScanline = rWriteAcc->GetScanline( aRect.Y1 );
                     if( rAlphaAcc.get() )
                     {
+                        Scanline pScanlineAlpha = rAlphaAcc->GetScanline( aRect.Y1 );
                         // read ARGB color
                         aARGBColors = rLayout.ColorSpace->convertIntegerToARGB(aPixelData);
 
@@ -123,12 +128,12 @@ namespace vcl
                             for( sal_Int32 x=0; x<nWidth; ++x )
                             {
                                 const rendering::ARGBColor& rColor=aARGBColors[x];
-                                rWriteAcc->SetPixelIndex( aRect.Y1, x,
-                                                     (sal_uInt8) rWriteAcc->GetBestPaletteIndex(
+                                rWriteAcc->SetPixelOnData( pScanline, x,
+                                                     BitmapColor(static_cast<sal_uInt8>(rWriteAcc->GetBestPaletteIndex(
                                                          BitmapColor( toByteColor(rColor.Red),
                                                                       toByteColor(rColor.Green),
-                                                                      toByteColor(rColor.Blue))) );
-                                rAlphaAcc->SetPixel( aRect.Y1, x,
+                                                                      toByteColor(rColor.Blue))))) );
+                                rAlphaAcc->SetPixelOnData( pScanlineAlpha, x,
                                                      BitmapColor( 255 - toByteColor(rColor.Alpha) ));
                             }
                         }
@@ -137,11 +142,11 @@ namespace vcl
                             for( sal_Int32 x=0; x<nWidth; ++x )
                             {
                                 const rendering::ARGBColor& rColor=aARGBColors[x];
-                                rWriteAcc->SetPixel( aRect.Y1, x,
+                                rWriteAcc->SetPixelOnData( pScanline, x,
                                                      BitmapColor( toByteColor(rColor.Red),
                                                                   toByteColor(rColor.Green),
                                                                   toByteColor(rColor.Blue) ));
-                                rAlphaAcc->SetPixel( aRect.Y1, x,
+                                rAlphaAcc->SetPixelOnData( pScanlineAlpha, x,
                                                      BitmapColor( 255 - toByteColor(rColor.Alpha) ));
                             }
                         }
@@ -155,11 +160,11 @@ namespace vcl
                             for( sal_Int32 x=0; x<nWidth; ++x )
                             {
                                 const rendering::RGBColor& rColor=aRGBColors[x];
-                                rWriteAcc->SetPixelIndex( aRect.Y1, x,
-                                                     (sal_uInt8) rWriteAcc->GetBestPaletteIndex(
+                                rWriteAcc->SetPixelOnData( pScanline, x,
+                                                     BitmapColor(static_cast<sal_uInt8>(rWriteAcc->GetBestPaletteIndex(
                                                          BitmapColor( toByteColor(rColor.Red),
                                                                       toByteColor(rColor.Green),
-                                                                      toByteColor(rColor.Blue))) );
+                                                                      toByteColor(rColor.Blue))))) );
                             }
                         }
                         else
@@ -167,7 +172,7 @@ namespace vcl
                             for( sal_Int32 x=0; x<nWidth; ++x )
                             {
                                 const rendering::RGBColor& rColor=aRGBColors[x];
-                                rWriteAcc->SetPixel( aRect.Y1, x,
+                                rWriteAcc->SetPixelOnData( pScanline, x,
                                                      BitmapColor( toByteColor(rColor.Red),
                                                                   toByteColor(rColor.Green),
                                                                   toByteColor(rColor.Blue) ));
@@ -196,8 +201,6 @@ namespace vcl
 
             // volatile bitmaps are a bit more complicated to read
             // from..
-            uno::Reference<rendering::XVolatileBitmap> xVolatileBitmap(
-                xInputBitmap, uno::UNO_QUERY);
 
             // loop a few times, until successfully read (for XVolatileBitmap)
             for( int i=0; i<10; ++i )
@@ -220,7 +223,7 @@ namespace vcl
                     const uno::Sequence<sal_Int8> aTags(
                         aLayout.ColorSpace->getComponentTags() );
                     const sal_Int8* pStart(aTags.getConstArray());
-                    const sal_Size  nLen(aTags.getLength());
+                    const std::size_t  nLen(aTags.getLength());
                     const sal_Int8* pEnd(pStart+nLen);
 
                     const std::ptrdiff_t nAlphaIndex =
@@ -295,11 +298,11 @@ namespace vcl
                     aAlpha = ::Bitmap( aPixelSize,
                                        sal::static_int_cast<sal_uInt16>(nAlphaDepth),
                                        &::Bitmap::GetGreyPalette(
-                                           sal::static_int_cast<sal_uInt16>(1L << nAlphaDepth)) );
+                                           sal::static_int_cast<sal_uInt16>(1 << nAlphaDepth)) );
 
                 { // limit scoped access
-                    Bitmap::ScopedWriteAccess pWriteAccess( aBitmap );
-                    Bitmap::ScopedWriteAccess pAlphaWriteAccess( nAlphaDepth ? aAlpha.AcquireWriteAccess() : nullptr,
+                    BitmapScopedWriteAccess pWriteAccess( aBitmap );
+                    BitmapScopedWriteAccess pAlphaWriteAccess( nAlphaDepth ? aAlpha.AcquireWriteAccess() : nullptr,
                                                                aAlpha );
 
                     ENSURE_OR_THROW(pWriteAccess.get() != nullptr,
@@ -344,16 +347,12 @@ namespace vcl
 
         ::Point pointFromB2DPoint( const basegfx::B2DPoint& rPoint )
         {
-            return ::Point( FRound( rPoint.getX() ),
-                            FRound( rPoint.getY() ) );
+            return pointFromB2IPoint(basegfx::fround(rPoint));
         }
 
-        ::Rectangle rectangleFromB2DRectangle( const basegfx::B2DRange& rRect )
+        ::tools::Rectangle rectangleFromB2DRectangle( const basegfx::B2DRange& rRect )
         {
-            return ::Rectangle( FRound( rRect.getMinX() ),
-                                FRound( rRect.getMinY() ),
-                                FRound( rRect.getMaxX() ),
-                                FRound( rRect.getMaxY() ) );
+            return rectangleFromB2IRectangle(basegfx::fround(rRect));
         }
 
         Point pointFromB2IPoint( const basegfx::B2IPoint& rPoint )
@@ -362,12 +361,23 @@ namespace vcl
                             rPoint.getY() );
         }
 
-        Rectangle rectangleFromB2IRectangle( const basegfx::B2IRange& rRect )
+        basegfx::B2IPoint b2IPointFromPoint(Point const& rPoint)
         {
-            return ::Rectangle( rRect.getMinX(),
+            return basegfx::B2IPoint(rPoint.X(), rPoint.Y());
+        }
+
+        tools::Rectangle rectangleFromB2IRectangle( const basegfx::B2IRange& rRect )
+        {
+            return ::tools::Rectangle( rRect.getMinX(),
                                 rRect.getMinY(),
                                 rRect.getMaxX(),
                                 rRect.getMaxY() );
+        }
+
+        basegfx::B2IRectangle b2IRectangleFromRectangle(tools::Rectangle const& rRect)
+        {
+            return basegfx::B2IRectangle(rRect.Left(), rRect.Top(),
+                                         rRect.Right(), rRect.Bottom());
         }
 
         basegfx::B2DVector b2DSizeFromSize( const ::Size& rSize )
@@ -382,7 +392,7 @@ namespace vcl
                                         rPoint.Y() );
         }
 
-        basegfx::B2DRange b2DRectangleFromRectangle( const ::Rectangle& rRect )
+        basegfx::B2DRange b2DRectangleFromRectangle( const ::tools::Rectangle& rRect )
         {
             return basegfx::B2DRange( rRect.Left(),
                                         rRect.Top(),
@@ -408,9 +418,9 @@ namespace vcl
                           rPoint.Y );
         }
 
-        Rectangle rectangleFromIntegerRectangle2D( const geometry::IntegerRectangle2D& rRectangle )
+        tools::Rectangle rectangleFromIntegerRectangle2D( const geometry::IntegerRectangle2D& rRectangle )
         {
-            return Rectangle( rRectangle.X1, rRectangle.Y1,
+            return tools::Rectangle( rRectangle.X1, rRectangle.Y1,
                               rRectangle.X2, rRectangle.Y2 );
         }
 
@@ -421,25 +431,24 @@ namespace vcl
             private:
                 uno::Sequence< sal_Int8 > m_aComponentTags;
 
-                virtual ::sal_Int8 SAL_CALL getType(  ) throw (uno::RuntimeException, std::exception) override
+                virtual ::sal_Int8 SAL_CALL getType(  ) override
                 {
                     return rendering::ColorSpaceType::RGB;
                 }
-                virtual uno::Sequence< ::sal_Int8 > SAL_CALL getComponentTags(  ) throw (uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< ::sal_Int8 > SAL_CALL getComponentTags(  ) override
                 {
                     return m_aComponentTags;
                 }
-                virtual ::sal_Int8 SAL_CALL getRenderingIntent(  ) throw (uno::RuntimeException, std::exception) override
+                virtual ::sal_Int8 SAL_CALL getRenderingIntent(  ) override
                 {
                     return rendering::RenderingIntent::PERCEPTUAL;
                 }
-                virtual uno::Sequence< beans::PropertyValue > SAL_CALL getProperties(  ) throw (uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< beans::PropertyValue > SAL_CALL getProperties(  ) override
                 {
                     return uno::Sequence< beans::PropertyValue >();
                 }
                 virtual uno::Sequence< double > SAL_CALL convertColorSpace( const uno::Sequence< double >& deviceColor,
-                                                                            const uno::Reference< rendering::XColorSpace >& targetColorSpace ) throw (lang::IllegalArgumentException,
-                                                                                                                                                      uno::RuntimeException, std::exception) override
+                                                                            const uno::Reference< rendering::XColorSpace >& targetColorSpace ) override
                 {
                     // TODO(P3): if we know anything about target
                     // colorspace, this can be greatly sped up
@@ -447,65 +456,65 @@ namespace vcl
                         convertToARGB(deviceColor));
                     return targetColorSpace->convertFromARGB(aIntermediate);
                 }
-                virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertToRGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< rendering::RGBColor > SAL_CALL convertToRGB( const uno::Sequence< double >& deviceColor ) override
                 {
                     const double*  pIn( deviceColor.getConstArray() );
-                    const sal_Size nLen( deviceColor.getLength() );
+                    const std::size_t nLen( deviceColor.getLength() );
                     ENSURE_ARG_OR_THROW2(nLen%4==0,
                                          "number of channels no multiple of 4",
                                          static_cast<rendering::XColorSpace*>(this), 0);
 
                     uno::Sequence< rendering::RGBColor > aRes(nLen/4);
                     rendering::RGBColor* pOut( aRes.getArray() );
-                    for( sal_Size i=0; i<nLen; i+=4 )
+                    for( std::size_t i=0; i<nLen; i+=4 )
                     {
                         *pOut++ = rendering::RGBColor(pIn[0],pIn[1],pIn[2]);
                         pIn += 4;
                     }
                     return aRes;
                 }
-                virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToARGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToARGB( const uno::Sequence< double >& deviceColor ) override
                 {
                     const double*  pIn( deviceColor.getConstArray() );
-                    const sal_Size nLen( deviceColor.getLength() );
+                    const std::size_t nLen( deviceColor.getLength() );
                     ENSURE_ARG_OR_THROW2(nLen%4==0,
                                          "number of channels no multiple of 4",
                                          static_cast<rendering::XColorSpace*>(this), 0);
 
                     uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                     rendering::ARGBColor* pOut( aRes.getArray() );
-                    for( sal_Size i=0; i<nLen; i+=4 )
+                    for( std::size_t i=0; i<nLen; i+=4 )
                     {
                         *pOut++ = rendering::ARGBColor(pIn[3],pIn[0],pIn[1],pIn[2]);
                         pIn += 4;
                     }
                     return aRes;
                 }
-                virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToPARGB( const uno::Sequence< double >& deviceColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< rendering::ARGBColor > SAL_CALL convertToPARGB( const uno::Sequence< double >& deviceColor ) override
                 {
                     const double*  pIn( deviceColor.getConstArray() );
-                    const sal_Size nLen( deviceColor.getLength() );
+                    const std::size_t nLen( deviceColor.getLength() );
                     ENSURE_ARG_OR_THROW2(nLen%4==0,
                                          "number of channels no multiple of 4",
                                          static_cast<rendering::XColorSpace*>(this), 0);
 
                     uno::Sequence< rendering::ARGBColor > aRes(nLen/4);
                     rendering::ARGBColor* pOut( aRes.getArray() );
-                    for( sal_Size i=0; i<nLen; i+=4 )
+                    for( std::size_t i=0; i<nLen; i+=4 )
                     {
                         *pOut++ = rendering::ARGBColor(pIn[3],pIn[3]*pIn[0],pIn[3]*pIn[1],pIn[3]*pIn[2]);
                         pIn += 4;
                     }
                     return aRes;
                 }
-                virtual uno::Sequence< double > SAL_CALL convertFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< double > SAL_CALL convertFromRGB( const uno::Sequence< rendering::RGBColor >& rgbColor ) override
                 {
                     const rendering::RGBColor* pIn( rgbColor.getConstArray() );
-                    const sal_Size             nLen( rgbColor.getLength() );
+                    const std::size_t             nLen( rgbColor.getLength() );
 
                     uno::Sequence< double > aRes(nLen*4);
                     double* pColors=aRes.getArray();
-                    for( sal_Size i=0; i<nLen; ++i )
+                    for( std::size_t i=0; i<nLen; ++i )
                     {
                         *pColors++ = pIn->Red;
                         *pColors++ = pIn->Green;
@@ -515,14 +524,14 @@ namespace vcl
                     }
                     return aRes;
                 }
-                virtual uno::Sequence< double > SAL_CALL convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< double > SAL_CALL convertFromARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
                 {
                     const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                    const sal_Size              nLen( rgbColor.getLength() );
+                    const std::size_t              nLen( rgbColor.getLength() );
 
                     uno::Sequence< double > aRes(nLen*4);
                     double* pColors=aRes.getArray();
-                    for( sal_Size i=0; i<nLen; ++i )
+                    for( std::size_t i=0; i<nLen; ++i )
                     {
                         *pColors++ = pIn->Red;
                         *pColors++ = pIn->Green;
@@ -532,14 +541,14 @@ namespace vcl
                     }
                     return aRes;
                 }
-                virtual uno::Sequence< double > SAL_CALL convertFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception) override
+                virtual uno::Sequence< double > SAL_CALL convertFromPARGB( const uno::Sequence< rendering::ARGBColor >& rgbColor ) override
                 {
                     const rendering::ARGBColor* pIn( rgbColor.getConstArray() );
-                    const sal_Size              nLen( rgbColor.getLength() );
+                    const std::size_t              nLen( rgbColor.getLength() );
 
                     uno::Sequence< double > aRes(nLen*4);
                     double* pColors=aRes.getArray();
-                    for( sal_Size i=0; i<nLen; ++i )
+                    for( std::size_t i=0; i<nLen; ++i )
                     {
                         *pColors++ = pIn->Red/pIn->Alpha;
                         *pColors++ = pIn->Green/pIn->Alpha;

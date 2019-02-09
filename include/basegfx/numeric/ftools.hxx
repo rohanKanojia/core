@@ -22,7 +22,8 @@
 
 #include <rtl/math.hxx>
 #include <basegfx/basegfxdllapi.h>
-
+#include <limits>
+#include <algorithm>
 
 // standard PI defines from solar.h, but we do not want to link against tools
 
@@ -59,7 +60,11 @@ namespace basegfx
     */
     inline sal_Int32 fround( double fVal )
     {
-        return fVal > 0.0 ? static_cast<sal_Int32>( fVal + .5 ) : -static_cast<sal_Int32>( -fVal + .5 );
+        if (fVal >= std::numeric_limits<sal_Int32>::max() - .5)
+            return std::numeric_limits<sal_Int32>::max();
+        else if (fVal <= std::numeric_limits<sal_Int32>::min() + .5)
+            return std::numeric_limits<sal_Int32>::min();
+        return fVal > 0.0 ? static_cast<sal_Int32>( fVal + .5 ) : static_cast<sal_Int32>( fVal - .5 );
     }
 
     /** Round double to nearest integer
@@ -95,32 +100,14 @@ namespace basegfx
         //    (::std::max(fVal,0.00001));
 
         if(fVal < 0.0)
-            return (fVal < -0.00001 ? fVal : -0.00001);
+            return std::min(fVal, -0.00001);
         else
-            return (fVal > 0.00001 ? fVal : 0.00001);
-    }
-
-    /** clamp given value against given minimum and maximum values
-    */
-    template <class T> inline const T& clamp(const T& value, const T& minimum, const T& maximum)
-    {
-        if(value < minimum)
-        {
-            return minimum;
-        }
-        else if(value > maximum)
-        {
-            return maximum;
-        }
-        else
-        {
-            return value;
-        }
+            return std::max(fVal, 0.00001);
     }
 
     /** Convert value from degrees to radians
      */
-    inline double deg2rad( double v )
+    constexpr double deg2rad( double v )
     {
         // divide first, to get exact values for v being a multiple of
         // 90 degrees
@@ -129,7 +116,7 @@ namespace basegfx
 
     /** Convert value radians to degrees
      */
-    inline double rad2deg( double v )
+    constexpr double rad2deg( double v )
     {
         // divide first, to get exact values for v being a multiple of
         // pi/2
@@ -147,6 +134,45 @@ namespace basegfx
         snapToNearestMultiple(0.26, 0.5) = 0.5
      */
     BASEGFX_DLLPUBLIC double snapToNearestMultiple(double v, const double fStep);
+
+    /** Snap v to the range [0.0 .. fWidth] using modulo
+     */
+    double snapToZeroRange(double v, double fWidth);
+
+    /** Snap v to the range [fLow .. fHigh] using modulo
+     */
+    double snapToRange(double v, double fLow, double fHigh);
+
+    /** return fValue with the sign of fSignCarrier, thus evtl. changed
+    */
+    inline double copySign(double fValue, double fSignCarrier)
+    {
+#ifdef WNT
+        return _copysign(fValue, fSignCarrier);
+#else
+        return copysign(fValue, fSignCarrier);
+#endif
+    }
+
+    /** RotateFlyFrame3: Normalize to range defined by [0.0 ... fRange[, independent
+        if v is positive or negative.
+
+        Examples:
+
+        normalizeToRange(0.5, -1.0) = 0.0
+        normalizeToRange(0.5, 0.0) = 0.0
+        normalizeToRange(0.5, 1.0) = 0.5
+        normalizeToRange(-0.5, 1.0) = 0.5
+        normalizeToRange(-0.3, 1.0) = 0.7
+        normalizeToRange(-0.7, 1.0) = 0.3
+        normalizeToRange(3.5, 1.0) = 0.5
+        normalizeToRange(3.3, 1.0) = 0.3
+        normalizeToRange(3.7, 1.0) = 0.7
+        normalizeToRange(-3.5, 1.0) = 0.5
+        normalizeToRange(-3.3, 1.0) = 0.7
+        normalizeToRange(-3.7, 1.0) = 0.3
+     */
+    BASEGFX_DLLPUBLIC double normalizeToRange(double v, const double fRange);
 
     class BASEGFX_DLLPUBLIC fTools
     {

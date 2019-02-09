@@ -149,7 +149,7 @@ syntax:
 void
     genline(void)
 {
-    static Token ta = {UNCLASS, 0, 0, 0, NULL, 0};
+    static Token ta = {UNCLASS, 0, 0, NULL, 0};
     static Tokenrow tr = {&ta, &ta, &ta + 1, 1};
     uchar *p;
 
@@ -179,9 +179,9 @@ void
  * Generate a pragma import/include directive
  */
 void
-    genimport(char *fname, int angled, char *iname, int import)
+    genimport(char const *fname, int angled, char const *iname, int import)
 {
-    static Token ta = {UNCLASS, 0, 0, 0, NULL, 0};
+    static Token ta = {UNCLASS, 0, 0, NULL, 0};
     static Tokenrow tr = {&ta, &ta, &ta + 1, 1};
     uchar *p;
 
@@ -223,28 +223,28 @@ void
 void
     genwrap(int end)
 {
-    static Token ta = {UNCLASS, 0, 0, 0, NULL, 0};
+    static Token ta = {UNCLASS, 0, 0, NULL, 0};
     static Tokenrow tr = {&ta, &ta, &ta + 1, 1};
     uchar *p;
 
-    if (Cplusplus)
-    {
-        ta.t = p = (uchar *) outptr;
+    if (!Cplusplus)
+        return;
 
-        if (! end)
-            strcpy((char *) p, "extern \"C\" {");
-        else
-            strcpy((char *) p, "}");
+    ta.t = p = (uchar *) outptr;
 
-        p += strlen((char *) p);
+    if (! end)
+        strcpy((char *) p, "extern \"C\" {");
+    else
+        strcpy((char *) p, "}");
 
-        *p++ = '\n';
+    p += strlen((char *) p);
 
-        ta.len = (char *) p - outptr;
-        outptr = (char *) p;
-        tr.tp = tr.bp;
-        puttokens(&tr);
-    }
+    *p++ = '\n';
+
+    ta.len = (char *) p - outptr;
+    outptr = (char *) p;
+    tr.tp = tr.bp;
+    puttokens(&tr);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

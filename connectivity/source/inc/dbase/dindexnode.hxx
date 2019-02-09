@@ -19,10 +19,11 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DINDEXNODE_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DINDEXNODE_HXX
 
-#include "file/fcode.hxx"
-#include "file/FTable.hxx"
+#include <file/fcode.hxx>
+#include <file/FTable.hxx>
 #include <connectivity/FValue.hxx>
 #include <rtl/ref.hxx>
+#include <memory>
 #include <vector>
 
 #define NODE_NOTFOUND 0xFFFF
@@ -48,10 +49,10 @@ namespace connectivity
             ORowSetValue    xValue;                 /* Key values     */
 
         public:
-            ONDXKey(sal_uInt32 nRec=0);
+            ONDXKey();
             ONDXKey(const ORowSetValue& rVal, sal_Int32 eType, sal_uInt32 nRec);
-            ONDXKey(const OUString& aStr, sal_uInt32 nRec = 0);
-            ONDXKey(double aVal, sal_uInt32 nRec = 0);
+            ONDXKey(const OUString& aStr, sal_uInt32 nRec);
+            ONDXKey(double aVal, sal_uInt32 nRec);
 
             inline ONDXKey(const ONDXKey& rKey);
 
@@ -90,19 +91,21 @@ namespace connectivity
             sal_uInt32  nPagePos;       // Position in the index file
 
         public:
-            ONDXPagePtr(sal_uInt32 nPos = 0) : mpPage(nullptr), nPagePos(nPos) {}
-            ONDXPagePtr(const ONDXPagePtr& rRef);
+            ONDXPagePtr();
+            ONDXPagePtr(ONDXPagePtr&& rObj);
+            ONDXPagePtr(ONDXPagePtr const & rRef);
             ONDXPagePtr(ONDXPage* pRefPage);
-            inline ~ONDXPagePtr();
+            ~ONDXPagePtr();
+            void Clear();
+            ONDXPagePtr& operator=(ONDXPagePtr const & rRef);
+            ONDXPagePtr& operator=(ONDXPagePtr && rRef);
+            bool Is() const { return mpPage != nullptr; }
+
+            ONDXPage * operator ->() const { assert(mpPage != nullptr); return mpPage; }
+            operator ONDXPage *() const { return mpPage; }
 
             sal_uInt32 GetPagePos() const {return nPagePos;}
             bool HasPage() const {return nPagePos != 0;}
-
-            operator ONDXPage *() const { return mpPage; }
-            ONDXPage * operator ->() const { assert(mpPage != nullptr); return mpPage; }
-            bool Is() const { return mpPage != nullptr; }
-            inline void Clear();
-            ONDXPagePtr& operator=(const ONDXPagePtr& rRef);
         };
 
         // Index Page
@@ -115,9 +118,11 @@ namespace connectivity
             friend  SvStream& WriteONDXPage(SvStream &rStream, const ONDXPage&);
             friend  SvStream& operator >> (SvStream &rStream, ONDXPage&);
 
+            // work around a clang 3.5 optimization bug: if the bNoDelete is *first*
+            // it mis-compiles "if (--nRefCount == 0)" and never deletes any object
+            unsigned int    nRefCount : 31;
             // the only reason this is not bool is because MSVC cannot handle mixed type bitfields
             unsigned int    bNoDelete : 1;
-            unsigned int    nRefCount : 31;
             sal_uInt32      nPagePos;       // Position in the index file
             bool            bModified : 1;
             sal_uInt16      nCount;
@@ -125,7 +130,8 @@ namespace connectivity
             ONDXPagePtr     aParent,            // Parent page
                             aChild;             // Pointer to the right child page
             ODbaseIndex&    rIndex;
-            ONDXNode*       ppNodes;             // Array of nodes
+            std::unique_ptr<ONDXNode[]>
+                            ppNodes;             // Array of nodes
 
         public:
             // Node operations
@@ -134,7 +140,7 @@ namespace connectivity
             bool    Insert(ONDXNode& rNode, sal_uInt32 nRowsLeft = 0);
             bool    Insert(sal_uInt16 nIndex, ONDXNode& rNode);
             bool    Append(ONDXNode& rNode);
-            bool    Delete(sal_uInt16);
+            void    Delete(sal_uInt16);
             void    Remove(sal_uInt16);
             void    Release(bool bSave = true);
             void    ReleaseFull();
@@ -155,7 +161,7 @@ namespace connectivity
             bool IsFull() const;
 
             sal_uInt32 GetPagePos() const {return nPagePos;}
-            ONDXPagePtr& GetChild(ODbaseIndex* pIndex = nullptr);
+            ONDXPagePtr& GetChild(ODbaseIndex const * pIndex = nullptr);
 
             // Parent does not need to be reloaded
             const ONDXPagePtr& GetParent();
@@ -168,10 +174,10 @@ namespace connectivity
 
             sal_uInt16 Search(const ONDXKey& rSearch);
             sal_uInt16 Search(const ONDXPage* pPage);
-            void   SearchAndReplace(const ONDXKey& rSearch, ONDXKey& rReplace);
+            void   SearchAndReplace(const ONDXKey& rSearch, ONDXKey const & rReplace);
 
         protected:
-            ONDXPage(ODbaseIndex& rIndex, sal_uInt32 nPos, ONDXPage* = nullptr);
+            ONDXPage(ODbaseIndex& rIndex, sal_uInt32 nPos, ONDXPage*);
             ~ONDXPage();
 
             void ReleaseRef();
@@ -200,16 +206,6 @@ namespace connectivity
 #endif
         };
 
-        inline ONDXPagePtr::~ONDXPagePtr() { if (mpPage != nullptr) mpPage->ReleaseRef(); }
-        inline void ONDXPagePtr::Clear()
-            {
-                if (mpPage != nullptr) {
-                    ONDXPage * pRefObj = mpPage;
-                    mpPage = nullptr;
-                    pRefObj->ReleaseRef();
-                }
-            }
-
         SvStream& WriteONDXPagePtr(SvStream &rStream, const ONDXPagePtr&);
         SvStream& operator >> (SvStream &rStream, ONDXPagePtr&);
 
@@ -234,9 +230,6 @@ namespace connectivity
         SvStream& WriteONDXPage(SvStream &rStream, const ONDXPage& rPage);
 
 
-        typedef ::std::vector<ONDXPage*>    ONDXPageList;
-
-
         // Index Node
 
         class ONDXNode
@@ -247,9 +240,8 @@ namespace connectivity
 
         public:
             ONDXNode(){}
-            ONDXNode(const ONDXKey& rKey,
-                       ONDXPagePtr aPagePtr = ONDXPagePtr())
-                       :aChild(aPagePtr),aKey(rKey) {}
+            ONDXNode(const ONDXKey& rKey)
+                       :aKey(rKey) {}
 
             // Does the node point to a page?
             bool            HasChild() const {return aChild.HasPage();}
@@ -263,7 +255,7 @@ namespace connectivity
             void            SetChild(ONDXPagePtr aCh = ONDXPagePtr(), ONDXPage* = nullptr);
 
             void Write(SvStream &rStream, const ONDXPage& rPage) const;
-            void Read(SvStream &rStream, ODbaseIndex&);
+            void Read(SvStream &rStream, ODbaseIndex const &);
         };
 
         inline ONDXKey::ONDXKey(const ONDXKey& rKey)

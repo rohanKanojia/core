@@ -11,22 +11,24 @@
 // Design proposal: https://wiki.documentfoundation.org/Design/Whiteboards/Comments_Ruler_Control
 // TODO Alpha blend border when it doesn't fit in window
 
-#include "swruler.hxx"
+#include <swruler.hxx>
 
-#include "viewsh.hxx"
-#include "edtwin.hxx"
-#include "PostItMgr.hxx"
-#include "viewopt.hxx"
+#include <viewsh.hxx>
+#include <edtwin.hxx>
+#include <PostItMgr.hxx>
+#include <viewopt.hxx>
 #include <view.hxx>
-#include "cmdid.h"
+#include <cmdid.h>
 #include <sfx2/request.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <vcl/settings.hxx>
-#include "misc.hrc"
+#include <strings.hrc>
+#include <comphelper/lok.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
+#include <boost/property_tree/json_parser.hpp>
 
 #define CONTROL_BORDER_WIDTH    1
-
 #define CONTROL_LEFT_OFFSET     6
 #define CONTROL_RIGHT_OFFSET    3
 #define CONTROL_TOP_OFFSET      4
@@ -49,17 +51,17 @@ void ImplDrawArrow(vcl::RenderContext& rRenderContext, long nX, long nY, const C
     rRenderContext.SetFillColor(rColor);
     if (bPointRight)
     {
-        rRenderContext.DrawRect(Rectangle(nX + 0, nY + 0, nX + 0, nY + 6) );
-        rRenderContext.DrawRect(Rectangle(nX + 1, nY + 1, nX + 1, nY + 5) );
-        rRenderContext.DrawRect(Rectangle(nX + 2, nY + 2, nX + 2, nY + 4) );
-        rRenderContext.DrawRect(Rectangle(nX + 3, nY + 3, nX + 3, nY + 3) );
+        rRenderContext.DrawRect(tools::Rectangle(nX + 0, nY + 0, nX + 0, nY + 6) );
+        rRenderContext.DrawRect(tools::Rectangle(nX + 1, nY + 1, nX + 1, nY + 5) );
+        rRenderContext.DrawRect(tools::Rectangle(nX + 2, nY + 2, nX + 2, nY + 4) );
+        rRenderContext.DrawRect(tools::Rectangle(nX + 3, nY + 3, nX + 3, nY + 3) );
     }
     else
     {
-        rRenderContext.DrawRect(Rectangle(nX + 0, nY + 3, nX + 0, nY + 3));
-        rRenderContext.DrawRect(Rectangle(nX + 1, nY + 2, nX + 1, nY + 4));
-        rRenderContext.DrawRect(Rectangle(nX + 2, nY + 1, nX + 2, nY + 5));
-        rRenderContext.DrawRect(Rectangle(nX + 3, nY + 0, nX + 3, nY + 6));
+        rRenderContext.DrawRect(tools::Rectangle(nX + 0, nY + 3, nX + 0, nY + 3));
+        rRenderContext.DrawRect(tools::Rectangle(nX + 1, nY + 2, nX + 1, nY + 4));
+        rRenderContext.DrawRect(tools::Rectangle(nX + 2, nY + 1, nX + 2, nY + 5));
+        rRenderContext.DrawRect(tools::Rectangle(nX + 3, nY + 0, nX + 3, nY + 6));
     }
 }
 
@@ -76,7 +78,8 @@ SwCommentRuler::SwCommentRuler( SwViewShell* pViewSh, vcl::Window* pParent, SwEd
 {
     // Set fading timeout: 5 x 40ms = 200ms
     maFadeTimer.SetTimeout(40);
-    maFadeTimer.SetTimeoutHdl( LINK( this, SwCommentRuler, FadeHandler ) );
+    maFadeTimer.SetInvokeHandler( LINK( this, SwCommentRuler, FadeHandler ) );
+    maFadeTimer.SetDebugName( "sw::SwCommentRuler maFadeTimer" );
 }
 
 // Destructor
@@ -91,8 +94,11 @@ void SwCommentRuler::dispose()
     SvxRuler::dispose();
 }
 
-void SwCommentRuler::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void SwCommentRuler::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
+    if (comphelper::LibreOfficeKit::isActive())
+        return; // no need to waste time on startup
+
     SvxRuler::Paint(rRenderContext, rRect);
 
     // Don't draw if there is not any note
@@ -105,7 +111,7 @@ void SwCommentRuler::DrawCommentControl(vcl::RenderContext& rRenderContext)
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
     bool bIsCollapsed = ! mpViewShell->GetPostItMgr()->ShowNotes();
 
-    Rectangle aControlRect = GetCommentControlRegion();
+    tools::Rectangle aControlRect = GetCommentControlRegion();
     maVirDev->SetOutputSizePixel(aControlRect.GetSize());
 
     // Paint comment control background
@@ -124,31 +130,31 @@ void SwCommentRuler::DrawCommentControl(vcl::RenderContext& rRenderContext)
         maVirDev->SetLineColor();
     }
 
-    maVirDev->DrawRect( Rectangle( Point(), aControlRect.GetSize() ) );
+    maVirDev->DrawRect( tools::Rectangle( Point(), aControlRect.GetSize() ) );
 
     // Label and arrow tip
-    OUString aLabel( SW_RESSTR ( STR_COMMENTS_LABEL ) );
+    OUString aLabel( SwResId ( STR_COMMENTS_LABEL ) );
     // Get label and arrow coordinates
     Point aLabelPos;
     Point aArrowPos;
     bool  bArrowToRight;
     // TODO Discover why it should be 0 instead of CONTROL_BORDER_WIDTH + CONTROL_TOP_OFFSET
-    aLabelPos.Y() = 0;
-    aArrowPos.Y() = CONTROL_BORDER_WIDTH + CONTROL_TOP_OFFSET;
+    aLabelPos.setY( 0 );
+    aArrowPos.setY( CONTROL_BORDER_WIDTH + CONTROL_TOP_OFFSET );
     if ( !AllSettings::GetLayoutRTL() )
     {
         // LTR
         if ( bIsCollapsed )
         {
             // It should draw something like | > Comments  |
-            aLabelPos.X() = CONTROL_LEFT_OFFSET + CONTROL_TRIANGLE_WIDTH + CONTROL_TRIANGLE_PAD;
-            aArrowPos.X() = CONTROL_LEFT_OFFSET;
+            aLabelPos.setX( CONTROL_LEFT_OFFSET + CONTROL_TRIANGLE_WIDTH + CONTROL_TRIANGLE_PAD );
+            aArrowPos.setX( CONTROL_LEFT_OFFSET );
         }
         else
         {
             // It should draw something like | Comments  < |
-            aLabelPos.X() = CONTROL_LEFT_OFFSET;
-            aArrowPos.X() = aControlRect.GetSize().Width() - 1 - CONTROL_RIGHT_OFFSET - CONTROL_BORDER_WIDTH - CONTROL_TRIANGLE_WIDTH;
+            aLabelPos.setX( CONTROL_LEFT_OFFSET );
+            aArrowPos.setX( aControlRect.GetSize().Width() - 1 - CONTROL_RIGHT_OFFSET - CONTROL_BORDER_WIDTH - CONTROL_TRIANGLE_WIDTH );
         }
         bArrowToRight = bIsCollapsed;
     }
@@ -159,14 +165,14 @@ void SwCommentRuler::DrawCommentControl(vcl::RenderContext& rRenderContext)
         if ( bIsCollapsed )
         {
             // It should draw something like |  Comments < |
-            aArrowPos.X() = aControlRect.GetSize().Width() - 1 - CONTROL_RIGHT_OFFSET - CONTROL_BORDER_WIDTH - CONTROL_TRIANGLE_WIDTH;
-            aLabelPos.X() = aArrowPos.X() - CONTROL_TRIANGLE_PAD - nLabelWidth;
+            aArrowPos.setX( aControlRect.GetSize().Width() - 1 - CONTROL_RIGHT_OFFSET - CONTROL_BORDER_WIDTH - CONTROL_TRIANGLE_WIDTH );
+            aLabelPos.setX( aArrowPos.X() - CONTROL_TRIANGLE_PAD - nLabelWidth );
         }
         else
         {
             // It should draw something like | >  Comments |
-            aLabelPos.X() = aControlRect.GetSize().Width() - 1 - CONTROL_RIGHT_OFFSET - CONTROL_BORDER_WIDTH - nLabelWidth;
-            aArrowPos.X() = CONTROL_LEFT_OFFSET;
+            aLabelPos.setX( aControlRect.GetSize().Width() - 1 - CONTROL_RIGHT_OFFSET - CONTROL_BORDER_WIDTH - nLabelWidth );
+            aArrowPos.setX( CONTROL_LEFT_OFFSET );
         }
         bArrowToRight = !bIsCollapsed;
     }
@@ -178,12 +184,12 @@ void SwCommentRuler::DrawCommentControl(vcl::RenderContext& rRenderContext)
     maVirDev->DrawText( aLabelPos, aLabel );
 
     // Draw arrow
-    // FIXME consistence of button colors. http://opengrok.libreoffice.org/xref/core/vcl/source/control/button.cxx#785
-    Color aArrowColor = GetFadedColor(Color(COL_BLACK), rStyleSettings.GetShadowColor());
-    ImplDrawArrow(*maVirDev.get(), aArrowPos.X(), aArrowPos.Y(), aArrowColor, bArrowToRight);
+    // FIXME consistence of button colors. https://opengrok.libreoffice.org/xref/core/vcl/source/control/button.cxx#785
+    Color aArrowColor = GetFadedColor(COL_BLACK, rStyleSettings.GetShadowColor());
+    ImplDrawArrow(*maVirDev, aArrowPos.X(), aArrowPos.Y(), aArrowColor, bArrowToRight);
 
     // Blit comment control
-    rRenderContext.DrawOutDev(aControlRect.TopLeft(), aControlRect.GetSize(), Point(), aControlRect.GetSize(), *maVirDev.get());
+    rRenderContext.DrawOutDev(aControlRect.TopLeft(), aControlRect.GetSize(), Point(), aControlRect.GetSize(), *maVirDev);
 }
 
 // Just accept double-click outside comment control
@@ -236,7 +242,7 @@ void SwCommentRuler::MouseButtonDown( const MouseEvent& rMEvt )
 
     // Toggle notes visibility
     SwView &rView = mpSwWin->GetView();
-    SfxRequest aRequest( rView.GetViewFrame(), FN_VIEW_NOTES );
+    SfxRequest aRequest( rView.GetViewFrame(), SID_TOGGLE_NOTES );
     rView.ExecViewOptions( aRequest );
 
     // It is inside comment control, so update help text
@@ -245,26 +251,55 @@ void SwCommentRuler::MouseButtonDown( const MouseEvent& rMEvt )
     Invalidate();
 }
 
+const std::string SwCommentRuler::CreateJsonNotification()
+{
+    boost::property_tree::ptree jsonNotif;
+
+    jsonNotif.put("margin1", convertTwipToMm100(GetMargin1()));
+    jsonNotif.put("margin2", convertTwipToMm100(GetMargin2()));
+    jsonNotif.put("leftOffset", convertTwipToMm100(GetNullOffset()));
+    jsonNotif.put("pageOffset", convertTwipToMm100(GetPageOffset()));
+    jsonNotif.put("pageWidth", convertTwipToMm100(GetPageWidth()));
+
+    RulerUnitData aUnitData = GetCurrentRulerUnit();
+    jsonNotif.put("unit", aUnitData.aUnitStr);
+
+    std::stringstream aStream;
+    boost::property_tree::write_json(aStream, jsonNotif);
+    std::string aPayload = aStream.str();
+    return aPayload;
+}
+
+void SwCommentRuler::NotifyKit()
+{
+    if (!comphelper::LibreOfficeKit::isActive())
+        return;
+
+    const std::string test = CreateJsonNotification();
+    mpViewShell->GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_RULER_UPDATE, test.c_str());
+}
+
 void SwCommentRuler::Update()
 {
-    Rectangle aPreviousControlRect = GetCommentControlRegion();
+    tools::Rectangle aPreviousControlRect = GetCommentControlRegion();
     SvxRuler::Update();
     if (aPreviousControlRect != GetCommentControlRegion())
         Invalidate();
+    NotifyKit();
 }
 
 void SwCommentRuler::UpdateCommentHelpText()
 {
-    int nTooltipResId;
+    const char* pTooltipResId;
     if ( mpViewShell->GetPostItMgr()->ShowNotes() )
-        nTooltipResId = STR_HIDE_COMMENTS;
+        pTooltipResId = STR_HIDE_COMMENTS;
     else
-        nTooltipResId = STR_SHOW_COMMENTS;
-    SetQuickHelpText( OUString( SW_RESSTR( nTooltipResId ) ) );
+        pTooltipResId = STR_SHOW_COMMENTS;
+    SetQuickHelpText(SwResId(pTooltipResId));
 }
 
 // TODO Make Ruler return its central rectangle instead of margins.
-Rectangle SwCommentRuler::GetCommentControlRegion()
+tools::Rectangle SwCommentRuler::GetCommentControlRegion()
 {
     long nLeft = 0;
     SwPostItMgr *pPostItMgr = mpViewShell->GetPostItMgr();
@@ -273,7 +308,7 @@ Rectangle SwCommentRuler::GetCommentControlRegion()
     //triggers an update of the uiview, but the result of the ctor hasn't been
     //set into the mpViewShell yet, so GetPostItMgr is temporarily still NULL
     if (!pPostItMgr)
-        return Rectangle();
+        return tools::Rectangle();
 
     unsigned long nSidebarWidth = pPostItMgr->GetSidebarWidth(true);
     //FIXME When the page width is larger then screen, the ruler is misplaced by one pixel
@@ -286,7 +321,7 @@ Rectangle SwCommentRuler::GetCommentControlRegion()
     long nRight  = nLeft + nSidebarWidth + pPostItMgr->GetSidebarBorderWidth(true);
     long nBottom = nTop + GetRulerVirHeight() - 3;
 
-    Rectangle aRect(nLeft, nTop, nRight, nBottom);
+    tools::Rectangle aRect(nLeft, nTop, nRight, nBottom);
     return aRect;
 }
 
@@ -300,7 +335,7 @@ Color SwCommentRuler::GetFadedColor(const Color &rHighColor, const Color &rLowCo
     return aColor;
 }
 
-IMPL_LINK_NOARG_TYPED(SwCommentRuler, FadeHandler, Timer *, void)
+IMPL_LINK_NOARG(SwCommentRuler, FadeHandler, Timer *, void)
 {
     const int nStep = 25;
     if ( mbIsHighlighted && mnFadeRate < 100 )

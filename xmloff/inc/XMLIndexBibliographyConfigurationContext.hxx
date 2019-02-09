@@ -43,17 +43,6 @@ namespace com { namespace sun { namespace star {
  */
 class XMLIndexBibliographyConfigurationContext : public SvXMLStyleContext
 {
-    const OUString sFieldMaster_Bibliography;
-    const OUString sBracketBefore;
-    const OUString sBracketAfter;
-    const OUString sIsNumberEntries;
-    const OUString sIsSortByPosition;
-    const OUString sSortKeys;
-    const OUString sSortKey;
-    const OUString sIsSortAscending;
-    const OUString sSortAlgorithm;
-    const OUString sLocale;
-
     OUString sSuffix;
     OUString sPrefix;
     OUString sAlgorithm;
@@ -72,16 +61,16 @@ public:
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList);
 
-    virtual ~XMLIndexBibliographyConfigurationContext();
+    virtual ~XMLIndexBibliographyConfigurationContext() override;
 
-protected:
+private:
 
     virtual void StartElement(
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList) override;
 
     virtual void CreateAndInsert( bool bOverwrite ) override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList> & xAttrList ) override;

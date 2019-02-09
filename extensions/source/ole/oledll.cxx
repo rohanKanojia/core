@@ -21,9 +21,6 @@
 #define STRICT
 #define _WIN32_DCOM
 
-#pragma warning (push,1)
-#pragma warning (disable:4548)
-
 #if defined __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wall"
@@ -37,18 +34,13 @@
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 #endif
 
-#ifdef __MINGW32__
-#define _INIT_ATL_COMMON_VARS
-#endif
 #include <atlbase.h>
-CComModule _Module;
+static CComModule _Module;
 #include <atlcom.h>
 
 #if defined __clang__
 #pragma clang diagnostic pop
 #endif
-
-#pragma warning (pop)
 
 BEGIN_OBJECT_MAP(ObjectMap)
 #if defined __clang__
@@ -67,7 +59,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID /*lpReserved*/)
 {
     if (dwReason == DLL_PROCESS_ATTACH)
     {
-        _Module.Init(ObjectMap, hInstance, NULL);
+        _Module.Init(ObjectMap, hInstance);
         DisableThreadLibraryCalls(hInstance);
     }
     else if (dwReason == DLL_PROCESS_DETACH)

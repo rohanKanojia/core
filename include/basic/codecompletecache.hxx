@@ -28,9 +28,9 @@
 #include <unordered_map>
 #include <vector>
 
-typedef std::unordered_map< OUString, OUString, OUStringHash > CodeCompleteVarTypes;
+typedef std::unordered_map< OUString, OUString > CodeCompleteVarTypes;
 /* variable name, type */
-typedef std::unordered_map< OUString, CodeCompleteVarTypes, OUStringHash > CodeCompleteVarScopes;
+typedef std::unordered_map< OUString, CodeCompleteVarTypes > CodeCompleteVarScopes;
 /* procedure, CodeCompleteVarTypes */
 
 class BASIC_DLLPUBLIC CodeCompleteOptions
@@ -52,25 +52,25 @@ public:
     CodeCompleteOptions();
 
     static bool IsCodeCompleteOn();
-    static void SetCodeCompleteOn( const bool& b );
+    static void SetCodeCompleteOn( bool b );
 
     static bool IsExtendedTypeDeclaration();
-    static void SetExtendedTypeDeclaration( const bool& b );
+    static void SetExtendedTypeDeclaration( bool b );
 
     static bool IsProcedureAutoCompleteOn();
-    static void SetProcedureAutoCompleteOn( const bool& b );
+    static void SetProcedureAutoCompleteOn( bool b );
 
     static bool IsAutoCloseQuotesOn();
-    static void SetAutoCloseQuotesOn( const bool& b );
+    static void SetAutoCloseQuotesOn( bool b );
 
     static bool IsAutoCloseParenthesisOn();
-    static void SetAutoCloseParenthesisOn( const bool& b );
+    static void SetAutoCloseParenthesisOn( bool b );
 
     static bool IsAutoCorrectOn();
-    static void SetAutoCorrectOn( const bool& b );
+    static void SetAutoCorrectOn( bool b );
 };
 
-class BASIC_DLLPUBLIC CodeCompleteDataCache
+class BASIC_DLLPUBLIC CodeCompleteDataCache final
 {
 /*
  * cache to store data for
@@ -82,7 +82,6 @@ private:
 
 public:
     CodeCompleteDataCache(){}
-    virtual ~CodeCompleteDataCache(){}
 
     friend BASIC_DLLPUBLIC std::ostream& operator<< (std::ostream& aStream, const CodeCompleteDataCache& aCache);
 

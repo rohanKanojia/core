@@ -17,20 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "BreakDlg.hxx"
+#include <BreakDlg.hxx>
 #include <sfx2/progress.hxx>
 
 #include <svx/svdedtv.hxx>
 #include <svx/svdetc.hxx>
 #include <sfx2/app.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 
-#include "sdattr.hxx"
-#include "sdresid.hxx"
-#include "View.hxx"
-#include "drawview.hxx"
-#include "strings.hrc"
-#include "DrawDocShell.hxx"
+#include <sdattr.hxx>
+#include <sdresid.hxx>
+#include <View.hxx>
+#include <drawview.hxx>
+#include <strings.hrc>
+#include <DrawDocShell.hxx>
 
 namespace sd {
 
@@ -38,55 +38,34 @@ namespace sd {
  * dialog to split metafiles
  */
 
-BreakDlg::BreakDlg(
-    vcl::Window* pWindow,
-    DrawView* _pDrView,
-    DrawDocShell* pShell,
-    sal_uLong nSumActionCount,
-    sal_uLong nObjCount )
-    : SfxModalDialog(pWindow, "BreakDialog", "modules/sdraw/ui/breakdialog.ui")
-    , mpProgress( nullptr )
+BreakDlg::BreakDlg(weld::Window* pWindow, DrawView* pDrView, DrawDocShell* pShell,
+    sal_uLong nSumActionCount, sal_uLong nObjCount)
+    : SfxDialogController(pWindow, "modules/sdraw/ui/breakdialog.ui", "BreakDialog")
+    , m_xFiObjInfo(m_xBuilder->weld_label("metafiles"))
+    , m_xFiActInfo(m_xBuilder->weld_label("metaobjects"))
+    , m_xFiInsInfo(m_xBuilder->weld_label("drawingobjects"))
+    , m_xBtnCancel(m_xBuilder->weld_button("cancel"))
+    , m_pDrView(pDrView)
+    , m_bCancel(false)
 {
-    get(m_pFiObjInfo, "metafiles");
-    get(m_pFiActInfo, "metaobjects");
-    get(m_pFiInsInfo, "drawingobjects");
-    get(m_pBtnCancel, "cancel");
+    m_aUpdateIdle.SetPriority( TaskPriority::REPAINT );
+    m_aUpdateIdle.SetInvokeHandler( LINK( this, BreakDlg, InitialUpdate ) );
+    m_aUpdateIdle.SetDebugName( "sd::BreakDlg m_aUpdateIdle" );
 
-    m_pBtnCancel->SetClickHdl( LINK( this, BreakDlg, CancelButtonHdl));
+    m_xBtnCancel->connect_clicked(LINK(this, BreakDlg, CancelButtonHdl));
 
-    mpProgress = new SfxProgress( pShell, SD_RESSTR(STR_BREAK_METAFILE), nSumActionCount*3 );
+    m_xProgress.reset(new SfxProgress(pShell, SdResId(STR_BREAK_METAFILE), nSumActionCount*3));
 
-    pProgrInfo = new SvdProgressInfo( LINK(this, BreakDlg, UpDate) );
+    m_xProgrInfo.reset(new SvdProgressInfo(LINK(this, BreakDlg, UpDate)));
     // every action is edited 3 times in DoImport()
-    pProgrInfo->Init( nSumActionCount*3, nObjCount );
-
-    pDrView = _pDrView;
-    bCancel = false;
-}
-
-BreakDlg::~BreakDlg()
-{
-    disposeOnce();
-}
-
-void BreakDlg::dispose()
-{
-    delete mpProgress;
-    mpProgress = nullptr;
-    delete pProgrInfo;
-    pProgrInfo = nullptr;
-    m_pFiObjInfo.clear();
-    m_pFiActInfo.clear();
-    m_pFiInsInfo.clear();
-    m_pBtnCancel.clear();
-    SfxModalDialog::dispose();
+    m_xProgrInfo->Init( nObjCount );
 }
 
 // Control-Handler for cancel button
-IMPL_LINK_NOARG_TYPED(BreakDlg, CancelButtonHdl, Button*, void)
+IMPL_LINK_NOARG(BreakDlg, CancelButtonHdl, weld::Button&, void)
 {
-    bCancel = true;
-    m_pBtnCancel->Disable();
+    m_bCancel = true;
+    m_xBtnCancel->set_sensitive(false);
 }
 
 /**
@@ -95,79 +74,83 @@ IMPL_LINK_NOARG_TYPED(BreakDlg, CancelButtonHdl, Button*, void)
  * Every following call should contain the finished actions since the
  * last call of UpDate.
  */
-IMPL_LINK_TYPED( BreakDlg, UpDate, void*, nInit, bool )
+IMPL_LINK( BreakDlg, UpDate, void*, nInit, bool )
 {
-    if(pProgrInfo == nullptr)
+    if (!m_xProgrInfo)
       return true;
 
     // update status bar or show a error message?
-    if(nInit == reinterpret_cast<void*>(1L))
+    if(nInit == reinterpret_cast<void*>(1))
     {
-        ScopedVclPtrInstance< MessageDialog > aErrBox(this, SD_RESSTR(STR_BREAK_FAIL));
-        aErrBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                     VclMessageType::Warning, VclButtonsType::Ok,
+                                                     SdResId(STR_BREAK_FAIL)));
+        xErrBox->run();
     }
     else
     {
-        if(mpProgress)
-            mpProgress->SetState( pProgrInfo->GetSumCurAction() );
+        if (m_xProgress)
+            m_xProgress->SetState(m_xProgrInfo->GetSumCurAction());
     }
 
     // which object is shown at the moment?
-    OUString info = OUString::number( pProgrInfo->GetCurObj() )
+    OUString info = OUString::number(m_xProgrInfo->GetCurObj())
             + "/"
-            + OUString::number( pProgrInfo->GetObjCount() );
-    m_pFiObjInfo->SetText(info);
+            + OUString::number(m_xProgrInfo->GetObjCount());
+    m_xFiObjInfo->set_label(info);
 
     // how many actions are started?
-    if(pProgrInfo->GetActionCount() == 0)
+    if (m_xProgrInfo->GetActionCount() == 0)
     {
-        m_pFiActInfo->SetText( OUString() );
+        m_xFiActInfo->set_label( OUString() );
     }
     else
     {
-        info = OUString::number( pProgrInfo->GetCurAction() )
+        info = OUString::number(m_xProgrInfo->GetCurAction())
             + "/"
-            + OUString::number( pProgrInfo->GetActionCount() );
-        m_pFiActInfo->SetText(info);
+            + OUString::number(m_xProgrInfo->GetActionCount());
+        m_xFiActInfo->set_label(info);
     }
 
     // and inserted????
-    if(pProgrInfo->GetInsertCount() == 0)
+    if (m_xProgrInfo->GetInsertCount() == 0)
     {
-        m_pFiInsInfo->SetText( OUString() );
+        m_xFiInsInfo->set_label( OUString() );
     }
     else
     {
-        info = OUString::number( pProgrInfo->GetCurInsert() )
+        info = OUString::number(m_xProgrInfo->GetCurInsert())
             + "/"
-            + OUString::number( pProgrInfo->GetInsertCount() );
-        m_pFiInsInfo->SetText(info);
+            + OUString::number(m_xProgrInfo->GetInsertCount());
+        m_xFiInsInfo->set_label(info);
     }
 
-    Application::Reschedule();
-    return bCancel;
+    // make sure dialog gets painted, it is intended to
+    // show the progress to the user. Also necessary to
+    // provide a clickable cancel button
+    Application::Reschedule(true);
+
+    // return okay-value (-> !cancel)
+    return !m_bCancel;
 }
 
 /**
  * open a modal dialog and start a timer which calls the working function after
  * the opening of the dialog
  */
-short BreakDlg::Execute()
+short BreakDlg::run()
 {
-  aIdle.SetPriority( SchedulerPriority::REPAINT );
-  aIdle.SetIdleHdl( LINK( this, BreakDlg, InitialUpdate ) );
-  aIdle.Start();
-
-  return SfxModalDialog::Execute();
+    m_aUpdateIdle.Start();
+    return SfxDialogController::run();
 }
 
 /**
  * link-method which starts the working function
  */
-IMPL_LINK_NOARG_TYPED(BreakDlg, InitialUpdate, Idle *, void)
+IMPL_LINK_NOARG(BreakDlg, InitialUpdate, Timer *, void)
 {
-    pDrView->DoImportMarkedMtf(pProgrInfo);
-    EndDialog(RET_OK);
+    m_pDrView->DoImportMarkedMtf(m_xProgrInfo.get());
+    m_xDialog->response(RET_OK);
 }
 
 } // end of namespace sd

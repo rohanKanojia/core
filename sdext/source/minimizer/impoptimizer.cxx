@@ -25,8 +25,8 @@
 #include "informationdialog.hxx"
 
 #include <vector>
-#include "com/sun/star/util/URL.hpp"
-#include "com/sun/star/util/XURLTransformer.hpp"
+#include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/util/XURLTransformer.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/awt/Size.hpp>
@@ -45,9 +45,7 @@
 #include <com/sun/star/drawing/XMasterPageTarget.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XMasterPagesSupplier.hpp>
-#include <com/sun/star/presentation/XPresentationSupplier.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/presentation/XPresentation.hpp>
 #include <com/sun/star/presentation/XPresentationPage.hpp>
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XExporter.hpp>
@@ -75,7 +73,7 @@ using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::presentation;
 
-void ImpExtractCustomShow( const Reference< XModel >& rxModel, const OUString& rCustomShowName )
+static void ImpExtractCustomShow( const Reference< XModel >& rxModel, const OUString& rCustomShowName )
 {
     vector< Reference< XDrawPage > > vNonUsedPageList;
     try
@@ -83,9 +81,8 @@ void ImpExtractCustomShow( const Reference< XModel >& rxModel, const OUString& r
         PageCollector::CollectNonCustomShowPages( rxModel, rCustomShowName, vNonUsedPageList );
         Reference< XDrawPagesSupplier > xDrawPagesSupplier( rxModel, UNO_QUERY_THROW );
         Reference< XDrawPages > xDrawPages( xDrawPagesSupplier->getDrawPages(), UNO_QUERY_THROW );
-        vector< Reference< XDrawPage > >::iterator aIter( vNonUsedPageList.begin() );
-        while( aIter != vNonUsedPageList.end() )
-            xDrawPages->remove( *aIter++ );
+        for( const auto& rxPage : vNonUsedPageList )
+            xDrawPages->remove( rxPage );
     }
     catch( Exception& )
     {
@@ -93,7 +90,7 @@ void ImpExtractCustomShow( const Reference< XModel >& rxModel, const OUString& r
     }
 }
 
-void ImpDeleteUnusedMasterPages( const Reference< XModel >& rxModel )
+static void ImpDeleteUnusedMasterPages( const Reference< XModel >& rxModel )
 {
     vector< PageCollector::MasterPageEntity > aMasterPageList;
     PageCollector::CollectMasterPages( rxModel, aMasterPageList );
@@ -101,16 +98,14 @@ void ImpDeleteUnusedMasterPages( const Reference< XModel >& rxModel )
     // now master pages that are not marked can be deleted
     Reference< XMasterPagesSupplier > xMasterPagesSupplier( rxModel, UNO_QUERY_THROW );
     Reference< XDrawPages > xMasterPages( xMasterPagesSupplier->getMasterPages(), UNO_QUERY_THROW );
-    vector< PageCollector::MasterPageEntity >::iterator aIter( aMasterPageList.begin() );
-    while( aIter != aMasterPageList.end() )
+    for( const auto& rMasterPage : aMasterPageList )
     {
-        if ( !aIter->bUsed )
-            xMasterPages->remove( aIter->xMasterPage );
-        ++aIter;
+        if ( !rMasterPage.bUsed )
+            xMasterPages->remove( rMasterPage.xMasterPage );
     }
 }
 
-void ImpDeleteHiddenSlides(  const Reference< XModel >& rxModel )
+static void ImpDeleteHiddenSlides(  const Reference< XModel >& rxModel )
 {
     try
     {
@@ -137,7 +132,7 @@ void ImpDeleteHiddenSlides(  const Reference< XModel >& rxModel )
     }
 }
 
-void ImpDeleteNotesPages( const Reference< XModel >& rxModel )
+static void ImpDeleteNotesPages( const Reference< XModel >& rxModel )
 {
     try
     {
@@ -152,7 +147,7 @@ void ImpDeleteNotesPages( const Reference< XModel >& rxModel )
             while( xShapes->getCount() )
                 xShapes->remove( Reference< XShape >( xShapes->getByIndex( xShapes->getCount() - 1 ), UNO_QUERY_THROW ) );
 
-            xPropSet->setPropertyValue( "Layout", Any( (sal_Int16)21 ) );
+            xPropSet->setPropertyValue( "Layout", Any( sal_Int16(21) ) );
         }
     }
     catch( Exception& )
@@ -160,7 +155,7 @@ void ImpDeleteNotesPages( const Reference< XModel >& rxModel )
     }
 }
 
-void ImpConvertOLE( const Reference< XModel >& rxModel, sal_Int32 nOLEOptimizationType )
+static void ImpConvertOLE( const Reference< XModel >& rxModel, sal_Int32 nOLEOptimizationType )
 {
     try
     {
@@ -208,7 +203,7 @@ void ImpConvertOLE( const Reference< XModel >& rxModel, sal_Int32 nOLEOptimizati
     }
 }
 
-void ImpCompressGraphic( Reference< XGraphicProvider >& rxGraphicProvider, const Reference< XGraphic >& rxGraphic, Reference< XOutputStream >& rxOutputStream,
+static void ImpCompressGraphic( Reference< XGraphicProvider > const & rxGraphicProvider, const Reference< XGraphic >& rxGraphic, Reference< XOutputStream > const & rxOutputStream,
     const OUString& rDestMimeType, const awt::Size& rLogicalSize, sal_Int32 nJPEGQuality, sal_Int32 nImageResolution, bool bRemoveCropping, const text::GraphicCrop& rGraphicCropLogic )
 {
     try
@@ -219,13 +214,13 @@ void ImpCompressGraphic( Reference< XGraphicProvider >& rxGraphicProvider, const
             aFilterData[ 0 ].Name = "ImageResolution";
             aFilterData[ 0 ].Value <<= nImageResolution;
             aFilterData[ 1 ].Name = "ColorMode";      // todo: jpeg color mode (0->true color, 1->greyscale)
-            aFilterData[ 1 ].Value <<= (sal_Int32)0;
+            aFilterData[ 1 ].Value <<= sal_Int32(0);
             aFilterData[ 2 ].Name = "Quality";        // quality that is used if we export to jpeg
             aFilterData[ 2 ].Value <<= nJPEGQuality;
             aFilterData[ 3 ].Name = "Compression";    // compression that is used if we export to png
-            aFilterData[ 3 ].Value <<= (sal_Int32)6;
+            aFilterData[ 3 ].Value <<= sal_Int32(6);
             aFilterData[ 4 ].Name = "Interlaced";     // interlaced is turned off if we export to png
-            aFilterData[ 4 ].Value <<= (sal_Int32)0;
+            aFilterData[ 4 ].Value <<= sal_Int32(0);
             aFilterData[ 5 ].Name = "LogicalSize";
             aFilterData[ 5 ].Value <<= rLogicalSize;
             aFilterData[ 6 ].Name = "RemoveCropArea";
@@ -249,7 +244,7 @@ void ImpCompressGraphic( Reference< XGraphicProvider >& rxGraphicProvider, const
     }
 }
 
-Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& rxContext,
+static Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& rxContext,
     const Reference< XGraphic >& xGraphic, const awt::Size& aLogicalSize, const text::GraphicCrop& aGraphicCropLogic,
         const GraphicSettings& rGraphicSettings )
 {
@@ -291,10 +286,10 @@ Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& 
 
                             if ( aSize100thMM.Width && aSize100thMM.Height )
                             {
-                                aGraphicCropPixel.Left = static_cast< sal_Int32 >( ( (double)aSourceSizePixel.Width * aGraphicCropLogic.Left ) / aSize100thMM.Width );
-                                aGraphicCropPixel.Top = static_cast< sal_Int32 >( ( (double)aSourceSizePixel.Height* aGraphicCropLogic.Top ) / aSize100thMM.Height );
-                                aGraphicCropPixel.Right = static_cast< sal_Int32 >( ( (double)aSourceSizePixel.Width * ( aSize100thMM.Width - aGraphicCropLogic.Right ) ) / aSize100thMM.Width );
-                                aGraphicCropPixel.Bottom = static_cast< sal_Int32 >( ( (double)aSourceSizePixel.Height* ( aSize100thMM.Height - aGraphicCropLogic.Bottom ) ) / aSize100thMM.Height );
+                                aGraphicCropPixel.Left = static_cast< sal_Int32 >( ( static_cast<double>(aSourceSizePixel.Width) * aGraphicCropLogic.Left ) / aSize100thMM.Width );
+                                aGraphicCropPixel.Top = static_cast< sal_Int32 >( ( static_cast<double>(aSourceSizePixel.Height)* aGraphicCropLogic.Top ) / aSize100thMM.Height );
+                                aGraphicCropPixel.Right = static_cast< sal_Int32 >( ( static_cast<double>(aSourceSizePixel.Width) * ( aSize100thMM.Width - aGraphicCropLogic.Right ) ) / aSize100thMM.Width );
+                                aGraphicCropPixel.Bottom = static_cast< sal_Int32 >( ( static_cast<double>(aSourceSizePixel.Height)* ( aSize100thMM.Height - aGraphicCropLogic.Bottom ) ) / aSize100thMM.Height );
 
                                 // first calculating new SourceSizePixel by removing the cropped area
                                 aSourceSizePixel.Width = aGraphicCropPixel.Right - aGraphicCropPixel.Left;
@@ -308,7 +303,7 @@ Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& 
                         if ( ( aSourceSizePixel.Width > 0 ) && ( aSourceSizePixel.Height > 0 ) )
                         {
                             OUString aDestMimeType( "image/png"  );
-                            if ( rGraphicSettings.mbJPEGCompression && !bTransparent && !bAlpha && !bAnimated )
+                            if (rGraphicSettings.mbJPEGCompression && !bTransparent && !bAlpha)
                             {
                                 aDestMimeType = "image/jpeg";
 //                                      if( aSourceMimeType != aDestMimeType )
@@ -318,16 +313,16 @@ Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& 
                                 aDestSizePixel = aSourceSizePixel;
                             if ( rGraphicSettings.mnImageResolution && aLogicalSize.Width && aLogicalSize.Height )
                             {
-                                const double fSourceDPIX = ((double)aSourceSizePixel.Width / ((double)aLogicalSize.Width / 2540.0 ));
-                                const double fSourceDPIY = ((double)aSourceSizePixel.Height/ ((double)aLogicalSize.Height/ 2540.0 ));
+                                const double fSourceDPIX = static_cast<double>(aSourceSizePixel.Width) / (static_cast<double>(aLogicalSize.Width) / 2540.0 );
+                                const double fSourceDPIY = static_cast<double>(aSourceSizePixel.Height)/ (static_cast<double>(aLogicalSize.Height)/ 2540.0 );
 
                                 // check, if the bitmap DPI exceeds the maximum DPI
                                 if( ( fSourceDPIX > rGraphicSettings.mnImageResolution ) || ( fSourceDPIY > rGraphicSettings.mnImageResolution ) )
                                 {
-                                    const double fNewSizePixelX = ((double)aDestSizePixel.Width * rGraphicSettings.mnImageResolution ) / fSourceDPIX;
-                                    const double fNewSizePixelY = ((double)aDestSizePixel.Height* rGraphicSettings.mnImageResolution ) / fSourceDPIY;
+                                    const double fNewSizePixelX = (static_cast<double>(aDestSizePixel.Width) * rGraphicSettings.mnImageResolution ) / fSourceDPIX;
+                                    const double fNewSizePixelY = (static_cast<double>(aDestSizePixel.Height)* rGraphicSettings.mnImageResolution ) / fSourceDPIY;
 
-                                    aDestSizePixel = awt::Size( (sal_Int32)fNewSizePixelX, (sal_Int32)fNewSizePixelY );
+                                    aDestSizePixel = awt::Size( static_cast<sal_Int32>(fNewSizePixelX), static_cast<sal_Int32>(fNewSizePixelY) );
                                     bNeedsOptimizing = true;
                                 }
                             }
@@ -352,7 +347,7 @@ Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& 
             }
             else // this is a metafile
             {
-                OUString aDestMimeType( aSourceMimeType );
+                const OUString& aDestMimeType( aSourceMimeType );
                 Reference< XStream > xTempFile( io::TempFile::create(rxContext), UNO_QUERY_THROW );
                 Reference< XOutputStream > xOutputStream( xTempFile->getOutputStream() );
                 Reference< XGraphicProvider > xGraphicProvider( GraphicProvider::create( rxContext ) );
@@ -373,72 +368,67 @@ Reference< XGraphic > ImpCompressGraphic( const Reference< XComponentContext >& 
     return xNewGraphic;
 }
 
-void CompressGraphics( ImpOptimizer& rOptimizer, const Reference< XComponentContext >& rxContext, const GraphicSettings& rGraphicSettings,
+static void CompressGraphics( ImpOptimizer& rOptimizer, const Reference< XComponentContext >& rxContext, const GraphicSettings& rGraphicSettings,
     std::vector< GraphicCollector::GraphicEntity >& rGraphicList )
 {
     try
     {
-        std::vector< GraphicCollector::GraphicEntity >::iterator aGraphicIter( rGraphicList.begin() );
-        std::vector< GraphicCollector::GraphicEntity >::iterator aGraphicIEnd( rGraphicList.end() );
         double i = 0;
-        while( aGraphicIter != aGraphicIEnd )
+        for( auto& rGraphic : rGraphicList )
         {
             i++;
             sal_Int32 nProgress = static_cast< sal_Int32 >( 40.0 * ( i / static_cast< double >( rGraphicList.size() ) ) ) + 50;
-            rOptimizer.SetStatusValue( TK_Progress, Any( static_cast< sal_Int32 >( nProgress ) ) );
+            rOptimizer.SetStatusValue( TK_Progress, Any( nProgress ) );
             rOptimizer.DispatchStatus();
 
-            if ( aGraphicIter->maUser.size() )
+            if ( !rGraphic.maUser.empty() )
             {
                 GraphicSettings aGraphicSettings( rGraphicSettings );
-                aGraphicSettings.mbRemoveCropArea = aGraphicIter->mbRemoveCropArea;
+                aGraphicSettings.mbRemoveCropArea = rGraphic.mbRemoveCropArea;
 
                 Reference< XGraphic > xGraphic;
-                if ( aGraphicIter->maUser[ 0 ].mbFillBitmap && aGraphicIter->maUser[ 0 ].mxPropertySet.is() )
+                if ( rGraphic.maUser[ 0 ].mbFillBitmap && rGraphic.maUser[ 0 ].mxPropertySet.is() )
                 {
                     Reference< XBitmap > xFillBitmap;
-                    if ( aGraphicIter->maUser[ 0 ].mxPropertySet->getPropertyValue( "FillBitmap" ) >>= xFillBitmap )
+                    if ( rGraphic.maUser[ 0 ].mxPropertySet->getPropertyValue( "FillBitmap" ) >>= xFillBitmap )
                         xGraphic.set( xFillBitmap, UNO_QUERY_THROW );
                 }
-                else if ( aGraphicIter->maUser[ 0 ].mxShape.is() )
+                else if ( rGraphic.maUser[ 0 ].mxShape.is() )
                 {
-                    Reference< XPropertySet > xShapePropertySet( aGraphicIter->maUser[ 0 ].mxShape, UNO_QUERY_THROW );
+                    Reference< XPropertySet > xShapePropertySet( rGraphic.maUser[ 0 ].mxShape, UNO_QUERY_THROW );
                     xShapePropertySet->getPropertyValue( "Graphic" ) >>= xGraphic;
                 }
                 if ( xGraphic.is() )
                 {
                     Reference< XPropertySet > xNewGraphicPropertySet( xGraphic, UNO_QUERY_THROW );
                     awt::Size aSize100thMM( GraphicCollector::GetOriginalSize( rxContext, xGraphic ) );
-                    Reference< XGraphic > xNewGraphic( ImpCompressGraphic( rxContext, xGraphic, aGraphicIter->maLogicalSize, aGraphicIter->maGraphicCropLogic, aGraphicSettings ) );
+                    Reference< XGraphic > xNewGraphic( ImpCompressGraphic( rxContext, xGraphic, rGraphic.maLogicalSize, rGraphic.maGraphicCropLogic, aGraphicSettings ) );
                     if ( xNewGraphic.is() )
                     {
                         // applying graphic to each user
-                        std::vector< GraphicCollector::GraphicUser >::iterator aGraphicUserIter( aGraphicIter->maUser.begin() );
-                        while( aGraphicUserIter != aGraphicIter->maUser.end() )
+                        for( auto& rGraphicUser : rGraphic.maUser )
                         {
-                            if ( aGraphicUserIter->mxShape.is() )
+                            if ( rGraphicUser.mxShape.is() )
                             {
-                                OUString sEmptyGraphicURL;
-                                Reference< XPropertySet > xShapePropertySet( aGraphicUserIter->mxShape, UNO_QUERY_THROW );
-                                xShapePropertySet->setPropertyValue( "GraphicURL", Any( sEmptyGraphicURL ) );
+                                Reference< XPropertySet > xShapePropertySet( rGraphicUser.mxShape, UNO_QUERY_THROW );
                                 xShapePropertySet->setPropertyValue( "Graphic", Any( xNewGraphic ) );
 
-                                if ( aGraphicUserIter->maGraphicCropLogic.Left || aGraphicUserIter->maGraphicCropLogic.Top
-                                || aGraphicUserIter->maGraphicCropLogic.Right || aGraphicUserIter->maGraphicCropLogic.Bottom )
-                                {   // removing crop area was not possible or should't been applied
+                                if ( rGraphicUser.maGraphicCropLogic.Left || rGraphicUser.maGraphicCropLogic.Top
+                                || rGraphicUser.maGraphicCropLogic.Right || rGraphicUser.maGraphicCropLogic.Bottom )
+                                {   // removing crop area was not possible or shouldn't been applied
                                     text::GraphicCrop aGraphicCropLogic( 0, 0, 0, 0 );
                                     if ( !aGraphicSettings.mbRemoveCropArea )
                                     {
                                         awt::Size aNewSize( GraphicCollector::GetOriginalSize( rxContext, xNewGraphic ) );
-                                        aGraphicCropLogic.Left = (sal_Int32)((double)aGraphicUserIter->maGraphicCropLogic.Left * ((double)aNewSize.Width / (double)aSize100thMM.Width));
-                                        aGraphicCropLogic.Top = (sal_Int32)((double)aGraphicUserIter->maGraphicCropLogic.Top * ((double)aNewSize.Height / (double)aSize100thMM.Height));
-                                        aGraphicCropLogic.Right = (sal_Int32)((double)aGraphicUserIter->maGraphicCropLogic.Right * ((double)aNewSize.Width / (double)aSize100thMM.Width));
-                                        aGraphicCropLogic.Bottom = (sal_Int32)((double)aGraphicUserIter->maGraphicCropLogic.Bottom * ((double)aNewSize.Height / (double)aSize100thMM.Height));
+                                        aGraphicCropLogic.Left = static_cast<sal_Int32>(static_cast<double>(rGraphicUser.maGraphicCropLogic.Left) * (static_cast<double>(aNewSize.Width) / static_cast<double>(aSize100thMM.Width)));
+                                        aGraphicCropLogic.Top = static_cast<sal_Int32>(static_cast<double>(rGraphicUser.maGraphicCropLogic.Top) * (static_cast<double>(aNewSize.Height) / static_cast<double>(aSize100thMM.Height)));
+                                        aGraphicCropLogic.Right = static_cast<sal_Int32>(static_cast<double>(rGraphicUser.maGraphicCropLogic.Right) * (static_cast<double>(aNewSize.Width) / static_cast<double>(aSize100thMM.Width)));
+                                        aGraphicCropLogic.Bottom = static_cast<sal_Int32>(static_cast<double>(rGraphicUser.maGraphicCropLogic.Bottom) * (static_cast<double>(aNewSize.Height) / static_cast<double>(aSize100thMM.Height)));
                                     }
                                     xShapePropertySet->setPropertyValue( "GraphicCrop", Any( aGraphicCropLogic ) );
                                 }
                             }
-                            else if ( aGraphicUserIter->mxPropertySet.is() )
+                            else if ( rGraphicUser.mxPropertySet.is() )
                             {
                                 Reference< XBitmap > xFillBitmap( xNewGraphic, UNO_QUERY );
                                 if ( xFillBitmap.is() )
@@ -446,7 +436,7 @@ void CompressGraphics( ImpOptimizer& rOptimizer, const Reference< XComponentCont
                                     awt::Size aSize;
                                     bool bLogicalSize;
 
-                                    Reference< XPropertySet >& rxPropertySet( aGraphicUserIter->mxPropertySet );
+                                    Reference< XPropertySet >& rxPropertySet( rGraphicUser.mxPropertySet );
                                     rxPropertySet->setPropertyValue( "FillBitmap", Any( xFillBitmap ) );
                                     if ( ( rxPropertySet->getPropertyValue( "FillBitmapLogicalSize" ) >>= bLogicalSize )
                                         && ( rxPropertySet->getPropertyValue( "FillBitmapSizeX" ) >>= aSize.Width )
@@ -454,21 +444,19 @@ void CompressGraphics( ImpOptimizer& rOptimizer, const Reference< XComponentCont
                                     {
                                         if ( !aSize.Width || !aSize.Height )
                                         {
-                                            rxPropertySet->setPropertyValue( "FillBitmapLogicalSize", Any( sal_True ) );
-                                            rxPropertySet->setPropertyValue( "FillBitmapSizeX", Any( aGraphicUserIter->maLogicalSize.Width ) );
-                                            rxPropertySet->setPropertyValue( "FillBitmapSizeY", Any( aGraphicUserIter->maLogicalSize.Height ) );
+                                            rxPropertySet->setPropertyValue( "FillBitmapLogicalSize", Any( true ) );
+                                            rxPropertySet->setPropertyValue( "FillBitmapSizeX", Any( rGraphicUser.maLogicalSize.Width ) );
+                                            rxPropertySet->setPropertyValue( "FillBitmapSizeY", Any( rGraphicUser.maLogicalSize.Height ) );
                                         }
                                     }
-                                    if ( aGraphicUserIter->mxPagePropertySet.is() )
-                                        aGraphicUserIter->mxPagePropertySet->setPropertyValue( "Background", Any( rxPropertySet ) );
+                                    if ( rGraphicUser.mxPagePropertySet.is() )
+                                        rGraphicUser.mxPagePropertySet->setPropertyValue( "Background", Any( rxPropertySet ) );
                                 }
                             }
-                            ++aGraphicUserIter;
                         }
                     }
                 }
             }
-            ++aGraphicIter;
         }
     }
     catch ( Exception& )
@@ -512,7 +500,7 @@ void ImpOptimizer::DispatchStatus()
 }
 
 
-bool ImpOptimizer::Optimize()
+void ImpOptimizer::Optimize()
 {
 
     if ( !maCustomShowName.isEmpty() )
@@ -562,10 +550,9 @@ bool ImpOptimizer::Optimize()
     }
     SetStatusValue( TK_Progress, Any( static_cast< sal_Int32 >( 100 ) ) );
     DispatchStatus();
-    return true;
 }
 
-static void DispatchURL( Reference< XComponentContext > xContext, const OUString& sURL, Reference< XFrame > xFrame )
+static void DispatchURL( const Reference< XComponentContext >& xContext, const OUString& sURL, const Reference< XFrame >& xFrame )
 {
     try
     {
@@ -717,7 +704,7 @@ void ImpOptimizer::Optimize( const Sequence< PropertyValue >& rArguments )
             if ( mbOpenNewDocument && xSelf.is() )
             {
                 Reference< awt::XWindow > xContainerWindow( xSelf->getContainerWindow() );
-                xContainerWindow->setVisible( sal_True );
+                xContainerWindow->setVisible( true );
             }
             else
             {

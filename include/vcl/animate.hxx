@@ -23,25 +23,14 @@
 #include <vcl/dllapi.h>
 #include <vcl/timer.hxx>
 #include <vcl/bitmapex.hxx>
-#include <vcl/vclptr.hxx>
 
 #define ANIMATION_TIMEOUT_ON_CLICK 2147483647L
 
-enum Disposal
+enum class Disposal
 {
-    DISPOSE_NOT,
-    DISPOSE_BACK,
-    DISPOSE_FULL,
-    DISPOSE_PREVIOUS
-};
-
-enum CycleMode
-{
-    CYCLE_NOT,
-    CYCLE_NORMAL,
-    CYCLE_FALLBACK,
-    CYCLE_REVERS,
-    CYCLE_REVERS_FALLBACK
+    Not,
+    Back,
+    Previous
 };
 
 struct VCL_DLLPUBLIC AnimationBitmap
@@ -55,7 +44,7 @@ struct VCL_DLLPUBLIC AnimationBitmap
 
                     AnimationBitmap()
                         : nWait(0)
-                        , eDisposal(DISPOSE_NOT)
+                        , eDisposal(Disposal::Not)
                         , bUserInput(false)
                     {}
 
@@ -63,8 +52,8 @@ struct VCL_DLLPUBLIC AnimationBitmap
                         const BitmapEx& rBmpEx,
                         const Point& rPosPix,
                         const Size& rSizePix,
-                        long _nWait = 0L,
-                        Disposal _eDisposal = DISPOSE_NOT
+                        long _nWait = 0,
+                        Disposal _eDisposal = Disposal::Not
                     ) :
                         aBmpEx      ( rBmpEx ),
                         aPosPix     ( rPosPix ),
@@ -111,8 +100,8 @@ public:
                         OutputDevice* pOutDev,
                         const Point& rDestPt,
                         const Size& rDestSz,
-                        long nExtraData = 0,
-                        OutputDevice* pFirstFrameOutDev = nullptr);
+                        long nExtraData,
+                        OutputDevice* pFirstFrameOutDev);
 
     void            Stop( OutputDevice* pOutDev = nullptr, long nExtraData = 0 );
 
@@ -128,15 +117,14 @@ public:
     const BitmapEx& GetBitmapEx() const { return maBitmapEx; }
     void            SetBitmapEx( const BitmapEx& rBmpEx ) { maBitmapEx = rBmpEx; }
 
-    sal_uLong       GetLoopCount() const { return mnLoopCount; }
-    void            SetLoopCount( const sal_uLong nLoopCount );
+    sal_uInt32      GetLoopCount() const { return mnLoopCount; }
+    void            SetLoopCount(const sal_uInt32 nLoopCount);
     void            ResetLoopCount();
-
-    CycleMode       GetCycleMode() const { return meCycleMode; }
 
     void            SetNotifyHdl( const Link<Animation*,void>& rLink ) { maNotifyLink = rLink; }
     const Link<Animation*,void>& GetNotifyHdl() const { return maNotifyLink; }
 
+    std::vector< std::unique_ptr<AnimationBitmap> >& GetAnimationFrames() { return maList; }
     size_t          Count() const { return maList.size(); }
     bool            Insert( const AnimationBitmap& rAnimationBitmap );
     const AnimationBitmap&
@@ -148,23 +136,19 @@ public:
 
 public:
 
-    bool            Convert( BmpConversion eConversion );
+    void            Convert( BmpConversion eConversion );
     bool            ReduceColors( sal_uInt16 nNewColorCount );
 
     bool            Invert();
-    bool            Mirror( BmpMirrorFlags nMirrorFlags );
-    bool            Adjust(
-                        short nLuminancePercent = 0,
-                        short nContrastPercent = 0,
-                        short nChannelRPercent = 0,
-                        short nChannelGPercent = 0,
-                        short nChannelBPercent = 0,
+    void            Mirror( BmpMirrorFlags nMirrorFlags );
+    void            Adjust(
+                        short nLuminancePercent,
+                        short nContrastPercent,
+                        short nChannelRPercent,
+                        short nChannelGPercent,
+                        short nChannelBPercent,
                         double fGamma = 1.0,
                         bool bInvert = false );
-
-    bool            Filter(
-                        BmpFilter eFilter,
-                        const BmpFilterParam* pFilterParam = nullptr );
 
     friend VCL_DLLPUBLIC SvStream& ReadAnimation( SvStream& rIStream, Animation& rAnimation );
     friend VCL_DLLPUBLIC SvStream& WriteAnimation( SvStream& rOStream, const Animation& rAnimation );
@@ -181,23 +165,21 @@ public:
 private:
     SAL_DLLPRIVATE static sal_uLong mnAnimCount;
 
-    std::vector< AnimationBitmap* > maList;
-    std::vector< ImplAnimView* >    maViewList;
+    std::vector< std::unique_ptr<AnimationBitmap> > maList;
+    std::vector< std::unique_ptr<ImplAnimView> >    maViewList;
 
     Link<Animation*,void> maNotifyLink;
     BitmapEx        maBitmapEx;
     Timer           maTimer;
     Size            maGlobalSize;
-    long            mnLoopCount;
-    long            mnLoops;
+    sal_uInt32      mnLoopCount;
+    sal_uInt32      mnLoops;
     size_t          mnPos;
-    CycleMode       meCycleMode;
     bool            mbIsInAnimation;
     bool            mbLoopTerminated;
-    bool            mbIsWaiting;
 
     SAL_DLLPRIVATE void ImplRestartTimer( sal_uLong nTimeout );
-    DECL_DLLPRIVATE_LINK_TYPED( ImplTimeoutHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( ImplTimeoutHdl, Timer*, void );
 
 };
 

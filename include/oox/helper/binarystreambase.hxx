@@ -20,10 +20,10 @@
 #ifndef INCLUDED_OOX_HELPER_BINARYSTREAMBASE_HXX
 #define INCLUDED_OOX_HELPER_BINARYSTREAMBASE_HXX
 
+#include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
-#include <oox/helper/helper.hxx>
 #include <oox/dllapi.h>
-#include <memory>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
     namespace io { class XSeekable; }
@@ -100,7 +100,7 @@ public:
         @param nAnchorPos
             Position in the stream the data blocks are aligned to.
      */
-    void                alignToBlock( sal_Int32 nBlockSize, sal_Int64 nAnchorPos = 0 );
+    void                alignToBlock( sal_Int32 nBlockSize, sal_Int64 nAnchorPos );
 
 protected:
     explicit            BinaryStreamBase( bool bSeekable ) : mbEof( false ), mbSeekable( bSeekable ) {}
@@ -123,7 +123,7 @@ private:
 class OOX_DLLPUBLIC BinaryXSeekableStream : public virtual BinaryStreamBase
 {
 public:
-    virtual             ~BinaryXSeekableStream();
+    virtual             ~BinaryXSeekableStream() override;
 
     /** Returns the size of the stream, if wrapped stream is seekable, otherwise -1. */
     virtual sal_Int64   size() const override;

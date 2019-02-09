@@ -12,6 +12,7 @@
 
 #include <list>
 #include <map>
+#include <mutex>
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
@@ -39,13 +40,44 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::uno;
 
-using ::std::list;
 using ::std::map;
 
 #define EXT_MODULE_OLE_URI "http://libreoffice.org/2011/xslt/ole"
 
 namespace XSLT
 {
+
+    class LibXSLTTransformer;
+
+    /*
+     * Reader provides a worker thread to perform the actual transformation.
+     * It pipes the streams provided by a LibXSLTTransformer
+     * instance through libxslt.
+     */
+    class Reader : public salhelper::Thread
+    {
+    public:
+        Reader(LibXSLTTransformer* transformer);
+        int read(char * buffer, int len);
+        int write(const char * buffer, int len);
+        void forceStateStopped();
+        void closeOutput();
+
+    private:
+        virtual ~Reader() override;
+
+        static const sal_Int32 OUTPUT_BUFFER_SIZE;
+        static const sal_Int32 INPUT_BUFFER_SIZE;
+        LibXSLTTransformer* m_transformer;
+        Sequence<sal_Int8> m_readBuf;
+        Sequence<sal_Int8> m_writeBuf;
+
+        std::mutex m_mutex;
+        xsltTransformContextPtr m_tcontext;
+
+        virtual void execute() override;
+        static void registerExtensionModule();
+    };
 
     /*
      * LibXSLTTransformer provides an transforming pipe service to XSLTFilter.
@@ -85,13 +117,14 @@ namespace XSLT
 
         ::std::map<const char *, OString> m_parameters;
 
-        rtl::Reference< salhelper::Thread > m_Reader;
+        rtl::Reference<Reader> m_Reader;
 
     protected:
-        virtual ~LibXSLTTransformer() {
+        virtual ~LibXSLTTransformer() override {
             if (m_Reader.is()) {
-                    m_Reader->terminate();
-                    m_Reader->join();
+                m_Reader->terminate();
+                m_Reader->forceStateStopped();
+                m_Reader->join();
             }
         }
 
@@ -102,81 +135,45 @@ namespace XSLT
 
         // XActiveDataSink
         virtual void SAL_CALL
-        setInputStream(const css::uno::Reference<XInputStream>& inputStream)
-                throw (RuntimeException, std::exception) override;
+        setInputStream(const css::uno::Reference<XInputStream>& inputStream) override;
         virtual css::uno::Reference<XInputStream> SAL_CALL
-        getInputStream() throw (RuntimeException, std::exception) override;
+        getInputStream() override;
         // XActiveDataSource
         virtual void SAL_CALL
-        setOutputStream(const css::uno::Reference<XOutputStream>& outputStream)
-                throw (RuntimeException, std::exception) override;
+        setOutputStream(const css::uno::Reference<XOutputStream>& outputStream) override;
         virtual css::uno::Reference<XOutputStream> SAL_CALL
-        getOutputStream() throw (RuntimeException, std::exception) override;
+        getOutputStream() override;
         // XActiveDataControl
         virtual void SAL_CALL
-        addListener(const css::uno::Reference<XStreamListener>& listener)
-                throw (RuntimeException, std::exception) override;
+        addListener(const css::uno::Reference<XStreamListener>& listener) override;
         virtual void SAL_CALL
-        removeListener(const css::uno::Reference<XStreamListener>& listener)
-                throw (RuntimeException, std::exception) override;
+        removeListener(const css::uno::Reference<XStreamListener>& listener) override;
         virtual void SAL_CALL
-        start() throw (RuntimeException, std::exception) override;
+        start() override;
         virtual void SAL_CALL
-        terminate() throw (RuntimeException, std::exception) override;
+        terminate() override;
         virtual void SAL_CALL
-        initialize(const Sequence<Any>& params) throw (RuntimeException, std::exception) override;
+        initialize(const Sequence<Any>& params) override;
 
-        void SAL_CALL
+        void
         done();
 
-        void SAL_CALL
+        void
         error(const OUString& msg);
 
-        const OString& SAL_CALL
+        const OString&
         getStyleSheetURL() { return m_styleSheetURL; }
 
-        const ::std::map<const char*, OString>& SAL_CALL
+        const ::std::map<const char*, OString>&
         getParameters() { return m_parameters; }
 
-        const css::uno::Reference<css::uno::XComponentContext>& SAL_CALL
+        const css::uno::Reference<css::uno::XComponentContext>&
         getComponentContext() {
             return m_xContext;
         }
 
     };
-
-    /*
-     * Reader provides a worker thread to perform the actual transformation.
-     * It pipes the streams provided by a LibXSLTTransformer
-     * instance through libxslt.
-     */
-    class Reader : public salhelper::Thread
-    {
-    public:
-        Reader(LibXSLTTransformer* transformer);
-        int SAL_CALL
-        read(char * buffer, int len);
-        int SAL_CALL
-        write(const char * buffer, int len);
-        int SAL_CALL
-        closeOutput();
-
-    private:
-        virtual
-        ~Reader();
-
-        static const sal_Int32 OUTPUT_BUFFER_SIZE;
-        static const sal_Int32 INPUT_BUFFER_SIZE;
-        LibXSLTTransformer* m_transformer;
-        Sequence<sal_Int8> m_readBuf;
-        Sequence<sal_Int8> m_writeBuf;
-
-        virtual void execute() override;
-        static void SAL_CALL registerExtensionModule();
-    };
-
 }
-;
 
 #endif // INCLUDED_FILTER_SOURCE_XSLTFILTER_LIBXSLTTRANSFORMER_HXX
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

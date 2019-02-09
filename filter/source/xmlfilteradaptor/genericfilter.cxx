@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
 #include <osl/thread.h>
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
@@ -30,12 +29,12 @@ using namespace ::com::sun::star::registry;
 
 extern "C"
 {
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL xmlfa_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * xmlfa_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * /* pRegistryKey */ )
 {
     void * pRet = nullptr;
     OUString implName = OUString::createFromAscii( pImplName );
-    if ( pServiceManager && implName.equals(XmlFilterAdaptor_getImplementationName()) )
+    if ( pServiceManager && implName == XmlFilterAdaptor_getImplementationName() )
     {
         Reference< XSingleServiceFactory > xFactory( createSingleFactory(
             static_cast< XMultiServiceFactory * >( pServiceManager ),

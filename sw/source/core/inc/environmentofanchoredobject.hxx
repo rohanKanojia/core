@@ -29,6 +29,7 @@ namespace objectpositioning
     {
     private:
         const bool mbFollowTextFlow;
+        const bool mbLayoutInCell = false;
 
     public:
         /** constructor
@@ -36,8 +37,12 @@ namespace objectpositioning
             @param _bFollowTextFlow
             input parameter - indicates, if the anchored object, for which
             this environment is instantiated, follow the text flow or not
+            @param _bLayoutInCell
+            input parameter - indicates, if the anchored object should be
+            layed out within a (table) cell
         */
-        SwEnvironmentOfAnchoredObject( const bool _bFollowTextFlow );
+        SwEnvironmentOfAnchoredObject( const bool _bFollowTextFlow,
+                                       const bool _bLayoutInCell = false );
 
         /** destructor
         */
@@ -62,7 +67,7 @@ namespace objectpositioning
             starting point for the search of the layout frame.
 
             @return reference to the layout frame, which determines the
-            the horizontal environment the object has to be positioned in.
+            horizontal environment the object has to be positioned in.
         */
         const SwLayoutFrame& GetHoriEnvironmentLayoutFrame( const SwFrame& _rHoriOrientFrame ) const;
 
@@ -87,7 +92,7 @@ namespace objectpositioning
             starting point for the search of the layout frame.
 
             @return reference to the layout frame, which determines the
-            the vertical environment the object has to be positioned in.
+            vertical environment the object has to be positioned in.
         */
         const SwLayoutFrame& GetVertEnvironmentLayoutFrame( const SwFrame& _rVertOrientFrame ) const;
     };

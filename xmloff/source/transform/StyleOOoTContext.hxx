@@ -31,7 +31,7 @@ class XMLStyleOOoTContext : public XMLPersElemContentTContext
 {
     XMLFamilyType m_eFamily;
 
-    bool m_bPersistent;
+    bool const m_bPersistent;
 
 public:
     XMLStyleOOoTContext( XMLTransformerBase& rTransformer,
@@ -45,7 +45,7 @@ public:
                            ::xmloff::token::XMLTokenEnum eToken,
                            bool bPersistent );
 
-    virtual ~XMLStyleOOoTContext();
+    virtual ~XMLStyleOOoTContext() override;
 
     virtual rtl::Reference<XMLTransformerContext> CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,

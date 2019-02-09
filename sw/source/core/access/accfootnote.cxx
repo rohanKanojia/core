@@ -17,11 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/mutex.hxx>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
-#include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <unotools/accessiblestatesethelper.hxx>
-#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/svapp.hxx>
 #include <ftnfrm.hxx>
@@ -30,29 +27,25 @@
 #include <viewsh.hxx>
 #include <accmap.hxx>
 #include "accfootnote.hxx"
-#include "access.hrc"
+#include <strings.hrc>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::accessibility;
 
-const sal_Char sServiceNameFootnote[] = "com.sun.star.text.AccessibleFootnoteView";
-const sal_Char sServiceNameEndnote[] = "com.sun.star.text.AccessibleEndnoteView";
 const sal_Char sImplementationNameFootnote[] = "com.sun.star.comp.Writer.SwAccessibleFootnoteView";
 const sal_Char sImplementationNameEndnote[] = "com.sun.star.comp.Writer.SwAccessibleEndnoteView";
 
 SwAccessibleFootnote::SwAccessibleFootnote(
-        SwAccessibleMap* pInitMap,
+        std::shared_ptr<SwAccessibleMap> const& pInitMap,
         bool bIsEndnote,
         const SwFootnoteFrame *pFootnoteFrame ) :
     SwAccessibleContext( pInitMap,
         bIsEndnote ? AccessibleRole::END_NOTE : AccessibleRole::FOOTNOTE,
         pFootnoteFrame )
 {
-    SolarMutexGuard aGuard;
-
-    sal_uInt16 nResId = bIsEndnote ? STR_ACCESS_ENDNOTE_NAME
+    const char* pResId = bIsEndnote ? STR_ACCESS_ENDNOTE_NAME
                                    : STR_ACCESS_FOOTNOTE_NAME;
 
     OUString sArg;
@@ -61,10 +54,10 @@ SwAccessibleFootnote::SwAccessibleFootnote(
     if( pTextFootnote )
     {
         const SwDoc *pDoc = GetShell()->GetDoc();
-        sArg = pTextFootnote->GetFootnote().GetViewNumStr( *pDoc );
+        sArg = pTextFootnote->GetFootnote().GetViewNumStr(*pDoc, pFootnoteFrame->getRootFrame());
     }
 
-    SetName( GetResource( nResId, &sArg ) );
+    SetName(GetResource(pResId, &sArg));
 }
 
 SwAccessibleFootnote::~SwAccessibleFootnote()
@@ -72,13 +65,12 @@ SwAccessibleFootnote::~SwAccessibleFootnote()
 }
 
 OUString SAL_CALL SwAccessibleFootnote::getAccessibleDescription()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    CHECK_FOR_DEFUNC( XAccessibleContext )
+    ThrowIfDisposed();
 
-    sal_uInt16 nResId = AccessibleRole::END_NOTE == GetRole()
+    const char* pResId = AccessibleRole::END_NOTE == GetRole()
         ? STR_ACCESS_ENDNOTE_DESC
         : STR_ACCESS_FOOTNOTE_DESC ;
 
@@ -88,14 +80,13 @@ OUString SAL_CALL SwAccessibleFootnote::getAccessibleDescription()
     if( pTextFootnote )
     {
         const SwDoc *pDoc = GetMap()->GetShell()->GetDoc();
-        sArg = pTextFootnote->GetFootnote().GetViewNumStr( *pDoc );
+        sArg = pTextFootnote->GetFootnote().GetViewNumStr(*pDoc, GetFrame()->getRootFrame());
     }
 
-    return GetResource( nResId, &sArg );
+    return GetResource(pResId, &sArg);
 }
 
 OUString SAL_CALL SwAccessibleFootnote::getImplementationName()
-        throw( RuntimeException, std::exception )
 {
     if( AccessibleRole::END_NOTE == GetRole() )
         return OUString(sImplementationNameEndnote);
@@ -104,26 +95,23 @@ OUString SAL_CALL SwAccessibleFootnote::getImplementationName()
 }
 
 sal_Bool SAL_CALL SwAccessibleFootnote::supportsService(const OUString& sTestServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sTestServiceName);
 }
 
 Sequence< OUString > SAL_CALL SwAccessibleFootnote::getSupportedServiceNames()
-        throw( uno::RuntimeException, std::exception )
 {
     Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
     if( AccessibleRole::END_NOTE == GetRole() )
-        pArray[0] = sServiceNameEndnote;
+        pArray[0] = "com.sun.star.text.AccessibleEndnoteView";
     else
-        pArray[0] = sServiceNameFootnote;
+        pArray[0] = "com.sun.star.text.AccessibleFootnoteView";
     pArray[1] = sAccessibleServiceName;
     return aRet;
 }
 
 Sequence< sal_Int8 > SAL_CALL SwAccessibleFootnote::getImplementationId()
-        throw(RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }

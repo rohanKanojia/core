@@ -19,40 +19,40 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_NUMBERINGTYPELISTBOX_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_NUMBERINGTYPELISTBOX_HXX
 
-#include <vcl/lstbox.hxx>
-#include "swdllapi.h"
+#include <memory>
+#include <vcl/weld.hxx>
+#include <swdllapi.h>
 #include <o3tl/typed_flags_set.hxx>
+#include <editeng/svxenum.hxx>
 
 enum class SwInsertNumTypes
 {
     NoNumbering              = 0x01,
-    PageStyleNumbering       = 0x02,
-    Bitmap                   = 0x04,
-    Bullet                   = 0x08,
-    Extended                 = 0x10
+    Extended                 = 0x02
 };
 
 namespace o3tl {
-   template<> struct typed_flags<SwInsertNumTypes> : is_typed_flags<SwInsertNumTypes, 0x1f> {};
+   template<> struct typed_flags<SwInsertNumTypes> : is_typed_flags<SwInsertNumTypes, 0x03> {};
 };
 
 struct SwNumberingTypeListBox_Impl;
 
-class SW_DLLPUBLIC SwNumberingTypeListBox : public ListBox
+class SW_DLLPUBLIC SwNumberingTypeListBox
 {
-    SwNumberingTypeListBox_Impl* pImpl;
+    std::unique_ptr<weld::ComboBox> m_xWidget;
+    std::unique_ptr<SwNumberingTypeListBox_Impl> m_xImpl;
 
 public:
-    SwNumberingTypeListBox( vcl::Window* pWin, WinBits nStyle = WB_BORDER );
-    virtual ~SwNumberingTypeListBox();
-    virtual void dispose() override;
+    SwNumberingTypeListBox(std::unique_ptr<weld::ComboBox> pWidget);
+    ~SwNumberingTypeListBox();
 
-    virtual bool set_property(const OString &rKey, const OString &rValue) override;
+    void connect_changed(const Link<weld::ComboBox&, void>& rLink) { m_xWidget->connect_changed(rLink); }
 
-    void        Reload(SwInsertNumTypes nTypeFlags);
-
-    sal_Int16   GetSelectedNumberingType();
-    bool    SelectNumberingType(sal_Int16 nType);
+    void          Reload(SwInsertNumTypes nTypeFlags);
+    SvxNumType    GetSelectedNumberingType();
+    bool          SelectNumberingType(SvxNumType nType);
+    void          SetNoSelection() { m_xWidget->set_active(-1); }
+    void          Enable(bool bEnable) { m_xWidget->set_sensitive(bEnable); }
 };
 
 #endif

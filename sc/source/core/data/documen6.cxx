@@ -17,23 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-#include <editeng/scripttypeitem.hxx>
+#include <scitems.hxx>
 
 #include <com/sun/star/i18n/BreakIterator.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <comphelper/processfactory.hxx>
 
-#include "document.hxx"
-#include "cellform.hxx"
-#include "patattr.hxx"
-#include "scrdata.hxx"
-#include "poolhelp.hxx"
-#include "attrib.hxx"
-#include "globalnames.hxx"
-#include "columnspanset.hxx"
-#include "table.hxx"
+#include <document.hxx>
+#include <cellform.hxx>
+#include <patattr.hxx>
+#include <scrdata.hxx>
+#include <poolhelp.hxx>
+#include <attrib.hxx>
+#include <columnspanset.hxx>
+#include <table.hxx>
 
 using namespace com::sun::star;
 
@@ -43,7 +40,7 @@ using namespace com::sun::star;
 const uno::Reference< i18n::XBreakIterator >& ScDocument::GetBreakIterator()
 {
     if ( !pScriptTypeData )
-        pScriptTypeData = new ScScriptTypeData;
+        pScriptTypeData.reset( new ScScriptTypeData );
     if ( !pScriptTypeData->xBreakIter.is() )
     {
         pScriptTypeData->xBreakIter = i18n::BreakIterator::create( comphelper::getProcessComponentContext() );
@@ -111,14 +108,14 @@ SvtScriptType ScDocument::GetStringScriptType( const OUString& rString )
     return nRet;
 }
 
-SvtScriptType ScDocument::GetCellScriptType( const ScAddress& rPos, sal_uLong nNumberFormat )
+SvtScriptType ScDocument::GetCellScriptType( const ScAddress& rPos, sal_uInt32 nNumberFormat )
 {
     SvtScriptType nStored = GetScriptType(rPos);
     if ( nStored != SvtScriptType::UNKNOWN )         // stored value valid?
         return nStored;                             // use stored value
 
     Color* pColor;
-    OUString aStr = ScCellFormat::GetString(*this, rPos, nNumberFormat, &pColor, *xPoolHelper->GetFormTable());
+    OUString aStr = ScCellFormat::GetString(*this, rPos, nNumberFormat, &pColor, *mxPoolHelper->GetFormTable());
 
     SvtScriptType nRet = GetStringScriptType( aStr );
 
@@ -141,10 +138,10 @@ SvtScriptType ScDocument::GetScriptType( SCCOL nCol, SCROW nRow, SCTAB nTab )
     const ScPatternAttr* pPattern = GetPattern( nCol, nRow, nTab );
     if (!pPattern) return SvtScriptType::NONE;
     const SfxItemSet* pCondSet = nullptr;
-    if ( !static_cast<const ScCondFormatItem&>(pPattern->GetItem(ATTR_CONDITIONAL)).GetCondFormatData().empty() )
+    if ( !pPattern->GetItem(ATTR_CONDITIONAL).GetCondFormatData().empty() )
         pCondSet = GetCondResult( nCol, nRow, nTab );
 
-    sal_uLong nFormat = pPattern->GetNumberFormat( xPoolHelper->GetFormTable(), pCondSet );
+    sal_uInt32 nFormat = pPattern->GetNumberFormat( mxPoolHelper->GetFormTable(), pCondSet );
 
     return GetCellScriptType(aPos, nFormat);
 }
@@ -192,7 +189,7 @@ SvtScriptType ScDocument::GetRangeScriptType( const ScRangeList& rRanges )
     sc::ColumnSpanSet aSet(false);
     for (size_t i = 0, n = rRanges.size(); i < n; ++i)
     {
-        const ScRange& rRange = *rRanges[i];
+        const ScRange& rRange = rRanges[i];
         SCTAB nTab = rRange.aStart.Tab();
         SCROW nRow1 = rRange.aStart.Row();
         SCROW nRow2 = rRange.aEnd.Row();

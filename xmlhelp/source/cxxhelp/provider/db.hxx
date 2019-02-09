@@ -23,6 +23,7 @@
 #include <comphelper/fileurl.hxx>
 #include <osl/diagnose.h>
 #include <rtl/string.hxx>
+#include <memory>
 #include <unordered_map>
 
 namespace helpdatafileproxy {
@@ -31,33 +32,28 @@ namespace helpdatafileproxy {
     {
         friend class        Hdf;
 
-        int                 m_nSize;
-        char*               m_pBuffer;
+        int                     m_nSize;
+        std::unique_ptr<char[]> m_pBuffer;
 
         void copyToBuffer( const char* pSrcData, int nSize );
 
     public:
-        HDFData()
-            : m_nSize( 0 )
-            , m_pBuffer( nullptr )
-        {}
-        ~HDFData()
-            { delete [] m_pBuffer; }
+        HDFData() : m_nSize( 0 ) {}
 
-          int getSize() const
+        int getSize() const
             { return m_nSize; }
-          const char* getData() const
-            { return m_pBuffer; }
+        const char* getData() const
+            { return m_pBuffer.get(); }
     };
 
-    typedef std::unordered_map< OString,std::pair<int,int>,OStringHash >   StringToValPosMap;
-    typedef std::unordered_map< OString,OString,OStringHash >     StringToDataMap;
+    typedef std::unordered_map< OString,std::pair<int,int> >   StringToValPosMap;
+    typedef std::unordered_map< OString,OString >     StringToDataMap;
 
     class Hdf
     {
-        OUString       m_aFileURL;
-        StringToDataMap*    m_pStringToDataMap;
-        StringToValPosMap*  m_pStringToValPosMap;
+        OUString const       m_aFileURL;
+        std::unique_ptr<StringToDataMap>   m_pStringToDataMap;
+        std::unique_ptr<StringToValPosMap> m_pStringToValPosMap;
         css::uno::Reference< css::ucb::XSimpleFileAccess3 >
                             m_xSFA;
 
@@ -74,10 +70,8 @@ namespace helpdatafileproxy {
         //SimpleFileAccess requires file URLs as arguments. Passing file path may work but fails
         //for example when using long file paths on Windows, which start with "\\?\"
         Hdf( const OUString& rFileURL,
-            css::uno::Reference< css::ucb::XSimpleFileAccess3 > xSFA )
+            css::uno::Reference< css::ucb::XSimpleFileAccess3 > const & xSFA )
                 : m_aFileURL( rFileURL )
-                , m_pStringToDataMap( nullptr )
-                , m_pStringToValPosMap( nullptr )
                 , m_xSFA( xSFA )
                 , m_pItData( nullptr )
                 , m_nItRead( -1 )
@@ -85,10 +79,9 @@ namespace helpdatafileproxy {
         {
             OSL_ASSERT(comphelper::isFileUrl(rFileURL));
         }
-        ~Hdf()
-            { releaseHashMap(); }
+        ~Hdf();
 
-        void createHashMap( bool bOptimizeForPerformance = false );
+        void createHashMap( bool bOptimizeForPerformance );
         void releaseHashMap();
 
         bool getValueForKey( const OString& rKey, HDFData& rValue );

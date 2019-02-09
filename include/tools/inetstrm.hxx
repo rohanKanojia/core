@@ -20,45 +20,45 @@
 #define INCLUDED_TOOLS_INETSTRM_HXX
 
 #include <tools/toolsdllapi.h>
+#include <tools/stream.hxx>
 #include <sal/types.h>
-#include <rtl/ustring.hxx>
+#include <vector>
+#include <memory>
 
 class INetMIMEMessage;
-class SvMemoryStream;
-class SvStream;
 
 class TOOLS_DLLPUBLIC INetMIMEMessageStream
 {
     INetMIMEMessage *pSourceMsg;
     bool            bHeaderGenerated;
 
-    sal_uIntPtr           nBufSiz;
-    sal_Char       *pBuffer;
+    std::vector<sal_Char> mvBuffer;
     sal_Char       *pRead;
     sal_Char       *pWrite;
 
-    SvStream       *pMsgStrm;
-    SvMemoryStream *pMsgBuffer;
+    std::unique_ptr<SvStream>
+                    pMsgStrm;
+    SvMemoryStream  maMsgBuffer;
     sal_Char       *pMsgRead;
     sal_Char       *pMsgWrite;
 
     bool done;
 
-    sal_uIntPtr                  nChildIndex;
-    INetMIMEMessageStream *pChildStrm;
+    sal_uInt32             nChildIndex;
+    std::unique_ptr<INetMIMEMessageStream> pChildStrm;
 
     INetMIMEMessageStream (const INetMIMEMessageStream& rStrm) = delete;
     INetMIMEMessageStream& operator= (const INetMIMEMessageStream& rStrm) = delete;
 
-    int GetHeaderLine(sal_Char *pData, sal_uIntPtr nSize);
-    int GetBodyLine(sal_Char *pData, sal_uIntPtr nSize);
-    int GetMsgLine(sal_Char *pData, sal_uIntPtr nSize);
+    int GetHeaderLine(sal_Char *pData, sal_uInt32 nSize);
+    int GetBodyLine(sal_Char *pData, sal_uInt32 nSize);
+    int GetMsgLine(sal_Char *pData, sal_uInt32 nSize);
 
 public:
     explicit INetMIMEMessageStream(INetMIMEMessage *pMsg, bool headerGenerated);
     ~INetMIMEMessageStream();
 
-    int Read (sal_Char *pData, sal_uIntPtr nSize);
+    int Read (sal_Char *pData, sal_uInt32 nSize);
 };
 
 #endif

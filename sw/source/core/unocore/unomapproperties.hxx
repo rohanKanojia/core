@@ -61,13 +61,14 @@
     { OUString(UNO_NAME_CHAR_LOCALE_COMPLEX), RES_CHRATR_CTL_LANGUAGE ,   cppu::UnoType<css::lang::Locale>::get()  ,          PropertyAttribute::MAYBEVOID,  MID_LANG_LOCALE },
 
 #define REDLINE_NODE_PROPERTIES \
-    { OUString(UNO_NAME_START_REDLINE), FN_UNO_REDLINE_NODE_START , cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(),   PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,  0xff }, \
-    { OUString(UNO_NAME_END_REDLINE), FN_UNO_REDLINE_NODE_END ,     cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(),       PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,  0xff },
+    { OUString(UNO_NAME_START_REDLINE), FN_UNO_REDLINE_NODE_START , cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(),   PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,  0xbf }, \
+    { OUString(UNO_NAME_END_REDLINE), FN_UNO_REDLINE_NODE_END ,     cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(),       PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,  0xbf },
 
 #define REDLINE_PROPERTIES \
     {OUString(UNO_NAME_REDLINE_AUTHOR), 0, cppu::UnoType<OUString>::get(),                     PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},\
     {OUString(UNO_NAME_REDLINE_DATE_TIME), 0, cppu::UnoType<css::util::DateTime>::get(),                  PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},\
     {OUString(UNO_NAME_REDLINE_COMMENT), 0, cppu::UnoType<OUString>::get(),                        PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},\
+    {OUString(UNO_NAME_REDLINE_DESCRIPTION), 0, cppu::UnoType<OUString>::get(), PropertyAttribute::MAYBEVOID | PropertyAttribute::READONLY, 0}, \
     {OUString(UNO_NAME_REDLINE_TYPE), 0, cppu::UnoType<OUString>::get(),                       PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},\
     {OUString(UNO_NAME_REDLINE_SUCCESSOR_DATA), 0, cppu::UnoType< cppu::UnoSequenceType<css::beans::PropertyValue> >::get(),    PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,   0},\
     {OUString(UNO_NAME_REDLINE_IDENTIFIER), 0, cppu::UnoType<OUString>::get(),                         PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY, 0},\
@@ -87,6 +88,7 @@
         { OUString(UNO_NAME_CELL), FN_UNO_CELL,         cppu::UnoType<css::table::XCell>::get(),         PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY ,0 },                     \
         { OUString(UNO_NAME_TEXT_FRAME), FN_UNO_TEXT_FRAME,     cppu::UnoType<css::text::XTextFrame>::get(),        PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY ,0 },                     \
         { OUString(UNO_NAME_TEXT_SECTION), FN_UNO_TEXT_SECTION, cppu::UnoType<css::text::XTextSection>::get(),  PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY ,0 },                    \
+        { OUString(UNO_NAME_TEXT_PARAGRAPH), FN_UNO_TEXT_PARAGRAPH, cppu::UnoType<css::text::XTextContent>::get(),  PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY ,0 },                    \
         { OUString(UNO_NAME_PARA_CHAPTER_NUMBERING_LEVEL), FN_UNO_PARA_CHAPTER_NUMBERING_LEVEL,cppu::UnoType<sal_Int8>::get(), PROPERTY_NONE, 0},                                                     \
         { OUString(UNO_NAME_PARA_CONDITIONAL_STYLE_NAME), FN_UNO_PARA_CONDITIONAL_STYLE_NAME, cppu::UnoType<OUString>::get(),      PropertyAttribute::READONLY, 0},                                                     \
         { OUString(UNO_NAME_LIST_ID), FN_UNO_LIST_ID, cppu::UnoType<OUString>::get(), PropertyAttribute::MAYBEVOID, 0}, \
@@ -131,6 +133,7 @@
         { OUString(UNO_NAME_CHAR_OVERLINE_COLOR),                 RES_CHRATR_OVERLINE,           cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, MID_TL_COLOR                           }, \
         { OUString(UNO_NAME_CHAR_OVERLINE_HAS_COLOR),             RES_CHRATR_OVERLINE,           cppu::UnoType<bool>::get(),       PropertyAttribute::MAYBEVOID, MID_TL_HASCOLOR                        }, \
         { OUString(UNO_NAME_PARA_GRAPHIC_URL),                    RES_BACKGROUND,                cppu::UnoType<OUString>::get(),      PropertyAttribute::MAYBEVOID, MID_GRAPHIC_URL                        }, \
+        { OUString(UNO_NAME_PARA_GRAPHIC),                        RES_BACKGROUND,                cppu::UnoType<css::graphic::XGraphic>::get(),      PropertyAttribute::MAYBEVOID, MID_GRAPHIC                        }, \
         { OUString(UNO_NAME_PARA_GRAPHIC_FILTER),                 RES_BACKGROUND,                cppu::UnoType<OUString>::get(),      PropertyAttribute::MAYBEVOID, MID_GRAPHIC_FILTER                     }, \
         { OUString(UNO_NAME_PARA_GRAPHIC_LOCATION),               RES_BACKGROUND,                cppu::UnoType<css::style::GraphicLocation>::get(),    PropertyAttribute::MAYBEVOID, MID_GRAPHIC_POSITION                   }, \
         { OUString(UNO_NAME_PARA_LEFT_MARGIN),                    RES_LR_SPACE,                  cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, MID_TXT_LMARGIN        | CONVERT_TWIPS }, \
@@ -202,6 +205,7 @@
         { OUString(UNO_NAME_RUBY_TEXT),                           RES_TXTATR_CJK_RUBY,           cppu::UnoType<OUString>::get(),      PropertyAttribute::MAYBEVOID, MID_RUBY_TEXT                          }, \
         { OUString(UNO_NAME_RUBY_ADJUST),                         RES_TXTATR_CJK_RUBY,           cppu::UnoType<sal_Int16>::get(),         PropertyAttribute::MAYBEVOID, MID_RUBY_ADJUST                        }, \
         { OUString(UNO_NAME_RUBY_CHAR_STYLE_NAME),                RES_TXTATR_CJK_RUBY,           cppu::UnoType<OUString>::get(),      PropertyAttribute::MAYBEVOID, MID_RUBY_CHARSTYLE                     }, \
+        { OUString(UNO_NAME_RUBY_POSITION),                       RES_TXTATR_CJK_RUBY,           cppu::UnoType<sal_Int16>::get(),       PropertyAttribute::MAYBEVOID, MID_RUBY_POSITION}, \
         { OUString(UNO_NAME_RUBY_IS_ABOVE),                       RES_TXTATR_CJK_RUBY,           cppu::UnoType<bool>::get(),       PropertyAttribute::MAYBEVOID, MID_RUBY_ABOVE                         }, \
         { OUString(UNO_NAME_CHAR_RELIEF),                         RES_CHRATR_RELIEF,             cppu::UnoType<sal_Int16>::get(),         PropertyAttribute::MAYBEVOID, MID_RELIEF                             }, \
         { OUString(UNO_NAME_SNAP_TO_GRID),                        RES_PARATR_SNAPTOGRID,         cppu::UnoType<bool>::get(),       PropertyAttribute::MAYBEVOID, 0                                      }, \
@@ -247,10 +251,10 @@
         { OUString(UNO_NAME_CONTENT_SECTION), WID_IDX_CONTENT_SECTION,  cppu::UnoType<css::text::XTextSection>::get()  , PropertyAttribute::READONLY,     0},\
         { OUString(UNO_NAME_HEADER_SECTION), WID_IDX_HEADER_SECTION,  cppu::UnoType<css::text::XTextSection>::get()  , PropertyAttribute::MAYBEVOID|PropertyAttribute::READONLY,     0},\
 
-#define ANCHOR_TYPES_PROPERTY    { OUString(UNO_NAME_ANCHOR_TYPES), FN_UNO_ANCHOR_TYPES,    cppu::UnoType< cppu::UnoSequenceType<css::text::TextContentAnchorType> >::get(),PropertyAttribute::READONLY, 0xff},
+#define ANCHOR_TYPES_PROPERTY    { OUString(UNO_NAME_ANCHOR_TYPES), FN_UNO_ANCHOR_TYPES,    cppu::UnoType< cppu::UnoSequenceType<css::text::TextContentAnchorType> >::get(),PropertyAttribute::READONLY, 0xbf},
 
 // #i18732# #i28701# #i73249#
-//UUUU all users of COMMON_FRAME_PROPERTIES add the new XATTR_FILL_FIRST, XATTR_FILL_LAST FillStyle,
+// all users of COMMON_FRAME_PROPERTIES add the new XATTR_FILL_FIRST, XATTR_FILL_LAST FillStyle,
 // thus it may be possible to remove the RES_BACKGROUND entries from SvxBrushItem completely (this includes
 // all using UNO_NAME_BACK_* slots) in the future
 #define COMMON_FRAME_PROPERTIES \
@@ -265,6 +269,7 @@
     { OUString(UNO_NAME_CONTENT_PROTECTED), RES_PROTECT,            cppu::UnoType<bool>::get(),             PROPERTY_NONE, MID_PROTECT_CONTENT  },                          \
     { OUString(UNO_NAME_FRAME_STYLE_NAME), FN_UNO_FRAME_STYLE_NAME,cppu::UnoType<OUString>::get(),         PROPERTY_NONE, 0},                                   \
     { OUString(UNO_NAME_BACK_GRAPHIC_URL), RES_BACKGROUND,      cppu::UnoType<OUString>::get(),        PROPERTY_NONE ,MID_GRAPHIC_URL    },                 \
+    { OUString(UNO_NAME_BACK_GRAPHIC), RES_BACKGROUND, cppu::UnoType<css::graphic::XGraphic>::get(), PROPERTY_NONE, MID_GRAPHIC }, \
     { OUString(UNO_NAME_BACK_GRAPHIC_FILTER), RES_BACKGROUND,       cppu::UnoType<OUString>::get(),        PROPERTY_NONE ,MID_GRAPHIC_FILTER    },              \
     { OUString(UNO_NAME_BACK_GRAPHIC_LOCATION), RES_BACKGROUND,         cppu::UnoType<css::style::GraphicLocation>::get(), PROPERTY_NONE ,MID_GRAPHIC_POSITION}, \
     { OUString(UNO_NAME_BACK_GRAPHIC_TRANSPARENCY), RES_BACKGROUND,      cppu::UnoType<sal_Int8>::get(), PROPERTY_NONE ,MID_GRAPHIC_TRANSPARENCY},    \
@@ -312,10 +317,11 @@
     { OUString(UNO_NAME_RIGHT_BORDER_DISTANCE), RES_BOX,                cppu::UnoType<sal_Int32>::get(),   0, RIGHT_BORDER_DISTANCE |CONVERT_TWIPS },                \
     { OUString(UNO_NAME_TOP_BORDER_DISTANCE), RES_BOX,              cppu::UnoType<sal_Int32>::get(),   0, TOP_BORDER_DISTANCE   |CONVERT_TWIPS },            \
     { OUString(UNO_NAME_BOTTOM_BORDER_DISTANCE), RES_BOX,               cppu::UnoType<sal_Int32>::get(),   0, BOTTOM_BORDER_DISTANCE|CONVERT_TWIPS },            \
-    { OUString(UNO_LINK_DISPLAY_NAME), FN_PARAM_LINK_DISPLAY_NAME,  cppu::UnoType<OUString>::get(), PropertyAttribute::READONLY, 0xff}, \
+    { OUString(UNO_LINK_DISPLAY_NAME), FN_PARAM_LINK_DISPLAY_NAME,  cppu::UnoType<OUString>::get(), PropertyAttribute::READONLY, 0xbf}, \
     { OUString(UNO_NAME_USER_DEFINED_ATTRIBUTES), RES_UNKNOWNATR_CONTAINER, cppu::UnoType<css::container::XNameContainer>::get(), PropertyAttribute::MAYBEVOID, 0 },\
     { OUString(UNO_NAME_Z_ORDER), FN_UNO_Z_ORDER,           cppu::UnoType<sal_Int32>::get(),       PROPERTY_NONE, 0}, \
-    { OUString(UNO_NAME_IS_FOLLOWING_TEXT_FLOW), RES_FOLLOW_TEXT_FLOW,     cppu::UnoType<bool>::get(), PROPERTY_NONE, 0}, \
+    { OUString(UNO_NAME_IS_FOLLOWING_TEXT_FLOW), RES_FOLLOW_TEXT_FLOW,     cppu::UnoType<bool>::get(), PROPERTY_NONE, MID_FOLLOW_TEXT_FLOW}, \
+    { OUString(UNO_NAME_IS_LAYOUT_IN_CELL), RES_FOLLOW_TEXT_FLOW,     cppu::UnoType<bool>::get(), PROPERTY_NONE, MID_FTF_LAYOUT_IN_CELL}, \
     { OUString(UNO_NAME_WRAP_INFLUENCE_ON_POSITION), RES_WRAP_INFLUENCE_ON_OBJPOS, cppu::UnoType<sal_Int8>::get(), PROPERTY_NONE, MID_WRAP_INFLUENCE}, \
     { OUString(UNO_NAME_TITLE), FN_UNO_TITLE, cppu::UnoType<OUString>::get(), PROPERTY_NONE, 0}, \
     { OUString(UNO_NAME_DESCRIPTION), FN_UNO_DESCRIPTION, cppu::UnoType<OUString>::get(), PROPERTY_NONE, 0}, \
@@ -348,6 +354,7 @@
                     { OUString(UNO_NAME_PARA_BACK_COLOR), RES_BACKGROUND,       cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE ,MID_BACK_COLOR        },\
                     { OUString(UNO_NAME_PARA_BACK_TRANSPARENT), RES_BACKGROUND,         cppu::UnoType<bool>::get(),         PROPERTY_NONE ,MID_GRAPHIC_TRANSPARENT       },\
                     { OUString(UNO_NAME_PARA_GRAPHIC_URL), RES_BACKGROUND,      cppu::UnoType<OUString>::get(), PROPERTY_NONE ,MID_GRAPHIC_URL    },\
+                    { OUString(UNO_NAME_PARA_GRAPHIC), RES_BACKGROUND,      cppu::UnoType<css::graphic::XGraphic>::get(), PROPERTY_NONE ,MID_GRAPHIC    },\
                     { OUString(UNO_NAME_PARA_GRAPHIC_FILTER), RES_BACKGROUND,       cppu::UnoType<OUString>::get(), PROPERTY_NONE ,MID_GRAPHIC_FILTER    },\
                     { OUString(UNO_NAME_PARA_GRAPHIC_LOCATION), RES_BACKGROUND,         cppu::UnoType<css::style::GraphicLocation>::get(), PROPERTY_NONE ,MID_GRAPHIC_POSITION}, \
                     { OUString(UNO_NAME_CHAR_CASE_MAP), RES_CHRATR_CASEMAP,     cppu::UnoType<sal_Int16>::get(),           PROPERTY_NONE, 0},\
@@ -399,6 +406,7 @@
                     { OUString(UNO_NAME_PARA_BOTTOM_MARGIN_RELATIVE), RES_UL_SPACE,         cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_LO_REL_MARGIN},\
                     TABSTOPS_MAP_ENTRY\
                     { OUString(UNO_NAME_CHAR_WORD_MODE), RES_CHRATR_WORDLINEMODE,cppu::UnoType<bool>::get()  ,    PROPERTY_NONE,     0},\
+                    { OUString(UNO_NAME_CHAR_SHADING_VALUE), RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int32>::get(), PROPERTY_NONE, MID_SHADING_VALUE }, \
                     { OUString(UNO_NAME_CHAR_LEFT_BORDER), RES_CHRATR_BOX, cppu::UnoType<css::table::BorderLine>::get(), PROPERTY_NONE, LEFT_BORDER |CONVERT_TWIPS },\
                     { OUString(UNO_NAME_CHAR_RIGHT_BORDER), RES_CHRATR_BOX, cppu::UnoType<css::table::BorderLine>::get(), PROPERTY_NONE, RIGHT_BORDER |CONVERT_TWIPS },\
                     { OUString(UNO_NAME_CHAR_TOP_BORDER), RES_CHRATR_BOX, cppu::UnoType<css::table::BorderLine>::get(), PROPERTY_NONE, TOP_BORDER |CONVERT_TWIPS },\
@@ -475,7 +483,6 @@
                     { OUString(UNO_NAME_PARA_RIGHT_MARGIN), RES_LR_SPACE,           cppu::UnoType<sal_Int32>::get(),           PropertyAttribute::MAYBEVOID, MID_R_MARGIN|CONVERT_TWIPS},  \
                     { OUString(UNO_NAME_TABSTOPS), RES_PARATR_TABSTOP,   cppu::UnoType< cppu::UnoSequenceType<css::style::TabStop> >::get(),   PropertyAttribute::MAYBEVOID, CONVERT_TWIPS}, \
 
-//UUUU
 #define FILL_PROPERTIES_SW_BMP \
     { OUString(UNO_NAME_SW_FILLBMP_LOGICAL_SIZE),               XATTR_FILLBMP_SIZELOG,      cppu::UnoType<bool>::get(),       0,  0}, \
     { OUString(UNO_NAME_SW_FILLBMP_OFFSET_X),                   XATTR_FILLBMP_TILEOFFSETX,  cppu::UnoType<sal_Int32>::get(),   0,  0}, \
@@ -483,24 +490,22 @@
     { OUString(UNO_NAME_SW_FILLBMP_POSITION_OFFSET_X),          XATTR_FILLBMP_POSOFFSETX,   cppu::UnoType<sal_Int32>::get(),   0,  0}, \
     { OUString(UNO_NAME_SW_FILLBMP_POSITION_OFFSET_Y),          XATTR_FILLBMP_POSOFFSETY,   cppu::UnoType<sal_Int32>::get(),   0,  0}, \
     { OUString(UNO_NAME_SW_FILLBMP_RECTANGLE_POINT),            XATTR_FILLBMP_POS,          cppu::UnoType<css::drawing::RectanglePoint>::get(), 0,  0}, \
-    { OUString(UNO_NAME_SW_FILLBMP_SIZE_X),                     XATTR_FILLBMP_SIZEX,        cppu::UnoType<sal_Int32>::get(),   0,  SFX_METRIC_ITEM}, \
-    { OUString(UNO_NAME_SW_FILLBMP_SIZE_Y),                     XATTR_FILLBMP_SIZEY,        cppu::UnoType<sal_Int32>::get(),   0,  SFX_METRIC_ITEM},    \
+    { OUString(UNO_NAME_SW_FILLBMP_SIZE_X),                     XATTR_FILLBMP_SIZEX,        cppu::UnoType<sal_Int32>::get(),   0,  0, PropertyMoreFlags::METRIC_ITEM}, \
+    { OUString(UNO_NAME_SW_FILLBMP_SIZE_Y),                     XATTR_FILLBMP_SIZEY,        cppu::UnoType<sal_Int32>::get(),   0,  0, PropertyMoreFlags::METRIC_ITEM},    \
     { OUString(UNO_NAME_SW_FILLBMP_STRETCH),                    XATTR_FILLBMP_STRETCH,      cppu::UnoType<bool>::get(),       0,  0}, \
     { OUString(UNO_NAME_SW_FILLBMP_TILE),                       XATTR_FILLBMP_TILE,         cppu::UnoType<bool>::get(),       0,  0},\
     { OUString(UNO_NAME_SW_FILLBMP_MODE),                       OWN_ATTR_FILLBMP_MODE,      cppu::UnoType<drawing::BitmapMode>::get(), 0,  0}, \
 
-//UUUU
 #define FILL_PROPERTIES_SW_DEFAULTS \
     { OUString(UNO_NAME_SW_FILLCOLOR),                          XATTR_FILLCOLOR,            cppu::UnoType<sal_Int32>::get(),   0,  0}, \
 
-//UUUU
 #define FILL_PROPERTIES_SW \
     FILL_PROPERTIES_SW_BMP \
     FILL_PROPERTIES_SW_DEFAULTS \
     { OUString(UNO_NAME_SW_FILLBACKGROUND),                 XATTR_FILLBACKGROUND,           cppu::UnoType<bool>::get(),        0, 0}, \
     { OUString(UNO_NAME_SW_FILLBITMAP),                     XATTR_FILLBITMAP,               cppu::UnoType<css::awt::XBitmap>::get(), 0, MID_BITMAP}, \
+    { OUString(UNO_NAME_SW_FILLBITMAPURL),                  XATTR_FILLBITMAP,               cppu::UnoType<OUString>::get(),          0, MID_BITMAP }, \
     { OUString(UNO_NAME_SW_FILLBITMAPNAME),                 XATTR_FILLBITMAP,               cppu::UnoType<OUString>::get(),    0,  MID_NAME }, \
-    { OUString(UNO_NAME_SW_FILLBITMAPURL),                  XATTR_FILLBITMAP,               cppu::UnoType<OUString>::get(),    0,  MID_GRAFURL }, \
     { OUString(UNO_NAME_SW_FILLGRADIENTSTEPCOUNT),          XATTR_GRADIENTSTEPCOUNT,        cppu::UnoType<sal_Int16>::get(),   0,  0}, \
     { OUString(UNO_NAME_SW_FILLGRADIENT),                   XATTR_FILLGRADIENT,             cppu::UnoType<css::awt::Gradient>::get(), 0, MID_FILLGRADIENT}, \
     { OUString(UNO_NAME_SW_FILLGRADIENTNAME),               XATTR_FILLGRADIENT,             cppu::UnoType<OUString>::get(),    0, MID_NAME }, \

@@ -18,7 +18,7 @@
 #include <iterator>
 #include <vector>
 
-#include "CommonFunctors.hxx"
+#include <CommonFunctors.hxx>
 
 
 class CommonFunctorsTest : public CppUnit::TestFixture
@@ -38,13 +38,13 @@ private:
 void CommonFunctorsTest::testAnyToString()
 {
     std::vector<css::uno::Any> aInput;
-    aInput.push_back(css::uno::makeAny(2.0));
-    aInput.push_back(css::uno::makeAny(10.0));
-    aInput.push_back(css::uno::makeAny(12.0));
-    aInput.push_back(css::uno::makeAny(15.0));
-    aInput.push_back(css::uno::makeAny(25.234));
-    aInput.push_back(css::uno::makeAny(123.456));
-    aInput.push_back(css::uno::makeAny(0.123450));
+    aInput.emplace_back(2.0);
+    aInput.emplace_back(10.0);
+    aInput.emplace_back(12.0);
+    aInput.emplace_back(15.0);
+    aInput.emplace_back(25.234);
+    aInput.emplace_back(123.456);
+    aInput.emplace_back(0.123450);
 
     std::vector<OUString> aOutput;
     std::transform(aInput.begin(), aInput.end(),

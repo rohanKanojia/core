@@ -20,42 +20,42 @@
 #include <sfx2/objsh.hxx>
 #include <vcl/svapp.hxx>
 
-#include "addinlis.hxx"
-#include "miscuno.hxx"
-#include "document.hxx"
-#include "brdcst.hxx"
-#include "sc.hrc"
+#include <addinlis.hxx>
+#include <miscuno.hxx>
+#include <document.hxx>
+#include <brdcst.hxx>
+#include <sc.hrc>
+
+#include <com/sun/star/sheet/XVolatileResult.hpp>
 
 using namespace com::sun::star;
 
 SC_SIMPLE_SERVICE_INFO( ScAddInListener, "ScAddInListener", "stardiv.one.sheet.AddInListener" )
 
-::std::list<ScAddInListener*> ScAddInListener::aAllListeners;
+::std::vector<rtl::Reference<ScAddInListener>> ScAddInListener::aAllListeners;
 
 ScAddInListener* ScAddInListener::CreateListener(
                         const uno::Reference<sheet::XVolatileResult>& xVR, ScDocument* pDoc )
 {
-    ScAddInListener* pNew = new ScAddInListener( xVR, pDoc );
+    rtl::Reference<ScAddInListener> xNew = new ScAddInListener( xVR, pDoc );
 
-    pNew->acquire(); // for aAllListeners
-    aAllListeners.push_back( pNew );
+    aAllListeners.push_back( xNew );
 
     if ( xVR.is() )
-        xVR->addResultListener( pNew ); // after at least 1 ref exists!
+        xVR->addResultListener( xNew.get() ); // after at least 1 ref exists!
 
-    return pNew;
+    return xNew.get();
 }
 
-ScAddInListener::ScAddInListener( uno::Reference<sheet::XVolatileResult> xVR, ScDocument* pDoc ) :
-    xVolRes( xVR )
+ScAddInListener::ScAddInListener( uno::Reference<sheet::XVolatileResult> const & xVR, ScDocument* pDoc ) :
+    xVolRes( xVR ),
+    pDocs( new ScAddInDocs )
 {
-    pDocs = new ScAddInDocs();
     pDocs->insert( pDoc );
 }
 
 ScAddInListener::~ScAddInListener()
 {
-    delete pDocs;
 }
 
 ScAddInListener* ScAddInListener::Get( const uno::Reference<sheet::XVolatileResult>& xVR )
@@ -63,11 +63,11 @@ ScAddInListener* ScAddInListener::Get( const uno::Reference<sheet::XVolatileResu
     ScAddInListener* pLst = nullptr;
     sheet::XVolatileResult* pComp = xVR.get();
 
-    for(::std::list<ScAddInListener*>::iterator iter = aAllListeners.begin(); iter != aAllListeners.end(); ++iter)
+    for (auto const& listener : aAllListeners)
     {
-        if ( pComp == (*iter)->xVolRes.get() )
+        if ( pComp == listener->xVolRes.get() )
         {
-            pLst = *iter;
+            pLst = listener.get();
             break;
         }
     }
@@ -77,10 +77,10 @@ ScAddInListener* ScAddInListener::Get( const uno::Reference<sheet::XVolatileResu
 //TODO: move to some container object?
 void ScAddInListener::RemoveDocument( ScDocument* pDocumentP )
 {
-    ::std::list<ScAddInListener*>::iterator iter = aAllListeners.begin();
+    auto iter = aAllListeners.begin();
     while(iter != aAllListeners.end())
     {
-        ScAddInDocs* p = (*iter)->pDocs;
+        ScAddInDocs* p = (*iter)->pDocs.get();
         ScAddInDocs::iterator iter2 = p->find( pDocumentP );
         if( iter2 != p->end() )
         {
@@ -88,12 +88,7 @@ void ScAddInListener::RemoveDocument( ScDocument* pDocumentP )
             if ( p->empty() )
             {
                 if ( (*iter)->xVolRes.is() )
-                    (*iter)->xVolRes->removeResultListener( *iter );
-
-                (*iter)->release(); // Ref for aAllListeners - pLst may be deleted here
-
-                // this AddIn is no longer used
-                // don't delete, just remove the ref for the list
+                    (*iter)->xVolRes->removeResultListener( iter->get() );
 
                 iter = aAllListeners.erase( iter );
                 continue;
@@ -106,7 +101,6 @@ void ScAddInListener::RemoveDocument( ScDocument* pDocumentP )
 // XResultListener
 
 void SAL_CALL ScAddInListener::modified( const css::sheet::ResultEvent& aEvent )
-                                throw(css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard; //TODO: or generate a UserEvent
 
@@ -114,20 +108,18 @@ void SAL_CALL ScAddInListener::modified( const css::sheet::ResultEvent& aEvent )
 
     // notify document of changes
 
-    Broadcast( ScHint(SC_HINT_DATACHANGED, ScAddress()) );
+    Broadcast( ScHint(SfxHintId::ScDataChanged, ScAddress()) );
 
-    for ( ScAddInDocs::iterator it = pDocs->begin(); it != pDocs->end(); ++it )
+    for (auto const& pDoc : *pDocs)
     {
-        ScDocument* pDoc = *it;
         pDoc->TrackFormulas();
-        pDoc->GetDocumentShell()->Broadcast( SfxSimpleHint( FID_DATACHANGED ) );
+        pDoc->GetDocumentShell()->Broadcast( SfxHint( SfxHintId::ScDataChanged ) );
     }
 }
 
 // XEventListener
 
 void SAL_CALL ScAddInListener::disposing( const css::lang::EventObject& /* Source */ )
-                                throw(css::uno::RuntimeException, std::exception)
 {
     // hold a ref so this is not deleted at removeResultListener
     uno::Reference<sheet::XResultListener> xRef( this );

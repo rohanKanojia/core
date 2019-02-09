@@ -10,22 +10,24 @@
 #include <swtypes.hxx>
 #include <wordcountdialog.hxx>
 #include <docstat.hxx>
-#include <dialog.hrc>
 #include <cmdid.h>
 
 SFX_IMPL_CHILDWINDOW_WITHID(SwWordCountWrapper, FN_WORDCOUNT_DIALOG)
 
-SwWordCountWrapper::SwWordCountWrapper(   vcl::Window *pParentWindow,
+SwWordCountWrapper::SwWordCountWrapper(vcl::Window *pParentWindow,
                             sal_uInt16 nId,
                             SfxBindings* pBindings,
-                            SfxChildWinInfo* pInfo ) :
-        SfxChildWindow(pParentWindow, nId)
+                            SfxChildWinInfo* pInfo )
+    : SfxChildWindow(pParentWindow, nId)
 {
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    assert(pFact && "SwAbstractDialogFactory fail!");
-    xAbstDlg.reset(pFact->CreateSwWordCountDialog(pBindings, this, pParentWindow, pInfo));
-    assert(xAbstDlg && "Dialog construction failed!");
-    SetWindow(xAbstDlg->GetWindow());
+    xAbstDlg.reset(pFact->CreateSwWordCountDialog(pBindings, this, pParentWindow->GetFrameWeld(), pInfo));
+    SetController(xAbstDlg->GetController());
+}
+
+SwWordCountWrapper::~SwWordCountWrapper()
+{
+    xAbstDlg.disposeAndClear();
 }
 
 SfxChildWinInfo SwWordCountWrapper::GetInfo() const

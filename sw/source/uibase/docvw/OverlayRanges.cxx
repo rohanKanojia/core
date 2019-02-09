@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <OverlayRanges.hxx>
+#include "OverlayRanges.hxx"
 #include <view.hxx>
 #include <svx/sdrpaintwindow.hxx>
 #include <svx/svdview.hxx>
@@ -39,7 +39,7 @@ namespace
 
         for(sal_uInt32 a(0); a < nCount; a++)
         {
-            const basegfx::B2DPolygon aDiscretePolygon(basegfx::tools::createPolygonFromRect(rRanges[a]));
+            const basegfx::B2DPolygon aDiscretePolygon(basegfx::utils::createPolygonFromRect(rRanges[a]));
 
             if(0 == a)
             {
@@ -47,7 +47,7 @@ namespace
             }
             else
             {
-                aRetval = basegfx::tools::solvePolygonOperationOr(aRetval, basegfx::B2DPolyPolygon(aDiscretePolygon));
+                aRetval = basegfx::utils::solvePolygonOperationOr(aRetval, basegfx::B2DPolyPolygon(aDiscretePolygon));
             }
         }
 
@@ -67,7 +67,7 @@ namespace sw
             for ( sal_uInt32 a = 0; a < nCount; ++a )
             {
                 const basegfx::BColor aRGBColor(getBaseColor().getBColor());
-                const basegfx::B2DPolygon aPolygon(basegfx::tools::createPolygonFromRect(maRanges[a]));
+                const basegfx::B2DPolygon aPolygon(basegfx::utils::createPolygonFromRect(maRanges[a]));
                 aRetval[a] = drawinglayer::primitive2d::Primitive2DReference(
                     new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
                     basegfx::B2DPolyPolygon(aPolygon),
@@ -103,23 +103,23 @@ namespace sw
             return aRetval;
         }
 
-        /*static*/ OverlayRanges* OverlayRanges::CreateOverlayRange(
-            SwView& rDocView,
+        /*static*/ std::unique_ptr<OverlayRanges> OverlayRanges::CreateOverlayRange(
+            SwView const & rDocView,
             const Color& rColor,
             const std::vector< basegfx::B2DRange >& rRanges,
             const bool bShowSolidBorder )
         {
-            OverlayRanges* pOverlayRanges = nullptr;
+            std::unique_ptr<OverlayRanges> pOverlayRanges;
 
             SdrView* pView = rDocView.GetDrawView();
             if ( pView != nullptr )
             {
                 SdrPaintWindow* pCandidate = pView->GetPaintWindow(0);
-                rtl::Reference<sdr::overlay::OverlayManager> xTargetOverlay = pCandidate->GetOverlayManager();
+                const rtl::Reference<sdr::overlay::OverlayManager>& xTargetOverlay = pCandidate->GetOverlayManager();
 
                 if ( xTargetOverlay.is() )
                 {
-                    pOverlayRanges = new sw::overlay::OverlayRanges( rColor, rRanges, bShowSolidBorder );
+                    pOverlayRanges.reset(new sw::overlay::OverlayRanges( rColor, rRanges, bShowSolidBorder ));
                     xTargetOverlay->add( *pOverlayRanges );
                 }
             }

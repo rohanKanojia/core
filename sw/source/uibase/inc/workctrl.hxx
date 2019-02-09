@@ -21,7 +21,6 @@
 
 #include <sfx2/tbxctrl.hxx>
 #include <vcl/toolbox.hxx>
-#include <svtools/stdctrl.hxx>
 #include <vcl/button.hxx>
 
 class PopupMenu;
@@ -54,21 +53,18 @@ class SwView;
 
 class SwTbxAutoTextCtrl : public SfxToolBoxControl
 {
-    PopupMenu*              pPopup;
-
-    void                    DelPopup();
 public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SwTbxAutoTextCtrl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SwTbxAutoTextCtrl();
+    virtual ~SwTbxAutoTextCtrl() override;
 
     virtual VclPtr<SfxPopupWindow> CreatePopupWindow() override;
     virtual void                StateChanged( sal_uInt16 nSID,
                                               SfxItemState eState,
                                               const SfxPoolItem* pState ) override;
 
-    DECL_STATIC_LINK_TYPED(SwTbxAutoTextCtrl, PopupHdl, Menu*, bool);
+    DECL_STATIC_LINK(SwTbxAutoTextCtrl, PopupHdl, Menu*, bool);
 };
 
 class SwScrollNaviPopup;
@@ -86,7 +82,7 @@ public:
         , m_pNaviPopup(pNaviPopup)
     {
     }
-    virtual ~SwScrollNaviToolBox();
+    virtual ~SwScrollNaviToolBox() override;
     virtual void dispose() override;
 };
 
@@ -94,39 +90,22 @@ class SwScrollNaviPopup : public SfxPopupWindow
 {
     VclPtr<SwScrollNaviToolBox> m_pToolBox;
     VclPtr<FixedText>           m_pInfoField;
-    ImageList       aIList;
 
     OUString        sQuickHelp[2 * NID_COUNT];
 
-    void            ApplyImageList();
-
-    using Window::GetQuickHelpText;
-
 protected:
-        DECL_LINK_TYPED(SelectHdl, ToolBox*, void);
-        virtual void        DataChanged( const DataChangedEvent& rDCEvt ) override;
+    DECL_LINK(SelectHdl, ToolBox*, void);
 
 public:
     SwScrollNaviPopup( sal_uInt16 nId, const css::uno::Reference< css::frame::XFrame >& rFrame, vcl::Window *pParent );
-    virtual ~SwScrollNaviPopup();
+    virtual ~SwScrollNaviPopup() override;
     virtual void dispose() override;
 
-    static OUString         GetQuickHelpText(bool bNext);
+    static OUString     GetToolTip(bool bNext);
 
     void                GrabFocus() { m_pToolBox->GrabFocus(); }
-};
 
-//  ImageButtons have to set the HelpText themselves if needed
-
-class SwHlpImageButton : public ImageButton
-{
-    bool        bUp;
-    public:
-        SwHlpImageButton(vcl::Window* pParent, const ResId& rResId, bool bUpBtn) :
-            ImageButton(pParent, rResId), bUp(bUpBtn){}
-
-    virtual void    RequestHelp( const HelpEvent& rHEvt ) override;
-
+    virtual void statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 };
 
 class SwPreviewZoomControl : public SfxToolBoxControl
@@ -135,7 +114,7 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SwPreviewZoomControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SwPreviewZoomControl();
+    virtual ~SwPreviewZoomControl() override;
 
     virtual void            StateChanged( sal_uInt16 nSID,
                                               SfxItemState eState,
@@ -150,9 +129,9 @@ public:
     SFX_DECL_TOOLBOX_CONTROL();
 
     SwJumpToSpecificPageControl( sal_uInt16 nSlotId, sal_uInt16 nId, ToolBox& rTbx );
-    virtual ~SwJumpToSpecificPageControl();
+    virtual ~SwJumpToSpecificPageControl() override;
 
-    virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window *pParent ) SAL_OVERRIDE;
+    virtual VclPtr<vcl::Window> CreateItemWindow( vcl::Window *pParent ) override;
 };
 #endif
 

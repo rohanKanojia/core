@@ -20,6 +20,7 @@
 #include <tools/stream.hxx>
 
 #include <basic/sbx.hxx>
+#include <basic/sberrors.hxx>
 #include "sbxres.hxx"
 
 
@@ -30,8 +31,8 @@ static OUString pRemove;
 static sal_uInt16 nCountHash = 0, nAddHash, nItemHash, nRemoveHash;
 
 
-SbxCollection::SbxCollection( const OUString& rClass )
-             : SbxObject( rClass )
+SbxCollection::SbxCollection()
+             : SbxObject( "" )
 {
     if( !nCountHash )
     {
@@ -46,7 +47,7 @@ SbxCollection::SbxCollection( const OUString& rClass )
     }
     Initialize();
     // For Access on itself
-    StartListening( GetBroadcaster(), true );
+    StartListening(GetBroadcaster(), DuplicateHandling::Prevent);
 }
 
 SbxCollection::SbxCollection( const SbxCollection& rColl )
@@ -75,28 +76,15 @@ void SbxCollection::Initialize()
     SetFlag( SbxFlagBits::Fixed );
     ResetFlag( SbxFlagBits::Write );
     SbxVariable* p;
-    p = Make( pCount , SbxCLASS_PROPERTY, SbxINTEGER );
+    p = Make( pCount , SbxClassType::Property, SbxINTEGER );
     p->ResetFlag( SbxFlagBits::Write );
     p->SetFlag( SbxFlagBits::DontStore );
-    p = Make( pAdd, SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( pAdd, SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
-    p = Make( pItem , SbxCLASS_METHOD, SbxOBJECT );
+    p = Make( pItem , SbxClassType::Method, SbxOBJECT );
     p->SetFlag( SbxFlagBits::DontStore );
-    p = Make( pRemove, SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( pRemove, SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
-}
-
-SbxVariable* SbxCollection::FindUserData( sal_uInt32 nData )
-{
-    if( GetParameters() )
-    {
-        SbxObject* pObj = static_cast<SbxObject*>(GetObject());
-        return pObj ? pObj->FindUserData( nData ) : nullptr;
-    }
-    else
-    {
-        return SbxObject::FindUserData( nData );
-    }
 }
 
 SbxVariable* SbxCollection::Find( const OUString& rName, SbxClassType t )
@@ -117,9 +105,9 @@ void SbxCollection::Notify( SfxBroadcaster& rCst, const SfxHint& rHint )
     const SbxHint* p = dynamic_cast<const SbxHint*>(&rHint);
     if( p )
     {
-        const sal_uInt32 nId = p->GetId();
-        bool bRead  = ( nId == SBX_HINT_DATAWANTED );
-        bool bWrite = ( nId == SBX_HINT_DATACHANGED );
+        const SfxHintId nId = p->GetId();
+        bool bRead  = ( nId == SfxHintId::BasicDataWanted );
+        bool bWrite = ( nId == SfxHintId::BasicDataChanged );
         SbxVariable* pVar = p->GetVar();
         SbxArray* pArg = pVar->GetParameters();
         if( bRead || bWrite )
@@ -165,14 +153,14 @@ void SbxCollection::CollAdd( SbxArray* pPar_ )
 {
     if( pPar_->Count() != 2 )
     {
-        SetError( ERRCODE_SBX_WRONG_ARGS );
+        SetError( ERRCODE_BASIC_WRONG_ARGS );
     }
     else
     {
         SbxBase* pObj = pPar_->Get( 1 )->GetObject();
-        if( !pObj || !( nullptr != dynamic_cast<const SbxObject*>( pObj) ) )
+        if( !pObj || dynamic_cast<const SbxObject*>(pObj) == nullptr )
         {
-            SetError( ERRCODE_SBX_NOTIMP );
+            SetError( ERRCODE_BASIC_BAD_ARGUMENT );
         }
         else
         {
@@ -187,7 +175,7 @@ void SbxCollection::CollItem( SbxArray* pPar_ )
 {
     if( pPar_->Count() != 2 )
     {
-        SetError( ERRCODE_SBX_WRONG_ARGS );
+        SetError( ERRCODE_BASIC_WRONG_ARGS );
     }
     else
     {
@@ -195,19 +183,19 @@ void SbxCollection::CollItem( SbxArray* pPar_ )
         SbxVariable* p = pPar_->Get( 1 );
         if( p->GetType() == SbxSTRING )
         {
-            pRes = Find( p->GetOUString(), SbxCLASS_OBJECT );
+            pRes = Find( p->GetOUString(), SbxClassType::Object );
         }
         else
         {
             short n = p->GetInteger();
-            if( n >= 1 && n <= (short) pObjs->Count() )
+            if( n >= 1 && n <= static_cast<short>(pObjs->Count()) )
             {
-                pRes = pObjs->Get( (sal_uInt16) n - 1 );
+                pRes = pObjs->Get( static_cast<sal_uInt16>(n) - 1 );
             }
         }
         if( !pRes )
         {
-            SetError( ERRCODE_SBX_BAD_INDEX );
+            SetError( ERRCODE_BASIC_BAD_INDEX );
         }
         pPar_->Get( 0 )->PutObject( pRes );
     }
@@ -218,14 +206,14 @@ void SbxCollection::CollItem( SbxArray* pPar_ )
 void SbxCollection::CollRemove( SbxArray* pPar_ )
 {
     if( pPar_->Count() != 2 )
-        SetError( ERRCODE_SBX_WRONG_ARGS );
+        SetError( ERRCODE_BASIC_WRONG_ARGS );
     else
     {
         short n = pPar_->Get( 1 )->GetInteger();
-        if( n < 1 || n > (short) pObjs->Count() )
-            SetError( ERRCODE_SBX_BAD_INDEX );
+        if( n < 1 || n > static_cast<short>(pObjs->Count()) )
+            SetError( ERRCODE_BASIC_BAD_INDEX );
         else
-            Remove( pObjs->Get( (sal_uInt16) n - 1 ) );
+            Remove( pObjs->Get( static_cast<sal_uInt16>(n) - 1 ) );
     }
 }
 
@@ -237,10 +225,8 @@ bool SbxCollection::LoadData( SvStream& rStrm, sal_uInt16 nVer )
 }
 
 
-SbxStdCollection::SbxStdCollection
-                    ( const OUString& rClass, const OUString& rElem, bool b )
-                  : SbxCollection( rClass ), aElemClass( rElem ),
-                    bAddRemoveOk( b )
+SbxStdCollection::SbxStdCollection()
+                  : bAddRemoveOk( true )
 {}
 
 SbxStdCollection::SbxStdCollection( const SbxStdCollection& r )
@@ -254,7 +240,7 @@ SbxStdCollection& SbxStdCollection::operator=( const SbxStdCollection& r )
     {
         if( !r.aElemClass.equalsIgnoreAsciiCase( aElemClass ) )
         {
-            SetError( ERRCODE_SBX_CONVERSION );
+            SetError( ERRCODE_BASIC_CONVERSION );
         }
         else
         {
@@ -273,7 +259,7 @@ void SbxStdCollection::Insert( SbxVariable* p )
 {
     SbxObject* pObj = dynamic_cast<SbxObject*>( p );
     if( pObj && !pObj->IsClass( aElemClass ) )
-        SetError( ERRCODE_SBX_BAD_ACTION );
+        SetError( ERRCODE_BASIC_BAD_ACTION );
     else
         SbxCollection::Insert( p );
 }
@@ -281,7 +267,7 @@ void SbxStdCollection::Insert( SbxVariable* p )
 void SbxStdCollection::CollAdd( SbxArray* pPar_ )
 {
     if( !bAddRemoveOk )
-        SetError( ERRCODE_SBX_BAD_ACTION );
+        SetError( ERRCODE_BASIC_BAD_ACTION );
     else
         SbxCollection::CollAdd( pPar_ );
 }
@@ -289,7 +275,7 @@ void SbxStdCollection::CollAdd( SbxArray* pPar_ )
 void SbxStdCollection::CollRemove( SbxArray* pPar_ )
 {
     if( !bAddRemoveOk )
-        SetError( ERRCODE_SBX_BAD_ACTION );
+        SetError( ERRCODE_BASIC_BAD_ACTION );
     else
         SbxCollection::CollRemove( pPar_ );
 }

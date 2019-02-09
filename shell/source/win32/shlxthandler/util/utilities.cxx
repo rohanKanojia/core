@@ -17,25 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "config.hxx"
-#include "utilities.hxx"
+#include <sal/config.h>
 
-#ifdef _WIN32_WINNT_WINBLUE
-#include <VersionHelpers.h>
-#endif
+#include <memory>
+
+#include <config.hxx>
+#include <utilities.hxx>
 
 // constants
 
 
 const size_t MAX_RES_STRING = 1024;
-const wchar_t SPACE_CHAR = _T(' ');
+const wchar_t SPACE_CHAR = L' ';
 
 static std::wstring StringToWString(const std::string& String, int codepage)
 {
     int len = MultiByteToWideChar(
-        codepage, 0, String.c_str(), -1, 0, 0);
+        codepage, 0, String.c_str(), -1, nullptr, 0);
 
-    wchar_t* buff = reinterpret_cast<wchar_t*>(
+    wchar_t* buff = static_cast<wchar_t*>(
         _alloca(len * sizeof(wchar_t)));
 
     MultiByteToWideChar(
@@ -47,78 +47,46 @@ static std::wstring StringToWString(const std::string& String, int codepage)
 static std::string WStringToString(const std::wstring& String, int codepage)
 {
     int len = WideCharToMultiByte(
-        codepage, 0, String.c_str(), -1, 0, 0, 0, 0);
+        codepage, 0, String.c_str(), -1, nullptr, 0, nullptr, nullptr);
 
-    char* buff = reinterpret_cast<char*>(
+    char* buff = static_cast<char*>(
         _alloca(len * sizeof(char)));
 
     WideCharToMultiByte(
-        codepage, 0, String.c_str(), -1, buff, len, 0, 0);
+        codepage, 0, String.c_str(), -1, buff, len, nullptr, nullptr);
 
     return std::string(buff);
 }
 
 
-/**
-*/
 std::wstring StringToWString(const std::string& String)
 {
     return StringToWString(String, CP_ACP);
 }
 
 
-/**
-*/
 std::string WStringToString(const std::wstring& String)
 {
     return WStringToString(String, CP_ACP);
 }
 
 
-/**
-*/
 std::wstring UTF8ToWString(const std::string& String)
 {
     return StringToWString(String, CP_UTF8);
 }
 
 
-/**
-*/
 std::wstring GetResString(int ResId)
 {
     wchar_t szResStr[MAX_RES_STRING];
 
     int rc = LoadStringW( GetModuleHandleW(MODULE_NAME), ResId, szResStr, sizeof(szResStr) );
 
-    OutputDebugStringFormat( "GetResString: read %d chars\n", rc );
+    OutputDebugStringFormatW( L"GetResString: read %d chars\n", rc );
     // OSL_ENSURE(rc, "String resource not found");
 
     return std::wstring(szResStr);
-}
-
-
-/**
-*/
-bool is_windows_xp_or_above()
-{
-// the Win32 SDK 8.1 deprecates GetVersionEx()
-#ifdef _WIN32_WINNT_WINBLUE
-    return IsWindowsXPOrGreater() ? true : false;
-#else
-    OSVERSIONINFO osvi;
-    ZeroMemory(&osvi, sizeof(osvi));
-    osvi.dwOSVersionInfoSize = sizeof(osvi);
-    GetVersionEx(&osvi);
-
-    // LLA: check for windows xp or above (Vista)
-    if (osvi.dwMajorVersion > 5 ||
-        (5 == osvi.dwMajorVersion && osvi.dwMinorVersion >= 1))
-    {
-        return true;
-    }
-    return false;
-#endif
 }
 
 
@@ -147,21 +115,20 @@ bool HasOnlySpaces(const std::wstring& String)
 
 /** helper function to convert windows paths to short form.
     @returns
-        shortend path.
+        shortened path.
 */
 
 std::wstring getShortPathName( const std::wstring& aLongName )
 {
     std::wstring shortName = aLongName;
-    long         length    = GetShortPathName( aLongName.c_str(), NULL, 0 );
+    long         length    = GetShortPathNameW( aLongName.c_str(), nullptr, 0 );
 
     if ( length != 0 )
     {
-        TCHAR* buffer = new TCHAR[ length+1 ];
-        length = GetShortPathName( aLongName.c_str(), buffer, length );
+        auto buffer = std::unique_ptr<WCHAR[]>(new WCHAR[ length+1 ]);
+        length = GetShortPathNameW( aLongName.c_str(), buffer.get(), length );
         if ( length != 0 )
-            shortName = std::wstring( buffer );
-        delete [] buffer;
+            shortName = std::wstring( buffer.get() );
     }
     return shortName;
 }

@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <o3tl/make_unique.hxx>
 #include <sdr/properties/circleproperties.hxx>
 #include <svl/itemset.hxx>
 #include <svl/style.hxx>
@@ -32,23 +35,18 @@ namespace sdr
     namespace properties
     {
         // create a new itemset
-        SfxItemSet* CircleProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
+        std::unique_ptr<SfxItemSet> CircleProperties::CreateObjectSpecificItemSet(SfxItemPool& rPool)
         {
-            return new SfxItemSet(rPool,
-
-                // range from SdrAttrObj
-                SDRATTR_START, SDRATTR_SHADOW_LAST,
-                SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-
-                // range from SdrCircObj
-                SDRATTR_CIRC_FIRST, SDRATTR_CIRC_LAST,
-
-                // range from SdrTextObj
-                EE_ITEMS_START, EE_ITEMS_END,
-
-                // end
-                0, 0);
+            return o3tl::make_unique<SfxItemSet>(
+                rPool,
+                svl::Items<
+                    // Ranges from SdrAttrObj, SdrCircObj
+                    SDRATTR_START, SDRATTR_SHADOW_LAST,
+                    SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
+                    SDRATTR_CIRC_FIRST, SDRATTR_CIRC_LAST,
+                    SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
+                    // Range from SdrTextObj:
+                    EE_ITEMS_START, EE_ITEMS_END>{});
         }
 
         CircleProperties::CircleProperties(SdrObject& rObj)
@@ -65,9 +63,9 @@ namespace sdr
         {
         }
 
-        BaseProperties& CircleProperties::Clone(SdrObject& rObj) const
+        std::unique_ptr<BaseProperties> CircleProperties::Clone(SdrObject& rObj) const
         {
-            return *(new CircleProperties(*this, rObj));
+            return std::unique_ptr<BaseProperties>(new CircleProperties(*this, rObj));
         }
 
         void CircleProperties::ItemSetChanged(const SfxItemSet& rSet)
@@ -83,13 +81,12 @@ namespace sdr
 
         void CircleProperties::SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr)
         {
-            SdrCircObj& rObj = static_cast<SdrCircObj&>(GetSdrObject());
+            // call parent (always first thing to do, may create the SfxItemSet)
+            RectangleProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
 
             // local changes
+            SdrCircObj& rObj = static_cast<SdrCircObj&>(GetSdrObject());
             rObj.SetXPolyDirty();
-
-            // call parent
-            RectangleProperties::SetStyleSheet(pNewStyleSheet, bDontRemoveHardAttr);
 
             // local changes
             rObj.ImpSetAttrToCircInfo();

@@ -22,8 +22,8 @@
 #include <tools/color.hxx>
 #include <svl/poolitem.hxx>
 #include "swdllapi.h"
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 
 class IntlWrapper;
 
@@ -48,20 +48,23 @@ private:
 
 public:
     SwTextGridItem();
-    virtual ~SwTextGridItem();
+    virtual ~SwTextGridItem() override;
+
+    SwTextGridItem(SwTextGridItem const &) = default;
+    SwTextGridItem(SwTextGridItem &&) = default;
+    SwTextGridItem & operator =(SwTextGridItem const &) = delete; // due to SfxPoolItem
+    SwTextGridItem & operator =(SwTextGridItem &&) = delete; // due to SfxPoolItem
 
     // "pure virtual methods" of SfxPoolItem
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
     virtual bool             QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
-
-    SwTextGridItem&  operator=( const SwTextGridItem& );
 
     const Color& GetColor() const { return m_aColor; }
     void SetColor( const Color& rCol )  { m_aColor = rCol; }
@@ -107,7 +110,7 @@ public:
 };
 
 inline const SwTextGridItem &SwFormat::GetTextGrid(bool bInP) const
-    {   return static_cast<const SwTextGridItem&>(m_aSet.Get( RES_TEXTGRID, bInP )); }
+    {   return m_aSet.Get( RES_TEXTGRID, bInP ); }
 
 #endif
 

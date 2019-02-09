@@ -18,8 +18,7 @@
  */
 
 #include "VAxisOrGridBase.hxx"
-#include "ShapeFactory.hxx"
-#include "CommonConverters.hxx"
+#include <CommonConverters.hxx>
 #include "Tickmarks.hxx"
 
 namespace chart
@@ -43,7 +42,6 @@ VAxisOrGridBase::~VAxisOrGridBase()
 void VAxisOrGridBase::setExplicitScaleAndIncrement(
               const ExplicitScaleData& rScale
             , const ExplicitIncrementData& rIncrement )
-            throw (uno::RuntimeException)
 {
     m_aScale = rScale;
     m_aIncrement = rIncrement;

@@ -40,6 +40,8 @@
   <token tokenid="ooxml:object"/>
   <token tokenid="ooxml:tblStart"/>
   <token tokenid="ooxml:tblEnd"/>
+  <token tokenid="ooxml:tcStart"/>
+  <token tokenid="ooxml:tcEnd"/>
 
   <!-- These are not directly generated from OOXML XML elements / attributes, need to clean them up in the future. -->
   <token tokenid="ooxml:tblDepth"/>
@@ -3873,7 +3875,7 @@
       </define>
       <define name="CT_NonVisualDrawingProps">
         <element name="a:hlinkClick">
-          <ref name="BUILT_IN_ANY_TYPE"/>
+          <ref name="CT_Hyperlink_URL"/>
         </element>
         <element name="hlinkHover">
           <ref name="CT_Hyperlink"/>
@@ -3894,6 +3896,11 @@
           <data type="boolean"/>
         </attribute>
         <attribute name="title">
+          <data type="string"/>
+        </attribute>
+      </define>
+      <define name="CT_Hyperlink_URL">
+        <attribute name="r:id">
           <data type="string"/>
         </attribute>
       </define>
@@ -3950,6 +3957,10 @@
         </element>
       </define>
     </grammar>
+    <resource name="CT_Hyperlink_URL" resource="Properties">
+      <attribute name="r:id" tokenid="ooxml:CT_Hyperlink_URL"/>
+      <action name="start" action="handleHyperlinkURL"/>
+    </resource>
     <resource name="CT_GraphicalObjectFrameLocking" resource="Properties">
       <element name="extLst" tokenid="ooxml:CT_GraphicalObjectFrameLocking_extLst"/>
       <attribute name="noGrp" tokenid="ooxml:CT_GraphicalObjectFrameLocking_noGrp"/>
@@ -5630,16 +5641,16 @@
           <element name="artisticWatercolorSponge">
             <ref name="CT_PictureEffectWatercolorSponge"/>
           </element>
-          <element name="artisticBrightnessContrast">
+          <element name="brightnessContrast">
             <ref name="CT_PictureEffectBrightnessContrast"/>
           </element>
-          <element name="artisticColorTemperature">
+          <element name="colorTemperature">
             <ref name="CT_PictureEffectColorTemperature"/>
           </element>
-          <element name="artisticSaturation">
+          <element name="saturation">
             <ref name="CT_PictureEffectSaturation"/>
           </element>
-          <element name="artisticSharpenSoften">
+          <element name="sharpenSoften">
             <ref name="CT_PictureEffectSharpenSoften"/>
           </element>
         </choice>
@@ -8225,7 +8236,7 @@
     <resource name="CT_OMathJc" resource="Value">
       <attribute name="val" tokenid="ooxml:CT_OMathJc_val" action="setValue"/>
     </resource>
-    <resource name="ST_TwipsMeasure" resource="UniversalMeasure"/>
+    <resource name="ST_TwipsMeasure" resource="TwipsMeasure_asSigned"/>
     <resource name="CT_TwipsMeasure" resource="Value">
       <attribute name="val" tokenid="ooxml:CT_TwipsMeasure_val" action="setValue"/>
       <action name="start" action="setDefaultIntegerValue"/>
@@ -10672,7 +10683,23 @@
       <define name="ST_UnsignedDecimalNumber">
         <data type="unsignedLong"/>
       </define>
+<!-- MS documentation states that TwipsMeasure is a positive value
+     but it doesn't indicate how to handle an invalid negative
+     value. So, ST_TwipsMeasure matches the documented type,
+     and the extension (_asSigned, _asZero, or perhaps _asAbsolute)
+     indicates how MS handles it in practice.
+
+     Historically, LO has treated TwipsMeasure as signed,
+     i.e. that negative numbers are allowed and treated as negative,
+     so that is the default handling.
+-->
       <define name="ST_TwipsMeasure">
+        <data type="unsignedLong"/>
+      </define>
+      <define name="ST_TwipsMeasure_asSigned">
+        <data type="unsignedLong"/>
+      </define>
+      <define name="ST_TwipsMeasure_asZero">
         <data type="unsignedLong"/>
       </define>
       <define name="CT_TwipsMeasure">
@@ -11757,7 +11784,7 @@
           <ref name="ST_DecimalNumber"/>
         </attribute>
         <attribute name="hanging">
-          <ref name="ST_TwipsMeasure"/>
+          <ref name="ST_TwipsMeasure_asSigned"/>
         </attribute>
         <attribute name="hangingChars">
           <ref name="ST_DecimalNumber"/>
@@ -12115,6 +12142,9 @@
         </attribute>
         <ref name="CT_MarkupRange"/>
       </define>
+      <define name="CT_MarkupRangePerm">
+        <ref name="CT_MarkupRange"/>
+      </define>
       <define name="CT_MarkupRangeCommentStart">
         <ref name="CT_Markup"/>
       </define>
@@ -12154,6 +12184,24 @@
         <attribute name="initials">
           <ref name="ST_String"/>
         </attribute>
+      </define>
+      <define name="CT_PermStart">
+        <ref name="CT_MarkupRangePerm"/>
+        <attribute name="ed">
+          <data type="string"/>
+        </attribute>
+        <attribute name="edGrp">
+          <data type="string"/>
+        </attribute>
+        <attribute name="colFirst">
+          <data type="ST_DecimalNumber"/>
+        </attribute>
+        <attribute name="colLast">
+          <data type="ST_DecimalNumber"/>
+        </attribute>
+      </define>
+      <define name="CT_PermEnd">
+        <ref name="CT_MarkupRangePerm"/>
       </define>
       <define name="CT_TrackChangeNumbering">
         <ref name="CT_TrackChange"/>
@@ -12242,6 +12290,12 @@
           </element>
           <element name="bookmarkEnd">
             <ref name="CT_MarkupRangeBookmark"/>
+          </element>
+          <element name="permStart">
+            <ref name="CT_PermStart"/>
+          </element>
+          <element name="permEnd">
+            <ref name="CT_PermEnd"/>
           </element>
           <element name="moveFromRangeStart">
             <ref name="CT_MoveBookmark"/>
@@ -12444,17 +12498,6 @@
           <ref name="CT_PPrChange"/>
         </element>
       </define>
-      <define name="CT_Control">
-        <attribute name="name">
-          <data type="string"/>
-        </attribute>
-        <attribute name="shapeid">
-          <data type="string"/>
-        </attribute>
-        <attribute name="r:id">
-          <ref name="ST_String"/>
-        </attribute>
-      </define>
       <define name="CT_Background">
         <ref name="CT_PictureBase"/>
         <attribute name="color">
@@ -12485,9 +12528,6 @@
       </define>
       <define name="CT_Object">
         <ref name="CT_PictureBase"/>
-        <element name="control">
-          <ref name="CT_Control"/>
-        </element>
         <attribute name="dxaOrig">
           <data type="string"/>
         </attribute>
@@ -12499,9 +12539,6 @@
         <ref name="CT_PictureBase"/>
         <element name="movie">
           <ref name="CT_Rel"/>
-        </element>
-        <element name="control">
-          <ref name="CT_Control"/>
         </element>
       </define>
       <define name="CT_Drawing">
@@ -12992,10 +13029,10 @@
       </define>
       <define name="CT_Column">
         <attribute name="w">
-          <ref name="ST_TwipsMeasure"/>
+          <ref name="ST_TwipsMeasure_asZero"/>
         </attribute>
         <attribute name="space">
-          <ref name="ST_TwipsMeasure"/>
+          <ref name="ST_TwipsMeasure_asZero"/>
         </attribute>
       </define>
       <define name="CT_Columns">
@@ -13183,6 +13220,14 @@
         </element>
         <ref name="AG_SectPrAttributes"/>
       </define>
+      <define name="CT_finalSectPr">
+        <ref name="EG_HdrFtrReferences"/>
+        <ref name="EG_SectPrContents"/>
+        <element name="sectPrChange">
+          <ref name="CT_SectPrChange"/>
+        </element>
+        <ref name="AG_SectPrAttributes"/>
+      </define>
       <define name="ST_BrType">
         <choice>
           <!-- Page Break -->
@@ -13206,6 +13251,14 @@
         </choice>
       </define>
       <define name="CT_Br">
+        <attribute name="type">
+          <ref name="ST_BrType"/>
+        </attribute>
+        <attribute name="clear">
+          <ref name="ST_BrClear"/>
+        </attribute>
+      </define>
+      <define name="CT_Br_OutOfOrder">
         <attribute name="type">
           <ref name="ST_BrType"/>
         </attribute>
@@ -13266,29 +13319,6 @@
       </define>
       <define name="CT_ProofErr">
         <attribute name="type">
-          <data type="string"/>
-        </attribute>
-      </define>
-      <define name="CT_Perm">
-        <attribute name="id">
-          <data type="string"/>
-        </attribute>
-        <attribute name="displacedByCustomXml">
-          <data type="string"/>
-        </attribute>
-      </define>
-      <define name="CT_PermStart">
-        <ref name="CT_Perm"/>
-        <attribute name="edGrp">
-          <data type="string"/>
-        </attribute>
-        <attribute name="ed">
-          <data type="string"/>
-        </attribute>
-        <attribute name="colFirst">
-          <data type="string"/>
-        </attribute>
-        <attribute name="colLast">
           <data type="string"/>
         </attribute>
       </define>
@@ -13929,10 +13959,25 @@
           <element name="sdt">
             <ref name="CT_SdtRun"/>
           </element>
+          <element name="dir">
+            <ref name="CT_DirContentRun"/>
+          </element>
           <element name="r">
             <ref name="CT_R"/>
           </element>
           <ref name="EG_RunLevelElts"/>
+        </choice>
+      </define>
+      <define name="CT_DirContentRun">
+        <ref name="EG_PContent"/>
+        <attribute name="val">
+          <ref name="ST_Direction"/>
+        </attribute>
+      </define>
+      <define name="ST_Direction">
+        <choice>
+          <value>ltr</value>
+          <value>rtl</value>
         </choice>
       </define>
       <define name="CT_SdtContentRun">
@@ -13952,6 +13997,11 @@
           <element name="tbl">
             <ref name="CT_Tbl"/>
           </element>
+          <!-- tdf#108714 : allow <w:br> at block level (despite this is illegal according to ECMA-376-1:2016) - bug-to-bug compatibility with Word -->
+          <element name="br">
+            <ref name="CT_Br_OutOfOrder"/>
+          </element>
+          <!-- end tdf#108714 -->
           <ref name="EG_RunLevelElts"/>
         </choice>
       </define>
@@ -14154,6 +14204,15 @@
         <attribute name="rsidRDefault">
           <data type="string"/>
         </attribute>
+        <!-- tdf#108714 : allow <w:br> at paragraph level (despite this is illegal according to ECMA-376-1:2016) - bug-to-bug compatibility with Word -->
+        <element name="br">
+          <ref name="CT_Br_OutOfOrder"/>
+        </element>
+        <!-- end tdf#108714 -->
+        <!-- tdf#111550 : allow <w:tbl> at paragraph level (despite this is illegal according to ECMA-376-1:2016) - bug-to-bug compatibility with Word -->
+        <element name="tbl">
+          <ref name="CT_P_Tbl"/>
+        </element>
       </define>
       <define name="ST_TblWidth">
         <choice>
@@ -14167,6 +14226,9 @@
           <value>auto</value>
         </choice>
       </define>
+      <define name="ST_MeasurementOrPercent">
+        <data type="string"/>
+      </define>
       <define name="CT_Height">
         <attribute name="val">
           <data type="string"/>
@@ -14177,7 +14239,7 @@
       </define>
       <define name="CT_TblWidth">
         <attribute name="w">
-          <ref name="ST_DecimalNumber"/>
+          <ref name="ST_MeasurementOrPercent"/>
         </attribute>
         <attribute name="type">
           <ref name="ST_TblWidth"/>
@@ -14382,7 +14444,7 @@
             <ref name="CT_TrPrBaseGridBefore"/>
           </element>
           <element name="gridAfter">
-            <ref name="CT_DecimalNumber"/>
+            <ref name="CT_TrPrBaseGridAfter"/>
           </element>
           <element name="wBefore">
             <ref name="CT_TblWidth"/>
@@ -14411,6 +14473,11 @@
         </choice>
       </define>
       <define name="CT_TrPrBaseGridBefore">
+        <attribute name="val">
+          <ref name="ST_DecimalNumber"/>
+        </attribute>
+      </define>
+      <define name="CT_TrPrBaseGridAfter">
         <attribute name="val">
           <ref name="ST_DecimalNumber"/>
         </attribute>
@@ -14653,6 +14720,17 @@
         </element>
       </define>
       <define name="CT_Tbl">
+        <ref name="EG_RangeMarkupElements"/>
+        <element name="tblPr">
+          <ref name="CT_TblPr"/>
+        </element>
+        <element name="tblGrid">
+          <ref name="CT_TblGrid"/>
+        </element>
+        <ref name="EG_ContentRowContent"/>
+      </define>
+      <!-- tdf#111550 : Special element - copy of usual CT_Tbl, but only used as direct child of CT_P -->
+      <define name="CT_P_Tbl">
         <ref name="EG_RangeMarkupElements"/>
         <element name="tblPr">
           <ref name="CT_TblPr"/>
@@ -16248,12 +16326,6 @@
           <element name="proofErr">
             <ref name="CT_ProofErr"/>
           </element>
-          <element name="permStart">
-            <ref name="CT_PermStart"/>
-          </element>
-          <element name="permEnd">
-            <ref name="CT_Perm"/>
-          </element>
           <ref name="EG_RangeMarkupElements"/>
           <element name="ins">
             <ref name="CT_RunTrackChange"/>
@@ -16273,7 +16345,7 @@
       <define name="CT_Body">
         <ref name="EG_BlockLevelElts"/>
         <element name="sectPr">
-          <ref name="CT_SectPr"/>
+          <ref name="CT_finalSectPr"/>
         </element>
       </define>
       <define name="CT_ShapeDefaults">
@@ -16600,12 +16672,19 @@
       <action name="start" action="setDefaultIntegerValue"/>
     </resource>
     <resource name="ST_UnsignedDecimalNumber" resource="Integer"/>
-    <resource name="ST_TwipsMeasure" resource="UniversalMeasure"/>
+<!--
+     Historically, LO has treated TwipsMeasure as signed,
+     i.e. that negative numbers are allowed and treated as negative,
+     so that is the default handling.
+-->
+    <resource name="ST_TwipsMeasure" resource="TwipsMeasure_asSigned"/>
+    <resource name="ST_TwipsMeasure_asSigned" resource="TwipsMeasure_asSigned"/>
+    <resource name="ST_TwipsMeasure_asZero" resource="TwipsMeasure_asZero"/>
     <resource name="CT_TwipsMeasure" resource="Value">
       <attribute name="val" tokenid="ooxml:CT_TwipsMeasure_val" action="setValue"/>
       <action name="start" action="setDefaultIntegerValue"/>
     </resource>
-    <resource name="ST_SignedTwipsMeasure" resource="UniversalMeasure"/>
+    <resource name="ST_SignedTwipsMeasure" resource="TwipsMeasure_asSigned"/>
     <resource name="CT_SignedTwipsMeasure" resource="Value">
       <attribute name="val" tokenid="ooxml:CT_SignedTwipsMeasure_val" action="setValue"/>
       <action name="start" action="setDefaultIntegerValue"/>
@@ -16615,7 +16694,7 @@
       <attribute name="val" tokenid="ooxml:CT_PixelsMeasure_val" action="setValue"/>
       <action name="start" action="setDefaultIntegerValue"/>
     </resource>
-    <resource name="ST_HpsMeasure" resource="Integer"/>
+    <resource name="ST_HpsMeasure" resource="HpsMeasure"/>
     <resource name="CT_HpsMeasure" resource="Value">
       <attribute name="val" tokenid="ooxml:CT_HpsMeasure_val" action="setValue"/>
       <action name="start" action="setDefaultIntegerValue"/>
@@ -16625,6 +16704,7 @@
       <attribute name="val" tokenid="ooxml:CT_SignedHpsMeasure_val" action="setValue"/>
       <action name="start" action="setDefaultIntegerValue"/>
     </resource>
+    <resource name="ST_MeasurementOrPercent" resource="MeasurementOrPercent"/>
     <resource name="ST_DateTime" resource="String"/>
     <resource name="CT_MacroName" resource="Value">
       <attribute name="val" tokenid="ooxml:CT_MacroName_val" action="setValue"/>
@@ -16668,7 +16748,7 @@
       <value tokenid="ooxml:Value_ST_HexColorAuto_auto">auto</value>
     </resource>
     <resource name="ST_HexColorRGB" resource="Hex"/>
-    <resource name="ST_HexColor" resource="Hex"/>
+    <resource name="ST_HexColor" resource="HexColor"/>
     <resource name="CT_Color" resource="Properties">
       <attribute name="val" tokenid="ooxml:CT_Color_val"/>
       <attribute name="themeColor" tokenid="ooxml:CT_Color_themeColor"/>
@@ -17319,6 +17399,18 @@
     <resource name="CT_MarkupRangeBookmark" resource="Properties">
       <attribute name="id" tokenid="ooxml:CT_MarkupRangeBookmark_id"/>
     </resource>
+    <resource name="CT_PermStart" resource="Properties">
+      <attribute name="id" tokenid="ooxml:CT_PermStart_id"/>
+      <attribute name="colFirst" tokenid="ooxml:CT_PermStart_colFirst"/>
+      <attribute name="colLast" tokenid="ooxml:CT_PermStart_colLast"/>
+      <attribute name="ed" tokenid="ooxml:CT_PermStart_ed"/>
+      <attribute name="edGrp" tokenid="ooxml:CT_PermStart_edGrp"/>
+      <attribute name="displacedByCustomXml" tokenid="ooxml:CT_PermStart_displacedByCustomXml"/>
+    </resource>
+    <resource name="CT_PermEnd" resource="Properties">
+      <attribute name="id" tokenid="ooxml:CT_PermEnd_id"/>
+      <attribute name="displacedByCustomXml" tokenid="ooxml:CT_PermEnd_displacedByCustomXml"/>
+    </resource>
     <resource name="CT_MarkupRangeCommentStart" resource="Properties">
       <attribute name="id" tokenid="ooxml:EG_RangeMarkupElements_commentRangeStart"/>
     </resource>
@@ -17381,6 +17473,8 @@
     <resource name="EG_RangeMarkupElements" resource="Properties">
       <element name="bookmarkStart" tokenid="ooxml:EG_RangeMarkupElements_bookmarkStart"/>
       <element name="bookmarkEnd" tokenid="ooxml:EG_RangeMarkupElements_bookmarkEnd"/>
+      <element name="permStart" tokenid="ooxml:EG_RangeMarkupElements_PermStart"/>
+      <element name="permEnd" tokenid="ooxml:EG_RangeMarkupElements_PermEnd"/>
       <element name="moveFromRangeStart" tokenid="ooxml:EG_RangeMarkupElements_moveFromRangeStart"/>
       <element name="moveFromRangeEnd" tokenid="ooxml:EG_RangeMarkupElements_moveFromRangeEnd"/>
       <element name="moveToRangeStart" tokenid="ooxml:EG_RangeMarkupElements_moveToRangeStart"/>
@@ -17457,11 +17551,6 @@
       <element name="sectPr" tokenid="ooxml:CT_PPr_sectPr"/>
       <element name="pPrChange" tokenid="ooxml:CT_PPr_pPrChange"/>
     </resource>
-    <resource name="CT_Control" resource="Properties">
-      <attribute name="name" tokenid="ooxml:CT_Control_name"/>
-      <attribute name="shapeid" tokenid="ooxml:CT_Control_shapeid"/>
-      <attribute name="r:id" tokenid="ooxml:CT_Control_r_id"/>
-    </resource>
     <resource name="CT_Background" resource="Properties">
       <attribute name="color" tokenid="ooxml:CT_Background_color"/>
       <attribute name="themeColor" tokenid="ooxml:CT_Background_themeColor"/>
@@ -17474,7 +17563,6 @@
     </resource>
     <resource name="CT_PictureBase" resource="Properties"/>
     <resource name="CT_Object" resource="Shape">
-      <element name="control" tokenid="ooxml:CT_Object_control"/>
       <attribute name="dxaOrig" tokenid="ooxml:CT_Object_dxaOrig"/>
       <attribute name="dyaOrig" tokenid="ooxml:CT_Object_dyaOrig"/>
       <action name="end" action="sendPropertiesWithId" sendtokenid="ooxml:object"/>
@@ -17482,7 +17570,6 @@
     </resource>
     <resource name="CT_Picture" resource="Shape">
       <element name="movie" tokenid="ooxml:CT_Picture_movie"/>
-      <element name="control" tokenid="ooxml:CT_Picture_control"/>
       <action name="end" action="sendPropertiesWithId" sendtokenid="ooxml:object"/>
       <action name="end" action="clearProps"/>
     </resource>
@@ -17806,8 +17893,13 @@
     </resource>
     <resource name="CT_SectPrBase" resource="Properties"/>
     <resource name="CT_SectPr" resource="Properties">
+      <action name="start" action="handleLastParagraphInSection"/>
       <element name="sectPrChange" tokenid="ooxml:CT_SectPr_sectPrChange"/>
       <action name="start" action="setLastParagraphInSection"/>
+    </resource>
+    <resource name="CT_finalSectPr" resource="Properties">
+      <action name="start" action="handleLastParagraphInSection"/>
+      <element name="sectPrChange" tokenid="ooxml:CT_SectPr_sectPrChange"/>
     </resource>
     <resource name="ST_BrType" resource="List">
       <value tokenid="ooxml:Value_ST_BrType_column">column</value>
@@ -17824,6 +17916,11 @@
       <attribute name="type" tokenid="ooxml:CT_Br_type"/>
       <attribute name="clear" tokenid="ooxml:CT_Br_clear"/>
       <action name="end" action="handleBreak"/>
+    </resource>
+    <resource name="CT_Br_OutOfOrder" resource="Properties">
+      <attribute name="type" tokenid="ooxml:CT_Br_type"/>
+      <attribute name="clear" tokenid="ooxml:CT_Br_clear"/>
+      <action name="end" action="handleOutOfOrderBreak"/>
     </resource>
     <resource name="ST_PTabAlignment" resource="List">
       <value tokenid="ooxml:Value_ST_PTabAlignment_left">left</value>
@@ -17850,7 +17947,7 @@
     <resource name="CT_Sym" resource="Properties">
       <attribute name="font" tokenid="ooxml:CT_Sym_font"/>
       <attribute name="char" tokenid="ooxml:CT_Sym_char"/>
-      <action name="end" tokenid="ooxml:EG_RunInnerContent_sym" action="sendPropertiesWithId" sendtokenid="ooxml:EG_RunInnerContent_sym"/>
+      <action name="end" action="symbol"/>
     </resource>
     <resource name="CT_Text" resource="Stream">
       <attribute name="xml:space" tokenid="ooxml:CT_Text_space"/>
@@ -17868,8 +17965,8 @@
     <resource name="CT_PgNum" resource="Stream">
       <action name="end" action="pgNum"/>
     </resource>
-    <resource name="CT_Cr" resource="Stream">
-      <action name="end" action="endOfParagraph"/>
+    <resource name="CT_Cr" resource="Properties">
+      <action name="end" action="handleBreak"/>
     </resource>
     <resource name="CT_Tab" resource="Stream">
       <action name="end" action="tab"/>
@@ -18085,6 +18182,15 @@
     <resource name="CT_SdtEndPr" resource="Properties">
       <element name="rPr" tokenid="ooxml:CT_SdtEndPr_rPr"/>
     </resource>
+    <resource name="CT_DirContentRun" resource="Value">
+      <attribute name="val" tokenid="ooxml:CT_DirContentRun_val" action="setValue"/>
+      <action name="start" action="pushBiDiEmbedLevel"/>
+      <action name="end" action="popBiDiEmbedLevel"/>
+    </resource>
+    <resource name="ST_Direction" resource="List">
+      <value tokenid="ooxml:Value_ST_Direction_ltr">ltr</value>
+      <value tokenid="ooxml:Value_ST_Direction_rtl">rtl</value>
+    </resource>
     <resource name="CT_SdtContentRun" resource="Stream"/>
     <resource name="CT_SdtContentBlock" resource="Stream"/>
     <resource name="CT_SdtContentRow" resource="Stream"/>
@@ -18298,8 +18404,6 @@
     <resource name="CT_TrPrBase" resource="Properties">
       <element name="cnfStyle" tokenid="ooxml:CT_TrPrBase_cnfStyle"/>
       <element name="divId" tokenid="ooxml:CT_TrPrBase_divId"/>
-<!--      <element name="gridBefore" tokenid="ooxml:CT_TrPrBase_gridBefore"/> -->
-      <element name="gridAfter" tokenid="ooxml:CT_TrPrBase_gridAfter"/>
       <element name="wBefore" tokenid="ooxml:CT_TrPrBase_wBefore"/>
       <element name="wAfter" tokenid="ooxml:CT_TrPrBase_wAfter"/>
       <element name="cantSplit" tokenid="ooxml:CT_TrPrBase_cantSplit"/>
@@ -18311,6 +18415,9 @@
     </resource>
     <resource name="CT_TrPrBaseGridBefore" resource="TextTableRow">
       <attribute name="val" tokenid="ooxml:CT_TrPrBase_gridBefore" action="handleGridBefore"/>
+    </resource>
+    <resource name="CT_TrPrBaseGridAfter" resource="TextTableRow">
+      <attribute name="val" tokenid="ooxml:CT_TrPrBase_gridAfter" action="handleGridAfter"/>
     </resource>
     <resource name="CT_TrPr" resource="Properties">
       <element name="ins" tokenid="ooxml:CT_TrPr_ins"/>
@@ -18385,6 +18492,10 @@
         <element name="tblPrExChange" tokenid="ooxml:CT_TblPrEx_tblPrExChange"/>
     </resource>
     <resource name="CT_Tbl" resource="TextTable"/>
+    <!-- tdf#111550 : allow <w:tbl> at paragraph level (despite this is illegal according to ECMA-376-1:2016) - bug-to-bug compatibility with Word -->
+    <resource name="CT_P_Tbl" resource="TextTable">
+      <action name="start" action="start_P_Tbl"/>
+    </resource>
     <resource name="CT_TblLook" resource="Properties">
       <attribute name="firstRow" tokenid="ooxml:CT_TblLook_firstRow"/>
       <attribute name="lastRow" tokenid="ooxml:CT_TblLook_lastRow"/>
@@ -18988,9 +19099,8 @@
       <attribute name="val" tokenid="ooxml:CT_DocPartType_val" action="setValue"/>
       <action name="start" action="setDefaultStringValue"/>
     </resource>
-    <resource name="CT_DocPartGallery" resource="Value">
-      <attribute name="val" tokenid="ooxml:CT_DocPartGallery_val" action="setValue"/>
-      <action name="start" action="setDefaultStringValue"/>
+    <resource name="CT_DocPartGallery" resource="Properties">
+        <attribute name="val" tokenid="ooxml:CT_DocPartGallery_val"/>
     </resource>
     <resource name="CT_DocPartName" resource="Properties">
       <attribute name="val" tokenid="ooxml:CT_DocPartName_val"/>
@@ -19039,6 +19149,19 @@
     </resource>
     <resource name="CT_Document" resource="Stream"/>
     <resource name="CT_GlossaryDocument" resource="Stream"/>
+    <resource name="CT_DocParts" resource="Stream"/>
+    <resource name="CT_DocPart" resource="Stream">
+        <action name="start" action="startGlossaryEntry"/>
+        <action name="end" action="endGlossaryEntry"/>
+    </resource>
+    <resource name="CT_DocPartPr" resource="Properties">
+        <action name="start" action="startSectionGroup"/>
+        <element name="name" tokenid="ooxml:CT_DocPartPr_name"/>
+        <element name="category" tokenid="ooxml:CT_DocPartPr_category"/>
+    </resource>
+    <resource name="CT_DocPartCategory" resource="Properties">
+        <element name="gallery" tokenid="ooxml:CT_DocPartCategory_gallery"/>
+    </resource>
     <resource name="document" resource="Stream"/>
     <resource name="glossaryDocument" resource="Stream"/>
     <resource name="CT_TxbxContent" resource="Stream">

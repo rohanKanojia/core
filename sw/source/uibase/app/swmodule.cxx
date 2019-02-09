@@ -24,7 +24,13 @@
 #include <vcl/wrkwin.hxx>
 #include <vcl/graph.hxx>
 #include <svtools/ehdl.hxx>
+#include <unotools/resmgr.hxx>
+#include <unotools/useroptions.hxx>
+#include <svl/ctloptions.hxx>
 #include <svx/ParaLineSpacingPopup.hxx>
+#include <svx/TextCharacterSpacingPopup.hxx>
+#include <svx/TextUnderlinePopup.hxx>
+#include <svx/ParaSpacingControl.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/pszctrl.hxx>
 #include <svx/insctrl.hxx>
@@ -47,9 +53,11 @@
 #include <svx/srchdlg.hxx>
 #include <svx/hyperdlg.hxx>
 #include <svx/modctrl.hxx>
+#include <sfx2/emojipopup.hxx>
+#include <sfx2/charmappopup.hxx>
 #include <com/sun/star/scanner/ScannerManager.hpp>
-#include <com/sun/star/container/XSet.hpp>
 #include <com/sun/star/linguistic2/LanguageGuessing.hpp>
+#include <ooo/vba/XSinkCaller.hpp>
 #include <comphelper/processfactory.hxx>
 #include <docsh.hxx>
 #include <swmodule.hxx>
@@ -106,6 +114,10 @@
 #include <barcfg.hxx>
 #include <svx/rubydialog.hxx>
 #include <svtools/colorcfg.hxx>
+#include <PageSizePopup.hxx>
+#include <PageMarginPopup.hxx>
+#include <PageOrientationPopup.hxx>
+#include <PageColumnPopup.hxx>
 
 #include <unotools/configmgr.hxx>
 #include <unotools/moduleoptions.hxx>
@@ -117,8 +129,10 @@
 #include <navsh.hxx>
 
 #include <app.hrc>
+#include <error.hrc>
+#include <strings.hrc>
+#include <bitmaps.hlst>
 #include <svx/xmlsecctrl.hxx>
-ResMgr *pSwResMgr = nullptr;
 bool     g_bNoInterrupt     = false;
 
 #include <sfx2/app.hxx>
@@ -128,33 +142,16 @@ bool     g_bNoInterrupt     = false;
 #include <unomid.h>
 
 #include "swdllimpl.hxx"
+#include <dbconfig.hxx>
+#include <navicfg.hxx>
 
 using namespace com::sun::star;
-
-
-using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
 SwModule::SwModule( SfxObjectFactory* pWebFact,
                     SfxObjectFactory* pFact,
                     SfxObjectFactory* pGlobalFact )
-    : SfxModule( ResMgr::CreateResMgr( "sw" ), false, pWebFact,
-                     pFact, pGlobalFact, nullptr ),
-    m_pModuleConfig(nullptr),
-    m_pUsrPref(nullptr),
-    m_pWebUsrPref(nullptr),
-    m_pPrintOptions(nullptr),
-    m_pWebPrintOptions(nullptr),
-    m_pChapterNumRules(nullptr),
-    m_pStdFontConfig(nullptr),
-    m_pNavigationConfig(nullptr),
-    m_pToolbarConfig(nullptr),
-    m_pWebToolbarConfig(nullptr),
-    m_pDBConfig(nullptr),
-    m_pColorConfig(nullptr),
-    m_pAccessibilityOptions(nullptr),
-    m_pCTLOptions(nullptr),
-    m_pUserOptions(nullptr),
+    : SfxModule("sw", {pWebFact, pFact, pGlobalFact}),
     m_pAttrPool(nullptr),
     m_pView(nullptr),
     m_bAuthorInitialised(false),
@@ -163,34 +160,43 @@ SwModule::SwModule( SfxObjectFactory* pWebFact,
     m_pXSelection( nullptr )
 {
     SetName( "StarWriter" );
-    pSwResMgr = GetResMgr();
     SvxErrorHandler::ensure();
-    m_pErrorHandler = new SfxErrorHandler( RID_SW_ERRHDL,
-                                     ERRCODE_AREA_SW,
-                                     ERRCODE_AREA_SW_END,
-                                     pSwResMgr );
+    m_pErrorHandler.reset( new SfxErrorHandler( RID_SW_ERRHDL,
+                                     ErrCodeArea::Sw,
+                                     ErrCodeArea::Sw,
+                                     GetResLocale() ) );
 
-    m_pModuleConfig = new SwModuleOptions;
+    m_pModuleConfig.reset(new SwModuleOptions);
 
     // We need them anyways
-    m_pToolbarConfig = new SwToolbarConfigItem( false );
-    m_pWebToolbarConfig = new SwToolbarConfigItem( true );
+    m_pToolbarConfig.reset(new SwToolbarConfigItem( false ));
+    m_pWebToolbarConfig.reset(new SwToolbarConfigItem( true ));
 
-    m_pStdFontConfig = new SwStdFontConfig;
-
-    m_pAuthorNames = new std::vector<OUString>;  // All Redlining-Authors
+    m_pStdFontConfig.reset(new SwStdFontConfig);
 
     StartListening( *SfxGetpApp() );
 
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
     {
         // init color configuration
         // member <pColorConfig> is created and the color configuration is applied
         // at the view options.
         GetColorConfig();
+        m_xLinguServiceEventListener = new SwLinguServiceEventListener;
     }
 }
-uno::Reference< scanner::XScannerManager2 >
+
+OUString SwResId(const char* pId)
+{
+    return Translate::get(pId, SW_MOD()->GetResLocale());
+}
+
+OUString SwResId(const char* pId, int nCardinality)
+{
+    return Translate::nget(pId, nCardinality, SW_MOD()->GetResLocale());
+}
+
+uno::Reference< scanner::XScannerManager2 > const &
 SwModule::GetScannerManager()
 {
     if (!m_xScannerManager.is())
@@ -200,7 +206,7 @@ SwModule::GetScannerManager()
     return m_xScannerManager;
 }
 
-uno::Reference< linguistic2::XLanguageGuessing > SwModule::GetLanguageGuesser()
+uno::Reference< linguistic2::XLanguageGuessing > const & SwModule::GetLanguageGuesser()
 {
     if (!m_xLanguageGuesser.is())
     {
@@ -211,30 +217,26 @@ uno::Reference< linguistic2::XLanguageGuessing > SwModule::GetLanguageGuesser()
 
 SwModule::~SwModule()
 {
-    delete m_pErrorHandler;
+    css::uno::Sequence< css::uno::Any > aArgs;
+    CallAutomationApplicationEventSinks( "Quit", aArgs );
+    m_pErrorHandler.reset();
     EndListening( *SfxGetpApp() );
-}
-
-void SwModule::CreateLngSvcEvtListener()
-{
-    if (!m_xLinguServiceEventListener.is())
-        m_xLinguServiceEventListener = new SwLinguServiceEventListener;
 }
 
 void SwDLL::RegisterFactories()
 {
     // These Id's must not be changed. Through these Id's the View (resume Documentview)
     // is created by Sfx.
-    if (!utl::ConfigManager::IsAvoidConfig() && SvtModuleOptions().IsWriter())
-        SwView::RegisterFactory         ( 2 );
+    if (utl::ConfigManager::IsFuzzing() || SvtModuleOptions().IsWriter())
+        SwView::RegisterFactory         ( SFX_INTERFACE_SFXDOCSH );
 
 #if HAVE_FEATURE_DESKTOP
-    SwWebView::RegisterFactory        ( 5 );
+    SwWebView::RegisterFactory        ( SFX_INTERFACE_SFXMODULE );
 
-    if (!utl::ConfigManager::IsAvoidConfig() && SvtModuleOptions().IsWriter())
+    if (utl::ConfigManager::IsFuzzing() || SvtModuleOptions().IsWriter())
     {
-        SwSrcView::RegisterFactory      ( 6 );
-        SwPagePreview::RegisterFactory  ( 7 );
+        SwSrcView::RegisterFactory      ( SfxInterfaceId(6) );
+        SwPagePreview::RegisterFactory  ( SfxInterfaceId(7) );
     }
 #endif
 }
@@ -284,8 +286,17 @@ void SwDLL::RegisterControls()
     SvxTbxCtlDraw::RegisterControl(SID_TRACK_CHANGES_BAR, pMod );
     SwTbxAutoTextCtrl::RegisterControl(FN_GLOSSARY_DLG, pMod );
     svx::ParaLineSpacingPopup::RegisterControl(SID_ATTR_PARA_LINESPACE, pMod);
-
-    SvxColorToolBoxControl::RegisterControl( SID_EXTRUSION_3D_COLOR, pMod );
+    svx::TextCharacterSpacingPopup::RegisterControl(SID_ATTR_CHAR_KERNING, pMod);
+    svx::TextUnderlinePopup::RegisterControl(SID_ATTR_CHAR_UNDERLINE, pMod);
+    svx::ParaAboveSpacingControl::RegisterControl(SID_ATTR_PARA_ABOVESPACE, pMod);
+    svx::ParaBelowSpacingControl::RegisterControl(SID_ATTR_PARA_BELOWSPACE, pMod);
+    svx::ParaLeftSpacingControl::RegisterControl(SID_ATTR_PARA_LEFTSPACE, pMod);
+    svx::ParaRightSpacingControl::RegisterControl(SID_ATTR_PARA_RIGHTSPACE, pMod);
+    svx::ParaFirstLineSpacingControl::RegisterControl(SID_ATTR_PARA_FIRSTLINESPACE, pMod);
+    PageMarginPopup::RegisterControl(SID_ATTR_PAGE_MARGIN, pMod);
+    PageOrientationPopup::RegisterControl(SID_ATTR_PAGE_ORIENTATION, pMod);
+    PageColumnPopup::RegisterControl(SID_ATTR_PAGE_COLUMN, pMod);
+    PageSizePopup::RegisterControl(SID_ATTR_PAGE_SIZE, pMod);
 
     SvxClipBoardControl::RegisterControl(SID_PASTE, pMod );
     SvxUndoRedoControl::RegisterControl(SID_UNDO, pMod );
@@ -295,20 +306,8 @@ void SwDLL::RegisterControls()
     SvxFillToolBoxControl::RegisterControl(SID_ATTR_FILL_STYLE, pMod );
     SvxLineStyleToolBoxControl::RegisterControl(SID_ATTR_LINE_STYLE, pMod );
     SvxLineWidthToolBoxControl::RegisterControl(SID_ATTR_LINE_WIDTH, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_LINE_COLOR, pMod );
-    SvxLineEndToolBoxControl::RegisterControl(SID_ATTR_LINEEND_STYLE, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_FILL_COLOR, pMod);
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_CHAR_BACK_COLOR, pMod);
 
-    SvxFontNameToolBoxControl::RegisterControl(SID_ATTR_CHAR_FONT, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_CHAR_COLOR, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_CHAR_COLOR2, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_CHAR_COLOR_BACKGROUND, pMod );
     SvxStyleToolBoxControl::RegisterControl(SID_STYLE_APPLY, pMod );
-    SvxColorToolBoxControl::RegisterControl( SID_BACKGROUND_COLOR, pMod );
-    SvxFrameToolBoxControl::RegisterControl(SID_ATTR_BORDER, pMod );
-    SvxFrameLineStyleToolBoxControl::RegisterControl(SID_FRAME_LINESTYLE, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_FRAME_LINECOLOR, pMod );
 
     SvxColumnsToolBoxControl::RegisterControl(FN_INSERT_FRAME_INTERACT, pMod );
     SvxColumnsToolBoxControl::RegisterControl(FN_INSERT_FRAME, pMod );
@@ -330,6 +329,8 @@ void SwDLL::RegisterControls()
     SvxModifyControl::RegisterControl( SID_DOC_MODIFIED, pMod );
     SvxZoomSliderControl::RegisterControl( SID_ATTR_ZOOMSLIDER, pMod );
 
+    EmojiPopup::RegisterControl(SID_EMOJI_CONTROL, pMod );
+
     SvxIMapDlgChildWindow::RegisterChildWindow( false, pMod );
     SvxSearchDialogWrapper::RegisterChildWindow( false, pMod );
     SvxHlinkDlgWrapper::RegisterChildWindow( false, pMod );
@@ -347,6 +348,8 @@ void SwDLL::RegisterControls()
     SvxRubyChildWindow::RegisterChildWindow( false, pMod);
     SwSpellDialogChildWindow::RegisterChildWindow(false, pMod);
 
+    CharmapPopup::RegisterControl(SID_CHARMAP_CONTROL, pMod );
+
     SvxGrafRedToolBoxControl::RegisterControl( SID_ATTR_GRAF_RED, pMod );
     SvxGrafGreenToolBoxControl::RegisterControl( SID_ATTR_GRAF_GREEN, pMod );
     SvxGrafBlueToolBoxControl::RegisterControl( SID_ATTR_GRAF_BLUE, pMod );
@@ -363,8 +366,10 @@ void SwDLL::RegisterControls()
     SvxCTLTextTbxCtrl::RegisterControl(SID_ATTR_PARA_LEFT_TO_RIGHT, pMod);
     SvxCTLTextTbxCtrl::RegisterControl(SID_ATTR_PARA_RIGHT_TO_LEFT, pMod);
 
+#if HAVE_FEATURE_AVMEDIA
     ::avmedia::MediaToolBoxControl::RegisterControl(SID_AVMEDIA_TOOLBOX, pMod);
     ::avmedia::MediaPlayer::RegisterChildWindow(false, pMod);
+#endif
 
     ::sfx2::sidebar::SidebarChildWindow::RegisterChildWindow(false, pMod);
 
@@ -383,6 +388,54 @@ void    SwModule::RemoveAttrPool()
 {
     SetPool(nullptr);
     SfxItemPool::Free(m_pAttrPool);
+}
+
+std::unique_ptr<SfxStyleFamilies> SwModule::CreateStyleFamilies()
+{
+    std::unique_ptr<SfxStyleFamilies> pStyleFamilies(new SfxStyleFamilies);
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Para,
+                                                    SwResId(STR_PARAGRAPHSTYLEFAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_PARA),
+                                                    RID_PARAGRAPHSTYLEFAMILY, GetResLocale()));
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Char,
+                                                    SwResId(STR_CHARACTERSTYLEFAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_CHAR),
+                                                    RID_CHARACTERSTYLEFAMILY, GetResLocale()));
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Frame,
+                                                    SwResId(STR_FRAMESTYLEFAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_FRAME),
+                                                    RID_FRAMESTYLEFAMILY, GetResLocale()));
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Page,
+                                                    SwResId(STR_PAGESTYLEFAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_PAGE),
+                                                    RID_PAGESTYLEFAMILY, GetResLocale()));
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Pseudo,
+                                                    SwResId(STR_LISTSTYLEFAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_LIST),
+                                                    RID_LISTSTYLEFAMILY, GetResLocale()));
+
+    pStyleFamilies->emplace_back(SfxStyleFamilyItem(SfxStyleFamily::Table,
+                                                    SwResId(STR_TABLESTYLEFAMILY),
+                                                    Image(StockImage::Yes, BMP_STYLES_FAMILY_TABLE),
+                                                    RID_TABLESTYLEFAMILY, GetResLocale()));
+
+    return pStyleFamilies;
+}
+
+void SwModule::RegisterAutomationApplicationEventsCaller(css::uno::Reference< ooo::vba::XSinkCaller > const& xCaller)
+{
+    mxAutomationApplicationEventsCaller = xCaller;
+}
+
+void SwModule::CallAutomationApplicationEventSinks(const OUString& Method, css::uno::Sequence< css::uno::Any >& Arguments)
+{
+    if (mxAutomationApplicationEventsCaller.is())
+        mxAutomationApplicationEventsCaller->CallSinks(Method, Arguments);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

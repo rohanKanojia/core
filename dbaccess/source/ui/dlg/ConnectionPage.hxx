@@ -23,7 +23,7 @@
 #include "ConnectionHelper.hxx"
 #include "adminpages.hxx"
 #include <ucbhelper/content.hxx>
-#include "curledit.hxx"
+#include <curledit.hxx>
 
 namespace dbaui
 {
@@ -32,33 +32,32 @@ namespace dbaui
 
     /** implements the connection page of the data source properties dialog.
     */
-    class OConnectionTabPage : public OConnectionHelper
+    class OConnectionTabPage final : public OConnectionHelper
     {
         friend class VclPtr<OConnectionTabPage>;
-    protected:
-        // user authentification
-        VclPtr<FixedText>          m_pFL2;
-        VclPtr<FixedText>          m_pUserNameLabel;
-        VclPtr<Edit>               m_pUserName;
-        VclPtr<CheckBox>           m_pPasswordRequired;
+    private:
+        // user authentication
+        std::unique_ptr<weld::Label> m_xFL2;
+        std::unique_ptr<weld::Label> m_xUserNameLabel;
+        std::unique_ptr<weld::Entry> m_xUserName;
+        std::unique_ptr<weld::CheckButton> m_xPasswordRequired;
 
         // jdbc driver
-        VclPtr<FixedText>          m_pFL3;
-        VclPtr<FixedText>          m_pJavaDriverLabel;
-        VclPtr<Edit>               m_pJavaDriver;
-        VclPtr<PushButton>         m_pTestJavaDriver;
+        std::unique_ptr<weld::Label> m_xFL3;
+        std::unique_ptr<weld::Label> m_xJavaDriverLabel;
+        std::unique_ptr<weld::Entry> m_xJavaDriver;
+        std::unique_ptr<weld::Button> m_xTestJavaDriver;
 
         // connection test
-        VclPtr<PushButton>         m_pTestConnection;
+        std::unique_ptr<weld::Button> m_xTestConnection;
 
         // called when the test connection button was clicked
-        DECL_LINK_TYPED(OnTestJavaClickHdl, Button*, void);
-        DECL_LINK_TYPED(OnEditModified, Edit&, void);
+        DECL_LINK(OnTestJavaClickHdl, weld::Button&, void);
+        DECL_LINK(OnEditModified, weld::Entry&, void);
 
     public:
-        virtual ~OConnectionTabPage();
-        virtual void dispose() override;
-        static VclPtr<SfxTabPage> Create( vcl::Window* pParent, const SfxItemSet* _rAttrSet );
+        virtual ~OConnectionTabPage() override;
+        static VclPtr<SfxTabPage> Create( TabPageParent pParent, const SfxItemSet* _rAttrSet );
         virtual bool        FillItemSet (SfxItemSet* _rCoreAttrs) override;
 
         virtual void        implInitControls(const SfxItemSet& _rSet, bool _bSaveValue) override;
@@ -68,10 +67,9 @@ namespace dbaui
             affect the type may be changed (compared to the previous URL).</p>
         */
     private:
-        OConnectionTabPage(vcl::Window* pParent, const SfxItemSet& _rCoreAttrs);
+        OConnectionTabPage(TabPageParent pParent, const SfxItemSet& _rCoreAttrs);
             // nControlFlags is a combination of the CBTP_xxx-constants
 
-    private:
         /** enables the test connection button, if allowed
         */
         virtual bool checkTestConnection() override;

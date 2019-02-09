@@ -21,30 +21,26 @@
 #define INCLUDED_SOT_FILELIST_HXX
 
 #include <sot/sotdllapi.h>
-#include <tools/stream.hxx>
+#include <rtl/ustring.hxx>
 
 #include <vector>
+class SvStream;
 
-class SOT_DLLPUBLIC FileList : public SvDataCopyStream
+class SOT_DLLPUBLIC FileList
 {
-    ::std::vector< OUString >  aStrList;
+    std::vector< OUString >  aStrList;
 
-protected:
+private:
 
-    // Liste loeschen;
-    void            ClearAll();
+    // delete list
+    void clear() { aStrList.clear(); }
 
 public:
-    FileList() {};
-    virtual ~FileList();
 
-    // Zuweisungsoperator
-    FileList&           operator=( const FileList& rFileList );
-
-    // Im-/Export
+    // import/export
     SOT_DLLPUBLIC friend SvStream&  ReadFileList( SvStream& rIStm, FileList& rFileList );
 
-    // Liste fuellen/abfragen
+    // fill in / interrogate list
     void AppendFile( const OUString& rStr );
     OUString GetFile( size_t i ) const;
     size_t Count() const;

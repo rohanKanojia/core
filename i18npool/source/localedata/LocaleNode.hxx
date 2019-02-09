@@ -18,10 +18,13 @@
  */
 #ifndef INCLUDED_I18NPOOL_SOURCE_LOCALEDATA_LOCALENODE_HXX
 #define INCLUDED_I18NPOOL_SOURCE_LOCALEDATA_LOCALENODE_HXX
+
 #include <com/sun/star/xml/sax/XParser.hpp>
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
 
+#include <string>
 #include <vector>
+#include <memory>
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/xml/sax/SAXParseException.hpp>
@@ -60,9 +63,9 @@ public:
     void  writeParameter(const sal_Char* pTagStr, const sal_Char* pAsciiStr, const OUString& aChars, sal_Int16 count0, sal_Int16 count1) const;
     void  closeOutput() const;
     /// Return the locale string, something like en_US or de_DE
-    const char * getLocale() const { return theLocale; }
+    const char * getLocale() const { return theLocale.c_str(); }
 private:
-    char theLocale[50];
+    std::string theLocale;
     FILE *m_f;
 };
 
@@ -72,9 +75,7 @@ class Attr {
 
 public:
     explicit Attr (const Reference< XAttributeList > & attr);
-    const OUString& getValueByName (const sal_Char *str) const;
-    sal_Int32 getLength() const;
-    const OUString& getTypeByIndex (sal_Int32 idx) const;
+    OUString getValueByName (const sal_Char *str) const;
     const OUString& getValueByIndex (sal_Int32 idx) const ;
 };
 
@@ -84,29 +85,22 @@ class LocaleNode
     OUString aValue;
     Attr aAttribs;
     LocaleNode * parent;
-    LocaleNode* * children;
-    sal_Int32 nChildren;
-    sal_Int32 childArrSize;
-
-    void setParent ( LocaleNode*  node);
+    std::vector<std::unique_ptr<LocaleNode>> children;
 
 protected:
     mutable int nError;
 
 public:
     LocaleNode (const OUString& name, const Reference< XAttributeList > & attr);
-    inline void setValue(const OUString &oValue) { aValue += oValue; };
-    inline const OUString& getName() const { return aName; };
-    inline const OUString& getValue() const { return aValue; };
-    inline const Attr& getAttr() const { return aAttribs; };
-    inline sal_Int32 getNumberOfChildren () const { return nChildren; };
-    inline  LocaleNode * getChildAt (sal_Int32 idx) const { return children[idx] ; };
+    void setValue(const OUString &oValue) { aValue += oValue; };
+    const OUString& getName() const { return aName; };
+    const OUString& getValue() const { return aValue; };
+    const Attr& getAttr() const { return aAttribs; };
+    sal_Int32 getNumberOfChildren () const { return sal_Int32(children.size()); };
+    LocaleNode * getChildAt (sal_Int32 idx) const { return children[idx].get(); };
     const LocaleNode * findNode ( const sal_Char *name) const;
-    void print () const;
-    void printR () const;
     virtual ~LocaleNode();
     void addChild (  LocaleNode * node);
-    const LocaleNode* getParent() const { return parent; };
     const LocaleNode* getRoot() const;
     int getError() const;
     virtual void generateCode (const OFileWriter &of) const;
@@ -133,7 +127,7 @@ public:
 
 class LCInfoNode : public LocaleNode {
 public:
-    inline LCInfoNode (const OUString& name,
+    LCInfoNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
     virtual void generateCode (const OFileWriter &of) const override;
 };
@@ -141,7 +135,7 @@ public:
 
 class LCCTYPENode : public LocaleNode {
 public:
-    inline LCCTYPENode (const OUString& name,
+    LCCTYPENode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -151,7 +145,7 @@ class LCFormatNode : public LocaleNode {
     static sal_Int16 mnSection;
     static sal_Int16 mnFormats;
 public:
-    inline LCFormatNode (const OUString& name,
+    LCFormatNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -159,7 +153,7 @@ public:
 
 class LCCollationNode : public LocaleNode {
 public:
-    inline LCCollationNode (const OUString& name,
+    LCCollationNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -167,7 +161,7 @@ public:
 
 class LCIndexNode : public LocaleNode {
 public:
-    inline LCIndexNode (const OUString& name,
+    LCIndexNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -175,7 +169,7 @@ public:
 
 class LCSearchNode : public LocaleNode {
 public:
-    inline LCSearchNode (const OUString& name,
+    LCSearchNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -183,7 +177,7 @@ public:
 
 class LCCalendarNode : public LocaleNode {
 public:
-    inline LCCalendarNode (const OUString& name,
+    LCCalendarNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -191,7 +185,7 @@ public:
 
 class LCCurrencyNode : public LocaleNode {
 public:
-    inline LCCurrencyNode (const OUString& name,
+    LCCurrencyNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -199,7 +193,7 @@ public:
 
 class LCTransliterationNode : public LocaleNode {
 public:
-    inline LCTransliterationNode (const OUString& name,
+    LCTransliterationNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -207,7 +201,7 @@ public:
 
 class LCMiscNode : public LocaleNode {
 public:
-    inline LCMiscNode (const OUString& name,
+    LCMiscNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -215,7 +209,7 @@ public:
 
 class LCNumberingLevelNode : public LocaleNode {
 public:
-    inline LCNumberingLevelNode (const OUString& name,
+    LCNumberingLevelNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;
@@ -223,7 +217,7 @@ public:
 
 class LCOutlineNumberingLevelNode : public LocaleNode {
 public:
-    inline LCOutlineNumberingLevelNode (const OUString& name,
+    LCOutlineNumberingLevelNode (const OUString& name,
                 const Reference< XAttributeList > & attr) : LocaleNode (name, attr) { ; };
 
     virtual void generateCode (const OFileWriter &of) const override;

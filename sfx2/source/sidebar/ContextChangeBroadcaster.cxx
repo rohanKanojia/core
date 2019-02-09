@@ -17,14 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include <sidebar/ContextChangeBroadcaster.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <com/sun/star/ui/ContextChangeEventObject.hpp>
 #include <com/sun/star/ui/ContextChangeEventMultiplexer.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
 #include <osl/diagnose.h>
+#include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
+#include <sfx2/lokhelper.hxx>
+#include <sfx2/viewsh.hxx>
 
-using ::rtl::OUString;
 using namespace css;
 using namespace css::uno;
 
@@ -40,7 +42,7 @@ ContextChangeBroadcaster::~ContextChangeBroadcaster()
 {
 }
 
-void ContextChangeBroadcaster::Initialize (const ::rtl::OUString& rsContextName)
+void ContextChangeBroadcaster::Initialize (const OUString& rsContextName)
 {
     msContextName = rsContextName;
 }
@@ -58,7 +60,7 @@ void ContextChangeBroadcaster::Deactivate (const css::uno::Reference<css::frame:
         BroadcastContextChange(
             rxFrame,
             GetModuleName(rxFrame),
-            EnumContext::GetContextName(EnumContext::Context_Default));
+            vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Default));
     }
 }
 
@@ -71,8 +73,8 @@ bool ContextChangeBroadcaster::SetBroadcasterEnabled (const bool bIsEnabled)
 
 void ContextChangeBroadcaster::BroadcastContextChange (
     const css::uno::Reference<css::frame::XFrame>& rxFrame,
-    const ::rtl::OUString& rsModuleName,
-    const ::rtl::OUString& rsContextName)
+    const OUString& rsModuleName,
+    const OUString& rsContextName)
 {
     if ( ! mbIsBroadcasterEnabled)
         return;
@@ -85,6 +87,13 @@ void ContextChangeBroadcaster::BroadcastContextChange (
         // Frame is (probably) being deleted.  Broadcasting context
         // changes is not necessary anymore.
         return;
+    }
+
+    // notify the LOK too
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        if (SfxViewShell* pViewShell = SfxViewShell::Get(rxFrame->getController()))
+            SfxLokHelper::notifyContextChange(pViewShell, rsModuleName, rsContextName);
     }
 
     const css::ui::ContextChangeEventObject aEvent(

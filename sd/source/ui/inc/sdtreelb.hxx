@@ -20,12 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_SDTREELB_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_SDTREELB_HXX
 
-#include <svtools/transfer.hxx>
-
-#include "sdresid.hxx"
-#include "pres.hxx"
-#include "sddllapi.h"
-#include <svtools/treelistbox.hxx>
+#include <pres.hxx>
+#include <sddllapi.h>
+#include <vcl/treelistbox.hxx>
 #include <svl/urlbmk.hxx>
 #include <tools/ref.hxx>
 #include "sdxfer.hxx"
@@ -50,18 +47,19 @@ class DrawDocShell;
 typedef ::tools::SvRef<DrawDocShell> DrawDocShellRef;
 #endif
 }
+namespace svt {
+    class AcceleratorExecute;
+}
 
 /**
  * Effect-Tab-Dialog
  */
-class SD_DLLPUBLIC SdPageObjsTLB : public SvTreeListBox
+class SD_DLLPUBLIC SdPageObjsTLB final : public SvTreeListBox
 {
-private:
-
     static bool  SAL_DLLPRIVATE bIsInDrag;      ///< static, in the case the navigator is deleted in ExecuteDrag
 
-    // set contenttree in SdNavigatorWin
-    bool                           bisInSdNavigatorWin;
+    ::std::unique_ptr< ::svt::AcceleratorExecute> m_pAccel;
+
 public:
 
     // nested class to implement the TransferableHelper
@@ -91,16 +89,16 @@ public:
         static SotClipboardFormatId mnListBoxDropFormatId;
 
         SdPageObjsTLB&      mrParent;
-        INetBookmark        maBookmark;
+        INetBookmark const      maBookmark;
         ::sd::DrawDocShell&     mrDocShell;
-        NavigatorDragType   meDragType;
-        SAL_DLLPRIVATE virtual               ~SdPageObjsTransferable();
+        NavigatorDragType const   meDragType;
+        SAL_DLLPRIVATE virtual               ~SdPageObjsTransferable() override;
 
         SAL_DLLPRIVATE virtual void      AddSupportedFormats() override;
         SAL_DLLPRIVATE virtual bool GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
         SAL_DLLPRIVATE virtual void      DragFinished( sal_Int8 nDropAction ) override;
 
-        SAL_DLLPRIVATE virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw( css::uno::RuntimeException, std::exception ) override;
+        SAL_DLLPRIVATE virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& rId ) override;
     };
 
     friend class SdPageObjsTLB::SdPageObjsTransferable;
@@ -116,20 +114,18 @@ public:
     */
     bool PageBelongsToCurrentShow (const SdPage* pPage) const;
 
-protected:
+private:
 
-    VclPtr<vcl::Window>     mpParent;
+    VclPtr<SdNavigatorWin>  mpNavigator;
     const SdDrawDocument*   mpDoc;
     SdDrawDocument*         mpBookmarkDoc;
     SfxMedium*              mpMedium;
     SfxMedium*              mpOwnMedium;
-    Image                   maImgOle;
-    Image                   maImgGraphic;
+    Image const             maImgOle;
+    Image const             maImgGraphic;
     bool                    mbLinkableSelected;
     OUString                maDocName;
     ::sd::DrawDocShellRef   mxBookmarkDocShRef; ///< for the loading of bookmarks
-    VclPtr<SdNavigatorWin>  mpDropNavWin;
-    SfxViewFrame*           mpFrame;
     std::vector<OUString>   maTreeItem;
     bool                    mbSaveTreeItemState;
     OUString                maSelectionEntryText;
@@ -144,7 +140,7 @@ protected:
     virtual void            RequestingChildren( SvTreeListEntry* pParent ) override;
 
     void                    DoDrag();
-    void                    OnDragFinished( sal_uInt8 nDropAction );
+    void                    OnDragFinished();
 
     /** Return the name of the object.  When the object has no user supplied
         name and the bCreate flag is <TRUE/> then a name is created
@@ -163,7 +159,7 @@ protected:
         const SdrObject* pObject,
         const bool bCreate = true) const;
     void                    CloseBookmarkDoc();
-                            DECL_LINK_TYPED(ExecDragHdl, void*, void);
+                            DECL_LINK(ExecDragHdl, void*, void);
 
     /** Handle the reordering of entries in the navigator.  This method
         reorders both the involved shapes in their page as well as the
@@ -181,9 +177,8 @@ protected:
 
 public:
 
-    SdPageObjsTLB( vcl::Window* pParent, const SdResId& rSdResId );
-    SdPageObjsTLB( vcl::Window* pParent, WinBits nStyle );
-                            virtual ~SdPageObjsTLB();
+    SdPageObjsTLB(vcl::Window* pParent, WinBits nStyle);
+    virtual ~SdPageObjsTLB() override;
     virtual void            dispose() override;
 
    // helper function for   GetEntryAltText and GetEntryLongDescription
@@ -192,22 +187,25 @@ public:
     OUString                GetEntryLongDescription( SvTreeListEntry* pEntry ) const override;
     virtual void            SelectHdl() override;
     virtual void            KeyInput( const KeyEvent& rKEvt ) override;
+    void MouseButtonDown(const MouseEvent& rMEvt) override;
 
-    void                    SetViewFrame( SfxViewFrame* pViewFrame ) { mpFrame = pViewFrame; }
+    void                    SetViewFrame( const SfxViewFrame* pViewFrame );
 
     void                    Fill( const SdDrawDocument*, bool bAllPages, const OUString& rDocName );
     void                    Fill( const SdDrawDocument*, SfxMedium* pSfxMedium, const OUString& rDocName );
     void                    SetShowAllShapes (const bool bShowAllShapes, const bool bFill);
     bool                    GetShowAllShapes() const { return mbShowAllShapes;}
-    bool                    IsEqualToDoc( const SdDrawDocument* pInDoc = nullptr );
+    bool IsNavigationGrabsFocus() const { return mbNavigationGrabsFocus; }
+    bool                    IsEqualToDoc( const SdDrawDocument* pInDoc );
+    /// Visits rList recursively and tries to advance pEntry accordingly.
+    bool IsEqualToShapeList(SvTreeListEntry*& pEntry, const SdrObjList& rList,
+                            const OUString& rListName);
     bool                    HasSelectedChildren( const OUString& rName );
     bool                    SelectEntry( const OUString& rName );
-    OUString                GetSelectEntry();
+    OUString                GetSelectedEntry();
 
     //Mark Current Entry
-    void                    MarkCurEntry( const OUString& rName );
-    void                    SetSdNavigatorWinFlag(bool isInSdNavigatorWin){bisInSdNavigatorWin =isInSdNavigatorWin;};
-    void                    FreshCurEntry();
+    void                    SetSdNavigator(SdNavigatorWin* pNavigator);
 
     void                    Clear();
     void                    SetSaveTreeItemStateFlag(bool bState){mbSaveTreeItemState = bState;}
@@ -246,11 +244,21 @@ private:
     /** This flag controls whether to show all pages.
     */
     bool mbShowAllPages;
+    /**
+     * If changing the selection should also result in navigating to the
+     * relevant shape.
+     */
+    bool mbSelectionHandlerNavigates;
+    /**
+     * If navigation should not only select the relevant shape but also change
+     * focus to it.
+     */
+    bool mbNavigationGrabsFocus;
 
     /** Return <TRUE/> when the current transferable may be dropped at the
         given list box entry.
     */
-    bool IsDropAllowed (SvTreeListEntry* pEntry);
+    bool IsDropAllowed (SvTreeListEntry const * pEntry);
 
     /** This inner class is defined in sdtreelb.cxx and is basically a
         container for the icons used in the list box for the entries.

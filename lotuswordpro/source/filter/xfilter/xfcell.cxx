@@ -57,28 +57,25 @@
  * @file
  * Table cell.
  ************************************************************************/
-#include "xfcell.hxx"
+#include <xfilter/xfcell.hxx>
 
 #include <stdexcept>
 
-#include "xfparagraph.hxx"
-#include "xftable.hxx"
-#include "xfrow.hxx"
+#include <xfilter/xfparagraph.hxx>
+#include <xfilter/xftable.hxx>
+#include <xfilter/xfrow.hxx>
 
 XFCell::XFCell()
-{
-    m_pSubTable = nullptr;
-    m_pOwnerRow = nullptr;
-    m_nCol = 0;
-    m_nColSpaned = 1;
-    m_nRepeated = 0;
-    m_eValueType = enumXFValueTypeNone;
-    m_bProtect = false;
-}
+    : m_pOwnerRow(nullptr)
+    , m_nCol(0)
+    , m_nColSpaned(1)
+    , m_nRepeated(0)
+    , m_eValueType(enumXFValueTypeNone)
+    , m_bProtect(false)
+{}
 
 XFCell::~XFCell()
 {
-    delete m_pSubTable;
 }
 
 void    XFCell::Add(XFContent *pContent)
@@ -88,7 +85,7 @@ void    XFCell::Add(XFContent *pContent)
         Reset();
         m_eValueType = enumXFValueTypeNone;
     }
-    if (m_pSubTable)
+    if (m_pSubTable.is())
     {
         throw std::runtime_error("subtable already set");
     }
@@ -139,12 +136,12 @@ OUString   XFCell::GetCellName()
     XFRow *pRow = m_pOwnerRow;
 
     if( !pRow )
-        return OUString("");
+        return OUString();
 
     XFTable *pTable = pRow->GetOwnerTable();
 
     if( !pTable )
-        return OUString("");
+        return OUString();
 
     OUString name;
     if( pTable->IsSubTable() )
@@ -185,7 +182,7 @@ void    XFCell::ToXml(IXFStream *pStrm)
 
     pStrm->StartElement( "table:table-cell" );
 
-    if( m_pSubTable )
+    if( m_pSubTable.is() )
         m_pSubTable->ToXml(pStrm);
     else
     {

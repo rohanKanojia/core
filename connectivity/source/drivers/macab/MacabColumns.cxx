@@ -44,7 +44,7 @@ sdbcx::ObjectType MacabColumns::createObject(const OUString& _rName)
     Reference< XResultSet > xResult = m_pTable->getConnection()->getMetaData()->getColumns(
         aCatalog, sSchemaName, sTableName, _rName);
 
-    sdbcx::ObjectType xRet = nullptr;
+    sdbcx::ObjectType xRet;
     if (xResult.is())
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
@@ -78,14 +78,14 @@ sdbcx::ObjectType MacabColumns::createObject(const OUString& _rName)
     return xRet;
 }
 
-void MacabColumns::impl_refresh() throw(RuntimeException)
+void MacabColumns::impl_refresh()
 {
     m_pTable->refreshColumns();
 }
 
 MacabColumns::MacabColumns( MacabTable* _pTable,
                         ::osl::Mutex& _rMutex,
-                        const TStringVector &_rVector)
+                        const ::std::vector< OUString> &_rVector)
     : sdbcx::OCollection(*_pTable, true, _rMutex, _rVector),
       m_pTable(_pTable)
 {

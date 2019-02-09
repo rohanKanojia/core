@@ -31,8 +31,6 @@ namespace com { namespace sun { namespace star {
 
 class XMLOFF_DLLPUBLIC XMLTextMasterPageContext : public SvXMLStyleContext
 {
-    const OUString sIsPhysical;
-    const OUString sFollowStyle;
     OUString       sFollow;
     OUString       sPageMasterName;
 
@@ -46,14 +44,10 @@ class XMLOFF_DLLPUBLIC XMLTextMasterPageContext : public SvXMLStyleContext
     bool bInsertFooterFirst;
     bool bHeaderInserted;
     bool bFooterInserted;
-    bool bHeaderLeftInserted;
-    bool bFooterLeftInserted;
-    bool bHeaderFirstInserted;
-    bool bFooterFirstInserted;
 
     SAL_DLLPRIVATE css::uno::Reference< css::style::XStyle > Create();
 protected:
-    css::uno::Reference< css::style::XStyle > GetStyle() { return xStyle; }
+    const css::uno::Reference< css::style::XStyle >& GetStyle() { return xStyle; }
 public:
 
 
@@ -61,9 +55,9 @@ public:
             const OUString& rLName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
             bool bOverwrite );
-    virtual ~XMLTextMasterPageContext();
+    virtual ~XMLTextMasterPageContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

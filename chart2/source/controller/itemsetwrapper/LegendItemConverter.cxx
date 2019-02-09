@@ -17,21 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LegendItemConverter.hxx"
+#include <LegendItemConverter.hxx>
 #include "SchWhichPairs.hxx"
-#include "macros.hxx"
-#include "ItemPropertyMap.hxx"
-#include "GraphicPropertyItemConverter.hxx"
-#include "CharacterPropertyItemConverter.hxx"
-#include <com/sun/star/chart2/XLegend.hpp>
+#include <GraphicPropertyItemConverter.hxx>
+#include <CharacterPropertyItemConverter.hxx>
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <svl/intitem.hxx>
 #include <svl/eitem.hxx>
+#include <tools/diagnose_ex.h>
 
-#include <functional>
-#include <algorithm>
 #include <memory>
 
 using namespace ::com::sun::star;
@@ -49,17 +46,16 @@ LegendItemConverter::LegendItemConverter(
     const awt::Size* pRefSize ) :
         ItemConverter( rPropertySet, rItemPool )
 {
-    m_aConverters.push_back( new GraphicPropertyItemConverter(
+    m_aConverters.emplace_back( new GraphicPropertyItemConverter(
                                  rPropertySet, rItemPool, rDrawModel, xNamedPropertyContainerFactory,
-                                 GraphicPropertyItemConverter::LINE_AND_FILL_PROPERTIES ));
-    m_aConverters.push_back( new CharacterPropertyItemConverter(
+                                 GraphicObjectType::LineAndFillProperties ));
+    m_aConverters.emplace_back( new CharacterPropertyItemConverter(
                                  rPropertySet, rItemPool, pRefSize,
                                  "ReferencePageSize" ));
 }
 
 LegendItemConverter::~LegendItemConverter()
 {
-    ::std::for_each( m_aConverters.begin(), m_aConverters.end(), std::default_delete<ItemConverter>());
 }
 
 void LegendItemConverter::FillItemSet( SfxItemSet & rOutItemSet ) const
@@ -95,7 +91,6 @@ bool LegendItemConverter::GetItemProperty( tWhichIdType /*nWhichId*/, tPropertyN
 }
 
 bool LegendItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet& rInItemSet )
-    throw( uno::Exception )
 {
     bool bChanged = false;
 
@@ -111,7 +106,7 @@ bool LegendItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSe
                 if( ! (GetPropertySet()->getPropertyValue( "Show" ) >>= bWasShown) ||
                     ( bWasShown != bShow ))
                 {
-                    GetPropertySet()->setPropertyValue( "Show" , uno::makeAny( bShow ));
+                    GetPropertySet()->setPropertyValue( "Show" , uno::Any( bShow ));
                     bChanged = true;
                 }
             }
@@ -146,15 +141,15 @@ bool LegendItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSe
                     if( ! ( GetPropertySet()->getPropertyValue( "AnchorPosition" ) >>= eOldPos ) ||
                         ( eOldPos != eNewPos ))
                     {
-                        GetPropertySet()->setPropertyValue( "AnchorPosition" , uno::makeAny( eNewPos ));
-                        GetPropertySet()->setPropertyValue( "Expansion" , uno::makeAny( eExpansion ));
+                        GetPropertySet()->setPropertyValue( "AnchorPosition" , uno::Any( eNewPos ));
+                        GetPropertySet()->setPropertyValue( "Expansion" , uno::Any( eExpansion ));
                         GetPropertySet()->setPropertyValue( "RelativePosition" , uno::Any());
                         bChanged = true;
                     }
                 }
-                catch( const uno::Exception & ex )
+                catch( const uno::Exception & )
                 {
-                    ASSERT_EXCEPTION( ex );
+                    DBG_UNHANDLED_EXCEPTION("chart2");
                 }
             }
         }
@@ -166,7 +161,6 @@ bool LegendItemConverter::ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSe
 
 void LegendItemConverter::FillSpecialItem(
     sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-    throw( uno::Exception )
 {
     switch( nWhichId )
     {
@@ -181,7 +175,7 @@ void LegendItemConverter::FillSpecialItem(
         {
             chart2::LegendPosition eLegendPos( chart2::LegendPosition_LINE_END );
             GetPropertySet()->getPropertyValue( "AnchorPosition" ) >>= eLegendPos;
-            rOutItemSet.Put( SfxInt32Item(SCHATTR_LEGEND_POS, eLegendPos ) );
+            rOutItemSet.Put( SfxInt32Item(SCHATTR_LEGEND_POS, static_cast<sal_Int32>(eLegendPos) ) );
         }
         break;
    }

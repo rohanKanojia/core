@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formtoolbars.hxx"
+#include <formtoolbars.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <osl/diagnose.h>
@@ -77,15 +77,13 @@ namespace svxform
     }
 
 
-    OUString FormToolboxes::getToolboxResourceName( sal_uInt16 _nSlotId ) const
+    OUString FormToolboxes::getToolboxResourceName( sal_uInt16 _nSlotId )
     {
-        OSL_ENSURE( ( _nSlotId == SID_FM_MORE_CONTROLS ) || ( _nSlotId == SID_FM_FORM_DESIGN_TOOLS ) || ( _nSlotId == SID_FM_CONFIG ),
+        OSL_ENSURE( ( _nSlotId == SID_FM_MORE_CONTROLS ) || ( _nSlotId == SID_FM_FORM_DESIGN_TOOLS ),
             "FormToolboxes::getToolboxResourceName: unsupported slot!" );
 
-        const sal_Char* pToolBarName = "formcontrols";
-        if ( _nSlotId == SID_FM_MORE_CONTROLS )
-            pToolBarName = "moreformcontrols";
-        else if ( _nSlotId == SID_FM_FORM_DESIGN_TOOLS )
+        const sal_Char* pToolBarName = "moreformcontrols";
+        if ( _nSlotId == SID_FM_FORM_DESIGN_TOOLS )
             pToolBarName = "formdesign";
 
         OUString aToolBarResStr( "private:resource/toolbar/" );

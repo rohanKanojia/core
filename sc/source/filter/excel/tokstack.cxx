@@ -17,29 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tokstack.hxx"
-#include "compiler.hxx"
-#include "global.hxx"
-#include "scmatrix.hxx"
+#include <tokstack.hxx>
+#include <scmatrix.hxx>
 
 #include <svl/sharedstringpool.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <algorithm>
 #include <string.h>
 
 const sal_uInt16    TokenPool::nScTokenOff = 8192;
 
-TokenStack::TokenStack( sal_uInt16 nNewSize )
+TokenStack::TokenStack(  )
+    : pStack( new TokenId[ nSize ] )
 {
-    pStack = new TokenId[ nNewSize ];
-
     Reset();
-    nSize = nNewSize;
 }
 
 TokenStack::~TokenStack()
 {
-    delete[] pStack;
 }
 
 // !ATTENTION!": to the outside the numbering starts with 1!
@@ -49,194 +46,43 @@ TokenStack::~TokenStack()
 TokenPool::TokenPool( svl::SharedStringPool& rSPool ) :
     mrStringPool(rSPool)
 {
-    sal_uInt16  nLauf = nScTokenOff;
-
     // pool for Id-sequences
     nP_Id = 256;
-    pP_Id = new sal_uInt16[ nP_Id ];
+    pP_Id.reset( new sal_uInt16[ nP_Id ] );
 
     // pool for Ids
     nElement = 32;
-    pElement = new sal_uInt16[ nElement ];
-    pType = new E_TYPE[ nElement ];
-    pSize = new sal_uInt16[ nElement ];
+    pElement.reset( new sal_uInt16[ nElement ] );
+    pType.reset( new E_TYPE[ nElement ] );
+    pSize.reset( new sal_uInt16[ nElement ] );
     nP_IdLast = 0;
 
-    // pool for strings
-    nP_Str = 4;
-    ppP_Str = new OUString *[ nP_Str ];
-    for( nLauf = 0 ; nLauf < nP_Str ; nLauf++ )
-        ppP_Str[ nLauf ] = nullptr;
-
-    // pool for double
-    nP_Dbl = 8;
-    pP_Dbl = new double[ nP_Dbl ];
-
-    // pool for error codes
-    nP_Err = 8;
-    pP_Err = new sal_uInt16[ nP_Err ];
-
-    // pool for References
-    nP_RefTr = 32;
-    ppP_RefTr = new ScSingleRefData *[ nP_RefTr ];
-    for( nLauf = 0 ; nLauf < nP_RefTr ; nLauf++ )
-        ppP_RefTr[ nLauf ] = nullptr;
-
-    nP_Ext = 32;
-    ppP_Ext = new EXTCONT*[ nP_Ext ];
-    memset( ppP_Ext, 0, sizeof( EXTCONT* ) * nP_Ext );
-
-    nP_Nlf = 16;
-    ppP_Nlf = new NLFCONT*[ nP_Nlf ];
-    memset( ppP_Nlf, 0, sizeof( NLFCONT* ) * nP_Nlf );
-
     nP_Matrix = 16;
-    ppP_Matrix = new ScMatrix*[ nP_Matrix ];
-    memset( ppP_Matrix, 0, sizeof( ScMatrix* ) * nP_Matrix );
-
-    pScToken = new ScTokenArray;
+    ppP_Matrix.reset( new ScMatrix*[ nP_Matrix ] );
+    memset( ppP_Matrix.get(), 0, sizeof( ScMatrix* ) * nP_Matrix );
 
     Reset();
 }
 
 TokenPool::~TokenPool()
 {
-    sal_uInt16 n;
-
-    delete[] pP_Id;
-    delete[] pElement;
-    delete[] pType;
-    delete[] pSize;
-    delete[] pP_Dbl;
-    delete[] pP_Err;
-
-    for( n = 0 ; n < nP_RefTr ; n++ )
-        delete ppP_RefTr[ n ];
-    delete[] ppP_RefTr;
-
-    for( n = 0 ; n < nP_Str ; n++ )
-        delete ppP_Str[ n ];
-    delete[] ppP_Str;
-
-    for( n = 0 ; n < nP_Ext ; n++ )
-        delete ppP_Ext[ n ];
-    delete[] ppP_Ext;
-
-    for( n = 0 ; n < nP_Nlf ; n++ )
-        delete ppP_Nlf[ n ];
-    delete[] ppP_Nlf;
-
     ClearMatrix();
-    delete[] ppP_Matrix;
-
-    delete pScToken;
 }
 
 /** Returns the new number of elements, or 0 if overflow. */
-static sal_uInt16 lcl_canGrow( sal_uInt16 nOld, sal_uInt16 nByMin = 1 )
+static sal_uInt16 lcl_canGrow( sal_uInt16 nOld )
 {
     if (!nOld)
-        return nByMin ? nByMin : 1;
+        return 1;
     if (nOld == SAL_MAX_UINT16)
         return 0;
     sal_uInt32 nNew = ::std::max( static_cast<sal_uInt32>(nOld) * 2,
-            static_cast<sal_uInt32>(nOld) + nByMin);
+            static_cast<sal_uInt32>(nOld) + 1);
     if (nNew > SAL_MAX_UINT16)
         nNew = SAL_MAX_UINT16;
-    if (nNew - nByMin < nOld)
+    if (nNew - 1 < nOld)
         nNew = 0;
     return static_cast<sal_uInt16>(nNew);
-}
-
-bool TokenPool::GrowString()
-{
-    sal_uInt16 nP_StrNew = lcl_canGrow( nP_Str);
-    if (!nP_StrNew)
-        return false;
-
-    sal_uInt16      nL;
-
-    OUString** ppP_StrNew = new (::std::nothrow) OUString *[ nP_StrNew ];
-    if (!ppP_StrNew)
-        return false;
-
-    for( nL = 0 ; nL < nP_Str ; nL++ )
-        ppP_StrNew[ nL ] = ppP_Str[ nL ];
-    for( nL = nP_Str ; nL < nP_StrNew ; nL++ )
-        ppP_StrNew[ nL ] = nullptr;
-
-    nP_Str = nP_StrNew;
-
-    delete[]    ppP_Str;
-    ppP_Str = ppP_StrNew;
-    return true;
-}
-
-bool TokenPool::GrowDouble()
-{
-    sal_uInt16 nP_DblNew = lcl_canGrow( nP_Dbl);
-    if (!nP_DblNew)
-        return false;
-
-    double* pP_DblNew = new (::std::nothrow) double[ nP_DblNew ];
-    if (!pP_DblNew)
-        return false;
-
-    for( sal_uInt16 nL = 0 ; nL < nP_Dbl ; nL++ )
-        pP_DblNew[ nL ] = pP_Dbl[ nL ];
-
-    nP_Dbl = nP_DblNew;
-
-    delete[] pP_Dbl;
-    pP_Dbl = pP_DblNew;
-    return true;
-}
-
-/* TODO: in case we had FormulaTokenArray::AddError() */
-#if 0
-void TokenPool::GrowError()
-{
-    sal_uInt16 nP_ErrNew = lcl_canGrow( nP_Err);
-    if (!nP_ErrNew)
-        return false;
-
-    sal_uInt16*     pP_ErrNew = new (::std::nothrow) sal_uInt16[ nP_ErrNew ];
-    if (!pP_ErrNew)
-        return false;
-
-    for( sal_uInt16 nL = 0 ; nL < nP_Err ; nL++ )
-        pP_ErrNew[ nL ] = pP_Err[ nL ];
-
-    nP_Err = nP_ErrNew;
-
-    delete[] pP_Err;
-    pP_Err = pP_ErrNew;
-    return true;
-}
-#endif
-
-bool TokenPool::GrowTripel( sal_uInt16 nByMin )
-{
-    sal_uInt16 nP_RefTrNew = lcl_canGrow( nP_RefTr, nByMin);
-    if (!nP_RefTrNew)
-        return false;
-
-    sal_uInt16          nL;
-
-    ScSingleRefData** ppP_RefTrNew = new (::std::nothrow) ScSingleRefData *[ nP_RefTrNew ];
-    if (!ppP_RefTrNew)
-        return false;
-
-    for( nL = 0 ; nL < nP_RefTr ; nL++ )
-        ppP_RefTrNew[ nL ] = ppP_RefTr[ nL ];
-    for( nL = nP_RefTr ; nL < nP_RefTrNew ; nL++ )
-        ppP_RefTrNew[ nL ] = nullptr;
-
-    nP_RefTr = nP_RefTrNew;
-
-    delete[] ppP_RefTr;
-    ppP_RefTr = ppP_RefTrNew;
-    return true;
 }
 
 bool TokenPool::GrowId()
@@ -254,8 +100,22 @@ bool TokenPool::GrowId()
 
     nP_Id = nP_IdNew;
 
-    delete[] pP_Id;
-    pP_Id = pP_IdNew;
+    pP_Id.reset( pP_IdNew );
+    return true;
+}
+
+bool TokenPool::CheckElementOrGrow()
+{
+    // Last possible ID to be assigned somewhere is nElementCurrent+1
+    if (nElementCurrent + 1 == nScTokenOff - 1)
+    {
+        SAL_WARN("sc.filter","TokenPool::CheckElementOrGrow - last possible ID " << nElementCurrent+1);
+        return false;
+    }
+
+    if (nElementCurrent >= nElement)
+        return GrowElement();
+
     return true;
 }
 
@@ -265,14 +125,11 @@ bool TokenPool::GrowElement()
     if (!nElementNew)
         return false;
 
-    sal_uInt16* pElementNew = new (::std::nothrow) sal_uInt16[ nElementNew ];
-    E_TYPE* pTypeNew = new (::std::nothrow) E_TYPE[ nElementNew ];
-    sal_uInt16* pSizeNew = new (::std::nothrow) sal_uInt16[ nElementNew ];
+    std::unique_ptr<sal_uInt16[]> pElementNew(new (::std::nothrow) sal_uInt16[ nElementNew ]);
+    std::unique_ptr<E_TYPE[]> pTypeNew(new (::std::nothrow) E_TYPE[ nElementNew ]);
+    std::unique_ptr<sal_uInt16[]> pSizeNew(new (::std::nothrow) sal_uInt16[ nElementNew ]);
     if (!pElementNew || !pTypeNew || !pSizeNew)
     {
-        delete [] pElementNew;
-        delete [] pTypeNew;
-        delete [] pSizeNew;
         return false;
     }
 
@@ -285,50 +142,9 @@ bool TokenPool::GrowElement()
 
     nElement = nElementNew;
 
-    delete[] pElement;
-    delete[] pType;
-    delete[] pSize;
-    pElement = pElementNew;
-    pType = pTypeNew;
-    pSize = pSizeNew;
-    return true;
-}
-
-bool TokenPool::GrowExt()
-{
-    sal_uInt16 nNewSize = lcl_canGrow( nP_Ext);
-    if (!nNewSize)
-        return false;
-
-    EXTCONT** ppNew = new (::std::nothrow) EXTCONT*[ nNewSize ];
-    if (!ppNew)
-        return false;
-
-    memset( ppNew, 0, sizeof( EXTCONT* ) * nNewSize );
-    memcpy( ppNew, ppP_Ext, sizeof( EXTCONT* ) * nP_Ext );
-
-    delete[] ppP_Ext;
-    ppP_Ext = ppNew;
-    nP_Ext = nNewSize;
-    return true;
-}
-
-bool TokenPool::GrowNlf()
-{
-    sal_uInt16 nNewSize = lcl_canGrow( nP_Nlf);
-    if (!nNewSize)
-        return false;
-
-    NLFCONT** ppNew = new (::std::nothrow) NLFCONT*[ nNewSize ];
-    if (!ppNew)
-        return false;
-
-    memset( ppNew, 0, sizeof( NLFCONT* ) * nNewSize );
-    memcpy( ppNew, ppP_Nlf, sizeof( NLFCONT* ) * nP_Nlf );
-
-    delete[] ppP_Nlf;
-    ppP_Nlf = ppNew;
-    nP_Nlf = nNewSize;
+    pElement = std::move( pElementNew );
+    pType = std::move( pTypeNew );
+    pSize = std::move( pSizeNew );
     return true;
 }
 
@@ -343,23 +159,25 @@ bool TokenPool::GrowMatrix()
         return false;
 
     memset( ppNew, 0, sizeof( ScMatrix* ) * nNewSize );
-    memcpy( ppNew, ppP_Matrix, sizeof( ScMatrix* ) * nP_Matrix );
+    for( sal_uInt16 nL = 0 ; nL < nP_Matrix ; nL++ )
+        ppNew[ nL ] = ppP_Matrix[ nL ];
 
-    delete[] ppP_Matrix;
-    ppP_Matrix = ppNew;
+    ppP_Matrix.reset( ppNew );
     nP_Matrix = nNewSize;
     return true;
 }
 
-bool TokenPool::GetElement( const sal_uInt16 nId )
+bool TokenPool::GetElement( const sal_uInt16 nId, ScTokenArray* pScToken )
 {
-    OSL_ENSURE( nId < nElementAkt, "*TokenPool::GetElement(): Id too large!?" );
-    if (nId >= nElementAkt)
+    if (nId >= nElementCurrent)
+    {
+        SAL_WARN("sc.filter","TokenPool::GetElement - Id too large, " << nId << " >= " << nElementCurrent);
         return false;
+    }
 
     bool bRet = true;
     if( pType[ nId ] == T_Id )
-        bRet = GetElementRek( nId );
+        bRet = GetElementRek( nId, pScToken );
     else
     {
         switch( pType[ nId ] )
@@ -367,9 +185,9 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
             case T_Str:
                 {
                     sal_uInt16 n = pElement[ nId ];
-                    OUString* p = ( n < nP_Str )? ppP_Str[ n ] : nullptr;
+                    auto* p = ppP_Str.getIfInRange( n );
                     if (p)
-                        pScToken->AddString(mrStringPool.intern(*p));
+                        pScToken->AddString(mrStringPool.intern(**p));
                     else
                         bRet = false;
                 }
@@ -377,13 +195,14 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
             case T_D:
                 {
                     sal_uInt16 n = pElement[ nId ];
-                    if (n < nP_Dbl)
+                    if (n < pP_Dbl.m_writemark)
                         pScToken->AddDouble( pP_Dbl[ n ] );
                     else
                         bRet = false;
                 }
                 break;
             case T_Err:
+                break;
 /* TODO: in case we had FormulaTokenArray::AddError() */
 #if 0
                 {
@@ -394,13 +213,12 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
                         bRet = false;
                 }
 #endif
-                break;
             case T_RefC:
                 {
                     sal_uInt16 n = pElement[ nId ];
-                    ScSingleRefData* p = ( n < nP_RefTr )? ppP_RefTr[ n ] : nullptr;
+                    auto p = ppP_RefTr.getIfInRange(n);
                     if (p)
-                        pScToken->AddSingleReference( *p );
+                        pScToken->AddSingleReference( **p );
                     else
                         bRet = false;
                 }
@@ -408,7 +226,7 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
             case T_RefA:
                 {
                     sal_uInt16 n = pElement[ nId ];
-                    if (n < nP_RefTr && ppP_RefTr[ n ] && n+1 < nP_RefTr && ppP_RefTr[ n + 1 ])
+                    if (n < ppP_RefTr.m_writemark && ppP_RefTr[ n ] && n+1 < ppP_RefTr.m_writemark && ppP_RefTr[ n + 1 ])
                     {
                         ScComplexRefData aScComplexRefData;
                         aScComplexRefData.Ref1 = *ppP_RefTr[ n ];
@@ -431,15 +249,15 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
             break;
             case T_Ext:
                 {
-                    sal_uInt16      n = pElement[ nId ];
-                    EXTCONT*        p = ( n < nP_Ext )? ppP_Ext[ n ] : nullptr;
+                    sal_uInt16 n = pElement[ nId ];
+                    auto       p = ppP_Ext.getIfInRange(n);
 
                     if( p )
                     {
-                        if( p->eId == ocEuroConvert )
-                            pScToken->AddOpCode( p->eId );
+                        if( (*p)->eId == ocEuroConvert )
+                            pScToken->AddOpCode( (*p)->eId );
                         else
-                            pScToken->AddExternal( p->aText, p->eId );
+                            pScToken->AddExternal( (*p)->aText, (*p)->eId );
                     }
                     else
                         bRet = false;
@@ -447,11 +265,11 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
                 break;
             case T_Nlf:
                 {
-                    sal_uInt16      n = pElement[ nId ];
-                    NLFCONT*        p = ( n < nP_Nlf )? ppP_Nlf[ n ] : nullptr;
+                    sal_uInt16 n = pElement[ nId ];
+                    auto       p = ppP_Nlf.getIfInRange(n);
 
                     if( p )
-                        pScToken->AddColRowName( p->aRef );
+                        pScToken->AddColRowName( **p );
                     else
                         bRet = false;
                 }
@@ -473,7 +291,7 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
                 if (n < maExtNames.size())
                 {
                     const ExtName& r = maExtNames[n];
-                    pScToken->AddExternalName(r.mnFileId, r.maName);
+                    pScToken->AddExternalName(r.mnFileId, mrStringPool.intern( r.maName));
                 }
                 else
                     bRet = false;
@@ -485,7 +303,7 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
                 if (n < maExtCellRefs.size())
                 {
                     const ExtCellRef& r = maExtCellRefs[n];
-                    pScToken->AddExternalSingleReference(r.mnFileId, r.maTabName, r.maRef);
+                    pScToken->AddExternalSingleReference(r.mnFileId, mrStringPool.intern( r.maTabName), r.maRef);
                 }
                 else
                     bRet = false;
@@ -497,7 +315,7 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
                 if (n < maExtAreaRefs.size())
                 {
                     const ExtAreaRef& r = maExtAreaRefs[n];
-                    pScToken->AddExternalDoubleReference(r.mnFileId, r.maTabName, r.maRef);
+                    pScToken->AddExternalDoubleReference(r.mnFileId, mrStringPool.intern( r.maTabName), r.maRef);
                 }
                 else
                     bRet = false;
@@ -511,18 +329,18 @@ bool TokenPool::GetElement( const sal_uInt16 nId )
     return bRet;
 }
 
-bool TokenPool::GetElementRek( const sal_uInt16 nId )
+bool TokenPool::GetElementRek( const sal_uInt16 nId, ScTokenArray* pScToken )
 {
 #ifdef DBG_UTIL
     m_nRek++;
     OSL_ENSURE(m_nRek <= nP_Id, "*TokenPool::GetElement(): recursion loops!?");
 #endif
 
-    OSL_ENSURE( nId < nElementAkt, "*TokenPool::GetElementRek(): nId >= nElementAkt" );
+    OSL_ENSURE( nId < nElementCurrent, "*TokenPool::GetElementRek(): nId >= nElementCurrent" );
 
-    if (nId >= nElementAkt)
+    if (nId >= nElementCurrent)
     {
-        SAL_WARN("sc.filter", "*TokenPool::GetElementRek(): nId >= nElementAkt");
+        SAL_WARN("sc.filter", "*TokenPool::GetElementRek(): nId >= nElementCurrent");
 #ifdef DBG_UTIL
         m_nRek--;
 #endif
@@ -539,40 +357,41 @@ bool TokenPool::GetElementRek( const sal_uInt16 nId )
     }
 
     bool bRet = true;
-    sal_uInt16      nAnz = pSize[ nId ];
+    sal_uInt16      nCnt = pSize[ nId ];
     sal_uInt16 nFirstId = pElement[ nId ];
     if (nFirstId >= nP_Id)
     {
         SAL_WARN("sc.filter", "TokenPool::GetElementRek: nFirstId >= nP_Id");
-        nAnz = 0;
+        nCnt = 0;
         bRet = false;
     }
-    sal_uInt16* pAkt = nAnz ? &pP_Id[ nFirstId ] : nullptr;
-    if (nAnz > nP_Id - nFirstId)
+    sal_uInt16* pCurrent = nCnt ? &pP_Id[ nFirstId ] : nullptr;
+    if (nCnt > nP_Id - nFirstId)
     {
-        SAL_WARN("sc.filter", "TokenPool::GetElementRek: nAnz > nP_Id - nFirstId");
-        nAnz = nP_Id - nFirstId;
+        SAL_WARN("sc.filter", "TokenPool::GetElementRek: nCnt > nP_Id - nFirstId");
+        nCnt = nP_Id - nFirstId;
         bRet = false;
     }
-    for( ; nAnz > 0 ; nAnz--, pAkt++ )
+    for( ; nCnt > 0 ; nCnt--, pCurrent++ )
     {
-        if( *pAkt < nScTokenOff )
+        assert(pCurrent);
+        if( *pCurrent < nScTokenOff )
         {// recursion or not?
-            if (*pAkt >= nElementAkt)
+            if (*pCurrent >= nElementCurrent)
             {
-                SAL_WARN("sc.filter", "TokenPool::GetElementRek: *pAkt >= nElementAkt");
+                SAL_WARN("sc.filter", "TokenPool::GetElementRek: *pCurrent >= nElementCurrent");
                 bRet = false;
             }
             else
             {
-                if (pType[ *pAkt ] == T_Id)
-                    bRet = GetElementRek( *pAkt );
+                if (pType[ *pCurrent ] == T_Id)
+                    bRet = GetElementRek( *pCurrent, pScToken );
                 else
-                    bRet = GetElement( *pAkt );
+                    bRet = GetElement( *pCurrent, pScToken );
             }
         }
         else    // elementary SC_Token
-            pScToken->AddOpCode( ( DefTokenId ) ( *pAkt - nScTokenOff ) );
+            pScToken->AddOpCode( static_cast<DefTokenId>( *pCurrent - nScTokenOff ) );
     }
 
 #ifdef DBG_UTIL
@@ -583,42 +402,40 @@ bool TokenPool::GetElementRek( const sal_uInt16 nId )
 
 void TokenPool::operator >>( TokenId& rId )
 {
-    rId = static_cast<TokenId>( nElementAkt + 1 );
+    rId = static_cast<TokenId>( nElementCurrent + 1 );
 
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return;
+    if (!CheckElementOrGrow())
+        return;
 
-    pElement[ nElementAkt ] = nP_IdLast;    // Start of Token-sequence
-    pType[ nElementAkt ] = T_Id;            // set Typeinfo
-    pSize[ nElementAkt ] = nP_IdAkt - nP_IdLast;
-        // write from nP_IdLast to nP_IdAkt-1 -> length of the sequence
+    pElement[ nElementCurrent ] = nP_IdLast;    // Start of Token-sequence
+    pType[ nElementCurrent ] = T_Id;            // set Typeinfo
+    pSize[ nElementCurrent ] = nP_IdCurrent - nP_IdLast;
+        // write from nP_IdLast to nP_IdCurrent-1 -> length of the sequence
 
-    nElementAkt++;          // start value for next sequence
-    nP_IdLast = nP_IdAkt;
+    nElementCurrent++;          // start value for next sequence
+    nP_IdLast = nP_IdCurrent;
 }
 
 const TokenId TokenPool::Store( const double& rDouble )
 {
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_DblAkt >= nP_Dbl )
-        if (!GrowDouble())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if( pP_Dbl.m_writemark >= pP_Dbl.m_capacity )
+        if (!pP_Dbl.Grow())
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_DblAkt;    // Index in Double-Array
-    pType[ nElementAkt ] = T_D;             // set Typeinfo Double
+    pElement[ nElementCurrent ] = pP_Dbl.m_writemark;    // Index in Double-Array
+    pType[ nElementCurrent ] = T_D;             // set Typeinfo Double
 
-    pP_Dbl[ nP_DblAkt ] = rDouble;
+    pP_Dbl[ pP_Dbl.m_writemark ] = rDouble;
 
-    pSize[ nElementAkt ] = 1;               // does not matter
+    pSize[ nElementCurrent ] = 1;               // does not matter
 
-    nElementAkt++;
-    nP_DblAkt++;
+    nElementCurrent++;
+    pP_Dbl.m_writemark++;
 
-    return static_cast<const TokenId>(nElementAkt); // return old value + 1!
+    return static_cast<const TokenId>(nElementCurrent); // return old value + 1!
 }
 
 const TokenId TokenPool::Store( const sal_uInt16 nIndex )
@@ -629,248 +446,237 @@ const TokenId TokenPool::Store( const sal_uInt16 nIndex )
 const TokenId TokenPool::Store( const OUString& rString )
 {
     // mostly copied to Store( const sal_Char* ), to avoid a temporary string
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_StrAkt >= nP_Str )
-        if (!GrowString())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if( ppP_Str.m_writemark >= ppP_Str.m_capacity )
+        if (!ppP_Str.Grow())
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_StrAkt;    // Index in String-Array
-    pType[ nElementAkt ] = T_Str;           // set Typeinfo String
+    pElement[ nElementCurrent ] = ppP_Str.m_writemark;    // Index in String-Array
+    pType[ nElementCurrent ] = T_Str;           // set Typeinfo String
 
     // create String
-    if( !ppP_Str[ nP_StrAkt ] )
+    if( !ppP_Str[ ppP_Str.m_writemark ] )
         //...but only, if it does not exist already
-        ppP_Str[ nP_StrAkt ] = new (::std::nothrow) OUString( rString );
+        ppP_Str[ ppP_Str.m_writemark ].reset( new OUString( rString ) );
     else
         //...copy otherwise
-        *ppP_Str[ nP_StrAkt ] = rString;
+        *ppP_Str[ ppP_Str.m_writemark ] = rString;
 
-    if (ppP_Str[ nP_StrAkt ])
-    {
-        /* attention truncate to 16 bits */
-        pSize[ nElementAkt ] = ( sal_uInt16 ) ppP_Str[ nP_StrAkt ]->getLength();
-    }
+    /* attention truncate to 16 bits */
+    pSize[ nElementCurrent ] = static_cast<sal_uInt16>(ppP_Str[ ppP_Str.m_writemark ]->getLength());
 
-    nElementAkt++;
-    nP_StrAkt++;
+    nElementCurrent++;
+    ppP_Str.m_writemark++;
 
-    return static_cast<const TokenId>(nElementAkt); // return old value + 1!
+    return static_cast<const TokenId>(nElementCurrent); // return old value + 1!
 }
 
 const TokenId TokenPool::Store( const ScSingleRefData& rTr )
 {
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_RefTrAkt >= nP_RefTr )
-        if (!GrowTripel())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if( ppP_RefTr.m_writemark >= ppP_RefTr.m_capacity )
+        if (!ppP_RefTr.Grow())
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_RefTrAkt;
-    pType[ nElementAkt ] = T_RefC;          // set Typeinfo Cell-Ref
+    pElement[ nElementCurrent ] = ppP_RefTr.m_writemark;
+    pType[ nElementCurrent ] = T_RefC;          // set Typeinfo Cell-Ref
 
-    if( !ppP_RefTr[ nP_RefTrAkt ] )
-        ppP_RefTr[ nP_RefTrAkt ] = new ScSingleRefData( rTr );
+    if( !ppP_RefTr[ ppP_RefTr.m_writemark ] )
+        ppP_RefTr[ ppP_RefTr.m_writemark ].reset( new ScSingleRefData( rTr ) );
     else
-        *ppP_RefTr[ nP_RefTrAkt ] = rTr;
+        *ppP_RefTr[ ppP_RefTr.m_writemark ] = rTr;
 
-    nElementAkt++;
-    nP_RefTrAkt++;
+    nElementCurrent++;
+    ppP_RefTr.m_writemark++;
 
-    return static_cast<const TokenId>(nElementAkt); // return old value + 1!
+    return static_cast<const TokenId>(nElementCurrent); // return old value + 1!
 }
 
 const TokenId TokenPool::Store( const ScComplexRefData& rTr )
 {
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_RefTrAkt + 1 >= nP_RefTr )
-        if (!GrowTripel( 2))
-            return static_cast<const TokenId>(nElementAkt+1);
+    if( ppP_RefTr.m_writemark + 1 >= ppP_RefTr.m_capacity )
+        if (!ppP_RefTr.Grow(2))
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_RefTrAkt;
-    pType[ nElementAkt ] = T_RefA;          // setTypeinfo Area-Ref
+    pElement[ nElementCurrent ] = ppP_RefTr.m_writemark;
+    pType[ nElementCurrent ] = T_RefA;          // setTypeinfo Area-Ref
 
-    if( !ppP_RefTr[ nP_RefTrAkt ] )
-        ppP_RefTr[ nP_RefTrAkt ] = new ScSingleRefData( rTr.Ref1 );
+    if( !ppP_RefTr[ ppP_RefTr.m_writemark ] )
+        ppP_RefTr[ ppP_RefTr.m_writemark ].reset( new ScSingleRefData( rTr.Ref1 ) );
     else
-        *ppP_RefTr[ nP_RefTrAkt ] = rTr.Ref1;
-    nP_RefTrAkt++;
+        *ppP_RefTr[ ppP_RefTr.m_writemark ] = rTr.Ref1;
+    ppP_RefTr.m_writemark++;
 
-    if( !ppP_RefTr[ nP_RefTrAkt ] )
-        ppP_RefTr[ nP_RefTrAkt ] = new ScSingleRefData( rTr.Ref2 );
+    if( !ppP_RefTr[ ppP_RefTr.m_writemark ] )
+        ppP_RefTr[ ppP_RefTr.m_writemark ].reset( new ScSingleRefData( rTr.Ref2 ) );
     else
-        *ppP_RefTr[ nP_RefTrAkt ] = rTr.Ref2;
-    nP_RefTrAkt++;
+        *ppP_RefTr[ ppP_RefTr.m_writemark ] = rTr.Ref2;
+    ppP_RefTr.m_writemark++;
 
-    nElementAkt++;
+    nElementCurrent++;
 
-    return static_cast<const TokenId>(nElementAkt); // return old value + 1!
+    return static_cast<const TokenId>(nElementCurrent); // return old value + 1!
 }
 
 const TokenId TokenPool::Store( const DefTokenId e, const OUString& r )
 {
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_ExtAkt >= nP_Ext )
-        if (!GrowExt())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if( ppP_Ext.m_writemark >= ppP_Ext.m_capacity )
+        if (!ppP_Ext.Grow())
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_ExtAkt;
-    pType[ nElementAkt ] = T_Ext;           // set Typeinfo String
+    pElement[ nElementCurrent ] = ppP_Ext.m_writemark;
+    pType[ nElementCurrent ] = T_Ext;           // set Typeinfo String
 
-    if( ppP_Ext[ nP_ExtAkt ] )
+    if( ppP_Ext[ ppP_Ext.m_writemark ] )
     {
-        ppP_Ext[ nP_ExtAkt ]->eId = e;
-        ppP_Ext[ nP_ExtAkt ]->aText = r;
+        ppP_Ext[ ppP_Ext.m_writemark ]->eId = e;
+        ppP_Ext[ ppP_Ext.m_writemark ]->aText = r;
     }
     else
-        ppP_Ext[ nP_ExtAkt ] = new EXTCONT( e, r );
+        ppP_Ext[ ppP_Ext.m_writemark ].reset( new EXTCONT( e, r ) );
 
-    nElementAkt++;
-    nP_ExtAkt++;
+    nElementCurrent++;
+    ppP_Ext.m_writemark++;
 
-    return static_cast<const TokenId>(nElementAkt); // return old value + 1!
+    return static_cast<const TokenId>(nElementCurrent); // return old value + 1!
 }
 
 const TokenId TokenPool::StoreNlf( const ScSingleRefData& rTr )
 {
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_NlfAkt >= nP_Nlf )
-        if (!GrowNlf())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if( ppP_Nlf.m_writemark >= ppP_Nlf.m_capacity )
+        if (!ppP_Nlf.Grow())
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_NlfAkt;
-    pType[ nElementAkt ] = T_Nlf;
+    pElement[ nElementCurrent ] = ppP_Nlf.m_writemark;
+    pType[ nElementCurrent ] = T_Nlf;
 
-    if( ppP_Nlf[ nP_NlfAkt ] )
+    if( ppP_Nlf[ ppP_Nlf.m_writemark ] )
     {
-        ppP_Nlf[ nP_NlfAkt ]->aRef = rTr;
+        *ppP_Nlf[ ppP_Nlf.m_writemark ] = rTr;
     }
     else
-        ppP_Nlf[ nP_NlfAkt ] = new NLFCONT( rTr );
+        ppP_Nlf[ ppP_Nlf.m_writemark ].reset( new ScSingleRefData( rTr ) );
 
-    nElementAkt++;
-    nP_NlfAkt++;
+    nElementCurrent++;
+    ppP_Nlf.m_writemark++;
 
-    return static_cast<const TokenId>(nElementAkt);
+    return static_cast<const TokenId>(nElementCurrent);
 }
 
 const TokenId TokenPool::StoreMatrix()
 {
-    if( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    if( nP_MatrixAkt >= nP_Matrix )
+    if( nP_MatrixCurrent >= nP_Matrix )
         if (!GrowMatrix())
-            return static_cast<const TokenId>(nElementAkt+1);
+            return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[ nElementAkt ] = nP_MatrixAkt;
-    pType[ nElementAkt ] = T_Matrix;
+    pElement[ nElementCurrent ] = nP_MatrixCurrent;
+    pType[ nElementCurrent ] = T_Matrix;
 
-    ScMatrix* pM = new ScFullMatrix( 0, 0 );
+    ScMatrix* pM = new ScMatrix( 0, 0 );
     pM->IncRef( );
-    ppP_Matrix[ nP_MatrixAkt ] = pM;
+    ppP_Matrix[ nP_MatrixCurrent ] = pM;
 
-    nElementAkt++;
-    nP_MatrixAkt++;
+    nElementCurrent++;
+    nP_MatrixCurrent++;
 
-    return static_cast<const TokenId>(nElementAkt);
+    return static_cast<const TokenId>(nElementCurrent);
 }
 
 const TokenId TokenPool::StoreName( sal_uInt16 nIndex, sal_Int16 nSheet )
 {
-    if ( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[nElementAkt] = static_cast<sal_uInt16>(maRangeNames.size());
-    pType[nElementAkt] = T_RN;
+    pElement[nElementCurrent] = static_cast<sal_uInt16>(maRangeNames.size());
+    pType[nElementCurrent] = T_RN;
 
-    maRangeNames.push_back(RangeName());
+    maRangeNames.emplace_back();
     RangeName& r = maRangeNames.back();
     r.mnIndex = nIndex;
     r.mnSheet = nSheet;
 
-    ++nElementAkt;
+    ++nElementCurrent;
 
-    return static_cast<const TokenId>(nElementAkt);
+    return static_cast<const TokenId>(nElementCurrent);
 }
 
 const TokenId TokenPool::StoreExtName( sal_uInt16 nFileId, const OUString& rName )
 {
-    if ( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[nElementAkt] = static_cast<sal_uInt16>(maExtNames.size());
-    pType[nElementAkt] = T_ExtName;
+    pElement[nElementCurrent] = static_cast<sal_uInt16>(maExtNames.size());
+    pType[nElementCurrent] = T_ExtName;
 
-    maExtNames.push_back(ExtName());
+    maExtNames.emplace_back();
     ExtName& r = maExtNames.back();
     r.mnFileId = nFileId;
     r.maName = rName;
 
-    ++nElementAkt;
+    ++nElementCurrent;
 
-    return static_cast<const TokenId>(nElementAkt);
+    return static_cast<const TokenId>(nElementCurrent);
 }
 
 const TokenId TokenPool::StoreExtRef( sal_uInt16 nFileId, const OUString& rTabName, const ScSingleRefData& rRef )
 {
-    if ( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[nElementAkt] = static_cast<sal_uInt16>(maExtCellRefs.size());
-    pType[nElementAkt] = T_ExtRefC;
+    pElement[nElementCurrent] = static_cast<sal_uInt16>(maExtCellRefs.size());
+    pType[nElementCurrent] = T_ExtRefC;
 
-    maExtCellRefs.push_back(ExtCellRef());
+    maExtCellRefs.emplace_back();
     ExtCellRef& r = maExtCellRefs.back();
     r.mnFileId = nFileId;
     r.maTabName = rTabName;
     r.maRef = rRef;
 
-    ++nElementAkt;
+    ++nElementCurrent;
 
-    return static_cast<const TokenId>(nElementAkt);
+    return static_cast<const TokenId>(nElementCurrent);
 }
 
 const TokenId TokenPool::StoreExtRef( sal_uInt16 nFileId, const OUString& rTabName, const ScComplexRefData& rRef )
 {
-    if ( nElementAkt >= nElement )
-        if (!GrowElement())
-            return static_cast<const TokenId>(nElementAkt+1);
+    if (!CheckElementOrGrow())
+        return static_cast<const TokenId>(nElementCurrent+1);
 
-    pElement[nElementAkt] = static_cast<sal_uInt16>(maExtAreaRefs.size());
-    pType[nElementAkt] = T_ExtRefA;
+    pElement[nElementCurrent] = static_cast<sal_uInt16>(maExtAreaRefs.size());
+    pType[nElementCurrent] = T_ExtRefA;
 
-    maExtAreaRefs.push_back(ExtAreaRef());
+    maExtAreaRefs.emplace_back();
     ExtAreaRef& r = maExtAreaRefs.back();
     r.mnFileId = nFileId;
     r.maTabName = rTabName;
     r.maRef = rRef;
 
-    ++nElementAkt;
+    ++nElementCurrent;
 
-    return static_cast<const TokenId>(nElementAkt);
+    return static_cast<const TokenId>(nElementCurrent);
 }
 
 void TokenPool::Reset()
 {
-    nP_IdAkt = nP_IdLast = nElementAkt = nP_StrAkt = nP_DblAkt = nP_ErrAkt = nP_RefTrAkt = nP_ExtAkt = nP_NlfAkt = nP_MatrixAkt = 0;
+    nP_IdCurrent = nP_IdLast = nElementCurrent
+        = ppP_Str.m_writemark = pP_Dbl.m_writemark = pP_Err.m_writemark
+        = ppP_RefTr.m_writemark = ppP_Ext.m_writemark = ppP_Nlf.m_writemark = nP_MatrixCurrent = 0;
     maRangeNames.clear();
     maExtNames.clear();
     maExtCellRefs.clear();
@@ -880,8 +686,8 @@ void TokenPool::Reset()
 
 bool TokenPool::IsSingleOp( const TokenId& rId, const DefTokenId eId ) const
 {
-    sal_uInt16 nId = (sal_uInt16) rId;
-    if( nId && nId <= nElementAkt )
+    sal_uInt16 nId = static_cast<sal_uInt16>(rId);
+    if( nId && nId <= nElementCurrent )
     {// existent?
         nId--;
         if( T_Id == pType[ nId ] )
@@ -894,7 +700,7 @@ bool TokenPool::IsSingleOp( const TokenId& rId, const DefTokenId eId ) const
                     sal_uInt16 nSecId = pP_Id[ nPid ];
                     if( nSecId >= nScTokenOff )
                     {// Default-Token?
-                        return ( DefTokenId ) ( nSecId - nScTokenOff ) == eId;  // wanted?
+                        return static_cast<DefTokenId>( nSecId - nScTokenOff ) == eId;  // wanted?
                     }
                 }
             }
@@ -907,14 +713,14 @@ bool TokenPool::IsSingleOp( const TokenId& rId, const DefTokenId eId ) const
 const OUString* TokenPool::GetExternal( const TokenId& rId ) const
 {
     const OUString*   p = nullptr;
-    sal_uInt16 n = (sal_uInt16) rId;
-    if( n && n <= nElementAkt )
+    sal_uInt16 n = static_cast<sal_uInt16>(rId);
+    if( n && n <= nElementCurrent )
     {
         n--;
         if( pType[ n ] == T_Ext )
         {
             sal_uInt16 nExt = pElement[ n ];
-            if ( nExt < nP_Ext && ppP_Ext[ nExt ] )
+            if ( nExt < ppP_Ext.m_writemark && ppP_Ext[ nExt ] )
                 p = &ppP_Ext[ nExt ]->aText;
         }
     }
@@ -924,10 +730,10 @@ const OUString* TokenPool::GetExternal( const TokenId& rId ) const
 
 ScMatrix* TokenPool::GetMatrix( unsigned int n ) const
 {
-    if( n < nP_MatrixAkt )
+    if( n < nP_MatrixCurrent )
         return ppP_Matrix[ n ];
     else
-        SAL_WARN("sc.filter", "GetMatrix: " << n << " >= " << nP_MatrixAkt << "\n");
+        SAL_WARN("sc.filter", "GetMatrix: " << n << " >= " << nP_MatrixCurrent);
     return nullptr;
 }
 

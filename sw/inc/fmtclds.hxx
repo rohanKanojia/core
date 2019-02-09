@@ -21,38 +21,35 @@
 
 #include <editeng/borderline.hxx>
 #include <tools/color.hxx>
+#include <tools/solar.h>
 #include <svl/poolitem.hxx>
 #include "swdllapi.h"
-#include <hintids.hxx>
-#include <format.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 
 #include <vector>
 
 /// ColumnDescriptor
 class SwColumn
 {
-    sal_uInt16 nWish;   /**< Desired width, borders included.
+    sal_uInt16 m_nWish;   /**< Desired width, borders included.
                          It is inversely proportional to the ratio of
                          desired width environment / current width column. */
-    sal_uInt16 nUpper;  ///< Top border.
-    sal_uInt16 nLower;  ///< Bottom border.
-    sal_uInt16 nLeft;   ///< Left border.
-    sal_uInt16 nRight;  ///< Right border.
+    sal_uInt16 m_nLeft;   ///< Left border.
+    sal_uInt16 m_nRight;  ///< Right border.
 
 public:
     SwColumn();
 
     bool operator==( const SwColumn & ) const;
 
-    void SetWishWidth( sal_uInt16 nNew ) { nWish  = nNew; }
-    void SetLeft ( sal_uInt16  nNew ) { nLeft  = nNew; }
-    void SetRight( sal_uInt16  nNew ) { nRight = nNew; }
+    void SetWishWidth( sal_uInt16 nNew ) { m_nWish  = nNew; }
+    void SetLeft ( sal_uInt16  nNew ) { m_nLeft  = nNew; }
+    void SetRight( sal_uInt16  nNew ) { m_nRight = nNew; }
 
-    sal_uInt16 GetWishWidth() const { return nWish;  }
-    sal_uInt16 GetUpper() const { return nUpper; }
-    sal_uInt16 GetLower() const { return nLower; }
-    sal_uInt16 GetLeft () const { return nLeft; }
-    sal_uInt16 GetRight() const { return nRight; }
+    sal_uInt16 GetWishWidth() const { return m_nWish;  }
+    sal_uInt16 GetLeft () const { return m_nLeft; }
+    sal_uInt16 GetRight() const { return m_nRight; }
 
     void dumpAsXml(struct _xmlTextWriter* pWriter) const;
 };
@@ -69,7 +66,7 @@ enum SwColLineAdj
 
 class SW_DLLPUBLIC SwFormatCol : public SfxPoolItem
 {
-    editeng::SvxBorderStyle m_eLineStyle;     ///< style of the separator line
+    SvxBorderLineStyle m_eLineStyle;     ///< style of the separator line
     sal_uLong   m_nLineWidth;                 ///< Width of the separator line.
     Color   m_aLineColor;                     ///< Color of the separator line.
 
@@ -93,10 +90,10 @@ class SW_DLLPUBLIC SwFormatCol : public SfxPoolItem
 public:
     SwFormatCol();
     SwFormatCol( const SwFormatCol& );
-    virtual ~SwFormatCol();
+    virtual ~SwFormatCol() override;
     //#i120133#
     sal_Int16 GetAdjustValue() const { return m_aWidthAdjustValue; }
-    void SetAdjustValue( const sal_Int16& n ) { m_aWidthAdjustValue = n; }
+    void SetAdjustValue( sal_Int16 n ) { m_aWidthAdjustValue = n; }
 
     SwFormatCol& operator=( const SwFormatCol& );
 
@@ -104,10 +101,10 @@ public:
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper* pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
 
     virtual bool QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
@@ -116,7 +113,7 @@ public:
           SwColumns &GetColumns()       { return m_aColumns; }
     sal_uInt16           GetNumCols() const { return m_aColumns.size(); }
 
-    editeng::SvxBorderStyle     GetLineStyle() const  { return m_eLineStyle;}
+    SvxBorderLineStyle     GetLineStyle() const  { return m_eLineStyle;}
     sal_uLong           GetLineWidth() const  { return m_nLineWidth;}
     const Color&    GetLineColor() const { return m_aLineColor;}
 
@@ -129,7 +126,7 @@ public:
      @return smallest width if bMin is true. */
     sal_uInt16 GetGutterWidth( bool bMin = false ) const;
 
-    void SetLineStyle(editeng::SvxBorderStyle eStyle)        { m_eLineStyle = eStyle;}
+    void SetLineStyle(SvxBorderLineStyle eStyle)        { m_eLineStyle = eStyle;}
     void SetLineWidth(sal_uLong nLWidth)        { m_nLineWidth = nLWidth;}
     void SetLineColor(const Color& rCol )   { m_aLineColor = rCol;}
     void SetLineHeight( sal_uInt8 nNew )     { m_nLineHeight = nNew; }
@@ -151,7 +148,7 @@ public:
     void SetOrtho( bool bNew, sal_uInt16 nGutterWidth, sal_uInt16 nAct );
 
     /// For the reader
-    void _SetOrtho( bool bNew ) { m_bOrtho = bNew; }
+    void SetOrtho_( bool bNew ) { m_bOrtho = bNew; }
 
     /** Calculates current width of column nCol.
      The ratio of desired width of this column to return value is
@@ -166,7 +163,7 @@ public:
 };
 
 inline const SwFormatCol &SwAttrSet::GetCol(bool bInP) const
-    { return static_cast<const SwFormatCol&>(Get( RES_COL,bInP)); }
+    { return Get( RES_COL,bInP); }
 
 inline const SwFormatCol &SwFormat::GetCol(bool bInP) const
     { return m_aSet.GetCol(bInP); }

@@ -17,18 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <SidebarTxtControl.hxx>
+#include "SidebarTxtControl.hxx"
 
-#include <SidebarTxtControlAcc.hxx>
+#include "SidebarTxtControlAcc.hxx"
 #include <docsh.hxx>
 #include <doc.hxx>
 
-#include <SidebarWin.hxx>
 #include <PostItMgr.hxx>
 #include <edtwin.hxx>
 
 #include <cmdid.h>
-#include <docvw.hrc>
+#include <strings.hrc>
 
 #include <unotools/securityoptions.hxx>
 
@@ -38,8 +37,7 @@
 
 #include <vcl/svapp.hxx>
 #include <vcl/help.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/gradient.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/settings.hxx>
@@ -49,16 +47,20 @@
 #include <editeng/editview.hxx>
 #include <editeng/flditem.hxx>
 #include <LibreOfficeKit/LibreOfficeKitEnums.h>
+#include <comphelper/lok.hxx>
+#include <sfx2/lokhelper.hxx>
 
 #include <uitool.hxx>
 #include <view.hxx>
 #include <wrtsh.hxx>
 #include <shellres.hxx>
+#include <AnnotationWin.hxx>
+#include <redline.hxx>
 #include <memory>
 
 namespace sw { namespace sidebarwindows {
 
-SidebarTextControl::SidebarTextControl( SwSidebarWin& rSidebarWin,
+SidebarTextControl::SidebarTextControl( sw::annotation::SwAnnotationWin& rSidebarWin,
                                       WinBits nBits,
                                       SwView& rDocView,
                                       SwPostItMgr& rPostItMgr )
@@ -67,7 +69,7 @@ SidebarTextControl::SidebarTextControl( SwSidebarWin& rSidebarWin,
     , mrDocView( rDocView )
     , mrPostItMgr( rPostItMgr )
 {
-    AddEventListener( LINK( &mrSidebarWin, SwSidebarWin, WindowEventListener ) );
+    AddEventListener( LINK( &mrSidebarWin, sw::annotation::SwAnnotationWin, WindowEventListener ) );
 }
 
 SidebarTextControl::~SidebarTextControl()
@@ -77,7 +79,7 @@ SidebarTextControl::~SidebarTextControl()
 
 void SidebarTextControl::dispose()
 {
-    RemoveEventListener( LINK( &mrSidebarWin, SwSidebarWin, WindowEventListener ) );
+    RemoveEventListener( LINK( &mrSidebarWin, sw::annotation::SwAnnotationWin, WindowEventListener ) );
     Control::dispose();
 }
 
@@ -109,22 +111,22 @@ void SidebarTextControl::LoseFocus()
 
 void SidebarTextControl::RequestHelp(const HelpEvent &rEvt)
 {
-    sal_uInt16 nResId = 0;
+    const char* pResId = nullptr;
     switch( mrSidebarWin.GetLayoutStatus() )
     {
-        case SwPostItHelper::INSERTED:  nResId = STR_REDLINE_INSERT; break;
-        case SwPostItHelper::DELETED:   nResId = STR_REDLINE_DELETE; break;
-        default: nResId = 0;
+        case SwPostItHelper::INSERTED:  pResId = STR_REDLINE_INSERT; break;
+        case SwPostItHelper::DELETED:   pResId = STR_REDLINE_DELETE; break;
+        default: pResId = nullptr;
     }
 
-    SwContentAtPos aContentAtPos( SwContentAtPos::SW_REDLINE );
-    if ( nResId &&
+    SwContentAtPos aContentAtPos( IsAttrAtPos::Redline );
+    if ( pResId &&
          mrDocView.GetWrtShell().GetContentAtPos( mrSidebarWin.GetAnchorPos(), aContentAtPos ) )
     {
-        OUString sText = SW_RESSTR( nResId ) + ": " +
+        OUString sText = SwResId(pResId) + ": " +
                         aContentAtPos.aFnd.pRedl->GetAuthorString() + " - " +
                         GetAppLangDateTimeString( aContentAtPos.aFnd.pRedl->GetTimeStamp() );
-        Help::ShowQuickHelp( this,PixelToLogic(Rectangle(rEvt.GetMousePosPixel(),Size(50,10))),sText);
+        Help::ShowQuickHelp( this,PixelToLogic(tools::Rectangle(rEvt.GetMousePosPixel(),Size(50,10))),sText);
     }
 }
 
@@ -132,11 +134,11 @@ void SidebarTextControl::Draw(OutputDevice* pDev, const Point& rPt, const Size& 
 {
     //Take the control's height, but overwrite the scrollbar area if there was one
     Size aSize(PixelToLogic(GetSizePixel()));
-    aSize.Width() = rSz.Width();
+    aSize.setWidth( rSz.Width() );
 
     if ( GetTextView() )
     {
-        GetTextView()->GetOutliner()->Draw(pDev, Rectangle(rPt, aSize));
+        GetTextView()->GetOutliner()->Draw(pDev, tools::Rectangle(rPt, aSize));
     }
 
     if ( mrSidebarWin.GetLayoutStatus()==SwPostItHelper::DELETED )
@@ -153,19 +155,19 @@ void SidebarTextControl::Draw(OutputDevice* pDev, const Point& rPt, const Size& 
     }
 }
 
-void SidebarTextControl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void SidebarTextControl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     if (!rRenderContext.GetSettings().GetStyleSettings().GetHighContrastMode())
     {
         if (mrSidebarWin.IsMouseOverSidebarWin() || HasFocus())
         {
-            rRenderContext.DrawGradient(Rectangle(Point(0,0), rRenderContext.PixelToLogic(GetSizePixel())),
-                                        Gradient(GradientStyle_LINEAR, mrSidebarWin.ColorDark(), mrSidebarWin.ColorDark()));
+            rRenderContext.DrawGradient(tools::Rectangle(Point(0,0), rRenderContext.PixelToLogic(GetSizePixel())),
+                                        Gradient(GradientStyle::Linear, mrSidebarWin.ColorDark(), mrSidebarWin.ColorDark()));
         }
         else
         {
-            rRenderContext.DrawGradient(Rectangle(Point(0,0), rRenderContext.PixelToLogic(GetSizePixel())),
-                           Gradient(GradientStyle_LINEAR, mrSidebarWin.ColorLight(), mrSidebarWin.ColorDark()));
+            rRenderContext.DrawGradient(tools::Rectangle(Point(0,0), rRenderContext.PixelToLogic(GetSizePixel())),
+                           Gradient(GradientStyle::Linear, mrSidebarWin.ColorLight(), mrSidebarWin.ColorDark()));
         }
     }
 
@@ -187,15 +189,15 @@ void SidebarTextControl::Paint(vcl::RenderContext& rRenderContext, const Rectang
     }
 }
 
-void SidebarTextControl::LogicInvalidate(const Rectangle* pRectangle)
+void SidebarTextControl::LogicInvalidate(const tools::Rectangle* pRectangle)
 {
-    Rectangle aRectangle;
+    tools::Rectangle aRectangle;
 
     if (!pRectangle)
     {
         Push(PushFlags::MAPMODE);
         EnableMapMode();
-        aRectangle = Rectangle(Point(0, 0), PixelToLogic(GetSizePixel()));
+        aRectangle = tools::Rectangle(Point(0, 0), PixelToLogic(GetSizePixel()));
         Pop();
     }
     else
@@ -212,7 +214,7 @@ void SidebarTextControl::LogicInvalidate(const Rectangle* pRectangle)
 
     OString sRectangle = aRectangle.toString();
     SwWrtShell& rWrtShell = mrDocView.GetWrtShell();
-    rWrtShell.libreOfficeKitCallback(LOK_CALLBACK_INVALIDATE_TILES, sRectangle.getStr());
+    SfxLokHelper::notifyInvalidation(rWrtShell.GetSfxViewShell(), sRectangle);
 }
 
 void SidebarTextControl::KeyInput( const KeyEvent& rKeyEvt )
@@ -240,17 +242,18 @@ void SidebarTextControl::KeyInput( const KeyEvent& rKeyEvt )
     {
         mrSidebarWin.SwitchToFieldPos();
     }
-    else if ( nKey == KEY_INSERT )
+    else if ( rKeyCode.GetFullCode() == KEY_INSERT )
     {
-        if ( !rKeyCode.IsMod1() && !rKeyCode.IsMod2() )
-        {
-            mrSidebarWin.ToggleInsMode();
-        }
+        mrSidebarWin.ToggleInsMode();
     }
     else
     {
+        // MakeVisible can lose our MapMode, save it.
+        auto oldMapMode = GetMapMode();
         //let's make sure we see our note
         mrPostItMgr.MakeVisible(&mrSidebarWin);
+        if (comphelper::LibreOfficeKit::isActive())
+            SetMapMode(oldMapMode);
 
         long aOldHeight = mrSidebarWin.GetPostItTextHeight();
         bool bDone = false;
@@ -265,8 +268,9 @@ void SidebarTextControl::KeyInput( const KeyEvent& rKeyEvt )
             }
             else
             {
-                ScopedVclPtrInstance<MessageDialog>::Create(this, "InfoReadonlyDialog",
-                    "modules/swriter/ui/inforeadonlydialog.ui")->Execute();
+                std::unique_ptr<weld::Builder> xBuilder(Application::CreateBuilder(GetFrameWeld(), "modules/swriter/ui/inforeadonlydialog.ui"));
+                std::unique_ptr<weld::MessageDialog> xQuery(xBuilder->weld_message_dialog("InfoReadonlyDialog"));
+                xQuery->run();
             }
         }
         if (bDone)
@@ -304,11 +308,11 @@ void SidebarTextControl::MouseMove( const MouseEvent& rMEvt )
             {
                 OUString sURL( pURL->GetURL() );
                 SvtSecurityOptions aSecOpts;
-                if ( aSecOpts.IsOptionSet( SvtSecurityOptions::E_CTRLCLICK_HYPERLINK) )
+                if ( aSecOpts.IsOptionSet( SvtSecurityOptions::EOption::CtrlClickHyperlink) )
                     sURL = SwViewShell::GetShellRes()->aLinkCtrlClick + ": " + sURL;
                 else
                     sURL = SwViewShell::GetShellRes()->aLinkClick + ": " + sURL;
-                Help::ShowQuickHelp( this,PixelToLogic(Rectangle(GetPosPixel(),Size(50,10))),sURL);
+                Help::ShowQuickHelp( this,PixelToLogic(tools::Rectangle(GetPosPixel(),Size(50,10))),sURL);
             }
         }
     }
@@ -319,7 +323,7 @@ void SidebarTextControl::MouseButtonDown( const MouseEvent& rMEvt )
     if ( GetTextView() )
     {
         SvtSecurityOptions aSecOpts;
-        bool bExecuteMod = aSecOpts.IsOptionSet( SvtSecurityOptions::E_CTRLCLICK_HYPERLINK);
+        bool bExecuteMod = aSecOpts.IsOptionSet( SvtSecurityOptions::EOption::CtrlClickHyperlink);
 
         if ( !bExecuteMod || (rMEvt.GetModifier() == KEY_MOD1))
         {
@@ -333,9 +337,9 @@ void SidebarTextControl::MouseButtonDown( const MouseEvent& rMEvt )
                 {
                     GetTextView()->MouseButtonDown( rMEvt );
                     SwWrtShell &rSh = mrDocView.GetWrtShell();
-                    OUString sURL( pURL->GetURL() );
-                    OUString sTarget( pURL->GetTargetFrame() );
-                    ::LoadURL(rSh, sURL, URLLOAD_NOFILTER, sTarget);
+                    const OUString& sURL( pURL->GetURL() );
+                    const OUString& sTarget( pURL->GetTargetFrame() );
+                    ::LoadURL(rSh, sURL, LoadUrlFlags::NONE, sTarget);
                     return;
                 }
             }
@@ -356,7 +360,7 @@ void SidebarTextControl::MouseButtonUp( const MouseEvent& rMEvt )
         GetTextView()->MouseButtonUp( rMEvt );
 }
 
-IMPL_LINK_TYPED( SidebarTextControl, OnlineSpellCallback, SpellCallbackInfo&, rInfo, void )
+IMPL_LINK( SidebarTextControl, OnlineSpellCallback, SpellCallbackInfo&, rInfo, void )
 {
     if ( rInfo.nCommand == SpellCallbackCommand::STARTSPELLDLG )
     {

@@ -20,15 +20,29 @@
 #ifndef INCLUDED_OOX_OLE_VBACONTROL_HXX
 #define INCLUDED_OOX_OLE_VBACONTROL_HXX
 
+#include <memory>
+
+#include <com/sun/star/uno/Reference.hxx>
+#include <oox/helper/refvector.hxx>
+#include <oox/ole/axbinaryreader.hxx>
 #include <oox/ole/axcontrol.hxx>
-#include <com/sun/star/frame/XModel.hpp>
+#include <rtl/textenc.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
+    namespace awt { class XControlModel; }
     namespace container { class XNameContainer; }
+    namespace frame { class XModel; }
     namespace uno { class XComponentContext; }
 } } }
 
-namespace oox { class StorageBase; }
+namespace oox {
+    class BinaryInputStream;
+    class GraphicHelper;
+    class PropertyMap;
+    class StorageBase;
+}
 
 namespace oox {
 namespace ole {
@@ -36,11 +50,11 @@ namespace ole {
 
 /** Common properties for all controls that are part of a VBA user form or of
     another container control in a VBA user form. */
-class VbaSiteModel
+class VbaSiteModel final
 {
 public:
     explicit            VbaSiteModel();
-    virtual             ~VbaSiteModel();
+                        ~VbaSiteModel();
 
     /** Allows to set single properties specified by XML token identifier. */
     void                importProperty( sal_Int32 nPropId, const OUString& rValue );
@@ -74,7 +88,7 @@ public:
                             sal_Int32 nCtrlIndex ) const;
     const OUString& getControlSource() { return  maControlSource; }
     const OUString& getRowSource() { return  maRowSource; }
-protected:
+private:
     OUString     maName;             ///< Name of the control.
     OUString     maTag;              ///< User defined tag.
     OUString     maToolTip;          ///< Tool tip for the control.
@@ -177,7 +191,7 @@ public:
                             const css::uno::Reference< css::uno::XComponentContext >& rxContext,
                             const css::uno::Reference< css::frame::XModel >& rxDocModel,
                             const GraphicHelper& rGraphicHelper,
-                            bool bDefaultColorBgr = true );
+                            bool bDefaultColorBgr );
 
     /** Imports the form and its embedded controls, and inserts the form with
         all its controls into the passed dialog library. */
@@ -190,7 +204,7 @@ public:
 private:
     css::uno::Reference< css::uno::XComponentContext > mxContext;
     css::uno::Reference< css::frame::XModel >          mxDocModel;
-    ControlConverter                                   maConverter;
+    ControlConverter const                             maConverter;
 };
 
 

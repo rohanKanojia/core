@@ -21,16 +21,14 @@
 #define INCLUDED_SD_SOURCE_UI_UNOIDL_UNOWCNTR_HXX
 
 #include <cppuhelper/weakref.hxx>
-#include <list>
+#include <vector>
 
-typedef bool (*weakref_searchfunc)( const css::uno::WeakReference< css::uno::XInterface >& xRef, void* pSearchData );
-
-typedef ::std::list< css::uno::WeakReference< css::uno::XInterface >* > WeakRefList;
+typedef bool (*weakref_searchfunc)( const css::uno::WeakReference< css::uno::XInterface >& xRef, void const * pSearchData );
 
 class SvUnoWeakContainer
 {
 private:
-    WeakRefList maList;
+    std::vector< css::uno::WeakReference< css::uno::XInterface > > maVector;
 
 public:
     SvUnoWeakContainer() throw();
@@ -42,7 +40,7 @@ public:
     /** searches the container for a ref that returns true on the given
         search function
     */
-    bool findRef( css::uno::WeakReference< css::uno::XInterface >& rRef, void* pSearchData, weakref_searchfunc pSearchFunc );
+    bool findRef( css::uno::WeakReference< css::uno::XInterface >& rRef, void const * pSearchData, weakref_searchfunc pSearchFunc );
 
     void dispose();
 };

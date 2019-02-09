@@ -19,14 +19,14 @@
 
 
 #include <string.h>
-#include "jvmaccess/virtualmachine.hxx"
-#include "rtl/byteseq.h"
-#include "rtl/byteseq.hxx"
-#include "rtl/ref.hxx"
-#include "sal/types.h"
-#include "uno/threadpool.h"
+#include <jvmaccess/virtualmachine.hxx>
+#include <rtl/byteseq.h>
+#include <rtl/byteseq.hxx>
+#include <rtl/ref.hxx>
+#include <sal/types.h>
+#include <uno/threadpool.h>
 
-#include "jni.h"
+#include <jni.h>
 
 #include <new>
 
@@ -64,7 +64,7 @@ void throwOutOfMemory(JNIEnv * env) {
 
 extern "C" {
 
-static void SAL_CALL executeRequest(void * data) {
+static void executeRequest(void * data) {
     Job * job = static_cast< Job * >(data);
     try {
         jvmaccess::VirtualMachine::AttachGuard guard(job->pool->virtualMachine);

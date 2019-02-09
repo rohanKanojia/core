@@ -20,13 +20,11 @@
 #include <svx/SvxColorChildWindow.hxx>
 #include <sfx2/dockwin.hxx>
 #include <svx/svxids.hrc>
-#include <svx/dialogs.hrc>
 #include <svx/colrctrl.hxx>
-#include <svx/dialmgr.hxx>
 
 SFX_IMPL_DOCKINGWINDOW_WITHID( SvxColorChildWindow, SID_COLOR_CONTROL )
 
-// Ableitung vom SfxChildWindow als "Behaelter" fuer Animator
+// Derivation from SfxChildWindow as "container" for animator
 SvxColorChildWindow::SvxColorChildWindow( vcl::Window* _pParent,
                                           sal_uInt16 nId,
                                           SfxBindings* pBindings,

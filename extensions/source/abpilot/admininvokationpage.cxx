@@ -20,11 +20,10 @@
 #include "admininvokationpage.hxx"
 #include "abspilot.hxx"
 #include "admininvokationimpl.hxx"
-#include "comphelper/processfactory.hxx"
 
 namespace abp
 {
-    AdminDialogInvokationPage::AdminDialogInvokationPage( OAddessBookSourcePilot* _pParent )
+    AdminDialogInvokationPage::AdminDialogInvokationPage( OAddressBookSourcePilot* _pParent )
         : AddressBookSourcePage(_pParent, "InvokeAdminPage",
             "modules/sabpilot/ui/invokeadminpage.ui")
     {
@@ -82,7 +81,7 @@ namespace abp
     }
 
     // davido: Do we need it?
-    IMPL_LINK_NOARG_TYPED( AdminDialogInvokationPage, OnInvokeAdminDialog, Button*, void )
+    IMPL_LINK_NOARG( AdminDialogInvokationPage, OnInvokeAdminDialog, Button*, void )
     {
         OAdminDialogInvokation aInvokation( getORB(), getDialog()->getDataSource().getDataSource(), getDialog() );
         if ( aInvokation.invokeAdministration() )

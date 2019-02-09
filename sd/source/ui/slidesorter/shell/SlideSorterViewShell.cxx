@@ -17,40 +17,39 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SlideSorterViewShell.hxx"
-#include "ViewShellImplementation.hxx"
+#include <SlideSorterViewShell.hxx>
+#include <ViewShellImplementation.hxx>
 
-#include "SlideSorter.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsClipboard.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "controller/SlsScrollBarManager.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsSlotManager.hxx"
-#include "controller/SlsCurrentSlideManager.hxx"
-#include "controller/SlsSelectionManager.hxx"
-#include "controller/SlsSelectionFunction.hxx"
-#include "controller/SlsProperties.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageEnumeration.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "ViewShellBase.hxx"
-#include "drawdoc.hxx"
-#include "app.hrc"
-#include "glob.hrc"
-#include "sdattr.hrc"
-#include "sdresid.hxx"
-#include "AccessibleSlideSorterView.hxx"
-#include "DrawDocShell.hxx"
-#include "DrawViewShell.hxx"
-#include "FrameView.hxx"
-#include "SdUnoSlideView.hxx"
-#include "ViewShellManager.hxx"
-#include "Window.hxx"
-#include "drawview.hxx"
+#include <SlideSorter.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsClipboard.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <controller/SlsScrollBarManager.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsSlotManager.hxx>
+#include <controller/SlsCurrentSlideManager.hxx>
+#include <controller/SlsSelectionManager.hxx>
+#include <controller/SlsSelectionFunction.hxx>
+#include <controller/SlsProperties.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageEnumeration.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <ViewShellBase.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <app.hrc>
+#include <sdattr.hrc>
+#include <AccessibleSlideSorterView.hxx>
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <FrameView.hxx>
+#include <SdUnoSlideView.hxx>
+#include <ViewShellManager.hxx>
+#include <Window.hxx>
+#include <drawview.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/msg.hxx>
 #include <sfx2/objface.hxx>
@@ -60,24 +59,23 @@
 #include <sfx2/request.hxx>
 #include <sfx2/sidebar/SidebarChildWindow.hxx>
 #include <svx/svxids.hrc>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <svx/sidebar/ContextChangeEventMultiplexer.hxx>
 #include <svx/sidebar/SelectionAnalyzer.hxx>
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
 #include <com/sun/star/drawing/framework/ResourceId.hpp>
 #include <cppuhelper/bootstrap.hxx>
-#include <comphelper/processfactory.hxx>
 
 using namespace ::sd::slidesorter;
-#define SlideSorterViewShell
-#include "sdslots.hxx"
+#define ShellClass_SlideSorterViewShell
+#include <sdslots.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::drawing::framework;
 
 using ::sd::framework::FrameworkHelper;
-using ::sfx2::sidebar::EnumContext;
+using ::vcl::EnumContext;
 
 namespace sd { namespace slidesorter {
 
@@ -93,18 +91,15 @@ std::shared_ptr<SlideSorterViewShell> SlideSorterViewShell::Create (
     SfxViewFrame* pFrame,
     ViewShellBase& rViewShellBase,
     vcl::Window* pParentWindow,
-    FrameView* pFrameViewArgument,
-    const bool bIsCenterPane)
+    FrameView* pFrameViewArgument)
 {
-    (void)bIsCenterPane;
-
     std::shared_ptr<SlideSorterViewShell> pViewShell;
     try
     {
         pViewShell.reset(
             new SlideSorterViewShell(pFrame,rViewShellBase,pParentWindow,pFrameViewArgument));
         pViewShell->Initialize();
-        if (pViewShell->mpSlideSorter.get() == nullptr)
+        if (pViewShell->mpSlideSorter == nullptr)
             pViewShell.reset();
     }
     catch(Exception&)
@@ -115,14 +110,15 @@ std::shared_ptr<SlideSorterViewShell> SlideSorterViewShell::Create (
 }
 
 SlideSorterViewShell::SlideSorterViewShell (
-    SfxViewFrame* pFrame,
+    SfxViewFrame* /*pFrame*/,
     ViewShellBase& rViewShellBase,
     vcl::Window* pParentWindow,
     FrameView* pFrameViewArgument)
-    : ViewShell (pFrame, pParentWindow, rViewShellBase),
+    : ViewShell (pParentWindow, rViewShellBase),
       mpSlideSorter(),
       mbIsArrangeGUIElementsPending(true)
 {
+    GetContentWindow()->set_id("slidesorter");
     meShellType = ST_SLIDE_SORTER;
 
     if (pFrameViewArgument != nullptr)
@@ -179,7 +175,7 @@ void SlideSorterViewShell::Initialize()
     // the new view shell.  (One is created earlier while the constructor
     // of the base class is executed.  At that time the correct
     // accessibility object can not be constructed.)
-    sd::Window *pWindow (mpSlideSorter->GetContentWindow());
+    sd::Window *pWindow (mpSlideSorter->GetContentWindow().get());
     if (pWindow)
     {
         pWindow->Hide();
@@ -251,14 +247,14 @@ css::uno::Reference<css::accessibility::XAccessible>
 {
     // When the view is not set then the initialization is not yet complete
     // and we can not yet provide an accessibility object.
-    if (mpView == nullptr || mpSlideSorter.get() == nullptr)
+    if (mpView == nullptr || mpSlideSorter == nullptr)
         return nullptr;
 
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
 
     ::accessibility::AccessibleSlideSorterView *pAccessibleView =
     new ::accessibility::AccessibleSlideSorterView(
-        *mpSlideSorter.get(),
+        *mpSlideSorter,
         pWindow);
 
     css::uno::Reference< css::accessibility::XAccessible> xRet(pAccessibleView);
@@ -282,26 +278,23 @@ void SlideSorterViewShell::SwitchViewFireFocus(const css::uno::Reference< css::a
 
 SlideSorter& SlideSorterViewShell::GetSlideSorter() const
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     return *mpSlideSorter;
 }
 
 bool SlideSorterViewShell::RelocateToParentWindow (vcl::Window* pParentWindow)
 {
-    OSL_ASSERT(mpSlideSorter);
+    assert(mpSlideSorter);
     if ( ! mpSlideSorter)
         return false;
 
-    if (pParentWindow == nullptr)
-        WriteFrameViewData();
-    const bool bSuccess (mpSlideSorter->RelocateToWindow(pParentWindow));
-    if (pParentWindow != nullptr)
-        ReadFrameViewData(mpFrameView);
+    mpSlideSorter->RelocateToWindow(pParentWindow);
+    ReadFrameViewData(mpFrameView);
 
-    return bSuccess;
+    return true;
 }
 
-::svl::IUndoManager* SlideSorterViewShell::ImpGetUndoManager() const
+SfxUndoManager* SlideSorterViewShell::ImpGetUndoManager() const
 {
     SfxShell* pObjectBar = GetViewShellBase().GetViewShellManager()->GetTopShell();
     if (pObjectBar != nullptr)
@@ -336,7 +329,7 @@ SdPage* SlideSorterViewShell::GetActualPage()
     if ( ! IsMainViewShell())
     {
         std::shared_ptr<ViewShell> pMainViewShell = GetViewShellBase().GetMainViewShell();
-        if (pMainViewShell.get() != nullptr)
+        if (pMainViewShell != nullptr)
             pCurrentPage = pMainViewShell->GetActualPage();
     }
 
@@ -348,43 +341,38 @@ SdPage* SlideSorterViewShell::GetActualPage()
             pCurrentPage = pDescriptor->GetPage();
     }
 
-    if (pCurrentPage == nullptr)
-    {
-
-    }
-
     return pCurrentPage;
 }
 
 void SlideSorterViewShell::GetMenuState ( SfxItemSet& rSet)
 {
     ViewShell::GetMenuState(rSet);
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetSlotManager()->GetMenuState(rSet);
 }
 
 void SlideSorterViewShell::GetClipboardState ( SfxItemSet& rSet)
 {
     ViewShell::GetMenuState(rSet);
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetSlotManager()->GetClipboardState(rSet);
 }
 
 void SlideSorterViewShell::ExecCtrl (SfxRequest& rRequest)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().ExecCtrl(rRequest);
 }
 
 void SlideSorterViewShell::GetCtrlState (SfxItemSet& rSet)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetCtrlState(rSet);
 }
 
 void SlideSorterViewShell::FuSupport (SfxRequest& rRequest)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().FuSupport(rRequest);
 }
 
@@ -393,7 +381,7 @@ void SlideSorterViewShell::FuSupport (SfxRequest& rRequest)
 */
 void SlideSorterViewShell::FuTemporary (SfxRequest& rRequest)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     switch (rRequest.GetSlot())
     {
         case SID_MODIFYPAGE:
@@ -403,7 +391,7 @@ void SlideSorterViewShell::FuTemporary (SfxRequest& rRequest)
                 mpImpl->ProcessModifyPageSlot (
                     rRequest,
                     pCurrentPage,
-                    mpSlideSorter->GetModel().GetPageType());
+                    PageKind::Standard);
             Cancel();
             rRequest.Done ();
         }
@@ -417,19 +405,19 @@ void SlideSorterViewShell::FuTemporary (SfxRequest& rRequest)
 
 void SlideSorterViewShell::GetStatusBarState (SfxItemSet& rSet)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetStatusBarState(rSet);
 }
 
 void SlideSorterViewShell::FuPermanent (SfxRequest& rRequest)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().FuPermanent(rRequest);
 }
 
 void SlideSorterViewShell::GetAttrState (SfxItemSet& rSet)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetAttrState(rSet);
 }
 
@@ -438,11 +426,11 @@ void SlideSorterViewShell::ExecStatusBar (SfxRequest& )
 }
 
 void SlideSorterViewShell::Paint (
-    const Rectangle& rBBox,
+    const ::tools::Rectangle& rBBox,
     ::sd::Window* pWindow)
 {
     SetActiveWindow (pWindow);
-    OSL_ASSERT(mpSlideSorter);
+    assert(mpSlideSorter);
     if (mpSlideSorter)
         mpSlideSorter->GetController().Paint(rBBox,pWindow);
 }
@@ -451,7 +439,7 @@ void SlideSorterViewShell::ArrangeGUIElements()
 {
     if (IsActive())
     {
-        OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+        assert(mpSlideSorter.get()!=nullptr);
         mpSlideSorter->ArrangeGUIElements(maViewPos, maViewSize);
         mbIsArrangeGUIElementsPending = false;
     }
@@ -466,7 +454,7 @@ void SlideSorterViewShell::Activate (bool bIsMDIActivate)
         ArrangeGUIElements();
 
     // Determine and broadcast the context that belongs to the main view shell.
-    EnumContext::Context eContext = EnumContext::Context_Unknown;
+    EnumContext::Context eContext = EnumContext::Context::Unknown;
     std::shared_ptr<ViewShell> pMainViewShell (GetViewShellBase().GetMainViewShell());
     ViewShell::ShellType eMainViewShellType (
         pMainViewShell
@@ -478,7 +466,7 @@ void SlideSorterViewShell::Activate (bool bIsMDIActivate)
         case ViewShell::ST_SLIDE_SORTER:
         case ViewShell::ST_NOTES:
         case ViewShell::ST_DRAW:
-            eContext = EnumContext::Context_DrawPage;
+            eContext = EnumContext::Context::DrawPage;
             if( nullptr != dynamic_cast< const DrawViewShell *>( pMainViewShell.get() ))
             {
                 DrawViewShell* pDrawViewShell = dynamic_cast<DrawViewShell*>(pMainViewShell.get());
@@ -505,14 +493,14 @@ void SlideSorterViewShell::Command (
     const CommandEvent& rEvent,
     ::sd::Window* pWindow)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     if ( ! mpSlideSorter->GetController().Command (rEvent, pWindow))
         ViewShell::Command (rEvent, pWindow);
 }
 
 void SlideSorterViewShell::ReadFrameViewData (FrameView* pFrameView)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     if (pFrameView != nullptr)
     {
         view::SlideSorterView& rView (mpSlideSorter->GetView());
@@ -540,7 +528,7 @@ void SlideSorterViewShell::ReadFrameViewData (FrameView* pFrameView)
     if ( ! IsMainViewShell())
     {
         std::shared_ptr<ViewShell> pMainViewShell = GetViewShellBase().GetMainViewShell();
-        if (pMainViewShell.get() != nullptr)
+        if (pMainViewShell != nullptr)
             mpSlideSorter->GetController().GetCurrentSlideManager()->NotifyCurrentSlideChange(
                 pMainViewShell->getCurrentPage());
     }
@@ -548,11 +536,11 @@ void SlideSorterViewShell::ReadFrameViewData (FrameView* pFrameView)
 
 void SlideSorterViewShell::WriteFrameViewData()
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     if (mpFrameView != nullptr)
     {
         view::SlideSorterView& rView (mpSlideSorter->GetView());
-        mpFrameView->SetSlidesPerRow((sal_uInt16)rView.GetLayouter().GetColumnCount());
+        mpFrameView->SetSlidesPerRow(static_cast<sal_uInt16>(rView.GetLayouter().GetColumnCount()));
 
         // DrawMode for 'main' window
         if( mpFrameView->GetDrawMode() != GetActiveWindow()->GetDrawMode() )
@@ -565,14 +553,14 @@ void SlideSorterViewShell::WriteFrameViewData()
                 mpFrameView->SetSelectedPage((pActualPage->GetPageNum()- 1) / 2);
             // else
             // The slide sorter is not expected to switch the current page
-            // other then by double clicks.  That is handled separately.
+            // other than by double clicks.  That is handled separately.
         }
         else
         {
             // We have no current page to set but at least we can make sure
             // that the index of the frame view has a legal value.
             if (mpFrameView->GetSelectedPage() >= mpSlideSorter->GetModel().GetPageCount())
-                mpFrameView->SetSelectedPage((sal_uInt16)mpSlideSorter->GetModel().GetPageCount()-1);
+                mpFrameView->SetSelectedPage(static_cast<sal_uInt16>(mpSlideSorter->GetModel().GetPageCount())-1);
         }
     }
 }
@@ -584,19 +572,19 @@ void SlideSorterViewShell::SetZoom (long int )
     // the window.
 }
 
-void SlideSorterViewShell::SetZoomRect (const Rectangle& rZoomRect)
+void SlideSorterViewShell::SetZoomRect (const ::tools::Rectangle& rZoomRect)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     Size aPageSize (mpSlideSorter->GetView().GetLayouter().GetPageObjectSize());
 
-    Rectangle aRect(rZoomRect);
+    ::tools::Rectangle aRect(rZoomRect);
 
     if (aRect.GetWidth()  < aPageSize.Width())
     {
         long nWidthDiff  = (aPageSize.Width() - aRect.GetWidth()) / 2;
 
-        aRect.Left() -= nWidthDiff;
-        aRect.Right() += nWidthDiff;
+        aRect.AdjustLeft( -nWidthDiff );
+        aRect.AdjustRight(nWidthDiff );
 
         if (aRect.Left() < 0)
         {
@@ -608,8 +596,8 @@ void SlideSorterViewShell::SetZoomRect (const Rectangle& rZoomRect)
     {
         long nHeightDiff  = (aPageSize.Height() - aRect.GetHeight()) / 2;
 
-        aRect.Top() -= nHeightDiff;
-        aRect.Bottom() += nHeightDiff;
+        aRect.AdjustTop( -nHeightDiff );
+        aRect.AdjustBottom(nHeightDiff );
 
         if (aRect.Top() < 0)
         {
@@ -627,14 +615,14 @@ void SlideSorterViewShell::UpdateScrollBars()
 {
     // Do not call the overwritten method of the base class: We do all the
     // scroll bar setup by ourselves.
-    mpSlideSorter->GetController().GetScrollBarManager().UpdateScrollBars ();
+    mpSlideSorter->GetController().GetScrollBarManager().UpdateScrollBars(true);
 }
 
 void SlideSorterViewShell::StartDrag (
     const Point& rDragPt,
     vcl::Window* pWindow )
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetClipboard().StartDrag (
         rDragPt,
         pWindow);
@@ -645,9 +633,9 @@ sal_Int8 SlideSorterViewShell::AcceptDrop (
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     return mpSlideSorter->GetController().GetClipboard().AcceptDrop (
         rEvt,
         rTargetHelper,
@@ -661,9 +649,9 @@ sal_Int8 SlideSorterViewShell::ExecuteDrop (
     DropTargetHelper& rTargetHelper,
     ::sd::Window* pTargetWindow,
     sal_uInt16 nPage,
-    sal_uInt16 nLayer)
+    SdrLayerID nLayer)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     return mpSlideSorter->GetController().GetClipboard().ExecuteDrop (
         rEvt,
         rTargetHelper,
@@ -675,44 +663,77 @@ sal_Int8 SlideSorterViewShell::ExecuteDrop (
 std::shared_ptr<SlideSorterViewShell::PageSelection>
     SlideSorterViewShell::GetPageSelection() const
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     return mpSlideSorter->GetController().GetPageSelector().GetPageSelection();
 }
 
 void SlideSorterViewShell::SetPageSelection (
     const std::shared_ptr<PageSelection>& rSelection)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
-    mpSlideSorter->GetController().GetPageSelector().SetPageSelection(rSelection);
+    assert(mpSlideSorter.get()!=nullptr);
+    mpSlideSorter->GetController().GetPageSelector().SetPageSelection(rSelection, true);
 }
 
 void SlideSorterViewShell::AddSelectionChangeListener (
     const Link<LinkParamNone*,void>& rCallback)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetSelectionManager()->AddSelectionChangeListener(rCallback);
 }
 
 void SlideSorterViewShell::RemoveSelectionChangeListener (
     const Link<LinkParamNone*,void>& rCallback)
 {
-    OSL_ASSERT(mpSlideSorter.get()!=nullptr);
+    assert(mpSlideSorter.get()!=nullptr);
     mpSlideSorter->GetController().GetSelectionManager()->RemoveSelectionChangeListener(rCallback);
+}
+
+void SlideSorterViewShell::MainViewEndEditAndUnmarkAll()
+{
+    std::shared_ptr<ViewShell> pMainViewShell = GetViewShellBase().GetMainViewShell();
+    DrawViewShell* pDrawViewShell = dynamic_cast<DrawViewShell*>(pMainViewShell.get());
+    SdrView* pView = pDrawViewShell ? pDrawViewShell->GetDrawView() : nullptr;
+    if (pView)
+    {
+        pView->SdrEndTextEdit();
+        pView->UnmarkAll();
+    }
+}
+
+std::pair<sal_uInt16, sal_uInt16> SlideSorterViewShell::SyncPageSelectionToDocument(const std::shared_ptr<SlideSorterViewShell::PageSelection> &rpSelection)
+{
+    sal_uInt16 firstSelectedPageNo = SAL_MAX_UINT16;
+    sal_uInt16 lastSelectedPageNo = 0;
+
+    GetDoc()->UnselectAllPages();
+    for (auto& rpPage : *rpSelection)
+    {
+        // Check page number
+        sal_uInt16 pageNo = rpPage->GetPageNum();
+        if (pageNo > lastSelectedPageNo)
+            lastSelectedPageNo = pageNo;
+        if (pageNo < firstSelectedPageNo)
+            firstSelectedPageNo = pageNo;
+        GetDoc()->SetSelected(rpPage, true);
+    }
+
+    return std::make_pair(firstSelectedPageNo, lastSelectedPageNo);
 }
 
 void SlideSorterViewShell::ExecMovePageFirst (SfxRequest& /*rReq*/)
 {
+    MainViewEndEditAndUnmarkAll();
+
+    std::shared_ptr<SlideSorterViewShell::PageSelection> xSelection(GetPageSelection());
+
     // SdDrawDocument MovePages is based on SdPage IsSelected, so
-    // transfer the SlideSorter selection to SdPages (*it)
-    std::shared_ptr<SlideSorterViewShell::PageSelection> pSelection ( GetPageSelection() );
-    for (auto it = pSelection->begin(); it != pSelection->end() ; ++it ) {
-        GetDoc()->SetSelected(*it, true);
-    }
+    // transfer the SlideSorter selection to SdPages
+    SyncPageSelectionToDocument(xSelection);
 
     // Moves selected pages after page -1
-    GetDoc()->MovePages( (sal_uInt16) -1 );
+    GetDoc()->MovePages( sal_uInt16(-1) );
 
-    PostMoveSlidesActions(pSelection);
+    PostMoveSlidesActions(xSelection);
 }
 
 void SlideSorterViewShell::GetStateMovePageFirst (SfxItemSet& rSet)
@@ -720,26 +741,20 @@ void SlideSorterViewShell::GetStateMovePageFirst (SfxItemSet& rSet)
     if ( ! IsMainViewShell())
     {
         std::shared_ptr<ViewShell> pMainViewShell = GetViewShellBase().GetMainViewShell();
-        if (pMainViewShell.get() != nullptr && nullptr != dynamic_cast< const DrawViewShell *>( pMainViewShell.get() ))
+        DrawViewShell* pDrawViewShell = dynamic_cast<DrawViewShell*>(pMainViewShell.get());
+        if (pDrawViewShell != nullptr && pDrawViewShell->GetPageKind() == PageKind::Handout)
         {
-            DrawViewShell* pDrawViewShell = dynamic_cast<DrawViewShell*>(pMainViewShell.get());
-            if (pDrawViewShell != nullptr && pDrawViewShell->GetPageKind() == PK_HANDOUT)
-            {
-                rSet.DisableItem( SID_MOVE_PAGE_FIRST );
-                rSet.DisableItem( SID_MOVE_PAGE_UP );
-                return;
-            }
+            rSet.DisableItem( SID_MOVE_PAGE_FIRST );
+            rSet.DisableItem( SID_MOVE_PAGE_UP );
+            return;
         }
     }
 
-    sal_uInt16 firstSelectedPageNo = SAL_MAX_UINT16;
-    sal_uInt16 pageNo;
-    std::shared_ptr<SlideSorterViewShell::PageSelection> pSelection ( GetPageSelection() );
-    for (auto it = pSelection->begin(); it != pSelection->end() ; ++it ) {
-        // Check page number
-        pageNo = (*it)->GetPageNum();
-        if (pageNo < firstSelectedPageNo) firstSelectedPageNo = pageNo;
-    }
+    std::shared_ptr<SlideSorterViewShell::PageSelection> xSelection(GetPageSelection());
+
+    // SdDrawDocument MovePages is based on SdPage IsSelected, so
+    // transfer the SlideSorter selection to SdPages
+    sal_uInt16 firstSelectedPageNo = SyncPageSelectionToDocument(xSelection).first;
     // Now compute human page number from internal page number
     firstSelectedPageNo = (firstSelectedPageNo - 1) / 2;
 
@@ -752,18 +767,13 @@ void SlideSorterViewShell::GetStateMovePageFirst (SfxItemSet& rSet)
 
 void SlideSorterViewShell::ExecMovePageUp (SfxRequest& /*rReq*/)
 {
-    sal_uInt16 firstSelectedPageNo = SAL_MAX_UINT16;
-    sal_uInt16 pageNo;
-    // SdDrawDocument MovePages is based on SdPage IsSelected, so
-    // transfer the SlideSorter selection to SdPages (*it)
-    std::shared_ptr<SlideSorterViewShell::PageSelection> pSelection ( GetPageSelection() );
-    for (auto it = pSelection->begin(); it != pSelection->end() ; ++it ) {
-        // Check page number
-        pageNo = (*it)->GetPageNum();
-        if (pageNo < firstSelectedPageNo) firstSelectedPageNo = pageNo;
-        GetDoc()->SetSelected(*it, true);
+    MainViewEndEditAndUnmarkAll();
 
-    }
+    std::shared_ptr<SlideSorterViewShell::PageSelection> xSelection(GetPageSelection());
+
+    // SdDrawDocument MovePages is based on SdPage IsSelected, so
+    // transfer the SlideSorter selection to SdPages
+    sal_uInt16 firstSelectedPageNo = SyncPageSelectionToDocument(xSelection).first;
     // Now compute human page number from internal page number
     firstSelectedPageNo = (firstSelectedPageNo - 1) / 2;
 
@@ -774,7 +784,7 @@ void SlideSorterViewShell::ExecMovePageUp (SfxRequest& /*rReq*/)
     // remembering that -1 means at first, which is good.
     GetDoc()->MovePages( firstSelectedPageNo - 2 );
 
-    PostMoveSlidesActions(pSelection);
+    PostMoveSlidesActions(xSelection);
 }
 
 void SlideSorterViewShell::GetStateMovePageUp (SfxItemSet& rSet)
@@ -784,21 +794,16 @@ void SlideSorterViewShell::GetStateMovePageUp (SfxItemSet& rSet)
 
 void SlideSorterViewShell::ExecMovePageDown (SfxRequest& /*rReq*/)
 {
-    sal_uInt16 lastSelectedPageNo = 0;
-    sal_uInt16 pageNo;
+    MainViewEndEditAndUnmarkAll();
+
+    std::shared_ptr<SlideSorterViewShell::PageSelection> xSelection(GetPageSelection());
+
     // SdDrawDocument MovePages is based on SdPage IsSelected, so
-    // transfer the SlideSorter selection to SdPages (*it)
-    std::shared_ptr<SlideSorterViewShell::PageSelection> pSelection ( GetPageSelection() );
-    for (auto it = pSelection->begin(); it != pSelection->end() ; ++it )
-    {
-        // Check page number
-        pageNo = (*it)->GetPageNum();
-        if (pageNo > lastSelectedPageNo) lastSelectedPageNo = pageNo;
-        GetDoc()->SetSelected(*it, true);
-    }
+    // transfer the SlideSorter selection to SdPages
+    sal_uInt16 lastSelectedPageNo = SyncPageSelectionToDocument(xSelection).second;
 
     // Get page number of the last page
-    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PageKind::Standard);
 
     // Now compute human page number from internal page number
     lastSelectedPageNo = (lastSelectedPageNo - 1) / 2;
@@ -808,7 +813,7 @@ void SlideSorterViewShell::ExecMovePageDown (SfxRequest& /*rReq*/)
     // Move to position after lastSelectedPageNo
     GetDoc()->MovePages( lastSelectedPageNo + 1 );
 
-    PostMoveSlidesActions(pSelection);
+    PostMoveSlidesActions(xSelection);
 }
 
 void SlideSorterViewShell::GetStateMovePageDown (SfxItemSet& rSet)
@@ -818,51 +823,42 @@ void SlideSorterViewShell::GetStateMovePageDown (SfxItemSet& rSet)
 
 void SlideSorterViewShell::ExecMovePageLast (SfxRequest& /*rReq*/)
 {
+    MainViewEndEditAndUnmarkAll();
+
+    std::shared_ptr<SlideSorterViewShell::PageSelection> xSelection(GetPageSelection());
+
     // SdDrawDocument MovePages is based on SdPage IsSelected, so
-    // transfer the SlideSorter selection to SdPages (*it)
-    std::shared_ptr<SlideSorterViewShell::PageSelection> pSelection ( GetPageSelection() );
-    for (auto it = pSelection->begin(); it != pSelection->end() ; ++it ) {
-        GetDoc()->SetSelected(*it, true);
-    }
+    // transfer the SlideSorter selection to SdPages
+    SyncPageSelectionToDocument(xSelection);
 
     // Get page number of the last page
-    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PageKind::Standard);
 
     // Move to position after last page No (=Number of pages - 1)
     GetDoc()->MovePages( nNoOfPages - 1 );
 
-    PostMoveSlidesActions(pSelection);
+    PostMoveSlidesActions(xSelection);
 }
 
 void SlideSorterViewShell::GetStateMovePageLast (SfxItemSet& rSet)
 {
     std::shared_ptr<ViewShell> pMainViewShell = GetViewShellBase().GetMainViewShell();
-    if (pMainViewShell.get() != nullptr && nullptr != dynamic_cast< const DrawViewShell *>( pMainViewShell.get() ))
+    DrawViewShell* pDrawViewShell = dynamic_cast<DrawViewShell*>(pMainViewShell.get());
+    if (pDrawViewShell != nullptr && pDrawViewShell->GetPageKind() == PageKind::Handout)
     {
-       DrawViewShell* pDrawViewShell = dynamic_cast<DrawViewShell*>(pMainViewShell.get());
-        if (pDrawViewShell != nullptr && pDrawViewShell->GetPageKind() == PK_HANDOUT)
-        {
-            rSet.DisableItem( SID_MOVE_PAGE_LAST );
-            rSet.DisableItem( SID_MOVE_PAGE_DOWN );
-            return;
-        }
+        rSet.DisableItem( SID_MOVE_PAGE_LAST );
+        rSet.DisableItem( SID_MOVE_PAGE_DOWN );
+        return;
     }
 
-    sal_uInt16 lastSelectedPageNo = 0;
-    sal_uInt16 pageNo;
+    std::shared_ptr<SlideSorterViewShell::PageSelection> xSelection(GetPageSelection());
+
     // SdDrawDocument MovePages is based on SdPage IsSelected, so
-    // transfer the SlideSorter selection to SdPages (*it)
-    std::shared_ptr<SlideSorterViewShell::PageSelection> pSelection ( GetPageSelection() );
-    for (auto it = pSelection->begin(); it != pSelection->end() ; ++it )
-    {
-        // Check page number
-        pageNo = (*it)->GetPageNum();
-        if (pageNo > lastSelectedPageNo) lastSelectedPageNo = pageNo;
-        GetDoc()->SetSelected(*it, true);
-    }
+    // transfer the SlideSorter selection to SdPages
+    sal_uInt16 lastSelectedPageNo = SyncPageSelectionToDocument(xSelection).second;
 
     // Get page number of the last page
-    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PageKind::Standard);
 
     // Now compute human page number from internal page number
     lastSelectedPageNo = (lastSelectedPageNo - 1) / 2;
@@ -875,20 +871,17 @@ void SlideSorterViewShell::GetStateMovePageLast (SfxItemSet& rSet)
 
 void SlideSorterViewShell::PostMoveSlidesActions(const std::shared_ptr<SlideSorterViewShell::PageSelection> &rpSelection)
 {
-    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nNoOfPages = GetDoc()->GetSdPageCount(PageKind::Standard);
     for (sal_uInt16 nPage = 0; nPage < nNoOfPages; nPage++)
     {
-        SdPage* pPage = GetDoc()->GetSdPage(nPage, PK_STANDARD);
+        SdPage* pPage = GetDoc()->GetSdPage(nPage, PageKind::Standard);
         GetDoc()->SetSelected(pPage, false);
     }
 
     mpSlideSorter->GetController().GetPageSelector().DeselectAllPages();
-    ::std::vector<SdPage*>::iterator iPage;
-    for (iPage=rpSelection->begin();
-        iPage!=rpSelection->end();
-        ++iPage)
+    for (const auto& rpPage : *rpSelection)
     {
-        mpSlideSorter->GetController().GetPageSelector().SelectPage(*iPage);
+        mpSlideSorter->GetController().GetPageSelector().SelectPage(rpPage);
     }
 
     // Refresh toolbar icons

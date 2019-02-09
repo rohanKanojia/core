@@ -27,20 +27,29 @@
 
 class SdrHint;
 class SdrModel;
-class SdrModel;
 
-SVX_DLLPUBLIC css::uno::Reference< css::container::XIndexReplace > SvxCreateNumRule( SdrModel* pModel ) throw();
+SVX_DLLPUBLIC css::uno::Reference< css::container::XIndexReplace > SvxCreateNumRule(SdrModel* pModel);
 
 class SVX_DLLPUBLIC SvxUnoDrawMSFactory : public css::lang::XMultiServiceFactory
 {
+protected:
+    /** abstract SdrModel provider */
+    // Every App has a DrwingLayer as internal Tooling, thus ist is
+    // not too hard to asl a UnoModel to hand back a DrawingLayer Model in the
+    // form of an SdrModel. Thus, returning a reference and make usages
+    // safer and easier is justified.
+    virtual SdrModel& getSdrModelFromUnoModel() const = 0; //TTTT make reference return
+
 public:
     SvxUnoDrawMSFactory() throw() {};
 
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier ) throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments( const OUString& ServiceSpecifier, const css::uno::Sequence< css::uno::Any >& Arguments ) throw(css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames(  ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstance( const OUString& aServiceSpecifier ) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL createInstanceWithArguments( const OUString& ServiceSpecifier, const css::uno::Sequence< css::uno::Any >& Arguments ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getAvailableServiceNames(  ) override;
 
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL createTextField( const OUString& aServiceSpecifier ) throw(css::uno::Exception, css::uno::RuntimeException);
+    /// @throws css::uno::Exception
+    /// @throws css::uno::RuntimeException
+    static css::uno::Reference< css::uno::XInterface > createTextField( const OUString& aServiceSpecifier );
     // internal
     static css::uno::Sequence< OUString >
         concatServiceNames( css::uno::Sequence< OUString >& rServices1,

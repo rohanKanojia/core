@@ -16,11 +16,10 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
-#include <sfx2/sidebar/Theme.hxx>
 #include <sfx2/sidebar/ControlFactory.hxx>
-#include <GraphicPropertyPanel.hxx>
-#include <svx/dialogs.hrc>
+#include "GraphicPropertyPanel.hxx"
+#include <svx/strings.hrc>
+#include <svx/svxids.hrc>
 #include <svx/dialmgr.hxx>
 #include <vcl/field.hxx>
 #include <vcl/lstbox.hxx>
@@ -30,7 +29,6 @@
 
 using namespace css;
 using namespace css::uno;
-using ::sfx2::sidebar::Theme;
 
 
 // namespace open
@@ -100,19 +98,16 @@ void GraphicPropertyPanel::Initialize()
     mpMtrContrast->SetModifyHdl( LINK( this, GraphicPropertyPanel, ModifyContrastHdl ) );
     mpMtrTrans->SetModifyHdl( LINK( this, GraphicPropertyPanel, ModifyTransHdl ) );
 
-    mpLBColorMode->InsertEntry(SVX_RESSTR(RID_SVXSTR_GRAFMODE_STANDARD));
-    mpLBColorMode->InsertEntry(SVX_RESSTR(RID_SVXSTR_GRAFMODE_GREYS));
-    mpLBColorMode->InsertEntry(SVX_RESSTR(RID_SVXSTR_GRAFMODE_MONO));
-    mpLBColorMode->InsertEntry(SVX_RESSTR(RID_SVXSTR_GRAFMODE_WATERMARK));
+    mpLBColorMode->InsertEntry(SvxResId(RID_SVXSTR_GRAFMODE_STANDARD));
+    mpLBColorMode->InsertEntry(SvxResId(RID_SVXSTR_GRAFMODE_GREYS));
+    mpLBColorMode->InsertEntry(SvxResId(RID_SVXSTR_GRAFMODE_MONO));
+    mpLBColorMode->InsertEntry(SvxResId(RID_SVXSTR_GRAFMODE_WATERMARK));
     mpLBColorMode->SetSelectHdl( LINK( this, GraphicPropertyPanel, ClickColorModeHdl ));
 
     mpMtrRed->SetModifyHdl( LINK( this, GraphicPropertyPanel, RedHdl ) );
     mpMtrGreen->SetModifyHdl( LINK( this, GraphicPropertyPanel, GreenHdl ) );
     mpMtrBlue->SetModifyHdl( LINK( this, GraphicPropertyPanel, BlueHdl ) );
     mpMtrGamma->SetModifyHdl( LINK( this, GraphicPropertyPanel, GammaHdl ) );
-    mpMtrRed->SetAccessibleName(mpMtrRed->GetQuickHelpText());
-    mpMtrGreen->SetAccessibleName(mpMtrGreen->GetQuickHelpText());
-    mpMtrBlue->SetAccessibleName(mpMtrBlue->GetQuickHelpText());
 
     // Fix left position of some controls that may be wrong due to
     // rounding errors.
@@ -133,7 +128,7 @@ void GraphicPropertyPanel::Initialize()
 }
 
 
-IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ModifyBrightnessHdl, Edit&, void )
+IMPL_LINK_NOARG( GraphicPropertyPanel, ModifyBrightnessHdl, Edit&, void )
 {
     const sal_Int16 nBright = mpMtrBrightness->GetValue();
     const SfxInt16Item aBrightItem( SID_ATTR_GRAF_LUMINANCE, nBright );
@@ -142,7 +137,7 @@ IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ModifyBrightnessHdl, Edit&, void )
 }
 
 
-IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ModifyContrastHdl, Edit&, void )
+IMPL_LINK_NOARG( GraphicPropertyPanel, ModifyContrastHdl, Edit&, void )
 {
     const sal_Int16 nContrast = mpMtrContrast->GetValue();
     const SfxInt16Item aContrastItem( SID_ATTR_GRAF_CONTRAST, nContrast );
@@ -151,7 +146,7 @@ IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ModifyContrastHdl, Edit&, void )
 }
 
 
-IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ModifyTransHdl, Edit&, void )
+IMPL_LINK_NOARG( GraphicPropertyPanel, ModifyTransHdl, Edit&, void )
 {
     const sal_Int16 nTrans = mpMtrTrans->GetValue();
     const SfxInt16Item aTransItem( SID_ATTR_GRAF_TRANSPARENCE, nTrans );
@@ -160,16 +155,16 @@ IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ModifyTransHdl, Edit&, void )
 }
 
 
-IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, ClickColorModeHdl, ListBox&, void )
+IMPL_LINK_NOARG( GraphicPropertyPanel, ClickColorModeHdl, ListBox&, void )
 {
-    const sal_Int16 nTrans = mpLBColorMode->GetSelectEntryPos();
+    const sal_Int16 nTrans = mpLBColorMode->GetSelectedEntryPos();
     const SfxInt16Item aTransItem( SID_ATTR_GRAF_MODE, nTrans );
     GetBindings()->GetDispatcher()->ExecuteList(SID_ATTR_GRAF_MODE,
             SfxCallMode::RECORD, { &aTransItem });
 }
 
 
-IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, RedHdl, Edit&, void )
+IMPL_LINK_NOARG( GraphicPropertyPanel, RedHdl, Edit&, void )
 {
     const sal_Int16 nRed = mpMtrRed->GetValue();
     const SfxInt16Item aRedItem( SID_ATTR_GRAF_RED, nRed );
@@ -178,7 +173,7 @@ IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, RedHdl, Edit&, void )
 }
 
 
-IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, GreenHdl, Edit&, void )
+IMPL_LINK_NOARG( GraphicPropertyPanel, GreenHdl, Edit&, void )
 {
     const sal_Int16 nGreen = mpMtrGreen->GetValue();
     const SfxInt16Item aGreenItem( SID_ATTR_GRAF_GREEN, nGreen );
@@ -187,7 +182,7 @@ IMPL_LINK_NOARG_TYPED( GraphicPropertyPanel, GreenHdl, Edit&, void )
 }
 
 
-IMPL_LINK_NOARG_TYPED(GraphicPropertyPanel, BlueHdl, Edit&, void)
+IMPL_LINK_NOARG(GraphicPropertyPanel, BlueHdl, Edit&, void)
 {
     const sal_Int16 nBlue = mpMtrBlue->GetValue();
     const SfxInt16Item aBlueItem( SID_ATTR_GRAF_BLUE, nBlue );
@@ -196,7 +191,7 @@ IMPL_LINK_NOARG_TYPED(GraphicPropertyPanel, BlueHdl, Edit&, void)
 }
 
 
-IMPL_LINK_NOARG_TYPED(GraphicPropertyPanel, GammaHdl, Edit&, void)
+IMPL_LINK_NOARG(GraphicPropertyPanel, GammaHdl, Edit&, void)
 {
     const sal_Int32 nGamma = mpMtrGamma->GetValue();
     const SfxInt32Item nGammaItem( SID_ATTR_GRAF_GAMMA, nGamma );
@@ -234,10 +229,8 @@ void GraphicPropertyPanel::NotifyItemUpdate(
     sal_uInt16 nSID,
     SfxItemState eState,
     const SfxPoolItem* pState,
-    const bool bIsEnabled)
+    const bool)
 {
-    (void)bIsEnabled;
-
     switch( nSID )
     {
         case SID_ATTR_GRAF_LUMINANCE:

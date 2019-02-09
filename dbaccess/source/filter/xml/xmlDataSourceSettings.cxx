@@ -23,10 +23,10 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <tools/debug.hxx>
 
 #include <vector>
 
@@ -48,7 +48,7 @@ OXMLDataSourceSettings::~OXMLDataSourceSettings()
 
 }
 
-SvXMLImportContext* OXMLDataSourceSettings::CreateChildContext(
+SvXMLImportContextRef OXMLDataSourceSettings::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

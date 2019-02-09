@@ -60,10 +60,11 @@
 #include <rtl/ref.hxx>
 
 #include <vector>
+#include <memory>
 
-#include "basecontainercontrol.hxx"
+#include <basecontainercontrol.hxx>
 
-namespace unocontrols{
+namespace unocontrols {
 
 class ProgressBar;
 
@@ -78,12 +79,10 @@ class ProgressBar;
 #define DEFAULT_BUTTONLABEL                             "Abbrechen"
 #define PROGRESSMONITOR_DEFAULT_TOPIC                   ""
 #define PROGRESSMONITOR_DEFAULT_TEXT                    ""
-#define PROGRESSMONITOR_LINECOLOR_BRIGHT                TRGB_COLORDATA( 0x00, 0xFF, 0xFF, 0xFF )                // white
-#define PROGRESSMONITOR_LINECOLOR_SHADOW                TRGB_COLORDATA( 0x00, 0x00, 0x00, 0x00 )                // black
+#define PROGRESSMONITOR_LINECOLOR_BRIGHT                sal_Int32(Color( 0x00, 0xFF, 0xFF, 0xFF ))             // white
+#define PROGRESSMONITOR_LINECOLOR_SHADOW                sal_Int32(Color( 0x00, 0x00, 0x00, 0x00 ))             // black
 #define PROGRESSMONITOR_DEFAULT_WIDTH                   350
 #define PROGRESSMONITOR_DEFAULT_HEIGHT                  100
-
-//  structs, types
 
 /// Item of TextList
 struct IMPL_TextlistItem
@@ -92,23 +91,19 @@ struct IMPL_TextlistItem
     OUString sText;          /// Right site of textline in dialog
 };
 
-//  class declaration
-
 class ProgressMonitor   : public css::awt::XLayoutConstrains
                         , public css::awt::XButton
                         , public css::awt::XProgressMonitor
                         , public BaseContainerControl
 {
-
 public:
-
     ProgressMonitor( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
-    virtual ~ProgressMonitor();
+    virtual ~ProgressMonitor() override;
 
     //  XInterface
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      give answer, if interface is supported
         @descr      The interfaces are searched by type.
 
@@ -121,10 +116,9 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      increment refcount
         @seealso    XInterface
         @seealso    release()
@@ -133,7 +127,7 @@ public:
 
     virtual void SAL_CALL acquire() throw() override;
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      decrement refcount
         @seealso    XInterface
         @seealso    acquire()
@@ -144,7 +138,7 @@ public:
 
     //  XTypeProvider
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      get information about supported interfaces
         @seealso    XTypeProvider
         @return     Sequence of types of all supported interfaces
@@ -152,16 +146,15 @@ public:
         @onerror    A RuntimeException is thrown.
     */
 
-    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() override;
 
     //  XAggregation
 
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& aType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& aType ) override;
 
     //  XProgressMonitor
 
-    /**_______________________________________________________________________________________________________
+    /**
         @short      add topic to dialog
         @descr      Add a topic with a text in right textlist (used for FixedText-member).<BR>
                     ( "beforeProgress" fix the right list ). The dialog metric is recalculated.
@@ -182,72 +175,68 @@ public:
         const OUString& sTopic ,
         const OUString& sText ,
         sal_Bool bbeforeProgress
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeText(
         const OUString& sTopic ,
         sal_Bool bbeforeProgress
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL updateText(
         const OUString&  sTopic ,
         const OUString&  sText ,
         sal_Bool bbeforeProgress
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     //  XProgressBar
 
-    virtual void SAL_CALL setForegroundColor( sal_Int32 nColor ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setForegroundColor( sal_Int32 nColor ) override;
 
-    virtual void SAL_CALL setBackgroundColor( sal_Int32 nColor ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setBackgroundColor( sal_Int32 nColor ) override;
 
-    virtual void SAL_CALL setValue( sal_Int32 nValue ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setValue( sal_Int32 nValue ) override;
 
     virtual void SAL_CALL setRange( sal_Int32   nMin    ,
-                                    sal_Int32   nMax    ) throw( css::uno::RuntimeException, std::exception ) override;
+                                    sal_Int32   nMax    ) override;
 
-    virtual sal_Int32 SAL_CALL getValue() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Int32 SAL_CALL getValue() override;
 
     //  XButton
 
     virtual void SAL_CALL addActionListener(
         const css::uno::Reference< css::awt::XActionListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
     virtual void SAL_CALL removeActionListener(
         const css::uno::Reference< css::awt::XActionListener >& xListener
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
-    virtual void SAL_CALL setLabel( const OUString& sLabel ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setLabel( const OUString& sLabel ) override;
 
-    virtual void SAL_CALL setActionCommand( const OUString& sCommand )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setActionCommand( const OUString& sCommand ) override;
 
     //  XLayoutConstrains
 
-    virtual css::awt::Size SAL_CALL getMinimumSize() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Size SAL_CALL getMinimumSize() override;
 
-    virtual css::awt::Size SAL_CALL getPreferredSize() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Size SAL_CALL getPreferredSize() override;
 
-    virtual css::awt::Size SAL_CALL calcAdjustedSize( const css::awt::Size& aNewSize )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Size SAL_CALL calcAdjustedSize( const css::awt::Size& aNewSize ) override;
 
     //  XControl
 
     virtual void SAL_CALL createPeer(
         const css::uno::Reference< css::awt::XToolkit     >& xToolkit ,
         const css::uno::Reference< css::awt::XWindowPeer  >& xParent
-    ) throw( css::uno::RuntimeException, std::exception ) override;
+    ) override;
 
-    virtual sal_Bool SAL_CALL setModel( const css::uno::Reference< css::awt::XControlModel >& xModel )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Bool SAL_CALL setModel( const css::uno::Reference< css::awt::XControlModel >& xModel ) override;
 
-    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel() override;
 
     //  XComponent
 
-    virtual void SAL_CALL dispose() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL dispose() override;
 
     //  XWindow
 
@@ -255,7 +244,7 @@ public:
                                         sal_Int32   nY      ,
                                         sal_Int32   nWidth  ,
                                         sal_Int32   nHeight ,
-                                        sal_Int16   nFlags  ) throw( css::uno::RuntimeException, std::exception ) override;
+                                        sal_Int16   nFlags  ) override;
 
     //  BaseControl
 
@@ -264,7 +253,6 @@ public:
     static const OUString impl_getStaticImplementationName();
 
 protected:
-
     virtual void impl_paint( sal_Int32 nX ,
                              sal_Int32 nY ,
                              const css::uno::Reference< css::awt::XGraphics >& xGraphics ) override;
@@ -283,28 +271,26 @@ private:
 // debug methods
 
 private:
-
-    static bool impl_debug_checkParameter( const OUString& sTopic, const OUString& sText, bool bbeforeProgress );    // addText, updateText
-    static bool impl_debug_checkParameter( const OUString& rTopic, bool bbeforeProgress );                              // removeText
+    static bool impl_debug_checkParameter( const OUString& sTopic, const OUString& sText );    // addText, updateText
+    static bool impl_debug_checkParameter( const OUString& rTopic );                           // removeText
 
 // private variables
 
 private:
-    ::std::vector < IMPL_TextlistItem* >          maTextlist_Top;         // Elements before progress
+    ::std::vector < std::unique_ptr<IMPL_TextlistItem> > maTextlist_Top;         // Elements before progress
     css::uno::Reference< css::awt::XFixedText >   m_xTopic_Top;   // (used, if parameter "beforeProgress"=true in "addText, updateText, removeText")
     css::uno::Reference< css::awt::XFixedText >   m_xText_Top;
 
-    ::std::vector < IMPL_TextlistItem* >          maTextlist_Bottom;      // Elements below of progress
+    ::std::vector < std::unique_ptr<IMPL_TextlistItem> > maTextlist_Bottom;      // Elements below of progress
     css::uno::Reference< css::awt::XFixedText >   m_xTopic_Bottom;   // (used, if parameter "beforeProgress"=false in "addText, updateText, removeText")
     css::uno::Reference< css::awt::XFixedText >   m_xText_Bottom;
 
     rtl::Reference<ProgressBar>                   m_xProgressBar;
     css::uno::Reference< css::awt::XButton >      m_xButton;
     css::awt::Rectangle                           m_a3DLine;
+};
 
-};  // class ProgressMonitor
-
-}   // namespace unocontrols
+}
 
 #endif // INCLUDED_UNOCONTROLS_SOURCE_INC_PROGRESSMONITOR_HXX
 

@@ -31,10 +31,12 @@
 #include <txtfrm.hxx>
 #include <tabfrm.hxx>
 #include <IDocumentRedlineAccess.hxx>
+#include <IDocumentFieldsAccess.hxx>
 #include <redline.hxx>
 #include <scriptinfo.hxx>
 #include <editeng/charhiddenitem.hxx>
 #include <calbck.hxx>
+#include <tools/solar.h>
 
 class Point;
 
@@ -48,7 +50,7 @@ SwPostItHelper::SwLayoutStatus SwPostItHelper::getLayoutInfos(
     if ( pTextNode == nullptr )
         return aRet;
 
-    SwIterator<SwTextFrame,SwContentNode> aIter( *pTextNode );
+    SwIterator<SwTextFrame, SwContentNode, sw::IteratorMode::UnwrapMulti> aIter(*pTextNode);
     for( SwTextFrame* pTextFrame = aIter.First(); pTextFrame != nullptr; pTextFrame = aIter.Next() )
     {
         if( !pTextFrame->IsFollow() )
@@ -60,7 +62,10 @@ SwPostItHelper::SwLayoutStatus SwPostItHelper::getLayoutInfos(
                 aRet = VISIBLE;
 
                 o_rInfo.mpAnchorFrame = pTextFrame;
-                pTextFrame->GetCharRect( o_rInfo.mPosition, rAnchorPos );
+                {
+                    DisableCallbackAction a(*pTextFrame->getRootFrame());
+                    pTextFrame->GetCharRect(o_rInfo.mPosition, rAnchorPos, nullptr, false);
+                }
                 if ( pAnnotationStartPos != nullptr )
                 {
                     o_rInfo.mnStartNodeIdx = pAnnotationStartPos->nNode.GetIndex();
@@ -71,15 +76,15 @@ SwPostItHelper::SwLayoutStatus SwPostItHelper::getLayoutInfos(
                     o_rInfo.mnStartNodeIdx = 0;
                     o_rInfo.mnStartContent = -1;
                 }
-                o_rInfo.mPageFrame = pPage->Frame();
-                o_rInfo.mPagePrtArea = pPage->Prt();
+                o_rInfo.mPageFrame = pPage->getFrameArea();
+                o_rInfo.mPagePrtArea = pPage->getFramePrintArea();
                 o_rInfo.mPagePrtArea.Pos() += o_rInfo.mPageFrame.Pos();
                 o_rInfo.mnPageNumber = pPage->GetPhyPageNum();
                 o_rInfo.meSidebarPosition = pPage->SidebarPosition();
                 o_rInfo.mRedlineAuthor = 0;
 
                 const IDocumentRedlineAccess& rIDRA = pTextNode->getIDocumentRedlineAccess();
-                if( IDocumentRedlineAccess::IsShowChanges( rIDRA.GetRedlineMode() ) )
+                if( IDocumentRedlineAccess::IsShowChanges( rIDRA.GetRedlineFlags() ) )
                 {
                     const SwRangeRedline* pRedline = rIDRA.GetRedline( rAnchorPos, nullptr );
                     if( pRedline )
@@ -102,7 +107,7 @@ SwPostItHelper::SwLayoutStatus SwPostItHelper::getLayoutInfos(
 
 long SwPostItHelper::getLayoutHeight( const SwRootFrame* pRoot )
 {
-    long nRet = pRoot ? pRoot->Frame().Height() : 0;
+    long nRet = pRoot ? pRoot->getFrameArea().Height() : 0;
     return nRet;
 }
 
@@ -123,7 +128,7 @@ unsigned long SwPostItHelper::getPageInfo( SwRect& rPageFrame, const SwRootFrame
     if( pPage )
     {
         nRet = pPage->GetPhyPageNum();
-        rPageFrame = pPage->Frame();
+        rPageFrame = pPage->getFrameArea();
     }
     return nRet;
 }
@@ -138,18 +143,20 @@ SwPosition SwAnnotationItem::GetAnchorPosition() const
     return aPos;
 }
 
-bool SwAnnotationItem::UseElement()
+bool SwAnnotationItem::UseElement(SwRootFrame const& rLayout,
+        IDocumentRedlineAccess const& rIDRA)
 {
-    return mrFormatField.IsFieldInDoc();
+    return mrFormatField.IsFieldInDoc()
+        && (!rLayout.IsHideRedlines()
+            || !sw::IsFieldDeletedInModel(rIDRA, *mrFormatField.GetTextField()));
 }
 
-VclPtr<sw::sidebarwindows::SwSidebarWin> SwAnnotationItem::GetSidebarWindow(
+VclPtr<sw::annotation::SwAnnotationWin> SwAnnotationItem::GetSidebarWindow(
                                                             SwEditWin& rEditWin,
-                                                            WinBits nBits,
                                                             SwPostItMgr& aMgr)
 {
-    return VclPtr<sw::annotation::SwAnnotationWin>::Create( rEditWin, nBits,
-                                                aMgr, 0,
+    return VclPtr<sw::annotation::SwAnnotationWin>::Create( rEditWin,
+                                                aMgr,
                                                 *this,
                                                 &mrFormatField );
 }

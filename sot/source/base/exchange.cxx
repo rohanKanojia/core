@@ -31,18 +31,18 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <comphelper/documentconstants.hxx>
 
+#include <memory>
 #include <vector>
 
 using namespace::com::sun::star::uno;
 using namespace::com::sun::star::datatransfer;
 
 /*
-    In diesen Tabellen stehen alle im Office verwendeten MimeTypes,
-    Format-Bezeichner und Types.
-    Die Tabelle ist nach den Formatstring-Ids sortiert und jede Id
-    ist um genau 1 groesser als ihre Vorgaenger-Id, damit die Id als
-    Tabellenindex benutzt werden kann.
-*/
+ *  These tables contain all MimeTypes, format identifiers, and types used in
+ *  the Office. The table is sorted by the format string ID, and each ID is
+ *  exactly 1 greater than its predecessor ID, so that the ID can be used as a
+ *  table index.
+ */
 struct DataFlavorRepresentation
 {
     const char*            pMimeType;
@@ -72,8 +72,8 @@ namespace
             /* 11 SotClipboardFormatId::DRAWING*/                { "application/x-openoffice-drawing;windows_formatname=\"Drawing Format\"", "Drawing Format", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /* 12 SotClipboardFormatId::SVXB*/                   { "application/x-openoffice-svxb;windows_formatname=\"SVXB (StarView Bitmap/Animation)\"", "SVXB (StarView Bitmap/Animation)", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /* 13 SotClipboardFormatId::SVIM*/                   { "application/x-openoffice-svim;windows_formatname=\"SVIM (StarView ImageMap)\"", "SVIM (StarView ImageMap)", &cppu::UnoType<Sequence<sal_Int8>>::get() },
-            /* 14 SotClipboardFormatId::XFA*/                    { "application/x-openoffice-xfa;windows_formatname=\"XFA (XOutDev FillAttr)\"", "XFA (XOutDev FillAttr)", &cppu::UnoType<Sequence<sal_Int8>>::get() },
-            /* 15 SotClipboardFormatId::EDITENGINE*/             { "application/x-openoffice-editengine;windows_formatname=\"EditEngineFormat\"", "EditEngineFormat", &cppu::UnoType<Sequence<sal_Int8>>::get() },
+            /* 14 SotClipboardFormatId::XFA*/                    { "application/x-libreoffice-xfa;windows_formatname=\"XFA (XOutDev FillAttr Any)\"", "XFA (XOutDev FillAttr Any)", &cppu::UnoType<Sequence<sal_Int8>>::get() },
+            /* 15 SotClipboardFormatId::EDITENGINE_ODF_TEXT_FLAT*/ { "application/vnd.oasis.opendocument.text-flat-xml", "Flat XML format (EditEngine ODF)", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /* 16 SotClipboardFormatId::INTERNALLINK_STATE*/     { "application/x-openoffice-internallink-state;windows_formatname=\"StatusInfo vom SvxInternalLink\"", "StatusInfo vom SvxInternalLink", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /* 17 SotClipboardFormatId::SOLK*/                   { "application/x-openoffice-solk;windows_formatname=\"SOLK (StarOffice Link)\"", "SOLK (StarOffice Link)", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /* 18 SotClipboardFormatId::NETSCAPE_BOOKMARK*/      { "application/x-openoffice-netscape-bookmark;windows_formatname=\"Netscape Bookmark\"", "Netscape Bookmark", &cppu::UnoType<Sequence<sal_Int8>>::get() },
@@ -198,11 +198,13 @@ namespace
             /*137 SotClipboardFormatId::STARCHART_8_TEMPLATE*/           { MIMETYPE_OASIS_OPENDOCUMENT_CHART_TEMPLATE_ASCII, "Chart 8 Template", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /*138 SotClipboardFormatId::STARMATH_8_TEMPLATE*/            { MIMETYPE_OASIS_OPENDOCUMENT_FORMULA_TEMPLATE_ASCII, "Math 8 Template", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /*139 SotClipboardFormatId::STARBASE_8*/             { MIMETYPE_OASIS_OPENDOCUMENT_DATABASE_ASCII, "StarBase 8", &cppu::UnoType<Sequence<sal_Int8>>::get() },
-            /*140 SotClipboardFormatId::GDIMETAFILE*/                  { "application/x-openoffice-highcontrast-gdimetafile;windows_formatname=\"GDIMetaFile\"", "High Contrast GDIMetaFile", &cppu::UnoType<Sequence<sal_Int8>>::get() },
+            /*140 SotClipboardFormatId::HC_GDIMETAFILE*/         { "application/x-openoffice-highcontrast-gdimetafile;windows_formatname=\"GDIMetaFile\"", "High Contrast GDIMetaFile", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /*141 SotClipboardFormatId::PNG*/                    { "image/png", "PNG Bitmap", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /*142 SotClipboardFormatId::STARWRITERGLOB_8_TEMPLATE*/      { MIMETYPE_OASIS_OPENDOCUMENT_TEXT_GLOBAL_TEMPLATE_ASCII, "Writer/Global 8 Template", &cppu::UnoType<Sequence<sal_Int8>>::get() },
             /*143 SotClipboardFormatId::MATHML*/   { "application/mathml+xml", "MathML", &::cppu::UnoType<const Sequence< sal_Int8 >>::get() },
             /*144 SotClipboardFormatId::JPEG*/ { "image/jpeg", "JPEG Bitmap", &cppu::UnoType<Sequence<sal_Int8>>::get() },
+            /*145 SotClipboardFormatId::RICHTEXT*/ { "text/richtext", "Richtext Format", &cppu::UnoType<Sequence<sal_Int8>>::get() },
+            /*146 SotClipboardFormatId::STRING_TSVC*/            { "application/x-libreoffice-tsvc", "Text TSV-Calc", &cppu::UnoType<OUString>::get() }
             };
         return &aInstance[0];
         }
@@ -213,25 +215,11 @@ namespace
             const DataFlavorRepresentation, ImplFormatArray_Impl > {};
 
 
-    typedef std::vector<css::datatransfer::DataFlavor*> tDataFlavorList;
+    typedef std::vector<std::unique_ptr<css::datatransfer::DataFlavor>> tDataFlavorList;
 
     struct SotData_Impl
     {
-        tDataFlavorList* pDataFlavorList;
-
-        SotData_Impl(): pDataFlavorList(nullptr) {}
-        ~SotData_Impl()
-        {
-            if (pDataFlavorList)
-            {
-                for( tDataFlavorList::iterator aI = pDataFlavorList->begin(),
-                     aEnd = pDataFlavorList->end(); aI != aEnd; ++aI)
-                {
-                    delete *aI;
-                }
-                delete pDataFlavorList;
-            }
-        }
+        std::unique_ptr<tDataFlavorList> pDataFlavorList;
     };
 
     struct ImplData : public rtl::Static<SotData_Impl, ImplData> {};
@@ -241,7 +229,7 @@ static tDataFlavorList& InitFormats_Impl()
 {
     SotData_Impl *pSotData = &ImplData::get();
     if( !pSotData->pDataFlavorList )
-        pSotData->pDataFlavorList = new tDataFlavorList();
+        pSotData->pDataFlavorList.reset(new tDataFlavorList);
     return *pSotData->pDataFlavorList;
 }
 
@@ -249,12 +237,12 @@ static tDataFlavorList& InitFormats_Impl()
 |*
 |*    SotExchange::RegisterFormatName()
 |*
-|*    Beschreibung      CLIP.SDW
+|*    Description       CLIP.SDW
 *************************************************************************/
 SotClipboardFormatId SotExchange::RegisterFormatName( const OUString& rName )
 {
     const DataFlavorRepresentation *pFormatArray_Impl = FormatArray_Impl::get();
-    // teste zuerst die Standard - Name
+    // test the default first - name
     for( SotClipboardFormatId i = SotClipboardFormatId::STRING; i <= SotClipboardFormatId::FILE_LIST;  ++i )
         if( rName.equalsAscii( pFormatArray_Impl[ static_cast<int>(i) ].pName ) )
             return i;
@@ -268,21 +256,21 @@ SotClipboardFormatId SotExchange::RegisterFormatName( const OUString& rName )
                      ? SotClipboardFormatId::STARCHART_50
                      : i );
 
-    // dann in der dynamischen Liste
+    // then in the dynamic list
     tDataFlavorList& rL = InitFormats_Impl();
     for( tDataFlavorList::size_type i = 0; i < rL.size(); i++ )
     {
-        DataFlavor* pFlavor = rL[ i ];
+        auto const& pFlavor = rL[ i ];
         if( pFlavor && rName == pFlavor->HumanPresentableName )
             return static_cast<SotClipboardFormatId>(i + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
     }
 
-    DataFlavor* pNewFlavor = new DataFlavor;
+    std::unique_ptr<DataFlavor> pNewFlavor(new DataFlavor);
     pNewFlavor->MimeType = rName;
     pNewFlavor->HumanPresentableName = rName;
     pNewFlavor->DataType = cppu::UnoType<OUString>::get();
 
-    rL.push_back( pNewFlavor );
+    rL.push_back( std::move(pNewFlavor) );
 
     return static_cast<SotClipboardFormatId>(static_cast<int>(rL.size()-1) + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
 }
@@ -290,7 +278,7 @@ SotClipboardFormatId SotExchange::RegisterFormatName( const OUString& rName )
 SotClipboardFormatId SotExchange::RegisterFormatMimeType( const OUString& rMimeType )
 {
     const DataFlavorRepresentation *pFormatArray_Impl = FormatArray_Impl::get();
-    // teste zuerst die Standard - Name
+    // test the default first - name
     for( SotClipboardFormatId i = SotClipboardFormatId::STRING; i <= SotClipboardFormatId::FILE_LIST;  ++i )
         if( rMimeType.equalsAscii( pFormatArray_Impl[ static_cast<int>(i) ].pMimeType ) )
             return i;
@@ -299,21 +287,21 @@ SotClipboardFormatId SotExchange::RegisterFormatMimeType( const OUString& rMimeT
         if( rMimeType.equalsAscii( pFormatArray_Impl[ static_cast<int>(i) ].pMimeType ) )
             return i;
 
-    // dann in der dynamischen Liste
+    // then in the dynamic list
     tDataFlavorList& rL = InitFormats_Impl();
     for( tDataFlavorList::size_type i = 0; i < rL.size(); i++ )
     {
-        DataFlavor* pFlavor = rL[ i ];
+        auto const& pFlavor = rL[ i ];
         if( pFlavor && rMimeType == pFlavor->MimeType )
             return static_cast<SotClipboardFormatId>(i + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
     }
 
-    DataFlavor* pNewFlavor = new DataFlavor;
+    std::unique_ptr<DataFlavor> pNewFlavor(new DataFlavor);
     pNewFlavor->MimeType = rMimeType;
     pNewFlavor->HumanPresentableName = rMimeType;
     pNewFlavor->DataType = cppu::UnoType<OUString>::get();
 
-    rL.push_back( pNewFlavor );
+    rL.push_back( std::move(pNewFlavor) );
 
     return static_cast<SotClipboardFormatId>(static_cast<int>(rL.size()-1) + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
 }
@@ -322,7 +310,7 @@ SotClipboardFormatId SotExchange::RegisterFormatMimeType( const OUString& rMimeT
 |*
 |*    SotExchange::RegisterFormatName()
 |*
-|*    Beschreibung      CLIP.SDW
+|*    Description       CLIP.SDW
 *************************************************************************/
 SotClipboardFormatId SotExchange::RegisterFormat( const DataFlavor& rFlavor )
 {
@@ -332,7 +320,7 @@ SotClipboardFormatId SotExchange::RegisterFormat( const DataFlavor& rFlavor )
     {
         tDataFlavorList& rL = InitFormats_Impl();
         nRet = static_cast<SotClipboardFormatId>(rL.size() + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
-        rL.push_back( new DataFlavor( rFlavor ) );
+        rL.emplace_back( new DataFlavor( rFlavor ) );
     }
 
     return nRet;
@@ -428,12 +416,12 @@ SotClipboardFormatId SotExchange::GetFormatIdFromMimeType( const OUString& rMime
                      ? SotClipboardFormatId::STARCHART_50
                      : i );
 
-    // dann in der dynamischen Liste
+    // then in the dynamic list
     tDataFlavorList& rL = InitFormats_Impl();
 
     for( tDataFlavorList::size_type i = 0; i < rL.size(); i++ )
     {
-        DataFlavor* pFlavor = rL[ i ];
+        auto const& pFlavor = rL[ i ];
         if( pFlavor && rMimeType == pFlavor->MimeType )
             return static_cast<SotClipboardFormatId>(i + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
     }
@@ -445,17 +433,17 @@ SotClipboardFormatId SotExchange::GetFormatIdFromMimeType( const OUString& rMime
 |*
 |*    SotExchange::GetFormatName()
 |*
-|*    Beschreibung      CLIP.SDW
+|*    Description       CLIP.SDW
 *************************************************************************/
 SotClipboardFormatId SotExchange::GetFormat( const DataFlavor& rFlavor )
 {
-    // teste zuerst die Standard - Name
+    // test the default first - name
     const OUString& rMimeType = rFlavor.MimeType;
 
     const DataFlavorRepresentation *pFormatArray_Impl = FormatArray_Impl::get();
     for( SotClipboardFormatId i = SotClipboardFormatId::STRING; i <= SotClipboardFormatId::FILE_LIST;  ++i )
         if( rMimeType.equalsAscii( pFormatArray_Impl[ static_cast<int>(i) ].pMimeType ) )
-            return static_cast<SotClipboardFormatId>(i);
+            return i;
 
     // BM: the chart format 105 ("StarChartDocument 5.0") was written
     // only into 5.1 chart documents - in 5.0 and 5.2 it was 42 ("StarChart 5.0")
@@ -463,14 +451,14 @@ SotClipboardFormatId SotExchange::GetFormat( const DataFlavor& rFlavor )
     for( SotClipboardFormatId i = SotClipboardFormatId::RTF; i <= SotClipboardFormatId::USER_END;  ++i )
         if( rMimeType.equalsAscii( pFormatArray_Impl[ static_cast<int>(i) ].pMimeType ) )
             return ( (i == SotClipboardFormatId::STARCHARTDOCUMENT_50)
-                     ? static_cast<SotClipboardFormatId>(SotClipboardFormatId::STARCHART_50)
-                     : static_cast<SotClipboardFormatId>(i) );
+                     ? SotClipboardFormatId::STARCHART_50
+                     : i );
 
-    // dann in der dynamischen Liste
+    // then in the dynamic list
     tDataFlavorList& rL = InitFormats_Impl();
     for( tDataFlavorList::size_type i = 0; i < rL.size(); i++ )
     {
-        DataFlavor* pFlavor = rL[ i ];
+        auto const& pFlavor = rL[ i ];
         if( pFlavor && rMimeType == pFlavor->MimeType )
             return static_cast<SotClipboardFormatId>(i + static_cast<int>(SotClipboardFormatId::USER_END) + 1);
     }
@@ -482,7 +470,7 @@ SotClipboardFormatId SotExchange::GetFormat( const DataFlavor& rFlavor )
 |*
 |*    SotExchange::GetFormatName()
 |*
-|*    Beschreibung      CLIP.SDW
+|*    Description       CLIP.SDW
 *************************************************************************/
 OUString SotExchange::GetFormatName( SotClipboardFormatId nFormat )
 {
@@ -497,16 +485,14 @@ OUString SotExchange::GetFormatName( SotClipboardFormatId nFormat )
 
 bool SotExchange::IsInternal( const SvGlobalName& rName )
 {
-    if ( rName == SvGlobalName(SO3_SW_CLASSID_60) ||
+    return rName == SvGlobalName(SO3_SW_CLASSID_60) ||
          rName == SvGlobalName(SO3_SC_CLASSID_60) ||
          rName == SvGlobalName(SO3_SIMPRESS_CLASSID_60) ||
          rName == SvGlobalName(SO3_SDRAW_CLASSID_60) ||
          rName == SvGlobalName(SO3_SCH_CLASSID_60) ||
          rName == SvGlobalName(SO3_SM_CLASSID_60) ||
          rName == SvGlobalName(SO3_SWWEB_CLASSID_60) ||
-         rName == SvGlobalName(SO3_SWGLOB_CLASSID_60) )
-        return true;
-    return false;
+         rName == SvGlobalName(SO3_SWGLOB_CLASSID_60);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

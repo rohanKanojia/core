@@ -17,86 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svl/languageoptions.hxx>
-#include <vcl/svapp.hxx>
-#include <editeng/scripttypeitem.hxx>
-#include "format.hxx"
-
-
-// Latin default-fonts
-static const DefaultFontType aLatinDefFnts[FNT_END] =
-{
-    DefaultFontType::SERIF,  // FNT_VARIABLE
-    DefaultFontType::SERIF,  // FNT_FUNCTION
-    DefaultFontType::SERIF,  // FNT_NUMBER
-    DefaultFontType::SERIF,  // FNT_TEXT
-    DefaultFontType::SERIF,  // FNT_SERIF
-    DefaultFontType::SANS,   // FNT_SANS
-    DefaultFontType::FIXED   // FNT_FIXED
-    //OpenSymbol,    // FNT_MATH
-};
-
-// CJK default-fonts
-//! we use non-asian fonts for variables, functions and numbers since they
-//! look better and even in asia only latin letters will be used for those.
-//! At least that's what I was told...
-static const DefaultFontType aCJKDefFnts[FNT_END] =
-{
-    DefaultFontType::SERIF,          // FNT_VARIABLE
-    DefaultFontType::SERIF,          // FNT_FUNCTION
-    DefaultFontType::SERIF,          // FNT_NUMBER
-    DefaultFontType::CJK_TEXT,       // FNT_TEXT
-    DefaultFontType::CJK_TEXT,       // FNT_SERIF
-    DefaultFontType::CJK_DISPLAY,    // FNT_SANS
-    DefaultFontType::CJK_TEXT        // FNT_FIXED
-    //OpenSymbol,    // FNT_MATH
-};
-
-// CTL default-fonts
-static const DefaultFontType aCTLDefFnts[FNT_END] =
-{
-    DefaultFontType::CTL_TEXT,    // FNT_VARIABLE
-    DefaultFontType::CTL_TEXT,    // FNT_FUNCTION
-    DefaultFontType::CTL_TEXT,    // FNT_NUMBER
-    DefaultFontType::CTL_TEXT,    // FNT_TEXT
-    DefaultFontType::CTL_TEXT,    // FNT_SERIF
-    DefaultFontType::CTL_TEXT,    // FNT_SANS
-    DefaultFontType::CTL_TEXT     // FNT_FIXED
-    //OpenSymbol,    // FNT_MATH
-};
-
-
-OUString GetDefaultFontName( LanguageType nLang, sal_uInt16 nIdent )
-{
-    OSL_ENSURE( /*FNT_BEGIN <= nIdent  &&*/  nIdent <= FNT_END,
-            "index out opd range" );
-
-    if (FNT_MATH == nIdent)
-        return OUString(FNTNAME_MATH);
-    else
-    {
-        const DefaultFontType *pTable;
-        switch ( SvtLanguageOptions::GetScriptTypeOfLanguage( nLang ) )
-        {
-            case SvtScriptType::LATIN :     pTable = aLatinDefFnts; break;
-            case SvtScriptType::ASIAN :     pTable = aCJKDefFnts; break;
-            case SvtScriptType::COMPLEX :   pTable = aCTLDefFnts; break;
-            default :
-                pTable = aLatinDefFnts;
-                SAL_WARN("starmath", "unknown script-type");
-        }
-
-        return OutputDevice::GetDefaultFont(
-                        pTable[ nIdent ], nLang,
-                        GetDefaultFontFlags::OnlyOne ).GetFamilyName();
-    }
-}
+#include <format.hxx>
 
 
 SmFormat::SmFormat()
 :   aBaseSize(0, SmPtsTo100th_mm(12))
 {
-    eHorAlign       = AlignCenter;
+    eHorAlign       = SmHorAlign::Center;
     nGreekCharStyle = 0;
     bIsTextmode     = bScaleNormalBrackets = false;
 
@@ -135,10 +62,10 @@ SmFormat::SmFormat()
     vFont[FNT_FUNCTION] =
     vFont[FNT_NUMBER]   =
     vFont[FNT_TEXT]     =
-    vFont[FNT_SERIF]    = SmFace(OUString(FNTNAME_TIMES), aBaseSize);
-    vFont[FNT_SANS]     = SmFace(OUString(FNTNAME_HELV),  aBaseSize);
-    vFont[FNT_FIXED]    = SmFace(OUString(FNTNAME_COUR),  aBaseSize);
-    vFont[FNT_MATH]     = SmFace(OUString(FNTNAME_MATH),  aBaseSize);
+    vFont[FNT_SERIF]    = SmFace(FNTNAME_TIMES, aBaseSize);
+    vFont[FNT_SANS]     = SmFace(FNTNAME_HELV,  aBaseSize);
+    vFont[FNT_FIXED]    = SmFace(FNTNAME_COUR,  aBaseSize);
+    vFont[FNT_MATH]     = SmFace(FNTNAME_MATH,  aBaseSize);
 
     vFont[FNT_MATH].SetCharSet( RTL_TEXTENCODING_UNICODE );
 

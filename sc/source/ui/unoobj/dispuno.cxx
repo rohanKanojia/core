@@ -19,24 +19,24 @@
 
 #include <sfx2/viewfrm.hxx>
 #include <svx/dataaccessdescriptor.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <vcl/svapp.hxx>
 
 #include <com/sun/star/frame/XDispatchProviderInterception.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 
-#include "dispuno.hxx"
-#include "tabvwsh.hxx"
-#include "dbdocfun.hxx"
-#include "dbdata.hxx"
+#include <dispuno.hxx>
+#include <tabvwsh.hxx>
+#include <dbdocfun.hxx>
+#include <dbdata.hxx>
 
 using namespace com::sun::star;
 
-static const char* cURLInsertColumns = ".uno:DataSourceBrowser/InsertColumns"; //data into text
-static const char* cURLDocDataSource = ".uno:DataSourceBrowser/DocumentDataSource";
+static const char cURLInsertColumns[] = ".uno:DataSourceBrowser/InsertColumns"; //data into text
+static const char cURLDocDataSource[] = ".uno:DataSourceBrowser/DocumentDataSource";
 
-static uno::Reference<view::XSelectionSupplier> lcl_GetSelectionSupplier( SfxViewShell* pViewShell )
+static uno::Reference<view::XSelectionSupplier> lcl_GetSelectionSupplier( const SfxViewShell* pViewShell )
 {
     if ( pViewShell )
     {
@@ -82,8 +82,7 @@ ScDispatchProviderInterceptor::~ScDispatchProviderInterceptor()
 
 void ScDispatchProviderInterceptor::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
         pViewShell = nullptr;
 }
 
@@ -92,15 +91,14 @@ void ScDispatchProviderInterceptor::Notify( SfxBroadcaster&, const SfxHint& rHin
 uno::Reference<frame::XDispatch> SAL_CALL ScDispatchProviderInterceptor::queryDispatch(
                         const util::URL& aURL, const OUString& aTargetFrameName,
                         sal_Int32 nSearchFlags )
-                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     uno::Reference<frame::XDispatch> xResult;
     // create some dispatch ...
     if ( pViewShell && (
-        aURL.Complete.equalsAscii(cURLInsertColumns) ||
-        aURL.Complete.equalsAscii(cURLDocDataSource) ) )
+        aURL.Complete == cURLInsertColumns ||
+        aURL.Complete == cURLDocDataSource ) )
     {
         if (!m_xMyDispatch.is())
             m_xMyDispatch = new ScDispatch( pViewShell );
@@ -117,7 +115,6 @@ uno::Reference<frame::XDispatch> SAL_CALL ScDispatchProviderInterceptor::queryDi
 uno::Sequence< uno::Reference<frame::XDispatch> > SAL_CALL
                         ScDispatchProviderInterceptor::queryDispatches(
                         const uno::Sequence<frame::DispatchDescriptor>& aDescripts )
-                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -136,7 +133,6 @@ uno::Sequence< uno::Reference<frame::XDispatch> > SAL_CALL
 
 uno::Reference<frame::XDispatchProvider> SAL_CALL
                         ScDispatchProviderInterceptor::getSlaveDispatchProvider()
-                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return m_xSlaveDispatcher;
@@ -144,7 +140,6 @@ uno::Reference<frame::XDispatchProvider> SAL_CALL
 
 void SAL_CALL ScDispatchProviderInterceptor::setSlaveDispatchProvider(
                         const uno::Reference<frame::XDispatchProvider>& xNewDispatchProvider )
-                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     m_xSlaveDispatcher.set(xNewDispatchProvider);
@@ -152,7 +147,6 @@ void SAL_CALL ScDispatchProviderInterceptor::setSlaveDispatchProvider(
 
 uno::Reference<frame::XDispatchProvider> SAL_CALL
                         ScDispatchProviderInterceptor::getMasterDispatchProvider()
-                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return m_xMasterDispatcher;
@@ -160,7 +154,6 @@ uno::Reference<frame::XDispatchProvider> SAL_CALL
 
 void SAL_CALL ScDispatchProviderInterceptor::setMasterDispatchProvider(
                         const uno::Reference<frame::XDispatchProvider>& xNewSupplier )
-                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     m_xMasterDispatcher.set(xNewSupplier);
@@ -169,7 +162,6 @@ void SAL_CALL ScDispatchProviderInterceptor::setMasterDispatchProvider(
 // XEventListener
 
 void SAL_CALL ScDispatchProviderInterceptor::disposing( const lang::EventObject& /* Source */ )
-                                throw(css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -209,8 +201,7 @@ ScDispatch::~ScDispatch()
 
 void ScDispatch::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
         pViewShell = nullptr;
 }
 
@@ -218,18 +209,18 @@ void ScDispatch::Notify( SfxBroadcaster&, const SfxHint& rHint )
 
 void SAL_CALL ScDispatch::dispatch( const util::URL& aURL,
                                 const uno::Sequence<beans::PropertyValue>& aArgs )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
     bool bDone = false;
-    if ( pViewShell && aURL.Complete.equalsAscii(cURLInsertColumns) )
+    if ( pViewShell && aURL.Complete == cURLInsertColumns )
     {
         ScViewData& rViewData = pViewShell->GetViewData();
         ScAddress aPos( rViewData.GetCurX(), rViewData.GetCurY(), rViewData.GetTabNo() );
 
         ScDBDocFunc aFunc( *rViewData.GetDocShell() );
-        bDone = aFunc.DoImportUno( aPos, aArgs );
+        aFunc.DoImportUno( aPos, aArgs );
+        bDone = true;
     }
     // cURLDocDataSource is never dispatched
 
@@ -249,16 +240,16 @@ static void lcl_FillDataSource( frame::FeatureStateEvent& rEvent, const ScImport
                                                     sdb::CommandType::TABLE );
 
         aDescriptor.setDataSource(rParam.aDBName);
-        aDescriptor[svx::daCommand]     <<= rParam.aStatement;
-        aDescriptor[svx::daCommandType] <<= nType;
+        aDescriptor[svx::DataAccessDescriptorProperty::Command]     <<= rParam.aStatement;
+        aDescriptor[svx::DataAccessDescriptorProperty::CommandType] <<= nType;
     }
     else
     {
         //  descriptor has to be complete anyway
 
-        aDescriptor[svx::daDataSource]  <<= OUString();
-        aDescriptor[svx::daCommand]     <<= OUString();
-        aDescriptor[svx::daCommandType] <<= (sal_Int32)sdb::CommandType::TABLE;
+        aDescriptor[svx::DataAccessDescriptorProperty::DataSource]  <<= OUString();
+        aDescriptor[svx::DataAccessDescriptorProperty::Command]     <<= OUString();
+        aDescriptor[svx::DataAccessDescriptorProperty::CommandType] <<= sal_Int32(sdb::CommandType::TABLE);
     }
     rEvent.State <<= aDescriptor.createPropertyValueSequence();
 }
@@ -266,7 +257,6 @@ static void lcl_FillDataSource( frame::FeatureStateEvent& rEvent, const ScImport
 void SAL_CALL ScDispatch::addStatusListener(
     const uno::Reference<frame::XStatusListener>& xListener,
     const util::URL& aURL)
-        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -275,13 +265,13 @@ void SAL_CALL ScDispatch::addStatusListener(
 
     //  initial state
     frame::FeatureStateEvent aEvent;
-    aEvent.IsEnabled = sal_True;
+    aEvent.IsEnabled = true;
     aEvent.Source.set(static_cast<cppu::OWeakObject*>(this));
     aEvent.FeatureURL = aURL;
 
-    if ( aURL.Complete.equalsAscii(cURLDocDataSource) )
+    if ( aURL.Complete == cURLDocDataSource )
     {
-        aDataSourceListeners.push_back( uno::Reference<frame::XStatusListener>( xListener ) );
+        aDataSourceListeners.emplace_back( xListener );
 
         if (!bListeningToView)
         {
@@ -304,11 +294,10 @@ void SAL_CALL ScDispatch::addStatusListener(
 void SAL_CALL ScDispatch::removeStatusListener(
                                 const uno::Reference<frame::XStatusListener>& xListener,
                                 const util::URL& aURL )
-                                throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    if ( aURL.Complete.equalsAscii(cURLDocDataSource) )
+    if ( aURL.Complete == cURLDocDataSource )
     {
         sal_uInt16 nCount = aDataSourceListeners.size();
         for ( sal_uInt16 n=nCount; n--; )
@@ -334,7 +323,6 @@ void SAL_CALL ScDispatch::removeStatusListener(
 // XSelectionChangeListener
 
 void SAL_CALL ScDispatch::selectionChanged( const css::lang::EventObject& /* aEvent */ )
-    throw (css::uno::RuntimeException, std::exception)
 {
     //  currently only called for URL cURLDocDataSource
 
@@ -354,12 +342,12 @@ void SAL_CALL ScDispatch::selectionChanged( const css::lang::EventObject& /* aEv
         {
             frame::FeatureStateEvent aEvent;
             aEvent.Source.set(static_cast<cppu::OWeakObject*>(this));
-            aEvent.FeatureURL.Complete = OUString::createFromAscii( cURLDocDataSource );
+            aEvent.FeatureURL.Complete = cURLDocDataSource;
 
             lcl_FillDataSource( aEvent, aNewImport );       // modifies State, IsEnabled
 
-            for ( size_t n=0; n<aDataSourceListeners.size(); n++ )
-                aDataSourceListeners[n]->statusChanged( aEvent );
+            for (uno::Reference<frame::XStatusListener> & xDataSourceListener : aDataSourceListeners)
+                xDataSourceListener->statusChanged( aEvent );
 
             aLastImport = aNewImport;
         }
@@ -369,7 +357,6 @@ void SAL_CALL ScDispatch::selectionChanged( const css::lang::EventObject& /* aEv
 // XEventListener
 
 void SAL_CALL ScDispatch::disposing( const css::lang::EventObject& rSource )
-                                throw (css::uno::RuntimeException, std::exception)
 {
     uno::Reference<view::XSelectionSupplier> xSupplier(rSource.Source, uno::UNO_QUERY);
     xSupplier->removeSelectionChangeListener(this);
@@ -377,8 +364,8 @@ void SAL_CALL ScDispatch::disposing( const css::lang::EventObject& rSource )
 
     lang::EventObject aEvent;
     aEvent.Source.set(static_cast<cppu::OWeakObject*>(this));
-    for ( size_t n=0; n<aDataSourceListeners.size(); n++ )
-        aDataSourceListeners[n]->disposing( aEvent );
+    for (uno::Reference<frame::XStatusListener> & xDataSourceListener : aDataSourceListeners)
+        xDataSourceListener->disposing( aEvent );
 
     pViewShell = nullptr;
 }

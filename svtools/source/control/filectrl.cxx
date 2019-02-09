@@ -23,10 +23,12 @@
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <comphelper/processfactory.hxx>
 #include <osl/file.h>
+#include <osl/diagnose.h>
 #include <svtools/svtresid.hxx>
 #include <tools/urlobj.hxx>
+#include <vcl/edit.hxx>
 #include <vcl/stdtext.hxx>
-#include <filectrl.hrc>
+#include <svtools/strings.hrc>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
@@ -37,11 +39,10 @@ FileControl::FileControl( vcl::Window* pParent, WinBits nStyle ) :
     Window( pParent, nStyle|WB_DIALOGCONTROL ),
     maEdit( VclPtr<Edit>::Create(this, (nStyle&(~WB_BORDER))|WB_NOTABSTOP) ),
     maButton( VclPtr<PushButton>::Create( this, (nStyle&(~WB_BORDER))|WB_NOLIGHTBORDER|WB_NOPOINTERFOCUS|WB_NOTABSTOP ) ),
-    maButtonText( SVT_RESSTR(STR_FILECTRL_BUTTONTEXT) ),
+    maButtonText( SvtResId(STR_FILECTRL_BUTTONTEXT) ),
     mnInternalFlags( FileControlMode_Internal::ORIGINALBUTTONTEXT )
 {
     maButton->SetClickHdl( LINK( this, FileControl, ButtonHdl ) );
-    mbOpenDlg = true;
 
     maButton->Show();
     maEdit->Show();
@@ -145,7 +146,7 @@ void FileControl::StateChanged( StateChangedType nType )
 
 void FileControl::Resize()
 {
-    static long ButtonBorder = 10;
+    static const long ButtonBorder = 10;
 
     if( mnInternalFlags & FileControlMode_Internal::INRESIZE )
         return;
@@ -173,13 +174,10 @@ void FileControl::Resize()
 }
 
 
-IMPL_LINK_NOARG_TYPED(FileControl, ButtonHdl, Button*, void)
-{
-    ImplBrowseFile( );
-}
-
 void FileControl::GetFocus()
 {
+    if (!maEdit || maEdit->IsDisposed())
+        return;
     maEdit->GrabFocus();
 }
 
@@ -200,7 +198,7 @@ void FileControl::Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize
         GetEdit().SetStyle( nOldEditStyle );
 }
 
-void FileControl::ImplBrowseFile( )
+IMPL_LINK_NOARG(FileControl, ButtonHdl, Button*, void)
 {
     try
     {
@@ -231,7 +229,7 @@ void FileControl::ImplBrowseFile( )
                 if ( aObj.GetProtocol() == INetProtocol::File )
                     aNewText = aObj.PathToFileName();
                 SetText( aNewText );
-                maEdit->GetModifyHdl().Call( *maEdit.get() );
+                maEdit->GetModifyHdl().Call( *maEdit );
             }
         }
     }

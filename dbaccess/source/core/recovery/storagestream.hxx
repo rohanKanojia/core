@@ -31,7 +31,7 @@ namespace dbaccess
     // StorageOutputStream
     /** convenience wrapper around a stream living in a storage
     */
-    class DBACCESS_DLLPRIVATE StorageOutputStream
+    class StorageOutputStream
     {
     public:
         StorageOutputStream(
@@ -39,10 +39,6 @@ namespace dbaccess
             const OUString& i_rStreamName
         );
         virtual ~StorageOutputStream();
-
-        /** simply calls closeOutput on our output stream, override to extend/modify this behavior
-        */
-        virtual void close();
 
     protected:
         const css::uno::Reference< css::io::XOutputStream >&
@@ -53,26 +49,6 @@ namespace dbaccess
                                                 m_xOutputStream;
     };
 
-    // StorageInputStream
-    /** convenience wrapper around a stream living in a storage
-    */
-    class DBACCESS_DLLPRIVATE StorageInputStream
-    {
-    public:
-        StorageInputStream(
-            const css::uno::Reference< css::embed::XStorage >& i_rParentStorage,
-            const OUString& i_rStreamName
-        );
-        virtual ~StorageInputStream();
-
-    protected:
-        const css::uno::Reference< css::io::XInputStream >&
-                                                getInputStream() const { return m_xInputStream; }
-
-    private:
-              css::uno::Reference< css::io::XInputStream >
-                                                m_xInputStream;
-    };
 
 } // namespace dbaccess
 

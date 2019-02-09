@@ -23,7 +23,7 @@
 #include "helpers.hxx"
 #include <services.h>
 #include <services/layoutmanager.hxx>
-#include <classes/resource.hrc>
+#include <strings.hrc>
 #include <classes/fwkresid.hxx>
 
 #include <com/sun/star/awt/PosSize.hpp>
@@ -35,6 +35,7 @@
 #include <com/sun/star/ui/XUIElementSettings.hpp>
 #include <com/sun/star/ui/XUIFunctionListener.hpp>
 
+#include <cppuhelper/queryinterface.hxx>
 #include <unotools/cmdoptions.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <toolkit/helper/convert.hxx>
@@ -42,6 +43,7 @@
 #include <vcl/i18nhelp.hxx>
 #include <vcl/dockingarea.hxx>
 #include <vcl/settings.hxx>
+#include <sal/log.hxx>
 
 
 using namespace ::com::sun::star;
@@ -58,14 +60,10 @@ ToolbarLayoutManager::ToolbarLayoutManager(
     m_pParentLayouter( pParentLayouter ),
     m_eDockOperation( DOCKOP_ON_COLROW ),
     m_ePreviewDetection( PREVIEWFRAME_UNKNOWN ),
-    m_pAddonOptions( nullptr ),
-    m_pGlobalSettings( nullptr ),
     m_bComponentAttached( false ),
     m_bLayoutDirty( false ),
-    m_bStoreWindowState( false ),
     m_bGlobalSettings( false ),
     m_bDockingInProgress( false ),
-    m_bVisible( true ),
     m_bLayoutInProgress( false ),
     m_bToolbarCreation( false )
 {
@@ -76,8 +74,8 @@ ToolbarLayoutManager::ToolbarLayoutManager(
 
 ToolbarLayoutManager::~ToolbarLayoutManager()
 {
-    delete m_pGlobalSettings;
-    delete m_pAddonOptions;
+    m_pGlobalSettings.reset();
+    m_pAddonOptions.reset();
 }
 
 //  XInterface
@@ -92,12 +90,12 @@ void SAL_CALL ToolbarLayoutManager::release() throw()
     OWeakObject::release();
 }
 
-uno::Any SAL_CALL ToolbarLayoutManager::queryInterface( const uno::Type & rType ) throw( uno::RuntimeException, std::exception )
+uno::Any SAL_CALL ToolbarLayoutManager::queryInterface( const uno::Type & rType )
 {
     uno::Any a = ::cppu::queryInterface( rType,
-        (static_cast< awt::XDockableWindowListener* >(this)),
-        (static_cast< ui::XUIConfigurationListener* >(this)),
-        (static_cast< awt::XWindowListener* >(this)));
+        static_cast< awt::XDockableWindowListener* >(this),
+        static_cast< ui::XUIConfigurationListener* >(this),
+        static_cast< awt::XWindowListener* >(this));
 
     if ( a.hasValue() )
         return a;
@@ -105,7 +103,7 @@ uno::Any SAL_CALL ToolbarLayoutManager::queryInterface( const uno::Type & rType 
     return OWeakObject::queryInterface( rType );
 }
 
-void SAL_CALL ToolbarLayoutManager::disposing( const lang::EventObject& aEvent ) throw( uno::RuntimeException, std::exception )
+void SAL_CALL ToolbarLayoutManager::disposing( const lang::EventObject& aEvent )
 {
     if ( aEvent.Source == m_xFrame )
     {
@@ -118,7 +116,7 @@ void SAL_CALL ToolbarLayoutManager::disposing( const lang::EventObject& aEvent )
 awt::Rectangle ToolbarLayoutManager::getDockingArea()
 {
     SolarMutexResettableGuard aWriteLock;
-    Rectangle aNewDockingArea( m_aDockingArea );
+    tools::Rectangle aNewDockingArea( m_aDockingArea );
     aWriteLock.clear();
 
     if ( isLayoutDirty() )
@@ -141,17 +139,17 @@ void ToolbarLayoutManager::setDockingArea( const awt::Rectangle& rDockingArea )
 void ToolbarLayoutManager::implts_setDockingAreaWindowSizes( const awt::Rectangle& rBorderSpace )
 {
     SolarMutexClearableGuard aReadLock;
-    Rectangle aDockOffsets = m_aDockingAreaOffsets;
+    tools::Rectangle aDockOffsets = m_aDockingAreaOffsets;
     uno::Reference< awt::XWindow2 > xContainerWindow( m_xContainerWindow );
-    uno::Reference< awt::XWindow > xTopDockAreaWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP] );
-    uno::Reference< awt::XWindow > xBottomDockAreaWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM] );
-    uno::Reference< awt::XWindow > xLeftDockAreaWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT] );
-    uno::Reference< awt::XWindow > xRightDockAreaWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT] );
+    uno::Reference< awt::XWindow > xTopDockAreaWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)] );
+    uno::Reference< awt::XWindow > xBottomDockAreaWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)] );
+    uno::Reference< awt::XWindow > xLeftDockAreaWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)] );
+    uno::Reference< awt::XWindow > xRightDockAreaWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)] );
     aReadLock.clear();
 
     uno::Reference< awt::XDevice > xDevice( xContainerWindow, uno::UNO_QUERY );
 
-    // Convert relativ size to output size.
+    // Convert relative size to output size.
     awt::Rectangle  aRectangle           = xContainerWindow->getPosSize();
     awt::DeviceInfo aInfo                = xDevice->getInfo();
     awt::Size       aContainerClientSize = awt::Size( aRectangle.Width - aInfo.LeftInset - aInfo.RightInset  ,
@@ -163,7 +161,7 @@ void ToolbarLayoutManager::implts_setDockingAreaWindowSizes( const awt::Rectangl
     {
         // Top docking area window
         xTopDockAreaWindow->setPosSize( 0, 0, aContainerClientSize.Width, rBorderSpace.Y, awt::PosSize::POSSIZE );
-        xTopDockAreaWindow->setVisible( sal_True );
+        xTopDockAreaWindow->setVisible( true );
         nLeftRightDockingAreaHeight -= rBorderSpace.Y;
     }
 
@@ -174,7 +172,7 @@ void ToolbarLayoutManager::implts_setDockingAreaWindowSizes( const awt::Rectangl
         sal_Int32 nHeight = ( nBottomPos == 0 ) ? 0 : rBorderSpace.Height;
 
         xBottomDockAreaWindow->setPosSize( 0, nBottomPos, aContainerClientSize.Width, nHeight, awt::PosSize::POSSIZE );
-        xBottomDockAreaWindow->setVisible( sal_True );
+        xBottomDockAreaWindow->setVisible( true );
         nLeftRightDockingAreaHeight -= nHeight - 1;
     }
 
@@ -183,21 +181,21 @@ void ToolbarLayoutManager::implts_setDockingAreaWindowSizes( const awt::Rectangl
     {
         // Left docking area window
         // We also have to change our right docking area window if the top or bottom area has changed. They have a higher priority!
-        sal_Int32 nHeight = std::max( sal_Int32( 0 ), sal_Int32( nLeftRightDockingAreaHeight ));
+        sal_Int32 nHeight = std::max<sal_Int32>( 0, nLeftRightDockingAreaHeight );
 
         xLeftDockAreaWindow->setPosSize( 0, rBorderSpace.Y, rBorderSpace.X, nHeight, awt::PosSize::POSSIZE );
-        xLeftDockAreaWindow->setVisible( sal_True );
+        xLeftDockAreaWindow->setVisible( true );
     }
     if ( rBorderSpace.Width >= 0 || nLeftRightDockingAreaHeight > 0 )
     {
         // Right docking area window
         // We also have to change our right docking area window if the top or bottom area has changed. They have a higher priority!
-        sal_Int32 nLeftPos = std::max( sal_Int32( 0 ), sal_Int32( aContainerClientSize.Width - rBorderSpace.Width ));
-        sal_Int32 nHeight  = std::max( sal_Int32( 0 ), sal_Int32( nLeftRightDockingAreaHeight ));
+        sal_Int32 nLeftPos = std::max<sal_Int32>( 0, aContainerClientSize.Width - rBorderSpace.Width );
+        sal_Int32 nHeight  = std::max<sal_Int32>( 0, nLeftRightDockingAreaHeight );
         sal_Int32 nWidth   = ( nLeftPos == 0 ) ? 0 : rBorderSpace.Width;
 
         xRightDockAreaWindow->setPosSize( nLeftPos, rBorderSpace.Y, nWidth, nHeight, awt::PosSize::POSSIZE );
-        xRightDockAreaWindow->setVisible( sal_True );
+        xRightDockAreaWindow->setVisible( true );
     }
 }
 
@@ -219,7 +217,7 @@ void ToolbarLayoutManager::doLayout(const ::Size& aContainerSize)
         bool bReverse( isReverseOrderDockingArea( i ));
         std::vector< SingleRowColumnWindowData > aRowColumnsWindowData;
 
-        implts_getDockingAreaElementInfos( (ui::DockingArea)i, aRowColumnsWindowData );
+        implts_getDockingAreaElementInfos( static_cast<ui::DockingArea>(i), aRowColumnsWindowData );
 
         sal_Int32 nOffset( 0 );
         const sal_uInt32 nCount = aRowColumnsWindowData.size();
@@ -249,29 +247,28 @@ bool ToolbarLayoutManager::implts_isParentWindowVisible() const
     return bVisible;
 }
 
-Rectangle ToolbarLayoutManager::implts_calcDockingArea()
+tools::Rectangle ToolbarLayoutManager::implts_calcDockingArea()
 {
     SolarMutexClearableGuard aReadLock;
     UIElementVector aWindowVector( m_aUIElements );
     aReadLock.clear();
 
-    Rectangle                aBorderSpace;
+    tools::Rectangle                aBorderSpace;
     sal_Int32                nCurrRowColumn( 0 );
     sal_Int32                nCurrPos( 0 );
-    sal_Int32                nCurrDockingArea( ui::DockingArea_DOCKINGAREA_TOP );
+    ui::DockingArea          nCurrDockingArea( ui::DockingArea_DOCKINGAREA_TOP );
     std::vector< sal_Int32 > aRowColumnSizes[DOCKINGAREAS_COUNT];
-    UIElementVector::const_iterator pConstIter;
 
     // initialize rectangle with zero values!
     aBorderSpace.setWidth(0);
     aBorderSpace.setHeight(0);
 
-    aRowColumnSizes[nCurrDockingArea].clear();
-    aRowColumnSizes[nCurrDockingArea].push_back( 0 );
+    aRowColumnSizes[static_cast<int>(nCurrDockingArea)].clear();
+    aRowColumnSizes[static_cast<int>(nCurrDockingArea)].push_back( 0 );
 
-    for ( pConstIter = aWindowVector.begin(); pConstIter != aWindowVector.end(); ++pConstIter )
+    for (auto const& window : aWindowVector)
     {
-        uno::Reference< ui::XUIElement > xUIElement( pConstIter->m_xUIElement, uno::UNO_QUERY );
+        uno::Reference< ui::XUIElement > xUIElement( window.m_xUIElement, uno::UNO_QUERY );
         if ( xUIElement.is() )
         {
             uno::Reference< awt::XWindow > xWindow( xUIElement->getRealInterface(), uno::UNO_QUERY );
@@ -280,44 +277,44 @@ Rectangle ToolbarLayoutManager::implts_calcDockingArea()
             {
                 SolarMutexGuard aGuard;
 
-                vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-                if ( pWindow && !xDockWindow->isFloating() && pConstIter->m_bVisible && !pConstIter->m_bMasterHide )
+                VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+                if ( pWindow && !xDockWindow->isFloating() && window.m_bVisible && !window.m_bMasterHide )
                 {
                     awt::Rectangle aPosSize = xWindow->getPosSize();
-                    if ( pConstIter->m_aDockedData.m_nDockedArea != nCurrDockingArea )
+                    if ( window.m_aDockedData.m_nDockedArea != nCurrDockingArea )
                     {
-                        nCurrDockingArea = pConstIter->m_aDockedData.m_nDockedArea;
+                        nCurrDockingArea = window.m_aDockedData.m_nDockedArea;
                         nCurrRowColumn   = 0;
                         nCurrPos         = 0;
-                        aRowColumnSizes[nCurrDockingArea].clear();
-                        aRowColumnSizes[nCurrDockingArea].push_back( 0 );
+                        aRowColumnSizes[static_cast<int>(nCurrDockingArea)].clear();
+                        aRowColumnSizes[static_cast<int>(nCurrDockingArea)].push_back( 0 );
                     }
 
-                    if ( pConstIter->m_aDockedData.m_nDockedArea == nCurrDockingArea )
+                    if ( window.m_aDockedData.m_nDockedArea == nCurrDockingArea )
                     {
-                        if ( isHorizontalDockingArea( pConstIter->m_aDockedData.m_nDockedArea ))
+                        if ( isHorizontalDockingArea( window.m_aDockedData.m_nDockedArea ))
                         {
-                            if ( pConstIter->m_aDockedData.m_aPos.Y > nCurrPos )
+                            if ( window.m_aDockedData.m_aPos.Y > nCurrPos )
                             {
                                 ++nCurrRowColumn;
-                                nCurrPos = pConstIter->m_aDockedData.m_aPos.Y;
-                                aRowColumnSizes[nCurrDockingArea].push_back( 0 );
+                                nCurrPos = window.m_aDockedData.m_aPos.Y;
+                                aRowColumnSizes[static_cast<int>(nCurrDockingArea)].push_back( 0 );
                             }
 
-                            if ( aPosSize.Height > aRowColumnSizes[nCurrDockingArea][nCurrRowColumn] )
-                                aRowColumnSizes[nCurrDockingArea][nCurrRowColumn] = aPosSize.Height;
+                            if ( aPosSize.Height > aRowColumnSizes[static_cast<int>(nCurrDockingArea)][nCurrRowColumn] )
+                                aRowColumnSizes[static_cast<int>(nCurrDockingArea)][nCurrRowColumn] = aPosSize.Height;
                         }
                         else
                         {
-                            if ( pConstIter->m_aDockedData.m_aPos.X > nCurrPos )
+                            if ( window.m_aDockedData.m_aPos.X > nCurrPos )
                             {
                                 ++nCurrRowColumn;
-                                nCurrPos = pConstIter->m_aDockedData.m_aPos.X;
-                                aRowColumnSizes[nCurrDockingArea].push_back( 0 );
+                                nCurrPos = window.m_aDockedData.m_aPos.X;
+                                aRowColumnSizes[static_cast<int>(nCurrDockingArea)].push_back( 0 );
                             }
 
-                            if ( aPosSize.Width > aRowColumnSizes[nCurrDockingArea][nCurrRowColumn] )
-                                aRowColumnSizes[nCurrDockingArea][nCurrRowColumn] = aPosSize.Width;
+                            if ( aPosSize.Width > aRowColumnSizes[static_cast<int>(nCurrDockingArea)][nCurrRowColumn] )
+                                aRowColumnSizes[static_cast<int>(nCurrDockingArea)][nCurrRowColumn] = aPosSize.Width;
                         }
                     }
                 }
@@ -328,21 +325,21 @@ Rectangle ToolbarLayoutManager::implts_calcDockingArea()
     // Sum up max heights from every row/column
     if ( !aWindowVector.empty() )
     {
-        for ( sal_Int32 i = 0; i <= ui::DockingArea_DOCKINGAREA_RIGHT; i++ )
+        for ( sal_Int32 i = 0; i <= sal_Int32(ui::DockingArea_DOCKINGAREA_RIGHT); i++ )
         {
             sal_Int32 nSize( 0 );
             const sal_uInt32 nCount = aRowColumnSizes[i].size();
             for ( sal_uInt32 j = 0; j < nCount; j++ )
                 nSize += aRowColumnSizes[i][j];
 
-            if ( i == ui::DockingArea_DOCKINGAREA_TOP )
-                aBorderSpace.Top() = nSize;
-            else if ( i == ui::DockingArea_DOCKINGAREA_BOTTOM )
-                aBorderSpace.Bottom() = nSize;
-            else if ( i == ui::DockingArea_DOCKINGAREA_LEFT )
-                aBorderSpace.Left() = nSize;
+            if ( i == sal_Int32(ui::DockingArea_DOCKINGAREA_TOP) )
+                aBorderSpace.SetTop( nSize );
+            else if ( i == sal_Int32(ui::DockingArea_DOCKINGAREA_BOTTOM) )
+                aBorderSpace.SetBottom( nSize );
+            else if ( i == sal_Int32(ui::DockingArea_DOCKINGAREA_LEFT) )
+                aBorderSpace.SetLeft( nSize );
             else
-                aBorderSpace.Right() = nSize;
+                aBorderSpace.SetRight( nSize );
         }
     }
 
@@ -435,7 +432,7 @@ bool ToolbarLayoutManager::requestToolbar( const OUString& rResourceURL )
         bCreateOrShowToolbar &= bool( xContainerWindow->isActive());
 
     if ( bCreateOrShowToolbar )
-        bNotify = ( bMustCallCreate ) ? createToolbar( rResourceURL ) : showToolbar( rResourceURL );
+        bNotify = bMustCallCreate ? createToolbar( rResourceURL ) : showToolbar( rResourceURL );
 
     return bNotify;
 }
@@ -493,7 +490,7 @@ bool ToolbarLayoutManager::createToolbar( const OUString& rResourceURL )
                         static_cast< OWeakObject * >( this ), uno::UNO_QUERY ));
                     xWindow->addWindowListener( uno::Reference< awt::XWindowListener >(
                         static_cast< OWeakObject * >( this ), uno::UNO_QUERY ));
-                    xDockWindow->enableDocking( sal_True );
+                    xDockWindow->enableDocking( true );
                 }
                 catch (const uno::Exception&)
                 {
@@ -507,6 +504,17 @@ bool ToolbarLayoutManager::createToolbar( const OUString& rResourceURL )
             SolarMutexClearableGuard aWriteLock;
 
             UIElement& rElement = impl_findToolbar( rResourceURL );
+            if (rElement.m_xUIElement.is())
+            {
+                // somebody else must have created it while we released
+                // the SolarMutex - just dispose our new instance and
+                // do nothing. (We have to dispose either the new or the
+                // existing m_xUIElement.)
+                aWriteLock.clear();
+                uno::Reference<lang::XComponent> const xC(xUIElement, uno::UNO_QUERY);
+                xC->dispose();
+                return false;
+            }
             if ( !rElement.m_aName.isEmpty() )
             {
                 // Reuse a local entry so we are able to use the latest
@@ -533,15 +541,15 @@ bool ToolbarLayoutManager::createToolbar( const OUString& rResourceURL )
             SvtCommandOptions aCmdOptions;
 
             SolarMutexGuard aGuard;
-            vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-            if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
+            VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+            if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
             {
-                ToolBox* pToolbar = static_cast<ToolBox *>(pWindow);
-                sal_uInt16 nMenuType = pToolbar->GetMenuType();
+                ToolBox* pToolbar = static_cast<ToolBox *>(pWindow.get());
+                ToolBoxMenuType nMenuType = pToolbar->GetMenuType();
                 if ( aCmdOptions.Lookup( SvtCommandOptions::CMDOPTION_DISABLED, "ConfigureDialog" ))
-                    pToolbar->SetMenuType( nMenuType & ~TOOLBOX_MENUTYPE_CUSTOMIZE );
+                    pToolbar->SetMenuType( nMenuType & ~ToolBoxMenuType::Customize );
                 else
-                    pToolbar->SetMenuType( nMenuType | TOOLBOX_MENUTYPE_CUSTOMIZE );
+                    pToolbar->SetMenuType( nMenuType | ToolBoxMenuType::Customize );
             }
             bNotify = true;
 
@@ -557,7 +565,6 @@ bool ToolbarLayoutManager::createToolbar( const OUString& rResourceURL )
 
 bool ToolbarLayoutManager::destroyToolbar( const OUString& rResourceURL )
 {
-    UIElementVector::iterator pIter;
     uno::Reference< lang::XComponent > xComponent;
 
     bool bNotify( false );
@@ -566,15 +573,15 @@ bool ToolbarLayoutManager::destroyToolbar( const OUString& rResourceURL )
     bool bMustBeDestroyed( !rResourceURL.startsWith("private:resource/toolbar/addon_") );
 
     SolarMutexClearableGuard aWriteLock;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto & elem : m_aUIElements)
     {
-        if ( pIter->m_aName == rResourceURL )
+        if ( elem.m_aName == rResourceURL )
         {
-            xComponent.set( pIter->m_xUIElement, uno::UNO_QUERY );
+            xComponent.set( elem.m_xUIElement, uno::UNO_QUERY );
             if ( bMustBeDestroyed )
-                pIter->m_xUIElement.clear();
+                elem.m_xUIElement.clear();
             else
-                pIter->m_bVisible = false;
+                elem.m_bVisible = false;
             break;
         }
     }
@@ -611,7 +618,7 @@ bool ToolbarLayoutManager::destroyToolbar( const OUString& rResourceURL )
         else
         {
             if ( xWindow.is() )
-                xWindow->setVisible( sal_False );
+                xWindow->setVisible( false );
             bNotify = true;
         }
 
@@ -646,10 +653,9 @@ void ToolbarLayoutManager::destroyToolbars()
     m_bLayoutDirty = true;
     aWriteLock.clear();
 
-    UIElementVector::iterator pIter;
-    for ( pIter = aUIElementVector.begin(); pIter != aUIElementVector.end(); ++pIter )
+    for (auto const& elem : aUIElementVector)
     {
-        uno::Reference< lang::XComponent > xComponent( pIter->m_xUIElement, uno::UNO_QUERY );
+        uno::Reference< lang::XComponent > xComponent( elem.m_xUIElement, uno::UNO_QUERY );
         if ( xComponent.is() )
             xComponent->dispose();
     }
@@ -711,26 +717,21 @@ void ToolbarLayoutManager::refreshToolbarsVisibility( bool bAutomaticToolbars )
 {
     UIElementVector aUIElementVector;
 
-    SolarMutexClearableGuard aReadLock;
-    bool bVisible( m_bVisible );
-    aReadLock.clear();
-
-    if ( !bVisible || !bAutomaticToolbars )
+    if ( !bAutomaticToolbars )
         return;
 
     implts_getUIElementVectorCopy( aUIElementVector );
 
     UIElement aUIElement;
     SolarMutexGuard aGuard;
-    UIElementVector::iterator pIter;
-    for ( pIter = aUIElementVector.begin(); pIter != aUIElementVector.end(); ++pIter )
+    for (auto const& elem : aUIElementVector)
     {
-        if ( implts_readWindowStateData( pIter->m_aName, aUIElement ) &&
-             ( pIter->m_bVisible != aUIElement.m_bVisible ) && !pIter->m_bMasterHide )
+        if ( implts_readWindowStateData( elem.m_aName, aUIElement ) &&
+             ( elem.m_bVisible != aUIElement.m_bVisible ) && !elem.m_bMasterHide )
         {
             SolarMutexGuard g;
-            UIElement& rUIElement = impl_findToolbar( pIter->m_aName );
-            if ( rUIElement.m_aName == pIter->m_aName )
+            UIElement& rUIElement = impl_findToolbar( elem.m_aName );
+            if ( rUIElement.m_aName == elem.m_aName )
             {
                 rUIElement.m_bVisible = aUIElement.m_bVisible;
                 implts_setLayoutDirty();
@@ -745,15 +746,14 @@ void ToolbarLayoutManager::setFloatingToolbarsVisibility( bool bVisible )
     implts_getUIElementVectorCopy( aUIElementVector );
 
     SolarMutexGuard aGuard;
-    UIElementVector::iterator pIter;
-    for ( pIter = aUIElementVector.begin(); pIter != aUIElementVector.end(); ++pIter )
+    for (auto const& elem : aUIElementVector)
     {
-        vcl::Window* pWindow = getWindowFromXUIElement( pIter->m_xUIElement );
-        if ( pWindow && pIter->m_bFloating )
+        vcl::Window* pWindow = getWindowFromXUIElement( elem.m_xUIElement );
+        if ( pWindow && elem.m_bFloating )
         {
             if ( bVisible )
             {
-                if ( pIter->m_bVisible && !pIter->m_bMasterHide )
+                if ( elem.m_bVisible && !elem.m_bMasterHide )
                     pWindow->Show( true, ShowFlags::NoFocusChange | ShowFlags::NoActivate );
             }
             else
@@ -768,26 +768,24 @@ void ToolbarLayoutManager::setVisible( bool bVisible )
     implts_getUIElementVectorCopy( aUIElementVector );
 
     SolarMutexGuard aGuard;
-    UIElementVector::iterator pIter;
-    for ( pIter = aUIElementVector.begin(); pIter != aUIElementVector.end(); ++pIter )
+    for (auto & elem : aUIElementVector)
     {
-        if (!pIter->m_bFloating)
+        if (!elem.m_bFloating)
         {
-            UIElement aUIElement(*pIter);
-            aUIElement.m_bMasterHide = !bVisible;
-            implts_setToolbar(aUIElement);
+            elem.m_bMasterHide = !bVisible;
+            implts_setToolbar(elem);
             implts_setLayoutDirty();
         }
 
-        vcl::Window* pWindow = getWindowFromXUIElement( pIter->m_xUIElement );
+        vcl::Window* pWindow = getWindowFromXUIElement( elem.m_xUIElement );
         if ( pWindow )
         {
-            bool bSetVisible( pIter->m_bVisible && bVisible );
+            bool bSetVisible( elem.m_bVisible && bVisible );
             if ( !bSetVisible )
                 pWindow->Hide();
             else
             {
-                if ( pIter->m_bFloating )
+                if ( elem.m_bFloating )
                     pWindow->Show(true, ShowFlags::NoFocusChange | ShowFlags::NoActivate );
             }
         }
@@ -810,7 +808,7 @@ bool ToolbarLayoutManager::dockToolbar( const OUString& rResourceURL, ui::Dockin
             if ( xDockWindow.is() )
             {
                 if ( eDockingArea != ui::DockingArea_DOCKINGAREA_DEFAULT )
-                    aUIElement.m_aDockedData.m_nDockedArea = sal_Int16( eDockingArea );
+                    aUIElement.m_aDockedData.m_nDockedArea = eDockingArea;
 
                 if ( !isDefaultPos( aPos ))
                     aUIElement.m_aDockedData.m_aPos = aPos;
@@ -822,8 +820,8 @@ bool ToolbarLayoutManager::dockToolbar( const OUString& rResourceURL, ui::Dockin
 
                     {
                         SolarMutexGuard aGuard;
-                        pWindow = VCLUnoHelper::GetWindow( xWindow );
-                        if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
+                        pWindow = VCLUnoHelper::GetWindow( xWindow ).get();
+                        if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
                         {
                             pToolBox = static_cast<ToolBox *>(pWindow);
 
@@ -849,7 +847,7 @@ bool ToolbarLayoutManager::dockToolbar( const OUString& rResourceURL, ui::Dockin
 
                         ::Point aPixelPos;
                         awt::Point aDockPos;
-                        implts_findNextDockingPos((ui::DockingArea)aUIElement.m_aDockedData.m_nDockedArea, aSize, aDockPos, aPixelPos );
+                        implts_findNextDockingPos(aUIElement.m_aDockedData.m_nDockedArea, aSize, aDockPos, aPixelPos );
                         aUIElement.m_aDockedData.m_aPos = aDockPos;
                     }
                 }
@@ -860,7 +858,7 @@ bool ToolbarLayoutManager::dockToolbar( const OUString& rResourceURL, ui::Dockin
                 {
                     // ATTENTION: This will call toggleFloatingMode() via notifications which
                     // sets the floating member of the UIElement correctly!
-                    xDockWindow->setFloatingMode( sal_False );
+                    xDockWindow->setFloatingMode( false );
                 }
                 else
                 {
@@ -886,11 +884,10 @@ bool ToolbarLayoutManager::dockAllToolbars()
     std::vector< OUString > aToolBarNameVector;
 
     SolarMutexClearableGuard aReadLock;
-    UIElementVector::iterator pIter;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto const& elem : m_aUIElements)
     {
-        if ( pIter->m_aType == "toolbar" && pIter->m_xUIElement.is() && pIter->m_bFloating && pIter->m_bVisible )
-            aToolBarNameVector.push_back( pIter->m_aName );
+        if ( elem.m_aType == "toolbar" && elem.m_xUIElement.is() && elem.m_bFloating && elem.m_bVisible )
+            aToolBarNameVector.push_back( elem.m_aName );
     }
     aReadLock.clear();
 
@@ -906,18 +903,18 @@ bool ToolbarLayoutManager::dockAllToolbars()
     return bResult;
 }
 
-long ToolbarLayoutManager::childWindowEvent( VclSimpleEvent* pEvent )
+void ToolbarLayoutManager::childWindowEvent( VclSimpleEvent const * pEvent )
 {
     // To enable toolbar controllers to change their image when a sub-toolbar function
     // is activated, we need this mechanism. We have NO connection between these toolbars
     // anymore!
-    if ( dynamic_cast< const VclWindowEvent* >(pEvent) != nullptr )
+    if ( auto pWindowEvent = dynamic_cast< const VclWindowEvent* >(pEvent) )
     {
-        if ( pEvent->GetId() == VCLEVENT_TOOLBOX_SELECT )
+        if ( pEvent->GetId() == VclEventId::ToolboxSelect )
         {
             OUString aToolbarName;
             OUString aCommand;
-            ToolBox*        pToolBox = getToolboxPtr( static_cast<VclWindowEvent*>(pEvent)->GetWindow() );
+            ToolBox* pToolBox = getToolboxPtr( pWindowEvent->GetWindow() );
 
             if ( pToolBox )
             {
@@ -931,13 +928,12 @@ long ToolbarLayoutManager::childWindowEvent( VclSimpleEvent* pEvent )
             {
                 SolarMutexClearableGuard aReadLock;
                 ::std::vector< uno::Reference< ui::XUIFunctionListener > > aListenerArray;
-                UIElementVector::iterator pIter;
 
-                for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+                for (auto const& elem : m_aUIElements)
                 {
-                    if ( pIter->m_xUIElement.is() )
+                    if ( elem.m_xUIElement.is() )
                     {
-                        uno::Reference< ui::XUIFunctionListener > xListener( pIter->m_xUIElement, uno::UNO_QUERY );
+                        uno::Reference< ui::XUIFunctionListener > xListener( elem.m_xUIElement, uno::UNO_QUERY );
                         if ( xListener.is() )
                             aListenerArray.push_back( xListener );
                     }
@@ -961,11 +957,11 @@ long ToolbarLayoutManager::childWindowEvent( VclSimpleEvent* pEvent )
                 }
             }
         }
-        else if ( pEvent->GetId() == VCLEVENT_TOOLBOX_FORMATCHANGED )
+        else if ( pEvent->GetId() == VclEventId::ToolboxFormatChanged )
         {
             if ( !implts_isToolbarCreationActive() )
             {
-                ToolBox* pToolBox = getToolboxPtr( static_cast<VclWindowEvent*>(pEvent)->GetWindow() );
+                ToolBox* pToolBox = getToolboxPtr( static_cast<VclWindowEvent const *>(pEvent)->GetWindow() );
                 if ( pToolBox )
                 {
                     OUString aToolbarName = retrieveToolbarNameFromHelpURL( pToolBox );
@@ -986,17 +982,15 @@ long ToolbarLayoutManager::childWindowEvent( VclSimpleEvent* pEvent )
             }
         }
     }
-
-    return 1;
 }
 
 void ToolbarLayoutManager::resetDockingArea()
 {
     SolarMutexClearableGuard aReadLock;
-    uno::Reference< awt::XWindow > xTopDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP] );
-    uno::Reference< awt::XWindow > xLeftDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT] );
-    uno::Reference< awt::XWindow > xRightDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT] );
-    uno::Reference< awt::XWindow > xBottomDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM] );
+    uno::Reference< awt::XWindow > xTopDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)] );
+    uno::Reference< awt::XWindow > xLeftDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)] );
+    uno::Reference< awt::XWindow > xRightDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)] );
+    uno::Reference< awt::XWindow > xBottomDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)] );
     aReadLock.clear();
 
     if ( xTopDockingWindow.is() )
@@ -1021,10 +1015,10 @@ void ToolbarLayoutManager::setParentWindow(
 
     SolarMutexClearableGuard aWriteLock;
     m_xContainerWindow.set( xParentWindow, uno::UNO_QUERY );
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP]    = xTopDockWindow;
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT]   = xLeftDockWindow;
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT]  = xRightDockWindow;
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM] = xBottomDockWindow;
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)]    = xTopDockWindow;
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)]   = xLeftDockWindow;
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)]  = xRightDockWindow;
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)] = xBottomDockWindow;
     aWriteLock.clear();
 
     if ( xParentWindow.is() )
@@ -1051,7 +1045,7 @@ void ToolbarLayoutManager::setParentWindow(
     }
 }
 
-void ToolbarLayoutManager::setDockingAreaOffsets( const ::Rectangle& rOffsets )
+void ToolbarLayoutManager::setDockingAreaOffsets( const ::tools::Rectangle& rOffsets )
 {
     SolarMutexGuard g;
     m_aDockingAreaOffsets = rOffsets;
@@ -1060,20 +1054,20 @@ void ToolbarLayoutManager::setDockingAreaOffsets( const ::Rectangle& rOffsets )
 
 OUString ToolbarLayoutManager::implts_generateGenericAddonToolbarTitle( sal_Int32 nNumber ) const
 {
-    OUString aAddonGenericTitle(FWK_RESSTR(STR_TOOLBAR_TITLE_ADDON));
+    OUString aAddonGenericTitle(FwkResId(STR_TOOLBAR_TITLE_ADDON));
     const vcl::I18nHelper& rI18nHelper = Application::GetSettings().GetUILocaleI18nHelper();
 
     OUString aNumStr = rI18nHelper.GetNum( nNumber, 0, false, false );
     aAddonGenericTitle = aAddonGenericTitle.replaceFirst( "%num%", aNumStr );
 
-    return OUString( aAddonGenericTitle );
+    return aAddonGenericTitle;
 }
 
 void ToolbarLayoutManager::implts_createAddonsToolBars()
 {
     SolarMutexClearableGuard aWriteLock;
     if ( !m_pAddonOptions )
-        m_pAddonOptions = new AddonsOptions;
+        m_pAddonOptions.reset( new AddonsOptions );
 
     uno::Reference< ui::XUIElementFactory > xUIElementFactory( m_xUIElementFactoryManager );
     uno::Reference< frame::XFrame > xFrame( m_xFrame );
@@ -1086,7 +1080,6 @@ void ToolbarLayoutManager::implts_createAddonsToolBars()
     uno::Reference< ui::XUIElement >                       xUIElement;
 
     sal_uInt32 nCount = m_pAddonOptions->GetAddonsToolBarCount();
-    OUString aElementType( "toolbar" );
 
     uno::Sequence< beans::PropertyValue > aPropSeq( 2 );
     aPropSeq[0].Name = "Frame";
@@ -1118,7 +1111,7 @@ void ToolbarLayoutManager::implts_createAddonsToolBars()
                     try
                     {
                         xDockWindow->addDockableWindowListener( uno::Reference< awt::XDockableWindowListener >( static_cast< OWeakObject * >( this ), uno::UNO_QUERY ));
-                        xDockWindow->enableDocking( sal_True );
+                        xDockWindow->enableDocking( true );
                         uno::Reference< awt::XWindow > xWindow( xDockWindow, uno::UNO_QUERY );
                         if ( xWindow.is() )
                             xWindow->addWindowListener( uno::Reference< awt::XWindowListener >( static_cast< OWeakObject * >( this ), uno::UNO_QUERY ));
@@ -1145,7 +1138,7 @@ void ToolbarLayoutManager::implts_createAddonsToolBars()
                 else
                 {
                     // Create new UI element and try to read its state data
-                    UIElement aNewToolbar( aAddonToolBarName, aElementType, xUIElement );
+                    UIElement aNewToolbar( aAddonToolBarName, "toolbar", xUIElement );
                     aNewToolbar.m_bFloating = true;
                     implts_readWindowStateData( aAddonToolBarName, aNewToolbar );
                     implts_setElementData( aNewToolbar, xDockWindow );
@@ -1162,12 +1155,12 @@ void ToolbarLayoutManager::implts_createAddonsToolBars()
                 {
                     // Set generic title for add-on toolbar
                     SolarMutexGuard aGuard;
-                    vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+                    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
                     if ( pWindow->GetText().isEmpty() )
                         pWindow->SetText( aGenericAddonTitle );
-                    if ( pWindow->GetType() == WINDOW_TOOLBOX )
+                    if ( pWindow->GetType() == WindowType::TOOLBOX )
                     {
-                        ToolBox* pToolbar = static_cast<ToolBox *>(pWindow);
+                        ToolBox* pToolbar = static_cast<ToolBox *>(pWindow.get());
                         pToolbar->SetMenuType();
                     }
                 }
@@ -1188,7 +1181,6 @@ void ToolbarLayoutManager::implts_createCustomToolBars()
     if ( !m_bComponentAttached )
         return;
 
-    uno::Reference< ui::XUIElementFactory > xUIElementFactory( m_xUIElementFactoryManager );
     uno::Reference< frame::XFrame > xFrame( m_xFrame );
     uno::Reference< ui::XUIConfigurationManager > xModuleCfgMgr( m_xModuleCfgMgr, uno::UNO_QUERY );
     uno::Reference< ui::XUIConfigurationManager > xDocCfgMgr( m_xDocCfgMgr, uno::UNO_QUERY );
@@ -1220,7 +1212,6 @@ void ToolbarLayoutManager::implts_createNonContextSensitiveToolBars()
     if ( !m_xPersistentWindowState.is() || !m_xFrame.is() || !m_bComponentAttached )
         return;
 
-    uno::Reference< ui::XUIElementFactory >  xUIElementFactory( m_xUIElementFactoryManager );
     uno::Reference< container::XNameAccess > xPersistentWindowState( m_xPersistentWindowState );
     aReadLock.clear();
 
@@ -1239,7 +1230,6 @@ void ToolbarLayoutManager::implts_createNonContextSensitiveToolBars()
             OUString aElementName;
             OUString aName;
 
-            uno::Reference< ui::XUIElement > xUIElement;
             aMakeVisibleToolbars.reserve(aToolbarNames.getLength());
 
             SolarMutexGuard g;
@@ -1279,12 +1269,9 @@ void ToolbarLayoutManager::implts_createNonContextSensitiveToolBars()
     {
     }
 
-    if ( !aMakeVisibleToolbars.empty() )
+    for (auto const& rURL : aMakeVisibleToolbars)
     {
-        for (auto const& rURL : aMakeVisibleToolbars)
-        {
-            this->requestToolbar(rURL);
-        }
+        requestToolbar(rURL);
     }
 }
 
@@ -1334,20 +1321,19 @@ void ToolbarLayoutManager::implts_reparentToolbars()
 {
     SolarMutexClearableGuard aWriteLock;
     UIElementVector aUIElementVector = m_aUIElements;
-    vcl::Window* pContainerWindow  = VCLUnoHelper::GetWindow( m_xContainerWindow );
-    vcl::Window* pTopDockWindow    = VCLUnoHelper::GetWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP] );
-    vcl::Window* pBottomDockWindow = VCLUnoHelper::GetWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM] );
-    vcl::Window* pLeftDockWindow   = VCLUnoHelper::GetWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT] );
-    vcl::Window* pRightDockWindow  = VCLUnoHelper::GetWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT] );
+    VclPtr<vcl::Window> pContainerWindow  = VCLUnoHelper::GetWindow( m_xContainerWindow );
+    VclPtr<vcl::Window> pTopDockWindow    = VCLUnoHelper::GetWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)] );
+    VclPtr<vcl::Window> pBottomDockWindow = VCLUnoHelper::GetWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)] );
+    VclPtr<vcl::Window> pLeftDockWindow   = VCLUnoHelper::GetWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)] );
+    VclPtr<vcl::Window> pRightDockWindow  = VCLUnoHelper::GetWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)] );
     aWriteLock.clear();
 
     SolarMutexGuard aGuard;
     if ( pContainerWindow )
     {
-        UIElementVector::iterator pIter;
-        for ( pIter = aUIElementVector.begin(); pIter != aUIElementVector.end(); ++pIter )
+        for (auto const& elem : aUIElementVector)
         {
-            uno::Reference< ui::XUIElement > xUIElement( pIter->m_xUIElement );
+            uno::Reference< ui::XUIElement > xUIElement( elem.m_xUIElement );
             if ( xUIElement.is() )
             {
                 uno::Reference< awt::XWindow > xWindow;
@@ -1365,19 +1351,19 @@ void ToolbarLayoutManager::implts_reparentToolbars()
                 {
                 }
 
-                vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+                VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
                 if ( pWindow )
                 {
                     // Reparent our child windows according to their current state.
-                    if ( pIter->m_bFloating )
+                    if ( elem.m_bFloating )
                         pWindow->SetParent( pContainerWindow );
                     else
                     {
-                        if ( pIter->m_aDockedData.m_nDockedArea == ui::DockingArea_DOCKINGAREA_TOP )
+                        if ( elem.m_aDockedData.m_nDockedArea == ui::DockingArea_DOCKINGAREA_TOP )
                             pWindow->SetParent( pTopDockWindow );
-                        else if ( pIter->m_aDockedData.m_nDockedArea == ui::DockingArea_DOCKINGAREA_BOTTOM )
+                        else if ( elem.m_aDockedData.m_nDockedArea == ui::DockingArea_DOCKINGAREA_BOTTOM )
                             pWindow->SetParent( pBottomDockWindow );
-                        else if ( pIter->m_aDockedData.m_nDockedArea == ui::DockingArea_DOCKINGAREA_LEFT )
+                        else if ( elem.m_aDockedData.m_nDockedArea == ui::DockingArea_DOCKINGAREA_LEFT )
                             pWindow->SetParent( pLeftDockWindow );
                         else
                             pWindow->SetParent( pRightDockWindow );
@@ -1406,17 +1392,16 @@ void ToolbarLayoutManager::implts_setElementData( UIElement& rElement, const uno
     bool bShowElement( rElement.m_bVisible && !rElement.m_bMasterHide && implts_isParentWindowVisible() );
     aReadLock.clear();
 
-    uno::Reference< awt::XDockableWindow > xDockWindow( rDockWindow );
-    uno::Reference< awt::XWindow2 >        xWindow( xDockWindow, uno::UNO_QUERY );
+    uno::Reference< awt::XWindow2 >  xWindow( rDockWindow, uno::UNO_QUERY );
 
     vcl::Window*  pWindow( nullptr );
     ToolBox* pToolBox( nullptr );
 
-    if ( xDockWindow.is() && xWindow.is() )
+    if ( rDockWindow.is() && xWindow.is() )
     {
         {
             SolarMutexGuard aGuard;
-            pWindow = VCLUnoHelper::GetWindow( xWindow );
+            pWindow = VCLUnoHelper::GetWindow( xWindow ).get();
             if ( pWindow )
             {
                 OUString aText = pWindow->GetText();
@@ -1424,12 +1409,12 @@ void ToolbarLayoutManager::implts_setElementData( UIElement& rElement, const uno
                     pWindow->SetText( rElement.m_aUIName );
                 if ( rElement.m_bNoClose )
                     pWindow->SetStyle( pWindow->GetStyle() & ~WB_CLOSEABLE );
-                if ( pWindow->GetType() == WINDOW_TOOLBOX )
+                if ( pWindow->GetType() == WindowType::TOOLBOX )
                     pToolBox = static_cast<ToolBox *>(pWindow);
             }
             if ( pToolBox )
             {
-                pToolBox->SetButtonType( (ButtonType)rElement.m_nStyle );
+                pToolBox->SetButtonType( rElement.m_nStyle );
                 if ( rElement.m_bNoClose )
                     pToolBox->SetFloatStyle( pToolBox->GetFloatStyle() & ~WB_CLOSEABLE );
             }
@@ -1450,7 +1435,7 @@ void ToolbarLayoutManager::implts_setElementData( UIElement& rElement, const uno
             bool bUndefPos = hasDefaultPosValue( rElement.m_aFloatingData.m_aPos );
             bool bSetSize = ( rElement.m_aFloatingData.m_aSize.Width != 0 &&
                               rElement.m_aFloatingData.m_aSize.Height != 0 );
-            xDockWindow->setFloatingMode( sal_True );
+            rDockWindow->setFloatingMode( true );
             if ( bUndefPos )
             {
                 aPos = implts_findNextCascadeFloatingPos();
@@ -1501,15 +1486,15 @@ void ToolbarLayoutManager::implts_setElementData( UIElement& rElement, const uno
                 SolarMutexGuard aGuard;
                 pToolBox->SetAlign( ImplConvertAlignment(rElement.m_aDockedData.m_nDockedArea )  );
                 pToolBox->SetLineCount( 1 );
-                xDockWindow->setFloatingMode( sal_False );
+                rDockWindow->setFloatingMode( false );
                 if ( rElement.m_aDockedData.m_bLocked )
-                    xDockWindow->lock();
+                    rDockWindow->lock();
                 aSize = pToolBox->CalcWindowSizePixel();
                 bSetSize = true;
 
                 if ( isDefaultPos( rElement.m_aDockedData.m_aPos ))
                 {
-                    implts_findNextDockingPos( (ui::DockingArea)rElement.m_aDockedData.m_nDockedArea, aSize, aDockPos, aPixelPos );
+                    implts_findNextDockingPos( rElement.m_aDockedData.m_nDockedArea, aSize, aDockPos, aPixelPos );
                     rElement.m_aDockedData.m_aPos = aDockPos;
                 }
             }
@@ -1531,14 +1516,14 @@ void ToolbarLayoutManager::implts_setElementData( UIElement& rElement, const uno
 void ToolbarLayoutManager::implts_destroyDockingAreaWindows()
 {
     SolarMutexClearableGuard aWriteLock;
-    uno::Reference< awt::XWindow > xTopDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP] );
-    uno::Reference< awt::XWindow > xLeftDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT] );
-    uno::Reference< awt::XWindow > xRightDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT] );
-    uno::Reference< awt::XWindow > xBottomDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM] );
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP].clear();
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT].clear();
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT].clear();
-    m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM].clear();
+    uno::Reference< awt::XWindow > xTopDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)] );
+    uno::Reference< awt::XWindow > xLeftDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)] );
+    uno::Reference< awt::XWindow > xRightDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)] );
+    uno::Reference< awt::XWindow > xBottomDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)] );
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)].clear();
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)].clear();
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)].clear();
+    m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)].clear();
     aWriteLock.clear();
 
     // destroy windows
@@ -1560,7 +1545,6 @@ void ToolbarLayoutManager::implts_writeWindowStateData( const UIElement& rElemen
 {
     SolarMutexResettableGuard aWriteLock;
     uno::Reference< container::XNameAccess > xPersistentWindowState( m_xPersistentWindowState );
-    m_bStoreWindowState = true; // set flag to determine that we triggered the notification
     aWriteLock.clear();
 
     bool bPersistent( false );
@@ -1588,11 +1572,11 @@ void ToolbarLayoutManager::implts_writeWindowStateData( const UIElement& rElemen
             uno::Sequence< beans::PropertyValue > aWindowState( 9 );
 
             aWindowState[0].Name  = WINDOWSTATE_PROPERTY_DOCKED;
-            aWindowState[0].Value = ::uno::makeAny( !rElementData.m_bFloating );
+            aWindowState[0].Value <<= !rElementData.m_bFloating;
             aWindowState[1].Name  = WINDOWSTATE_PROPERTY_VISIBLE;
-            aWindowState[1].Value = uno::makeAny( rElementData.m_bVisible );
+            aWindowState[1].Value <<= rElementData.m_bVisible;
             aWindowState[2].Name  = WINDOWSTATE_PROPERTY_DOCKINGAREA;
-            aWindowState[2].Value = uno::makeAny( static_cast< ui::DockingArea >( rElementData.m_aDockedData.m_nDockedArea ) );
+            aWindowState[2].Value <<= rElementData.m_aDockedData.m_nDockedArea;
 
             awt::Point aPos = rElementData.m_aDockedData.m_aPos;
             aWindowState[3].Name  = WINDOWSTATE_PROPERTY_DOCKPOS;
@@ -1605,11 +1589,11 @@ void ToolbarLayoutManager::implts_writeWindowStateData( const UIElement& rElemen
             aWindowState[5].Name  = WINDOWSTATE_PROPERTY_SIZE;
             aWindowState[5].Value <<= rElementData.m_aFloatingData.m_aSize;
             aWindowState[6].Name  = WINDOWSTATE_PROPERTY_UINAME;
-            aWindowState[6].Value = uno::makeAny( rElementData.m_aUIName );
+            aWindowState[6].Value <<= rElementData.m_aUIName;
             aWindowState[7].Name  = WINDOWSTATE_PROPERTY_LOCKED;
-            aWindowState[7].Value = uno::makeAny( rElementData.m_aDockedData.m_bLocked );
+            aWindowState[7].Value <<= rElementData.m_aDockedData.m_bLocked;
             aWindowState[8].Name  = WINDOWSTATE_PROPERTY_STYLE;
-            aWindowState[8].Value = uno::makeAny( static_cast<sal_uInt16>(rElementData.m_nStyle) );
+            aWindowState[8].Value <<= static_cast<sal_uInt16>(rElementData.m_nStyle);
 
             OUString aName = rElementData.m_aName;
             if ( xPersistentWindowState->hasByName( aName ))
@@ -1630,7 +1614,6 @@ void ToolbarLayoutManager::implts_writeWindowStateData( const UIElement& rElemen
 
     // Reset flag
     aWriteLock.reset();
-    m_bStoreWindowState = false;
     aWriteLock.clear();
 }
 
@@ -1641,13 +1624,12 @@ void ToolbarLayoutManager::implts_writeWindowStateData( const UIElement& rElemen
 UIElement& ToolbarLayoutManager::impl_findToolbar( const OUString& aName )
 {
     static UIElement aEmptyElement;
-    UIElementVector::iterator pIter;
 
     SolarMutexGuard g;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto & elem : m_aUIElements)
     {
-        if ( pIter->m_aName == aName )
-            return *pIter;
+        if ( elem.m_aName == aName )
+            return elem;
     }
 
     return aEmptyElement;
@@ -1662,17 +1644,16 @@ UIElement ToolbarLayoutManager::implts_findToolbar( const OUString& aName )
 UIElement ToolbarLayoutManager::implts_findToolbar( const uno::Reference< uno::XInterface >& xToolbar )
 {
     UIElement                       aToolbar;
-    UIElementVector::const_iterator pIter;
 
     SolarMutexGuard g;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto const& elem : m_aUIElements)
     {
-        if ( pIter->m_xUIElement.is() )
+        if ( elem.m_xUIElement.is() )
         {
-            uno::Reference< uno::XInterface > xIfac( pIter->m_xUIElement->getRealInterface(), uno::UNO_QUERY );
+            uno::Reference< uno::XInterface > xIfac( elem.m_xUIElement->getRealInterface(), uno::UNO_QUERY );
             if ( xIfac == xToolbar )
             {
-                aToolbar = *pIter;
+                aToolbar = elem;
                 break;
             }
         }
@@ -1683,15 +1664,14 @@ UIElement ToolbarLayoutManager::implts_findToolbar( const uno::Reference< uno::X
 
 uno::Reference< awt::XWindow > ToolbarLayoutManager::implts_getXWindow( const OUString& aName )
 {
-    UIElementVector::iterator pIter;
     uno::Reference< awt::XWindow > xWindow;
 
     SolarMutexGuard g;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto const& elem : m_aUIElements)
     {
-        if ( pIter->m_aName == aName && pIter->m_xUIElement.is() )
+        if ( elem.m_aName == aName && elem.m_xUIElement.is() )
         {
-             xWindow.set( pIter->m_xUIElement->getRealInterface(), uno::UNO_QUERY );
+             xWindow.set( elem.m_xUIElement->getRealInterface(), uno::UNO_QUERY );
              break;
         }
     }
@@ -1702,7 +1682,7 @@ uno::Reference< awt::XWindow > ToolbarLayoutManager::implts_getXWindow( const OU
 vcl::Window* ToolbarLayoutManager::implts_getWindow( const OUString& aName )
 {
     uno::Reference< awt::XWindow > xWindow = implts_getXWindow( aName );
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
 
     return pWindow;
 }
@@ -1750,8 +1730,8 @@ awt::Point ToolbarLayoutManager::implts_findNextCascadeFloatingPos()
 
     SolarMutexClearableGuard aReadLock;
     uno::Reference< awt::XWindow2 > xContainerWindow( m_xContainerWindow );
-    uno::Reference< awt::XWindow > xTopDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP] );
-    uno::Reference< awt::XWindow > xLeftDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT] );
+    uno::Reference< awt::XWindow > xTopDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)] );
+    uno::Reference< awt::XWindow > xLeftDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)] );
     aReadLock.clear();
 
     awt::Point aStartPos( nCascadeIndentX, nCascadeIndentY );
@@ -1760,7 +1740,7 @@ awt::Point ToolbarLayoutManager::implts_findNextCascadeFloatingPos()
     if ( xContainerWindow.is() )
     {
         SolarMutexGuard aGuard;
-        vcl::Window* pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow );
+        VclPtr<vcl::Window> pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow );
         if ( pContainerWindow )
             aStartPos = AWTPoint(pContainerWindow->OutputToScreenPixel(VCLPoint(aStartPos)));
     }
@@ -1774,17 +1754,16 @@ awt::Point ToolbarLayoutManager::implts_findNextCascadeFloatingPos()
     aCurrPos = aStartPos;
 
     // Try to find a cascaded position for the new floating window
-    UIElementVector::const_iterator pIter;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto const& elem : m_aUIElements)
     {
-        if ( pIter->m_xUIElement.is() )
+        if ( elem.m_xUIElement.is() )
         {
-            uno::Reference< awt::XDockableWindow > xDockWindow( pIter->m_xUIElement->getRealInterface(), uno::UNO_QUERY );
+            uno::Reference< awt::XDockableWindow > xDockWindow( elem.m_xUIElement->getRealInterface(), uno::UNO_QUERY );
             uno::Reference< awt::XWindow > xWindow( xDockWindow, uno::UNO_QUERY );
             if ( xDockWindow.is() && xDockWindow->isFloating() )
             {
                 SolarMutexGuard aGuard;
-                vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+                VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
                 if ( pWindow && pWindow->IsVisible() )
                 {
                     awt::Rectangle aFloatRect = xWindow->getPosSize();
@@ -1807,15 +1786,12 @@ awt::Point ToolbarLayoutManager::implts_findNextCascadeFloatingPos()
 void ToolbarLayoutManager::implts_sortUIElements()
 {
     SolarMutexGuard g;
-    UIElementVector::iterator pIterStart = m_aUIElements.begin();
-    UIElementVector::iterator pIterEnd   = m_aUIElements.end();
 
-    std::stable_sort( pIterStart, pIterEnd ); // first created element should first
+    std::stable_sort( m_aUIElements.begin(), m_aUIElements.end()); // first created element should first
 
     // We have to reset our temporary flags.
-    UIElementVector::iterator pIter;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
-        pIter->m_bUserActive = false;
+    for (auto & elem : m_aUIElements)
+        elem.m_bUserActive = false;
 }
 
 void ToolbarLayoutManager::implts_getUIElementVectorCopy( UIElementVector& rCopy )
@@ -1831,14 +1807,14 @@ void ToolbarLayoutManager::implts_getUIElementVectorCopy( UIElementVector& rCopy
     uno::Reference< awt::XWindow > xBottomDockingAreaWindow;
 
     SolarMutexClearableGuard aReadLock;
-    xTopDockingAreaWindow    = m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP];
-    xBottomDockingAreaWindow = m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM];
+    xTopDockingAreaWindow    = m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)];
+    xBottomDockingAreaWindow = m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)];
     aReadLock.clear();
 
     if ( xTopDockingAreaWindow.is() )
-        aSize.Width() = xTopDockingAreaWindow->getPosSize().Height;
+        aSize.setWidth( xTopDockingAreaWindow->getPosSize().Height );
     if ( xBottomDockingAreaWindow.is() )
-        aSize.Height() = xBottomDockingAreaWindow->getPosSize().Height;
+        aSize.setHeight( xBottomDockingAreaWindow->getPosSize().Height );
 
     return aSize;
 }
@@ -1855,13 +1831,12 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfos( ui::DockingArea eD
     /* SAFE AREA ----------------------------------------------------------------------------------------------- */
     SolarMutexClearableGuard aReadLock;
     aWindowVector.reserve(m_aUIElements.size());
-    xDockAreaWindow = m_xDockAreaWindows[eDockingArea];
-    UIElementVector::iterator   pIter;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    xDockAreaWindow = m_xDockAreaWindows[static_cast<int>(eDockingArea)];
+    for (auto const& elem : m_aUIElements)
     {
-        if ( pIter->m_aDockedData.m_nDockedArea == eDockingArea && pIter->m_bVisible && !pIter->m_bFloating )
+        if ( elem.m_aDockedData.m_nDockedArea == eDockingArea && elem.m_bVisible && !elem.m_bFloating )
         {
-            uno::Reference< ui::XUIElement > xUIElement( pIter->m_xUIElement );
+            uno::Reference< ui::XUIElement > xUIElement( elem.m_xUIElement );
             if ( xUIElement.is() )
             {
                 uno::Reference< awt::XWindow > xWindow( xUIElement->getRealInterface(), uno::UNO_QUERY );
@@ -1869,7 +1844,7 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfos( ui::DockingArea eD
                 if ( xDockWindow.is() )
                 {
                     // docked windows
-                    aWindowVector.push_back( *pIter );
+                    aWindowVector.push_back(elem);
                 }
             }
         }
@@ -1952,11 +1927,11 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfos( ui::DockingArea eD
 
             rRowColumnsWindowData[nIndex].aRowColumnWindows.push_back( xWindow );
             rRowColumnsWindowData[nIndex].aUIElementNames.push_back( rElement.m_aName );
-            rRowColumnsWindowData[nIndex].aRowColumnWindowSizes.push_back(
-                awt::Rectangle( rElement.m_aDockedData.m_aPos.X,
+            rRowColumnsWindowData[nIndex].aRowColumnWindowSizes.emplace_back(
+                                rElement.m_aDockedData.m_aPos.X,
                                 rElement.m_aDockedData.m_aPos.Y,
                                 aPosSize.Width,
-                                aPosSize.Height ));
+                                aPosSize.Height );
             if ( rRowColumnsWindowData[nIndex].nStaticSize < aPosSize.Height )
                 rRowColumnsWindowData[nIndex].nStaticSize = aPosSize.Height;
             if ( eDockingArea == ui::DockingArea_DOCKINGAREA_TOP )
@@ -2010,11 +1985,11 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfos( ui::DockingArea eD
 
             rRowColumnsWindowData[nIndex].aRowColumnWindows.push_back( xWindow );
             rRowColumnsWindowData[nIndex].aUIElementNames.push_back( rElement.m_aName );
-            rRowColumnsWindowData[nIndex].aRowColumnWindowSizes.push_back(
-                awt::Rectangle( rElement.m_aDockedData.m_aPos.X,
+            rRowColumnsWindowData[nIndex].aRowColumnWindowSizes.emplace_back(
+                                rElement.m_aDockedData.m_aPos.X,
                                 rElement.m_aDockedData.m_aPos.Y,
                                 aPosSize.Width,
-                                aPosSize.Height ));
+                                aPosSize.Height );
             if ( rRowColumnsWindowData[nIndex].nStaticSize < aPosSize.Width )
                 rRowColumnsWindowData[nIndex].nStaticSize = aPosSize.Width;
             if ( eDockingArea == ui::DockingArea_DOCKINGAREA_LEFT )
@@ -2039,14 +2014,12 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
 
     /* SAFE AREA ----------------------------------------------------------------------------------------------- */
     SolarMutexClearableGuard aReadLock;
-    UIElementVector::iterator   pIter;
-    UIElementVector::iterator   pEnd = m_aUIElements.end();
-    for ( pIter = m_aUIElements.begin(); pIter != pEnd; ++pIter )
+    for (auto const& elem : m_aUIElements)
     {
-        if ( pIter->m_aDockedData.m_nDockedArea == eDockingArea )
+        if ( elem.m_aDockedData.m_nDockedArea == eDockingArea )
         {
-            bool bSameRowCol = bHorzDockArea ? ( pIter->m_aDockedData.m_aPos.Y == nRowCol ) : ( pIter->m_aDockedData.m_aPos.X == nRowCol );
-            uno::Reference< ui::XUIElement > xUIElement( pIter->m_xUIElement );
+            bool bSameRowCol = bHorzDockArea ? ( elem.m_aDockedData.m_aPos.Y == nRowCol ) : ( elem.m_aDockedData.m_aPos.X == nRowCol );
+            uno::Reference< ui::XUIElement > xUIElement( elem.m_xUIElement );
 
             if ( bSameRowCol && xUIElement.is() )
             {
@@ -2054,10 +2027,10 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
                 if ( xWindow.is() )
                 {
                     SolarMutexGuard aGuard;
-                    vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+                    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
                     uno::Reference< awt::XDockableWindow > xDockWindow( xWindow, uno::UNO_QUERY );
-                    if ( pWindow && pIter->m_bVisible && xDockWindow.is() && !pIter->m_bFloating )
-                        aWindowVector.push_back( *pIter ); // docked windows
+                    if ( pWindow && elem.m_bVisible && xDockWindow.is() && !elem.m_bFloating )
+                        aWindowVector.push_back(elem); // docked windows
                 }
             }
         }
@@ -2102,9 +2075,9 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
 
             nLastPos = rElement.m_aDockedData.m_aPos.X + aPosSize.Width;
 
-            rRowColumnWindowData.aRowColumnWindowSizes.push_back(
-                awt::Rectangle( rElement.m_aDockedData.m_aPos.X, rElement.m_aDockedData.m_aPos.Y,
-                                aPosSize.Width, aPosSize.Height ));
+            rRowColumnWindowData.aRowColumnWindowSizes.emplace_back(
+                                rElement.m_aDockedData.m_aPos.X, rElement.m_aDockedData.m_aPos.Y,
+                                aPosSize.Width, aPosSize.Height );
             if ( rRowColumnWindowData.nStaticSize < aPosSize.Height )
                 rRowColumnWindowData.nStaticSize = aPosSize.Height;
             rRowColumnWindowData.nVarSize += aPosSize.Width;
@@ -2120,9 +2093,9 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
 
             nLastPos = rElement.m_aDockedData.m_aPos.Y + aPosSize.Height;
 
-            rRowColumnWindowData.aRowColumnWindowSizes.push_back(
-                awt::Rectangle( rElement.m_aDockedData.m_aPos.X, rElement.m_aDockedData.m_aPos.Y,
-                                aPosSize.Width, aPosSize.Height ));
+            rRowColumnWindowData.aRowColumnWindowSizes.emplace_back(
+                                rElement.m_aDockedData.m_aPos.X, rElement.m_aDockedData.m_aPos.Y,
+                                aPosSize.Width, aPosSize.Height );
             if ( rRowColumnWindowData.nStaticSize < aPosSize.Width )
                 rRowColumnWindowData.nStaticSize = aPosSize.Width;
             rRowColumnWindowData.nVarSize += aPosSize.Height;
@@ -2135,13 +2108,13 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
     }
 }
 
-::Rectangle ToolbarLayoutManager::implts_getWindowRectFromRowColumn(
+::tools::Rectangle ToolbarLayoutManager::implts_getWindowRectFromRowColumn(
     ui::DockingArea DockingArea,
     const SingleRowColumnWindowData& rRowColumnWindowData,
     const ::Point& rMousePos,
     const OUString& rExcludeElementName )
 {
-    ::Rectangle aWinRect;
+    ::tools::Rectangle aWinRect;
 
     if (( DockingArea < ui::DockingArea_DOCKINGAREA_TOP ) || ( DockingArea > ui::DockingArea_DOCKINGAREA_RIGHT ))
         DockingArea = ui::DockingArea_DOCKINGAREA_TOP;
@@ -2151,8 +2124,8 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
     else
     {
         SolarMutexClearableGuard aReadLock;
-        vcl::Window* pContainerWindow( VCLUnoHelper::GetWindow( m_xContainerWindow ));
-        vcl::Window* pDockingAreaWindow( VCLUnoHelper::GetWindow( m_xDockAreaWindows[DockingArea] ));
+        VclPtr<vcl::Window> pContainerWindow( VCLUnoHelper::GetWindow( m_xContainerWindow ));
+        VclPtr<vcl::Window> pDockingAreaWindow( VCLUnoHelper::GetWindow( m_xDockAreaWindows[static_cast<int>(DockingArea)] ));
         aReadLock.clear();
 
         // Calc correct position of the column/row rectangle to be able to compare it with mouse pos/tracking rect
@@ -2165,7 +2138,7 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
             for ( sal_uInt32 i = 0; i < nCount; i++ )
             {
                 awt::Rectangle aWindowRect = rRowColumnWindowData.aRowColumnWindows[i]->getPosSize();
-                ::Rectangle aRect( aWindowRect.X, aWindowRect.Y, aWindowRect.X+aWindowRect.Width, aWindowRect.Y+aWindowRect.Height );
+                ::tools::Rectangle aRect( aWindowRect.X, aWindowRect.Y, aWindowRect.X+aWindowRect.Width, aWindowRect.Y+aWindowRect.Height );
                 aRect.SetPos( pContainerWindow->ScreenToOutputPixel( pDockingAreaWindow->OutputToScreenPixel( aRect.TopLeft() )));
                 if ( aRect.IsInside( rMousePos ))
                 {
@@ -2183,12 +2156,12 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
     return aWinRect;
 }
 
-::Rectangle ToolbarLayoutManager::implts_determineFrontDockingRect(
+::tools::Rectangle ToolbarLayoutManager::implts_determineFrontDockingRect(
     ui::DockingArea        eDockingArea,
     sal_Int32              nRowCol,
-    const ::Rectangle&     rDockedElementRect,
+    const ::tools::Rectangle&     rDockedElementRect,
     const OUString& rMovedElementName,
-    const ::Rectangle&     rMovedElementRect )
+    const ::tools::Rectangle&     rMovedElementRect )
 {
     SingleRowColumnWindowData aRowColumnWindowData;
 
@@ -2199,7 +2172,7 @@ void ToolbarLayoutManager::implts_getDockingAreaElementInfoOnSingleRowCol( ui::D
     else
     {
         sal_Int32 nSpace( 0 );
-        ::Rectangle aFrontDockingRect( rMovedElementRect );
+        ::tools::Rectangle aFrontDockingRect( rMovedElementRect );
         const sal_uInt32 nCount = aRowColumnWindowData.aRowColumnWindows.size();
         for ( sal_uInt32 i = 0; i < nCount; i++ )
         {
@@ -2249,7 +2222,7 @@ void ToolbarLayoutManager::implts_findNextDockingPos( ui::DockingArea DockingAre
     SolarMutexClearableGuard aReadLock;
     if (( DockingArea < ui::DockingArea_DOCKINGAREA_TOP ) || ( DockingArea > ui::DockingArea_DOCKINGAREA_RIGHT ))
         DockingArea = ui::DockingArea_DOCKINGAREA_TOP;
-    uno::Reference< awt::XWindow > xDockingWindow( m_xDockAreaWindows[DockingArea] );
+    uno::Reference< awt::XWindow > xDockingWindow( m_xDockAreaWindows[static_cast<int>(DockingArea)] );
     ::Size                         aDockingWinSize;
     vcl::Window*                        pDockingWindow( nullptr );
     aReadLock.clear();
@@ -2257,7 +2230,7 @@ void ToolbarLayoutManager::implts_findNextDockingPos( ui::DockingArea DockingAre
     {
         // Retrieve output size from container Window
         SolarMutexGuard aGuard;
-        pDockingWindow  = VCLUnoHelper::GetWindow( xDockingWindow );
+        pDockingWindow  = VCLUnoHelper::GetWindow( xDockingWindow ).get();
         if ( pDockingWindow )
             aDockingWinSize = pDockingWindow->GetOutputSizePixel();
     }
@@ -2474,16 +2447,16 @@ void ToolbarLayoutManager::implts_calcWindowPosSizeOnSingleRowColumn(
             SolarMutexGuard aGuard;
             {
                 uno::Reference< awt::XWindow > xWindow = rRowColumnWindowData.aRowColumnWindows[i];
-                vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-                if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
-                    aMinSize = static_cast<ToolBox *>(pWindow)->CalcMinimumWindowSizePixel();
+                VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+                if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
+                    aMinSize = static_cast<ToolBox *>(pWindow.get())->CalcMinimumWindowSizePixel();
             }
 
             if (( aMinSize.Width() > 0 ) && ( aMinSize.Height() > 0 ))
             {
                 if ( isHorizontalDockingArea( nDockingArea ))
                 {
-                    sal_Int32 nMaxReducation = ( rWinRect.Width - aMinSize.Width() );
+                    sal_Int32 nMaxReducation = rWinRect.Width - aMinSize.Width();
                     if ( nMaxReducation >= -nDiff )
                     {
                         rWinRect.Width = rWinRect.Width + nDiff;
@@ -2501,7 +2474,7 @@ void ToolbarLayoutManager::implts_calcWindowPosSizeOnSingleRowColumn(
                 }
                 else
                 {
-                    sal_Int32 nMaxReducation = ( rWinRect.Height - aMinSize.Height() );
+                    sal_Int32 nMaxReducation = rWinRect.Height - aMinSize.Height();
                     if ( nMaxReducation >= -nDiff )
                     {
                         rWinRect.Height = rWinRect.Height + nDiff;
@@ -2527,7 +2500,7 @@ void ToolbarLayoutManager::implts_calcWindowPosSizeOnSingleRowColumn(
     }
 
     SolarMutexClearableGuard aReadLock;
-    vcl::Window* pDockAreaWindow = VCLUnoHelper::GetWindow( m_xDockAreaWindows[nDockingArea] );
+    VclPtr<vcl::Window> pDockAreaWindow = VCLUnoHelper::GetWindow( m_xDockAreaWindows[nDockingArea] );
     aReadLock.clear();
 
     sal_Int32 nCurrPos( 0 );
@@ -2536,7 +2509,7 @@ void ToolbarLayoutManager::implts_calcWindowPosSizeOnSingleRowColumn(
     for ( sal_uInt32 i = 0; i < nCount; i++ )
     {
         uno::Reference< awt::XWindow > xWindow = rRowColumnWindowData.aRowColumnWindows[i];
-        vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
+        VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
         vcl::Window* pOldParentWindow = pWindow->GetParent();
 
         if ( pDockAreaWindow != pOldParentWindow )
@@ -2574,14 +2547,14 @@ void ToolbarLayoutManager::implts_setLayoutInProgress( bool bInProgress )
     m_bLayoutInProgress = bInProgress;
 }
 
-::Rectangle ToolbarLayoutManager::implts_calcHotZoneRect( const ::Rectangle& rRect, sal_Int32 nHotZoneOffset )
+::tools::Rectangle ToolbarLayoutManager::implts_calcHotZoneRect( const ::tools::Rectangle& rRect, sal_Int32 nHotZoneOffset )
 {
-    ::Rectangle aRect( rRect );
+    ::tools::Rectangle aRect( rRect );
 
-    aRect.Left() -= nHotZoneOffset;
-    aRect.Top() -= nHotZoneOffset;
-    aRect.Right() += nHotZoneOffset;
-    aRect.Bottom() += nHotZoneOffset;
+    aRect.AdjustLeft( -nHotZoneOffset );
+    aRect.AdjustTop( -nHotZoneOffset );
+    aRect.AdjustRight(nHotZoneOffset );
+    aRect.AdjustBottom(nHotZoneOffset );
 
     return aRect;
 }
@@ -2589,26 +2562,26 @@ void ToolbarLayoutManager::implts_setLayoutInProgress( bool bInProgress )
 void ToolbarLayoutManager::implts_calcDockingPosSize(
     UIElement&          rUIElement,
     DockingOperation&   rDockingOperation,
-    ::Rectangle&        rTrackingRect,
+    ::tools::Rectangle&        rTrackingRect,
     const Point&        rMousePos )
 {
     SolarMutexResettableGuard aReadLock;
     uno::Reference< awt::XWindow2 > xContainerWindow( m_xContainerWindow );
     ::Size                          aContainerWinSize;
-    vcl::Window*                         pContainerWindow( nullptr );
-    ::Rectangle                     aDockingAreaOffsets( m_aDockingAreaOffsets );
+    vcl::Window*                    pContainerWindow( nullptr );
+    ::tools::Rectangle                     aDockingAreaOffsets( m_aDockingAreaOffsets );
     aReadLock.clear();
 
     if ( !rUIElement.m_xUIElement.is() )
     {
-        rTrackingRect = ::Rectangle();
+        rTrackingRect = ::tools::Rectangle();
         return;
     }
 
     {
         // Retrieve output size from container Window
         SolarMutexGuard aGuard;
-        pContainerWindow  = VCLUnoHelper::GetWindow( xContainerWindow );
+        pContainerWindow  = VCLUnoHelper::GetWindow( xContainerWindow ).get();
         aContainerWinSize = pContainerWindow->GetOutputSizePixel();
     }
 
@@ -2616,8 +2589,8 @@ void ToolbarLayoutManager::implts_calcDockingPosSize(
     ToolBox*                       pToolBox( nullptr );
     uno::Reference< awt::XWindow > xWindow( rUIElement.m_xUIElement->getRealInterface(), uno::UNO_QUERY );
     uno::Reference< awt::XWindow > xDockingAreaWindow;
-    ::Rectangle                    aTrackingRect( rTrackingRect );
-    ui::DockingArea                eDockedArea( (ui::DockingArea)rUIElement.m_aDockedData.m_nDockedArea );
+    ::tools::Rectangle                    aTrackingRect( rTrackingRect );
+    ui::DockingArea                eDockedArea( rUIElement.m_aDockedData.m_nDockedArea );
     sal_Int32                      nTopDockingAreaSize( implts_getTopBottomDockingAreaSizes().Width() );
     sal_Int32                      nBottomDockingAreaSize( implts_getTopBottomDockingAreaSizes().Height() );
     bool                           bHorizontalDockArea(( eDockedArea == ui::DockingArea_DOCKINGAREA_TOP ) ||
@@ -2627,24 +2600,24 @@ void ToolbarLayoutManager::implts_calcDockingPosSize(
                                                                nBottomDockingAreaSize -
                                                                aDockingAreaOffsets.Top() -
                                                                aDockingAreaOffsets.Bottom();
-    ::Rectangle                    aDockingAreaRect;
+    ::tools::Rectangle                    aDockingAreaRect;
 
     aReadLock.reset();
-    xDockingAreaWindow = m_xDockAreaWindows[eDockedArea];
+    xDockingAreaWindow = m_xDockAreaWindows[static_cast<int>(eDockedArea)];
     aReadLock.clear();
 
     {
         SolarMutexGuard aGuard;
-        pDockingAreaWindow = VCLUnoHelper::GetWindow( xDockingAreaWindow );
-        vcl::Window* pDockWindow = VCLUnoHelper::GetWindow( xWindow );
-        if ( pDockWindow && pDockWindow->GetType() == WINDOW_TOOLBOX )
-            pToolBox = static_cast<ToolBox *>(pDockWindow);
+        pDockingAreaWindow = VCLUnoHelper::GetWindow( xDockingAreaWindow ).get();
+        VclPtr<vcl::Window> pDockWindow = VCLUnoHelper::GetWindow( xWindow );
+        if ( pDockWindow && pDockWindow->GetType() == WindowType::TOOLBOX )
+            pToolBox = static_cast<ToolBox *>(pDockWindow.get());
 
-        aDockingAreaRect = ::Rectangle( pDockingAreaWindow->GetPosPixel(), pDockingAreaWindow->GetSizePixel() );
+        aDockingAreaRect = ::tools::Rectangle( pDockingAreaWindow->GetPosPixel(), pDockingAreaWindow->GetSizePixel() );
         if ( pToolBox )
         {
             // docked toolbars always have one line
-            ::Size aSize = pToolBox->CalcWindowSizePixel( 1, ImplConvertAlignment( sal_Int16( eDockedArea )) );
+            ::Size aSize = pToolBox->CalcWindowSizePixel( 1, ImplConvertAlignment( eDockedArea ) );
             aTrackingRect.SetSize( ::Size( aSize.Width(), aSize.Height() ));
         }
     }
@@ -2674,13 +2647,13 @@ void ToolbarLayoutManager::implts_calcDockingPosSize(
         // docking inside our docking area
         sal_Int32   nIndex( -1 );
         sal_Int32   nRowCol( -1 );
-        ::Rectangle aWindowRect;
-        ::Rectangle aRowColumnRect;
+        ::tools::Rectangle aWindowRect;
+        ::tools::Rectangle aRowColumnRect;
 
         const sal_uInt32 nWindowDataCount = aRowColumnsWindowData.size();
         for ( sal_uInt32 i = 0; i < nWindowDataCount; i++ )
         {
-            ::Rectangle aRect( aRowColumnsWindowData[i].aRowColumnRect.X,
+            ::tools::Rectangle aRect( aRowColumnsWindowData[i].aRowColumnRect.X,
                                aRowColumnsWindowData[i].aRowColumnRect.Y,
                                aRowColumnsWindowData[i].aRowColumnRect.X + aRowColumnsWindowData[i].aRowColumnRect.Width,
                                aRowColumnsWindowData[i].aRowColumnRect.Y + aRowColumnsWindowData[i].aRowColumnRect.Height );
@@ -2713,7 +2686,7 @@ void ToolbarLayoutManager::implts_calcDockingPosSize(
                     // Tracking rect is on a row/column and mouse is over a docked toolbar.
                     // Determine if the tracking rect must be located before/after the docked toolbar.
 
-                    ::Rectangle aUIElementRect( aWindowRect );
+                    ::tools::Rectangle aUIElementRect( aWindowRect );
                     sal_Int32   nMiddle( bHorizontalDockArea ? ( aWindowRect.Left() + aWindowRect.getWidth() / 2 ) :
                                                                ( aWindowRect.Top() + aWindowRect.getHeight() / 2 ));
                     bool    bInsertBefore( bHorizontalDockArea ? ( rMousePos.X() < nMiddle ) : ( rMousePos.Y() < nMiddle ));
@@ -2919,12 +2892,12 @@ void ToolbarLayoutManager::implts_calcDockingPosSize(
         }
         else
         {
-            sal_Int32 nMaxDockingAreaHeight = std::max( sal_Int32( 0 ), sal_Int32( nMaxLeftRightDockAreaSize ));
-            sal_Int32 nPosY( std::max( sal_Int32( aTrackingRect.Top()), sal_Int32( nTopDockingAreaSize )));
+            sal_Int32 nMaxDockingAreaHeight = std::max<sal_Int32>( 0, nMaxLeftRightDockAreaSize );
+            sal_Int32 nPosY( std::max<sal_Int32>( aTrackingRect.Top(), nTopDockingAreaSize ));
             if (( nPosY + aTrackingRect.getHeight()) > ( nTopDockingAreaSize + nMaxDockingAreaHeight ))
                 nPosY = std::min( nPosY,
-                                std::max( sal_Int32( nTopDockingAreaSize + ( nMaxDockingAreaHeight - aTrackingRect.getHeight() )),
-                                        sal_Int32( nTopDockingAreaSize )));
+                                std::max<sal_Int32>( nTopDockingAreaSize + ( nMaxDockingAreaHeight - aTrackingRect.getHeight() ),
+                                                     nTopDockingAreaSize ));
 
             sal_Int32 nSize = std::min( nMaxDockingAreaHeight, static_cast<sal_Int32>(aTrackingRect.getHeight()) );
             sal_Int32 nDockWidth = std::max( static_cast<sal_Int32>(aDockingAreaRect.getWidth()), sal_Int32( 0 ));
@@ -2968,7 +2941,7 @@ void ToolbarLayoutManager::implts_calcDockingPosSize(
 
 framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_determineDockingOperation(
     ui::DockingArea    DockingArea,
-    const ::Rectangle& rRowColRect,
+    const ::tools::Rectangle& rRowColRect,
     const Point&       rMousePos )
 {
     const sal_Int32 nHorzVerticalRegionSize        = 6;
@@ -3005,16 +2978,16 @@ framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_d
         return DOCKOP_ON_COLROW;
 }
 
-::Rectangle ToolbarLayoutManager::implts_calcTrackingAndElementRect(
+::tools::Rectangle ToolbarLayoutManager::implts_calcTrackingAndElementRect(
     ui::DockingArea eDockingArea,
     sal_Int32 nRowCol,
     UIElement& rUIElement,
-    const ::Rectangle& rTrackingRect,
-    const ::Rectangle& rRowColumnRect,
+    const ::tools::Rectangle& rTrackingRect,
+    const ::tools::Rectangle& rRowColumnRect,
     const ::Size& rContainerWinSize )
 {
     SolarMutexResettableGuard aReadGuard;
-    ::Rectangle aDockingAreaOffsets( m_aDockingAreaOffsets );
+    ::tools::Rectangle aDockingAreaOffsets( m_aDockingAreaOffsets );
     aReadGuard.clear();
 
     bool      bHorizontalDockArea( isHorizontalDockingArea( eDockingArea ));
@@ -3028,7 +3001,7 @@ framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_d
                                           aDockingAreaOffsets.Top() -
                                           aDockingAreaOffsets.Bottom();
 
-    ::Rectangle aTrackingRect( rTrackingRect );
+    ::tools::Rectangle aTrackingRect( rTrackingRect );
     if ( bHorizontalDockArea )
     {
         sal_Int32 nPosX( std::max( sal_Int32( rTrackingRect.Left()), sal_Int32( 0 )));
@@ -3049,14 +3022,13 @@ framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_d
     }
     else
     {
-        sal_Int32 nMaxDockingAreaHeight = std::max( sal_Int32( 0 ),
-                                                    sal_Int32( nMaxLeftRightDockAreaSize ));
+        sal_Int32 nMaxDockingAreaHeight = std::max<sal_Int32>(  0, nMaxLeftRightDockAreaSize );
 
-        sal_Int32 nPosY( std::max( sal_Int32( aTrackingRect.Top()), sal_Int32( nTopDockingAreaSize )));
+        sal_Int32 nPosY( std::max<sal_Int32>( aTrackingRect.Top(), nTopDockingAreaSize ));
         if (( nPosY + aTrackingRect.getHeight()) > ( nTopDockingAreaSize + nMaxDockingAreaHeight ))
             nPosY = std::min( nPosY,
-                                std::max( sal_Int32( nTopDockingAreaSize + ( nMaxDockingAreaHeight - aTrackingRect.getHeight() )),
-                                        sal_Int32( nTopDockingAreaSize )));
+                                std::max<sal_Int32>( nTopDockingAreaSize + ( nMaxDockingAreaHeight - aTrackingRect.getHeight() ),
+                                                     nTopDockingAreaSize ));
 
         sal_Int32 nSize = std::min( nMaxDockingAreaHeight, static_cast<sal_Int32>(aTrackingRect.getHeight()) );
 
@@ -3065,7 +3037,7 @@ framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_d
         aTrackingRect.setHeight( nSize );
 
         aReadGuard.reset();
-        uno::Reference< awt::XWindow  > xDockingAreaWindow( m_xDockAreaWindows[eDockingArea] );
+        uno::Reference< awt::XWindow  > xDockingAreaWindow( m_xDockAreaWindows[static_cast<int>(eDockingArea)] );
         uno::Reference< awt::XWindow2 > xContainerWindow( m_xContainerWindow );
         aReadGuard.clear();
 
@@ -3073,8 +3045,8 @@ framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_d
         vcl::Window* pDockingAreaWindow( nullptr );
         {
             SolarMutexGuard aGuard;
-            pDockingAreaWindow = VCLUnoHelper::GetWindow( xDockingAreaWindow );
-            vcl::Window* pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow );
+            pDockingAreaWindow = VCLUnoHelper::GetWindow( xDockingAreaWindow ).get();
+            VclPtr<vcl::Window> pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow );
             nDockPosY = pDockingAreaWindow->ScreenToOutputPixel( pContainerWindow->OutputToScreenPixel( ::Point( 0, nPosY ))).Y();
         }
 
@@ -3086,19 +3058,18 @@ framework::ToolbarLayoutManager::DockingOperation ToolbarLayoutManager::implts_d
     return aTrackingRect;
 }
 
-void ToolbarLayoutManager::implts_setTrackingRect( ui::DockingArea eDockingArea, const ::Point& rMousePos, ::Rectangle& rTrackingRect )
+void ToolbarLayoutManager::implts_setTrackingRect( ui::DockingArea eDockingArea, const ::Point& rMousePos, ::tools::Rectangle& rTrackingRect )
 {
     ::Point aPoint( rTrackingRect.TopLeft());
     if ( isHorizontalDockingArea( eDockingArea ))
-        aPoint.X() = rMousePos.X();
+        aPoint.setX( rMousePos.X() );
     else
-        aPoint.Y() = rMousePos.Y();
+        aPoint.setY( rMousePos.Y() );
     rTrackingRect.SetPos( aPoint );
 }
 
 void ToolbarLayoutManager::implts_renumberRowColumnData(
     ui::DockingArea eDockingArea,
-    DockingOperation /*eDockingOperation*/,
     const UIElement& rUIElement )
 {
     SolarMutexClearableGuard aReadLock;
@@ -3110,22 +3081,21 @@ void ToolbarLayoutManager::implts_renumberRowColumnData(
 
     /* SAFE AREA ----------------------------------------------------------------------------------------------- */
     SolarMutexClearableGuard aWriteLock;
-    UIElementVector::iterator pIter;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto & elem : m_aUIElements)
     {
-        if (( pIter->m_aDockedData.m_nDockedArea == sal_Int16( eDockingArea )) && ( pIter->m_aName != rUIElement.m_aName ))
+        if (( elem.m_aDockedData.m_nDockedArea == eDockingArea ) && ( elem.m_aName != rUIElement.m_aName ))
         {
             // Don't change toolbars without a valid docking position!
-            if ( isDefaultPos( pIter->m_aDockedData.m_aPos ))
+            if ( isDefaultPos( elem.m_aDockedData.m_aPos ))
                 continue;
 
-            sal_Int32 nWindowRowCol = ( bHorzDockingArea ) ? pIter->m_aDockedData.m_aPos.Y : pIter->m_aDockedData.m_aPos.X;
+            sal_Int32 nWindowRowCol = bHorzDockingArea ? elem.m_aDockedData.m_aPos.Y : elem.m_aDockedData.m_aPos.X;
             if ( nWindowRowCol >= nRowCol )
             {
                 if ( bHorzDockingArea )
-                    pIter->m_aDockedData.m_aPos.Y += 1;
+                    elem.m_aDockedData.m_aPos.Y += 1;
                 else
-                    pIter->m_aDockedData.m_aPos.X += 1;
+                    elem.m_aDockedData.m_aPos.X += 1;
             }
         }
     }
@@ -3161,7 +3131,7 @@ void ToolbarLayoutManager::implts_renumberRowColumnData(
                         if ( isDefaultPos( aDockedPos ))
                             continue;
 
-                        sal_Int32 nWindowRowCol = ( bHorzDockingArea ) ? aDockedPos.Y : aDockedPos.X;
+                        sal_Int32 nWindowRowCol = bHorzDockingArea ? aDockedPos.Y : aDockedPos.X;
                         if (( nDockedArea == eDockingArea ) && ( nWindowRowCol >= nRowCol ))
                         {
                             if ( bHorzDockingArea )
@@ -3188,7 +3158,6 @@ void ToolbarLayoutManager::implts_renumberRowColumnData(
 //  XWindowListener
 
 void SAL_CALL ToolbarLayoutManager::windowResized( const awt::WindowEvent& aEvent )
-throw( uno::RuntimeException, std::exception )
 {
     SolarMutexClearableGuard aWriteLock;
     bool bLocked( m_bDockingInProgress );
@@ -3238,24 +3207,20 @@ throw( uno::RuntimeException, std::exception )
 }
 
 void SAL_CALL ToolbarLayoutManager::windowMoved( const awt::WindowEvent& /*aEvent*/ )
-throw( uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL ToolbarLayoutManager::windowShown( const lang::EventObject& /*aEvent*/ )
-throw( uno::RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL ToolbarLayoutManager::windowHidden( const lang::EventObject& /*aEvent*/ )
-throw( uno::RuntimeException, std::exception )
 {
 }
 
 //  XDockableWindowListener
 
 void SAL_CALL ToolbarLayoutManager::startDocking( const awt::DockingEvent& e )
-throw (uno::RuntimeException, std::exception)
 {
     bool bWinFound( false );
 
@@ -3268,7 +3233,7 @@ throw (uno::RuntimeException, std::exception)
     ::Point aMousePos;
     {
         SolarMutexGuard aGuard;
-        pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow );
+        pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow ).get();
         aMousePos = pContainerWindow->ScreenToOutputPixel( ::Point( e.MousePos.X, e.MousePos.Y ));
     }
 
@@ -3288,10 +3253,10 @@ throw (uno::RuntimeException, std::exception)
 
             SolarMutexGuard aGuard;
 
-            vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-            if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
+            VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+            if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
             {
-                ToolBox* pToolBox = static_cast<ToolBox *>(pWindow);
+                ToolBox* pToolBox = static_cast<ToolBox *>(pWindow.get());
                 aUIElement.m_aFloatingData.m_nLines        = pToolBox->GetFloatingLines();
                 aUIElement.m_aFloatingData.m_bIsHorizontal = isToolboxHorizontalAligned( pToolBox );
             }
@@ -3306,7 +3271,6 @@ throw (uno::RuntimeException, std::exception)
 }
 
 awt::DockingData SAL_CALL ToolbarLayoutManager::docking( const awt::DockingEvent& e )
-throw (uno::RuntimeException, std::exception)
 {
     const sal_Int32 MAGNETIC_DISTANCE_UNDOCK = 25;
     const sal_Int32 MAGNETIC_DISTANCE_DOCK   = 20;
@@ -3315,10 +3279,10 @@ throw (uno::RuntimeException, std::exception)
     awt::DockingData                       aDockingData;
     uno::Reference< awt::XDockableWindow > xDockWindow( e.Source, uno::UNO_QUERY );
     uno::Reference< awt::XWindow >         xWindow( e.Source, uno::UNO_QUERY );
-    uno::Reference< awt::XWindow >         xTopDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_TOP] );
-    uno::Reference< awt::XWindow >         xLeftDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_LEFT] );
-    uno::Reference< awt::XWindow >         xRightDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_RIGHT] );
-    uno::Reference< awt::XWindow >         xBottomDockingWindow( m_xDockAreaWindows[ui::DockingArea_DOCKINGAREA_BOTTOM] );
+    uno::Reference< awt::XWindow >         xTopDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_TOP)] );
+    uno::Reference< awt::XWindow >         xLeftDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_LEFT)] );
+    uno::Reference< awt::XWindow >         xRightDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_RIGHT)] );
+    uno::Reference< awt::XWindow >         xBottomDockingWindow( m_xDockAreaWindows[int(ui::DockingArea_DOCKINGAREA_BOTTOM)] );
     uno::Reference< awt::XWindow2 >        xContainerWindow( m_xContainerWindow );
     UIElement                              aUIDockingElement( m_aDockUIElement );
 
@@ -3335,30 +3299,30 @@ throw (uno::RuntimeException, std::exception)
         {
             SolarMutexGuard aGuard;
 
-            sal_Int16 eDockingArea( -1 ); // none
+            ui::DockingArea eDockingArea( ui::DockingArea(-1) ); // none
             sal_Int32 nMagneticZone( aUIDockingElement.m_bFloating ? MAGNETIC_DISTANCE_DOCK : MAGNETIC_DISTANCE_UNDOCK );
             awt::Rectangle aNewTrackingRect;
-            ::Rectangle aTrackingRect( e.TrackingRectangle.X, e.TrackingRectangle.Y,
+            ::tools::Rectangle aTrackingRect( e.TrackingRectangle.X, e.TrackingRectangle.Y,
                                        ( e.TrackingRectangle.X + e.TrackingRectangle.Width ),
                                        ( e.TrackingRectangle.Y + e.TrackingRectangle.Height ));
 
             awt::Rectangle aTmpRect = xTopDockingWindow->getPosSize();
-            ::Rectangle aTopDockRect( aTmpRect.X, aTmpRect.Y, aTmpRect.Width, aTmpRect.Height );
-            ::Rectangle aHotZoneTopDockRect( implts_calcHotZoneRect( aTopDockRect, nMagneticZone ));
+            ::tools::Rectangle aTopDockRect( aTmpRect.X, aTmpRect.Y, aTmpRect.Width, aTmpRect.Height );
+            ::tools::Rectangle aHotZoneTopDockRect( implts_calcHotZoneRect( aTopDockRect, nMagneticZone ));
 
             aTmpRect = xBottomDockingWindow->getPosSize();
-            ::Rectangle aBottomDockRect( aTmpRect.X, aTmpRect.Y, ( aTmpRect.X + aTmpRect.Width), ( aTmpRect.Y + aTmpRect.Height ));
-            ::Rectangle aHotZoneBottomDockRect( implts_calcHotZoneRect( aBottomDockRect, nMagneticZone ));
+            ::tools::Rectangle aBottomDockRect( aTmpRect.X, aTmpRect.Y, ( aTmpRect.X + aTmpRect.Width), ( aTmpRect.Y + aTmpRect.Height ));
+            ::tools::Rectangle aHotZoneBottomDockRect( implts_calcHotZoneRect( aBottomDockRect, nMagneticZone ));
 
             aTmpRect = xLeftDockingWindow->getPosSize();
-            ::Rectangle aLeftDockRect( aTmpRect.X, aTmpRect.Y, ( aTmpRect.X + aTmpRect.Width ), ( aTmpRect.Y + aTmpRect.Height ));
-            ::Rectangle aHotZoneLeftDockRect( implts_calcHotZoneRect( aLeftDockRect, nMagneticZone ));
+            ::tools::Rectangle aLeftDockRect( aTmpRect.X, aTmpRect.Y, ( aTmpRect.X + aTmpRect.Width ), ( aTmpRect.Y + aTmpRect.Height ));
+            ::tools::Rectangle aHotZoneLeftDockRect( implts_calcHotZoneRect( aLeftDockRect, nMagneticZone ));
 
             aTmpRect = xRightDockingWindow->getPosSize();
-            ::Rectangle aRightDockRect( aTmpRect.X, aTmpRect.Y, ( aTmpRect.X + aTmpRect.Width ), ( aTmpRect.Y + aTmpRect.Height ));
-            ::Rectangle aHotZoneRightDockRect( implts_calcHotZoneRect( aRightDockRect, nMagneticZone ));
+            ::tools::Rectangle aRightDockRect( aTmpRect.X, aTmpRect.Y, ( aTmpRect.X + aTmpRect.Width ), ( aTmpRect.Y + aTmpRect.Height ));
+            ::tools::Rectangle aHotZoneRightDockRect( implts_calcHotZoneRect( aRightDockRect, nMagneticZone ));
 
-            vcl::Window* pContainerWindow( VCLUnoHelper::GetWindow( xContainerWindow ) );
+            VclPtr<vcl::Window> pContainerWindow( VCLUnoHelper::GetWindow( xContainerWindow ) );
             ::Point aMousePos( pContainerWindow->ScreenToOutputPixel( ::Point( e.MousePos.X, e.MousePos.Y )));
 
             if ( aHotZoneTopDockRect.IsInside( aMousePos ))
@@ -3381,12 +3345,12 @@ throw (uno::RuntimeException, std::exception)
                 eDockingArea = ui::DockingArea_DOCKINGAREA_RIGHT;
 
             // Determine if we have a toolbar and set alignment according to the docking area!
-            vcl::Window*  pWindow = VCLUnoHelper::GetWindow( xWindow );
+            VclPtr<vcl::Window>  pWindow = VCLUnoHelper::GetWindow( xWindow );
             ToolBox* pToolBox = nullptr;
-            if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
-                pToolBox = static_cast<ToolBox *>(pWindow);
+            if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
+                pToolBox = static_cast<ToolBox *>(pWindow.get());
 
-            if ( eDockingArea != -1 )
+            if ( eDockingArea != ui::DockingArea(-1) )
             {
                 if ( eDockingArea == ui::DockingArea_DOCKINGAREA_TOP )
                 {
@@ -3412,7 +3376,7 @@ throw (uno::RuntimeException, std::exception)
                 ::Point aOutputPos = pContainerWindow->ScreenToOutputPixel( aTrackingRect.TopLeft() );
                 aTrackingRect.SetPos( aOutputPos );
 
-                ::Rectangle aNewDockingRect( aTrackingRect );
+                ::tools::Rectangle aNewDockingRect( aTrackingRect );
 
                 implts_calcDockingPosSize( aUIDockingElement, eDockingOperation, aNewDockingRect, aMousePos );
 
@@ -3421,7 +3385,7 @@ throw (uno::RuntimeException, std::exception)
                                                    aNewDockingRect.getWidth(), aNewDockingRect.getHeight() );
                 aDockingData.TrackingRectangle = aNewTrackingRect;
             }
-            else if ( pToolBox && bDockingInProgress )
+            else if (pToolBox)
             {
                 bool bIsHorizontal = isToolboxHorizontalAligned( pToolBox );
                 awt::Size aFloatSize = aUIDockingElement.m_aFloatingData.m_aSize;
@@ -3457,7 +3421,7 @@ throw (uno::RuntimeException, std::exception)
                 aDockingData.TrackingRectangle.Y = e.MousePos.Y;
             }
 
-            aDockingData.bFloating = ( eDockingArea == -1 );
+            aDockingData.bFloating = ( eDockingArea == ui::DockingArea(-1) );
 
             // Write current data to the member docking progress data
             SolarMutexGuard g;
@@ -3480,8 +3444,10 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL ToolbarLayoutManager::endDocking( const awt::EndDockingEvent& e )
-throw (uno::RuntimeException, std::exception)
 {
+    if (e.bCancelled)
+        return;
+
     bool bDockingInProgress( false );
     bool bStartDockFloated( false );
     bool bFloating( false );
@@ -3514,7 +3480,7 @@ throw (uno::RuntimeException, std::exception)
             if ( m_eDockOperation != DOCKOP_ON_COLROW )
             {
                 // we have to renumber our row/column data to insert a new row/column
-                implts_renumberRowColumnData((ui::DockingArea)aUIDockingElement.m_aDockedData.m_nDockedArea, m_eDockOperation, aUIDockingElement );
+                implts_renumberRowColumnData(aUIDockingElement.m_aDockedData.m_nDockedArea, aUIDockingElement );
             }
         }
 
@@ -3534,10 +3500,10 @@ throw (uno::RuntimeException, std::exception)
     if ( bDockingInProgress )
     {
         SolarMutexGuard aGuard;
-        vcl::Window*  pWindow = VCLUnoHelper::GetWindow( uno::Reference< awt::XWindow >( e.Source, uno::UNO_QUERY ));
+        VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( uno::Reference< awt::XWindow >( e.Source, uno::UNO_QUERY ));
         ToolBox* pToolBox = nullptr;
-        if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
-            pToolBox = static_cast<ToolBox *>(pWindow);
+        if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
+            pToolBox = static_cast<ToolBox *>(pWindow.get());
 
         if ( pToolBox )
         {
@@ -3576,7 +3542,6 @@ throw (uno::RuntimeException, std::exception)
 }
 
 sal_Bool SAL_CALL ToolbarLayoutManager::prepareToggleFloatingMode( const lang::EventObject& e )
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexClearableGuard aReadLock;
     bool bDockingInProgress = m_bDockingInProgress;
@@ -3595,10 +3560,10 @@ throw (uno::RuntimeException, std::exception)
             {
                 {
                     SolarMutexGuard aGuard;
-                    vcl::Window* pWindow = VCLUnoHelper::GetWindow( xWindow );
-                    if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
+                    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( xWindow );
+                    if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
                     {
-                        ToolBox* pToolBox = static_cast< ToolBox *>( pWindow );
+                        ToolBox* pToolBox = static_cast< ToolBox *>( pWindow.get() );
                         aUIDockingElement.m_aFloatingData.m_aPos = AWTPoint(pToolBox->GetPosPixel());
                         aUIDockingElement.m_aFloatingData.m_aSize = AWTSize(pToolBox->GetOutputSizePixel());
                         aUIDockingElement.m_aFloatingData.m_nLines        = pToolBox->GetFloatingLines();
@@ -3613,11 +3578,10 @@ throw (uno::RuntimeException, std::exception)
         }
     }
 
-    return sal_True;
+    return true;
 }
 
 void SAL_CALL ToolbarLayoutManager::toggleFloatingMode( const lang::EventObject& e )
-throw (uno::RuntimeException, std::exception)
 {
     UIElement aUIDockingElement;
 
@@ -3634,16 +3598,16 @@ throw (uno::RuntimeException, std::exception)
     {
         SolarMutexGuard aGuard;
         xWindow.set( e.Source, uno::UNO_QUERY );
-        pWindow = VCLUnoHelper::GetWindow( xWindow );
+        pWindow = VCLUnoHelper::GetWindow( xWindow ).get();
 
-        if ( pWindow && pWindow->GetType() == WINDOW_TOOLBOX )
+        if ( pWindow && pWindow->GetType() == WindowType::TOOLBOX )
             pToolBox = static_cast<ToolBox *>(pWindow);
     }
 
     if ( !bDockingInProgress )
     {
         aUIDockingElement = implts_findToolbar( e.Source );
-        bool bWinFound = ( !aUIDockingElement.m_aName.isEmpty() );
+        bool bWinFound = !aUIDockingElement.m_aName.isEmpty();
 
         if ( bWinFound && xWindow.is() )
         {
@@ -3700,7 +3664,7 @@ throw (uno::RuntimeException, std::exception)
                             aSize = pWindow->GetSizePixel();
                     }
 
-                    implts_findNextDockingPos((ui::DockingArea)aUIDockingElement.m_aDockedData.m_nDockedArea, aSize, aDockPos, aPixelPos );
+                    implts_findNextDockingPos(aUIDockingElement.m_aDockedData.m_nDockedArea, aSize, aDockPos, aPixelPos );
                     aUIDockingElement.m_aDockedData.m_aPos = aDockPos;
                 }
 
@@ -3748,30 +3712,28 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL ToolbarLayoutManager::closed( const lang::EventObject& e )
-throw (uno::RuntimeException, std::exception)
 {
     OUString aName;
     UIElement     aUIElement;
-    UIElementVector::iterator pIter;
 
     SolarMutexClearableGuard aWriteLock;
-    for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+    for (auto & elem : m_aUIElements)
     {
-        uno::Reference< ui::XUIElement > xUIElement( pIter->m_xUIElement );
+        uno::Reference< ui::XUIElement > xUIElement( elem.m_xUIElement );
         if ( xUIElement.is() )
         {
             uno::Reference< uno::XInterface > xIfac( xUIElement->getRealInterface(), uno::UNO_QUERY );
             if ( xIfac == e.Source )
             {
-                aName = pIter->m_aName;
+                aName = elem.m_aName;
 
                 // user closes a toolbar =>
                 // context sensitive toolbar: only destroy toolbar and store state.
                 // non context sensitive toolbar: make it invisible, store state and destroy it.
-                if ( !pIter->m_bContextSensitive )
-                    pIter->m_bVisible = false;
+                if ( !elem.m_bContextSensitive )
+                    elem.m_bVisible = false;
 
-                aUIElement = *pIter;
+                aUIElement = elem;
                 break;
             }
         }
@@ -3795,26 +3757,23 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL ToolbarLayoutManager::endPopupMode( const awt::EndPopupModeEvent& /*e*/ )
-throw (uno::RuntimeException, std::exception)
 {
 }
 
 //  XUIConfigurationListener
 
 void SAL_CALL ToolbarLayoutManager::elementInserted( const ui::ConfigurationEvent& rEvent )
-throw (uno::RuntimeException, std::exception)
 {
     UIElement aUIElement = implts_findToolbar( rEvent.ResourceURL );
 
     uno::Reference< ui::XUIElementSettings > xElementSettings( aUIElement.m_xUIElement, uno::UNO_QUERY );
     if ( xElementSettings.is() )
     {
-        OUString aConfigSourcePropName( "ConfigurationSource" );
         uno::Reference< beans::XPropertySet > xPropSet( xElementSettings, uno::UNO_QUERY );
         if ( xPropSet.is() )
         {
             if ( rEvent.Source == uno::Reference< uno::XInterface >( m_xDocCfgMgr, uno::UNO_QUERY ))
-                xPropSet->setPropertyValue( aConfigSourcePropName, makeAny( m_xDocCfgMgr ));
+                xPropSet->setPropertyValue( "ConfigurationSource", makeAny( m_xDocCfgMgr ));
         }
         xElementSettings->updateSettings();
     }
@@ -3837,7 +3796,7 @@ throw (uno::RuntimeException, std::exception)
                 try
                 {
                     xCfgMgr.set( rEvent.Source, uno::UNO_QUERY );
-                    xPropSet.set( xCfgMgr->getSettings( rEvent.ResourceURL, sal_False ), uno::UNO_QUERY );
+                    xPropSet.set( xCfgMgr->getSettings( rEvent.ResourceURL, false ), uno::UNO_QUERY );
 
                     if ( xPropSet.is() )
                         xPropSet->getPropertyValue("UIName") >>= aUIName;
@@ -3866,7 +3825,6 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL ToolbarLayoutManager::elementRemoved( const ui::ConfigurationEvent& rEvent )
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexClearableGuard aReadLock;
     uno::Reference< awt::XWindow > xContainerWindow( m_xContainerWindow, uno::UNO_QUERY );
@@ -3914,19 +3872,17 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL ToolbarLayoutManager::elementReplaced( const ui::ConfigurationEvent& rEvent )
-throw (uno::RuntimeException, std::exception)
 {
     UIElement aUIElement = implts_findToolbar( rEvent.ResourceURL );
 
     uno::Reference< ui::XUIElementSettings > xElementSettings( aUIElement.m_xUIElement, uno::UNO_QUERY );
     if ( xElementSettings.is() )
     {
-        OUString                       aConfigSourcePropName( "ConfigurationSource" );
         uno::Reference< uno::XInterface >     xElementCfgMgr;
         uno::Reference< beans::XPropertySet > xPropSet( xElementSettings, uno::UNO_QUERY );
 
         if ( xPropSet.is() )
-            xPropSet->getPropertyValue( aConfigSourcePropName ) >>= xElementCfgMgr;
+            xPropSet->getPropertyValue( "ConfigurationSource" ) >>= xElementCfgMgr;
 
         if ( !xElementCfgMgr.is() )
             return;
@@ -3958,17 +3914,16 @@ uno::Sequence< uno::Reference< ui::XUIElement > > ToolbarLayoutManager::getToolb
     uno::Sequence< uno::Reference< ui::XUIElement > > aSeq;
 
     SolarMutexGuard g;
-    if ( m_aUIElements.size() > 0 )
+    if ( !m_aUIElements.empty() )
     {
         sal_uInt32 nCount(0);
-        UIElementVector::iterator pIter;
-        for ( pIter = m_aUIElements.begin(); pIter != m_aUIElements.end(); ++pIter )
+        for (auto const& elem : m_aUIElements)
         {
-            if ( pIter->m_xUIElement.is() )
+            if ( elem.m_xUIElement.is() )
             {
                 ++nCount;
                 aSeq.realloc( nCount );
-                aSeq[nCount-1] = pIter->m_xUIElement;
+                aSeq[nCount-1] = elem.m_xUIElement;
             }
         }
     }

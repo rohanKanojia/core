@@ -19,7 +19,7 @@
 
 #include "GenericConfigurationChangeRequest.hxx"
 
-#include "framework/FrameworkHelper.hxx"
+#include <framework/FrameworkHelper.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -29,7 +29,7 @@ namespace sd { namespace framework {
 
 GenericConfigurationChangeRequest::GenericConfigurationChangeRequest (
     const Reference<XResourceId>& rxResourceId,
-    const Mode eMode) throw(css::lang::IllegalArgumentException)
+    const Mode eMode)
     : GenericConfigurationChangeRequestInterfaceBase(MutexOwner::maMutex),
       mxResourceId(rxResourceId),
       meMode(eMode)
@@ -44,7 +44,6 @@ GenericConfigurationChangeRequest::~GenericConfigurationChangeRequest() throw()
 
 void SAL_CALL GenericConfigurationChangeRequest::execute (
     const Reference<XConfiguration>& rxConfiguration)
-    throw (RuntimeException, std::exception)
 {
     if (rxConfiguration.is())
     {
@@ -62,17 +61,14 @@ void SAL_CALL GenericConfigurationChangeRequest::execute (
 }
 
 OUString SAL_CALL GenericConfigurationChangeRequest::getName()
-    throw (RuntimeException, std::exception)
 {
     return "GenericConfigurationChangeRequest "
         + (meMode==Activation ? OUString("activate ") : OUString("deactivate "))
         + FrameworkHelper::ResourceIdToString(mxResourceId);
 }
 
-void SAL_CALL GenericConfigurationChangeRequest::setName (const OUString& rsName)
-    throw (RuntimeException, std::exception)
+void SAL_CALL GenericConfigurationChangeRequest::setName (const OUString&)
 {
-    (void)rsName;
     // Ignored.
 }
 

@@ -20,14 +20,7 @@
 #ifndef INCLUDED_SHELL_INC_INTERNAL_COLUMNINFO_HXX
 #define INCLUDED_SHELL_INC_INTERNAL_COLUMNINFO_HXX
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable:4917)
-#endif
 #include <shlobj.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 
 class CColumnInfo : public IColumnProvider
@@ -42,25 +35,22 @@ public:
 
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(
             REFIID riid,
-            void __RPC_FAR *__RPC_FAR *ppvObject);
+            void __RPC_FAR *__RPC_FAR *ppvObject) override;
 
-    virtual ULONG STDMETHODCALLTYPE AddRef();
+    virtual ULONG STDMETHODCALLTYPE AddRef() override;
 
-    virtual ULONG STDMETHODCALLTYPE Release();
+    virtual ULONG STDMETHODCALLTYPE Release() override;
 
 
     // IColumnProvider
 
 
-    virtual HRESULT STDMETHODCALLTYPE Initialize(LPCSHCOLUMNINIT psci);
+    virtual HRESULT STDMETHODCALLTYPE Initialize(LPCSHCOLUMNINIT psci) override;
 
-    virtual HRESULT STDMETHODCALLTYPE GetColumnInfo(DWORD dwIndex, SHCOLUMNINFO *psci);
+    virtual HRESULT STDMETHODCALLTYPE GetColumnInfo(DWORD dwIndex, SHCOLUMNINFO *psci) override;
 
     virtual HRESULT STDMETHODCALLTYPE GetItemData(
-        LPCSHCOLUMNID pscid, LPCSHCOLUMNDATA pscd, VARIANT *pvarData);
-
-private:
-    bool IsOOFileExtension(wchar_t* Extension) const;
+        LPCSHCOLUMNID pscid, LPCSHCOLUMNDATA pscd, VARIANT *pvarData) override;
 
 private:
     long    m_RefCnt;

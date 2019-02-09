@@ -21,14 +21,13 @@
 #include "swfdialog.hxx"
 #include "swfuno.hxx"
 #include "impswfdialog.hxx"
-#include <vcl/svapp.hxx>
-#include <vcl/dialog.hxx>
 #include <svl/solar.hrc>
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <com/sun/star/view/XRenderable.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <vcl/svapp.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -42,22 +41,19 @@ using namespace ::com::sun::star::document;
 
 
 OUString SWFDialog_getImplementationName ()
-    throw (RuntimeException)
 {
     return OUString ( SERVICE_NAME );
 }
 
 
-Sequence< OUString > SAL_CALL SWFDialog_getSupportedServiceNames()
-    throw (RuntimeException)
+Sequence< OUString > SWFDialog_getSupportedServiceNames()
 {
     Sequence<OUString> aRet { SERVICE_NAME };
     return aRet;
 }
 
 
-Reference< XInterface > SAL_CALL SWFDialog_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
-    throw( Exception )
+Reference< XInterface > SWFDialog_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
 {
     return static_cast<cppu::OWeakObject*>(new SWFDialog( comphelper::getComponentContext(rSMgr) ));
 }
@@ -76,7 +72,6 @@ SWFDialog::~SWFDialog()
 
 
 Any SAL_CALL SWFDialog::queryInterface( const Type& rType )
-    throw (RuntimeException, std::exception)
 {
     Any aReturn = OGenericUnoDialog::queryInterface( rType );
 
@@ -104,34 +99,29 @@ void SAL_CALL SWFDialog::release()
 
 
 Sequence< sal_Int8 > SAL_CALL SWFDialog::getImplementationId()
-    throw(RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 
 OUString SAL_CALL SWFDialog::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return SWFDialog_getImplementationName();
 }
 
-
 Sequence< OUString > SAL_CALL SWFDialog::getSupportedServiceNames()
-    throw (RuntimeException, std::exception)
 {
     return SWFDialog_getSupportedServiceNames();
 }
 
-
-VclPtr<Dialog> SWFDialog::createDialog( vcl::Window* pParent )
+svt::OGenericUnoDialog::Dialog SWFDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
 {
-    VclPtr<Dialog> pRet;
+    std::unique_ptr<weld::DialogController> xRet;
 
     if (mxSrcDoc.is())
     {
 /*      TODO: From the controller we may get information what page is visible and what shapes
-              are selected, if we optionaly want to limit output to that
+              are selected, if we optionally want to limit output to that
         Any aSelection;
 
         try
@@ -150,35 +140,30 @@ VclPtr<Dialog> SWFDialog::createDialog( vcl::Window* pParent )
         {
         }
 */
-        pRet.reset( VclPtr<ImpSWFDialog>::Create( pParent, maFilterData ) );
+        xRet.reset(new ImpSWFDialog(Application::GetFrameWeld(rParent), maFilterData));
     }
 
-    return pRet;
+    return svt::OGenericUnoDialog::Dialog(std::move(xRet));
 }
-
 
 void SWFDialog::executedDialog( sal_Int16 nExecutionResult )
 {
-    if( nExecutionResult && m_pDialog )
-        maFilterData = static_cast< ImpSWFDialog* >( m_pDialog.get() )->GetFilterData();
+    if (nExecutionResult && m_aDialog)
+        maFilterData = static_cast<ImpSWFDialog*>(m_aDialog.m_xWeldDialog.get())->GetFilterData();
 
     destroyDialog();
 }
 
-
 Reference< XPropertySetInfo > SAL_CALL SWFDialog::getPropertySetInfo()
-    throw(RuntimeException, std::exception)
 {
     Reference< XPropertySetInfo >  xInfo( createPropertySetInfo( getInfoHelper() ) );
     return xInfo;
 }
 
-
 ::cppu::IPropertyArrayHelper& SWFDialog::getInfoHelper()
 {
     return *getArrayHelper();
 }
-
 
 ::cppu::IPropertyArrayHelper* SWFDialog::createArrayHelper() const
 {
@@ -187,9 +172,7 @@ Reference< XPropertySetInfo > SAL_CALL SWFDialog::getPropertySetInfo()
     return new ::cppu::OPropertyArrayHelper( aProps );
 }
 
-
 Sequence< PropertyValue > SAL_CALL SWFDialog::getPropertyValues()
-    throw ( RuntimeException, std::exception )
 {
     sal_Int32 i, nCount;
 
@@ -210,7 +193,6 @@ Sequence< PropertyValue > SAL_CALL SWFDialog::getPropertyValues()
 
 
 void SAL_CALL SWFDialog::setPropertyValues( const Sequence< PropertyValue >& rProps )
-    throw ( UnknownPropertyException, PropertyVetoException, IllegalArgumentException, WrappedTargetException, RuntimeException, std::exception )
 {
     maMediaDescriptor = rProps;
 
@@ -226,7 +208,6 @@ void SAL_CALL SWFDialog::setPropertyValues( const Sequence< PropertyValue >& rPr
 
 
 void SAL_CALL SWFDialog::setSourceDocument( const Reference< XComponent >& xDoc )
-    throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     mxSrcDoc = xDoc;
 }

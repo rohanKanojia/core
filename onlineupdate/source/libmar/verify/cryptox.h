@@ -77,9 +77,9 @@ CryptoX_Result CryptoMac_LoadPublicKey(const unsigned char* aCertData,
                                        unsigned int aDataSize,
                                        CryptoX_PublicKey* aPublicKey);
 CryptoX_Result CryptoMac_VerifySignature(CryptoX_SignatureHandle* aInputData,
-                                         CryptoX_PublicKey* aPublicKey,
-                                         const unsigned char* aSignature,
-                                         unsigned int aSignatureLen);
+        CryptoX_PublicKey* aPublicKey,
+        const unsigned char* aSignature,
+        unsigned int aSignatureLen);
 void CryptoMac_FreeSignatureHandle(CryptoX_SignatureHandle* aInputData);
 void CryptoMac_FreePublicKey(CryptoX_PublicKey* aPublicKey);
 #ifdef __cplusplus
@@ -118,9 +118,9 @@ CryptoX_Result CryptoAPI_VerifyBegin(HCRYPTPROV provider, HCRYPTHASH* hash);
 CryptoX_Result CryptoAPI_VerifyUpdate(HCRYPTHASH* hash,
                                       BYTE *buf, DWORD len);
 CryptoX_Result CyprtoAPI_VerifySignature(HCRYPTHASH *hash,
-                                         HCRYPTKEY *pubKey,
-                                         const BYTE *signature,
-                                         DWORD signatureLen);
+        HCRYPTKEY *pubKey,
+        const BYTE *signature,
+        DWORD signatureLen);
 
 #define CryptoX_InvalidHandleValue ((ULONG_PTR)NULL)
 #define CryptoX_ProviderHandle HCRYPTPROV
@@ -147,7 +147,7 @@ CryptoX_Result CyprtoAPI_VerifySignature(HCRYPTHASH *hash,
 
 /* This default implementation is necessary because we don't want to
  * link to NSS from updater code on non Windows platforms.  On Windows
- * we use CyrptoAPI instead of NSS.  We don't call any function as they
+ * we use CryptoAPI instead of NSS.  We don't call any function as they
  * would just fail, but this simplifies linking.
  */
 

@@ -18,8 +18,8 @@
  */
 
 
-#include "fmcontrollayout.hxx"
-#include "fmprop.hrc"
+#include <fmcontrollayout.hxx>
+#include <fmprop.hxx>
 
 #include <com/sun/star/form/FormComponentType.hpp>
 #include <com/sun/star/awt/VisualEffect.hpp>
@@ -34,6 +34,7 @@
 #include <i18nlangtag/mslangid.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <unotools/syslocale.hxx>
+#include <unotools/localedatawrapper.hxx>
 
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/debug.hxx>
@@ -189,7 +190,7 @@ namespace svxform
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("svx");
             }
         }
     }
@@ -263,7 +264,7 @@ namespace svxform
                             &&  ( xPSI->hasPropertyByName( FM_PROP_BORDERCOLOR ) )
                             )
                             // light gray flat border
-                            _rxControlModel->setPropertyValue( FM_PROP_BORDERCOLOR, makeAny( (sal_Int32)0x00C0C0C0 ) );
+                            _rxControlModel->setPropertyValue( FM_PROP_BORDERCOLOR, makeAny( sal_Int32(0x00C0C0C0) ) );
                     }
                 }
                 if ( xPSI->hasPropertyByName( FM_PROP_VISUALEFFECT ) )

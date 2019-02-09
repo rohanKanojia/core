@@ -17,10 +17,7 @@ $(eval $(call gb_CppunitTest_set_include,connectivity_mork,\
 
 $(eval $(call gb_CppunitTest_use_external,connectivity_mork,boost_headers))
 
-$(eval $(call gb_CppunitTest_use_api,connectivity_mork,\
-    udkapi \
-    offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,connectivity_mork))
 
 $(eval $(call gb_CppunitTest_use_ure,connectivity_mork))
 $(eval $(call gb_CppunitTest_use_vcl,connectivity_mork))
@@ -44,7 +41,6 @@ $(eval $(call gb_CppunitTest_use_libraries,connectivity_mork, \
     unotest \
     ucbhelper \
     utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_components,connectivity_mork,\

@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unx/geninst.h"
-#include "unx/genpspgraphics.h"
-#include "outdev.h"
-#include "PhysicalFontCollection.hxx"
+#include <unx/geninst.h>
+#include <unx/genpspgraphics.h>
+#include <outdev.h>
+#include <PhysicalFontCollection.hxx>
 
 // platform specific font substitution hooks
 
@@ -40,61 +40,21 @@ class FcGlyphFallbackSubstitution
 {
     // TODO: add a cache
 public:
-    bool FindFontSubstitute( FontSelectPattern&, OUString& rMissingCodes ) const override;
+    bool FindFontSubstitute(FontSelectPattern&, LogicalFontInstance* pLogicalFont, OUString& rMissingCodes) const override;
 };
-
-int SalGenericInstance::FetchFontSubstitutionFlags()
-{
-    // init font substitution defaults
-    int nDisableBits = 0;
-#ifdef SOLARIS
-    nDisableBits = 1; // disable "font fallback" here on default
-#endif
-    // apply the environment variable if any
-    const char* pEnvStr = ::getenv( "SAL_DISABLE_FC_SUBST" );
-    if( pEnvStr )
-    {
-        if( (*pEnvStr >= '0') && (*pEnvStr <= '9') )
-            nDisableBits = (*pEnvStr - '0');
-        else
-            nDisableBits = ~0U; // no specific bits set: disable all
-    }
-    return nDisableBits;
-}
 
 void SalGenericInstance::RegisterFontSubstitutors( PhysicalFontCollection* pFontCollection )
 {
-    // init font substitution defaults
-    int nDisableBits = 0;
-#ifdef SOLARIS
-    nDisableBits = 1; // disable "font fallback" here on default
-#endif
-    // apply the environment variable if any
-    const char* pEnvStr = ::getenv( "SAL_DISABLE_FC_SUBST" );
-    if( pEnvStr )
-    {
-        if( (*pEnvStr >= '0') && (*pEnvStr <= '9') )
-            nDisableBits = (*pEnvStr - '0');
-        else
-            nDisableBits = ~0U; // no specific bits set: disable all
-    }
+    // register font fallback substitutions
+    static FcPreMatchSubstitution aSubstPreMatch;
+    pFontCollection->SetPreMatchHook( &aSubstPreMatch );
 
-    // register font fallback substitutions (unless disabled by bit0)
-    if( (nDisableBits & 1) == 0 )
-    {
-        static FcPreMatchSubstitution aSubstPreMatch;
-        pFontCollection->SetPreMatchHook( &aSubstPreMatch );
-    }
-
-    // register glyph fallback substitutions (unless disabled by bit1)
-    if( (nDisableBits & 2) == 0 )
-    {
-        static FcGlyphFallbackSubstitution aSubstFallback;
-        pFontCollection->SetFallbackHook( &aSubstFallback );
-    }
+    // register glyph fallback substitutions
+    static FcGlyphFallbackSubstitution aSubstFallback;
+    pFontCollection->SetFallbackHook( &aSubstFallback );
 }
 
-static FontSelectPattern GetFcSubstitute(const FontSelectPattern &rFontSelData, OUString& rMissingCodes )
+static FontSelectPattern GetFcSubstitute(const FontSelectPattern &rFontSelData, OUString& rMissingCodes)
 {
     FontSelectPattern aSubstituted(rFontSelData);
     psp::PrintFontManager& rMgr = psp::PrintFontManager::get();
@@ -130,7 +90,7 @@ namespace
     };
 }
 
-bool FcPreMatchSubstitution::FindFontSubstitute( FontSelectPattern &rFontSelData ) const
+bool FcPreMatchSubstitution::FindFontSubstitute(FontSelectPattern &rFontSelData) const
 {
     // We don't actually want to talk to Fontconfig at all for symbol fonts
     if( rFontSelData.IsSymbolFont() )
@@ -145,12 +105,12 @@ bool FcPreMatchSubstitution::FindFontSubstitute( FontSelectPattern &rFontSelData
     //just on the name, cache map all the input and all the output not just map
     //from original selection to output fontname
     FontSelectPattern& rPatternAttributes = rFontSelData;
-    CachedFontMapType &rCachedFontMap = const_cast<CachedFontMapType &>(maCachedFontMap);
+    CachedFontMapType &rCachedFontMap = maCachedFontMap;
     CachedFontMapType::iterator itr = std::find_if(rCachedFontMap.begin(), rCachedFontMap.end(), equal(rPatternAttributes));
     if (itr != rCachedFontMap.end())
     {
         // Cached substitution
-        rFontSelData.copyAttributes(itr->second);
+        rFontSelData = itr->second;
         if (itr != rCachedFontMap.begin())
         {
             // MRU, move it to the front
@@ -195,7 +155,8 @@ bool FcPreMatchSubstitution::FindFontSubstitute( FontSelectPattern &rFontSelData
     return bHaveSubstitute;
 }
 
-bool FcGlyphFallbackSubstitution::FindFontSubstitute( FontSelectPattern& rFontSelData,
+bool FcGlyphFallbackSubstitution::FindFontSubstitute(FontSelectPattern& rFontSelData,
+    LogicalFontInstance* /*pLogicalFont*/,
     OUString& rMissingCodes ) const
 {
     // We don't actually want to talk to Fontconfig at all for symbol fonts

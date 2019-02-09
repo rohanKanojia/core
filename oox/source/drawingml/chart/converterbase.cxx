@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/chart/converterbase.hxx"
+#include <drawingml/chart/converterbase.hxx>
 
 #include <com/sun/star/chart/XAxisXSupplier.hpp>
 #include <com/sun/star/chart/XAxisYSupplier.hpp>
@@ -29,13 +29,16 @@
 #include <com/sun/star/chart2/RelativeSize.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <osl/diagnose.h>
-#include "basegfx/numeric/ftools.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/drawingml/theme.hxx"
+#include <basegfx/numeric/ftools.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/drawingml/theme.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 #include <comphelper/processfactory.hxx>
+
 
 namespace oox {
 namespace drawingml {
@@ -46,7 +49,6 @@ namespace cssc = ::com::sun::star::chart;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
 using namespace ::com::sun::star::drawing;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::uno;
 
@@ -56,7 +58,7 @@ namespace {
 
 struct TitleKey : public ::std::pair< ObjectType, ::std::pair< sal_Int32, sal_Int32 > >
 {
-    inline explicit     TitleKey( ObjectType eObjType, sal_Int32 nMainIdx = -1, sal_Int32 nSubIdx = -1 )
+    explicit     TitleKey( ObjectType eObjType, sal_Int32 nMainIdx = -1, sal_Int32 nSubIdx = -1 )
                             { first = eObjType; second.first = nMainIdx; second.second = nSubIdx; }
 };
 
@@ -71,14 +73,14 @@ struct TitleLayoutInfo
     ModelRef< LayoutModel > mxLayout;   /// The layout model, if existing.
     GetShapeFunc        mpGetShape;     /// Helper function to receive the title shape.
 
-    inline explicit     TitleLayoutInfo() : mpGetShape( nullptr ) {}
+    explicit     TitleLayoutInfo() : mpGetShape( nullptr ) {}
 
     void                convertTitlePos(
-                            ConverterRoot& rRoot,
+                            ConverterRoot const & rRoot,
                             const Reference< cssc::XChartDocument >& rxChart1Doc );
 };
 
-void TitleLayoutInfo::convertTitlePos( ConverterRoot& rRoot, const Reference< cssc::XChartDocument >& rxChart1Doc )
+void TitleLayoutInfo::convertTitlePos( ConverterRoot const & rRoot, const Reference< cssc::XChartDocument >& rxChart1Doc )
 {
     if( mxTitle.is() && mpGetShape ) try
     {
@@ -145,7 +147,7 @@ struct ConverterData
     XmlFilterBase&      mrFilter;
     ChartConverter&     mrConverter;
     Reference< XChartDocument > mxDoc;
-    awt::Size                maSize;
+    awt::Size const          maSize;
 
     explicit            ConverterData(
                             XmlFilterBase& rFilter,
@@ -229,7 +231,7 @@ Reference< XInterface > ConverterRoot::createInstance( const OUString& rServiceN
     return xInt;
 }
 
-Reference< XComponentContext > ConverterRoot::getComponentContext() const
+Reference< XComponentContext > const & ConverterRoot::getComponentContext() const
 {
     return mxData->mrFilter.getComponentContext();
 }
@@ -244,7 +246,7 @@ ChartConverter& ConverterRoot::getChartConverter() const
     return mxData->mrConverter;
 }
 
-Reference< XChartDocument > ConverterRoot::getChartDocument() const
+Reference< XChartDocument > const & ConverterRoot::getChartDocument() const
 {
     return mxData->mxDoc;
 }
@@ -274,8 +276,8 @@ void ConverterRoot::convertTitlePositions()
     try
     {
         Reference< cssc::XChartDocument > xChart1Doc( mxData->mxDoc, UNO_QUERY_THROW );
-        for( ConverterData::TitleMap::iterator aIt = mxData->maTitles.begin(), aEnd = mxData->maTitles.end(); aIt != aEnd; ++aIt )
-            aIt->second.convertTitlePos( *this, xChart1Doc );
+        for (auto & title : mxData->maTitles)
+            title.second.convertTitlePos( *this, xChart1Doc );
     }
     catch( Exception& )
     {
@@ -348,7 +350,12 @@ bool LayoutConverter::calcAbsRectangle( awt::Rectangle& orRect ) const
 {
     if( !mrModel.mbAutoLayout )
     {
-        const awt::Size& rChartSize = getChartSize();
+        awt::Size rChartSize=getChartSize();
+        if( (rChartSize.Width < 0) || (rChartSize.Height < 0) )
+        {
+        rChartSize.Width = 16000;
+        rChartSize.Height = 9000;
+        }
         orRect.X = lclCalcPosition( rChartSize.Width,  mrModel.mfX, mrModel.mnXMode );
         orRect.Y = lclCalcPosition( rChartSize.Height, mrModel.mfY, mrModel.mnYMode );
         if( (orRect.X >= 0) && (orRect.Y >= 0) )
@@ -398,7 +405,7 @@ void LayoutConverter::convertFromModel( const Reference< XShape >& rxShape, doub
             // the call to XShape.getSize() may recalc the chart view
             awt::Size aShapeSize = rxShape->getSize();
             // rotated shapes need special handling...
-            double fSin = fabs( sin( fRotationAngle * F_PI180 ) );
+            double fSin = fabs( sin( basegfx::deg2rad(fRotationAngle) ) );
             // add part of height to X direction, if title is rotated down
             if( fRotationAngle > 180.0 )
                 aShapePos.X += static_cast< sal_Int32 >( fSin * aShapeSize.Height + 0.5 );

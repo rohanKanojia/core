@@ -9,11 +9,11 @@
 
 #include <config_folders.h>
 
-#include "opencl_device.hxx"
+#include <opencl_device.hxx>
 
-#include <comphelper/string.hxx>
 #include <opencl/openclconfig.hxx>
 #include <opencl/openclwrapper.hxx>
+#include <opencl/platforminfo.hxx>
 #include <osl/file.hxx>
 #include <rtl/bootstrap.hxx>
 #include <rtl/digest.h>
@@ -21,6 +21,7 @@
 #include <rtl/ustring.hxx>
 #include <sal/config.h>
 #include <sal/log.hxx>
+#include <opencl/OpenCLZone.hxx>
 
 #include <memory>
 #include <unicode/regex.h>
@@ -30,6 +31,8 @@
 #include <string.h>
 
 #include <cmath>
+
+#include <officecfg/Office/Common.hxx>
 
 #ifdef _WIN32
 #include <prewin.h>
@@ -41,6 +44,10 @@
 #define OPENCL_DLL_NAME "libOpenCL.so.1"
 #endif
 
+#ifdef _WIN32_WINNT_WINBLUE
+#include <VersionHelpers.h>
+#endif
+
 #define DEVICE_NAME_LENGTH 1024
 #define DRIVER_VERSION_LENGTH 1024
 #define PLATFORM_VERSION_LENGTH 1024
@@ -48,19 +55,25 @@
 #define CHECK_OPENCL(status,name) \
 if( status != CL_SUCCESS )  \
 { \
-    SAL_WARN( "opencl", "OpenCL error code " << status << " at " SAL_DETAIL_WHERE " from " name ); \
+    SAL_WARN( "opencl", "OpenCL error code " << status << " at " SAL_DETAIL_WHERE "from " name ); \
     return false; \
 }
 
 using namespace std;
 
-namespace opencl {
-
-GPUEnv gpuEnv;
-
 namespace {
 
 bool bIsInited = false;
+
+}
+
+namespace openclwrapper {
+
+GPUEnv gpuEnv;
+sal_uInt64 kernelFailures = 0;
+
+namespace
+{
 
 OString generateMD5(const void* pData, size_t length)
 {
@@ -70,32 +83,79 @@ OString generateMD5(const void* pData, size_t length)
     SAL_WARN_IF(aError != rtl_Digest_E_None, "opencl", "md5 generation failed");
 
     OStringBuffer aBuffer;
-    const char* pString = "0123456789ABCDEF";
-    for(size_t i = 0; i < RTL_DIGEST_LENGTH_MD5; ++i)
+    const char* const pString = "0123456789ABCDEF";
+    for(sal_uInt8 val : pBuffer)
     {
-        sal_uInt8 val = pBuffer[i];
         aBuffer.append(pString[val/16]);
         aBuffer.append(pString[val%16]);
     }
     return aBuffer.makeStringAndClear();
 }
 
-OString getCacheFolder()
+OString const & getCacheFolder()
 {
-    OUString url("${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("bootstrap") ":UserInstallation}/cache/");
-    rtl::Bootstrap::expandMacros(url);
+    static OString const aCacheFolder = [&]()
+    {
+        OUString url("${$BRAND_BASE_DIR/" LIBO_ETC_FOLDER "/" SAL_CONFIGFILE("bootstrap") ":UserInstallation}/cache/");
+        rtl::Bootstrap::expandMacros(url);
 
-    osl::Directory::create(url);
+        osl::Directory::create(url);
 
-    return rtl::OUStringToOString(url, RTL_TEXTENCODING_UTF8);
+        return OUStringToOString(url, RTL_TEXTENCODING_UTF8);
+    }();
+    return aCacheFolder;
 }
 
-OString maCacheFolder = getCacheFolder();
+}
 
+static bool initializeCommandQueue(GPUEnv& aGpuEnv)
+{
+    OpenCLZone zone;
+
+    cl_int nState;
+    cl_command_queue command_queue[OPENCL_CMDQUEUE_SIZE];
+
+    for (int i = 0; i < OPENCL_CMDQUEUE_SIZE; ++i)
+    {
+        command_queue[i] = clCreateCommandQueue(aGpuEnv.mpContext, aGpuEnv.mpDevID, 0, &nState);
+        if (nState != CL_SUCCESS)
+            SAL_WARN("opencl", "clCreateCommandQueue failed: " << errorString(nState));
+
+        if (command_queue[i] == nullptr || nState != CL_SUCCESS)
+        {
+            // Release all command queues created so far.
+            for (int j = 0; j <= i; ++j)
+            {
+                if (command_queue[j])
+                {
+                    clReleaseCommandQueue(command_queue[j]);
+                    command_queue[j] = nullptr;
+                }
+            }
+
+            clReleaseContext(aGpuEnv.mpContext);
+            SAL_WARN("opencl", "failed to set/switch opencl device");
+            return false;
+        }
+
+        SAL_INFO("opencl", "Created command queue " << command_queue[i] << " for context " << aGpuEnv.mpContext);
+    }
+
+    for (int i = 0; i < OPENCL_CMDQUEUE_SIZE; ++i)
+    {
+        aGpuEnv.mpCmdQueue[i] = command_queue[i];
+    }
+    aGpuEnv.mbCommandQueueInitialized = true;
+    return true;
 }
 
 void setKernelEnv( KernelEnv *envInfo )
 {
+    if (!gpuEnv.mbCommandQueueInitialized)
+    {
+        initializeCommandQueue(gpuEnv);
+    }
+
     envInfo->mpkContext = gpuEnv.mpContext;
     envInfo->mpkProgram = gpuEnv.mpArryPrograms[0];
 
@@ -132,8 +192,7 @@ OString createFileName(cl_device_id deviceId, const char* clFileName)
     OString aString = OString(deviceName) + driverVersion + platformVersion;
     OString aHash = generateMD5(aString.getStr(), aString.getLength());
 
-    return maCacheFolder + fileName + "-" +
-        aHash + ".bin";
+    return getCacheFolder() + fileName + "-" + aHash + ".bin";
 }
 
 std::vector<std::shared_ptr<osl::File> > binaryGenerated( const char * clFileName, cl_context context )
@@ -161,16 +220,15 @@ std::vector<std::shared_ptr<osl::File> > binaryGenerated( const char * clFileNam
     assert(pDevID == gpuEnv.mpDevID);
 
     OString fileName = createFileName(gpuEnv.mpDevID, clFileName);
-    osl::File* pNewFile = new osl::File(rtl::OStringToOUString(fileName, RTL_TEXTENCODING_UTF8));
+    auto pNewFile = std::make_shared<osl::File>(OStringToOUString(fileName, RTL_TEXTENCODING_UTF8));
     if(pNewFile->open(osl_File_OpenFlag_Read) == osl::FileBase::E_None)
     {
-        aGeneratedFiles.push_back(std::shared_ptr<osl::File>(pNewFile));
+        aGeneratedFiles.push_back(pNewFile);
         SAL_INFO("opencl.file", "Opening binary file '" << fileName << "' for reading: success");
     }
     else
     {
         SAL_INFO("opencl.file", "Opening binary file '" << fileName << "' for reading: FAIL");
-        delete pNewFile;
     }
 
     return aGeneratedFiles;
@@ -178,7 +236,7 @@ std::vector<std::shared_ptr<osl::File> > binaryGenerated( const char * clFileNam
 
 bool writeBinaryToFile( const OString& rFileName, const char* binary, size_t numBytes )
 {
-    osl::File file(rtl::OStringToOUString(rFileName, RTL_TEXTENCODING_UTF8));
+    osl::File file(OStringToOUString(rFileName, RTL_TEXTENCODING_UTF8));
     osl::FileBase::RC status = file.open(
             osl_File_OpenFlag_Write | osl_File_OpenFlag_Create );
 
@@ -257,40 +315,11 @@ bool initOpenCLAttr( OpenCLEnv * env )
 
     gpuEnv.mnIsUserCreated = 1;
 
-    for (int i = 0; i < OPENCL_CMDQUEUE_SIZE; ++i)
-        gpuEnv.mpCmdQueue[i] = env->mpOclCmdQueue[i];
+    gpuEnv.mbCommandQueueInitialized = false;
 
     gpuEnv.mnCmdQueuePos = 0; // default to 0.
 
     return false;
-}
-
-void releaseOpenCLEnv( GPUEnv *gpuInfo )
-{
-    if ( !bIsInited )
-    {
-        return;
-    }
-
-    for (int i = 0; i < OPENCL_CMDQUEUE_SIZE; ++i)
-    {
-        if (gpuEnv.mpCmdQueue[i])
-        {
-            clReleaseCommandQueue(gpuEnv.mpCmdQueue[i]);
-            gpuEnv.mpCmdQueue[i] = nullptr;
-        }
-    }
-    gpuEnv.mnCmdQueuePos = 0;
-
-    if ( gpuEnv.mpContext )
-    {
-        clReleaseContext( gpuEnv.mpContext );
-        gpuEnv.mpContext = nullptr;
-    }
-    bIsInited = false;
-    gpuInfo->mnIsUserCreated = 0;
-
-    return;
 }
 
 bool buildProgram(const char* buildOption, GPUEnv* gpuInfo, int idx)
@@ -319,8 +348,8 @@ bool buildProgram(const char* buildOption, GPUEnv* gpuInfo, int idx)
             return false;
         }
 
-        OString aBuildLogFileURL = maCacheFolder + "kernel-build.log";
-        osl::File aBuildLogFile(rtl::OStringToOUString(aBuildLogFileURL, RTL_TEXTENCODING_UTF8));
+        OString aBuildLogFileURL = getCacheFolder() + "kernel-build.log";
+        osl::File aBuildLogFile(OStringToOUString(aBuildLogFileURL, RTL_TEXTENCODING_UTF8));
         osl::FileBase::RC status = aBuildLogFile.open(
                 osl_File_OpenFlag_Write | osl_File_OpenFlag_Create );
 
@@ -410,6 +439,8 @@ namespace {
 
 void checkDeviceForDoubleSupport(cl_device_id deviceId, bool& bKhrFp64, bool& bAmdFp64)
 {
+    OpenCLZone zone;
+
     bKhrFp64 = false;
     bAmdFp64 = false;
 
@@ -442,6 +473,10 @@ void checkDeviceForDoubleSupport(cl_device_id deviceId, bool& bKhrFp64, bool& bA
 
 bool initOpenCLRunEnv( GPUEnv *gpuInfo )
 {
+    OpenCLZone zone;
+    cl_uint nPreferredVectorWidthFloat;
+    char pName[64];
+
     bool bKhrFp64 = false;
     bool bAmdFp64 = false;
 
@@ -450,10 +485,48 @@ bool initOpenCLRunEnv( GPUEnv *gpuInfo )
     gpuInfo->mnKhrFp64Flag = bKhrFp64;
     gpuInfo->mnAmdFp64Flag = bAmdFp64;
 
-    gpuInfo->mnPreferredVectorWidthFloat = 0;
+    gpuInfo->mbNeedsTDRAvoidance = false;
 
     clGetDeviceInfo(gpuInfo->mpDevID, CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT, sizeof(cl_uint),
-                    &gpuInfo->mnPreferredVectorWidthFloat, nullptr);
+                    &nPreferredVectorWidthFloat, nullptr);
+    SAL_INFO("opencl", "CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT=" << nPreferredVectorWidthFloat);
+
+    clGetPlatformInfo(gpuInfo->mpPlatformID, CL_PLATFORM_NAME, 64,
+             pName, nullptr);
+
+#if defined (_WIN32)
+// the Win32 SDK 8.1 deprecates GetVersionEx()
+# ifdef _WIN32_WINNT_WINBLUE
+    const bool bIsNotWinOrIsWin8OrGreater = IsWindows8OrGreater();
+# else
+    bool bIsNotWinOrIsWin8OrGreater = true;
+    OSVERSIONINFOW aVersionInfo;
+    memset( &aVersionInfo, 0, sizeof(aVersionInfo) );
+    aVersionInfo.dwOSVersionInfoSize = sizeof( aVersionInfo );
+    if (GetVersionExW( &aVersionInfo ))
+    {
+        // Windows 7 or lower?
+        if (aVersionInfo.dwMajorVersion < 6 ||
+           (aVersionInfo.dwMajorVersion == 6 && aVersionInfo.dwMinorVersion < 2))
+            bIsNotWinOrIsWin8OrGreater = false;
+    }
+# endif
+#else
+    const bool bIsNotWinOrIsWin8OrGreater = true;
+#endif
+
+    // Heuristic: Certain old low-end OpenCL implementations don't
+    // work for us with too large group lengths. Looking at the preferred
+    // float vector width seems to be a way to detect these devices, except
+    // the non-working NVIDIA cards on Windows older than version 8.
+    gpuInfo->mbNeedsTDRAvoidance = ( nPreferredVectorWidthFloat == 4 ) ||
+        ( !bIsNotWinOrIsWin8OrGreater &&
+          OUString::createFromAscii(pName).indexOf("NVIDIA") > -1 );
+
+    size_t nMaxParameterSize;
+    clGetDeviceInfo(gpuInfo->mpDevID, CL_DEVICE_MAX_PARAMETER_SIZE, sizeof(size_t),
+                    &nMaxParameterSize, nullptr);
+    SAL_INFO("opencl", "CL_DEVICE_MAX_PARAMETER_SIZE=" << nMaxParameterSize);
 
     return false;
 }
@@ -601,7 +674,9 @@ bool createPlatformInfo(cl_platform_id nPlatformId, OpenCLPlatformInfo& rPlatfor
 const std::vector<OpenCLPlatformInfo>& fillOpenCLInfo()
 {
     static std::vector<OpenCLPlatformInfo> aPlatforms;
-    if(!aPlatforms.empty())
+
+    // return early if we already initialized or can't use OpenCL
+    if (!aPlatforms.empty() || !canUseOpenCL())
         return aPlatforms;
 
     int status = clewInit(OPENCL_DLL_NAME);
@@ -636,16 +711,14 @@ namespace {
 
 cl_device_id findDeviceIdByDeviceString(const OUString& rString, const std::vector<OpenCLPlatformInfo>& rPlatforms)
 {
-    std::vector<OpenCLPlatformInfo>::const_iterator it = rPlatforms.begin(), itEnd = rPlatforms.end();
-    for(; it != itEnd; ++it)
+    for (const OpenCLPlatformInfo& rPlatform : rPlatforms)
     {
-        std::vector<OpenCLDeviceInfo>::const_iterator itr = it->maDevices.begin(), itrEnd = it->maDevices.end();
-        for(; itr != itrEnd; ++itr)
+        for (const OpenCLDeviceInfo& rDeviceInfo : rPlatform.maDevices)
         {
-            OUString aDeviceId = it->maVendor + " " + itr->maName;
-            if(rString == aDeviceId)
+            OUString aDeviceId = rDeviceInfo.maVendor + " " + rDeviceInfo.maName;
+            if (rString == aDeviceId)
             {
-                return static_cast<cl_device_id>(itr->device);
+                return rDeviceInfo.device;
             }
         }
     }
@@ -665,13 +738,13 @@ void findDeviceInfoFromDeviceId(cl_device_id aDeviceId, size_t& rDeviceId, size_
     const std::vector<OpenCLPlatformInfo>& rPlatforms = fillOpenCLInfo();
     for(size_t i = 0; i < rPlatforms.size(); ++i)
     {
-        cl_platform_id platId = static_cast<cl_platform_id>(rPlatforms[i].platform);
+        cl_platform_id platId = rPlatforms[i].platform;
         if(platId != platformId)
             continue;
 
         for(size_t j = 0; j < rPlatforms[i].maDevices.size(); ++j)
         {
-            cl_device_id id = static_cast<cl_device_id>(rPlatforms[i].maDevices[j].device);
+            cl_device_id id = rPlatforms[i].maDevices[j].device;
             if(id == aDeviceId)
             {
                 rDeviceId = j;
@@ -684,9 +757,19 @@ void findDeviceInfoFromDeviceId(cl_device_id aDeviceId, size_t& rDeviceId, size_
 
 }
 
-bool switchOpenCLDevice(const OUString* pDevice, bool bAutoSelect, bool bForceEvaluation)
+bool canUseOpenCL()
 {
-    if(fillOpenCLInfo().empty())
+    if( const char* env = getenv( "SC_FORCE_CALCULATION" ))
+    {
+        if( strcmp( env, "opencl" ) == 0 )
+            return true;
+    }
+    return !getenv("SAL_DISABLE_OPENCL") && officecfg::Office::Common::Misc::UseOpenCL::get();
+}
+
+bool switchOpenCLDevice(const OUString* pDevice, bool bAutoSelect, bool bForceEvaluation, OUString& rOutSelectedDeviceVersionIDString)
+{
+    if (!canUseOpenCL() || fillOpenCLInfo().empty())
         return false;
 
     cl_device_id pDeviceId = nullptr;
@@ -703,10 +786,10 @@ bool switchOpenCLDevice(const OUString* pDevice, bool bAutoSelect, bool bForceEv
         rtl::Bootstrap::expandMacros(url);
         OUString path;
         osl::FileBase::getSystemPathFromFileURL(url,path);
-        OString dsFileName = rtl::OUStringToOString(path, RTL_TEXTENCODING_UTF8);
-        ds_device pSelectedDevice = getDeviceSelection(dsFileName.getStr(), bForceEvaluation);
-        pDeviceId = pSelectedDevice.oclDeviceID;
-
+        ds_device aSelectedDevice = getDeviceSelection(path, bForceEvaluation);
+        if ( aSelectedDevice.eType != DeviceType::OpenCLDevice)
+            return false;
+        pDeviceId = aSelectedDevice.aDeviceID;
     }
 
     if(gpuEnv.mpDevID == pDeviceId)
@@ -716,66 +799,44 @@ bool switchOpenCLDevice(const OUString* pDevice, bool bAutoSelect, bool bForceEv
         return pDeviceId != nullptr;
     }
 
+    cl_context context;
     cl_platform_id platformId;
-    cl_int nState = clGetDeviceInfo(pDeviceId, CL_DEVICE_PLATFORM,
-            sizeof(platformId), &platformId, nullptr);
 
-    cl_context_properties cps[3];
-    cps[0] = CL_CONTEXT_PLATFORM;
-    cps[1] = reinterpret_cast<cl_context_properties>(platformId);
-    cps[2] = 0;
-    cl_context context = clCreateContext( cps, 1, &pDeviceId, nullptr, nullptr, &nState );
-    if (nState != CL_SUCCESS)
-        SAL_WARN("opencl", "clCreateContext failed: " << errorString(nState));
-
-    if(nState != CL_SUCCESS || context == nullptr)
     {
-        if(context != nullptr)
-            clReleaseContext(context);
+        OpenCLZone zone;
+        cl_int nState = clGetDeviceInfo(pDeviceId, CL_DEVICE_PLATFORM,
+                                        sizeof(platformId), &platformId, nullptr);
 
-        SAL_WARN("opencl", "failed to set/switch opencl device");
-        return false;
-    }
-    SAL_INFO("opencl", "Created context " << context << " for platform " << platformId << ", device " << pDeviceId);
-
-    cl_command_queue command_queue[OPENCL_CMDQUEUE_SIZE];
-    for (int i = 0; i < OPENCL_CMDQUEUE_SIZE; ++i)
-    {
-        command_queue[i] = clCreateCommandQueue(
-            context, pDeviceId, 0, &nState);
+        cl_context_properties cps[3];
+        cps[0] = CL_CONTEXT_PLATFORM;
+        cps[1] = reinterpret_cast<cl_context_properties>(platformId);
+        cps[2] = 0;
+        context = clCreateContext( cps, 1, &pDeviceId, nullptr, nullptr, &nState );
         if (nState != CL_SUCCESS)
-            SAL_WARN("opencl", "clCreateCommandQueue failed: " << errorString(nState));
+            SAL_WARN("opencl", "clCreateContext failed: " << errorString(nState));
 
-        if (command_queue[i] == nullptr || nState != CL_SUCCESS)
+        if(nState != CL_SUCCESS || context == nullptr)
         {
-            // Release all command queues created so far.
-            for (int j = 0; j <= i; ++j)
-            {
-                if (command_queue[j])
-                {
-                    clReleaseCommandQueue(command_queue[j]);
-                    command_queue[j] = nullptr;
-                }
-            }
+            if(context != nullptr)
+                clReleaseContext(context);
 
-            clReleaseContext(context);
             SAL_WARN("opencl", "failed to set/switch opencl device");
             return false;
         }
+        SAL_INFO("opencl", "Created context " << context << " for platform " << platformId << ", device " << pDeviceId);
 
-        SAL_INFO("opencl", "Created command queue " << command_queue[i] << " for context " << context);
+        OString sDeviceID = getDeviceInfoString(pDeviceId, CL_DEVICE_VENDOR) + " " + getDeviceInfoString(pDeviceId, CL_DRIVER_VERSION);
+        rOutSelectedDeviceVersionIDString = OStringToOUString(sDeviceID, RTL_TEXTENCODING_UTF8);
     }
 
     setOpenCLCmdQueuePosition(0); // Call this just to avoid the method being deleted from unused function deleter.
 
     releaseOpenCLEnv(&gpuEnv);
+
     OpenCLEnv env;
     env.mpOclPlatformID = platformId;
     env.mpOclContext = context;
     env.mpOclDevsID = pDeviceId;
-
-    for (int i = 0; i < OPENCL_CMDQUEUE_SIZE; ++i)
-        env.mpOclCmdQueue[i] = command_queue[i];
 
     initOpenCLAttr(&env);
 
@@ -784,6 +845,9 @@ bool switchOpenCLDevice(const OUString* pDevice, bool bAutoSelect, bool bForceEv
 
 void getOpenCLDeviceInfo(size_t& rDeviceId, size_t& rPlatformId)
 {
+    if (!canUseOpenCL())
+        return;
+
     int status = clewInit(OPENCL_DLL_NAME);
     if (status < 0)
         return;
@@ -859,6 +923,39 @@ const char* errorString(cl_int nError)
 #undef CASE
 }
 
+bool GPUEnv::isOpenCLEnabled()
+{
+    return gpuEnv.mpDevID && gpuEnv.mpContext;
+}
+
+}
+
+void releaseOpenCLEnv( openclwrapper::GPUEnv *gpuInfo )
+{
+    OpenCLZone zone;
+
+    if ( !bIsInited )
+    {
+        return;
+    }
+
+    for (_cl_command_queue* & i : openclwrapper::gpuEnv.mpCmdQueue)
+    {
+        if (i)
+        {
+            clReleaseCommandQueue(i);
+            i = nullptr;
+        }
+    }
+    openclwrapper::gpuEnv.mnCmdQueuePos = 0;
+
+    if ( openclwrapper::gpuEnv.mpContext )
+    {
+        clReleaseContext( openclwrapper::gpuEnv.mpContext );
+        openclwrapper::gpuEnv.mpContext = nullptr;
+    }
+    bIsInited = false;
+    gpuInfo->mnIsUserCreated = 0;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -305,7 +306,7 @@ public class FunctionHelper
                 // the systemw window handle. A possible reason can be an invisible
                 // java window. In this case it should be enough to set return
                 // values to null. All other resources (which was created before)
-                // will be freed automatically if scope wil be leaved.
+                // will be freed automatically if scope will be leaved.
                 System.out.println("May be the NativeView object wasn't really visible at calling time of getNativeWindow()?");
                 xPeer   = null;
                 xWindow = null;
@@ -363,7 +364,7 @@ public class FunctionHelper
 
             // pass the window the frame as his new container window.
             // It's necessary to do it first  - before you call anything else there.
-            // Otherwhise the frame throws some exceptions for "uninitialized state".
+            // Otherwise the frame throws some exceptions for "uninitialized state".
             xFrame.initialize( xWindow );
 
             // Insert the new frame in desktop hierarchy.
@@ -439,7 +440,7 @@ public class FunctionHelper
      *                      (Note: Deregistration is part of this listener himself!)
      *
      * @return  [XDispatch] It's the used dispatch object and can be used for deregistration of an optional listener.
-     *                      Otherwhise caller can ignore it.
+     *                      Otherwise caller can ignore it.
      */
     public static com.sun.star.frame.XDispatch execute(com.sun.star.frame.XFrame          xFrame     ,
                                                        com.sun.star.util.URL              aURL       ,
@@ -934,3 +935,5 @@ public class FunctionHelper
     private static File maLastDir   = null;
     private static int  mnViewCount = 0   ;
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

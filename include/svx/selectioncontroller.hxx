@@ -33,9 +33,13 @@ class SfxStyleSheet;
 class SdrPage;
 class SdrModel;
 class Point;
+class FontList;
+class SdrObject;
 
 namespace sdr
 {
+
+namespace table { struct CellPos; }
 
 class SVX_DLLPUBLIC SelectionController: public cppu::OWeakObject
 {
@@ -50,7 +54,6 @@ public:
     virtual void GetState( SfxItemSet& rSet );
     virtual void Execute( SfxRequest& rReq );
 
-    virtual bool HasMarked();
     virtual bool DeleteMarked();
 
     virtual bool GetAttributes(SfxItemSet& rTargetSet, bool bOnlyHardAttr) const;
@@ -59,7 +62,7 @@ public:
     virtual bool GetStyleSheet( SfxStyleSheet* &rpStyleSheet ) const;
     virtual bool SetStyleSheet( SfxStyleSheet* pStyleSheet, bool bDontRemoveHardAttr );
 
-    virtual bool GetMarkedObjModel( SdrPage* pNewPage );
+    virtual SdrObject* GetMarkedSdrObjClone( SdrModel& rTargetModel );
     virtual bool PasteObjModel( const SdrModel& rModel );
 
     /** returns a format paint brush set from the current selection */
@@ -74,6 +77,10 @@ public:
     virtual bool hasSelectedCells() const;
     /// Allows adjusting the point or mark of the selection to a document coordinate.
     virtual bool setCursorLogicPosition(const Point& rPosition, bool bPoint);
+    /// Get the position of the first and the last selected cell.
+    virtual void getSelectedCells(table::CellPos& rFirstPos, table::CellPos& rLastPos);
+    /// Changes the font (grow/shrink) according to the input parameters.
+    virtual bool ChangeFontSize(bool bGrow, const FontList* pFontList);
 };
 
 }

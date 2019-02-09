@@ -17,14 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sqlmessage.hxx"
-#include "uiservices.hxx"
-#include "unosqlmessage.hxx"
-#include "dbu_reghelper.hxx"
-#include "dbustrings.hrc"
+#include <sqlmessage.hxx>
+#include <uiservices.hxx>
+#include <unosqlmessage.hxx>
+#include <dbu_reghelper.hxx>
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <connectivity/dbexception.hxx>
+#include <vcl/svapp.hxx>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
 
 using namespace dbaui;
 using namespace dbtools;
@@ -32,7 +37,7 @@ using namespace dbtools;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdb;
 
-extern "C" void SAL_CALL createRegistryInfo_OSQLMessageDialog()
+extern "C" void createRegistryInfo_OSQLMessageDialog()
 {
     static OMultiInstanceAutoRegistration< OSQLMessageDialog > aAutoRegistration;
 }
@@ -53,55 +58,56 @@ OSQLMessageDialog::OSQLMessageDialog(const Reference< XComponentContext >& _rxOR
         &m_sHelpURL, cppu::UnoType<decltype(m_sHelpURL)>::get() );
 }
 
-Sequence<sal_Int8> SAL_CALL OSQLMessageDialog::getImplementationId(  ) throw(RuntimeException, std::exception)
+Sequence<sal_Int8> SAL_CALL OSQLMessageDialog::getImplementationId(  )
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-Reference< XInterface > SAL_CALL OSQLMessageDialog::Create(const Reference< XMultiServiceFactory >& _rxFactory)
+Reference< XInterface > OSQLMessageDialog::Create(const Reference< XMultiServiceFactory >& _rxFactory)
 {
     return *(new OSQLMessageDialog( comphelper::getComponentContext(_rxFactory) ));
 }
 
-OUString SAL_CALL OSQLMessageDialog::getImplementationName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OSQLMessageDialog::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
-OUString OSQLMessageDialog::getImplementationName_Static() throw(RuntimeException)
+OUString OSQLMessageDialog::getImplementationName_Static()
 {
     return OUString("org.openoffice.comp.dbu.OSQLMessageDialog");
 }
 
-css::uno::Sequence<OUString> SAL_CALL OSQLMessageDialog::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OSQLMessageDialog::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
 
-css::uno::Sequence<OUString> OSQLMessageDialog::getSupportedServiceNames_Static() throw(RuntimeException)
+css::uno::Sequence<OUString> OSQLMessageDialog::getSupportedServiceNames_Static()
 {
     css::uno::Sequence<OUString> aSupported { "com.sun.star.sdb.ErrorMessageDialog" };
     return aSupported;
 }
 
-void OSQLMessageDialog::initialize(Sequence<Any> const & args) throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
+void OSQLMessageDialog::initialize(Sequence<Any> const & args)
 {
     OUString title;
     Reference< css::awt::XWindow > parentWindow;
-    css::uno::Any sqlException;
 
-    if ((args.getLength() == 3) && (args[0] >>= title) && (args[1] >>= parentWindow) && (args[2] >>= sqlException)) {
-        Sequence<Any> s(3);
-        s[0] <<= PropertyValue( "Title", -1, makeAny(title), PropertyState_DIRECT_VALUE);
-        s[1] <<= PropertyValue( "ParentWindow", -1, makeAny(parentWindow), PropertyState_DIRECT_VALUE);
-        s[2] <<= PropertyValue( "SQLException", -1, sqlException, PropertyState_DIRECT_VALUE);
+    if ((args.getLength() == 3) && (args[0] >>= title) && (args[1] >>= parentWindow)) {
+        Sequence<Any> s(comphelper::InitAnyPropertySequence(
+        {
+            {"Title", Any(title)},
+            {"ParentWindow", Any(parentWindow)},
+            {"SQLException", args[2]}
+        }));
         OGenericUnoDialog::initialize(s);
     } else {
         OGenericUnoDialog::initialize(args);
     }
 }
 
-sal_Bool SAL_CALL OSQLMessageDialog::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue) throw(IllegalArgumentException)
+sal_Bool SAL_CALL OSQLMessageDialog::convertFastPropertyValue( Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue)
 {
     switch (_nHandle)
     {
@@ -114,7 +120,7 @@ sal_Bool SAL_CALL OSQLMessageDialog::convertFastPropertyValue( Any& _rConvertedV
             _rOldValue = m_aException;
             _rConvertedValue = aInfo.get();
 
-            return sal_True;
+            return true;
                 // always assume "modified", don't bother with comparing the two values
         }
         default:
@@ -122,7 +128,7 @@ sal_Bool SAL_CALL OSQLMessageDialog::convertFastPropertyValue( Any& _rConvertedV
     }
 }
 
-Reference<XPropertySetInfo>  SAL_CALL OSQLMessageDialog::getPropertySetInfo() throw(RuntimeException, std::exception)
+Reference<XPropertySetInfo>  SAL_CALL OSQLMessageDialog::getPropertySetInfo()
 {
     Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
     return xInfo;
@@ -140,13 +146,14 @@ Reference<XPropertySetInfo>  SAL_CALL OSQLMessageDialog::getPropertySetInfo() th
     return new ::cppu::OPropertyArrayHelper(aProps);
 }
 
-VclPtr<Dialog> OSQLMessageDialog::createDialog(vcl::Window* _pParent)
+svt::OGenericUnoDialog::Dialog OSQLMessageDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
 {
+    weld::Window* pParent = Application::GetFrameWeld(rParent);
     if ( m_aException.hasValue() )
-        return VclPtr<OSQLMessageBox>::Create( _pParent, SQLExceptionInfo( m_aException ), WB_OK | WB_DEF_OK, m_sHelpURL );
+        return svt::OGenericUnoDialog::Dialog(std::make_unique<OSQLMessageBox>(pParent, SQLExceptionInfo(m_aException), MessBoxStyle::Ok | MessBoxStyle::DefaultOk, m_sHelpURL));
 
     OSL_FAIL("OSQLMessageDialog::createDialog : You should use the SQLException property to specify the error to display!");
-    return VclPtr<OSQLMessageBox>::Create(_pParent, SQLException());
+    return svt::OGenericUnoDialog::Dialog(std::make_unique<OSQLMessageBox>(pParent, SQLException()));
 }
 
 }   // namespace dbaui

@@ -27,7 +27,7 @@ using namespace connectivity::macab;
 
 /* A MacabGroup is basically a MacabRecords with a different constructor.
  * It only exists as a different entity for clarification purposes (a group
- * is its own entity in the Mac OS X Address Book) and because its
+ * is its own entity in the macOS Address Book) and because its
  * construction is so unique (it is based on an already existent
  * MacabRecords of the entire address book).
  */
@@ -48,7 +48,7 @@ MacabGroup::MacabGroup(const ABAddressBookRef _addressBook, const MacabRecords *
     CFRelease(sGroupName);
 
     // The _group's_ records (remember MacabGroup inherits from MacabRecords)
-    recordsSize = (sal_Int32) CFArrayGetCount(xGroupMembers);
+    recordsSize = static_cast<sal_Int32>(CFArrayGetCount(xGroupMembers));
     records = new MacabRecord *[recordsSize];
     setHeader(_allRecords->getHeader());
 
@@ -81,7 +81,7 @@ MacabGroup::MacabGroup(const ABAddressBookRef _addressBook, const MacabRecords *
                         }
                     }
                 }
-                OSL_ENSURE(bFound, "MacabGroup::MacabGroup : Could not find group member based on UID!\n");
+                OSL_ENSURE(bFound, "MacabGroup::MacabGroup : Could not find group member based on UID!");
                 CFRelease(sGroupMemberUID);
             }
         }

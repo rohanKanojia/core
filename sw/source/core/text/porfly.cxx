@@ -17,25 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dcontact.hxx"
-#include "dflyobj.hxx"
-#include "pam.hxx"
-#include <portab.hxx>
-#include "flyfrm.hxx"
-#include "rootfrm.hxx"
-#include "frmfmt.hxx"
-#include "viewsh.hxx"
-#include "textboxhelper.hxx"
+#include <dcontact.hxx>
+#include <dflyobj.hxx>
+#include <pam.hxx>
+#include "portab.hxx"
+#include <flyfrm.hxx>
+#include <rootfrm.hxx>
+#include <frmfmt.hxx>
+#include <viewsh.hxx>
+#include <textboxhelper.hxx>
 
 #include <vcl/outdev.hxx>
 #include <editeng/lrspitem.hxx>
 #include <editeng/ulspitem.hxx>
+#include <sal/log.hxx>
 #include <fmtanchr.hxx>
 #include <fmtflcnt.hxx>
 #include <fmtornt.hxx>
 #include <frmatr.hxx>
-#include "flyfrms.hxx"
-#include "txatbase.hxx"
+#include <flyfrms.hxx>
+#include <txatbase.hxx>
 #include "porfly.hxx"
 #include "porlay.hxx"
 #include "inftxt.hxx"
@@ -72,14 +73,15 @@ bool SwFlyPortion::Format( SwTextFormatInfo &rInf )
     rInf.GetParaPortion()->SetFly();
 
     // trailing blank:
-    if( rInf.GetIdx() < rInf.GetText().getLength() &&  1 < rInf.GetIdx()
+    if( rInf.GetIdx() < TextFrameIndex(rInf.GetText().getLength())
+        && TextFrameIndex(1) < rInf.GetIdx()
         && !rInf.GetRest()
         && ' ' == rInf.GetChar( rInf.GetIdx() )
-        && ' ' != rInf.GetChar( rInf.GetIdx() - 1 )
+        && ' ' != rInf.GetChar(rInf.GetIdx() - TextFrameIndex(1))
         && ( !rInf.GetLast() || !rInf.GetLast()->IsBreakPortion() ) )
     {
         SetBlankWidth( rInf.GetTextSize(OUString(' ')).Width() );
-        SetLen( 1 );
+        SetLen(TextFrameIndex(1));
     }
 
     const sal_uInt16 nNewWidth = static_cast<sal_uInt16>(rInf.X() + PrtWidth());
@@ -126,7 +128,7 @@ bool SwFlyCntPortion::Format( SwTextFormatInfo &rInf )
                 rInf.SetNewLine( true );
             Width(0);
             SetAscent(0);
-            SetLen(0);
+            SetLen(TextFrameIndex(0));
             if( rInf.GetLast() )
                 rInf.GetLast()->FormatEOL( rInf );
 
@@ -147,7 +149,8 @@ bool SwFlyCntPortion::Format( SwTextFormatInfo &rInf )
  * @param nStart
  * @param nEnd
  */
-void SwTextFrame::MoveFlyInCnt( SwTextFrame *pNew, sal_Int32 nStart, sal_Int32 nEnd )
+void SwTextFrame::MoveFlyInCnt(SwTextFrame *pNew,
+        TextFrameIndex const nStart, TextFrameIndex const nEnd)
 {
     SwSortedObjs *pObjs = nullptr;
     if ( nullptr != (pObjs = GetDrawObjs()) )
@@ -157,11 +160,11 @@ void SwTextFrame::MoveFlyInCnt( SwTextFrame *pNew, sal_Int32 nStart, sal_Int32 n
             // Consider changed type of <SwSortedList> entries
             SwAnchoredObject* pAnchoredObj = (*pObjs)[i];
             const SwFormatAnchor& rAnch = pAnchoredObj->GetFrameFormat().GetAnchor();
-            if (rAnch.GetAnchorId() == FLY_AS_CHAR)
+            if (rAnch.GetAnchorId() == RndStdIds::FLY_AS_CHAR)
             {
                 const SwPosition* pPos = rAnch.GetContentAnchor();
-                const sal_Int32 nIdx = pPos->nContent.GetIndex();
-                if ( nIdx >= nStart && nEnd > nIdx )
+                TextFrameIndex const nIndex(MapModelToViewPos(*pPos));
+                if (nStart <= nIndex && nIndex < nEnd)
                 {
                     if ( dynamic_cast< const SwFlyFrame *>( pAnchoredObj ) !=  nullptr )
                     {
@@ -180,126 +183,134 @@ void SwTextFrame::MoveFlyInCnt( SwTextFrame *pNew, sal_Int32 nStart, sal_Int32 n
     }
 }
 
-sal_Int32 SwTextFrame::CalcFlyPos( SwFrameFormat* pSearch )
+TextFrameIndex SwTextFrame::CalcFlyPos( SwFrameFormat const * pSearch )
 {
-    SwpHints* pHints = GetTextNode()->GetpSwpHints();
-    OSL_ENSURE( pHints, "CalcFlyPos: Why me?" );
-    if( !pHints )
-        return COMPLETE_STRING;
-    SwTextAttr* pFound = nullptr;
-    for ( size_t i = 0; i < pHints->Count(); ++i )
+    sw::MergedAttrIter iter(*this);
+    for (SwTextAttr const* pHt = iter.NextAttr(); pHt; pHt = iter.NextAttr())
     {
-        SwTextAttr *pHt = pHints->Get( i );
         if( RES_TXTATR_FLYCNT == pHt->Which() )
         {
             SwFrameFormat* pFrameFormat = pHt->GetFlyCnt().GetFrameFormat();
             if( pFrameFormat == pSearch )
-                pFound = pHt;
+            {
+                return TextFrameIndex(pHt->GetStart());
+            }
         }
     }
-    OSL_ENSURE( pHints, "CalcFlyPos: Not Found!" );
-    if( !pFound )
-        return COMPLETE_STRING;
-    return pFound->GetStart();
+    OSL_ENSURE(false, "CalcFlyPos: Not Found!");
+    return TextFrameIndex(COMPLETE_STRING);
 }
 
-void SwFlyCntPortion::Paint( const SwTextPaintInfo &rInf ) const
+void sw::FlyContentPortion::Paint(const SwTextPaintInfo& rInf) const
 {
-    if( bDraw )
+    // Baseline output
+    // Re-paint everything at a CompletePaint call
+    SwRect aRepaintRect(rInf.GetPaintRect());
+
+    if(rInf.GetTextFrame()->IsRightToLeft())
+        rInf.GetTextFrame()->SwitchLTRtoRTL(aRepaintRect);
+
+    if(rInf.GetTextFrame()->IsVertical())
+        rInf.GetTextFrame()->SwitchHorizontalToVertical(aRepaintRect);
+
+    if((m_pFly->IsCompletePaint() ||
+            m_pFly->getFrameArea().IsOver(aRepaintRect)) &&
+            SwFlyFrame::IsPaint(m_pFly->GetVirtDrawObj(), m_pFly->getRootFrame()->GetCurrShell()))
     {
-        if( !static_cast<SwDrawContact*>(pContact)->GetAnchorFrame() )
+        SwRect aRect(m_pFly->getFrameArea());
+        if(!m_pFly->IsCompletePaint())
+            aRect.Intersection_(aRepaintRect);
+
+        // GetFlyFrame() may change the layout mode at the output device.
         {
-            // No direct positioning of the drawing object is needed
-            SwDrawContact* pDrawContact = static_cast<SwDrawContact*>(pContact);
-            pDrawContact->ConnectToLayout();
+            SwLayoutModeModifier aLayoutModeModifier(*rInf.GetOut());
+            m_pFly->PaintSwFrame(const_cast<vcl::RenderContext&>(*rInf.GetOut()), aRect);
         }
+        const_cast<SwTextPaintInfo&>(rInf).GetRefDev()->SetLayoutMode(rInf.GetOut()->GetLayoutMode());
+
+        // As the OutputDevice might be anything, the font must be re-selected.
+        // Being in const method should not be a problem.
+        const_cast<SwTextPaintInfo&>(rInf).SelectFont();
+
+        assert(rInf.GetVsh());
+        SAL_WARN_IF(rInf.GetVsh()->GetOut() != rInf.GetOut(), "sw.core", "SwFlyCntPortion::Paint: Outdev has changed");
+        if(rInf.GetVsh())
+            const_cast<SwTextPaintInfo&>(rInf).SetOut(rInf.GetVsh()->GetOut());
     }
-    else
+}
+
+void sw::DrawFlyCntPortion::Paint(const SwTextPaintInfo&) const
+{
+    if(!m_pContact->GetAnchorFrame())
     {
-        // Baseline output
-        // Re-paint everything at a CompletePaint call
-        SwRect aRepaintRect( rInf.GetPaintRect() );
-
-        if ( rInf.GetTextFrame()->IsRightToLeft() )
-            rInf.GetTextFrame()->SwitchLTRtoRTL( aRepaintRect );
-
-        if ( rInf.GetTextFrame()->IsVertical() )
-            rInf.GetTextFrame()->SwitchHorizontalToVertical( aRepaintRect );
-
-        if( (GetFlyFrame()->IsCompletePaint() ||
-             GetFlyFrame()->Frame().IsOver( aRepaintRect )) &&
-             SwFlyFrame::IsPaint( const_cast<SwVirtFlyDrawObj*>(GetFlyFrame()->GetVirtDrawObj()),
-                                GetFlyFrame()->getRootFrame()->GetCurrShell() ))
-        {
-            SwRect aRect( GetFlyFrame()->Frame() );
-            if( !GetFlyFrame()->IsCompletePaint() )
-                aRect._Intersection( aRepaintRect );
-
-            // GetFlyFrame() may change the layout mode at the output device.
-            {
-                SwLayoutModeModifier aLayoutModeModifier( *rInf.GetOut() );
-                GetFlyFrame()->Paint( const_cast<vcl::RenderContext&>(*rInf.GetOut()), aRect );
-            }
-            ((SwTextPaintInfo&)rInf).GetRefDev()->SetLayoutMode(
-                    rInf.GetOut()->GetLayoutMode() );
-
-            // As the OutputDevice might be anything, the font must be re-selected.
-            // Being in const method should not be a problem.
-            ((SwTextPaintInfo&)rInf).SelectFont();
-
-            OSL_ENSURE( ! rInf.GetVsh() || rInf.GetVsh()->GetOut() == rInf.GetOut(),
-                    "SwFlyCntPortion::Paint: Outdev has changed" );
-            if( rInf.GetVsh() )
-                ((SwTextPaintInfo&)rInf).SetOut( rInf.GetVsh()->GetOut() );
-        }
+        // No direct positioning of the drawing object is needed
+        m_pContact->ConnectToLayout();
     }
 }
 
 /**
  * Use the dimensions of pFly->OutRect()
  */
-SwFlyCntPortion::SwFlyCntPortion( const SwTextFrame& rFrame,
-                                  SwFlyInContentFrame *pFly, const Point &rBase,
-                                  long nLnAscent, long nLnDescent,
-                                  long nFlyAsc, long nFlyDesc,
-                                  AsCharFlags nFlags ) :
-    pContact( pFly ),
-    bDraw( false ),
-    bMax( false ),
-    nAlign( 0 )
+SwFlyCntPortion::SwFlyCntPortion()
+    : m_bMax(false)
+    , m_eAlign(sw::LineAlign::NONE)
 {
-    OSL_ENSURE( pFly, "SwFlyCntPortion::SwFlyCntPortion: no SwFlyInContentFrame!" );
-    nLineLength = 1;
-    nFlags |= AsCharFlags::UlSpace | AsCharFlags::Init;
-    SetBase( rFrame, rBase, nLnAscent, nLnDescent, nFlyAsc, nFlyDesc, nFlags );
-    SetWhichPor( POR_FLYCNT );
+    nLineLength = TextFrameIndex(1);
+    SetWhichPor(PortionType::FlyCnt);
 }
 
-SwFlyCntPortion::SwFlyCntPortion( const SwTextFrame& rFrame,
-                                  SwDrawContact *pDrawContact, const Point &rBase,
-                                  long nLnAscent, long nLnDescent,
-                                  long nFlyAsc, long nFlyDesc,
-                                  AsCharFlags nFlags ) :
-    pContact( pDrawContact ),
-    bDraw( true ),
-    bMax( false ),
-    nAlign( 0 )
+sw::FlyContentPortion::FlyContentPortion(SwFlyInContentFrame* pFly)
+    : m_pFly(pFly)
 {
-    OSL_ENSURE( pDrawContact, "SwFlyCntPortion::SwFlyCntPortion: no SwDrawContact!" );
-    if( !pDrawContact->GetAnchorFrame() )
+    SAL_WARN_IF(!pFly, "sw.core", "SwFlyCntPortion::SwFlyCntPortion: no SwFlyInContentFrame!");
+}
+
+sw::DrawFlyCntPortion::DrawFlyCntPortion(SwFrameFormat const & rFormat)
+    : m_pContact(nullptr)
+{
+    rFormat.CallSwClientNotify(sw::CreatePortionHint(&m_pContact));
+    assert(m_pContact);
+}
+
+sw::FlyContentPortion* sw::FlyContentPortion::Create(const SwTextFrame& rFrame, SwFlyInContentFrame* pFly, const Point& rBase, long nLnAscent, long nLnDescent, long nFlyAsc, long nFlyDesc, AsCharFlags nFlags)
+{
+    auto pNew(new sw::FlyContentPortion(pFly));
+    pNew->SetBase(rFrame, rBase, nLnAscent, nLnDescent, nFlyAsc, nFlyDesc, nFlags | AsCharFlags::UlSpace | AsCharFlags::Init);
+    return pNew;
+}
+
+sw::DrawFlyCntPortion* sw::DrawFlyCntPortion::Create(const SwTextFrame& rFrame, SwFrameFormat const & rFormat, const Point& rBase, long nLnAscent, long nLnDescent, long nFlyAsc, long nFlyDesc, AsCharFlags nFlags)
+{
+    auto pNew(new DrawFlyCntPortion(rFormat));
+    pNew->SetBase(rFrame, rBase, nLnAscent, nLnDescent, nFlyAsc, nFlyDesc, nFlags | AsCharFlags::UlSpace | AsCharFlags::Init);
+    return pNew;
+}
+
+sw::DrawFlyCntPortion::~DrawFlyCntPortion() {};
+sw::FlyContentPortion::~FlyContentPortion() {};
+
+SdrObject* sw::FlyContentPortion::GetSdrObj(const SwTextFrame&)
+{
+    return m_pFly->GetVirtDrawObj();
+}
+
+SdrObject* sw::DrawFlyCntPortion::GetSdrObj(const SwTextFrame& rFrame)
+{
+    SdrObject* pSdrObj;
+    // Determine drawing object ('master' or 'virtual') by frame
+    pSdrObj = m_pContact->GetDrawObjectByAnchorFrame(rFrame);
+    if(!pSdrObj)
     {
-        // No direct positioning needed any more
-        pDrawContact->ConnectToLayout();
-
-        // Move object to visible layer
-        pDrawContact->MoveObjToVisibleLayer( pDrawContact->GetMaster() );
+        SAL_WARN("sw.core", "SwFlyCntPortion::SetBase(..) - No drawing object found by <GetDrawContact()->GetDrawObjectByAnchorFrame( rFrame )>");
+        pSdrObj = m_pContact->GetMaster();
     }
-    nLineLength = 1;
-    nFlags |= AsCharFlags::UlSpace | AsCharFlags::Init;
 
-    SetBase( rFrame, rBase, nLnAscent, nLnDescent, nFlyAsc, nFlyDesc, nFlags );
-
-    SetWhichPor( POR_FLYCNT );
+    // Call <SwAnchoredDrawObject::MakeObjPos()> to assure that flag at
+    // the <DrawFrameFormat> and at the <SwAnchoredDrawObject> instance are
+    // correctly set
+    if(pSdrObj)
+        m_pContact->GetAnchoredObj(pSdrObj)->MakeObjPos();
+    return pSdrObj;
 }
 
 /**
@@ -315,30 +326,7 @@ void SwFlyCntPortion::SetBase( const SwTextFrame& rFrame, const Point &rBase,
 {
     // Use new class to position object
     // Determine drawing object
-    SdrObject* pSdrObj = nullptr;
-    if( bDraw )
-    {
-        // Determine drawing object ('master' or 'virtual') by frame
-        pSdrObj = GetDrawContact()->GetDrawObjectByAnchorFrame( rFrame );
-        if ( !pSdrObj )
-        {
-            OSL_FAIL( "SwFlyCntPortion::SetBase(..) - No drawing object found by <GetDrawContact()->GetDrawObjectByAnchorFrame( rFrame )>" );
-            pSdrObj = GetDrawContact()->GetMaster();
-        }
-
-        // Call <SwAnchoredDrawObject::MakeObjPos()> to assure that flag at
-        // the <DrawFrameFormat> and at the <SwAnchoredDrawObject> instance are
-        // correctly set
-        if ( pSdrObj )
-        {
-            GetDrawContact()->GetAnchoredObj( pSdrObj )->MakeObjPos();
-        }
-    }
-    else
-    {
-        pSdrObj = GetFlyFrame()->GetVirtDrawObj();
-    }
-
+    SdrObject* pSdrObj = GetSdrObj(rFrame);
     if (!pSdrObj)
         return;
 
@@ -356,24 +344,28 @@ void SwFlyCntPortion::SetBase( const SwTextFrame& rFrame, const Point &rBase,
 
     SwFrameFormat* pShape = FindFrameFormat(pSdrObj);
     const SwFormatAnchor& rAnchor(pShape->GetAnchor());
-    if (rAnchor.GetAnchorId() == FLY_AS_CHAR)
+    if (rAnchor.GetAnchorId() == RndStdIds::FLY_AS_CHAR)
     {
         // This is an inline draw shape, see if it has a textbox.
-        SwFrameFormat* pTextBox = SwTextBoxHelper::findTextBox(pShape);
+        SwFrameFormat* pTextBox = SwTextBoxHelper::getOtherTextBoxFormat(pShape, RES_DRAWFRMFMT);
         if (pTextBox)
         {
             // It has, so look up its text rectangle, and adjust the position
             // of the textbox accordingly.
-            Rectangle aTextRectangle = SwTextBoxHelper::getTextRectangle(pShape);
+            // Both rectangles are absolute, SwFormatHori/VertOrient's position
+            // is relative to the print area of the anchor text frame.
+            tools::Rectangle aTextRectangle = SwTextBoxHelper::getTextRectangle(pShape);
 
             SwFormatHoriOrient aHori(pTextBox->GetHoriOrient());
             aHori.SetHoriOrient(css::text::HoriOrientation::NONE);
-            sal_Int32 nLeft = aTextRectangle.getX() - rFrame.Frame().Left();
+            sal_Int32 nLeft = aTextRectangle.getX() - rFrame.getFrameArea().Left()
+                              - rFrame.getFramePrintArea().Left();
             aHori.SetPos(nLeft);
 
             SwFormatVertOrient aVert(pTextBox->GetVertOrient());
             aVert.SetVertOrient(css::text::VertOrientation::NONE);
-            sal_Int32 nTop = aTextRectangle.getY() - rFrame.Frame().Top() - nFlyAsc;
+            sal_Int32 const nTop = aTextRectangle.getY() - rFrame.getFrameArea().Top()
+                                   - rFrame.getFramePrintArea().Top();
             aVert.SetPos(nTop);
 
             pTextBox->LockModify();
@@ -385,7 +377,7 @@ void SwFlyCntPortion::SetBase( const SwTextFrame& rFrame, const Point &rBase,
 
     SetAlign( aObjPositioning.GetLineAlignment() );
 
-    aRef = aObjPositioning.GetAnchorPos();
+    m_aRef = aObjPositioning.GetAnchorPos();
     if( nFlags & AsCharFlags::Rotate )
         SvXSize( aObjPositioning.GetObjBoundRectInclSpacing().SSize() );
     else
@@ -412,26 +404,6 @@ void SwFlyCntPortion::SetBase( const SwTextFrame& rFrame, const Point &rBase,
         Height( 1 );
         nAscent = 0;
     }
-}
-
-sal_Int32 SwFlyCntPortion::GetFlyCursorOfst( const sal_uInt16 nOfst,
-    const Point &rPoint, SwPosition *pPos, SwCursorMoveState* pCMS ) const
-{
-    // As the FlyCnt are not attached to the side, their GetCursorOfst() will
-    // not be called.
-    // In order to reduce management overhead for the layout page, the paragraph
-    // calls the FlyFrame's GetCursorOfst() only when needed
-    Point aPoint( rPoint );
-    if( !pPos || bDraw || !( GetFlyFrame()->GetCursorOfst( pPos, aPoint, pCMS ) ) )
-        return SwLinePortion::GetCursorOfst( nOfst );
-    else
-        return 0;
-}
-
-sal_Int32 SwFlyCntPortion::GetCursorOfst( const sal_uInt16 nOfst ) const
-{
-    // OSL_FAIL("SwFlyCntPortion::GetCursorOfst: use GetFlyCursorOfst()");
-    return SwLinePortion::GetCursorOfst( nOfst );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

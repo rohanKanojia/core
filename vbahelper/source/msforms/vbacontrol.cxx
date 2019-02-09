@@ -16,12 +16,14 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
+#include <memory>
 #include <com/sun/star/form/FormComponentType.hpp>
 #include <com/sun/star/awt/XControlModel.hpp>
 #include <com/sun/star/awt/XControl.hpp>
 #include <com/sun/star/awt/XWindow2.hpp>
 #include <com/sun/star/awt/XActionListener.hpp>
 #include <com/sun/star/lang/XEventListener.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/frame/XModel.hpp>
@@ -37,6 +39,7 @@
 #include <ooo/vba/XControlProvider.hpp>
 #include <ooo/vba/msforms/fmMousePointer.hpp>
 #include <svtools/bindablecontrolhelper.hxx>
+#include "service.hxx"
 #include "vbacontrol.hxx"
 #include "vbacombobox.hxx"
 #include "vbabutton.hxx"
@@ -65,7 +68,7 @@ using namespace com::sun::star;
 using namespace ooo::vba;
 
 uno::Reference< css::awt::XWindowPeer >
-ScVbaControl::getWindowPeer() throw (uno::RuntimeException)
+ScVbaControl::getWindowPeer()
 {
     uno::Reference< drawing::XControlShape > xControlShape( m_xControl, uno::UNO_QUERY );
 
@@ -101,20 +104,16 @@ private:
     ScVbaControl *pControl;
 public:
     explicit ScVbaControlListener( ScVbaControl *pTmpControl );
-    virtual ~ScVbaControlListener();
-    virtual void SAL_CALL disposing( const lang::EventObject& rEventObject ) throw( uno::RuntimeException, std::exception ) override;
+
+    virtual void SAL_CALL disposing( const lang::EventObject& rEventObject ) override;
 };
 
 ScVbaControlListener::ScVbaControlListener( ScVbaControl *pTmpControl ): pControl( pTmpControl )
 {
 }
 
-ScVbaControlListener::~ScVbaControlListener()
-{
-}
-
 void SAL_CALL
-ScVbaControlListener::disposing( const lang::EventObject& ) throw( uno::RuntimeException, std::exception )
+ScVbaControlListener::disposing( const lang::EventObject& )
 {
     if( pControl )
     {
@@ -125,11 +124,12 @@ ScVbaControlListener::disposing( const lang::EventObject& ) throw( uno::RuntimeE
 
 //ScVbaControl
 
-ScVbaControl::ScVbaControl( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< ::uno::XInterface >& xControl,  const css::uno::Reference< css::frame::XModel >& xModel, AbstractGeometryAttributes* pGeomHelper ) : ControlImpl_BASE( xParent, xContext ),  bIsDialog(false), m_xControl( xControl ), m_xModel( xModel )
+ScVbaControl::ScVbaControl( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< ::uno::XInterface >& xControl,  const css::uno::Reference< css::frame::XModel >& xModel, std::unique_ptr<ov::AbstractGeometryAttributes> pGeomHelper )
+    : ControlImpl_BASE( xParent, xContext ), m_xControl( xControl ), m_xModel( xModel )
 {
     //add listener
     m_xEventListener.set( new ScVbaControlListener( this ) );
-    setGeometryHelper( pGeomHelper );
+    setGeometryHelper( std::move(pGeomHelper) );
     uno::Reference< lang::XComponent > xComponent( m_xControl, uno::UNO_QUERY_THROW );
     xComponent->addEventListener( m_xEventListener );
 
@@ -147,7 +147,6 @@ ScVbaControl::ScVbaControl( const uno::Reference< XHelperInterface >& xParent, c
     else if ( xUserFormControl.is() ) // userform control
     {
         m_xProps.set( xUserFormControl->getModel(), uno::UNO_QUERY_THROW );
-        bIsDialog = true;
     }
 }
 
@@ -161,12 +160,12 @@ ScVbaControl::~ScVbaControl()
 }
 
 void
-ScVbaControl::setGeometryHelper( AbstractGeometryAttributes* pHelper )
+ScVbaControl::setGeometryHelper( std::unique_ptr<AbstractGeometryAttributes> pHelper )
 {
-    mpGeometryHelper.reset( pHelper );
+    mpGeometryHelper = std::move( pHelper );
 }
 
-void ScVbaControl::removeResource() throw( uno::RuntimeException )
+void ScVbaControl::removeResource()
 {
     uno::Reference< lang::XComponent > xComponent( m_xControl, uno::UNO_QUERY_THROW );
     xComponent->removeEventListener( m_xEventListener );
@@ -175,7 +174,7 @@ void ScVbaControl::removeResource() throw( uno::RuntimeException )
 }
 
 //In design model has different behavior
-sal_Bool SAL_CALL ScVbaControl::getEnabled() throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ScVbaControl::getEnabled()
 {
     uno::Any aValue = m_xProps->getPropertyValue ( "Enabled" );
     bool bRet = false;
@@ -183,14 +182,14 @@ sal_Bool SAL_CALL ScVbaControl::getEnabled() throw (uno::RuntimeException, std::
     return bRet;
 }
 
-void SAL_CALL ScVbaControl::setEnabled( sal_Bool bVisible ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::setEnabled( sal_Bool bVisible )
 {
     uno::Any aValue( bVisible );
     m_xProps->setPropertyValue(  "Enabled" , aValue);
 
 }
 
-sal_Bool SAL_CALL ScVbaControl::getVisible() throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL ScVbaControl::getVisible()
 {
     bool bVisible( true );
     m_xProps->getPropertyValue ( "EnableVisible" ) >>= bVisible;
@@ -207,7 +206,7 @@ sal_Bool SAL_CALL ScVbaControl::getVisible() throw (uno::RuntimeException, std::
     return bVisible;
 }
 
-void SAL_CALL ScVbaControl::setVisible( sal_Bool bVisible ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::setVisible( sal_Bool bVisible )
 {
     uno::Any aValue( bVisible );
     m_xProps->setPropertyValue( "EnableVisible" , aValue);
@@ -218,63 +217,62 @@ void SAL_CALL ScVbaControl::setVisible( sal_Bool bVisible ) throw (uno::RuntimeE
         xProps->setPropertyValue ( "Visible", aValue );
     }
 }
-double SAL_CALL ScVbaControl::getHeight() throw (uno::RuntimeException, std::exception)
+double SAL_CALL ScVbaControl::getHeight()
 {
     return mpGeometryHelper->getHeight();
 }
-void SAL_CALL ScVbaControl::setHeight( double _height ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::setHeight( double _height )
 {
     mpGeometryHelper->setHeight( _height );
 }
 
-double SAL_CALL ScVbaControl::getWidth() throw (uno::RuntimeException, std::exception)
+double SAL_CALL ScVbaControl::getWidth()
 {
     return mpGeometryHelper->getWidth();
 }
-void SAL_CALL ScVbaControl::setWidth( double _width ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::setWidth( double _width )
 {
     mpGeometryHelper->setWidth( _width );
 }
 
 double SAL_CALL
-ScVbaControl::getLeft() throw (uno::RuntimeException, std::exception)
+ScVbaControl::getLeft()
 {
     return mpGeometryHelper->getLeft();
 }
 
 void SAL_CALL
-ScVbaControl::setLeft( double _left ) throw (uno::RuntimeException, std::exception)
+ScVbaControl::setLeft( double _left )
 {
     mpGeometryHelper->setLeft( _left );
 }
 
 double SAL_CALL
-ScVbaControl::getTop() throw (uno::RuntimeException, std::exception)
+ScVbaControl::getTop()
 {
     return mpGeometryHelper->getTop();
 }
 
 void SAL_CALL
-ScVbaControl::setTop( double _top ) throw (uno::RuntimeException, std::exception)
+ScVbaControl::setTop( double _top )
 {
     mpGeometryHelper->setTop( _top );
 }
 
 uno::Reference< uno::XInterface > SAL_CALL
-ScVbaControl::getObject() throw (uno::RuntimeException, std::exception)
+ScVbaControl::getObject()
 {
     uno::Reference< msforms::XControl > xRet( this );
     return xRet;
 }
 
-void SAL_CALL ScVbaControl::SetFocus() throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::SetFocus()
 {
     uno::Reference< awt::XWindow > xWin( m_xControl, uno::UNO_QUERY_THROW );
     xWin->setFocus();
 }
 
 void SAL_CALL ScVbaControl::Move( double Left, double Top, const uno::Any& Width, const uno::Any& Height )
-    throw ( uno::RuntimeException, std::exception )
 {
     double nWidth = 0.0;
     double nHeight = 0.0;
@@ -290,7 +288,7 @@ void SAL_CALL ScVbaControl::Move( double Left, double Top, const uno::Any& Width
 }
 
 OUString SAL_CALL
-ScVbaControl::getControlSource() throw (uno::RuntimeException, std::exception)
+ScVbaControl::getControlSource()
 {
 // #FIXME I *hate* having these upstream differences
 // but this is necessary until I manage to upstream other
@@ -317,7 +315,7 @@ ScVbaControl::getControlSource() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaControl::setControlSource( const OUString& _controlsource ) throw (uno::RuntimeException, std::exception)
+ScVbaControl::setControlSource( const OUString& _controlsource )
 {
     // afaik this is only relevant for Excel documents ( and we need to set up a
     // reference tab in case no Sheet is specified in "_controlsource"
@@ -356,7 +354,7 @@ ScVbaControl::setControlSource( const OUString& _controlsource ) throw (uno::Run
 }
 
 OUString SAL_CALL
-ScVbaControl::getRowSource() throw (uno::RuntimeException, std::exception)
+ScVbaControl::getRowSource()
 {
     OUString sRowSource;
     uno::Reference< form::binding::XListEntrySink > xListSink( m_xProps, uno::UNO_QUERY );
@@ -381,13 +379,13 @@ ScVbaControl::getRowSource() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaControl::setRowSource( const OUString& _rowsource ) throw (uno::RuntimeException, std::exception)
+ScVbaControl::setRowSource( const OUString& _rowsource )
 {
     svt::BindableControlHelper::ApplyListSourceAndBindableData( m_xModel, m_xProps, "", _rowsource );
 }
 
 OUString SAL_CALL
-ScVbaControl::getName() throw (uno::RuntimeException, std::exception)
+ScVbaControl::getName()
 {
     OUString sName;
     m_xProps->getPropertyValue( "Name" ) >>= sName;
@@ -396,13 +394,13 @@ ScVbaControl::getName() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaControl::setName( const OUString& _name ) throw (uno::RuntimeException, std::exception)
+ScVbaControl::setName( const OUString& _name )
 {
     m_xProps->setPropertyValue( "Name" , uno::makeAny( _name ) );
     }
 
 OUString SAL_CALL
-ScVbaControl::getControlTipText() throw (css::uno::RuntimeException, std::exception)
+ScVbaControl::getControlTipText()
 {
     OUString sName;
     m_xProps->getPropertyValue( "HelpText" ) >>= sName;
@@ -410,26 +408,24 @@ ScVbaControl::getControlTipText() throw (css::uno::RuntimeException, std::except
 }
 
 void SAL_CALL
-ScVbaControl::setControlTipText( const OUString& rsToolTip ) throw (css::uno::RuntimeException, std::exception)
+ScVbaControl::setControlTipText( const OUString& rsToolTip )
 {
     m_xProps->setPropertyValue( "HelpText" , uno::makeAny( rsToolTip ) );
 }
 
 OUString SAL_CALL ScVbaControl::getTag()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return m_aControlTag;
 }
 
 void SAL_CALL ScVbaControl::setTag( const OUString& aTag )
-    throw (css::uno::RuntimeException, std::exception)
 {
     m_aControlTag = aTag;
 }
 
-::sal_Int32 SAL_CALL ScVbaControl::getForeColor() throw (css::uno::RuntimeException)
+::sal_Int32 SAL_CALL ScVbaControl::getForeColor()
 {
-    sal_Int32 nForeColor = -1;
+    Color nForeColor;
     m_xProps->getPropertyValue( "TextColor" ) >>= nForeColor;
     return OORGBToXLRGB( nForeColor );
 }
@@ -437,12 +433,12 @@ void SAL_CALL ScVbaControl::setTag( const OUString& aTag )
 
 struct PointerStyles
 {
-   long msoPointerStyle;
-   PointerStyle loPointStyle;
+   long const msoPointerStyle;
+   PointerStyle const loPointStyle;
 };
 
 // 1 -> 1 map of styles ( some dubious choices in there though )
-PointerStyles styles[] = {
+PointerStyles const styles[] = {
   /// assuming pointer default is Arrow
   { msforms::fmMousePointer::fmMousePointerDefault, PointerStyle::Arrow },
   { msforms::fmMousePointer::fmMousePointerArrow, PointerStyle::Arrow },
@@ -465,7 +461,7 @@ PointerStyles styles[] = {
 static long lcl_loPointerToMsoPointer( PointerStyle eType )
 {
     long nRet = msforms::fmMousePointer::fmMousePointerDefault;
-    for ( int i = 0, nElems = SAL_N_ELEMENTS( styles ); i < nElems; ++i )
+    for ( int i = 0; i < int(SAL_N_ELEMENTS( styles )); ++i )
     {
         if ( styles[ i ].loPointStyle == eType )
         {
@@ -479,7 +475,7 @@ static long lcl_loPointerToMsoPointer( PointerStyle eType )
 static Pointer lcl_msoPointerToLOPointer( long msoPointerStyle )
 {
     Pointer aPointer( PointerStyle::Arrow );
-    for ( int i = 0, nElems = SAL_N_ELEMENTS( styles ); i < nElems; ++i )
+    for ( int i = 0; i < int(SAL_N_ELEMENTS( styles )); ++i )
     {
         if ( styles[ i ].msoPointerStyle == msoPointerStyle )
         {
@@ -491,10 +487,10 @@ static Pointer lcl_msoPointerToLOPointer( long msoPointerStyle )
 }
 
 ::sal_Int32 SAL_CALL
-ScVbaControl::getMousePointer() throw (css::uno::RuntimeException, std::exception)
+ScVbaControl::getMousePointer()
 {
     PointerStyle eType = PointerStyle::Arrow; // default ?
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow( getWindowPeer() );
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( getWindowPeer() );
     if ( pWindow )
     {
         eType = pWindow->GetPointer().GetStyle();
@@ -503,9 +499,9 @@ ScVbaControl::getMousePointer() throw (css::uno::RuntimeException, std::exceptio
 }
 
 void SAL_CALL
-ScVbaControl::setMousePointer( ::sal_Int32 _mousepointer ) throw (css::uno::RuntimeException, std::exception)
+ScVbaControl::setMousePointer( ::sal_Int32 _mousepointer )
 {
-    vcl::Window* pWindow = VCLUnoHelper::GetWindow( getWindowPeer() );
+    VclPtr<vcl::Window> pWindow = VCLUnoHelper::GetWindow( getWindowPeer() );
     if ( pWindow )
     {
         Pointer aPointer( PointerStyle::Arrow );
@@ -514,7 +510,7 @@ ScVbaControl::setMousePointer( ::sal_Int32 _mousepointer ) throw (css::uno::Runt
     }
 }
 
-void SAL_CALL ScVbaControl::fireEvent( const script::ScriptEvent& rEvt ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::fireEvent( const script::ScriptEvent& rEvt )
 {
     script::ScriptEvent evt( rEvt );
     uno::Reference<lang::XMultiComponentFactory > xServiceManager( mxContext->getServiceManager(), uno::UNO_QUERY_THROW );
@@ -544,7 +540,7 @@ void SAL_CALL ScVbaControl::fireEvent( const script::ScriptEvent& rEvt ) throw (
             evt.ScriptCode = xNameQuery->getCodeNameForObject( xIf );
             // handle if we passed in our own arguments
             if ( !rEvt.Arguments.getLength() )
-                evt.Arguments[ 0 ] = uno::makeAny( aEvt );
+                evt.Arguments[ 0 ] <<= aEvt;
             xScriptListener->firing( evt );
         }
         else
@@ -558,7 +554,7 @@ void SAL_CALL ScVbaControl::fireEvent( const script::ScriptEvent& rEvt ) throw (
                 evt.Source = xThisControl;
                 aEvt.Source = xControl;
                 evt.ScriptCode = m_sLibraryAndCodeName;
-                evt.Arguments[ 0 ] = uno::makeAny( aEvt );
+                evt.Arguments[ 0 ] <<= aEvt;
                 xScriptListener->firing( evt );
             }
         }
@@ -585,12 +581,12 @@ void ScVbaControl::fireClickEvent()
     fireEvent( evt );
 }
 
-sal_Int32 SAL_CALL ScVbaControl::getTabIndex() throw (uno::RuntimeException, std::exception)
+sal_Int32 SAL_CALL ScVbaControl::getTabIndex()
 {
     return 1;
 }
 
-void SAL_CALL ScVbaControl::setTabIndex( sal_Int32 /*nTabIndex*/ ) throw (uno::RuntimeException, std::exception)
+void SAL_CALL ScVbaControl::setTabIndex( sal_Int32 /*nTabIndex*/ )
 {
 }
 
@@ -599,43 +595,43 @@ void SAL_CALL ScVbaControl::setTabIndex( sal_Int32 /*nTabIndex*/ ) throw (uno::R
 /*static*/ uno::Reference< msforms::XControl > ScVbaControlFactory::createShapeControl(
         const uno::Reference< uno::XComponentContext >& xContext,
         const uno::Reference< drawing::XControlShape >& xControlShape,
-        const uno::Reference< frame::XModel >& xModel ) throw (uno::RuntimeException)
+        const uno::Reference< frame::XModel >& xModel )
 {
     uno::Reference< beans::XPropertySet > xProps( xControlShape->getControl(), uno::UNO_QUERY_THROW );
     sal_Int32 nClassId = -1;
     xProps->getPropertyValue( "ClassId" ) >>= nClassId;
     uno::Reference< XHelperInterface > xVbaParent; // #FIXME - should be worksheet I guess
     uno::Reference< drawing::XShape > xShape( xControlShape, uno::UNO_QUERY_THROW );
-    ::std::unique_ptr< ConcreteXShapeGeometryAttributes > xGeoHelper( new ConcreteXShapeGeometryAttributes( xContext, xShape ) );
+    ::std::unique_ptr< ConcreteXShapeGeometryAttributes > xGeoHelper( new ConcreteXShapeGeometryAttributes( xShape ) );
     switch( nClassId )
     {
         case form::FormComponentType::COMBOBOX:
-            return new ScVbaComboBox( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaComboBox( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::COMMANDBUTTON:
         {
             bool bToggle = false;
             xProps->getPropertyValue( "Toggle" ) >>= bToggle;
             if ( bToggle )
-                return new ScVbaToggleButton( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+                return new ScVbaToggleButton( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
             else
-                return new VbaButton( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+                return new VbaButton( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         }
         case form::FormComponentType::FIXEDTEXT:
-            return new ScVbaLabel( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaLabel( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::TEXTFIELD:
-            return new ScVbaTextBox( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaTextBox( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::CHECKBOX:
-            return new ScVbaCheckbox( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaCheckbox( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::RADIOBUTTON:
-            return new ScVbaRadioButton( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaRadioButton( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::LISTBOX:
-            return new ScVbaListBox( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaListBox( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::SPINBUTTON:
-            return new ScVbaSpinButton( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaSpinButton( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::IMAGECONTROL:
-            return new ScVbaImage( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaImage( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
         case form::FormComponentType::SCROLLBAR:
-            return new ScVbaScrollBar( xVbaParent, xContext, xControlShape, xModel, xGeoHelper.release() );
+            return new ScVbaScrollBar( xVbaParent, xContext, xControlShape, xModel, std::move(xGeoHelper) );
     }
     throw uno::RuntimeException( "Unsupported control." );
 }
@@ -645,54 +641,54 @@ void SAL_CALL ScVbaControl::setTabIndex( sal_Int32 /*nTabIndex*/ ) throw (uno::R
         const uno::Reference< awt::XControl >& xControl,
         const uno::Reference< awt::XControl >& xDialog,
         const uno::Reference< frame::XModel >& xModel,
-        double fOffsetX, double fOffsetY ) throw (uno::RuntimeException)
+        double fOffsetX, double fOffsetY )
 {
     uno::Reference< beans::XPropertySet > xProps( xControl->getModel(), uno::UNO_QUERY_THROW );
     uno::Reference< lang::XServiceInfo > xServiceInfo( xProps, uno::UNO_QUERY_THROW );
     uno::Reference< msforms::XControl > xVBAControl;
     uno::Reference< XHelperInterface > xVbaParent; // #FIXME - should be worksheet I guess
-    ::std::unique_ptr< UserFormGeometryHelper > xGeoHelper( new UserFormGeometryHelper( xContext, xControl, fOffsetX, fOffsetY ) );
+    ::std::unique_ptr< UserFormGeometryHelper > xGeoHelper( new UserFormGeometryHelper( xControl, fOffsetX, fOffsetY ) );
 
     if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlCheckBoxModel" ) )
-        xVBAControl.set( new ScVbaCheckbox( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaCheckbox( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlRadioButtonModel" ) )
-        xVBAControl.set( new ScVbaRadioButton( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaRadioButton( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlEditModel" ) )
-        xVBAControl.set( new ScVbaTextBox( xVbaParent, xContext, xControl, xModel, xGeoHelper.release(), true ) );
+        xVBAControl.set( new ScVbaTextBox( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper), true ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlButtonModel" ) )
     {
         bool bToggle = false;
         xProps->getPropertyValue( "Toggle" ) >>= bToggle;
         if ( bToggle )
-            xVBAControl.set( new ScVbaToggleButton( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+            xVBAControl.set( new ScVbaToggleButton( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
         else
-            xVBAControl.set( new VbaButton( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+            xVBAControl.set( new VbaButton( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     }
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlComboBoxModel" ) )
-        xVBAControl.set( new ScVbaComboBox( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaComboBox( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlListBoxModel" ) )
-        xVBAControl.set( new ScVbaListBox( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaListBox( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlFixedTextModel" ) )
-        xVBAControl.set( new ScVbaLabel( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaLabel( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlImageControlModel" ) )
-        xVBAControl.set( new ScVbaImage( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaImage( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlProgressBarModel" ) )
-        xVBAControl.set( new ScVbaProgressBar( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaProgressBar( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlGroupBoxModel" ) )
-        xVBAControl.set( new ScVbaFrame( xVbaParent, xContext, xControl, xModel, xGeoHelper.release(), xDialog ) );
+        xVBAControl.set( new ScVbaFrame( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper), xDialog ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlScrollBarModel" ) )
-        xVBAControl.set( new ScVbaScrollBar( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaScrollBar( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoMultiPageModel" ) )
-        xVBAControl.set( new ScVbaMultiPage( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaMultiPage( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlSpinButtonModel" ) )
-        xVBAControl.set( new ScVbaSpinButton( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaSpinButton( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.custom.awt.UnoControlSystemAXContainerModel" ) )
-        xVBAControl.set( new VbaSystemAXControl( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new VbaSystemAXControl( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     // #FIXME implement a page control
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoPageModel" ) )
-        xVBAControl.set( new ScVbaControl( xVbaParent, xContext, xControl, xModel, xGeoHelper.release() ) );
+        xVBAControl.set( new ScVbaControl( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper) ) );
     else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoFrameModel" ) )
-        xVBAControl.set( new ScVbaFrame( xVbaParent, xContext, xControl, xModel, xGeoHelper.release(), xDialog ) );
+        xVBAControl.set( new ScVbaFrame( xVbaParent, xContext, xControl, xModel, std::move(xGeoHelper), xDialog ) );
     if( xVBAControl.is() )
         return xVBAControl;
     throw uno::RuntimeException( "Unsupported control." );
@@ -707,35 +703,33 @@ ScVbaControl::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaControl::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.Control";
-    }
+        "ooo.vba.excel.Control"
+    };
     return aServiceNames;
 }
 
-sal_Int32 nSysCols[] = { 0xC8D0D4, 0x0, 0x6A240A, 0x808080, 0xE4E4E4, 0xFFFFFF, 0x0, 0x0, 0x0, 0xFFFFFF, 0xE4E4E4, 0xE4E4E4, 0x808080, 0x6A240A, 0xFFFFFF, 0xE4E4E4, 0x808080, 0x808080, 0x0, 0xC8D0D4, 0xFFFFFF, 0x404040, 0xE4E4E4, 0x0, 0xE1FFFF };
+sal_Int32 const nSysCols[] = { 0xC8D0D4, 0x0, 0x6A240A, 0x808080, 0xE4E4E4, 0xFFFFFF, 0x0, 0x0, 0x0, 0xFFFFFF, 0xE4E4E4, 0xE4E4E4, 0x808080, 0x6A240A, 0xFFFFFF, 0xE4E4E4, 0x808080, 0x808080, 0x0, 0xC8D0D4, 0xFFFFFF, 0x404040, 0xE4E4E4, 0x0, 0xE1FFFF };
 
-sal_Int32 ScVbaControl::getBackColor() throw (uno::RuntimeException)
+sal_Int32 ScVbaControl::getBackColor()
 {
     sal_Int32 nBackColor = 0;
     m_xProps->getPropertyValue( "BackgroundColor" ) >>= nBackColor;
     return nBackColor;
 }
 
-void ScVbaControl::setBackColor( sal_Int32 nBackColor ) throw (uno::RuntimeException)
+void ScVbaControl::setBackColor( sal_Int32 nBackColor )
 {
-    if ( ( (sal_uInt32)nBackColor >= (sal_uInt32)0x80000000 ) &&
-         ( (sal_uInt32)nBackColor <= (sal_uInt32)0x80000000 + SAL_N_ELEMENTS(nSysCols) ) )
+    if ( ( static_cast<sal_uInt32>(nBackColor) >= sal_uInt32(0x80000000) ) &&
+         ( static_cast<sal_uInt32>(nBackColor) <= sal_uInt32(0x80000000) + SAL_N_ELEMENTS(nSysCols) ) )
     {
         nBackColor = nSysCols[ nBackColor & 0x0FF];
     }
     m_xProps->setPropertyValue( "BackgroundColor" , uno::makeAny( XLRGBToOORGB( nBackColor ) ) );
 }
 
-bool ScVbaControl::getAutoSize() throw (uno::RuntimeException)
+bool ScVbaControl::getAutoSize()
 {
     bool bIsResizeEnabled = false;
     uno::Reference< uno::XInterface > xIf( m_xControl, uno::UNO_QUERY_THROW );
@@ -746,7 +740,7 @@ bool ScVbaControl::getAutoSize() throw (uno::RuntimeException)
 }
 
 // currently no implementation for this
-void ScVbaControl::setAutoSize( bool bAutoSize ) throw (uno::RuntimeException)
+void ScVbaControl::setAutoSize( bool bAutoSize )
 {
     uno::Reference< uno::XInterface > xIf( m_xControl, uno::UNO_QUERY_THROW );
     SdrObject* pObj = SdrObject::getSdrObjectFromXShape( xIf );
@@ -754,14 +748,14 @@ void ScVbaControl::setAutoSize( bool bAutoSize ) throw (uno::RuntimeException)
         pObj->SetResizeProtect( !bAutoSize );
 }
 
-bool ScVbaControl::getLocked() throw (uno::RuntimeException)
+bool ScVbaControl::getLocked()
 {
     bool bRes( false );
     m_xProps->getPropertyValue( "ReadOnly" ) >>= bRes;
     return bRes;
 }
 
-void ScVbaControl::setLocked( bool bLocked ) throw (uno::RuntimeException)
+void ScVbaControl::setLocked( bool bLocked )
 {
     m_xProps->setPropertyValue( "ReadOnly" , uno::makeAny( bLocked ) );
 }
@@ -771,11 +765,11 @@ class ControlProviderImpl : public cppu::WeakImplHelper< XControlProvider >
     uno::Reference< uno::XComponentContext > m_xCtx;
 public:
     explicit ControlProviderImpl( const uno::Reference< uno::XComponentContext >& xCtx ) : m_xCtx( xCtx ) {}
-    virtual uno::Reference< msforms::XControl > SAL_CALL createControl( const uno::Reference< drawing::XControlShape >& xControl, const uno::Reference< frame::XModel >& xDocOwner ) throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Reference< msforms::XControl > SAL_CALL createControl( const uno::Reference< drawing::XControlShape >& xControl, const uno::Reference< frame::XModel >& xDocOwner ) override;
 };
 
 uno::Reference< msforms::XControl > SAL_CALL
-ControlProviderImpl::createControl( const uno::Reference< drawing::XControlShape >& xControlShape, const uno::Reference< frame::XModel >& xDocOwner ) throw (uno::RuntimeException, std::exception)
+ControlProviderImpl::createControl( const uno::Reference< drawing::XControlShape >& xControlShape, const uno::Reference< frame::XModel >& xDocOwner )
 {
     uno::Reference< msforms::XControl > xControlToReturn;
     if ( xControlShape.is() )
@@ -787,8 +781,8 @@ ControlProviderImpl::createControl( const uno::Reference< drawing::XControlShape
 namespace controlprovider
 {
 namespace sdecl = comphelper::service_decl;
-sdecl::class_<ControlProviderImpl, sdecl::with_args<false> > serviceImpl;
-extern sdecl::ServiceDecl const serviceDecl(
+sdecl::class_<ControlProviderImpl, sdecl::with_args<false> > const serviceImpl;
+sdecl::ServiceDecl const serviceDecl(
     serviceImpl,
     "ControlProviderImpl",
     "ooo.vba.ControlProvider" );

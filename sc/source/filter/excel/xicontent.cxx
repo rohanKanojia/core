@@ -17,53 +17,48 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xicontent.hxx"
+#include <com/sun/star/sheet/TableValidationVisibility.hpp>
+#include <xicontent.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/docfile.hxx>
 #include <tools/urlobj.hxx>
-#include <editeng/editeng.hxx>
-#include <editeng/editobj.hxx>
 #include <sfx2/linkmgr.hxx>
 #include <svl/itemset.hxx>
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
 #include <editeng/flditem.hxx>
-#include <editeng/fhgtitem.hxx>
-#include <editeng/wghtitem.hxx>
-#include <editeng/udlnitem.hxx>
-#include <editeng/postitem.hxx>
-#include <editeng/colritem.hxx>
-#include <editeng/crossedoutitem.hxx>
-#include "stringutil.hxx"
-#include "cellform.hxx"
-#include "cellvalue.hxx"
-#include "document.hxx"
-#include "editutil.hxx"
-#include "formulacell.hxx"
-#include "validat.hxx"
-#include "patattr.hxx"
-#include "docpool.hxx"
-#include "rangenam.hxx"
-#include "arealink.hxx"
-#include "stlsheet.hxx"
-#include "scextopt.hxx"
-#include "xlformula.hxx"
-#include "xltracer.hxx"
-#include "xistream.hxx"
-#include "xihelper.hxx"
-#include "xistyle.hxx"
-#include "xiescher.hxx"
-#include "xiname.hxx"
+#include <editeng/editobj.hxx>
+#include <unotools/charclass.hxx>
+#include <stringutil.hxx>
+#include <cellform.hxx>
+#include <cellvalue.hxx>
+#include <document.hxx>
+#include <editutil.hxx>
+#include <validat.hxx>
+#include <patattr.hxx>
+#include <docpool.hxx>
+#include <rangenam.hxx>
+#include <arealink.hxx>
+#include <stlsheet.hxx>
+#include <xlcontent.hxx>
+#include <xlformula.hxx>
+#include <xltracer.hxx>
+#include <xistream.hxx>
+#include <xihelper.hxx>
+#include <xistyle.hxx>
+#include <xiescher.hxx>
+#include <xiname.hxx>
 
-#include "excform.hxx"
-#include "tabprotection.hxx"
-#include "documentimport.hxx"
+#include <excform.hxx>
+#include <tabprotection.hxx>
+#include <documentimport.hxx>
 
 #include <memory>
 #include <utility>
-#include <o3tl/make_unique.hxx>
+#include <oox/helper/helper.hxx>
+#include <sal/log.hxx>
 
 using ::com::sun::star::uno::Sequence;
 using ::std::unique_ptr;
@@ -113,7 +108,7 @@ void lclAppendString32( OUString& rString, XclImpStream& rStrm, sal_uInt32 nChar
     sal_uInt16 nReadChars = ulimit_cast< sal_uInt16 >( nChars );
     rString += rStrm.ReadRawUniString( nReadChars, b16Bit );
     // ignore remaining chars
-    sal_Size nIgnore = nChars - nReadChars;
+    std::size_t nIgnore = nChars - nReadChars;
     if( b16Bit )
         nIgnore *= 2;
     rStrm.Ignore( nIgnore );
@@ -126,21 +121,19 @@ void lclAppendString32( OUString& rString, XclImpStream& rStrm, bool b16Bit )
     lclAppendString32( rString, rStrm, rStrm.ReaduInt32(), b16Bit );
 }
 
-/** Reads 32-bit string length and ignores following character array.
-    @param b16Bit  true = 16-bit characters, false = 8-bit characters. */
-void lclIgnoreString32( XclImpStream& rStrm, bool b16Bit )
+/** Reads 32-bit string length and ignores following 16-bit character array. */
+void lclIgnoreString32( XclImpStream& rStrm )
 {
     sal_uInt32 nChars(0);
     nChars = rStrm.ReaduInt32();
-    if( b16Bit )
-        nChars *= 2;
+    nChars *= 2;
     rStrm.Ignore( nChars );
 }
 
 /** Converts a path to an absolute path.
     @param rPath  The source path. The resulting path is returned here.
     @param nLevel  Number of parent directories to add in front of the path. */
-void lclGetAbsPath( OUString& rPath, sal_uInt16 nLevel, SfxObjectShell* pDocShell )
+void lclGetAbsPath( OUString& rPath, sal_uInt16 nLevel, const SfxObjectShell* pDocShell )
 {
     OUStringBuffer aTmpStr;
     while( nLevel )
@@ -153,7 +146,7 @@ void lclGetAbsPath( OUString& rPath, sal_uInt16 nLevel, SfxObjectShell* pDocShel
     if( pDocShell )
     {
         bool bWasAbs = false;
-        rPath = pDocShell->GetMedium()->GetURLObject().smartRel2Abs( aTmpStr.makeStringAndClear(), bWasAbs ).GetMainURL( INetURLObject::NO_DECODE );
+        rPath = pDocShell->GetMedium()->GetURLObject().smartRel2Abs( aTmpStr.makeStringAndClear(), bWasAbs ).GetMainURL( INetURLObject::DecodeMechanism::NONE );
         // full path as stored in SvxURLField must be encoded
     }
     else
@@ -172,7 +165,7 @@ void lclInsertUrl( XclImpRoot& rRoot, const OUString& rUrl, SCCOL nScCol, SCROW 
         case CELLTYPE_STRING:
         case CELLTYPE_EDIT:
         {
-            sal_uLong nNumFmt = rDoc.getDoc().GetNumberFormat(aScPos);
+            sal_uInt32 nNumFmt = rDoc.getDoc().GetNumberFormat(rDoc.getDoc().GetNonThreadedContext(), aScPos);
             SvNumberFormatter* pFormatter = rDoc.getDoc().GetFormatTable();
             Color* pColor;
             OUString aDisplText;
@@ -181,7 +174,7 @@ void lclInsertUrl( XclImpRoot& rRoot, const OUString& rUrl, SCCOL nScCol, SCROW 
                 aDisplText = rUrl;
 
             ScEditEngineDefaulter& rEE = rRoot.GetEditEngine();
-            SvxURLField aUrlField( rUrl, aDisplText, SVXURLFORMAT_APPDEFAULT );
+            SvxURLField aUrlField( rUrl, aDisplText, SvxURLFormat::AppDefault );
 
             if( aCell.meType == CELLTYPE_EDIT )
             {
@@ -259,10 +252,10 @@ OUString XclImpHyperlink::ReadEmbeddedData( XclImpStream& rStrm )
 
     // description (ignore)
     if( ::get_flag( nFlags, EXC_HLINK_DESCR ) )
-        lclIgnoreString32( rStrm, true );
+        lclIgnoreString32( rStrm );
     // target frame (ignore) !! DESCR/FRAME - is this the right order? (never seen them together)
     if( ::get_flag( nFlags, EXC_HLINK_FRAME ) )
-        lclIgnoreString32( rStrm, true );
+        lclIgnoreString32( rStrm );
 
     // URL fields are zero-terminated - do not let the stream replace them
     // in the lclAppendString32() with the '?' character.
@@ -329,14 +322,14 @@ OUString XclImpHyperlink::ReadEmbeddedData( XclImpStream& rStrm )
 
     OSL_ENSURE( rStrm.GetRecLeft() == 0, "XclImpHyperlink::ReadEmbeddedData - record size mismatch" );
 
-    if( !xLongName.get() && xShortName.get() )
+    if (!xLongName && xShortName.get())
         xLongName = std::move(xShortName);
-    else if( !xLongName.get() && xTextMark.get() )
+    else if (!xLongName && xTextMark.get())
         xLongName.reset( new OUString );
 
-    if( xLongName.get() )
+    if (xLongName)
     {
-        if( xTextMark.get() )
+        if (xTextMark)
         {
             if( xLongName->isEmpty() )
             {
@@ -374,7 +367,8 @@ void XclImpHyperlink::ConvertToValidTabName(OUString& rUrl)
         // the 1st character must be '#'.
         return;
 
-    OUString aNewUrl('#'), aTabName;
+    OUStringBuffer aNewUrl("#");
+    OUStringBuffer aTabName;
 
     bool bInQuote = false;
     bool bQuoteTabName = false;
@@ -389,8 +383,7 @@ void XclImpHyperlink::ConvertToValidTabName(OUString& rUrl)
                 // quite.  When this occurs, the whole table name needs to be
                 // quoted.
                 bQuoteTabName = true;
-                aTabName += OUString(c);
-                aTabName += OUString(c);
+                aTabName.append(c).append(c);
                 ++i;
                 continue;
             }
@@ -399,16 +392,16 @@ void XclImpHyperlink::ConvertToValidTabName(OUString& rUrl)
             if (!bInQuote && !aTabName.isEmpty())
             {
                 if (bQuoteTabName)
-                    aNewUrl += "'";
-                aNewUrl += aTabName;
+                    aNewUrl.append("'");
+                aNewUrl.append(aTabName);
                 if (bQuoteTabName)
-                    aNewUrl += "'";
+                    aNewUrl.append("'");
             }
         }
         else if (bInQuote)
-            aTabName += OUString(c);
+            aTabName.append(c);
         else
-            aNewUrl += OUString(c);
+            aNewUrl.append(c);
     }
 
     if (bInQuote)
@@ -416,7 +409,7 @@ void XclImpHyperlink::ConvertToValidTabName(OUString& rUrl)
         return;
 
     // All is good.  Pass the new URL.
-    rUrl = aNewUrl;
+    rUrl = aNewUrl.makeStringAndClear();
 }
 
 void XclImpHyperlink::InsertUrl( XclImpRoot& rRoot, const XclRange& rXclRange, const OUString& rUrl )
@@ -448,7 +441,6 @@ void XclImpLabelranges::ReadLabelranges( XclImpStream& rStrm )
     SCTAB nScTab = rRoot.GetCurrScTab();
     XclImpAddressConverter& rAddrConv = rRoot.GetAddressConverter();
     ScRangePairListRef xLabelRangesRef;
-    const ScRange* pScRange = nullptr;
 
     XclRangeList aRowXclRanges, aColXclRanges;
     rStrm >> aRowXclRanges >> aColXclRanges;
@@ -459,8 +451,8 @@ void XclImpLabelranges::ReadLabelranges( XclImpStream& rStrm )
     xLabelRangesRef = rDoc.GetRowNameRangesRef();
     for ( size_t i = 0, nRanges = aRowScRanges.size(); i < nRanges; ++i )
     {
-        pScRange = aRowScRanges[ i ];
-        ScRange aDataRange( *pScRange );
+        const ScRange & rScRange = aRowScRanges[ i ];
+        ScRange aDataRange( rScRange );
         if( aDataRange.aEnd.Col() < MAXCOL )
         {
             aDataRange.aStart.SetCol( aDataRange.aEnd.Col() + 1 );
@@ -471,7 +463,7 @@ void XclImpLabelranges::ReadLabelranges( XclImpStream& rStrm )
             aDataRange.aEnd.SetCol( aDataRange.aStart.Col() - 1 );
             aDataRange.aStart.SetCol( 0 );
         }
-        xLabelRangesRef->Append( ScRangePair( *pScRange, aDataRange ) );
+        xLabelRangesRef->Append( ScRangePair( rScRange, aDataRange ) );
     }
 
     // column label ranges
@@ -481,8 +473,8 @@ void XclImpLabelranges::ReadLabelranges( XclImpStream& rStrm )
 
     for ( size_t i = 0, nRanges = aColScRanges.size(); i < nRanges; ++i )
     {
-        pScRange = aColScRanges[ i ];
-        ScRange aDataRange( *pScRange );
+        const ScRange & rScRange = aColScRanges[ i ];
+        ScRange aDataRange( rScRange );
         if( aDataRange.aEnd.Row() < MAXROW )
         {
             aDataRange.aStart.SetRow( aDataRange.aEnd.Row() + 1 );
@@ -493,7 +485,7 @@ void XclImpLabelranges::ReadLabelranges( XclImpStream& rStrm )
             aDataRange.aEnd.SetRow( aDataRange.aStart.Row() - 1 );
             aDataRange.aStart.SetRow( 0 );
         }
-        xLabelRangesRef->Append( ScRangePair( *pScRange, aDataRange ) );
+        xLabelRangesRef->Append( ScRangePair( rScRange, aDataRange ) );
     }
 }
 
@@ -542,21 +534,21 @@ void XclImpCondFormat::ReadCF( XclImpStream& rStrm )
 
     // *** mode and comparison operator ***
 
-    ScConditionMode eMode = SC_COND_NONE;
+    ScConditionMode eMode = ScConditionMode::NONE;
     switch( nType )
     {
         case EXC_CF_TYPE_CELL:
         {
             switch( nOperator )
             {
-                case EXC_CF_CMP_BETWEEN:        eMode = SC_COND_BETWEEN;    break;
-                case EXC_CF_CMP_NOT_BETWEEN:    eMode = SC_COND_NOTBETWEEN; break;
-                case EXC_CF_CMP_EQUAL:          eMode = SC_COND_EQUAL;      break;
-                case EXC_CF_CMP_NOT_EQUAL:      eMode = SC_COND_NOTEQUAL;   break;
-                case EXC_CF_CMP_GREATER:        eMode = SC_COND_GREATER;    break;
-                case EXC_CF_CMP_LESS:           eMode = SC_COND_LESS;       break;
-                case EXC_CF_CMP_GREATER_EQUAL:  eMode = SC_COND_EQGREATER;  break;
-                case EXC_CF_CMP_LESS_EQUAL:     eMode = SC_COND_EQLESS;     break;
+                case EXC_CF_CMP_BETWEEN:        eMode = ScConditionMode::Between;    break;
+                case EXC_CF_CMP_NOT_BETWEEN:    eMode = ScConditionMode::NotBetween; break;
+                case EXC_CF_CMP_EQUAL:          eMode = ScConditionMode::Equal;      break;
+                case EXC_CF_CMP_NOT_EQUAL:      eMode = ScConditionMode::NotEqual;   break;
+                case EXC_CF_CMP_GREATER:        eMode = ScConditionMode::Greater;    break;
+                case EXC_CF_CMP_LESS:           eMode = ScConditionMode::Less;       break;
+                case EXC_CF_CMP_GREATER_EQUAL:  eMode = ScConditionMode::EqGreater;  break;
+                case EXC_CF_CMP_LESS_EQUAL:     eMode = ScConditionMode::EqLess;     break;
                 default:
                     SAL_INFO(
                         "sc.filter", "unknown CF comparison " << nOperator);
@@ -565,7 +557,7 @@ void XclImpCondFormat::ReadCF( XclImpStream& rStrm )
         break;
 
         case EXC_CF_TYPE_FMLA:
-            eMode = SC_COND_DIRECT;
+            eMode = ScConditionMode::Direct;
         break;
 
         default:
@@ -596,7 +588,7 @@ void XclImpCondFormat::ReadCF( XclImpStream& rStrm )
     {
         XclImpFont aFont( GetRoot() );
         aFont.ReadCFFontBlock( rStrm );
-        aFont.FillToItemSet( rStyleItemSet, EXC_FONTITEM_CELL );
+        aFont.FillToItemSet( rStyleItemSet, XclFontItemType::Cell );
     }
 
     // alignment
@@ -651,43 +643,50 @@ void XclImpCondFormat::ReadCF( XclImpStream& rStrm )
 
     // *** formulas ***
 
-    const ScAddress& rPos = maRanges.front()->aStart;    // assured above that maRanges is not empty
+    const ScAddress& rPos = maRanges.front().aStart;    // assured above that maRanges is not empty
     ExcelToSc& rFmlaConv = GetOldFmlaConverter();
 
     ::std::unique_ptr< ScTokenArray > xTokArr1;
     if( nFmlaSize1 > 0 )
     {
-        const ScTokenArray* pTokArr = nullptr;
+        std::unique_ptr<ScTokenArray> pTokArr;
         rFmlaConv.Reset( rPos );
         rFmlaConv.Convert( pTokArr, rStrm, nFmlaSize1, false, FT_CondFormat );
         // formula converter owns pTokArr -> create a copy of the token array
         if( pTokArr )
-            xTokArr1.reset( pTokArr->Clone() );
+        {
+            xTokArr1 = std::move( pTokArr );
+            GetDocRef().CheckLinkFormulaNeedingCheck( *xTokArr1);
+        }
     }
 
-    ::std::unique_ptr< ScTokenArray > pTokArr2;
+    ::std::unique_ptr< ScTokenArray > xTokArr2;
     if( nFmlaSize2 > 0 )
     {
-        const ScTokenArray* pTokArr = nullptr;
+        std::unique_ptr<ScTokenArray> pTokArr;
         rFmlaConv.Reset( rPos );
         rFmlaConv.Convert( pTokArr, rStrm, nFmlaSize2, false, FT_CondFormat );
         // formula converter owns pTokArr -> create a copy of the token array
         if( pTokArr )
-            pTokArr2.reset( pTokArr->Clone() );
+        {
+            xTokArr2 = std::move( pTokArr );
+            GetDocRef().CheckLinkFormulaNeedingCheck( *xTokArr2);
+        }
     }
 
     // *** create the Calc conditional formatting ***
 
+    const ScAddress aPos(rPos); //in case maRanges.Join invalidates it
+
     if( !mxScCondFmt.get() )
     {
-        sal_uLong nKey = 0;
-        mxScCondFmt.reset( new ScConditionalFormat( nKey, &GetDocRef() ) );
+        mxScCondFmt.reset( new ScConditionalFormat( 0/*nKey*/, &GetDocRef() ) );
         if(maRanges.size() > 1)
-            maRanges.Join(*maRanges[0], true);
+            maRanges.Join(maRanges[0], true);
         mxScCondFmt->SetRange(maRanges);
     }
 
-    ScCondFormatEntry* pEntry = new ScCondFormatEntry( eMode, xTokArr1.get(), pTokArr2.get(), &GetDocRef(), rPos, aStyleName );
+    ScCondFormatEntry* pEntry = new ScCondFormatEntry(eMode, xTokArr1.get(), xTokArr2.get(), &GetDocRef(), aPos, aStyleName);
     mxScCondFmt->AddEntry( pEntry );
     ++mnCondIndex;
 }
@@ -698,7 +697,7 @@ void XclImpCondFormat::Apply()
     {
         ScDocument& rDoc = GetDoc();
 
-        SCTAB nTab = maRanges.front()->aStart.Tab();
+        SCTAB nTab = maRanges.front().aStart.Tab();
         sal_uLong nKey = rDoc.AddCondFormat( mxScCondFmt->Clone(), nTab );
 
         rDoc.AddCondFormatData( maRanges, nTab, nKey );
@@ -726,8 +725,8 @@ void XclImpCondFormatManager::ReadCF( XclImpStream& rStrm )
 
 void XclImpCondFormatManager::Apply()
 {
-    for( XclImpCondFmtList::iterator itFmt = maCondFmtList.begin(); itFmt != maCondFmtList.end(); ++itFmt )
-        (*itFmt)->Apply();
+    for( auto& rxFmt : maCondFmtList )
+        rxFmt->Apply();
     maCondFmtList.clear();
 }
 
@@ -824,23 +823,23 @@ void XclImpValidationManager::ReadDV( XclImpStream& rStrm )
     rStrm.RestorePosition(aPosFormula1);
     if( nLenFormula1 > 0 )
     {
-        const ScTokenArray* pTokArr = nullptr;
+        std::unique_ptr<ScTokenArray> pTokArr;
         rFmlaConv.Reset(aCombinedRange.aStart);
         rFmlaConv.Convert( pTokArr, rStrm, nLenFormula1, false, FT_CondFormat );
         // formula converter owns pTokArr -> create a copy of the token array
         if( pTokArr )
-            xTokArr1.reset( pTokArr->Clone() );
+            xTokArr1 = std::move( pTokArr );
     }
     rStrm.SetNulSubstChar();    // back to default
     if (nLenFormula2 > 0)
     {
         rStrm.RestorePosition(aPosFormula2);
-        const ScTokenArray* pTokArr = nullptr;
+        std::unique_ptr<ScTokenArray> pTokArr;
         rFmlaConv.Reset(aCombinedRange.aStart);
         rFmlaConv.Convert( pTokArr, rStrm, nLenFormula2, false, FT_CondFormat );
         // formula converter owns pTokArr -> create a copy of the token array
         if( pTokArr )
-            xTokArr2.reset( pTokArr->Clone() );
+            xTokArr2 = std::move( pTokArr );
     }
 
     rStrm.RestorePosition(aCurrentPos);
@@ -862,17 +861,17 @@ void XclImpValidationManager::ReadDV( XclImpStream& rStrm )
     }
     rRoot.GetTracer().TraceDVType(eValMode == SC_VALID_CUSTOM);
 
-    ScConditionMode eCondMode = SC_COND_BETWEEN;
+    ScConditionMode eCondMode = ScConditionMode::Between;
     switch( nFlags & EXC_DV_COND_MASK )
     {
-        case EXC_DV_COND_BETWEEN:   eCondMode = SC_COND_BETWEEN;    break;
-        case EXC_DV_COND_NOTBETWEEN:eCondMode = SC_COND_NOTBETWEEN; break;
-        case EXC_DV_COND_EQUAL:     eCondMode = SC_COND_EQUAL;      break;
-        case EXC_DV_COND_NOTEQUAL:  eCondMode = SC_COND_NOTEQUAL;   break;
-        case EXC_DV_COND_GREATER:   eCondMode = SC_COND_GREATER;    break;
-        case EXC_DV_COND_LESS:      eCondMode = SC_COND_LESS;       break;
-        case EXC_DV_COND_EQGREATER: eCondMode = SC_COND_EQGREATER;  break;
-        case EXC_DV_COND_EQLESS:    eCondMode = SC_COND_EQLESS;     break;
+        case EXC_DV_COND_BETWEEN:   eCondMode = ScConditionMode::Between;    break;
+        case EXC_DV_COND_NOTBETWEEN:eCondMode = ScConditionMode::NotBetween; break;
+        case EXC_DV_COND_EQUAL:     eCondMode = ScConditionMode::Equal;      break;
+        case EXC_DV_COND_NOTEQUAL:  eCondMode = ScConditionMode::NotEqual;   break;
+        case EXC_DV_COND_GREATER:   eCondMode = ScConditionMode::Greater;    break;
+        case EXC_DV_COND_LESS:      eCondMode = ScConditionMode::Less;       break;
+        case EXC_DV_COND_EQGREATER: eCondMode = ScConditionMode::EqGreater;  break;
+        case EXC_DV_COND_EQLESS:    eCondMode = ScConditionMode::EqLess;     break;
         default:                    bIsValid = false;
     }
 
@@ -880,15 +879,24 @@ void XclImpValidationManager::ReadDV( XclImpStream& rStrm )
         // No valid validation found.  Bail out.
         return;
 
+    // The default value for comparison is _BETWEEN. However, custom
+    // rules are a formula, and thus the comparator should be ignored
+    // and only a true or false from the formula is evaluated. In Calc,
+    // formulas use comparison SC_COND_DIRECT.
+    if( eValMode == SC_VALID_CUSTOM )
+    {
+        eCondMode = ScConditionMode::Direct;
+    }
+
     // first range for base address for relative references
-    const ScRange& rScRange = *aScRanges.front();    // aScRanges is not empty
+    const ScRange& rScRange = aScRanges.front();    // aScRanges is not empty
 
     // process string list of a list validity (convert to list of string tokens)
     if( xTokArr1.get() && (eValMode == SC_VALID_LIST) && ::get_flag( nFlags, EXC_DV_STRINGLIST ) )
-        XclTokenArrayHelper::ConvertStringToList(*xTokArr1, rDoc.GetSharedStringPool(), '\n', true);
+        XclTokenArrayHelper::ConvertStringToList(*xTokArr1, rDoc.GetSharedStringPool(), '\n');
 
     maDVItems.push_back(
-        o3tl::make_unique<DVItem>(aScRanges, ScValidationData(eValMode, eCondMode, xTokArr1.get(), xTokArr2.get(), &rDoc, rScRange.aStart)));
+        std::make_unique<DVItem>(aScRanges, ScValidationData(eValMode, eCondMode, xTokArr1.get(), xTokArr2.get(), &rDoc, rScRange.aStart)));
     DVItem& rItem = *maDVItems.back().get();
 
     rItem.maValidData.SetIgnoreBlank( ::get_flag( nFlags, EXC_DV_IGNOREBLANK ) );
@@ -919,10 +927,9 @@ void XclImpValidationManager::ReadDV( XclImpStream& rStrm )
 void XclImpValidationManager::Apply()
 {
     ScDocument& rDoc = GetRoot().GetDoc();
-    DVItemList::iterator itr = maDVItems.begin(), itrEnd = maDVItems.end();
-    for (; itr != itrEnd; ++itr)
+    for (const auto& rxDVItem : maDVItems)
     {
-        DVItem& rItem = *itr->get();
+        DVItem& rItem = *rxDVItem;
         // set the handle ID
         sal_uLong nHandle = rDoc.AddValidationEntry( rItem.maValidData );
         ScPatternAttr aPattern( rDoc.GetPool() );
@@ -931,9 +938,9 @@ void XclImpValidationManager::Apply()
         // apply all ranges
         for ( size_t i = 0, nRanges = rItem.maRanges.size(); i < nRanges; ++i )
         {
-            const ScRange* pScRange = rItem.maRanges[ i ];
-            rDoc.ApplyPatternAreaTab( pScRange->aStart.Col(), pScRange->aStart.Row(),
-                pScRange->aEnd.Col(), pScRange->aEnd.Row(), pScRange->aStart.Tab(), aPattern );
+            const ScRange & rScRange = rItem.maRanges[ i ];
+            rDoc.ApplyPatternAreaTab( rScRange.aStart.Col(), rScRange.aStart.Row(),
+                rScRange.aEnd.Col(), rScRange.aEnd.Row(), rScRange.aStart.Tab(), aPattern );
         }
     }
     maDVItems.clear();
@@ -992,11 +999,9 @@ void XclImpWebQuery::ReadWqtables( XclImpStream& rStrm )
         OUString aTables( rStrm.ReadUniString() );
 
         const sal_Unicode cSep = ';';
-        OUString aQuotedPairs( "\"\"" );
-        sal_Int32 nTokenCnt = ScStringUtil::GetQuotedTokenCount( aTables, aQuotedPairs, ',' );
+        const OUString aQuotedPairs( "\"\"" );
         maTables.clear();
-        sal_Int32 nStringIx = 0;
-        for( sal_Int32 nToken = 0; nToken < nTokenCnt; ++nToken )
+        for ( sal_Int32 nStringIx {aTables.isEmpty() ? -1 : 0}; nStringIx>=0; )
         {
             OUString aToken( ScStringUtil::GetQuotedToken( aTables, 0, aQuotedPairs, ',', nStringIx ) );
             sal_Int32 nTabNum = CharClass::isAsciiNumeric( aToken ) ? aToken.toInt32() : 0;
@@ -1045,7 +1050,7 @@ void XclImpWebQueryBuffer::ReadQsi( XclImpStream& rStrm )
             {
                 ScRange aRange;
                 if( pRangeData->IsReference( aRange ) )
-                    maWQList.push_back( XclImpWebQuery( aRange ) );
+                    maWQList.emplace_back( aRange );
             }
         }
     }
@@ -1082,9 +1087,8 @@ void XclImpWebQueryBuffer::ReadWqtables( XclImpStream& rStrm )
 void XclImpWebQueryBuffer::Apply()
 {
     ScDocument& rDoc = GetDoc();
-    OUString aFilterName( EXC_WEBQRY_FILTER );
-    for( XclImpWebQueryList::iterator itQuery = maWQList.begin(); itQuery != maWQList.end(); ++itQuery )
-        itQuery->Apply( rDoc, aFilterName );
+    for( auto& rQuery : maWQList )
+        rQuery.Apply( rDoc, EXC_WEBQRY_FILTER );
 }
 
 // Decryption =================================================================
@@ -1111,21 +1115,80 @@ XclImpDecrypterRef lclReadFilepass8_Standard( XclImpStream& rStrm )
     OSL_ENSURE( rStrm.GetRecLeft() == 48, "lclReadFilepass8 - wrong record size" );
     if( rStrm.GetRecLeft() == 48 )
     {
-        sal_uInt8 pnSalt[ 16 ];
-        sal_uInt8 pnVerifier[ 16 ];
-        sal_uInt8 pnVerifierHash[ 16 ];
-        rStrm.Read( pnSalt, 16 );
-        rStrm.Read( pnVerifier, 16 );
-        rStrm.Read( pnVerifierHash, 16 );
-        xDecr.reset( new XclImpBiff8Decrypter( pnSalt, pnVerifier, pnVerifierHash ) );
+        std::vector<sal_uInt8> aSalt(16);
+        std::vector<sal_uInt8> aVerifier(16);
+        std::vector<sal_uInt8> aVerifierHash(16);
+        rStrm.Read(aSalt.data(), 16);
+        rStrm.Read(aVerifier.data(), 16);
+        rStrm.Read(aVerifierHash.data(), 16);
+        xDecr.reset(new XclImpBiff8StdDecrypter(aSalt, aVerifier, aVerifierHash));
     }
     return xDecr;
 }
 
-XclImpDecrypterRef lclReadFilepass8_Strong( XclImpStream& /*rStrm*/ )
+XclImpDecrypterRef lclReadFilepass8_Strong(XclImpStream& rStream)
 {
-    // not supported
-    return XclImpDecrypterRef();
+    //It is possible there are other variants in existence but these
+    //are the defaults I get with Excel 2013
+    XclImpDecrypterRef xDecr;
+
+    msfilter::RC4EncryptionInfo info;
+
+    info.header.flags = rStream.ReaduInt32();
+    if (oox::getFlag( info.header.flags, msfilter::ENCRYPTINFO_EXTERNAL))
+        return xDecr;
+
+    sal_uInt32 nHeaderSize = rStream.ReaduInt32();
+    sal_uInt32 actualHeaderSize = sizeof(info.header);
+
+    if( nHeaderSize < actualHeaderSize )
+        return xDecr;
+
+    info.header.flags = rStream.ReaduInt32();
+    info.header.sizeExtra = rStream.ReaduInt32();
+    info.header.algId = rStream.ReaduInt32();
+    info.header.algIdHash = rStream.ReaduInt32();
+    info.header.keyBits = rStream.ReaduInt32();
+    info.header.providedType = rStream.ReaduInt32();
+    info.header.reserved1 = rStream.ReaduInt32();
+    info.header.reserved2 = rStream.ReaduInt32();
+
+    rStream.Ignore(nHeaderSize - actualHeaderSize);
+
+    info.verifier.saltSize = rStream.ReaduInt32();
+    if (info.verifier.saltSize != msfilter::SALT_LENGTH)
+        return xDecr;
+    rStream.Read(&info.verifier.salt, sizeof(info.verifier.salt));
+    rStream.Read(&info.verifier.encryptedVerifier, sizeof(info.verifier.encryptedVerifier));
+
+    info.verifier.encryptedVerifierHashSize = rStream.ReaduInt32();
+    if (info.verifier.encryptedVerifierHashSize != RTL_DIGEST_LENGTH_SHA1)
+        return xDecr;
+    rStream.Read(&info.verifier.encryptedVerifierHash, info.verifier.encryptedVerifierHashSize);
+
+    // check flags and algorithm IDs, required are AES128 and SHA-1
+    if (!oox::getFlag(info.header.flags, msfilter::ENCRYPTINFO_CRYPTOAPI))
+        return xDecr;
+
+    if (oox::getFlag(info.header.flags, msfilter::ENCRYPTINFO_AES))
+        return xDecr;
+
+    if (info.header.algId != msfilter::ENCRYPT_ALGO_RC4)
+        return xDecr;
+
+    // hash algorithm ID 0 defaults to SHA-1 too
+    if (info.header.algIdHash != 0 && info.header.algIdHash != msfilter::ENCRYPT_HASH_SHA1)
+        return xDecr;
+
+    xDecr.reset(new XclImpBiff8CryptoAPIDecrypter(
+        std::vector<sal_uInt8>(info.verifier.salt,
+            info.verifier.salt + SAL_N_ELEMENTS(info.verifier.salt)),
+        std::vector<sal_uInt8>(info.verifier.encryptedVerifier,
+            info.verifier.encryptedVerifier + SAL_N_ELEMENTS(info.verifier.encryptedVerifier)),
+        std::vector<sal_uInt8>(info.verifier.encryptedVerifierHash,
+            info.verifier.encryptedVerifierHash + SAL_N_ELEMENTS(info.verifier.encryptedVerifierHash))));
+
+    return xDecr;
 }
 
 XclImpDecrypterRef lclReadFilepass8( XclImpStream& rStrm )
@@ -1142,20 +1205,22 @@ XclImpDecrypterRef lclReadFilepass8( XclImpStream& rStrm )
 
         case EXC_FILEPASS_BIFF8:
         {
-            rStrm.Ignore( 2 );
-            sal_uInt16 nSubMode(0);
-            nSubMode = rStrm.ReaduInt16();
-            switch( nSubMode )
+            sal_uInt32 nVersion = rStrm.ReaduInt32();
+            if (nVersion == msfilter::VERSION_INFO_1997_FORMAT)
             {
-                case EXC_FILEPASS_BIFF8_STD:
-                    xDecr = lclReadFilepass8_Standard( rStrm );
-                break;
-                case EXC_FILEPASS_BIFF8_STRONG:
-                    xDecr = lclReadFilepass8_Strong( rStrm );
-                break;
-                default:
-                    OSL_FAIL( "lclReadFilepass8 - unknown BIFF8 encryption sub mode" );
+                //A Version structure where Version.vMajor MUST be 0x0001,
+                //and Version.vMinor MUST be 0x0001.
+                xDecr = lclReadFilepass8_Standard(rStrm);
             }
+            else if (nVersion == msfilter::VERSION_INFO_2007_FORMAT ||
+                     nVersion == msfilter::VERSION_INFO_2007_FORMAT_SP2)
+            {
+                //Version.vMajor MUST be 0x0002, 0x0003 or 0x0004 and
+                //Version.vMinor MUST be 0x0002.
+                xDecr = lclReadFilepass8_Strong(rStrm);
+            }
+            else
+                OSL_FAIL("lclReadFilepass8 - unknown BIFF8 encryption sub mode");
         }
         break;
 
@@ -1168,7 +1233,7 @@ XclImpDecrypterRef lclReadFilepass8( XclImpStream& rStrm )
 
 } // namespace
 
-ErrCode XclImpDecryptHelper::ReadFilepass( XclImpStream& rStrm )
+const ErrCode& XclImpDecryptHelper::ReadFilepass( XclImpStream& rStrm )
 {
     XclImpDecrypterRef xDecr;
     rStrm.DisableDecryption();
@@ -1317,10 +1382,9 @@ void XclImpSheetProtectBuffer::ReadPasswordHash( XclImpStream& rStrm, SCTAB nTab
 
 void XclImpSheetProtectBuffer::Apply() const
 {
-    for (ProtectedSheetMap::const_iterator itr = maProtectedSheets.begin(), itrEnd = maProtectedSheets.end();
-         itr != itrEnd; ++itr)
+    for (const auto& [rTab, rSheet] : maProtectedSheets)
     {
-        if (!itr->second.mbProtected)
+        if (!rSheet.mbProtected)
             // This sheet is (for whatever reason) not protected.
             continue;
 
@@ -1328,7 +1392,7 @@ void XclImpSheetProtectBuffer::Apply() const
         pProtect->setProtected(true);
 
         // 16-bit hash password
-        const sal_uInt16 nHash = itr->second.mnPasswordHash;
+        const sal_uInt16 nHash = rSheet.mnPasswordHash;
         if (nHash)
         {
             Sequence<sal_Int8> aPass(2);
@@ -1338,7 +1402,7 @@ void XclImpSheetProtectBuffer::Apply() const
         }
 
         // sheet protection options
-        const sal_uInt16 nOptions = itr->second.mnOptions;
+        const sal_uInt16 nOptions = rSheet.mnOptions;
         pProtect->setOption( ScTableProtection::OBJECTS,               (nOptions & 0x0001) );
         pProtect->setOption( ScTableProtection::SCENARIOS,             (nOptions & 0x0002) );
         pProtect->setOption( ScTableProtection::FORMAT_CELLS,          (nOptions & 0x0004) );
@@ -1356,10 +1420,10 @@ void XclImpSheetProtectBuffer::Apply() const
         pProtect->setOption( ScTableProtection::SELECT_UNLOCKED_CELLS, (nOptions & 0x4000) );
 
         // Enhanced protection containing editable ranges and permissions.
-        pProtect->setEnhancedProtection( itr->second.maEnhancedProtections);
+        pProtect->setEnhancedProtection( rSheet.maEnhancedProtections);
 
         // all done.  now commit.
-        GetDoc().SetTabProtection(itr->first, pProtect.get());
+        GetDoc().SetTabProtection(rTab, pProtect.get());
     }
 }
 
@@ -1369,7 +1433,7 @@ XclImpSheetProtectBuffer::Sheet* XclImpSheetProtectBuffer::GetSheetItem( SCTAB n
     if (itr == maProtectedSheets.end())
     {
         // new sheet
-        if ( !maProtectedSheets.insert( ProtectedSheetMap::value_type(nTab, Sheet()) ).second )
+        if ( !maProtectedSheets.emplace( nTab, Sheet() ).second )
             return nullptr;
 
         itr = maProtectedSheets.find(nTab);

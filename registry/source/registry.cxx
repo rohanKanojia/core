@@ -57,13 +57,10 @@ static void REGISTRY_CALLTYPE release(RegHandle hReg)
 {
     ORegistry* pReg = static_cast<ORegistry*>(hReg);
 
-    if (pReg)
+    if (pReg && pReg->release() == 0)
     {
-        if (pReg->release() == 0)
-        {
-            delete pReg;
-            hReg = nullptr;
-        }
+        delete pReg;
+        hReg = nullptr;
     }
 }
 
@@ -98,7 +95,7 @@ static sal_Bool REGISTRY_CALLTYPE isReadOnly(RegHandle hReg)
     if (hReg)
         return static_cast<ORegistry*>(hReg)->isReadOnly();
     else
-        return sal_False;
+        return false;
 }
 
 
@@ -185,7 +182,7 @@ static RegError REGISTRY_CALLTYPE closeRegistry(RegHandle hReg)
         RegError ret = RegError::NO_ERROR;
         if (pReg->release() == 0)
         {
-            delete(pReg);
+            delete pReg;
             hReg = nullptr;
         }
         else
@@ -217,7 +214,7 @@ static RegError REGISTRY_CALLTYPE destroyRegistry(RegHandle hReg,
         {
             if (!registryName->length)
             {
-                delete(pReg);
+                delete pReg;
                 hReg = nullptr;
             }
         }
@@ -357,13 +354,12 @@ RegError REGISTRY_CALLTYPE reg_openRootKey(RegHandle hRegistry,
 //  reg_openRegistry
 
 RegError REGISTRY_CALLTYPE reg_openRegistry(rtl_uString* registryName,
-                                            RegHandle* phRegistry,
-                                            RegAccessMode accessMode)
+                                            RegHandle* phRegistry)
 {
     RegError _ret;
 
     ORegistry* pReg = new ORegistry();
-    if ((_ret = pReg->initRegistry(registryName, accessMode)) != RegError::NO_ERROR)
+    if ((_ret = pReg->initRegistry(registryName, RegAccessMode::READONLY)) != RegError::NO_ERROR)
     {
         delete pReg;
         *phRegistry = nullptr;
@@ -383,7 +379,7 @@ RegError REGISTRY_CALLTYPE reg_closeRegistry(RegHandle hRegistry)
     if (hRegistry)
     {
         ORegistry* pReg = static_cast<ORegistry*>(hRegistry);
-        delete(pReg);
+        delete pReg;
         return RegError::NO_ERROR;
     } else
     {

@@ -21,7 +21,6 @@
 #include <uielement/generictoolbarcontroller.hxx>
 
 #include <svtools/miscopt.hxx>
-#include <comphelper/processfactory.hxx>
 
 namespace framework
 {
@@ -100,13 +99,8 @@ bool ToolBarMerger::IsCorrectContext(
 
      A vector of AddonToolbarItems which will hold the
      conversion from the rSequence argument.
-
- @result
-     The result is true if the sequence, sequence of property
-     values could be converted to a vector of structs.
-
 */
-bool ToolBarMerger::ConvertSeqSeqToVector(
+void ToolBarMerger::ConvertSeqSeqToVector(
     const uno::Sequence< uno::Sequence< beans::PropertyValue > >& rSequence,
     AddonToolbarItemContainer& rContainer )
 {
@@ -124,8 +118,6 @@ bool ToolBarMerger::ConvertSeqSeqToVector(
                                  aAddonToolbarItem.nWidth );
         rContainer.push_back( aAddonToolbarItem );
     }
-
-    return true;
 }
 
 /**
@@ -238,11 +230,11 @@ ReferenceToolbarPathInfo ToolBarMerger::FindReferencePoint(
     ReferenceToolbarPathInfo aResult;
     aResult.bResult  = false;
     aResult.pToolbar = pToolbar;
-    aResult.nPos     = TOOLBOX_ITEM_NOTFOUND;
+    aResult.nPos     = ToolBox::ITEM_NOTFOUND;
 
-    const sal_uInt16 nSize( pToolbar->GetItemCount() );
+    const ToolBox::ImplToolItems::size_type nSize( pToolbar->GetItemCount() );
 
-    for ( sal_uInt16 i = 0; i < nSize; i++ )
+    for ( ToolBox::ImplToolItems::size_type i = 0; i < nSize; i++ )
     {
         const sal_uInt16 nItemId = pToolbar->GetItemId( i );
         if ( nItemId > 0 )
@@ -262,11 +254,6 @@ ReferenceToolbarPathInfo ToolBarMerger::FindReferencePoint(
 
 /**
  Processes a merge operation.
-
- @param
-     xFrame
-
-     Must be a valid reference to a frame.
 
  @param
      pToolbar
@@ -312,9 +299,8 @@ ReferenceToolbarPathInfo ToolBarMerger::FindReferencePoint(
      false.
 */
 bool ToolBarMerger::ProcessMergeOperation(
-    const uno::Reference< frame::XFrame >& xFrame,
     ToolBox*                               pToolbar,
-    sal_uInt16                             nPos,
+    ToolBox::ImplToolItems::size_type      nPos,
     sal_uInt16&                            rItemId,
     CommandToInfoMap&                      rCommandMap,
     const OUString&                        rModuleIdentifier,
@@ -323,24 +309,20 @@ bool ToolBarMerger::ProcessMergeOperation(
     const AddonToolbarItemContainer&       rItems )
 {
     if ( rMergeCommand == MERGECOMMAND_ADDAFTER )
-        return MergeItems( xFrame, pToolbar, nPos, 1, rItemId, rCommandMap, rModuleIdentifier, rItems );
+        MergeItems( pToolbar, nPos, 1, rItemId, rCommandMap, rModuleIdentifier, rItems );
     else if ( rMergeCommand == MERGECOMMAND_ADDBEFORE )
-        return MergeItems( xFrame, pToolbar, nPos, 0, rItemId, rCommandMap, rModuleIdentifier, rItems );
+        MergeItems( pToolbar, nPos, 0, rItemId, rCommandMap, rModuleIdentifier, rItems );
     else if ( rMergeCommand == MERGECOMMAND_REPLACE )
-        return ReplaceItem( xFrame, pToolbar, nPos, rItemId, rCommandMap, rModuleIdentifier, rItems );
+        ReplaceItem( pToolbar, nPos, rItemId, rCommandMap, rModuleIdentifier, rItems );
     else if ( rMergeCommand == MERGECOMMAND_REMOVE )
-        return RemoveItems( pToolbar, nPos, rMergeCommandParameter );
-
-    return false;
+        RemoveItems( pToolbar, nPos, rMergeCommandParameter );
+    else
+        return false;
+    return true;
 }
 
 /**
  Processes a merge fallback operation.
-
- @param
-     xFrame
-
-     Must be a valid reference to a frame.
 
  @param
      pToolbar
@@ -381,9 +363,7 @@ bool ToolBarMerger::ProcessMergeOperation(
      false.
 */
 bool ToolBarMerger::ProcessMergeFallback(
-    const css::uno::Reference< css::frame::XFrame >& xFrame,
     ToolBox*                         pToolbar,
-    sal_uInt16                       /*nPos*/,
     sal_uInt16&                      rItemId,
     CommandToInfoMap&                rCommandMap,
     const OUString&           rModuleIdentifier,
@@ -401,9 +381,12 @@ bool ToolBarMerger::ProcessMergeFallback(
              ( rMergeCommand == MERGECOMMAND_ADDAFTER ) )
     {
         if ( rMergeFallback == MERGEFALLBACK_ADDFIRST )
-            return MergeItems( xFrame, pToolbar, 0, 0, rItemId, rCommandMap, rModuleIdentifier, rItems );
+            MergeItems( pToolbar, 0, 0, rItemId, rCommandMap, rModuleIdentifier, rItems );
         else if ( rMergeFallback == MERGEFALLBACK_ADDLAST )
-            return MergeItems( xFrame, pToolbar, TOOLBOX_APPEND, 0, rItemId, rCommandMap, rModuleIdentifier, rItems );
+            MergeItems( pToolbar, ToolBox::APPEND, 0, rItemId, rCommandMap, rModuleIdentifier, rItems );
+        else
+            return false;
+        return true;
     }
 
     return false;
@@ -411,11 +394,6 @@ bool ToolBarMerger::ProcessMergeFallback(
 
 /**
  Merges (adds) toolbar items into an existing toolbar.
-
- @param
-     xFrame
-
-     Must be a valid reference to a frame.
 
  @param
      pToolbar
@@ -445,15 +423,10 @@ bool ToolBarMerger::ProcessMergeFallback(
 
      Toolbar items which are associated to the merge
      command.
-
- @result
-     Returns true for a successful operation otherwise
-     false.
 */
-bool ToolBarMerger::MergeItems(
-    const uno::Reference< frame::XFrame >& rFrame,
+void ToolBarMerger::MergeItems(
     ToolBox*                               pToolbar,
-    sal_uInt16                             nPos,
+    ToolBox::ImplToolItems::size_type      nPos,
     sal_uInt16                             nModIndex,
     sal_uInt16&                            rItemId,
     CommandToInfoMap&                      rCommandMap,
@@ -462,20 +435,22 @@ bool ToolBarMerger::MergeItems(
 {
     const sal_Int32 nSize( rAddonToolbarItems.size() );
 
-    uno::Reference< frame::XFrame > xFrame( rFrame );
-
     sal_uInt16 nIndex( 0 );
     for ( sal_Int32 i = 0; i < nSize; i++ )
     {
         const AddonToolbarItem& rItem = rAddonToolbarItems[i];
         if ( IsCorrectContext( rItem.aContext, rModuleIdentifier ))
         {
-            sal_Int32 nInsPos = nPos+nModIndex+i;
-            if ( nInsPos > sal_Int32( pToolbar->GetItemCount() ))
-                nInsPos = TOOLBOX_APPEND;
+            ToolBox::ImplToolItems::size_type nInsPos = nPos;
+            if (nInsPos != ToolBox::APPEND)
+            {
+                nInsPos += nModIndex+i;
+                if ( nInsPos > pToolbar->GetItemCount() )
+                    nInsPos = ToolBox::APPEND;
+            }
 
             if ( rItem.aCommandURL == TOOLBOXITEM_SEPARATOR_STR )
-                pToolbar->InsertSeparator( sal_uInt16( nInsPos ));
+                pToolbar->InsertSeparator( nInsPos );
             else
             {
                 CommandToInfoMap::iterator pIter = rCommandMap.find( rItem.aCommandURL );
@@ -491,25 +466,18 @@ bool ToolBarMerger::MergeItems(
                     pIter->second.aIds.push_back( rItemId );
                 }
 
-                ToolBarMerger::CreateToolbarItem( pToolbar, sal_uInt16( nInsPos ), rItemId, rItem );
+                ToolBarMerger::CreateToolbarItem( pToolbar, nInsPos, rItemId, rItem );
             }
 
             ++nIndex;
             ++rItemId;
         }
     }
-
-    return true;
 }
 
 /**
  Replaces a toolbar item with new items for an
  existing toolbar.
-
- @param
-     xFrame
-
-     Must be a valid reference to a frame.
 
  @param
      pToolbar
@@ -539,22 +507,17 @@ bool ToolBarMerger::MergeItems(
 
      Toolbar items which are associated to the merge
      command.
-
- @result
-     Returns true for a successful operation otherwise
-     false.
 */
-bool ToolBarMerger::ReplaceItem(
-    const uno::Reference< frame::XFrame >& xFrame,
+void ToolBarMerger::ReplaceItem(
     ToolBox*                               pToolbar,
-    sal_uInt16                             nPos,
+    ToolBox::ImplToolItems::size_type      nPos,
     sal_uInt16&                            rItemId,
     CommandToInfoMap&                      rCommandMap,
     const OUString&                        rModuleIdentifier,
     const AddonToolbarItemContainer&       rAddonToolbarItems )
 {
     pToolbar->RemoveItem( nPos );
-    return MergeItems( xFrame, pToolbar, nPos, 0, rItemId, rCommandMap, rModuleIdentifier, rAddonToolbarItems );
+    MergeItems( pToolbar, nPos, 0, rItemId, rCommandMap, rModuleIdentifier, rAddonToolbarItems );
 }
 
 /**
@@ -577,14 +540,10 @@ bool ToolBarMerger::ReplaceItem(
      rMergeCommandParameter.
 
      An optional argument for the merge command.
-
- @result
-     Returns true for a successful operation otherwise
-     false.
 */
-bool ToolBarMerger::RemoveItems(
+void ToolBarMerger::RemoveItems(
     ToolBox*                  pToolbar,
-    sal_uInt16                nPos,
+    ToolBox::ImplToolItems::size_type nPos,
     const OUString&    rMergeCommandParameter )
 {
     sal_Int32 nCount = rMergeCommandParameter.toInt32();
@@ -596,7 +555,6 @@ bool ToolBarMerger::RemoveItems(
                 pToolbar->RemoveItem( nPos );
         }
     }
-    return true;
 }
 
 /**
@@ -649,17 +607,17 @@ bool ToolBarMerger::RemoveItems(
         pResult = new DropdownToolbarController( rxContext, xFrame, pToolbar, nId, nWidth, rCommandURL );
     else if ( rControlType == TOOLBARCONTROLLER_DROPDOWNBTN )
         pResult = new ToggleButtonToolbarController( rxContext, xFrame, pToolbar, nId,
-                                                     ToggleButtonToolbarController::STYLE_DROPDOWNBUTTON, rCommandURL );
+                                                     ToggleButtonToolbarController::Style::DropDownButton, rCommandURL );
     else if ( rControlType == TOOLBARCONTROLLER_TOGGLEDDBTN )
         pResult = new ToggleButtonToolbarController( rxContext, xFrame, pToolbar, nId,
-                                                     ToggleButtonToolbarController::STYLE_TOGGLE_DROPDOWNBUTTON, rCommandURL );
+                                                     ToggleButtonToolbarController::Style::ToggleDropDownButton, rCommandURL );
     else
         pResult = new GenericToolbarController( rxContext, xFrame, pToolbar, nId, rCommandURL );
 
     return pResult;
 }
 
-void ToolBarMerger::CreateToolbarItem( ToolBox* pToolbar, sal_uInt16 nPos, sal_uInt16 nItemId, const AddonToolbarItem& rItem )
+void ToolBarMerger::CreateToolbarItem( ToolBox* pToolbar, ToolBox::ImplToolItems::size_type nPos, sal_uInt16 nItemId, const AddonToolbarItem& rItem )
 {
     pToolbar->InsertItem( nItemId, rItem.aLabel, ToolBoxItemBits::NONE, nPos );
     pToolbar->SetItemCommand( nItemId, rItem.aCommandURL );

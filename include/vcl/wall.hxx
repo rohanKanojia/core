@@ -20,10 +20,11 @@
 #ifndef INCLUDED_VCL_WALL_HXX
 #define INCLUDED_VCL_WALL_HXX
 
-#include <tools/color.hxx>
 #include <tools/gen.hxx>
 #include <vcl/dllapi.h>
+#include <o3tl/cow_wrapper.hxx>
 
+class Color;
 class Gradient;
 class BitmapEx;
 class ImplWallpaper;
@@ -48,19 +49,22 @@ enum class WallpaperStyle
 
 class VCL_DLLPUBLIC Wallpaper
 {
-private:
-    ImplWallpaper*  mpImplWallpaper;
-
-    SAL_DLLPRIVATE void           ImplMakeUnique( bool bReleaseCache = true );
-    SAL_DLLPRIVATE Gradient       ImplGetApplicationGradient() const;
-
 public:
-    SAL_DLLPRIVATE ImplWallpaper* ImplGetImpWallpaper() const { return mpImplWallpaper; }
+    typedef o3tl::cow_wrapper<ImplWallpaper> ImplType;
 
+    SAL_DLLPRIVATE void             ImplSetCachedBitmap( BitmapEx& rBmp ) const;
+    SAL_DLLPRIVATE const BitmapEx*  ImplGetCachedBitmap() const;
+    SAL_DLLPRIVATE void             ImplReleaseCachedBitmap() const;
+
+private:
+    ImplType  mpImplWallpaper;
+
+    SAL_DLLPRIVATE static Gradient  ImplGetApplicationGradient();
 
 public:
                     Wallpaper();
                     Wallpaper( const Wallpaper& rWallpaper );
+                    Wallpaper( Wallpaper&& rWallpaper );
                     Wallpaper( const Color& rColor );
                     explicit Wallpaper( const BitmapEx& rBmpEx );
                     Wallpaper( const Gradient& rGradient );
@@ -80,14 +84,16 @@ public:
     Gradient        GetGradient() const;
     bool            IsGradient() const;
 
-    void            SetRect( const Rectangle& rRect );
-    Rectangle       GetRect() const;
+    void            SetRect( const tools::Rectangle& rRect );
+    tools::Rectangle       GetRect() const;
     bool            IsRect() const;
 
     bool            IsFixed() const;
     bool            IsScrollable() const;
 
     Wallpaper&      operator=( const Wallpaper& rWallpaper );
+    Wallpaper&      operator=( Wallpaper&& rWallpaper );
+
     bool            operator==( const Wallpaper& rWallpaper ) const;
     bool            operator!=( const Wallpaper& rWallpaper ) const
                         { return !(Wallpaper::operator==( rWallpaper )); }

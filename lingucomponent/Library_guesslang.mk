@@ -25,11 +25,9 @@ $(eval $(call gb_Library_use_libraries,guesslang,\
 	sal \
 	tl \
 	utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,guesslang,\
-	lingucomponent/source/languageguessing/altstrfunc \
 	lingucomponent/source/languageguessing/guess \
 	lingucomponent/source/languageguessing/guesslang \
 	lingucomponent/source/languageguessing/simpleguesser \

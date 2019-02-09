@@ -32,27 +32,27 @@
 #include <com/sun/star/ui/dialogs/XFilterManager.hpp>
 #include <comphelper/processfactory.hxx>
 
-#include "insdlg.hxx"
+#include <insdlg.hxx>
 #include <dialmgr.hxx>
-#include <svtools/sores.hxx>
+#include <svtools/imagemgr.hxx>
+#include <svtools/strings.hrc>
+#include <svtools/svtresid.hxx>
 
+#include <sal/log.hxx>
 #include <tools/urlobj.hxx>
 #include <tools/debug.hxx>
+#include <tools/stream.hxx>
 #include <svl/urihelper.hxx>
-#include <vcl/button.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/svapp.hxx>
 #include <comphelper/classids.hxx>
+#include <sfx2/filedlghelper.hxx>
 #include <sfx2/frmdescr.hxx>
 #include <sfx2/viewsh.hxx>
-#include <sfx2/filedlghelper.hxx>
 #include <svl/ownlist.hxx>
 #include <comphelper/seqstream.hxx>
 
-#include "cuires.hrc"
+#include <strings.hrc>
 
 #include <osl/file.hxx>
 
@@ -66,19 +66,6 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::ui::dialogs;
 
-
-static OUString impl_getSvtResString( sal_uInt32 nId )
-{
-    OUString aRet;
-    ResMgr* pMgr = ResMgr::CreateResMgr( "svt", Application::GetSettings().GetUILanguageTag() );
-    if( pMgr )
-    {
-        aRet = ResId( nId, *pMgr );
-        delete pMgr;
-    }
-    return aRet;
-}
-
 bool InsertObjectDialog_Impl::IsCreateNew() const
 {
     return false;
@@ -89,115 +76,82 @@ uno::Reference< io::XInputStream > InsertObjectDialog_Impl::GetIconIfIconified( 
     return uno::Reference< io::XInputStream >();
 }
 
-InsertObjectDialog_Impl::InsertObjectDialog_Impl(vcl::Window * pParent, const OUString& rID,
-    const OUString& rUIXMLDescription,
+InsertObjectDialog_Impl::InsertObjectDialog_Impl(weld::Window* pParent,
+    const OUString& rUIXMLDescription, const OString& rID,
     const css::uno::Reference < css::embed::XStorage >& xStorage)
-    : ModalDialog(pParent, rID, rUIXMLDescription)
+    : GenericDialogController(pParent, rUIXMLDescription, rID)
     , m_xStorage( xStorage )
     , aCnt( m_xStorage )
 {
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvInsertOleDlg, DoubleClickHdl, ListBox&, void)
+IMPL_LINK_NOARG(SvInsertOleDlg, DoubleClickHdl, weld::TreeView&, void)
 {
-    EndDialog( RET_OK );
+    m_xDialog->response(RET_OK);
 }
 
-IMPL_LINK_NOARG_TYPED(SvInsertOleDlg, BrowseHdl, Button*, void)
+IMPL_LINK_NOARG(SvInsertOleDlg, BrowseHdl, weld::Button&, void)
 {
-    Reference< XComponentContext > xContext( ::comphelper::getProcessComponentContext() );
-
-    Reference< XFilePicker3 > xFilePicker = FilePicker::createWithMode(xContext, TemplateDescription::FILEOPEN_SIMPLE);
+    sfx2::FileDialogHelper aHelper(ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, FileDialogFlags::NONE, m_xDialog.get());
+    const Reference< XFilePicker3 >& xFilePicker = aHelper.GetFilePicker();
 
     // add filter
     try
     {
-        xFilePicker->appendFilter(
-             OUString(),
-             "*.*"
-             );
+        xFilePicker->appendFilter(CuiResId(RID_SVXSTR_FILTER_ALL), "*.*");
     }
     catch( const IllegalArgumentException& )
     {
-        DBG_ASSERT( false, "caught IllegalArgumentException when registering filter\n" );
+        SAL_WARN( "cui.dialogs", "caught IllegalArgumentException when registering filter" );
     }
 
     if( xFilePicker->execute() == ExecutableDialogResults::OK )
     {
         Sequence< OUString > aPathSeq( xFilePicker->getSelectedFiles() );
         INetURLObject aObj( aPathSeq[0] );
-        m_pEdFilepath->SetText( aObj.PathToFileName() );
+        m_xEdFilepath->set_text(aObj.PathToFileName());
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvInsertOleDlg, RadioHdl, Button*, void)
+IMPL_LINK_NOARG(SvInsertOleDlg, RadioHdl, weld::Button&, void)
 {
-    if ( m_pRbNewObject->IsChecked() )
+    if (m_xRbNewObject->get_active())
     {
-        m_pObjectTypeFrame->Show();
-        m_pFileFrame->Hide();
+        m_xObjectTypeFrame->show();
+        m_xFileFrame->hide();
     }
     else
     {
-        m_pFileFrame->Show();
-        m_pObjectTypeFrame->Hide();
+        m_xFileFrame->show();
+        m_xObjectTypeFrame->hide();
     }
 }
 
-
-void SvInsertOleDlg::SelectDefault()
+SvInsertOleDlg::SvInsertOleDlg(weld::Window* pParent, const Reference<embed::XStorage>& xStorage,
+        const SvObjectServerList* pServers)
+    : InsertObjectDialog_Impl( pParent, "cui/ui/insertoleobject.ui", "InsertOLEObjectDialog", xStorage)
+    , m_pServers( pServers )
+    , m_xRbNewObject(m_xBuilder->weld_radio_button("createnew"))
+    , m_xRbObjectFromfile(m_xBuilder->weld_radio_button("createfromfile"))
+    , m_xObjectTypeFrame(m_xBuilder->weld_frame("objecttypeframe"))
+    , m_xLbObjecttype(m_xBuilder->weld_tree_view("types"))
+    , m_xFileFrame(m_xBuilder->weld_frame("fileframe"))
+    , m_xEdFilepath(m_xBuilder->weld_entry("urled"))
+    , m_xBtnFilepath(m_xBuilder->weld_button("urlbtn"))
+    , m_xCbFilelink(m_xBuilder->weld_check_button("linktofile"))
+    , m_xCbAsIcon(m_xBuilder->weld_check_button("asicon"))
 {
-    m_pLbObjecttype->SelectEntryPos(0);
+    m_xLbObjecttype->set_size_request(m_xLbObjecttype->get_approximate_digit_width() * 32,
+                                      m_xLbObjecttype->get_height_rows(6));
+    m_xLbObjecttype->connect_row_activated(LINK(this, SvInsertOleDlg, DoubleClickHdl));
+    m_xBtnFilepath->connect_clicked(LINK( this, SvInsertOleDlg, BrowseHdl));
+    Link<weld::Button&,void> aLink( LINK( this, SvInsertOleDlg, RadioHdl ) );
+    m_xRbNewObject->connect_clicked( aLink );
+    m_xRbObjectFromfile->connect_clicked( aLink );
+    m_xRbNewObject->set_active(true);
 }
 
-
-SvInsertOleDlg::SvInsertOleDlg
-(
-    vcl::Window* pParent,
-    const Reference < embed::XStorage >& xStorage,
-    const SvObjectServerList* pServers
-)
-    : InsertObjectDialog_Impl( pParent, "InsertOLEObjectDialog", "cui/ui/insertoleobject.ui", xStorage ),
-    m_pServers( pServers )
-{
-    get(m_pRbNewObject, "createnew");
-    get(m_pRbObjectFromfile, "createfromfile");
-    get(m_pObjectTypeFrame, "objecttypeframe");
-    get(m_pLbObjecttype, "types");
-    get(m_pFileFrame, "fileframe");
-    get(m_pEdFilepath, "urled");
-    get(m_pBtnFilepath, "urlbtn");
-    get(m_pCbFilelink, "linktofile");
-    m_pLbObjecttype->SetDoubleClickHdl( LINK( this, SvInsertOleDlg, DoubleClickHdl ) );
-    m_pBtnFilepath->SetClickHdl( LINK( this, SvInsertOleDlg, BrowseHdl ) );
-    Link<Button*,void> aLink( LINK( this, SvInsertOleDlg, RadioHdl ) );
-    m_pRbNewObject->SetClickHdl( aLink );
-    m_pRbObjectFromfile->SetClickHdl( aLink );
-    m_pRbNewObject->Check();
-    RadioHdl( nullptr );
-}
-
-SvInsertOleDlg::~SvInsertOleDlg()
-{
-    disposeOnce();
-}
-
-void SvInsertOleDlg::dispose()
-{
-    m_pRbNewObject.clear();
-    m_pRbObjectFromfile.clear();
-    m_pObjectTypeFrame.clear();
-    m_pLbObjecttype.clear();
-    m_pFileFrame.clear();
-    m_pEdFilepath.clear();
-    m_pBtnFilepath.clear();
-    m_pCbFilelink.clear();
-    InsertObjectDialog_Impl::dispose();
-}
-
-short SvInsertOleDlg::Execute()
+short SvInsertOleDlg::run()
 {
     short nRet = RET_OK;
     SvObjectServerList  aObjS;
@@ -209,23 +163,22 @@ short SvInsertOleDlg::Execute()
     }
 
     // fill listbox and select default
-    ListBox& rBox = GetObjectTypes();
-    rBox.SetUpdateMode( false );
+    m_xLbObjecttype->freeze();
     for ( sal_uLong i = 0; i < m_pServers->Count(); i++ )
-        rBox.InsertEntry( (*m_pServers)[i].GetHumanName() );
-    rBox.SetUpdateMode( true );
-    SelectDefault();
+        m_xLbObjecttype->append_text((*m_pServers)[i].GetHumanName());
+    m_xLbObjecttype->thaw();
+    m_xLbObjecttype->select(0);
     OUString aName;
 
     DBG_ASSERT( m_xStorage.is(), "No storage!");
-    if ( m_xStorage.is() && ( nRet = Dialog::Execute() ) == RET_OK )
+    if ( m_xStorage.is() && ( nRet = InsertObjectDialog_Impl::run() ) == RET_OK )
     {
         OUString aFileName;
         bool bCreateNew = IsCreateNew();
         if ( bCreateNew )
         {
             // create and insert new embedded object
-            OUString aServerName = rBox.GetSelectEntry();
+            OUString aServerName = m_xLbObjecttype->get_selected_text();
             const SvObjectServer* pS = m_pServers->Get( aServerName );
             if ( pS )
             {
@@ -282,43 +235,49 @@ short SvInsertOleDlg::Execute()
                     {
                         // object couldn't be created from file
                         // global Resource from svtools (former so3 resource)
-                        OUString aErr( impl_getSvtResString( STR_ERROR_OBJNOCREATE_FROM_FILE ) );
+                        OUString aErr(SvtResId(STR_ERROR_OBJNOCREATE_FROM_FILE));
                         aErr = aErr.replaceFirst( "%", aFileName );
-                        ScopedVclPtrInstance<MessageDialog>::Create(this, aErr)->Execute();
+
+                        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                                  VclMessageType::Warning, VclButtonsType::Ok, aErr));
+                        xBox->run();
                     }
                     else
                     {
                         // object couldn't be created
                         // global Resource from svtools (former so3 resource)
-                        OUString aErr( impl_getSvtResString( STR_ERROR_OBJNOCREATE ) );
+                        OUString aErr(SvtResId(STR_ERROR_OBJNOCREATE));
                         aErr = aErr.replaceFirst( "%", aServerName );
-                        ScopedVclPtrInstance<MessageDialog>::Create(this, aErr)->Execute();
+
+                        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                                  VclMessageType::Warning, VclButtonsType::Ok, aErr));
+                        xBox->run();
                     }
                 }
             }
         }
         else
         {
-            aFileName = GetFilePath();
+            aFileName = m_xEdFilepath->get_text();
             INetURLObject aURL;
             aURL.SetSmartProtocol( INetProtocol::File );
             aURL.SetSmartURL( aFileName );
-            aFileName = aURL.GetMainURL( INetURLObject::NO_DECODE );
-            bool bLink = IsLinked();
+            aFileName = aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE );
+            bool bLink = m_xCbFilelink->get_active();
 
             if ( !aFileName.isEmpty() )
             {
                 // create MediaDescriptor for file to create object from
                 uno::Sequence < beans::PropertyValue > aMedium( 2 );
                 aMedium[0].Name = "URL";
-                aMedium[0].Value <<= OUString( aFileName );
+                aMedium[0].Value <<= aFileName;
 
                 uno::Reference< uno::XComponentContext > xContext = ::comphelper::getProcessComponentContext();
                 uno::Reference< task::XInteractionHandler2 > xInteraction(
                     task::InteractionHandler::createWithParent(xContext, nullptr) );
 
-               aMedium[1].Name = "InteractionHandler";
-               aMedium[1].Value <<= xInteraction;
+                aMedium[1].Name = "InteractionHandler";
+                aMedium[1].Value <<= xInteraction;
 
                 // create object from media descriptor
                 if ( bLink )
@@ -331,9 +290,25 @@ short SvInsertOleDlg::Execute()
             {
                 // object couldn't be created from file
                 // global Resource from svtools (former so3 resource)
-                OUString aErr( impl_getSvtResString( STR_ERROR_OBJNOCREATE_FROM_FILE ) );
+                OUString aErr(SvtResId(STR_ERROR_OBJNOCREATE_FROM_FILE));
                 aErr = aErr.replaceFirst( "%", aFileName );
-                ScopedVclPtrInstance<MessageDialog>::Create(this, aErr)->Execute();
+
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(m_xDialog.get(),
+                                                          VclMessageType::Warning, VclButtonsType::Ok, aErr));
+                xBox->run();
+            }
+            else
+            {
+                if (m_xCbAsIcon->get_active())
+                {
+                    //something nice here I guess would be to write the filename into
+                    //the image with this icon above it
+                    Image aImage = SvFileInformationManager::GetImage(aURL, true);
+                    SvMemoryStream aTemp;
+                    WriteDIBBitmapEx(aImage.GetBitmapEx(), aTemp);
+                    m_aIconMetaFile = Sequence<sal_Int8>(static_cast<const sal_Int8*>(aTemp.GetData()), aTemp.TellEnd());
+                    m_aIconMediaType = "application/x-openoffice-bitmap;windows_formatname=\"Bitmap\"";
+                }
             }
         }
     }
@@ -356,78 +331,54 @@ uno::Reference< io::XInputStream > SvInsertOleDlg::GetIconIfIconified( OUString*
 }
 
 
-SfxInsertFloatingFrameDialog::SfxInsertFloatingFrameDialog( vcl::Window *pParent,
-                            const css::uno::Reference < css::embed::XStorage >& xStorage )
-    : InsertObjectDialog_Impl( pParent, "InsertFloatingFrameDialog", "cui/ui/insertfloatingframe.ui",
-                              xStorage )
+SfxInsertFloatingFrameDialog::SfxInsertFloatingFrameDialog(weld::Window *pParent,
+                            const css::uno::Reference < css::embed::XStorage >& xStorage)
+    : InsertObjectDialog_Impl(pParent, "cui/ui/insertfloatingframe.ui", "InsertFloatingFrameDialog",
+                              xStorage)
 {
     Init();
 }
 
-SfxInsertFloatingFrameDialog::SfxInsertFloatingFrameDialog( vcl::Window *pParent,
-                            const uno::Reference < embed::XEmbeddedObject >& xObj )
-    : InsertObjectDialog_Impl( pParent, "InsertFloatingFrameDialog", "cui/ui/insertfloatingframe.ui",
-                              uno::Reference < embed::XStorage >() )
+SfxInsertFloatingFrameDialog::SfxInsertFloatingFrameDialog(weld::Window *pParent,
+                            const uno::Reference < embed::XEmbeddedObject >& xObj)
+    : InsertObjectDialog_Impl(pParent, "cui/ui/insertfloatingframe.ui", "InsertFloatingFrameDialog",
+                              uno::Reference<embed::XStorage>())
 {
     m_xObj = xObj;
 
     Init();
 }
 
-SfxInsertFloatingFrameDialog::~SfxInsertFloatingFrameDialog()
-{
-    disposeOnce();
-}
-
-void SfxInsertFloatingFrameDialog::dispose()
-{
-    m_pEDName.clear();
-    m_pEDURL.clear();
-    m_pBTOpen.clear();
-    m_pRBScrollingOn.clear();
-    m_pRBScrollingOff.clear();
-    m_pRBScrollingAuto.clear();
-    m_pRBFrameBorderOn.clear();
-    m_pRBFrameBorderOff.clear();
-    m_pFTMarginWidth.clear();
-    m_pNMMarginWidth.clear();
-    m_pCBMarginWidthDefault.clear();
-    m_pFTMarginHeight.clear();
-    m_pNMMarginHeight.clear();
-    m_pCBMarginHeightDefault.clear();
-    InsertObjectDialog_Impl::dispose();
-}
-
 void SfxInsertFloatingFrameDialog::Init()
 {
-    get(m_pEDName, "edname");
-    get(m_pEDURL, "edurl");
-    get(m_pBTOpen, "buttonbrowse");
-    get(m_pRBScrollingOn, "scrollbaron");
-    get(m_pRBScrollingOff, "scrollbaroff");
-    get(m_pRBScrollingAuto, "scrollbarauto");
-    get(m_pRBFrameBorderOn, "borderon");
-    get(m_pRBFrameBorderOff, "borderoff");
-    get(m_pFTMarginWidth, "widthlabel");
-    get(m_pNMMarginWidth, "width");
-    get(m_pCBMarginWidthDefault, "defaultwidth");
-    get(m_pFTMarginHeight, "heightlabel");
-    get(m_pNMMarginHeight, "height");
-    get(m_pCBMarginHeightDefault, "defaultheight");
+    m_xEDName = m_xBuilder->weld_entry("edname");
+    m_xEDURL = m_xBuilder->weld_entry("edurl");
+    m_xBTOpen = m_xBuilder->weld_button("buttonbrowse");
+    m_xRBScrollingOn = m_xBuilder->weld_radio_button("scrollbaron");
+    m_xRBScrollingOff = m_xBuilder->weld_radio_button("scrollbaroff");
+    m_xRBScrollingAuto = m_xBuilder->weld_radio_button("scrollbarauto");
+    m_xRBFrameBorderOn = m_xBuilder->weld_radio_button("borderon");
+    m_xRBFrameBorderOff = m_xBuilder->weld_radio_button("borderoff");
+    m_xFTMarginWidth = m_xBuilder->weld_label("widthlabel");
+    m_xNMMarginWidth = m_xBuilder->weld_spin_button("width");
+    m_xCBMarginWidthDefault = m_xBuilder->weld_check_button("defaultwidth");
+    m_xFTMarginHeight = m_xBuilder->weld_label("heightlabel");
+    m_xNMMarginHeight = m_xBuilder->weld_spin_button("height");
+    m_xCBMarginHeightDefault = m_xBuilder->weld_check_button("defaultheight");
 
-    Link<Button*, void> aLink( LINK( this, SfxInsertFloatingFrameDialog, CheckHdl ) );
-    m_pCBMarginWidthDefault->SetClickHdl( aLink );
-    m_pCBMarginHeightDefault->SetClickHdl( aLink );
+    Link<weld::Button&, void> aLink(LINK(this, SfxInsertFloatingFrameDialog, CheckHdl));
+    m_xCBMarginWidthDefault->connect_clicked(aLink);
+    m_xCBMarginHeightDefault->connect_clicked(aLink);
 
-    m_pCBMarginWidthDefault->Check();
-    m_pCBMarginHeightDefault->Check();
-    m_pRBScrollingAuto->Check();
-    m_pRBFrameBorderOn->Check();
+    m_xCBMarginWidthDefault->set_active(true);
+    m_xCBMarginHeightDefault->set_active(true);
+    m_xRBScrollingAuto->set_active(true);
+    m_xRBFrameBorderOn->set_active(true);
 
-    m_pBTOpen->SetClickHdl( LINK( this, SfxInsertFloatingFrameDialog, OpenHdl ) );
+    m_xBTOpen->connect_clicked(LINK(this, SfxInsertFloatingFrameDialog, OpenHdl));
 }
 
-short SfxInsertFloatingFrameDialog::Execute()
+short SfxInsertFloatingFrameDialog::run()
 {
     short nRet = RET_OK;
     bool bOK = false;
@@ -442,10 +393,10 @@ short SfxInsertFloatingFrameDialog::Execute()
             OUString aStr;
             uno::Any aAny = xSet->getPropertyValue( "FrameURL" );
             if ( aAny >>= aStr )
-                m_pEDURL->SetText( aStr );
+                m_xEDURL->set_text( aStr );
             aAny = xSet->getPropertyValue( "FrameName" );
             if ( aAny >>= aStr )
-                m_pEDName->SetText( aStr );
+                m_xEDName->set_text(aStr);
 
             sal_Int32 nSize = SIZE_NOT_SET;
             aAny = xSet->getPropertyValue( "FrameMarginWidth" );
@@ -453,26 +404,26 @@ short SfxInsertFloatingFrameDialog::Execute()
 
             if ( nSize == SIZE_NOT_SET )
             {
-                m_pCBMarginWidthDefault->Check();
-                m_pNMMarginWidth->SetText( OUString::number(DEFAULT_MARGIN_WIDTH) );
-                m_pFTMarginWidth->Enable( false );
-                m_pNMMarginWidth->Enable( false );
+                m_xCBMarginWidthDefault->set_active(true);
+                m_xNMMarginWidth->set_text(OUString::number(DEFAULT_MARGIN_WIDTH));
+                m_xFTMarginWidth->set_sensitive(false);
+                m_xNMMarginWidth->set_sensitive(false);
             }
             else
-                m_pNMMarginWidth->SetText( OUString::number( nSize ) );
+                m_xNMMarginWidth->set_text(OUString::number(nSize));
 
             aAny = xSet->getPropertyValue( "FrameMarginHeight" );
             aAny >>= nSize;
 
             if ( nSize == SIZE_NOT_SET )
             {
-                m_pCBMarginHeightDefault->Check();
-                m_pNMMarginHeight->SetText( OUString::number(DEFAULT_MARGIN_HEIGHT) );
-                m_pFTMarginHeight->Enable( false );
-                m_pNMMarginHeight->Enable( false );
+                m_xCBMarginHeightDefault->set_active(true);
+                m_xNMMarginHeight->set_text(OUString::number(DEFAULT_MARGIN_HEIGHT));
+                m_xFTMarginHeight->set_sensitive(false);
+                m_xNMMarginHeight->set_sensitive(false);
             }
             else
-                m_pNMMarginHeight->SetText( OUString::number( nSize ) );
+                m_xNMMarginHeight->set_text(OUString::number(nSize));
 
             bool bScrollOn = false;
             bool bScrollOff = false;
@@ -491,9 +442,9 @@ short SfxInsertFloatingFrameDialog::Execute()
             else
                 bScrollAuto = true;
 
-            m_pRBScrollingOn->Check( bScrollOn );
-            m_pRBScrollingOff->Check( bScrollOff );
-            m_pRBScrollingAuto->Check( bScrollAuto );
+            m_xRBScrollingOn->set_sensitive(bScrollOn);
+            m_xRBScrollingOff->set_sensitive(bScrollOff);
+            m_xRBScrollingAuto->set_sensitive(bScrollAuto);
 
             bSet = false;
             aAny = xSet->getPropertyValue( "FrameIsAutoBorder" );
@@ -502,11 +453,10 @@ short SfxInsertFloatingFrameDialog::Execute()
             {
                 aAny = xSet->getPropertyValue( "FrameIsBorder" );
                 aAny >>= bSet;
-                m_pRBFrameBorderOn->Check( bSet );
-                m_pRBFrameBorderOff->Check( !bSet );
+                m_xRBFrameBorderOn->set_active(bSet);
+                m_xRBFrameBorderOff->set_active(!bSet);
             }
 
-            SetUpdateMode( true );
             bOK = true;
         }
         catch ( uno::Exception& )
@@ -520,16 +470,16 @@ short SfxInsertFloatingFrameDialog::Execute()
         bOK = m_xStorage.is();
     }
 
-    if ( bOK && ( nRet = Dialog::Execute() ) == RET_OK )
+    if ( bOK && ( nRet = InsertObjectDialog_Impl::run() ) == RET_OK )
     {
         OUString aURL;
-        if ( !m_pEDURL->GetText().isEmpty() )
+        if (!m_xEDURL->get_text().isEmpty())
         {
             // URL can be a valid and absolute URL or a system file name
             INetURLObject aObj;
             aObj.SetSmartProtocol( INetProtocol::File );
-            if ( aObj.SetSmartURL( m_pEDURL->GetText() ) )
-                aURL = aObj.GetMainURL( INetURLObject::NO_DECODE );
+            if ( aObj.SetSmartURL( m_xEDURL->get_text() ) )
+                aURL = aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE );
         }
 
         if ( !m_xObj.is() && !aURL.isEmpty() )
@@ -551,40 +501,40 @@ short SfxInsertFloatingFrameDialog::Execute()
                 if ( bIPActive )
                     m_xObj->changeState( embed::EmbedStates::RUNNING );
 
-                OUString aName = m_pEDName->GetText();
-                ScrollingMode eScroll = ScrollingNo;
-                if ( m_pRBScrollingOn->IsChecked() )
-                    eScroll = ScrollingYes;
-                if ( m_pRBScrollingOff->IsChecked() )
-                    eScroll = ScrollingNo;
-                if ( m_pRBScrollingAuto->IsChecked() )
-                    eScroll = ScrollingAuto;
+                OUString aName = m_xEDName->get_text();
+                ScrollingMode eScroll = ScrollingMode::No;
+                if (m_xRBScrollingOn->get_active())
+                    eScroll = ScrollingMode::Yes;
+                if (m_xRBScrollingOff->get_active())
+                    eScroll = ScrollingMode::No;
+                if (m_xRBScrollingAuto->get_active())
+                    eScroll = ScrollingMode::Auto;
 
-                bool bHasBorder = m_pRBFrameBorderOn->IsChecked();
+                bool bHasBorder = m_xRBFrameBorderOn->get_active();
 
                 long lMarginWidth;
-                if ( !m_pCBMarginWidthDefault->IsChecked() )
-                    lMarginWidth = (long) m_pNMMarginWidth->GetText().toInt32();
+                if (!m_xCBMarginWidthDefault->get_active())
+                    lMarginWidth = static_cast<long>(m_xNMMarginWidth->get_text().toInt32());
                 else
                     lMarginWidth = SIZE_NOT_SET;
 
                 long lMarginHeight;
-                if ( !m_pCBMarginHeightDefault->IsChecked() )
-                    lMarginHeight = (long) m_pNMMarginHeight->GetText().toInt32();
+                if (!m_xCBMarginHeightDefault->get_active())
+                    lMarginHeight = static_cast<long>(m_xNMMarginHeight->get_text().toInt32());
                 else
                     lMarginHeight = SIZE_NOT_SET;
 
-                xSet->setPropertyValue( "FrameURL", makeAny( aURL ) );
-                xSet->setPropertyValue( "FrameName", makeAny( aName ) );
+                xSet->setPropertyValue( "FrameURL", Any( aURL ) );
+                xSet->setPropertyValue( "FrameName", Any( aName ) );
 
-                if ( eScroll == ScrollingAuto )
-                    xSet->setPropertyValue( "FrameIsAutoScroll", makeAny( true ) );
+                if ( eScroll == ScrollingMode::Auto )
+                    xSet->setPropertyValue( "FrameIsAutoScroll", Any( true ) );
                 else
-                    xSet->setPropertyValue( "FrameIsScrollingMode", makeAny( eScroll == ScrollingYes ) );
+                    xSet->setPropertyValue( "FrameIsScrollingMode", Any( eScroll == ScrollingMode::Yes ) );
 
-                xSet->setPropertyValue( "FrameIsBorder", makeAny( bHasBorder ) );
-                xSet->setPropertyValue( "FrameMarginWidth", makeAny( sal_Int32( lMarginWidth ) ) );
-                xSet->setPropertyValue( "FrameMarginHeight", makeAny( sal_Int32( lMarginHeight ) ) );
+                xSet->setPropertyValue( "FrameIsBorder", Any( bHasBorder ) );
+                xSet->setPropertyValue( "FrameMarginWidth", Any( sal_Int32( lMarginWidth ) ) );
+                xSet->setPropertyValue( "FrameMarginHeight", Any( sal_Int32( lMarginHeight ) ) );
 
                 if ( bIPActive )
                     m_xObj->changeState( embed::EmbedStates::INPLACE_ACTIVE );
@@ -599,46 +549,39 @@ short SfxInsertFloatingFrameDialog::Execute()
     return nRet;
 }
 
-
-IMPL_LINK_TYPED( SfxInsertFloatingFrameDialog, CheckHdl, Button*, pButton, void )
+IMPL_LINK(SfxInsertFloatingFrameDialog, CheckHdl, weld::Button&, rButton, void)
 {
-    CheckBox* pCB = static_cast<CheckBox*>(pButton);
-    if ( pCB == m_pCBMarginWidthDefault )
+    weld::CheckButton& rCB = dynamic_cast<weld::CheckButton&>(rButton);
+    if (&rCB == m_xCBMarginWidthDefault.get())
     {
-        if ( pCB->IsChecked() )
-            m_pNMMarginWidth->SetText( OUString::number(DEFAULT_MARGIN_WIDTH) );
-        m_pFTMarginWidth->Enable( !pCB->IsChecked() );
-        m_pNMMarginWidth->Enable( !pCB->IsChecked() );
+        if (rCB.get_active())
+            m_xNMMarginWidth->set_text(OUString::number(DEFAULT_MARGIN_WIDTH));
+        m_xFTMarginWidth->set_sensitive(!rCB.get_active());
+        m_xNMMarginWidth->set_sensitive(!rCB.get_active());
     }
 
-    if ( pCB == m_pCBMarginHeightDefault )
+    if (&rCB == m_xCBMarginHeightDefault.get())
     {
-        if ( pCB->IsChecked() )
-            m_pNMMarginHeight->SetText( OUString::number(DEFAULT_MARGIN_HEIGHT) );
-        m_pFTMarginHeight->Enable( !pCB->IsChecked() );
-        m_pNMMarginHeight->Enable( !pCB->IsChecked() );
+        if (rCB.get_active())
+            m_xNMMarginHeight->set_text(OUString::number(DEFAULT_MARGIN_HEIGHT));
+        m_xFTMarginHeight->set_sensitive(!rCB.get_active());
+        m_xNMMarginHeight->set_sensitive(!rCB.get_active());
     }
 }
 
-
-IMPL_LINK_NOARG_TYPED( SfxInsertFloatingFrameDialog, OpenHdl, Button*, void)
+IMPL_LINK_NOARG( SfxInsertFloatingFrameDialog, OpenHdl, weld::Button&, void)
 {
-    vcl::Window* pOldParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent( this );
-
     // create the file dialog
     sfx2::FileDialogHelper aFileDlg(
-            ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, 0, OUString() );
+            ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE, FileDialogFlags::NONE, OUString(),
+            SfxFilterFlags::NONE, SfxFilterFlags::NONE, m_xDialog.get());
 
     // set the title
-    aFileDlg.SetTitle(CUI_RESSTR(RID_SVXSTR_SELECT_FILE_IFRAME));
+    aFileDlg.SetTitle(CuiResId(RID_SVXSTR_SELECT_FILE_IFRAME));
 
     // show the dialog
     if ( aFileDlg.Execute() == ERRCODE_NONE )
-        m_pEDURL->SetText(
-            INetURLObject( aFileDlg.GetPath() ).GetMainURL( INetURLObject::DECODE_WITH_CHARSET ) );
-
-    Application::SetDefDialogParent( pOldParent );
+        m_xEDURL->set_text(INetURLObject(aFileDlg.GetPath()).GetMainURL(INetURLObject::DecodeMechanism::WithCharset));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

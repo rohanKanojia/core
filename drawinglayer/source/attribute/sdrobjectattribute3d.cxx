@@ -37,7 +37,6 @@ namespace drawinglayer
             css::drawing::TextureMode              maTextureMode;              // texture kind (see uno API)
             MaterialAttribute3D                    maMaterial;                 // object, specular and emissive colors, SpecularIntensity
 
-            // bitfield
             bool                                   mbNormalsInvert : 1;        // invert normals
             bool                                   mbDoubleSided : 1;          // surfaces are double sided
             bool                                   mbShadow3D : 1;             // display shadow in 3D (if on), params for that are at scene
@@ -123,20 +122,11 @@ namespace drawinglayer
         {
         }
 
-        Sdr3DObjectAttribute::Sdr3DObjectAttribute(const Sdr3DObjectAttribute& rCandidate)
-        :   mpSdr3DObjectAttribute(rCandidate.mpSdr3DObjectAttribute)
-        {
-        }
+        Sdr3DObjectAttribute::Sdr3DObjectAttribute(const Sdr3DObjectAttribute&) = default;
 
-        Sdr3DObjectAttribute::~Sdr3DObjectAttribute()
-        {
-        }
+        Sdr3DObjectAttribute::~Sdr3DObjectAttribute() = default;
 
-        Sdr3DObjectAttribute& Sdr3DObjectAttribute::operator=(const Sdr3DObjectAttribute& rCandidate)
-        {
-            mpSdr3DObjectAttribute = rCandidate.mpSdr3DObjectAttribute;
-            return *this;
-        }
+        Sdr3DObjectAttribute& Sdr3DObjectAttribute::operator=(const Sdr3DObjectAttribute&) = default;
 
         bool Sdr3DObjectAttribute::operator==(const Sdr3DObjectAttribute& rCandidate) const
         {

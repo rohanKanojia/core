@@ -18,10 +18,12 @@
  */
 #ifndef INCLUDED_SC_SOURCE_UI_VBA_VBACONDITION_HXX
 #define INCLUDED_SC_SOURCE_UI_VBA_VBACONDITION_HXX
-#include <com/sun/star/sheet/XSheetCondition.hpp>
-#include <com/sun/star/sheet/XCellRangeAddressable.hpp>
+
 #include <vbahelper/vbahelperinterface.hxx>
 #include <com/sun/star/sheet/ConditionOperator.hpp>
+
+namespace com { namespace sun { namespace star { namespace sheet { class XCellRangeAddressable; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { class XSheetCondition; } } } }
 
 template< typename... Ifc >
 class ScVbaCondition : public InheritedHelperInterfaceWeakImpl< Ifc... >
@@ -33,13 +35,14 @@ protected:
 public:
     ScVbaCondition(  const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > & xContext, const css::uno::Reference< css::sheet::XSheetCondition >& _xSheetCondition );
 
-    static css::sheet::ConditionOperator retrieveAPIOperator( const css::uno::Any& _aOperator) throw ( css::script::BasicErrorException );
+    /// @throws css::script::BasicErrorException
+    static css::sheet::ConditionOperator retrieveAPIOperator( const css::uno::Any& _aOperator);
 
-    virtual OUString SAL_CALL Formula1( ) throw ( css::script::BasicErrorException, css::uno::RuntimeException ) SAL_OVERRIDE;
-    virtual OUString SAL_CALL Formula2( ) throw ( css::script::BasicErrorException, css::uno::RuntimeException ) SAL_OVERRIDE;
-    virtual void setFormula1( const css::uno::Any& _aFormula1) throw ( css::script::BasicErrorException );
-    virtual sal_Int32 Operator(bool _bIncludeFormulaValue) throw ( css::script::BasicErrorException );
-    virtual sal_Int32 SAL_CALL Operator() throw ( css::script::BasicErrorException, css::uno::RuntimeException ) SAL_OVERRIDE = 0;
+    virtual OUString SAL_CALL Formula1( ) override;
+    virtual OUString SAL_CALL Formula2( ) override;
+    /// @throws css::script::BasicErrorException
+    virtual sal_Int32 Operator(bool _bIncludeFormulaValue);
+    virtual sal_Int32 SAL_CALL Operator() override = 0;
 
 };
 #endif

@@ -84,10 +84,10 @@ SwExtTextInput::~SwExtTextInput()
                     if( bInsText )
                     {
                         rIdx = nSttCnt;
-                        pDoc->GetIDocumentUndoRedo().StartUndo( UNDO_OVERWRITE, nullptr );
+                        pDoc->GetIDocumentUndoRedo().StartUndo( SwUndoId::OVERWRITE, nullptr );
                         pDoc->getIDocumentContentOperations().Overwrite( *this, sText.copy( 0, nOWLen ) );
                         pDoc->getIDocumentContentOperations().InsertString( *this, sText.copy( nOWLen ) );
-                        pDoc->GetIDocumentUndoRedo().EndUndo( UNDO_OVERWRITE, nullptr );
+                        pDoc->GetIDocumentUndoRedo().EndUndo( SwUndoId::OVERWRITE, nullptr );
                     }
                 }
                 else
@@ -148,7 +148,7 @@ void SwExtTextInput::SetInputData( const CommandExtTextInputData& rData )
         }
 
         SwIndex aIdx( pTNd, nSttCnt );
-        const OUString rNewStr = rData.GetText();
+        const OUString& rNewStr = rData.GetText();
 
         if( bIsOverwriteCursor && !sOverwriteText.isEmpty() )
         {
@@ -203,7 +203,7 @@ void SwExtTextInput::SetInputData( const CommandExtTextInputData& rData )
         aAttrs.clear();
         if( rData.GetTextAttr() )
         {
-            const sal_uInt16 *pAttrs = rData.GetTextAttr();
+            const ExtTextInputAttr *pAttrs = rData.GetTextAttr();
             aAttrs.insert( aAttrs.begin(), pAttrs, pAttrs + rData.GetText().getLength() );
         }
     }
@@ -256,7 +256,7 @@ void SwDoc::DeleteExtTextInput( SwExtTextInput* pDel )
     if( pDel == mpExtInputRing )
     {
         if( pDel->GetNext() != mpExtInputRing )
-            mpExtInputRing = static_cast<SwPaM*>(pDel->GetNext());
+            mpExtInputRing = pDel->GetNext();
         else
             mpExtInputRing = nullptr;
     }
@@ -270,7 +270,7 @@ SwExtTextInput* SwDoc::GetExtTextInput( const SwNode& rNd,
     if( mpExtInputRing )
     {
         sal_uLong nNdIdx = rNd.GetIndex();
-        SwExtTextInput* pTmp = static_cast<SwExtTextInput*>(mpExtInputRing);
+        SwExtTextInput* pTmp = mpExtInputRing;
         do {
             sal_uLong nPt = pTmp->GetPoint()->nNode.GetIndex(),
                   nMk = pTmp->GetMark()->nNode.GetIndex();
@@ -290,7 +290,7 @@ SwExtTextInput* SwDoc::GetExtTextInput( const SwNode& rNd,
                 pRet = pTmp;
                 break;
             }
-            pTmp = static_cast<SwExtTextInput*>(pTmp->GetNext());
+            pTmp = pTmp->GetNext();
         } while ( pTmp!=mpExtInputRing );
     }
     return pRet;
@@ -300,7 +300,7 @@ SwExtTextInput* SwDoc::GetExtTextInput() const
 {
     OSL_ENSURE( !mpExtInputRing || !mpExtInputRing->IsMultiSelection(),
             "more than one InputEngine available" );
-    return static_cast<SwExtTextInput*>(mpExtInputRing);
+    return mpExtInputRing;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

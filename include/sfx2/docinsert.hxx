@@ -22,42 +22,52 @@
 
 #include <rtl/ustring.hxx>
 #include <sfx2/dllapi.h>
-#include <tools/errcode.hxx>
+#include <sfx2/docfile.hxx>
+#include <vcl/errcode.hxx>
 #include <tools/link.hxx>
+#include <memory>
 #include <vector>
 
 namespace sfx2 { class FileDialogHelper; }
-class SfxMedium;
+namespace weld { class Window; }
 class SfxItemSet;
+enum class FileDialogFlags;
 
-typedef ::std::vector< SfxMedium* > SfxMediumList;
+typedef ::std::vector< std::unique_ptr<SfxMedium> > SfxMediumList;
 
 namespace sfx2 {
 
 class SFX2_DLLPUBLIC DocumentInserter
 {
 private:
-    OUString                m_sDocFactory;
+    weld::Window* const     m_pParent;
+    OUString const          m_sDocFactory;
     OUString                m_sFilter;
     Link<sfx2::FileDialogHelper*,void> m_aDialogClosedLink;
 
-    sal_Int64 const         m_nDlgFlags;
+    FileDialogFlags const m_nDlgFlags;
     ErrCode                 m_nError;
 
-    sfx2::FileDialogHelper* m_pFileDlg;
+    std::unique_ptr<sfx2::FileDialogHelper>
+                            m_pFileDlg;
     SfxItemSet*             m_pItemSet;
     std::vector<OUString>   m_pURLList;
 
-    DECL_LINK_TYPED(DialogClosedHdl, sfx2::FileDialogHelper*, void);
+    DECL_LINK(DialogClosedHdl, sfx2::FileDialogHelper*, void);
 
 public:
-    DocumentInserter(const OUString& rFactory,
-                     bool const bEnableMultiSelection = false);
+    enum class Mode {
+        Insert,
+        InsertMulti,
+        Compare,
+        Merge
+    };
+    DocumentInserter(weld::Window* pParent, const OUString& rFactory, const Mode mode = Mode::Insert);
     ~DocumentInserter();
 
     void                    StartExecuteModal( const Link<sfx2::FileDialogHelper*,void>& _rDialogClosedLink );
-    SfxMedium*              CreateMedium();
-    SfxMediumList*          CreateMediumList();
+    std::unique_ptr<SfxMedium> CreateMedium(char const* pFallbackHack = nullptr);
+    SfxMediumList CreateMediumList();
 };
 
 } // namespace sfx2

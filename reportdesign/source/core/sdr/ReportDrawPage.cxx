@@ -16,23 +16,24 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "ReportDrawPage.hxx"
-#include "RptObject.hxx"
-#include "RptModel.hxx"
-#include "RptDef.hxx"
-#include "corestrings.hrc"
+#include <ReportDrawPage.hxx>
+#include <RptObject.hxx>
+#include <RptModel.hxx>
+#include <RptDef.hxx>
+#include <strings.hxx>
 #include <comphelper/mimeconfighelper.hxx>
 #include <comphelper/classids.hxx>
 #include <comphelper/embeddedobjectcontainer.hxx>
 #include <comphelper/documentconstants.hxx>
+#include <editeng/outlobj.hxx>
 
 #include <svx/svdmodel.hxx>
-#include <com/sun/star/report/XFixedLine.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
-
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <tools/diagnose_ex.h>
 #include <svx/unoshape.hxx>
+#include <svx/svdpage.hxx>
 
 namespace reportdesign
 {
@@ -46,21 +47,24 @@ OReportDrawPage::OReportDrawPage(SdrPage* _pPage
 {
 }
 
-SdrObject* OReportDrawPage::_CreateSdrObject(const uno::Reference< drawing::XShape > & xDescr)
-    throw (uno::RuntimeException, std::exception)
+SdrObject* OReportDrawPage::CreateSdrObject_(const uno::Reference< drawing::XShape > & xDescr)
 {
     uno::Reference< report::XReportComponent> xReportComponent(xDescr,uno::UNO_QUERY);
     if ( xReportComponent.is() )
-        return OObjectBase::createObject(xReportComponent);
-    return SvxDrawPage::_CreateSdrObject( xDescr );
+    {
+        return OObjectBase::createObject(
+            GetSdrPage()->getSdrModelFromSdrPage(),
+            xReportComponent);
+    }
+
+    return SvxDrawPage::CreateSdrObject_( xDescr );
 }
 
-uno::Reference< drawing::XShape >  OReportDrawPage::_CreateShape( SdrObject *pObj ) const
-    throw (uno::RuntimeException, std::exception)
+uno::Reference< drawing::XShape >  OReportDrawPage::CreateShape( SdrObject *pObj ) const
 {
     OObjectBase* pBaseObj = dynamic_cast<OObjectBase*>(pObj);
     if ( !pBaseObj )
-        return SvxDrawPage::_CreateShape( pObj );
+        return SvxDrawPage::CreateShape( pObj );
 
     uno::Reference< report::XSection> xSection = m_xSection;
     uno::Reference< lang::XMultiServiceFactory> xFactory;
@@ -71,7 +75,7 @@ uno::Reference< drawing::XShape >  OReportDrawPage::_CreateShape( SdrObject *pOb
     if ( xFactory.is() )
     {
         bool bChangeOrientation = false;
-        OUString sServiceName = pBaseObj->getServiceName();
+        const OUString& sServiceName = pBaseObj->getServiceName();
         OSL_ENSURE(!sServiceName.isEmpty(),"No Service Name given!");
 
         if (dynamic_cast< const OUnoObject* >(pObj) != nullptr)
@@ -81,7 +85,7 @@ uno::Reference< drawing::XShape >  OReportDrawPage::_CreateShape( SdrObject *pOb
             {
                 uno::Reference<beans::XPropertySet> xControlModel(rUnoObj.GetUnoControlModel(),uno::UNO_QUERY);
                 if ( xControlModel.is() )
-                    xControlModel->setPropertyValue( PROPERTY_MULTILINE,uno::makeAny(sal_True));
+                    xControlModel->setPropertyValue( PROPERTY_MULTILINE,uno::makeAny(true));
             }
             else
                 bChangeOrientation = rUnoObj.GetObjIdentifier() == OBJ_DLG_HFIXEDLINE;
@@ -104,13 +108,13 @@ uno::Reference< drawing::XShape >  OReportDrawPage::_CreateShape( SdrObject *pOb
                 sal_Int64 nAspect = embed::Aspects::MSOLE_CONTENT;
                 uno::Reference < embed::XEmbeddedObject > xObj;
                 OUString sName;
-                xObj = pObj->GetModel()->GetPersist()->getEmbeddedObjectContainer().CreateEmbeddedObject(
+                xObj = pObj->getSdrModelFromSdrObject().GetPersist()->getEmbeddedObjectContainer().CreateEmbeddedObject(
                     ::comphelper::MimeConfigurationHelper::GetSequenceClassIDRepresentation(
                     "80243D39-6741-46C5-926E-069164FF87BB"), sName );
                 OSL_ENSURE(xObj.is(),"Embedded Object could not be created!");
 
                 /**************************************************
-                * Das leere OLE-Objekt bekommt ein neues IPObj
+                * The empty OLE object gets a new IPObj
                 **************************************************/
                 pObj->SetEmptyPresObj(false);
                 rOle2Obj.SetOutlinerParaObject(nullptr);
@@ -118,7 +122,7 @@ uno::Reference< drawing::XShape >  OReportDrawPage::_CreateShape( SdrObject *pOb
                 rOle2Obj.SetPersistName(sName);
                 rOle2Obj.SetName(sName);
                 rOle2Obj.SetAspect(nAspect);
-                Rectangle aRect = rOle2Obj.GetLogicRect();
+                tools::Rectangle aRect = rOle2Obj.GetLogicRect();
 
                 Size aTmp = aRect.GetSize();
                 awt::Size aSz( aTmp.Width(), aTmp.Height() );
@@ -130,16 +134,16 @@ uno::Reference< drawing::XShape >  OReportDrawPage::_CreateShape( SdrObject *pOb
         }
 
         if ( !xShape.is() )
-            xShape.set( SvxDrawPage::_CreateShape( pObj ) );
+            xShape.set( SvxDrawPage::CreateShape( pObj ) );
 
         try
         {
-            OReportModel* pRptModel = static_cast<OReportModel*>(pObj->GetModel());
-            xRet.set( pRptModel->createShape(sServiceName,xShape,bChangeOrientation ? 0 : 1), uno::UNO_QUERY_THROW );
+            OReportModel& rRptModel(static_cast< OReportModel& >(pObj->getSdrModelFromSdrObject()));
+            xRet.set( rRptModel.createShape(sServiceName,xShape,bChangeOrientation ? 0 : 1), uno::UNO_QUERY_THROW );
         }
         catch( const uno::Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
 

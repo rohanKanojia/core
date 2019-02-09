@@ -26,18 +26,20 @@
 #include <i18nlangtag/lang.h>
 #include <svtools/parhtml.hxx>
 #include <svl/macitem.hxx>
+#include <memory>
 
 
 class ImageMap;
 class SfxMedium;
 class SfxObjectShell;
+class SvNumberFormatter;
 
 class SFX2_DLLPUBLIC SfxHTMLParser : public HTMLParser
 {
     OUString                aScriptType;
 
-    SfxMedium*              pMedium;
-    SfxMedium *pDLMedium;   // Medium for Download Files
+    SfxMedium* const        pMedium;
+    std::unique_ptr<SfxMedium> pDLMedium;   // Medium for Download Files
 
     ScriptType eScriptType;
 
@@ -45,9 +47,9 @@ class SFX2_DLLPUBLIC SfxHTMLParser : public HTMLParser
 
 protected:
 
-    SfxHTMLParser( SvStream& rStream, bool bNewDoc=true, SfxMedium *pMedium=nullptr );
+    SfxHTMLParser( SvStream& rStream, bool bNewDoc, SfxMedium *pMedium );
 
-    virtual ~SfxHTMLParser();
+    virtual ~SfxHTMLParser() override;
 
 public:
     // Read the options of an image map
@@ -58,11 +60,11 @@ public:
     { return ParseMapOptions(pImageMap, GetOptions()); }
     static bool ParseAreaOptions(ImageMap * pImageMap, const OUString& rBaseURL,
                                  const HTMLOptions& rOptions,
-                                 sal_uInt16 nEventMouseOver = 0,
-                                 sal_uInt16 nEventMouseOut = 0 );
+                                 SvMacroItemId nEventMouseOver,
+                                 SvMacroItemId nEventMouseOut );
     inline bool ParseAreaOptions(ImageMap * pImageMap, const OUString& rBaseURL,
-                                 sal_uInt16 nEventMouseOver = 0,
-                                 sal_uInt16 nEventMouseOut = 0);
+                                 SvMacroItemId nEventMouseOver,
+                                 SvMacroItemId nEventMouseOut);
 
     // <TD SDVAL="..." SDNUM="...">
     static double GetTableDataOptionsValNum( sal_uInt32& nNumForm,
@@ -99,8 +101,8 @@ protected:
 };
 
 inline bool SfxHTMLParser::ParseAreaOptions(ImageMap * pImageMap, const OUString& rBaseURL,
-                                            sal_uInt16 nEventMouseOver,
-                                            sal_uInt16 nEventMouseOut)
+                                            SvMacroItemId nEventMouseOver,
+                                            SvMacroItemId nEventMouseOut)
 {
     return ParseAreaOptions( pImageMap, rBaseURL, GetOptions(),
                              nEventMouseOver, nEventMouseOut );

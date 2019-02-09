@@ -17,67 +17,61 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "bbdlg.hxx"
-#include "border.hxx"
-#include "backgrnd.hxx"
-//UUUU
-#include "svx/svxids.hrc"
-#include "cuitabarea.hxx"
+#include <bbdlg.hxx>
+#include <border.hxx>
+#include <backgrnd.hxx>
+#include <svx/svxids.hrc>
+#include <cuitabarea.hxx>
 
-SvxBorderBackgroundDlg::SvxBorderBackgroundDlg(vcl::Window *pParent,
+SvxBorderBackgroundDlg::SvxBorderBackgroundDlg(weld::Window *pParent,
     const SfxItemSet& rCoreSet,
     bool bEnableSelector,
     bool bEnableDrawingLayerFillStyles)
-    : SfxTabDialog(pParent,
-        bEnableDrawingLayerFillStyles
-            ? OUString("BorderAreaTransparencyDialog")
-            : OUString("BorderBackgroundDialog"),
+    : SfxTabDialogController(pParent,
         bEnableDrawingLayerFillStyles
             ? OUString("cui/ui/borderareatransparencydialog.ui")
             : OUString("cui/ui/borderbackgrounddialog.ui"),
+        bEnableDrawingLayerFillStyles
+            ? OString("BorderAreaTransparencyDialog")
+            : OString("BorderBackgroundDialog"),
         &rCoreSet)
     , mbEnableBackgroundSelector(bEnableSelector)
-    , mbEnableDrawingLayerFillStyles(bEnableDrawingLayerFillStyles)
-    , m_nBackgroundPageId(0)
-    , m_nAreaPageId(0)
-    , m_nTransparencePageId(0)
 {
     AddTabPage("borders", SvxBorderTabPage::Create, nullptr );
-    if (mbEnableDrawingLayerFillStyles)
+    if (bEnableDrawingLayerFillStyles)
     {
-        //UUUU Here we want full DrawingLayer FillStyle access, so add Area and Transparency TabPages
-        m_nAreaPageId = AddTabPage("area", SvxAreaTabPage::Create, nullptr);
-        m_nTransparencePageId = AddTabPage("transparence", SvxTransparenceTabPage::Create, nullptr);
+        // Here we want full DrawingLayer FillStyle access, so add Area and Transparency TabPages
+        AddTabPage("area", SvxAreaTabPage::Create, nullptr);
+        AddTabPage("transparence", SvxTransparenceTabPage::Create, nullptr);
     }
     else
     {
-        m_nBackgroundPageId = AddTabPage("background", SvxBackgroundTabPage::Create, nullptr );
+        AddTabPage("background", SvxBkgTabPage::Create, nullptr );
     }
 }
 
-void SvxBorderBackgroundDlg::PageCreated( sal_uInt16 nPageId, SfxTabPage& rTabPage )
+void SvxBorderBackgroundDlg::PageCreated(const OString& rPageId, SfxTabPage& rTabPage)
 {
-    if (nPageId == m_nBackgroundPageId)
+    if (rPageId == "background")
     {
+        SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
         // allow switching between Color/graphic
-        if(mbEnableBackgroundSelector)
-        {
-            static_cast< SvxBackgroundTabPage& >(rTabPage).ShowSelector();
-        }
+        if (mbEnableBackgroundSelector)
+            aSet.Put(SfxUInt32Item(SID_FLAG_TYPE, static_cast<sal_uInt32>(SvxBackgroundTabFlags::SHOW_SELECTOR)));
+        rTabPage.PageCreated(aSet);
     }
-    //UUUU inits for Area and Transparency TabPages
+    // inits for Area and Transparency TabPages
     // The selection attribute lists (XPropertyList derivates, e.g. XColorList for
     // the color table) need to be added as items (e.g. SvxColorTableItem) to make
     // these pages find the needed attributes for fill style suggestions.
-    // These are added in SwDocStyleSheet::GetItemSet() for the SFX_STYLE_FAMILY_PARA on
+    // These are added in SwDocStyleSheet::GetItemSet() for the SfxStyleFamily::Para on
     // demand, but could also be directly added from the DrawModel.
-    else if (nPageId == m_nAreaPageId)
+    else if (rPageId == "area")
     {
         SfxItemSet aNew(
             *GetInputSetImpl()->GetPool(),
-            SID_COLOR_TABLE, SID_BITMAP_LIST,
-            SID_OFFER_IMPORT, SID_OFFER_IMPORT,
-            0, 0);
+            svl::Items<SID_COLOR_TABLE, SID_PATTERN_LIST,
+            SID_OFFER_IMPORT, SID_OFFER_IMPORT>{});
 
         aNew.Put(*GetInputSetImpl());
 
@@ -86,7 +80,7 @@ void SvxBorderBackgroundDlg::PageCreated( sal_uInt16 nPageId, SfxTabPage& rTabPa
 
         rTabPage.PageCreated(aNew);
     }
-    else if (nPageId == m_nTransparencePageId)
+    else if (rPageId == "transparence")
     {
         rTabPage.PageCreated(*GetInputSetImpl());
     }

@@ -10,7 +10,6 @@
 #include <string>
 
 #include "plugin.hxx"
-#include "compat.hxx"
 
 // Having an extern prototype for a method in a module and not actually declaring that method is dodgy.
 //
@@ -18,10 +17,10 @@
 namespace {
 
 class ExternAndNotDefined:
-    public RecursiveASTVisitor<ExternAndNotDefined>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<ExternAndNotDefined>
 {
 public:
-    explicit ExternAndNotDefined(InstantiationData const & data): Plugin(data) {}
+    explicit ExternAndNotDefined(loplugin::InstantiationData const & data): FilteringPlugin(data) {}
 
     virtual void run() override { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
 
@@ -33,7 +32,7 @@ bool ExternAndNotDefined::VisitFunctionDecl(const FunctionDecl * functionDecl) {
         return true;
     }
     if (functionDecl->isDefined() || functionDecl->isPure()
-      || (compat::getLinkage(functionDecl->getLinkageAndVisibility())
+      || (functionDecl->getLinkageAndVisibility().getLinkage()
           != ExternalLinkage)) {
         return true;
     }
@@ -46,7 +45,7 @@ bool ExternAndNotDefined::VisitFunctionDecl(const FunctionDecl * functionDecl) {
         return true;
     }
     // this is the bison/flex C API, it has to be defined this way
-    string functionName = functionDecl->getNameAsString();
+    std::string functionName = functionDecl->getNameAsString();
     if (functionName == "yyerror" || functionName == "YYWarning" || functionName == "yyparse" || functionName == "yylex") {
         return true;
     }
@@ -54,12 +53,13 @@ bool ExternAndNotDefined::VisitFunctionDecl(const FunctionDecl * functionDecl) {
     if (functionName == "gdk_x11_screen_get_screen_number") {
         return true;
     }
-    if (!compat::isInMainFile( compiler.getSourceManager(), functionDecl->getLocation())) {
+    if (!compiler.getSourceManager().isInMainFile(functionDecl->getLocation()))
+    {
         return true;
     }
-    StringRef fileName { compiler.getSourceManager().getFilename(functionDecl->getLocation()) };
+    StringRef fileName { getFileNameOfSpellingLoc(functionDecl->getLocation()) };
     // the filters use some kind of dynamic loading stunt
-    if (fileName.startswith(SRCDIR "/filter/qa/")) {
+    if (loplugin::hasPathnamePrefix(fileName, SRCDIR "/filter/qa/")) {
         return true;
     }
     report(

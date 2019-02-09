@@ -19,13 +19,16 @@
 #ifndef INCLUDED_COM_SUN_STAR_UNO_ANY_H
 #define INCLUDED_COM_SUN_STAR_UNO_ANY_H
 
-#include <uno/any2.h>
-#include <typelib/typedescription.h>
-#include <cppu/unotype.hxx>
-#include <com/sun/star/uno/TypeClass.hdl>
-#include <rtl/alloc.h>
+#include "sal/config.h"
 
-namespace rtl { class OUString; }
+#include <cstddef>
+
+#include "rtl/ustring.hxx"
+#include "uno/any2.h"
+#include "typelib/typedescription.h"
+#include "cppu/unotype.hxx"
+#include "com/sun/star/uno/TypeClass.hdl"
+#include "rtl/alloc.h"
 
 namespace com
 {
@@ -51,13 +54,13 @@ class SAL_WARN_UNUSED SAL_DLLPUBLIC_RTTI Any : public uno_Any
 public:
     /// @cond INTERNAL
     // these are here to force memory de/allocation to sal lib.
-    inline static void * SAL_CALL operator new ( size_t nSize )
+    static void * SAL_CALL operator new ( size_t nSize )
         { return ::rtl_allocateMemory( nSize ); }
-    inline static void SAL_CALL operator delete ( void * pMem )
+    static void SAL_CALL operator delete ( void * pMem )
         { ::rtl_freeMemory( pMem ); }
-    inline static void * SAL_CALL operator new ( size_t, void * pMem )
+    static void * SAL_CALL operator new ( size_t, void * pMem )
         { return pMem; }
-    inline static void SAL_CALL operator delete ( void *, void * )
+    static void SAL_CALL operator delete ( void *, void * )
         {}
     /// @endcond
 
@@ -73,6 +76,13 @@ public:
     explicit inline Any( T const & value );
     /// Ctor support for C++ bool.
     explicit inline Any( bool value );
+
+#if defined LIBO_INTERNAL_ONLY
+    template<typename T1, typename T2>
+    explicit inline Any(rtl::OUStringConcat<T1, T2> && value);
+    template<typename T1, typename T2>
+    explicit Any(rtl::OUStringConcat<T1, T2> const &) = delete;
+#endif
 
     /** Copy constructor: Sets value of the given any.
 
@@ -101,6 +111,21 @@ public:
     */
     inline Any( const void * pData_, typelib_TypeDescriptionReference * pType_ );
 
+#if defined LIBO_INTERNAL_ONLY
+    Any(bool const *, Type const &) = delete;
+    Any(bool const *, typelib_TypeDescription *) = delete;
+    Any(bool const *, typelib_TypeDescriptionReference *) = delete;
+    Any(sal_Bool const *, Type const &) = delete;
+    Any(sal_Bool const *, typelib_TypeDescription *) = delete;
+    Any(sal_Bool const *, typelib_TypeDescriptionReference *) = delete;
+    Any(std::nullptr_t, Type const & type):
+        Any(static_cast<void *>(nullptr), type) {}
+    Any(std::nullptr_t, typelib_TypeDescription * type):
+        Any(static_cast<void *>(nullptr), type) {}
+    Any(std::nullptr_t, typelib_TypeDescriptionReference * type):
+        Any(static_cast<void *>(nullptr), type) {}
+#endif
+
     /** Destructor: Destructs any content and frees memory.
     */
     inline ~Any();
@@ -112,17 +137,22 @@ public:
     */
     inline Any & SAL_CALL operator = ( const Any & rAny );
 
+#if defined LIBO_INTERNAL_ONLY
+    inline Any(Any && other);
+    inline Any & operator =(Any && other);
+#endif
+
     /** Gets the type of the set value.
 
         @return a Type object of the set value
      */
-    inline const Type & SAL_CALL getValueType() const
+    const Type & SAL_CALL getValueType() const
         { return * reinterpret_cast< const Type * >( &pType ); }
     /** Gets the type of the set value.
 
         @return the unacquired type description reference of the set value
      */
-    inline typelib_TypeDescriptionReference * SAL_CALL getValueTypeRef() const
+    typelib_TypeDescriptionReference * SAL_CALL getValueTypeRef() const
         { return pType; }
 
     /** Gets the type description of the set value. Provides ownership of the type description!
@@ -130,15 +160,15 @@ public:
 
         @param ppTypeDescr a pointer to type description pointer
     */
-    inline void SAL_CALL getValueTypeDescription( typelib_TypeDescription ** ppTypeDescr ) const
+    void SAL_CALL getValueTypeDescription( typelib_TypeDescription ** ppTypeDescr ) const
         { ::typelib_typedescriptionreference_getDescription( ppTypeDescr, pType ); }
 
     /** Gets the type class of the set value.
 
         @return the type class of the set value
      */
-    inline TypeClass SAL_CALL getValueTypeClass() const
-        { return (TypeClass)pType->eTypeClass; }
+    TypeClass SAL_CALL getValueTypeClass() const
+        { return static_cast<TypeClass>(pType->eTypeClass); }
 
     /** Gets the type name of the set value.
 
@@ -150,14 +180,14 @@ public:
 
         @return true if any has a value, false otherwise
     */
-    inline bool SAL_CALL hasValue() const
+    bool SAL_CALL hasValue() const
         { return (typelib_TypeClass_VOID != pType->eTypeClass); }
 
     /** Gets a pointer to the set value.
 
         @return a pointer to the set value
     */
-    inline const void * SAL_CALL getValue() const
+    const void * SAL_CALL getValue() const
         { return pData; }
 
     /** Provides a value of specified type, so you can easily write e.g.
@@ -197,6 +227,22 @@ public:
     */
     inline void SAL_CALL setValue( const void * pData_, typelib_TypeDescription * pTypeDescr );
 
+#if defined LIBO_INTERNAL_ONLY
+    void setValue(bool const *, Type const &) = delete;
+    void setValue(bool const *, typelib_TypeDescriptionReference *) = delete;
+    void setValue(bool const *, typelib_TypeDescription *) = delete;
+    void setValue(sal_Bool const *, Type const &) = delete;
+    void setValue(sal_Bool const *, typelib_TypeDescriptionReference *)
+        = delete;
+    void setValue(sal_Bool const *, typelib_TypeDescription *) = delete;
+    void setValue(std::nullptr_t, Type const & type)
+    { setValue(static_cast<void *>(nullptr), type); }
+    void setValue(std::nullptr_t, typelib_TypeDescriptionReference * type)
+    { setValue(static_cast<void *>(nullptr), type); }
+    void setValue(std::nullptr_t, typelib_TypeDescription * type)
+    { setValue(static_cast<void *>(nullptr), type); }
+#endif
+
     /** Clears this any. If the any already contains a value, that value will be destructed
         and its memory freed. After this has been called, the any does not contain a value.
     */
@@ -235,19 +281,28 @@ public:
     inline bool SAL_CALL operator != ( const Any & rAny ) const;
 
 private:
+#if !defined LIBO_INTERNAL_ONLY
     /// @cond INTERNAL
     // Forbid use with ambiguous type (sal_Unicode, sal_uInt16):
     explicit Any(sal_uInt16) SAL_DELETED_FUNCTION;
     /// @endcond
+#endif
 };
 
+#if !defined LIBO_INTERNAL_ONLY
 /// @cond INTERNAL
 // Forbid use with ambiguous type (sal_Unicode, sal_uInt16):
 template<> sal_uInt16 Any::get<sal_uInt16>() const SAL_DELETED_FUNCTION;
 template<> bool Any::has<sal_uInt16>() const SAL_DELETED_FUNCTION;
 /// @endcond
+#endif
 
 /** Template function to generically construct an any from a C++ value.
+
+    This can be useful with an explicitly specified template parameter, when the
+    (UNO) type recorded in the Any instance shall be different from what would
+    be deduced from the (C++) type of the argument if no template parameter were
+    specified explicitly.
 
     @tparam C value type
     @param value a value
@@ -256,9 +311,9 @@ template<> bool Any::has<sal_uInt16>() const SAL_DELETED_FUNCTION;
 template< class C >
 inline Any SAL_CALL makeAny( const C & value );
 
-// additionally specialized for C++ bool
-template<>
-inline Any SAL_CALL makeAny( bool const & value );
+#if !defined LIBO_INTERNAL_ONLY
+template<> inline Any SAL_CALL makeAny(sal_uInt16 const & value);
+#endif
 
 template<> Any SAL_CALL makeAny(Any const &) SAL_DELETED_FUNCTION;
 
@@ -272,6 +327,31 @@ template<> Any SAL_CALL makeAny(Any const &) SAL_DELETED_FUNCTION;
 template<typename T> inline Any toAny(T const & value);
 
 template<> inline Any toAny(Any const & value);
+
+#if defined LIBO_INTERNAL_ONLY
+
+/** Extract a value from an Any, if necessary.
+
+    The difference to operator >>= is that operator >>= cannot be called with an
+    Any as right-hand side (in LIBO_INTERNAL_ONLY), while fromAny just passes on
+    the given Any (and always succeeds) in the specialization for T = Any.
+
+    @tparam T  any type representing a UNO type
+
+    @param any  any Any value
+
+    @param value  a non-null pointer, receiving the extracted value if
+    extraction succeeded (and left unmodified otherwise)
+
+    @return  true iff extraction succeeded
+
+    @since LibreOffice 5.3
+*/
+template<typename T> inline bool fromAny(Any const & any, T * value);
+
+template<> inline bool fromAny(Any const & any, Any * value);
+
+#endif
 
 class BaseReference;
 
@@ -370,8 +450,10 @@ inline bool SAL_CALL operator >>= ( const Any & rAny, Type & value );
 template<>
 inline bool SAL_CALL operator == ( const Any & rAny, const Type & value );
 // any
+#if !defined LIBO_INTERNAL_ONLY
 template<>
 inline bool SAL_CALL operator >>= ( const Any & rAny, Any & value );
+#endif
 // interface
 template<>
 inline bool SAL_CALL operator == ( const Any & rAny, const BaseReference & value );

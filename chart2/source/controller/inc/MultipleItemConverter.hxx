@@ -19,8 +19,6 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_MULTIPLEITEMCONVERTER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_MULTIPLEITEMCONVERTER_HXX
 
-#include <com/sun/star/frame/XModel.hpp>
-
 #include "ItemConverter.hxx"
 
 #include <vector>
@@ -32,7 +30,7 @@ namespace chart { namespace wrapper {
 class MultipleItemConverter : public ItemConverter
 {
 public:
-    virtual ~MultipleItemConverter();
+    virtual ~MultipleItemConverter() override;
 
     virtual void FillItemSet( SfxItemSet & rOutItemSet ) const override;
     virtual bool ApplyItemSet( const SfxItemSet & rItemSet ) override;
@@ -43,7 +41,7 @@ public:
 protected:
     MultipleItemConverter( SfxItemPool& rItemPool );
 
-    ::std::vector< ItemConverter * >            m_aConverters;
+    std::vector< std::unique_ptr<ItemConverter> >  m_aConverters;
 };
 
 }}

@@ -55,29 +55,29 @@ namespace drawinglayer
                 const bool bOldModulate(getModulate()); mbModulate = rPrimitive.getModulate();
                 const bool bOldFilter(getFilter()); mbFilter = rPrimitive.getFilter();
                 const bool bOldSimpleTextureActive(getSimpleTextureActive());
-                std::shared_ptr< texture::GeoTexSvx > pOldTex = (bTransparence) ? mpTransparenceGeoTexSvx : mpGeoTexSvx;
+                std::shared_ptr< texture::GeoTexSvx > pOldTex = bTransparence ? mpTransparenceGeoTexSvx : mpGeoTexSvx;
 
                 // create texture
                 const attribute::FillGradientAttribute& rFillGradient = rPrimitive.getGradient();
                 const basegfx::B2DRange aOutlineRange(0.0, 0.0, rPrimitive.getTextureSize().getX(), rPrimitive.getTextureSize().getY());
                 const attribute::GradientStyle aGradientStyle(rFillGradient.getStyle());
                 sal_uInt32 nSteps(rFillGradient.getSteps());
-                const basegfx::BColor aStart(rFillGradient.getStartColor());
-                const basegfx::BColor aEnd(rFillGradient.getEndColor());
+                const basegfx::BColor& aStart(rFillGradient.getStartColor());
+                const basegfx::BColor& aEnd(rFillGradient.getEndColor());
                 const sal_uInt32 nMaxSteps(sal_uInt32((aStart.getMaximumDistance(aEnd) * 127.5) + 0.5));
                 std::shared_ptr< texture::GeoTexSvx > pNewTex;
 
                 if(nMaxSteps)
                 {
                     // there IS a color distance
-                    if(nSteps == 0L)
+                    if(nSteps == 0)
                     {
                         nSteps = nMaxSteps;
                     }
 
-                    if(nSteps < 2L)
+                    if(nSteps < 2)
                     {
-                        nSteps = 2L;
+                        nSteps = 2;
                     }
 
                     if(nSteps > nMaxSteps)
@@ -87,7 +87,7 @@ namespace drawinglayer
 
                     switch(aGradientStyle)
                     {
-                        case attribute::GRADIENTSTYLE_LINEAR:
+                        case attribute::GradientStyle::Linear:
                         {
                             pNewTex.reset(
                                 new texture::GeoTexSvxGradientLinear(
@@ -100,7 +100,7 @@ namespace drawinglayer
                                     rFillGradient.getAngle()));
                             break;
                         }
-                        case attribute::GRADIENTSTYLE_AXIAL:
+                        case attribute::GradientStyle::Axial:
                         {
                             pNewTex.reset(
                                 new texture::GeoTexSvxGradientAxial(
@@ -113,7 +113,7 @@ namespace drawinglayer
                                     rFillGradient.getAngle()));
                             break;
                         }
-                        case attribute::GRADIENTSTYLE_RADIAL:
+                        case attribute::GradientStyle::Radial:
                         {
                             pNewTex.reset(
                                 new texture::GeoTexSvxGradientRadial(
@@ -126,7 +126,7 @@ namespace drawinglayer
                                     rFillGradient.getOffsetY()));
                             break;
                         }
-                        case attribute::GRADIENTSTYLE_ELLIPTICAL:
+                        case attribute::GradientStyle::Elliptical:
                         {
                             pNewTex.reset(
                                 new texture::GeoTexSvxGradientElliptical(
@@ -140,7 +140,7 @@ namespace drawinglayer
                                     rFillGradient.getAngle()));
                             break;
                         }
-                        case attribute::GRADIENTSTYLE_SQUARE:
+                        case attribute::GradientStyle::Square:
                         {
                             pNewTex.reset(
                                 new texture::GeoTexSvxGradientSquare(
@@ -154,7 +154,7 @@ namespace drawinglayer
                                     rFillGradient.getAngle()));
                             break;
                         }
-                        case attribute::GRADIENTSTYLE_RECT:
+                        case attribute::GradientStyle::Rect:
                         {
                             pNewTex.reset(
                                 new texture::GeoTexSvxGradientRect(
@@ -229,12 +229,12 @@ namespace drawinglayer
                 const basegfx::B3DPoint aZero(aInvObjectToView * basegfx::B3DPoint(0.0, 0.0, 0.0));
                 const basegfx::B3DPoint aOne(aInvObjectToView * basegfx::B3DPoint(1.0, 1.0, 1.0));
                 const basegfx::B3DVector aLogicPixel(aOne - aZero);
-                double fLogicPixelSizeWorld(::std::max(::std::max(fabs(aLogicPixel.getX()), fabs(aLogicPixel.getY())), fabs(aLogicPixel.getZ())));
+                double fLogicPixelSizeWorld(std::max(std::max(fabs(aLogicPixel.getX()), fabs(aLogicPixel.getY())), fabs(aLogicPixel.getZ())));
 
                 // calculate logic pixel size in texture coordinates
                 const double fLogicTexSizeX(fLogicPixelSizeWorld / rPrimitive.getTextureSize().getX());
                 const double fLogicTexSizeY(fLogicPixelSizeWorld / rPrimitive.getTextureSize().getY());
-                const double fLogicTexSize(fLogicTexSizeX > fLogicTexSizeY ? fLogicTexSizeX : fLogicTexSizeY);
+                const double fLogicTexSize(std::max(fLogicTexSizeX, fLogicTexSizeY));
 
                 // create texture and set
                 mpGeoTexSvx.reset(new texture::GeoTexSvxMultiHatch(rPrimitive, fLogicTexSize));
@@ -270,7 +270,7 @@ namespace drawinglayer
                 basegfx::B2DRange aGraphicRange(rFillGraphicAttribute.getGraphicRange());
 
                 aGraphicRange.transform(
-                    basegfx::tools::createScaleB2DHomMatrix(
+                    basegfx::utils::createScaleB2DHomMatrix(
                         rPrimitive.getTextureSize()));
 
                 if(rFillGraphicAttribute.getTiling())
@@ -317,7 +317,7 @@ namespace drawinglayer
             }
         }
 
-        void DefaultProcessor3D::impRenderPolygonHairlinePrimitive3D(const primitive3d::PolygonHairlinePrimitive3D& rPrimitive)
+        void DefaultProcessor3D::impRenderPolygonHairlinePrimitive3D(const primitive3d::PolygonHairlinePrimitive3D& rPrimitive) const
         {
             basegfx::B3DPolygon aHairline(rPrimitive.getB3DPolygon());
 
@@ -330,7 +330,7 @@ namespace drawinglayer
 
                 // transform to device coordinates (-1.0 .. 1.0) and check for visibility
                 aHairline.transform(getViewInformation3D().getObjectToView());
-                const basegfx::B3DRange a3DRange(basegfx::tools::getRange(aHairline));
+                const basegfx::B3DRange a3DRange(basegfx::utils::getRange(aHairline));
                 const basegfx::B2DRange a2DRange(a3DRange.getMinX(), a3DRange.getMinY(), a3DRange.getMaxX(), a3DRange.getMaxY());
 
                 if(a2DRange.overlaps(maRasterRange))
@@ -342,7 +342,7 @@ namespace drawinglayer
             }
         }
 
-        void DefaultProcessor3D::impRenderPolyPolygonMaterialPrimitive3D(const primitive3d::PolyPolygonMaterialPrimitive3D& rPrimitive)
+        void DefaultProcessor3D::impRenderPolyPolygonMaterialPrimitive3D(const primitive3d::PolyPolygonMaterialPrimitive3D& rPrimitive) const
         {
             basegfx::B3DPolyPolygon aFill(rPrimitive.getB3DPolyPolygon());
             basegfx::BColor aObjectColor(rPrimitive.getMaterial().getColor());
@@ -370,7 +370,7 @@ namespace drawinglayer
 
                 // transform to device coordinates (-1.0 .. 1.0) and check for visibility
                 aFill.transform(getViewInformation3D().getObjectToView());
-                const basegfx::B3DRange a3DRange(basegfx::tools::getRange(aFill));
+                const basegfx::B3DRange a3DRange(basegfx::utils::getRange(aFill));
                 const basegfx::B2DRange a2DRange(a3DRange.getMinX(), a3DRange.getMinY(), a3DRange.getMaxX(), a3DRange.getMaxY());
 
                 bPaintIt = a2DRange.overlaps(maRasterRange);
@@ -381,7 +381,7 @@ namespace drawinglayer
             {
                 // get plane normal of polygon in view coordinates (with ZBuffer values),
                 // left-handed coordinate system
-                const basegfx::B3DVector aPlaneNormal(aFill.getB3DPolygon(0L).getNormal());
+                const basegfx::B3DVector aPlaneNormal(aFill.getB3DPolygon(0).getNormal());
 
                 if(aPlaneNormal.getZ() > 0.0)
                 {
@@ -398,7 +398,7 @@ namespace drawinglayer
                 {
                     // get plane normal of polygon in view coordinates (with ZBuffer values),
                     // left-handed coordinate system
-                    const basegfx::B3DVector aPlaneNormal(aFill.getB3DPolygon(0L).getNormal());
+                    const basegfx::B3DVector aPlaneNormal(aFill.getB3DPolygon(0).getNormal());
 
                     if(aPlaneNormal.getZ() > 0.0)
                     {
@@ -427,11 +427,11 @@ namespace drawinglayer
                         const sal_uInt16 nSpecularIntensity(rPrimitive.getMaterial().getSpecularIntensity());
 
                         // solve color model for each normal vector, set colors at points. Clear normals.
-                        for(sal_uInt32 a(0L); a < aFill.count(); a++)
+                        for(sal_uInt32 a(0); a < aFill.count(); a++)
                         {
                             basegfx::B3DPolygon aPartFill(aFill.getB3DPolygon(a));
 
-                            for(sal_uInt32 b(0L); b < aPartFill.count(); b++)
+                            for(sal_uInt32 b(0); b < aPartFill.count(); b++)
                             {
                                 // solve color model. Transform normal to eye coor
                                 const basegfx::B3DVector aNormal(aPartFill.getNormal(b));
@@ -448,7 +448,7 @@ namespace drawinglayer
                     case css::drawing::ShadeMode_FLAT:
                     {
                         // flat shading. Get plane vector in eye coordinates
-                        const basegfx::B3DVector aPlaneEyeNormal(aNormalTransform * rPrimitive.getB3DPolyPolygon().getB3DPolygon(0L).getNormal());
+                        const basegfx::B3DVector aPlaneEyeNormal(aNormalTransform * rPrimitive.getB3DPolyPolygon().getB3DPolygon(0).getNormal());
 
                         // prepare color model parameters, evtl. use blend color
                         const basegfx::BColor aColor(getModulate() ? basegfx::BColor(1.0, 1.0, 1.0) : rPrimitive.getMaterial().getColor());

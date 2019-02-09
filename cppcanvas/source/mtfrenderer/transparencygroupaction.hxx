@@ -43,8 +43,8 @@ namespace cppcanvas
     {
         struct OutDevState;
 
-        typedef ::std::unique_ptr< GDIMetaFile >  MtfAutoPtr;
-        typedef ::std::unique_ptr< Gradient >     GradientAutoPtr;
+        typedef std::unique_ptr< GDIMetaFile >  MtfAutoPtr;
+        typedef std::unique_ptr< Gradient >     GradientAutoPtr;
 
         /** Transparency group action.
 
@@ -79,7 +79,7 @@ namespace cppcanvas
                 Size of the transparency group object, in current
                 state coordinate system.
              */
-            ActionSharedPtr createTransparencyGroupAction( MtfAutoPtr&&                  rGroupMtf,
+            std::shared_ptr<Action> createTransparencyGroupAction( MtfAutoPtr&&                  rGroupMtf,
                                                                   GradientAutoPtr&&             rAlphaGradient,
                                                                   const ::basegfx::B2DPoint&    rDstPoint,
                                                                   const ::basegfx::B2DVector&   rDstSize,

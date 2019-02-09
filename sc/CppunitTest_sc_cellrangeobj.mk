@@ -18,89 +18,25 @@ $(eval $(call gb_CppunitTest_add_exception_objects,sc_cellrangeobj, \
 ))
 
 $(eval $(call gb_CppunitTest_use_libraries,sc_cellrangeobj, \
-    basegfx \
-    comphelper \
     cppu \
-    cppuhelper \
-    drawinglayer \
-    editeng \
-    for \
-    forui \
-    i18nlangtag \
-    msfilter \
-    oox \
     sal \
-    salhelper \
-    sax \
-    sb \
-    sc \
-    sfx \
-    sot \
     subsequenttest \
-    svl \
-    svt \
-    svx \
-    svxcore \
 	test \
-    tk \
-    tl \
-    ucbhelper \
 	unotest \
-    utl \
-    vbahelper \
-    vcl \
-    xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_cellrangeobj,\
-    -I$(SRCDIR)/sc/source/ui/inc \
-    -I$(SRCDIR)/sc/inc \
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sc_cellrangeobj,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sc_cellrangeobj))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_cellrangeobj))
 $(eval $(call gb_CppunitTest_use_vcl,sc_cellrangeobj))
 
 $(eval $(call gb_CppunitTest_use_components,sc_cellrangeobj,\
-	basic/util/sb \
-    comphelper/util/comphelp \
-    configmgr/source/configmgr \
-    dbaccess/util/dba \
-    filter/source/config/cache/filterconfig1 \
-    filter/source/storagefilterdetect/storagefd \
-    forms/util/frm \
-    framework/util/fwk \
+    $(sc_unoapi_common_components) \
     i18npool/source/search/i18nsearch \
-    i18npool/util/i18npool \
-    oox/util/oox \
-    package/source/xstor/xstor \
-    package/util/package2 \
-    sax/source/expatwrap/expwrap \
-    scripting/source/basprov/basprov \
-    scripting/util/scriptframe \
-    sc/util/sc \
-    sc/util/scd \
-    sc/util/scfilt \
-    $(call gb_Helper_optional,SCRIPTING, \
-	    sc/util/vbaobj) \
-    sfx2/util/sfx \
-    sot/util/sot \
-    svl/source/fsstor/fsstorage \
-    toolkit/util/tk \
-    ucb/source/core/ucb1 \
-    ucb/source/ucp/file/ucpfile1 \
-    ucb/source/ucp/tdoc/ucptdoc1 \
-    unotools/util/utl \
-    unoxml/source/rdf/unordf \
-    unoxml/source/service/unoxml \
-    xmloff/util/xo \
-	svtools/util/svt \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sc_cellrangeobj))

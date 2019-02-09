@@ -10,24 +10,25 @@
 #include <unotest/filters-test.hxx>
 #include <test/bootstrapfixture.hxx>
 
-#include <comphelper/processfactory.hxx>
+#include <comphelper/fileformat.h>
 
 #include <sfx2/app.hxx>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
 #include <sfx2/sfxsids.hrc>
+#include <sfx2/fcontnr.hxx>
 
 #include <svl/stritem.hxx>
 #include <unotools/tempfile.hxx>
 
-#include "init.hxx"
-#include "iodetect.hxx"
-#include "swtypes.hxx"
-#include "doc.hxx"
-#include "docsh.hxx"
-#include "shellres.hxx"
-#include "docufld.hxx"
+#include <init.hxx>
+#include <iodetect.hxx>
+#include <swtypes.hxx>
+#include <doc.hxx>
+#include <docsh.hxx>
+#include <shellres.hxx>
+#include <docufld.hxx>
 
 typedef tools::SvRef<SwDocShell> SwDocShellRef;
 
@@ -82,12 +83,12 @@ bool SwFiltersTest::filter(const OUString &rFilter, const OUString &rURL,
 {
     std::shared_ptr<const SfxFilter> pFilter(new SfxFilter(
         rFilter, OUString(), nFilterFlags,
-        nClipboardID, OUString(), 0, OUString(),
+        nClipboardID, OUString(), OUString(),
         rUserData, OUString()));
     const_cast<SfxFilter*>(pFilter.get())->SetVersion(nFilterVersion);
 
     SwDocShellRef xDocShRef = new SwDocShell;
-    SfxMedium* pSrcMed = new SfxMedium(rURL, STREAM_STD_READ);
+    SfxMedium* pSrcMed = new SfxMedium(rURL, StreamMode::STD_READ);
 
     std::shared_ptr<const SfxFilter> pImportFilter;
     std::shared_ptr<const SfxFilter> pExportFilter;
@@ -110,7 +111,7 @@ bool SwFiltersTest::filter(const OUString &rFilter, const OUString &rURL,
     bool bLoaded = xDocShRef->DoLoad(pSrcMed);
     if (!bExport)
     {
-        if (xDocShRef.Is())
+        if (xDocShRef.is())
             xDocShRef->DoClose();
         return bLoaded;
     }
@@ -121,10 +122,10 @@ bool SwFiltersTest::filter(const OUString &rFilter, const OUString &rURL,
 
     utl::TempFile aTempFile;
     aTempFile.EnableKillingFile();
-    SfxMedium aDstMed(aTempFile.GetURL(), STREAM_STD_WRITE);
+    SfxMedium aDstMed(aTempFile.GetURL(), StreamMode::STD_WRITE);
     aDstMed.SetFilter(pExportFilter);
     bool bSaved = xDocShRef->DoSaveAs(aDstMed);
-    if (xDocShRef.Is())
+    if (xDocShRef.is())
         xDocShRef->DoClose();
     return bSaved;
 }

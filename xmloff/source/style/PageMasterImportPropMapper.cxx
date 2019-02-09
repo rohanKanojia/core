@@ -125,10 +125,9 @@ void PageMasterImportPropertyMapper::finished(std::vector< XMLPropertyState >& r
     XMLPropertyState* pFooterMargins[4] = { nullptr, nullptr, nullptr, nullptr };
     std::unique_ptr<XMLPropertyState> pNewFooterMargins[4];
 
-    std::vector< XMLPropertyState >::iterator aEnd = rProperties.end();
-    for (std::vector< XMLPropertyState >::iterator aIter = rProperties.begin(); aIter != aEnd; ++aIter)
+    for (auto& rProp : rProperties)
     {
-        XMLPropertyState *property = &(*aIter);
+        XMLPropertyState *property = &rProp;
         sal_Int16 nContextID = getPropertySetMapper()->GetEntryContextId(property->mnIndex);
         if (property->mnIndex >= nStartIndex && property->mnIndex < nEndIndex)
         {
@@ -313,31 +312,19 @@ void PageMasterImportPropertyMapper::finished(std::vector< XMLPropertyState >& r
 
     if (pHeaderHeight)
     {
-        sal_Bool bValue(sal_False);
-        uno::Any aAny;
-        aAny.setValue( &bValue, cppu::UnoType<bool>::get() );
-        xHeaderDynamic.reset(new XMLPropertyState(pHeaderHeight->mnIndex + 2, aAny));
+        xHeaderDynamic.reset(new XMLPropertyState(pHeaderHeight->mnIndex + 2, Any(false)));
     }
     if (pHeaderMinHeight)
     {
-        sal_Bool bValue(sal_True);
-        uno::Any aAny;
-        aAny.setValue( &bValue, cppu::UnoType<bool>::get() );
-        xHeaderDynamic.reset(new XMLPropertyState(pHeaderMinHeight->mnIndex + 1, aAny));
+        xHeaderDynamic.reset(new XMLPropertyState(pHeaderMinHeight->mnIndex + 1, Any(true)));
     }
     if (pFooterHeight)
     {
-        sal_Bool bValue(sal_False);
-        uno::Any aAny;
-        aAny.setValue( &bValue, cppu::UnoType<bool>::get() );
-        xFooterDynamic.reset(new XMLPropertyState(pFooterHeight->mnIndex + 2, aAny));
+        xFooterDynamic.reset(new XMLPropertyState(pFooterHeight->mnIndex + 2, Any(false)));
     }
     if (pFooterMinHeight)
     {
-        sal_Bool bValue(sal_True);
-        uno::Any aAny;
-        aAny.setValue( &bValue, cppu::UnoType<bool>::get() );
-        xFooterDynamic.reset(new XMLPropertyState(pFooterMinHeight->mnIndex + 1, aAny));
+        xFooterDynamic.reset(new XMLPropertyState(pFooterMinHeight->mnIndex + 1, Any(true)));
     }
 
     // fdo#38056: nerf the various AllFoo properties so they do not override
@@ -393,15 +380,15 @@ void PageMasterImportPropertyMapper::finished(std::vector< XMLPropertyState >& r
 
     for (sal_uInt16 i = 0; i < 4; i++)
     {
-        if (pNewMargins[i].get())
+        if (pNewMargins[i])
         {
             rProperties.push_back(*pNewMargins[i]);
         }
-        if (pNewHeaderMargins[i].get())
+        if (pNewHeaderMargins[i])
         {
             rProperties.push_back(*pNewHeaderMargins[i]);
         }
-        if (pNewFooterMargins[i].get())
+        if (pNewFooterMargins[i])
         {
             rProperties.push_back(*pNewFooterMargins[i]);
         }

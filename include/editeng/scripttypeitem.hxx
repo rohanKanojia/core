@@ -19,33 +19,13 @@
 #ifndef INCLUDED_EDITENG_SCRIPTTYPEITEM_HXX
 #define INCLUDED_EDITENG_SCRIPTTYPEITEM_HXX
 
-#include <svl/intitem.hxx>
 #include <svl/languageoptions.hxx>
+#include <svl/poolitem.hxx>
 #include <editeng/editengdllapi.h>
-
-// class SvxScriptTypeItem ----------------------------------------------
-
-/* [Description]
-
-    This item describes the script type of the selected text and is only
-    used for the user interface.
-*/
-
-class EDITENG_DLLPUBLIC SvxScriptTypeItem : public SfxUInt16Item
-{
-public:
-    static SfxPoolItem* CreateDefault();
-
-    explicit SvxScriptTypeItem( SvtScriptType nType = SvtScriptType::LATIN );
-    virtual SfxPoolItem* Clone( SfxItemPool *pPool = nullptr ) const override;
-
-};
 
 class EDITENG_DLLPUBLIC SvxScriptSetItem : public SfxSetItem
 {
 public:
-    static SfxPoolItem* CreateDefault();
-
     SvxScriptSetItem( sal_uInt16 nSlotId, SfxItemPool& rPool );
 
     virtual SfxPoolItem* Clone( SfxItemPool *pPool = nullptr ) const override;

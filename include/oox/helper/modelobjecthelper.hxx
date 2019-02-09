@@ -20,13 +20,19 @@
 #ifndef INCLUDED_OOX_HELPER_MODELOBJECTHELPER_HXX
 #define INCLUDED_OOX_HELPER_MODELOBJECTHELPER_HXX
 
+#include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 namespace com { namespace sun { namespace star {
-    namespace awt { struct Gradient; }
+    namespace awt { struct Gradient;
+                    class XBitmap; }
+    namespace graphic { class XGraphic; }
     namespace container { class XNameContainer; }
     namespace drawing { struct LineDash; }
+    namespace drawing { struct Hatch; }
     namespace drawing { struct PolyPolygonBezierCoords; }
     namespace lang { class XMultiServiceFactory; }
 } } }
@@ -63,7 +69,7 @@ private:
                         mxModelFactory;         ///< Factory to create the container.
     mutable css::uno::Reference< css::container::XNameContainer >
                         mxContainer;            ///< Container for the objects.
-    OUString            maServiceName;          ///< Service name to create the container.
+    OUString const      maServiceName;          ///< Service name to create the container.
     sal_Int32           mnIndex;                ///< Index to create unique identifiers.
 };
 
@@ -100,11 +106,13 @@ public:
 
     OUString     insertTransGrandient( const css::awt::Gradient& rGradient );
 
-    /** Inserts a new named fill bitmap URL, returns the bitmap name, based on
-        an internal constant name with a new unused index appended. */
-    OUString     insertFillBitmapUrl( const OUString& rGraphicUrl );
+    OUString     insertFillHatch( const css::drawing::Hatch& rHatch );
 
-    OUString     getFillBitmapUrl( const OUString& rGraphicName );
+    /** Inserts a new named fill graphic, returns the bitmap name, based on
+        an internal constant name with a new unused index appended. */
+    OUString insertFillBitmapXGraphic(css::uno::Reference<css::graphic::XGraphic> const & rxGraphic);
+
+    css::uno::Reference<css::awt::XBitmap> getFillBitmap(OUString const & rGraphicName);
 
 private:
     ObjectContainer     maMarkerContainer;      ///< Contains all named line markers (line end polygons).
@@ -112,10 +120,7 @@ private:
     ObjectContainer     maGradientContainer;    ///< Contains all named fill gradients.
     ObjectContainer     maTransGradContainer;   ///< Contains all named transparency Gradients.
     ObjectContainer     maBitmapUrlContainer;   ///< Contains all named fill bitmap URLs.
-    const OUString      maDashNameBase;       ///< Base name for all named line dashes.
-    const OUString      maGradientNameBase;   ///< Base name for all named fill gradients.
-    const OUString      maTransGradNameBase;   ///< Base name for all named fill gradients.
-    const OUString      maBitmapUrlNameBase;  ///< Base name for all named fill bitmap URLs.
+    ObjectContainer     maHatchContainer;       ///< Contains all named fill hatches.
 };
 
 

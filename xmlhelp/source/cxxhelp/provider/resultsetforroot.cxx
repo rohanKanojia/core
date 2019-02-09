@@ -32,13 +32,11 @@ using namespace com::sun::star::ucb;
 ResultSetForRoot::ResultSetForRoot( const uno::Reference< uno::XComponentContext >&  rxContext,
                                     const uno::Reference< XContentProvider >&  xProvider,
                                     const uno::Sequence< beans::Property >& seq,
-                                    URLParameter& aURLParameter,
+                                    URLParameter const & aURLParameter,
                                     Databases* pDatabases )
-    : ResultSetBase( rxContext, xProvider,seq ),
-      m_aURLParameter( aURLParameter ),
-      m_pDatabases( pDatabases )
+    : ResultSetBase( rxContext, xProvider,seq )
 {
-    m_aPath = m_pDatabases->getModuleList( m_aURLParameter.get_language() );
+    m_aPath = pDatabases->getModuleList( aURLParameter.get_language() );
     m_aItems.resize( m_aPath.size() );
     m_aIdents.resize( m_aPath.size() );
 
@@ -52,9 +50,9 @@ ResultSetForRoot::ResultSetForRoot( const uno::Reference< uno::XComponentContext
             "vnd.sun.star.help://" +
             m_aPath[i] +
             "?Language=" +
-            m_aURLParameter.get_language() +
+            aURLParameter.get_language() +
             "&System=" +
-            m_aURLParameter.get_system();
+            aURLParameter.get_system();
 
         m_nRow = sal_Int32( i );
 

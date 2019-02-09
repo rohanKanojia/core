@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/Duration.hpp>
 #include <com/sun/star/xml/sax/XAttributeList.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
@@ -81,6 +82,10 @@ SdXMLShowsContext::SdXMLShowsContext( SdXMLImport& rImport,  sal_uInt16 nPrfx, c
     {
         bool bAll = true;
         uno::Any aAny;
+        // Per ODF this is default, but we did it wrong before LO 6.0 (tdf#108824)
+        bool bIsMouseVisible = true;
+        if (rImport.getGeneratorVersion() < SvXMLImport::LO_6x)
+            bIsMouseVisible = false;
 
         // read attributes
         const sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
@@ -96,8 +101,7 @@ SdXMLShowsContext::SdXMLShowsContext( SdXMLImport& rImport,  sal_uInt16 nPrfx, c
             case XML_NAMESPACE_PRESENTATION:
                 if( IsXMLToken( aLocalName, XML_START_PAGE ) )
                 {
-                    aAny <<= sValue;
-                    mpImpl->mxPresProps->setPropertyValue("FirstPage", aAny );
+                    mpImpl->mxPresProps->setPropertyValue("FirstPage", Any(sValue) );
                     bAll = false;
                 }
                 else if( IsXMLToken( aLocalName, XML_SHOW ) )
@@ -113,8 +117,7 @@ SdXMLShowsContext::SdXMLShowsContext( SdXMLImport& rImport,  sal_uInt16 nPrfx, c
 
                     const sal_Int32 nMS = (aDuration.Hours * 60 +
                             aDuration.Minutes) * 60 + aDuration.Seconds;
-                    aAny <<= nMS;
-                    mpImpl->mxPresProps->setPropertyValue("Pause", aAny );
+                    mpImpl->mxPresProps->setPropertyValue("Pause", Any(nMS) );
                 }
                 else if( IsXMLToken( aLocalName, XML_ANIMATIONS ) )
                 {
@@ -143,8 +146,7 @@ SdXMLShowsContext::SdXMLShowsContext( SdXMLImport& rImport,  sal_uInt16 nPrfx, c
                 }
                 else if( IsXMLToken( aLocalName, XML_MOUSE_VISIBLE ) )
                 {
-                    aAny <<= IsXMLToken( sValue, XML_TRUE );
-                    mpImpl->mxPresProps->setPropertyValue("IsMouseVisible", aAny );
+                    bIsMouseVisible = IsXMLToken( sValue, XML_TRUE );
                 }
                 else if( IsXMLToken( aLocalName, XML_START_WITH_NAVIGATOR ) )
                 {
@@ -168,8 +170,8 @@ SdXMLShowsContext::SdXMLShowsContext( SdXMLImport& rImport,  sal_uInt16 nPrfx, c
                 }
             }
         }
-        aAny <<= bAll;
-        mpImpl->mxPresProps->setPropertyValue("IsShowAll", aAny );
+        mpImpl->mxPresProps->setPropertyValue("IsShowAll", Any(bAll) );
+        mpImpl->mxPresProps->setPropertyValue("IsMouseVisible", Any(bIsMouseVisible) );
     }
 }
 
@@ -183,7 +185,7 @@ SdXMLShowsContext::~SdXMLShowsContext()
     }
 }
 
-SvXMLImportContext * SdXMLShowsContext::CreateChildContext( sal_uInt16 p_nPrefix, const OUString& rLocalName, const Reference< XAttributeList>& xAttrList )
+SvXMLImportContextRef SdXMLShowsContext::CreateChildContext( sal_uInt16 p_nPrefix, const OUString& rLocalName, const Reference< XAttributeList>& xAttrList )
 {
     if( mpImpl && p_nPrefix == XML_NAMESPACE_PRESENTATION && IsXMLToken( rLocalName, XML_SHOW ) )
     {
@@ -220,7 +222,6 @@ SvXMLImportContext * SdXMLShowsContext::CreateChildContext( sal_uInt16 p_nPrefix
             {
                 SvXMLTokenEnumerator aPageNames( aPages, ',' );
                 OUString sPageName;
-                Any aAny;
 
                 while( aPageNames.getNextToken( sPageName ) )
                 {
@@ -231,13 +232,12 @@ SvXMLImportContext * SdXMLShowsContext::CreateChildContext( sal_uInt16 p_nPrefix
                     mpImpl->mxPages->getByName( sPageName ) >>= xPage;
                     if( xPage.is() )
                     {
-                        aAny <<= xPage;
-                        xShow->insertByIndex( xShow->getCount(), aAny );
+                        xShow->insertByIndex( xShow->getCount(), Any(xPage) );
                     }
                 }
 
+                Any aAny;
                 aAny <<= xShow;
-
                 if( mpImpl->mxShows->hasByName( aName ) )
                 {
                     mpImpl->mxShows->replaceByName( aName, aAny );

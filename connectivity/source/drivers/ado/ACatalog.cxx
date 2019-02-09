@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ado/ACatalog.hxx"
-#include "ado/AConnection.hxx"
-#include "ado/AGroups.hxx"
-#include "ado/AUsers.hxx"
-#include "ado/ATables.hxx"
-#include "ado/AViews.hxx"
+#include <ado/ACatalog.hxx>
+#include <ado/AConnection.hxx>
+#include <ado/AGroups.hxx>
+#include <ado/AUsers.hxx>
+#include <ado/ATables.hxx>
+#include <ado/AViews.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 
@@ -39,13 +39,13 @@ OCatalog::OCatalog(_ADOCatalog* _pCatalog,OConnection* _pCon) : connectivity::sd
 OCatalog::~OCatalog()
 {
     if(m_aCatalog.IsValid())
-        m_aCatalog.putref_ActiveConnection(NULL);
+        m_aCatalog.putref_ActiveConnection(nullptr);
     m_aCatalog.clear();
 }
 
 void OCatalog::refreshTables()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     WpADOTables aTables(m_aCatalog.get_Tables());
   if ( aTables.IsValid() )
@@ -69,12 +69,12 @@ void OCatalog::refreshTables()
     if(m_pTables)
         m_pTables->reFill(aVector);
     else
-        m_pTables = new OTables(this,m_aMutex,aVector,aTables,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers());
+        m_pTables.reset( new OTables(this,m_aMutex,aVector,aTables,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers()) );
 }
 
 void OCatalog::refreshViews()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     WpADOViews aViews = m_aCatalog.get_Views();
     aViews.fillElementNames(aVector);
@@ -82,12 +82,12 @@ void OCatalog::refreshViews()
     if(m_pViews)
         m_pViews->reFill(aVector);
     else
-        m_pViews = new OViews(this,m_aMutex,aVector,aViews,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers());
+        m_pViews.reset( new OViews(this,m_aMutex,aVector,aViews,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers()) );
 }
 
 void OCatalog::refreshGroups()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     WpADOGroups aGroups = m_aCatalog.get_Groups();
     aGroups.fillElementNames(aVector);
@@ -95,12 +95,12 @@ void OCatalog::refreshGroups()
     if(m_pGroups)
         m_pGroups->reFill(aVector);
     else
-        m_pGroups = new OGroups(this,m_aMutex,aVector,aGroups,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers());
+        m_pGroups.reset( new OGroups(this,m_aMutex,aVector,aGroups,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers()) );
 }
 
 void OCatalog::refreshUsers()
 {
-    TStringVector aVector;
+    ::std::vector< OUString> aVector;
 
     WpADOUsers aUsers = m_aCatalog.get_Users();
     aUsers.fillElementNames(aVector);
@@ -108,7 +108,7 @@ void OCatalog::refreshUsers()
     if(m_pUsers)
         m_pUsers->reFill(aVector);
     else
-        m_pUsers = new OUsers(this,m_aMutex,aVector,aUsers,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers());
+        m_pUsers.reset( new OUsers(this,m_aMutex,aVector,aUsers,m_pConnection->getMetaData()->supportsMixedCaseQuotedIdentifiers()) );
 }
 
 

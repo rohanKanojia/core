@@ -20,9 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_UNDOHEADERFOOTER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_UNDOHEADERFOOTER_HXX
 
-#include "sdundo.hxx"
-#include "sdpage.hxx"
-#include "sddllapi.h"
+#include <sdundo.hxx>
+#include <sdpage.hxx>
+#include <sddllapi.h>
 
 class SdDrawDocument;
 
@@ -37,7 +37,7 @@ class SD_DLLPUBLIC SdHeaderFooterUndoAction : public SdUndoAction
 
 public:
     SdHeaderFooterUndoAction( SdDrawDocument* pDoc, SdPage* pPage, const sd::HeaderFooterSettings& rNewSettings );
-    virtual ~SdHeaderFooterUndoAction();
+    virtual ~SdHeaderFooterUndoAction() override;
 
     virtual void Undo() override;
     virtual void Redo() override;

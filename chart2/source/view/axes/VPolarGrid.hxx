@@ -21,14 +21,14 @@
 
 #include "VAxisOrGridBase.hxx"
 #include "Tickmarks.hxx"
-#include "VLineProperties.hxx"
 #include <com/sun/star/drawing/PointSequenceSequence.hpp>
+#include <memory>
+
+namespace chart { struct VLineProperties; }
 
 namespace chart
 {
 
-/**
-*/
 class PolarPlottingPositionHelper;
 
 class VPolarGrid : public VAxisOrGridBase
@@ -39,7 +39,7 @@ public:
         , const css::uno::Sequence<
             css::uno::Reference< css::beans::XPropertySet > > & rGridPropertiesList //main grid, subgrid, subsubgrid etc
         );
-    virtual ~VPolarGrid();
+    virtual ~VPolarGrid() override;
 
     virtual void createShapes() override;
 
@@ -50,21 +50,21 @@ public:
                     , TickInfoArraysType& rAllTickInfos
                     , const ExplicitIncrementData& rIncrement
                     , const ExplicitScaleData& rScale
-                    , PolarPlottingPositionHelper* pPosHelper
+                    , PolarPlottingPositionHelper const * pPosHelper
                     , double fLogicRadius, double fLogicZ );
 
 private: //member
     css::uno::Sequence<
         css::uno::Reference< css::beans::XPropertySet > > m_aGridPropertiesList;//main grid, subgrid, subsubgrid etc
-    PolarPlottingPositionHelper* m_pPosHelper;
-    ::std::vector< ExplicitIncrementData >   m_aIncrements;
+    std::unique_ptr<PolarPlottingPositionHelper> m_pPosHelper;
+    std::vector< ExplicitIncrementData >   m_aIncrements;
 
     void getAllTickInfos( sal_Int32 nDimensionIndex, TickInfoArraysType& rAllTickInfos ) const;
 
     void create2DRadiusGrid( const css::uno::Reference<css::drawing::XShapes>& xLogicTarget
                     , TickInfoArraysType& rRadiusTickInfos
                     , TickInfoArraysType& rAngleTickInfos
-                    , const ::std::vector<VLineProperties>& rLinePropertiesList );
+                    , const std::vector<VLineProperties>& rLinePropertiesList );
 };
 
 } //namespace chart

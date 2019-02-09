@@ -21,13 +21,11 @@
 
 #include <sfx2/sidebar/Theme.hxx>
 
-#include <sfx2/imagemgr.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/namedvaluecollection.hxx>
+#include <vcl/commandinfoprovider.hxx>
 #include <vcl/gradient.hxx>
 
 #include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
 
@@ -39,8 +37,8 @@ using namespace css::uno;
 namespace sfx2 { namespace sidebar {
 
 Image Tools::GetImage (
-    const ::rtl::OUString& rsImageURL,
-    const ::rtl::OUString& rsHighContrastImageURL,
+    const OUString& rsImageURL,
+    const OUString& rsHighContrastImageURL,
     const Reference<frame::XFrame>& rxFrame)
 {
     if (Theme::IsHighContrastMode())
@@ -50,42 +48,18 @@ Image Tools::GetImage (
 }
 
 Image Tools::GetImage (
-    const ::rtl::OUString& rsURL,
+    const OUString& rsURL,
     const Reference<frame::XFrame>& rxFrame)
 {
     if (rsURL.getLength() > 0)
     {
-        const sal_Char  sUnoCommandPrefix[] = ".uno:";
-        const sal_Char  sCommandImagePrefix[] = "private:commandimage/";
-        const sal_Int32 nCommandImagePrefixLength = strlen(sCommandImagePrefix);
-
-        if (rsURL.startsWith(sUnoCommandPrefix))
+        if (rsURL.startsWith(".uno:"))
         {
-            const Image aPanelImage (::GetImage(rxFrame, rsURL, false));
-            return aPanelImage;
-        }
-        else if (rsURL.startsWith(sCommandImagePrefix))
-        {
-            ::rtl::OUStringBuffer aCommandName;
-            aCommandName.append(sUnoCommandPrefix);
-            aCommandName.append(rsURL.copy(nCommandImagePrefixLength));
-            const ::rtl::OUString sCommandName (aCommandName.makeStringAndClear());
-
-            const Image aPanelImage (::GetImage(rxFrame, sCommandName, false));
-            return aPanelImage;
+            return vcl::CommandInfoProvider::GetImageForCommand(rsURL, rxFrame);
         }
         else
         {
-            const Reference<XComponentContext> xContext (::comphelper::getProcessComponentContext());
-            const Reference<graphic::XGraphicProvider> xGraphicProvider =
-                graphic::GraphicProvider::create( xContext );
-            ::comphelper::NamedValueCollection aMediaProperties;
-            aMediaProperties.put("URL", rsURL);
-            const Reference<graphic::XGraphic> xGraphic (
-                xGraphicProvider->queryGraphic(aMediaProperties.getPropertyValues()),
-                UNO_QUERY);
-            if (xGraphic.is())
-                return Image(xGraphic);
+            return Image(rsURL);
         }
     }
     return Image();
@@ -95,8 +69,8 @@ css::awt::Gradient Tools::VclToAwtGradient (const Gradient& rVclGradient)
 {
     css::awt::Gradient aAwtGradient (
         awt::GradientStyle(rVclGradient.GetStyle()),
-        rVclGradient.GetStartColor().GetRGBColor(),
-        rVclGradient.GetEndColor().GetRGBColor(),
+        sal_Int32(rVclGradient.GetStartColor().GetRGBColor()),
+        sal_Int32(rVclGradient.GetEndColor().GetRGBColor()),
         rVclGradient.GetAngle(),
         rVclGradient.GetBorder(),
         rVclGradient.GetOfsX(),
@@ -111,8 +85,8 @@ Gradient Tools::AwtToVclGradient (const css::awt::Gradient& rAwtGradient)
 {
     Gradient aVclGradient (
         GradientStyle(rAwtGradient.Style),
-        rAwtGradient.StartColor,
-        rAwtGradient.EndColor);
+        Color(rAwtGradient.StartColor),
+        Color(rAwtGradient.EndColor));
     aVclGradient.SetAngle(rAwtGradient.Angle);
     aVclGradient.SetBorder(rAwtGradient.Border);
     aVclGradient.SetOfsX(rAwtGradient.XOffset);
@@ -124,7 +98,7 @@ Gradient Tools::AwtToVclGradient (const css::awt::Gradient& rAwtGradient)
     return aVclGradient;
 }
 
-util::URL Tools::GetURL (const ::rtl::OUString& rsCommand)
+util::URL Tools::GetURL (const OUString& rsCommand)
 {
     util::URL aURL;
     aURL.Complete = rsCommand;
@@ -141,15 +115,15 @@ Reference<frame::XDispatch> Tools::GetDispatch (
     const util::URL& rURL)
 {
     Reference<frame::XDispatchProvider> xProvider (rxFrame, UNO_QUERY_THROW);
-    Reference<frame::XDispatch> xDispatch (xProvider->queryDispatch(rURL, ::rtl::OUString(), 0));
+    Reference<frame::XDispatch> xDispatch (xProvider->queryDispatch(rURL, OUString(), 0));
     return xDispatch;
 }
 
-::rtl::OUString Tools::GetModuleName (
+OUString Tools::GetModuleName (
     const css::uno::Reference<css::frame::XController>& rxController)
 {
     if (!rxController.is())
-        return ::rtl::OUString();
+        return OUString();
 
     try
     {
@@ -161,7 +135,7 @@ Reference<frame::XDispatch> Tools::GetDispatch (
     {
         // Ignored.
     }
-    return ::rtl::OUString();
+    return OUString();
 }
 
 } } // end of namespace sfx2::sidebar

@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <FldRefTreeListBox.hxx>
+#include "FldRefTreeListBox.hxx"
 
-#include <helpid.h>
 #include <vcl/builderfactory.hxx>
+#include <vcl/event.hxx>
 #include <vcl/help.hxx>
 
 SwFieldRefTreeListBox::SwFieldRefTreeListBox(vcl::Window* pParent, WinBits nStyle)
@@ -28,14 +28,7 @@ SwFieldRefTreeListBox::SwFieldRefTreeListBox(vcl::Window* pParent, WinBits nStyl
 {
 }
 
-VCL_BUILDER_DECL_FACTORY(SwFieldRefTreeListBox)
-{
-    WinBits nWinStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<SwFieldRefTreeListBox>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(SwFieldRefTreeListBox, WB_TABSTOP)
 
 void SwFieldRefTreeListBox::RequestHelp( const HelpEvent& rHEvt )
 {
@@ -53,14 +46,14 @@ void SwFieldRefTreeListBox::RequestHelp( const HelpEvent& rHEvt )
             {
                 aPos = GetEntryPosition( pEntry );
 
-                aPos.X() = GetTabPos( pEntry, pTab );
+                aPos.setX( GetTabPos( pEntry, pTab ) );
                 Size aSize( pItem->GetSize( this, pEntry ) );
 
                 if((aPos.X() + aSize.Width()) > GetSizePixel().Width())
-                    aSize.Width() = GetSizePixel().Width() - aPos.X();
+                    aSize.setWidth( GetSizePixel().Width() - aPos.X() );
 
                 aPos = OutputToScreenPixel(aPos);
-                Rectangle aItemRect( aPos, aSize );
+                tools::Rectangle aItemRect( aPos, aSize );
                 Help::ShowQuickHelp( this, aItemRect, sEntry,
                     QuickHelpFlags::Left|QuickHelpFlags::VCenter );
                 bCallBase = false;

@@ -29,11 +29,9 @@ namespace dbaui
 
     // OCharsetDisplay
     typedef ::dbtools::OCharsetMap OCharsetDisplay_Base;
-    class OCharsetDisplay
-            :protected OCharsetDisplay_Base
-            ,protected SvxTextEncodingTable
+    class OCharsetDisplay final : protected OCharsetDisplay_Base
     {
-    protected:
+    private:
         OUString m_aSystemDisplayName;
 
     public:
@@ -55,16 +53,15 @@ namespace dbaui
         /// get access to the (last + 1st) element of the charset collection
         const_iterator  end() const;
 
-    protected:
+    private:
         virtual bool approveEncoding( const rtl_TextEncoding _eEncoding, const rtl_TextEncodingInfo& _rInfo ) const override;
 
-    private:
         using OCharsetDisplay_Base::find;
     };
 
     //- CharsetDisplayDerefHelper
     typedef ::dbtools::CharsetIteratorDerefHelper CharsetDisplayDerefHelper_Base;
-    class CharsetDisplayDerefHelper : protected CharsetDisplayDerefHelper_Base
+    class CharsetDisplayDerefHelper final : protected CharsetDisplayDerefHelper_Base
     {
         friend class OCharsetDisplay::ExtendedCharsetIterator;
 
@@ -73,10 +70,10 @@ namespace dbaui
     public:
         CharsetDisplayDerefHelper(const CharsetDisplayDerefHelper& _rSource);
 
-        OUString        getIanaName() const         { return CharsetDisplayDerefHelper_Base::getIanaName(); }
+        OUString const & getIanaName() const         { return CharsetDisplayDerefHelper_Base::getIanaName(); }
         const OUString& getDisplayName() const      { return m_sDisplayName; }
 
-    protected:
+    private:
         CharsetDisplayDerefHelper(const ::dbtools::CharsetIteratorDerefHelper& _rBase, const OUString& _rDisplayName);
     };
 
@@ -96,8 +93,6 @@ namespace dbaui
         base_iterator               m_aPosition;
 
     public:
-        ExtendedCharsetIterator(const ExtendedCharsetIterator& _rSource);
-
         CharsetDisplayDerefHelper operator*() const;
 
         /// prefix increment

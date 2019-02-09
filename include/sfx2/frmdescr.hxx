@@ -19,19 +19,13 @@
 #ifndef INCLUDED_SFX2_FRMDESCR_HXX
 #define INCLUDED_SFX2_FRMDESCR_HXX
 
+#include <memory>
 #include <rtl/ustring.hxx>
 #include <sal/config.h>
 #include <sfx2/dllapi.h>
 #include <sfx2/sfxsids.hrc>
-#include <svl/poolitem.hxx>
 #include <tools/gen.hxx>
 #include <tools/urlobj.hxx>
-
-class SvStream;
-struct SfxFrameDescriptor_Impl;
-class SfxFrameDescriptor;
-class Wallpaper;
-
 
 // The SfxFrame descriptors build a recursive structure, that covers all the
 // required data in-order to display the frame document.
@@ -43,25 +37,16 @@ class Wallpaper;
 // aligned, from which also the alignment of the FrameSet is given.
 
 
-enum ScrollingMode
+enum class ScrollingMode
 {
-    ScrollingYes,
-    ScrollingNo,
-    ScrollingAuto
+    Yes,
+    No,
+    Auto
 };
 
-enum SizeSelector
-{
-    SIZE_ABS,
-    SIZE_PERCENT,
-    SIZE_REL
-};
-
-#define SPACING_NOT_SET     -1L
 #define SIZE_NOT_SET        -1L
 
 class SfxItemSet;
-struct SfxFrameProperties;
 
 class SFX2_DLLPUBLIC SfxFrameDescriptor
 {
@@ -69,17 +54,10 @@ class SFX2_DLLPUBLIC SfxFrameDescriptor
     INetURLObject           aActualURL;
     OUString                aName;
     Size                    aMargin;
-    long                    nWidth;
     ScrollingMode           eScroll;
-    SizeSelector            eSizeSelector;
     bool                    bHasBorder;
     bool                    bHasBorderSet;
-    sal_uInt16              nItemId;
-    bool                    bResizeHorizontal;
-    bool                    bResizeVertical;
-    bool                    bHasUI;
-    bool                    bReadOnly;
-    SfxFrameDescriptor_Impl* pImp;
+    std::unique_ptr<SfxItemSet> m_pArgs;
 
 public:
                             SfxFrameDescriptor();
@@ -90,16 +68,7 @@ public:
     const INetURLObject&    GetURL() const
                             { return aURL; }
     void                    SetURL( const OUString& rURL );
-    void                    SetActualURL( const INetURLObject& rURL );
     void                    SetActualURL( const OUString& rURL );
-    void                    SetReadOnly( bool bSet ) { bReadOnly = bSet;}
-    bool                    IsReadOnly(  ) const { return bReadOnly;}
-    void                    SetEditable( bool bSet );
-    bool                    IsEditable() const;
-
-                            // Size
-    void                    SetResizable( bool bRes )
-                            { bResizeHorizontal = bResizeVertical = bRes; }
 
                             // FrameName
     const OUString&         GetName() const
@@ -117,8 +86,6 @@ public:
     void                    SetScrollingMode( ScrollingMode eMode )
                             { eScroll = eMode; }
 
-    void                    SetWallpaper( const Wallpaper& rWallpaper );
-
                             // FrameBorder
     bool                    HasFrameBorder() const
                             { return bHasBorder; }
@@ -130,88 +97,6 @@ public:
                             { return bHasBorderSet; }
     void                    ResetBorder()
                             { bHasBorder = false; bHasBorderSet = false; }
-
-                            // Copy for example for Views
-    SfxFrameDescriptor*     Clone() const;
-};
-
-// No block to implement a =operator
-struct SfxFrameProperties
-{
-    OUString                            aURL;
-    OUString                            aName;
-    long                                lMarginWidth;
-    long                                lMarginHeight;
-    long                                lSize;
-    long                                lSetSize;
-    long                                lFrameSpacing;
-    long                                lInheritedFrameSpacing;
-    ScrollingMode                       eScroll;
-    SizeSelector                        eSizeSelector;
-    SizeSelector                        eSetSizeSelector;
-    bool                                bHasBorder;
-    bool                                bBorderSet;
-    bool                                bResizable;
-    bool                                bSetResizable;
-    bool                                bIsRootSet;
-    bool                                bIsInColSet;
-    bool                                bHasBorderInherited;
-    SfxFrameDescriptor*                 pFrame;
-
-private:
-    SfxFrameProperties( SfxFrameProperties& ) {}
-public:
-                                        SfxFrameProperties()
-                                            : lMarginWidth( SIZE_NOT_SET ),
-                                              lMarginHeight( SIZE_NOT_SET ),
-                                              lSize( 1L ),
-                                              lSetSize( 1L ),
-                                              lFrameSpacing( SPACING_NOT_SET ),
-                                              lInheritedFrameSpacing( SPACING_NOT_SET ),
-                                              eScroll( ScrollingAuto ),
-                                              eSizeSelector( SIZE_REL ),
-                                              eSetSizeSelector( SIZE_REL ),
-                                              bHasBorder( true ),
-                                              bBorderSet( true ),
-                                              bResizable( true ),
-                                              bSetResizable( true ),
-                                              bIsRootSet( false ),
-                                              bIsInColSet( false ),
-                                              bHasBorderInherited( true ),
-                                              pFrame( nullptr ) {}
-
-                                        ~SfxFrameProperties() { delete pFrame; }
-
-    bool                                operator ==( const SfxFrameProperties& ) const;
-    SfxFrameProperties&                 operator =( const SfxFrameProperties &rProp );
-};
-
-class SfxFrameDescriptorItem : public SfxPoolItem
-{
-    SfxFrameProperties                  aProperties;
-public:
-
-                                        SfxFrameDescriptorItem ( const sal_uInt16 nId = SID_FRAMEDESCRIPTOR )
-                                            : SfxPoolItem( nId )
-                                        {}
-
-                                        SfxFrameDescriptorItem( const SfxFrameDescriptorItem& rCpy )
-                                            : SfxPoolItem( rCpy )
-                                        {
-                                            aProperties = rCpy.aProperties;
-                                        }
-
-    virtual                             ~SfxFrameDescriptorItem();
-
-    virtual bool                        operator ==( const SfxPoolItem& ) const override;
-    SfxFrameDescriptorItem&             operator =( const SfxFrameDescriptorItem & );
-
-    virtual bool GetPresentation( SfxItemPresentation ePres,
-                                            SfxMapUnit eCoreMetric,
-                                            SfxMapUnit ePresMetric,
-                                            OUString &rText, const IntlWrapper * = nullptr ) const override;
-
-    virtual SfxPoolItem*                Clone( SfxItemPool *pPool = nullptr ) const override;
 };
 
 #endif // INCLUDED_SFX2_FRMDESCR_HXX

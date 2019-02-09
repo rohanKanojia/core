@@ -24,12 +24,10 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include "xmlEnums.hxx"
-#include <tools/debug.hxx>
 #include "xmlStyleImport.hxx"
-#include <comphelper/namecontainer.hxx>
 #include <comphelper/genericpropertyset.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include "xmlstrings.hrc"
+#include "strings.hxx"
 
 namespace rptxml
 {

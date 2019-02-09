@@ -32,7 +32,7 @@ $(eval $(call gb_ExternalProject_register_targets,jfreereport_liblayout,\
 $(call gb_ExternalProject_get_state_target,jfreereport_liblayout,build) :
 	$(call gb_ExternalProject_run,build,\
 		$(ICECREAM_RUN) "$(ANT)" \
-			-q \
+			$(if $(verbose),-v,-q) \
 			-f build.xml \
 			-Dbuild.label="build-$(LIBO_VERSION_MAJOR).$(LIBO_VERSION_MINOR).$(LIBO_VERSION_MICRO).$(LIBO_VERSION_PATCH)" \
 			$(if $(SYSTEM_APACHE_COMMONS),\
@@ -47,11 +47,8 @@ $(call gb_ExternalProject_get_state_target,jfreereport_liblayout,build) :
 			-Dlibserializer.jar=$(call gb_UnpackedTarball_get_dir,jfreereport_libserializer)/dist/libserializer-$(LIBBASE_VERSION).jar \
 			-Dlibxml.jar=$(call gb_UnpackedTarball_get_dir,jfreereport_libxml)/dist/libxml-$(LIBXML_VERSION).jar \
 			-Dsac.jar=$(call gb_UnpackedTarball_get_dir,jfreereport_sac)/build/lib/sac.jar \
-			$(if $(filter yes,$(JAVACISGCJ))\
-				,-Dbuild.compiler=gcj \
-				,-Dant.build.javac.source=$(JAVA_SOURCE_VER) \
-				 -Dant.build.javac.target=$(JAVA_TARGET_VER) \
-			) \
+			-Dant.build.javac.source=$(JAVA_SOURCE_VER) \
+			-Dant.build.javac.target=$(JAVA_TARGET_VER) \
 			-Dantcontrib.available="true" \
 			-Dbuild.id="10682" \
 			$(if $(debug),-Dbuild.debug="on") jar \

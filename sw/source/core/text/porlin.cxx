@@ -25,12 +25,12 @@
 #include "portxt.hxx"
 #include "pormulti.hxx"
 #include "porglue.hxx"
-#include "blink.hxx"
+#include <blink.hxx>
 #if OSL_DEBUG_LEVEL > 0
 
-bool ChkChain( SwLinePortion *pStart )
+static bool ChkChain( SwLinePortion *pStart )
 {
-    SwLinePortion *pPor = pStart->GetPortion();
+    SwLinePortion *pPor = pStart->GetNextPortion();
     sal_uInt16 nCount = 0;
     while( pPor )
     {
@@ -39,14 +39,14 @@ bool ChkChain( SwLinePortion *pStart )
                 "ChkChain(): lost in chains" );
         if( nCount >= 200 || pPor == pStart )
         {
-            // der Lebensretter
-            pPor = pStart->GetPortion();
-            pStart->SetPortion(nullptr);
+            // the lifesaver
+            pPor = pStart->GetNextPortion();
+            pStart->SetNextPortion(nullptr);
             pPor->Truncate();
-            pStart->SetPortion( pPor );
+            pStart->SetNextPortion( pPor );
             return false;
         }
-        pPor = pPor->GetPortion();
+        pPor = pPor->GetNextPortion();
     }
     return true;
 }
@@ -69,10 +69,10 @@ sal_uInt16 SwLinePortion::GetViewWidth( const SwTextSizeInfo & ) const
 }
 
 SwLinePortion::SwLinePortion( ) :
-    pPortion( nullptr ),
+    mpNextPortion( nullptr ),
     nLineLength( 0 ),
     nAscent( 0 ),
-    nWhichPor( POR_LIN ),
+    nWhichPor( PortionType::NONE ),
     m_bJoinBorderWithPrev(false),
     m_bJoinBorderWithNext(false)
 {
@@ -93,13 +93,13 @@ void SwLinePortion::PrePaint( const SwTextPaintInfo& rInf,
     sal_uInt16 nLastWidth = pLast->Width();
 
     if ( pLast->InSpaceGrp() && rInf.GetSpaceAdd() )
-        nLastWidth = nLastWidth + (sal_uInt16)pLast->CalcSpacing( rInf.GetSpaceAdd(), rInf );
+        nLastWidth = nLastWidth + static_cast<sal_uInt16>(pLast->CalcSpacing( rInf.GetSpaceAdd(), rInf ));
 
     sal_uInt16 nPos;
     SwTextPaintInfo aInf( rInf );
 
     const bool bBidiPor = rInf.GetTextFrame()->IsRightToLeft() !=
-                          bool( TEXT_LAYOUT_BIDI_RTL & rInf.GetOut()->GetLayoutMode() );
+                          bool( ComplexTextLayoutFlags::BiDiRtl & rInf.GetOut()->GetLayoutMode() );
 
     sal_uInt16 nDir = bBidiPor ?
                   1800 :
@@ -151,27 +151,27 @@ void SwLinePortion::CalcTextSize( const SwTextSizeInfo &rInf )
     }
 }
 
-// Es werden alle nachfolgenden Portions geloescht.
-void SwLinePortion::_Truncate()
+// all following portions will be deleted
+void SwLinePortion::Truncate_()
 {
-    SwLinePortion *pPos = pPortion;
+    SwLinePortion *pPos = mpNextPortion;
     do
     { OSL_ENSURE( pPos != this, "SwLinePortion::Truncate: loop" );
         SwLinePortion *pLast = pPos;
-        pPos = pPos->GetPortion();
-        pLast->SetPortion( nullptr );
+        pPos = pPos->GetNextPortion();
+        pLast->SetNextPortion( nullptr );
         delete pLast;
 
     } while( pPos );
 
-    pPortion = nullptr;
+    mpNextPortion = nullptr;
 }
 
-// Es wird immer hinter uns eingefuegt.
+// It always will be inserted after us.
 SwLinePortion *SwLinePortion::Insert( SwLinePortion *pIns )
 {
-    pIns->FindLastPortion()->SetPortion( pPortion );
-    SetPortion( pIns );
+    pIns->FindLastPortion()->SetNextPortion( mpNextPortion );
+    SetNextPortion( pIns );
 #if OSL_DEBUG_LEVEL > 0
     ChkChain( this );
 #endif
@@ -181,10 +181,10 @@ SwLinePortion *SwLinePortion::Insert( SwLinePortion *pIns )
 SwLinePortion *SwLinePortion::FindLastPortion()
 {
     SwLinePortion *pPos = this;
-    // An das Ende wandern und pLinPortion an den letzten haengen ...
-    while( pPos->GetPortion() )
+    // Find the end and link pLinPortion to the last one...
+    while( pPos->GetNextPortion() )
     {
-        pPos = pPos->GetPortion();
+        pPos = pPos->GetNextPortion();
     }
     return pPos;
 }
@@ -192,8 +192,8 @@ SwLinePortion *SwLinePortion::FindLastPortion()
 SwLinePortion *SwLinePortion::Append( SwLinePortion *pIns )
 {
     SwLinePortion *pPos = FindLastPortion();
-    pPos->SetPortion( pIns );
-    pIns->SetPortion( nullptr );
+    pPos->SetNextPortion( pIns );
+    pIns->SetNextPortion( nullptr );
 #if OSL_DEBUG_LEVEL > 0
     ChkChain( this );
 #endif
@@ -204,8 +204,8 @@ SwLinePortion *SwLinePortion::Cut( SwLinePortion *pVictim )
 {
     SwLinePortion *pPrev = pVictim->FindPrevPortion( this );
     OSL_ENSURE( pPrev, "SwLinePortion::Cut(): can't cut" );
-    pPrev->SetPortion( pVictim->GetPortion() );
-    pVictim->SetPortion(nullptr);
+    pPrev->SetNextPortion( pVictim->GetNextPortion() );
+    pVictim->SetNextPortion(nullptr);
     return pVictim;
 }
 
@@ -213,21 +213,21 @@ SwLinePortion *SwLinePortion::FindPrevPortion( const SwLinePortion *pRoot )
 {
     OSL_ENSURE( pRoot != this, "SwLinePortion::FindPrevPortion(): invalid root" );
     SwLinePortion *pPos = const_cast<SwLinePortion*>(pRoot);
-    while( pPos->GetPortion() && pPos->GetPortion() != this )
+    while( pPos->GetNextPortion() && pPos->GetNextPortion() != this )
     {
-        pPos = pPos->GetPortion();
+        pPos = pPos->GetNextPortion();
     }
-    OSL_ENSURE( pPos->GetPortion(),
+    OSL_ENSURE( pPos->GetNextPortion(),
             "SwLinePortion::FindPrevPortion: blowing in the wind");
     return pPos;
 }
 
-sal_Int32 SwLinePortion::GetCursorOfst( const sal_uInt16 nOfst ) const
+TextFrameIndex SwLinePortion::GetCursorOfst(const sal_uInt16 nOfst) const
 {
     if( nOfst > ( PrtWidth() / 2 ) )
         return GetLen();
     else
-        return 0;
+        return TextFrameIndex(0);
 }
 
 SwPosSize SwLinePortion::GetTextSize( const SwTextSizeInfo & ) const
@@ -250,8 +250,8 @@ bool SwLinePortion::Format( SwTextFormatInfo &rInf )
     Height( pLast->Height() );
     SetAscent( pLast->GetAscent() );
     const sal_uInt16 nNewWidth = static_cast<sal_uInt16>(rInf.X() + PrtWidth());
-    // Nur Portions mit echter Breite koennen ein true zurueckliefern
-    // Notizen beispielsweise setzen niemals bFull==true
+    // Only portions with true width can return true
+    // Notes for example never set bFull==true
     if( rInf.Width() <= nNewWidth && PrtWidth() && ! IsKernPortion() )
     {
         Truncate();

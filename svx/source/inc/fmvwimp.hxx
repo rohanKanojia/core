@@ -22,8 +22,10 @@
 #include <sal/config.h>
 
 #include <map>
+#include <memory>
 
-#include "svx/svdmark.hxx"
+#include <svx/svdmark.hxx>
+#include <svx/svdobj.hxx>
 #include "fmdocumentclassification.hxx"
 
 #include <com/sun/star/form/XForm.hpp>
@@ -42,7 +44,6 @@
 #include <comphelper/stl_types.hxx>
 #include <tools/link.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <comphelper/uno3.hxx>
 #include <rtl/ref.hxx>
 #include <vcl/vclptr.hxx>
 
@@ -57,6 +58,7 @@ namespace vcl { class Window; }
 class OutputDevice;
 class SdrUnoObj;
 struct ImplSVEvent;
+enum class SdrInventor : sal_uInt32;
 
 namespace com { namespace sun { namespace star {
     namespace awt {
@@ -85,7 +87,7 @@ typedef ::cppu::WeakImplHelper <   css::container::XIndexAccess
                                 ,   css::form::runtime::XFormControllerContext
                                 >   FormViewPageWindowAdapter_Base;
 
-class FormViewPageWindowAdapter : public FormViewPageWindowAdapter_Base
+class FormViewPageWindowAdapter final : public FormViewPageWindowAdapter_Base
 {
     friend class FmXFormView;
 
@@ -95,33 +97,32 @@ class FormViewPageWindowAdapter : public FormViewPageWindowAdapter_Base
     FmXFormView*                m_pViewImpl;
     VclPtr<vcl::Window>         m_pWindow;
 
-protected:
-    virtual ~FormViewPageWindowAdapter();
-
 public:
     FormViewPageWindowAdapter(  const css::uno::Reference<css::uno::XComponentContext>& _rContext,
         const SdrPageWindow&, FmXFormView* pView);
         //const SdrPageViewWinRec*, FmXFormView* pView);
 
     // XElementAccess
-    virtual css::uno::Type SAL_CALL getElementType() throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements() throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() throw(css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Any SAL_CALL getByIndex(sal_Int32 _Index) throw(css::lang::IndexOutOfBoundsException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getCount() override;
+    virtual css::uno::Any SAL_CALL getByIndex(sal_Int32 Index) override;
 
     // XFormControllerContext
-    virtual void SAL_CALL makeVisible( const css::uno::Reference< css::awt::XControl >& _Control ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL makeVisible( const css::uno::Reference< css::awt::XControl >& Control ) override;
 
     const ::std::vector< css::uno::Reference< css::form::runtime::XFormController > >& GetList() {return m_aControllerList;}
 
-protected:
+private:
+    virtual ~FormViewPageWindowAdapter() override;
+
     css::uno::Reference< css::form::runtime::XFormController >  getController( const css::uno::Reference< css::form::XForm >& xForm ) const;
     void setController(
             const css::uno::Reference< css::form::XForm >& xForm,
             const css::uno::Reference< css::form::runtime::XFormController >& _rxParentController );
-    css::uno::Reference< css::awt::XControlContainer >  getControlContainer() const { return m_xControlContainer; }
+    const css::uno::Reference< css::awt::XControlContainer >&  getControlContainer() const { return m_xControlContainer; }
     void updateTabOrder( const css::uno::Reference< css::form::XForm >& _rxForm );
     void dispose();
     vcl::Window* getWindow() const {return m_pWindow;}
@@ -168,20 +169,19 @@ class FmXFormView : public ::cppu::WeakImplHelper<
     MapControlContainerToSetOfForms
                     m_aNeedTabOrderUpdate;
 
-    // Liste der markierten Object, dient zur Restauration beim Umschalten von Alive in DesignMode
+    // list of selected objects, used for restoration when switching from Alive to DesignMode
     SdrMarkList             m_aMark;
-    ObjectRemoveListener*   m_pWatchStoredList;
+    std::unique_ptr<ObjectRemoveListener>
+                    m_pWatchStoredList;
 
     bool            m_bFirstActivation;
     bool            m_isTabOrderUpdateSuspended;
 
     FmFormShell* GetFormShell() const;
 
-    void removeGridWindowListening();
-
 protected:
     FmXFormView( FmFormView* _pView );
-    virtual ~FmXFormView();
+    virtual ~FmXFormView() override;
 
     void    saveMarkList();
     void    restoreMarkList( SdrMarkList& _rRestoredMarkList );
@@ -192,23 +192,23 @@ protected:
         // notifies this impl class that the anti-impl instance (m_pView) is going to die
 
 public:
-    // UNO Anbindung
+    // UNO binding
 
 // css::lang::XEventListener
-    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing(const css::lang::EventObject& Source) override;
 
 // css::container::XContainerListener
-    virtual void SAL_CALL elementInserted(const  css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL elementReplaced(const  css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL elementRemoved(const  css::container::ContainerEvent& rEvent) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL elementInserted(const  css::container::ContainerEvent& rEvent) override;
+    virtual void SAL_CALL elementReplaced(const  css::container::ContainerEvent& rEvent) override;
+    virtual void SAL_CALL elementRemoved(const  css::container::ContainerEvent& rEvent) override;
 
 // css::form::XFormControllerListener
-    virtual void SAL_CALL formActivated(const css::lang::EventObject& rEvent) throw(css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL formDeactivated(const css::lang::EventObject& rEvent) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL formActivated(const css::lang::EventObject& rEvent) override;
+    virtual void SAL_CALL formDeactivated(const css::lang::EventObject& rEvent) override;
 
     // XFocusListener
-    virtual void SAL_CALL focusGained( const css::awt::FocusEvent& e ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL focusLost( const css::awt::FocusEvent& e ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL focusGained( const css::awt::FocusEvent& e ) override;
+    virtual void SAL_CALL focusLost( const css::awt::FocusEvent& e ) override;
 
     FmFormView* getView() const {return m_pView;}
     PFormViewPageWindowAdapter  findWindow( const css::uno::Reference< css::awt::XControlContainer >& _rxCC ) const;
@@ -217,8 +217,8 @@ public:
             getFormController( const css::uno::Reference< css::form::XForm >& _rxForm, const OutputDevice& _rDevice ) const;
 
     // activation handling
-    inline  bool        hasEverBeenActivated( ) const { return !m_bFirstActivation; }
-    inline  void        setHasBeenActivated( ) { m_bFirstActivation = false; }
+    bool        hasEverBeenActivated( ) const { return !m_bFirstActivation; }
+    void        setHasBeenActivated( ) { m_bFirstActivation = false; }
 
             void        onFirstViewActivation( const FmFormModel* _pDocModel );
 
@@ -233,7 +233,7 @@ public:
     */
     void    resumeTabOrderUpdate();
 
-    void    onCreatedFormObject( FmFormObj& _rFormObject );
+    void    onCreatedFormObject( FmFormObj const & _rFormObject );
 
     void    breakCreateFormObject();
 
@@ -247,40 +247,42 @@ private:
     void Activate(bool bSync = false);
     void Deactivate(bool bDeactivateController = true);
 
-    SdrObject*  implCreateFieldControl( const svx::ODataAccessDescriptor& _rColumnDescriptor );
-    SdrObject*  implCreateXFormsControl( const svx::OXFormsDescriptor &_rDesc );
+    SdrObjectUniquePtr implCreateFieldControl( const svx::ODataAccessDescriptor& _rColumnDescriptor );
+    SdrObjectUniquePtr implCreateXFormsControl( const svx::OXFormsDescriptor &_rDesc );
 
     static bool createControlLabelPair(
-        OutputDevice& _rOutDev,
+        OutputDevice const & _rOutDev,
         sal_Int32 _nXOffsetMM,
         sal_Int32 _nYOffsetMM,
         const css::uno::Reference< css::beans::XPropertySet >& _rxField,
         const css::uno::Reference< css::util::XNumberFormats >& _rxNumberFormats,
         sal_uInt16 _nControlObjectID,
         const OUString& _rFieldPostfix,
-        sal_uInt32 _nInventor,
+        SdrInventor _nInventor,
         sal_uInt16 _nLabelObjectID,
-        SdrPage* _pLabelPage,
-        SdrPage* _pControlPage,
-        SdrModel* _pModel,
-        SdrUnoObj*& _rpLabel,
-        SdrUnoObj*& _rpControl
+
+        // tdf#118963 Need a SdrModel for SdrObject creation. To make the
+        // demand clear, hand over a SdrMldel&
+        SdrModel& _rModel,
+
+        std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpLabel,
+        std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpControl
     );
 
     bool    createControlLabelPair(
-        OutputDevice& _rOutDev,
+        OutputDevice const & _rOutDev,
         sal_Int32 _nXOffsetMM,
         sal_Int32 _nYOffsetMM,
         const css::uno::Reference< css::beans::XPropertySet >& _rxField,
         const css::uno::Reference< css::util::XNumberFormats >& _rxNumberFormats,
         sal_uInt16 _nControlObjectID,
         const OUString& _rFieldPostfix,
-        SdrUnoObj*& _rpLabel,
-        SdrUnoObj*& _rpControl,
-        const css::uno::Reference< css::sdbc::XDataSource >& _rxDataSource = nullptr,
-        const OUString& _rDataSourceName = OUString(),
-        const OUString& _rCommand = OUString(),
-        const sal_Int32 _nCommandType = -1
+        std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpLabel,
+        std::unique_ptr<SdrUnoObj, SdrObjectFreeOp>& _rpControl,
+        const css::uno::Reference< css::sdbc::XDataSource >& _rxDataSource,
+        const OUString& _rDataSourceName,
+        const OUString& _rCommand,
+        const sal_Int32 _nCommandType
     );
 
     void ObjectRemovedInAliveMode(const SdrObject* pObject);
@@ -293,10 +295,10 @@ private:
 
     /// the auto focus to the first (in terms of the tab order) control
     void AutoFocus();
-    DECL_LINK_TYPED( OnActivate, void*, void );
-    DECL_LINK_TYPED( OnAutoFocus, void*, void );
-    DECL_LINK_TYPED( OnDelayedErrorMessage, void*, void );
-    DECL_LINK_TYPED( OnStartControlWizard, void*, void );
+    DECL_LINK( OnActivate, void*, void );
+    DECL_LINK( OnAutoFocus, void*, void );
+    DECL_LINK( OnDelayedErrorMessage, void*, void );
+    DECL_LINK( OnStartControlWizard, void*, void );
 
 private:
     ::svxform::DocumentType impl_getDocumentType() const;

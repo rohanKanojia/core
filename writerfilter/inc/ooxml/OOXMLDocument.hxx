@@ -71,14 +71,12 @@ namespace writerfilter {
 namespace ooxml
 {
 
-class OOXMLStream
+class OOXMLStream : public virtual SvRefBase
 {
 public:
     enum StreamType_t { UNKNOWN, DOCUMENT, STYLES, WEBSETTINGS, FONTTABLE, NUMBERING,
-        FOOTNOTES, ENDNOTES, COMMENTS, THEME, CUSTOMXML, CUSTOMXMLPROPS, ACTIVEX, ACTIVEXBIN, GLOSSARY, CHARTS, EMBEDDINGS, SETTINGS, VBAPROJECT, FOOTER, HEADER, SIGNATURE };
-    typedef std::shared_ptr<OOXMLStream> Pointer_t;
-
-    virtual ~OOXMLStream() {}
+        FOOTNOTES, ENDNOTES, COMMENTS, THEME, CUSTOMXML, CUSTOMXMLPROPS, GLOSSARY, CHARTS, EMBEDDINGS, SETTINGS, VBAPROJECT, FOOTER, HEADER, VBADATA };
+    typedef tools::SvRef<OOXMLStream> Pointer_t;
 
     /**
        Returns fast parser for this stream.
@@ -86,8 +84,6 @@ public:
     virtual css::uno::Reference<css::xml::sax::XFastParser> getFastParser() = 0;
 
     virtual css::uno::Reference<css::io::XInputStream> getDocumentStream() = 0;
-
-    virtual css::uno::Reference<css::io::XInputStream> getStorageStream() = 0;
 
     /**
        Returns component context for this stream.
@@ -116,9 +112,7 @@ public:
     /**
        Pointer to this stream.
     */
-    typedef std::shared_ptr<OOXMLDocument> Pointer_t;
-
-    virtual ~OOXMLDocument() {}
+    typedef tools::SvRef<OOXMLDocument> Pointer_t;
 
     /**
        Resolves this document to a stream handler.
@@ -138,7 +132,7 @@ public:
        @param rNoteId       id of the footnote to resolve
      */
     virtual void resolveFootnote(Stream & rStream,
-                                 const Id & rNoteType,
+                                 Id aNoteType,
                                  const sal_Int32 nNoteId) = 0;
     /**
        Resolves an endnote to a stream handler.
@@ -151,7 +145,7 @@ public:
        @param rNoteId       id of the endnote to resolve
      */
     virtual void resolveEndnote(Stream & rStream,
-                                const Id & rNoteType,
+                                Id  aNoteType,
                                 const sal_Int32 NoteId) = 0;
 
     /**
@@ -216,21 +210,22 @@ public:
     virtual css::uno::Reference<css::frame::XModel> getModel() = 0;
     virtual void setDrawPage(css::uno::Reference<css::drawing::XDrawPage> xDrawPage) = 0;
     virtual css::uno::Reference<css::drawing::XDrawPage> getDrawPage() = 0;
-    virtual css::uno::Reference<css::io::XInputStream> getStorageStream() = 0;
     virtual css::uno::Reference<css::io::XInputStream> getInputStreamForId(const OUString & rId) = 0;
     virtual void setXNoteId(const sal_Int32 nId) = 0;
     virtual sal_Int32 getXNoteId() const = 0;
-    virtual void setXNoteType(const Id & nId) = 0;
+    virtual void setXNoteType(Id nId) = 0;
     virtual const OUString & getTarget() const = 0;
     virtual css::uno::Reference<css::xml::sax::XFastShapeContextHandler> getShapeContext( ) = 0;
     virtual void setShapeContext( css::uno::Reference<css::xml::sax::XFastShapeContextHandler> xContext ) = 0;
+    /// Push context of drawingML shapes, so nested shapes are handled separately.
+    virtual void pushShapeContext() = 0;
+    /// Pop context of a previously pushed drawingML shape.
+    virtual void popShapeContext() = 0;
     virtual css::uno::Reference<css::xml::dom::XDocument> getThemeDom( ) = 0;
     virtual css::uno::Reference<css::xml::dom::XDocument> getGlossaryDocDom( ) = 0;
     virtual css::uno::Sequence<css::uno::Sequence< css::uno::Any> > getGlossaryDomList() = 0;
     virtual css::uno::Sequence<css::uno::Reference<css::xml::dom::XDocument> > getCustomXmlDomList( ) = 0;
     virtual css::uno::Sequence<css::uno::Reference<css::xml::dom::XDocument> > getCustomXmlDomPropsList( ) = 0;
-    virtual css::uno::Sequence<css::uno::Reference<css::xml::dom::XDocument> > getActiveXDomList( ) = 0;
-    virtual css::uno::Sequence<css::uno::Reference<css::io::XInputStream> > getActiveXBinList() = 0;
     virtual css::uno::Sequence<css::beans::PropertyValue > getEmbeddingsList() = 0;
 };
 
@@ -245,7 +240,7 @@ public:
 
     static OOXMLStream::Pointer_t
     createStream(const OOXMLStream::Pointer_t& pStream,
-                 OOXMLStream::StreamType_t nStreamType = OOXMLStream::DOCUMENT);
+                 OOXMLStream::StreamType_t nStreamType);
 
     static OOXMLStream::Pointer_t
     createStream(const OOXMLStream::Pointer_t& pStream, const OUString & rId);

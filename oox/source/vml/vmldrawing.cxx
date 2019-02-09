@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/vml/vmldrawing.hxx"
+#include <oox/vml/vmldrawing.hxx>
 
 #include <algorithm>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -29,11 +29,14 @@
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/ole/axcontrol.hxx"
-#include "oox/vml/vmlshape.hxx"
-#include "oox/vml/vmlshapecontainer.hxx"
+#include <sal/log.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/ole/axcontrol.hxx>
+#include <oox/vml/vmlshape.hxx>
+#include <oox/vml/vmlshapecontainer.hxx>
+#include <tools/diagnose_ex.h>
+#include <tools/gen.hxx>
 
 namespace oox {
 namespace vml {
@@ -54,7 +57,7 @@ namespace {
 OUString lclGetShapeId( sal_Int32 nShapeId )
 {
     // identifier consists of a literal NUL character, a lowercase 's', and the id
-    sal_Unicode aStr[2] = { '\0', 's' };
+    sal_Unicode const aStr[2] = { '\0', 's' };
     return OUString( aStr, 2 ) + OUString::number( nShapeId );
 }
 
@@ -79,12 +82,13 @@ void OleObjectInfo::setShapeId( sal_Int32 nShapeId )
 }
 
 ControlInfo::ControlInfo()
+    : mbTextContentShape(false)
 {
 }
 
 void ControlInfo::setShapeId( sal_Int32 nShapeId )
 {
-    maShapeId = lclGetShapeId( nShapeId );
+    maShapeId = lclGetShapeId(nShapeId);
 }
 
 Drawing::Drawing( XmlFilterBase& rFilter, const Reference< XDrawPage >& rxDrawPage, DrawingType eType ) :
@@ -102,7 +106,7 @@ Drawing::~Drawing()
 
 ::oox::ole::EmbeddedForm& Drawing::getControlForm() const
 {
-    if( !mxCtrlForm.get() )
+    if (!mxCtrlForm)
         mxCtrlForm.reset( new ::oox::ole::EmbeddedForm(
             mrFilter.getModel(), mxDrawPage, mrFilter.getGraphicHelper() ) );
     return *mxCtrlForm;
@@ -124,7 +128,7 @@ void Drawing::registerOleObject( const OleObjectInfo& rOleObject )
 {
     OSL_ENSURE( !rOleObject.maShapeId.isEmpty(), "Drawing::registerOleObject - missing OLE object shape id" );
     OSL_ENSURE( maOleObjects.count( rOleObject.maShapeId ) == 0, "Drawing::registerOleObject - OLE object already registered" );
-    maOleObjects.insert( OleObjectInfoMap::value_type( rOleObject.maShapeId, rOleObject ) );
+    maOleObjects.emplace( rOleObject.maShapeId, rOleObject );
 }
 
 void Drawing::registerControl( const ControlInfo& rControl )
@@ -132,7 +136,7 @@ void Drawing::registerControl( const ControlInfo& rControl )
     OSL_ENSURE( !rControl.maShapeId.isEmpty(), "Drawing::registerControl - missing form control shape id" );
     OSL_ENSURE( !rControl.maName.isEmpty(), "Drawing::registerControl - missing form control name" );
     OSL_ENSURE( maControls.count( rControl.maShapeId ) == 0, "Drawing::registerControl - form control already registered" );
-    maControls.insert( ControlInfoMap::value_type( rControl.maShapeId, rControl ) );
+    maControls.emplace( rControl.maShapeId, rControl );
 }
 
 void Drawing::finalizeFragmentImport()
@@ -144,6 +148,59 @@ void Drawing::convertAndInsert() const
 {
     Reference< XShapes > xShapes( mxDrawPage, UNO_QUERY );
     mxShapes->convertAndInsert( xShapes );
+
+    // Group together form control radio buttons that are in the same groupBox
+    std::map<OUString, tools::Rectangle> GroupBoxMap;
+    std::map<Reference< XPropertySet >, tools::Rectangle> RadioButtonMap;
+    for ( sal_Int32 i = 0; i < xShapes->getCount(); ++i )
+    {
+        try
+        {
+            Reference< XControlShape > xCtrlShape( xShapes->getByIndex(i), UNO_QUERY_THROW );
+            Reference< XControlModel > xCtrlModel( xCtrlShape->getControl(), UNO_SET_THROW );
+            Reference< XServiceInfo > xModelSI (xCtrlModel, UNO_QUERY_THROW );
+            Reference< XPropertySet >  aProps( xCtrlModel, UNO_QUERY_THROW );
+
+            OUString sName;
+            aProps->getPropertyValue("Name") >>= sName;
+            const ::Point aPoint( xCtrlShape->getPosition().X, xCtrlShape->getPosition().Y );
+            const ::Size aSize( xCtrlShape->getSize().Width, xCtrlShape->getSize().Height );
+            const tools::Rectangle aRect( aPoint, aSize );
+            if ( !sName.isEmpty()
+                 && xModelSI->supportsService("com.sun.star.awt.UnoControlGroupBoxModel") )
+            {
+                GroupBoxMap[sName] = aRect;
+            }
+            else if ( xModelSI->supportsService("com.sun.star.awt.UnoControlRadioButtonModel") )
+            {
+                OUString sGroupName;
+                aProps->getPropertyValue("GroupName") >>= sGroupName;
+                // only Form Controls are affected by Group Boxes - see drawingfragment.cxx
+                if ( sGroupName == "autoGroup_formControl" )
+                    RadioButtonMap[aProps] = aRect;
+            }
+        }
+        catch (uno::Exception&)
+        {
+            DBG_UNHANDLED_EXCEPTION("oox.vml");
+        }
+    }
+    for ( auto& BoxItr : GroupBoxMap )
+    {
+        const uno::Any aGroup( OUString("autoGroup_").concat(BoxItr.first) );
+        for ( auto RadioItr = RadioButtonMap.begin(); RadioItr != RadioButtonMap.end(); )
+        {
+            if ( BoxItr.second.IsInside(RadioItr->second) )
+            {
+                RadioItr->first->setPropertyValue("GroupName", aGroup );
+                // If conflict, first created GroupBox wins
+                RadioButtonMap.erase( RadioItr++ );
+            }
+            else
+                RadioItr++;
+        }
+    }
+
 }
 
 sal_Int32 Drawing::getLocalShapeIndex( const OUString& rShapeId ) const
@@ -227,9 +284,9 @@ Reference< XShape > Drawing::createAndInsertXShape( const OUString& rService,
     }
     catch( Exception& e )
     {
-        SAL_WARN( "oox", "Drawing::createAndInsertXShape - error during shape object creation: " << e.Message );
+        SAL_WARN( "oox", "Drawing::createAndInsertXShape - error during shape object creation: " << e );
     }
-    OSL_ENSURE( xShape.is(), "Drawing::createAndInsertXShape - cannot instanciate shape object" );
+    OSL_ENSURE( xShape.is(), "Drawing::createAndInsertXShape - cannot instantiate shape object" );
     return xShape;
 }
 
@@ -250,7 +307,7 @@ Reference< XShape > Drawing::createAndInsertXControlShape( const ::oox::ole::Emb
     }
     catch (Exception const& e)
     {
-        SAL_WARN("oox", "exception inserting Shape: " << e.Message);
+        SAL_WARN("oox", "exception inserting Shape: " << e);
     }
     return xShape;
 }

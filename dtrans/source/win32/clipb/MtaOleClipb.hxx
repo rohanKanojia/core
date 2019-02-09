@@ -23,13 +23,7 @@
 #include <sal/types.h>
 #include <osl/mutex.hxx>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
-#endif
 #include <objidl.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 // the Mta-Ole clipboard class is for internal use only!
 // only one instance of this class should be created, the
@@ -73,14 +67,13 @@ private:
     // message handler functions; remember these functions are called
     // from a different thread context!
 
-    LRESULT  onSetClipboard( IDataObject* pIDataObject );
-    LRESULT  onGetClipboard( LPSTREAM* ppStream );
-    LRESULT  onFlushClipboard( );
+    static LRESULT onSetClipboard( IDataObject* pIDataObject );
+    static LRESULT onGetClipboard( LPSTREAM* ppStream );
+    static LRESULT onFlushClipboard( );
     bool     onRegisterClipViewer( LPFNC_CLIPVIEWER_CALLBACK_t pfncClipViewerCallback );
 
-    // win32 clipboard-viewer support
-    LRESULT onChangeCBChain( HWND hWndRemove, HWND hWndNext );
-    LRESULT onDrawClipboard( );
+    // win32 clipboard listener support
+    LRESULT onClipboardUpdate();
 
     static LRESULT CALLBACK mtaOleReqWndProc( HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam );
     static unsigned int WINAPI oleThreadProc( LPVOID pParam );
@@ -94,8 +87,8 @@ private:
     unsigned                    m_uOleThreadId;
     HANDLE                      m_hEvtThrdReady;
     HWND                        m_hwndMtaOleReqWnd;
+    HANDLE                      m_hEvtWndDisposed;
     ATOM                        m_MtaOleReqWndClassAtom;
-    HWND                        m_hwndNextClipViewer;
     LPFNC_CLIPVIEWER_CALLBACK_t m_pfncClipViewerCallback;
     bool                        m_bInRegisterClipViewer;
 

@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dndeventdispatcher.hxx"
-#include "dndlistenercontainer.hxx"
+#include <dndeventdispatcher.hxx>
+#include <dndlistenercontainer.hxx>
 #include <window.h>
 #include <svdata.hxx>
+#include <sal/log.hxx>
 
 #include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
@@ -68,9 +69,9 @@ vcl::Window* DNDEventDispatcher::findTopLevelWindow(Point location)
     return pChildWindow;
 }
 
-IMPL_LINK_TYPED(DNDEventDispatcher, WindowEventListener, VclWindowEvent&, rEvent, void)
+IMPL_LINK(DNDEventDispatcher, WindowEventListener, VclWindowEvent&, rEvent, void)
 {
-    if (rEvent.GetId() == VCLEVENT_OBJECT_DYING)
+    if (rEvent.GetId() == VclEventId::ObjectDying)
     {
         designate_currentwindow(nullptr);
     }
@@ -86,7 +87,6 @@ void DNDEventDispatcher::designate_currentwindow(vcl::Window *pWindow)
 }
 
 void SAL_CALL DNDEventDispatcher::drop( const DropTargetDropEvent& dtde )
-    throw(RuntimeException, std::exception)
 {
     osl::MutexGuard aImplGuard( m_aMutex );
 
@@ -94,7 +94,7 @@ void SAL_CALL DNDEventDispatcher::drop( const DropTargetDropEvent& dtde )
 
     vcl::Window* pChildWindow = findTopLevelWindow(location);
 
-    // handle the case that drop is in an other vcl window than the last dragOver
+    // handle the case that drop is in another vcl window than the last dragOver
     if( pChildWindow != m_pCurrentWindow.get() )
     {
         // fire dragExit on listeners of previous window
@@ -112,7 +112,7 @@ void SAL_CALL DNDEventDispatcher::drop( const DropTargetDropEvent& dtde )
 
     // reject drop if no listeners found
     if( nListeners == 0 ) {
-        OSL_TRACE( "rejecting drop due to missing listeners." );
+        SAL_WARN( "vcl", "rejecting drop due to missing listeners." );
         dtde.Context->rejectDrop();
     }
 
@@ -122,7 +122,6 @@ void SAL_CALL DNDEventDispatcher::drop( const DropTargetDropEvent& dtde )
 }
 
 void SAL_CALL DNDEventDispatcher::dragEnter( const DropTargetDragEnterEvent& dtdee )
-    throw(RuntimeException, std::exception)
 {
     osl::MutexGuard aImplGuard( m_aMutex );
     Point location( dtdee.LocationX, dtdee.LocationY );
@@ -139,14 +138,13 @@ void SAL_CALL DNDEventDispatcher::dragEnter( const DropTargetDragEnterEvent& dtd
 
     // reject drag if no listener found
     if( nListeners == 0 ) {
-        OSL_TRACE( "rejecting drag enter due to missing listeners." );
+        SAL_WARN( "vcl", "rejecting drag enter due to missing listeners." );
         dtdee.Context->rejectDrag();
     }
 
 }
 
 void SAL_CALL DNDEventDispatcher::dragExit( const DropTargetEvent& /*dte*/ )
-    throw(RuntimeException, std::exception)
 {
     osl::MutexGuard aImplGuard( m_aMutex );
 
@@ -158,7 +156,6 @@ void SAL_CALL DNDEventDispatcher::dragExit( const DropTargetEvent& /*dte*/ )
 }
 
 void SAL_CALL DNDEventDispatcher::dragOver( const DropTargetDragEvent& dtde )
-    throw(RuntimeException, std::exception)
 {
     osl::MutexGuard aImplGuard( m_aMutex );
 
@@ -189,13 +186,12 @@ void SAL_CALL DNDEventDispatcher::dragOver( const DropTargetDragEvent& dtde )
     // reject drag if no listener found
     if( nListeners == 0 )
     {
-        OSL_TRACE( "rejecting drag over due to missing listeners." );
+        SAL_WARN( "vcl", "rejecting drag over due to missing listeners." );
         dtde.Context->rejectDrag();
     }
 }
 
 void SAL_CALL DNDEventDispatcher::dropActionChanged( const DropTargetDragEvent& dtde )
-    throw(RuntimeException, std::exception)
 {
     osl::MutexGuard aImplGuard( m_aMutex );
 
@@ -226,13 +222,12 @@ void SAL_CALL DNDEventDispatcher::dropActionChanged( const DropTargetDragEvent& 
     // reject drag if no listener found
     if( nListeners == 0 )
     {
-        OSL_TRACE( "rejecting dropActionChanged due to missing listeners." );
+        SAL_WARN( "vcl", "rejecting dropActionChanged due to missing listeners." );
         dtde.Context->rejectDrag();
     }
 }
 
 void SAL_CALL DNDEventDispatcher::dragGestureRecognized( const DragGestureEvent& dge )
-    throw(RuntimeException, std::exception)
 {
     osl::MutexGuard aImplGuard( m_aMutex );
 
@@ -244,15 +239,14 @@ void SAL_CALL DNDEventDispatcher::dragGestureRecognized( const DragGestureEvent&
 }
 
 void SAL_CALL DNDEventDispatcher::disposing( const EventObject& )
-    throw(RuntimeException, std::exception)
 {
 }
 
-void SAL_CALL DNDEventDispatcher::acceptDrag( sal_Int8 /*dropAction*/ ) throw(RuntimeException, std::exception)
+void SAL_CALL DNDEventDispatcher::acceptDrag( sal_Int8 /*dropAction*/ )
 {
 }
 
-void SAL_CALL DNDEventDispatcher::rejectDrag() throw(RuntimeException, std::exception)
+void SAL_CALL DNDEventDispatcher::rejectDrag()
 {
 }
 
@@ -260,16 +254,12 @@ sal_Int32 DNDEventDispatcher::fireDragEnterEvent( vcl::Window *pWindow,
     const Reference< XDropTargetDragContext >& xContext, const sal_Int8 nDropAction,
     const Point& rLocation, const sal_Int8 nSourceActions, const Sequence< DataFlavor >& aFlavorList
 )
-    throw(RuntimeException)
 {
     sal_Int32 n = 0;
 
     if( pWindow && pWindow->IsInputEnabled() && ! pWindow->IsInModalMode() )
     {
         SolarMutexClearableGuard aSolarGuard;
-
-        // set an UI lock
-        pWindow->IncrementLockCount();
 
         // query DropTarget from window
         Reference< XDropTarget > xDropTarget = pWindow->GetDropTarget();
@@ -292,7 +282,6 @@ sal_Int32 DNDEventDispatcher::fireDragOverEvent( vcl::Window *pWindow,
     const Reference< XDropTargetDragContext >& xContext, const sal_Int8 nDropAction,
     const Point& rLocation, const sal_Int8 nSourceActions
 )
-    throw(RuntimeException)
 {
     sal_Int32 n = 0;
 
@@ -317,7 +306,7 @@ sal_Int32 DNDEventDispatcher::fireDragOverEvent( vcl::Window *pWindow,
     return n;
 }
 
-sal_Int32 DNDEventDispatcher::fireDragExitEvent( vcl::Window *pWindow ) throw(RuntimeException)
+sal_Int32 DNDEventDispatcher::fireDragExitEvent( vcl::Window *pWindow )
 {
     sal_Int32 n = 0;
 
@@ -332,9 +321,6 @@ sal_Int32 DNDEventDispatcher::fireDragExitEvent( vcl::Window *pWindow ) throw(Ru
 
         if( xDropTarget.is() )
             n = static_cast < DNDListenerContainer * > ( xDropTarget.get() )->fireDragExitEvent();
-
-        // release UI lock
-        pWindow->DecrementLockCount();
     }
 
     return n;
@@ -344,7 +330,6 @@ sal_Int32 DNDEventDispatcher::fireDropActionChangedEvent( vcl::Window *pWindow,
     const Reference< XDropTargetDragContext >& xContext, const sal_Int8 nDropAction,
     const Point& rLocation, const sal_Int8 nSourceActions
 )
-    throw(RuntimeException)
 {
     sal_Int32 n = 0;
 
@@ -373,7 +358,6 @@ sal_Int32 DNDEventDispatcher::fireDropEvent( vcl::Window *pWindow,
     const Reference< XDropTargetDropContext >& xContext, const sal_Int8 nDropAction, const Point& rLocation,
     const sal_Int8 nSourceActions, const Reference< XTransferable >& xTransferable
 )
-    throw(RuntimeException)
 {
     sal_Int32 n = 0;
 
@@ -396,13 +380,6 @@ sal_Int32 DNDEventDispatcher::fireDropEvent( vcl::Window *pWindow,
             n = static_cast < DNDListenerContainer * > ( xDropTarget.get() )->fireDropEvent(
                 xContext, nDropAction, relLoc.X(), relLoc.Y(), nSourceActions, xTransferable );
         }
-
-        if ( !xWindow->IsDisposed() )
-        {
-            // release UI lock
-            pWindow->DecrementLockCount();
-        }
-
     }
 
     return n;
@@ -412,7 +389,6 @@ sal_Int32 DNDEventDispatcher::fireDragGestureEvent( vcl::Window *pWindow,
     const Reference< XDragSource >& xSource, const Any& event,
     const Point& rOrigin, const sal_Int8 nDragAction
 )
-    throw(css::uno::RuntimeException)
 {
     sal_Int32 n = 0;
 
@@ -432,9 +408,6 @@ sal_Int32 DNDEventDispatcher::fireDragGestureEvent( vcl::Window *pWindow,
             n = static_cast < DNDListenerContainer * > ( xDragGestureRecognizer.get() )->fireDragGestureEvent(
                 nDragAction, relLoc.X(), relLoc.Y(), xSource, event );
         }
-
-        // release UI lock
-        pWindow->DecrementLockCount();
     }
 
     return n;

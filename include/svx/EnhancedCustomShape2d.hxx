@@ -35,17 +35,15 @@
 #include <svx/EnhancedCustomShapeFunctionParser.hxx>
 #include <tools/gen.hxx>
 #include <o3tl/typed_flags_set.hxx>
+#include <basegfx/point/b2dpoint.hxx>
 
 #include <memory>
 #include <vector>
 
 class Color;
-class SdrModel;
 class SdrObject;
-class SfxItemSet;
-struct SvxMSDffVertPair;
-struct SvxMSDffCalculationData;
-struct SvxMSDffTextRectangles;
+class SdrPathObj;
+class SdrObjCustomShape;
 
 enum class HandleFlags
 {
@@ -74,11 +72,9 @@ namespace o3tl
 // escher, but we are using it internally in to differentiate
 // between X_RANGE and Y_RANGE
 
-class SdrPathObj;
-
 class SVX_DLLPUBLIC EnhancedCustomShape2d : public SfxItemSet
 {
-        SdrObject*                  pCustomShapeObj;
+        SdrObjCustomShape&          mrSdrObjCustomShape;
         MSO_SPT                     eSpType;
 
         sal_Int32                   nCoordLeft;
@@ -87,7 +83,7 @@ class SVX_DLLPUBLIC EnhancedCustomShape2d : public SfxItemSet
         sal_Int32                   nCoordHeightG;
         sal_Int32                   nCoordWidth;
         sal_Int32                   nCoordHeight;
-        Rectangle                   aLogicRect;
+        tools::Rectangle                   aLogicRect;
 
         double                      fXScale;
         double                      fYScale;
@@ -119,9 +115,8 @@ class SVX_DLLPUBLIC EnhancedCustomShape2d : public SfxItemSet
         css::uno::Sequence< css::beans::PropertyValues >                          seqHandles;
         css::uno::Sequence< css::awt::Size >                                      seqSubViewSize;
 
-        bool                    bTextFlow       : 1;
-        bool                    bFilled         : 1;
-        bool                    bStroked        : 1;
+        bool const              bFilled         : 1;
+        bool const              bStroked        : 1;
 
         bool                    bFlipH;
         bool                    bFlipV;
@@ -130,16 +125,24 @@ class SVX_DLLPUBLIC EnhancedCustomShape2d : public SfxItemSet
         SAL_DLLPRIVATE bool     SetAdjustValueAsDouble( const double& rValue, const sal_Int32 nIndex );
         SAL_DLLPRIVATE sal_Int32 GetLuminanceChange( sal_uInt32 nIndex ) const;
         SAL_DLLPRIVATE Color    GetColorData( const Color& rFillColor, sal_uInt32 nIndex, double dBrightness ) const;
-        SAL_DLLPRIVATE void     AdaptObjColor(SdrPathObj& rObj, const SfxItemSet& rCustomShapeSet,
-                                                  sal_uInt32& nColorIndex, sal_uInt32 nColorCount);
-        SAL_DLLPRIVATE void     GetParameter( double& rParameterReturnValue,  const css::drawing::EnhancedCustomShapeParameter&,
-                                                  const bool bReplaceGeoWidth, const bool bReplaceGeoHeight ) const;
+        SAL_DLLPRIVATE void AdaptObjColor(
+            SdrPathObj& rObj,
+            double dBrightness,
+            const SfxItemSet& rCustomShapeSet,
+            sal_uInt32& nColorIndex,
+            sal_uInt32 nColorCount);
         SAL_DLLPRIVATE Point    GetPoint( const css::drawing::EnhancedCustomShapeParameterPair&,
                                                     const bool bScale = true, const bool bReplaceGeoSize = false ) const;
+        SAL_DLLPRIVATE basegfx::B2DPoint GetPointAsB2DPoint(const css::drawing::EnhancedCustomShapeParameterPair&,
+                                                    const bool bScale = true, const bool bReplaceGeoSize = false ) const;
 
-        SAL_DLLPRIVATE void     CreateSubPath( sal_uInt16& rSrcPt, sal_uInt16& rSegmentInd, std::vector< SdrPathObj* >& rObjectList,
-                                                   bool bLineGeometryNeededOnly, bool bSortFilledObjectsToBack,
-                                                   sal_Int32 nIndex );
+        SAL_DLLPRIVATE void CreateSubPath(
+            sal_Int32& rSrcPt,
+            sal_Int32& rSegmentInd,
+            std::vector< std::pair< SdrPathObj*, double> >& rObjectList,
+            bool bLineGeometryNeededOnly,
+            bool bSortFilledObjectsToBack,
+            sal_Int32 nIndex);
         SAL_DLLPRIVATE SdrObject* CreatePathObj( bool bLineGeometryNeededOnly );
         SAL_DLLPRIVATE void     ApplyShapeAttributes( const SdrCustomShapeGeometryItem& rItem );
 
@@ -179,39 +182,24 @@ class SVX_DLLPUBLIC EnhancedCustomShape2d : public SfxItemSet
         SAL_DLLPRIVATE bool     IsFlipVert() { return bFlipV; };
         SAL_DLLPRIVATE bool     IsFlipHorz() { return bFlipH; };
         SAL_DLLPRIVATE sal_Int32 GetRotateAngle() { return nRotateAngle; };
-        bool                    IsPostRotate() const;
 
         SdrObject*              CreateLineGeometry();
         SdrObject*              CreateObject( bool bLineGeometryNeededOnly );
         void                    ApplyGluePoints( SdrObject* pObj );
-        Rectangle               GetTextRect() const;
-        Rectangle               GetLogicRect() const { return aLogicRect; }
+        tools::Rectangle        GetTextRect() const;
+        const tools::Rectangle& GetLogicRect() const { return aLogicRect; }
 
         sal_uInt32              GetHdlCount() const;
         bool                    GetHandlePosition( const sal_uInt32 nIndex, Point& rReturnPosition ) const;
         bool                    SetHandleControllerPosition( const sal_uInt32 nIndex, const css::awt::Point& rPosition );
 
-        EnhancedCustomShape2d( SdrObject* pSdrObjCustomShape );
-        virtual ~EnhancedCustomShape2d();
+        EnhancedCustomShape2d(SdrObjCustomShape& rSdrObjCustomShape);
+        virtual ~EnhancedCustomShape2d() override;
 
-        enum SAL_DLLPRIVATE EnumFunc
-        {
-            ENUM_FUNC_PI,
-            ENUM_FUNC_LEFT,
-            ENUM_FUNC_TOP,
-            ENUM_FUNC_RIGHT,
-            ENUM_FUNC_BOTTOM,
-            ENUM_FUNC_XSTRETCH,
-            ENUM_FUNC_YSTRETCH,
-            ENUM_FUNC_HASSTROKE,
-            ENUM_FUNC_HASFILL,
-            ENUM_FUNC_WIDTH,
-            ENUM_FUNC_HEIGHT,
-            ENUM_FUNC_LOGWIDTH,
-            ENUM_FUNC_LOGHEIGHT
-        };
-        SAL_DLLPRIVATE double   GetEnumFunc( const EnumFunc eVal ) const;
+        SAL_DLLPRIVATE double   GetEnumFunc( const EnhancedCustomShape::ExpressionFunct eVal ) const;
 
+        void     GetParameter( double& rParameterReturnValue,  const css::drawing::EnhancedCustomShapeParameter&,
+                               const bool bReplaceGeoWidth, const bool bReplaceGeoHeight ) const;
         SAL_DLLPRIVATE double   GetAdjustValueAsDouble( const sal_Int32 nIndex ) const;
         SAL_DLLPRIVATE double   GetEquationValueAsDouble( const sal_Int32 nIndex ) const;
 

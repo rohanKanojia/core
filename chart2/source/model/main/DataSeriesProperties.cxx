@@ -19,13 +19,8 @@
 
 #include "DataSeriesProperties.hxx"
 #include "DataPointProperties.hxx"
-#include "DataPoint.hxx"
-#include "macros.hxx"
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/chart2/StackingDirection.hpp>
-
-#include <algorithm>
 
 using namespace ::com::sun::star;
 
@@ -35,36 +30,38 @@ namespace chart
 {
 
 void DataSeriesProperties::AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "AttributedDataPoints",
+    rOutProperties.emplace_back( "AttributedDataPoints",
                   PROP_DATASERIES_ATTRIBUTED_DATA_POINTS,
                   cppu::UnoType<uno::Sequence< sal_Int32 >>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "StackingDirection",
+    rOutProperties.emplace_back( "StackingDirection",
                   PROP_DATASERIES_STACKING_DIRECTION,
                   cppu::UnoType<chart2::StackingDirection>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "VaryColorsByPoint",
+    rOutProperties.emplace_back( "VaryColorsByPoint",
                   PROP_DATASERIES_VARY_COLORS_BY_POINT,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "AttachedAxisIndex",
+    rOutProperties.emplace_back( "AttachedAxisIndex",
                   PROP_DATASERIES_ATTACHED_AXIS_INDEX,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEVOID
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+
+    rOutProperties.emplace_back( "ShowLegendEntry",
+                  PROP_DATASERIES_SHOW_LEGEND_ENTRY,
+                  cppu::UnoType<sal_Bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
     // add properties of service DataPointProperties
     DataPointProperties::AddPropertiesToVector( rOutProperties );
@@ -76,11 +73,12 @@ void DataSeriesProperties::AddDefaultsToMap(
     PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_STACKING_DIRECTION, chart2::StackingDirection_NO_STACKING );
     PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_VARY_COLORS_BY_POINT, false );
     PropertyHelper::setPropertyValueDefault< sal_Int32 >( rOutMap, PROP_DATASERIES_ATTACHED_AXIS_INDEX, 0 );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATASERIES_SHOW_LEGEND_ENTRY, true );
 
     // PROP_DATASERIES_ATTRIBUTED_DATA_POINTS has no default
 
     // add properties of service DataPointProperties
-     DataPointProperties::AddDefaultsToMap( rOutMap );
+    DataPointProperties::AddDefaultsToMap( rOutMap );
 }
 
 }  // namespace chart

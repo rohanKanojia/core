@@ -17,11 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <stdlib.h>
 #include <time.h>
 #ifndef _WIN32
 #include <unistd.h>
 #else
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 #include <comphelper/random.hxx>
@@ -32,7 +39,7 @@
 #include <unotools/bootstrap.hxx>
 #include <tools/config.hxx>
 
-#include "lockfile.hxx"
+#include <lockfile.hxx>
 
 using namespace ::osl;
 using namespace ::utl;
@@ -46,13 +53,12 @@ static OString impl_getHostname()
        prevent windows from connecting to the net to get its own
        hostname by using the netbios name
        */
-    sal_Int32 sz = MAX_COMPUTERNAME_LENGTH + 1;
-    char* szHost = new char[sz];
-    if (GetComputerName(szHost, (LPDWORD)&sz))
-        aHost = OString(szHost);
+    DWORD sz = MAX_COMPUTERNAME_LENGTH + 1;
+    auto szHost = std::unique_ptr<char[]>(new char[sz]);
+    if (GetComputerNameA(szHost.get(), &sz))
+        aHost = OString(szHost.get());
     else
         aHost = OString("UNKNOWN");
-    delete[] szHost;
 #else
     /* Don't do dns lookup on Linux either */
     sal_Char pHostName[1024];
@@ -149,7 +155,7 @@ namespace desktop {
         Config aConfig(aLockname);
         aConfig.SetGroup(LOCKFILE_GROUP);
         OString aIPCserver  = aConfig.ReadKey( LOCKFILE_IPCKEY );
-        if (!aIPCserver.equalsIgnoreAsciiCase(OString("true")))
+        if (!aIPCserver.equalsIgnoreAsciiCase("true"))
             return false;
 
         OString aHost = aConfig.ReadKey( LOCKFILE_HOSTKEY );

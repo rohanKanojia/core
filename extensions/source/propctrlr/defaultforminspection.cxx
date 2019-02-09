@@ -20,19 +20,18 @@
 #include "defaultforminspection.hxx"
 #include "pcrcommon.hxx"
 #include "pcrservices.hxx"
-#include "propresid.hrc"
-#include "formresid.hrc"
+#include <helpids.h>
+#include <strings.hrc>
 #include "modulepcr.hxx"
-#include "propctrlr.hrc"
+#include <propctrlr.h>
 #include "formmetadata.hxx"
 
 #include <com/sun/star/ucb/AlreadyInitializedException.hpp>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <osl/diagnose.h>
 #include <sal/macros.h>
 
 
-extern "C" void SAL_CALL createRegistryInfo_DefaultFormComponentInspectorModel()
+extern "C" void createRegistryInfo_DefaultFormComponentInspectorModel()
 {
     ::pcr::OAutoRegistration< ::pcr::DefaultFormComponentInspectorModel > aAutoRegistration;
 }
@@ -49,9 +48,7 @@ namespace pcr
     using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::lang::EventObject;
     using ::com::sun::star::inspection::PropertyCategoryDescriptor;
-    using ::com::sun::star::beans::UnknownPropertyException;
     using ::com::sun::star::ucb::AlreadyInitializedException;
     using ::com::sun::star::lang::IllegalArgumentException;
 
@@ -69,47 +66,47 @@ namespace pcr
     }
 
 
-    OUString SAL_CALL DefaultFormComponentInspectorModel::getImplementationName(  ) throw(RuntimeException, std::exception)
+    OUString SAL_CALL DefaultFormComponentInspectorModel::getImplementationName(  )
     {
         return getImplementationName_static();
     }
 
 
-    Sequence< OUString > SAL_CALL DefaultFormComponentInspectorModel::getSupportedServiceNames(  ) throw(RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL DefaultFormComponentInspectorModel::getSupportedServiceNames(  )
     {
         return getSupportedServiceNames_static();
     }
 
 
-    OUString DefaultFormComponentInspectorModel::getImplementationName_static(  ) throw(RuntimeException)
+    OUString DefaultFormComponentInspectorModel::getImplementationName_static(  )
     {
         return OUString("org.openoffice.comp.extensions.DefaultFormComponentInspectorModel");
     }
 
 
-    Sequence< OUString > DefaultFormComponentInspectorModel::getSupportedServiceNames_static(  ) throw(RuntimeException)
+    Sequence< OUString > DefaultFormComponentInspectorModel::getSupportedServiceNames_static(  )
     {
         Sequence< OUString > aSupported { "com.sun.star.form.inspection.DefaultFormComponentInspectorModel" };
         return aSupported;
     }
 
 
-    Reference< XInterface > SAL_CALL DefaultFormComponentInspectorModel::Create( const Reference< XComponentContext >& )
+    Reference< XInterface > DefaultFormComponentInspectorModel::Create( const Reference< XComponentContext >& )
     {
         return *new DefaultFormComponentInspectorModel();
     }
 
 
-    Sequence< Any > SAL_CALL DefaultFormComponentInspectorModel::getHandlerFactories() throw (RuntimeException, std::exception)
+    Sequence< Any > SAL_CALL DefaultFormComponentInspectorModel::getHandlerFactories()
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
         // service names for all our handlers
-        struct
+        static struct
         {
             const sal_Char* serviceName;
             bool            isFormOnly;
-        } aFactories[] = {
+        } const aFactories[] = {
 
             // a generic handler for form component properties (must precede the ButtonNavigationHandler)
             { "com.sun.star.form.inspection.FormComponentPropertyHandler", false },
@@ -155,16 +152,16 @@ namespace pcr
     }
 
 
-    Sequence< PropertyCategoryDescriptor > SAL_CALL DefaultFormComponentInspectorModel::describeCategories(  ) throw (RuntimeException, std::exception)
+    Sequence< PropertyCategoryDescriptor > SAL_CALL DefaultFormComponentInspectorModel::describeCategories(  )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
 
-        struct
+        static struct
         {
             const sal_Char* programmaticName;
-            sal_uInt16          uiNameResId;
+            const char* uiNameResId;
             const sal_Char* helpId;
-        } aCategories[] = {
+        } const aCategories[] = {
             { "General",    RID_STR_PROPPAGE_DEFAULT,   HID_FM_PROPDLG_TAB_GENERAL },
             { "Data",       RID_STR_PROPPAGE_DATA,      HID_FM_PROPDLG_TAB_DATA },
             { "Events",     RID_STR_EVENTS,             HID_FM_PROPDLG_TAB_EVT }
@@ -176,7 +173,7 @@ namespace pcr
         for ( sal_Int32 i=0; i<nCategories; ++i, ++pReturn )
         {
             pReturn->ProgrammaticName = OUString::createFromAscii( aCategories[i].programmaticName );
-            pReturn->UIName = PcrRes( aCategories[i].uiNameResId ).toString();
+            pReturn->UIName = PcrRes( aCategories[i].uiNameResId );
             pReturn->HelpURL = HelpIdUrl::getHelpURL( aCategories[i].helpId );
         }
 
@@ -184,7 +181,7 @@ namespace pcr
     }
 
 
-    ::sal_Int32 SAL_CALL DefaultFormComponentInspectorModel::getPropertyOrderIndex( const OUString& _rPropertyName ) throw (RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL DefaultFormComponentInspectorModel::getPropertyOrderIndex( const OUString& _rPropertyName )
     {
         sal_Int32 nPropertyId( m_pInfoService->getPropertyId( _rPropertyName ) );
         if ( nPropertyId == -1 )
@@ -200,7 +197,7 @@ namespace pcr
     }
 
 
-    void SAL_CALL DefaultFormComponentInspectorModel::initialize( const Sequence< Any >& _arguments ) throw (Exception, RuntimeException, std::exception)
+    void SAL_CALL DefaultFormComponentInspectorModel::initialize( const Sequence< Any >& _arguments )
     {
         if ( m_bConstructed )
             throw AlreadyInitializedException();
@@ -208,7 +205,7 @@ namespace pcr
         StlSyntaxSequence< Any > arguments( _arguments );
         if ( arguments.empty() )
         {   // constructor: "createDefault()"
-            createDefault();
+            m_bConstructed = true;
             return;
         }
 
@@ -222,12 +219,6 @@ namespace pcr
         }
 
         throw IllegalArgumentException( OUString(), *this, 0 );
-    }
-
-
-    void DefaultFormComponentInspectorModel::createDefault()
-    {
-        m_bConstructed = true;
     }
 
 

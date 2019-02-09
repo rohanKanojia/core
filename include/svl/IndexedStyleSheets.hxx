@@ -10,9 +10,7 @@
 #ifndef INCLUDED_SVL_INDEXEDSTYLESHEETS_HXX
 #define INCLUDED_SVL_INDEXEDSTYLESHEETS_HXX
 
-#include <sal/types.h>
-
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ref.hxx>
 
@@ -21,8 +19,6 @@
 #include <unordered_map>
 #include <vector>
 
-class SfxStyleSheetBase;
-
 namespace svl {
 
 /** Function object to check whether a style sheet a fulfills specific criteria.
@@ -30,7 +26,7 @@ namespace svl {
  */
 struct StyleSheetPredicate {
     virtual bool Check(const SfxStyleSheetBase& styleSheet) = 0;
-    virtual ~StyleSheetPredicate() {;}
+    virtual ~StyleSheetPredicate() {}
 };
 
 /** Function object for cleanup-Strategy for IndexedSfxStyleSheets::Clear().
@@ -38,7 +34,7 @@ struct StyleSheetPredicate {
  */
 struct StyleSheetDisposer {
     virtual void Dispose(rtl::Reference<SfxStyleSheetBase> styleSheet) = 0;
-    virtual ~StyleSheetDisposer() {;}
+    virtual ~StyleSheetDisposer() {}
 };
 
 /** Function object to apply a method on all style sheets.
@@ -46,7 +42,7 @@ struct StyleSheetDisposer {
  */
 struct StyleSheetCallback {
     virtual void DoIt(const SfxStyleSheetBase& styleSheet) = 0;
-    virtual ~StyleSheetCallback() {;}
+    virtual ~StyleSheetCallback() {}
 };
 
 /** This class holds SfxStyleSheets and allows for access via an id and a name.
@@ -109,7 +105,7 @@ public:
      * @internal
      * Method is not const because the returned style sheet is not const
      */
-    rtl::Reference< SfxStyleSheetBase >
+    SfxStyleSheetBase*
     GetStyleSheetByPosition(unsigned pos);
 
     /** Find the position of a provided style.
@@ -122,16 +118,16 @@ public:
     /** Obtain the positions of all styles which have a given name
      */
     std::vector<unsigned>
-    FindPositionsByName(const rtl::OUString& name) const;
+    FindPositionsByName(const OUString& name) const;
 
-    enum SearchBehavior { RETURN_ALL, RETURN_FIRST };
+    enum class SearchBehavior { ReturnAll, ReturnFirst };
     /** Obtain the positions of all styles which have a certain name and fulfill a certain condition.
      *
      * This method is fast because it can use the name-based index
      */
     std::vector<unsigned>
-    FindPositionsByNameAndPredicate(const rtl::OUString& name, StyleSheetPredicate& predicate,
-            SearchBehavior behavior = RETURN_ALL) const;
+    FindPositionsByNameAndPredicate(const OUString& name, StyleSheetPredicate& predicate,
+            SearchBehavior behavior = SearchBehavior::ReturnAll) const;
 
     /** Obtain the positions of all styles which fulfill a certain condition.
      *
@@ -155,7 +151,7 @@ public:
     Reindex();
 
     /** Warning: counting for n starts at 0, i.e., the 0th style sheet is the first that is found. */
-    rtl::Reference<SfxStyleSheetBase>
+    SfxStyleSheetBase*
     GetNthStyleSheetThatMatchesPredicate(unsigned n, StyleSheetPredicate& predicate,
             unsigned startAt = 0);
 
@@ -178,7 +174,7 @@ private:
      *
      * @internal
      * Must be an unordered map. A regular map is too slow for some files. */
-    typedef std::unordered_multimap<rtl::OUString, unsigned, rtl::OUStringHash> MapType;
+    typedef std::unordered_multimap<OUString, unsigned> MapType;
 
     /** A map which stores the positions of style sheets by their name */
     MapType mPositionsByName;

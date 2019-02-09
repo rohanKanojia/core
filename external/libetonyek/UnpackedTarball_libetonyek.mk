@@ -13,18 +13,22 @@ $(eval $(call gb_UnpackedTarball_set_tarball,libetonyek,$(ETONYEK_TARBALL)))
 
 $(eval $(call gb_UnpackedTarball_set_patchlevel,libetonyek,0))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,libetonyek))
+
 $(eval $(call gb_UnpackedTarball_add_patches,libetonyek,\
 	external/libetonyek/win_build.patch.1 \
 	external/libetonyek/ubsan.patch \
 	external/libetonyek/rpath.patch \
-	external/libetonyek/0001-fix-brain-fart.patch.1 \
+	external/libetonyek/warnings.patch \
 ))
 
 ifneq ($(OS),MACOSX)
 ifneq ($(OS),WNT)
+ifneq ($(OS),iOS)
 $(eval $(call gb_UnpackedTarball_add_patches,libetonyek,\
 	external/libetonyek/libetonyek-bundled-soname.patch.0 \
 ))
+endif
 endif
 endif
 

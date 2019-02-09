@@ -19,28 +19,24 @@
 
 #include <editeng/itemtype.hxx>
 #include <unosett.hxx>
+#include <osl/diagnose.h>
 
-#include "swtypes.hxx"
-#include "cmdid.h"
-#include "uiitems.hxx"
+#include <swtypes.hxx>
+#include <cmdid.h>
+#include <uiitems.hxx>
 
-#include "utlui.hrc"
-#include "attrdesc.hrc"
+#include <strings.hrc>
 #include <unomid.h>
 #include <numrule.hxx>
+
+#include <editeng/eerdll.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
-SwPageFootnoteInfoItem::SwPageFootnoteInfoItem( const sal_uInt16 nId, SwPageFootnoteInfo& rInfo) :
-    SfxPoolItem( nId ),
+SwPageFootnoteInfoItem::SwPageFootnoteInfoItem( SwPageFootnoteInfo const & rInfo) :
+    SfxPoolItem( FN_PARAM_FTN_INFO ),
     aFootnoteInfo(rInfo)
-{
-}
-
-SwPageFootnoteInfoItem::SwPageFootnoteInfoItem( const SwPageFootnoteInfoItem& rItem ) :
-    SfxPoolItem( rItem ),
-    aFootnoteInfo(rItem.GetPageFootnoteInfo())
 {
 }
 
@@ -59,21 +55,21 @@ bool SwPageFootnoteInfoItem::operator==( const SfxPoolItem& rAttr ) const
     return ( aFootnoteInfo == static_cast<const SwPageFootnoteInfoItem&>(rAttr).GetPageFootnoteInfo());
 }
 
-bool  SwPageFootnoteInfoItem::GetPresentation
+bool SwPageFootnoteInfoItem::GetPresentation
 (
     SfxItemPresentation /*ePres*/,
-    SfxMapUnit          eCoreUnit,
-    SfxMapUnit          ePresUnit,
+    MapUnit             eCoreUnit,
+    MapUnit             ePresUnit,
     OUString&           rText,
-    const IntlWrapper*  pIntl
+    const IntlWrapper&  rIntl
 )   const
 {
     const SwTwips nHght = GetPageFootnoteInfo().GetHeight();
     if ( nHght )
     {
-        rText = SW_RESSTR( STR_MAX_FTN_HEIGHT ) + " " +
-                ::GetMetricText( nHght, eCoreUnit, ePresUnit, pIntl ) + " " +
-                ::GetSvxString( ::GetMetricId( ePresUnit ) );
+        rText = SwResId( STR_MAX_FTN_HEIGHT ) + " " +
+                ::GetMetricText( nHght, eCoreUnit, ePresUnit, &rIntl ) + " " +
+                EditResId( ::GetMetricId( ePresUnit ) );
     }
     return true;
 }
@@ -83,28 +79,28 @@ bool SwPageFootnoteInfoItem::QueryValue( Any& rVal, sal_uInt8 nMemberId ) const
     bool bRet = true;
     switch(nMemberId & ~CONVERT_TWIPS)
     {
-        case MID_FTN_HEIGHT        :     rVal <<= (sal_Int32)convertTwipToMm100(aFootnoteInfo.GetHeight());break;
-        case MID_LINE_WEIGHT       :     rVal <<= (sal_Int16)convertTwipToMm100(aFootnoteInfo.GetLineWidth());break;
-        case MID_LINE_COLOR        :     rVal <<= (sal_Int32)aFootnoteInfo.GetLineColor().GetColor();break;
+        case MID_FTN_HEIGHT        :     rVal <<= static_cast<sal_Int32>(convertTwipToMm100(aFootnoteInfo.GetHeight()));break;
+        case MID_LINE_WEIGHT       :     rVal <<= static_cast<sal_Int16>(convertTwipToMm100(aFootnoteInfo.GetLineWidth()));break;
+        case MID_LINE_COLOR        :     rVal <<= aFootnoteInfo.GetLineColor();break;
         case MID_LINE_RELWIDTH     :
         {
             Fraction aTmp( 100, 1 );
             aTmp *= aFootnoteInfo.GetWidth();
-            rVal <<= (sal_Int8)(long)aTmp;
+            rVal <<= static_cast<sal_Int8>(static_cast<long>(aTmp));
         }
         break;
-        case MID_LINE_ADJUST       :     rVal <<= (sal_Int16)aFootnoteInfo.GetAdj();break;//text::HorizontalAdjust
-        case MID_LINE_TEXT_DIST    :     rVal <<= (sal_Int32)convertTwipToMm100(aFootnoteInfo.GetTopDist());break;
-        case MID_LINE_FOOTNOTE_DIST:     rVal <<= (sal_Int32)convertTwipToMm100(aFootnoteInfo.GetBottomDist());break;
+        case MID_LINE_ADJUST       :     rVal <<= static_cast<sal_Int16>(aFootnoteInfo.GetAdj());break;//text::HorizontalAdjust
+        case MID_LINE_TEXT_DIST    :     rVal <<= static_cast<sal_Int32>(convertTwipToMm100(aFootnoteInfo.GetTopDist()));break;
+        case MID_LINE_FOOTNOTE_DIST:     rVal <<= static_cast<sal_Int32>(convertTwipToMm100(aFootnoteInfo.GetBottomDist()));break;
         case MID_FTN_LINE_STYLE    :
         {
             switch ( aFootnoteInfo.GetLineStyle( ) )
             {
                 default:
-                case table::BorderLineStyle::NONE : rVal <<= sal_Int8(0); break;
-                case table::BorderLineStyle::SOLID: rVal <<= sal_Int8(1); break;
-                case table::BorderLineStyle::DOTTED: rVal <<= sal_Int8(2); break;
-                case table::BorderLineStyle::DASHED: rVal <<= sal_Int8(3); break;
+                case SvxBorderLineStyle::NONE : rVal <<= sal_Int8(0); break;
+                case SvxBorderLineStyle::SOLID: rVal <<= sal_Int8(1); break;
+                case SvxBorderLineStyle::DOTTED: rVal <<= sal_Int8(2); break;
+                case SvxBorderLineStyle::DASHED: rVal <<= sal_Int8(3); break;
             }
             break;
         }
@@ -117,12 +113,13 @@ bool SwPageFootnoteInfoItem::QueryValue( Any& rVal, sal_uInt8 nMemberId ) const
 bool SwPageFootnoteInfoItem::PutValue(const Any& rVal, sal_uInt8 nMemberId)
 {
     sal_Int32 nSet32 = 0;
+    Color aColor;
     bool bRet = true;
     switch(nMemberId  & ~CONVERT_TWIPS)
     {
         case MID_LINE_COLOR        :
-            rVal >>= nSet32;
-            aFootnoteInfo.SetLineColor(nSet32);
+            rVal >>= aColor;
+            aFootnoteInfo.SetLineColor(aColor);
         break;
         case MID_FTN_HEIGHT:
         case MID_LINE_TEXT_DIST    :
@@ -166,21 +163,21 @@ bool SwPageFootnoteInfoItem::PutValue(const Any& rVal, sal_uInt8 nMemberId)
             sal_Int16 nSet = 0;
             rVal >>= nSet;
             if(nSet >= 0 && nSet < 3) //text::HorizontalAdjust
-                aFootnoteInfo.SetAdj((SwFootnoteAdj)nSet);
+                aFootnoteInfo.SetAdj(static_cast<css::text::HorizontalAdjust>(nSet));
             else
                 bRet = false;
         }
         break;
         case MID_FTN_LINE_STYLE:
         {
-            ::editeng::SvxBorderStyle eStyle = table::BorderLineStyle::NONE;
+            SvxBorderLineStyle eStyle = SvxBorderLineStyle::NONE;
             sal_Int8 nSet = 0;
             rVal >>= nSet;
             switch ( nSet )
             {
-                case 1: eStyle = table::BorderLineStyle::SOLID; break;
-                case 2: eStyle = table::BorderLineStyle::DOTTED; break;
-                case 3: eStyle = table::BorderLineStyle::DASHED; break;
+                case 1: eStyle = SvxBorderLineStyle::SOLID; break;
+                case 2: eStyle = SvxBorderLineStyle::DOTTED; break;
+                case 3: eStyle = SvxBorderLineStyle::DASHED; break;
                 default: break;
             }
             aFootnoteInfo.SetLineStyle( eStyle );
@@ -196,13 +193,6 @@ SwPtrItem::SwPtrItem( const sal_uInt16 nId, void* pPtr ) :
     SfxPoolItem( nId ),
     pMisc(pPtr)
 {
-}
-
-// Copy constructor
-
-SwPtrItem::SwPtrItem( const SwPtrItem& rItem ) : SfxPoolItem( rItem )
-{
-    pMisc = rItem.pMisc;
 }
 
 // Cloning
@@ -221,8 +211,8 @@ bool SwPtrItem::operator==( const SfxPoolItem& rAttr ) const
 
 // SwUINumRuleItem for the NumTabPages of the FormatNumRule/Styleists
 
-SwUINumRuleItem::SwUINumRuleItem( const SwNumRule& rRul, const sal_uInt16 nId )
-    : SfxPoolItem( nId ), pRule( new SwNumRule( rRul ) )
+SwUINumRuleItem::SwUINumRuleItem( const SwNumRule& rRul )
+    : SfxPoolItem( FN_PARAM_ACT_NUMBER ), pRule( new SwNumRule( rRul ) )
 {
 }
 
@@ -232,9 +222,8 @@ SwUINumRuleItem::SwUINumRuleItem( const SwUINumRuleItem& rItem )
 {
 }
 
- SwUINumRuleItem::~SwUINumRuleItem()
+SwUINumRuleItem::~SwUINumRuleItem()
 {
-    delete pRule;
 }
 
 SfxPoolItem*  SwUINumRuleItem::Clone( SfxItemPool * /*pPool*/ ) const
@@ -251,7 +240,7 @@ bool SwUINumRuleItem::operator==( const SfxPoolItem& rAttr ) const
 bool SwUINumRuleItem::QueryValue( uno::Any& rVal, sal_uInt8 /*nMemberId*/ ) const
 {
     uno::Reference< container::XIndexReplace >xRules = new SwXNumberingRules(*pRule);
-    rVal.setValue(&xRules, cppu::UnoType<container::XIndexReplace>::get());
+    rVal <<= xRules;
     return true;
 }
 bool SwUINumRuleItem::PutValue( const uno::Any& rVal, sal_uInt8 /*nMemberId*/ )
@@ -270,25 +259,10 @@ bool SwUINumRuleItem::PutValue( const uno::Any& rVal, sal_uInt8 /*nMemberId*/ )
     return true;
 }
 
-SwBackgroundDestinationItem::SwBackgroundDestinationItem(sal_uInt16  _nWhich, sal_uInt16 nValue) :
-    SfxUInt16Item(_nWhich, nValue)
-{
-}
-
-SfxPoolItem*     SwBackgroundDestinationItem::Clone( SfxItemPool * /*pPool*/ ) const
-{
-    return new SwBackgroundDestinationItem(Which(), GetValue());
-}
-
 SwPaMItem::SwPaMItem( const sal_uInt16 nId, SwPaM* pPaM ) :
     SfxPoolItem( nId ),
     m_pPaM(pPaM)
 {
-}
-
-SwPaMItem::SwPaMItem( const SwPaMItem& rItem ) : SfxPoolItem( rItem )
-{
-    m_pPaM = rItem.m_pPaM;
 }
 
 SfxPoolItem* SwPaMItem::Clone( SfxItemPool * /*pPool*/ ) const

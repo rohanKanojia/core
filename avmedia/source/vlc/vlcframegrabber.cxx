@@ -29,11 +29,12 @@
 #include <unotools/ucbstreamhelper.hxx>
 #include <tools/stream.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <sal/log.hxx>
 
 #include "vlcframegrabber.hxx"
 #include "vlcplayer.hxx"
-#include "wrapper/Player.hxx"
-#include "wrapper/EventManager.hxx"
+#include <wrapper/Player.hxx>
+#include <wrapper/EventManager.hxx>
 
 using namespace ::com::sun::star;
 
@@ -42,8 +43,8 @@ namespace vlc {
 
 namespace
 {
-    const ::rtl::OUString AVMEDIA_VLC_GRABBER_IMPLEMENTATIONNAME = "com.sun.star.comp.avmedia.VLCFrameGrabber_VLC";
-    const ::rtl::OUString AVMEDIA_VLC_GRABBER_SERVICENAME = "com.sun.star.media.VLCFrameGrabber_VLC";
+    const OUString AVMEDIA_VLC_GRABBER_IMPLEMENTATIONNAME = "com.sun.star.comp.avmedia.VLCFrameGrabber_VLC";
+    const OUString AVMEDIA_VLC_GRABBER_SERVICENAME = "com.sun.star.media.VLCFrameGrabber_VLC";
     const int MSEC_IN_SEC = 1000;
 
     const char * const VLC_ARGS[] = {
@@ -57,7 +58,7 @@ namespace
     };
 }
 
-VLCFrameGrabber::VLCFrameGrabber( wrapper::EventHandler& eh, const rtl::OUString& url )
+VLCFrameGrabber::VLCFrameGrabber( wrapper::EventHandler& eh, const OUString& url )
     : FrameGrabber_BASE()
     , mInstance( SAL_N_ELEMENTS(VLC_ARGS), VLC_ARGS )
     , mMedia( url, mInstance )
@@ -67,11 +68,10 @@ VLCFrameGrabber::VLCFrameGrabber( wrapper::EventHandler& eh, const rtl::OUString
 }
 
 ::uno::Reference< css::graphic::XGraphic > SAL_CALL VLCFrameGrabber::grabFrame( double fMediaTime )
-        throw ( css::uno::RuntimeException, std::exception )
 {
     osl::Condition condition;
 
-    const rtl::OUString& fileName = utl::TempFile::CreateTempName();
+    const OUString& fileName = utl::TempFile::CreateTempName();
     {
         wrapper::EventManager manager( mPlayer, mEventHandler );
         manager.onPaused([&condition](){ condition.set(); });
@@ -82,7 +82,7 @@ VLCFrameGrabber::VLCFrameGrabber( wrapper::EventHandler& eh, const rtl::OUString
             return ::uno::Reference< css::graphic::XGraphic >();
         }
 
-        mPlayer.setTime( ( fMediaTime > 0 ? fMediaTime : 0 ) * MSEC_IN_SEC );
+        mPlayer.setTime( std::max(fMediaTime, 0.0) * MSEC_IN_SEC );
         mPlayer.pause();
 
         condition.wait(std::chrono::seconds(2));
@@ -100,10 +100,10 @@ VLCFrameGrabber::VLCFrameGrabber( wrapper::EventHandler& eh, const rtl::OUString
         manager.onPaused();
     }
 
-    rtl::OUString url;
+    OUString url;
     osl::FileBase::getFileURLFromSystemPath( fileName, url );
     std::shared_ptr<SvStream> stream( utl::UcbStreamHelper::CreateStream( url,
-                                                                            STREAM_STD_READ ) );
+                                                                            StreamMode::STD_READ ) );
 
     vcl::PNGReader reader( *stream );
 
@@ -112,22 +112,19 @@ VLCFrameGrabber::VLCFrameGrabber( wrapper::EventHandler& eh, const rtl::OUString
     return Graphic( bitmap ).GetXGraphic();
 }
 
-::rtl::OUString SAL_CALL VLCFrameGrabber::getImplementationName() throw ( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL VLCFrameGrabber::getImplementationName()
 {
     return AVMEDIA_VLC_GRABBER_IMPLEMENTATIONNAME;
 }
 
-sal_Bool SAL_CALL VLCFrameGrabber::supportsService( const ::rtl::OUString& serviceName )
-        throw ( css::uno::RuntimeException, std::exception )
+sal_Bool SAL_CALL VLCFrameGrabber::supportsService( const OUString& serviceName )
 {
     return cppu::supportsService(this, serviceName);
 }
 
-::uno::Sequence< ::rtl::OUString > SAL_CALL VLCFrameGrabber::getSupportedServiceNames()
-        throw ( css::uno::RuntimeException, std::exception )
+::uno::Sequence< OUString > SAL_CALL VLCFrameGrabber::getSupportedServiceNames()
 {
-    ::uno::Sequence< OUString > aRet { AVMEDIA_VLC_GRABBER_SERVICENAME };
-    return aRet;
+    return { AVMEDIA_VLC_GRABBER_SERVICENAME };
 }
 
 }

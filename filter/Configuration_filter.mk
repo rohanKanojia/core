@@ -342,6 +342,7 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_writer_types.xcu
 	writer8 \
 	writer_MS_Word_2007_XML \
 	writer_MS_Word_2007_XML_Template \
+	writer_MS_Word_2007_XML_VBA \
 	writer_OOXML \
 	writer_OOXML_Template \
 	writer_layout_dump_xml \
@@ -352,6 +353,8 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_writer_types.xcu
 	writer_ApplePages \
 	MWAW_Text_Document \
 	Palm_Text_Document \
+	StarOffice_Writer \
+	writer_EPUB_Document \
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_writer_filters.xcu,filter/source/config/fragments/filters,\
@@ -387,6 +390,7 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_writer_filters
 	writer8_template \
 	MS_Word_2007_XML \
 	MS_Word_2007_XML_Template \
+	MS_Word_2007_XML_VBA \
 	OOXML_Text \
 	OOXML_Text_Template \
 	writer_layout_dump \
@@ -397,6 +401,8 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_writer_filters
 	ApplePages \
 	MWAW_Text_Document \
 	Palm_Text_Document \
+	StarOffice_Writer \
+	EPUB \
 ))
 
 # fcfg_web
@@ -486,6 +492,8 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_calc_types.xcu,f
 	calc_AppleNumbers \
 	MWAW_Database \
 	MWAW_Spreadsheet \
+	StarOffice_Spreadsheet \
+	calc_MS_Multiplan \
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_calc_filters.xcu,filter/source/config/fragments/filters,\
@@ -502,6 +510,7 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_calc_filters.x
 	MS_Excel_95_Vorlage_Template \
 	MS_Excel_97 \
 	MS_Excel_97_Vorlage_Template \
+	MS_Excel_2003_XML_Orcus \
 	Rich_Text_Format__StarCalc_ \
 	SYLK \
 	StarOffice_XML__Calc_ \
@@ -528,6 +537,8 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_calc_filters.x
 	AppleNumbers \
 	MWAW_Database \
 	MWAW_Spreadsheet \
+	StarOffice_Spreadsheet \
+	MS_Multiplan \
 ))
 
 # fcfg_draw
@@ -547,8 +558,11 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_draw_types.xcu,f
 	draw_Visio_Document \
 	draw_ClarisWorks \
 	draw_PageMaker_Document \
+	draw_QXP_Document \
+	draw_ZMF_Document \
 	MWAW_Bitmap \
 	MWAW_Drawing \
+	StarOffice_Drawing \
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_draw_filters.xcu,filter/source/config/fragments/filters,\
@@ -566,8 +580,11 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_draw_filters.x
 	FreehandDocument \
 	ClarisWorks_Draw \
 	PageMakerDocument \
+	QXPDocument \
+	ZMFDocument \
 	MWAW_Bitmap \
 	MWAW_Drawing \
+	StarOffice_Drawing \
 ))
 
 # fcfg_impress
@@ -581,18 +598,20 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_impress_types.xc
 	impress_StarOffice_XML_Impress \
 	impress_StarOffice_XML_Impress_Template \
 	pdf_Portable_Document_Format \
-	pwp_PlaceWare \
 	impress8 \
 	impress8_template \
 	draw8 \
 	MS_PowerPoint_2007_XML \
 	MS_PowerPoint_2007_XML_AutoPlay \
 	MS_PowerPoint_2007_XML_Template \
+	MS_PowerPoint_2007_XML_VBA \
 	impress_OOXML_Presentation \
 	impress_OOXML_Presentation_Template \
 	impress_OOXML_Presentation_AutoPlay \
 	impress_ClarisWorks \
+	StarOffice_Presentation \
 	MWAW_Presentation \
+	impress_PowerPoint3 \
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_impress_filters.xcu,filter/source/config/fragments/filters,\
@@ -605,18 +624,20 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_impress_filter
 	StarOffice_XML__Impress_ \
 	impress_StarOffice_XML_Impress_Template \
 	impress_pdf_Export \
-	placeware_Export \
 	impress8 \
 	impress8_template \
 	impress8_draw \
 	impress_MS_PowerPoint_2007_XML \
 	impress_MS_PowerPoint_2007_XML_AutoPlay \
 	impress_MS_PowerPoint_2007_XML_Template \
+	impress_MS_PowerPoint_2007_XML_VBA \
 	impress_OOXML \
 	impress_OOXML_Template \
 	impress_OOXML_AutoPlay \
 	ClarisWorks_Impress \
+	StarOffice_Presentation \
 	MWAW_Presentation \
+	PowerPoint3 \
 ))
 
 # fcfg_chart
@@ -674,8 +695,7 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_drawgraphics_typ
 	ppm_Portable_Pixelmap \
 	psd_Adobe_Photoshop \
 	ras_Sun_Rasterfile \
-	sgf_StarOffice_Writer_SGF \
-	sgv_StarDraw_20 \
+	svg_Scalable_Vector_Graphics_Draw \
 	svg_Scalable_Vector_Graphics \
 	svm_StarView_Metafile \
 	tga_Truevision_TARGA \
@@ -702,8 +722,7 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_drawgraphics_f
 	PPM___Portable_Pixelmap \
 	PSD___Adobe_Photoshop \
 	RAS___Sun_Rasterfile \
-	SGF___StarOffice_Writer_SGF \
-	SGV___StarDraw_2_0 \
+	SVG___Scalable_Vector_Graphics_Draw \
 	SVG___Scalable_Vector_Graphics \
 	SVM___StarView_Metafile \
 	TGA___Truevision_TARGA \
@@ -744,6 +763,7 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_impressgraphics_
 	png_Portable_Network_Graphic \
 	ppm_Portable_Pixelmap \
 	ras_Sun_Rasterfile \
+	svg_Scalable_Vector_Graphics_Draw \
 	svg_Scalable_Vector_Graphics \
 	svm_StarView_Metafile \
 	tif_Tag_Image_File \
@@ -770,20 +790,25 @@ $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_impressgraphic
 $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_writergraphics_types.xcu,filter/source/config/fragments/types,\
 	jpg_JPEG \
 	png_Portable_Network_Graphic \
+	svg_Scalable_Vector_Graphics \
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_writergraphics_filters.xcu,filter/source/config/fragments/filters,\
 	writer_jpg_Export \
 	writer_png_Export \
+	writer_svg_Export \
 ))
 
 # fcfg_calcgraphics
 $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_calcgraphics_types.xcu,filter/source/config/fragments/types,\
 	png_Portable_Network_Graphic \
+	svg_Scalable_Vector_Graphics \
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_calcgraphics_filters.xcu,filter/source/config/fragments/filters,\
+	calc_jpg_Export \
 	calc_png_Export \
+	calc_svg_Export \
 ))
 
 # fcfg_internalgraphics
@@ -807,8 +832,6 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_internalgraphics
 	ppm_Portable_Pixelmap \
 	psd_Adobe_Photoshop \
 	ras_Sun_Rasterfile \
-	sgf_StarOffice_Writer_SGF \
-	sgv_StarDraw_20 \
 	svg_Scalable_Vector_Graphics \
 	svm_StarView_Metafile \
 	tga_Truevision_TARGA \
@@ -837,14 +860,14 @@ $(eval $(call filter_Configuration_add_internal_filters,fcfg_langpack,fcfg_inter
 	pcd_Import_Base16 \
 	pct_Import \
 	pcx_Import \
+	pdf_Export \
+	pdf_Import \
 	pgm_Import \
 	png_Export \
 	png_Import \
 	ppm_Import \
 	psd_Import \
 	ras_Import \
-	sgf_Import \
-	sgv_Import \
 	svg_Export \
 	svg_Import \
 	svm_Export \
@@ -861,6 +884,7 @@ $(eval $(call filter_Configuration_add_internal_filters,fcfg_langpack,fcfg_inter
 
 # fcfg_xslt
 $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_xslt_types.xcu,filter/source/config/fragments/types,\
+	calc_ADO_rowset_XML \
 	calc_MS_Excel_2003_XML \
 	writer_DocBook_File \
 	writer_MS_Word_2003_XML \
@@ -871,6 +895,7 @@ $(eval $(call filter_Configuration_add_types,fcfg_langpack,fcfg_xslt_types.xcu,f
 ))
 
 $(eval $(call filter_Configuration_add_filters,fcfg_langpack,fcfg_xslt_filters.xcu,filter/source/config/fragments/filters,\
+	ADO_rowset_XML \
 	DocBook_File \
 	MS_Excel_2003_XML \
 	MS_Word_2003_XML \

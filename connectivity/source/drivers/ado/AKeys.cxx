@@ -17,22 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ado/AKeys.hxx"
-#include "ado/AKey.hxx"
+#include <ado/AKeys.hxx>
+#include <ado/AKey.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
-#include "ado/AConnection.hxx"
+#include <ado/AConnection.hxx>
 #include <comphelper/types.hxx>
-#include "ado/Awrapado.hxx"
-#include <comphelper/property.hxx>
+#include <ado/Awrapado.hxx>
 #include <connectivity/dbexception.hxx>
-#include "resource/ado_res.hrc"
-
-#if defined __MINGW32__
-#pragma GCC diagnostic warning "-Wwrite-strings"
-#endif
+#include <strings.hrc>
 
 using namespace ::comphelper;
 using namespace connectivity;
@@ -49,7 +44,7 @@ sdbcx::ObjectType OKeys::createObject(const OUString& _rName)
     return new OAdoKey(isCaseSensitive(),m_pConnection,m_aCollection.GetItem(_rName));
 }
 
-void OKeys::impl_refresh() throw(RuntimeException)
+void OKeys::impl_refresh()
 {
     m_aCollection.Refresh();
 }
@@ -62,29 +57,23 @@ Reference< XPropertySet > OKeys::createDescriptor()
 // XAppend
 sdbcx::ObjectType OKeys::appendObject( const OUString&, const Reference< XPropertySet >& descriptor )
 {
-    OAdoKey* pKey = NULL;
-    if ( !getImplementation( pKey, descriptor ) || pKey == NULL)
+    OAdoKey* pKey = nullptr;
+    if ( !getImplementation( pKey, descriptor ) || pKey == nullptr)
         m_pConnection->throwGenericSQLException( STR_INVALID_KEY_DESCRIPTOR_ERROR,static_cast<XTypeProvider*>(this) );
 
     // To pass as column parameter to Key's Append method
     OLEVariant vOptional;
     vOptional.setNoArg();
 
-#if OSL_DEBUG_LEVEL > 0
-    KeyTypeEnum eKey =
-#endif
-        OAdoKey::Map2KeyRule(getINT32(descriptor->getPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_TYPE))));
-#if OSL_DEBUG_LEVEL > 0
-    (void)eKey;
-#endif
+    OAdoKey::Map2KeyRule(getINT32(descriptor->getPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_TYPE))));
 
     WpADOKey aKey = pKey->getImpl();
     OUString sName = aKey.get_Name();
     if(!sName.getLength())
-        aKey.put_Name(OUString("PrimaryKey") );
+        aKey.put_Name("PrimaryKey");
 
     ADOKeys* pKeys = m_aCollection;
-    if ( FAILED(pKeys->Append(OLEVariant((ADOKey*)aKey),
+    if ( FAILED(pKeys->Append(OLEVariant(static_cast<ADOKey*>(aKey)),
                             adKeyPrimary, // must be every time adKeyPrimary
                             vOptional)) )
     {
@@ -99,7 +88,7 @@ sdbcx::ObjectType OKeys::appendObject( const OUString&, const Reference< XProper
 // XDrop
 void OKeys::dropObject(sal_Int32 /*_nPos*/,const OUString& _sElementName)
 {
-    if(!m_aCollection.Delete(OLEVariant(_sElementName)))
+    if(!m_aCollection.Delete(OLEVariant(_sElementName).getString()))
         ADOS::ThrowException(*m_pConnection->getConnection(),static_cast<XTypeProvider*>(this));
 }
 

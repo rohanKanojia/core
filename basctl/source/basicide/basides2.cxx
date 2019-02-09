@@ -17,16 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "docsignature.hxx"
+#include <docsignature.hxx>
 
 #include "basicrenderable.hxx"
 
 #include <com/sun/star/frame/XTitle.hpp>
 
-#include <basidesh.hrc>
-#include <baside2.hxx>
-#include <basdoc.hxx>
+#include <strings.hrc>
+#include "baside2.hxx"
+#include "basdoc.hxx"
 #include <vcl/xtextedt.hxx>
+#include <vcl/textview.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/signaturestate.hxx>
 #include <com/sun/star/container/XNamed.hpp>
@@ -96,21 +97,20 @@ sal_uInt16 Shell::SetPrinter( SfxPrinter *pNewPrinter, SfxPrinterChangeFlags )
 
 void Shell::SetMDITitle()
 {
-    OUStringBuffer aTitleBuf;
+    OUString aTitle;
     if ( !m_aCurLibName.isEmpty() )
     {
         LibraryLocation eLocation = m_aCurDocument.getLibraryLocation( m_aCurLibName );
-        aTitleBuf = m_aCurDocument.getTitle(eLocation) + "." + m_aCurLibName ;
+        aTitle = m_aCurDocument.getTitle(eLocation) + "." + m_aCurLibName ;
     }
     else
-        aTitleBuf = IDE_RESSTR(RID_STR_ALL) ;
+        aTitle = IDEResId(RID_STR_ALL) ;
 
     DocumentSignature aCurSignature( m_aCurDocument );
     if ( aCurSignature.getScriptingSignatureState() == SignatureState::OK )
     {
-        aTitleBuf = aTitleBuf + " " + IDE_RESSTR(RID_STR_SIGNED) + " ";
+        aTitle += " " + IDEResId(RID_STR_SIGNED) + " ";
     }
-    OUString aTitle(aTitleBuf.makeStringAndClear());
 
     SfxViewFrame* pViewFrame = GetViewFrame();
     if ( pViewFrame )
@@ -166,7 +166,7 @@ VclPtr<ModulWindow> Shell::CreateBasWin( const ScriptDocument& rDocument, const 
             {
                 // new module window
                 if (!pModulLayout)
-                    pModulLayout.reset(VclPtr<ModulWindowLayout>::Create(&GetViewFrame()->GetWindow(), *aObjectCatalog.get()));
+                    pModulLayout.reset(VclPtr<ModulWindowLayout>::Create(&GetViewFrame()->GetWindow(), *aObjectCatalog));
                 pWin = VclPtr<ModulWindow>::Create(pModulLayout.get(), rDocument, aLibName, aModName, aModule);
                 nKey = InsertWindowInTable( pWin );
             }
@@ -178,7 +178,7 @@ VclPtr<ModulWindow> Shell::CreateBasWin( const ScriptDocument& rDocument, const 
     {
         pWin->SetStatus( pWin->GetStatus() & ~BASWIN_SUSPENDED );
         nKey = GetWindowId( pWin );
-        DBG_ASSERT( nKey, "CreateBasWin: Kein Key- Fenster nicht gefunden!" );
+        DBG_ASSERT( nKey, "CreateBasWin: No Key - Window not found!" );
     }
     if( nKey && xLib.is() && rDocument.isInVBAMode() )
     {
@@ -191,7 +191,7 @@ VclPtr<ModulWindow> Shell::CreateBasWin( const ScriptDocument& rDocument, const 
             aModName += " (" + sObjName + ")";
         }
     }
-    pTabBar->InsertPage( (sal_uInt16)nKey, aModName );
+    pTabBar->InsertPage( static_cast<sal_uInt16>(nKey), aModName );
     pTabBar->Sort();
     if(pWin)
     {
@@ -209,8 +209,8 @@ VclPtr<ModulWindow> Shell::FindBasWin (
     bool bCreateIfNotExist, bool bFindSuspended
 )
 {
-    if (BaseWindow* pWin = FindWindow(rDocument, rLibName, rName, TYPE_MODULE, bFindSuspended))
-        return VclPtr<ModulWindow>(static_cast<ModulWindow*>(pWin));
+    if (VclPtr<BaseWindow> pWin = FindWindow(rDocument, rLibName, rName, TYPE_MODULE, bFindSuspended))
+        return VclPtr<ModulWindow>(static_cast<ModulWindow*>(pWin.get()));
     return bCreateIfNotExist ? CreateBasWin(rDocument, rLibName, rName) : nullptr;
 }
 

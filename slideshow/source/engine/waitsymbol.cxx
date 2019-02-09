@@ -22,6 +22,7 @@
 
 #include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
+#include <sal/log.hxx>
 
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/vector/b2dvector.hxx>
@@ -30,7 +31,7 @@
 #include <com/sun/star/presentation/XSlideShowView.hpp>
 
 #include "waitsymbol.hxx"
-#include "eventmultiplexer.hxx"
+#include <eventmultiplexer.hxx>
 
 #include <algorithm>
 
@@ -67,29 +68,29 @@ WaitSymbol::WaitSymbol( uno::Reference<rendering::XBitmap> const &   xBitmap,
     mbVisible(false)
 {
     for( const auto& pView : rViewContainer )
-        this->viewAdded( pView );
+        viewAdded( pView );
 }
 
 void WaitSymbol::setVisible( const bool bVisible )
 {
-    if( mbVisible != bVisible )
+    if( mbVisible == bVisible )
+        return;
+
+    mbVisible = bVisible;
+
+    for( const auto& rView : maViews )
     {
-        mbVisible = bVisible;
-
-        for( const auto& rView : maViews )
+        if( rView.second )
         {
-            if( rView.second )
-            {
-                if( bVisible )
-                    rView.second->show();
-                else
-                    rView.second->hide();
-            }
+            if( bVisible )
+                rView.second->show();
+            else
+                rView.second->hide();
         }
-
-        // sprites changed, need a screen update for this frame.
-        mrScreenUpdater.requestImmediateUpdate();
     }
+
+    // sprites changed, need a screen update for this frame.
+    mrScreenUpdater.requestImmediateUpdate();
 }
 
 basegfx::B2DPoint WaitSymbol::calcSpritePos(
@@ -129,12 +130,10 @@ void WaitSymbol::viewAdded( const UnoViewSharedPtr& rView )
     }
     catch( uno::Exception& )
     {
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString( cppu::getCaughtException() ),
-                        RTL_TEXTENCODING_UTF8 ).getStr() );
+        SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
     }
 
-    maViews.push_back( ViewsVecT::value_type( rView, sprite ) );
+    maViews.emplace_back( rView, sprite );
 }
 
 void WaitSymbol::viewRemoved( const UnoViewSharedPtr& rView )

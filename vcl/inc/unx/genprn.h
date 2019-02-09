@@ -21,35 +21,35 @@
 #define INCLUDED_VCL_INC_GENERIC_GENPRN_H
 
 #include <vcl/jobdata.hxx>
-#include "unx/printergfx.hxx"
-#include "unx/printerjob.hxx"
-#include "salprn.hxx"
-#include "vclpluginapi.h"
+#include <unx/printergfx.hxx>
+#include <unx/printerjob.hxx>
+#include <salprn.hxx>
+#include <vclpluginapi.h>
 
 class GenPspGraphics;
 class VCL_DLLPUBLIC PspSalInfoPrinter : public SalInfoPrinter
 {
 public:
-    GenPspGraphics*         m_pGraphics;
+    std::unique_ptr<GenPspGraphics> m_pGraphics;
     psp::JobData            m_aJobData;
     psp::PrinterGfx         m_aPrinterGfx;
 
     PspSalInfoPrinter();
-    virtual ~PspSalInfoPrinter();
+    virtual ~PspSalInfoPrinter() override;
 
     // override all pure virtual methods
     virtual SalGraphics*            AcquireGraphics() override;
     virtual void                    ReleaseGraphics( SalGraphics* pGraphics ) override;
-    virtual bool                    Setup( SalFrame* pFrame, ImplJobSetup* pSetupData ) override;
+    virtual bool                    Setup( weld::Window* pFrame, ImplJobSetup* pSetupData ) override;
     virtual bool                    SetPrinterData( ImplJobSetup* pSetupData ) override;
     virtual bool                    SetData( JobSetFlags nFlags, ImplJobSetup* pSetupData ) override;
     virtual void                    GetPageInfo( const ImplJobSetup* pSetupData,
                                                  long& rOutWidth, long& rOutHeight,
-                                                 long& rPageOffX, long& rPageOffY,
-                                                 long& rPageWidth, long& rPageHeight ) override;
+                                                 Point& rPageOffset,
+                                                 Size& rPaperSize ) override;
     virtual sal_uInt32              GetCapabilities( const ImplJobSetup* pSetupData, PrinterCapType nType ) override;
-    virtual sal_uIntPtr             GetPaperBinCount( const ImplJobSetup* pSetupData ) override;
-    virtual OUString                GetPaperBinName( const ImplJobSetup* pSetupData, sal_uIntPtr nPaperBin ) override;
+    virtual sal_uInt16              GetPaperBinCount( const ImplJobSetup* pSetupData ) override;
+    virtual OUString                GetPaperBinName( const ImplJobSetup* pSetupData, sal_uInt16 nPaperBin ) override;
     virtual void                    InitPaperFormats( const ImplJobSetup* pSetupData ) override;
     virtual int                     GetLandscapeAngle( const ImplJobSetup* pSetupData ) override;
 };
@@ -70,7 +70,7 @@ public:
     bool                    m_bIsPDFWriterJob;
 
     PspSalPrinter( SalInfoPrinter *pPrinter );
-    virtual ~PspSalPrinter();
+    virtual ~PspSalPrinter() override;
 
     // override all pure virtual methods
     virtual bool                    StartJob( const OUString* pFileName,
@@ -88,7 +88,6 @@ public:
     virtual bool                    EndJob() override;
     virtual SalGraphics*            StartPage( ImplJobSetup* pSetupData, bool bNewJobData ) override;
     virtual void                    EndPage() override;
-    virtual sal_uIntPtr                 GetErrorCode() override;
 };
 
 #endif // INCLUDED_VCL_INC_GENERIC_GENPRN_H

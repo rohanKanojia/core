@@ -7,12 +7,12 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "xedbdata.hxx"
-#include "excrecds.hxx"
-#include "xltools.hxx"
-#include "dbdata.hxx"
-#include "document.hxx"
+#include <xedbdata.hxx>
+#include <excrecds.hxx>
+#include <dbdata.hxx>
+#include <document.hxx>
 #include <oox/export/utils.hxx>
+#include <oox/token/namespaces.hxx>
 
 using namespace oox;
 
@@ -21,7 +21,6 @@ class XclExpTablesImpl5 : public XclExpTables
 {
 public:
     explicit            XclExpTablesImpl5( const XclExpRoot& rRoot );
-    virtual             ~XclExpTablesImpl5();
 
     virtual void        Save( XclExpStream& rStrm ) override;
     virtual void        SaveXml( XclExpXmlStream& rStrm ) override;
@@ -32,7 +31,6 @@ class XclExpTablesImpl8 : public XclExpTables
 {
 public:
     explicit            XclExpTablesImpl8( const XclExpRoot& rRoot );
-    virtual             ~XclExpTablesImpl8();
 
     virtual void        Save( XclExpStream& rStrm ) override;
     virtual void        SaveXml( XclExpXmlStream& rStrm ) override;
@@ -41,10 +39,6 @@ public:
 
 XclExpTablesImpl5::XclExpTablesImpl5( const XclExpRoot& rRoot ) :
     XclExpTables( rRoot )
-{
-}
-
-XclExpTablesImpl5::~XclExpTablesImpl5()
 {
 }
 
@@ -61,10 +55,6 @@ void XclExpTablesImpl5::SaveXml( XclExpXmlStream& /*rStrm*/ )
 
 XclExpTablesImpl8::XclExpTablesImpl8( const XclExpRoot& rRoot ) :
     XclExpTables( rRoot )
-{
-}
-
-XclExpTablesImpl8::~XclExpTablesImpl8()
 {
 }
 
@@ -123,9 +113,9 @@ void XclExpTablesManager::Initialize()
         return;
 
     sal_Int32 nTableId = 0;
-    for (ScDBCollection::NamedDBs::iterator itDB(rDBs.begin()); itDB != rDBs.end(); ++itDB)
+    for (const auto& rxDB : rDBs)
     {
-        ScDBData* pDBData = itDB->get();
+        ScDBData* pDBData = rxDB.get();
         pDBData->RefreshTableColumnNames( &rDoc);   // currently not in sync, so refresh
         ScRange aRange( ScAddress::UNINITIALIZED);
         pDBData->GetArea( aRange);
@@ -180,7 +170,7 @@ XclExpTables::~XclExpTables()
 
 void XclExpTables::AppendTable( const ScDBData* pData, sal_Int32 nTableId )
 {
-    maTables.push_back( Entry( pData, nTableId));
+    maTables.emplace_back( pData, nTableId);
 }
 
 void XclExpTables::SaveTableXml( XclExpXmlStream& rStrm, const Entry& rEntry )
@@ -190,14 +180,14 @@ void XclExpTables::SaveTableXml( XclExpXmlStream& rStrm, const Entry& rEntry )
     rData.GetArea( aRange);
     sax_fastparser::FSHelperPtr& pTableStrm = rStrm.GetCurrentStream();
     pTableStrm->startElement( XML_table,
-        XML_xmlns, "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+        XML_xmlns, XclXmlUtils::ToOString(rStrm.getNamespaceURL(OOX_NS(xls))).getStr(),
         XML_id, OString::number( rEntry.mnTableId).getStr(),
         XML_name, XclXmlUtils::ToOString( rData.GetName()).getStr(),
         XML_displayName, XclXmlUtils::ToOString( rData.GetName()).getStr(),
         XML_ref, XclXmlUtils::ToOString(aRange),
-        XML_headerRowCount, BS(rData.HasHeader()),
-        XML_totalsRowCount, BS(rData.HasTotals()),
-        XML_totalsRowShown, BS(rData.HasTotals()),  // we don't support that but if there are totals they are shown
+        XML_headerRowCount, ToPsz10(rData.HasHeader()),
+        XML_totalsRowCount, ToPsz10(rData.HasTotals()),
+        XML_totalsRowShown, ToPsz10(rData.HasTotals()),  // we don't support that but if there are totals they are shown
         // OOXTODO: XML_comment, ...,
         // OOXTODO: XML_connectionId, ...,
         // OOXTODO: XML_dataCellStyle, ...,

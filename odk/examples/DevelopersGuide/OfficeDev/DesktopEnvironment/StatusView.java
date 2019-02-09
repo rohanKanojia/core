@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -54,7 +55,7 @@ import javax.swing.*;
  * call needs this mutex too => a deadlock occurs.
  * Why? UNO had created a new thread for our synchronous call
  * inside the office process and so exist different threads
- * for this constallation.
+ * for this constellation.
  *
  */
 public class StatusView extends    JPanel
@@ -219,8 +220,8 @@ public class StatusView extends    JPanel
             return;
 
         // create some listener on given frame for available status events
-        // Created listener instances will register herself on this frame and
-        // show her received information automatically on setted UI controls.
+        // Created listener instances will register themselves on this frame and
+        // show it received information automatically on set UI controls.
         m_aFontListener      = new StatusListener(m_laFontValue     ,FONT_ON     ,FONT_OFF     ,xFrame, FEATUREURL_FONT     );
         m_aSizeListener      = new StatusListener(m_laSizeValue     ,SIZE_ON     ,SIZE_OFF     ,xFrame, FEATUREURL_SIZE     );
         m_aBoldListener      = new StatusListener(m_laBoldValue     ,BOLD_ON     ,BOLD_OFF     ,xFrame, FEATUREURL_BOLD     );
@@ -238,7 +239,7 @@ public class StatusView extends    JPanel
 
     /**
      * If this java application shutdown - we must cancel all current existing
-     * listener connections. Otherwhise the office will run into some
+     * listener connections. Otherwise the office will run into some
      * DisposedExceptions if it tries to use these forgotten listener references.
      * And of course it can die doing that.
      * We are registered at a central object to be informed if the VM will exit.
@@ -259,3 +260,5 @@ public class StatusView extends    JPanel
         m_aUnderlineListener = null;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -26,12 +26,13 @@
 #include <com/sun/star/xml/crypto/XCipherContext.hpp>
 #include <com/sun/star/xml/crypto/XDigestContext.hpp>
 
+#include <comphelper/refcountedmutex.hxx>
 #include <package/Inflater.hxx>
-#include <ByteGrabber.hxx>
-#include <HashMaps.hxx>
-#include <EncryptionData.hxx>
+#include "ByteGrabber.hxx"
+#include "HashMaps.hxx"
+#include "EncryptionData.hxx"
 
-#include <mutexholder.hxx>
+#include <memory>
 
 namespace com { namespace sun { namespace star {
     namespace uno { class XComponentContext; }
@@ -53,28 +54,27 @@ class ZipEnumeration;
 
 class ZipFile
 {
-protected:
-    ::osl::Mutex    m_aMutex;
+    rtl::Reference<comphelper::RefCountedMutex> m_aMutexHolder;
 
     EntryHash       aEntries;
     ByteGrabber     aGrabber;
     ZipUtils::Inflater aInflater;
     css::uno::Reference < css::io::XInputStream > xStream;
-    css::uno::Reference < css::io::XSeekable > xSeek;
     const css::uno::Reference < css::uno::XComponentContext > m_xContext;
 
-    bool bRecoveryMode;
+    bool const bRecoveryMode;
 
     // aMediaType parameter is used only for raw stream header creation
-    css::uno::Reference < css::io::XInputStream >  createUnbufferedStream(
-            const rtl::Reference<SotMutexHolder>& aMutexHolder,
-            ZipEntry & rEntry,
+    css::uno::Reference < css::io::XInputStream >  createStreamForZipEntry(
+            const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
+            ZipEntry const & rEntry,
             const ::rtl::Reference < EncryptionData > &rData,
             sal_Int8 nStreamMode,
             bool bDecrypt,
+            const bool bUseBufferedStream = true,
             const OUString& aMediaType = OUString() );
 
-    bool hasValidPassword ( ZipEntry & rEntry, const rtl::Reference < EncryptionData > &rData );
+    bool hasValidPassword ( ZipEntry const & rEntry, const rtl::Reference < EncryptionData > &rData );
 
     bool checkSizeAndCRC( const ZipEntry& aEntry );
 
@@ -82,32 +82,35 @@ protected:
 
     void getSizeAndCRC( sal_Int64 nOffset, sal_Int64 nCompressedSize, sal_Int64 *nSize, sal_Int32 *nCRC );
 
+    void readLOC( ZipEntry &rEntry );
+    sal_Int32 readCEN();
+    sal_Int32 findEND();
+    void recover();
+
 public:
 
-    ZipFile( css::uno::Reference < css::io::XInputStream > &xInput,
+    ZipFile( const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
+             css::uno::Reference < css::io::XInputStream > const &xInput,
              const css::uno::Reference < css::uno::XComponentContext > &rxContext,
-             bool bInitialise
-             )
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
+             bool bInitialise );
 
-    ZipFile( css::uno::Reference < css::io::XInputStream > &xInput,
+    ZipFile( const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
+             css::uno::Reference < css::io::XInputStream > const &xInput,
              const css::uno::Reference < css::uno::XComponentContext > &rxContext,
              bool bInitialise,
-             bool bForceRecover
-             )
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
+             bool bForceRecover );
 
     ~ZipFile();
 
     EntryHash& GetEntryHash() { return aEntries; }
 
-    void setInputStream ( css::uno::Reference < css::io::XInputStream > xNewStream );
-    css::uno::Reference< css::io::XInputStream > SAL_CALL getRawData(
+    void setInputStream ( const css::uno::Reference < css::io::XInputStream >& xNewStream );
+    css::uno::Reference< css::io::XInputStream > getRawData(
             ZipEntry& rEntry,
             const ::rtl::Reference < EncryptionData > &rData,
             bool bDecrypt,
-            const rtl::Reference<SotMutexHolder>& aMutexHolder )
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
+            const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
+            const bool bUseBufferedStream = true );
 
     static css::uno::Reference< css::xml::crypto::XDigestContext > StaticGetDigestContextForChecksum(
             const css::uno::Reference< css::uno::XComponentContext >& xArgContext,
@@ -123,7 +126,7 @@ public:
                                     const OUString& aMediaType,
                                     sal_Int8 * & pHeader );
 
-    static bool StaticFillData ( ::rtl::Reference < BaseEncryptionData > & rData,
+    static bool StaticFillData ( ::rtl::Reference < BaseEncryptionData > const & rData,
                                      sal_Int32 &rEncAlgorithm,
                                      sal_Int32 &rChecksumAlgorithm,
                                      sal_Int32 &rDerivedKeySize,
@@ -133,56 +136,35 @@ public:
                                      const css::uno::Reference < css::io::XInputStream >& rStream );
 
     static css::uno::Reference< css::io::XInputStream > StaticGetDataFromRawStream(
+            const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder,
             const css::uno::Reference< css::uno::XComponentContext >& rxContext,
             const css::uno::Reference< css::io::XInputStream >& xStream,
-            const ::rtl::Reference < EncryptionData > &rData )
-        throw ( css::packages::WrongPasswordException,
-                css::packages::zip::ZipIOException,
-                css::uno::RuntimeException );
+            const ::rtl::Reference < EncryptionData > &rData );
 
     static bool StaticHasValidPassword (
             const css::uno::Reference< css::uno::XComponentContext >& rxContext,
             const css::uno::Sequence< sal_Int8 > &aReadBuffer,
             const ::rtl::Reference < EncryptionData > &rData );
 
-    css::uno::Reference< css::io::XInputStream > SAL_CALL getInputStream(
+    css::uno::Reference< css::io::XInputStream > getInputStream(
             ZipEntry& rEntry,
             const ::rtl::Reference < EncryptionData > &rData,
             bool bDecrypt,
-            const rtl::Reference<SotMutexHolder>& aMutexHolder )
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
+            const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder );
 
-    css::uno::Reference< css::io::XInputStream > SAL_CALL getDataStream(
+    css::uno::Reference< css::io::XInputStream > getDataStream(
             ZipEntry& rEntry,
             const ::rtl::Reference < EncryptionData > &rData,
             bool bDecrypt,
-            const rtl::Reference<SotMutexHolder>& aMutexHolder )
-        throw ( css::packages::WrongPasswordException,
-                css::io::IOException,
-                css::packages::zip::ZipException,
-                css::uno::RuntimeException );
+            const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder );
 
-    css::uno::Reference< css::io::XInputStream > SAL_CALL getWrappedRawStream(
+    css::uno::Reference< css::io::XInputStream > getWrappedRawStream(
             ZipEntry& rEntry,
             const ::rtl::Reference < EncryptionData > &rData,
             const OUString& aMediaType,
-            const rtl::Reference<SotMutexHolder>& aMutexHolder )
-        throw ( css::packages::NoEncryptionException,
-                css::io::IOException,
-                css::packages::zip::ZipException,
-                css::uno::RuntimeException );
+            const rtl::Reference<comphelper::RefCountedMutex>& aMutexHolder );
 
-    ZipEnumeration * SAL_CALL entries(  );
-protected:
-    bool        readLOC ( ZipEntry &rEntry)
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
-    sal_Int32       readCEN()
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
-    sal_Int32       findEND()
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
-    void            recover()
-        throw(css::io::IOException, css::packages::zip::ZipException, css::uno::RuntimeException);
-
+    std::unique_ptr<ZipEnumeration> entries();
 };
 
 #endif

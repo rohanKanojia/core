@@ -16,35 +16,23 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include <comphelper/processfactory.hxx>
 
-#include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/beans/PropertyVetoException.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/document/XTypeDetection.hpp>
-#include <com/sun/star/uri/XUriReference.hpp>
-#include <com/sun/star/uri/XUriReferenceFactory.hpp>
-#include <com/sun/star/script/vba/VBAEventId.hpp>
-#include <com/sun/star/script/vba/XVBACompatibility.hpp>
-#include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
-#include <com/sun/star/script/vba/XVBAModuleInfo.hpp>
-#include <com/sun/star/script/ModuleInfo.hpp>
-#include <com/sun/star/script/ModuleType.hpp>
 
 #include <sfx2/objsh.hxx>
 #include <tools/urlobj.hxx>
 
+#include "excelvbahelper.hxx"
 #include "vbaglobals.hxx"
 #include "vbaworkbook.hxx"
 #include "vbaworkbooks.hxx"
@@ -58,7 +46,9 @@ using namespace ::com::sun::star;
 const sal_Int16 CUSTOM_CHAR = 5;
 
 static uno::Any
-getWorkbook( uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< sheet::XSpreadsheetDocument > &xDoc, const uno::Reference< XHelperInterface >& xParent )
+getWorkbook( const uno::Reference< uno::XComponentContext >& xContext,
+             const uno::Reference< sheet::XSpreadsheetDocument > &xDoc,
+             const uno::Reference< XHelperInterface >& xParent )
 {
     // FIXME: fine as long as ScVbaWorkbook is stateless ...
     uno::Reference< frame::XModel > xModel( xDoc, uno::UNO_QUERY );
@@ -68,7 +58,6 @@ getWorkbook( uno::Reference< uno::XComponentContext >& xContext, const uno::Refe
     uno::Reference< excel::XWorkbook > xWb( getVBADocument( xModel ), uno::UNO_QUERY );
     if ( xWb.is() )
     {
-        OSL_TRACE(" *** Returning Module uno Object *** ");
         return uno::Any( xWb );
     }
 
@@ -79,9 +68,10 @@ getWorkbook( uno::Reference< uno::XComponentContext >& xContext, const uno::Refe
 class WorkBookEnumImpl : public EnumerationHelperImpl
 {
 public:
-    WorkBookEnumImpl( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration ) throw ( uno::RuntimeException ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ) {}
+    /// @throws uno::RuntimeException
+    WorkBookEnumImpl( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration ) : EnumerationHelperImpl( xParent, xContext, xEnumeration ) {}
 
-    virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+    virtual uno::Any SAL_CALL nextElement(  ) override
     {
         uno::Reference< sheet::XSpreadsheetDocument > xDoc( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
         return getWorkbook( m_xContext, xDoc, m_xParent );
@@ -94,12 +84,12 @@ ScVbaWorkbooks::ScVbaWorkbooks( const uno::Reference< XHelperInterface >& xParen
 }
 // XEnumerationAccess
 uno::Type
-ScVbaWorkbooks::getElementType() throw (uno::RuntimeException)
+ScVbaWorkbooks::getElementType()
 {
     return cppu::UnoType<excel::XWorkbook>::get();
 }
 uno::Reference< container::XEnumeration >
-ScVbaWorkbooks::createEnumeration() throw (uno::RuntimeException)
+ScVbaWorkbooks::createEnumeration()
 {
     // #FIXME its possible the WorkBookEnumImpl here doesn't reflect
     // the state of this object ( although it should ) would be
@@ -117,7 +107,7 @@ ScVbaWorkbooks::createCollectionObject( const css::uno::Any& aSource )
 }
 
 uno::Any SAL_CALL
-ScVbaWorkbooks::Add( const uno::Any& Template ) throw (uno::RuntimeException, std::exception)
+ScVbaWorkbooks::Add( const uno::Any& Template )
 {
     uno::Reference< sheet::XSpreadsheetDocument > xSpreadDoc;
     sal_Int32 nWorkbookType = 0;
@@ -161,7 +151,7 @@ ScVbaWorkbooks::Add( const uno::Any& Template ) throw (uno::RuntimeException, st
 }
 
 void SAL_CALL
-ScVbaWorkbooks::Close() throw (uno::RuntimeException, std::exception)
+ScVbaWorkbooks::Close()
 {
 }
 
@@ -180,11 +170,10 @@ bool
 ScVbaWorkbooks::isSpreadSheetFile( const OUString& sType )
 {
     // include calc_QPro etc. ? ( not for the moment anyway )
-    if ( sType.startsWith( "calc_MS" )
+    return sType.startsWith( "calc_MS" )
+      || sType.startsWith( "MS Excel" )
       || sType.startsWith( "calc8" )
-      || sType.startsWith( "calc_StarOffice" ) )
-        return true;
-    return false;
+      || sType.startsWith( "calc_StarOffice" );
 }
 
 OUString
@@ -194,13 +183,13 @@ ScVbaWorkbooks::getFileFilterType( const OUString& rFileName )
     uno::Sequence< beans::PropertyValue > aMediaDesc(1);
     aMediaDesc[ 0 ].Name = "URL";
     aMediaDesc[ 0 ].Value <<= rFileName;
-    OUString sType = xTypeDetect->queryTypeByDescriptor( aMediaDesc, sal_True );
+    OUString sType = xTypeDetect->queryTypeByDescriptor( aMediaDesc, true );
     return sType;
 }
 
 // #TODO# #FIXME# can any of the unused params below be used?
 uno::Any SAL_CALL
-ScVbaWorkbooks::Open( const OUString& rFileName, const uno::Any& /*UpdateLinks*/, const uno::Any& ReadOnly, const uno::Any& Format, const uno::Any& /*Password*/, const uno::Any& /*WriteResPassword*/, const uno::Any& /*IgnoreReadOnlyRecommended*/, const uno::Any& /*Origin*/, const uno::Any& Delimiter, const uno::Any& /*Editable*/, const uno::Any& /*Notify*/, const uno::Any& /*Converter*/, const uno::Any& /*AddToMru*/ ) throw (uno::RuntimeException, std::exception)
+ScVbaWorkbooks::Open( const OUString& rFileName, const uno::Any& /*UpdateLinks*/, const uno::Any& ReadOnly, const uno::Any& Format, const uno::Any& /*Password*/, const uno::Any& /*WriteResPassword*/, const uno::Any& /*IgnoreReadOnlyRecommended*/, const uno::Any& /*Origin*/, const uno::Any& Delimiter, const uno::Any& /*Editable*/, const uno::Any& /*Notify*/, const uno::Any& /*Converter*/, const uno::Any& /*AddToMru*/ )
 {
     // we need to detect if this is a URL, if not then assume it's a file path
     OUString aURL;
@@ -229,8 +218,7 @@ ScVbaWorkbooks::Open( const OUString& rFileName, const uno::Any& /*UpdateLinks*/
         // no format means use the current delimiter
         sProps.realloc( 3 );
         sProps[ nIndex ].Name = "FilterOptions";
-        sal_Int16 delims[] = { 0 /*default not used*/, 9/*tab*/, 44/*comma*/, 32/*space*/, 59/*semicolon*/ };
-        static const char sRestOfFormat[] = ",34,0,1";
+        sal_Int16 const delims[] { 0 /*default not used*/, 9/*tab*/, 44/*comma*/, 32/*space*/, 59/*semicolon*/ };
 
         OUString sFormat;
         sal_Int16 nFormat = 0; // default indicator
@@ -256,18 +244,19 @@ ScVbaWorkbooks::Open( const OUString& rFileName, const uno::Any& /*UpdateLinks*/
                 throw uno::RuntimeException("Expected value for Delimiter" );
             OUString sStr;
             Delimiter >>= sStr;
-            if ( !sStr.isEmpty() )
-                nDelim = sStr[0];
-            else
+            if ( sStr.isEmpty() )
                 throw uno::RuntimeException("Incorrect value for Delimiter" );
+
+            nDelim = sStr[0];
+
         }
 
         getCurrentDelim() = nDelim; //set new current
 
-        sFormat = OUString::number( nDelim ) + sRestOfFormat;
+        sFormat = OUString::number( nDelim ) + ",34,0,1";
         sProps[ nIndex++ ].Value <<= sFormat;
         sProps[ nIndex ].Name = "FilterName";
-        sProps[ nIndex++ ].Value <<= OUString( "Text - txt - csv (StarCalc)" );
+        sProps[ nIndex++ ].Value <<= OUString( SC_TEXT_CSV_FILTER_NAME );
         // Ensure WORKAROUND_CSV_TXT_BUG_i60158 gets called in typedetection.cxx so
         // csv is forced for deep detected 'writerxxx' types
         sProps[ nIndex ].Name = "DocumentService";
@@ -293,12 +282,10 @@ ScVbaWorkbooks::getServiceImplName()
 css::uno::Sequence<OUString>
 ScVbaWorkbooks::getServiceNames()
 {
-    static uno::Sequence< OUString > sNames;
-    if ( sNames.getLength() == 0 )
+    static uno::Sequence< OUString > const sNames
     {
-        sNames.realloc( 1 );
-        sNames[0] = "ooo.vba.excel.Workbooks";
-    }
+        "ooo.vba.excel.Workbooks"
+    };
     return sNames;
 }
 

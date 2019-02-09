@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "columnset.hxx"
+#include <columnset.hxx>
 #include <algorithm>
 
 namespace sc {
@@ -18,7 +18,7 @@ void ColumnSet::set(SCTAB nTab, SCCOL nCol)
     if (itTab == maTabs.end())
     {
         std::pair<TabsType::iterator,bool> r =
-            maTabs.insert(TabsType::value_type(nTab, ColsType()));
+            maTabs.emplace(nTab, ColsType());
 
         if (!r.second)
             // insertion failed.
@@ -50,6 +50,16 @@ void ColumnSet::getColumns(SCTAB nTab, std::vector<SCCOL>& rCols) const
     aCols.erase(itCol, aCols.end());
 
     rCols.swap(aCols);
+}
+
+bool ColumnSet::hasTab(SCTAB nTab) const
+{
+    return maTabs.find(nTab) != maTabs.end();
+}
+
+bool ColumnSet::empty() const
+{
+    return maTabs.empty();
 }
 
 }

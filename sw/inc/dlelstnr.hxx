@@ -20,21 +20,17 @@
 #ifndef INCLUDED_SW_INC_DLELSTNR_HXX
 #define INCLUDED_SW_INC_DLELSTNR_HXX
 
-#include <cppuhelper/weak.hxx>
-#include <com/sun/star/linguistic2/XDictionaryListEventListener.hpp>
 #include <com/sun/star/linguistic2/XLinguServiceEventListener.hpp>
 #include <com/sun/star/frame/XTerminateListener.hpp>
-#include <com/sun/star/frame/XDesktop2.hpp>
 #include <cppuhelper/implbase.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace linguistic2 {
-        class XDictionaryList;
         class XLinguServiceManager2;
         class XProofreadingIterator;
     }
     namespace frame {
-        class XTerminateListener;
+        class XDesktop2;
     }
 } } }
 
@@ -59,17 +55,17 @@ class SwLinguServiceEventListener :
 
 public:
     SwLinguServiceEventListener();
-    virtual ~SwLinguServiceEventListener();
+    virtual ~SwLinguServiceEventListener() override;
 
     /// XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& rEventObj ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& rEventObj ) override;
 
     /// XLinguServiceEventListener
-    virtual void SAL_CALL processLinguServiceEvent( const css::linguistic2::LinguServiceEvent& rLngSvcEvent ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL processLinguServiceEvent( const css::linguistic2::LinguServiceEvent& rLngSvcEvent ) override;
 
     /// XTerminateListener
-    virtual void SAL_CALL queryTermination( const css::lang::EventObject& rEventObj ) throw(css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& rEventObj ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL queryTermination( const css::lang::EventObject& rEventObj ) override;
+    virtual void SAL_CALL notifyTermination( const css::lang::EventObject& rEventObj ) override;
 };
 
 #endif

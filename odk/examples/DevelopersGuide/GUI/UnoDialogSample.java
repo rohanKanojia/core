@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -94,8 +95,7 @@ import com.sun.star.util.Time;
 import com.sun.star.util.thePathSettings;
 
 
-// Anregung von DV:
-// Position und Weite als Parameter uebergeben
+// Suggestion: hand the position and width over as parameters
 
 public class UnoDialogSample implements XTextListener, XSpinListener, XActionListener, XFocusListener, XMouseListener, XItemListener, XAdjustmentListener, XKeyListener {
     protected XComponentContext m_xContext = null;
@@ -1369,3 +1369,5 @@ public class UnoDialogSample implements XTextListener, XSpinListener, XActionLis
     }
 
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -21,13 +21,12 @@
 #define INCLUDED_XMLOFF_SOURCE_STYLE_PAGEMASTEREXPORTPROPMAPPER_HXX
 
 #include <xmloff/xmlexppr.hxx>
-#include "XMLBackgroundImageExport.hxx"
-#include "XMLTextColumnsExport.hxx"
+#include <XMLBackgroundImageExport.hxx>
+#include <XMLTextColumnsExport.hxx>
 #include "XMLFootnoteSeparatorExport.hxx"
 
 class XMLPageMasterExportPropMapper : public SvXMLExportPropertyMapper
 {
-protected:
     XMLBackgroundImageExport aBackgroundImageExport;
     XMLTextColumnsExport aTextColumnsExport;
     XMLFootnoteSeparatorExport aFootnoteSeparatorExport;
@@ -43,22 +42,22 @@ public:
                              const rtl::Reference< XMLPropertySetMapper >& rMapper,
                             SvXMLExport& rExport
                             );
-    virtual             ~XMLPageMasterExportPropMapper();
+    virtual             ~XMLPageMasterExportPropMapper() override;
 
     virtual void        handleElementItem(
                             SvXMLExport& rExport,
                             const XMLPropertyState& rProperty,
                             SvXmlExportFlags nFlags,
-                            const ::std::vector< XMLPropertyState >* pProperties = nullptr,
-                            sal_uInt32 nIdx = 0
+                            const ::std::vector< XMLPropertyState >* pProperties,
+                            sal_uInt32 nIdx
                             ) const override;
     virtual void        handleSpecialItem(
                             SvXMLAttributeList& rAttrList,
                             const XMLPropertyState& rProperty,
                             const SvXMLUnitConverter& rUnitConverter,
                             const SvXMLNamespaceMap& rNamespaceMap,
-                            const ::std::vector< XMLPropertyState >* pProperties = nullptr,
-                            sal_uInt32 nIdx = 0
+                            const ::std::vector< XMLPropertyState >* pProperties,
+                            sal_uInt32 nIdx
                             ) const override;
 };
 

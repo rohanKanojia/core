@@ -17,30 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "spelleng.hxx"
+#include <spelleng.hxx>
 #include <com/sun/star/i18n/TextConversionOption.hpp>
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 
 #include <editeng/langitem.hxx>
 #include <editeng/editobj.hxx>
 #include <editeng/editview.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#include "spelldialog.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "cellvalue.hxx"
-#include "cellform.hxx"
-#include "formulacell.hxx"
-#include "patattr.hxx"
-#include "waitoff.hxx"
-#include "globstr.hrc"
-#include "markdata.hxx"
+#include <spelldialog.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <cellvalue.hxx>
+#include <cellform.hxx>
+#include <formulacell.hxx>
+#include <patattr.hxx>
+#include <waitoff.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <markdata.hxx>
 
 #include <memory>
 
@@ -192,7 +193,7 @@ bool ScConversionEngineBase::FindNextConversionCell()
                 const SfxPoolItem* pItem = mrDoc.GetAttr( nNewCol, nNewRow, mnStartTab, ATTR_FONT_LANGUAGE );
                 if( const SvxLanguageItem* pLangItem = dynamic_cast<const SvxLanguageItem*>( pItem )  )
                 {
-                    LanguageType eLang = static_cast< LanguageType >( pLangItem->GetValue() );
+                    LanguageType eLang = pLangItem->GetValue();
                     if( eLang == LANGUAGE_SYSTEM )
                         eLang = Application::GetSettings().GetLanguageTag().getLanguageType();   // never use SYSTEM for spelling
                     if( eLang != meCurrLang )
@@ -255,7 +256,7 @@ void ScConversionEngineBase::FillFromCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
         case CELLTYPE_STRING:
         {
             SvNumberFormatter* pFormatter = mrDoc.GetFormatTable();
-            sal_uLong nNumFmt = mrDoc.GetNumberFormat(aPos);
+            sal_uInt32 nNumFmt = mrDoc.GetNumberFormat(aPos);
             OUString aText;
             Color* pColor;
             ScCellFormat::GetString(aCell, nNumFmt, aText, &pColor, *pFormatter, &mrDoc);
@@ -277,7 +278,7 @@ void ScConversionEngineBase::FillFromCell( SCCOL nCol, SCROW nRow, SCTAB nTab )
 ScSpellingEngine::ScSpellingEngine(
         SfxItemPool* pEnginePoolP, ScViewData& rViewData,
         ScDocument* pUndoDoc, ScDocument* pRedoDoc,
-        css::uno::Reference< css::linguistic2::XSpellChecker1 > xSpeller ) :
+        css::uno::Reference< css::linguistic2::XSpellChecker1 > const & xSpeller ) :
     ScConversionEngineBase( pEnginePoolP, rViewData, pUndoDoc, pRedoDoc )
 {
     SetSpeller( xSpeller );
@@ -285,17 +286,11 @@ ScSpellingEngine::ScSpellingEngine(
 
 void ScSpellingEngine::ConvertAll( EditView& rEditView )
 {
-    EESpellState eState = EE_SPELL_OK;
+    EESpellState eState = EESpellState::Ok;
     if( FindNextConversionCell() )
         eState = rEditView.StartSpeller( true );
 
-    OSL_ENSURE( eState != EE_SPELL_NOSPELLER, "ScSpellingEngine::Convert - no spell checker" );
-    if( eState == EE_SPELL_NOLANGUAGE )
-    {
-        vcl::Window* pParent = GetDialogParent();
-        ScWaitCursorOff aWaitOff( pParent );
-        ScopedVclPtr<InfoBox>::Create( pParent, ScGlobal::GetRscString( STR_NOLANGERR ) )->Execute();
-    }
+    OSL_ENSURE( eState != EESpellState::NoSpeller, "ScSpellingEngine::Convert - no spell checker" );
 }
 
 bool ScSpellingEngine::SpellNextDocument()
@@ -305,24 +300,30 @@ bool ScSpellingEngine::SpellNextDocument()
 
 bool ScSpellingEngine::NeedsConversion()
 {
-    return HasSpellErrors() != EE_SPELL_OK;
+    return HasSpellErrors() != EESpellState::Ok;
 }
 
 bool ScSpellingEngine::ShowTableWrapDialog()
 {
     vcl::Window* pParent = GetDialogParent();
     ScWaitCursorOff aWaitOff( pParent );
-    ScopedVclPtrInstance<MessBox> aMsgBox( pParent, WinBits( WB_YES_NO | WB_DEF_YES ),
-        ScGlobal::GetRscString( STR_MSSG_DOSUBTOTALS_0 ),
-        ScGlobal::GetRscString( STR_SPELLING_BEGIN_TAB) );
-    return aMsgBox->Execute() == RET_YES;
+
+    std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent ? pParent->GetFrameWeld() : nullptr,
+                                              VclMessageType::Question, VclButtonsType::YesNo,
+                                              ScResId(STR_SPELLING_BEGIN_TAB))); // "delete data?"
+    xBox->set_title(ScResId(STR_MSSG_DOSUBTOTALS_0));
+    xBox->set_default_response(RET_YES);
+    return xBox->run() == RET_YES;
 }
 
 void ScSpellingEngine::ShowFinishDialog()
 {
     vcl::Window* pParent = GetDialogParent();
     ScWaitCursorOff aWaitOff( pParent );
-    ScopedVclPtr<InfoBox>::Create( pParent, ScGlobal::GetRscString( STR_SPELLING_STOP_OK ) )->Execute();
+    std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(pParent ? pParent->GetFrameWeld() : nullptr,
+                                                  VclMessageType::Info, VclButtonsType::Ok,
+                                                  ScResId(STR_SPELLING_STOP_OK)));
+    xInfoBox->run();
 }
 
 vcl::Window* ScSpellingEngine::GetDialogParent()

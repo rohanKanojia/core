@@ -17,19 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "excelfilter.hxx"
+#include <excelfilter.hxx>
 
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-#include <oox/helper/binaryinputstream.hxx>
-#include "biffinputstream.hxx"
-#include "excelchartconverter.hxx"
-#include "excelvbaproject.hxx"
-#include "stylesbuffer.hxx"
-#include "themebuffer.hxx"
-#include "workbookfragment.hxx"
-#include "xestream.hxx"
+#include <excelvbaproject.hxx>
+#include <stylesbuffer.hxx>
+#include <themebuffer.hxx>
+#include <workbookfragment.hxx>
+#include <xestream.hxx>
+
+#include <addressconverter.hxx>
+#include <document.hxx>
+#include <docsh.hxx>
+#include <scerrors.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <svtools/sfxecode.hxx>
+#include <svtools/ehdl.hxx>
+#include <tools/urlobj.hxx>
 
 namespace oox {
 namespace xls {
@@ -37,12 +45,11 @@ namespace xls {
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::sheet;
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::xml::sax;
 using namespace ::oox::core;
 
 using ::oox::drawingml::table::TableStyleListPtr;
 
-ExcelFilter::ExcelFilter( const Reference< XComponentContext >& rxContext ) throw( RuntimeException ) :
+ExcelFilter::ExcelFilter( const Reference< XComponentContext >& rxContext ) :
     XmlFilterBase( rxContext ),
     mpBookGlob( nullptr )
 {
@@ -89,7 +96,7 @@ bool ExcelFilter::importDocument()
         }
         catch( const Exception& e )
         {
-            SAL_WARN("sc", "exception when importing document properties " << e.Message);
+            SAL_WARN("sc", "exception when importing document properties " << e);
         }
         catch( ... )
         {
@@ -99,9 +106,67 @@ bool ExcelFilter::importDocument()
             the class WorkbookHelper, and execute the import filter by constructing
             an instance of WorkbookFragment and loading the file. */
         WorkbookGlobalsRef xBookGlob(WorkbookHelper::constructGlobals(*this));
-        if (xBookGlob.get() && importFragment(new WorkbookFragment(*xBookGlob, aWorkbookPath)))
+        if (xBookGlob.get())
         {
-            return true;
+            rtl::Reference<FragmentHandler> xWorkbookFragment( new WorkbookFragment(*xBookGlob, aWorkbookPath));
+            bool bRet = importFragment( xWorkbookFragment);
+            if (bRet)
+            {
+                const WorkbookFragment* pWF = static_cast<const WorkbookFragment*>(xWorkbookFragment.get());
+                const AddressConverter& rAC = pWF->getAddressConverter();
+                if (rAC.isTabOverflow() || rAC.isColOverflow() || rAC.isRowOverflow())
+                {
+                    const ScDocument& rDoc = pWF->getScDocument();
+                    if (rDoc.IsUserInteractionEnabled())
+                    {
+                        // Show data loss warning.
+
+                        INetURLObject aURL( getFileUrl());
+                        SfxErrorContext aContext( ERRCTX_SFX_OPENDOC,
+                                aURL.getName( INetURLObject::LAST_SEGMENT, true,
+                                    INetURLObject::DecodeMechanism::WithCharset),
+                                nullptr, RID_ERRCTX);
+
+                        OUString aWarning;
+                        aContext.GetString( ERRCODE_NONE.MakeWarning(), aWarning);
+                        aWarning += ":\n";
+
+                        OUString aMsg;
+                        if (rAC.isTabOverflow())
+                        {
+                            if (ErrorHandler::GetErrorString( SCWARN_IMPORT_SHEET_OVERFLOW, aMsg))
+                                aWarning += aMsg;
+                        }
+                        if (rAC.isColOverflow())
+                        {
+                            if (!aMsg.isEmpty())
+                                aWarning += "\n";
+                            if (ErrorHandler::GetErrorString( SCWARN_IMPORT_COLUMN_OVERFLOW, aMsg))
+                                aWarning += aMsg;
+                        }
+                        if (rAC.isRowOverflow())
+                        {
+                            if (!aMsg.isEmpty())
+                                aWarning += "\n";
+                            if (ErrorHandler::GetErrorString( SCWARN_IMPORT_ROW_OVERFLOW, aMsg))
+                                aWarning += aMsg;
+                        }
+
+                        /* XXX displaying a dialog here is ugly and should
+                         * rather happen at UI level instead of at the filter
+                         * level, but it seems there's no way to transport
+                         * detailed information other than returning true or
+                         * false at this point? */
+
+                        vcl::Window* pWin = ScDocShell::GetActiveDialogParent();
+                        std::unique_ptr<weld::MessageDialog> xWarn(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                                   VclMessageType::Warning, VclButtonsType::Ok,
+                                                                   aWarning));
+                        xWarn->run();
+                    }
+                }
+            }
+            return bRet;
         }
     }
     catch (...)
@@ -151,7 +216,7 @@ GraphicHelper* ExcelFilter::implCreateGraphicHelper() const
     return new ExcelVbaProject( getComponentContext(), Reference< XSpreadsheetDocument >( getModel(), UNO_QUERY ) );
 }
 
-sal_Bool SAL_CALL ExcelFilter::filter( const css::uno::Sequence< css::beans::PropertyValue >& rDescriptor ) throw( css::uno::RuntimeException, std::exception )
+sal_Bool SAL_CALL ExcelFilter::filter( const css::uno::Sequence< css::beans::PropertyValue >& rDescriptor )
 {
     if ( XmlFilterBase::filter( rDescriptor ) )
         return true;
@@ -160,7 +225,7 @@ sal_Bool SAL_CALL ExcelFilter::filter( const css::uno::Sequence< css::beans::Pro
     {
         bool bExportVBA = exportVBA();
         Reference< XExporter > xExporter(
-            new XclExpXmlStream( getComponentContext(), bExportVBA ) );
+            new XclExpXmlStream( getComponentContext(), bExportVBA, isExportTemplate() ) );
 
         Reference< XComponent > xDocument( getModel(), UNO_QUERY );
         Reference< XFilter > xFilter( xExporter, UNO_QUERY );
@@ -176,7 +241,7 @@ sal_Bool SAL_CALL ExcelFilter::filter( const css::uno::Sequence< css::beans::Pro
     return false;
 }
 
-OUString ExcelFilter::getImplementationName() throw (css::uno::RuntimeException, std::exception)
+OUString ExcelFilter::getImplementationName()
 {
     return OUString( "com.sun.star.comp.oox.xls.ExcelFilter" );
 }
@@ -185,7 +250,7 @@ OUString ExcelFilter::getImplementationName() throw (css::uno::RuntimeException,
 } // namespace oox
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_oox_xls_ExcelFilter_get_implementation(css::uno::XComponentContext* context,
                                                          css::uno::Sequence<css::uno::Any> const &)
 {

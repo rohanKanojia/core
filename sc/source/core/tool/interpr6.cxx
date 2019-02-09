@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "interpre.hxx"
-#include "columnspanset.hxx"
-#include "column.hxx"
-#include "document.hxx"
-#include "cellvalue.hxx"
-#include "dociter.hxx"
-#include "mtvcellfunc.hxx"
-#include "scmatrix.hxx"
+#include <interpre.hxx>
+#include <columnspanset.hxx>
+#include <column.hxx>
+#include <document.hxx>
+#include <cellvalue.hxx>
+#include <dociter.hxx>
+#include <mtvcellfunc.hxx>
+#include <scmatrix.hxx>
 
-#include "arraysumfunctor.hxx"
+#include <arraysumfunctor.hxx>
 
 #include <formula/token.hxx>
 
@@ -85,7 +85,7 @@ double ScInterpreter::GetGammaContFraction( double fA, double fX )
     // most iterations, if fX==fAlpha+1.0; approx sqrt(fAlpha) iterations then
     if (!bFinished)
     {
-        SetError(errNoConvergence);
+        SetError(FormulaError::NoConvergence);
     }
     return fApprox;
 }
@@ -110,7 +110,7 @@ double ScInterpreter::GetGammaSeries( double fA, double fX )
     // if fX <= fAlpha+1.0
     if (nCount>10000)
     {
-        SetError(errNoConvergence);
+        SetError(FormulaError::NoConvergence);
     }
     return fSum;
 }
@@ -150,7 +150,7 @@ double ScInterpreter::GetGammaDistPDF( double fX, double fAlpha, double fLambda 
     {
         if (fAlpha < 1.0)
         {
-            SetError(errDivisionByZero);  // should be #DIV/0
+            SetError(FormulaError::DivisionByZero);  // should be #DIV/0
             return HUGE_VAL;
         }
         else if (fAlpha == 1)
@@ -207,10 +207,10 @@ class NumericCellAccumulator
 {
     double mfFirst;
     double mfRest;
-    sal_uInt16 mnError;
+    FormulaError mnError;
 
 public:
-    NumericCellAccumulator() : mfFirst(0.0), mfRest(0.0), mnError(0) {}
+    NumericCellAccumulator() : mfFirst(0.0), mfRest(0.0), mnError(FormulaError::NONE) {}
 
     void operator() (const sc::CellStoreType::value_type& rNode, size_t nOffset, size_t nDataSize)
     {
@@ -252,13 +252,13 @@ public:
                 for (; it != itEnd; ++it)
                 {
                     double fVal = 0.0;
-                    sal_uInt16 nErr = 0;
-                    ScFormulaCell& rCell = const_cast<ScFormulaCell&>(*(*it));
+                    FormulaError nErr = FormulaError::NONE;
+                    ScFormulaCell& rCell = *(*it);
                     if (!rCell.GetErrorOrValue(nErr, fVal))
                         // The cell has neither error nor value.  Perhaps string result.
                         continue;
 
-                    if (nErr)
+                    if (nErr != FormulaError::NONE)
                     {
                         // Cell has error - skip all the rest
                         mnError = nErr;
@@ -277,7 +277,7 @@ public:
         }
     }
 
-    sal_uInt16 getError() const { return mnError; }
+    FormulaError getError() const { return mnError; }
     double getFirst() const { return mfFirst; }
     double getRest() const { return mfRest; }
 };
@@ -303,7 +303,7 @@ public:
                 std::advance(itEnd, nDataSize);
                 for (; it != itEnd; ++it)
                 {
-                    ScFormulaCell& rCell = const_cast<ScFormulaCell&>(**it);
+                    ScFormulaCell& rCell = **it;
                     if (rCell.IsValueNoError())
                         ++mnCount;
                 }
@@ -319,13 +319,14 @@ public:
 
 class FuncCount : public sc::ColumnSpanSet::ColumnAction
 {
+    const ScInterpreterContext& mrContext;
     sc::ColumnBlockConstPosition maPos;
     ScColumn* mpCol;
     size_t mnCount;
     sal_uInt32 mnNumFmt;
 
 public:
-    FuncCount() : mpCol(nullptr), mnCount(0), mnNumFmt(0) {}
+    FuncCount(const ScInterpreterContext& rContext) : mrContext(rContext), mpCol(nullptr), mnCount(0), mnNumFmt(0) {}
 
     virtual void startColumn(ScColumn* pCol) override
     {
@@ -341,7 +342,7 @@ public:
         NumericCellCounter aFunc;
         maPos.miCellPos = sc::ParseBlock(maPos.miCellPos, mpCol->GetCellStore(), aFunc, nRow1, nRow2);
         mnCount += aFunc.getCount();
-        mnNumFmt = mpCol->GetNumberFormat(nRow2);
+        mnNumFmt = mpCol->GetNumberFormat(mrContext, nRow2);
     };
 
     size_t getCount() const { return mnCount; }
@@ -350,14 +351,15 @@ public:
 
 class FuncSum : public sc::ColumnSpanSet::ColumnAction
 {
+    const ScInterpreterContext& mrContext;
     sc::ColumnBlockConstPosition maPos;
     ScColumn* mpCol;
     double mfSum;
-    sal_uInt16 mnError;
+    FormulaError mnError;
     sal_uInt32 mnNumFmt;
 
 public:
-    FuncSum() : mpCol(nullptr), mfSum(0.0), mnError(0), mnNumFmt(0) {}
+    FuncSum(const ScInterpreterContext& rContext) : mrContext(rContext), mpCol(nullptr), mfSum(0.0), mnError(FormulaError::NONE), mnNumFmt(0) {}
 
     virtual void startColumn(ScColumn* pCol) override
     {
@@ -365,20 +367,20 @@ public:
         mpCol->InitBlockPosition(maPos);
     }
 
-    virtual void execute(SCROW, SCROW, bool) override { return; };
+    virtual void execute(SCROW, SCROW, bool) override {}
 
     virtual void executeSum(SCROW nRow1, SCROW nRow2, bool bVal, double& fMem ) override
     {
         if (!bVal)
             return;
 
-        if (mnError)
+        if (mnError != FormulaError::NONE)
             return;
 
         NumericCellAccumulator aFunc;
         maPos.miCellPos = sc::ParseBlock(maPos.miCellPos, mpCol->GetCellStore(), aFunc, nRow1, nRow2);
         mnError = aFunc.getError();
-        if (mnError)
+        if (mnError != FormulaError::NONE)
             return;
 
         if ( fMem )
@@ -389,23 +391,23 @@ public:
             mfSum += aFunc.getRest();
         }
 
-        mnNumFmt = mpCol->GetNumberFormat(nRow2);
+        mnNumFmt = mpCol->GetNumberFormat(mrContext, nRow2);
     };
 
-    sal_uInt16 getError() const { return mnError; }
+    FormulaError getError() const { return mnError; }
     double getSum() const { return mfSum; }
     sal_uInt32 getNumberFormat() const { return mnNumFmt; }
 };
 
-void IterateMatrix(
+static void IterateMatrix(
     const ScMatrixRef& pMat, ScIterFunc eFunc, bool bTextAsZero,
-    sal_uLong& rCount, short& rFuncFmtType, double& fRes, double& fMem )
+    sal_uLong& rCount, SvNumFormatType& rFuncFmtType, double& fRes, double& fMem )
 {
     if (!pMat)
         return;
 
     // TODO fdo73148 take mnSubTotalFlags into account
-    rFuncFmtType = css::util::NumberFormat::NUMBER;
+    rFuncFmtType = SvNumFormatType::NUMBER;
     switch (eFunc)
     {
         case ifAVERAGE:
@@ -459,19 +461,68 @@ void IterateMatrix(
     }
 }
 
-double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
+size_t ScInterpreter::GetRefListArrayMaxSize( short nParamCount )
+{
+    size_t nSize = 0;
+    if (IsInArrayContext())
+    {
+        for (short i=1; i <= nParamCount; ++i)
+        {
+            if (GetStackType(i) == svRefList)
+            {
+                const ScRefListToken* p = dynamic_cast<const ScRefListToken*>(pStack[sp - i]);
+                if (p && p->IsArrayResult() && p->GetRefList()->size() > nSize)
+                    nSize = p->GetRefList()->size();
+            }
+        }
+    }
+    return nSize;
+}
+
+static double lcl_IterResult( ScIterFunc eFunc, double fRes, double fMem, sal_uLong nCount )
+{
+    switch( eFunc )
+    {
+        case ifSUM:
+            fRes = ::rtl::math::approxAdd( fRes, fMem );
+        break;
+        case ifAVERAGE:
+            fRes = sc::div( ::rtl::math::approxAdd( fRes, fMem ), nCount);
+        break;
+        case ifCOUNT2:
+        case ifCOUNT:
+            fRes = nCount;
+        break;
+        case ifPRODUCT:
+            if ( !nCount )
+                fRes = 0.0;
+        break;
+        default:
+            ; // nothing
+    }
+    return fRes;
+}
+
+void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
 {
     short nParamCount = GetByte();
-    double fRes = ( eFunc == ifPRODUCT ) ? 1.0 : 0.0;
+    const SCSIZE nMatRows = GetRefListArrayMaxSize( nParamCount);
+    ScMatrixRef xResMat, xResCount;
+    auto ResInitVal = [eFunc]()
+    {
+        return (eFunc == ifPRODUCT) ? 1.0 : 0.0;
+    };
+    double fRes = ResInitVal();
     double fVal = 0.0;
     double fMem = 0.0;  // first numeric value != 0.0
     sal_uLong nCount = 0;
     ScAddress aAdr;
     ScRange aRange;
     size_t nRefInList = 0;
-    if ( nGlobalError && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
-         ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) ) )
-        nGlobalError = 0;
+    size_t nRefArrayPos = std::numeric_limits<size_t>::max();
+    if ( nGlobalError != FormulaError::NONE && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
+         ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) ) )
+        nGlobalError = FormulaError::NONE;
     while (nParamCount-- > 0)
     {
         switch (GetStackType())
@@ -487,16 +538,17 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                     {
                         // Only check if string can be converted to number, no
                         // error propagation.
-                        sal_uInt16 nErr = nGlobalError;
-                        nGlobalError = 0;
+                        FormulaError nErr = nGlobalError;
+                        nGlobalError = FormulaError::NONE;
                         ConvertStringToValue( aStr );
-                        if (!nGlobalError)
+                        if (nGlobalError == FormulaError::NONE)
                             ++nCount;
                         nGlobalError = nErr;
                     }
                 }
                 else
                 {
+                    Pop();
                     switch ( eFunc )
                     {
                         case ifAVERAGE:
@@ -506,7 +558,6 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         {
                             if ( bTextAsZero )
                             {
-                                Pop();
                                 nCount++;
                                 if ( eFunc == ifPRODUCT )
                                     fRes = 0.0;
@@ -515,12 +566,11 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                             {
                                 while (nParamCount-- > 0)
                                     Pop();
-                                SetError( errNoValue );
+                                SetError( FormulaError::NoValue );
                             }
                         }
                         break;
                         default:
-                            Pop();
                             nCount++;
                     }
                 }
@@ -542,18 +592,18 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                     case ifPRODUCT: fRes *= fVal; break;
                     default: ; // nothing
                 }
-                nFuncFmtType = css::util::NumberFormat::NUMBER;
+                nFuncFmtType = SvNumFormatType::NUMBER;
                 break;
             case svExternalSingleRef:
             {
                 ScExternalRefCache::TokenRef pToken;
                 ScExternalRefCache::CellFormat aFmt;
                 PopExternalSingleRef(pToken, &aFmt);
-                if ( nGlobalError && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
-                     ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) ) )
+                if ( nGlobalError != FormulaError::NONE && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
+                     ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) ) )
                 {
-                    nGlobalError = 0;
-                    if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) )
+                    nGlobalError = FormulaError::NONE;
+                    if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
                         ++nCount;
                     break;
                 }
@@ -564,15 +614,15 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                 StackVar eType = pToken->GetType();
                 if (eFunc == ifCOUNT2)
                 {
-                    if ( eType != formula::svEmptyCell &&
+                    if ( eType != svEmptyCell &&
                          ( ( pToken->GetOpCode() != ocSubTotal &&
                              pToken->GetOpCode() != ocAggregate ) ||
-                           ( mnSubTotalFlags & SUBTOTAL_IGN_NESTED_ST_AG ) ) )
+                           ( mnSubTotalFlags & SubtotalFlags::IgnoreNestedStAg ) ) )
                         nCount++;
-                    if (nGlobalError)
-                        nGlobalError = 0;
+                    if (nGlobalError != FormulaError::NONE)
+                        nGlobalError = FormulaError::NONE;
                 }
-                else if (eType == formula::svDouble)
+                else if (eType == svDouble)
                 {
                     nCount++;
                     fVal = pToken->GetDouble();
@@ -593,16 +643,16 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         case ifSUMSQ:   fRes += fVal * fVal; break;
                         case ifPRODUCT: fRes *= fVal; break;
                         case ifCOUNT:
-                            if ( nGlobalError )
+                            if ( nGlobalError != FormulaError::NONE )
                             {
-                                nGlobalError = 0;
+                                nGlobalError = FormulaError::NONE;
                                 nCount--;
                             }
                             break;
                         default: ; // nothing
                     }
                 }
-                else if (bTextAsZero && eType == formula::svString)
+                else if (bTextAsZero && eType == svString)
                 {
                     nCount++;
                     if ( eFunc == ifPRODUCT )
@@ -613,17 +663,25 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
             case svSingleRef :
             {
                 PopSingleRef( aAdr );
-                if ( nGlobalError && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
-                     ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) ) )
+                if (nGlobalError == FormulaError::NoRef)
                 {
-                    nGlobalError = 0;
-                    if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) )
-                        ++nCount;
+                    PushError( FormulaError::NoRef);
+                    return;
+                }
+
+                if ( ( ( mnSubTotalFlags & SubtotalFlags::IgnoreFiltered ) &&
+                     pDok->RowFiltered( aAdr.Row(), aAdr.Tab() ) ) ||
+                     ( ( mnSubTotalFlags & SubtotalFlags::IgnoreHidden ) &&
+                       pDok->RowHidden( aAdr.Row(), aAdr.Tab() ) ) )
+                {
                     break;
                 }
-                if ( ( mnSubTotalFlags & SUBTOTAL_IGN_FILTERED ) &&
-                     pDok->RowFiltered( aAdr.Row(), aAdr.Tab() ) )
+                if ( nGlobalError != FormulaError::NONE && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
+                     ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) ) )
                 {
+                    nGlobalError = FormulaError::NONE;
+                    if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
+                        ++nCount;
                     break;
                 }
                 ScRefCellValue aCell(*pDok, aAdr);
@@ -634,8 +692,8 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         CellType eCellType = aCell.meType;
                         if ( eCellType != CELLTYPE_NONE )
                             nCount++;
-                        if ( nGlobalError )
-                            nGlobalError = 0;
+                        if ( nGlobalError != FormulaError::NONE )
+                            nGlobalError = FormulaError::NONE;
                     }
                     else if (aCell.hasNumeric())
                     {
@@ -654,9 +712,9 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                             case ifSUMSQ:   fRes += fVal * fVal; break;
                             case ifPRODUCT: fRes *= fVal; break;
                             case ifCOUNT:
-                                if ( nGlobalError )
+                                if ( nGlobalError != FormulaError::NONE )
                                 {
-                                    nGlobalError = 0;
+                                    nGlobalError = FormulaError::NONE;
                                     nCount--;
                                 }
                                 break;
@@ -672,15 +730,75 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                 }
             }
             break;
-            case svDoubleRef :
             case svRefList :
             {
-                PopDoubleRef( aRange, nParamCount, nRefInList);
-                if ( nGlobalError && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
-                     ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) ) )
+                const ScRefListToken* p = dynamic_cast<const ScRefListToken*>(pStack[sp-1]);
+                if (p && p->IsArrayResult())
                 {
-                    nGlobalError = 0;
-                    if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) )
+                    nRefArrayPos = nRefInList;
+                    if ((eFunc == ifSUM || eFunc == ifAVERAGE) && fMem != 0.0)
+                    {
+                        fRes = rtl::math::approxAdd( fRes, fMem);
+                        fMem = 0.0;
+                    }
+                    // The "one value to all references of an array" seems to
+                    // be what Excel does if there are other types than just
+                    // arrays of references.
+                    if (!xResMat)
+                    {
+                        // Create and init all elements with current value.
+                        assert(nMatRows > 0);
+                        xResMat = GetNewMat( 1, nMatRows, true);
+                        xResMat->FillDouble( fRes, 0,0, 0,nMatRows-1);
+                        if (eFunc != ifSUM)
+                        {
+                            xResCount = GetNewMat( 1, nMatRows, true);
+                            xResCount->FillDouble( nCount, 0,0, 0,nMatRows-1);
+                        }
+                    }
+                    else
+                    {
+                        // Current value and values from vector are operands
+                        // for each vector position.
+                        if (nCount && xResCount)
+                        {
+                            for (SCSIZE i=0; i < nMatRows; ++i)
+                            {
+                                xResCount->PutDouble( xResCount->GetDouble(0,i) + nCount, 0,i);
+                            }
+                        }
+                        if (fRes != ResInitVal())
+                        {
+                            for (SCSIZE i=0; i < nMatRows; ++i)
+                            {
+                                double fVecRes = xResMat->GetDouble(0,i);
+                                if (eFunc == ifPRODUCT)
+                                    fVecRes *= fRes;
+                                else
+                                    fVecRes += fRes;
+                                xResMat->PutDouble( fVecRes, 0,i);
+                            }
+                        }
+                    }
+                    fRes = ResInitVal();
+                    nCount = 0;
+                }
+            }
+            [[fallthrough]];
+            case svDoubleRef :
+            {
+                PopDoubleRef( aRange, nParamCount, nRefInList);
+                if (nGlobalError == FormulaError::NoRef)
+                {
+                    PushError( FormulaError::NoRef);
+                    return;
+                }
+
+                if ( nGlobalError != FormulaError::NONE && ( eFunc == ifCOUNT2 || eFunc == ifCOUNT ||
+                     ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) ) )
+                {
+                    nGlobalError = FormulaError::NONE;
+                    if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
                         ++nCount;
                     if ( eFunc == ifCOUNT2 || eFunc == ifCOUNT )
                         break;
@@ -690,29 +808,28 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                     ScCellIterator aIter( pDok, aRange, mnSubTotalFlags );
                     for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
                     {
-                        if ( !aIter.hasEmptyData() )
+                        if ( !aIter.isEmpty() )
                         {
                             ++nCount;
                         }
                     }
 
-                    if ( nGlobalError )
-                        nGlobalError = 0;
+                    if ( nGlobalError != FormulaError::NONE )
+                        nGlobalError = FormulaError::NONE;
                 }
-                else if ( ( eFunc == ifSUM || eFunc == ifCOUNT ) && !mnSubTotalFlags )
+                else if ( ( eFunc == ifSUM || eFunc == ifCOUNT ) && mnSubTotalFlags == SubtotalFlags::NONE )
                 {
-                    sc::ColumnSpanSet aSet( false );
-                    aSet.set( aRange, true );
+                    sc::RangeColumnSpanSet aSet( aRange );
 
                     if ( eFunc == ifSUM )
                     {
-                        FuncSum aAction;
+                        FuncSum aAction(mrContext);
                         aSet.executeColumnAction( *pDok, aAction, fMem );
-                        sal_uInt16 nErr = aAction.getError();
-                        if ( nErr )
+                        FormulaError nErr = aAction.getError();
+                        if ( nErr != FormulaError::NONE )
                         {
-                            SetError( nErr );
-                            return fRes;
+                            PushError( nErr );
+                            return;
                         }
                         fRes += aAction.getSum();
 
@@ -721,7 +838,7 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                     }
                     else
                     {
-                        FuncCount aAction;
+                        FuncCount aAction(mrContext);
                         aSet.executeColumnAction(*pDok, aAction);
                         nCount += aAction.getCount();
 
@@ -729,25 +846,26 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         nFuncFmtIndex = aAction.getNumberFormat();
                     }
 
-                    nFuncFmtType = pDok->GetFormatTable()->GetType( nFuncFmtIndex );
+                    nFuncFmtType = mrContext.GetFormatTable()->GetType( nFuncFmtIndex );
                 }
                 else
                 {
                     ScValueIterator aValIter( pDok, aRange, mnSubTotalFlags, bTextAsZero );
-                    sal_uInt16 nErr = 0;
+                    aValIter.SetInterpreterContext( &mrContext );
+                    FormulaError nErr = FormulaError::NONE;
                     if (aValIter.GetFirst(fVal, nErr))
                     {
                         // placed the loop on the inside for performance reasons:
-                        aValIter.GetCurNumFmtInfo( nFuncFmtType, nFuncFmtIndex );
+                        aValIter.GetCurNumFmtInfo( mrContext, nFuncFmtType, nFuncFmtIndex );
                         switch( eFunc )
                         {
                             case ifAVERAGE:
                             case ifSUM:
-                                    if ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL )
+                                    if ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal )
                                     {
                                         do
                                         {
-                                            if ( !nErr )
+                                            if ( nErr == FormulaError::NONE )
                                             {
                                                 SetError(nErr);
                                                 if ( fMem )
@@ -774,11 +892,11 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                                     }
                                     break;
                             case ifSUMSQ:
-                                    if ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL )
+                                    if ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal )
                                     {
                                         do
                                         {
-                                            if ( !nErr )
+                                            if ( nErr == FormulaError::NONE )
                                             {
                                                 SetError(nErr);
                                                 fRes += fVal * fVal;
@@ -801,7 +919,7 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                             case ifPRODUCT:
                                     do
                                     {
-                                        if ( !( nErr && ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) ) )
+                                        if ( !( nErr != FormulaError::NONE && ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) ) )
                                         {
                                             SetError(nErr);
                                             fRes *= fVal;
@@ -813,7 +931,7 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                             case ifCOUNT:
                                     do
                                     {
-                                        if ( !nErr )
+                                        if ( nErr == FormulaError::NONE )
                                             nCount++;
                                     }
                                     while (aValIter.GetNext(fVal, nErr));
@@ -823,13 +941,34 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         SetError( nErr );
                     }
                 }
+                if (nRefArrayPos != std::numeric_limits<size_t>::max())
+                {
+                    // Update vector element with current value.
+                    if ((eFunc == ifSUM || eFunc == ifAVERAGE) && fMem != 0.0)
+                    {
+                        fRes = rtl::math::approxAdd( fRes, fMem);
+                        fMem = 0.0;
+                    }
+                    if (xResCount)
+                        xResCount->PutDouble( xResCount->GetDouble(0,nRefArrayPos) + nCount, 0,nRefArrayPos);
+                    double fVecRes = xResMat->GetDouble(0,nRefArrayPos);
+                    if (eFunc == ifPRODUCT)
+                        fVecRes *= fRes;
+                    else
+                        fVecRes += fRes;
+                    xResMat->PutDouble( fVecRes, 0,nRefArrayPos);
+                    // Reset.
+                    fRes = ResInitVal();
+                    nCount = 0;
+                    nRefArrayPos = std::numeric_limits<size_t>::max();
+                }
             }
             break;
             case svExternalDoubleRef:
             {
                 ScMatrixRef pMat;
                 PopExternalDoubleRef(pMat);
-                if ( nGlobalError && !( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) )
+                if ( nGlobalError != FormulaError::NONE && !( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
                     break;
 
                 IterateMatrix( pMat, eFunc, bTextAsZero, nCount, nFuncFmtType, fRes, fMem );
@@ -845,67 +984,79 @@ double ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
             case svError:
             {
                 PopError();
-                if ( eFunc == ifCOUNT || ( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) )
+                if ( eFunc == ifCOUNT || ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
                 {
-                    nGlobalError = 0;
+                    nGlobalError = FormulaError::NONE;
                 }
-                else if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SUBTOTAL_IGN_ERR_VAL ) )
+                else if ( eFunc == ifCOUNT2 && !( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
                 {
                     nCount++;
-                    nGlobalError = 0;
+                    nGlobalError = FormulaError::NONE;
                 }
             }
             break;
             default :
                 while (nParamCount-- > 0)
                     PopError();
-                SetError(errIllegalParameter);
+                SetError(FormulaError::IllegalParameter);
         }
     }
-    switch( eFunc )
-    {
-        case ifSUM:     fRes = ::rtl::math::approxAdd( fRes, fMem ); break;
-        case ifAVERAGE: fRes = div(::rtl::math::approxAdd( fRes, fMem ), nCount); break;
-        case ifCOUNT2:
-        case ifCOUNT:   fRes  = nCount; break;
-        case ifPRODUCT: if ( !nCount ) fRes = 0.0; break;
-        default: ; // nothing
-    }
+
     // A boolean return type makes no sense on sums et al.
     // Counts are always numbers.
-    if( nFuncFmtType == css::util::NumberFormat::LOGICAL || eFunc == ifCOUNT || eFunc == ifCOUNT2 )
-        nFuncFmtType = css::util::NumberFormat::NUMBER;
-    return fRes;
+    if( nFuncFmtType == SvNumFormatType::LOGICAL || eFunc == ifCOUNT || eFunc == ifCOUNT2 )
+        nFuncFmtType = SvNumFormatType::NUMBER;
+
+    if (xResMat)
+    {
+        // Include value of last non-references-array type and calculate final result.
+        for (SCSIZE i=0; i < nMatRows; ++i)
+        {
+            sal_uLong nVecCount = (xResCount ? nCount + xResCount->GetDouble(0,i) : nCount);
+            double fVecRes = xResMat->GetDouble(0,i);
+            if (eFunc == ifPRODUCT)
+                fVecRes *= fRes;
+            else
+                fVecRes += fRes;
+            fVecRes = lcl_IterResult( eFunc, fVecRes, fMem, nVecCount);
+            xResMat->PutDouble( fVecRes, 0,i);
+        }
+        PushMatrix( xResMat);
+    }
+    else
+    {
+        PushDouble( lcl_IterResult( eFunc, fRes, fMem, nCount));
+    }
 }
 
 void ScInterpreter::ScSumSQ()
 {
-    PushDouble( IterateParameters( ifSUMSQ ) );
+    IterateParameters( ifSUMSQ );
 }
 
 void ScInterpreter::ScSum()
 {
-    PushDouble( IterateParameters( ifSUM ) );
+    IterateParameters( ifSUM );
 }
 
 void ScInterpreter::ScProduct()
 {
-    PushDouble( IterateParameters( ifPRODUCT ) );
+    IterateParameters( ifPRODUCT );
 }
 
 void ScInterpreter::ScAverage( bool bTextAsZero )
 {
-    PushDouble( IterateParameters( ifAVERAGE, bTextAsZero ) );
+    IterateParameters( ifAVERAGE, bTextAsZero );
 }
 
 void ScInterpreter::ScCount()
 {
-    PushDouble( IterateParameters( ifCOUNT ) );
+    IterateParameters( ifCOUNT );
 }
 
 void ScInterpreter::ScCount2()
 {
-    PushDouble( IterateParameters( ifCOUNT2 ) );
+    IterateParameters( ifCOUNT2 );
 }
 
 void ScInterpreter::ScRawSubtract()
@@ -915,15 +1066,16 @@ void ScInterpreter::ScRawSubtract()
         return;
 
     // Fish the 1st parameter from the stack and push it on top.
-    FormulaToken* p = pStack[ sp - nParamCount ];
+    const FormulaToken* p = pStack[ sp - nParamCount ];
     PushWithoutError( *p );
     // Obtain the minuend.
     double fRes = GetDouble();
 
-    while (!nGlobalError && nParamCount-- > 1)
+    while (nGlobalError == FormulaError::NONE && nParamCount > 1)
     {
         // Simple single values without matrix support.
         fRes -= GetDouble();
+        --nParamCount;
     }
     while (nParamCount-- > 0)
         PopError();

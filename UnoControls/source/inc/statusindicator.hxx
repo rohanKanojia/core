@@ -31,9 +31,9 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <rtl/ref.hxx>
 
-#include "basecontainercontrol.hxx"
+#include <basecontainercontrol.hxx>
 
-namespace unocontrols{
+namespace unocontrols {
 
 class ProgressBar;
 
@@ -42,158 +42,144 @@ class ProgressBar;
 #define FIXEDTEXT_MODELNAME                     "com.sun.star.awt.UnoControlFixedTextModel"
 #define CONTROLNAME_TEXT                        "Text"                                                  // identifier the control in container
 #define CONTROLNAME_PROGRESSBAR                 "ProgressBar"                                           //              -||-
-#define STATUSINDICATOR_BACKGROUNDCOLOR         TRGB_COLORDATA( 0x00, 0xC0, 0xC0, 0xC0 )                // lightgray
-#define STATUSINDICATOR_LINECOLOR_BRIGHT        TRGB_COLORDATA( 0x00, 0xFF, 0xFF, 0xFF )                // white
-#define STATUSINDICATOR_LINECOLOR_SHADOW        TRGB_COLORDATA( 0x00, 0x00, 0x00, 0x00 )                // black
+#define STATUSINDICATOR_BACKGROUNDCOLOR         sal_Int32(Color( 0x00, 0xC0, 0xC0, 0xC0 ))              // lightgray
+#define STATUSINDICATOR_LINECOLOR_BRIGHT        sal_Int32(Color( 0x00, 0xFF, 0xFF, 0xFF ))              // white
+#define STATUSINDICATOR_LINECOLOR_SHADOW        sal_Int32(Color( 0x00, 0x00, 0x00, 0x00 ))              // black
 #define STATUSINDICATOR_DEFAULT_WIDTH           300
 #define STATUSINDICATOR_DEFAULT_HEIGHT          25
-
-//  structs, types
-
-//  class declaration
 
 class StatusIndicator   : public css::awt::XLayoutConstrains
                         , public css::task::XStatusIndicator
                         , public BaseContainerControl
 {
+public:
+    StatusIndicator( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
-    public:
+    virtual ~StatusIndicator() override;
 
-        StatusIndicator( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    //  XInterface
 
-        virtual ~StatusIndicator();
+    /**
+        @short      give answer, if interface is supported
+        @descr      The interfaces are searched by type.
 
-        //  XInterface
+        @seealso    XInterface
 
-        /**_______________________________________________________________________________________________________
-            @short      give answer, if interface is supported
-            @descr      The interfaces are searched by type.
+        @param      "rType" is the type of searched interface.
 
-            @seealso    XInterface
+        @return     Any     information about found interface
 
-            @param      "rType" is the type of searched interface.
+        @onerror    A RuntimeException is thrown.
+    */
 
-            @return     Any     information about found interface
+    virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override;
 
-            @onerror    A RuntimeException is thrown.
-        */
+    /**
+        @short      increment refcount
+        @seealso    XInterface
+        @seealso    release()
+        @onerror    A RuntimeException is thrown.
+    */
 
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType )
-            throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL acquire() throw() override;
 
-        /**_______________________________________________________________________________________________________
-            @short      increment refcount
-            @seealso    XInterface
-            @seealso    release()
-            @onerror    A RuntimeException is thrown.
-        */
+    /**
+        @short      decrement refcount
+        @seealso    XInterface
+        @seealso    acquire()
+        @onerror    A RuntimeException is thrown.
+    */
 
-        virtual void SAL_CALL acquire() throw() override;
+    virtual void SAL_CALL release() throw() override;
 
-        /**_______________________________________________________________________________________________________
-            @short      decrement refcount
-            @seealso    XInterface
-            @seealso    acquire()
-            @onerror    A RuntimeException is thrown.
-        */
+    //  XTypeProvider
 
-        virtual void SAL_CALL release() throw() override;
+    /**
+        @short      get information about supported interfaces
+        @seealso    XTypeProvider
+        @return     Sequence of types of all supported interfaces
 
-        //  XTypeProvider
+        @onerror    A RuntimeException is thrown.
+    */
 
-        /**_______________________________________________________________________________________________________
-            @short      get information about supported interfaces
-            @seealso    XTypeProvider
-            @return     Sequence of types of all supported interfaces
+    virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes() override;
 
-            @onerror    A RuntimeException is thrown.
-        */
+    //  XAggregation
 
-        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes()
-            throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& aType ) override;
 
-        //  XAggregation
+    //  XStatusIndicator
 
-        virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& aType )
-            throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL start(
+        const OUString&  sText   ,
+        sal_Int32 nRange
+    ) override;
 
-        //  XStatusIndicator
+    virtual void SAL_CALL end() override;
 
-        virtual void SAL_CALL start(
-            const OUString&  sText   ,
-            sal_Int32 nRange
-        ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL reset() override;
 
-        virtual void SAL_CALL end() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setText( const OUString& sText ) override;
 
-        virtual void SAL_CALL reset() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setValue( sal_Int32 nValue ) override;
 
-        virtual void SAL_CALL setText( const OUString& sText ) throw( css::uno::RuntimeException, std::exception ) override;
+    //  XLayoutConstrains
 
-        virtual void SAL_CALL setValue( sal_Int32 nValue ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Size SAL_CALL getMinimumSize() override;
 
-        //  XLayoutConstrains
+    virtual css::awt::Size SAL_CALL getPreferredSize() override;
 
-        virtual css::awt::Size SAL_CALL getMinimumSize() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::awt::Size SAL_CALL calcAdjustedSize( const css::awt::Size& aNewSize ) override;
 
-        virtual css::awt::Size SAL_CALL getPreferredSize() throw( css::uno::RuntimeException, std::exception ) override;
+    //  XControl
 
-        virtual css::awt::Size SAL_CALL calcAdjustedSize( const css::awt::Size& aNewSize )
-            throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL createPeer(
+        const   css::uno::Reference< css::awt::XToolkit >&    xToolkit    ,
+        const   css::uno::Reference< css::awt::XWindowPeer >& xParent
+    ) override;
 
-        //  XControl
+    virtual sal_Bool SAL_CALL setModel( const css::uno::Reference< css::awt::XControlModel >& xModel ) override;
 
-        virtual void SAL_CALL createPeer(
-            const   css::uno::Reference< css::awt::XToolkit >&    xToolkit    ,
-            const   css::uno::Reference< css::awt::XWindowPeer >& xParent
-        ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel() override;
 
-        virtual sal_Bool SAL_CALL setModel( const css::uno::Reference< css::awt::XControlModel >& xModel )
-            throw( css::uno::RuntimeException, std::exception ) override;
+    //  XComponent
 
-        virtual css::uno::Reference< css::awt::XControlModel > SAL_CALL getModel()
-            throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL dispose() override;
 
-        //  XComponent
+    //  XWindow
 
-        virtual void SAL_CALL dispose() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setPosSize(   sal_Int32   nX      ,
+                                        sal_Int32   nY      ,
+                                        sal_Int32   nWidth  ,
+                                        sal_Int32   nHeight ,
+                                        sal_Int16   nFlags  ) override;
 
-        //  XWindow
+    //  BaseControl
 
-        virtual void SAL_CALL setPosSize(   sal_Int32   nX      ,
-                                            sal_Int32   nY      ,
-                                            sal_Int32   nWidth  ,
-                                            sal_Int32   nHeight ,
-                                            sal_Int16   nFlags  ) throw( css::uno::RuntimeException, std::exception ) override;
+    static const css::uno::Sequence< OUString > impl_getStaticSupportedServiceNames();
 
-        //  BaseControl
-
-        static const css::uno::Sequence< OUString > impl_getStaticSupportedServiceNames();
-
-        static const OUString impl_getStaticImplementationName();
+    static const OUString impl_getStaticImplementationName();
 
 protected:
+    virtual css::awt::WindowDescriptor impl_getWindowDescriptor(
+        const css::uno::Reference< css::awt::XWindowPeer >& xParentPeer
+    ) override;
 
-        virtual css::awt::WindowDescriptor* impl_getWindowDescriptor(
-            const css::uno::Reference< css::awt::XWindowPeer >& xParentPeer
-        ) override;
+    virtual void impl_paint (
+        sal_Int32 nX,
+        sal_Int32 nY,
+        const css::uno::Reference< css::awt::XGraphics > & rGraphics
+    ) override;
 
-        virtual void impl_paint (
-            sal_Int32 nX,
-            sal_Int32 nY,
-            const css::uno::Reference< css::awt::XGraphics > & rGraphics
-        ) override;
-
-        virtual void impl_recalcLayout( const css::awt::WindowEvent& aEvent ) override;
+    virtual void impl_recalcLayout( const css::awt::WindowEvent& aEvent ) override;
 
 private:
-
     css::uno::Reference< css::awt::XFixedText >   m_xText;
     rtl::Reference<ProgressBar>                   m_xProgressBar;
 
-};  // class StatusIndicator
+};
 
-}   // namespace unocontrols
+}
 
 #endif // INCLUDED_UNOCONTROLS_SOURCE_INC_STATUSINDICATOR_HXX
 

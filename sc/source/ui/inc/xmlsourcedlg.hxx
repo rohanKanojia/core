@@ -13,10 +13,10 @@
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 
 #include "anyrefdg.hxx"
-#include "orcusxml.hxx"
+#include <orcusxml.hxx>
 
 #include <set>
 #include <memory>
@@ -57,7 +57,7 @@ class ScXMLSourceDlg : public ScAnyRefDlg
 public:
     ScXMLSourceDlg(
         SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent, ScDocument* pDoc);
-    virtual ~ScXMLSourceDlg();
+    virtual ~ScXMLSourceDlg() override;
     virtual void dispose() override;
 
     virtual bool IsRefInputMode() const override;
@@ -70,7 +70,7 @@ private:
 
     void SelectSourceFile();
     void LoadSourceFileStructure(const OUString& rPath);
-    void HandleGetFocus(Control* pCtrl);
+    void HandleGetFocus(const Control* pCtrl);
     void TreeItemSelected();
     void DefaultElementSelected(SvTreeListEntry& rEntry);
     void RepeatElementSelected(SvTreeListEntry& rEntry);
@@ -94,10 +94,10 @@ private:
     void CancelPressed();
     void RefEditModified();
 
-    DECL_LINK_TYPED(GetFocusHdl, Control&, void);
-    DECL_LINK_TYPED(BtnPressedHdl, Button*, void);
-    DECL_LINK_TYPED(TreeItemSelectHdl, SvTreeListBox*, void);
-    DECL_LINK_TYPED(RefModifiedHdl, Edit&, void);
+    DECL_LINK(GetFocusHdl, Control&, void);
+    DECL_LINK(BtnPressedHdl, Button*, void);
+    DECL_LINK(TreeItemSelectHdl, SvTreeListBox*, void);
+    DECL_LINK(RefModifiedHdl, Edit&, void);
 };
 
 #endif

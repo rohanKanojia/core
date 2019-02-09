@@ -165,53 +165,51 @@ class LwpFormulaFunc :public LwpFormulaArg
 {
 public:
     explicit LwpFormulaFunc(sal_uInt16 nTokenType);
-    virtual ~LwpFormulaFunc();
+    virtual ~LwpFormulaFunc() override;
 
-    void AddArg(LwpFormulaArg* pArg);
+    void AddArg(std::unique_ptr<LwpFormulaArg> pArg);
 
     virtual OUString ToString(LwpTableLayout* pCellsMap) override;
     OUString ToArgString(LwpTableLayout* pCellsMap) override;
 
 protected:
-    std::vector<LwpFormulaArg*> m_aArgs;
+    std::vector<std::unique_ptr<LwpFormulaArg>> m_aArgs;
     sal_uInt16 m_nTokenType;
 };
 
 class LwpFormulaOp : public LwpFormulaFunc
 {
 public:
-    explicit LwpFormulaOp(sal_uInt16 nTokenType):LwpFormulaFunc(nTokenType){;}
+    explicit LwpFormulaOp(sal_uInt16 nTokenType):LwpFormulaFunc(nTokenType){}
     virtual OUString ToString(LwpTableLayout* pCellsMap) override;
 };
 
 class LwpFormulaUnaryOp : public LwpFormulaFunc
 {
 public:
-    explicit LwpFormulaUnaryOp(sal_uInt16 nTokenType):LwpFormulaFunc(nTokenType){;}
+    explicit LwpFormulaUnaryOp(sal_uInt16 nTokenType):LwpFormulaFunc(nTokenType){}
     virtual OUString ToString(LwpTableLayout* pCellsMap) override;
 };
 
-class LwpFormulaInfo : public LwpCellList
+class LwpFormulaInfo final : public LwpCellList
 {
 public:
-    LwpFormulaInfo(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
+    LwpFormulaInfo(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
     OUString Convert(LwpTableLayout* pCellsMap);
-    void Convert(XFCell * pCell, LwpTableLayout* pCellsMap) override;
-protected:
+    void Convert(XFCell * pCell, LwpTableLayout* pCellsMap=nullptr) override;
+private:
     void Read() override;
-    bool ReadCellID();
+    void ReadCellID();
     void ReadText();
     void ReadCellRange();
     void ReadExpression();
     void ReadArguments(LwpFormulaFunc& aFunc);
     bool m_bSupported;
-private:
-    virtual ~LwpFormulaInfo();
-
-    std::vector<LwpFormulaArg*> m_aStack;
+    virtual ~LwpFormulaInfo() override;
     void ReadConst();
     void MarkUnsupported(sal_uInt16 TokenType);
 
+    std::vector<std::unique_ptr<LwpFormulaArg>> m_aStack;
     sal_uInt16 m_nFormulaRow;
 };
 

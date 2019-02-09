@@ -30,11 +30,12 @@
 #include <com/sun/star/report/XGroups.hpp>
 #include <com/sun/star/report/XGroup.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include "GroupProperties.hxx"
+#include <GroupProperties.hxx>
 #include <comphelper/propmultiplex.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include <svtools/svmedit.hxx>
 #include <rtl/ref.hxx>
+#include <osl/diagnose.h>
 
 #include <vector>
 
@@ -80,12 +81,12 @@ class OGroupsSortingDialog :    public FloatingWindow
     ::rtl::Reference< comphelper::OPropertyChangeMultiplexer>                       m_pReportListener;
     css::uno::Reference< css::report::XGroups>            m_xGroups;
     css::uno::Reference< css::container::XNameAccess >    m_xColumns;
-    bool                                                  m_bReadOnly;
+    bool const                                            m_bReadOnly;
 private:
-    DECL_LINK_TYPED( OnControlFocusLost, Control&, void );
-    DECL_LINK_TYPED( OnControlFocusGot, Control&, void );
-    DECL_LINK_TYPED( LBChangeHdl, ListBox&, void );
-    DECL_LINK_TYPED( OnFormatAction, ToolBox*, void );
+    DECL_LINK( OnControlFocusLost, Control&, void );
+    DECL_LINK( OnControlFocusGot, Control&, void );
+    DECL_LINK( LBChangeHdl, ListBox&, void );
+    DECL_LINK( OnFormatAction, ToolBox*, void );
 
     /** returns the groups
         @return the groups which now have to check which one changes
@@ -117,10 +118,6 @@ private:
     */
     sal_Int32 getColumnDataType(const OUString& _sColumnName);
 
-    /** shows the text given by the id in the multiline edit
-        @param  _nResId the string id
-    */
-    void showHelpText(sal_uInt16 _nResId);
     /** display the group props
         @param  _xGroup the group to display
     */
@@ -135,16 +132,16 @@ private:
     *
     */
     void fillColumns();
-    OGroupsSortingDialog(OGroupsSortingDialog&) = delete;
-    void operator =(OGroupsSortingDialog&) = delete;
+    OGroupsSortingDialog(OGroupsSortingDialog const &) = delete;
+    void operator =(OGroupsSortingDialog const &) = delete;
 protected:
     // OPropertyChangeListener
-    virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) throw( css::uno::RuntimeException, std::exception) override;
+    virtual void    _propertyChanged(const css::beans::PropertyChangeEvent& _rEvent) override;
 public:
     OGroupsSortingDialog( vcl::Window* pParent
                         ,bool _bReadOnly
                         ,::rptui::OReportController* _pController);
-    virtual ~OGroupsSortingDialog();
+    virtual ~OGroupsSortingDialog() override;
     virtual void dispose() override;
 
     /* updates the current view

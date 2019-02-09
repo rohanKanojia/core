@@ -12,7 +12,7 @@
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#if !defined(SOLARIS) && !defined(AIX)
+#if !defined(__sun) && !defined(AIX)
 #include <X11/extensions/dpms.h>
 #endif
 
@@ -24,7 +24,7 @@
 class VCL_PLUGIN_PUBLIC ScreenSaverInhibitor
 {
 public:
-    void inhibit( bool bInhibit, const rtl::OUString& sReason,
+    void inhibit( bool bInhibit, const OUString& sReason,
                   bool bIsX11, const boost::optional<unsigned int>& xid, boost::optional<Display*> pDisplay );
 
 private:
@@ -38,7 +38,7 @@ private:
 
     boost::optional<int> mnXScreenSaverTimeout;
 
-#if !defined(SOLARIS) && !defined(AIX)
+#if !defined(__sun) && !defined(AIX)
     BOOL mbDPMSWasEnabled;
     CARD16 mnDPMSStandbyTimeout;
     CARD16 mnDPMSSuspendTimeout;

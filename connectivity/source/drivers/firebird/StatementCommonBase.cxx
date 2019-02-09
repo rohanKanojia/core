@@ -22,10 +22,12 @@
 #include "StatementCommonBase.hxx"
 #include "Util.hxx"
 
+#include <sal/log.hxx>
 #include <comphelper/sequence.hxx>
 #include <cppuhelper/typeprovider.hxx>
-#include "propertyids.hxx"
-#include "TConnection.hxx"
+#include <propertyids.hxx>
+#include <vcl/svapp.hxx>
+#include <TConnection.hxx>
 
 using namespace ::connectivity::firebird;
 
@@ -47,7 +49,11 @@ OStatementCommonBase::OStatementCommonBase(Connection* _pConnection)
     : OStatementCommonBase_Base(m_aMutex),
       OPropertySetHelper(OStatementCommonBase_Base::rBHelper),
       m_pConnection(_pConnection),
-      m_aStatementHandle( 0 )
+#if SAL_TYPES_SIZEOFPOINTER == 8
+      m_aStatementHandle(0)
+#else
+      m_aStatementHandle(nullptr)
+#endif
 {
 }
 
@@ -64,7 +70,6 @@ void OStatementCommonBase::disposeResultSet()
 }
 
 void OStatementCommonBase::freeStatementHandle()
-    throw (SQLException)
 {
     if (m_aStatementHandle)
     {
@@ -78,7 +83,7 @@ void OStatementCommonBase::freeStatementHandle()
 }
 
 
-Any SAL_CALL OStatementCommonBase::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OStatementCommonBase::queryInterface( const Type & rType )
 {
     Any aRet = OStatementCommonBase_Base::queryInterface(rType);
     if(!aRet.hasValue())
@@ -86,7 +91,7 @@ Any SAL_CALL OStatementCommonBase::queryInterface( const Type & rType ) throw(Ru
     return aRet;
 }
 
-Sequence< Type > SAL_CALL OStatementCommonBase::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OStatementCommonBase::getTypes(  )
 {
     ::cppu::OTypeCollection aTypes(
         ::cppu::UnoType<XMultiPropertySet>::get(),
@@ -97,7 +102,7 @@ Sequence< Type > SAL_CALL OStatementCommonBase::getTypes(  ) throw(RuntimeExcept
 }
 
 
-void SAL_CALL OStatementCommonBase::cancel(  ) throw(RuntimeException, std::exception)
+void SAL_CALL OStatementCommonBase::cancel(  )
 {
     MutexGuard aGuard(m_aMutex);
     checkDisposed(OStatementCommonBase_Base::rBHelper.bDisposed);
@@ -105,7 +110,6 @@ void SAL_CALL OStatementCommonBase::cancel(  ) throw(RuntimeException, std::exce
 }
 
 void SAL_CALL OStatementCommonBase::close()
-    throw(SQLException, RuntimeException, std::exception)
 {
     SAL_INFO("connectivity.firebird", "close");
 
@@ -122,9 +126,8 @@ void SAL_CALL OStatementCommonBase::close()
 void OStatementCommonBase::prepareAndDescribeStatement(const OUString& sql,
                                                       XSQLDA*& pOutSqlda,
                                                       XSQLDA* pInSqlda)
-    throw (SQLException)
 {
-    MutexGuard aGuard(m_aMutex);
+    SolarMutexGuard g; // tdf#122129
 
     freeStatementHandle();
 
@@ -219,7 +222,7 @@ void OStatementCommonBase::prepareAndDescribeStatement(const OUString& sql,
 }
 
 // ---- XMultipleResults - UNSUPPORTED ----------------------------------------
-uno::Reference< XResultSet > SAL_CALL OStatementCommonBase::getResultSet() throw(SQLException, RuntimeException, std::exception)
+uno::Reference< XResultSet > SAL_CALL OStatementCommonBase::getResultSet()
 {
     // TODO: verify we really can't support this
 //     return uno::Reference< XResultSet >();
@@ -229,28 +232,28 @@ uno::Reference< XResultSet > SAL_CALL OStatementCommonBase::getResultSet() throw
     return m_xResultSet;
 }
 
-sal_Bool SAL_CALL OStatementCommonBase::getMoreResults() throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OStatementCommonBase::getMoreResults()
 {
     // TODO: verify we really can't support this
-    return sal_False;
+    return false;
 //     MutexGuard aGuard( m_aMutex );
 //     checkDisposed(OStatementCommonBase_Base::rBHelper.bDisposed);
 }
 
-sal_Int32 SAL_CALL OStatementCommonBase::getUpdateCount() throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OStatementCommonBase::getUpdateCount()
 {
     // TODO: verify we really can't support this
-    return 0;
+    return -1;
 }
 
 
 // ---- XWarningsSupplier - UNSUPPORTED ----------------------------------------
-Any SAL_CALL OStatementCommonBase::getWarnings() throw(SQLException, RuntimeException, std::exception)
+Any SAL_CALL OStatementCommonBase::getWarnings()
 {
     return Any();
 }
 
-void SAL_CALL OStatementCommonBase::clearWarnings() throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OStatementCommonBase::clearWarnings()
 {
 }
 
@@ -261,25 +264,25 @@ void SAL_CALL OStatementCommonBase::clearWarnings() throw(SQLException, RuntimeE
     Sequence< Property > aProps(10);
     Property* pProperties = aProps.getArray();
     sal_Int32 nPos = 0;
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_CURSORNAME),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_CURSORNAME),
         PROPERTY_ID_CURSORNAME, cppu::UnoType<OUString>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ESCAPEPROCESSING),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_ESCAPEPROCESSING),
         PROPERTY_ID_ESCAPEPROCESSING, cppu::UnoType<bool>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHDIRECTION),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHDIRECTION),
         PROPERTY_ID_FETCHDIRECTION, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHSIZE),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FETCHSIZE),
         PROPERTY_ID_FETCHSIZE, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXFIELDSIZE),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXFIELDSIZE),
         PROPERTY_ID_MAXFIELDSIZE, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXROWS),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_MAXROWS),
         PROPERTY_ID_MAXROWS, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_QUERYTIMEOUT),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_QUERYTIMEOUT),
         PROPERTY_ID_QUERYTIMEOUT, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETCONCURRENCY),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETCONCURRENCY),
         PROPERTY_ID_RESULTSETCONCURRENCY, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETTYPE),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_RESULTSETTYPE),
         PROPERTY_ID_RESULTSETTYPE, cppu::UnoType<sal_Int32>::get(), 0);
-    pProperties[nPos++] = ::com::sun::star::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_USEBOOKMARKS),
+    pProperties[nPos++] = css::beans::Property(::connectivity::OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_USEBOOKMARKS),
         PROPERTY_ID_USEBOOKMARKS, cppu::UnoType<bool>::get(), 0);
 
     return new ::cppu::OPropertyArrayHelper(aProps);
@@ -292,25 +295,18 @@ void SAL_CALL OStatementCommonBase::clearWarnings() throw(SQLException, RuntimeE
 }
 
 sal_Bool OStatementCommonBase::convertFastPropertyValue(
-                            Any & rConvertedValue,
-                            Any & rOldValue,
-                            sal_Int32 nHandle,
-                            const Any& rValue )
-    throw (IllegalArgumentException)
+                            Any &,
+                            Any &,
+                            sal_Int32,
+                            const Any& )
 {
-    (void) rConvertedValue;
-    (void) rOldValue;
-    (void) nHandle;
-    (void) rValue;
-    bool bConverted = false;
     // here we have to try to convert
-    return bConverted;
+    return false;
 }
 
-void OStatementCommonBase::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any& rValue) throw (Exception, std::exception)
+void OStatementCommonBase::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,const Any&)
 {
-    (void) rValue;
-    // set the value to what ever is necessary
+    // set the value to whatever is necessary
     switch(nHandle)
     {
         case PROPERTY_ID_QUERYTIMEOUT:
@@ -328,9 +324,8 @@ void OStatementCommonBase::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle,co
     }
 }
 
-void OStatementCommonBase::getFastPropertyValue(Any& rValue,sal_Int32 nHandle) const
+void OStatementCommonBase::getFastPropertyValue(Any&,sal_Int32 nHandle) const
 {
-    (void) rValue;
     switch(nHandle)
     {
         case PROPERTY_ID_QUERYTIMEOUT:
@@ -358,13 +353,12 @@ void SAL_CALL OStatementCommonBase::release() throw()
     OStatementCommonBase_Base::release();
 }
 
-uno::Reference< ::com::sun::star::beans::XPropertySetInfo > SAL_CALL OStatementCommonBase::getPropertySetInfo(  ) throw(RuntimeException, std::exception)
+uno::Reference< css::beans::XPropertySetInfo > SAL_CALL OStatementCommonBase::getPropertySetInfo(  )
 {
     return ::cppu::OPropertySetHelper::createPropertySetInfo(getInfoHelper());
 }
 
 short OStatementCommonBase::getSqlInfoItem(char aInfoItem)
-    throw (SQLException)
 {
     ISC_STATUS_ARRAY aStatusVector;
     ISC_STATUS aErr;
@@ -381,8 +375,8 @@ short OStatementCommonBase::getSqlInfoItem(char aInfoItem)
 
     if (!aErr && aResultsBuffer[0] == aInfoItem)
     {
-        const short aBytes = (short) isc_vax_integer(aResultsBuffer+1, 2);
-        return (short) isc_vax_integer(aResultsBuffer+3, aBytes);
+        const short aBytes = static_cast<short>(isc_vax_integer(aResultsBuffer+1, 2));
+        return static_cast<short>(isc_vax_integer(aResultsBuffer+3, aBytes));
     }
 
     evaluateStatusVector(aStatusVector,
@@ -392,16 +386,11 @@ short OStatementCommonBase::getSqlInfoItem(char aInfoItem)
 }
 
 bool OStatementCommonBase::isDDLStatement()
-    throw (SQLException)
 {
-    if (getSqlInfoItem(isc_info_sql_stmt_type) == isc_info_sql_stmt_ddl)
-        return true;
-    else
-        return false;
+    return getSqlInfoItem(isc_info_sql_stmt_type) == isc_info_sql_stmt_ddl;
 }
 
 sal_Int32 OStatementCommonBase::getStatementChangeCount()
-    throw (SQLException)
 {
     const short aStatementType = getSqlInfoItem(isc_info_sql_stmt_type);
 
@@ -443,12 +432,14 @@ sal_Int32 OStatementCommonBase::getStatementChangeCount()
         case isc_info_sql_stmt_delete:
             aDesiredInfoType = isc_info_req_delete_count;
             break;
+        case isc_info_sql_stmt_exec_procedure:
+            return 0; // cannot determine
         default:
             throw SQLException(); // TODO: better error message?
     }
 
     char* pResults = aResultsBuffer;
-    if (((short) *pResults++) == isc_info_sql_records)
+    if (static_cast<short>(*pResults++) == isc_info_sql_records)
     {
 //         const short aTotalLength = (short) isc_vax_integer(pResults, 2);
         pResults += 2;
@@ -457,11 +448,11 @@ sal_Int32 OStatementCommonBase::getStatementChangeCount()
         while (*pResults != isc_info_rsb_end)
         {
             const char aToken = *pResults;
-            const short aLength =  (short) isc_vax_integer(pResults+1, 2);
+            const short aLength =  static_cast<short>(isc_vax_integer(pResults+1, 2));
 
             if (aToken == aDesiredInfoType)
             {
-                return sal_Int32(isc_vax_integer(pResults + 3, aLength));
+                return isc_vax_integer(pResults + 3, aLength);
             }
 
             pResults += (3 + aLength);

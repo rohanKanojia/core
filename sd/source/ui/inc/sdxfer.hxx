@@ -20,8 +20,7 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_SDXFER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_SDXFER_HXX
 
-#include <svtools/transfer.hxx>
-#include <vcl/graph.hxx>
+#include <vcl/transfer.hxx>
 #include <sfx2/objsh.hxx>
 #include <svl/lstner.hxx>
 
@@ -37,12 +36,12 @@ class DrawDocShell;
 class View;
 }
 
-class SdTransferable : public TransferableHelper, public SfxListener
+class SAL_DLLPUBLIC_RTTI SdTransferable : public TransferableHelper, public SfxListener
 {
 public:
 
                                     SdTransferable( SdDrawDocument* pSrcDoc, ::sd::View* pWorkView, bool bInitOnGetData );
-                                    virtual ~SdTransferable();
+                                    virtual ~SdTransferable() override;
 
     void                            SetDocShell( const SfxObjectShellRef& rRef ) { maDocShellRef = rRef; }
     const SfxObjectShellRef&        GetDocShell() const { return maDocShellRef; }
@@ -53,7 +52,7 @@ public:
     void                            SetView(const ::sd::View* pView);
     const ::sd::View*               GetView() const { return mpSdView; }
 
-    void                            SetObjectDescriptor( const TransferableObjectDescriptor& rObjDesc );
+    void                            SetObjectDescriptor( std::unique_ptr<TransferableObjectDescriptor> pObjDesc );
 
     void                            SetStartPos( const Point& rStartPos ) { maStartPos = rStartPos; }
     const Point&                    GetStartPos() const { return maStartPos; }
@@ -69,7 +68,7 @@ public:
     const std::vector<OUString>&    GetPageBookmarks() const { return maPageBookmarks; }
     ::sd::DrawDocShell*             GetPageDocShell() const { return mpPageDocShell; }
 
-    bool                            SetTableRTF( SdDrawDocument*, const css::datatransfer::DataFlavor& );
+    bool                            SetTableRTF( SdDrawDocument* );
 
     static const css::uno::Sequence< sal_Int8 >& getUnoTunnelId();
     static SdTransferable*          getImplementation( const css::uno::Reference< css::uno::XInterface >& rxData ) throw();
@@ -106,36 +105,35 @@ protected:
 
     virtual void                    AddSupportedFormats() override;
     virtual bool                    GetData( const css::datatransfer::DataFlavor& rFlavor, const OUString& rDestDoc ) override;
-    virtual bool                    WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* pUserObject, SotClipboardFormatId nUserObjectId, const css::datatransfer::DataFlavor& rFlavor ) override;
+    virtual bool                    WriteObject( tools::SvRef<SotStorageStream>& rxOStm, void* pUserObject, sal_uInt32 nUserObjectId, const css::datatransfer::DataFlavor& rFlavor ) override;
     virtual void                    ObjectReleased() override;
 
-    virtual sal_Int64 SAL_CALL      getSomething( const css::uno::Sequence< sal_Int8 >& rId ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual sal_Int64 SAL_CALL      getSomething( const css::uno::Sequence< sal_Int8 >& rId ) override;
 
 private:
 
     SfxObjectShellRef               maDocShellRef;
     ::sd::DrawDocShell*             mpPageDocShell;
     std::vector<OUString>      maPageBookmarks;
-    TransferableDataHelper*         mpOLEDataHelper;
-    TransferableObjectDescriptor*   mpObjDesc;
+    std::unique_ptr<TransferableDataHelper>  mpOLEDataHelper;
+    std::unique_ptr<TransferableObjectDescriptor>  mpObjDesc;
     const ::sd::View*               mpSdView;
     ::sd::View*                     mpSdViewIntern;
     SdDrawDocument*                 mpSdDrawDocument;
     SdDrawDocument*                 mpSdDrawDocumentIntern;
     SdDrawDocument*                 mpSourceDoc;
     VclPtr<VirtualDevice>           mpVDev;
-    INetBookmark*                   mpBookmark;
-    Graphic*                        mpGraphic;
-    ImageMap*                       mpImageMap;
-    Rectangle                       maVisArea;
+    std::unique_ptr<INetBookmark>   mpBookmark;
+    std::unique_ptr<Graphic>        mpGraphic;
+    std::unique_ptr<ImageMap>       mpImageMap;
+    ::tools::Rectangle                       maVisArea;
     Point                           maStartPos;
     bool                            mbInternalMove               : 1;
     bool                            mbOwnDocument                : 1;
     bool                            mbOwnView                    : 1;
-    bool                            mbLateInit                   : 1;
+    bool const                      mbLateInit                   : 1;
     bool                            mbPageTransferable           : 1;
     bool                            mbPageTransferablePersistent : 1;
-    bool                            mbIsUnoObj                  : 1;
     ::std::vector<std::shared_ptr<UserData> > maUserData;
 
                                     SdTransferable( const SdTransferable& ) = delete;

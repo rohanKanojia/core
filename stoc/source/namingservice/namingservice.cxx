@@ -19,7 +19,6 @@
 
 
 #include <osl/mutex.hxx>
-#include <osl/diagnose.h>
 #include <uno/dispatcher.h>
 #include <uno/mapping.hxx>
 #include <cppuhelper/queryinterface.hxx>
@@ -61,12 +60,7 @@ static OUString ns_getImplementationName()
     return OUString(IMPLNAME);
 }
 
-typedef std::unordered_map
-<
-    OUString,
-    Reference<XInterface >,
-    OUStringHash
-> HashMap_OWString_Interface;
+typedef std::unordered_map< OUString, Reference<XInterface > > HashMap_OWString_Interface;
 
 
 class NamingService_Impl
@@ -76,23 +70,19 @@ class NamingService_Impl
     HashMap_OWString_Interface          aMap;
 public:
     NamingService_Impl();
-    virtual ~NamingService_Impl();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-    throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-    throw(css::uno::RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames()
-    throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getRegisteredObject( const OUString& Name ) throw(Exception, RuntimeException, std::exception) override;
-    virtual void SAL_CALL registerObject( const OUString& Name, const css::uno::Reference< css::uno::XInterface >& Object ) throw(Exception, RuntimeException, std::exception) override;
-    virtual void SAL_CALL revokeObject( const OUString& Name ) throw(Exception, RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getRegisteredObject( const OUString& Name ) override;
+    virtual void SAL_CALL registerObject( const OUString& Name, const css::uno::Reference< css::uno::XInterface >& Object ) override;
+    virtual void SAL_CALL revokeObject( const OUString& Name ) override;
 };
 
 
-static Reference<XInterface> SAL_CALL NamingService_Impl_create(
+static Reference<XInterface> NamingService_Impl_create(
     SAL_UNUSED_PARAMETER const Reference<XComponentContext> & )
 {
     return *new NamingService_Impl();
@@ -101,32 +91,26 @@ static Reference<XInterface> SAL_CALL NamingService_Impl_create(
 
 NamingService_Impl::NamingService_Impl() {}
 
-
-NamingService_Impl::~NamingService_Impl() {}
-
 // XServiceInfo
 OUString NamingService_Impl::getImplementationName()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return ns_getImplementationName();
 }
 
 // XServiceInfo
 sal_Bool NamingService_Impl::supportsService( const OUString & rServiceName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 // XServiceInfo
 Sequence< OUString > NamingService_Impl::getSupportedServiceNames()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return ns_getSupportedServiceNames();
 }
 
 // XServiceInfo
-Reference< XInterface > NamingService_Impl::getRegisteredObject( const OUString& Name ) throw(Exception, RuntimeException, std::exception)
+Reference< XInterface > NamingService_Impl::getRegisteredObject( const OUString& Name )
 {
     Guard< Mutex > aGuard( aMutex );
     Reference< XInterface > xRet;
@@ -137,14 +121,14 @@ Reference< XInterface > NamingService_Impl::getRegisteredObject( const OUString&
 }
 
 // XServiceInfo
-void NamingService_Impl::registerObject( const OUString& Name, const Reference< XInterface >& Object ) throw(Exception, RuntimeException, std::exception)
+void NamingService_Impl::registerObject( const OUString& Name, const Reference< XInterface >& Object )
 {
     Guard< Mutex > aGuard( aMutex );
     aMap[ Name ] = Object;
 }
 
 // XServiceInfo
-void NamingService_Impl::revokeObject( const OUString& Name ) throw(Exception, RuntimeException, std::exception)
+void NamingService_Impl::revokeObject( const OUString& Name )
 {
     Guard< Mutex > aGuard( aMutex );
     aMap.erase( Name );
@@ -163,7 +147,7 @@ static const struct ImplementationEntry g_entries[] =
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
 };
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL namingservice_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * namingservice_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , g_entries );

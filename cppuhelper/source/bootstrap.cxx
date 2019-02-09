@@ -28,10 +28,10 @@
 #include <rtl/string.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/uri.hxx>
-#include <osl/diagnose.h>
 #include <osl/file.hxx>
 #include <osl/security.hxx>
 #include <osl/thread.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #include <cppuhelper/bootstrap.hxx>
 #include <cppuhelper/findsofficepath.h>
@@ -43,14 +43,11 @@
 
 #include "macro_expander.hxx"
 
-#define ARLEN(x) sizeof (x) / sizeof *(x)
-
 using namespace ::osl;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
 using rtl::Bootstrap;
-using rtl::OUString;
 
 namespace cppu
 {
@@ -59,7 +56,7 @@ BootstrapException::BootstrapException()
 {
 }
 
-BootstrapException::BootstrapException( const ::rtl::OUString & rMessage )
+BootstrapException::BootstrapException( const OUString & rMessage )
     :m_aMessage( rMessage )
 {
 }
@@ -79,7 +76,7 @@ BootstrapException & BootstrapException::operator=( const BootstrapException & e
     return *this;
 }
 
-const ::rtl::OUString & BootstrapException::getMessage() const
+const OUString & BootstrapException::getMessage() const
 {
     return m_aMessage;
 }
@@ -90,21 +87,28 @@ Reference< XComponentContext > SAL_CALL bootstrap()
 
     try
     {
-        char const * p1 = cppuhelper_detail_findSofficePath();
+        auto* p1 = cppuhelper_detail_findSofficePath();
         if (p1 == nullptr) {
             throw BootstrapException(
                 "no soffice installation found!");
         }
-        rtl::OUString p2;
-        if (!rtl_convertStringToUString(
+        OUString p2;
+#if defined(_WIN32)
+        p2 = o3tl::toU(p1);
+        free(p1);
+#else
+        bool bOk = rtl_convertStringToUString(
                 &p2.pData, p1, std::strlen(p1), osl_getThreadTextEncoding(),
                 (RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_ERROR |
                  RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_ERROR |
-                 RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR)))
+                 RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR));
+        free(p1);
+        if (!bOk)
         {
             throw BootstrapException(
                 "bad characters in soffice installation path!");
         }
+#endif
         OUString path;
         if (osl::FileBase::getFileURLFromSystemPath(p2, path) !=
             osl::FileBase::E_None)
@@ -139,13 +143,13 @@ Reference< XComponentContext > SAL_CALL bootstrap()
         if ( hPool == nullptr )
             throw BootstrapException( "cannot create random pool!" );
         sal_uInt8 bytes[ 16 ];
-        if ( rtl_random_getBytes( hPool, bytes, ARLEN( bytes ) )
+        if ( rtl_random_getBytes( hPool, bytes, SAL_N_ELEMENTS( bytes ) )
             != rtl_Random_E_None )
             throw BootstrapException( "random pool error!" );
         rtl_random_destroyPool( hPool );
-        ::rtl::OUStringBuffer buf("uno");
-        for ( sal_uInt32 i = 0; i < ARLEN( bytes ); ++i )
-            buf.append( static_cast< sal_Int32 >( bytes[ i ] ) );
+        OUStringBuffer buf("uno");
+        for (unsigned char byte : bytes)
+            buf.append( static_cast< sal_Int32 >( byte ) );
         OUString sPipeName( buf.makeStringAndClear() );
 
         // arguments
@@ -168,7 +172,7 @@ Reference< XComponentContext > SAL_CALL bootstrap()
         // start office process
         oslProcess hProcess = nullptr;
         oslProcessError rc = osl_executeProcess(
-            OUString(path + "soffice").pData, ar_args, ARLEN( ar_args ),
+            OUString(path + "soffice").pData, ar_args, SAL_N_ELEMENTS( ar_args ),
             osl_Process_DETACHED,
             sec.getHandle(),
             nullptr, // => current working dir

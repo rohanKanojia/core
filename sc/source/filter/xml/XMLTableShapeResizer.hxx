@@ -20,10 +20,10 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLESHAPERESIZER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLTABLESHAPERESIZER_HXX
 
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/table/CellAddress.hpp>
-#include <com/sun/star/sheet/XSpreadsheet.hpp>
-#include <list>
+#include <com/sun/star/uno/Reference.hxx>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace drawing { class XShape; } } } }
 
 class ScXMLImport;
 class ScChartListenerCollection;
@@ -35,12 +35,10 @@ struct ScMyToFixupOLE
     OUString sRangeList;
 };
 
-typedef std::list<ScMyToFixupOLE> ScMyToFixupOLEs;
-
 class ScMyOLEFixer
 {
     ScXMLImport&                rImport;
-    ScMyToFixupOLEs             aShapes;
+    std::vector<ScMyToFixupOLE>   aShapes;
     ScChartListenerCollection*  pCollection;
 
     void CreateChartListener(ScDocument* pDoc,
@@ -50,8 +48,8 @@ public:
     explicit ScMyOLEFixer(ScXMLImport& rImport);
     ~ScMyOLEFixer();
 
-    static bool IsOLE(css::uno::Reference< css::drawing::XShape >& rShape);
-    void    AddOLE(css::uno::Reference <css::drawing::XShape>& rShape,
+    static bool IsOLE(const css::uno::Reference< css::drawing::XShape >& rShape);
+    void    AddOLE(const css::uno::Reference <css::drawing::XShape>& rShape,
                    const OUString &rRangeList);
     void    FixupOLEs();
 };

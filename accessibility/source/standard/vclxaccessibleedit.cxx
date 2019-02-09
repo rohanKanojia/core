@@ -17,12 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/standard/vclxaccessibleedit.hxx>
+#include <standard/vclxaccessibleedit.hxx>
 
 #include <toolkit/awt/vclxwindows.hxx>
 #include <toolkit/helper/convert.hxx>
-#include <accessibility/helper/accresmgr.hxx>
-#include <accessibility/helper/accessiblestrings.hrc>
 
 #include <unotools/accessiblestatesethelper.hxx>
 #include <unotools/accessiblerelationsethelper.hxx>
@@ -30,12 +28,18 @@
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
+#include <com/sun/star/accessibility/AccessibleTextType.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <cppuhelper/typeprovider.hxx>
-#include <comphelper/sequence.hxx>
 #include <comphelper/string.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
+#include <vcl/settings.hxx>
 #include <vcl/edit.hxx>
+#include <vcl/vclmedit.hxx>
+#include <vcl/textdata.hxx>
+#include <vcl/txtattr.hxx>
+#include <vcl/xtextedt.hxx>
 #include <sot/exchange.hxx>
 #include <sot/formats.hxx>
 
@@ -55,13 +59,7 @@ using namespace ::comphelper;
 VCLXAccessibleEdit::VCLXAccessibleEdit( VCLXWindow* pVCLWindow )
     :VCLXAccessibleTextComponent( pVCLWindow )
 {
-    m_nSelectionStart = getSelectionStart();
     m_nCaretPosition = getCaretPosition();
-}
-
-
-VCLXAccessibleEdit::~VCLXAccessibleEdit()
-{
 }
 
 
@@ -69,17 +67,17 @@ void VCLXAccessibleEdit::ProcessWindowEvent( const VclWindowEvent& rVclWindowEve
 {
     switch ( rVclWindowEvent.GetId() )
     {
-        case VCLEVENT_EDIT_MODIFY:
+        case VclEventId::EditModify:
         {
             SetText( implGetText() );
         }
         break;
-        case VCLEVENT_EDIT_CARETCHANGED:
+        case VclEventId::EditCaretChanged:
         {
             sal_Int32 nOldCaretPosition = m_nCaretPosition;
             m_nCaretPosition = getCaretPosition();
 
-            vcl::Window* pWindow = GetWindow();
+            VclPtr<vcl::Window> pWindow = GetWindow();
             if (pWindow && pWindow->HasChildPathFocus())
             {
                 if (m_nCaretPosition != nOldCaretPosition)
@@ -92,9 +90,9 @@ void VCLXAccessibleEdit::ProcessWindowEvent( const VclWindowEvent& rVclWindowEve
             }
         }
         break;
-        case VCLEVENT_EDIT_SELECTIONCHANGED:
+        case VclEventId::EditSelectionChanged:
         {
-            vcl::Window* pWindow = GetWindow();
+            VclPtr<vcl::Window> pWindow = GetWindow();
             if (pWindow && pWindow->HasChildPathFocus())
             {
                 NotifyAccessibleEvent( AccessibleEventId::TEXT_SELECTION_CHANGED, Any(), Any() );
@@ -134,7 +132,7 @@ OUString VCLXAccessibleEdit::implGetText()
     {
         aText = OutputDevice::GetNonMnemonicString( pEdit->GetText() );
 
-        if ( getAccessibleRole() == AccessibleRole::PASSWORD_TEXT )
+        if ( implGetAccessibleRole() == AccessibleRole::PASSWORD_TEXT )
         {
             sal_Unicode cEchoChar = pEdit->GetEchoChar();
             if ( !cEchoChar )
@@ -176,23 +174,22 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2( VCLXAccessibleEdit, VCLXAccessibleTextComponen
 // XServiceInfo
 
 
-OUString VCLXAccessibleEdit::getImplementationName() throw (RuntimeException, std::exception)
+OUString VCLXAccessibleEdit::getImplementationName()
 {
     return OUString( "com.sun.star.comp.toolkit.AccessibleEdit" );
 }
 
 
-Sequence< OUString > VCLXAccessibleEdit::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > VCLXAccessibleEdit::getSupportedServiceNames()
 {
-    Sequence< OUString > aNames { "com.sun.star.awt.AccessibleEdit" };
-    return aNames;
+    return { "com.sun.star.awt.AccessibleEdit" };
 }
 
 
 // XAccessibleContext
 
 
-sal_Int32 VCLXAccessibleEdit::getAccessibleChildCount() throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getAccessibleChildCount()
 {
     OExternalLockGuard aGuard( this );
 
@@ -200,25 +197,27 @@ sal_Int32 VCLXAccessibleEdit::getAccessibleChildCount() throw (RuntimeException,
 }
 
 
-Reference< XAccessible > VCLXAccessibleEdit::getAccessibleChild( sal_Int32 i ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XAccessible > VCLXAccessibleEdit::getAccessibleChild( sal_Int32 )
 {
-    OExternalLockGuard aGuard( this );
-
-    if ( i < 0 || i >= getAccessibleChildCount() )
-        throw IndexOutOfBoundsException();
-
-    return Reference< XAccessible >();
+    throw IndexOutOfBoundsException();
 }
 
 
-sal_Int16 VCLXAccessibleEdit::getAccessibleRole(  ) throw (RuntimeException, std::exception)
+sal_Int16 VCLXAccessibleEdit::getAccessibleRole(  )
 {
     OExternalLockGuard aGuard( this );
 
+    return implGetAccessibleRole();
+}
+
+sal_Int16 VCLXAccessibleEdit::implGetAccessibleRole(  )
+{
     sal_Int16 nRole;
     VclPtr< Edit > pEdit = GetAs< Edit >();
-    if ( pEdit && ( ( pEdit->GetStyle() & WB_PASSWORD ) || pEdit->GetEchoChar() ) )
+    if ( pEdit && ( pEdit->IsPassword() || pEdit->GetEchoChar() ) )
         nRole = AccessibleRole::PASSWORD_TEXT;
+    else if ( pEdit && ( pEdit->GetStyle() & WB_READONLY ) )
+        nRole = AccessibleRole::STATIC;
     else
         nRole = AccessibleRole::TEXT;
 
@@ -229,7 +228,7 @@ sal_Int16 VCLXAccessibleEdit::getAccessibleRole(  ) throw (RuntimeException, std
 // XAccessibleAction
 
 
-sal_Int32 VCLXAccessibleEdit::getAccessibleActionCount( ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getAccessibleActionCount( )
 {
     OExternalLockGuard aGuard( this );
 
@@ -238,15 +237,15 @@ sal_Int32 VCLXAccessibleEdit::getAccessibleActionCount( ) throw (RuntimeExceptio
 }
 
 
-sal_Bool VCLXAccessibleEdit::doAccessibleAction ( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::doAccessibleAction ( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( nIndex < 0 || nIndex >= getAccessibleActionCount() )
+    if ( nIndex != 0 )
         throw IndexOutOfBoundsException();
 
     bool bDoAction = false;
-    vcl::Window* pWindow = GetWindow();
+    VclPtr<vcl::Window> pWindow = GetWindow();
     if ( pWindow )
     {
         pWindow->GrabFocus();
@@ -257,22 +256,22 @@ sal_Bool VCLXAccessibleEdit::doAccessibleAction ( sal_Int32 nIndex ) throw (Inde
 }
 
 
-OUString VCLXAccessibleEdit::getAccessibleActionDescription ( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+OUString VCLXAccessibleEdit::getAccessibleActionDescription ( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( nIndex < 0 || nIndex >= getAccessibleActionCount() )
+    if ( nIndex != 0)
         throw IndexOutOfBoundsException();
 
     return OUString( "activate" );
 }
 
 
-Reference< XAccessibleKeyBinding > VCLXAccessibleEdit::getAccessibleActionKeyBinding( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Reference< XAccessibleKeyBinding > VCLXAccessibleEdit::getAccessibleActionKeyBinding( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
-    if ( nIndex < 0 || nIndex >= getAccessibleActionCount() )
+    if ( nIndex != 0 )
         throw IndexOutOfBoundsException();
 
     return Reference< XAccessibleKeyBinding >();
@@ -282,35 +281,71 @@ Reference< XAccessibleKeyBinding > VCLXAccessibleEdit::getAccessibleActionKeyBin
 // XAccessibleText
 
 
-sal_Int32 VCLXAccessibleEdit::getCaretPosition(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getCaretPosition(  )
 {
     return getSelectionEnd();
 }
 
 
-sal_Bool VCLXAccessibleEdit::setCaretPosition( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::setCaretPosition( sal_Int32 nIndex )
 {
     return setSelection( nIndex, nIndex );
 }
 
 
-sal_Unicode VCLXAccessibleEdit::getCharacter( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Unicode VCLXAccessibleEdit::getCharacter( sal_Int32 nIndex )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getCharacter( nIndex );
 }
 
 
-Sequence< PropertyValue > VCLXAccessibleEdit::getCharacterAttributes( sal_Int32 nIndex, const Sequence< OUString >& aRequestedAttributes ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+Sequence< PropertyValue > VCLXAccessibleEdit::getCharacterAttributes( sal_Int32 nIndex, const Sequence< OUString >& aRequestedAttributes )
 {
     OExternalLockGuard aGuard( this );
+    Sequence< PropertyValue > aProperties = VCLXAccessibleTextComponent::getCharacterAttributes( nIndex, aRequestedAttributes );
 
-    return VCLXAccessibleTextComponent::getCharacterAttributes( nIndex, aRequestedAttributes );
+    // Handle multiline edit character properties
+    VclPtr<VclMultiLineEdit> pMulitLineEdit = GetAsDynamic< VclMultiLineEdit >();
+    if ( pMulitLineEdit )
+    {
+        ExtTextEngine* pTextEngine = pMulitLineEdit->GetTextEngine();
+        TextPaM aCursor( 0, nIndex );
+        const TextAttribFontColor* pFontColor = static_cast<const TextAttribFontColor* >(pTextEngine->FindAttrib( aCursor, TEXTATTR_FONTCOLOR ));
+        if ( pFontColor )
+        {
+            for (PropertyValue& aValue : aProperties )
+            {
+                if (aValue.Name == "CharColor")
+                {
+                    aValue.Value <<= pFontColor->GetColor().GetRGBColor();
+                    break;
+                }
+            }
+        }
+    }
+
+    // Set default character color if it is not set yet to a valid value
+    for (PropertyValue& aValue : aProperties )
+    {
+        if (aValue.Name == "CharColor")
+        {
+            if ( aValue.Value == sal_Int32(-1) )
+            {
+                OutputDevice* pDev = Application::GetDefaultDevice();
+                if ( pDev )
+                {
+                    aValue.Value <<= pDev->GetSettings().GetStyleSettings().GetFieldTextColor();
+                }
+            }
+            break;
+        }
+    }
+
+    return aProperties;
 }
 
 
-awt::Rectangle VCLXAccessibleEdit::getCharacterBounds( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+awt::Rectangle VCLXAccessibleEdit::getCharacterBounds( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
@@ -328,7 +363,7 @@ awt::Rectangle VCLXAccessibleEdit::getCharacterBounds( sal_Int32 nIndex ) throw 
             // #108914# calculate virtual bounding rectangle
             for ( sal_Int32 i = 0; i < nLength; ++i )
             {
-                Rectangle aRect = pControl->GetCharacterBounds( i );
+                tools::Rectangle aRect = pControl->GetCharacterBounds( i );
                 sal_Int32 nHeight = aRect.GetHeight();
                 if ( aBounds.Height < nHeight )
                 {
@@ -352,47 +387,37 @@ awt::Rectangle VCLXAccessibleEdit::getCharacterBounds( sal_Int32 nIndex ) throw 
 }
 
 
-sal_Int32 VCLXAccessibleEdit::getCharacterCount(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getCharacterCount(  )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getCharacterCount();
 }
 
 
-sal_Int32 VCLXAccessibleEdit::getIndexAtPoint( const awt::Point& aPoint ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getIndexAtPoint( const awt::Point& aPoint )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getIndexAtPoint( aPoint );
 }
 
 
-OUString VCLXAccessibleEdit::getSelectedText(  ) throw (RuntimeException, std::exception)
+OUString VCLXAccessibleEdit::getSelectedText(  )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getSelectedText();
 }
 
 
-sal_Int32 VCLXAccessibleEdit::getSelectionStart(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getSelectionStart(  )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getSelectionStart();
 }
 
 
-sal_Int32 VCLXAccessibleEdit::getSelectionEnd(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessibleEdit::getSelectionEnd(  )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getSelectionEnd();
 }
 
 
-sal_Bool VCLXAccessibleEdit::setSelection( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::setSelection( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
 {
     OExternalLockGuard aGuard( this );
 
@@ -414,50 +439,53 @@ sal_Bool VCLXAccessibleEdit::setSelection( sal_Int32 nStartIndex, sal_Int32 nEnd
 }
 
 
-OUString VCLXAccessibleEdit::getText(  ) throw (RuntimeException, std::exception)
+OUString VCLXAccessibleEdit::getText(  )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getText();
 }
 
 
-OUString VCLXAccessibleEdit::getTextRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+OUString VCLXAccessibleEdit::getTextRange( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getTextRange( nStartIndex, nEndIndex );
 }
 
 
-css::accessibility::TextSegment VCLXAccessibleEdit::getTextAtIndex( sal_Int32 nIndex, sal_Int16 aTextType ) throw (css::lang::IndexOutOfBoundsException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::accessibility::TextSegment VCLXAccessibleEdit::getTextAtIndex( sal_Int32 nIndex, sal_Int16 aTextType )
 {
     OExternalLockGuard aGuard( this );
+    // Override general text component behavior: MultiLineEdit can have more text portions
+    if ( aTextType == AccessibleTextType::ATTRIBUTE_RUN )
+    {
+        VclPtr<VclMultiLineEdit> pMulitLineEdit = GetAsDynamic< VclMultiLineEdit >();
+        if ( pMulitLineEdit )
+        {
+            ExtTextEngine* pTextEngine = pMulitLineEdit->GetTextEngine();
+            TextPaM aCursor( 0, nIndex );
+            TextSegment aResult;
+            pTextEngine->GetTextPortionRange( aCursor, aResult.SegmentStart, aResult.SegmentEnd );
+            return aResult;
+        }
+    }
 
     return VCLXAccessibleTextComponent::getTextAtIndex( nIndex, aTextType );
 }
 
 
-css::accessibility::TextSegment VCLXAccessibleEdit::getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 aTextType ) throw (css::lang::IndexOutOfBoundsException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::accessibility::TextSegment VCLXAccessibleEdit::getTextBeforeIndex( sal_Int32 nIndex, sal_Int16 aTextType )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getTextBeforeIndex( nIndex, aTextType );
 }
 
 
-css::accessibility::TextSegment VCLXAccessibleEdit::getTextBehindIndex( sal_Int32 nIndex, sal_Int16 aTextType ) throw (css::lang::IndexOutOfBoundsException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::accessibility::TextSegment VCLXAccessibleEdit::getTextBehindIndex( sal_Int32 nIndex, sal_Int16 aTextType )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::getTextBehindIndex( nIndex, aTextType );
 }
 
 
-sal_Bool VCLXAccessibleEdit::copyText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::copyText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
 {
-    OExternalLockGuard aGuard( this );
-
     return VCLXAccessibleTextComponent::copyText( nStartIndex, nEndIndex );
 }
 
@@ -465,15 +493,13 @@ sal_Bool VCLXAccessibleEdit::copyText( sal_Int32 nStartIndex, sal_Int32 nEndInde
 // XAccessibleEditableText
 
 
-sal_Bool VCLXAccessibleEdit::cutText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::cutText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
 {
-    OExternalLockGuard aGuard( this );
-
     return copyText( nStartIndex, nEndIndex ) && deleteText( nStartIndex, nEndIndex );
 }
 
 
-sal_Bool VCLXAccessibleEdit::pasteText( sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::pasteText( sal_Int32 nIndex )
 {
     OExternalLockGuard aGuard( this );
 
@@ -508,23 +534,19 @@ sal_Bool VCLXAccessibleEdit::pasteText( sal_Int32 nIndex ) throw (IndexOutOfBoun
 }
 
 
-sal_Bool VCLXAccessibleEdit::deleteText( sal_Int32 nStartIndex, sal_Int32 nEndIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::deleteText( sal_Int32 nStartIndex, sal_Int32 nEndIndex )
 {
-    OExternalLockGuard aGuard( this );
-
     return replaceText( nStartIndex, nEndIndex, OUString() );
 }
 
 
-sal_Bool VCLXAccessibleEdit::insertText( const OUString& sText, sal_Int32 nIndex ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::insertText( const OUString& sText, sal_Int32 nIndex )
 {
-    OExternalLockGuard aGuard( this );
-
     return replaceText( nIndex, nIndex, sText );
 }
 
 
-sal_Bool VCLXAccessibleEdit::replaceText( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const OUString& sReplacement ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::replaceText( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const OUString& sReplacement )
 {
     OExternalLockGuard aGuard( this );
 
@@ -534,8 +556,8 @@ sal_Bool VCLXAccessibleEdit::replaceText( sal_Int32 nStartIndex, sal_Int32 nEndI
     if ( !implIsValidRange( nStartIndex, nEndIndex, sText.getLength() ) )
         throw IndexOutOfBoundsException();
 
-    sal_Int32 nMinIndex = ::std::min( nStartIndex, nEndIndex );
-    sal_Int32 nMaxIndex = ::std::max( nStartIndex, nEndIndex );
+    sal_Int32 nMinIndex = std::min( nStartIndex, nEndIndex );
+    sal_Int32 nMaxIndex = std::max( nStartIndex, nEndIndex );
 
     VCLXEdit* pVCLXEdit = static_cast< VCLXEdit* >( GetVCLXWindow() );
     if ( pVCLXEdit && pVCLXEdit->isEditable() )
@@ -550,7 +572,7 @@ sal_Bool VCLXAccessibleEdit::replaceText( sal_Int32 nStartIndex, sal_Int32 nEndI
 }
 
 
-sal_Bool VCLXAccessibleEdit::setAttributes( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const Sequence<PropertyValue>& ) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::setAttributes( sal_Int32 nStartIndex, sal_Int32 nEndIndex, const Sequence<PropertyValue>& )
 {
     OExternalLockGuard aGuard( this );
 
@@ -561,20 +583,22 @@ sal_Bool VCLXAccessibleEdit::setAttributes( sal_Int32 nStartIndex, sal_Int32 nEn
 }
 
 
-sal_Bool VCLXAccessibleEdit::setText( const OUString& sText ) throw (RuntimeException, std::exception)
+sal_Bool VCLXAccessibleEdit::setText( const OUString& sText )
 {
     OExternalLockGuard aGuard( this );
 
-    bool bSuccess = false;
-    try
+    bool bReturn = false;
+
+    VCLXEdit* pVCLXEdit = static_cast< VCLXEdit* >( GetVCLXWindow() );
+    if ( pVCLXEdit && pVCLXEdit->isEditable() )
     {
-        bSuccess = replaceText( 0, implGetText().getLength(), sText );
+        pVCLXEdit->setText( sText );
+        sal_Int32 nSize = sText.getLength();
+        pVCLXEdit->setSelection( awt::Selection( nSize, nSize ) );
+        bReturn = true;
     }
-    catch( const IndexOutOfBoundsException& )
-    {
-        OSL_FAIL( "VCLXAccessibleText::setText: caught an exception!" );
-    }
-    return bSuccess;
+
+    return bReturn;
 }
 
 

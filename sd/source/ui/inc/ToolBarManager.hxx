@@ -20,15 +20,14 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_TOOLBARMANAGER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_TOOLBARMANAGER_HXX
 
-#include "ViewShell.hxx"
 #include "ShellFactory.hxx"
 #include <rtl/ustring.hxx>
-#include <com/sun/star/frame/XFrame.hpp>
 
 #include <sal/types.h>
 #include <memory>
 
 class SdrView;
+namespace sd { class ViewShell; }
 
 namespace sd { namespace tools {
 class EventMultiplexer;
@@ -93,7 +92,7 @@ public:
     void MainViewShellChanged (const ViewShell& rMainViewShell);
 
     /** Call this method when the selection has changed to update the more
-        temporary tool bars (those in the TBG_FUNCTION group.)
+        temporary tool bars (those in the ToolBarGroup::Function group.)
     */
     void SelectionHasChanged (
         const ViewShell& rViewShell,
@@ -101,33 +100,30 @@ public:
 
     /** The set of tool bars that are handled by this manager class.
     */
-    const static OUString msToolBar;                  // RID_DRAW_TOOLBOX, 23011
-    const static OUString msOptionsToolBar;           // RID_DRAW_OPTIONS_TOOLBOX, 23020
-    const static OUString msCommonTaskToolBar;        // RID_DRAW_COMMONTASK_TOOLBOX, 23021
-    const static OUString msViewerToolBar;            // RID_DRAW_VIEWER_TOOLBOX, 23023
-    const static OUString msSlideSorterToolBar;       // RID_SLIDE_TOOLBOX, 23012
-    const static OUString msSlideSorterObjectBar;     // RID_SLIDE_OBJ_TOOLBOX, 23014
-    const static OUString msOutlineToolBar;           // RID_OUTLINE_TOOLBOX, 23017
+    const static OUString msToolBar;                  // Draw_Toolbox_Sd, 23011
+    const static OUString msOptionsToolBar;           // Draw_Options_Toolbox, 23020
+    const static OUString msCommonTaskToolBar;        // Draw_CommonTask_Toolbox, 23021
+    const static OUString msViewerToolBar;            // Draw_Viewer_Toolbox, 23023
+    const static OUString msSlideSorterToolBar;       // Slide_Toolbox, 23012
+    const static OUString msSlideSorterObjectBar;     // Slide_Obj_Toolbox, 23014
+    const static OUString msOutlineToolBar;           // Outline_Toolbox, 23017
     const static OUString msMasterViewToolBar;        // SID_MASTERPAGE, 27053
-    const static OUString msDrawingObjectToolBar;     // RID_DRAW_OBJ_TOOLBOX, 23013
-    const static OUString msGluePointsToolBar;        // RID_GLUEPOINTS_TOOLBOX, 23019
-    const static OUString msTextObjectBar;            // RID_DRAW_TEXT_TOOLBOX, 23016
-    const static OUString msBezierObjectBar;          // RID_BEZIER_TOOLBOX, 23015
-    const static OUString msGraphicObjectBar;         // RID_DRAW_GRAF_TOOLBOX, 23030
-    const static OUString msMediaObjectBar;           // RID_DRAW_MEDIA_TOOLBOX, 23031
-    const static OUString msTableObjectBar;           // RID_DRAW_TABLE_TOOLBOX
+    const static OUString msDrawingObjectToolBar;     // Draw_Obj_Toolbox, 23013
+    const static OUString msGluePointsToolBar;        // Gluepoints_Toolbox, 23019
+    const static OUString msTextObjectBar;            // Draw_Text_Toolbox_Sd, 23016
+    const static OUString msBezierObjectBar;          // Bezier_Toolbox_Sd, 23015
+    const static OUString msGraphicObjectBar;         // Draw_Graf_Toolbox, 23030
+    const static OUString msMediaObjectBar;           // Draw_Media_Toolbox, 23031
+    const static OUString msTableObjectBar;           // Draw_Table_Toolbox, 23018
 
     /** The set of tool bar groups.
     */
-    enum ToolBarGroup {
-        TBG__FIRST,
-
-        TBG_PERMANENT = TBG__FIRST,
-        TBG_FUNCTION,
-        TBG_COMMON_TASK,
-        TBG_MASTER_MODE,
-
-        TBG__LAST = TBG_MASTER_MODE
+    enum class ToolBarGroup {
+        Permanent,
+        Function,
+        CommonTask,
+        MasterMode,
+        LAST = MasterMode
     };
 
     /** Reset the set of visible object bars in the specified group.  Tool
@@ -243,7 +239,7 @@ public:
     class UpdateLock { public:
         UpdateLock(const std::shared_ptr<ToolBarManager>& rpManager)
             : mpManager(rpManager) { mpManager->LockUpdate(); }
-        ~UpdateLock() { mpManager->UnlockUpdate(); }
+        ~UpdateLock() COVERITY_NOEXCEPT_FALSE { mpManager->UnlockUpdate(); }
     private:
         std::shared_ptr<ToolBarManager> mpManager;
     };

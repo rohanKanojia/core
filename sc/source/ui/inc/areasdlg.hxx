@@ -19,21 +19,20 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_AREASDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_AREASDLG_HXX
 
-#include "address.hxx"
+#include <address.hxx>
 
-#include <svl/stritem.hxx>
 #include <vcl/lstbox.hxx>
-#include <vcl/fixed.hxx>
 #include "anyrefdg.hxx"
 
 class ScDocument;
 class ScViewData;
+class SfxStringItem;
 
 class ScPrintAreasDlg : public ScAnyRefDlg
 {
 public:
                     ScPrintAreasDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent );
-                    virtual ~ScPrintAreasDlg();
+                    virtual ~ScPrintAreasDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -70,13 +69,13 @@ private:
     void Impl_Reset();
     bool Impl_CheckRefStrings();
     void Impl_FillLists();
-    bool Impl_GetItem( Edit* pEd, SfxStringItem& rItem );
+    bool Impl_GetItem( const Edit* pEd, SfxStringItem& rItem );
 
     // Handler:
-    DECL_LINK_TYPED( Impl_SelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( Impl_ModifyHdl, Edit&, void  );
-    DECL_LINK_TYPED( Impl_BtnHdl,    Button*, void );
-    DECL_LINK_TYPED( Impl_GetFocusHdl, Control&, void );
+    DECL_LINK( Impl_SelectHdl, ListBox&, void );
+    DECL_LINK( Impl_ModifyHdl, Edit&, void  );
+    DECL_LINK( Impl_BtnHdl,    Button*, void );
+    DECL_LINK( Impl_GetFocusHdl, Control&, void );
 };
 
 #endif

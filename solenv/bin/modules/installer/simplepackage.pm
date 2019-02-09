@@ -223,7 +223,7 @@ sub replace_variables_in_scriptfile
 # Creating the "simple" package.
 # "zip" for Windows
 # "tar.gz" for all other platforms
-# additionally "dmg" on Mac OS X
+# additionally "dmg" on macOS
 #############################################
 
 sub create_package
@@ -379,25 +379,33 @@ sub create_package
             $destfile = $subdir . "/" . $iconfile;
             installer::systemactions::copy_one_file($iconfileref, $destfile);
 
-            my $installname = "Info.plist";
             my $infoplistfile = $ENV{'SRCDIR'} . "/setup_native/source/mac/Info.plist.langpack";
             if (! -f $infoplistfile) { installer::exiter::exit_program("ERROR: Could not find Apple script Info.plist: $infoplistfile!", "create_package"); }
-            $destfile = $contentsfolder . "/" . $installname;
-            installer::systemactions::copy_one_file($infoplistfile, $destfile);
-
+            $destfile = "$contentsfolder/Info.plist";
             # Replacing variables in Info.plist
-            $scriptfilecontent = installer::files::read_file($destfile);
+            $scriptfilecontent = installer::files::read_file($infoplistfile);
             # replace_one_variable_in_shellscript($scriptfilecontent, $volume_name, "FULLPRODUCTNAME" );
             replace_one_variable_in_shellscript($scriptfilecontent, $volume_name_classic_app, "FULLAPPPRODUCTNAME" ); # OpenOffice.org Language Pack
+            replace_one_variable_in_shellscript($scriptfilecontent, $ENV{'MACOSX_BUNDLE_IDENTIFIER'}, "BUNDLEIDENTIFIER" );
             installer::files::save_file($destfile, $scriptfilecontent);
 
             chdir $localfrom;
+
+            if ( defined($ENV{'MACOSX_CODESIGNING_IDENTITY'}) && $ENV{'MACOSX_CODESIGNING_IDENTITY'} ne "" ) {
+                my @lp_sign = ('codesign', '--verbose', '--sign', $ENV{'MACOSX_CODESIGNING_IDENTITY'}, '--deep', $appfolder);
+                if (system(@lp_sign) == 0) {
+                    $infoline = "Success: \"@lp_sign\" executed successfully!\n";
+                } else {
+                    $infoline = "ERROR: Could not codesign the languagepack using \"@lp_sign\"!\n";
+                }
+                push( @installer::globals::logfileinfo, $infoline);
+            }
         }
         elsif ($volume_name_classic_app eq 'LibreOffice' || $volume_name_classic_app eq 'LibreOfficeDev')
         {
             my $subdir = "$tempdir/$packagename/$volume_name_classic_app.app/Contents/Resources";
             if ( ! -d $subdir ) { installer::systemactions::create_directory($subdir); }
-            # iterate over OS X localizations
+            # iterate over macOS localizations
             foreach $lang ("ca", "cs", "da", "de", "el", "en", "es", "fi", "fr", "hr", "hu", "id", "it", "ja", "ko", "ms", "nl", "no", "pl", "pt", "pt_PT", "ro", "ru", "sk", "sv", "th", "tr", "uk", "vi", "zh_CN", "zh_TW")
             {
                 installer::systemactions::create_directory($subdir . "/" . $lang . ".lproj");
@@ -430,16 +438,14 @@ sub create_package
     }
     else
     {
-        # getting the path of the getuid.so (only required for Solaris and Linux)
-        my $getuidlibrary = "";
-        my $ldpreloadstring = "";
+        # use fakeroot (only required for Solaris and Linux)
+        my $fakerootstring = "";
         if (( $installer::globals::issolarisbuild ) || ( $installer::globals::islinuxbuild ))
         {
-            $getuidlibrary = installer::download::get_path_for_library($includepatharrayref);
-            if ( $getuidlibrary ne "" ) { $ldpreloadstring = "LD_PRELOAD=" . $getuidlibrary; }
+            $fakerootstring = "fakeroot";
         }
 
-        $systemcall = "cd $tempdir; $ldpreloadstring tar -cf - . | gzip > $archive";
+        $systemcall = "cd $tempdir; $fakerootstring tar -cf - . | gzip > $archive";
     }
 
     if ( $makesystemcall )
@@ -451,7 +457,7 @@ sub create_package
 
         if ($returnvalue)
         {
-            $infoline = "ERROR: Could not execute \"$systemcall\"!\n";
+            $infoline = "ERROR: Could not execute \"$systemcall\": $returnvalue\n";
             push( @installer::globals::logfileinfo, $infoline);
         }
         else
@@ -646,10 +652,10 @@ sub create_simple_package
         my $target = $onelink->{'Target'};
         my $destination = $subfolderdir . $installer::globals::separator . $onelink->{'destination'};
 
-        my $localcall = "ln -sf \'$target\' \'$destination\' \>\/dev\/null 2\>\&1";
-        system($localcall);
+        my @localcall = ('ln', '-sf', $target, $destination);
+        system(@localcall) == 0 or die "system @localcall failed: $?";
 
-        $infoline = "Creating Unix link: \"ln -sf $target $destination\"\n";
+        $infoline = "Creating Unix link: \"@localcall\"\n";
         push(@installer::globals::logfileinfo, $infoline);
     }
 

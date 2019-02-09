@@ -21,13 +21,13 @@
 #define INCLUDED_SC_INC_LOOKUPCACHE_HXX
 
 #include "address.hxx"
-#include "global.hxx"
-#include <formula/token.hxx>
 #include <svl/listener.hxx>
 
+#include <memory>
 #include <unordered_map>
 
 class ScDocument;
+struct ScLookupCacheMap;
 struct ScQueryEntry;
 
 /** Lookup cache for one range used with interpreter functions such as VLOOKUP
@@ -104,18 +104,24 @@ public:
                 (mbString ? (*mpStr == *r.mpStr) : (mfVal == r.mfVal));
         }
 
+        bool isEmptyStringQuery() const
+        {
+            return (getQueryOp() == QueryOp::EQUAL) && mbString && mpStr && mpStr->isEmpty();
+        }
     };
 
     /// MUST be new'd because Notify() deletes.
-                            ScLookupCache( ScDocument * pDoc, const ScRange & rRange );
-    virtual                 ~ScLookupCache();
+                            ScLookupCache( ScDocument * pDoc, const ScRange & rRange, ScLookupCacheMap & cacheMap );
+    virtual                 ~ScLookupCache() override;
     /// Remove from document structure and delete (!) cache on modify hint.
     virtual void Notify( const SfxHint& rHint ) override;
 
-    /// @returns document address in o_rAddress if Result==FOUND
+    /// @returns document address in o_rResultAddress if Result==FOUND
             Result          lookup( ScAddress & o_rResultAddress,
                                     const QueryCriteria & rCriteria,
                                     const ScAddress & rQueryAddress ) const;
+
+            SCROW           lookup( const QueryCriteria & rCriteria ) const;
 
     /** Insert query and result.
         @param bAvailable
@@ -128,7 +134,9 @@ public:
                                     const ScAddress & rQueryAddress,
                                     const bool bAvailable );
 
-    inline  const ScRange&  getRange() const { return maRange; }
+    const ScRange&  getRange() const { return maRange; }
+
+    ScLookupCacheMap & getCacheMap() const { return mCacheMap; }
 
     struct Hash
     {
@@ -143,9 +151,9 @@ private:
 
     struct QueryKey
     {
-        SCROW           mnRow;
-        SCTAB           mnTab;
-        QueryOp         meOp;
+        SCROW const           mnRow;
+        SCTAB const           mnTab;
+        QueryOp const         meOp;
 
         QueryKey( const ScAddress & rAddress, const QueryOp eOp ) :
             mnRow( rAddress.Row()),
@@ -172,7 +180,7 @@ private:
 
     struct QueryCriteriaAndResult
     {
-        QueryCriteria   maCriteria;
+        QueryCriteria const   maCriteria;
         ScAddress       maAddress;
 
         QueryCriteriaAndResult( const QueryCriteria & rCriteria, const ScAddress & rAddress ) :
@@ -180,22 +188,24 @@ private:
             maAddress( rAddress)
         {
         }
-        ~QueryCriteriaAndResult()
-        {
-        }
     };
 
-    typedef std::unordered_map< QueryKey, QueryCriteriaAndResult, QueryKey::Hash > QueryMap;
-    QueryMap        maQueryMap;
-    ScRange         maRange;
+    std::unordered_map< QueryKey, QueryCriteriaAndResult, QueryKey::Hash > maQueryMap;
+    ScRange const   maRange;
     ScDocument *    mpDoc;
+    ScLookupCacheMap & mCacheMap;
 
     ScLookupCache( const ScLookupCache & ) = delete;
     ScLookupCache & operator=( const ScLookupCache & ) = delete;
 
 };
 
-typedef std::unordered_map< ScRange, ScLookupCache*, ScLookupCache::Hash > ScLookupCacheMap;
+// Struct because including lookupcache.hxx in document.hxx isn't wanted.
+struct ScLookupCacheMap
+{
+    std::unordered_map< ScRange, std::unique_ptr<ScLookupCache>, ScLookupCache::Hash > aCacheMap;
+};
+
 
 #endif
 

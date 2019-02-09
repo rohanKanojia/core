@@ -7,12 +7,49 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "mtvelements.hxx"
-#include "globalnames.hxx"
-#include "document.hxx"
-#include "cellvalue.hxx"
+#include <mtvelements.hxx>
+#include <document.hxx>
+#include <cellvalue.hxx>
+#include <column.hxx>
+#include <table.hxx>
+
+#include <sstream>
 
 namespace sc {
+
+CellStoreEvent::CellStoreEvent() : mpCol(nullptr) {}
+
+CellStoreEvent::CellStoreEvent(ScColumn* pCol) : mpCol(pCol) {}
+
+void CellStoreEvent::element_block_acquired(const mdds::mtv::base_element_block* block)
+{
+    if (!mpCol)
+        return;
+
+    switch (mdds::mtv::get_block_type(*block))
+    {
+        case sc::element_type_formula:
+            ++mpCol->mnBlkCountFormula;
+            break;
+        default:
+            ;
+    }
+}
+
+void CellStoreEvent::element_block_released(const mdds::mtv::base_element_block* block)
+{
+    if (!mpCol)
+        return;
+
+    switch (mdds::mtv::get_block_type(*block))
+    {
+        case sc::element_type_formula:
+            --mpCol->mnBlkCountFormula;
+            break;
+        default:
+            ;
+    }
+}
 
 ColumnBlockPositionSet::ColumnBlockPositionSet(ScDocument& rDoc) : mrDoc(rDoc) {}
 
@@ -24,7 +61,7 @@ ColumnBlockPosition* ColumnBlockPositionSet::getBlockPosition(SCTAB nTab, SCCOL 
     if (itTab == maTables.end())
     {
         std::pair<TablesType::iterator,bool> r =
-            maTables.insert(TablesType::value_type(nTab, ColumnsType()));
+            maTables.emplace(nTab, ColumnsType());
         if (!r.second)
             // insertion failed.
             return nullptr;
@@ -40,8 +77,7 @@ ColumnBlockPosition* ColumnBlockPositionSet::getBlockPosition(SCTAB nTab, SCCOL 
         return &it->second;
 
     std::pair<ColumnsType::iterator,bool> r =
-        rCols.insert(
-            ColumnsType::value_type(nCol, ColumnBlockPosition()));
+        rCols.emplace(nCol, ColumnBlockPosition());
 
     if (!r.second)
         // insertion failed.
@@ -59,6 +95,59 @@ void ColumnBlockPositionSet::clear()
 {
     osl::MutexGuard aGuard(&maMtxTables);
     maTables.clear();
+}
+
+struct TableColumnBlockPositionSet::Impl
+{
+    typedef std::unordered_map<SCCOL, ColumnBlockPosition> ColumnsType;
+
+    ScTable* mpTab;
+    ColumnsType maColumns;
+
+    Impl() : mpTab(nullptr) {}
+};
+
+TableColumnBlockPositionSet::TableColumnBlockPositionSet( ScDocument& rDoc, SCTAB nTab ) :
+    mpImpl(std::make_unique<Impl>())
+{
+    mpImpl->mpTab = rDoc.FetchTable(nTab);
+
+    if (!mpImpl->mpTab)
+    {
+        std::ostringstream os;
+        os << "Passed table index " << nTab << " is invalid.";
+        throw std::invalid_argument(os.str());
+    }
+}
+
+TableColumnBlockPositionSet::TableColumnBlockPositionSet( TableColumnBlockPositionSet&& rOther ) :
+    mpImpl(std::move(rOther.mpImpl)) {}
+
+TableColumnBlockPositionSet::~TableColumnBlockPositionSet() {}
+
+ColumnBlockPosition* TableColumnBlockPositionSet::getBlockPosition( SCCOL nCol )
+{
+    using ColumnsType = Impl::ColumnsType;
+
+    ColumnsType::iterator it = mpImpl->maColumns.find(nCol);
+
+    if (it != mpImpl->maColumns.end())
+        // Block position for this column has already been fetched.
+        return &it->second;
+
+    std::pair<ColumnsType::iterator,bool> r =
+        mpImpl->maColumns.emplace(nCol, ColumnBlockPosition());
+
+    if (!r.second)
+        // insertion failed.
+        return nullptr;
+
+    it = r.first;
+
+    if (!mpImpl->mpTab->InitColumnBlockPosition(it->second, nCol))
+        return nullptr;
+
+    return &it->second;
 }
 
 ScRefCellValue toRefCell( const sc::CellStoreType::const_iterator& itPos, size_t nOffset )

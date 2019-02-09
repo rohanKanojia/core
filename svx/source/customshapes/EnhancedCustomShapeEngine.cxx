@@ -27,14 +27,14 @@
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/drawing/XCustomShapeEngine.hpp>
 #include <rtl/ref.hxx>
-#include "svx/EnhancedCustomShape2d.hxx"
+#include <svx/EnhancedCustomShape2d.hxx>
 #include "EnhancedCustomShape3d.hxx"
 #include "EnhancedCustomShapeFontWork.hxx"
 #include "EnhancedCustomShapeHandle.hxx"
-#include "svx/EnhancedCustomShapeGeometry.hxx"
+#include <svx/EnhancedCustomShapeGeometry.hxx>
 #include <svx/unoshape.hxx>
-#include "svx/unopage.hxx"
-#include "svx/unoapi.hxx"
+#include <svx/unopage.hxx>
+#include <svx/unoapi.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdoashp.hxx>
 #include <svx/svdogrp.hxx>
@@ -46,13 +46,13 @@
 #include <svx/svdopath.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdmodel.hxx>
-#include "svx/svditer.hxx"
+#include <svx/svditer.hxx>
 #include <uno/mapping.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/unotools.hxx>
 #include <com/sun/star/document/XActionLockable.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <o3tl/make_unique.hxx>
 
 using namespace css;
 using namespace css::uno;
@@ -72,44 +72,34 @@ class EnhancedCustomShapeEngine : public cppu::WeakImplHelper
     css::uno::Reference< css::drawing::XShape >      mxShape;
     bool                                    mbForceGroupWithText;
 
-    SdrObject* ImplForceGroupWithText( const SdrObjCustomShape* pCustoObj, SdrObject* pRenderedShape );
+    std::unique_ptr<SdrObject, SdrObjectFreeOp> ImplForceGroupWithText(
+        const SdrObjCustomShape& rSdrObjCustomShape,
+        std::unique_ptr<SdrObject, SdrObjectFreeOp> pRenderedShape);
 
 public:
                             EnhancedCustomShapeEngine();
-    virtual                 ~EnhancedCustomShapeEngine();
 
     // XInterface
     virtual void SAL_CALL   acquire() throw() override;
     virtual void SAL_CALL   release() throw() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-        throw ( css::uno::Exception, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName )
-        throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XCustomShapeEngine
-    virtual css::uno::Reference< css::drawing::XShape > SAL_CALL render()
-        throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::awt::Rectangle SAL_CALL getTextBounds()
-        throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::drawing::PolyPolygonBezierCoords SAL_CALL getLineGeometry()
-        throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< css::uno::Reference< css::drawing::XCustomShapeHandle > > SAL_CALL getInteraction()
-        throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::drawing::XShape > SAL_CALL render() override;
+    virtual css::awt::Rectangle SAL_CALL getTextBounds() override;
+    virtual css::drawing::PolyPolygonBezierCoords SAL_CALL getLineGeometry() override;
+    virtual css::uno::Sequence< css::uno::Reference< css::drawing::XCustomShapeHandle > > SAL_CALL getInteraction() override;
 };
 
 EnhancedCustomShapeEngine::EnhancedCustomShapeEngine() :
     mbForceGroupWithText    ( false )
-{
-}
-EnhancedCustomShapeEngine::~EnhancedCustomShapeEngine()
 {
 }
 
@@ -125,7 +115,6 @@ void SAL_CALL EnhancedCustomShapeEngine::release() throw()
 
 // XInitialization
 void SAL_CALL EnhancedCustomShapeEngine::initialize( const Sequence< Any >& aArguments )
-    throw ( Exception, RuntimeException, std::exception )
 {
     sal_Int32 i;
     Sequence< beans::PropertyValue > aParameter;
@@ -146,82 +135,98 @@ void SAL_CALL EnhancedCustomShapeEngine::initialize( const Sequence< Any >& aArg
 
 // XServiceInfo
 OUString SAL_CALL EnhancedCustomShapeEngine::getImplementationName()
-    throw( RuntimeException, std::exception )
 {
     return OUString( "com.sun.star.drawing.EnhancedCustomShapeEngine" );
 }
 sal_Bool SAL_CALL EnhancedCustomShapeEngine::supportsService( const OUString& rServiceName )
-    throw( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 Sequence< OUString > SAL_CALL EnhancedCustomShapeEngine::getSupportedServiceNames()
-    throw ( RuntimeException, std::exception )
 {
     Sequence<OUString> aRet { "com.sun.star.drawing.CustomShapeEngine" };
     return aRet;
 }
 
 // XCustomShapeEngine
-SdrObject* EnhancedCustomShapeEngine::ImplForceGroupWithText( const SdrObjCustomShape* pCustoObj, SdrObject* pRenderedShape )
+std::unique_ptr<SdrObject, SdrObjectFreeOp> EnhancedCustomShapeEngine::ImplForceGroupWithText(
+    const SdrObjCustomShape& rSdrObjCustomShape,
+    std::unique_ptr<SdrObject, SdrObjectFreeOp> pRenderedShape)
 {
-    bool bHasText = pCustoObj->HasText();
+    const bool bHasText(rSdrObjCustomShape.HasText());
+
     if ( pRenderedShape || bHasText )
     {
         // applying shadow
-        const SdrObject* pShadowGeometry = pCustoObj->GetSdrObjectShadowFromCustomShape();
+        const SdrObject* pShadowGeometry(rSdrObjCustomShape.GetSdrObjectShadowFromCustomShape());
+
         if ( pShadowGeometry )
         {
             if ( pRenderedShape )
             {
-                if ( dynamic_cast<const SdrObjGroup*>( pRenderedShape) ==  nullptr )
+                if ( dynamic_cast<const SdrObjGroup*>( pRenderedShape.get() ) ==  nullptr )
                 {
-                    SdrObject* pTmp = pRenderedShape;
-                    pRenderedShape = new SdrObjGroup();
-                    static_cast<SdrObjGroup*>(pRenderedShape)->GetSubList()->NbcInsertObject( pTmp );
+                    auto pTmp = std::move(pRenderedShape);
+                    pRenderedShape.reset(new SdrObjGroup(rSdrObjCustomShape.getSdrModelFromSdrObject()));
+                    static_cast<SdrObjGroup*>(pRenderedShape.get())->GetSubList()->NbcInsertObject( pTmp.release() );
                 }
-                static_cast<SdrObjGroup*>(pRenderedShape)->GetSubList()->NbcInsertObject( pShadowGeometry->Clone(), 0 );
+
+                static_cast<SdrObjGroup*>(pRenderedShape.get())->GetSubList()->NbcInsertObject(
+                    pShadowGeometry->CloneSdrObject(pShadowGeometry->getSdrModelFromSdrObject()),
+                    0);
             }
             else
-                pRenderedShape = pShadowGeometry->Clone();
+            {
+                pRenderedShape.reset( pShadowGeometry->CloneSdrObject(pShadowGeometry->getSdrModelFromSdrObject()) );
+            }
         }
 
         // apply text
         if ( bHasText )
         {
             // #i37011# also create a text object and add at rPos + 1
-            SdrObject* pTextObj = SdrObjFactory::MakeNewObject(
-                pCustoObj->GetObjInventor(), OBJ_TEXT, nullptr, pCustoObj->GetModel());
+            std::unique_ptr<SdrObject, SdrObjectFreeOp> pTextObj( SdrObjFactory::MakeNewObject(
+                rSdrObjCustomShape.getSdrModelFromSdrObject(),
+                rSdrObjCustomShape.GetObjInventor(),
+                OBJ_TEXT) );
 
             // Copy text content
-            OutlinerParaObject* pParaObj = pCustoObj->GetOutlinerParaObject();
+            OutlinerParaObject* pParaObj(rSdrObjCustomShape.GetOutlinerParaObject());
+
             if( pParaObj )
-                pTextObj->NbcSetOutlinerParaObject( new OutlinerParaObject(*pParaObj) );
+                pTextObj->NbcSetOutlinerParaObject( o3tl::make_unique<OutlinerParaObject>(*pParaObj) );
 
             // copy all attributes
-            SfxItemSet aTargetItemSet( pCustoObj->GetMergedItemSet() );
+            SfxItemSet aTargetItemSet(rSdrObjCustomShape.GetMergedItemSet());
 
             // clear fill and line style
             aTargetItemSet.Put(XLineStyleItem(drawing::LineStyle_NONE));
             aTargetItemSet.Put(XFillStyleItem(drawing::FillStyle_NONE));
 
             // get the text bounds and set at text object
-            Rectangle aTextBounds = pCustoObj->GetSnapRect();
-            SdrObject* pSdrObjCustomShape( GetSdrObjectFromXShape( mxShape ) );
-            if ( pSdrObjCustomShape )
+            tools::Rectangle aTextBounds(rSdrObjCustomShape.GetSnapRect());
+            const bool bIsSdrObjCustomShape(nullptr != dynamic_cast< SdrObjCustomShape* >(GetSdrObjectFromXShape(mxShape)));
+
+            if(bIsSdrObjCustomShape)
             {
-                EnhancedCustomShape2d aCustomShape2d( pSdrObjCustomShape );
+                SdrObjCustomShape& rSdrObjCustomShape2(
+                    static_cast< SdrObjCustomShape& >(
+                        *GetSdrObjectFromXShape(mxShape)));
+                EnhancedCustomShape2d aCustomShape2d(rSdrObjCustomShape2);
                 aTextBounds = aCustomShape2d.GetTextRect();
             }
+
             pTextObj->SetSnapRect( aTextBounds );
 
             // if rotated, copy GeoStat, too.
-            const GeoStat& rSourceGeo = pCustoObj->GetGeoStat();
+            const GeoStat& rSourceGeo(rSdrObjCustomShape.GetGeoStat());
             if ( rSourceGeo.nRotationAngle )
             {
                 pTextObj->NbcRotate(
-                    pCustoObj->GetSnapRect().Center(), rSourceGeo.nRotationAngle,
-                    rSourceGeo.nSin, rSourceGeo.nCos);
+                    rSdrObjCustomShape.GetSnapRect().Center(),
+                    rSourceGeo.nRotationAngle,
+                    rSourceGeo.nSin,
+                    rSourceGeo.nCos);
             }
 
             // set modified ItemSet at text object
@@ -229,35 +234,34 @@ SdrObject* EnhancedCustomShapeEngine::ImplForceGroupWithText( const SdrObjCustom
 
             if ( pRenderedShape )
             {
-                if ( dynamic_cast<const SdrObjGroup*>( pRenderedShape) ==  nullptr )
+                if ( dynamic_cast<const SdrObjGroup*>( pRenderedShape.get() ) == nullptr )
                 {
-                    SdrObject* pTmp = pRenderedShape;
-                    pRenderedShape = new SdrObjGroup();
-                    static_cast<SdrObjGroup*>(pRenderedShape)->GetSubList()->NbcInsertObject( pTmp );
+                    auto pTmp = std::move(pRenderedShape);
+                    pRenderedShape.reset(new SdrObjGroup(rSdrObjCustomShape.getSdrModelFromSdrObject()));
+                    static_cast<SdrObjGroup*>(pRenderedShape.get())->GetSubList()->NbcInsertObject( pTmp.release() );
                 }
-                static_cast<SdrObjGroup*>(pRenderedShape)->GetSubList()->NbcInsertObject( pTextObj );
+                static_cast<SdrObjGroup*>(pRenderedShape.get())->GetSubList()->NbcInsertObject( pTextObj.release() );
             }
             else
-                pRenderedShape = pTextObj;
+                pRenderedShape = std::move(pTextObj);
         }
 
         // force group
         if ( pRenderedShape )
         {
-            if ( dynamic_cast<const SdrObjGroup*>( pRenderedShape) ==  nullptr )
+            if ( dynamic_cast<const SdrObjGroup*>( pRenderedShape.get() ) ==  nullptr )
             {
-                SdrObject* pTmp = pRenderedShape;
-                pRenderedShape = new SdrObjGroup();
-                static_cast<SdrObjGroup*>(pRenderedShape)->GetSubList()->NbcInsertObject( pTmp );
+                auto pTmp = std::move(pRenderedShape);
+                pRenderedShape.reset(new SdrObjGroup(rSdrObjCustomShape.getSdrModelFromSdrObject()));
+                static_cast<SdrObjGroup*>(pRenderedShape.get())->GetSubList()->NbcInsertObject( pTmp.release() );
             }
-            pRenderedShape->SetPage( pCustoObj->GetPage() );
-            pRenderedShape->SetModel( pCustoObj->GetModel() );
         }
     }
+
     return pRenderedShape;
 }
 
-void SetTemporary( uno::Reference< drawing::XShape >& xShape )
+void SetTemporary( uno::Reference< drawing::XShape > const & xShape )
 {
     if ( xShape.is() )
     {
@@ -268,145 +272,164 @@ void SetTemporary( uno::Reference< drawing::XShape >& xShape )
 }
 
 Reference< drawing::XShape > SAL_CALL EnhancedCustomShapeEngine::render()
-    throw ( RuntimeException, std::exception )
 {
-    Reference< drawing::XShape > xShape;
-    SdrObject* pSdrObjCustomShape( dynamic_cast<SdrObjCustomShape*>( GetSdrObjectFromXShape( mxShape ) )  );
-    if ( pSdrObjCustomShape )
+    const bool bIsSdrObjCustomShape(nullptr != dynamic_cast< SdrObjCustomShape* >(GetSdrObjectFromXShape(mxShape)));
+
+    if(!bIsSdrObjCustomShape)
     {
-        // retrieving the TextPath property to check if feature is enabled
-        const SdrCustomShapeGeometryItem& rGeometryItem = static_cast<const SdrCustomShapeGeometryItem&>(
-            pSdrObjCustomShape->GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
-        bool bTextPathOn = false;
-        const uno::Any* pAny = rGeometryItem.GetPropertyValueByName( "TextPath", "TextPath" );
-        if ( pAny )
-            *pAny >>= bTextPathOn;
-
-        EnhancedCustomShape2d aCustomShape2d( pSdrObjCustomShape );
-        sal_Int32 nRotateAngle = aCustomShape2d.GetRotateAngle();
-        bool bPostRotateAngle = aCustomShape2d.IsPostRotate();
-
-        bool bFlipV = aCustomShape2d.IsFlipVert();
-        bool bFlipH = aCustomShape2d.IsFlipHorz();
-        bool bLineGeometryNeededOnly = bTextPathOn;
-
-        SdrObject* pRenderedShape = aCustomShape2d.CreateObject( bLineGeometryNeededOnly );
-        if ( pRenderedShape )
-        {
-            if ( bTextPathOn )
-            {
-                SdrObject* pRenderedFontWork = EnhancedCustomShapeFontWork::CreateFontWork( pRenderedShape, pSdrObjCustomShape );
-                if ( pRenderedFontWork )
-                {
-                    SdrObject::Free( pRenderedShape );
-                    pRenderedShape = pRenderedFontWork;
-                }
-            }
-            SdrObject* pRenderedShape3d = EnhancedCustomShape3d::Create3DObject( pRenderedShape, pSdrObjCustomShape );
-            if ( pRenderedShape3d )
-            {
-                bFlipV = bFlipH = false;
-                nRotateAngle = 0;
-                SdrObject::Free( pRenderedShape );
-                pRenderedShape = pRenderedShape3d;
-            }
-            Rectangle aRect( pSdrObjCustomShape->GetSnapRect() );
-
-            const GeoStat& rGeoStat = static_cast<SdrObjCustomShape*>(pSdrObjCustomShape)->GetGeoStat();
-            if ( rGeoStat.nShearAngle )
-            {
-                long nShearAngle = rGeoStat.nShearAngle;
-                double nTan = rGeoStat.nTan;
-                if ((bFlipV&&!bFlipH )||(bFlipH&&!bFlipV))
-                {
-                    nShearAngle = -nShearAngle;
-                    nTan = -nTan;
-                }
-                pRenderedShape->Shear( pSdrObjCustomShape->GetSnapRect().Center(), nShearAngle, nTan, false);
-            }
-            if( !bPostRotateAngle && nRotateAngle )
-            {
-                double a = nRotateAngle * F_PI18000;
-                pRenderedShape->NbcRotate( pSdrObjCustomShape->GetSnapRect().Center(), nRotateAngle, sin( a ), cos( a ) );
-            }
-            if ( bFlipV )
-            {
-                Point aLeft( aRect.Left(), ( aRect.Top() + aRect.Bottom() ) >> 1 );
-                Point aRight( aLeft.X() + 1000, aLeft.Y() );
-                pRenderedShape->NbcMirror( aLeft, aRight );
-            }
-            if ( bFlipH )
-            {
-                Point aTop( ( aRect.Left() + aRect.Right() ) >> 1, aRect.Top() );
-                Point aBottom( aTop.X(), aTop.Y() + 1000 );
-                pRenderedShape->NbcMirror( aTop, aBottom );
-            }
-            // Specifically for pptx imports
-            if( bPostRotateAngle && nRotateAngle )
-            {
-                double a = nRotateAngle * F_PI18000;
-                pRenderedShape->NbcRotate( pSdrObjCustomShape->GetSnapRect().Center(), nRotateAngle, sin( a ), cos( a ) );
-            }
-            pRenderedShape->NbcSetStyleSheet( pSdrObjCustomShape->GetStyleSheet(), true );
-            pRenderedShape->RecalcSnapRect();
-        }
-
-        if ( mbForceGroupWithText )
-            pRenderedShape = ImplForceGroupWithText( static_cast<SdrObjCustomShape*>(pSdrObjCustomShape), pRenderedShape );
-
-        if ( pRenderedShape )
-        {
-            aCustomShape2d.ApplyGluePoints( pRenderedShape );
-            xShape = SvxDrawPage::CreateShapeByTypeAndInventor( pRenderedShape->GetObjIdentifier(),
-                pRenderedShape->GetObjInventor(), pRenderedShape );
-        }
-        SetTemporary( xShape );
+        return Reference< drawing::XShape >();
     }
+
+    SdrObjCustomShape& rSdrObjCustomShape(
+        static_cast< SdrObjCustomShape& >(
+            *GetSdrObjectFromXShape(mxShape)));
+
+    // retrieving the TextPath property to check if feature is enabled
+    const SdrCustomShapeGeometryItem& rGeometryItem(rSdrObjCustomShape.GetMergedItem( SDRATTR_CUSTOMSHAPE_GEOMETRY ));
+    bool bTextPathOn = false;
+    const uno::Any* pAny = rGeometryItem.GetPropertyValueByName( "TextPath", "TextPath" );
+    if ( pAny )
+        *pAny >>= bTextPathOn;
+
+    EnhancedCustomShape2d aCustomShape2d(rSdrObjCustomShape);
+    sal_Int32 nRotateAngle = aCustomShape2d.GetRotateAngle();
+
+    bool bFlipV = aCustomShape2d.IsFlipVert();
+    bool bFlipH = aCustomShape2d.IsFlipHorz();
+    bool bLineGeometryNeededOnly = bTextPathOn;
+
+    std::unique_ptr<SdrObject, SdrObjectFreeOp> xRenderedShape(aCustomShape2d.CreateObject(bLineGeometryNeededOnly));
+    if (xRenderedShape)
+    {
+        if ( bTextPathOn )
+        {
+            std::unique_ptr<SdrObject, SdrObjectFreeOp> xRenderedFontWork(
+                EnhancedCustomShapeFontWork::CreateFontWork(
+                    xRenderedShape.get(),
+                    rSdrObjCustomShape));
+
+            if (xRenderedFontWork)
+            {
+                xRenderedShape = std::move(xRenderedFontWork);
+            }
+        }
+        std::unique_ptr<SdrObject, SdrObjectFreeOp> xRenderedShape3d(EnhancedCustomShape3d::Create3DObject(xRenderedShape.get(), rSdrObjCustomShape));
+        if (xRenderedShape3d)
+        {
+            bFlipV = bFlipH = false;
+            nRotateAngle = 0;
+            xRenderedShape = std::move(xRenderedShape3d);
+        }
+
+        tools::Rectangle aRect(rSdrObjCustomShape.GetSnapRect());
+        const GeoStat& rGeoStat(rSdrObjCustomShape.GetGeoStat());
+
+        if ( rGeoStat.nShearAngle )
+        {
+            long nShearAngle = rGeoStat.nShearAngle;
+            double nTan = rGeoStat.nTan;
+            if (bFlipV != bFlipH)
+            {
+                nShearAngle = -nShearAngle;
+                nTan = -nTan;
+            }
+
+            xRenderedShape->Shear(rSdrObjCustomShape.GetSnapRect().Center(), nShearAngle, nTan, false);
+        }
+        if(nRotateAngle )
+        {
+            double a = nRotateAngle * F_PI18000;
+
+            xRenderedShape->NbcRotate(rSdrObjCustomShape.GetSnapRect().Center(), nRotateAngle, sin( a ), cos( a ));
+        }
+        if ( bFlipV )
+        {
+            Point aLeft( aRect.Left(), ( aRect.Top() + aRect.Bottom() ) >> 1 );
+            Point aRight( aLeft.X() + 1000, aLeft.Y() );
+            xRenderedShape->NbcMirror( aLeft, aRight );
+        }
+        if ( bFlipH )
+        {
+            Point aTop( ( aRect.Left() + aRect.Right() ) >> 1, aRect.Top() );
+            Point aBottom( aTop.X(), aTop.Y() + 1000 );
+            xRenderedShape->NbcMirror( aTop, aBottom );
+        }
+
+        xRenderedShape->NbcSetStyleSheet(rSdrObjCustomShape.GetStyleSheet(), true);
+        xRenderedShape->RecalcSnapRect();
+    }
+
+    if ( mbForceGroupWithText )
+    {
+        xRenderedShape = ImplForceGroupWithText(
+            rSdrObjCustomShape,
+            std::move(xRenderedShape));
+    }
+
+    Reference< drawing::XShape > xShape;
+
+    if (xRenderedShape)
+    {
+        aCustomShape2d.ApplyGluePoints(xRenderedShape.get());
+        SdrObject* pRenderedShape = xRenderedShape.release();
+        xShape = SvxDrawPage::CreateShapeByTypeAndInventor( pRenderedShape->GetObjIdentifier(),
+            pRenderedShape->GetObjInventor(), pRenderedShape );
+    }
+
+    SetTemporary( xShape );
+
     return xShape;
 }
 
 awt::Rectangle SAL_CALL EnhancedCustomShapeEngine::getTextBounds()
-    throw ( RuntimeException, std::exception )
 {
     awt::Rectangle aTextRect;
-    SdrObject* pSdrObjCustomShape( GetSdrObjectFromXShape( mxShape ) );
-    uno::Reference< document::XActionLockable > xLockable( mxShape, uno::UNO_QUERY );
-    if ( pSdrObjCustomShape && pSdrObjCustomShape->GetModel() && xLockable.is() && !xLockable->isActionLocked() )
+    const bool bIsSdrObjCustomShape(nullptr != dynamic_cast< SdrObjCustomShape* >(GetSdrObjectFromXShape(mxShape)));
+
+    if(bIsSdrObjCustomShape)
     {
-        if ( pSdrObjCustomShape )
+        SdrObjCustomShape& rSdrObjCustomShape(static_cast< SdrObjCustomShape& >(*GetSdrObjectFromXShape(mxShape)));
+        uno::Reference< document::XActionLockable > xLockable( mxShape, uno::UNO_QUERY );
+
+        if(xLockable.is() && !xLockable->isActionLocked())
         {
-            EnhancedCustomShape2d aCustomShape2d( pSdrObjCustomShape );
-            Rectangle aRect( aCustomShape2d.GetTextRect() );
+            EnhancedCustomShape2d aCustomShape2d(rSdrObjCustomShape);
+            tools::Rectangle aRect( aCustomShape2d.GetTextRect() );
             aTextRect.X = aRect.Left();
             aTextRect.Y = aRect.Top();
             aTextRect.Width = aRect.GetWidth();
             aTextRect.Height = aRect.GetHeight();
         }
     }
+
     return aTextRect;
 }
 
 drawing::PolyPolygonBezierCoords SAL_CALL EnhancedCustomShapeEngine::getLineGeometry()
-    throw ( RuntimeException, std::exception )
 {
     drawing::PolyPolygonBezierCoords aPolyPolygonBezierCoords;
-    SdrObject* pSdrObjCustomShape( GetSdrObjectFromXShape( mxShape ) );
-    if ( pSdrObjCustomShape )
+    const bool bIsSdrObjCustomShape(nullptr != dynamic_cast< SdrObjCustomShape* >(GetSdrObjectFromXShape(mxShape)));
+
+    if(bIsSdrObjCustomShape)
     {
-        EnhancedCustomShape2d aCustomShape2d( pSdrObjCustomShape );
+        SdrObjCustomShape& rSdrObjCustomShape(
+            static_cast< SdrObjCustomShape& >(
+                *GetSdrObjectFromXShape(mxShape)));
+        EnhancedCustomShape2d aCustomShape2d(rSdrObjCustomShape);
         SdrObject* pObj = aCustomShape2d.CreateLineGeometry();
+
         if ( pObj )
         {
-            Rectangle aRect( pSdrObjCustomShape->GetSnapRect() );
+            tools::Rectangle aRect(rSdrObjCustomShape.GetSnapRect());
             bool bFlipV = aCustomShape2d.IsFlipVert();
             bool bFlipH = aCustomShape2d.IsFlipHorz();
+            const GeoStat& rGeoStat(rSdrObjCustomShape.GetGeoStat());
 
-            const GeoStat& rGeoStat = static_cast<SdrObjCustomShape*>(pSdrObjCustomShape)->GetGeoStat();
             if ( rGeoStat.nShearAngle )
             {
                 long nShearAngle = rGeoStat.nShearAngle;
                 double nTan = rGeoStat.nTan;
-                if ((bFlipV&&!bFlipH )||(bFlipH&&!bFlipV))
+                if (bFlipV != bFlipH)
                 {
                     nShearAngle = -nShearAngle;
                     nTan = -nTan;
@@ -433,7 +456,7 @@ drawing::PolyPolygonBezierCoords SAL_CALL EnhancedCustomShapeEngine::getLineGeom
             }
 
             basegfx::B2DPolyPolygon aPolyPolygon;
-            SdrObjListIter aIter( *pObj, IM_DEEPWITHGROUPS );
+            SdrObjListIter aIter( *pObj, SdrIterMode::DeepWithGroups );
 
             while ( aIter.IsMore() )
             {
@@ -441,9 +464,9 @@ drawing::PolyPolygonBezierCoords SAL_CALL EnhancedCustomShapeEngine::getLineGeom
                 basegfx::B2DPolyPolygon aPP;
                 const SdrObject* pNext = aIter.Next();
 
-                if ( dynamic_cast<const SdrPathObj*>( pNext) !=  nullptr )
+                if ( auto pPathObj = dynamic_cast<const SdrPathObj*>(pNext) )
                 {
-                    aPP = static_cast<const SdrPathObj*>(pNext)->GetPathPoly();
+                    aPP = pPathObj->GetPathPoly();
                 }
                 else
                 {
@@ -459,7 +482,7 @@ drawing::PolyPolygonBezierCoords SAL_CALL EnhancedCustomShapeEngine::getLineGeom
                 SdrObject::Free( pNewObj );
             }
             SdrObject::Free( pObj );
-            basegfx::unotools::b2DPolyPolygonToPolyPolygonBezier( aPolyPolygon,
+            basegfx::utils::B2DPolyPolygonToUnoPolyPolygonBezierCoords( aPolyPolygon,
                                                                   aPolyPolygonBezierCoords );
         }
     }
@@ -468,16 +491,21 @@ drawing::PolyPolygonBezierCoords SAL_CALL EnhancedCustomShapeEngine::getLineGeom
 }
 
 Sequence< Reference< drawing::XCustomShapeHandle > > SAL_CALL EnhancedCustomShapeEngine::getInteraction()
-    throw ( RuntimeException, std::exception )
 {
     sal_uInt32 i, nHdlCount = 0;
-    SdrObject* pSdrObjCustomShape = GetSdrObjectFromXShape( mxShape );
-    if ( pSdrObjCustomShape )
+    const bool bIsSdrObjCustomShape(nullptr != dynamic_cast< SdrObjCustomShape* >(GetSdrObjectFromXShape(mxShape)));
+
+    if(bIsSdrObjCustomShape)
     {
-        EnhancedCustomShape2d aCustomShape2d( pSdrObjCustomShape );
+        SdrObjCustomShape& rSdrObjCustomShape(
+            static_cast< SdrObjCustomShape& >(
+                *GetSdrObjectFromXShape(mxShape)));
+        EnhancedCustomShape2d aCustomShape2d(rSdrObjCustomShape);
         nHdlCount = aCustomShape2d.GetHdlCount();
     }
+
     Sequence< Reference< drawing::XCustomShapeHandle > > aSeq( nHdlCount );
+
     for ( i = 0; i < nHdlCount; i++ )
         aSeq[ i ] = new EnhancedCustomShapeHandle( mxShape, i );
     return aSeq;
@@ -485,7 +513,7 @@ Sequence< Reference< drawing::XCustomShapeHandle > > SAL_CALL EnhancedCustomShap
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_drawing_EnhancedCustomShapeEngine_get_implementation(
     css::uno::XComponentContext *,
     css::uno::Sequence<css::uno::Any> const &)

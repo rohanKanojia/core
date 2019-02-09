@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <algorithm>
+
 #include <drawinglayer/primitive2d/graphicprimitive2d.hxx>
 #include <drawinglayer/primitive2d/cropprimitive2d.hxx>
 #include <drawinglayer/primitive2d/drawinglayer_primitivetypes2d.hxx>
@@ -32,15 +36,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer GraphicPrimitive2D::create2DDecomposition(const geometry::ViewInformation2D&
-            ) const
+        void GraphicPrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& ) const
         {
-            Primitive2DContainer aRetval;
-
-            if(255L == getGraphicAttr().GetTransparency())
+            if(255 == getGraphicAttr().GetTransparency())
             {
                 // content is invisible, done
-                return aRetval;
+                return;
             }
 
             // do not apply mirroring from GraphicAttr to the Metafile by calling
@@ -58,7 +59,7 @@ namespace drawinglayer
 
                 // mirror by applying negative scale to the unit primitive and
                 // applying the object transformation on it.
-                aTransform = basegfx::tools::createScaleB2DHomMatrix(
+                aTransform = basegfx::utils::createScaleB2DHomMatrix(
                     bHMirr ? -1.0 : 1.0,
                     bVMirr ? -1.0 : 1.0);
                 aTransform.translate(
@@ -81,9 +82,9 @@ namespace drawinglayer
 
             const GraphicObject& rGraphicObject = getGraphicObject();
             Graphic aTransformedGraphic(rGraphicObject.GetGraphic());
-            const bool isBitmap(GRAPHIC_BITMAP == aTransformedGraphic.GetType() && !aTransformedGraphic.getSvgData().get());
+            const bool isBitmap(GraphicType::Bitmap == aTransformedGraphic.GetType() && !aTransformedGraphic.getVectorGraphicData().get());
             const bool isAdjusted(getGraphicAttr().IsAdjusted());
-            const bool isDrawMode(GRAPHICDRAWMODE_STANDARD != getGraphicAttr().GetDrawMode());
+            const bool isDrawMode(GraphicDrawMode::Standard != getGraphicAttr().GetDrawMode());
 
             if(isBitmap && (isAdjusted || isDrawMode))
             {
@@ -92,9 +93,9 @@ namespace drawinglayer
                 // instead of creating all as in create2DColorModifierEmbeddingsAsNeeded (see below).
                 // Still, crop, rotation, mirroring and transparency is handled by primitives already
                 // (see above).
-                // This could even be done when vector graphic, but we explicitely want to have the
+                // This could even be done when vector graphic, but we explicitly want to have the
                 // pure primitive solution for this; this will allow vector graphics to stay vector
-                // geraphics, independent from the color filtering stuff. This will enhance e.g.
+                // graphics, independent from the color filtering stuff. This will enhance e.g.
                 // SVG and print quality while reducing data size at the same time.
                 // The other way around the old modifications when only used on already bitmap objects
                 // will not lose any quality.
@@ -106,14 +107,16 @@ namespace drawinglayer
 
             // create sub-content; helper takes care of correct handling of
             // bitmap, svg or metafile content
-            aRetval = create2DDecompositionOfGraphic(
+            Primitive2DContainer aRetval;
+            create2DDecompositionOfGraphic(
+                aRetval,
                 aTransformedGraphic,
                 aTransform);
 
-            if(!aRetval.size())
+            if(aRetval.empty())
             {
                 // content is invisible, done
-                return aRetval;
+                return;
             }
 
             if(isAdjusted || isDrawMode)
@@ -123,25 +126,25 @@ namespace drawinglayer
                 aRetval = create2DColorModifierEmbeddingsAsNeeded(
                     aRetval,
                     aSuppressGraphicAttr.GetDrawMode(),
-                    basegfx::clamp(aSuppressGraphicAttr.GetLuminance() * 0.01, -1.0, 1.0),
-                    basegfx::clamp(aSuppressGraphicAttr.GetContrast() * 0.01, -1.0, 1.0),
-                    basegfx::clamp(aSuppressGraphicAttr.GetChannelR() * 0.01, -1.0, 1.0),
-                    basegfx::clamp(aSuppressGraphicAttr.GetChannelG() * 0.01, -1.0, 1.0),
-                    basegfx::clamp(aSuppressGraphicAttr.GetChannelB() * 0.01, -1.0, 1.0),
-                    basegfx::clamp(aSuppressGraphicAttr.GetGamma(), 0.0, 10.0),
+                    std::clamp(aSuppressGraphicAttr.GetLuminance() * 0.01, -1.0, 1.0),
+                    std::clamp(aSuppressGraphicAttr.GetContrast() * 0.01, -1.0, 1.0),
+                    std::clamp(aSuppressGraphicAttr.GetChannelR() * 0.01, -1.0, 1.0),
+                    std::clamp(aSuppressGraphicAttr.GetChannelG() * 0.01, -1.0, 1.0),
+                    std::clamp(aSuppressGraphicAttr.GetChannelB() * 0.01, -1.0, 1.0),
+                    std::clamp(aSuppressGraphicAttr.GetGamma(), 0.0, 10.0),
                     aSuppressGraphicAttr.IsInvert());
 
-                if(!aRetval.size())
+                if(aRetval.empty())
                 {
                     // content is invisible, done
-                    return aRetval;
+                    return;
                 }
             }
 
             if(getGraphicAttr().IsTransparent())
             {
                 // check for transparency
-                const double fTransparency(basegfx::clamp(getGraphicAttr().GetTransparency() * (1.0 / 255.0), 0.0, 1.0));
+                const double fTransparency(std::clamp(getGraphicAttr().GetTransparency() * (1.0 / 255.0), 0.0, 1.0));
 
                 if(!basegfx::fTools::equalZero(fTransparency))
                 {
@@ -182,7 +185,7 @@ namespace drawinglayer
                 aRetval = Primitive2DContainer { xPrimitive };
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         GraphicPrimitive2D::GraphicPrimitive2D(

@@ -19,25 +19,25 @@
 #ifndef INCLUDED_CPPUHELPER_COMPONENT_CONTEXT_HXX
 #define INCLUDED_CPPUHELPER_COMPONENT_CONTEXT_HXX
 
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/uno/Any.hxx>
-#include <com/sun/star/uno/Reference.hxx>
-#include <cppuhelper/cppuhelperdllapi.h>
-#include <rtl/ustring.hxx>
-#include <sal/types.h>
+#include "com/sun/star/uno/Any.hxx"
+#include "com/sun/star/uno/Reference.hxx"
+#include "cppuhelper/cppuhelperdllapi.h"
+#include "rtl/ustring.hxx"
+#include "sal/types.h"
 
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace cppu
 {
 
 /** Context entries init struct calling createComponentContext().
 */
-struct ContextEntry_Init
+struct SAL_WARN_UNUSED ContextEntry_Init
 {
     /** late init denotes a object that will be raised when first get() is calling for it
 
         The context implementation expects either a css::lang::XSingleComponentFactory
-        object as value (to instanciate the object) or a string as value for raising
+        object as value (to instantiate the object) or a string as value for raising
         a service via the used service manager.
     */
     bool bLateInitService;
@@ -50,7 +50,7 @@ struct ContextEntry_Init
 
     /** Default ctor.
     */
-    inline ContextEntry_Init()
+    ContextEntry_Init()
         : bLateInitService( false )
         {}
     /** Ctor.
@@ -63,7 +63,7 @@ struct ContextEntry_Init
                whether this entry is a late-init named object entry
                (value is object factory or service string)
     */
-    inline ContextEntry_Init(
+    ContextEntry_Init(
         ::rtl::OUString const & name_,
         css::uno::Any const & value_,
         bool bLateInitService_ = false )

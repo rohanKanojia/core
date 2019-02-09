@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PageMasterImportContext.hxx"
+#include <PageMasterImportContext.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
 #include "PageMasterPropHdl.hxx"
@@ -29,8 +29,9 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <osl/diagnose.h>
 
-//UUUU
+//
 #include <xmlsdtypes.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <xmloff/xmlerror.hxx>
 
@@ -39,7 +40,7 @@ using namespace ::xmloff::token;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 
-//UUUU
+//
 using namespace ::com::sun::star::beans;
 
 void PageStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
@@ -65,7 +66,7 @@ PageStyleContext::PageStyleContext( SvXMLImport& rImport,
         bool bDefaultStyle) :
     XMLPropStyleContext( rImport, nPrfx, rLName, xAttrList, rStyles, XML_STYLE_FAMILY_PAGE_MASTER, bDefaultStyle),
     sPageUsage(),
-    m_bIsFillStyleAlreadyConverted(false) //UUUU
+    m_bIsFillStyleAlreadyConverted(false) //
 {
 }
 
@@ -73,7 +74,7 @@ PageStyleContext::~PageStyleContext()
 {
 }
 
-SvXMLImportContext *PageStyleContext::CreateChildContext(
+SvXMLImportContextRef PageStyleContext::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const uno::Reference< xml::sax::XAttributeList > & xAttrList )
@@ -146,12 +147,11 @@ SvXMLImportContext *PageStyleContext::CreateChildContext(
             }
             if (!bEnd)
                 nEndIndex = nIndex;
-            PageContextType aType = Page;
             return new PagePropertySetContext( GetImport(), nPrefix,
                                                     rLocalName, xAttrList,
                                                     XML_TYPE_PROP_PAGE_LAYOUT,
                                                     GetProperties(),
-                                                    xImpPrMap, 0, nEndIndex, aType);
+                                                    xImpPrMap, 0, nEndIndex, Page);
         }
     }
 
@@ -160,13 +160,13 @@ SvXMLImportContext *PageStyleContext::CreateChildContext(
 
 void PageStyleContext::FillPropertySet(const uno::Reference<beans::XPropertySet > & rPropSet)
 {
-    //UUUU need to filter out old fill definitions when the new ones are used. The new
+    // need to filter out old fill definitions when the new ones are used. The new
     // ones are used when a FillStyle is defined
-    if(!m_bIsFillStyleAlreadyConverted && GetProperties().size())
+    if(!m_bIsFillStyleAlreadyConverted && !GetProperties().empty())
     {
-        static ::rtl::OUString s_FillStyle(RTL_CONSTASCII_USTRINGPARAM("FillStyle"));
-        static ::rtl::OUString s_HeaderFillStyle(RTL_CONSTASCII_USTRINGPARAM("HeaderFillStyle"));
-        static ::rtl::OUString s_FooterFillStyle(RTL_CONSTASCII_USTRINGPARAM("FooterFillStyle"));
+        static OUString s_FillStyle("FillStyle");
+        static OUString s_HeaderFillStyle("HeaderFillStyle");
+        static OUString s_FooterFillStyle("FooterFillStyle");
 
         if(doNewDrawingLayerFillStyleDefinitionsExist(s_FillStyle))
         {
@@ -186,7 +186,7 @@ void PageStyleContext::FillPropertySet(const uno::Reference<beans::XPropertySet 
         m_bIsFillStyleAlreadyConverted = true;
     }
 
-    //UUUU do not use XMLPropStyleContext::FillPropertySet, we need to handle this ourselves since
+    // do not use XMLPropStyleContext::FillPropertySet, we need to handle this ourselves since
     // we have properties which use the MID_FLAG_NO_PROPERTY_IMPORT flag since they need some special
     // handling
     rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap = GetStyles()->GetImportPropertyMapper(GetFamily());
@@ -225,14 +225,14 @@ void PageStyleContext::FillPropertySet(const uno::Reference<beans::XPropertySet 
             XML_STYLE_FAMILY_SD_FILL_IMAGE_ID
         };
 
-        //UUUU Fill PropertySet, but let it handle special properties not itself
+        // Fill PropertySet, but let it handle special properties not itself
         xImpPrMap->FillPropertySet(GetProperties(), rPropSet, aContextIDs);
 
         // get property set mapper
         const rtl::Reference< XMLPropertySetMapper >& rMapper = xImpPrMap->getPropertySetMapper();
         Reference< XPropertySetInfo > xInfo;
 
-        //UUUU handle special attributes which have MID_FLAG_NO_PROPERTY_IMPORT set
+        // handle special attributes which have MID_FLAG_NO_PROPERTY_IMPORT set
         for(sal_uInt16 i = 0; aContextIDs[i].nContextID != -1; i++)
         {
             sal_Int32 nIndex = aContextIDs[i].nIndex;
@@ -257,16 +257,16 @@ void PageStyleContext::FillPropertySet(const uno::Reference<beans::XPropertySet 
                     case CTF_PM_FOOTERFILLBITMAPNAME:
                     {
                         struct XMLPropertyState& rState = GetProperties()[nIndex];
-                        rtl::OUString sStyleName;
+                        OUString sStyleName;
                         rState.maValue >>= sStyleName;
 
-                        //UUUU translate the used name from ODF intern to the name used in the Model
+                        // translate the used name from ODF intern to the name used in the Model
                         sStyleName = GetImport().GetStyleDisplayName(aFamilies[i%4], sStyleName);
 
                         try
                         {
                             // set property
-                            const rtl::OUString& rPropertyName = rMapper->GetEntryAPIName(rState.mnIndex);
+                            const OUString& rPropertyName = rMapper->GetEntryAPIName(rState.mnIndex);
 
                             if(!xInfo.is())
                             {
@@ -296,7 +296,7 @@ void PageStyleContext::FillPropertySet(const uno::Reference<beans::XPropertySet 
         OSL_ENSURE(xImpPrMap.is(), "Got no SvXMLImportPropertyMapper (!)");
     }
 
-    //UUUU old code, replaced by above stuff
+    // old code, replaced by above stuff
     // XMLPropStyleContext::FillPropertySet(rPropSet);
 
     if (!sPageUsage.isEmpty())

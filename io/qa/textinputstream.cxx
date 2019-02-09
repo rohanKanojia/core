@@ -14,15 +14,15 @@
 #include <cstring>
 #include <exception>
 
-#include "com/sun/star/io/BufferSizeExceededException.hdl"
-#include "com/sun/star/io/IOException.hdl"
-#include "com/sun/star/io/NotConnectedException.hdl"
+#include <com/sun/star/io/BufferSizeExceededException.hpp>
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/TextInputStream.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XTextInputStream2.hpp>
-#include "com/sun/star/uno/Sequence.hxx"
+#include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/Reference.hxx>
-#include "com/sun/star/uno/RuntimeException.hdl"
+#include <com/sun/star/uno/RuntimeException.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <cppunit/TestAssert.h>
 #include <cppunit/extensions/HelperMacros.h>
@@ -39,22 +39,14 @@ public:
     Input(): open_(true), index_(0) {}
 
 private:
-    virtual ~Input() {}
+    virtual ~Input() override {}
 
     sal_Int32 SAL_CALL readBytes(css::uno::Sequence<sal_Int8> &, sal_Int32)
-        throw (
-            css::io::NotConnectedException,
-            css::io::BufferSizeExceededException, css::io::IOException,
-            css::uno::RuntimeException, std::exception)
         override
-    { CPPUNIT_FAIL("readLine is supposed to call readSomeBytes instead"); return 0;}
+    { CPPUNIT_FAIL("readLine is supposed to call readSomeBytes instead"); }
 
     sal_Int32 SAL_CALL readSomeBytes(
-        css::uno::Sequence<sal_Int8 > & aData, sal_Int32 nMaxBytesToRead)
-        throw (
-            css::io::NotConnectedException,
-            css::io::BufferSizeExceededException, css::io::IOException,
-            css::uno::RuntimeException, ::std::exception) override
+        css::uno::Sequence<sal_Int8 > & aData, sal_Int32 nMaxBytesToRead) override
     {
         assert(nMaxBytesToRead >= 0);
         osl::MutexGuard g(mutex_);
@@ -70,11 +62,7 @@ private:
         return n;
     }
 
-    void SAL_CALL skipBytes(sal_Int32 nBytesToSkip)
-        throw (
-            css::io::NotConnectedException,
-            css::io::BufferSizeExceededException, css::io::IOException,
-            css::uno::RuntimeException, std::exception) override
+    void SAL_CALL skipBytes(sal_Int32 nBytesToSkip) override
     {
         assert(nBytesToSkip >= 0);
         osl::MutexGuard g(mutex_);
@@ -84,10 +72,7 @@ private:
         assert(index_ >= 0 && index_ <= SIZE);
     }
 
-    sal_Int32 SAL_CALL available()
-        throw (
-            css::io::NotConnectedException, css::io::IOException,
-            css::uno::RuntimeException, std::exception) override
+    sal_Int32 SAL_CALL available() override
     {
         osl::MutexGuard g(mutex_);
         checkClosed();
@@ -95,10 +80,7 @@ private:
         return SIZE - index_;
     }
 
-    void SAL_CALL closeInput()
-        throw (
-            css::io::NotConnectedException, css::io::IOException,
-            css::uno::RuntimeException, std::exception) override
+    void SAL_CALL closeInput() override
     {
         osl::MutexGuard g(mutex_);
         checkClosed();
@@ -135,8 +117,8 @@ void Test::testReadLine() {
     css::uno::Reference<css::io::XTextInputStream2> s(
         css::io::TextInputStream::create(getComponentContext()));
     s->setInputStream(new Input);
-    rtl::OUString l(s->readLine());
-    CPPUNIT_ASSERT_EQUAL(rtl::OUString("123456789"), l);
+    OUString l(s->readLine());
+    CPPUNIT_ASSERT_EQUAL(OUString("123456789"), l);
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);

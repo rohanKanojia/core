@@ -24,52 +24,50 @@
 #include "swdbdata.hxx"
 
 class SwDoc;
-class SwTextField;
-class SwFrame;
 
 // Database field.
 class SW_DLLPUBLIC SwDBFieldType : public SwValueFieldType
 {
-    SwDBData    aDBData;
-    OUString sName;          ///< only used in ::GetName() !
-    OUString sColumn;
-    long        nRefCnt;
+    SwDBData    m_aDBData;
+    OUString m_sName;          ///< only used in ::GetName() !
+    OUString m_sColumn;
+    long        m_nRefCnt;
 
 public:
 
     SwDBFieldType(SwDoc* pDocPtr, const OUString& rColumnName, const SwDBData& rDBData);
-    virtual ~SwDBFieldType();
+    virtual ~SwDBFieldType() override;
 
     virtual OUString GetName() const override;
     virtual SwFieldType*  Copy() const override;
 
-    inline void     AddRef() { nRefCnt++; }
+    void     AddRef() { m_nRefCnt++; }
     void            ReleaseRef();
 
-    OUString        GetColumnName() const {return sColumn;}
-    const SwDBData& GetDBData() const {return aDBData;}
+    const OUString&     GetColumnName() const {return m_sColumn;}
+    const SwDBData& GetDBData() const {return m_aDBData;}
 
-    virtual bool        QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;
-    virtual bool        PutValue( const css::uno::Any& rVal, sal_uInt16 nWhich ) override;
+    virtual void        QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;
+    virtual void        PutValue( const css::uno::Any& rVal, sal_uInt16 nWhich ) override;
 };
 
 // Classes derived from SwFields. They overlay the expand-function.
 // Content is formatted according to the format (if available).
 class SW_DLLPUBLIC SwDBField : public SwValueField
 {
-    OUString aContent;
-    OUString sFieldCode; ///< contains Word's field code
-    sal_uInt16  nSubType;
-    bool    bIsInBodyText    : 1;
-    bool    bValidValue     : 1;
-    bool    bInitialized    : 1;
+    OUString m_aContent;
+    OUString m_sFieldCode; ///< contains Word's field code
+    sal_uInt16  m_nSubType;
+    bool    m_bIsInBodyText    : 1;
+    bool    m_bValidValue     : 1;
+    bool    m_bInitialized    : 1;
 
-    virtual OUString    Expand() const override;
-    virtual SwField*    Copy() const override;
+    virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
 
 public:
-    SwDBField(SwDBFieldType*, sal_uLong nFormat = 0);
-    virtual ~SwDBField();
+    SwDBField(SwDBFieldType*, sal_uInt32 nFormat = 0);
+    virtual ~SwDBField() override;
 
     virtual SwFieldType*    ChgTyp( SwFieldType* ) override;
 
@@ -93,31 +91,31 @@ public:
 
     inline void         ChgBodyTextFlag( bool bIsInBody );
 
-    inline bool         IsInitialized() const   { return bInitialized; }
-    inline void         ClearInitialized()      { bInitialized = false; }
-    inline void         SetInitialized()        { bInitialized = true; }
+    bool         IsInitialized() const   { return m_bInitialized; }
+    void         ClearInitialized()      { m_bInitialized = false; }
+    void         SetInitialized()        { m_bInitialized = true; }
 
     /// Get name.
     virtual OUString    GetPar1() const override;
 
     /// access to the command string
-    void                SetFieldCode(const OUString& rStr) { sFieldCode = rStr; }
+    void                SetFieldCode(const OUString& rStr) { m_sFieldCode = rStr; }
 
     /// DBName
-    inline const SwDBData&  GetDBData() const { return static_cast<SwDBFieldType*>(GetTyp())->GetDBData(); }
+    const SwDBData&  GetDBData() const { return static_cast<SwDBFieldType*>(GetTyp())->GetDBData(); }
     virtual bool        QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;
     virtual bool        PutValue( const css::uno::Any& rVal, sal_uInt16 nWhich ) override;
 
-    static bool FormatValue( SvNumberFormatter* pDocFormatter, OUString &aString, sal_uInt32 nFormat,
+    static bool FormatValue( SvNumberFormatter const * pDocFormatter, OUString const &aString, sal_uInt32 nFormat,
                              double &aNumber, sal_Int32 nColumnType, SwDBField *pField = nullptr );
 };
 
 inline  void SwDBField::SetExpansion(const OUString& rStr)
-    { aContent = rStr; }
+    { m_aContent = rStr; }
 
 /// set from UpdateExpFields (the Node-Position is known there)
 inline void SwDBField::ChgBodyTextFlag( bool bIsInBody )
-    { bIsInBodyText = bIsInBody; }
+    { m_bIsInBodyText = bIsInBody; }
 
 // Base class for all other database fields.
 class SW_DLLPUBLIC SwDBNameInfField : public SwField
@@ -129,12 +127,12 @@ protected:
     const SwDBData& GetDBData() const {return aDBData;}
     SwDBData&       GetDBData() {return aDBData;}
 
-    SwDBNameInfField(SwFieldType* pTyp, const SwDBData& rDBData, sal_uLong nFormat = 0);
+    SwDBNameInfField(SwFieldType* pTyp, const SwDBData& rDBData, sal_uInt32 nFormat = 0);
 
 public:
     /// DBName
-    inline const SwDBData&  GetRealDBData() const { return aDBData; }
-    inline SwDBData&        GetRealDBData() { return aDBData; }
+    const SwDBData&  GetRealDBData() const { return aDBData; }
+    SwDBData&        GetRealDBData() { return aDBData; }
 
     SwDBData                GetDBData(SwDoc* pDoc);
     void                    SetDBData(const SwDBData& rDBData);
@@ -164,12 +162,12 @@ class SW_DLLPUBLIC SwDBNextSetField : public SwDBNameInfField
 
 public:
     SwDBNextSetField( SwDBNextSetFieldType*,
-                      const OUString& rCond, const OUString& rDummy, const SwDBData& rDBData);
+                      const OUString& rCond, const SwDBData& rDBData);
 
-    virtual OUString        Expand() const override;
-    virtual SwField*        Copy() const override;
+    virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
 
-    void                    Evaluate(SwDoc*);
+    void                    Evaluate(SwDoc const *);
     inline void             SetCondValid(bool bCond);
     inline bool             IsCondValid() const;
 
@@ -206,12 +204,12 @@ class SwDBNumSetField : public SwDBNameInfField
 public:
     SwDBNumSetField(SwDBNumSetFieldType*, const OUString& rCond, const OUString& rDBNum, const SwDBData& rDBData);
 
-    virtual OUString        Expand() const override;
-    virtual SwField*        Copy() const override;
+    virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
 
     inline bool             IsCondValid() const;
     inline void             SetCondValid(bool bCond);
-    void                    Evaluate(SwDoc*);
+    void                    Evaluate(SwDoc const *);
 
     // Condition
     virtual OUString        GetPar1() const override;
@@ -239,7 +237,7 @@ class SwDBNameFieldType : public SwFieldType
 public:
     SwDBNameFieldType(SwDoc*);
 
-    OUString                Expand(sal_uLong) const;
+    OUString                Expand() const;
     virtual SwFieldType*    Copy() const override;
 };
 
@@ -249,8 +247,8 @@ class SW_DLLPUBLIC SwDBNameField : public SwDBNameInfField
 public:
     SwDBNameField(SwDBNameFieldType*, const SwDBData& rDBData);
 
-    virtual OUString Expand() const override;
-    virtual SwField* Copy() const override;
+    virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
     virtual bool        QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;
     virtual bool        PutValue( const css::uno::Any& rVal, sal_uInt16 nWhich ) override;
 };
@@ -269,11 +267,11 @@ class SW_DLLPUBLIC SwDBSetNumberField : public SwDBNameInfField
 {
     long    nNumber;
 public:
-    SwDBSetNumberField(SwDBSetNumberFieldType*, const SwDBData& rDBData, sal_uLong nFormat = 0);
+    SwDBSetNumberField(SwDBSetNumberFieldType*, const SwDBData& rDBData, sal_uInt32 nFormat = 0);
 
-    virtual OUString Expand() const override;
-    virtual         SwField* Copy() const override;
-    void            Evaluate(SwDoc*);
+    virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
+    void            Evaluate(SwDoc const *);
 
     inline long     GetSetNumber() const;
     inline void     SetSetNumber(long nNum);

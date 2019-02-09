@@ -18,17 +18,17 @@
  */
 
 
-#include "dp_gui_shared.hxx"
+#include <memory>
 #include "dp_gui.h"
 #include "dp_gui_theextmgr.hxx"
+#include <osl/diagnose.h>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <unotools/configmgr.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/servicedecl.hxx>
 #include <comphelper/unwrapargs.hxx>
-#include <i18nlangtag/languagetag.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -53,7 +53,6 @@ class MyApp : public Application
 {
 public:
     MyApp();
-    virtual ~MyApp();
 
     MyApp(const MyApp&) = delete;
     const MyApp& operator=(const MyApp&) = delete;
@@ -62,12 +61,6 @@ public:
     virtual int Main() override;
     virtual void DeInit() override;
 };
-
-
-MyApp::~MyApp()
-{
-}
-
 
 MyApp::MyApp()
 {
@@ -105,7 +98,7 @@ namespace
         : public rtl::Static< OUString, Extension > {};
 }
 
-OUString ReplaceProductNameHookProc( const OUString& rStr )
+static OUString ReplaceProductNameHookProc( const OUString& rStr )
 {
     if (rStr.indexOf( "%PRODUCT" ) == -1)
         return rStr;
@@ -146,9 +139,6 @@ class ServiceImpl
 {
     Reference<XComponentContext> const m_xComponentContext;
     boost::optional< Reference<awt::XWindow> > /* const */ m_parent;
-    boost::optional<OUString> /* const */ m_view;
-    /* if true then this service is running in an unopkg process and not in an office process */
-    boost::optional<sal_Bool> /* const */ m_unopkg;
     boost::optional<OUString> m_extensionURL;
     OUString m_initialTitle;
     bool m_bShowUpdateOnly;
@@ -158,15 +148,12 @@ public:
                  Reference<XComponentContext> const & xComponentContext );
 
     // XAsynchronousExecutableDialog
-    virtual void SAL_CALL setDialogTitle( OUString const & aTitle )
-        throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL setDialogTitle( OUString const & aTitle ) override;
     virtual void SAL_CALL startExecuteModal(
-        Reference< ui::dialogs::XDialogClosedListener > const & xListener )
-        throw (RuntimeException, std::exception) override;
+        Reference< ui::dialogs::XDialogClosedListener > const & xListener ) override;
 
     // XJobExecutor
-    virtual void SAL_CALL trigger( OUString const & event )
-        throw (RuntimeException, std::exception) override;
+    virtual void SAL_CALL trigger( OUString const & event ) override;
 };
 
 
@@ -175,8 +162,11 @@ ServiceImpl::ServiceImpl( Sequence<Any> const& args,
     : m_xComponentContext(xComponentContext),
       m_bShowUpdateOnly( false )
 {
+    /* if true then this service is running in an unopkg process and not in an office process */
+    boost::optional<sal_Bool> unopkg;
+    boost::optional<OUString> view;
     try {
-        comphelper::unwrapArgs( args, m_parent, m_view, m_unopkg );
+        comphelper::unwrapArgs( args, m_parent, view, unopkg );
         return;
     } catch ( const css::lang::IllegalArgumentException & ) {
     }
@@ -185,15 +175,14 @@ ServiceImpl::ServiceImpl( Sequence<Any> const& args,
     } catch ( const css::lang::IllegalArgumentException & ) {
     }
 
-    ResHookProc pProc = ResMgr::GetReadStringHook();
+    ResHookProc pProc = Translate::GetReadStringHook();
     if ( !pProc )
-        ResMgr::SetReadStringHook( ReplaceProductNameHookProc );
+        Translate::SetReadStringHook(ReplaceProductNameHookProc);
 }
 
 // XAsynchronousExecutableDialog
 
 void ServiceImpl::setDialogTitle( OUString const & title )
-    throw (RuntimeException, std::exception)
 {
     if ( dp_gui::TheExtensionManager::s_ExtMgr.is() )
     {
@@ -211,10 +200,9 @@ void ServiceImpl::setDialogTitle( OUString const & title )
 
 void ServiceImpl::startExecuteModal(
     Reference< ui::dialogs::XDialogClosedListener > const & xListener )
-    throw (RuntimeException, std::exception)
 {
     bool bCloseDialog = true;  // only used if m_bShowUpdateOnly is true
-    ::std::unique_ptr<Application> app;
+    std::unique_ptr<Application> app;
     //ToDo: synchronize access to s_dialog !!!
     if (! dp_gui::TheExtensionManager::s_ExtMgr.is())
     {
@@ -226,9 +214,10 @@ void ServiceImpl::startExecuteModal(
         catch (const Exception & exc) {
             if (bAppUp) {
                 const SolarMutexGuard guard;
-                ScopedVclPtrInstance<MessageDialog> box(
-                        Application::GetActiveTopWindow(), exc.Message);
-                box->Execute();
+                vcl::Window* pWin = Application::GetActiveTopWindow();
+                std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                          VclMessageType::Warning, VclButtonsType::Ok, exc.Message));
+                xBox->run();
             }
             throw;
         }
@@ -269,7 +258,7 @@ void ServiceImpl::startExecuteModal(
         }
         if ( m_bShowUpdateOnly )
         {
-            myExtMgr->checkUpdates( true, !bCloseDialog );
+            myExtMgr->checkUpdates();
             if ( bCloseDialog )
                 myExtMgr->Close();
             else
@@ -282,7 +271,8 @@ void ServiceImpl::startExecuteModal(
         }
     }
 
-    if (app.get() != nullptr) {
+    if (app != nullptr)
+    {
         Application::Execute();
         DeInitVCL();
     }
@@ -296,7 +286,7 @@ void ServiceImpl::startExecuteModal(
 
 // XJobExecutor
 
-void ServiceImpl::trigger( OUString const &rEvent ) throw (RuntimeException, std::exception)
+void ServiceImpl::trigger( OUString const &rEvent )
 {
     if ( rEvent == "SHOW_UPDATE_DIALOG" )
         m_bShowUpdateOnly = true;
@@ -306,19 +296,19 @@ void ServiceImpl::trigger( OUString const &rEvent ) throw (RuntimeException, std
     startExecuteModal( Reference< ui::dialogs::XDialogClosedListener >() );
 }
 
-sdecl::class_<ServiceImpl, sdecl::with_args<true> > serviceSI;
+sdecl::class_<ServiceImpl, sdecl::with_args<true> > const serviceSI;
 sdecl::ServiceDecl const serviceDecl(
     serviceSI,
     "com.sun.star.comp.deployment.ui.PackageManagerDialog",
     "com.sun.star.deployment.ui.PackageManagerDialog" );
 
-sdecl::class_<LicenseDialog, sdecl::with_args<true> > licenseSI;
+sdecl::class_<LicenseDialog, sdecl::with_args<true> > const licenseSI;
 sdecl::ServiceDecl const licenseDecl(
     licenseSI,
     "com.sun.star.comp.deployment.ui.LicenseDialog",
     "com.sun.star.deployment.ui.LicenseDialog" );
 
-sdecl::class_<UpdateRequiredDialogService, sdecl::with_args<true> > updateSI;
+sdecl::class_<UpdateRequiredDialogService, sdecl::with_args<true> > const updateSI;
 sdecl::ServiceDecl const updateDecl(
     updateSI,
     "com.sun.star.comp.deployment.ui.UpdateRequiredDialog",
@@ -327,7 +317,7 @@ sdecl::ServiceDecl const updateDecl(
 
 extern "C" {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL deploymentgui_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * deploymentgui_component_getFactory(
     sal_Char const * pImplName, void *, void *)
 {
     return sdecl::component_getFactoryHelper(

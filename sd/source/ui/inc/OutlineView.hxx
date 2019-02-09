@@ -20,17 +20,16 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_OUTLINEVIEW_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_OUTLINEVIEW_HXX
 
+#include <memory>
 #include <vcl/image.hxx>
 #include <editeng/lrspitem.hxx>
+#include <o3tl/deleter.hxx>
 #include "View.hxx"
 
 class SdPage;
 class SdrPage;
-class Paragraph;
 class SdrTextObj;
-class Outliner;
 class SfxProgress;
-struct PaintFirstLineInfo;
 struct PasteOrDropInfos;
 class EditView;
 
@@ -43,7 +42,6 @@ namespace sd {
 class DrawDocShell;
 class OutlineViewShell;
 class OutlineViewModelChangeGuard;
-class DrawDocShell;
 
 static const int MAX_OUTLINERVIEWS = 4;
 
@@ -60,7 +58,7 @@ public:
     OutlineView (DrawDocShell& rDocSh,
         vcl::Window* pWindow,
         OutlineViewShell& rOutlineViewSh);
-    virtual ~OutlineView();
+    virtual ~OutlineView() override;
 
     /** This method is called by the view shell that owns the view to tell
         the view that it can safely connect to the application.
@@ -71,8 +69,8 @@ public:
     void DisconnectFromApplication();
 
 
-    static SdrTextObj*     GetTitleTextObject(SdrPage* pPage);
-    static SdrTextObj*     GetOutlineTextObject(SdrPage* pPage);
+    static SdrTextObj*     GetTitleTextObject(SdrPage const * pPage);
+    static SdrTextObj*     GetOutlineTextObject(SdrPage const * pPage);
 
     static SdrTextObj*     CreateTitleTextObject(SdPage* pPage);
     static SdrTextObj*     CreateOutlineTextObject(SdPage* pPage);
@@ -80,36 +78,36 @@ public:
     virtual void AddWindowToPaintView(OutputDevice* pWin, vcl::Window* pWindow) override;
     virtual void DeleteWindowFromPaintView(OutputDevice* pWin) override;
 
-    OutlinerView*   GetViewByWindow(vcl::Window* pWin) const;
+    OutlinerView*   GetViewByWindow(vcl::Window const * pWin) const;
     SdrOutliner&    GetOutliner() { return mrOutliner; }
 
     Paragraph*      GetPrevTitle(const Paragraph* pPara);
     Paragraph*      GetNextTitle(const Paragraph* pPara);
     SdPage*         GetActualPage();
     SdPage*         GetPageForParagraph( Paragraph* pPara );
-    Paragraph*      GetParagraphForPage( ::Outliner& rOutl, SdPage* pPage );
+    Paragraph*      GetParagraphForPage( ::Outliner const & rOutl, SdPage const * pPage );
 
     /** selects the paragraph for the given page at the outliner view*/
-    void            SetActualPage( SdPage* pActual );
+    void            SetActualPage( SdPage const * pActual );
 
-    void Paint (const Rectangle& rRect, ::sd::Window* pWin);
+    void Paint (const ::tools::Rectangle& rRect, ::sd::Window const * pWin);
 
-                    // Callbacks fuer LINKs
-    DECL_LINK_TYPED( ParagraphInsertedHdl, ::Outliner *, void );
-    DECL_LINK_TYPED( ParagraphRemovingHdl, ::Outliner *, void );
-    DECL_LINK_TYPED( DepthChangedHdl, ::Outliner *, void );
-    DECL_LINK_TYPED( StatusEventHdl, EditStatus&, void );
-    DECL_LINK_TYPED( BeginMovingHdl, ::Outliner *, void );
-    DECL_LINK_TYPED( EndMovingHdl, ::Outliner *, void );
-    DECL_LINK_TYPED( RemovingPagesHdl, OutlinerView *, bool );
-    DECL_LINK_TYPED( IndentingPagesHdl, OutlinerView *, bool );
-    DECL_LINK_TYPED( BeginDropHdl, EditView*, void );
-    DECL_LINK_TYPED( EndDropHdl, EditView*, void );
-    DECL_LINK_TYPED( PaintingFirstLineHdl, PaintFirstLineInfo*, void );
+                    // Callbacks for LINKs
+    DECL_LINK( ParagraphInsertedHdl, ::Outliner::ParagraphHdlParam, void );
+    DECL_LINK( ParagraphRemovingHdl, ::Outliner::ParagraphHdlParam, void );
+    DECL_LINK( DepthChangedHdl, ::Outliner::DepthChangeHdlParam, void );
+    DECL_LINK( StatusEventHdl, EditStatus&, void );
+    DECL_LINK( BeginMovingHdl, ::Outliner *, void );
+    DECL_LINK( EndMovingHdl, ::Outliner *, void );
+    DECL_LINK( RemovingPagesHdl, OutlinerView *, bool );
+    DECL_LINK( IndentingPagesHdl, OutlinerView *, bool );
+    DECL_LINK( BeginDropHdl, EditView*, void );
+    DECL_LINK( EndDropHdl, EditView*, void );
+    DECL_LINK( PaintingFirstLineHdl, PaintFirstLineInfo*, void );
 
     sal_uLong         GetPaperWidth() { return mnPaperWidth;}
 
-    bool          PrepareClose(bool bUI = true);
+    void              PrepareClose();
 
     virtual void    GetAttributes( SfxItemSet& rTargetSet, bool bOnlyHardAttr = false ) const override;
     virtual bool    SetAttributes(const SfxItemSet& rSet, bool bReplaceAll = false) override;
@@ -125,14 +123,14 @@ public:
     virtual sal_Int8 AcceptDrop (
         const AcceptDropEvent& rEvt,
         DropTargetHelper& rTargetHelper,
-        ::sd::Window* pTargetWindow = nullptr,
-        sal_uInt16 nPage = SDRPAGE_NOTFOUND,
-        sal_uInt16 nLayer = SDRPAGE_NOTFOUND) override;
+        ::sd::Window* pTargetWindow,
+        sal_uInt16 nPage,
+        SdrLayerID nLayer) override;
     virtual sal_Int8 ExecuteDrop (
         const ExecuteDropEvent& rEvt,
-        ::sd::Window* pTargetWindow = nullptr,
-        sal_uInt16 nPage = SDRPAGE_NOTFOUND,
-        sal_uInt16 nLayer = SDRPAGE_NOTFOUND) override;
+        ::sd::Window* pTargetWindow,
+        sal_uInt16 nPage,
+        SdrLayerID nLayer) override;
 
     // Re-implement GetScriptType for this view to get correct results
     virtual SvtScriptType GetScriptType() const override;
@@ -171,7 +169,7 @@ private:
 
     OutlineViewShell&   mrOutlineViewShell;
     SdrOutliner&        mrOutliner;
-    OutlinerView*       mpOutlinerView[MAX_OUTLINERVIEWS];
+    std::unique_ptr<OutlinerView> mpOutlinerViews[MAX_OUTLINERVIEWS];
 
     std::vector<Paragraph*> maOldParaOrder;
     std::vector<Paragraph*> maSelectedParas;
@@ -183,7 +181,7 @@ private:
 
     sal_uLong               mnPaperWidth;
 
-    SfxProgress*        mpProgress;
+    std::unique_ptr<SfxProgress> mpProgress;
 
     /** stores the last used document color.
         this is changed in onUpdateStyleSettings()
@@ -193,22 +191,19 @@ private:
     /** updates the high contrast settings and document color if they changed.
         @param bForceUpdate forces the method to set all style settings
     */
-    void onUpdateStyleSettings( bool bForceUpdate = false );
+    void onUpdateStyleSettings( bool bForceUpdate );
 
     /** this link is called from the vcl application when the stylesettings
         change. Its only purpose is to call onUpdateStyleSettings() then.
     */
-    DECL_LINK_TYPED( AppEventListenerHdl, VclSimpleEvent&, void );
+    DECL_LINK( AppEventListenerHdl, VclSimpleEvent&, void );
 
-    DECL_LINK_TYPED(EventMultiplexerListener, sd::tools::EventMultiplexerEvent&, void);
+    DECL_LINK(EventMultiplexerListener, sd::tools::EventMultiplexerEvent&, void);
 
     /** holds a model guard during drag and drop between BeginMovingHdl and EndMovingHdl */
-    std::unique_ptr< OutlineViewModelChangeGuard > maDragAndDropModelGuard;
+    std::unique_ptr<OutlineViewModelChangeGuard, o3tl::default_delete<OutlineViewModelChangeGuard>> maDragAndDropModelGuard;
 
-    vcl::Font maPageNumberFont;
-    vcl::Font maBulletFont;
-
-    SvxLRSpaceItem maLRSpaceItem;
+    SvxLRSpaceItem const maLRSpaceItem;
     Image maSlideImage;
 };
 
@@ -227,7 +222,7 @@ class OutlineViewModelChangeGuard
 {
 public:
     OutlineViewModelChangeGuard( OutlineView& rView );
-    ~OutlineViewModelChangeGuard();
+    ~OutlineViewModelChangeGuard() COVERITY_NOEXCEPT_FALSE;
 private:
     OutlineView& mrView;
 };

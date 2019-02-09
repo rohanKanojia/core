@@ -21,11 +21,12 @@
 #define INCLUDED_SC_INC_QUERYPARAM_HXX
 
 #include <unotools/textsearch.hxx>
-#include "global.hxx"
+#include "address.hxx"
 #include "types.hxx"
 
 #include <memory>
 #include <vector>
+#include <ostream>
 
 class SvNumberFormatter;
 
@@ -57,7 +58,9 @@ struct ScQueryParamBase
     SC_DLLPUBLIC ScQueryEntry& GetEntry(SCSIZE n);
     SC_DLLPUBLIC ScQueryEntry& AppendEntry();
     ScQueryEntry* FindEntryByField(SCCOLROW nField, bool bNew);
-    SC_DLLPUBLIC void RemoveEntryByField(SCCOLROW nField);
+    std::vector<ScQueryEntry*> FindAllEntriesByField(SCCOLROW nField);
+    SC_DLLPUBLIC bool RemoveEntryByField(SCCOLROW nField);
+    SC_DLLPUBLIC void RemoveAllEntriesByField(SCCOLROW nField);
     void Resize(size_t nNew);
     void FillInExcelSyntax( svl::SharedStringPool& rPool, const OUString& aCellStr, SCSIZE nIndex,
                             SvNumberFormatter* pFormatter );
@@ -74,9 +77,27 @@ public:
 protected:
     ScQueryParamBase();
     ScQueryParamBase(const ScQueryParamBase& r);
+    ScQueryParamBase& operator=(const ScQueryParamBase& r);
 
     EntriesType m_Entries;
 };
+
+// For use in SAL_DEBUG etc. Output format not guaranteed to be stable.
+template<typename charT, typename traits>
+inline std::basic_ostream<charT, traits> & operator <<(std::basic_ostream<charT, traits> & stream, const ScQueryParamBase& rParam)
+{
+    stream << "{" <<
+        "searchType=" << rParam.eSearchType <<
+        ",hasHeader=" << (rParam.bHasHeader?"YES":"NO") <<
+        ",byRow=" << (rParam.bByRow?"YES":"NO") <<
+        ",inplace=" << (rParam.bInplace?"YES":"NO") <<
+        ",caseSens=" << (rParam.bCaseSens?"YES":"NO") <<
+        ",duplicate=" << (rParam.bDuplicate?"YES":"NO") <<
+        ",rangeLookup=" << (rParam.mbRangeLookup?"YES":"NO") <<
+        "}";
+
+    return stream;
+}
 
 struct ScQueryParamTable
 {
@@ -87,9 +108,28 @@ struct ScQueryParamTable
     SCTAB           nTab;
 
     ScQueryParamTable();
-    ScQueryParamTable(const ScQueryParamTable& r);
     virtual ~ScQueryParamTable();
+
+    ScQueryParamTable(ScQueryParamTable const &) = default;
+    ScQueryParamTable(ScQueryParamTable &&) = default;
+    ScQueryParamTable & operator =(ScQueryParamTable const &) = default;
+    ScQueryParamTable & operator =(ScQueryParamTable &&) = default;
 };
+
+// For use in SAL_DEBUG etc. Output format not guaranteed to be stable.
+template<typename charT, typename traits>
+inline std::basic_ostream<charT, traits> & operator <<(std::basic_ostream<charT, traits> & stream, const ScQueryParamTable& rParam)
+{
+    stream << "{" <<
+        "col1=" << rParam.nCol1 <<
+        ",row1=" << rParam.nRow1 <<
+        ",col2=" << rParam.nCol2 <<
+        ",row2=" << rParam.nRow2 <<
+        ",tab=" << rParam.nTab <<
+        "}";
+
+    return stream;
+}
 
 struct SC_DLLPUBLIC ScQueryParam : public ScQueryParamBase, public ScQueryParamTable
 {
@@ -99,16 +139,32 @@ struct SC_DLLPUBLIC ScQueryParam : public ScQueryParamBase, public ScQueryParamT
     SCROW           nDestRow;
 
     ScQueryParam();
-    ScQueryParam( const ScQueryParam& r );
+    ScQueryParam( const ScQueryParam& );
     ScQueryParam( const ScDBQueryParamInternal& r );
-    virtual ~ScQueryParam();
+    virtual ~ScQueryParam() override;
 
-    ScQueryParam&   operator=  ( const ScQueryParam& r );
+    ScQueryParam&   operator=  ( const ScQueryParam& );
     bool            operator== ( const ScQueryParam& rOther ) const;
     void            Clear();
     void            ClearDestParams();
     void            MoveToDest();
 };
+
+// For use in SAL_DEBUG etc. Output format not guaranteed to be stable.
+template<typename charT, typename traits>
+inline std::basic_ostream<charT, traits> & operator <<(std::basic_ostream<charT, traits> & stream, const ScQueryParam& rParam)
+{
+    stream << "{" <<
+        "base=" << *static_cast<const ScQueryParamBase*>(&rParam) <<
+        ",table=" << *static_cast<const ScQueryParamTable*>(&rParam) <<
+        ",destPers=" << (rParam.bDestPers?"YES":"NO") <<
+        ",destTab=" << rParam.nDestTab <<
+        ",destCol=" << rParam.nDestCol <<
+        ",destRow=" << rParam.nDestRow <<
+        "}";
+
+    return stream;
+}
 
 struct ScDBQueryParamBase : public ScQueryParamBase
 {
@@ -119,21 +175,20 @@ struct ScDBQueryParamBase : public ScQueryParamBase
 
     DataType        GetType() const { return meType;}
 
-    virtual ~ScDBQueryParamBase();
+    ScDBQueryParamBase() = delete;
+    virtual ~ScDBQueryParamBase() override;
 
 protected:
     ScDBQueryParamBase(DataType eType);
 
 private:
-    ScDBQueryParamBase();
-
-    DataType        meType;
+    DataType const        meType;
 };
 
 struct ScDBQueryParamInternal : public ScDBQueryParamBase, public ScQueryParamTable
 {
     ScDBQueryParamInternal();
-    virtual ~ScDBQueryParamInternal();
+    virtual ~ScDBQueryParamInternal() override;
 
     virtual bool IsValidFieldIndex() const override;
 };
@@ -143,7 +198,7 @@ struct ScDBQueryParamMatrix : public ScDBQueryParamBase
     ScMatrixRef mpMatrix;
 
     ScDBQueryParamMatrix();
-    virtual ~ScDBQueryParamMatrix();
+    virtual ~ScDBQueryParamMatrix() override;
 
     virtual bool IsValidFieldIndex() const override;
 };

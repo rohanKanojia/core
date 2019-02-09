@@ -21,22 +21,17 @@
 #define INCLUDED_XMLOFF_CONTROLPROPERTYHDL_HXX
 
 #include <sal/config.h>
+
+#include <memory>
+
 #include <xmloff/dllapi.h>
 #include <xmloff/prhdlfac.hxx>
-#include <rtl/ref.hxx>
 #include <rtl/ustring.hxx>
-#include <xmloff/xmlexppr.hxx>
 #include <xmloff/XMLConstantsPropertyHandler.hxx>
-
-struct SvXMLEnumMapEntry;
-class Color;
+#include <xmloff/NamedBoolPropertyHdl.hxx>
 
 namespace xmloff
 {
-
-
-    class IFormsExportContext;
-    class OFormLayerXMLImport_Impl;
 
 
     //= ORotationAngleHandler
@@ -80,7 +75,7 @@ namespace xmloff
         virtual bool exportXML( OUString& _rStrExpValue, const css::uno::Any& _rValue, const SvXMLUnitConverter& _rUnitConverter ) const override;
 
     private:
-        BorderFacet m_eFacet;
+        BorderFacet const m_eFacet;
     };
 
 
@@ -109,17 +104,14 @@ namespace xmloff
 
     class XMLOFF_DLLPUBLIC OControlPropertyHandlerFactory : public XMLPropertyHandlerFactory
     {
-    protected:
-        mutable XMLConstantsPropertyHandler*    m_pTextAlignHandler;
-        mutable OControlBorderHandler*          m_pControlBorderStyleHandler;
-        mutable OControlBorderHandler*          m_pControlBorderColorHandler;
-        mutable ORotationAngleHandler*          m_pRotationAngleHandler;
-        mutable OFontWidthHandler*              m_pFontWidthHandler;
-        mutable XMLConstantsPropertyHandler*    m_pFontEmphasisHandler;
-        mutable XMLConstantsPropertyHandler*    m_pFontReliefHandler;
-
-    protected:
-        virtual ~OControlPropertyHandlerFactory();
+        mutable std::unique_ptr<XMLConstantsPropertyHandler>    m_pTextAlignHandler;
+        mutable std::unique_ptr<OControlBorderHandler>          m_pControlBorderStyleHandler;
+        mutable std::unique_ptr<OControlBorderHandler>          m_pControlBorderColorHandler;
+        mutable std::unique_ptr<ORotationAngleHandler>          m_pRotationAngleHandler;
+        mutable std::unique_ptr<OFontWidthHandler>              m_pFontWidthHandler;
+        mutable std::unique_ptr<XMLConstantsPropertyHandler>    m_pFontEmphasisHandler;
+        mutable std::unique_ptr<XMLConstantsPropertyHandler>    m_pFontReliefHandler;
+        mutable std::unique_ptr<XMLNamedBoolPropertyHdl>        m_pTextLineModeHandler;
 
     public:
         OControlPropertyHandlerFactory();

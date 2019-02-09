@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "filter/msfilter/countryid.hxx"
+#include <filter/msfilter/countryid.hxx>
 
 #include <algorithm>
 #include <sal/macros.h>
@@ -250,10 +250,10 @@ struct CountryEntryPred_Country
 {
     CountryId                   meCountry;
 
-    inline explicit             CountryEntryPred_Country( CountryId eCountry ) :
+    explicit             CountryEntryPred_Country( CountryId eCountry ) :
                                     meCountry( eCountry ) {}
 
-    inline bool                 operator()( const CountryEntry& rCmp ) const
+    bool                 operator()( const CountryEntry& rCmp ) const
                                     { return rCmp.meCountry == meCountry; }
 };
 
@@ -265,18 +265,18 @@ struct CountryEntryPred_Language
 {
     LanguageType                meLanguage;
 
-    inline explicit             CountryEntryPred_Language( LanguageType eLanguage ) :
+    explicit             CountryEntryPred_Language( LanguageType eLanguage ) :
                                     meLanguage( eLanguage ) {}
 
-    inline bool                 operator()( const CountryEntry& rCmp ) const;
+    bool                 operator()( const CountryEntry& rCmp ) const;
 };
 
-inline bool CountryEntryPred_Language::operator()( const CountryEntry& rCmp ) const
+bool CountryEntryPred_Language::operator()( const CountryEntry& rCmp ) const
 {
     //  rCmp.mbUseSubLang==true  -> compare full language type
     //  rCmp.mbUseSubLang==false -> compare primary language only
     return rCmp.mbUseSubLang ? (meLanguage == rCmp.meLanguage) :
-                ((meLanguage & 0x03FF) == (rCmp.meLanguage & 0x03FF));
+                (primary(meLanguage) == primary(rCmp.meLanguage));
 }
 
 } // namespace

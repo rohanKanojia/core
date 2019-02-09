@@ -25,14 +25,12 @@
 
 class XMLCreateElemTransformerContext : public XMLTransformerContext
 {
-    sal_uInt16 m_nActionMap;
+    sal_uInt16 const m_nActionMap;
 
 public:
     XMLCreateElemTransformerContext( XMLTransformerBase& rTransformer,
                            const OUString& rQName,
                               sal_uInt16 nActionMap );
-
-    virtual ~XMLCreateElemTransformerContext();
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };

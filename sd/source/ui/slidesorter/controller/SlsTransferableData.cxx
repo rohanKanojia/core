@@ -17,21 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "controller/SlsTransferableData.hxx"
+#include <controller/SlsTransferableData.hxx>
 
-#include "SlideSorterViewShell.hxx"
-#include "View.hxx"
+#include <SlideSorterViewShell.hxx>
+#include <View.hxx>
 
 namespace sd { namespace slidesorter { namespace controller {
 
 SdTransferable* TransferableData::CreateTransferable (
     SdDrawDocument* pSrcDoc,
-    ::sd::View* pWorkView,
-    bool bInitOnGetData,
     SlideSorterViewShell* pViewShell,
     const ::std::vector<Representative>& rRepresentatives)
 {
-    SdTransferable* pTransferable = new SdTransferable (pSrcDoc, pWorkView, bInitOnGetData);
+    SdTransferable* pTransferable = new SdTransferable (pSrcDoc, nullptr, false/*bInitOnGetData*/);
     std::shared_ptr<TransferableData> pData (new TransferableData(pViewShell, rRepresentatives));
     pTransferable->AddUserData(pData);
     return pTransferable;
@@ -70,10 +68,9 @@ TransferableData::~TransferableData()
 
 void TransferableData::Notify (SfxBroadcaster&, const SfxHint& rHint)
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (pSimpleHint && mpViewShell)
+    if (mpViewShell)
     {
-        if (pSimpleHint->GetId() == SFX_HINT_DYING)
+        if (rHint.GetId() == SfxHintId::Dying)
         {
             // This hint may come either from the ViewShell or from the
             // document (registered by SdTransferable).  We do not know

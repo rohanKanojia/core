@@ -20,10 +20,10 @@
 #ifndef INCLUDED_REGISTRY_SOURCE_REGKEY_HXX
 #define INCLUDED_REGISTRY_SOURCE_REGKEY_HXX
 
-#include "sal/config.h"
-#include "registry/regtype.h"
-#include "rtl/ustring.h"
-#include "sal/types.h"
+#include <sal/config.h>
+#include <registry/regtype.h>
+#include <rtl/ustring.h>
+#include <sal/types.h>
 
 extern "C" {
 
@@ -41,7 +41,7 @@ RegError REGISTRY_CALLTYPE closeKey(RegKeyHandle);
 RegError REGISTRY_CALLTYPE setValue(
     RegKeyHandle, rtl_uString*, RegValueType, RegValue, sal_uInt32);
 RegError REGISTRY_CALLTYPE setLongListValue(
-    RegKeyHandle, rtl_uString*, sal_Int32*, sal_uInt32);
+    RegKeyHandle, rtl_uString*, sal_Int32 const *, sal_uInt32);
 RegError REGISTRY_CALLTYPE setStringListValue(
     RegKeyHandle, rtl_uString*, sal_Char**, sal_uInt32);
 RegError REGISTRY_CALLTYPE setUnicodeListValue(

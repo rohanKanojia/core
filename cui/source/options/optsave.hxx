@@ -19,11 +19,20 @@
 #ifndef INCLUDED_CUI_SOURCE_OPTIONS_OPTSAVE_HXX
 #define INCLUDED_CUI_SOURCE_OPTIONS_OPTSAVE_HXX
 
-#include <vcl/group.hxx>
+#include <memory>
 #include <vcl/field.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
 #include <sfx2/tabdlg.hxx>
+
+#define APP_WRITER              0
+#define APP_WRITER_WEB          1
+#define APP_WRITER_GLOBAL       2
+#define APP_CALC                3
+#define APP_IMPRESS             4
+#define APP_DRAW                5
+#define APP_MATH                6
+#define APP_COUNT               7
 
 namespace com { namespace sun { namespace star {
   namespace beans {
@@ -57,20 +66,20 @@ private:
     VclPtr<FixedImage>             aODFWarningFI;
     VclPtr<FixedText>              aODFWarningFT;
 
-    SvxSaveTabPage_Impl*    pImpl;
+    std::unique_ptr<SvxSaveTabPage_Impl>    pImpl;
 
-    DECL_LINK_TYPED( AutoClickHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( FilterHdl_Impl, ListBox&, void );
-    DECL_LINK_TYPED(ODFVersionHdl_Impl, ListBox&, void );
+    DECL_LINK( AutoClickHdl_Impl, Button*, void );
+    DECL_LINK( FilterHdl_Impl, ListBox&, void );
+    DECL_LINK(ODFVersionHdl_Impl, ListBox&, void );
 
     void    DetectHiddenControls();
 
 public:
     SvxSaveTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxSaveTabPage();
+    virtual ~SvxSaveTabPage() override;
     virtual void        dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
 
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

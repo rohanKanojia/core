@@ -17,48 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "themebuffer.hxx"
+#include <themebuffer.hxx>
 
-#include "stylesbuffer.hxx"
+#include <stylesbuffer.hxx>
 
 namespace oox {
 namespace xls {
 
-using ::oox::drawingml::ClrScheme;
 
 ThemeBuffer::ThemeBuffer( const WorkbookHelper& rHelper ) :
     WorkbookHelper( rHelper ),
     mxDefFontModel( new FontModel )
 {
-    switch( getFilterType() )
-    {
-        case FILTER_OOXML:
-            //! TODO: locale dependent font name
-            mxDefFontModel->maName = "Cambria";
-            mxDefFontModel->mfHeight = 11.0;
-        break;
-        case FILTER_BIFF:
-            //! TODO: BIFF dependent font name
-            mxDefFontModel->maName = "Arial";
-            mxDefFontModel->mfHeight = 10.0;
-        break;
-        case FILTER_UNKNOWN: break;
-    }
+    //! TODO: locale dependent font name
+    mxDefFontModel->maName = "Cambria";
+    mxDefFontModel->mfHeight = 11.0;
 }
 
 ThemeBuffer::~ThemeBuffer()
 {
 }
 
-sal_Int32 ThemeBuffer::getColorByToken( sal_Int32 nToken ) const
+::Color ThemeBuffer::getColorByToken( sal_Int32 nToken ) const
 {
-    sal_Int32 nColor = 0;
+    ::Color nColor = 0;
     return getClrScheme().getColor( nToken, nColor ) ? nColor : API_RGB_TRANSPARENT;
 }
 
-sal_Int32 ThemeBuffer::getColorByIndex(size_t nIndex) const
+::Color ThemeBuffer::getColorByIndex(size_t nIndex) const
 {
-    sal_Int32 nColor = 0;
+    ::Color nColor = 0;
     return getClrScheme().getColorByIndex(nIndex, nColor) ? nColor : API_RGB_TRANSPARENT;
 }
 

@@ -17,15 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dpsdbtab.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
-#include "dpfilteredcache.hxx"
-#include "dptabres.hxx"
-#include "document.hxx"
-#include "dpobject.hxx"
+#include <dpsdbtab.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <dpfilteredcache.hxx>
+#include <document.hxx>
+#include <dpobject.hxx>
 
-#include <com/sun/star/sheet/DataImportMode.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 
 using namespace com::sun::star;
@@ -63,7 +61,7 @@ const ScDPCache* ScImportSourceDesc::CreateCache(const ScDPDimensionSaveData* pD
 }
 
 ScDatabaseDPData::ScDatabaseDPData(
-    ScDocument* pDoc, const ScDPCache& rCache) :
+    const ScDocument* pDoc, const ScDPCache& rCache) :
     ScDPTableData(pDoc),
     aCacheTable(rCache)
 {
@@ -91,7 +89,7 @@ OUString ScDatabaseDPData::getDimensionName(long nColumn)
     {
         //TODO: different internal and display names?
         //return "Data";
-        return ScGlobal::GetRscString(STR_PIVOT_DATA);
+        return ScResId(STR_PIVOT_DATA);
     }
 
     CreateCacheTable();
@@ -158,5 +156,14 @@ void ScDatabaseDPData::ReloadCacheTable()
     aCacheTable.clear();
     CreateCacheTable();
 }
+
+#if DUMP_PIVOT_TABLE
+
+void ScDatabaseDPData::Dump() const
+{
+    // TODO : Implement this.
+}
+
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

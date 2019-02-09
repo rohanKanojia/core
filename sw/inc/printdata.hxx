@@ -32,15 +32,10 @@
 
 class SwDoc;
 class SwDocShell;
-class _SetGetExpFields;
+class SetGetExpFields;
 class SwViewOption;
-class OutputDevice;
 class SwViewOptionAdjust_Impl;
 class SwViewShell;
-class SfxViewShell;
-
-// forward declarations
-class SwPrintUIOptions;
 class SwRenderData;
 
 /** this must match the definitions in css::text::NotePrintMode */
@@ -56,7 +51,6 @@ enum class SwPostItMode
 
 class SwPrintData
 {
-    const SwPrintUIOptions *    m_pPrintUIOptions;  // not owner
     const SwRenderData *        m_pRenderData;      // not owner
 
 public:
@@ -69,18 +63,13 @@ public:
              m_bPrintProspectRTL,
              m_bPrintSingleJobs, m_bPaperFromSetup,
              /// Print empty pages
-             m_bPrintEmptyPages,
-
-             /// #i56195# no field update while printing mail merge documents
-             m_bUpdateFieldsInPrinting,
-             m_bModified;
+             m_bPrintEmptyPages;
 
     SwPostItMode    m_nPrintPostIts;
     OUString       m_sFaxName;
 
     SwPrintData()
     {
-        m_pPrintUIOptions       = nullptr;
         m_pRenderData        = nullptr;
 
         m_bPrintGraphic           =
@@ -90,15 +79,13 @@ public:
         m_bPrintLeftPages         =
         m_bPrintRightPages        =
         m_bPrintPageBackground    =
-        m_bPrintEmptyPages        =
-        m_bUpdateFieldsInPrinting = true;
+        m_bPrintEmptyPages        = true;
 
         m_bPaperFromSetup         =
         m_bPrintReverse           =
         m_bPrintProspect          =
         m_bPrintProspectRTL       =
         m_bPrintSingleJobs        =
-        m_bModified               =
         m_bPrintBlackFont         =
         m_bPrintHiddenText        =
         m_bPrintTextPlaceholder   = false;
@@ -107,6 +94,11 @@ public:
     }
 
     virtual ~SwPrintData() {}
+
+    SwPrintData(SwPrintData const &) = default;
+    SwPrintData(SwPrintData &&) = default;
+    SwPrintData & operator =(SwPrintData const &) = default;
+    SwPrintData & operator =(SwPrintData &&) = default;
 
     bool operator==(const SwPrintData& rData)const
     {
@@ -125,7 +117,6 @@ public:
         m_bPrintSingleJobs    ==   rData.m_bPrintSingleJobs     &&
         m_bPaperFromSetup     ==   rData.m_bPaperFromSetup      &&
         m_bPrintEmptyPages    ==   rData.m_bPrintEmptyPages     &&
-        m_bUpdateFieldsInPrinting == rData.m_bUpdateFieldsInPrinting &&
         m_nPrintPostIts       ==   rData.m_nPrintPostIts        &&
         m_sFaxName            ==   rData.m_sFaxName             &&
         m_bPrintHiddenText    ==   rData.m_bPrintHiddenText     &&
@@ -135,7 +126,6 @@ public:
     /** Note: in the context where this class is used the pointers should always be valid
        during the lifetime of this object */
     const SwRenderData &        GetRenderData() const           { return *m_pRenderData; }
-    void  SetPrintUIOptions( const SwPrintUIOptions *pOpt )     { m_pPrintUIOptions = pOpt; }
     void  SetRenderData( const SwRenderData *pData )            { m_pRenderData = pData; }
 
     bool IsPrintGraphic() const             { return m_bPrintGraphic; }
@@ -153,7 +143,7 @@ public:
     bool IsPrintBlackFont() const           { return m_bPrintBlackFont; }
     bool IsPrintSingleJobs() const          { return m_bPrintSingleJobs; }
     SwPostItMode GetPrintPostIts() const           { return m_nPrintPostIts; }
-    const OUString GetFaxName() const      { return m_sFaxName; }
+    const OUString& GetFaxName() const      { return m_sFaxName; }
     bool IsPrintHiddenText() const          { return m_bPrintHiddenText; }
     bool IsPrintTextPlaceholder() const     { return m_bPrintTextPlaceholder; }
 
@@ -176,7 +166,7 @@ public:
     void SetPrintHiddenText( bool b )           { doSetModified(); m_bPrintHiddenText = b; }
     void SetPrintTextPlaceholder( bool b )      { doSetModified(); m_bPrintTextPlaceholder = b; }
 
-    virtual void doSetModified () { m_bModified = true;}
+    virtual void doSetModified () {}
 };
 
 class SwPrintUIOptions : public vcl::PrinterOptionsHelper
@@ -242,8 +232,8 @@ class SwRenderData
 public:
 
     // PostIt relevant data
-    /// an array of "_SetGetExpField *" sorted by page and line numbers
-    std::unique_ptr<_SetGetExpFields> m_pPostItFields;
+    /// an array of "SetGetExpField *" sorted by page and line numbers
+    std::unique_ptr<SetGetExpFields> m_pPostItFields;
     /// this contains a SwDoc with the post-it content
     std::unique_ptr<SwViewShell>      m_pPostItShell;
 
@@ -261,7 +251,7 @@ public:
     bool IsViewOptionAdjust() const  { return m_pViewOptionAdjust != nullptr; }
     bool NeedNewViewOptionAdjust( const SwViewShell& ) const;
     void ViewOptionAdjustStart( SwViewShell &rSh, const SwViewOption &rViewOptions);
-    void ViewOptionAdjust( SwPrintData const* const pPrtOptions );
+    void ViewOptionAdjust( SwPrintData const* const pPrtOptions, bool setShowPlaceHoldersInPDF );
     void ViewOptionAdjustStop();
     void ViewOptionAdjustCrashPreventionKludge();
 
@@ -290,7 +280,7 @@ public:
     PagePairsVec_t &                    GetPagePairsForProspectPrinting()           { return m_aPagePairs; }
     const PagePairsVec_t &              GetPagePairsForProspectPrinting() const     { return m_aPagePairs; }
 
-    OUString   GetPageRange() const                            { return m_aPageRange; }
+    const OUString& GetPageRange() const                            { return m_aPageRange; }
     void            SetPageRange( const OUString &rRange )     { m_aPageRange = rRange; }
 };
 

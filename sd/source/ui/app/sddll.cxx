@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <avmedia/mediaplayer.hxx>
 #include <avmedia/mediatoolbox.hxx>
 #include <editeng/eeitem.hxx>
@@ -25,41 +27,37 @@
 #include <unotools/configmgr.hxx>
 #include <unotools/moduleoptions.hxx>
 #include <svx/fmobjfac.hxx>
-#include <svx/svdfield.hxx>
 #include <svx/objfac3d.hxx>
 #include <vcl/svapp.hxx>
 
-#include "registerinterfaces.hxx"
-#include "sddll.hxx"
-#include "app.hrc"
-#include "AnimationChildWindow.hxx"
-#include "BezierObjectBar.hxx"
-#include "diactrl.hxx"
-#include "DrawDocShell.hxx"
-#include "FactoryIds.hxx"
-#include "gluectrl.hxx"
-#include "GraphicDocShell.hxx"
-#include "GraphicObjectBar.hxx"
-#include "GraphicViewShell.hxx"
-#include "GraphicViewShellBase.hxx"
-#include "ImpressViewShellBase.hxx"
-#include "PresentationViewShell.hxx"
-#include "PresentationViewShellBase.hxx"
-#include "MediaObjectBar.hxx"
-#include "NavigatorChildWindow.hxx"
-#include "OutlineViewShell.hxx"
-#include "OutlineViewShellBase.hxx"
-#include "PaneChildWindows.hxx"
-#include "sdresid.hxx"
-#include "sdobjfac.hxx"
-#include "cfgids.hxx"
-#include "SpellDialogChildWindow.hxx"
-#include "SlideSorterViewShell.hxx"
-#include "SlideSorterViewShellBase.hxx"
-#include "strmname.h"
-#include "SdShapeTypes.hxx"
-#include "TextObjectBar.hxx"
-#include "tmplctrl.hxx"
+#include <registerinterfaces.hxx>
+#include <sddll.hxx>
+#include <app.hrc>
+#include <AnimationChildWindow.hxx>
+#include <BezierObjectBar.hxx>
+#include <diactrl.hxx>
+#include <DrawDocShell.hxx>
+#include <FactoryIds.hxx>
+#include <gluectrl.hxx>
+#include <GraphicDocShell.hxx>
+#include <GraphicObjectBar.hxx>
+#include <GraphicViewShell.hxx>
+#include <GraphicViewShellBase.hxx>
+#include <ImpressViewShellBase.hxx>
+#include <PresentationViewShell.hxx>
+#include <PresentationViewShellBase.hxx>
+#include <MediaObjectBar.hxx>
+#include <NavigatorChildWindow.hxx>
+#include <OutlineViewShell.hxx>
+#include <OutlineViewShellBase.hxx>
+#include <PaneChildWindows.hxx>
+#include <SpellDialogChildWindow.hxx>
+#include <SlideSorterViewShell.hxx>
+#include <SlideSorterViewShellBase.hxx>
+#include <strmname.h>
+#include <SdShapeTypes.hxx>
+#include <TextObjectBar.hxx>
+#include <tmplctrl.hxx>
 
 #include <svx/svxids.hrc>
 #include <svx/bmpmask.hxx>
@@ -69,6 +67,8 @@
 #include <svx/fontwork.hxx>
 #include <svx/formatpaintbrushctrl.hxx>
 #include <svx/ParaLineSpacingPopup.hxx>
+#include <svx/TextCharacterSpacingPopup.hxx>
+#include <svx/TextUnderlinePopup.hxx>
 #include <svx/grafctrl.hxx>
 #include <svx/hyperdlg.hxx>
 #include <svx/imapdlg.hxx>
@@ -89,16 +89,20 @@
 #include <sfx2/docfilt.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/fcontnr.hxx>
+#include <sfx2/emojipopup.hxx>
+#include <sfx2/charmappopup.hxx>
 #include <sfx2/sidebar/SidebarChildWindow.hxx>
 #include <vcl/FilterConfigItem.hxx>
-#include <comphelper/processfactory.hxx>
+#include <sdabstdlg.hxx>
+#include <sdfilter.hxx>
+#include <sdmod.hxx>
 
 using namespace ::com::sun::star;
 
 // Register all Factories
 void SdDLL::RegisterFactorys()
 {
-    if (utl::ConfigManager::IsAvoidConfig() || SvtModuleOptions().IsImpress())
+    if (utl::ConfigManager::IsFuzzing() || SvtModuleOptions().IsImpress())
     {
         ::sd::ImpressViewShellBase::RegisterFactory (
             ::sd::IMPRESS_FACTORY_ID);
@@ -109,7 +113,7 @@ void SdDLL::RegisterFactorys()
         ::sd::PresentationViewShellBase::RegisterFactory (
             ::sd::PRESENTATION_FACTORY_ID);
     }
-    if (!utl::ConfigManager::IsAvoidConfig() && SvtModuleOptions().IsDraw())
+    if (!utl::ConfigManager::IsFuzzing() && SvtModuleOptions().IsDraw())
     {
         ::sd::GraphicViewShellBase::RegisterFactory (::sd::DRAW_FACTORY_ID);
     }
@@ -117,10 +121,9 @@ void SdDLL::RegisterFactorys()
 
 // Register all Interfaces
 
-void SdDLL::RegisterInterfaces()
+void SdDLL::RegisterInterfaces(SdModule* pMod)
 {
     // Module
-    SfxModule* pMod = SD_MOD();
     SdModule::RegisterInterface(pMod);
 
     // View shell base.
@@ -155,16 +158,14 @@ void SdDLL::RegisterInterfaces()
 
 // Register all Controllers
 
-void SdDLL::RegisterControllers()
+void SdDLL::RegisterControllers(SdModule* pMod)
 {
-    SfxModule* pMod = SD_MOD();
-
     SdTbxCtlDiaPages::RegisterControl( SID_PAGES_PER_ROW, pMod );
     SdTbxCtlGlueEscDir::RegisterControl( SID_GLUE_ESCDIR, pMod );
 
     ::sd::AnimationChildWindow::RegisterChildWindow(false, pMod);
-    ::sd::NavigatorChildWindow::RegisterChildWindowContext( (sal_uInt16) ::sd::DrawViewShell::GetInterfaceId(), pMod );
-    ::sd::NavigatorChildWindow::RegisterChildWindowContext( (sal_uInt16) ::sd::GraphicViewShell::GetInterfaceId(), pMod );
+    ::sd::NavigatorChildWindow::RegisterChildWindowContext( static_cast<sal_uInt16>(::sd::DrawViewShell::GetInterfaceId()), pMod );
+    ::sd::NavigatorChildWindow::RegisterChildWindowContext( static_cast<sal_uInt16>(::sd::GraphicViewShell::GetInterfaceId()), pMod );
 
     Svx3DChildWindow::RegisterChildWindow(false, pMod);
     SvxFontWorkChildWindow::RegisterChildWindow(false, pMod);
@@ -174,7 +175,9 @@ void SdDLL::RegisterControllers()
     SvxIMapDlgChildWindow::RegisterChildWindow(false, pMod);
     SvxHlinkDlgWrapper::RegisterChildWindow(false, pMod);
     ::sd::SpellDialogChildWindow::RegisterChildWindow(false, pMod);
+#if HAVE_FEATURE_AVMEDIA
     ::avmedia::MediaPlayer::RegisterChildWindow(false, pMod);
+#endif
     ::sd::LeftPaneImpressChildWindow::RegisterChildWindow(false, pMod);
     ::sd::LeftPaneDrawChildWindow::RegisterChildWindow(false, pMod);
     ::sfx2::sidebar::SidebarChildWindow::RegisterChildWindow(false, pMod);
@@ -182,15 +185,8 @@ void SdDLL::RegisterControllers()
     SvxFillToolBoxControl::RegisterControl(0, pMod);
     SvxLineStyleToolBoxControl::RegisterControl(0, pMod);
     SvxLineWidthToolBoxControl::RegisterControl(0, pMod);
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_LINE_COLOR, pMod);
-    SvxColorToolBoxControl::RegisterControl(SID_ATTR_FILL_COLOR, pMod);
-
-    SvxLineEndToolBoxControl::RegisterControl( SID_ATTR_LINEEND_STYLE, pMod );
 
     SvxStyleToolBoxControl::RegisterControl(0, pMod);
-    SvxFontNameToolBoxControl::RegisterControl(0, pMod);
-    SvxColorToolBoxControl::RegisterControl( SID_ATTR_CHAR_COLOR, pMod );
-    SvxColorToolBoxControl::RegisterControl( SID_ATTR_CHAR_BACK_COLOR, pMod );
 
     SvxGrafModeToolBoxControl::RegisterControl( SID_ATTR_GRAF_MODE, pMod );
     SvxGrafRedToolBoxControl::RegisterControl( SID_ATTR_GRAF_RED, pMod );
@@ -225,56 +221,48 @@ void SdDLL::RegisterControllers()
     SvxClipBoardControl::RegisterControl( SID_PASTE, pMod );
     SvxClipBoardControl::RegisterControl( SID_PASTE_UNFORMATTED, pMod );
 
-    SvxColorToolBoxControl::RegisterControl( SID_EXTRUSION_3D_COLOR, pMod );
     svx::ParaLineSpacingPopup::RegisterControl(SID_ATTR_PARA_LINESPACE, pMod);
+    svx::TextCharacterSpacingPopup::RegisterControl(SID_ATTR_CHAR_KERNING, pMod);
+    svx::TextUnderlinePopup::RegisterControl(SID_ATTR_CHAR_UNDERLINE, pMod);
 
+#if HAVE_FEATURE_AVMEDIA
     ::avmedia::MediaToolBoxControl::RegisterControl( SID_AVMEDIA_TOOLBOX, pMod );
+#endif
     XmlSecStatusBarControl::RegisterControl( SID_SIGNATURE, pMod );
     SdTemplateControl::RegisterControl( SID_STATUS_LAYOUT, pMod );
     SvxTableToolBoxControl::RegisterControl(SID_INSERT_TABLE, pMod );
-    SvxFrameLineStyleToolBoxControl::RegisterControl(SID_FRAME_LINESTYLE, pMod );
-    SvxColorToolBoxControl::RegisterControl(SID_FRAME_LINECOLOR, pMod );
-    SvxFrameToolBoxControl::RegisterControl(SID_ATTR_BORDER, pMod );
     SvxTbxCtlDraw::RegisterControl(SID_INSERT_DRAW, pMod );
+
+    EmojiPopup::RegisterControl(SID_EMOJI_CONTROL, pMod );
+    CharmapPopup::RegisterControl(SID_CHARMAP_CONTROL, pMod );
 }
 
 void SdDLL::Init()
 {
-    if ( SD_MOD() )
+    if ( SfxApplication::GetModule(SfxToolsModule::Draw) )    // Module already active
         return;
 
     SfxObjectFactory* pDrawFact = nullptr;
     SfxObjectFactory* pImpressFact = nullptr;
 
-    if (utl::ConfigManager::IsAvoidConfig() || SvtModuleOptions().IsImpress())
+    if (utl::ConfigManager::IsFuzzing() || SvtModuleOptions().IsImpress())
         pImpressFact = &::sd::DrawDocShell::Factory();
 
-    if (!utl::ConfigManager::IsAvoidConfig() && SvtModuleOptions().IsDraw())
+    if (!utl::ConfigManager::IsFuzzing() && SvtModuleOptions().IsDraw())
         pDrawFact = &::sd::GraphicDocShell::Factory();
 
-    // the SdModule must be created
-     SdModule** ppShlPtr = reinterpret_cast<SdModule**>(GetAppData(SHL_DRAW));
+    auto pUniqueModule = std::make_unique<SdModule>(pImpressFact, pDrawFact);
+    SdModule* pModule = pUniqueModule.get();
+    SfxApplication::SetModule(SfxToolsModule::Draw, std::move(pUniqueModule));
 
-     // #i46427#
-     // The SfxModule::SfxModule stops when the first given factory
-     // is 0, so we must not give a 0 as first factory
-     if( pImpressFact )
-     {
-        (*ppShlPtr) = new SdModule( pImpressFact, pDrawFact );
-     }
-     else
-     {
-        (*ppShlPtr) = new SdModule( pDrawFact, pImpressFact );
-     }
-
-    if (!utl::ConfigManager::IsAvoidConfig() && SvtModuleOptions().IsImpress())
+    if (!utl::ConfigManager::IsFuzzing() && SvtModuleOptions().IsImpress())
     {
         // Register the Impress shape types in order to make the shapes accessible.
         ::accessibility::RegisterImpressShapeTypes ();
         ::sd::DrawDocShell::Factory().SetDocumentServiceName( "com.sun.star.presentation.PresentationDocument" );
     }
 
-    if (!utl::ConfigManager::IsAvoidConfig() && SvtModuleOptions().IsDraw())
+    if (!utl::ConfigManager::IsFuzzing() && SvtModuleOptions().IsDraw())
     {
         ::sd::GraphicDocShell::Factory().SetDocumentServiceName( "com.sun.star.drawing.DrawingDocument" );
     }
@@ -283,28 +271,33 @@ void SdDLL::Init()
     RegisterFactorys();
 
     // register your shell-interfaces here
-    RegisterInterfaces();
+    RegisterInterfaces(pModule);
 
     // register your controllers here
-    RegisterControllers();
+    RegisterControllers(pModule);
 
-    // register SvDraw-Fields
-    SdrRegisterFieldClasses();
-
-    // register 3D-Objekt-Factory
+    // register 3D-object-factory
     E3dObjFactory();
 
     // register css::form::component::Form-Object-Factory
     FmFormObjFactory();
 
-    // register Object-Factory
-    SdrObjFactory::InsertMakeUserDataHdl(LINK(&aSdObjectFactory, SdObjectFactory, MakeUserData));
-
     // register your exotic remote controls here
 #ifdef ENABLE_SDREMOTE
-    if (!utl::ConfigManager::IsAvoidConfig() && !Application::IsHeadlessModeEnabled())
+    if (!utl::ConfigManager::IsFuzzing() && !Application::IsHeadlessModeEnabled())
         RegisterRemotes();
 #endif
 }
+
+#ifndef DISABLE_DYNLOADING
+
+extern "C" SAL_DLLPUBLIC_EXPORT
+void lok_preload_hook()
+{
+    SdFilter::Preload();
+    SdAbstractDialogFactory::Create();
+}
+
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

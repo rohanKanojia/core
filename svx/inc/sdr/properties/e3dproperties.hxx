@@ -31,7 +31,7 @@ namespace sdr
         {
         protected:
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
 
             // react on ItemSet changes
             virtual void ItemSetChanged(const SfxItemSet& rSet) override;
@@ -44,13 +44,10 @@ namespace sdr
             E3dProperties(const E3dProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~E3dProperties();
+            virtual ~E3dProperties() override;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
-
-            // set a new StyleSheet and broadcast
-            virtual void SetStyleSheet(SfxStyleSheet* pNewStyleSheet, bool bDontRemoveHardAttr) override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
         };
     } // end of namespace properties
 } // end of namespace sdr

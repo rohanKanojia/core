@@ -20,11 +20,14 @@
 #include <svtools/htmlkywd.hxx>
 
 #include <rtl/tencinfo.h>
+#include <sal/log.hxx>
 
 #include <unotools/configmgr.hxx>
 #include <svl/urihelper.hxx>
 #include <tools/datetime.hxx>
 #include <tools/stream.hxx>
+#include <tools/debug.hxx>
+#include <unotools/resmgr.hxx>
 
 #include <sfx2/frmhtmlw.hxx>
 #include <sfx2/evntconf.hxx>
@@ -32,10 +35,8 @@
 #include <sfx2/app.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/docfile.hxx>
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/objsh.hxx>
-#include <sfx2/sfx.hrc>
-#include "bastyp.hrc"
+#include <strings.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
@@ -51,7 +52,6 @@ using namespace ::com::sun::star;
 
 static sal_Char const sHTML_SC_yes[] =  "YES";
 static sal_Char const sHTML_SC_no[] =       "NO";
-static sal_Char const sHTML_MIME_text_html[] =  "text/html; charset=";
 
 void SfxFrameHTMLWriter::OutMeta( SvStream& rStrm,
                                   const sal_Char *pIndent,
@@ -89,13 +89,12 @@ void SfxFrameHTMLWriter::Out_DocInfo( SvStream& rStrm, const OUString& rBaseURL,
 
     if( pCharSet )
     {
-        OUString aContentType(sHTML_MIME_text_html);
-        aContentType += OUString(pCharSet, strlen(pCharSet), RTL_TEXTENCODING_UTF8);
+        OUString aContentType = "text/html; charset=" + OUString(pCharSet, strlen(pCharSet), RTL_TEXTENCODING_UTF8);
         OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_content_type, aContentType, true,
                  eDestEnc, pNonConvertableChars );
     }
 
-    // Titel (auch wenn er leer ist)
+    // Title (regardless if empty)
     rStrm.WriteCharPtr( SAL_NEWLINE_STRING );
     if( pIndent )
         rStrm.WriteCharPtr( pIndent );
@@ -128,107 +127,106 @@ void SfxFrameHTMLWriter::Out_DocInfo( SvStream& rStrm, const OUString& rBaseURL,
     }
 
     // Who we are
-    OUString sGenerator( SfxResId(STR_HTML_GENERATOR).toString() );
+    OUString sGenerator(Translate::ExpandVariables(STR_HTML_GENERATOR));
     OUString os( "$_OS" );
     ::rtl::Bootstrap::expandMacros(os);
     sGenerator = sGenerator.replaceFirst( "%1", os );
     OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_generator, sGenerator, false, eDestEnc, pNonConvertableChars );
 
-    if( i_xDocProps.is() )
+    if( !i_xDocProps.is() )
+        return;
+
+    // Reload
+    if( (i_xDocProps->getAutoloadSecs() != 0) ||
+        !i_xDocProps->getAutoloadURL().isEmpty() )
     {
-        // Reload
-        if( (i_xDocProps->getAutoloadSecs() != 0) ||
-            !i_xDocProps->getAutoloadURL().isEmpty() )
+        OUString sContent = OUString::number(
+                            i_xDocProps->getAutoloadSecs() );
+
+        const OUString &rReloadURL = i_xDocProps->getAutoloadURL();
+        if( !rReloadURL.isEmpty() )
         {
-            OUString sContent = OUString::number(
-                                i_xDocProps->getAutoloadSecs() );
-
-            const OUString &rReloadURL = i_xDocProps->getAutoloadURL();
-            if( !rReloadURL.isEmpty() )
-            {
-                sContent += ";URL=";
-                sContent += URIHelper::simpleNormalizedMakeRelative(
-                              rBaseURL, rReloadURL);
-            }
-
-            OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_refresh, sContent, true,
-                     eDestEnc, pNonConvertableChars );
+            sContent += ";URL=";
+            sContent += URIHelper::simpleNormalizedMakeRelative(
+                          rBaseURL, rReloadURL);
         }
 
-        // Author
-        const OUString& rAuthor = i_xDocProps->getAuthor();
-        if( !rAuthor.isEmpty() )
-            OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_author, rAuthor, false,
-                     eDestEnc, pNonConvertableChars );
+        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_refresh, sContent, true,
+                 eDestEnc, pNonConvertableChars );
+    }
 
-        // created
-        ::util::DateTime uDT = i_xDocProps->getCreationDate();
-        OUStringBuffer aBuffer;
-        ::sax::Converter::convertTimeOrDateTime(aBuffer, uDT, nullptr);
-
-        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_created, aBuffer.makeStringAndClear(), false,
+    // Author
+    const OUString& rAuthor = i_xDocProps->getAuthor();
+    if( !rAuthor.isEmpty() )
+        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_author, rAuthor, false,
                  eDestEnc, pNonConvertableChars );
 
-        // changedby
-        const OUString& rChangedBy = i_xDocProps->getModifiedBy();
-        if( !rChangedBy.isEmpty() )
-            OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_changedby, rChangedBy, false,
-                     eDestEnc, pNonConvertableChars );
+    // created
+    ::util::DateTime uDT = i_xDocProps->getCreationDate();
+    OUStringBuffer aBuffer;
+    ::sax::Converter::convertTimeOrDateTime(aBuffer, uDT);
 
-        // changed
-        uDT = i_xDocProps->getModificationDate();
-        ::sax::Converter::convertTimeOrDateTime(aBuffer, uDT, nullptr);
+    OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_created, aBuffer.makeStringAndClear(), false,
+             eDestEnc, pNonConvertableChars );
 
-        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_changed, aBuffer.makeStringAndClear(), false,
+    // changedby
+    const OUString& rChangedBy = i_xDocProps->getModifiedBy();
+    if( !rChangedBy.isEmpty() )
+        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_changedby, rChangedBy, false,
                  eDestEnc, pNonConvertableChars );
 
-        // Subject
-        const OUString& rTheme = i_xDocProps->getSubject();
-        if( !rTheme.isEmpty() )
-            OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_classification, rTheme, false,
-                     eDestEnc, pNonConvertableChars );
+    // changed
+    uDT = i_xDocProps->getModificationDate();
+    ::sax::Converter::convertTimeOrDateTime(aBuffer, uDT);
 
-        // Description
-        const OUString& rComment = i_xDocProps->getDescription();
-        if( !rComment.isEmpty() )
-            OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_description, rComment, false,
-                     eDestEnc, pNonConvertableChars);
+    OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_changed, aBuffer.makeStringAndClear(), false,
+             eDestEnc, pNonConvertableChars );
 
-        // Keywords
-        OUString Keywords = ::comphelper::string::convertCommaSeparated(
-            i_xDocProps->getKeywords());
-        if( !Keywords.isEmpty() )
-            OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_keywords, Keywords, false,
-                     eDestEnc, pNonConvertableChars);
+    // Subject
+    const OUString& rTheme = i_xDocProps->getSubject();
+    if( !rTheme.isEmpty() )
+        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_classification, rTheme, false,
+                 eDestEnc, pNonConvertableChars );
 
-        uno::Reference < script::XTypeConverter > xConverter( script::Converter::create(
-            ::comphelper::getProcessComponentContext() ) );
-        uno::Reference<beans::XPropertySet> xUserDefinedProps(
-            i_xDocProps->getUserDefinedProperties(), uno::UNO_QUERY_THROW);
-        DBG_ASSERT(xUserDefinedProps.is(), "UserDefinedProperties is null");
-        uno::Reference<beans::XPropertySetInfo> xPropInfo =
-            xUserDefinedProps->getPropertySetInfo();
-        DBG_ASSERT(xPropInfo.is(), "UserDefinedProperties Info is null");
-        uno::Sequence<beans::Property> props = xPropInfo->getProperties();
-        for (sal_Int32 i = 0; i < props.getLength(); ++i)
+    // Description
+    const OUString& rComment = i_xDocProps->getDescription();
+    if( !rComment.isEmpty() )
+        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_description, rComment, false,
+                 eDestEnc, pNonConvertableChars);
+
+    // Keywords
+    OUString Keywords = ::comphelper::string::convertCommaSeparated(
+        i_xDocProps->getKeywords());
+    if( !Keywords.isEmpty() )
+        OutMeta( rStrm, pIndent, OOO_STRING_SVTOOLS_HTML_META_keywords, Keywords, false,
+                 eDestEnc, pNonConvertableChars);
+
+    uno::Reference < script::XTypeConverter > xConverter( script::Converter::create(
+        ::comphelper::getProcessComponentContext() ) );
+    uno::Reference<beans::XPropertySet> xUserDefinedProps(
+        i_xDocProps->getUserDefinedProperties(), uno::UNO_QUERY_THROW);
+    uno::Reference<beans::XPropertySetInfo> xPropInfo =
+        xUserDefinedProps->getPropertySetInfo();
+    DBG_ASSERT(xPropInfo.is(), "UserDefinedProperties Info is null");
+    uno::Sequence<beans::Property> props = xPropInfo->getProperties();
+    for (sal_Int32 i = 0; i < props.getLength(); ++i)
+    {
+        try
         {
-            try
-            {
-                OUString name = props[i].Name;
-                uno::Any aStr = xConverter->convertToSimpleType(
-                        xUserDefinedProps->getPropertyValue(name),
-                        uno::TypeClass_STRING);
-                OUString str;
-                aStr >>= str;
-                OUString valstr(comphelper::string::stripEnd(str, ' '));
-                OutMeta( rStrm, pIndent, name, valstr, false,
-                         eDestEnc, pNonConvertableChars );
-            }
-            catch (const uno::Exception&)
-            {
-                // may happen with concurrent modification...
-                SAL_INFO("sfx", "SfxFrameHTMLWriter::Out_DocInfo: exception");
-            }
+            OUString name = props[i].Name;
+            uno::Any aStr = xConverter->convertToSimpleType(
+                    xUserDefinedProps->getPropertyValue(name),
+                    uno::TypeClass_STRING);
+            OUString str;
+            aStr >>= str;
+            OUString valstr(comphelper::string::stripEnd(str, ' '));
+            OutMeta( rStrm, pIndent, name, valstr, false,
+                     eDestEnc, pNonConvertableChars );
+        }
+        catch (const uno::Exception&)
+        {
+            // may happen with concurrent modification...
+            SAL_INFO("sfx", "SfxFrameHTMLWriter::Out_DocInfo: exception");
         }
     }
 }
@@ -244,7 +242,7 @@ void SfxFrameHTMLWriter::Out_FrameDescriptor(
         uno::Any aAny = xSet->getPropertyValue("FrameURL");
         if ( (aAny >>= aStr) && !aStr.isEmpty() )
         {
-            OUString aURL = INetURLObject( aStr ).GetMainURL( INetURLObject::DECODE_TO_IURI );
+            OUString aURL = INetURLObject( aStr ).GetMainURL( INetURLObject::DecodeMechanism::ToIUri );
             if( !aURL.isEmpty() )
             {
                 aURL = URIHelper::simpleNormalizedMakeRelative(

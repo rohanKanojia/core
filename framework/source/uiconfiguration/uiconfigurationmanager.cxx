@@ -26,11 +26,16 @@
 #include <framework/toolboxconfiguration.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/ElementExistException.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/embed/InvalidStorageException.hpp>
+#include <com/sun/star/embed/StorageWrappedTargetException.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
+#include <com/sun/star/lang/IllegalAccessException.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <com/sun/star/ui/UIElementType.hpp>
 #include <com/sun/star/ui/ConfigurationEvent.hpp>
@@ -42,10 +47,12 @@
 
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <comphelper/sequence.hxx>
 #include <vcl/svapp.hxx>
 #include <rtl/ref.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <unordered_map>
 
@@ -65,60 +72,55 @@ class UIConfigurationManager :   public ::cppu::WeakImplHelper<
                                         css::ui::XUIConfigurationManager2 >
 {
 public:
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.UIConfigurationManager");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.ui.UIConfigurationManager" };
-        return aSeq;
+        return {"com.sun.star.ui.UIConfigurationManager"};
     }
 
     explicit UIConfigurationManager( const css::uno::Reference< css::uno::XComponentContext > & rxContext );
-    virtual ~UIConfigurationManager();
 
     // XComponent
-    virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
+    virtual void SAL_CALL addEventListener( const css::uno::Reference< css::lang::XEventListener >& xListener ) override;
+    virtual void SAL_CALL removeEventListener( const css::uno::Reference< css::lang::XEventListener >& aListener ) override;
 
     // XUIConfiguration
-    virtual void SAL_CALL addConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL addConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) override;
+    virtual void SAL_CALL removeConfigurationListener( const css::uno::Reference< css::ui::XUIConfigurationListener >& Listener ) override;
 
     // XUIConfigurationManager
-    virtual void SAL_CALL reset() throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > SAL_CALL getUIElementsInfo( sal_Int16 ElementType ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::container::XIndexContainer > SAL_CALL createSettings(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasSettings( const OUString& ResourceURL ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::container::XIndexAccess > SAL_CALL getSettings( const OUString& ResourceURL, sal_Bool bWriteable ) throw (css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL replaceSettings( const OUString& ResourceURL, const css::uno::Reference< css::container::XIndexAccess >& aNewData ) throw (css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeSettings( const OUString& ResourceURL ) throw (css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL insertSettings( const OUString& NewResourceURL, const css::uno::Reference< css::container::XIndexAccess >& aNewData ) throw (css::container::ElementExistException, css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getImageManager() throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::ui::XAcceleratorConfiguration > SAL_CALL getShortCutManager() throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getEventsManager() throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL reset() override;
+    virtual css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > > SAL_CALL getUIElementsInfo( sal_Int16 ElementType ) override;
+    virtual css::uno::Reference< css::container::XIndexContainer > SAL_CALL createSettings(  ) override;
+    virtual sal_Bool SAL_CALL hasSettings( const OUString& ResourceURL ) override;
+    virtual css::uno::Reference< css::container::XIndexAccess > SAL_CALL getSettings( const OUString& ResourceURL, sal_Bool bWriteable ) override;
+    virtual void SAL_CALL replaceSettings( const OUString& ResourceURL, const css::uno::Reference< css::container::XIndexAccess >& aNewData ) override;
+    virtual void SAL_CALL removeSettings( const OUString& ResourceURL ) override;
+    virtual void SAL_CALL insertSettings( const OUString& NewResourceURL, const css::uno::Reference< css::container::XIndexAccess >& aNewData ) override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getImageManager() override;
+    virtual css::uno::Reference< css::ui::XAcceleratorConfiguration > SAL_CALL getShortCutManager() override;
+    virtual css::uno::Reference< css::uno::XInterface > SAL_CALL getEventsManager() override;
 
     // XUIConfigurationPersistence
-    virtual void SAL_CALL reload() throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL store() throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL storeToStorage( const css::uno::Reference< css::embed::XStorage >& Storage ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isModified() throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isReadOnly() throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL reload() override;
+    virtual void SAL_CALL store() override;
+    virtual void SAL_CALL storeToStorage( const css::uno::Reference< css::embed::XStorage >& Storage ) override;
+    virtual sal_Bool SAL_CALL isModified() override;
+    virtual sal_Bool SAL_CALL isReadOnly() override;
 
     // XUIConfigurationStorage
-    virtual void SAL_CALL setStorage( const css::uno::Reference< css::embed::XStorage >& Storage ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasStorage() throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setStorage( const css::uno::Reference< css::embed::XStorage >& Storage ) override;
+    virtual sal_Bool SAL_CALL hasStorage() override;
 
 private:
     // private data types
@@ -150,18 +152,16 @@ private:
 
     struct UIElementType;
     friend struct UIElementType;
-    typedef std::unordered_map< OUString, UIElementData, OUStringHash > UIElementDataHashMap;
+    typedef std::unordered_map< OUString, UIElementData > UIElementDataHashMap;
 
     struct UIElementType
     {
         UIElementType() : bModified( false ),
                           bLoaded( false ),
-                          bDefaultLayer( false ),
                           nElementType( css::ui::UIElementType::UNKNOWN ) {}
 
         bool                                                              bModified;
         bool                                                              bLoaded;
-        bool                                                              bDefaultLayer;
         sal_Int16                                                         nElementType;
         UIElementDataHashMap                                              aElementsHashMap;
         css::uno::Reference< css::embed::XStorage > xStorage;
@@ -169,7 +169,7 @@ private:
 
     typedef std::vector< UIElementType > UIElementTypesVector;
     typedef std::vector< css::ui::ConfigurationEvent > ConfigEventNotifyContainer;
-    typedef std::unordered_map< OUString, UIElementInfo, OUStringHash > UIElementInfoHashMap;
+    typedef std::unordered_map< OUString, UIElementInfo > UIElementInfoHashMap;
 
     void            impl_Initialize();
     void            implts_notifyContainerListener( const css::ui::ConfigurationEvent& aEvent, NotifyOp eOp );
@@ -177,7 +177,7 @@ private:
     void            impl_preloadUIElementTypeList( sal_Int16 nElementType );
     UIElementData*  impl_findUIElementData( const OUString& aResourceURL, sal_Int16 nElementType, bool bLoad = true );
     void            impl_requestUIElementData( sal_Int16 nElementType, UIElementData& aUIElementData );
-    void            impl_storeElementTypeData( css::uno::Reference< css::embed::XStorage >& xStorage, UIElementType& rElementType, bool bResetModifyState = true );
+    void            impl_storeElementTypeData( css::uno::Reference< css::embed::XStorage > const & xStorage, UIElementType& rElementType, bool bResetModifyState = true );
     void            impl_resetElementTypeData( UIElementType& rDocElementType, ConfigEventNotifyContainer& rRemoveNotifyContainer );
     void            impl_reloadElementTypeData( UIElementType& rDocElementType, ConfigEventNotifyContainer& rRemoveNotifyContainer, ConfigEventNotifyContainer& rReplaceNotifyContainer );
 
@@ -185,12 +185,8 @@ private:
     css::uno::Reference< css::embed::XStorage >               m_xDocConfigStorage;
     bool                                                      m_bReadOnly;
     bool                                                      m_bModified;
-    bool                                                      m_bConfigRead;
     bool                                                      m_bDisposed;
-    OUString                                                  m_aXMLPostfix;
     OUString                                                  m_aPropUIName;
-    OUString                                                  m_aPropResourceURL;
-    OUString                                                  m_aModuleIdentifier;
     css::uno::Reference< css::uno::XComponentContext >        m_xContext;
     osl::Mutex                                                m_mutex;
     cppu::OMultiTypeInterfaceContainerHelper                  m_aListenerContainer;   /// container for ALL Listener
@@ -256,11 +252,10 @@ void UIConfigurationManager::impl_fillSequenceWithElementTypeInfo( UIElementInfo
     impl_preloadUIElementTypeList( nElementType );
 
     UIElementDataHashMap& rUserElements = m_aUIElements[nElementType].aElementsHashMap;
-    UIElementDataHashMap::const_iterator pUserIter = rUserElements.begin();
 
-    while ( pUserIter != rUserElements.end() )
+    for (auto const& elem : rUserElements)
     {
-        UIElementData* pDataSettings = impl_findUIElementData( pUserIter->second.aResourceURL, nElementType );
+        UIElementData* pDataSettings = impl_findUIElementData( elem.second.aResourceURL, nElementType );
         if ( pDataSettings && !pDataSettings->bDefault )
         {
             // Retrieve user interface name from XPropertySet interface
@@ -272,10 +267,9 @@ void UIConfigurationManager::impl_fillSequenceWithElementTypeInfo( UIElementInfo
                 a >>= aUIName;
             }
 
-            UIElementInfo aInfo( pUserIter->second.aResourceURL, aUIName );
-            aUIElementInfoCollection.insert( UIElementInfoHashMap::value_type( pUserIter->second.aResourceURL, aInfo ));
+            UIElementInfo aInfo( elem.second.aResourceURL, aUIName );
+            aUIElementInfoCollection.emplace( elem.second.aResourceURL, aInfo );
         }
-        ++pUserIter;
     }
 }
 
@@ -317,7 +311,7 @@ void UIConfigurationManager::impl_preloadUIElementTypeList( sal_Int16 nElementTy
 
                         // Create unordered_map entries for all user interface elements inside the storage. We don't load the
                         // settings to speed up the process.
-                        rHashMap.insert( UIElementDataHashMap::value_type( aUIElementData.aResourceURL, aUIElementData ));
+                        rHashMap.emplace( aUIElementData.aResourceURL, aUIElementData );
                     }
                 }
             }
@@ -450,14 +444,13 @@ UIConfigurationManager::UIElementData* UIConfigurationManager::impl_findUIElemen
     return nullptr;
 }
 
-void UIConfigurationManager::impl_storeElementTypeData( Reference< XStorage >& xStorage, UIElementType& rElementType, bool bResetModifyState )
+void UIConfigurationManager::impl_storeElementTypeData( Reference< XStorage > const & xStorage, UIElementType& rElementType, bool bResetModifyState )
 {
     UIElementDataHashMap& rHashMap          = rElementType.aElementsHashMap;
-    UIElementDataHashMap::iterator pIter    = rHashMap.begin();
 
-    while ( pIter != rHashMap.end() )
+    for (auto & elem : rHashMap)
     {
-        UIElementData& rElement = pIter->second;
+        UIElementData& rElement = elem.second;
         if ( rElement.bModified )
         {
             if ( rElement.bDefault )
@@ -523,8 +516,6 @@ void UIConfigurationManager::impl_storeElementTypeData( Reference< XStorage >& x
                     rElement.bModified = false;
             }
         }
-
-        ++pIter;
     }
 
     // commit element type storage
@@ -542,16 +533,15 @@ void UIConfigurationManager::impl_resetElementTypeData(
     ConfigEventNotifyContainer& rRemoveNotifyContainer )
 {
     UIElementDataHashMap& rHashMap          = rDocElementType.aElementsHashMap;
-    UIElementDataHashMap::iterator pIter    = rHashMap.begin();
 
     Reference< XUIConfigurationManager > xThis( static_cast< OWeakObject* >( this ), UNO_QUERY );
     Reference< XInterface > xIfac( xThis, UNO_QUERY );
 
     // Make copies of the event structures to be thread-safe. We have to unlock our mutex before calling
     // our listeners!
-    while ( pIter != rHashMap.end() )
+    for (auto & elem : rHashMap)
     {
-        UIElementData& rElement = pIter->second;
+        UIElementData& rElement = elem.second;
         if ( !rElement.bDefault )
         {
             // Remove user-defined settings from document
@@ -569,8 +559,6 @@ void UIConfigurationManager::impl_resetElementTypeData(
         }
         else
             rElement.bModified = false;
-
-        ++pIter;
     }
 
     // Remove all settings from our user interface elements
@@ -583,16 +571,15 @@ void UIConfigurationManager::impl_reloadElementTypeData(
     ConfigEventNotifyContainer& rReplaceNotifyContainer )
 {
     UIElementDataHashMap& rHashMap          = rDocElementType.aElementsHashMap;
-    UIElementDataHashMap::iterator pIter    = rHashMap.begin();
     Reference< XStorage > xElementStorage( rDocElementType.xStorage );
 
     Reference< XUIConfigurationManager > xThis( static_cast< OWeakObject* >( this ), UNO_QUERY );
     Reference< XInterface > xIfac( xThis, UNO_QUERY );
     sal_Int16 nType = rDocElementType.nElementType;
 
-    while ( pIter != rHashMap.end() )
+    for (auto & elem : rHashMap)
     {
-        UIElementData& rElement = pIter->second;
+        UIElementData& rElement = elem.second;
         if ( rElement.bModified )
         {
             if ( xElementStorage->hasByName( rElement.aName ))
@@ -630,7 +617,6 @@ void UIConfigurationManager::impl_reloadElementTypeData(
                 rElement.bDefault  = true;
             }
         }
-        ++pIter;
     }
 
     rDocElementType.bModified = false;
@@ -671,7 +657,6 @@ void UIConfigurationManager::impl_Initialize()
             m_aUIElements[i].nElementType = i;
             m_aUIElements[i].bModified = false;
             m_aUIElements[i].xStorage = xElementTypeStorage;
-            m_aUIElements[i].bDefaultLayer = false;
         }
     }
     else
@@ -683,14 +668,10 @@ void UIConfigurationManager::impl_Initialize()
 }
 
 UIConfigurationManager::UIConfigurationManager( const css::uno::Reference< css::uno::XComponentContext > & rxContext ) :
-    m_xDocConfigStorage( nullptr )
-    , m_bReadOnly( true )
+      m_bReadOnly( true )
     , m_bModified( false )
-    , m_bConfigRead( false )
     , m_bDisposed( false )
-    , m_aXMLPostfix( ".xml" )
     , m_aPropUIName( "UIName" )
-    , m_aPropResourceURL( "ResourceURL" )
     , m_xContext( rxContext )
     , m_aListenerContainer( m_mutex )
 {
@@ -699,12 +680,8 @@ UIConfigurationManager::UIConfigurationManager( const css::uno::Reference< css::
     m_aUIElements.resize( css::ui::UIElementType::COUNT );
 }
 
-UIConfigurationManager::~UIConfigurationManager()
-{
-}
-
 // XComponent
-void SAL_CALL UIConfigurationManager::dispose() throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::dispose()
 {
     Reference< XComponent > xThis( static_cast< OWeakObject* >(this), UNO_QUERY );
 
@@ -725,13 +702,12 @@ void SAL_CALL UIConfigurationManager::dispose() throw (css::uno::RuntimeExceptio
         m_xImageManager.clear();
         m_aUIElements.clear();
         m_xDocConfigStorage.clear();
-        m_bConfigRead = false;
         m_bModified = false;
         m_bDisposed = true;
     }
 }
 
-void SAL_CALL UIConfigurationManager::addEventListener( const Reference< XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::addEventListener( const Reference< XEventListener >& xListener )
 {
     {
         SolarMutexGuard g;
@@ -744,14 +720,14 @@ void SAL_CALL UIConfigurationManager::addEventListener( const Reference< XEventL
     m_aListenerContainer.addInterface( cppu::UnoType<XEventListener>::get(), xListener );
 }
 
-void SAL_CALL UIConfigurationManager::removeEventListener( const Reference< XEventListener >& xListener ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::removeEventListener( const Reference< XEventListener >& xListener )
 {
     /* SAFE AREA ----------------------------------------------------------------------------------------------- */
     m_aListenerContainer.removeInterface( cppu::UnoType<XEventListener>::get(), xListener );
 }
 
 // XUIConfigurationManager
-void SAL_CALL UIConfigurationManager::addConfigurationListener( const Reference< css::ui::XUIConfigurationListener >& xListener ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::addConfigurationListener( const Reference< css::ui::XUIConfigurationListener >& xListener )
 {
     {
         SolarMutexGuard g;
@@ -764,13 +740,13 @@ void SAL_CALL UIConfigurationManager::addConfigurationListener( const Reference<
     m_aListenerContainer.addInterface( cppu::UnoType<XUIConfigurationListener>::get(), xListener );
 }
 
-void SAL_CALL UIConfigurationManager::removeConfigurationListener( const Reference< css::ui::XUIConfigurationListener >& xListener ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::removeConfigurationListener( const Reference< css::ui::XUIConfigurationListener >& xListener )
 {
     /* SAFE AREA ----------------------------------------------------------------------------------------------- */
     m_aListenerContainer.removeInterface( cppu::UnoType<XUIConfigurationListener>::get(), xListener );
 }
 
-void SAL_CALL UIConfigurationManager::reset() throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::reset()
 {
     SolarMutexClearableGuard aGuard;
 
@@ -837,8 +813,8 @@ void SAL_CALL UIConfigurationManager::reset() throw (css::uno::RuntimeException,
             aGuard.clear();
 
             // Notify our listeners
-            for ( size_t k = 0; k < aRemoveEventNotifyContainer.size(); k++ )
-                implts_notifyContainerListener( aRemoveEventNotifyContainer[k], NotifyOp_Remove );
+            for (ConfigurationEvent & k : aRemoveEventNotifyContainer)
+                implts_notifyContainerListener( k, NotifyOp_Remove );
         }
         catch ( const css::lang::IllegalArgumentException& )
         {
@@ -856,7 +832,6 @@ void SAL_CALL UIConfigurationManager::reset() throw (css::uno::RuntimeException,
 }
 
 Sequence< Sequence< PropertyValue > > SAL_CALL UIConfigurationManager::getUIElementsInfo( sal_Int16 ElementType )
-throw ( IllegalArgumentException, RuntimeException, std::exception )
 {
     if (( ElementType < 0 ) || ( ElementType >= css::ui::UIElementType::COUNT ))
         throw IllegalArgumentException();
@@ -871,31 +846,28 @@ throw ( IllegalArgumentException, RuntimeException, std::exception )
     if ( ElementType == css::ui::UIElementType::UNKNOWN )
     {
         for ( sal_Int16 i = 0; i < css::ui::UIElementType::COUNT; i++ )
-            impl_fillSequenceWithElementTypeInfo( aUIElementInfoCollection, sal_Int16( i ) );
+            impl_fillSequenceWithElementTypeInfo( aUIElementInfoCollection, i );
     }
     else
         impl_fillSequenceWithElementTypeInfo( aUIElementInfoCollection, ElementType );
 
     Sequence< PropertyValue > aUIElementInfo( 2 );
-    aUIElementInfo[0].Name = m_aPropResourceURL;
+    aUIElementInfo[0].Name = "ResourceURL";
     aUIElementInfo[1].Name = m_aPropUIName;
 
     aElementInfoSeq.resize( aUIElementInfoCollection.size() );
-    UIElementInfoHashMap::const_iterator pIter = aUIElementInfoCollection.begin();
-
     sal_Int32 n = 0;
-    while ( pIter != aUIElementInfoCollection.end() )
+    for (auto const& elem : aUIElementInfoCollection)
     {
-        aUIElementInfo[0].Value <<= pIter->second.aResourceURL;
-        aUIElementInfo[1].Value <<= pIter->second.aUIName;
+        aUIElementInfo[0].Value <<= elem.second.aResourceURL;
+        aUIElementInfo[1].Value <<= elem.second.aUIName;
         aElementInfoSeq[n++] = aUIElementInfo;
-        ++pIter;
     }
 
     return comphelper::containerToSequence(aElementInfoSeq);
 }
 
-Reference< XIndexContainer > SAL_CALL UIConfigurationManager::createSettings() throw (css::uno::RuntimeException, std::exception)
+Reference< XIndexContainer > SAL_CALL UIConfigurationManager::createSettings()
 {
     SolarMutexGuard g;
 
@@ -907,54 +879,46 @@ Reference< XIndexContainer > SAL_CALL UIConfigurationManager::createSettings() t
 }
 
 sal_Bool SAL_CALL UIConfigurationManager::hasSettings( const OUString& ResourceURL )
-throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
 {
     sal_Int16 nElementType = RetrieveTypeFromResourceURL( ResourceURL );
 
     if (( nElementType == css::ui::UIElementType::UNKNOWN ) ||
         ( nElementType >= css::ui::UIElementType::COUNT   ))
         throw IllegalArgumentException();
-    else
-    {
-        UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType, false );
-        if ( pDataSettings && !pDataSettings->bDefault )
-            return sal_True;
-    }
+    UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType, false );
+    if ( pDataSettings && !pDataSettings->bDefault )
+        return true;
 
-    return sal_False;
+    return false;
 }
 
 Reference< XIndexAccess > SAL_CALL UIConfigurationManager::getSettings( const OUString& ResourceURL, sal_Bool bWriteable )
-throw (css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
 {
     sal_Int16 nElementType = RetrieveTypeFromResourceURL( ResourceURL );
 
     if (( nElementType == css::ui::UIElementType::UNKNOWN ) ||
         ( nElementType >= css::ui::UIElementType::COUNT   ))
         throw IllegalArgumentException();
-    else
+
+    SolarMutexGuard g;
+
+    if ( m_bDisposed )
+        throw DisposedException();
+
+    UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType );
+    if ( pDataSettings && !pDataSettings->bDefault )
     {
-        SolarMutexGuard g;
-
-        if ( m_bDisposed )
-            throw DisposedException();
-
-        UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType );
-        if ( pDataSettings && !pDataSettings->bDefault )
-        {
-            // Create a copy of our data if someone wants to change the data.
-            if ( bWriteable )
-                return Reference< XIndexAccess >( static_cast< OWeakObject * >( new RootItemContainer( pDataSettings->xSettings ) ), UNO_QUERY );
-            else
-                return pDataSettings->xSettings;
-        }
+        // Create a copy of our data if someone wants to change the data.
+        if ( bWriteable )
+            return Reference< XIndexAccess >( static_cast< OWeakObject * >( new RootItemContainer( pDataSettings->xSettings ) ), UNO_QUERY );
+        else
+            return pDataSettings->xSettings;
     }
 
     throw NoSuchElementException();
 }
 
 void SAL_CALL UIConfigurationManager::replaceSettings( const OUString& ResourceURL, const Reference< css::container::XIndexAccess >& aNewData )
-throw (css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::lang::IllegalAccessException, css::uno::RuntimeException, std::exception)
 {
     sal_Int16 nElementType = RetrieveTypeFromResourceURL( ResourceURL );
 
@@ -971,21 +935,81 @@ throw (css::container::NoSuchElementException, css::lang::IllegalArgumentExcepti
             throw DisposedException();
 
         UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType );
-        if ( pDataSettings && !pDataSettings->bDefault )
+        if ( !pDataSettings || pDataSettings->bDefault )
+            throw NoSuchElementException();
+        // we have a settings entry in our user-defined layer - replace
+        Reference< XIndexAccess > xOldSettings = pDataSettings->xSettings;
+
+        // Create a copy of the data if the container is not const
+        Reference< XIndexReplace > xReplace( aNewData, UNO_QUERY );
+        if ( xReplace.is() )
+            pDataSettings->xSettings.set( static_cast< OWeakObject * >( new ConstItemContainer( aNewData ) ), UNO_QUERY );
+        else
+            pDataSettings->xSettings = aNewData;
+
+        pDataSettings->bDefault  = false;
+        pDataSettings->bModified = true;
+        m_bModified = true;
+
+        // Modify type container
+        UIElementType& rElementType = m_aUIElements[nElementType];
+        rElementType.bModified = true;
+
+        Reference< XUIConfigurationManager > xThis( static_cast< OWeakObject* >( this ), UNO_QUERY );
+        Reference< XInterface > xIfac( xThis, UNO_QUERY );
+
+        // Create event to notify listener about replaced element settings
+        ConfigurationEvent aEvent;
+
+        aEvent.ResourceURL = ResourceURL;
+        aEvent.Accessor <<= xThis;
+        aEvent.Source = xIfac;
+        aEvent.ReplacedElement <<= xOldSettings;
+        aEvent.Element <<= pDataSettings->xSettings;
+
+        aGuard.clear();
+
+        implts_notifyContainerListener( aEvent, NotifyOp_Replace );
+    }
+}
+
+void SAL_CALL UIConfigurationManager::removeSettings( const OUString& ResourceURL )
+{
+    sal_Int16 nElementType = RetrieveTypeFromResourceURL( ResourceURL );
+
+    if (( nElementType == css::ui::UIElementType::UNKNOWN ) ||
+        ( nElementType >= css::ui::UIElementType::COUNT   ))
+        throw IllegalArgumentException( "The ResourceURL is not valid or "
+                                        "describes an unknown type. "
+                                        "ResourceURL: " + ResourceURL, nullptr, 0 );
+    else if ( m_bReadOnly )
+        throw IllegalAccessException( "The configuration manager is read-only. "
+                                      "ResourceURL: " + ResourceURL, nullptr );
+    else
+    {
+        SolarMutexClearableGuard aGuard;
+
+        if ( m_bDisposed )
+            throw DisposedException( "The configuration manager has been disposed, "
+                                     "and can't uphold its method specification anymore. "
+                                     "ResourceURL: " + ResourceURL, nullptr );
+
+        UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType );
+        if ( !pDataSettings )
+            throw NoSuchElementException( "The settings data cannot be found. "
+                                          "ResourceURL: " + ResourceURL, nullptr);
+        // If element settings are default, we don't need to change anything!
+        if ( pDataSettings->bDefault )
+            return;
+        else
         {
-            // we have a settings entry in our user-defined layer - replace
-            Reference< XIndexAccess > xOldSettings = pDataSettings->xSettings;
+            Reference< XIndexAccess > xRemovedSettings = pDataSettings->xSettings;
+            pDataSettings->bDefault = true;
 
-            // Create a copy of the data if the container is not const
-            Reference< XIndexReplace > xReplace( aNewData, UNO_QUERY );
-            if ( xReplace.is() )
-                pDataSettings->xSettings.set( static_cast< OWeakObject * >( new ConstItemContainer( aNewData ) ), UNO_QUERY );
-            else
-                pDataSettings->xSettings = aNewData;
-
-            pDataSettings->bDefault  = false;
-            pDataSettings->bModified = true;
-            m_bModified = true;
+            // check if this is a default layer node
+            pDataSettings->bModified = true; // we have to remove this node from the user layer!
+            pDataSettings->xSettings.clear();
+            m_bModified = true; // user layer must be written
 
             // Modify type container
             UIElementType& rElementType = m_aUIElements[nElementType];
@@ -994,84 +1018,22 @@ throw (css::container::NoSuchElementException, css::lang::IllegalArgumentExcepti
             Reference< XUIConfigurationManager > xThis( static_cast< OWeakObject* >( this ), UNO_QUERY );
             Reference< XInterface > xIfac( xThis, UNO_QUERY );
 
-            // Create event to notify listener about replaced element settings
+            // Create event to notify listener about removed element settings
             ConfigurationEvent aEvent;
 
             aEvent.ResourceURL = ResourceURL;
             aEvent.Accessor <<= xThis;
             aEvent.Source = xIfac;
-            aEvent.ReplacedElement <<= xOldSettings;
-            aEvent.Element <<= pDataSettings->xSettings;
+            aEvent.Element <<= xRemovedSettings;
 
             aGuard.clear();
 
-            implts_notifyContainerListener( aEvent, NotifyOp_Replace );
+            implts_notifyContainerListener( aEvent, NotifyOp_Remove );
         }
-        else
-            throw NoSuchElementException();
-    }
-}
-
-void SAL_CALL UIConfigurationManager::removeSettings( const OUString& ResourceURL )
-throw ( NoSuchElementException, IllegalArgumentException, IllegalAccessException, RuntimeException, std::exception)
-{
-    sal_Int16 nElementType = RetrieveTypeFromResourceURL( ResourceURL );
-
-    if (( nElementType == css::ui::UIElementType::UNKNOWN ) ||
-        ( nElementType >= css::ui::UIElementType::COUNT   ))
-        throw IllegalArgumentException();
-    else if ( m_bReadOnly )
-        throw IllegalAccessException();
-    else
-    {
-        SolarMutexClearableGuard aGuard;
-
-        if ( m_bDisposed )
-            throw DisposedException();
-
-        UIElementData* pDataSettings = impl_findUIElementData( ResourceURL, nElementType );
-        if ( pDataSettings )
-        {
-            // If element settings are default, we don't need to change anything!
-            if ( pDataSettings->bDefault )
-                return;
-            else
-            {
-                Reference< XIndexAccess > xRemovedSettings = pDataSettings->xSettings;
-                pDataSettings->bDefault = true;
-
-                // check if this is a default layer node
-                pDataSettings->bModified = true; // we have to remove this node from the user layer!
-                pDataSettings->xSettings.clear();
-                m_bModified = true; // user layer must be written
-
-                // Modify type container
-                UIElementType& rElementType = m_aUIElements[nElementType];
-                rElementType.bModified = true;
-
-                Reference< XUIConfigurationManager > xThis( static_cast< OWeakObject* >( this ), UNO_QUERY );
-                Reference< XInterface > xIfac( xThis, UNO_QUERY );
-
-                // Create event to notify listener about removed element settings
-                ConfigurationEvent aEvent;
-
-                aEvent.ResourceURL = ResourceURL;
-                aEvent.Accessor <<= xThis;
-                aEvent.Source = xIfac;
-                aEvent.Element <<= xRemovedSettings;
-
-                aGuard.clear();
-
-                implts_notifyContainerListener( aEvent, NotifyOp_Remove );
-            }
-        }
-        else
-            throw NoSuchElementException();
     }
 }
 
 void SAL_CALL UIConfigurationManager::insertSettings( const OUString& NewResourceURL, const Reference< XIndexAccess >& aNewData )
-throw ( ElementExistException, IllegalArgumentException, IllegalAccessException, RuntimeException, std::exception )
 {
     sal_Int16 nElementType = RetrieveTypeFromResourceURL( NewResourceURL );
 
@@ -1118,11 +1080,11 @@ throw ( ElementExistException, IllegalArgumentException, IllegalAccessException,
 
             if ( bInsertData )
             {
-                pDataSettings->aName        = RetrieveNameFromResourceURL( NewResourceURL ) + m_aXMLPostfix;
+                pDataSettings->aName        = RetrieveNameFromResourceURL( NewResourceURL ) + ".xml";
                 pDataSettings->aResourceURL = NewResourceURL;
 
                 UIElementDataHashMap& rElements = rElementType.aElementsHashMap;
-                rElements.insert( UIElementDataHashMap::value_type( NewResourceURL, *pDataSettings ));
+                rElements.emplace( NewResourceURL, *pDataSettings );
             }
 
             Reference< XIndexAccess > xInsertSettings( aUIElementData.xSettings );
@@ -1144,7 +1106,7 @@ throw ( ElementExistException, IllegalArgumentException, IllegalAccessException,
     }
 }
 
-Reference< XInterface > SAL_CALL UIConfigurationManager::getImageManager() throw (css::uno::RuntimeException, std::exception)
+Reference< XInterface > SAL_CALL UIConfigurationManager::getImageManager()
 {
     if ( m_bDisposed )
         throw DisposedException();
@@ -1155,14 +1117,11 @@ Reference< XInterface > SAL_CALL UIConfigurationManager::getImageManager() throw
                              UNO_QUERY );
         Reference< XInitialization > xInit( m_xImageManager, UNO_QUERY );
 
-        Sequence< Any > aPropSeq( 2 );
-        PropertyValue aPropValue;
-        aPropValue.Name  = "UserConfigStorage";
-        aPropValue.Value = makeAny( m_xDocConfigStorage );
-        aPropSeq[0] = makeAny( aPropValue );
-        aPropValue.Name  = "ModuleIdentifier";
-        aPropValue.Value = makeAny( m_aModuleIdentifier );
-        aPropSeq[1] = makeAny( aPropValue );
+        Sequence<Any> aPropSeq(comphelper::InitAnyPropertySequence(
+        {
+            {"UserConfigStorage", Any(m_xDocConfigStorage)},
+            {"ModuleIdentifier", Any(OUString())},
+        }));
 
         xInit->initialize( aPropSeq );
     }
@@ -1170,7 +1129,7 @@ Reference< XInterface > SAL_CALL UIConfigurationManager::getImageManager() throw
     return Reference< XInterface >( m_xImageManager, UNO_QUERY );
 }
 
-Reference< XAcceleratorConfiguration > SAL_CALL UIConfigurationManager::getShortCutManager() throw (css::uno::RuntimeException, std::exception)
+Reference< XAcceleratorConfiguration > SAL_CALL UIConfigurationManager::getShortCutManager()
 {
     // SAFE ->
     SolarMutexGuard g;
@@ -1189,13 +1148,13 @@ Reference< XAcceleratorConfiguration > SAL_CALL UIConfigurationManager::getShort
     return m_xAccConfig;
 }
 
-Reference< XInterface > SAL_CALL UIConfigurationManager::getEventsManager() throw (css::uno::RuntimeException, std::exception)
+Reference< XInterface > SAL_CALL UIConfigurationManager::getEventsManager()
 {
     return Reference< XInterface >();
 }
 
 // XUIConfigurationStorage
-void SAL_CALL UIConfigurationManager::setStorage( const Reference< XStorage >& Storage ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::setStorage( const Reference< XStorage >& Storage )
 {
     SolarMutexGuard g;
 
@@ -1255,18 +1214,18 @@ void SAL_CALL UIConfigurationManager::setStorage( const Reference< XStorage >& S
     impl_Initialize();
 }
 
-sal_Bool SAL_CALL UIConfigurationManager::hasStorage() throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL UIConfigurationManager::hasStorage()
 {
     SolarMutexGuard g;
 
     if ( m_bDisposed )
         throw DisposedException();
 
-    return ( m_xDocConfigStorage.is() );
+    return m_xDocConfigStorage.is();
 }
 
 // XUIConfigurationPersistence
-void SAL_CALL UIConfigurationManager::reload() throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::reload()
 {
     SolarMutexClearableGuard aGuard;
 
@@ -1298,14 +1257,14 @@ void SAL_CALL UIConfigurationManager::reload() throw (css::uno::Exception, css::
         aGuard.clear();
 
         // Notify our listeners
-        for ( size_t j = 0; j < aRemoveNotifyContainer.size(); j++ )
-            implts_notifyContainerListener( aRemoveNotifyContainer[j], NotifyOp_Remove );
-        for ( size_t k = 0; k < aReplaceNotifyContainer.size(); k++ )
-            implts_notifyContainerListener( aReplaceNotifyContainer[k], NotifyOp_Replace );
+        for (ConfigurationEvent & j : aRemoveNotifyContainer)
+            implts_notifyContainerListener( j, NotifyOp_Remove );
+        for (ConfigurationEvent & k : aReplaceNotifyContainer)
+            implts_notifyContainerListener( k, NotifyOp_Replace );
     }
 }
 
-void SAL_CALL UIConfigurationManager::store() throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::store()
 {
     SolarMutexGuard g;
 
@@ -1338,7 +1297,7 @@ void SAL_CALL UIConfigurationManager::store() throw (css::uno::Exception, css::u
     }
 }
 
-void SAL_CALL UIConfigurationManager::storeToStorage( const Reference< XStorage >& Storage ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception)
+void SAL_CALL UIConfigurationManager::storeToStorage( const Reference< XStorage >& Storage )
 {
     SolarMutexGuard g;
 
@@ -1371,14 +1330,14 @@ void SAL_CALL UIConfigurationManager::storeToStorage( const Reference< XStorage 
     }
 }
 
-sal_Bool SAL_CALL UIConfigurationManager::isModified() throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL UIConfigurationManager::isModified()
 {
     SolarMutexGuard g;
 
     return m_bModified;
 }
 
-sal_Bool SAL_CALL UIConfigurationManager::isReadOnly() throw (css::uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL UIConfigurationManager::isReadOnly()
 {
     SolarMutexGuard g;
 
@@ -1418,7 +1377,7 @@ void UIConfigurationManager::implts_notifyContainerListener( const Configuration
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_UIConfigurationManager_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

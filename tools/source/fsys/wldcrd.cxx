@@ -48,8 +48,10 @@ bool WildCard::ImpMatch( const char *pWild, const char *pStr )
                     else
                         pWild += pos;
                 else
-                    break;          // WARNING: may cause execution of next case
-                                    // in some circumstances!
+                    break;
+                // WARNING/TODO: may cause execution of next case in some
+                // circumstances!
+                [[fallthrough]];
             case '*':
                 while ( *pWild == '*' )
                     pWild++;
@@ -102,10 +104,7 @@ bool WildCard::Matches( const OUString& rString ) const
         }
     }
 
-    if ( ImpMatch( aTmpWild.getStr(), aString.getStr() ) )
-        return true;
-    else
-        return false;
+    return ImpMatch( aTmpWild.getStr(), aString.getStr() );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

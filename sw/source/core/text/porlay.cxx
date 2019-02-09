@@ -21,22 +21,26 @@
 #include "itrform2.hxx"
 #include "porglue.hxx"
 #include "porexp.hxx"
-#include "blink.hxx"
+#include <blink.hxx>
 #include "redlnitr.hxx"
 #include "porfly.hxx"
-#include <porrst.hxx>
-#include <pormulti.hxx>
-#include <pordrop.hxx>
+#include "porrst.hxx"
+#include "pormulti.hxx"
+#include "pordrop.hxx"
 #include <breakit.hxx>
 #include <unicode/uchar.h>
 #include <com/sun/star/i18n/ScriptType.hpp>
+#include <com/sun/star/i18n/CharacterIteratorMode.hpp>
 #include <com/sun/star/i18n/CTLScriptType.hpp>
 #include <com/sun/star/i18n/WordType.hpp>
+#include <com/sun/star/i18n/XBreakIterator.hpp>
 #include <paratr.hxx>
+#include <sal/log.hxx>
 #include <editeng/adjustitem.hxx>
 #include <editeng/scripttypeitem.hxx>
 #include <editeng/charhiddenitem.hxx>
 #include <vcl/outdev.hxx>
+#include <svl/asiancfg.hxx>
 #include <editeng/blinkitem.hxx>
 #include <tools/multisel.hxx>
 #include <unotools/charclass.hxx>
@@ -47,9 +51,11 @@
 #include <redline.hxx>
 #include <section.hxx>
 #include <calbck.hxx>
+#include <doc.hxx>
 #include <IDocumentRedlineAccess.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentContentOperations.hxx>
+#include <IMark.hxx>
 
 using namespace ::com::sun::star;
 using namespace i18n::ScriptType;
@@ -61,25 +67,74 @@ using namespace i18n::ScriptType;
 #define IS_JOINING_GROUP(c, g) ( u_getIntPropertyValue( (c), UCHAR_JOINING_GROUP ) == U_JG_##g )
 #define isAinChar(c)        IS_JOINING_GROUP((c), AIN)
 #define isAlefChar(c)       IS_JOINING_GROUP((c), ALEF)
-#define isBaaChar(c)        IS_JOINING_GROUP((c), BEH)
 #define isDalChar(c)        IS_JOINING_GROUP((c), DAL)
+#if U_ICU_VERSION_MAJOR_NUM >= 58
+#define isFehChar(c)       (IS_JOINING_GROUP((c), FEH) || IS_JOINING_GROUP((c), AFRICAN_FEH))
+#else
 #define isFehChar(c)        IS_JOINING_GROUP((c), FEH)
+#endif
 #define isGafChar(c)        IS_JOINING_GROUP((c), GAF)
-#define isHahChar(c)        IS_JOINING_GROUP((c), HAH)
+#define isHehChar(c)        IS_JOINING_GROUP((c), HEH)
 #define isKafChar(c)        IS_JOINING_GROUP((c), KAF)
 #define isLamChar(c)        IS_JOINING_GROUP((c), LAM)
+#if U_ICU_VERSION_MAJOR_NUM >= 58
+#define isQafChar(c)       (IS_JOINING_GROUP((c), QAF) || IS_JOINING_GROUP((c), AFRICAN_QAF))
+#else
 #define isQafChar(c)        IS_JOINING_GROUP((c), QAF)
+#endif
 #define isRehChar(c)        IS_JOINING_GROUP((c), REH)
+#define isTahChar(c)        IS_JOINING_GROUP((c), TAH)
 #define isTehMarbutaChar(c) IS_JOINING_GROUP((c), TEH_MARBUTA)
 #define isWawChar(c)        IS_JOINING_GROUP((c), WAW)
-#if (U_ICU_VERSION_MAJOR_NUM > 4) || (U_ICU_VERSION_MAJOR_NUM == 4 && U_ICU_VERSION_MINOR_NUM >= 4)
-#define isYehChar(c)        (IS_JOINING_GROUP((c), YEH) || IS_JOINING_GROUP((c), FARSI_YEH))
-#else
-#define isYehChar(c)        IS_JOINING_GROUP((c), YEH)
-#endif
 #define isSeenOrSadChar(c)  (IS_JOINING_GROUP((c), SAD) || IS_JOINING_GROUP((c), SEEN))
 
-bool isTransparentChar ( sal_Unicode cCh )
+// Beh and charters that behave like Beh in medial form.
+static bool isBehChar(sal_Unicode cCh)
+{
+    bool bRet = false;
+    switch (u_getIntPropertyValue(cCh, UCHAR_JOINING_GROUP))
+    {
+    case U_JG_BEH:
+    case U_JG_NOON:
+#if U_ICU_VERSION_MAJOR_NUM >= 58
+    case U_JG_AFRICAN_NOON:
+#endif
+    case U_JG_NYA:
+    case U_JG_YEH:
+    case U_JG_FARSI_YEH:
+    case U_JG_BURUSHASKI_YEH_BARREE:
+        bRet = true;
+        break;
+    default:
+        bRet = false;
+        break;
+    }
+
+    return bRet;
+}
+
+// Yeh and charters that behave like Yeh in final form.
+static bool isYehChar(sal_Unicode cCh)
+{
+    bool bRet = false;
+    switch (u_getIntPropertyValue(cCh, UCHAR_JOINING_GROUP))
+    {
+    case U_JG_YEH:
+    case U_JG_FARSI_YEH:
+    case U_JG_YEH_BARREE:
+    case U_JG_BURUSHASKI_YEH_BARREE:
+    case U_JG_YEH_WITH_TAIL:
+        bRet = true;
+        break;
+    default:
+        bRet = false;
+        break;
+    }
+
+    return bRet;
+}
+
+static bool isTransparentChar ( sal_Unicode cCh )
 {
     return u_getIntPropertyValue( cCh, UCHAR_JOINING_TYPE ) == U_JT_TRANSPARENT;
 }
@@ -117,6 +172,29 @@ static  bool lcl_HasStrongLTR ( const OUString& rText, sal_Int32 nStart, sal_Int
      return false;
  }
 
+// This is (meant to be) functionally equivalent to 'delete m_pNext' where
+// deleting a SwLineLayout recursively deletes the owned m_pNext SwLineLayout.
+//
+// Here, instead of using a potentially deep stack, iterate over all the
+// SwLineLayouts that would be deleted recursively and delete them linearly
+void SwLineLayout::DeleteNext()
+{
+    if (!m_pNext)
+        return;
+    std::vector<SwLineLayout*> aNexts;
+    SwLineLayout* pNext = m_pNext;
+    do
+    {
+        aNexts.push_back(pNext);
+        SwLineLayout* pLastNext = pNext;
+        pNext = pNext->GetNext();
+        pLastNext->SetNext(nullptr);
+    }
+    while (pNext);
+    for (auto a : aNexts)
+        delete a;
+}
+
 // class SwLineLayout: This is the layout of a single line, which is made
 // up of its dimension, the character count and the word spacing in the line.
 // Line objects are managed in an own pool, in order to store them continuously
@@ -124,46 +202,46 @@ static  bool lcl_HasStrongLTR ( const OUString& rText, sal_Int32 nStart, sal_Int
 SwLineLayout::~SwLineLayout()
 {
     Truncate();
-    delete m_pNext;
+    DeleteNext();
     if( pBlink )
         pBlink->Delete( this );
-    delete m_pLLSpaceAdd;
-    delete m_pKanaComp;
+    m_pLLSpaceAdd.reset();
+    m_pKanaComp.reset();
 }
 
 SwLinePortion *SwLineLayout::Insert( SwLinePortion *pIns )
 {
-   // First attribute change: copy mass and length from *pIns into the first
-   // text portion
-    if( !pPortion )
+    // First attribute change: copy mass and length from *pIns into the first
+    // text portion
+    if( !mpNextPortion )
     {
         if( GetLen() )
         {
-            pPortion = SwTextPortion::CopyLinePortion(*this);
+            mpNextPortion = SwTextPortion::CopyLinePortion(*this);
             if( IsBlinking() && pBlink )
             {
                 SetBlinking( false );
-                pBlink->Replace( this, pPortion );
+                pBlink->Replace( this, mpNextPortion );
             }
         }
         else
         {
-            SetPortion( pIns );
+            SetNextPortion( pIns );
             return pIns;
         }
     }
     // Call with scope or we'll end up with recursion!
-    return pPortion->SwLinePortion::Insert( pIns );
+    return mpNextPortion->SwLinePortion::Insert( pIns );
 }
 
 SwLinePortion *SwLineLayout::Append( SwLinePortion *pIns )
 {
     // First attribute change: copy mass and length from *pIns into the first
     // text portion
-    if( !pPortion )
-        pPortion = SwTextPortion::CopyLinePortion(*this);
+    if( !mpNextPortion )
+        mpNextPortion = SwTextPortion::CopyLinePortion(*this);
     // Call with scope or we'll end up with recursion!
-    return pPortion->SwLinePortion::Append( pIns );
+    return mpNextPortion->SwLinePortion::Append( pIns );
 }
 
 // For special treatment of empty lines
@@ -181,34 +259,34 @@ bool SwLineLayout::Format( SwTextFormatInfo &rInf )
 // MarginPortion.
 SwMarginPortion *SwLineLayout::CalcLeftMargin()
 {
-    SwMarginPortion *pLeft = (GetPortion() && GetPortion()->IsMarginPortion()) ?
-        static_cast<SwMarginPortion *>(GetPortion()) : nullptr;
-    if( !GetPortion() )
-         SetPortion(SwTextPortion::CopyLinePortion(*this));
+    SwMarginPortion *pLeft = (GetNextPortion() && GetNextPortion()->IsMarginPortion()) ?
+        static_cast<SwMarginPortion *>(GetNextPortion()) : nullptr;
+    if( !GetNextPortion() )
+         SetNextPortion(SwTextPortion::CopyLinePortion(*this));
     if( !pLeft )
     {
-        pLeft = new SwMarginPortion( 0 );
-        pLeft->SetPortion( GetPortion() );
-        SetPortion( pLeft );
+        pLeft = new SwMarginPortion;
+        pLeft->SetNextPortion( GetNextPortion() );
+        SetNextPortion( pLeft );
     }
     else
     {
         pLeft->Height( 0 );
         pLeft->Width( 0 );
-        pLeft->SetLen( 0 );
+        pLeft->SetLen(TextFrameIndex(0));
         pLeft->SetAscent( 0 );
-        pLeft->SetPortion( nullptr );
+        pLeft->SetNextPortion( nullptr );
         pLeft->SetFixWidth(0);
     }
 
-    SwLinePortion *pPos = pLeft->GetPortion();
+    SwLinePortion *pPos = pLeft->GetNextPortion();
     while( pPos )
     {
         if( pPos->IsFlyPortion() )
         {
-            // The FlyPortion get's sucked out ...
+            // The FlyPortion gets sucked out...
             pLeft->Join( static_cast<SwGluePortion*>(pPos) );
-            pPos = pLeft->GetPortion();
+            pPos = pLeft->GetNextPortion();
             if( GetpKanaComp() && !GetKanaComp().empty() )
                 GetKanaComp().pop_front();
         }
@@ -228,17 +306,17 @@ void SwLineLayout::InitSpaceAdd()
 
 void SwLineLayout::CreateSpaceAdd( const long nInit )
 {
-    m_pLLSpaceAdd = new std::vector<long>;
+    m_pLLSpaceAdd.reset( new std::vector<long> );
     SetLLSpaceAdd( nInit, 0 );
 }
 
 // Returns true if there are only blanks in [nStt, nEnd[
-static bool lcl_HasOnlyBlanks( const OUString& rText, sal_Int32 nStt, sal_Int32 nEnd )
+static bool lcl_HasOnlyBlanks(const OUString& rText, TextFrameIndex nStt, TextFrameIndex nEnd)
 {
     bool bBlankOnly = true;
     while ( nStt < nEnd )
     {
-        const sal_Unicode cChar = rText[ nStt++ ];
+        const sal_Unicode cChar = rText[ sal_Int32(nStt++) ];
         if ( ' ' != cChar && 0x3000 != cChar )
         {
             bBlankOnly = false;
@@ -270,25 +348,26 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
 
     // #i3952#
     const bool bIgnoreBlanksAndTabsForLineHeightCalculation =
-            rInf.GetTextFrame()->GetNode()->getIDocumentSettingAccess()->get(DocumentSettingId::IGNORE_TABS_AND_BLANKS_FOR_LINE_CALCULATION);
+        rInf.GetTextFrame()->GetDoc().getIDocumentSettingAccess().get(
+            DocumentSettingId::IGNORE_TABS_AND_BLANKS_FOR_LINE_CALCULATION);
 
     bool bHasBlankPortion = false;
     bool bHasOnlyBlankPortions = true;
 
-    if( pPortion )
+    if( mpNextPortion )
     {
         SetContent( false );
-        if( pPortion->IsBreakPortion() )
+        if( mpNextPortion->IsBreakPortion() )
         {
-            SetLen( pPortion->GetLen() );
+            SetLen( mpNextPortion->GetLen() );
             if( GetLen() )
                 bTmpDummy = false;
         }
         else
         {
             const sal_uInt16 nLineHeight = Height();
-            Init( GetPortion() );
-            SwLinePortion *pPos = pPortion;
+            Init( GetNextPortion() );
+            SwLinePortion *pPos = mpNextPortion;
             SwLinePortion *pLast = this;
             sal_uInt16 nMaxDescent = 0;
 
@@ -296,7 +375,7 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
             // portion spanning to the end or the next fixed portion
             while( pPos )
             {
-                SAL_WARN_IF( POR_LIN == pPos->GetWhichPor(),
+                SAL_WARN_IF( PortionType::NONE == pPos->GetWhichPor(),
                         "sw.core", "SwLineLayout::CalcLine: don't use SwLinePortions !" );
 
                 // Null portions are eliminated. They can form if two FlyFrames
@@ -305,7 +384,7 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                 {
                     // Only take over Height and Ascent if the rest of the line
                     // is empty.
-                    if( !pPos->GetPortion() )
+                    if( !pPos->GetNextPortion() )
                     {
                         if( !Height() )
                             Height( pPos->Height() );
@@ -313,11 +392,11 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                             SetAscent( pPos->GetAscent() );
                     }
                     delete pLast->Cut( pPos );
-                    pPos = pLast->GetPortion();
+                    pPos = pLast->GetNextPortion();
                     continue;
                 }
 
-                const sal_Int32 nPorSttIdx = rInf.GetLineStart() + nLineLength;
+                TextFrameIndex const nPorSttIdx = rInf.GetLineStart() + nLineLength;
                 nLineLength += pPos->GetLen();
                 AddPrtWidth( pPos->Width() );
 
@@ -329,7 +408,7 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                               lcl_HasOnlyBlanks( rInf.GetText(), nPorSttIdx, nPorSttIdx + pPos->GetLen() ) ) )
                     {
                         pLast = pPos;
-                        pPos = pPos->GetPortion();
+                        pPos = pPos->GetNextPortion();
                         bHasBlankPortion = true;
                         continue;
                     }
@@ -339,7 +418,7 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                 if( pPos->IsDropPortion() && static_cast<SwDropPortion*>(pPos)->GetLines() > 1)
                 {
                     pLast = pPos;
-                    pPos = pPos->GetPortion();
+                    pPos = pPos->GetNextPortion();
                     continue;
                 }
 
@@ -355,7 +434,7 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
 
                 if( pPos->IsHangingPortion() )
                 {
-                    SetHanging();
+                    SetHanging(true);
                     rInf.GetParaPortion()->SetMargin();
                 }
 
@@ -403,22 +482,24 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                         if( Height() < nPosHeight )
                         {
                             // Height is set to 0 when Init() is called.
-                            if (bIgnoreBlanksAndTabsForLineHeightCalculation && pPos->GetWhichPor() == POR_FLYCNT)
+                            if (bIgnoreBlanksAndTabsForLineHeightCalculation && pPos->GetWhichPor() == PortionType::FlyCnt)
                                 // Compat flag set: take the line height, if it's larger.
                                 Height(std::max(nPosHeight, nLineHeight));
                             else
                                 // Just care about the portion height.
                                 Height(nPosHeight);
                         }
-                        if( pPos->IsFlyCntPortion() || ( pPos->IsMultiPortion()
+                        SwFlyCntPortion* pAsFly(nullptr);
+                        if(pPos->IsFlyCntPortion())
+                            pAsFly = static_cast<SwFlyCntPortion*>(pPos);
+                        if( pAsFly || ( pPos->IsMultiPortion()
                             && static_cast<SwMultiPortion*>(pPos)->HasFlyInContent() ) )
                             rLine.SetFlyInCntBase();
-                        if( pPos->IsFlyCntPortion() &&
-                            static_cast<SwFlyCntPortion*>(pPos)->GetAlign() )
+                        if(pAsFly && pAsFly->GetAlign() != sw::LineAlign::NONE)
                         {
-                            static_cast<SwFlyCntPortion*>(pPos)->SetMax( false );
+                            pAsFly->SetMax(false);
                             if( !pFlyCnt || pPos->Height() > pFlyCnt->Height() )
-                                pFlyCnt = static_cast<SwFlyCntPortion*>(pPos);
+                                pFlyCnt = pAsFly;
                         }
                         else
                         {
@@ -438,17 +519,17 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                     {
                         OUString aText;
                         if( pPos->GetExpText( rInf, aText ) && !aText.isEmpty() )
-                            SetContent();
+                            SetContent(true);
                     }
                     else if( ( pPos->InTextGrp() || pPos->IsMultiPortion() ) &&
                              pPos->GetLen() )
-                        SetContent();
+                        SetContent(true);
                 }
 
                 bTmpDummy &= !HasContent() && ( !pPos->Width() || pPos->IsFlyPortion() );
 
                 pLast = pPos;
-                pPos = pPos->GetPortion();
+                pPos = pPos->GetNextPortion();
             }
 
             if( pFlyCnt )
@@ -458,9 +539,9 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
                     pFlyCnt->SetMax( true );
                     if( Height() > nMaxDescent + nAscent )
                     {
-                        if( 3 == pFlyCnt->GetAlign() ) // Bottom
+                        if( sw::LineAlign::BOTTOM == pFlyCnt->GetAlign() )
                             nAscent = Height() - nMaxDescent;
-                        else if( 2 == pFlyCnt->GetAlign() ) // Center
+                        else if( sw::LineAlign::CENTER == pFlyCnt->GetAlign() )
                             nAscent = ( Height() + nAscent - nMaxDescent ) / 2;
                     }
                     pFlyCnt->SetAscent( nAscent );
@@ -512,8 +593,13 @@ void SwLineLayout::CalcLine( SwTextFormatter &rLine, SwTextFormatInfo &rInf )
         Width( nLineWidth );
     SAL_WARN_IF( nLineWidth < Width(), "sw.core", "SwLineLayout::CalcLine: line is bursting" );
     SetDummy( bTmpDummy );
+    std::pair<SwTextNode const*, sal_Int32> const start(
+            rInf.GetTextFrame()->MapViewToModel(rLine.GetStart()));
+    std::pair<SwTextNode const*, sal_Int32> const end(
+            rInf.GetTextFrame()->MapViewToModel(rLine.GetEnd()));
     SetRedline( rLine.GetRedln() &&
-        rLine.GetRedln()->CheckLine( rLine.GetStart(), rLine.GetEnd() ) );
+        rLine.GetRedln()->CheckLine(start.first->GetIndex(), start.second,
+            end.first->GetIndex(), end.second) );
 }
 
 // #i47162# - add optional parameter <_bNoFlyCntPorAndLinePor>
@@ -531,9 +617,9 @@ void SwLineLayout::MaxAscentDescent( SwTwips& _orAscent,
     _orObjDescent = 0;
 
     const SwLinePortion* pTmpPortion = this;
-    if ( !pTmpPortion->GetLen() && pTmpPortion->GetPortion() )
+    if ( !pTmpPortion->GetLen() && pTmpPortion->GetNextPortion() )
     {
-        pTmpPortion = pTmpPortion->GetPortion();
+        pTmpPortion = pTmpPortion->GetNextPortion();
     }
 
     while ( pTmpPortion )
@@ -541,7 +627,7 @@ void SwLineLayout::MaxAscentDescent( SwTwips& _orAscent,
         if ( !pTmpPortion->IsBreakPortion() && !pTmpPortion->IsFlyPortion() &&
              ( !_bNoFlyCntPorAndLinePor ||
                ( !pTmpPortion->IsFlyCntPortion() &&
-                 !(pTmpPortion == this && pTmpPortion->GetPortion() ) ) ) )
+                 !(pTmpPortion == this && pTmpPortion->GetNextPortion() ) ) ) )
         {
             SwTwips nPortionAsc = static_cast<SwTwips>(pTmpPortion->GetAscent());
             SwTwips nPortionDesc = static_cast<SwTwips>(pTmpPortion->Height()) -
@@ -549,7 +635,7 @@ void SwLineLayout::MaxAscentDescent( SwTwips& _orAscent,
 
             const bool bFlyCmp = pTmpPortion->IsFlyCntPortion() ?
                                      static_cast<const SwFlyCntPortion*>(pTmpPortion)->IsMax() :
-                                     !( pTmpPortion == _pDontConsiderPortion );
+                                     ( pTmpPortion != _pDontConsiderPortion );
 
             if ( bFlyCmp )
             {
@@ -563,14 +649,36 @@ void SwLineLayout::MaxAscentDescent( SwTwips& _orAscent,
                 _orDescent = std::max( _orDescent, nPortionDesc );
             }
         }
-        pTmpPortion = pTmpPortion->GetPortion();
+        pTmpPortion = pTmpPortion->GetNextPortion();
     }
+}
+
+void SwLineLayout::ResetFlags()
+{
+    m_bFormatAdj = m_bDummy = m_bEndHyph = m_bMidHyph = m_bFly
+    = m_bRest = m_bBlinking = m_bClipping = m_bContent = m_bRedline
+    = m_bForcedLeftMargin = m_bHanging = false;
+}
+
+SwLineLayout::SwLineLayout()
+    : m_pNext( nullptr ), m_nRealHeight( 0 ),
+      m_bUnderscore( false )
+{
+    ResetFlags();
+    SetWhichPor( PortionType::Lay );
+}
+
+SwLinePortion *SwLineLayout::GetFirstPortion() const
+{
+    const SwLinePortion *pRet = mpNextPortion ? mpNextPortion : this;
+    return const_cast<SwLinePortion*>(pRet);
 }
 
 SwCharRange &SwCharRange::operator+=(const SwCharRange &rRange)
 {
-    if(0 != rRange.nLen ) {
-        if(0 == nLen) {
+    if (TextFrameIndex(0) != rRange.nLen)
+    {
+        if (TextFrameIndex(0) == nLen) {
             nStart = rRange.nStart;
             nLen = rRange.nLen ;
         }
@@ -588,8 +696,8 @@ SwCharRange &SwCharRange::operator+=(const SwCharRange &rRange)
 }
 
 SwScriptInfo::SwScriptInfo()
-    : nInvalidityPos(0)
-    , nDefaultDir(0)
+    : m_nInvalidityPos(0)
+    , m_nDefaultDir(0)
 {
 };
 
@@ -599,13 +707,8 @@ SwScriptInfo::~SwScriptInfo()
 
 // Converts i18n Script Type (LATIN, ASIAN, COMPLEX, WEAK) to
 // Sw Script Types (SwFontScript::Latin, SwFontScript::CJK, SwFontScript::CTL), used to identify the font
-SwFontScript SwScriptInfo::WhichFont( sal_Int32 nIdx, const OUString* pText, const SwScriptInfo* pSI )
+static SwFontScript lcl_ScriptToFont(sal_uInt16 const nScript)
 {
-    assert((pSI || pText) && "How should I determine the script type?");
-    const sal_uInt16 nScript = pSI
-        ? pSI->ScriptType( nIdx )                         // use our SwScriptInfo if available
-        : g_pBreakIt->GetRealScriptOfText( *pText, nIdx ); // else  ask the break iterator
-
     switch ( nScript ) {
         case i18n::ScriptType::LATIN : return SwFontScript::Latin;
         case i18n::ScriptType::ASIAN : return SwFontScript::CJK;
@@ -616,45 +719,116 @@ SwFontScript SwScriptInfo::WhichFont( sal_Int32 nIdx, const OUString* pText, con
     return SwFontScript::Latin;
 }
 
-// searches for script changes in rText and stores them
-void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode )
+SwFontScript SwScriptInfo::WhichFont(TextFrameIndex const nIdx) const
 {
-    InitScriptInfo( rNode, nDefaultDir == UBIDI_RTL );
+    const sal_uInt16 nScript(ScriptType(nIdx));
+    return lcl_ScriptToFont(nScript);
 }
 
-void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
+SwFontScript SwScriptInfo::WhichFont(sal_Int32 nIdx, OUString const& rText)
 {
-    if( !g_pBreakIt->GetBreakIter().is() )
-        return;
+    const sal_uInt16 nScript(g_pBreakIt->GetRealScriptOfText(rText, nIdx));
+    return lcl_ScriptToFont(nScript);
+}
 
-    const OUString& rText = rNode.GetText();
+// searches for script changes in rText and stores them
+void SwScriptInfo::InitScriptInfo(const SwTextNode& rNode,
+        sw::MergedPara const*const pMerged)
+{
+    InitScriptInfo( rNode, pMerged, m_nDefaultDir == UBIDI_RTL );
+}
+
+void SwScriptInfo::InitScriptInfo(const SwTextNode& rNode,
+        sw::MergedPara const*const pMerged, bool bRTL)
+{
+    assert(g_pBreakIt && g_pBreakIt->GetBreakIter().is());
+
+    const OUString& rText(pMerged ? pMerged->mergedText : rNode.GetText());
 
     // HIDDEN TEXT INFORMATION
 
-    Range aRange( 0, !rText.isEmpty() ? rText.getLength() - 1 : 0 );
-    MultiSelection aHiddenMulti( aRange );
-    CalcHiddenRanges( rNode, aHiddenMulti );
-
-    aHiddenChg.clear();
-    for( size_t i = 0; i < aHiddenMulti.GetRangeCount(); ++i )
+    m_HiddenChg.clear();
+    if (pMerged)
     {
-        const Range& rRange = aHiddenMulti.GetRange( i );
-        const sal_Int32 nStart = rRange.Min();
-        const sal_Int32 nEnd = rRange.Max() + 1;
+        SwTextNode const* pNode(nullptr);
+        TextFrameIndex nOffset(0);
+        for (auto iter = pMerged->extents.begin(); iter != pMerged->extents.end(); ++iter)
+        {
+            if (iter->pNode == pNode)
+            {
+                nOffset += TextFrameIndex(iter->nEnd - iter->nStart);
+                continue; // skip extents at end of previous node
+            }
+            pNode = iter->pNode;
+            Range aRange( 0, pNode->Len() > 0 ? pNode->Len() - 1 : 0 );
+            MultiSelection aHiddenMulti( aRange );
+            CalcHiddenRanges( *pNode, aHiddenMulti );
 
-        aHiddenChg.push_back( nStart );
-        aHiddenChg.push_back( nEnd );
+            for (sal_Int32 i = 0; i < aHiddenMulti.GetRangeCount(); ++i)
+            {
+                const Range& rRange = aHiddenMulti.GetRange( i );
+                const sal_Int32 nStart = rRange.Min();
+                const sal_Int32 nEnd = rRange.Max() + 1;
+
+                while (true)
+                {
+                    // because of the selectRedLineDeleted call, never overlaps
+                    // extents, must be contained inside one extent
+                    assert(!(iter->nStart <= nStart && nStart < iter->nEnd && iter->nEnd < nEnd));
+                    assert(!(nStart < iter->nStart && iter->nStart < nEnd && nEnd <= iter->nEnd));
+                    if (iter->nStart <= nStart && nEnd <= iter->nEnd)
+                    {
+                        if (iter->nStart == nStart && !m_HiddenChg.empty()
+                            && m_HiddenChg.back() == nOffset)
+                        {
+                            // previous one went until end of extent, extend it
+                            m_HiddenChg.back() += TextFrameIndex(nEnd - iter->nStart);
+                        }
+                        else // new one
+                        {
+                            m_HiddenChg.push_back(nOffset + TextFrameIndex(nStart - iter->nStart));
+                            m_HiddenChg.push_back(nOffset + TextFrameIndex(nEnd - iter->nStart));
+                        }
+                        break;
+                    }
+                    else
+                    {
+                        nOffset += TextFrameIndex(iter->nEnd - iter->nStart);
+                        ++iter;
+                        // because selectRedLineDeleted, must find it in pNode
+                        assert(iter != pMerged->extents.end());
+                        assert(iter->pNode == pNode);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        Range aRange( 0, !rText.isEmpty() ? rText.getLength() - 1 : 0 );
+        MultiSelection aHiddenMulti( aRange );
+        CalcHiddenRanges( rNode, aHiddenMulti );
+
+        for (sal_Int32 i = 0; i < aHiddenMulti.GetRangeCount(); ++i)
+        {
+            const Range& rRange = aHiddenMulti.GetRange( i );
+            const sal_Int32 nStart = rRange.Min();
+            const sal_Int32 nEnd = rRange.Max() + 1;
+
+            m_HiddenChg.push_back( TextFrameIndex(nStart) );
+            m_HiddenChg.push_back( TextFrameIndex(nEnd) );
+        }
     }
 
     // SCRIPT AND SCRIPT RELATED INFORMATION
 
-    sal_Int32 nChg = nInvalidityPos;
+    TextFrameIndex nChg = m_nInvalidityPos;
 
     // COMPLETE_STRING means the data structure is up to date
-    nInvalidityPos = COMPLETE_STRING;
+    m_nInvalidityPos = TextFrameIndex(COMPLETE_STRING);
 
     // this is the default direction
-    nDefaultDir = static_cast<sal_uInt8>(bRTL ? UBIDI_RTL : UBIDI_LTR);
+    m_nDefaultDir = static_cast<sal_uInt8>(bRTL ? UBIDI_RTL : UBIDI_LTR);
 
     // counter for script info arrays
     size_t nCnt = 0;
@@ -666,11 +840,11 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
     sal_Int16 nScript = i18n::ScriptType::LATIN;
 
     // compression type
-    const SwCharCompressType aCompEnum = rNode.getIDocumentSettingAccess()->getCharacterCompressionType();
+    const CharCompressType aCompEnum = rNode.getIDocumentSettingAccess()->getCharacterCompressionType();
 
+    auto const& rParaItems((pMerged ? *pMerged->pParaPropsNode : rNode).GetSwAttrSet());
     // justification type
-    const bool bAdjustBlock = SVX_ADJUST_BLOCK ==
-                                  rNode.GetSwAttrSet().GetAdjust().GetAdjust();
+    const bool bAdjustBlock = SvxAdjust::Block == rParaItems.GetAdjust().GetAdjust();
 
     // FIND INVALID RANGES IN SCRIPT INFO ARRAYS:
 
@@ -690,7 +864,7 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                 break;
             }
         }
-        if( CHARCOMPRESS_NONE != aCompEnum )
+        if( CharCompressType::NONE != aCompEnum )
         {
             while( nCntComp < CountCompChg() )
             {
@@ -717,26 +891,26 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
     if ( nChg )
         --nChg;
 
-    const sal_Int32 nGrpStart = nCnt ? GetScriptChg( nCnt - 1 ) : 0;
+    const TextFrameIndex nGrpStart = nCnt ? GetScriptChg(nCnt - 1) : TextFrameIndex(0);
 
     // we go back in our group until we reach the first character of
     // type nScript
     while ( nChg > nGrpStart &&
-            nScript != g_pBreakIt->GetBreakIter()->getScriptType( rText, nChg ) )
+            nScript != g_pBreakIt->GetBreakIter()->getScriptType(rText, sal_Int32(nChg)))
         --nChg;
 
     // If we are at the start of a group, we do not trust nScript,
     // we better get nScript from the breakiterator:
     if ( nChg == nGrpStart )
-        nScript = (sal_uInt8)g_pBreakIt->GetBreakIter()->getScriptType( rText, nChg );
+        nScript = static_cast<sal_uInt8>(g_pBreakIt->GetBreakIter()->getScriptType(rText, sal_Int32(nChg)));
 
     // INVALID DATA FROM THE SCRIPT INFO ARRAYS HAS TO BE DELETED:
 
     // remove invalid entries from script information arrays
-    aScriptChanges.erase( aScriptChanges.begin() + nCnt, aScriptChanges.end() );
+    m_ScriptChanges.erase(m_ScriptChanges.begin() + nCnt, m_ScriptChanges.end());
 
     // get the start of the last compression group
-    sal_Int32 nLastCompression = nChg;
+    TextFrameIndex nLastCompression = nChg;
     if( nCntComp )
     {
         --nCntComp;
@@ -749,10 +923,11 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
     }
 
     // remove invalid entries from compression information arrays
-    aCompressionChanges.erase(aCompressionChanges.begin() + nCntComp, aCompressionChanges.end() );
+    m_CompressionChanges.erase(m_CompressionChanges.begin() + nCntComp,
+            m_CompressionChanges.end());
 
     // get the start of the last kashida group
-    sal_Int32 nLastKashida = nChg;
+    TextFrameIndex nLastKashida = nChg;
     if( nCntKash && i18n::ScriptType::COMPLEX == nScript )
     {
         --nCntKash;
@@ -760,22 +935,22 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
     }
 
     // remove invalid entries from kashida array
-    aKashida.erase( aKashida.begin() + nCntKash, aKashida.end() );
+    m_Kashida.erase(m_Kashida.begin() + nCntKash, m_Kashida.end());
 
     // TAKE CARE OF WEAK CHARACTERS: WE MUST FIND AN APPROPRIATE
     // SCRIPT FOR WEAK CHARACTERS AT THE BEGINNING OF A PARAGRAPH
 
-    if( WEAK == g_pBreakIt->GetBreakIter()->getScriptType( rText, nChg ) )
+    if (WEAK == g_pBreakIt->GetBreakIter()->getScriptType(rText, sal_Int32(nChg)))
     {
         // If the beginning of the current group is weak, this means that
         // all of the characters in this group are weak. We have to assign
         // the scripts to these characters depending on the fonts which are
         // set for these characters to display them.
-        sal_Int32 nEnd =
-                g_pBreakIt->GetBreakIter()->endOfScript( rText, nChg, WEAK );
+        TextFrameIndex nEnd = TextFrameIndex(
+            g_pBreakIt->GetBreakIter()->endOfScript(rText, sal_Int32(nChg), WEAK));
 
-        if (nEnd > rText.getLength() || nEnd < 0)
-            nEnd = rText.getLength();
+        if (nEnd > TextFrameIndex(rText.getLength()) || nEnd < TextFrameIndex(0))
+            nEnd = TextFrameIndex(rText.getLength());
 
         nScript = SvtLanguageOptions::GetI18NScriptTypeOfLanguage( GetAppLanguage() );
 
@@ -786,13 +961,13 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
         nChg = nEnd;
 
         // Get next script type or set to weak in order to exit
-        sal_uInt8 nNextScript = ( nEnd < rText.getLength() ) ?
-           (sal_uInt8)g_pBreakIt->GetBreakIter()->getScriptType( rText, nEnd ) :
-           (sal_uInt8)WEAK;
+        sal_uInt8 nNextScript = (nEnd < TextFrameIndex(rText.getLength()))
+            ? static_cast<sal_uInt8>(g_pBreakIt->GetBreakIter()->getScriptType(rText, sal_Int32(nEnd)))
+            : sal_uInt8(WEAK);
 
         if ( nScript != nNextScript )
         {
-            aScriptChanges.push_back( ScriptChangeInfo(nEnd, nScript) );
+            m_ScriptChanges.emplace_back(nEnd, nScript);
             nCnt++;
             nScript = nNextScript;
         }
@@ -800,69 +975,77 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
 
     // UPDATE THE SCRIPT INFO ARRAYS:
 
-    while ( nChg < rText.getLength() || ( aScriptChanges.empty() && rText.isEmpty() ) )
+    while (nChg < TextFrameIndex(rText.getLength())
+           || (m_ScriptChanges.empty() && rText.isEmpty()))
     {
         SAL_WARN_IF( i18n::ScriptType::WEAK == nScript,
                 "sw.core", "Inserting WEAK into SwScriptInfo structure" );
 
-        sal_Int32 nSearchStt = nChg;
-        nChg = g_pBreakIt->GetBreakIter()->endOfScript( rText, nSearchStt, nScript );
+        TextFrameIndex nSearchStt = nChg;
+        nChg = TextFrameIndex(g_pBreakIt->GetBreakIter()->endOfScript(
+                    rText, sal_Int32(nSearchStt), nScript));
 
-        if (nChg > rText.getLength() || nChg < 0)
-            nChg = rText.getLength();
+        if (nChg > TextFrameIndex(rText.getLength()) || nChg < TextFrameIndex(0))
+            nChg = TextFrameIndex(rText.getLength());
 
         // #i28203#
         // for 'complex' portions, we make sure that a portion does not contain more
         // than one script:
         if( i18n::ScriptType::COMPLEX == nScript )
         {
-            const short nScriptType = ScriptTypeDetector::getCTLScriptType( rText, nSearchStt );
-            sal_Int32 nNextCTLScriptStart = nSearchStt;
+            const short nScriptType = ScriptTypeDetector::getCTLScriptType(
+                    rText, sal_Int32(nSearchStt) );
+            TextFrameIndex nNextCTLScriptStart = nSearchStt;
             short nCurrentScriptType = nScriptType;
             while( css::i18n::CTLScriptType::CTL_UNKNOWN == nCurrentScriptType || nScriptType == nCurrentScriptType )
             {
-                nNextCTLScriptStart = ScriptTypeDetector::endOfCTLScriptType( rText, nNextCTLScriptStart );
-                if( nNextCTLScriptStart >= rText.getLength() || nNextCTLScriptStart >= nChg )
+                nNextCTLScriptStart = TextFrameIndex(
+                        ScriptTypeDetector::endOfCTLScriptType(
+                            rText, sal_Int32(nNextCTLScriptStart)));
+                if (nNextCTLScriptStart >= TextFrameIndex(rText.getLength())
+                    || nNextCTLScriptStart >= nChg)
                     break;
-                nCurrentScriptType = ScriptTypeDetector::getCTLScriptType( rText, nNextCTLScriptStart );
+                nCurrentScriptType = ScriptTypeDetector::getCTLScriptType(
+                                        rText, sal_Int32(nNextCTLScriptStart));
             }
             nChg = std::min( nChg, nNextCTLScriptStart );
         }
 
         // special case for dotted circle since it can be used with complex
         // before a mark, so we want it associated with the mark's script
-        if (nChg < rText.getLength() && nChg > 0 && (i18n::ScriptType::WEAK ==
-            g_pBreakIt->GetBreakIter()->getScriptType(rText,nChg - 1)))
+        if (nChg < TextFrameIndex(rText.getLength()) && nChg > TextFrameIndex(0)
+            && (i18n::ScriptType::WEAK ==
+                g_pBreakIt->GetBreakIter()->getScriptType(rText, sal_Int32(nChg) - 1)))
         {
-            int8_t nType = u_charType(rText[nChg] );
+            int8_t nType = u_charType(rText[sal_Int32(nChg)]);
             if (nType == U_NON_SPACING_MARK || nType == U_ENCLOSING_MARK ||
                 nType == U_COMBINING_SPACING_MARK )
             {
-                aScriptChanges.push_back( ScriptChangeInfo(nChg-1, nScript) );
+                m_ScriptChanges.emplace_back(nChg-TextFrameIndex(1), nScript);
             }
             else
             {
-                aScriptChanges.push_back( ScriptChangeInfo(nChg, nScript) );
+                m_ScriptChanges.emplace_back(nChg, nScript);
             }
         }
         else
         {
-            aScriptChanges.push_back( ScriptChangeInfo(nChg, nScript) );
+            m_ScriptChanges.emplace_back(nChg, nScript);
         }
         ++nCnt;
 
         // if current script is asian, we search for compressable characters
         // in this range
-        if ( CHARCOMPRESS_NONE != aCompEnum &&
+        if ( CharCompressType::NONE != aCompEnum &&
              i18n::ScriptType::ASIAN == nScript )
         {
             CompType ePrevState = NONE;
             CompType eState = NONE;
-            sal_Int32 nPrevChg = nLastCompression;
+            TextFrameIndex nPrevChg = nLastCompression;
 
             while ( nLastCompression < nChg )
             {
-                sal_Unicode cChar = rText[ nLastCompression ];
+                sal_Unicode cChar = rText[ sal_Int32(nLastCompression) ];
 
                 // examine current character
                 switch ( cChar )
@@ -893,10 +1076,11 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                     if ( ePrevState != NONE )
                     {
                         // insert start and type
-                        if ( CHARCOMPRESS_PUNCTUATION_KANA == aCompEnum ||
+                        if ( CharCompressType::PunctuationAndKana == aCompEnum ||
                              ePrevState != KANA )
                         {
-                            aCompressionChanges.push_back( CompressionChangeInfo(nPrevChg, nLastCompression - nPrevChg, ePrevState) );
+                            m_CompressionChanges.emplace_back(nPrevChg,
+                                    nLastCompression - nPrevChg, ePrevState);
                         }
                     }
 
@@ -911,10 +1095,11 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
             if ( ePrevState != NONE )
             {
                 // insert start and type
-                if ( CHARCOMPRESS_PUNCTUATION_KANA == aCompEnum ||
+                if ( CharCompressType::PunctuationAndKana == aCompEnum ||
                      ePrevState != KANA )
                 {
-                    aCompressionChanges.push_back( CompressionChangeInfo(nPrevChg, nLastCompression - nPrevChg, ePrevState) );
+                    m_CompressionChanges.emplace_back(nPrevChg,
+                            nLastCompression - nPrevChg, ePrevState);
                 }
             }
         }
@@ -922,9 +1107,22 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
         // we search for connecting opportunities (kashida)
         else if ( bAdjustBlock && i18n::ScriptType::COMPLEX == nScript )
         {
-            SwScanner aScanner( rNode, rNode.GetText(), nullptr, ModelToViewHelper(),
+            // sw_redlinehide: this is the only place that uses SwScanner with
+            // frame text, so we convert to sal_Int32 here
+            std::function<LanguageType (sal_Int32, sal_Int32, bool)> const pGetLangOfCharM(
+                [&pMerged](sal_Int32 const nBegin, sal_uInt16 const script, bool const bNoChar)
+                    {
+                        std::pair<SwTextNode const*, sal_Int32> const pos(
+                            sw::MapViewToModel(*pMerged, TextFrameIndex(nBegin)));
+                        return pos.first->GetLang(pos.second, bNoChar ? 0 : 1, script);
+                    });
+            std::function<LanguageType (sal_Int32, sal_Int32, bool)> const pGetLangOfChar1(
+                [&rNode](sal_Int32 const nBegin, sal_uInt16 const script, bool const bNoChar)
+                    { return rNode.GetLang(nBegin, bNoChar ? 0 : 1, script); });
+            auto pGetLangOfChar(pMerged ? pGetLangOfCharM : pGetLangOfChar1);
+            SwScanner aScanner( pGetLangOfChar, rText, nullptr, ModelToViewHelper(),
                                 i18n::WordType::DICTIONARY_WORD,
-                                nLastKashida, nChg );
+                                sal_Int32(nLastKashida), sal_Int32(nChg));
 
             // the search has to be performed on a per word base
             while ( aScanner.NextWord() )
@@ -970,12 +1168,12 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                     }
 
                     // 3. Priority:
-                    // before final form of Teh Marbuta, Hah, Dal
+                    // before final form of Teh Marbuta, Heh, Dal
                     if ( nPriorityLevel >= 2 && nIdx > 0 )
                     {
                         if ( isTehMarbutaChar ( cCh ) || // Teh Marbuta (right joining)
                              isDalChar ( cCh ) ||        // Dal (right joining) final form may appear in the middle of word
-                             ( isHahChar ( cCh ) && nIdx == nWordLen - 1))  // Hah (dual joining) only at end of word
+                             ( isHehChar ( cCh ) && nIdx == nWordLen - 1))  // Heh (dual joining) only at end of word
                         {
 
                             SAL_WARN_IF( 0 == cPrevCh, "sw.core", "No previous character" );
@@ -989,12 +1187,13 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                     }
 
                     // 4. Priority:
-                    // before final form of Alef, Lam or Kaf
+                    // before final form of Alef, Tah, Lam, Kaf or Gaf
                     if ( nPriorityLevel >= 3 && nIdx > 0 )
                     {
                         if ( isAlefChar ( cCh ) ||   // Alef (right joining) final form may appear in the middle of word
-                             (( isLamChar ( cCh ) || // Lam
-                              isKafChar ( cCh )   || // Kaf (both dual joining)
+                             (( isLamChar ( cCh ) || // Lam,
+                              isTahChar ( cCh )   || // Tah,
+                              isKafChar ( cCh )   || // Kaf (all dual joining)
                               isGafChar ( cCh ) )
                               && nIdx == nWordLen - 1))  // only at end of word
                         {
@@ -1009,12 +1208,12 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                     }
 
                     // 5. Priority:
-                    // before media Bah
+                    // before medial Beh-like
                     if ( nPriorityLevel >= 4 && nIdx > 0 && nIdx < nWordLen - 1 )
                     {
-                        if ( isBaaChar ( cCh )) // Bah
+                        if ( isBehChar ( cCh ) )
                         {
-                            // check if next character is Reh, Yeh or Alef Maksura
+                            // check if next character is Reh or Yeh-like
                             sal_Unicode cNextCh = rWord[ nIdx + 1 ];
                             if ( isRehChar ( cNextCh ) || isYehChar ( cNextCh ))
                            {
@@ -1030,7 +1229,7 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                     }
 
                     // 6. Priority:
-                    // before the final form of Waw, Ain, Qaf and Fa
+                    // before the final form of Waw, Ain, Qaf and Feh
                     if ( nPriorityLevel >= 5 && nIdx > 0 )
                     {
                         if ( isWawChar ( cCh )   || // Wav (right joining)
@@ -1053,12 +1252,8 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                     // other connecting possibilities
                     if ( nPriorityLevel >= 6 && nIdx > 0 )
                     {
-                        // remaining right joiners
-                        // Reh, Zain, Thal,
-                        if ( isRehChar ( cCh ) ||   // Reh Zain (right joining)
-                                                    // final form may appear in the middle of word
-                             ( 0x60C <= cCh && 0x6FE >= cCh // all others
-                              && nIdx == nWordLen - 1))   // only at end of word
+                        // Reh, Zain
+                        if ( isRehChar ( cCh ) )
                         {
                             SAL_WARN_IF( 0 == cPrevCh, "sw.core", "No previous character" );
                             // check if character is connectable to previous character,
@@ -1070,9 +1265,8 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                         }
                     }
 
-                    // Do not consider Fathatan, Dammatan, Kasratan, Fatha,
-                    // Damma, Kasra, Shadda and Sukun when checking if
-                    // a character can be connected to previous character.
+                    // Do not consider vowel marks when checking if a character
+                    // can be connected to previous character.
                     if ( !isTransparentChar ( cCh) )
                         cPrevCh = cCh;
 
@@ -1081,14 +1275,14 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
 
                 if ( -1 != nKashidaPos )
                 {
-                    aKashida.insert( aKashida.begin() + nCntKash, nKashidaPos);
+                    m_Kashida.insert(m_Kashida.begin() + nCntKash, TextFrameIndex(nKashidaPos));
                     nCntKash++;
                 }
             } // end of kashida search
         }
 
-        if ( nChg < rText.getLength() )
-            nScript = (sal_uInt8)g_pBreakIt->GetBreakIter()->getScriptType( rText, nChg );
+        if (nChg < TextFrameIndex(rText.getLength()))
+            nScript = static_cast<sal_uInt8>(g_pBreakIt->GetBreakIter()->getScriptType(rText, sal_Int32(nChg)));
 
         nLastCompression = nChg;
         nLastKashida = nChg;
@@ -1096,11 +1290,11 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
 
 #if OSL_DEBUG_LEVEL > 0
     // check kashida data
-    long nTmpKashidaPos = -1;
+    TextFrameIndex nTmpKashidaPos(-1);
     bool bWrongKash = false;
-    for (size_t i = 0; i < aKashida.size(); ++i )
+    for (size_t i = 0; i < m_Kashida.size(); ++i)
     {
-        long nCurrKashidaPos = GetKashida( i );
+        TextFrameIndex nCurrKashidaPos = GetKashida( i );
         if ( nCurrKashidaPos <= nTmpKashidaPos )
         {
             bWrongKash = true;
@@ -1112,19 +1306,9 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
 #endif
 
     // remove invalid entries from direction information arrays
-    aDirectionChanges.clear();
+    m_DirectionChanges.clear();
 
     // Perform Unicode Bidi Algorithm for text direction information
-    bool bPerformUBA = UBIDI_LTR != nDefaultDir;
-    nCnt = 0;
-    while( !bPerformUBA && nCnt < CountScriptChg() )
-    {
-        if ( i18n::ScriptType::COMPLEX == GetScriptType( nCnt++ ) )
-            bPerformUBA = true;
-    }
-
-    // do not call the unicode bidi algorithm if not required
-    if ( bPerformUBA )
     {
         UpdateBidiInfo( rText );
 
@@ -1132,16 +1316,17 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
         // 1. All text in RTL runs will use the CTL font
         // #i89825# change the script type also to CTL (hennerdrewes)
         // 2. Text in embedded LTR runs that does not have any strong LTR characters (numbers!)
-        for ( size_t nDirIdx = 0; nDirIdx < aDirectionChanges.size(); ++nDirIdx )
+        for (size_t nDirIdx = 0; nDirIdx < m_DirectionChanges.size(); ++nDirIdx)
         {
             const sal_uInt8 nCurrDirType = GetDirType( nDirIdx );
-                // nStart ist start of RTL run:
-                const sal_Int32 nStart = nDirIdx > 0 ? GetDirChg( nDirIdx - 1 ) : 0;
+                // nStart is start of RTL run:
+            const TextFrameIndex nStart = nDirIdx > 0 ? GetDirChg(nDirIdx - 1) : TextFrameIndex(0);
                 // nEnd is end of RTL run:
-                const sal_Int32 nEnd = GetDirChg( nDirIdx );
+            const TextFrameIndex nEnd = GetDirChg( nDirIdx );
 
             if ( nCurrDirType % 2 == UBIDI_RTL  || // text in RTL run
-                ( nCurrDirType > UBIDI_LTR && !lcl_HasStrongLTR( rText, nStart, nEnd ) ) ) // non-strong text in embedded LTR run
+                (nCurrDirType > UBIDI_LTR && // non-strong text in embedded LTR run
+                 !lcl_HasStrongLTR(rText, sal_Int32(nStart), sal_Int32(nEnd))))
             {
                 // nScriptIdx points into the ScriptArrays:
                 size_t nScriptIdx = 0;
@@ -1153,7 +1338,9 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                 while ( GetScriptChg( nScriptIdx ) <= nStart )
                     ++nScriptIdx;
 
-                const sal_Int32 nStartPosOfGroup = nScriptIdx ? GetScriptChg( nScriptIdx - 1 ) : 0;
+                const TextFrameIndex nStartPosOfGroup = nScriptIdx
+                        ? GetScriptChg(nScriptIdx - 1)
+                        : TextFrameIndex(0);
                 const sal_uInt8 nScriptTypeOfGroup = GetScriptType( nScriptIdx );
 
                 SAL_WARN_IF( nStartPosOfGroup > nStart || GetScriptChg( nScriptIdx ) <= nStart,
@@ -1162,35 +1349,36 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
                 // Check if we have to insert a new script change at
                 // position nStart. If nStartPosOfGroup < nStart,
                 // we have to insert a new script change:
-                if ( nStart > 0 && nStartPosOfGroup < nStart )
+                if (nStart > TextFrameIndex(0) && nStartPosOfGroup < nStart)
                 {
-                    aScriptChanges.insert(aScriptChanges.begin() + nScriptIdx,
+                    m_ScriptChanges.insert(m_ScriptChanges.begin() + nScriptIdx,
                                           ScriptChangeInfo(nStart, nScriptTypeOfGroup) );
                     ++nScriptIdx;
                 }
 
                 // Remove entries in ScriptArray which end inside the RTL run:
-                while ( nScriptIdx < aScriptChanges.size() && GetScriptChg( nScriptIdx ) <= nEnd )
+                while (nScriptIdx < m_ScriptChanges.size()
+                       && GetScriptChg(nScriptIdx) <= nEnd)
                 {
-                    aScriptChanges.erase(aScriptChanges.begin() + nScriptIdx);
+                    m_ScriptChanges.erase(m_ScriptChanges.begin() + nScriptIdx);
                 }
 
                 // Insert a new entry in ScriptArray for the end of the RTL run:
-                aScriptChanges.insert(aScriptChanges.begin() + nScriptIdx,
+                m_ScriptChanges.insert(m_ScriptChanges.begin() + nScriptIdx,
                                       ScriptChangeInfo(nEnd, i18n::ScriptType::COMPLEX) );
 
 #if OSL_DEBUG_LEVEL > 1
                 // Check that ScriptChangeInfos are in increasing order of
                 // position and that we don't have "empty" changes.
                 sal_uInt8 nLastTyp = i18n::ScriptType::WEAK;
-                sal_Int32 nLastPos = 0;
-                for (std::vector<ScriptChangeInfo>::const_iterator i2 = aScriptChanges.begin(); i2 != aScriptChanges.end(); ++i2)
+                TextFrameIndex nLastPos = TextFrameIndex(0);
+                for (const auto& rScriptChange : m_ScriptChanges)
                 {
-                    SAL_WARN_IF( nLastTyp == i2->type ||
-                            nLastPos >= i2->position,
+                    SAL_WARN_IF( nLastTyp == rScriptChange.type ||
+                            nLastPos >= rScriptChange.position,
                             "sw.core", "Heavy InitScriptType() confusion" );
-                    nLastPos = i2->position;
-                    nLastTyp = i2->type;
+                    nLastPos = rScriptChange.position;
+                    nLastTyp = rScriptChange.type;
                 }
 #endif
             }
@@ -1201,7 +1389,7 @@ void SwScriptInfo::InitScriptInfo( const SwTextNode& rNode, bool bRTL )
 void SwScriptInfo::UpdateBidiInfo( const OUString& rText )
 {
     // remove invalid entries from direction information arrays
-    aDirectionChanges.clear();
+    m_DirectionChanges.clear();
 
     // Bidi functions from icu 2.0
 
@@ -1209,8 +1397,8 @@ void SwScriptInfo::UpdateBidiInfo( const OUString& rText )
     UBiDi* pBidi = ubidi_openSized( rText.getLength(), 0, &nError );
     nError = U_ZERO_ERROR;
 
-    ubidi_setPara( pBidi, reinterpret_cast<const UChar *>(rText.getStr()), rText.getLength(),    // UChar != sal_Unicode in MinGW
-                   nDefaultDir, nullptr, &nError );
+    ubidi_setPara( pBidi, reinterpret_cast<const UChar *>(rText.getStr()), rText.getLength(),
+                   m_nDefaultDir, nullptr, &nError );
     nError = U_ZERO_ERROR;
     int nCount = ubidi_countRuns( pBidi, &nError );
     int32_t nStart = 0;
@@ -1219,7 +1407,7 @@ void SwScriptInfo::UpdateBidiInfo( const OUString& rText )
     for ( int nIdx = 0; nIdx < nCount; ++nIdx )
     {
         ubidi_getLogicalRun( pBidi, nStart, &nEnd, &nCurrDir );
-        aDirectionChanges.push_back( DirectionChangeInfo(nEnd, nCurrDir) );
+        m_DirectionChanges.emplace_back(TextFrameIndex(nEnd), nCurrDir);
         nStart = nEnd;
     }
 
@@ -1233,7 +1421,7 @@ void SwScriptInfo::UpdateBidiInfo( const OUString& rText )
 // Scripts are Asian (Chinese, Japanese, Korean),
 //             Latin ( English etc.)
 //         and Complex ( Hebrew, Arabian )
-sal_Int32 SwScriptInfo::NextScriptChg(const sal_Int32 nPos)  const
+TextFrameIndex SwScriptInfo::NextScriptChg(const TextFrameIndex nPos)  const
 {
     const size_t nEnd = CountScriptChg();
     for( size_t nX = 0; nX < nEnd; ++nX )
@@ -1242,11 +1430,11 @@ sal_Int32 SwScriptInfo::NextScriptChg(const sal_Int32 nPos)  const
             return GetScriptChg( nX );
     }
 
-    return COMPLETE_STRING;
+    return TextFrameIndex(COMPLETE_STRING);
 }
 
 // returns the script of the character at the input position
-sal_Int16 SwScriptInfo::ScriptType(const sal_Int32 nPos) const
+sal_Int16 SwScriptInfo::ScriptType(const TextFrameIndex nPos) const
 {
     const size_t nEnd = CountScriptChg();
     for( size_t nX = 0; nX < nEnd; ++nX )
@@ -1256,10 +1444,10 @@ sal_Int16 SwScriptInfo::ScriptType(const sal_Int32 nPos) const
     }
 
     // the default is the application language script
-    return SvtLanguageOptions::GetI18NScriptTypeOfLanguage( (sal_uInt16)GetAppLanguage() );
+    return SvtLanguageOptions::GetI18NScriptTypeOfLanguage( GetAppLanguage() );
 }
 
-sal_Int32 SwScriptInfo::NextDirChg( const sal_Int32 nPos,
+TextFrameIndex SwScriptInfo::NextDirChg(const TextFrameIndex nPos,
                                      const sal_uInt8* pLevel )  const
 {
     const sal_uInt8 nCurrDir = pLevel ? *pLevel : 62;
@@ -1271,10 +1459,10 @@ sal_Int32 SwScriptInfo::NextDirChg( const sal_Int32 nPos,
             return GetDirChg( nX );
     }
 
-    return COMPLETE_STRING;
+    return TextFrameIndex(COMPLETE_STRING);
 }
 
-sal_uInt8 SwScriptInfo::DirType(const sal_Int32 nPos) const
+sal_uInt8 SwScriptInfo::DirType(const TextFrameIndex nPos) const
 {
     const size_t nEnd = CountDirChg();
     for( size_t nX = 0; nX < nEnd; ++nX )
@@ -1286,6 +1474,18 @@ sal_uInt8 SwScriptInfo::DirType(const sal_Int32 nPos) const
     return 0;
 }
 
+TextFrameIndex SwScriptInfo::NextHiddenChg(TextFrameIndex const nPos) const
+{
+    for (auto const& it : m_HiddenChg)
+    {
+        if (nPos < it)
+        {
+            return it;
+        }
+    }
+    return TextFrameIndex(COMPLETE_STRING);
+}
+
 // Takes a string and replaced the hidden ranges with cChar.
 sal_Int32 SwScriptInfo::MaskHiddenRanges( const SwTextNode& rNode, OUStringBuffer & rText,
                                        const sal_Int32 nStt, const sal_Int32 nEnd,
@@ -1293,13 +1493,13 @@ sal_Int32 SwScriptInfo::MaskHiddenRanges( const SwTextNode& rNode, OUStringBuffe
 {
     assert(rNode.GetText().getLength() == rText.getLength());
 
-    PositionList aList;
+    std::vector<sal_Int32> aList;
     sal_Int32 nHiddenStart;
     sal_Int32 nHiddenEnd;
     sal_Int32 nNumOfHiddenChars = 0;
     GetBoundsOfHiddenRange( rNode, 0, nHiddenStart, nHiddenEnd, &aList );
-    PositionList::const_reverse_iterator rFirst( aList.end() );
-    PositionList::const_reverse_iterator rLast( aList.begin() );
+    auto rFirst( aList.crbegin() );
+    auto rLast( aList.crend() );
     while ( rFirst != rLast )
     {
         nHiddenEnd = *(rFirst++);
@@ -1310,7 +1510,7 @@ sal_Int32 SwScriptInfo::MaskHiddenRanges( const SwTextNode& rNode, OUStringBuffe
 
         while ( nHiddenStart < nHiddenEnd && nHiddenStart < nEnd )
         {
-            if ( nHiddenStart >= nStt && nHiddenStart < nEnd )
+            if (nHiddenStart >= nStt)
             {
                 rText[nHiddenStart] = cChar;
                 ++nNumOfHiddenChars;
@@ -1325,12 +1525,12 @@ sal_Int32 SwScriptInfo::MaskHiddenRanges( const SwTextNode& rNode, OUStringBuffe
 // Takes a SwTextNode and deletes the hidden ranges from the node.
 void SwScriptInfo::DeleteHiddenRanges( SwTextNode& rNode )
 {
-    PositionList aList;
+    std::vector<sal_Int32> aList;
     sal_Int32 nHiddenStart;
     sal_Int32 nHiddenEnd;
     GetBoundsOfHiddenRange( rNode, 0, nHiddenStart, nHiddenEnd, &aList );
-    PositionList::const_reverse_iterator rFirst( aList.end() );
-    PositionList::const_reverse_iterator rLast( aList.begin() );
+    auto rFirst( aList.crbegin() );
+    auto rLast( aList.crend() );
     while ( rFirst != rLast )
     {
         nHiddenEnd = *(rFirst++);
@@ -1343,7 +1543,7 @@ void SwScriptInfo::DeleteHiddenRanges( SwTextNode& rNode )
 
 bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nPos,
                                            sal_Int32& rnStartPos, sal_Int32& rnEndPos,
-                                           PositionList* pList )
+                                           std::vector<sal_Int32>* pList )
 {
     rnStartPos = COMPLETE_STRING;
     rnEndPos = 0;
@@ -1373,6 +1573,8 @@ bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nP
         }
     }
 
+    // sw_redlinehide: this won't work if it's merged
+#if 0
     const SwScriptInfo* pSI = SwScriptInfo::GetScriptInfo( rNode );
     if ( pSI )
     {
@@ -1385,6 +1587,7 @@ bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nP
         rNode.SetHiddenCharAttribute( bNewHiddenCharsHidePara, bNewContainsHiddenChars );
     }
     else
+#endif
     {
 
         // No valid SwScriptInfo Object, we have to do it the hard way:
@@ -1394,7 +1597,7 @@ bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nP
                             : 0);
         MultiSelection aHiddenMulti( aRange );
         SwScriptInfo::CalcHiddenRanges( rNode, aHiddenMulti );
-        for( size_t i = 0; i < aHiddenMulti.GetRangeCount(); ++i )
+        for( sal_Int32 i = 0; i < aHiddenMulti.GetRangeCount(); ++i )
         {
             const Range& rRange = aHiddenMulti.GetRange( i );
             const sal_Int32 nHiddenStart = rRange.Min();
@@ -1402,7 +1605,7 @@ bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nP
 
             if ( nHiddenStart > nPos )
                 break;
-            if ( nHiddenStart <= nPos && nPos < nHiddenEnd )
+            if (nPos < nHiddenEnd)
             {
                 rnStartPos = nHiddenStart;
                 rnEndPos   = std::min<sal_Int32>(nHiddenEnd,
@@ -1413,7 +1616,7 @@ bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nP
 
         if ( pList )
         {
-            for( size_t i = 0; i < aHiddenMulti.GetRangeCount(); ++i )
+            for( sal_Int32 i = 0; i < aHiddenMulti.GetRangeCount(); ++i )
             {
                 const Range& rRange = aHiddenMulti.GetRange( i );
                 pList->push_back( rRange.Min() );
@@ -1427,34 +1630,25 @@ bool SwScriptInfo::GetBoundsOfHiddenRange( const SwTextNode& rNode, sal_Int32 nP
     return bNewContainsHiddenChars;
 }
 
-bool SwScriptInfo::GetBoundsOfHiddenRange( sal_Int32 nPos, sal_Int32& rnStartPos,
-                                           sal_Int32& rnEndPos, PositionList* pList ) const
+bool SwScriptInfo::GetBoundsOfHiddenRange(TextFrameIndex nPos,
+        TextFrameIndex & rnStartPos, TextFrameIndex & rnEndPos) const
 {
-    rnStartPos = COMPLETE_STRING;
-    rnEndPos = 0;
+    rnStartPos = TextFrameIndex(COMPLETE_STRING);
+    rnEndPos = TextFrameIndex(0);
 
     const size_t nEnd = CountHiddenChg();
     for( size_t nX = 0; nX < nEnd; ++nX )
     {
-        const sal_Int32 nHiddenStart = GetHiddenChg( nX++ );
-        const sal_Int32 nHiddenEnd = GetHiddenChg( nX );
+        const TextFrameIndex nHiddenStart = GetHiddenChg( nX++ );
+        const TextFrameIndex nHiddenEnd = GetHiddenChg( nX );
 
         if ( nHiddenStart > nPos )
             break;
-        if ( nHiddenStart <= nPos && nPos < nHiddenEnd )
+        if (nPos < nHiddenEnd)
         {
             rnStartPos = nHiddenStart;
             rnEndPos   = nHiddenEnd;
             break;
-        }
-    }
-
-    if ( pList )
-    {
-        for( size_t nX = 0; nX < nEnd; ++nX )
-        {
-            pList->push_back( GetHiddenChg( nX++ ) );
-            pList->push_back( GetHiddenChg( nX ) );
         }
     }
 
@@ -1471,12 +1665,12 @@ bool SwScriptInfo::IsInHiddenRange( const SwTextNode& rNode, sal_Int32 nPos )
 
 #ifdef DBG_UTIL
 // returns the type of the compressed character
-SwScriptInfo::CompType SwScriptInfo::DbgCompType( const sal_Int32 nPos ) const
+SwScriptInfo::CompType SwScriptInfo::DbgCompType(const TextFrameIndex nPos) const
 {
     const size_t nEnd = CountCompChg();
     for( size_t nX = 0; nX < nEnd; ++nX )
     {
-        const sal_Int32 nChg = GetCompStart( nX );
+        const TextFrameIndex nChg = GetCompStart(nX);
 
         if ( nPos < nChg )
             return NONE;
@@ -1490,15 +1684,15 @@ SwScriptInfo::CompType SwScriptInfo::DbgCompType( const sal_Int32 nPos ) const
 
 // returns, if there are compressable kanas or specials
 // between nStart and nEnd
-size_t SwScriptInfo::HasKana( sal_Int32 nStart, const sal_Int32 nLen ) const
+size_t SwScriptInfo::HasKana(TextFrameIndex const nStart, TextFrameIndex const nLen) const
 {
     const size_t nCnt = CountCompChg();
-    sal_Int32 nEnd = nStart + nLen;
+    TextFrameIndex nEnd = nStart + nLen;
 
     for( size_t nX = 0; nX < nCnt; ++nX )
     {
-        sal_Int32 nKanaStart  = GetCompStart( nX );
-        sal_Int32 nKanaEnd = nKanaStart + GetCompLen( nX );
+        TextFrameIndex nKanaStart  = GetCompStart(nX);
+        TextFrameIndex nKanaEnd = nKanaStart + GetCompLen(nX);
 
         if ( nKanaStart >= nEnd )
             return SAL_MAX_SIZE;
@@ -1510,7 +1704,7 @@ size_t SwScriptInfo::HasKana( sal_Int32 nStart, const sal_Int32 nLen ) const
     return SAL_MAX_SIZE;
 }
 
-long SwScriptInfo::Compress( long* pKernArray, sal_Int32 nIdx, sal_Int32 nLen,
+long SwScriptInfo::Compress(long* pKernArray, TextFrameIndex nIdx, TextFrameIndex nLen,
                              const sal_uInt16 nCompress, const sal_uInt16 nFontHeight,
                              bool bCenter,
                              Point* pPoint ) const
@@ -1529,14 +1723,14 @@ long SwScriptInfo::Compress( long* pKernArray, sal_Int32 nIdx, sal_Int32 nLen,
     if ( SAL_MAX_SIZE == nCompIdx )
         return 0;
 
-    sal_Int32 nChg = GetCompStart( nCompIdx );
-    sal_Int32 nCompLen = GetCompLen( nCompIdx );
+    TextFrameIndex nChg = GetCompStart( nCompIdx );
+    TextFrameIndex nCompLen = GetCompLen( nCompIdx );
     sal_Int32 nI = 0;
     nLen += nIdx;
 
     if( nChg > nIdx )
     {
-        nI = nChg - nIdx;
+        nI = sal_Int32(nChg - nIdx);
         nIdx = nChg;
     }
     else if( nIdx < nChg + nCompLen )
@@ -1582,7 +1776,7 @@ long SwScriptInfo::Compress( long* pKernArray, sal_Int32 nIdx, sal_Int32 nLen,
                             nMove = nLast;
                         else
                         {
-                            pPoint->X() += nLast;
+                            pPoint->AdjustX(nLast );
                             nLast = 0;
                         }
                     }
@@ -1603,7 +1797,7 @@ long SwScriptInfo::Compress( long* pKernArray, sal_Int32 nIdx, sal_Int32 nLen,
         if( nIdx >= nLen )
             break;
 
-        sal_Int32 nTmpChg = nLen;
+        TextFrameIndex nTmpChg = nLen;
         if( ++nCompIdx < nCompCount )
         {
             nTmpChg = GetCompStart( nCompIdx );
@@ -1625,12 +1819,12 @@ long SwScriptInfo::Compress( long* pKernArray, sal_Int32 nIdx, sal_Int32 nLen,
 // Note on calling KashidaJustify():
 // Kashida positions may be marked as invalid. Therefore KashidaJustify may return the clean
 // total number of kashida positions, or the number of kashida positions after some positions
-// have been dropped, depending on the state of the aKashidaInvalid array.
+// have been dropped, depending on the state of the m_KashidaInvalid set.
 
 sal_Int32 SwScriptInfo::KashidaJustify( long* pKernArray,
                                         long* pScrArray,
-                                        sal_Int32 nStt,
-                                        sal_Int32 nLen,
+                                        TextFrameIndex const nStt,
+                                        TextFrameIndex const nLen,
                                         long nSpaceAdd ) const
 {
     SAL_WARN_IF( !nLen, "sw.core", "Kashida justification without text?!" );
@@ -1648,7 +1842,7 @@ sal_Int32 SwScriptInfo::KashidaJustify( long* pKernArray,
         ++nCntKash;
     }
 
-    const sal_Int32 nEnd = nStt + nLen;
+    const TextFrameIndex nEnd = nStt + nLen;
 
     size_t nCntKashEnd = nCntKash;
     while ( nCntKashEnd < CountKashida() )
@@ -1672,33 +1866,34 @@ sal_Int32 SwScriptInfo::KashidaJustify( long* pKernArray,
     if ( nCntKash < CountKashida() )
     {
         // skip any invalid kashidas
-        while ( ! IsKashidaValid ( nCntKash ) && nCntKash < nCntKashEnd )
+        while (nCntKash < nCntKashEnd && !IsKashidaValid(nCntKash))
             ++nCntKash;
 
-        sal_Int32 nKashidaPos = GetKashida( nCntKash );
-        sal_Int32 nIdx = nKashidaPos;
+        TextFrameIndex nIdx = nCntKash < nCntKashEnd && IsKashidaValid(nCntKash)
+            ? GetKashida(nCntKash)
+            : nEnd;
         long nKashAdd = nSpaceAdd;
 
         while ( nIdx < nEnd )
         {
-            sal_Int32 nArrayPos = nIdx - nStt;
+            TextFrameIndex nArrayPos = nIdx - nStt;
 
             // next kashida position
             ++nCntKash;
-            while ( ! IsKashidaValid ( nCntKash ) && nCntKash < nCntKashEnd )
+            while (nCntKash < nCntKashEnd && !IsKashidaValid(nCntKash))
                 ++nCntKash;
 
-            nIdx = nCntKash < CountKashida() && IsKashidaValid ( nCntKash ) ? GetKashida( nCntKash ) : nEnd;
+            nIdx = nCntKash < nCntKashEnd && IsKashidaValid(nCntKash) ? GetKashida(nCntKash) : nEnd;
             if ( nIdx > nEnd )
                 nIdx = nEnd;
 
-            const sal_Int32 nArrayEnd = nIdx - nStt;
+            const TextFrameIndex nArrayEnd = nIdx - nStt;
 
             while ( nArrayPos < nArrayEnd )
             {
-                pKernArray[ nArrayPos ] += nKashAdd;
+                pKernArray[ sal_Int32(nArrayPos) ] += nKashAdd;
                 if ( pScrArray )
-                    pScrArray[ nArrayPos ] += nKashAdd;
+                    pScrArray[ sal_Int32(nArrayPos) ] += nKashAdd;
                 ++nArrayPos;
             }
             nKashAdd += nSpaceAdd;
@@ -1711,18 +1906,19 @@ sal_Int32 SwScriptInfo::KashidaJustify( long* pKernArray,
 // Checks if the current text is 'Arabic' text. Note that only the first
 // character has to be checked because a ctl portion only contains one
 // script, see NewTextPortion
-bool SwScriptInfo::IsArabicText( const OUString& rText, sal_Int32 nStt, sal_Int32 nLen )
+bool SwScriptInfo::IsArabicText(const OUString& rText,
+        TextFrameIndex const nStt, TextFrameIndex const nLen)
 {
     using namespace ::com::sun::star::i18n;
     static const ScriptTypeList typeList[] = {
-        { UnicodeScript_kArabic, UnicodeScript_kArabic, UnicodeScript_kArabic },        // 11,
-        { UnicodeScript_kScriptCount, UnicodeScript_kScriptCount, UnicodeScript_kScriptCount }    // 88
+        { UnicodeScript_kArabic, UnicodeScript_kArabic, sal_Int16(UnicodeScript_kArabic) },        // 11,
+        { UnicodeScript_kScriptCount, UnicodeScript_kScriptCount, sal_Int16(UnicodeScript_kScriptCount) }    // 88
     };
 
     // go forward if current position does not hold a regular character:
     const CharClass& rCC = GetAppCharClass();
-    sal_Int32 nIdx = nStt;
-    const sal_Int32 nEnd = nStt + nLen;
+    sal_Int32 nIdx = sal_Int32(nStt);
+    const sal_Int32 nEnd = sal_Int32(nStt + nLen);
     while ( nIdx < nEnd && !rCC.isLetterNumeric( rText, nIdx ) )
     {
         ++nIdx;
@@ -1741,39 +1937,28 @@ bool SwScriptInfo::IsArabicText( const OUString& rText, sal_Int32 nStt, sal_Int3
     if( nIdx >= 0 )
     {
         const sal_Unicode cCh = rText[nIdx];
-        const sal_Int16 type = unicode::getUnicodeScriptType( cCh, typeList, UnicodeScript_kScriptCount );
-        return type == UnicodeScript_kArabic;
+        const sal_Int16 type = unicode::getUnicodeScriptType( cCh, typeList, sal_Int16(UnicodeScript_kScriptCount) );
+        return type == sal_Int16(UnicodeScript_kArabic);
     }
     return false;
 }
 
-bool SwScriptInfo::IsKashidaValid(sal_Int32 nKashPos) const
+bool SwScriptInfo::IsKashidaValid(size_t const nKashPos) const
 {
-    for ( size_t i = 0; i < aKashidaInvalid.size(); ++i )
-    {
-        if ( aKashidaInvalid [ i ] == nKashPos )
-            return false;
-    }
-    return true;
+    return m_KashidaInvalid.find(nKashPos) == m_KashidaInvalid.end();
 }
 
-void SwScriptInfo::ClearKashidaInvalid(sal_Int32 nKashPos)
+void SwScriptInfo::ClearKashidaInvalid(size_t const nKashPos)
 {
-    for ( size_t i = 0; i < aKashidaInvalid.size(); ++i )
-    {
-        if ( aKashidaInvalid [ i ] == nKashPos )
-        {
-            aKashidaInvalid.erase ( aKashidaInvalid.begin() + i );
-            return;
-        }
-    }
+    m_KashidaInvalid.erase(nKashPos);
 }
 
 // bMark == true:
 // marks the first valid kashida in the given text range as invalid
 // bMark == false:
 // clears all kashida invalid flags in the given text range
-bool SwScriptInfo::MarkOrClearKashidaInvalid(sal_Int32 nStt, sal_Int32 nLen,
+bool SwScriptInfo::MarkOrClearKashidaInvalid(
+    TextFrameIndex const nStt, TextFrameIndex const nLen,
     bool bMark, sal_Int32 nMarkCount)
 {
     size_t nCntKash = 0;
@@ -1784,7 +1969,7 @@ bool SwScriptInfo::MarkOrClearKashidaInvalid(sal_Int32 nStt, sal_Int32 nLen,
         nCntKash++;
     }
 
-    const sal_Int32 nEnd = nStt + nLen;
+    const TextFrameIndex nEnd = nStt + nLen;
 
     while ( nCntKash < CountKashida() )
     {
@@ -1792,9 +1977,8 @@ bool SwScriptInfo::MarkOrClearKashidaInvalid(sal_Int32 nStt, sal_Int32 nLen,
             break;
         if(bMark)
         {
-            if ( IsKashidaValid ( nCntKash ) )
+            if ( MarkKashidaInvalid ( nCntKash ) )
             {
-                MarkKashidaInvalid ( nCntKash );
                 --nMarkCount;
                 if (!nMarkCount)
                     return true;
@@ -1809,14 +1993,15 @@ bool SwScriptInfo::MarkOrClearKashidaInvalid(sal_Int32 nStt, sal_Int32 nLen,
     return false;
 }
 
-void SwScriptInfo::MarkKashidaInvalid(sal_Int32 nKashPos)
+bool SwScriptInfo::MarkKashidaInvalid(size_t const nKashPos)
 {
-    aKashidaInvalid.push_back(nKashPos);
+    return m_KashidaInvalid.insert(nKashPos).second;
 }
 
 // retrieve the kashida positions in the given text range
-void SwScriptInfo::GetKashidaPositions(sal_Int32 nStt, sal_Int32 nLen,
-    sal_Int32* pKashidaPosition)
+void SwScriptInfo::GetKashidaPositions(
+    TextFrameIndex const nStt, TextFrameIndex const nLen,
+    std::vector<TextFrameIndex>& rKashidaPosition)
 {
     size_t nCntKash = 0;
     while( nCntKash < CountKashida() )
@@ -1826,44 +2011,44 @@ void SwScriptInfo::GetKashidaPositions(sal_Int32 nStt, sal_Int32 nLen,
         nCntKash++;
     }
 
-    const sal_Int32 nEnd = nStt + nLen;
+    const TextFrameIndex nEnd = nStt + nLen;
 
     size_t nCntKashEnd = nCntKash;
     while ( nCntKashEnd < CountKashida() )
     {
         if ( nEnd <= GetKashida( nCntKashEnd ) )
             break;
-        pKashidaPosition [ nCntKashEnd - nCntKash ] = GetKashida ( nCntKashEnd );
+        rKashidaPosition.push_back(GetKashida(nCntKashEnd));
         nCntKashEnd++;
     }
 }
 
-void SwScriptInfo::SetNoKashidaLine(sal_Int32 nStt, sal_Int32 nLen)
+void SwScriptInfo::SetNoKashidaLine(TextFrameIndex const nStt, TextFrameIndex const nLen)
 {
-    aNoKashidaLine.push_back( nStt );
-    aNoKashidaLineEnd.push_back( nStt+nLen );
+    m_NoKashidaLine.push_back( nStt );
+    m_NoKashidaLineEnd.push_back( nStt + nLen );
 }
 
 // determines if the line uses kashida justification
-bool SwScriptInfo::IsKashidaLine(sal_Int32 nCharIdx) const
+bool SwScriptInfo::IsKashidaLine(TextFrameIndex const nCharIdx) const
 {
-    for (size_t i = 0; i < aNoKashidaLine.size(); ++i)
+    for (size_t i = 0; i < m_NoKashidaLine.size(); ++i)
     {
-        if (nCharIdx >= aNoKashidaLine[ i ] && nCharIdx < aNoKashidaLineEnd[ i ])
+        if (nCharIdx >= m_NoKashidaLine[i] && nCharIdx < m_NoKashidaLineEnd[i])
             return false;
     }
     return true;
 }
 
-void SwScriptInfo::ClearNoKashidaLine(sal_Int32 nStt, sal_Int32 nLen)
+void SwScriptInfo::ClearNoKashidaLine(TextFrameIndex const nStt, TextFrameIndex const nLen)
 {
     size_t i = 0;
-    while( i < aNoKashidaLine.size())
+    while (i < m_NoKashidaLine.size())
     {
-        if( nStt + nLen >= aNoKashidaLine[ i ] && nStt < aNoKashidaLineEnd [ i ] )
+        if (nStt + nLen >= m_NoKashidaLine[i] && nStt < m_NoKashidaLineEnd[i])
         {
-            aNoKashidaLine.erase(aNoKashidaLine.begin() + i);
-            aNoKashidaLineEnd.erase(aNoKashidaLineEnd.begin() + i);
+            m_NoKashidaLine.erase(m_NoKashidaLine.begin() + i);
+            m_NoKashidaLineEnd.erase(m_NoKashidaLineEnd.begin() + i);
         }
         else
             ++i;
@@ -1871,7 +2056,8 @@ void SwScriptInfo::ClearNoKashidaLine(sal_Int32 nStt, sal_Int32 nLen)
 }
 
 // mark the given character indices as invalid kashida positions
-bool SwScriptInfo::MarkKashidasInvalid(sal_Int32 nCnt, sal_Int32* pKashidaPositions)
+void SwScriptInfo::MarkKashidasInvalid(sal_Int32 const nCnt,
+        const TextFrameIndex* pKashidaPositions)
 {
     SAL_WARN_IF( !pKashidaPositions || nCnt == 0, "sw.core", "Where are kashidas?" );
 
@@ -1887,38 +2073,38 @@ bool SwScriptInfo::MarkKashidasInvalid(sal_Int32 nCnt, sal_Int32* pKashidaPositi
         }
 
         if ( pKashidaPositions [nKashidaPosIdx] != GetKashida( nCntKash ) || !IsKashidaValid ( nCntKash ) )
-            return false; // something is wrong
+            return; // something is wrong
 
         MarkKashidaInvalid ( nCntKash );
         nKashidaPosIdx++;
     }
-    return true;
 }
 
-sal_Int32 SwScriptInfo::ThaiJustify( const OUString& rText, long* pKernArray,
-                                     long* pScrArray, sal_Int32 nStt,
-                                     sal_Int32 nLen, sal_Int32 nNumberOfBlanks,
+TextFrameIndex SwScriptInfo::ThaiJustify( const OUString& rText, long* pKernArray,
+                                     long* pScrArray, TextFrameIndex const nStt,
+                                     TextFrameIndex const nLen,
+                                     TextFrameIndex nNumberOfBlanks,
                                      long nSpaceAdd )
 {
-    SAL_WARN_IF( nStt + nLen > rText.getLength(), "sw.core", "String in ThaiJustify too small" );
+    SAL_WARN_IF( nStt + nLen > TextFrameIndex(rText.getLength()), "sw.core", "String in ThaiJustify too small" );
 
-    SwTwips nNumOfTwipsToDistribute = nSpaceAdd * nNumberOfBlanks /
+    SwTwips nNumOfTwipsToDistribute = nSpaceAdd * sal_Int32(nNumberOfBlanks) /
                                       SPACING_PRECISION_FACTOR;
 
     long nSpaceSum = 0;
-    sal_Int32 nCnt = 0;
+    TextFrameIndex nCnt(0);
 
-    for (sal_Int32 nI = 0; nI < nLen; ++nI)
+    for (sal_Int32 nI = 0; nI < sal_Int32(nLen); ++nI)
     {
-        const sal_Unicode cCh = rText[nStt + nI];
+        const sal_Unicode cCh = rText[sal_Int32(nStt) + nI];
 
         // check if character is not above or below base
         if ( ( 0xE34 > cCh || cCh > 0xE3A ) &&
              ( 0xE47 > cCh || cCh > 0xE4E ) && cCh != 0xE31 )
         {
-            if ( nNumberOfBlanks > 0 )
+            if (nNumberOfBlanks > TextFrameIndex(0))
             {
-                nSpaceAdd = nNumOfTwipsToDistribute / nNumberOfBlanks;
+                nSpaceAdd = nNumOfTwipsToDistribute / sal_Int32(nNumberOfBlanks);
                 --nNumberOfBlanks;
                 nNumOfTwipsToDistribute -= nSpaceAdd;
             }
@@ -1934,9 +2120,10 @@ sal_Int32 SwScriptInfo::ThaiJustify( const OUString& rText, long* pKernArray,
 }
 
 SwScriptInfo* SwScriptInfo::GetScriptInfo( const SwTextNode& rTNd,
-                                           bool bAllowInvalid )
+                                           SwTextFrame const**const o_ppFrame,
+                                           bool const bAllowInvalid)
 {
-    SwIterator<SwTextFrame,SwTextNode> aIter( rTNd );
+    SwIterator<SwTextFrame, SwTextNode, sw::IteratorMode::UnwrapMulti> aIter(rTNd);
     SwScriptInfo* pScriptInfo = nullptr;
 
     for( SwTextFrame* pLast = aIter.First(); pLast; pLast = aIter.Next() )
@@ -1944,8 +2131,15 @@ SwScriptInfo* SwScriptInfo::GetScriptInfo( const SwTextNode& rTNd,
         pScriptInfo = const_cast<SwScriptInfo*>(pLast->GetScriptInfo());
         if ( pScriptInfo )
         {
-            if ( bAllowInvalid || COMPLETE_STRING == pScriptInfo->GetInvalidityA() )
+            if (bAllowInvalid ||
+                TextFrameIndex(COMPLETE_STRING) == pScriptInfo->GetInvalidityA())
+            {
+                if (o_ppFrame)
+                {
+                    *o_ppFrame = pLast;
+                }
                 break;
+            }
             pScriptInfo = nullptr;
         }
     }
@@ -1957,16 +2151,16 @@ SwParaPortion::SwParaPortion()
 {
     FormatReset();
     m_bFlys = m_bFootnoteNum = m_bMargin = false;
-    SetWhichPor( POR_PARA );
+    SetWhichPor( PortionType::Para );
 }
 
 SwParaPortion::~SwParaPortion()
 {
 }
 
-sal_Int32 SwParaPortion::GetParLen() const
+TextFrameIndex SwParaPortion::GetParLen() const
 {
-    sal_Int32 nLen = 0;
+    TextFrameIndex nLen(0);
     const SwLineLayout *pLay = this;
     while( pLay )
     {
@@ -1983,9 +2177,9 @@ const SwDropPortion *SwParaPortion::FindDropPortion() const
         pLay = pLay->GetNext();
     while( pLay )
     {
-        const SwLinePortion *pPos = pLay->GetPortion();
+        const SwLinePortion *pPos = pLay->GetNextPortion();
         while ( pPos && !pPos->GetLen() )
-            pPos = pPos->GetPortion();
+            pPos = pPos->GetNextPortion();
         if( pPos && pPos->IsDropPortion() )
             return static_cast<const SwDropPortion *>(pPos);
         pLay = pLay->GetLen() ? nullptr : pLay->GetNext();
@@ -1997,18 +2191,18 @@ void SwLineLayout::Init( SwLinePortion* pNextPortion )
 {
     Height( 0 );
     Width( 0 );
-    SetLen( 0 );
+    SetLen(TextFrameIndex(0));
     SetAscent( 0 );
     SetRealHeight( 0 );
-    SetPortion( pNextPortion );
+    SetNextPortion( pNextPortion );
 }
 
 // looks for hanging punctuation portions in the paragraph
 // and return the maximum right offset of them.
 // If no such portion is found, the Margin/Hanging-flags will be updated.
-SwTwips SwLineLayout::_GetHangingMargin() const
+SwTwips SwLineLayout::GetHangingMargin_() const
 {
-    SwLinePortion* pPor = GetPortion();
+    SwLinePortion* pPor = GetNextPortion();
     bool bFound = false;
     SwTwips nDiff = 0;
     while( pPor)
@@ -2020,10 +2214,10 @@ SwTwips SwLineLayout::_GetHangingMargin() const
                 bFound = true;
         }
         // the last post its portion
-        else if ( pPor->IsPostItsPortion() && ! pPor->GetPortion() )
+        else if ( pPor->IsPostItsPortion() && ! pPor->GetNextPortion() )
             nDiff = nAscent;
 
-        pPor = pPor->GetPortion();
+        pPor = pPor->GetNextPortion();
     }
     if( !bFound ) // update the hanging-flag
         const_cast<SwLineLayout*>(this)->SetHanging( false );
@@ -2068,8 +2262,7 @@ void SwScriptInfo::selectHiddenTextProperty(const SwTextNode& rNode, MultiSelect
         for( size_t nTmp = 0; nTmp < pHints->Count(); ++nTmp )
         {
             const SwTextAttr* pTextAttr = pHints->Get( nTmp );
-            const SvxCharHiddenItem* pHiddenItem =
-                static_cast<const SvxCharHiddenItem*>( CharFormat::GetItem( *pTextAttr, RES_CHRATR_HIDDEN ) );
+            const SvxCharHiddenItem* pHiddenItem = CharFormat::GetItem( *pTextAttr, RES_CHRATR_HIDDEN );
             if( pHiddenItem )
             {
                 const sal_Int32 nSt = pTextAttr->GetStart();
@@ -2082,6 +2275,25 @@ void SwScriptInfo::selectHiddenTextProperty(const SwTextNode& rNode, MultiSelect
             }
         }
     }
+
+    for (const SwIndex* pIndex = rNode.GetFirstIndex(); pIndex; pIndex = pIndex->GetNext())
+    {
+        const sw::mark::IMark* pMark = pIndex->GetMark();
+        const sw::mark::IBookmark* pBookmark = dynamic_cast<const sw::mark::IBookmark*>(pMark);
+        if (pBookmark && pBookmark->IsHidden())
+        {
+            // intersect bookmark range with textnode range and add the intersection to rHiddenMulti
+
+            const sal_Int32 nSt =  pBookmark->GetMarkStart().nContent.GetIndex();
+            const sal_Int32 nEnd = pBookmark->GetMarkEnd().nContent.GetIndex();
+
+            if( nEnd > nSt )
+            {
+                Range aTmp( nSt, nEnd - 1 );
+                rHiddenMulti.Select(aTmp, true);
+            }
+        }
+    }
 }
 
 void SwScriptInfo::selectRedLineDeleted(const SwTextNode& rNode, MultiSelection &rHiddenMulti, bool bSelect)
@@ -2090,9 +2302,9 @@ void SwScriptInfo::selectRedLineDeleted(const SwTextNode& rNode, MultiSelection 
         || (rNode.GetText().getLength() == rHiddenMulti.GetTotalRange().Len()));
 
     const IDocumentRedlineAccess& rIDRA = rNode.getIDocumentRedlineAccess();
-    if ( IDocumentRedlineAccess::IsShowChanges( rIDRA.GetRedlineMode() ) )
+    if ( IDocumentRedlineAccess::IsShowChanges( rIDRA.GetRedlineFlags() ) )
     {
-        sal_uInt16 nAct = rIDRA.GetRedlinePos( rNode, USHRT_MAX );
+        SwRedlineTable::size_type nAct = rIDRA.GetRedlinePos( rNode, USHRT_MAX );
 
         for ( ; nAct < rIDRA.GetRedlineTable().size(); nAct++ )
         {
@@ -2142,4 +2354,55 @@ void SwScriptInfo::CalcHiddenRanges( const SwTextNode& rNode, MultiSelection& rH
     rNode.SetHiddenCharAttribute( bNewHiddenCharsHidePara, bNewContainsHiddenChars );
 }
 
+TextFrameIndex SwScriptInfo::CountCJKCharacters(const OUString &rText,
+    TextFrameIndex nPos, TextFrameIndex const nEnd, LanguageType aLang)
+{
+    TextFrameIndex nCount(0);
+    if (nEnd > nPos)
+    {
+        sal_Int32 nDone = 0;
+        const lang::Locale &rLocale = g_pBreakIt->GetLocale( aLang );
+        while ( nPos < nEnd )
+        {
+            nPos = TextFrameIndex(g_pBreakIt->GetBreakIter()->nextCharacters(
+                    rText, sal_Int32(nPos),
+                    rLocale,
+                    i18n::CharacterIteratorMode::SKIPCELL, 1, nDone));
+            nCount++;
+        }
+    }
+    else
+        nCount = nEnd - nPos ;
+
+    return nCount;
+}
+
+void SwScriptInfo::CJKJustify( const OUString& rText, long* pKernArray,
+                                     long* pScrArray, TextFrameIndex const nStt,
+                                     TextFrameIndex const nLen, LanguageType aLang,
+                                     long nSpaceAdd, bool bIsSpaceStop )
+{
+    assert( pKernArray != nullptr && sal_Int32(nStt) >= 0 );
+    if (sal_Int32(nLen) > 0)
+    {
+        long nSpaceSum = 0;
+        const lang::Locale &rLocale = g_pBreakIt->GetLocale( aLang );
+        sal_Int32 nDone = 0;
+        sal_Int32 nNext(nStt);
+        for ( sal_Int32 nI = 0; nI < sal_Int32(nLen); ++nI )
+        {
+            if (nI + sal_Int32(nStt) == nNext)
+            {
+                nNext = g_pBreakIt->GetBreakIter()->nextCharacters( rText, nNext,
+                        rLocale,
+                        i18n::CharacterIteratorMode::SKIPCELL, 1, nDone );
+                if (nNext < sal_Int32(nStt + nLen) || !bIsSpaceStop)
+                    nSpaceSum += nSpaceAdd;
+            }
+            pKernArray[ nI ] += nSpaceSum;
+            if ( pScrArray )
+                pScrArray[ nI ] += nSpaceSum;
+        }
+    }
+}
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

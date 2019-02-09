@@ -19,19 +19,20 @@
 #ifndef INCLUDED_SFX2_INC_BITSET_HXX
 #define INCLUDED_SFX2_INC_BITSET_HXX
 
+#include <memory>
+
 class IndexBitSet
 {
 private:
-    sal_uInt16 nBlocks;
-    sal_uInt16 nCount;
-    sal_uInt32* pBitmap;
+    sal_uInt16                    nBlocks;
+    std::unique_ptr<sal_uInt32[]> pBitmap;
 
     IndexBitSet& operator|=( sal_uInt16 nBit );
     IndexBitSet& operator-=( sal_uInt16 nBit );
     bool Contains( sal_uInt16 nBit ) const;
 
-    IndexBitSet(IndexBitSet &) = delete;
-    void operator =(IndexBitSet) = delete;
+    IndexBitSet(IndexBitSet const &) = delete;
+    void operator =(IndexBitSet const &) = delete;
 
 public:
     IndexBitSet();

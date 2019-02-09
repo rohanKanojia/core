@@ -25,60 +25,32 @@
 #include <unordered_map>
 #include <vector>
 
-struct ImageAryData
-{
-    OUString maName;
-    // Images identified by either name, or by id
-    sal_uInt16              mnId;
-    BitmapEx                maBitmapEx;
-
-    ImageAryData( const OUString &aName,
-                  sal_uInt16 nId, const BitmapEx &aBitmap );
-    ImageAryData( const ImageAryData& rData );
-    ~ImageAryData();
-
-    bool IsLoadable() { return maBitmapEx.IsEmpty() && !maName.isEmpty(); }
-    void Load(const OUString &rPrefix);
-
-    ImageAryData&   operator=( const ImageAryData& rData );
-};
-
-struct ImplImageList
-{
-    typedef std::vector<ImageAryData *> ImageAryDataVec;
-    typedef std::unordered_map< OUString, ImageAryData *, OUStringHash >
-        ImageAryDataNameHash;
-
-    ImageAryDataVec        maImages;
-    ImageAryDataNameHash   maNameHash;
-    OUString               maPrefix;
-    Size                   maImageSize;
-    sal_uIntPtr            mnRefCount;
-
-    ImplImageList();
-    ImplImageList( const ImplImageList &aSrc );
-    ~ImplImageList();
-
-    void AddImage( const OUString &aName,
-                   sal_uInt16 nId, const BitmapEx &aBitmapEx );
-    void RemoveImage( sal_uInt16 nPos );
-};
-
 struct ImplImage
 {
-    sal_uIntPtr mnRefCount;
-
     BitmapChecksum maBitmapChecksum;
+    /// if non-empty: cached original size of maStockName else Size of maBitmap
+    Size     maSizePixel;
+    /// If set - defines the bitmap via images.zip*
+    OUString maStockName;
 
-    std::unique_ptr<BitmapEx> mpBitmapEx;
+    /// Original bitmap - or cache of a potentially scaled bitmap
+    BitmapEx maBitmapEx;
     BitmapEx maDisabledBitmapEx;
 
-    ImplImage();
-    ~ImplImage();
+    ImplImage(const BitmapEx& rBitmapEx);
+    ImplImage(const OUString &aStockName);
 
-private:
-    ImplImage(const ImplImage&) = delete;
-    void operator=(const ImplImage&) = delete;
+    bool isStock() const { return maStockName.getLength() > 0; }
+
+    /// get size in co-ordinates not scaled for HiDPI
+    Size getSizePixel();
+    /// Legacy - the original bitmap
+    BitmapEx getBitmapEx(bool bDisabled = false);
+    /// Taking account of HiDPI scaling
+    BitmapEx getBitmapExForHiDPI(bool bDisabled = false);
+    bool isEqual(const ImplImage &ref) const;
+    bool isSizeEmpty() const { return maSizePixel == Size(0, 0); }
+    bool loadStockAtScale(double fScale, BitmapEx &rBitmapEx);
 };
 
 #endif // INCLUDED_VCL_INC_IMAGE_H

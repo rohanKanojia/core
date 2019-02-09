@@ -27,7 +27,6 @@
 #include <xmloff/xmltoken.hxx>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
-#include <comphelper/extract.hxx>
 #include <xmloff/xmlprcon.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <osl/diagnose.h>
@@ -41,7 +40,6 @@ using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::com::sun::star::style;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::container;
 using namespace xmloff::token;
@@ -72,9 +70,7 @@ void OTableStyleContext::FillPropertySet(
         {
             if ( !sPageStyle.isEmpty() )
             {
-                uno::Any aAny;
-                aAny <<= sPageStyle;
-                AddProperty(CTF_DB_MASTERPAGENAME, aAny);
+                AddProperty(CTF_DB_MASTERPAGENAME, Any(sPageStyle));
             }
         }
         else if ( GetFamily() == XML_STYLE_FAMILY_TABLE_COLUMN )
@@ -115,7 +111,7 @@ void OTableStyleContext::AddProperty(const sal_Int16 nContextID, const uno::Any&
     sal_Int32 nIndex(static_cast<OTableStylesContext *>(pStyles)->GetIndex(nContextID));
     OSL_ENSURE(nIndex != -1, "Property not found in Map");
     XMLPropertyState aPropState(nIndex, rValue);
-    GetProperties().push_back(aPropState); // has to be insertes in a sort order later
+    GetProperties().push_back(aPropState); // has to be inserted in a sort order later
 }
 
 void OTableStyleContext::SetAttribute( sal_uInt16 nPrefixKey,
@@ -143,9 +139,6 @@ OTableStylesContext::OTableStylesContext( SvXMLImport& rImport,
                                           const Reference< XAttributeList > & xAttrList,
                                           const bool bTempAutoStyles )
     : SvXMLStylesContext( rImport, nPrfx, rLName, xAttrList )
-    , sTableStyleServiceName( OUString( XML_STYLE_FAMILY_TABLE_TABLE_STYLES_NAME ))
-    , sColumnStyleServiceName( OUString( XML_STYLE_FAMILY_TABLE_COLUMN_STYLES_NAME ))
-    , sCellStyleServiceName( OUString( XML_STYLE_FAMILY_TABLE_CELL_STYLES_NAME ))
     , m_nNumberFormatIndex(-1)
     , m_nMasterPageNameIndex(-1)
     , bAutoStyles(bTempAutoStyles)
@@ -242,13 +235,13 @@ OUString OTableStylesContext::GetServiceName( sal_uInt16 nFamily ) const
         switch( nFamily )
         {
         case XML_STYLE_FAMILY_TABLE_TABLE:
-            sServiceName = sTableStyleServiceName;
+            sServiceName = XML_STYLE_FAMILY_TABLE_TABLE_STYLES_NAME;
             break;
         case XML_STYLE_FAMILY_TABLE_COLUMN:
-            sServiceName = sColumnStyleServiceName;
+            sServiceName = XML_STYLE_FAMILY_TABLE_COLUMN_STYLES_NAME;
             break;
         case XML_STYLE_FAMILY_TABLE_CELL:
-            sServiceName = sCellStyleServiceName;
+            sServiceName = XML_STYLE_FAMILY_TABLE_CELL_STYLES_NAME;
             break;
 
         }

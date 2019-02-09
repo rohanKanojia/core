@@ -23,9 +23,6 @@
 #include <com/sun/star/drawing/XMasterPageTarget.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/document/XFilter.hpp>
-#include <com/sun/star/document/XExporter.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/task/XStatusIndicatorFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <vcl/gdimtf.hxx>
@@ -43,9 +40,7 @@
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::drawing;
-using namespace ::com::sun::star::presentation;
 using namespace ::com::sun::star::task;
-using namespace ::std;
 using namespace ::swf;
 
 using com::sun::star::io::XOutputStream;
@@ -53,10 +48,6 @@ using com::sun::star::beans::PropertyValue;
 using com::sun::star::container::XIndexAccess;
 using com::sun::star::beans::XPropertySet;
 using com::sun::star::lang::XComponent;
-using com::sun::star::lang::IllegalArgumentException;
-using com::sun::star::document::XExporter;
-using com::sun::star::document::XFilter;
-using com::sun::star::frame::XModel;
 using com::sun::star::lang::XServiceInfo;
 
 
@@ -70,12 +61,6 @@ PageInfo::PageInfo()
 
 PageInfo::~PageInfo()
 {
-    vector<ShapeInfo*>::iterator aIter( maShapesVector.begin() );
-    const vector<ShapeInfo*>::iterator aEnd( maShapesVector.end() );
-    while( aIter != aEnd )
-    {
-        delete (*aIter++);
-    }
 }
 
 
@@ -94,7 +79,6 @@ FlashExporter::FlashExporter(
     , mxSelectedDrawPage(rxSelectedDrawPage)
     , mbExportSelection(false)
 
-    , mpWriter(nullptr)
     , mnDocWidth(0)
     , mnDocHeight(0)
     , mnJPEGcompressMode(nJPEGCompressMode)
@@ -117,9 +101,7 @@ FlashExporter::~FlashExporter()
 
 void FlashExporter::Flush()
 {
-    delete mpWriter;
-    mpWriter = nullptr;
-
+    mpWriter.reset();
     maPagesMap.clear();
 }
 
@@ -129,7 +111,7 @@ const sal_uInt16 cBackgroundObjectsDepth = 3;
 const sal_uInt16 cPageObjectsDepth = 4;
 const sal_uInt16 cWaitButtonDepth = 10;
 
-bool FlashExporter::exportAll( const Reference< XComponent >& xDoc, Reference< XOutputStream > &xOutputStream, Reference< XStatusIndicator> &xStatusIndicator )
+bool FlashExporter::exportAll( const Reference< XComponent >& xDoc, Reference< XOutputStream > const &xOutputStream, Reference< XStatusIndicator> const &xStatusIndicator )
 {
     Reference< XServiceInfo > xDocServInfo( xDoc, UNO_QUERY );
     if( xDocServInfo.is() )
@@ -163,8 +145,7 @@ bool FlashExporter::exportAll( const Reference< XComponent >& xDoc, Reference< X
 
         sal_Int32 nOutputWidth = 14400;
         sal_Int32 nOutputHeight = (nOutputWidth * mnDocHeight ) / mnDocWidth;
-        delete mpWriter;
-        mpWriter = new Writer( nOutputWidth, nOutputHeight, mnDocWidth, mnDocHeight, mnJPEGcompressMode  );
+        mpWriter.reset(new Writer( nOutputWidth, nOutputHeight, mnDocWidth, mnDocHeight, mnJPEGcompressMode  ));
     }
     catch( const Exception& )
     {
@@ -174,14 +155,13 @@ bool FlashExporter::exportAll( const Reference< XComponent >& xDoc, Reference< X
 
     // #i56084# nPageCount is 1 when exporting selection
     const sal_Int32 nPageCount = mbExportSelection ? 1 : xDrawPages->getCount();
-    sal_uInt16 nPage;
 
     if ( xStatusIndicator.is() )
     {
         xStatusIndicator->start("Macromedia Flash (SWF)", nPageCount);
     }
 
-    for( nPage = 0; nPage < nPageCount; nPage++)
+    for( sal_Int32 nPage = 0; nPage < nPageCount; nPage++)
     {
         // #i56084# keep PageNumber? We could determine the PageNumber of the single to-be-exported page
         // when exporting the selection, but this is only used for swf internal, so no need to do so (AFAIK)
@@ -190,7 +170,7 @@ bool FlashExporter::exportAll( const Reference< XComponent >& xDoc, Reference< X
         if ( xStatusIndicator.is() )
             xStatusIndicator->setValue( nPage );
 
-        // #i56084# get current xDrawPage when not exporting selection; else alraedy set above
+        // #i56084# get current xDrawPage when not exporting selection; else already set above
         if(!mbExportSelection)
         {
             xDrawPages->getByIndex(nPage) >>= xDrawPage;
@@ -272,7 +252,7 @@ bool FlashExporter::exportAll( const Reference< XComponent >& xDoc, Reference< X
 }
 
 
-bool FlashExporter::exportSlides( const Reference< XDrawPage >& xDrawPage, Reference< XOutputStream > &xOutputStream, sal_uInt16 /* nPage */ )
+bool FlashExporter::exportSlides( const Reference< XDrawPage >& xDrawPage, Reference< XOutputStream > const &xOutputStream )
 {
     Reference< XPropertySet > xPropSet( xDrawPage, UNO_QUERY );
     if( !xDrawPage.is() || !xPropSet.is() )
@@ -280,12 +260,12 @@ bool FlashExporter::exportSlides( const Reference< XDrawPage >& xDrawPage, Refer
 
     try
     {
-        if( nullptr == mpWriter )
+        if( !mpWriter )
         {
             xPropSet->getPropertyValue( "Width" ) >>= mnDocWidth;
             xPropSet->getPropertyValue( "Height" ) >>= mnDocHeight;
 
-            mpWriter = new Writer( 14400, 10800, mnDocWidth, mnDocHeight, mnJPEGcompressMode );
+            mpWriter.reset(new Writer( 14400, 10800, mnDocWidth, mnDocHeight, mnJPEGcompressMode ));
         }
 
         if( mbPresentation )
@@ -308,18 +288,18 @@ bool FlashExporter::exportSlides( const Reference< XDrawPage >& xDrawPage, Refer
     return true;
 }
 
-sal_uInt16 FlashExporter::exportBackgrounds( const Reference< XDrawPage >& xDrawPage, Reference< XOutputStream > &xOutputStream, sal_uInt16 nPage, bool bExportObjects )
+sal_uInt16 FlashExporter::exportBackgrounds( const Reference< XDrawPage >& xDrawPage, Reference< XOutputStream > const &xOutputStream, sal_uInt16 nPage, bool bExportObjects )
 {
     Reference< XPropertySet > xPropSet( xDrawPage, UNO_QUERY );
     if( !xDrawPage.is() || !xPropSet.is() )
         return 0;
 
-    if( nullptr == mpWriter )
+    if( !mpWriter )
     {
         xPropSet->getPropertyValue( "Width" ) >>= mnDocWidth;
         xPropSet->getPropertyValue( "Height" ) >>= mnDocHeight;
 
-        mpWriter = new Writer( 14400, 10800, mnDocWidth, mnDocHeight, mnJPEGcompressMode );
+        mpWriter.reset(new Writer( 14400, 10800, mnDocWidth, mnDocHeight, mnJPEGcompressMode ));
     }
 
     sal_uInt16 ret = exportBackgrounds(xDrawPage, nPage, bExportObjects);
@@ -328,16 +308,16 @@ sal_uInt16 FlashExporter::exportBackgrounds( const Reference< XDrawPage >& xDraw
         return ret;
 
     if (bExportObjects)
-        mpWriter->placeShape( maPagesMap[nPage].mnObjectsID, _uInt16(1), 0, 0 );
+        mpWriter->placeShape( maPagesMap[nPage].mnObjectsID, uInt16_(1), 0, 0 );
     else
-        mpWriter->placeShape( maPagesMap[nPage].mnBackgroundID, _uInt16(0), 0, 0 );
+        mpWriter->placeShape( maPagesMap[nPage].mnBackgroundID, uInt16_(0), 0, 0 );
 
     mpWriter->storeTo( xOutputStream );
 
     return nPage;
 }
 
-sal_uInt16 FlashExporter::exportBackgrounds( Reference< XDrawPage > xDrawPage, sal_uInt16 nPage, bool bExportObjects )
+sal_uInt16 FlashExporter::exportBackgrounds( Reference< XDrawPage > const & xDrawPage, sal_uInt16 nPage, bool bExportObjects )
 {
     Reference< XPropertySet > xPropSet( xDrawPage, UNO_QUERY );
     if( !xDrawPage.is() || !xPropSet.is() )
@@ -394,13 +374,13 @@ sal_uInt16 FlashExporter::exportBackgrounds( Reference< XDrawPage > xDrawPage, s
 }
 
 
-sal_Int32 nPlaceDepth;
+static sal_Int32 nPlaceDepth;
 // AS: A Slide can have a private background or use its masterpage's background.
 //  We use the checksums on the metafiles to tell if backgrounds are the same and
 //  should be reused.  The return value indicates which slide's background to use.
 //  If the return value != nPage, then there is no background (if == -1) or the
 //  background has already been exported.
-sal_uInt16 FlashExporter::exportDrawPageBackground(sal_uInt16 nPage, Reference< XDrawPage >& xPage)
+sal_uInt16 FlashExporter::exportDrawPageBackground(sal_uInt16 nPage, Reference< XDrawPage > const & xPage)
 {
     sal_uInt16 rBackgroundID;
 
@@ -469,7 +449,7 @@ sal_uInt16 FlashExporter::exportDrawPageBackground(sal_uInt16 nPage, Reference< 
     return nPage;
 }
 
-sal_uInt16 FlashExporter::exportMasterPageObjects(sal_uInt16 nPage, Reference< XDrawPage >& xMasterPage)
+sal_uInt16 FlashExporter::exportMasterPageObjects(sal_uInt16 nPage, Reference< XDrawPage > const & xMasterPage)
 {
     Reference< XShapes > xShapes( xMasterPage, UNO_QUERY );
 
@@ -512,7 +492,7 @@ void FlashExporter::exportShapes( const Reference< XShapes >& xShapes, bool bStr
 {
     OSL_ENSURE( (xShapes->getCount() <= 0xffff), "overflow in FlashExporter::exportDrawPageContents()" );
 
-    sal_uInt16 nShapeCount = (sal_uInt16)min( xShapes->getCount(), (sal_Int32)0xffff );
+    sal_uInt16 nShapeCount = static_cast<sal_uInt16>(std::min( xShapes->getCount(), sal_Int32(0xffff) ));
     sal_uInt16 nShape;
 
     Reference< XShape > xShape;
@@ -586,22 +566,6 @@ void FlashExporter::exportShape( const Reference< XShape >& xShape, bool bMaster
             pShapeInfo->mnWidth = aBoundRect.Width;
             pShapeInfo->mnHeight = aBoundRect.Height;
 
-            if( mbPresentation )
-            {
-                xPropSet->getPropertyValue( "Bookmark" ) >>= pShapeInfo->maBookmark;
-                xPropSet->getPropertyValue( "DimColor" ) >>= pShapeInfo->mnDimColor;
-                xPropSet->getPropertyValue( "DimHide" ) >>= pShapeInfo->mbDimHide;
-                xPropSet->getPropertyValue( "DimPrevious" ) >>= pShapeInfo->mbDimPrev;
-                xPropSet->getPropertyValue( "Effect" ) >>= pShapeInfo->meEffect;
-                xPropSet->getPropertyValue( "PlayFull" ) >>= pShapeInfo->mbPlayFull;
-                xPropSet->getPropertyValue( "PresentationOrder" ) >>= pShapeInfo->mnPresOrder;
-                xPropSet->getPropertyValue( "Sound" ) >>= pShapeInfo->maSoundURL;
-                xPropSet->getPropertyValue( "SoundOn" ) >>= pShapeInfo->mbSoundOn;
-                xPropSet->getPropertyValue( "Speed" )  >>= pShapeInfo->meEffectSpeed;
-                xPropSet->getPropertyValue( "TextEffect" )  >>= pShapeInfo->meTextEffect;
-                xPropSet->getPropertyValue( "TransparentColor" )  >>= pShapeInfo->mnBlueScreenColor;
-            }
-
             GDIMetaFile     aMtf;
             Reference< XComponent > xComponent( xShape, UNO_QUERY );
 
@@ -636,7 +600,7 @@ void FlashExporter::exportShape( const Reference< XShape >& xShape, bool bMaster
 
 //          pPageInfo->addShape( pShapeInfo );
 
-            mpWriter->placeShape( pShapeInfo->mnID, _uInt16(nPlaceDepth++), pShapeInfo->mnX, pShapeInfo->mnY );
+            mpWriter->placeShape( pShapeInfo->mnID, uInt16_(nPlaceDepth++), pShapeInfo->mnX, pShapeInfo->mnY );
     }
     catch( const Exception& )
     {
@@ -645,7 +609,7 @@ void FlashExporter::exportShape( const Reference< XShape >& xShape, bool bMaster
 }
 
 
-bool FlashExporter::getMetaFile( Reference< XComponent >&xComponent, GDIMetaFile& rMtf, bool bOnlyBackground /* = false */, bool bExportAsJPEG /* = false */)
+bool FlashExporter::getMetaFile( Reference< XComponent > const &xComponent, GDIMetaFile& rMtf, bool bOnlyBackground /* = false */, bool bExportAsJPEG /* = false */)
 {
     if( !mxGraphicExporter.is() )
         mxGraphicExporter = GraphicExportFilter::create( mxContext );
@@ -655,7 +619,7 @@ bool FlashExporter::getMetaFile( Reference< XComponent >&xComponent, GDIMetaFile
 
     Sequence< PropertyValue > aFilterData(bExportAsJPEG ? 3 : 2);
     aFilterData[0].Name = "Version";
-    aFilterData[0].Value <<= (sal_Int32)6000;
+    aFilterData[0].Value <<= sal_Int32(6000);
     aFilterData[1].Name = "PageNumber";
     aFilterData[1].Value <<= mnPageNumber;
 
@@ -674,7 +638,7 @@ bool FlashExporter::getMetaFile( Reference< XComponent >&xComponent, GDIMetaFile
     aDescriptor[0].Value <<= bExportAsJPEG ? OUString("PNG") : OUString("SVM");
 
     aDescriptor[1].Name = "URL";
-    aDescriptor[1].Value <<= OUString(aFile.GetURL());
+    aDescriptor[1].Value <<= aFile.GetURL();
     aDescriptor[2].Name = "FilterData";
     aDescriptor[2].Value <<= aFilterData;
     if( bOnlyBackground )
@@ -691,24 +655,17 @@ bool FlashExporter::getMetaFile( Reference< XComponent >&xComponent, GDIMetaFile
         GraphicFilter aFilter(false);
 
         aFilter.ImportGraphic( aGraphic, aFile.GetURL(), *aFile.GetStream( StreamMode::READ ) );
-        BitmapEx rBitmapEx( aGraphic.GetBitmap(), Color(255,255,255) );
+        BitmapEx rBitmapEx( aGraphic.GetBitmapEx().GetBitmap(), Color(255,255,255) );
 
-        Rectangle clipRect;
+        tools::Rectangle clipRect;
         for( size_t i = 0, nCount = rMtf.GetActionSize(); i < nCount; i++ )
         {
-            const MetaAction*    pAction = rMtf.GetAction( i );
-            const MetaActionType nType = pAction->GetType();
-
-            switch( nType )
+            const MetaAction* pAction = rMtf.GetAction( i );
+            if (pAction->GetType() == MetaActionType::ISECTRECTCLIPREGION)
             {
-                case( MetaActionType::ISECTRECTCLIPREGION ):
-                {
-                    const MetaISectRectClipRegionAction* pA = static_cast<const MetaISectRectClipRegionAction*>(pAction);
-                    clipRect = pA->GetRect();
-                    i = nCount;
-                    break;
-                }
-                default: break;
+                const MetaISectRectClipRegionAction* pA = static_cast<const MetaISectRectClipRegionAction*>(pAction);
+                clipRect = pA->GetRect();
+                break;
             }
         }
         MetaBmpExScaleAction *pmetaAct = new MetaBmpExScaleAction(Point(clipRect.Left(), clipRect.Top()), Size(clipRect.GetWidth(), clipRect.GetHeight()), rBitmapEx);
@@ -733,7 +690,7 @@ bool FlashExporter::getMetaFile( Reference< XComponent >&xComponent, GDIMetaFile
     return rMtf.GetActionSize() != 0;
 }
 
-BitmapChecksum FlashExporter::ActionSummer(Reference< XShape >& xShape)
+BitmapChecksum FlashExporter::ActionSummer(Reference< XShape > const & xShape)
 {
     Reference< XShapes > xShapes( xShape, UNO_QUERY );
 
@@ -752,7 +709,7 @@ BitmapChecksum FlashExporter::ActionSummer(Reference< XShape >& xShape)
     }
 }
 
-BitmapChecksum FlashExporter::ActionSummer(Reference< XShapes >& xShapes)
+BitmapChecksum FlashExporter::ActionSummer(Reference< XShapes > const & xShapes)
 {
     sal_uInt32 nShapeCount = xShapes->getCount();
     BitmapChecksum shapecount = 0;

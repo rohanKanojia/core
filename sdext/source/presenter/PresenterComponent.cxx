@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cppuhelper/factory.hxx"
-#include "cppuhelper/implementationentry.hxx"
+#include <cppuhelper/factory.hxx>
+#include <cppuhelper/implementationentry.hxx>
 
 #include "PresenterProtocolHandler.hxx"
 #include "PresenterScreen.hxx"
@@ -47,7 +47,7 @@ static const struct ImplementationEntry gServiceEntries[] =
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
 };
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL presenter_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * presenter_component_getFactory(
         const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , gServiceEntries);

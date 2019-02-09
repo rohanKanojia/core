@@ -22,6 +22,7 @@
 #include <editeng/editview.hxx>
 #include <svx/svxids.hrc>
 #include <editeng/scriptspaceitem.hxx>
+#include <osl/diagnose.h>
 
 
 namespace frm
@@ -51,12 +52,9 @@ namespace frm
 
 
     void SAL_CALL OSelectAllDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& /*_rArguments*/ )
-        throw (RuntimeException,
-               std::exception)
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         OSL_ENSURE( _rURL.Complete == getFeatureURL().Complete, "OSelectAllDispatcher::dispatch: invalid URL!" );
-        (void)_rURL;
 
         checkDisposed();
 
@@ -78,7 +76,7 @@ namespace frm
     FeatureStateEvent OSelectAllDispatcher::buildStatusEvent() const
     {
         FeatureStateEvent aEvent( ORichTextFeatureDispatcher::buildStatusEvent() );
-        aEvent.IsEnabled = sal_True;
+        aEvent.IsEnabled = true;
         return aEvent;
     }
 
@@ -96,7 +94,7 @@ namespace frm
         EditEngine* pEngine = getEditView() ? getEditView()->GetEditEngine() : nullptr;
         OSL_ENSURE( pEngine, "OParagraphDirectionDispatcher::dispatch: no edit engine - but not yet disposed?" );
         if ( pEngine && pEngine->IsVertical() )
-            aEvent.IsEnabled = sal_False;
+            aEvent.IsEnabled = false;
 
         return aEvent;
     }
@@ -107,11 +105,10 @@ namespace frm
     }
 
 
-    void SAL_CALL OTextDirectionDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& /*_rArguments*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL OTextDirectionDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& /*_rArguments*/ )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         OSL_ENSURE( _rURL.Complete == getFeatureURL().Complete, "OTextDirectionDispatcher::dispatch: invalid URL!" );
-        (void)_rURL;
 
         checkDisposed();
 
@@ -131,7 +128,7 @@ namespace frm
         EditEngine* pEngine = getEditView() ? getEditView()->GetEditEngine() : nullptr;
         OSL_ENSURE( pEngine, "OTextDirectionDispatcher::dispatch: no edit engine - but not yet disposed?" );
 
-        aEvent.IsEnabled = sal_True;
+        aEvent.IsEnabled = true;
         aEvent.State <<= pEngine && pEngine->IsVertical();
 
         return aEvent;
@@ -159,8 +156,8 @@ namespace frm
             bool bEnable = true;
             OSL_VERIFY( pLookup->Value >>= bEnable );
             if ( m_nAttributeId == SID_ATTR_PARA_SCRIPTSPACE )
-                return new SvxScriptSpaceItem( bEnable, (WhichId)m_nAttributeId );
-            return new SfxBoolItem( (WhichId)m_nAttributeId, bEnable );
+                return new SvxScriptSpaceItem( bEnable, static_cast<WhichId>(m_nAttributeId) );
+            return new SfxBoolItem( static_cast<WhichId>(m_nAttributeId), bEnable );
         }
 
         OSL_FAIL( "OAsianFontLayoutDispatcher::convertDispatchArgsToItem: did not find the one and only argument!" );

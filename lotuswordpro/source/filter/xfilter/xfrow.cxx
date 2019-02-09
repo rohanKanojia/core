@@ -60,11 +60,11 @@
 
 #include <sal/config.h>
 
-#include "ixfattrlist.hxx"
-#include "ixfstream.hxx"
-#include "xfrow.hxx"
-#include "xfcell.hxx"
-#include "xftable.hxx"
+#include <xfilter/ixfattrlist.hxx>
+#include <xfilter/ixfstream.hxx>
+#include <xfilter/xfrow.hxx>
+#include <xfilter/xfcell.hxx>
+#include <xfilter/xftable.hxx>
 
 XFRow::XFRow()
     : m_pOwnerTable(nullptr)
@@ -75,25 +75,19 @@ XFRow::XFRow()
 
 XFRow::~XFRow()
 {
-    std::map<sal_Int32,XFCell*>::iterator it;
-    for( it=m_aCells.begin(); it!=m_aCells.end(); ++it )
-    {
-        XFCell *pCell = (*it).second;
-        delete pCell;
-    }
 }
 
-void    XFRow::AddCell(XFCell *pCell)
+void XFRow::AddCell(rtl::Reference<XFCell> const & rCell)
 {
-    if( !pCell )
+    if (!rCell)
         return;
     sal_Int32 col = m_aCells.size()+1;
-    pCell->SetCol(col);
-    pCell->SetOwnerRow(this);
-    m_aCells[col]=pCell;
+    rCell->SetCol(col);
+    rCell->SetOwnerRow(this);
+    m_aCells[col] = rCell;
 }
 
-sal_Int32   XFRow::GetCellCount() const
+sal_Int32 XFRow::GetCellCount() const
 {
     return m_aCells.size();
 }
@@ -103,7 +97,7 @@ XFCell* XFRow::GetCell(sal_Int32 col) const
     if( m_aCells.find(col) == m_aCells.end() )
         return nullptr;
     else
-        return m_aCells.find(col)->second;
+        return m_aCells.find(col)->second.get();
 }
 
 void    XFRow::ToXml(IXFStream *pStrm)
@@ -118,11 +112,10 @@ void    XFRow::ToXml(IXFStream *pStrm)
         pAttrList->AddAttribute( "table:number-rows-repeated", OUString::number(m_nRepeat) );
     pStrm->StartElement( "table:table-row" );
 
-    std::map<sal_Int32,XFCell*>::iterator   it = m_aCells.begin();
-    for( ; it!=m_aCells.end(); ++it )
+    for (auto const& cell : m_aCells)
     {
-        int col = (*it).first;
-        XFCell  *pCell = (*it).second;
+        int col = cell.first;
+        XFCell *pCell = cell.second.get();
         if( !pCell )
             continue;
         if( col>lastCol+1 )

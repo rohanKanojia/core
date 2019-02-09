@@ -35,7 +35,6 @@ enum SbiSymScope { SbLOCAL, SbPARAM, SbPUBLIC, SbGLOBAL, SbRTL };
 // makes sure that they don't exist twice.
 
 class SbiStringPool {
-    const OUString aEmpty;
     std::vector<OUString> aData;
 public:
     SbiStringPool();
@@ -43,14 +42,13 @@ public:
     sal_uInt32 GetSize() const { return aData.size(); }
     short Add( const OUString& );
     short Add( double, SbxDataType );
-    const OUString& Find( sal_uInt32 ) const;
+    OUString Find( sal_uInt32 ) const;
 };
 
 
-class SbiSymPool {
+class SbiSymPool final {
     friend class SbiSymDef;
     friend class SbiProcDef;
-protected:
     SbiStringPool& rStrings;
     std::vector<std::unique_ptr<SbiSymDef>> m_Data;
     SbiSymPool*    pParent;
@@ -88,7 +86,7 @@ protected:
     OUString     aName;
     SbxDataType eType;
     SbiSymPool* pIn;                // parent pool
-    SbiSymPool* pPool;              // pool for sub-elements
+    std::unique_ptr<SbiSymPool> pPool; // pool for sub-elements
     short      nLen;                // string length for STRING*n
     short      nDims;
     sal_uInt16     nId;
@@ -132,7 +130,7 @@ public:
     void       SetParamArray()  { bParamArray = true;       }
     void       SetWithEvents()  { bWithEvents = true;       }
     void       SetWithBrackets(){ bWithBrackets = true;     }
-    void       SetByVal( bool bByVal_ = true ) { bByVal = bByVal_; }
+    void       SetByVal( bool bByVal_ ) { bByVal = bByVal_; }
     void       SetStatic( bool bAsStatic = true )      { bStatic = bAsStatic;  }
     void       SetNew()         { bNew = true;      }
     void       SetDefinedAs()   { bAs = true;       }
@@ -173,7 +171,7 @@ class SbiProcDef : public SbiSymDef {   // procedure definition (from basic):
     bool   mbProcDecl : 1;          // true: instantiated by SbiParser::ProcDecl
 public:
     SbiProcDef( SbiParser*, const OUString&, bool bProcDecl=false );
-    virtual ~SbiProcDef();
+    virtual ~SbiProcDef() override;
     virtual SbiProcDef* GetProcDef() override;
     virtual void SetType( SbxDataType ) override;
     SbiSymPool& GetParams()         { return aParams;  }
@@ -183,7 +181,7 @@ public:
     OUString& GetAlias()            { return aAlias;   }
     void SetPublic( bool b )        { bPublic = b;     }
     bool IsPublic() const           { return bPublic;  }
-    void SetCdecl( bool b = true)   { bCdecl = b;      }
+    void SetCdecl( bool b )         { bCdecl = b;      }
     bool IsCdecl() const            { return bCdecl;   }
     bool IsUsedForProcDecl() const  { return mbProcDecl; }
     void SetLine1( sal_uInt16 n )   { nLine1 = n;      }
@@ -209,7 +207,7 @@ class SbiConstDef : public SbiSymDef
     OUString aVal;
 public:
     SbiConstDef( const OUString& );
-    virtual ~SbiConstDef();
+    virtual ~SbiConstDef() override;
     virtual SbiConstDef* GetConstDef() override;
     void Set( double, SbxDataType );
     void Set( const OUString& );

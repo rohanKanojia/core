@@ -20,22 +20,15 @@
 #ifndef INCLUDED_CPPUHELPER_PROPERTYSETMIXIN_HXX
 #define INCLUDED_CPPUHELPER_PROPERTYSETMIXIN_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <exception>
-
-#include <com/sun/star/beans/PropertyVetoException.hpp>
-#include <com/sun/star/beans/UnknownPropertyException.hpp>
-#include <com/sun/star/beans/XFastPropertySet.hpp>
-#include <com/sun/star/beans/XPropertyAccess.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/lang/IllegalArgumentException.hpp>
-#include <com/sun/star/lang/WrappedTargetException.hpp>
-#include <com/sun/star/uno/Reference.hxx>
-#include <com/sun/star/uno/RuntimeException.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <sal/types.h>
-#include <cppuhelper/cppuhelperdllapi.h>
+#include "com/sun/star/beans/XFastPropertySet.hpp"
+#include "com/sun/star/beans/XPropertyAccess.hpp"
+#include "com/sun/star/beans/XPropertySet.hpp"
+#include "com/sun/star/uno/Reference.h"
+#include "com/sun/star/uno/Sequence.hxx"
+#include "sal/types.h"
+#include "cppuhelper/cppuhelperdllapi.h"
 
 namespace com { namespace sun { namespace star {
     namespace beans {
@@ -45,22 +38,12 @@ namespace com { namespace sun { namespace star {
         struct PropertyValue;
     }
     namespace uno {
-        class Any;
         class Type;
         class XComponentContext;
     }
 } } }
-namespace rtl { class OUString; }
 
 namespace cppu {
-
-template< typename T > class PropertySetMixin;
-
-// Suppress warnings about virtual functions but non-virtual destructor:
-#if defined _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4265)
-#endif
 
 /**
    @short A helper base class for <code>cppu::PropertySetMixin</code>.
@@ -262,31 +245,19 @@ protected:
        object.
     */
     virtual css::uno::Any SAL_CALL queryInterface(
-        css::uno::Type const & type)
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::uno::Type const & type) SAL_OVERRIDE;
 
     // @see css::beans::XPropertySet::getPropertySetInfo
-    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo()
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+    virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo() SAL_OVERRIDE;
 
     // @see css::beans::XPropertySet::setPropertyValue
     virtual void SAL_CALL setPropertyValue(
         rtl::OUString const & propertyName,
-        css::uno::Any const & value)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::beans::PropertyVetoException,
-            css::lang::IllegalArgumentException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::uno::Any const & value) SAL_OVERRIDE;
 
     // @see css::beans::XPropertySet::getPropertyValue
     virtual css::uno::Any SAL_CALL getPropertyValue(
-        rtl::OUString const & propertyName)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        rtl::OUString const & propertyName) SAL_OVERRIDE;
 
     /**
        @short Adds a
@@ -300,21 +271,13 @@ protected:
     virtual void SAL_CALL addPropertyChangeListener(
         rtl::OUString const & propertyName,
         css::uno::Reference<
-        css::beans::XPropertyChangeListener > const & listener)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::beans::XPropertyChangeListener > const & listener) SAL_OVERRIDE;
 
     // @see css::beans::XPropertySet::removePropertyChangeListener
     virtual void SAL_CALL removePropertyChangeListener(
         rtl::OUString const & propertyName,
         css::uno::Reference<
-        css::beans::XPropertyChangeListener > const & listener)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::beans::XPropertyChangeListener > const & listener) SAL_OVERRIDE;
 
     /**
        @short Adds a
@@ -328,53 +291,28 @@ protected:
     virtual void SAL_CALL addVetoableChangeListener(
         rtl::OUString const & propertyName,
         css::uno::Reference<
-        css::beans::XVetoableChangeListener > const & listener)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::beans::XVetoableChangeListener > const & listener) SAL_OVERRIDE;
 
     // @see css::beans::XPropertySet::removeVetoableChangeListener
     virtual void SAL_CALL removeVetoableChangeListener(
         rtl::OUString const & propertyName,
         css::uno::Reference<
-        css::beans::XVetoableChangeListener > const & listener)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::beans::XVetoableChangeListener > const & listener) SAL_OVERRIDE;
 
     // @see css::beans::XFastPropertySet::setFastPropertyValue
     virtual void SAL_CALL setFastPropertyValue(
-        sal_Int32 handle, css::uno::Any const & value)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::beans::PropertyVetoException,
-            css::lang::IllegalArgumentException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        sal_Int32 handle, css::uno::Any const & value) SAL_OVERRIDE;
 
     // @see css::beans::XFastPropertySet::getFastPropertyValue
     virtual css::uno::Any SAL_CALL getFastPropertyValue(
-        sal_Int32 handle)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        sal_Int32 handle) SAL_OVERRIDE;
 
     // @see css::beans::XPropertyAccess::getPropertyValues
-    virtual css::uno::Sequence< css::beans::PropertyValue > SAL_CALL getPropertyValues()
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+    virtual css::uno::Sequence< css::beans::PropertyValue > SAL_CALL getPropertyValues() SAL_OVERRIDE;
 
     // @see css::beans::XPropertyAccess::setPropertyValues
     virtual void SAL_CALL setPropertyValues(
-        css::uno::Sequence< css::beans::PropertyValue > const & props)
-        throw (
-            css::beans::UnknownPropertyException,
-            css::beans::PropertyVetoException,
-            css::lang::IllegalArgumentException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        css::uno::Sequence< css::beans::PropertyValue > const & props) SAL_OVERRIDE;
 
 private:
     PropertySetMixinImpl( const PropertySetMixinImpl&) SAL_DELETED_FUNCTION;
@@ -472,10 +410,6 @@ private:
 };
 #if defined __GNUC__ && !defined __clang__
 #pragma GCC diagnostic pop
-#endif
-
-#if defined _MSC_VER
-#pragma warning(pop)
 #endif
 
 }

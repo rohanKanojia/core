@@ -93,7 +93,7 @@ namespace dbtools
                 }
                 catch( const Exception& )
                 {
-                    DBG_UNHANDLED_EXCEPTION();
+                    DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
                 }
             }
             _rData.xComposer.clear();
@@ -222,7 +222,7 @@ namespace dbtools
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
             }
 
             return _rData.xComposer.is();
@@ -266,7 +266,7 @@ namespace dbtools
     }
 
 
-    Reference< XSingleSelectQueryComposer > StatementComposer::getComposer()
+    Reference< XSingleSelectQueryComposer > const & StatementComposer::getComposer()
     {
         lcl_ensureUpToDateComposer_nothrow( *m_pData );
         return m_pData->xComposer;

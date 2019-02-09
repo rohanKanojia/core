@@ -18,32 +18,16 @@
  */
 
 
-#include "cppu/helper/purpenv/Mapping.hxx"
+#include <cppu/helper/purpenv/Mapping.hxx>
 
 #include "Proxy.hxx"
 
-#include "osl/interlck.h"
-#include "uno/environment.hxx"
-#include "uno/dispatcher.h"
-#include "typelib/typedescription.h"
-
-
-#ifdef debug
-# define LOG_LIFECYCLE_cppu_helper_purpenv_Mapping
-#endif
-
-#ifdef LOG_LIFECYCLE_cppu_helper_purpenv_Mapping
-#  include <iostream>
-#  define LOG_LIFECYCLE_cppu_helper_purpenv_Mapping_emit(x) x
-
-#else
-#  define LOG_LIFECYCLE_cppu_helper_purpenv_Mapping_emit(x)
-
-#endif
-
+#include <osl/interlck.h>
+#include <sal/log.hxx>
+#include <uno/environment.hxx>
+#include <uno/dispatcher.h>
 
 using namespace com::sun::star;
-
 
 class Mapping : public uno_Mapping
 {
@@ -71,7 +55,7 @@ public:
     void release();
 };
 
-static void SAL_CALL s_mapInterface(
+static void s_mapInterface(
     uno_Mapping                       * puno_Mapping,
     void                             ** ppOut,
     void                              * pUnoI,
@@ -85,14 +69,14 @@ static void SAL_CALL s_mapInterface(
 }
 
 extern "C" {
-static void SAL_CALL s_acquire(uno_Mapping * puno_Mapping)
+static void s_acquire(uno_Mapping * puno_Mapping)
     SAL_THROW_EXTERN_C()
 {
     Mapping * pMapping = static_cast<Mapping *>(puno_Mapping);
     pMapping->acquire();
 }
 
-static void SAL_CALL s_release(uno_Mapping * puno_Mapping)
+static void s_release(uno_Mapping * puno_Mapping)
     SAL_THROW_EXTERN_C()
 {
     Mapping * pMapping = static_cast<Mapping * >(puno_Mapping);
@@ -109,7 +93,7 @@ static void s_getIdentifier_v(va_list * pParam)
     pEnv->getObjectIdentifier(pEnv, ppOid, pUnoI);
 }
 
-static void SAL_CALL s_free(uno_Mapping * puno_Mapping)
+static void s_free(uno_Mapping * puno_Mapping)
     SAL_THROW_EXTERN_C()
 {
     Mapping * pMapping = static_cast<Mapping *>(puno_Mapping);
@@ -128,7 +112,7 @@ Mapping::Mapping(uno_Environment                 * pFrom,
       m_probeFun(probeFun),
       m_pContext(pProbeContext)
 {
-    LOG_LIFECYCLE_cppu_helper_purpenv_Mapping_emit(fprintf(stderr, "LIFE: %s -> %p\n", "Mapping::Mapping(uno_Environment * pFrom, uno_Environment * pTo)", this));
+    SAL_INFO("cppu.purpenv", "LIFE: Mapping::Mapping(uno_Environment * pFrom, uno_Environment * pTo -> " << this);
 
     uno_Mapping::acquire      = s_acquire;
     uno_Mapping::release      = s_release;
@@ -137,7 +121,7 @@ Mapping::Mapping(uno_Environment                 * pFrom,
 
 Mapping::~Mapping()
 {
-    LOG_LIFECYCLE_cppu_helper_purpenv_Mapping_emit(fprintf(stderr, "LIFE: %s -> %p\n", "Mapping::~Mapping()", this));
+    SAL_INFO("cppu.purpenv", "LIFE: Mapping:~Mapping() -> " << this);
 }
 
 

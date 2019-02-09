@@ -20,8 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_UNPRLOUT_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_UNPRLOUT_HXX
 
-#include "sdundo.hxx"
-#include "pres.hxx"
+#include <xmloff/autolayout.hxx>
+
+#include <sdundo.hxx>
 
 class SdDrawDocument;
 class SdPage;
@@ -45,7 +46,7 @@ public:
                          bool            bSet,
                          SdPage*         pThePage);
 
-    virtual ~SdPresentationLayoutUndoAction();
+    virtual ~SdPresentationLayoutUndoAction() override;
     virtual void Undo() override;
     virtual void Redo() override;
 

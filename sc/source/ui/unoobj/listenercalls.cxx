@@ -20,7 +20,7 @@
 #include <com/sun/star/util/XModifyListener.hpp>
 #include <osl/diagnose.h>
 
-#include "listenercalls.hxx"
+#include <listenercalls.hxx>
 
 using namespace com::sun::star;
 
@@ -37,7 +37,7 @@ void ScUnoListenerCalls::Add( const uno::Reference<util::XModifyListener>& rList
                                 const lang::EventObject& rEvent )
 {
     if ( rListener.is() )
-        aEntries.push_back( ScUnoListenerEntry( rListener, rEvent ) );
+        aEntries.emplace_back( rListener, rEvent );
 }
 
 void ScUnoListenerCalls::ExecuteAndClear()
@@ -46,29 +46,25 @@ void ScUnoListenerCalls::ExecuteAndClear()
     //  During each modified() call, Add may be called again.
     //  These new calls are executed here, too.
 
-    if (!aEntries.empty())
+    std::vector<ScUnoListenerEntry>::iterator aItr(aEntries.begin());
+    while (aItr != aEntries.end())
     {
-        std::list<ScUnoListenerEntry>::iterator aItr(aEntries.begin());
-        std::list<ScUnoListenerEntry>::iterator aEndItr(aEntries.end());
-        while ( aItr != aEndItr )
+        ScUnoListenerEntry aEntry = *aItr;
+        try
         {
-            ScUnoListenerEntry aEntry = *aItr;
-            try
-            {
-                aEntry.xListener->modified( aEntry.aEvent );
-            }
-            catch ( const uno::RuntimeException& )
-            {
-                // the listener is an external object and may throw a RuntimeException
-                // for reasons we don't know
-            }
-
-            //  New calls that are added during the modified() call are appended to the end
-            //  of aEntries, so the loop will catch them, too (as long as erase happens
-            //  after modified).
-
-            aItr = aEntries.erase(aItr);
+            aEntry.xListener->modified( aEntry.aEvent );
         }
+        catch ( const uno::RuntimeException& )
+        {
+            // the listener is an external object and may throw a RuntimeException
+            // for reasons we don't know
+        }
+
+        //  New calls that are added during the modified() call are appended to the end
+        //  of aEntries, so the loop will catch them, too (as long as erase happens
+        //  after modified).
+
+        aItr = aEntries.erase(aItr);
     }
 }
 

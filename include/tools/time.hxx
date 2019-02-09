@@ -20,9 +20,9 @@
 #define INCLUDED_TOOLS_TIME_HXX
 
 #include <tools/toolsdllapi.h>
-#include <tools/solar.h>
 #include <com/sun/star/util/Time.hpp>
-#include <com/sun/star/util/DateTime.hpp>
+
+namespace com { namespace sun { namespace star { namespace util { struct DateTime; } } } }
 
 /**
  @WARNING: This class can serve both as wall clock time and time duration, and
@@ -64,13 +64,13 @@ public:
     static const sal_Int64 nanoPerMilli  = 1000000;
     static const sal_Int64 nanoPerCenti  = 10000000;
 
-                    Time( TimeInitEmpty )
+                    explicit Time( TimeInitEmpty )
                         { nTime = 0; }
-                    Time( TimeInitSystem );
-                    Time( sal_Int64 _nTime ) { Time::nTime = _nTime; }
+                    explicit Time( TimeInitSystem );
+                    explicit Time( sal_Int64 _nTime ) { Time::nTime = _nTime; }
                     Time( const tools::Time& rTime );
                     Time( const css::util::Time& rTime );
-                    Time( const css::util::DateTime& rDateTime );
+                    explicit Time( const css::util::DateTime& rDateTime );
                     Time( sal_uInt32 nHour, sal_uInt32 nMin,
                           sal_uInt32 nSec = 0, sal_uInt64 nNanoSec = 0 );
 
@@ -104,6 +104,25 @@ public:
                     /// 12 hours == 0.5 days
     double          GetTimeInDays() const;
 
+    /** Get the wall clock time particles for a (date+)time value.
+
+        Does the necessary rounding and truncating to obtain hour, minute,
+        second and fraction of second from a double time value (time in days,
+        0.5 == 12h) such that individual values are not rounded up, i.e.
+        x:59:59.999 does not yield x+1:0:0.00
+
+        A potential date component (fTimeInDays >= 1.0) is discarded.
+
+        @param  nFractionDecimals
+                If > 0 fFractionOfSecond is truncated to that amount of
+                decimals.
+                Else fFractionOfSecond returns the full remainder of the
+                fractional second.
+     */
+    static void     GetClock( double fTimeInDays,
+                              sal_uInt16& nHour, sal_uInt16& nMinute, sal_uInt16& nSecond,
+                              double& fFractionOfSecond, int nFractionDecimals );
+
     bool            IsEqualIgnoreNanoSec( const tools::Time& rTime ) const;
 
     bool            operator ==( const tools::Time& rTime ) const
@@ -121,8 +140,26 @@ public:
 
     static Time     GetUTCOffset();
 
-    /// Elapsed time since epoch in milliseconds
+    /**
+     * Elapsed time in milliseconds (1e-3) since some unspecified starting point
+     *
+     * Convenience function, which just calls GetMonotonicTicks() / 1000.
+     */
     static sal_uInt64 GetSystemTicks();
+
+    /**
+     * Elapsed time in microseconds (1e-6) since some unspecified starting point
+     *
+     * Uses the high-precision, monotonic time sources provided by the OS, if
+     * available. Don't try to relate it to the system time, and also it's long
+     * time accuracy is not the best.
+     *
+     * Currently used to measure the runtime of OpenCL shaders and to set a
+     * message creation timestamp to allow filtering of invalid timer messages.
+     *
+     * @return current system ticks in microseconds (1e-6s)
+     */
+    static sal_uInt64 GetMonotonicTicks();
 
     tools::Time&           operator =( const tools::Time& rTime );
     Time            operator -() const

@@ -33,7 +33,6 @@ private:
     Bool    mbUseable; // system supports current locale ?
     XIC     maContext;
 
-    XIMStyle mnSupportedStatusStyle;
     XIMStyle mnSupportedPreeditStyle;
     XIMStyle mnStatusStyle;
     XIMStyle mnPreeditStyle;
@@ -51,35 +50,30 @@ private:
     XVaNestedList mpStatusAttributes;
     XVaNestedList mpPreeditAttributes;
 
-    bool         SupportInputMethodStyle( XIMStyles *pIMStyles );
+    bool         SupportInputMethodStyle( XIMStyles const *pIMStyles );
     static unsigned int GetWeightingOfIMStyle(   XIMStyle n_style );
-    Bool         IsSupportedIMStyle(      XIMStyle n_style ) const;
+    bool         IsSupportedIMStyle(      XIMStyle n_style ) const;
 
 public:
 
     Bool UseContext()       { return mbUseable; }
-    bool IsPreeditMode()    { return maClientData.eState == ePreeditStatusActive; }
+    bool IsPreeditMode()    { return maClientData.eState == PreeditStatus::Active; }
     XIC  GetContext()       { return maContext; }
 
     void ExtendEventMask(  ::Window aFocusWindow );
     void SetICFocus( SalFrame* pFocusFrame );
-    void UnsetICFocus( SalFrame* pFrame );
+    void UnsetICFocus( SalFrame const * pFrame );
     void HandleDestroyIM();
 
-    void EndExtTextInput( EndExtTextInputFlags nFlags );        // unused
-    void  CommitKeyEvent( sal_Unicode* pText, sal_Size nLength );
+    void EndExtTextInput();
+    void CommitKeyEvent( sal_Unicode const * pText, std::size_t nLength );
     int  UpdateSpotLocation();
 
     void Map( SalFrame *pFrame );
-    void Unmap( SalFrame* pFrame );
+    void Unmap( SalFrame const * pFrame );
 
     SalI18N_InputContext( SalFrame *aFrame );
     ~SalI18N_InputContext();
-
-private:
-
-    SalI18N_InputContext(); // do not use this
-
 };
 
 #endif // INCLUDED_VCL_INC_UNX_I18N_IC_HXX

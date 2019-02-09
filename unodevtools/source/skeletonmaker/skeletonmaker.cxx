@@ -18,12 +18,12 @@
  */
 #include <iostream>
 
-#include "codemaker/global.hxx"
-#include "codemaker/typemanager.hxx"
-#include "sal/main.h"
-#include "rtl/process.h"
-#include "unodevtools/options.hxx"
-#include "unoidl/unoidl.hxx"
+#include <codemaker/global.hxx>
+#include <codemaker/typemanager.hxx>
+#include <sal/main.h>
+#include <rtl/process.h>
+#include <options.hxx>
+#include <unoidl/unoidl.hxx>
 
 #include "skeletonjava.hxx"
 #include "skeletoncpp.hxx"
@@ -120,8 +120,8 @@ void printUsageAndExit(const char* programname, const char* version)
 
 SAL_IMPLEMENT_MAIN()
 {
-    const char* version = "0.4";
-    const char* programname = "uno-skeletonmaker";
+    const char* const version = "0.4";
+    const char* const programname = "uno-skeletonmaker";
 
     sal_uInt32 nCount = rtl_getAppCommandArgCount();
     if ( nCount == 0 ) {
@@ -138,7 +138,6 @@ SAL_IMPLEMENT_MAIN()
 
     sal_uInt32 nPos = 0;
     OUString arg, sOption;
-    sal_Bool bOption=sal_False;
 
     // check command
     rtl_getAppCommandArg(nPos++, &arg.pData);
@@ -155,20 +154,17 @@ SAL_IMPLEMENT_MAIN()
         options.dump = false;
         options.shortnames = true;
         options.componenttype = 3;
-    } else if ( readOption( &bOption, "h", &nPos, arg) ||
-                readOption( &bOption, "help", &nPos, arg) ) {
+    } else if ( readOption( "h", &nPos, arg) ||
+                readOption( "help", &nPos, arg) ) {
         printUsageAndExit(programname, version);
         exit(EXIT_SUCCESS);
-    } else if ( readOption( &bOption, "V", &nPos, arg) ||
-                readOption( &bOption, "version", &nPos, arg) ) {
+    } else if ( readOption( "V", &nPos, arg) ||
+                readOption( "version", &nPos, arg) ) {
         std::cerr << "\n Sun Microsystems (R) " << programname
                   << " Version " << version << "\n\n";
         exit(EXIT_SUCCESS);
     } else {
-        std::cerr
-            << "ERROR: unexpected command \""
-            << OUStringToOString(arg, RTL_TEXTENCODING_UTF8).getStr()
-            << "\"!\n";
+        std::cerr << "ERROR: unexpected command \"" << arg << "\"!\n";
         printUsageAndExit(programname, version);
         exit(EXIT_FAILURE);
     }
@@ -178,39 +174,39 @@ SAL_IMPLEMENT_MAIN()
     {
         rtl_getAppCommandArg(nPos, &arg.pData);
 
-        if ( readOption( &bOption, "a", &nPos, arg) ||
-             readOption( &bOption, "all", &nPos, arg) ) {
+        if ( readOption( "a", &nPos, arg) ||
+             readOption( "all", &nPos, arg) ) {
             options.all = true;
             continue;
         }
-        if ( readOption( &bOption, "java4", &nPos, arg) ) {
+        if ( readOption( "java4", &nPos, arg) ) {
             std::cerr <<
               "\nError: Java 1.4 is no longer supported, use --java5 instead\n";
         }
-        if ( readOption( &bOption, "java5", &nPos, arg) ) {
+        if ( readOption( "java5", &nPos, arg) ) {
             options.language = 1;
             continue;
         }
-        if ( readOption( &bOption, "cpp", &nPos, arg) ) {
+        if ( readOption( "cpp", &nPos, arg) ) {
             options.language = 2;
             continue;
         }
-        if ( readOption( &bOption, "sn", &nPos, arg) ||
-             readOption( &bOption, "shortnames", &nPos, arg) ) {
+        if ( readOption( "sn", &nPos, arg) ||
+             readOption( "shortnames", &nPos, arg) ) {
             options.shortnames = true;
             continue;
         }
-        if ( readOption( &bOption, "lh", &nPos, arg) ||
-             readOption( &bOption, "licenseheader", &nPos, arg) ) {
+        if ( readOption( "lh", &nPos, arg) ||
+             readOption( "licenseheader", &nPos, arg) ) {
             options.license = true;
             continue;
         }
-        if ( readOption( &bOption, "bc", &nPos, arg) ||
-             readOption( &bOption, "backward-compatible", &nPos, arg) ) {
+        if ( readOption( "bc", &nPos, arg) ||
+             readOption( "backward-compatible", &nPos, arg) ) {
             options.backwardcompatible = true;
             continue;
         }
-        if ( readOption( &bOption, "propertysetmixin", &nPos, arg) ) {
+        if ( readOption( "propertysetmixin", &nPos, arg) ) {
             options.supportpropertysetmixin = true;
             continue;
         }
@@ -236,18 +232,12 @@ SAL_IMPLEMENT_MAIN()
         }
         if ( readOption( &sOption, "p", &nPos, arg) ) {
             OString sTmp(OUStringToOString(sOption, RTL_TEXTENCODING_UTF8));
-            sal_Int32 nIndex= sTmp.indexOf(':');
-            OString sPrt = sTmp.copy(0, nIndex+1);
-            OString sCmds = sTmp.copy(nIndex+1);
-
-            nIndex = 0;
+            sal_Int32 nIndex{ sTmp.indexOf(':')+1 };
+            const OString sPrt = sTmp.copy(0, nIndex);
             std::vector< OString > vCmds;
-            do {
-                OString sCmd = sCmds.getToken( 0, ',', nIndex );
-                vCmds.push_back(sCmd);
-            } while ( nIndex >= 0 );
-
-            options.protocolCmdMap.insert(ProtocolCmdMap::value_type(sPrt, vCmds));
+            while (nIndex>=0)
+                vCmds.push_back(sTmp.getToken( 0, ',', nIndex ));
+            options.protocolCmdMap.emplace(sPrt, vCmds);
             continue;
         }
 
@@ -258,38 +248,35 @@ SAL_IMPLEMENT_MAIN()
 
     if ( types.empty() && options.componenttype != 3) {
         std::cerr
-            << ("\nError: no type is specified, use the -T option at least once\n");
+            << "\nError: no type is specified, use the -T option at least once\n";
         printUsageAndExit(programname, version);
         exit(EXIT_FAILURE);
     }
 
     rtl::Reference< TypeManager > manager(new TypeManager);
-    for (std::vector< OString >::const_iterator i(registries.begin());
-         i != registries.end(); ++i)
+    for (const auto& rRegistry : registries)
     {
-        manager->loadProvider(convertToFileUrl(*i), true);
+        manager->loadProvider(convertToFileUrl(rRegistry), true);
     }
 
     if ( options.dump ) {
-        std::vector< OString >::const_iterator iter = types.begin();
-        while (iter != types.end()) {
+        for (const auto& rType : types) {
             std::cout << "\n/***************************************************"
                 "*****************************/\n";
             switch (options.language )
             {
             case 1: //Java
                 java::generateDocumentation(std::cout, options, manager,
-                                            *iter, delegate);
+                                            rType, delegate);
                 break;
             case 2: //C++
                 cpp::generateDocumentation(std::cout, options, manager,
-                                           *iter, delegate);
+                                           rType, delegate);
                 break;
             default:
                 OSL_ASSERT(false);
                 break;
             }
-            ++iter;
         }
     } else {
         switch ( options.language )

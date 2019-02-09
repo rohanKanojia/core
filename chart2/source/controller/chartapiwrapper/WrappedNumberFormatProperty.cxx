@@ -18,7 +18,9 @@
  */
 
 #include "WrappedNumberFormatProperty.hxx"
-#include "macros.hxx"
+#include "Chart2ModelContact.hxx"
+#include <com/sun/star/chart2/XAxis.hpp>
+#include <com/sun/star/chart2/XDataSeries.hpp>
 #include <unonames.hxx>
 #include <osl/diagnose.h>
 
@@ -31,7 +33,7 @@ namespace chart
 namespace wrapper
 {
 
-WrappedNumberFormatProperty::WrappedNumberFormatProperty( std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
+WrappedNumberFormatProperty::WrappedNumberFormatProperty(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
         : WrappedDirectStateProperty( CHART_UNONAME_NUMFMT, CHART_UNONAME_NUMFMT )
         , m_spChart2ModelContact(spChart2ModelContact)
 {
@@ -42,18 +44,16 @@ WrappedNumberFormatProperty::~WrappedNumberFormatProperty()
 }
 
 void WrappedNumberFormatProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     sal_Int32 nFormat = 0;
     if( ! (rOuterValue >>= nFormat) )
         throw lang::IllegalArgumentException( "Property 'NumberFormat' requires value of type sal_Int32", nullptr, 0 );
 
     if(xInnerPropertySet.is())
-        xInnerPropertySet->setPropertyValue(getInnerName(), this->convertOuterToInnerValue(rOuterValue));
+        xInnerPropertySet->setPropertyValue(getInnerName(), convertOuterToInnerValue(rOuterValue));
 }
 
 Any WrappedNumberFormatProperty::getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     if( !xInnerPropertySet.is() )
     {
@@ -78,9 +78,8 @@ Any WrappedNumberFormatProperty::getPropertyValue( const Reference< beans::XProp
 }
 
 Any WrappedNumberFormatProperty::getPropertyDefault( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
-    return uno::makeAny( sal_Int32( 0 ) );
+    return uno::Any( sal_Int32( 0 ) );
 }
 
 WrappedLinkNumberFormatProperty::WrappedLinkNumberFormatProperty() :
@@ -93,7 +92,6 @@ WrappedLinkNumberFormatProperty::~WrappedLinkNumberFormatProperty()
 }
 
 void WrappedLinkNumberFormatProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     if( !xInnerPropertySet.is() )
     {
@@ -105,7 +103,6 @@ void WrappedLinkNumberFormatProperty::setPropertyValue( const Any& rOuterValue, 
 }
 
 Any WrappedLinkNumberFormatProperty::getPropertyValue( const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     if( !xInnerPropertySet.is() )
     {
@@ -117,10 +114,8 @@ Any WrappedLinkNumberFormatProperty::getPropertyValue( const Reference< beans::X
 }
 
 Any WrappedLinkNumberFormatProperty::getPropertyDefault( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
-    bool bLink = true;
-    return uno::makeAny( bLink );
+    return uno::Any( true ); // bLink
 }
 
 } //namespace wrapper

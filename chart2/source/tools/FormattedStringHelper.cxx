@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "FormattedStringHelper.hxx"
-#include "macros.hxx"
-#include "PropertyHelper.hxx"
+#include <FormattedStringHelper.hxx>
 #include <com/sun/star/chart2/FormattedString.hpp>
+#include <tools/diagnose_ex.h>
+#include <comphelper/property.hxx>
 
 namespace chart
 {
@@ -50,9 +50,9 @@ Sequence< Reference< chart2::XFormattedString2 > >
                 xTextProperties, Reference< beans::XPropertySet >( xFormStr, uno::UNO_QUERY_THROW ) );
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return Sequence< Reference< XFormattedString2 > >( & xFormStr, 1 );

@@ -19,22 +19,19 @@
 #include <com/sun/star/frame/Desktop.hpp>
 
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/table/XTableChartsSupplier.hpp>
-#include <com/sun/star/table/XTableCharts.hpp>
 #include <com/sun/star/table/XTableChart.hpp>
+#include <com/sun/star/table/XTablePivotChartsSupplier.hpp>
+#include <com/sun/star/table/XTablePivotChart.hpp>
 #include <com/sun/star/document/XEmbeddedObjectSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
-#include <com/sun/star/beans/PropertyValue.hpp>
 
 #include <unotools/tempfile.hxx>
 
 #include <com/sun/star/chart2/XAnyDescriptionAccess.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
-#include <com/sun/star/chart2/XDiagram.hpp>
-#include <com/sun/star/chart2/XDataSeries.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
@@ -44,11 +41,8 @@
 #include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
 #include <com/sun/star/chart2/data/XDataSource.hpp>
 #include <com/sun/star/chart/XChartDataArray.hpp>
-#include <com/sun/star/chart/XComplexDescriptionAccess.hpp>
-#include <com/sun/star/chart/DataLabelPlacement.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
-#include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/text/XTextEmbeddedObjectsSupplier.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
@@ -59,27 +53,35 @@
 #include <iostream>
 #include <memory>
 
-#include <libxml/xmlwriter.h>
-#include <libxml/xpath.h>
-
+#include <com/sun/star/embed/Aspects.hpp>
+#include <com/sun/star/embed/XVisualObject.hpp>
+#include <com/sun/star/chart2/RelativeSize.hpp>
 
 using namespace css;
 using namespace css::uno;
+
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDiagram; } } } }
+namespace com { namespace sun { namespace star { namespace table { class XTableCharts; } } } }
+namespace com { namespace sun { namespace star { namespace table { class XTablePivotCharts; } } } }
 
 class ChartTest : public test::BootstrapFixture, public unotest::MacrosTest
 {
 public:
     ChartTest():mbSkipValidation(false) {}
     void load( const OUString& rDir, const OUString& rFileName );
+    std::shared_ptr<utl::TempFile> save( const OUString& rFileName );
     std::shared_ptr<utl::TempFile> reload( const OUString& rFileName );
-    uno::Sequence < OUString > getImpressChartColumnDescriptions( const char* pDir, const char* pName );
+    uno::Sequence < OUString > getImpressChartColumnDescriptions( const OUString& pDir, const char* pName );
     OUString getFileExtension( const OUString& rFileName );
 
-    uno::Reference< chart::XChartDocument > getChartDocFromImpress( const char* pDir, const char* pName );
+    uno::Reference< chart::XChartDocument > getChartDocFromImpress( const OUString& pDir, const char* pName );
 
     uno::Reference<chart::XChartDocument> getChartDocFromDrawImpress( sal_Int32 nPage, sal_Int32 nShape );
 
     uno::Reference<chart::XChartDocument> getChartDocFromWriter( sal_Int32 nShape );
+    awt::Size getPageSize( const Reference< chart2::XChartDocument > & xChartDoc );
+    awt::Size getSize(css::uno::Reference<chart2::XDiagram> xDiagram, const awt::Size& rPageSize);
 
     virtual void setUp() override;
     virtual void tearDown() override;
@@ -112,20 +114,28 @@ void ChartTest::load( const OUString& aDir, const OUString& aName )
     {
         maServiceName = "com.sun.star.drawing.DrawingDocument";
     }
-
+    if (mxComponent.is())
+        mxComponent->dispose();
     mxComponent = loadFromDesktop(m_directories.getURLFromSrc(aDir) + aName, maServiceName);
     CPPUNIT_ASSERT(mxComponent.is());
 }
 
-std::shared_ptr<utl::TempFile> ChartTest::reload(const OUString& rFilterName)
+std::shared_ptr<utl::TempFile> ChartTest::save(const OUString& rFilterName)
 {
     uno::Reference<frame::XStorable> xStorable(mxComponent, uno::UNO_QUERY);
     auto aArgs(::comphelper::InitPropertySequence({
-        { "FilterName", makeAny(rFilterName) }
+        { "FilterName", Any(rFilterName) }
     }));
     std::shared_ptr<utl::TempFile> pTempFile = std::make_shared<utl::TempFile>();
     pTempFile->EnableKillingFile();
     xStorable->storeToURL(pTempFile->GetURL(), aArgs);
+
+    return pTempFile;
+}
+
+std::shared_ptr<utl::TempFile> ChartTest::reload(const OUString& rFilterName)
+{
+    std::shared_ptr<utl::TempFile> pTempFile = save(rFilterName);
     mxComponent->dispose();
     mxComponent = loadFromDesktop(pTempFile->GetURL(), maServiceName);
     std::cout << pTempFile->GetURL();
@@ -142,7 +152,11 @@ std::shared_ptr<utl::TempFile> ChartTest::reload(const OUString& rFilterName)
         if(!mbSkipValidation)
             validate(pTempFile->GetFileName(), test::ODF);
     }
-
+    else if(rFilterName == "MS Excel 97")
+    {
+        if(!mbSkipValidation)
+            validate(pTempFile->GetFileName(), test::MSBINARY);
+    }
     CPPUNIT_ASSERT(mxComponent.is());
     return pTempFile;
 }
@@ -163,44 +177,84 @@ void ChartTest::tearDown()
 
 }
 
-Reference< lang::XComponent > getChartCompFromSheet( sal_Int32 nSheet, uno::Reference< lang::XComponent > xComponent )
+Reference< lang::XComponent > getChartCompFromSheet( sal_Int32 nSheet, uno::Reference< lang::XComponent > const & xComponent )
 {
     // let us assume that we only have one chart per sheet
 
     uno::Reference< sheet::XSpreadsheetDocument > xDoc(xComponent, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xDoc.is());
 
     uno::Reference< container::XIndexAccess > xIA(xDoc->getSheets(), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xIA.is());
 
     uno::Reference< table::XTableChartsSupplier > xChartSupplier( xIA->getByIndex(nSheet), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xChartSupplier.is());
 
     uno::Reference< table::XTableCharts > xCharts = xChartSupplier->getCharts();
     CPPUNIT_ASSERT(xCharts.is());
 
     uno::Reference< container::XIndexAccess > xIACharts(xCharts, UNO_QUERY_THROW);
     uno::Reference< table::XTableChart > xChart( xIACharts->getByIndex(0), UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xChart.is());
 
     uno::Reference< document::XEmbeddedObjectSupplier > xEmbObjectSupplier(xChart, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xEmbObjectSupplier.is());
 
     uno::Reference< lang::XComponent > xChartComp( xEmbObjectSupplier->getEmbeddedObject(), UNO_QUERY_THROW );
-    CPPUNIT_ASSERT(xChartComp.is());
 
     return xChartComp;
 
 }
 
-Reference< chart2::XChartDocument > getChartDocFromSheet( sal_Int32 nSheet, uno::Reference< lang::XComponent > xComponent )
+Reference< chart2::XChartDocument > getChartDocFromSheet( sal_Int32 nSheet, uno::Reference< lang::XComponent > const & xComponent )
 {
     uno::Reference< chart2::XChartDocument > xChartDoc ( getChartCompFromSheet(nSheet, xComponent), UNO_QUERY_THROW );
-    CPPUNIT_ASSERT(xChartDoc.is());
     return xChartDoc;
 }
 
-Reference< chart2::XChartType > getChartTypeFromDoc( Reference< chart2::XChartDocument > xChartDoc,
+uno::Reference<table::XTablePivotCharts> getTablePivotChartsFromSheet(sal_Int32 nSheet, uno::Reference<lang::XComponent> const & xComponent)
+{
+    uno::Reference<sheet::XSpreadsheetDocument> xDoc(xComponent, UNO_QUERY_THROW);
+
+    uno::Reference<container::XIndexAccess> xIA(xDoc->getSheets(), UNO_QUERY_THROW);
+
+    uno::Reference<table::XTablePivotChartsSupplier> xChartSupplier(xIA->getByIndex(nSheet), UNO_QUERY_THROW);
+
+    uno::Reference<table::XTablePivotCharts> xTablePivotCharts = xChartSupplier->getPivotCharts();
+    CPPUNIT_ASSERT(xTablePivotCharts.is());
+
+    return xTablePivotCharts;
+}
+
+Reference<lang::XComponent> getPivotChartCompFromSheet(sal_Int32 nSheet, uno::Reference<lang::XComponent> const & xComponent)
+{
+    uno::Reference<table::XTablePivotCharts> xTablePivotCharts = getTablePivotChartsFromSheet(nSheet, xComponent);
+
+    uno::Reference<container::XIndexAccess> xIACharts(xTablePivotCharts, UNO_QUERY_THROW);
+    uno::Reference<table::XTablePivotChart> xTablePivotChart(xIACharts->getByIndex(0), UNO_QUERY_THROW);
+
+    uno::Reference<document::XEmbeddedObjectSupplier> xEmbObjectSupplier(xTablePivotChart, UNO_QUERY_THROW);
+
+    uno::Reference<lang::XComponent> xChartComp(xEmbObjectSupplier->getEmbeddedObject(), UNO_QUERY_THROW);
+
+    return xChartComp;
+}
+
+Reference<chart2::XChartDocument> getPivotChartDocFromSheet(sal_Int32 nSheet, uno::Reference<lang::XComponent> const & xComponent)
+{
+    uno::Reference<chart2::XChartDocument> xChartDoc(getPivotChartCompFromSheet(nSheet, xComponent), UNO_QUERY_THROW);
+    return xChartDoc;
+}
+
+Reference<chart2::XChartDocument> getPivotChartDocFromSheet(uno::Reference<table::XTablePivotCharts> const & xTablePivotCharts, sal_Int32 nIndex)
+{
+    uno::Reference<container::XIndexAccess> xIACharts(xTablePivotCharts, UNO_QUERY_THROW);
+    uno::Reference<table::XTablePivotChart> xTablePivotChart(xIACharts->getByIndex(nIndex), UNO_QUERY_THROW);
+
+    uno::Reference<document::XEmbeddedObjectSupplier> xEmbObjectSupplier(xTablePivotChart, UNO_QUERY_THROW);
+
+    uno::Reference<lang::XComponent> xChartComp(xEmbObjectSupplier->getEmbeddedObject(), UNO_QUERY_THROW);
+
+    uno::Reference<chart2::XChartDocument> xChartDoc(xChartComp, UNO_QUERY_THROW);
+    return xChartDoc;
+}
+
+Reference< chart2::XChartType > getChartTypeFromDoc( Reference< chart2::XChartDocument > const & xChartDoc,
                                                                 sal_Int32 nChartType, sal_Int32 nCooSys = 0 )
 {
     CPPUNIT_ASSERT( xChartDoc.is() );
@@ -209,13 +263,11 @@ Reference< chart2::XChartType > getChartTypeFromDoc( Reference< chart2::XChartDo
     CPPUNIT_ASSERT( xDiagram.is() );
 
     Reference< chart2::XCoordinateSystemContainer > xCooSysContainer( xDiagram, UNO_QUERY_THROW );
-    CPPUNIT_ASSERT( xCooSysContainer.is() );
 
     Sequence< Reference< chart2::XCoordinateSystem > > xCooSysSequence( xCooSysContainer->getCoordinateSystems());
     CPPUNIT_ASSERT( xCooSysSequence.getLength() > nCooSys );
 
     Reference< chart2::XChartTypeContainer > xChartTypeContainer( xCooSysSequence[nCooSys], UNO_QUERY_THROW );
-    CPPUNIT_ASSERT( xChartTypeContainer.is() );
 
     Sequence< Reference< chart2::XChartType > > xChartTypeSequence( xChartTypeContainer->getChartTypes() );
     CPPUNIT_ASSERT( xChartTypeSequence.getLength() > nChartType );
@@ -230,7 +282,6 @@ Reference<chart2::XAxis> getAxisFromDoc(
     CPPUNIT_ASSERT(xDiagram.is());
 
     Reference<chart2::XCoordinateSystemContainer> xCooSysContainer(xDiagram, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xCooSysContainer.is());
 
     Sequence<Reference<chart2::XCoordinateSystem> > xCooSysSequence = xCooSysContainer->getCoordinateSystems();
     CPPUNIT_ASSERT(xCooSysSequence.getLength() > nCooSys);
@@ -244,12 +295,22 @@ Reference<chart2::XAxis> getAxisFromDoc(
     return xAxis;
 }
 
-Reference< chart2::XDataSeries > getDataSeriesFromDoc( uno::Reference< chart2::XChartDocument > xChartDoc,
-                                                                sal_Int32 nDataSeries, sal_Int32 nChartType = 0, sal_Int32 nCooSys = 0 )
+sal_Int32 getNumberOfDataSeries(uno::Reference<chart2::XChartDocument> const & xChartDoc,
+                                sal_Int32 nChartType = 0, sal_Int32 nCooSys = 0)
+{
+    Reference<chart2::XChartType> xChartType = getChartTypeFromDoc(xChartDoc, nChartType, nCooSys);
+    Reference<chart2::XDataSeriesContainer> xDataSeriesContainer(xChartType, UNO_QUERY_THROW);
+
+    uno::Sequence<uno::Reference<chart2::XDataSeries>> xSeriesSequence(xDataSeriesContainer->getDataSeries());
+    return xSeriesSequence.getLength();
+}
+
+Reference< chart2::XDataSeries > getDataSeriesFromDoc(uno::Reference<chart2::XChartDocument> const & xChartDoc,
+                                                      sal_Int32 nDataSeries, sal_Int32 nChartType = 0,
+                                                      sal_Int32 nCooSys = 0)
 {
     Reference< chart2::XChartType > xChartType = getChartTypeFromDoc( xChartDoc, nChartType, nCooSys );
     Reference< chart2::XDataSeriesContainer > xDataSeriesContainer( xChartType, UNO_QUERY_THROW );
-    CPPUNIT_ASSERT ( xDataSeriesContainer.is() );
 
     Sequence< Reference< chart2::XDataSeries > > xSeriesSequence( xDataSeriesContainer->getDataSeries() );
     CPPUNIT_ASSERT( xSeriesSequence.getLength() > nDataSeries );
@@ -260,7 +321,7 @@ Reference< chart2::XDataSeries > getDataSeriesFromDoc( uno::Reference< chart2::X
 }
 
 Reference< chart2::data::XDataSequence > getLabelDataSequenceFromDoc(
-        Reference< chart2::XChartDocument > xChartDoc,
+        Reference< chart2::XChartDocument > const & xChartDoc,
         sal_Int32 nDataSeries = 0, sal_Int32 nChartType = 0 )
 {
     Reference< chart2::XDataSeries > xDataSeries =
@@ -279,11 +340,10 @@ Reference< chart2::data::XDataSequence > getLabelDataSequenceFromDoc(
     }
 
     CPPUNIT_FAIL("no Label sequence found");
-    return Reference< chart2::data::XDataSequence > ();
 }
 
 Reference< chart2::data::XDataSequence > getDataSequenceFromDocByRole(
-        Reference< chart2::XChartDocument > xChartDoc, const OUString& rRole,
+        Reference< chart2::XChartDocument > const & xChartDoc, const OUString& rRole,
         sal_Int32 nDataSeries = 0, sal_Int32 nChartType = 0 )
 {
     Reference< chart2::XDataSeries > xDataSeries =
@@ -305,11 +365,10 @@ Reference< chart2::data::XDataSequence > getDataSequenceFromDocByRole(
             return xLabelSeq;
     }
 
-    CPPUNIT_FAIL("no Label sequence found");
     return Reference< chart2::data::XDataSequence > ();
 }
 
-uno::Sequence < OUString > getWriterChartColumnDescriptions( Reference< lang::XComponent > mxComponent )
+uno::Sequence < OUString > getWriterChartColumnDescriptions( Reference< lang::XComponent > const & mxComponent )
 {
     uno::Reference<drawing::XDrawPageSupplier> xDrawPageSupplier(mxComponent, uno::UNO_QUERY);
     uno::Reference<drawing::XDrawPage> xDrawPage = xDrawPageSupplier->getDrawPage();
@@ -322,7 +381,6 @@ uno::Sequence < OUString > getWriterChartColumnDescriptions( Reference< lang::XC
     CPPUNIT_ASSERT( xChartDoc->getDataProvider().is() );
     uno::Reference<beans::XPropertySet> xProp(xChartDoc->getDataProvider(), uno::UNO_QUERY );
     uno::Reference< chart2::XAnyDescriptionAccess > xAnyDescriptionAccess ( xChartDoc->getDataProvider(), uno::UNO_QUERY_THROW );
-    CPPUNIT_ASSERT( xAnyDescriptionAccess.is() );
     uno::Sequence< OUString > seriesList = xAnyDescriptionAccess->getColumnDescriptions();
     return seriesList;
 }
@@ -412,13 +470,12 @@ std::vector<uno::Sequence<uno::Any> > getDataSeriesLabelsFromChartType( const Re
     return aRet;
 }
 
-uno::Reference< chart::XChartDocument > ChartTest::getChartDocFromImpress( const char* pDir, const char* pName )
+uno::Reference< chart::XChartDocument > ChartTest::getChartDocFromImpress( const OUString& pDir, const char* pName )
 {
     mxComponent = loadFromDesktop(m_directories.getURLFromSrc(pDir) + OUString::createFromAscii(pName), "com.sun.star.comp.Draw.PresentationDocument");
     uno::Reference< drawing::XDrawPagesSupplier > xDoc(mxComponent, uno::UNO_QUERY_THROW );
     uno::Reference< drawing::XDrawPage > xPage(
         xDoc->getDrawPages()->getByIndex(0), uno::UNO_QUERY_THROW );
-    CPPUNIT_ASSERT(xPage.is());
     uno::Reference< beans::XPropertySet > xShapeProps(
         xPage->getByIndex(0), uno::UNO_QUERY );
     CPPUNIT_ASSERT(xShapeProps.is());
@@ -441,8 +498,6 @@ uno::Reference<chart::XChartDocument> ChartTest::getChartDocFromDrawImpress(
 
     uno::Reference<drawing::XDrawPage> xPage(
         xPages->getDrawPages()->getByIndex(nPage), uno::UNO_QUERY_THROW);
-    if (!xPage.is())
-        return xEmpty;
 
     uno::Reference<beans::XPropertySet> xShapeProps(xPage->getByIndex(nShape), uno::UNO_QUERY);
     if (!xShapeProps.is())
@@ -477,11 +532,10 @@ uno::Reference<chart::XChartDocument> ChartTest::getChartDocFromWriter( sal_Int3
     return xChartDoc;
 }
 
-uno::Sequence < OUString > ChartTest::getImpressChartColumnDescriptions( const char* pDir, const char* pName )
+uno::Sequence < OUString > ChartTest::getImpressChartColumnDescriptions( const OUString& pDir, const char* pName )
 {
     uno::Reference< chart::XChartDocument > xChartDoc = getChartDocFromImpress( pDir, pName );
     uno::Reference< chart::XChartDataArray > xChartData ( xChartDoc->getData(), uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xChartData.is());
     uno::Sequence < OUString > seriesList = xChartData->getColumnDescriptions();
     return seriesList;
 }
@@ -504,7 +558,7 @@ sal_Int32 getNumberFormat( const Reference<chart2::XChartDocument>& xChartDoc, c
     Reference<util::XNumberFormats> xNumberFormats = xNFS->getNumberFormats();
     CPPUNIT_ASSERT(xNumberFormats.is());
 
-    return xNumberFormats->queryKey(sFormat, css::lang::Locale(), sal_False);
+    return xNumberFormats->queryKey(sFormat, css::lang::Locale(), false);
 }
 
 sal_Int32 getNumberFormatFromAxis( const Reference<chart2::XAxis>& xAxis )
@@ -531,6 +585,28 @@ sal_Int16 getNumberFormatType( const Reference<chart2::XChartDocument>& xChartDo
     xNumPS->getPropertyValue("Type") >>= nType;
 
     return nType;
+}
+
+awt::Size ChartTest::getPageSize( const Reference< chart2::XChartDocument > & xChartDoc )
+{
+    awt::Size aSize( 0, 0 );
+    uno::Reference< com::sun::star::embed::XVisualObject > xVisualObject( xChartDoc, uno::UNO_QUERY );
+    CPPUNIT_ASSERT( xVisualObject.is() );
+    aSize = xVisualObject->getVisualAreaSize( com::sun::star::embed::Aspects::MSOLE_CONTENT );
+    return aSize;
+}
+
+awt::Size ChartTest::getSize(css::uno::Reference<chart2::XDiagram> xDiagram, const awt::Size& rPageSize)
+{
+    Reference< beans::XPropertySet > xProp(xDiagram, uno::UNO_QUERY);
+    chart2::RelativeSize aRelativeSize;
+    xProp->getPropertyValue( "RelativeSize" ) >>= aRelativeSize;
+    double fX = aRelativeSize.Primary * rPageSize.Width;
+    double fY = aRelativeSize.Secondary * rPageSize.Height;
+    awt::Size aSize;
+    aSize.Width = static_cast< sal_Int32 >( ::rtl::math::round( fX ) );
+    aSize.Height = static_cast< sal_Int32 >( ::rtl::math::round( fY ) );
+    return aSize;
 }
 
 #endif // INCLUDED_CHART2_QA_EXTRAS_CHARTTEST_HXX

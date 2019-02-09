@@ -18,8 +18,8 @@
  */
 
 
-#include "dp_misc.h"
-#include "dp_platform.hxx"
+#include <dp_misc.h>
+#include <dp_platform.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/instance.hxx>
@@ -77,7 +77,7 @@ namespace
         else if (token == "windows_x86")
             ret = checkOSandCPU("Windows", "x86");
         else if (token == "windows_x86_64")
-            ret = checkOSandCPU("Windows", "x86_64");
+            ret = checkOSandCPU("Windows", "X86_64");
         else if (token == "solaris_sparc")
             ret = checkOSandCPU("Solaris", "SPARC");
         else if (token == "solaris_sparc64")
@@ -94,6 +94,8 @@ namespace
             ret = checkOSandCPU("Linux", "X86_64");
         else if (token == "linux_sparc")
             ret = checkOSandCPU("Linux", "SPARC");
+        else if (token == "linux_sparc64")
+            ret = checkOSandCPU("Linux", "SPARC64");
         else if (token == "linux_powerpc")
             ret = checkOSandCPU("Linux", "PowerPC");
         else if (token == "linux_powerpc64")

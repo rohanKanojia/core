@@ -17,17 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "reffact.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "docsh.hxx"
-#include "crnrdlg.hxx"
-#include <vcl/msgbox.hxx>
+#include <reffact.hxx>
+#include <document.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <docsh.hxx>
+#include <crnrdlg.hxx>
+#include <vcl/weld.hxx>
+#include <vcl/fixed.hxx>
 #include <memory>
 
-#define ERRORBOX(s) ScopedVclPtr<MessageDialog>::Create(this, s)->Execute()
-#define QUERYBOX(m) ScopedVclPtr<QueryBox>::Create(this,WinBits(WB_YES_NO|WB_DEF_YES),m)->Execute()
+namespace
+{
+    void ERRORBOX(weld::Window* pParent, const OUString& rString)
+    {
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent,
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  rString));
+        xBox->run();
+    }
+
+    int QUERYBOX(weld::Window* pParent, const OUString& rString)
+    {
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent,
+                                                  VclMessageType::Question, VclButtonsType::YesNo,
+                                                  rString));
+        xBox->set_default_response(RET_YES);
+        return xBox->run();
+    }
+
+}
 
 const sal_uLong nEntryDataCol = 0;
 const sal_uLong nEntryDataRow = 1;
@@ -135,8 +154,7 @@ void ScColRowNameRangesDlg::Init()
         SCTAB nEndTab   = 0;
         pViewData->GetSimpleArea( nStartCol, nStartRow, nStartTab,
                                   nEndCol,   nEndRow,  nEndTab );
-        SetColRowData( ScRange( ScAddress( nStartCol, nStartRow, nStartTab ),
-                              ScAddress( nEndCol,   nEndRow,   nEndTab ) ) );
+        SetColRowData( ScRange( nStartCol, nStartRow, nStartTab, nEndCol, nEndRow, nEndTab));
     }
     else
     {
@@ -153,7 +171,7 @@ void ScColRowNameRangesDlg::Init()
     pEdAssign->GrabFocus();
     pRbAssign->Enable();
 
-    Range1SelectHdl( *pLbRange.get() );
+    Range1SelectHdl( *pLbRange );
 }
 
 // set data range of a labeled range to default values and set the
@@ -362,92 +380,91 @@ void ScColRowNameRangesDlg::UpdateNames()
     SCROW nRow2;
     SCTAB nTab2;
     OUString rString;
-    OUString strShow;
     const ScAddress::Details aDetails(pDoc->GetAddressConvention());
 
     OUString aString;
     OUString strDelim(" --- ");
     aString = strDelim;
-    aString += ScGlobal::GetRscString( STR_COLUMN );
+    aString += ScResId( STR_COLUMN );
     aString += strDelim;
     sal_Int32 nPos = pLbRange->InsertEntry( aString );
     pLbRange->SetEntryData( nPos, reinterpret_cast<void*>(nEntryDataDelim) );
     if ( (nCount = xColNameRanges->size()) > 0 )
     {
-        std::unique_ptr<ScRangePair*[]> ppSortArray(xColNameRanges->CreateNameSortedArray(
-               nCount, pDoc ));
+        std::vector<const ScRangePair*> aSortArray(xColNameRanges->CreateNameSortedArray(
+               pDoc ));
+        nCount = aSortArray.size();
         for ( j=0; j < nCount; j++ )
         {
-            const ScRange aRange(ppSortArray[j]->GetRange(0));
+            const ScRange aRange(aSortArray[j]->GetRange(0));
             aString = aRange.Format(ScRefFlags::RANGE_ABS_3D, pDoc, aDetails);
 
             //@008 get range parameters from document
-            ppSortArray[j]->GetRange(0).GetVars( nCol1, nRow1, nTab1,
+            aSortArray[j]->GetRange(0).GetVars( nCol1, nRow1, nTab1,
                                             nCol2, nRow2, nTab2 );
             SCCOL q=nCol1+3;
             if(q>nCol2) q=nCol2;
             //@008 construct string
-            strShow = " [";
+            OUStringBuffer strShow = " [";
             rString = pDoc->GetString(nCol1, nRow1, nTab1);
-            strShow += rString;
+            strShow.append(rString);
             for(SCCOL i=nCol1+1;i<=q;i++)
             {
-                strShow += ", ";
+                strShow.append(", ");
                 rString = pDoc->GetString(i, nRow1, nTab1);
-                strShow += rString;
+                strShow.append(rString);
             }
             if(q<nCol2) // Too long? Add ",..."
             {
-                strShow += ", ...";
+                strShow.append(", ...");
             }
-            strShow += "]";
+            strShow.append("]");
 
             //@008 Add string to listbox
-            OUString aInsStr = aString;
-            aInsStr += strShow;
+            OUString aInsStr = aString + strShow.makeStringAndClear();
             nPos = pLbRange->InsertEntry( aInsStr );
-            aRangeMap.insert( NameRangeMap::value_type(aInsStr, aRange) );
+            aRangeMap.emplace( aInsStr, aRange );
             pLbRange->SetEntryData( nPos, reinterpret_cast<void*>(nEntryDataCol) );
         }
     }
     aString = strDelim;
-    aString += ScGlobal::GetRscString( STR_ROW );
+    aString += ScResId( STR_ROW );
     aString += strDelim;
     nPos = pLbRange->InsertEntry( aString );
     pLbRange->SetEntryData( nPos, reinterpret_cast<void*>(nEntryDataDelim) );
     if ( (nCount = xRowNameRanges->size()) > 0 )
     {
-        std::unique_ptr<ScRangePair*[]> ppSortArray(xRowNameRanges->CreateNameSortedArray(
-               nCount, pDoc ));
+        std::vector<const ScRangePair*> aSortArray(xRowNameRanges->CreateNameSortedArray(
+               pDoc ));
+        nCount = aSortArray.size();
         for ( j=0; j < nCount; j++ )
         {
-            const ScRange aRange(ppSortArray[j]->GetRange(0));
+            const ScRange aRange(aSortArray[j]->GetRange(0));
             aString = aRange.Format(ScRefFlags::RANGE_ABS_3D, pDoc, aDetails);
 
             //@008 Build string for rows below
-            ppSortArray[j]->GetRange(0).GetVars( nCol1, nRow1, nTab1,
+            aSortArray[j]->GetRange(0).GetVars( nCol1, nRow1, nTab1,
                                             nCol2, nRow2, nTab2 );
             SCROW q=nRow1+3;
             if(q>nRow2) q=nRow2;
-            strShow = " [";
+            OUStringBuffer strShow = " [";
             rString = pDoc->GetString(nCol1, nRow1, nTab1);
-            strShow += rString;
+            strShow.append(rString);
             for(SCROW i=nRow1+1;i<=q;i++)
             {
-                strShow += ", ";
+                strShow.append(", ");
                 rString = pDoc->GetString(nCol1, i, nTab1);
-                strShow += rString;
+                strShow.append(rString);
             }
             if(q<nRow2)
             {
-                strShow += ", ...";
+                strShow.append(", ...");
             }
-            strShow += "]";
+            strShow.append("]");
 
-            OUString aInsStr = aString;
-            aInsStr += strShow;
+            OUString aInsStr = aString + strShow.makeStringAndClear();
             nPos = pLbRange->InsertEntry( aInsStr );
-            aRangeMap.insert( NameRangeMap::value_type(aInsStr, aRange) );
+            aRangeMap.emplace( aInsStr, aRange );
             pLbRange->SetEntryData( nPos, reinterpret_cast<void*>(nEntryDataRow) );
         }
     }
@@ -499,29 +516,29 @@ bool ScColRowNameRangesDlg::IsRefInputMode() const
 
 // handler called when OK is clicked, calls the add button handler before
 // passing the range lists to the document
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, OkBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, OkBtnHdl, Button*, void)
 {
     AddBtnHdl( nullptr );
 
-    // assign RangeLists to the den references in the document
+    // assign RangeLists to the references in the document
     pDoc->GetColNameRangesRef() = xColNameRanges;
     pDoc->GetRowNameRangesRef() = xRowNameRanges;
     // changed ranges need to take effect
     pDoc->CompileColRowNameFormula();
     ScDocShell* pDocShell = pViewData->GetDocShell();
-    pDocShell->PostPaint(ScRange(0, 0, 0, MAXCOL, MAXROW, MAXTAB), PAINT_GRID);
+    pDocShell->PostPaint(ScRange(0, 0, 0, MAXCOL, MAXROW, MAXTAB), PaintPartFlags::Grid);
     pDocShell->SetDocumentModified();
 
     Close();
 }
 
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, CancelBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, CancelBtnHdl, Button*, void)
 {
     Close();
 }
 
 // handler called when add button clicked: set ranges and add to listbox
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, AddBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, AddBtnHdl, Button*, void)
 {
     OUString aNewArea( pEdAssign->GetText() );
     OUString aNewData( pEdAssign2->GetText() );
@@ -538,13 +555,11 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, AddBtnHdl, Button*, void)
             ScRangePair* pPair;
             if ( ( pPair = xColNameRanges->Find( theCurArea ) ) != nullptr )
             {
-                xColNameRanges->Remove( pPair );
-                delete pPair;
+                xColNameRanges->Remove( *pPair );
             }
             if ( ( pPair = xRowNameRanges->Find( theCurArea ) ) != nullptr )
             {
-                xRowNameRanges->Remove( pPair );
-                delete pPair;
+                xRowNameRanges->Remove( *pPair );
             }
             if ( pBtnColHead->IsChecked() )
                 xColNameRanges->Join( ScRangePair( theCurArea, theCurData ) );
@@ -562,11 +577,11 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, AddBtnHdl, Button*, void)
             pEdAssign2->SetText( EMPTY_OUSTRING );
             theCurArea = ScRange();
             theCurData = theCurArea;
-            Range1SelectHdl( *pLbRange.get() );
+            Range1SelectHdl( *pLbRange );
         }
         else
         {
-            ERRORBOX( ScGlobal::GetRscString(STR_INVALIDTABNAME) );
+            ERRORBOX(GetFrameWeld(), ScResId(STR_INVALIDTABNAME));
             if ( !bOk1 )
                 pEdAssign->GrabFocus();
             else
@@ -575,10 +590,10 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, AddBtnHdl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, RemoveBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, RemoveBtnHdl, Button*, void)
 {
-    OUString aRangeStr = pLbRange->GetSelectEntry();
-    sal_Int32 nSelectPos = pLbRange->GetSelectEntryPos();
+    OUString aRangeStr = pLbRange->GetSelectedEntry();
+    sal_Int32 nSelectPos = pLbRange->GetSelectedEntryPos();
     bool bColName =
         (reinterpret_cast<sal_uLong>(pLbRange->GetEntryData( nSelectPos )) == nEntryDataCol);
     NameRangeMap::const_iterator itr = aRangeMap.find(aRangeStr);
@@ -594,19 +609,17 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, RemoveBtnHdl, Button*, void)
         bFound = true;
     if ( bFound )
     {
-        OUString aStrDelMsg = ScGlobal::GetRscString( STR_QUERY_DELENTRY );
-        OUString aMsg       = aStrDelMsg.getToken( 0, '#' );
+        OUString aStrDelMsg = ScResId( STR_QUERY_DELENTRY );
+        OUString aMsg       = aStrDelMsg.getToken( 0, '#' )
+                            + aRangeStr
+                            + aStrDelMsg.getToken( 1, '#' );
 
-        aMsg += aRangeStr;
-        aMsg += aStrDelMsg.getToken( 1, '#' );
-
-        if ( RET_YES == QUERYBOX(aMsg) )
+        if (RET_YES == QUERYBOX(GetFrameWeld(), aMsg))
         {
             if ( bColName )
-                xColNameRanges->Remove( pPair );
+                xColNameRanges->Remove( *pPair );
             else
-                xRowNameRanges->Remove( pPair );
-            delete pPair;
+                xRowNameRanges->Remove( *pPair );
 
             UpdateNames();
             const sal_Int32 nCnt = pLbRange->GetEntryCount();
@@ -630,15 +643,15 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, RemoveBtnHdl, Button*, void)
             pBtnColHead->Check();
             pBtnRowHead->Check( false );
             pEdAssign2->SetText( EMPTY_OUSTRING );
-            Range1SelectHdl( *pLbRange.get() );
+            Range1SelectHdl( *pLbRange );
         }
     }
 }
 
 // handler called when a row in the listbox is selected, updates form input fields
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range1SelectHdl, ListBox&, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, Range1SelectHdl, ListBox&, void)
 {
-    sal_Int32 nSelectPos = pLbRange->GetSelectEntryPos();
+    sal_Int32 nSelectPos = pLbRange->GetSelectedEntryPos();
     const sal_Int32 nCnt = pLbRange->GetEntryCount();
     sal_uInt16 nMoves = 0;
     while ( nSelectPos < nCnt
@@ -647,7 +660,7 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range1SelectHdl, ListBox&, void)
         ++nMoves;
         pLbRange->SelectEntryPos( ++nSelectPos );
     }
-    OUString aRangeStr = pLbRange->GetSelectEntry();
+    OUString aRangeStr = pLbRange->GetSelectedEntry();
     if ( nMoves )
     {
         if ( nSelectPos > 1 && nSelectPos >= nCnt )
@@ -655,14 +668,14 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range1SelectHdl, ListBox&, void)
             // do not stop at the delimiter
             nSelectPos = nCnt - 2;
             pLbRange->SelectEntryPos( nSelectPos );
-            aRangeStr = pLbRange->GetSelectEntry();
+            aRangeStr = pLbRange->GetSelectedEntry();
         }
         else if ( nSelectPos > 2 && nSelectPos < nCnt && !aRangeStr.isEmpty()
                   && aRangeStr == pEdAssign->GetText() )
         {   // move upwards instead of below to the previous position
             nSelectPos -= 2;
             pLbRange->SelectEntryPos( nSelectPos );
-            aRangeStr = pLbRange->GetSelectEntry();
+            aRangeStr = pLbRange->GetSelectedEntry();
         }
     }
     NameRangeMap::const_iterator itr = aRangeMap.find(aRangeStr);
@@ -704,7 +717,7 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range1SelectHdl, ListBox&, void)
 }
 
 // handler called when the label range has changed
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range1DataModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, Range1DataModifyHdl, Edit&, void)
 {
     OUString aNewArea( pEdAssign->GetText() );
     bool bValid = false;
@@ -737,7 +750,7 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range1DataModifyHdl, Edit&, void)
 }
 
 // handler called when the data range has changed
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range2DataModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, Range2DataModifyHdl, Edit&, void)
 {
     OUString aNewData( pEdAssign2->GetText() );
     if ( !aNewData.isEmpty() )
@@ -758,7 +771,7 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, Range2DataModifyHdl, Edit&, void)
 }
 
 // handler for the radio button for columns, adjust ranges
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, ColClickHdl, Button*, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, ColClickHdl, Button*, void)
 {
     if ( !pBtnColHead->GetSavedValue() )
     {
@@ -771,14 +784,14 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, ColClickHdl, Button*, void)
             pEdAssign->SetText( aStr );
         }
         ScRange aRange( theCurData );
-        aRange.aStart.SetRow( std::min( (long)(theCurArea.aEnd.Row() + 1), (long)MAXROW ) );
+        aRange.aStart.SetRow( std::min( static_cast<long>(theCurArea.aEnd.Row() + 1), long(MAXROW) ) );
         aRange.aEnd.SetRow( MAXROW );
         AdjustColRowData( aRange );
     }
 }
 
 // handler for the radio button for columns, adjust range
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, RowClickHdl, Button*, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, RowClickHdl, Button*, void)
 {
     if ( !pBtnRowHead->GetSavedValue() )
     {
@@ -791,13 +804,13 @@ IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, RowClickHdl, Button*, void)
             pEdAssign->SetText( aStr );
         }
         ScRange aRange( theCurData );
-        aRange.aStart.SetCol( static_cast<SCCOL>(std::min( (long)(theCurArea.aEnd.Col() + 1), (long)MAXCOL )) );
+        aRange.aStart.SetCol( static_cast<SCCOL>(std::min( static_cast<long>(theCurArea.aEnd.Col() + 1), long(MAXCOL) )) );
         aRange.aEnd.SetCol( MAXCOL );
         AdjustColRowData( aRange );
     }
 }
 
-IMPL_LINK_TYPED( ScColRowNameRangesDlg, GetFocusHdl, Control&, rCtrl, void )
+IMPL_LINK( ScColRowNameRangesDlg, GetFocusHdl, Control&, rCtrl, void )
 {
     if( (&rCtrl == static_cast<Control*>(pEdAssign)) || (&rCtrl == static_cast<Control*>(pRbAssign)) )
         pEdActive = pEdAssign;
@@ -810,7 +823,7 @@ IMPL_LINK_TYPED( ScColRowNameRangesDlg, GetFocusHdl, Control&, rCtrl, void )
         pEdActive->SetSelection( Selection( 0, SELECTION_MAX ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ScColRowNameRangesDlg, LoseFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ScColRowNameRangesDlg, LoseFocusHdl, Control&, void)
 {
     bDlgLostFocus = !IsActive();
 }

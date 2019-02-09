@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <algorithm>
 #include <cassert>
@@ -15,17 +15,17 @@
 #include <set>
 #include <vector>
 
-#include "osl/endian.h"
-#include "osl/file.h"
-#include "rtl/character.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/textenc.h"
-#include "rtl/textcvt.h"
-#include "rtl/ustring.hxx"
-#include "sal/log.hxx"
-#include "sal/types.h"
-#include "salhelper/simplereferenceobject.hxx"
-#include "unoidl/unoidl.hxx"
+#include <osl/endian.h>
+#include <osl/file.h>
+#include <rtl/character.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/textenc.h>
+#include <rtl/textcvt.h>
+#include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <sal/types.h>
+#include <salhelper/simplereferenceobject.hxx>
+#include <unoidl/unoidl.hxx>
 
 #include "unoidlprovider.hxx"
 
@@ -61,7 +61,7 @@ public:
     void * address;
 
 private:
-    virtual ~MappedFile();
+    virtual ~MappedFile() override;
 
     sal_uInt8 get8(sal_uInt32 offset) const;
 
@@ -83,7 +83,7 @@ namespace {
 
 // sizeof (Memory16) == 2
 struct Memory16 {
-    unsigned char byte[2];
+    unsigned char const byte[2];
 
     sal_uInt16 getUnsigned16() const {
         return static_cast< sal_uInt16 >(byte[0])
@@ -93,7 +93,7 @@ struct Memory16 {
 
 // sizeof (Memory32) == 4
 struct Memory32 {
-    unsigned char byte[4];
+    unsigned char const byte[4];
 
     sal_uInt32 getUnsigned32() const {
         return static_cast< sal_uInt32 >(byte[0])
@@ -124,7 +124,7 @@ struct Memory32 {
 
 // sizeof (Memory64) == 8
 struct Memory64 {
-    unsigned char byte[8];
+    unsigned char const byte[8];
 
     sal_uInt64 getUnsigned64() const {
         return static_cast< sal_uInt64 >(byte[0])
@@ -452,11 +452,11 @@ OUString MappedFile::readIdxString(
 
 // sizeof (MapEntry) == 8
 struct MapEntry {
-    Memory32 name;
-    Memory32 data;
+    Memory32 const name;
+    Memory32 const data;
 };
 
-bool operator <(const Map& map1, const Map& map2) {
+static bool operator <(const Map& map1, const Map& map2) {
     return map1.begin < map2.begin
         || (map1.begin == map2.begin && map1.size < map2.size);
 }
@@ -531,6 +531,10 @@ sal_uInt32 findInMap(
     return off;
 }
 
+#if defined(__COVERITY__)
+extern "C" void __coverity_tainted_data_sanitize__(void *);
+#endif
+
 std::vector< OUString > readAnnotations(
     bool annotated, rtl::Reference< MappedFile > const & file,
     sal_uInt32 offset, sal_uInt32 * newOffset = nullptr)
@@ -538,6 +542,9 @@ std::vector< OUString > readAnnotations(
     std::vector< OUString > ans;
     if (annotated) {
         sal_uInt32 n = file->read32(offset);
+#if defined(__COVERITY__)
+        __coverity_tainted_data_sanitize__(&n);
+#endif
         offset += 4;
         for (sal_uInt32 i = 0; i != n; ++i) {
             ans.push_back(file->readIdxString(&offset));
@@ -551,7 +558,7 @@ std::vector< OUString > readAnnotations(
 
 ConstantValue readConstant(
     rtl::Reference< MappedFile > const & file, sal_uInt32 offset,
-    sal_uInt32 * newOffset = nullptr, bool * annotated = nullptr)
+    sal_uInt32 * newOffset, bool * annotated)
 {
     assert(file.is());
     int v = file->read8(offset);
@@ -648,7 +655,7 @@ class UnoidlModuleEntity;
 class UnoidlCursor: public MapCursor {
 public:
     UnoidlCursor(
-        rtl::Reference< MappedFile > file,
+        rtl::Reference< MappedFile > const & file,
         rtl::Reference<UnoidlProvider> const & reference1,
         rtl::Reference<UnoidlModuleEntity> const & reference2,
         NestedMap const & map):
@@ -657,7 +664,7 @@ public:
     {}
 
 private:
-    virtual ~UnoidlCursor() throw () {}
+    virtual ~UnoidlCursor() throw () override {}
 
     virtual rtl::Reference< Entity > getNext(OUString * name) override;
 
@@ -699,7 +706,7 @@ public:
     }
 
 private:
-    virtual ~UnoidlModuleEntity() throw () {}
+    virtual ~UnoidlModuleEntity() throw () override {}
 
     virtual std::vector< OUString > getMemberNames() const override;
 
@@ -1276,7 +1283,7 @@ rtl::Reference< Entity > readEntity(
                         file->uri,
                         ("UNOIDL format: bad mode " + OUString::number(v)
                          + " of property " + propName
-                         + " for accumulation-based servcie"));
+                         + " for accumulation-based service"));
                 }
                 props.emplace_back(
                     propName, propType,

@@ -1,3 +1,4 @@
+# -*- tab-width: 4; indent-tabs-mode: nil; py-indent-offset: 4 -*-
 #
 # This file is part of the LibreOffice project.
 #
@@ -24,6 +25,7 @@ import imp
 import time
 import ast
 import platform
+from com.sun.star.uri.RelativeUriExcessParentSegments import RETAIN
 
 try:
     unicode
@@ -153,7 +155,7 @@ g_implName = "org.libreoffice.pyuno.LanguageScriptProviderFor"+LANGUAGENAME
 BLOCK_SIZE = 65536
 def readTextFromStream( inputStream ):
     # read the file
-    code = uno.ByteSequence( "" )
+    code = uno.ByteSequence( b"" )
     while True:
         read,out = inputStream.readBytes( None , BLOCK_SIZE )
         code = code + out
@@ -211,8 +213,33 @@ class MyUriHelper:
 
     def scriptURI2StorageUri( self, scriptURI ):
         try:
-            myUri = self.m_uriRefFac.parse(scriptURI)
-            ret = self.m_baseUri + "/" + myUri.getName().replace( "|", "/" )
+            # base path to the python script location
+            sBaseUri = self.m_baseUri + "/"
+            xBaseUri = self.m_uriRefFac.parse(sBaseUri)
+
+            # path to the .py file + "$functionname, arguments, etc
+            xStorageUri = self.m_uriRefFac.parse(scriptURI)
+            sStorageUri = xStorageUri.getName().replace( "|", "/" );
+
+            # path to the .py file, relative to the base
+            sFileUri = sStorageUri[0:sStorageUri.find("$")]
+            xFileUri = self.m_uriRefFac.parse(sFileUri)
+            if not xFileUri:
+                message = "pythonscript: invalid relative uri '" + sFileUri+ "'"
+                log.debug( message )
+                raise RuntimeException( message )
+
+            # absolute path to the .py file
+            xAbsScriptUri = self.m_uriRefFac.makeAbsolute(xBaseUri, xFileUri, True, RETAIN)
+            sAbsScriptUri = xAbsScriptUri.getUriReference()
+
+            # ensure py file is under the base path
+            if not sAbsScriptUri.startswith(sBaseUri):
+                message = "pythonscript: storage uri '" + sAbsScriptUri + "' not in base uri '" + self.m_baseUri + "'"
+                log.debug( message )
+                raise RuntimeException( message )
+
+            ret = sBaseUri + sStorageUri
             log.debug( "converting scriptURI="+scriptURI + " to storageURI=" + ret )
             return ret
         except UnoException as e:
@@ -404,7 +431,12 @@ class ProviderContext:
                 allFuncs.append(node.name)
             elif isinstance(node, ast.Assign):
                 for target in node.targets:
-                    if target.id == "g_exportedScripts":
+                    try:
+                        identifier = target.id
+                    except AttributeError:
+                        identifier = ""
+                        pass
+                    if identifier == "g_exportedScripts":
                         for value in node.value.elts:
                             g_exportedScripts.append(value.id)
                         return g_exportedScripts
@@ -549,9 +581,8 @@ class ScriptBrowseNode( unohelper.Base, XBrowseNode , XPropertySet, XInvocation,
 
             elif event.ActionCommand == "Save":
                 toWrite = uno.ByteSequence(
-                    str(
                     self.editor.getControl("EditorTextField").getText().encode(
-                    sys.getdefaultencoding())) )
+                    sys.getdefaultencoding()) )
                 copyUrl = self.uri + ".orig"
                 self.provCtx.sfa.move( self.uri, copyUrl )
                 out = self.provCtx.sfa.openFileWrite( self.uri )
@@ -738,7 +769,7 @@ class DummyProgressHandler( unohelper.Base, XProgressHandler ):
 
     def push( self,status ):
         log.debug( "pythonscript: DummyProgressHandler.push " + str( status ) )
-    def update( self,status ): 
+    def update( self,status ):
         log.debug( "pythonscript: DummyProgressHandler.update " + str( status ) )
     def pop( self, event ):
         log.debug( "pythonscript: DummyProgressHandler.push " + str( event ) )
@@ -854,19 +885,23 @@ class PackageBrowseNode( unohelper.Base, XBrowseNode ):
         return CONTAINER
 
     def getScript( self, uri ):
-        log.debug( "DirBrowseNode getScript " + uri + " invoked" )
+        log.debug( "PackageBrowseNode getScript " + uri + " invoked" )
         raise IllegalArgumentException( "PackageBrowseNode couldn't instantiate script " + uri , self , 0 )
 
 
 
 
 class PythonScript( unohelper.Base, XScript ):
-    def __init__( self, func, mod ):
+    def __init__( self, func, mod, args ):
         self.func = func
         self.mod = mod
+        self.args = args
+
     def invoke(self, args, out, outindex ):
         log.debug( "PythonScript.invoke " + str( args ) )
         try:
+            if (self.args):
+                args += self.args
             ret = self.func( *args )
         except UnoException as e:
             # UNO Exception continue to fly ...
@@ -878,7 +913,7 @@ class PythonScript( unohelper.Base, XScript ):
             # some people may beat me up for modifying the exception text,
             # but otherwise office just shows
             # the type name and message text with no more information,
-            # this is really bad for most users. 
+            # this is really bad for most users.
             e.Message = e.Message + " (" + complete + ")"
             raise
         except Exception as e:
@@ -975,10 +1010,24 @@ class PythonScriptProvider( unohelper.Base, XBrowseNode, XScriptProvider, XNameC
     def getType( self ):
         return self.dirBrowseNode.getType()
 
-    def getScript( self, uri ):
-        log.debug( "DirBrowseNode getScript " + uri + " invoked" )
-
-        raise IllegalArgumentException( "DirBrowseNode couldn't instantiate script " + uri , self , 0 )
+    # retrieve function args in parenthesis
+    def getFunctionArguments(self, func_signature):
+        nOpenParenthesis = func_signature.find( "(" )
+        if -1 == nOpenParenthesis:
+            function_name = func_signature
+            arguments = None
+        else:
+            function_name = func_signature[0:nOpenParenthesis]
+            arg_part = func_signature[nOpenParenthesis+1:len(func_signature)]
+            nCloseParenthesis = arg_part.find( ")" )
+            if -1 == nCloseParenthesis:
+                raise IllegalArgumentException( "PythonLoader: mismatch parenthesis " + func_signature, self, 0 )
+            arguments = arg_part[0:nCloseParenthesis].strip()
+            if arguments == "":
+                arguments = None
+            else:
+                arguments = tuple([x.strip().strip('"') for x in arguments.split(",")])
+        return function_name, arguments
 
     def getScript( self, scriptUri ):
         try:
@@ -990,13 +1039,18 @@ class PythonScriptProvider( unohelper.Base, XBrowseNode, XScriptProvider, XNameC
             fileUri = storageUri[0:storageUri.find( "$" )]
             funcName = storageUri[storageUri.find( "$" )+1:len(storageUri)]
 
+            # retrieve arguments in parenthesis
+            funcName, funcArgs = self.getFunctionArguments(funcName)
+            log.debug( " getScript : parsed funcname " + str(funcName) )
+            log.debug( " getScript : func args " + str(funcArgs) )
+
             mod = self.provCtx.getModuleByUrl( fileUri )
             log.debug( " got mod " + str(mod) )
 
             func = mod.__dict__[ funcName ]
 
             log.debug( "got func " + str( func ) )
-            return PythonScript( func, mod )
+            return PythonScript( func, mod, funcArgs )
         except:
             text = lastException2String()
             log.error( text )
@@ -1076,5 +1130,6 @@ g_ImplementationHelper.addImplementation( \
      "com.sun.star.script.provider.ScriptProviderFor"+ LANGUAGENAME,),)
 
 
-log.debug( "pythonscript finished intializing" )
+log.debug( "pythonscript finished initializing" )
 
+# vim: set shiftwidth=4 softtabstop=4 expandtab:

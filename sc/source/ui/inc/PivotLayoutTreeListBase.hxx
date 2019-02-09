@@ -11,11 +11,9 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_PIVOTLAYOUTTREELISTBASE_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_PIVOTLAYOUTTREELISTBASE_HXX
 
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 
-#include <vcl/builder.hxx>
-
-#include "pivot.hxx"
+#include <pivot.hxx>
 
 class ScPivotLayoutDialog;
 class ScItemValue;
@@ -41,10 +39,9 @@ public:
     void Setup(ScPivotLayoutDialog* pParent);
 
     ScPivotLayoutTreeListBase(vcl::Window* pParent, WinBits nBits, SvPivotTreeListType eType = UNDEFINED);
-    virtual ~ScPivotLayoutTreeListBase();
+    virtual ~ScPivotLayoutTreeListBase() override;
     virtual void dispose() override;
 
-    virtual sal_Int8 AcceptDrop(const AcceptDropEvent& rEvent) override;
     virtual bool NotifyAcceptDrop(SvTreeListEntry* pEntry) override;
     virtual TriState NotifyMoving(SvTreeListEntry* pTarget, SvTreeListEntry* pSource,
                                   SvTreeListEntry*& rpNewParent, sal_uLong& rNewChildPos) override;
@@ -59,14 +56,12 @@ public:
 
     void PushEntriesToPivotFieldVector(ScPivotFieldVector& rVector);
 
-    void RemoveEntryForItem(ScItemValue* pItemValue);
+    void RemoveEntryForItem(const ScItemValue* pItemValue);
 
-    bool HasEntry(SvTreeListEntry* pEntry);
+    bool HasEntry(const SvTreeListEntry* pEntry);
 
 protected:
     virtual void InsertEntryForSourceTarget(SvTreeListEntry* pSource, SvTreeListEntry* pTarget);
-
-    virtual void InsertEntryForItem(ScItemValue* pItemValue, sal_uLong nPosition);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

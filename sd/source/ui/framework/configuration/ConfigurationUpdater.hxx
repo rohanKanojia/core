@@ -20,18 +20,21 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_CONFIGURATION_CONFIGURATIONUPDATER_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_CONFIGURATION_CONFIGURATIONUPDATER_HXX
 
-#include "ConfigurationControllerResourceManager.hxx"
-#include <com/sun/star/drawing/framework/XResourceId.hpp>
-#include <com/sun/star/drawing/framework/XConfiguration.hpp>
-#include <com/sun/star/drawing/framework/XControllerManager.hpp>
+#include <com/sun/star/uno/Reference.hxx>
 #include <vcl/timer.hxx>
 #include <memory>
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfiguration; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XControllerManager; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
 
 namespace sd { namespace framework {
 
 class ConfigurationClassifier;
 class ConfigurationUpdaterLock;
+class ConfigurationControllerResourceManager;
+class ConfigurationControllerBroadcaster;
 
 /** This is a helper class for the ConfigurationController.  It handles the
     update of the current configuration so that it looks like a requested
@@ -55,13 +58,6 @@ public:
             css::drawing::framework::XControllerManager>& rxControllerManager);
     ~ConfigurationUpdater();
 
-    /** This method is typically called once, when the controller manager is
-        accessible to the caller.
-    */
-    void SetControllerManager(
-        const css::uno::Reference<
-            css::drawing::framework::XControllerManager>& rxControllerManager);
-
     /** Request an update of the current configuration so that it looks like
         the given requested configuration.  It checks whether an update of
         the current configuration can be done.  Calls UpdateConfiguration()
@@ -71,8 +67,8 @@ public:
     void RequestUpdate (const css::uno::Reference<
         css::drawing::framework::XConfiguration>& rxRequestedConfiguration);
 
-    css::uno::Reference<
-        css::drawing::framework::XConfiguration> GetCurrentConfiguration() const { return mxCurrentConfiguration;}
+    const css::uno::Reference<
+        css::drawing::framework::XConfiguration>& GetCurrentConfiguration() const { return mxCurrentConfiguration;}
 
     friend class ConfigurationUpdaterLock;
     /** Return a lock of the called ConfigurationUpdater.  While the
@@ -106,7 +102,7 @@ private:
         css::drawing::framework::XConfiguration> mxRequestedConfiguration;
 
     /** This flag is set to </sal_True> when an update of the current
-        configurtion was requested (because the last request in the queue
+        configuration was requested (because the last request in the queue
         was processed) but could not be executed because the
         ConfigurationController was locked.  A call to UpdateConfiguration()
         resets the flag to </sal_False>.
@@ -197,7 +193,7 @@ private:
     */
     void UnlockUpdates();
 
-    DECL_LINK_TYPED(TimeoutHandler, Timer *, void);
+    DECL_LINK(TimeoutHandler, Timer *, void);
 };
 
 } } // end of namespace sd::framework

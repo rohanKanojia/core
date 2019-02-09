@@ -20,7 +20,6 @@
 #define INCLUDED_VCL_EVNTPOST_HXX
 
 #include <tools/link.hxx>
-#include <tools/solar.h>
 #include <vcl/dllapi.h>
 
 struct ImplSVEvent;
@@ -30,9 +29,9 @@ namespace vcl
     class VCL_DLLPUBLIC EventPoster
     {
         ImplSVEvent *             m_nId;
-        Link<LinkParamNone*,void> m_aLink;
+        Link<LinkParamNone*,void> const m_aLink;
 
-        DECL_DLLPRIVATE_LINK_TYPED( DoEvent_Impl, void*, void );
+        DECL_DLLPRIVATE_LINK( DoEvent_Impl, void*, void );
 
     public:
                         EventPoster( const Link<LinkParamNone*,void>& rLink );

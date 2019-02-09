@@ -34,6 +34,7 @@
 
 #include <cppuhelper/compbase.hxx>
 #include <comphelper/uno3.hxx>
+#include <comphelper/types.hxx>
 
 #include <canvas/base/spritecanvasbase.hxx>
 #include <canvas/base/disambiguationhelper.hxx>
@@ -112,7 +113,7 @@ namespace vclcanvas
         void initialize();
 
         /// For resource tracking
-        virtual ~SpriteCanvas();
+        virtual ~SpriteCanvas() override;
 
         /// Dispose all internal references
         virtual void disposeThis() override;
@@ -125,14 +126,14 @@ namespace vclcanvas
         DECLARE_UNO3_XCOMPONENT_AGG_DEFAULTS( SpriteCanvas, WindowGraphicDeviceBase_Base, ::cppu::WeakComponentImplHelperBase )
 
         // XBufferController (partial)
-        virtual sal_Bool SAL_CALL showBuffer( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL switchBuffer( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException) override;
+        virtual sal_Bool SAL_CALL showBuffer( sal_Bool bUpdateAll ) override;
+        virtual sal_Bool SAL_CALL switchBuffer( sal_Bool bUpdateAll ) override;
 
         // XSpriteCanvas (partial)
-        virtual sal_Bool SAL_CALL updateScreen( sal_Bool bUpdateAll ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL updateScreen( sal_Bool bUpdateAll ) override;
 
         // XServiceName
-        virtual OUString SAL_CALL getServiceName(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getServiceName(  ) override;
 
         // RepaintTarget
         virtual bool repaint( const GraphicObjectSharedPtr&                   rGrf,
@@ -143,13 +144,12 @@ namespace vclcanvas
                               const GraphicAttr&                              rAttr ) const override;
 
         /// Get backbuffer for this canvas
-        OutDevProviderSharedPtr getFrontBuffer() const { return maDeviceHelper.getOutDev(); }
+        OutDevProviderSharedPtr const & getFrontBuffer() const { return maDeviceHelper.getOutDev(); }
         /// Get window for this canvas
-        BackBufferSharedPtr getBackBuffer() const { return maDeviceHelper.getBackBuffer(); }
+        BackBufferSharedPtr const & getBackBuffer() const { return maDeviceHelper.getBackBuffer(); }
 
     private:
         css::uno::Sequence< css::uno::Any >                maArguments;
-        css::uno::Reference< css::uno::XComponentContext > mxComponentContext;
     };
 
     typedef ::rtl::Reference< SpriteCanvas > SpriteCanvasRef;

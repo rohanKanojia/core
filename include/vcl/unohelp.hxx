@@ -21,7 +21,8 @@
 #define INCLUDED_VCL_UNOHELP_HXX
 
 #include <com/sun/star/uno/Reference.h>
-#include <rtl/ustring.hxx>
+#include <com/sun/star/awt/FontSlant.hpp>
+#include <tools/fontenum.hxx>
 #include <vcl/dllapi.h>
 
 namespace com {
@@ -30,7 +31,6 @@ namespace star {
 namespace i18n {
     class XBreakIterator;
     class XCharacterClassification;
-    class XCollator;
 }}}}
 
 namespace com {
@@ -41,11 +41,6 @@ namespace accessibility {
 }
 }}}
 
-namespace comphelper {
-    namespace string {
-        class NaturalStringSorter;
-}}
-
 namespace vcl
 {
 namespace unohelper
@@ -53,6 +48,12 @@ namespace unohelper
 VCL_DLLPUBLIC css::uno::Reference < css::i18n::XBreakIterator > CreateBreakIterator();
 VCL_DLLPUBLIC css::uno::Reference < css::i18n::XCharacterClassification> CreateCharacterClassification();
 VCL_DLLPUBLIC void NotifyAccessibleStateEventGlobally( const css::accessibility::AccessibleEventObject& rEventObject );
+VCL_DLLPUBLIC float               ConvertFontWidth( FontWidth eWidth );
+VCL_DLLPUBLIC FontWidth           ConvertFontWidth( float f );
+VCL_DLLPUBLIC float               ConvertFontWeight( FontWeight eWeight );
+VCL_DLLPUBLIC FontWeight          ConvertFontWeight( float f );
+VCL_DLLPUBLIC css::awt::FontSlant ConvertFontSlant( FontItalic eWeight );
+VCL_DLLPUBLIC FontItalic          ConvertFontSlant( css::awt::FontSlant );
 }}  // namespace vcl::unohelper
 
 #endif // INCLUDED_VCL_UNOHELP_HXX

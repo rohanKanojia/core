@@ -171,7 +171,7 @@
         <!-- OldLocation: soffice.ini -->
         <!-- UIHints: Tools - Options - General - User Data -->
         <info>
-          <desc>Specifies the user's e-mail address.</desc>
+          <desc>Specifies the user's email address.</desc>
         </info>
         <value/>
         <!-- JB: Empty default inserted into empty property node. Remove if NIL was intended -->
@@ -196,6 +196,38 @@
         <!-- UIHints: Tools - Options - General - User Data -->
         <info>
           <desc>Specifies the apartment of the user (only for Russian UI).</desc>
+        </info>
+        <value/>
+      </prop>
+      <prop oor:name="signingkey" oor:type="xs:string" oor:nillable="false">
+        <!-- UIHints: Tools - Options - General - User Data -->
+        <info>
+          <desc>Specifies user's preferred OpenPGP key used for document signing</desc>
+        </info>
+        <value/>
+      </prop>
+      <prop oor:name="encryptionkey" oor:type="xs:string" oor:nillable="false">
+        <!-- UIHints: Tools - Options - General - User Data -->
+        <info>
+          <desc>Specifies user's preferred OpenPGP key used for document encryption</desc>
+        </info>
+        <value/>
+      </prop>
+      <prop oor:name="encrypttoself" oor:type="xs:boolean" oor:nillable="false">
+        <!-- UIHints: Tools - Options - General - User Data -->
+        <info>
+          <desc>Whether to encrypt documents for recipient(s) and also for the user with their preferred encryption key</desc>
+        </info>
+        <value>true</value>
+      </prop>
+    </group>
+    <group oor:name="WinUserInfo">
+      <info>
+        <desc>Contains user information cached from Active Directory.</desc>
+      </info>
+      <prop oor:name="Cache" oor:type="xs:string" oor:nillable="false">
+        <info>
+          <desc>Cache data.</desc>
         </info>
         <value/>
       </prop>

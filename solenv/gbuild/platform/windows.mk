@@ -1,6 +1,5 @@
 # -*- Mode: makefile-gmake; tab-width: 4; indent-tabs-mode: t -*-
 #
-#
 # This file is part of the LibreOffice project.
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
@@ -8,8 +7,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 
-# to avoid flashing windows during tests
-export VCL_HIDE_WINDOWS=1
+# to block heavy exception handling that try to acquire the solarmutex
+export LO_LEAN_EXCEPTION=1
 
 gb_LICENSE := license.txt
 gb_README = readme_$(1).txt
@@ -21,25 +20,18 @@ gb_Helper_LIBRARY_PATH_VAR := PATH
 gb_MKTEMP := mktemp --tmpdir=$(gb_TMPDIR) gbuild.XXXXXX
 
 # define _WIN32_WINNT and WINVER will be derived from it in sdkddkver.h
-# with a 7.1 SDK target Windows XP, with 8.x SDK target Windows Vista
-# currently _WIN32_IE is defined to a higher version than would be derived
-# in sdkddkver.h from _WIN32_WINNT=0x0502 but if _WIN32_WINNT >= 0x0600
-# the derived value is sufficient
-gb_OSDEFS := \
-	-D_WIN32_WINNT=$(if $(filter 70,$(WINDOWS_SDK_VERSION)),0x0502,0x0600) \
-	-D_WIN32_IE=0x0700 \
+# current baseline is Windows 7 (NT 6.1)
+# for _WIN32_IE, if _WIN32_WINNT >= 0x0600 the derived value from
+# sdkddkver.h is sufficient
+gb_WIN_VERSION_DEFS := \
+	-D_WIN32_WINNT=0x0601 \
 	-DWIN32 \
 	-DWNT \
+
+gb_OSDEFS := \
+	$(gb_WIN_VERSION_DEFS) \
 	-DNOMINMAX \
-
-
-gb_UWINAPI :=
-
-ifeq ($(VCVER),120)
-
-gb_UWINAPI := uwinapi
-
-endif
+	$(LFS_CFLAGS) \
 
 gb_Executable_LAYER := \
 	$(foreach exe,$(gb_Executable_UREBIN),$(exe):UREBIN) \

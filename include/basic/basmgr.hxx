@@ -19,11 +19,13 @@
 #ifndef INCLUDED_BASIC_BASMGR_HXX
 #define INCLUDED_BASIC_BASMGR_HXX
 
+#include <vcl/errinf.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <basic/sbstar.hxx>
-#include <com/sun/star/script/XStorageBasedLibraryContainer.hpp>
+#include <com/sun/star/script/XPersistentLibraryContainer.hpp>
 #include <com/sun/star/script/XStarBasicAccess.hpp>
 #include <basic/basicdllapi.h>
+#include <memory>
 #include <vector>
 
 // Basic XML Import/Export
@@ -34,29 +36,26 @@ class SotStorage;
 
 enum class BasicErrorReason
 {
-    OPENSTORAGE      = 0x0001,
     OPENLIBSTORAGE   = 0x0002,
     OPENMGRSTREAM    = 0x0004,
     OPENLIBSTREAM    = 0x0008,
     LIBNOTFOUND      = 0x0010,
     STORAGENOTFOUND  = 0x0020,
     BASICLOADERROR   = 0x0040,
-    NOSTORAGENAME    = 0x0080,
     STDLIB           = 0x0100
 };
 
 class BASIC_DLLPUBLIC BasicError
 {
 private:
-    sal_uInt64 nErrorId;
+    ErrCode nErrorId;
     BasicErrorReason  nReason;
-    OUString  aErrStr;
 
 public:
             BasicError( const BasicError& rErr );
-            BasicError( sal_uInt64 nId, BasicErrorReason nR, const OUString& rErrStr );
+            BasicError( ErrCode nId, BasicErrorReason nR );
 
-    sal_uInt64 GetErrorId() const                  { return nErrorId; }
+    ErrCode const & GetErrorId() const                  { return nErrorId; }
 };
 
 class ErrorManager;
@@ -87,8 +86,8 @@ struct LibraryContainerInfo
 
     LibraryContainerInfo
     (
-        css::uno::Reference< css::script::XPersistentLibraryContainer > xScriptCont,
-        css::uno::Reference< css::script::XPersistentLibraryContainer > xDialogCont,
+        css::uno::Reference< css::script::XPersistentLibraryContainer > const & xScriptCont,
+        css::uno::Reference< css::script::XPersistentLibraryContainer > const & xDialogCont,
         OldBasicPassword* pOldBasicPassword
     )
         : mxScriptCont( xScriptCont )
@@ -116,7 +115,7 @@ private:
     OUString            maStorageName;
     bool                mbDocMgr;
 
-    BasicManagerImpl*   mpImpl;
+    std::unique_ptr<BasicManagerImpl>   mpImpl;
 
     BASIC_DLLPRIVATE void Init();
 
@@ -129,22 +128,13 @@ protected:
     void            LoadOldBasicManager( SotStorage& rStorage );
     bool            ImplLoadBasic( SvStream& rStrm, StarBASICRef& rOldBasic ) const;
     static bool     ImplEncryptStream( SvStream& rStream );
-    BasicLibInfo*   FindLibInfo( StarBASIC* pBasic );
+    BasicLibInfo*   FindLibInfo( StarBASIC const * pBasic );
     static void     CheckModules( StarBASIC* pBasic, bool bReference );
-    virtual ~BasicManager();
 
 public:
-                    BasicManager( SotStorage& rStorage, const OUString& rBaseURL, StarBASIC* pParentFromStdLib = nullptr, OUString* pLibPath = nullptr, bool bDocMgr = false );
-                    BasicManager( StarBASIC* pStdLib, OUString* pLibPath = nullptr, bool bDocMgr = false );
-
-    /** deletes the given BasicManager instance
-
-        This method is necessary since normally, BasicManager instances are owned by the BasicManagerRepository,
-        and expected to be deleted by the repository only. However, there exists quite some legacy code,
-        which needs to explicitly delete a BasicManager itself. This code must not use the (protected)
-        destructor, but LegacyDeleteBasicManager.
-    */
-    static void     LegacyDeleteBasicManager( BasicManager*& _rpManager );
+                    BasicManager( SotStorage& rStorage, const OUString& rBaseURL, StarBASIC* pParentFromStdLib = nullptr, OUString const * pLibPath = nullptr, bool bDocMgr = false );
+                    BasicManager( StarBASIC* pStdLib, OUString const * pLibPath = nullptr, bool bDocMgr = false );
+    virtual ~BasicManager() override;
 
     void            SetStorageName( const OUString& rName )   { maStorageName = rName; }
     const OUString& GetStorageName() const                  { return maStorageName; }

@@ -17,6 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <string_view>
+
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/uno/Exception.hpp>
 #include <com/sun/star/uno/Reference.hxx>
@@ -49,41 +53,34 @@ public:
     Translator(const Translator&) = delete;
     Translator& operator=(const Translator&) = delete;
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL supportsService(OUString const & serviceName) override;
 
     virtual css::uno::Sequence< OUString > SAL_CALL
-    getSupportedServiceNames() throw (css::uno::RuntimeException, std::exception) override;
+    getSupportedServiceNames() override;
 
     virtual OUString SAL_CALL
-    translateToInternal(OUString const & externalUriReference)
-        throw (css::uno::RuntimeException, std::exception) override;
+    translateToInternal(OUString const & externalUriReference) override;
 
     virtual OUString SAL_CALL
-    translateToExternal(OUString const & internalUriReference)
-        throw (css::uno::RuntimeException, std::exception) override;
+    translateToExternal(OUString const & internalUriReference) override;
 
 private:
-    virtual ~Translator() {}
+    virtual ~Translator() override {}
 };
 
 OUString Translator::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("com.sun.star.comp.uri.ExternalUriReferenceTranslator");
 }
 
 sal_Bool Translator::supportsService(OUString const & serviceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, serviceName);
 }
 
 css::uno::Sequence< OUString > Translator::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     css::uno::Sequence< OUString > s { "com.sun.star.uri.ExternalUriReferenceTranslator" };
     return s;
@@ -91,7 +88,6 @@ css::uno::Sequence< OUString > Translator::getSupportedServiceNames()
 
 OUString Translator::translateToInternal(
     OUString const & externalUriReference)
-    throw (css::uno::RuntimeException, std::exception)
 {
     if (!externalUriReference.matchIgnoreAsciiCase("file:/"))
     {
@@ -99,7 +95,7 @@ OUString Translator::translateToInternal(
     }
     sal_Int32 i = RTL_CONSTASCII_LENGTH("file:");
     OUStringBuffer buf;
-    buf.append(externalUriReference.getStr(), i);
+    buf.append(std::u16string_view(externalUriReference).substr(0, i));
     // Some environments (e.g., Java) produce illegal file URLs without an
     // authority part; treat them as having an empty authority part:
     if (!externalUriReference.match("//", i))
@@ -140,7 +136,6 @@ OUString Translator::translateToInternal(
 
 OUString Translator::translateToExternal(
     OUString const & internalUriReference)
-    throw (css::uno::RuntimeException, std::exception)
 {
     if (!internalUriReference.matchIgnoreAsciiCase("file://"))
     {
@@ -148,7 +143,7 @@ OUString Translator::translateToExternal(
     }
     sal_Int32 i = RTL_CONSTASCII_LENGTH("file://");
     OUStringBuffer buf;
-    buf.append(internalUriReference.getStr(), i);
+    buf.append(std::u16string_view(internalUriReference).substr(0, i));
     rtl_TextEncoding encoding = osl_getThreadTextEncoding();
     for (bool path = true;;) {
         sal_Int32 j = i;
@@ -186,7 +181,7 @@ OUString Translator::translateToExternal(
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_uri_ExternalUriReferenceTranslator_get_implementation(css::uno::XComponentContext* ,
         css::uno::Sequence<css::uno::Any> const &)
 {

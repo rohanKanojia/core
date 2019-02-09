@@ -20,10 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSINSERTIONINDICATORHANDLER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSINSERTIONINDICATORHANDLER_HXX
 
-#include "view/SlsInsertAnimator.hxx"
+#include <controller/SlsAnimator.hxx>
 
-#include "view/SlsLayouter.hxx"
-#include "sdxfer.hxx"
+#include <view/SlsLayouter.hxx>
 
 namespace sd { namespace slidesorter { class SlideSorter; } }
 namespace sd { namespace slidesorter { namespace view {
@@ -31,9 +30,9 @@ class InsertAnimator;
 class InsertionIndicatorOverlay;
 } } }
 
-namespace sd { namespace slidesorter { namespace controller {
+class SdTransferable;
 
-class Transferable;
+namespace sd { namespace slidesorter { namespace controller {
 
 /** Manage the visibility and location of the insertion indicator.  Its
     actual display is controlled by the InsertionIndicatorOverlay.
@@ -42,7 +41,7 @@ class InsertionIndicatorHandler
 {
 public:
     InsertionIndicatorHandler (SlideSorter& rSlideSorter);
-    ~InsertionIndicatorHandler();
+    ~InsertionIndicatorHandler() COVERITY_NOEXCEPT_FALSE;
 
     enum Mode { CopyMode, MoveMode, UnknownMode };
     static Mode GetModeFromDndAction (const sal_Int8 nDndAction);
@@ -63,7 +62,7 @@ public:
     {
     public:
         ForceShowContext (const std::shared_ptr<InsertionIndicatorHandler>& rpHandler);
-        ~ForceShowContext();
+        ~ForceShowContext() COVERITY_NOEXCEPT_FALSE;
     private:
         const std::shared_ptr<InsertionIndicatorHandler> mpHandler;
     };
@@ -121,7 +120,7 @@ private:
     void SetPosition (
         const Point& rPoint,
         const Mode eMode);
-    std::shared_ptr<view::InsertAnimator> GetInsertAnimator();
+    std::shared_ptr<view::InsertAnimator> const & GetInsertAnimator();
 
     /** Make the insertion indicator visible (that is the show part) and
         keep it visible, even when the mouse leaves the window (that is the

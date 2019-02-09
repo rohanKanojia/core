@@ -21,6 +21,7 @@
 #include "xmlfilter.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlDataSource.hxx"
 #include "xmlDocuments.hxx"
 #include "xmlEnums.hxx"
@@ -28,8 +29,8 @@
 #include <com/sun/star/sdb/XFormDocumentsSupplier.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdb/XQueryDefinitionsSupplier.hpp>
-#include "xmlstrings.hrc"
-#include <tools/debug.hxx>
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <connectivity/dbtools.hxx>
 
 namespace dbaxml
@@ -51,7 +52,7 @@ OXMLDatabase::~OXMLDatabase()
 
 }
 
-SvXMLImportContext* OXMLDatabase::CreateChildContext(
+SvXMLImportContextRef OXMLDatabase::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

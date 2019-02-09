@@ -9,14 +9,7 @@
 
 $(eval $(call gb_CppunitTest_CppunitTest,writerperfect_writer))
 
-$(eval $(call gb_CppunitTest_use_externals,writerperfect_writer,\
-	boost_headers \
-))
-
-$(eval $(call gb_CppunitTest_use_api,writerperfect_writer,\
-	offapi \
-	udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,writerperfect_writer))
 
 $(eval $(call gb_CppunitTest_use_libraries,writerperfect_writer,\
 	comphelper \
@@ -27,11 +20,7 @@ $(eval $(call gb_CppunitTest_use_libraries,writerperfect_writer,\
 	tl \
 	ucbhelper \
 	unotest \
-	$(gb_UWINAPI) \
-))
-
-$(eval $(call gb_CppunitTest_use_static_libraries,writerperfect_writer,\
-	writerperfect_importtestbase \
+	wpftqahelper \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,writerperfect_writer))
@@ -40,6 +29,10 @@ $(eval $(call gb_CppunitTest_use_vcl,writerperfect_writer))
 $(eval $(call gb_CppunitTest_use_rdb,writerperfect_writer,services))
 
 $(eval $(call gb_CppunitTest_use_configuration,writerperfect_writer))
+
+$(eval $(call gb_CppunitTest_use_uiconfigs,writerperfect_writer,\
+	modules/swriter \
+))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,writerperfect_writer,\
 	writerperfect/qa/unit/WpftWriterFilterTest \

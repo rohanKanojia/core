@@ -7,111 +7,127 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include "xmlcondformat.hxx"
-#include <xmloff/nmspmap.hxx>
+#include "xmlimprt.hxx"
+#include <xmloff/xmlnmspe.hxx>
+#include <xmloff/xmlictxt.hxx>
+#include <sal/log.hxx>
 
-#include "colorscale.hxx"
-#include "conditio.hxx"
-#include "document.hxx"
+#include <compiler.hxx>
+#include <colorscale.hxx>
+#include <conditio.hxx>
+#include <document.hxx>
 #include <sax/tools/converter.hxx>
-#include "rangelst.hxx"
-#include "rangeutl.hxx"
-#include "docfunc.hxx"
+#include <rangelst.hxx>
+#include <rangeutl.hxx>
 #include "XMLConverter.hxx"
-#include "stylehelper.hxx"
+#include <stylehelper.hxx>
+#include <tokenarray.hxx>
 
-ScXMLConditionalFormatsContext::ScXMLConditionalFormatsContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName):
-    SvXMLImportContext( rImport, nPrfx, rLName )
+using namespace xmloff::token;
+
+ScXMLConditionalFormatsContext::ScXMLConditionalFormatsContext( ScXMLImport& rImport ):
+    ScXMLImportContext( rImport )
 {
     GetScImport().SetNewCondFormatData();
     GetScImport().GetDocument()->SetCondFormList(new ScConditionalFormatList(), GetScImport().GetTables().GetCurrentSheet());
 }
 
-SvXMLImportContext* ScXMLConditionalFormatsContext::CreateChildContext( sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ScXMLConditionalFormatsContext::createFastChildContext(
+    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetCondFormatsTokenMap();
-    sal_uInt16 nToken = rTokenMap.Get(nPrefix, rLocalName);
     SvXMLImportContext* pContext = nullptr;
-    switch (nToken)
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
+
+    switch (nElement)
     {
-        case XML_TOK_CONDFORMATS_CONDFORMAT:
-            pContext = new ScXMLConditionalFormatContext( GetScImport(), nPrefix, rLocalName, xAttrList );
+        case XML_ELEMENT( CALC_EXT, XML_CONDITIONAL_FORMAT ):
+            pContext = new ScXMLConditionalFormatContext( GetScImport(), pAttribList, *this );
             break;
     }
 
     return pContext;
 }
 
-void ScXMLConditionalFormatsContext::EndElement()
+IMPL_LINK(ScXMLConditionalFormatsContext, FormatDeletedHdl, ScConditionalFormat*, pFormat, void)
+{
+    mvCondFormatData.erase(std::remove_if(mvCondFormatData.begin(), mvCondFormatData.end(),
+                                          [pFormat](CondFormatData& r){ return r.mpFormat == pFormat; }),
+                           mvCondFormatData.end());
+}
+
+void SAL_CALL ScXMLConditionalFormatsContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScDocument* pDoc = GetScImport().GetDocument();
 
     SCTAB nTab = GetScImport().GetTables().GetCurrentSheet();
     ScConditionalFormatList* pCondFormatList = pDoc->GetCondFormList(nTab);
-    bool bDeleted = !pCondFormatList->CheckAllEntries();
+    bool bDeleted = !pCondFormatList->CheckAllEntries(LINK(this, ScXMLConditionalFormatsContext, FormatDeletedHdl));
 
     SAL_WARN_IF(bDeleted, "sc", "conditional formats have been deleted because they contained empty range info");
+
+    for (const auto& i : mvCondFormatData)
+    {
+        pDoc->AddCondFormatData( i.mpFormat->GetRange(), i.mnTab, i.mpFormat->GetKey() );
+    }
 }
 
-ScXMLConditionalFormatContext::ScXMLConditionalFormatContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName, const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList):
-    SvXMLImportContext( rImport, nPrfx, rLName )
+ScXMLConditionalFormatContext::ScXMLConditionalFormatContext( ScXMLImport& rImport,
+                                                              const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                                              ScXMLConditionalFormatsContext& rParent ):
+    ScXMLImportContext( rImport ),
+    mrParent( rParent )
 {
     OUString sRange;
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetCondFormatAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_CONDFORMAT_TARGET_RANGE:
-                sRange = sValue;
-            break;
-            default:
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_TARGET_RANGE_ADDRESS ):
+                    sRange = aIter.toString();
                 break;
+                default:
+                    break;
+            }
         }
     }
 
-    ScRangeStringConverter::GetRangeListFromString(maRange, sRange, GetScImport().GetDocument(),
+    ScRangeList aRangeList;
+    ScRangeStringConverter::GetRangeListFromString(aRangeList, sRange, GetScImport().GetDocument(),
             formula::FormulaGrammar::CONV_ODF);
 
     mxFormat.reset(new ScConditionalFormat(0, GetScImport().GetDocument()));
-    mxFormat->SetRange(maRange);
+    mxFormat->SetRange(aRangeList);
 }
 
-SvXMLImportContext* ScXMLConditionalFormatContext::CreateChildContext( sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ScXMLConditionalFormatContext::createFastChildContext(
+    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetCondFormatTokenMap();
-    sal_uInt16 nToken = rTokenMap.Get(nPrefix, rLocalName);
     SvXMLImportContext* pContext = nullptr;
-    switch (nToken)
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
+
+    switch (nElement)
     {
-        case XML_TOK_CONDFORMAT_CONDITION:
-            pContext = new ScXMLCondContext( GetScImport(), nPrefix, rLocalName, xAttrList, mxFormat.get() );
+        case XML_ELEMENT( CALC_EXT, XML_CONDITION ):
+            pContext = new ScXMLCondContext( GetScImport(), pAttribList, mxFormat.get() );
             break;
-        case XML_TOK_CONDFORMAT_COLORSCALE:
-            pContext = new ScXMLColorScaleFormatContext( GetScImport(), nPrefix, rLocalName, mxFormat.get() );
+        case XML_ELEMENT( CALC_EXT, XML_COLOR_SCALE ):
+            pContext = new ScXMLColorScaleFormatContext( GetScImport(), mxFormat.get() );
             break;
-        case XML_TOK_CONDFORMAT_DATABAR:
-            pContext = new ScXMLDataBarFormatContext( GetScImport(), nPrefix, rLocalName, xAttrList, mxFormat.get() );
+        case XML_ELEMENT( CALC_EXT, XML_DATA_BAR ):
+            pContext = new ScXMLDataBarFormatContext( GetScImport(), pAttribList, mxFormat.get() );
             break;
-        case XML_TOK_CONDFORMAT_ICONSET:
-            pContext = new ScXMLIconSetFormatContext( GetScImport(), nPrefix, rLocalName, xAttrList, mxFormat.get() );
+        case XML_ELEMENT( CALC_EXT, XML_ICON_SET ):
+            pContext = new ScXMLIconSetFormatContext( GetScImport(), pAttribList, mxFormat.get() );
             break;
-        case XML_TOK_CONDFORMAT_DATE:
-            pContext = new ScXMLDateContext( GetScImport(), nPrefix, rLocalName, xAttrList, mxFormat.get() );
+        case XML_ELEMENT( CALC_EXT, XML_DATE_IS ):
+            pContext = new ScXMLDateContext( GetScImport(), pAttribList, mxFormat.get() );
             break;
         default:
             break;
@@ -120,42 +136,257 @@ SvXMLImportContext* ScXMLConditionalFormatContext::CreateChildContext( sal_uInt1
     return pContext;
 }
 
-void ScXMLConditionalFormatContext::EndElement()
+static bool HasRelRefIgnoringSheet0Relative( ScDocument* pDoc, const ScTokenArray* pTokens, sal_uInt16 nRecursion = 0 )
+{
+    if (pTokens)
+    {
+        formula::FormulaTokenArrayPlainIterator aIter( *pTokens );
+        formula::FormulaToken* t;
+        for( t = aIter.Next(); t; t = aIter.Next() )
+        {
+            switch( t->GetType() )
+            {
+                case formula::svDoubleRef:
+                {
+                    ScSingleRefData& rRef2 = t->GetDoubleRef()->Ref2;
+                    if ( rRef2.IsColRel() || rRef2.IsRowRel() || (rRef2.IsFlag3D() && rRef2.IsTabRel()) )
+                        return true;
+                    [[fallthrough]];
+                }
+
+                case formula::svSingleRef:
+                {
+                    ScSingleRefData& rRef1 = *t->GetSingleRef();
+                    if ( rRef1.IsColRel() || rRef1.IsRowRel() || (rRef1.IsFlag3D() && rRef1.IsTabRel()) )
+                        return true;
+                }
+                break;
+
+                case formula::svIndex:
+                {
+                    if( t->GetOpCode() == ocName )      // DB areas always absolute
+                        if( ScRangeData* pRangeData = pDoc->FindRangeNameBySheetAndIndex( t->GetSheet(), t->GetIndex()) )
+                            if( (nRecursion < 42) && HasRelRefIgnoringSheet0Relative( pDoc, pRangeData->GetCode(), nRecursion + 1 ) )
+                                return true;
+                }
+                break;
+
+                // #i34474# function result dependent on cell position
+                case formula::svByte:
+                {
+                    switch( t->GetOpCode() )
+                    {
+                        case ocRow:     // ROW() returns own row index
+                        case ocColumn:  // COLUMN() returns own column index
+                        case ocSheet:   // SHEET() returns own sheet index
+                        case ocCell:    // CELL() may return own cell address
+                            return true;
+                        default:
+                            break;
+                    }
+                }
+                break;
+
+                default:
+                    break;
+            }
+        }
+    }
+    return false;
+}
+
+static bool HasOneSingleFullyRelativeReference( const ScTokenArray* pTokens, ScSingleRefData& rOffset )
+{
+    int nCount = 0;
+    if (pTokens)
+    {
+        formula::FormulaTokenArrayPlainIterator aIter( *pTokens );
+        formula::FormulaToken* t;
+        for( t = aIter.Next(); t; t = aIter.Next() )
+        {
+            switch( t->GetType() )
+            {
+                case formula::svSingleRef:
+                {
+                    ScSingleRefData& rRef1 = *t->GetSingleRef();
+                    if ( rRef1.IsColRel() && rRef1.IsRowRel() && !rRef1.IsFlag3D() && rRef1.IsTabRel() )
+                    {
+                        nCount++;
+                        if (nCount == 1)
+                        {
+                            rOffset = rRef1;
+                        }
+                    }
+                }
+                break;
+
+                default:
+                    break;
+            }
+        }
+    }
+    return nCount == 1;
+}
+
+void SAL_CALL ScXMLConditionalFormatContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     ScDocument* pDoc = GetScImport().GetDocument();
 
     SCTAB nTab = GetScImport().GetTables().GetCurrentSheet();
-    ScConditionalFormat* pFormat = mxFormat.release();
-    sal_uLong nIndex = pDoc->AddCondFormat(pFormat, nTab);
-    pFormat->SetKey(nIndex);
+    std::unique_ptr<ScConditionalFormat> pFormat(std::move(mxFormat));
 
-    pDoc->AddCondFormatData( pFormat->GetRange(), nTab, nIndex);
+    bool bEligibleForCache = true;
+    bool bSingleRelativeReference = false;
+    ScSingleRefData aOffsetForSingleRelRef;
+    std::unique_ptr<ScTokenArray> pTokens;
+    for (size_t nFormatEntryIx = 0; nFormatEntryIx < pFormat->size(); ++nFormatEntryIx)
+    {
+        auto pFormatEntry = pFormat->GetEntry(nFormatEntryIx);
+        auto pCondFormatEntry = dynamic_cast<const ScCondFormatEntry*>(pFormatEntry);
+
+        if (pCondFormatEntry == nullptr ||
+            (pCondFormatEntry->GetOperation() != ScConditionMode::Equal &&
+             pCondFormatEntry->GetOperation() != ScConditionMode::Direct))
+        {
+            bEligibleForCache = false;
+            break;
+        }
+
+        ScAddress aSrcPos;
+        OUString aSrcString = pCondFormatEntry->GetSrcString();
+        if ( !aSrcString.isEmpty() )
+            aSrcPos.Parse( aSrcString, pDoc );
+        ScCompiler aComp( pDoc, aSrcPos );
+        aComp.SetGrammar( formula::FormulaGrammar::GRAM_ODFF );
+        pTokens = aComp.CompileString( pCondFormatEntry->GetExpression(aSrcPos, 0), "" );
+        if (HasRelRefIgnoringSheet0Relative( pDoc, pTokens.get() ))
+        {
+            // In general not eligible, but some might be. We handle one very special case: When the
+            // conditional format has one entry, the reference position is the first cell of the
+            // range, and with a single fully relative reference in its expression. (Possibly these
+            // conditions could be loosened, but I am too tired to think on that right now.)
+            if (pFormat->size() == 1 &&
+                pFormat->GetRange().size() == 1 &&
+                pFormat->GetRange()[0].aStart == aSrcPos &&
+                HasOneSingleFullyRelativeReference( pTokens.get(), aOffsetForSingleRelRef ))
+            {
+                bSingleRelativeReference = true;
+            }
+            else
+            {
+                bEligibleForCache = false;
+                break;
+            }
+        }
+    }
+
+    if (bEligibleForCache)
+    {
+        for (auto& aCacheEntry : mrParent.maCache)
+            if (aCacheEntry.mnAge < SAL_MAX_INT64)
+                aCacheEntry.mnAge++;
+
+        for (auto& aCacheEntry : mrParent.maCache)
+        {
+            if (!aCacheEntry.mpFormat)
+                continue;
+
+            if (aCacheEntry.mpFormat->size() != pFormat->size())
+                continue;
+
+            // Check if the conditional format is identical to an existing one (but with different range) and can be shared
+            for (size_t nFormatEntryIx = 0; nFormatEntryIx < pFormat->size(); ++nFormatEntryIx)
+            {
+                auto pCacheFormatEntry = aCacheEntry.mpFormat->GetEntry(nFormatEntryIx);
+                auto pFormatEntry = pFormat->GetEntry(nFormatEntryIx);
+                if (pCacheFormatEntry->GetType() != pFormatEntry->GetType() ||
+                    pFormatEntry->GetType() != ScFormatEntry::Type::Condition)
+                    break;
+
+                auto pCacheCondFormatEntry = static_cast<const ScCondFormatEntry*>(pCacheFormatEntry);
+                auto pCondFormatEntry = static_cast<const ScCondFormatEntry*>(pFormatEntry);
+
+                if (pCacheCondFormatEntry->GetStyle() != pCondFormatEntry->GetStyle())
+                    break;
+
+                // Note That comparing the formulas of the ScConditionEntry at this stage is
+                // comparing just the *strings* of the formulas. For the bSingleRelativeReference
+                // case we compare the tokenized ("compiled") formulas.
+                if (bSingleRelativeReference)
+                {
+                    if (aCacheEntry.mbSingleRelativeReference &&
+                        pTokens->EqualTokens(aCacheEntry.mpTokens.get()))
+                        ;
+                    else
+                        break;
+                }
+                else if (!pCacheCondFormatEntry->IsEqual(*pCondFormatEntry, /*bIgnoreSrcPos*/true))
+                {
+                    break;
+                }
+                // If we get here on the last round through the for loop, we have a cache hit
+                if (nFormatEntryIx == pFormat->size() - 1)
+                {
+                    // Mark cache entry as fresh, do necessary mangling of it and just return
+                    aCacheEntry.mnAge = 0;
+                    for (size_t k = 0; k < pFormat->GetRange().size(); ++k)
+                        aCacheEntry.mpFormat->GetRangeList().Join(pFormat->GetRange()[k]);
+                    return;
+                }
+            }
+        }
+    }
+
+    sal_uLong nIndex = pDoc->AddCondFormat(std::move(pFormat), nTab);
+    ScConditionalFormat* pInsertedFormat = pDoc->GetCondFormList(nTab)->GetFormat(nIndex);
+    assert(pInsertedFormat && pInsertedFormat->GetKey() == nIndex);
+
+    mrParent.mvCondFormatData.push_back( { pInsertedFormat, nTab } );
+
+    if (bEligibleForCache)
+    {
+        // Not found in cache, replace oldest cache entry
+        sal_Int64 nOldestAge = -1;
+        size_t nIndexOfOldest = 0;
+        for (auto& aCacheEntry : mrParent.maCache)
+        {
+            if (aCacheEntry.mnAge > nOldestAge)
+            {
+                nOldestAge = aCacheEntry.mnAge;
+                nIndexOfOldest = (&aCacheEntry - &mrParent.maCache.front());
+            }
+        }
+        mrParent.maCache[nIndexOfOldest].mpFormat = pInsertedFormat;
+        mrParent.maCache[nIndexOfOldest].mbSingleRelativeReference = bSingleRelativeReference;
+        mrParent.maCache[nIndexOfOldest].mpTokens = std::move(pTokens);
+        mrParent.maCache[nIndexOfOldest].mnAge = 0;
+    }
 }
 
 ScXMLConditionalFormatContext::~ScXMLConditionalFormatContext()
 {
 }
 
-ScXMLColorScaleFormatContext::ScXMLColorScaleFormatContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName, ScConditionalFormat* pFormat):
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+ScXMLColorScaleFormatContext::ScXMLColorScaleFormatContext( ScXMLImport& rImport,
+                        ScConditionalFormat* pFormat):
+    ScXMLImportContext( rImport ),
     pColorScaleFormat(nullptr)
 {
     pColorScaleFormat = new ScColorScaleFormat(GetScImport().GetDocument());
     pFormat->AddEntry(pColorScaleFormat);
 }
 
-SvXMLImportContext* ScXMLColorScaleFormatContext::CreateChildContext( sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ScXMLColorScaleFormatContext::createFastChildContext(
+    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetColorScaleTokenMap();
-    sal_uInt16 nToken = rTokenMap.Get(nPrefix, rLocalName);
     SvXMLImportContext* pContext = nullptr;
-    switch (nToken)
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
+
+    switch (nElement)
     {
-        case XML_TOK_COLORSCALE_COLORSCALEENTRY:
-            pContext = new ScXMLColorScaleFormatEntryContext( GetScImport(), nPrefix, rLocalName, xAttrList, pColorScaleFormat );
+        case XML_ELEMENT( CALC_EXT, XML_COLOR_SCALE_ENTRY ):
+            pContext = new ScXMLColorScaleFormatEntryContext( GetScImport(), pAttribList, pColorScaleFormat );
             break;
         default:
             break;
@@ -164,12 +395,13 @@ SvXMLImportContext* ScXMLColorScaleFormatContext::CreateChildContext( sal_uInt16
     return pContext;
 }
 
-ScXMLDataBarFormatContext::ScXMLDataBarFormatContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName, const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
+ScXMLDataBarFormatContext::ScXMLDataBarFormatContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScConditionalFormat* pFormat):
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    mpDataBarFormat(nullptr),
-    mpFormatData(nullptr)
+    ScXMLImportContext( rImport ),
+    mpFormatData(nullptr),
+    mpParent(pFormat),
+    mnIndex(0)
 {
     OUString sPositiveColor;
     OUString sNegativeColor;
@@ -180,68 +412,61 @@ ScXMLDataBarFormatContext::ScXMLDataBarFormatContext( ScXMLImport& rImport, sal_
     OUString sMinLength;
     OUString sMaxLength;
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataBarAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATABAR_POSITIVE_COLOR:
-                sPositiveColor = sValue;
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_POSITIVE_COLOR ):
+                    sPositiveColor = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_GRADIENT:
-                sGradient = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_GRADIENT ):
+                    sGradient = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_NEGATIVE_COLOR:
-                sNegativeColor = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_NEGATIVE_COLOR ):
+                    sNegativeColor = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_AXISPOSITION:
-                sAxisPosition = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_AXIS_POSITION ):
+                    sAxisPosition = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_SHOWVALUE:
-                sShowValue = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_SHOW_VALUE ):
+                    sShowValue = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_AXISCOLOR:
-                sAxisColor = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_AXIS_COLOR ):
+                    sAxisColor = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_MINLENGTH:
-                sMinLength = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_MIN_LENGTH ):
+                    sMinLength = aIter.toString();
                 break;
-            case XML_TOK_DATABAR_MAXLENGTH:
-                sMaxLength = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_MAX_LENGTH ):
+                    sMaxLength = aIter.toString();
                 break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 
-    mpDataBarFormat = new ScDataBarFormat(rImport.GetDocument());
+    ScDataBarFormat* pDataBarFormat = new ScDataBarFormat(rImport.GetDocument());
     mpFormatData = new ScDataBarFormatData();
-    mpDataBarFormat->SetDataBarData(mpFormatData);
+    pDataBarFormat->SetDataBarData(mpFormatData);
     if(!sGradient.isEmpty())
     {
         bool bGradient = true;
-        sax::Converter::convertBool( bGradient, sGradient);
+        (void)sax::Converter::convertBool( bGradient, sGradient);
         mpFormatData->mbGradient = bGradient;
     }
 
     if(!sPositiveColor.isEmpty())
     {
-        sal_Int32 nColor = 0;
-        sax::Converter::convertColor( nColor, sPositiveColor );
-        mpFormatData->maPositiveColor = Color(nColor);
+        sax::Converter::convertColor( mpFormatData->maPositiveColor, sPositiveColor );
     }
 
     if(!sNegativeColor.isEmpty())
     {
         // we might check here for 0xff0000 and don't write it
-        sal_Int32 nColor = 0;
+        Color nColor;
         sax::Converter::convertColor( nColor, sNegativeColor );
         mpFormatData->mpNegativeColor.reset(new Color(nColor));
     }
@@ -258,15 +483,13 @@ ScXMLDataBarFormatContext::ScXMLDataBarFormatContext( ScXMLImport& rImport, sal_
 
     if(!sAxisColor.isEmpty())
     {
-        sal_Int32 nColor = 0;
-        sax::Converter::convertColor( nColor, sAxisColor );
-        mpFormatData->maAxisColor = Color(nColor);
+        sax::Converter::convertColor( mpFormatData->maAxisColor, sAxisColor );
     }
 
     if(!sShowValue.isEmpty())
     {
         bool bShowValue = true;
-        sax::Converter::convertBool( bShowValue, sShowValue );
+        (void)sax::Converter::convertBool( bShowValue, sShowValue );
         mpFormatData->mbOnlyBar = !bShowValue;
     }
 
@@ -284,31 +507,38 @@ ScXMLDataBarFormatContext::ScXMLDataBarFormatContext( ScXMLImport& rImport, sal_
         mpFormatData->mnMaxLength = nVal;
     }
 
-    pFormat->AddEntry(mpDataBarFormat);
+    pFormat->AddEntry(pDataBarFormat);
 }
 
-SvXMLImportContext* ScXMLDataBarFormatContext::CreateChildContext( sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ScXMLDataBarFormatContext::createFastChildContext(
+    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetFormattingTokenMap();
-    sal_uInt16 nToken = rTokenMap.Get(nPrefix, rLocalName);
     SvXMLImportContext* pContext = nullptr;
-    switch (nToken)
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
+
+    switch (nElement)
     {
-        case XML_TOK_FORMATTING_ENTRY:
-        case XML_TOK_DATABAR_DATABARENTRY:
+        case XML_ELEMENT( CALC_EXT, XML_FORMATTING_ENTRY ):
+        case XML_ELEMENT( CALC_EXT, XML_DATA_BAR_ENTRY ):
         {
             ScColorScaleEntry* pEntry(nullptr);
-            pContext = new ScXMLFormattingEntryContext( GetScImport(), nPrefix, rLocalName, xAttrList, pEntry );
-            if(mpFormatData->mpLowerLimit)
+            pContext = new ScXMLFormattingEntryContext( GetScImport(), pAttribList, pEntry );
+            pEntry->SetRepaintCallback(mpParent);
+            if(mnIndex == 0)
+            {
+                mpFormatData->mpLowerLimit.reset(pEntry);
+            }
+            else if (mnIndex == 1)
             {
                 mpFormatData->mpUpperLimit.reset(pEntry);
             }
             else
             {
-                mpFormatData->mpLowerLimit.reset(pEntry);
+                // data bars only support 2 entries
+                assert(false);
             }
+            ++mnIndex;
         }
         break;
         default:
@@ -318,37 +548,32 @@ SvXMLImportContext* ScXMLDataBarFormatContext::CreateChildContext( sal_uInt16 nP
     return pContext;
 }
 
-ScXMLIconSetFormatContext::ScXMLIconSetFormatContext(ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+ScXMLIconSetFormatContext::ScXMLIconSetFormatContext(ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScConditionalFormat* pFormat):
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport ),
+    mpParent(pFormat)
 {
     OUString aIconSetType, sShowValue;
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetIconSetAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_ICONSET_TYPE:
-                aIconSetType = sValue;
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_ICON_SET_TYPE ):
+                    aIconSetType = aIter.toString();
                 break;
-            case XML_TOK_ICONSET_SHOWVALUE:
-                sShowValue = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_SHOW_VALUE ):
+                    sShowValue = aIter.toString();
                 break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 
-    ScIconSetMap* pMap = ScIconSetFormat::getIconSetMap();
+    const ScIconSetMap* pMap = ScIconSetFormat::g_IconSetMap;
     ScIconSetType eType = IconSet_3Arrows;
     for(; pMap->pName; ++pMap)
     {
@@ -366,7 +591,7 @@ ScXMLIconSetFormatContext::ScXMLIconSetFormatContext(ScXMLImport& rImport, sal_u
     if(!sShowValue.isEmpty())
     {
         bool bShowValue = true;
-        sax::Converter::convertBool( bShowValue, sShowValue );
+        (void)sax::Converter::convertBool( bShowValue, sShowValue );
         pIconSetFormatData->mbShowValue = !bShowValue;
     }
 
@@ -377,20 +602,21 @@ ScXMLIconSetFormatContext::ScXMLIconSetFormatContext(ScXMLImport& rImport, sal_u
     mpFormatData = pIconSetFormatData;
 }
 
-SvXMLImportContext* ScXMLIconSetFormatContext::CreateChildContext( sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ScXMLIconSetFormatContext::createFastChildContext(
+    sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList )
 {
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetFormattingTokenMap();
-    sal_uInt16 nToken = rTokenMap.Get(nPrefix, rLocalName);
     SvXMLImportContext* pContext = nullptr;
-    switch (nToken)
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
+
+    switch (nElement)
     {
-        case XML_TOK_FORMATTING_ENTRY:
+        case XML_ELEMENT( CALC_EXT, XML_FORMATTING_ENTRY ):
             {
                 ScColorScaleEntry* pEntry(nullptr);
-                pContext = new ScXMLFormattingEntryContext( GetScImport(), nPrefix, rLocalName, xAttrList, pEntry );
+                pContext = new ScXMLFormattingEntryContext( GetScImport(), pAttribList, pEntry );
                 mpFormatData->m_Entries.push_back(std::unique_ptr<ScColorScaleEntry>(pEntry));
+                pEntry->SetRepaintCallback(mpParent);
             }
             break;
         default:
@@ -406,11 +632,11 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
 {
     if(rValue.startsWith("unique"))
     {
-        eMode = SC_COND_NOTDUPLICATE;
+        eMode = ScConditionMode::NotDuplicate;
     }
     else if(rValue.startsWith("duplicate"))
     {
-        eMode = SC_COND_DUPLICATE;
+        eMode = ScConditionMode::Duplicate;
     }
     else if(rValue.startsWith("between"))
     {
@@ -419,7 +645,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ',');
         rExpr2 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_BETWEEN;
+        eMode = ScConditionMode::Between;
     }
     else if(rValue.startsWith("not-between"))
     {
@@ -428,37 +654,37 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ',');
         rExpr2 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_NOTBETWEEN;
+        eMode = ScConditionMode::NotBetween;
     }
     else if(rValue.startsWith("<="))
     {
         rExpr1 = rValue.copy(2);
-        eMode = SC_COND_EQLESS;
+        eMode = ScConditionMode::EqLess;
     }
     else if(rValue.startsWith(">="))
     {
         rExpr1 = rValue.copy(2);
-        eMode = SC_COND_EQGREATER;
+        eMode = ScConditionMode::EqGreater;
     }
     else if(rValue.startsWith("!="))
     {
         rExpr1 = rValue.copy(2);
-        eMode = SC_COND_NOTEQUAL;
+        eMode = ScConditionMode::NotEqual;
     }
     else if(rValue.startsWith("<"))
     {
         rExpr1 = rValue.copy(1);
-        eMode = SC_COND_LESS;
+        eMode = ScConditionMode::Less;
     }
     else if(rValue.startsWith("="))
     {
         rExpr1 = rValue.copy(1);
-        eMode = SC_COND_EQUAL;
+        eMode = ScConditionMode::Equal;
     }
     else if(rValue.startsWith(">"))
     {
         rExpr1 = rValue.copy(1);
-        eMode = SC_COND_GREATER;
+        eMode = ScConditionMode::Greater;
     }
     else if(rValue.startsWith("formula-is"))
     {
@@ -466,7 +692,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pStart = pStr + 11;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_DIRECT;
+        eMode = ScConditionMode::Direct;
     }
     else if(rValue.startsWith("top-elements"))
     {
@@ -474,7 +700,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pStart = pStr + 13;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_TOP10;
+        eMode = ScConditionMode::Top10;
     }
     else if(rValue.startsWith("bottom-elements"))
     {
@@ -482,7 +708,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pStart = pStr + 16;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_BOTTOM10;
+        eMode = ScConditionMode::Bottom10;
     }
     else if(rValue.startsWith("top-percent"))
     {
@@ -490,7 +716,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pStart = pStr + 12;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_TOP_PERCENT;
+        eMode = ScConditionMode::TopPercent;
     }
     else if(rValue.startsWith("bottom-percent"))
     {
@@ -498,35 +724,35 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
         const sal_Unicode* pStart = pStr + 15;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
-        eMode = SC_COND_BOTTOM_PERCENT;
+        eMode = ScConditionMode::BottomPercent;
     }
     else if(rValue.startsWith("above-average"))
     {
-        eMode = SC_COND_ABOVE_AVERAGE;
+        eMode = ScConditionMode::AboveAverage;
     }
     else if(rValue.startsWith("below-average"))
     {
-        eMode = SC_COND_BELOW_AVERAGE;
+        eMode = ScConditionMode::BelowAverage;
     }
     else if(rValue.startsWith("above-equal-average"))
     {
-        eMode = SC_COND_ABOVE_EQUAL_AVERAGE;
+        eMode = ScConditionMode::AboveEqualAverage;
     }
     else if(rValue.startsWith("below-equal-average"))
     {
-        eMode = SC_COND_BELOW_EQUAL_AVERAGE;
+        eMode = ScConditionMode::BelowEqualAverage;
     }
     else if(rValue.startsWith("is-error"))
     {
-        eMode = SC_COND_ERROR;
+        eMode = ScConditionMode::Error;
     }
     else if(rValue.startsWith("is-no-error"))
     {
-        eMode = SC_COND_NOERROR;
+        eMode = ScConditionMode::NoError;
     }
     else if(rValue.startsWith("begins-with"))
     {
-        eMode = SC_COND_BEGINS_WITH;
+        eMode = ScConditionMode::BeginsWith;
         const sal_Unicode* pStr = rValue.getStr();
         const sal_Unicode* pStart = pStr + 12;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
@@ -534,7 +760,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
     }
     else if(rValue.startsWith("ends-with"))
     {
-        eMode = SC_COND_ENDS_WITH;
+        eMode = ScConditionMode::EndsWith;
         const sal_Unicode* pStr = rValue.getStr();
         const sal_Unicode* pStart = pStr + 10;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
@@ -542,7 +768,7 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
     }
     else if(rValue.startsWith("contains-text"))
     {
-        eMode = SC_COND_CONTAINS_TEXT;
+        eMode = ScConditionMode::ContainsText;
         const sal_Unicode* pStr = rValue.getStr();
         const sal_Unicode* pStart = pStr + 14;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
@@ -550,51 +776,45 @@ void GetConditionData(const OUString& rValue, ScConditionMode& eMode, OUString& 
     }
     else if(rValue.startsWith("not-contains-text"))
     {
-        eMode = SC_COND_NOT_CONTAINS_TEXT;
+        eMode = ScConditionMode::NotContainsText;
         const sal_Unicode* pStr = rValue.getStr();
         const sal_Unicode* pStart = pStr + 18;
         const sal_Unicode* pEnd = pStr + rValue.getLength();
         rExpr1 = ScXMLConditionHelper::getExpression( pStart, pEnd, ')');
     }
     else
-        eMode = SC_COND_NONE;
+        eMode = ScConditionMode::NONE;
 }
 
 }
 
-ScXMLCondContext::ScXMLCondContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
+ScXMLCondContext::ScXMLCondContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScConditionalFormat* pFormat ):
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     OUString sExpression;
     OUString sStyle;
     OUString sAddress;
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetConditionAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_CONDITION_VALUE:
-                sExpression = sValue;
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_VALUE ):
+                    sExpression = aIter.toString();
                 break;
-            case XML_TOK_CONDITION_APPLY_STYLE_NAME:
-                sStyle = ScStyleNameConversion::ProgrammaticToDisplayName(sValue, SFX_STYLE_FAMILY_PARA );
+                case XML_ELEMENT( CALC_EXT, XML_APPLY_STYLE_NAME ):
+                    sStyle = ScStyleNameConversion::ProgrammaticToDisplayName(aIter.toString(), SfxStyleFamily::Para );
                 break;
-            case XML_TOK_CONDITION_BASE_CELL_ADDRESS:
-                sAddress = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_BASE_CELL_ADDRESS ):
+                    sAddress = aIter.toString();
                 break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 
@@ -637,12 +857,10 @@ void setColorEntryType(const OUString& rType, ScColorScaleEntry* pEntry, const O
 
 }
 
-ScXMLColorScaleFormatEntryContext::ScXMLColorScaleFormatEntryContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
+ScXMLColorScaleFormatEntryContext::ScXMLColorScaleFormatEntryContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScColorScaleFormat* pFormat):
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    mpFormatEntry( nullptr )
+    ScXMLImportContext( rImport )
 {
     double nVal = 0;
     Color aColor;
@@ -651,73 +869,60 @@ ScXMLColorScaleFormatEntryContext::ScXMLColorScaleFormatEntryContext( ScXMLImpor
     OUString sVal;
     OUString sColor;
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetColorScaleEntryAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_COLORSCALEENTRY_TYPE:
-                sType = sValue;
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_TYPE ):
+                    sType = aIter.toString();
                 break;
-            case XML_TOK_COLORSCALEENTRY_VALUE:
-                sVal = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_VALUE ):
+                    sVal = aIter.toString();
                 break;
-            case XML_TOK_COLORSCALEENTRY_COLOR:
-                sColor = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_COLOR ):
+                    sColor = aIter.toString();
                 break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 
-    sal_Int32 nColor;
-    sax::Converter::convertColor(nColor, sColor);
-    aColor = Color(nColor);
+    sax::Converter::convertColor(aColor, sColor);
 
     if(!sVal.isEmpty())
         sax::Converter::convertDouble(nVal, sVal);
 
-    mpFormatEntry = new ScColorScaleEntry(nVal, aColor);
-    setColorEntryType(sType, mpFormatEntry, sVal, GetScImport());
-    pFormat->AddEntry(mpFormatEntry);
+    auto pFormatEntry = new ScColorScaleEntry(nVal, aColor);
+    setColorEntryType(sType, pFormatEntry, sVal, GetScImport());
+    pFormat->AddEntry(pFormatEntry);
 }
 
-ScXMLFormattingEntryContext::ScXMLFormattingEntryContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
+ScXMLFormattingEntryContext::ScXMLFormattingEntryContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScColorScaleEntry*& pColorScaleEntry):
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     OUString sVal;
     OUString sType;
 
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataBarEntryAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATABARENTRY_TYPE:
-                sType = sValue;
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_TYPE ):
+                    sType = aIter.toString();
                 break;
-            case XML_TOK_DATABARENTRY_VALUE:
-                sVal = sValue;
+                case XML_ELEMENT( CALC_EXT, XML_VALUE ):
+                    sVal = aIter.toString();
                 break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 
@@ -766,33 +971,27 @@ condformat::ScCondFormatDateType getDateFromString(const OUString& rString)
 
 }
 
-ScXMLDateContext::ScXMLDateContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
+ScXMLDateContext::ScXMLDateContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScConditionalFormat* pFormat ):
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     OUString sDateType, sStyle;
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetCondDateAttrMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                    sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_COND_DATE_VALUE:
-                sDateType = sValue;
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( CALC_EXT, XML_DATE ):
+                    sDateType = aIter.toString();
                 break;
-            case XML_TOK_COND_DATE_STYLE:
-                sStyle = ScStyleNameConversion::ProgrammaticToDisplayName(sValue, SFX_STYLE_FAMILY_PARA );
+                case XML_ELEMENT( CALC_EXT, XML_STYLE ):
+                    sStyle = ScStyleNameConversion::ProgrammaticToDisplayName(aIter.toString(), SfxStyleFamily::Para );
                 break;
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 

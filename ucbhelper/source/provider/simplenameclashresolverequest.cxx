@@ -45,8 +45,7 @@ public:
 
     // XInterface
     virtual css::uno::Any SAL_CALL
-    queryInterface( const css::uno::Type & rType )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    queryInterface( const css::uno::Type & rType ) override;
     virtual void SAL_CALL acquire()
         throw() override;
     virtual void SAL_CALL release()
@@ -54,19 +53,15 @@ public:
 
     // XTypeProvider
     virtual css::uno::Sequence< css::uno::Type > SAL_CALL
-    getTypes()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    getTypes() override;
     virtual css::uno::Sequence< sal_Int8 > SAL_CALL
-    getImplementationId()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    getImplementationId() override;
 
     // XInteractionContinuation
-    virtual void SAL_CALL select()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL select() override;
 
     // XInteractionSupplyName
-    virtual void SAL_CALL setName( const OUString& Name )
-        throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setName( const OUString& Name ) override;
 
     // Non-interface methods.
 
@@ -93,7 +88,6 @@ void SAL_CALL InteractionSupplyName::release()
 
 uno::Any SAL_CALL
 InteractionSupplyName::queryInterface( const uno::Type & rType )
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Any aRet = cppu::queryInterface( rType,
                 static_cast< lang::XTypeProvider * >( this ),
@@ -105,38 +99,26 @@ InteractionSupplyName::queryInterface( const uno::Type & rType )
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL InteractionSupplyName::getImplementationId()
-    throw( uno::RuntimeException, std::exception )
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 uno::Sequence< uno::Type > SAL_CALL InteractionSupplyName::getTypes()
-    throw( uno::RuntimeException, std::exception )
 {
-    static cppu::OTypeCollection* pCollection = nullptr;
-      if ( !pCollection )
-      {
-        osl::Guard< osl::Mutex > aGuard( osl::Mutex::getGlobalMutex() );
-        if ( !pCollection )
-        {
-            static cppu::OTypeCollection collection(
+    static cppu::OTypeCollection s_aCollection(
                 cppu::UnoType<lang::XTypeProvider>::get(),
                 cppu::UnoType<ucb::XInteractionSupplyName>::get() );
-            pCollection = &collection;
-        }
-    }
-    return (*pCollection).getTypes();
+
+    return s_aCollection.getTypes();
 }
 
 void SAL_CALL InteractionSupplyName::select()
-    throw( uno::RuntimeException, std::exception )
 {
     recordSelection();
 }
 
 void SAL_CALL
 InteractionSupplyName::setName( const OUString& Name )
-    throw( uno::RuntimeException, std::exception )
 {
     m_aName = Name;
 }
@@ -145,8 +127,7 @@ SimpleNameClashResolveRequest::~SimpleNameClashResolveRequest() {}
 
 SimpleNameClashResolveRequest::SimpleNameClashResolveRequest(
                                     const OUString & rTargetFolderURL,
-                                    const OUString & rClashingName,
-                                    const OUString & rProposedNewName )
+                                    const OUString & rClashingName )
 {
     // Fill request...
     ucb::NameClashResolveRequest aRequest;
@@ -155,7 +136,7 @@ SimpleNameClashResolveRequest::SimpleNameClashResolveRequest(
     aRequest.Classification  = task::InteractionClassification_QUERY;
     aRequest.TargetFolderURL = rTargetFolderURL;
     aRequest.ClashingName    = rClashingName;
-    aRequest.ProposedNewName = rProposedNewName;
+    aRequest.ProposedNewName = OUString();
 
     setRequest( uno::makeAny( aRequest ) );
 
@@ -171,7 +152,7 @@ SimpleNameClashResolveRequest::SimpleNameClashResolveRequest(
     setContinuations( aContinuations );
 }
 
-const OUString SimpleNameClashResolveRequest::getNewName() const
+OUString const & SimpleNameClashResolveRequest::getNewName() const
 {
     return m_xNameSupplier->getName();
 }

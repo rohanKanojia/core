@@ -19,7 +19,6 @@
 
 #include <dbaccess/AsynchronousLink.hxx>
 #include <vcl/svapp.hxx>
-#include <tools/debug.hxx>
 
 // OAsynchronousLink
 using namespace dbaui;
@@ -65,7 +64,7 @@ void OAsynchronousLink::CancelCall()
     m_nEventId = nullptr;
 }
 
-IMPL_LINK_TYPED(OAsynchronousLink, OnAsyncCall, void*, _pArg, void)
+IMPL_LINK(OAsynchronousLink, OnAsyncCall, void*, _pArg, void)
 {
     {
         ::osl::MutexGuard aDestructionGuard( m_aDestructionSafety );

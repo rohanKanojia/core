@@ -36,17 +36,16 @@ class CheckNamedPropertyValues(unittest.TestCase):
         cls._uno = UnoInProcess()
         cls._uno.setUp()
         cls.xContext = cls._uno.getContext()
-        cls.xDoc = cls._uno.openEmptyWriterDoc()
 
     @classmethod
     def tearDownClass(cls):
         cls._uno.tearDown()
 
-
     def test_checkNamedPropertyValues(self):
 
         xServiceManager = self.xContext.ServiceManager
-        xCont = xServiceManager.createInstanceWithContext('com.sun.star.document.NamedPropertyValues', self.xContext)
+        xCont = xServiceManager.createInstanceWithContext('com.sun.star.document.NamedPropertyValues',
+                                                          self.xContext)
 
         p1 = PropertyValue(Name="Jupp", Value="GoodGuy")
         prop1 = uno.Any("[]com.sun.star.beans.PropertyValue", (p1,))
@@ -82,9 +81,7 @@ class CheckNamedPropertyValues(unittest.TestCase):
             uno.invoke(xCont, "insertByName", ("prop2", prop1))
 
         with self.assertRaises(IllegalArgumentException):
-            uno.invoke(xCont, "insertByName",("prop3", "Example String"))
+            uno.invoke(xCont, "insertByName", ("prop3", "Example String"))
 
         with self.assertRaises(NoSuchElementException):
             xCont.removeByName("prop3")
-
-

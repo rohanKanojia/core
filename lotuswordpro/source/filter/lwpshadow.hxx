@@ -60,8 +60,8 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSHADOW_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSHADOW_HXX
 
-#include "lwpcolor.hxx"
-#include "lwptools.hxx"
+#include <lwpcolor.hxx>
+#include <lwptools.hxx>
 
 class LwpShadow
 {
@@ -80,9 +80,7 @@ public:
 
     double  GetOffsetY();
 
-    LwpColor GetColor();
-
-    inline LwpShadow& operator = (const LwpShadow& rOther);
+    const LwpColor& GetColor();
 
 private:
     LwpColor        m_aColor;
@@ -101,18 +99,11 @@ inline double   LwpShadow::GetOffsetY()
     return LwpTools::ConvertFromUnitsToMetric(m_nDirY);
 }
 
-inline LwpColor LwpShadow::GetColor()
+inline const LwpColor& LwpShadow::GetColor()
 {
     return m_aColor;
 }
 
-inline LwpShadow& LwpShadow::operator = (const LwpShadow& rOther)
-{
-    m_aColor = rOther.m_aColor;
-    m_nDirX = rOther.m_nDirX;
-    m_nDirY = rOther.m_nDirY;
-    return *this;
-}
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

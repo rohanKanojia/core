@@ -20,42 +20,40 @@
 #ifndef INCLUDED_SVX_XBITMAP_HXX
 #define INCLUDED_SVX_XBITMAP_HXX
 
+#include <memory>
 #include <tools/color.hxx>
 #include <vcl/bitmap.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <svx/xenum.hxx>
 #include <svx/svxdllapi.h>
 
 class SVX_DLLPUBLIC XOBitmap
 {
 private:
-    XBitmapType     eType;
-    GraphicObject   aGraphicObject;
-    sal_uInt16*     pPixelArray;
-    Size            aArraySize;
+    std::unique_ptr<GraphicObject> xGraphicObject;
+    std::unique_ptr<sal_uInt16[]>  pPixelArray;
     Color           aPixelColor;
     Color           aBckgrColor;
     bool            bGraphicDirty;
 
     const GraphicObject& GetGraphicObject() const;
 
-public:
-    XOBitmap( const Bitmap& rBitmap );
-    XOBitmap( const XOBitmap& rXBmp );
-    ~XOBitmap();
+    XOBitmap(const XOBitmap& rXBmp) = delete;
+    XOBitmap& operator=(const XOBitmap& rXOBitmap) = delete;
 
-    XOBitmap& operator=( const XOBitmap& rXOBitmap );
+
+public:
+    XOBitmap( const BitmapEx& rBitmap );
+    ~XOBitmap();
 
     void Bitmap2Array();
     void Array2Bitmap();
 
-    void SetBitmapType( XBitmapType eNewType )          { eType = eNewType; }
     void SetPixelColor( const Color& rColor )           { aPixelColor = rColor; bGraphicDirty = true; }
-    void SetPixelSize( const Size& rSize )              { aArraySize  = rSize;  bGraphicDirty = true; }
     void SetBackgroundColor( const Color& rColor )      { aBckgrColor = rColor; bGraphicDirty = true; }
 
-    Bitmap                  GetBitmap() const;
-    Color                   GetBackgroundColor() const  { return aBckgrColor; }
+    BitmapEx                GetBitmap() const;
+    const Color&            GetBackgroundColor() const  { return aBckgrColor; }
 };
 
 #endif

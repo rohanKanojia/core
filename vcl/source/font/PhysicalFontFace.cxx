@@ -21,10 +21,10 @@
 #include <tools/fontenum.hxx>
 #include <unotools/fontdefs.hxx>
 
-#include "fontinstance.hxx"
-#include "fontattributes.hxx"
+#include <fontinstance.hxx>
+#include <fontattributes.hxx>
 
-#include "PhysicalFontFace.hxx"
+#include <PhysicalFontFace.hxx>
 
 PhysicalFontFace::PhysicalFontFace( const FontAttributes& rDFA )
     : FontAttributes( rDFA )
@@ -111,11 +111,11 @@ bool PhysicalFontFace::IsBetterMatch( const FontSelectPattern& rFSD, FontMatchSt
         // if not bold or requiring emboldening prefer light fonts to bold fonts
         FontWeight ePatternWeight = rFSD.mbEmbolden ? WEIGHT_NORMAL : rFSD.GetWeight();
 
-        int nReqWeight = (int)ePatternWeight;
+        int nReqWeight = static_cast<int>(ePatternWeight);
         if ( ePatternWeight > WEIGHT_MEDIUM )
             nReqWeight += 100;
 
-        int nGivenWeight = (int)GetWeight();
+        int nGivenWeight = static_cast<int>(GetWeight());
         if( GetWeight() > WEIGHT_MEDIUM )
             nGivenWeight += 100;
 
@@ -158,45 +158,15 @@ bool PhysicalFontFace::IsBetterMatch( const FontSelectPattern& rFSD, FontMatchSt
             nMatch += 600;
     }
 
-    if( IsBuiltInFont() )
-        nMatch += 1;
-
     int nHeightMatch = 0;
     int nWidthMatch = 0;
 
-    if( IsScalable() )
-    {
-        if( rFSD.mnOrientation != 0 )
-            nMatch += 80;
-        else if( rFSD.mnWidth != 0 )
-            nMatch += 25;
-        else
-            nMatch += 5;
-    }
+    if( rFSD.mnOrientation != 0 )
+        nMatch += 80;
+    else if( rFSD.mnWidth != 0 )
+        nMatch += 25;
     else
-    {
-        if( rFSD.mnHeight == mnHeight )
-        {
-            nMatch += 20;
-            if( rFSD.mnWidth == mnWidth )
-                nMatch += 10;
-        }
-        else
-        {
-            // for non-scalable fonts the size difference is very important
-            // prefer the smaller font face because of clipping/overlapping issues
-            int nHeightDiff = (rFSD.mnHeight - mnHeight) * 1000;
-            nHeightMatch = (nHeightDiff >= 0) ? -nHeightDiff : 100+nHeightDiff;
-            if( rFSD.mnHeight )
-                nHeightMatch /= rFSD.mnHeight;
-
-            if( (rFSD.mnWidth != 0) && (mnWidth != 0) && (rFSD.mnWidth != mnWidth) )
-            {
-                int nWidthDiff = (rFSD.mnWidth - mnWidth) * 100;
-                nWidthMatch = (nWidthDiff >= 0) ? -nWidthDiff : +nWidthDiff;
-            }
-        }
-    }
+        nMatch += 5;
 
     if( rStatus.mnFaceMatch > nMatch )
         return false;

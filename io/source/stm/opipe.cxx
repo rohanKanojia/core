@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
-// streams
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/XPipe.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
@@ -34,6 +35,7 @@
 #include <osl/mutex.hxx>
 
 #include <limits>
+#include <memory>
 #include <string.h>
 
 using namespace ::osl;
@@ -42,7 +44,7 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::lang;
 
-#include "services.hxx"
+#include <services.hxx>
 #include "streamhelper.hxx"
 
 // Implementation and service names
@@ -55,56 +57,31 @@ class OPipeImpl :
 {
 public:
     OPipeImpl( );
-    virtual ~OPipeImpl();
 
 public: // XInputStream
-    virtual sal_Int32 SAL_CALL readBytes(Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead)
-        throw(  NotConnectedException,
-                BufferSizeExceededException,
-                RuntimeException, std::exception ) override;
-    virtual sal_Int32 SAL_CALL readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead)
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               RuntimeException, std::exception ) override;
-    virtual void SAL_CALL skipBytes(sal_Int32 nBytesToSkip)
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               RuntimeException, std::exception ) override;
-    virtual sal_Int32 SAL_CALL available()
-        throw( NotConnectedException,
-               RuntimeException, std::exception ) override;
-    virtual void SAL_CALL closeInput()
-        throw( NotConnectedException,
-               RuntimeException, std::exception ) override;
+    virtual sal_Int32 SAL_CALL readBytes(Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead) override;
+    virtual sal_Int32 SAL_CALL readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead) override;
+    virtual void SAL_CALL skipBytes(sal_Int32 nBytesToSkip) override;
+    virtual sal_Int32 SAL_CALL available() override;
+    virtual void SAL_CALL closeInput() override;
 
 public: // XOutputStream
 
-    virtual void SAL_CALL writeBytes(const Sequence< sal_Int8 >& aData)
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               RuntimeException, std::exception ) override;
-    virtual void SAL_CALL flush()
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               RuntimeException, std::exception ) override;
-    virtual void SAL_CALL closeOutput()
-        throw( NotConnectedException,
-               BufferSizeExceededException,
-               RuntimeException, std::exception ) override;
+    virtual void SAL_CALL writeBytes(const Sequence< sal_Int8 >& aData) override;
+    virtual void SAL_CALL flush() override;
+    virtual void SAL_CALL closeOutput() override;
 
 public: // XConnectable
-    virtual void SAL_CALL setPredecessor(const Reference< XConnectable >& aPredecessor)
-        throw( RuntimeException, std::exception ) override;
-    virtual Reference< XConnectable > SAL_CALL getPredecessor() throw( RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setSuccessor(const Reference < XConnectable > & aSuccessor)
-        throw( RuntimeException, std::exception ) override;
-    virtual Reference < XConnectable > SAL_CALL getSuccessor() throw( RuntimeException, std::exception ) override ;
+    virtual void SAL_CALL setPredecessor(const Reference< XConnectable >& aPredecessor) override;
+    virtual Reference< XConnectable > SAL_CALL getPredecessor() override;
+    virtual void SAL_CALL setSuccessor(const Reference < XConnectable > & aSuccessor) override;
+    virtual Reference < XConnectable > SAL_CALL getSuccessor() override ;
 
 
 public: // XServiceInfo
-    OUString                    SAL_CALL getImplementationName() throw(std::exception  ) override;
-    Sequence< OUString >         SAL_CALL getSupportedServiceNames() throw(std::exception  ) override;
-    sal_Bool                        SAL_CALL supportsService(const OUString& ServiceName) throw(std::exception  ) override;
+    OUString                    SAL_CALL getImplementationName() override;
+    Sequence< OUString >         SAL_CALL getSupportedServiceNames() override;
+    sal_Bool                        SAL_CALL supportsService(const OUString& ServiceName) override;
 
 private:
 
@@ -118,28 +95,21 @@ private:
 
     osl::Condition m_conditionBytesAvail;
     Mutex          m_mutexAccess;
-    MemFIFO       *m_pFIFO;
+    std::unique_ptr<MemFIFO> m_pFIFO;
 };
 
 
 OPipeImpl::OPipeImpl()
+    : m_nBytesToSkip(0 )
+    , m_bOutputStreamClosed(false )
+    , m_bInputStreamClosed( false )
+    , m_pFIFO( new MemFIFO )
 {
-    m_nBytesToSkip  = 0;
-
-    m_bOutputStreamClosed   = false;
-    m_bInputStreamClosed    = false;
-
-    m_pFIFO = new MemFIFO;
 }
 
-OPipeImpl::~OPipeImpl()
-{
-    delete m_pFIFO;
-}
 
 
 sal_Int32 OPipeImpl::readBytes(Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead)
-    throw( NotConnectedException, BufferSizeExceededException,RuntimeException, std::exception )
 {
     while( true )
     {
@@ -177,9 +147,6 @@ sal_Int32 OPipeImpl::readBytes(Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRe
 
 
 sal_Int32 OPipeImpl::readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead)
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           RuntimeException, std::exception )
 {
     while( true ) {
         {
@@ -192,7 +159,7 @@ sal_Int32 OPipeImpl::readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBy
             }
             if( m_pFIFO->getSize() )
             {
-                sal_Int32 nSize = Min( nMaxBytesToRead , m_pFIFO->getSize() );
+                sal_Int32 nSize = std::min( nMaxBytesToRead , m_pFIFO->getSize() );
                 aData.realloc( nSize );
                 m_pFIFO->read( aData , nSize );
                 return nSize;
@@ -211,9 +178,6 @@ sal_Int32 OPipeImpl::readSomeBytes(Sequence< sal_Int8 >& aData, sal_Int32 nMaxBy
 
 
 void OPipeImpl::skipBytes(sal_Int32 nBytesToSkip)
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           RuntimeException, std::exception )
 {
     MutexGuard guard( m_mutexAccess );
     if( m_bInputStreamClosed )
@@ -233,15 +197,13 @@ void OPipeImpl::skipBytes(sal_Int32 nBytesToSkip)
     }
     m_nBytesToSkip += nBytesToSkip;
 
-    nBytesToSkip = Min( m_pFIFO->getSize() , m_nBytesToSkip );
+    nBytesToSkip = std::min( m_pFIFO->getSize() , m_nBytesToSkip );
     m_pFIFO->skip( nBytesToSkip );
     m_nBytesToSkip -= nBytesToSkip;
 }
 
 
 sal_Int32 OPipeImpl::available()
-    throw( NotConnectedException,
-           RuntimeException, std::exception )
  {
     MutexGuard guard( m_mutexAccess );
     if( m_bInputStreamClosed )
@@ -254,28 +216,21 @@ sal_Int32 OPipeImpl::available()
 }
 
 void OPipeImpl::closeInput()
-    throw( NotConnectedException,
-           RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutexAccess );
 
     m_bInputStreamClosed = true;
 
-    delete m_pFIFO;
-    m_pFIFO = nullptr;
+    m_pFIFO.reset();
 
     // readBytes may throw an exception
     m_conditionBytesAvail.set();
 
     setSuccessor( Reference< XConnectable > () );
-    return;
 }
 
 
 void OPipeImpl::writeBytes(const Sequence< sal_Int8 >& aData)
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutexAccess );
 
@@ -320,30 +275,21 @@ void OPipeImpl::writeBytes(const Sequence< sal_Int8 >& aData)
 
 
 void OPipeImpl::flush()
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           RuntimeException, std::exception)
 {
     // nothing to do for a pipe
-    return;
 }
 
 void OPipeImpl::closeOutput()
-    throw( NotConnectedException,
-           BufferSizeExceededException,
-           RuntimeException, std::exception)
 {
     MutexGuard guard( m_mutexAccess );
 
     m_bOutputStreamClosed = true;
     m_conditionBytesAvail.set();
     setPredecessor( Reference < XConnectable > () );
-    return;
 }
 
 
 void OPipeImpl::setSuccessor( const Reference < XConnectable >  &r )
-    throw( RuntimeException, std::exception )
 {
      /// if the references match, nothing needs to be done
      if( m_succ != r ) {
@@ -353,12 +299,12 @@ void OPipeImpl::setSuccessor( const Reference < XConnectable >  &r )
          if( m_succ.is() )
          {
               m_succ->setPredecessor(
-                  Reference< XConnectable > ( (static_cast< XConnectable *  >(this)) ) );
+                  Reference< XConnectable > ( static_cast< XConnectable * >(this) ) );
          }
      }
 }
 
-Reference < XConnectable > OPipeImpl::getSuccessor()    throw( RuntimeException, std::exception )
+Reference < XConnectable > OPipeImpl::getSuccessor()
 {
     return m_succ;
 }
@@ -366,37 +312,36 @@ Reference < XConnectable > OPipeImpl::getSuccessor()    throw( RuntimeException,
 
 // XDataSource
 void OPipeImpl::setPredecessor( const Reference < XConnectable > &r )
-    throw( RuntimeException, std::exception )
 {
     if( r != m_pred ) {
         m_pred = r;
         if( m_pred.is() ) {
             m_pred->setSuccessor(
-                Reference < XConnectable > ( (static_cast< XConnectable *  >(this)) ) );
+                Reference < XConnectable > ( static_cast< XConnectable * >(this) ) );
         }
     }
 }
 
-Reference < XConnectable > OPipeImpl::getPredecessor() throw( RuntimeException, std::exception )
+Reference < XConnectable > OPipeImpl::getPredecessor()
 {
     return m_pred;
 }
 
 
 // XServiceInfo
-OUString OPipeImpl::getImplementationName() throw(std::exception  )
+OUString OPipeImpl::getImplementationName()
 {
     return OPipeImpl_getImplementationName();
 }
 
 // XServiceInfo
-sal_Bool OPipeImpl::supportsService(const OUString& ServiceName) throw(std::exception  )
+sal_Bool OPipeImpl::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > OPipeImpl::getSupportedServiceNames() throw(std::exception  )
+Sequence< OUString > OPipeImpl::getSupportedServiceNames()
 {
     return OPipeImpl_getSupportedServiceNames();
 }
@@ -407,13 +352,12 @@ Sequence< OUString > OPipeImpl::getSupportedServiceNames() throw(std::exception 
 */
 
 
-Reference < XInterface > SAL_CALL OPipeImpl_CreateInstance(
+Reference < XInterface > OPipeImpl_CreateInstance(
     SAL_UNUSED_PARAMETER const Reference < XComponentContext > & )
-    throw(Exception)
 {
     OPipeImpl *p = new OPipeImpl;
 
-    return Reference < XInterface > ( (static_cast< OWeakObject *  >(p)) );
+    return Reference < XInterface > ( static_cast< OWeakObject * >(p) );
 }
 
 

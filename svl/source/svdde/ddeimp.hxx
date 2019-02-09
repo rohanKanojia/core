@@ -20,6 +20,9 @@
 #ifndef INCLUDED_SVL_SOURCE_SVDDE_DDEIMP_HXX
 #define INCLUDED_SVL_SOURCE_SVDDE_DDEIMP_HXX
 
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <ddeml.h>
 
@@ -34,21 +37,20 @@ struct Conversation
     DdeTopic*   pTopic;
 };
 
-typedef ::std::vector< Conversation* > ConvList;
-
 
 class DdeInternal
 {
 public:
     static HDDEDATA CALLBACK CliCallback
-           ( WORD, WORD, HCONV, HSZ, HSZ, HDDEDATA, DWORD, DWORD );
+           ( UINT, UINT, HCONV, HSZ, HSZ, HDDEDATA, ULONG_PTR, ULONG_PTR );
     static HDDEDATA CALLBACK SvrCallback
-           ( WORD, WORD, HCONV, HSZ, HSZ, HDDEDATA, DWORD, DWORD );
-    static HDDEDATA CALLBACK InfCallback
-           ( WORD, WORD, HCONV, HSZ, HSZ, HDDEDATA, DWORD, DWORD );
+           ( UINT, UINT, HCONV, HSZ, HSZ, HDDEDATA, ULONG_PTR, ULONG_PTR );
     static DdeService*      FindService( HSZ );
     static DdeTopic*        FindTopic( DdeService&, HSZ );
     static DdeItem*         FindItem( DdeTopic&, HSZ );
+    static void DisconnectTopic(DdeTopic &, HCONV);
+    static void IncMonitor(DdeItem *pItem, HCONV);
+    static void DecMonitor(DdeItem *pItem, HCONV);
 };
 
 
@@ -61,12 +63,11 @@ protected:
     DWORD       hInst;
 
 public:
-                DdeString( DWORD, const sal_Unicode* );
                 DdeString( DWORD, const OUString& );
                 ~DdeString();
 
-    int         operator==( HSZ );
-                operator HSZ();
+    bool        operator==( HSZ );
+    HSZ getHSZ();
     OUString toOUString() const { return m_aString; }
 };
 
@@ -74,8 +75,8 @@ public:
 struct DdeDataImp
 {
     HDDEDATA        hData;
-    LPBYTE          pData;
-    long            nData;
+    void const *    pData;
+    DWORD           nData;
     SotClipboardFormatId nFmt;
 };
 
@@ -87,7 +88,6 @@ public:
     sal_uInt16          nRefCount;
     std::vector<DdeConnection*> aConnections;
     // Server
-    sal_IntPtr      hCurConvSvr;
     DWORD           hDdeInstSvr;
     short           nInstanceSvr;
     DdeServices*    pServicesSvr;
@@ -97,10 +97,9 @@ public:
 
     DdeInstData()
         : nRefCount(0)
-        , hCurConvSvr(0)
         , hDdeInstSvr(0)
         , nInstanceSvr(0)
-        , pServicesSvr(NULL)
+        , pServicesSvr(nullptr)
         , hDdeInstCli(0)
         , nInstanceCli(0)
     {

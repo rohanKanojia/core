@@ -17,20 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "chartview/DrawModelWrapper.hxx"
-#include "macros.hxx"
-#include "AbstractShapeFactory.hxx"
+#include <chartview/DrawModelWrapper.hxx>
+#include <ShapeFactory.hxx>
 #include "ChartItemPool.hxx"
-#include "ObjectIdentifier.hxx"
+#include <ObjectIdentifier.hxx>
 #include <svx/unomodel.hxx>
 #include <svl/itempool.hxx>
 #include <svl/eitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <svx/svx3ditems.hxx>
-#include <unotools/pathoptions.hxx>
 #include <svx/objfac3d.hxx>
 #include <svx/svdpage.hxx>
-#include <svx/XPropertyTable.hxx>
 #include <svx/xtable.hxx>
 #include <svx/svdoutl.hxx>
 #include <editeng/unolingu.hxx>
@@ -38,11 +35,9 @@
 #include <vcl/virdev.hxx>
 
 #include <com/sun/star/container/XChild.hpp>
-#include <com/sun/star/lang/XUnoTunnel.hpp>
 
-#include <sfx2/objsh.hxx>
-#include <com/sun/star/linguistic2/XHyphenator.hpp>
-#include <com/sun/star/linguistic2/XSpellChecker1.hpp>
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XHyphenator; } } } }
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XSpellChecker1; } } } }
 
 using namespace ::com::sun::star;
 
@@ -50,20 +45,18 @@ using namespace ::com::sun::star;
 namespace chart
 {
 
-DrawModelWrapper::DrawModelWrapper( const uno::Reference<uno::XComponentContext>& /*xContext*/ )
-        : SdrModel( SvtPathOptions().GetPalettePath(), nullptr, nullptr, false )
-        , m_pChartItemPool(nullptr)
-        , m_xMainDrawPage(nullptr)
-        , m_xHiddenDrawPage(nullptr)
+DrawModelWrapper::DrawModelWrapper()
+:   SdrModel()
+    , m_pChartItemPool(nullptr)
 {
     m_pChartItemPool = ChartItemPool::CreateChartItemPool();
 
-    SetScaleUnit(MAP_100TH_MM);
+    SetScaleUnit(MapUnit::Map100thMM);
     SetScaleFraction(Fraction(1, 1));
     SetDefaultFontHeight(423);     // 12pt
 
     SfxItemPool* pMasterPool = &GetItemPool();
-    pMasterPool->SetDefaultMetric(SFX_MAPUNIT_100TH_MM);
+    pMasterPool->SetDefaultMetric(MapUnit::Map100thMM);
     pMasterPool->SetPoolDefaultItem(SfxBoolItem(EE_PARA_HYPHENATE, true) );
     pMasterPool->SetPoolDefaultItem(makeSvx3DPercentDiagonalItem (5));
 
@@ -113,7 +106,7 @@ DrawModelWrapper::DrawModelWrapper( const uno::Reference<uno::XComponentContext>
     m_pRefDevice.disposeAndClear();
     m_pRefDevice = VclPtr<VirtualDevice>::Create(*pDefaultDevice);
     MapMode aMapMode = m_pRefDevice->GetMapMode();
-    aMapMode.SetMapUnit(MAP_100TH_MM);
+    aMapMode.SetMapUnit(MapUnit::Map100thMM);
     m_pRefDevice->SetMapMode(aMapMode);
     SetRefDevice(m_pRefDevice.get());
     rOutliner.SetRefDevice(m_pRefDevice.get());
@@ -148,7 +141,7 @@ uno::Reference< uno::XInterface > DrawModelWrapper::createUnoModel()
 
 uno::Reference< frame::XModel > DrawModelWrapper::getUnoModel()
 {
-    uno::Reference< uno::XInterface > xI = this->SdrModel::getUnoModel();
+    uno::Reference< uno::XInterface > xI = SdrModel::getUnoModel();
     return uno::Reference<frame::XModel>::query( xI );
 }
 
@@ -159,11 +152,11 @@ SdrModel& DrawModelWrapper::getSdrModel()
 
 uno::Reference< lang::XMultiServiceFactory > DrawModelWrapper::getShapeFactory()
 {
-    uno::Reference< lang::XMultiServiceFactory > xShapeFactory( this->getUnoModel(), uno::UNO_QUERY );
+    uno::Reference< lang::XMultiServiceFactory > xShapeFactory( getUnoModel(), uno::UNO_QUERY );
     return xShapeFactory;
 }
 
-uno::Reference< drawing::XDrawPage > DrawModelWrapper::getMainDrawPage()
+uno::Reference< drawing::XDrawPage > const & DrawModelWrapper::getMainDrawPage()
 {
     if (m_xMainDrawPage.is())
         return m_xMainDrawPage;
@@ -189,14 +182,14 @@ uno::Reference< drawing::XDrawPage > DrawModelWrapper::getMainDrawPage()
     //ensure that additional shapes are in front of the chart objects so create the chart root before
     // let us disable this call for now
     // TODO:moggi
-    // AbstractShapeFactory::getOrCreateShapeFactory(this->getShapeFactory())->getOrCreateChartRootShape( m_xMainDrawPage );
+    // ShapeFactory::getOrCreateShapeFactory(getShapeFactory())->getOrCreateChartRootShape( m_xMainDrawPage );
     return m_xMainDrawPage;
 }
-uno::Reference< drawing::XDrawPage > DrawModelWrapper::getHiddenDrawPage()
+uno::Reference< drawing::XDrawPage > const & DrawModelWrapper::getHiddenDrawPage()
 {
     if( !m_xHiddenDrawPage.is() )
     {
-        uno::Reference< drawing::XDrawPagesSupplier > xDrawPagesSuplier( this->getUnoModel(), uno::UNO_QUERY );
+        uno::Reference< drawing::XDrawPagesSupplier > xDrawPagesSuplier( getUnoModel(), uno::UNO_QUERY );
         if( xDrawPagesSuplier.is() )
         {
             uno::Reference< drawing::XDrawPages > xDrawPages( xDrawPagesSuplier->getDrawPages () );
@@ -219,7 +212,7 @@ uno::Reference< drawing::XDrawPage > DrawModelWrapper::getHiddenDrawPage()
 void DrawModelWrapper::clearMainDrawPage()
 {
     //uno::Reference<drawing::XShapes> xChartRoot( m_xMainDrawPage, uno::UNO_QUERY );
-    uno::Reference<drawing::XShapes> xChartRoot( AbstractShapeFactory::getChartRootShape( m_xMainDrawPage ) );
+    uno::Reference<drawing::XShapes> xChartRoot( ShapeFactory::getChartRootShape( m_xMainDrawPage ) );
     if( xChartRoot.is() )
     {
         sal_Int32 nSubCount = xChartRoot->getCount();
@@ -235,18 +228,18 @@ void DrawModelWrapper::clearMainDrawPage()
 uno::Reference< drawing::XShapes > DrawModelWrapper::getChartRootShape(
     const uno::Reference< drawing::XDrawPage>& xDrawPage )
 {
-    return AbstractShapeFactory::getChartRootShape( xDrawPage );
+    return ShapeFactory::getChartRootShape( xDrawPage );
 }
 
 void DrawModelWrapper::lockControllers()
 {
-    uno::Reference< frame::XModel > xDrawModel( this->getUnoModel() );
+    uno::Reference< frame::XModel > xDrawModel( getUnoModel() );
     if( xDrawModel.is())
         xDrawModel->lockControllers();
 }
 void DrawModelWrapper::unlockControllers()
 {
-    uno::Reference< frame::XModel > xDrawModel( this->getUnoModel() );
+    uno::Reference< frame::XModel > xDrawModel( getUnoModel() );
     if( xDrawModel.is())
         xDrawModel->unlockControllers();
 }
@@ -258,31 +251,36 @@ OutputDevice* DrawModelWrapper::getReferenceDevice() const
 
 SfxItemPool& DrawModelWrapper::GetItemPool()
 {
-    return this->SdrModel::GetItemPool();
+    return SdrModel::GetItemPool();
 }
 XColorListRef DrawModelWrapper::GetColorList() const
 {
-    return this->SdrModel::GetColorList();
+    return SdrModel::GetColorList();
 }
 XDashListRef DrawModelWrapper::GetDashList() const
 {
-    return this->SdrModel::GetDashList();
+    return SdrModel::GetDashList();
 }
 XLineEndListRef DrawModelWrapper::GetLineEndList() const
 {
-    return this->SdrModel::GetLineEndList();
+    return SdrModel::GetLineEndList();
 }
 XGradientListRef DrawModelWrapper::GetGradientList() const
 {
-    return this->SdrModel::GetGradientList();
+    return SdrModel::GetGradientList();
 }
 XHatchListRef DrawModelWrapper::GetHatchList() const
 {
-    return this->SdrModel::GetHatchList();
+    return SdrModel::GetHatchList();
 }
 XBitmapListRef DrawModelWrapper::GetBitmapList() const
 {
-    return this->SdrModel::GetBitmapList();
+    return SdrModel::GetBitmapList();
+}
+
+XPatternListRef DrawModelWrapper::GetPatternList() const
+{
+    return SdrModel::GetPatternList();
 }
 
 SdrObject* DrawModelWrapper::getNamedSdrObject( const OUString& rName )
@@ -292,7 +290,7 @@ SdrObject* DrawModelWrapper::getNamedSdrObject( const OUString& rName )
     return getNamedSdrObject( rName, GetPage(0) );
 }
 
-SdrObject* DrawModelWrapper::getNamedSdrObject( const OUString& rObjectCID, SdrObjList* pSearchList )
+SdrObject* DrawModelWrapper::getNamedSdrObject( const OUString& rObjectCID, SdrObjList const * pSearchList )
 {
     if(!pSearchList || rObjectCID.isEmpty())
         return nullptr;

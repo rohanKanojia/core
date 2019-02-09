@@ -27,18 +27,18 @@ namespace oox { namespace drawingml {
 
 struct LineProperties;
 
-class LinePropertiesContext : public ::oox::core::ContextHandler2
+class LinePropertiesContext final : public ::oox::core::ContextHandler2
 {
 public:
-    LinePropertiesContext( ::oox::core::ContextHandler2Helper& rParent,
+    LinePropertiesContext( ::oox::core::ContextHandler2Helper const & rParent,
             const ::oox::AttributeList& rAttributes,
             LineProperties& rLineProperties ) throw();
-    virtual ~LinePropertiesContext();
+    virtual ~LinePropertiesContext() override;
 
     virtual ::oox::core::ContextHandlerRef
         onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
-protected:
+private:
     LineProperties& mrLineProperties;
 };
 

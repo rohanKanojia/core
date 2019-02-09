@@ -13,11 +13,11 @@
  manual changes will be rewritten by the next run of update_pch.sh (which presumably
  also fixes all possible problems, so it's usually better to use it).
 
- Generated on 2015-11-14 14:16:43 using:
+ Generated on 2017-09-20 22:54:18 using:
  ./bin/update_pch svx svxcore --cutoff=7 --exclude:system --include:module --exclude:local
 
  If after updating build fails, use the following command to locate conflicting headers:
- ./bin/update_pch_bisect ./svx/inc/pch/precompiled_svxcore.hxx "/opt/lo/bin/make svx.build" --find-conflicts
+ ./bin/update_pch_bisect ./svx/inc/pch/precompiled_svxcore.hxx "make svx.build" --find-conflicts
 */
 
 #include <algorithm>
@@ -30,11 +30,14 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <float.h>
 #include <functional>
 #include <iomanip>
 #include <limits.h>
+#include <limits>
 #include <list>
+#include <locale>
 #include <map>
 #include <math.h>
 #include <memory>
@@ -49,10 +52,9 @@
 #include <type_traits>
 #include <typeinfo>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
-#include <boost/assign/list_of.hpp>
-#include <boost/intrusive_ptr.hpp>
 #include <boost/optional.hpp>
 #include <boost/optional/optional.hpp>
 #include <osl/conditn.h>
@@ -74,9 +76,11 @@
 #include <rtl/character.hxx>
 #include <rtl/crc.h>
 #include <rtl/instance.hxx>
+#include <rtl/locale.h>
 #include <rtl/math.h>
 #include <rtl/math.hxx>
 #include <rtl/ref.hxx>
+#include <rtl/strbuf.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/string.h>
 #include <rtl/string.hxx>
@@ -99,22 +103,28 @@
 #include <sal/typesizes.h>
 #include <salhelper/singletonref.hxx>
 #include <salhelper/thread.hxx>
+#include <vcl/EnumContext.hxx>
+#include <vcl/NotebookbarContextControl.hxx>
 #include <vcl/alpha.hxx>
 #include <vcl/animate.hxx>
 #include <vcl/bitmap.hxx>
-#include <vcl/bitmapex.hxx>
 #include <vcl/bitmapaccess.hxx>
+#include <vcl/bitmapex.hxx>
 #include <vcl/builder.hxx>
+#include <vcl/builderfactory.hxx>
 #include <vcl/button.hxx>
 #include <vcl/checksum.hxx>
-#include <vcl/commandevent.hxx>
 #include <vcl/combobox.hxx>
+#include <vcl/commandevent.hxx>
 #include <vcl/ctrl.hxx>
+#include <vcl/cursor.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/dllapi.h>
 #include <vcl/dndhelp.hxx>
 #include <vcl/dockwin.hxx>
 #include <vcl/edit.hxx>
+#include <vcl/errcode.hxx>
+#include <vcl/errinf.hxx>
 #include <vcl/field.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/floatwin.hxx>
@@ -132,24 +142,27 @@
 #include <vcl/mapmod.hxx>
 #include <vcl/menu.hxx>
 #include <vcl/metaact.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/metric.hxx>
+#include <vcl/notebookbar.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/region.hxx>
 #include <vcl/salnativewidgets.hxx>
-#include <vcl/scheduler.hxx>
 #include <vcl/scopedbitmapaccess.hxx>
 #include <vcl/scrbar.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/spinfld.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/svgdata.hxx>
 #include <vcl/syswin.hxx>
+#include <vcl/task.hxx>
 #include <vcl/timer.hxx>
 #include <vcl/vclenum.hxx>
 #include <vcl/vclevent.hxx>
 #include <vcl/vclptr.hxx>
+#include <vcl/vclreferencebase.hxx>
+#include <vcl/vectorgraphicdata.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/window.hxx>
+#include <vcl/wmfexternal.hxx>
 #include <basegfx/basegfxdllapi.h>
 #include <basegfx/color/bcolor.hxx>
 #include <basegfx/color/bcolormodifier.hxx>
@@ -168,12 +181,14 @@
 #include <basegfx/range/b3drange.hxx>
 #include <basegfx/range/basicrange.hxx>
 #include <basegfx/tuple/b3dtuple.hxx>
+#include <basegfx/vector/b2dsize.hxx>
 #include <basegfx/vector/b2dvector.hxx>
 #include <basegfx/vector/b2enums.hxx>
 #include <basegfx/vector/b3dvector.hxx>
 #include <basic/basicdllapi.h>
 #include <basic/sbxcore.hxx>
 #include <basic/sbxdef.hxx>
+#include <basic/sbxobj.hxx>
 #include <basic/sbxvar.hxx>
 #include <com/sun/star/accessibility/XAccessibleStateSet.hpp>
 #include <com/sun/star/awt/Key.hpp>
@@ -210,6 +225,7 @@
 #include <com/sun/star/bridge/oleautomation/Decimal.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XContainerListener.hpp>
+#include <com/sun/star/datatransfer/DataFlavor.hpp>
 #include <com/sun/star/datatransfer/XTransferable2.hpp>
 #include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
 #include <com/sun/star/datatransfer/dnd/DNDConstants.hpp>
@@ -229,10 +245,13 @@
 #include <com/sun/star/embed/VerbDescriptor.hpp>
 #include <com/sun/star/embed/XStorage.hpp>
 #include <com/sun/star/form/FormComponentType.hpp>
+#include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/FeatureStateEvent.hpp>
 #include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XFrameActionListener.hpp>
+#include <com/sun/star/frame/XLayoutManager.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/XStatusListener.hpp>
 #include <com/sun/star/frame/XTerminateListener.hpp>
@@ -241,6 +260,8 @@
 #include <com/sun/star/graphic/XPrimitive3D.hpp>
 #include <com/sun/star/i18n/Calendar2.hpp>
 #include <com/sun/star/i18n/LocaleItem.hpp>
+#include <com/sun/star/i18n/WordType.hpp>
+#include <com/sun/star/i18n/XCollator.hpp>
 #include <com/sun/star/i18n/XLocaleData4.hpp>
 #include <com/sun/star/i18n/reservedWords.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
@@ -262,6 +283,8 @@
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
+#include <com/sun/star/style/NumberingType.hpp>
+#include <com/sun/star/ui/XContextChangeEventListener.hpp>
 #include <com/sun/star/uno/Any.h>
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Exception.hpp>
@@ -273,7 +296,6 @@
 #include <com/sun/star/uno/Type.h>
 #include <com/sun/star/uno/Type.hxx>
 #include <com/sun/star/uno/TypeClass.hdl>
-#include <com/sun/star/uno/TypeClass.hpp>
 #include <com/sun/star/uno/XAggregation.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/uno/XInterface.hpp>
@@ -284,16 +306,23 @@
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/Time.hpp>
 #include <com/sun/star/util/URL.hpp>
+#include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/VetoException.hpp>
+#include <com/sun/star/util/XAccounting.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
+#include <com/sun/star/util/XUpdatable.hpp>
 #include <com/sun/star/view/XSelectionChangeListener.hpp>
 #include <comphelper/broadcasthelper.hxx>
 #include <comphelper/classids.hxx>
 #include <comphelper/comphelperdllapi.h>
 #include <comphelper/fileformat.h>
+#include <comphelper/interfacecontainer2.hxx>
+#include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/propagg.hxx>
+#include <comphelper/proparrhlp.hxx>
 #include <comphelper/property.hxx>
+#include <comphelper/propertycontainer.hxx>
 #include <comphelper/propertycontainerhelper.hxx>
 #include <comphelper/propstate.hxx>
 #include <comphelper/sequence.hxx>
@@ -305,23 +334,18 @@
 #include <connectivity/dbtoolsdllapi.hxx>
 #include <cppu/cppudllapi.h>
 #include <cppu/unotype.hxx>
-#include <cppuhelper/compbase1.hxx>
+#include <cppuhelper/basemutex.hxx>
+#include <cppuhelper/compbase.hxx>
 #include <cppuhelper/compbase_ex.hxx>
 #include <cppuhelper/cppuhelperdllapi.h>
 #include <cppuhelper/factory.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <cppuhelper/implbase1.hxx>
-#include <cppuhelper/implbase2.hxx>
-#include <cppuhelper/implbase4.hxx>
-#include <cppuhelper/implbase5.hxx>
 #include <cppuhelper/implbase_ex.hxx>
 #include <cppuhelper/implbase_ex_post.hxx>
 #include <cppuhelper/implbase_ex_pre.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <cppuhelper/interfacecontainer.hxx>
 #include <cppuhelper/propshlp.hxx>
-#include <cppuhelper/proptypehlp.h>
-#include <cppuhelper/proptypehlp.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/typeprovider.hxx>
@@ -346,6 +370,7 @@
 #include <drawinglayer/primitive3d/baseprimitive3d.hxx>
 #include <drawinglayer/primitive3d/sdrextrudelathetools3d.hxx>
 #include <drawinglayer/processor2d/processor2dtools.hxx>
+#include <editeng/adjustitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/colritem.hxx>
 #include <editeng/editdata.hxx>
@@ -366,11 +391,13 @@
 #include <i18nlangtag/languagetag.hxx>
 #include <libxml/xmlwriter.h>
 #include <o3tl/cow_wrapper.hxx>
+#include <o3tl/make_unique.hxx>
+#include <o3tl/sorted_vector.hxx>
+#include <o3tl/strong_int.hxx>
 #include <o3tl/typed_flags_set.hxx>
-#include <rsc/rsc-vcl-shared-types.hxx>
-#include <rsc/rscsfx.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/bindings.hxx>
+#include <sfx2/ctrlitem.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/dllapi.h>
 #include <sfx2/docfile.hxx>
@@ -379,7 +406,9 @@
 #include <sfx2/shell.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/viewsh.hxx>
+#include <sot/exchange.hxx>
 #include <sot/formats.hxx>
+#include <sot/sotdllapi.h>
 #include <sot/storage.hxx>
 #include <svl/SfxBroadcaster.hxx>
 #include <svl/custritm.hxx>
@@ -392,16 +421,15 @@
 #include <svl/languageoptions.hxx>
 #include <svl/lstner.hxx>
 #include <svl/poolitem.hxx>
-#include <svl/smplhint.hxx>
 #include <svl/stritem.hxx>
 #include <svl/style.hxx>
 #include <svl/svldllapi.h>
 #include <svl/whiter.hxx>
-#include <svtools/AccessibleBrowseBoxObjType.hxx>
 #include <svtools/colorcfg.hxx>
-#include <svtools/headbar.hxx>
+#include <svtools/ehdl.hxx>
 #include <svtools/svtdllapi.h>
-#include <svtools/transfer.hxx>
+#include <svtools/svtresid.hxx>
+#include <svtools/toolboxcontroller.hxx>
 #include <svtools/valueset.hxx>
 #include <toolkit/dllapi.h>
 #include <toolkit/helper/macros.hxx>
@@ -422,10 +450,7 @@
 #include <tools/link.hxx>
 #include <tools/mapunit.hxx>
 #include <tools/poly.hxx>
-#include <tools/rc.hxx>
 #include <tools/ref.hxx>
-#include <tools/resid.hxx>
-#include <tools/resmgr.hxx>
 #include <tools/solar.h>
 #include <tools/stream.hxx>
 #include <tools/time.hxx>
@@ -440,10 +465,13 @@
 #include <uno/data.h>
 #include <uno/sequence2.h>
 #include <unotools/accessiblestatesethelper.hxx>
+#include <unotools/calendarwrapper.hxx>
 #include <unotools/configitem.hxx>
+#include <unotools/localedatawrapper.hxx>
 #include <unotools/options.hxx>
 #include <unotools/pathoptions.hxx>
 #include <unotools/readwritemutexguard.hxx>
+#include <unotools/resmgr.hxx>
 #include <unotools/streamwrap.hxx>
 #include <unotools/syslocale.hxx>
 #include <unotools/ucbstreamhelper.hxx>
@@ -467,7 +495,6 @@
 #include <svx/ipolypolygoneditorcontroller.hxx>
 #include <svx/lathe3d.hxx>
 #include <svx/obj3d.hxx>
-#include <svx/polysc3d.hxx>
 #include <svx/scene3d.hxx>
 #include <svx/sdmetitm.hxx>
 #include <svx/sdr/animation/scheduler.hxx>
@@ -524,6 +551,7 @@
 #include <svx/svdtrans.hxx>
 #include <svx/svdundo.hxx>
 #include <svx/svdview.hxx>
+#include <svx/svdviter.hxx>
 #include <svx/svx3ditems.hxx>
 #include <svx/svxdlg.hxx>
 #include <svx/svxdllapi.h>
@@ -559,5 +587,8 @@
 #include <svx/xpoly.hxx>
 #include <svx/xpool.hxx>
 #include <svx/xtable.hxx>
+#include <vcl/AccessibleBrowseBoxObjType.hxx>
+#include <vcl/headbar.hxx>
+#include <vcl/transfer.hxx>
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

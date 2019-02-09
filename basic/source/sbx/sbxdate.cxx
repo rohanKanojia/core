@@ -20,14 +20,17 @@
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <svl/zforlist.hxx>
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
 #include <tools/color.hxx>
 #include <i18nlangtag/lang.h>
 #include <basic/sbx.hxx>
+#include <basic/sberrors.hxx>
 #include "sbxconv.hxx"
-#include "math.h"
-#include <comphelper/processfactory.hxx>
+#include <runtime.hxx>
+#include <sbintern.hxx>
+#include <math.h>
 #include <memory>
+#include <config_features.h>
 
 
 double ImpGetDate( const SbxValues* p )
@@ -38,7 +41,8 @@ double ImpGetDate( const SbxValues* p )
     switch( +p->eType )
     {
     case SbxNULL:
-        SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+        SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
+        [[fallthrough]];
     case SbxEMPTY:
         nRes = 0;
         break;
@@ -57,10 +61,10 @@ double ImpGetDate( const SbxValues* p )
         nRes = p->nUShort;
         break;
     case SbxLONG:
-        nRes = (double) p->nLong;
+        nRes = static_cast<double>(p->nLong);
         break;
     case SbxULONG:
-        nRes = (double) p->nULong;
+        nRes = static_cast<double>(p->nULong);
         break;
     case SbxSINGLE:
         nRes = p->nSingle;
@@ -92,6 +96,7 @@ double ImpGetDate( const SbxValues* p )
     case SbxBYREF | SbxSTRING:
     case SbxSTRING:
     case SbxLPSTR:
+#if HAVE_FEATURE_SCRIPTING
         if( !p->pOUString )
         {
             nRes = 0;
@@ -99,12 +104,21 @@ double ImpGetDate( const SbxValues* p )
         else
         {
             LanguageType eLangType = Application::GetSettings().GetLanguageTag().getLanguageType();
-
-            std::unique_ptr<SvNumberFormatter> pFormatter(new SvNumberFormatter( comphelper::getProcessComponentContext(), eLangType ));
+            std::shared_ptr<SvNumberFormatter> pFormatter;
+            if (GetSbData()->pInst)
+            {
+                pFormatter = GetSbData()->pInst->GetNumberFormatter();
+            }
+            else
+            {
+                sal_uInt32 nDummy;
+                pFormatter = SbiInstance::PrepareNumberFormatter( nDummy, nDummy, nDummy );
+            }
 
             sal_uInt32 nIndex;
             sal_Int32 nCheckPos = 0;
-            short nType = 127;
+            SvNumFormatType nType = SvNumFormatType::DEFINED | SvNumFormatType::DATE | SvNumFormatType::TIME | SvNumFormatType::CURRENCY
+                                    | SvNumFormatType::NUMBER | SvNumFormatType::SCIENTIFIC | SvNumFormatType::FRACTION;
 
             // Default templates of the formatter have only two-digit
             // date. Therefore register an own format.
@@ -115,27 +129,26 @@ double ImpGetDate( const SbxValues* p )
             // quod vide basic/source/runtime/runtime.cxx
 
             SvtSysLocale aSysLocale;
-            DateFormat eDate = aSysLocale.GetLocaleData().getDateFormat();
+            DateOrder eDate = aSysLocale.GetLocaleData().getDateOrder();
             OUString aDateStr;
             switch( eDate )
             {
                 default:
-                case MDY: aDateStr = "MM/DD/YYYY"; break;
-                case DMY: aDateStr = "DD/MM/YYYY"; break;
-                case YMD: aDateStr = "YYYY/MM/DD"; break;
+                case DateOrder::MDY: aDateStr = "MM/DD/YYYY"; break;
+                case DateOrder::DMY: aDateStr = "DD/MM/YYYY"; break;
+                case DateOrder::YMD: aDateStr = "YYYY/MM/DD"; break;
             }
 
-            OUString aStr( aDateStr );
-            aStr += " HH:MM:SS";
+            OUString aStr = aDateStr + " HH:MM:SS";
 
             pFormatter->PutandConvertEntry( aStr, nCheckPos, nType,
-                                            nIndex, LANGUAGE_ENGLISH_US, eLangType );
+                                            nIndex, LANGUAGE_ENGLISH_US, eLangType, true);
             bool bSuccess = pFormatter->IsNumberFormat( *p->pOUString, nIndex, nRes );
             if ( bSuccess )
             {
-                short nType_ = pFormatter->GetType( nIndex );
-                if(!(nType_ & ( css::util::NumberFormat::DATETIME | css::util::NumberFormat::DATE |
-                                css::util::NumberFormat::TIME | css::util::NumberFormat::DEFINED )))
+                SvNumFormatType nType_ = pFormatter->GetType( nIndex );
+                if(!(nType_ & ( SvNumFormatType::DATETIME | SvNumFormatType::DATE |
+                                SvNumFormatType::TIME | SvNumFormatType::DEFINED )))
                 {
                     bSuccess = false;
                 }
@@ -143,9 +156,12 @@ double ImpGetDate( const SbxValues* p )
 
             if ( !bSuccess )
             {
-                SbxBase::SetError( ERRCODE_SBX_CONVERSION ); nRes = 0;
+                SbxBase::SetError( ERRCODE_BASIC_CONVERSION ); nRes = 0;
             }
         }
+#else
+        nRes = 0;
+#endif
         break;
     case SbxOBJECT:
         pVal = dynamic_cast<SbxValue*>( p->pObj );
@@ -155,7 +171,7 @@ double ImpGetDate( const SbxValues* p )
         }
         else
         {
-            SbxBase::SetError( ERRCODE_SBX_NO_OBJECT ); nRes = 0;
+            SbxBase::SetError( ERRCODE_BASIC_NO_OBJECT ); nRes = 0;
         }
         break;
     case SbxBYREF | SbxCHAR:
@@ -195,7 +211,7 @@ double ImpGetDate( const SbxValues* p )
         nRes = ImpSalUInt64ToDouble( *p->puInt64 );
         break;
     default:
-        SbxBase::SetError( ERRCODE_SBX_CONVERSION ); nRes = 0;
+        SbxBase::SetError( ERRCODE_BASIC_CONVERSION ); nRes = 0;
         break;
     }
     return nRes;
@@ -250,7 +266,7 @@ start:
         pDec = ImpCreateDecimal( p );
         if( !pDec->setDouble( n ) )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW );
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW );
         }
         break;
     direct:
@@ -261,6 +277,7 @@ start:
     case SbxSTRING:
     case SbxLPSTR:
         {
+#if HAVE_FEATURE_SCRIPTING
             if( !p->pOUString )
             {
                 p->pOUString = new OUString;
@@ -268,14 +285,23 @@ start:
             Color* pColor;
 
             LanguageType eLangType = Application::GetSettings().GetLanguageTag().getLanguageType();
-            std::unique_ptr<SvNumberFormatter> pFormatter(new SvNumberFormatter( comphelper::getProcessComponentContext(), eLangType ));
+            std::shared_ptr<SvNumberFormatter> pFormatter;
+            if (GetSbData()->pInst)
+            {
+                pFormatter = GetSbData()->pInst->GetNumberFormatter();
+            }
+            else
+            {
+                sal_uInt32 nDummy;
+                pFormatter = SbiInstance::PrepareNumberFormatter( nDummy, nDummy, nDummy );
+            }
 
             sal_uInt32 nIndex;
             sal_Int32 nCheckPos = 0;
-            short nType;
+            SvNumFormatType nType;
 
             SvtSysLocale aSysLocale;
-            DateFormat eDate = aSysLocale.GetLocaleData().getDateFormat();
+            DateOrder eDate = aSysLocale.GetLocaleData().getDateOrder();
             OUString aStr;
             // if the whole-number part is 0, we want no year!
             if( n <= -1.0 || n >= 1.0 )
@@ -285,20 +311,20 @@ start:
                 {
                     switch( eDate )
                     {
-                    case MDY: aStr = "MM.TT.JJJJ"; break;
-                    case DMY: aStr = "TT.MM.JJJJ"; break;
-                    case YMD: aStr = "JJJJ.MM.TT"; break;
-                    default:  aStr = "MM.TT.JJJJ";
+                        default:
+                        case DateOrder::MDY: aStr = "MM/DD/YYYY"; break;
+                        case DateOrder::DMY: aStr = "DD/MM/YYYY"; break;
+                        case DateOrder::YMD: aStr = "YYYY/MM/DD"; break;
                     }
                 }
                 else
                 {
                     switch( eDate )
                     {
-                    case MDY: aStr = "MM.TT.JJJJ HH:MM:SS"; break;
-                    case DMY: aStr = "TT.MM.JJJJ HH:MM:SS"; break;
-                    case YMD: aStr = "JJJJ.MM.TT HH:MM:SS"; break;
-                    default:  aStr = "MM.TT.JJJJ HH:MM:SS";
+                        default:
+                        case DateOrder::MDY: aStr = "MM/DD/YYYY HH:MM:SS"; break;
+                        case DateOrder::DMY: aStr = "DD/MM/YYYY HH:MM:SS"; break;
+                        case DateOrder::YMD: aStr = "YYYY/MM/DD HH:MM:SS"; break;
                     }
                 }
             }
@@ -310,9 +336,10 @@ start:
                                             nCheckPos,
                                             nType,
                                             nIndex,
-                                            LANGUAGE_GERMAN,
-                                            eLangType );
+                                            LANGUAGE_ENGLISH_US,
+                                            eLangType, true);
             pFormatter->GetOutputString( n, nIndex, *p->pOUString, &pColor );
+#endif
             break;
         }
     case SbxOBJECT:
@@ -323,87 +350,87 @@ start:
         }
         else
         {
-            SbxBase::SetError( ERRCODE_SBX_NO_OBJECT );
+            SbxBase::SetError( ERRCODE_BASIC_NO_OBJECT );
         }
         break;
     case SbxBYREF | SbxCHAR:
         if( n > SbxMAXCHAR )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXCHAR;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXCHAR;
         }
         else if( n < SbxMINCHAR )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMINCHAR;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMINCHAR;
         }
-        *p->pChar = (sal_Unicode) n;
+        *p->pChar = static_cast<sal_Unicode>(n);
         break;
     case SbxBYREF | SbxBYTE:
         if( n > SbxMAXBYTE )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXBYTE;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXBYTE;
         }
         else if( n < 0 )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = 0;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = 0;
         }
-        *p->pByte = (sal_uInt8) n;
+        *p->pByte = static_cast<sal_uInt8>(n);
         break;
     case SbxBYREF | SbxINTEGER:
     case SbxBYREF | SbxBOOL:
         if( n > SbxMAXINT )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXINT;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXINT;
         }
         else if( n < SbxMININT )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMININT;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMININT;
         }
-        *p->pInteger = (sal_Int16) n;
+        *p->pInteger = static_cast<sal_Int16>(n);
         break;
     case SbxBYREF | SbxERROR:
     case SbxBYREF | SbxUSHORT:
         if( n > SbxMAXUINT )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXUINT;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXUINT;
         }
         else if( n < 0 )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = 0;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = 0;
         }
-        *p->pUShort = (sal_uInt16) n;
+        *p->pUShort = static_cast<sal_uInt16>(n);
         break;
     case SbxBYREF | SbxLONG:
         if( n > SbxMAXLNG )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXLNG;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXLNG;
         }
         else if( n < SbxMINLNG )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMINLNG;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMINLNG;
         }
-        *p->pLong = (sal_Int32) n;
+        *p->pLong = static_cast<sal_Int32>(n);
         break;
     case SbxBYREF | SbxULONG:
         if( n > SbxMAXULNG )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXULNG;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXULNG;
         }
         else if( n < 0 )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = 0;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = 0;
         }
-        *p->pULong = (sal_uInt32) n;
+        *p->pULong = static_cast<sal_uInt32>(n);
         break;
     case SbxBYREF | SbxSINGLE:
         if( n > SbxMAXSNG )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXSNG;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXSNG;
         }
         else if( n < SbxMINSNG )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMINSNG;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMINSNG;
         }
-        *p->pSingle = (float) n;
+        *p->pSingle = static_cast<float>(n);
         break;
     case SbxBYREF | SbxSALINT64:
         *p->pnInt64 = ImpDoubleToSalInt64( n );
@@ -413,21 +440,21 @@ start:
         break;
     case SbxBYREF | SbxDATE:
     case SbxBYREF | SbxDOUBLE:
-        *p->pDouble = (double) n;
+        *p->pDouble = n;
         break;
     case SbxBYREF | SbxCURRENCY:
         if( n > SbxMAXCURR )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMAXCURR;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMAXCURR;
         }
         else if( n < SbxMINCURR )
         {
-            SbxBase::SetError( ERRCODE_SBX_OVERFLOW ); n = SbxMINCURR;
+            SbxBase::SetError( ERRCODE_BASIC_MATH_OVERFLOW ); n = SbxMINCURR;
         }
         *p->pnInt64 = ImpDoubleToCurrency( n );
         break;
     default:
-        SbxBase::SetError( ERRCODE_SBX_CONVERSION );
+        SbxBase::SetError( ERRCODE_BASIC_CONVERSION );
         break;
     }
 }

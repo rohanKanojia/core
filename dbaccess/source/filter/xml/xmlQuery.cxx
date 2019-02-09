@@ -22,12 +22,13 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
-#include <tools/debug.hxx>
 
 namespace dbaxml
 {
@@ -76,32 +77,32 @@ OXMLQuery::~OXMLQuery()
 
 }
 
-SvXMLImportContext* OXMLQuery::CreateChildContext(
+SvXMLImportContextRef OXMLQuery::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
 {
-    SvXMLImportContext* pContext = OXMLTable::CreateChildContext(nPrefix, rLocalName,xAttrList );
-    if ( !pContext )
+    SvXMLImportContextRef xContext = OXMLTable::CreateChildContext(nPrefix, rLocalName,xAttrList );
+    if (!xContext)
     {
         const SvXMLTokenMap& rTokenMap = GetOwnImport().GetQueryElemTokenMap();
 
         switch( rTokenMap.Get( nPrefix, rLocalName ) )
         {
             case XML_TOK_UPDATE_TABLE:
-                {
-                    GetOwnImport().GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-                    OUString s1;
-                    fillAttributes(nPrefix, rLocalName,xAttrList,s1,m_sTable,m_sSchema,m_sCatalog);
-                }
+            {
+                GetOwnImport().GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                OUString s1;
+                fillAttributes(xAttrList,s1,m_sTable,m_sSchema,m_sCatalog);
                 break;
+            }
         }
     }
 
-    if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
+    if (!xContext)
+        xContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
 
-    return pContext;
+    return xContext;
 }
 
 void OXMLQuery::setProperties(Reference< XPropertySet > & _xProp )
@@ -130,7 +131,7 @@ void OXMLQuery::setProperties(Reference< XPropertySet > & _xProp )
     }
     catch(Exception&)
     {
-        OSL_FAIL("OXMLTable::EndElement -> exception catched");
+        OSL_FAIL("OXMLTable::EndElement -> exception caught");
     }
 }
 

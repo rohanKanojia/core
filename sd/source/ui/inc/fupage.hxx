@@ -20,7 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FUPAGE_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FUPAGE_HXX
 
+#include <memory>
 #include "fupoor.hxx"
+#include <vcl/weld.hxx>
 
 class SfxItemSet;
 class SdBackgroundObjUndoAction;
@@ -40,10 +42,10 @@ class FuPage
     virtual void Activate() override;
     virtual void Deactivate() override;
 
-    const SfxItemSet* ExecuteDialog( vcl::Window* pParent );
+    const SfxItemSet* ExecuteDialog(weld::Window* pParent);
 
 protected:
-    virtual ~FuPage();
+    virtual ~FuPage() override;
 
 private:
     FuPage (
@@ -57,7 +59,8 @@ private:
 
     SfxRequest&                 mrReq;
     const SfxItemSet*           mpArgs;
-    SdBackgroundObjUndoAction*  mpBackgroundObjUndoAction;
+    std::unique_ptr<SdBackgroundObjUndoAction>
+                                mpBackgroundObjUndoAction;
     Size                        maSize;
     bool                        mbPageBckgrdDeleted;
     bool                        mbMasterPage;

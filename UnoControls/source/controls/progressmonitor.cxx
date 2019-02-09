@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "progressmonitor.hxx"
+#include <progressmonitor.hxx>
 
 #include <com/sun/star/awt/GradientStyle.hpp>
 #include <com/sun/star/awt/RasterOperation.hpp>
@@ -30,7 +30,7 @@
 #include <tools/debug.hxx>
 #include <algorithm>
 
-#include "progressbar.hxx"
+#include <progressbar.hxx>
 
 using namespace ::cppu;
 using namespace ::osl;
@@ -41,12 +41,12 @@ using namespace ::com::sun::star::awt;
 using ::std::vector;
 using ::std::find;
 
-namespace unocontrols{
+namespace unocontrols {
 
 ProgressMonitor::ProgressMonitor( const css::uno::Reference< XComponentContext >& rxContext )
     : BaseContainerControl  ( rxContext  )
 {
-    // Its not allowed to work with member in this method (refcounter !!!)
+    // It's not allowed to work with member in this method (refcounter !!!)
     // But with a HACK (++refcount) its "OK" :-(
     ++m_refCount;
 
@@ -57,7 +57,7 @@ ProgressMonitor::ProgressMonitor( const css::uno::Reference< XComponentContext >
     m_xTopic_Bottom.set( rxContext->getServiceManager()->createInstanceWithContext( FIXEDTEXT_SERVICENAME, rxContext ), UNO_QUERY );
     m_xText_Bottom.set ( rxContext->getServiceManager()->createInstanceWithContext( FIXEDTEXT_SERVICENAME, rxContext ), UNO_QUERY );
     m_xButton.set      ( rxContext->getServiceManager()->createInstanceWithContext( BUTTON_SERVICENAME, rxContext ), UNO_QUERY );
-    m_xProgressBar = VclPtr<ProgressBar>::Create(rxContext);
+    m_xProgressBar = new ProgressBar(rxContext);
 
     // ... cast controls to Reference< XControl >  (for "setModel"!) ...
     css::uno::Reference< XControl >   xRef_Topic_Top      ( m_xTopic_Top    , UNO_QUERY );
@@ -103,7 +103,7 @@ ProgressMonitor::~ProgressMonitor()
 }
 
 //  XInterface
-Any SAL_CALL ProgressMonitor::queryInterface( const Type& rType ) throw( RuntimeException, std::exception )
+Any SAL_CALL ProgressMonitor::queryInterface( const Type& rType )
 {
     // Attention:
     //  Don't use mutex or guard in this method!!! Is a method of XInterface.
@@ -145,37 +145,19 @@ void SAL_CALL ProgressMonitor::release() throw()
 }
 
 //  XTypeProvider
-Sequence< Type > SAL_CALL ProgressMonitor::getTypes() throw( RuntimeException, std::exception )
+Sequence< Type > SAL_CALL ProgressMonitor::getTypes()
 {
-    // Optimize this method !
-    // We initialize a static variable only one time. And we don't must use a mutex at every call!
-    // For the first call; pTypeCollection is NULL - for the second call pTypeCollection is different from NULL!
-    static OTypeCollection* pTypeCollection = nullptr;
+    static OTypeCollection ourTypeCollection(
+                cppu::UnoType<XLayoutConstrains>::get(),
+                cppu::UnoType<XButton>::get(),
+                cppu::UnoType<XProgressMonitor>::get(),
+                BaseContainerControl::getTypes() );
 
-    if ( pTypeCollection == nullptr )
-    {
-        // Ready for multithreading; get global mutex for first call of this method only! see before
-        MutexGuard aGuard( Mutex::getGlobalMutex() );
-
-        // Control these pointer again ... it can be, that another instance will be faster then these!
-        if ( pTypeCollection == nullptr )
-        {
-            // Create a static typecollection ...
-            static OTypeCollection aTypeCollection ( cppu::UnoType<XLayoutConstrains>::get(),
-                                                     cppu::UnoType<XButton>::get(),
-                                                     cppu::UnoType<XProgressMonitor>::get(),
-                                                     BaseContainerControl::getTypes()
-                                                   );
-            // ... and set his address to static pointer!
-            pTypeCollection = &aTypeCollection;
-        }
-    }
-
-    return pTypeCollection->getTypes();
+    return ourTypeCollection.getTypes();
 }
 
 //  XAggregation
-Any SAL_CALL ProgressMonitor::queryAggregation( const Type& aType ) throw( RuntimeException, std::exception )
+Any SAL_CALL ProgressMonitor::queryAggregation( const Type& aType )
 {
     // Ask for my own supported interfaces ...
     // Attention: XTypeProvider and XInterface are supported by OComponentHelper!
@@ -201,12 +183,12 @@ void SAL_CALL ProgressMonitor::addText(
     const OUString& rTopic,
     const OUString& rText,
     sal_Bool bbeforeProgress
-) throw( RuntimeException, std::exception )
+)
 {
     // Safe impossible cases
     // Check valid call of this method.
-    DBG_ASSERT ( impl_debug_checkParameter ( rTopic, rText, bbeforeProgress )   , "ProgressMonitor::addText()\nCall without valid parameters!\n");
-    DBG_ASSERT ( !(impl_searchTopic ( rTopic, bbeforeProgress ) != nullptr )       , "ProgresMonitor::addText()\nThe text already exist.\n"        );
+    DBG_ASSERT ( impl_debug_checkParameter ( rTopic, rText ),                 "ProgressMonitor::addText()\nCall without valid parameters!\n");
+    DBG_ASSERT ( !(impl_searchTopic ( rTopic, bbeforeProgress ) != nullptr ), "ProgressMonitor::addText()\nThe text already exist.\n"        );
 
     // Do nothing (in Release), if topic already exist.
     if ( impl_searchTopic ( rTopic, bbeforeProgress ) != nullptr )
@@ -215,7 +197,7 @@ void SAL_CALL ProgressMonitor::addText(
     }
 
     // Else ... take memory for new item ...
-    IMPL_TextlistItem*  pTextItem = new IMPL_TextlistItem;
+    std::unique_ptr<IMPL_TextlistItem> pTextItem(new IMPL_TextlistItem);
 
     // Set values ...
     pTextItem->sTopic   = rTopic;
@@ -227,11 +209,11 @@ void SAL_CALL ProgressMonitor::addText(
     // ... and insert it in right list.
     if ( bbeforeProgress )
     {
-        maTextlist_Top.push_back( pTextItem );
+        maTextlist_Top.push_back( std::move(pTextItem) );
     }
     else
     {
-        maTextlist_Bottom.push_back( pTextItem );
+        maTextlist_Bottom.push_back( std::move(pTextItem) );
     }
 
     // ... update window
@@ -240,11 +222,11 @@ void SAL_CALL ProgressMonitor::addText(
 }
 
 //  XProgressMonitor
-void SAL_CALL ProgressMonitor::removeText ( const OUString& rTopic, sal_Bool bbeforeProgress ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::removeText ( const OUString& rTopic, sal_Bool bbeforeProgress )
 {
     // Safe impossible cases
     // Check valid call of this method.
-    DBG_ASSERT ( impl_debug_checkParameter ( rTopic, bbeforeProgress ), "ProgressMonitor::removeText()\nCall without valid parameters!\n" );
+    DBG_ASSERT ( impl_debug_checkParameter ( rTopic ), "ProgressMonitor::removeText()\nCall without valid parameters!" );
 
     // Search the topic ...
     IMPL_TextlistItem* pSearchItem = impl_searchTopic ( rTopic, bbeforeProgress );
@@ -257,15 +239,17 @@ void SAL_CALL ProgressMonitor::removeText ( const OUString& rTopic, sal_Bool bbe
         // ... delete item from right list ...
         if ( bbeforeProgress )
         {
-            vector< IMPL_TextlistItem* >::iterator
-                itr = find( maTextlist_Top.begin(), maTextlist_Top.end(), pSearchItem );
+            auto itr = std::find_if( maTextlist_Top.begin(), maTextlist_Top.end(),
+                            [&] (std::unique_ptr<IMPL_TextlistItem> const &p)
+                            { return p.get() == pSearchItem; } );
             if (itr != maTextlist_Top.end())
                 maTextlist_Top.erase(itr);
         }
         else
         {
-            vector< IMPL_TextlistItem* >::iterator
-                itr = find( maTextlist_Bottom.begin(), maTextlist_Bottom.end(), pSearchItem );
+            auto itr = std::find_if( maTextlist_Bottom.begin(), maTextlist_Bottom.end(),
+                            [&] (std::unique_ptr<IMPL_TextlistItem> const &p)
+                            { return p.get() == pSearchItem; } );
             if (itr != maTextlist_Bottom.end())
                 maTextlist_Bottom.erase(itr);
         }
@@ -283,11 +267,11 @@ void SAL_CALL ProgressMonitor::updateText (
     const OUString& rTopic,
     const OUString& rText,
     sal_Bool bbeforeProgress
-) throw( RuntimeException, std::exception )
+)
 {
     // Safe impossible cases
     // Check valid call of this method.
-    DBG_ASSERT ( impl_debug_checkParameter ( rTopic, rText, bbeforeProgress ), "ProgressMonitor::updateText()\nCall without valid parameters!\n" );
+    DBG_ASSERT ( impl_debug_checkParameter ( rTopic, rText ), "ProgressMonitor::updateText()\nCall without valid parameters!\n" );
 
     // Search topic ...
     IMPL_TextlistItem* pSearchItem = impl_searchTopic ( rTopic, bbeforeProgress );
@@ -307,7 +291,7 @@ void SAL_CALL ProgressMonitor::updateText (
 }
 
 //  XProgressBar
-void SAL_CALL ProgressMonitor::setForegroundColor ( sal_Int32 nColor ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setForegroundColor ( sal_Int32 nColor )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -316,7 +300,7 @@ void SAL_CALL ProgressMonitor::setForegroundColor ( sal_Int32 nColor ) throw( Ru
 }
 
 //  XProgressBar
-void SAL_CALL ProgressMonitor::setBackgroundColor ( sal_Int32 nColor ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setBackgroundColor ( sal_Int32 nColor )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -325,7 +309,7 @@ void SAL_CALL ProgressMonitor::setBackgroundColor ( sal_Int32 nColor ) throw( Ru
 }
 
 //  XProgressBar
-void SAL_CALL ProgressMonitor::setValue ( sal_Int32 nValue ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setValue ( sal_Int32 nValue )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -334,7 +318,7 @@ void SAL_CALL ProgressMonitor::setValue ( sal_Int32 nValue ) throw( RuntimeExcep
 }
 
 //  XProgressBar
-void SAL_CALL ProgressMonitor::setRange ( sal_Int32 nMin, sal_Int32 nMax ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setRange ( sal_Int32 nMin, sal_Int32 nMax )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -343,7 +327,7 @@ void SAL_CALL ProgressMonitor::setRange ( sal_Int32 nMin, sal_Int32 nMax ) throw
 }
 
 //  XProgressBar
-sal_Int32 SAL_CALL ProgressMonitor::getValue () throw( RuntimeException, std::exception )
+sal_Int32 SAL_CALL ProgressMonitor::getValue ()
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -352,7 +336,7 @@ sal_Int32 SAL_CALL ProgressMonitor::getValue () throw( RuntimeException, std::ex
 }
 
 //  XButton
-void SAL_CALL ProgressMonitor::addActionListener ( const css::uno::Reference< XActionListener > & rListener ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::addActionListener ( const css::uno::Reference< XActionListener > & rListener )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -364,7 +348,7 @@ void SAL_CALL ProgressMonitor::addActionListener ( const css::uno::Reference< XA
 }
 
 //  XButton
-void SAL_CALL ProgressMonitor::removeActionListener ( const css::uno::Reference< XActionListener > & rListener ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::removeActionListener ( const css::uno::Reference< XActionListener > & rListener )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -376,7 +360,7 @@ void SAL_CALL ProgressMonitor::removeActionListener ( const css::uno::Reference<
 }
 
 //  XButton
-void SAL_CALL ProgressMonitor::setLabel ( const OUString& rLabel ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setLabel ( const OUString& rLabel )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -388,7 +372,7 @@ void SAL_CALL ProgressMonitor::setLabel ( const OUString& rLabel ) throw( Runtim
 }
 
 //  XButton
-void SAL_CALL ProgressMonitor::setActionCommand ( const OUString& rCommand ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setActionCommand ( const OUString& rCommand )
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -400,13 +384,13 @@ void SAL_CALL ProgressMonitor::setActionCommand ( const OUString& rCommand ) thr
 }
 
 //  XLayoutConstrains
-Size SAL_CALL ProgressMonitor::getMinimumSize () throw( RuntimeException, std::exception )
+Size SAL_CALL ProgressMonitor::getMinimumSize ()
 {
     return Size (PROGRESSMONITOR_DEFAULT_WIDTH, PROGRESSMONITOR_DEFAULT_HEIGHT);
 }
 
 //  XLayoutConstrains
-Size SAL_CALL ProgressMonitor::getPreferredSize () throw( RuntimeException, std::exception )
+Size SAL_CALL ProgressMonitor::getPreferredSize ()
 {
     // Ready for multithreading
     ClearableMutexGuard aGuard ( m_aMutex );
@@ -450,13 +434,13 @@ Size SAL_CALL ProgressMonitor::getPreferredSize () throw( RuntimeException, std:
 }
 
 //  XLayoutConstrains
-Size SAL_CALL ProgressMonitor::calcAdjustedSize ( const Size& /*rNewSize*/ ) throw( RuntimeException, std::exception )
+Size SAL_CALL ProgressMonitor::calcAdjustedSize ( const Size& /*rNewSize*/ )
 {
     return getPreferredSize ();
 }
 
 //  XControl
-void SAL_CALL ProgressMonitor::createPeer ( const css::uno::Reference< XToolkit > & rToolkit, const css::uno::Reference< XWindowPeer > & rParent    ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::createPeer ( const css::uno::Reference< XToolkit > & rToolkit, const css::uno::Reference< XWindowPeer > & rParent    )
 {
     if (!getPeer().is())
     {
@@ -471,14 +455,14 @@ void SAL_CALL ProgressMonitor::createPeer ( const css::uno::Reference< XToolkit 
 }
 
 //  XControl
-sal_Bool SAL_CALL ProgressMonitor::setModel ( const css::uno::Reference< XControlModel > & /*rModel*/ ) throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL ProgressMonitor::setModel ( const css::uno::Reference< XControlModel > & /*rModel*/ )
 {
     // We have no model.
     return false;
 }
 
 //  XControl
-css::uno::Reference< XControlModel > SAL_CALL ProgressMonitor::getModel () throw( RuntimeException, std::exception )
+css::uno::Reference< XControlModel > SAL_CALL ProgressMonitor::getModel ()
 {
     // We have no model.
     // return (XControlModel*)this;
@@ -486,7 +470,7 @@ css::uno::Reference< XControlModel > SAL_CALL ProgressMonitor::getModel () throw
 }
 
 //  XComponent
-void SAL_CALL ProgressMonitor::dispose () throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::dispose ()
 {
     // Ready for multithreading
     MutexGuard aGuard ( m_aMutex );
@@ -505,7 +489,7 @@ void SAL_CALL ProgressMonitor::dispose () throw( RuntimeException, std::exceptio
     removeControl ( xRef_Button         );
     removeControl ( m_xProgressBar.get() );
 
-    // do'nt use "...->clear ()" or "... = XFixedText ()"
+    // don't use "...->clear ()" or "... = XFixedText ()"
     // when other hold a reference at this object !!!
     xRef_Topic_Top->dispose     ();
     xRef_Text_Top->dispose      ();
@@ -518,7 +502,7 @@ void SAL_CALL ProgressMonitor::dispose () throw( RuntimeException, std::exceptio
 }
 
 //  XWindow
-void SAL_CALL ProgressMonitor::setPosSize ( sal_Int32 nX, sal_Int32 nY, sal_Int32 nWidth, sal_Int32 nHeight, sal_Int16 nFlags ) throw( RuntimeException, std::exception )
+void SAL_CALL ProgressMonitor::setPosSize ( sal_Int32 nX, sal_Int32 nY, sal_Int32 nWidth, sal_Int32 nHeight, sal_Int16 nFlags )
 {
     Rectangle   aBasePosSize = getPosSize ();
     BaseContainerControl::setPosSize (nX, nY, nWidth, nHeight, nFlags);
@@ -638,7 +622,7 @@ void ProgressMonitor::impl_recalcLayout ()
     nWidth_Topic_Top        =   std::max( aTopicSize_Top.Width, aTopicSize_Bottom.Width );
     nHeight_Topic_Top       =   aTopicSize_Top.Height;
 
-    // Right column before progressbar has relativ position to left column ...
+    // Right column before progressbar has relative position to left column ...
     // ... and a size as rest of dialog size!
     nX_Text_Top             =   nX_Topic_Top+nWidth_Topic_Top+PROGRESSMONITOR_FREEBORDER;
     nY_Text_Top             =   nY_Topic_Top;
@@ -652,7 +636,7 @@ void ProgressMonitor::impl_recalcLayout ()
         nWidth_Text_Top     =   impl_getWidth()-nWidth_Topic_Top-(3*PROGRESSMONITOR_FREEBORDER);
     nHeight_Text_Top        =   nHeight_Topic_Top;
 
-    // Position of progressbar is relativ to columns before.
+    // Position of progressbar is relative to columns before.
     // Progressbar.Width  = Dialog.Width !!!
     // Progressbar.Height = Button.Height
     nX_ProgressBar          =   nX_Topic_Top;
@@ -737,35 +721,31 @@ void ProgressMonitor::impl_rebuildFixedText ()
     // Rebuild left site of text
     if (m_xTopic_Top.is())
     {
-        OUString aCollectString;
+        OUStringBuffer aCollectString;
 
         // Collect all topics from list and format text.
         // "\n" MUST BE at the end of line!!! => Else ... topic and his text are not in the same line!!!
-        for ( size_t n = 0; n < maTextlist_Top.size(); ++n )
+        for (auto const & pSearchItem : maTextlist_Top)
         {
-            IMPL_TextlistItem* pSearchItem = maTextlist_Top[ n ];
-            aCollectString  +=  pSearchItem->sTopic;
-            aCollectString  +=  "\n";
+            aCollectString.append(pSearchItem->sTopic).append("\n");
         }
 
-        m_xTopic_Top->setText ( aCollectString );
+        m_xTopic_Top->setText ( aCollectString.makeStringAndClear() );
     }
 
     // Rebuild right site of text
     if (m_xText_Top.is())
     {
-        OUString        aCollectString;
+        OUStringBuffer aCollectString;
 
         // Collect all topics from list and format text.
         // "\n" MUST BE at the end of line!!! => Else ... topic and his text are not in the same line!!!
-        for ( size_t n = 0; n < maTextlist_Top.size(); ++n )
+        for (auto const & pSearchItem : maTextlist_Top)
         {
-            IMPL_TextlistItem* pSearchItem = maTextlist_Top[ n ];
-            aCollectString  +=  pSearchItem->sText;
-            aCollectString  +=  "\n";
+            aCollectString.append(pSearchItem->sText).append("\n");
         }
 
-        m_xText_Top->setText ( aCollectString );
+        m_xText_Top->setText ( aCollectString.makeStringAndClear() );
     }
 
     // Rebuild fixedtext below progress
@@ -773,35 +753,31 @@ void ProgressMonitor::impl_rebuildFixedText ()
     // Rebuild left site of text
     if (m_xTopic_Bottom.is())
     {
-        OUString        aCollectString;
+        OUStringBuffer aCollectString;
 
         // Collect all topics from list and format text.
         // "\n" MUST BE at the end of line!!! => Else ... topic and his text are not in the same line!!!
-        for ( size_t n = 0; n < maTextlist_Bottom.size(); ++n )
+        for (auto const & pSearchItem : maTextlist_Bottom)
         {
-            IMPL_TextlistItem* pSearchItem = maTextlist_Bottom[ n ];
-            aCollectString  +=  pSearchItem->sTopic;
-            aCollectString  +=  "\n";
+            aCollectString.append(pSearchItem->sTopic).append("\n");
         }
 
-        m_xTopic_Bottom->setText ( aCollectString );
+        m_xTopic_Bottom->setText ( aCollectString.makeStringAndClear() );
     }
 
     // Rebuild right site of text
     if (m_xText_Bottom.is())
     {
-        OUString        aCollectString;
+        OUStringBuffer aCollectString;
 
         // Collect all topics from list and format text.
         // "\n" MUST BE at the end of line!!! => Else ... topic and his text are not in the same line!!!
-        for ( size_t n = 0; n < maTextlist_Bottom.size(); ++n )
+        for (auto const & pSearchItem : maTextlist_Bottom)
         {
-            IMPL_TextlistItem* pSearchItem = maTextlist_Bottom[ n ];
-            aCollectString  +=  pSearchItem->sText;
-            aCollectString  +=  "\n";
+            aCollectString.append(pSearchItem->sText).append("\n");
         }
 
-        m_xText_Bottom->setText ( aCollectString );
+        m_xText_Bottom->setText ( aCollectString.makeStringAndClear() );
     }
 }
 
@@ -812,19 +788,7 @@ void ProgressMonitor::impl_cleanMemory ()
     MutexGuard aGuard ( m_aMutex );
 
     // Delete all of lists.
-
-    for ( size_t nPosition = 0; nPosition < maTextlist_Top.size(); ++nPosition )
-    {
-        IMPL_TextlistItem* pSearchItem = maTextlist_Top[ nPosition ];
-        delete pSearchItem;
-    }
     maTextlist_Top.clear();
-
-    for ( size_t nPosition = 0; nPosition < maTextlist_Bottom.size(); ++nPosition )
-    {
-        IMPL_TextlistItem* pSearchItem = maTextlist_Bottom[ nPosition ];
-        delete pSearchItem;
-    }
     maTextlist_Bottom.clear();
 }
 
@@ -832,7 +796,7 @@ void ProgressMonitor::impl_cleanMemory ()
 IMPL_TextlistItem* ProgressMonitor::impl_searchTopic ( const OUString& rTopic, bool bbeforeProgress )
 {
     // Get right textlist for following operations.
-    ::std::vector< IMPL_TextlistItem* >* pTextList;
+    ::std::vector< std::unique_ptr<IMPL_TextlistItem> >* pTextList;
 
     // Ready for multithreading
     ClearableMutexGuard aGuard ( m_aMutex );
@@ -855,7 +819,7 @@ IMPL_TextlistItem* ProgressMonitor::impl_searchTopic ( const OUString& rTopic, b
 
     for ( nPosition = 0; nPosition < nCount; ++nPosition )
     {
-        IMPL_TextlistItem* pSearchItem = pTextList->at( nPosition );
+        auto pSearchItem = pTextList->at( nPosition ).get();
 
         if ( pSearchItem->sTopic == rTopic )
         {
@@ -873,25 +837,20 @@ IMPL_TextlistItem* ProgressMonitor::impl_searchTopic ( const OUString& rTopic, b
 // addText, updateText
 bool ProgressMonitor::impl_debug_checkParameter (
     const OUString& rTopic,
-    const OUString& rText,
-    bool /*bbeforeProgress*/
+    const OUString& rText
 ) {
     if ( rTopic.isEmpty()       ) return false;    // ""
 
     if ( rText.isEmpty()       ) return false;    // ""
-
-    // "bbeforeProgress" is valid in everyway!
 
     // Parameter OK ... return true.
     return true;
 }
 
 // removeText
-bool ProgressMonitor::impl_debug_checkParameter ( const OUString& rTopic, bool /*bbeforeProgress*/ )
+bool ProgressMonitor::impl_debug_checkParameter ( const OUString& rTopic )
 {
     if ( rTopic.isEmpty()      ) return false;    // ""
-
-    // "bbeforeProgress" is valid in everyway!
 
     // Parameter OK ... return true.
     return true;

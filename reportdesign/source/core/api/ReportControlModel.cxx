@@ -16,7 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "ReportControlModel.hxx"
+#include <ReportControlModel.hxx>
 #include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/beans/XPropertyState.hpp>
 namespace reportdesign
@@ -25,24 +25,24 @@ using namespace com::sun::star;
 using namespace comphelper;
 
 // XContainer
-void OReportControlModel::addContainerListener( const uno::Reference< container::XContainerListener >& xListener ) throw (uno::RuntimeException)
+void OReportControlModel::addContainerListener( const uno::Reference< container::XContainerListener >& xListener )
 {
     aContainerListeners.addInterface(xListener);
 }
 
-void OReportControlModel::removeContainerListener( const uno::Reference< container::XContainerListener >& xListener ) throw (uno::RuntimeException)
+void OReportControlModel::removeContainerListener( const uno::Reference< container::XContainerListener >& xListener )
 {
     aContainerListeners.removeInterface(xListener);
 }
 
-bool OReportControlModel::hasElements(  ) throw (uno::RuntimeException)
+bool OReportControlModel::hasElements(  )
 {
     ::osl::MutexGuard aGuard(m_rMutex);
     return !m_aFormatConditions.empty();
 }
 
 // XIndexContainer
-void OReportControlModel::insertByIndex( ::sal_Int32 Index, const uno::Any& Element ) throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException)
+void OReportControlModel::insertByIndex( ::sal_Int32 Index, const uno::Any& Element )
 {
     uno::Reference<report::XFormatCondition> xElement(Element,uno::UNO_QUERY);
     if ( !xElement.is() )
@@ -63,7 +63,7 @@ void OReportControlModel::insertByIndex( ::sal_Int32 Index, const uno::Any& Elem
     aContainerListeners.notifyEach(&container::XContainerListener::elementInserted,aEvent);
 }
 
-void OReportControlModel::removeByIndex( ::sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException)
+void OReportControlModel::removeByIndex( ::sal_Int32 Index )
 {
     uno::Any Element;
     uno::Reference< container::XContainer > xBroadcaster;
@@ -79,7 +79,7 @@ void OReportControlModel::removeByIndex( ::sal_Int32 Index ) throw (lang::IndexO
 }
 
 // XIndexReplace
-void OReportControlModel::replaceByIndex( ::sal_Int32 Index, const uno::Any& Element ) throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException)
+void OReportControlModel::replaceByIndex( ::sal_Int32 Index, const uno::Any& Element )
 {
     uno::Reference<report::XFormatCondition> xElement(Element,uno::UNO_QUERY);
     if ( !xElement.is() )
@@ -96,13 +96,13 @@ void OReportControlModel::replaceByIndex( ::sal_Int32 Index, const uno::Any& Ele
 }
 
 // XIndexAccess
-::sal_Int32 OReportControlModel::getCount(  ) throw (uno::RuntimeException)
+::sal_Int32 OReportControlModel::getCount(  )
 {
     ::osl::MutexGuard aGuard(m_rMutex);
     return m_aFormatConditions.size();
 }
 
-uno::Any OReportControlModel::getByIndex( ::sal_Int32 Index ) throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException, uno::RuntimeException)
+uno::Any OReportControlModel::getByIndex( ::sal_Int32 Index )
 {
     uno::Any aElement;
     {

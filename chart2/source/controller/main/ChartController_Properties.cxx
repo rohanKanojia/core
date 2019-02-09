@@ -17,47 +17,47 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ChartController.hxx"
-#include "ChartWindow.hxx"
-#include "chartview/DrawModelWrapper.hxx"
-#include "ObjectIdentifier.hxx"
-#include "chartview/ExplicitValueProvider.hxx"
-#include "macros.hxx"
-#include "dlg_ObjectProperties.hxx"
-#include "dlg_View3D.hxx"
-#include "dlg_InsertErrorBars.hxx"
-#include "ViewElementListProvider.hxx"
-#include "DataPointItemConverter.hxx"
-#include "TextLabelItemConverter.hxx"
-#include "AxisItemConverter.hxx"
-#include "MultipleChartConverters.hxx"
-#include "TitleItemConverter.hxx"
-#include "LegendItemConverter.hxx"
-#include "RegressionCurveItemConverter.hxx"
-#include "RegressionEquationItemConverter.hxx"
-#include "ErrorBarItemConverter.hxx"
-#include "ChartModelHelper.hxx"
-#include "AxisHelper.hxx"
-#include "TitleHelper.hxx"
-#include "LegendHelper.hxx"
-#include "ChartTypeHelper.hxx"
-#include "ColorPerPointHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "servicenames_charttypes.hxx"
-#include "ControllerLockGuard.hxx"
+#include <ChartController.hxx>
+#include <ChartWindow.hxx>
+#include <chartview/DrawModelWrapper.hxx>
+#include <chartview/ChartSfxItemIds.hxx>
+#include <ObjectIdentifier.hxx>
+#include <chartview/ExplicitScaleValues.hxx>
+#include <chartview/ExplicitValueProvider.hxx>
+#include <dlg_ObjectProperties.hxx>
+#include <dlg_View3D.hxx>
+#include <dlg_InsertErrorBars.hxx>
+#include <ViewElementListProvider.hxx>
+#include <DataPointItemConverter.hxx>
+#include <TextLabelItemConverter.hxx>
+#include <AxisItemConverter.hxx>
+#include <MultipleChartConverters.hxx>
+#include <TitleItemConverter.hxx>
+#include <LegendItemConverter.hxx>
+#include <RegressionCurveItemConverter.hxx>
+#include <RegressionEquationItemConverter.hxx>
+#include <ErrorBarItemConverter.hxx>
+#include <ChartModelHelper.hxx>
+#include <AxisHelper.hxx>
+#include <TitleHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <ColorPerPointHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <ControllerLockGuard.hxx>
 #include "UndoGuard.hxx"
-#include "ObjectNameProvider.hxx"
-#include "ResId.hxx"
-#include "Strings.hrc"
-#include "ReferenceSizeProvider.hxx"
-#include "RegressionCurveHelper.hxx"
+#include <ObjectNameProvider.hxx>
+#include <ResId.hxx>
+#include <strings.hrc>
+#include <ReferenceSizeProvider.hxx>
+#include <RegressionCurveHelper.hxx>
 #include <com/sun/star/chart2/XChartDocument.hpp>
+#include <com/sun/star/util/CloseVetoException.hpp>
+#include <com/sun/star/chart2/XRegressionCurveContainer.hpp>
 
 #include <memory>
 
-#include <vcl/msgbox.hxx>
+#include <sal/log.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <svx/ActionDescriptionProvider.hxx>
 
 namespace chart
@@ -72,13 +72,13 @@ namespace
 wrapper::ItemConverter* createItemConverter(
     const OUString & aObjectCID, const uno::Reference<frame::XModel>& xChartModel,
     const uno::Reference<uno::XComponentContext>& xContext, SdrModel& rDrawModel,
-    ExplicitValueProvider* pExplicitValueProvider, ReferenceSizeProvider* pRefSizeProvider )
+    ExplicitValueProvider* pExplicitValueProvider, ReferenceSizeProvider const * pRefSizeProvider )
 {
     wrapper::ItemConverter* pItemConverter=nullptr;
 
     //get type of selected object
     ObjectType eObjectType = ObjectIdentifier::getObjectType( aObjectCID );
-    if( OBJECTTYPE_UNKNOWN==eObjectType )
+    if( eObjectType==OBJECTTYPE_UNKNOWN )
     {
         OSL_FAIL("unknown ObjectType");
         return nullptr;
@@ -99,7 +99,7 @@ wrapper::ItemConverter* createItemConverter(
                 pItemConverter =  new wrapper::GraphicPropertyItemConverter(
                                         xObjectProperties, rDrawModel.GetItemPool(),
                                         rDrawModel, uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ),
-                                        wrapper::GraphicPropertyItemConverter::LINE_AND_FILL_PROPERTIES );
+                                        wrapper::GraphicObjectType::LineAndFillProperties );
                     break;
             case OBJECTTYPE_TITLE:
             {
@@ -134,7 +134,7 @@ wrapper::ItemConverter* createItemConverter(
                 pItemConverter =  new wrapper::GraphicPropertyItemConverter(
                                         xObjectProperties, rDrawModel.GetItemPool(),
                                         rDrawModel, uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ),
-                                        wrapper::GraphicPropertyItemConverter::LINE_AND_FILL_PROPERTIES );
+                                        wrapper::GraphicObjectType::LineAndFillProperties );
                     break;
             case OBJECTTYPE_AXIS:
             {
@@ -174,7 +174,6 @@ wrapper::ItemConverter* createItemConverter(
                     pRefSize.reset( new awt::Size( pRefSizeProvider->getPageSize()));
 
                 uno::Reference<XDataSeries> xSeries = ObjectIdentifier::getDataSeriesForCID(aObjectCID, xChartModel);
-                uno::Reference<XChartType> xChartType = ChartModelHelper::getChartTypeOfSeries(xChartModel, xSeries);
 
                 uno::Reference<XDiagram> xDiagram = ChartModelHelper::findDiagram(xChartModel);
 
@@ -202,8 +201,8 @@ wrapper::ItemConverter* createItemConverter(
                 if (pRefSizeProvider)
                     pRefSize.reset( new awt::Size( pRefSizeProvider->getPageSize()));
 
-                wrapper::GraphicPropertyItemConverter::eGraphicObjectType eMapTo =
-                    wrapper::GraphicPropertyItemConverter::FILLED_DATA_POINT;
+                wrapper::GraphicObjectType eMapTo =
+                    wrapper::GraphicObjectType::FilledDataPoint;
 
                 uno::Reference< XDataSeries > xSeries = ObjectIdentifier::getDataSeriesForCID( aObjectCID, xChartModel );
                 uno::Reference< XChartType > xChartType = ChartModelHelper::getChartTypeOfSeries( xChartModel, xSeries );
@@ -211,7 +210,7 @@ wrapper::ItemConverter* createItemConverter(
                 uno::Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
                 sal_Int32 nDimensionCount = DiagramHelper::getDimension( xDiagram );
                 if( !ChartTypeHelper::isSupportingAreaProperties( xChartType, nDimensionCount ) )
-                    eMapTo = wrapper::GraphicPropertyItemConverter::LINE_DATA_POINT;
+                    eMapTo = wrapper::GraphicObjectType::LineDataPoint;
 
                 bool bDataSeries = eObjectType == OBJECTTYPE_DATA_SERIES;
 
@@ -247,7 +246,7 @@ wrapper::ItemConverter* createItemConverter(
                                         uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ),
                                         eMapTo, pRefSize.get(), bDataSeries, bUseSpecialFillColor, nSpecialFillColor, true,
                                         nNumberFormat, nPercentNumberFormat );
-                    break;
+                break;
             }
             case OBJECTTYPE_GRID:
             case OBJECTTYPE_SUBGRID:
@@ -255,7 +254,7 @@ wrapper::ItemConverter* createItemConverter(
                 pItemConverter =  new wrapper::GraphicPropertyItemConverter(
                                         xObjectProperties, rDrawModel.GetItemPool(),
                                         rDrawModel, uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ),
-                                        wrapper::GraphicPropertyItemConverter::LINE_PROPERTIES );
+                                        wrapper::GraphicObjectType::LineProperties );
                     break;
 
             case OBJECTTYPE_DATA_ERRORS_X:
@@ -283,7 +282,7 @@ wrapper::ItemConverter* createItemConverter(
                                         xObjectProperties, rDrawModel.GetItemPool(), rDrawModel,
                                         uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ),
                                         pRefSize.get());
-                    break;
+                break;
             }
             case OBJECTTYPE_DATA_STOCK_RANGE:
                     break;
@@ -292,7 +291,7 @@ wrapper::ItemConverter* createItemConverter(
                 pItemConverter =  new wrapper::GraphicPropertyItemConverter(
                                         xObjectProperties, rDrawModel.GetItemPool(),
                                         rDrawModel, uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ),
-                                        wrapper::GraphicPropertyItemConverter::LINE_AND_FILL_PROPERTIES );
+                                        wrapper::GraphicObjectType::LineAndFillProperties );
                     break;
             default: //OBJECTTYPE_UNKNOWN
                     break;
@@ -315,7 +314,7 @@ wrapper::ItemConverter* createItemConverter(
 
                 pItemConverter =  new wrapper::AllAxisItemConverter(
                     xChartModel, rDrawModel.GetItemPool(),
-                    rDrawModel, uno::Reference< lang::XMultiServiceFactory >( xChartModel, uno::UNO_QUERY ), pRefSize.get());
+                    rDrawModel, pRefSize.get());
             }
             break;
             case OBJECTTYPE_GRID:
@@ -333,21 +332,21 @@ wrapper::ItemConverter* createItemConverter(
 
 OUString lcl_getTitleCIDForCommand( const OString& rDispatchCommand, const uno::Reference< frame::XModel > & xChartModel )
 {
-    if( rDispatchCommand.equals("AllTitles"))
+    if( rDispatchCommand == "AllTitles")
         return ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_TITLE, "ALLELEMENTS" );
 
     TitleHelper::eTitleType nTitleType( TitleHelper::MAIN_TITLE );
-    if( rDispatchCommand.equals("SubTitle") )
+    if( rDispatchCommand == "SubTitle" )
         nTitleType = TitleHelper::SUB_TITLE;
-    else if( rDispatchCommand.equals("XTitle") )
+    else if( rDispatchCommand == "XTitle" )
         nTitleType = TitleHelper::X_AXIS_TITLE;
-    else if( rDispatchCommand.equals("YTitle") )
+    else if( rDispatchCommand == "YTitle" )
         nTitleType = TitleHelper::Y_AXIS_TITLE;
-    else if( rDispatchCommand.equals("ZTitle") )
+    else if( rDispatchCommand == "ZTitle" )
         nTitleType = TitleHelper::Z_AXIS_TITLE;
-    else if( rDispatchCommand.equals("SecondaryXTitle") )
+    else if( rDispatchCommand == "SecondaryXTitle" )
         nTitleType = TitleHelper::SECONDARY_X_AXIS_TITLE;
-    else if( rDispatchCommand.equals("SecondaryYTitle") )
+    else if( rDispatchCommand == "SecondaryYTitle" )
         nTitleType = TitleHelper::SECONDARY_Y_AXIS_TITLE;
 
     uno::Reference< XTitle > xTitle( TitleHelper::getTitle( nTitleType, xChartModel ) );
@@ -356,28 +355,28 @@ OUString lcl_getTitleCIDForCommand( const OString& rDispatchCommand, const uno::
 
 OUString lcl_getAxisCIDForCommand( const OString& rDispatchCommand, const uno::Reference< frame::XModel >& xChartModel )
 {
-    if( rDispatchCommand.equals("DiagramAxisAll"))
+    if( rDispatchCommand == "DiagramAxisAll")
         return ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_AXIS, "ALLELEMENTS" );
 
     sal_Int32   nDimensionIndex=0;
     bool        bMainAxis=true;
-    if( rDispatchCommand.equals("DiagramAxisX"))
+    if( rDispatchCommand == "DiagramAxisX")
     {
         nDimensionIndex=0; bMainAxis=true;
     }
-    else if( rDispatchCommand.equals("DiagramAxisY"))
+    else if( rDispatchCommand == "DiagramAxisY")
     {
         nDimensionIndex=1; bMainAxis=true;
     }
-    else if( rDispatchCommand.equals("DiagramAxisZ"))
+    else if( rDispatchCommand == "DiagramAxisZ")
     {
         nDimensionIndex=2; bMainAxis=true;
     }
-    else if( rDispatchCommand.equals("DiagramAxisA"))
+    else if( rDispatchCommand == "DiagramAxisA")
     {
         nDimensionIndex=0; bMainAxis=false;
     }
-    else if( rDispatchCommand.equals("DiagramAxisB"))
+    else if( rDispatchCommand == "DiagramAxisB")
     {
         nDimensionIndex=1; bMainAxis=false;
     }
@@ -391,7 +390,7 @@ OUString lcl_getGridCIDForCommand( const OString& rDispatchCommand, const uno::R
 {
     uno::Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( xChartModel ) );
 
-    if( rDispatchCommand.equals("DiagramGridAll"))
+    if( rDispatchCommand == "DiagramGridAll")
         return ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_GRID, "ALLELEMENTS" );
 
     sal_Int32   nDimensionIndex=0;
@@ -399,35 +398,34 @@ OUString lcl_getGridCIDForCommand( const OString& rDispatchCommand, const uno::R
 
     //x and y is swapped in the commands
 
-    if( rDispatchCommand.equals("DiagramGridYMain"))
+    if( rDispatchCommand == "DiagramGridYMain")
     {
         nDimensionIndex=0; bMainGrid=true;
     }
-    else if( rDispatchCommand.equals("DiagramGridXMain"))
+    else if( rDispatchCommand == "DiagramGridXMain")
     {
         nDimensionIndex=1; bMainGrid=true;
     }
-    else if( rDispatchCommand.equals("DiagramGridZMain"))
+    else if( rDispatchCommand == "DiagramGridZMain")
     {
         nDimensionIndex=2; bMainGrid=true;
     }
-    else if( rDispatchCommand.equals("DiagramGridYHelp"))
+    else if( rDispatchCommand == "DiagramGridYHelp")
     {
         nDimensionIndex=0; bMainGrid=false;
     }
-    else if( rDispatchCommand.equals("DiagramGridXHelp"))
+    else if( rDispatchCommand == "DiagramGridXHelp")
     {
         nDimensionIndex=1; bMainGrid=false;
     }
-    else if( rDispatchCommand.equals("DiagramGridZHelp"))
+    else if( rDispatchCommand == "DiagramGridZHelp")
     {
         nDimensionIndex=2; bMainGrid=false;
     }
 
-    bool bMainAxis = true;
-    uno::Reference< XAxis > xAxis( AxisHelper::getAxis( nDimensionIndex, bMainAxis, xDiagram ) );
+    uno::Reference< XAxis > xAxis( AxisHelper::getAxis( nDimensionIndex, true/*bMainAxis*/, xDiagram ) );
 
-    sal_Int32   nSubGridIndex= bMainGrid ? (-1) : 0;
+    sal_Int32   nSubGridIndex= bMainGrid ? -1 : 0;
     OUString aCID( ObjectIdentifier::createClassifiedIdentifierForGrid( xAxis, xChartModel, nSubGridIndex ) );
     return aCID;
 }
@@ -443,7 +441,6 @@ OUString lcl_getErrorCIDForCommand( const ObjectType eDispatchType, const Object
 OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno::Reference< XChartDocument > & xChartDocument, const OUString& rSelectedCID )
 {
     ObjectType eObjectType = OBJECTTYPE_UNKNOWN;
-    OUString aParticleID;
 
     uno::Reference< frame::XModel > xChartModel( xChartDocument, uno::UNO_QUERY );
     const ObjectType eSelectedType = ObjectIdentifier::getObjectType( rSelectedCID );
@@ -451,65 +448,65 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
     uno::Reference< chart2::XRegressionCurveContainer > xRegCurveCnt( xSeries, uno::UNO_QUERY );
 
     //legend
-    if( rDispatchCommand.equals("Legend") || rDispatchCommand.equals("FormatLegend") )
+    if( rDispatchCommand == "Legend" || rDispatchCommand == "FormatLegend" )
     {
         eObjectType = OBJECTTYPE_LEGEND;
         //@todo set particular aParticleID if we have more than one legend
     }
     //wall floor area
-    else if( rDispatchCommand.equals("DiagramWall") || rDispatchCommand.equals("FormatWall") )
+    else if( rDispatchCommand == "DiagramWall" || rDispatchCommand == "FormatWall" )
     {
         //OBJECTTYPE_DIAGRAM;
         eObjectType = OBJECTTYPE_DIAGRAM_WALL;
         //@todo set particular aParticleID if we have more than one diagram
     }
-    else if( rDispatchCommand.equals("DiagramFloor") || rDispatchCommand.equals("FormatFloor") )
+    else if( rDispatchCommand == "DiagramFloor" || rDispatchCommand == "FormatFloor" )
     {
         eObjectType = OBJECTTYPE_DIAGRAM_FLOOR;
         //@todo set particular aParticleID if we have more than one diagram
     }
-    else if( rDispatchCommand.equals("DiagramArea") || rDispatchCommand.equals("FormatChartArea") )
+    else if( rDispatchCommand == "DiagramArea" || rDispatchCommand == "FormatChartArea" )
     {
         eObjectType = OBJECTTYPE_PAGE;
     }
     //title
-    else if( rDispatchCommand.equals("MainTitle")
-        || rDispatchCommand.equals("SubTitle")
-        || rDispatchCommand.equals("XTitle")
-        || rDispatchCommand.equals("YTitle")
-        || rDispatchCommand.equals("ZTitle")
-        || rDispatchCommand.equals("SecondaryXTitle")
-        || rDispatchCommand.equals("SecondaryYTitle")
-        || rDispatchCommand.equals("AllTitles")
+    else if( rDispatchCommand == "MainTitle"
+        || rDispatchCommand == "SubTitle"
+        || rDispatchCommand == "XTitle"
+        || rDispatchCommand == "YTitle"
+        || rDispatchCommand == "ZTitle"
+        || rDispatchCommand == "SecondaryXTitle"
+        || rDispatchCommand == "SecondaryYTitle"
+        || rDispatchCommand == "AllTitles"
         )
     {
         return lcl_getTitleCIDForCommand( rDispatchCommand, xChartModel );
     }
     //axis
-    else if( rDispatchCommand.equals("DiagramAxisX")
-        || rDispatchCommand.equals("DiagramAxisY")
-        || rDispatchCommand.equals("DiagramAxisZ")
-        || rDispatchCommand.equals("DiagramAxisA")
-        || rDispatchCommand.equals("DiagramAxisB")
-        || rDispatchCommand.equals("DiagramAxisAll")
+    else if( rDispatchCommand == "DiagramAxisX"
+        || rDispatchCommand == "DiagramAxisY"
+        || rDispatchCommand == "DiagramAxisZ"
+        || rDispatchCommand == "DiagramAxisA"
+        || rDispatchCommand == "DiagramAxisB"
+        || rDispatchCommand == "DiagramAxisAll"
         )
     {
         return lcl_getAxisCIDForCommand( rDispatchCommand, xChartModel );
     }
     //grid
-    else if( rDispatchCommand.equals("DiagramGridYMain")
-        || rDispatchCommand.equals("DiagramGridXMain")
-        || rDispatchCommand.equals("DiagramGridZMain")
-        || rDispatchCommand.equals("DiagramGridYHelp")
-        || rDispatchCommand.equals("DiagramGridXHelp")
-        || rDispatchCommand.equals("DiagramGridZHelp")
-        || rDispatchCommand.equals("DiagramGridAll")
+    else if( rDispatchCommand == "DiagramGridYMain"
+        || rDispatchCommand == "DiagramGridXMain"
+        || rDispatchCommand == "DiagramGridZMain"
+        || rDispatchCommand == "DiagramGridYHelp"
+        || rDispatchCommand == "DiagramGridXHelp"
+        || rDispatchCommand == "DiagramGridZHelp"
+        || rDispatchCommand == "DiagramGridAll"
         )
     {
         return lcl_getGridCIDForCommand( rDispatchCommand, xChartModel );
     }
     //data series
-    else if( rDispatchCommand.equals("FormatDataSeries") )
+    else if( rDispatchCommand == "FormatDataSeries" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_SERIES )
             return rSelectedCID;
@@ -518,12 +515,12 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
                 OBJECTTYPE_DATA_SERIES, ObjectIdentifier::getSeriesParticleFromCID( rSelectedCID ) );
     }
     //data point
-    else if( rDispatchCommand.equals("FormatDataPoint") )
+    else if( rDispatchCommand == "FormatDataPoint" )
     {
         return rSelectedCID;
     }
     //data labels
-    else if( rDispatchCommand.equals("FormatDataLabels") )
+    else if( rDispatchCommand == "FormatDataLabels" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_LABELS )
             return rSelectedCID;
@@ -532,7 +529,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
                 OBJECTTYPE_DATA_LABELS, OUString(), rSelectedCID );
     }
     //data labels
-    else if( rDispatchCommand.equals("FormatDataLabel") )
+    else if( rDispatchCommand == "FormatDataLabel" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_LABEL )
             return rSelectedCID;
@@ -552,7 +549,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
         }
     }
     //mean value line
-    else if( rDispatchCommand.equals("FormatMeanValue") )
+    else if( rDispatchCommand == "FormatMeanValue" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_AVERAGE_LINE )
             return rSelectedCID;
@@ -563,7 +560,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
                         RegressionCurveHelper::getMeanValueLine( xRegCurveCnt ) ), true );
     }
     //trend line
-    else if( rDispatchCommand.equals("FormatTrendline") )
+    else if( rDispatchCommand == "FormatTrendline" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_CURVE )
             return rSelectedCID;
@@ -574,7 +571,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
                         RegressionCurveHelper::getFirstCurveNotMeanValueLine( xRegCurveCnt ) ), false );
     }
     //trend line equation
-    else if( rDispatchCommand.equals("FormatTrendlineEquation") )
+    else if( rDispatchCommand == "FormatTrendlineEquation" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_CURVE_EQUATION )
             return rSelectedCID;
@@ -585,17 +582,17 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
                         RegressionCurveHelper::getFirstCurveNotMeanValueLine( xRegCurveCnt ) ) );
     }
     // y error bars
-    else if( rDispatchCommand.equals("FormatXErrorBars") )
+    else if( rDispatchCommand == "FormatXErrorBars" )
     {
         return lcl_getErrorCIDForCommand(OBJECTTYPE_DATA_ERRORS_X, eSelectedType, rSelectedCID );
     }
     // y error bars
-    else if( rDispatchCommand.equals("FormatYErrorBars") )
+    else if( rDispatchCommand == "FormatYErrorBars" )
     {
         return lcl_getErrorCIDForCommand(OBJECTTYPE_DATA_ERRORS_Y, eSelectedType, rSelectedCID );
     }
     // axis
-    else if( rDispatchCommand.equals("FormatAxis") )
+    else if( rDispatchCommand == "FormatAxis" )
     {
         if( eSelectedType == OBJECTTYPE_AXIS )
             return rSelectedCID;
@@ -606,7 +603,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
         }
     }
     // major grid
-    else if( rDispatchCommand.equals("FormatMajorGrid") )
+    else if( rDispatchCommand == "FormatMajorGrid" )
     {
         if( eSelectedType == OBJECTTYPE_GRID )
             return rSelectedCID;
@@ -618,7 +615,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
 
     }
     // minor grid
-    else if( rDispatchCommand.equals("FormatMinorGrid") )
+    else if( rDispatchCommand == "FormatMinorGrid" )
     {
         if( eSelectedType == OBJECTTYPE_SUBGRID )
             return rSelectedCID;
@@ -629,13 +626,13 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
         }
     }
     // title
-    else if( rDispatchCommand.equals("FormatTitle") )
+    else if( rDispatchCommand == "FormatTitle" )
     {
         if( eSelectedType == OBJECTTYPE_TITLE )
             return rSelectedCID;
     }
     // stock loss
-    else if( rDispatchCommand.equals("FormatStockLoss") )
+    else if( rDispatchCommand == "FormatStockLoss" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_STOCK_LOSS )
             return rSelectedCID;
@@ -643,7 +640,7 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
             return ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_DATA_STOCK_LOSS, OUString());
     }
     // stock gain
-    else if( rDispatchCommand.equals("FormatStockGain") )
+    else if( rDispatchCommand == "FormatStockGain" )
     {
         if( eSelectedType == OBJECTTYPE_DATA_STOCK_GAIN )
             return rSelectedCID;
@@ -652,7 +649,8 @@ OUString lcl_getObjectCIDForCommand( const OString& rDispatchCommand, const uno:
     }
 
     return ObjectIdentifier::createClassifiedIdentifier(
-        eObjectType, aParticleID );
+        eObjectType,
+        OUString() ); // aParticleID
 }
 
 }
@@ -682,14 +680,14 @@ OUString lcl_getFormatCIDforSelectedCID( const OUString& rSelectedCID )
     ObjectType eObjectType = ObjectIdentifier::getObjectType( aFormatCID );
 
     // some legend entries are handled as if they were data series
-    if( OBJECTTYPE_LEGEND_ENTRY==eObjectType )
+    if( eObjectType==OBJECTTYPE_LEGEND_ENTRY )
     {
         OUString aParentParticle( ObjectIdentifier::getFullParentParticle( rSelectedCID ) );
         aFormatCID  = ObjectIdentifier::createClassifiedIdentifierForParticle( aParentParticle );
     }
 
     // treat diagram as wall
-    if( OBJECTTYPE_DIAGRAM==eObjectType )
+    if( eObjectType==OBJECTTYPE_DIAGRAM )
         aFormatCID  = ObjectIdentifier::createClassifiedIdentifier( OBJECTTYPE_DIAGRAM_WALL, OUString() );
 
     return aFormatCID;
@@ -702,7 +700,7 @@ void ChartController::executeDlg_ObjectProperties( const OUString& rSelectedObje
     OUString aObjectCID = lcl_getFormatCIDforSelectedCID( rSelectedObjectCID );
 
     UndoGuard aUndoGuard( ActionDescriptionProvider::createDescription(
-                ActionDescriptionProvider::FORMAT,
+                ActionDescriptionProvider::ActionType::Format,
                 ObjectNameProvider::getName( ObjectIdentifier::getObjectType( aObjectCID ))),
             m_xUndoManager );
 
@@ -724,11 +722,11 @@ bool ChartController::executeDlg_ObjectProperties_withoutUndoGuard(
     {
         //get type of object
         ObjectType eObjectType = ObjectIdentifier::getObjectType( rObjectCID );
-        if( OBJECTTYPE_UNKNOWN==eObjectType )
+        if( eObjectType==OBJECTTYPE_UNKNOWN )
         {
             return bRet;
         }
-        if( OBJECTTYPE_DIAGRAM_WALL==eObjectType || OBJECTTYPE_DIAGRAM_FLOOR==eObjectType )
+        if( eObjectType==OBJECTTYPE_DIAGRAM_WALL || eObjectType==OBJECTTYPE_DIAGRAM_FLOOR )
         {
             if( !DiagramHelper::isSupportingFloorAndWall( ChartModelHelper::findDiagram( getModel() ) ) )
                 return bRet;
@@ -760,15 +758,14 @@ bool ChartController::executeDlg_ObjectProperties_withoutUndoGuard(
         ViewElementListProvider aViewElementListProvider( m_pDrawModelWrapper.get() );
 
         SolarMutexGuard aGuard;
-        ScopedVclPtrInstance<SchAttribTabDlg> aDlg(
-                m_pChartWindow, &aItemSet, &aDialogParameter,
+        SchAttribTabDlg aDlg(
+                GetChartFrame(), &aItemSet, &aDialogParameter,
                 &aViewElementListProvider,
                 uno::Reference< util::XNumberFormatsSupplier >(
                         getModel(), uno::UNO_QUERY ) );
 
         if(aDialogParameter.HasSymbolProperties())
         {
-            SfxItemSet* pSymbolShapeProperties=nullptr;
             uno::Reference< beans::XPropertySet > xObjectProperties =
                 ObjectIdentifier::getObjectPropertySet( rObjectCID, getModel() );
             wrapper::DataPointItemConverter aSymbolItemConverter( getModel(), m_xCC
@@ -776,26 +773,26 @@ bool ChartController::executeDlg_ObjectProperties_withoutUndoGuard(
                                         , m_pDrawModelWrapper->getSdrModel().GetItemPool()
                                         , m_pDrawModelWrapper->getSdrModel()
                                         , uno::Reference< lang::XMultiServiceFactory >( getModel(), uno::UNO_QUERY )
-                                        , wrapper::GraphicPropertyItemConverter::FILLED_DATA_POINT );
+                                        , wrapper::GraphicObjectType::FilledDataPoint );
 
-            pSymbolShapeProperties = new SfxItemSet( aSymbolItemConverter.CreateEmptyItemSet() );
+            std::unique_ptr<SfxItemSet> pSymbolShapeProperties(new SfxItemSet( aSymbolItemConverter.CreateEmptyItemSet() ));
             aSymbolItemConverter.FillItemSet( *pSymbolShapeProperties );
 
-            sal_Int32   nStandardSymbol=0;//@todo get from somewhere
-            Graphic*    pAutoSymbolGraphic = new Graphic( aViewElementListProvider.GetSymbolGraphic( nStandardSymbol, pSymbolShapeProperties ) );
+            sal_Int32 const nStandardSymbol=0;//@todo get from somewhere
+            std::unique_ptr<Graphic> pAutoSymbolGraphic(new Graphic( aViewElementListProvider.GetSymbolGraphic( nStandardSymbol, pSymbolShapeProperties.get() ) ));
             // note: the dialog takes the ownership of pSymbolShapeProperties and pAutoSymbolGraphic
-            aDlg->setSymbolInformation( pSymbolShapeProperties, pAutoSymbolGraphic );
+            aDlg.setSymbolInformation( std::move(pSymbolShapeProperties), std::move(pAutoSymbolGraphic) );
         }
         if( aDialogParameter.HasStatisticProperties() )
         {
-            aDlg->SetAxisMinorStepWidthForErrorBarDecimals(
+            aDlg.SetAxisMinorStepWidthForErrorBarDecimals(
                 InsertErrorBarsDialog::getAxisMinorStepWidthForErrorBarDecimals( getModel(), m_xChartView, rObjectCID ) );
         }
 
         //open the dialog
-        if (aDlg->Execute() == RET_OK || (bSuccessOnUnchanged && aDlg->DialogWasClosedWithOK()))
+        if (aDlg.run() == RET_OK || (bSuccessOnUnchanged && aDlg.DialogWasClosedWithOK()))
         {
-            const SfxItemSet* pOutItemSet = aDlg->GetOutputItemSet();
+            const SfxItemSet* pOutItemSet = aDlg.GetOutputItemSet();
             if(pOutItemSet)
             {
                 ControllerLockGuardUNO aCLGuard( getModel());
@@ -817,20 +814,19 @@ void ChartController::executeDispatch_View3D()
 {
     try
     {
-        // using assignment for broken gcc 3.3
-        UndoLiveUpdateGuard aUndoGuard = UndoLiveUpdateGuard(
-            SCH_RESSTR( STR_ACTION_EDIT_3D_VIEW ),
+        UndoLiveUpdateGuard aUndoGuard(
+            SchResId( STR_ACTION_EDIT_3D_VIEW ),
             m_xUndoManager );
 
         //open dialog
         SolarMutexGuard aSolarGuard;
-        ScopedVclPtrInstance< View3DDialog > aDlg( m_pChartWindow, getModel(), m_pDrawModelWrapper->GetColorList() );
+        ScopedVclPtrInstance< View3DDialog > aDlg(GetChartWindow(), getModel());
         if( aDlg->Execute() == RET_OK )
             aUndoGuard.commit();
     }
     catch(const uno::RuntimeException& e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
 }
 

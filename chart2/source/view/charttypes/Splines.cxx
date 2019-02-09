@@ -20,13 +20,11 @@
 #include "Splines.hxx"
 #include <rtl/math.hxx>
 #include <osl/diagnose.h>
+#include <com/sun/star/drawing/PolyPolygonShape3D.hpp>
 
 #include <vector>
 #include <algorithm>
-#include <functional>
 #include <memory>
-
-#define MAX_BSPLINE_DEGREE 15
 
 namespace chart
 {
@@ -35,8 +33,8 @@ using namespace ::com::sun::star;
 namespace
 {
 
-typedef ::std::pair< double, double >   tPointType;
-typedef ::std::vector< tPointType >     tPointVecType;
+typedef std::pair< double, double >   tPointType;
+typedef std::vector< tPointType >     tPointVecType;
 typedef tPointVecType::size_type        lcl_tSizeType;
 
 class lcl_SplineCalculation
@@ -67,7 +65,7 @@ public:
 
     /** @descr this function corresponds to the function splint in [1].
 
-        [1] Numerical Recipies in C, 2nd edition
+        [1] Numerical Recipes in C, 2nd edition
             William H. Press, et al.,
             Section 3.3, page 116
     */
@@ -78,7 +76,7 @@ private:
     tPointVecType            m_aPoints;
 
     /// the result of the Calculate() method
-    ::std::vector< double >         m_aSecDerivY;
+    std::vector< double >         m_aSecDerivY;
 
     double m_fYp1;
     double m_fYpN;
@@ -90,7 +88,7 @@ private:
 
     /** @descr this function corresponds to the function spline in [1].
 
-        [1] Numerical Recipies in C, 2nd edition
+        [1] Numerical Recipes in C, 2nd edition
             William H. Press, et al.,
             Section 3.3, page 115
     */
@@ -148,7 +146,7 @@ void lcl_SplineCalculation::Calculate()
 
     // n is the last valid index to m_aPoints
     const lcl_tSizeType n = m_aPoints.size() - 1;
-    ::std::vector< double > u( n );
+    std::vector< double > u( n );
     m_aSecDerivY.resize( n + 1, 0.0 );
 
     if( ::rtl::math::isInf( m_fYp1 ) )
@@ -160,7 +158,7 @@ void lcl_SplineCalculation::Calculate()
     else
     {
         m_aSecDerivY[ 0 ] = -0.5;
-        double xDiff = ( m_aPoints[ 1 ].first - m_aPoints[ 0 ].first );
+        double xDiff = m_aPoints[ 1 ].first - m_aPoints[ 0 ].first;
         u[ 0 ] = ( 3.0 / xDiff ) *
             ((( m_aPoints[ 1 ].second - m_aPoints[ 0 ].second ) / xDiff ) - m_fYp1 );
     }
@@ -195,7 +193,7 @@ void lcl_SplineCalculation::Calculate()
     if( ! ::rtl::math::isInf( m_fYpN ) )
     {
         qn = 0.5;
-        double xDiff = ( m_aPoints[ n ].first - m_aPoints[ n - 1 ].first );
+        double xDiff = m_aPoints[ n ].first - m_aPoints[ n - 1 ].first;
         un = ( 3.0 / xDiff ) *
             ( m_fYpN - ( m_aPoints[ n ].second - m_aPoints[ n - 1 ].second ) / xDiff );
     }
@@ -207,7 +205,7 @@ void lcl_SplineCalculation::Calculate()
     // is always true.
     for( lcl_tSizeType k = n; k > 0; --k )
     {
-        ( m_aSecDerivY[ k - 1 ] *= m_aSecDerivY[ k ] ) += u[ k - 1 ];
+        m_aSecDerivY[ k - 1 ] = (m_aSecDerivY[ k - 1 ] * m_aSecDerivY[ k ] ) + u[ k - 1 ];
     }
 }
 
@@ -221,25 +219,25 @@ void lcl_SplineCalculation::CalculatePeriodic()
 
     // u is used for vector f in A*c=f in [3], vector a in  Ax=a in [2],
     // vector z in Rtranspose z = a and Dr=z in [2]
-    ::std::vector< double > u( n + 1, 0.0 );
+    std::vector< double > u( n + 1, 0.0 );
 
     // used for vector c in A*c=f and vector x in Ax=a in [2]
     m_aSecDerivY.resize( n + 1, 0.0 );
 
     // diagonal of matrix A, used index 1 to n
-    ::std::vector< double > Adiag( n + 1, 0.0 );
+    std::vector< double > Adiag( n + 1, 0.0 );
 
     // secondary diagonal of matrix A with index 1 to n-1 and upper right element in A[n]
-    ::std::vector< double > Aupper( n + 1, 0.0 );
+    std::vector< double > Aupper( n + 1, 0.0 );
 
     // diagonal of matrix D in A=(R transpose)*D*R in [2], used index 1 to n
-    ::std::vector< double > Ddiag( n+1, 0.0 );
+    std::vector< double > Ddiag( n+1, 0.0 );
 
     // right column of matrix R, used index 1 to n-2
-    ::std::vector< double > Rright( n-1, 0.0 );
+    std::vector< double > Rright( n-1, 0.0 );
 
     // secondary diagonal of matrix R, used index 1 to n-1
-    ::std::vector< double > Rupper( n, 0.0 );
+    std::vector< double > Rupper( n, 0.0 );
 
     if (n<4)
     {
@@ -381,8 +379,8 @@ double lcl_SplineCalculation::GetInterpolatedValue( double x )
     }
     else
     {
-        while( ( m_aPoints[ m_nKHigh ].first < x ) &&
-               ( m_nKHigh <= n ) )
+        while( ( m_nKHigh <= n ) &&
+               ( m_aPoints[ m_nKHigh ].first < x ) )
         {
             ++m_nKHigh;
             ++m_nKLow;
@@ -422,7 +420,7 @@ bool createParameterT(const tPointVecType& rUniquePoints, double* t)
         dx = rUniquePoints[i].first - rUniquePoints[i-1].first;
         dy = rUniquePoints[i].second - rUniquePoints[i-1].second;
         // scaling to avoid underflow or overflow
-        fDiffMax = (fabs(dx)>fabs(dy)) ? fabs(dx) : fabs(dy);
+        fDiffMax = std::max(fabs(dx), fabs(dy));
         if (fDiffMax == 0.0)
         {
             bIsSuccessful = false;
@@ -448,7 +446,7 @@ bool createParameterT(const tPointVecType& rUniquePoints, double* t)
             {
                 dx = rUniquePoints[i].first - rUniquePoints[i-1].first;
                 dy = rUniquePoints[i].second - rUniquePoints[i-1].second;
-                fDiffMax = (fabs(dx)>fabs(dy)) ? fabs(dx) : fabs(dy);
+                fDiffMax = std::max(fabs(dx), fabs(dy));
                 // same as above, so should not be zero
                 dx /= fDiffMax;
                 dy /= fDiffMax;
@@ -475,7 +473,7 @@ bool createParameterT(const tPointVecType& rUniquePoints, double* t)
     return bIsSuccessful;
 }
 
-void createKnotVector(const lcl_tSizeType n, const sal_uInt32 p, double* t, double* u)
+void createKnotVector(const lcl_tSizeType n, const sal_uInt32 p, const double* t, double* u)
 {  // precondition: 0 = t_0 < t_1 < ... < t_n = 1
         for (lcl_tSizeType j = 0; j <= p; ++j)
         {
@@ -540,17 +538,14 @@ void SplineCalculater::CalculateCubicSplines(
 {
     OSL_PRECOND( nGranularity > 0, "Granularity is invalid" );
 
-    rResult.SequenceX.realloc(0);
-    rResult.SequenceY.realloc(0);
-    rResult.SequenceZ.realloc(0);
-
     sal_uInt32 nOuterCount = rInput.SequenceX.getLength();
-    if( !nOuterCount )
-        return;
 
     rResult.SequenceX.realloc(nOuterCount);
     rResult.SequenceY.realloc(nOuterCount);
     rResult.SequenceZ.realloc(nOuterCount);
+
+    if( !nOuterCount )
+        return;
 
     for( sal_uInt32 nOuter = 0; nOuter < nOuterCount; ++nOuter )
     {
@@ -562,7 +557,7 @@ void SplineCalculater::CalculateCubicSplines(
         const double* pOldY = rInput.SequenceY[nOuter].getConstArray();
         const double* pOldZ = rInput.SequenceZ[nOuter].getConstArray();
 
-        ::std::vector < double > aParameter(nMaxIndexPoints+1);
+        std::vector < double > aParameter(nMaxIndexPoints+1);
         aParameter[0]=0.0;
         for( sal_uInt32 nIndex=1; nIndex<=nMaxIndexPoints; nIndex++ )
         {
@@ -588,8 +583,8 @@ void SplineCalculater::CalculateCubicSplines(
 
         // generate a spline for each coordinate. It holds the complete
         // information to calculate each point of the curve
-        lcl_SplineCalculation* aSplineX;
-        lcl_SplineCalculation* aSplineY;
+        std::unique_ptr<lcl_SplineCalculation> aSplineX;
+        std::unique_ptr<lcl_SplineCalculation> aSplineY;
         // lcl_SplineCalculation* aSplineZ; the z-coordinates of all points in
         // a data series are equal. No spline calculation needed, but copy
         // coordinate to output
@@ -599,8 +594,8 @@ void SplineCalculater::CalculateCubicSplines(
             pOldZ[ 0 ] == pOldZ[nMaxIndexPoints] &&
             nMaxIndexPoints >=2 )
         {   // periodic spline
-            aSplineX = new lcl_SplineCalculation( aInputX) ;
-            aSplineY = new lcl_SplineCalculation( aInputY) ;
+            aSplineX.reset(new lcl_SplineCalculation( aInputX));
+            aSplineY.reset(new lcl_SplineCalculation( aInputY));
             // aSplineZ = new lcl_SplineCalculation( aInputZ) ;
         }
         else // generate the kind "natural spline"
@@ -609,8 +604,8 @@ void SplineCalculater::CalculateCubicSplines(
             ::rtl::math::setInf( &fInfty, false );
             double fXDerivation = fInfty;
             double fYDerivation = fInfty;
-            aSplineX = new lcl_SplineCalculation( aInputX, fXDerivation, fXDerivation );
-            aSplineY = new lcl_SplineCalculation( aInputY, fYDerivation, fYDerivation );
+            aSplineX.reset(new lcl_SplineCalculation( aInputX, fXDerivation, fXDerivation ));
+            aSplineY.reset(new lcl_SplineCalculation( aInputY, fYDerivation, fYDerivation ));
         }
 
         // fill result polygon with calculated values
@@ -649,9 +644,6 @@ void SplineCalculater::CalculateCubicSplines(
         pNewX[nNewPointIndex] = pOldX[nMaxIndexPoints];
         pNewY[nNewPointIndex] = pOldY[nMaxIndexPoints];
         pNewZ[nNewPointIndex] = pOldZ[nMaxIndexPoints];
-        delete aSplineX;
-        delete aSplineY;
-        // delete aSplineZ;
     }
 }
 
@@ -676,20 +668,17 @@ void SplineCalculater::CalculateBSplines(
     OSL_ASSERT( nResolution > 1 );
     OSL_ASSERT( nDegree >= 1 );
 
-    // limit the b-spline degree to prevent insanely large sets of points
-    sal_uInt32 p = std::min<sal_uInt32>(nDegree, MAX_BSPLINE_DEGREE);
-
-    rResult.SequenceX.realloc(0);
-    rResult.SequenceY.realloc(0);
-    rResult.SequenceZ.realloc(0);
+    // limit the b-spline degree at 15 to prevent insanely large sets of points
+    sal_uInt32 p = std::min<sal_uInt32>(nDegree, 15);
 
     sal_Int32 nOuterCount = rInput.SequenceX.getLength();
-    if( !nOuterCount )
-        return; // no input
 
     rResult.SequenceX.realloc(nOuterCount);
     rResult.SequenceY.realloc(nOuterCount);
     rResult.SequenceZ.realloc(nOuterCount);
+
+    if( !nOuterCount )
+        return; // no input
 
     for( sal_Int32 nOuter = 0; nOuter < nOuterCount; ++nOuter )
     {
@@ -711,7 +700,7 @@ void SplineCalculater::CalculateBSplines(
           aPointsIn[ i ].first = pOldX[i];
           aPointsIn[ i ].second = pOldY[i];
         }
-        aPointsIn.erase( ::std::unique( aPointsIn.begin(), aPointsIn.end()),
+        aPointsIn.erase( std::unique( aPointsIn.begin(), aPointsIn.end()),
                      aPointsIn.end() );
 
         // n is the last valid index to the reduced aPointsIn

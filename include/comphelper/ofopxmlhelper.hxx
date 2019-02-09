@@ -20,13 +20,15 @@
 #ifndef INCLUDED_COMPHELPER_OFOPXMLHELPER_HXX
 #define INCLUDED_COMPHELPER_OFOPXMLHELPER_HXX
 
-#include <com/sun/star/beans/StringPair.hpp>
-#include <com/sun/star/io/XInputStream.hpp>
-#include <com/sun/star/io/XOutputStream.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/uno/Sequence.h>
 
 #include <comphelper/comphelperdllapi.h>
 
+namespace com { namespace sun { namespace star { namespace beans { struct StringPair; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XInputStream; } } } }
+namespace com { namespace sun { namespace star { namespace io { class XOutputStream; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
 
 namespace comphelper
 {
@@ -36,48 +38,60 @@ namespace OFOPXMLHelper {
     // returns sequence of elements, where each element is described by sequence of tags,
     // where each tag is described by StringPair ( First - name, Second - value )
     // the first tag of each element sequence must be "Id"
+    /// @throws css::uno::Exception
     COMPHELPER_DLLPUBLIC
     css::uno::Sequence< css::uno::Sequence< css::beans::StringPair > >
     ReadRelationsInfoSequence(
         const css::uno::Reference< css::io::XInputStream >& xInStream,
         const OUString & aStreamName,
-        const css::uno::Reference< css::uno::XComponentContext >& rContext )
-            throw( css::uno::Exception );
+        const css::uno::Reference< css::uno::XComponentContext >& rContext );
 
     // returns sequence containing two entries of type sequence<StringPair>
     // the first sequence describes "Default" elements, where each element is described
     // by StringPair object ( First - Extension, Second - ContentType )
     // the second sequence describes "Override" elements, where each element is described
     // by StringPair object ( First - PartName, Second - ContentType )
+    /// @throws css::uno::Exception
     COMPHELPER_DLLPUBLIC
     css::uno::Sequence< css::uno::Sequence< css::beans::StringPair > >
     ReadContentTypeSequence(
         const css::uno::Reference< css::io::XInputStream >& xInStream,
-        const css::uno::Reference< css::uno::XComponentContext >& rContext )
-            throw( css::uno::Exception );
+        const css::uno::Reference< css::uno::XComponentContext >& rContext );
+
+    // returns the ContentType for the given name, or empty when not found.
+    // rContentTypes is a sequence containing two entries of type sequence<StringPair>
+    // the first sequence describes "Default" elements, where each element is described
+    // by StringPair object ( First - Extension, Second - ContentType )
+    // the second sequence describes "Override" elements, where each element is described
+    // by StringPair object ( First - PartName, Second - ContentType )
+    // The "Override" sequence is searched first before falling back on "Default".
+    COMPHELPER_DLLPUBLIC
+    OUString
+    GetContentTypeByName(const css::uno::Sequence<css::uno::Sequence<css::beans::StringPair>>& rContentTypes,
+                         const OUString& rFilename);
 
     // writes sequence of elements, where each element is described by sequence of tags,
     // where each tag is described by StringPair ( First - name, Second - value )
     // the first tag of each element sequence must be "Id"
+    /// @throws css::uno::Exception
     COMPHELPER_DLLPUBLIC
     void WriteRelationsInfoSequence(
         const css::uno::Reference< css::io::XOutputStream >& xOutStream,
         const css::uno::Sequence< css::uno::Sequence< css::beans::StringPair > >& aSequence,
-        const css::uno::Reference< css::uno::XComponentContext >& rContext )
-            throw( css::uno::Exception );
+        const css::uno::Reference< css::uno::XComponentContext >& rContext );
 
     // writes two entries of type sequence<StringPair>
     // the first sequence describes "Default" elements, where each element is described
     // by StringPair object ( First - Extension, Second - ContentType )
     // the second sequence describes "Override" elements, where each element is described
     // by StringPair object ( First - PartName, Second - ContentType )
+    /// @throws css::uno::Exception
     COMPHELPER_DLLPUBLIC
     void WriteContentSequence(
         const css::uno::Reference< css::io::XOutputStream >& xOutStream,
         const css::uno::Sequence< css::beans::StringPair >& aDefaultsSequence,
         const css::uno::Sequence< css::beans::StringPair >& aOverridesSequence,
-        const css::uno::Reference< css::uno::XComponentContext >& rContext )
-            throw( css::uno::Exception );
+        const css::uno::Reference< css::uno::XComponentContext >& rContext );
 
 } // namespace OFOPXMLHelper
 

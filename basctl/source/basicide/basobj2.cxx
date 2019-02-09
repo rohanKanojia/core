@@ -17,20 +17,23 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "iderdll.hxx"
+#include <iderdll.hxx>
 #include "iderdll2.hxx"
 #include "macrodlg.hxx"
 #include "moduldlg.hxx"
-#include "basidesh.hrc"
+#include <strings.hrc>
 #include "baside2.hxx"
 
 #include <com/sun/star/document/XScriptInvocationContext.hpp>
 
 #include <basic/sbmeth.hxx>
 #include <framework/documentundoguard.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 #include <unotools/moduleoptions.hxx>
+#include <vcl/weld.hxx>
 
+#include <memory>
 #include <vector>
 #include <algorithm>
 #include <basic/basmgr.hxx>
@@ -42,11 +45,11 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::container;
 
 extern "C" {
-    SAL_DLLPUBLIC_EXPORT rtl_uString* basicide_choose_macro( void* pOnlyInDocument_AsXModel, sal_Bool bChooseOnly, rtl_uString* pMacroDesc )
+    SAL_DLLPUBLIC_EXPORT rtl_uString* basicide_choose_macro(void* pParent, void* pOnlyInDocument_AsXModel, void* pDocFrame_AsXFrame, sal_Bool bChooseOnly )
     {
-        OUString aMacroDesc( pMacroDesc );
         Reference< frame::XModel > aDocument( static_cast< frame::XModel* >( pOnlyInDocument_AsXModel ) );
-        OUString aScriptURL = basctl::ChooseMacro( aDocument, bChooseOnly, aMacroDesc );
+        Reference< frame::XFrame > aDocFrame( static_cast< frame::XFrame* >( pDocFrame_AsXFrame ) );
+        OUString aScriptURL = basctl::ChooseMacro(static_cast<weld::Window*>(pParent), aDocument, aDocFrame, bChooseOnly);
         rtl_uString* pScriptURL = aScriptURL.pData;
         rtl_uString_acquire( pScriptURL );
 
@@ -69,7 +72,7 @@ void Organize( sal_Int16 tabId )
             aDesc = pCurWin->CreateEntryDescriptor();
 
     vcl::Window* pParent = Application::GetDefDialogParent();
-    ScopedVclPtrInstance<OrganizeDialog>::Create(pParent, tabId, aDesc)->Execute();
+    VclPtr<OrganizeDialog>::Create(pParent, tabId, aDesc)->StartExecuteAsync(nullptr);
 }
 
 bool IsValidSbxName( const OUString& rName )
@@ -97,7 +100,7 @@ static bool StringCompareLessThan( const OUString& rStr1, const OUString& rStr2 
 Sequence< OUString > GetMergedLibraryNames( const Reference< script::XLibraryContainer >& xModLibContainer, const Reference< script::XLibraryContainer >& xDlgLibContainer )
 {
     // create a sorted list of module library names
-    ::std::vector<OUString> aModLibList;
+    std::vector<OUString> aModLibList;
     if ( xModLibContainer.is() )
     {
         Sequence< OUString > aModLibNames = xModLibContainer->getElementNames();
@@ -105,11 +108,11 @@ Sequence< OUString > GetMergedLibraryNames( const Reference< script::XLibraryCon
         const OUString* pModLibNames = aModLibNames.getConstArray();
         for ( sal_Int32 i = 0 ; i < nModLibCount ; i++ )
             aModLibList.push_back( pModLibNames[ i ] );
-        ::std::sort( aModLibList.begin() , aModLibList.end() , StringCompareLessThan );
+        std::sort( aModLibList.begin() , aModLibList.end() , StringCompareLessThan );
     }
 
     // create a sorted list of dialog library names
-    ::std::vector<OUString> aDlgLibList;
+    std::vector<OUString> aDlgLibList;
     if ( xDlgLibContainer.is() )
     {
         Sequence< OUString > aDlgLibNames = xDlgLibContainer->getElementNames();
@@ -117,13 +120,13 @@ Sequence< OUString > GetMergedLibraryNames( const Reference< script::XLibraryCon
         const OUString* pDlgLibNames = aDlgLibNames.getConstArray();
         for ( sal_Int32 i = 0 ; i < nDlgLibCount ; i++ )
             aDlgLibList.push_back( pDlgLibNames[ i ] );
-        ::std::sort( aDlgLibList.begin() , aDlgLibList.end() , StringCompareLessThan );
+        std::sort( aDlgLibList.begin() , aDlgLibList.end() , StringCompareLessThan );
     }
 
     // merge both lists
-    ::std::vector<OUString> aLibList( aModLibList.size() + aDlgLibList.size() );
-    ::std::merge( aModLibList.begin(), aModLibList.end(), aDlgLibList.begin(), aDlgLibList.end(), aLibList.begin(), StringCompareLessThan );
-    ::std::vector<OUString>::iterator aIterEnd = ::std::unique( aLibList.begin(), aLibList.end() );  // move unique elements to the front
+    std::vector<OUString> aLibList( aModLibList.size() + aDlgLibList.size() );
+    std::merge( aModLibList.begin(), aModLibList.end(), aDlgLibList.begin(), aDlgLibList.end(), aLibList.begin(), StringCompareLessThan );
+    std::vector<OUString>::iterator aIterEnd = std::unique( aLibList.begin(), aLibList.end() );  // move unique elements to the front
     aLibList.erase( aIterEnd, aLibList.end() ); // remove duplicates
 
     // copy to sequence
@@ -136,7 +139,7 @@ Sequence< OUString > GetMergedLibraryNames( const Reference< script::XLibraryCon
 }
 
 bool RenameModule (
-    vcl::Window* pErrorParent,
+    weld::Widget* pErrorParent,
     const ScriptDocument& rDocument,
     const OUString& rLibName,
     const OUString& rOldName,
@@ -151,16 +154,18 @@ bool RenameModule (
 
     if ( rDocument.hasModule( rLibName, rNewName ) )
     {
-        ScopedVclPtrInstance< MessageDialog > aError(pErrorParent, IDE_RESSTR(RID_STR_SBXNAMEALLREADYUSED2));
-        aError->Execute();
+        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(pErrorParent,
+                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_SBXNAMEALLREADYUSED2)));
+        xError->run();
         return false;
     }
 
     // #i74440
     if ( rNewName.isEmpty() )
     {
-        ScopedVclPtrInstance< MessageDialog > aError(pErrorParent, IDE_RESSTR(RID_STR_BADSBXNAME));
-        aError->Execute();
+        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(pErrorParent,
+                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_BADSBXNAME)));
+        xError->run();
         return false;
     }
 
@@ -169,7 +174,7 @@ bool RenameModule (
 
     if (Shell* pShell = GetShell())
     {
-        if (ModulWindow* pWin = pShell->FindBasWin(rDocument, rLibName, rNewName, false, true))
+        if (VclPtr<ModulWindow> pWin = pShell->FindBasWin(rDocument, rLibName, rNewName, false, true))
         {
             // set new name in window
             pWin->SetName( rNewName );
@@ -201,7 +206,6 @@ namespace
 
         MacroExecutionData()
             :aDocument( ScriptDocument::NoDocument )
-            ,xMethod( nullptr )
         {
         }
     };
@@ -209,10 +213,10 @@ namespace
     class MacroExecution
     {
     public:
-        DECL_STATIC_LINK_TYPED( MacroExecution, ExecuteMacroEvent, void*, void );
+        DECL_STATIC_LINK( MacroExecution, ExecuteMacroEvent, void*, void );
     };
 
-    IMPL_STATIC_LINK_TYPED( MacroExecution, ExecuteMacroEvent, void*, p, void )
+    IMPL_STATIC_LINK( MacroExecution, ExecuteMacroEvent, void*, p, void )
     {
         MacroExecutionData* i_pData = static_cast<MacroExecutionData*>(p);
         ENSURE_OR_RETURN_VOID( i_pData, "wrong MacroExecutionData" );
@@ -227,14 +231,15 @@ namespace
         if ( pData->aDocument.isDocument() )
             pUndoGuard.reset( new ::framework::DocumentUndoGuard( pData->aDocument.getDocument() ) );
 
-        RunMethod(pData->xMethod);
+        RunMethod( pData->xMethod.get() );
     }
 }
 
-OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, bool bChooseOnly, const OUString& rMacroDesc )
+OUString ChooseMacro(weld::Window* pParent,
+                     const uno::Reference< frame::XModel >& rxLimitToDocument,
+                     const uno::Reference< frame::XFrame >& xDocFrame,
+                     bool bChooseOnly)
 {
-    (void)rMacroDesc;
-
     EnsureIde();
 
     GetExtraData()->ChoosingMacro() = true;
@@ -242,15 +247,17 @@ OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, 
     OUString aScriptURL;
     SbMethod* pMethod = nullptr;
 
-    ScopedVclPtrInstance< MacroChooser > pChooser( nullptr, true );
+    MacroChooser aChooser(pParent, xDocFrame);
     if ( bChooseOnly || !SvtModuleOptions::IsBasicIDE() )
-        pChooser->SetMode(MacroChooser::ChooseOnly);
+        aChooser.SetMode(MacroChooser::ChooseOnly);
 
     if ( !bChooseOnly && rxLimitToDocument.is() )
+    {
         // Hack!
-        pChooser->SetMode(MacroChooser::Recording);
+        aChooser.SetMode(MacroChooser::Recording);
+    }
 
-    short nRetValue = pChooser->Execute();
+    short nRetValue = aChooser.run();
 
     GetExtraData()->ChoosingMacro() = false;
 
@@ -260,9 +267,9 @@ OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, 
         {
             bool bError = false;
 
-            pMethod = pChooser->GetMacro();
-            if ( !pMethod && pChooser->GetMode() == MacroChooser::Recording )
-                pMethod = pChooser->CreateMacro();
+            pMethod = aChooser.GetMacro();
+            if ( !pMethod && aChooser.GetMode() == MacroChooser::Recording )
+                pMethod = aChooser.CreateMacro();
 
             if ( !pMethod )
                 break;
@@ -289,12 +296,7 @@ OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, 
             }
 
             // name
-            OUString aName;
-            aName += pBasic->GetName();
-            aName += ".";
-            aName += pModule->GetName();
-            aName += ".";
-            aName += pMethod->GetName();
+            OUString aName = pBasic->GetName() + "." + pModule->GetName() + "." + pMethod->GetName();
 
             // location
             OUString aLocation;
@@ -329,7 +331,9 @@ OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, 
                     {
                         // error
                         bError = true;
-                        ScopedVclPtrInstance<MessageDialog>::Create(nullptr, IDEResId(RID_STR_ERRORCHOOSEMACRO))->Execute();
+                        std::unique_ptr<weld::MessageDialog> xError(Application::CreateMessageDialog(nullptr,
+                                                                    VclMessageType::Warning, VclButtonsType::Ok, IDEResId(RID_STR_ERRORCHOOSEMACRO)));
+                        xError->run();
                     }
                 }
             }
@@ -342,12 +346,7 @@ OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, 
             // script URL
             if ( !bError )
             {
-                aScriptURL = "vnd.sun.star.script:" ;
-                aScriptURL += aName;
-                aScriptURL += "?language=" ;
-                aScriptURL += "Basic";
-                aScriptURL += "&location=" ;
-                aScriptURL += aLocation;
+                aScriptURL = "vnd.sun.star.script:" + aName + "?language=Basic&location=" + aLocation;
             }
 
             if ( !rxLimitToDocument.is() )
@@ -365,7 +364,6 @@ OUString ChooseMacro( const uno::Reference< frame::XModel >& rxLimitToDocument, 
 }
 
 Sequence< OUString > GetMethodNames( const ScriptDocument& rDocument, const OUString& rLibName, const OUString& rModName )
-    throw (NoSuchElementException, RuntimeException, std::exception)
 {
     Sequence< OUString > aSeqMethods;
 
@@ -384,7 +382,7 @@ Sequence< OUString > GetMethodNames( const ScriptDocument& rDocument, const OUSt
         {
             xModule = new SbModule( rModName );
             xModule->SetSource32( aOUSource );
-            pMod = xModule;
+            pMod = xModule.get();
         }
 
         sal_uInt16 nCount = pMod->GetMethods()->Count();
@@ -434,12 +432,12 @@ bool HasMethod (
         {
             xModule = new SbModule( rModName );
             xModule->SetSource32( aOUSource );
-            pMod = xModule;
+            pMod = xModule.get();
         }
-        SbxArray* pMethods = pMod->GetMethods();
+        SbxArray* pMethods = pMod->GetMethods().get();
         if ( pMethods )
         {
-            SbMethod* pMethod = static_cast<SbMethod*>(pMethods->Find( rMethName, SbxCLASS_METHOD ));
+            SbMethod* pMethod = static_cast<SbMethod*>(pMethods->Find( rMethName, SbxClassType::Method ));
             if ( pMethod && !pMethod->IsHidden() )
                 bHasMethod = true;
         }

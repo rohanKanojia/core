@@ -17,23 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "document.hxx"
+#include <document.hxx>
+#include <docoptio.hxx>
 
-#include "scerrors.hxx"
-#include "root.hxx"
+#include <scdll.hxx>
+#include <scerrors.hxx>
+#include <root.hxx>
 #include "lotfilter.hxx"
-#include "lotimpop.hxx"
-#include "lotattr.hxx"
-#include "fprogressbar.hxx"
+#include <lotimpop.hxx>
+#include <lotattr.hxx>
+#include <fprogressbar.hxx>
 
-class ScFormulaCell;
+#include <sal/log.hxx>
 
-FltError ImportLotus::Read()
+ErrCode ImportLotus::parse()
 {
     enum STATE
     {
         S_START,        // analyse first BOF
-        S_WK1,          // in WK1-Stream
         S_WK3,          // in WK3-Section
         S_WK4,
         S_FM3,
@@ -43,11 +44,11 @@ FltError ImportLotus::Read()
     sal_uInt16          nOp;
     sal_uInt16          nSubType;
     sal_uInt16          nRecLen;
-    sal_uInt32          nNextRec = 0UL;
-    FltError        eRet = eERR_OK;
+    sal_uInt32          nNextRec = 0;
+    ErrCode        eRet = ERRCODE_NONE;
 //  ScFormulaCell   *pLastFormCell;
 
-    STATE           eAkt = S_START;
+    STATE               eCurrent = S_START;
 
     nTab = 0;
     nExtTab = -2;
@@ -57,23 +58,28 @@ FltError ImportLotus::Read()
     // start progressbar
     ScfStreamProgressBar aPrgrsBar( *pIn, pD->GetDocumentShell() );
     LotusContext &rContext = aConv.getContext();
-    while( eAkt != S_END )
+    while( eCurrent != S_END )
     {
         pIn->ReadUInt16( nOp ).ReadUInt16( nRecLen );
 
-        if( pIn->IsEof() || nNextRec > SAL_MAX_UINT32 - nRecLen - 4 )
-            eAkt = S_END;
+        if (!pIn->good() || nNextRec > SAL_MAX_UINT32 - nRecLen - 4)
+        {
+            eRet = SCERR_IMPORT_FORMAT;
+            eCurrent = S_END;
+            if (!pIn->good())
+                break;  // while
+        }
 
         nNextRec += nRecLen + 4;
 
-        switch( eAkt )
+        switch( eCurrent )
         {
 
             case S_START:                                           // S_START
             if( nOp )
             {
                 eRet = SCERR_IMPORT_UNKNOWN_WK;
-                eAkt = S_END;
+                eCurrent = S_END;
             }
             else
             {
@@ -82,24 +88,19 @@ FltError ImportLotus::Read()
                     Bof();
                     switch (rContext.pLotusRoot->eFirstType)
                     {
-                        case Lotus_WK1: eAkt = S_WK1; break;
-                        case Lotus_WK3: eAkt = S_WK3; break;
-                        case Lotus_WK4: eAkt = S_WK4; break;
-                        case Lotus_FM3: eAkt = S_FM3; break;
+                        case Lotus123Typ::WK3: eCurrent = S_WK3; break;
+                        case Lotus123Typ::WK4: eCurrent = S_WK4; break;
                         default:
                         eRet = SCERR_IMPORT_UNKNOWN_WK;
-                        eAkt = S_END;
+                        eCurrent = S_END;
                     }
                 }
                 else
                 {
-                    eAkt = S_END;                       // TODO: add here something for <= WK1!
-                    eRet = 0xFFFFFFFF;
+                    eCurrent = S_END;                   // TODO: add here something for <= WK1!
+                    eRet = ErrCode(0xFFFFFFFF);
                 }
             }
-            break;
-
-            case S_WK1:                                 // S_WK1
             break;
 
             case S_WK3:                                 // S_WK3
@@ -107,13 +108,13 @@ FltError ImportLotus::Read()
             switch( nOp )
             {
                 case 0x0001:                            // EOF
-                eAkt = S_FM3;
+                eCurrent = S_FM3;
                 nTab++;
                 break;
 
                 case 0x0002:                            // PASSWORD
-                eRet = eERR_FILEPASSWD;
-                eAkt = S_END;
+                eRet = SCERR_IMPORT_FILEPASSWD;
+                eCurrent = S_END;
                 break;
 
                 case 0x0007:                            // COLUMNWIDTH
@@ -173,8 +174,8 @@ FltError ImportLotus::Read()
                 }
                 else
                 {
-                    eRet = eERR_FORMAT;
-                    eAkt = S_END;
+                    eRet = SCERR_IMPORT_FORMAT;
+                    eCurrent = S_END;
                 }
             }
 
@@ -187,7 +188,7 @@ FltError ImportLotus::Read()
             break;
         }
 
-        OSL_ENSURE( nNextRec >= pIn->Tell(),
+        SAL_WARN_IF( nNextRec < pIn->Tell(), "sc.filter",
             "*ImportLotus::Read(): Read too much..." );
 
         pIn->Seek( nNextRec );
@@ -199,7 +200,6 @@ FltError ImportLotus::Read()
     SCTAB       nCnt;
     OUString aTabName;
     OUString aBaseName;
-    OUString aRef( "temp" );
     if( nTabs != 0 )
     {
         if( nTabs > 1 )
@@ -209,10 +209,10 @@ FltError ImportLotus::Read()
         }
         for( nCnt = 1 ; nCnt < nTabs ; nCnt++ )
         {
-            OSL_ENSURE( pD->HasTable( nCnt ),
+            SAL_WARN_IF( !pD->HasTable( nCnt ), "sc.filter",
                 "-ImportLotus::Read(): Where is my table?!" );
             pD->GetName( nCnt, aTabName );
-            if( aTabName.equals(aRef) )
+            if( aTabName == "temp" )
             {
                 aTabName = aBaseName;
                 pD->CreateValidTabName( aTabName );
@@ -221,20 +221,25 @@ FltError ImportLotus::Read()
         }
     }
 
-    pD->CalcAfterLoad();
-
     return eRet;
 }
 
-FltError ImportLotus::Read(SvStream& rIn)
+ErrCode ImportLotus::Read()
+{
+    ErrCode eRet = parse();
+    pD->CalcAfterLoad();
+    return eRet;
+}
+
+ErrCode ImportLotus::Read(SvStream& rIn)
 {
     pIn = &rIn;
 
     bool            bRead = true;
     sal_uInt16          nOp;
     sal_uInt16          nRecLen;
-    sal_uInt32          nNextRec = 0UL;
-    FltError        eRet = eERR_OK;
+    sal_uInt32          nNextRec = 0;
+    ErrCode             eRet = ERRCODE_NONE;
 
     nTab = 0;
     nExtTab = -1;
@@ -248,7 +253,7 @@ FltError ImportLotus::Read(SvStream& rIn)
     {
         pIn->ReadUInt16( nOp ).ReadUInt16( nRecLen );
 
-        if( pIn->IsEof() || nNextRec > SAL_MAX_UINT32 - nRecLen - 4 )
+        if (!pIn->good() || nNextRec > SAL_MAX_UINT32 - nRecLen - 4)
             bRead = false;
         else
         {
@@ -260,13 +265,13 @@ FltError ImportLotus::Read(SvStream& rIn)
                 if( nRecLen != 26 || !BofFm3() )
                 {
                     bRead = false;
-                    eRet = eERR_FORMAT;
+                    eRet = SCERR_IMPORT_FORMAT;
                 }
                 break;
 
                 case 0x0001:                            // EOF
                     bRead = false;
-                    OSL_ENSURE( nTab == 0,
+                    SAL_WARN_IF( nTab != 0, "sc.filter",
                         "-ImportLotus::Read( SvStream& ): EOF twice!" );
                     nTab++;
                 break;
@@ -285,24 +290,48 @@ FltError ImportLotus::Read(SvStream& rIn)
 
                 case 195:
                     if( nExtTab >= 0 )
-                        rContext.pLotusRoot->pAttrTable->Apply(rContext.pLotusRoot, (SCTAB)nExtTab);
+                        rContext.pLotusRoot->maAttrTable.Apply(rContext.pLotusRoot, static_cast<SCTAB>(nExtTab));
                     nExtTab++;
                     break;
                 case 197:
-                    _Row( nRecLen );
+                    Row_( nRecLen );
                 break;
             }
 
-            OSL_ENSURE( nNextRec >= pIn->Tell(),
+            SAL_WARN_IF( nNextRec < pIn->Tell(), "sc.filter",
                 "*ImportLotus::Read(): Read too much..." );
             pIn->Seek( nNextRec );
             aPrgrsBar.Progress();
         }
     }
 
-    rContext.pLotusRoot->pAttrTable->Apply(rContext.pLotusRoot, (SCTAB)nExtTab);
+    rContext.pLotusRoot->maAttrTable.Apply(rContext.pLotusRoot, static_cast<SCTAB>(nExtTab));
 
     return eRet;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportWKS(SvStream& rStream)
+{
+    ScDLL::Init();
+    ScDocument aDocument;
+    ScDocOptions aDocOpt = aDocument.GetDocOptions();
+    aDocOpt.SetLookUpColRowNames(false);
+    aDocument.SetDocOptions(aDocOpt);
+    aDocument.MakeTable(0);
+    aDocument.EnableExecuteLink(false);
+    aDocument.SetInsertingFromOtherDoc(true);
+
+    LotusContext aContext;
+    ImportLotus aLotusImport(aContext, rStream, &aDocument, RTL_TEXTENCODING_ASCII_US);
+
+    ErrCode eRet = aLotusImport.parse();
+    if (eRet == ErrCode(0xFFFFFFFF))
+    {
+        rStream.Seek(0);
+        eRet = ScImportLotus123old(aContext, rStream, &aDocument, RTL_TEXTENCODING_ASCII_US);
+    }
+
+    return eRet == ERRCODE_NONE;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

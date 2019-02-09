@@ -19,21 +19,21 @@
 
 #include <UndoBookmark.hxx>
 
-#include <comcore.hrc>
-#include "doc.hxx"
-#include "docary.hxx"
-#include "swundo.hxx"
-#include "pam.hxx"
+#include <strings.hrc>
+#include <doc.hxx>
+#include <docary.hxx>
+#include <swundo.hxx>
+#include <pam.hxx>
 
 #include <UndoCore.hxx>
-#include "IMark.hxx"
-#include "rolbck.hxx"
+#include <IMark.hxx>
+#include <rolbck.hxx>
 
-#include "SwRewriter.hxx"
+#include <SwRewriter.hxx>
 
 SwUndoBookmark::SwUndoBookmark( SwUndoId nUndoId,
             const ::sw::mark::IMark& rBkmk )
-    : SwUndo( nUndoId )
+    : SwUndo( nUndoId, rBkmk.GetMarkPos().GetDoc() )
     , m_pHistoryBookmark(new SwHistoryBookmark(rBkmk, true, rBkmk.IsExpanded()))
 {
 }
@@ -72,7 +72,7 @@ SwRewriter SwUndoBookmark::GetRewriter() const
 }
 
 SwUndoInsBookmark::SwUndoInsBookmark( const ::sw::mark::IMark& rBkmk )
-    : SwUndoBookmark( UNDO_INSBOOKMARK, rBkmk )
+    : SwUndoBookmark( SwUndoId::INSBOOKMARK, rBkmk )
 {
 }
 
@@ -87,7 +87,7 @@ void SwUndoInsBookmark::RedoImpl(::sw::UndoRedoContext & rContext)
 }
 
 SwUndoDeleteBookmark::SwUndoDeleteBookmark( const ::sw::mark::IMark& rBkmk )
-    : SwUndoBookmark( UNDO_DELBOOKMARK, rBkmk )
+    : SwUndoBookmark( SwUndoId::DELBOOKMARK, rBkmk )
 {
 }
 
@@ -101,8 +101,8 @@ void SwUndoDeleteBookmark::RedoImpl(::sw::UndoRedoContext & rContext)
     ResetInDoc( &rContext.GetDoc() );
 }
 
-SwUndoRenameBookmark::SwUndoRenameBookmark( const OUString& rOldName, const OUString& rNewName )
-    : SwUndo( UNDO_BOOKMARK_RENAME )
+SwUndoRenameBookmark::SwUndoRenameBookmark( const OUString& rOldName, const OUString& rNewName, const SwDoc* pDoc )
+    : SwUndo( SwUndoId::BOOKMARK_RENAME, pDoc )
     , m_sOldName( rOldName )
     , m_sNewName( rNewName )
 {
@@ -114,8 +114,8 @@ SwUndoRenameBookmark::~SwUndoRenameBookmark()
 
 static OUString lcl_QuoteName(const OUString& rName)
 {
-    static const OUString sStart = SW_RES(STR_START_QUOTE);
-    static const OUString sEnd = SW_RES(STR_END_QUOTE);
+    static const OUString sStart = SwResId(STR_START_QUOTE);
+    static const OUString sEnd = SwResId(STR_END_QUOTE);
     return sStart + rName + sEnd;
 }
 
@@ -123,12 +123,12 @@ SwRewriter SwUndoRenameBookmark::GetRewriter() const
 {
     SwRewriter aRewriter;
     aRewriter.AddRule(UndoArg1, lcl_QuoteName(m_sOldName));
-    aRewriter.AddRule(UndoArg2, SW_RES(STR_YIELDS));
+    aRewriter.AddRule(UndoArg2, SwResId(STR_YIELDS));
     aRewriter.AddRule(UndoArg3, lcl_QuoteName(m_sNewName));
     return aRewriter;
 }
 
-void SwUndoRenameBookmark::Rename(::sw::UndoRedoContext & rContext, const OUString& sFrom, const OUString& sTo)
+void SwUndoRenameBookmark::Rename(::sw::UndoRedoContext const & rContext, const OUString& sFrom, const OUString& sTo)
 {
     IDocumentMarkAccess* const pMarkAccess = rContext.GetDoc().getIDocumentMarkAccess();
     IDocumentMarkAccess::const_iterator_t ppBkmk = pMarkAccess->findMark(sFrom);

@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
-#include "deployment.hrc"
-#include "dp_misc.h"
-#include "dp_ucb.h"
+#include <string_view>
+
+#include <dp_misc.h>
+#include <dp_ucb.h>
 #include <rtl/uri.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <ucbhelper/content.hxx>
@@ -29,6 +31,7 @@
 #include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <com/sun/star/ucb/ContentInfo.hpp>
 #include <com/sun/star/ucb/ContentInfoAttribute.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <comphelper/processfactory.hxx>
 
 using namespace ::com::sun::star;
@@ -49,7 +52,7 @@ bool create_ucb_content(
         // content ctor/isFolder() will throw exception in case the resource
         // does not exist.
 
-        // dilemma: no chance to use the given iahandler here, because it would
+        // dilemma: no chance to use the given handler here, because it would
         //          raise no such file dialogs, else no interaction for
         //          passwords, ...? xxx todo
         ::ucbhelper::Content ucbContent(
@@ -103,7 +106,7 @@ bool create_folder(
         // invalid: has to be at least "auth:/..."
         if (throw_exc)
             throw ContentCreationException(
-                "Cannot create folder (invalid path): " + url,
+                "Cannot create folder (invalid path): '" + url + "'",
                 Reference<XInterface>(), ContentCreationError_UNKNOWN );
         return false;
     }
@@ -154,7 +157,7 @@ bool create_folder(
     }
     if (throw_exc)
         throw ContentCreationException(
-            "Cannot create folder: " + url,
+            "Cannot create folder: '" + url + "'",
             Reference<XInterface>(), ContentCreationError_UNKNOWN );
     return false;
 }
@@ -216,18 +219,18 @@ bool readLine( OUString * res, OUString const & startingWith,
             {
                 pos = file.indexOf( LF, pos );
                 if (pos < 0) { // EOF
-                    buf.append( file.copy( start ) );
+                    buf.append( std::u16string_view(file).substr(start) );
                 }
                 else
                 {
                     if (pos > 0 && file[ pos - 1 ] == CR)
                     {
                         // consume extra CR
-                        buf.append( file.copy( start, pos - start - 1 ) );
+                        buf.append( std::u16string_view(file).substr(start, pos - start - 1) );
                         ++pos;
                     }
                     else
-                        buf.append( file.copy( start, pos - start ) );
+                        buf.append( std::u16string_view(file).substr(start, pos - start) );
                     ++pos; // consume LF
                     // check next line:
                     if (pos < file.getLength() &&
@@ -253,7 +256,7 @@ bool readLine( OUString * res, OUString const & startingWith,
     return false;
 }
 
-bool readProperties( ::std::list< ::std::pair< OUString, OUString> > & out_result,
+bool readProperties( std::vector< std::pair< OUString, OUString> > & out_result,
                      ::ucbhelper::Content & ucb_content )
 {
     // read whole file:
@@ -271,16 +274,16 @@ bool readProperties( ::std::list< ::std::pair< OUString, OUString> > & out_resul
         bool bEOF = false;
         pos = file.indexOf( LF, pos );
         if (pos < 0) { // EOF
-            buf.append( file.copy( start ) );
+            buf.append( std::u16string_view(file).substr(start) );
             bEOF = true;
         }
         else
         {
             if (pos > 0 && file[ pos - 1 ] == CR)
                 // consume extra CR
-                buf.append( file.copy( start, pos - start - 1 ) );
+                buf.append( std::u16string_view(file).substr(start, pos - start - 1) );
             else
-                buf.append( file.copy( start, pos - start ) );
+                buf.append( std::u16string_view(file).substr(start, pos - start) );
             pos++;
         }
         OUString aLine = buf.makeStringAndClear();
@@ -290,7 +293,7 @@ bool readProperties( ::std::list< ::std::pair< OUString, OUString> > & out_resul
         {
             OUString name = aLine.copy(0, posEqual);
             OUString value = aLine.copy(posEqual + 1);
-            out_result.push_back(::std::make_pair(name, value));
+            out_result.emplace_back(name, value);
         }
 
         if (bEOF)

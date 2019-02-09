@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fulink.hxx"
+#include <fulink.hxx>
 
 #include <sfx2/linkmgr.hxx>
 #include <sfx2/bindings.hxx>
@@ -25,10 +25,10 @@
 
 #include <svx/svxdlg.hxx>
 
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "ViewShell.hxx"
-#include "app.hrc"
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <ViewShell.hxx>
+#include <app.hrc>
 #include <memory>
 
 class SfxRequest;
@@ -58,12 +58,9 @@ void FuLink::DoExecute( SfxRequest& )
     sfx2::LinkManager* pLinkManager = mpDoc->GetLinkManager();
 
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    std::unique_ptr<SfxAbstractLinksDialog> pDlg(pFact->CreateLinksDialog( mpViewShell->GetActiveWindow(), pLinkManager ));
-    if ( pDlg )
-    {
-        pDlg->Execute();
-        mpViewShell->GetViewFrame()->GetBindings().Invalidate( SID_MANAGE_LINKS );
-    }
+    ScopedVclPtr<SfxAbstractLinksDialog> pDlg(pFact->CreateLinksDialog( mpViewShell->GetActiveWindow(), pLinkManager ));
+    pDlg->Execute();
+    mpViewShell->GetViewFrame()->GetBindings().Invalidate( SID_MANAGE_LINKS );
 }
 
 } // end of namespace sd

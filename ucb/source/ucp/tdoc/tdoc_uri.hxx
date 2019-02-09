@@ -20,7 +20,7 @@
 #ifndef INCLUDED_UCB_SOURCE_UCP_TDOC_TDOC_URI_HXX
 #define INCLUDED_UCB_SOURCE_UCP_TDOC_TDOC_URI_HXX
 
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 
 namespace tdoc_ucp {
 
@@ -46,7 +46,6 @@ private:
     void init() const;
 
 public:
-    Uri() : m_eState( UNKNOWN ) {}
     explicit Uri( const OUString & rUri )
     : m_aUri( rUri ), m_eState( UNKNOWN ) {}
 

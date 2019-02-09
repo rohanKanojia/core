@@ -19,7 +19,7 @@
 
 #include <config_features.h>
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #if defined MACOSX
 #include <cassert>
@@ -28,24 +28,25 @@
 #include <sys/stat.h>
 #endif
 
-#include "osl/process.h"
-#include "sal/main.h"
-#include "sal/types.h"
+#include <config_global.h>
+#include <osl/process.h>
+#include <sal/main.h>
+#include <sal/types.h>
 
-#include <saltime.hxx>
+#include "saltime.hxx"
+#include <salusesyslog.hxx>
 
 #if HAVE_SYSLOG_H
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
-// from sal/osl/all/log.cxx:
-extern bool sal_use_syslog;
 #endif
 
 extern "C" {
 
 void sal_detail_initialize(int argc, char ** argv) {
 #if defined MACOSX && !HAVE_FEATURE_MACOSX_SANDBOX
-    // On OS X when not sandboxed, soffice can restart itself via exec (see
+    // On macOS when not sandboxed, soffice can restart itself via exec (see
     // restartOnMac in desktop/source/app/app.cxx), which leaves all file
     // descriptors open, which in turn can have unwanted effects (see
     // <https://bugs.libreoffice.org/show_bug.cgi?id=50603> "Unable to update
@@ -57,7 +58,7 @@ void sal_detail_initialize(int argc, char ** argv) {
     // yet that might already have opened some fds); this is done for all kinds
     // of processes here, not just soffice, but hopefully none of our processes
     // rely on being spawned with certain fds already open. Unfortunately, Mac
-    // OS X appears to have no better interface to close all fds (like
+    // macOS appears to have no better interface to close all fds (like
     // closefrom):
     long openMax = sysconf(_SC_OPEN_MAX);
     if (openMax == -1) {
@@ -65,7 +66,7 @@ void sal_detail_initialize(int argc, char ** argv) {
         openMax = 1024;
     }
     assert(openMax >= 0 && openMax <= std::numeric_limits< int >::max());
-    for (int fd = 3; fd < openMax; ++fd) {
+    for (int fd = 3; fd < int(openMax); ++fd) {
         struct stat s;
         if (fstat(fd, &s) != -1 && S_ISREG(s.st_mode))
             close(fd);

@@ -19,11 +19,9 @@
 #ifndef INCLUDED_XMLSCRIPT_SOURCE_INC_XML_IMPORT_HXX
 #define INCLUDED_XMLSCRIPT_SOURCE_INC_XML_IMPORT_HXX
 
-#include <osl/mutex.hxx>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <tools/diagnose_ex.h>
-#include <comphelper/processfactory.hxx>
 
 #include <com/sun/star/xml/input/XRoot.hpp>
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
@@ -47,7 +45,7 @@ namespace xmlscript
             document handler for parser
 */
 css::uno::Reference< css::xml::sax::XDocumentHandler >
-SAL_CALL createDocumentHandler(
+createDocumentHandler(
     css::uno::Reference<
     css::xml::input::XRoot > const & xRoot );
 

@@ -1,4 +1,6 @@
-Visual Components Library is responsible for the widgets (windowing, buttons, controls, file-pickers etc.) operating system abstraction, including basic rendering (e.g. the output device).
+Visual Class Library is responsible for the widgets (windowing, buttons, controls, file-pickers etc.), operating system abstraction, including basic rendering (e.g. the output device).
+
+It should not be confused with Borland's Visual Component Library, which is entirely unrelated.
 
 VCL provides a graphical toolkit similar to gtk+, Qt, SWING etc.
 
@@ -15,32 +17,36 @@ android/
 	+ Android backend
 
 osx/
-	+ OS X backend
+	+ macOS backend
 
 ios/
 	+ iOS backend
 
 quartz/
-	+ code common to OS X and iOS
+	+ code common to macOS and iOS
 
 win/
 	+ Windows backend
 
+qt5/
+	+ Qt5 (under construction)
+
 unx/
 	+ X11 backend and its sub-platforms
 
-	plugadapt/
-		+ pluggable framework to select correct unx backend
 	gtk/
 		+ GTK2 support
 	gtk3/
-		+ GTK3.2+ support
-	kde/
-		+ KDE3 support
-	kde4/
-		+ KDE4 support
+		+ GTK3 support
+	kde5/
+		+ KDE5 support
+	gtk3_kde5/
+		+ GTK3 support with KDE5 file pickers (alternative to native kde5 one)
 	generic/
 		+ raw X11 support
+
+		plugadapt/
+			+ pluggable framework to select correct unx backend
 
 		dtrans/
 			+ "data transfer" - clipboard handling
@@ -59,7 +65,7 @@ How the platform abstraction works
 	  API for platform backends
 		+ It is a factory for:
 		  SalFrames, SalVirtualDevices, SalPrinters,
-		  Timers, the SolarMutexe, Drag&Drop and other
+		  Timers, the SolarMutex, Drag&Drop and other
 		  objects, as well as the primary event loop wrapper.
 
 Note: references to "SV" in the code mean StarView, which was a
@@ -72,7 +78,7 @@ LibreOffice (and OpenOffice).
 == COM threading ==
 
 The way COM is used in LO generally:
-- vcl InitSalData() puts main thread into Single-threaded Apartment (STA)
+- vcl puts main thread into Single-threaded Apartment (STA)
 - oslWorkerWrapperFunction() puts every thread spawned via oslCreateThread()
   into MTA (free-threaded)
 
@@ -82,13 +88,9 @@ GDIMetafile is a vector drawing representation that corresponds directly
 to the SVM (StarView Metafile) format; it is extremely important as
 an intermediate format in all sorts of drawing and printing operations.
 
-There is a class MetafileXmlDump in include/test/mtfxmldump.hxx that
+There is a class MetafileXmlDump in include/vcl/mtfxmldump.hxx that
 can store a GDIMetafile as XML, which makes debugging much easier
 since you can just use "diff" to see changes.
-
-To use it you need to link against "test" library and then (because
-"test" is not part of the installation) run with:
-LD_LIBRARY_PATH=workdir/LinkTarget/Library:workdir/UnpackedTarball/cppunit/src/cppunit/.libs instdir/program/soffice
 
 == EMF+ ==
 
@@ -189,12 +191,14 @@ On-screen display differs in step 1 and 2:
 
 === Debugging PDF export ===
 
-Debugging the PDF export becomes much easier in higher debug-levels, where
+Debugging the PDF export becomes much easier when
 compression is disabled (so the PDF file is directly readable) and
 the MARK function puts comments into the PDF file about which method
 generated the following PDF content.
 
-touch vcl/source/gdi/pdfwriter* && make vcl dbglevel=3
+The compression can be disabled even using a env. var:
+
+export VCL_DEBUG_DISABLE_PDFCOMPRESSION=1
 
 To de-compress the contents of a PDF file written by a release build or
 other programs, use the "pdfunzip" tool:

@@ -41,6 +41,8 @@ $(eval $(call gb_Library_use_libraries,fwk,\
     comphelper \
     cppu \
     cppuhelper \
+    $(call gb_Helper_optional,BREAKPAD, \
+		crashreport) \
     fwe \
     fwi \
     i18nlangtag \
@@ -54,7 +56,6 @@ $(eval $(call gb_Library_use_libraries,fwk,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,fwk,\
@@ -111,6 +112,10 @@ $(eval $(call gb_Library_add_exception_objects,fwk,\
     framework/source/services/substitutepathvars \
     framework/source/services/taskcreatorsrv \
     framework/source/services/urltransformer \
+    framework/source/uiconfiguration/CommandImageResolver \
+    framework/source/uiconfiguration/ImageArrayData \
+    framework/source/uiconfiguration/ImageList \
+    framework/source/uiconfiguration/ImplImageList \
     framework/source/uiconfiguration/globalsettings \
     framework/source/uiconfiguration/graphicnameaccess \
     framework/source/uiconfiguration/imagemanager \
@@ -141,7 +146,6 @@ $(eval $(call gb_Library_add_exception_objects,fwk,\
     framework/source/uielement/progressbarwrapper \
     framework/source/uielement/recentfilesmenucontroller \
     framework/source/uielement/resourcemenucontroller \
-    framework/source/uielement/saveasmenucontroller \
     framework/source/uielement/spinfieldtoolbarcontroller \
     framework/source/uielement/statusbar \
     framework/source/uielement/statusbaritem \
@@ -149,6 +153,7 @@ $(eval $(call gb_Library_add_exception_objects,fwk,\
     framework/source/uielement/statusbarmerger \
     framework/source/uielement/statusbarwrapper \
     framework/source/uielement/statusindicatorinterfacewrapper \
+    framework/source/uielement/styletoolbarcontroller \
     framework/source/uielement/subtoolbarcontroller \
     framework/source/uielement/thesaurusmenucontroller \
     framework/source/uielement/togglebuttontoolbarcontroller \

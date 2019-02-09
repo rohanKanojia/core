@@ -45,7 +45,6 @@ private:
     void init() const;
 
 public:
-    PackageUri() : m_bValid( false ) {}
     explicit PackageUri( const OUString & rPackageUri )
     : m_aUri( rPackageUri ), m_bValid( false ) {}
 
@@ -82,8 +81,7 @@ public:
 inline bool PackageUri::isRootFolder() const
 {
     init();
-    return ( ( m_aPath.getLength() == 1 ) &&
-             ( m_aPath.getStr()[ 0 ] == sal_Unicode( '/' ) ) );
+    return m_aPath == "/";
 }
 
 }

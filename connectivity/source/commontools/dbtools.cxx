@@ -18,7 +18,7 @@
  */
 
 #include <connectivity/CommonTools.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <connectivity/ParameterCont.hxx>
 
 #include <com/sun/star/awt/XWindow.hpp>
@@ -27,6 +27,7 @@
 #include <com/sun/star/form/FormComponentType.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/sdb/DatabaseContext.hpp>
 #include <com/sun/star/sdb/BooleanComparisonMode.hpp>
@@ -65,21 +66,22 @@
 
 #include <comphelper/extract.hxx>
 #include <comphelper/interaction.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/property.hxx>
 #include <comphelper/propertysequence.hxx>
+#include <comphelper/types.hxx>
 #include <connectivity/conncleanup.hxx>
 #include <connectivity/dbconversion.hxx>
 #include <connectivity/dbexception.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/statementcomposer.hxx>
+#include <o3tl/any.hxx>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 #include <cppuhelper/implbase.hxx>
-#include "resource/common_res.hrc"
-#include "resource/sharedresources.hxx"
-#include <connectivity/OSubComponent.hxx>
+#include <strings.hrc>
+#include <resource/sharedresources.hxx>
 
 #include <algorithm>
 #include <iterator>
@@ -97,17 +99,12 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::sdb;
 using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
+using namespace ::com::sun::star::task;
 using namespace ::com::sun::star::form;
 using namespace connectivity;
 
 namespace dbtools
 {
-    using namespace ::com::sun::star::uno;
-    using namespace ::com::sun::star::beans;
-    using namespace ::com::sun::star::util;
-    using namespace ::com::sun::star::lang;
-    using namespace ::com::sun::star::sdbc;
-    using namespace ::com::sun::star::task;
 
 namespace
 {
@@ -173,22 +170,22 @@ sal_Int32 getDefaultNumberFormat(sal_Int32 _nDataType,
         {
             try
             {
-                nFormat = _xTypes->getStandardFormat((sal_Int16)nNumberType, _rLocale);
+                nFormat = _xTypes->getStandardFormat(static_cast<sal_Int16>(nNumberType), _rLocale);
                 if(_nScale > 0)
                 {
                     // generate a new format if necessary
                     Reference< XNumberFormats > xFormats(_xTypes, UNO_QUERY);
-                    OUString sNewFormat = xFormats->generateFormat( 0L, _rLocale, sal_False, sal_False, (sal_Int16)_nScale, 1);
+                    OUString sNewFormat = xFormats->generateFormat( 0, _rLocale, false, false, static_cast<sal_Int16>(_nScale), 1);
 
                     // and add it to the formatter if necessary
-                    nFormat = xFormats->queryKey(sNewFormat, _rLocale, sal_False);
-                    if (nFormat == (sal_Int32)-1)
+                    nFormat = xFormats->queryKey(sNewFormat, _rLocale, false);
+                    if (nFormat == sal_Int32(-1))
                         nFormat = xFormats->addNew(sNewFormat, _rLocale);
                 }
             }
             catch (Exception&)
             {
-                nFormat = _xTypes->getStandardFormat((sal_Int16)nNumberType, _rLocale);
+                nFormat = _xTypes->getStandardFormat(static_cast<sal_Int16>(nNumberType), _rLocale);
             }
         }   break;
         case DataType::CHAR:
@@ -223,7 +220,7 @@ sal_Int32 getDefaultNumberFormat(sal_Int32 _nDataType,
     return nFormat;
 }
 
-Reference< XConnection> findConnection(const Reference< XInterface >& xParent)
+static Reference< XConnection> findConnection(const Reference< XInterface >& xParent)
 {
     Reference< XConnection> xConnection(xParent, UNO_QUERY);
     if (!xConnection.is())
@@ -235,7 +232,7 @@ Reference< XConnection> findConnection(const Reference< XInterface >& xParent)
     return xConnection;
 }
 
-Reference< XDataSource> getDataSource_allowException(
+static Reference< XDataSource> getDataSource_allowException(
             const OUString& _rsTitleOrPath,
             const Reference< XComponentContext >& _rxContext )
 {
@@ -257,13 +254,13 @@ Reference< XDataSource > getDataSource(
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
     }
 
     return xDS;
 }
 
-Reference< XConnection > getConnection_allowException(
+static Reference< XConnection > getConnection_allowException(
             const OUString& _rsTitleOrPath,
             const OUString& _rsUser,
             const OUString& _rsPwd,
@@ -328,7 +325,7 @@ Reference< XConnection> getConnection_withFeedback(const OUString& _rDataSourceN
     return xReturn;
 }
 
-Reference< XConnection> getConnection(const Reference< XRowSet>& _rxRowSet) throw (RuntimeException)
+Reference< XConnection> getConnection(const Reference< XRowSet>& _rxRowSet)
 {
     Reference< XConnection> xReturn;
     Reference< XPropertySet> xRowSetProps(_rxRowSet, UNO_QUERY);
@@ -340,8 +337,8 @@ Reference< XConnection> getConnection(const Reference< XRowSet>& _rxRowSet) thro
 // helper function which allows to implement both the connectRowset and the ensureRowSetConnection semantics
 // if connectRowset (which is deprecated) is removed, this function and one of its parameters are
 // not needed anymore, the whole implementation can be moved into ensureRowSetConnection then)
-SharedConnection lcl_connectRowSet(const Reference< XRowSet>& _rxRowSet, const Reference< XComponentContext >& _rxContext,
-        bool _bSetAsActiveConnection, bool _bAttachAutoDisposer )
+static SharedConnection lcl_connectRowSet(const Reference< XRowSet>& _rxRowSet, const Reference< XComponentContext >& _rxContext,
+        bool _bAttachAutoDisposer )
 {
     SharedConnection xConnection;
 
@@ -363,11 +360,8 @@ SharedConnection lcl_connectRowSet(const Reference< XRowSet>& _rxRowSet, const R
             ||  ( xExistingConn = findConnection( _rxRowSet ) ).is()
             )
         {
-            if ( _bSetAsActiveConnection )
-            {
-                xRowSetProps->setPropertyValue("ActiveConnection", makeAny( xExistingConn ) );
-                // no auto disposer needed, since we did not create the connection
-            }
+            xRowSetProps->setPropertyValue("ActiveConnection", makeAny( xExistingConn ) );
+            // no auto disposer needed, since we did not create the connection
 
             xConnection.reset( xExistingConn, SharedConnection::NoTakeOwnership );
             break;
@@ -428,14 +422,13 @@ SharedConnection lcl_connectRowSet(const Reference< XRowSet>& _rxRowSet, const R
         );
 
         // now if we created a connection, forward it to the row set
-        if ( xConnection.is() && _bSetAsActiveConnection )
+        if ( xConnection.is() )
         {
             try
             {
                 if ( _bAttachAutoDisposer )
                 {
-                    OAutoConnectionDisposer* pAutoDispose = new OAutoConnectionDisposer( _rxRowSet, xConnection );
-                    Reference< XPropertyChangeListener > xEnsureDelete(pAutoDispose);
+                    rtl::Reference<OAutoConnectionDisposer> pAutoDispose = new OAutoConnectionDisposer( _rxRowSet, xConnection );
                 }
                 else
                     xRowSetProps->setPropertyValue(
@@ -454,17 +447,15 @@ SharedConnection lcl_connectRowSet(const Reference< XRowSet>& _rxRowSet, const R
     return xConnection;
 }
 
-Reference< XConnection> connectRowset(const Reference< XRowSet>& _rxRowSet, const Reference< XComponentContext >& _rxContext,
-    bool _bSetAsActiveConnection )
+Reference< XConnection> connectRowset(const Reference< XRowSet>& _rxRowSet, const Reference< XComponentContext >& _rxContext )
 {
-    SharedConnection xConnection = lcl_connectRowSet( _rxRowSet, _rxContext, _bSetAsActiveConnection, true );
+    SharedConnection xConnection = lcl_connectRowSet( _rxRowSet, _rxContext, true );
     return xConnection.getTyped();
 }
 
-SharedConnection ensureRowSetConnection(const Reference< XRowSet>& _rxRowSet, const Reference< XComponentContext>& _rxContext,
-    bool _bUseAutoConnectionDisposer )
+SharedConnection ensureRowSetConnection(const Reference< XRowSet>& _rxRowSet, const Reference< XComponentContext>& _rxContext )
 {
-    return lcl_connectRowSet( _rxRowSet, _rxContext, true, _bUseAutoConnectionDisposer );
+    return lcl_connectRowSet( _rxRowSet, _rxContext, false/*bUseAutoConnectionDisposer*/ );
 }
 
 Reference< XNameAccess> getTableFields(const Reference< XConnection>& _rxConn,const OUString& _rName)
@@ -489,22 +480,19 @@ Reference< XNameAccess> getPrimaryKeyColumns_throw(const Reference< XPropertySet
         if ( xKeys.is() )
         {
             ::dbtools::OPropertyMap& rPropMap = OMetaConnection::getPropMap();
-            const OUString sPropName = rPropMap.getNameByIndex(PROPERTY_ID_TYPE);
+            const OUString& sPropName = rPropMap.getNameByIndex(PROPERTY_ID_TYPE);
             Reference<XPropertySet> xProp;
             const sal_Int32 nCount = xKeys->getCount();
             for(sal_Int32 i = 0;i< nCount;++i)
             {
                 xProp.set(xKeys->getByIndex(i),UNO_QUERY_THROW);
-                if ( xProp.is() )
+                sal_Int32 nKeyType = 0;
+                xProp->getPropertyValue(sPropName) >>= nKeyType;
+                if(KeyType::PRIMARY == nKeyType)
                 {
-                    sal_Int32 nKeyType = 0;
-                    xProp->getPropertyValue(sPropName) >>= nKeyType;
-                    if(KeyType::PRIMARY == nKeyType)
-                    {
-                        const Reference<XColumnsSupplier> xKeyColsSup(xProp,UNO_QUERY_THROW);
-                        xKeyColumns = xKeyColsSup->getColumns();
-                        break;
-                    }
+                    const Reference<XColumnsSupplier> xKeyColsSup(xProp,UNO_QUERY_THROW);
+                    xKeyColumns = xKeyColsSup->getColumns();
+                    break;
                 }
             }
         }
@@ -603,16 +591,13 @@ Reference< XNameAccess > getFieldsByCommandDescriptor( const Reference< XConnect
                     eState = FAILED;
 
                     OSL_ENSURE( xObjectCollection.is(), "::dbtools::getFieldsByCommandDescriptor: invalid connection (no sdb.Connection, or no Tables-/QueriesSupplier)!");
-                    if ( xObjectCollection.is() )
+                    if ( xObjectCollection.is() && xObjectCollection->hasByName( _rCommand ) )
                     {
-                        if ( xObjectCollection.is() && xObjectCollection->hasByName( _rCommand ) )
-                        {
-                            xObjectCollection->getByName( _rCommand ) >>= xSupplyColumns;
-                                // (xSupplyColumns being NULL will be handled in the next state)
+                        xObjectCollection->getByName( _rCommand ) >>= xSupplyColumns;
+                            // (xSupplyColumns being NULL will be handled in the next state)
 
-                            // next: go for the columns
-                            eState = RETRIEVE_COLUMNS;
-                        }
+                        // next: go for the columns
+                        eState = RETRIEVE_COLUMNS;
                     }
                     break;
 
@@ -889,7 +874,7 @@ void qualifiedNameComponents(const Reference< XDatabaseMetaData >& _rxConnMetaDa
 
     if ( aNameComps.bSchemas )
     {
-        sal_Int32 nIndex = sName.indexOf((sal_Unicode)'.');
+        sal_Int32 nIndex = sName.indexOf('.');
         //  OSL_ENSURE(-1 != nIndex, "QualifiedNameComponents : no schema separator!");
         if ( nIndex != -1 )
             _rSchema = sName.copy(0, nIndex);
@@ -963,11 +948,11 @@ try
         if ( pOldProps[i].Name != "DefaultControl" && pOldProps[i].Name != "LabelControl" )
         {
             // binary search
-            Property* pResult = ::std::lower_bound(
+            Property* pResult = std::lower_bound(
                 pNewProps, pNewProps + nNewLen, pOldProps[i], ::comphelper::PropertyCompareByName());
 
-            if (    pResult
-                && ( pResult != pNewProps + nNewLen && pResult->Name == pOldProps[i].Name )
+            if (   ( pResult != aNewProperties.end() )
+                && ( pResult->Name == pOldProps[i].Name )
                 && ( (pResult->Attributes & PropertyAttribute::READONLY) == 0 )
                 && ( pResult->Type.equals(pOldProps[i].Type)) )
             {   // Attributes match and the property is not read-only
@@ -975,14 +960,10 @@ try
                 {
                     xNewProps->setPropertyValue(pResult->Name, xOldProps->getPropertyValue(pResult->Name));
                 }
-                catch(IllegalArgumentException&)
+                catch(IllegalArgumentException const & exc)
                 {
-#ifdef DBG_UTIL
-                    OUString sMessage = "TransferFormComponentProperties : could not transfer the value for property \"" +
-                        pResult->Name +
-                        "\"";
-                    OSL_FAIL(OUStringToOString(sMessage, RTL_TEXTENCODING_ASCII_US).getStr());
-#endif
+                    SAL_WARN( "connectivity.commontools", "TransferFormComponentProperties : could not transfer the value for property \""
+                                << pResult->Name << "\" " << exc);
                 }
             }
         }
@@ -1127,17 +1108,17 @@ try
             }
 
             // With this we can generate a new format ...
-            OUString sNewFormat = xFormats->generateFormat(nBaseKey, _rLocale, sal_False, sal_False, nDecimals, 0);
+            OUString sNewFormat = xFormats->generateFormat(nBaseKey, _rLocale, false, false, nDecimals, 0);
             // No thousands separator, negative numbers are not in red, no leading zeros
 
             // ... and add at FormatsSupplier (if needed)
-            sal_Int32 nKey = xFormats->queryKey(sNewFormat, _rLocale, sal_False);
-            if (nKey == (sal_Int32)-1)
+            sal_Int32 nKey = xFormats->queryKey(sNewFormat, _rLocale, false);
+            if (nKey == sal_Int32(-1))
             {   // not added yet in my formatter ...
                 nKey = xFormats->addNew(sNewFormat, _rLocale);
             }
 
-            xNewProps->setPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FORMATKEY), makeAny((sal_Int32)nKey));
+            xNewProps->setPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_FORMATKEY), makeAny(nKey));
         }
 
         // min-/max-Value
@@ -1155,14 +1136,14 @@ try
         {
             Any aDate( xOldProps->getPropertyValue(sPropDefaultDate) );
             if (aDate.hasValue())
-                aNewDefault <<= DBTypeConversion::toDouble(*static_cast<Date const *>(aDate.getValue()));
+                aNewDefault <<= DBTypeConversion::toDouble(*o3tl::doAccess<Date>(aDate));
         }
 
         if (hasProperty(sPropDefaultTime, xOldProps))
         {
             Any aTime( xOldProps->getPropertyValue(sPropDefaultTime) );
             if (aTime.hasValue())
-                aNewDefault <<= DBTypeConversion::toDouble(*static_cast<Time const *>(aTime.getValue()));
+                aNewDefault <<= DBTypeConversion::toDouble(*o3tl::doAccess<Time>(aTime));
         }
 
         // double or OUString will be copied directly
@@ -1183,17 +1164,17 @@ catch(const Exception&)
 
 bool canInsert(const Reference< XPropertySet>& _rxCursorSet)
 {
-    return ((_rxCursorSet.is() && (getINT32(_rxCursorSet->getPropertyValue("Privileges")) & Privilege::INSERT) != 0));
+    return (_rxCursorSet.is() && (getINT32(_rxCursorSet->getPropertyValue("Privileges")) & Privilege::INSERT) != 0);
 }
 
 bool canUpdate(const Reference< XPropertySet>& _rxCursorSet)
 {
-    return ((_rxCursorSet.is() && (getINT32(_rxCursorSet->getPropertyValue("Privileges")) & Privilege::UPDATE) != 0));
+    return (_rxCursorSet.is() && (getINT32(_rxCursorSet->getPropertyValue("Privileges")) & Privilege::UPDATE) != 0);
 }
 
 bool canDelete(const Reference< XPropertySet>& _rxCursorSet)
 {
-    return ((_rxCursorSet.is() && (getINT32(_rxCursorSet->getPropertyValue("Privileges")) & Privilege::DELETE) != 0));
+    return (_rxCursorSet.is() && (getINT32(_rxCursorSet->getPropertyValue("Privileges")) & Privilege::DELETE) != 0);
 }
 
 Reference< XDataSource> findDataSource(const Reference< XInterface >& _xParent)
@@ -1213,12 +1194,12 @@ Reference< XDataSource> findDataSource(const Reference< XInterface >& _xParent)
     return xDataSource;
 }
 
-Reference< XSingleSelectQueryComposer > getComposedRowSetStatement( const Reference< XPropertySet >& _rxRowSet, const Reference< XComponentContext >& _rxContext )
+static Reference< XSingleSelectQueryComposer > getComposedRowSetStatement( const Reference< XPropertySet >& _rxRowSet, const Reference< XComponentContext >& _rxContext )
 {
     Reference< XSingleSelectQueryComposer > xComposer;
     try
     {
-        Reference< XConnection> xConn = connectRowset( Reference< XRowSet >( _rxRowSet, UNO_QUERY ), _rxContext, true );
+        Reference< XConnection> xConn = connectRowset( Reference< XRowSet >( _rxRowSet, UNO_QUERY ), _rxContext );
         if ( xConn.is() )       // implies _rxRowSet.is()
         {
             // build the statement the row set is based on (can't use the ActiveCommand property of the set
@@ -1254,7 +1235,7 @@ Reference< XSingleSelectQueryComposer > getComposedRowSetStatement( const Refere
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
     }
 
     return xComposer;
@@ -1343,8 +1324,6 @@ OUString composeTableNameForSelect( const Reference< XConnection >& _rxConnectio
 OUString composeTableName(const Reference<XDatabaseMetaData>& _xMetaData,
                                  const Reference<XPropertySet>& _xTable,
                                  EComposeRule _eComposeRule,
-                                 bool _bSuppressCatalog,
-                                 bool _bSuppressSchema,
                                  bool _bQuote )
 {
     OUString sCatalog, sSchema, sName;
@@ -1352,8 +1331,8 @@ OUString composeTableName(const Reference<XDatabaseMetaData>& _xMetaData,
 
     return impl_doComposeTableName(
             _xMetaData,
-            _bSuppressCatalog ? OUString() : sCatalog,
-            _bSuppressSchema ? OUString() : sSchema,
+            sCatalog,
+            sSchema,
             sName,
             _bQuote,
             _eComposeRule
@@ -1381,11 +1360,11 @@ sal_Int32 getSearchColumnFlag( const Reference< XConnection>& _rxConn,sal_Int32 
 
 OUString createUniqueName( const Sequence< OUString >& _rNames, const OUString& _rBaseName, bool _bStartWithNumber )
 {
-    ::std::set< OUString > aUsedNames;
-    ::std::copy(
-        _rNames.getConstArray(),
-        _rNames.getConstArray() + _rNames.getLength(),
-        ::std::insert_iterator< ::std::set< OUString > >( aUsedNames, aUsedNames.end() )
+    std::set< OUString > aUsedNames;
+    std::copy(
+        _rNames.begin(),
+        _rNames.end(),
+        std::insert_iterator< std::set< OUString > >( aUsedNames, aUsedNames.end() )
     );
 
     OUString sName( _rBaseName );
@@ -1395,8 +1374,7 @@ OUString createUniqueName( const Sequence< OUString >& _rNames, const OUString& 
 
     while ( aUsedNames.find( sName ) != aUsedNames.end() )
     {
-        sName = _rBaseName;
-        sName += OUString::number( ++nPos );
+        sName = _rBaseName + OUString::number( ++nPos );
     }
     return sName;
 }
@@ -1438,9 +1416,7 @@ bool implUpdateObject(const Reference< XRowUpdate >& _rxUpdatedObject,
     {
         case TypeClass_ANY:
         {
-            Any aInnerValue;
-            _rValue >>= aInnerValue;
-            bSuccessfullyReRouted = implUpdateObject(_rxUpdatedObject, _nColumnIndex, aInnerValue);
+            bSuccessfullyReRouted = implUpdateObject(_rxUpdatedObject, _nColumnIndex, _rValue);
         }
         break;
 
@@ -1449,29 +1425,29 @@ bool implUpdateObject(const Reference< XRowUpdate >& _rxUpdatedObject,
             break;
 
         case TypeClass_STRING:
-            _rxUpdatedObject->updateString(_nColumnIndex, *static_cast<OUString const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateString(_nColumnIndex, *o3tl::forceAccess<OUString>(_rValue));
             break;
 
         case TypeClass_BOOLEAN:
-            _rxUpdatedObject->updateBoolean(_nColumnIndex, *static_cast<sal_Bool const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateBoolean(_nColumnIndex, *o3tl::forceAccess<bool>(_rValue));
             break;
 
         case TypeClass_BYTE:
-            _rxUpdatedObject->updateByte(_nColumnIndex, *static_cast<sal_Int8 const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateByte(_nColumnIndex, *o3tl::forceAccess<sal_Int8>(_rValue));
             break;
 
         case TypeClass_UNSIGNED_SHORT:
         case TypeClass_SHORT:
-            _rxUpdatedObject->updateShort(_nColumnIndex, *static_cast<sal_Int16 const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateShort(_nColumnIndex, *o3tl::forceAccess<sal_Int16>(_rValue));
             break;
 
         case TypeClass_CHAR:
-            _rxUpdatedObject->updateString(_nColumnIndex,OUString(static_cast<sal_Unicode const *>(_rValue.getValue()),1));
+            _rxUpdatedObject->updateString(_nColumnIndex,OUString(*o3tl::forceAccess<sal_Unicode>(_rValue)));
             break;
 
         case TypeClass_UNSIGNED_LONG:
         case TypeClass_LONG:
-            _rxUpdatedObject->updateInt(_nColumnIndex, *static_cast<sal_Int32 const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateInt(_nColumnIndex, *o3tl::forceAccess<sal_Int32>(_rValue));
             break;
 
         case TypeClass_HYPER:
@@ -1483,39 +1459,37 @@ bool implUpdateObject(const Reference< XRowUpdate >& _rxUpdatedObject,
         break;
 
         case TypeClass_FLOAT:
-            _rxUpdatedObject->updateFloat(_nColumnIndex, *static_cast<float const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateFloat(_nColumnIndex, *o3tl::forceAccess<float>(_rValue));
             break;
 
         case TypeClass_DOUBLE:
-            _rxUpdatedObject->updateDouble(_nColumnIndex, *static_cast<double const *>(_rValue.getValue()));
+            _rxUpdatedObject->updateDouble(_nColumnIndex, *o3tl::forceAccess<double>(_rValue));
             break;
 
         case TypeClass_SEQUENCE:
-            if (_rValue.getValueType() == cppu::UnoType< Sequence< sal_Int8 > >::get())
-                _rxUpdatedObject->updateBytes(_nColumnIndex, *static_cast<Sequence<sal_Int8> const *>(_rValue.getValue()));
+            if (auto s = o3tl::tryAccess<Sequence< sal_Int8 >>(_rValue))
+                _rxUpdatedObject->updateBytes(_nColumnIndex, *s);
             else
                 bSuccessfullyReRouted = false;
             break;
         case TypeClass_STRUCT:
-            if (_rValue.getValueType() == cppu::UnoType<DateTime>::get())
-                _rxUpdatedObject->updateTimestamp(_nColumnIndex, *static_cast<DateTime const *>(_rValue.getValue()));
-            else if (_rValue.getValueType() == cppu::UnoType<Date>::get())
-                _rxUpdatedObject->updateDate(_nColumnIndex, *static_cast<Date const *>(_rValue.getValue()));
-            else if (_rValue.getValueType() == cppu::UnoType<Time>::get())
-                _rxUpdatedObject->updateTime(_nColumnIndex, *static_cast<Time const *>(_rValue.getValue()));
+            if (auto s1 = o3tl::tryAccess<DateTime>(_rValue))
+                _rxUpdatedObject->updateTimestamp(_nColumnIndex, *s1);
+            else if (auto s2 = o3tl::tryAccess<Date>(_rValue))
+                _rxUpdatedObject->updateDate(_nColumnIndex, *s2);
+            else if (auto s3 = o3tl::tryAccess<Time>(_rValue))
+                _rxUpdatedObject->updateTime(_nColumnIndex, *s3);
             else
                 bSuccessfullyReRouted = false;
             break;
 
         case TypeClass_INTERFACE:
-            if (_rValue.getValueType() == cppu::UnoType<XInputStream>::get())
+            if (auto xStream = o3tl::tryAccess<Reference<XInputStream>>(_rValue))
             {
-                Reference< XInputStream >  xStream;
-                _rValue >>= xStream;
-                _rxUpdatedObject->updateBinaryStream(_nColumnIndex, xStream, xStream->available());
+                _rxUpdatedObject->updateBinaryStream(_nColumnIndex, *xStream, (*xStream)->available());
                 break;
             }
-            // run through
+            [[fallthrough]];
         default:
             bSuccessfullyReRouted = false;
     }
@@ -1548,9 +1522,7 @@ bool implSetObject( const Reference< XParameters >& _rxParameters,
 
         case TypeClass_ANY:
         {
-            Any aInnerValue;
-            _rValue >>= aInnerValue;
-            bSuccessfullyReRouted = implSetObject(_rxParameters, _nColumnIndex, aInnerValue);
+            bSuccessfullyReRouted = implSetObject(_rxParameters, _nColumnIndex, _rValue);
         }
         break;
 
@@ -1559,23 +1531,23 @@ bool implSetObject( const Reference< XParameters >& _rxParameters,
             break;
 
         case TypeClass_STRING:
-            _rxParameters->setString(_nColumnIndex, *static_cast<OUString const *>(_rValue.getValue()));
+            _rxParameters->setString(_nColumnIndex, *o3tl::forceAccess<OUString>(_rValue));
             break;
 
         case TypeClass_BOOLEAN:
-            _rxParameters->setBoolean(_nColumnIndex, *static_cast<sal_Bool const *>(_rValue.getValue()));
+            _rxParameters->setBoolean(_nColumnIndex, *o3tl::forceAccess<bool>(_rValue));
             break;
 
         case TypeClass_BYTE:
-            _rxParameters->setByte(_nColumnIndex, *static_cast<sal_Int8 const *>(_rValue.getValue()));
+            _rxParameters->setByte(_nColumnIndex, *o3tl::forceAccess<sal_Int8>(_rValue));
             break;
 
         case TypeClass_SHORT:
-            _rxParameters->setShort(_nColumnIndex, *static_cast<sal_Int16 const *>(_rValue.getValue()));
+            _rxParameters->setShort(_nColumnIndex, *o3tl::forceAccess<sal_Int16>(_rValue));
             break;
 
         case TypeClass_CHAR:
-            _rxParameters->setString(_nColumnIndex, OUString(static_cast<sal_Unicode const *>(_rValue.getValue()),1));
+            _rxParameters->setString(_nColumnIndex, OUString(*o3tl::forceAccess<sal_Unicode>(_rValue)));
             break;
 
         case TypeClass_UNSIGNED_SHORT:
@@ -1588,28 +1560,28 @@ bool implSetObject( const Reference< XParameters >& _rxParameters,
         }
 
         case TypeClass_FLOAT:
-            _rxParameters->setFloat(_nColumnIndex, *static_cast<float const *>(_rValue.getValue()));
+            _rxParameters->setFloat(_nColumnIndex, *o3tl::forceAccess<float>(_rValue));
             break;
 
         case TypeClass_DOUBLE:
-            _rxParameters->setDouble(_nColumnIndex, *static_cast<double const *>(_rValue.getValue()));
+            _rxParameters->setDouble(_nColumnIndex, *o3tl::forceAccess<double>(_rValue));
             break;
 
         case TypeClass_SEQUENCE:
-            if (_rValue.getValueType() == cppu::UnoType< Sequence< sal_Int8 > >::get())
+            if (auto s = o3tl::tryAccess<Sequence< sal_Int8 >>(_rValue))
             {
-                _rxParameters->setBytes(_nColumnIndex, *static_cast<Sequence<sal_Int8> const *>(_rValue.getValue()));
+                _rxParameters->setBytes(_nColumnIndex, *s);
             }
             else
                 bSuccessfullyReRouted = false;
             break;
         case TypeClass_STRUCT:
-            if (_rValue.getValueType() == cppu::UnoType<DateTime>::get())
-                _rxParameters->setTimestamp(_nColumnIndex, *static_cast<DateTime const *>(_rValue.getValue()));
-            else if (_rValue.getValueType() == cppu::UnoType<Date>::get())
-                _rxParameters->setDate(_nColumnIndex, *static_cast<Date const *>(_rValue.getValue()));
-            else if (_rValue.getValueType() == cppu::UnoType<Time>::get())
-                _rxParameters->setTime(_nColumnIndex, *static_cast<Time const *>(_rValue.getValue()));
+            if (auto s1 = o3tl::tryAccess<DateTime>(_rValue))
+                _rxParameters->setTimestamp(_nColumnIndex, *s1);
+            else if (auto s2 = o3tl::tryAccess<Date>(_rValue))
+                _rxParameters->setDate(_nColumnIndex, *s2);
+            else if (auto s3 = o3tl::tryAccess<Time>(_rValue))
+                _rxParameters->setTime(_nColumnIndex, *s3);
             else
                 bSuccessfullyReRouted = false;
             break;
@@ -1622,7 +1594,7 @@ bool implSetObject( const Reference< XParameters >& _rxParameters,
                 _rxParameters->setBinaryStream(_nColumnIndex, xStream, xStream->available());
                 break;
             }
-            // run through
+            [[fallthrough]];
         default:
             bSuccessfullyReRouted = false;
 
@@ -1635,38 +1607,38 @@ namespace
 {
     class OParameterWrapper : public ::cppu::WeakImplHelper< XIndexAccess >
     {
-        ::std::vector<bool, std::allocator<bool> >       m_aSet;
+        std::vector<bool, std::allocator<bool> >       m_aSet;
         Reference<XIndexAccess> m_xSource;
     public:
-        OParameterWrapper(const ::std::vector<bool, std::allocator<bool> >& _aSet,const Reference<XIndexAccess>& _xSource) : m_aSet(_aSet),m_xSource(_xSource){}
+        OParameterWrapper(const std::vector<bool, std::allocator<bool> >& _aSet,const Reference<XIndexAccess>& _xSource) : m_aSet(_aSet),m_xSource(_xSource){}
     private:
-        // ::com::sun::star::container::XElementAccess
-        virtual Type SAL_CALL getElementType() throw(RuntimeException, std::exception) override
+        // css::container::XElementAccess
+        virtual Type SAL_CALL getElementType() override
         {
             return m_xSource->getElementType();
         }
-        virtual sal_Bool SAL_CALL hasElements(  ) throw(RuntimeException, std::exception) override
+        virtual sal_Bool SAL_CALL hasElements(  ) override
         {
             if ( m_aSet.empty() )
                 return m_xSource->hasElements();
-            return ::std::count(m_aSet.begin(),m_aSet.end(),false) != 0;
+            return std::count(m_aSet.begin(),m_aSet.end(),false) != 0;
         }
-        // ::com::sun::star::container::XIndexAccess
-        virtual sal_Int32 SAL_CALL getCount(  ) throw(RuntimeException, std::exception) override
+        // css::container::XIndexAccess
+        virtual sal_Int32 SAL_CALL getCount(  ) override
         {
             if ( m_aSet.empty() )
                 return m_xSource->getCount();
-            return ::std::count(m_aSet.begin(),m_aSet.end(),false);
+            return std::count(m_aSet.begin(),m_aSet.end(),false);
         }
-        virtual Any SAL_CALL getByIndex( sal_Int32 Index ) throw(IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception) override
+        virtual Any SAL_CALL getByIndex( sal_Int32 Index ) override
         {
             if ( m_aSet.empty() )
                 return m_xSource->getByIndex(Index);
-            if ( m_aSet.size() < (size_t)Index )
+            if ( m_aSet.size() < static_cast<size_t>(Index) )
                 throw IndexOutOfBoundsException();
 
-            ::std::vector<bool, std::allocator<bool> >::const_iterator aIter = m_aSet.begin();
-            ::std::vector<bool, std::allocator<bool> >::const_iterator aEnd = m_aSet.end();
+            std::vector<bool, std::allocator<bool> >::const_iterator aIter = m_aSet.begin();
+            std::vector<bool, std::allocator<bool> >::const_iterator aEnd = m_aSet.end();
             sal_Int32 i = 0;
             sal_Int32 nParamPos = -1;
             for(; aIter != aEnd && i <= Index; ++aIter)
@@ -1686,7 +1658,7 @@ void askForParameters(const Reference< XSingleSelectQueryComposer >& _xComposer,
                       const Reference<XParameters>& _xParameters,
                       const Reference< XConnection>& _xConnection,
                       const Reference< XInteractionHandler >& _rxHandler,
-                      const ::std::vector<bool, std::allocator<bool> >& _aParametersSet)
+                      const std::vector<bool, std::allocator<bool> >& _aParametersSet)
 {
     OSL_ENSURE(_xComposer.is(),"dbtools::askForParameters XSQLQueryComposer is null!");
     OSL_ENSURE(_xParameters.is(),"dbtools::askForParameters XParameters is null!");
@@ -1698,12 +1670,12 @@ void askForParameters(const Reference< XSingleSelectQueryComposer >& _xComposer,
 
     Reference<XIndexAccess>  xParamsAsIndicies = xParameters.is() ? xParameters->getParameters() : Reference<XIndexAccess>();
     sal_Int32 nParamCount = xParamsAsIndicies.is() ? xParamsAsIndicies->getCount() : 0;
-    ::std::vector<bool, std::allocator<bool> > aNewParameterSet( _aParametersSet );
-    if ( nParamCount && ::std::count(aNewParameterSet.begin(),aNewParameterSet.end(),true) != nParamCount )
+    std::vector<bool, std::allocator<bool> > aNewParameterSet( _aParametersSet );
+    if ( nParamCount && std::count(aNewParameterSet.begin(),aNewParameterSet.end(),true) != nParamCount )
     {
         static const OUString PROPERTY_NAME(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_NAME));
         aNewParameterSet.resize(nParamCount ,false);
-        typedef ::std::map< OUString, ::std::vector<sal_Int32> > TParameterPositions;
+        typedef std::map< OUString, std::vector<sal_Int32> > TParameterPositions;
         TParameterPositions aParameterNames;
         for(sal_Int32 i = 0; i < nParamCount; ++i)
         {
@@ -1752,7 +1724,7 @@ void askForParameters(const Reference< XSingleSelectQueryComposer >& _xComposer,
             {
                 OUString sName;
                 xParamColumn->getPropertyValue(PROPERTY_NAME) >>= sName;
-                OSL_ENSURE(sName.equals(pFinalValues->Name), "::dbaui::askForParameters: inconsistent parameter names!");
+                OSL_ENSURE(sName == pFinalValues->Name, "::dbaui::askForParameters: inconsistent parameter names!");
 
                 // determine the field type and ...
                 sal_Int32 nParamType = 0;
@@ -1763,8 +1735,8 @@ void askForParameters(const Reference< XSingleSelectQueryComposer >& _xComposer,
                     xParamColumn->getPropertyValue(OMetaConnection::getPropMap().getNameByIndex(PROPERTY_ID_SCALE)) >>= nScale;
                     // (the index of the parameters is one-based)
                 TParameterPositions::const_iterator aFind = aParameterNames.find(pFinalValues->Name);
-                ::std::vector<sal_Int32>::const_iterator aIterPos = aFind->second.begin();
-                ::std::vector<sal_Int32>::const_iterator aEndPos = aFind->second.end();
+                std::vector<sal_Int32>::const_iterator aIterPos = aFind->second.begin();
+                std::vector<sal_Int32>::const_iterator aEndPos = aFind->second.end();
                 for(;aIterPos != aEndPos;++aIterPos)
                 {
                     if ( _aParametersSet.empty() || !_aParametersSet[(*aIterPos)-1] )
@@ -1781,7 +1753,7 @@ void setObjectWithInfo(const Reference<XParameters>& _xParams,
                        sal_Int32 parameterIndex,
                        const Any& x,
                        sal_Int32 sqlType,
-                       sal_Int32 scale)  throw(SQLException, RuntimeException)
+                       sal_Int32 scale)
 {
     ORowSetValue aVal;
     aVal.fill(x);
@@ -1792,7 +1764,7 @@ void setObjectWithInfo(const Reference<XParameters>& _xParams,
                        sal_Int32 parameterIndex,
                        const ::connectivity::ORowSetValue& _rValue,
                        sal_Int32 sqlType,
-                       sal_Int32 scale)  throw(SQLException, RuntimeException)
+                       sal_Int32 scale)
 {
     if ( _rValue.isNull() )
         _xParams->setNull(parameterIndex,sqlType);
@@ -1822,7 +1794,7 @@ void setObjectWithInfo(const Reference<XParameters>& _xParams,
                             _xParams->setClob(parameterIndex,xClob);
                         else
                         {
-                            Reference< ::com::sun::star::io::XInputStream > xStream;
+                            Reference< css::io::XInputStream > xStream;
                             if(x >>= xStream)
                                 _xParams->setCharacterStream(parameterIndex,xStream,xStream->available());
                         }
@@ -1873,7 +1845,7 @@ void setObjectWithInfo(const Reference<XParameters>& _xParams,
                                 _xParams->setClob(parameterIndex,xClob);
                             else
                             {
-                                Reference< ::com::sun::star::io::XInputStream > xBinStream;
+                                Reference< css::io::XInputStream > xBinStream;
                                 if(x >>= xBinStream)
                                     _xParams->setBinaryStream(parameterIndex,xBinStream,xBinStream->available());
                             }
@@ -1963,44 +1935,7 @@ void getBooleanComparisonPredicate( const OUString& _rExpression, const bool _bV
 
 namespace connectivity
 {
-void release(oslInterlockedCount& _refCount,
-             ::cppu::OBroadcastHelper& rBHelper,
-             Reference< XInterface >& _xInterface,
-             ::com::sun::star::lang::XComponent* _pObject)
-{
-    if (osl_atomic_decrement( &_refCount ) == 0)
-    {
-        osl_atomic_increment( &_refCount );
-
-        if (!rBHelper.bDisposed && !rBHelper.bInDispose)
-        {
-            // remember the parent
-            Reference< XInterface > xParent;
-            {
-                ::osl::MutexGuard aGuard( rBHelper.rMutex );
-                xParent = _xInterface;
-                _xInterface = nullptr;
-            }
-
-            // First dispose
-            _pObject->dispose();
-
-            // only the alive ref holds the object
-            OSL_ASSERT( _refCount == 1 );
-
-            // release the parent in the ~
-            if (xParent.is())
-            {
-                ::osl::MutexGuard aGuard( rBHelper.rMutex );
-                _xInterface = xParent;
-            }
-        }
-    }
-    else
-        osl_atomic_increment( &_refCount );
-}
-
-void checkDisposed(bool _bThrow) throw ( DisposedException )
+void checkDisposed(bool _bThrow)
 {
     if (_bThrow)
         throw DisposedException();
@@ -2035,6 +1970,92 @@ OSQLColumns::Vector::const_iterator find(OSQLColumns::Vector::const_iterator fir
         ++first;
     return first;
 }
+
+namespace dbase
+{
+    bool dbfDecodeCharset(rtl_TextEncoding &_out_encoding, sal_uInt8 nType, sal_uInt8 nCodepage)
+    {
+        switch (nType)
+        {
+        // dBaseIII header doesn't contain language driver ID
+        // See http://dbase.free.fr/tlcharge/structure%20tables.pdf
+        case dBaseIII:
+        case dBaseIIIMemo:
+            break;
+        case dBaseIV:
+        case dBaseV:
+        case VisualFoxPro:
+        case VisualFoxProAuto:
+        case dBaseFS:
+        case dBaseFSMemo:
+        case dBaseIVMemoSQL:
+        case FoxProMemo:
+        {
+            if (nCodepage != 0x00)
+            {
+                auto eEncoding(RTL_TEXTENCODING_DONTKNOW);
+                switch(nCodepage)
+                {
+                case 0x01: eEncoding = RTL_TEXTENCODING_IBM_437; break;       // DOS USA  code page 437
+                case 0x02: eEncoding = RTL_TEXTENCODING_IBM_850; break;       // DOS Multilingual code page 850
+                case 0x03: eEncoding = RTL_TEXTENCODING_MS_1252; break;       // Windows ANSI code page 1252
+                case 0x04: eEncoding = RTL_TEXTENCODING_APPLE_ROMAN; break;   // Standard Macintosh
+                case 0x64: eEncoding = RTL_TEXTENCODING_IBM_852; break;       // EE MS-DOS    code page 852
+                case 0x65: eEncoding = RTL_TEXTENCODING_IBM_866; break;       // Russian MS-DOS   code page 866
+                case 0x66: eEncoding = RTL_TEXTENCODING_IBM_865; break;       // Nordic MS-DOS    code page 865
+                case 0x67: eEncoding = RTL_TEXTENCODING_IBM_861; break;       // Icelandic MS-DOS
+                //case 0x68: eEncoding = ; break;     // Kamenicky (Czech) MS-DOS
+                //case 0x69: eEncoding = ; break;     // Mazovia (Polish) MS-DOS
+                case 0x6A: eEncoding = RTL_TEXTENCODING_IBM_737; break;       // Greek MS-DOS (437G)
+                case 0x6B: eEncoding = RTL_TEXTENCODING_IBM_857; break;       // Turkish MS-DOS
+                case 0x6C: eEncoding = RTL_TEXTENCODING_IBM_863; break;       // MS-DOS, Canada
+                case 0x78: eEncoding = RTL_TEXTENCODING_MS_950; break;        // Windows, Traditional Chinese
+                case 0x79: eEncoding = RTL_TEXTENCODING_MS_949; break;        // Windows, Korean (Hangul)
+                case 0x7A: eEncoding = RTL_TEXTENCODING_MS_936; break;        // Windows, Simplified Chinese
+                case 0x7B: eEncoding = RTL_TEXTENCODING_MS_932; break;        // Windows, Japanese (Shift-jis)
+                case 0x7C: eEncoding = RTL_TEXTENCODING_MS_874; break;        // Windows, Thai
+                case 0x7D: eEncoding = RTL_TEXTENCODING_MS_1255; break;       // Windows, Hebrew
+                case 0x7E: eEncoding = RTL_TEXTENCODING_MS_1256; break;       // Windows, Arabic
+                case 0x96: eEncoding = RTL_TEXTENCODING_APPLE_CYRILLIC; break;    // Russian Macintosh
+                case 0x97: eEncoding = RTL_TEXTENCODING_APPLE_CENTEURO; break;    // Eastern European Macintosh
+                case 0x98: eEncoding = RTL_TEXTENCODING_APPLE_GREEK; break;   // Greek Macintosh
+                case 0xC8: eEncoding = RTL_TEXTENCODING_MS_1250; break;       // Windows EE   code page 1250
+                case 0xC9: eEncoding = RTL_TEXTENCODING_MS_1251; break;       // Russian Windows
+                case 0xCA: eEncoding = RTL_TEXTENCODING_MS_1254; break;       // Turkish Windows
+                case 0xCB: eEncoding = RTL_TEXTENCODING_MS_1253; break;       // Greek Windows
+                case 0xCC: eEncoding = RTL_TEXTENCODING_MS_1257; break;       // Windows, Baltic
+                }
+                if(eEncoding != RTL_TEXTENCODING_DONTKNOW)
+                {
+                    _out_encoding = eEncoding;
+                    return true;
+                }
+            }
+        }
+        }
+        return false;
+    }
+
+    bool dbfReadCharset(rtl_TextEncoding &nCharSet, SvStream* dbf_Stream)
+    {
+        sal_uInt8 nType=0;
+        dbf_Stream->ReadUChar( nType );
+
+        dbf_Stream->Seek(STREAM_SEEK_TO_BEGIN + 29);
+        if (dbf_Stream->eof())
+        {
+            return false;
+        }
+        else
+        {
+            sal_uInt8 nEncoding=0;
+            dbf_Stream->ReadUChar( nEncoding );
+            return dbfDecodeCharset(nCharSet, nType, nEncoding);
+        }
+    }
+
+}
+
 } //namespace connectivity
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

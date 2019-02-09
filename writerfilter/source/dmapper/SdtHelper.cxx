@@ -7,15 +7,43 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <SdtHelper.hxx>
+#include "SdtHelper.hxx"
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
+#include <com/sun/star/util/DateTime.hpp>
+#include <com/sun/star/util/Date.hpp>
+#include <sal/log.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <editeng/unoprnms.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/outdev.hxx>
 #include <unotools/datetime.hxx>
 #include <comphelper/sequence.hxx>
+
+#include "DomainMapper_Impl.hxx"
+#include "StyleSheetTable.hxx"
+
+namespace
+{
+/// Maps OOXML <w:dateFormat> values to UNO date format values.
+sal_Int16 getUNODateFormat(const OUString& rDateFormat)
+{
+    // See com/sun/star/awt/UnoControlDateFieldModel.idl, DateFormat; sadly
+    // there are no constants.
+    sal_Int16 nDateFormat = -1;
+
+    if (rDateFormat == "M/d/yyyy" || rDateFormat == "M.d.yyyy")
+        // MMDDYYYY
+        nDateFormat = 8;
+    else if (rDateFormat == "dd/MM/yyyy")
+        // DDMMYYYY
+        nDateFormat = 7;
+
+    return nDateFormat;
+}
+}
 
 namespace writerfilter
 {
@@ -25,15 +53,15 @@ namespace dmapper
 using namespace ::com::sun::star;
 
 /// w:sdt's w:dropDownList doesn't have width, so guess the size based on the longest string.
-awt::Size lcl_getOptimalWidth(const StyleSheetTablePtr& pStyleSheet, OUString& rDefault, std::vector<OUString>& rItems)
+static awt::Size lcl_getOptimalWidth(const StyleSheetTablePtr& pStyleSheet, OUString const& rDefault, std::vector<OUString>& rItems)
 {
     OUString aLongest = rDefault;
     sal_Int32 nHeight = 0;
-    for (std::size_t i = 0; i < rItems.size(); ++i)
-        if (rItems[i].getLength() > aLongest.getLength())
-            aLongest = rItems[i];
+    for (const OUString& rItem : rItems)
+        if (rItem.getLength() > aLongest.getLength())
+            aLongest = rItem;
 
-    MapMode aMap(MAP_100TH_MM);
+    MapMode aMap(MapUnit::Map100thMM);
     OutputDevice* pOut = Application::GetDefaultDevice();
     pOut->Push(PushFlags::FONT | PushFlags::MAPMODE);
 
@@ -59,7 +87,7 @@ awt::Size lcl_getOptimalWidth(const StyleSheetTablePtr& pStyleSheet, OUString& r
     sal_Int32 nBorder = nHeight / 2;
 
     // Width: space for the text + the square having the dropdown arrow.
-    return awt::Size(nWidth + nBorder + nHeight, nHeight + nBorder);
+    return {nWidth + nBorder + nHeight, nHeight + nBorder};
 }
 
 SdtHelper::SdtHelper(DomainMapper_Impl& rDM_Impl)
@@ -69,9 +97,7 @@ SdtHelper::SdtHelper(DomainMapper_Impl& rDM_Impl)
 {
 }
 
-SdtHelper::~SdtHelper()
-{
-}
+SdtHelper::~SdtHelper() = default;
 
 void SdtHelper::createDropDownControl()
 {
@@ -79,14 +105,23 @@ void SdtHelper::createDropDownControl()
     uno::Reference<awt::XControlModel> xControlModel(m_rDM_Impl.GetTextFactory()->createInstance("com.sun.star.form.component.ComboBox"), uno::UNO_QUERY);
     uno::Reference<beans::XPropertySet> xPropertySet(xControlModel, uno::UNO_QUERY);
     xPropertySet->setPropertyValue("DefaultText", uno::makeAny(aDefaultText));
-    xPropertySet->setPropertyValue("Dropdown", uno::makeAny(sal_True));
+    xPropertySet->setPropertyValue("Dropdown", uno::makeAny(true));
     xPropertySet->setPropertyValue("StringItemList", uno::makeAny(comphelper::containerToSequence(m_aDropDownItems)));
 
-    createControlShape(lcl_getOptimalWidth(m_rDM_Impl.GetStyleSheetTable(), aDefaultText, m_aDropDownItems), xControlModel);
+    createControlShape(lcl_getOptimalWidth(m_rDM_Impl.GetStyleSheetTable(), aDefaultText, m_aDropDownItems),
+                       xControlModel, uno::Sequence<beans::PropertyValue>());
     m_aDropDownItems.clear();
 }
 
-void SdtHelper::createDateControl(OUString& rContentText, const beans::PropertyValue& rCharFormat)
+bool SdtHelper::validateDateFormat()
+{
+    bool bRet = !m_sDate.isEmpty() || getUNODateFormat(m_sDateFormat.toString()) != -1;
+    if (!bRet)
+        m_sDateFormat.setLength(0);
+    return bRet;
+}
+
+void SdtHelper::createDateControl(OUString const& rContentText, const beans::PropertyValue& rCharFormat)
 {
     uno::Reference<awt::XControlModel> xControlModel;
     try
@@ -105,17 +140,19 @@ void SdtHelper::createDateControl(OUString& rContentText, const beans::PropertyV
     uno::Reference<beans::XPropertySet> xPropertySet(
         xControlModel, uno::UNO_QUERY_THROW);
 
-    xPropertySet->setPropertyValue("Dropdown", uno::makeAny(sal_True));
+    xPropertySet->setPropertyValue("Dropdown", uno::makeAny(true));
 
     // See com/sun/star/awt/UnoControlDateFieldModel.idl, DateFormat; sadly there are no constants
-    sal_Int16 nDateFormat = 0;
     OUString sDateFormat = m_sDateFormat.makeStringAndClear();
-    if (sDateFormat == "M/d/yyyy" || sDateFormat == "M.d.yyyy")
-        // Approximate with MM.dd.yyy
-        nDateFormat = 8;
-    else
+    sal_Int16 nDateFormat = getUNODateFormat(sDateFormat);
+    if (nDateFormat == -1)
+    {
         // Set default format, so at least the date picker is created.
         SAL_WARN("writerfilter", "unhandled w:dateFormat value");
+        if (m_sDate.isEmpty())
+            return;
+        nDateFormat = 0;
+    }
     xPropertySet->setPropertyValue("DateFormat", uno::makeAny(nDateFormat));
 
     util::Date aDate;
@@ -126,7 +163,7 @@ void SdtHelper::createDateControl(OUString& rContentText, const beans::PropertyV
         xPropertySet->setPropertyValue("Date", uno::makeAny(aDate));
     }
     else
-        xPropertySet->setPropertyValue("HelpText", uno::makeAny(rContentText));
+        xPropertySet->setPropertyValue("HelpText", uno::makeAny(rContentText.trim()));
 
     // append date format to grab bag
     comphelper::SequenceAsHashMap aGrabBag;
@@ -134,7 +171,7 @@ void SdtHelper::createDateControl(OUString& rContentText, const beans::PropertyV
     aGrabBag["OriginalContent"] <<= rContentText;
     aGrabBag["DateFormat"] <<= sDateFormat;
     aGrabBag["Locale"] <<= m_sLocale.makeStringAndClear();
-    aGrabBag["CharFormat"] <<= rCharFormat.Value;
+    aGrabBag["CharFormat"] = rCharFormat.Value;
     // merge in properties like ooxml:CT_SdtPr_alias and friends.
     aGrabBag.update(comphelper::SequenceAsHashMap(comphelper::containerToSequence(m_aGrabBag)));
     // and empty the property list, so they won't end up on the next sdt as well
@@ -142,11 +179,6 @@ void SdtHelper::createDateControl(OUString& rContentText, const beans::PropertyV
 
     std::vector<OUString> aItems;
     createControlShape(lcl_getOptimalWidth(m_rDM_Impl.GetStyleSheetTable(), rContentText, aItems), xControlModel, aGrabBag.getAsConstPropertyValueList());
-}
-
-void SdtHelper::createControlShape(awt::Size aSize, uno::Reference<awt::XControlModel> const& xControlModel)
-{
-    createControlShape(aSize, xControlModel, uno::Sequence<beans::PropertyValue>());
 }
 
 void SdtHelper::createControlShape(awt::Size aSize, uno::Reference<awt::XControlModel> const& xControlModel, const uno::Sequence<beans::PropertyValue>& rGrabBag)
@@ -190,8 +222,8 @@ sal_Int32 SdtHelper::getInteropGrabBagSize()
 
 bool SdtHelper::containedInInteropGrabBag(const OUString& rValueName)
 {
-    for (std::size_t i=0; i < m_aGrabBag.size(); ++i)
-        if (m_aGrabBag[i].Name == rValueName)
+    for (beans::PropertyValue& i : m_aGrabBag)
+        if (i.Name == rValueName)
             return true;
 
     return false;

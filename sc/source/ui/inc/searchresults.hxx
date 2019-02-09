@@ -23,16 +23,18 @@ namespace sc {
 class SearchResultsDlg : public ModelessDialog
 {
     VclPtr<SvSimpleTable> mpList;
-    SfxBindings* mpBindings;
+    VclPtr<FixedText> mpSearchResults;
+    OUString const aSkipped;
+    SfxBindings* const mpBindings;
     ScDocument* mpDoc;
 
-    DECL_LINK_TYPED( ListSelectHdl, SvTreeListBox*, void );
+    DECL_LINK( ListSelectHdl, SvTreeListBox*, void );
 public:
-    SearchResultsDlg( SfxBindings* _pBindings, vcl::Window* pParent, sal_uInt16 nId );
-    virtual ~SearchResultsDlg();
+    SearchResultsDlg( SfxBindings* _pBindings, vcl::Window* pParent );
+    virtual ~SearchResultsDlg() override;
     virtual void dispose() override;
 
-    void FillResults( ScDocument* pDoc, const ScRangeList& rMatchedRanges );
+    void FillResults( ScDocument* pDoc, const ScRangeList& rMatchedRanges, bool bCellNotes );
 
     virtual bool Close() override;
 };
@@ -43,7 +45,7 @@ public:
     SearchResultsDlgWrapper(
         vcl::Window* _pParent, sal_uInt16 nId, SfxBindings* pBindings, SfxChildWinInfo* pInfo );
 
-    virtual ~SearchResultsDlgWrapper();
+    virtual ~SearchResultsDlgWrapper() override;
 
     SFX_DECL_CHILDWINDOW_WITHID(SearchResultsDlgWrapper);
 };

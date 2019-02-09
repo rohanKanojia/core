@@ -18,86 +18,81 @@
  */
 
 // HINTIDs must be on top; it is required for the macitem.hxx header
-#include "hintids.hxx"
-#include "unoevent.hxx"
-#include "unoframe.hxx"
-#include "unostyle.hxx"
-#include "swevent.hxx"
-#include "docstyle.hxx"
+#include <hintids.hxx>
+#include <unoevent.hxx>
+#include <unoframe.hxx>
+#include <unostyle.hxx>
+#include <swevent.hxx>
+#include <docstyle.hxx>
 #include <svx/svxids.hrc>
-#include "fmtinfmt.hxx"
+#include <fmtinfmt.hxx>
 #include <svl/macitem.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <com/sun/star/beans/PropertyValue.hpp>
+#include <sfx2/event.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 
-using ::com::sun::star::container::NoSuchElementException;
 using ::com::sun::star::container::XNameReplace;
-using ::com::sun::star::lang::IllegalArgumentException;
-using ::com::sun::star::lang::WrappedTargetException;
-using ::com::sun::star::lang::XServiceInfo;
-using ::com::sun::star::beans::PropertyValue;
 
 // tables of allowed events for specific objects
 
 const struct SvEventDescription aGraphicEvents[] =
 {
-    { SW_EVENT_OBJECT_SELECT,       "OnSelect" },
-    { SFX_EVENT_MOUSEOVER_OBJECT,   "OnMouseOver" },
-    { SFX_EVENT_MOUSECLICK_OBJECT,  "OnClick" },
-    { SFX_EVENT_MOUSEOUT_OBJECT,    "OnMouseOut" },
-    { SVX_EVENT_IMAGE_LOAD,         "OnLoadDone" },
-    { SVX_EVENT_IMAGE_ABORT,        "OnLoadCancel" },
-    { SVX_EVENT_IMAGE_ERROR,        "OnLoadError" },
-    { 0, nullptr }
+    { SvMacroItemId::SwObjectSelect,    "OnSelect" },
+    { SvMacroItemId::OnMouseOver,       "OnMouseOver" },
+    { SvMacroItemId::OnClick,           "OnClick" },
+    { SvMacroItemId::OnMouseOut,        "OnMouseOut" },
+    { SvMacroItemId::OnImageLoadDone,   "OnLoadDone" },
+    { SvMacroItemId::OnImageLoadCancel, "OnLoadCancel" },
+    { SvMacroItemId::OnImageLoadError,  "OnLoadError" },
+    { SvMacroItemId::NONE, nullptr }
 };
 
 const struct SvEventDescription aFrameEvents[] =
 {
-    { SW_EVENT_OBJECT_SELECT,       "OnSelect" },
-    { SW_EVENT_FRM_KEYINPUT_ALPHA,  "OnAlphaCharInput" },
-    { SW_EVENT_FRM_KEYINPUT_NOALPHA,    "OnNonAlphaCharInput" },
-    { SW_EVENT_FRM_RESIZE,          "OnResize" },
-    { SW_EVENT_FRM_MOVE,            "OnMove" },
-    { SFX_EVENT_MOUSEOVER_OBJECT,   "OnMouseOver" },
-    { SFX_EVENT_MOUSECLICK_OBJECT,  "OnClick" },
-    { SFX_EVENT_MOUSEOUT_OBJECT,    "OnMouseOut" },
-    { 0, nullptr }
+    { SvMacroItemId::SwObjectSelect,       "OnSelect" },
+    { SvMacroItemId::SwFrmKeyInputAlpha,   "OnAlphaCharInput" },
+    { SvMacroItemId::SwFrmKeyInputNoAlpha, "OnNonAlphaCharInput" },
+    { SvMacroItemId::SwFrmResize,          "OnResize" },
+    { SvMacroItemId::SwFrmMove,            "OnMove" },
+    { SvMacroItemId::OnMouseOver,          "OnMouseOver" },
+    { SvMacroItemId::OnClick,              "OnClick" },
+    { SvMacroItemId::OnMouseOut,           "OnMouseOut" },
+    { SvMacroItemId::NONE, nullptr }
 };
 
 const struct SvEventDescription aOLEEvents[] =
 {
-    { SW_EVENT_OBJECT_SELECT,       "OnSelect" },
-    { SFX_EVENT_MOUSEOVER_OBJECT,   "OnMouseOver" },
-    { SFX_EVENT_MOUSECLICK_OBJECT,  "OnClick" },
-    { SFX_EVENT_MOUSEOUT_OBJECT,    "OnMouseOut" },
-    { 0, nullptr }
+    { SvMacroItemId::SwObjectSelect, "OnSelect" },
+    { SvMacroItemId::OnMouseOver,    "OnMouseOver" },
+    { SvMacroItemId::OnClick,        "OnClick" },
+    { SvMacroItemId::OnMouseOut,     "OnMouseOut" },
+    { SvMacroItemId::NONE, nullptr }
 };
 
 const struct SvEventDescription aHyperlinkEvents[] =
 {
-    { SFX_EVENT_MOUSEOVER_OBJECT,   "OnMouseOver" },
-    { SFX_EVENT_MOUSECLICK_OBJECT,  "OnClick" },
-    { SFX_EVENT_MOUSEOUT_OBJECT,    "OnMouseOut" },
-    { 0, nullptr }
+    { SvMacroItemId::OnMouseOver, "OnMouseOver" },
+    { SvMacroItemId::OnClick,     "OnClick" },
+    { SvMacroItemId::OnMouseOut,  "OnMouseOut" },
+    { SvMacroItemId::NONE, nullptr }
 };
 
 const struct SvEventDescription aFrameStyleEvents[] =
 {
-    { SW_EVENT_OBJECT_SELECT,       "OnSelect" },
-    { SW_EVENT_FRM_KEYINPUT_ALPHA,  "OnAlphaCharInput" },
-    { SW_EVENT_FRM_KEYINPUT_NOALPHA,    "OnNonAlphaCharInput" },
-    { SW_EVENT_FRM_RESIZE,          "OnResize" },
-    { SW_EVENT_FRM_MOVE,            "OnMove" },
-    { SFX_EVENT_MOUSEOVER_OBJECT,   "OnMouseOver" },
-    { SFX_EVENT_MOUSECLICK_OBJECT,  "OnClick" },
-    { SFX_EVENT_MOUSEOUT_OBJECT,    "OnMouseOut" },
-    { SVX_EVENT_IMAGE_LOAD,         "OnLoadDone" },
-    { SVX_EVENT_IMAGE_ABORT,        "OnLoadCancel" },
-    { SVX_EVENT_IMAGE_ERROR,        "OnLoadError" },
-    { 0, nullptr }
+    { SvMacroItemId::SwObjectSelect,       "OnSelect" },
+    { SvMacroItemId::SwFrmKeyInputAlpha,   "OnAlphaCharInput" },
+    { SvMacroItemId::SwFrmKeyInputNoAlpha, "OnNonAlphaCharInput" },
+    { SvMacroItemId::SwFrmResize,          "OnResize" },
+    { SvMacroItemId::SwFrmMove,            "OnMove" },
+    { SvMacroItemId::OnMouseOver,          "OnMouseOver" },
+    { SvMacroItemId::OnClick,              "OnClick" },
+    { SvMacroItemId::OnMouseOut,           "OnMouseOut" },
+    { SvMacroItemId::OnImageLoadDone,      "OnLoadDone" },
+    { SvMacroItemId::OnImageLoadCancel,    "OnLoadCancel" },
+    { SvMacroItemId::OnImageLoadError,     "OnLoadError" },
+    { SvMacroItemId::NONE, nullptr }
 };
 
 SwHyperlinkEventDescriptor::SwHyperlinkEventDescriptor() :
@@ -110,7 +105,6 @@ SwHyperlinkEventDescriptor::~SwHyperlinkEventDescriptor()
 }
 
 OUString SwHyperlinkEventDescriptor::getImplementationName()
-    throw( RuntimeException, std::exception )
 {
     return OUString("SwHyperlinkEventDescriptor");
 }
@@ -118,9 +112,9 @@ OUString SwHyperlinkEventDescriptor::getImplementationName()
 void SwHyperlinkEventDescriptor::copyMacrosFromINetFormat(
     const SwFormatINetFormat& aFormat)
 {
-    for(sal_uInt16 i = 0; mpSupportedMacroItems[i].mnEvent != 0; ++i)
+    for(sal_uInt16 i = 0; mpSupportedMacroItems[i].mnEvent != SvMacroItemId::NONE; ++i)
     {
-        const sal_uInt16 nEvent = mpSupportedMacroItems[i].mnEvent;
+        const SvMacroItemId nEvent = mpSupportedMacroItems[i].mnEvent;
         const SvxMacro* aMacro = aFormat.GetMacro(nEvent);
         if (nullptr != aMacro)
             replaceByName(nEvent, *aMacro);
@@ -130,9 +124,9 @@ void SwHyperlinkEventDescriptor::copyMacrosFromINetFormat(
 void SwHyperlinkEventDescriptor::copyMacrosIntoINetFormat(
     SwFormatINetFormat& aFormat)
 {
-    for(sal_uInt16 i = 0; mpSupportedMacroItems[i].mnEvent != 0; ++i)
+    for(sal_uInt16 i = 0; mpSupportedMacroItems[i].mnEvent != SvMacroItemId::NONE; ++i)
     {
-        const sal_uInt16 nEvent = mpSupportedMacroItems[i].mnEvent;
+        const SvMacroItemId nEvent = mpSupportedMacroItems[i].mnEvent;
         if (hasById(nEvent))
         {
             SvxMacro aMacro("", "");
@@ -144,7 +138,7 @@ void SwHyperlinkEventDescriptor::copyMacrosIntoINetFormat(
 
 void SwHyperlinkEventDescriptor::copyMacrosFromNameReplace(
     uno::Reference<
-        container::XNameReplace> & xReplace)
+        container::XNameReplace> const & xReplace)
 {
     // iterate over all names (all names that *we* support)
     Sequence<OUString> aNames = getElementNames();
@@ -161,10 +155,10 @@ void SwHyperlinkEventDescriptor::copyMacrosFromNameReplace(
     }
 }
 
-// use double cast in superclass constructor to avoid ambigous cast
+// use double cast in superclass constructor to avoid ambiguous cast
 SwFrameEventDescriptor::SwFrameEventDescriptor(
     SwXTextFrame& rFrameRef ) :
-        SvEventDescriptor((text::XTextFrame&)rFrameRef, aFrameEvents),
+        SvEventDescriptor(static_cast<text::XTextFrame&>(rFrameRef), aFrameEvents),
         sSwFrameEventDescriptor("SwFrameEventDescriptor"),
         rFrame(rFrameRef)
 {
@@ -172,15 +166,15 @@ SwFrameEventDescriptor::SwFrameEventDescriptor(
 
 SwFrameEventDescriptor::SwFrameEventDescriptor(
     SwXTextGraphicObject& rGraphicRef ) :
-        SvEventDescriptor((text::XTextContent&)rGraphicRef, aGraphicEvents),
-        rFrame((SwXFrame&)rGraphicRef)
+        SvEventDescriptor(static_cast<text::XTextContent&>(rGraphicRef), aGraphicEvents),
+        rFrame(static_cast<SwXFrame&>(rGraphicRef))
 {
 }
 
 SwFrameEventDescriptor::SwFrameEventDescriptor(
     SwXTextEmbeddedObject& rObjectRef ) :
-        SvEventDescriptor((text::XTextContent&)rObjectRef, aOLEEvents),
-        rFrame((SwXFrame&)rObjectRef)
+        SvEventDescriptor(static_cast<text::XTextContent&>(rObjectRef), aOLEEvents),
+        rFrame(static_cast<SwXFrame&>(rObjectRef))
 {
 }
 
@@ -195,7 +189,7 @@ void SwFrameEventDescriptor::setMacroItem(const SvxMacroItem& rItem)
 
 const SvxMacroItem& SwFrameEventDescriptor::getMacroItem()
 {
-    return static_cast<const SvxMacroItem&>(rFrame.GetFrameFormat()->GetFormatAttr(RES_FRMMACRO));
+    return rFrame.GetFrameFormat()->GetFormatAttr(RES_FRMMACRO);
 }
 
 sal_uInt16 SwFrameEventDescriptor::getMacroItemWhich() const
@@ -204,7 +198,6 @@ sal_uInt16 SwFrameEventDescriptor::getMacroItemWhich() const
 }
 
 OUString SwFrameEventDescriptor::getImplementationName()
-    throw( RuntimeException, std::exception )
 {
     return sSwFrameEventDescriptor;
 }
@@ -213,7 +206,6 @@ SwFrameStyleEventDescriptor::SwFrameStyleEventDescriptor(
     sw::ICoreFrameStyle& rStyle ) :
         SvEventDescriptor(rStyle.GetEventsSupplier(),
                           aFrameStyleEvents),
-        sSwFrameStyleEventDescriptor("SwFrameStyleEventDescriptor"),
         m_rStyle(rStyle)
 {
 }
@@ -236,9 +228,8 @@ const SvxMacroItem& SwFrameStyleEventDescriptor::getMacroItem()
 }
 
 OUString SwFrameStyleEventDescriptor::getImplementationName()
-    throw( RuntimeException, std::exception )
 {
-    return sSwFrameStyleEventDescriptor;
+    return OUString("SwFrameStyleEventDescriptor");
 }
 
 sal_uInt16 SwFrameStyleEventDescriptor::getMacroItemWhich() const

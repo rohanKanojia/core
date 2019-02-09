@@ -17,29 +17,30 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
-#include <backhdl.hxx>
+#include "backhdl.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/xmlement.hxx>
 #include <sax/tools/converter.hxx>
 #include <com/sun/star/uno/Any.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
-SvXMLEnumMapEntry pXML_BrushHorizontalPos[] =
+SvXMLEnumMapEntry<style::GraphicLocation> const pXML_BrushHorizontalPos[] =
 {
     { XML_LEFT,             style::GraphicLocation_LEFT_MIDDLE   },
     { XML_RIGHT,            style::GraphicLocation_RIGHT_MIDDLE },
-    { XML_TOKEN_INVALID,    0       }
+    { XML_TOKEN_INVALID,    style::GraphicLocation(0)       }
 };
 
-SvXMLEnumMapEntry pXML_BrushVerticalPos[] =
+SvXMLEnumMapEntry<style::GraphicLocation> const pXML_BrushVerticalPos[] =
 {
     { XML_TOP,              style::GraphicLocation_MIDDLE_TOP   },
     { XML_BOTTOM,           style::GraphicLocation_MIDDLE_BOTTOM    },
-    { XML_TOKEN_INVALID,    0       }
+    { XML_TOKEN_INVALID,    style::GraphicLocation(0)       }
 };
 
 
@@ -55,7 +56,7 @@ bool XMLBackGraphicPositionPropHdl::importXML( const OUString& rStrImpValue, uno
 {
     bool bRet = true;
     style::GraphicLocation ePos = style::GraphicLocation_NONE, eTmp;
-    sal_uInt16 nTmp;
+    style::GraphicLocation nTmpGraphicLocation;
     SvXMLTokenEnumerator aTokenEnum( rStrImpValue );
     OUString aToken;
     bool bHori = false, bVert = false;
@@ -102,23 +103,23 @@ bool XMLBackGraphicPositionPropHdl::importXML( const OUString& rStrImpValue, uno
             else
                 ePos = style::GraphicLocation_MIDDLE_MIDDLE;
         }
-        else if( SvXMLUnitConverter::convertEnum( nTmp, aToken, pXML_BrushHorizontalPos ) )
+        else if( SvXMLUnitConverter::convertEnum( nTmpGraphicLocation, aToken, pXML_BrushHorizontalPos ) )
         {
             if( bVert )
-                MergeXMLHoriPos( ePos, (style::GraphicLocation)nTmp );
+                MergeXMLHoriPos( ePos, nTmpGraphicLocation );
             else if( !bHori )
-                ePos = (style::GraphicLocation)nTmp;
+                ePos = nTmpGraphicLocation;
             else
                 bRet = false;
 
             bHori = true;
         }
-        else if( SvXMLUnitConverter::convertEnum( nTmp, aToken, pXML_BrushVerticalPos ) )
+        else if( SvXMLUnitConverter::convertEnum( nTmpGraphicLocation, aToken, pXML_BrushVerticalPos ) )
         {
             if( bHori )
-                MergeXMLVertPos( ePos, (style::GraphicLocation)nTmp );
+                MergeXMLVertPos( ePos, nTmpGraphicLocation );
             else if( !bVert )
-                ePos = (style::GraphicLocation)nTmp;
+                ePos = nTmpGraphicLocation;
             else
                 bRet = false;
             bVert = true;
@@ -131,7 +132,7 @@ bool XMLBackGraphicPositionPropHdl::importXML( const OUString& rStrImpValue, uno
 
     bRet &= style::GraphicLocation_NONE != ePos;
     if( bRet )
-        rValue <<= (style::GraphicLocation)(sal_uInt16)ePos;
+        rValue <<= static_cast<style::GraphicLocation>(static_cast<sal_uInt16>(ePos));
 
     return bRet;
 }
@@ -146,7 +147,7 @@ bool XMLBackGraphicPositionPropHdl::exportXML( OUString& rStrExpValue, const uno
     {
         sal_Int32 nValue = 0;
         if( rValue >>= nValue )
-            eLocation = (style::GraphicLocation)nValue;
+            eLocation = static_cast<style::GraphicLocation>(nValue);
         else
             bRet = false;
     }
@@ -247,7 +248,7 @@ void XMLBackGraphicPositionPropHdl::MergeXMLVertPos( style::GraphicLocation& ePo
 
 void XMLBackGraphicPositionPropHdl::MergeXMLHoriPos( style::GraphicLocation& ePos, style::GraphicLocation eHori )
 {
-    DBG_ASSERT( style::GraphicLocation_LEFT_MIDDLE==eHori || style::GraphicLocation_MIDDLE_MIDDLE==eHori || style::GraphicLocation_RIGHT_MIDDLE==eHori,
+    SAL_WARN_IF( !(style::GraphicLocation_LEFT_MIDDLE==eHori || style::GraphicLocation_MIDDLE_MIDDLE==eHori || style::GraphicLocation_RIGHT_MIDDLE==eHori), "xmloff",
                 "lcl_frmitems_MergeXMLHoriPos: vertical pos must be middle" );
 
     switch( ePos )

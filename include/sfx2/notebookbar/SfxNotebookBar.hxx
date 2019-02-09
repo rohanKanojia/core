@@ -11,6 +11,8 @@
 #define INCLUDED_SFX2_NOTEBOOKBAR_SFXNOTEBOOKBAR_HXX
 
 #include <sfx2/dllapi.h>
+#include <sfx2/viewfrm.hxx>
+#include <vcl/notebookbar.hxx>
 
 class SfxBindings;
 
@@ -21,11 +23,36 @@ namespace sfx2 {
 class SFX2_DLLPUBLIC SfxNotebookBar
 {
 public:
+    static void CloseMethod(SfxBindings& rBindings);
+    static void CloseMethod(SystemWindow* pSysWindow);
+
+    static bool IsActive();
+
     /// Function to be called from the sdi's ExecMethod.
-    static void ExecMethod(SfxBindings& rBindings);
+    static void ExecMethod(SfxBindings& rBindings, const OUString& rUIName);
 
     /// Function to be called from the sdi's StateMethod.
-    static void StateMethod(SfxBindings& rBindings, const OUString& rUIFile);
+    static bool StateMethod(SfxBindings& rBindings, const OUString& rUIFile);
+    static bool StateMethod(SystemWindow* pSysWindow,
+                            const css::uno::Reference<css::frame::XFrame> & xFrame,
+                            const OUString& rUIFile);
+
+    /// Method temporarily blocks showing of the NotebookBar
+    static void LockNotebookBar();
+    /// Method restores normal behaviour of the Notebookbar
+    static void UnlockNotebookBar();
+
+    static void RemoveListeners(SystemWindow const * pSysWindow);
+
+    /** Show menu bar in all frames of current application */
+    static void ShowMenubar(bool bShow);
+    /** Show menu bar only in current frame */
+    static void ShowMenubar(SfxViewFrame const * pViewFrame, bool bShow);
+    static void ToggleMenubar();
+
+private:
+    static bool m_bLock;
+    static bool m_bHide;
 };
 
 } // namespace sfx2

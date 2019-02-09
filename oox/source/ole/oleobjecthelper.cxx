@@ -17,10 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/oleobjecthelper.hxx"
+#include <oox/ole/oleobjecthelper.hxx>
 
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/awt/Size.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/document/XEmbeddedObjectResolver.hpp>
@@ -30,7 +31,8 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <osl/diagnose.h>
 #include <comphelper/sequenceashashmap.hxx>
-#include "oox/helper/propertymap.hxx"
+#include <oox/helper/propertymap.hxx>
+#include <oox/token/properties.hxx>
 
 namespace oox {
 namespace ole {
@@ -112,10 +114,10 @@ void SaveInteropProperties(uno::Reference<frame::XModel> const& xModel,
             objectsList.erase(it);
     }
 
-    objectsList[rObjectName] = uno::Any( aGrabBagAttribute );
+    objectsList[rObjectName] <<= aGrabBagAttribute;
 
     // put objects list back into the grab bag
-    aGrabBag[sEmbeddingsPropName] = uno::Any(objectsList.getAsConstPropertyValueList());
+    aGrabBag[sEmbeddingsPropName] <<= objectsList.getAsConstPropertyValueList();
 
     // put grab bag back into the document
     xDocProps->setPropertyValue("InteropGrabBag", uno::Any(aGrabBag.getAsConstPropertyValueList()));

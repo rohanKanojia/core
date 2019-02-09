@@ -18,7 +18,7 @@
  */
 
 
-#include "file/FStringFunctions.hxx"
+#include <file/FStringFunctions.hxx>
 #include <rtl/ustrbuf.hxx>
 
 using namespace connectivity;
@@ -57,35 +57,35 @@ ORowSetValue OOp_CharLength::operate(const ORowSetValue& lhs) const
     return lhs.getString().getLength();
 }
 
-ORowSetValue OOp_Char::operate(const ::std::vector<ORowSetValue>& lhs) const
+ORowSetValue OOp_Char::operate(const std::vector<ORowSetValue>& lhs) const
 {
     if ( lhs.empty() )
         return ORowSetValue();
 
-    OUString sRet;
-    ::std::vector<ORowSetValue>::const_reverse_iterator aIter = lhs.rbegin();
-    ::std::vector<ORowSetValue>::const_reverse_iterator aEnd = lhs.rend();
+    OUStringBuffer sRet;
+    std::vector<ORowSetValue>::const_reverse_iterator aIter = lhs.rbegin();
+    std::vector<ORowSetValue>::const_reverse_iterator aEnd = lhs.rend();
     for (; aIter != aEnd; ++aIter)
     {
         if ( !aIter->isNull() )
         {
             sal_Char c = static_cast<sal_Char>(static_cast<sal_Int32>(*aIter));
 
-            sRet += OUString(&c,1,RTL_TEXTENCODING_ASCII_US);
+            sRet.appendAscii(&c, 1);
         }
     }
 
-    return sRet;
+    return sRet.makeStringAndClear();
 }
 
-ORowSetValue OOp_Concat::operate(const ::std::vector<ORowSetValue>& lhs) const
+ORowSetValue OOp_Concat::operate(const std::vector<ORowSetValue>& lhs) const
 {
     if ( lhs.empty() )
         return ORowSetValue();
 
     OUStringBuffer sRet;
-    ::std::vector<ORowSetValue>::const_reverse_iterator aIter = lhs.rbegin();
-    ::std::vector<ORowSetValue>::const_reverse_iterator aEnd = lhs.rend();
+    std::vector<ORowSetValue>::const_reverse_iterator aIter = lhs.rbegin();
+    std::vector<ORowSetValue>::const_reverse_iterator aEnd = lhs.rend();
     for (; aIter != aEnd; ++aIter)
     {
         if ( aIter->isNull() )
@@ -97,10 +97,10 @@ ORowSetValue OOp_Concat::operate(const ::std::vector<ORowSetValue>& lhs) const
     return sRet.makeStringAndClear();
 }
 
-ORowSetValue OOp_Locate::operate(const ::std::vector<ORowSetValue>& lhs) const
+ORowSetValue OOp_Locate::operate(const std::vector<ORowSetValue>& lhs) const
 {
-    ::std::vector<ORowSetValue>::const_iterator aIter = lhs.begin();
-    ::std::vector<ORowSetValue>::const_iterator aEnd = lhs.end();
+    std::vector<ORowSetValue>::const_iterator aIter = lhs.begin();
+    std::vector<ORowSetValue>::const_iterator aEnd = lhs.end();
     for (; aIter != aEnd; ++aIter)
     {
         if ( aIter->isNull() )
@@ -115,10 +115,10 @@ ORowSetValue OOp_Locate::operate(const ::std::vector<ORowSetValue>& lhs) const
     return lhs[1].getString().indexOf(lhs[2].getString(),lhs[0]) + 1;
 }
 
-ORowSetValue OOp_SubString::operate(const ::std::vector<ORowSetValue>& lhs) const
+ORowSetValue OOp_SubString::operate(const std::vector<ORowSetValue>& lhs) const
 {
-    ::std::vector<ORowSetValue>::const_iterator aIter = lhs.begin();
-    ::std::vector<ORowSetValue>::const_iterator aEnd = lhs.end();
+    std::vector<ORowSetValue>::const_iterator aIter = lhs.begin();
+    std::vector<ORowSetValue>::const_iterator aEnd = lhs.end();
     for (; aIter != aEnd; ++aIter)
     {
         if ( aIter->isNull() )
@@ -168,7 +168,7 @@ ORowSetValue OOp_Space::operate(const ORowSetValue& lhs) const
     return sRet.makeStringAndClear();
 }
 
-ORowSetValue OOp_Replace::operate(const ::std::vector<ORowSetValue>& lhs) const
+ORowSetValue OOp_Replace::operate(const std::vector<ORowSetValue>& lhs) const
 {
     if ( lhs.size() != 3 )
         return ORowSetValue();
@@ -191,16 +191,16 @@ ORowSetValue OOp_Repeat::operate(const ORowSetValue& lhs,const ORowSetValue& rhs
     if ( lhs.isNull() || rhs.isNull() )
         return lhs;
 
-    OUString sRet;
+    OUStringBuffer sRet;
     sal_Int32 nCount = rhs;
     for (sal_Int32 i=0; i < nCount; ++i)
     {
-        sRet += lhs;
+        sRet.append(lhs.operator OUString());
     }
-    return sRet;
+    return sRet.makeStringAndClear();
 }
 
-ORowSetValue OOp_Insert::operate(const ::std::vector<ORowSetValue>& lhs) const
+ORowSetValue OOp_Insert::operate(const std::vector<ORowSetValue>& lhs) const
 {
     if ( lhs.size() != 4 )
         return ORowSetValue();

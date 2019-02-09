@@ -50,7 +50,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_perfobj, \
     vbahelper \
     vcl \
     xo \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_perfobj,\
@@ -59,10 +58,11 @@ $(eval $(call gb_CppunitTest_set_include,sc_perfobj,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sc_perfobj,\
-    offapi \
-    udkapi \
+$(eval $(call gb_CppunitTest_use_api,sc_perfobj, \
+    oovbaapi \
 ))
+
+$(eval $(call gb_CppunitTest_use_sdk_api,sc_perfobj))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_perfobj))
 $(eval $(call gb_CppunitTest_use_vcl,sc_perfobj))

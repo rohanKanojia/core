@@ -71,14 +71,14 @@ namespace connectivity
         public:
             ParamValue( ) : base_type( ) { }
             ParamValue( OUString const& val ) : base_type( val ) { }
-            ParamValue( ParamValue const& rhs ) : base_type( (base_type const&)rhs ) { }
+            ParamValue( ParamValue const& rhs ) : base_type( static_cast<base_type const&>( rhs ) ) { }
 
             bool    is() const { return !base_type::operator!(); }
         };
 
 
     public:
-        explicit        SQLError( const css::uno::Reference< css::uno::XComponentContext > & _rxContext );
+                        SQLError();
                         ~SQLError();
 
         /** returns the message associated with a given error condition, after (optionally) replacing
@@ -87,7 +87,7 @@ namespace connectivity
             Some error messages need to contain references to runtime-dependent data (say, the
             name of a concrete table in the database), which in the resource file's strings are
             represented by a placeholder, namely $1$, $2, and so on. This method allows to
-            retrieve such an error message, and replace upo to 3 placeholders with their concrete
+            retrieve such an error message, and replace up to 3 placeholders with their concrete
             values.
 
             In a non-product build, assertions will fire if the number of placeholders in the

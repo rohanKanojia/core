@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "RDFaImportHelper.hxx"
+#include <RDFaImportHelper.hxx>
 
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/nmspmap.hxx>
@@ -29,14 +29,7 @@
 #include <com/sun/star/rdf/XDocumentRepository.hpp>
 
 #include <rtl/ustring.hxx>
-
-#include <boost/iterator_adaptors.hpp>
-#ifndef BOOST_ITERATOR_ADAPTOR_DWA053000_HPP_ // from iterator_adaptors.hpp
-// N.B.: the check for the header guard _of a specific version of boost_
-//       is here so this may work on different versions of boost,
-//       which sadly put the goods in different header files
-#include <boost/iterator/transform_iterator.hpp>
-#endif
+#include <sal/log.hxx>
 
 #include <map>
 #include <iterator>
@@ -115,10 +108,10 @@ public:
 /** store parsed RDFa attributes */
 struct ParsedRDFaAttributes
 {
-    OUString m_About;
-    ::std::vector< OUString > m_Properties;
-    OUString m_Content;
-    OUString m_Datatype;
+    OUString const m_About;
+    ::std::vector< OUString > const m_Properties;
+    OUString const m_Content;
+    OUString const m_Datatype;
 
     ParsedRDFaAttributes(
             OUString const & i_rAbout,
@@ -145,7 +138,7 @@ struct RDFaEntry
     { }
 };
 
-static inline bool isWS(const sal_Unicode i_Char)
+static bool isWS(const sal_Unicode i_Char)
 {
     return ('\t' == i_Char) || ('\n' == i_Char) || ('\r' == i_Char)
         || (' ' == i_Char);
@@ -291,7 +284,7 @@ RDFaInserter::MakeURI( OUString const & i_rURI) const
     }
 }
 
-uno::Reference< rdf::XResource>
+uno::Reference<rdf::XResource>
 RDFaInserter::MakeResource( OUString const & i_rResource)
 {
     if (i_rResource.startsWith("_:")) // blank node
@@ -328,18 +321,14 @@ void RDFaInserter::InsertRDFaEntry(
 
     predicates.reserve(i_rEntry.m_xRDFaAttributes->m_Properties.size());
 
-    auto aPropertyToXURI = [this](OUString const& aProperty) { return this->MakeURI(aProperty); };
-    // Store as variable so the type matches in both calls.
-
-    ::std::remove_copy_if(
-        ::boost::make_transform_iterator(
-            i_rEntry.m_xRDFaAttributes->m_Properties.begin(),
-            aPropertyToXURI),
-        ::boost::make_transform_iterator(
-            i_rEntry.m_xRDFaAttributes->m_Properties.end(),
-            aPropertyToXURI),
-        ::std::back_inserter(predicates),
-        [this](uno::Reference<rdf::XURI> const& arRef) { return !arRef.is(); } );
+    for (OUString const& prop : i_rEntry.m_xRDFaAttributes->m_Properties)
+    {
+        auto const xURI(MakeURI(prop));
+        if (xURI.is())
+        {
+            predicates.push_back(xURI);
+        }
+    }
 
     if (predicates.empty())
     {
@@ -402,14 +391,14 @@ RDFaImportHelper::ParseRDFa(
     const OUString datatype( !i_rDatatype.isEmpty()
         ?   reader.ReadCURIE(i_rDatatype)
         :   OUString() );
-    return std::shared_ptr<ParsedRDFaAttributes>(
-            new ParsedRDFaAttributes(about, properties, i_rContent, datatype));
+    return std::make_shared<ParsedRDFaAttributes>(
+            about, properties, i_rContent, datatype);
 }
 
 void
 RDFaImportHelper::AddRDFa(
     uno::Reference<rdf::XMetadatable> const & i_xObject,
-    std::shared_ptr<ParsedRDFaAttributes> & i_pRDFaAttributes)
+    std::shared_ptr<ParsedRDFaAttributes> const & i_pRDFaAttributes)
 {
     if (!i_xObject.is())
     {
@@ -421,7 +410,7 @@ RDFaImportHelper::AddRDFa(
         SAL_WARN("xmloff.core", "AddRDFa: invalid arg: null RDFa attributes");
         return;
     }
-    m_RDFaEntries.push_back(RDFaEntry(i_xObject, i_pRDFaAttributes));
+    m_RDFaEntries.emplace_back(i_xObject, i_pRDFaAttributes);
 }
 
 void

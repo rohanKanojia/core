@@ -17,64 +17,61 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <memory>
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/fhgtitem.hxx>
 #include <editeng/svxrtf.hxx>
 #include <vcl/outdev.hxx>
 #include <svtools/rtftoken.h>
+#include <osl/diagnose.h>
+#include <svl/itempool.hxx>
 
-#include "rtfparse.hxx"
-#include "global.hxx"
-#include "document.hxx"
-#include "docpool.hxx"
+#include <rtfparse.hxx>
 
 #define SC_RTFTWIPTOL 10        // 10 Twips tolerance when determining columns
 
 ScRTFParser::ScRTFParser( EditEngine* pEditP ) :
         ScEEParser( pEditP ),
         mnCurPos(0),
-        pColTwips( new ScRTFColTwips ),
         pActDefault( nullptr ),
         pDefMerge( nullptr ),
-        nStartAdjust( (sal_uLong)~0 ),
+        nStartAdjust( sal_uLong(~0) ),
         nLastWidth(0),
         bNewDef( false )
 {
     // RTF default FontSize 12Pt
-    long nMM = OutputDevice::LogicToLogic( 12, MAP_POINT, MAP_100TH_MM );
+    long nMM = OutputDevice::LogicToLogic( 12, MapUnit::MapPoint, MapUnit::Map100thMM );
     pPool->SetPoolDefaultItem( SvxFontHeightItem( nMM, 100, EE_CHAR_FONTHEIGHT ) );
     // Free-flying pInsDefault
-    pInsDefault = new ScRTFCellDefault( pPool );
+    pInsDefault.reset( new ScRTFCellDefault( pPool ) );
 }
 
 ScRTFParser::~ScRTFParser()
 {
-    delete pInsDefault;
-    delete pColTwips;
+    pInsDefault.reset();
     maDefaultList.clear();
 }
 
-sal_uLong ScRTFParser::Read( SvStream& rStream, const OUString& rBaseURL )
+ErrCode ScRTFParser::Read( SvStream& rStream, const OUString& rBaseURL )
 {
-    Link<ImportInfo&,void> aOldLink = pEdit->GetImportHdl();
-    pEdit->SetImportHdl( LINK( this, ScRTFParser, RTFImportHdl ) );
-    sal_uLong nErr = pEdit->Read( rStream, rBaseURL, EE_FORMAT_RTF );
-    if ( nLastToken == RTF_PAR )
+    Link<RtfImportInfo&,void> aOldLink = pEdit->GetRtfImportHdl();
+    pEdit->SetRtfImportHdl( LINK( this, ScRTFParser, RTFImportHdl ) );
+    ErrCode nErr = pEdit->Read( rStream, rBaseURL, EETextFormat::Rtf );
+    if ( nRtfLastToken == RTF_PAR )
     {
         if ( !maList.empty() )
         {
-            ScEEParseEntry* pE = maList.back();
+            auto& pE = maList.back();
             if (    // Completely empty
-                (  (  pE->aSel.nStartPara == pE->aSel.nEndPara
+                (  pE->aSel.nStartPara == pE->aSel.nEndPara
                    && pE->aSel.nStartPos  == pE->aSel.nEndPos
-                   )
+                )
                 ||  // Empty paragraph
-                   (  pE->aSel.nStartPara + 1 == pE->aSel.nEndPara
+                (  pE->aSel.nStartPara + 1 == pE->aSel.nEndPara
                    && pE->aSel.nStartPos      == pEdit->GetTextLen( pE->aSel.nStartPara )
                    && pE->aSel.nEndPos        == 0
-                   )
                 )
                )
             {   // Don't take over the last paragraph
@@ -83,7 +80,7 @@ sal_uLong ScRTFParser::Read( SvStream& rStream, const OUString& rBaseURL )
         }
     }
     ColAdjust();
-    pEdit->SetImportHdl( aOldLink );
+    pEdit->SetRtfImportHdl( aOldLink );
     return nErr;
 }
 
@@ -103,21 +100,21 @@ inline void ScRTFParser::NextRow()
 
 bool ScRTFParser::SeekTwips( sal_uInt16 nTwips, SCCOL* pCol )
 {
-    ScRTFColTwips::const_iterator it = pColTwips->find( nTwips );
-    bool bFound = it != pColTwips->end();
-    sal_uInt16 nPos = it - pColTwips->begin();
+    ScRTFColTwips::const_iterator it = aColTwips.find( nTwips );
+    bool bFound = it != aColTwips.end();
+    sal_uInt16 nPos = it - aColTwips.begin();
     *pCol = static_cast<SCCOL>(nPos);
     if ( bFound )
         return true;
-    sal_uInt16 nCount = pColTwips->size();
+    sal_uInt16 nCount = aColTwips.size();
     if ( !nCount )
         return false;
     SCCOL nCol = *pCol;
     // nCol is insertion position; the next one higher up is there (or not)
-    if ( nCol < static_cast<SCCOL>(nCount) && (((*pColTwips)[nCol] - SC_RTFTWIPTOL) <= nTwips) )
+    if ( nCol < static_cast<SCCOL>(nCount) && ((aColTwips[nCol] - SC_RTFTWIPTOL) <= nTwips) )
         return true;
     // Not smaller than everything else? Then compare with the next lower one
-    else if ( nCol != 0 && (((*pColTwips)[nCol-1] + SC_RTFTWIPTOL) >= nTwips) )
+    else if ( nCol != 0 && ((aColTwips[nCol-1] + SC_RTFTWIPTOL) >= nTwips) )
     {
         (*pCol)--;
         return true;
@@ -127,13 +124,12 @@ bool ScRTFParser::SeekTwips( sal_uInt16 nTwips, SCCOL* pCol )
 
 void ScRTFParser::ColAdjust()
 {
-    if ( nStartAdjust != (sal_uLong)~0 )
+    if ( nStartAdjust != sal_uLong(~0) )
     {
         SCCOL nCol = 0;
-        ScEEParseEntry* pE;
-        for ( size_t i = nStartAdjust, nListSize = maList.size(); i < nListSize; ++ i )
+        for (size_t i = nStartAdjust, nListSize = maList.size(); i < nListSize; ++i)
         {
-            pE = maList[ i ];
+            auto& pE = maList[i];
             if ( pE->nCol == 0 )
                 nCol = 0;
             pE->nCol = nCol;
@@ -149,22 +145,22 @@ void ScRTFParser::ColAdjust()
             if ( nCol > nColMax )
                 nColMax = nCol;
         }
-        nStartAdjust = (sal_uLong)~0;
-        pColTwips->clear();
+        nStartAdjust = sal_uLong(~0);
+        aColTwips.clear();
     }
 }
 
-IMPL_LINK_TYPED( ScRTFParser, RTFImportHdl, ImportInfo&, rInfo, void )
+IMPL_LINK( ScRTFParser, RTFImportHdl, RtfImportInfo&, rInfo, void )
 {
     switch ( rInfo.eState )
     {
-        case RTFIMP_NEXTTOKEN:
+        case RtfImportState::NextToken:
             ProcToken( &rInfo );
             break;
-        case RTFIMP_UNKNOWNATTR:
+        case RtfImportState::UnknownAttr:
             ProcToken( &rInfo );
             break;
-        case RTFIMP_START:
+        case RtfImportState::Start:
         {
             SvxRTFParser* pParser = static_cast<SvxRTFParser*>(rInfo.pParser);
             pParser->SetAttrPool( pPool );
@@ -174,7 +170,7 @@ IMPL_LINK_TYPED( ScRTFParser, RTFImportHdl, ImportInfo&, rInfo, void )
             rMap.nShadow = ATTR_SHADOW;
         }
             break;
-        case RTFIMP_END:
+        case RtfImportState::End:
             if ( rInfo.aSelection.nEndPos )
             {   // If still text: create last paragraph
                 pActDefault = nullptr;
@@ -185,11 +181,11 @@ IMPL_LINK_TYPED( ScRTFParser, RTFImportHdl, ImportInfo&, rInfo, void )
                 ProcToken( &rInfo );
             }
             break;
-        case RTFIMP_SETATTR:
+        case RtfImportState::SetAttr:
             break;
-        case RTFIMP_INSERTTEXT:
+        case RtfImportState::InsertText:
             break;
-        case RTFIMP_INSERTPARA:
+        case RtfImportState::InsertPara:
             break;
         default:
             OSL_FAIL("unknown ImportInfo.eState");
@@ -199,7 +195,7 @@ IMPL_LINK_TYPED( ScRTFParser, RTFImportHdl, ImportInfo&, rInfo, void )
 // Bad behavior:
 // For RTF_INTBL or respectively at the start of the first RTF_CELL
 // after RTF_CELLX if there was no RTF_INTBL
-void ScRTFParser::NewCellRow( ImportInfo* /*pInfo*/ )
+void ScRTFParser::NewCellRow()
 {
     if ( bNewDef )
     {
@@ -222,12 +218,12 @@ void ScRTFParser::NewCellRow( ImportInfo* /*pInfo*/ )
             }
         }
         // Build up TwipCols only after nLastWidth comparison!
-        for ( size_t i = 0, n = maDefaultList.size(); i < n; ++i )
+        for (std::unique_ptr<ScRTFCellDefault> & pCellDefault : maDefaultList)
         {
-            const ScRTFCellDefault& rD = *maDefaultList[i].get();
+            const ScRTFCellDefault& rD = *pCellDefault;
             SCCOL nCol;
             if ( !SeekTwips(rD.nTwips, &nCol) )
-                pColTwips->insert( rD.nTwips );
+                aColTwips.insert( rD.nTwips );
         }
     }
     pDefMerge = nullptr;
@@ -263,26 +259,28 @@ void ScRTFParser::NewCellRow( ImportInfo* /*pInfo*/ )
 
  */
 
-void ScRTFParser::ProcToken( ImportInfo* pInfo )
+void ScRTFParser::ProcToken( RtfImportInfo* pInfo )
 {
     switch ( pInfo->nToken )
     {
-        case RTF_TROWD:         // denotes table row defauls, before RTF_CELLX
+        case RTF_TROWD:         // denotes table row default, before RTF_CELLX
         {
             if (!maDefaultList.empty())
                 nLastWidth = maDefaultList.back()->nTwips;
 
             nColCnt = 0;
+            if (pActDefault != pInsDefault.get())
+                pActDefault = nullptr;
             maDefaultList.clear();
             pDefMerge = nullptr;
-            nLastToken = pInfo->nToken;
+            nRtfLastToken = pInfo->nToken;
             mnCurPos = 0;
         }
         break;
         case RTF_CLMGF:         // The first cell of cells to be merged
         {
-            pDefMerge = pInsDefault;
-            nLastToken = pInfo->nToken;
+            pDefMerge = pInsDefault.get();
+            nRtfLastToken = pInfo->nToken;
         }
         break;
         case RTF_CLMRG:         // A cell to be merged with the preceding cell
@@ -296,7 +294,7 @@ void ScRTFParser::ProcToken( ImportInfo* pInfo )
             if ( pDefMerge ) // Else broken RTF
                 pDefMerge->nColOverlap++;   // multiple successive ones possible
             pInsDefault->nColOverlap = 0;   // Flag: ignore these
-            nLastToken = pInfo->nToken;
+            nRtfLastToken = pInfo->nToken;
         }
         break;
         case RTF_CELLX:         // closes cell default
@@ -304,22 +302,22 @@ void ScRTFParser::ProcToken( ImportInfo* pInfo )
             bNewDef = true;
             pInsDefault->nCol = nColCnt;
             pInsDefault->nTwips = pInfo->nTokenValue; // Right cell border
-            maDefaultList.push_back( std::unique_ptr<ScRTFCellDefault>(pInsDefault) );
+            maDefaultList.push_back( std::move(pInsDefault) );
             // New free-flying pInsDefault
-            pInsDefault = new ScRTFCellDefault( pPool );
+            pInsDefault.reset( new ScRTFCellDefault( pPool ) );
             if ( ++nColCnt > nColMax )
                 nColMax = nColCnt;
-            nLastToken = pInfo->nToken;
+            nRtfLastToken = pInfo->nToken;
         }
         break;
         case RTF_INTBL:         // before the first RTF_CELL
         {
             // Once over NextToken and once over UnknownAttrToken
             // or e.g. \intbl ... \cell \pard \intbl ... \cell
-            if ( nLastToken != RTF_INTBL && nLastToken != RTF_CELL && nLastToken != RTF_PAR )
+            if ( nRtfLastToken != RTF_INTBL && nRtfLastToken != RTF_CELL && nRtfLastToken != RTF_PAR )
             {
-                NewCellRow( pInfo );
-                nLastToken = pInfo->nToken;
+                NewCellRow();
+                nRtfLastToken = pInfo->nToken;
             }
         }
         break;
@@ -327,47 +325,47 @@ void ScRTFParser::ProcToken( ImportInfo* pInfo )
         {
             OSL_ENSURE( pActDefault, "RTF_CELL: pActDefault==0" );
             if ( bNewDef || !pActDefault )
-                NewCellRow( pInfo );    // davor war kein \intbl, bad behavior
+                NewCellRow();    // before was no \intbl, bad behavior
             // Broken RTF? Let's save what we can
             if ( !pActDefault )
-                pActDefault = pInsDefault;
+                pActDefault = pInsDefault.get();
             if ( pActDefault->nColOverlap > 0 )
             {   // Not merged with preceding
-                pActEntry->nCol = pActDefault->nCol;
-                pActEntry->nColOverlap = pActDefault->nColOverlap;
-                pActEntry->nTwips = pActDefault->nTwips;
-                pActEntry->nRow = nRowCnt;
-                pActEntry->aItemSet.Set( pActDefault->aItemSet );
-                EntryEnd( pActEntry, pInfo->aSelection );
+                mxActEntry->nCol = pActDefault->nCol;
+                mxActEntry->nColOverlap = pActDefault->nColOverlap;
+                mxActEntry->nTwips = pActDefault->nTwips;
+                mxActEntry->nRow = nRowCnt;
+                mxActEntry->aItemSet.Set(pActDefault->aItemSet);
+                EntryEnd(mxActEntry.get(), pInfo->aSelection);
 
-                if ( nStartAdjust == (sal_uLong)~0 )
+                if ( nStartAdjust == sal_uLong(~0) )
                     nStartAdjust = maList.size();
-                maList.push_back( pActEntry );
-                NewActEntry( pActEntry ); // New free-flying pActEntry
+                maList.push_back(mxActEntry);
+                NewActEntry(mxActEntry.get()); // New free-flying mxActEntry
             }
             else
             {   // Assign current Twips to MergeCell
                 if ( !maList.empty() )
                 {
-                    ScEEParseEntry* pE = maList.back();
+                    auto& pE = maList.back();
                     pE->nTwips = pActDefault->nTwips;
                 }
-                // Adjust selection of free-flying pActEntry
+                // Adjust selection of free-flying mxActEntry
                 // Paragraph -1 due to separated text in EditEngine during parsing
-                pActEntry->aSel.nStartPara = pInfo->aSelection.nEndPara - 1;
+                mxActEntry->aSel.nStartPara = pInfo->aSelection.nEndPara - 1;
             }
 
             pActDefault = nullptr;
             if (!maDefaultList.empty() && (mnCurPos+1) < maDefaultList.size())
                 pActDefault = maDefaultList[++mnCurPos].get();
 
-            nLastToken = pInfo->nToken;
+            nRtfLastToken = pInfo->nToken;
         }
         break;
         case RTF_ROW:           // denotes the end of a row
         {
             NextRow();
-            nLastToken = pInfo->nToken;
+            nRtfLastToken = pInfo->nToken;
         }
         break;
         case RTF_PAR:           // Paragraph
@@ -375,18 +373,18 @@ void ScRTFParser::ProcToken( ImportInfo* pInfo )
             if ( !pActDefault )
             {   // text not in table
                 ColAdjust();    // close the processing table
-                pActEntry->nCol = 0;
-                pActEntry->nRow = nRowCnt;
-                EntryEnd( pActEntry, pInfo->aSelection );
-                maList.push_back( pActEntry );
-                NewActEntry( pActEntry );   // new pActEntry
+                mxActEntry->nCol = 0;
+                mxActEntry->nRow = nRowCnt;
+                EntryEnd(mxActEntry.get(), pInfo->aSelection);
+                maList.push_back(mxActEntry);
+                NewActEntry(mxActEntry.get());   // new mxActEntry
                 NextRow();
             }
-            nLastToken = pInfo->nToken;
+            nRtfLastToken = pInfo->nToken;
         }
         break;
         default:
-        {   // do not set nLastToken
+        {   // do not set nRtfLastToken
             switch ( pInfo->nToken & ~(0xff | RTF_TABLEDEF) )
             {
                 case RTF_SHADINGDEF:

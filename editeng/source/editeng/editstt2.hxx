@@ -26,8 +26,6 @@ class InternalEditStatus : public EditStatus
 {
 
 public:
-            InternalEditStatus() { ; }
-
     void    TurnOnFlags( EEControlBits nFlags )
                 { nControlBits |= nFlags; }
 
@@ -36,9 +34,6 @@ public:
 
     bool    UseCharAttribs() const
                 { return bool( nControlBits & EEControlBits::USECHARATTRIBS ); }
-
-    bool    NotifyCursorMovements() const
-                { return bool( nControlBits & EEControlBits::CRSRLEFTPARA ); }
 
     bool    UseIdleFormatter() const
                 { return bool( nControlBits & EEControlBits::DOIDLEFORMAT); }
@@ -57,12 +52,6 @@ public:
 
     bool    IsOutliner() const
                 { return bool( nControlBits & EEControlBits::OUTLINER ); }
-
-    bool    IsOutliner2() const
-                { return bool( nControlBits & EEControlBits::OUTLINER2 ); }
-
-    bool    IsAnyOutliner() const
-                { return IsOutliner() || IsOutliner2(); }
 
     bool    DoNotUseColors() const
                 { return bool( nControlBits & EEControlBits::NOCOLORS ); }
@@ -83,11 +72,11 @@ public:
     bool    AutoPageHeight() const
                 { return bool( nControlBits & EEControlBits::AUTOPAGESIZEY ); }
 
-    bool    MarkFields() const
-                { return bool( nControlBits & EEControlBits::MARKFIELDS ); }
+    bool    MarkNonUrlFields() const
+                { return bool( nControlBits & EEControlBits::MARKNONURLFIELDS ); }
 
-    bool    DoRestoreFont() const
-                { return bool( nControlBits & EEControlBits::RESTOREFONT ); }
+    bool    MarkUrlFields() const
+                { return bool( nControlBits & EEControlBits::MARKURLFIELDS ); }
 
     bool    DoImportRTFStyleSheets() const
                 { return bool( nControlBits & EEControlBits::RTFSTYLESHEETS ); }
@@ -98,17 +87,11 @@ public:
     bool    DoAutoComplete() const
                 { return bool( nControlBits & EEControlBits::AUTOCOMPLETE ); }
 
-    bool    DoTabIndenting() const
-                { return bool( nControlBits & EEControlBits::TABINDENTING ); }
-
     bool    DoFormat100() const
                 { return bool( nControlBits & EEControlBits::FORMAT100 ); }
 
     bool    ULSpaceSummation() const
                 { return bool( nControlBits & EEControlBits::ULSPACESUMMATION ); }
-
-    bool    ULSpaceFirstParagraph() const
-                { return bool( nControlBits & EEControlBits::ULSPACEFIRSTPARA ); }
 };
 
 #endif // INCLUDED_EDITENG_SOURCE_EDITENG_EDITSTT2_HXX

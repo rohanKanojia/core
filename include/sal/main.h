@@ -20,10 +20,10 @@
 #ifndef INCLUDED_SAL_MAIN_H
 #define INCLUDED_SAL_MAIN_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 #if defined AIX
 #include <unistd.h>
@@ -67,7 +67,7 @@ int SAL_DLLPUBLIC_EXPORT SAL_CALL main(int argc, char ** argv) \
 
 /* Definition macros for CRT entries */
 
-#ifdef SAL_W32
+#ifdef _WIN32
 
 #include <stdlib.h>
 
@@ -99,11 +99,11 @@ int WINAPI WinMain( HINSTANCE _hinst, HINSTANCE _dummy, char* _cmdline, int _nsh
     return main(argc, argv); \
 }
 
-#else   /* ! SAL_W32 */
+#else   /* ! _WIN32 */
 
 # define SAL_WIN_WinMain
 
-#endif /* ! SAL_W32 */
+#endif /* ! _WIN32 */
 
 /* Implementation macro */
 

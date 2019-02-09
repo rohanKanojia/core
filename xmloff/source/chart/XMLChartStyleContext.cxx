@@ -17,13 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLChartStyleContext.hxx"
+#include <XMLChartStyleContext.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmlnumfi.hxx>
 #include <xmloff/families.hxx>
 #include <xmloff/xmltypes.hxx>
-#include <tools/debug.hxx>
+#include <xmloff/xmlimppr.hxx>
+
+#include <sal/log.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 #include "XMLChartPropertyContext.hxx"
 
@@ -82,10 +85,8 @@ void lcl_NumberFormatStyleToProperty( const OUString& rStyleName, const OUString
             XML_STYLE_FAMILY_DATA_STYLE, rStyleName, true ));
         if( pStyle )
         {
-            uno::Any aNumberFormat;
             sal_Int32 nNumberFormat = const_cast<SvXMLNumFormatContext*>(pStyle)->GetKey();
-            aNumberFormat <<= nNumberFormat;
-            rPropSet->setPropertyValue( rPropertyName, aNumberFormat );
+            rPropSet->setPropertyValue( rPropertyName, uno::Any(nNumberFormat) );
         }
     }
 }
@@ -101,19 +102,19 @@ void XMLChartStyleContext::FillPropertySet(
     }
     catch( beans::UnknownPropertyException&  )
     {
-        DBG_ASSERT( false, "unknown property exception -> shape style not completely imported for chart style" );
+        SAL_WARN( "xmloff", "unknown property exception -> shape style not completely imported for chart style" );
     }
 
     lcl_NumberFormatStyleToProperty( msDataStyleName, "NumberFormat", mrStyles, rPropSet );
     lcl_NumberFormatStyleToProperty( msPercentageDataStyleName, "PercentageNumberFormat", mrStyles, rPropSet );
 }
 
-SvXMLImportContext *XMLChartStyleContext::CreateChildContext(
+SvXMLImportContextRef XMLChartStyleContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList > & xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if( XML_NAMESPACE_STYLE == nPrefix || XML_NAMESPACE_LO_EXT == nPrefix )
     {
@@ -131,17 +132,17 @@ SvXMLImportContext *XMLChartStyleContext::CreateChildContext(
             rtl::Reference < SvXMLImportPropertyMapper > xImpPrMap =
                 GetStyles()->GetImportPropertyMapper( GetFamily() );
             if( xImpPrMap.is() )
-                pContext = new XMLChartPropertyContext(
+                xContext = new XMLChartPropertyContext(
                     GetImport(), nPrefix, rLocalName, xAttrList, nFamily,
                     GetProperties(), xImpPrMap );
         }
     }
 
-    if( !pContext )
-        pContext = XMLShapeStyleContext::CreateChildContext( nPrefix, rLocalName,
+    if (!xContext)
+        xContext = XMLShapeStyleContext::CreateChildContext( nPrefix, rLocalName,
                                                              xAttrList );
 
-    return pContext;
+    return xContext;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

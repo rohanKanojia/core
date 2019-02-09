@@ -7,18 +7,19 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "simpleformulacalc.hxx"
-#include "document.hxx"
-#include "tokenarray.hxx"
-#include "interpre.hxx"
-#include "compiler.hxx"
+#include <memory>
+#include <simpleformulacalc.hxx>
+#include <document.hxx>
+#include <tokenarray.hxx>
+#include <interpre.hxx>
+#include <compiler.hxx>
+#include <sfx2/linkmgr.hxx>
 
 #define DISPLAY_LEN 15
 
 ScSimpleFormulaCalculator::ScSimpleFormulaCalculator( ScDocument* pDoc, const ScAddress& rAddr,
         const OUString& rFormula, bool bMatrixFormula, formula::FormulaGrammar::Grammar eGram )
-    : mnFormatType(0)
-    , mnFormatIndex(0)
+    : mnFormatType(SvNumFormatType::ALL)
     , mbCalculated(false)
     , maAddr(rAddr)
     , mpDoc(pDoc)
@@ -28,10 +29,9 @@ ScSimpleFormulaCalculator::ScSimpleFormulaCalculator( ScDocument* pDoc, const Sc
     , mbMatrixFormula(bMatrixFormula)
 {
     // compile already here
-    ScCompiler aComp(mpDoc, maAddr);
-    aComp.SetGrammar(eGram);
-    mpCode.reset(aComp.CompileString(rFormula));
-    if(!mpCode->GetCodeError() && mpCode->GetLen())
+    ScCompiler aComp(mpDoc, maAddr, eGram, true, bMatrixFormula);
+    mpCode = aComp.CompileString(rFormula);
+    if(mpCode->GetCodeError() == FormulaError::NONE && mpCode->GetLen())
         aComp.CompileTokenArray();
 }
 
@@ -45,15 +45,18 @@ void ScSimpleFormulaCalculator::Calculate()
         return;
 
     mbCalculated = true;
-    ScInterpreter aInt(nullptr, mpDoc, maAddr, *mpCode.get());
+    ScInterpreter aInt(nullptr, mpDoc, mpDoc->GetNonThreadedContext(), maAddr, *mpCode);
+
+    std::unique_ptr<sfx2::LinkManager> pNewLinkMgr( new sfx2::LinkManager(mpDoc->GetDocumentShell()) );
+    aInt.SetLinkManager( pNewLinkMgr.get() );
+
     if (mbMatrixFormula)
         aInt.AssertFormulaMatrix();
 
     formula::StackVar aIntType = aInt.Interpret();
     if ( aIntType == formula::svMatrixCell )
     {
-        ScCompiler aComp(mpDoc, maAddr);
-        aComp.SetGrammar(maGram);
+        ScCompiler aComp(mpDoc, maAddr, maGram);
         OUStringBuffer aStr;
         aComp.CreateStringFromToken(aStr, aInt.GetResultToken().get());
 
@@ -76,7 +79,6 @@ void ScSimpleFormulaCalculator::Calculate()
         maMatrixFormulaResult = aStr.makeStringAndClear();
     }
     mnFormatType = aInt.GetRetFormatType();
-    mnFormatIndex = aInt.GetRetFormatIndex();
     maResult.SetToken(aInt.GetResultToken().get());
 }
 
@@ -95,12 +97,12 @@ bool ScSimpleFormulaCalculator::IsMatrix()
     return mbMatrixResult;
 }
 
-sal_uInt16 ScSimpleFormulaCalculator::GetErrCode()
+FormulaError ScSimpleFormulaCalculator::GetErrCode()
 {
     Calculate();
 
-    sal_uInt16 nErr = mpCode->GetCodeError();
-    if (nErr)
+    FormulaError nErr = mpCode->GetCodeError();
+    if (nErr != FormulaError::NONE)
         return nErr;
     return maResult.GetResultError();
 }
@@ -109,8 +111,8 @@ double ScSimpleFormulaCalculator::GetValue()
 {
     Calculate();
 
-    if ((!mpCode->GetCodeError() || mpCode->GetCodeError() == errDoubleRef) &&
-            !maResult.GetResultError())
+    if ((mpCode->GetCodeError() == FormulaError::NONE) &&
+            maResult.GetResultError() == FormulaError::NONE)
         return maResult.GetDouble();
 
     return 0.0;
@@ -121,10 +123,10 @@ svl::SharedString ScSimpleFormulaCalculator::GetString()
     Calculate();
 
     if (mbMatrixResult)
-        return maMatrixFormulaResult;
+        return svl::SharedString( maMatrixFormulaResult);   // string not interned
 
-    if ((!mpCode->GetCodeError() || mpCode->GetCodeError() == errDoubleRef) &&
-            !maResult.GetResultError())
+    if ((mpCode->GetCodeError() == FormulaError::NONE) &&
+            maResult.GetResultError() == FormulaError::NONE)
         return maResult.GetString();
 
     return svl::SharedString::getEmptyString();
@@ -132,8 +134,7 @@ svl::SharedString ScSimpleFormulaCalculator::GetString()
 
 bool ScSimpleFormulaCalculator::HasColRowName()
 {
-    mpCode->Reset();
-    return mpCode->GetNextColRowName() != nullptr;
+    return formula::FormulaTokenArrayPlainIterator(*mpCode).GetNextColRowName() != nullptr;
 }
 
 ScTokenArray* ScSimpleFormulaCalculator::GetCode()

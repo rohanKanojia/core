@@ -28,7 +28,6 @@ class Point;
 class DXFLineInfo {
 public:
     LineStyle       eStyle;
-    double          fWidth;
     sal_Int32       nDashCount;
     double          fDashLen;
     sal_Int32       nDotCount;
@@ -36,23 +35,12 @@ public:
     double          fDistance;
 
     DXFLineInfo() :
-        eStyle(LINE_SOLID),
-        fWidth(0),
+        eStyle(LineStyle::Solid),
         nDashCount(0),
         fDashLen(0),
         nDotCount(0),
         fDotLen(0),
         fDistance(0) {}
-
-    DXFLineInfo(const DXFLineInfo& x) :
-        eStyle(x.eStyle),
-        fWidth(x.fWidth),
-        nDashCount(x.nDashCount),
-        fDashLen(x.fDashLen),
-        nDotCount(x.nDotCount),
-        fDotLen(x.fDotLen),
-        fDistance(x.fDistance) {}
-
 };
 
 
@@ -67,7 +55,6 @@ public:
     double fx,fy,fz; // public ! - why not?
 
     inline DXFVector(double fX=0.0, double fY=0.0, double fZ=0.0);
-    inline DXFVector(const DXFVector & rV);
 
     // summation/subtraktion:
     DXFVector & operator += (const DXFVector & rV);
@@ -145,9 +132,6 @@ public:
         // arbitrary position would be created, sal_False is returned.
         // (The center point will not be transformed, use Transform(..))
 
-    sal_uInt32 TransLineWidth(double fW) const;
-        // Transforms the thickness of a line (as good as possible)
-
     double CalcRotAngle() const;
         // Calculates the rotation angle around z-axis (in degrees)
 
@@ -171,12 +155,6 @@ private:
 inline DXFVector::DXFVector(double fX, double fY, double fZ)
 {
     fx=fX; fy=fY; fz=fZ;
-}
-
-
-inline DXFVector::DXFVector(const DXFVector & rV)
-{
-    fx=rV.fx; fy=rV.fy; fz=rV.fz;
 }
 
 

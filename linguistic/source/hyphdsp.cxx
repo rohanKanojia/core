@@ -18,12 +18,14 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
 #include <cppuhelper/factory.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
-#include <com/sun/star/linguistic2/XSearchableDictionaryList.hpp>
+#include <com/sun/star/linguistic2/XLinguServiceEventBroadcaster.hpp>
 #include <com/sun/star/linguistic2/XHyphenatedWord.hpp>
 #include <rtl/ustrbuf.hxx>
 #include <i18nlangtag/lang.h>
@@ -34,8 +36,8 @@
 #include <osl/mutex.hxx>
 
 #include "hyphdsp.hxx"
-#include "linguistic/hyphdta.hxx"
-#include "linguistic/lngprops.hxx"
+#include <linguistic/hyphdta.hxx>
+#include <linguistic/lngprops.hxx>
 #include "lngsvcmgr.hxx"
 
 using namespace osl;
@@ -70,7 +72,7 @@ void HyphenatorDispatcher::ClearSvcList()
 Reference<XHyphenatedWord>  HyphenatorDispatcher::buildHyphWord(
             const OUString& rOrigWord,
             const Reference<XDictionaryEntry> &xEntry,
-            sal_Int16 nLang, sal_Int16 nMaxLeading )
+            LanguageType nLang, sal_Int16 nMaxLeading )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -110,7 +112,7 @@ Reference<XHyphenatedWord>  HyphenatorDispatcher::buildHyphWord(
                     if (!bSkip  &&  nHyphIdx >= 0)
                     {
                         if (nLeading <= nMaxLeading) {
-                            nHyphenationPos = (sal_Int16) nHyphIdx;
+                            nHyphenationPos = static_cast<sal_Int16>(nHyphIdx);
                             nOrigHyphPos = i;
                         }
                     }
@@ -182,7 +184,7 @@ Reference<XHyphenatedWord>  HyphenatorDispatcher::buildHyphWord(
 
 
 Reference< XPossibleHyphens > HyphenatorDispatcher::buildPossHyphens(
-            const Reference< XDictionaryEntry > &xEntry, sal_Int16 nLanguage )
+            const Reference< XDictionaryEntry > &xEntry, LanguageType nLanguage )
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -220,7 +222,7 @@ Reference< XPossibleHyphens > HyphenatorDispatcher::buildPossHyphens(
                 else
                 {
                     if (!bSkip  &&  nHyphIdx >= 0)
-                        pPos[ nHyphCount++ ] = (sal_Int16) nHyphIdx;
+                        pPos[ nHyphCount++ ] = static_cast<sal_Int16>(nHyphIdx);
                     bSkip = true;   //! multiple '=' should count as one only
                 }
             }
@@ -246,23 +248,20 @@ Reference< XPossibleHyphens > HyphenatorDispatcher::buildPossHyphens(
 
 
 Sequence< Locale > SAL_CALL HyphenatorDispatcher::getLocales()
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     Sequence< Locale > aLocales( static_cast< sal_Int32 >(aSvcMap.size()) );
     Locale *pLocales = aLocales.getArray();
-    HyphSvcByLangMap_t::const_iterator aIt;
-    for (aIt = aSvcMap.begin();  aIt != aSvcMap.end();  ++aIt)
+    for (auto const& elem : aSvcMap)
     {
-        *pLocales++ = LanguageTag::convertToLocale( aIt->first );
+        *pLocales++ = LanguageTag::convertToLocale(elem.first);
     }
     return aLocales;
 }
 
 
 sal_Bool SAL_CALL HyphenatorDispatcher::hasLocale(const Locale& rLocale)
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
     HyphSvcByLangMap_t::const_iterator aIt( aSvcMap.find( LinguLocaleToLanguage( rLocale ) ) );
@@ -274,14 +273,13 @@ Reference< XHyphenatedWord > SAL_CALL
     HyphenatorDispatcher::hyphenate(
             const OUString& rWord, const Locale& rLocale, sal_Int16 nMaxLeading,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     Reference< XHyphenatedWord >    xRes;
 
     sal_Int32 nWordLen = rWord.getLength();
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
     if (LinguIsUnspecified(nLanguage) || !nWordLen ||
         nMaxLeading == 0 || nMaxLeading == nWordLen)
         return xRes;
@@ -308,7 +306,7 @@ Reference< XHyphenatedWord > SAL_CALL
         bWordModified |= RemoveHyphens( aChkWord );
         if (IsIgnoreControlChars( rProperties, GetPropSet() ))
             bWordModified |= RemoveControlChars( aChkWord );
-        sal_Int16 nChkMaxLeading = (sal_Int16) GetPosInWordToCheck( rWord, nMaxLeading );
+        sal_Int16 nChkMaxLeading = static_cast<sal_Int16>(GetPosInWordToCheck( rWord, nMaxLeading ));
 
         // check for results from (positive) dictionaries which have precedence!
         Reference< XDictionaryEntry > xEntry;
@@ -316,7 +314,7 @@ Reference< XHyphenatedWord > SAL_CALL
         if (GetDicList().is()  &&  IsUseDicList( rProperties, GetPropSet() ))
         {
             xEntry = GetDicList()->queryDictionaryEntry( aChkWord, rLocale,
-                        sal_True, sal_False );
+                        true, false );
         }
 
         if (xEntry.is())
@@ -369,7 +367,7 @@ Reference< XHyphenatedWord > SAL_CALL
                 }
                 catch (uno::Exception &)
                 {
-                    DBG_ASSERT( false, "createInstanceWithArguments failed" );
+                    SAL_WARN( "linguistic", "createInstanceWithArguments failed" );
                 }
                 pRef [i] = xHyph;
 
@@ -382,7 +380,7 @@ Reference< XHyphenatedWord > SAL_CALL
                     xRes = xHyph->hyphenate( aChkWord, rLocale, nChkMaxLeading,
                                             rProperties );
 
-                pEntry->nLastTriedSvcIndex = (sal_Int16) i;
+                pEntry->nLastTriedSvcIndex = static_cast<sal_Int16>(i);
                 ++i;
 
                 // if language is not supported by the services
@@ -411,14 +409,13 @@ Reference< XHyphenatedWord > SAL_CALL
     HyphenatorDispatcher::queryAlternativeSpelling(
             const OUString& rWord, const Locale& rLocale, sal_Int16 nIndex,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     Reference< XHyphenatedWord >    xRes;
 
     sal_Int32 nWordLen = rWord.getLength();
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
     if (LinguIsUnspecified(nLanguage) || !nWordLen)
         return xRes;
 
@@ -444,7 +441,7 @@ Reference< XHyphenatedWord > SAL_CALL
         bWordModified |= RemoveHyphens( aChkWord );
         if (IsIgnoreControlChars( rProperties, GetPropSet() ))
             bWordModified |= RemoveControlChars( aChkWord );
-        sal_Int16 nChkIndex = (sal_Int16) GetPosInWordToCheck( rWord, nIndex );
+        sal_Int16 nChkIndex = static_cast<sal_Int16>(GetPosInWordToCheck( rWord, nIndex ));
 
         // check for results from (positive) dictionaries which have precedence!
         Reference< XDictionaryEntry > xEntry;
@@ -452,7 +449,7 @@ Reference< XHyphenatedWord > SAL_CALL
         if (GetDicList().is()  &&  IsUseDicList( rProperties, GetPropSet() ))
         {
             xEntry = GetDicList()->queryDictionaryEntry( aChkWord, rLocale,
-                        sal_True, sal_False );
+                        true, false );
         }
 
         if (xEntry.is())
@@ -501,7 +498,7 @@ Reference< XHyphenatedWord > SAL_CALL
                 }
                 catch (uno::Exception &)
                 {
-                    DBG_ASSERT( false, "createInstanceWithArguments failed" );
+                    SAL_WARN( "linguistic", "createInstanceWithArguments failed" );
                 }
                 pRef [i] = xHyph;
 
@@ -514,7 +511,7 @@ Reference< XHyphenatedWord > SAL_CALL
                     xRes = xHyph->queryAlternativeSpelling( aChkWord, rLocale,
                                 nChkIndex, rProperties );
 
-                pEntry->nLastTriedSvcIndex = (sal_Int16) i;
+                pEntry->nLastTriedSvcIndex = static_cast<sal_Int16>(i);
                 ++i;
 
                 // if language is not supported by the services
@@ -543,13 +540,12 @@ Reference< XPossibleHyphens > SAL_CALL
     HyphenatorDispatcher::createPossibleHyphens(
             const OUString& rWord, const Locale& rLocale,
             const PropertyValues& rProperties )
-        throw(IllegalArgumentException, RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
     Reference< XPossibleHyphens >   xRes;
 
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
     if (LinguIsUnspecified(nLanguage) || rWord.isEmpty())
         return xRes;
 
@@ -577,7 +573,7 @@ Reference< XPossibleHyphens > SAL_CALL
         if (GetDicList().is()  &&  IsUseDicList( rProperties, GetPropSet() ))
         {
             xEntry = GetDicList()->queryDictionaryEntry( aChkWord, rLocale,
-                        sal_True, sal_False );
+                        true, false );
         }
 
         if (xEntry.is())
@@ -624,7 +620,7 @@ Reference< XPossibleHyphens > SAL_CALL
                 }
                 catch (uno::Exception &)
                 {
-                    DBG_ASSERT( false, "createWithArguments failed" );
+                    SAL_WARN( "linguistic", "createWithArguments failed" );
                 }
                 pRef [i] = xHyph;
 
@@ -636,7 +632,7 @@ Reference< XPossibleHyphens > SAL_CALL
                 if (xHyph.is()  &&  xHyph->hasLocale( rLocale ))
                     xRes = xHyph->createPossibleHyphens( aChkWord, rLocale, rProperties );
 
-                pEntry->nLastTriedSvcIndex = (sal_Int16) i;
+                pEntry->nLastTriedSvcIndex = static_cast<sal_Int16>(i);
                 ++i;
 
                 // if language is not supported by the services
@@ -663,7 +659,7 @@ void HyphenatorDispatcher::SetServiceList( const Locale &rLocale,
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
 
     sal_Int32 nLen = rSvcImplNames.getLength();
     if (0 == nLen)
@@ -698,7 +694,7 @@ Sequence< OUString >
     Sequence< OUString > aRes;
 
     // search for entry with that language and use data from that
-    sal_Int16 nLanguage = LinguLocaleToLanguage( rLocale );
+    LanguageType nLanguage = LinguLocaleToLanguage( rLocale );
     const HyphSvcByLangMap_t::const_iterator  aIt( aSvcMap.find( nLanguage ) );
     const LangSvcEntries_Hyph       *pEntry = aIt != aSvcMap.end() ? aIt->second.get() : nullptr;
     if (pEntry)

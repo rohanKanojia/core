@@ -19,7 +19,6 @@
 
 #include <redline.hxx>
 #include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
 #include <svl/eitem.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dispatch.hxx>
@@ -32,14 +31,11 @@
 #include <swwait.hxx>
 #include <uitool.hxx>
 
-#include <helpid.h>
 #include <cmdid.h>
-#include <misc.hrc>
-#include <shells.hrc>
 
 #include <vector>
 #include <redlndlg.hxx>
-#include "swmodalredlineacceptdlg.hxx"
+#include <swmodalredlineacceptdlg.hxx>
 
 #include <unomid.h>
 
@@ -47,7 +43,7 @@ SwModalRedlineAcceptDlg::SwModalRedlineAcceptDlg(vcl::Window *pParent)
     : SfxModalDialog(pParent,
         "AcceptRejectChangesDialog", "svx/ui/acceptrejectchangesdialog.ui")
 {
-    pImplDlg = new SwRedlineAcceptDlg(this, this, get_content_area(), true);
+    pImplDlg.reset( new SwRedlineAcceptDlg(this, this, get_content_area(), true) );
 
     pImplDlg->Initialize(GetExtraData());
     pImplDlg->Activate();   // for data's initialisation
@@ -63,7 +59,7 @@ void SwModalRedlineAcceptDlg::dispose()
     AcceptAll(false);   // refuse everything remaining
     pImplDlg->FillInfo(GetExtraData());
 
-    delete pImplDlg;
+    pImplDlg.reset();
     SfxModalDialog::dispose();
 }
 

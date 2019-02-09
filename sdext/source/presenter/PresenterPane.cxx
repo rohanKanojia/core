@@ -24,7 +24,6 @@
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/drawing/CanvasFeature.hpp>
 #include <com/sun/star/rendering/CompositeOperation.hpp>
-#include <osl/mutex.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -56,14 +55,12 @@ PresenterPane::~PresenterPane()
 //----- XPane -----------------------------------------------------------------
 
 Reference<awt::XWindow> SAL_CALL PresenterPane::getWindow()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return mxContentWindow;
 }
 
 Reference<rendering::XCanvas> SAL_CALL PresenterPane::getCanvas()
-    throw (RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return mxContentCanvas;
@@ -72,9 +69,7 @@ Reference<rendering::XCanvas> SAL_CALL PresenterPane::getCanvas()
 //----- XWindowListener -------------------------------------------------------
 
 void SAL_CALL PresenterPane::windowResized (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowResized(rEvent);
 
     Invalidate(maBoundingBox);
@@ -87,9 +82,7 @@ void SAL_CALL PresenterPane::windowResized (const awt::WindowEvent& rEvent)
 }
 
 void SAL_CALL PresenterPane::windowMoved (const awt::WindowEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowMoved(rEvent);
 
     Invalidate(maBoundingBox);
@@ -101,9 +94,7 @@ void SAL_CALL PresenterPane::windowMoved (const awt::WindowEvent& rEvent)
 }
 
 void SAL_CALL PresenterPane::windowShown (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowShown(rEvent);
 
     ToTop();
@@ -111,7 +102,7 @@ void SAL_CALL PresenterPane::windowShown (const lang::EventObject& rEvent)
     if (mxContentWindow.is())
     {
         LayoutContextWindow();
-        mxContentWindow->setVisible(sal_True);
+        mxContentWindow->setVisible(true);
     }
 
     UpdateBoundingBox();
@@ -119,21 +110,17 @@ void SAL_CALL PresenterPane::windowShown (const lang::EventObject& rEvent)
 }
 
 void SAL_CALL PresenterPane::windowHidden (const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     PresenterPaneBase::windowHidden(rEvent);
 
     if (mxContentWindow.is())
-        mxContentWindow->setVisible(sal_False);
+        mxContentWindow->setVisible(false);
 }
 
 //----- XPaintListener --------------------------------------------------------
 
 void SAL_CALL PresenterPane::windowPaint (const awt::PaintEvent& rEvent)
-    throw (RuntimeException, std::exception)
 {
-    (void)rEvent;
     ThrowIfDisposed();
 
     PaintBorder(rEvent.UpdateRect);
@@ -141,27 +128,26 @@ void SAL_CALL PresenterPane::windowPaint (const awt::PaintEvent& rEvent)
 
 
 void PresenterPane::CreateCanvases (
-    const Reference<awt::XWindow>& rxParentWindow,
     const Reference<rendering::XSpriteCanvas>& rxParentCanvas)
 {
     if ( ! mxPresenterHelper.is())
         return;
-    if ( ! rxParentWindow.is())
+    if ( ! mxParentWindow.is())
         return;
     if ( ! rxParentCanvas.is())
         return;
 
     mxBorderCanvas = mxPresenterHelper->createSharedCanvas(
         rxParentCanvas,
-        rxParentWindow,
+        mxParentWindow,
         Reference<rendering::XCanvas>(rxParentCanvas, UNO_QUERY),
-        rxParentWindow,
+        mxParentWindow,
         mxBorderWindow);
     mxContentCanvas = mxPresenterHelper->createSharedCanvas(
         rxParentCanvas,
-        rxParentWindow,
+        mxParentWindow,
         Reference<rendering::XCanvas>(rxParentCanvas, UNO_QUERY),
-        rxParentWindow,
+        mxParentWindow,
         mxContentWindow);
 
     PaintBorder(mxBorderWindow->getPosSize());

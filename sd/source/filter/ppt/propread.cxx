@@ -17,40 +17,37 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <propread.hxx>
-#include "rtl/tencinfo.h"
-#include "rtl/textenc.h"
+#include <memory>
+#include "propread.hxx"
+#include <rtl/tencinfo.h>
+#include <rtl/textenc.h>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
-#include <o3tl/make_unique.hxx>
 
-PropEntry::PropEntry( sal_uInt32 nId, const sal_uInt8* pBuf, sal_uInt32 nBufSize, sal_uInt16 nTextEnc ) :
+PropEntry::PropEntry( sal_uInt32 nId, const sal_uInt8* pBuf, sal_uInt32 nBufSize ) :
     mnId        ( nId ),
     mnSize      ( nBufSize ),
-    mnTextEnc   ( nTextEnc ),
     mpBuf       ( new sal_uInt8[ nBufSize ] )
 {
-    memcpy( static_cast<void*>(mpBuf), static_cast<void const *>(pBuf), nBufSize );
+    memcpy( mpBuf.get(), pBuf, nBufSize );
 };
 
 PropEntry::PropEntry( const PropEntry& rProp ) :
     mnId        ( rProp.mnId ),
     mnSize      ( rProp.mnSize ),
-    mnTextEnc   ( rProp.mnTextEnc ),
     mpBuf       ( new sal_uInt8[ mnSize ] )
 {
-    memcpy( static_cast<void*>(mpBuf), static_cast<void const *>(rProp.mpBuf), mnSize );
+    memcpy( mpBuf.get(), rProp.mpBuf.get(), mnSize );
 };
 
 PropEntry& PropEntry::operator=(const PropEntry& rPropEntry)
 {
     if ( this != &rPropEntry )
     {
-        delete[] mpBuf;
         mnId = rPropEntry.mnId;
         mnSize = rPropEntry.mnSize;
-        mnTextEnc = rPropEntry.mnTextEnc;
-        mpBuf = new sal_uInt8[ mnSize ];
-        memcpy( static_cast<void*>(mpBuf), static_cast<void const *>(rPropEntry.mpBuf), mnSize );
+        mpBuf.reset( new sal_uInt8[ mnSize ] );
+        memcpy( mpBuf.get(), rPropEntry.mpBuf.get(), mnSize );
     }
     return *this;
 }
@@ -108,13 +105,13 @@ bool PropItem::Read( OUString& rString, sal_uInt32 nStringType, bool bAlign )
             {
                 try
                 {
-                    sal_Char* pString = new sal_Char[ nItemSize ];
+                    std::unique_ptr<sal_Char[]> pString( new sal_Char[ nItemSize ] );
                     if ( mnTextEnc == RTL_TEXTENCODING_UCS2 )
                     {
                         nItemSize >>= 1;
                         if ( nItemSize > 1 )
                         {
-                            sal_Unicode* pWString = reinterpret_cast<sal_Unicode*>(pString);
+                            sal_Unicode* pWString = reinterpret_cast<sal_Unicode*>(pString.get());
                             for (sal_uInt32 i = 0; i < nItemSize; ++i)
                                 ReadUtf16( pWString[ i ] );
                             rString = OUString(pWString, lcl_getMaxSafeStrLen(nItemSize));
@@ -125,17 +122,16 @@ bool PropItem::Read( OUString& rString, sal_uInt32 nStringType, bool bAlign )
                     }
                     else
                     {
-                        SvMemoryStream::Read( pString, nItemSize );
+                        SvMemoryStream::ReadBytes(pString.get(), nItemSize);
                         if ( pString[ nItemSize - 1 ] == 0 )
                         {
                             if ( nItemSize > 1 )
-                                rString = OUString(pString, rtl_str_getLength(pString), mnTextEnc);
+                                rString = OUString(pString.get(), rtl_str_getLength(pString.get()), mnTextEnc);
                             else
                                 rString.clear();
                             bRetValue = true;
                         }
                     }
-                    delete[] pString;
                 }
                 catch( const std::bad_alloc& )
                 {
@@ -163,18 +159,17 @@ bool PropItem::Read( OUString& rString, sal_uInt32 nStringType, bool bAlign )
             {
                 try
                 {
-                    sal_Unicode* pString = new sal_Unicode[ nItemSize ];
+                    std::unique_ptr<sal_Unicode[]> pString( new sal_Unicode[ nItemSize ] );
                     for (sal_uInt32 i = 0; i < nItemSize; ++i)
                         ReadUtf16( pString[ i ] );
                     if ( pString[ nItemSize - 1 ] == 0 )
                     {
-                        if ( (sal_uInt16)nItemSize > 1 )
-                            rString = OUString(pString, lcl_getMaxSafeStrLen(nItemSize));
+                        if ( static_cast<sal_uInt16>(nItemSize) > 1 )
+                            rString = OUString(pString.get(), lcl_getMaxSafeStrLen(nItemSize));
                         else
                             rString.clear();
                         bRetValue = true;
                     }
-                    delete[] pString;
                 }
                 catch( const std::bad_alloc& )
                 {
@@ -199,10 +194,7 @@ PropItem& PropItem::operator=( PropItem& rPropItem )
         delete[] static_cast<sal_uInt8*>(SwitchBuffer());
 
         mnTextEnc = rPropItem.mnTextEnc;
-        sal_uInt32 nItemPos = rPropItem.Tell();
-        rPropItem.Seek( STREAM_SEEK_TO_END );
-        SvMemoryStream::Write( rPropItem.GetData(), rPropItem.Tell() );
-        rPropItem.Seek( nItemPos );
+        SvMemoryStream::WriteBytes(rPropItem.GetData(), rPropItem.TellEnd());
     }
     return *this;
 }
@@ -213,7 +205,7 @@ Section::Section( const Section& rSection )
     for ( int i = 0; i < 16; i++ )
         aFMTID[ i ] = rSection.aFMTID[ i ];
     for(const std::unique_ptr<PropEntry>& rEntry : rSection.maEntries)
-        maEntries.push_back(o3tl::make_unique<PropEntry>(*rEntry.get()));
+        maEntries.push_back(std::make_unique<PropEntry>(*rEntry));
 }
 
 Section::Section( const sal_uInt8* pFMTID )
@@ -227,18 +219,14 @@ bool Section::GetProperty( sal_uInt32 nId, PropItem& rPropItem )
 {
     if ( nId )
     {
-        std::vector<std::unique_ptr<PropEntry> >::const_iterator iter;
-        for (iter = maEntries.begin(); iter != maEntries.end(); ++iter)
-        {
-            if ((*iter)->mnId == nId)
-                break;
-        }
+        auto iter = std::find_if(maEntries.begin(), maEntries.end(),
+            [nId](const std::unique_ptr<PropEntry>& rxEntry) { return rxEntry->mnId == nId; });
 
         if (iter != maEntries.end())
         {
             rPropItem.Clear();
             rPropItem.SetTextEncoding( mnTextEnc );
-            rPropItem.Write( (*iter)->mpBuf, (*iter)->mnSize );
+            rPropItem.WriteBytes( (*iter)->mpBuf.get(), (*iter)->mnSize );
             rPropItem.Seek( STREAM_SEEK_TO_BEGIN );
             return true;
         }
@@ -256,34 +244,30 @@ void Section::AddProperty( sal_uInt32 nId, const sal_uInt8* pBuf, sal_uInt32 nBu
         nId = 0;
 
     // do not allow same PropId's, sort
-    std::vector<std::unique_ptr<PropEntry> >::iterator iter;
-    for ( iter = maEntries.begin(); iter != maEntries.end(); ++iter )
+    auto iter = std::find_if(maEntries.begin(), maEntries.end(),
+        [nId](const std::unique_ptr<PropEntry>& rxEntry) { return rxEntry->mnId >= nId; });
+    if (iter != maEntries.end())
     {
         if ( (*iter)->mnId == nId )
-            (*iter).reset(new PropEntry( nId, pBuf, nBufSize, mnTextEnc ));
-        else if ( (*iter)->mnId > nId )
-            maEntries.insert( iter, o3tl::make_unique<PropEntry>( nId, pBuf, nBufSize, mnTextEnc ));
+            (*iter).reset(new PropEntry( nId, pBuf, nBufSize ));
         else
-            continue;
-        return;
+            maEntries.insert( iter, std::make_unique<PropEntry>( nId, pBuf, nBufSize ));
     }
-
-    maEntries.push_back( o3tl::make_unique<PropEntry>( nId, pBuf, nBufSize, mnTextEnc ) );
+    else
+    {
+        maEntries.push_back( std::make_unique<PropEntry>( nId, pBuf, nBufSize ) );
+    }
 }
 
 void Section::GetDictionary(Dictionary& rDict)
 {
-    std::vector<std::unique_ptr<PropEntry> >::iterator iter;
-    for (iter = maEntries.begin(); iter != maEntries.end(); ++iter)
-    {
-        if ( (*iter)->mnId == 0 )
-            break;
-    }
+    auto iter = std::find_if(maEntries.begin(), maEntries.end(),
+        [](const std::unique_ptr<PropEntry>& rxEntry) { return rxEntry->mnId == 0; });
 
     if (iter == maEntries.end())
         return;
 
-    SvMemoryStream aStream( (*iter)->mpBuf, (*iter)->mnSize, StreamMode::READ );
+    SvMemoryStream aStream( (*iter)->mpBuf.get(), (*iter)->mnSize, StreamMode::READ );
     aStream.Seek( STREAM_SEEK_TO_BEGIN );
     sal_uInt32 nDictCount(0);
     aStream.ReadUInt32( nDictCount );
@@ -302,18 +286,16 @@ void Section::GetDictionary(Dictionary& rDict)
         {
             if ( mnTextEnc == RTL_TEXTENCODING_UCS2 )
             {
-                sal_Unicode* pWString = new sal_Unicode[nSize];
+                std::unique_ptr<sal_Unicode[]> pWString( new sal_Unicode[nSize] );
                 for (sal_uInt32 j = 0; j < nSize; ++j)
                     aStream.ReadUtf16(pWString[j]);
-                aString = OUString(pWString, lcl_getMaxSafeStrLen(nSize));
-                delete[] pWString;
+                aString = OUString(pWString.get(), lcl_getMaxSafeStrLen(nSize));
             }
             else
             {
-                sal_Char* pString = new sal_Char[nSize];
-                aStream.Read(pString, nSize);
-                aString = OUString(pString, lcl_getMaxSafeStrLen(nSize), mnTextEnc);
-                delete[] pString;
+                std::unique_ptr<sal_Char[]> pString( new sal_Char[nSize] );
+                aStream.ReadBytes(pString.get(), nSize);
+                aString = OUString(pString.get(), lcl_getMaxSafeStrLen(nSize), mnTextEnc);
             }
         }
         catch( const std::bad_alloc& )
@@ -328,16 +310,18 @@ void Section::GetDictionary(Dictionary& rDict)
 
 void Section::Read( SotStorageStream *pStrm )
 {
-    sal_uInt32 nSecOfs, nPropSize, nStrmSize;
-    nSecOfs = pStrm->Tell();
-
-    pStrm->Seek( STREAM_SEEK_TO_END );
-    nStrmSize = pStrm->Tell();
-    pStrm->Seek( nSecOfs );
+    sal_uInt32 nSecOfs = pStrm->Tell();
+    sal_uInt32 nStrmSize = pStrm->remainingSize();
 
     mnTextEnc = RTL_TEXTENCODING_MS_1252;
     sal_uInt32 nSecSize(0), nPropCount(0);
-    pStrm->ReadUInt32( nSecSize ).ReadUInt32( nPropCount );
+    pStrm->ReadUInt32(nSecSize).ReadUInt32(nPropCount);
+    if (nSecSize > nStrmSize)
+    {
+        SAL_WARN("sd.filter", "Section Len " << nSecSize << " claimed, only " << nStrmSize << " possible");
+        nSecSize = nStrmSize;
+    }
+
     while (nPropCount--)
     {
         sal_uInt32 nPropId(0), nPropOfs(0);
@@ -346,15 +330,14 @@ void Section::Read( SotStorageStream *pStrm )
             break;
         auto nCurrent = pStrm->Tell();
         sal_uInt64 nOffset = nPropOfs + nSecOfs;
-        if (nOffset != pStrm->Seek(nOffset))
+        if (!checkSeek(*pStrm, nOffset))
             break;
         if ( nPropId )                  // do not read dictionary
         {
             sal_uInt32 nPropType(0), nVectorCount(0);
             pStrm->ReadUInt32(nPropType);
 
-            nPropSize = 4;
-
+            sal_uInt32 nPropSize = 4;
             if ( nPropType & VT_VECTOR )
             {
                 pStrm->ReadUInt32( nVectorCount );
@@ -443,7 +426,7 @@ void Section::Read( SotStorageStream *pStrm )
                     if ( ( nVectorCount - i ) > 1 )
                     {
                         nOffset = nPropOfs + nSecOfs + nPropSize;
-                        if (nOffset != pStrm->Seek(nOffset))
+                        if (!checkSeek(*pStrm, nOffset))
                             break;
                     }
                 }
@@ -454,17 +437,15 @@ void Section::Read( SotStorageStream *pStrm )
             {
                 if ( nPropSize > nStrmSize )
                 {
-                    nPropCount = 0;
                     break;
                 }
                 pStrm->Seek( nPropOfs + nSecOfs );
                 // make sure we don't overflow the section size
                 if( nPropSize > nSecSize - nSecOfs )
                     nPropSize = nSecSize - nSecOfs;
-                sal_uInt8* pBuf = new sal_uInt8[ nPropSize ];
-                nPropSize = pStrm->Read(pBuf, nPropSize);
-                AddProperty( nPropId, pBuf, nPropSize );
-                delete[] pBuf;
+                std::unique_ptr<sal_uInt8[]> pBuf( new sal_uInt8[ nPropSize ] );
+                nPropSize = pStrm->ReadBytes(pBuf.get(), nPropSize);
+                AddProperty( nPropId, pBuf.get(), nPropSize );
             }
             if ( nPropId == 1 )
             {
@@ -512,7 +493,7 @@ void Section::Read( SotStorageStream *pStrm )
                 if (!pStrm->good())
                     break;
                 sal_uInt64 nPos = pStrm->Tell() + nSize;
-                if (nPos != pStrm->Seek(nPos))
+                if (!checkSeek(*pStrm, nPos))
                     break;
             }
             sal_uInt32 nSize = pStrm->Tell();
@@ -520,17 +501,15 @@ void Section::Read( SotStorageStream *pStrm )
             nSize -= pStrm->Tell();
             if ( nSize > nStrmSize )
             {
-                nPropCount = 0;
                 break;
             }
-            sal_uInt8* pBuf = new sal_uInt8[ nSize ];
-            nSize = pStrm->Read(pBuf, nSize);
-            AddProperty( 0xffffffff, pBuf, nSize );
-            delete[] pBuf;
+            std::unique_ptr<sal_uInt8[]> pBuf( new sal_uInt8[ nSize ] );
+            nSize = pStrm->ReadBytes(pBuf.get(), nSize);
+            AddProperty( 0xffffffff, pBuf.get(), nSize );
         }
         pStrm->Seek(nCurrent);
     }
-    pStrm->Seek( nSecOfs + nSecSize );
+    pStrm->Seek(nSecOfs + nSecSize);
 }
 
 Section& Section::operator=( const Section& rSection )
@@ -540,22 +519,19 @@ Section& Section::operator=( const Section& rSection )
         memcpy( static_cast<void*>(aFMTID), static_cast<void const *>(rSection.aFMTID), 16 );
 
         for(const std::unique_ptr<PropEntry>& rEntry : rSection.maEntries)
-            maEntries.push_back(o3tl::make_unique<PropEntry>(*rEntry.get()));
+            maEntries.push_back(std::make_unique<PropEntry>(*rEntry));
     }
     return *this;
 }
 
 PropRead::PropRead( SotStorage& rStorage, const OUString& rName ) :
         mbStatus            ( false ),
-        mnByteOrder         ( 0xfffe ),
-        mnFormat            ( 0 ),
-        mnVersionLo         ( 4 ),
-        mnVersionHi         ( 2 )
+        mnByteOrder         ( 0xfffe )
 {
     if ( rStorage.IsStream( rName ) )
     {
-        mpSvStream = rStorage.OpenSotStream( rName, STREAM_STD_READ );
-        if ( mpSvStream )
+        mpSvStream = rStorage.OpenSotStream( rName, StreamMode::STD_READ );
+        if ( mpSvStream.is() )
         {
             mpSvStream->SetEndian( SvStreamEndian::LITTLE );
             memset( mApplicationCLSID, 0, 16 );
@@ -564,19 +540,12 @@ PropRead::PropRead( SotStorage& rStorage, const OUString& rName ) :
     }
 }
 
-void PropRead::AddSection( Section& rSection )
-{
-    maSections.push_back( o3tl::make_unique<Section>( rSection ) );
-}
-
 const Section* PropRead::GetSection( const sal_uInt8* pFMTID )
 {
-    std::vector<std::unique_ptr<Section> >::iterator it;
-    for ( it = maSections.begin(); it != maSections.end(); ++it)
-    {
-        if ( memcmp( (*it)->GetFMTID(), pFMTID, 16 ) == 0 )
-            return it->get();
-    }
+    auto it = std::find_if(maSections.begin(), maSections.end(),
+        [&pFMTID](const std::unique_ptr<Section>& rxSection) { return memcmp( rxSection->GetFMTID(), pFMTID, 16 ) == 0; });
+    if (it != maSections.end())
+        return it->get();
     return nullptr;
 }
 
@@ -586,31 +555,34 @@ void PropRead::Read()
 
     if ( mbStatus )
     {
-        sal_uInt32  nSections;
-        sal_uInt32  nSectionOfs;
-        sal_uInt32  nCurrent;
+        sal_uInt16              mnVersionLo;
+        sal_uInt16              mnVersionHi;
+        sal_uInt16              mnFormat;
         mpSvStream->ReadUInt16( mnByteOrder ).ReadUInt16( mnFormat ).ReadUInt16( mnVersionLo ).ReadUInt16( mnVersionHi );
         if ( mnByteOrder == 0xfffe )
         {
-            sal_uInt8*  pSectCLSID = new sal_uInt8[ 16 ];
-            mpSvStream->Read( mApplicationCLSID, 16 );
-            mpSvStream->ReadUInt32( nSections );
+            std::vector<sal_uInt8> aSectCLSID(16);
+            mpSvStream->ReadBytes(mApplicationCLSID, 16);
+            sal_uInt32 nSections(0);
+            mpSvStream->ReadUInt32(nSections);
             if ( nSections > 2 )                // sj: PowerPoint documents are containing max 2 sections
             {
                 mbStatus = false;
             }
             else for ( sal_uInt32 i = 0; i < nSections; i++ )
             {
-                mpSvStream->Read( pSectCLSID, 16 );
+                mpSvStream->ReadBytes(aSectCLSID.data(), aSectCLSID.size());
+                sal_uInt32 nSectionOfs(0);
                 mpSvStream->ReadUInt32( nSectionOfs );
-                nCurrent = mpSvStream->Tell();
-                mpSvStream->Seek( nSectionOfs );
-                Section aSection( pSectCLSID );
-                aSection.Read( mpSvStream );
-                AddSection( aSection );
+                sal_uInt32 nCurrent = mpSvStream->Tell();
+                if (checkSeek(*mpSvStream, nSectionOfs))
+                {
+                    Section aSection(aSectCLSID.data());
+                    aSection.Read(mpSvStream.get());
+                    maSections.push_back(std::make_unique<Section>(aSection));
+                }
                 mpSvStream->Seek( nCurrent );
             }
-            delete[] pSectCLSID;
         }
     }
 }
@@ -623,13 +595,10 @@ PropRead& PropRead::operator=( const PropRead& rPropRead )
         mpSvStream = rPropRead.mpSvStream;
 
         mnByteOrder = rPropRead.mnByteOrder;
-        mnFormat = rPropRead.mnFormat;
-        mnVersionLo = rPropRead.mnVersionLo;
-        mnVersionHi = rPropRead.mnVersionHi;
         memcpy( mApplicationCLSID, rPropRead.mApplicationCLSID, 16 );
 
         for(const std::unique_ptr<Section>& rSection : rPropRead.maSections)
-            maSections.push_back(o3tl::make_unique<Section>(*rSection.get()));
+            maSections.push_back(std::make_unique<Section>(*rSection));
     }
     return *this;
 }

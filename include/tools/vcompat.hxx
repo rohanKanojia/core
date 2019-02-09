@@ -21,11 +21,14 @@
 
 #include <tools/toolsdllapi.h>
 
-#define COMPAT_FORMAT( char1, char2, char3, char4 ) \
-    ((sal_uInt32)((((sal_uInt32)(char)(char1)))|                \
-    (((sal_uInt32)(char)(char2))<<8UL)|                 \
-    (((sal_uInt32)(char)(char3))<<16UL)|                    \
-    ((sal_uInt32)(char)(char4))<<24UL))
+inline sal_uInt32 COMPAT_FORMAT( char char1, char char2, char char3, char char4 )
+{
+    return
+        static_cast<sal_uInt32>(char1) |
+        (static_cast<sal_uInt32>(char2) <<  8) |
+        (static_cast<sal_uInt32>(char3) << 16) |
+        (static_cast<sal_uInt32>(char4) << 24);
+};
 
 class SvStream;
 enum class StreamMode;
@@ -35,15 +38,13 @@ class TOOLS_DLLPUBLIC VersionCompat
     SvStream*       mpRWStm;
     sal_uInt32      mnCompatPos;
     sal_uInt32      mnTotalSize;
-    StreamMode   mnStmMode;
+    StreamMode const mnStmMode;
     sal_uInt16      mnVersion;
 
-                    VersionCompat() {}
-                    VersionCompat( const VersionCompat& ) {}
+                    VersionCompat( const VersionCompat& ) = delete;
     VersionCompat&  operator=( const VersionCompat& ) { return *this; }
 
 public:
-
                     VersionCompat( SvStream& rStm, StreamMode nStreamMode, sal_uInt16 nVersion = 1 );
                     ~VersionCompat();
 

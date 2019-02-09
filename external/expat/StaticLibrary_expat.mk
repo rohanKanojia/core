@@ -14,7 +14,7 @@ $(eval $(call gb_StaticLibrary_set_warnings_not_errors,expat))
 $(eval $(call gb_StaticLibrary_use_unpacked,expat,expat))
 
 # no configure step on windows, no dependency
-ifneq ($(OS)$(COM),WNTMSC)
+ifneq ($(OS),WNT)
 $(eval $(call gb_StaticLibrary_use_external_project,expat,expat,full))
 endif
 
@@ -48,6 +48,7 @@ $(eval $(call gb_StaticLibrary_add_cflags,expat,\
 ))
 
 $(eval $(call gb_StaticLibrary_add_generated_cobjects,expat,\
+	UnpackedTarball/expat/lib/loadlibrary \
 	UnpackedTarball/expat/lib/xmlparse \
 	UnpackedTarball/expat/lib/xmlrole \
 	UnpackedTarball/expat/lib/xmltok \

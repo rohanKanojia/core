@@ -22,24 +22,19 @@
 #include <osl/diagnose.h>
 #include <rtl/tencinfo.h>
 #include "../misc/ImplHelper.hxx"
-#include "WinClip.hxx"
+#include <WinClip.hxx>
 #include "MimeAttrib.hxx"
 #include "DTransHelper.hxx"
 #include <rtl/string.h>
+#include <o3tl/char16_t2wchar_t.hxx>
 #include "Fetc.hxx"
 #include <com/sun/star/datatransfer/DataFormatTranslator.hpp>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
-#pragma warning(disable:4917)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
 #include <shlobj.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
-
-// namespace directives
 
 using namespace std;
 using namespace com::sun::star::uno;
@@ -86,7 +81,7 @@ CFormatEtc CDataFormatTranslator::getFormatEtcFromDataFlavor( const DataFlavor& 
                     aFormat >>= aClipFmtName;
 
                     OSL_ASSERT( aClipFmtName.getLength( ) );
-                    cf = RegisterClipboardFormatW( reinterpret_cast<LPCWSTR>(aClipFmtName.getStr( )) );
+                    cf = RegisterClipboardFormatW( o3tl::toW(aClipFmtName.getStr( )) );
 
                     OSL_ENSURE( CF_INVALID != cf, "RegisterClipboardFormat failed" );
                 }
@@ -156,29 +151,29 @@ DataFlavor CDataFormatTranslator::getDataFlavorFromFormatEtc( const FORMATETC& a
     return aFlavor;
 }
 
-CFormatEtc SAL_CALL CDataFormatTranslator::getFormatEtcForClipformatName( const OUString& aClipFmtName ) const
+CFormatEtc CDataFormatTranslator::getFormatEtcForClipformatName( const OUString& aClipFmtName )
 {
     // check parameter
     if ( !aClipFmtName.getLength( ) )
         return CFormatEtc( CF_INVALID );
 
-    CLIPFORMAT cf = sal::static_int_cast<CLIPFORMAT>(RegisterClipboardFormatW( reinterpret_cast<LPCWSTR>(aClipFmtName.getStr( )) ));
+    CLIPFORMAT cf = sal::static_int_cast<CLIPFORMAT>(RegisterClipboardFormatW( o3tl::toW(aClipFmtName.getStr( )) ));
     return getFormatEtcForClipformat( cf );
 }
 
-OUString CDataFormatTranslator::getClipboardFormatName( CLIPFORMAT aClipformat ) const
+OUString CDataFormatTranslator::getClipboardFormatName( CLIPFORMAT aClipformat )
 {
     OSL_PRECOND( CF_INVALID != aClipformat, "Invalid clipboard format" );
 
     sal_Unicode wBuff[ MAX_CLIPFORMAT_NAME + 1 ]; // Null terminator isn't counted, apparently.
-    sal_Int32   nLen = GetClipboardFormatNameW( aClipformat, reinterpret_cast<LPWSTR>(wBuff), MAX_CLIPFORMAT_NAME );
+    sal_Int32   nLen = GetClipboardFormatNameW( aClipformat, o3tl::toW(wBuff), MAX_CLIPFORMAT_NAME );
 
     return OUString( wBuff, nLen );
 }
 
-CFormatEtc SAL_CALL CDataFormatTranslator::getFormatEtcForClipformat( CLIPFORMAT cf ) const
+CFormatEtc CDataFormatTranslator::getFormatEtcForClipformat( CLIPFORMAT cf )
 {
-    CFormatEtc fetc( cf, TYMED_NULL, NULL, DVASPECT_CONTENT );
+    CFormatEtc fetc( cf, TYMED_NULL, nullptr, DVASPECT_CONTENT );
 
     switch( cf )
     {
@@ -203,40 +198,40 @@ CFormatEtc SAL_CALL CDataFormatTranslator::getFormatEtcForClipformat( CLIPFORMAT
         of which FileContents it wants to paste
         see MSDN: "Handling Shell Data Transfer Scenarios"
     */
-    if ( cf == RegisterClipboardFormatA( CFSTR_FILECONTENTS ) )
+    if ( cf == RegisterClipboardFormat( CFSTR_FILECONTENTS ) )
          fetc.setLindex( 0 );
 
     return fetc;
 }
 
-sal_Bool SAL_CALL CDataFormatTranslator::isOemOrAnsiTextFormat( CLIPFORMAT cf ) const
+bool CDataFormatTranslator::isOemOrAnsiTextFormat( CLIPFORMAT cf )
 {
     return ( (cf == CF_TEXT) || (cf == CF_OEMTEXT) );
 }
 
-sal_Bool SAL_CALL CDataFormatTranslator::isUnicodeTextFormat( CLIPFORMAT cf ) const
+bool CDataFormatTranslator::isUnicodeTextFormat( CLIPFORMAT cf )
 {
     return ( cf == CF_UNICODETEXT );
 }
 
-sal_Bool SAL_CALL CDataFormatTranslator::isTextFormat( CLIPFORMAT cf ) const
+bool CDataFormatTranslator::isTextFormat( CLIPFORMAT cf )
 {
     return ( isOemOrAnsiTextFormat( cf ) || isUnicodeTextFormat( cf ) );
 }
 
-sal_Bool SAL_CALL CDataFormatTranslator::isHTMLFormat( CLIPFORMAT cf ) const
+bool CDataFormatTranslator::isHTMLFormat( CLIPFORMAT cf )
 {
     OUString clipFormatName = getClipboardFormatName( cf );
     return ( clipFormatName == HTML_FORMAT_NAME_WINDOWS );
 }
 
-sal_Bool SAL_CALL CDataFormatTranslator::isTextHtmlFormat( CLIPFORMAT cf ) const
+bool CDataFormatTranslator::isTextHtmlFormat( CLIPFORMAT cf )
 {
     OUString clipFormatName = getClipboardFormatName( cf );
-    return ( clipFormatName.equalsIgnoreAsciiCase( HTML_FORMAT_NAME_SOFFICE ) );
+    return clipFormatName.equalsIgnoreAsciiCase( HTML_FORMAT_NAME_SOFFICE );
 }
 
-OUString SAL_CALL CDataFormatTranslator::getTextCharsetFromLCID( LCID lcid, CLIPFORMAT aClipformat ) const
+OUString CDataFormatTranslator::getTextCharsetFromLCID( LCID lcid, CLIPFORMAT aClipformat )
 {
     OSL_ASSERT( isOemOrAnsiTextFormat( aClipformat ) );
 
@@ -256,7 +251,7 @@ OUString SAL_CALL CDataFormatTranslator::getTextCharsetFromLCID( LCID lcid, CLIP
                     PRE_OEM_CODEPAGE );
     }
     else // CF_UNICODE
-        OSL_ASSERT( sal_False );
+        OSL_ASSERT( false );
 
     return charset;
 }

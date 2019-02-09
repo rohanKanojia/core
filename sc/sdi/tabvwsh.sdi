@@ -21,7 +21,6 @@
 interface TableOLEObject
 {
     SID_ACTIVE_OBJ_NAME [ StateMethod = GetObjectState; ]
-    SID_OLE_OBJECT      [ StateMethod = GetObjectState; ]
     SID_OLE_ACTIVATE    [ ExecMethod = ExecuteObject; ]
     SID_OLE_DEACTIVATE  [ ExecMethod = ExecuteObject; ]
     SID_OLE_SELECT      [ ExecMethod = ExecuteObject; ] // api:
@@ -50,21 +49,22 @@ interface Tables
 
 interface BaseSelection
 {
-    // Einfuegen von Objekten {
+    // insert objects {
 
     SID_INSERT_GRAPHIC          [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
     SID_INSERT_FRAME            [ ExecMethod = ExecDraw; StateMethod = GetDrawState; Export = FALSE; ]
     SID_INSERT_OBJECT           [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
     SID_INSERT_FLOATINGFRAME    [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
     SID_INSERT_AVMEDIA          [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
+    SID_INSERT_SIGNATURELINE    [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
+    SID_EDIT_SIGNATURELINE      [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
+    SID_SIGN_SIGNATURELINE      [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
 
     SID_IMAP                    [ ExecMethod = ExecImageMap; StateMethod = GetImageMapState; ]
     SID_IMAP_EXEC               [ ExecMethod = ExecImageMap; StateMethod = GetImageMapState; ]
 
     SfxVoidItem InsertObjectChart SID_INSERT_DIAGRAM
     (
-        SfxBoolItem ColHeaders SID_ATTR_COLHEADERS,
-        SfxBoolItem RowHeaders SID_ATTR_ROWHEADERS,
         SfxBoolItem InNewTable FN_PARAM_4,
         SfxStringItem RangeList FN_PARAM_5
     )
@@ -73,11 +73,6 @@ interface BaseSelection
         StateMethod = GetDrawInsState ;
         Asynchron ;
     ]
-
-    SID_PIVOT_CREATE        [ ExecMethod = ExecuteSbx; StateMethod = GetSbxState; ]
-    SID_RANGE_OFFSET        [ ExecMethod = ExecuteSbx; ]
-    SID_RANGE_REGION        [ StateMethod = GetSbxState; ]
-
 
     SID_INSERT_SMATH        [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
     SID_GALLERY_FORMATS     [ ExecMethod = ExecGallery; ]
@@ -88,6 +83,16 @@ interface BaseSelection
 
     SID_OBJECT_SELECT               [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
     SID_DRAW_LINE                   [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_DRAW_XLINE                  [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_ARROW_END              [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_ARROW_CIRCLE           [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_ARROW_SQUARE           [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_ARROW_START            [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_CIRCLE_ARROW           [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_SQUARE_ARROW           [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_LINE_ARROWS                 [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_DRAW_MEASURELINE            [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
+    SID_DRAWTBX_ARROWS              [ StateMethod = GetDrawState; ]
     SID_DRAW_RECT                   [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
     SID_DRAW_ELLIPSE                [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
     SID_DRAWTBX_LINES               [ StateMethod = GetDrawState; ]
@@ -120,10 +125,9 @@ interface BaseSelection
     SID_FM_CREATE_CONTROL   [ ExecMethod = ExecDraw ; ]
     SID_LINKS               [ ExecMethod = ExecDrawIns; StateMethod = GetDrawInsState; ]
     SID_DRAW_CHART          [ ExecMethod = ExecDraw; StateMethod = GetDrawState; ]
-    SID_INSERT_DIAGRAM_FROM_FILE [ ExecMethod = ExecDrawIns; StateMethod = GetDrawState; ]
     SID_FM_CREATE_FIELDCONTROL [ ExecMethod = ExecDrawIns ; ]
 
-    // } Einfuegen von Objekten
+    // } insert objects
 
 }
 
@@ -151,7 +155,7 @@ interface TableEditView
         StateMethod = GetSaveState ;
         Export = FALSE ;
     ]
-     // hat zwar ein SW im Namen, wird aber im Calc auch gebraucht
+    // has indeed a SW in his name but is also used in Calc
     SID_CREATE_SW_DRAWVIEW [ ExecMethod = Execute; ]
     SID_ATTR_ZOOM       [ ExecMethod = Execute; StateMethod = GetState; ]
     SID_ATTR_ZOOMSLIDER [ ExecMethod = Execute; StateMethod = GetState; ]
@@ -178,11 +182,11 @@ interface TableEditView
     SID_PRINTPREVIEW    [ ExecMethod = Execute; StateMethod = GetState; ]
 
 
-         // Suchen/Eersetzen:
+    // search/replace
     FID_SEARCH_NOW      [ ExecMethod = ExecSearch; StateMethod = NoState;  ]
     SID_SEARCH_ITEM     [ ExecMethod = ExecSearch;  StateMethod = GetState; ]
     SID_SEARCH_OPTIONS  [ ExecMethod = NoExec;      StateMethod = GetState; ]
-     // Suchen/Ersetzen von Basic aus:
+    // search/replace from Basic:
     FID_SEARCH          [ ExecMethod = ExecSearch; ]
     FID_REPLACE         [ ExecMethod = ExecSearch; ]
     FID_SEARCH_ALL      [ ExecMethod = ExecSearch; ]
@@ -207,30 +211,6 @@ interface TableEditView
     SID_READONLY_MODE   [ StateMethod = GetState; ]
 }
 
-
-
- //     Pivot-Krempel
-
-
-interface DataPilotTables
-{
-}
-
-interface DataPilotTable
-{
-    SbxObject DataPilotFields SID_PIVOT_FIELDS ()
-}
-
-interface DataPilotFields
-{
-}
-
-interface DataPilotField
-{
-    String FieldName SID_PFIELD_NAME ()
-    UINT16 Orientation SID_PFIELD_ORIENTATION ()
-    UINT16 Function SID_PFIELD_FUNCTION ()
-}
 
 
 shell ScTabViewShell

@@ -20,9 +20,14 @@
 #ifndef INCLUDED_VCL_TEXTDATA_HXX
 #define INCLUDED_VCL_TEXTDATA_HXX
 
+#include <sal/types.h>
+#include <tools/solar.h>
 #include <rtl/ustring.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <vcl/dllapi.h>
+#include <memory>
+
+enum class ExtTextInputAttr;
 
 // for Notify, if all paragraphs were deleted
 #define TEXT_PARA_ALL               SAL_MAX_UINT32
@@ -107,47 +112,30 @@ inline bool TextSelection::operator != ( const TextSelection& rSel ) const
     return !( *this == rSel );
 }
 
-#define TEXT_HINT_PARAINSERTED              1
-#define TEXT_HINT_PARAREMOVED               2
-#define TEXT_HINT_PARACONTENTCHANGED        3
-#define TEXT_HINT_TEXTHEIGHTCHANGED         4
-#define TEXT_HINT_FORMATPARA                5
-#define TEXT_HINT_TEXTFORMATTED             6
-#define TEXT_HINT_MODIFIED                  7
-#define TEXT_HINT_BLOCKNOTIFICATION_START   8
-#define TEXT_HINT_BLOCKNOTIFICATION_END     9
-#define TEXT_HINT_INPUT_START               10
-#define TEXT_HINT_INPUT_END                 11
-
-#define TEXT_HINT_VIEWSCROLLED          100
-#define TEXT_HINT_VIEWSELECTIONCHANGED  101
-#define TEXT_HINT_VIEWCARETCHANGED      102
-
-class VCL_DLLPUBLIC TextHint : public SfxSimpleHint
+class VCL_DLLPUBLIC TextHint : public SfxHint
 {
 private:
-    sal_uLong   mnValue;
+    sal_uLong const   mnValue;
 
 public:
-    TextHint( sal_uInt32 nId );
-    TextHint( sal_uInt32 nId, sal_uLong nValue );
+    TextHint( SfxHintId nId );
+    TextHint( SfxHintId nId, sal_uLong nValue );
 
     sal_uLong   GetValue() const        { return mnValue; }
 };
 
 struct TEIMEInfos
 {
-    OUString    aOldTextAfterStartPos;
-    sal_uInt16* pAttribs;
+    OUString const    aOldTextAfterStartPos;
+    std::unique_ptr<ExtTextInputAttr[]> pAttribs;
     TextPaM     aPos;
     sal_Int32   nLen;
-    bool        bCursor;
     bool        bWasCursorOverwrite;
 
     TEIMEInfos(const TextPaM& rPos, const OUString& rOldTextAfterStartPos);
     ~TEIMEInfos();
 
-    void CopyAttribs(const sal_uInt16* pA, sal_Int32 nL);
+    void CopyAttribs(const ExtTextInputAttr* pA, sal_Int32 nL);
     void DestroyAttribs();
 };
 

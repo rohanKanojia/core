@@ -280,7 +280,6 @@ End
 RegistryItem gid_Regitem_Soffice_Starcalcdocument_6_AppUserModelID
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 601";
     Subkey = "soffice.StarCalcDocument.6";
     Name = "AppUserModelID";
     Value = "TheDocumentFoundation.LibreOffice.Calc";
@@ -353,7 +352,7 @@ RegistryItem gid_Regitem_Soffice_Starcalcdocument_6_Shell_Open_Command
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     ModuleID = gid_Module_Prg_Calc_Bin;
     Subkey = "soffice.StarCalcDocument.6\shell\open\command";
-    Value = "\"<progpath>\program\scalc.exe\" -o \"%1\"";
+    Value = "\"<progpath>\program\soffice.exe\" -o \"%1\"";
 End
 
 RegistryItem gid_Regitem_Soffice_Starcalcdocument_6_Shell_Print_Command
@@ -394,7 +393,6 @@ End
 RegistryItem gid_Regitem_Soffice_Starcalctemplate_6_AppUserModelID
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 601";
     Subkey = "soffice.StarCalcTemplate.6";
     Name = "AppUserModelID";
     Value = "TheDocumentFoundation.LibreOffice.Calc";
@@ -433,7 +431,7 @@ RegistryItem gid_Regitem_Soffice_Starcalctemplate_6_Shell_Open_Command
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     Subkey = "soffice.StarCalcTemplate.6\shell\open\command";
     ModuleID = gid_Module_Prg_Calc_Bin;
-    Value = "\"<progpath>\program\scalc.exe\" -o \"%1\"";
+    Value = "\"<progpath>\program\soffice.exe\" -o \"%1\"";
 End
 
 RegistryItem gid_Regitem_Soffice_Starcalctemplate_6_Shell_Print_Command
@@ -534,7 +532,6 @@ End
 RegistryItem gid_Regitem_stc_KindMap
     ParentID = PREDEFINED_HKEY_LOCAL_MACHINE;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 600";
     Subkey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\KindMap";
     Name = ".stc";
     Value = "document";
@@ -701,7 +698,6 @@ End
 RegistryItem gid_Regitem_Openoffice_Calcdocument_1_AppUserModelID
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 601";
     Subkey = "LibreOffice.CalcDocument.1";
     Name = "AppUserModelID";
     Value = "TheDocumentFoundation.LibreOffice.Calc";
@@ -728,7 +724,6 @@ End
 RegistryItem gid_Regitem_ods_KindMap
     ParentID = PREDEFINED_HKEY_LOCAL_MACHINE;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 600";
     Subkey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\KindMap";
     Name = ".ods";
     Value = "document";
@@ -793,7 +788,7 @@ RegistryItem gid_Regitem_Openoffice_Calcdocument_1_Shell_Open_Command
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     ModuleID = gid_Module_Prg_Calc_Bin;
     Subkey = "LibreOffice.CalcDocument.1\shell\open\command";
-    Value = "\"<progpath>\program\scalc.exe\" -o \"%1\"";
+    Value = "\"<progpath>\program\soffice.exe\" -o \"%1\"";
     Styles = ();
 End
 
@@ -809,6 +804,21 @@ RegistryItem gid_Regitem_Openoffice_Calcdocument_1_Shell_Printto_Command
     ModuleID = gid_Module_Prg_Calc_Bin;
     Subkey = "LibreOffice.CalcDocument.1\shell\printto\command";
     Value = "\"<progpath>\program\soffice.exe\" -pt \"%2\" \"%1\"";
+End
+
+RegistryItem gid_Regitem_CalcApplication
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
+    ModuleID = gid_Module_Prg_Calc_Bin;
+    Subkey = "Calc.Application\CLSID";
+    Value = "{82154425-0FBF-11d4-8313-005004526AB4}";
+    Styles = ();
+End
+
+RegistryItem gid_Regitem_Clsid__82154425_0FBF_11d4_8313_005004526AB4__Localserver32
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
+    ModuleID = gid_Module_Prg_Wrt_Bin;
+    Subkey = "CLSID\{82154425-0FBF-11d4-8313-005004526AB4}\LocalServer32";
+    Value = "<progpath>\program\soffice.exe --nodefault --nologo";
 End
 
 // .fods
@@ -839,7 +849,6 @@ End
 RegistryItem gid_Regitem_fods_KindMap
     ParentID = PREDEFINED_HKEY_LOCAL_MACHINE;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 600";
     Subkey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\KindMap";
     Name = ".fods";
     Value = "document";
@@ -907,7 +916,6 @@ End
 RegistryItem gid_Regitem_Openoffice_Calctemplate_1_AppUserModelID
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 601";
     Subkey = "LibreOffice.CalcTemplate.1";
     Name = "AppUserModelID";
     Value = "TheDocumentFoundation.LibreOffice.Calc";
@@ -934,7 +942,6 @@ End
 RegistryItem gid_Regitem_ots_KindMap
     ParentID = PREDEFINED_HKEY_LOCAL_MACHINE;
     ModuleID = gid_Module_Prg_Calc_Bin;
-    ComponentCondition = "VersionNT >= 600";
     Subkey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\KindMap";
     Name = ".ots";
     Value = "document";
@@ -965,7 +972,7 @@ RegistryItem gid_Regitem_Openoffice_Calctemplate_1_Shell_Open_Command
     ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
     Subkey = "LibreOffice.CalcTemplate.1\shell\open\command";
     ModuleID = gid_Module_Prg_Calc_Bin;
-    Value = "\"<progpath>\program\scalc.exe\" -o \"%1\"";
+    Value = "\"<progpath>\program\soffice.exe\" -o \"%1\"";
 End
 
 RegistryItem gid_Regitem_Openoffice_Calctemplate_1_Shell_Print_Command
@@ -1249,11 +1256,36 @@ CONDITIONAL_REGISTER_DOC_EXTENSION( Xls,  gid_Module_Prg_Calc_MSO_Reg, xls,  XLS
 CONDITIONAL_REGISTER_DOC_EXTENSION( Xlsx, gid_Module_Prg_Calc_MSO_Reg, xlsx, XLSX, MS_EXCEL_WORKSHEET, 3, scalc.exe, open, Calc )
 CONDITIONAL_REGISTER_DOC_EXTENSION( Xlsm, gid_Module_Prg_Calc_MSO_Reg, xlsm, XLSM, MS_EXCEL_WORKSHEET, 3, scalc.exe, open, Calc )
 CONDITIONAL_REGISTER_DOC_EXTENSION( Xlsb, gid_Module_Prg_Calc_MSO_Reg, xlsb, XLSB, MS_EXCEL_WORKSHEET, 3, scalc.exe, open, Calc )
+CONDITIONAL_REGISTER_DOC_OPEN_EXTENSION( Iqy, gid_Module_Prg_Calc_MSO_Reg, iqy, IQY, MS_EXCEL_WEBQUERY, 0, scalc.exe, open, Calc )
+CONDITIONAL_REGISTRY_ENTRY_EXT_MEDIATYPE( Iqy, IQY, iqy, text/x-ms-iqy )
+CONDITIONAL_REGISTRY_ENTRY_MEDIATYPE_DEF_EXT( Iqy, IQY, iqy, text/x-ms-iqy )
 CONDITIONAL_REGISTER_DOCTEMPLATE_EXTENSION( Xlt,  gid_Module_Prg_Calc_MSO_Reg, xlt,  XLT,  MS_EXCEL_TEMPLATE_OLD, 4, scalc.exe, new, Calc )
 CONDITIONAL_REGISTER_DOCTEMPLATE_EXTENSION( Xltx, gid_Module_Prg_Calc_MSO_Reg, xltx, XLTX, MS_EXCEL_TEMPLATE, 4, scalc.exe, new, Calc )
 CONDITIONAL_REGISTER_DOCTEMPLATE_EXTENSION( Xltm, gid_Module_Prg_Calc_MSO_Reg, xltm, XLTM, MS_EXCEL_TEMPLATE, 4, scalc.exe, new, Calc )
+
+// Registering OOXML MIME content types, to allow OS/applications to redirect such content to LO even if extension is unknown
+
+RegistryItem gid_Regitem_Xlsx_Mime_Database
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
+    ModuleID = gid_Module_Prg_Calc_Bin;
+    Subkey = "MIME\Database\Content Type\application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    Name = "Extension";
+    Value = ".xlsx";
+End
+
+RegistryItem gid_Regitem_Xltx_Mime_Database
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT;
+    ModuleID = gid_Module_Prg_Calc_Bin;
+    Subkey = "MIME\Database\Content Type\application/vnd.openxmlformats-officedocument.spreadsheetml.template";
+    Name = "Extension";
+    Value = ".xltx";
+End
 
 // registering other supported types
 
 CONDITIONAL_REGISTER_DOC_EXTENSION( Uos, gid_Module_Prg_Calc_Other_Reg, uos, UOS, UNIFORM_OFFICE_FORMAT_SPREADSHEET, 3, scalc.exe, open, Calc )
 CONDITIONAL_REGISTER_DOC_EXTENSION( Wb2, gid_Module_Prg_Calc_Other_Reg, wb2, WB2, QUATTROPRO_SPREADSHEET, 3, scalc.exe, open, Calc )
+
+// registering ms-excel URI scheme handler
+CONDITIONAL_REGISTER_URI_HANDLER( ms-excel, ms_excel, gid_Module_Prg_Calc_MSO_Reg, SELECT_EXCEL )
+REGISTRY_ENTRY_CAPABILITIES_URL(ms-excel, ms_excel, gid_Module_Prg_Calc_MSO_Reg, vnd.libreoffice.command)

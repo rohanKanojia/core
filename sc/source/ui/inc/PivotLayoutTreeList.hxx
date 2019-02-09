@@ -11,6 +11,7 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_PIVOTLAYOUTTREELIST_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_PIVOTLAYOUTTREELIST_HXX
 
+#include <memory>
 #include "PivotLayoutTreeListBase.hxx"
 
 class ScPivotLayoutTreeList : public ScPivotLayoutTreeListBase
@@ -20,7 +21,7 @@ private:
 
 public:
     ScPivotLayoutTreeList(vcl::Window* pParent, WinBits nBits);
-    virtual ~ScPivotLayoutTreeList();
+    virtual ~ScPivotLayoutTreeList() override;
     virtual bool DoubleClickHdl() override;
 
     void Setup(ScPivotLayoutDialog* pParent, SvPivotTreeListType eType);
@@ -28,7 +29,7 @@ public:
 
 protected:
     virtual void InsertEntryForSourceTarget(SvTreeListEntry* pSource, SvTreeListEntry* pTarget) override;
-    virtual void InsertEntryForItem(ScItemValue* pItemValue, sal_uLong nPosition) override;
+    void InsertEntryForItem(const ScItemValue* pItemValue, sal_uLong nPosition);
 
     virtual void KeyInput(const KeyEvent& rKeyEvent) override;
 };

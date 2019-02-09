@@ -23,32 +23,30 @@
 #include "global.hxx"
 #include "dpfilteredcache.hxx"
 #include "calcmacros.hxx"
+#include "dpitemdata.hxx"
+#include "subtotal.hxx"
 
-#include <com/sun/star/sheet/MemberResult.hpp>
-#include <com/sun/star/sheet/DataResult.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
+#include <com/sun/star/sheet/DataPilotFieldReference.hpp>
 
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <memory>
 #include <vector>
 
-namespace com { namespace sun { namespace star { namespace sheet {
-    struct DataPilotFieldReference;
-} } } }
+namespace com { namespace sun { namespace star { namespace sheet { struct DataResult; } } } }
+namespace com { namespace sun { namespace star { namespace sheet { struct MemberResult; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
 
-class ScAddress;
-class ScDocument;
 class ScDPSource;
 class ScDPDimension;
 class ScDPLevel;
 class ScDPMember;
-class ScDPAggData;
 class ScDPResultMember;
 class ScDPResultVisibilityData;
 
 struct ScDPValue;
-class ScDPItemData;
 struct ScDPResultFilterContext;
 
 /**
@@ -60,8 +58,8 @@ class ScDPInitState
 public:
     struct Member
     {
-        long mnSrcIndex;
-        SCROW mnNameIndex;
+        long const mnSrcIndex;
+        SCROW const mnNameIndex;
 
         Member(long nSrcIndex, SCROW nNameIndex);
     };
@@ -125,8 +123,8 @@ public:
     void    RemoveRowIndex();
 
 private:
-    ScDPResultMember*   pColResRoot;
-    ScDPResultMember*   pRowResRoot;
+    ScDPResultMember* const   pColResRoot;
+    ScDPResultMember* const   pRowResRoot;
 
     mutable IndexArray maColVisible;
     mutable IndexArray maColSorted;
@@ -137,7 +135,7 @@ private:
 struct ScDPRelativePos
 {
     long    nBasePos;       // simple count, without sort order applied
-    long    nDirection;
+    long const    nDirection;
 
     ScDPRelativePos( long nBase, long nDir );
 };
@@ -147,23 +145,24 @@ struct ScDPRelativePos
 
 //  Possible values for the nCount member:
 //  (greater than 0 counts the collected values)
-const long SC_DPAGG_EMPTY        =  0;  // empty during data collection
-const long SC_DPAGG_DATA_ERROR   = -1;  // error during data collection
-const long SC_DPAGG_RESULT_EMPTY = -2;  // empty result calculated
-const long SC_DPAGG_RESULT_VALID = -3;  // valid result calculated
-const long SC_DPAGG_RESULT_ERROR = -4;  // error in calculated result
+const sal_Int64 SC_DPAGG_EMPTY        =  0;  // empty during data collection
+const sal_Int64 SC_DPAGG_DATA_ERROR   = -1;  // error during data collection
+const sal_Int64 SC_DPAGG_RESULT_EMPTY = -2;  // empty result calculated
+const sal_Int64 SC_DPAGG_RESULT_VALID = -3;  // valid result calculated
+const sal_Int64 SC_DPAGG_RESULT_ERROR = -4;  // error in calculated result
 
 class ScDPAggData
 {
 private:
+    WelfordRunner   maWelford;
     double          fVal;
     double          fAux;
-    long            nCount;
-    ScDPAggData*    pChild;
+    sal_Int64       nCount;
+    std::unique_ptr<ScDPAggData> pChild;
+    std::vector<double> mSortedValues;
 
 public:
-            ScDPAggData() : fVal(0.0), fAux(0.0), nCount(SC_DPAGG_EMPTY), pChild(nullptr) {}
-            ~ScDPAggData() { delete pChild; }
+            ScDPAggData() : fVal(0.0), fAux(0.0), nCount(SC_DPAGG_EMPTY) {}
 
     void    Update( const ScDPValue& rNext, ScSubTotalFunc eFunc, const ScDPSubTotalState& rSubState );
     void    Calculate( ScSubTotalFunc eFunc, const ScDPSubTotalState& rSubState );
@@ -182,10 +181,10 @@ public:
 
     void    Reset();        // also deletes children
 
-    const ScDPAggData*  GetExistingChild() const    { return pChild; }
+    const ScDPAggData*  GetExistingChild() const    { return pChild.get(); }
     ScDPAggData*        GetChild();
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void Dump(int nIndent) const;
 #endif
 };
@@ -218,11 +217,6 @@ class ScDPDataMember;
 #define SC_DPMEASURE_ALL    -1
 #define SC_DPMEASURE_ANY    -2
 
-struct MemberHashIndexFunc : public std::unary_function< const SCROW &, size_t >
-{
-    size_t operator() (const SCROW &rDataIndex) const { return rDataIndex; }
-};
-
 struct ScDPParentDimData
 {
     const SCROW                     mnOrder;                //! Ref
@@ -234,19 +228,17 @@ struct ScDPParentDimData
     ScDPParentDimData(SCROW nIndex, const ScDPDimension* pDim, const ScDPLevel* pLev, const ScDPMember* pMember);
 };
 
-typedef std::unordered_map < SCROW, ScDPParentDimData *, MemberHashIndexFunc>  DimMemberHash;
-
-class ResultMembers
+class ResultMembers final
 {
-    DimMemberHash      maMemberHash;
+    std::unordered_map<SCROW, ScDPParentDimData> maMemberHash;
     bool mbHasHideDetailsMember;
 public:
-    ScDPParentDimData* FindMember( SCROW nIndex ) const;
-    void                             InsertMember(  ScDPParentDimData* pNew );
+    const ScDPParentDimData* FindMember( SCROW nIndex ) const;
+    void InsertMember( ScDPParentDimData const & rNew );
     bool IsHasHideDetailsMembers() const { return mbHasHideDetailsMember; }
     void SetHasHideDetailsMembers( bool b ) { mbHasHideDetailsMember = b; }
     ResultMembers();
-    virtual ~ResultMembers();
+    ~ResultMembers();
 };
 
 class LateInitParams
@@ -255,7 +247,7 @@ private:
     const ::std::vector<ScDPDimension*>& mppDim;
     const ::std::vector<ScDPLevel*>& mppLev;
 
-    bool mbRow:1;
+    bool const mbRow:1;
     bool mbInitChild:1;
     bool mbAllChildren:1;
 public:
@@ -266,8 +258,8 @@ public:
     void SetInitChild( bool b ) { mbInitChild = b; }
     void SetInitAllChildren( bool b ) { mbAllChildren = b; }
 
-    inline ScDPDimension* GetDim( size_t nPos ) const { return mppDim[nPos];}
-    inline ScDPLevel*         GetLevel( size_t nPos ) const { return mppLev[nPos];}
+    ScDPDimension* GetDim( size_t nPos ) const { return mppDim[nPos];}
+    ScDPLevel*         GetLevel( size_t nPos ) const { return mppLev[nPos];}
 
     bool GetInitChild() const {return mbInitChild; }
     bool GetInitAllChild() const { return mbAllChildren; }
@@ -285,7 +277,7 @@ class ScDPResultData
 
     std::vector<ScSubTotalFunc> maMeasureFuncs;
     std::vector<css::sheet::DataPilotFieldReference> maMeasureRefs;
-    std::vector<sal_uInt16> maMeasureRefOrients;
+    std::vector<css::sheet::DataPilotFieldOrientation> maMeasureRefOrients;
     std::vector<OUString> maMeasureNames;
 
     bool                    bLateInit:1;
@@ -293,7 +285,7 @@ class ScDPResultData
     bool                    bDataAtRow:1;
 
     //! add "displayed values" settings
-    mutable std::vector<ResultMembers*> maDimMembers;
+    mutable std::vector<std::unique_ptr<ResultMembers>> maDimMembers;
 public:
     ScDPResultData( ScDPSource& rSrc );
     ~ScDPResultData();
@@ -301,9 +293,10 @@ public:
     void SetMeasureData(
         std::vector<ScSubTotalFunc>& rFunctions,
         std::vector<css::sheet::DataPilotFieldReference>& rRefs,
-        std::vector<sal_uInt16>& rRefOrient, std::vector<OUString>& rNames );
+        std::vector<css::sheet::DataPilotFieldOrientation>& rRefOrient,
+        std::vector<OUString>& rNames );
 
-    void                SetDataLayoutOrientation( sal_uInt16 nOrient );
+    void                SetDataLayoutOrientation( css::sheet::DataPilotFieldOrientation nOrient );
     void                SetLateInit( bool bSet );
 
     long                GetMeasureCount() const { return maMeasureFuncs.size(); }
@@ -311,7 +304,7 @@ public:
     OUString            GetMeasureString(long nMeasure, bool bForce, ScSubTotalFunc eForceFunc, bool& rbTotalResult) const;
     OUString            GetMeasureDimensionName(long nMeasure) const;
     const css::sheet::DataPilotFieldReference& GetMeasureRefVal(long nMeasure) const;
-    sal_uInt16          GetMeasureRefOrient(long nMeasure) const;
+    css::sheet::DataPilotFieldOrientation      GetMeasureRefOrient(long nMeasure) const;
 
     bool                IsLateInit() const              { return bLateInit; }
 
@@ -328,7 +321,7 @@ public:
     bool                HasCommonElement( SCROW nFirstDataId, long nFirstIndex,
                                           const ScDPItemData& rSecondData, long nSecondIndex ) const;
 
-    ResultMembers* GetDimResultMembers(long nDim, ScDPDimension* pDim, ScDPLevel* pLevel) const;
+    ResultMembers&      GetDimResultMembers(long nDim, const ScDPDimension* pDim, ScDPLevel* pLevel) const;
 
     const ScDPSource& GetSource() const { return mrSource;}
 };
@@ -337,11 +330,11 @@ class ScDPResultMember
 {
 private:
     const ScDPResultData*   pResultData;
-    ScDPParentDimData        aParentDimData;
-    ScDPResultDimension*    pChildDimension;
-    ScDPDataMember*         pDataRoot;
+    ScDPParentDimData const        aParentDimData;
+    std::unique_ptr<ScDPResultDimension>  pChildDimension;
+    std::unique_ptr<ScDPDataMember>       pDataRoot;
     bool                    bHasElements:1;
-    bool                    bForceSubTotal:1;
+    bool const              bForceSubTotal:1;
     bool                    bHasHiddenDetails:1;
     bool                    bInitialized:1;
     bool                    bAutoHidden:1;
@@ -366,9 +359,9 @@ public:
                                         ScDPInitState& rInitState);
     void CheckShowEmpty( bool bShow = false );
     OUString GetName() const;
-    OUString GetDisplayName() const;
+    OUString GetDisplayName( bool bLocaleIndependent ) const;
 
-    void                FillItemData( ScDPItemData& rData ) const;
+    ScDPItemData FillItemData() const;
     bool IsValid() const;
     bool IsVisible() const;
     long                GetSize(long nMeasure) const;
@@ -408,17 +401,17 @@ public:
 
     void ResetResults();
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void DumpState( const ScDPResultMember* pRefMember, ScDocument* pDoc, ScAddress& rPos ) const;
 
     void Dump(int nIndent) const;
 #endif
 
                         //! this will be removed!
-    const ScDPResultDimension*  GetChildDimension() const   { return pChildDimension; }
-    ScDPResultDimension*        GetChildDimension()         { return pChildDimension; }
+    const ScDPResultDimension*  GetChildDimension() const   { return pChildDimension.get(); }
+    ScDPResultDimension*        GetChildDimension()         { return pChildDimension.get(); }
 
-    ScDPDataMember*         GetDataRoot() const             { return pDataRoot; }
+    ScDPDataMember*         GetDataRoot() const             { return pDataRoot.get(); }
 
     const ScDPDimension*  GetParentDim() const               { return aParentDimData.mpParentDim; }     //! Ref
     const ScDPLevel*         GetParentLevel() const         { return aParentDimData.mpParentLevel; }   //! Ref
@@ -436,8 +429,9 @@ class ScDPDataMember
 private:
     const ScDPResultData*       pResultData;
     const ScDPResultMember*     pResultMember;          //! Ref?
-    ScDPDataDimension*      pChildDimension;
-    ScDPAggData             aAggregate;
+    std::unique_ptr<ScDPDataDimension>
+                                pChildDimension;
+    ScDPAggData                 aAggregate;
 
     void                UpdateValues( const ::std::vector<ScDPValue>& aValues, const ScDPSubTotalState& rSubState );
 
@@ -479,14 +473,14 @@ public:
 
     void                ResetResults();
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void DumpState( const ScDPResultMember* pRefMember, ScDocument* pDoc, ScAddress& rPos ) const;
     void Dump(int nIndent) const;
 #endif
 
                         //! this will be removed!
-    const ScDPDataDimension*    GetChildDimension() const   { return pChildDimension; }
-    ScDPDataDimension*          GetChildDimension()         { return pChildDimension; }
+    const ScDPDataDimension*    GetChildDimension() const   { return pChildDimension.get(); }
+    ScDPDataDimension*          GetChildDimension()         { return pChildDimension.get(); }
 };
 
 typedef std::vector<ScDPDataMember*> ScDPDataMembers;
@@ -496,13 +490,13 @@ typedef std::vector<ScDPDataMember*> ScDPDataMembers;
 class ScDPResultDimension
 {
 public:
-    typedef std::vector<ScDPResultMember*>     MemberArray;
+    typedef std::vector<std::unique_ptr<ScDPResultMember>> MemberArray;
     typedef std::map<SCROW, ScDPResultMember*> MemberHash;
 private:
     const ScDPResultData*   pResultData;
     MemberArray             maMemberArray;
     MemberHash              maMemberHash;
-    OUString           aDimensionName;     //! or ptr to IntDimension?
+    OUString                aDimensionName;     //! or ptr to IntDimension?
     long                    nSortMeasure;
     ScMemberSortOrder       aMemberOrder;       // used when sorted by measure
     bool                    bIsDataLayout:1;      //! or ptr to IntDimension?
@@ -516,7 +510,7 @@ private:
 
     ScDPResultMember*        FindMember(   SCROW  iData ) const;
     ScDPResultMember*        AddMember( const ScDPParentDimData& aData );
-    ScDPResultMember*        InsertMember( ScDPParentDimData* pMemberData );
+    ScDPResultMember*        InsertMember( const ScDPParentDimData* pMemberData );
     void                                  InitWithMembers( LateInitParams& rParams,
                                                             const ::std::vector< SCROW >& pItemData,
                                                             size_t  nPos,
@@ -577,7 +571,7 @@ public:
         const ScDPRelativePos* pMemberPos, const OUString* pName,
         long nRefDimPos, const ScDPRunningTotalState& rRunning );
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void DumpState( const ScDPResultMember* pRefMember, ScDocument* pDoc, ScAddress& rPos ) const;
     void Dump(int nIndent) const;
 #endif
@@ -612,7 +606,7 @@ class ScDPDataDimension
 private:
     const ScDPResultData*       pResultData;
     const ScDPResultDimension* pResultDimension;  // column
-    ScDPDataMembers     maMembers;
+    std::vector<std::unique_ptr<ScDPDataMember>> maMembers;
     bool bIsDataLayout;      //! or ptr to IntDimension?
 
 public:
@@ -641,7 +635,7 @@ public:
 
     void                ResetResults();
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void DumpState( const ScDPResultDimension* pRefDim, ScDocument* pDoc, ScAddress& rPos ) const;
     void Dump(int nIndent) const;
 #endif
@@ -670,7 +664,7 @@ private:
         size_t operator()(const ScDPItemData& r) const;
     };
     typedef std::unordered_set<ScDPItemData, MemberHash> VisibleMemberType;
-    typedef std::unordered_map<OUString, VisibleMemberType, OUStringHash> DimMemberType;
+    typedef std::unordered_map<OUString, VisibleMemberType> DimMemberType;
     DimMemberType maDimensions;
 
     ScDPSource* mpSource;

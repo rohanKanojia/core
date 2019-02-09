@@ -7,6 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 #include "Transmitter.hxx"
+#include "IBluetoothSocket.hxx"
+#include <sal/log.hxx>
 
 using namespace std;
 using namespace osl; // Sockets etc.

@@ -16,16 +16,16 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "ReportUndoFactory.hxx"
-#include "RptObject.hxx"
-#include "UndoActions.hxx"
-#include "RptResId.hrc"
+#include <ReportUndoFactory.hxx>
+#include <RptObject.hxx>
+#include <UndoActions.hxx>
+#include <strings.hrc>
 
 namespace rptui
 {
     using namespace ::com::sun::star;
 
-SdrUndoAction* lcl_createUndo(SdrObject& rObject,Action _eAction,sal_uInt16 _nCommentId)
+static std::unique_ptr<SdrUndoAction> lcl_createUndo(SdrObject& rObject, Action _eAction, const char* pCommentId)
 {
     OObjectBase* pObj = dynamic_cast<OObjectBase*>(&rObject);
     if ( !pObj )
@@ -33,12 +33,10 @@ SdrUndoAction* lcl_createUndo(SdrObject& rObject,Action _eAction,sal_uInt16 _nCo
     uno::Reference< report::XReportComponent> xReportComponent = pObj->getReportComponent();
     uno::Reference< report::XSection> xSection = pObj->getSection();
     uno::Reference< report::XGroup> xGroup = xSection->getGroup();
-    SdrUndoAction* pUndo = nullptr;
     if ( xGroup.is() )
-        pUndo = new OUndoGroupSectionAction(*rObject.GetModel(),_eAction,OGroupHelper::getMemberFunction(xSection),xGroup,xReportComponent,_nCommentId);
+        return std::make_unique<OUndoGroupSectionAction>(rObject.getSdrModelFromSdrObject(),_eAction,OGroupHelper::getMemberFunction(xSection),xGroup,xReportComponent,pCommentId);
     else
-        pUndo = new OUndoReportSectionAction(*rObject.GetModel(),_eAction,OReportHelper::getMemberFunction(xSection),xSection->getReportDefinition(),xReportComponent,_nCommentId);
-    return pUndo;
+        return std::make_unique<OUndoReportSectionAction>(rObject.getSdrModelFromSdrObject(),_eAction,OReportHelper::getMemberFunction(xSection),xSection->getReportDefinition(),xReportComponent,pCommentId);
 }
 
 
@@ -50,115 +48,104 @@ OReportUndoFactory::~OReportUndoFactory()
 {
 }
 
-// shapes
-SdrUndoAction* OReportUndoFactory::CreateUndoMoveObject( SdrObject& rObject )
-{
-    return m_pUndoFactory->CreateUndoMoveObject( rObject );
-}
-
-SdrUndoAction* OReportUndoFactory::CreateUndoMoveObject( SdrObject& rObject, const Size& rDist )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoMoveObject( SdrObject& rObject, const Size& rDist )
 {
     return m_pUndoFactory->CreateUndoMoveObject( rObject, rDist );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoGeoObject( SdrObject& rObject )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoGeoObject( SdrObject& rObject )
 {
     return m_pUndoFactory->CreateUndoGeoObject( rObject );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoAttrObject( SdrObject& rObject, bool bStyleSheet1, bool bSaveText )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoAttrObject( SdrObject& rObject, bool bStyleSheet1, bool bSaveText )
 {
     return m_pUndoFactory->CreateUndoAttrObject( rObject, bStyleSheet1, bSaveText );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoRemoveObject( SdrObject& rObject, bool bOrdNumDirect )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoRemoveObject( SdrObject& rObject, bool bOrdNumDirect )
 {
     return m_pUndoFactory->CreateUndoRemoveObject( rObject, bOrdNumDirect );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoInsertObject( SdrObject& rObject, bool /*bOrdNumDirect*/ )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoInsertObject( SdrObject& rObject, bool /*bOrdNumDirect*/ )
 {
     return lcl_createUndo(rObject,rptui::Inserted,RID_STR_UNDO_INSERT_CONTROL);
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoDeleteObject( SdrObject& rObject, bool /*bOrdNumDirect*/ )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoDeleteObject( SdrObject& rObject, bool /*bOrdNumDirect*/ )
 {
     return lcl_createUndo(rObject,rptui::Removed,RID_STR_UNDO_DELETE_CONTROL);
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoNewObject( SdrObject& rObject, bool /*bOrdNumDirect*/ )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoNewObject( SdrObject& rObject, bool /*bOrdNumDirect*/ )
 {
     return lcl_createUndo(rObject,rptui::Inserted,RID_STR_UNDO_INSERT_CONTROL);
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoCopyObject( SdrObject& rObject, bool bOrdNumDirect )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoCopyObject( SdrObject& rObject, bool bOrdNumDirect )
 {
     return m_pUndoFactory->CreateUndoCopyObject( rObject, bOrdNumDirect );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoObjectOrdNum( SdrObject& rObject, sal_uInt32 nOldOrdNum1, sal_uInt32 nNewOrdNum1)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoObjectOrdNum( SdrObject& rObject, sal_uInt32 nOldOrdNum1, sal_uInt32 nNewOrdNum1)
 {
     return m_pUndoFactory->CreateUndoObjectOrdNum( rObject, nOldOrdNum1, nNewOrdNum1 );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoReplaceObject( SdrObject& rOldObject, SdrObject& rNewObject, bool bOrdNumDirect )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoReplaceObject( SdrObject& rOldObject, SdrObject& rNewObject, bool bOrdNumDirect )
 {
     return m_pUndoFactory->CreateUndoReplaceObject( rOldObject, rNewObject, bOrdNumDirect );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoObjectLayerChange( SdrObject& rObject, SdrLayerID aOldLayer, SdrLayerID aNewLayer )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoObjectLayerChange( SdrObject& rObject, SdrLayerID aOldLayer, SdrLayerID aNewLayer )
 {
     return m_pUndoFactory->CreateUndoObjectLayerChange( rObject, aOldLayer, aNewLayer );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoObjectSetText( SdrObject& rNewObj, sal_Int32 nText )
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoObjectSetText( SdrObject& rNewObj, sal_Int32 nText )
 {
     return m_pUndoFactory->CreateUndoObjectSetText( rNewObj, nText );
 }
 
 // layer
-SdrUndoAction* OReportUndoFactory::CreateUndoNewLayer(sal_uInt16 nLayerNum, SdrLayerAdmin& rNewLayerAdmin, SdrModel& rNewModel)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoNewLayer(sal_uInt16 nLayerNum, SdrLayerAdmin& rNewLayerAdmin, SdrModel& rNewModel)
 {
     return m_pUndoFactory->CreateUndoNewLayer( nLayerNum, rNewLayerAdmin, rNewModel );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoDeleteLayer(sal_uInt16 nLayerNum, SdrLayerAdmin& rNewLayerAdmin, SdrModel& rNewModel)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoDeleteLayer(sal_uInt16 nLayerNum, SdrLayerAdmin& rNewLayerAdmin, SdrModel& rNewModel)
 {
     return m_pUndoFactory->CreateUndoDeleteLayer( nLayerNum, rNewLayerAdmin, rNewModel );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoMoveLayer(sal_uInt16 nLayerNum, SdrLayerAdmin& rNewLayerAdmin, SdrModel& rNewModel, sal_uInt16 nNeuPos1)
-{
-    return m_pUndoFactory->CreateUndoMoveLayer( nLayerNum, rNewLayerAdmin, rNewModel, nNeuPos1 );
-}
-
 // page
-SdrUndoAction*  OReportUndoFactory::CreateUndoDeletePage(SdrPage& rPage)
+std::unique_ptr<SdrUndoAction>  OReportUndoFactory::CreateUndoDeletePage(SdrPage& rPage)
 {
-    return m_pUndoFactory->CreateUndoDeletePage( rPage );
+    return m_pUndoFactory->CreateUndoDeletePage(rPage);
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoNewPage(SdrPage& rPage)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoNewPage(SdrPage& rPage)
 {
     return m_pUndoFactory->CreateUndoNewPage( rPage );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoCopyPage(SdrPage& rPage)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoCopyPage(SdrPage& rPage)
 {
     return m_pUndoFactory->CreateUndoCopyPage( rPage );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoSetPageNum(SdrPage& rNewPg, sal_uInt16 nOldPageNum1, sal_uInt16 nNewPageNum1)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoSetPageNum(SdrPage& rNewPg, sal_uInt16 nOldPageNum1, sal_uInt16 nNewPageNum1)
 {
     return m_pUndoFactory->CreateUndoSetPageNum( rNewPg, nOldPageNum1, nNewPageNum1 );
 }
     // master page
-SdrUndoAction* OReportUndoFactory::CreateUndoPageRemoveMasterPage(SdrPage& rChangedPage)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoPageRemoveMasterPage(SdrPage& rChangedPage)
 {
     return m_pUndoFactory->CreateUndoPageRemoveMasterPage( rChangedPage );
 }
 
-SdrUndoAction* OReportUndoFactory::CreateUndoPageChangeMasterPage(SdrPage& rChangedPage)
+std::unique_ptr<SdrUndoAction> OReportUndoFactory::CreateUndoPageChangeMasterPage(SdrPage& rChangedPage)
 {
     return m_pUndoFactory->CreateUndoPageChangeMasterPage(rChangedPage);
 }

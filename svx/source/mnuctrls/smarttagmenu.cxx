@@ -17,8 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <svtools/popupmenucontrollerbase.hxx>
 #include <svx/SmartTagItem.hxx>
+#include <toolkit/awt/vclxmenu.hxx>
 #include <vcl/commandinfoprovider.hxx>
 #include <vcl/menu.hxx>
 
@@ -28,29 +30,27 @@ class SmartTagMenuController : public svt::PopupMenuControllerBase
 {
 public:
     explicit SmartTagMenuController( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
-    virtual ~SmartTagMenuController();
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& rEvent ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw ( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 private:
     void FillMenu();
-    DECL_LINK_TYPED( MenuSelect, Menu*, bool );
+    DECL_LINK( MenuSelect, Menu*, bool );
     struct InvokeAction
     {
         css::uno::Reference< css::smarttags::XSmartTagAction > m_xAction;
         css::uno::Reference< css::container::XStringKeyMap > m_xSmartTagProperties;
-        sal_uInt32 m_nActionID;
-        InvokeAction( css::uno::Reference< css::smarttags::XSmartTagAction > xAction,
-                      css::uno::Reference< css::container::XStringKeyMap > xSmartTagProperties,
+        sal_uInt32 const m_nActionID;
+        InvokeAction( css::uno::Reference< css::smarttags::XSmartTagAction > const & xAction,
+                      css::uno::Reference< css::container::XStringKeyMap > const & xSmartTagProperties,
                       sal_uInt32 nActionID ) : m_xAction( xAction ), m_xSmartTagProperties( xSmartTagProperties ), m_nActionID( nActionID ) {}
     };
     std::vector< InvokeAction > m_aInvokeActions;
-    std::vector< std::unique_ptr< PopupMenu > > m_aSubMenus;
     std::unique_ptr< const SvxSmartTagItem > m_pSmartTagItem;
 };
 
@@ -59,50 +59,44 @@ SmartTagMenuController::SmartTagMenuController( const css::uno::Reference< css::
 {
 }
 
-SmartTagMenuController::~SmartTagMenuController()
-{
-}
-
 void SmartTagMenuController::statusChanged( const css::frame::FeatureStateEvent& rEvent )
-    throw ( css::uno::RuntimeException, std::exception )
 {
     resetPopupMenu( m_xPopupMenu );
-    m_aSubMenus.clear();
 
     css::uno::Sequence< css::beans::PropertyValue > aProperties;
-    if ( rEvent.IsEnabled && ( rEvent.State >>= aProperties ) )
-    {
-        css::uno::Sequence< css::uno::Sequence< css::uno::Reference< css::smarttags::XSmartTagAction > > > aActionComponents;
-        css::uno::Sequence< css::uno::Sequence< sal_Int32 > > aActionIndices;
-        css::uno::Sequence< css::uno::Reference< css::container::XStringKeyMap > > aStringKeyMaps;
-        css::uno::Reference< css::text::XTextRange > xTextRange;
-        css::uno::Reference< css::frame::XController > xController;
-        css::lang::Locale aLocale;
-        OUString aApplicationName;
-        OUString aRangeText;
+    if ( !rEvent.IsEnabled || !( rEvent.State >>= aProperties ) )
+        return;
 
-        for ( const auto& aProperty : aProperties )
-        {
-            if ( aProperty.Name == "ActionComponents" )
-                aProperty.Value >>= aActionComponents;
-            else if ( aProperty.Name == "ActionIndices" )
-                aProperty.Value >>= aActionIndices;
-            else if ( aProperty.Name == "StringKeyMaps" )
-                aProperty.Value >>= aStringKeyMaps;
-            else if ( aProperty.Name == "TextRange" )
-                aProperty.Value >>= xTextRange;
-            else if ( aProperty.Name == "Controller" )
-                aProperty.Value >>= xController;
-            else if ( aProperty.Name == "Locale" )
-                aProperty.Value >>= aLocale;
-            else if ( aProperty.Name == "ApplicationName" )
-                aProperty.Value >>= aApplicationName;
-            else if ( aProperty.Name == "RangeText" )
-                aProperty.Value >>= aRangeText;
-        }
-        m_pSmartTagItem.reset( new SvxSmartTagItem( 0, aActionComponents, aActionIndices, aStringKeyMaps, xTextRange, xController, aLocale, aApplicationName, aRangeText ) );
-        FillMenu();
+    css::uno::Sequence< css::uno::Sequence< css::uno::Reference< css::smarttags::XSmartTagAction > > > aActionComponents;
+    css::uno::Sequence< css::uno::Sequence< sal_Int32 > > aActionIndices;
+    css::uno::Sequence< css::uno::Reference< css::container::XStringKeyMap > > aStringKeyMaps;
+    css::uno::Reference< css::text::XTextRange > xTextRange;
+    css::uno::Reference< css::frame::XController > xController;
+    css::lang::Locale aLocale;
+    OUString aApplicationName;
+    OUString aRangeText;
+
+    for ( const auto& aProperty : aProperties )
+    {
+        if ( aProperty.Name == "ActionComponents" )
+            aProperty.Value >>= aActionComponents;
+        else if ( aProperty.Name == "ActionIndices" )
+            aProperty.Value >>= aActionIndices;
+        else if ( aProperty.Name == "StringKeyMaps" )
+            aProperty.Value >>= aStringKeyMaps;
+        else if ( aProperty.Name == "TextRange" )
+            aProperty.Value >>= xTextRange;
+        else if ( aProperty.Name == "Controller" )
+            aProperty.Value >>= xController;
+        else if ( aProperty.Name == "Locale" )
+            aProperty.Value >>= aLocale;
+        else if ( aProperty.Name == "ApplicationName" )
+            aProperty.Value >>= aApplicationName;
+        else if ( aProperty.Name == "RangeText" )
+            aProperty.Value >>= aRangeText;
     }
+    m_pSmartTagItem.reset( new SvxSmartTagItem( 0, aActionComponents, aActionIndices, aStringKeyMaps, xTextRange, xController, aLocale, aApplicationName, aRangeText ) );
+    FillMenu();
 }
 
 void SmartTagMenuController::FillMenu()
@@ -151,8 +145,8 @@ void SmartTagMenuController::FillMenu()
         if ( 1 < rActionComponentsSequence.getLength() )
         {
             pVCLMenu->InsertItem( nMenuId, aSmartTagCaption );
-            pSubMenu = new PopupMenu;
-            m_aSubMenus.push_back( std::unique_ptr< PopupMenu >( pSubMenu ) );
+            VclPtrInstance<PopupMenu> pMenu;
+            pSubMenu = pMenu;
             pVCLMenu->SetPopupMenu( nMenuId++, pSubMenu );
         }
         pSubMenu->SetSelectHdl( LINK( this, SmartTagMenuController, MenuSelect ) );
@@ -188,12 +182,12 @@ void SmartTagMenuController::FillMenu()
     {
         const OUString aCommand = ".uno:AutoCorrectDlg?OpenSmartTag:bool=true";
         pVCLMenu->InsertSeparator();
-        pVCLMenu->InsertItem( nMenuId, vcl::CommandInfoProvider::Instance().GetPopupLabelForCommand( aCommand, m_xFrame ) );
+        pVCLMenu->InsertItem( nMenuId, vcl::CommandInfoProvider::GetPopupLabelForCommand( aCommand, m_aModuleName ) );
         pVCLMenu->SetItemCommand( nMenuId, aCommand );
     }
 }
 
-IMPL_LINK_TYPED( SmartTagMenuController, MenuSelect, Menu*, pMenu, bool )
+IMPL_LINK( SmartTagMenuController, MenuSelect, Menu*, pMenu, bool )
 {
     if ( !m_pSmartTagItem )
         return false;
@@ -223,19 +217,16 @@ IMPL_LINK_TYPED( SmartTagMenuController, MenuSelect, Menu*, pMenu, bool )
 }
 
 OUString SmartTagMenuController::getImplementationName()
-    throw ( css::uno::RuntimeException, std::exception )
 {
     return OUString( "com.sun.star.comp.svx.SmartTagMenuController" );
 }
 
 css::uno::Sequence< OUString > SmartTagMenuController::getSupportedServiceNames()
-    throw ( css::uno::RuntimeException, std::exception )
 {
-    css::uno::Sequence< OUString > aRet { "com.sun.star.frame.PopupMenuController" };
-    return aRet;
+    return { "com.sun.star.frame.PopupMenuController" };
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_svx_SmartTagMenuController_get_implementation(
     css::uno::XComponentContext* xContext,
     css::uno::Sequence< css::uno::Any > const & )

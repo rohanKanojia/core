@@ -28,6 +28,7 @@
 #include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
+#include <com/sun/star/io/BufferSizeExceededException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -46,6 +47,7 @@
 #include <svx/unoapi.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <rtl/math.hxx>
 #include <comphelper/string.hxx>
 #include <comphelper/sequenceashashmap.hxx>
@@ -53,7 +55,7 @@
 
 #include <oox/drawingml/drawingmltypes.hxx>
 
-#include <DomainMapper.hxx>
+#include "DomainMapper.hxx"
 #include <dmapper/GraphicZOrderHelper.hxx>
 #include <ooxml/resourceids.hxx>
 
@@ -64,79 +66,69 @@
 #include "WrapPolygonHandler.hxx"
 #include "util.hxx"
 
+using namespace css;
+
+namespace
+{
+bool isTopGroupObj(const uno::Reference<drawing::XShape>& xShape)
+{
+    SdrObject* pObject = GetSdrObjectFromXShape(xShape);
+    if (!pObject)
+        return false;
+
+    if (pObject->getParentSdrObjectFromSdrObject())
+        return false;
+
+    return pObject->IsGroupObject();
+}
+}
+
 namespace writerfilter {
 
 namespace dmapper
 {
-using namespace css;
 
 class XInputStreamHelper : public cppu::WeakImplHelper<io::XInputStream>
 {
     const sal_uInt8* m_pBuffer;
     const sal_Int32  m_nLength;
     sal_Int32        m_nPosition;
-    bool             m_bBmp;
-
-    const sal_uInt8* m_pBMPHeader; //default BMP-header
-    sal_Int32        m_nHeaderLength;
 public:
-    XInputStreamHelper(const sal_uInt8* buf, size_t len, bool bBmp);
-    virtual ~XInputStreamHelper();
+    XInputStreamHelper(const sal_uInt8* buf, size_t len);
 
-    virtual ::sal_Int32 SAL_CALL readBytes( uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead ) throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL readSomeBytes( uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead ) throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL skipBytes( ::sal_Int32 nBytesToSkip ) throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception) override;
-    virtual ::sal_Int32 SAL_CALL available(  ) throw (io::NotConnectedException, io::IOException, uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL closeInput(  ) throw (io::NotConnectedException, io::IOException, uno::RuntimeException, std::exception) override;
+    virtual ::sal_Int32 SAL_CALL readBytes( uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nBytesToRead ) override;
+    virtual ::sal_Int32 SAL_CALL readSomeBytes( uno::Sequence< ::sal_Int8 >& aData, ::sal_Int32 nMaxBytesToRead ) override;
+    virtual void SAL_CALL skipBytes( ::sal_Int32 nBytesToSkip ) override;
+    virtual ::sal_Int32 SAL_CALL available(  ) override;
+    virtual void SAL_CALL closeInput(  ) override;
 };
 
-XInputStreamHelper::XInputStreamHelper(const sal_uInt8* buf, size_t len, bool bBmp) :
+XInputStreamHelper::XInputStreamHelper(const sal_uInt8* buf, size_t len) :
         m_pBuffer( buf ),
         m_nLength( len ),
-        m_nPosition( 0 ),
-        m_bBmp( bBmp )
-{
-    static const sal_uInt8 aHeader[] =
-        {0x42, 0x4d, 0xe6, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 };
-    m_pBMPHeader = aHeader;
-    m_nHeaderLength = m_bBmp ? sizeof( aHeader ) / sizeof(sal_uInt8) : 0;
-}
-
-
-XInputStreamHelper::~XInputStreamHelper()
+        m_nPosition( 0 )
 {
 }
 
 sal_Int32 XInputStreamHelper::readBytes( uno::Sequence<sal_Int8>& aData, sal_Int32 nBytesToRead )
-    throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     return readSomeBytes( aData, nBytesToRead );
 }
 
 sal_Int32 XInputStreamHelper::readSomeBytes( uno::Sequence<sal_Int8>& aData, sal_Int32 nMaxBytesToRead )
-        throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
 {
     sal_Int32 nRet = 0;
     if( nMaxBytesToRead > 0 )
     {
-        if( nMaxBytesToRead > (m_nLength + m_nHeaderLength) - m_nPosition )
-            nRet = (m_nLength + m_nHeaderLength) - m_nPosition;
+        if( nMaxBytesToRead > m_nLength - m_nPosition )
+            nRet = m_nLength - m_nPosition;
         else
             nRet = nMaxBytesToRead;
         aData.realloc( nRet );
         sal_Int8* pData = aData.getArray();
-        sal_Int32 nHeaderRead = 0;
-        if( m_nPosition < m_nHeaderLength)
-        {
-            //copy header content first
-            nHeaderRead = m_nHeaderLength - m_nPosition;
-            memcpy( pData, m_pBMPHeader + (m_nPosition ), nHeaderRead );
-            nRet -= nHeaderRead;
-            m_nPosition += nHeaderRead;
-        }
         if( nRet )
         {
-            memcpy( pData + nHeaderRead, m_pBuffer + (m_nPosition - m_nHeaderLength), nRet );
+            memcpy( pData, m_pBuffer + m_nPosition, nRet );
             m_nPosition += nRet;
         }
     }
@@ -144,21 +136,21 @@ sal_Int32 XInputStreamHelper::readSomeBytes( uno::Sequence<sal_Int8>& aData, sal
 }
 
 
-void XInputStreamHelper::skipBytes( sal_Int32 nBytesToSkip ) throw (io::NotConnectedException, io::BufferSizeExceededException, io::IOException, uno::RuntimeException, std::exception)
+void XInputStreamHelper::skipBytes( sal_Int32 nBytesToSkip )
 {
-    if( nBytesToSkip < 0 || m_nPosition + nBytesToSkip > (m_nLength + m_nHeaderLength))
+    if( nBytesToSkip < 0 || m_nPosition + nBytesToSkip > m_nLength)
         throw io::BufferSizeExceededException();
     m_nPosition += nBytesToSkip;
 }
 
 
-sal_Int32 XInputStreamHelper::available(  ) throw (io::NotConnectedException, io::IOException, uno::RuntimeException, std::exception)
+sal_Int32 XInputStreamHelper::available(  )
 {
-    return ( m_nLength + m_nHeaderLength ) - m_nPosition;
+    return m_nLength - m_nPosition;
 }
 
 
-void XInputStreamHelper::closeInput(  ) throw (io::NotConnectedException, io::IOException, uno::RuntimeException, std::exception)
+void XInputStreamHelper::closeInput(  )
 {
 }
 
@@ -166,20 +158,16 @@ void XInputStreamHelper::closeInput(  ) throw (io::NotConnectedException, io::IO
 struct GraphicBorderLine
 {
     sal_Int32   nLineWidth;
-    sal_Int32   nLineColor;
-    sal_Int32   nLineDistance;
     bool        bHasShadow;
 
     GraphicBorderLine() :
         nLineWidth(0)
-        ,nLineColor(0)
-        ,nLineDistance(0)
         ,bHasShadow(false)
         {}
 
     bool isEmpty()
     {
-        return nLineWidth == 0 && nLineColor == 0 && !bHasShadow;
+        return nLineWidth == 0 && !bHasShadow;
     }
 
 };
@@ -193,22 +181,20 @@ private:
     bool      bYSizeValid;
 
 public:
-    GraphicImportType eGraphicImportType;
+    GraphicImportType const eGraphicImportType;
     DomainMapper&   rDomainMapper;
 
     sal_Int32 nLeftPosition;
     sal_Int32 nTopPosition;
-    sal_Int32 nRightPosition;
 
     bool      bUseSimplePos;
     sal_Int32 zOrder;
 
     sal_Int16 nHoriOrient;
     sal_Int16 nHoriRelation;
-    bool      bPageToggle;
     sal_Int16 nVertOrient;
     sal_Int16 nVertRelation;
-    sal_Int32 nWrap;
+    text::WrapTextMode nWrap;
     bool      bLayoutInCell;
     bool      bOpaque;
     bool      bContour;
@@ -228,20 +214,14 @@ public:
 
     sal_Int32 nContrast;
     sal_Int32 nBrightness;
-    double    fGamma;
 
-    sal_Int32 nFillColor;
+    static constexpr sal_Int32 nFillColor = 0xffffffff;
 
     drawing::ColorMode eColorMode;
 
     GraphicBorderLine   aBorders[4];
-    sal_Int32           nCurrentBorderLine;
 
     bool            bIsGraphic;
-    bool            bIsBitmap;
-
-    bool            bHoriFlip;
-    bool            bVertFlip;
 
     bool            bSizeProtected;
     bool            bPositionProtected;
@@ -251,6 +231,7 @@ public:
     OUString sName;
     OUString sAlternativeText;
     OUString title;
+    OUString sHyperlinkURL;
     std::pair<OUString, OUString>& m_rPositionOffsets;
     std::pair<OUString, OUString>& m_rAligns;
     std::queue<OUString>& m_rPositivePercentages;
@@ -270,17 +251,15 @@ public:
         ,rDomainMapper( rDMapper )
         ,nLeftPosition(0)
         ,nTopPosition(0)
-        ,nRightPosition(0)
         ,bUseSimplePos(false)
         ,zOrder(-1)
         ,nHoriOrient(   text::HoriOrientation::NONE )
         ,nHoriRelation( text::RelOrientation::FRAME )
-        ,bPageToggle( false )
         ,nVertOrient(  text::VertOrientation::NONE )
         ,nVertRelation( text::RelOrientation::FRAME )
-        ,nWrap(0)
+        ,nWrap(text::WrapTextMode_NONE)
         ,bLayoutInCell(false)
-        ,bOpaque( true )
+        ,bOpaque( !rDMapper.IsInHeaderFooter() )
         ,bContour(false)
         ,bContourOutside(true)
         ,nLeftMargin(319)
@@ -294,14 +273,8 @@ public:
         ,nShadowTransparence(0)
         ,nContrast(0)
         ,nBrightness(0)
-        ,fGamma( -1.0 )
-        ,nFillColor( 0xffffffff )
         ,eColorMode( drawing::ColorMode_STANDARD )
-        ,nCurrentBorderLine(BORDER_TOP)
         ,bIsGraphic(false)
-        ,bIsBitmap(false)
-        ,bHoriFlip(false)
-        ,bVertFlip(false)
         ,bSizeProtected(false)
         ,bPositionProtected(false)
         ,nShapeOptionType(0)
@@ -366,7 +339,7 @@ public:
         xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_HORI_ORIENT_RELATION ),
                 uno::makeAny(nHoriRelation));
         xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_PAGE_TOGGLE ),
-                uno::makeAny(bPageToggle));
+                uno::makeAny(false));
         if (!bRelativeOnly)
             xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_VERT_ORIENT_POSITION),
                                                        uno::makeAny(nTopPosition));
@@ -374,7 +347,7 @@ public:
                 uno::makeAny(nVertRelation));
     }
 
-    void applyZOrder(uno::Reference<beans::XPropertySet>& xGraphicObjectProperties) const
+    void applyZOrder(uno::Reference<beans::XPropertySet> const & xGraphicObjectProperties) const
     {
         if (zOrder >= 0)
         {
@@ -384,15 +357,19 @@ public:
         }
     }
 
-    void applyName(uno::Reference<beans::XPropertySet>& xGraphicObjectProperties) const
+    void applyName(uno::Reference<beans::XPropertySet> const & xGraphicObjectProperties) const
     {
         try
         {
-            if( !sName.isEmpty() )
-            {
-                uno::Reference< container::XNamed > xNamed( xGraphicObjectProperties, uno::UNO_QUERY_THROW );
-                xNamed->setName( sName );
-            }
+            // Ask the graphic naming helper to find out the name for this
+            // object: It's around till the end of the import, so it remembers
+            // what's the first free name.
+            uno::Reference< container::XNamed > xNamed( xGraphicObjectProperties, uno::UNO_QUERY_THROW );
+            xNamed->setName(rDomainMapper.GetGraphicNamingHelper().NameGraphic(sName));
+
+            if ( sHyperlinkURL.getLength() > 0 )
+                xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_HYPER_LINK_U_R_L ),
+                    uno::makeAny ( sHyperlinkURL ));
             xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_DESCRIPTION ),
                 uno::makeAny( sAlternativeText ));
             xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_TITLE ),
@@ -400,12 +377,12 @@ public:
         }
         catch( const uno::Exception& e )
         {
-            SAL_WARN("writerfilter", "failed. Message :" << e.Message);
+            SAL_WARN("writerfilter", "failed. Message :" << e);
         }
     }
 
     /// Getter for m_aInteropGrabBag, but also merges in the values from other members if they are set.
-    comphelper::SequenceAsHashMap getInteropGrabBag()
+    comphelper::SequenceAsHashMap const & getInteropGrabBag()
     {
         comphelper::SequenceAsHashMap aEffectExtent;
         if (m_oEffectExtentLeft)
@@ -464,16 +441,14 @@ void GraphicImport::handleWrapTextValue(sal_uInt32 nVal)
 
 void GraphicImport::putPropertyToFrameGrabBag( const OUString& sPropertyName, const uno::Any& aPropertyValue )
 {
-    beans::PropertyValue pProperty;
-    pProperty.Name = sPropertyName;
-    pProperty.Value = aPropertyValue;
+    beans::PropertyValue aProperty;
+    aProperty.Name = sPropertyName;
+    aProperty.Value = aPropertyValue;
 
     if (!m_xShape.is())
         return;
 
     uno::Reference< beans::XPropertySet > xSet(m_xShape, uno::UNO_QUERY_THROW);
-    if (!xSet.is())
-        return;
 
     uno::Reference< beans::XPropertySetInfo > xSetInfo(xSet->getPropertySetInfo());
     if (!xSetInfo.is())
@@ -492,7 +467,7 @@ void GraphicImport::putPropertyToFrameGrabBag( const OUString& sPropertyName, co
         uno::Sequence<beans::PropertyValue> aTmp;
         xSet->getPropertyValue(aGrabBagPropName) >>= aTmp;
         std::vector<beans::PropertyValue> aGrabBag(comphelper::sequenceToContainer<std::vector<beans::PropertyValue> >(aTmp));
-        aGrabBag.push_back(pProperty);
+        aGrabBag.push_back(aProperty);
 
         xSet->setPropertyValue(aGrabBagPropName, uno::makeAny(comphelper::containerToSequence(aGrabBag)));
     }
@@ -503,6 +478,9 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
     sal_Int32 nIntValue = rValue.getInt();
     switch( nName )
     {
+        case NS_ooxml::LN_CT_Hyperlink_URL://90682;
+            m_pImpl->sHyperlinkURL = rValue.getString();
+        break;
         case NS_ooxml::LN_blip: //the binary graphic data in a shape
             {
             writerfilter::Reference<Properties>::Pointer_t pProperties = rValue.getProperties();
@@ -522,16 +500,15 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
 
         //border properties
         case NS_ooxml::LN_CT_Border_sz:
-            m_pImpl->aBorders[m_pImpl->nCurrentBorderLine].nLineWidth = nIntValue;
+            m_pImpl->aBorders[BORDER_TOP].nLineWidth = nIntValue;
         break;
         case NS_ooxml::LN_CT_Border_val:
             //graphic borders don't support different line types
         break;
         case NS_ooxml::LN_CT_Border_space:
-            m_pImpl->aBorders[m_pImpl->nCurrentBorderLine].nLineDistance = nIntValue;
         break;
         case NS_ooxml::LN_CT_Border_shadow:
-            m_pImpl->aBorders[m_pImpl->nCurrentBorderLine].bHasShadow = nIntValue != 0;
+            m_pImpl->aBorders[BORDER_TOP].bHasShadow = nIntValue != 0;
         break;
         case NS_ooxml::LN_CT_Border_frame:
             break;
@@ -539,6 +516,12 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
         case NS_ooxml::LN_CT_PositiveSize2D_cy:
         {
             sal_Int32 nDim = oox::drawingml::convertEmuToHmm(nIntValue);
+            // drawingML equivalent of oox::vml::ShapeType::getAbsRectangle():
+            // make sure a shape isn't hidden implicitly just because it has
+            // zero height or width.
+            if (nDim == 0)
+                nDim = 1;
+
             if( nName == NS_ooxml::LN_CT_PositiveSize2D_cx )
                 m_pImpl->setXSize(nDim);
             else
@@ -665,8 +648,8 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
                         uno::Reference< beans::XPropertySet > xShapeProps
                             ( xShape, uno::UNO_QUERY_THROW );
 
-                        OUString sUrl;
-                        xShapeProps->getPropertyValue("GraphicURL") >>= sUrl;
+                        uno::Reference<graphic::XGraphic> xGraphic;
+                        xShapeProps->getPropertyValue("Graphic") >>= xGraphic;
 
                         sal_Int32 nRotation = 0;
                         xShapeProps->getPropertyValue("RotateAngle") >>= nRotation;
@@ -683,10 +666,6 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
                                 bContainsEffects = true;
                         }
 
-                        beans::PropertyValues aMediaProperties( 1 );
-                        aMediaProperties[0].Name = "URL";
-                        aMediaProperties[0].Value <<= sUrl;
-
                         xShapeProps->getPropertyValue("Shadow") >>= m_pImpl->bShadow;
                         if (m_pImpl->bShadow)
                         {
@@ -702,7 +681,7 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
 
                         // fdo#70457: transform XShape into a SwXTextGraphicObject only if there's no rotation
                         if ( nRotation == 0 && !bContainsEffects )
-                            m_xGraphicObject = createGraphicObject( aMediaProperties, xShapeProps );
+                            m_xGraphicObject = createGraphicObject( xGraphic, xShapeProps );
 
                         bUseShape = !m_xGraphicObject.is( );
 
@@ -833,8 +812,15 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
                                 xShapeProps->setPropertyValue("RotateAngle", uno::makeAny(sal_Int32(0)));
 
                             // Position of the groupshape should be set after children have been added.
+                            // Long-term we should get rid of positioning group
+                            // shapes, though. Do it for top-level ones with
+                            // absolute page position as a start.
                             // fdo#80555: also set position for graphic shapes here
-                            m_xShape->setPosition(awt::Point(m_pImpl->nLeftPosition, m_pImpl->nTopPosition));
+                            if (!isTopGroupObj(m_xShape)
+                                || m_pImpl->nHoriRelation != text::RelOrientation::PAGE_FRAME
+                                || m_pImpl->nVertRelation != text::RelOrientation::PAGE_FRAME)
+                                m_xShape->setPosition(
+                                    awt::Point(m_pImpl->nLeftPosition, m_pImpl->nTopPosition));
 
                             if (nRotation)
                                 xShapeProps->setPropertyValue("RotateAngle", uno::makeAny(nRotation));
@@ -843,13 +829,19 @@ void GraphicImport::lcl_attribute(Id nName, Value& rValue)
 
                         xShapeProps->setPropertyValue("SurroundContour", uno::makeAny(m_pImpl->bContour));
                         m_pImpl->applyMargins(xShapeProps);
-                        bool bOpaque = m_pImpl->bOpaque && !m_pImpl->rDomainMapper.IsInHeaderFooter();
-                        xShapeProps->setPropertyValue("Opaque", uno::makeAny(bOpaque));
-                        xShapeProps->setPropertyValue("Surround", uno::makeAny(m_pImpl->nWrap));
+                        xShapeProps->setPropertyValue("Opaque", uno::makeAny(m_pImpl->bOpaque));
+                        xShapeProps->setPropertyValue("Surround", uno::makeAny(static_cast<sal_Int32>(m_pImpl->nWrap)));
                         m_pImpl->applyZOrder(xShapeProps);
                         m_pImpl->applyName(xShapeProps);
 
                         // Get the grab-bag set by oox, merge with our one and then put it back.
+                        comphelper::SequenceAsHashMap aInteropGrabBag(xShapeProps->getPropertyValue("InteropGrabBag"));
+                        aInteropGrabBag.update(m_pImpl->getInteropGrabBag());
+                        xShapeProps->setPropertyValue("InteropGrabBag", uno::makeAny(aInteropGrabBag.getAsConstPropertyValueList()));
+                    }
+                    else if (bUseShape && m_pImpl->eGraphicImportType == IMPORT_AS_DETECTED_INLINE)
+                    {
+                        uno::Reference< beans::XPropertySet > xShapeProps(m_xShape, uno::UNO_QUERY_THROW);
                         comphelper::SequenceAsHashMap aInteropGrabBag(xShapeProps->getPropertyValue("InteropGrabBag"));
                         aInteropGrabBag.update(m_pImpl->getInteropGrabBag());
                         xShapeProps->setPropertyValue("InteropGrabBag", uno::makeAny(aInteropGrabBag.getAsConstPropertyValueList()));
@@ -944,7 +936,7 @@ uno::Reference<text::XTextContent> GraphicImport::GetGraphicObject()
 }
 
 
-void GraphicImport::ProcessShapeOptions(Value& rValue)
+void GraphicImport::ProcessShapeOptions(Value const & rValue)
 {
     sal_Int32 nIntValue = rValue.getInt();
     switch( m_pImpl->nShapeOptionType )
@@ -1034,8 +1026,8 @@ void GraphicImport::lcl_sprm(Sprm& rSprm)
             break;
         case NS_ooxml::LN_CT_Anchor_positionH: // 90976;
         {
-            // Use a special handler for the positionning
-            PositionHandlerPtr pHandler( new PositionHandler( m_pImpl->m_rPositionOffsets, m_pImpl->m_rAligns ));
+            // Use a special handler for the positioning
+            std::shared_ptr<PositionHandler> pHandler( new PositionHandler( m_pImpl->m_rPositionOffsets, m_pImpl->m_rAligns ));
             writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
             if( pProperties.get( ) )
             {
@@ -1045,23 +1037,14 @@ void GraphicImport::lcl_sprm(Sprm& rSprm)
                     m_pImpl->nHoriRelation = pHandler->relation();
                     m_pImpl->nHoriOrient = pHandler->orientation();
                     m_pImpl->nLeftPosition = pHandler->position();
-                    if (m_pImpl->nHoriRelation == text::RelOrientation::PAGE_FRAME && m_pImpl->nHoriOrient == text::HoriOrientation::RIGHT)
-                    {
-                        // If the shape is relative from page and aligned to
-                        // right, then set the relation to right and clear the
-                        // orientation, that provides the same visual result as
-                        // Word.
-                        m_pImpl->nHoriRelation = text::RelOrientation::PAGE_RIGHT;
-                        m_pImpl->nHoriOrient = text::HoriOrientation::NONE;
-                    }
                 }
             }
         }
         break;
         case NS_ooxml::LN_CT_Anchor_positionV: // 90977;
         {
-            // Use a special handler for the positionning
-            PositionHandlerPtr pHandler( new PositionHandler( m_pImpl->m_rPositionOffsets, m_pImpl->m_rAligns));
+            // Use a special handler for the positioning
+            std::shared_ptr<PositionHandler> pHandler( new PositionHandler( m_pImpl->m_rPositionOffsets, m_pImpl->m_rAligns));
             writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
             if( pProperties.get( ) )
             {
@@ -1077,10 +1060,12 @@ void GraphicImport::lcl_sprm(Sprm& rSprm)
         break;
         case NS_ooxml::LN_CT_SizeRelH_pctWidth:
         case NS_ooxml::LN_CT_SizeRelV_pctHeight:
-            if (m_xShape.is() && !m_pImpl->m_rPositivePercentages.empty())
+            if (m_pImpl->m_rPositivePercentages.empty())
+                break;
+
+            if (m_xShape.is())
             {
                 sal_Int16 nPositivePercentage = rtl::math::round(m_pImpl->m_rPositivePercentages.front().toDouble() / oox::drawingml::PER_PERCENT);
-                m_pImpl->m_rPositivePercentages.pop();
 
                 if (nPositivePercentage)
                 {
@@ -1089,10 +1074,21 @@ void GraphicImport::lcl_sprm(Sprm& rSprm)
                     xPropertySet->setPropertyValue(aProperty, uno::makeAny(nPositivePercentage));
                 }
             }
+
+            // Make sure the token is consumed even if xShape is an empty
+            // reference.
+            m_pImpl->m_rPositivePercentages.pop();
             break;
         case NS_ooxml::LN_EG_WrapType_wrapNone: // 90944; - doesn't contain attributes
-            //depending on the behindDoc attribute text wraps through behind or in fron of the object
-            m_pImpl->nWrap = text::WrapTextMode_THROUGHT;
+            //depending on the behindDoc attribute text wraps through behind or in front of the object
+            m_pImpl->nWrap = text::WrapTextMode_THROUGH;
+
+            // Wrap though means the margins defined earlier should not be
+            // respected.
+            m_pImpl->nLeftMargin = 0;
+            m_pImpl->nTopMargin = 0;
+            m_pImpl->nRightMargin = 0;
+            m_pImpl->nBottomMargin = 0;
         break;
         case NS_ooxml::LN_EG_WrapType_wrapTopAndBottom: // 90948;
             m_pImpl->nWrap = text::WrapTextMode_NONE;
@@ -1106,6 +1102,13 @@ void GraphicImport::lcl_sprm(Sprm& rSprm)
                     pProperties->resolve(*this);
             }
         break;
+        case NS_ooxml::LN_CT_NonVisualDrawingProps_a_hlinkClick: // 90689;
+            {
+                writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
+                if( pProperties.get( ) )
+                    pProperties->resolve( *this );
+            }
+        break;
         default:
             SAL_WARN("writerfilter", "GraphicImport::lcl_sprm: unhandled token: " << nSprmId);
         break;
@@ -1116,20 +1119,18 @@ void GraphicImport::lcl_entry(int /*pos*/, writerfilter::Reference<Properties>::
 {
 }
 
-uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const beans::PropertyValues& aMediaProperties, const uno::Reference<beans::XPropertySet>& xShapeProps )
+uno::Reference<text::XTextContent> GraphicImport::createGraphicObject(uno::Reference<graphic::XGraphic> const & rxGraphic,
+                                                                      uno::Reference<beans::XPropertySet> const & xShapeProps)
 {
-    uno::Reference< text::XTextContent > xGraphicObject;
+    uno::Reference<text::XTextContent> xGraphicObject;
     try
     {
-        uno::Reference< graphic::XGraphicProvider > xGraphicProvider( graphic::GraphicProvider::create(m_xComponentContext) );
-        uno::Reference< graphic::XGraphic > xGraphic = xGraphicProvider->queryGraphic( aMediaProperties );
-
-        if(xGraphic.is())
+        if (rxGraphic.is())
         {
             uno::Reference< beans::XPropertySet > xGraphicObjectProperties(
                 m_xTextFactory->createInstance("com.sun.star.text.TextGraphicObject"),
                 uno::UNO_QUERY_THROW);
-            xGraphicObjectProperties->setPropertyValue(getPropertyName(PROP_GRAPHIC), uno::makeAny( xGraphic ));
+            xGraphicObjectProperties->setPropertyValue(getPropertyName(PROP_GRAPHIC), uno::makeAny(rxGraphic));
             xGraphicObjectProperties->setPropertyValue(getPropertyName(PROP_ANCHOR_TYPE),
                 uno::makeAny( m_pImpl->eGraphicImportType == IMPORT_AS_DETECTED_ANCHOR ?
                                     text::TextContentAnchorType_AT_CHARACTER :
@@ -1149,12 +1150,12 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
             }
             else
             {
-                aBorderLine.Color = rBorderLine.nLineColor;
+                aBorderLine.Color = 0;
                 aBorderLine.InnerLineWidth = 0;
-                aBorderLine.OuterLineWidth = (sal_Int16)rBorderLine.nLineWidth;
+                aBorderLine.OuterLineWidth = static_cast<sal_Int16>(rBorderLine.nLineWidth);
                 aBorderLine.LineDistance = 0;
             }
-            PropertyIds aBorderProps[4] =
+            PropertyIds const aBorderProps[] =
             {
                 PROP_LEFT_BORDER,
                 PROP_RIGHT_BORDER,
@@ -1162,10 +1163,10 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
                 PROP_BOTTOM_BORDER
             };
 
-            for( sal_Int32 nBorder = 0; nBorder < 4; ++nBorder )
-                xGraphicObjectProperties->setPropertyValue(getPropertyName( aBorderProps[nBorder]), uno::makeAny(aBorderLine));
+            for(PropertyIds const & rBorderProp : aBorderProps)
+                xGraphicObjectProperties->setPropertyValue(getPropertyName(rBorderProp), uno::makeAny(aBorderLine));
 
-            // setting graphic object shadow proerties
+            // setting graphic object shadow properties
             if (m_pImpl->bShadow)
             {
                 // Shadow width is approximated by average of X and Y
@@ -1205,7 +1206,7 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
                 xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_SIZE_PROTECTED ),
                     uno::makeAny(true));
 
-            sal_Int32 nWidth = m_pImpl->nRightPosition - m_pImpl->nLeftPosition;
+            sal_Int32 nWidth = - m_pImpl->nLeftPosition;
             if (m_pImpl->eGraphicImportType == IMPORT_AS_DETECTED_ANCHOR)
             {
                 //adjust margins
@@ -1253,17 +1254,20 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
 
                 m_pImpl->applyPosition(xGraphicObjectProperties);
                 m_pImpl->applyRelativePosition(xGraphicObjectProperties);
-                bool bOpaque = m_pImpl->bOpaque && !m_pImpl->rDomainMapper.IsInHeaderFooter( );
-                if( !bOpaque )
+                if( !m_pImpl->bOpaque )
                 {
-                    xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_OPAQUE ),
-                        uno::makeAny(bOpaque));
+                    xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_OPAQUE ), uno::makeAny(m_pImpl->bOpaque));
                 }
                 xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_SURROUND ),
-                    uno::makeAny(m_pImpl->nWrap));
-                if( m_pImpl->bLayoutInCell && m_pImpl->nWrap != text::WrapTextMode_THROUGHT )
+                    uno::makeAny(static_cast<sal_Int32>(m_pImpl->nWrap)));
+                if( m_pImpl->rDomainMapper.IsInTable() && m_pImpl->bLayoutInCell && m_pImpl->nWrap != text::WrapTextMode_THROUGH )
                     xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_FOLLOW_TEXT_FLOW ),
                         uno::makeAny(true));
+                if( m_pImpl->rDomainMapper.IsInTable() && m_pImpl->bLayoutInCell )
+                {
+                    xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_LAYOUT_IN_CELL ),
+                        uno::makeAny(true));
+                }
 
                 xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_SURROUND_CONTOUR ),
                     uno::makeAny(m_pImpl->bContour));
@@ -1282,35 +1286,22 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
             }
 
             xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_ADJUST_CONTRAST ),
-                uno::makeAny((sal_Int16)m_pImpl->nContrast));
+                uno::makeAny(static_cast<sal_Int16>(m_pImpl->nContrast)));
             xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_ADJUST_LUMINANCE ),
-                uno::makeAny((sal_Int16)m_pImpl->nBrightness));
+                uno::makeAny(static_cast<sal_Int16>(m_pImpl->nBrightness)));
             if(m_pImpl->eColorMode != drawing::ColorMode_STANDARD)
             {
                 xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_GRAPHIC_COLOR_MODE ),
                     uno::makeAny(m_pImpl->eColorMode));
             }
-            if(m_pImpl->fGamma > 0. )
-                xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_GAMMA ),
-                    uno::makeAny(m_pImpl->fGamma ));
-            if(m_pImpl->bHoriFlip)
-            {
-                xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_HORI_MIRRORED_ON_EVEN_PAGES ),
-                uno::makeAny( m_pImpl->bHoriFlip ));
-                xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_HORI_MIRRORED_ON_ODD_PAGES ),
-                uno::makeAny( m_pImpl->bHoriFlip ));
-            }
 
-            if( m_pImpl->bVertFlip )
-                xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_VERT_MIRRORED ),
-                    uno::makeAny( m_pImpl->bVertFlip ));
             xGraphicObjectProperties->setPropertyValue(getPropertyName( PROP_BACK_COLOR ),
-                uno::makeAny( m_pImpl->nFillColor ));
+                uno::makeAny( GraphicImport_Impl::nFillColor ));
 
             m_pImpl->applyZOrder(xGraphicObjectProperties);
 
             //there seems to be no way to detect the original size via _real_ API
-            uno::Reference< beans::XPropertySet > xGraphicProperties( xGraphic, uno::UNO_QUERY_THROW );
+            uno::Reference< beans::XPropertySet > xGraphicProperties(rxGraphic, uno::UNO_QUERY_THROW);
 
             if (m_pImpl->mpWrapPolygon.get() != nullptr)
             {
@@ -1351,11 +1342,22 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
                 m_pImpl->applyMargins(xGraphicObjectProperties);
                 m_pImpl->applyName(xGraphicObjectProperties);
             }
+
+            // Handle horizontal flip.
+            bool bMirrored = false;
+            xShapeProps->getPropertyValue("IsMirrored") >>= bMirrored;
+            if (bMirrored)
+            {
+                xGraphicObjectProperties->setPropertyValue("HoriMirroredOnEvenPages",
+                                                           uno::makeAny(true));
+                xGraphicObjectProperties->setPropertyValue("HoriMirroredOnOddPages",
+                                                           uno::makeAny(true));
+            }
         }
     }
     catch( const uno::Exception& e )
     {
-        SAL_WARN("writerfilter", "failed. Message :" << e.Message);
+        SAL_WARN("writerfilter", "failed. Message :" << e);
     }
     return xGraphicObject;
 }
@@ -1363,14 +1365,16 @@ uno::Reference< text::XTextContent > GraphicImport::createGraphicObject( const b
 
 void GraphicImport::data(const sal_uInt8* buf, size_t len, writerfilter::Reference<Properties>::Pointer_t /*ref*/)
 {
-        beans::PropertyValues aMediaProperties( 1 );
-        aMediaProperties[0].Name = getPropertyName(PROP_INPUT_STREAM);
+    beans::PropertyValues aMediaProperties( 1 );
+    aMediaProperties[0].Name = getPropertyName(PROP_INPUT_STREAM);
 
-        uno::Reference< io::XInputStream > xIStream = new XInputStreamHelper( buf, len, m_pImpl->bIsBitmap );
-        aMediaProperties[0].Value <<= xIStream;
+    uno::Reference< io::XInputStream > xIStream = new XInputStreamHelper( buf, len );
+    aMediaProperties[0].Value <<= xIStream;
 
-        uno::Reference<beans::XPropertySet> xPropertySet;
-        m_xGraphicObject = createGraphicObject( aMediaProperties, xPropertySet );
+    uno::Reference<beans::XPropertySet> xPropertySet;
+    uno::Reference<graphic::XGraphicProvider> xGraphicProvider(graphic::GraphicProvider::create(m_xComponentContext));
+    uno::Reference<graphic::XGraphic> xGraphic = xGraphicProvider->queryGraphic(aMediaProperties);
+    m_xGraphicObject = createGraphicObject(xGraphic, xPropertySet);
 }
 
 
@@ -1427,7 +1431,6 @@ void GraphicImport::lcl_table(Id /*name*/, writerfilter::Reference<Table>::Point
 void GraphicImport::lcl_substream(Id /*name*/, ::writerfilter::Reference<Stream>::Pointer_t /*ref*/)
 {
 }
-
 
 void GraphicImport::lcl_info(const std::string& /*info*/)
 {

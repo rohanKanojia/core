@@ -65,7 +65,7 @@ class FaxWizardDialogImpl(FaxWizardDialog):
             self.nMaxStep = 5
 
             #instantiate The Document Frame for the Preview
-            self.terminateListener = TerminateListenerProcAdapter(self)
+            self.terminateListener = TerminateListenerProcAdapter(self.queryTermination)
             self.myFaxDoc = FaxDocument(xMSF, self.terminateListener)
 
             #create the dialog:
@@ -108,7 +108,7 @@ class FaxWizardDialogImpl(FaxWizardDialog):
             #Greeting/Salutation/CommunicationType yet choose a default
             self.__setDefaultForGreetingAndSalutationAndCommunication()
 
-            #disable funtionality that is not supported by the template:
+            #disable functionality that is not supported by the template:
             self.initializeElements()
 
             #disable the document, so that the user cannot change anything:

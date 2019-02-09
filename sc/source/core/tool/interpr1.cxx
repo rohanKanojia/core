@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "interpre.hxx"
+#include <interpre.hxx>
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/justifyitem.hxx>
 #include <osl/thread.h>
@@ -33,32 +33,37 @@
 #include <sfx2/printer.hxx>
 #include <unotools/collatorwrapper.hxx>
 #include <unotools/transliterationwrapper.hxx>
+#include <rtl/character.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 #include <unicode/uchar.h>
+#include <unicode/regex.h>
+#include <i18nlangtag/mslangid.hxx>
 
-#include "patattr.hxx"
-#include "global.hxx"
-#include "document.hxx"
-#include "dociter.hxx"
-#include "formulacell.hxx"
-#include "scmatrix.hxx"
-#include "docoptio.hxx"
-#include "globstr.hrc"
-#include "attrib.hxx"
-#include "jumpmatrix.hxx"
-#include "cellkeytranslator.hxx"
-#include "lookupcache.hxx"
-#include "rangenam.hxx"
-#include "rangeutl.hxx"
-#include "compiler.hxx"
-#include "externalrefmgr.hxx"
+#include <patattr.hxx>
+#include <global.hxx>
+#include <document.hxx>
+#include <dociter.hxx>
+#include <formulacell.hxx>
+#include <scmatrix.hxx>
+#include <docoptio.hxx>
+#include <attrib.hxx>
+#include <jumpmatrix.hxx>
+#include <cellkeytranslator.hxx>
+#include <lookupcache.hxx>
+#include <rangenam.hxx>
+#include <rangeutl.hxx>
+#include <compiler.hxx>
+#include <externalrefmgr.hxx>
 #include <basic/sbstar.hxx>
-#include "doubleref.hxx"
-#include "queryparam.hxx"
-#include "queryentry.hxx"
-#include "tokenarray.hxx"
-#include "compare.hxx"
+#include <doubleref.hxx>
+#include <queryparam.hxx>
+#include <queryentry.hxx>
+#include <tokenarray.hxx>
+#include <compare.hxx>
 
+#include <com/sun/star/util/SearchResult.hpp>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/random.hxx>
 #include <comphelper/string.hxx>
@@ -73,12 +78,7 @@
 
 static const sal_uInt64 n2power48 = SAL_CONST_UINT64( 281474976710656); // 2^48
 
-IMPL_FIXEDMEMPOOL_NEWDEL( ScTokenStack )
-IMPL_FIXEDMEMPOOL_NEWDEL( ScInterpreter )
-
 ScCalcConfig *ScInterpreter::mpGlobalConfig = nullptr;
-ScTokenStack* ScInterpreter::pGlobalStack = nullptr;
-bool ScInterpreter::bGlobalStackInUse = false;
 
 using namespace formula;
 using ::std::unique_ptr;
@@ -87,7 +87,7 @@ void ScInterpreter::ScIfJump()
 {
     const short* pJump = pCur->GetJump();
     short nJumpCount = pJump[ 0 ];
-    MatrixDoubleRefToMatrix();
+    MatrixJumpConditionToMatrix();
     switch ( GetStackType() )
     {
         case svMatrix:
@@ -97,7 +97,7 @@ void ScInterpreter::ScIfJump()
                 PushIllegalParameter();
             else
             {
-                FormulaTokenRef xNew;
+                FormulaConstTokenRef xNew;
                 ScTokenMatrixMap::const_iterator aMapIter;
                 // DoubleError handled by JumpMatrix
                 pMat->SetErrorInterpreter( nullptr);
@@ -108,12 +108,12 @@ void ScInterpreter::ScIfJump()
                     PushIllegalArgument();
                     return;
                 }
-                else if (pTokenMatrixMap && ((aMapIter = pTokenMatrixMap->find(
-                                    pCur)) != pTokenMatrixMap->end()))
+                else if (pTokenMatrixMap && ((aMapIter = pTokenMatrixMap->find( pCur)) != pTokenMatrixMap->end()))
                     xNew = (*aMapIter).second;
                 else
                 {
-                    ScJumpMatrix* pJumpMat = new ScJumpMatrix( nCols, nRows );
+                    std::shared_ptr<ScJumpMatrix> pJumpMat( std::make_shared<ScJumpMatrix>(
+                                pCur->GetOpCode(), nCols, nRows));
                     for ( SCSIZE nC=0; nC < nCols; ++nC )
                     {
                         for ( SCSIZE nR=0; nR < nRows; ++nR )
@@ -132,10 +132,12 @@ void ScInterpreter::ScIfJump()
                             else
                             {
                                 // Treat empty and empty path as 0, but string
-                                // as error.
-                                bIsValue = (!pMat->IsString(nC, nR) || pMat->IsEmpty(nC, nR));
+                                // as error. ScMatrix::IsValueOrEmpty() returns
+                                // true for any empty, empty path, empty cell,
+                                // empty result.
+                                bIsValue = pMat->IsValueOrEmpty(nC, nR);
                                 bTrue = false;
-                                fVal = (bIsValue ? 0.0 : CreateDoubleError( errNoValue));
+                                fVal = (bIsValue ? 0.0 : CreateDoubleError( FormulaError::NoValue));
                             }
                             if ( bTrue )
                             {   // TRUE
@@ -171,14 +173,14 @@ void ScInterpreter::ScIfJump()
                         }
                     }
                     xNew = new ScJumpMatrixToken( pJumpMat );
-                    GetTokenMatrixMap().insert( ScTokenMatrixMap::value_type(pCur, xNew));
+                    GetTokenMatrixMap().emplace(pCur, xNew);
                 }
                 if (!xNew.get())
                 {
                     PushIllegalArgument();
                     return;
                 }
-                PushTempToken( xNew.get());
+                PushTokenRef( xNew);
                 // set endpoint of path for main code line
                 aCode.Jump( pJump[ nJumpCount ], pJump[ nJumpCount ] );
             }
@@ -194,7 +196,7 @@ void ScInterpreter::ScIfJump()
                 }
                 else
                 {   // no parameter given for THEN
-                    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+                    nFuncFmtType = SvNumFormatType::LOGICAL;
                     PushInt(1);
                     aCode.Jump( pJump[ nJumpCount ], pJump[ nJumpCount ] );
                 }
@@ -207,7 +209,7 @@ void ScInterpreter::ScIfJump()
                 }
                 else
                 {   // no parameter given for ELSE
-                    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+                    nFuncFmtType = SvNumFormatType::LOGICAL;
                     PushInt(0);
                     aCode.Jump( pJump[ nJumpCount ], pJump[ nJumpCount ] );
                 }
@@ -244,26 +246,26 @@ void ScInterpreter::ScIfError( bool bNAonly )
     if (!sp || nJumpCount != 2)
     {
         // Reset nGlobalError here to not propagate the old error, if any.
-        nGlobalError = (sp ? errParameterExpected : errUnknownStackVariable);
+        nGlobalError = (sp ? FormulaError::ParameterExpected : FormulaError::UnknownStackVariable);
         PushError( nGlobalError);
         aCode.Jump( pJump[ nJumpCount  ], pJump[ nJumpCount ] );
         return;
     }
 
-    FormulaTokenRef xToken( pStack[ sp - 1 ] );
+    FormulaConstTokenRef xToken( pStack[ sp - 1 ] );
     bool bError = false;
-    sal_uInt16 nOldGlobalError = nGlobalError;
-    nGlobalError = 0;
+    FormulaError nOldGlobalError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
 
-    MatrixDoubleRefToMatrix();
+    MatrixJumpConditionToMatrix();
     switch (GetStackType())
     {
         default:
             Pop();
             // Act on implicitly propagated error, if any.
-            if (nOldGlobalError)
+            if (nOldGlobalError != FormulaError::NONE)
                 nGlobalError = nOldGlobalError;
-            if (nGlobalError)
+            if (nGlobalError != FormulaError::NONE)
                 bError = true;
             break;
         case svError:
@@ -281,7 +283,7 @@ void ScInterpreter::ScIfError( bool bNAonly )
 
                     ScRefCellValue aCell(*pDok, aAdr);
                     nGlobalError = GetCellErrCode(aCell);
-                    if (nGlobalError)
+                    if (nGlobalError != FormulaError::NONE)
                         bError = true;
                 }
             }
@@ -294,14 +296,14 @@ void ScInterpreter::ScIfError( bool bNAonly )
             // Handles also existing jump matrix case and sets error on
             // elements.
             GetDoubleOrStringFromMatrix( fVal, aStr);
-            if (nGlobalError)
+            if (nGlobalError != FormulaError::NONE)
                 bError = true;
         }
         break;
         case svMatrix:
             {
                 const ScMatrixRef pMat = PopMatrix();
-                if (!pMat || (nGlobalError && (!bNAonly || nGlobalError == NOTAVAILABLE)))
+                if (!pMat || (nGlobalError != FormulaError::NONE && (!bNAonly || nGlobalError == FormulaError::NotAvailable)))
                 {
                     bError = true;
                     break;  // switch
@@ -321,8 +323,8 @@ void ScInterpreter::ScIfError( bool bNAonly )
                 {
                     for (SCSIZE nR=0; nR < nRows && !bError; ++nR)
                     {
-                        sal_uInt16 nErr = pMat->GetError( nC, nR );
-                        if (nErr && (!bNAonly || nErr == NOTAVAILABLE))
+                        FormulaError nErr = pMat->GetError( nC, nR );
+                        if (nErr != FormulaError::NONE && (!bNAonly || nErr == FormulaError::NotAvailable))
                         {
                             bError = true;
                             nErrorCol = nC;
@@ -333,7 +335,7 @@ void ScInterpreter::ScIfError( bool bNAonly )
                 if (!bError)
                     break;  // switch, we're done and have the result
 
-                FormulaTokenRef xNew;
+                FormulaConstTokenRef xNew;
                 ScTokenMatrixMap::const_iterator aMapIter;
                 if (pTokenMatrixMap && ((aMapIter = pTokenMatrixMap->find( pCur)) != pTokenMatrixMap->end()))
                 {
@@ -342,10 +344,11 @@ void ScInterpreter::ScIfError( bool bNAonly )
                 else
                 {
                     const ScMatrix* pMatPtr = pMat.get();
-                    ScJumpMatrix* pJumpMat = new ScJumpMatrix( nCols, nRows );
+                    std::shared_ptr<ScJumpMatrix> pJumpMat( std::make_shared<ScJumpMatrix>(
+                                pCur->GetOpCode(), nCols, nRows));
                     // Init all jumps to no error to save single calls. Error
                     // is the exceptional condition.
-                    const double fFlagResult = CreateDoubleError( errJumpMatHasResult);
+                    const double fFlagResult = CreateDoubleError( FormulaError::JumpMatHasResult);
                     pJumpMat->SetAllJumps( fFlagResult, pJump[ nJumpCount ], pJump[ nJumpCount ] );
                     // Up to first error position simply store results, no need
                     // to evaluate error conditions again.
@@ -354,7 +357,7 @@ void ScInterpreter::ScIfError( bool bNAonly )
                     {
                         for (nR = 0 ; nR < nRows && (nC != nErrorCol || nR != nErrorRow); ++nR)
                         {
-                            lcl_storeJumpMatResult(pMatPtr, pJumpMat, nC, nR);
+                            lcl_storeJumpMatResult(pMatPtr, pJumpMat.get(), nC, nR);
                         }
                         if (nC != nErrorCol && nR != nErrorRow)
                             ++nC;
@@ -364,23 +367,23 @@ void ScInterpreter::ScIfError( bool bNAonly )
                     {
                         for ( ; nR < nRows; ++nR)
                         {
-                            sal_uInt16 nErr = pMat->GetError( nC, nR );
-                            if (nErr && (!bNAonly || nErr == NOTAVAILABLE))
+                            FormulaError nErr = pMat->GetError( nC, nR );
+                            if (nErr != FormulaError::NONE && (!bNAonly || nErr == FormulaError::NotAvailable))
                             {   // TRUE, THEN path
                                 pJumpMat->SetJump( nC, nR, 1.0, pJump[ 1 ], pJump[ nJumpCount ] );
                             }
                             else
                             {   // FALSE, EMPTY path, store result instead
-                                lcl_storeJumpMatResult(pMatPtr, pJumpMat, nC, nR);
+                                lcl_storeJumpMatResult(pMatPtr, pJumpMat.get(), nC, nR);
                             }
                         }
                         nR = 0;
                     }
                     xNew = new ScJumpMatrixToken( pJumpMat );
-                    GetTokenMatrixMap().insert( ScTokenMatrixMap::value_type( pCur, xNew ));
+                    GetTokenMatrixMap().emplace( pCur, xNew );
                 }
                 nGlobalError = nOldGlobalError;
-                PushTempToken( xNew.get() );
+                PushTokenRef( xNew );
                 // set endpoint of path for main code line
                 aCode.Jump( pJump[ nJumpCount ], pJump[ nJumpCount ] );
                 return;
@@ -388,17 +391,17 @@ void ScInterpreter::ScIfError( bool bNAonly )
             break;
     }
 
-    if (bError && (!bNAonly || nGlobalError == NOTAVAILABLE))
+    if (bError && (!bNAonly || nGlobalError == FormulaError::NotAvailable))
     {
         // error, calculate 2nd argument
-        nGlobalError = 0;
+        nGlobalError = FormulaError::NONE;
         aCode.Jump( pJump[ 1 ], pJump[ nJumpCount ] );
     }
     else
     {
         // no error, push 1st argument and continue
         nGlobalError = nOldGlobalError;
-        PushTempToken( xToken.get());
+        PushTokenRef( xToken);
         aCode.Jump( pJump[ nJumpCount ], pJump[ nJumpCount ] );
     }
 }
@@ -410,7 +413,7 @@ void ScInterpreter::ScChooseJump()
     bool bHaveJump = false;
     const short* pJump = pCur->GetJump();
     short nJumpCount = pJump[ 0 ];
-    MatrixDoubleRefToMatrix();
+    MatrixJumpConditionToMatrix();
     switch ( GetStackType() )
     {
         case svMatrix:
@@ -420,7 +423,7 @@ void ScInterpreter::ScChooseJump()
                 PushIllegalParameter();
             else
             {
-                FormulaTokenRef xNew;
+                FormulaConstTokenRef xNew;
                 ScTokenMatrixMap::const_iterator aMapIter;
                 // DoubleError handled by JumpMatrix
                 pMat->SetErrorInterpreter( nullptr);
@@ -433,7 +436,8 @@ void ScInterpreter::ScChooseJump()
                     xNew = (*aMapIter).second;
                 else
                 {
-                    ScJumpMatrix* pJumpMat = new ScJumpMatrix( nCols, nRows );
+                    std::shared_ptr<ScJumpMatrix> pJumpMat( std::make_shared<ScJumpMatrix>(
+                                pCur->GetOpCode(), nCols, nRows));
                     for ( SCSIZE nC=0; nC < nCols; ++nC )
                     {
                         for ( SCSIZE nR=0; nR < nRows; ++nR )
@@ -451,18 +455,18 @@ void ScInterpreter::ScChooseJump()
                                     {
                                         bIsValue = false;
                                         fVal = CreateDoubleError(
-                                                errIllegalArgument);
+                                                FormulaError::IllegalArgument);
                                     }
                                 }
                             }
                             else
                             {
-                                fVal = CreateDoubleError( errNoValue);
+                                fVal = CreateDoubleError( FormulaError::NoValue);
                             }
                             if ( bIsValue )
                             {
                                 pJumpMat->SetJump( nC, nR, fVal,
-                                        pJump[ (short)fVal ],
+                                        pJump[ static_cast<short>(fVal) ],
                                         pJump[ nJumpCount ]);
                             }
                             else
@@ -474,12 +478,11 @@ void ScInterpreter::ScChooseJump()
                         }
                     }
                     xNew = new ScJumpMatrixToken( pJumpMat );
-                    GetTokenMatrixMap().insert( ScTokenMatrixMap::value_type(
-                                pCur, xNew));
+                    GetTokenMatrixMap().emplace(pCur, xNew);
                 }
                 if (xNew.get())
                 {
-                    PushTempToken( xNew.get());
+                    PushTokenRef( xNew);
                     // set endpoint of path for main code line
                     aCode.Jump( pJump[ nJumpCount ], pJump[ nJumpCount ] );
                     bHaveJump = true;
@@ -489,10 +492,10 @@ void ScInterpreter::ScChooseJump()
         break;
         default:
         {
-            double nJumpIndex = ::rtl::math::approxFloor( GetDouble() );
-            if (!nGlobalError && (nJumpIndex >= 1) && (nJumpIndex < nJumpCount))
+            sal_Int16 nJumpIndex = GetInt16();
+            if (nGlobalError == FormulaError::NONE && (nJumpIndex >= 1) && (nJumpIndex < nJumpCount))
             {
-                aCode.Jump( pJump[ (short) nJumpIndex ], pJump[ nJumpCount ] );
+                aCode.Jump( pJump[ static_cast<short>(nJumpIndex) ], pJump[ nJumpCount ] );
                 bHaveJump = true;
             }
             else
@@ -515,8 +518,8 @@ static void lcl_AdjustJumpMatrix( ScJumpMatrix* pJumpM, SCSIZE nParmCols, SCSIZE
     {
         if ( nJumpCols == 1 && nJumpRows == 1 )
         {
-            nAdjustCols = nParmCols > nResCols ? nParmCols : nResCols;
-            nAdjustRows = nParmRows > nResRows ? nParmRows : nResRows;
+            nAdjustCols = std::max(nParmCols, nResCols);
+            nAdjustRows = std::max(nParmRows, nResRows);
         }
         else if ( nJumpCols == 1 )
         {
@@ -543,13 +546,13 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
             aCode.Pop();    // pop what Jump() pushed
         else
         {
-            OSL_FAIL( "ScInterpreter::JumpMatrix: pop goes the weasel" );
+            assert(!"pop goes the weasel");
         }
 
         if ( !bHasResMat )
         {
             Pop();
-            SetError( errUnknownStackVariable );
+            SetError( FormulaError::UnknownStackVariable );
         }
         else
         {
@@ -559,10 +562,10 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                 case svDouble:
                 {
                     double fVal = GetDouble();
-                    if ( nGlobalError )
+                    if ( nGlobalError != FormulaError::NONE )
                     {
                         fVal = CreateDoubleError( nGlobalError );
-                        nGlobalError = 0;
+                        nGlobalError = FormulaError::NONE;
                     }
                     pJumpMatrix->PutResultDouble( fVal, nC, nR );
                 }
@@ -570,11 +573,11 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                 case svString:
                 {
                     svl::SharedString aStr = GetString();
-                    if ( nGlobalError )
+                    if ( nGlobalError != FormulaError::NONE )
                     {
                         pJumpMatrix->PutResultDouble( CreateDoubleError( nGlobalError),
                                 nC, nR);
-                        nGlobalError = 0;
+                        nGlobalError = FormulaError::NONE;
                     }
                     else
                         pJumpMatrix->PutResultString(aStr, nC, nR);
@@ -582,13 +585,14 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                 break;
                 case svSingleRef:
                 {
+                    FormulaConstTokenRef xRef = pStack[sp-1];
                     ScAddress aAdr;
                     PopSingleRef( aAdr );
-                    if ( nGlobalError )
+                    if ( nGlobalError != FormulaError::NONE )
                     {
                         pJumpMatrix->PutResultDouble( CreateDoubleError( nGlobalError),
                                 nC, nR);
-                        nGlobalError = 0;
+                        nGlobalError = FormulaError::NONE;
                     }
                     else
                     {
@@ -598,11 +602,11 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                         else if (aCell.hasNumeric())
                         {
                             double fVal = GetCellValue(aAdr, aCell);
-                            if ( nGlobalError )
+                            if ( nGlobalError != FormulaError::NONE )
                             {
                                 fVal = CreateDoubleError(
                                         nGlobalError);
-                                nGlobalError = 0;
+                                nGlobalError = FormulaError::NONE;
                             }
                             pJumpMatrix->PutResultDouble( fVal, nC, nR );
                         }
@@ -610,27 +614,38 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                         {
                             svl::SharedString aStr;
                             GetCellString(aStr, aCell);
-                            if ( nGlobalError )
+                            if ( nGlobalError != FormulaError::NONE )
                             {
                                 pJumpMatrix->PutResultDouble( CreateDoubleError(
                                             nGlobalError), nC, nR);
-                                nGlobalError = 0;
+                                nGlobalError = FormulaError::NONE;
                             }
                             else
                                 pJumpMatrix->PutResultString(aStr, nC, nR);
                         }
                     }
+
+                    formula::ParamClass eReturnType = ScParameterClassification::GetParameterType( pCur, SAL_MAX_UINT16);
+                    if (eReturnType == ParamClass::Reference)
+                    {
+                        /* TODO: What about error handling and do we actually
+                         * need the result matrix above at all in this case? */
+                        ScComplexRefData aRef;
+                        aRef.Ref1 = aRef.Ref2 = *(xRef->GetSingleRef());
+                        pJumpMatrix->GetRefList().push_back( aRef);
+                    }
                 }
                 break;
                 case svDoubleRef:
                 {   // upper left plus offset within matrix
+                    FormulaConstTokenRef xRef = pStack[sp-1];
                     double fVal;
                     ScRange aRange;
                     PopDoubleRef( aRange );
-                    if ( nGlobalError )
+                    if ( nGlobalError != FormulaError::NONE )
                     {
                         fVal = CreateDoubleError( nGlobalError );
-                        nGlobalError = 0;
+                        nGlobalError = FormulaError::NONE;
                         pJumpMatrix->PutResultDouble( fVal, nC, nR );
                     }
                     else
@@ -638,18 +653,18 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                         // Do not modify the original range because we use it
                         // to adjust the size of the result matrix if necessary.
                         ScAddress aAdr( aRange.aStart);
-                        sal_uLong nCol = (sal_uLong)aAdr.Col() + nC;
-                        sal_uLong nRow = (sal_uLong)aAdr.Row() + nR;
+                        sal_uLong nCol = static_cast<sal_uLong>(aAdr.Col()) + nC;
+                        sal_uLong nRow = static_cast<sal_uLong>(aAdr.Row()) + nR;
                         if ((nCol > static_cast<sal_uLong>(aRange.aEnd.Col()) &&
                                     aRange.aEnd.Col() != aRange.aStart.Col())
                                 || (nRow > static_cast<sal_uLong>(aRange.aEnd.Row()) &&
                                     aRange.aEnd.Row() != aRange.aStart.Row()))
-                          {
-                            fVal = CreateDoubleError( NOTAVAILABLE );
+                        {
+                            fVal = CreateDoubleError( FormulaError::NotAvailable );
                             pJumpMatrix->PutResultDouble( fVal, nC, nR );
-                          }
-                          else
-                          {
+                        }
+                        else
+                        {
                             // Replicate column and/or row of a vector if it is
                             // one. Note that this could be a range reference
                             // that in fact consists of only one cell, e.g. A1:A1
@@ -663,49 +678,91 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                             if (aCell.hasEmptyValue())
                                 pJumpMatrix->PutResultEmpty( nC, nR );
                             else if (aCell.hasNumeric())
-                              {
+                            {
                                 double fCellVal = GetCellValue(aAdr, aCell);
-                                if ( nGlobalError )
+                                if ( nGlobalError != FormulaError::NONE )
                                 {
                                     fCellVal = CreateDoubleError(
                                             nGlobalError);
-                                    nGlobalError = 0;
+                                    nGlobalError = FormulaError::NONE;
                                 }
                                 pJumpMatrix->PutResultDouble( fCellVal, nC, nR );
-                              }
-                              else
-                              {
+                            }
+                            else
+                            {
                                 svl::SharedString aStr;
                                 GetCellString(aStr, aCell);
-                                if ( nGlobalError )
+                                if ( nGlobalError != FormulaError::NONE )
                                 {
                                     pJumpMatrix->PutResultDouble( CreateDoubleError(
                                                 nGlobalError), nC, nR);
-                                    nGlobalError = 0;
+                                    nGlobalError = FormulaError::NONE;
                                 }
                                 else
                                     pJumpMatrix->PutResultString(aStr, nC, nR);
                             }
-                          }
+                        }
                         SCSIZE nParmCols = aRange.aEnd.Col() - aRange.aStart.Col() + 1;
                         SCSIZE nParmRows = aRange.aEnd.Row() - aRange.aStart.Row() + 1;
                         lcl_AdjustJumpMatrix( pJumpMatrix, nParmCols, nParmRows );
                     }
+
+                    formula::ParamClass eReturnType = ScParameterClassification::GetParameterType( pCur, SAL_MAX_UINT16);
+                    if (eReturnType == ParamClass::Reference)
+                    {
+                        /* TODO: What about error handling and do we actually
+                         * need the result matrix above at all in this case? */
+                        pJumpMatrix->GetRefList().push_back( *(xRef->GetDoubleRef()));
+                    }
                 }
                 break;
+                case svExternalSingleRef:
+                {
+                    ScExternalRefCache::TokenRef pToken;
+                    PopExternalSingleRef(pToken);
+                    if (nGlobalError != FormulaError::NONE)
+                    {
+                        pJumpMatrix->PutResultDouble( CreateDoubleError( nGlobalError), nC, nR );
+                        nGlobalError = FormulaError::NONE;
+                    }
+                    else
+                    {
+                        switch (pToken->GetType())
+                        {
+                            case svDouble:
+                                pJumpMatrix->PutResultDouble( pToken->GetDouble(), nC, nR );
+                            break;
+                            case svString:
+                                pJumpMatrix->PutResultString( pToken->GetString(), nC, nR );
+                            break;
+                            case svEmptyCell:
+                                pJumpMatrix->PutResultEmpty( nC, nR );
+                            break;
+                            default:
+                                // svError was already handled (set by
+                                // PopExternalSingleRef()) with nGlobalError
+                                // above.
+                                assert(!"unhandled svExternalSingleRef case");
+                                pJumpMatrix->PutResultDouble( CreateDoubleError(
+                                            FormulaError::UnknownStackVariable), nC, nR );
+                        }
+                    }
+                }
+                break;
+                case svExternalDoubleRef:
                 case svMatrix:
                 {   // match matrix offsets
                     double fVal;
-                    ScMatrixRef pMat = PopMatrix();
-                    if ( nGlobalError )
+                    ScMatrixRef pMat = GetMatrix();
+                    if ( nGlobalError != FormulaError::NONE )
                     {
                         fVal = CreateDoubleError( nGlobalError );
-                        nGlobalError = 0;
+                        nGlobalError = FormulaError::NONE;
                         pJumpMatrix->PutResultDouble( fVal, nC, nR );
                     }
                     else if ( !pMat )
                     {
-                        fVal = CreateDoubleError( errUnknownVariable );
+                        fVal = CreateDoubleError( FormulaError::UnknownVariable );
                         pJumpMatrix->PutResultDouble( fVal, nC, nR );
                     }
                     else
@@ -715,7 +772,7 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                         if ((nCols <= nC && nCols != 1) ||
                             (nRows <= nR && nRows != 1))
                         {
-                            fVal = CreateDoubleError( NOTAVAILABLE );
+                            fVal = CreateDoubleError( FormulaError::NotAvailable );
                             pJumpMatrix->PutResultDouble( fVal, nC, nR );
                         }
                         else
@@ -730,14 +787,14 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                 {
                     PopError();
                     double fVal = CreateDoubleError( nGlobalError);
-                    nGlobalError = 0;
+                    nGlobalError = FormulaError::NONE;
                     pJumpMatrix->PutResultDouble( fVal, nC, nR );
                 }
                 break;
                 default:
                 {
                     Pop();
-                    double fVal = CreateDoubleError( errIllegalArgument);
+                    double fVal = CreateDoubleError( FormulaError::IllegalArgument);
                     pJumpMatrix->PutResultDouble( fVal, nC, nR );
                 }
             }
@@ -751,7 +808,7 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
         pJumpMatrix->GetJump( nC, nR, fBool, nStart, nNext, nStop );
         while ( bCont && nStart == nNext )
         {   // push all results that have no jump path
-            if ( bHasResMat && (GetDoubleErrorValue( fBool) != errJumpMatHasResult) )
+            if ( bHasResMat && (GetDoubleErrorValue( fBool) != FormulaError::JumpMatHasResult) )
             {
                 // a false without path results in an empty path value
                 if ( fBool == 0.0 )
@@ -765,34 +822,60 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
         }
         if ( bCont && nStart != nNext )
         {
-            const ScTokenVec* pParams = pJumpMatrix->GetJumpParameters();
-            if ( pParams )
+            const ScTokenVec & rParams = pJumpMatrix->GetJumpParameters();
+            for ( auto const & i : rParams )
             {
-                for ( ScTokenVec::const_iterator i = pParams->begin();
-                        i != pParams->end(); ++i )
-                {
-                    // This is not the current state of the interpreter, so
-                    // push without error, and elements' errors are coded into
-                    // double.
-                    PushWithoutError( *(*i));
-                }
+                // This is not the current state of the interpreter, so
+                // push without error, and elements' errors are coded into
+                // double.
+                PushWithoutError(*i);
             }
             aCode.Jump( nStart, nNext, nStop );
         }
     }
     if ( !bCont )
-    {   // we're done with it, throw away jump matrix, keep result
-        ScMatrix* pResMat = pJumpMatrix->GetResultMatrix();
-        pJumpMatrix = nullptr;
-        Pop();
-        PushMatrix( pResMat );
-        // Remove jump matrix from map and remember result matrix in case it
-        // could be reused in another path of the same condition.
-        if (pTokenMatrixMap)
+    {   // We're done with it, throw away jump matrix, keep result.
+        // For an intermediate result of Reference use the array of references
+        // if there are more than one reference and the current ForceArray
+        // context is not ForceArray or suppressed. Note that also
+        // ReferenceOrRefArray forces the array of references as result if
+        // there is more than one reference.
+        // Else (also for a final result of Reference) use the matrix.
+        // Treat the result of a jump command as final and use the matrix (see
+        // tdf#115493 for why).
+        ParamClass eParamClass;
+        if (!FormulaCompiler::IsOpCodeJumpCommand( pJumpMatrix->GetOpCode()) &&
+                pJumpMatrix->GetRefList().size() > 1 &&
+                ScParameterClassification::GetParameterType( pCur, SAL_MAX_UINT16) == ParamClass::Reference &&
+                (eParamClass = pCur->GetInForceArray()) != ParamClass::ForceArray &&
+                eParamClass != ParamClass::ReferenceOrForceArray &&
+                eParamClass != ParamClass::SuppressedReferenceOrForceArray &&
+                aCode.PeekNextOperator())
         {
-            pTokenMatrixMap->erase( pCur);
-            pTokenMatrixMap->insert( ScTokenMatrixMap::value_type( pCur,
-                        pStack[sp-1]));
+            FormulaTokenRef xRef = new ScRefListToken(true);
+            *(xRef->GetRefList()) = pJumpMatrix->GetRefList();
+            pJumpMatrix = nullptr;
+            Pop();
+            PushTokenRef( xRef);
+            if (pTokenMatrixMap)
+            {
+                pTokenMatrixMap->erase( pCur);
+                // There's no result matrix to remember in this case.
+            }
+        }
+        else
+        {
+            ScMatrix* pResMat = pJumpMatrix->GetResultMatrix();
+            pJumpMatrix = nullptr;
+            Pop();
+            PushMatrix( pResMat );
+            // Remove jump matrix from map and remember result matrix in case it
+            // could be reused in another path of the same condition.
+            if (pTokenMatrixMap)
+            {
+                pTokenMatrixMap->erase( pCur);
+                pTokenMatrixMap->emplace(pCur, pStack[sp-1]);
+            }
         }
         return true;
     }
@@ -851,7 +934,7 @@ double ScInterpreter::Compare( ScQueryOp eOp )
                 ScMatrixRef pMat = GetMatrix();
                 if (!pMat)
                 {
-                    SetError( errIllegalParameter);
+                    SetError( FormulaError::IllegalParameter);
                     break;
                 }
 
@@ -859,12 +942,12 @@ double ScInterpreter::Compare( ScQueryOp eOp )
                 pMat->GetDimensions(nC, nR);
                 if (!nC || !nR)
                 {
-                    SetError( errIllegalParameter);
+                    SetError( FormulaError::IllegalParameter);
                     break;
                 }
                 if (pMat->IsEmpty(0, 0))
                     rCell.mbEmpty = true;
-                else if (pMat->IsString(0, 0))
+                else if (pMat->IsStringOrEmpty(0, 0))
                 {
                     rCell.maStr = pMat->GetString(0, 0);
                     rCell.mbValue = false;
@@ -878,14 +961,21 @@ double ScInterpreter::Compare( ScQueryOp eOp )
             break;
             case svExternalDoubleRef:
                 // TODO: Find out how to handle this...
+                // Xcl generates a position dependent intersection using
+                // col/row, as it seems to do for all range references, not
+                // only in compare context. We'd need a general implementation
+                // for that behavior similar to svDoubleRef in scalar and array
+                // mode. Which also means we'd have to change all places where
+                // it currently is handled along with svMatrix.
             default:
-                SetError( errIllegalParameter);
+                PopError();
+                SetError( FormulaError::IllegalParameter);
             break;
         }
     }
-    if( nGlobalError )
+    if( nGlobalError != FormulaError::NONE )
         return 0;
-    nCurFmtType = nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
     return sc::CompareFunc(aComp);
 }
 
@@ -935,26 +1025,29 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
                 }
             }
             break;
+            case svExternalSingleRef:
+            case svExternalDoubleRef:
             case svDoubleRef:
             case svMatrix:
                 aMat[i] = GetRangeMatrix();
                 if (!aMat[i].mpMat)
-                    SetError( errIllegalParameter);
+                    SetError( FormulaError::IllegalParameter);
                 else
                     aMat[i].mpMat->SetErrorInterpreter(nullptr);
                     // errors are transported as DoubleError inside matrix
                 break;
             default:
-                SetError( errIllegalParameter);
+                PopError();
+                SetError( FormulaError::IllegalParameter);
             break;
         }
     }
 
     sc::RangeMatrix aRes;
 
-    if (nGlobalError)
+    if (nGlobalError != FormulaError::NONE)
     {
-        nCurFmtType = nFuncFmtType = css::util::NumberFormat::LOGICAL;
+        nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
         return aRes;
     }
 
@@ -981,7 +1074,7 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
                     {
                         sc::Compare::Cell& rCell = aComp.maCells[i];
 
-                        if (aMat[i].mpMat->IsString(j, k))
+                        if (aMat[i].mpMat->IsStringOrEmpty(j, k))
                         {
                             rCell.mbValue = false;
                             rCell.maStr = aMat[i].mpMat->GetString(j, k);
@@ -997,7 +1090,7 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
                     aRes.mpMat->PutDouble( sc::CompareFunc( aComp, pOptions), j, k);
                 }
                 else
-                    aRes.mpMat->PutError( errNoValue, j, k);
+                    aRes.mpMat->PutError( FormulaError::NoValue, j, k);
             }
         }
 
@@ -1022,7 +1115,7 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
                 aRes.mpMat->CompareNotEqual();
                 break;
             default:
-                OSL_TRACE( "ScInterpreter::QueryMat: unhandled comparison operator: %d", (int)eOp);
+                SAL_WARN("sc",  "ScInterpreter::QueryMat: unhandled comparison operator: " << static_cast<int>(eOp));
                 aRes.mpMat.reset();
                 return aRes;
         }
@@ -1044,14 +1137,14 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
             return aRes;
     }
 
-    nCurFmtType = nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
     return aRes;
 }
 
 ScMatrixRef ScInterpreter::QueryMat( const ScMatrixRef& pMat, sc::CompareOptions& rOptions )
 {
-    short nSaveCurFmtType = nCurFmtType;
-    short nSaveFuncFmtType = nFuncFmtType;
+    SvNumFormatType nSaveCurFmtType = nCurFmtType;
+    SvNumFormatType nSaveFuncFmtType = nFuncFmtType;
     PushMatrix( pMat);
     const ScQueryEntry::Item& rItem = rOptions.aQueryEntry.GetQueryItem();
     if (rItem.meType == ScQueryEntry::ByString)
@@ -1061,9 +1154,9 @@ ScMatrixRef ScInterpreter::QueryMat( const ScMatrixRef& pMat, sc::CompareOptions
     ScMatrixRef pResultMatrix = CompareMat(rOptions.aQueryEntry.eOp, &rOptions).mpMat;
     nCurFmtType = nSaveCurFmtType;
     nFuncFmtType = nSaveFuncFmtType;
-    if (nGlobalError || !pResultMatrix)
+    if (nGlobalError != FormulaError::NONE || !pResultMatrix)
     {
-        SetError( errIllegalParameter);
+        SetError( FormulaError::IllegalParameter);
         return pResultMatrix;
     }
 
@@ -1174,7 +1267,7 @@ void ScInterpreter::ScGreaterEqual()
 
 void ScInterpreter::ScAnd()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     short nParamCount = GetByte();
     if ( MustHaveParamCountMin( nParamCount, 1 ) )
     {
@@ -1183,7 +1276,7 @@ void ScInterpreter::ScAnd()
         size_t nRefInList = 0;
         while( nParamCount-- > 0)
         {
-            if ( !nGlobalError )
+            if ( nGlobalError == FormulaError::NONE )
             {
                 switch ( GetStackType() )
                 {
@@ -1193,13 +1286,13 @@ void ScInterpreter::ScAnd()
                     break;
                     case svString :
                         Pop();
-                        SetError( errNoValue );
+                        SetError( FormulaError::NoValue );
                     break;
                     case svSingleRef :
                     {
                         ScAddress aAdr;
                         PopSingleRef( aAdr );
-                        if ( !nGlobalError )
+                        if ( nGlobalError == FormulaError::NONE )
                         {
                             ScRefCellValue aCell(*pDok, aAdr);
                             if (aCell.hasNumeric())
@@ -1216,18 +1309,18 @@ void ScInterpreter::ScAnd()
                     {
                         ScRange aRange;
                         PopDoubleRef( aRange, nParamCount, nRefInList);
-                        if ( !nGlobalError )
+                        if ( nGlobalError == FormulaError::NONE )
                         {
                             double fVal;
-                            sal_uInt16 nErr = 0;
+                            FormulaError nErr = FormulaError::NONE;
                             ScValueIterator aValIter( pDok, aRange );
-                            if ( aValIter.GetFirst( fVal, nErr ) && nErr == 0 )
+                            if ( aValIter.GetFirst( fVal, nErr ) && nErr == FormulaError::NONE )
                             {
                                 bHaveValue = true;
                                 do
                                 {
                                     bRes &= ( fVal != 0.0 );
-                                } while ( (nErr == 0) &&
+                                } while ( (nErr == FormulaError::NONE) &&
                                     aValIter.GetNext( fVal, nErr ) );
                             }
                             SetError( nErr );
@@ -1243,8 +1336,8 @@ void ScInterpreter::ScAnd()
                         {
                             bHaveValue = true;
                             double fVal = pMat->And();
-                            sal_uInt16 nErr = GetDoubleErrorValue( fVal );
-                            if ( nErr )
+                            FormulaError nErr = GetDoubleErrorValue( fVal );
+                            if ( nErr != FormulaError::NONE )
                             {
                                 SetError( nErr );
                                 bRes = false;
@@ -1252,12 +1345,12 @@ void ScInterpreter::ScAnd()
                             else
                                 bRes &= (fVal != 0.0);
                         }
-                        // else: GetMatrix did set errIllegalParameter
+                        // else: GetMatrix did set FormulaError::IllegalParameter
                     }
                     break;
                     default:
                         Pop();
-                        SetError( errIllegalParameter);
+                        SetError( FormulaError::IllegalParameter);
                 }
             }
             else
@@ -1272,7 +1365,7 @@ void ScInterpreter::ScAnd()
 
 void ScInterpreter::ScOr()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     short nParamCount = GetByte();
     if ( MustHaveParamCountMin( nParamCount, 1 ) )
     {
@@ -1281,7 +1374,7 @@ void ScInterpreter::ScOr()
         size_t nRefInList = 0;
         while( nParamCount-- > 0)
         {
-            if ( !nGlobalError )
+            if ( nGlobalError == FormulaError::NONE )
             {
                 switch ( GetStackType() )
                 {
@@ -1291,13 +1384,13 @@ void ScInterpreter::ScOr()
                     break;
                     case svString :
                         Pop();
-                        SetError( errNoValue );
+                        SetError( FormulaError::NoValue );
                     break;
                     case svSingleRef :
                     {
                         ScAddress aAdr;
                         PopSingleRef( aAdr );
-                        if ( !nGlobalError )
+                        if ( nGlobalError == FormulaError::NONE )
                         {
                             ScRefCellValue aCell(*pDok, aAdr);
                             if (aCell.hasNumeric())
@@ -1314,10 +1407,10 @@ void ScInterpreter::ScOr()
                     {
                         ScRange aRange;
                         PopDoubleRef( aRange, nParamCount, nRefInList);
-                        if ( !nGlobalError )
+                        if ( nGlobalError == FormulaError::NONE )
                         {
                             double fVal;
-                            sal_uInt16 nErr = 0;
+                            FormulaError nErr = FormulaError::NONE;
                             ScValueIterator aValIter( pDok, aRange );
                             if ( aValIter.GetFirst( fVal, nErr ) )
                             {
@@ -1325,7 +1418,7 @@ void ScInterpreter::ScOr()
                                 do
                                 {
                                     bRes |= ( fVal != 0.0 );
-                                } while ( (nErr == 0) &&
+                                } while ( (nErr == FormulaError::NONE) &&
                                     aValIter.GetNext( fVal, nErr ) );
                             }
                             SetError( nErr );
@@ -1342,8 +1435,8 @@ void ScInterpreter::ScOr()
                         {
                             bHaveValue = true;
                             double fVal = pMat->Or();
-                            sal_uInt16 nErr = GetDoubleErrorValue( fVal );
-                            if ( nErr )
+                            FormulaError nErr = GetDoubleErrorValue( fVal );
+                            if ( nErr != FormulaError::NONE )
                             {
                                 SetError( nErr );
                                 bRes = false;
@@ -1351,12 +1444,12 @@ void ScInterpreter::ScOr()
                             else
                                 bRes |= (fVal != 0.0);
                         }
-                        // else: GetMatrix did set errIllegalParameter
+                        // else: GetMatrix did set FormulaError::IllegalParameter
                     }
                     break;
                     default:
                         Pop();
-                        SetError( errIllegalParameter);
+                        SetError( FormulaError::IllegalParameter);
                 }
             }
             else
@@ -1372,7 +1465,7 @@ void ScInterpreter::ScOr()
 void ScInterpreter::ScXor()
 {
 
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     short nParamCount = GetByte();
     if ( MustHaveParamCountMin( nParamCount, 1 ) )
     {
@@ -1381,7 +1474,7 @@ void ScInterpreter::ScXor()
         size_t nRefInList = 0;
         while( nParamCount-- > 0)
         {
-            if ( !nGlobalError )
+            if ( nGlobalError == FormulaError::NONE )
             {
                 switch ( GetStackType() )
                 {
@@ -1391,13 +1484,13 @@ void ScInterpreter::ScXor()
                     break;
                     case svString :
                         Pop();
-                        SetError( errNoValue );
+                        SetError( FormulaError::NoValue );
                     break;
                     case svSingleRef :
                     {
                         ScAddress aAdr;
                         PopSingleRef( aAdr );
-                        if ( !nGlobalError )
+                        if ( nGlobalError == FormulaError::NONE )
                         {
                             ScRefCellValue aCell(*pDok, aAdr);
                             if (aCell.hasNumeric())
@@ -1416,10 +1509,10 @@ void ScInterpreter::ScXor()
                     {
                         ScRange aRange;
                         PopDoubleRef( aRange, nParamCount, nRefInList);
-                        if ( !nGlobalError )
+                        if ( nGlobalError == FormulaError::NONE )
                         {
                             double fVal;
-                            sal_uInt16 nErr = 0;
+                            FormulaError nErr = FormulaError::NONE;
                             ScValueIterator aValIter( pDok, aRange );
                             if ( aValIter.GetFirst( fVal, nErr ) )
                             {
@@ -1427,7 +1520,7 @@ void ScInterpreter::ScXor()
                                 do
                                 {
                                     bRes ^= ( fVal != 0.0 );
-                                } while ( (nErr == 0) &&
+                                } while ( (nErr == FormulaError::NONE) &&
                                     aValIter.GetNext( fVal, nErr ) );
                             }
                             SetError( nErr );
@@ -1444,8 +1537,8 @@ void ScInterpreter::ScXor()
                         {
                             bHaveValue = true;
                             double fVal = pMat->Xor();
-                            sal_uInt16 nErr = GetDoubleErrorValue( fVal );
-                            if ( nErr )
+                            FormulaError nErr = GetDoubleErrorValue( fVal );
+                            if ( nErr != FormulaError::NONE )
                             {
                                 SetError( nErr );
                                 bRes = false;
@@ -1453,12 +1546,12 @@ void ScInterpreter::ScXor()
                             else
                                 bRes ^= ( fVal != 0.0 );
                         }
-                        // else: GetMatrix did set errIllegalParameter
+                        // else: GetMatrix did set FormulaError::IllegalParameter
                     }
                     break;
                     default:
                         Pop();
-                        SetError( errIllegalParameter);
+                        SetError( FormulaError::IllegalParameter);
                 }
             }
             else
@@ -1505,7 +1598,7 @@ void ScInterpreter::ScNeg()
 
 void ScInterpreter::ScPercentSign()
 {
-    nFuncFmtType = css::util::NumberFormat::PERCENT;
+    nFuncFmtType = SvNumFormatType::PERCENT;
     const FormulaToken* pSaveCur = pCur;
     sal_uInt8 nSavePar = cPar;
     PushInt( 100 );
@@ -1519,7 +1612,7 @@ void ScInterpreter::ScPercentSign()
 
 void ScInterpreter::ScNot()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     switch ( GetStackType() )
     {
         case svMatrix :
@@ -1559,7 +1652,7 @@ void ScInterpreter::ScBitAnd()
             (num2 >= n2power48) || (num2 < 0))
         PushIllegalArgument();
     else
-        PushDouble ((sal_uInt64) num1 & (sal_uInt64) num2);
+        PushDouble (static_cast<sal_uInt64>(num1) & static_cast<sal_uInt64>(num2));
 }
 
 void ScInterpreter::ScBitOr()
@@ -1574,7 +1667,7 @@ void ScInterpreter::ScBitOr()
             (num2 >= n2power48) || (num2 < 0))
         PushIllegalArgument();
     else
-        PushDouble ((sal_uInt64) num1 | (sal_uInt64) num2);
+        PushDouble (static_cast<sal_uInt64>(num1) | static_cast<sal_uInt64>(num2));
 }
 
 void ScInterpreter::ScBitXor()
@@ -1589,7 +1682,7 @@ void ScInterpreter::ScBitXor()
             (num2 >= n2power48) || (num2 < 0))
         PushIllegalArgument();
     else
-        PushDouble ((sal_uInt64) num1 ^ (sal_uInt64) num2);
+        PushDouble (static_cast<sal_uInt64>(num1) ^ static_cast<sal_uInt64>(num2));
 }
 
 void ScInterpreter::ScBitLshift()
@@ -1645,29 +1738,61 @@ void ScInterpreter::ScPi()
 
 void ScInterpreter::ScRandom()
 {
-    PushDouble(::comphelper::rng::uniform_real_distribution());
+    if (bMatrixFormula && pMyFormulaCell)
+    {
+        SCCOL nCols;
+        SCROW nRows;
+        pMyFormulaCell->GetMatColsRows( nCols, nRows);
+        // ScViewFunc::EnterMatrix() might be asking for
+        // ScFormulaCell::GetResultDimensions(), which here are none so create
+        // a 1x1 matrix at least which exactly is the case when EnterMatrix()
+        // asks for a not selected range.
+        if (nCols == 0)
+            nCols = 1;
+        if (nRows == 0)
+            nRows = 1;
+        ScMatrixRef pResMat = GetNewMat( static_cast<SCSIZE>(nCols), static_cast<SCSIZE>(nRows));
+        if (!pResMat)
+            PushError( FormulaError::MatrixSize);
+        else
+        {
+            for (SCCOL i=0; i < nCols; ++i)
+            {
+                for (SCROW j=0; j < nRows; ++j)
+                {
+                    pResMat->PutDouble( comphelper::rng::uniform_real_distribution(),
+                            static_cast<SCSIZE>(i), static_cast<SCSIZE>(j));
+                }
+            }
+            PushMatrix( pResMat);
+        }
+    }
+    else
+    {
+        PushDouble( comphelper::rng::uniform_real_distribution());
+    }
 }
 
 void ScInterpreter::ScTrue()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     PushInt(1);
 }
 
 void ScInterpreter::ScFalse()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     PushInt(0);
 }
 
 void ScInterpreter::ScDeg()
 {
-    PushDouble((GetDouble() / F_PI) * 180.0);
+    PushDouble(basegfx::rad2deg(GetDouble()));
 }
 
 void ScInterpreter::ScRad()
 {
-    PushDouble(GetDouble() * (F_PI / 180));
+    PushDouble(basegfx::deg2rad(GetDouble()));
 }
 
 void ScInterpreter::ScSin()
@@ -1799,12 +1924,12 @@ void ScInterpreter::ScSqrt()
 void ScInterpreter::ScIsEmpty()
 {
     short nRes = 0;
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     switch ( GetRawStackType() )
     {
         case svEmptyCell:
         {
-            FormulaTokenRef p = PopToken();
+            FormulaConstTokenRef p = PopToken();
             if (!static_cast<const ScEmptyCellToken*>(p.get())->IsInherited())
                 nRes = 1;
         }
@@ -1846,13 +1971,13 @@ void ScInterpreter::ScIsEmpty()
         default:
             Pop();
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( nRes );
 }
 
 bool ScInterpreter::IsString()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetRawStackType() )
     {
@@ -1868,7 +1993,7 @@ bool ScInterpreter::IsString()
                 break;
 
             ScRefCellValue aCell(*pDok, aAdr);
-            if (GetCellErrCode(aCell) == 0)
+            if (GetCellErrCode(aCell) == FormulaError::NONE)
             {
                 switch (aCell.meType)
                 {
@@ -1885,27 +2010,36 @@ bool ScInterpreter::IsString()
             }
         }
         break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if (nGlobalError == FormulaError::NONE && pToken->GetType() == svString)
+                bRes = true;
+        }
+        break;
+        case svExternalDoubleRef:
         case svMatrix:
         {
-            ScMatrixRef pMat = PopMatrix();
+            ScMatrixRef pMat = GetMatrix();
             if ( !pMat )
                 ;   // nothing
             else if ( !pJumpMatrix )
-                bRes = pMat->IsString(0, 0) && !pMat->IsEmpty(0, 0);
+                bRes = pMat->IsStringOrEmpty(0, 0) && !pMat->IsEmpty(0, 0);
             else
             {
                 SCSIZE nCols, nRows, nC, nR;
                 pMat->GetDimensions( nCols, nRows);
                 pJumpMatrix->GetPos( nC, nR);
                 if ( nC < nCols && nR < nRows )
-                    bRes = pMat->IsString( nC, nR) && !pMat->IsEmpty( nC, nR);
+                    bRes = pMat->IsStringOrEmpty( nC, nR) && !pMat->IsEmpty( nC, nR);
             }
         }
         break;
         default:
             Pop();
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     return bRes;
 }
 
@@ -1932,27 +2066,31 @@ void ScInterpreter::ScIsLogical()
                 break;
 
             ScRefCellValue aCell(*pDok, aAdr);
-            if (GetCellErrCode(aCell) == 0)
+            if (GetCellErrCode(aCell) == FormulaError::NONE)
             {
                 if (aCell.hasNumeric())
                 {
-                    sal_uLong nFormat = GetCellNumberFormat(aAdr, aCell);
-                    bRes = (pFormatter->GetType(nFormat) == css::util::NumberFormat::LOGICAL);
+                    sal_uInt32 nFormat = GetCellNumberFormat(aAdr, aCell);
+                    bRes = (pFormatter->GetType(nFormat) == SvNumFormatType::LOGICAL);
                 }
             }
         }
         break;
         case svMatrix:
-            // TODO: we don't have type information for arrays except
-            // numerical/string.
-        // Fall through
+        {
+            double fVal;
+            svl::SharedString aStr;
+            ScMatValType nMatValType = GetDoubleOrStringFromMatrix( fVal, aStr);
+            bRes = (nMatValType == ScMatValType::Boolean);
+        }
+        break;
         default:
             PopError();
-            if ( !nGlobalError )
-                bRes = ( nCurFmtType == css::util::NumberFormat::LOGICAL );
+            if ( nGlobalError == FormulaError::NONE )
+                bRes = ( nCurFmtType == SvNumFormatType::LOGICAL );
     }
-    nCurFmtType = nFuncFmtType = css::util::NumberFormat::LOGICAL;
-    nGlobalError = 0;
+    nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
@@ -1969,7 +2107,7 @@ void ScInterpreter::ScType()
                 break;
 
             ScRefCellValue aCell(*pDok, aAdr);
-            if (GetCellErrCode(aCell) == 0)
+            if (GetCellErrCode(aCell) == FormulaError::NONE)
             {
                 switch (aCell.meType)
                 {
@@ -1980,13 +2118,17 @@ void ScInterpreter::ScType()
                         break;
                     case CELLTYPE_VALUE :
                     {
-                        sal_uLong nFormat = GetCellNumberFormat(aAdr, aCell);
-                        if (pFormatter->GetType(nFormat) == css::util::NumberFormat::LOGICAL)
+                        sal_uInt32 nFormat = GetCellNumberFormat(aAdr, aCell);
+                        if (pFormatter->GetType(nFormat) == SvNumFormatType::LOGICAL)
                             nType = 4;
                         else
                             nType = 1;
                     }
                     break;
+                    case CELLTYPE_NONE:
+                        // always 1, s. tdf#73078
+                        nType = 1;
+                        break;
                     case CELLTYPE_FORMULA :
                         nType = 8;
                         break;
@@ -2000,20 +2142,20 @@ void ScInterpreter::ScType()
         break;
         case svString:
             PopError();
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
             {
                 nType = 16;
-                nGlobalError = 0;
+                nGlobalError = FormulaError::NONE;
             }
             else
                 nType = 2;
         break;
         case svMatrix:
             PopMatrix();
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
             {
                 nType = 16;
-                nGlobalError = 0;
+                nGlobalError = FormulaError::NONE;
             }
             else
                 nType = 64;
@@ -2022,10 +2164,10 @@ void ScInterpreter::ScType()
         break;
         default:
             PopError();
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
             {
                 nType = 16;
-                nGlobalError = 0;
+                nGlobalError = FormulaError::NONE;
             }
             else
                 nType = 1;
@@ -2033,12 +2175,12 @@ void ScInterpreter::ScType()
     PushInt( nType );
 }
 
-static inline bool lcl_FormatHasNegColor( const SvNumberformat* pFormat )
+static bool lcl_FormatHasNegColor( const SvNumberformat* pFormat )
 {
     return pFormat && pFormat->GetColor( 1 );
 }
 
-static inline bool lcl_FormatHasOpenPar( const SvNumberformat* pFormat )
+static bool lcl_FormatHasOpenPar( const SvNumberformat* pFormat )
 {
     return pFormat && (pFormat->GetFormatstring().indexOf('(') != -1);
 }
@@ -2054,16 +2196,16 @@ void getFormatString(SvNumberFormatter* pFormatter, sal_uLong nFormat, OUString&
 
     switch( pFormatter->GetType( nFormat ) )
     {
-        case css::util::NumberFormat::NUMBER:
+        case SvNumFormatType::NUMBER:
             if(bThousand) rFmtStr = ","; else rFmtStr = "F";
             break;
-        case css::util::NumberFormat::CURRENCY:
+        case SvNumFormatType::CURRENCY:
             rFmtStr = "C";
             break;
-        case css::util::NumberFormat::SCIENTIFIC:
+        case SvNumFormatType::SCIENTIFIC:
             rFmtStr = "S";
             break;
-        case css::util::NumberFormat::PERCENT:
+        case SvNumFormatType::PERCENT:
             rFmtStr = "P";
             break;
         default:
@@ -2128,7 +2270,7 @@ void ScInterpreter::ScCell()
             bError = !PopDoubleRefOrSingleRef( aCellPos );
         }
         OUString aInfoType = GetString().getString();
-        if( bError || nGlobalError )
+        if( bError || nGlobalError != FormulaError::NONE )
             PushIllegalParameter();
         else
         {
@@ -2151,7 +2293,7 @@ void ScInterpreter::ScCell()
             }
             else if( aInfoType == "ADDRESS" )
             {   // address formatted as [['FILENAME'#]$TABLE.]$COL$ROW
-                ScRefFlags nFlags = (aCellPos.Tab() == aPos.Tab()) ? (ScRefFlags::ADDR_ABS) : (ScRefFlags::ADDR_ABS_3D);
+                ScRefFlags nFlags = (aCellPos.Tab() == aPos.Tab()) ? ScRefFlags::ADDR_ABS : ScRefFlags::ADDR_ABS_3D;
                 OUString aStr(aCellPos.Format(nFlags, pDok, pDok->GetAddressConvention()));
                 PushString(aStr);
             }
@@ -2171,7 +2313,7 @@ void ScInterpreter::ScCell()
                             OUStringBuffer aBuf;
                             aBuf.append('\'');
                             const INetURLObject& rURLObj = pShell->GetMedium()->GetURLObject();
-                            aBuf.append(rURLObj.GetMainURL(INetURLObject::DECODE_UNAMBIGUOUS));
+                            aBuf.append(rURLObj.GetMainURL(INetURLObject::DecodeMechanism::Unambiguous));
                             aBuf.append("'#$");
                             OUString aTabName;
                             pDok->GetName( nTab, aTabName );
@@ -2225,14 +2367,14 @@ void ScInterpreter::ScCell()
                 vcl::Font   aOldFont( pPrinter->GetFont() );
                 vcl::Font   aDefFont;
 
-                pPrinter->SetMapMode( MAP_TWIP );
+                pPrinter->SetMapMode(MapMode(MapUnit::MapTwip));
                 // font color doesn't matter here
                 pDok->GetDefPattern()->GetFont( aDefFont, SC_AUTOCOL_BLACK, pPrinter );
                 pPrinter->SetFont( aDefFont );
                 long nZeroWidth = pPrinter->GetTextWidth( OUString( '0' ) );
                 pPrinter->SetFont( aOldFont );
                 pPrinter->SetMapMode( aOldMode );
-                int nZeroCount = (int)(pDok->GetColWidth( aCellPos.Col(), aCellPos.Tab() ) / nZeroWidth);
+                int nZeroCount = static_cast<int>(pDok->GetColWidth( aCellPos.Col(), aCellPos.Tab() ) / nZeroWidth);
                 PushInt( nZeroCount );
             }
             else if( aInfoType == "PREFIX" )
@@ -2240,24 +2382,22 @@ void ScInterpreter::ScCell()
                 sal_Unicode c = 0;
                 if (aCell.hasString())
                 {
-                    const SvxHorJustifyItem* pJustAttr = static_cast<const SvxHorJustifyItem*>(
-                        pDok->GetAttr( aCellPos.Col(), aCellPos.Row(), aCellPos.Tab(), ATTR_HOR_JUSTIFY ));
+                    const SvxHorJustifyItem* pJustAttr = pDok->GetAttr( aCellPos, ATTR_HOR_JUSTIFY );
                     switch( pJustAttr->GetValue() )
                     {
-                        case SVX_HOR_JUSTIFY_STANDARD:
-                        case SVX_HOR_JUSTIFY_LEFT:
-                        case SVX_HOR_JUSTIFY_BLOCK:     c = '\''; break;
-                        case SVX_HOR_JUSTIFY_CENTER:    c = '^';  break;
-                        case SVX_HOR_JUSTIFY_RIGHT:     c = '"';  break;
-                        case SVX_HOR_JUSTIFY_REPEAT:    c = '\\'; break;
+                        case SvxCellHorJustify::Standard:
+                        case SvxCellHorJustify::Left:
+                        case SvxCellHorJustify::Block:     c = '\''; break;
+                        case SvxCellHorJustify::Center:    c = '^';  break;
+                        case SvxCellHorJustify::Right:     c = '"';  break;
+                        case SvxCellHorJustify::Repeat:    c = '\\'; break;
                     }
                 }
                 PushString( OUString(c) );
             }
             else if( aInfoType == "PROTECT" )
             {   // 1 = cell locked
-                const ScProtectionAttr* pProtAttr = static_cast<const ScProtectionAttr*>(
-                    pDok->GetAttr( aCellPos.Col(), aCellPos.Row(), aCellPos.Tab(), ATTR_PROTECTION ));
+                const ScProtectionAttr* pProtAttr = pDok->GetAttr( aCellPos, ATTR_PROTECTION );
                 PushInt( pProtAttr->GetProtection() ? 1 : 0 );
             }
 
@@ -2265,7 +2405,7 @@ void ScInterpreter::ScCell()
             else if( aInfoType == "FORMAT" )
             {   // specific format code for standard formats
                 OUString aFuncResult;
-                sal_uLong   nFormat = pDok->GetNumberFormat( aCellPos );
+                sal_uInt32 nFormat = pDok->GetNumberFormat( aCellPos );
                 getFormatString(pFormatter, nFormat, aFuncResult);
                 PushString( aFuncResult );
             }
@@ -2293,16 +2433,16 @@ void ScInterpreter::ScCellExternal()
     ScExternalRefCache::TokenRef pToken;
     ScExternalRefCache::CellFormat aFmt;
     PopExternalSingleRef(nFileId, aTabName, aRef, pToken, &aFmt);
-    if (nGlobalError)
+    if (nGlobalError != FormulaError::NONE)
     {
-        PushIllegalParameter();
+        PushError( nGlobalError);
         return;
     }
 
     OUString aInfoType = GetString().getString();
-    if (nGlobalError)
+    if (nGlobalError != FormulaError::NONE)
     {
-        PushIllegalParameter();
+        PushError( nGlobalError);
         return;
     }
 
@@ -2311,7 +2451,7 @@ void ScInterpreter::ScCellExternal()
     SCTAB nTab;
     aRef.SetAbsTab(0); // external ref has a tab index of -1, which SingleRefToVars() don't like.
     SingleRefToVars(aRef, nCol, nRow, nTab);
-    if (nGlobalError)
+    if (nGlobalError != FormulaError::NONE)
     {
         PushIllegalParameter();
         return;
@@ -2333,15 +2473,14 @@ void ScInterpreter::ScCellExternal()
         if (pRefMgr->getCacheTable(nFileId, aTabName, false).get())
             PushInt(1);
         else
-            SetError(errNoName);
+            SetError(FormulaError::NoName);
     }
     else if ( aInfoType == "ADDRESS" )
     {
         // ODF 1.2 says we need to always display address using the ODF A1 grammar.
         ScTokenArray aArray;
-        aArray.AddExternalSingleReference(nFileId, aTabName, aRef);
-        ScCompiler aComp(pDok, aPos, aArray);
-        aComp.SetGrammar(formula::FormulaGrammar::GRAM_ODFF_A1);
+        aArray.AddExternalSingleReference(nFileId, svl::SharedString( aTabName), aRef); // string not interned
+        ScCompiler aComp(pDok, aPos, aArray, formula::FormulaGrammar::GRAM_ODFF_A1);
         OUString aStr;
         aComp.CreateStringFromTokenArray(aStr);
         PushString(aStr);
@@ -2354,7 +2493,7 @@ void ScInterpreter::ScCellExternal()
         if (!p)
         {
             // In theory this should never happen...
-            SetError(errNoName);
+            SetError(FormulaError::NoName);
             return;
         }
 
@@ -2433,7 +2572,7 @@ void ScInterpreter::ScCellExternal()
 
 void ScInterpreter::ScIsRef()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetStackType() )
     {
@@ -2441,7 +2580,7 @@ void ScInterpreter::ScIsRef()
         {
             ScAddress aAdr;
             PopSingleRef( aAdr );
-            if ( !nGlobalError )
+            if ( nGlobalError == FormulaError::NONE )
                 bRes = true;
         }
         break;
@@ -2449,27 +2588,43 @@ void ScInterpreter::ScIsRef()
         {
             ScRange aRange;
             PopDoubleRef( aRange );
-            if ( !nGlobalError )
+            if ( nGlobalError == FormulaError::NONE )
                 bRes = true;
         }
         break;
         case svRefList :
         {
-            FormulaTokenRef x = PopToken();
-            if ( !nGlobalError )
+            FormulaConstTokenRef x = PopToken();
+            if ( nGlobalError == FormulaError::NONE )
                 bRes = !x.get()->GetRefList()->empty();
+        }
+        break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if (nGlobalError == FormulaError::NONE)
+                bRes = true;
+        }
+        break;
+        case svExternalDoubleRef:
+        {
+            ScExternalRefCache::TokenArrayRef pArray;
+            PopExternalDoubleRef(pArray);
+            if (nGlobalError == FormulaError::NONE)
+                bRes = true;
         }
         break;
         default:
             Pop();
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
 void ScInterpreter::ScIsValue()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetRawStackType() )
     {
@@ -2485,7 +2640,7 @@ void ScInterpreter::ScIsValue()
                 break;
 
             ScRefCellValue aCell(*pDok, aAdr);
-            if (GetCellErrCode(aCell) == 0)
+            if (GetCellErrCode(aCell) == FormulaError::NONE)
             {
                 switch (aCell.meType)
                 {
@@ -2501,14 +2656,23 @@ void ScInterpreter::ScIsValue()
             }
         }
         break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if (nGlobalError == FormulaError::NONE && pToken->GetType() == svDouble)
+                bRes = true;
+        }
+        break;
+        case svExternalDoubleRef:
         case svMatrix:
         {
-            ScMatrixRef pMat = PopMatrix();
+            ScMatrixRef pMat = GetMatrix();
             if ( !pMat )
                 ;   // nothing
             else if ( !pJumpMatrix )
             {
-                if (pMat->GetErrorIfNotString( 0, 0) == 0)
+                if (pMat->GetErrorIfNotString( 0, 0) == FormulaError::NONE)
                     bRes = pMat->IsValue( 0, 0);
             }
             else
@@ -2517,7 +2681,7 @@ void ScInterpreter::ScIsValue()
                 pMat->GetDimensions( nCols, nRows);
                 pJumpMatrix->GetPos( nC, nR);
                 if ( nC < nCols && nR < nRows )
-                    if (pMat->GetErrorIfNotString( nC, nR) == 0)
+                    if (pMat->GetErrorIfNotString( nC, nR) == FormulaError::NONE)
                         bRes = pMat->IsValue( nC, nR);
             }
         }
@@ -2525,17 +2689,63 @@ void ScInterpreter::ScIsValue()
         default:
             Pop();
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
 void ScInterpreter::ScIsFormula()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetStackType() )
     {
         case svDoubleRef :
+            if (IsInArrayContext())
+            {
+                SCCOL nCol1, nCol2;
+                SCROW nRow1, nRow2;
+                SCTAB nTab1, nTab2;
+                PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
+                if (nGlobalError != FormulaError::NONE)
+                {
+                    PushError( nGlobalError);
+                    return;
+                }
+                if (nTab1 != nTab2)
+                {
+                    PushIllegalArgument();
+                    return;
+                }
+
+                ScMatrixRef pResMat = GetNewMat( static_cast<SCSIZE>(nCol2 - nCol1 + 1),
+                        static_cast<SCSIZE>(nRow2 - nRow1 + 1), true);
+                if (!pResMat)
+                {
+                    PushError( FormulaError::MatrixSize);
+                    return;
+                }
+
+                /* TODO: we really should have a gap-aware cell iterator. */
+                SCSIZE i=0, j=0;
+                ScAddress aAdr( 0, 0, nTab1);
+                for (SCCOL nCol = nCol1; nCol <= nCol2; ++nCol)
+                {
+                    aAdr.SetCol(nCol);
+                    for (SCROW nRow = nRow1; nRow <= nRow2; ++nRow)
+                    {
+                        aAdr.SetRow(nRow);
+                        ScRefCellValue aCell(*pDok, aAdr);
+                        pResMat->PutBoolean( (aCell.meType == CELLTYPE_FORMULA), i,j);
+                        ++j;
+                    }
+                    ++i;
+                    j = 0;
+                }
+
+                PushMatrix( pResMat);
+                return;
+            }
+        [[fallthrough]];
         case svSingleRef :
         {
             ScAddress aAdr;
@@ -2548,7 +2758,7 @@ void ScInterpreter::ScIsFormula()
         default:
             Pop();
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
@@ -2558,18 +2768,18 @@ void ScInterpreter::ScFormula()
     switch ( GetStackType() )
     {
         case svDoubleRef :
-            if (bMatrixFormula)
+            if (IsInArrayContext())
             {
                 SCCOL nCol1, nCol2;
                 SCROW nRow1, nRow2;
                 SCTAB nTab1, nTab2;
                 PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
-                if (nGlobalError)
+                if (nGlobalError != FormulaError::NONE)
                     break;
 
                 if (nTab1 != nTab2)
                 {
-                    SetError( errIllegalArgument);
+                    SetError( FormulaError::IllegalArgument);
                     break;
                 }
 
@@ -2590,11 +2800,11 @@ void ScInterpreter::ScFormula()
                         switch (aCell.meType)
                         {
                             case CELLTYPE_FORMULA :
-                                aCell.mpFormula->GetFormula(aFormula);
+                                aCell.mpFormula->GetFormula(aFormula, formula::FormulaGrammar::GRAM_UNSPECIFIED, &mrContext);
                                 pResMat->PutString( mrStrPool.intern( aFormula), i,j);
                                 break;
                             default:
-                                pResMat->PutError( NOTAVAILABLE, i,j);
+                                pResMat->PutError( FormulaError::NotAvailable, i,j);
                         }
                         ++j;
                     }
@@ -2605,7 +2815,7 @@ void ScInterpreter::ScFormula()
                 PushMatrix( pResMat);
                 return;
             }
-            // fallthru
+            [[fallthrough]];
         case svSingleRef :
         {
             ScAddress aAdr;
@@ -2616,23 +2826,23 @@ void ScInterpreter::ScFormula()
             switch (aCell.meType)
             {
                 case CELLTYPE_FORMULA :
-                    aCell.mpFormula->GetFormula(aFormula);
+                    aCell.mpFormula->GetFormula(aFormula, formula::FormulaGrammar::GRAM_UNSPECIFIED, &mrContext);
                 break;
                 default:
-                    SetError( NOTAVAILABLE );
+                    SetError( FormulaError::NotAvailable );
             }
         }
         break;
         default:
             Pop();
-            SetError( NOTAVAILABLE );
+            SetError( FormulaError::NotAvailable );
     }
     PushString( aFormula );
 }
 
 void ScInterpreter::ScIsNV()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetStackType() )
     {
@@ -2641,45 +2851,55 @@ void ScInterpreter::ScIsNV()
         {
             ScAddress aAdr;
             bool bOk = PopDoubleRefOrSingleRef( aAdr );
-            if ( nGlobalError == NOTAVAILABLE )
+            if ( nGlobalError == FormulaError::NotAvailable )
                 bRes = true;
             else if (bOk)
             {
                 ScRefCellValue aCell(*pDok, aAdr);
-                sal_uInt16 nErr = GetCellErrCode(aCell);
-                bRes = (nErr == NOTAVAILABLE);
+                FormulaError nErr = GetCellErrCode(aCell);
+                bRes = (nErr == FormulaError::NotAvailable);
             }
         }
         break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if (nGlobalError == FormulaError::NotAvailable ||
+                    (pToken && pToken->GetType() == svError && pToken->GetError() == FormulaError::NotAvailable))
+                bRes = true;
+        }
+        break;
+        case svExternalDoubleRef:
         case svMatrix:
         {
-            ScMatrixRef pMat = PopMatrix();
+            ScMatrixRef pMat = GetMatrix();
             if ( !pMat )
                 ;   // nothing
             else if ( !pJumpMatrix )
-                bRes = (pMat->GetErrorIfNotString( 0, 0) == NOTAVAILABLE);
+                bRes = (pMat->GetErrorIfNotString( 0, 0) == FormulaError::NotAvailable);
             else
             {
                 SCSIZE nCols, nRows, nC, nR;
                 pMat->GetDimensions( nCols, nRows);
                 pJumpMatrix->GetPos( nC, nR);
                 if ( nC < nCols && nR < nRows )
-                    bRes = (pMat->GetErrorIfNotString( nC, nR) == NOTAVAILABLE);
+                    bRes = (pMat->GetErrorIfNotString( nC, nR) == FormulaError::NotAvailable);
             }
         }
         break;
         default:
             PopError();
-            if ( nGlobalError == NOTAVAILABLE )
+            if ( nGlobalError == FormulaError::NotAvailable )
                 bRes = true;
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
 void ScInterpreter::ScIsErr()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetStackType() )
     {
@@ -2688,25 +2908,35 @@ void ScInterpreter::ScIsErr()
         {
             ScAddress aAdr;
             bool bOk = PopDoubleRefOrSingleRef( aAdr );
-            if ( !bOk || (nGlobalError && nGlobalError != NOTAVAILABLE) )
+            if ( !bOk || (nGlobalError != FormulaError::NONE && nGlobalError != FormulaError::NotAvailable) )
                 bRes = true;
             else
             {
                 ScRefCellValue aCell(*pDok, aAdr);
-                sal_uInt16 nErr = GetCellErrCode(aCell);
-                bRes = (nErr && nErr != NOTAVAILABLE);
+                FormulaError nErr = GetCellErrCode(aCell);
+                bRes = (nErr != FormulaError::NONE && nErr != FormulaError::NotAvailable);
             }
         }
         break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if ((nGlobalError != FormulaError::NONE && nGlobalError != FormulaError::NotAvailable) || !pToken ||
+                    (pToken->GetType() == svError && pToken->GetError() != FormulaError::NotAvailable))
+                bRes = true;
+        }
+        break;
+        case svExternalDoubleRef:
         case svMatrix:
         {
-            ScMatrixRef pMat = PopMatrix();
-            if ( nGlobalError || !pMat )
-                bRes = ((nGlobalError && nGlobalError != NOTAVAILABLE) || !pMat);
+            ScMatrixRef pMat = GetMatrix();
+            if ( nGlobalError != FormulaError::NONE || !pMat )
+                bRes = ((nGlobalError != FormulaError::NONE && nGlobalError != FormulaError::NotAvailable) || !pMat);
             else if ( !pJumpMatrix )
             {
-                sal_uInt16 nErr = pMat->GetErrorIfNotString( 0, 0);
-                bRes = (nErr && nErr != NOTAVAILABLE);
+                FormulaError nErr = pMat->GetErrorIfNotString( 0, 0);
+                bRes = (nErr != FormulaError::NONE && nErr != FormulaError::NotAvailable);
             }
             else
             {
@@ -2715,24 +2945,24 @@ void ScInterpreter::ScIsErr()
                 pJumpMatrix->GetPos( nC, nR);
                 if ( nC < nCols && nR < nRows )
                 {
-                    sal_uInt16 nErr = pMat->GetErrorIfNotString( nC, nR);
-                    bRes = (nErr && nErr != NOTAVAILABLE);
+                    FormulaError nErr = pMat->GetErrorIfNotString( nC, nR);
+                    bRes = (nErr != FormulaError::NONE && nErr != FormulaError::NotAvailable);
                 }
             }
         }
         break;
         default:
             PopError();
-            if ( nGlobalError && nGlobalError != NOTAVAILABLE )
+            if ( nGlobalError != FormulaError::NONE && nGlobalError != FormulaError::NotAvailable )
                 bRes = true;
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
 void ScInterpreter::ScIsError()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     switch ( GetStackType() )
     {
@@ -2745,44 +2975,53 @@ void ScInterpreter::ScIsError()
                 bRes = true;
                 break;
             }
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
                 bRes = true;
             else
             {
                 ScRefCellValue aCell(*pDok, aAdr);
-                bRes = (GetCellErrCode(aCell) != 0);
+                bRes = (GetCellErrCode(aCell) != FormulaError::NONE);
             }
         }
         break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if (nGlobalError != FormulaError::NONE || pToken->GetType() == svError)
+                bRes = true;
+        }
+        break;
+        case svExternalDoubleRef:
         case svMatrix:
         {
-            ScMatrixRef pMat = PopMatrix();
-            if ( nGlobalError || !pMat )
+            ScMatrixRef pMat = GetMatrix();
+            if ( nGlobalError != FormulaError::NONE || !pMat )
                 bRes = true;
             else if ( !pJumpMatrix )
-                bRes = (pMat->GetErrorIfNotString( 0, 0) != 0);
+                bRes = (pMat->GetErrorIfNotString( 0, 0) != FormulaError::NONE);
             else
             {
                 SCSIZE nCols, nRows, nC, nR;
                 pMat->GetDimensions( nCols, nRows);
                 pJumpMatrix->GetPos( nC, nR);
                 if ( nC < nCols && nR < nRows )
-                    bRes = (pMat->GetErrorIfNotString( nC, nR) != 0);
+                    bRes = (pMat->GetErrorIfNotString( nC, nR) != FormulaError::NONE);
             }
         }
         break;
         default:
             PopError();
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
                 bRes = true;
     }
-    nGlobalError = 0;
+    nGlobalError = FormulaError::NONE;
     PushInt( int(bRes) );
 }
 
 bool ScInterpreter::IsEven()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     bool bRes = false;
     double fVal = 0.0;
     switch ( GetStackType() )
@@ -2795,8 +3034,8 @@ bool ScInterpreter::IsEven()
                 break;
 
             ScRefCellValue aCell(*pDok, aAdr);
-            sal_uInt16 nErr = GetCellErrCode(aCell);
-            if (nErr != 0)
+            FormulaError nErr = GetCellErrCode(aCell);
+            if (nErr != FormulaError::NONE)
                 SetError(nErr);
             else
             {
@@ -2825,9 +3064,21 @@ bool ScInterpreter::IsEven()
             bRes = true;
         }
         break;
+        case svExternalSingleRef:
+        {
+            ScExternalRefCache::TokenRef pToken;
+            PopExternalSingleRef(pToken);
+            if (nGlobalError == FormulaError::NONE && pToken->GetType() == svDouble)
+            {
+                fVal = pToken->GetDouble();
+                bRes = true;
+            }
+        }
+        break;
+        case svExternalDoubleRef:
         case svMatrix:
         {
-            ScMatrixRef pMat = PopMatrix();
+            ScMatrixRef pMat = GetMatrix();
             if ( !pMat )
                 ;   // nothing
             else if ( !pJumpMatrix )
@@ -2848,7 +3099,7 @@ bool ScInterpreter::IsEven()
                         fVal = pMat->GetDouble( nC, nR);
                 }
                 else
-                    SetError( errNoValue);
+                    SetError( FormulaError::NoValue);
             }
         }
         break;
@@ -2856,7 +3107,7 @@ bool ScInterpreter::IsEven()
             ; // nothing
     }
     if ( !bRes )
-        SetError( errIllegalParameter);
+        SetError( FormulaError::IllegalParameter);
     else
         bRes = ( fmod( ::rtl::math::approxFloor( fabs( fVal ) ), 2.0 ) < 0.5 );
     return bRes;
@@ -2874,18 +3125,18 @@ void ScInterpreter::ScIsOdd()
 
 void ScInterpreter::ScN()
 {
-    sal_uInt16 nErr = nGlobalError;
-    nGlobalError = 0;
+    FormulaError nErr = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     // Temporarily override the ConvertStringToValue() error for
     // GetCellValue() / GetCellValueOrZero()
-    sal_uInt16 nSErr = mnStringNoValueError;
-    mnStringNoValueError = errCellNoValue;
+    FormulaError nSErr = mnStringNoValueError;
+    mnStringNoValueError = FormulaError::CellNoValue;
     double fVal = GetDouble();
     mnStringNoValueError = nSErr;
-    if (nErr)
+    if (nErr != FormulaError::NONE)
         nGlobalError = nErr;    // preserve previous error if any
-    else if (nGlobalError == errCellNoValue)
-        nGlobalError = 0;       // reset temporary detection error
+    else if (nGlobalError == FormulaError::CellNoValue)
+        nGlobalError = FormulaError::NONE;       // reset temporary detection error
     PushDouble(fVal);
 }
 
@@ -2943,7 +3194,15 @@ void ScInterpreter::ScLower()
 
 void ScInterpreter::ScLen()
 {
-    PushDouble(GetString().getLength());
+    OUString aStr = GetString().getString();
+    sal_Int32 nIdx = 0;
+    sal_Int32 nCnt = 0;
+    while ( nIdx < aStr.getLength() )
+    {
+        aStr.iterateCodePoints( &nIdx );
+        ++nCnt;
+    }
+    PushDouble( nCnt );
 }
 
 void ScInterpreter::ScT()
@@ -2961,7 +3220,7 @@ void ScInterpreter::ScT()
             }
             bool bValue = false;
             ScRefCellValue aCell(*pDok, aAdr);
-            if (GetCellErrCode(aCell) == 0)
+            if (GetCellErrCode(aCell) == FormulaError::NONE)
             {
                 switch (aCell.meType)
                 {
@@ -3009,7 +3268,7 @@ void ScInterpreter::ScT()
             ;   // leave on stack
         break;
         default :
-            PushError( errUnknownOpCode);
+            PushError( FormulaError::UnknownOpCode);
     }
 }
 
@@ -3064,14 +3323,14 @@ void ScInterpreter::ScValue()
                 aInputString = aSS.getString();
                 switch (nType)
                 {
-                    case SC_MATVAL_EMPTY:
+                    case ScMatValType::Empty:
                         fVal = 0.0;
-                        // fallthru
-                    case SC_MATVAL_VALUE:
-                    case SC_MATVAL_BOOLEAN:
+                        [[fallthrough]];
+                    case ScMatValType::Value:
+                    case ScMatValType::Boolean:
                         PushDouble( fVal);
                         return;
-                    case SC_MATVAL_STRING:
+                    case ScMatValType::String:
                         // evaluated below
                         break;
                     default:
@@ -3131,7 +3390,7 @@ void ScInterpreter::ScNumberValue()
         default:
         aInputString = GetString().getString();
     }
-    if ( nGlobalError )
+    if ( nGlobalError != FormulaError::NONE )
     {
         PushError( nGlobalError );
         return;
@@ -3188,7 +3447,7 @@ void ScInterpreter::ScNumberValue()
 }
 
 //2do: this should be a proper unicode string method
-static inline bool lcl_ScInterpreter_IsPrintable( sal_Unicode c )
+static bool lcl_ScInterpreter_IsPrintable( sal_Unicode c )
 {
     return 0x20 <= c && c != 0x7f;
 }
@@ -3220,7 +3479,7 @@ void ScInterpreter::ScCode()
             RTL_UNICODETOTEXT_FLAGS_UNDEFINED_DEFAULT |
             RTL_UNICODETOTEXT_FLAGS_INVALID_DEFAULT |
             RTL_UNICODETOTEXT_FLAGS_UNDEFINED_REPLACE;
-        PushInt( (unsigned char) OUStringToOString(OUString(aStr[0]), osl_getThreadTextEncoding(), convertFlags).toChar() );
+        PushInt( static_cast<unsigned char>(OUStringToOString(OUString(aStr[0]), osl_getThreadTextEncoding(), convertFlags).toChar()) );
     }
 }
 
@@ -3250,30 +3509,28 @@ void ScInterpreter::ScChar()
 
 static OUString lcl_convertIntoHalfWidth( const OUString & rStr )
 {
-    static bool bFirstASCCall = true;
-    static utl::TransliterationWrapper aTrans( ::comphelper::getProcessComponentContext(), 0 );
-
-    if( bFirstASCCall )
-    {
-        aTrans.loadModuleByImplName( "FULLWIDTH_HALFWIDTH_LIKE_ASC", LANGUAGE_SYSTEM );
-        bFirstASCCall = false;
-    }
-
-    return aTrans.transliterate( rStr, 0, sal_uInt16( rStr.getLength() ), nullptr );
+    // Make the initialization thread-safe. Since another function needs to be called, move it all to another
+    // function and thread-safely initialize a static reference in this function.
+    auto init = []() -> utl::TransliterationWrapper&
+        {
+        static utl::TransliterationWrapper trans( ::comphelper::getProcessComponentContext(), TransliterationFlags::NONE );
+        trans.loadModuleByImplName( "FULLWIDTH_HALFWIDTH_LIKE_ASC", LANGUAGE_SYSTEM );
+        return trans;
+        };
+    static utl::TransliterationWrapper& aTrans( init());
+    return aTrans.transliterate( rStr, 0, sal_uInt16( rStr.getLength() ) );
 }
 
 static OUString lcl_convertIntoFullWidth( const OUString & rStr )
 {
-    static bool bFirstJISCall = true;
-    static utl::TransliterationWrapper aTrans( ::comphelper::getProcessComponentContext(), 0 );
-
-    if( bFirstJISCall )
-    {
-        aTrans.loadModuleByImplName( "HALFWIDTH_FULLWIDTH_LIKE_JIS", LANGUAGE_SYSTEM );
-        bFirstJISCall = false;
-    }
-
-    return aTrans.transliterate( rStr, 0, sal_uInt16( rStr.getLength() ), nullptr );
+    auto init = []() -> utl::TransliterationWrapper&
+        {
+        static utl::TransliterationWrapper trans( ::comphelper::getProcessComponentContext(), TransliterationFlags::NONE );
+        trans.loadModuleByImplName( "HALFWIDTH_FULLWIDTH_LIKE_JIS", LANGUAGE_SYSTEM );
+        return trans;
+        };
+    static utl::TransliterationWrapper& aTrans( init());
+    return aTrans.transliterate( rStr, 0, sal_uInt16( rStr.getLength() ) );
 }
 
 /* ODFF:
@@ -3323,16 +3580,41 @@ void ScInterpreter::ScUnichar()
 {
     if ( MustHaveParamCount( GetByte(), 1 ) )
     {
-        double dVal = ::rtl::math::approxFloor( GetDouble() );
-        if (dVal < 0 || !rtl::isUnicodeCodePoint(dVal))
+        sal_uInt32 nCodePoint = GetUInt32();
+        if (nGlobalError != FormulaError::NONE || !rtl::isUnicodeCodePoint(nCodePoint))
             PushIllegalArgument();
         else
         {
-            sal_uInt32 nCodePoint = static_cast<sal_uInt32>( dVal );
             OUString aStr( &nCodePoint, 1 );
             PushString( aStr );
         }
     }
+}
+
+bool ScInterpreter::SwitchToArrayRefList( ScMatrixRef& xResMat, SCSIZE nMatRows, double fCurrent,
+        const std::function<void( SCSIZE i, double fCurrent )>& MatOpFunc, bool bDoMatOp )
+{
+    const ScRefListToken* p = dynamic_cast<const ScRefListToken*>(pStack[sp-1]);
+    if (!p || !p->IsArrayResult())
+        return false;
+
+    if (!xResMat)
+    {
+        // Create and init all elements with current value.
+        assert(nMatRows > 0);
+        xResMat = GetNewMat( 1, nMatRows, true);
+        xResMat->FillDouble( fCurrent, 0,0, 0,nMatRows-1);
+    }
+    else if (bDoMatOp)
+    {
+        // Current value and values from vector are operands
+        // for each vector position.
+        for (SCSIZE i=0; i < nMatRows; ++i)
+        {
+            MatOpFunc( i, fCurrent);
+        }
+    }
+    return true;
 }
 
 void ScInterpreter::ScMin( bool bTextAsZero )
@@ -3340,7 +3622,18 @@ void ScInterpreter::ScMin( bool bTextAsZero )
     short nParamCount = GetByte();
     if (!MustHaveParamCountMin( nParamCount, 1))
         return;
+
+    ScMatrixRef xResMat;
     double nMin = ::std::numeric_limits<double>::max();
+    auto MatOpFunc = [&xResMat]( SCSIZE i, double fCurMin )
+    {
+        double fVecRes = xResMat->GetDouble(0,i);
+        if (fVecRes > fCurMin)
+            xResMat->PutDouble( fCurMin, 0,i);
+    };
+    const SCSIZE nMatRows = GetRefListArrayMaxSize( nParamCount);
+    size_t nRefArrayPos = std::numeric_limits<size_t>::max();
+
     double nVal = 0.0;
     ScAddress aAdr;
     ScRange aRange;
@@ -3353,7 +3646,7 @@ void ScInterpreter::ScMin( bool bTextAsZero )
             {
                 nVal = GetDouble();
                 if (nMin > nVal) nMin = nVal;
-                nFuncFmtType = css::util::NumberFormat::NUMBER;
+                nFuncFmtType = SvNumFormatType::NUMBER;
             }
             break;
             case svSingleRef :
@@ -3373,23 +3666,44 @@ void ScInterpreter::ScMin( bool bTextAsZero )
                 }
             }
             break;
-            case svDoubleRef :
             case svRefList :
             {
-                sal_uInt16 nErr = 0;
+                // bDoMatOp only for non-array value when switching to
+                // ArrayRefList.
+                if (SwitchToArrayRefList( xResMat, nMatRows, nMin, MatOpFunc,
+                            nRefArrayPos == std::numeric_limits<size_t>::max()))
+                {
+                    nRefArrayPos = nRefInList;
+                }
+            }
+            [[fallthrough]];
+            case svDoubleRef :
+            {
+                FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 ScValueIterator aValIter( pDok, aRange, mnSubTotalFlags, bTextAsZero );
+                aValIter.SetInterpreterContext( &mrContext );
                 if (aValIter.GetFirst(nVal, nErr))
                 {
                     if (nMin > nVal)
                         nMin = nVal;
-                    aValIter.GetCurNumFmtInfo( nFuncFmtType, nFuncFmtIndex );
-                    while ((nErr == 0) && aValIter.GetNext(nVal, nErr))
+                    aValIter.GetCurNumFmtInfo( mrContext, nFuncFmtType, nFuncFmtIndex );
+                    while ((nErr == FormulaError::NONE) && aValIter.GetNext(nVal, nErr))
                     {
                         if (nMin > nVal)
                             nMin = nVal;
                     }
                     SetError(nErr);
+                }
+                if (nRefArrayPos != std::numeric_limits<size_t>::max())
+                {
+                    // Update vector element with current value.
+                    MatOpFunc( nRefArrayPos, nMin);
+
+                    // Reset.
+                    nMin = std::numeric_limits<double>::max();
+                    nVal = 0.0;
+                    nRefArrayPos = std::numeric_limits<size_t>::max();
                 }
             }
             break;
@@ -3400,7 +3714,7 @@ void ScInterpreter::ScMin( bool bTextAsZero )
                 ScMatrixRef pMat = GetMatrix();
                 if (pMat)
                 {
-                    nFuncFmtType = css::util::NumberFormat::NUMBER;
+                    nFuncFmtType = SvNumFormatType::NUMBER;
                     nVal = pMat->GetMinValue(bTextAsZero);
                     if (nMin > nVal)
                         nMin = nVal;
@@ -3416,18 +3730,49 @@ void ScInterpreter::ScMin( bool bTextAsZero )
                         nMin = 0.0;
                 }
                 else
-                    SetError(errIllegalParameter);
+                    SetError(FormulaError::IllegalParameter);
             }
             break;
             default :
                 Pop();
-                SetError(errIllegalParameter);
+                SetError(FormulaError::IllegalParameter);
         }
     }
-    if ( nVal < nMin  )
-        PushDouble(0.0);
+
+    if (xResMat)
+    {
+        // Include value of last non-references-array type and calculate final result.
+        if (nMin < std::numeric_limits<double>::max())
+        {
+            for (SCSIZE i=0; i < nMatRows; ++i)
+            {
+                MatOpFunc( i, nMin);
+            }
+        }
+        else
+        {
+            /* TODO: the awkward "no value is minimum 0.0" is likely the case
+             * if a value is numeric_limits::max. Still, that could be a valid
+             * minimum value as well, but nVal and nMin had been reset after
+             * the last svRefList.. so we may lie here. */
+            for (SCSIZE i=0; i < nMatRows; ++i)
+            {
+                double fVecRes = xResMat->GetDouble(0,i);
+                if (fVecRes == std::numeric_limits<double>::max())
+                    xResMat->PutDouble( 0.0, 0,i);
+            }
+        }
+        PushMatrix( xResMat);
+    }
     else
-        PushDouble(nMin);
+    {
+        if (!rtl::math::isFinite(nVal))
+            PushError( GetDoubleErrorValue( nVal));
+        else if ( nVal < nMin  )
+            PushDouble(0.0);    // zero or only empty arguments
+        else
+            PushDouble(nMin);
+    }
 }
 
 void ScInterpreter::ScMax( bool bTextAsZero )
@@ -3435,7 +3780,18 @@ void ScInterpreter::ScMax( bool bTextAsZero )
     short nParamCount = GetByte();
     if (!MustHaveParamCountMin( nParamCount, 1))
         return;
-    double nMax = -(::std::numeric_limits<double>::max());
+
+    ScMatrixRef xResMat;
+    double nMax = std::numeric_limits<double>::lowest();
+    auto MatOpFunc = [&xResMat]( SCSIZE i, double fCurMax )
+    {
+        double fVecRes = xResMat->GetDouble(0,i);
+        if (fVecRes < fCurMax)
+            xResMat->PutDouble( fCurMax, 0,i);
+    };
+    const SCSIZE nMatRows = GetRefListArrayMaxSize( nParamCount);
+    size_t nRefArrayPos = std::numeric_limits<size_t>::max();
+
     double nVal = 0.0;
     ScAddress aAdr;
     ScRange aRange;
@@ -3448,7 +3804,7 @@ void ScInterpreter::ScMax( bool bTextAsZero )
             {
                 nVal = GetDouble();
                 if (nMax < nVal) nMax = nVal;
-                nFuncFmtType = css::util::NumberFormat::NUMBER;
+                nFuncFmtType = SvNumFormatType::NUMBER;
             }
             break;
             case svSingleRef :
@@ -3468,23 +3824,44 @@ void ScInterpreter::ScMax( bool bTextAsZero )
                 }
             }
             break;
-            case svDoubleRef :
             case svRefList :
             {
-                sal_uInt16 nErr = 0;
+                // bDoMatOp only for non-array value when switching to
+                // ArrayRefList.
+                if (SwitchToArrayRefList( xResMat, nMatRows, nMax, MatOpFunc,
+                            nRefArrayPos == std::numeric_limits<size_t>::max()))
+                {
+                    nRefArrayPos = nRefInList;
+                }
+            }
+            [[fallthrough]];
+            case svDoubleRef :
+            {
+                FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 ScValueIterator aValIter( pDok, aRange, mnSubTotalFlags, bTextAsZero );
+                aValIter.SetInterpreterContext( &mrContext );
                 if (aValIter.GetFirst(nVal, nErr))
                 {
                     if (nMax < nVal)
                         nMax = nVal;
-                    aValIter.GetCurNumFmtInfo( nFuncFmtType, nFuncFmtIndex );
-                    while ((nErr == 0) && aValIter.GetNext(nVal, nErr))
+                    aValIter.GetCurNumFmtInfo( mrContext, nFuncFmtType, nFuncFmtIndex );
+                    while ((nErr == FormulaError::NONE) && aValIter.GetNext(nVal, nErr))
                     {
                         if (nMax < nVal)
                             nMax = nVal;
                     }
                     SetError(nErr);
+                }
+                if (nRefArrayPos != std::numeric_limits<size_t>::max())
+                {
+                    // Update vector element with current value.
+                    MatOpFunc( nRefArrayPos, nMax);
+
+                    // Reset.
+                    nMax = std::numeric_limits<double>::lowest();
+                    nVal = 0.0;
+                    nRefArrayPos = std::numeric_limits<size_t>::max();
                 }
             }
             break;
@@ -3495,7 +3872,7 @@ void ScInterpreter::ScMax( bool bTextAsZero )
                 ScMatrixRef pMat = GetMatrix();
                 if (pMat)
                 {
-                    nFuncFmtType = css::util::NumberFormat::NUMBER;
+                    nFuncFmtType = SvNumFormatType::NUMBER;
                     nVal = pMat->GetMaxValue(bTextAsZero);
                     if (nMax < nVal)
                         nMax = nVal;
@@ -3511,44 +3888,82 @@ void ScInterpreter::ScMax( bool bTextAsZero )
                         nMax = 0.0;
                 }
                 else
-                    SetError(errIllegalParameter);
+                    SetError(FormulaError::IllegalParameter);
             }
             break;
             default :
                 Pop();
-                SetError(errIllegalParameter);
+                SetError(FormulaError::IllegalParameter);
         }
     }
-    if ( nVal > nMax  )
-        PushDouble(0.0);
+
+    if (xResMat)
+    {
+        // Include value of last non-references-array type and calculate final result.
+        if (nMax > std::numeric_limits<double>::lowest())
+        {
+            for (SCSIZE i=0; i < nMatRows; ++i)
+            {
+                MatOpFunc( i, nMax);
+            }
+        }
+        else
+        {
+            /* TODO: the awkward "no value is maximum 0.0" is likely the case
+             * if a value is numeric_limits::lowest. Still, that could be a
+             * valid maximum value as well, but nVal and nMax had been reset
+             * after the last svRefList.. so we may lie here. */
+            for (SCSIZE i=0; i < nMatRows; ++i)
+            {
+                double fVecRes = xResMat->GetDouble(0,i);
+                if (fVecRes == -std::numeric_limits<double>::max())
+                    xResMat->PutDouble( 0.0, 0,i);
+            }
+        }
+        PushMatrix( xResMat);
+    }
     else
-        PushDouble(nMax);
+    {
+        if (!rtl::math::isFinite(nVal))
+            PushError( GetDoubleErrorValue( nVal));
+        else if ( nVal > nMax  )
+            PushDouble(0.0);    // zero or only empty arguments
+        else
+            PushDouble(nMax);
+    }
 }
 
-void ScInterpreter::GetStVarParams( double& rVal, double& rValCount,
-                bool bTextAsZero )
+void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double fVal, size_t nValCount ) )
 {
     short nParamCount = GetByte();
+    const SCSIZE nMatRows = GetRefListArrayMaxSize( nParamCount);
+
+    struct ArrayRefListValue
+    {
+        std::vector<double> mvValues;
+        double mfSum;
+        ArrayRefListValue() : mfSum(0.0) {}
+    };
+    std::vector<ArrayRefListValue> vArrayValues;
 
     std::vector<double> values;
     double fSum    = 0.0;
-    double vSum    = 0.0;
-    double vMean    = 0.0;
     double fVal = 0.0;
-    rValCount = 0.0;
     ScAddress aAdr;
     ScRange aRange;
     size_t nRefInList = 0;
-    while (nParamCount-- > 0)
+    while (nGlobalError == FormulaError::NONE && nParamCount-- > 0)
     {
         switch (GetStackType())
         {
             case svDouble :
             {
                 fVal = GetDouble();
-                values.push_back(fVal);
-                fSum    += fVal;
-                rValCount++;
+                if (nGlobalError == FormulaError::NONE)
+                {
+                    values.push_back(fVal);
+                    fSum    += fVal;
+                }
             }
             break;
             case svSingleRef :
@@ -3558,21 +3973,72 @@ void ScInterpreter::GetStVarParams( double& rVal, double& rValCount,
                 if (aCell.hasNumeric())
                 {
                     fVal = GetCellValue(aAdr, aCell);
-                    values.push_back(fVal);
-                    fSum += fVal;
-                    rValCount++;
+                    if (nGlobalError == FormulaError::NONE)
+                    {
+                        values.push_back(fVal);
+                        fSum += fVal;
+                    }
                 }
                 else if (bTextAsZero && aCell.hasString())
                 {
                     values.push_back(0.0);
-                    rValCount++;
                 }
             }
             break;
-            case svDoubleRef :
             case svRefList :
             {
-                sal_uInt16 nErr = 0;
+                const ScRefListToken* p = dynamic_cast<const ScRefListToken*>(pStack[sp-1]);
+                if (p && p->IsArrayResult())
+                {
+                    size_t nRefArrayPos = nRefInList;
+                    if (vArrayValues.empty())
+                    {
+                        // Create and init all elements with current value.
+                        assert(nMatRows > 0);
+                        vArrayValues.resize(nMatRows);
+                        for (auto & it : vArrayValues)
+                        {
+                            it.mvValues = values;
+                            it.mfSum = fSum;
+                        }
+                    }
+                    else
+                    {
+                        // Current value and values from vector are operands
+                        // for each vector position.
+                        for (auto & it : vArrayValues)
+                        {
+                            it.mvValues.insert( it.mvValues.end(), values.begin(), values.end());
+                            it.mfSum += fSum;
+                        }
+                    }
+                    ArrayRefListValue& rArrayValue = vArrayValues[nRefArrayPos];
+                    FormulaError nErr = FormulaError::NONE;
+                    PopDoubleRef( aRange, nParamCount, nRefInList);
+                    ScValueIterator aValIter( pDok, aRange, mnSubTotalFlags, bTextAsZero );
+                    if (aValIter.GetFirst(fVal, nErr))
+                    {
+                        do
+                        {
+                            rArrayValue.mvValues.push_back(fVal);
+                            rArrayValue.mfSum += fVal;
+                        }
+                        while ((nErr == FormulaError::NONE) && aValIter.GetNext(fVal, nErr));
+                    }
+                    if ( nErr != FormulaError::NONE )
+                    {
+                        rArrayValue.mfSum = CreateDoubleError( nErr);
+                    }
+                    // Reset.
+                    std::vector<double>().swap(values);
+                    fSum = 0.0;
+                    break;
+                }
+            }
+            [[fallthrough]];
+            case svDoubleRef :
+            {
+                FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 ScValueIterator aValIter( pDok, aRange, mnSubTotalFlags, bTextAsZero );
                 if (aValIter.GetFirst(fVal, nErr))
@@ -3581,15 +4047,20 @@ void ScInterpreter::GetStVarParams( double& rVal, double& rValCount,
                     {
                         values.push_back(fVal);
                         fSum += fVal;
-                        rValCount++;
                     }
-                    while ((nErr == 0) && aValIter.GetNext(fVal, nErr));
+                    while ((nErr == FormulaError::NONE) && aValIter.GetNext(fVal, nErr));
+                }
+                if ( nErr != FormulaError::NONE )
+                {
+                    SetError(nErr);
                 }
             }
             break;
+            case svExternalSingleRef :
+            case svExternalDoubleRef :
             case svMatrix :
             {
-                ScMatrixRef pMat = PopMatrix();
+                ScMatrixRef pMat = GetMatrix();
                 if (pMat)
                 {
                     SCSIZE nC, nR;
@@ -3598,17 +4069,18 @@ void ScInterpreter::GetStVarParams( double& rVal, double& rValCount,
                     {
                         for (SCSIZE nMatRow = 0; nMatRow < nR; nMatRow++)
                         {
-                            if (!pMat->IsString(nMatCol,nMatRow))
+                            if (!pMat->IsStringOrEmpty(nMatCol,nMatRow))
                             {
                                 fVal= pMat->GetDouble(nMatCol,nMatRow);
-                                values.push_back(fVal);
-                                fSum += fVal;
-                                rValCount++;
+                                if (nGlobalError == FormulaError::NONE)
+                                {
+                                    values.push_back(fVal);
+                                    fSum += fVal;
+                                }
                             }
                             else if ( bTextAsZero )
                             {
                                 values.push_back(0.0);
-                                rValCount++;
                             }
                         }
                     }
@@ -3621,66 +4093,107 @@ void ScInterpreter::GetStVarParams( double& rVal, double& rValCount,
                 if ( bTextAsZero )
                 {
                     values.push_back(0.0);
-                    rValCount++;
                 }
                 else
-                    SetError(errIllegalParameter);
+                    SetError(FormulaError::IllegalParameter);
             }
             break;
             default :
                 Pop();
-                SetError(errIllegalParameter);
+                SetError(FormulaError::IllegalParameter);
         }
     }
 
-    ::std::vector<double>::size_type n = values.size();
-    vMean = fSum / n;
-    for (::std::vector<double>::size_type i = 0; i < n; i++)
-        vSum += ::rtl::math::approxSub( values[i], vMean) * ::rtl::math::approxSub( values[i], vMean);
-    rVal = vSum;
+    if (!vArrayValues.empty())
+    {
+        // Include value of last non-references-array type and calculate final result.
+        if (!values.empty())
+        {
+            for (auto & it : vArrayValues)
+            {
+                it.mvValues.insert( it.mvValues.end(), values.begin(), values.end());
+                it.mfSum += fSum;
+            }
+        }
+        ScMatrixRef xResMat = GetNewMat( 1, nMatRows, true);
+        for (SCSIZE r=0; r < nMatRows; ++r)
+        {
+            ::std::vector<double>::size_type n = vArrayValues[r].mvValues.size();
+            if (!n)
+                xResMat->PutError( FormulaError::DivisionByZero, 0, r);
+            else
+            {
+                ArrayRefListValue& rArrayValue = vArrayValues[r];
+                double vSum = 0.0;
+                const double vMean = rArrayValue.mfSum / n;
+                for (::std::vector<double>::size_type i = 0; i < n; i++)
+                    vSum += ::rtl::math::approxSub( rArrayValue.mvValues[i], vMean) *
+                        ::rtl::math::approxSub( rArrayValue.mvValues[i], vMean);
+                xResMat->PutDouble( VarResult( vSum, n), 0, r);
+            }
+        }
+        PushMatrix( xResMat);
+    }
+    else
+    {
+        ::std::vector<double>::size_type n = values.size();
+        if (!n)
+            SetError( FormulaError::DivisionByZero);
+        double vSum = 0.0;
+        if (nGlobalError == FormulaError::NONE)
+        {
+            const double vMean = fSum / n;
+            for (::std::vector<double>::size_type i = 0; i < n; i++)
+                vSum += ::rtl::math::approxSub( values[i], vMean) * ::rtl::math::approxSub( values[i], vMean);
+        }
+        PushDouble( VarResult( vSum, n));
+    }
 }
 
 void ScInterpreter::ScVar( bool bTextAsZero )
 {
-    double nVal;
-    double nValCount;
-    GetStVarParams( nVal, nValCount, bTextAsZero );
-
-    if (nValCount <= 1.0)
-        PushError( errDivisionByZero );
-    else
-        PushDouble( nVal / (nValCount - 1.0));
+    auto VarResult = []( double fVal, size_t nValCount )
+    {
+        if (nValCount <= 1)
+            return CreateDoubleError( FormulaError::DivisionByZero );
+        else
+            return fVal / (nValCount - 1);
+    };
+    GetStVarParams( bTextAsZero, VarResult );
 }
 
 void ScInterpreter::ScVarP( bool bTextAsZero )
 {
-    double nVal;
-    double nValCount;
-    GetStVarParams( nVal, nValCount, bTextAsZero );
+    auto VarResult = []( double fVal, size_t nValCount )
+    {
+        return sc::div( fVal, nValCount);
+    };
+    GetStVarParams( bTextAsZero, VarResult );
 
-    PushDouble( div( nVal, nValCount));
 }
 
 void ScInterpreter::ScStDev( bool bTextAsZero )
 {
-    double nVal;
-    double nValCount;
-    GetStVarParams( nVal, nValCount, bTextAsZero );
-    if (nValCount <= 1.0)
-        PushError( errDivisionByZero );
-    else
-        PushDouble( sqrt( nVal / (nValCount - 1.0)));
+    auto VarResult = []( double fVal, size_t nValCount )
+    {
+        if (nValCount <= 1)
+            return CreateDoubleError( FormulaError::DivisionByZero );
+        else
+            return sqrt( fVal / (nValCount - 1));
+    };
+    GetStVarParams( bTextAsZero, VarResult );
 }
 
 void ScInterpreter::ScStDevP( bool bTextAsZero )
 {
-    double nVal;
-    double nValCount;
-    GetStVarParams( nVal, nValCount, bTextAsZero );
-    if (nValCount == 0.0)
-        PushError( errDivisionByZero );
-    else
-        PushDouble( sqrt( nVal / nValCount));
+    auto VarResult = []( double fVal, size_t nValCount )
+    {
+        if (nValCount == 0)
+            return CreateDoubleError( FormulaError::DivisionByZero );
+        else
+            return sqrt( fVal / nValCount);
+    };
+    GetStVarParams( bTextAsZero, VarResult );
 
     /* this was: PushDouble( sqrt( div( nVal, nValCount)));
      *
@@ -3751,10 +4264,10 @@ void ScInterpreter::ScColumns()
             break;
             default:
                 PopError();
-                SetError(errIllegalParameter);
+                SetError(FormulaError::IllegalParameter);
         }
     }
-    PushDouble((double)nVal);
+    PushDouble(static_cast<double>(nVal));
 }
 
 void ScInterpreter::ScRows()
@@ -3808,10 +4321,10 @@ void ScInterpreter::ScRows()
             break;
             default:
                 PopError();
-                SetError(errIllegalParameter);
+                SetError(FormulaError::IllegalParameter);
         }
     }
-    PushDouble((double)nVal);
+    PushDouble(static_cast<double>(nVal));
 }
 
 void ScInterpreter::ScSheets()
@@ -3829,25 +4342,18 @@ void ScInterpreter::ScSheets()
         SCCOL nCol2;
         SCROW nRow2;
         SCTAB nTab2;
-        while (nParamCount-- > 0)
+        while (nGlobalError == FormulaError::NONE && nParamCount-- > 0)
         {
             switch ( GetStackType() )
             {
                 case svSingleRef:
+                case svExternalSingleRef:
                     PopError();
                     nVal++;
                 break;
                 case svDoubleRef:
                     PopDoubleRef(nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
                     nVal += static_cast<sal_uLong>(nTab2 - nTab1 + 1);
-                break;
-                case svMatrix:
-                    PopError();
-                    nVal++;
-                break;
-                case svExternalSingleRef:
-                    PopError();
-                    nVal++;
                 break;
                 case svExternalDoubleRef:
                 {
@@ -3861,11 +4367,11 @@ void ScInterpreter::ScSheets()
                 break;
                 default:
                     PopError();
-                    SetError( errIllegalParameter );
+                    SetError( FormulaError::IllegalParameter );
             }
         }
     }
-    PushDouble( (double) nVal );
+    PushDouble( static_cast<double>(nVal) );
 }
 
 void ScInterpreter::ScColumn()
@@ -3873,7 +4379,7 @@ void ScInterpreter::ScColumn()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 0, 1 ) )
     {
-        double nVal = 0;
+        double nVal = 0.0;
         if (nParamCount == 0)
         {
             nVal = aPos.Col() + 1;
@@ -3905,22 +4411,47 @@ void ScInterpreter::ScColumn()
             {
                 case svSingleRef :
                 {
-                    SCCOL nCol1;
-                    SCROW nRow1;
-                    SCTAB nTab1;
+                    SCCOL nCol1(0);
+                    SCROW nRow1(0);
+                    SCTAB nTab1(0);
                     PopSingleRef( nCol1, nRow1, nTab1 );
-                    nVal = (double) (nCol1 + 1);
+                    nVal = static_cast<double>(nCol1 + 1);
                 }
                 break;
+                case svExternalSingleRef :
+                {
+                    sal_uInt16 nFileId;
+                    OUString aTabName;
+                    ScSingleRefData aRef;
+                    PopExternalSingleRef( nFileId, aTabName, aRef );
+                    ScAddress aAbsRef = aRef.toAbs( aPos );
+                    nVal = static_cast<double>( aAbsRef.Col() + 1 );
+                }
+                break;
+
                 case svDoubleRef :
+                case svExternalDoubleRef :
                 {
                     SCCOL nCol1;
-                    SCROW nRow1;
-                    SCTAB nTab1;
                     SCCOL nCol2;
-                    SCROW nRow2;
-                    SCTAB nTab2;
-                    PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
+                    if ( GetStackType() == svDoubleRef )
+                    {
+                        SCROW nRow1;
+                        SCTAB nTab1;
+                        SCROW nRow2;
+                        SCTAB nTab2;
+                        PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
+                    }
+                    else
+                    {
+                        sal_uInt16 nFileId;
+                        OUString aTabName;
+                        ScComplexRefData aRef;
+                        PopExternalDoubleRef( nFileId, aTabName, aRef );
+                        ScRange aAbs = aRef.toAbs( aPos );
+                        nCol1 = aAbs.aStart.Col();
+                        nCol2 = aAbs.aEnd.Col();
+                    }
                     if (nCol2 > nCol1)
                     {
                         ScMatrixRef pResMat = GetNewMat(
@@ -3928,21 +4459,18 @@ void ScInterpreter::ScColumn()
                         if (pResMat)
                         {
                             for (SCCOL i = nCol1; i <= nCol2; i++)
-                                pResMat->PutDouble((double)(i+1),
+                                pResMat->PutDouble(static_cast<double>(i+1),
                                         static_cast<SCSIZE>(i-nCol1), 0);
                             PushMatrix(pResMat);
                             return;
                         }
-                        else
-                            nVal = 0.0;
                     }
                     else
-                        nVal = (double) (nCol1 + 1);
+                        nVal = static_cast<double>(nCol1 + 1);
                 }
                 break;
                 default:
-                    SetError( errIllegalParameter );
-                    nVal = 0.0;
+                    SetError( FormulaError::IllegalParameter );
             }
         }
         PushDouble( nVal );
@@ -3954,7 +4482,7 @@ void ScInterpreter::ScRow()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 0, 1 ) )
     {
-        double nVal = 0;
+        double nVal = 0.0;
         if (nParamCount == 0)
         {
             nVal = aPos.Row() + 1;
@@ -3986,22 +4514,46 @@ void ScInterpreter::ScRow()
             {
                 case svSingleRef :
                 {
-                    SCCOL nCol1;
-                    SCROW nRow1;
-                    SCTAB nTab1;
+                    SCCOL nCol1(0);
+                    SCROW nRow1(0);
+                    SCTAB nTab1(0);
                     PopSingleRef( nCol1, nRow1, nTab1 );
-                    nVal = (double) (nRow1 + 1);
+                    nVal = static_cast<double>(nRow1 + 1);
+                }
+                break;
+                case svExternalSingleRef :
+                {
+                    sal_uInt16 nFileId;
+                    OUString aTabName;
+                    ScSingleRefData aRef;
+                    PopExternalSingleRef( nFileId, aTabName, aRef );
+                    ScAddress aAbsRef = aRef.toAbs( aPos );
+                    nVal = static_cast<double>( aAbsRef.Row() + 1 );
                 }
                 break;
                 case svDoubleRef :
+                case svExternalDoubleRef :
                 {
-                    SCCOL nCol1;
                     SCROW nRow1;
-                    SCTAB nTab1;
-                    SCCOL nCol2;
                     SCROW nRow2;
-                    SCTAB nTab2;
-                    PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
+                    if ( GetStackType() == svDoubleRef )
+                    {
+                        SCCOL nCol1;
+                        SCTAB nTab1;
+                        SCCOL nCol2;
+                        SCTAB nTab2;
+                        PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
+                    }
+                    else
+                    {
+                        sal_uInt16 nFileId;
+                        OUString aTabName;
+                        ScComplexRefData aRef;
+                        PopExternalDoubleRef( nFileId, aTabName, aRef );
+                        ScRange aAbs = aRef.toAbs( aPos );
+                        nRow1 = aAbs.aStart.Row();
+                        nRow2 = aAbs.aEnd.Row();
+                    }
                     if (nRow2 > nRow1)
                     {
                         ScMatrixRef pResMat = GetNewMat( 1,
@@ -4009,21 +4561,18 @@ void ScInterpreter::ScRow()
                         if (pResMat)
                         {
                             for (SCROW i = nRow1; i <= nRow2; i++)
-                                pResMat->PutDouble((double)(i+1), 0,
+                                pResMat->PutDouble(static_cast<double>(i+1), 0,
                                         static_cast<SCSIZE>(i-nRow1));
                             PushMatrix(pResMat);
                             return;
                         }
-                        else
-                            nVal = 0.0;
                     }
                     else
-                        nVal = (double) (nRow1 + 1);
+                        nVal = static_cast<double>(nRow1 + 1);
                 }
                 break;
                 default:
-                    SetError( errIllegalParameter );
-                    nVal = 0.0;
+                    SetError( FormulaError::IllegalParameter );
             }
         }
         PushDouble( nVal );
@@ -4048,15 +4597,15 @@ void ScInterpreter::ScSheet()
                     if ( pDok->GetTable(aStr.getString(), nVal))
                         ++nVal;
                     else
-                        SetError( errIllegalArgument );
+                        SetError( FormulaError::IllegalArgument );
                 }
                 break;
                 case svSingleRef :
                 {
-                    SCCOL nCol1;
-                    SCROW nRow1;
-                    SCTAB nTab1;
-                    PopSingleRef( nCol1, nRow1, nTab1 );
+                    SCCOL nCol1(0);
+                    SCROW nRow1(0);
+                    SCTAB nTab1(0);
+                    PopSingleRef(nCol1, nRow1, nTab1);
                     nVal = nTab1 + 1;
                 }
                 break;
@@ -4073,12 +4622,12 @@ void ScInterpreter::ScSheet()
                 }
                 break;
                 default:
-                    SetError( errIllegalParameter );
+                    SetError( FormulaError::IllegalParameter );
             }
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
                 nVal = 0;
         }
-        PushDouble( (double) nVal );
+        PushDouble( static_cast<double>(nVal) );
     }
 }
 
@@ -4105,9 +4654,9 @@ public:
         return mbColVec ? mrMat.IsValue(0, i) : mrMat.IsValue(i, 0);
     }
 
-    bool IsString(SCSIZE i) const
+    bool IsStringOrEmpty(SCSIZE i) const
     {
-        return mbColVec ? mrMat.IsString(0, i) : mrMat.IsString(i, 0);
+        return mbColVec ? mrMat.IsStringOrEmpty(0, i) : mrMat.IsStringOrEmpty(i, 0);
     }
 
     double GetDouble(SCSIZE i) const
@@ -4129,7 +4678,7 @@ public:
 
 private:
     const ScMatrix& mrMat;
-    bool mbColVec;
+    bool const mbColVec;
 };
 
 /** returns -1 when the matrix value is smaller than the query value, 0 when
@@ -4151,11 +4700,20 @@ sal_Int32 lcl_CompareMatrix2Query(
     bool bByString = rEntry.GetQueryItem().meType == ScQueryEntry::ByString;
     if (rMat.IsValue(i))
     {
+        const double nVal1 = rMat.GetDouble(i);
+        if (!rtl::math::isFinite(nVal1))
+        {
+            // XXX Querying for error values is not required, otherwise we'd
+            // need to check here.
+            return 1;   // error always greater than numeric or string
+        }
+
         if (bByString)
             return -1;  // numeric always less than string
 
-        const double nVal1 = rMat.GetDouble(i);
         const double nVal2 = rEntry.GetQueryItem().mfVal;
+        // XXX Querying for error values is not required, otherwise we'd need
+        // to check here and move that check before the bByString check.
         if (nVal1 == nVal2)
             return 0;
 
@@ -4188,7 +4746,7 @@ void lcl_GetLastMatch( SCSIZE& rIndex, const VectorMatrixAccessor& rMat,
                     nVal == rMat.GetDouble(rIndex+1))
                 ++rIndex;
     }
-    // Order of IsEmptyPath, IsEmpty, IsString is significant!
+    // Order of IsEmptyPath, IsEmpty, IsStringOrEmpty is significant!
     else if (rMat.IsEmptyPath(rIndex))
     {
         if (bReverse)
@@ -4207,15 +4765,15 @@ void lcl_GetLastMatch( SCSIZE& rIndex, const VectorMatrixAccessor& rMat,
             while (rIndex < nMatCount-1 && rMat.IsEmpty(rIndex+1))
                 ++rIndex;
     }
-    else if (rMat.IsString(rIndex))
+    else if (rMat.IsStringOrEmpty(rIndex))
     {
         OUString aStr( rMat.GetString(rIndex));
         if (bReverse)
-            while (rIndex > 0 && rMat.IsString(rIndex-1) &&
+            while (rIndex > 0 && rMat.IsStringOrEmpty(rIndex-1) &&
                     aStr == rMat.GetString(rIndex-1))
                 --rIndex;
         else
-            while (rIndex < nMatCount-1 && rMat.IsString(rIndex+1) &&
+            while (rIndex < nMatCount-1 && rMat.IsStringOrEmpty(rIndex+1) &&
                     aStr == rMat.GetString(rIndex+1))
                 ++rIndex;
     }
@@ -4243,7 +4801,6 @@ void ScInterpreter::ScMatch()
         SCTAB nTab1 = 0;
         SCCOL nCol2 = 0;
         SCROW nRow2 = 0;
-        SCTAB nTab2 = 0;
         ScMatrixRef pMatSrc = nullptr;
 
         switch (GetStackType())
@@ -4252,10 +4809,10 @@ void ScInterpreter::ScMatch()
                 PopSingleRef( nCol1, nRow1, nTab1);
                 nCol2 = nCol1;
                 nRow2 = nRow1;
-                nTab2 = nTab1;
             break;
             case svDoubleRef:
             {
+                SCTAB nTab2 = 0;
                 PopDoubleRef(nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
                 if (nTab1 != nTab2 || (nCol1 != nCol2 && nRow1 != nRow2))
                 {
@@ -4284,7 +4841,7 @@ void ScInterpreter::ScMatch()
                 return;
         }
 
-        if (nGlobalError == 0)
+        if (nGlobalError == FormulaError::NONE)
         {
             double fVal;
             ScQueryParam rParam;
@@ -4342,9 +4899,9 @@ void ScInterpreter::ScMatch()
                 {
                     ScExternalRefCache::TokenRef pToken;
                     PopExternalSingleRef(pToken);
-                    if (!pToken)
+                    if (nGlobalError != FormulaError::NONE)
                     {
-                        PushInt(0);
+                        PushError( nGlobalError);
                         return;
                     }
                     if (pToken->GetType() == svDouble)
@@ -4360,10 +4917,6 @@ void ScInterpreter::ScMatch()
                 }
                 break;
                 case svExternalDoubleRef:
-                    // TODO: Implement this.
-                    PushIllegalParameter();
-                    return;
-                break;
                 case svMatrix :
                 {
                     svl::SharedString aStr;
@@ -4385,7 +4938,7 @@ void ScInterpreter::ScMatch()
                 bool bIsVBAMode = pDok->IsInVBAMode();
 
                 if ( bIsVBAMode )
-                    rParam.eSearchType = utl::SearchParam::SRCH_WILDCARD;
+                    rParam.eSearchType = utl::SearchParam::SearchType::Wildcard;
                 else
                     rParam.eSearchType = DetectSearchType(rEntry.GetQueryItem().maString.getString(), pDok);
             }
@@ -4400,6 +4953,10 @@ void ScInterpreter::ScMatch()
                     PushIllegalParameter();
                     return;
                 }
+
+                // Do not propagate errors from matrix while searching.
+                pMatSrc->SetErrorInterpreter( nullptr);
+
                 SCSIZE nMatCount = (nC == 1) ? nR : nC;
                 VectorMatrixAccessor aMatAcc(*pMatSrc, nC == 1);
 
@@ -4503,7 +5060,7 @@ void ScInterpreter::ScMatch()
                 rParam.bByRow = false;
                 rParam.nRow2 = nRow1;
                 rEntry.nField = nCol1;
-                ScQueryCellIterator aCellIter(pDok, nTab1, rParam, false);
+                ScQueryCellIterator aCellIter(pDok, mrContext, nTab1, rParam, false);
                 // Advance Entry.nField in Iterator if column changed
                 aCellIter.SetAdvanceQueryParamEntryField( true );
                 if (fTyp == 0.0)
@@ -4527,7 +5084,7 @@ void ScInterpreter::ScMatch()
                 }
                 nDelta = nC - nCol1;
             }
-            PushDouble((double) (nDelta + 1));
+            PushDouble(static_cast<double>(nDelta + 1));
         }
         else
             PushIllegalParameter();
@@ -4574,6 +5131,9 @@ void ScInterpreter::ScCountEmptyCells()
 {
     if ( MustHaveParamCount( GetByte(), 1 ) )
     {
+        const SCSIZE nMatRows = GetRefListArrayMaxSize(1);
+        // There's either one RefList and nothing else, or none.
+        ScMatrixRef xResMat = (nMatRows ? GetNewMat( 1, nMatRows) : nullptr);
         sal_uLong nMaxCount = 0, nCount = 0;
         switch (GetStackType())
         {
@@ -4587,14 +5147,16 @@ void ScInterpreter::ScCountEmptyCells()
                     nCount = 1;
             }
             break;
-            case svDoubleRef :
             case svRefList :
+            case svDoubleRef :
             {
                 ScRange aRange;
                 short nParam = 1;
+                SCSIZE nRefListArrayPos = 0;
                 size_t nRefInList = 0;
                 while (nParam-- > 0)
                 {
+                    nRefListArrayPos = nRefInList;
                     PopDoubleRef( aRange, nParam, nRefInList);
                     nMaxCount +=
                         static_cast<sal_uLong>(aRange.aEnd.Row() - aRange.aStart.Row() + 1) *
@@ -4608,20 +5170,28 @@ void ScInterpreter::ScCountEmptyCells()
                         if (!isCellContentEmpty(rCell))
                             ++nCount;
                     }
+                    if (xResMat)
+                    {
+                        xResMat->PutDouble( nMaxCount - nCount, 0, nRefListArrayPos);
+                        nMaxCount = nCount = 0;
+                    }
                 }
             }
             break;
-            default : SetError(errIllegalParameter); break;
+            default : SetError(FormulaError::IllegalParameter); break;
         }
-        PushDouble(nMaxCount - nCount);
+        if (xResMat)
+            PushMatrix( xResMat);
+        else
+            PushDouble(nMaxCount - nCount);
     }
 }
 
-double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
+void ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
 {
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 2, 3 ) )
-        return 0;
+        return;
 
     SCCOL nCol3 = 0;
     SCROW nRow3 = 0;
@@ -4644,8 +5214,8 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
                     PopDoubleRef( nCol3, nRow3, nTab3, nColJunk, nRowJunk, nTabJunk );
                     if ( nTabJunk != nTab3 )
                     {
-                        SetError( errIllegalParameter);
-                        return 0;
+                        PushError( FormulaError::IllegalParameter);
+                        return;
                     }
                 }
                 break;
@@ -4658,13 +5228,13 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
                 break;
             case svExternalSingleRef:
                 {
-                    pSumExtraMatrix = new ScFullMatrix(1, 1, 0.0);
+                    pSumExtraMatrix = GetNewMat(1,1);
                     ScExternalRefCache::TokenRef pToken;
                     PopExternalSingleRef(pToken);
-                    if (!pToken)
+                    if (nGlobalError != FormulaError::NONE)
                     {
-                        SetError( errIllegalParameter);
-                        return 0;
+                        PushError( nGlobalError);
+                        return;
                     }
 
                     if (pToken->GetType() == svDouble)
@@ -4677,8 +5247,8 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
                 PopExternalDoubleRef(pSumExtraMatrix);
                 break;
             default:
-                SetError( errIllegalParameter);
-                return 0;
+                PushError( FormulaError::IllegalParameter);
+                return;
         }
     }
 
@@ -4692,7 +5262,10 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
             {
                 ScAddress aAdr;
                 if ( !PopDoubleRefOrSingleRef( aAdr ) )
-                    return 0;
+                {
+                    PushError( nGlobalError);
+                    return;
+                }
 
                 ScRefCellValue aCell(*pDok, aAdr);
                 switch (aCell.meType)
@@ -4727,14 +5300,14 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
         case svExternalDoubleRef:
             {
                 ScMatValType nType = GetDoubleOrStringFromMatrix( fVal, aString);
-                bIsString = ScMatrix::IsNonValueType( nType);
+                bIsString = ScMatrix::IsRealStringType( nType);
             }
             break;
         case svExternalSingleRef:
             {
                 ScExternalRefCache::TokenRef pToken;
                 PopExternalSingleRef(pToken);
-                if (pToken)
+                if (nGlobalError == FormulaError::NONE)
                 {
                     if (pToken->GetType() == svDouble)
                     {
@@ -4759,6 +5332,10 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
     double fCount = 0.0;
     bool bNull = true;
     short nParam = 1;
+    const SCSIZE nMatRows = GetRefListArrayMaxSize( nParam);
+    // There's either one RefList and nothing else, or none.
+    ScMatrixRef xResMat = (nMatRows ? GetNewMat( 1, nMatRows) : nullptr);
+    SCSIZE nRefListArrayPos = 0;
     size_t nRefInList = 0;
     while (nParam-- > 0)
     {
@@ -4774,10 +5351,12 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
             case svRefList :
                 if (bSumExtraRange)
                 {
-                    SetError( errIllegalParameter);
+                    /* TODO: this could resolve if all refs are of the same size */
+                    SetError( FormulaError::IllegalParameter);
                 }
                 else
                 {
+                    nRefListArrayPos = nRefInList;
                     ScRange aRange;
                     PopDoubleRef( aRange, nParam, nRefInList);
                     aRange.GetVars( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
@@ -4799,8 +5378,8 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
                     pQueryMatrix = GetMatrix();
                     if (!pQueryMatrix)
                     {
-                        SetError( errIllegalParameter);
-                        return 0;
+                        PushError( FormulaError::IllegalParameter);
+                        return;
                     }
                     nCol1 = 0;
                     nRow1 = 0;
@@ -4813,11 +5392,11 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
                 }
                 break;
             default:
-                SetError( errIllegalParameter);
+                SetError( FormulaError::IllegalParameter);
         }
         if ( nTab1 != nTab2 )
         {
-            SetError( errIllegalParameter);
+            SetError( FormulaError::IllegalParameter);
         }
 
         if (bSumExtraRange)
@@ -4865,7 +5444,7 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
             nTab3 = nTab1;
         }
 
-        if (nGlobalError == 0)
+        if (nGlobalError == FormulaError::NONE)
         {
             ScQueryParam rParam;
             rParam.nRow1       = nRow1;
@@ -4891,16 +5470,16 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
             rParam.nCol1  = nCol1;
             rParam.nCol2  = nCol2;
             rEntry.nField = nCol1;
-            SCsCOL nColDiff = nCol3 - nCol1;
-            SCsROW nRowDiff = nRow3 - nRow1;
+            SCCOL nColDiff = nCol3 - nCol1;
+            SCROW nRowDiff = nRow3 - nRow1;
             if (pQueryMatrix)
             {
                 // Never case-sensitive.
                 sc::CompareOptions aOptions( pDok, rEntry, rParam.eSearchType);
                 ScMatrixRef pResultMatrix = QueryMat( pQueryMatrix, aOptions);
-                if (nGlobalError || !pResultMatrix)
+                if (nGlobalError != FormulaError::NONE || !pResultMatrix)
                 {
-                    SetError( errIllegalParameter);
+                    SetError( FormulaError::IllegalParameter);
                 }
 
                 if (pSumExtraMatrix)
@@ -4960,7 +5539,7 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
             }
             else
             {
-                ScQueryCellIterator aCellIter(pDok, nTab1, rParam, false);
+                ScQueryCellIterator aCellIter(pDok, mrContext, nTab1, rParam, false);
                 // Increment Entry.nField in iterator when switching to next column.
                 aCellIter.SetAdvanceQueryParamEntryField( true );
                 if ( aCellIter.GetFirst() )
@@ -5011,27 +5590,41 @@ double ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
         }
         else
         {
-            SetError( errIllegalParameter);
-            return 0;
+            PushError( FormulaError::IllegalParameter);
+            return;
+        }
+
+        switch( eFunc )
+        {
+            case ifSUMIF:     fRes = ::rtl::math::approxAdd( fSum, fMem ); break;
+            case ifAVERAGEIF: fRes = div( ::rtl::math::approxAdd( fSum, fMem ), fCount); break;
+        }
+        if (xResMat)
+        {
+            if (nGlobalError == FormulaError::NONE)
+                xResMat->PutDouble( fRes, 0, nRefListArrayPos);
+            else
+            {
+                xResMat->PutError( nGlobalError, 0, nRefListArrayPos);
+                nGlobalError = FormulaError::NONE;
+            }
+            fRes = fSum = fMem = fCount = 0.0;
         }
     }
-
-    switch( eFunc )
-    {
-        case ifSUMIF:     fRes = ::rtl::math::approxAdd( fSum, fMem ); break;
-        case ifAVERAGEIF: fRes = div( ::rtl::math::approxAdd( fSum, fMem ), fCount); break;
-    }
-    return fRes;
+    if (xResMat)
+        PushMatrix( xResMat);
+    else
+        PushDouble( fRes);
 }
 
 void ScInterpreter::ScSumIf()
 {
-    PushDouble( IterateParametersIf( ifSUMIF));
+    IterateParametersIf( ifSUMIF);
 }
 
 void ScInterpreter::ScAverageIf()
 {
-    PushDouble( IterateParametersIf( ifAVERAGEIF));
+    IterateParametersIf( ifAVERAGEIF);
 }
 
 void ScInterpreter::ScCountIf()
@@ -5083,7 +5676,7 @@ void ScInterpreter::ScCountIf()
             case svExternalDoubleRef:
             {
                 ScMatValType nType = GetDoubleOrStringFromMatrix(fVal, aString);
-                bIsString = ScMatrix::IsNonValueType( nType);
+                bIsString = ScMatrix::IsRealStringType( nType);
             }
             break;
             case svString:
@@ -5097,6 +5690,10 @@ void ScInterpreter::ScCountIf()
         }
         double fCount = 0.0;
         short nParam = 1;
+        const SCSIZE nMatRows = GetRefListArrayMaxSize( nParam);
+        // There's either one RefList and nothing else, or none.
+        ScMatrixRef xResMat = (nMatRows ? GetNewMat( 1, nMatRows) : nullptr);
+        SCSIZE nRefListArrayPos = 0;
         size_t nRefInList = 0;
         while (nParam-- > 0)
         {
@@ -5109,8 +5706,10 @@ void ScInterpreter::ScCountIf()
             ScMatrixRef pQueryMatrix;
             switch ( GetStackType() )
             {
-                case svDoubleRef :
                 case svRefList :
+                    nRefListArrayPos = nRefInList;
+                    [[fallthrough]];
+                case svDoubleRef :
                     {
                         ScRange aRange;
                         PopDoubleRef( aRange, nParam, nRefInList);
@@ -5157,7 +5756,7 @@ void ScInterpreter::ScCountIf()
                 PushIllegalParameter();
                 return;
             }
-            if (nGlobalError == 0)
+            if (nGlobalError == FormulaError::NONE)
             {
                 ScQueryParam rParam;
                 rParam.nRow1       = nRow1;
@@ -5186,7 +5785,7 @@ void ScInterpreter::ScCountIf()
                     // Never case-sensitive.
                     sc::CompareOptions aOptions( pDok, rEntry, rParam.eSearchType);
                     ScMatrixRef pResultMatrix = QueryMat( pQueryMatrix, aOptions);
-                    if (nGlobalError || !pResultMatrix)
+                    if (nGlobalError != FormulaError::NONE || !pResultMatrix)
                     {
                         PushIllegalParameter();
                         return;
@@ -5202,7 +5801,7 @@ void ScInterpreter::ScCountIf()
                 }
                 else
                 {
-                    ScQueryCellIterator aCellIter(pDok, nTab1, rParam, false);
+                    ScQueryCellIterator aCellIter(pDok, mrContext, nTab1, rParam, false);
                     // Keep Entry.nField in iterator on column change
                     aCellIter.SetAdvanceQueryParamEntryField( true );
                     if ( aCellIter.GetFirst() )
@@ -5219,155 +5818,240 @@ void ScInterpreter::ScCountIf()
                 PushIllegalParameter();
                 return;
             }
+            if (xResMat)
+            {
+                xResMat->PutDouble( fCount, 0, nRefListArrayPos);
+                fCount = 0.0;
+            }
         }
-        PushDouble(fCount);
+        if (xResMat)
+            PushMatrix( xResMat);
+        else
+            PushDouble(fCount);
     }
 }
 
-double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
+void ScInterpreter::IterateParametersIfs( double(*ResultFunc)( const sc::ParamIfsResult& rRes ) )
 {
     sal_uInt8 nParamCount = GetByte();
     sal_uInt8 nQueryCount = nParamCount / 2;
 
-    bool bCheck;
-    if ( eFunc == ifCOUNTIFS )
-        bCheck = (nParamCount >= 2) && (nParamCount % 2 == 0);
-    else
-        bCheck = (nParamCount >= 3) && (nParamCount % 2 == 1);
+    std::vector<sal_uInt32>& vConditions = mrContext.maConditions;
+    // vConditions is cached, although it is clear'ed after every cell is interpreted,
+    // if the SUMIFS/COUNTIFS are part of a matrix formula, then that is not enough because
+    // with a single InterpretTail() call it results in evaluation of all the cells in the
+    // matrix formula.
+    vConditions.clear();
 
-    if ( !bCheck )
-    {
-        SetError( errParameterExpected);
-    }
-    else
-    {
-        std::vector<sal_uInt8> aResArray;
-        size_t nRowSize = 0;
-        size_t nColSize = 0;
-        double fVal = 0.0;
-        double fSum = 0.0;
-        double fMem = 0.0;
-        double fRes = 0.0;
-        double fCount = 0.0;
-        short nParam = 1;
-        size_t nRefInList = 0;
-        SCCOL nDimensionCols = 0;
-        SCROW nDimensionRows = 0;
+    SCCOL nStartColDiff = 0;
+    SCCOL nEndColDiff = 0;
+    SCROW nStartRowDiff = 0;
+    SCROW nEndRowDiff = 0;
+    bool bRangeReduce = false;
 
-        while (nParamCount > 1 && !nGlobalError)
+    // Range-reduce optimization
+    if (nParamCount % 2) // Not COUNTIFS
+    {
+        bool bHasDoubleRefCriteriaRanges = true;
+        // Do not attempt main-range reduce if any of the criteria-ranges are not double-refs.
+        for (sal_uInt16 nParamIdx = 2; nParamIdx < nParamCount; nParamIdx += 2 )
         {
-            // take criteria
-            svl::SharedString aString;
-            fVal = 0.0;
-            bool bIsString = true;
-            switch ( GetStackType() )
+            const formula::FormulaToken* pCriteriaRangeToken = pStack[ sp-nParamIdx ];
+            if (pCriteriaRangeToken->GetType() != svDoubleRef )
             {
-                case svDoubleRef :
-                case svSingleRef :
-                    {
-                        ScAddress aAdr;
-                        if ( !PopDoubleRefOrSingleRef( aAdr ) )
-                            return 0;
+                bHasDoubleRefCriteriaRanges = false;
+                break;
+            }
+        }
 
-                        ScRefCellValue aCell(*pDok, aAdr);
-                        switch (aCell.meType)
-                        {
-                            case CELLTYPE_VALUE :
-                                fVal = GetCellValue(aAdr, aCell);
-                                bIsString = false;
-                                break;
-                            case CELLTYPE_FORMULA :
-                                if (aCell.mpFormula->IsValue())
-                                {
-                                    fVal = GetCellValue(aAdr, aCell);
-                                    bIsString = false;
-                                }
-                                else
-                                    GetCellString(aString, aCell);
-                                break;
-                            case CELLTYPE_STRING :
-                            case CELLTYPE_EDIT :
-                                GetCellString(aString, aCell);
-                                break;
-                            default:
-                                fVal = 0.0;
-                                bIsString = false;
-                        }
-                    }
-                    break;
-                case svString:
-                    aString = GetString();
-                    break;
-                case svMatrix :
-                case svExternalDoubleRef:
+        // Probe the main range token, and try if we can shrink the range without altering results.
+        const formula::FormulaToken* pMainRangeToken = pStack[ sp-nParamCount ];
+        if (pMainRangeToken->GetType() == svDoubleRef && bHasDoubleRefCriteriaRanges)
+        {
+            const ScComplexRefData* pRefData = pMainRangeToken->GetDoubleRef();
+            if (!pRefData->IsDeleted())
+            {
+                ScRange aMainRange, aSubRange;
+                DoubleRefToRange( *pRefData, aMainRange);
+
+                if (aMainRange.aStart.Tab() == aMainRange.aEnd.Tab())
+                {
+                    // Shrink the range to actual data content.
+                    aSubRange = aMainRange;
+                    pDok->GetDataAreaSubrange(aSubRange);
+
+                    nStartColDiff = aSubRange.aStart.Col() - aMainRange.aStart.Col();
+                    nStartRowDiff = aSubRange.aStart.Row() - aMainRange.aStart.Row();
+
+                    nEndColDiff = aSubRange.aEnd.Col() - aMainRange.aEnd.Col();
+                    nEndRowDiff = aSubRange.aEnd.Row() - aMainRange.aEnd.Row();
+                    bRangeReduce = nStartColDiff || nStartRowDiff || nEndColDiff || nEndRowDiff;
+                }
+            }
+        }
+    }
+
+    double fVal = 0.0;
+    SCCOL nDimensionCols = 0;
+    SCROW nDimensionRows = 0;
+    const SCSIZE nRefArrayRows = GetRefListArrayMaxSize( nParamCount);
+    std::vector<std::vector<sal_uInt32>> vRefArrayConditions;
+
+    while (nParamCount > 1 && nGlobalError == FormulaError::NONE)
+    {
+        // take criteria
+        svl::SharedString aString;
+        fVal = 0.0;
+        bool bIsString = true;
+        switch ( GetStackType() )
+        {
+            case svDoubleRef :
+            case svSingleRef :
+                {
+                    ScAddress aAdr;
+                    if ( !PopDoubleRefOrSingleRef( aAdr ) )
                     {
-                        ScMatValType nType = GetDoubleOrStringFromMatrix( fVal, aString);
-                        bIsString = ScMatrix::IsNonValueType( nType);
+                        PushError( nGlobalError);
+                        return;
                     }
-                    break;
-                case svExternalSingleRef:
+
+                    ScRefCellValue aCell(*pDok, aAdr);
+                    switch (aCell.meType)
                     {
-                        ScExternalRefCache::TokenRef pToken;
-                        PopExternalSingleRef(pToken);
-                        if (pToken)
-                        {
-                            if (pToken->GetType() == svDouble)
+                        case CELLTYPE_VALUE :
+                            fVal = GetCellValue(aAdr, aCell);
+                            bIsString = false;
+                            break;
+                        case CELLTYPE_FORMULA :
+                            if (aCell.mpFormula->IsValue())
                             {
-                                fVal = pToken->GetDouble();
+                                fVal = GetCellValue(aAdr, aCell);
                                 bIsString = false;
                             }
                             else
-                                aString = pToken->GetString();
-                        }
+                                GetCellString(aString, aCell);
+                            break;
+                        case CELLTYPE_STRING :
+                        case CELLTYPE_EDIT :
+                            GetCellString(aString, aCell);
+                            break;
+                        default:
+                            fVal = 0.0;
+                            bIsString = false;
                     }
-                    break;
-                default:
+                }
+                break;
+            case svString:
+                aString = GetString();
+                break;
+            case svMatrix :
+            case svExternalDoubleRef:
+                {
+                    ScMatValType nType = GetDoubleOrStringFromMatrix( fVal, aString);
+                    bIsString = ScMatrix::IsRealStringType( nType);
+                }
+                break;
+            case svExternalSingleRef:
+                {
+                    ScExternalRefCache::TokenRef pToken;
+                    PopExternalSingleRef(pToken);
+                    if (nGlobalError == FormulaError::NONE)
                     {
-                        fVal = GetDouble();
-                        bIsString = false;
+                        if (pToken->GetType() == svDouble)
+                        {
+                            fVal = pToken->GetDouble();
+                            bIsString = false;
+                        }
+                        else
+                            aString = pToken->GetString();
                     }
-            }
+                }
+                break;
+            default:
+                {
+                    fVal = GetDouble();
+                    bIsString = false;
+                }
+        }
 
-            if (nGlobalError)
-                return 0;   // and bail out, no need to evaluate other arguments
+        if (nGlobalError != FormulaError::NONE)
+        {
+            PushError( nGlobalError);
+            return;   // and bail out, no need to evaluate other arguments
+        }
 
-            // take range
-            nParam = 1;
-            nRefInList = 0;
-            SCCOL nCol1 = 0;
-            SCROW nRow1 = 0;
-            SCTAB nTab1 = 0;
-            SCCOL nCol2 = 0;
-            SCROW nRow2 = 0;
-            SCTAB nTab2 = 0;
-            ScMatrixRef pQueryMatrix;
+        // take range
+        short nParam = nParamCount;
+        size_t nRefInList = 0;
+        size_t nRefArrayPos = std::numeric_limits<size_t>::max();
+        SCCOL nCol1 = 0;
+        SCROW nRow1 = 0;
+        SCTAB nTab1 = 0;
+        SCCOL nCol2 = 0;
+        SCROW nRow2 = 0;
+        SCTAB nTab2 = 0;
+        ScMatrixRef pQueryMatrix;
+        while (nParam-- == nParamCount)
+        {
             switch ( GetStackType() )
             {
                 case svRefList :
                     {
+                        const ScRefListToken* p = dynamic_cast<const ScRefListToken*>(pStack[sp-1]);
+                        if (p && p->IsArrayResult())
+                        {
+                            if (nRefInList == 0)
+                            {
+                                if (vRefArrayConditions.empty())
+                                    vRefArrayConditions.resize( nRefArrayRows);
+                                if (!vConditions.empty())
+                                {
+                                    // Similar to other reference list array
+                                    // handling, add/op the current value to
+                                    // all array positions.
+                                    for (auto & rVec : vRefArrayConditions)
+                                    {
+                                        if (rVec.empty())
+                                            rVec = vConditions;
+                                        else
+                                        {
+                                            assert(rVec.size() == vConditions.size());  // see dimensions below
+                                            for (size_t i=0, n = rVec.size(); i < n; ++i)
+                                            {
+                                                rVec[i] += vConditions[i];
+                                            }
+                                        }
+                                    }
+                                    // Reset condition results.
+                                    std::for_each( vConditions.begin(), vConditions.end(),
+                                            [](sal_uInt32 & r){ r = 0.0; } );
+                                }
+                            }
+                            nRefArrayPos = nRefInList;
+                        }
                         ScRange aRange;
                         PopDoubleRef( aRange, nParam, nRefInList);
                         aRange.GetVars( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
                     }
-                    break;
+                break;
                 case svDoubleRef :
                     PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2 );
-                    break;
+                break;
                 case svSingleRef :
                     PopSingleRef( nCol1, nRow1, nTab1 );
                     nCol2 = nCol1;
                     nRow2 = nRow1;
                     nTab2 = nTab1;
-                    break;
+                break;
                 case svMatrix:
                 case svExternalSingleRef:
                 case svExternalDoubleRef:
                     {
-                        pQueryMatrix = PopMatrix();
+                        pQueryMatrix = GetMatrix();
                         if (!pQueryMatrix)
                         {
-                            SetError( errIllegalParameter);
-                            return 0;
+                            PushError( FormulaError::IllegalParameter);
+                            return;
                         }
                         nCol1 = 0;
                         nRow1 = 0;
@@ -5378,15 +6062,24 @@ double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
                         nRow2 = static_cast<SCROW>(nR - 1);
                         nTab2 = 0;
                     }
-                    break;
+                break;
                 default:
-                    SetError( errIllegalParameter);
-                    return 0;
+                    PushError( FormulaError::IllegalParameter);
+                    return;
             }
             if ( nTab1 != nTab2 )
             {
-                SetError( errIllegalArgument);
-                return 0;
+                PushError( FormulaError::IllegalArgument);
+                return;
+            }
+
+            if (bRangeReduce)
+            {
+                nCol1 += nStartColDiff;
+                nRow1 += nStartRowDiff;
+
+                nCol2 += nEndColDiff;
+                nRow2 += nEndRowDiff;
             }
 
             // All reference ranges must be of same dimension and size.
@@ -5396,21 +6089,20 @@ double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
                 nDimensionRows = nRow2 - nRow1 + 1;
             if ((nDimensionCols != (nCol2 - nCol1 + 1)) || (nDimensionRows != (nRow2 - nRow1 + 1)))
             {
-                SetError ( errIllegalArgument);
-                return 0;
+                PushError ( FormulaError::IllegalArgument);
+                return;
             }
 
             // recalculate matrix values
-            if (nGlobalError)
-                return 0;
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError( nGlobalError);
+                return;
+            }
 
             // initialize temporary result matrix
-            if (aResArray.empty())
-            {
-                nColSize = nCol2 - nCol1 + 1;
-                nRowSize = nRow2 - nRow1 + 1;
-                aResArray.resize(nColSize*nRowSize, 0);
-            }
+            if (vConditions.empty())
+                vConditions.resize( nDimensionCols * nDimensionRows, 0);
 
             ScQueryParam rParam;
             rParam.nRow1       = nRow1;
@@ -5431,41 +6123,41 @@ double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
                 if (rItem.meType == ScQueryEntry::ByString)
                     rParam.eSearchType = DetectSearchType(rItem.maString.getString(), pDok);
             }
-            ScAddress aAdr;
-            aAdr.SetTab( nTab1 );
             rParam.nCol1  = nCol1;
             rParam.nCol2  = nCol2;
             rEntry.nField = nCol1;
-            SCsCOL nColDiff = -nCol1;
-            SCsROW nRowDiff = -nRow1;
+            SCCOL nColDiff = -nCol1;
+            SCROW nRowDiff = -nRow1;
             if (pQueryMatrix)
             {
                 // Never case-sensitive.
                 sc::CompareOptions aOptions( pDok, rEntry, rParam.eSearchType);
                 ScMatrixRef pResultMatrix = QueryMat( pQueryMatrix, aOptions);
-                if (nGlobalError || !pResultMatrix)
+                if (nGlobalError != FormulaError::NONE || !pResultMatrix)
                 {
-                    SetError( errIllegalParameter);
-                    return 0;
+                    PushError( FormulaError::IllegalParameter);
+                    return;
                 }
 
                 // result matrix is filled with boolean values.
                 std::vector<double> aResValues;
                 pResultMatrix->GetDoubleArray(aResValues);
-                if (aResArray.size() != aResValues.size())
+                if (vConditions.size() != aResValues.size())
                 {
-                    SetError( errIllegalParameter);
-                    return 0;
+                    PushError( FormulaError::IllegalParameter);
+                    return;
                 }
 
-                std::vector<sal_uInt8>::iterator itRes = aResArray.begin(), itResEnd = aResArray.end();
                 std::vector<double>::const_iterator itThisRes = aResValues.begin();
-                for (; itRes != itResEnd; ++itRes, ++itThisRes)
-                    *itRes += *itThisRes;
+                for (auto& rCondition : vConditions)
+                {
+                    rCondition += *itThisRes;
+                    ++itThisRes;
+                }
             }
             else
             {
-                ScQueryCellIterator aCellIter(pDok, nTab1, rParam, false);
+                ScQueryCellIterator aCellIter(pDok, mrContext, nTab1, rParam, false);
                 // Increment Entry.nField in iterator when switching to next column.
                 aCellIter.SetAdvanceQueryParamEntryField( true );
                 if ( aCellIter.GetFirst() )
@@ -5474,21 +6166,72 @@ double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
                     {
                         size_t nC = aCellIter.GetCol() + nColDiff;
                         size_t nR = aCellIter.GetRow() + nRowDiff;
-                        ++aResArray[nC*nRowSize+nR];
+                        ++vConditions[nC * nDimensionRows + nR];
                     } while ( aCellIter.GetNext() );
                 }
             }
-            nParamCount -= 2;
+            if (nRefArrayPos != std::numeric_limits<size_t>::max())
+            {
+                // Apply condition result to reference list array result position.
+                std::vector<sal_uInt32>& rVec = vRefArrayConditions[nRefArrayPos];
+                if (rVec.empty())
+                    rVec = vConditions;
+                else
+                {
+                    assert(rVec.size() == vConditions.size());  // see dimensions above
+                    for (size_t i=0, n = rVec.size(); i < n; ++i)
+                    {
+                        rVec[i] += vConditions[i];
+                    }
+                }
+                // Reset conditions vector.
+                // When leaving an svRefList this has to be emptied not set to
+                // 0.0 because it's checked when entering an svRefList.
+                if (nRefInList == 0)
+                    std::vector<sal_uInt32>().swap( vConditions);
+                else
+                    std::for_each( vConditions.begin(), vConditions.end(), [](sal_uInt32 & r){ r = 0.0; } );
+            }
         }
+        nParamCount -= 2;
+    }
 
-        if (nGlobalError)
-            return 0;   // bail out
-
-        // main range - only for AVERAGEIFS and SUMIFS
-        if (nParamCount == 1)
+    if (!vRefArrayConditions.empty() && !vConditions.empty())
+    {
+        // Add/op the last current value to all array positions.
+        for (auto & rVec : vRefArrayConditions)
         {
-            nParam = 1;
-            nRefInList = 0;
+            if (rVec.empty())
+                rVec = vConditions;
+            else
+            {
+                assert(rVec.size() == vConditions.size());  // see dimensions above
+                for (size_t i=0, n = rVec.size(); i < n; ++i)
+                {
+                    rVec[i] += vConditions[i];
+                }
+            }
+        }
+    }
+
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;   // bail out
+    }
+
+    sc::ParamIfsResult aRes;
+    ScMatrixRef xResMat;
+
+    // main range - only for AVERAGEIFS, SUMIFS, MINIFS and MAXIFS
+    if (nParamCount == 1)
+    {
+        short nParam = nParamCount;
+        size_t nRefInList = 0;
+        size_t nRefArrayPos = std::numeric_limits<size_t>::max();
+        bool bRefArrayMain = false;
+        while (nParam-- == nParamCount)
+        {
             bool bNull = true;
             SCCOL nMainCol1 = 0;
             SCROW nMainRow1 = 0;
@@ -5501,29 +6244,47 @@ double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
             {
                 case svRefList :
                     {
+                        const ScRefListToken* p = dynamic_cast<const ScRefListToken*>(pStack[sp-1]);
+                        if (p && p->IsArrayResult())
+                        {
+                            if (vRefArrayConditions.empty())
+                            {
+                                // Replicate conditions if there wasn't a
+                                // reference list array for criteria
+                                // evaluation.
+                                vRefArrayConditions.resize( nRefArrayRows);
+                                for (auto & rVec : vRefArrayConditions)
+                                {
+                                    rVec = vConditions;
+                                }
+                            }
+
+                            bRefArrayMain = true;
+                            nRefArrayPos = nRefInList;
+                        }
                         ScRange aRange;
                         PopDoubleRef( aRange, nParam, nRefInList);
                         aRange.GetVars( nMainCol1, nMainRow1, nMainTab1, nMainCol2, nMainRow2, nMainTab2);
                     }
-                    break;
+                break;
                 case svDoubleRef :
                     PopDoubleRef( nMainCol1, nMainRow1, nMainTab1, nMainCol2, nMainRow2, nMainTab2 );
-                    break;
+                break;
                 case svSingleRef :
                     PopSingleRef( nMainCol1, nMainRow1, nMainTab1 );
                     nMainCol2 = nMainCol1;
                     nMainRow2 = nMainRow1;
                     nMainTab2 = nMainTab1;
-                    break;
+                break;
                 case svMatrix:
                 case svExternalSingleRef:
                 case svExternalDoubleRef:
                     {
-                        pMainMatrix = PopMatrix();
+                        pMainMatrix = GetMatrix();
                         if (!pMainMatrix)
                         {
-                            SetError( errIllegalParameter);
-                            return 0;
+                            PushError( FormulaError::IllegalParameter);
+                            return;
                         }
                         nMainCol1 = 0;
                         nMainRow1 = 0;
@@ -5534,123 +6295,284 @@ double ScInterpreter::IterateParametersIfs( ScIterFuncIfs eFunc )
                         nMainRow2 = static_cast<SCROW>(nR - 1);
                         nMainTab2 = 0;
                     }
-                    break;
+                break;
+                // Treat a scalar value as 1x1 matrix.
+                case svDouble:
+                    pMainMatrix = GetNewMat(1,1);
+                    nMainCol1 = nMainCol2 = 0;
+                    nMainRow1 = nMainRow2 = 0;
+                    nMainTab1 = nMainTab2 = 0;
+                    pMainMatrix->PutDouble( GetDouble(), 0, 0);
+                break;
+                case svString:
+                    pMainMatrix = GetNewMat(1,1);
+                    nMainCol1 = nMainCol2 = 0;
+                    nMainRow1 = nMainRow2 = 0;
+                    nMainTab1 = nMainTab2 = 0;
+                    pMainMatrix->PutString( GetString(), 0, 0);
+                break;
                 default:
-                    SetError( errIllegalParameter);
-                    return 0;
+                    PopError();
+                    PushError( FormulaError::IllegalParameter);
+                    return;
             }
             if ( nMainTab1 != nMainTab2 )
             {
-                SetError( errIllegalArgument);
-                return 0;
+                PushError( FormulaError::IllegalArgument);
+                return;
+            }
+
+            if (bRangeReduce)
+            {
+                nMainCol1 += nStartColDiff;
+                nMainRow1 += nStartRowDiff;
+
+                nMainCol2 += nEndColDiff;
+                nMainRow2 += nEndRowDiff;
             }
 
             // All reference ranges must be of same dimension and size.
             if ((nDimensionCols != (nMainCol2 - nMainCol1 + 1)) || (nDimensionRows != (nMainRow2 - nMainRow1 + 1)))
             {
-                SetError ( errIllegalArgument);
-                return 0;
+                PushError ( FormulaError::IllegalArgument);
+                return;
             }
 
-            if (nGlobalError)
-                return 0;   // bail out
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError( nGlobalError);
+                return;   // bail out
+            }
 
             // end-result calculation
-            ScAddress aAdr;
-            aAdr.SetTab( nMainTab1 );
+
+            // This gets weird.. if conditions were calculated using a
+            // reference list array but the main calculation range is not a
+            // reference list array, then the conditions of the array are
+            // applied to the main range each in turn to form the array result.
+
+            size_t nRefArrayMainPos = (bRefArrayMain ? nRefArrayPos :
+                    (vRefArrayConditions.empty() ? std::numeric_limits<size_t>::max() : 0));
+            const bool bAppliedArray = (!bRefArrayMain && nRefArrayMainPos == 0);
+
+            if (nRefArrayMainPos == 0)
+                xResMat = GetNewMat( 1, nRefArrayRows);
+
             if (pMainMatrix)
             {
                 std::vector<double> aMainValues;
                 pMainMatrix->GetDoubleArray(aMainValues, false); // Map empty values to NaN's.
-                if (aResArray.size() != aMainValues.size())
+
+                do
                 {
-                    SetError( errIllegalArgument);
-                    return 0;
-                }
+                    if (nRefArrayMainPos < vRefArrayConditions.size())
+                        vConditions = vRefArrayConditions[nRefArrayMainPos];
 
-                std::vector<sal_uInt8>::const_iterator itRes = aResArray.begin(), itResEnd = aResArray.end();
-                std::vector<double>::const_iterator itMain = aMainValues.begin();
-                for (; itRes != itResEnd; ++itRes, ++itMain)
-                {
-                    if (*itRes != nQueryCount)
-                        continue;
-
-                    fVal = *itMain;
-                    if (GetDoubleErrorValue(fVal) == errElementNaN)
-                        continue;
-
-                    ++fCount;
-                    if (bNull && fVal != 0.0)
+                    if (vConditions.size() != aMainValues.size())
                     {
-                        bNull = false;
-                        fMem = fVal;
+                        PushError( FormulaError::IllegalArgument);
+                        return;
                     }
-                    else
-                        fSum += fVal;
+
+                    std::vector<sal_uInt32>::const_iterator itRes = vConditions.begin(), itResEnd = vConditions.end();
+                    std::vector<double>::const_iterator itMain = aMainValues.begin();
+                    for (; itRes != itResEnd; ++itRes, ++itMain)
+                    {
+                        if (*itRes != nQueryCount)
+                            continue;
+
+                        fVal = *itMain;
+                        if (GetDoubleErrorValue(fVal) == FormulaError::ElementNaN)
+                            continue;
+
+                        ++aRes.mfCount;
+                        if (bNull && fVal != 0.0)
+                        {
+                            bNull = false;
+                            aRes.mfMem = fVal;
+                        }
+                        else
+                            aRes.mfSum += fVal;
+                        if ( aRes.mfMin > fVal )
+                            aRes.mfMin = fVal;
+                        if ( aRes.mfMax < fVal )
+                            aRes.mfMax = fVal;
+                    }
+                    if (nRefArrayMainPos != std::numeric_limits<size_t>::max())
+                    {
+                        xResMat->PutDouble( ResultFunc( aRes), 0, nRefArrayMainPos);
+                        aRes = sc::ParamIfsResult();
+                    }
                 }
+                while (bAppliedArray && ++nRefArrayMainPos < nRefArrayRows);
             }
             else
             {
-                std::vector<sal_uInt8>::const_iterator itRes = aResArray.begin();
-                for (size_t nCol = 0; nCol < nColSize; ++nCol)
+                ScAddress aAdr;
+                aAdr.SetTab( nMainTab1 );
+                do
                 {
-                    for (size_t nRow = 0; nRow < nRowSize; ++nRow, ++itRes)
+                    if (nRefArrayMainPos < vRefArrayConditions.size())
+                        vConditions = vRefArrayConditions[nRefArrayMainPos];
+
+                    std::vector<sal_uInt32>::const_iterator itRes = vConditions.begin();
+                    for (SCCOL nCol = 0; nCol < nDimensionCols; ++nCol)
                     {
-                        if (*itRes == nQueryCount)
+                        for (SCROW nRow = 0; nRow < nDimensionRows; ++nRow, ++itRes)
                         {
-                            aAdr.SetCol( static_cast<SCCOL>(nCol) + nMainCol1);
-                            aAdr.SetRow( static_cast<SCROW>(nRow) + nMainRow1);
-                            ScRefCellValue aCell(*pDok, aAdr);
-                            if (aCell.hasNumeric())
+                            if (*itRes == nQueryCount)
                             {
-                                fVal = GetCellValue(aAdr, aCell);
-                                ++fCount;
-                                if ( bNull && fVal != 0.0 )
+                                aAdr.SetCol( nCol + nMainCol1);
+                                aAdr.SetRow( nRow + nMainRow1);
+                                ScRefCellValue aCell(*pDok, aAdr);
+                                if (aCell.hasNumeric())
                                 {
-                                    bNull = false;
-                                    fMem = fVal;
+                                    fVal = GetCellValue(aAdr, aCell);
+                                    ++aRes.mfCount;
+                                    if ( bNull && fVal != 0.0 )
+                                    {
+                                        bNull = false;
+                                        aRes.mfMem = fVal;
+                                    }
+                                    else
+                                        aRes.mfSum += fVal;
+                                    if ( aRes.mfMin > fVal )
+                                        aRes.mfMin = fVal;
+                                    if ( aRes.mfMax < fVal )
+                                        aRes.mfMax = fVal;
                                 }
-                                else
-                                    fSum += fVal;
                             }
                         }
                     }
+                    if (nRefArrayMainPos != std::numeric_limits<size_t>::max())
+                    {
+                        xResMat->PutDouble( ResultFunc( aRes), 0, nRefArrayMainPos);
+                        aRes = sc::ParamIfsResult();
+                    }
                 }
+                while (bAppliedArray && ++nRefArrayMainPos < nRefArrayRows);
+            }
+        }
+    }
+    else
+    {
+        // COUNTIFS only.
+        if (vRefArrayConditions.empty())
+        {
+            for (auto const & rCond : vConditions)
+            {
+                if (rCond == nQueryCount)
+                    ++aRes.mfCount;
             }
         }
         else
         {
-            std::vector<sal_uInt8>::const_iterator itRes = aResArray.begin(), itResEnd = aResArray.end();
-            for (; itRes != itResEnd; ++itRes)
-                if (*itRes == nQueryCount)
-                    ++fCount;
+            xResMat = GetNewMat( 1, nRefArrayRows);
+            for (size_t i=0, n = vRefArrayConditions.size(); i < n; ++i)
+            {
+                double fCount = 0.0;
+                for (auto const & rCond : vRefArrayConditions[i])
+                {
+                    if (rCond == nQueryCount)
+                        ++fCount;
+                }
+                if (fCount)
+                    xResMat->PutDouble( fCount, 0, i);
+            }
         }
-
-        switch( eFunc )
-        {
-            case ifSUMIFS:     fRes = ::rtl::math::approxAdd( fSum, fMem ); break;
-            case ifAVERAGEIFS: fRes = div( ::rtl::math::approxAdd( fSum, fMem ), fCount); break;
-            case ifCOUNTIFS:   fRes = fCount; break;
-            default: ; // nothing
-        }
-        return fRes;
     }
-    return 0;
+
+    if (xResMat)
+        PushMatrix( xResMat);
+    else
+        PushDouble( ResultFunc( aRes));
 }
 
 void ScInterpreter::ScSumIfs()
 {
-    PushDouble( IterateParametersIfs( ifSUMIFS));
+    // ScMutationGuard aShouldFail(pDok, ScMutationGuardFlags::CORE);
+    sal_uInt8 nParamCount = GetByte();
+
+    if (nParamCount < 3 || (nParamCount % 2 != 1))
+    {
+        PushError( FormulaError::ParameterExpected);
+        return;
+    }
+
+    auto ResultFunc = []( const sc::ParamIfsResult& rRes )
+    {
+        return rtl::math::approxAdd(rRes.mfSum, rRes.mfMem);
+    };
+    IterateParametersIfs(ResultFunc);
 }
 
 void ScInterpreter::ScAverageIfs()
 {
-    PushDouble( IterateParametersIfs( ifAVERAGEIFS));
+    sal_uInt8 nParamCount = GetByte();
+
+    if (nParamCount < 3 || (nParamCount % 2 != 1))
+    {
+        PushError( FormulaError::ParameterExpected);
+        return;
+    }
+
+    auto ResultFunc = []( const sc::ParamIfsResult& rRes )
+    {
+        return sc::div( rtl::math::approxAdd( rRes.mfSum, rRes.mfMem), rRes.mfCount);
+    };
+    IterateParametersIfs(ResultFunc);
 }
 
 void ScInterpreter::ScCountIfs()
 {
-    PushDouble( IterateParametersIfs( ifCOUNTIFS));
+    sal_uInt8 nParamCount = GetByte();
+
+    if (nParamCount < 2 || (nParamCount % 2 != 0))
+    {
+        PushError( FormulaError::ParameterExpected);
+        return;
+    }
+
+    auto ResultFunc = []( const sc::ParamIfsResult& rRes )
+    {
+        return rRes.mfCount;
+    };
+    IterateParametersIfs(ResultFunc);
+}
+
+void ScInterpreter::ScMinIfs_MS()
+{
+    sal_uInt8 nParamCount = GetByte();
+
+    if (nParamCount < 3 || (nParamCount % 2 != 1))
+    {
+        PushError( FormulaError::ParameterExpected);
+        return;
+    }
+
+    auto ResultFunc = []( const sc::ParamIfsResult& rRes )
+    {
+        return (rRes.mfMin < std::numeric_limits<double>::max()) ? rRes.mfMin : 0.0;
+    };
+    IterateParametersIfs(ResultFunc);
+}
+
+
+void ScInterpreter::ScMaxIfs_MS()
+{
+    sal_uInt8 nParamCount = GetByte();
+
+    if (nParamCount < 3 || (nParamCount % 2 != 1))
+    {
+        PushError( FormulaError::ParameterExpected);
+        return;
+    }
+
+    auto ResultFunc = []( const sc::ParamIfsResult& rRes )
+    {
+        return (rRes.mfMax > std::numeric_limits<double>::lowest()) ? rRes.mfMax : 0.0;
+    };
+    IterateParametersIfs(ResultFunc);
 }
 
 void ScInterpreter::ScLookup()
@@ -5786,7 +6708,7 @@ void ScInterpreter::ScLookup()
             if (aCell.hasEmptyValue())
             {
                 // Empty cells aren't found anywhere, bail out early.
-                SetError( NOTAVAILABLE);
+                SetError( FormulaError::NotAvailable);
             }
             else if (aCell.hasNumeric())
             {
@@ -5798,10 +6720,10 @@ void ScInterpreter::ScLookup()
         }
         break;
         default:
-            SetError( errIllegalParameter);
+            SetError( FormulaError::IllegalParameter);
     }
 
-    if (nGlobalError)
+    if (nGlobalError != FormulaError::NONE)
     {
         PushError( nGlobalError);
         return;
@@ -5866,7 +6788,7 @@ void ScInterpreter::ScLookup()
                     break;
                 case svDoubleRef:
                     aResAdr.Set( nResCol1, nResRow1, nResTab);
-                    // fallthru
+                    [[fallthrough]];
                 case svSingleRef:
                     PushCellResultToken( true, aResAdr, nullptr, nullptr);
                     break;
@@ -5906,28 +6828,83 @@ void ScInterpreter::ScLookup()
         SCSIZE nC, nR;
         pDataMat->GetDimensions(nC, nR);
 
+        // Do not propagate errors from matrix while copying to vector.
+        pDataMat->SetErrorInterpreter( nullptr);
+
+        // Excel has an undocumented behaviour in that it seems to internally
+        // sort an interim array (i.e. error values specifically #DIV/0! are
+        // sorted to the end) or ignore error values that makes these "get last
+        // non-empty" searches work, e.g. =LOOKUP(2,1/NOT(ISBLANK(A:A)),A:A)
+        // see tdf#117016
+        // Instead of sorting a million entries of which mostly only a bunch of
+        // rows are filled and moving error values to the end which most are
+        // already anyway, assume the matrix to be sorted except error values
+        // and omit the coded DoubleError values.
+        // Do this only for a numeric matrix (that includes errors coded as
+        // doubles), which covers the case in question.
+        /* TODO: it's unclear whether this really matches Excel behaviour in
+         * all constellations or if there are cases that include unsorted error
+         * values and thus yield arbitrary binary search results or something
+         * different or whether there are cases where error values are also
+         * omitted from mixed numeric/string arrays or if it's not an interim
+         * matrix but a cell range reference instead. */
+        const bool bOmitErrorValues = (eDataArrayType == svMatrix && pDataMat->IsNumeric());
+
         // In case of non-vector matrix, only search the first row or column.
         ScMatrixRef pDataMat2;
-        if (bVertical)
+        std::vector<SCCOLROW> vIndex;
+        if (bOmitErrorValues)
         {
-            ScMatrixRef pTempMat(new ScFullMatrix(1, nR, 0.0));
-            for (SCSIZE i = 0; i < nR; ++i)
-                if (pDataMat->IsValue(0, i))
-                    pTempMat->PutDouble(pDataMat->GetDouble(0, i), 0, i);
+            std::vector<double> vArray;
+            VectorMatrixAccessor aMatAcc(*pDataMat, bVertical);
+            const SCSIZE nElements = aMatAcc.GetElementCount();
+            for (SCSIZE i=0; i < nElements; ++i)
+            {
+                const double fVal = aMatAcc.GetDouble(i);
+                if (rtl::math::isFinite(fVal))
+                {
+                    vArray.push_back(fVal);
+                    vIndex.push_back(i);
+                }
+            }
+            if (vArray.empty())
+            {
+                PushNA();
+                return;
+            }
+            const size_t nElems = vArray.size();
+            if (nElems == nElements)
+            {
+                // No error value omitted, use as is.
+                pDataMat2 = pDataMat;
+                std::vector<SCCOLROW>().swap( vIndex);
+            }
+            else
+            {
+                nLenMajor = nElems;
+                if (bVertical)
+                {
+                    ScMatrixRef pTempMat = GetNewMat( 1, nElems);
+                    pTempMat->PutDoubleVector( vArray, 0, 0);
+                    pDataMat2 = pTempMat;
+                }
                 else
-                    pTempMat->PutString(pDataMat->GetString(0, i), 0, i);
-            pDataMat2 = pTempMat;
+                {
+                    ScMatrixRef pTempMat = GetNewMat( nElems, 1);
+                    for (size_t i=0; i < nElems; ++i)
+                        pTempMat->PutDouble( vArray[i], i, 0);
+                    pDataMat2 = pTempMat;
+                }
+            }
         }
         else
         {
-            ScMatrixRef pTempMat(new ScFullMatrix(nC, 1, 0.0));
-            for (SCSIZE i = 0; i < nC; ++i)
-                if (pDataMat->IsValue(i, 0))
-                    pTempMat->PutDouble(pDataMat->GetDouble(i, 0), i, 0);
-                else
-                    pTempMat->PutString(pDataMat->GetString(i, 0), i, 0);
-            pDataMat2 = pTempMat;
+            // Just use as is with the VectorMatrixAccessor.
+            pDataMat2 = pDataMat;
         }
+
+        // Do not propagate errors from matrix while searching.
+        pDataMat2->SetErrorInterpreter( nullptr);
 
         VectorMatrixAccessor aMatAcc2(*pDataMat2, bVertical);
 
@@ -5987,6 +6964,9 @@ void ScInterpreter::ScLookup()
 
         if (bFound)
         {
+            if (!vIndex.empty())
+                nDelta = vIndex[nDelta];
+
             VectorMatrixAccessor aMatAcc(*pDataMat, bVertical);
             SCCOLROW i = nDelta;
             SCSIZE n = aMatAcc.GetElementCount();
@@ -6051,7 +7031,9 @@ void ScInterpreter::ScLookup()
         }
         else
         {
-            // no result array.  Use the data array to get the final value from.
+            // No result array. Use the data array to get the final value from.
+            // Propagate errors from matrix again.
+            pDataMat->SetErrorInterpreter( this);
             if (bVertical)
             {
                 if (pDataMat->IsValue(nC-1, nDelta))
@@ -6086,7 +7068,7 @@ void ScInterpreter::ScLookup()
     if (rItem.meType == ScQueryEntry::ByString)
         aParam.eSearchType = DetectSearchType(rItem.maString.getString(), pDok);
 
-    ScQueryCellIterator aCellIter(pDok, nTab1, aParam, false);
+    ScQueryCellIterator aCellIter(pDok, mrContext, nTab1, aParam, false);
     SCCOL nC;
     SCROW nR;
     // Advance Entry.nField in iterator upon switching columns if
@@ -6280,11 +7262,11 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
 
     if (!pMat)
     {
-        nZIndex += nRow1;                       // Wertzeile
+        nZIndex += nRow1;                       // value row
         nSpIndex = sal::static_int_cast<SCCOL>( nSpIndex + nCol1 );     // value column
     }
 
-    if (nGlobalError)
+    if (nGlobalError != FormulaError::NONE)
     {
         PushIllegalParameter();
         return;
@@ -6296,12 +7278,12 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     if ( bHLookup )
     {
         aParam.nCol2 = nCol2;
-        aParam.nRow2 = nRow1;     // nur in der ersten Zeile suchen
+        aParam.nRow2 = nRow1;     // search only in the first row
         aParam.bByRow = false;
     }
     else
     {
-        aParam.nCol2 = nCol1;     // nur in der ersten Spalte suchen
+        aParam.nCol2 = nCol1;     // search only in the first column
         aParam.nRow2 = nRow2;
         aParam.nTab  = nTab1;
     }
@@ -6328,10 +7310,10 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
             svl::SharedString aParamStr = rItem.maString;
             if ( bSorted )
             {
-                static CollatorWrapper* pCollator = ScGlobal::GetCollator();
+                CollatorWrapper* pCollator = ScGlobal::GetCollator();
                 for (SCSIZE i = 0; i < nMatCount; i++)
                 {
-                    if (bHLookup ? pMat->IsString(i, 0) : pMat->IsString(0, i))
+                    if (bHLookup ? pMat->IsStringOrEmpty(i, 0) : pMat->IsStringOrEmpty(0, i))
                     {
                         sal_Int32 nRes =
                             pCollator->compareString(
@@ -6351,7 +7333,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
                 {
                     for (SCSIZE i = 0; i < nMatCount; i++)
                     {
-                        if (pMat->IsString(i, 0))
+                        if (pMat->IsStringOrEmpty(i, 0))
                         {
                             if (pMat->GetString(i,0).getDataIgnoreCase() == aParamStr.getDataIgnoreCase())
                             {
@@ -6374,7 +7356,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
                 // #i2168# ignore strings
                 for (SCSIZE i = 0; i < nMatCount; i++)
                 {
-                    if (!(bHLookup ? pMat->IsString(i, 0) : pMat->IsString(0, i)))
+                    if (!(bHLookup ? pMat->IsStringOrEmpty(i, 0) : pMat->IsStringOrEmpty(0, i)))
                     {
                         if ((bHLookup ? pMat->GetDouble(i,0) : pMat->GetDouble(0,i)) <= rItem.mfVal)
                             nDelta = i;
@@ -6389,7 +7371,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
                 {
                     for (SCSIZE i = 0; i < nMatCount; i++)
                     {
-                        if (! pMat->IsString(i, 0) )
+                        if (! pMat->IsStringOrEmpty(i, 0) )
                         {
                             if ( pMat->GetDouble(i,0) == rItem.mfVal)
                             {
@@ -6414,7 +7396,8 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
                 nX = nDelta;
                 nY = static_cast<SCSIZE>(nZIndex);
             }
-            if ( pMat->IsString( nX, nY) )
+            assert( nX < nC && nY < nR );
+            if ( pMat->IsStringOrEmpty( nX, nY) )
                 PushString(pMat->GetString( nX,nY).getString());
             else
                 PushDouble(pMat->GetDouble( nX,nY));
@@ -6432,7 +7415,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
             rEntry.eOp = SC_LESS_EQUAL;
         if ( bHLookup )
         {
-            ScQueryCellIterator aCellIter(pDok, nTab1, aParam, false);
+            ScQueryCellIterator aCellIter(pDok, mrContext, nTab1, aParam, false);
             // advance Entry.nField in Iterator upon switching columns
             aCellIter.SetAdvanceQueryParamEntryField( true );
             if ( bSorted )
@@ -6504,7 +7487,9 @@ bool ScInterpreter::FillEntry(ScQueryEntry& rEntry)
             }
         }
         break;
-        case svMatrix :
+        case svExternalDoubleRef:
+        case svExternalSingleRef:
+        case svMatrix:
         {
             svl::SharedString aStr;
             const ScMatValType nType = GetDoubleOrStringFromMatrix(rItem.mfVal, aStr);
@@ -6521,6 +7506,7 @@ bool ScInterpreter::FillEntry(ScQueryEntry& rEntry)
     } // switch ( GetStackType() )
     return true;
 }
+
 void ScInterpreter::ScVLookup()
 {
     CalculateLookup(false);
@@ -6533,18 +7519,18 @@ void ScInterpreter::ScSubTotal()
     {
         // We must fish the 1st parameter deep from the stack! And push it on top.
         const FormulaToken* p = pStack[ sp - nParamCount ];
-        PushTempToken( *p );
-        int nFunc = (int) ::rtl::math::approxFloor( GetDouble() );
-        mnSubTotalFlags |= SUBTOTAL_IGN_NESTED_ST_AG | SUBTOTAL_IGN_FILTERED;
+        PushWithoutError( *p );
+        sal_Int32 nFunc = GetInt32();
+        mnSubTotalFlags |= SubtotalFlags::IgnoreNestedStAg | SubtotalFlags::IgnoreFiltered;
         if (nFunc > 100)
         {
             // For opcodes 101 through 111, we need to skip hidden cells.
             // Other than that these opcodes are identical to 1 through 11.
-            mnSubTotalFlags |= SUBTOTAL_IGN_HIDDEN;
+            mnSubTotalFlags |= SubtotalFlags::IgnoreHidden;
             nFunc -= 100;
         }
 
-        if ( nFunc < 1 || nFunc > 11 )
+        if ( nGlobalError != FormulaError::NONE || nFunc < 1 || nFunc > 11 )
             PushIllegalArgument();  // simulate return on stack, not SetError(...)
         else
         {
@@ -6565,11 +7551,11 @@ void ScInterpreter::ScSubTotal()
                 default : PushIllegalArgument();       break;
             }
         }
-        mnSubTotalFlags = 0x00;
+        mnSubTotalFlags = SubtotalFlags::NONE;
         // Get rid of the 1st (fished) parameter.
-        double nVal = GetDouble();
+        FormulaConstTokenRef xRef( PopToken());
         Pop();
-        PushDouble( nVal );
+        PushTokenRef( xRef);
     }
 }
 
@@ -6580,42 +7566,42 @@ void ScInterpreter::ScAggregate()
     {
         // fish the 1st parameter from the stack and push it on top.
         const FormulaToken* p = pStack[ sp - nParamCount ];
-        PushTempToken( *p );
-        int nFunc = ( int ) ::rtl::math::approxFloor( GetDouble() );
+        PushWithoutError( *p );
+        sal_Int32 nFunc = GetInt32();
         // fish the 2nd parameter from the stack and push it on top.
         const FormulaToken* p2 = pStack[ sp - ( nParamCount - 1 ) ];
-        PushTempToken( *p2 );
-        int nOption = ( int ) ::rtl::math::approxFloor( GetDouble() );
+        PushWithoutError( *p2 );
+        sal_Int32 nOption = GetInt32();
 
-        if ( nFunc < 1 || nFunc > 19 )
+        if ( nGlobalError != FormulaError::NONE || nFunc < 1 || nFunc > 19 )
             PushIllegalArgument();
         else
         {
             switch ( nOption)
             {
                 case 0 : // ignore nested SUBTOTAL and AGGREGATE functions
-                    mnSubTotalFlags = SUBTOTAL_IGN_NESTED_ST_AG;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreNestedStAg;
                     break;
                 case 1 : // ignore hidden rows, nested SUBTOTAL and AGGREGATE functions
-                    mnSubTotalFlags = SUBTOTAL_IGN_HIDDEN | SUBTOTAL_IGN_NESTED_ST_AG;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreHidden | SubtotalFlags::IgnoreNestedStAg;
                     break;
                 case 2 : // ignore error values, nested SUBTOTAL and AGGREGATE functions
-                    mnSubTotalFlags = SUBTOTAL_IGN_ERR_VAL | SUBTOTAL_IGN_NESTED_ST_AG;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreErrVal | SubtotalFlags::IgnoreNestedStAg;
                     break;
                 case 3 : // ignore hidden rows, error values, nested SUBTOTAL and AGGREGATE functions
-                    mnSubTotalFlags = SUBTOTAL_IGN_HIDDEN | SUBTOTAL_IGN_ERR_VAL | SUBTOTAL_IGN_NESTED_ST_AG;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreHidden | SubtotalFlags::IgnoreErrVal | SubtotalFlags::IgnoreNestedStAg;
                     break;
                 case 4 : // ignore nothing
-                    mnSubTotalFlags = 0x00;
+                    mnSubTotalFlags = SubtotalFlags::NONE;
                     break;
                 case 5 : // ignore hidden rows
-                    mnSubTotalFlags = SUBTOTAL_IGN_HIDDEN ;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreHidden ;
                     break;
                 case 6 : // ignore error values
-                    mnSubTotalFlags = SUBTOTAL_IGN_ERR_VAL ;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreErrVal ;
                     break;
                 case 7 : // ignore hidden rows and error values
-                    mnSubTotalFlags = SUBTOTAL_IGN_HIDDEN | SUBTOTAL_IGN_ERR_VAL ;
+                    mnSubTotalFlags = SubtotalFlags::IgnoreHidden | SubtotalFlags::IgnoreErrVal ;
                     break;
                 default :
                     PushIllegalArgument();
@@ -6625,17 +7611,17 @@ void ScInterpreter::ScAggregate()
             cPar = nParamCount - 2;
             switch ( nFunc )
             {
-                case SUBTOTAL_FUNC_AVE      : ScAverage(); break;
-                case SUBTOTAL_FUNC_CNT      : ScCount();   break;
-                case SUBTOTAL_FUNC_CNT2     : ScCount2();  break;
-                case SUBTOTAL_FUNC_MAX      : ScMax();     break;
-                case SUBTOTAL_FUNC_MIN      : ScMin();     break;
-                case SUBTOTAL_FUNC_PROD     : ScProduct(); break;
-                case SUBTOTAL_FUNC_STD      : ScStDev();   break;
-                case SUBTOTAL_FUNC_STDP     : ScStDevP();  break;
-                case SUBTOTAL_FUNC_SUM      : ScSum();     break;
-                case SUBTOTAL_FUNC_VAR      : ScVar();     break;
-                case SUBTOTAL_FUNC_VARP     : ScVarP();    break;
+                case AGGREGATE_FUNC_AVE     : ScAverage(); break;
+                case AGGREGATE_FUNC_CNT     : ScCount();   break;
+                case AGGREGATE_FUNC_CNT2    : ScCount2();  break;
+                case AGGREGATE_FUNC_MAX     : ScMax();     break;
+                case AGGREGATE_FUNC_MIN     : ScMin();     break;
+                case AGGREGATE_FUNC_PROD    : ScProduct(); break;
+                case AGGREGATE_FUNC_STD     : ScStDev();   break;
+                case AGGREGATE_FUNC_STDP    : ScStDevP();  break;
+                case AGGREGATE_FUNC_SUM     : ScSum();     break;
+                case AGGREGATE_FUNC_VAR     : ScVar();     break;
+                case AGGREGATE_FUNC_VARP    : ScVarP();    break;
                 case AGGREGATE_FUNC_MEDIAN  : ScMedian();            break;
                 case AGGREGATE_FUNC_MODSNGL : ScModalValue();        break;
                 case AGGREGATE_FUNC_LARGE   : ScLarge();             break;
@@ -6646,13 +7632,13 @@ void ScInterpreter::ScAggregate()
                 case AGGREGATE_FUNC_QRTEXC  : ScQuartile( false );   break;
                 default : PushIllegalArgument();       break;
             }
-            mnSubTotalFlags = 0x00;
+            mnSubTotalFlags = SubtotalFlags::NONE;
         }
-        double nVal = GetDouble();
+        FormulaConstTokenRef xRef( PopToken());
         // Get rid of the 1st and 2nd (fished) parameters.
         Pop();
         Pop();
-        PushDouble( nVal );
+        PushTokenRef( xRef);
     }
 }
 
@@ -6668,7 +7654,7 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
     {
         // First, get the query criteria range.
         ::std::unique_ptr<ScDBRangeBase> pQueryRef( PopDBDoubleRef() );
-        if (!pQueryRef.get())
+        if (!pQueryRef)
             return nullptr;
 
         bool    bByVal = true;
@@ -6710,7 +7696,7 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
                 else
                 {
                     PopError();
-                    SetError( errIllegalParameter );
+                    SetError( FormulaError::IllegalParameter );
                 }
                 break;
             case svMissing :
@@ -6718,19 +7704,19 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
                 if ( bAllowMissingField )
                     rMissingField = true;
                 else
-                    SetError( errIllegalParameter );
+                    SetError( FormulaError::IllegalParameter );
                 break;
             default:
                 PopError();
-                SetError( errIllegalParameter );
+                SetError( FormulaError::IllegalParameter );
         }
 
-        if (nGlobalError)
+        if (nGlobalError != FormulaError::NONE)
             return nullptr;
 
         unique_ptr<ScDBRangeBase> pDBRef( PopDBDoubleRef() );
 
-        if (nGlobalError || !pDBRef.get())
+        if (nGlobalError != FormulaError::NONE || !pDBRef)
             return nullptr;
 
         if ( bRangeFake )
@@ -6739,10 +7725,10 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
             if (pDBRef->isRangeEqual(aMissingRange))
                 rMissingField = true;
             else
-                SetError( errIllegalParameter );
+                SetError( FormulaError::IllegalParameter );
         }
 
-        if (nGlobalError)
+        if (nGlobalError != FormulaError::NONE)
             return nullptr;
 
         SCCOL nField = pDBRef->getFirstFieldColumn();
@@ -6752,7 +7738,7 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
             nField = pDBRef->findFieldColumn(static_cast<SCCOL>(nVal));
         else
         {
-            sal_uInt16 nErr = 0;
+            FormulaError nErr = FormulaError::NONE;
             nField = pDBRef->findFieldColumn(aStr.getString(), &nErr);
             SetError(nErr);
         }
@@ -6762,7 +7748,7 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
 
         unique_ptr<ScDBQueryParamBase> pParam( pDBRef->createQueryParam(pQueryRef.get()) );
 
-        if (pParam.get())
+        if (pParam)
         {
             // An allowed missing field parameter sets the result field
             // to any of the query fields, just to be able to return
@@ -6785,7 +7771,7 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
                     aQueryStr, nIndex, rItem.mfVal);
                 rItem.meType = bNumber ? ScQueryEntry::ByValue : ScQueryEntry::ByString;
 
-                if (!bNumber && pParam->eSearchType == utl::SearchParam::SRCH_NORMAL)
+                if (!bNumber && pParam->eSearchType == utl::SearchParam::SearchType::Normal)
                     pParam->eSearchType = DetectSearchType(aQueryStr, pDok);
             }
             return pParam;
@@ -6801,16 +7787,16 @@ void ScInterpreter::DBIterator( ScIterFunc eFunc )
     sal_uLong nCount = 0;
     bool bMissingField = false;
     unique_ptr<ScDBQueryParamBase> pQueryParam( GetDBParams(bMissingField) );
-    if (pQueryParam.get())
+    if (pQueryParam)
     {
         if (!pQueryParam->IsValidFieldIndex())
         {
-            SetError(errNoValue);
+            SetError(FormulaError::NoValue);
             return;
         }
-        ScDBQueryDataIterator aValIter(pDok, pQueryParam.release());
+        ScDBQueryDataIterator aValIter(pDok, mrContext, std::move(pQueryParam));
         ScDBQueryDataIterator::Value aValue;
-        if ( aValIter.GetFirst(aValue) && !aValue.mnError )
+        if ( aValIter.GetFirst(aValue) && aValue.mnError == FormulaError::NONE )
         {
             switch( eFunc )
             {
@@ -6851,12 +7837,12 @@ void ScInterpreter::DBIterator( ScIterFunc eFunc )
                     default: ; // nothing
                 }
             }
-            while ( aValIter.GetNext(aValue) && !aValue.mnError );
+            while ( aValIter.GetNext(aValue) && aValue.mnError == FormulaError::NONE );
         }
         SetError(aValue.mnError);
     }
     else
-        SetError( errIllegalParameter);
+        SetError( FormulaError::IllegalParameter);
     switch( eFunc )
     {
         case ifCOUNT:   nErg = nCount; break;
@@ -6876,7 +7862,7 @@ void ScInterpreter::ScDBCount()
 {
     bool bMissingField = true;
     unique_ptr<ScDBQueryParamBase> pQueryParam( GetDBParams(bMissingField) );
-    if (pQueryParam.get())
+    if (pQueryParam)
     {
         sal_uLong nCount = 0;
         if ( bMissingField && pQueryParam->GetType() == ScDBQueryParamBase::INTERNAL )
@@ -6896,7 +7882,7 @@ void ScInterpreter::ScDBCount()
             // so the source range has to be restricted, like before the introduction
             // of ScDBQueryParamBase.
             p->nCol1 = p->nCol2 = p->mnField;
-            ScQueryCellIterator aCellIter( pDok, nTab, *p);
+            ScQueryCellIterator aCellIter( pDok, mrContext, nTab, *p, true);
             if ( aCellIter.GetFirst() )
             {
                 do
@@ -6909,18 +7895,18 @@ void ScInterpreter::ScDBCount()
         {   // count only matching records with a value in the "result" field
             if (!pQueryParam->IsValidFieldIndex())
             {
-                SetError(errNoValue);
+                SetError(FormulaError::NoValue);
                 return;
             }
-            ScDBQueryDataIterator aValIter( pDok, pQueryParam.release());
+            ScDBQueryDataIterator aValIter( pDok, mrContext, std::move(pQueryParam));
             ScDBQueryDataIterator::Value aValue;
-            if ( aValIter.GetFirst(aValue) && !aValue.mnError )
+            if ( aValIter.GetFirst(aValue) && aValue.mnError == FormulaError::NONE )
             {
                 do
                 {
                     nCount++;
                 }
-                while ( aValIter.GetNext(aValue) && !aValue.mnError );
+                while ( aValIter.GetNext(aValue) && aValue.mnError == FormulaError::NONE );
             }
             SetError(aValue.mnError);
         }
@@ -6934,24 +7920,24 @@ void ScInterpreter::ScDBCount2()
 {
     bool bMissingField = true;
     unique_ptr<ScDBQueryParamBase> pQueryParam( GetDBParams(bMissingField) );
-    if (pQueryParam.get())
+    if (pQueryParam)
     {
         if (!pQueryParam->IsValidFieldIndex())
         {
-            SetError(errNoValue);
+            SetError(FormulaError::NoValue);
             return;
         }
         sal_uLong nCount = 0;
         pQueryParam->mbSkipString = false;
-        ScDBQueryDataIterator aValIter( pDok, pQueryParam.release());
+        ScDBQueryDataIterator aValIter( pDok, mrContext, std::move(pQueryParam));
         ScDBQueryDataIterator::Value aValue;
-        if ( aValIter.GetFirst(aValue) && !aValue.mnError )
+        if ( aValIter.GetFirst(aValue) && aValue.mnError == FormulaError::NONE )
         {
             do
             {
                 nCount++;
             }
-            while ( aValIter.GetNext(aValue) && !aValue.mnError );
+            while ( aValIter.GetNext(aValue) && aValue.mnError == FormulaError::NONE );
         }
         SetError(aValue.mnError);
         PushDouble( nCount );
@@ -6990,16 +7976,16 @@ void ScInterpreter::GetDBStVarParams( double& rVal, double& rValCount )
     double fSum    = 0.0;
     bool bMissingField = false;
     unique_ptr<ScDBQueryParamBase> pQueryParam( GetDBParams(bMissingField) );
-    if (pQueryParam.get())
+    if (pQueryParam)
     {
         if (!pQueryParam->IsValidFieldIndex())
         {
-            SetError(errNoValue);
+            SetError(FormulaError::NoValue);
             return;
         }
-        ScDBQueryDataIterator aValIter(pDok, pQueryParam.release());
+        ScDBQueryDataIterator aValIter(pDok, mrContext, std::move(pQueryParam));
         ScDBQueryDataIterator::Value aValue;
-        if (aValIter.GetFirst(aValue) && !aValue.mnError)
+        if (aValIter.GetFirst(aValue) && aValue.mnError == FormulaError::NONE)
         {
             do
             {
@@ -7007,17 +7993,17 @@ void ScInterpreter::GetDBStVarParams( double& rVal, double& rValCount )
                 values.push_back(aValue.mfValue);
                 fSum += aValue.mfValue;
             }
-            while ((aValue.mnError == 0) && aValIter.GetNext(aValue));
+            while ((aValue.mnError == FormulaError::NONE) && aValIter.GetNext(aValue));
         }
         SetError(aValue.mnError);
     }
     else
-        SetError( errIllegalParameter);
+        SetError( FormulaError::IllegalParameter);
 
     vMean = fSum / values.size();
 
-    for (size_t i = 0; i < values.size(); i++)
-        vSum += (values[i] - vMean) * (values[i] - vMean);
+    for (double v : values)
+        vSum += (v - vMean) * (v - vMean);
 
     rVal = vSum;
 }
@@ -7065,7 +8051,7 @@ void ScInterpreter::ScIndirect()
         // to determine which syntax to use during doc import
         bool bTryXlA1 = (eConv == FormulaGrammar::CONV_A1_XL_A1);
 
-        if (nParamCount == 2 && 0.0 == ::rtl::math::approxFloor( GetDouble()))
+        if (nParamCount == 2 && 0.0 == GetDouble() )
         {
             // Overwrite the config and try Excel R1C1.
             eConv = FormulaGrammar::CONV_XL_R1C1;
@@ -7180,8 +8166,7 @@ void ScInterpreter::ScIndirect()
             {
                 do
                 {
-                    ScCompiler aComp( pDok, aPos);
-                    aComp.SetGrammar( pDok->GetGrammar());
+                    ScCompiler aComp( pDok, aPos, pDok->GetGrammar());
                     aComp.SetRefConvention( eConv);     // must be after grammar
                     std::unique_ptr<ScTokenArray> pArr( aComp.CompileString( sRefStr));
 
@@ -7197,7 +8182,7 @@ void ScInterpreter::ScIndirect()
                     if (pArr->GetCodeLen() != 1)
                         break;
 
-                    ScTokenRef xTok( pArr->FirstRPN());
+                    ScTokenRef xTok( pArr->FirstRPNToken());
                     if (!xTok)
                         break;
 
@@ -7206,7 +8191,7 @@ void ScInterpreter::ScIndirect()
                         case svSingleRef:
                         case svDoubleRef:
                         case svError:
-                            PushTempToken( xTok.get());
+                            PushTokenRef( xTok);
                             // success!
                             return;
                         default:
@@ -7216,7 +8201,7 @@ void ScInterpreter::ScIndirect()
                 while (false);
             }
 
-            PushError( errNoRef);
+            PushError( FormulaError::NoRef);
         }
     }
 }
@@ -7233,13 +8218,24 @@ void ScInterpreter::ScAddressFunc()
         sTabStr = GetString().getString();
 
     FormulaGrammar::AddressConvention eConv = FormulaGrammar::CONV_OOO;      // default
-    if( nParamCount >= 4 && 0.0 == ::rtl::math::approxFloor( GetDoubleWithDefault( 1.0)))
+    if (nParamCount >= 4 && 0.0 == GetDoubleWithDefault( 1.0))
         eConv = FormulaGrammar::CONV_XL_R1C1;
+    else
+    {
+        // If A1 syntax is requested then the actual sheet separator and format
+        // convention depends on the syntax configured for INDIRECT to match
+        // that, and if it is unspecified then the document's address syntax.
+        FormulaGrammar::AddressConvention eForceConv = maCalcConfig.meStringRefAddressSyntax;
+        if (eForceConv == FormulaGrammar::CONV_UNSPECIFIED)
+            eForceConv = pDok->GetAddressConvention();
+        if (eForceConv == FormulaGrammar::CONV_XL_A1 || eForceConv == FormulaGrammar::CONV_XL_R1C1)
+            eConv = FormulaGrammar::CONV_XL_A1;     // for anything Excel use Excel A1
+    }
 
     ScRefFlags  nFlags = ScRefFlags::COL_ABS | ScRefFlags::ROW_ABS;   // default
     if( nParamCount >= 3 )
     {
-        sal_uInt16 n = (sal_uInt16) ::rtl::math::approxFloor( GetDoubleWithDefault( 1.0));
+        sal_Int32 n = GetInt32WithDefault(1);
         switch ( n )
         {
             default :
@@ -7258,8 +8254,8 @@ void ScInterpreter::ScAddressFunc()
     }
     nFlags |= ScRefFlags::VALID | ScRefFlags::ROW_VALID | ScRefFlags::COL_VALID;
 
-    SCCOL nCol = (SCCOL) ::rtl::math::approxFloor(GetDouble());
-    SCROW nRow = (SCROW) ::rtl::math::approxFloor(GetDouble());
+    SCCOL nCol = static_cast<SCCOL>(GetInt16());
+    SCROW nRow = static_cast<SCROW>(GetInt32());
     if( eConv == FormulaGrammar::CONV_XL_R1C1 )
     {
         // YUCK!  The XL interface actually treats rel R1C1 refs differently
@@ -7272,7 +8268,7 @@ void ScInterpreter::ScAddressFunc()
 
     --nCol;
     --nRow;
-    if(!ValidCol( nCol) || !ValidRow( nRow))
+    if (nGlobalError != FormulaError::NONE || !ValidCol( nCol) || !ValidRow( nRow))
     {
         PushIllegalArgument();
         return;
@@ -7303,7 +8299,8 @@ void ScInterpreter::ScAddressFunc()
             ScCompiler::CheckTabQuotes( sTabStr, eConv);
         if (!aDoc.isEmpty())
             sTabStr = aDoc + sTabStr;
-        sTabStr += eConv == FormulaGrammar::CONV_XL_R1C1 ? OUString("!") : OUString(".");
+        sTabStr += (eConv == FormulaGrammar::CONV_XL_R1C1 || eConv == FormulaGrammar::CONV_XL_A1) ?
+            OUString("!") : OUString(".");
         sTabStr += aRefStr;
         PushString( sTabStr );
     }
@@ -7316,13 +8313,18 @@ void ScInterpreter::ScOffset()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 3, 5 ) )
     {
-        long nColNew = -1, nRowNew = -1, nColPlus, nRowPlus;
+        sal_Int32 nColNew = -1, nRowNew = -1, nColPlus, nRowPlus;
         if (nParamCount == 5)
-            nColNew = (long) ::rtl::math::approxFloor(GetDouble());
+            nColNew = GetInt32();
         if (nParamCount >= 4)
-            nRowNew = (long) ::rtl::math::approxFloor(GetDoubleWithDefault( -1.0 ));
-        nColPlus = (long) ::rtl::math::approxFloor(GetDouble());
-        nRowPlus = (long) ::rtl::math::approxFloor(GetDouble());
+            nRowNew = GetInt32WithDefault(-1);
+        nColPlus = GetInt32();
+        nRowPlus = GetInt32();
+        if (nGlobalError != FormulaError::NONE)
+        {
+            PushError( nGlobalError);
+            return;
+        }
         SCCOL nCol1(0);
         SCROW nRow1(0);
         SCTAB nTab1(0);
@@ -7341,8 +8343,8 @@ void ScInterpreter::ScOffset()
             PopSingleRef(nCol1, nRow1, nTab1);
             if (nParamCount == 3 || (nColNew < 0 && nRowNew < 0))
             {
-                nCol1 = (SCCOL)((long) nCol1 + nColPlus);
-                nRow1 = (SCROW)((long) nRow1 + nRowPlus);
+                nCol1 = static_cast<SCCOL>(static_cast<long>(nCol1) + nColPlus);
+                nRow1 = static_cast<SCROW>(static_cast<long>(nRow1) + nRowPlus);
                 if (!ValidCol(nCol1) || !ValidRow(nRow1))
                     PushIllegalArgument();
                 else
@@ -7354,10 +8356,10 @@ void ScInterpreter::ScOffset()
                     nColNew = 1;
                 if (nRowNew < 0)
                     nRowNew = 1;
-                nCol1 = (SCCOL)((long)nCol1+nColPlus);
-                nRow1 = (SCROW)((long)nRow1+nRowPlus);
-                nCol2 = (SCCOL)((long)nCol1+nColNew-1);
-                nRow2 = (SCROW)((long)nRow1+nRowNew-1);
+                nCol1 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColPlus);
+                nRow1 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowPlus);
+                nCol2 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColNew-1);
+                nRow2 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowNew-1);
                 if (!ValidCol(nCol1) || !ValidRow(nRow1) ||
                     !ValidCol(nCol2) || !ValidRow(nRow2))
                     PushIllegalArgument();
@@ -7379,8 +8381,8 @@ void ScInterpreter::ScOffset()
 
             if (nParamCount == 3 || (nColNew < 0 && nRowNew < 0))
             {
-                nCol1 = (SCCOL)((long) nCol1 + nColPlus);
-                nRow1 = (SCROW)((long) nRow1 + nRowPlus);
+                nCol1 = static_cast<SCCOL>(static_cast<long>(nCol1) + nColPlus);
+                nRow1 = static_cast<SCROW>(static_cast<long>(nRow1) + nRowPlus);
                 if (!ValidCol(nCol1) || !ValidRow(nRow1))
                     PushIllegalArgument();
                 else
@@ -7392,10 +8394,10 @@ void ScInterpreter::ScOffset()
                     nColNew = 1;
                 if (nRowNew < 0)
                     nRowNew = 1;
-                nCol1 = (SCCOL)((long)nCol1+nColPlus);
-                nRow1 = (SCROW)((long)nRow1+nRowPlus);
-                nCol2 = (SCCOL)((long)nCol1+nColNew-1);
-                nRow2 = (SCROW)((long)nRow1+nRowNew-1);
+                nCol1 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColPlus);
+                nRow1 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowPlus);
+                nCol2 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColNew-1);
+                nRow2 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowNew-1);
                 nTab2 = nTab1;
                 if (!ValidCol(nCol1) || !ValidRow(nRow1) ||
                     !ValidCol(nCol2) || !ValidRow(nRow2))
@@ -7412,10 +8414,10 @@ void ScInterpreter::ScOffset()
                 nColNew = nCol2 - nCol1 + 1;
             if (nRowNew < 0)
                 nRowNew = nRow2 - nRow1 + 1;
-            nCol1 = (SCCOL)((long)nCol1+nColPlus);
-            nRow1 = (SCROW)((long)nRow1+nRowPlus);
-            nCol2 = (SCCOL)((long)nCol1+nColNew-1);
-            nRow2 = (SCROW)((long)nRow1+nRowNew-1);
+            nCol1 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColPlus);
+            nRow1 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowPlus);
+            nCol2 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColNew-1);
+            nRow2 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowNew-1);
             if (!ValidCol(nCol1) || !ValidRow(nRow1) ||
                 !ValidCol(nCol2) || !ValidRow(nRow2) || nTab1 != nTab2)
                 PushIllegalArgument();
@@ -7440,10 +8442,10 @@ void ScInterpreter::ScOffset()
                 nColNew = nCol2 - nCol1 + 1;
             if (nRowNew < 0)
                 nRowNew = nRow2 - nRow1 + 1;
-            nCol1 = (SCCOL)((long)nCol1+nColPlus);
-            nRow1 = (SCROW)((long)nRow1+nRowPlus);
-            nCol2 = (SCCOL)((long)nCol1+nColNew-1);
-            nRow2 = (SCROW)((long)nRow1+nRowNew-1);
+            nCol1 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColPlus);
+            nRow1 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowPlus);
+            nCol2 = static_cast<SCCOL>(static_cast<long>(nCol1)+nColNew-1);
+            nRow2 = static_cast<SCROW>(static_cast<long>(nRow1)+nRowNew-1);
             if (!ValidCol(nCol1) || !ValidRow(nRow1) ||
                 !ValidCol(nCol2) || !ValidRow(nRow2) || nTab1 != nTab2)
                 PushIllegalArgument();
@@ -7463,29 +8465,29 @@ void ScInterpreter::ScIndex()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 1, 4 ) )
     {
-        long nArea;
+        sal_uInt32 nArea;
         size_t nAreaCount;
         SCCOL nCol;
         SCROW nRow;
         if (nParamCount == 4)
-            nArea = (long) ::rtl::math::approxFloor(GetDouble());
+            nArea = GetUInt32();
         else
             nArea = 1;
         if (nParamCount >= 3)
-            nCol = (SCCOL) ::rtl::math::approxFloor(GetDouble());
+            nCol = static_cast<SCCOL>(GetInt16());
         else
             nCol = 0;
         if (nParamCount >= 2)
-            nRow = (SCROW) ::rtl::math::approxFloor(GetDouble());
+            nRow = static_cast<SCROW>(GetInt32());
         else
             nRow = 0;
         if (GetStackType() == svRefList)
             nAreaCount = (sp ? pStack[sp-1]->GetRefList()->size() : 0);
         else
             nAreaCount = 1;     // one reference or array or whatever
-        if (nAreaCount == 0 || (size_t)nArea > nAreaCount)
+        if (nGlobalError != FormulaError::NONE || nAreaCount == 0 || static_cast<size_t>(nArea) > nAreaCount)
         {
-            PushError( errNoRef);
+            PushError( FormulaError::NoRef);
             return;
         }
         else if (nArea < 1 || nCol < 0 || nRow < 0)
@@ -7500,7 +8502,7 @@ void ScInterpreter::ScIndex()
             case svExternalDoubleRef:
                 {
                     if (nArea != 1)
-                        SetError(errIllegalArgument);
+                        SetError(FormulaError::IllegalArgument);
                     sal_uInt16 nOldSp = sp;
                     ScMatrixRef pMat = GetMatrix();
                     if (pMat)
@@ -7522,7 +8524,7 @@ void ScInterpreter::ScIndex()
                         else if (bVector)
                         {
                             --nElement;
-                            if (pMat->IsString( nElement))
+                            if (pMat->IsStringOrEmpty( nElement))
                                 PushString( pMat->GetString(nElement).getString());
                             else
                                 PushDouble( pMat->GetDouble( nElement));
@@ -7534,7 +8536,7 @@ void ScInterpreter::ScIndex()
                             {
                                 SCSIZE nRowMinus1 = static_cast<SCSIZE>(nRow - 1);
                                 for (SCSIZE i = 0; i < nC; i++)
-                                    if (!pMat->IsString(i, nRowMinus1))
+                                    if (!pMat->IsStringOrEmpty(i, nRowMinus1))
                                         pResMat->PutDouble(pMat->GetDouble(i,
                                                     nRowMinus1), i, 0);
                                     else
@@ -7552,7 +8554,7 @@ void ScInterpreter::ScIndex()
                             {
                                 SCSIZE nColMinus1 = static_cast<SCSIZE>(nCol - 1);
                                 for (SCSIZE i = 0; i < nR; i++)
-                                    if (!pMat->IsString(nColMinus1, i))
+                                    if (!pMat->IsStringOrEmpty(nColMinus1, i))
                                         pResMat->PutDouble(pMat->GetDouble(nColMinus1,
                                                     i), i);
                                     else
@@ -7564,7 +8566,7 @@ void ScInterpreter::ScIndex()
                         }
                         else
                         {
-                            if (!pMat->IsString( static_cast<SCSIZE>(nCol-1),
+                            if (!pMat->IsStringOrEmpty( static_cast<SCSIZE>(nCol-1),
                                         static_cast<SCSIZE>(nRow-1)))
                                 PushDouble( pMat->GetDouble(
                                             static_cast<SCSIZE>(nCol-1),
@@ -7601,8 +8603,8 @@ void ScInterpreter::ScIndex()
                     bool bRowArray = false;
                     if (GetStackType() == svRefList)
                     {
-                        FormulaTokenRef xRef = PopToken();
-                        if (nGlobalError || !xRef)
+                        FormulaConstTokenRef xRef = PopToken();
+                        if (nGlobalError != FormulaError::NONE || !xRef)
                         {
                             PushIllegalParameter();
                             return;
@@ -7645,7 +8647,7 @@ void ScInterpreter::ScIndex()
                             PushSingleRef( nCol1, nRow1+nRow-1, nTab1 );
                         else if ( bRowArray )
                         {
-                            nCol =(SCCOL) nRow;
+                            nCol =static_cast<SCCOL>(nRow);
                             nRow = 1;
                             PushSingleRef( nCol1+nCol-1, nRow1+nRow-1, nTab1);
                         }
@@ -7669,7 +8671,7 @@ void ScInterpreter::ScMultiArea()
     sal_uInt8 nParamCount = GetByte();
     if (MustHaveParamCountMin( nParamCount, 1))
     {
-        while (!nGlobalError && nParamCount-- > 1)
+        while (nGlobalError == FormulaError::NONE && nParamCount-- > 1)
         {
             ScUnionFunc();
         }
@@ -7686,27 +8688,27 @@ void ScInterpreter::ScAreas()
         {
             case svSingleRef:
                 {
-                    FormulaTokenRef xT = PopToken();
-                    ValidateRef( *xT.get()->GetSingleRef());
+                    FormulaConstTokenRef xT = PopToken();
+                    ValidateRef( *xT->GetSingleRef());
                     ++nCount;
                 }
                 break;
             case svDoubleRef:
                 {
-                    FormulaTokenRef xT = PopToken();
-                    ValidateRef( *xT.get()->GetDoubleRef());
+                    FormulaConstTokenRef xT = PopToken();
+                    ValidateRef( *xT->GetDoubleRef());
                     ++nCount;
                 }
                 break;
             case svRefList:
                 {
-                    FormulaTokenRef xT = PopToken();
+                    FormulaConstTokenRef xT = PopToken();
                     ValidateRef( *(xT.get()->GetRefList()));
                     nCount += xT.get()->GetRefList()->size();
                 }
                 break;
             default:
-                SetError( errIllegalParameter);
+                SetError( FormulaError::IllegalParameter);
         }
         PushDouble( double(nCount));
     }
@@ -7733,7 +8735,7 @@ void ScInterpreter::ScCurrency()
         double fVal = GetDouble();
         double fFac;
         if ( fDec != 0.0 )
-            fFac = pow( (double)10, fDec );
+            fFac = pow( double(10), fDec );
         else
             fFac = 1.0;
         if (fVal < 0.0)
@@ -7744,22 +8746,22 @@ void ScInterpreter::ScCurrency()
         if ( fDec < 0.0 )
             fDec = 0.0;
         sal_uLong nIndex = pFormatter->GetStandardFormat(
-                                        css::util::NumberFormat::CURRENCY,
+                                        SvNumFormatType::CURRENCY,
                                         ScGlobal::eLnge);
-        if ( (sal_uInt16) fDec != pFormatter->GetFormatPrecision( nIndex ) )
+        if ( static_cast<sal_uInt16>(fDec) != pFormatter->GetFormatPrecision( nIndex ) )
         {
             OUString sFormatString = pFormatter->GenerateFormat(
                                                    nIndex,
                                                    ScGlobal::eLnge,
-                                                   true,        // mit Tausenderpunkt
-                                                   false,       // nicht rot
-                                                  (sal_uInt16) fDec);// Nachkommastellen
+                                                   true,        // with thousands separator
+                                                   false,       // not red
+                                                  static_cast<sal_uInt16>(fDec));// decimal places
             if (!pFormatter->GetPreviewString(sFormatString,
                                               fVal,
                                               aStr,
                                               &pColor,
                                               ScGlobal::eLnge))
-                SetError(errIllegalArgument);
+                SetError(FormulaError::IllegalArgument);
         }
         else
         {
@@ -7774,23 +8776,34 @@ void ScInterpreter::ScReplace()
     if ( MustHaveParamCount( GetByte(), 4 ) )
     {
         OUString aNewStr = GetString().getString();
-        double fCount = GetStringPositionArgument();
-        double fPos   = GetStringPositionArgument();
+        sal_Int32 nCount = GetStringPositionArgument();
+        sal_Int32 nPos   = GetStringPositionArgument();
         OUString aOldStr = GetString().getString();
-        if (fPos < 1.0 || fCount < 0.0)
+        if (nPos < 1 || nCount < 0)
             PushIllegalArgument();
         else
         {
-            sal_Int32 nCount = static_cast<sal_Int32>(fCount);
-            sal_Int32 nPos   = static_cast<sal_Int32>(fPos);
             sal_Int32 nLen   = aOldStr.getLength();
             if (nPos > nLen + 1)
                 nPos = nLen + 1;
             if (nCount > nLen - nPos + 1)
                 nCount = nLen - nPos + 1;
-            aOldStr = aOldStr.replaceAt( nPos-1, nCount, "" );
+            sal_Int32 nIdx = 0;
+            sal_Int32 nCnt = 0;
+            while ( nIdx < nLen && nPos > nCnt + 1 )
+            {
+                aOldStr.iterateCodePoints( &nIdx );
+                ++nCnt;
+            }
+            sal_Int32 nStart = nIdx;
+            while ( nIdx < nLen && nPos + nCount - 1 > nCnt )
+            {
+                aOldStr.iterateCodePoints( &nIdx );
+                ++nCnt;
+            }
+            aOldStr = aOldStr.replaceAt( nStart, nIdx - nStart, "" );
             if ( CheckStringResultLen( aOldStr, aNewStr ) )
-                aOldStr = aOldStr.replaceAt( nPos-1, 0, aNewStr );
+                aOldStr = aOldStr.replaceAt( nStart, 0, aNewStr );
             PushString( aOldStr );
         }
     }
@@ -7805,7 +8818,7 @@ void ScInterpreter::ScFixed()
         double fDec;
         bool bThousand;
         if (nParamCount == 3)
-            bThousand = !GetBool();     // Param TRUE: keine Tausenderpunkte
+            bThousand = !GetBool();     // Param true: no thousands separator
         else
             bThousand = true;
         if (nParamCount >= 2)
@@ -7822,7 +8835,7 @@ void ScInterpreter::ScFixed()
         double fVal = GetDouble();
         double fFac;
         if ( fDec != 0.0 )
-            fFac = pow( (double)10, fDec );
+            fFac = pow( double(10), fDec );
         else
             fFac = 1.0;
         if (fVal < 0.0)
@@ -7833,14 +8846,14 @@ void ScInterpreter::ScFixed()
         if (fDec < 0.0)
             fDec = 0.0;
         sal_uLong nIndex = pFormatter->GetStandardFormat(
-                                            css::util::NumberFormat::NUMBER,
+                                            SvNumFormatType::NUMBER,
                                             ScGlobal::eLnge);
         OUString sFormatString = pFormatter->GenerateFormat(
                                                nIndex,
                                                ScGlobal::eLnge,
-                                               bThousand,   // mit Tausenderpunkt
-                                               false,       // nicht rot
-                                               (sal_uInt16) fDec);// Nachkommastellen
+                                               bThousand,   // with thousands separator
+                                               false,       // not red
+                                               static_cast<sal_uInt16>(fDec));// decimal places
         if (!pFormatter->GetPreviewString(sFormatString,
                                                   fVal,
                                                   aStr,
@@ -7857,28 +8870,37 @@ void ScInterpreter::ScFind()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 2, 3 ) )
     {
-        sal_Int32 nAnz;
+        sal_Int32 nCnt;
         if (nParamCount == 3)
-            nAnz = GetDouble();
+            nCnt = GetDouble();
         else
-            nAnz = 1;
+            nCnt = 1;
         OUString sStr = GetString().getString();
-        if (nAnz < 1 || nAnz > sStr.getLength())
+        if (nCnt < 1 || nCnt > sStr.getLength())
             PushNoValue();
         else
         {
-            sal_Int32 nPos = sStr.indexOf(GetString().getString(), nAnz - 1);
+            sal_Int32 nPos = sStr.indexOf(GetString().getString(), nCnt - 1);
             if (nPos == -1)
                 PushNoValue();
             else
-                PushDouble((double)(nPos + 1));
+            {
+                sal_Int32 nIdx = 0;
+                nCnt = 0;
+                while ( nIdx <= nPos )
+                {
+                    sStr.iterateCodePoints( &nIdx );
+                    ++nCnt;
+                }
+                PushDouble( static_cast<double>(nCnt) );
+            }
         }
     }
 }
 
 void ScInterpreter::ScExact()
 {
-    nFuncFmtType = css::util::NumberFormat::LOGICAL;
+    nFuncFmtType = SvNumFormatType::LOGICAL;
     if ( MustHaveParamCount( GetByte(), 2 ) )
     {
         svl::SharedString s1 = GetString();
@@ -7895,27 +8917,28 @@ void ScInterpreter::ScLeft()
         sal_Int32 n;
         if (nParamCount == 2)
         {
-            double nVal = GetStringPositionArgument();
-            if (nVal < 0.0)
+            n = GetStringPositionArgument();
+            if (n < 0)
             {
                 PushIllegalArgument();
                 return ;
             }
-            else
-                n = (sal_Int32) nVal;
         }
         else
             n = 1;
         OUString aStr = GetString().getString();
-        n = std::min(n, aStr.getLength());
-        aStr = aStr.copy( 0, n );
+        sal_Int32 nIdx = 0;
+        sal_Int32 nCnt = 0;
+        while ( nIdx < aStr.getLength() && n > nCnt++ )
+            aStr.iterateCodePoints( &nIdx );
+        aStr = aStr.copy( 0, nIdx );
         PushString( aStr );
     }
 }
 
 typedef struct {
-    UBlockCode from;
-    UBlockCode to;
+    UBlockCode const from;
+    UBlockCode const to;
 } UBlockScript;
 
 static const UBlockScript scriptList[] = {
@@ -7928,34 +8951,28 @@ static const UBlockScript scriptList[] = {
     {UBLOCK_CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B, UBLOCK_CJK_COMPATIBILITY_IDEOGRAPHS_SUPPLEMENT},
     {UBLOCK_CJK_STROKES, UBLOCK_CJK_STROKES}
 };
-#define scriptListCount sizeof (scriptList) / sizeof (UBlockScript)
-bool SAL_CALL lcl_getScriptClass(sal_uInt32 currentChar)
+static bool IsDBCS(sal_Unicode currentChar)
 {
     // for the locale of ja-JP, character U+0x005c and U+0x20ac should be ScriptType::Asian
     if( (currentChar == 0x005c || currentChar == 0x20ac) &&
           (MsLangId::getSystemLanguage() == LANGUAGE_JAPANESE) )
         return true;
     sal_uInt16 i;
-    static bool bRet = false;
-    UBlockCode block = (UBlockCode)ublock_getCode((sal_uInt32)currentChar);
-    for ( i = 0; i < scriptListCount; i++) {
+    bool bRet = false;
+    UBlockCode block = ublock_getCode(currentChar);
+    for ( i = 0; i < SAL_N_ELEMENTS(scriptList); i++) {
         if (block <= scriptList[i].to) break;
     }
-    bRet = (i < scriptListCount && block >= scriptList[i].from);
+    bRet = (i < SAL_N_ELEMENTS(scriptList) && block >= scriptList[i].from);
     return bRet;
 }
-bool IsDBCS(sal_Unicode ch)
+static sal_Int32 lcl_getLengthB( const OUString &str, sal_Int32 nPos )
 {
-    return lcl_getScriptClass(ch);
-}
-sal_Int32 getLengthB(const OUString &str)
-{
-    if(str.isEmpty())
-        return 0;
     sal_Int32 index = 0;
     sal_Int32 length = 0;
-    while(index < str.getLength()){
-        if(IsDBCS(str[index]))
+    while ( index < nPos )
+    {
+        if (IsDBCS(str[index]))
             length += 2;
         else
             length++;
@@ -7963,11 +8980,18 @@ sal_Int32 getLengthB(const OUString &str)
     }
     return length;
 }
+static sal_Int32 getLengthB(const OUString &str)
+{
+    if(str.isEmpty())
+        return 0;
+    else
+        return lcl_getLengthB( str, str.getLength() );
+}
 void ScInterpreter::ScLenB()
 {
     PushDouble( getLengthB(GetString().getString()) );
 }
-OUString lcl_RightB(const OUString &rStr, sal_Int32 n)
+static OUString lcl_RightB(const OUString &rStr, sal_Int32 n)
 {
     if( n < getLengthB(rStr) )
     {
@@ -8003,14 +9027,12 @@ void ScInterpreter::ScRightB()
         sal_Int32 n;
         if (nParamCount == 2)
         {
-            double nVal = GetStringPositionArgument();
-            if ( nVal < 0.0 )
+            n = GetStringPositionArgument();
+            if (n < 0)
             {
                 PushIllegalArgument();
                 return ;
             }
-            else
-                n = (sal_Int32) nVal;
         }
         else
             n = 1;
@@ -8018,7 +9040,7 @@ void ScInterpreter::ScRightB()
         PushString( aStr );
     }
 }
-OUString lcl_LeftB(const OUString &rStr, sal_Int32 n)
+static OUString lcl_LeftB(const OUString &rStr, sal_Int32 n)
 {
     if( n < getLengthB(rStr) )
     {
@@ -8054,14 +9076,12 @@ void ScInterpreter::ScLeftB()
         sal_Int32 n;
         if (nParamCount == 2)
         {
-            double nVal = GetStringPositionArgument();
-            if ( nVal < 0.0 )
+            n = GetStringPositionArgument();
+            if (n < 0)
             {
                 PushIllegalArgument();
                 return ;
             }
-            else
-                n = (sal_Int32) nVal;
         }
         else
             n = 1;
@@ -8073,18 +9093,120 @@ void ScInterpreter::ScMidB()
 {
     if ( MustHaveParamCount( GetByte(), 3 ) )
     {
-        double fAnz    = GetStringPositionArgument();
-        double fAnfang = GetStringPositionArgument();
+        const sal_Int32 nCount = GetStringPositionArgument();
+        const sal_Int32 nStart = GetStringPositionArgument();
         OUString aStr = GetString().getString();
-        if (fAnfang < 1.0 || fAnz < 0.0)
+        if (nStart < 1 || nCount < 0)
             PushIllegalArgument();
         else
         {
 
-            aStr = lcl_LeftB(aStr, (sal_Int32)fAnfang + (sal_Int32)fAnz - 1);
-            sal_Int32 nCnt = getLengthB(aStr) - (sal_Int32)fAnfang + 1;
-            aStr = lcl_RightB(aStr, nCnt>0 ? nCnt:0);
+            aStr = lcl_LeftB(aStr, nStart + nCount - 1);
+            sal_Int32 nCnt = getLengthB(aStr) - nStart + 1;
+            aStr = lcl_RightB(aStr, std::max<sal_Int32>(nCnt,0));
             PushString(aStr);
+        }
+    }
+}
+
+void ScInterpreter::ScReplaceB()
+{
+    if ( MustHaveParamCount( GetByte(), 4 ) )
+    {
+        OUString aNewStr       = GetString().getString();
+        const sal_Int32 nCount = GetStringPositionArgument();
+        const sal_Int32 nPos   = GetStringPositionArgument();
+        OUString aOldStr       = GetString().getString();
+        int nLen               = getLengthB( aOldStr );
+        if (nPos < 1.0 || nPos > nLen || nCount < 0.0 || nPos + nCount -1 > nLen)
+            PushIllegalArgument();
+        else
+        {
+            // REPLACEB(aOldStr;nPos;nCount;aNewStr) is the same as
+            // LEFTB(aOldStr;nPos-1) & aNewStr & RIGHT(aOldStr;LENB(aOldStr)-(nPos - 1)-nCount)
+            OUString aStr1 = lcl_LeftB( aOldStr, nPos - 1 );
+            OUString aStr3 = lcl_RightB( aOldStr, nLen - nPos - nCount + 1);
+
+            PushString( aStr1 + aNewStr + aStr3 );
+        }
+    }
+}
+
+void ScInterpreter::ScFindB()
+{
+    sal_uInt8 nParamCount = GetByte();
+    if ( MustHaveParamCount( nParamCount, 2, 3 ) )
+    {
+        sal_Int32 nStart;
+        if ( nParamCount == 3 )
+            nStart = GetStringPositionArgument();
+        else
+            nStart = 1;
+        OUString aStr  = GetString().getString();
+        int nLen       = getLengthB( aStr );
+        OUString asStr = GetString().getString();
+        int nsLen      = getLengthB( asStr );
+        if ( nStart < 1 || nStart > nLen - nsLen + 1 )
+            PushIllegalArgument();
+        else
+        {
+            // create a string from sStr starting at nStart
+            OUStringBuffer aBuf( lcl_RightB( aStr, nLen - nStart + 1 ) );
+            // search aBuf for asStr
+            sal_Int32 nPos = aBuf.indexOf( asStr, 0 );
+            if ( nPos == -1 )
+                PushNoValue();
+            else
+            {
+                // obtain byte value of nPos
+                int nBytePos = lcl_getLengthB( aBuf.makeStringAndClear(), nPos );
+                PushDouble( nBytePos + nStart );
+            }
+        }
+    }
+}
+
+void ScInterpreter::ScSearchB()
+{
+    sal_uInt8 nParamCount = GetByte();
+    if ( MustHaveParamCount( nParamCount, 2, 3 ) )
+    {
+        sal_Int32 nStart;
+        if ( nParamCount == 3 )
+        {
+            nStart = GetStringPositionArgument();
+            if( nStart < 1 )
+            {
+                PushIllegalArgument();
+                return;
+            }
+        }
+        else
+            nStart = 1;
+        OUString aStr = GetString().getString();
+        sal_Int32 nLen = getLengthB( aStr );
+        OUString asStr = GetString().getString();
+        sal_Int32 nsLen = nStart - 1;
+        if( nsLen >= nLen )
+            PushNoValue();
+        else
+        {
+            // create a string from sStr starting at nStart
+            OUString aSubStr( lcl_RightB( aStr, nLen - nStart + 1 ) );
+            // search aSubStr for asStr
+            sal_Int32 nPos = 0;
+            sal_Int32 nEndPos = aSubStr.getLength();
+            utl::SearchParam::SearchType eSearchType = DetectSearchType( asStr, pDok );
+            utl::SearchParam sPar( asStr, eSearchType, false, '~', false );
+            utl::TextSearch sT( sPar, *ScGlobal::pCharClass );
+            if ( !sT.SearchForward( aSubStr, &nPos, &nEndPos ) )
+                PushNoValue();
+            else
+            {
+                // obtain byte value of nPos
+                int nBytePos = lcl_getLengthB( aSubStr, nPos );
+                PushDouble( nBytePos + nStart );
+            }
         }
     }
 }
@@ -8097,21 +9219,31 @@ void ScInterpreter::ScRight()
         sal_Int32 n;
         if (nParamCount == 2)
         {
-            double nVal = GetStringPositionArgument();
-            if (nVal < 0.0)
+            n = GetStringPositionArgument();
+            if (n < 0)
             {
                 PushIllegalArgument();
                 return ;
             }
-            else
-                n = (sal_Int32) nVal;
         }
         else
             n = 1;
         OUString aStr = GetString().getString();
-        if( n < aStr.getLength() )
-            aStr = aStr.copy( aStr.getLength() - n );
-        PushString( aStr );
+        sal_Int32 nLen = aStr.getLength();
+        if ( nLen <= n )
+            PushString( aStr );
+        else
+        {
+            sal_Int32 nIdx = nLen;
+            sal_Int32 nCnt = 0;
+            while ( nIdx > 0 && n > nCnt )
+            {
+                aStr.iterateCodePoints( &nIdx, -1 );
+                ++nCnt;
+            }
+            aStr = aStr.copy( nIdx, nLen - nIdx );
+            PushString( aStr );
+        }
     }
 }
 
@@ -8120,28 +9252,21 @@ void ScInterpreter::ScSearch()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 2, 3 ) )
     {
-        double fAnz;
+        sal_Int32 nStart;
         if (nParamCount == 3)
         {
-            // This should use GetStringPositionArgument() but old versions up
-            // to LibreOffice 4.2.5 allowed and ignored 0 and negative values.
-            // It is unnecessary to break existing documents that "rely" on
-            // that behavior. Though ODFF constrains Start to be >=1.
-            /* TODO: fix this and possibly break those broken documents? */
-            fAnz = rtl::math::approxFloor( GetDouble());
-            if (fAnz < 1.0)
-                fAnz = 1.0;
-            else if (!CheckStringPositionArgument( fAnz))
+            nStart = GetStringPositionArgument();
+            if( nStart < 1 )
             {
                 PushIllegalArgument();
                 return;
             }
         }
         else
-            fAnz = 1.0;
+            nStart = 1;
         OUString sStr = GetString().getString();
         OUString SearchStr = GetString().getString();
-        sal_Int32 nPos = fAnz - 1;
+        sal_Int32 nPos = nStart - 1;
         sal_Int32 nEndPos = sStr.getLength();
         if( nPos >= nEndPos )
             PushNoValue();
@@ -8154,27 +9279,232 @@ void ScInterpreter::ScSearch()
             if (!bBool)
                 PushNoValue();
             else
-                PushDouble((double)(nPos) + 1);
+            {
+                sal_Int32 nIdx = 0;
+                sal_Int32 nCnt = 0;
+                while ( nIdx <= nPos )
+                {
+                    sStr.iterateCodePoints( &nIdx );
+                    ++nCnt;
+                }
+                PushDouble( static_cast<double>(nCnt) );
+            }
         }
     }
+}
+
+void ScInterpreter::ScRegex()
+{
+    const sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount( nParamCount, 2, 4))
+        return;
+
+    // Flags are supported only for replacement, search match flags can be
+    // individually and much more flexible set in the regular expression
+    // pattern using (?ismwx-ismwx)
+    bool bGlobalReplacement = false;
+    sal_Int32 nOccurrence = 1;  // default first occurrence, if any
+    if (nParamCount == 4)
+    {
+        // Argument can be either string or double.
+        double fOccurrence;
+        svl::SharedString aFlagsString;
+        bool bDouble;
+        if (!IsMissing())
+            bDouble = GetDoubleOrString( fOccurrence, aFlagsString);
+        else
+        {
+            // For an omitted argument keep the default.
+            PopError();
+            bDouble = true;
+            fOccurrence = nOccurrence;
+        }
+        if (nGlobalError != FormulaError::NONE)
+        {
+            PushError( nGlobalError);
+            return;
+        }
+        if (bDouble)
+        {
+            if (!CheckStringPositionArgument( fOccurrence))
+            {
+                PushError( FormulaError::IllegalArgument);
+                return;
+            }
+            nOccurrence = static_cast<sal_Int32>(fOccurrence);
+        }
+        else
+        {
+            const OUString aFlags( aFlagsString.getString());
+            // Empty flags string is valid => no flag set.
+            if (aFlags.getLength() > 1)
+            {
+                // Only one flag supported.
+                PushIllegalArgument();
+                return;
+            }
+            if (aFlags.getLength() == 1)
+            {
+                if (aFlags.indexOf('g') >= 0)
+                    bGlobalReplacement = true;
+                else
+                {
+                    // Unsupported flag.
+                    PushIllegalArgument();
+                    return;
+                }
+            }
+        }
+    }
+
+    bool bReplacement = false;
+    OUString aReplacement;
+    if (nParamCount >= 3)
+    {
+        // A missing argument is not an empty string to replace the match.
+        // nOccurrence==0 forces no replacement, so simply discard the
+        // argument.
+        if (IsMissing() || nOccurrence == 0)
+            PopError();
+        else
+        {
+            aReplacement = GetString().getString();
+            bReplacement = true;
+        }
+    }
+    // If bGlobalReplacement==true and bReplacement==false then
+    // bGlobalReplacement is silently ignored.
+
+    OUString aExpression = GetString().getString();
+    OUString aText = GetString().getString();
+
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;
+    }
+
+    // 0-th match or replacement is none, return original string early.
+    if (nOccurrence == 0)
+    {
+        PushString( aText);
+        return;
+    }
+
+    const icu::UnicodeString aIcuExpression(
+            reinterpret_cast<const UChar*>(aExpression.getStr()), aExpression.getLength());
+    UErrorCode status = U_ZERO_ERROR;
+    icu::RegexMatcher aRegexMatcher( aIcuExpression, 0, status);
+    if (U_FAILURE(status))
+    {
+        // Invalid regex.
+        PushIllegalArgument();
+        return;
+    }
+    // Guard against pathological patterns, limit steps of engine, see
+    // https://ssl.icu-project.org/apiref/icu4c/classicu_1_1RegexMatcher.html#a6ebcfcab4fe6a38678c0291643a03a00
+    aRegexMatcher.setTimeLimit( 23*1000, status);
+
+    const icu::UnicodeString aIcuText( reinterpret_cast<const UChar*>(aText.getStr()), aText.getLength());
+    aRegexMatcher.reset( aIcuText);
+
+    if (!bReplacement)
+    {
+        // Find n-th occurrence.
+        sal_Int32 nCount = 0;
+        while (aRegexMatcher.find( status) && U_SUCCESS(status) && ++nCount < nOccurrence)
+            ;
+        if (U_FAILURE(status))
+        {
+            // Some error.
+            PushIllegalArgument();
+            return;
+        }
+        // n-th match found?
+        if (nCount != nOccurrence)
+        {
+            PushError( FormulaError::NotAvailable);
+            return;
+        }
+        // Extract matched text.
+        icu::UnicodeString aMatch( aRegexMatcher.group( status));
+        if (U_FAILURE(status))
+        {
+            // Some error.
+            PushIllegalArgument();
+            return;
+        }
+        OUString aResult( reinterpret_cast<const sal_Unicode*>(aMatch.getBuffer()), aMatch.length());
+        PushString( aResult);
+        return;
+    }
+
+    const icu::UnicodeString aIcuReplacement(
+            reinterpret_cast<const UChar*>(aReplacement.getStr()), aReplacement.getLength());
+    icu::UnicodeString aReplaced;
+    if (bGlobalReplacement)
+        // Replace all occurrences of match with replacement.
+        aReplaced = aRegexMatcher.replaceAll( aIcuReplacement, status);
+    else if (nOccurrence == 1)
+        // Replace first occurrence of match with replacement.
+        aReplaced = aRegexMatcher.replaceFirst( aIcuReplacement, status);
+    else
+    {
+        // Replace n-th occurrence of match with replacement.
+        sal_Int32 nCount = 0;
+        while (aRegexMatcher.find( status) && U_SUCCESS(status))
+        {
+            // XXX NOTE: After several RegexMatcher::find() the
+            // RegexMatcher::appendReplacement() still starts at the
+            // beginning (or after the last appendReplacement() position
+            // which is none here) and copies the original text up to the
+            // current found match and then replaces the found match.
+            if (++nCount == nOccurrence)
+            {
+                aRegexMatcher.appendReplacement( aReplaced, aIcuReplacement, status);
+                break;
+            }
+        }
+        aRegexMatcher.appendTail( aReplaced);
+    }
+    if (U_FAILURE(status))
+    {
+        // Some error, e.g. extraneous $1 without group.
+        PushIllegalArgument();
+        return;
+    }
+    OUString aResult( reinterpret_cast<const sal_Unicode*>(aReplaced.getBuffer()), aReplaced.length());
+    PushString( aResult);
 }
 
 void ScInterpreter::ScMid()
 {
     if ( MustHaveParamCount( GetByte(), 3 ) )
     {
-        double fAnz    = GetStringPositionArgument();
-        double fAnfang = GetStringPositionArgument();
+        const sal_Int32 nSubLen = GetStringPositionArgument();
+        const sal_Int32 nStart  = GetStringPositionArgument();
         OUString aStr = GetString().getString();
-        if (fAnfang < 1.0 || fAnz < 0.0)
+        if ( nStart < 1 || nSubLen < 0 )
             PushIllegalArgument();
         else
         {
-            sal_Int32 nCharacters = std::min<sal_Int32>(static_cast<sal_Int32>(fAnz), aStr.getLength() - fAnfang + 1);
-            OUString sRes;
-            if (nCharacters > 0)
-                sRes = aStr.copy(static_cast<sal_Int32>(fAnfang-1), nCharacters);
-            PushString(sRes);
+            sal_Int32 nLen = aStr.getLength();
+            sal_Int32 nIdx = 0;
+            sal_Int32 nCnt = 0;
+            while ( nIdx < nLen && nStart - 1 > nCnt )
+            {
+                aStr.iterateCodePoints( &nIdx );
+                ++nCnt;
+            }
+            sal_Int32 nIdx0 = nIdx;  //start position
+
+            while ( nIdx < nLen && nStart + nSubLen - 1 > nCnt )
+            {
+                aStr.iterateCodePoints( &nIdx );
+                ++nCnt;
+            }
+            aStr = aStr.copy( nIdx0, nIdx - nIdx0 );
+            PushString( aStr );
         }
     }
 }
@@ -8197,28 +9527,28 @@ void ScInterpreter::ScText()
                 break;
             default:
                 {
-                    FormulaTokenRef xTok( PopToken());
-                    if (!nGlobalError)
+                    FormulaConstTokenRef xTok( PopToken());
+                    if (nGlobalError == FormulaError::NONE)
                     {
-                        PushTempToken( xTok.get());
+                        PushTokenRef( xTok);
                         // Temporarily override the ConvertStringToValue()
                         // error for GetCellValue() / GetCellValueOrZero()
-                        sal_uInt16 nSErr = mnStringNoValueError;
-                        mnStringNoValueError = errNotNumericString;
+                        FormulaError nSErr = mnStringNoValueError;
+                        mnStringNoValueError = FormulaError::NotNumericString;
                         fVal = GetDouble();
                         mnStringNoValueError = nSErr;
-                        if (nGlobalError == errNotNumericString)
+                        if (nGlobalError == FormulaError::NotNumericString)
                         {
                             // Not numeric.
-                            nGlobalError = 0;
-                            PushTempToken( xTok.get());
+                            nGlobalError = FormulaError::NONE;
+                            PushTokenRef( xTok);
                             aStr = GetString();
                             bString = true;
                         }
                     }
                 }
         }
-        if (nGlobalError)
+        if (nGlobalError != FormulaError::NONE)
             PushError( nGlobalError);
         else
         {
@@ -8228,8 +9558,7 @@ void ScInterpreter::ScText()
             const ScPatternAttr* pPattern = pDok->GetPattern(
                     aPos.Col(), aPos.Row(), aPos.Tab() );
             if ( pPattern )
-                eCellLang = static_cast<const SvxLanguageItem&>(
-                        pPattern->GetItem( ATTR_LANGUAGE_FORMAT )).GetValue();
+                eCellLang = pPattern->GetItem( ATTR_LANGUAGE_FORMAT ).GetValue();
             else
                 eCellLang = ScGlobal::eLnge;
             if (bString)
@@ -8257,20 +9586,18 @@ void ScInterpreter::ScSubstitute()
     sal_uInt8 nParamCount = GetByte();
     if ( MustHaveParamCount( nParamCount, 3, 4 ) )
     {
-        sal_Int32 nAnz;
+        sal_Int32 nCnt;
         if (nParamCount == 4)
         {
-            double fAnz = GetStringPositionArgument();
-            if( fAnz < 1 )
+            nCnt = GetStringPositionArgument();
+            if (nCnt < 1)
             {
                 PushIllegalArgument();
                 return;
             }
-            else
-                nAnz = (sal_Int32) fAnz;
         }
         else
-            nAnz = 0;
+            nCnt = 0;
         OUString sNewStr = GetString().getString();
         OUString sOldStr = GetString().getString();
         OUString sStr    = GetString().getString();
@@ -8284,7 +9611,7 @@ void ScInterpreter::ScSubstitute()
             if (nPos != -1)
             {
                 nCount++;
-                if( !nAnz || nCount == nAnz )
+                if( !nCnt || nCount == nCnt )
                 {
                     sStr = sStr.replaceAt(nPos,nOldLen, "");
                     if ( CheckStringResultLen( sStr, sNewStr ) )
@@ -8309,22 +9636,21 @@ void ScInterpreter::ScRept()
 {
     if ( MustHaveParamCount( GetByte(), 2 ) )
     {
-        double fAnz = GetStringPositionArgument();
+        sal_Int32 nCnt = GetStringPositionArgument();
         OUString aStr = GetString().getString();
-        if ( fAnz < 0.0 )
+        if (nCnt < 0)
             PushIllegalArgument();
-        else if ( fAnz * aStr.getLength() > SAL_MAX_UINT16 )
+        else if (static_cast<double>(nCnt) * aStr.getLength() > kScInterpreterMaxStrLen)
         {
-            PushError( errStringOverflow );
+            PushError( FormulaError::StringOverflow );
         }
-        else if ( fAnz == 0.0 )
+        else if (nCnt == 0)
             PushString( EMPTY_OUSTRING );
         else
         {
             const sal_Int32 nLen = aStr.getLength();
-            sal_Int32 n = (sal_Int32) fAnz;
-            OUStringBuffer aRes(n*nLen);
-            while( n-- )
+            OUStringBuffer aRes(nCnt*nLen);
+            while( nCnt-- )
                 aRes.append(aStr);
             PushString( aRes.makeStringAndClear() );
         }
@@ -8338,36 +9664,39 @@ void ScInterpreter::ScConcat()
     while( nParamCount-- > 0)
     {
         OUString aStr = GetString().getString();
-        aRes = aStr + aRes;
+        if (CheckStringResultLen( aRes, aStr))
+            aRes = aStr + aRes;
+        else
+            break;
     }
     PushString( aRes );
 }
 
-sal_uInt16 ScInterpreter::GetErrorType()
+FormulaError ScInterpreter::GetErrorType()
 {
-    sal_uInt16 nErr;
-    sal_uInt16 nOldError = nGlobalError;
-    nGlobalError = 0;
+    FormulaError nErr;
+    FormulaError nOldError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     switch ( GetStackType() )
     {
         case svRefList :
         {
-            FormulaTokenRef x = PopToken();
-            if (nGlobalError)
+            FormulaConstTokenRef x = PopToken();
+            if (nGlobalError != FormulaError::NONE)
                 nErr = nGlobalError;
             else
             {
                 const ScRefList* pRefList = x.get()->GetRefList();
                 size_t n = pRefList->size();
                 if (!n)
-                    nErr = errNoRef;
+                    nErr = FormulaError::NoRef;
                 else if (n > 1)
-                    nErr = errNoValue;
+                    nErr = FormulaError::NoValue;
                 else
                 {
                     ScRange aRange;
                     DoubleRefToRange( (*pRefList)[0], aRange);
-                    if (nGlobalError)
+                    if (nGlobalError != FormulaError::NONE)
                         nErr = nGlobalError;
                     else
                     {
@@ -8385,7 +9714,7 @@ sal_uInt16 ScInterpreter::GetErrorType()
         {
             ScRange aRange;
             PopDoubleRef( aRange );
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
                 nErr = nGlobalError;
             else
             {
@@ -8401,7 +9730,7 @@ sal_uInt16 ScInterpreter::GetErrorType()
         {
             ScAddress aAdr;
             PopSingleRef( aAdr );
-            if ( nGlobalError )
+            if ( nGlobalError != FormulaError::NONE )
                 nErr = nGlobalError;
             else
                 nErr = pDok->GetErrCode( aAdr );
@@ -8417,11 +9746,11 @@ sal_uInt16 ScInterpreter::GetErrorType()
 
 void ScInterpreter::ScErrorType()
 {
-    sal_uInt16 nErr = GetErrorType();
-    if ( nErr )
+    FormulaError nErr = GetErrorType();
+    if ( nErr != FormulaError::NONE )
     {
-        nGlobalError = 0;
-        PushDouble( nErr );
+        nGlobalError = FormulaError::NONE;
+        PushDouble( static_cast<double>(nErr) );
     }
     else
     {
@@ -8431,30 +9760,30 @@ void ScInterpreter::ScErrorType()
 
 void ScInterpreter::ScErrorType_ODF()
 {
-    sal_uInt16 nErr = GetErrorType();
+    FormulaError nErr = GetErrorType();
     sal_uInt16 nErrType;
 
     switch ( nErr )
     {
-        case errParameterExpected :  // #NULL!
+        case FormulaError::ParameterExpected :  // #NULL!
             nErrType = 1;
             break;
-        case errDivisionByZero :     // #DIV/0!
+        case FormulaError::DivisionByZero :     // #DIV/0!
             nErrType = 2;
             break;
-        case errNoValue :            // #VALUE!
+        case FormulaError::NoValue :            // #VALUE!
             nErrType = 3;
             break;
-        case errNoRef :              // #REF!
+        case FormulaError::NoRef :              // #REF!
             nErrType = 4;
             break;
-        case errNoName :             // #NAME?
+        case FormulaError::NoName :             // #NAME?
             nErrType = 5;
             break;
-        case errIllegalFPOperation : // #NUM!
+        case FormulaError::IllegalFPOperation : // #NUM!
             nErrType = 6;
             break;
-        case NOTAVAILABLE :          // #N/A
+        case FormulaError::NotAvailable :          // #N/A
             nErrType = 7;
             break;
         /*
@@ -8478,17 +9807,15 @@ void ScInterpreter::ScErrorType_ODF()
 
     if ( nErrType )
     {
-        nGlobalError = 0;
+        nGlobalError =FormulaError::NONE;
         PushDouble( nErrType );
     }
     else
         PushNA();
 }
 
-bool ScInterpreter::MayBeRegExp( const OUString& rStr, const ScDocument* pDoc, bool bIgnoreWildcards )
+bool ScInterpreter::MayBeRegExp( const OUString& rStr, bool bIgnoreWildcards )
 {
-    if ( pDoc && !pDoc->GetDocOptions().IsFormulaRegexEnabled() )
-        return false;
     if ( rStr.isEmpty() || (rStr.getLength() == 1 && !rStr.startsWith(".")) )
         return false;   // single meta characters can not be a regexp
     // First two characters are wildcard '?' and '*' characters.
@@ -8508,11 +9835,8 @@ bool ScInterpreter::MayBeRegExp( const OUString& rStr, const ScDocument* pDoc, b
     return false;
 }
 
-bool ScInterpreter::MayBeWildcard( const OUString& rStr, const ScDocument* pDoc )
+bool ScInterpreter::MayBeWildcard( const OUString& rStr )
 {
-    if ( pDoc && !pDoc->GetDocOptions().IsFormulaWildcardsEnabled() )
-        return false;
-
     // Wildcards with '~' escape, if there are no wildcards then an escaped
     // character does not make sense, but it modifies the search pattern in an
     // Excel compatible wildcard search..
@@ -8536,26 +9860,26 @@ utl::SearchParam::SearchType ScInterpreter::DetectSearchType( const OUString& rS
     if (pDoc)
     {
         if (pDoc->GetDocOptions().IsFormulaWildcardsEnabled())
-            return MayBeWildcard( rStr, nullptr) ? utl::SearchParam::SRCH_WILDCARD : utl::SearchParam::SRCH_NORMAL;
+            return MayBeWildcard( rStr ) ? utl::SearchParam::SearchType::Wildcard : utl::SearchParam::SearchType::Normal;
         if (pDoc->GetDocOptions().IsFormulaRegexEnabled())
-            return MayBeRegExp( rStr, nullptr) ? utl::SearchParam::SRCH_REGEXP : utl::SearchParam::SRCH_NORMAL;
+            return MayBeRegExp( rStr ) ? utl::SearchParam::SearchType::Regexp : utl::SearchParam::SearchType::Normal;
     }
     else
     {
         /* TODO: obtain the global config for this rare case? */
-        if (MayBeRegExp( rStr, nullptr, true))
-            return utl::SearchParam::SRCH_REGEXP;
-        if (MayBeWildcard( rStr, nullptr))
-            return utl::SearchParam::SRCH_WILDCARD;
+        if (MayBeRegExp( rStr, true))
+            return utl::SearchParam::SearchType::Regexp;
+        if (MayBeWildcard( rStr ))
+            return utl::SearchParam::SearchType::Wildcard;
     }
-    return utl::SearchParam::SRCH_NORMAL;
+    return utl::SearchParam::SearchType::Normal;
 }
 
-static bool lcl_LookupQuery( ScAddress & o_rResultPos, ScDocument * pDoc,
+static bool lcl_LookupQuery( ScAddress & o_rResultPos, ScDocument * pDoc, const ScInterpreterContext& rContext,
         const ScQueryParam & rParam, const ScQueryEntry & rEntry )
 {
     bool bFound = false;
-    ScQueryCellIterator aCellIter( pDoc, rParam.nTab, rParam, false);
+    ScQueryCellIterator aCellIter( pDoc, rContext, rParam.nTab, rParam, false);
     if (rEntry.eOp != SC_EQUAL)
     {
         // range lookup <= or >=
@@ -8578,6 +9902,44 @@ static bool lcl_LookupQuery( ScAddress & o_rResultPos, ScDocument * pDoc,
     return bFound;
 }
 
+// tdf#121052:
+// =VLOOKUP(SearchCriterion; RangeArray; Index; Sorted)
+//  [SearchCriterion] is the value searched for in the first column of the array.
+//  [RangeArray] is the reference, which is to comprise at least two columns.
+//  [Index] is the number of the column in the array that contains the value to be returned. The first column has the number 1.
+//
+// Prerequisite of lcl_getPrevRowWithEmptyValueLookup():
+//      Value referenced by [SearchCriterion] is empty.
+// lcl_getPrevRowWithEmptyValueLookup() performs following checks:
+// - if we run query with "exact match" mode (i.e. VLOOKUP)
+// - and if we already have the same lookup done before but for another row
+//   which is also had empty [SearchCriterion]
+//
+// then
+//   we could say, that for current row we could reuse results of the cached call which was done for the row2
+//   In this case we return row index, which is >= 0.
+//
+// Elsewhere
+//   -1 is returned, which will lead to default behavior =>
+//   complete lookup will be done in RangeArray inside lcl_LookupQuery() method.
+//
+// This method was added only for speed up to avoid several useless complete
+// lookups inside [RangeArray] for searching empty strings.
+//
+static SCROW lcl_getPrevRowWithEmptyValueLookup( const ScLookupCache& rCache,
+        const ScLookupCache::QueryCriteria& rCriteria, const ScQueryParam & rParam)
+{
+    // is lookup value empty?
+    const ScQueryEntry& rEntry = rParam.GetEntry(0);
+    const ScQueryEntry::Item& rItem = rEntry.GetQueryItem();
+    if (! rItem.maString.getString().isEmpty())
+        return -1; // not found
+
+    // try to find the row index for which we have already performed lookup
+    // and have some result of it inside cache
+    return rCache.lookup( rCriteria );
+}
+
 bool ScInterpreter::LookupQueryWithCache( ScAddress & o_rResultPos,
         const ScQueryParam & rParam ) const
 {
@@ -8592,20 +9954,38 @@ bool ScInterpreter::LookupQueryWithCache( ScAddress & o_rResultPos,
      * direct lookups here. We could even further attribute volatility per
      * parameter so it would affect only the lookup range parameter. */
     if (!bColumnsMatch || GetVolatileType() != NOT_VOLATILE)
-        bFound = lcl_LookupQuery( o_rResultPos, pDok, rParam, rEntry);
+        bFound = lcl_LookupQuery( o_rResultPos, pDok, mrContext, rParam, rEntry);
     else
     {
         ScRange aLookupRange( rParam.nCol1, rParam.nRow1, rParam.nTab,
                 rParam.nCol2, rParam.nRow2, rParam.nTab);
-        ScLookupCache& rCache = pDok->GetLookupCache( aLookupRange);
+        ScLookupCache& rCache = pDok->GetLookupCache( aLookupRange, &mrContext );
         ScLookupCache::QueryCriteria aCriteria( rEntry);
         ScLookupCache::Result eCacheResult = rCache.lookup( o_rResultPos,
                 aCriteria, aPos);
+
+        // tdf#121052: Slow load of cells with VLOOKUP with references to empty cells
+        // This check was added only for speed up to avoid several useless complete
+        // lookups inside [RangeArray] for searching empty strings.
+        if (eCacheResult == ScLookupCache::NOT_CACHED && aCriteria.isEmptyStringQuery())
+        {
+            const SCROW nPrevRowWithEmptyValueLookup = lcl_getPrevRowWithEmptyValueLookup(rCache, aCriteria, rParam);
+            if (nPrevRowWithEmptyValueLookup >= 0)
+            {
+                // make the same lookup using cache with different row index
+                // (this lookup was already cached)
+                ScAddress aPosPrev(aPos);
+                aPosPrev.SetRow(nPrevRowWithEmptyValueLookup);
+
+                eCacheResult = rCache.lookup( o_rResultPos, aCriteria, aPosPrev );
+            }
+        }
+
         switch (eCacheResult)
         {
             case ScLookupCache::NOT_CACHED :
             case ScLookupCache::CRITERIA_DIFFERENT :
-                bFound = lcl_LookupQuery( o_rResultPos, pDok, rParam, rEntry);
+                bFound = lcl_LookupQuery( o_rResultPos, pDok, mrContext, rParam, rEntry);
                 if (eCacheResult == ScLookupCache::NOT_CACHED)
                     rCache.insert( o_rResultPos, aCriteria, aPos, bFound);
                 break;

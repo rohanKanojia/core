@@ -41,24 +41,19 @@ published service MediaProperties
 
         <p>In addition to the normal protocols like file:// or http://
         you can use private URLs as follows to get access to graphics
-        lying inside the resource system within an Office context:
-
+        lying inside the graphicrepository system within an Office context:
         <ul>
-            <li>private:resource/projectshortname/bitmap/12345</li>
-            <li>private:resource/projectshortname/bitmapex/12345</li>
-            <li>private:resource/projectshortname/image/12345</li>
-            <li>private:resource/projectshortname/imagelist/12345</li>
-            <li>private:resource/projectshortname/imagelist/12345/12</li>
+            <li><code>private:graphicrepository/<em>&lt;path_in_repository&gt;</em></code></li>
         </ul>
-And additionally, GraphicObject scheme URLs like
-            <ul> <li>vnd.sun.star.GraphicObject:10000000000001940000012FB99807BD</li> </ul>
-              can be used to access graphics held by the GraphicCache implementation.
         </p>
 
-        <p>Yet more, you can access graphics in the application-wide image
-        repository by specifying URLs of the form
-        <code>private:graphicrepository/<em>&lt;path_in_repository&gt;</em></code>.
-</p>
+        <p>
+        Note: As of LibreOffice 6.1 GraphicObject scheme URLs are not supported anymore.
+        For example:
+        <ul>
+            <li>vnd.sun.star.GraphicObject:10000000000001940000012FB99807BD</li>
+        </ul>
+        </p>
     */
     [optional, property ] string URL;
 

@@ -20,27 +20,25 @@
 #include "dlg_NumberFormat.hxx"
 
 #include <svl/itemset.hxx>
-#include <svx/numinf.hxx>
-#include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <sfx2/tabdlg.hxx>
-#include <svl/zforlist.hxx>
+#include <sfx2/sfxdlg.hxx>
 
 namespace chart
 {
 using namespace ::com::sun::star;
 
-NumberFormatDialog::NumberFormatDialog(vcl::Window* pParent, SfxItemSet& rSet)
-    : SfxSingleTabDialog(pParent, rSet, "FormatNumberDialog",
-        "cui/ui/formatnumberdialog.ui")
+NumberFormatDialog::NumberFormatDialog(weld::Window* pParent, SfxItemSet& rSet)
+    : SfxSingleTabDialogController(pParent, rSet, "cui/ui/formatnumberdialog.ui", "FormatNumberDialog")
 {
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
     ::CreateTabPage fnCreatePage = pFact->GetTabPageCreatorFunc( RID_SVXPAGE_NUMBERFORMAT );
-    if ( fnCreatePage )
+    if (fnCreatePage)
     {
-        SfxTabPage* pTabPage = (*fnCreatePage)( get_content_area(), &rSet );
-        pTabPage->PageCreated(rSet);
-        SetTabPage(pTabPage);
+        TabPageParent pPageParent(get_content_area(), this);
+        VclPtr<SfxTabPage> xTabPage = (*fnCreatePage)(pPageParent, &rSet);
+        xTabPage->PageCreated(rSet);
+        SetTabPage(xTabPage);
     }
 }
 

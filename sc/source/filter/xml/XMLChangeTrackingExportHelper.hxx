@@ -21,11 +21,11 @@
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLCHANGETRACKINGEXPORTHELPER_HXX
 
 #include <xmloff/xmltoken.hxx>
-#include <list>
 #include <map>
+#include <memory>
 #include <tools/solar.h>
-#include <com/sun/star/text/XText.hpp>
-#include <rtl/ustrbuf.hxx>
+
+namespace com { namespace sun { namespace star { namespace text { class XText; } } } }
 
 class ScChangeAction;
 class ScChangeTrack;
@@ -43,11 +43,10 @@ class ScChangeTrackingExportHelper
 
     ScChangeTrack*  pChangeTrack;
     ScEditEngineTextObj* pEditTextObj;
-    ScChangeActionMap* pDependings;
-    OUString   sChangeIDPrefix;
+    std::unique_ptr<ScChangeActionMap> pDependings;
     css::uno::Reference<css::text::XText> xText;
 
-    OUString GetChangeID(const sal_uInt32 nActionNumber);
+    static OUString GetChangeID(const sal_uInt32 nActionNumber);
     void GetAcceptanceState(const ScChangeAction* pAction);
 
     void WriteBigRange(const ScBigRange& rBigRange, xmloff::token::XMLTokenEnum aName);
@@ -55,7 +54,7 @@ class ScChangeTrackingExportHelper
     void WriteGenerated(const ScChangeAction* pDependAction);
     void WriteDeleted(const ScChangeAction* pDependAction);
     void WriteDepending(const ScChangeAction* pDependAction);
-    void WriteDependings(ScChangeAction* pAction);
+    void WriteDependings(const ScChangeAction* pAction);
 
     void WriteEmptyCell();
     void SetValueAttributes(const double& fValue, const OUString& sValue);
@@ -65,17 +64,17 @@ class ScChangeTrackingExportHelper
     void WriteFormulaCell(const ScCellValue& rCell, const OUString& sValue);
     void WriteCell(const ScCellValue& rCell, const OUString& sValue);
 
-    void WriteContentChange(ScChangeAction* pAction);
+    void WriteContentChange(const ScChangeAction* pAction);
     void AddInsertionAttributes(const ScChangeAction* pAction);
-    void WriteInsertion(ScChangeAction* pAction);
-    void AddDeletionAttributes(const ScChangeActionDel* pAction, const ScChangeActionDel* pLastAction);
+    void WriteInsertion(const ScChangeAction* pAction);
+    void AddDeletionAttributes(const ScChangeActionDel* pAction);
     void WriteCutOffs(const ScChangeActionDel* pAction);
     void WriteDeletion(ScChangeAction* pAction);
-    void WriteMovement(ScChangeAction* pAction);
-    void WriteRejection(ScChangeAction* pAction);
+    void WriteMovement(const ScChangeAction* pAction);
+    void WriteRejection(const ScChangeAction* pAction);
 
     void CollectCellAutoStyles(const ScCellValue& rCell);
-    void CollectActionAutoStyles(ScChangeAction* pAction);
+    void CollectActionAutoStyles(const ScChangeAction* pAction);
     void WorkWithChangeAction(ScChangeAction* pAction);
 public:
     explicit ScChangeTrackingExportHelper(ScXMLExport& rExport);

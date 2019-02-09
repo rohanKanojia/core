@@ -50,16 +50,16 @@ namespace tools
     class PolyPolygon;
 }
 
-inline sal_uInt16 _uInt16( sal_Int32 nValue )
+inline sal_uInt16 uInt16_( sal_Int32 nValue )
 {
-    OSL_ENSURE( (nValue >= 0) && ((sal_uInt32)nValue <= 0xffff), "overflow while converting sal_Int32 to sal_uInt16" );
-    return (sal_uInt16)nValue;
+    OSL_ENSURE( (nValue >= 0) && (static_cast<sal_uInt32>(nValue) <= 0xffff), "overflow while converting sal_Int32 to sal_uInt16" );
+    return static_cast<sal_uInt16>(nValue);
 }
 
-inline sal_Int16 _Int16( sal_Int32 nValue )
+inline sal_Int16 Int16_( sal_Int32 nValue )
 {
     OSL_ENSURE( (nValue >= -32768) && (nValue <= 32767), "overflow while converting sal_Int32 to sal_Int16" );
-    return (sal_Int16)nValue;
+    return static_cast<sal_Int16>(nValue);
 }
 
 class VirtualDevice;
@@ -109,16 +109,6 @@ sal_uInt32 getFixed( double fValue );
 
 typedef ::std::map<BitmapChecksum, sal_uInt16> ChecksumCache;
 
-/** unsigned int 16 compare operation for stl */
-struct ltuint16
-{
-  bool operator()(sal_uInt16 s1, sal_uInt16 s2) const
-  {
-    return s1 < s2;
-  }
-};
-
-
 /** container class to create bit structures */
 class BitStream
 {
@@ -159,15 +149,12 @@ public:
 
 private:
     const vcl::Font maFont;
-    std::map<sal_uInt16, sal_uInt16, ltuint16> maGlyphIndex;
+    std::map<sal_uInt16, sal_uInt16> maGlyphIndex;
     sal_uInt16 mnNextIndex;
     sal_uInt16 mnId;
     BitStream maGlyphData;
     std::vector< sal_uInt16 > maGlyphOffsets;
 };
-
-typedef std::vector<FlashFont*> FontMap;
-
 
 /** this class helps creating flash tags */
 class Tag : public SvMemoryStream
@@ -186,13 +173,12 @@ public:
 
     void addRGBA( const Color& rColor );
     void addRGB( const Color& rColor );
-    void addRect( const Rectangle& rRect );
+    void addRect( const tools::Rectangle& rRect );
     void addMatrix( const ::basegfx::B2DHomMatrix& rMatrix ); // #i73264#
-    void addString( const char* pString );
     void addStream( SvStream& rIn );
 
     static void writeMatrix( SvStream& rOut, const ::basegfx::B2DHomMatrix& rMatrix ); // #i73264#
-    static void writeRect( SvStream& rOut, const Rectangle& rRect );
+    static void writeRect( SvStream& rOut, const tools::Rectangle& rRect );
 
 private:
     sal_uInt8 mnTagId;
@@ -207,10 +193,10 @@ public:
     ~Sprite();
 
     void write( SvStream& out );
-    void addTag( Tag* pNewTag );
+    void addTag( std::unique_ptr<Tag> pNewTag );
 
 private:
-    std::vector< Tag* > maTags;
+    std::vector< std::unique_ptr<Tag> > maTags;
     sal_uInt16  mnId;
     sal_uInt32  mnFrames;
 };
@@ -226,7 +212,7 @@ public:
     explicit FillStyle( const Color& rSolidColor );
 
     /** this c'tor creates a linear or radial gradient fill style */
-    FillStyle( const Rectangle& rBoundRect, const Gradient& rGradient );
+    FillStyle( const tools::Rectangle& rBoundRect, const Gradient& rGradient );
 
     /** this c'tor creates a tiled or clipped bitmap fill style */
     FillStyle( sal_uInt16 nBitmapId, bool bClipped, const ::basegfx::B2DHomMatrix& rMatrix ); // #i73264#
@@ -241,7 +227,7 @@ private:
     sal_uInt16      mnBitmapId;
     Color           maColor;
     Gradient        maGradient;
-    Rectangle       maBoundRect;
+    tools::Rectangle       maBoundRect;
 };
 
 
@@ -258,10 +244,10 @@ public:
         An invisible shape with the size of the document is placed at depth 1
         and it clips all shapes on depth 2 and 3.
     */
-    Writer( sal_Int32 nDocWidthInput, sal_Int32 nDocHeightInput, sal_Int32 nDocWidth, sal_Int32 nDocHeight, sal_Int32 nJPEGcompressMode = -1 );
+    Writer( sal_Int32 nTWIPWidthOutput, sal_Int32 nTWIPHeightOutput, sal_Int32 nDocWidth, sal_Int32 nDocHeight, sal_Int32 nJPEGcompressMode );
     ~Writer();
 
-    void storeTo( css::uno::Reference< css::io::XOutputStream > &xOutStream );
+    void storeTo( css::uno::Reference< css::io::XOutputStream > const &xOutStream );
 
     // geometry
     void setClipping( const tools::PolyPolygon* pClipPolyPolygon );
@@ -327,9 +313,9 @@ private:
     void endTag();
     sal_uInt16 createID() { return mnNextId++; }
 
-    void Impl_writeBmp( sal_uInt16 nBitmapId, sal_uInt32 width, sal_uInt32 height, sal_uInt8 *pCompressed, sal_uInt32 compressed_size );
-    void Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Size& rSz, const Point& rSrcPt, const Size& rSrcSz, const Rectangle& rClipRect, bool bMap );
-    void Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal_uInt32 nJpgDataLength, sal_uInt8 *pCompressed, sal_uInt32 compressed_size );
+    void Impl_writeBmp( sal_uInt16 nBitmapId, sal_uInt32 width, sal_uInt32 height, sal_uInt8 const *pCompressed, sal_uInt32 compressed_size );
+    void Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Size& rSz, const Point& rSrcPt, const Size& rSrcSz, const tools::Rectangle& rClipRect, bool bMap );
+    void Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal_uInt32 nJpgDataLength, sal_uInt8 const *pCompressed, sal_uInt32 compressed_size );
     void Impl_handleLineInfoPolyPolygons(const LineInfo& rInfo, const basegfx::B2DPolygon& rLinePolygon);
     void Impl_writeActions( const GDIMetaFile& rMtf );
     void Impl_writePolygon( const tools::Polygon& rPoly, bool bFilled );
@@ -340,10 +326,10 @@ private:
     void Impl_writeText( const Point& rPos, const OUString& rText, const long* pDXArray, long nWidth, Color aTextColor );
     void Impl_writeGradientEx( const tools::PolyPolygon& rPolyPoly, const Gradient& rGradient );
     void Impl_writeLine( const Point& rPt1, const Point& rPt2, const Color* pLineColor = nullptr );
-    void Impl_writeRect( const Rectangle& rRect, long nRadX, long nRadY );
+    void Impl_writeRect( const tools::Rectangle& rRect, long nRadX, long nRadY );
     void Impl_writeEllipse( const Point& rCenter, long nRadX, long nRadY );
-    bool Impl_writeFilling( SvtGraphicFill& rFilling );
-    bool Impl_writeStroke( SvtGraphicStroke& rStroke );
+    bool Impl_writeFilling( SvtGraphicFill const & rFilling );
+    bool Impl_writeStroke( SvtGraphicStroke const & rStroke );
 
     FlashFont& Impl_getFont( const vcl::Font& rFont );
 
@@ -369,12 +355,12 @@ private:
                                    const double P3x, const double P3y,
                                    const double P4x, const double P4y );
 
-    css::uno::Reference < css::i18n::XBreakIterator > Impl_GetBreakIterator();
+    css::uno::Reference < css::i18n::XBreakIterator > const & Impl_GetBreakIterator();
 
 private:
     css::uno::Reference< css::i18n::XBreakIterator > mxBreakIterator;
 
-    FontMap                 maFonts;
+    std::vector<std::unique_ptr<FlashFont>> maFonts;
 
     sal_Int32 mnDocWidth;
     sal_Int32 mnDocHeight;
@@ -383,7 +369,6 @@ private:
     double mnDocXScale;
     double mnDocYScale;
 
-    sal_uInt16 mnWhiteBackgroundShapeId;
     sal_uInt16 mnPageButtonId;
 
     VclPtrInstance<VirtualDevice> mpVDev;
@@ -393,11 +378,10 @@ private:
     /** holds the information of the objects defined in the movie stream
         while executing defineShape
     */
-    typedef std::vector<sal_uInt16> CharacterIdVector;
-    CharacterIdVector       maShapeIds;
+    std::vector<sal_uInt16> maShapeIds;
 
-    Tag* mpTag;
-    Sprite* mpSprite;
+    std::unique_ptr<Tag> mpTag;
+    std::unique_ptr<Sprite> mpSprite;
     std::stack<Sprite*> mvSpriteStack;
     ChecksumCache mBitmapCache;
 

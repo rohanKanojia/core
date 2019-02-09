@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<interface domain="cui">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="IconSelector">
     <property name="can_focus">False</property>
     <property name="hexpand">True</property>
     <property name="vexpand">True</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Change Icon</property>
+    <property name="title" translatable="yes" context="iconselectordialog|IconSelector">Change Icon</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
@@ -24,7 +24,6 @@
             <child>
               <object class="GtkButton" id="ok">
                 <property name="label">gtk-ok</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="can_default">True</property>
@@ -41,7 +40,6 @@
             <child>
               <object class="GtkButton" id="cancel">
                 <property name="label">gtk-cancel</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -56,7 +54,6 @@
             <child>
               <object class="GtkButton" id="help">
                 <property name="label">gtk-help</property>
-                <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -122,7 +119,7 @@
                       <object class="GtkLabel" id="label1">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="label" translatable="yes">_Icons</property>
+                        <property name="label" translatable="yes" context="iconselectordialog|label1">_Icons</property>
                         <property name="use_underline">True</property>
                         <attributes>
                           <attribute name="weight" value="bold"/>
@@ -145,8 +142,7 @@
                     <property name="layout_style">start</property>
                     <child>
                       <object class="GtkButton" id="importButton">
-                        <property name="label" translatable="yes">I_mport...</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="label" translatable="yes" context="iconselectordialog|importButton">I_mport...</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
@@ -160,8 +156,7 @@
                     </child>
                     <child>
                       <object class="GtkButton" id="deleteButton">
-                        <property name="label" translatable="yes">_Delete...</property>
-                        <property name="use_action_appearance">False</property>
+                        <property name="label" translatable="yes" context="iconselectordialog|deleteButton">_Delete...</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">True</property>
@@ -194,7 +189,7 @@
                 <property name="halign">start</property>
                 <property name="xalign">0</property>
                 <property name="yalign">0</property>
-                <property name="label" translatable="yes">Note:
+                <property name="label" translatable="yes" context="iconselectordialog|noteLabel">Note:
 The size of an icon should be 16x16 pixel to achieve best quality.
 Different sized icons will be scaled automatically.</property>
                 <property name="wrap">True</property>
@@ -215,9 +210,9 @@ Different sized icons will be scaled automatically.</property>
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
   </object>
 </interface>

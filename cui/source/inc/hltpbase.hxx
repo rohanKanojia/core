@@ -21,7 +21,6 @@
 
 #include <sfx2/app.hxx>
 #include <sfx2/tabdlg.hxx>
-#include <vcl/group.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/combobox.hxx>
@@ -29,18 +28,14 @@
 #include <vcl/lstbox.hxx>
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <sfx2/dispatch.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/fcontnr.hxx>
 #include <svtools/inettbc.hxx>
 #include <vcl/timer.hxx>
 
-#include <dialmgr.hxx>
 #include <sfx2/docfile.hxx>
-#include <cuires.hrc>
 #include <com/sun/star/frame/XFrame.hpp>
-#include "helpid.hrc"
 #include <svx/hlnkitem.hxx>
 
 #include "hlmarkwn.hxx"
@@ -53,13 +48,8 @@ protected:
     virtual sal_Int8    AcceptDrop( const AcceptDropEvent& rEvt ) override;
     virtual sal_Int8    ExecuteDrop( const ExecuteDropEvent& rEvt ) override;
 
-    virtual bool        Notify( NotifyEvent& rNEvt ) override;
-    virtual void        Select() override;
-    virtual void        Modify() override;
-    virtual bool        PreNotify( NotifyEvent& rNEvt ) override;
-
 public:
-    SvxHyperURLBox( vcl::Window* pParent, INetProtocol eSmart = INetProtocol::File );
+    SvxHyperURLBox( vcl::Window* pParent, INetProtocol eSmart );
 
 };
 
@@ -100,11 +90,11 @@ protected:
                                           OUString& aStrIntName, OUString& aStrFrame,
                                           SvxLinkInsertMode& eMode );
 
-    DECL_LINK_TYPED (ClickScriptHdl_Impl, Button*, void ); ///< Button : Script
+    DECL_LINK (ClickScriptHdl_Impl, Button*, void ); ///< Button : Script
 
     static OUString GetSchemeFromURL( const OUString& rStrURL );
 
-    inline void     DisableClose( bool _bDisable ) { mbIsCloseDisabled = _bDisable; }
+    void     DisableClose( bool _bDisable ) { mbIsCloseDisabled = _bDisable; }
 
 public:
     SvxHyperlinkTabPageBase (
@@ -112,9 +102,9 @@ public:
         IconChoiceDialog* pDlg,
         const OString& rID,
         const OUString& rUIXMLDescription,
-        const SfxItemSet& rItemSet
+        const SfxItemSet* pItemSet
     );
-    virtual ~SvxHyperlinkTabPageBase ();
+    virtual ~SvxHyperlinkTabPageBase () override;
     virtual void dispose() override;
 
     void    SetDocumentFrame(
@@ -130,14 +120,14 @@ public:
     virtual void Reset( const SfxItemSet& ) override;
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void ActivatePage( const SfxItemSet& rItemSet ) override;
-    virtual int  DeactivatePage( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
 
     bool IsMarkWndVisible ()      { return static_cast<vcl::Window*>(mpMarkWnd)->IsVisible(); }
-    Size GetSizeExtraWnd ()       { return ( mpMarkWnd->GetSizePixel() ); }
+    Size GetSizeExtraWnd ()       { return mpMarkWnd->GetSizePixel(); }
     bool MoveToExtraWnd ( Point aNewPos, bool bDisConnectDlg = false );
 
-    virtual void        ActivatePage() override;
-    virtual void        DeactivatePage() override;
+    using TabPage::ActivatePage;
+    using TabPage::DeactivatePage;
     virtual bool        QueryClose() override;
 
 protected:
@@ -149,10 +139,8 @@ protected:
 
     SfxDispatcher* GetDispatcher() const;
 
-    sal_uInt16             GetMacroEvents();
+    HyperDialogEvent   GetMacroEvents();
     SvxMacroTableDtor* GetMacroTable();
-
-    bool IsHTMLDoc() const;
 };
 
 #endif // INCLUDED_CUI_SOURCE_INC_HLTPBASE_HXX

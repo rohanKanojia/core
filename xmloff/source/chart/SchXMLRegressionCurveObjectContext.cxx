@@ -30,6 +30,7 @@
 
 #include <comphelper/processfactory.hxx>
 
+#include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/chart2/RegressionEquation.hpp>
 #include <com/sun/star/chart2/RelativePosition.hpp>
 
@@ -41,7 +42,7 @@ SchXMLRegressionCurveObjectContext::SchXMLRegressionCurveObjectContext(
                                         SvXMLImport& rImport,
                                         sal_uInt16 nPrefix,
                                         const OUString& rLocalName,
-                                        std::list< RegressionStyle >& rRegressionStyleList,
+                                        std::vector< RegressionStyle >& rRegressionStyleVector,
                                         const css::uno::Reference<
                                                     css::chart2::XDataSeries >& xSeries,
                                         const awt::Size & rChartSize) :
@@ -49,7 +50,7 @@ SchXMLRegressionCurveObjectContext::SchXMLRegressionCurveObjectContext(
     mrImportHelper( rImpHelper ),
     mxSeries( xSeries ),
     maChartSize( rChartSize ),
-    mrRegressionStyleList( rRegressionStyleList )
+    mrRegressionStyleVector( rRegressionStyleVector )
 {
 }
 
@@ -79,27 +80,27 @@ void SchXMLRegressionCurveObjectContext::StartElement( const uno::Reference< xml
     }
 
     RegressionStyle aStyle( mxSeries, sAutoStyleName );
-    mrRegressionStyleList.push_back( aStyle );
+    mrRegressionStyleVector.push_back( aStyle );
 }
 
-SvXMLImportContext* SchXMLRegressionCurveObjectContext::CreateChildContext(
+SvXMLImportContextRef SchXMLRegressionCurveObjectContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     if( nPrefix == XML_NAMESPACE_CHART && IsXMLToken( rLocalName, XML_EQUATION ) )
     {
-        pContext = new SchXMLEquationContext(
-            mrImportHelper, GetImport(), nPrefix, rLocalName, maChartSize, mrRegressionStyleList.back());
+        xContext = new SchXMLEquationContext(
+            mrImportHelper, GetImport(), nPrefix, rLocalName, maChartSize, mrRegressionStyleVector.back());
     }
     else
     {
-        pContext = SvXMLImportContext::CreateChildContext( nPrefix, rLocalName, xAttrList );
+        xContext = SvXMLImportContext::CreateChildContext( nPrefix, rLocalName, xAttrList );
     }
 
-    return pContext;
+    return xContext;
 }
 
 SchXMLEquationContext::SchXMLEquationContext(
@@ -153,10 +154,10 @@ void SchXMLEquationContext::StartElement( const uno::Reference< xml::sax::XAttri
                 bHasYPos = true;
                 break;
             case XML_TOK_REGEQ_DISPLAY_EQUATION:
-                ::sax::Converter::convertBool(bShowEquation, aValue);
+                (void)::sax::Converter::convertBool(bShowEquation, aValue);
                 break;
             case XML_TOK_REGEQ_DISPLAY_R_SQUARE:
-                ::sax::Converter::convertBool(bShowRSquare, aValue);
+                (void)::sax::Converter::convertBool(bShowRSquare, aValue);
                 break;
             case XML_TOK_REGEQ_STYLE_NAME:
                 sAutoStyleName = aValue;

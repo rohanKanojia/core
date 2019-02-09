@@ -22,7 +22,7 @@
 
 #include <rtl/ref.hxx>
 #include <salhelper/simplereferenceobject.hxx>
-#include "docoptio.hxx"
+#include <docoptio.hxx>
 #include <osl/mutex.hxx>
 
 class ScDocument;
@@ -38,16 +38,14 @@ private:
     ScDocOptions        aOpt;
     ScDocumentPool*     pDocPool;
     rtl::Reference< ScStyleSheetPool > mxStylePool;
-    mutable SvNumberFormatter*  pFormTable;
+    mutable std::unique_ptr<SvNumberFormatter> pFormTable;
     mutable SfxItemPool*        pEditPool;                      // EditTextObjectPool
     mutable SfxItemPool*        pEnginePool;                    // EditEnginePool
-    ScDocument*         m_pSourceDoc;
-
-    void                UseDocOptions() const;
+    ScDocument* const         m_pSourceDoc;
 
 public:
                 ScPoolHelper( ScDocument* pSourceDoc );
-    virtual     ~ScPoolHelper();
+    virtual     ~ScPoolHelper() override;
 
                 // called in dtor of main document
     void        SourceDocumentGone();
@@ -61,7 +59,7 @@ public:
 
     void                SetFormTableOpt(const ScDocOptions& rOpt);
 
-    SvNumberFormatter* CreateNumberFormatter() const;
+    std::unique_ptr<SvNumberFormatter> CreateNumberFormatter() const;
 };
 
 #endif

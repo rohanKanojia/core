@@ -28,12 +28,10 @@
 #include "ChartSidebarModifyListener.hxx"
 #include "ChartSidebarSelectionListener.hxx"
 
-#include <com/sun/star/util/XModifyListener.hpp>
-#include <com/sun/star/view/XSelectionChangeListener.hpp>
+namespace com { namespace sun { namespace star { namespace util { class XModifyListener; } } } }
+namespace com { namespace sun { namespace star { namespace view { class XSelectionChangeListener; } } } }
 
-class FixedText;
 class ListBox;
-class NumericField;
 
 namespace chart {
 
@@ -58,7 +56,7 @@ public:
         const DataChangedEvent& rEvent) override;
 
     virtual void HandleContextChange(
-        const ::sfx2::sidebar::EnumContext& rContext) override;
+        const vcl::EnumContext& rContext) override;
 
     virtual void NotifyItemUpdate(
         const sal_uInt16 nSId,
@@ -66,12 +64,12 @@ public:
         const SfxPoolItem* pState,
         const bool bIsEnabled) override;
 
-    // constructor/destuctor
+    // constructor/destructor
     ChartSeriesPanel(
         vcl::Window* pParent,
         const css::uno::Reference<css::frame::XFrame>& rxFrame,
         ChartController* pController);
-    virtual ~ChartSeriesPanel();
+    virtual ~ChartSeriesPanel() override;
     virtual void dispose() override;
 
     virtual void updateData() override;
@@ -106,9 +104,9 @@ private:
 
     void Initialize();
 
-    DECL_LINK_TYPED(CheckBoxHdl, Button*, void);
-    DECL_LINK_TYPED(RadioBtnHdl, RadioButton&, void);
-    DECL_LINK_TYPED(ListBoxHdl, ListBox&, void);
+    DECL_LINK(CheckBoxHdl, Button*, void);
+    DECL_LINK(RadioBtnHdl, RadioButton&, void);
+    DECL_LINK(ListBoxHdl, ListBox&, void);
 };
 
 } } // end of namespace ::chart::sidebar

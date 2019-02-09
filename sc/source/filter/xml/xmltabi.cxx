@@ -24,30 +24,25 @@
 #include "xmlsceni.hxx"
 #include "xmlexternaltabi.hxx"
 #include "xmlnexpi.hxx"
-#include "document.hxx"
-#include "docuno.hxx"
-#include "olinetab.hxx"
-#include "XMLConverter.hxx"
+#include <document.hxx>
+#include <docuno.hxx>
+#include <olinetab.hxx>
 #include "XMLTableShapesContext.hxx"
 #include "XMLTableSourceContext.hxx"
 #include "XMLStylesImportHelper.hxx"
-#include "rangeutl.hxx"
-#include "externalrefmgr.hxx"
-#include "sheetdata.hxx"
+#include <rangeutl.hxx>
+#include <externalrefmgr.hxx>
+#include <sheetdata.hxx>
 #include "xmlcondformat.hxx"
 
 #include <xmloff/xmltkmap.hxx>
-#include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
+#include <xmloff/xmlnmspe.hxx>
 #include <xmloff/XMLEventsImportContext.hxx>
+#include <sal/log.hxx>
 
 #include <tools/urlobj.hxx>
-
-#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
-#include <com/sun/star/sheet/XSpreadsheets.hpp>
-#include <com/sun/star/sheet/XSpreadsheet.hpp>
-#include <com/sun/star/sheet/XPrintAreas.hpp>
-#include <com/sun/star/table/CellAddress.hpp>
+#include <sax/fastattribs.hxx>
 
 using namespace com::sun::star;
 using namespace xmloff::token;
@@ -135,10 +130,8 @@ ScXMLExternalTabData::ScXMLExternalTabData() :
 }
 
 ScXMLTableContext::ScXMLTableContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList ) :
+    ScXMLImportContext( rImport ),
     nStartOffset(-1),
     bStartFormPage(false),
     bPrintEntireSheet(true)
@@ -149,45 +142,43 @@ ScXMLTableContext::ScXMLTableContext( ScXMLImport& rImport,
     ScXMLTabProtectionData aProtectData;
     OUString sName;
     OUString sStyleName;
-    sal_Int16 nAttrCount(xAttrList.is() ? xAttrList->getLength() : 0);
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetTableAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
-    {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix(GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName ));
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
 
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+    if ( rAttrList.is() )
+    {
+        for (auto &it : *rAttrList)
         {
-            case XML_TOK_TABLE_NAME:
-                    sName = sValue;
+            switch (it.getToken())
+            {
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                        sName = it.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_STYLE_NAME ):
+                        sStyleName = it.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_PROTECTED ):
+                    aProtectData.mbProtected = IsXMLToken( it, XML_TRUE );
                 break;
-            case XML_TOK_TABLE_STYLE_NAME:
-                    sStyleName = sValue;
+                case XML_ELEMENT( TABLE, XML_PRINT_RANGES ):
+                        sPrintRanges = it.toString();
+                    break;
+                case XML_ELEMENT( TABLE, XML_PROTECTION_KEY ):
+                    aProtectData.maPassword = it.toString();
                 break;
-            case XML_TOK_TABLE_PROTECTED:
-                aProtectData.mbProtected = IsXMLToken(sValue, XML_TRUE);
-            break;
-            case XML_TOK_TABLE_PRINT_RANGES:
-                    sPrintRanges = sValue;
+                case XML_ELEMENT( TABLE, XML_PROTECTION_KEY_DIGEST_ALGORITHM ):
+                    aProtectData.meHash1 = ScPassHashHelper::getHashTypeFromURI( it.toString() );
                 break;
-            case XML_TOK_TABLE_PASSWORD:
-                aProtectData.maPassword = sValue;
-            break;
-            case XML_TOK_TABLE_PASSHASH:
-                aProtectData.meHash1 = ScPassHashHelper::getHashTypeFromURI(sValue);
-            break;
-            case XML_TOK_TABLE_PASSHASH_2:
-                aProtectData.meHash2 = ScPassHashHelper::getHashTypeFromURI(sValue);
-            break;
-            case XML_TOK_TABLE_PRINT:
-                {
-                    if (IsXMLToken(sValue, XML_FALSE))
-                        bPrintEntireSheet = false;
-                }
+                case XML_ELEMENT( TABLE, XML_PROTECTION_KEY_DIGEST_ALGORITHM_2 ):
+                case XML_ELEMENT( LO_EXT, XML_PROTECTION_KEY_DIGEST_ALGORITHM_2 ):
+                    aProtectData.meHash2 = ScPassHashHelper::getHashTypeFromURI( it.toString() );
                 break;
+                case XML_ELEMENT( TABLE, XML_PRINT ):
+                    {
+                        if ( IsXMLToken( it, XML_FALSE) )
+                            bPrintEntireSheet = false;
+                    }
+                    break;
+            }
+
         }
     }
 
@@ -202,7 +193,8 @@ ScXMLTableContext::ScXMLTableContext( ScXMLImport& rImport,
         {
             ScExternalRefManager* pRefMgr = pDoc->GetExternalRefManager();
             pExternalRefInfo->mnFileId = pRefMgr->getExternalFileId(aExtUrl);
-            pExternalRefInfo->mpCacheTable = pRefMgr->getCacheTable(pExternalRefInfo->mnFileId, aExtTabName, true);
+            pExternalRefInfo->mpCacheTable = pRefMgr->getCacheTable(pExternalRefInfo->mnFileId, aExtTabName, true,
+                    nullptr, &aExtUrl);
             pExternalRefInfo->mpCacheTable->setWholeTableCached();
         }
     }
@@ -217,34 +209,14 @@ ScXMLTableContext::~ScXMLTableContext()
 {
 }
 
-SvXMLImportContext *ScXMLTableContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef ScXMLTableContext::CreateChildContext( sal_uInt16 nPrefix,
                                             const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /*xAttrList*/ )
 {
     const SvXMLTokenMap& rTokenMap(GetScImport().GetTableElemTokenMap());
     sal_uInt16 nToken = rTokenMap.Get(nPrefix, rLName);
-    if (pExternalRefInfo.get())
+    if (pExternalRefInfo)
     {
-        // We only care about the table-row and table-source elements for
-        // external cache data.
-        switch (nToken)
-        {
-            case XML_TOK_TABLE_ROW_GROUP:
-            case XML_TOK_TABLE_HEADER_ROWS:
-            case XML_TOK_TABLE_ROWS:
-                // #i101319# don't discard rows in groups or header (repeat range)
-                return new ScXMLExternalRefRowsContext(
-                    GetScImport(), nPrefix, rLName, xAttrList, *pExternalRefInfo);
-            case XML_TOK_TABLE_ROW:
-                return new ScXMLExternalRefRowContext(
-                    GetScImport(), nPrefix, rLName, xAttrList, *pExternalRefInfo);
-            case XML_TOK_TABLE_SOURCE:
-                return new ScXMLExternalRefTabSourceContext(
-                    GetScImport(), nPrefix, rLName, xAttrList, *pExternalRefInfo);
-            default:
-                ;
-        }
-
         return new SvXMLImportContext(GetImport(), nPrefix, rLName);
     }
 
@@ -252,67 +224,6 @@ SvXMLImportContext *ScXMLTableContext::CreateChildContext( sal_uInt16 nPrefix,
 
     switch (nToken)
     {
-    case XML_TOK_TABLE_NAMED_EXPRESSIONS:
-    {
-        SCTAB nTab = GetScImport().GetTables().GetCurrentSheet();
-        pContext = new ScXMLNamedExpressionsContext(
-            GetScImport(), nPrefix, rLName, xAttrList,
-            new ScXMLNamedExpressionsContext::SheetLocalInserter(GetScImport(), nTab));
-    }
-        break;
-    case XML_TOK_TABLE_COL_GROUP:
-        pContext = new ScXMLTableColsContext( GetScImport(), nPrefix,
-                                                   rLName, xAttrList,
-                                                   false, true );
-        break;
-    case XML_TOK_TABLE_HEADER_COLS:
-        pContext = new ScXMLTableColsContext( GetScImport(), nPrefix,
-                                                   rLName, xAttrList,
-                                                   true, false );
-        break;
-    case XML_TOK_TABLE_COLS:
-        pContext = new ScXMLTableColsContext( GetScImport(), nPrefix,
-                                                   rLName, xAttrList,
-                                                   false, false );
-        break;
-    case XML_TOK_TABLE_COL:
-            pContext = new ScXMLTableColContext( GetScImport(), nPrefix,
-                                                      rLName, xAttrList );
-        break;
-    case XML_TOK_TABLE_PROTECTION:
-    case XML_TOK_TABLE_PROTECTION_EXT:
-        pContext = new ScXMLTableProtectionContext( GetScImport(), nPrefix, rLName, xAttrList );
-        break;
-    case XML_TOK_TABLE_ROW_GROUP:
-        pContext = new ScXMLTableRowsContext( GetScImport(), nPrefix,
-                                                   rLName, xAttrList,
-                                                   false, true );
-        break;
-    case XML_TOK_TABLE_HEADER_ROWS:
-        pContext = new ScXMLTableRowsContext( GetScImport(), nPrefix,
-                                                   rLName, xAttrList,
-                                                   true, false );
-        break;
-    case XML_TOK_TABLE_ROWS:
-        pContext = new ScXMLTableRowsContext( GetScImport(), nPrefix,
-                                                   rLName, xAttrList,
-                                                   false, false );
-        break;
-    case XML_TOK_TABLE_ROW:
-            pContext = new ScXMLTableRowContext( GetScImport(), nPrefix,
-                                                      rLName, xAttrList//,
-                                                      //this
-                                                      );
-        break;
-    case XML_TOK_TABLE_SOURCE:
-        pContext = new ScXMLTableSourceContext( GetScImport(), nPrefix, rLName, xAttrList);
-        break;
-    case XML_TOK_TABLE_SCENARIO:
-        pContext = new ScXMLTableScenarioContext( GetScImport(), nPrefix, rLName, xAttrList);
-        break;
-    case XML_TOK_TABLE_SHAPES:
-        pContext = new ScXMLTableShapesContext( GetScImport(), nPrefix, rLName, xAttrList);
-        break;
     case XML_TOK_TABLE_FORMS:
         {
             GetScImport().GetFormImport()->startPage(GetScImport().GetTables().GetCurrentXDrawPage());
@@ -328,9 +239,6 @@ SvXMLImportContext *ScXMLTableContext::CreateChildContext( sal_uInt16 nPrefix,
             pContext = new XMLEventsImportContext( GetImport(), nPrefix, rLName, xSupplier );
         }
         break;
-    case XML_TOK_TABLE_CONDFORMATS:
-        pContext = new ScXMLConditionalFormatsContext( GetScImport(), nPrefix, rLName );
-        break;
     default:
         ;
     }
@@ -341,7 +249,106 @@ SvXMLImportContext *ScXMLTableContext::CreateChildContext( sal_uInt16 nPrefix,
     return pContext;
 }
 
-void ScXMLTableContext::EndElement()
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL
+        ScXMLTableContext::createFastChildContext( sal_Int32 nElement,
+        const uno::Reference< xml::sax::XFastAttributeList > & xAttrList )
+{
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
+
+    if (pExternalRefInfo)
+    {
+        // We only care about the table-row and table-source elements for
+        // external cache data.
+        switch ( nElement )
+        {
+            case XML_ELEMENT( TABLE, XML_TABLE_ROW_GROUP ):
+            case XML_ELEMENT( TABLE, XML_TABLE_HEADER_ROWS ):
+            case XML_ELEMENT( TABLE, XML_TABLE_ROWS ):
+                // #i101319# don't discard rows in groups or header (repeat range)
+                return new ScXMLExternalRefRowsContext(
+                    GetScImport(), *pExternalRefInfo);
+            case XML_ELEMENT( TABLE, XML_TABLE_ROW ):
+                return new ScXMLExternalRefRowContext(
+                    GetScImport(), pAttribList, *pExternalRefInfo);
+            case XML_ELEMENT( TABLE, XML_TABLE_SOURCE ):
+                return new ScXMLExternalRefTabSourceContext(
+                    GetScImport(), pAttribList, *pExternalRefInfo);
+            default:
+                ;
+        }
+        return new SvXMLImportContext( GetImport() );
+    }
+
+    SvXMLImportContext *pContext(nullptr);
+
+    switch ( nElement )
+    {
+    case XML_ELEMENT( TABLE, XML_NAMED_EXPRESSIONS ):
+    {
+        SCTAB nTab = GetScImport().GetTables().GetCurrentSheet();
+        pContext = new ScXMLNamedExpressionsContext(
+            GetScImport(),
+            new ScXMLNamedExpressionsContext::SheetLocalInserter(GetScImport(), nTab));
+    }
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_COLUMN_GROUP ):
+        pContext = new ScXMLTableColsContext( GetScImport(), pAttribList,
+                                                   false, true );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_HEADER_COLUMNS ):
+        pContext = new ScXMLTableColsContext( GetScImport(), pAttribList,
+                                                   true, false );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_COLUMNS ):
+        pContext = new ScXMLTableColsContext( GetScImport(), pAttribList,
+                                                   false, false );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_COLUMN ):
+        pContext = new ScXMLTableColContext( GetScImport(), pAttribList );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_PROTECTION ):
+    case XML_ELEMENT( LO_EXT, XML_TABLE_PROTECTION ):
+    case XML_ELEMENT( OFFICE_EXT, XML_TABLE_PROTECTION ):
+        pContext = new ScXMLTableProtectionContext( GetScImport(), pAttribList );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_ROW_GROUP ):
+        pContext = new ScXMLTableRowsContext( GetScImport(), pAttribList,
+                                                   false, true );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_HEADER_ROWS ):
+        pContext = new ScXMLTableRowsContext( GetScImport(), pAttribList,
+                                                   true, false );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_ROWS ):
+        pContext = new ScXMLTableRowsContext( GetScImport(), pAttribList,
+                                                   false, false );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_ROW ):
+            pContext = new ScXMLTableRowContext( GetScImport(), pAttribList );
+        break;
+    case XML_ELEMENT( TABLE, XML_TABLE_SOURCE ):
+        pContext = new ScXMLTableSourceContext( GetScImport(), pAttribList);
+        break;
+    case XML_ELEMENT( TABLE, XML_SCENARIO ):
+        pContext = new ScXMLTableScenarioContext( GetScImport(), pAttribList);
+        break;
+    case XML_ELEMENT( TABLE, XML_SHAPES ):
+        pContext = new ScXMLTableShapesContext( GetScImport() );
+        break;
+    case XML_ELEMENT( CALC_EXT, XML_CONDITIONAL_FORMATS ):
+        pContext = new ScXMLConditionalFormatsContext( GetScImport() );
+        break;
+    default:
+        pContext = new SvXMLImportContext( GetImport() );
+    }
+
+    assert(pContext);
+
+    return pContext;
+}
+
+void SAL_CALL ScXMLTableContext::endFastElement(sal_Int32 /*nElement*/)
 {
     ScXMLImport::MutexGuard aMutexGuard(GetScImport());
     ScXMLImport& rImport = GetScImport();
@@ -359,7 +366,7 @@ void ScXMLTableContext::EndElement()
         size_t nCount = aRangeList.size();
         for (size_t i=0; i< nCount; i++ )
         {
-            pDoc->AddPrintRange( nCurTab, *aRangeList[i] );
+            pDoc->AddPrintRange( nCurTab, aRangeList[i] );
         }
     }
     else if (!bPrintEntireSheet)
@@ -410,7 +417,7 @@ void ScXMLTableContext::EndElement()
     rImport.ProgressBarIncrement();
 
     // store stream positions
-    if (!pExternalRefInfo.get() && nStartOffset >= 0 /* && nEndOffset >= 0 */)
+    if (!pExternalRefInfo && nStartOffset >= 0 /* && nEndOffset >= 0 */)
     {
         ScSheetSaveData* pSheetData = ScModelObj::getImplementation(rImport.GetModel())->GetSheetSaveData();
         SCTAB nTab = rTables.GetCurrentSheet();
@@ -419,63 +426,70 @@ void ScXMLTableContext::EndElement()
     }
 }
 
-ScXMLImport& ScXMLTableProtectionContext::GetScImport()
-{
-    return static_cast<ScXMLImport&>(GetImport());
-}
-
 ScXMLTableProtectionContext::ScXMLTableProtectionContext(
-    ScXMLImport& rImport, sal_uInt16 nPrefix, const OUString& rLName,
-    const Reference<XAttributeList>& xAttrList ) :
-    SvXMLImportContext( rImport, nPrefix, rLName )
+    ScXMLImport& rImport,
+    const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList ) :
+    ScXMLImportContext( rImport )
 {
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetTableProtectionAttrTokenMap();
     bool bSelectProtectedCells = false;
     bool bSelectUnprotectedCells = false;
+    bool bInsertColumns = false;
+    bool bInsertRows = false;
+    bool bDeleteColumns = false;
+    bool bDeleteRows = false;
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-
-    for (sal_Int16 i = 0; i < nAttrCount; ++i)
+    if ( rAttrList.is() )
     {
-        const OUString& aAttrName = xAttrList->getNameByIndex(i);
-        const OUString aValue = xAttrList->getValueByIndex(i);
-
-        OUString aLocalName;
-        sal_uInt16 nLocalPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-            aAttrName, &aLocalName);
-
-        switch (rAttrTokenMap.Get(nLocalPrefix, aLocalName))
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_TABLE_SELECT_PROTECTED_CELLS:
-            case XML_TOK_TABLE_SELECT_PROTECTED_CELLS_EXT:
-                bSelectProtectedCells = IsXMLToken(aValue, XML_TRUE);
-            break;
-            case XML_TOK_TABLE_SELECT_UNPROTECTED_CELLS:
-            case XML_TOK_TABLE_SELECT_UNPROTECTED_CELLS_EXT:
-                bSelectUnprotectedCells = IsXMLToken(aValue, XML_TRUE);
-            break;
+            sal_Int32 nToken = aIter.getToken();
+            switch (nToken)
+            {
+            case XML_ELEMENT( TABLE, XML_SELECT_PROTECTED_CELLS ):
+            case XML_ELEMENT( OFFICE_EXT, XML_SELECT_PROTECTED_CELLS ):
+            case XML_ELEMENT( LO_EXT, XML_SELECT_PROTECTED_CELLS ):
+                bSelectProtectedCells = IsXMLToken(aIter, XML_TRUE);
+                break;
+            case XML_ELEMENT( TABLE, XML_SELECT_UNPROTECTED_CELLS ):
+            case XML_ELEMENT( OFFICE_EXT, XML_SELECT_UNPROTECTED_CELLS ):
+            case XML_ELEMENT( LO_EXT, XML_SELECT_UNPROTECTED_CELLS ):
+                bSelectUnprotectedCells = IsXMLToken(aIter, XML_TRUE);
+                break;
+            case XML_ELEMENT( LO_EXT, XML_INSERT_COLUMNS ):
+                bInsertColumns = IsXMLToken(aIter, XML_TRUE);
+                break;
+            case XML_ELEMENT( LO_EXT,  XML_INSERT_ROWS ):
+                bInsertRows = IsXMLToken(aIter, XML_TRUE);
+                break;
+            case XML_ELEMENT( LO_EXT, XML_DELETE_COLUMNS ):
+                bDeleteColumns = IsXMLToken(aIter, XML_TRUE);
+                break;
+            case XML_ELEMENT( LO_EXT, XML_DELETE_ROWS ):
+                bDeleteRows = IsXMLToken(aIter, XML_TRUE);
+                break;
             default:
-                SAL_WARN("sc", "unknown attribute: " << aAttrName);
+                SAL_WARN("sc", "unknown attribute: " << nToken);
+            }
         }
     }
 
     ScXMLTabProtectionData& rProtectData = GetScImport().GetTables().GetCurrentProtectionData();
     rProtectData.mbSelectProtectedCells   = bSelectProtectedCells;
     rProtectData.mbSelectUnprotectedCells = bSelectUnprotectedCells;
+    rProtectData.mbInsertColumns = bInsertColumns;
+    rProtectData.mbInsertRows = bInsertRows;
+    rProtectData.mbDeleteColumns = bDeleteColumns;
+    rProtectData.mbDeleteRows = bDeleteRows;
 }
 
 ScXMLTableProtectionContext::~ScXMLTableProtectionContext()
 {
 }
 
-SvXMLImportContext* ScXMLTableProtectionContext::CreateChildContext(
-    sal_uInt16 /*nPrefix*/, const OUString& /*rLocalName*/, const Reference<XAttributeList>& /*xAttrList*/ )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLTableProtectionContext::createFastChildContext(
+    sal_Int32 /*nElement*/, const uno::Reference< xml::sax::XFastAttributeList >& /*xAttrList*/ )
 {
     return nullptr;
-}
-
-void ScXMLTableProtectionContext::EndElement()
-{
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -20,23 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SIDEBAR_LAYOUTMENU_HXX
 #define INCLUDED_SD_SOURCE_UI_SIDEBAR_LAYOUTMENU_HXX
 
-#include "IDisposable.hxx"
-#include "ISidebarReceiver.hxx"
 #include <sfx2/sidebar/ILayoutableWindow.hxx>
 
-#include <com/sun/star/frame/XStatusListener.hpp>
-
-#include "glob.hxx"
-#include "pres.hxx"
-
-#include <vcl/ctrl.hxx>
 #include <svtools/valueset.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <sfx2/shell.hxx>
+#include <xmloff/autolayout.hxx>
 
-#include <com/sun/star/ui/XSidebar.hpp>
-
-class SfxModule;
+namespace com { namespace sun { namespace star { namespace frame { class XStatusListener; } } } }
+namespace com { namespace sun { namespace star { namespace ui { class XSidebar; } } } }
 
 
 namespace sd {
@@ -49,9 +41,6 @@ class EventMultiplexerEvent;
 } }
 
 namespace sd { namespace sidebar {
-
-class ControlFactory;
-class SidebarViewShell;
 
 class LayoutMenu
     : public ValueSet,
@@ -72,7 +61,7 @@ public:
         vcl::Window* pParent,
         ViewShellBase& rViewShellBase,
         const css::uno::Reference<css::ui::XSidebar>& rxSidebar);
-    virtual ~LayoutMenu();
+    virtual ~LayoutMenu() override;
     virtual void dispose() override;
 
     void Dispose();
@@ -86,7 +75,6 @@ public:
     virtual css::ui::LayoutSize GetHeightForWidth (const sal_Int32 nWidth) override;
 
     // From vcl::Window
-    virtual void Paint (vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
     virtual void Resize() override;
 
     /** Show a context menu when the right mouse button is pressed.
@@ -121,16 +109,10 @@ public:
 private:
     ViewShellBase& mrBase;
 
-    /** Do we use our own scroll bar or is viewport handling done by
-        our parent?
-    */
-    bool mbUseOwnScrollBar;
-
     /** If we are asked for the preferred window size, then use this
         many columns for the calculation.
     */
     css::uno::Reference<css::frame::XStatusListener> mxListener;
-    bool mbSelectionUpdatePending;
     bool mbIsMainViewChangePending;
     css::uno::Reference<css::ui::XSidebar> mxSidebar;
     bool mbIsDisposed;
@@ -187,11 +169,11 @@ private:
 
     /** When clicked then set the current page of the view in the center pane.
     */
-    DECL_LINK_TYPED(ClickHandler, ValueSet*, void);
-    DECL_LINK_TYPED(StateChangeHandler, const OUString&, void);
-    DECL_LINK_TYPED(EventMultiplexerListener, ::sd::tools::EventMultiplexerEvent&, void);
-    DECL_LINK_TYPED(WindowEventHandler, VclWindowEvent&, void);
-    DECL_LINK_TYPED(OnMenuItemSelected, Menu*, bool);
+    DECL_LINK(ClickHandler, ValueSet*, void);
+    DECL_LINK(StateChangeHandler, const OUString&, void);
+    DECL_LINK(EventMultiplexerListener, ::sd::tools::EventMultiplexerEvent&, void);
+    DECL_LINK(WindowEventHandler, VclWindowEvent&, void);
+    DECL_LINK(OnMenuItemSelected, Menu*, bool);
 };
 
 } } // end of namespace ::sd::toolpanel

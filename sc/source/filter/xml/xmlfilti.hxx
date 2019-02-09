@@ -20,117 +20,94 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_XML_XMLFILTI_HXX
 #define INCLUDED_SC_SOURCE_FILTER_XML_XMLFILTI_HXX
 
-#include <xmloff/xmlictxt.hxx>
-#include <xmloff/xmlimp.hxx>
-#include <com/sun/star/table/CellAddress.hpp>
-#include <com/sun/star/table/CellRangeAddress.hpp>
-#include <com/sun/star/sheet/FilterOperator.hpp>
-#include <com/sun/star/sheet/FilterOperator2.hpp>
-#include <com/sun/star/sheet/TableFilterField2.hpp>
-
-#include "xmldrani.hxx"
-#include "xmldpimp.hxx"
-#include "queryentry.hxx"
+#include "importcontext.hxx"
+#include <queryentry.hxx>
+#include <queryparam.hxx>
 
 #include <stack>
 #include <vector>
 
 class ScXMLImport;
-struct ScQueryParam;
+class ScXMLDatabaseRangeContext;
+class ScXMLDataPilotTableContext;
+namespace sax_fastparser { class FastAttributeList; }
 
-class ScXMLFilterContext : public SvXMLImportContext
+class ScXMLFilterContext : public ScXMLImportContext
 {
     struct ConnStackItem
     {
-        bool mbOr;
+        bool const mbOr;
         int  mnCondCount;
         explicit ConnStackItem(bool bOr);
     };
     ScQueryParam& mrQueryParam;
     ScXMLDatabaseRangeContext* pDatabaseRangeContext;
 
-    css::table::CellAddress aOutputPosition;
-    css::table::CellRangeAddress aConditionSourceRangeAddress;
+    ScAddress   aOutputPosition;
+    ScRange     aConditionSourceRangeAddress;
     bool        bSkipDuplicates;
     bool        bCopyOutputData;
     bool        bConditionSourceRange;
     std::vector<ConnStackItem> maConnStack;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLFilterContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLFilterContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScQueryParam& rParam,
                         ScXMLDatabaseRangeContext* pTempDatabaseRangeContext);
 
-    virtual ~ScXMLFilterContext();
+    virtual ~ScXMLFilterContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
     void OpenConnection(bool b);
     void CloseConnection();
     bool GetConnection();
 };
 
-class ScXMLAndContext : public SvXMLImportContext
+class ScXMLAndContext : public ScXMLImportContext
 {
     ScQueryParam& mrQueryParam;
     ScXMLFilterContext* pFilterContext;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLAndContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                     const OUString& rLName,
-                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLAndContext( ScXMLImport& rImport,
                      ScQueryParam& rParam,
                      ScXMLFilterContext* pTempFilterContext);
 
-    virtual ~ScXMLAndContext();
+    virtual ~ScXMLAndContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
-class ScXMLOrContext : public SvXMLImportContext
+class ScXMLOrContext : public ScXMLImportContext
 {
     ScQueryParam& mrQueryParam;
     ScXMLFilterContext* pFilterContext;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLOrContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                    const OUString& rLName,
-                    const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLOrContext( ScXMLImport& rImport,
                     ScQueryParam& rParam,
                     ScXMLFilterContext* pTempFilterContext);
 
-    virtual ~ScXMLOrContext();
+    virtual ~ScXMLOrContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
-class ScXMLConditionContext : public SvXMLImportContext
+class ScXMLConditionContext : public ScXMLImportContext
 {
     ScQueryParam& mrQueryParam;
     ScXMLFilterContext* pFilterContext;
@@ -142,52 +119,37 @@ class ScXMLConditionContext : public SvXMLImportContext
     sal_Int32   nField;
     bool        bIsCaseSensitive;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLConditionContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                           const OUString& rLName,
-                           const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLConditionContext( ScXMLImport& rImport, sal_Int32 nElement,
+                           const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                            ScQueryParam& rParam,
                            ScXMLFilterContext* pTempFilterContext);
 
-    virtual ~ScXMLConditionContext();
+    virtual ~ScXMLConditionContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
     static void GetOperator(const OUString& aOpStr, ScQueryParam& rParam, ScQueryEntry& rEntry);
     void AddSetItem(const ScQueryEntry::Item& rItem);
 };
 
-class ScXMLSetItemContext : public SvXMLImportContext
+class ScXMLSetItemContext : public ScXMLImportContext
 {
-    const ScXMLImport& GetScImport() const;
-    ScXMLImport& GetScImport();
 public:
-    ScXMLSetItemContext(ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLSetItemContext(ScXMLImport& rImport, sal_Int32 nElement,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLConditionContext& rParent);
 
-    virtual ~ScXMLSetItemContext();
-
-    virtual SvXMLImportContext *CreateChildContext(
-        sal_uInt16 nPrefix,
-        const OUString& rLocalName,
-        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList) override;
-
-    virtual void EndElement() override;
+    virtual ~ScXMLSetItemContext() override;
 };
 
 // Datapilot (Core)
 
-class ScXMLDPFilterContext : public SvXMLImportContext
+class ScXMLDPFilterContext : public ScXMLImportContext
 {
     ScXMLDataPilotTableContext* pDataPilotTable;
 
@@ -204,28 +166,23 @@ class ScXMLDPFilterContext : public SvXMLImportContext
     bool        bConditionSourceRange:1;
     ::std::stack<bool>  aConnectionOrStack;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLDPFilterContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLDPFilterContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDataPilotTableContext* pTempDataPilotTableContext);
 
-    virtual ~ScXMLDPFilterContext();
+    virtual ~ScXMLDPFilterContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 
     void SetIsCaseSensitive(const bool bTemp) { bIsCaseSensitive = bTemp; }
     void SetSearchType(const utl::SearchParam::SearchType eTemp)
     {
-        if (eSearchType == utl::SearchParam::SRCH_NORMAL)
+        if (eSearchType == utl::SearchParam::SearchType::Normal)
             eSearchType = eTemp;
     }
 
@@ -255,53 +212,39 @@ public:
     void AddFilterField (const ScQueryEntry& aFilterField);
 };
 
-class ScXMLDPAndContext : public SvXMLImportContext
+class ScXMLDPAndContext : public ScXMLImportContext
 {
     ScXMLDPFilterContext* pFilterContext;
-
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLDPAndContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLDPAndContext( ScXMLImport& rImport,
                         ScXMLDPFilterContext* pTempFilterContext);
 
-    virtual ~ScXMLDPAndContext();
+    virtual ~ScXMLDPAndContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
-class ScXMLDPOrContext : public SvXMLImportContext
+class ScXMLDPOrContext : public ScXMLImportContext
 {
     ScXMLDPFilterContext* pFilterContext;
-
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLDPOrContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLDPOrContext( ScXMLImport& rImport,
                         ScXMLDPFilterContext* pTempFilterContext);
 
-    virtual ~ScXMLDPOrContext();
+    virtual ~ScXMLDPOrContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createFastChildContext(
+        sal_Int32 nElement, const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
 
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
-class ScXMLDPConditionContext : public SvXMLImportContext
+class ScXMLDPConditionContext : public ScXMLImportContext
 {
     ScXMLDPFilterContext* pFilterContext;
 
@@ -311,25 +254,17 @@ class ScXMLDPConditionContext : public SvXMLImportContext
     sal_Int32   nField;
     bool        bIsCaseSensitive;
 
-    const ScXMLImport& GetScImport() const { return static_cast<const ScXMLImport&>(GetImport()); }
-    ScXMLImport& GetScImport() { return static_cast<ScXMLImport&>(GetImport()); }
-
 public:
 
-    ScXMLDPConditionContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+    ScXMLDPConditionContext( ScXMLImport& rImport, sal_Int32 nElement,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDPFilterContext* pTempFilterContext);
 
-    virtual ~ScXMLDPConditionContext();
-
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
-                                     const OUString& rLocalName,
-                                     const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList ) override;
+    virtual ~ScXMLDPConditionContext() override;
 
     static void getOperatorXML(
         const OUString& sTempOperator, ScQueryOp& aFilterOperator, utl::SearchParam::SearchType& rSearchType);
-    virtual void EndElement() override;
+    virtual void SAL_CALL endFastElement( sal_Int32 nElement ) override;
 };
 
 #endif

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "queryentry.hxx"
+#include <queryentry.hxx>
 
 #include <unotools/textsearch.hxx>
 
@@ -27,8 +27,8 @@
  * conjunctions with the flag bQueryByString = FALSE.
  */
 
-#define SC_EMPTYFIELDS      ((double)0x0042)
-#define SC_NONEMPTYFIELDS   ((double)0x0043)
+#define SC_EMPTYFIELDS      (double(0x0042))
+#define SC_NONEMPTYFIELDS   (double(0x0043))
 
 bool ScQueryEntry::Item::operator== (const Item& r) const
 {
@@ -40,8 +40,6 @@ ScQueryEntry::ScQueryEntry() :
     nField(0),
     eOp(SC_EQUAL),
     eConnect(SC_AND),
-    pSearchParam(nullptr),
-    pSearchText(nullptr),
     maQueryItems(1)
 {
 }
@@ -51,16 +49,12 @@ ScQueryEntry::ScQueryEntry(const ScQueryEntry& r) :
     nField(r.nField),
     eOp(r.eOp),
     eConnect(r.eConnect),
-    pSearchParam(nullptr),
-    pSearchText(nullptr),
     maQueryItems(r.maQueryItems)
 {
 }
 
 ScQueryEntry::~ScQueryEntry()
 {
-    delete pSearchParam;
-    delete pSearchText;
 }
 
 ScQueryEntry& ScQueryEntry::operator=( const ScQueryEntry& r )
@@ -71,10 +65,8 @@ ScQueryEntry& ScQueryEntry::operator=( const ScQueryEntry& r )
     nField          = r.nField;
     maQueryItems  = r.maQueryItems;
 
-    delete pSearchParam;
-    delete pSearchText;
-    pSearchParam    = nullptr;
-    pSearchText     = nullptr;
+    pSearchParam.reset();
+    pSearchText.reset();
 
     return *this;
 }
@@ -146,12 +138,10 @@ void ScQueryEntry::Clear()
     eConnect        = SC_AND;
     nField          = 0;
     maQueryItems.clear();
-    maQueryItems.push_back(Item());
+    maQueryItems.emplace_back();
 
-    delete pSearchParam;
-    delete pSearchText;
-    pSearchParam    = nullptr;
-    pSearchText     = nullptr;
+    pSearchParam.reset();
+    pSearchText.reset();
 }
 
 bool ScQueryEntry::operator==( const ScQueryEntry& r ) const
@@ -170,11 +160,11 @@ utl::TextSearch* ScQueryEntry::GetSearchTextPtr( utl::SearchParam::SearchType eS
     if ( !pSearchParam )
     {
         OUString aStr = maQueryItems[0].maString.getString();
-        pSearchParam = new utl::SearchParam(
-            aStr, eSearchType, bCaseSens, '~', bWildMatchSel);
-        pSearchText = new utl::TextSearch( *pSearchParam, *ScGlobal::pCharClass );
+        pSearchParam.reset(new utl::SearchParam(
+            aStr, eSearchType, bCaseSens, '~', bWildMatchSel));
+        pSearchText.reset(new utl::TextSearch( *pSearchParam, *ScGlobal::pCharClass ));
     }
-    return pSearchText;
+    return pSearchText.get();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

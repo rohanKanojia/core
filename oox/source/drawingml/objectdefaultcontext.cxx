@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/objectdefaultcontext.hxx"
-#include "drawingml/spdefcontext.hxx"
-#include "oox/drawingml/theme.hxx"
+#include <drawingml/objectdefaultcontext.hxx>
+#include <drawingml/spdefcontext.hxx>
+#include <oox/drawingml/theme.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -27,7 +29,7 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace drawingml {
 
-objectDefaultContext::objectDefaultContext( ContextHandler2Helper& rParent, Theme& rTheme )
+objectDefaultContext::objectDefaultContext( ContextHandler2Helper const & rParent, Theme& rTheme )
 : ContextHandler2( rParent )
 , mrTheme( rTheme )
 {

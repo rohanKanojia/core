@@ -20,16 +20,10 @@
 #ifndef INCLUDED_SHELL_INC_INTERNAL_INFOTIPS_HXX
 #define INCLUDED_SHELL_INC_INTERNAL_INFOTIPS_HXX
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable:4917)
-#endif
 #include <objidl.h>
 #include <shlobj.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 #include <string>
+#include "filepath.hxx"
 
 class CInfoTip : public IQueryInfo, public IPersistFile
 {
@@ -43,50 +37,50 @@ public:
 
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(
             REFIID riid,
-            void __RPC_FAR *__RPC_FAR *ppvObject);
+            void __RPC_FAR *__RPC_FAR *ppvObject) override;
 
-    virtual ULONG STDMETHODCALLTYPE AddRef();
+    virtual ULONG STDMETHODCALLTYPE AddRef() override;
 
-    virtual ULONG STDMETHODCALLTYPE Release();
+    virtual ULONG STDMETHODCALLTYPE Release() override;
 
 
     // IQueryInfo methods
 
 
-    virtual HRESULT STDMETHODCALLTYPE GetInfoTip(DWORD dwFlags, wchar_t** ppwszTip);
+    virtual HRESULT STDMETHODCALLTYPE GetInfoTip(DWORD dwFlags, wchar_t** ppwszTip) override;
 
-    virtual HRESULT STDMETHODCALLTYPE GetInfoFlags(DWORD *pdwFlags);
+    virtual HRESULT STDMETHODCALLTYPE GetInfoFlags(DWORD *pdwFlags) override;
 
 
     // IPersist methods
 
 
-    virtual HRESULT STDMETHODCALLTYPE GetClassID(CLSID* pClassID);
+    virtual HRESULT STDMETHODCALLTYPE GetClassID(CLSID* pClassID) override;
 
 
     // IPersistFile methods
 
 
-    virtual HRESULT STDMETHODCALLTYPE IsDirty();
+    virtual HRESULT STDMETHODCALLTYPE IsDirty() override;
 
     virtual HRESULT STDMETHODCALLTYPE Load(
             /* [in] */ LPCOLESTR pszFileName,
-            /* [in] */ DWORD dwMode);
+            /* [in] */ DWORD dwMode) override;
 
     virtual HRESULT STDMETHODCALLTYPE Save(
             /* [unique][in] */ LPCOLESTR pszFileName,
-            /* [in] */ BOOL fRemember);
+            /* [in] */ BOOL fRemember) override;
 
     virtual HRESULT STDMETHODCALLTYPE SaveCompleted(
-            /* [unique][in] */ LPCOLESTR pszFileName);
+            /* [unique][in] */ LPCOLESTR pszFileName) override;
 
     virtual HRESULT STDMETHODCALLTYPE GetCurFile(
-            /* [out] */ LPOLESTR __RPC_FAR *ppszFileName);
+            /* [out] */ LPOLESTR __RPC_FAR *ppszFileName) override;
 
 private:
-    long         m_RefCnt;
-    char         m_szFileName[MAX_PATH];
-    std::wstring m_FileNameOnly;
+    long            m_RefCnt;
+    Filepath_char_t m_szFileName[MAX_PATH];
+    std::wstring    m_FileNameOnly;
 };
 
 #endif

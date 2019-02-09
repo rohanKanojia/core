@@ -24,15 +24,14 @@
 
 class ScUnitConverterData
 {
-    OUString maIndexString;
-    double mfValue;
-    ScUnitConverterData& operator=( const ScUnitConverterData& ) = delete;
+    OUString const maIndexString;
+    double const mfValue;
 
 public:
     ScUnitConverterData( const OUString& rFromUnit,
-        const OUString& rToUnit, double fValue = 1.0 );
-    ScUnitConverterData( const ScUnitConverterData& );
-    ~ScUnitConverterData();
+        const OUString& rToUnit, double fValue );
+    ScUnitConverterData( const ScUnitConverterData& ) = default;
+    ScUnitConverterData& operator=( const ScUnitConverterData& ) = delete;
 
     double GetValue() const { return mfValue;}
     const OUString& GetIndexString() const { return maIndexString;}

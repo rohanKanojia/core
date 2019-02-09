@@ -17,18 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osl/diagnose.h"
-#include "rtl/character.hxx"
-#include "rtl/strbuf.hxx"
-#include "rtl/textenc.h"
-#include "rtl/textcvt.h"
-#include "rtl/uri.h"
-#include "rtl/ustrbuf.h"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "sal/macros.h"
+#include <rtl/character.hxx>
+#include <rtl/strbuf.hxx>
+#include <rtl/textenc.h>
+#include <rtl/textcvt.h>
+#include <rtl/uri.h>
+#include <rtl/ustrbuf.h>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <sal/macros.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -39,7 +38,7 @@ std::size_t const nCharClassSize = 128;
 
 sal_Unicode const cEscapePrefix = 0x25; // '%'
 
-inline int getHexWeight(sal_uInt32 nUtf32)
+int getHexWeight(sal_uInt32 nUtf32)
 {
     return nUtf32 >= 0x30 && nUtf32 <= 0x39 ? // '0'--'9'
                static_cast< int >(nUtf32 - 0x30) :
@@ -50,12 +49,12 @@ inline int getHexWeight(sal_uInt32 nUtf32)
                -1; // not a hex digit
 }
 
-inline bool isValid(sal_Bool const * pCharClass, sal_uInt32 nUtf32)
+bool isValid(sal_Bool const * pCharClass, sal_uInt32 nUtf32)
 {
     return nUtf32 < nCharClassSize && pCharClass[nUtf32];
 }
 
-inline void writeUnicode(rtl_uString ** pBuffer, sal_Int32 * pCapacity,
+void writeUnicode(rtl_uString ** pBuffer, sal_Int32 * pCapacity,
                          sal_Unicode cChar)
 {
     rtl_uStringbuffer_insert(pBuffer, pCapacity, (*pBuffer)->length, &cChar, 1);
@@ -68,14 +67,12 @@ enum EscapeType
     EscapeOctet
 };
 
-/* Read any of the following:
+/** Read any of the following:
 
-   - sequence of escape sequences representing character from eCharset,
-     translated to single UCS4 character; or
-
-   - pair of UTF-16 surrogates, translated to single UCS4 character; or
-
-   _ single UTF-16 character, extended to UCS4 character.
+   @li sequence of escape sequences representing character from eCharset,
+       translated to single UCS4 character; or
+   @li pair of UTF-16 surrogates, translated to single UCS4 character; or
+   @li  single UTF-16 character, extended to UCS4 character.
  */
 sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
                     bool bEncoded, rtl_TextEncoding eCharset,
@@ -91,7 +88,9 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
         *pBegin += 2;
         nChar = static_cast< sal_uInt32 >(nWeight1 << 4 | nWeight2);
         if (nChar <= 0x7F)
+        {
             *pType = EscapeChar;
+        }
         else if (eCharset == RTL_TEXTENCODING_UTF8)
         {
             if (nChar >= 0xC0 && nChar <= 0xF4)
@@ -117,8 +116,10 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
                     nShift = 12;
                     nMin = 0x10000;
                 }
+
                 sal_Unicode const * p = *pBegin;
                 bool bUTF8 = true;
+
                 for (; nShift >= 0; nShift -= 6)
                 {
                     if (pEnd - p < 3 || p[0] != cEscapePrefix
@@ -132,9 +133,8 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
                     p += 3;
                     nEncoded |= ((nWeight1 & 3) << 4 | nWeight2) << nShift;
                 }
-                if (bUTF8 && rtl::isUnicodeCodePoint(nEncoded)
-                    && nEncoded >= nMin && !rtl::isHighSurrogate(nEncoded)
-                    && !rtl::isLowSurrogate(nEncoded))
+                if (bUTF8 && rtl::isUnicodeScalarValue(nEncoded)
+                    && nEncoded >= nMin)
                 {
                     *pBegin = p;
                     *pType = EscapeChar;
@@ -145,11 +145,12 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
         }
         else
         {
-            rtl::OStringBuffer aBuf;
+            OStringBuffer aBuf;
             aBuf.append(static_cast< char >(nChar));
             rtl_TextToUnicodeConverter aConverter
                 = rtl_createTextToUnicodeConverter(eCharset);
             sal_Unicode const * p = *pBegin;
+
             for (;;)
             {
                 sal_Unicode aDst[2];
@@ -162,21 +163,25 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
                      | RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_ERROR
                      | RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR),
                     &nInfo, &nConverted);
+
                 if (nInfo == 0)
                 {
                     assert( nConverted
                         == sal::static_int_cast< sal_uInt32 >(
                             aBuf.getLength()));
+
                     rtl_destroyTextToUnicodeConverter(aConverter);
                     *pBegin = p;
                     *pType = EscapeChar;
+
                     assert( nDstSize == 1
                         || (nDstSize == 2 && rtl::isHighSurrogate(aDst[0])
                             && rtl::isLowSurrogate(aDst[1])));
+
                     return nDstSize == 1
                         ? aDst[0] : rtl::combineSurrogates(aDst[0], aDst[1]);
                 }
-                else if (nInfo == RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL
+                if (nInfo == RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL
                          && pEnd - p >= 3 && p[0] == cEscapePrefix
                          && (nWeight1 = getHexWeight(p[1])) >= 0
                          && (nWeight2 = getHexWeight(p[2])) >= 0)
@@ -184,7 +189,7 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
                     p += 3;
                     aBuf.append(static_cast< char >(nWeight1 << 4 | nWeight2));
                 }
-                else if (nInfo == RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOSMALL
+                else if (nInfo == RTL_TEXTTOUNICODE_INFO_SRCBUFFERTOOSMALL
                          && p != pEnd && *p <= 0x7F)
                 {
                     aBuf.append(static_cast< char >(*p++));
@@ -192,7 +197,7 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
                 else
                 {
                     assert(
-                        (nInfo & RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL)
+                        (nInfo & RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL)
                         == 0);
                     break;
                 }
@@ -202,22 +207,22 @@ sal_uInt32 readUcs4(sal_Unicode const ** pBegin, sal_Unicode const * pEnd,
         }
         return nChar;
     }
-    else
-    {
-        *pType = EscapeNo;
-        return rtl::isHighSurrogate(nChar) && *pBegin < pEnd
-               && rtl::isLowSurrogate(**pBegin) ?
-                   rtl::combineSurrogates(nChar, *(*pBegin)++) : nChar;
-    }
+
+    *pType = EscapeNo;
+    return rtl::isHighSurrogate(nChar) && *pBegin < pEnd
+           && rtl::isLowSurrogate(**pBegin) ?
+               rtl::combineSurrogates(nChar, *(*pBegin)++) : nChar;
 }
 
 void writeUcs4(rtl_uString ** pBuffer, sal_Int32 * pCapacity, sal_uInt32 nUtf32)
 {
     assert(rtl::isUnicodeCodePoint(nUtf32));
-    if (nUtf32 <= 0xFFFF) {
-        writeUnicode(
-            pBuffer, pCapacity, static_cast< sal_Unicode >(nUtf32));
-    } else {
+    if (nUtf32 <= 0xFFFF)
+    {
+        writeUnicode(pBuffer, pCapacity, static_cast< sal_Unicode >(nUtf32));
+    }
+    else
+    {
         nUtf32 -= 0x10000;
         writeUnicode(
             pBuffer, pCapacity,
@@ -246,9 +251,12 @@ bool writeEscapeChar(rtl_uString ** pBuffer, sal_Int32 * pCapacity,
                      sal_uInt32 nUtf32, rtl_TextEncoding eCharset, bool bStrict)
 {
     assert(rtl::isUnicodeCodePoint(nUtf32));
-    if (eCharset == RTL_TEXTENCODING_UTF8) {
+    if (eCharset == RTL_TEXTENCODING_UTF8)
+    {
         if (nUtf32 < 0x80)
+        {
             writeEscapeOctet(pBuffer, pCapacity, nUtf32);
+        }
         else if (nUtf32 < 0x800)
         {
             writeEscapeOctet(pBuffer, pCapacity, nUtf32 >> 6 | 0xC0);
@@ -267,7 +275,9 @@ bool writeEscapeChar(rtl_uString ** pBuffer, sal_Int32 * pCapacity,
             writeEscapeOctet(pBuffer, pCapacity, (nUtf32 >> 6 & 0x3F) | 0x80);
             writeEscapeOctet(pBuffer, pCapacity, (nUtf32 & 0x3F) | 0x80);
         }
-    } else {
+    }
+    else
+    {
         rtl_UnicodeToTextConverter aConverter
             = rtl_createUnicodeToTextConverter(eCharset);
         sal_Unicode aSrc[2];
@@ -285,6 +295,7 @@ bool writeEscapeChar(rtl_uString ** pBuffer, sal_Int32 * pCapacity,
                 ((nUtf32 - 0x10000) & 0x3FF) | 0xDC00);
             nSrcSize = 2;
         }
+
         sal_Char aDst[32]; // FIXME  random value
         sal_uInt32 nInfo;
         sal_Size nConverted;
@@ -296,18 +307,24 @@ bool writeEscapeChar(rtl_uString ** pBuffer, sal_Int32 * pCapacity,
             &nInfo, &nConverted);
         assert((nInfo & RTL_UNICODETOTEXT_INFO_DESTBUFFERTOSMALL) == 0);
         rtl_destroyUnicodeToTextConverter(aConverter);
-        if (nInfo == 0) {
+
+        if (nInfo == 0)
+        {
             assert(nConverted == nSrcSize); // bad rtl_convertUnicodeToText
+
             for (sal_Size i = 0; i < nDstSize; ++i)
+            {
                 writeEscapeOctet(pBuffer, pCapacity,
                                  static_cast< unsigned char >(aDst[i]));
                     // FIXME  all octets are escaped, even if there is no need
-        } else {
-            if (bStrict) {
-                return false;
-            } else {
-                writeUcs4(pBuffer, pCapacity, nUtf32);
             }
+        }
+        else
+        {
+            if (bStrict)
+                return false;
+
+            writeUcs4(pBuffer, pCapacity, nUtf32);
         }
     }
     return true;
@@ -318,14 +335,14 @@ struct Component
     sal_Unicode const * pBegin;
     sal_Unicode const * pEnd;
 
-    inline Component(): pBegin(nullptr), pEnd(nullptr) {}
+    Component(): pBegin(nullptr), pEnd(nullptr) {}
 
-    inline bool isPresent() const { return pBegin != nullptr; }
+    bool isPresent() const { return pBegin != nullptr; }
 
-    inline sal_Int32 getLength() const;
+    sal_Int32 getLength() const;
 };
 
-inline sal_Int32 Component::getLength() const
+sal_Int32 Component::getLength() const
 {
     assert(isPresent()); // taking length of non-present component
     return static_cast< sal_Int32 >(pEnd - pBegin);
@@ -359,7 +376,8 @@ void parseUriRef(rtl_uString const * pUriRef, Components * pComponents)
                 pPos = p;
                 break;
             }
-            else if (!rtl::isAsciiAlphanumeric(*p) && *p != '+' && *p != '-'
+
+            if (!rtl::isAsciiAlphanumeric(*p) && *p != '+' && *p != '-'
                      && *p != '.')
             {
                 break;
@@ -372,20 +390,29 @@ void parseUriRef(rtl_uString const * pUriRef, Components * pComponents)
         pComponents->aAuthority.pBegin = pPos;
         pPos += 2;
         while (pPos != pEnd && *pPos != '/' && *pPos != '?' && *pPos != '#')
+        {
             ++pPos;
+        }
+
         pComponents->aAuthority.pEnd = pPos;
     }
 
     pComponents->aPath.pBegin = pPos;
     while (pPos != pEnd && *pPos != '?' && * pPos != '#')
+    {
         ++pPos;
+    }
+
     pComponents->aPath.pEnd = pPos;
 
     if (pPos != pEnd && *pPos == '?')
     {
         pComponents->aQuery.pBegin = pPos++;
         while (pPos != pEnd && * pPos != '#')
+        {
             ++pPos;
+        }
+
         pComponents->aQuery.pEnd = pPos;
     }
 
@@ -398,16 +425,20 @@ void parseUriRef(rtl_uString const * pUriRef, Components * pComponents)
 }
 
 void appendPath(
-    rtl::OUStringBuffer & buffer, sal_Int32 bufferStart, bool precedingSlash,
+    OUStringBuffer & buffer, sal_Int32 bufferStart, bool precedingSlash,
     sal_Unicode const * pathBegin, sal_Unicode const * pathEnd)
 {
-    while (precedingSlash || pathBegin != pathEnd) {
+    while (precedingSlash || pathBegin != pathEnd)
+    {
         sal_Unicode const * p = pathBegin;
-        while (p != pathEnd && *p != '/') {
+        while (p != pathEnd && *p != '/')
+        {
             ++p;
         }
+
         std::size_t n = p - pathBegin;
-        if (n == 1 && pathBegin[0] == '.') {
+        if (n == 1 && pathBegin[0] == '.')
+        {
             // input begins with "." -> remove from input (and done):
             //  i.e., !precedingSlash -> !precedingSlash
             // input begins with "./" -> remove from input:
@@ -417,7 +448,9 @@ void appendPath(
             //  i.e., precedingSlash -> precedingSlash
             // input begins with "/./" -> replace with "/" in input:
             //  i.e., precedingSlash -> precedingSlash
-        } else if (n == 2 && pathBegin[0] == '.' && pathBegin[1] == '.') {
+        }
+        else if (n == 2 && pathBegin[0] == '.' && pathBegin[1] == '.')
+        {
             // input begins with ".." -> remove from input (and done):
             //  i.e., !precedingSlash -> !precedingSlash
             // input begins with "../" -> remove from input
@@ -428,7 +461,8 @@ void appendPath(
             // input begins with "/../" -> replace with "/" in input, and shrink
             // output:
             //  i.e., precedingSlash -> precedingSlash
-            if (precedingSlash) {
+            if (precedingSlash)
+            {
                 buffer.truncate(
                     bufferStart
                     + std::max<sal_Int32>(
@@ -437,10 +471,12 @@ void appendPath(
                             buffer.getLength() - bufferStart, '/'),
                         0));
             }
-        } else {
-            if (precedingSlash) {
+        }
+        else
+        {
+            if (precedingSlash)
                 buffer.append('/');
-            }
+
             buffer.append(pathBegin, n);
             precedingSlash = p != pathEnd;
         }
@@ -453,79 +489,136 @@ void appendPath(
 sal_Bool const * SAL_CALL rtl_getUriCharClass(rtl_UriCharClass eCharClass)
     SAL_THROW_EXTERN_C()
 {
-    static sal_Bool const aCharClass[][nCharClassSize]
-    = {{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* None */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* !"#$%&'()*+,-./*/
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*0123456789:;<=>?*/
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*@ABCDEFGHIJKLMNO*/
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*PQRSTUVWXYZ[\]^_*/
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*`abcdefghijklmno*/
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* Uric */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, /*0123456789:;<=>?*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* UricNoSlash */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, /*0123456789:;<=>?*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* RelSegment */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, /*0123456789:;<=>?*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* RegName */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, /*0123456789:;<=>?*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* Userinfo */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, /*0123456789:;<=>?*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* Pchar */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, /*0123456789:;<=>?*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       },
-       { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* UnoParamValue */
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, /* !"#$%&'()*+,-./*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*0123456789:;<=>?*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*@ABCDEFGHIJKLMNO*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /*PQRSTUVWXYZ[\]^_*/
-         0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*`abcdefghijklmno*/
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0  /*pqrstuvwxyz{|}~ */
-       }};
+    static sal_Bool const aCharClass[][nCharClassSize] = {
+        {false, false, false, false, false, false, false, false,// None
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,   //  !"#$%&'
+         false, false, false, false, false, false, false, false,   // ()*+,-./
+         false, false, false, false, false, false, false, false,   // 01234567
+         false, false, false, false, false, false, false, false,   // 89:;<=>?
+         false, false, false, false, false, false, false, false,   // @ABCDEFG
+         false, false, false, false, false, false, false, false,   // HIJKLMNO
+         false, false, false, false, false, false, false, false,   // PQRSTUVW
+         false, false, false, false, false, false, false, false,   // XYZ[\]^_
+         false, false, false, false, false, false, false, false,   // `abcdefg
+         false, false, false, false, false, false, false, false,   // hijklmno
+         false, false, false, false, false, false, false, false,   // pqrstuvw
+         false, false, false, false, false, false, false, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// Uric
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true,  true,  true,  true,  true,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true,  true,  true, false,  true, false,  true,   // 89:;<=>?
+          true,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true,  true, false,  true, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// UricNoSlash
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true,  true,  true,  true, false,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true,  true,  true, false,  true, false,  true,   // 89:;<=>?
+          true,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true, false, false, false, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// RelSegment
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true,  true,  true,  true, false,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true, false,  true, false,  true, false, false,   // 89:;<=>?
+          true,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true, false, false, false, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// RegName
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true,  true,  true,  true, false,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true,  true,  true, false,  true, false, false,   // 89:;<=>?
+          true,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true, false, false, false, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// Userinfo
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true,  true,  true,  true, false,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true,  true,  true, false,  true, false, false,   // 89:;<=>?
+         false,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true, false, false, false, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// Pchar
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true,  true,  true,  true, false,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true,  true, false, false,  true, false, false,   // 89:;<=>?
+          true,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true, false, false, false, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false},  // xyz{|}~
+        {false, false, false, false, false, false, false, false,// UnoParamValue
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false, false, false, false, false, false, false, false,
+         false,  true, false, false,  true, false,  true,  true,   //  !"#$%&'
+          true,  true,  true,  true, false,  true,  true,  true,   // ()*+,-./
+          true,  true,  true,  true,  true,  true,  true,  true,   // 01234567
+          true,  true,  true, false, false, false, false,  true,   // 89:;<=>?
+          true,  true,  true,  true,  true,  true,  true,  true,   // @ABCDEFG
+          true,  true,  true,  true,  true,  true,  true,  true,   // HIJKLMNO
+          true,  true,  true,  true,  true,  true,  true,  true,   // PQRSTUVW
+          true,  true,  true, false, false, false, false,  true,   // XYZ[\]^_
+         false,  true,  true,  true,  true,  true,  true,  true,   // `abcdefg
+          true,  true,  true,  true,  true,  true,  true,  true,   // hijklmno
+          true,  true,  true,  true,  true,  true,  true,  true,   // pqrstuvw
+          true,  true,  true, false, false, false,  true, false}}; // xyz{|}~
+
     assert(
         (eCharClass >= 0
          && (sal::static_int_cast< std::size_t >(eCharClass)
@@ -544,6 +637,7 @@ void SAL_CALL rtl_uriEncode(rtl_uString * pText, sal_Bool const * pCharClass,
     sal_Unicode const * pEnd = p + pText->length;
     sal_Int32 nCapacity = pText->length;
     rtl_uString_new_WithLength(pResult, nCapacity);
+
     while (p < pEnd)
     {
         EscapeType eType;
@@ -553,12 +647,15 @@ void SAL_CALL rtl_uriEncode(rtl_uString * pText, sal_Bool const * pCharClass,
              || eMechanism == rtl_UriEncodeCheckEscapes
              || eMechanism == rtl_UriEncodeStrictKeepEscapes),
             eCharset, &eType);
+
         switch (eType)
         {
         case EscapeNo:
             if (isValid(pCharClass, nUtf32)) // implies nUtf32 <= 0x7F
+            {
                 writeUnicode(pResult, &nCapacity,
                              static_cast< sal_Unicode >(nUtf32));
+            }
             else if (!writeEscapeChar(
                          pResult, &nCapacity, nUtf32, eCharset,
                          (eMechanism == rtl_UriEncodeStrict
@@ -572,8 +669,10 @@ void SAL_CALL rtl_uriEncode(rtl_uString * pText, sal_Bool const * pCharClass,
         case EscapeChar:
             if (eMechanism == rtl_UriEncodeCheckEscapes
                 && isValid(pCharClass, nUtf32)) // implies nUtf32 <= 0x7F
+            {
                 writeUnicode(pResult, &nCapacity,
                              static_cast< sal_Unicode >(nUtf32));
+            }
             else if (!writeEscapeChar(
                          pResult, &nCapacity, nUtf32, eCharset,
                          (eMechanism == rtl_UriEncodeStrict
@@ -589,7 +688,7 @@ void SAL_CALL rtl_uriEncode(rtl_uString * pText, sal_Bool const * pCharClass,
             break;
         }
     }
-    *pResult = rtl_uStringBuffer_makeStringAndClear( pResult, &nCapacity );
+    *pResult = rtl_uStringBuffer_makeStringAndClear(pResult, &nCapacity);
 }
 
 void SAL_CALL rtl_uriDecode(rtl_uString * pText,
@@ -605,13 +704,14 @@ void SAL_CALL rtl_uriDecode(rtl_uString * pText,
 
     case rtl_UriDecodeToIuri:
         eCharset = RTL_TEXTENCODING_UTF8;
-        //fall-through
+        [[fallthrough]];
     default: // rtl_UriDecodeWithCharset, rtl_UriDecodeStrict
         {
             sal_Unicode const * p = pText->buffer;
             sal_Unicode const * pEnd = p + pText->length;
             sal_Int32 nCapacity = pText->length;
             rtl_uString_new_WithLength(pResult, nCapacity);
+
             while (p < pEnd)
             {
                 EscapeType eType;
@@ -624,12 +724,15 @@ void SAL_CALL rtl_uriDecode(rtl_uString * pText,
                         writeEscapeOctet(pResult, &nCapacity, nUtf32);
                         break;
                     }
+                    [[fallthrough]];
+
                 case EscapeNo:
                     writeUcs4(pResult, &nCapacity, nUtf32);
                     break;
 
                 case EscapeOctet:
-                    if (eMechanism == rtl_UriDecodeStrict) {
+                    if (eMechanism == rtl_UriDecodeStrict)
+                    {
                         rtl_uString_new(pResult);
                         return;
                     }
@@ -637,6 +740,7 @@ void SAL_CALL rtl_uriDecode(rtl_uString * pText,
                     break;
                 }
             }
+
             *pResult = rtl_uStringBuffer_makeStringAndClear( pResult, &nCapacity );
         }
         break;
@@ -651,22 +755,30 @@ sal_Bool SAL_CALL rtl_uriConvertRelToAbs(rtl_uString * pBaseUriRef,
 {
     // Use the strict parser algorithm from RFC 3986, section 5.2, to turn the
     // relative URI into an absolute one:
-    rtl::OUStringBuffer aBuffer;
+    OUStringBuffer aBuffer;
     Components aRelComponents;
     parseUriRef(pRelUriRef, &aRelComponents);
+
     if (aRelComponents.aScheme.isPresent())
     {
         aBuffer.append(aRelComponents.aScheme.pBegin,
                        aRelComponents.aScheme.getLength());
+
         if (aRelComponents.aAuthority.isPresent())
+        {
             aBuffer.append(aRelComponents.aAuthority.pBegin,
                            aRelComponents.aAuthority.getLength());
+        }
+
         appendPath(
             aBuffer, aBuffer.getLength(), false, aRelComponents.aPath.pBegin,
             aRelComponents.aPath.pEnd);
+
         if (aRelComponents.aQuery.isPresent())
+        {
             aBuffer.append(aRelComponents.aQuery.pBegin,
                            aRelComponents.aQuery.getLength());
+        }
     }
     else
     {
@@ -676,12 +788,13 @@ sal_Bool SAL_CALL rtl_uriConvertRelToAbs(rtl_uString * pBaseUriRef,
         {
             rtl_uString_assign(
                 pException,
-                (rtl::OUString(
-                    "<" + rtl::OUString(pBaseUriRef)
+                (OUString(
+                    "<" + OUString(pBaseUriRef)
                     + "> does not start with a scheme component")
                  .pData));
             return false;
         }
+
         aBuffer.append(aBaseComponents.aScheme.pBegin,
                        aBaseComponents.aScheme.getLength());
         if (aRelComponents.aAuthority.isPresent())
@@ -691,63 +804,86 @@ sal_Bool SAL_CALL rtl_uriConvertRelToAbs(rtl_uString * pBaseUriRef,
             appendPath(
                 aBuffer, aBuffer.getLength(), false,
                 aRelComponents.aPath.pBegin, aRelComponents.aPath.pEnd);
+
             if (aRelComponents.aQuery.isPresent())
+            {
                 aBuffer.append(aRelComponents.aQuery.pBegin,
                                aRelComponents.aQuery.getLength());
+            }
         }
         else
         {
             if (aBaseComponents.aAuthority.isPresent())
+            {
                 aBuffer.append(aBaseComponents.aAuthority.pBegin,
                                aBaseComponents.aAuthority.getLength());
+            }
+
             if (aRelComponents.aPath.pBegin == aRelComponents.aPath.pEnd)
             {
                 aBuffer.append(aBaseComponents.aPath.pBegin,
                                aBaseComponents.aPath.getLength());
                 if (aRelComponents.aQuery.isPresent())
+                {
                     aBuffer.append(aRelComponents.aQuery.pBegin,
                                    aRelComponents.aQuery.getLength());
+                }
                 else if (aBaseComponents.aQuery.isPresent())
+                {
                     aBuffer.append(aBaseComponents.aQuery.pBegin,
                                    aBaseComponents.aQuery.getLength());
+                }
             }
             else
             {
                 if (aRelComponents.aPath.pBegin != aRelComponents.aPath.pEnd
                     && *aRelComponents.aPath.pBegin == '/')
+                {
                     appendPath(
                         aBuffer, aBuffer.getLength(), false,
                         aRelComponents.aPath.pBegin, aRelComponents.aPath.pEnd);
+                }
                 else if (aBaseComponents.aAuthority.isPresent()
                          && aBaseComponents.aPath.pBegin
                             == aBaseComponents.aPath.pEnd)
+                {
                     appendPath(
                         aBuffer, aBuffer.getLength(), true,
                         aRelComponents.aPath.pBegin, aRelComponents.aPath.pEnd);
+                }
                 else
                 {
                     sal_Int32 n = aBuffer.getLength();
                     sal_Int32 i = rtl_ustr_lastIndexOfChar_WithLength(
                         aBaseComponents.aPath.pBegin,
                         aBaseComponents.aPath.getLength(), '/');
-                    if (i >= 0) {
+
+                    if (i >= 0)
+                    {
                         appendPath(
                             aBuffer, n, false, aBaseComponents.aPath.pBegin,
                             aBaseComponents.aPath.pBegin + i);
                     }
+
                     appendPath(
                         aBuffer, n, i >= 0, aRelComponents.aPath.pBegin,
                         aRelComponents.aPath.pEnd);
                 }
+
                 if (aRelComponents.aQuery.isPresent())
+                {
                     aBuffer.append(aRelComponents.aQuery.pBegin,
                                    aRelComponents.aQuery.getLength());
+                }
             }
         }
     }
     if (aRelComponents.aFragment.isPresent())
+    {
         aBuffer.append(aRelComponents.aFragment.pBegin,
                        aRelComponents.aFragment.getLength());
+    }
+
     rtl_uString_assign(pResult, aBuffer.makeStringAndClear().pData);
     return true;
 }

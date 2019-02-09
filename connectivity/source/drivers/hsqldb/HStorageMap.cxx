@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hsqldb/HStorageMap.hxx"
+#include <hsqldb/HStorageMap.hxx>
 #include <comphelper/types.hxx>
 #include <com/sun/star/embed/XTransactionBroadcaster.hpp>
 #include <com/sun/star/embed/XTransactedObject.hpp>
@@ -25,6 +25,7 @@
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <osl/diagnose.h>
 #include <osl/thread.h>
+#include <sal/log.hxx>
 #include <uno/mapping.hxx>
 #include <algorithm>
 
@@ -55,7 +56,7 @@ namespace connectivity
                     m_xInputStream->closeInput();
                     m_xInputStream.clear();
                 }
-                // this is done implicity by the closing of the input stream
+                // this is done implicitly by the closing of the input stream
                 else if ( m_xOutputStream.is() )
                 {
                     m_xOutputStream->closeOutput();
@@ -79,21 +80,21 @@ namespace connectivity
             }
         }
 
-        Reference< XInputStream> StreamHelper::getInputStream()
+        Reference< XInputStream> const & StreamHelper::getInputStream()
         {
             if ( !m_xInputStream.is() )
                 m_xInputStream = m_xStream->getInputStream();
             return m_xInputStream;
         }
 
-        Reference< XOutputStream> StreamHelper::getOutputStream()
+        Reference< XOutputStream> const & StreamHelper::getOutputStream()
         {
             if ( !m_xOutputStream.is() )
                 m_xOutputStream = m_xStream->getOutputStream();
             return m_xOutputStream;
         }
 
-        Reference< XSeekable> StreamHelper::getSeek()
+        Reference< XSeekable> const & StreamHelper::getSeek()
         {
             if ( !m_xSeek.is() )
                 m_xSeek.set(m_xStream,UNO_QUERY);
@@ -122,13 +123,13 @@ namespace connectivity
             }
         }
 
-        TStorages& lcl_getStorageMap()
+        static TStorages& lcl_getStorageMap()
         {
             static TStorages s_aMap;
             return s_aMap;
         }
 
-        OUString lcl_getNextCount()
+        static OUString lcl_getNextCount()
         {
             static sal_Int32 s_nCount = 0;
             return OUString::number(s_nCount++);
@@ -167,7 +168,7 @@ namespace connectivity
             OUString aStr;
             if ( jstr )
             {
-                jboolean bCopy(sal_True);
+                jboolean bCopy(true);
                 const jchar* pChar = env->GetStringChars(jstr,&bCopy);
                 jsize len = env->GetStringLength(jstr);
                 aStr = OUString(
@@ -191,7 +192,7 @@ namespace connectivity
             OSL_ENSURE(_xStorage.is(),"Storage is NULL!");
             TStorages& rMap = lcl_getStorageMap();
             // check if the storage is already in our map
-            TStorages::const_iterator aFind = ::std::find_if(rMap.begin(),rMap.end(),
+            TStorages::const_iterator aFind = std::find_if(rMap.begin(),rMap.end(),
                 [&_xStorage] (const TStorages::value_type& storage) {
                     return storage.second.mapStorage() == _xStorage;
                 });
@@ -222,7 +223,7 @@ namespace connectivity
             OSL_ENSURE(_xStorage.is(),"Storage is NULL!");
             TStorages& rMap = lcl_getStorageMap();
             // check if the storage is already in our map
-            TStorages::const_iterator aFind = ::std::find_if(rMap.begin(),rMap.end(),
+            TStorages::const_iterator aFind = std::find_if(rMap.begin(),rMap.end(),
                 [&_xStorage] (const TStorages::value_type& storage) {
                     return storage.second.mapStorage() == _xStorage;
                 });
@@ -291,7 +292,7 @@ namespace connectivity
                             {
                                 OUString sStrippedName = removeOldURLPrefix(sOrgName);
 
-                                if ( ((_nMode & ElementModes::WRITE) != ElementModes::WRITE ) )
+                                if ( (_nMode & ElementModes::WRITE) != ElementModes::WRITE )
                                 {
                                     bool bIsStream = true;
                                     try
@@ -307,20 +308,14 @@ namespace connectivity
                                 }
                                 pHelper.reset( new StreamHelper(storage->openStreamElement( sStrippedName, _nMode ) ) );
                             }
-                            aFind->second.streams.insert(TStreamMap::value_type(sName,pHelper));
+                            aFind->second.streams.emplace(sName,pHelper);
                         }
                         catch(const Exception& e)
                         {
-#if OSL_DEBUG_LEVEL > 0
-                            OString sMessage( "[HSQLDB-SDBC] caught an exception while opening a stream\n" );
-                            sMessage += "Name: ";
-                            sMessage += OString( sName.getStr(), sName.getLength(), osl_getThreadTextEncoding() );
-                            sMessage += "\nMode: 0x";
-                            if ( _nMode < 16 )
-                                sMessage += "0";
-                            sMessage += OString::number( _nMode, 16 ).toAsciiUpperCase();
-                            OSL_FAIL( sMessage.getStr() );
-#endif
+                            SAL_WARN( "connectivity.hsqldb", "[HSQLDB-SDBC] caught an exception while opening a stream\n"
+                                "Name: " << sName
+                                << "\nMode: 0x" <<  ( _nMode < 16 ? "0" : "")
+                                << std::hex << _nMode );
                             StorageContainer::throwJavaException(e,env);
                         }
                     }
@@ -358,8 +353,8 @@ namespace connectivity
         {
             if (env->ExceptionCheck())
                 env->ExceptionClear();
+            SAL_WARN("connectivity.hsqldb", "forwarding Exception: " << _aException );
             OString cstr( OUStringToOString(_aException.Message, RTL_TEXTENCODING_JAVA_UTF8 ) );
-            OSL_TRACE( __FILE__": forwarding Exception: %s", cstr.getStr() );
             env->ThrowNew(env->FindClass("java/io/IOException"), cstr.getStr());
         }
 

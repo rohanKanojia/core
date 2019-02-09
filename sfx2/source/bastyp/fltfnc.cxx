@@ -36,9 +36,10 @@
 #include <basic/sbxobj.hxx>
 #include <basic/sbxmeth.hxx>
 #include <basic/sbxcore.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 #include <rtl/ustring.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
 #include <svl/stritem.hxx>
@@ -47,23 +48,6 @@
 #include <svl/rectitem.hxx>
 
 #include <sot/storage.hxx>
-#include <com/sun/star/frame/XDispatchProviderInterceptor.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/frame/XDispatchProviderInterception.hpp>
-#include <com/sun/star/frame/FeatureStateEvent.hpp>
-#include <com/sun/star/frame/DispatchDescriptor.hpp>
-#include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XFrameActionListener.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/FrameActionEvent.hpp>
-#include <com/sun/star/frame/FrameAction.hpp>
-#include <com/sun/star/frame/XFrameLoader.hpp>
-#include <com/sun/star/frame/XLoadEventListener.hpp>
-#include <com/sun/star/frame/XFilterDetect.hpp>
 #include <com/sun/star/loader/XImplementationLoader.hpp>
 #include <comphelper/processfactory.hxx>
 
@@ -77,29 +61,28 @@
 
 #include <rtl/instance.hxx>
 
-#include <svl/ctypeitm.hxx>
 #include <svtools/sfxecode.hxx>
 #include <unotools/syslocale.hxx>
+#include <unotools/charclass.hxx>
 
 #include <sfx2/sfxhelp.hxx>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/docfac.hxx>
-#include "sfxtypes.hxx"
+#include <sfxtypes.hxx>
 #include <sfx2/sfxuno.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/progress.hxx>
-#include "openflag.hxx"
-#include "bastyp.hrc"
+#include <openflag.hxx>
+#include <sfx2/strings.hrc>
 #include <sfx2/sfxresid.hxx>
 #include <sfx2/doctempl.hxx>
 #include <sfx2/frame.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
-#include "helper.hxx"
+#include <helper.hxx>
 #include "fltlst.hxx"
 #include <sfx2/request.hxx>
-#include "arrdecl.hxx"
-#include <o3tl/make_unique.hxx>
+#include <arrdecl.hxx>
 
 #include <vector>
 #include <memory>
@@ -136,7 +119,7 @@ static void CreateFilterArr()
     theSfxFilterListener::get();
 }
 
-inline OUString ToUpper_Impl( const OUString &rStr )
+static OUString ToUpper_Impl( const OUString &rStr )
 {
     return SvtSysLocale().GetCharClass().uppercase( rStr );
 }
@@ -144,13 +127,11 @@ inline OUString ToUpper_Impl( const OUString &rStr )
 class SfxFilterContainer_Impl
 {
 public:
-    OUString            aName;
-    OUString            aServiceName;
+    OUString const      aName;
 
     explicit SfxFilterContainer_Impl( const OUString& rName )
         : aName( rName )
     {
-        aServiceName = SfxObjectShell::GetServiceNameFromFactory( rName );
     }
 };
 
@@ -190,7 +171,7 @@ SfxFilterContainer::~SfxFilterContainer()
 }
 
 
-const OUString SfxFilterContainer::GetName() const
+OUString const & SfxFilterContainer::GetName() const
 {
     return pImpl->aName;
 }
@@ -234,9 +215,8 @@ std::shared_ptr<const SfxFilter> SfxFilterContainer::GetDefaultFilter_Impl( cons
         if ( bFirstRead )
             ReadFilters_Impl();
 
-        for ( size_t i = 0, n = pFilterArr->size(); i < n; ++i )
+        for (std::shared_ptr<const SfxFilter>& pCheckFilter : *pFilterArr)
         {
-            std::shared_ptr<const SfxFilter> pCheckFilter = (*pFilterArr)[i];
             if ( pCheckFilter->GetServiceName().equalsIgnoreAsciiCase(sServiceName) )
             {
                 pFilter = pCheckFilter;
@@ -253,7 +233,7 @@ std::shared_ptr<const SfxFilter> SfxFilterContainer::GetDefaultFilter_Impl( cons
 class SfxFilterMatcher_Impl
 {
 public:
-    OUString     aName;
+    OUString const              aName;
     mutable SfxFilterList_Impl* pList;      // is created on demand
 
     void InitForIterating() const;
@@ -275,8 +255,7 @@ public:
 
 namespace
 {
-    typedef std::vector<std::unique_ptr<SfxFilterMatcher_Impl> > SfxFilterMatcherArr_Impl;
-    static SfxFilterMatcherArr_Impl aImplArr;
+    static std::vector<std::unique_ptr<SfxFilterMatcher_Impl> > aImplArr;
     static int nSfxFilterMatcherCount;
 
     SfxFilterMatcher_Impl & getSfxFilterMatcher_Impl(const OUString &rName)
@@ -290,10 +269,10 @@ namespace
         // previously
         for (std::unique_ptr<SfxFilterMatcher_Impl>& aImpl : aImplArr)
             if (aImpl->aName == aName)
-                return *aImpl.get();
+                return *aImpl;
 
         // first Matcher created for this factory
-        aImplArr.push_back(o3tl::make_unique<SfxFilterMatcher_Impl>(aName));
+        aImplArr.push_back(std::make_unique<SfxFilterMatcher_Impl>(aName));
         return *aImplArr.back().get();
     }
 }
@@ -325,9 +304,8 @@ void SfxFilterMatcher_Impl::Update() const
     {
         // this List was already used
         pList->clear();
-        for ( size_t i = 0, n = pFilterArr->size(); i < n; ++i )
+        for (std::shared_ptr<const SfxFilter>& pFilter : *pFilterArr)
         {
-            std::shared_ptr<const SfxFilter> pFilter = (*pFilterArr)[i];
             if ( pFilter->GetServiceName() == aName )
                 pList->push_back( pFilter );
         }
@@ -359,9 +337,8 @@ void SfxFilterMatcher_Impl::InitForIterating() const
 std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetAnyFilter( SfxFilterFlags nMust, SfxFilterFlags nDont ) const
 {
     m_rImpl.InitForIterating();
-    for ( size_t i = 0, n = m_rImpl.pList->size(); i < n; ++i )
+    for (std::shared_ptr<const SfxFilter>& pFilter : *m_rImpl.pList)
     {
-        std::shared_ptr<const SfxFilter> pFilter = (*m_rImpl.pList)[i];
         SfxFilterFlags nFlags = pFilter->GetFilterFlags();
         if ( (nFlags & nMust) == nMust && !(nFlags & nDont ) )
             return pFilter;
@@ -371,8 +348,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetAnyFilter( SfxFilterFlags 
 }
 
 
-sal_uInt32  SfxFilterMatcher::GuessFilterIgnoringContent(
-    SfxMedium& rMedium,
+ErrCode  SfxFilterMatcher::GuessFilterIgnoringContent(
+    SfxMedium const & rMedium,
     std::shared_ptr<const SfxFilter>& rpFilter ) const
 {
     uno::Reference<document::XTypeDetection> xDetection(
@@ -381,7 +358,7 @@ sal_uInt32  SfxFilterMatcher::GuessFilterIgnoringContent(
     OUString sTypeName;
     try
     {
-        sTypeName = xDetection->queryTypeByURL( rMedium.GetURLObject().GetMainURL( INetURLObject::NO_DECODE ) );
+        sTypeName = xDetection->queryTypeByURL( rMedium.GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
     }
     catch (uno::Exception&)
     {
@@ -399,13 +376,13 @@ sal_uInt32  SfxFilterMatcher::GuessFilterIgnoringContent(
 }
 
 
-sal_uInt32  SfxFilterMatcher::GuessFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& rpFilter, SfxFilterFlags nMust, SfxFilterFlags nDont ) const
+ErrCode  SfxFilterMatcher::GuessFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& rpFilter, SfxFilterFlags nMust, SfxFilterFlags nDont ) const
 {
     return GuessFilterControlDefaultUI( rMedium, rpFilter, nMust, nDont );
 }
 
 
-sal_uInt32  SfxFilterMatcher::GuessFilterControlDefaultUI( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& rpFilter, SfxFilterFlags nMust, SfxFilterFlags nDont ) const
+ErrCode  SfxFilterMatcher::GuessFilterControlDefaultUI( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& rpFilter, SfxFilterFlags nMust, SfxFilterFlags nDont ) const
 {
     std::shared_ptr<const SfxFilter> pOldFilter = rpFilter;
 
@@ -420,9 +397,9 @@ sal_uInt32  SfxFilterMatcher::GuessFilterControlDefaultUI( SfxMedium& rMedium, s
     try
     {
         // open the stream one times only ...
-        // Otherwhise it will be tried more than once and show the same interaction more than once ...
+        // Otherwise it will be tried more than once and show the same interaction more than once ...
 
-        OUString sURL( rMedium.GetURLObject().GetMainURL( INetURLObject::NO_DECODE ) );
+        OUString sURL( rMedium.GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
         uno::Reference< io::XInputStream > xInStream = rMedium.GetInputStream();
         OUString aFilterName;
 
@@ -446,12 +423,12 @@ sal_uInt32  SfxFilterMatcher::GuessFilterControlDefaultUI( SfxMedium& rMedium, s
 
             if ( pOldFilter )
             {
-                aDescriptor[utl::MediaDescriptor::PROP_TYPENAME()  ] <<= OUString( pOldFilter->GetTypeName()   );
-                aDescriptor[utl::MediaDescriptor::PROP_FILTERNAME()] <<= OUString( pOldFilter->GetFilterName() );
+                aDescriptor[utl::MediaDescriptor::PROP_TYPENAME()  ] <<= pOldFilter->GetTypeName();
+                aDescriptor[utl::MediaDescriptor::PROP_FILTERNAME()] <<= pOldFilter->GetFilterName();
             }
 
             uno::Sequence< beans::PropertyValue > lDescriptor = aDescriptor.getAsConstPropertyValueList();
-            sTypeName = xDetection->queryTypeByDescriptor(lDescriptor, sal_True); // lDescriptor is used as In/Out param ... don't use aDescriptor.getAsConstPropertyValueList() directly!
+            sTypeName = xDetection->queryTypeByDescriptor(lDescriptor, true); // lDescriptor is used as In/Out param ... don't use aDescriptor.getAsConstPropertyValueList() directly!
 
             for (sal_Int32 i = 0; i < lDescriptor.getLength(); ++i)
             {
@@ -504,15 +481,22 @@ bool SfxFilterMatcher::IsFilterInstalled_Impl( const std::shared_ptr<const SfxFi
     if ( pFilter->GetFilterFlags() & SfxFilterFlags::MUSTINSTALL )
     {
         // Here could a  re-installation be offered
-        OUString aText( SfxResId(STR_FILTER_NOT_INSTALLED).toString() );
+        OUString aText( SfxResId(STR_FILTER_NOT_INSTALLED) );
         aText = aText.replaceFirst( "$(FILTER)", pFilter->GetUIName() );
-        ScopedVclPtrInstance< QueryBox > aQuery(nullptr, WB_YES_NO | WB_DEF_YES, aText);
-        short nRet = aQuery->Execute();
+        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(nullptr,
+                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                       aText));
+        xQueryBox->set_default_response(RET_YES);
+
+        short nRet = xQueryBox->run();
         if ( nRet == RET_YES )
         {
 #ifdef DBG_UTIL
             // Start Setup
-            ScopedVclPtr<InfoBox>::Create( nullptr, "Here should the Setup now be starting!" )->Execute();
+            std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(nullptr,
+                                                          VclMessageType::Info, VclButtonsType::Ok,
+                                                          "Here should the Setup now be starting!"));
+            xInfoBox->run();
 #endif
             // Installation must still give feedback if it worked or not,
             // then the  Filterflag be deleted
@@ -522,9 +506,12 @@ bool SfxFilterMatcher::IsFilterInstalled_Impl( const std::shared_ptr<const SfxFi
     }
     else if ( pFilter->GetFilterFlags() & SfxFilterFlags::CONSULTSERVICE )
     {
-        OUString aText( SfxResId(STR_FILTER_CONSULT_SERVICE).toString() );
+        OUString aText( SfxResId(STR_FILTER_CONSULT_SERVICE) );
         aText = aText.replaceFirst( "$(FILTER)", pFilter->GetUIName() );
-        ScopedVclPtr<InfoBox>::Create( nullptr, aText )->Execute();
+        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(nullptr,
+                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                      aText));
+        xInfoBox->run();
         return false;
     }
     else
@@ -532,7 +519,7 @@ bool SfxFilterMatcher::IsFilterInstalled_Impl( const std::shared_ptr<const SfxFi
 }
 
 
-sal_uInt32 SfxFilterMatcher::DetectFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& rpFilter ) const
+ErrCode SfxFilterMatcher::DetectFilter( SfxMedium& rMedium, std::shared_ptr<const SfxFilter>& rpFilter ) const
 /*  [Description]
 
     Here the Filter selection box is pulled up. Otherwise GuessFilter
@@ -579,7 +566,7 @@ sal_uInt32 SfxFilterMatcher::DetectFilter( SfxMedium& rMedium, std::shared_ptr<c
         if ( pInstallFilter )
         {
             if ( IsFilterInstalled_Impl( pInstallFilter ) )
-                // Maybe the filter was installed was installed afterwards.
+                // Maybe the filter was installed afterwards.
                 pFilter = pInstallFilter;
         }
         else
@@ -660,9 +647,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4Mime( const OUStrin
 {
     if ( m_rImpl.pList )
     {
-        for ( size_t i = 0, n = m_rImpl.pList->size(); i < n; ++i )
+        for (std::shared_ptr<const SfxFilter>& pFilter : *m_rImpl.pList)
         {
-            std::shared_ptr<const SfxFilter> pFilter = (*m_rImpl.pList)[i];
             SfxFilterFlags nFlags = pFilter->GetFilterFlags();
             if ( (nFlags & nMust) == nMust && !(nFlags & nDont ) && pFilter->GetMimeType() == rMediaType )
                 return pFilter;
@@ -680,9 +666,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4EA( const OUString&
     if ( m_rImpl.pList )
     {
         std::shared_ptr<const SfxFilter> pFirst;
-        for ( size_t i = 0, n = m_rImpl.pList->size(); i < n; ++i )
+        for (std::shared_ptr<const SfxFilter>& pFilter : *m_rImpl.pList)
         {
-            std::shared_ptr<const SfxFilter> pFilter = (*m_rImpl.pList)[i];
             SfxFilterFlags nFlags = pFilter->GetFilterFlags();
             if ( (nFlags & nMust) == nMust && !(nFlags & nDont ) && pFilter->GetTypeName() == rType )
             {
@@ -706,9 +691,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4Extension( const OU
 {
     if ( m_rImpl.pList )
     {
-        for ( size_t i = 0, n = m_rImpl.pList->size(); i < n; ++i )
+        for (std::shared_ptr<const SfxFilter>& pFilter : *m_rImpl.pList)
         {
-            std::shared_ptr<const SfxFilter> pFilter = (*m_rImpl.pList)[i];
             SfxFilterFlags nFlags = pFilter->GetFilterFlags();
             if ( (nFlags & nMust) == nMust && !(nFlags & nDont ) )
             {
@@ -718,7 +702,7 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4Extension( const OU
                 if (sExt.isEmpty())
                     continue;
 
-                if (sExt[0] != (sal_Unicode)'.')
+                if (sExt[0] != '.')
                     sExt = "." + sExt;
 
                 WildCard aCheck(sWildCard, ';');
@@ -754,9 +738,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4UIName( const OUStr
 {
     m_rImpl.InitForIterating();
     std::shared_ptr<const SfxFilter> pFirstFilter;
-    for ( size_t i = 0, n = m_rImpl.pList->size(); i < n; ++i )
+    for (std::shared_ptr<const SfxFilter>& pFilter : *m_rImpl.pList)
     {
-        std::shared_ptr<const SfxFilter> pFilter = (*m_rImpl.pList)[i];
         SfxFilterFlags nFlags = pFilter->GetFilterFlags();
         if ( (nFlags & nMust) == nMust &&
              !(nFlags & nDont ) && pFilter->GetUIName() == rName )
@@ -797,9 +780,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4FilterName( const O
                 CreateFilterArr();
             else
             {
-                for ( size_t i = 0, n = pFilterArr->size(); i < n; ++i )
+                for (std::shared_ptr<const SfxFilter>& pFilter : *pFilterArr)
                 {
-                    std::shared_ptr<const SfxFilter> pFilter = (*pFilterArr)[i];
                     SfxFilterFlags nFlags = pFilter->GetFilterFlags();
                     if ((nFlags & nMust) == nMust && !(nFlags & nDont) && pFilter->GetFilterName().equalsIgnoreAsciiCase(aName))
                         return pFilter;
@@ -814,9 +796,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4FilterName( const O
     if ( !pList )
         pList = pFilterArr;
 
-    for ( size_t i = 0, n = pList->size(); i < n; ++i )
+    for (std::shared_ptr<const SfxFilter>& pFilter : *pList)
     {
-        std::shared_ptr<const SfxFilter> pFilter = (*pList)[i];
         SfxFilterFlags nFlags = pFilter->GetFilterFlags();
         if ( (nFlags & nMust) == nMust && !(nFlags & nDont ) && pFilter->GetFilterName().equalsIgnoreAsciiCase(aName))
             return pFilter;
@@ -825,17 +806,13 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcher::GetFilter4FilterName( const O
     return nullptr;
 }
 
-IMPL_LINK_TYPED( SfxFilterMatcher, MaybeFileHdl_Impl, OUString*, pString, bool )
+IMPL_LINK( SfxFilterMatcher, MaybeFileHdl_Impl, OUString*, pString, bool )
 {
     std::shared_ptr<const SfxFilter> pFilter = GetFilter4Extension( *pString );
-    if (pFilter && !pFilter->GetWildcard().Matches( OUString() ) &&
+    return pFilter &&
+        !pFilter->GetWildcard().Matches("") &&
         !pFilter->GetWildcard().Matches("*.*") &&
-        !pFilter->GetWildcard().Matches(OUString('*'))
-       )
-    {
-        return true;
-    }
-    return false;
+        !pFilter->GetWildcard().Matches("*");
 }
 
 
@@ -882,8 +859,8 @@ std::shared_ptr<const SfxFilter> SfxFilterMatcherIter::Next()
     helper to build own formatted string from given stringlist by
     using given separator
   ---------------------------------------------------------------*/
-OUString implc_convertStringlistToString( const uno::Sequence< OUString >& lList     ,
-                                                 const sal_Unicode&                                        cSeparator,
+static OUString implc_convertStringlistToString( const uno::Sequence< OUString >& lList     ,
+                                                 sal_Unicode                                        cSeparator,
                                                  const OUString&                                    sPrefix   )
 {
     OUStringBuffer   sString ( 1000 )           ;
@@ -925,183 +902,189 @@ void SfxFilterContainer::ReadSingleFilter_Impl(
         aResult = uno::Any();
     }
 
-    if( aResult >>= lFilterProperties )
+    if( !(aResult >>= lFilterProperties) )
+        return;
+
+    // collect information to add filter to container
+    // (attention: some information aren't available on filter directly ... you must search for corresponding type too!)
+    SfxFilterFlags       nFlags          = SfxFilterFlags::NONE;
+    SotClipboardFormatId nClipboardId    = SotClipboardFormatId::NONE;
+    sal_Int32       nDocumentIconId = 0 ;
+    sal_Int32       nFormatVersion  = 0 ;
+    OUString sMimeType           ;
+    OUString sType               ;
+    OUString sUIName             ;
+    OUString sHumanName          ;
+    OUString sDefaultTemplate    ;
+    OUString sUserData           ;
+    OUString sExtension          ;
+    OUString sPattern            ;
+    OUString sServiceName        ;
+    bool bEnabled = true         ;
+
+    // first get directly available properties
+    sal_Int32 nFilterPropertyCount = lFilterProperties.getLength();
+    sal_Int32 nFilterProperty      = 0                            ;
+    for( nFilterProperty=0; nFilterProperty<nFilterPropertyCount; ++nFilterProperty )
     {
-        // collect information to add filter to container
-        // (attention: some information aren't available on filter directly ... you must search for corresponding type too!)
-        SfxFilterFlags       nFlags          = SfxFilterFlags::NONE;
-        SotClipboardFormatId nClipboardId    = SotClipboardFormatId::NONE;
-        sal_Int32       nDocumentIconId = 0 ;
-        sal_Int32       nFormatVersion  = 0 ;
-        OUString sMimeType           ;
-        OUString sType               ;
-        OUString sUIName             ;
-        OUString sHumanName          ;
-        OUString sDefaultTemplate    ;
-        OUString sUserData           ;
-        OUString sExtension          ;
-        OUString sPattern            ;
-        OUString sServiceName        ;
-
-        // first get directly available properties
-        sal_Int32 nFilterPropertyCount = lFilterProperties.getLength();
-        sal_Int32 nFilterProperty      = 0                            ;
-        for( nFilterProperty=0; nFilterProperty<nFilterPropertyCount; ++nFilterProperty )
+        if ( lFilterProperties[nFilterProperty].Name == "FileFormatVersion" )
         {
-            if ( lFilterProperties[nFilterProperty].Name == "FileFormatVersion" )
+            lFilterProperties[nFilterProperty].Value >>= nFormatVersion;
+        }
+        else if ( lFilterProperties[nFilterProperty].Name == "TemplateName" )
+        {
+            lFilterProperties[nFilterProperty].Value >>= sDefaultTemplate;
+        }
+        else if ( lFilterProperties[nFilterProperty].Name == "Flags" )
+        {
+            sal_Int32 nTmp(0);
+            lFilterProperties[nFilterProperty].Value >>= nTmp;
+            assert((nTmp & ~o3tl::typed_flags<SfxFilterFlags>::mask) == 0);
+            nFlags = static_cast<SfxFilterFlags>(nTmp);
+        }
+        else if ( lFilterProperties[nFilterProperty].Name == "UIName" )
+        {
+            lFilterProperties[nFilterProperty].Value >>= sUIName;
+        }
+        else if ( lFilterProperties[nFilterProperty].Name == "UserData" )
+        {
+            uno::Sequence< OUString > lUserData;
+            lFilterProperties[nFilterProperty].Value >>= lUserData;
+            sUserData = implc_convertStringlistToString( lUserData, ',', OUString() );
+        }
+        else if ( lFilterProperties[nFilterProperty].Name == "DocumentService" )
+        {
+            lFilterProperties[nFilterProperty].Value >>= sServiceName;
+        }
+        else if (lFilterProperties[nFilterProperty].Name == "ExportExtension")
+        {
+            // Extension preferred by the filter.  This takes precedence
+            // over those that are given in the file format type.
+            lFilterProperties[nFilterProperty].Value >>= sExtension;
+            sExtension = "*." + sExtension;
+        }
+        else if ( lFilterProperties[nFilterProperty].Name == "Type" )
+        {
+            lFilterProperties[nFilterProperty].Value >>= sType;
+            // Try to get filter .. but look for any exceptions!
+            // May be filter was deleted by another thread ...
+            try
             {
-                lFilterProperties[nFilterProperty].Value >>= nFormatVersion;
+                aResult = xTypeCFG->getByName( sType );
             }
-            else if ( lFilterProperties[nFilterProperty].Name == "TemplateName" )
+            catch (const container::NoSuchElementException&)
             {
-                lFilterProperties[nFilterProperty].Value >>= sDefaultTemplate;
+                aResult = uno::Any();
             }
-            else if ( lFilterProperties[nFilterProperty].Name == "Flags" )
-            {
-                sal_Int32 nTmp(0);
-                lFilterProperties[nFilterProperty].Value >>= nTmp;
-                assert((nTmp & ~o3tl::typed_flags<SfxFilterFlags>::mask) == 0);
-                nFlags = static_cast<SfxFilterFlags>(nTmp);
-            }
-            else if ( lFilterProperties[nFilterProperty].Name == "UIName" )
-            {
-                lFilterProperties[nFilterProperty].Value >>= sUIName;
-            }
-            else if ( lFilterProperties[nFilterProperty].Name == "UserData" )
-            {
-                uno::Sequence< OUString > lUserData;
-                lFilterProperties[nFilterProperty].Value >>= lUserData;
-                sUserData = implc_convertStringlistToString( lUserData, ',', OUString() );
-            }
-            else if ( lFilterProperties[nFilterProperty].Name == "DocumentService" )
-            {
-                lFilterProperties[nFilterProperty].Value >>= sServiceName;
-            }
-            else if (lFilterProperties[nFilterProperty].Name == "ExportExtension")
-            {
-                // Extension preferred by the filter.  This takes precedence
-                // over those that are given in the file format type.
-                lFilterProperties[nFilterProperty].Value >>= sExtension;
-                sExtension = "*." + sExtension;
-            }
-            else if ( lFilterProperties[nFilterProperty].Name == "Type" )
-            {
-                lFilterProperties[nFilterProperty].Value >>= sType;
-                // Try to get filter .. but look for any exceptions!
-                // May be filter was deleted by another thread ...
-                try
-                {
-                    aResult = xTypeCFG->getByName( sType );
-                }
-                catch (const container::NoSuchElementException&)
-                {
-                    aResult = uno::Any();
-                }
 
-                uno::Sequence< beans::PropertyValue > lTypeProperties;
-                if( aResult >>= lTypeProperties )
+            uno::Sequence< beans::PropertyValue > lTypeProperties;
+            if( aResult >>= lTypeProperties )
+            {
+                // get indirect available properties then (types)
+                sal_Int32 nTypePropertyCount = lTypeProperties.getLength();
+                sal_Int32 nTypeProperty      = 0                          ;
+                for( nTypeProperty=0; nTypeProperty<nTypePropertyCount; ++nTypeProperty )
                 {
-                    // get indirect available properties then (types)
-                    sal_Int32 nTypePropertyCount = lTypeProperties.getLength();
-                    sal_Int32 nTypeProperty      = 0                          ;
-                    for( nTypeProperty=0; nTypeProperty<nTypePropertyCount; ++nTypeProperty )
+                    if ( lTypeProperties[nTypeProperty].Name == "ClipboardFormat" )
                     {
-                        if ( lTypeProperties[nTypeProperty].Name == "ClipboardFormat" )
+                        lTypeProperties[nTypeProperty].Value >>= sHumanName;
+                    }
+                    else if ( lTypeProperties[nTypeProperty].Name == "DocumentIconID" )
+                    {
+                        lTypeProperties[nTypeProperty].Value >>= nDocumentIconId;
+                    }
+                    else if ( lTypeProperties[nTypeProperty].Name == "MediaType" )
+                    {
+                        lTypeProperties[nTypeProperty].Value >>= sMimeType;
+                    }
+                    else if ( lTypeProperties[nTypeProperty].Name == "Extensions" )
+                    {
+                        if (sExtension.isEmpty())
                         {
-                            lTypeProperties[nTypeProperty].Value >>= sHumanName;
+                            uno::Sequence< OUString > lExtensions;
+                            lTypeProperties[nTypeProperty].Value >>= lExtensions;
+                            sExtension = implc_convertStringlistToString( lExtensions, ';', "*." );
                         }
-                        else if ( lTypeProperties[nTypeProperty].Name == "DocumentIconID" )
-                        {
-                            lTypeProperties[nTypeProperty].Value >>= nDocumentIconId;
-                        }
-                        else if ( lTypeProperties[nTypeProperty].Name == "MediaType" )
-                        {
-                            lTypeProperties[nTypeProperty].Value >>= sMimeType;
-                        }
-                        else if ( lTypeProperties[nTypeProperty].Name == "Extensions" )
-                        {
-                            if (sExtension.isEmpty())
-                            {
-                                uno::Sequence< OUString > lExtensions;
-                                lTypeProperties[nTypeProperty].Value >>= lExtensions;
-                                sExtension = implc_convertStringlistToString( lExtensions, ';', "*." );
-                            }
-                        }
-                        else if ( lTypeProperties[nTypeProperty].Name == "URLPattern" )
-                        {
-                                uno::Sequence< OUString > lPattern;
-                                lTypeProperties[nTypeProperty].Value >>= lPattern;
-                                sPattern = implc_convertStringlistToString( lPattern, ';', OUString() );
-                        }
+                    }
+                    else if ( lTypeProperties[nTypeProperty].Name == "URLPattern" )
+                    {
+                            uno::Sequence< OUString > lPattern;
+                            lTypeProperties[nTypeProperty].Value >>= lPattern;
+                            sPattern = implc_convertStringlistToString( lPattern, ';', OUString() );
                     }
                 }
             }
         }
-
-        if ( sServiceName.isEmpty() )
-            return;
-
-        // old formats are found ... using HumanPresentableName!
-        if( !sHumanName.isEmpty() )
+        else if ( lFilterProperties[nFilterProperty].Name == "Enabled" )
         {
-            nClipboardId = SotExchange::RegisterFormatName( sHumanName );
-
-            // For external filters ignore clipboard IDs
-            if(nFlags & SfxFilterFlags::STARONEFILTER)
-            {
-                nClipboardId = SotClipboardFormatId::NONE;
-            }
-        }
-        // register SfxFilter
-        // first erase module name from old filter names!
-        // e.g: "scalc: DIF" => "DIF"
-        sal_Int32 nStartRealName = sFilterName.indexOf( ": " );
-        if( nStartRealName != -1 )
-        {
-            SAL_WARN( "sfx.bastyp", "Old format, not supported!");
-            sFilterName = sFilterName.copy( nStartRealName+2 );
+            lFilterProperties[nFilterProperty].Value >>= bEnabled;
         }
 
-        std::shared_ptr<const SfxFilter> pFilter = bUpdate ? SfxFilter::GetFilterByName( sFilterName ) : nullptr;
-        if (!pFilter)
-        {
-            pFilter.reset(new SfxFilter( sFilterName             ,
-                                     sExtension              ,
-                                     nFlags                  ,
-                                     nClipboardId            ,
-                                     sType                   ,
-                                     (sal_uInt16)nDocumentIconId ,
-                                     sMimeType               ,
-                                     sUserData               ,
-                                     sServiceName ));
-            rList.push_back( pFilter );
-        }
-        else
-        {
-            SfxFilter* pFilt = const_cast<SfxFilter*>(pFilter.get());
-            pFilt->maFilterName  = sFilterName;
-            pFilt->aWildCard    = WildCard(sExtension, ';');
-            pFilt->nFormatType  = nFlags;
-            pFilt->lFormat      = nClipboardId;
-            pFilt->aTypeName    = sType;
-            pFilt->nDocIcon     = (sal_uInt16)nDocumentIconId;
-            pFilt->aMimeType    = sMimeType;
-            pFilt->aUserData    = sUserData;
-            pFilt->aServiceName = sServiceName;
-        }
-
-        SfxFilter* pFilt = const_cast<SfxFilter*>(pFilter.get());
-
-        // Don't forget to set right UIName!
-        // Otherwise internal name is used as fallback ...
-        pFilt->SetUIName( sUIName );
-        pFilt->SetDefaultTemplate( sDefaultTemplate );
-        if( nFormatVersion )
-        {
-            pFilt->SetVersion( nFormatVersion );
-        }
-        pFilt->SetURLPattern(sPattern);
     }
+
+    if ( sServiceName.isEmpty() )
+        return;
+
+    // old formats are found ... using HumanPresentableName!
+    if( !sHumanName.isEmpty() )
+    {
+        nClipboardId = SotExchange::RegisterFormatName( sHumanName );
+
+        // For external filters ignore clipboard IDs
+        if(nFlags & SfxFilterFlags::STARONEFILTER)
+        {
+            nClipboardId = SotClipboardFormatId::NONE;
+        }
+    }
+    // register SfxFilter
+    // first erase module name from old filter names!
+    // e.g: "scalc: DIF" => "DIF"
+    sal_Int32 nStartRealName = sFilterName.indexOf( ": " );
+    if( nStartRealName != -1 )
+    {
+        SAL_WARN( "sfx.bastyp", "Old format, not supported!");
+        sFilterName = sFilterName.copy( nStartRealName+2 );
+    }
+
+    std::shared_ptr<const SfxFilter> pFilter = bUpdate ? SfxFilter::GetFilterByName( sFilterName ) : nullptr;
+    if (!pFilter)
+    {
+        pFilter.reset(new SfxFilter( sFilterName             ,
+                                 sExtension              ,
+                                 nFlags                  ,
+                                 nClipboardId            ,
+                                 sType                   ,
+                                 sMimeType               ,
+                                 sUserData               ,
+                                 sServiceName            ,
+                                 bEnabled ));
+        rList.push_back( pFilter );
+    }
+    else
+    {
+        SfxFilter* pFilt = const_cast<SfxFilter*>(pFilter.get());
+        pFilt->maFilterName  = sFilterName;
+        pFilt->aWildCard    = WildCard(sExtension, ';');
+        pFilt->nFormatType  = nFlags;
+        pFilt->lFormat      = nClipboardId;
+        pFilt->aTypeName    = sType;
+        pFilt->aMimeType    = sMimeType;
+        pFilt->aUserData    = sUserData;
+        pFilt->aServiceName = sServiceName;
+        pFilt->mbEnabled    = bEnabled;
+    }
+
+    SfxFilter* pFilt = const_cast<SfxFilter*>(pFilter.get());
+
+    // Don't forget to set right UIName!
+    // Otherwise internal name is used as fallback ...
+    pFilt->SetUIName( sUIName );
+    pFilt->SetDefaultTemplate( sDefaultTemplate );
+    if( nFormatVersion )
+    {
+        pFilt->SetVersion( nFormatVersion );
+    }
+    pFilt->SetURLPattern(sPattern);
 }
 
 void SfxFilterContainer::ReadFilters_Impl( bool bUpdate )
@@ -1126,7 +1109,7 @@ void SfxFilterContainer::ReadFilters_Impl( bool bUpdate )
 
         if( xFilterCFG.is() && xTypeCFG.is() )
         {
-            // select right query to get right set of filters for search modul
+            // select right query to get right set of filters for search module
             uno::Sequence< OUString > lFilterNames = xFilterCFG->getElementNames();
             if ( lFilterNames.getLength() )
             {
@@ -1137,9 +1120,8 @@ void SfxFilterContainer::ReadFilters_Impl( bool bUpdate )
                 if( !rList.empty() )
                 {
                     bUpdate = true;
-                    for ( size_t i = 0, n = rList.size(); i < n; ++i )
+                    for (std::shared_ptr<const SfxFilter>& pFilter : rList)
                     {
-                        std::shared_ptr<const SfxFilter> pFilter = rList[i];
                         SfxFilter* pNonConstFilter = const_cast<SfxFilter*>(pFilter.get());
                         pNonConstFilter->nFormatType |= SFX_FILTER_NOTINSTALLED;
                     }
@@ -1160,12 +1142,12 @@ void SfxFilterContainer::ReadFilters_Impl( bool bUpdate )
     }
     catch(const uno::Exception&)
     {
-        SAL_WARN( "sfx.bastyp", "SfxFilterContainer::ReadFilter()\nException detected. Possible not all filters could be cached.\n" );
+        SAL_WARN( "sfx.bastyp", "SfxFilterContainer::ReadFilter()\nException detected. Possible not all filters could be cached." );
     }
 
     if ( bUpdate )
     {
-        // global filter arry was modified, factory specific ones might need an
+        // global filter array was modified, factory specific ones might need an
         // update too
         for (auto& aImpl : aImplArr)
             aImpl->Update();

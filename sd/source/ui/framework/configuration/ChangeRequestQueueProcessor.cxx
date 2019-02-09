@@ -17,13 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include "debugtrace.hxx"
 #include "ChangeRequestQueueProcessor.hxx"
 #include "ConfigurationTracer.hxx"
 
-#include "framework/ConfigurationController.hxx"
+#include <framework/ConfigurationController.hxx>
 #include "ConfigurationUpdater.hxx"
 
 #include <vcl/svapp.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/drawing/framework/XConfiguration.hpp>
 #include <com/sun/star/drawing/framework/ConfigurationChangeEvent.hpp>
@@ -34,14 +36,13 @@ using namespace ::com::sun::star::drawing::framework;
 
 namespace {
 
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
 
 void TraceRequest (const Reference<XConfigurationChangeRequest>& rxRequest)
 {
     Reference<container::XNamed> xNamed (rxRequest, UNO_QUERY);
     if (xNamed.is())
-        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ":    " <<
-            OUStringToOString(xNamed->getName(), RTL_TEXTENCODING_UTF8).getStr());
+        SAL_INFO("sd.fwk", OSL_THIS_FUNC << ":    " << xNamed->getName());
 }
 
 #endif
@@ -80,7 +81,7 @@ void ChangeRequestQueueProcessor::AddRequest (
 {
     ::osl::MutexGuard aGuard (maMutex);
 
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
     if (maQueue.empty())
     {
         SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": Adding requests to empty queue");
@@ -109,7 +110,7 @@ void ChangeRequestQueueProcessor::StartProcessing()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ChangeRequestQueueProcessor, ProcessEvent, void*, void)
+IMPL_LINK_NOARG(ChangeRequestQueueProcessor, ProcessEvent, void*, void)
 {
     ::osl::MutexGuard aGuard (maMutex);
 
@@ -140,7 +141,7 @@ void ChangeRequestQueueProcessor::ProcessOneEvent()
         // Execute the change request.
         if (xRequest.is())
         {
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
             TraceRequest(xRequest);
 #endif
             xRequest->execute(mxConfiguration);
@@ -151,9 +152,9 @@ void ChangeRequestQueueProcessor::ProcessOneEvent()
             SAL_INFO("sd.fwk", OSL_THIS_FUNC << ": All requests are processed");
             // The queue is empty so tell the ConfigurationManager to update
             // its state.
-            if (mpConfigurationUpdater.get() != nullptr)
+            if (mpConfigurationUpdater != nullptr)
             {
-#if OSL_DEBUG_LEVEL >= 2
+#if DEBUG_SD_CONFIGURATION_TRACE
                 ConfigurationTracer::TraceConfiguration (
                     mxConfiguration, "updating to configuration");
 #endif

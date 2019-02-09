@@ -23,15 +23,14 @@
 #include <com/sun/star/table/CellRangeAddress.hpp>
 #include <com/sun/star/sheet/GeneralFunction.hpp>
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
-#include "test/container/xnamed.hxx"
-#include "test/sheet/xdatapilottable.hxx"
-#include "test/sheet/xdatapilotdescriptor.hxx"
-#include "test/beans/xpropertyset.hxx"
+#include <test/container/xnamed.hxx>
+#include <test/sheet/xdatapilottable.hxx>
+#include <test/sheet/xdatapilotdescriptor.hxx>
+#include <test/beans/xpropertyset.hxx>
 //check the DataPilot of Calc.
 
 using namespace css;
 using namespace css::lang;
-using namespace css::frame;
 
 namespace sc_apitest {
 
@@ -73,7 +72,7 @@ private:
 
 CheckDataPilotTable::CheckDataPilotTable()
      : CalcUnoApiTest("/sc/qa/extras/testdocuments"),
-       apitest::XNamed(OUString("DataPilotTable"))
+       apitest::XNamed("DataPilotTable")
 {
 }
 
@@ -87,7 +86,6 @@ uno::Reference< uno::XInterface > CheckDataPilotTable::init()
         return mxObject;
 
     uno::Reference< sheet::XSpreadsheetDocument > xSheetDoc(mxComponent, uno::UNO_QUERY_THROW);
-    CPPUNIT_ASSERT_MESSAGE("no calc document!", xSheetDoc.is());
 
     // the cell range
     table::CellRangeAddress sCellRangeAdress;
@@ -166,8 +164,8 @@ uno::Reference< uno::XInterface > CheckDataPilotTable::init()
     DPT->insertNewByName("DataPilotTable", sCellAdress, DPDsc);
 
     uno::Reference<uno::XInterface> xDataPilotTableObject;
-    uno::Any mAny = DPT->getByName( DPT->getElementNames()[0] );
-    CPPUNIT_ASSERT(mAny >>= xDataPilotTableObject);
+    data = DPT->getByName( DPT->getElementNames()[0] );
+    CPPUNIT_ASSERT(data >>= xDataPilotTableObject);
     mxObject = xDataPilotTableObject;
 
     return xDataPilotTableObject;

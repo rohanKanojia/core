@@ -20,8 +20,6 @@
 #ifndef INCLUDED_REPORTDESIGN_SOURCE_UI_INC_CONDFORMAT_HXX
 #define INCLUDED_REPORTDESIGN_SOURCE_UI_INC_CONDFORMAT_HXX
 
-#include "ModuleHelper.hxx"
-
 #include <com/sun/star/report/XReportControlModel.hpp>
 
 #include <vcl/dialog.hxx>
@@ -37,7 +35,7 @@ namespace rptui
 {
 
 
-    #define MAX_CONDITIONS  (size_t)3
+    #define MAX_CONDITIONS  size_t(3)
 
     class OReportController;
     class Condition;
@@ -69,7 +67,6 @@ namespace rptui
     {
         typedef ::std::vector< VclPtr<Condition> >  Conditions;
 
-        OModuleClient             m_aModuleClient;
         VclPtr<vcl::Window>       m_pConditionPlayground;
         Conditions                m_aConditions;
         VclPtr<VclScrolledWindow> m_pScrollWindow;
@@ -90,7 +87,7 @@ namespace rptui
             const css::uno::Reference< css::report::XReportControlModel>& _xHoldAlive,
             ::rptui::OReportController& _rController
         );
-        virtual ~ConditionalFormattingDialog();
+        virtual ~ConditionalFormattingDialog() override;
         virtual void dispose() override;
         // Dialog overridables
         virtual short   Execute() override;
@@ -107,7 +104,7 @@ namespace rptui
         virtual bool        PreNotify( NotifyEvent& rNEvt ) override;
 
     private:
-        DECL_LINK_TYPED( OnScroll, ScrollBar*, void );
+        DECL_LINK( OnScroll, ScrollBar*, void );
 
     private:
         /// returns the current number of conditions
@@ -154,9 +151,6 @@ namespace rptui
 
         /// updates the scrollbar range. (does not update the scrollbar visibility)
         void    impl_updateScrollBarRange();
-
-        /// determines whether we need a scrollbar for the conditions
-        bool    impl_needScrollBar() const { return m_aConditions.size() > MAX_CONDITIONS; }
 
         /// scrolls the condition with the given index to the top position
         void    impl_scrollTo( size_t _nTopCondIndex );

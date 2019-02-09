@@ -20,9 +20,9 @@
 #include "unogridcolumnfacade.hxx"
 #include "unocontroltablemodel.hxx"
 
-#include "table/defaultinputhandler.hxx"
-#include "table/gridtablerenderer.hxx"
-#include "table/tablecontrol.hxx"
+#include <table/defaultinputhandler.hxx>
+#include <table/gridtablerenderer.hxx>
+#include <table/tablecontrol.hxx>
 
 #include <com/sun/star/awt/grid/XGridColumn.hpp>
 #include <com/sun/star/view/SelectionType.hpp>
@@ -31,7 +31,6 @@
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <cppuhelper/implbase.hxx>
 
 
@@ -43,7 +42,6 @@ namespace svt { namespace table
     using css::uno::RuntimeException;
     using css::uno::UNO_QUERY_THROW;
     using css::awt::grid::XGridColumn;
-    using css::uno::XInterface;
     using css::uno::Exception;
     using css::awt::grid::XGridColumnListener;
     using css::lang::EventObject;
@@ -64,7 +62,7 @@ namespace svt { namespace table
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("svtools.uno");
             }
         }
 
@@ -78,7 +76,7 @@ namespace svt { namespace table
             }
             catch( const Exception& )
             {
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("svtools.uno");
             }
             return value;
         }
@@ -99,13 +97,13 @@ namespace svt { namespace table
         void dispose();
 
     protected:
-        virtual ~ColumnChangeMultiplexer();
+        virtual ~ColumnChangeMultiplexer() override;
 
         // XGridColumnListener
-        virtual void SAL_CALL columnChanged( const GridColumnEvent& i_event ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL columnChanged( const GridColumnEvent& i_event ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const EventObject& i_event ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const EventObject& i_event ) override;
 
     private:
         UnoGridColumnFacade* m_pColumnImplementation;
@@ -130,7 +128,7 @@ namespace svt { namespace table
     }
 
 
-    void SAL_CALL ColumnChangeMultiplexer::columnChanged( const GridColumnEvent& i_event ) throw (RuntimeException, std::exception)
+    void SAL_CALL ColumnChangeMultiplexer::columnChanged( const GridColumnEvent& i_event )
     {
         if ( i_event.AttributeName == "DataColumnIndex" )
         {
@@ -163,7 +161,7 @@ namespace svt { namespace table
     }
 
 
-    void SAL_CALL ColumnChangeMultiplexer::disposing( const EventObject& ) throw (RuntimeException, std::exception)
+    void SAL_CALL ColumnChangeMultiplexer::disposing( const EventObject& )
     {
     }
 
@@ -210,7 +208,7 @@ namespace svt { namespace table
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
     }
 
@@ -242,7 +240,7 @@ namespace svt { namespace table
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
         return sName;
     }
@@ -258,7 +256,7 @@ namespace svt { namespace table
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svtools.uno");
         }
         return sHelpText;
     }

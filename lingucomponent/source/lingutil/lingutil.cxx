@@ -18,15 +18,20 @@
  */
 
 #if defined(_WIN32)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #endif
 
 #include <osl/thread.h>
 #include <osl/file.hxx>
+#include <osl/process.h>
 #include <tools/debug.hxx>
 #include <tools/urlobj.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
+#include <unotools/bootstrap.hxx>
 #include <unotools/lingucfg.hxx>
 #include <unotools/pathoptions.hxx>
 #include <rtl/ustring.hxx>
@@ -38,11 +43,10 @@
 #include <vector>
 #include <string.h>
 
-#include <lingutil.hxx>
+#include "lingutil.hxx"
 
 #include <sal/macros.h>
 
-using ::com::sun::star::lang::Locale;
 using namespace ::com::sun::star;
 
 #if defined(_WIN32)
@@ -54,7 +58,80 @@ OString Win_AddLongPathPrefix( const OString &rPathName )
 }
 #endif //defined(WNT)
 
-// build list of old style diuctionaries (not as extensions) to use.
+#ifdef SYSTEM_DICTS
+// find old style dictionaries in system directories
+static void GetOldStyleDicsInDir(
+    OUString const & aSystemDir, OUString const & aFormatName,
+    OUString const & aSystemSuffix, OUString const & aSystemPrefix,
+    std::set< OUString >& aDicLangInUse,
+    std::vector< SvtLinguConfigDictionaryEntry >& aRes )
+{
+    osl::Directory aSystemDicts(aSystemDir);
+    if (aSystemDicts.open() == osl::FileBase::E_None)
+    {
+        osl::DirectoryItem aItem;
+        osl::FileStatus aFileStatus(osl_FileStatus_Mask_FileURL);
+        while (aSystemDicts.getNextItem(aItem) == osl::FileBase::E_None)
+        {
+            aItem.getFileStatus(aFileStatus);
+            OUString sPath = aFileStatus.getFileURL();
+            if (sPath.endsWith(aSystemSuffix))
+            {
+                sal_Int32 nStartIndex = sPath.lastIndexOf('/') + 1;
+                if (!sPath.match(aSystemPrefix, nStartIndex))
+                    continue;
+                OUString sChunk = sPath.copy(nStartIndex + aSystemPrefix.getLength(),
+                    sPath.getLength() - aSystemSuffix.getLength() -
+                    nStartIndex - aSystemPrefix.getLength());
+                if (sChunk.isEmpty())
+                    continue;
+
+                // We prefer (now) to use language tags.
+                // Avoid feeding in the older LANG_REGION scheme to the BCP47
+                // ctor as that triggers use of liblangtag and initializes its
+                // database which we do not want during startup. Convert
+                // instead.
+                sChunk = sChunk.replace( '_', '-');
+
+                // There's a known exception to the rule, the dreaded
+                // hu_HU_u8.dic of the myspell-hu package, see
+                // http://packages.debian.org/search?arch=any&searchon=contents&keywords=hu_HU_u8.dic
+                // This was ignored because unknown in the old implementation,
+                // truncate to the known locale and either insert because hu_HU
+                // wasn't encountered yet, or skip because it was. It doesn't
+                // really matter because the proper new-style hu_HU dictionary
+                // will take precedence anyway if installed with a Hungarian
+                // languagepack. Again, this is only to not pull in all
+                // liblangtag and stuff during startup, the result would be
+                // !isValidBcp47() and the dictionary ignored.
+                if (sChunk == "hu-HU-u8")
+                    sChunk = "hu-HU";
+
+                LanguageTag aLangTag(sChunk, true);
+                if (!aLangTag.isValidBcp47())
+                    continue;
+
+                // Thus we first get the language of the dictionary
+                const OUString& aLocaleName(aLangTag.getBcp47());
+
+                if (aDicLangInUse.insert(aLocaleName).second)
+                {
+                    // add the dictionary to the resulting vector
+                    SvtLinguConfigDictionaryEntry aDicEntry;
+                    aDicEntry.aLocations.realloc(1);
+                    aDicEntry.aLocaleNames.realloc(1);
+                    aDicEntry.aLocations[0] = sPath;
+                    aDicEntry.aFormatName = aFormatName;
+                    aDicEntry.aLocaleNames[0] = aLocaleName;
+                    aRes.push_back( aDicEntry );
+                }
+            }
+        }
+    }
+}
+#endif
+
+// build list of old style dictionaries (not as extensions) to use.
 // User installed dictionaries (the ones residing in the user paths)
 // will get precedence over system installed ones for the same language.
 std::vector< SvtLinguConfigDictionaryEntry > GetOldStyleDics( const char *pDicType )
@@ -105,87 +182,62 @@ std::vector< SvtLinguConfigDictionaryEntry > GetOldStyleDics( const char *pDicTy
         return aRes;
 
 #ifdef SYSTEM_DICTS
-    osl::Directory aSystemDicts(aSystemDir);
-    if (aSystemDicts.open() == osl::FileBase::E_None)
+    // set of languages to remember the language where it is already
+    // decided to make use of the dictionary.
+    std::set< OUString > aDicLangInUse;
+
+    // follow the hunspell tool's example and check DICPATH for preferred dictionaries
+    rtl_uString * pSearchPath = nullptr;
+    osl_getEnvironment(OUString("DICPATH").pData, &pSearchPath);
+
+    if (pSearchPath)
     {
-        // set of languages to remember the language where it is already
-        // decided to make use of the dictionary.
-        std::set< OUString > aDicLangInUse;
+        OUString aSearchPath(pSearchPath);
+        rtl_uString_release(pSearchPath);
 
-        osl::DirectoryItem aItem;
-        osl::FileStatus aFileStatus(osl_FileStatus_Mask_FileURL);
-        while (aSystemDicts.getNextItem(aItem) == osl::FileBase::E_None)
+        sal_Int32 nIndex = 0;
+        do
         {
-            aItem.getFileStatus(aFileStatus);
-            OUString sPath = aFileStatus.getFileURL();
-            if (sPath.endsWith(aSystemSuffix))
-            {
-                sal_Int32 nStartIndex = sPath.lastIndexOf('/') + 1;
-                if (!sPath.match(aSystemPrefix, nStartIndex))
-                    continue;
-                OUString sChunk = sPath.copy(nStartIndex + aSystemPrefix.getLength(),
-                    sPath.getLength() - aSystemSuffix.getLength() -
-                    nStartIndex - aSystemPrefix.getLength());
-                if (sChunk.isEmpty())
-                    continue;
+            OUString aSystem = aSearchPath.getToken(0, ':', nIndex);
+            OUString aCWD;
+            OUString aRelative;
+            OUString aAbsolute;
 
-                // We prefer (now) to use language tags.
-                // Avoid feeding in the older LANG_REGION scheme to the BCP47
-                // ctor as that triggers use of liblangtag and initializes its
-                // database which we do not want during startup. Convert
-                // instead.
-                sChunk = sChunk.replace( '_', '-');
+            if (!utl::Bootstrap::getProcessWorkingDir(aCWD))
+                continue;
+            if (osl::FileBase::getFileURLFromSystemPath(aSystem, aRelative)
+                    != osl::FileBase::E_None)
+                continue;
+            if (osl::FileBase::getAbsoluteFileURL(aCWD, aRelative, aAbsolute)
+                    != osl::FileBase::E_None)
+                continue;
 
-                // There's a known exception to the rule, the dreaded
-                // hu_HU_u8.dic of the myspell-hu package, see
-                // http://packages.debian.org/search?arch=any&searchon=contents&keywords=hu_HU_u8.dic
-                // This was ignored because unknown in the old implementation,
-                // truncate to the known locale and either insert because hu_HU
-                // wasn't encountered yet, or skip because it was. It doesn't
-                // really matter because the proper new-style hu_HU dictionary
-                // will take precedence anyway if installed with a Hungarian
-                // languagepack. Again, this is only to not pull in all
-                // liblangtag and stuff during startup, the result would be
-                // !isValidBcp47() and the dictionary ignored.
-                if (sChunk == "hu-HU-u8")
-                    sChunk = "hu-HU";
-
-                LanguageTag aLangTag(sChunk, true);
-                if (!aLangTag.isValidBcp47())
-                    continue;
-
-                // Thus we first get the language of the dictionary
-                OUString aLocaleName(aLangTag.getBcp47());
-
-                if (aDicLangInUse.insert(aLocaleName).second)
-                {
-                    // add the dictionary to the resulting vector
-                    SvtLinguConfigDictionaryEntry aDicEntry;
-                    aDicEntry.aLocations.realloc(1);
-                    aDicEntry.aLocaleNames.realloc(1);
-                    aDicEntry.aLocations[0] = sPath;
-                    aDicEntry.aFormatName = aFormatName;
-                    aDicEntry.aLocaleNames[0] = aLocaleName;
-                    aRes.push_back( aDicEntry );
-                }
-            }
+            // GetOldStyleDicsInDir will make sure the dictionary is the right
+            // type based on its prefix, that way hyphen, mythes and regular
+            // dictionaries can live in one directory
+            GetOldStyleDicsInDir(aAbsolute, aFormatName, aSystemSuffix,
+                aSystemPrefix, aDicLangInUse, aRes);
         }
+        while (nIndex != -1);
     }
+
+    // load system directories last so that DICPATH prevails
+    GetOldStyleDicsInDir(aSystemDir, aFormatName, aSystemSuffix, aSystemPrefix,
+        aDicLangInUse, aRes);
 #endif
 
     return aRes;
 }
 
 void MergeNewStyleDicsAndOldStyleDics(
-    std::list< SvtLinguConfigDictionaryEntry > &rNewStyleDics,
+    std::vector< SvtLinguConfigDictionaryEntry > &rNewStyleDics,
     const std::vector< SvtLinguConfigDictionaryEntry > &rOldStyleDics )
 {
     // get list of languages supported by new style dictionaries
     std::set< OUString > aNewStyleLanguages;
-    std::list< SvtLinguConfigDictionaryEntry >::const_iterator aIt;
-    for (aIt = rNewStyleDics.begin() ;  aIt != rNewStyleDics.end();  ++aIt)
+    for (auto const& newStyleDic : rNewStyleDics)
     {
-        const uno::Sequence< OUString > aLocaleNames( aIt->aLocaleNames );
+        const uno::Sequence< OUString > aLocaleNames(newStyleDic.aLocaleNames);
         sal_Int32 nLocaleNames = aLocaleNames.getLength();
         for (sal_Int32 k = 0;  k < nLocaleNames; ++k)
         {
@@ -195,24 +247,23 @@ void MergeNewStyleDicsAndOldStyleDics(
 
     // now check all old style dictionaries if they will add a not yet
     // added language. If so add them to the resulting vector
-    std::vector< SvtLinguConfigDictionaryEntry >::const_iterator aIt2;
-    for (aIt2 = rOldStyleDics.begin();  aIt2 != rOldStyleDics.end();  ++aIt2)
+    for (auto const& oldStyleDic : rOldStyleDics)
     {
-        sal_Int32 nOldStyleDics = aIt2->aLocaleNames.getLength();
+        sal_Int32 nOldStyleDics = oldStyleDic.aLocaleNames.getLength();
 
         // old style dics should only have one language listed...
         DBG_ASSERT( nOldStyleDics, "old style dictionary with more than one language found!");
         if (nOldStyleDics > 0)
         {
-            if (linguistic::LinguIsUnspecified( aIt2->aLocaleNames[0]))
+            if (linguistic::LinguIsUnspecified( oldStyleDic.aLocaleNames[0]))
             {
                 OSL_FAIL( "old style dictionary with invalid language found!" );
                 continue;
             }
 
             // language not yet added?
-            if (aNewStyleLanguages.find( aIt2->aLocaleNames[0] ) == aNewStyleLanguages.end())
-                rNewStyleDics.push_back( *aIt2 );
+            if (aNewStyleLanguages.find( oldStyleDic.aLocaleNames[0] ) == aNewStyleLanguages.end())
+                rNewStyleDics.push_back(oldStyleDic);
         }
         else
         {

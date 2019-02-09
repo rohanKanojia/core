@@ -25,7 +25,7 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/range/b2drange.hxx>
 #include <basegfx/color/bcolor.hxx>
-#include <basegfx/tools/gradienttools.hxx>
+#include <basegfx/utils/gradienttools.hxx>
 #include <vector>
 
 
@@ -84,9 +84,8 @@ namespace drawinglayer
                 const basegfx::B2DRange& rDefinitionRange,
                 const basegfx::BColor& rStart,
                 const basegfx::BColor& rEnd,
-                sal_uInt32 nSteps,
                 double fBorder);
-            virtual ~GeoTexSvxGradient();
+            virtual ~GeoTexSvxGradient() override;
 
             // compare operator
             virtual bool operator==(const GeoTexSvx& rGeoTexSvx) const override;
@@ -104,9 +103,8 @@ namespace drawinglayer
 {
     namespace texture
     {
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxGradientLinear : public GeoTexSvxGradient
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxGradientLinear final : public GeoTexSvxGradient
         {
-        protected:
             double                  mfUnitMinX;
             double                  mfUnitWidth;
             double                  mfUnitMaxY;
@@ -120,7 +118,7 @@ namespace drawinglayer
                 sal_uInt32 nSteps,
                 double fBorder,
                 double fAngle);
-            virtual ~GeoTexSvxGradientLinear();
+            virtual ~GeoTexSvxGradientLinear() override;
 
             virtual void appendTransformationsAndColors(
                 std::vector< B2DHomMatrixAndBColor >& rEntries,
@@ -135,9 +133,8 @@ namespace drawinglayer
 {
     namespace texture
     {
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxGradientAxial : public GeoTexSvxGradient
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxGradientAxial final : public GeoTexSvxGradient
         {
-        protected:
             double                  mfUnitMinX;
             double                  mfUnitWidth;
 
@@ -150,7 +147,7 @@ namespace drawinglayer
                 sal_uInt32 nSteps,
                 double fBorder,
                 double fAngle);
-            virtual ~GeoTexSvxGradientAxial();
+            virtual ~GeoTexSvxGradientAxial() override;
 
             virtual void appendTransformationsAndColors(
                 std::vector< B2DHomMatrixAndBColor >& rEntries,
@@ -176,7 +173,7 @@ namespace drawinglayer
                 double fBorder,
                 double fOffsetX,
                 double fOffsetY);
-            virtual ~GeoTexSvxGradientRadial();
+            virtual ~GeoTexSvxGradientRadial() override;
 
             virtual void appendTransformationsAndColors(
                 std::vector< B2DHomMatrixAndBColor >& rEntries,
@@ -203,7 +200,7 @@ namespace drawinglayer
                 double fOffsetX,
                 double fOffsetY,
                 double fAngle);
-            virtual ~GeoTexSvxGradientElliptical();
+            virtual ~GeoTexSvxGradientElliptical() override;
 
             virtual void appendTransformationsAndColors(
                 std::vector< B2DHomMatrixAndBColor >& rEntries,
@@ -230,7 +227,7 @@ namespace drawinglayer
                 double fOffsetX,
                 double fOffsetY,
                 double fAngle);
-            virtual ~GeoTexSvxGradientSquare();
+            virtual ~GeoTexSvxGradientSquare() override;
 
             virtual void appendTransformationsAndColors(
                 std::vector< B2DHomMatrixAndBColor >& rEntries,
@@ -257,7 +254,7 @@ namespace drawinglayer
                 double fOffsetX,
                 double fOffsetY,
                 double fAngle);
-            virtual ~GeoTexSvxGradientRect();
+            virtual ~GeoTexSvxGradientRect() override;
 
             virtual void appendTransformationsAndColors(
                 std::vector< B2DHomMatrixAndBColor >& rEntries,
@@ -272,9 +269,8 @@ namespace drawinglayer
 {
     namespace texture
     {
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxHatch : public GeoTexSvx
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxHatch final : public GeoTexSvx
         {
-        protected:
             basegfx::B2DRange                   maOutputRange;
             basegfx::B2DHomMatrix               maTextureTransform;
             basegfx::B2DHomMatrix               maBackTextureTransform;
@@ -282,7 +278,6 @@ namespace drawinglayer
             double                              mfAngle;
             sal_uInt32                          mnSteps;
 
-            /// bitfield
             bool                                mbDefinitionRangeEqualsOutputRange : 1;
 
         public:
@@ -291,7 +286,7 @@ namespace drawinglayer
                 const basegfx::B2DRange& rOutputRange,
                 double fDistance,
                 double fAngle);
-            virtual ~GeoTexSvxHatch();
+            virtual ~GeoTexSvxHatch() override;
 
             // compare operator
             virtual bool operator==(const GeoTexSvx& rGeoTexSvx) const override;
@@ -317,24 +312,26 @@ namespace drawinglayer
         // given percentage value (offsetX has to be 0.0 <= offsetX <= 1.0).
         // Accordingly to offsetY. If both are given, offsetX is preferred
         // and offsetY is ignored.
-        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxTiled : public GeoTexSvx
+        class DRAWINGLAYER_DLLPUBLIC GeoTexSvxTiled final : public GeoTexSvx
         {
-        protected:
             basegfx::B2DRange               maRange;
             double                          mfOffsetX;
             double                          mfOffsetY;
+
+            sal_Int32 iterateTiles(::std::vector< basegfx::B2DHomMatrix >* pMatrices) const;
 
         public:
             GeoTexSvxTiled(
                 const basegfx::B2DRange& rRange,
                 double fOffsetX = 0.0,
                 double fOffsetY = 0.0);
-            virtual ~GeoTexSvxTiled();
+            virtual ~GeoTexSvxTiled() override;
 
             // compare operator
             virtual bool operator==(const GeoTexSvx& rGeoTexSvx) const override;
 
-            void appendTransformations(::std::vector< basegfx::B2DHomMatrix >& rMatrices);
+            void appendTransformations(::std::vector< basegfx::B2DHomMatrix >& rMatrices) const;
+            sal_uInt32 getNumberOfTiles() const;
         };
     } // end of namespace texture
 } // end of namespace drawinglayer

@@ -17,14 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "view/SlsPageObjectLayouter.hxx"
+#include <view/SlsPageObjectLayouter.hxx>
 
-#include "model/SlsPageDescriptor.hxx"
-#include "view/SlsFontProvider.hxx"
-#include "view/SlsTheme.hxx"
-#include "tools/IconCache.hxx"
-#include "Window.hxx"
-#include "res_bmp.hrc"
+#include <model/SlsPageDescriptor.hxx>
+#include <view/SlsFontProvider.hxx>
+#include <view/SlsTheme.hxx>
+#include <tools/IconCache.hxx>
+#include <Window.hxx>
+
+#include <bitmaps.hlst>
+#include <osl/diagnose.h>
 
 namespace sd { namespace slidesorter { namespace view {
 
@@ -41,7 +43,6 @@ PageObjectLayouter::PageObjectLayouter (
     sd::Window *pWindow,
     const sal_Int32 nPageCount)
     : mpWindow(pWindow),
-      maPageObjectSize(rPageObjectWindowSize.Width(), rPageObjectWindowSize.Height()),
       maPageObjectBoundingBox(),
       maPageNumberAreaBoundingBox(),
       maPreviewBoundingBox(),
@@ -55,21 +56,22 @@ PageObjectLayouter::PageObjectLayouter (
     const int nMaximumBorderWidth (gnOuterBorderWidth);
     const int nFocusIndicatorWidth (Theme_FocusIndicatorWidth);
 
+    Size aPageObjectSize(rPageObjectWindowSize.Width(), rPageObjectWindowSize.Height());
     maPreviewBoundingBox = CalculatePreviewBoundingBox(
-        maPageObjectSize,
+        aPageObjectSize,
         Size(rPageSize.Width(), rPageSize.Height()),
         aPageNumberAreaSize.Width(),
         nFocusIndicatorWidth);
-    maFocusIndicatorBoundingBox = Rectangle(Point(0,0), maPageObjectSize);
-    maPageObjectBoundingBox = Rectangle(
+    maFocusIndicatorBoundingBox = ::tools::Rectangle(Point(0,0), aPageObjectSize);
+    maPageObjectBoundingBox = ::tools::Rectangle(
         Point(
             nFocusIndicatorWidth,
             nFocusIndicatorWidth),
         Size(
-            maPageObjectSize.Width()-2*nFocusIndicatorWidth,
-            maPageObjectSize.Height()-2*nFocusIndicatorWidth));
+            aPageObjectSize.Width()-2*nFocusIndicatorWidth,
+            aPageObjectSize.Height()-2*nFocusIndicatorWidth));
 
-    maPageNumberAreaBoundingBox = Rectangle(
+    maPageNumberAreaBoundingBox = ::tools::Rectangle(
         Point(
             std::max(gnLeftPageNumberOffset,
                 sal_Int32(maPreviewBoundingBox.Left()
@@ -79,12 +81,12 @@ PageObjectLayouter::PageObjectLayouter (
         aPageNumberAreaSize);
 
     const Size aIconSize (maTransitionEffectIcon.GetSizePixel());
-    maTransitionEffectBoundingBox = Rectangle(
+    maTransitionEffectBoundingBox = ::tools::Rectangle(
         Point(
             (maPreviewBoundingBox.Left() - 2*aIconSize.Width()) / 2,
             maPreviewBoundingBox.Bottom() - aIconSize.Height()),
         aIconSize);
-    maCustomAnimationEffectBoundingBox = Rectangle(
+    maCustomAnimationEffectBoundingBox = ::tools::Rectangle(
         Point(
             (maPreviewBoundingBox.Left() - 2*aIconSize.Width()) / 2,
             maPreviewBoundingBox.Bottom() - 2*aIconSize.Height()),
@@ -95,7 +97,7 @@ PageObjectLayouter::~PageObjectLayouter()
 {
 }
 
-Rectangle PageObjectLayouter::CalculatePreviewBoundingBox (
+::tools::Rectangle PageObjectLayouter::CalculatePreviewBoundingBox (
     Size& rPageObjectSize,
     const Size& rPageSize,
     const sal_Int32 nPageNumberAreaWidth,
@@ -151,14 +153,14 @@ Rectangle PageObjectLayouter::CalculatePreviewBoundingBox (
     const int nLeft (rPageObjectSize.Width()
         - gnOuterBorderWidth - nPreviewWidth - nFocusIndicatorWidth - 1);
     const int nTop ((rPageObjectSize.Height() - nPreviewHeight)/2);
-    return Rectangle(
+    return ::tools::Rectangle(
         nLeft,
         nTop,
         nLeft + nPreviewWidth,
         nTop + nPreviewHeight);
 }
 
-Rectangle PageObjectLayouter::GetBoundingBox (
+::tools::Rectangle PageObjectLayouter::GetBoundingBox (
     const model::SharedPageDescriptor& rpPageDescriptor,
     const Part ePart,
     const CoordinateSystem eCoordinateSystem,
@@ -171,39 +173,34 @@ Rectangle PageObjectLayouter::GetBoundingBox (
     return GetBoundingBox(aLocation, ePart, eCoordinateSystem);
 }
 
-Rectangle PageObjectLayouter::GetBoundingBox (
+::tools::Rectangle PageObjectLayouter::GetBoundingBox (
     const Point& rPageObjectLocation,
     const Part ePart,
     const CoordinateSystem eCoordinateSystem)
 {
-    Rectangle aBoundingBox;
+    ::tools::Rectangle aBoundingBox;
     switch (ePart)
     {
-        case FocusIndicator:
+        case Part::FocusIndicator:
             aBoundingBox = maFocusIndicatorBoundingBox;
             break;
 
-        case PageObject:
-        case MouseOverIndicator:
+        case Part::PageObject:
             aBoundingBox = maPageObjectBoundingBox;
             break;
 
-        case Preview:
+        case Part::Preview:
             aBoundingBox = maPreviewBoundingBox;
             break;
 
-        case PageNumber:
+        case Part::PageNumber:
             aBoundingBox = maPageNumberAreaBoundingBox;
             break;
 
-        case Name:
-            aBoundingBox = maPageNumberAreaBoundingBox;
-            break;
-
-        case TransitionEffectIndicator:
+        case Part::TransitionEffectIndicator:
             aBoundingBox = maTransitionEffectBoundingBox;
             break;
-        case CustomAnimationEffectIndicator:
+        case Part::CustomAnimationEffectIndicator:
             aBoundingBox = maCustomAnimationEffectBoundingBox;
             break;
     }
@@ -213,20 +210,20 @@ Rectangle PageObjectLayouter::GetBoundingBox (
     if (eCoordinateSystem == WindowCoordinateSystem)
         aLocation += mpWindow->GetMapMode().GetOrigin();
 
-    return Rectangle(
+    return ::tools::Rectangle(
         aBoundingBox.TopLeft() + aLocation,
         aBoundingBox.BottomRight() + aLocation);
 }
 
 Size PageObjectLayouter::GetPreviewSize ()
 {
-    return GetBoundingBox(Point(0,0), PageObjectLayouter::Preview,
+    return GetBoundingBox(Point(0,0), PageObjectLayouter::Part::Preview,
                           WindowCoordinateSystem).GetSize();
 }
 
 Size PageObjectLayouter::GetGridMaxSize()
 {
-    return GetBoundingBox(Point(0,0), PageObjectLayouter::FocusIndicator,
+    return GetBoundingBox(Point(0,0), PageObjectLayouter::Part::FocusIndicator,
                           WindowCoordinateSystem).GetSize();
 }
 

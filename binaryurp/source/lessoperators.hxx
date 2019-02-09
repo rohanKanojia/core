@@ -20,18 +20,16 @@
 #ifndef INCLUDED_BINARYURP_SOURCE_LESSOPERATORS_HXX
 #define INCLUDED_BINARYURP_SOURCE_LESSOPERATORS_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-namespace com { namespace sun { namespace star { namespace uno {
-    class TypeDescription;
-} } } }
+namespace com::sun::star::uno { class TypeDescription; }
 namespace rtl { class ByteSequence; }
 
-namespace com { namespace sun { namespace star { namespace uno {
+namespace com::sun::star::uno {
 
 bool operator <(TypeDescription const & left, TypeDescription const & right);
 
-} } } }
+}
 
 namespace rtl {
 

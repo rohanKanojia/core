@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlgedview.hxx"
-#include "dlged.hxx"
+#include <dlgedview.hxx>
+#include <dlged.hxx>
 #include <dlgedpage.hxx>
 
 #include <svx/svxids.hrc>
@@ -26,14 +26,16 @@
 
 #include <basidesh.hxx>
 #include <iderdll.hxx>
-#include "dlgedobj.hxx"
+#include <dlgedobj.hxx>
 
 namespace basctl
 {
 
-
-DlgEdView::DlgEdView (SdrModel& rModel, OutputDevice& rOut, DlgEditor& rEditor) :
-    SdrView(&rModel, &rOut),
+DlgEdView::DlgEdView(
+    SdrModel& rSdrModel,
+    OutputDevice& rOut,
+    DlgEditor& rEditor)
+:   SdrView(rSdrModel, &rOut),
     rDlgEditor(rEditor)
 {
     SetBufferedOutputAllowed(true);
@@ -53,14 +55,14 @@ void DlgEdView::MarkListHasChanged()
     rDlgEditor.UpdatePropertyBrowserDelayed();
 }
 
-void DlgEdView::MakeVisible( const Rectangle& rRect, vcl::Window& rWin )
+void DlgEdView::MakeVisible( const tools::Rectangle& rRect, vcl::Window& rWin )
 {
     // visible area
     MapMode aMap( rWin.GetMapMode() );
     Point aOrg( aMap.GetOrigin() );
     Size aVisSize( rWin.GetOutputSize() );
-    Rectangle RectTmp( Point(-aOrg.X(),-aOrg.Y()), aVisSize );
-    Rectangle aVisRect( RectTmp );
+    tools::Rectangle RectTmp( Point(-aOrg.X(),-aOrg.Y()), aVisSize );
+    tools::Rectangle aVisRect( RectTmp );
 
     // check, if rectangle is inside visible area
     if ( !aVisRect.IsInside( rRect ) )
@@ -121,7 +123,7 @@ void DlgEdView::MakeVisible( const Rectangle& rRect, vcl::Window& rWin )
     }
 }
 
-SdrObject* impLocalHitCorrection(SdrObject* pRetval, const Point& rPnt, sal_uInt16 nTol)
+static SdrObject* impLocalHitCorrection(SdrObject* pRetval, const Point& rPnt, sal_uInt16 nTol)
 {
     DlgEdObj* pDlgEdObj = dynamic_cast< DlgEdObj* >(pRetval);
 
@@ -129,7 +131,7 @@ SdrObject* impLocalHitCorrection(SdrObject* pRetval, const Point& rPnt, sal_uInt
     {
         bool bExcludeInner(false);
 
-        if(nullptr != dynamic_cast< DlgEdForm* >(pRetval))
+        if(dynamic_cast< DlgEdForm* >(pRetval) != nullptr)
         {
             // from DlgEdForm::CheckHit; exclude inner for DlgEdForm
             bExcludeInner = true;
@@ -144,7 +146,7 @@ SdrObject* impLocalHitCorrection(SdrObject* pRetval, const Point& rPnt, sal_uInt
         {
             // use direct model data; it's a DlgEdObj, so GetLastBoundRect()
             // will access aOutRect directly
-            const Rectangle aOuterRectangle(pDlgEdObj->GetLastBoundRect());
+            const tools::Rectangle aOuterRectangle(pDlgEdObj->GetLastBoundRect());
 
             if(!aOuterRectangle.IsEmpty())
             {
@@ -168,14 +170,14 @@ SdrObject* impLocalHitCorrection(SdrObject* pRetval, const Point& rPnt, sal_uInt
     return pRetval;
 }
 
-SdrObject* DlgEdView::CheckSingleSdrObjectHit(const Point& rPnt, sal_uInt16 nTol, SdrObject* pObj, SdrPageView* pPV, SdrSearchOptions nOptions, const SetOfByte* pMVisLay) const
+SdrObject* DlgEdView::CheckSingleSdrObjectHit(const Point& rPnt, sal_uInt16 nTol, SdrObject* pObj, SdrPageView* pPV, SdrSearchOptions nOptions, const SdrLayerIDSet* pMVisLay) const
 {
     // call parent
     SdrObject* pRetval = SdrView::CheckSingleSdrObjectHit(rPnt, nTol, pObj, pPV, nOptions, pMVisLay);
 
     if(pRetval)
     {
-        // check hitted object locally
+        // check hit object locally
         pRetval = impLocalHitCorrection(pRetval, rPnt, nTol);
     }
 

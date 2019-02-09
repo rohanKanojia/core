@@ -20,6 +20,7 @@
 #include <vcl/dialog.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/scheduler.hxx>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 
@@ -85,25 +86,49 @@ void LifecycleTest::testMultiDispose()
     xWin->disposeOnce();
     xWin->disposeOnce();
     xWin->disposeOnce();
-    CPPUNIT_ASSERT(xWin->GetWindow(GetWindowType::Parent) == nullptr);
-    CPPUNIT_ASSERT(xWin->GetChild(0) == nullptr);
-    CPPUNIT_ASSERT(xWin->GetChildCount() == 0);
+    CPPUNIT_ASSERT(!xWin->GetWindow(GetWindowType::Parent));
+    CPPUNIT_ASSERT(!xWin->GetChild(0));
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_uInt16>(0), xWin->GetChildCount());
 }
 
 void LifecycleTest::testWidgets(vcl::Window *pParent)
 {
-    { ScopedVclPtrInstance< PushButton > aPtr( pParent );   }
-    { ScopedVclPtrInstance< OKButton > aPtr( pParent );     }
-    { ScopedVclPtrInstance< CancelButton > aPtr( pParent ); }
-    { ScopedVclPtrInstance< HelpButton > aPtr( pParent );   }
+    {
+        ScopedVclPtrInstance< PushButton > aPtr( pParent );
+        (void)aPtr; // silence unused variable warning
+    }
+    {
+        ScopedVclPtrInstance< OKButton > aPtr( pParent );
+        (void)aPtr; // silence unused variable warning
+    }
+    {
+        ScopedVclPtrInstance< CancelButton > aPtr( pParent );
+        (void)aPtr; // silence unused variable warning
+    }
+    {
+        ScopedVclPtrInstance< HelpButton > aPtr( pParent );
+        (void)aPtr; // silence unused variable warning
+    }
 
     // Some widgets really insist on adoption.
     if (pParent)
     {
-        { ScopedVclPtrInstance< CheckBox > aPtr( pParent );     }
-        { ScopedVclPtrInstance< Edit > aPtr( pParent );         }
-        { ScopedVclPtrInstance< ComboBox > aPtr( pParent );     }
-        { ScopedVclPtrInstance< RadioButton > aPtr( pParent );  }
+        {
+            ScopedVclPtrInstance< CheckBox > aPtr( pParent );
+            (void)aPtr; // silence unused variable warning
+        }
+        {
+            ScopedVclPtrInstance< Edit > aPtr( pParent );
+            (void)aPtr; // silence unused variable warning
+        }
+        {
+            ScopedVclPtrInstance< ComboBox > aPtr( pParent );
+            (void)aPtr; // silence unused variable warning
+        }
+        {
+            ScopedVclPtrInstance< RadioButton > aPtr( pParent );
+            (void)aPtr; // silence unused variable warning
+        }
     }
 }
 
@@ -124,7 +149,7 @@ class DisposableChild : public vcl::Window
 {
 public:
     explicit DisposableChild(vcl::Window *pParent) : vcl::Window(pParent) {}
-    virtual ~DisposableChild()
+    virtual ~DisposableChild() override
     {
         disposeOnce();
     }
@@ -166,7 +191,7 @@ public:
     {
         return false;
     }
-    virtual bool Notify( NotifyEvent& ) override
+    virtual bool EventNotify( NotifyEvent& ) override
     {
         return false;
     }
@@ -187,7 +212,7 @@ void LifecycleTest::testFocus()
     xWin->Show();
     xChild->GrabFocus();
     // process asynchronous ToTop
-    Scheduler::ProcessTaskScheduling(false);
+    Scheduler::ProcessTaskScheduling();
     // FIXME: really awful to test focus issues without showing windows.
     // CPPUNIT_ASSERT(xChild->HasFocus());
 }
@@ -230,7 +255,7 @@ public:
         pNew->mpRef = static_cast<void *>(static_cast<vcl::Window *>(pNew->mxRef));
         return pNew;
     }
-    VclPtr<vcl::Window> getRef() { return mxRef; }
+    const VclPtr<vcl::Window>& getRef() { return mxRef; }
     void disposeAndClear()
     {
         mxRef.disposeAndClear();
@@ -274,10 +299,8 @@ void LifecycleTest::testLeakage()
         aObjects.push_back(LeakTestObject::Create<VclVButtonBox>(xVBox));
     }
 
-#if 0 // FIXME - would be good to get internal paths working.
     aObjects.push_back(LeakTestObject::Create<ModelessDialog>(xParent, "PrintProgressDialog", "vcl/ui/printprogressdialog.ui"));
-#endif
-    aObjects.push_back(LeakTestObject::Create<ModalDialog>(xParent));
+    aObjects.push_back(LeakTestObject::Create<ModalDialog>(xParent, "PrintProgressDialog", "vcl/ui/printprogressdialog.ui"));
     xParent.clear();
 
     for (auto i = aObjects.rbegin(); i != aObjects.rend(); ++i)

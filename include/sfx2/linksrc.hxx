@@ -31,7 +31,7 @@ namespace com { namespace sun { namespace star { namespace uno
 {
     class Any;
 }}}}
-namespace vcl { class Window; }
+namespace weld { class Window; }
 namespace rtl {
     class OUString;
 }
@@ -58,24 +58,24 @@ private:
 public:
 
                         SvLinkSource();
-    virtual             ~SvLinkSource();
+    virtual             ~SvLinkSource() override;
 
     bool                HasDataLinks() const;
 
     void                Closed();
 
-    sal_uIntPtr                 GetUpdateTimeout() const;
-    void                SetUpdateTimeout( sal_uIntPtr nTime );
+    sal_uInt64          GetUpdateTimeout() const;
+    void                SetUpdateTimeout( sal_uInt64 nTimeMs );
                         // notify the sink, the mime type is not
                         // a selection criterion
-    void                DataChanged( const rtl::OUString & rMimeType,
+    void                DataChanged( const OUString & rMimeType,
                                     const css::uno::Any & rVal );
     void                SendDataChanged();
     void                NotifyDataChanged();
 
     virtual bool        Connect( SvBaseLink* );
     virtual bool        GetData( css::uno::Any & rData /*out param*/,
-                                const rtl::OUString & rMimeType,
+                                const OUString & rMimeType,
                                 bool bSynchron = false );
 
                         // sal_True => waitinmg for data
@@ -83,15 +83,15 @@ public:
                         // sal_True => data complete loaded
     virtual bool        IsDataComplete() const;
 
-    virtual void        Edit( vcl::Window *, SvBaseLink *, const Link<const OUString&, void>& rEndEditHdl );
+    virtual void        Edit(weld::Window *, SvBaseLink *, const Link<const OUString&, void>& rEndEditHdl);
 
 
-    void                AddDataAdvise( SvBaseLink *, const rtl::OUString & rMimeType,
+    void                AddDataAdvise( SvBaseLink *, const OUString & rMimeType,
                                         sal_uInt16 nAdviceMode );
-    void                RemoveAllDataAdvise( SvBaseLink * );
+    void                RemoveAllDataAdvise( SvBaseLink const * );
 
     void                AddConnectAdvise( SvBaseLink * );
-    void                RemoveConnectAdvise( SvBaseLink * );
+    void                RemoveConnectAdvise( SvBaseLink const * );
 
     struct StreamToLoadFrom{
         StreamToLoadFrom(
@@ -103,7 +103,7 @@ public:
 
         css::uno::Reference<css::io::XInputStream>
              m_xInputStreamToLoadFrom;
-        bool m_bIsReadOnly;
+        bool const m_bIsReadOnly;
     };
 
     StreamToLoadFrom getStreamToLoadFrom();

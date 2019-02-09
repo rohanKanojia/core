@@ -24,7 +24,7 @@ using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
 uno::Any
-SwVbaDialogs::Item( const uno::Any &aItem ) throw (uno::RuntimeException, std::exception)
+SwVbaDialogs::Item( const uno::Any &aItem )
 {
     sal_Int32 nIndex = 0;
     aItem >>= nIndex;
@@ -41,12 +41,10 @@ SwVbaDialogs::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaDialogs::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Dialogs";
-    }
+        "ooo.vba.word.Dialogs"
+    };
     return aServiceNames;
 }
 

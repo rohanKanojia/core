@@ -29,12 +29,6 @@ $(eval $(call gb_Library_add_defs,dbu,\
     -DDBACCESS_DLLIMPLEMENTATION \
 ))
 
-ifeq ($(OS)$(COM),WNTGCC) # for adoint.h
-$(eval $(call gb_Library_add_cxxflags,dbu,\
-    -fpermissive \
-))
-endif
-
 $(eval $(call gb_Library_use_externals,dbu,\
 	boost_headers \
 	odbc_headers \
@@ -62,7 +56,6 @@ $(eval $(call gb_Library_use_libraries,dbu,\
     ucbhelper \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 ifeq ($(OS),WNT)
@@ -118,7 +111,6 @@ $(eval $(call gb_Library_add_exception_objects,dbu,\
     dbaccess/source/ui/control/SqlNameEdit \
     dbaccess/source/ui/control/TableGrantCtrl \
     dbaccess/source/ui/control/tabletree \
-    dbaccess/source/ui/control/toolboxcontroller \
     dbaccess/source/ui/control/undosqledit \
     dbaccess/source/ui/control/VertSplitView \
     dbaccess/source/ui/dlg/admincontrols \
@@ -140,7 +132,6 @@ $(eval $(call gb_Library_add_exception_objects,dbu,\
     dbaccess/source/ui/dlg/dlgattr \
     dbaccess/source/ui/dlg/dlgsave \
     dbaccess/source/ui/dlg/dlgsize \
-    dbaccess/source/ui/dlg/DriverSettings \
     dbaccess/source/ui/dlg/dsselect \
     dbaccess/source/ui/dlg/finteraction \
     dbaccess/source/ui/dlg/generalpage \
@@ -174,8 +165,6 @@ $(eval $(call gb_Library_add_exception_objects,dbu,\
     dbaccess/source/ui/misc/imageprovider \
     dbaccess/source/ui/misc/indexcollection \
     dbaccess/source/ui/misc/linkeddocuments \
-    dbaccess/source/ui/misc/moduledbu \
-    dbaccess/source/ui/misc/propertysetitem \
     dbaccess/source/ui/misc/propertystorage \
     dbaccess/source/ui/misc/RowSetDrop \
     dbaccess/source/ui/misc/RtfReader \
@@ -215,7 +204,6 @@ $(eval $(call gb_Library_add_exception_objects,dbu,\
     dbaccess/source/ui/querydesign/QueryTableView \
     dbaccess/source/ui/querydesign/QueryTabWinUndoAct \
     dbaccess/source/ui/querydesign/QueryTextView \
-    dbaccess/source/ui/querydesign/queryview \
     dbaccess/source/ui/querydesign/QueryViewSwitch \
     dbaccess/source/ui/querydesign/SelectionBrowseBox \
     dbaccess/source/ui/querydesign/TableConnection \

@@ -34,15 +34,9 @@
 class SAL_WARN_UNUSED SVX_DLLPUBLIC E3dDefaultAttributes
 {
 private:
-    // Compound object
-    Color               aDefaultAmbientColor;
-    bool                bDefaultCreateNormals;
-    bool                bDefaultCreateTexture;
-
     // Cube object
     basegfx::B3DPoint   aDefaultCubePos;
     basegfx::B3DVector  aDefaultCubeSize;
-    sal_uInt16          nDefaultCubeSideFlags;
     bool                bDefaultCubePosIsCenter;
 
     // Sphere object
@@ -50,7 +44,6 @@ private:
     basegfx::B3DVector  aDefaultSphereSize;
 
     // Lathe object
-    long                nDefaultLatheEndAngle;
     bool                bDefaultLatheSmoothed;
     bool                bDefaultLatheSmoothFrontBack;
     bool                bDefaultLatheCharacterMode;
@@ -65,28 +58,20 @@ private:
     bool                bDefaultExtrudeCloseBack;
 
 public:
-    // Construktor
+    // Constructor
     E3dDefaultAttributes();
 
     // Reset to defaults
     void Reset();
 
-    // Getter/Setter for default values of all 3D objects
-    // Compound object
-    const Color& GetDefaultAmbientColor() { return aDefaultAmbientColor; }
-
-    bool GetDefaultCreateNormals() const { return bDefaultCreateNormals; }
-    bool GetDefaultCreateTexture() const { return bDefaultCreateTexture; }
-
     // Cube object
-    const basegfx::B3DPoint& GetDefaultCubePos() { return aDefaultCubePos; }
-    const basegfx::B3DVector& GetDefaultCubeSize() { return aDefaultCubeSize; }
-    sal_uInt16 GetDefaultCubeSideFlags() const { return nDefaultCubeSideFlags; }
+    const basegfx::B3DPoint& GetDefaultCubePos() const { return aDefaultCubePos; }
+    const basegfx::B3DVector& GetDefaultCubeSize() const { return aDefaultCubeSize; }
     bool GetDefaultCubePosIsCenter() const { return bDefaultCubePosIsCenter; }
 
     // Sphere object
-    const basegfx::B3DPoint& GetDefaultSphereCenter() { return aDefaultSphereCenter; }
-    const basegfx::B3DVector& GetDefaultSphereSize() { return aDefaultSphereSize; }
+    const basegfx::B3DPoint& GetDefaultSphereCenter() const { return aDefaultSphereCenter; }
+    const basegfx::B3DVector& GetDefaultSphereSize() const { return aDefaultSphereSize; }
 
     // Lathe object
     bool GetDefaultLatheSmoothed() const { return bDefaultLatheSmoothed; }

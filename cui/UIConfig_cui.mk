@@ -53,6 +53,7 @@ $(eval $(call gb_UIConfig_add_uifiles,cui,\
 	cui/uiconfig/ui/embossdialog \
 	cui/uiconfig/ui/eventassigndialog \
 	cui/uiconfig/ui/eventassignpage \
+	cui/uiconfig/ui/fontfragment \
 	cui/uiconfig/ui/formatnumberdialog \
 	cui/uiconfig/ui/fmsearchdialog \
 	cui/uiconfig/ui/gradientpage \
@@ -63,6 +64,7 @@ $(eval $(call gb_UIConfig_add_uifiles,cui,\
 	cui/uiconfig/ui/effectspage \
 	cui/uiconfig/ui/eventsconfigpage \
 	cui/uiconfig/ui/formatcellsdialog \
+	cui/uiconfig/ui/fontfeaturesdialog \
 	cui/uiconfig/ui/galleryapplyprogress \
 	cui/uiconfig/ui/galleryfilespage \
 	cui/uiconfig/ui/gallerygeneralpage \
@@ -98,7 +100,6 @@ $(eval $(call gb_UIConfig_add_uifiles,cui,\
 	cui/uiconfig/ui/macroassignpage \
 	cui/uiconfig/ui/macroselectordialog \
 	cui/uiconfig/ui/menuassignpage \
-	cui/uiconfig/ui/messbox \
 	cui/uiconfig/ui/mosaicdialog \
 	cui/uiconfig/ui/movemenu \
 	cui/uiconfig/ui/multipathdialog \
@@ -128,7 +129,6 @@ $(eval $(call gb_UIConfig_add_uifiles,cui,\
 	cui/uiconfig/ui/optjsearchpage \
 	cui/uiconfig/ui/optlanguagespage \
 	cui/uiconfig/ui/optlingupage \
-	cui/uiconfig/ui/optmemorypage \
 	cui/uiconfig/ui/optnewdictionarydialog \
 	cui/uiconfig/ui/optonlineupdatepage \
 	$(call gb_Helper_optional,OPENCL, \
@@ -144,7 +144,9 @@ $(eval $(call gb_UIConfig_add_uifiles,cui,\
 	cui/uiconfig/ui/paraindentspacing \
 	cui/uiconfig/ui/paratabspage \
 	cui/uiconfig/ui/password \
+	cui/uiconfig/ui/screenshotannotationdialog \
 	cui/uiconfig/ui/pastespecial \
+	cui/uiconfig/ui/patterntabpage \
 	cui/uiconfig/ui/percentdialog \
 	cui/uiconfig/ui/personalization_tab \
 	cui/uiconfig/ui/pickbulletpage \
@@ -180,6 +182,8 @@ $(eval $(call gb_UIConfig_add_uifiles,cui,\
 	cui/uiconfig/ui/shadowtabpage \
 	cui/uiconfig/ui/showcoldialog \
 	cui/uiconfig/ui/similaritysearchdialog \
+	cui/uiconfig/ui/signatureline \
+	cui/uiconfig/ui/signsignatureline \
 	cui/uiconfig/ui/slantcornertabpage \
 	cui/uiconfig/ui/smarttagoptionspage \
 	cui/uiconfig/ui/smoothdialog \

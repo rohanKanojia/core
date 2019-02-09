@@ -59,9 +59,9 @@
  ************************************************************************/
 
 #include "lwpholder.hxx"
-#include "lwpfilehdr.hxx"
+#include <lwpfilehdr.hxx>
 
-LwpDLVListHeadHolder::LwpDLVListHeadHolder(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpDLVListHeadHolder::LwpDLVListHeadHolder(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     : LwpObject(objHdr, pStrm)
 {}
 /**
@@ -69,11 +69,11 @@ LwpDLVListHeadHolder::LwpDLVListHeadHolder(LwpObjectHeader& objHdr, LwpSvStream*
 */
 void LwpDLVListHeadHolder::Read()
 {
-    m_DLVHead.ReadIndexed(m_pObjStrm);
+    m_DLVHead.ReadIndexed(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 
-LwpDLVListHeadTailHolder::LwpDLVListHeadTailHolder(LwpObjectHeader& objHdr, LwpSvStream* pStrm)
+LwpDLVListHeadTailHolder::LwpDLVListHeadTailHolder(LwpObjectHeader const & objHdr, LwpSvStream* pStrm)
     : LwpObject(objHdr, pStrm)
 {}
 /**
@@ -81,11 +81,11 @@ LwpDLVListHeadTailHolder::LwpDLVListHeadTailHolder(LwpObjectHeader& objHdr, LwpS
 */
 void LwpDLVListHeadTailHolder::Read()
 {
-    m_HeadTail.Read(m_pObjStrm);
+    m_HeadTail.Read(m_pObjStrm.get());
     //m_pObjStrm->SkipExtra();
 }
 
-LwpObjectHolder::LwpObjectHolder(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpObjectHolder::LwpObjectHolder(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     :LwpDLVList(objHdr, pStrm)
 {}
 /**
@@ -95,12 +95,12 @@ void LwpObjectHolder::Read()
 {
     LwpDLVList::Read();
 
-    m_Object.ReadIndexed(m_pObjStrm);
+    m_Object.ReadIndexed(m_pObjStrm.get());
     if( LwpFileHeader::m_nFileRevision < 0x0006 )
         m_pObjStrm->SkipExtra();
 }
 
-LwpListList::LwpListList(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpListList::LwpListList(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
     :LwpObjectHolder(objHdr, pStrm)
 {}
 /**
@@ -110,7 +110,7 @@ void LwpListList::Read()
 {
     LwpObjectHolder::Read();
 
-    m_HeadTail.Read(m_pObjStrm);
+    m_HeadTail.Read(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 

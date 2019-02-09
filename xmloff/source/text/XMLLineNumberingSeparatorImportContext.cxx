@@ -21,7 +21,7 @@
 #include "XMLLineNumberingSeparatorImportContext.hxx"
 
 #include <sax/tools/converter.hxx>
-#include "XMLLineNumberingImportContext.hxx"
+#include <XMLLineNumberingImportContext.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -66,7 +66,7 @@ void XMLLineNumberingSeparatorImportContext::StartElement(
             if (::sax::Converter::convertNumber(
                 nTmp, xAttrList->getValueByIndex(i), 0))
             {
-                rLineNumberingContext.SetSeparatorIncrement((sal_Int16)nTmp);
+                rLineNumberingContext.SetSeparatorIncrement(static_cast<sal_Int16>(nTmp));
             }
             // else: invalid number -> ignore
         }

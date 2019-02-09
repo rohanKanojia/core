@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -61,7 +62,7 @@ import com.sun.star.awt.Rectangle;
 import com.sun.star.test.XTestDialogHandler;
 
 // DialogComponent implements all necessary interfaces self, this is only
-// for demonstration. More convenient is to use the impelmentation WeakBase or
+// for demonstration. More convenient is to use the implementation WeakBase or
 // ComponentBase, see implementation of TestComponentA.
 public class DialogComponent {
 
@@ -289,3 +290,5 @@ public class DialogComponent {
         return xFactory;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

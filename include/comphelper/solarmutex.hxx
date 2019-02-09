@@ -22,44 +22,74 @@
 
 #include <sal/config.h>
 
+#include <assert.h>
+#include <osl/thread.h>
+#include <osl/mutex.hxx>
 #include <comphelper/comphelperdllapi.h>
 
 namespace comphelper {
 
+
 /**
- * Abstract SolarMutex interface, needed for VCL's
- * Application::GetSolarMutex().
+ * SolarMutex, needed for VCL's Application::GetSolarMutex().
  *
  * The SolarMutex is the one big recursive code lock used
  * to protect the vast majority of the LibreOffice code-base,
  * in particular anything that is graphical and the cores of
  * the applications.
+ *
+ * Treat this as a singleton, as its constructor sets a global
+ * pointing at itself.
  */
 class COMPHELPER_DLLPUBLIC SolarMutex {
 public:
-    virtual void acquire() = 0;
+    typedef void (*BeforeReleaseHandler) ();
 
-    virtual void release() = 0;
+    SolarMutex();
+    virtual ~SolarMutex();
 
-    virtual bool tryToAcquire() = 0;
+    void SetBeforeReleaseHandler( const BeforeReleaseHandler& rLink )
+         { m_aBeforeReleaseHandler = rLink; }
+
+    void acquire( sal_uInt32 nLockCount = 1 );
+    sal_uInt32 release( bool bUnlockAll = false );
+
+    virtual bool tryToAcquire();
+
+    // returns true, if the mutex is owned by the current thread
+    virtual bool IsCurrentThread() const;
 
     /// Help components to get the SolarMutex easily.
     static SolarMutex *get();
 
-    /// semi-private: allow VCL to push its one-big-lock down here.
-    static void setSolarMutex( SolarMutex *pMutex );
-
 protected:
-    SolarMutex();
+    virtual sal_uInt32 doRelease( bool bUnlockAll );
+    virtual void doAcquire( sal_uInt32 nLockCount );
 
-    virtual ~SolarMutex();
+    osl::Mutex            m_aMutex;
+    sal_uInt32            m_nCount;
+    oslThreadIdentifier   m_nThreadId;
+
 private:
     SolarMutex(const SolarMutex&) = delete;
     SolarMutex& operator=(const SolarMutex&) = delete;
+
+    BeforeReleaseHandler  m_aBeforeReleaseHandler;
 };
+
+inline void SolarMutex::acquire( sal_uInt32 nLockCount )
+{
+    assert( nLockCount > 0 );
+    doAcquire( nLockCount );
+}
+
+inline sal_uInt32 SolarMutex::release( bool bUnlockAll )
+{
+     return doRelease( bUnlockAll );
+}
 
 }
 
-#endif
+#endif // INCLUDED_COMPHELPER_SOLARMUTEX_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

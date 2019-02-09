@@ -17,22 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "CollectionView.hxx"
+#include <CollectionView.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include "moduledbu.hxx"
-#include "dbu_dlg.hrc"
-#include <comphelper/processfactory.hxx>
+#include <core_resource.hxx>
+#include <dbu_dlg.hxx>
+#include <strings.hrc>
 #include <comphelper/interaction.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <vcl/msgbox.hxx>
-#include "dbustrings.hrc"
-#include "UITools.hxx"
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <stringconstants.hxx>
+#include <bitmaps.hlst>
+#include <UITools.hxx>
 #include <com/sun/star/container/XHierarchicalNameContainer.hpp>
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
 #include <com/sun/star/ucb/IOErrorCode.hpp>
@@ -72,16 +75,15 @@ OCollectionView::OCollectionView( vcl::Window * pParent
     get(m_pPB_OK, "ok");
 
     OSL_ENSURE(m_xContent.is(),"No valid content!");
-    m_pView->Initialize(m_xContent,OUString());
+    m_pView->Initialize(m_xContent);
     m_pFTCurrentPath->SetStyle( m_pFTCurrentPath->GetStyle() | WB_PATHELLIPSIS );
     initCurrentPath();
 
     m_pName->SetText(_sDefaultName);
     m_pName->GrabFocus();
 
-    m_pNewFolder->SetStyle( m_pNewFolder->GetStyle() | WB_NOPOINTERFOCUS );
-    m_pUp->SetModeImage(Image(ModuleRes(IMG_NAVIGATION_BTN_UP_SC)));
-    m_pNewFolder->SetModeImage(Image(ModuleRes(IMG_NAVIGATION_CREATEFOLDER_SC)));
+    m_pUp->SetModeImage(Image(StockImage::Yes, BMP_NAVIGATION_BTN_UP_SC));
+    m_pNewFolder->SetModeImage(Image(StockImage::Yes, BMP_NAVIGATION_CREATEFOLDER_SC));
 
     m_pView->SetDoubleClickHdl( LINK( this, OCollectionView, Dbl_Click_FileView ) );
     m_pView->EnableAutoResize();
@@ -107,7 +109,7 @@ void OCollectionView::dispose()
     ModalDialog::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(OCollectionView, Save_Click, Button*, void)
+IMPL_LINK_NOARG(OCollectionView, Save_Click, Button*, void)
 {
     OUString sName = m_pName->GetText();
     if ( sName.isEmpty() )
@@ -131,7 +133,7 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Save_Click, Button*, void)
                         xChild.set(m_xContent,UNO_QUERY);
                     }
                 }
-                m_pView->Initialize(m_xContent,OUString());
+                m_pView->Initialize(m_xContent);
                 initCurrentPath();
             }
             sSubFolder = sName.copy(0,nIndex-1);
@@ -146,20 +148,14 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Save_Click, Button*, void)
                 }
                 else // sub folder doesn't exist
                 {
-                    Sequence< Any > aValues(2);
-                    PropertyValue aValue;
-                    aValue.Name = "ResourceName";
-                    aValue.Value <<= sSubFolder;
-                    aValues[0] <<= aValue;
-
-                    aValue.Name = "ResourceType";
-                    aValue.Value <<= OUString("folder");
-                    aValues[1] <<= aValue;
-
-                    InteractionClassification eClass = InteractionClassification_ERROR;
-                    css::ucb::IOErrorCode eError = IOErrorCode_NOT_EXISTING_PATH;
-                    OUString sTemp;
-                    InteractiveAugmentedIOException aException(sTemp,Reference<XInterface>(),eClass,eError,aValues);
+                    Sequence<Any> aValues(comphelper::InitAnyPropertySequence(
+                    {
+                        {"ResourceName", Any(sSubFolder)},
+                        {"ResourceType", Any(OUString("folder"))}
+                    }));
+                    InteractiveAugmentedIOException aException(OUString(),Reference<XInterface>(),
+                                                               InteractionClassification_ERROR,
+                                                               IOErrorCode_NOT_EXISTING_PATH,aValues);
 
                     Reference<XInteractionHandler2> xHandler(
                         InteractionHandler::createWithParent(m_xContext, VCLUnoHelper::GetInterface( this )));
@@ -177,11 +173,12 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Save_Click, Button*, void)
         Reference<XNameContainer> xNameContainer(m_xContent,UNO_QUERY);
         if ( xNameContainer.is() )
         {
-            Reference< XContent> xContent;
             if ( xNameContainer->hasByName(sName) )
             {
-                ScopedVclPtrInstance< QueryBox > aBox( this, WB_YES_NO, ModuleRes( STR_ALREADYEXISTOVERWRITE ) );
-                if ( aBox->Execute() != RET_YES )
+                std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                               VclMessageType::Question, VclButtonsType::YesNo,
+                                                               DBA_RES(STR_ALREADYEXISTOVERWRITE)));
+                if (xQueryBox->run() != RET_YES)
                     return;
             }
             m_pName->SetText(sName);
@@ -190,29 +187,29 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Save_Click, Button*, void)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-IMPL_LINK_NOARG_TYPED(OCollectionView, NewFolder_Click, Button*, void)
+IMPL_LINK_NOARG(OCollectionView, NewFolder_Click, Button*, void)
 {
     try
     {
         Reference<XHierarchicalNameContainer> xNameContainer(m_xContent,UNO_QUERY);
         if ( dbaui::insertHierachyElement(this,m_xContext,xNameContainer,OUString(),m_bCreateForm) )
-            m_pView->Initialize(m_xContent,OUString());
+            m_pView->Initialize(m_xContent);
     }
     catch( const SQLException& )
     {
-        showError( ::dbtools::SQLExceptionInfo( ::cppu::getCaughtException() ), this, m_xContext );
+        showError( ::dbtools::SQLExceptionInfo( ::cppu::getCaughtException() ), VCLUnoHelper::GetInterface(this), m_xContext );
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-IMPL_LINK_NOARG_TYPED(OCollectionView, Up_Click, Button*, void)
+IMPL_LINK_NOARG(OCollectionView, Up_Click, Button*, void)
 {
     try
     {
@@ -223,7 +220,7 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Up_Click, Button*, void)
             if ( xNameAccess.is() )
             {
                 m_xContent.set(xNameAccess,UNO_QUERY);
-                m_pView->Initialize(m_xContent,OUString());
+                m_pView->Initialize(m_xContent);
                 initCurrentPath();
             }
             else
@@ -232,11 +229,11 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Up_Click, Button*, void)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
-IMPL_LINK_NOARG_TYPED(OCollectionView, Dbl_Click_FileView, SvTreeListBox*, bool)
+IMPL_LINK_NOARG(OCollectionView, Dbl_Click_FileView, SvTreeListBox*, bool)
 {
     try
     {
@@ -244,8 +241,7 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Dbl_Click_FileView, SvTreeListBox*, bool)
         if ( xNameAccess.is() )
         {
             OUString sSubFolder = m_pView->GetCurrentURL();
-            sal_Int32 nIndex = sSubFolder.lastIndexOf('/') + 1;
-            sSubFolder = sSubFolder.getToken(0,'/',nIndex);
+            sSubFolder = sSubFolder.copy(sSubFolder.lastIndexOf('/') + 1);
             if ( !sSubFolder.isEmpty() )
             {
                 Reference< XContent> xContent;
@@ -254,7 +250,7 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Dbl_Click_FileView, SvTreeListBox*, bool)
                 if ( xContent.is() )
                 {
                     m_xContent = xContent;
-                    m_pView->Initialize(m_xContent,OUString());
+                    m_pView->Initialize(m_xContent);
                     initCurrentPath();
                 }
             }
@@ -262,7 +258,7 @@ IMPL_LINK_NOARG_TYPED(OCollectionView, Dbl_Click_FileView, SvTreeListBox*, bool)
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     return false;
 }
@@ -279,9 +275,9 @@ void OCollectionView::initCurrentPath()
             static const char s_sReportsCID[] = "private:reports";
             m_bCreateForm = s_sFormsCID == sCID;
             OUString sPath("/");
-            if ( m_bCreateForm && sCID.getLength() != (sal_Int32)strlen(s_sFormsCID))
+            if ( m_bCreateForm && sCID.getLength() != static_cast<sal_Int32>(strlen(s_sFormsCID)))
                 sPath = sCID.copy(strlen(s_sFormsCID));
-            else if ( !m_bCreateForm && sCID.getLength() != (sal_Int32)strlen(s_sReportsCID) )
+            else if ( !m_bCreateForm && sCID.getLength() != static_cast<sal_Int32>(strlen(s_sReportsCID)) )
                 sPath = sCID.copy(strlen(s_sReportsCID) - 2);
 
             m_pFTCurrentPath->SetText(sPath);
@@ -291,7 +287,7 @@ void OCollectionView::initCurrentPath()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     m_pUp->Enable(bEnable);
 }

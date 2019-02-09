@@ -26,8 +26,11 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmluconv.hxx>
 
+#include <sal/log.hxx>
+
 #include <com/sun/star/chart/ChartLegendPosition.hpp>
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
+#include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 
 using namespace ::xmloff::token;
@@ -95,7 +98,7 @@ void SchXMLLegendContext::StartElement( const uno::Reference< xml::sax::XAttribu
     {
         try
         {
-            xDocProp->setPropertyValue("HasLegend", uno::makeAny( sal_True ) );
+            xDocProp->setPropertyValue("HasLegend", uno::makeAny( true ) );
         }
         catch(const beans::UnknownPropertyException&)
         {
@@ -198,15 +201,7 @@ void SchXMLLegendContext::StartElement( const uno::Reference< xml::sax::XAttribu
     xLegendProps->setPropertyValue("FillStyle", uno::makeAny( drawing::FillStyle_NONE ));
 
     // set auto-styles for Legend
-    const SvXMLStylesContext* pStylesCtxt = mrImportHelper.GetAutoStylesContext();
-    if( pStylesCtxt )
-    {
-        const SvXMLStyleContext* pStyle = pStylesCtxt->FindStyleChildContext(
-            SchXMLImportHelper::GetChartFamilyID(), sAutoStyleName );
-
-        if( pStyle && dynamic_cast< const XMLPropStyleContext*>(pStyle) !=  nullptr)
-            const_cast<XMLPropStyleContext*>( static_cast<const XMLPropStyleContext*>( pStyle ) )->FillPropertySet( xLegendProps );
-    }
+    mrImportHelper.FillAutoStyle(sAutoStyleName, xLegendProps);
 }
 
 SchXMLLegendContext::~SchXMLLegendContext()

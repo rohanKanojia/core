@@ -20,14 +20,15 @@
 #ifndef INCLUDED_L10NTOOLS_INC_CFGMERGE_HXX
 #define INCLUDED_L10NTOOLS_INC_CFGMERGE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <fstream>
 #include <unordered_map>
+#include <memory>
 #include <vector>
 #include "po.hxx"
 
-typedef std::unordered_map<OString, OString, OStringHash> OStringHashMap;
+typedef std::unordered_map<OString, OString> OStringHashMap;
 
 
 // class CfgStackData
@@ -53,8 +54,8 @@ public:
         : sTagType( rTag ), sIdentifier( rId )
     {}
 
-    const OString &GetTagType() { return sTagType; }
-    const OString &GetIdentifier() { return sIdentifier; }
+    const OString &GetTagType() const { return sTagType; }
+    const OString &GetIdentifier() const { return sIdentifier; }
 
 };
 
@@ -111,8 +112,6 @@ protected:
 
     virtual void Output(const OString & rOutput)=0;
 
-    static void Error(const OString &rError);
-
 private:
     void ExecuteAnalyzedToken( int nToken, char *pToken );
     void AddText(
@@ -149,14 +148,14 @@ public:
         const OString &rOutputFile,
         const OString &rFilePath
     );
-    virtual ~CfgExport();
+    virtual ~CfgExport() override;
 };
 
 /// Merge strings to *.xcu files
 class CfgMerge : public CfgParser
 {
 private:
-    MergeDataFile *pMergeDataFile;
+    std::unique_ptr<MergeDataFile> pMergeDataFile;
     std::vector<OString> aLanguages;
     std::unique_ptr<ResData> pResData;
 
@@ -175,7 +174,7 @@ public:
     CfgMerge(
         const OString &rMergeSource, const OString &rOutputFile,
         const OString &rFilename, const OString &rLanguage );
-    virtual ~CfgMerge();
+    virtual ~CfgMerge() override;
 };
 
 #endif

@@ -21,18 +21,15 @@
 
 #include <rtl/ustring.hxx>
 #include <svx/svxdllapi.h>
+#include <memory>
 
 /*
     contains strings needed for positioning dialogs
     of frames and drawing in Writer
  */
-class SvxSwFramePosString_Impl;
 class SVX_DLLPUBLIC SvxSwFramePosString
 {
-    SvxSwFramePosString_Impl* pImpl;
 public:
-    SvxSwFramePosString();
-    ~SvxSwFramePosString();
     enum StringId
     {
         LEFT                       ,
@@ -80,7 +77,7 @@ public:
 
         STR_MAX
     };
-    const OUString& GetString(StringId eId);
+    static OUString GetString(StringId eId);
 };
 #endif
 

@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -127,7 +128,7 @@ public class UnoNode{
         String sAnchor = ""; // TODO find out how the Anchor may be set at the html file;  //_sAnchor;
         boolean bExists = Introspector.getIntrospector().getXSimpleFileAccess().exists(sIDLUrl);
         if (sIDLUrl.equals("") || (!bExists)){
-            sIDLUrl = "http://api.libreoffice.org/" + Inspector.sIDLDOCUMENTSUBFOLDER;
+            sIDLUrl = "https://api.libreoffice.org/" + Inspector.sIDLDOCUMENTSUBFOLDER;
         }
         if (!sIDLUrl.endsWith("/")){
             sIDLUrl += "/";
@@ -346,3 +347,5 @@ public class UnoNode{
         return m_oParamObjects;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -22,6 +22,8 @@
 
 #include <sal/log.hxx>
 
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <com/sun/star/io/XActiveDataControl.hpp>
@@ -49,7 +51,7 @@ using namespace com::sun::star::lang;
 using namespace com::sun::star::registry;
 using namespace com::sun::star::io;
 
-#include "services.hxx"
+#include <services.hxx>
 
 namespace io_stm {
 
@@ -77,32 +79,32 @@ namespace io_stm {
 
     public:
         Pump();
-        virtual ~Pump();
+        virtual ~Pump() override;
 
         // XActiveDataSource
-        virtual void SAL_CALL setOutputStream( const Reference< css::io::XOutputStream >& xOutput ) throw(std::exception) override;
-        virtual Reference< css::io::XOutputStream > SAL_CALL getOutputStream() throw(std::exception) override;
+        virtual void SAL_CALL setOutputStream( const Reference< css::io::XOutputStream >& xOutput ) override;
+        virtual Reference< css::io::XOutputStream > SAL_CALL getOutputStream() override;
 
         // XActiveDataSink
-        virtual void SAL_CALL setInputStream( const Reference< css::io::XInputStream >& xStream ) throw(std::exception) override;
-        virtual Reference< css::io::XInputStream > SAL_CALL getInputStream() throw(std::exception) override;
+        virtual void SAL_CALL setInputStream( const Reference< css::io::XInputStream >& xStream ) override;
+        virtual Reference< css::io::XInputStream > SAL_CALL getInputStream() override;
 
         // XActiveDataControl
-        virtual void SAL_CALL addListener( const Reference< css::io::XStreamListener >& xListener ) throw(std::exception) override;
-        virtual void SAL_CALL removeListener( const Reference< css::io::XStreamListener >& xListener ) throw(std::exception) override;
-        virtual void SAL_CALL start() throw( RuntimeException, std::exception ) override;
-        virtual void SAL_CALL terminate() throw(std::exception) override;
+        virtual void SAL_CALL addListener( const Reference< css::io::XStreamListener >& xListener ) override;
+        virtual void SAL_CALL removeListener( const Reference< css::io::XStreamListener >& xListener ) override;
+        virtual void SAL_CALL start() override;
+        virtual void SAL_CALL terminate() override;
 
         // XConnectable
-        virtual void SAL_CALL setPredecessor( const Reference< css::io::XConnectable >& xPred ) throw(std::exception) override;
-        virtual Reference< css::io::XConnectable > SAL_CALL getPredecessor() throw(std::exception) override;
-        virtual void SAL_CALL setSuccessor( const Reference< css::io::XConnectable >& xSucc ) throw(std::exception) override;
-        virtual Reference< css::io::XConnectable > SAL_CALL getSuccessor() throw(std::exception) override;
+        virtual void SAL_CALL setPredecessor( const Reference< css::io::XConnectable >& xPred ) override;
+        virtual Reference< css::io::XConnectable > SAL_CALL getPredecessor() override;
+        virtual void SAL_CALL setSuccessor( const Reference< css::io::XConnectable >& xSucc ) override;
+        virtual Reference< css::io::XConnectable > SAL_CALL getSuccessor() override;
 
     public: // XServiceInfo
-        virtual OUString    SAL_CALL getImplementationName() throw(std::exception  ) override;
-        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(std::exception  ) override;
-        virtual sal_Bool     SAL_CALL supportsService(const OUString& ServiceName) throw(std::exception  ) override;
+        virtual OUString    SAL_CALL getImplementationName() override;
+        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
+        virtual sal_Bool     SAL_CALL supportsService(const OUString& ServiceName) override;
     };
 
 Pump::Pump() : m_aThread( nullptr ),
@@ -132,7 +134,7 @@ void Pump::fireError( const  Any & exception )
         }
         catch ( const RuntimeException &e )
         {
-            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e.Message);
+            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
         }
     }
 }
@@ -160,7 +162,7 @@ void Pump::fireClose()
             }
             catch ( const RuntimeException &e )
             {
-                SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e.Message);
+                SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
             }
         }
     }
@@ -177,7 +179,7 @@ void Pump::fireStarted()
         }
         catch ( const RuntimeException &e )
         {
-            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e.Message);
+            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
         }
     }
 }
@@ -193,7 +195,7 @@ void Pump::fireTerminated()
         }
         catch ( const RuntimeException &e )
         {
-            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e.Message);
+            SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
         }
     }
 }
@@ -295,7 +297,7 @@ void Pump::run()
     {
         // we are the last on the stack.
         // this is to avoid crashing the program, when e.g. a bridge crashes
-        SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e.Message);
+        SAL_WARN("io.streams","com.sun.star.comp.stoc.Pump: unexpected exception during calling listeners" << e);
     }
 }
 
@@ -304,28 +306,28 @@ void Pump::run()
  * XConnectable
  */
 
-void Pump::setPredecessor( const Reference< XConnectable >& xPred ) throw(std::exception)
+void Pump::setPredecessor( const Reference< XConnectable >& xPred )
 {
     Guard< Mutex > aGuard( m_aMutex );
     m_xPred = xPred;
 }
 
 
-Reference< XConnectable > Pump::getPredecessor() throw(std::exception)
+Reference< XConnectable > Pump::getPredecessor()
 {
     Guard< Mutex > aGuard( m_aMutex );
     return m_xPred;
 }
 
 
-void Pump::setSuccessor( const Reference< XConnectable >& xSucc ) throw(std::exception)
+void Pump::setSuccessor( const Reference< XConnectable >& xSucc )
 {
     Guard< Mutex > aGuard( m_aMutex );
     m_xSucc = xSucc;
 }
 
 
-Reference< XConnectable > Pump::getSuccessor() throw(std::exception)
+Reference< XConnectable > Pump::getSuccessor()
 {
     Guard< Mutex > aGuard( m_aMutex );
     return m_xSucc;
@@ -336,38 +338,37 @@ Reference< XConnectable > Pump::getSuccessor() throw(std::exception)
  * XActiveDataControl
  */
 
-void Pump::addListener( const Reference< XStreamListener >& xListener ) throw(std::exception)
+void Pump::addListener( const Reference< XStreamListener >& xListener )
 {
     m_cnt.addInterface( xListener );
 }
 
 
-void Pump::removeListener( const Reference< XStreamListener >& xListener ) throw(std::exception)
+void Pump::removeListener( const Reference< XStreamListener >& xListener )
 {
     m_cnt.removeInterface( xListener );
 }
 
 
-void Pump::start() throw( RuntimeException, std::exception )
+void Pump::start()
 {
     Guard< Mutex > aGuard( m_aMutex );
     m_aThread = osl_createSuspendedThread(Pump::static_run,this);
-    if( m_aThread )
-    {
-        // will be released by OPump::static_run
-        acquire();
-        osl_resumeThread( m_aThread );
-    }
-    else
+    if( !m_aThread )
     {
         throw RuntimeException(
             "Pump::start Couldn't create worker thread",
             *this);
     }
+
+    // will be released by OPump::static_run
+    acquire();
+    osl_resumeThread( m_aThread );
+
 }
 
 
-void Pump::terminate() throw(std::exception)
+void Pump::terminate()
 {
     close();
 
@@ -384,7 +385,7 @@ void Pump::terminate() throw(std::exception)
  * XActiveDataSink
  */
 
-void Pump::setInputStream( const Reference< XInputStream >& xStream ) throw(std::exception)
+void Pump::setInputStream( const Reference< XInputStream >& xStream )
 {
     Guard< Mutex > aGuard( m_aMutex );
     m_xInput = xStream;
@@ -395,7 +396,7 @@ void Pump::setInputStream( const Reference< XInputStream >& xStream ) throw(std:
 }
 
 
-Reference< XInputStream > Pump::getInputStream() throw(std::exception)
+Reference< XInputStream > Pump::getInputStream()
 {
     Guard< Mutex > aGuard( m_aMutex );
     return m_xInput;
@@ -406,7 +407,7 @@ Reference< XInputStream > Pump::getInputStream() throw(std::exception)
  * XActiveDataSource
  */
 
-void Pump::setOutputStream( const Reference< XOutputStream >& xOut ) throw(std::exception)
+void Pump::setOutputStream( const Reference< XOutputStream >& xOut )
 {
     Guard< Mutex > aGuard( m_aMutex );
     m_xOutput = xOut;
@@ -416,34 +417,33 @@ void Pump::setOutputStream( const Reference< XOutputStream >& xOut ) throw(std::
     // data transfer starts in XActiveDataControl::start
 }
 
-Reference< XOutputStream > Pump::getOutputStream() throw(std::exception)
+Reference< XOutputStream > Pump::getOutputStream()
 {
     Guard< Mutex > aGuard( m_aMutex );
     return m_xOutput;
 }
 
 // XServiceInfo
-OUString Pump::getImplementationName() throw(std::exception  )
+OUString Pump::getImplementationName()
 {
     return OPumpImpl_getImplementationName();
 }
 
 // XServiceInfo
-sal_Bool Pump::supportsService(const OUString& ServiceName) throw(std::exception  )
+sal_Bool Pump::supportsService(const OUString& ServiceName)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 // XServiceInfo
-Sequence< OUString > Pump::getSupportedServiceNames() throw(std::exception  )
+Sequence< OUString > Pump::getSupportedServiceNames()
 {
     return OPumpImpl_getSupportedServiceNames();
 }
 
 
-Reference< XInterface > SAL_CALL OPumpImpl_CreateInstance(
+Reference< XInterface > OPumpImpl_CreateInstance(
     SAL_UNUSED_PARAMETER const Reference< XComponentContext > & )
-    throw (Exception)
 {
     return Reference< XInterface >( *new Pump );
 }

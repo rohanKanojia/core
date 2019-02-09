@@ -29,11 +29,10 @@
 #include <basegfx/color/bcolor.hxx>
 #include <drawinglayer/primitive2d/markerarrayprimitive2d.hxx>
 #include <drawinglayer/primitive2d/objectinfoprimitive2d.hxx>
-#include <sdr/contact/objectcontactofpageview.hxx>
+#include <svx/sdr/contact/objectcontactofpageview.hxx>
 #include <svx/sdrpagewindow.hxx>
 #include <svx/sdrpaintwindow.hxx>
 #include <svx/svdhdl.hxx>
-#include <comphelper/sequence.hxx>
 
 namespace sdr { namespace contact {
 
@@ -50,7 +49,7 @@ ViewObjectContact& ViewContactOfSdrObj::CreateObjectSpecificViewObjectContact(Ob
 ViewContactOfSdrObj::ViewContactOfSdrObj(SdrObject& rObj)
 :   ViewContact(),
     mrObject(rObj),
-    meRememberedAnimationKind(SDRTEXTANI_NONE)
+    meRememberedAnimationKind(SdrTextAniKind::NONE)
 {
     // init AnimationKind
     if(dynamic_cast<const SdrTextObj*>( &GetSdrObject() ) != nullptr)
@@ -87,7 +86,7 @@ ViewContact& ViewContactOfSdrObj::GetViewContact(sal_uInt32 nIndex) const
 ViewContact* ViewContactOfSdrObj::GetParentContact() const
 {
     ViewContact* pRetval = nullptr;
-    SdrObjList* pObjList = GetSdrObject().GetObjList();
+    SdrObjList* pObjList = GetSdrObject().getParentSdrObjListFromSdrObject();
 
     if(pObjList)
     {
@@ -99,9 +98,9 @@ ViewContact* ViewContactOfSdrObj::GetParentContact() const
         else
         {
             // Is a group?
-            if(pObjList->GetOwnerObj())
+            if(pObjList->getSdrObjectFromSdrObjList())
             {
-                pRetval = &(pObjList->GetOwnerObj()->GetViewContact());
+                pRetval = &(pObjList->getSdrObjectFromSdrObjList()->GetViewContact());
             }
         }
     }
@@ -128,7 +127,7 @@ void ViewContactOfSdrObj::ActionChanged()
     ViewContact::ActionChanged();
 }
 
-// override for acessing the SdrObject
+// override for accessing the SdrObject
 SdrObject* ViewContactOfSdrObj::TryToGetSdrObject() const
 {
     return &GetSdrObject();
@@ -153,12 +152,12 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContactOfSdrObj::createGlueP
             std::vector< basegfx::B2DPoint > aGluepointVector;
 
             // create GluePoint primitives. ATM these are relative to the SnapRect
-            for(sal_uInt32 a(0L); a < nCount; a++)
+            for(sal_uInt32 a(0); a < nCount; a++)
             {
-                const SdrGluePoint& rCandidate = (*pGluePointList)[(sal_uInt16)a];
+                const SdrGluePoint& rCandidate = (*pGluePointList)[static_cast<sal_uInt16>(a)];
                 const Point aPosition(rCandidate.GetAbsolutePos(GetSdrObject()));
 
-                aGluepointVector.push_back(basegfx::B2DPoint(aPosition.X(), aPosition.Y()));
+                aGluepointVector.emplace_back(aPosition.X(), aPosition.Y());
             }
 
             if(!aGluepointVector.empty())

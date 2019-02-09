@@ -24,7 +24,6 @@
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
 #include "tabletree.hxx"
 
 namespace dbaui
@@ -70,29 +69,28 @@ namespace dbaui
 
         IAddTableDialogContext& m_rContext;
 
-        DECL_LINK_TYPED( AddClickHdl, Button*, void );
-        DECL_LINK_TYPED( CloseClickHdl, Button*, void);
-        DECL_LINK_TYPED( TableListDoubleClickHdl, SvTreeListBox*, bool );
-        DECL_LINK_TYPED( TableListSelectHdl, SvTreeListBox*, void );
-        DECL_LINK_TYPED( OnTypeSelected, Button*, void );
+        DECL_LINK( AddClickHdl, Button*, void );
+        DECL_LINK( CloseClickHdl, Button*, void);
+        DECL_LINK( TableListDoubleClickHdl, SvTreeListBox*, bool );
+        DECL_LINK( TableListSelectHdl, SvTreeListBox*, void );
+        DECL_LINK( OnTypeSelected, Button*, void );
 
     public:
         OAddTableDlg(
             vcl::Window* _pParent,
             IAddTableDialogContext& _rContext );
-        virtual ~OAddTableDlg();
+        virtual ~OAddTableDlg() override;
         virtual void dispose() override;
 
         void Update();
 
         static  OUString  getDialogTitleForContext(
-            IAddTableDialogContext& _rContext );
+            IAddTableDialogContext const & _rContext );
 
     private:
         virtual bool Close() override;
 
         bool impl_isAddAllowed();
-        void impl_addTable();
 
         enum ObjectList
         {

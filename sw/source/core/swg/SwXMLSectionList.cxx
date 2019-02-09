@@ -18,6 +18,7 @@
  */
 
 #include <SwXMLSectionList.hxx>
+#include <xmloff/xmlictxt.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <vector>
@@ -25,21 +26,73 @@
 using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
-// TODO: verify if these should match the same-name constants
-//       in xmloff/source/core/xmlimp.cxx ("_office" and "_office")
-sal_Char const sXML_np__office[] = "_ooffice";
-sal_Char const sXML_np__text[] = "_otext";
+class SvXMLSectionListContext : public SvXMLImportContext
+{
+private:
+    SwXMLSectionList & m_rImport;
+
+public:
+    SvXMLSectionListContext(SwXMLSectionList& rImport,
+           sal_uInt16 nPrefix,
+           const OUString& rLocalName,
+           const uno::Reference<xml::sax::XAttributeList> & xAttrList);
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 nPrefix,
+           const OUString& rLocalName,
+           const uno::Reference<xml::sax::XAttributeList> & xAttrList) override;
+};
+
+class SwXMLParentContext : public SvXMLImportContext
+{
+private:
+    SwXMLSectionList & m_rImport;
+
+public:
+    SwXMLParentContext(SwXMLSectionList& rImport,
+           sal_uInt16 nPrefix,
+           const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+        , m_rImport(rImport)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 nPrefix,
+           const OUString& rLocalName,
+           const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        if ((nPrefix == XML_NAMESPACE_OFFICE && IsXMLToken(rLocalName, XML_BODY)) ||
+            (nPrefix == XML_NAMESPACE_TEXT &&
+                (   IsXMLToken(rLocalName, XML_P)
+                 || IsXMLToken(rLocalName, XML_H)
+                 || IsXMLToken(rLocalName, XML_A)
+                 || IsXMLToken(rLocalName, XML_SPAN)
+                 || IsXMLToken(rLocalName, XML_SECTION)
+                 || IsXMLToken(rLocalName, XML_INDEX_BODY)
+                 || IsXMLToken(rLocalName, XML_INDEX_TITLE)
+                 || IsXMLToken(rLocalName, XML_INSERTION)
+                 || IsXMLToken(rLocalName, XML_DELETION))))
+        {
+            return new SvXMLSectionListContext(m_rImport, nPrefix, rLocalName, xAttrList);
+        }
+        else
+        {
+            return new SwXMLParentContext(m_rImport, nPrefix, rLocalName);
+        }
+    }
+};
+
 
 SwXMLSectionList::SwXMLSectionList(
     const uno::Reference< uno::XComponentContext >& rContext,
-    std::vector<OUString*> &rNewSectionList)
-:   SvXMLImport( rContext, "" ),
-    rSectionList ( rNewSectionList )
+    std::vector<OUString> &rNewSectionList)
+: SvXMLImport(rContext, "")
+, m_rSectionList(rNewSectionList)
 {
-    GetNamespaceMap().Add( sXML_np__office,
+    // TODO: verify if these should match the same-name constants
+    //       in xmloff/source/core/xmlimp.cxx ("_office" and "_office")
+    GetNamespaceMap().Add( "_ooffice",
                             GetXMLToken(XML_N_OFFICE_OOO),
                             XML_NAMESPACE_OFFICE );
-    GetNamespaceMap().Add( sXML_np__text,
+    GetNamespaceMap().Add( "_otext",
                             GetXMLToken(XML_N_TEXT_OOO),
                             XML_NAMESPACE_TEXT );
 }
@@ -49,32 +102,12 @@ SwXMLSectionList::~SwXMLSectionList()
 {
 }
 
-SvXMLImportContext *SwXMLSectionList::CreateContext(
+SvXMLImportContext *SwXMLSectionList::CreateDocumentContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
-        const uno::Reference< xml::sax::XAttributeList > & xAttrList )
+        const uno::Reference<xml::sax::XAttributeList> & )
 {
-    SvXMLImportContext *pContext = nullptr;
-
-    if(( nPrefix == XML_NAMESPACE_OFFICE && IsXMLToken ( rLocalName, XML_BODY )) ||
-        ( nPrefix == XML_NAMESPACE_TEXT &&
-            (IsXMLToken ( rLocalName, XML_P ) ||
-            IsXMLToken ( rLocalName, XML_H ) ||
-            IsXMLToken ( rLocalName, XML_A ) ||
-            IsXMLToken ( rLocalName, XML_SPAN ) ||
-            IsXMLToken ( rLocalName, XML_SECTION ) ||
-            IsXMLToken ( rLocalName, XML_INDEX_BODY ) ||
-            IsXMLToken ( rLocalName, XML_INDEX_TITLE )||
-            IsXMLToken ( rLocalName, XML_INSERTION ) ||
-            IsXMLToken ( rLocalName, XML_DELETION ) )
-        )
-      )
-    {
-        pContext = new SvXMLSectionListContext (*this, nPrefix, rLocalName, xAttrList);
-    }
-    else
-        pContext = SvXMLImport::CreateContext( nPrefix, rLocalName, xAttrList );
-    return pContext;
+    return new SwXMLParentContext(*this, nPrefix, rLocalName);
 }
 
 SvXMLSectionListContext::SvXMLSectionListContext(
@@ -83,11 +116,11 @@ SvXMLSectionListContext::SvXMLSectionListContext(
    const OUString& rLocalName,
    const uno::Reference<   xml::sax::XAttributeList > & ) :
    SvXMLImportContext ( rImport, nPrefix, rLocalName ),
-   rLocalRef(rImport)
+   m_rImport(rImport)
 {
 }
 
-SvXMLImportContext *SvXMLSectionListContext::CreateChildContext(
+SvXMLImportContextRef SvXMLSectionListContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList > & xAttrList )
@@ -104,19 +137,16 @@ SvXMLImportContext *SvXMLSectionListContext::CreateChildContext(
         {
             const OUString& rAttrName = xAttrList->getNameByIndex( i );
             OUString aLocalName;
-            sal_uInt16 nPrefx = rLocalRef.GetNamespaceMap().GetKeyByAttrName( rAttrName, &aLocalName);
+            sal_uInt16 nPrefx = m_rImport.GetNamespaceMap().GetKeyByAttrName(rAttrName, &aLocalName);
             if (XML_NAMESPACE_TEXT == nPrefx && IsXMLToken ( aLocalName, XML_NAME ) )
                 sName = xAttrList->getValueByIndex( i );
         }
         if ( !sName.isEmpty() )
-            rLocalRef.rSectionList.push_back( new OUString(sName) );
+            m_rImport.m_rSectionList.push_back(sName);
     }
 
-    pContext = new SvXMLSectionListContext (rLocalRef, nPrefix, rLocalName, xAttrList);
+    pContext = new SvXMLSectionListContext(m_rImport, nPrefix, rLocalName, xAttrList);
     return pContext;
-}
-SvXMLSectionListContext::~SvXMLSectionListContext()
-{
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

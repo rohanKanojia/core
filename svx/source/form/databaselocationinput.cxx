@@ -18,10 +18,10 @@
  */
 
 
-#include "svx/databaselocationinput.hxx"
-#include "svx/dialmgr.hxx"
+#include <svx/databaselocationinput.hxx>
+#include <svx/dialmgr.hxx>
 
-#include "svx/fmresids.hrc"
+#include <svx/strings.hrc>
 
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 
@@ -34,13 +34,11 @@
 #include <unotools/confignode.hxx>
 #include <unotools/ucbhelper.hxx>
 #include <vcl/button.hxx>
-#include <vcl/msgbox.hxx>
-
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
 namespace svx
 {
-
-
     using ::com::sun::star::uno::Sequence;
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::uno::XComponentContext;
@@ -67,10 +65,9 @@ namespace svx
     private:
         void     impl_initFilterProperties_nothrow();
         void     impl_onBrowseButtonClicked();
-        void     impl_onLocationModified();
         OUString impl_getCurrentURL() const;
 
-        DECL_LINK_TYPED( OnControlAction, VclWindowEvent&, void );
+        DECL_LINK( OnControlAction, VclWindowEvent&, void );
 
     private:
         const Reference<XComponentContext>      m_xContext;
@@ -95,12 +92,9 @@ namespace svx
 
         // forward the allowed extensions to the input control
         OUStringBuffer aExtensionList;
-        for (   const OUString* pExtension = m_aFilterExtensions.getConstArray();
-                pExtension != m_aFilterExtensions.getConstArray() + m_aFilterExtensions.getLength();
-                ++pExtension
-            )
+        for ( auto const & extension : m_aFilterExtensions )
         {
-            aExtensionList.append( *pExtension );
+            aExtensionList.append( extension );
             aExtensionList.append( ';' );
         }
         m_rLocationInput.SetFilter( aExtensionList.makeStringAndClear() );
@@ -128,8 +122,10 @@ namespace svx
         {
             if ( ::utl::UCBContentHelper::Exists( sURL ) )
             {
-                ScopedVclPtrInstance< QueryBox > aBox( m_rLocationInput.GetSystemWindow(), WB_YES_NO, SVX_RESSTR(RID_STR_ALREADYEXISTOVERWRITE) );
-                if ( aBox->Execute() != RET_YES )
+                std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(m_rLocationInput.GetFrameWeld(),
+                                                               VclMessageType::Question, VclButtonsType::YesNo,
+                                                               SvxResId(RID_STR_ALREADYEXISTOVERWRITE)));
+                if (xQueryBox->run() != RET_YES)
                     return false;
             }
         }
@@ -182,7 +178,7 @@ namespace svx
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
 
         // ensure we have at least one extension
@@ -196,20 +192,20 @@ namespace svx
     }
 
 
-    IMPL_LINK_TYPED( DatabaseLocationInputController_Impl, OnControlAction, VclWindowEvent&, _rEvent, void )
+    IMPL_LINK( DatabaseLocationInputController_Impl, OnControlAction, VclWindowEvent&, _rEvent, void )
     {
         if  (   ( _rEvent.GetWindow() == &m_rBrowseButton )
-            &&  ( _rEvent.GetId() == VCLEVENT_BUTTON_CLICK )
+            &&  ( _rEvent.GetId() == VclEventId::ButtonClick )
             )
         {
             impl_onBrowseButtonClicked();
         }
 
         if  (   ( _rEvent.GetWindow() == &m_rLocationInput )
-            &&  ( _rEvent.GetId() == VCLEVENT_EDIT_MODIFY )
+            &&  ( _rEvent.GetId() == VclEventId::EditModify )
             )
         {
-            impl_onLocationModified();
+            m_bNeedExistenceCheck = true;
         }
     }
 
@@ -230,12 +226,12 @@ namespace svx
     {
         ::sfx2::FileDialogHelper aFileDlg(
             TemplateDescription::FILESAVE_AUTOEXTENSION,
-            0,
-            m_rLocationInput.GetSystemWindow()
+            FileDialogFlags::NONE,
+            m_rLocationInput.GetFrameWeld()
         );
         aFileDlg.SetDisplayDirectory( impl_getCurrentURL() );
 
-        aFileDlg.AddFilter( m_sFilterUIName, OUStringBuffer().append( "*." ).append( m_aFilterExtensions[0] ).makeStringAndClear() );
+        aFileDlg.AddFilter( m_sFilterUIName, "*." + m_aFilterExtensions[0] );
         aFileDlg.SetCurrentFilter( m_sFilterUIName );
 
         if ( aFileDlg.Execute() == ERRCODE_NONE )
@@ -243,7 +239,7 @@ namespace svx
             INetURLObject aURL( aFileDlg.GetPath() );
             if( aURL.GetProtocol() != INetProtocol::NotValid )
             {
-                ::svt::OFileNotation aFileNotation( aURL.GetMainURL( INetURLObject::NO_DECODE ) );
+                ::svt::OFileNotation aFileNotation( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
                 m_rLocationInput.SetText( aFileNotation.get( ::svt::OFileNotation::N_SYSTEM ) );
                 m_rLocationInput.GetModifyHdl().Call( m_rLocationInput );
                 // the dialog already checked for the file's existence, so we don't need to, again
@@ -252,11 +248,6 @@ namespace svx
         }
     }
 
-
-    void DatabaseLocationInputController_Impl::impl_onLocationModified()
-    {
-        m_bNeedExistenceCheck = true;
-    }
 
     DatabaseLocationInputController::DatabaseLocationInputController( const Reference<XComponentContext>& _rContext,
             ::svt::OFileURLControl& _rLocationInput, PushButton& _rBrowseButton )

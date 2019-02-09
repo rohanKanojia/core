@@ -27,59 +27,31 @@
 #include <com/sun/star/datatransfer/XDataFormatTranslator.hpp>
 #include <com/sun/star/datatransfer/XMimeContentTypeFactory.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include "WinClip.hxx"
+#include <WinClip.hxx>
 
 #include <vector>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
-#endif
-#include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
-
-// CDataFormatTranslator
-
-class CDataFormatTranslator : public
+class CDataFormatTranslatorUNO : public
     cppu::WeakImplHelper< css::datatransfer::XDataFormatTranslator,
                           css::lang::XServiceInfo >
 {
 
 public:
-    explicit CDataFormatTranslator( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
+    explicit CDataFormatTranslatorUNO( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
 
     // XDataFormatTranslator
 
-    virtual css::uno::Any SAL_CALL getSystemDataTypeFromDataFlavor( const css::datatransfer::DataFlavor& aDataFlavor )
-        throw(css::uno::RuntimeException);
+    virtual css::uno::Any SAL_CALL getSystemDataTypeFromDataFlavor( const css::datatransfer::DataFlavor& aDataFlavor ) override;
 
-    virtual css::datatransfer::DataFlavor SAL_CALL getDataFlavorFromSystemDataType( const css::uno::Any& aSysDataType )
-        throw(css::uno::RuntimeException);
+    virtual css::datatransfer::DataFlavor SAL_CALL getDataFlavorFromSystemDataType( const css::uno::Any& aSysDataType ) override;
 
     // XServiceInfo
 
-    virtual OUString SAL_CALL getImplementationName(  )
-        throw(css::uno::RuntimeException);
+    virtual OUString SAL_CALL getImplementationName(  ) override;
 
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-        throw(css::uno::RuntimeException);
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
 
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  )
-        throw(css::uno::RuntimeException);
-
-private:
-    void SAL_CALL findDataFlavorForStandardFormatId( sal_Int32 aStandardFormatId, css::datatransfer::DataFlavor& aDataFlavor ) const;
-    void SAL_CALL findDataFlavorForNativeFormatName( const OUString& aNativeFormatName, css::datatransfer::DataFlavor& aDataFlavor ) const;
-    void SAL_CALL findStandardFormatIdForCharset( const OUString& aCharset, css::uno::Any& aAny ) const;
-    void SAL_CALL setStandardFormatIdForNativeFormatName( const OUString& aNativeFormatName, css::uno::Any& aAny ) const;
-    void SAL_CALL findStdFormatIdOrNativeFormatNameForFullMediaType(
-        const css::uno::Reference< css::datatransfer::XMimeContentTypeFactory >& aRefXMimeFactory,
-        const OUString& aFullMediaType, css::uno::Any& aAny ) const;
-
-    sal_Bool isTextPlainMediaType( const OUString& fullMediaType ) const;
-
-    css::datatransfer::DataFlavor SAL_CALL mkDataFlv( const OUString& cnttype, const OUString& hpname, css::uno::Type dtype );
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
 private:
     const css::uno::Reference< css::uno::XComponentContext >  m_xContext;

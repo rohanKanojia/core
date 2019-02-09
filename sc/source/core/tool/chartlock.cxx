@@ -22,11 +22,12 @@
 #include <svx/svdoole2.hxx>
 #include <svx/svdpage.hxx>
 
-#include "chartlock.hxx"
-#include "document.hxx"
-#include "drwlayer.hxx"
+#include <chartlock.hxx>
+#include <document.hxx>
+#include <drwlayer.hxx>
 
 #include <com/sun/star/embed/XComponentSupplier.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 
 using namespace com::sun::star;
 using ::com::sun::star::uno::Reference;
@@ -53,7 +54,7 @@ std::vector< WeakReference< frame::XModel > > lcl_getAllLivingCharts( ScDocument
             SdrPage* pPage = pDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
             OSL_ENSURE(pPage,"Page ?");
 
-            SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+            SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
             SdrObject* pObject = aIter.Next();
             while (pObject)
             {
@@ -65,7 +66,7 @@ std::vector< WeakReference< frame::XModel > > lcl_getAllLivingCharts( ScDocument
                     {
                         Reference< frame::XModel > xModel( xCompSupp->getComponent(), uno::UNO_QUERY );
                         if( xModel.is() )
-                            aRet.push_back( xModel );
+                            aRet.emplace_back(xModel );
                     }
                 }
                 pObject = aIter.Next();
@@ -81,13 +82,11 @@ std::vector< WeakReference< frame::XModel > > lcl_getAllLivingCharts( ScDocument
 ScChartLockGuard::ScChartLockGuard( ScDocument* pDoc ) :
     maChartModels( lcl_getAllLivingCharts( pDoc ) )
 {
-    std::vector< WeakReference< frame::XModel > >::const_iterator aIter = maChartModels.begin();
-    const std::vector< WeakReference< frame::XModel > >::const_iterator aEnd = maChartModels.end();
-    for( ; aIter != aEnd; ++aIter )
+    for( const auto& rxChartModel : maChartModels )
     {
         try
         {
-            Reference< frame::XModel > xModel( *aIter );
+            Reference< frame::XModel > xModel( rxChartModel );
             if( xModel.is())
                 xModel->lockControllers();
         }
@@ -100,13 +99,11 @@ ScChartLockGuard::ScChartLockGuard( ScDocument* pDoc ) :
 
 ScChartLockGuard::~ScChartLockGuard()
 {
-    std::vector< WeakReference< frame::XModel > >::const_iterator aIter = maChartModels.begin();
-    const std::vector< WeakReference< frame::XModel > >::const_iterator aEnd = maChartModels.end();
-    for( ; aIter != aEnd; ++aIter )
+    for( const auto& rxChartModel : maChartModels )
     {
         try
         {
-            Reference< frame::XModel > xModel( *aIter );
+            Reference< frame::XModel > xModel( rxChartModel );
             if( xModel.is())
                 xModel->unlockControllers();
         }
@@ -132,7 +129,7 @@ void ScChartLockGuard::AlsoLockThisChart( const Reference< frame::XModel >& xMod
         try
         {
             xModel->lockControllers();
-            maChartModels.push_back( xModel );
+            maChartModels.emplace_back(xModel );
         }
         catch ( uno::Exception& )
         {
@@ -146,7 +143,7 @@ ScTemporaryChartLock::ScTemporaryChartLock( ScDocument* pDocP ) :
     mpDoc( pDocP )
 {
     maTimer.SetTimeout( SC_CHARTLOCKTIMEOUT );
-    maTimer.SetTimeoutHdl( LINK( this, ScTemporaryChartLock, TimeoutHdl ) );
+    maTimer.SetInvokeHandler( LINK( this, ScTemporaryChartLock, TimeoutHdl ) );
 }
 
 ScTemporaryChartLock::~ScTemporaryChartLock()
@@ -157,7 +154,7 @@ ScTemporaryChartLock::~ScTemporaryChartLock()
 
 void ScTemporaryChartLock::StartOrContinueLocking()
 {
-    if(!mapScChartLockGuard.get())
+    if (!mapScChartLockGuard)
         mapScChartLockGuard.reset( new ScChartLockGuard(mpDoc) );
     maTimer.Start();
 }
@@ -170,11 +167,11 @@ void ScTemporaryChartLock::StopLocking()
 
 void ScTemporaryChartLock::AlsoLockThisChart( const Reference< frame::XModel >& xModel )
 {
-    if(mapScChartLockGuard.get())
+    if (mapScChartLockGuard)
         mapScChartLockGuard->AlsoLockThisChart( xModel );
 }
 
-IMPL_LINK_NOARG_TYPED(ScTemporaryChartLock, TimeoutHdl, Timer *, void)
+IMPL_LINK_NOARG(ScTemporaryChartLock, TimeoutHdl, Timer *, void)
 {
     mapScChartLockGuard.reset();
 }

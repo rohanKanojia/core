@@ -20,16 +20,11 @@
 #ifndef INCLUDED_SC_INC_SCRESID_HXX
 #define INCLUDED_SC_INC_SCRESID_HXX
 
-#include <tools/resid.hxx>
+#include <rtl/ustring.hxx>
 #include "scdllapi.h"
 
-class SC_DLLPUBLIC ScResId : public ResId
-{
- public:
-    ScResId( sal_uInt16 nId );      // in scdll.cxx
-};
-
-#define SC_RESSTR(x) ScResId(x).toString()
+OUString SC_DLLPUBLIC ScResId(const char* pId);
+OUString SC_DLLPUBLIC ScResId(const char* pId, int nCardinality);
 
 #endif // SC_SCRESMGR_HXX
 

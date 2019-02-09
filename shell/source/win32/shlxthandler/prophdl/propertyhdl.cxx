@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "global.hxx"
-#include "propertyhdl.hxx"
-#include "fileextensions.hxx"
-#include "metainforeader.hxx"
-#include "utilities.hxx"
-#include "config.hxx"
+#include <global.hxx>
+#include <propertyhdl.hxx>
+#include <fileextensions.hxx>
+#include <metainforeader.hxx>
+#include <utilities.hxx>
+#include <config.hxx>
 
 #include <propkey.h>
 #include <propvarutil.h>
@@ -31,13 +31,13 @@
 #include <malloc.h>
 #include <strsafe.h>
 
-#include "stream_helper.hxx"
+#include <stream_helper.hxx>
 
 
 // Module global
 
 long g_DllRefCnt = 0;
-HINSTANCE g_hModule = NULL;
+static HINSTANCE g_hModule = nullptr;
 
 // Map of property keys to the locations of their value(s) in the .??? XML schema
 struct PROPERTYMAP
@@ -56,14 +56,14 @@ const PROPERTYMAP g_rgPROPERTYMAP[] =
     { PKEY_Comment,        L"LibreOffice",          L"Comments" },
 };
 
-size_t gPropertyMapTableSize = SAL_N_ELEMENTS(g_rgPROPERTYMAP);
+size_t const gPropertyMapTableSize = SAL_N_ELEMENTS(g_rgPROPERTYMAP);
 
 
 CPropertyHdl::CPropertyHdl( long nRefCnt ) :
     m_RefCnt( nRefCnt ),
-    m_pCache( NULL )
+    m_pCache( nullptr )
 {
-    OutputDebugStringFormat( "CPropertyHdl: CTOR\n" );
+    OutputDebugStringFormatW( L"CPropertyHdl: CTOR\n" );
     InterlockedIncrement( &g_DllRefCnt );
 }
 
@@ -73,7 +73,7 @@ CPropertyHdl::~CPropertyHdl()
     if ( m_pCache )
     {
         m_pCache->Release();
-        m_pCache = NULL;
+        m_pCache = nullptr;
     }
     InterlockedDecrement( &g_DllRefCnt );
 }
@@ -83,11 +83,11 @@ CPropertyHdl::~CPropertyHdl()
 
 HRESULT STDMETHODCALLTYPE CPropertyHdl::QueryInterface(REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject)
 {
-    *ppvObject = 0;
+    *ppvObject = nullptr;
 
     if (IID_IUnknown == riid || IID_IPropertyStore == riid)
     {
-        OutputDebugStringFormat( "CPropertyHdl: QueryInterface (IID_IPropertyStore)\n" );
+        OutputDebugStringFormatW( L"CPropertyHdl: QueryInterface (IID_IPropertyStore)\n" );
         IUnknown* pUnk = static_cast<IPropertyStore*>(this);
         pUnk->AddRef();
         *ppvObject = pUnk;
@@ -95,7 +95,7 @@ HRESULT STDMETHODCALLTYPE CPropertyHdl::QueryInterface(REFIID riid, void __RPC_F
     }
     else if (IID_IPropertyStoreCapabilities == riid)
     {
-        OutputDebugStringFormat( "CPropertyHdl: QueryInterface (IID_IPropertyStoreCapabilities)\n" );
+        OutputDebugStringFormatW( L"CPropertyHdl: QueryInterface (IID_IPropertyStoreCapabilities)\n" );
         IUnknown* pUnk = static_cast<IPropertyStore*>(this);
         pUnk->AddRef();
         *ppvObject = pUnk;
@@ -103,13 +103,13 @@ HRESULT STDMETHODCALLTYPE CPropertyHdl::QueryInterface(REFIID riid, void __RPC_F
     }
     else if (IID_IInitializeWithStream == riid)
     {
-        OutputDebugStringFormat( "CPropertyHdl: QueryInterface (IID_IInitializeWithStream)\n" );
+        OutputDebugStringFormatW( L"CPropertyHdl: QueryInterface (IID_IInitializeWithStream)\n" );
         IUnknown* pUnk = static_cast<IInitializeWithStream*>(this);
         pUnk->AddRef();
         *ppvObject = pUnk;
         return S_OK;
     }
-    OutputDebugStringFormat( "CPropertyHdl: QueryInterface (something different)\n" );
+    OutputDebugStringFormatW( L"CPropertyHdl: QueryInterface (something different)\n" );
 
     return E_NOINTERFACE;
 }
@@ -207,16 +207,12 @@ HRESULT STDMETHODCALLTYPE CPropertyHdl::Initialize( IStream *pStream, DWORD grfM
 
     if ( !m_pCache )
     {
-#ifdef __MINGW32__
-        if ( FAILED( PSCreateMemoryPropertyStore( IID_IPropertyStoreCache, reinterpret_cast<void**>(&m_pCache) ) ) )
-#else
         if ( FAILED( PSCreateMemoryPropertyStore( IID_PPV_ARGS( &m_pCache ) ) ) )
-#endif
-            OutputDebugStringFormat( "CPropertyHdl::Initialize: PSCreateMemoryPropertyStore failed" );
+            OutputDebugStringFormatW( L"CPropertyHdl::Initialize: PSCreateMemoryPropertyStore failed" );
 
         BufferStream tmpStream(pStream);
 
-        CMetaInfoReader *pMetaInfoReader = NULL;
+        CMetaInfoReader *pMetaInfoReader = nullptr;
 
         try
         {
@@ -226,7 +222,9 @@ HRESULT STDMETHODCALLTYPE CPropertyHdl::Initialize( IStream *pStream, DWORD grfM
         }
         catch (const std::exception& e)
         {
-            OutputDebugStringFormat( "CPropertyHdl::Initialize: Caught exception [%s]", e.what() );
+            // To output 8-bit string using unicode version of formatting functions, use capital %S type
+            // see https://msdn.microsoft.com/en-us/library/hf4y5e3w
+            OutputDebugStringFormatW( L"CPropertyHdl::Initialize: Caught exception [%S]", e.what() );
             return E_FAIL;
         }
     }
@@ -234,13 +232,60 @@ HRESULT STDMETHODCALLTYPE CPropertyHdl::Initialize( IStream *pStream, DWORD grfM
     return S_OK;
 }
 
+namespace {
+
+HRESULT GetItemData( CMetaInfoReader *pMetaInfoReader, UINT nIndex, PROPVARIANT *pVarData )
+{
+    switch (nIndex) {
+    case 0: {
+            pVarData->vt = VT_BSTR;
+            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_TITLE ).c_str() );
+            OutputDebugStringFormatW( L"CPropertyHdl::GetItemData: Title=%s.\n", pMetaInfoReader->getTagData( META_INFO_TITLE ).c_str() );
+            return S_OK;
+    }
+    case 1: {
+            pVarData->vt = VT_BSTR;
+            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_AUTHOR ).c_str() );
+            OutputDebugStringFormatW( L"CPropertyHdl::GetItemData: Author=%s.\n", pMetaInfoReader->getTagData( META_INFO_AUTHOR ).c_str() );
+            return S_OK;
+    }
+    case 2: {
+            pVarData->vt = VT_BSTR;
+            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_SUBJECT ).c_str() );
+            OutputDebugStringFormatW( L"CPropertyHdl::GetItemData: Subject=%s.\n", pMetaInfoReader->getTagData( META_INFO_SUBJECT ).c_str() );
+            return S_OK;
+    }
+    case 3: {
+            pVarData->vt = VT_BSTR;
+            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_KEYWORDS ).c_str() );
+            OutputDebugStringFormatW( L"CPropertyHdl::GetItemData: Keywords=%s.\n", pMetaInfoReader->getTagData( META_INFO_KEYWORDS ).c_str() );
+            return S_OK;
+    }
+    case 4: {
+            pVarData->vt = VT_BSTR;
+            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_DESCRIPTION ).c_str() );
+            OutputDebugStringFormatW( L"CPropertyHdl::GetItemData: Description=%s.\n", pMetaInfoReader->getTagData( META_INFO_DESCRIPTION ).c_str() );
+            return S_OK;
+    }
+    case 5: {
+            pVarData->vt = VT_BSTR;
+            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagAttribute( META_INFO_DOCUMENT_STATISTIC, META_INFO_PAGES ).c_str() );
+            OutputDebugStringFormatW( L"CPropertyHdl::GetItemData: Pages=%s.\n", pMetaInfoReader->getTagAttribute( META_INFO_DOCUMENT_STATISTIC, META_INFO_PAGES ).c_str() );
+            return S_OK;
+    }
+    }
+
+    return S_FALSE;
+}
+
+}
 
 void CPropertyHdl::LoadProperties( CMetaInfoReader *pMetaInfoReader )
 {
-    OutputDebugStringFormat( "CPropertyHdl: LoadProperties\n" );
+    OutputDebugStringFormatW( L"CPropertyHdl: LoadProperties\n" );
     PROPVARIANT propvarValues;
 
-    for ( UINT i = 0; i < (UINT)gPropertyMapTableSize; ++i )
+    for ( UINT i = 0; i < UINT(gPropertyMapTableSize); ++i )
     {
         PropVariantClear( &propvarValues );
         HRESULT hr = GetItemData( pMetaInfoReader, i, &propvarValues);
@@ -256,52 +301,6 @@ void CPropertyHdl::LoadProperties( CMetaInfoReader *pMetaInfoReader )
         }
     }
 }
-
-
-HRESULT CPropertyHdl::GetItemData( CMetaInfoReader *pMetaInfoReader, UINT nIndex, PROPVARIANT *pVarData )
-{
-    switch (nIndex) {
-    case 0: {
-            pVarData->vt = VT_BSTR;
-            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_TITLE ).c_str() );
-            OutputDebugStringFormat( "CPropertyHdl::GetItemData: Title=%S.\n", pMetaInfoReader->getTagData( META_INFO_TITLE ).c_str() );
-            return S_OK;
-    }
-    case 1: {
-            pVarData->vt = VT_BSTR;
-            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_AUTHOR ).c_str() );
-            OutputDebugStringFormat( "CPropertyHdl::GetItemData: Author=%S.\n", pMetaInfoReader->getTagData( META_INFO_AUTHOR ).c_str() );
-            return S_OK;
-    }
-    case 2: {
-            pVarData->vt = VT_BSTR;
-            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_SUBJECT ).c_str() );
-            OutputDebugStringFormat( "CPropertyHdl::GetItemData: Subject=%S.\n", pMetaInfoReader->getTagData( META_INFO_SUBJECT ).c_str() );
-            return S_OK;
-    }
-    case 3: {
-            pVarData->vt = VT_BSTR;
-            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_KEYWORDS ).c_str() );
-            OutputDebugStringFormat( "CPropertyHdl::GetItemData: Keywords=%S.\n", pMetaInfoReader->getTagData( META_INFO_KEYWORDS ).c_str() );
-            return S_OK;
-    }
-    case 4: {
-            pVarData->vt = VT_BSTR;
-            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagData( META_INFO_DESCRIPTION ).c_str() );
-            OutputDebugStringFormat( "CPropertyHdl::GetItemData: Description=%S.\n", pMetaInfoReader->getTagData( META_INFO_DESCRIPTION ).c_str() );
-            return S_OK;
-    }
-    case 5: {
-            pVarData->vt = VT_BSTR;
-            pVarData->bstrVal = SysAllocString( pMetaInfoReader->getTagAttribute( META_INFO_DOCUMENT_STATISTIC, META_INFO_PAGES ).c_str() );
-            OutputDebugStringFormat( "CPropertyHdl::GetItemData: Pages=%S.\n", pMetaInfoReader->getTagAttribute( META_INFO_DOCUMENT_STATISTIC, META_INFO_PAGES ).c_str() );
-            return S_OK;
-    }
-    }
-
-    return S_FALSE;
-}
-
 
 //                              CClassFactory
 
@@ -327,7 +326,7 @@ CClassFactory::~CClassFactory()
 
 HRESULT STDMETHODCALLTYPE CClassFactory::QueryInterface( REFIID riid, void __RPC_FAR *__RPC_FAR *ppvObject )
 {
-    *ppvObject = 0;
+    *ppvObject = nullptr;
 
     if ( IID_IUnknown == riid || IID_IClassFactory == riid )
     {
@@ -365,15 +364,15 @@ HRESULT STDMETHODCALLTYPE CClassFactory::CreateInstance(
             REFIID riid,
             void __RPC_FAR *__RPC_FAR *ppvObject)
 {
-    if ( pUnkOuter != NULL )
+    if ( pUnkOuter != nullptr )
         return CLASS_E_NOAGGREGATION;
 
-    IUnknown* pUnk = 0;
+    IUnknown* pUnk = nullptr;
 
     if ( CLSID_PROPERTY_HANDLER == m_Clsid )
         pUnk = static_cast<IPropertyStore*>( new CPropertyHdl() );
 
-    if (0 == pUnk)
+    if (nullptr == pUnk)
     {
         return E_OUTOFMEMORY;
     }
@@ -406,8 +405,8 @@ bool CClassFactory::IsLocked()
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 {
-    OutputDebugStringFormat( "DllGetClassObject.\n" );
-    *ppv = 0;
+    OutputDebugStringFormatW( L"DllGetClassObject.\n" );
+    *ppv = nullptr;
 
     if ( rclsid != CLSID_PROPERTY_HANDLER )
         return CLASS_E_CLASSNOTAVAILABLE;
@@ -423,7 +422,7 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 
 STDAPI DllCanUnloadNow()
 {
-    OutputDebugStringFormat( "DllCanUnloadNow.\n" );
+    OutputDebugStringFormatW( L"DllCanUnloadNow.\n" );
     if (CClassFactory::IsLocked() || g_DllRefCnt > 0)
         return S_FALSE;
 
@@ -433,7 +432,7 @@ STDAPI DllCanUnloadNow()
 
 BOOL WINAPI DllMain( HINSTANCE hInst, ULONG /*ul_reason_for_call*/, LPVOID /*lpReserved*/ )
 {
-    OutputDebugStringFormat( "DllMain.\n" );
+    OutputDebugStringFormatW( L"DllMain.\n" );
     g_hModule = hInst;
     return TRUE;
 }

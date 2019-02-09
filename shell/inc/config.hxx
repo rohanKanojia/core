@@ -20,22 +20,16 @@
 #ifndef INCLUDED_SHELL_INC_INTERNAL_CONFIG_HXX
 #define INCLUDED_SHELL_INC_INTERNAL_CONFIG_HXX
 
-#ifdef _MSC_VER
-#pragma warning (disable : 4786 4503 4917)
-#endif
-
-#include <tchar.h>
-
 #ifdef _AMD64_
-#define MODULE_NAME TEXT("shlxthdl_x64.dll")
+#define MODULE_NAME L"shlxthdl_x64.dll"
 #else
-#define MODULE_NAME TEXT("shlxthdl.dll")
+#define MODULE_NAME L"shlxthdl.dll"
 #endif
 
-#define COLUMN_HANDLER_DESCRIPTIVE_NAME    TEXT("LibreOffice Column Handler")
-#define INFOTIP_HANDLER_DESCRIPTIVE_NAME   TEXT("LibreOffice Infotip Handler")
-#define PROPSHEET_HANDLER_DESCRIPTIVE_NAME TEXT("LibreOffice Property Sheet Handler")
-#define THUMBVIEWER_HANDLER_DESCRIPTIVE_NAME TEXT("LibreOffice Thumbnail Viewer")
+#define COLUMN_HANDLER_DESCRIPTIVE_NAME    L"LibreOffice Column Handler"
+#define INFOTIP_HANDLER_DESCRIPTIVE_NAME   L"LibreOffice Infotip Handler"
+#define PROPSHEET_HANDLER_DESCRIPTIVE_NAME L"LibreOffice Property Sheet Handler"
+#define THUMBVIEWER_HANDLER_DESCRIPTIVE_NAME L"LibreOffice Thumbnail Viewer"
 
 #define META_CONTENT_NAME               "meta.xml"
 #define DOC_CONTENT_NAME                "content.xml"

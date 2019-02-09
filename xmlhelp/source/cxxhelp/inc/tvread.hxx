@@ -36,6 +36,7 @@
 #include <com/sun/star/deployment/XPackage.hpp>
 #include <com/sun/star/ucb/XSimpleFileAccess3.hpp>
 #include <cppuhelper/implbase.hxx>
+#include <memory>
 
 namespace treeview {
 
@@ -55,7 +56,7 @@ namespace treeview {
         OUString locale,system;
         OUString appendix;
 
-        void SAL_CALL replaceName( OUString& oustring ) const;
+        void replaceName( OUString& oustring ) const;
     };
 
     class TVDom;
@@ -71,19 +72,15 @@ namespace treeview {
 
     public:
 
-        virtual ~TVBase() { }
-
         // XNameAccess
 
         virtual css::uno::Type SAL_CALL
-        getElementType(  )
-            throw( css::uno::RuntimeException, std::exception ) override
+        getElementType(  ) override
         {
             return cppu::UnoType<void>::get();
         }
 
-        virtual sal_Bool SAL_CALL hasElements()
-            throw( css::uno::RuntimeException, std::exception ) override
+        virtual sal_Bool SAL_CALL hasElements() override
         {
             return true;
         }
@@ -92,71 +89,52 @@ namespace treeview {
 
         virtual void SAL_CALL
         addChangesListener(
-            const css::uno::Reference< css::util::XChangesListener >& aListener )
-            throw( css::uno::RuntimeException, std::exception ) override
+            const css::uno::Reference< css::util::XChangesListener >& ) override
         {
             // read only
-            (void)aListener;
         }
 
         virtual void SAL_CALL
         removeChangesListener(
-            const css::uno::Reference< css::util::XChangesListener >& aListener )
-            throw( css::uno::RuntimeException, std::exception ) override
+            const css::uno::Reference< css::util::XChangesListener >& ) override
         {
             // read only
-            (void)aListener;
         }
 
         // XComponent
 
-        virtual void SAL_CALL dispose( )
-            throw( css::uno::RuntimeException, std::exception ) override
+        virtual void SAL_CALL dispose( ) override
         {
         }
 
         virtual void SAL_CALL addEventListener(
-            const css::uno::Reference< css::lang::XEventListener >& xListener )
-            throw( css::uno::RuntimeException, std::exception ) override
-        {
-            (void)xListener;
-        }
+            const css::uno::Reference< css::lang::XEventListener >& ) override
+        {}
 
         virtual void SAL_CALL
         removeEventListener(
-            const css::uno::Reference< css::lang::XEventListener >& aListener )
-            throw( css::uno::RuntimeException, std::exception ) override
-        {
-            (void)aListener;
-        }
+            const css::uno::Reference< css::lang::XEventListener >& ) override
+        {}
 
         // Abstract functions
         // XNameAccess
 
         virtual css::uno::Any SAL_CALL
-        getByName( const OUString& aName )
-            throw( css::container::NoSuchElementException,
-                   css::lang::WrappedTargetException,
-                   css::uno::RuntimeException, std::exception) override = 0;
+        getByName( const OUString& aName ) override = 0;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        getElementNames( )
-            throw( css::uno::RuntimeException, std::exception ) override = 0;
+        getElementNames( ) override = 0;
 
         virtual sal_Bool SAL_CALL
-        hasByName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override = 0;
+        hasByName( const OUString& aName ) override = 0;
 
         // XHierarchicalNameAccess
 
         virtual css::uno::Any SAL_CALL
-        getByHierarchicalName( const OUString& aName )
-            throw( css::container::NoSuchElementException,
-                   css::uno::RuntimeException, std::exception ) override = 0;
+        getByHierarchicalName( const OUString& aName ) override = 0;
 
         virtual sal_Bool SAL_CALL
-        hasByHierarchicalName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override = 0;
+        hasByHierarchicalName( const OUString& aName ) override = 0;
 
     }; // end class TVBase
 
@@ -166,36 +144,28 @@ namespace treeview {
         friend class TVChildTarget;
 
     public:
-        TVRead( const ConfigData& configData,TVDom* tvDom = nullptr );
+        TVRead( const ConfigData& configData, TVDom* tvDom );
 
-        virtual ~TVRead();
+        virtual ~TVRead() override;
 
         // XNameAccess
 
         virtual css::uno::Any SAL_CALL
-        getByName( const OUString& aName )
-            throw( css::container::NoSuchElementException,
-                   css::lang::WrappedTargetException,
-                   css::uno::RuntimeException, std::exception) override;
+        getByName( const OUString& aName ) override;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        getElementNames( )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        getElementNames( ) override;
 
         virtual sal_Bool SAL_CALL
-        hasByName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        hasByName( const OUString& aName ) override;
 
         // XHierarchicalNameAccess
 
         virtual css::uno::Any SAL_CALL
-        getByHierarchicalName( const OUString& aName )
-            throw( css::container::NoSuchElementException,
-                   css::uno::RuntimeException, std::exception ) override;
+        getByHierarchicalName( const OUString& aName ) override;
 
         virtual sal_Bool SAL_CALL
-        hasByHierarchicalName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        hasByHierarchicalName( const OUString& aName ) override;
 
     private:
 
@@ -214,32 +184,24 @@ namespace treeview {
 
         TVChildTarget( const css::uno::Reference< css::uno::XComponentContext >& xContext );
 
-        virtual ~TVChildTarget();
+        virtual ~TVChildTarget() override;
 
         virtual css::uno::Any SAL_CALL
-        getByName( const OUString& aName )
-            throw( css::container::NoSuchElementException,
-                   css::lang::WrappedTargetException,
-                   css::uno::RuntimeException, std::exception) override;
+        getByName( const OUString& aName ) override;
 
         virtual css::uno::Sequence< OUString > SAL_CALL
-        getElementNames( )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        getElementNames( ) override;
 
         virtual sal_Bool SAL_CALL
-        hasByName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        hasByName( const OUString& aName ) override;
 
         // XHierarchicalNameAccess
 
         virtual css::uno::Any SAL_CALL
-        getByHierarchicalName( const OUString& aName )
-            throw( css::container::NoSuchElementException,
-                   css::uno::RuntimeException, std::exception ) override;
+        getByHierarchicalName( const OUString& aName ) override;
 
         virtual sal_Bool SAL_CALL
-        hasByHierarchicalName( const OUString& aName )
-            throw( css::uno::RuntimeException, std::exception ) override;
+        hasByHierarchicalName( const OUString& aName ) override;
 
     private:
         std::vector< rtl::Reference< TVRead > >   Elements;
@@ -266,18 +228,18 @@ namespace treeview {
 
         static void subst( OUString& instpath );
 
-        bool SearchAndInsert(TVDom* p, TVDom* tvDom);
+        std::unique_ptr<TVDom> SearchAndInsert(std::unique_ptr<TVDom> p, TVDom* tvDom);
 
         void Check(TVDom* tvDom);
 
     };  // end class TVChildTarget
 
-    enum IteratorState
+    enum class IteratorState
     {
-        USER_EXTENSIONS,
-        SHARED_EXTENSIONS,
-        BUNDLED_EXTENSIONS,
-        END_REACHED
+        UserExtensions,
+        SharedExtensions,
+        BundledExtensions,
+        EndReached
     };
 
     class ExtensionIteratorBase
@@ -288,7 +250,7 @@ namespace treeview {
 
     private:
         static css::uno::Reference< css::deployment::XPackage > implGetHelpPackageFromPackage
-            ( const css::uno::Reference< css::deployment::XPackage > xPackage,
+            ( const css::uno::Reference< css::deployment::XPackage >& xPackage,
               css::uno::Reference< css::deployment::XPackage >& o_xParentPackageBundle );
 
     protected:
@@ -300,14 +262,14 @@ namespace treeview {
             ( css::uno::Reference< css::deployment::XPackage >& o_xParentPackageBundle );
 
         void implGetLanguageVectorFromPackage( ::std::vector< OUString > &rv,
-            css::uno::Reference< css::deployment::XPackage > xPackage );
+            const css::uno::Reference< css::deployment::XPackage >& xPackage );
 
         osl::Mutex                                                                  m_aMutex;
         css::uno::Reference< css::uno::XComponentContext >    m_xContext;
         css::uno::Reference< css::ucb::XSimpleFileAccess3 >   m_xSFA;
 
         IteratorState                                                               m_eState;
-        OUString                                                               m_aLanguage;
+        OUString const                                                              m_aLanguage;
 
         css::uno::Sequence< css::uno::Reference
             < css::deployment::XPackage > >                              m_aUserPackagesSeq;
@@ -339,7 +301,7 @@ namespace treeview {
     private:
         OUString expandURL( const OUString& aURL );
         OUString implGetTreeFileFromPackage( sal_Int32& rnFileSize,
-            css::uno::Reference< css::deployment::XPackage > xPackage );
+            const css::uno::Reference< css::deployment::XPackage >& xPackage );
 
     }; // end class TreeFileIterator
 

@@ -18,15 +18,12 @@
  */
 
 #include "Legend.hxx"
-#include "macros.hxx"
-#include "LinePropertiesHelper.hxx"
-#include "FillProperties.hxx"
-#include "CharacterProperties.hxx"
-#include "UserDefinedProperties.hxx"
-#include "LegendHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "CloneHelper.hxx"
-#include "PropertyHelper.hxx"
+#include <LinePropertiesHelper.hxx>
+#include <FillProperties.hxx>
+#include <CharacterProperties.hxx>
+#include <UserDefinedProperties.hxx>
+#include <ModifyListenerHelper.hxx>
+#include <PropertyHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/chart2/LegendPosition.hpp>
@@ -34,8 +31,11 @@
 #include <com/sun/star/chart2/RelativePosition.hpp>
 #include <com/sun/star/chart2/RelativeSize.hpp>
 #include <cppuhelper/supportsservice.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <algorithm>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::beans::PropertyAttribute;
@@ -48,8 +48,6 @@ using ::com::sun::star::beans::Property;
 namespace
 {
 
-static const char lcl_aServiceName[] = "com.sun.star.comp.chart2.Legend";
-
 enum
 {
     PROP_LEGEND_ANCHOR_POSITION,
@@ -61,48 +59,42 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "AnchorPosition",
+    rOutProperties.emplace_back( "AnchorPosition",
                   PROP_LEGEND_ANCHOR_POSITION,
                   cppu::UnoType<chart2::LegendPosition>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "Expansion",
+    rOutProperties.emplace_back( "Expansion",
                   PROP_LEGEND_EXPANSION,
                   cppu::UnoType<css::chart::ChartLegendExpansion>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "Show",
+    rOutProperties.emplace_back( "Show",
                   PROP_LEGEND_SHOW,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "ReferencePageSize",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "ReferencePageSize",
                   PROP_LEGEND_REF_PAGE_SIZE,
                   cppu::UnoType<awt::Size>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "RelativePosition",
+    rOutProperties.emplace_back( "RelativePosition",
                   PROP_LEGEND_REL_POS,
                   cppu::UnoType<chart2::RelativePosition>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "RelativeSize",
+    rOutProperties.emplace_back( "RelativeSize",
                   PROP_LEGEND_REL_SIZE,
                   cppu::UnoType<chart2::RelativeSize>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
 }
 
@@ -147,14 +139,14 @@ struct StaticLegendInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
         ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
         ::chart::FillProperties::AddPropertiesToVector( aProperties );
         ::chart::CharacterProperties::AddPropertiesToVector( aProperties );
         ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -184,7 +176,7 @@ struct StaticLegendInfo : public rtl::StaticAggregate< uno::Reference< beans::XP
 namespace chart
 {
 
-Legend::Legend( Reference< uno::XComponentContext > const & /* xContext */ ) :
+Legend::Legend() :
         ::property::OPropertySet( m_aMutex ),
         m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {
@@ -192,7 +184,7 @@ Legend::Legend( Reference< uno::XComponentContext > const & /* xContext */ ) :
 
 Legend::Legend( const Legend & rOther ) :
         MutexContainer(),
-        impl::Legend_Base(),
+        impl::Legend_Base(rOther),
         ::property::OPropertySet( rOther, m_aMutex ),
     m_xModifyEventForwarder( ModifyListenerHelper::createModifyEventForwarder())
 {
@@ -204,50 +196,45 @@ Legend::~Legend()
 
 // ____ XCloneable ____
 Reference< util::XCloneable > SAL_CALL Legend::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     return Reference< util::XCloneable >( new Legend( *this ));
 }
 
 // ____ XModifyBroadcaster ____
 void SAL_CALL Legend::addModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL Legend::removeModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 // ____ XModifyListener ____
 void SAL_CALL Legend::modified( const lang::EventObject& aEvent )
-    throw (uno::RuntimeException, std::exception)
 {
     m_xModifyEventForwarder->modified( aEvent );
 }
 
 // ____ XEventListener (base of XModifyListener) ____
 void SAL_CALL Legend::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
     // nothing
 }
@@ -255,32 +242,11 @@ void SAL_CALL Legend::disposing( const lang::EventObject& /* Source */ )
 // ____ OPropertySet ____
 void Legend::firePropertyChangeEvent()
 {
-    fireModifyEvent();
-}
-
-void Legend::fireModifyEvent()
-{
     m_xModifyEventForwarder->modified( lang::EventObject( static_cast< uno::XWeak* >( this )));
-}
-
-Sequence< OUString > Legend::getSupportedServiceNames_Static()
-{
-    const sal_Int32 nNumServices( 6 );
-    sal_Int32 nI = 0;
-    Sequence< OUString > aServices( nNumServices );
-    aServices[ nI++ ] = "com.sun.star.chart2.Legend";
-    aServices[ nI++ ] = "com.sun.star.beans.PropertySet";
-    aServices[ nI++ ] = "com.sun.star.drawing.FillProperties";
-    aServices[ nI++ ] = "com.sun.star.drawing.LineProperties";
-    aServices[ nI++ ] = "com.sun.star.style.CharacterProperties";
-    aServices[ nI++ ] = "com.sun.star.layout.LayoutElement";
-    OSL_ASSERT( nNumServices == nI );
-    return aServices;
 }
 
 // ____ OPropertySet ____
 Any Legend::GetDefaultValue( sal_Int32 nHandle ) const
-    throw (beans::UnknownPropertyException, uno::RuntimeException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticLegendDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -296,33 +262,31 @@ Any Legend::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 Reference< beans::XPropertySetInfo > SAL_CALL Legend::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticLegendInfo::get();
 }
 
 // implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL Legend::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getImplementationName_Static();
-}
-
-OUString Legend::getImplementationName_Static()
-{
-    return OUString(lcl_aServiceName);
+    return OUString("com.sun.star.comp.chart2.Legend");
 }
 
 sal_Bool SAL_CALL Legend::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL Legend::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return {
+        "com.sun.star.chart2.Legend",
+        "com.sun.star.beans.PropertySet",
+        "com.sun.star.drawing.FillProperties",
+        "com.sun.star.drawing.LineProperties",
+        "com.sun.star.style.CharacterProperties",
+        "com.sun.star.layout.LayoutElement"
+    };
 }
 
 // needed by MSC compiler
@@ -333,11 +297,11 @@ IMPLEMENT_FORWARD_XTYPEPROVIDER2( Legend, Legend_Base, ::property::OPropertySet 
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
-com_sun_star_comp_chart2_Legend_get_implementation(css::uno::XComponentContext *context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
+com_sun_star_comp_chart2_Legend_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new ::chart::Legend(context));
+    return cppu::acquire(new ::chart::Legend);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

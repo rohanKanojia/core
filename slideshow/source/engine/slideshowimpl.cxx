@@ -28,11 +28,9 @@
 #include <cppuhelper/exc_hlp.hxx>
 
 #include <comphelper/anytostring.hxx>
-#include <comphelper/make_shared_from_uno.hxx>
 #include <comphelper/scopeguard.hxx>
-#include <comphelper/optional.hxx>
 #include <comphelper/servicedecl.hxx>
-#include <comphelper/namecontainer.hxx>
+#include <comphelper/storagehelper.hxx>
 
 #include <cppcanvas/spritecanvas.hxx>
 #include <cppcanvas/vclfactory.hxx>
@@ -45,10 +43,11 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 
 #include <vcl/font.hxx>
-#include "rtl/ref.hxx"
+#include <rtl/ref.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/XModifyListener.hpp>
@@ -59,6 +58,7 @@
 #include <com/sun/star/animations/TransitionSubType.hpp>
 #include <com/sun/star/presentation/XSlideShow.hpp>
 #include <com/sun/star/presentation/XSlideShowListener.hpp>
+#include <com/sun/star/lang/NoSupportException.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XServiceName.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
@@ -69,33 +69,34 @@
 #include <com/sun/star/drawing/XLayerSupplier.hpp>
 #include <com/sun/star/drawing/XLayerManager.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/document/XStorageBasedDocument.hpp>
 
-#include "com/sun/star/uno/Reference.hxx"
+#include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/loader/CannotActivateFactoryException.hpp>
 
-#include "unoviewcontainer.hxx"
-#include "transitionfactory.hxx"
-#include "eventmultiplexer.hxx"
-#include "usereventqueue.hxx"
-#include "eventqueue.hxx"
-#include "cursormanager.hxx"
-#include "slideshowcontext.hxx"
-#include "activitiesqueue.hxx"
-#include "activitiesfactory.hxx"
-#include "interruptabledelayevent.hxx"
-#include "slide.hxx"
-#include "shapemaps.hxx"
-#include "slideview.hxx"
-#include "tools.hxx"
-#include "unoview.hxx"
-#include "slidebitmap.hxx"
+#include <unoviewcontainer.hxx>
+#include <transitionfactory.hxx>
+#include <eventmultiplexer.hxx>
+#include <usereventqueue.hxx>
+#include <eventqueue.hxx>
+#include <cursormanager.hxx>
+#include <mediafilemanager.hxx>
+#include <slideshowcontext.hxx>
+#include <activitiesqueue.hxx>
+#include <activitiesfactory.hxx>
+#include <interruptabledelayevent.hxx>
+#include <slide.hxx>
+#include <shapemaps.hxx>
+#include <slideview.hxx>
+#include <tools.hxx>
+#include <unoview.hxx>
+#include <slidebitmap.hxx>
 #include "rehearsetimingsactivity.hxx"
 #include "waitsymbol.hxx"
 #include "effectrewinder.hxx"
-#include "framerate.hxx"
+#include <framerate.hxx>
 #include "pointersymbol.hxx"
 
-#include <boost/mem_fn.hpp>
 #include <map>
 #include <vector>
 #include <iterator>
@@ -152,7 +153,7 @@ private:
         one used by SlideShowImpl: it is not paused or modified by
         animations.
     */
-    canvas::tools::ElapsedTime maTimer;
+    canvas::tools::ElapsedTime const maTimer;
     /** Time between the display of frames.  Enforced only when mbIsActive
         is <TRUE/>.
     */
@@ -211,6 +212,7 @@ typedef ::std::map< css::uno::Reference<
 
 class SlideShowImpl : private cppu::BaseMutex,
                       public CursorManager,
+                      public MediaFileManager,
                       public SlideShowImplBase
 {
 public:
@@ -268,59 +270,49 @@ public:
     */
     bool notifyHyperLinkClicked( OUString const& hyperLink );
 
-    /** Notification from eventmultiplexer that an animation event has occoured.
-        This will be forewarded to all registered XSlideShowListener
+    /** Notification from eventmultiplexer that an animation event has occurred.
+        This will be forwarded to all registered XSlideShowListener
      */
     bool handleAnimationEvent( const AnimationNodeSharedPtr& rNode );
 
+    /** Obtain a MediaTempFile for the specified url. */
+    virtual std::shared_ptr<avmedia::MediaTempFile> getMediaTempFile(const OUString& aUrl) override;
+
 private:
     // XSlideShow:
-    virtual sal_Bool SAL_CALL nextEffect() throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL previousEffect() throw (uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL nextEffect() override;
+    virtual sal_Bool SAL_CALL previousEffect() override;
     virtual sal_Bool SAL_CALL startShapeActivity(
-        uno::Reference<drawing::XShape> const& xShape )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<drawing::XShape> const& xShape ) override;
     virtual sal_Bool SAL_CALL stopShapeActivity(
-        uno::Reference<drawing::XShape> const& xShape )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL pause( sal_Bool bPauseShow )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Reference<drawing::XDrawPage> SAL_CALL getCurrentSlide()
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<drawing::XShape> const& xShape ) override;
+    virtual sal_Bool SAL_CALL pause( sal_Bool bPauseShow ) override;
+    virtual uno::Reference<drawing::XDrawPage> SAL_CALL getCurrentSlide() override;
     virtual void SAL_CALL displaySlide(
         uno::Reference<drawing::XDrawPage> const& xSlide,
         uno::Reference<drawing::XDrawPagesSupplier> const& xDrawPages,
         uno::Reference<animations::XAnimationNode> const& xRootNode,
-        uno::Sequence<beans::PropertyValue> const& rProperties )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL registerUserPaintPolygons( const css::uno::Reference< css::lang::XMultiServiceFactory >& xDocFactory ) throw (css::uno::RuntimeException, std::exception) override;
+        uno::Sequence<beans::PropertyValue> const& rProperties ) override;
+    virtual void SAL_CALL registerUserPaintPolygons( const css::uno::Reference< css::lang::XMultiServiceFactory >& xDocFactory ) override;
     virtual sal_Bool SAL_CALL setProperty(
-        beans::PropertyValue const& rProperty ) throw (uno::RuntimeException, std::exception) override;
+        beans::PropertyValue const& rProperty ) override;
     virtual sal_Bool SAL_CALL addView(
-        uno::Reference<presentation::XSlideShowView> const& xView )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<presentation::XSlideShowView> const& xView ) override;
     virtual sal_Bool SAL_CALL removeView(
-        uno::Reference<presentation::XSlideShowView> const& xView )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL update( double & nNextTimeout )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<presentation::XSlideShowView> const& xView ) override;
+    virtual sal_Bool SAL_CALL update( double & nNextTimeout ) override;
     virtual void SAL_CALL addSlideShowListener(
-        uno::Reference<presentation::XSlideShowListener> const& xListener )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<presentation::XSlideShowListener> const& xListener ) override;
     virtual void SAL_CALL removeSlideShowListener(
-        uno::Reference<presentation::XSlideShowListener> const& xListener )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<presentation::XSlideShowListener> const& xListener ) override;
     virtual void SAL_CALL addShapeEventListener(
         uno::Reference<presentation::XShapeEventListener> const& xListener,
-        uno::Reference<drawing::XShape> const& xShape )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<drawing::XShape> const& xShape ) override;
     virtual void SAL_CALL removeShapeEventListener(
         uno::Reference<presentation::XShapeEventListener> const& xListener,
-        uno::Reference<drawing::XShape> const& xShape )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<drawing::XShape> const& xShape ) override;
     virtual void SAL_CALL setShapeCursor(
-        uno::Reference<drawing::XShape> const& xShape, sal_Int16 nPointerShape )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<drawing::XShape> const& xShape, sal_Int16 nPointerShape ) override;
 
     // CursorManager
 
@@ -375,7 +367,7 @@ private:
 
     /// Resets the current slide transition sound object with a new one:
     SoundPlayerSharedPtr resetSlideTransitionSound(
-        uno::Any const& url = uno::Any(), bool bLoopSound = false );
+        uno::Any const& url, bool bLoopSound );
 
     /// stops the current slide transition sound
     void stopSlideTransitionSound();
@@ -475,6 +467,8 @@ private:
     uno::Reference<drawing::XDrawPage>      mxPrefetchSlide;
     ///  save the XDrawPagesSupplier to retrieve polygons
     uno::Reference<drawing::XDrawPagesSupplier>  mxDrawPagesSupplier;
+    ///  Used by MediaFileManager, for media files with package url.
+    uno::Reference<document::XStorageBasedDocument> mxSBD;
     /// slide animation to be prefetched:
     uno::Reference<animations::XAnimationNode> mxPrefetchAnimationNode;
 
@@ -587,6 +581,7 @@ SlideShowImpl::SlideShowImpl(
       mpPrefetchSlide(),
       mxPrefetchSlide(),
       mxDrawPagesSupplier(),
+      mxSBD(),
       mxPrefetchAnimationNode(),
       mnCurrentCursor(awt::SystemPointer::ARROW),
       mnWaitSymbolRequestCount(0),
@@ -725,7 +720,7 @@ SoundPlayerSharedPtr SlideShowImpl::resetSlideTransitionSound( const uno::Any& r
         try
         {
             mpCurrentSlideTransitionSound = SoundPlayer::create(
-                maEventMultiplexer, url, mxComponentContext );
+                maEventMultiplexer, url, mxComponentContext, *this);
             mpCurrentSlideTransitionSound->setPlaybackLoop( bLoopSound );
         }
         catch (lang::NoSupportException const&)
@@ -761,8 +756,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
 
     if( !xPropSet.is() )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "Slide has no PropertySet - assuming no transition\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "Slide has no PropertySet - assuming no transition" );
         return ActivitySharedPtr();
     }
 
@@ -771,8 +766,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
                            xPropSet,
                            "TransitionType") )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "Could not extract slide transition type from XDrawPage - assuming no transition\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "Could not extract slide transition type from XDrawPage - assuming no transition" );
         return ActivitySharedPtr();
     }
 
@@ -781,8 +776,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
                            xPropSet,
                            "TransitionSubtype") )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "Could not extract slide transition subtype from XDrawPage - assuming no transition\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "Could not extract slide transition subtype from XDrawPage - assuming no transition" );
         return ActivitySharedPtr();
     }
 
@@ -791,8 +786,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
                            xPropSet,
                            "TransitionDirection") )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "Could not extract slide transition direction from XDrawPage - assuming default direction\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "Could not extract slide transition direction from XDrawPage - assuming default direction" );
     }
 
     sal_Int32 aUnoColor(0);
@@ -800,8 +795,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
                            xPropSet,
                            "TransitionFadeColor") )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "Could not extract slide transition fade color from XDrawPage - assuming black\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "Could not extract slide transition fade color from XDrawPage - assuming black" );
     }
 
     const RGBColor aTransitionFadeColor( unoColor2RGBColor( aUnoColor ));
@@ -810,10 +805,10 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
     bool bLoopSound = false;
 
     if( !getPropertyValue( aSound, xPropSet, "Sound") )
-        OSL_TRACE( "createSlideTransition(): Could not determine transition sound effect URL from XDrawPage - using no sound" );
+        SAL_INFO("slideshow", "createSlideTransition(): Could not determine transition sound effect URL from XDrawPage - using no sound" );
 
     if( !getPropertyValue( bLoopSound, xPropSet, "LoopSound" ) )
-        OSL_TRACE( "createSlideTransition(): Could not get slide property 'LoopSound' - using no sound" );
+        SAL_INFO("slideshow", "createSlideTransition(): Could not get slide property 'LoopSound' - using no sound" );
 
     NumberAnimationSharedPtr pTransition(
         TransitionFactory::createSlideTransition(
@@ -840,8 +835,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
                            xPropSet,
                            "TransitionDuration") )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "Could not extract slide transition duration from XDrawPage - assuming no transition\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "Could not extract slide transition duration from XDrawPage - assuming no transition" );
         return ActivitySharedPtr();
     }
 
@@ -850,8 +845,8 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
                            xPropSet,
                            "MinimalFrameNumber") )
     {
-        OSL_TRACE( "createSlideTransition(): "
-                   "No minimal number of frames given - assuming 5\n" );
+        SAL_INFO("slideshow", "createSlideTransition(): "
+                   "No minimal number of frames given - assuming 5" );
     }
 
     // prefetch slide transition bitmaps, but postpone it after
@@ -885,14 +880,7 @@ ActivitySharedPtr SlideShowImpl::createSlideTransition(
 PolygonMap::iterator SlideShowImpl::findPolygons( uno::Reference<drawing::XDrawPage> const& xDrawPage)
 {
     // TODO(P2): optimize research in the map.
-    PolygonMap::iterator aEnd = maPolygons.end();
-    for( PolygonMap::iterator aIter = maPolygons.begin();
-         aIter != aEnd;
-         ++aIter )
-        if( aIter->first == xDrawPage )
-            return aIter;
-
-    return aEnd;
+    return maPolygons.find(xDrawPage);
 }
 
 SlideSharedPtr SlideShowImpl::makeSlide(
@@ -915,6 +903,7 @@ SlideSharedPtr SlideShowImpl::makeSlide(
                                              maScreenUpdater,
                                              maActivitiesQueue,
                                              maUserEventQueue,
+                                             *this,
                                              *this,
                                              maViewContainer,
                                              mxComponentContext,
@@ -1051,8 +1040,7 @@ public:
         }
         else
         {
-            OSL_FAIL( OUStringToOString(
-                            rProperty.Name, RTL_TEXTENCODING_UTF8 ).getStr() );
+            SAL_WARN( "slideshow", rProperty.Name );
         }
     }
 private:
@@ -1066,7 +1054,6 @@ void SlideShowImpl::displaySlide(
     uno::Reference<drawing::XDrawPagesSupplier> const& xDrawPages,
     uno::Reference<animations::XAnimationNode> const& xRootNode,
     uno::Sequence<beans::PropertyValue> const& rProperties )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1079,6 +1066,7 @@ void SlideShowImpl::displaySlide(
     DBG_TESTSOLARMUTEX();
 
     mxDrawPagesSupplier = xDrawPages;
+    mxSBD = uno::Reference<document::XStorageBasedDocument>(mxDrawPagesSupplier, uno::UNO_QUERY);
 
     stopShow();  // MUST call that: results in
     // maUserEventQueue.clear(). What's more,
@@ -1091,8 +1079,8 @@ void SlideShowImpl::displaySlide(
 
     bool bSkipAllMainSequenceEffects (false);
     bool bSkipSlideTransition (false);
-    std::for_each( rProperties.getConstArray(),
-                   rProperties.getConstArray() + rProperties.getLength(),
+    std::for_each( rProperties.begin(),
+                   rProperties.end(),
         PrefetchPropertiesFunc(this, bSkipAllMainSequenceEffects, bSkipSlideTransition) );
 
     OSL_ENSURE( !maViewContainer.empty(), "### no views!" );
@@ -1175,7 +1163,10 @@ void SlideShowImpl::displaySlide(
     } // finally
 
     maListenerContainer.forEach<presentation::XSlideShowListener>(
-        boost::mem_fn( &presentation::XSlideShowListener::slideTransitionStarted ) );
+        [](uno::Reference<presentation::XSlideShowListener> const& xListener)
+        {
+            xListener->slideTransitionStarted();
+        });
 
     // We are currently rewinding an effect.  This lead us from the next
     // slide to this one.  To complete this we have to play back all main
@@ -1206,10 +1197,13 @@ void SlideShowImpl::redisplayCurrentSlide()
             "SlideShowImpl::notifySlideTransitionEnded"));
 
     maListenerContainer.forEach<presentation::XSlideShowListener>(
-        boost::mem_fn( &presentation::XSlideShowListener::slideTransitionStarted ) );
+        [](uno::Reference<presentation::XSlideShowListener> const& xListener)
+        {
+            xListener->slideTransitionStarted();
+        });
 }
 
-sal_Bool SlideShowImpl::nextEffect() throw (uno::RuntimeException, std::exception)
+sal_Bool SlideShowImpl::nextEffect()
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1225,7 +1219,7 @@ sal_Bool SlideShowImpl::nextEffect() throw (uno::RuntimeException, std::exceptio
         return maEventMultiplexer.notifyNextEffect();
 }
 
-sal_Bool SlideShowImpl::previousEffect() throw (uno::RuntimeException, std::exception)
+sal_Bool SlideShowImpl::previousEffect()
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1270,7 +1264,6 @@ void SlideShowImpl::rewindEffectToPreviousSlide()
 
 sal_Bool SlideShowImpl::startShapeActivity(
     uno::Reference<drawing::XShape> const& /*xShape*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1284,7 +1277,6 @@ sal_Bool SlideShowImpl::startShapeActivity(
 
 sal_Bool SlideShowImpl::stopShapeActivity(
     uno::Reference<drawing::XShape> const& /*xShape*/ )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1297,7 +1289,6 @@ sal_Bool SlideShowImpl::stopShapeActivity(
 }
 
 sal_Bool SlideShowImpl::pause( sal_Bool bPauseShow )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1319,7 +1310,6 @@ sal_Bool SlideShowImpl::pause( sal_Bool bPauseShow )
 }
 
 uno::Reference<drawing::XDrawPage> SlideShowImpl::getCurrentSlide()
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1337,7 +1327,6 @@ uno::Reference<drawing::XDrawPage> SlideShowImpl::getCurrentSlide()
 
 sal_Bool SlideShowImpl::addView(
     uno::Reference<presentation::XSlideShowView> const& xView )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1385,7 +1374,6 @@ sal_Bool SlideShowImpl::addView(
 
 sal_Bool SlideShowImpl::removeView(
     uno::Reference<presentation::XSlideShowView> const& xView )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1406,7 +1394,7 @@ sal_Bool SlideShowImpl::removeView(
     return true;
 }
 
-void SlideShowImpl::registerUserPaintPolygons( const uno::Reference< lang::XMultiServiceFactory >& xDocFactory ) throw (uno::RuntimeException, std::exception)
+void SlideShowImpl::registerUserPaintPolygons( const uno::Reference< lang::XMultiServiceFactory >& xDocFactory )
 {
     //Retrieve Polygons if user ends presentation by context menu
     if (mpCurrentSlide)
@@ -1494,24 +1482,20 @@ void SlideShowImpl::registerUserPaintPolygons( const uno::Reference< lang::XMult
                     aXPropSet->setPropertyValue("PolyPolygon", aParam );
 
                     //LineStyle : SOLID by default
-                    uno::Any            aAny;
                     drawing::LineStyle  eLS;
                     eLS = drawing::LineStyle_SOLID;
-                    aAny <<= eLS;
-                    aXPropSet->setPropertyValue("LineStyle", aAny );
+                    aXPropSet->setPropertyValue("LineStyle", uno::Any(eLS) );
 
                     //LineColor
                     sal_uInt32          nLineColor;
                     nLineColor = pPolyPoly->getRGBALineColor();
                     //Transform polygon color from RRGGBBAA to AARRGGBB
-                    aAny <<= RGBAColor2UnoColor(nLineColor);
-                    aXPropSet->setPropertyValue("LineColor", aAny );
+                    aXPropSet->setPropertyValue("LineColor", uno::Any(RGBAColor2UnoColor(nLineColor)) );
 
                     //LineWidth
                     double              fLineWidth;
                     fLineWidth = pPolyPoly->getStrokeWidth();
-                    aAny <<= (sal_Int32)fLineWidth;
-                    aXPropSet->setPropertyValue("LineWidth", aAny );
+                    aXPropSet->setPropertyValue("LineWidth", uno::Any(static_cast<sal_Int32>(fLineWidth)) );
 
                     // make polygons special
                     xLayerManager->attachShapeToLayer(rPolyShape, xDrawnInSlideshow);
@@ -1522,7 +1506,6 @@ void SlideShowImpl::registerUserPaintPolygons( const uno::Reference< lang::XMult
 }
 
 sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1553,7 +1536,7 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
                         "setProperty(): User paint overrides invisible mouse" );
 
             // enable user paint
-            maUserPaintColor.reset( unoColor2RGBColor( nColor ) );
+            maUserPaintColor = unoColor2RGBColor(nColor);
             if( mpCurrentSlide && !mpCurrentSlide->isPaintOverlayActive() )
                 mpCurrentSlide->enablePaintOverlay();
 
@@ -1583,7 +1566,7 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
                         "setProperty(): User paint overrides invisible mouse" );
 
             // enable user paint
-            maEraseAllInk.reset( bEraseAllInk );
+            maEraseAllInk = bEraseAllInk;
             maEventMultiplexer.notifyEraseAllInk( *maEraseAllInk );
         }
 
@@ -1600,7 +1583,7 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
 
             if(bSwitchPenMode){
             // Switch to Pen Mode
-            maSwitchPenMode.reset( bSwitchPenMode );
+            maSwitchPenMode = bSwitchPenMode;
             maEventMultiplexer.notifySwitchPenMode();
             }
         }
@@ -1616,7 +1599,7 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
                         "setProperty(): User paint overrides invisible mouse" );
             if(bSwitchEraserMode){
             // switch to Eraser mode
-            maSwitchEraserMode.reset( bSwitchEraserMode );
+            maSwitchEraserMode = bSwitchEraserMode;
             maEventMultiplexer.notifySwitchEraserMode();
             }
         }
@@ -1633,7 +1616,7 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
                         "setProperty(): User paint overrides invisible mouse" );
 
             // enable user paint
-            maEraseInk.reset( nEraseInk );
+            maEraseInk = nEraseInk;
             maEventMultiplexer.notifyEraseInkWidth( *maEraseInk );
         }
 
@@ -1715,6 +1698,7 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
                     maActivitiesQueue,
                     maUserEventQueue,
                     *this,
+                    *this,
                     maViewContainer,
                     mxComponentContext) );
         }
@@ -1791,19 +1775,14 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
             && (aValues[1] >>= bValue))
         {
             // Look up the view.
-            for (UnoViewVector::const_iterator
-                     iView (maViewContainer.begin()),
-                     iEnd (maViewContainer.end());
-                 iView!=iEnd;
-                 ++iView)
+            auto iView = std::find_if(maViewContainer.begin(), maViewContainer.end(),
+                [&xView](const UnoViewSharedPtr& rxView) { return rxView && rxView->getUnoView() == xView; });
+            if (iView != maViewContainer.end())
             {
-                if (*iView && (*iView)->getUnoView()==xView)
-                {
-                    // Store the flag at the view so that media shapes have
-                    // access to it.
-                    (*iView)->setIsSoundEnabled(bValue);
-                    return true;
-                }
+                // Store the flag at the view so that media shapes have
+                // access to it.
+                (*iView)->setIsSoundEnabled(bValue);
+                return true;
             }
         }
     }
@@ -1813,7 +1792,6 @@ sal_Bool SlideShowImpl::setProperty( beans::PropertyValue const& rProperty )
 
 void SlideShowImpl::addSlideShowListener(
     uno::Reference<presentation::XSlideShowListener> const& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1826,7 +1804,6 @@ void SlideShowImpl::addSlideShowListener(
 
 void SlideShowImpl::removeSlideShowListener(
     uno::Reference<presentation::XSlideShowListener> const& xListener )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1837,7 +1814,6 @@ void SlideShowImpl::removeSlideShowListener(
 void SlideShowImpl::addShapeEventListener(
     uno::Reference<presentation::XShapeEventListener> const& xListener,
     uno::Reference<drawing::XShape> const& xShape )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1852,11 +1828,10 @@ void SlideShowImpl::addShapeEventListener(
         maShapeEventListeners.end() )
     {
         // no entry for this shape -> create one
-        aIter = maShapeEventListeners.insert(
-            ShapeEventListenerMap::value_type(
+        aIter = maShapeEventListeners.emplace(
                 xShape,
-                std::shared_ptr<comphelper::OInterfaceContainerHelper2>(
-                    new comphelper::OInterfaceContainerHelper2(m_aMutex)))).first;
+                std::make_shared<comphelper::OInterfaceContainerHelper2>(
+                    m_aMutex)).first;
     }
 
     // add new listener to broadcaster
@@ -1870,7 +1845,6 @@ void SlideShowImpl::addShapeEventListener(
 void SlideShowImpl::removeShapeEventListener(
     uno::Reference<presentation::XShapeEventListener> const& xListener,
     uno::Reference<drawing::XShape> const& xShape )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1897,7 +1871,6 @@ void SlideShowImpl::removeShapeEventListener(
 
 void SlideShowImpl::setShapeCursor(
     uno::Reference<drawing::XShape> const& xShape, sal_Int16 nPointerShape )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -1916,9 +1889,7 @@ void SlideShowImpl::setShapeCursor(
             // add new entry, unless shape shall display
             // normal pointer arrow -> no need to handle that
             // case
-            maShapeCursors.insert(
-                ShapeCursorMap::value_type(xShape,
-                                           nPointerShape) );
+            maShapeCursors.emplace(xShape, nPointerShape);
         }
     }
     else if( nPointerShape == awt::SystemPointer::ARROW )
@@ -1958,7 +1929,6 @@ void SlideShowImpl::resetCursor()
 }
 
 sal_Bool SlideShowImpl::update( double & nNextTimeout )
-    throw (uno::RuntimeException, std::exception)
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -2000,7 +1970,7 @@ sal_Bool SlideShowImpl::update( double & nNextTimeout )
             maEventQueue.process();
 
             // #i118671# the call above may execute a macro bound to an object. In
-            // that case this macro may have destroyed this local sliseshow so that it
+            // that case this macro may have destroyed this local slideshow so that it
             // is disposed (see bugdoc at task). In that case, detect this and exit
             // gently from this slideshow. Do not forget to disable the scoped
             // call to mpPresTimer, this will be deleted if we are disposed.
@@ -2046,8 +2016,8 @@ sal_Bool SlideShowImpl::update( double & nNextTimeout )
         }
         // Time held until here
 
-        const bool bActivitiesLeft = (! maActivitiesQueue.isEmpty());
-        const bool bTimerEventsLeft = (! maEventQueue.isEmpty());
+        const bool bActivitiesLeft = ! maActivitiesQueue.isEmpty();
+        const bool bTimerEventsLeft = ! maEventQueue.isEmpty();
         const bool bRet = (bActivitiesLeft || bTimerEventsLeft);
 
         if (bRet)
@@ -2101,9 +2071,12 @@ sal_Bool SlideShowImpl::update( double & nNextTimeout )
                 {
                     uno::Reference< presentation::XSlideShowView > xView( pView->getUnoView(),
                                                                           uno::UNO_QUERY_THROW );
-                    uno::Reference< util::XUpdatable >             xUpdatable( xView->getCanvas(),
-                                                                               uno::UNO_QUERY_THROW );
-                    xUpdatable->update();
+                    uno::Reference<util::XUpdatable> const xUpdatable(
+                            xView->getCanvas(), uno::UNO_QUERY);
+                    if (xUpdatable.is()) // not supported in PresenterCanvas
+                    {
+                        xUpdatable->update();
+                    }
                 }
                 catch( uno::RuntimeException& )
                 {
@@ -2111,9 +2084,7 @@ sal_Bool SlideShowImpl::update( double & nNextTimeout )
                 }
                 catch( uno::Exception& )
                 {
-                    OSL_FAIL( OUStringToOString(
-                                    comphelper::anyToString( cppu::getCaughtException() ),
-                                    RTL_TEXTENCODING_UTF8 ).getStr() );
+                    SAL_WARN( "slideshow", comphelper::anyToString( cppu::getCaughtException() ) );
                 }
             }
 
@@ -2160,9 +2131,9 @@ void queryAutomaticSlideTransition( uno::Reference<drawing::XDrawPage> const& xD
                            xPropSet,
                            "Change") )
     {
-        OSL_TRACE(
+        SAL_INFO("slideshow",
             "queryAutomaticSlideTransition(): "
-            "Could not extract slide change mode from XDrawPage - assuming <none>\n" );
+            "Could not extract slide change mode from XDrawPage - assuming <none>" );
     }
 
     bHasAutomaticNextSlide = nChange == 1;
@@ -2172,10 +2143,10 @@ void queryAutomaticSlideTransition( uno::Reference<drawing::XDrawPage> const& xD
                            xPropSet,
                            "HighResDuration") )
     {
-        OSL_TRACE(
+        SAL_INFO("slideshow",
             "queryAutomaticSlideTransition(): "
             "Could not extract slide transition timeout from "
-            "XDrawPage - assuming 1 sec\n" );
+            "XDrawPage - assuming 1 sec" );
     }
 }
 
@@ -2282,7 +2253,10 @@ void SlideShowImpl::notifySlideAnimationsEnded()
     } // finally
 
     maListenerContainer.forEach<presentation::XSlideShowListener>(
-        boost::mem_fn( &presentation::XSlideShowListener::slideAnimationsEnded ) );
+        [](uno::Reference<presentation::XSlideShowListener> const& xListener)
+        {
+            xListener->slideAnimationsEnded();
+        });
 }
 
 void SlideShowImpl::notifySlideEnded (const bool bReverse)
@@ -2339,8 +2313,8 @@ bool SlideShowImpl::notifyHyperLinkClicked( OUString const& hyperLink )
     return true;
 }
 
-/** Notification from eventmultiplexer that an animation event has occoured.
-    This will be forewarded to all registered XSlideShoeListener
+/** Notification from eventmultiplexer that an animation event has occurred.
+    This will be forwarded to all registered XSlideShoeListener
  */
 bool SlideShowImpl::handleAnimationEvent( const AnimationNodeSharedPtr& rNode )
 {
@@ -2369,6 +2343,37 @@ bool SlideShowImpl::handleAnimationEvent( const AnimationNodeSharedPtr& rNode )
     }
 
     return true;
+}
+
+std::shared_ptr<avmedia::MediaTempFile> SlideShowImpl::getMediaTempFile(const OUString& aUrl)
+{
+    std::shared_ptr<avmedia::MediaTempFile> aRet;
+
+    if (!mxSBD.is())
+        return aRet;
+
+    comphelper::LifecycleProxy aProxy;
+    uno::Reference<io::XStream> xStream =
+        comphelper::OStorageHelper::GetStreamAtPackageURL(mxSBD->getDocumentStorage(), aUrl,
+                css::embed::ElementModes::READ, aProxy);
+
+    uno::Reference<io::XInputStream> xInStream = xStream->getInputStream();
+    if (xInStream.is())
+    {
+        sal_Int32 nLastDot = aUrl.lastIndexOf('.');
+        sal_Int32 nLastSlash = aUrl.lastIndexOf('/');
+        OUString sDesiredExtension;
+        if (nLastDot > nLastSlash && nLastDot+1 < aUrl.getLength())
+            sDesiredExtension = aUrl.copy(nLastDot);
+
+        OUString sTempUrl;
+        if (::avmedia::CreateMediaTempFile(xInStream, sTempUrl, sDesiredExtension))
+            aRet.reset(new avmedia::MediaTempFile(sTempUrl));
+
+        xInStream->closeInput();
+    }
+
+    return aRet;
 }
 
 //===== FrameSynchronization ==================================================
@@ -2419,7 +2424,7 @@ const sdecl::ServiceDecl slideShowDecl(
 
 // The C shared lib entry points
 extern "C"
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL slideshow_component_getFactory( sal_Char const* pImplName,
+SAL_DLLPUBLIC_EXPORT void* slideshow_component_getFactory( sal_Char const* pImplName,
                                          void*, void* )
 {
     return sdecl::component_getFactoryHelper( pImplName, {&slideShowDecl} );

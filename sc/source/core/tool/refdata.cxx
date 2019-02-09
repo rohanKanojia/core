@@ -21,7 +21,7 @@
 
 #include <algorithm>
 
-#include "refdata.hxx"
+#include <refdata.hxx>
 
 void ScSingleRefData::InitAddress( const ScAddress& rAdr )
 {
@@ -455,6 +455,10 @@ ScComplexRefData& ScComplexRefData::Extend( const ScSingleRefData & rRef, const 
     if (rRef.IsFlag3D())
         Ref1.SetFlag3D( true);
 
+    // Inherit RelNameRef from extending part.
+    if (rRef.IsRelName())
+        Ref2.SetRelName(true);
+
     SetRange(aAbsRange, rPos);
 
     return *this;
@@ -547,6 +551,11 @@ bool ScComplexRefData::IncEndRowSticky( SCROW nDelta, const ScAddress& rPos )
         Ref2.IncRow( nDelta);   // was greater than MAXROW, caller should know..
 
     return true;
+}
+
+bool ScComplexRefData::IsDeleted() const
+{
+    return Ref1.IsDeleted() || Ref2.IsDeleted();
 }
 
 #if DEBUG_FORMULA_COMPILER

@@ -11,10 +11,9 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_SIDEBAR_STYLEPRESETSPANEL_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_SIDEBAR_STYLEPRESETSPANEL_HXX
 
+#include <memory>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/document/XUndoManager.hpp>
 
-#include <svx/sidebar/Popup.hxx>
 #include <svx/sidebar/PanelLayout.hxx>
 
 #include <sfx2/sidebar/ControllerItem.hxx>
@@ -29,7 +28,6 @@
 #include <vcl/fixed.hxx>
 #include <vcl/button.hxx>
 #include <vcl/toolbox.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/field.hxx>
 #include <svl/intitem.hxx>
 #include <svl/lstner.hxx>
@@ -38,7 +36,7 @@
 
 #include <svx/fntctrl.hxx>
 
-#include "docstyle.hxx"
+#include <docstyle.hxx>
 
 namespace sw { namespace sidebar {
 
@@ -62,7 +60,7 @@ private:
             : maURL(rURL)
         {}
 
-        OUString maURL;
+        OUString const maURL;
     };
 
     void RefreshList();
@@ -70,14 +68,14 @@ private:
     StylePresetsPanel(vcl::Window* pParent,
                    const css::uno::Reference<css::frame::XFrame>& rxFrame);
 
-    virtual ~StylePresetsPanel();
+    virtual ~StylePresetsPanel() override;
     virtual void dispose() override;
 
     VclPtr<ValueSet> mpValueSet;
 
     std::vector<std::unique_ptr<TemplateEntry>> maTemplateEntries;
 
-    DECL_LINK_TYPED(DoubleClickHdl, ValueSet*, void);
+    DECL_LINK(DoubleClickHdl, ValueSet*, void);
 };
 
 }} // end of namespace sw::sidebar

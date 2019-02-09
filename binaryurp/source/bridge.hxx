@@ -20,26 +20,25 @@
 #ifndef INCLUDED_BINARYURP_SOURCE_BRIDGE_HXX
 #define INCLUDED_BINARYURP_SOURCE_BRIDGE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
-#include <list>
 #include <map>
 #include <vector>
 
-#include "com/sun/star/bridge/XBridge.hpp"
-#include "com/sun/star/lang/XComponent.hpp"
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "cppuhelper/implbase.hxx"
-#include "osl/conditn.hxx"
-#include "osl/mutex.hxx"
-#include "rtl/ref.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "uno/environment.hxx"
-#include "uno/mapping.hxx"
-#include "uno/threadpool.h"
+#include <com/sun/star/bridge/XBridge.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cppuhelper/implbase.hxx>
+#include <osl/conditn.hxx>
+#include <osl/mutex.hxx>
+#include <rtl/ref.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <uno/environment.hxx>
+#include <uno/mapping.hxx>
+#include <uno/threadpool.h>
 
 #include "outgoingrequest.hxx"
 #include "outgoingrequests.hxx"
@@ -51,7 +50,7 @@ namespace binaryurp {
     class Proxy;
     class Reader;
 }
-namespace com { namespace sun { namespace star {
+namespace com::sun::star {
     namespace bridge { class XInstanceProvider; }
     namespace connection { class XConnection; }
     namespace lang { class XEventListener; }
@@ -61,7 +60,7 @@ namespace com { namespace sun { namespace star {
         class UnoInterfaceReference;
         class XInterface;
     }
-} } }
+}
 namespace rtl { class ByteSequence; }
 
 namespace binaryurp {
@@ -88,10 +87,10 @@ public:
     // thread:
     void terminate(bool final);
 
-    com::sun::star::uno::Reference< com::sun::star::connection::XConnection >
+    const com::sun::star::uno::Reference< com::sun::star::connection::XConnection >&
     getConnection() const { return connection_;}
 
-    com::sun::star::uno::Reference< com::sun::star::bridge::XInstanceProvider >
+    const com::sun::star::uno::Reference< com::sun::star::bridge::XInstanceProvider >&
     getProvider() const { return provider_;}
 
     com::sun::star::uno::Mapping & getCppToBinaryMapping() { return cppToBinaryMapping_;}
@@ -172,30 +171,24 @@ private:
     Bridge(const Bridge&) = delete;
     Bridge& operator=(const Bridge&) = delete;
 
-    virtual ~Bridge();
+    virtual ~Bridge() override;
 
     virtual com::sun::star::uno::Reference< com::sun::star::uno::XInterface >
-    SAL_CALL getInstance(OUString const & sInstanceName)
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    SAL_CALL getInstance(OUString const & sInstanceName) override;
 
-    virtual OUString SAL_CALL getName()
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getName() override;
 
-    virtual OUString SAL_CALL getDescription()
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getDescription() override;
 
-    virtual void SAL_CALL dispose()
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
 
     virtual void SAL_CALL addEventListener(
         com::sun::star::uno::Reference< com::sun::star::lang::XEventListener >
-            const & xListener)
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+            const & xListener) override;
 
     virtual void SAL_CALL removeEventListener(
         com::sun::star::uno::Reference< com::sun::star::lang::XEventListener >
-            const & aListener)
-        throw (com::sun::star::uno::RuntimeException, std::exception) override;
+            const & aListener) override;
 
     // Only called from reader_ thread:
     void sendCommitChangeRequest();
@@ -227,7 +220,7 @@ private:
     void checkDisposed();
 
     typedef
-        std::list<
+        std::vector<
             com::sun::star::uno::Reference<
                 com::sun::star::lang::XEventListener > >
         Listeners;

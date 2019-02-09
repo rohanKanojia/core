@@ -15,7 +15,7 @@
 
 #include <config_dbus.h>
 
-#if (defined(LINUX) && !defined(__FreeBSD_kernel__)) && ENABLE_DBUS
+#if (defined(LINUX) && !defined(__FreeBSD_kernel__)) && ENABLE_DBUS && DBUS_HAVE_GLIB
 #  define LINUX_BLUETOOTH
 #endif
 
@@ -43,7 +43,7 @@ namespace sd
 #endif
     private:
         explicit BluetoothServer( std::vector<Communicator*>* pCommunicators );
-        virtual ~BluetoothServer();
+        virtual ~BluetoothServer() override;
 
         enum { UNKNOWN, DISCOVERABLE, NOT_DISCOVERABLE } meWasDiscoverable;
         static BluetoothServer *spServer;

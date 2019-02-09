@@ -20,10 +20,12 @@
 #ifndef INCLUDED_OOX_CORE_RELATIONS_HXX
 #define INCLUDED_OOX_CORE_RELATIONS_HXX
 
-#include <oox/helper/helper.hxx>
-#include <oox/dllapi.h>
+#include <cstddef>
 #include <map>
 #include <memory>
+
+#include <oox/dllapi.h>
+#include <rtl/ustring.hxx>
 
 namespace oox {
 namespace core {
@@ -76,9 +78,10 @@ public:
     {
         return maMap.end();
     }
-    void insert( const ::std::map< OUString, Relation >::value_type& rVal )
+    template<class... Args>
+    void emplace(Args&&... args)
     {
-        maMap.insert( rVal );
+        maMap.emplace(std::forward<Args>(args)...);
     }
 
     /** Returns the path of the fragment this relations collection is related to. */
@@ -106,7 +109,7 @@ public:
 
 private:
     ::std::map< OUString, Relation > maMap;
-    OUString     maFragmentPath;
+    OUString const maFragmentPath;
 };
 
 

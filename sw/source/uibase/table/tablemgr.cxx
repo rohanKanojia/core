@@ -27,37 +27,34 @@
 #include <sot/storage.hxx>
 #include <comphelper/classids.hxx>
 #include <svx/charthelper.hxx>
+#include <svtools/embedhlp.hxx>
 
-#include "edtwin.hxx"
-#include "wrtsh.hxx"
-#include "cmdid.h"
-#include "frmatr.hxx"
-#include "view.hxx"
-#include "basesh.hxx"
-#include "swundo.hxx"
-#include "tablemgr.hxx"
-#include "frmfmt.hxx"
-#include "instable.hxx"
-#include "swerror.h"
-#include "table.hrc"
-#include "swabstdlg.hxx"
-#include "swcli.hxx"
-#include "docsh.hxx"
-#include "unotbl.hxx"
-#include "unochart.hxx"
+#include <edtwin.hxx>
+#include <wrtsh.hxx>
+#include <cmdid.h>
+#include <frmatr.hxx>
+#include <view.hxx>
+#include <basesh.hxx>
+#include <swundo.hxx>
+#include <tablemgr.hxx>
+#include <frmfmt.hxx>
+#include <instable.hxx>
+#include <swerror.h>
+#include <swabstdlg.hxx>
+#include <swcli.hxx>
+#include <docsh.hxx>
+#include <unotbl.hxx>
+#include <unochart.hxx>
 #include <memory>
 
 using namespace ::com::sun::star;
 
 // Adjust line height (dialogue)
-void SwTableFUNC::ColWidthDlg( vcl::Window *pParent )
+void SwTableFUNC::ColWidthDlg(weld::Window *pParent)
 {
     InitTabCols();
     SwAbstractDialogFactory* pFact = SwAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "SwAbstractDialogFactory fail!");
-
-    std::unique_ptr<VclAbstractDialog> pDlg(pFact->CreateSwTableWidthDlg(pParent, *this));
-    OSL_ENSURE(pDlg, "Dialog creation failed!");
+    ScopedVclPtr<VclAbstractDialog> pDlg(pFact->CreateSwTableWidthDlg(pParent, *this));
     pDlg->Execute();
 }
 
@@ -133,7 +130,7 @@ void SwTableFUNC::SetColWidth(sal_uInt16 nNum, SwTwips nNewWidth )
             bCurrentOnly = true;
         SwTwips nWidth = GetColWidth(nNum);
 
-        int nDiff = (int)(nNewWidth - nWidth);
+        int nDiff = static_cast<int>(nNewWidth - nWidth);
         if( !nNum )
             aCols[ GetRightSeparator(0) ] += nDiff;
         else if( nNum < GetColCount()  )
@@ -142,7 +139,7 @@ void SwTableFUNC::SetColWidth(sal_uInt16 nNum, SwTwips nNewWidth )
                 aCols[ GetRightSeparator(nNum) ] += nDiff;
             else
             {
-                int nDiffLeft = nDiff - (int)GetColWidth(nNum + 1) + (int)MINLAY;
+                int nDiffLeft = nDiff - static_cast<int>(GetColWidth(nNum + 1)) + int(MINLAY);
                 aCols[ GetRightSeparator(nNum) ] += (nDiff - nDiffLeft);
                 aCols[ GetRightSeparator(nNum - 1) ] -= nDiffLeft;
             }
@@ -168,18 +165,12 @@ void SwTableFUNC::InitTabCols()
 
 SwTableFUNC::SwTableFUNC(SwWrtShell *pShell)
     : pFormat(pShell->GetTableFormat()),
-      pSh(pShell),
-      bCopy(false)
+      pSh(pShell)
 {
-    // if applicable copy the format for edit
-    if( pFormat && bCopy )
-        pFormat = new SwFrameFormat( *pFormat );
 }
 
 SwTableFUNC::~SwTableFUNC()
 {
-    if(bCopy)
-        delete pFormat;
 }
 
 void SwTableFUNC::UpdateChart()
@@ -196,13 +187,13 @@ void SwTableFUNC::UpdateChart()
 }
 
 uno::Reference< frame::XModel > SwTableFUNC::InsertChart(
-        uno::Reference< chart2::data::XDataProvider > &rxDataProvider,
+        uno::Reference< chart2::data::XDataProvider > const &rxDataProvider,
         bool bFillWithData,
         const OUString &rCellRange,
         SwFlyFrameFormat** ppFlyFrameFormat )
 {
     uno::Reference< frame::XModel > xChartModel;
-    pSh->StartUndo( UNDO_UI_INSERT_CHART );
+    pSh->StartUndo( SwUndoId::UI_INSERT_CHART );
     pSh->StartAllAction();
 
     OUString aName;
@@ -210,7 +201,7 @@ uno::Reference< frame::XModel > SwTableFUNC::InsertChart(
     {
         aName = pSh->GetTableFormat()->GetName();
         // insert node before table
-        pSh->MoveTable( fnTableCurr, fnTableStart );
+        pSh->MoveTable( GotoCurrTable, fnTableStart );
         pSh->Up( false );
         if ( pSh->IsCursorInTable() )
         {
@@ -311,21 +302,21 @@ uno::Reference< frame::XModel > SwTableFUNC::InsertChart(
 
         uno::Sequence< beans::PropertyValue > aArgs( 4 );
         aArgs[0] = beans::PropertyValue(
-            OUString("CellRangeRepresentation"), -1,
+            "CellRangeRepresentation", -1,
             uno::makeAny( rCellRange ), beans::PropertyState_DIRECT_VALUE );
         aArgs[1] = beans::PropertyValue(
-            OUString("HasCategories"), -1,
+            "HasCategories", -1,
             uno::makeAny( bHasCategories ), beans::PropertyState_DIRECT_VALUE );
         aArgs[2] = beans::PropertyValue(
-            OUString("FirstCellAsLabel"), -1,
+            "FirstCellAsLabel", -1,
             uno::makeAny( bFirstCellAsLabel ), beans::PropertyState_DIRECT_VALUE );
         aArgs[3] = beans::PropertyValue(
-            OUString("DataRowSource"), -1,
+            "DataRowSource", -1,
             uno::makeAny( eDataRowSource ), beans::PropertyState_DIRECT_VALUE );
         xDataReceiver->setArguments( aArgs );
     }
 
-    pSh->EndUndo( UNDO_UI_INSERT_CHART );
+    pSh->EndUndo( SwUndoId::UI_INSERT_CHART );
 
     if( xChartModel.is() )
         xChartModel->unlockControllers(); //#i79578# don't request a new replacement image for charts to often
@@ -353,7 +344,7 @@ sal_uInt16  SwTableFUNC::GetColCount() const
 
 int SwTableFUNC::GetRightSeparator(int nNum) const
 {
-    OSL_ENSURE( nNum < (int)GetColCount() ,"Index out of range");
+    OSL_ENSURE( nNum < static_cast<int>(GetColCount()) ,"Index out of range");
     int i = 0;
     while( nNum >= 0 )
     {

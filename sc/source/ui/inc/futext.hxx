@@ -22,21 +22,16 @@
 
 #include "fuconstr.hxx"
 
-class SdrObject;
-class SdrTextObj;
 class SdrOutliner;
 
 /** Base class for Text functions */
 class FuText : public FuConstruct
 {
-protected:
-    SdrTextObj*     pTextObj;
-
 public:
-    FuText(ScTabViewShell* pViewSh, vcl::Window* pWin, ScDrawView* pView,
-                   SdrModel* pDoc, SfxRequest& rReq);
+    FuText(ScTabViewShell& rViewSh, vcl::Window* pWin, ScDrawView* pView,
+                   SdrModel* pDoc, const SfxRequest& rReq);
 
-    virtual ~FuText();
+    virtual ~FuText() override;
 
     virtual bool KeyInput(const KeyEvent& rKEvt) override;
     virtual bool MouseMove(const MouseEvent& rMEvt) override;
@@ -53,10 +48,10 @@ public:
     void    StopEditMode();
 
     // Create default drawing objects via keyboard
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const tools::Rectangle& rRectangle) override;
 
 private:
-    SdrOutliner* MakeOutliner();
+    std::unique_ptr<SdrOutliner> MakeOutliner();
 };
 
 #endif

@@ -19,11 +19,11 @@
 #ifndef INCLUDED_CONNECTIVITY_IPARSECONTEXT_HXX
 #define INCLUDED_CONNECTIVITY_IPARSECONTEXT_HXX
 
-namespace connectivity { class OSQLParseNode; }
-
 #include <rtl/ustring.hxx>
 #include <com/sun/star/lang/Locale.hpp>
 #include <connectivity/dbtoolsdllapi.hxx>
+
+namespace connectivity { class OSQLParseNode; }
 
 namespace connectivity
 {
@@ -35,7 +35,6 @@ namespace connectivity
     public:
         enum class ErrorCode
         {
-            None      = 0,
             General,                // "Syntax error in SQL expression"
             ValueNoLike,            // "The value #1 can not be used with LIKE."
             FieldNoLike,            // "LIKE can not be used with this field."
@@ -90,7 +89,7 @@ namespace connectivity
         // finds out, if we have an international keyword (only ASCII allowed)
         virtual InternationalKeyCode getIntlKeyCode(const OString& rToken) const = 0;
 
-        /** get's a locale instance which should be used when parsing in the context specified by this instance
+        /** gets a locale instance which should be used when parsing in the context specified by this instance
             <p>if this is not overridden by derived classes, it returns the static default locale.</p>
         */
         virtual css::lang::Locale getPreferredLocale( ) const = 0;

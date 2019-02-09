@@ -17,30 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
-#include "osl/mutex.hxx"
-#include "osl/thread.h"
-#include "osl/thread.hxx"
-#include "sal/log.hxx"
+#include <osl/mutex.hxx>
+#include <osl/thread.h>
+#include <osl/thread.hxx>
+#include <sal/log.hxx>
 
 #include <cppu/Enterable.hxx>
-#include "cppu/helper/purpenv/Environment.hxx"
-#include "cppu/helper/purpenv/Mapping.hxx"
-
-
-#ifdef debug
-# define LOG_LIFECYCLE_UnsafeBridge
-#endif
-
-#ifdef LOG_LIFECYCLE_UnsafeBridge
-#  include <iostream>
-#  define LOG_LIFECYCLE_UnsafeBridge_emit(x) x
-
-#else
-#  define LOG_LIFECYCLE_UnsafeBridge_emit(x)
-
-#endif
-
+#include <cppu/helper/purpenv/Environment.hxx>
+#include <cppu/helper/purpenv/Mapping.hxx>
 
 class UnsafeBridge : public cppu::Enterable
 {
@@ -48,7 +32,7 @@ class UnsafeBridge : public cppu::Enterable
     sal_Int32           m_count;
     oslThreadIdentifier m_threadId;
 
-    virtual  ~UnsafeBridge();
+    virtual  ~UnsafeBridge() override;
 
 public:
     explicit UnsafeBridge();
@@ -59,19 +43,19 @@ public:
     virtual void v_enter() override;
     virtual void v_leave() override;
 
-    virtual bool v_isValid(rtl::OUString * pReason) override;
+    virtual bool v_isValid(OUString * pReason) override;
 };
 
 UnsafeBridge::UnsafeBridge()
     : m_count   (0),
       m_threadId(0)
 {
-    LOG_LIFECYCLE_UnsafeBridge_emit(fprintf(stderr, "LIFE: %s -> %p\n", "UnsafeBridge::UnsafeBridge(uno_Environment * pEnv)", this));
+    SAL_INFO("cppu.unsafebridge", "LIFE: UnsafeBridge::UnsafeBridge(uno_Environment * pEnv) -> " << this);
 }
 
 UnsafeBridge::~UnsafeBridge()
 {
-    LOG_LIFECYCLE_UnsafeBridge_emit(fprintf(stderr, "LIFE: %s -> %p\n", "UnsafeBridge::~UnsafeBridge()", this));
+    SAL_INFO("cppu.unsafebridge", "LIFE: UnsafeBridge::~UnsafeBridge() -> " << this);
 
     SAL_WARN_IF(m_count < 0, "cppu.unsafebridge", "m_count is less than 0");
 }
@@ -119,7 +103,7 @@ void UnsafeBridge::v_leave()
     m_mutex.release();
 }
 
-bool UnsafeBridge::v_isValid(rtl::OUString * pReason)
+bool UnsafeBridge::v_isValid(OUString * pReason)
 {
     bool result = m_count > 0;
     if (!result)
@@ -140,13 +124,13 @@ bool UnsafeBridge::v_isValid(rtl::OUString * pReason)
     return result;
 }
 
-extern "C" void SAL_DLLPUBLIC_EXPORT SAL_CALL uno_initEnvironment(uno_Environment * pEnv)
+extern "C" void SAL_DLLPUBLIC_EXPORT uno_initEnvironment(uno_Environment * pEnv)
     SAL_THROW_EXTERN_C()
 {
     cppu::helper::purpenv::Environment_initWithEnterable(pEnv, new UnsafeBridge());
 }
 
-extern "C" void SAL_DLLPUBLIC_EXPORT SAL_CALL uno_ext_getMapping(uno_Mapping     ** ppMapping,
+extern "C" void SAL_DLLPUBLIC_EXPORT uno_ext_getMapping(uno_Mapping     ** ppMapping,
                                    uno_Environment  * pFrom,
                                    uno_Environment  * pTo )
 {

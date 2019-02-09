@@ -28,71 +28,123 @@
 #include <sal/types.h>
 #include <salhelper/simplereferenceobject.hxx>
 #include <xmloff/xmlnmspe.hxx>
+#include <o3tl/typed_flags_set.hxx>
 
+template<typename EnumT>
 struct SvXMLEnumMapEntry;
+
+    // flags for common control attributes
+enum class CCAFlags {
+    NONE                  = 0x00000000,
+    Name                  = 0x00000001,
+    ServiceName           = 0x00000002,
+    ButtonType            = 0x00000004,
+    ControlId             = 0x00000008,
+    CurrentSelected       = 0x00000010,
+    CurrentValue          = 0x00000020,
+    Disabled              = 0x00000040,
+    Dropdown              = 0x00000080,
+    For                   = 0x00000100,
+    ImageData             = 0x00000200,
+    Label                 = 0x00000400,
+    MaxLength             = 0x00000800,
+    Printable             = 0x00001000,
+    ReadOnly              = 0x00002000,
+    Selected              = 0x00004000,
+    Size                  = 0x00008000,
+    TabIndex              = 0x00010000,
+    TargetFrame           = 0x00020000,
+    TargetLocation        = 0x00040000,
+    TabStop               = 0x00080000,
+    Title                 = 0x00100000,
+    Value                 = 0x00200000,
+    Orientation           = 0x00400000,
+    VisualEffect          = 0x00800000,
+    EnableVisible         = 0x01000000,
+};
+namespace o3tl {
+    template<> struct typed_flags<CCAFlags> : is_typed_flags<CCAFlags, 0x01ffffff> {};
+}
+
+    // flags for database control attributes
+enum class DAFlags {
+    NONE                  = 0x0000,
+    BoundColumn           = 0x0001,
+    ConvertEmpty          = 0x0002,
+    DataField             = 0x0004,
+    ListSource            = 0x0008,
+    ListSource_TYPE       = 0x0010,
+    InputRequired         = 0x0020,
+};
+namespace o3tl {
+    template<> struct typed_flags<DAFlags> : is_typed_flags<DAFlags, 0x003f> {};
+}
+
+    // flags for binding related control attributes
+enum class BAFlags {
+    NONE                  = 0x0000,
+    LinkedCell            = 0x0001,
+    ListLinkingType       = 0x0002,
+    ListCellRange         = 0x0004,
+    XFormsBind            = 0x0008,
+    XFormsListBind        = 0x0010,
+    XFormsSubmission      = 0x0020
+};
+namespace o3tl {
+    template<> struct typed_flags<BAFlags> : is_typed_flags<BAFlags, 0x003f> {};
+}
+
+    // flags for event attributes
+enum class EAFlags {
+    NONE                  = 0x0000,
+    ControlEvents         = 0x0001,
+    OnChange              = 0x0002,
+    OnClick               = 0x0004,
+    OnDoubleClick         = 0x0008,
+    OnSelect              = 0x0010
+};
+namespace o3tl {
+    template<> struct typed_flags<EAFlags> : is_typed_flags<EAFlags, 0x001f> {};
+}
+
+    // any other attributes, which are special to some control types
+enum class SCAFlags {
+    NONE                  = 0x000000,
+    EchoChar              = 0x000001,
+    MaxValue              = 0x000002,
+    MinValue              = 0x000004,
+    Validation            = 0x000008,
+    GroupName             = 0x000010,
+    MultiLine             = 0x000020,
+    AutoCompletion        = 0x000080,
+    Multiple              = 0x000100,
+    DefaultButton         = 0x000200,
+    CurrentState          = 0x000400,
+    IsTristate            = 0x000800,
+    State                 = 0x001000,
+    ColumnStyleName       = 0x002000,
+    StepSize              = 0x004000,
+    PageStepSize          = 0x008000,
+    RepeatDelay           = 0x010000,
+    Toggle                = 0x020000,
+    FocusOnClick          = 0x040000,
+    ImagePosition         = 0x080000
+};
+namespace o3tl {
+    template<> struct typed_flags<SCAFlags> : is_typed_flags<SCAFlags, 0x0fffff> {};
+}
+
 
 namespace xmloff
 {
-
-    // flags for common control attributes
-    #define CCA_NAME                    0x00000001
-    #define CCA_SERVICE_NAME            0x00000002
-    #define CCA_BUTTON_TYPE             0x00000004
-    #define CCA_CONTROL_ID              0x00000008
-    #define CCA_CURRENT_SELECTED        0x00000010
-    #define CCA_CURRENT_VALUE           0x00000020
-    #define CCA_DISABLED                0x00000040
-    #define CCA_DROPDOWN                0x00000080
-    #define CCA_FOR                     0x00000100
-    #define CCA_IMAGE_DATA              0x00000200
-    #define CCA_LABEL                   0x00000400
-    #define CCA_MAX_LENGTH              0x00000800
-    #define CCA_PRINTABLE               0x00001000
-    #define CCA_READONLY                0x00002000
-    #define CCA_SELECTED                0x00004000
-    #define CCA_SIZE                    0x00008000
-    #define CCA_TAB_INDEX               0x00010000
-    #define CCA_TARGET_FRAME            0x00020000
-    #define CCA_TARGET_LOCATION         0x00040000
-    #define CCA_TAB_STOP                0x00080000
-    #define CCA_TITLE                   0x00100000
-    #define CCA_VALUE                   0x00200000
-    #define CCA_ORIENTATION             0x00400000
-    #define CCA_VISUAL_EFFECT           0x00800000
-    #define CCA_ENABLEVISIBLE                 0x01000000
-
-    // flags for database control attributes
-    #define DA_BOUND_COLUMN             0x00000001
-    #define DA_CONVERT_EMPTY            0x00000002
-    #define DA_DATA_FIELD               0x00000004
-    #define DA_LIST_SOURCE              0x00000008
-    #define DA_LIST_SOURCE_TYPE         0x00000010
-    #define DA_INPUT_REQUIRED           0x00000020
-
-    // flags for binding related control attributes
-    #define BA_LINKED_CELL              0x00000001
-    #define BA_LIST_LINKING_TYPE        0x00000002
-    #define BA_LIST_CELL_RANGE          0x00000004
-    #define BA_XFORMS_BIND              0x00000008
-    #define BA_XFORMS_LISTBIND          0x00000010
-    #define BA_XFORMS_SUBMISSION        0x00000020
-
-    // flags for event attributes
-    #define EA_CONTROL_EVENTS           0x00000001
-    #define EA_ON_CHANGE                0x00000002
-    #define EA_ON_CLICK                 0x00000004
-    #define EA_ON_DBLCLICK              0x00000008
-    #define EA_ON_SELECT                0x00000010
 
     /// attributes in the xml tag representing a form
     enum FormAttributes
     {
         faName,
-        faServiceName,
         faAction,
         faEnctype,
         faMethod,
-        faTargetFrame,
         faAllowDeletes,
         faAllowInserts,
         faAllowUpdates,
@@ -101,7 +153,6 @@ namespace xmloff
         faCommandType,
         faEscapeProcessing,
         faDatasource,
-        faConnectionResource,
         faDetailFiels,
         faFilter,
         faIgnoreResult,
@@ -110,27 +161,6 @@ namespace xmloff
         faOrder,
         faTabbingCycle
     };
-
-    // any other attributes, which are special to some control types
-    #define SCA_ECHO_CHAR               0x00000001
-    #define SCA_MAX_VALUE               0x00000002
-    #define SCA_MIN_VALUE               0x00000004
-    #define SCA_VALIDATION              0x00000008
-    #define SCA_GROUP_NAME              0x00000010
-    #define SCA_MULTI_LINE              0x00000020
-    #define SCA_AUTOMATIC_COMPLETION    0x00000080
-    #define SCA_MULTIPLE                0x00000100
-    #define SCA_DEFAULT_BUTTON          0x00000200
-    #define SCA_CURRENT_STATE           0x00000400
-    #define SCA_IS_TRISTATE             0x00000800
-    #define SCA_STATE                   0x00001000
-    #define SCA_COLUMN_STYLE_NAME       0x00002000
-    #define SCA_STEP_SIZE               0x00004000
-    #define SCA_PAGE_STEP_SIZE          0x00008000
-    #define SCA_REPEAT_DELAY            0x00010000
-    #define SCA_TOGGLE                  0x00020000
-    #define SCA_FOCUS_ON_CLICK          0x00040000
-    #define SCA_IMAGE_POSITION          0x00080000
 
     // attributes of the office:forms element
     enum OfficeFormsAttributes
@@ -152,13 +182,13 @@ namespace xmloff
             @param _nId
                 the id of the attribute. Has to be one of the CCA_* constants.
         */
-        static const sal_Char* getCommonControlAttributeName(sal_Int32 _nId);
+        static const sal_Char* getCommonControlAttributeName(CCAFlags _nId);
 
         /** calculates the xml namespace key to use for a common control attribute
             @param _nId
                 the id of the attribute. Has to be one of the CCA_* constants.
         */
-        static sal_uInt16 getCommonControlAttributeNamespace(sal_Int32 _nId);
+        static sal_uInt16 getCommonControlAttributeNamespace(CCAFlags _nId);
 
         /** retrieves the name of an attribute of a form xml representation
             @param  _eAttrib
@@ -176,13 +206,13 @@ namespace xmloff
             @param _nId
                 the id of the attribute. Has to be one of the DA_* constants.
         */
-        static const sal_Char* getDatabaseAttributeName(sal_Int32 _nId);
+        static const sal_Char* getDatabaseAttributeName(DAFlags _nId);
 
         /** calculates the xml namespace key to use for a database attribute.
             @param _nId
                 the id of the attribute. Has to be one of the DA_* constants.
         */
-        static inline sal_uInt16 getDatabaseAttributeNamespace(sal_Int32 )
+        static sal_uInt16 getDatabaseAttributeNamespace()
         {
             // nothing special here
             return XML_NAMESPACE_FORM;
@@ -192,19 +222,19 @@ namespace xmloff
             @param _nId
                 the id of the attribute. Has to be one of the SCA_* constants.
         */
-        static const sal_Char* getSpecialAttributeName(sal_Int32 _nId);
+        static const sal_Char* getSpecialAttributeName(SCAFlags _nId);
 
         /** calculates the xml attribute representation of a binding attribute.
             @param _nId
                 the id of the attribute. Has to be one of the BA_* constants.
         */
-        static const sal_Char* getBindingAttributeName(sal_Int32 _nId);
+        static const sal_Char* getBindingAttributeName(BAFlags _nId);
 
         /** calculates the xml namespace key to use for a binding attribute.
             @param _nId
                 the id of the attribute. Has to be one of the BA_* constants.
         */
-        static inline sal_uInt16 getBindingAttributeNamespace(sal_Int32 )
+        static sal_uInt16 getBindingAttributeNamespace()
         {
             // nothing special here
             return XML_NAMESPACE_FORM;
@@ -214,7 +244,7 @@ namespace xmloff
             @param _nId
                 the id of the attribute. Has to be one of the SCA_* constants.
         */
-        static sal_uInt16 getSpecialAttributeNamespace(sal_Int32 _nId);
+        static sal_uInt16 getSpecialAttributeNamespace(SCAFlags _nId);
 
         /** calculates the xml attribute representation of a attribute of the office:forms element
             @param _nId
@@ -226,7 +256,7 @@ namespace xmloff
             @param _nId
                 the id of the attribute
         */
-        static inline sal_uInt16 getOfficeFormsAttributeNamespace(OfficeFormsAttributes )
+        static sal_uInt16 getOfficeFormsAttributeNamespace()
         { // nothing special here
           return XML_NAMESPACE_FORM;
         }
@@ -239,7 +269,7 @@ namespace xmloff
         <p>The construction of this class is rather expensive (or at least it's initialization from outside),
         so it should be shared</p>
     */
-    class OAttribute2Property
+    class OAttribute2Property final
     {
     public:
         // TODO: maybe the following struct should be used for exports, too. In this case we would not need to
@@ -251,24 +281,25 @@ namespace xmloff
             css::uno::Type           aPropertyType;          // the property type
 
             // entries which are special to some value types
-            const SvXMLEnumMapEntry*        pEnumMap;               // the enum map, if appliable
-            bool                        bInverseSemantics;      // for booleans: attribute and property value have the same or an inverse semantics?
+            const SvXMLEnumMapEntry<sal_uInt16>*
+                                     pEnumMap;               // the enum map, if applicable
+            bool                     bInverseSemantics;      // for booleans: attribute and property value have the same or an inverse semantics?
 
             AttributeAssignment() : pEnumMap(nullptr), bInverseSemantics(false) { }
         };
 
-    protected:
+    private:
         typedef std::map<OUString, AttributeAssignment> AttributeAssignments;
         AttributeAssignments        m_aKnownProperties;
 
     public:
         OAttribute2Property();
-        virtual ~OAttribute2Property();
+        ~OAttribute2Property();
 
         /** return the AttributeAssignment which corresponds to the given attribute
 
             @param _rAttribName
-                the name of the attrribute
+                the name of the attribute
             @return
                 a pointer to the <type>AttributeAssignment</type> structure as requested, NULL if the attribute
                 does not represent a property.
@@ -278,21 +309,17 @@ namespace xmloff
 
         /** add a attribute assignment referring to a string property to the map
             @param _pAttributeName
-                the name of the attrribute
+                the name of the attribute
             @param _rPropertyName
                 the name of the property assigned to the attribute
-            @param _pAttributeDefault
-                the default value for the attribute, if any. May be NULL, in this case the default is assumed to be
-                an empty string.
         */
         void    addStringProperty(
-            const sal_Char* _pAttributeName, const OUString& _rPropertyName,
-            const sal_Char* _pAttributeDefault = nullptr);
+            const sal_Char* _pAttributeName, const OUString& _rPropertyName);
 
         /** add a attribute assignment referring to a boolean property to the map
 
             @param _pAttributeName
-                the name of the attrribute
+                the name of the attribute
             @param _rPropertyName
                 the name of the property assigned to the attribute
             @param _bAttributeDefault
@@ -308,52 +335,53 @@ namespace xmloff
         /** add a attribute assignment referring to an int16 property to the map
 
             @param _pAttributeName
-                the name of the attrribute
+                the name of the attribute
             @param _rPropertyName
                 the name of the property assigned to the attribute
-            @param _nAttributeDefault
-                the default value for the attribute.
         */
         void    addInt16Property(
-            const sal_Char* _pAttributeName, const OUString& _rPropertyName,
-            const sal_Int16 _nAttributeDefault);
+            const sal_Char* _pAttributeName, const OUString& _rPropertyName);
 
         /** add a attribute assignment referring to an int32 property to the map
 
             @param _pAttributeName
-                the name of the attrribute
+                the name of the attribute
             @param _rPropertyName
                 the name of the property assigned to the attribute
-            @param _nAttributeDefault
-                the default value for the attribute.
         */
         void    addInt32Property(
-            const sal_Char* _pAttributeName, const OUString& _rPropertyName,
-            const sal_Int32 _nAttributeDefault );
+            const sal_Char* _pAttributeName, const OUString& _rPropertyName );
 
         /** add a attribute assignment referring to an enum property to the map
 
             @param _pAttributeName
-                the name of the attrribute
+                the name of the attribute
             @param _rPropertyName
                 the name of the property assigned to the attribute
-            @param _nAttributeDefault
-                the default value for the attribute, as (32bit) integer
             @param _pValueMap
                 the map to translate strings into enum values
             @param _pType
                 the type of the property. May be NULL, in this case 32bit integer is assumed.
         */
+        template<typename EnumT>
         void    addEnumProperty(
             const sal_Char* _pAttributeName, const OUString& _rPropertyName,
-            const sal_uInt16 _nAttributeDefault, const SvXMLEnumMapEntry* _pValueMap,
-            const css::uno::Type* _pType = nullptr);
+            const SvXMLEnumMapEntry<EnumT>* _pValueMap,
+            const css::uno::Type* _pType = nullptr)
+        {
+            addEnumPropertyImpl(_pAttributeName, _rPropertyName,
+                                reinterpret_cast<const SvXMLEnumMapEntry<sal_uInt16>*>(_pValueMap), _pType);
+        }
 
-    protected:
+    private:
+        void addEnumPropertyImpl(
+            const sal_Char* _pAttributeName, const OUString& _rPropertyName,
+            const SvXMLEnumMapEntry<sal_uInt16>* _pValueMap,
+            const css::uno::Type* _pType);
         /// some common code for the various add*Property methods
         AttributeAssignment& implAdd(
             const sal_Char* _pAttributeName, const OUString& _rPropertyName,
-            const css::uno::Type& _rType, const OUString& _rDefaultString);
+            const css::uno::Type& _rType);
     };
 }   // namespace xmloff
 

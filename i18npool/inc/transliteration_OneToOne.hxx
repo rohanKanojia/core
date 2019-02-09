@@ -19,44 +19,38 @@
 #ifndef INCLUDED_I18NPOOL_INC_TRANSLITERATION_ONETOONE_HXX
 #define INCLUDED_I18NPOOL_INC_TRANSLITERATION_ONETOONE_HXX
 
-#include <transliteration_commonclass.hxx>
+#include "transliteration_commonclass.hxx"
 #include <i18nutil/oneToOneMapping.hxx>
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 typedef sal_Unicode (*TransFunc)(const sal_Unicode);
 
 class transliteration_OneToOne : public transliteration_commonclass
 {
 public:
-        OUString SAL_CALL
-        transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset  )
-            throw(css::uno::RuntimeException, std::exception) override;
+        OUString
+        transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
 
         sal_Unicode SAL_CALL
-        transliterateChar2Char( sal_Unicode inChar)
-           throw(css::uno::RuntimeException,
-                 css::i18n::MultipleCharsOutputException, std::exception) override;
+        transliterateChar2Char( sal_Unicode inChar) override;
 
         // Methods which are shared.
-        sal_Int16 SAL_CALL getType() throw(css::uno::RuntimeException, std::exception) override;
+        sal_Int16 SAL_CALL getType() override;
 
-        OUString SAL_CALL
-        folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset)
-            throw(css::uno::RuntimeException, std::exception) override;
+        OUString
+        foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
 
         sal_Bool SAL_CALL
         equals( const OUString& str1, sal_Int32 pos1, sal_Int32 nCount1, sal_Int32& nMatch1,
-                const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 )
-           throw(css::uno::RuntimeException, std::exception) override;
+                const OUString& str2, sal_Int32 pos2, sal_Int32 nCount2, sal_Int32& nMatch2 ) override;
 
         css::uno::Sequence< OUString > SAL_CALL
-        transliterateRange( const OUString& str1, const OUString& str2 )
-             throw(css::uno::RuntimeException, std::exception) override;
+        transliterateRange( const OUString& str1, const OUString& str2 ) override;
 
 protected:
         TransFunc func;
-        oneToOneMapping *table;
+        i18nutil::oneToOneMapping *table;
 };
 
 #define TRANSLITERATION_ONETOONE( name ) \
@@ -64,21 +58,39 @@ class name : public transliteration_OneToOne \
 { \
 public: \
     name (); \
-    OUString SAL_CALL \
-    transliterate( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset ) \
-    throw(css::uno::RuntimeException, std::exception) override; \
+    OUString \
+    transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) \
+     override; \
     sal_Unicode SAL_CALL \
     transliterateChar2Char( sal_Unicode inChar) \
-    throw(css::uno::RuntimeException, \
-        css::i18n::MultipleCharsOutputException, std::exception) override; \
+     override; \
 };
 
 TRANSLITERATION_ONETOONE( fullwidthToHalfwidth )
-TRANSLITERATION_ONETOONE(halfwidthToFullwidth)
 TRANSLITERATION_ONETOONE( fullwidthKatakanaToHalfwidthKatakana )
-TRANSLITERATION_ONETOONE(halfwidthKatakanaToFullwidthKatakana)
 TRANSLITERATION_ONETOONE( fullwidthToHalfwidthLikeASC )
-TRANSLITERATION_ONETOONE( halfwidthToFullwidthLikeJIS )
+
+class halfwidthToFullwidth : public transliteration_OneToOne
+{
+public:
+    halfwidthToFullwidth();
+    OUString
+    transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
+};
+class halfwidthKatakanaToFullwidthKatakana : public transliteration_OneToOne
+{
+public:
+    halfwidthKatakanaToFullwidthKatakana();
+    OUString
+    transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
+};
+class halfwidthToFullwidthLikeJIS : public transliteration_OneToOne
+{
+public:
+    halfwidthToFullwidthLikeJIS();
+    OUString
+    transliterateImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount, css::uno::Sequence< sal_Int32 >& offset, bool useOffset ) override;
+};
 
 #undef TRANSLITERATION_ONETOONE
 
@@ -96,7 +108,7 @@ TRANSLITERATION_ONETOONE(smallToLarge_ja_JP)
 
 #undef TRANSLITERATION_ONETOONE
 
-} } } }
+}
 
 #endif // INCLUDED_I18NPOOL_INC_TRANSLITERATION_ONETOONE_HXX
 

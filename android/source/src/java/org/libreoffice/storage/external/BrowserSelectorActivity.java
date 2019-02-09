@@ -12,6 +12,7 @@ import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 
+import org.libreoffice.R;
 import org.libreoffice.storage.DocumentProviderFactory;
 
 import java.util.Set;
@@ -64,7 +65,7 @@ public class BrowserSelectorActivity extends AppCompatActivity {
         IExternalDocumentProvider provider =
                 (IExternalDocumentProvider) DocumentProviderFactory.getInstance()
                         .getProvider(providerIndex);
-        String previousDirectoryPath = preferences.getString(preferenceKey, provider.guessRootURI());
+        String previousDirectoryPath = preferences.getString(preferenceKey, provider.guessRootURI(this));
         Intent i = new Intent(this, DirectoryBrowserActivity.class);
         i.putExtra(DirectoryBrowserActivity.DIRECTORY_PATH_EXTRA, previousDirectoryPath);
         startActivityForResult(i, REQUEST_INTERNAL_BROWSER);
@@ -108,7 +109,7 @@ public class BrowserSelectorActivity extends AppCompatActivity {
         }
         unregisterListeners();
         Log.d(LOGTAG, "Preference saved: " +
-                preferences.getString(preferenceKey, "Directory not saved."));
+                preferences.getString(preferenceKey, getString(R.string.directory_not_saved)));
         finish();
     }
 

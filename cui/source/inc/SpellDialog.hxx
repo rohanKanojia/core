@@ -23,10 +23,8 @@
 #include <vcl/fixed.hxx>
 #include <vcl/edit.hxx>
 #include <vcl/lstbox.hxx>
-#include <svtools/stdctrl.hxx>
 #include <vcl/button.hxx>
 #include <vcl/menubtn.hxx>
-#include <vcl/group.hxx>
 #include <vcl/decoview.hxx>
 #include <vcl/image.hxx>
 #include <vcl/toolbox.hxx>
@@ -62,10 +60,10 @@ class SentenceEditWindow_Impl : public VclMultiLineEdit
     using VclMultiLineEdit::SetText;
 
 private:
-    std::set< sal_uInt16 >      m_aIgnoreErrorsAt;
+    std::set< sal_Int32 >      m_aIgnoreErrorsAt;
     VclPtr<ToolBox>     m_xToolbar;
-    sal_uInt16          m_nErrorStart;
-    sal_uInt16          m_nErrorEnd;
+    sal_Int32           m_nErrorStart;
+    sal_Int32           m_nErrorEnd;
     bool                m_bIsUndoEditMode;
 
     Link<Edit&,void>    m_aModifyLink;
@@ -74,23 +72,23 @@ private:
 
     inline SpellDialog* GetSpellDialog() const;
 
-    DECL_LINK_TYPED(ToolbarHdl, ToolBox*, void);
+    DECL_LINK(ToolbarHdl, ToolBox*, void);
 protected:
     virtual bool    PreNotify( NotifyEvent& rNEvt ) override;
 
 public:
     SentenceEditWindow_Impl(vcl::Window* pParent, WinBits nBits);
-    virtual ~SentenceEditWindow_Impl();
+    virtual ~SentenceEditWindow_Impl() override;
 
-    void            Init(VclPtr<ToolBox> &rToolbar);
+    void            Init(VclPtr<ToolBox> const &rToolbar);
     void            SetModifyHdl(const Link<Edit&,void>& rLink) override { m_aModifyLink = rLink;}
 
-    void            SetAttrib( const TextAttrib& rAttr, sal_uLong nPara, sal_uInt16 nStart, sal_uInt16 nEnd );
+    void            SetAttrib( const TextAttrib& rAttr, sal_uInt32 nPara, sal_Int32 nStart, sal_Int32 nEnd );
     void            SetText( const OUString& rStr ) override;
 
     bool            MarkNextError( bool bIgnoreCurrentError, const css::uno::Reference<css::linguistic2::XSpellChecker1>& );
     void            ChangeMarkedWord(const OUString& rNewWord, LanguageType eLanguage);
-    void            MoveErrorMarkTo(sal_uInt16 nErrorStart, sal_uInt16 nErrorEnd, bool bGrammar);
+    void            MoveErrorMarkTo(sal_Int32 nErrorStart, sal_Int32 nErrorEnd, bool bGrammar);
     OUString        GetErrorText() const;
     void            RestoreCurrentError();
 
@@ -111,8 +109,8 @@ public:
 
     void            ResetUndo();
     void            Undo();
-    void            AddUndoAction( SfxUndoAction *pAction );
-    sal_uInt16      GetUndoActionCount();
+    void            AddUndoAction( std::unique_ptr<SfxUndoAction> pAction );
+    size_t          GetUndoActionCount();
     void            UndoActionStart( sal_uInt16 nId );
     void            UndoActionEnd();
 
@@ -169,44 +167,41 @@ private:
 
     Link<SpellUndoAction_Impl&,void> aDialogUndoLink;
 
-    bool            bModified;
     bool            bFocusLocked;
 
     svx::SpellDialogChildWindow& rParent;
     svx::SpellPortions           m_aSavedSentence;
 
-    SpellDialog_Impl* pImpl;
+    std::unique_ptr<SpellDialog_Impl> pImpl;
     css::uno::Reference<
         css::linguistic2::XSpellChecker1 >     xSpell;
 
-    DECL_LINK_TYPED(ChangeHdl, Button*, void);
-    DECL_LINK_TYPED(DoubleClickChangeHdl, ListBox&, void);
-    DECL_LINK_TYPED(ChangeAllHdl, Button*, void);
-    DECL_LINK_TYPED( IgnoreAllHdl, Button*, void );
-    DECL_LINK_TYPED(IgnoreHdl, Button*, void);
-    DECL_LINK_TYPED( CheckGrammarHdl, Button*, void );
-    DECL_LINK_TYPED( ExtClickHdl, Button*, void );
-    DECL_LINK_TYPED(CancelHdl, Button*, void);
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void);
-    DECL_LINK_TYPED(UndoHdl, Button*, void);
-    DECL_LINK_TYPED( AddToDictSelectHdl, MenuButton*, void );
-    DECL_LINK_TYPED( AddToDictClickHdl, Button*, void );
-    DECL_LINK_TYPED( LanguageSelectHdl, ListBox&, void );
-    DECL_LINK_TYPED( DialogUndoHdl, SpellUndoAction_Impl&, void );
-    DECL_LINK_TYPED( HandleHyperlink, FixedHyperlink&, void );
+    DECL_LINK(ChangeHdl, Button*, void);
+    DECL_LINK(DoubleClickChangeHdl, ListBox&, void);
+    DECL_LINK(ChangeAllHdl, Button*, void);
+    DECL_LINK( IgnoreAllHdl, Button*, void );
+    DECL_LINK(IgnoreHdl, Button*, void);
+    DECL_LINK( CheckGrammarHdl, Button*, void );
+    DECL_LINK( ExtClickHdl, Button*, void );
+    DECL_LINK(CancelHdl, Button*, void);
+    DECL_LINK( ModifyHdl, Edit&, void);
+    DECL_LINK(UndoHdl, Button*, void);
+    DECL_LINK( AddToDictSelectHdl, MenuButton*, void );
+    DECL_LINK( AddToDictClickHdl, Button*, void );
+    DECL_LINK( LanguageSelectHdl, ListBox&, void );
+    DECL_LINK( DialogUndoHdl, SpellUndoAction_Impl&, void );
 
-    DECL_LINK_TYPED( InitHdl, void*, void );
+    DECL_LINK( InitHdl, void*, void );
 
-    void            AddToDictionaryExecute( sal_uInt16 ItemId, PopupMenu *pMenu );
+    void            AddToDictionaryExecute( sal_uInt16 ItemId, PopupMenu const *pMenu );
     void            StartSpellOptDlg_Impl();
     int             InitUserDicts();
-    void            UpdateBoxes_Impl();
+    void            UpdateBoxes_Impl(bool bCallFromSelectHdl = false);
     void            Init_Impl();
     void            SpellContinue_Impl(bool UseSavedSentence = false, bool bIgnoreCurrentError = false );
     void            LockFocusChanges( bool bLock ) {bFocusLocked = bLock;}
     void            Impl_Restore(bool bUseSavedSentence);
 
-    void            SetSelectedLang_Impl( LanguageType nLang );
     LanguageType    GetSelectedLang_Impl() const;
 
     /** Retrieves the next sentence.
@@ -218,7 +213,7 @@ private:
     void            SetTitle_Impl(LanguageType nLang);
 
 protected:
-    virtual bool    Notify( NotifyEvent& rNEvt ) override;
+    virtual bool    EventNotify( NotifyEvent& rNEvt ) override;
 
     OUString getReplacementString() const;
 
@@ -227,7 +222,7 @@ public:
         svx::SpellDialogChildWindow* pChildWindow,
         vcl::Window * pParent,
         SfxBindings* pBindings);
-    virtual ~SpellDialog();
+    virtual ~SpellDialog() override;
     virtual void dispose() override;
 
     virtual bool    Close() override;

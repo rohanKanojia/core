@@ -29,11 +29,11 @@
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 
 #include <o3tl/vector_pool.hxx>
-#include <boost/next_prior.hpp>
 
 #include <algorithm>
 #include <deque>
 #include <list>
+#include <iterator>
 
 namespace basegfx
 {
@@ -43,8 +43,6 @@ namespace basegfx
 
         // Helper functionality for sweep-line algorithm
         // ====================================================
-
-        typedef std::vector<B2DRange> VectorOfRanges;
 
         class ImplPolygon;
         typedef o3tl::vector_pool<ImplPolygon> VectorOfPolygons;
@@ -59,16 +57,6 @@ namespace basegfx
         class ActiveEdge
         {
         public:
-            /** The two possible active rectangle edges differ by one
-                coordinate value - the upper edge has the lower, the
-                lower edge the higher value.
-             */
-            enum EdgeType {
-                /// edge with lower coordinate value
-                UPPER=0,
-                /// edge with higher coordinate value
-                LOWER=1
-            };
 
             enum EdgeDirection {
                 /// edge proceeds to the left
@@ -288,11 +276,11 @@ namespace basegfx
                 processing must proceed with, when going through the
                 list of upcoming active edges).
              */
-            std::ptrdiff_t intersect( SweepLineEvent&   rEvent,
-                                      ActiveEdge&       rActiveEdge,
-                                      VectorOfPolygons& rPolygonPool,
-                                      B2DPolyPolygon&   rRes,
-                                      bool              isFinishingEdge )
+            std::ptrdiff_t intersect( SweepLineEvent const & rEvent,
+                                      ActiveEdge&            rActiveEdge,
+                                      VectorOfPolygons&      rPolygonPool,
+                                      B2DPolyPolygon&        rRes,
+                                      bool                   isFinishingEdge )
             {
                 OSL_PRECOND( !mbIsFinished,
                              "ImplPolygon::intersect(): called on already finished polygon!" );
@@ -348,15 +336,13 @@ namespace basegfx
             }
 
         private:
-            void handleInitialOwnEdge(SweepLineEvent& rEvent,
-                                      ActiveEdge&     rActiveEdge)
+            void handleInitialOwnEdge(SweepLineEvent const & rEvent,
+                                      ActiveEdge&            rActiveEdge) const
             {
                 const bool isActiveEdgeProceedLeft(
                     rActiveEdge.getEdgeDirection() == ActiveEdge::PROCEED_LEFT);
                 const bool isSweepLineEnteringRect(
                     rEvent.getEdgeType() == SweepLineEvent::STARTING_EDGE);
-                (void)isActiveEdgeProceedLeft;
-                (void)isSweepLineEnteringRect;
 
                 OSL_ENSURE( isSweepLineEnteringRect == isActiveEdgeProceedLeft,
                             "ImplPolygon::intersect(): sweep initial own edge hit: wrong polygon order" );
@@ -375,9 +361,9 @@ namespace basegfx
                 mpLeadingRightEdge = &rActiveEdge;
             }
 
-            void handleFinalOwnLeftEdge(ActiveEdge&       rActiveEdge,
-                                        VectorOfPolygons& rPolygonPool,
-                                        B2DPolyPolygon&   rRes)
+            void handleFinalOwnLeftEdge(ActiveEdge const & rActiveEdge,
+                                        VectorOfPolygons&  rPolygonPool,
+                                        B2DPolyPolygon&    rRes)
             {
                 OSL_ENSURE( rActiveEdge.getEdgeDirection() == ActiveEdge::PROCEED_LEFT,
                             "ImplPolygon::handleFinalOwnLeftEdge(): end edge wrong polygon order" );
@@ -477,8 +463,8 @@ namespace basegfx
             }
 
             /// True when sweep line hits our own active edge
-            static bool metOwnEdge(const SweepLineEvent& rEvent,
-                            ActiveEdge&           rActiveEdge)
+            static bool metOwnEdge(SweepLineEvent const & rEvent,
+                                   ActiveEdge const &     rActiveEdge)
             {
                 const bool bHitOwnEdge=&rEvent.getRect() == &rActiveEdge.getRect();
                 return bHitOwnEdge;
@@ -554,12 +540,11 @@ namespace basegfx
             {
                 const B2DRectangle& rCurrRect( *aCurrRect++ );
 
-                o_rEventVector.push_back(
-                    SweepLineEvent( rCurrRect.getMinX(),
+                o_rEventVector.emplace_back( rCurrRect.getMinX(),
                                     rCurrRect,
                                     SweepLineEvent::STARTING_EDGE,
                                     (*aCurrOrientation++) == B2VectorOrientation::Positive ?
-                                    SweepLineEvent::PROCEED_UP : SweepLineEvent::PROCEED_DOWN) );
+                                    SweepLineEvent::PROCEED_UP : SweepLineEvent::PROCEED_DOWN );
             }
 
             // second pass: add all right edges in reversed order
@@ -570,12 +555,11 @@ namespace basegfx
             {
                 const B2DRectangle& rCurrRect( *aCurrRectR++ );
 
-                o_rEventVector.push_back(
-                    SweepLineEvent( rCurrRect.getMaxX(),
+                o_rEventVector.emplace_back( rCurrRect.getMaxX(),
                                     rCurrRect,
                                     SweepLineEvent::FINISHING_EDGE,
                                     (*aCurrOrientationR++) == B2VectorOrientation::Positive ?
-                                    SweepLineEvent::PROCEED_DOWN : SweepLineEvent::PROCEED_UP ) );
+                                    SweepLineEvent::PROCEED_DOWN : SweepLineEvent::PROCEED_UP );
             }
 
             // sort events
@@ -616,9 +600,9 @@ namespace basegfx
             @param rCurrEvent
             The actual event that caused this call
          */
-        void createActiveEdgesFromStartEvent( ListOfEdges&      io_rEdgeList,
-                                              VectorOfPolygons& io_rPolygonPool,
-                                              SweepLineEvent&   rCurrEvent )
+        void createActiveEdgesFromStartEvent( ListOfEdges &          io_rEdgeList,
+                                              VectorOfPolygons &     io_rPolygonPool,
+                                              SweepLineEvent const & rCurrEvent )
         {
             ListOfEdges         aNewEdges;
             const B2DRectangle& rRect=rCurrEvent.getRect();
@@ -630,19 +614,17 @@ namespace basegfx
             io_rPolygonPool.get(nIdxPolygon).setPolygonPoolIndex(nIdxPolygon);
 
             // upper edge
-            aNewEdges.push_back(
-                ActiveEdge(
+            aNewEdges.emplace_back(
                     rRect,
                     rRect.getMinY(),
                     bGoesDown ? nIdxPolygon : -1,
-                    bGoesDown ? ActiveEdge::PROCEED_LEFT : ActiveEdge::PROCEED_RIGHT) );
+                    bGoesDown ? ActiveEdge::PROCEED_LEFT : ActiveEdge::PROCEED_RIGHT );
             // lower edge
-            aNewEdges.push_back(
-                ActiveEdge(
+            aNewEdges.emplace_back(
                     rRect,
                     rRect.getMaxY(),
                     bGoesDown ? -1 : nIdxPolygon,
-                    bGoesDown ? ActiveEdge::PROCEED_RIGHT : ActiveEdge::PROCEED_LEFT ) );
+                    bGoesDown ? ActiveEdge::PROCEED_RIGHT : ActiveEdge::PROCEED_LEFT );
 
             // furthermore, have to respect a special tie-breaking
             // rule here, for edges which share the same y value:
@@ -698,33 +680,33 @@ namespace basegfx
                                  aNewEdges );
         }
 
-        inline bool isSameRect(ActiveEdge&              rEdge,
-                               const basegfx::B2DRange& rRect)
+        bool isSameRect(ActiveEdge const &        rEdge,
+                               basegfx::B2DRange const & rRect)
         {
             return &rEdge.getRect() == &rRect;
         }
 
         // wow what a hack. necessary because stl's list::erase does
         // not eat reverse_iterator
-        template<typename Cont, typename Iter> Iter eraseFromList(Cont&, Iter);
-        template<> inline ListOfEdges::iterator eraseFromList(
-            ListOfEdges& rList, ListOfEdges::iterator aIter)
+        template<typename Cont, typename Iter> Iter eraseFromList(Cont&, const Iter&);
+        template<> ListOfEdges::iterator eraseFromList(
+            ListOfEdges& rList, const ListOfEdges::iterator& aIter)
         {
             return rList.erase(aIter);
         }
-        template<> inline ListOfEdges::reverse_iterator eraseFromList(
-            ListOfEdges& rList, ListOfEdges::reverse_iterator aIter)
+        template<> ListOfEdges::reverse_iterator eraseFromList(
+            ListOfEdges& rList, const ListOfEdges::reverse_iterator& aIter)
         {
             return ListOfEdges::reverse_iterator(
-                    rList.erase(boost::prior(aIter.base())));
+                    rList.erase(std::prev(aIter.base())));
         }
 
         template<int bPerformErase,
-                 typename Iterator> inline void processActiveEdges(
+                 typename Iterator> void processActiveEdges(
             Iterator          first,
             Iterator          last,
             ListOfEdges&      rActiveEdgeList,
-            SweepLineEvent&   rCurrEvent,
+            SweepLineEvent const & rCurrEvent,
             VectorOfPolygons& rPolygonPool,
             B2DPolyPolygon&   rRes )
         {
@@ -779,7 +761,7 @@ namespace basegfx
             }
         }
 
-        template<int bPerformErase> inline void processActiveEdgesTopDown(
+        template<int bPerformErase> void processActiveEdgesTopDown(
             SweepLineEvent&   rCurrEvent,
             ListOfEdges&      rActiveEdgeList,
             VectorOfPolygons& rPolygonPool,
@@ -794,7 +776,7 @@ namespace basegfx
                 rRes);
         }
 
-        template<int bPerformErase> inline void processActiveEdgesBottomUp(
+        template<int bPerformErase> void processActiveEdgesBottomUp(
             SweepLineEvent&   rCurrEvent,
             ListOfEdges&      rActiveEdgeList,
             VectorOfPolygons& rPolygonPool,
@@ -821,7 +803,7 @@ namespace basegfx
                                              rPolygonPool,
                                              rCurrEvent );
 
-            if( SweepLineEvent::PROCEED_DOWN == rCurrEvent.getEdgeDirection() )
+            if( rCurrEvent.getEdgeDirection() == SweepLineEvent::PROCEED_DOWN )
                 processActiveEdgesTopDown<NoErase>(
                     rCurrEvent, rActiveEdgeList, rPolygonPool, rRes);
             else
@@ -834,7 +816,7 @@ namespace basegfx
                                   VectorOfPolygons& rPolygonPool,
                                   B2DPolyPolygon&   rRes)
         {
-            if( SweepLineEvent::PROCEED_DOWN == rCurrEvent.getEdgeDirection() )
+            if( rCurrEvent.getEdgeDirection() == SweepLineEvent::PROCEED_DOWN )
                 processActiveEdgesTopDown<PerformErase>(
                     rCurrEvent, rActiveEdgeList, rPolygonPool, rRes);
             else
@@ -842,19 +824,19 @@ namespace basegfx
                     rCurrEvent, rActiveEdgeList, rPolygonPool, rRes);
         }
 
-        inline void handleSweepLineEvent( SweepLineEvent&   rCurrEvent,
+        void handleSweepLineEvent( SweepLineEvent&   rCurrEvent,
                                           ListOfEdges&      rActiveEdgeList,
                                           VectorOfPolygons& rPolygonPool,
                                           B2DPolyPolygon&   rRes)
         {
-            if( SweepLineEvent::STARTING_EDGE == rCurrEvent.getEdgeType() )
+            if( rCurrEvent.getEdgeType() == SweepLineEvent::STARTING_EDGE )
                 handleStartingEdge(rCurrEvent,rActiveEdgeList,rPolygonPool,rRes);
             else
                 handleFinishingEdge(rCurrEvent,rActiveEdgeList,rPolygonPool,rRes);
         }
     }
 
-    namespace tools
+    namespace utils
     {
         B2DPolyPolygon solveCrossovers(const std::vector<B2DRange>& rRanges,
                                        const std::vector<B2VectorOrientation>& rOrientations)

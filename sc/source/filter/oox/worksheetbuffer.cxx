@@ -17,24 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "worksheetbuffer.hxx"
+#include <worksheetbuffer.hxx>
 
 #include <com/sun/star/container/XIndexAccess.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/container/XNamed.hpp>
-#include <com/sun/star/sheet/XExternalSheetName.hpp>
-#include <com/sun/star/sheet/XSheetLinkable.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
-#include <oox/core/filterbase.hxx>
 #include <oox/helper/attributelist.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/containerhelper.hxx>
-#include <oox/helper/propertyset.hxx>
-#include <oox/token/properties.hxx>
-#include "biffinputstream.hxx"
-#include "excelhandlers.hxx"
-#include "document.hxx"
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
+#include <document.hxx>
+#include <documentimport.hxx>
+#include <biffhelper.hxx>
 
 namespace oox {
 namespace xls {

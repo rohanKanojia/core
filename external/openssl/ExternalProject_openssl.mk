@@ -38,15 +38,11 @@ OPENSSL_PLATFORM := \
         $(if $(filter X86_64,$(CPUNAME)),solaris64-x86_64-cc,solaris-sparcv9-cc)\
       )\
     ,\
-      $(if $(filter IOS,$(OS)),\
+      $(if $(filter iOS,$(OS)),\
         ios-armv7\
       ,\
         $(if $(filter WNT,$(OS)),\
-          $(if $(filter GCC,$(COM)),\
-            mingw\
-          ,\
-            $(if $(filter INTEL,$(CPUNAME)),VC-WIN32,VC-WIN64A)\
-          )\
+          $(if $(filter INTEL,$(CPUNAME)),VC-WIN32,VC-WIN64A)\
         ,\
           $(if $(filter MACOSX,$(OS)),\
             $(if $(filter POWERPC,$(CPUNAME)),darwin-ppc-cc)\
@@ -59,14 +55,13 @@ OPENSSL_PLATFORM := \
   )
 
 ifeq ($(COM),MSC)
+$(eval $(call gb_ExternalProject_use_nmake,openssl,build))
+
 $(call gb_ExternalProject_get_state_target,openssl,build):
 	$(call gb_ExternalProject_run,build,\
-		export CC="$(shell cygpath -w $(filter-out -%,$(CC))) $(filter -%,$(CC))" \
-		&& export PERL="$(shell cygpath -w $(PERL))" \
-		&& export LIB="$(ILIB)" \
+		export PERL="$(shell cygpath -w $(PERL))" \
 		&& $(PERL) Configure $(OPENSSL_PLATFORM) no-idea \
 		&& cmd /c "ms\do_ms.bat $(PERL) $(OPENSSL_PLATFORM)" \
-		&& unset MAKEFLAGS \
 		&& nmake -f "ms\ntdll.mak" \
 		&& mv inc32/* include/ \
 	)
@@ -75,20 +70,20 @@ else
 $(call gb_ExternalProject_get_state_target,openssl,build):
 	$(call gb_ExternalProject_run,build,\
 		unset MAKEFLAGS && \
-		$(if $(filter LINUX MACOSX FREEBSD ANDROID SOLARIS IOS,$(OS)), \
+		$(if $(filter LINUX MACOSX FREEBSD ANDROID SOLARIS iOS,$(OS)), \
 			./Configure, \
 		$(if $(filter WNT,$(OS)), \
 			$(PERL) Configure, \
 			./config)) \
 			$(OPENSSL_PLATFORM) no-dso no-shared \
 			$(if $(filter-out WNT,$(OS)),no-idea) \
-			$(if $(filter-out ANDROID IOS WNT,$(OS)), \
+			$(if $(filter-out ANDROID iOS WNT,$(OS)), \
 				$(if $(SYSBASE),-I$(SYSBASE)/usr/include -L$(SYSBASE)/usr/lib)) \
 			$(if $(filter MACOSX,$(OS)),--prefix=/@.__________________________________________________OOO) \
 		&& $(MAKE) build_libs \
-			CC="$(CC) -fPIC $(if $(filter-out WNT MACOSX,$(OS)),\
-			$(if $(filter TRUE,$(HAVE_GCC_VISIBILITY_FEATURE)),\
-			-fvisibility=hidden))" \
+			CC="$(CC) -fPIC \
+				$(if $(filter TRUE, $(ENABLE_DBGUTIL)), -DPURIFY,) \
+				$(if $(filter-out WNT MACOSX,$(OS)),-fvisibility=hidden)" \
 	)
 endif
 

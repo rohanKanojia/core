@@ -22,12 +22,14 @@
 
 #include <com/sun/star/uno/Sequence.hxx>
 #include <rtl/ustring.hxx>
+#include <memory>
 
 class Date;
 class SvNumberformat;
 class SvNumberFormatter;
+enum class SvNumFormatType : sal_Int16;
 
-#define SV_MAX_ANZ_INPUT_STRINGS  20    // max count of substrings in input scanner
+#define SV_MAX_COUNT_INPUT_STRINGS  20    // max count of substrings in input scanner
 
 class ImpSvNumberInputScan
 {
@@ -40,18 +42,18 @@ public:
     /// set reference date for offset calculation
     void ChangeNullDate( const sal_uInt16 nDay,
                          const sal_uInt16 nMonth,
-                         const sal_uInt16 nYear );
+                         const sal_Int16 nYear );
 
     /// convert input string to number
     bool IsNumberFormat( const OUString& rString,            /// input string
-                         short& F_Type,                      /// format type (in + out)
+                         SvNumFormatType& F_Type,                      /// format type (in + out)
                          double& fOutNumber,                 /// value determined (out)
-                         const SvNumberformat* pFormat = nullptr);  /// optional a number format to which compare against
+                         const SvNumberformat* pFormat);     /// number format to which compare against
 
     /// after IsNumberFormat: get decimal position
     short   GetDecPos() const { return nDecPos; }
     /// after IsNumberFormat: get count of numeric substrings in input string
-    sal_uInt16  GetAnzNums() const { return nAnzNums; }
+    sal_uInt16  GetNumericsCount() const { return nNumericsCnt; }
 
     /// set threshold of two-digit year input
     void    SetYear2000( sal_uInt16 nVal ) { nYear2000 = nVal; }
@@ -61,40 +63,35 @@ public:
     /** Whether input can be forced to ISO 8601 format.
 
         Depends on locale's date separator and a specific date format order.
-
-        @param eDateFormat
-            Evaluated only on first call during one scan process, subsequent
-            calls return state of nCanForceToIso8601!
-
-        @see nCanForceToIso8601
      */
-    bool CanForceToIso8601( DateFormat eDateFormat );
+    bool CanForceToIso8601( DateOrder eDateOrder );
 
     void InvalidateDateAcceptancePatterns();
 
 private:
     SvNumberFormatter*  pFormatter;
-    OUString* pUpperMonthText;                  //* Array of month names, uppercase
-    OUString* pUpperAbbrevMonthText;            //* Array of month names, abbreviated, uppercase
-    OUString* pUpperGenitiveMonthText;          //* Array of genitive month names, uppercase
-    OUString* pUpperGenitiveAbbrevMonthText;    //* Array of genitive month names, abbreviated, uppercase
-    OUString* pUpperPartitiveMonthText;         //* Array of partitive month names, uppercase
-    OUString* pUpperPartitiveAbbrevMonthText;   //* Array of partitive month names, abbreviated, uppercase
-    OUString* pUpperDayText;                    //* Array of day of week names, uppercase
-    OUString* pUpperAbbrevDayText;              //* Array of day of week names, abbreviated, uppercase
+    const SvNumberformat* mpFormat;                            //* The format to compare against, if any
+    std::unique_ptr<OUString[]> pUpperMonthText;               //* Array of month names, uppercase
+    std::unique_ptr<OUString[]> pUpperAbbrevMonthText;         //* Array of month names, abbreviated, uppercase
+    std::unique_ptr<OUString[]> pUpperGenitiveMonthText;       //* Array of genitive month names, uppercase
+    std::unique_ptr<OUString[]> pUpperGenitiveAbbrevMonthText; //* Array of genitive month names, abbreviated, uppercase
+    std::unique_ptr<OUString[]> pUpperPartitiveMonthText;      //* Array of partitive month names, uppercase
+    std::unique_ptr<OUString[]> pUpperPartitiveAbbrevMonthText;//* Array of partitive month names, abbreviated, uppercase
+    std::unique_ptr<OUString[]> pUpperDayText;                 //* Array of day of week names, uppercase
+    std::unique_ptr<OUString[]> pUpperAbbrevDayText;           //* Array of day of week names, abbreviated, uppercase
     OUString  aUpperCurrSymbol;                 //* Currency symbol, uppercase
     bool    bTextInitialized;                   //* Whether days and months are initialized
     bool    bScanGenitiveMonths;                //* Whether to scan an input for genitive months
     bool    bScanPartitiveMonths;               //* Whether to scan an input for partitive months
-    Date* pNullDate;                            //* 30Dec1899
+    std::unique_ptr<Date> pNullDate;                 //* 30Dec1899
     // Variables for provisional results:
-    OUString sStrArray[SV_MAX_ANZ_INPUT_STRINGS]; //* Array of scanned substrings
-    bool       IsNum[SV_MAX_ANZ_INPUT_STRINGS]; //* Whether a substring is numeric
-    sal_uInt16 nNums[SV_MAX_ANZ_INPUT_STRINGS]; //* Sequence of offsets to numeric strings
-    sal_uInt16 nAnzStrings;                     //* Total count of scanned substrings
-    sal_uInt16 nAnzNums;                        //* Count of numeric substrings
-    bool   bDecSepInDateSeps;                   //* True <=> DecSep in {.,-,/,DateSep}
-    sal_uInt8   nMatchedAllStrings;             //* Scan...String() matched all substrings,
+    OUString   sStrArray[SV_MAX_COUNT_INPUT_STRINGS];//* Array of scanned substrings
+    bool       IsNum[SV_MAX_COUNT_INPUT_STRINGS];    //* Whether a substring is numeric
+    sal_uInt16 nNums[SV_MAX_COUNT_INPUT_STRINGS];    //* Sequence of offsets to numeric strings
+    sal_uInt16 nStringsCnt;                          //* Total count of scanned substrings
+    sal_uInt16 nNumericsCnt;                         //* Count of numeric substrings
+    bool       bDecSepInDateSeps;                    //* True <=> DecSep in {.,-,/,DateSep}
+    sal_uInt8  nMatchedAllStrings;                   //* Scan...String() matched all substrings,
 
     // bit mask of nMatched... constants
     static const sal_uInt8 nMatchedEndString;        // 0x01
@@ -111,14 +108,15 @@ private:
     int    nDayOfWeek;                          // Temporary (!) day of week (1..7,-1..-7) if date
     sal_uInt16 nTimePos;                        // Index of first time separator (+1)
     short  nDecPos;                             // Index of substring containing "," (+1)
-    short  nNegCheck;                           // '( )' for negative
+    bool   bNegCheck;                           // '( )' for negative
     short  nESign;                              // Sign of exponent
     short  nAmPm;                               // +1 AM, -1 PM, 0 if none
     short  nLogical;                            // -1 => False, 1 => True
+    bool   mbEraCE;                            // Era if date, 0 => BCE, 1 => CE (currently only Gregorian)
     sal_uInt16 nThousand;                       // Count of group (AKA thousand) separators
     sal_uInt16 nPosThousandString;              // Position of concatenated 000,000,000 string
-    short  eScannedType;                        // Scanned type
-    short  eSetType;                            // Preset Type
+    SvNumFormatType eScannedType;               // Scanned type
+    SvNumFormatType eSetType;                   // Preset Type
 
     sal_uInt16 nStringScanNumFor;               // Fixed strings recognized in
                                                 // pFormat->NumFor[nNumForStringScan]
@@ -128,7 +126,6 @@ private:
                                                 // default 18
                                                 // number <= nYear2000 => 20xx
                                                 // number >  nYear2000 => 19xx
-    sal_uInt16  nTimezonePos;                   // Index of timezone separator (+1)
 
     /** State of ISO 8601 detection.
 
@@ -142,15 +139,8 @@ private:
      */
     sal_uInt8    nMayBeIso8601;
 
-    /** State of ISO 8601 can be forced.
-
-        0:= don't know yet
-        1:= no
-        2:= yes
-
-        @see CanForceToIso8601()
-     */
-    sal_uInt8   nCanForceToIso8601;
+    /** Whether the 'T' time separator was detected in an ISO 8601 string. */
+    bool        bIso8601Tsep;
 
     /** State of dd-month-yy or yy-month-dd detection, with month name.
 
@@ -206,7 +196,7 @@ private:
 
     // Concatenate ,000,23 blocks
     // in input to 000123
-    bool SkipThousands( const sal_Unicode*& pStr, OUString& rSymbol );
+    bool SkipThousands( const sal_Unicode*& pStr, OUString& rSymbol ) const;
 
     // Divide numbers/strings into
     // arrays and variables above.
@@ -220,12 +210,12 @@ private:
      */
     bool StringContainsWord( const OUString& rWhat,
                              const OUString& rString,
-                             sal_Int32 nPos );
+                             sal_Int32 nPos ) const;
 
     // optimized substring versions
 
     // Whether rString contains rWhat at nPos
-    static inline bool StringContains( const OUString& rWhat,
+    static bool StringContains( const OUString& rWhat,
                                        const OUString& rString,
                                        sal_Int32 nPos )
         {
@@ -242,7 +232,7 @@ private:
         }
 
     // Whether pString contains rWhat at nPos
-    static inline bool StringPtrContains( const OUString& rWhat,
+    static bool StringPtrContains( const OUString& rWhat,
                                           const sal_Unicode* pString,
                                           sal_Int32 nPos ) // nPos MUST be a valid offset from pString
         {
@@ -280,9 +270,9 @@ private:
     // Recognizes exactly ,111 as group separator
     inline bool GetThousandSep( const OUString& rString,
                                 sal_Int32& nPos,
-                                sal_uInt16 nStringPos );
+                                sal_uInt16 nStringPos ) const;
     // Get boolean value
-    short GetLogical( const OUString& rString );
+    short GetLogical( const OUString& rString ) const;
 
     // Get month and advance string position
     short GetMonth( const OUString& rString,
@@ -294,8 +284,7 @@ private:
 
     // Get currency symbol and advance string position
     bool GetCurrency( const OUString& rString,
-                      sal_Int32& nPos,
-                      const SvNumberformat* pFormat = nullptr ); // optional number format to match against
+                      sal_Int32& nPos );
 
     // Get symbol AM or PM and advance string position
     bool GetTimeAmPm( const OUString& rString,
@@ -303,11 +292,11 @@ private:
 
     // Get decimal separator and advance string position
     inline bool GetDecSep( const OUString& rString,
-                           sal_Int32& nPos );
+                           sal_Int32& nPos ) const;
 
     // Get hundredth seconds separator and advance string position
     inline bool GetTime100SecSep( const OUString& rString,
-                                  sal_Int32& nPos );
+                                  sal_Int32& nPos ) const;
 
     // Get sign  and advance string position
     // Including special case '('
@@ -320,7 +309,7 @@ private:
 
     // Get next number as array offset
     inline bool GetNextNumber( sal_uInt16& i,
-                               sal_uInt16& j );
+                               sal_uInt16& j ) const;
 
     /** Converts time -> double (only decimals)
 
@@ -328,35 +317,30 @@ private:
      */
     bool GetTimeRef( double& fOutNumber,                     // result as double
                      sal_uInt16 nIndex,                      // Index of hour in input
-                     sal_uInt16 nAnz );                      // Count of time substrings in input
-    sal_uInt16 ImplGetDay  ( sal_uInt16 nIndex );   // Day input, 0 if no match
-    sal_uInt16 ImplGetMonth( sal_uInt16 nIndex );   // Month input, zero based return, NumberOfMonths if no match
+                     sal_uInt16 nCnt ) const;                // Count of time substrings in input
+    sal_uInt16 ImplGetDay  ( sal_uInt16 nIndex ) const;      // Day input, 0 if no match
+    sal_uInt16 ImplGetMonth( sal_uInt16 nIndex ) const;      // Month input, zero based return, NumberOfMonths if no match
     sal_uInt16 ImplGetYear ( sal_uInt16 nIndex );   // Year input, 0 if no match
 
     // Conversion of date to number
     bool GetDateRef( double& fDays,                          // OUT: days diff to null date
-                     sal_uInt16& nCounter,                   // Count of date substrings
-                     const SvNumberformat* pFormat = nullptr ); // optional number format to match against
+                     sal_uInt16& nCounter );                 // Count of date substrings
 
     // Analyze start of string
-    bool ScanStartString( const OUString& rString,
-                          const SvNumberformat* pFormat = nullptr );
+    bool ScanStartString( const OUString& rString );
 
     // Analyze middle substring
     bool ScanMidString( const OUString& rString,
-                        sal_uInt16 nStringPos,
-                        const SvNumberformat* pFormat = nullptr );
+                        sal_uInt16 nStringPos );
 
 
     // Analyze end of string
-    bool ScanEndString( const OUString& rString,
-                        const SvNumberformat* pFormat = nullptr );
+    bool ScanEndString( const OUString& rString );
 
     // Compare rString to substring of array indexed by nString
     // nString == 0xFFFF => last substring
     bool ScanStringNumFor( const OUString& rString,
                            sal_Int32 nPos,
-                           const SvNumberformat* pFormat,
                            sal_uInt16 nString,
                            bool bDontDetectNegation = false );
 
@@ -370,9 +354,7 @@ private:
 
     // Main analyzing function
     bool IsNumberFormatMain( const OUString& rString,
-                             const SvNumberformat* pFormat = nullptr);    // optional number format to match against
-
-    static inline bool MyIsdigit( sal_Unicode c );
+                             const SvNumberformat* pFormat);    // number format to match against
 
     /** Whether input matches locale dependent date acceptance pattern.
 
@@ -389,13 +371,20 @@ private:
     /** Sets (not advances!) rPos to sStrArray[nParticle].getLength() if string
         matches separator in pattern at nParticle.
 
+        Also detects a signed year case like M/D/-Y
+
         @returns TRUE if separator matched.
      */
-    bool SkipDatePatternSeparator( sal_uInt16 nParticle, sal_Int32 & rPos );
+    bool SkipDatePatternSeparator( sal_uInt16 nParticle, sal_Int32 & rPos, bool & rSignedYear );
 
     /** Returns count of numbers in accepted date pattern.
      */
     sal_uInt16 GetDatePatternNumbers();
+
+    /** Whether numeric string nNumber is of type cType in accepted date
+        pattern, 'Y', 'M' or 'D'.
+     */
+    bool IsDatePatternNumberOfType( sal_uInt16 nNumber, sal_Unicode cType );
 
     /** Obtain order of accepted date pattern coded as, for example,
         ('D'<<16)|('M'<<8)|'Y'
@@ -405,7 +394,7 @@ private:
     /** Obtain date format order, from accepted date pattern if available or
         otherwise the locale's default order.
      */
-    DateFormat GetDateOrder();
+    DateOrder GetDateOrder();
 
     /** Whether input may be an ISO 8601 date format, yyyy-mm-dd...
 
@@ -422,6 +411,11 @@ private:
         @see nMayBeMonthDate
      */
     bool MayBeMonthDate();
+
+    /** Whether input is acceptable as ISO 8601 date format in the current
+        NfEvalDateFormat setting.
+     */
+    bool IsAcceptableIso8601();
 };
 
 #endif // INCLUDED_SVL_SOURCE_NUMBERS_ZFORFIND_HXX

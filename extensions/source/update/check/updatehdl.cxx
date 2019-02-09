@@ -19,51 +19,52 @@
 
 
 #include "updatehdl.hxx"
-#include "update.hrc"
+#include <helpids.h>
 
-#include "osl/diagnose.h"
-#include "osl/thread.hxx"
-#include "osl/file.hxx"
-#include "rtl/ustring.hxx"
-#include "rtl/bootstrap.hxx"
+#include <osl/diagnose.h>
+#include <osl/thread.hxx>
+#include <osl/file.hxx>
+#include <rtl/ustring.hxx>
+#include <rtl/bootstrap.hxx>
 
-#include "com/sun/star/uno/Sequence.h"
+#include <com/sun/star/uno/Sequence.h>
 
 #include <com/sun/star/style/VerticalAlignment.hpp>
 
-#include "com/sun/star/awt/ActionEvent.hpp"
-#include "com/sun/star/awt/PushButtonType.hpp"
-#include "com/sun/star/awt/UnoControlDialog.hpp"
-#include "com/sun/star/awt/VclWindowPeerAttribute.hpp"
-#include "com/sun/star/awt/WindowAttribute.hpp"
-#include "com/sun/star/awt/XButton.hpp"
-#include "com/sun/star/awt/XControl.hpp"
-#include "com/sun/star/awt/XControlContainer.hpp"
-#include "com/sun/star/awt/XMessageBox.hpp"
-#include "com/sun/star/awt/XAnimation.hpp"
-#include "com/sun/star/awt/XTopWindow.hpp"
-#include "com/sun/star/awt/XVclWindowPeer.hpp"
-#include "com/sun/star/awt/XVclContainer.hpp"
-#include "com/sun/star/awt/XWindow.hpp"
-#include "com/sun/star/awt/XWindow2.hpp"
+#include <com/sun/star/awt/ActionEvent.hpp>
+#include <com/sun/star/awt/PushButtonType.hpp>
+#include <com/sun/star/awt/UnoControlDialog.hpp>
+#include <com/sun/star/awt/VclWindowPeerAttribute.hpp>
+#include <com/sun/star/awt/WindowAttribute.hpp>
+#include <com/sun/star/awt/XButton.hpp>
+#include <com/sun/star/awt/XControl.hpp>
+#include <com/sun/star/awt/XControlContainer.hpp>
+#include <com/sun/star/awt/XMessageBox.hpp>
+#include <com/sun/star/awt/XAnimation.hpp>
+#include <com/sun/star/awt/XTopWindow.hpp>
+#include <com/sun/star/awt/XVclWindowPeer.hpp>
+#include <com/sun/star/awt/XVclContainer.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <com/sun/star/awt/XWindow2.hpp>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include "com/sun/star/beans/XPropertySet.hpp"
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 
-#include "com/sun/star/container/XNameContainer.hpp"
+#include <com/sun/star/container/XNameContainer.hpp>
 
-#include "com/sun/star/frame/Desktop.hpp"
+#include <com/sun/star/frame/Desktop.hpp>
+#include <com/sun/star/frame/TerminationVetoException.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/task/InteractionHandler.hpp>
+#include <com/sun/star/task/InteractionRequestStringResolver.hpp>
 
-#include "com/sun/star/lang/XMultiServiceFactory.hpp"
-#include "com/sun/star/task/InteractionHandler.hpp"
-#include "com/sun/star/task/InteractionRequestStringResolver.hpp"
-
-#include <com/sun/star/resource/XResourceBundleLoader.hpp>
-
-#include "updatehdl.hrc"
+#include <strings.hrc>
+#include <unotools/resmgr.hxx>
 #include <tools/urlobj.hxx>
+#include <vcl/settings.hxx>
+#include <vcl/svapp.hxx>
 
 #define COMMAND_CLOSE       "close"
 
@@ -118,11 +119,11 @@ void UpdateHandler::enableControls( short nCtrlState )
         return;
 
     // the help button should always be the last button in the
-    // enum list und must never be disabled
+    // enum list and must never be disabled
     for ( int i=0; i<HELP_BUTTON; i++ )
     {
-        short nCurStateVal = (short)(nCtrlState >> i);
-        short nOldStateVal = (short)(mnLastCtrlState >> i);
+        short nCurStateVal = static_cast<short>(nCtrlState >> i);
+        short nOldStateVal = static_cast<short>(mnLastCtrlState >> i);
         if ( ( nCurStateVal & 0x01 ) != ( nOldStateVal & 0x01 ) )
         {
             bool bEnableControl = ( ( nCurStateVal & 0x01 ) == 0x01 );
@@ -261,7 +262,7 @@ OUString UpdateHandler::getBubbleText( UpdateState eState )
     osl::MutexGuard aGuard( maMutex );
 
     OUString sText;
-    sal_Int32 nIndex = (sal_Int32) eState;
+    sal_Int32 nIndex = static_cast<sal_Int32>(eState);
 
     loadStrings();
 
@@ -277,7 +278,7 @@ OUString UpdateHandler::getBubbleTitle( UpdateState eState )
     osl::MutexGuard aGuard( maMutex );
 
     OUString sText;
-    sal_Int32 nIndex = (sal_Int32) eState;
+    sal_Int32 nIndex = static_cast<sal_Int32>(eState);
 
     loadStrings();
 
@@ -300,7 +301,6 @@ OUString UpdateHandler::getDefaultInstErrMsg()
 // XActionListener
 
 void SAL_CALL UpdateHandler::disposing( const lang::EventObject& rEvt )
-    throw( uno::RuntimeException, std::exception )
 {
     if ( rEvt.Source == mxUpdDlg )
         mxUpdDlg.clear();
@@ -308,14 +308,13 @@ void SAL_CALL UpdateHandler::disposing( const lang::EventObject& rEvt )
 
 
 void SAL_CALL UpdateHandler::actionPerformed( awt::ActionEvent const & rEvent )
-    throw( uno::RuntimeException, std::exception )
 {
     DialogControls eButton = BUTTON_COUNT;
     for ( int i = 0; i < BUTTON_COUNT; i++ )
     {
-        if ( rEvent.ActionCommand.equals( msButtonIDs[i] ) )
+        if ( rEvent.ActionCommand == msButtonIDs[i] )
         {
-            eButton = (DialogControls) i;
+            eButton = static_cast<DialogControls>(i);
             break;
         }
     }
@@ -373,13 +372,11 @@ void SAL_CALL UpdateHandler::actionPerformed( awt::ActionEvent const & rEvent )
 // XTopWindowListener
 
 void SAL_CALL UpdateHandler::windowOpened( const lang::EventObject& )
-    throw( uno::RuntimeException, std::exception )
 {
 }
 
 
 void SAL_CALL UpdateHandler::windowClosing( const lang::EventObject& e )
-    throw( uno::RuntimeException, std::exception )
 {
     awt::ActionEvent aActionEvt;
     aActionEvt.ActionCommand = COMMAND_CLOSE;
@@ -390,40 +387,34 @@ void SAL_CALL UpdateHandler::windowClosing( const lang::EventObject& e )
 
 
 void SAL_CALL UpdateHandler::windowClosed( const lang::EventObject& )
-    throw( uno::RuntimeException, std::exception )
 {
 }
 
 
 void SAL_CALL UpdateHandler::windowMinimized( const lang::EventObject& )
-    throw( uno::RuntimeException, std::exception )
 {
     mbMinimized = true;
 }
 
 
 void SAL_CALL UpdateHandler::windowNormalized( const lang::EventObject& )
-    throw( uno::RuntimeException, std::exception )
 {
     mbMinimized = false;
 }
 
 
 void SAL_CALL UpdateHandler::windowActivated( const lang::EventObject& )
-    throw( uno::RuntimeException, std::exception )
 {
 }
 
 
 void SAL_CALL UpdateHandler::windowDeactivated( const lang::EventObject& )
-    throw( uno::RuntimeException, std::exception )
 {
 }
 
 // XInteractionHandler
 
 void SAL_CALL UpdateHandler::handle( uno::Reference< task::XInteractionRequest > const & rRequest)
-    throw (uno::RuntimeException, std::exception)
 {
     if ( !mxInteractionHdl.is() )
     {
@@ -467,7 +458,6 @@ void SAL_CALL UpdateHandler::handle( uno::Reference< task::XInteractionRequest >
 // XTerminateListener
 
 void SAL_CALL UpdateHandler::queryTermination( const lang::EventObject& )
-    throw ( frame::TerminationVetoException, uno::RuntimeException, std::exception )
 {
     if ( mbShowsMessageBox )
     {
@@ -485,7 +475,6 @@ void SAL_CALL UpdateHandler::queryTermination( const lang::EventObject& )
 
 
 void SAL_CALL UpdateHandler::notifyTermination( const lang::EventObject& )
-    throw ( uno::RuntimeException, std::exception )
 {
     osl::MutexGuard aGuard( maMutex );
 
@@ -508,9 +497,6 @@ void UpdateHandler::updateState( UpdateState eState )
 {
     if ( meLastState == eState )
         return;
-
-    if ( isVisible() )
-        {} // ToTop();
 
     OUString sText;
 
@@ -603,24 +589,10 @@ void UpdateHandler::updateState( UpdateState eState )
     meLastState = eState;
 }
 
-
-OUString UpdateHandler::loadString( const uno::Reference< resource::XResourceBundle >& rBundle,
-                                         sal_Int32 nResourceId )
+OUString UpdateHandler::loadString(const std::locale& rLocale,
+                                   const char* pResourceId)
 {
-    OUString sString;
-    OUString sKey = "string:" + OUString::number( nResourceId );
-
-    try
-    {
-        OSL_VERIFY( rBundle->getByName( sKey ) >>= sString );
-    }
-    catch( const uno::Exception& )
-    {
-        OSL_FAIL( "UpdateHandler::loadString: caught an exception!" );
-        sString = "Missing " + sKey;
-    }
-
-    return sString;
+    return Translate::get(pResourceId, rLocale);
 }
 
 OUString UpdateHandler::substVariables( const OUString &rSource ) const
@@ -632,7 +604,6 @@ OUString UpdateHandler::substVariables( const OUString &rSource ) const
         .replaceAll( "%PERCENT", OUString::number( mnPercent ) );
 }
 
-
 void UpdateHandler::loadStrings()
 {
     if ( mbStringsLoaded )
@@ -640,76 +611,65 @@ void UpdateHandler::loadStrings()
     else
         mbStringsLoaded = true;
 
-    uno::Reference< resource::XResourceBundleLoader > xLoader;
-    try
-    {
-        uno::Any aValue( mxContext->getValueByName(
-                "/singletons/com.sun.star.resource.OfficeResourceLoader" ) );
-        OSL_VERIFY( aValue >>= xLoader );
-    }
-    catch( const uno::Exception& )
-    {
-        OSL_FAIL( "UpdateHandler::loadStrings: could not create the resource loader!" );
-    }
+    std::locale loc = Translate::Create("pcr");
 
-    if ( !xLoader.is() ) return;
+    msChecking      = loadString( loc, RID_UPDATE_STR_CHECKING );
+    msCheckingError = loadString( loc, RID_UPDATE_STR_CHECKING_ERR );
+    msNoUpdFound    = loadString( loc, RID_UPDATE_STR_NO_UPD_FOUND );
 
-    uno::Reference< resource::XResourceBundle > xBundle;
-
-    try
-    {
-        xBundle = xLoader->loadBundle_Default( "upd" );
-    }
-    catch( const resource::MissingResourceException& )
-    {
-        OSL_FAIL( "UpdateHandler::loadStrings: missing the resource bundle!" );
-    }
-
-    if ( !xBundle.is() ) return;
-
-    msChecking      = loadString( xBundle, RID_UPDATE_STR_CHECKING );
-    msCheckingError = loadString( xBundle, RID_UPDATE_STR_CHECKING_ERR );
-    msNoUpdFound    = loadString( xBundle, RID_UPDATE_STR_NO_UPD_FOUND );
-
-    msUpdFound      = loadString( xBundle, RID_UPDATE_STR_UPD_FOUND );
+    msUpdFound      = loadString( loc, RID_UPDATE_STR_UPD_FOUND );
     setFullVersion( msUpdFound );
 
-    msDlgTitle      = loadString( xBundle, RID_UPDATE_STR_DLG_TITLE );
-    msDownloadPause = loadString( xBundle, RID_UPDATE_STR_DOWNLOAD_PAUSE );
-    msDownloadError = loadString( xBundle, RID_UPDATE_STR_DOWNLOAD_ERR );
-    msDownloadWarning = loadString( xBundle, RID_UPDATE_STR_DOWNLOAD_WARN );
-    msDownloadDescr =  loadString( xBundle, RID_UPDATE_STR_DOWNLOAD_DESCR );
-    msDownloadNotAvail = loadString( xBundle, RID_UPDATE_STR_DOWNLOAD_UNAVAIL );
-    msDownloading   = loadString( xBundle, RID_UPDATE_STR_DOWNLOADING );
-    msReady2Install = loadString( xBundle, RID_UPDATE_STR_READY_INSTALL );
-    msCancelTitle   = loadString( xBundle, RID_UPDATE_STR_CANCEL_TITLE );
-    msCancelMessage = loadString( xBundle, RID_UPDATE_STR_CANCEL_DOWNLOAD );
-    msInstallMessage = loadString( xBundle, RID_UPDATE_STR_BEGIN_INSTALL );
-    msInstallNow    = loadString( xBundle, RID_UPDATE_STR_INSTALL_NOW );
-    msInstallLater  = loadString( xBundle, RID_UPDATE_STR_INSTALL_LATER );
-    msInstallError  = loadString( xBundle, RID_UPDATE_STR_INSTALL_ERROR );
-    msOverwriteWarning = loadString( xBundle, RID_UPDATE_STR_OVERWRITE_WARNING );
-    msPercent       = loadString( xBundle, RID_UPDATE_STR_PERCENT );
-    msReloadWarning = loadString( xBundle, RID_UPDATE_STR_RELOAD_WARNING );
-    msReloadReload  = loadString( xBundle, RID_UPDATE_STR_RELOAD_RELOAD );
-    msReloadContinue = loadString( xBundle, RID_UPDATE_STR_RELOAD_CONTINUE );
+    msDlgTitle      = loadString( loc, RID_UPDATE_STR_DLG_TITLE );
+    msDownloadPause = loadString( loc, RID_UPDATE_STR_DOWNLOAD_PAUSE );
+    msDownloadError = loadString( loc, RID_UPDATE_STR_DOWNLOAD_ERR );
+    msDownloadWarning = loadString( loc, RID_UPDATE_STR_DOWNLOAD_WARN );
+    msDownloadDescr =  loadString( loc, RID_UPDATE_STR_DOWNLOAD_DESCR );
+    msDownloadNotAvail = loadString( loc, RID_UPDATE_STR_DOWNLOAD_UNAVAIL );
+    msDownloading   = loadString( loc, RID_UPDATE_STR_DOWNLOADING );
+    msReady2Install = loadString( loc, RID_UPDATE_STR_READY_INSTALL );
+    msCancelTitle   = loadString( loc, RID_UPDATE_STR_CANCEL_TITLE );
+    msCancelMessage = loadString( loc, RID_UPDATE_STR_CANCEL_DOWNLOAD );
+    msInstallMessage = loadString( loc, RID_UPDATE_STR_BEGIN_INSTALL );
+    msInstallNow    = loadString( loc, RID_UPDATE_STR_INSTALL_NOW );
+    msInstallLater  = loadString( loc, RID_UPDATE_STR_INSTALL_LATER );
+    msInstallError  = loadString( loc, RID_UPDATE_STR_INSTALL_ERROR );
+    msOverwriteWarning = loadString( loc, RID_UPDATE_STR_OVERWRITE_WARNING );
+    msPercent       = loadString( loc, RID_UPDATE_STR_PERCENT );
+    msReloadWarning = loadString( loc, RID_UPDATE_STR_RELOAD_WARNING );
+    msReloadReload  = loadString( loc, RID_UPDATE_STR_RELOAD_RELOAD );
+    msReloadContinue = loadString( loc, RID_UPDATE_STR_RELOAD_CONTINUE );
 
-    msStatusFL      = loadString( xBundle, RID_UPDATE_FT_STATUS );
-    msDescription   = loadString( xBundle, RID_UPDATE_FT_DESCRIPTION );
+    msStatusFL      = loadString( loc, RID_UPDATE_FT_STATUS );
+    msDescription   = loadString( loc, RID_UPDATE_FT_DESCRIPTION );
 
-    msClose         = loadString( xBundle, RID_UPDATE_BTN_CLOSE );
-    msDownload      = loadString( xBundle, RID_UPDATE_BTN_DOWNLOAD );
-    msInstall       = loadString( xBundle, RID_UPDATE_BTN_INSTALL );
-    msPauseBtn      = loadString( xBundle, RID_UPDATE_BTN_PAUSE );
-    msResumeBtn     = loadString( xBundle, RID_UPDATE_BTN_RESUME );
-    msCancelBtn     = loadString( xBundle, RID_UPDATE_BTN_CANCEL );
+    msClose         = loadString( loc, RID_UPDATE_BTN_CLOSE );
+    msDownload      = loadString( loc, RID_UPDATE_BTN_DOWNLOAD );
+    msInstall       = loadString( loc, RID_UPDATE_BTN_INSTALL );
+    msPauseBtn      = loadString( loc, RID_UPDATE_BTN_PAUSE );
+    msResumeBtn     = loadString( loc, RID_UPDATE_BTN_RESUME );
+    msCancelBtn     = loadString( loc, RID_UPDATE_BTN_CANCEL );
+
+    std::pair<const char*, const char*> RID_UPDATE_BUBBLE[] =
+    {
+        { RID_UPDATE_BUBBLE_UPDATE_AVAIL, RID_UPDATE_BUBBLE_T_UPDATE_AVAIL },
+        { RID_UPDATE_BUBBLE_UPDATE_NO_DOWN, RID_UPDATE_BUBBLE_T_UPDATE_NO_DOWN },
+        { RID_UPDATE_BUBBLE_AUTO_START, RID_UPDATE_BUBBLE_T_AUTO_START },
+        { RID_UPDATE_BUBBLE_DOWNLOADING, RID_UPDATE_BUBBLE_T_DOWNLOADING },
+        { RID_UPDATE_BUBBLE_DOWNLOAD_PAUSED, RID_UPDATE_BUBBLE_T_DOWNLOAD_PAUSED },
+        { RID_UPDATE_BUBBLE_ERROR_DOWNLOADING, RID_UPDATE_BUBBLE_T_ERROR_DOWNLOADING },
+        { RID_UPDATE_BUBBLE_DOWNLOAD_AVAIL, RID_UPDATE_BUBBLE_T_DOWNLOAD_AVAIL },
+        { RID_UPDATE_BUBBLE_EXT_UPD_AVAIL, RID_UPDATE_BUBBLE_T_EXT_UPD_AVAIL }
+    };
+
+    static_assert(SAL_N_ELEMENTS(RID_UPDATE_BUBBLE) == UPDATESTATES_COUNT - UPDATESTATE_UPDATE_AVAIL, "mismatch");
 
     // all update states before UPDATESTATE_UPDATE_AVAIL don't have a bubble
     // so we can ignore them
-    for ( int i=0; i < (int)(UPDATESTATES_COUNT - UPDATESTATE_UPDATE_AVAIL); i++ )
+    for (size_t i = 0; i < SAL_N_ELEMENTS(RID_UPDATE_BUBBLE); ++i)
     {
-        msBubbleTexts[ i ] = loadString( xBundle, RID_UPDATE_BUBBLE_TEXT_START + i );
-        msBubbleTitles[ i ] = loadString( xBundle, RID_UPDATE_BUBBLE_T_TEXT_START + i );
+        msBubbleTexts[i] = loadString(loc, RID_UPDATE_BUBBLE[i].first);
+        msBubbleTitles[i] = loadString(loc, RID_UPDATE_BUBBLE[i].second);
     }
 
     for ( int i=0; i < BUTTON_COUNT; i++ )
@@ -787,7 +747,7 @@ void UpdateHandler::focusControl( DialogControls eID )
 
     OSL_ENSURE( (eID < BUTTON_COUNT), "UpdateHandler::focusControl: id to big!" );
 
-    uno::Reference< awt::XWindow > xWindow( xContainer->getControl( msButtonIDs[(short)eID] ), uno::UNO_QUERY );
+    uno::Reference< awt::XWindow > xWindow( xContainer->getControl( msButtonIDs[static_cast<short>(eID)] ), uno::UNO_QUERY );
     if ( xWindow.is() )
         xWindow->setFocus();
 }
@@ -828,10 +788,10 @@ void UpdateHandler::setFullVersion( OUString& rString )
 
     beans::PropertyValue aProperty;
     aProperty.Name  = "nodepath";
-    aProperty.Value = uno::makeAny( OUString("org.openoffice.Setup/Product") );
+    aProperty.Value <<= OUString("org.openoffice.Setup/Product");
 
     uno::Sequence< uno::Any > aArgumentList( 1 );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aArgumentList[0] <<= aProperty;
 
     uno::Reference< uno::XInterface > xConfigAccess;
     xConfigAccess = xConfigurationProvider->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationAccess",
@@ -1021,18 +981,18 @@ void UpdateHandler::showControls( short nControls )
     // The buttons from CANCEL_BUTTON to RESUME_BUTTON will be shown or
     // hidden on demand
     short nShiftMe;
-    for ( int i = 0; i <= (int)RESUME_BUTTON; i++ )
+    for ( int i = 0; i <= int(RESUME_BUTTON); i++ )
     {
-        nShiftMe = (short)(nControls >> i);
-        showControl( msButtonIDs[i], (bool)(nShiftMe & 0x01) );
+        nShiftMe = static_cast<short>(nControls >> i);
+        showControl( msButtonIDs[i], static_cast<bool>(nShiftMe & 0x01) );
     }
 
-    nShiftMe = (short)(nControls >> THROBBER_CTRL);
-    startThrobber( (bool)(nShiftMe & 0x01) );
+    nShiftMe = static_cast<short>(nControls >> THROBBER_CTRL);
+    startThrobber( static_cast<bool>(nShiftMe & 0x01) );
 
-    nShiftMe = (short)(nControls >> PROGRESS_CTRL);
-    showControl( CTRL_PROGRESS, (bool)(nShiftMe & 0x01) );
-    showControl( TEXT_PERCENT, (bool)(nShiftMe & 0x01) );
+    nShiftMe = static_cast<short>(nControls >> PROGRESS_CTRL);
+    showControl( CTRL_PROGRESS, static_cast<bool>(nShiftMe & 0x01) );
+    showControl( TEXT_PERCENT, static_cast<bool>(nShiftMe & 0x01) );
 
     // Status text needs to be smaller, when there are buttons at the right side of the dialog
     if ( ( nControls & ( (1<<CANCEL_BUTTON) + (1<<PAUSE_BUTTON) + (1<<RESUME_BUTTON) ) )  != 0 )

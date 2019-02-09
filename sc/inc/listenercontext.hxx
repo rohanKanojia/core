@@ -12,6 +12,7 @@
 
 #include "address.hxx"
 #include "columnspanset.hxx"
+#include "mtvelements.hxx"
 
 #include <memory>
 
@@ -20,18 +21,20 @@ class ScTokenArray;
 
 namespace sc {
 
-struct ColumnBlockPosition;
-class ColumnBlockPositionSet;
+class ColumnSet;
 
 class StartListeningContext
 {
     ScDocument& mrDoc;
     std::shared_ptr<ColumnBlockPositionSet> mpSet;
+    std::shared_ptr<const ColumnSet> mpColSet;
 public:
     StartListeningContext(const StartListeningContext&) = delete;
     const StartListeningContext& operator=(const StartListeningContext&) = delete;
     StartListeningContext(ScDocument& rDoc);
     StartListeningContext(ScDocument& rDoc, const std::shared_ptr<ColumnBlockPositionSet>& pSet);
+    void setColumnSet( const std::shared_ptr<const ColumnSet>& pColSet );
+    const std::shared_ptr<const ColumnSet>& getColumnSet() const;
     ScDocument& getDoc() { return mrDoc;}
 
     ColumnBlockPosition* getBlockPosition(SCTAB nTab, SCCOL nCol);
@@ -42,7 +45,7 @@ class EndListeningContext
     ScDocument& mrDoc;
     ColumnSpanSet maSet;
     std::shared_ptr<ColumnBlockPositionSet> mpPosSet;
-    ScTokenArray* mpOldCode;
+    ScTokenArray* const mpOldCode;
     ScAddress maPosDelta; // Add this to get the old position prior to the move.
 
 public:

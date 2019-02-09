@@ -17,9 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "warnpassword.hxx"
+#include <warnpassword.hxx>
 #include <com/sun/star/task/XInteractionHandler.hpp>
-#include <com/sun/star/task/XInteractionRequest.hpp>
 #include <svl/itemset.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/sfxsids.hrc>
@@ -32,11 +31,9 @@
 using ::com::sun::star::uno::makeAny;
 using ::com::sun::star::uno::Any;
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::uno::Exception;
 using ::com::sun::star::uno::XInterface;
 using ::com::sun::star::task::InteractionClassification_QUERY;
 using ::com::sun::star::task::XInteractionHandler;
-using ::com::sun::star::task::XInteractionRequest;
 using ::com::sun::star::ucb::InteractiveAppException;
 
 bool ScWarnPassword::WarningOnPassword( SfxMedium& rMedium )
@@ -45,36 +42,22 @@ bool ScWarnPassword::WarningOnPassword( SfxMedium& rMedium )
     Reference< XInteractionHandler > xHandler( rMedium.GetInteractionHandler());
     if( xHandler.is() )
     {
-
-        OUString empty;
-        Any xException( makeAny(InteractiveAppException(empty,
+        Any aException( InteractiveAppException("",
                 Reference <XInterface> (),
                 InteractionClassification_QUERY,
-                 ERRCODE_SVX_EXPORT_FILTER_CRYPT)));
+                sal_uInt32(ERRCODE_SVX_EXPORT_FILTER_CRYPT)));
 
-        Reference< ucbhelper::SimpleInteractionRequest > xRequest
+        rtl::Reference< ucbhelper::SimpleInteractionRequest > xRequest
                     = new ucbhelper::SimpleInteractionRequest(
-                        xException,
-                        ucbhelper::CONTINUATION_APPROVE
-                            | ucbhelper::CONTINUATION_DISAPPROVE );
+                        aException,
+                        ContinuationFlags::Approve | ContinuationFlags::Disapprove );
 
         xHandler->handle( xRequest.get() );
 
-        const sal_Int32 nResp = xRequest->getResponse();
+        const ContinuationFlags nResp = xRequest->getResponse();
 
-        switch ( nResp )
-        {
-        case ucbhelper::CONTINUATION_UNKNOWN:
-                break;
-
-        case ucbhelper::CONTINUATION_APPROVE:
-                // Continue
-                break;
-
-        case ucbhelper::CONTINUATION_DISAPPROVE:
-                bReturn = false;
-                break;
-        }
+        if ( nResp == ContinuationFlags::Disapprove )
+            bReturn = false;
     }
     return bReturn;
 }

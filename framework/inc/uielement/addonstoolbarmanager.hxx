@@ -21,15 +21,11 @@
 #define INCLUDED_FRAMEWORK_INC_UIELEMENT_ADDONSTOOLBARMANAGER_HXX
 
 #include <uielement/toolbarmanager.hxx>
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
 
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/frame/XModuleManager.hpp>
 
 #include <rtl/ustring.hxx>
 #include <cppuhelper/weak.hxx>
@@ -40,28 +36,28 @@ class ToolBox;
 namespace framework
 {
 
-class AddonsToolBarManager : public ToolBarManager
+class AddonsToolBarManager final : public ToolBarManager
 {
     public:
         AddonsToolBarManager( const css::uno::Reference< css::uno::XComponentContext >& rxContext,
                               const css::uno::Reference< css::frame::XFrame >& rFrame,
                               const OUString& rResourceName,
                               ToolBox* pToolBar );
-        virtual ~AddonsToolBarManager();
+        virtual ~AddonsToolBarManager() override;
 
         // XComponent
-        void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+        void SAL_CALL dispose() override;
 
         virtual void RefreshImages() override;
         using ToolBarManager::FillToolbar;
         void FillToolbar( const css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > >& rAddonToolbar );
 
-    protected:
-        DECL_LINK_TYPED(Click, ToolBox *, void);
-        DECL_LINK_TYPED(DoubleClick, ToolBox *, void);
-        DECL_LINK_TYPED(Select, ToolBox *, void);
-        DECL_LINK_TYPED(StateChanged, StateChangedType const *, void );
-        DECL_LINK_TYPED(DataChanged, DataChangedEvent const *, void );
+    private:
+        DECL_LINK(Click, ToolBox *, void);
+        DECL_LINK(DoubleClick, ToolBox *, void);
+        DECL_LINK(Select, ToolBox *, void);
+        DECL_LINK(StateChanged, StateChangedType const *, void );
+        DECL_LINK(DataChanged, DataChangedEvent const *, void );
 
         virtual bool MenuItemAllowed( sal_uInt16 ) const override;
 };

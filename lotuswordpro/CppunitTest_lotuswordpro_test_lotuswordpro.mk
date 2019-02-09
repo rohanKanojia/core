@@ -23,13 +23,9 @@ $(eval $(call gb_CppunitTest_use_libraries,lotuswordpro_test_lotuswordpro, \
     test \
     unotest \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,lotuswordpro_test_lotuswordpro,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,lotuswordpro_test_lotuswordpro))
 
 $(eval $(call gb_CppunitTest_use_ure,lotuswordpro_test_lotuswordpro))
 $(eval $(call gb_CppunitTest_use_vcl,lotuswordpro_test_lotuswordpro))

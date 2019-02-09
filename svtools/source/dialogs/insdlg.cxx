@@ -18,7 +18,7 @@
  */
 
 #include <svtools/insdlg.hxx>
-#include <svtools/sores.hxx>
+#include <svtools/strings.hrc>
 #include <svtools/svtresid.hxx>
 
 #include <unotools/configmgr.hxx>
@@ -30,6 +30,7 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <com/sun/star/container/XNameAccess.hpp>
 
 using namespace ::com::sun::star;
@@ -42,12 +43,12 @@ using namespace ::com::sun::star;
 
 struct OleObjectDescriptor
 {
-    sal_uInt32  cbSize;
-    ClsId       clsid;
-    sal_uInt32  dwDrawAspect;
-    Size        sizel;
-    Point       pointl;
-    sal_uInt32  dwStatus;
+    sal_uInt32 const  cbSize;
+    ClsId const       clsid;
+    sal_uInt32 const  dwDrawAspect;
+    Size const        sizel;
+    Point const       pointl;
+    sal_uInt32 const  dwStatus;
     sal_uInt32  dwFullUserTypeName;
     sal_uInt32  dwSrcOfCopy;
 };
@@ -57,38 +58,29 @@ struct OleObjectDescriptor
 
 const SvObjectServer * SvObjectServerList::Get( const OUString & rHumanName ) const
 {
-    for( size_t i = 0; i < aObjectServerList.size(); i++ )
+    for(const auto & i : aObjectServerList)
     {
-        if( rHumanName == aObjectServerList[ i ].GetHumanName() )
-            return &aObjectServerList[ i ];
+        if( rHumanName == i.GetHumanName() )
+            return &i;
     }
     return nullptr;
 }
 
 const SvObjectServer * SvObjectServerList::Get( const SvGlobalName & rName ) const
 {
-    for( size_t i = 0; i < aObjectServerList.size(); i++ )
+    for(const auto & i : aObjectServerList)
     {
-        if( rName == aObjectServerList[ i ].GetClassName() )
-            return &aObjectServerList[ i ];
+        if( rName == i.GetClassName() )
+            return &i;
     }
     return nullptr;
 }
 
 void SvObjectServerList::Remove( const SvGlobalName & rName )
 {
-    for( size_t i = 0; i < aObjectServerList.size(); )
-    {
-        if( aObjectServerList[ i ].GetClassName() == rName )
-        {
-            SvObjectServerList_impl::iterator it = aObjectServerList.begin() + i;
-            aObjectServerList.erase( it );
-        }
-        else
-        {
-            ++i;
-        }
-    }
+    aObjectServerList.erase(std::remove_if(aObjectServerList.begin(), aObjectServerList.end(),
+        [rName](const SvObjectServer& rServer) { return rServer.GetClassName() == rName; }),
+        aObjectServerList.end());
 }
 
 
@@ -104,15 +96,12 @@ void SvObjectServerList::FillInsertObjects()
         uno::Reference< lang::XMultiServiceFactory > sProviderMSFactory =
             configuration::theDefaultProvider::get(xContext);
 
-        OUString sReaderService( "com.sun.star.configuration.ConfigurationAccess" );
-        uno::Sequence< uno::Any > aArguments( 1 );
-        beans::PropertyValue aPathProp;
-        aPathProp.Name = "nodepath";
-        aPathProp.Value <<= OUString( "/org.openoffice.Office.Embedding/ObjectNames" );
-        aArguments[0] <<= aPathProp;
-
+        uno::Sequence<uno::Any> aArguments(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", uno::Any(OUString( "/org.openoffice.Office.Embedding/ObjectNames" ))}
+        }));
         uno::Reference< container::XNameAccess > xNameAccess(
-            sProviderMSFactory->createInstanceWithArguments( sReaderService,aArguments ),
+            sProviderMSFactory->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationAccess", aArguments ),
             uno::UNO_QUERY );
 
         if( xNameAccess.is())
@@ -164,8 +153,8 @@ void SvObjectServerList::FillInsertObjects()
                     if( aClassName.MakeId( aClassID) )
                     {
                         if( !Get( aClassName ) )
-                            // noch nicht eingetragen
-                            aObjectServerList.push_back( SvObjectServer( aClassName, aUIName ) );
+                            // not entered yet
+                            aObjectServerList.emplace_back( aClassName, aUIName );
                     }
                 }
             }
@@ -174,7 +163,7 @@ void SvObjectServerList::FillInsertObjects()
 
 #ifdef _WIN32
         SvGlobalName aOleFact( SO3_OUT_CLASSID );
-        OUString aOleObj( SVT_RESSTR( STR_FURTHER_OBJECT ) );
+        OUString aOleObj( SvtResId( STR_FURTHER_OBJECT ) );
         aObjectServerList.push_back( SvObjectServer( aOleFact, aOleObj ) );
 #endif
 
@@ -192,16 +181,16 @@ OUString SvPasteObjectHelper::GetSotFormatUIName( SotClipboardFormatId nId )
 {
     struct SotResourcePair
     {
-        SotClipboardFormatId   mnSotId;
-        sal_uInt16              mnResId;
+        SotClipboardFormatId const   mnSotId;
+        const char* mpResId;
     };
 
     static const SotResourcePair aSotResourcePairs[] =
     {
-        { SotClipboardFormatId::STRING,                    STR_FORMAT_STRING },
-        { SotClipboardFormatId::BITMAP,                    STR_FORMAT_BITMAP },
-        { SotClipboardFormatId::GDIMETAFILE,               STR_FORMAT_GDIMETAFILE },
-        { SotClipboardFormatId::RTF,                       STR_FORMAT_RTF },
+        { SotClipboardFormatId::STRING,              STR_FORMAT_STRING },
+        { SotClipboardFormatId::BITMAP,              STR_FORMAT_BITMAP },
+        { SotClipboardFormatId::GDIMETAFILE,         STR_FORMAT_GDIMETAFILE },
+        { SotClipboardFormatId::RTF,                 STR_FORMAT_RTF },
         { SotClipboardFormatId::DRAWING,             STR_FORMAT_ID_DRAWING },
         { SotClipboardFormatId::SVXB,                STR_FORMAT_ID_SVXB },
         { SotClipboardFormatId::INTERNALLINK_STATE,  STR_FORMAT_ID_INTERNALLINK_STATE },
@@ -263,27 +252,31 @@ OUString SvPasteObjectHelper::GetSotFormatUIName( SotClipboardFormatId nId )
         { SotClipboardFormatId::DBACCESS_COMMAND,    STR_FORMAT_ID_DBACCESS_COMMAND },
         { SotClipboardFormatId::DIALOG_60,           STR_FORMAT_ID_DIALOG_60 },
         { SotClipboardFormatId::FILEGRPDESCRIPTOR,   STR_FORMAT_ID_FILEGRPDESCRIPTOR },
-        { SotClipboardFormatId::HTML_NO_COMMENT,     STR_FORMAT_ID_HTML_NO_COMMENT }
+        { SotClipboardFormatId::HTML_NO_COMMENT,     STR_FORMAT_ID_HTML_NO_COMMENT },
+        { SotClipboardFormatId::RICHTEXT,            STR_FORMAT_ID_RICHTEXT },
+        { SotClipboardFormatId::STRING_TSVC,         STR_FORMAT_ID_STRING_TSVC },
+        { SotClipboardFormatId::PNG,                 STR_FORMAT_ID_PNG_BITMAP },
     };
 
-    OUString aUIName;
-    sal_uInt16 nResId = 0;
+    const char* pResId = nullptr;
 
-    for( sal_uInt32 i = 0, nCount = SAL_N_ELEMENTS( aSotResourcePairs ); ( i < nCount ) && !nResId; i++ )
+    sal_uInt32 const nCount = SAL_N_ELEMENTS( aSotResourcePairs );
+    for (sal_uInt32 i = 0; ( i < nCount ) && !pResId; ++i)
     {
         if( aSotResourcePairs[ i ].mnSotId == nId )
-            nResId = aSotResourcePairs[ i ].mnResId;
+            pResId = aSotResourcePairs[ i ].mpResId;
     }
 
-    if( nResId )
-        aUIName = SVT_RESSTR( nResId );
+    OUString aUIName;
+    if (pResId)
+        aUIName = SvtResId(pResId);
     else
         aUIName = SotExchange::GetFormatName( nId );
 
     return aUIName;
 }
 
-bool SvPasteObjectHelper::GetEmbeddedName(const TransferableDataHelper& rData, OUString& _rName, OUString& _rSource, SotClipboardFormatId& _nFormat)
+bool SvPasteObjectHelper::GetEmbeddedName(const TransferableDataHelper& rData, OUString& _rName, OUString& _rSource, SotClipboardFormatId const & _nFormat)
 {
     bool bRet = false;
     if( _nFormat == SotClipboardFormatId::EMBED_SOURCE_OLE || _nFormat == SotClipboardFormatId::EMBEDDED_OBJ_OLE )
@@ -333,7 +326,7 @@ bool SvPasteObjectHelper::GetEmbeddedName(const TransferableDataHelper& rData, O
                 _rSource += pSrcOfCopy;
             }
             else
-                _rSource = SVT_RESSTR(STR_UNKNOWN_SOURCE);
+                _rSource = SvtResId(STR_UNKNOWN_SOURCE);
         }
         bRet = true;
     }

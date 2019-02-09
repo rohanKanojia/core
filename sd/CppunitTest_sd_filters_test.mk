@@ -52,7 +52,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sd_filters_test, \
     utl \
     vcl \
     xo \
-    $(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sd_filters_test,\
@@ -61,10 +60,7 @@ $(eval $(call gb_CppunitTest_set_include,sd_filters_test,\
     $$(INCLUDE) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,sd_filters_test,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,sd_filters_test))
 
 $(eval $(call gb_CppunitTest_use_ure,sd_filters_test))
 $(eval $(call gb_CppunitTest_use_vcl,sd_filters_test))
@@ -76,6 +72,7 @@ $(eval $(call gb_CppunitTest_use_components,sd_filters_test,\
     configmgr/source/configmgr \
     dbaccess/util/dba \
     embeddedobj/util/embobj \
+    emfio/emfio \
     filter/source/config/cache/filterconfig1 \
     framework/util/fwk \
     i18npool/util/i18npool \
@@ -97,6 +94,8 @@ $(eval $(call gb_CppunitTest_use_components,sd_filters_test,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     xmloff/util/xo \
 ))
 
@@ -104,7 +103,6 @@ $(eval $(call gb_CppunitTest_use_configuration,sd_filters_test))
 
 # sd dlopens libicg.so for cgm import, so ensure its built by now
 $(call gb_CppunitTest_get_target,sd_filters_test) : | \
-    $(call gb_AllLangResTarget_get_target,sd) \
     $(call gb_Library_get_target,icg) \
 
 # vim: set noet sw=4 ts=4:

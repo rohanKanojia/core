@@ -23,56 +23,62 @@
 #include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/window.hxx>
+#include <o3tl/typed_flags_set.hxx>
+#include <memory>
 #include <vector>
 
+class DataChangedEvent;
+class HelpEvent;
+class MouseEvent;
+class UserDrawEvent;
 struct ImplStatusItem;
-typedef ::std::vector< ImplStatusItem* > ImplStatusItemList;
-
 
 void VCL_DLLPUBLIC DrawProgress(vcl::Window* pWindow, vcl::RenderContext& rRenderContext, const Point& rPos,
                                 long nOffset, long nPrgsWidth, long nPrgsHeight,
                                 sal_uInt16 nPercent1, sal_uInt16 nPercent2, sal_uInt16 nPercentCount,
-                                const Rectangle& rFramePosSize);
+                                const tools::Rectangle& rFramePosSize);
 
 
-typedef sal_uInt16 StatusBarItemBits;
+enum class StatusBarItemBits {
+    NONE            = 0x0000,
+    Left            = 0x0001,
+    Center          = 0x0002,
+    Right           = 0x0004,
+    In              = 0x0008,
+    Out             = 0x0010,
+    Flat            = 0x0020,
+    AutoSize        = 0x0040,
+    UserDraw        = 0x0080,
+    Mandatory       = 0x0100,
+};
+namespace o3tl
+{
+    template<> struct typed_flags<StatusBarItemBits> : is_typed_flags<StatusBarItemBits, 0x01ff> {};
+}
 
-
-#define SIB_LEFT                    ((StatusBarItemBits)0x0001)
-#define SIB_CENTER                  ((StatusBarItemBits)0x0002)
-#define SIB_RIGHT                   ((StatusBarItemBits)0x0004)
-#define SIB_IN                      ((StatusBarItemBits)0x0008)
-#define SIB_OUT                     ((StatusBarItemBits)0x0010)
-#define SIB_FLAT                    ((StatusBarItemBits)0x0020)
-#define SIB_AUTOSIZE                ((StatusBarItemBits)0x0040)
-#define SIB_USERDRAW                ((StatusBarItemBits)0x0080)
-
-
-#define STATUSBAR_APPEND            ((sal_uInt16)0xFFFF)
-#define STATUSBAR_ITEM_NOTFOUND     ((sal_uInt16)0xFFFF)
-#define STATUSBAR_OFFSET            ((long)5)
+#define STATUSBAR_APPEND            (sal_uInt16(0xFFFF))
+#define STATUSBAR_ITEM_NOTFOUND     (sal_uInt16(0xFFFF))
+#define STATUSBAR_OFFSET            (long(5))
 
 
 class VCL_DLLPUBLIC StatusBar : public vcl::Window
 {
     class   ImplData;
 private:
-    ImplStatusItemList* mpItemList;
-    ImplData*           mpImplData;
+    std::vector<std::unique_ptr<ImplStatusItem>> mvItemList;
+    std::unique_ptr<ImplData> mpImplData;
     OUString            maPrgsTxt;
     Point               maPrgsTxtPos;
-    Rectangle           maPrgsFrameRect;
+    tools::Rectangle           maPrgsFrameRect;
     long                mnPrgsSize;
     long                mnItemsWidth;
     long                mnDX;
     long                mnDY;
     long                mnCalcHeight;
     long                mnTextY;
-    long                mnItemY;
     sal_uInt16          mnCurItemId;
     sal_uInt16          mnPercent;
     sal_uInt16          mnPercentCount;
-    bool                mbVisibleItems;
     bool                mbFormat;
     bool                mbProgressMode;
     bool                mbInUserDraw;
@@ -91,7 +97,7 @@ private:
                                           sal_uInt16 nPos);
     SAL_DLLPRIVATE void      ImplDrawProgress(vcl::RenderContext& rRenderContext, sal_uInt16 nNewPerc);
     SAL_DLLPRIVATE void      ImplCalcProgressRect();
-    SAL_DLLPRIVATE Rectangle ImplGetItemRectPos( sal_uInt16 nPos ) const;
+    SAL_DLLPRIVATE tools::Rectangle ImplGetItemRectPos( sal_uInt16 nPos ) const;
     SAL_DLLPRIVATE sal_uInt16    ImplGetFirstVisiblePos() const;
 
 protected:
@@ -100,14 +106,13 @@ protected:
 public:
                         StatusBar( vcl::Window* pParent,
                                    WinBits nWinStyle = WB_BORDER | WB_RIGHT );
-    virtual             ~StatusBar();
+    virtual             ~StatusBar() override;
     virtual void        dispose() override;
 
     void                AdjustItemWidthsForHiDPI();
 
     virtual void        MouseButtonDown( const MouseEvent& rMEvt ) override;
-    virtual void        Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
-    virtual void        Move() override;
+    virtual void        Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void        Resize() override;
     virtual void        RequestHelp( const HelpEvent& rHEvt ) override;
     virtual void        StateChanged( StateChangedType nType ) override;
@@ -118,7 +123,7 @@ public:
     virtual void        UserDraw( const UserDrawEvent& rUDEvt );
 
     void                InsertItem( sal_uInt16 nItemId, sal_uLong nWidth,
-                                    StatusBarItemBits nBits = SIB_CENTER | SIB_IN,
+                                    StatusBarItemBits nBits = StatusBarItemBits::Center | StatusBarItemBits::In,
                                     long nOffset = STATUSBAR_OFFSET,
                                     sal_uInt16 nPos = STATUSBAR_APPEND );
     void                RemoveItem( sal_uInt16 nItemId );
@@ -126,8 +131,6 @@ public:
     void                ShowItem( sal_uInt16 nItemId );
     void                HideItem( sal_uInt16 nItemId );
     bool                IsItemVisible( sal_uInt16 nItemId ) const;
-
-    bool                AreItemsVisible() const { return mbVisibleItems; }
 
     void                RedrawItem( sal_uInt16 nItemId );
 
@@ -137,7 +140,7 @@ public:
     sal_uInt16          GetItemId( sal_uInt16 nPos ) const;
     sal_uInt16          GetItemId( const Point& rPos ) const;
     sal_uInt16          GetItemPos( sal_uInt16 nItemId ) const;
-    Rectangle           GetItemRect( sal_uInt16 nItemId ) const;
+    tools::Rectangle           GetItemRect( sal_uInt16 nItemId ) const;
     Point               GetItemTextPos( sal_uInt16 nItemId ) const;
     sal_uInt16          GetCurItemId() const { return mnCurItemId; }
 
@@ -164,7 +167,6 @@ public:
     const OUString&     GetQuickHelpText( sal_uInt16 nItemId ) const;
 
     void                SetHelpId( sal_uInt16 nItemId, const OString& rHelpId );
-    OString             GetHelpId( sal_uInt16 nItemId ) const;
 
     void                StartProgressMode( const OUString& rText );
     void                SetProgressValue( sal_uInt16 nPercent );

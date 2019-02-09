@@ -19,12 +19,14 @@
 
 #include <sax/tools/converter.hxx>
 #include <rtl/math.hxx>
+#include <sal/log.hxx>
 
 #include "ximp3dscene.hxx"
 #include <xmloff/xmluconv.hxx>
-#include "xexptran.hxx"
+#include <xexptran.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/Direction3D.hpp>
 #include <com/sun/star/drawing/CameraGeometry.hpp>
 #include "eventimp.hxx"
@@ -79,12 +81,12 @@ SdXML3DLightContext::SdXML3DLightContext(
             }
             case XML_TOK_3DLIGHT_ENABLED:
             {
-                ::sax::Converter::convertBool(mbEnabled, sValue);
+                (void)::sax::Converter::convertBool(mbEnabled, sValue);
                 break;
             }
             case XML_TOK_3DLIGHT_SPECULAR:
             {
-                ::sax::Converter::convertBool(mbSpecular, sValue);
+                (void)::sax::Converter::convertBool(mbSpecular, sValue);
                 break;
             }
         }
@@ -101,7 +103,7 @@ SdXML3DSceneShapeContext::SdXML3DSceneShapeContext(
     sal_uInt16 nPrfx,
     const OUString& rLocalName,
     const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList,
-    uno::Reference< drawing::XShapes >& rShapes,
+    uno::Reference< drawing::XShapes > const & rShapes,
     bool bTemporaryShapes)
 :   SdXMLShapeContext( rImport, nPrfx, rLocalName, xAttrList, rShapes, bTemporaryShapes ), SdXML3DSceneAttributesHelper( rImport )
 {
@@ -167,44 +169,44 @@ void SdXML3DSceneShapeContext::EndElement()
     }
 }
 
-SvXMLImportContext* SdXML3DSceneShapeContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef SdXML3DSceneShapeContext::CreateChildContext( sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList>& xAttrList )
 {
-    SvXMLImportContext* pContext = nullptr;
+    SvXMLImportContextRef xContext;
 
     // #i68101#
     if( nPrefix == XML_NAMESPACE_SVG &&
         (IsXMLToken( rLocalName, XML_TITLE ) || IsXMLToken( rLocalName, XML_DESC ) ) )
     {
-        pContext = new SdXMLDescriptionContext( GetImport(), nPrefix, rLocalName, xAttrList, mxShape );
+        xContext = new SdXMLDescriptionContext( GetImport(), nPrefix, rLocalName, xAttrList, mxShape );
     }
     else if( nPrefix == XML_NAMESPACE_OFFICE && IsXMLToken( rLocalName, XML_EVENT_LISTENERS ) )
     {
-        pContext = new SdXMLEventsContext( GetImport(), nPrefix, rLocalName, xAttrList, mxShape );
+        xContext = new SdXMLEventsContext( GetImport(), nPrefix, rLocalName, xAttrList, mxShape );
     }
     // look for local light context first
     else if(nPrefix == XML_NAMESPACE_DR3D && IsXMLToken( rLocalName, XML_LIGHT ) )
     {
         // dr3d:light inside dr3d:scene context
-        pContext = create3DLightContext( nPrefix, rLocalName, xAttrList );
+        xContext = create3DLightContext( nPrefix, rLocalName, xAttrList );
     }
 
     // call GroupChildContext function at common ShapeImport
-    if(!pContext)
+    if (!xContext)
     {
-        pContext = GetImport().GetShapeImport()->Create3DSceneChildContext(
+        xContext = GetImport().GetShapeImport()->Create3DSceneChildContext(
             GetImport(), nPrefix, rLocalName, xAttrList, mxChildren);
-        }
+    }
 
     // call parent when no own context was created
-    if(!pContext)
+    if (!xContext)
     {
-        pContext = SvXMLImportContext::CreateChildContext(
+        xContext = SvXMLImportContext::CreateChildContext(
         nPrefix, rLocalName, xAttrList);
     }
 
-    return pContext;
+    return xContext;
 }
 
 SdXML3DSceneAttributesHelper::SdXML3DSceneAttributesHelper( SvXMLImport& rImporter )
@@ -226,24 +228,15 @@ SdXML3DSceneAttributesHelper::SdXML3DSceneAttributesHelper( SvXMLImport& rImport
 {
 }
 
-SdXML3DSceneAttributesHelper::~SdXML3DSceneAttributesHelper()
-{
-    // release remembered light contexts, they are no longer needed
-    for ( size_t i = maList.size(); i > 0; )
-        maList[ --i ]->ReleaseRef();
-    maList.clear();
-}
-
 /** creates a 3d light context and adds it to the internal list for later processing */
 SvXMLImportContext * SdXML3DSceneAttributesHelper::create3DLightContext( sal_uInt16 nPrfx, const OUString& rLName, const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList)
 {
-    SvXMLImportContext* pContext = new SdXML3DLightContext(mrImport, nPrfx, rLName, xAttrList);
+    const rtl::Reference<SdXML3DLightContext> xContext{new SdXML3DLightContext(mrImport, nPrfx, rLName, xAttrList)};
 
     // remember SdXML3DLightContext for later evaluation
-    pContext->AddFirstRef();
-    maList.push_back( static_cast<SdXML3DLightContext*>(pContext) );
+    maList.push_back(xContext);
 
-    return pContext;
+    return xContext.get();
 }
 
 /** this should be called for each scene attribute */
@@ -338,7 +331,7 @@ void SdXML3DSceneAttributesHelper::processSceneAttribute( sal_uInt16 nPrefix, co
         }
         else if( IsXMLToken( rLocalName, XML_LIGHTING_MODE ) )
         {
-            ::sax::Converter::convertBool(mbLightingMode, rValue);
+            (void)::sax::Converter::convertBool(mbLightingMode, rValue);
             return;
         }
     }
@@ -352,33 +345,21 @@ void SdXML3DSceneAttributesHelper::setSceneAttributes( const css::uno::Reference
     // world transformation
     if(mbSetTransform)
     {
-        aAny <<= mxHomMat;
-        xPropSet->setPropertyValue("D3DTransformMatrix", aAny);
+        xPropSet->setPropertyValue("D3DTransformMatrix", uno::Any(mxHomMat));
     }
 
     // distance
-    aAny <<= mnDistance;
-    xPropSet->setPropertyValue("D3DSceneDistance", aAny);
-
+    xPropSet->setPropertyValue("D3DSceneDistance", uno::Any(mnDistance));
     // focalLength
-    aAny <<= mnFocalLength;
-    xPropSet->setPropertyValue("D3DSceneFocalLength", aAny);
-
+    xPropSet->setPropertyValue("D3DSceneFocalLength", uno::Any(mnFocalLength));
     // shadowSlant
-    aAny <<= (sal_Int16)mnShadowSlant;
-    xPropSet->setPropertyValue("D3DSceneShadowSlant", aAny);
-
+    xPropSet->setPropertyValue("D3DSceneShadowSlant", uno::Any(static_cast<sal_Int16>(mnShadowSlant)));
     // shadeMode
-    aAny <<= mxShadeMode;
-    xPropSet->setPropertyValue("D3DSceneShadeMode", aAny);
-
+    xPropSet->setPropertyValue("D3DSceneShadeMode", uno::Any(mxShadeMode));
     // ambientColor
-    aAny <<= maAmbientColor;
-    xPropSet->setPropertyValue("D3DSceneAmbientColor", aAny);
-
+    xPropSet->setPropertyValue("D3DSceneAmbientColor", uno::Any(maAmbientColor));
     // lightingMode
-    aAny <<= mbLightingMode;
-    xPropSet->setPropertyValue("D3DSceneTwoSidedLighting", aAny);
+    xPropSet->setPropertyValue("D3DSceneTwoSidedLighting", uno::Any(mbLightingMode));
 
     if( !maList.empty() )
     {
@@ -388,15 +369,15 @@ void SdXML3DSceneAttributesHelper::setSceneAttributes( const css::uno::Reference
         // set lights
         for( size_t a = 0; a < maList.size(); a++)
         {
-            SdXML3DLightContext* pCtx = maList[ a ];
+            SdXML3DLightContext* pCtx = maList[ a ].get();
 
             // set anys
             aAny <<= pCtx->GetDiffuseColor();
-            drawing::Direction3D xLightDir;
-            xLightDir.DirectionX = pCtx->GetDirection().getX();
-            xLightDir.DirectionY = pCtx->GetDirection().getY();
-            xLightDir.DirectionZ = pCtx->GetDirection().getZ();
-            aAny2 <<= xLightDir;
+            drawing::Direction3D aLightDir;
+            aLightDir.DirectionX = pCtx->GetDirection().getX();
+            aLightDir.DirectionY = pCtx->GetDirection().getY();
+            aLightDir.DirectionZ = pCtx->GetDirection().getZ();
+            aAny2 <<= aLightDir;
             aAny3 <<= pCtx->GetEnabled();
 
             switch(a)
@@ -472,13 +453,11 @@ void SdXML3DSceneAttributesHelper::setSceneAttributes( const css::uno::Reference
     aCamGeo.vup.DirectionX = maVUP.getX();
     aCamGeo.vup.DirectionY = maVUP.getY();
     aCamGeo.vup.DirectionZ = maVUP.getZ();
-    aAny <<= aCamGeo;
-    xPropSet->setPropertyValue("D3DCameraGeometry", aAny);
+    xPropSet->setPropertyValue("D3DCameraGeometry", uno::Any(aCamGeo));
 
     // #91047# set drawing::ProjectionMode AFTER camera geometry is set
     // projection "D3DScenePerspective" drawing::ProjectionMode
-    aAny <<= mxPrjMode;
-    xPropSet->setPropertyValue("D3DScenePerspective", aAny);
+    xPropSet->setPropertyValue("D3DScenePerspective", uno::Any(mxPrjMode));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

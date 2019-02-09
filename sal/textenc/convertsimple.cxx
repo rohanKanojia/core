@@ -7,10 +7,10 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "convertsimple.hxx"
 #include "handleundefinedunicodetotextchar.hxx"
@@ -22,8 +22,8 @@ namespace {
 
 struct ImplReplaceCharData
 {
-    sal_uInt16      mnUniChar;
-    sal_uInt16      mnReplaceChar;
+    sal_uInt16 const mnUniChar;
+    sal_uInt16 const mnReplaceChar;
 };
 
 static ImplReplaceCharData const aImplRepCharTab[] =
@@ -42,7 +42,7 @@ static ImplReplaceCharData const aImplRepCharTab[] =
   { 0x2005, 0x0020 },   /* FOUR-PER-EM SPACE */
   { 0x2006, 0x0020 },   /* SIX-PER-EM SPACE */
   { 0x2007, 0x0020 },   /* FIGURE SPACE */
-  { 0x2008, 0x0020 },   /* PUNCTATION SPACE */
+  { 0x2008, 0x0020 },   /* PUNCTUATION SPACE */
   { 0x2009, 0x0020 },   /* THIN SPACE */
   { 0x200A, 0x0020 },   /* HAIR SPACE */
   { 0x2010, 0x002D },   /* HYPHEN */
@@ -326,7 +326,7 @@ sal_uInt16 ImplGetReplaceChar( sal_Unicode c )
     const ImplReplaceCharData*  pCharData;
 
     nLow = 0;
-    nHigh = (sizeof( aImplRepCharTab )/sizeof( ImplReplaceCharData ))-1;
+    nHigh = SAL_N_ELEMENTS( aImplRepCharTab ) - 1;
     do
     {
         nMid = (nLow+nHigh)/2;
@@ -353,8 +353,8 @@ sal_uInt16 ImplGetReplaceChar( sal_Unicode c )
 
 struct ImplReplaceCharStrData
 {
-    sal_uInt16      mnUniChar;
-    sal_uInt16      maReplaceChars[IMPL_MAX_REPLACECHAR];
+    sal_uInt16 const mnUniChar;
+    sal_uInt16 const maReplaceChars[IMPL_MAX_REPLACECHAR];
 };
 
 static ImplReplaceCharStrData const aImplRepCharStrTab[] =
@@ -372,8 +372,8 @@ static ImplReplaceCharStrData const aImplRepCharStrTab[] =
   { 0x0153, { 0x006F, 0x0065, 0x0000, 0x0000, 0x0000  } },  /* LATIN SMALL LIGATURE OE */
   { 0x2025, { 0x002E, 0x002E, 0x0000, 0x0000, 0x0000  } },  /* TWO DOT LEADER */
   { 0x2026, { 0x002E, 0x002E, 0x002E, 0x0000, 0x0000  } },  /* HORIZONTAL ELLIPSES */
-  { 0x2034, { 0x0027, 0x0027, 0x0027, 0x0000, 0x0000  } },  /* TRIPPLE PRIME */
-  { 0x2037, { 0x0027, 0x0027, 0x0027, 0x0000, 0x0000  } },  /* RESERVED TRIPPLE PRIME */
+  { 0x2034, { 0x0027, 0x0027, 0x0027, 0x0000, 0x0000  } },  /* TRIPLE PRIME */
+  { 0x2037, { 0x0027, 0x0027, 0x0027, 0x0000, 0x0000  } },  /* REVERSED TRIPLE PRIME */
   { 0x20AC, { 0x0045, 0x0055, 0x0052, 0x0000, 0x0000  } },  /* EURO SIGN */
   { 0x2122, { 0x0028, 0x0074, 0x006D, 0x0029, 0x0000  } },  /* TRADE MARK SIGN */
   { 0x2153, { 0x0031, 0x002F, 0x0033, 0x0000, 0x0000  } },  /* VULGAR FRACTION ONE THIRD */
@@ -418,7 +418,7 @@ const sal_uInt16* ImplGetReplaceString( sal_Unicode c )
     const ImplReplaceCharStrData*   pCharData;
 
     nLow = 0;
-    nHigh = (sizeof( aImplRepCharStrTab )/sizeof( ImplReplaceCharStrData ))-1;
+    nHigh = SAL_N_ELEMENTS( aImplRepCharStrTab ) - 1;
     do
     {
         nMid = (nLow+nHigh)/2;
@@ -497,11 +497,8 @@ int ImplConvertUnicodeCharToChar(
                     dest[0] = static_cast< char >(pCharExData->mnChar);
                     if ( pCharExData->mnChar2 == 0 )
                         return 1;
-                    else
-                    {
-                        dest[1] = static_cast< char >(pCharExData->mnChar2);
-                        return 2;
-                    }
+                    dest[1] = static_cast< char >(pCharExData->mnChar2);
+                    return 2;
                 }
             }
         }
@@ -527,7 +524,7 @@ sal_Size sal::detail::textenc::convertCharToUnicode(
     pEndSrcBuf  = pSrcBuf+nSrcBytes;
     while ( pSrcBuf < pEndSrcBuf )
     {
-        unsigned char c = (unsigned char)*pSrcBuf;
+        unsigned char c = static_cast<unsigned char>(*pSrcBuf);
         if ( c < 0x80 )
             cConv = c;
         else
@@ -546,19 +543,18 @@ sal_Size sal::detail::textenc::convertCharToUnicode(
                     *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR;
                     break;
                 }
-                else if ( (nFlags & RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_MASK) == RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_IGNORE )
+                if ( (nFlags & RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_MASK) == RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_IGNORE )
                 {
                     pSrcBuf++;
                     continue;
                 }
-                else
-                    cConv = ImplGetUndefinedUnicodeChar(c, nFlags);
+                cConv = ImplGetUndefinedUnicodeChar(c, nFlags);
             }
         }
 
         if ( pDestBuf == pEndDestBuf )
         {
-            *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+            *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
             break;
         }
 
@@ -642,8 +638,7 @@ sal_Size sal::detail::textenc::convertUnicodeToChar(
                                 &pSrcBuf, pEndSrcBuf, &pDestBuf, pEndDestBuf,
                                 nFlags, pInfo))
                             continue;
-                        else
-                            break;
+                        break;
                     }
                 }
             }

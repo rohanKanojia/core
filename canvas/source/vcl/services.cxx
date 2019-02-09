@@ -21,7 +21,7 @@
 
 #include <algorithm>
 
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -52,7 +52,7 @@ namespace vclcanvas
         return xRet;
     }
 
-    sdecl::class_<Canvas, sdecl::with_args<true> > serviceImpl1(&initCanvas);
+    sdecl::class_<Canvas, sdecl::with_args<true> > const serviceImpl1(&initCanvas);
     const sdecl::ServiceDecl vclCanvasDecl(
         serviceImpl1,
         CANVAS_IMPLEMENTATION_NAME,
@@ -65,7 +65,7 @@ namespace vclcanvas
         return xRet;
     }
 
-    sdecl::class_<SpriteCanvas, sdecl::with_args<true> > serviceImpl2(&initSpriteCanvas);
+    sdecl::class_<SpriteCanvas, sdecl::with_args<true> > const serviceImpl2(&initSpriteCanvas);
     const sdecl::ServiceDecl vclSpriteCanvasDecl(
         serviceImpl2,
         SPRITECANVAS_IMPLEMENTATION_NAME,
@@ -74,7 +74,7 @@ namespace vclcanvas
 
 // The C shared lib entry points
 extern "C"
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL vclcanvas_component_getFactory( sal_Char const* pImplName,
+SAL_DLLPUBLIC_EXPORT void* vclcanvas_component_getFactory( sal_Char const* pImplName,
                                          void*, void* )
 {
     return sdecl::component_getFactoryHelper( pImplName, {&vclcanvas::vclCanvasDecl, &vclcanvas::vclSpriteCanvasDecl} );

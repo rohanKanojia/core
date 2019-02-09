@@ -20,12 +20,9 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_CONSDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_CONSDLG_HXX
 
-#include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
-#include <vcl/group.hxx>
 #include <vcl/layout.hxx>
-#include <vcl/morebtn.hxx>
-#include "global.hxx"
+#include <global.hxx>
 #include "anyrefdg.hxx"
 
 class ScViewData;
@@ -38,7 +35,7 @@ class ScConsolidateDlg : public ScAnyRefDlg
 public:
                     ScConsolidateDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                       const SfxItemSet& rArgSet );
-                    virtual ~ScConsolidateDlg();
+                    virtual ~ScConsolidateDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -74,15 +71,15 @@ private:
     VclPtr<PushButton>      pBtnAdd;
     VclPtr<PushButton>      pBtnRemove;
 
-    OUString         aStrUndefined;
+    OUString const         aStrUndefined;
 
-    ScConsolidateParam  theConsData;
+    ScConsolidateParam const  theConsData;
     ScViewData&         rViewData;
-    ScDocument*         pDoc;
-    ScRangeUtil*        pRangeUtil;
-    ScAreaData*         pAreaData;
+    ScDocument* const         pDoc;
+    std::unique_ptr<ScRangeUtil>  pRangeUtil;
+    std::unique_ptr<ScAreaData[]> pAreaData;
     size_t              nAreaDataCount;
-    sal_uInt16          nWhichCons;
+    sal_uInt16 const          nWhichCons;
 
     VclPtr<formula::RefEdit>   pRefInputEdit;
     bool                bDlgLostFocus;
@@ -91,11 +88,11 @@ private:
     void FillAreaLists      ();
     bool VerifyEdit         ( formula::RefEdit* pEd );
 
-    DECL_LINK_TYPED( OkHdl,    Button*, void );
-    DECL_LINK_TYPED( ClickHdl, Button*, void );
-    DECL_LINK_TYPED( GetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( ModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( SelectHdl, ListBox&, void );
+    DECL_LINK( OkHdl,    Button*, void );
+    DECL_LINK( ClickHdl, Button*, void );
+    DECL_LINK( GetFocusHdl, Control&, void );
+    DECL_LINK( ModifyHdl, Edit&, void );
+    DECL_LINK( SelectHdl, ListBox&, void );
 
     static ScSubTotalFunc  LbPosToFunc( sal_Int32 nPos );
     static sal_Int32      FuncToLbPos( ScSubTotalFunc eFunc );

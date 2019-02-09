@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<interface>
-  <!-- interface-requires gtk+ 3.0 -->
-  <!-- interface-requires LibreOffice 1.0 -->
+<interface domain="sw">
+  <requires lib="gtk+" version="3.18"/>
+  <requires lib="LibreOffice" version="1.0"/>
   <object class="GtkAdjustment" id="adjustment1">
     <property name="lower">1</property>
     <property name="upper">10</property>
@@ -35,6 +35,7 @@
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
                 <property name="search_column">0</property>
+                <property name="show_expanders">False</property>
                 <child internal-child="selection">
                   <object class="GtkTreeSelection" id="treeview-selection1"/>
                 </child>
@@ -47,7 +48,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="xalign">0</property>
-            <property name="label" translatable="yes">_Type</property>
+            <property name="label" translatable="yes" context="flddocumentpage|label1">_Type</property>
             <property name="use_underline">True</property>
             <attributes>
               <attribute name="weight" value="bold"/>
@@ -80,6 +81,7 @@
                 <property name="can_focus">True</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
+                <property name="show_expanders">False</property>
                 <child internal-child="selection">
                   <object class="GtkTreeSelection" id="treeview-selection3"/>
                 </child>
@@ -92,7 +94,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="xalign">0</property>
-            <property name="label" translatable="yes">S_elect</property>
+            <property name="label" translatable="yes" context="flddocumentpage|label2">S_elect</property>
             <property name="use_underline">True</property>
             <attributes>
               <attribute name="weight" value="bold"/>
@@ -141,6 +143,7 @@
                         <property name="hexpand">True</property>
                         <property name="vexpand">True</property>
                         <property name="search_column">0</property>
+                        <property name="show_expanders">False</property>
                         <child internal-child="selection">
                           <object class="GtkTreeSelection" id="treeview-selection5"/>
                         </child>
@@ -176,7 +179,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">F_ormat</property>
+                <property name="label" translatable="yes" context="flddocumentpage|label3">F_ormat</property>
                 <property name="use_underline">True</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
@@ -193,7 +196,7 @@
         </child>
         <child>
           <object class="GtkCheckButton" id="fixed">
-            <property name="label" translatable="yes">_Fixed content</property>
+            <property name="label" translatable="yes" context="flddocumentpage|fixed">_Fixed content</property>
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">False</property>
@@ -218,7 +221,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Level</property>
+                <property name="label" translatable="yes" context="flddocumentpage|levelft">Level</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">level</property>
               </object>
@@ -233,8 +236,6 @@
               <object class="GtkSpinButton" id="level">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="invisible_char">•</property>
-                <property name="invisible_char_set">True</property>
                 <property name="adjustment">adjustment1</property>
               </object>
               <packing>
@@ -248,8 +249,6 @@
               <object class="GtkSpinButton" id="offset">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="invisible_char">•</property>
-                <property name="invisible_char_set">True</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -263,7 +262,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Offs_et in days</property>
+                <property name="label" translatable="yes" context="flddocumentpage|daysft">Offs_et in days</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">offset</property>
               </object>
@@ -279,7 +278,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">Offs_et in minutes</property>
+                <property name="label" translatable="yes" context="flddocumentpage|minutesft">Offs_et in minutes</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">offset</property>
               </object>
@@ -308,7 +307,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0</property>
-                <property name="label" translatable="yes">_Value</property>
+                <property name="label" translatable="yes" context="flddocumentpage|valueft">_Value</property>
                 <property name="use_underline">True</property>
                 <property name="mnemonic_widget">value</property>
               </object>
@@ -323,7 +322,6 @@
               <object class="GtkEntry" id="value">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
-                <property name="invisible_char">•</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>

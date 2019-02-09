@@ -20,8 +20,8 @@
 #ifndef INCLUDED_CPPU_ENTERABLE_HXX
 #define INCLUDED_CPPU_ENTERABLE_HXX
 
-#include <uno/Enterable.h>
-#include <rtl/ustring.hxx>
+#include "uno/Enterable.h"
+#include "rtl/ustring.hxx"
 
 namespace cppu
 {
@@ -47,16 +47,16 @@ public:
 public:
     inline explicit Enterable();
 
-    inline void enter() {m_enter(this);}
-    inline void leave() {m_leave(this);}
+    void enter() {m_enter(this);}
+    void leave() {m_leave(this);}
 
-    inline void callInto_v(uno_EnvCallee * pCallee, va_list * pParam) {m_callInto_v(this, pCallee, pParam);}
-    inline void callOut_v (uno_EnvCallee * pCallee, va_list * pParam) {m_callOut_v (this, pCallee, pParam);}
+    void callInto_v(uno_EnvCallee * pCallee, va_list * pParam) {m_callInto_v(this, pCallee, pParam);}
+    void callOut_v (uno_EnvCallee * pCallee, va_list * pParam) {m_callOut_v (this, pCallee, pParam);}
 
     inline void callInto(uno_EnvCallee * pCallee, ...);
     inline void callOut (uno_EnvCallee * pCallee, ...);
 
-    inline int  isValid (rtl::OUString * pReason) {return m_isValid(this, &pReason->pData);}
+    int  isValid (rtl::OUString * pReason) {return m_isValid(this, &pReason->pData);}
 
 private:
     Enterable(Enterable const &) SAL_DELETED_FUNCTION;

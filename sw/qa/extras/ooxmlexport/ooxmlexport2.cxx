@@ -11,11 +11,9 @@
 
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/awt/Gradient.hpp>
 #include <com/sun/star/style/TabStop.hpp>
 #include <com/sun/star/view/XViewSettingsSupplier.hpp>
@@ -32,7 +30,6 @@
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/table/ShadowFormat.hpp>
-#include <com/sun/star/text/GraphicCrop.hpp>
 #include <com/sun/star/text/XPageCursor.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
@@ -42,7 +39,6 @@
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/style/BreakType.hpp>
 #include <unotools/tempfile.hxx>
-#include <comphelper/sequenceashashmap.hxx>
 #include <com/sun/star/text/XDocumentIndex.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
@@ -52,6 +48,8 @@
 #include <oox/drawingml/drawingmltypes.hxx>
 
 #include <string>
+
+#if !defined(_WIN32)
 
 class Test : public SwModelTestBase
 {
@@ -66,9 +64,6 @@ protected:
         const char* aBlacklist[] = {
             "math-escape.docx",
             "math-mso2k7.docx",
-            "ImageCrop.docx",
-            "test_GIF_ImageCrop.docx",
-            "test_PNG_ImageCrop.docx"
         };
         std::vector<const char*> vBlacklist(aBlacklist, aBlacklist + SAL_N_ELEMENTS(aBlacklist));
 
@@ -93,8 +88,6 @@ protected:
         return std::find(vWhitelist.begin(), vWhitelist.end(), filename) != vWhitelist.end();
     }
 };
-
-#if !defined(_WIN32)
 
 DECLARE_OOXMLEXPORT_TEST(testPageGraphicBackground, "page-graphic-background.odt")
 {
@@ -226,14 +219,13 @@ DECLARE_OOXMLEXPORT_TEST(testFdo51034, "fdo51034.odt")
     CPPUNIT_ASSERT_EQUAL(OUString("http://Www.google.com/#a"), getProperty<OUString>(getRun(getParagraph(1), 1), "HyperLinkURL"));
 }
 
-// Construct the expected formula from UTF8, as there may be such characters.
 // Remove all spaces, as LO export/import may change that.
 // Replace symbol - (i.e. U+2212) with ASCII - , LO does this change and it shouldn't matter.
-#define CHECK_FORMULA( expected, actual ) \
-    CPPUNIT_ASSERT_EQUAL( \
-        OUString( expected, strlen( expected ), RTL_TEXTENCODING_UTF8 ) \
-            .replaceAll( " ", "" ).replaceAll( OUString( "\xe2\x88\x92", strlen( "\xe2\x88\x92" ), RTL_TEXTENCODING_UTF8 ), "-" ), \
-        OUString( actual ).replaceAll( " ", "" ).replaceAll( OUString( "\xe2\x88\x92", strlen( "\xe2\x88\x92" ), RTL_TEXTENCODING_UTF8 ), "-" ))
+static void CHECK_FORMULA(OUString const & expected, OUString const & actual) {
+    CPPUNIT_ASSERT_EQUAL(
+        expected.replaceAll( " ", "" ).replaceAll( OUString(u"\u2212"), "-" ),
+        actual.replaceAll( " ", "" ).replaceAll( OUString(u"\u2212"), "-" ));
+}
 
 DECLARE_OOXMLEXPORT_TEST(testMathAccents, "math-accents.docx")
 {
@@ -258,12 +250,12 @@ DECLARE_OOXMLEXPORT_TEST(testMathD, "math-d.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testMathEscaping, "math-escaping.docx")
 {
-    CHECK_FORMULA( "\xe2\x88\x92 \xe2\x88\x9e < x < \xe2\x88\x9e", getFormula( getRun( getParagraph( 1 ), 1 )));
+    CHECK_FORMULA( u"\u2212 \u221E < x < \u221E", getFormula( getRun( getParagraph( 1 ), 1 )));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testMathLim, "math-lim.docx")
 {
-    CHECK_FORMULA( "lim from {x \xe2\x86\x92 1} {x}", getFormula( getRun( getParagraph( 1 ), 1 )));
+    CHECK_FORMULA( u"lim from {x \u2192 1} {x}", getFormula( getRun( getParagraph( 1 ), 1 )));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testMathMatrix, "math-matrix.docx")
@@ -273,32 +265,32 @@ DECLARE_OOXMLEXPORT_TEST(testMathMatrix, "math-matrix.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testMathMso2k7, "math-mso2k7.docx")
 {
-    CHECK_FORMULA( "A = \xcf\x80 {r} ^ {2}", getFormula( getRun( getParagraph( 1 ), 1 )));
+    CHECK_FORMULA( u"A = \u03C0 {r} ^ {2}", getFormula( getRun( getParagraph( 1 ), 1 )));
 // TODO check the stack/binom difference
 //    CHECK_FORMULA( "{left (x+a right )} ^ {n} = sum from {k=0} to {n} {left (binom {n} {k} right ) {x} ^ {k} {a} ^ {n-k}}",
     CHECK_FORMULA( "{left (x+a right )} ^ {n} = sum from {k=0} to {n} {left (stack {n # k} right ) {x} ^ {k} {a} ^ {n-k}}",
         getFormula( getRun( getParagraph( 2 ), 1 )));
-    CHECK_FORMULA( "{left (1+x right )} ^ {n} =1+ {nx} over {1!} + {n left (n-1 right ) {x} ^ {2}} over {2!} +\xe2\x80\xa6",
+    CHECK_FORMULA( u"{left (1+x right )} ^ {n} =1+ {nx} over {1!} + {n left (n-1 right ) {x} ^ {2}} over {2!} +\u2026",
         getFormula( getRun( getParagraph( 3 ), 1 )));
 // TODO check (cos/sin miss {})
 //    CHECK_FORMULA( "f left (x right ) = {a} rsub {0} + sum from {n=1} to {\xe2\x88\x9e} {left ({a} rsub {n} cos {{n\xcf\x80x} over {L}} + {b} rsub {n} sin {{n\xcf\x80x} over {L}} right )}",
-    CHECK_FORMULA( "f left (x right ) = {a} rsub {0} + sum from {n=1} to {\xe2\x88\x9e} {left ({a} rsub {n} cos {n\xcf\x80x} over {L} + {b} rsub {n} sin {n\xcf\x80x} over {L} right )}",
+    CHECK_FORMULA( u"f left (x right ) = {a} rsub {0} + sum from {n=1} to {\u221E} {left ({a} rsub {n} cos {n\u03C0x} over {L} + {b} rsub {n} sin {n\u03C0x} over {L} right )}",
         getFormula( getRun( getParagraph( 4 ), 1 )));
     CHECK_FORMULA( "{a} ^ {2} + {b} ^ {2} = {c} ^ {2}", getFormula( getRun( getParagraph( 5 ), 1 )));
-    CHECK_FORMULA( "x = {- b \xc2\xb1 sqrt {{b} ^ {2} -4 ac}} over {2 a}",
+    CHECK_FORMULA( u"x = {- b \u00B1 sqrt {{b} ^ {2} -4 ac}} over {2 a}",
         getFormula( getRun( getParagraph( 6 ), 1 )));
     CHECK_FORMULA(
-        "{e} ^ {x} =1+ {x} over {1!} + {{x} ^ {2}} over {2!} + {{x} ^ {3}} over {3!} +\xe2\x80\xa6,    -\xe2\x88\x9e<x<\xe2\x88\x9e",
+        u"{e} ^ {x} =1+ {x} over {1!} + {{x} ^ {2}} over {2!} + {{x} ^ {3}} over {3!} +\u2026,    -\u221E<x<\u221E",
         getFormula( getRun( getParagraph( 7 ), 1 )));
     CHECK_FORMULA(
 //        "sin {\xce\xb1} \xc2\xb1 sin {\xce\xb2} =2 sin {{1} over {2} left (\xce\xb1\xc2\xb1\xce\xb2 right )} cos {{1} over {2} left (\xce\xb1\xe2\x88\x93\xce\xb2 right )}",
 // TODO check (cos/in miss {})
-        "sin \xce\xb1 \xc2\xb1 sin \xce\xb2 =2 sin {1} over {2} left (\xce\xb1\xc2\xb1\xce\xb2 right ) cos {1} over {2} left (\xce\xb1\xe2\x88\x93\xce\xb2 right )",
+        u"sin \u03B1 \u00B1 sin \u03B2 =2 sin {1} over {2} left (\u03B1\u00B1\u03B2 right ) cos {1} over {2} left (\u03B1\u2213\u03B2 right )",
         getFormula( getRun( getParagraph( 8 ), 1 )));
     CHECK_FORMULA(
 //        "cos {\xce\xb1} + cos {\xce\xb2} =2 cos {{1} over {2} left (\xce\xb1+\xce\xb2 right )} cos {{1} over {2} left (\xce\xb1-\xce\xb2 right )}",
 // TODO check (cos/sin miss {})
-        "cos \xce\xb1 + cos \xce\xb2 =2 cos {1} over {2} left (\xce\xb1+\xce\xb2 right ) cos {1} over {2} left (\xce\xb1-\xce\xb2 right )",
+        u"cos \u03B1 + cos \u03B2 =2 cos {1} over {2} left (\u03B1+\u03B2 right ) cos {1} over {2} left (\u03B1-\u03B2 right )",
         getFormula( getRun( getParagraph( 9 ), 1 )));
 }
 
@@ -353,54 +345,10 @@ DECLARE_OOXMLEXPORT_TEST(testMathVerticalStacks, "math-vertical_stacks.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testTable, "table.odt")
 {
-    // Validation test: order of elements were wrong.
-    xmlDocPtr pXmlDoc = parseExport("word/document.xml");
-    if (!pXmlDoc)
-        return;
-    // Order was: insideH, end, insideV.
-    int nEnd = getXPathPosition(pXmlDoc, "/w:document/w:body/w:tbl/w:tblPr/w:tblBorders", "end");
-    int nInsideH = getXPathPosition(pXmlDoc, "/w:document/w:body/w:tbl/w:tblPr/w:tblBorders", "insideH");
-    int nInsideV = getXPathPosition(pXmlDoc, "/w:document/w:body/w:tbl/w:tblPr/w:tblBorders", "insideV");
-    CPPUNIT_ASSERT(nEnd < nInsideH);
-    CPPUNIT_ASSERT(nInsideH < nInsideV);
-
     // Make sure we write qFormat for well-known style names.
-    assertXPath(parseExport("word/styles.xml"), "//w:style[@w:styleId='Normal']/w:qFormat", 1);
-}
-
-DECLARE_OOXMLEXPORT_TEST(testTablePosition, "table-position.docx")
-{
-    sal_Int32 xCoordsFromOffice[] = { 2500, -1000, 0, 0 };
-    sal_Int32 cellLeftMarginFromOffice[] = { 250, 100, 0, 0 };
-
-    uno::Reference<text::XTextTablesSupplier> xTablesSupplier(mxComponent, uno::UNO_QUERY);
-    uno::Reference<frame::XModel> xModel(mxComponent, uno::UNO_QUERY);
-    uno::Reference<container::XIndexAccess> xTables(xTablesSupplier->getTextTables( ), uno::UNO_QUERY);
-
-    for (int i=0; i<4; i++) {
-        uno::Reference<text::XTextTable> xTable1 (xTables->getByIndex(i), uno::UNO_QUERY);
-        // Verify X coord
-        uno::Reference<view::XSelectionSupplier> xCtrl(xModel->getCurrentController(), uno::UNO_QUERY);
-        xCtrl->select(uno::makeAny(xTable1));
-        uno::Reference<text::XTextViewCursorSupplier> xTextViewCursorSupplier(xCtrl, uno::UNO_QUERY);
-        uno::Reference<text::XTextViewCursor> xCursor(xTextViewCursorSupplier->getViewCursor(), uno::UNO_QUERY);
-        awt::Point pos = xCursor->getPosition();
-        CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("Incorrect X coord computed from docx",
-            xCoordsFromOffice[i], pos.X, 1);
-
-        // Verify left margin of 1st cell :
-        //  * Office left margins are measured relative to the right of the border
-        //  * LO left spacing is measured from the center of the border
-        uno::Reference<table::XCell> xCell = xTable1->getCellByName("A1");
-        uno::Reference< beans::XPropertySet > xPropSet(xCell, uno::UNO_QUERY_THROW);
-        sal_Int32 aLeftMargin = -1;
-        xPropSet->getPropertyValue("LeftBorderDistance") >>= aLeftMargin;
-        uno::Any aLeftBorder = xPropSet->getPropertyValue("LeftBorder");
-        table::BorderLine2 aLeftBorderLine;
-        aLeftBorder >>= aLeftBorderLine;
-        CPPUNIT_ASSERT_DOUBLES_EQUAL_MESSAGE("Incorrect left spacing computed from docx cell margin",
-            cellLeftMarginFromOffice[i], aLeftMargin - 0.5 * aLeftBorderLine.LineWidth, 1);
-    }
+    xmlDocPtr pXmlDocCT = parseExport("word/styles.xml");
+    CPPUNIT_ASSERT(pXmlDocCT);
+    assertXPath(pXmlDocCT, "//w:style[@w:styleId='Normal']/w:qFormat", 1);
 }
 
 struct SingleLineBorders {
@@ -450,7 +398,7 @@ DECLARE_OOXMLEXPORT_TEST(testTableBorders, "table-borders.docx")
 
     uno::Sequence<OUString> const cells = xTextTable->getCellNames();
     sal_Int32 nLength = cells.getLength();
-    CPPUNIT_ASSERT_EQUAL((sal_Int32)cellBorders.size(), nLength);
+    CPPUNIT_ASSERT_EQUAL(static_cast<sal_Int32>(cellBorders.size()), nLength);
 
     for (sal_Int32 i = 0; i < nLength; ++i)
     {
@@ -621,7 +569,7 @@ DECLARE_OOXMLEXPORT_TEST(testTableStylerPrSz, "table-style-rPr-sz.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testMathLiteral, "math-literal.docx")
 {
-    CHECK_FORMULA( "iiint from {V} to <?> {\"div\" \"F\"}  dV= llint from {S} to <?> {\"F\" \xe2\x88\x99 \"n \" dS}",
+    CHECK_FORMULA( u"iiint from {V} to <?> {\"div\" \"F\"}  dV= llint from {S} to <?> {\"F\" \u2219 \"n \" dS}",
         getFormula( getRun( getParagraph( 1 ), 1 )));
 }
 
@@ -645,23 +593,26 @@ DECLARE_OOXMLEXPORT_TEST(testI120928, "i120928.docx")
     uno::Sequence<beans::PropertyValue> aProps;
     xLevels->getByIndex(0) >>= aProps; // 1st level
 
-    bool bIsGraphic = false;
+    uno::Reference<awt::XBitmap> xBitmap;
+    sal_Int16 nNumberingType = -1;
+
     for (int i = 0; i < aProps.getLength(); ++i)
     {
         const beans::PropertyValue& rProp = aProps[i];
 
         if (rProp.Name == "NumberingType")
-            CPPUNIT_ASSERT_EQUAL(style::NumberingType::BITMAP, rProp.Value.get<sal_Int16>());
-        else if (rProp.Name == "GraphicURL")
-            bIsGraphic = true;
+            nNumberingType = rProp.Value.get<sal_Int16>();
+        else if (rProp.Name == "GraphicBitmap")
+            xBitmap = rProp.Value.get<uno::Reference<awt::XBitmap>>();
     }
-    CPPUNIT_ASSERT_EQUAL(true, bIsGraphic);
+    CPPUNIT_ASSERT_EQUAL(style::NumberingType::BITMAP, nNumberingType);
+    CPPUNIT_ASSERT(xBitmap.is());
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo64826, "fdo64826.docx")
 {
     // 'Track-Changes' (Track Revisions) wasn't exported.
-    CPPUNIT_ASSERT_EQUAL(true, bool(getProperty<sal_Bool>(mxComponent, "RecordChanges")));
+    CPPUNIT_ASSERT_EQUAL(true, getProperty<bool>(mxComponent, "RecordChanges"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testPageBackground, "page-background.docx")
@@ -690,9 +641,9 @@ DECLARE_OOXMLEXPORT_TEST(testFdo65655, "fdo65655.docx")
     uno::Reference<beans::XPropertySet> xPropertySet(getStyles("PageStyles")->getByName("Standard"), uno::UNO_QUERY);
     bool bValue = false;
     xPropertySet->getPropertyValue("HeaderIsShared") >>= bValue;
-    CPPUNIT_ASSERT_EQUAL(false, bool(bValue));
+    CPPUNIT_ASSERT_EQUAL(false, bValue);
     xPropertySet->getPropertyValue("FooterIsShared") >>= bValue;
-    CPPUNIT_ASSERT_EQUAL(false, bool(bValue));
+    CPPUNIT_ASSERT_EQUAL(false, bValue);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFDO63053, "fdo63053.docx")
@@ -729,6 +680,24 @@ DECLARE_OOXMLEXPORT_TEST(testWatermark, "watermark.docx")
     CPPUNIT_ASSERT_EQUAL(sal_Int16(50), getProperty<sal_Int16>(xShape, "FillTransparence"));
     // The textpath had a stroke.
     CPPUNIT_ASSERT_EQUAL(drawing::LineStyle_NONE, getProperty<drawing::LineStyle>(xShape, "LineStyle"));
+}
+
+DECLARE_OOXMLEXPORT_TEST(testWatermarkFont, "watermark-font.docx")
+{
+    uno::Reference<text::XTextRange> xShape(getShape(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(OUString("TestFont"), xShape->getString());
+
+    uno::Reference<beans::XPropertySet> xPropertySet(xShape, uno::UNO_QUERY);
+    OUString aFont;
+    float nFontSize;
+
+    // Check font family
+    CPPUNIT_ASSERT(xPropertySet->getPropertyValue("CharFontName") >>= aFont);
+    CPPUNIT_ASSERT_EQUAL(OUString("DejaVu Serif"), aFont);
+
+    // Check font size
+    CPPUNIT_ASSERT(xPropertySet->getPropertyValue("CharHeight") >>= nFontSize);
+    CPPUNIT_ASSERT_EQUAL(float(72), nFontSize);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo43093, "fdo43093.docx")
@@ -812,7 +781,7 @@ DECLARE_OOXMLEXPORT_TEST(testFdo56679, "fdo56679.docx")
     uno::Reference< text::XTextRange > xParagraph = getParagraph( 1 );
     uno::Reference< text::XTextRange > xText = getRun( xParagraph, 2, "This is a simple sentence.");
 
-    CPPUNIT_ASSERT_EQUAL(true, bool(getProperty<sal_Bool>(xText, "CharUnderlineHasColor")));
+    CPPUNIT_ASSERT_EQUAL(true, getProperty<bool>(xText, "CharUnderlineHasColor"));
     CPPUNIT_ASSERT_EQUAL(sal_Int32(0xFF0000), getProperty<sal_Int32>(xText, "CharUnderlineColor"));
 }
 
@@ -833,7 +802,8 @@ DECLARE_OOXMLEXPORT_TEST(testFdo66543, "fdo66543.docx")
     // but nothing was done with it.
 
     uno::Reference< text::XTextRange > paragraph1 = getParagraph( 1 );
-    CPPUNIT_ASSERT_EQUAL( sal_Int32( 1 ), getProperty< sal_Int32 >( paragraph1, "ParaLineNumberStartValue" ));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(2),
+                         getProperty<sal_Int32>(paragraph1, "ParaLineNumberStartValue"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testN822175, "n822175.odt")
@@ -966,7 +936,7 @@ DECLARE_OOXMLEXPORT_TEST(testFdo66781, "fdo66781.docx")
         const beans::PropertyValue& rProp = aProps[i];
         if (rProp.Name == "BulletChar")
         {
-            CPPUNIT_ASSERT_EQUAL(OUString("\x0", 1, RTL_TEXTENCODING_UTF8), rProp.Value.get<OUString>());
+            CPPUNIT_ASSERT_EQUAL(OUString("\x0", 1, RTL_TEXTENCODING_ASCII_US), rProp.Value.get<OUString>());
             return;
         }
     }
@@ -992,16 +962,16 @@ DECLARE_OOXMLEXPORT_TEST(testFdo65718, "fdo65718.docx")
     // the actual attributes where 'distT', 'distB', 'distL', 'distR'
     uno::Reference<beans::XPropertySet> xPropertySet(getShape(1), uno::UNO_QUERY);
 
-    CPPUNIT_ASSERT_EQUAL(sal_Int32( oox::drawingml::convertEmuToHmm(0) ), getProperty<sal_Int32>(xPropertySet, "TopMargin") );
-    CPPUNIT_ASSERT_EQUAL(sal_Int32( oox::drawingml::convertEmuToHmm(0) ), getProperty<sal_Int32>(xPropertySet, "BottomMargin") );
+    CPPUNIT_ASSERT_EQUAL(oox::drawingml::convertEmuToHmm(0), getProperty<sal_Int32>(xPropertySet, "TopMargin") );
+    CPPUNIT_ASSERT_EQUAL(oox::drawingml::convertEmuToHmm(0), getProperty<sal_Int32>(xPropertySet, "BottomMargin") );
 
     // 'getProperty' return 318 (instead of 317.5)
     // I think this is because it returns an integer, instead of a float.
     // The actual exporting to DOCX exports the correct value (114300 = 317.5 * 360)
     // The exporting to DOCX uses the 'SvxLRSpacing' that stores the value in TWIPS (180 TWIPS)
     // However, the 'LeftMargin' property is an integer property that holds that value in 'MM100' (should hold 317.5, but it is 318)
-    CPPUNIT_ASSERT_EQUAL(sal_Int32( oox::drawingml::convertEmuToHmm(114300) ), getProperty<sal_Int32>(xPropertySet, "LeftMargin") );
-    CPPUNIT_ASSERT_EQUAL(sal_Int32( oox::drawingml::convertEmuToHmm(114300) ), getProperty<sal_Int32>(xPropertySet, "RightMargin") );
+    CPPUNIT_ASSERT_EQUAL(oox::drawingml::convertEmuToHmm(114300), getProperty<sal_Int32>(xPropertySet, "LeftMargin") );
+    CPPUNIT_ASSERT_EQUAL(oox::drawingml::convertEmuToHmm(114300), getProperty<sal_Int32>(xPropertySet, "RightMargin") );
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo64350, "fdo64350.docx")
@@ -1052,7 +1022,7 @@ DECLARE_OOXMLEXPORT_TEST(testParaShadow, "para-shadow.docx")
 {
     // The problem was that in w:pBdr, child elements had a w:shadow attribute, but that was ignored.
     table::ShadowFormat aShadow = getProperty<table::ShadowFormat>(getParagraph(2), "ParaShadowFormat");
-    CPPUNIT_ASSERT_EQUAL(COL_BLACK, sal_uInt32(aShadow.Color));
+    CPPUNIT_ASSERT_EQUAL(COL_BLACK, Color(aShadow.Color));
     CPPUNIT_ASSERT_EQUAL(table::ShadowLocation_BOTTOM_RIGHT, aShadow.Location);
     // w:sz="48" is in eights of a point, 1 pt is 20 twips.
     CPPUNIT_ASSERT_EQUAL(sal_Int16(convertTwipToMm100(24/8*20)), aShadow.ShadowWidth);
@@ -1112,7 +1082,7 @@ DECLARE_OOXMLEXPORT_TEST(testFdo67737, "fdo67737.docx")
         const beans::PropertyValue& rProp = aProps[i];
         if (rProp.Name == "MirroredY")
         {
-            CPPUNIT_ASSERT_EQUAL( true, bool(rProp.Value.get<sal_Bool>()) );
+            CPPUNIT_ASSERT_EQUAL( true, rProp.Value.get<bool>() );
             return;
         }
     }

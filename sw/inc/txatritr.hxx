@@ -19,11 +19,9 @@
 #ifndef INCLUDED_SW_INC_TXATRITR_HXX
 #define INCLUDED_SW_INC_TXATRITR_HXX
 
-#include <tools/solar.h>
 #include <sal/types.h>
 #include <editeng/langitem.hxx>
-#include <hintids.hxx>
-#include <swtypes.hxx>
+#include "swtypes.hxx"
 #include <deque>
 
 class SwTextNode;
@@ -35,52 +33,40 @@ class SwScriptIterator
     const OUString& m_rText;
     sal_Int32 m_nChgPos;
     sal_uInt16 nCurScript;
-    bool bForward;
+    bool const bForward;
 
 public:
-    SwScriptIterator( const OUString& rStr, sal_Int32 nStart = 0,
+    SwScriptIterator( const OUString& rStr, sal_Int32 nStart,
                       bool bFrwrd = true );
 
-    bool Next();
+    void Next();
 
     sal_uInt16 GetCurrScript() const { return nCurScript; }
     sal_Int32 GetScriptChgPos() const { return (m_nChgPos == -1) ? COMPLETE_STRING : m_nChgPos; }
     const OUString& GetText() const { return m_rText; }
 };
 
-class SwTextAttrIterator
+class SwLanguageIterator
 {
-    SwScriptIterator aSIter;
-    std::deque<const SwTextAttr*> aStack;
-    const SwTextNode& rTextNd;
-    const SfxPoolItem *pParaItem, *pCurItem;
-    size_t nAttrPos;
-    sal_Int32 nChgPos;
-    sal_uInt16 nWhichId;
+    SwScriptIterator    aSIter;
+    std::deque<const SwTextAttr*>
+                        aStack;
+    const SwTextNode&   rTextNd;
+    const SfxPoolItem*  pParaItem;
+    const SfxPoolItem*  pCurItem;
+    size_t              nAttrPos;
+    sal_Int32           nChgPos;
 
     void AddToStack( const SwTextAttr& rAttr );
     void SearchNextChg();
 
 public:
-    SwTextAttrIterator( const SwTextNode& rTextNd, sal_uInt16 nWhichId,
-                        sal_Int32 nStart = 0 );
+    SwLanguageIterator( const SwTextNode& rTextNd, sal_Int32 nStart );
 
-    bool Next();
-
-    const SfxPoolItem& GetAttr() const  { return *pCurItem; }
-    sal_Int32 GetChgPos() const        { return nChgPos; }
-};
-
-class SwLanguageIterator : public SwTextAttrIterator
-{
-public:
-    SwLanguageIterator( const SwTextNode& rTextNode, sal_Int32 nStart = 0,
-                        sal_uInt16 nWhich = RES_CHRATR_LANGUAGE )
-        : SwTextAttrIterator( rTextNode, nWhich, nStart )
-    {}
-
-    sal_uInt16 GetLanguage() const
-        { return static_cast<const SvxLanguageItem&>(GetAttr()).GetValue(); }
+    bool               Next();
+    sal_Int32          GetChgPos() const        { return nChgPos; }
+    LanguageType       GetLanguage() const
+        { return static_cast<const SvxLanguageItem&>(*pCurItem).GetValue(); }
 };
 
 #endif

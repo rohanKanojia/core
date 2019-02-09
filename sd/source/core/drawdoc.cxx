@@ -20,7 +20,6 @@
 #include <libxml/xmlwriter.h>
 
 #include "PageListWatcher.hxx"
-#include <com/sun/star/text/WritingMode.hpp>
 #include <com/sun/star/document/PrinterIndependentLayout.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <com/sun/star/beans/XPropertyContainer.hpp>
@@ -28,7 +27,6 @@
 #include <com/sun/star/document/XDocumentProperties.hpp>
 #include <editeng/forbiddencharacterstable.hxx>
 
-#include <svx/svxids.hrc>
 #include <svl/srchitem.hxx>
 #include <editeng/eeitem.hxx>
 #include <editeng/scriptspaceitem.hxx>
@@ -37,71 +35,51 @@
 #include <unotools/useroptions.hxx>
 #include <officecfg/Office/Impress.hxx>
 
-#include <sfx2/printer.hxx>
-#include <sfx2/app.hxx>
 #include <sfx2/linkmgr.hxx>
-#include <svx/dialogs.hrc>
-#include "Outliner.hxx"
-#include "sdmod.hxx"
+#include <Outliner.hxx>
+#include <sdmod.hxx>
 #include <editeng/editstat.hxx>
-#include <editeng/fontitem.hxx>
-#include <svl/flagitem.hxx>
-#include <svx/svdoattr.hxx>
 #include <svx/svdotext.hxx>
-#include <editeng/bulletitem.hxx>
-#include <editeng/numitem.hxx>
-#include <svx/svditer.hxx>
 #include <editeng/unolingu.hxx>
 #include <svl/itempool.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <svx/xtable.hxx>
-#include <com/sun/star/linguistic2/XHyphenator.hpp>
-#include <com/sun/star/linguistic2/XSpellChecker1.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <editeng/outlobj.hxx>
-#include <unotools/saveopt.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/getexpandeduri.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <unotools/charclass.hxx>
 #include <comphelper/processfactory.hxx>
-#include <unotools/pathoptions.hxx>
 #include <unotools/lingucfg.hxx>
-#include <unotools/linguprops.hxx>
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/xml/dom/XDocumentBuilder.hpp>
 #include <com/sun/star/xml/dom/XDocument.hpp>
-#include <com/sun/star/xml/dom/XNode.hpp>
 #include <com/sun/star/xml/dom/XNodeList.hpp>
-#include <com/sun/star/xml/dom/XNamedNodeMap.hpp>
 #include <com/sun/star/xml/dom/DocumentBuilder.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <rtl/ustring.hxx>
-#include <rtl/uri.hxx>
 
 #include <editeng/outliner.hxx>
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
-#include "pglink.hxx"
-#include "sdattr.hxx"
-#include "glob.hrc"
-#include "glob.hxx"
-#include "stlpool.hxx"
-#include "sdiocmpt.hxx"
-#include "sdresid.hxx"
-#include "cusshow.hxx"
-#include "customshowlist.hxx"
-#include "../ui/inc/DrawDocShell.hxx"
-#include "../ui/inc/GraphicDocShell.hxx"
-#include "../ui/inc/sdxfer.hxx"
-#include "../ui/inc/ViewShell.hxx"
-#include "../ui/inc/optsitem.hxx"
-#include "../ui/inc/FrameView.hxx"
-
-#include <tools/tenccvt.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+#include <strings.hrc>
+#include <glob.hxx>
+#include <stlpool.hxx>
+#include <sdresid.hxx>
+#include <customshowlist.hxx>
+#include <DrawDocShell.hxx>
+#include <GraphicDocShell.hxx>
+#include <sdxfer.hxx>
+#include <optsitem.hxx>
+#include <FrameView.hxx>
+#include <undo/undomanager.hxx>
+#include <sdundogr.hxx>
+#include <undopage.hxx>
 #include <vcl/settings.hxx>
-#include <comphelper/lok.hxx>
+#include <unokywds.hxx>
+
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XHyphenator; } } } }
+namespace com { namespace sun { namespace star { namespace linguistic2 { class XSpellChecker1; } } } }
 
 using namespace ::sd;
 using namespace ::com::sun::star;
@@ -112,7 +90,6 @@ using namespace ::com::sun::star::linguistic2;
 using namespace com::sun::star::xml::dom;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::lang::XMultiServiceFactory;
-using ::com::sun::star::beans::PropertyValue;
 
 
 SdDrawDocument* SdDrawDocument::s_pDocLockedInsertingLinks = nullptr;
@@ -133,33 +110,10 @@ PresentationSettings::PresentationSettings()
 {
 }
 
-PresentationSettings::PresentationSettings( const PresentationSettings& r )
-:   maPresPage( r.maPresPage ),
-    mbAll( r.mbAll ),
-    mbEndless( r.mbEndless ),
-    mbCustomShow( r.mbCustomShow ),
-    mbManual( r.mbManual ),
-    mbMouseVisible( r.mbMouseVisible ),
-    mbMouseAsPen( r.mbMouseAsPen ),
-    mbLockedPages( r.mbLockedPages ),
-    mbAlwaysOnTop( r.mbAlwaysOnTop ),
-    mbFullScreen( r.mbFullScreen ),
-    mbAnimationAllowed( r.mbAnimationAllowed ),
-    mnPauseTimeout( r.mnPauseTimeout ),
-    mbShowPauseLogo( r.mbShowPauseLogo )
-{
-}
-
 SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
-: FmFormModel( !utl::ConfigManager::IsAvoidConfig() ? SvtPathOptions().GetPalettePath() : OUString(), nullptr, pDrDocSh )
-, bReadOnly(false)
-, mpOutliner(nullptr)
-, mpInternalOutliner(nullptr)
-, mpWorkStartupTimer(nullptr)
-, mpOnlineSpellingIdle(nullptr)
-, mpOnlineSpellingList(nullptr)
-, mpOnlineSearchItem(nullptr)
-, mpCustomShowList(nullptr)
+:   FmFormModel(
+        nullptr,
+        pDrDocSh)
 , mpDocSh(static_cast< ::sd::DrawDocShell*>(pDrDocSh))
 , mpCreatingTransferable( nullptr )
 , mbHasOnlineSpellErrors(false)
@@ -171,12 +125,14 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
 , meLanguage( LANGUAGE_SYSTEM )
 , meLanguageCJK( LANGUAGE_SYSTEM )
 , meLanguageCTL( LANGUAGE_SYSTEM )
-, mePageNumType(SVX_ARABIC)
+, mePageNumType(SVX_NUM_ARABIC)
 , mbAllocDocSh(false)
 , meDocType(eType)
-, mpCharClass(nullptr)
-, mpLocale(nullptr)
-, mbUseEmbedFonts(false)
+, mbEmbedFonts(false)
+, mbEmbedUsedFontsOnly(false)
+, mbEmbedFontScriptLatin(true)
+, mbEmbedFontScriptAsian(true)
+, mbEmbedFontScriptComplex(true)
 {
     mpDrawPageListWatcher.reset(new ImpDrawPageListWatcher(*this));
     mpMasterPageListWatcher.reset(new ImpMasterPageListWatcher(*this));
@@ -196,16 +152,16 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
     pOptions->GetScale( nX, nY );
 
     // Allow UI scale only for draw documents.
-    if( eType == DOCUMENT_TYPE_DRAW )
-        SetUIUnit( (FieldUnit)pOptions->GetMetric(), Fraction( nX, nY ) );  // user-defined
+    if( eType == DocumentType::Draw )
+        SetUIUnit( static_cast<FieldUnit>(pOptions->GetMetric()), Fraction( nX, nY ) );  // user-defined
     else
-        SetUIUnit( (FieldUnit)pOptions->GetMetric(), Fraction( 1, 1 ) );    // default
+        SetUIUnit( static_cast<FieldUnit>(pOptions->GetMetric()), Fraction( 1, 1 ) );    // default
 
-    SetScaleUnit(MAP_100TH_MM);
+    SetScaleUnit(MapUnit::Map100thMM);
     SetScaleFraction(Fraction(1, 1));
     SetDefaultFontHeight(847);     // 24p
 
-    pItemPool->SetDefaultMetric(SFX_MAPUNIT_100TH_MM);
+    pItemPool->SetDefaultMetric(MapUnit::Map100thMM);
     pItemPool->FreezeIdRanges();
     SetTextDefaults();
 
@@ -220,7 +176,7 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
     SetCalcFieldValueHdl( &rOutliner );
 
     // set linguistic options
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
     {
         const SvtLinguConfig    aLinguConfig;
         SvtLinguOptions         aOptions;
@@ -233,22 +189,15 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
         SetLanguage( MsLangId::resolveSystemLanguageByScriptType(aOptions.nDefaultLanguage_CTL,
             css::i18n::ScriptType::COMPLEX), EE_CHAR_LANGUAGE_CTL );
 
-        if (!comphelper::LibreOfficeKit::isActive())
-            mbOnlineSpell = aOptions.bIsSpellAuto;
+        mbOnlineSpell = aOptions.bIsSpellAuto;
     }
 
     LanguageType eRealLanguage = MsLangId::getRealLanguage( meLanguage );
     LanguageTag aLanguageTag( eRealLanguage);
-    mpLocale = new css::lang::Locale( aLanguageTag.getLocale());
-    mpCharClass = new CharClass( aLanguageTag );
+    mpCharClass.reset(new CharClass( aLanguageTag ));
 
     // If the current application language is a language that uses right-to-left text...
     LanguageType eRealCTLLanguage = Application::GetSettings().GetLanguageTag().getLanguageType();
-    if( MsLangId::isRightToLeft( eRealCTLLanguage ) )
-    {
-        // ... then we have to set this as a default
-        SetDefaultWritingMode( css::text::WritingMode_RL_TB );
-    }
 
     // for korean and japanese languages we have a different default for apply spacing between asian, latin and ctl text
     if (MsLangId::isKorean(eRealCTLLanguage) || (LANGUAGE_JAPANESE == eRealCTLLanguage))
@@ -270,7 +219,7 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
         if( xHyphenator.is() )
             rOutliner.SetHyphenator( xHyphenator );
 
-        SetForbiddenCharsTable( new SvxForbiddenCharactersTable( ::comphelper::getProcessComponentContext() ) );
+        SetForbiddenCharsTable(SvxForbiddenCharactersTable::makeForbiddenCharactersTable(::comphelper::getProcessComponentContext()));
     }
     catch(...)
     {
@@ -293,7 +242,7 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
         nCntrl &= ~EEControlBits::ONLINESPELLING;
 
     nCntrl &= ~ EEControlBits::ULSPACESUMMATION;
-    if ( meDocType != DOCUMENT_TYPE_IMPRESS )
+    if ( meDocType != DocumentType::Impress )
         SetSummationOfParagraphs( false );
     else
     {
@@ -309,10 +258,9 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
     // Set the StyleSheetPool for HitTestOutliner.
     // The link to the StyleRequest handler of the document is set later, in
     // NewOrLoadCompleted, because only then do all the templates exist.
-    SfxItemSet aSet2( pHitTestOutliner->GetEmptyItemSet() );
     pHitTestOutliner->SetStyleSheetPool( static_cast<SfxStyleSheetPool*>(GetStyleSheetPool()) );
 
-    SetCalcFieldValueHdl( pHitTestOutliner );
+    SetCalcFieldValueHdl( pHitTestOutliner.get() );
 
     try
     {
@@ -345,28 +293,34 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
       *
       * We create the following default layers on all pages and master pages:
       *
-      * STR_LAYOUT    : default layer for drawing objects
+      * sUNO_LayerName_layout; "layout": default layer for drawing objects of normal pages
+      * localized by SdResId(STR_LAYER_LAYOUT)
       *
-      * STR_BCKGRND   : background of the master page
-      *                 (currently unused within normal pages)
+      * sUNO_LayerName_background; "background": background of the master page
+      * localized by SdResId(STR_LAYER_BCKGRND)
+      *           (currently unused within normal pages and not visible to users)
       *
-      * STR_BCKGRNDOBJ: objects on the background of master pages
-      *                 (currently unused within normal pages)
+      * sUNO_LayerName_background_objects; "backgroundobjects": objects on the background of master pages
+      * localized by SdResId(STR_LAYER_BCKGRNDOBJ)
+      *           (currently unused within normal pages)
       *
-      * STR_CONTROLS  : default layer for controls
+      * sUNO_LayerName_controls; "controls": default layer for controls
+      * localized by SdResId(STR_LAYER_CONTROLS)
+      *           (currently special handling in regard to z-order)
+      *
+      * sUNO_LayerName_measurelines; "measurelines" : default layer for measure lines
+      * localized by SdResId(STR_LAYER_MEASURELINES)
       */
 
     {
-        OUString aControlLayerName( SD_RESSTR(STR_LAYER_CONTROLS) );
-
         SdrLayerAdmin& rLayerAdmin = GetLayerAdmin();
-        rLayerAdmin.NewLayer( SD_RESSTR(STR_LAYER_LAYOUT) );
-        rLayerAdmin.NewLayer( SD_RESSTR(STR_LAYER_BCKGRND) );
-        rLayerAdmin.NewLayer( SD_RESSTR(STR_LAYER_BCKGRNDOBJ) );
-        rLayerAdmin.NewLayer( aControlLayerName );
-        rLayerAdmin.NewLayer( SD_RESSTR(STR_LAYER_MEASURELINES) );
+        rLayerAdmin.NewLayer( sUNO_LayerName_layout );
+        rLayerAdmin.NewLayer( sUNO_LayerName_background );
+        rLayerAdmin.NewLayer( sUNO_LayerName_background_objects );
+        rLayerAdmin.NewLayer( sUNO_LayerName_controls);
+        rLayerAdmin.NewLayer( sUNO_LayerName_measurelines );
 
-        rLayerAdmin.SetControlLayerName(aControlLayerName);
+        rLayerAdmin.SetControlLayerName(sUNO_LayerName_controls);
     }
 
 }
@@ -374,20 +328,18 @@ SdDrawDocument::SdDrawDocument(DocumentType eType, SfxObjectShell* pDrDocSh)
 // Destructor
 SdDrawDocument::~SdDrawDocument()
 {
-    Broadcast(SdrHint(HINT_MODELCLEARED));
+    Broadcast(SdrHint(SdrHintKind::ModelCleared));
 
     if (mpWorkStartupTimer)
     {
         if ( mpWorkStartupTimer->IsActive() )
             mpWorkStartupTimer->Stop();
 
-        delete mpWorkStartupTimer;
-        mpWorkStartupTimer = nullptr;
+        mpWorkStartupTimer.reset();
     }
 
     StopOnlineSpelling();
-    delete mpOnlineSearchItem;
-    mpOnlineSearchItem = nullptr;
+    mpOnlineSearchItem.reset();
 
     CloseBookmarkDoc();
     SetAllocDocSh(false);
@@ -406,34 +358,184 @@ SdDrawDocument::~SdDrawDocument()
         pLinkManager = nullptr;
     }
 
-    std::vector<sd::FrameView*>::iterator pIter;
-    for ( pIter = maFrameViewList.begin(); pIter != maFrameViewList.end(); ++pIter )
-        delete *pIter;
+    maFrameViewList.clear();
+    mpCustomShowList.reset();
+    mpOutliner.reset();
+    mpInternalOutliner.reset();
+    mpCharClass.reset();
+}
 
-    if (mpCustomShowList)
+void SdDrawDocument::adaptSizeAndBorderForAllPages(
+    const Size& rNewSize,
+    long nLeft,
+    long nRight,
+    long nUpper,
+    long nLower)
+{
+    const sal_uInt16 nMasterPageCnt(GetMasterSdPageCount(PageKind::Standard));
+    const sal_uInt16 nPageCnt(GetSdPageCount(PageKind::Standard));
+
+    if(0 == nMasterPageCnt && 0 == nPageCnt)
     {
-        for (sal_uLong j = 0; j < mpCustomShowList->size(); j++)
-        {
-            // If necessary, delete CustomShows
-            SdCustomShow* pCustomShow = (*mpCustomShowList)[j];
-            delete pCustomShow;
-        }
-
-        delete mpCustomShowList;
-        mpCustomShowList = nullptr;
+        return;
     }
 
-    delete mpOutliner;
-    mpOutliner = nullptr;
+    SdPage* pPage(0 != nPageCnt ? GetSdPage(0, PageKind::Standard) : GetMasterSdPage(0, PageKind::Standard));
 
-    delete mpInternalOutliner;
-    mpInternalOutliner = nullptr;
+    // call fully implemented local version, including getting
+    // some more information from one of the Pages (1st one)
+    AdaptPageSizeForAllPages(
+        rNewSize,
+        PageKind::Standard,
+        nullptr,
+        nLeft,
+        nRight,
+        nUpper,
+        nLower,
+        true,
+        pPage->GetOrientation(),
+        pPage->GetPaperBin(),
+        pPage->IsBackgroundFullSize());
 
-    delete mpLocale;
-    mpLocale = nullptr;
+    // adjust handout page to new format of the standard page
+    if(0 != nPageCnt)
+    {
+        GetSdPage(0, PageKind::Handout)->CreateTitleAndLayout(true);
+    }
+}
 
-    delete mpCharClass;
-    mpCharClass = nullptr;
+void SdDrawDocument::AdaptPageSizeForAllPages(
+    const Size& rNewSize,
+    PageKind ePageKind,
+    SdUndoGroup* pUndoGroup,
+    long nLeft,
+    long nRight,
+    long nUpper,
+    long nLower,
+    bool bScaleAll,
+    Orientation eOrientation,
+    sal_uInt16 nPaperBin,
+    bool bBackgroundFullSize)
+{
+    sal_uInt16 i;
+    const sal_uInt16 nMasterPageCnt(GetMasterSdPageCount(ePageKind));
+    const sal_uInt16 nPageCnt(GetSdPageCount(ePageKind));
+
+    if(0 == nMasterPageCnt && 0 == nPageCnt)
+    {
+        return;
+    }
+
+    for (i = 0; i < nMasterPageCnt; i++)
+    {
+        // first, handle all master pages
+        SdPage* pPage(GetMasterSdPage(i, ePageKind));
+
+        if(pUndoGroup)
+        {
+            SdUndoAction* pUndo(
+                new SdPageFormatUndoAction(
+                    this,
+                    pPage,
+                    pPage->GetSize(),
+                    pPage->GetLeftBorder(), pPage->GetRightBorder(),
+                    pPage->GetUpperBorder(), pPage->GetLowerBorder(),
+                    pPage->GetOrientation(),
+                    pPage->GetPaperBin(),
+                    pPage->IsBackgroundFullSize(),
+                    rNewSize,
+                    nLeft, nRight,
+                    nUpper, nLower,
+                    bScaleAll,
+                    eOrientation,
+                    nPaperBin,
+                    bBackgroundFullSize));
+            pUndoGroup->AddAction(pUndo);
+        }
+
+        if (rNewSize.Width() > 0 || nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0)
+        {
+            ::tools::Rectangle aNewBorderRect(nLeft, nUpper, nRight, nLower);
+            pPage->ScaleObjects(rNewSize, aNewBorderRect, bScaleAll);
+
+            if (rNewSize.Width() > 0)
+            {
+                pPage->SetSize(rNewSize);
+            }
+        }
+
+        if( nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0 )
+        {
+            pPage->SetBorder(nLeft, nUpper, nRight, nLower);
+        }
+
+        pPage->SetOrientation(eOrientation);
+        pPage->SetPaperBin( nPaperBin );
+        pPage->SetBackgroundFullSize( bBackgroundFullSize );
+
+        if ( ePageKind == PageKind::Standard )
+        {
+            GetMasterSdPage(i, PageKind::Notes)->CreateTitleAndLayout();
+        }
+
+        pPage->CreateTitleAndLayout();
+    }
+
+    for (i = 0; i < nPageCnt; i++)
+    {
+        // then, handle all pages
+        SdPage* pPage(GetSdPage(i, ePageKind));
+
+        if(pUndoGroup)
+        {
+            SdUndoAction* pUndo(
+                new SdPageFormatUndoAction(
+                    this,
+                    pPage,
+                    pPage->GetSize(),
+                    pPage->GetLeftBorder(), pPage->GetRightBorder(),
+                    pPage->GetUpperBorder(), pPage->GetLowerBorder(),
+                    pPage->GetOrientation(),
+                    pPage->GetPaperBin(),
+                    pPage->IsBackgroundFullSize(),
+                    rNewSize,
+                    nLeft, nRight,
+                    nUpper, nLower,
+                    bScaleAll,
+                    eOrientation,
+                    nPaperBin,
+                    bBackgroundFullSize));
+            pUndoGroup->AddAction(pUndo);
+        }
+
+        if (rNewSize.Width() > 0 || nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0)
+        {
+            ::tools::Rectangle aNewBorderRect(nLeft, nUpper, nRight, nLower);
+            pPage->ScaleObjects(rNewSize, aNewBorderRect, bScaleAll);
+
+            if (rNewSize.Width() > 0)
+            {
+                pPage->SetSize(rNewSize);
+            }
+        }
+
+        if( nLeft  >= 0 || nRight >= 0 || nUpper >= 0 || nLower >= 0 )
+        {
+            pPage->SetBorder(nLeft, nUpper, nRight, nLower);
+        }
+
+        pPage->SetOrientation(eOrientation);
+        pPage->SetPaperBin( nPaperBin );
+        pPage->SetBackgroundFullSize( bBackgroundFullSize );
+
+        if ( ePageKind == PageKind::Standard )
+        {
+            SdPage* pNotesPage = GetSdPage(i, PageKind::Notes);
+            pNotesPage->SetAutoLayout( pNotesPage->GetAutoLayout() );
+        }
+
+        pPage->SetAutoLayout( pPage->GetAutoLayout() );
+    }
 }
 
 SdrModel* SdDrawDocument::AllocModel() const
@@ -482,14 +584,15 @@ SdDrawDocument* SdDrawDocument::AllocSdDrawDocument() const
         SfxObjectShell*   pObj = nullptr;
         ::sd::DrawDocShell*     pNewDocSh = nullptr;
 
-        if( meDocType == DOCUMENT_TYPE_IMPRESS )
+        if( meDocType == DocumentType::Impress )
             mpCreatingTransferable->SetDocShell( new ::sd::DrawDocShell(
                 SfxObjectCreateMode::EMBEDDED, true, meDocType ) );
         else
             mpCreatingTransferable->SetDocShell( new ::sd::GraphicDocShell(
-                SfxObjectCreateMode::EMBEDDED, true, meDocType ) );
+                SfxObjectCreateMode::EMBEDDED ) );
 
-        pNewDocSh = static_cast< ::sd::DrawDocShell*>( pObj = mpCreatingTransferable->GetDocShell() );
+        pObj = mpCreatingTransferable->GetDocShell().get();
+        pNewDocSh = static_cast< ::sd::DrawDocShell*>( pObj );
         pNewDocSh->DoInitNew();
         pNewModel = pNewDocSh->GetDoc();
 
@@ -502,12 +605,12 @@ SdDrawDocument* SdDrawDocument::AllocSdDrawDocument() const
         pNewStylePool->CopyCellSheets(*pOldStylePool);
         pNewStylePool->CopyTableStyles(*pOldStylePool);
 
-        for (sal_uInt16 i = 0; i < GetMasterSdPageCount(PK_STANDARD); i++)
+        for (sal_uInt16 i = 0; i < GetMasterSdPageCount(PageKind::Standard); i++)
         {
             // Move with all of the master page's layouts
-            OUString aOldLayoutName(const_cast<SdDrawDocument*>(this)->GetMasterSdPage(i, PK_STANDARD)->GetLayoutName());
+            OUString aOldLayoutName(const_cast<SdDrawDocument*>(this)->GetMasterSdPage(i, PageKind::Standard)->GetLayoutName());
             aOldLayoutName = aOldLayoutName.copy( 0, aOldLayoutName.indexOf( SD_LT_SEPARATOR ) );
-            SdStyleSheetVector aCreatedSheets;
+            StyleSheetCopyResultVector aCreatedSheets;
             pNewStylePool->CopyLayoutSheets(aOldLayoutName, *pOldStylePool, aCreatedSheets );
         }
 
@@ -594,7 +697,7 @@ void SdDrawDocument::NewOrLoadCompleted(DocCreationMode eMode)
 
         CheckMasterPages();
 
-        if ( GetMasterSdPageCount(PK_STANDARD) > 1 )
+        if ( GetMasterSdPageCount(PageKind::Standard) > 1 )
             RemoveUnnecessaryMasterPages( nullptr, true, false );
 
         for ( sal_uInt16 i = 0; i < GetPageCount(); i++ )
@@ -625,9 +728,6 @@ void SdDrawDocument::NewOrLoadCompleted(DocCreationMode eMode)
                 pPage->SetName( aName );
         }
 
-        // Create names of the default layers in the user's language
-        RestoreLayerNames();
-
         // Create names of the styles in the user's language
         static_cast<SdStyleSheetPool*>(mxStyleSheetPool.get())->UpdateStdNames();
 
@@ -636,11 +736,11 @@ void SdDrawDocument::NewOrLoadCompleted(DocCreationMode eMode)
     }
 
     // Set default style of Drawing Engine
-    OUString aName( SD_RESSTR(STR_STANDARD_STYLESHEET_NAME));
-    SetDefaultStyleSheet(static_cast<SfxStyleSheet*>(mxStyleSheetPool->Find(aName, SD_STYLE_FAMILY_GRAPHICS)));
+    OUString aName( SdResId(STR_STANDARD_STYLESHEET_NAME));
+    SetDefaultStyleSheet(static_cast<SfxStyleSheet*>(mxStyleSheetPool->Find(aName, SfxStyleFamily::Para)));
 
     // #i119287# Set default StyleSheet for SdrGrafObj and SdrOle2Obj
-    SetDefaultStyleSheetForSdrGrafObjAndSdrOle2Obj(static_cast<SfxStyleSheet*>(mxStyleSheetPool->Find(SD_RESSTR(STR_POOLSHEET_OBJNOLINENOFILL), SD_STYLE_FAMILY_GRAPHICS)));
+    SetDefaultStyleSheetForSdrGrafObjAndSdrOle2Obj(static_cast<SfxStyleSheet*>(mxStyleSheetPool->Find(SdResId(STR_POOLSHEET_OBJNOLINENOFILL), SfxStyleFamily::Para)));
 
     // Initialize DrawOutliner and DocumentOutliner, but don't initialize the
     // global outliner, as it is not document specific like StyleSheetPool and
@@ -675,11 +775,11 @@ void SdDrawDocument::NewOrLoadCompleted(DocCreationMode eMode)
         sal_uInt16 nPage, nPageCount;
 
         // create missing layout style sheets for broken documents
-        //         that where created with the 5.2
-        nPageCount = GetMasterSdPageCount( PK_STANDARD );
+        //         that were created with the 5.2
+        nPageCount = GetMasterSdPageCount( PageKind::Standard );
         for (nPage = 0; nPage < nPageCount; nPage++)
         {
-            SdPage* pPage = GetMasterSdPage(nPage, PK_STANDARD);
+            SdPage* pPage = GetMasterSdPage(nPage, PageKind::Standard);
             pSPool->CreateLayoutStyleSheets( pPage->GetName(), true );
         }
 
@@ -700,22 +800,7 @@ void SdDrawDocument::NewOrLoadCompleted(DocCreationMode eMode)
     }
 
     mbNewOrLoadCompleted = true;
-
-    // Update all linked pages
-    sal_uInt16 nMaxSdPages = GetSdPageCount(PK_STANDARD);
-
-    for (sal_uInt16 nSdPage=0; nSdPage < nMaxSdPages; nSdPage++)
-    {
-        SdPage* pPage = GetSdPage(nSdPage, PK_STANDARD);
-
-        if (pPage && !pPage->GetFileName().isEmpty() && pPage->GetBookmarkName().getLength())
-        {
-            pPage->SetModel(this);
-        }
-    }
-
     UpdateAllLinks();
-
     SetChanged( false );
 }
 
@@ -726,7 +811,13 @@ void SdDrawDocument::UpdateAllLinks()
     {
         s_pDocLockedInsertingLinks = this; // lock inserting links. only links in this document should by resolved
 
-        pLinkManager->UpdateAllLinks();  // query box: update all links?
+        if (mpDocSh)
+        {
+            comphelper::EmbeddedObjectContainer& rEmbeddedObjectContainer = mpDocSh->getEmbeddedObjectContainer();
+            rEmbeddedObjectContainer.setUserAllowsLinkUpdate(true);
+        }
+
+        pLinkManager->UpdateAllLinks(true, false, nullptr);  // query box: update all links?
 
         if (s_pDocLockedInsertingLinks == this)
             s_pDocLockedInsertingLinks = nullptr;  // unlock inserting links
@@ -757,15 +848,15 @@ void SdDrawDocument::NewOrLoadCompleted( SdPage* pPage, SdStyleSheetPool* pSPool
         // listeners.
         while( (pObj = rPresentationShapes.getNextShape()) )
         {
-            if (pObj->GetObjInventor() == SdrInventor)
+            if (pObj->GetObjInventor() == SdrInventor::Default)
             {
                 OutlinerParaObject* pOPO = pObj->GetOutlinerParaObject();
                 sal_uInt16 nId = pObj->GetObjIdentifier();
 
                 if (nId == OBJ_TITLETEXT)
                 {
-                    if( pOPO && pOPO->GetOutlinerMode() == OUTLINERMODE_DONTKNOW )
-                        pOPO->SetOutlinerMode( OUTLINERMODE_TITLEOBJECT );
+                    if( pOPO && pOPO->GetOutlinerMode() == OutlinerMode::DontKnow )
+                        pOPO->SetOutlinerMode( OutlinerMode::TitleObject );
 
                     // sal_True: don't delete "hard" attributes when doing this.
                     if (pTitleSheet)
@@ -773,8 +864,8 @@ void SdDrawDocument::NewOrLoadCompleted( SdPage* pPage, SdStyleSheetPool* pSPool
                 }
                 else if (nId == OBJ_OUTLINETEXT)
                 {
-                    if( pOPO && pOPO->GetOutlinerMode() == OUTLINERMODE_DONTKNOW )
-                        pOPO->SetOutlinerMode( OUTLINERMODE_OUTLINEOBJECT );
+                    if( pOPO && pOPO->GetOutlinerMode() == OutlinerMode::DontKnow )
+                        pOPO->SetOutlinerMode( OutlinerMode::OutlineObject );
 
                     std::vector<SfxStyleSheetBase*>::iterator iter;
                     for (iter = aOutlineList.begin(); iter != aOutlineList.end(); ++iter)
@@ -799,7 +890,7 @@ void SdDrawDocument::NewOrLoadCompleted( SdPage* pPage, SdStyleSheetPool* pSPool
 
                     if (!aString.isEmpty())
                     {
-                        sd::Outliner* pInternalOutl = GetInternalOutliner();
+                        SdOutliner* pInternalOutl = GetInternalOutliner();
                         pPage->SetObjText( static_cast<SdrTextObj*>(pObj), pInternalOutl, ePresObjKind, aString );
                         pObj->NbcSetStyleSheet( pPage->GetStyleSheetForPresObj( ePresObjKind ), true );
                         pInternalOutl->Clear();
@@ -812,29 +903,29 @@ void SdDrawDocument::NewOrLoadCompleted( SdPage* pPage, SdStyleSheetPool* pSPool
 
 // Local outliner that is used for outline mode. In this outliner, OutlinerViews
 // may be inserted.
-::sd::Outliner* SdDrawDocument::GetOutliner(bool bCreateOutliner)
+SdOutliner* SdDrawDocument::GetOutliner(bool bCreateOutliner)
 {
     if (!mpOutliner && bCreateOutliner)
     {
-        mpOutliner = new ::sd::Outliner( this, OUTLINERMODE_TEXTOBJECT );
+        mpOutliner.reset(new SdOutliner( this, OutlinerMode::TextObject ));
 
         if (mpDocSh)
-            mpOutliner->SetRefDevice( SD_MOD()->GetRefDevice( *mpDocSh ) );
+            mpOutliner->SetRefDevice( SD_MOD()->GetVirtualRefDevice() );
 
         mpOutliner->SetDefTab( nDefaultTabulator );
         mpOutliner->SetStyleSheetPool(static_cast<SfxStyleSheetPool*>(GetStyleSheetPool()));
     }
 
-    return mpOutliner;
+    return mpOutliner.get();
 }
 
 // Internal outliner that is used to create text objects. We don't insert any
 // OutlinerViews into this outliner!
-::sd::Outliner* SdDrawDocument::GetInternalOutliner(bool bCreateOutliner)
+SdOutliner* SdDrawDocument::GetInternalOutliner(bool bCreateOutliner)
 {
     if ( !mpInternalOutliner && bCreateOutliner )
     {
-        mpInternalOutliner = new ::sd::Outliner( this, OUTLINERMODE_TEXTOBJECT );
+        mpInternalOutliner.reset( new SdOutliner( this, OutlinerMode::TextObject ) );
 
         // This outliner is only used to create special text objects. As no
         // information about portions is saved in this outliner, the update mode
@@ -843,7 +934,7 @@ void SdDrawDocument::NewOrLoadCompleted( SdPage* pPage, SdStyleSheetPool* pSPool
         mpInternalOutliner->EnableUndo( false );
 
         if (mpDocSh)
-            mpInternalOutliner->SetRefDevice( SD_MOD()->GetRefDevice( *mpDocSh ) );
+            mpInternalOutliner->SetRefDevice( SD_MOD()->GetVirtualRefDevice() );
 
         mpInternalOutliner->SetDefTab( nDefaultTabulator );
         mpInternalOutliner->SetStyleSheetPool(static_cast<SfxStyleSheetPool*>(GetStyleSheetPool()));
@@ -858,7 +949,7 @@ void SdDrawDocument::NewOrLoadCompleted( SdPage* pPage, SdStyleSheetPool* pSPool
     // b) no wasted memory
     DBG_ASSERT( !mpInternalOutliner || ( ( mpInternalOutliner->GetParagraphCount() == 1 ) && ( mpInternalOutliner->GetText( mpInternalOutliner->GetParagraph( 0 ) ).isEmpty() ) ), "InternalOutliner: not empty!" );
 
-    return mpInternalOutliner;
+    return mpInternalOutliner.get();
 }
 
 // OnlineSpelling on/off
@@ -993,16 +1084,8 @@ sal_uInt16 SdDrawDocument::GetAnnotationAuthorIndex( const OUString& rAuthor )
         maAnnotationAuthors.push_back( aUserOptions.GetFullName() );
     }
 
-    sal_uInt16 idx = 0;
-    const std::vector< OUString >::const_iterator aEnd( maAnnotationAuthors.end());
-    for( std::vector< OUString >::const_iterator iter( maAnnotationAuthors.begin() ); iter != aEnd; ++iter )
-    {
-        if( (*iter) == rAuthor )
-        {
-            break;
-        }
-        idx++;
-    }
+    auto iter = std::find(maAnnotationAuthors.begin(), maAnnotationAuthors.end(), rAuthor);
+    sal_uInt16 idx = static_cast<sal_uInt16>(std::distance(maAnnotationAuthors.begin(), iter));
 
     if( idx == maAnnotationAuthors.size() )
     {
@@ -1014,17 +1097,17 @@ sal_uInt16 SdDrawDocument::GetAnnotationAuthorIndex( const OUString& rAuthor )
 
 void SdDrawDocument::InitLayoutVector()
 {
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return;
 
     const Reference<css::uno::XComponentContext> xContext(
         ::comphelper::getProcessComponentContext() );
 
     // get file list from configuration
-    Sequence< rtl::OUString > aFiles(
+    Sequence< OUString > aFiles(
         officecfg::Office::Impress::Misc::LayoutListFiles::get(xContext) );
 
-    rtl::OUString sFilename;
+    OUString sFilename;
     for( sal_Int32 i=0; i < aFiles.getLength(); ++i )
     {
         sFilename = comphelper::getExpandedUri(xContext, aFiles[i]);
@@ -1053,17 +1136,17 @@ void SdDrawDocument::InitLayoutVector()
 
 void SdDrawDocument::InitObjectVector()
 {
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return;
 
     const Reference<css::uno::XComponentContext> xContext(
         ::comphelper::getProcessComponentContext() );
 
     // get file list from configuration
-    Sequence< rtl::OUString > aFiles(
+    Sequence< OUString > aFiles(
        officecfg::Office::Impress::Misc::PresObjListFiles::get(xContext) );
 
-    rtl::OUString sFilename;
+    OUString sFilename;
     for( sal_Int32 i=0; i < aFiles.getLength(); ++i )
     {
         sFilename = comphelper::getExpandedUri(xContext, aFiles[i]);
@@ -1096,10 +1179,21 @@ void SdDrawDocument::dumpAsXml(xmlTextWriterPtr pWriter) const
     if (!pWriter)
     {
         pWriter = xmlNewTextWriterFilename("model.xml", 0);
+        xmlTextWriterSetIndent(pWriter,1);
+        xmlTextWriterSetIndentString(pWriter, BAD_CAST("  "));
         xmlTextWriterStartDocument(pWriter, nullptr, nullptr, nullptr);
         bOwns = true;
     }
+    xmlTextWriterStartElement(pWriter, BAD_CAST("SdDrawDocument"));
+    xmlTextWriterWriteFormatAttribute(pWriter, BAD_CAST("ptr"), "%p", this);
+
+    if (mpOutliner)
+        mpOutliner->dumpAsXml(pWriter);
     FmFormModel::dumpAsXml(pWriter);
+    if (GetUndoManager())
+        GetUndoManager()->dumpAsXml(pWriter);
+
+    xmlTextWriterEndElement(pWriter);
     if (bOwns)
     {
         xmlTextWriterEndDocument(pWriter);

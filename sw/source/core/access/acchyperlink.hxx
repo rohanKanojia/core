@@ -23,61 +23,52 @@
 #include <com/sun/star/accessibility/XAccessibleHyperlink.hpp>
 #include <rtl/ref.hxx>
 #include <cppuhelper/implbase.hxx>
+#include <svl/listener.hxx>
+
 #include <fmtinfmt.hxx>
 
 class SwAccessibleParagraph;
 class SwTextAttr;
 
-class SwAccessibleHyperlink :
-        public ::cppu::WeakImplHelper<
-        css::accessibility::XAccessibleHyperlink >
+class SwAccessibleHyperlink
+    : public ::cppu::WeakImplHelper<css::accessibility::XAccessibleHyperlink>
+    , public SvtListener
 {
     friend class SwAccessibleParagraph;
     friend class SwAccessibleHyperTextData;
-    size_t nHintPos;
-    ::rtl::Reference< SwAccessibleParagraph > xPara;
-    sal_Int32 nStartIdx;
-    sal_Int32 nEndIdx;
+    SwFormatINetFormat * m_pHyperlink;
+    ::rtl::Reference< SwAccessibleParagraph > m_xParagraph;
+    sal_Int32 const m_nStartIndex;
+    sal_Int32 const m_nEndIndex;
 
-    SwAccessibleHyperlink( size_t nHintPos,
-                           SwAccessibleParagraph *p,
-                              sal_Int32 nStt, sal_Int32 nEnd    );
+    SwAccessibleHyperlink(const SwTextAttr &,
+                          SwAccessibleParagraph &,
+                          sal_Int32 nStt, sal_Int32 nEnd    );
+    virtual ~SwAccessibleHyperlink() override;
 
-    const SwTextAttr *GetTextAttr() const;
+    const SwFormatINetFormat* GetTextAttr() const;
     void Invalidate();
+
+    virtual void Notify(SfxHint const& rHint) override;
 
 public:
     // XAccessibleAction
-    virtual sal_Int32 SAL_CALL getAccessibleActionCount()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL doAccessibleAction( sal_Int32 nIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-                css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getAccessibleActionCount() override;
+    virtual sal_Bool SAL_CALL doAccessibleAction( sal_Int32 nIndex ) override;
     virtual OUString SAL_CALL getAccessibleActionDescription(
-                sal_Int32 nIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-                css::uno::RuntimeException, std::exception) override;
+                sal_Int32 nIndex ) override;
     virtual css::uno::Reference<
             css::accessibility::XAccessibleKeyBinding > SAL_CALL
-               getAccessibleActionKeyBinding( sal_Int32 nIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-                css::uno::RuntimeException, std::exception) override;
+               getAccessibleActionKeyBinding( sal_Int32 nIndex ) override;
 
     // XAccessibleHyperlink
     virtual css::uno::Any SAL_CALL getAccessibleActionAnchor(
-                sal_Int32 nIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-                css::uno::RuntimeException, std::exception) override;
+                sal_Int32 nIndex ) override;
     virtual css::uno::Any SAL_CALL getAccessibleActionObject(
-            sal_Int32 nIndex )
-        throw (css::lang::IndexOutOfBoundsException,
-                css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL getStartIndex()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Int32 SAL_CALL getEndIndex()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isValid(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+            sal_Int32 nIndex ) override;
+    virtual sal_Int32 SAL_CALL getStartIndex() override;
+    virtual sal_Int32 SAL_CALL getEndIndex() override;
+    virtual sal_Bool SAL_CALL isValid(  ) override;
 };
 
 #endif

@@ -20,15 +20,41 @@
 #ifndef INCLUDED_VCL_TABPAGE_HXX
 #define INCLUDED_VCL_TABPAGE_HXX
 
-#include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/builder.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/window.hxx>
+#include <vcl/IContext.hxx>
 
+struct TabPageParent
+{
+    TabPageParent(vcl::Window* _pParent)
+        : pParent(_pParent)
+        , pPage(nullptr)
+        , pController(nullptr)
+    {
+    }
+    TabPageParent(weld::Container* _pPage, weld::DialogController* _pController)
+        : pParent(nullptr)
+        , pPage(_pPage)
+        , pController(_pController)
+    {
+    }
+    weld::Window* GetFrameWeld() const
+    {
+        if (pController)
+            return pController->getDialog();
+        return pParent->GetFrameWeld();
+    }
+    VclPtr<vcl::Window> pParent;
+    weld::Container* const pPage;
+    weld::DialogController* pController;
+};
 
 class VCL_DLLPUBLIC TabPage
     : public vcl::Window
     , public VclBuilderContainer
+    , public vcl::IContext
 {
 private:
     using Window::ImplInit;
@@ -38,10 +64,10 @@ private:
 public:
     explicit        TabPage( vcl::Window* pParent, WinBits nStyle = 0 );
     explicit        TabPage( vcl::Window *pParent, const OString& rID, const OUString& rUIXMLDescription );
-    virtual         ~TabPage();
+    virtual         ~TabPage() override;
     virtual void    dispose() override;
 
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void    Draw( OutputDevice* pDev, const Point& rPos, const Size& rSize, DrawFlags nFlags ) override;
 
     virtual void    StateChanged( StateChangedType nStateChange ) override;
@@ -49,8 +75,6 @@ public:
 
     virtual void    ActivatePage();
     virtual void    DeactivatePage();
-
-    OString         GetConfigId() const;
 
     //To-Do, consider inheriting from VclContainer
     virtual void    SetPosSizePixel(const Point& rNewPos, const Size& rNewSize) override;

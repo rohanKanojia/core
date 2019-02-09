@@ -20,43 +20,38 @@
 #ifndef INCLUDED_BASCTL_SOURCE_BASICIDE_BRKDLG_HXX
 #define INCLUDED_BASCTL_SOURCE_BASICIDE_BRKDLG_HXX
 
-#include <vcl/dialog.hxx>
-
-#include <vcl/button.hxx>
-#include <vcl/field.hxx>
+#include <vcl/weld.hxx>
 
 namespace basctl
 {
 
-class BreakPointDialog : public ModalDialog
+class BreakPointDialog final : public weld::GenericDialogController
 {
-private:
-    VclPtr<ComboBox>       m_pComboBox;
-    VclPtr<OKButton>       m_pOKButton;
-    VclPtr<PushButton>     m_pNewButton;
-    VclPtr<PushButton>     m_pDelButton;
-    VclPtr<CheckBox>       m_pCheckBox;
-    VclPtr<NumericField>   m_pNumericField;
-
     BreakPointList & m_rOriginalBreakPointList;
     BreakPointList m_aModifiedBreakPointList;
 
-protected:
+    std::unique_ptr<weld::EntryTreeView> m_xComboBox;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    std::unique_ptr<weld::Button> m_xNewButton;
+    std::unique_ptr<weld::Button> m_xDelButton;
+    std::unique_ptr<weld::CheckButton> m_xCheckBox;
+    std::unique_ptr<weld::SpinButton> m_xNumericField;
+
     void            CheckButtons();
-    DECL_LINK_TYPED( CheckBoxHdl, Button*, void );
-    DECL_LINK_TYPED( ComboBoxHighlightHdl, ComboBox&, void );
-    DECL_LINK_TYPED( EditModifyHdl, Edit&, void );
-    DECL_LINK_TYPED( ButtonHdl, Button*, void );
-    void            UpdateFields( BreakPoint* pBrk );
+    DECL_LINK(CheckBoxHdl, weld::ToggleButton&, void);
+    DECL_LINK(EditModifyHdl, weld::ComboBox&, void);
+    DECL_LINK(FieldModifyHdl, weld::SpinButton&, void);
+    DECL_LINK(ButtonHdl, weld::Button&, void);
+    DECL_LINK(TreeModifyHdl, weld::TreeView&, void);
+    void            UpdateFields( BreakPoint const & rBrk );
     BreakPoint*     GetSelectedBreakPoint();
 
 
 public:
-            BreakPointDialog( vcl::Window* pParent, BreakPointList& rBrkList );
-    virtual ~BreakPointDialog();
-    virtual void dispose() override;
+    BreakPointDialog(weld::Window* pParent, BreakPointList& rBrkList);
+    virtual ~BreakPointDialog() override;
 
-    void    SetCurrentBreakPoint( BreakPoint* pBrk );
+    void    SetCurrentBreakPoint( BreakPoint const & rBrk );
 };
 
 } // namespace basctl

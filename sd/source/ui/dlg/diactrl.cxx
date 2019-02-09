@@ -17,18 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/presentation/FadeEffect.hpp>
-
+#include <svl/intitem.hxx>
 #include <svx/dialogs.hrc>
 
-#include "sdattr.hxx"
-#include "strings.hrc"
+#include <sdattr.hxx>
+#include <strings.hrc>
 
-#include "diactrl.hxx"
+#include <diactrl.hxx>
 
-#include "sdresid.hxx"
-#include "app.hrc"
-#include "res_bmp.hrc"
+#include <sdresid.hxx>
+#include <app.hrc>
+
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/app.hxx>
@@ -39,12 +38,11 @@ SFX_IMPL_TOOLBOX_CONTROL( SdTbxCtlDiaPages,  SfxUInt16Item )
 
 // SdPagesField
 SdPagesField::SdPagesField( vcl::Window* pParent,
-                            const uno::Reference< frame::XFrame >& rFrame,
-                            WinBits nBits ) :
-    SvxMetricField  ( pParent, rFrame, nBits ),
+                            const uno::Reference< frame::XFrame >& rFrame ) :
+    SvxMetricField  ( pParent, rFrame ),
     m_xFrame        ( rFrame )
 {
-    OUString aStr( SD_RESSTR( STR_SLIDE_PLURAL ) );
+    OUString aStr( SdResId( STR_SLIDE_PLURAL ) );
     SetCustomUnitText( aStr );
 
     // set size
@@ -54,7 +52,7 @@ SdPagesField::SdPagesField( vcl::Window* pParent,
     SetSizePixel( aSize );
 
     // set parameter of MetricFields
-    SetUnit( FUNIT_CUSTOM );
+    SetUnit( FieldUnit::CUSTOM );
     SetMin( 1 );
     SetFirst( 1 );
     SetMax( 15 );
@@ -72,12 +70,12 @@ void SdPagesField::UpdatePagesField( const SfxUInt16Item* pItem )
 {
     if( pItem )
     {
-        long nValue = (long) pItem->GetValue();
+        long nValue = static_cast<long>(pItem->GetValue());
         SetValue( nValue );
         if( nValue == 1 )
-            SetCustomUnitText( SD_RESSTR( STR_SLIDE_SINGULAR ) );
+            SetCustomUnitText( SdResId( STR_SLIDE_SINGULAR ) );
         else
-            SetCustomUnitText( SD_RESSTR( STR_SLIDE_PLURAL ) );
+            SetCustomUnitText( SdResId( STR_SLIDE_PLURAL ) );
     }
     else
         SetText( OUString() );
@@ -85,7 +83,7 @@ void SdPagesField::UpdatePagesField( const SfxUInt16Item* pItem )
 
 void SdPagesField::Modify()
 {
-    SfxUInt16Item aItem( SID_PAGES_PER_ROW, (sal_uInt16) GetValue() );
+    SfxUInt16Item aItem( SID_PAGES_PER_ROW, static_cast<sal_uInt16>(GetValue()) );
 
     ::uno::Any a;
     ::uno::Sequence< ::beans::PropertyValue > aArgs( 1 );

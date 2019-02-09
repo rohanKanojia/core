@@ -27,6 +27,7 @@
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <comphelper/extract.hxx>
+#include <tools/diagnose_ex.h>
 #include "strings.hxx"
 
 namespace xmloff
@@ -34,7 +35,6 @@ namespace xmloff
 
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::beans;
-    using namespace ::com::sun::star::frame;
     using namespace ::com::sun::star::xml;
     using ::xmloff::token::XML_FORMS;
     using ::com::sun::star::xml::sax::XAttributeList;
@@ -49,16 +49,16 @@ namespace xmloff
     {
     }
 
-    SvXMLImportContext* OFormsRootImport::CreateChildContext( sal_uInt16 _nPrefix, const OUString& _rLocalName,
+    SvXMLImportContextRef OFormsRootImport::CreateChildContext( sal_uInt16 _nPrefix, const OUString& _rLocalName,
             const Reference< XAttributeList>& xAttrList )
     {
         SvXMLImportContext* pRet = nullptr;
         try
         {
             pRet = GetImport().GetFormImport()->createContext( _nPrefix, _rLocalName, xAttrList );
-        } catch (const Exception& rException)
+        } catch (const Exception&)
         {
-            SAL_WARN("xmloff.forms", "OFormsRootImport::CreateChildContext: " << rException.Message);
+            DBG_UNHANDLED_EXCEPTION("xmloff.forms");
         }
         return pRet;
     }
@@ -69,13 +69,13 @@ namespace xmloff
     {
         // the complete attribute name to look for
         OUString sCompleteAttributeName = GetImport().GetNamespaceMap().GetQNameByIndex(
-            OAttributeMetaData::getOfficeFormsAttributeNamespace(_eAttribute),
+            OAttributeMetaData::getOfficeFormsAttributeNamespace(),
             OUString::createFromAscii(OAttributeMetaData::getOfficeFormsAttributeName(_eAttribute)));
 
         // get and convert the value
         OUString sAttributeValue = _rxAttributes->getValueByName(sCompleteAttributeName);
         bool bValue = _bDefault;
-        ::sax::Converter::convertBool(bValue, sAttributeValue);
+        (void)::sax::Converter::convertBool(bValue, sAttributeValue);
 
         // set the property
         if (_rxPropInfo->hasPropertyByName(_rPropName))
@@ -117,16 +117,14 @@ namespace xmloff
 
     //= OFormsRootExport
     OFormsRootExport::OFormsRootExport( SvXMLExport& _rExp )
-        :m_pImplElement(nullptr)
     {
         addModelAttributes(_rExp);
 
-        m_pImplElement = new SvXMLElementExport(_rExp, XML_NAMESPACE_OFFICE, XML_FORMS, true, true);
+        m_pImplElement.reset( new SvXMLElementExport(_rExp, XML_NAMESPACE_OFFICE, XML_FORMS, true, true) );
     }
 
     OFormsRootExport::~OFormsRootExport( )
     {
-        delete m_pImplElement;
     }
 
     void OFormsRootExport::implExportBool(SvXMLExport& _rExp, OfficeFormsAttributes _eAttribute,
@@ -144,7 +142,7 @@ namespace xmloff
 
         // add the attribute
         _rExp.AddAttribute(
-            OAttributeMetaData::getOfficeFormsAttributeNamespace(_eAttribute),
+            OAttributeMetaData::getOfficeFormsAttributeNamespace(),
             OAttributeMetaData::getOfficeFormsAttributeName(_eAttribute),
             aValue.makeStringAndClear());
     }

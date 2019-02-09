@@ -27,13 +27,10 @@
 #include <com/sun/star/datatransfer/clipboard/XClipboardOwner.hpp>
 #include "MtaOleClipb.hxx"
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 class CWinClipboard;
 class CXNotifyingDataObject;
@@ -49,37 +46,41 @@ public:
 protected:
     CWinClipbImpl( const OUString& aClipboardName, CWinClipboard* theWinClipboard );
 
-    css::uno::Reference< css::datatransfer::XTransferable > SAL_CALL getContents(  )
-        throw( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    css::uno::Reference< css::datatransfer::XTransferable > getContents(  );
 
-    void SAL_CALL setContents(
+    /// @throws css::uno::RuntimeException
+    void setContents(
         const css::uno::Reference< css::datatransfer::XTransferable >& xTransferable,
-        const css::uno::Reference< css::datatransfer::clipboard::XClipboardOwner >& xClipboardOwner )
-        throw( css::uno::RuntimeException );
+        const css::uno::Reference< css::datatransfer::clipboard::XClipboardOwner >& xClipboardOwner );
 
-    OUString SAL_CALL getName(  ) throw( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    OUString getName(  );
 
     // XClipboardEx
 
-    sal_Int8 SAL_CALL getRenderingCapabilities(  ) throw( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    static sal_Int8 getRenderingCapabilities(  );
 
     // XFlushableClipboard
 
-    void SAL_CALL flushClipboard( ) throw( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    void flushClipboard( );
 
     // XComponent
 
-    void SAL_CALL dispose( ) throw( css::uno::RuntimeException );
+    /// @throws css::uno::RuntimeException
+    void dispose( );
 
     // member functions
 
-    void SAL_CALL registerClipboardViewer( );
-    void SAL_CALL unregisterClipboardViewer( );
+    void registerClipboardViewer( );
+    void unregisterClipboardViewer( );
 
     static void WINAPI onClipboardContentChanged();
 
 private:
-    void SAL_CALL onReleaseDataObject( CXNotifyingDataObject* theCaller );
+    void onReleaseDataObject( CXNotifyingDataObject* theCaller );
 
 private:
     OUString                m_itsName;

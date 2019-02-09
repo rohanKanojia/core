@@ -21,6 +21,7 @@
 #define INCLUDED_SC_INC_MATH_HXX
 
 #include <formula/errorcodes.hxx>
+#include <rtl/math.hxx>
 
 namespace sc {
 
@@ -30,7 +31,7 @@ namespace sc {
 inline double div( const double& fNumerator, const double& fDenominator )
 {
     return (fDenominator != 0.0) ? (fNumerator / fDenominator) :
-        CreateDoubleError( errDivisionByZero);
+        CreateDoubleError( FormulaError::DivisionByZero);
 }
 
 /** Return fNumerator/fDenominator if fDenominator!=0 else +-Infinity if
@@ -64,6 +65,13 @@ inline double divide( const double& fNumerator, const double& fDenominator )
     }
     return fNumerator / fDenominator;
 }
+
+/** Return pow(fVal1,fVal2) with error handling.
+
+    If an error was detected, a coded double error of
+    FormulaError::IllegalFPOperation is returned.
+ */
+double power( const double& fVal1, const double& fVal2 );
 
 }
 

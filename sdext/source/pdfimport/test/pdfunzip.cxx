@@ -26,12 +26,12 @@
 #include <rtl/ustring.hxx>
 #include <rtl/strbuf.hxx>
 
-#include "pdfparse.hxx"
+#include <pdfparse.hxx>
 
 using namespace pdfparse;
 
 
-void printHelp( const char* pExe )
+static void printHelp( const char* pExe )
 {
     fprintf( stdout,
     "USAGE: %s [-h,--help]\n"
@@ -62,7 +62,7 @@ class FileEmitContext : public EmitContext
 
     public:
     FileEmitContext( const char* pFileName, const char* pOrigName, const PDFContainer* pTop );
-    virtual ~FileEmitContext();
+    virtual ~FileEmitContext() override;
 
     virtual bool write( const void* pBuf, unsigned int nLen ) throw() override;
     virtual unsigned int getCurPos() throw() override;
@@ -178,7 +178,7 @@ bool FileEmitContext::copyOrigBytes( unsigned int nOrigOffset, unsigned int nLen
         fprintf( stderr, "could not seek to offset %u\n", nOrigOffset );
         return false;
     }
-    void* pBuf = rtl_allocateMemory( nLen );
+    void* pBuf = std::malloc( nLen );
     if( ! pBuf )
         return false;
     sal_uInt64 nBytesRead = 0;
@@ -186,11 +186,11 @@ bool FileEmitContext::copyOrigBytes( unsigned int nOrigOffset, unsigned int nLen
         || nBytesRead != static_cast<sal_uInt64>(nLen) )
     {
         fprintf( stderr, "could not read %u bytes\n", nLen );
-        rtl_freeMemory( pBuf );
+        std::free( pBuf );
         return false;
     }
     bool bRet = write( pBuf, nLen );
-    rtl_freeMemory( pBuf );
+    std::free( pBuf );
     return bRet;
 }
 
@@ -212,7 +212,7 @@ unsigned int FileEmitContext::readOrigBytes( unsigned int nOrigOffset, unsigned 
 
 typedef int(*PDFFileHdl)(const char*, const char*, PDFFile*);
 
-int handleFile( const char* pInFile, const char* pOutFile, const char* pPassword, PDFFileHdl pHdl )
+static int handleFile( const char* pInFile, const char* pOutFile, const char* pPassword, PDFFileHdl pHdl )
 {
 
     PDFReader aParser;
@@ -236,7 +236,7 @@ int handleFile( const char* pInFile, const char* pOutFile, const char* pPassword
     return nRet;
 }
 
-int write_unzipFile( const char* pInFile, const char* pOutFile, PDFFile* pPDFFile )
+static int write_unzipFile( const char* pInFile, const char* pOutFile, PDFFile* pPDFFile )
 {
     FileEmitContext aContext( pOutFile, pInFile, pPDFFile );
     aContext.m_bDecrypt = pPDFFile->isEncrypted();
@@ -244,14 +244,14 @@ int write_unzipFile( const char* pInFile, const char* pOutFile, PDFFile* pPDFFil
     return 0;
 }
 
-int write_addStreamArray( const char* pOutFile, PDFArray* pStreams, PDFFile* pPDFFile, const char* pInFile )
+static int write_addStreamArray( const char* pOutFile, PDFArray* pStreams, PDFFile* pPDFFile, const char* pInFile )
 {
     int nRet = 0;
     unsigned int nArrayElements = pStreams->m_aSubElements.size();
     for( unsigned int i = 0; i < nArrayElements-1 && nRet == 0; i++ )
     {
-        PDFName* pMimeType = dynamic_cast<PDFName*>(pStreams->m_aSubElements[i]);
-        PDFObjectRef* pStreamRef = dynamic_cast<PDFObjectRef*>(pStreams->m_aSubElements[i+1]);
+        PDFName* pMimeType = dynamic_cast<PDFName*>(pStreams->m_aSubElements[i].get());
+        PDFObjectRef* pStreamRef = dynamic_cast<PDFObjectRef*>(pStreams->m_aSubElements[i+1].get());
         if( ! pMimeType )
             fprintf( stderr, "error: no mimetype element\n" );
         if( ! pStreamRef )
@@ -285,18 +285,18 @@ int write_addStreamArray( const char* pOutFile, PDFArray* pStreams, PDFFile* pPD
     return nRet;
 }
 
-int write_addStreams( const char* pInFile, const char* pOutFile, PDFFile* pPDFFile )
+static int write_addStreams( const char* pInFile, const char* pOutFile, PDFFile* pPDFFile )
 {
     // find all trailers
     int nRet = 0;
     unsigned int nElements = pPDFFile->m_aSubElements.size();
     for( unsigned i = 0; i < nElements && nRet == 0; i++ )
     {
-        PDFTrailer* pTrailer = dynamic_cast<PDFTrailer*>(pPDFFile->m_aSubElements[i]);
+        PDFTrailer* pTrailer = dynamic_cast<PDFTrailer*>(pPDFFile->m_aSubElements[i].get());
         if( pTrailer && pTrailer->m_pDict )
         {
             // search for AdditionalStreams entry
-            std::unordered_map<OString,PDFEntry*,OStringHash>::iterator add_stream;
+            std::unordered_map<OString,PDFEntry*>::iterator add_stream;
             add_stream = pTrailer->m_pDict->m_aMap.find( "AdditionalStreams" );
             if( add_stream != pTrailer->m_pDict->m_aMap.end() )
             {
@@ -309,21 +309,20 @@ int write_addStreams( const char* pInFile, const char* pOutFile, PDFFile* pPDFFi
     return nRet;
 }
 
-int write_fonts( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPDFFile )
+static int write_fonts( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPDFFile )
 {
-    int nRet = 0;
     unsigned int nElements = i_pPDFFile->m_aSubElements.size();
-    for( unsigned i = 0; i < nElements && nRet == 0; i++ )
+    for (unsigned i = 0; i < nElements; i++)
     {
         // search FontDescriptors
-        PDFObject* pObj = dynamic_cast<PDFObject*>(i_pPDFFile->m_aSubElements[i]);
+        PDFObject* pObj = dynamic_cast<PDFObject*>(i_pPDFFile->m_aSubElements[i].get());
         if( ! pObj )
             continue;
         PDFDict* pDict = dynamic_cast<PDFDict*>(pObj->m_pObject);
         if( ! pDict )
             continue;
 
-        std::unordered_map<OString,PDFEntry*,OStringHash>::iterator map_it =
+        std::unordered_map<OString,PDFEntry*>::iterator map_it =
                 pDict->m_aMap.find( "Type" );
         if( map_it == pDict->m_aMap.end() )
             continue;
@@ -331,7 +330,7 @@ int write_fonts( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPDFF
         PDFName* pName = dynamic_cast<PDFName*>(map_it->second);
         if( ! pName )
             continue;
-        if( ! pName->m_aName.equals( "FontDescriptor" ) )
+        if( pName->m_aName != "FontDescriptor" )
             continue;
 
         // the font name will be helpful, also there must be one in
@@ -390,23 +389,22 @@ int write_fonts( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPDFF
         aContext.m_bDecrypt = i_pPDFFile->isEncrypted();
         pStream->writeStream( aContext, i_pPDFFile );
     }
-    return nRet;
+    return 0;
 }
 
-std::vector< std::pair< sal_Int32, sal_Int32 > > s_aEmitObjects;
+static std::vector< std::pair< sal_Int32, sal_Int32 > > s_aEmitObjects;
 
-int write_objects( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPDFFile )
+static int write_objects( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPDFFile )
 {
-    int nRet = 0;
     unsigned int nElements = s_aEmitObjects.size();
-    for( unsigned i = 0; i < nElements && nRet == 0; i++ )
+    for (unsigned i = 0; i < nElements; i++)
     {
         sal_Int32 nObject     = s_aEmitObjects[i].first;
         sal_Int32 nGeneration = s_aEmitObjects[i].second;
         PDFObject* pStream = i_pPDFFile->findObject( nObject, nGeneration );
         if( ! pStream )
         {
-            fprintf( stderr, "object %d %d not found !\n", (int)nObject, (int)nGeneration );
+            fprintf( stderr, "object %d %d not found !\n", static_cast<int>(nObject), static_cast<int>(nGeneration) );
             continue;
         }
 
@@ -419,7 +417,7 @@ int write_objects( const char* i_pInFile, const char* i_pOutFile, PDFFile* i_pPD
         aContext.m_bDecrypt = i_pPDFFile->isEncrypted();
         pStream->writeStream( aContext, i_pPDFFile );
     }
-    return nRet;
+    return 0;
 }
 
 SAL_IMPLEMENT_MAIN_WITH_ARGS( argc, argv )
@@ -508,7 +506,7 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS( argc, argv )
         {
             if( aFile.getLength() > 4 )
             {
-                if( aFile.matchIgnoreAsciiCase( OString( ".pdf" ), aFile.getLength()-4 ) )
+                if( aFile.matchIgnoreAsciiCase( ".pdf", aFile.getLength()-4 ) )
                     aOutFile.append( pInFile, aFile.getLength() - 4 );
                 else
                     aOutFile.append( aFile );

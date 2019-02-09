@@ -24,1333 +24,1302 @@
 #include <sot/filelist.hxx>
 #include <sysformats.hxx>
 #include <comphelper/classids.hxx>
+#include <comphelper/fileformat.h>
 
 #include <tools/globname.hxx>
+#include <tools/stream.hxx>
 #include <com/sun/star/datatransfer/DataFlavor.hpp>
+#include <com/sun/star/datatransfer/UnsupportedFlavorException.hpp>
 #include <com/sun/star/datatransfer/XTransferable.hpp>
 
-using namespace::com::sun::star::uno;
-using namespace::com::sun::star::datatransfer;
-
-struct SotAction_Impl
-{
-    SotClipboardFormatId nFormatId;          // Clipboard Id
-    sal_uInt16           nAction;            // Action Id
-    sal_uInt8            nContextCheckId;    // additional check of content in clipboard
-};
-
+using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::datatransfer;
 
 // define a context check Id for every formatid
 #define FILEGRPDSC_ONLY_URL     1
 
 /*
-    Fuer jedes Ziel existiert in der Tabelle genau ein SotDestinationEntry_Impl.
-    Dieser Eintrag enthaelt u.a. fuer jedes vom Ziel auswertbare Format eine
-    Default-Action. Die Default-Aktionen verweisen fuer jedes Format auf
-    die auszuwertende Tabelle, d.h. sie enthalten nur EXCHG_IN_ACTION_MOVE,
-    EXCHG_IN_ACTION_COPY oder EXCHG_IN_ACTION_LINK. Entsprechend dieser Aktion
-    ist dann aMoveActions, aCopyActions oder aLinkActions auszuwerten.
-    Die Aktionen sind nach Prioritaet sortiert, d.h. je "wichtiger" das
-    Format ist, desto eher erscheint es in der Liste.
-*/
+ *  For each target there is exactly one SotDestinationEntry_Impl in the table.
+ *  This entry contains, among other things, a default action for each format
+ *  that can be evaluated by the target. The default actions refer to the table
+ *  to be evaluated for each format, i.e., they contain only EXCHG_IN_ACTION_MOVE,
+ *  EXCHG_IN_ACTION_COPY, or EXCHG_IN_ACTION_LINK. Corresponding to this action,
+ *  aMoveActions, aCopyActions, or aLinkActions is then evaluated. The actions
+ *  are sorted by priority, i.e., the "more important" is the format, the sooner
+ *  it appears in the list.
+ */
 
 struct SotDestinationEntry_Impl
 {
-    SotExchangeDest         nDestination;
+    SotExchangeDest const   nDestination;
     const SotAction_Impl*   aDefaultActions;
     const SotAction_Impl*   aMoveActions;
     const SotAction_Impl*   aCopyActions;
     const SotAction_Impl*   aLinkActions;
 };
 
-
+namespace
+{
 /*
-    Ueber diese Tabelle erfolgt die Zuordnung von Destination, vorhandenen
-    Datenformaten sowie gewuenschter Aktion zu einer Aktion und dem in
-    ihr zu benutzenden Datenformat. Die Tabelle ist nach den Exchange-Zielen
-    (EXCHG_DEST_*) sortiert. Innerhalb des Zieleintrages befinden sich genau
-    vier Tabellen fuer Default-, Move-, Copy- und Linkaktionen. Ueber
-    die Default-Tabelle erfolgt das Mapping zwischen Default-Aktion
-     (DropEvent::IsDefaultAction()) und daraus resultierender wirklicher
-    Aktion. Diese Tabelle enthaelt deshalb nur die Aktionen
-     EXCHG_IN_ACTION_COPY, EXCHG_IN_ACTION_MOVE und EXCHG_IN_ACTION_LINK,
-    die auf die spezielle Tabelle verweisen. Die uebrigen Tabellen
-    koennen beliebige Aktionen enthalten. Jede Tabelle ist nach der
-    Format-Prioritaet sortiert. Eintrag Null hat die hoechste Prioritaet.
-*/
+ *  Via this table, the destination, existing data formats and the desired action
+ *  are assigned to an action and the data format to be used in it. The table is
+ *  sorted by the Exchange destinations (EXCHG_DEST_*). Within the goal entry are
+ *  exactly four tables for default, move, copy and link actions. The mapping
+ *  between default action (DropEvent::IsDefaultAction()) and the resulting real
+ *  action is done via the default table. This table therefore contains only the
+ *  EXCHG_IN_ACTION_COPY, EXCHG_IN_ACTION_MOVE, and EXCHG_IN_ACTION_LINK actions
+ *  that point to the specific table. The other tables can contain any actions.
+ *  Each table is sorted by format priority. Entry zero has the highest priority.
+ */
 
-#define EXCHG_EMPYT_ARRAY                                                 \
-static SotAction_Impl const aEmptyArr[] =                         \
-    {                                                                     \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                  \
-    };
-
-#define EXCHG_DEST_DOC_OLEOBJ_ARRAY                                         \
-static SotAction_Impl const aEXCHG_DEST_DOC_OLEOBJ_Def[] =        \
-    {                                                                       \
-        { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_LINK, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_LINK, 0 },          \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, 0 },                          \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_LINK, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_LINK, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_LINK, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_OLEOBJ_Move[] =       \
-    {                                                                       \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_OLEOBJ_Link[] =       \
-    {                                                                       \
-        { SotClipboardFormatId::INET_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },      \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },           \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },\
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_CHARTDOC_OLEOBJ_ARRAY                                    \
-static SotAction_Impl const aEXCHG_DEST_CHARTDOC_OLEOBJ_Def[] =   \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, 0 },                          \
-        { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_LINK, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_LINK, 0 },          \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_LINK, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_LINK, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_LINK, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_CHARTDOC_OLEOBJ_Move[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_CHARTDOC_OLEOBJ_Link[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },      \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },           \
-        { SotClipboardFormatId::INET_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },          \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, 0 },\
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_TEXTFRAME_ARRAY                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Def[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_COPY, 0 },               \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, 0 },           \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE, 0 },                  \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE, 0 },                     \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Move[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE, 0 },                   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, 0 },     \
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },          \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Copy[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },        \
-        { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::XFORMS, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                   \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, 0 },     \
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },          \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Link[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK, 0 },                   \
-        { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_LINK, 0 },        \
-        { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_LINK, 0 },   \
-        { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_LINK, 0 },   \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_TEXTFRAME_WEB_ARRAY                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Def[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_COPY, 0 },               \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, 0 },           \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE, 0 },                     \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Move[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE, 0 },                   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },          \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Copy[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },        \
-        { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::XFORMS, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                   \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },          \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Link[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK, 0 },                   \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_GRAPHOBJ_ARRAY                                       \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Def[] =      \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Move[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Copy[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Link[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_LNKD_GRAPHOBJ_ARRAY                                  \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Def[] = \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Move[] =\
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Copy[] =\
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Link[] =\
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_GRAPH_W_IMAP_ARRAY                                   \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Def[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Move[] = \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Copy[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Link[] = \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },               \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_ARRAY                              \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Def[] =\
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Move[] =\
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_REPLACE_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Copy[] =\
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                           \
-    };                                                                       \
-static SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Link[] =\
-    {                                                                        \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },               \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_DOC_IMAPREGION_ARRAY                                     \
-static SotAction_Impl const aEXCHG_DEST_DOC_IMAPREGION_Def[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_IMAPREGION_Copy[] =   \
-    {                                                                       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_DOC_DRAWOBJ_ARRAY                                        \
-static SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Def[] =       \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Copy[] =      \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Move[] =      \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Link[] =      \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_DOC_URLBUTTON_ARRAY                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_URLBUTTON_Def[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_URLBUTTON_Move[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_URLBUTTON_Copy[] =    \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },      \
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },            \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },    \
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_DOC_URLFIELD_ARRAY                                       \
-static SotAction_Impl const aEXCHG_DEST_DOC_URLFIELD_Def[] =      \
-    {                                                                       \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_URLFIELD_Copy[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_URLFIELD_Link[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_HYPERLINK, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_DOC_GROUPOBJ_ARRAY                                       \
-static SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Def[] =      \
-    {                                                                       \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Move[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_KEEP_POSSIZE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Copy[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP| EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Link[] =     \
-    {                                                                       \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES| EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES | EXCHG_OUT_ACTION_FLAG_FILL | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_SWDOC_FREE_AREA_ARRAY                                    \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Def[] =   \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, 0 },                           \
-        { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, 0 },           \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE, 0 },                  \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE, 0 },                     \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Move[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE, 0 },                   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                           \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, 0 },              \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Copy[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },        \
-        { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::XFORMS, EXCHG_IN_ACTION_COPY, 0 },   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                   \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                   \
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                           \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },          \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Link[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK, 0 },                   \
-        { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_LINK, 0 },        \
-        { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_LINK, 0 },   \
-        { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_LINK, 0 },   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, 0 },        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-#define EXCHG_DEST_SWDOC_FREE_AREA_WEB_ARRAY                                    \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Def[] =   \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, 0 },                           \
-        { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, 0 },           \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE, 0 },                     \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Move[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE, 0 },                   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                           \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, 0 },              \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Copy[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                   \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                           \
-        { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },          \
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Link[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK, 0 },                   \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, 0 },        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_SCDOC_FREE_AREA_ARRAY                                    \
-static SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Def[] =   \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE, 0 },                  \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE, 0 },                     \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Move[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::BIFF_5, EXCHG_IN_ACTION_MOVE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { SotClipboardFormatId::BIFF__5,EXCHG_IN_ACTION_MOVE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { SotClipboardFormatId::BIFF_8, EXCHG_IN_ACTION_MOVE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Copy[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::BIFF_5, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { SotClipboardFormatId::BIFF__5,EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { SotClipboardFormatId::BIFF_8, EXCHG_IN_ACTION_COPY | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },                  \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Link[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, 0 },        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define EXCHG_DEST_SDDOC_FREE_AREA_ARRAY                                    \
-static SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Def[] =   \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },                     \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY, 0 },                          \
-        { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY, 0 },         \
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, FILEGRPDSC_ONLY_URL },       \
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY, 0 },       \
-        { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY, 0 },                 \
-        { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY, 0 },                    \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY, 0 },                   \
-        { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY, 0 },                        \
-        { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE, 0 },                  \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE, 0 },         \
-        { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE, 0 },                    \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Move[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Copy[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY, 0 },\
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },              \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },        \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };                                                                      \
-static SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Link[] =  \
-    {                                                                       \
-        { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, 0 },        \
-        { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK | EXCHG_OUT_ACTION_FLAG_INSERT_IMAGEMAP | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, FILEGRPDSC_ONLY_URL },\
-        { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },\
-        { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },             \
-        { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 },     \
-        { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE | EXCHG_OUT_ACTION_FLAG_INSERT_TARGETURL, 0 }, \
-        { static_cast<SotClipboardFormatId>(0xffff), 0, 0 }                                                          \
-    };
-
-
-#define IMPL_DATA_ARRAY_1                                                 \
-EXCHG_EMPYT_ARRAY                                                         \
-EXCHG_DEST_DOC_OLEOBJ_ARRAY                                               \
-EXCHG_DEST_CHARTDOC_OLEOBJ_ARRAY                                          \
-EXCHG_DEST_DOC_TEXTFRAME_ARRAY                                            \
-EXCHG_DEST_DOC_GRAPHOBJ_ARRAY                                             \
-EXCHG_DEST_DOC_LNKD_GRAPHOBJ_ARRAY                                        \
-EXCHG_DEST_DOC_TEXTFRAME_WEB_ARRAY
-
-#define IMPL_DATA_ARRAY_2                                                 \
-EXCHG_DEST_DOC_GRAPH_W_IMAP_ARRAY                                         \
-EXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_ARRAY                                    \
-EXCHG_DEST_DOC_IMAPREGION_ARRAY                                           \
-EXCHG_DEST_DOC_DRAWOBJ_ARRAY                                              \
-EXCHG_DEST_DOC_URLBUTTON_ARRAY                                            \
-EXCHG_DEST_DOC_URLFIELD_ARRAY                                             \
-EXCHG_DEST_DOC_GROUPOBJ_ARRAY                                             \
-EXCHG_DEST_SWDOC_FREE_AREA_ARRAY                                          \
-EXCHG_DEST_SCDOC_FREE_AREA_ARRAY                                          \
-EXCHG_DEST_SDDOC_FREE_AREA_ARRAY                                          \
-EXCHG_DEST_SWDOC_FREE_AREA_WEB_ARRAY                                      \
-
-#define IMPL_DATA_ARRAY_3                                                 \
-static SotDestinationEntry_Impl const aDestinationArray[] =     \
-{                                                                         \
-    { SotExchangeDest::DOC_OLEOBJ,                                              \
-        aEXCHG_DEST_DOC_OLEOBJ_Def,                                       \
-        aEXCHG_DEST_DOC_OLEOBJ_Move,                                      \
-        aEmptyArr,                                                        \
-        aEXCHG_DEST_DOC_OLEOBJ_Link                                       \
-    },                                                                    \
-    { SotExchangeDest::CHARTDOC_OLEOBJ,                                         \
-        aEXCHG_DEST_CHARTDOC_OLEOBJ_Def,                                  \
-        aEXCHG_DEST_CHARTDOC_OLEOBJ_Move,                                 \
-        aEmptyArr,                                                        \
-        aEXCHG_DEST_CHARTDOC_OLEOBJ_Link                                  \
-    },                                                                    \
-    { SotExchangeDest::DOC_TEXTFRAME,                                           \
-        aEXCHG_DEST_DOC_TEXTFRAME_Def,                                    \
-        aEXCHG_DEST_DOC_TEXTFRAME_Move,                                   \
-        aEXCHG_DEST_DOC_TEXTFRAME_Copy,                                   \
-        aEXCHG_DEST_DOC_TEXTFRAME_Link                                    \
-    },                                                                    \
-    { SotExchangeDest::DOC_GRAPHOBJ,                                            \
-        aEXCHG_DEST_DOC_GRAPHOBJ_Def,                                     \
-        aEXCHG_DEST_DOC_GRAPHOBJ_Move,                                    \
-        aEXCHG_DEST_DOC_GRAPHOBJ_Copy,                                    \
-        aEXCHG_DEST_DOC_GRAPHOBJ_Link                                     \
-    },                                                                    \
-    { SotExchangeDest::DOC_LNKD_GRAPHOBJ,                                       \
-        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Def,                                \
-        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Move,                               \
-        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Copy,                               \
-        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Link                                \
-    },                                                                    \
-    { SotExchangeDest::DOC_GRAPH_W_IMAP,                                        \
-        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Def,                                 \
-        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Move,                                \
-        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Copy,                                \
-        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Link                                 \
-    },                                                                    \
-    { SotExchangeDest::DOC_LNKD_GRAPH_W_IMAP,                                   \
-        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Def,                            \
-        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Move,                           \
-        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Copy,                           \
-        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Link                            \
-    },                                                                    \
-    { SotExchangeDest::DOC_IMAPREGION,                                          \
-        aEXCHG_DEST_DOC_IMAPREGION_Def,                                   \
-        aEXCHG_DEST_DOC_IMAPREGION_Copy,                                  \
-        aEmptyArr,                                                        \
-        aEmptyArr                                                         \
-    },                                                                    \
-    { SotExchangeDest::DOC_DRAWOBJ,                                             \
-        aEXCHG_DEST_DOC_DRAWOBJ_Def,                                      \
-        aEXCHG_DEST_DOC_DRAWOBJ_Copy,                                     \
-        aEXCHG_DEST_DOC_DRAWOBJ_Move,                                     \
-        aEXCHG_DEST_DOC_DRAWOBJ_Link                                      \
-    },                                                                    \
-    { SotExchangeDest::DOC_URLBUTTON,                                           \
-        aEXCHG_DEST_DOC_URLBUTTON_Def,                                    \
-        aEXCHG_DEST_DOC_URLBUTTON_Move,                                   \
-        aEXCHG_DEST_DOC_URLBUTTON_Copy,                                   \
-        aEmptyArr                                                         \
-    },                                                                    \
-    { SotExchangeDest::DOC_URLFIELD,                                            \
-        aEXCHG_DEST_DOC_URLFIELD_Def,                                     \
-        aEmptyArr,                                                        \
-        aEXCHG_DEST_DOC_URLFIELD_Copy,                                    \
-        aEXCHG_DEST_DOC_URLFIELD_Link                                     \
-    },                                                                    \
-    { SotExchangeDest::DOC_GROUPOBJ,                                            \
-        aEXCHG_DEST_DOC_GROUPOBJ_Def,                                     \
-        aEXCHG_DEST_DOC_GROUPOBJ_Move,                                    \
-        aEXCHG_DEST_DOC_GROUPOBJ_Copy,                                    \
-        aEXCHG_DEST_DOC_GROUPOBJ_Link                                     \
-    },                                                                    \
-    { SotExchangeDest::SWDOC_FREE_AREA,                                         \
-        aEXCHG_DEST_SWDOC_FREE_AREA_Def,                                  \
-        aEXCHG_DEST_SWDOC_FREE_AREA_Move,                                 \
-        aEXCHG_DEST_SWDOC_FREE_AREA_Copy,                                 \
-        aEXCHG_DEST_SWDOC_FREE_AREA_Link                                  \
-    },                                                                    \
-    { SotExchangeDest::SCDOC_FREE_AREA,                                         \
-        aEXCHG_DEST_SCDOC_FREE_AREA_Def,                                  \
-        aEXCHG_DEST_SCDOC_FREE_AREA_Move,                                 \
-        aEXCHG_DEST_SCDOC_FREE_AREA_Copy,                                 \
-        aEXCHG_DEST_SCDOC_FREE_AREA_Link                                  \
-    },                                                                    \
-    { SotExchangeDest::SDDOC_FREE_AREA,                                         \
-        aEXCHG_DEST_SDDOC_FREE_AREA_Def,                                  \
-        aEXCHG_DEST_SDDOC_FREE_AREA_Move,                                 \
-        aEXCHG_DEST_SDDOC_FREE_AREA_Copy,                                 \
-        aEXCHG_DEST_SDDOC_FREE_AREA_Link                                  \
-    },                                                                    \
-    { SotExchangeDest::DOC_TEXTFRAME_WEB,                                       \
-        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Def,                                \
-        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Move,                               \
-        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Copy,                               \
-        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Link                                \
-    },                                                                    \
-    { SotExchangeDest::SWDOC_FREE_AREA_WEB,                                     \
-        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Def,                              \
-        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Move,                             \
-        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Copy,                             \
-        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Link                              \
-    },                                                                    \
-    {                                                                     \
-        static_cast<SotExchangeDest>(0xffff), nullptr, nullptr, nullptr, nullptr                        \
-    }                                                                     \
+SotAction_Impl const aEmptyArr[] =
+{
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
 };
 
+/* --- DOC_OLEOBJ --- */
+SotAction_Impl const aEXCHG_DEST_DOC_OLEOBJ_Def[] =
+{
+    { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_LINK },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_OLEOBJ_Move[] =
+{
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_OLEOBJ_Link[] =
+{
+    { SotClipboardFormatId::INET_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- CHARTDOC_OLEOBJ --- */
+SotAction_Impl const aEXCHG_DEST_CHARTDOC_OLEOBJ_Def[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_LINK },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_CHARTDOC_OLEOBJ_Move[] =
+{
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_CHARTDOC_OLEOBJ_Link[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::INET_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_INTERACTIVE },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_TEXTFRAME --- */
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Move[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RICHTEXT, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Copy[] =
+{
+    { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::XFORMS, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RICHTEXT, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP,SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_Link[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_TEXTFRAME_WEB --- */
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::INET_IMAGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Move[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RICHTEXT, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Copy[] =
+{
+    { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::XFORMS, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RICHTEXT, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_TEXTFRAME_WEB_Link[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_GRAPHOBJ --- */
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPHOBJ_Link[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_LNKD_GRAPHOBJ --- */
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Link[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_GRAPH_W_IMAP --- */
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GRAPH_W_IMAP_Link[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_LNKD_GRAPH_W_IMAP --- */
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::ReplaceImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Link[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_IMAPREGION --- */
+SotAction_Impl const aEXCHG_DEST_DOC_IMAPREGION_Def[] =
+{
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_IMAPREGION_Copy[] =
+{
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_DRAWOBJ --- */
+SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_DRAWOBJ_Link[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_URLBUTTON --- */
+SotAction_Impl const aEXCHG_DEST_DOC_URLBUTTON_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_URLBUTTON_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_URLBUTTON_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_URLFIELD --- */
+SotAction_Impl const aEXCHG_DEST_DOC_URLFIELD_Def[] =
+{
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_URLFIELD_Copy[] =
+{
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_URLFIELD_Link[] =
+{
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_HYPERLINK },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- DOC_GROUPOBJ --- */
+SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Def[] =
+{
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Move[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_REPLACE_DRAWOBJ, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_REPLACE_SVXB, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_REPLACE_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_REPLACE_BITMAP, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_REPLACE_GRAPH, SotExchangeActionFlags::InsertImageMap  | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Copy[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_GRAPH, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_DOC_GROUPOBJ_Link[] =
+{
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_GET_ATTRIBUTES, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- SWDOC_FREE_AREA --- */
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Def[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::RICHTEXT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Move[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RICHTEXT, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Copy[] =
+{
+    { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::XFORMS, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+#ifndef MACOSX
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+#endif
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+#ifdef MACOSX
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+#endif
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_Link[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SBA_DATAEXCHANGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SBA_CTRLDATAEXCHANGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SBA_FIELDDATAEXCHANGE, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- SWDOC_FREE_AREA_WEB --- */
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Def[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SOLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Move[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Copy[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::RTF, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_IMAGE, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Link[] =
+{
+    { SotClipboardFormatId::SONLK, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SOLK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- SCDOC_FREE_AREA --- */
+SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Def[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Move[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BIFF_5, EXCHG_IN_ACTION_MOVE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BIFF__5,EXCHG_IN_ACTION_MOVE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE,SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BIFF_8, EXCHG_IN_ACTION_MOVE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Copy[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BIFF_5, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BIFF__5,EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BIFF_8, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SCDOC_FREE_AREA_Link[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- SDDOC_FREE_AREA --- */
+SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Def[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVIM, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::STRING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_IN_ACTION_COPY, SotExchangeActionFlags::NONE, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::DRAWING, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SVXB, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::PNG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::JPEG, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::BITMAP, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SD_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::LINK, EXCHG_IN_ACTION_MOVE },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Move[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_MOVE },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Copy[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_COPY },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_OUT_ACTION_INSERT_FILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::DRAWING, EXCHG_OUT_ACTION_INSERT_DRAWOBJ, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVXB, EXCHG_OUT_ACTION_INSERT_SVXB, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SD_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::GDIMETAFILE, EXCHG_OUT_ACTION_INSERT_GDIMETAFILE, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::PNG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::JPEG, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::BITMAP, EXCHG_OUT_ACTION_INSERT_BITMAP, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_NO_COMMENT, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::HTML_SIMPLE, EXCHG_OUT_ACTION_INSERT_HTML, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::STRING, EXCHG_OUT_ACTION_INSERT_STRING, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::SVIM, EXCHG_OUT_ACTION_INSERT_IMAGEMAP, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+SotAction_Impl const aEXCHG_DEST_SDDOC_FREE_AREA_Link[] =
+{
+    { SotClipboardFormatId::FILE_LIST, EXCHG_IN_ACTION_LINK },
+    { SotClipboardFormatId::SIMPLE_FILE, EXCHG_IN_ACTION_LINK, SotExchangeActionFlags::InsertImageMap | SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::NETSCAPE_BOOKMARK, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::FILEGRPDESCRIPTOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, FILEGRPDSC_ONLY_URL },
+    { SotClipboardFormatId::UNIFORMRESOURCELOCATOR, EXCHG_OUT_ACTION_INSERT_HYPERLINK, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::LINK, EXCHG_OUT_ACTION_INSERT_DDE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBED_SOURCE_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { SotClipboardFormatId::EMBEDDED_OBJ_OLE, EXCHG_OUT_ACTION_INSERT_OLE, SotExchangeActionFlags::InsertTargetUrl, 0 },
+    { static_cast<SotClipboardFormatId>(0xffff), 0 }
+};
+
+/* --- exchange destinations --- */
+SotDestinationEntry_Impl const aDestinationArray[] =
+{
+    { SotExchangeDest::DOC_OLEOBJ,
+        aEXCHG_DEST_DOC_OLEOBJ_Def,
+        aEXCHG_DEST_DOC_OLEOBJ_Move,
+        aEmptyArr,
+        aEXCHG_DEST_DOC_OLEOBJ_Link
+    },
+    { SotExchangeDest::CHARTDOC_OLEOBJ,
+        aEXCHG_DEST_CHARTDOC_OLEOBJ_Def,
+        aEXCHG_DEST_CHARTDOC_OLEOBJ_Move,
+        aEmptyArr,
+        aEXCHG_DEST_CHARTDOC_OLEOBJ_Link
+    },
+    { SotExchangeDest::DOC_TEXTFRAME,
+        aEXCHG_DEST_DOC_TEXTFRAME_Def,
+        aEXCHG_DEST_DOC_TEXTFRAME_Move,
+        aEXCHG_DEST_DOC_TEXTFRAME_Copy,
+        aEXCHG_DEST_DOC_TEXTFRAME_Link
+    },
+    { SotExchangeDest::DOC_GRAPHOBJ,
+        aEXCHG_DEST_DOC_GRAPHOBJ_Def,
+        aEXCHG_DEST_DOC_GRAPHOBJ_Move,
+        aEXCHG_DEST_DOC_GRAPHOBJ_Copy,
+        aEXCHG_DEST_DOC_GRAPHOBJ_Link
+    },
+    { SotExchangeDest::DOC_LNKD_GRAPHOBJ,
+        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Def,
+        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Move,
+        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Copy,
+        aEXCHG_DEST_DOC_LNKD_GRAPHOBJ_Link
+    },
+    { SotExchangeDest::DOC_GRAPH_W_IMAP,
+        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Def,
+        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Move,
+        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Copy,
+        aEXCHG_DEST_DOC_GRAPH_W_IMAP_Link
+    },
+    { SotExchangeDest::DOC_LNKD_GRAPH_W_IMAP,
+        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Def,
+        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Move,
+        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Copy,
+        aEXCHG_DEST_DOC_LNKD_GRAPH_W_IMAP_Link
+    },
+    { SotExchangeDest::DOC_IMAPREGION,
+        aEXCHG_DEST_DOC_IMAPREGION_Def,
+        aEXCHG_DEST_DOC_IMAPREGION_Copy,
+        aEmptyArr,
+        aEmptyArr
+    },
+    { SotExchangeDest::DOC_DRAWOBJ,
+        aEXCHG_DEST_DOC_DRAWOBJ_Def,
+        aEXCHG_DEST_DOC_DRAWOBJ_Copy,
+        aEXCHG_DEST_DOC_DRAWOBJ_Move,
+        aEXCHG_DEST_DOC_DRAWOBJ_Link
+    },
+    { SotExchangeDest::DOC_URLBUTTON,
+        aEXCHG_DEST_DOC_URLBUTTON_Def,
+        aEXCHG_DEST_DOC_URLBUTTON_Move,
+        aEXCHG_DEST_DOC_URLBUTTON_Copy,
+        aEmptyArr
+    },
+    { SotExchangeDest::DOC_URLFIELD,
+        aEXCHG_DEST_DOC_URLFIELD_Def,
+        aEmptyArr,
+        aEXCHG_DEST_DOC_URLFIELD_Copy,
+        aEXCHG_DEST_DOC_URLFIELD_Link
+    },
+    { SotExchangeDest::DOC_GROUPOBJ,
+        aEXCHG_DEST_DOC_GROUPOBJ_Def,
+        aEXCHG_DEST_DOC_GROUPOBJ_Move,
+        aEXCHG_DEST_DOC_GROUPOBJ_Copy,
+        aEXCHG_DEST_DOC_GROUPOBJ_Link
+    },
+    { SotExchangeDest::SWDOC_FREE_AREA,
+        aEXCHG_DEST_SWDOC_FREE_AREA_Def,
+        aEXCHG_DEST_SWDOC_FREE_AREA_Move,
+        aEXCHG_DEST_SWDOC_FREE_AREA_Copy,
+        aEXCHG_DEST_SWDOC_FREE_AREA_Link
+    },
+    { SotExchangeDest::SCDOC_FREE_AREA,
+        aEXCHG_DEST_SCDOC_FREE_AREA_Def,
+        aEXCHG_DEST_SCDOC_FREE_AREA_Move,
+        aEXCHG_DEST_SCDOC_FREE_AREA_Copy,
+        aEXCHG_DEST_SCDOC_FREE_AREA_Link
+    },
+    { SotExchangeDest::SDDOC_FREE_AREA,
+        aEXCHG_DEST_SDDOC_FREE_AREA_Def,
+        aEXCHG_DEST_SDDOC_FREE_AREA_Move,
+        aEXCHG_DEST_SDDOC_FREE_AREA_Copy,
+        aEXCHG_DEST_SDDOC_FREE_AREA_Link
+    },
+    { SotExchangeDest::DOC_TEXTFRAME_WEB,
+        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Def,
+        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Move,
+        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Copy,
+        aEXCHG_DEST_DOC_TEXTFRAME_WEB_Link
+    },
+    { SotExchangeDest::SWDOC_FREE_AREA_WEB,
+        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Def,
+        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Move,
+        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Copy,
+        aEXCHG_DEST_SWDOC_FREE_AREA_WEB_Link
+    },
+    {
+        static_cast<SotExchangeDest>(0xffff), nullptr, nullptr, nullptr, nullptr
+    }
+};
+
+} // namespace
+
+namespace sot
+{
+const SotAction_Impl* GetExchangeDestinationWriterFreeAreaCopy()
+{
+    return aEXCHG_DEST_SWDOC_FREE_AREA_Copy;
+}
+}
 
 // - new style GetExchange methods -
 
-
 bool IsFormatSupported( const DataFlavorExVector& rDataFlavorExVector, SotClipboardFormatId nId )
 {
-    DataFlavorExVector::iterator    aIter( ( (DataFlavorExVector&) rDataFlavorExVector ).begin() );
-    DataFlavorExVector::iterator    aEnd( ( (DataFlavorExVector&) rDataFlavorExVector ).end() );
-    bool bRet = false;
-
-    while( aIter != aEnd )
-    {
-        if( nId == (*aIter++).mnSotId )
-        {
-            bRet = true;
-            aIter = aEnd;
-        }
-    }
-
-    return bRet;
+    return std::any_of(rDataFlavorExVector.begin(), rDataFlavorExVector.end(),
+        [nId](const DataFlavorEx& rDataFlavorEx) { return nId == rDataFlavorEx.mnSotId; });
 }
 
 
@@ -1385,7 +1354,7 @@ static bool CheckTransferableContext_Impl( const Reference< XTransferable >* pxT
 
                             if( aSeq.getLength() )
                             {
-                                FILEGROUPDESCRIPTOR* pFDesc = (FILEGROUPDESCRIPTOR*) aSeq.getConstArray();
+                                FILEGROUPDESCRIPTOR const * pFDesc = reinterpret_cast<FILEGROUPDESCRIPTOR const *>(aSeq.getConstArray());
 
                                 if( pFDesc->cItems )
                                 {
@@ -1417,14 +1386,15 @@ static bool CheckTransferableContext_Impl( const Reference< XTransferable >* pxT
 
 static sal_uInt16 GetTransferableAction_Impl(
                             const DataFlavorExVector& rDataFlavorExVector,
-                             const SotAction_Impl* pArray,
+                            const SotAction_Impl* pArray,
                             SotClipboardFormatId& rFormat,
                             SotClipboardFormatId nOnlyTestFormat,
-                            const Reference< XTransferable >* pxTransferable )
+                            const Reference< XTransferable >* pxTransferable,
+                            SotExchangeActionFlags* pActionFlags )
 {
     try
     {
-        if( rDataFlavorExVector.size() )
+        if( !rDataFlavorExVector.empty() )
         {
             const SotAction_Impl*   pArrayStart = pArray;
             SotClipboardFormatId    nId = pArray->nFormatId;
@@ -1462,6 +1432,8 @@ static sal_uInt16 GetTransferableAction_Impl(
                                         if( pCur->nFormatId == SotClipboardFormatId::SIMPLE_FILE )
                                         {
                                             rFormat = SotClipboardFormatId::SIMPLE_FILE;
+                                            if (pActionFlags)
+                                                *pActionFlags = pCur->nFlags;
                                             return pCur->nAction;
                                         }
                                         pCur++;
@@ -1470,6 +1442,8 @@ static sal_uInt16 GetTransferableAction_Impl(
                             }
                         }
                     }
+                    if (pActionFlags)
+                        *pActionFlags = pArray->nFlags;
                     return pArray->nAction;
                 }
                 pArray++;
@@ -1488,23 +1462,19 @@ static sal_uInt16 GetTransferableAction_Impl(
 }
 
 
-sal_uInt16 SotExchange::GetExchangeAction( const DataFlavorExVector& rDataFlavorExVector,
+sal_uInt8 SotExchange::GetExchangeAction( const DataFlavorExVector& rDataFlavorExVector,
                                        SotExchangeDest nDestination,
                                        sal_uInt16 nSourceOptions,
-                                       sal_uInt16 nUserAction,
+                                       sal_uInt8 nUserAction,
                                        SotClipboardFormatId& rFormat,
-                                       sal_uInt16& rDefaultAction,
+                                       sal_uInt8& rDefaultAction,
                                        SotClipboardFormatId nOnlyTestFormat,
-                                       const Reference< XTransferable >* pxTransferable )
+                                       const Reference< XTransferable >* pxTransferable,
+                                       SotExchangeActionFlags* pActionFlags )
 {
-    // hier wird jetzt die oben definierte Tabelle "implementiert"
-    IMPL_DATA_ARRAY_1;
-    IMPL_DATA_ARRAY_2;
-    IMPL_DATA_ARRAY_3;
-
     rFormat = SotClipboardFormatId::STRING;
 
-    //Todo: Binaere Suche einbauen
+    //Todo: incorporate a binary search
     const SotDestinationEntry_Impl* pEntry = aDestinationArray;
     while( static_cast<SotExchangeDest>(0xffff) != pEntry->nDestination )
     {
@@ -1518,33 +1488,31 @@ sal_uInt16 SotExchange::GetExchangeAction( const DataFlavorExVector& rDataFlavor
         return EXCHG_INOUT_ACTION_NONE;
     }
 
-    nUserAction &= EXCHG_ACTION_MASK;
     rFormat = SotClipboardFormatId::NONE;
 
-    /* Behandlung der Default-Action nach folgender Vorgehensweise:
-
-       - Das Ziel wird nach der Default-Action gefragt
-       - Unterstuetzt die Quelle diese Aktion so wird sie uebernommen
-       - Anderenfalls wird aus den von der Quelle zur Verfuegung gestellten
-         Aktionen eine ausgewaehlt, die zu einer moeglichst nicht leeren
-          Ergebnisaktion fuehrt. Hierbei wird in dieser Reihenfolge
-          vorgegangen: Copy -> Link -> Move
-    */
+    /* Handling the default action using the following procedure:
+     *
+     * - The target is asked for the default action
+     * - If the source supports this action, it is taken over
+     * - Otherwise, from the actions made available by the source, one leading
+     *   to a most likely non-empty result action is selected. This is done in
+     *   the following order: Copy -> Link -> Move
+     */
     if( nUserAction == EXCHG_IN_ACTION_DEFAULT )
     {
             nUserAction = GetTransferableAction_Impl(
                 rDataFlavorExVector, pEntry->aDefaultActions,
-                rFormat, nOnlyTestFormat, pxTransferable );
-            // Unterstuetzt die Quelle die Aktion?
+                rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
+            // Does the source support the action?
             if( !(nUserAction & nSourceOptions ))
             {
-                // Nein -> Alle Aktionen der Quelle checken
+                // No -> Check all actions of the source
                 rDefaultAction = (EXCHG_IN_ACTION_COPY & nSourceOptions);
                 if( rDefaultAction )
                 {
                     nUserAction = GetTransferableAction_Impl(
                         rDataFlavorExVector, pEntry->aCopyActions,
-                        rFormat, nOnlyTestFormat, pxTransferable );
+                        rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
                     if ( nUserAction )
                         return nUserAction;
                 }
@@ -1553,7 +1521,7 @@ sal_uInt16 SotExchange::GetExchangeAction( const DataFlavorExVector& rDataFlavor
                 {
                     nUserAction = GetTransferableAction_Impl(
                         rDataFlavorExVector, pEntry->aLinkActions,
-                        rFormat, nOnlyTestFormat, pxTransferable );
+                        rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
                     if ( nUserAction )
                         return nUserAction;
                 }
@@ -1562,7 +1530,7 @@ sal_uInt16 SotExchange::GetExchangeAction( const DataFlavorExVector& rDataFlavor
                 {
                     nUserAction = GetTransferableAction_Impl(
                         rDataFlavorExVector, pEntry->aMoveActions,
-                        rFormat, nOnlyTestFormat, pxTransferable );
+                        rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
                     if ( nUserAction )
                         return nUserAction;
                 }
@@ -1571,27 +1539,27 @@ sal_uInt16 SotExchange::GetExchangeAction( const DataFlavorExVector& rDataFlavor
             }
             rDefaultAction = nUserAction;
     }
-      else
-            rDefaultAction = nUserAction;
+    else
+        rDefaultAction = nUserAction;
 
     switch( nUserAction )
     {
     case EXCHG_IN_ACTION_MOVE:
         nUserAction = GetTransferableAction_Impl(
                             rDataFlavorExVector, pEntry->aMoveActions,
-                            rFormat, nOnlyTestFormat, pxTransferable );
+                            rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
         break;
 
     case EXCHG_IN_ACTION_COPY:
         nUserAction = GetTransferableAction_Impl(
                             rDataFlavorExVector, pEntry->aCopyActions,
-                            rFormat, nOnlyTestFormat, pxTransferable );
+                            rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
         break;
 
     case EXCHG_IN_ACTION_LINK:
         nUserAction = GetTransferableAction_Impl(
                             rDataFlavorExVector, pEntry->aLinkActions,
-                            rFormat, nOnlyTestFormat, pxTransferable );
+                            rFormat, nOnlyTestFormat, pxTransferable, pActionFlags );
         break;
 
     default:

@@ -20,26 +20,21 @@
 #include "xmldpimp.hxx"
 #include "xmlimprt.hxx"
 #include "xmlfilti.hxx"
-#include "xmlsorti.hxx"
-#include "document.hxx"
-#include "docuno.hxx"
-#include "dpshttab.hxx"
-#include "dpsdbtab.hxx"
-#include "attrib.hxx"
+#include <document.hxx>
+#include <dpshttab.hxx>
+#include <dpsdbtab.hxx>
+#include <attrib.hxx>
 #include "XMLConverter.hxx"
-#include "dpgroup.hxx"
-#include "dpdimsave.hxx"
-#include "rangeutl.hxx"
-#include "dpoutputgeometry.hxx"
+#include <dpdimsave.hxx>
+#include <rangeutl.hxx>
+#include <dpoutputgeometry.hxx>
+#include <generalfunction.hxx>
 
 #include "pivotsource.hxx"
 
-#include <xmloff/xmltkmap.hxx>
-#include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmluconv.hxx>
-#include <sax/tools/converter.hxx>
 
 #include <com/sun/star/sheet/DataPilotFieldReferenceType.hpp>
 #include <com/sun/star/sheet/DataPilotFieldReferenceItemType.hpp>
@@ -54,11 +49,8 @@ using namespace xmloff::token;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::xml::sax::XAttributeList;
 
-ScXMLDataPilotTablesContext::ScXMLDataPilotTablesContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ ) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+ScXMLDataPilotTablesContext::ScXMLDataPilotTablesContext( ScXMLImport& rImport ) :
+    ScXMLImportContext( rImport )
 {
     // has no Attributes
     rImport.LockSolarMutex();
@@ -69,44 +61,36 @@ ScXMLDataPilotTablesContext::~ScXMLDataPilotTablesContext()
     GetScImport().UnlockSolarMutex();
 }
 
-SvXMLImportContext *ScXMLDataPilotTablesContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotTablesContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotTablesElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATA_PILOT_TABLE :
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_TABLE ) :
         {
-            pContext = new ScXMLDataPilotTableContext( GetScImport(), nPrefix,
-                                                          rLName, xAttrList);
+            pContext = new ScXMLDataPilotTableContext( GetScImport(), pAttribList );
         }
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
-}
-
-void ScXMLDataPilotTablesContext::EndElement()
-{
 }
 
 ScXMLDataPilotTableContext::GrandTotalItem::GrandTotalItem() :
     mbVisible(true) {}
 
 ScXMLDataPilotTableContext::ScXMLDataPilotTableContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList ) :
+    ScXMLImportContext( rImport ),
     pDoc(GetScImport().GetDocument()),
-    pDPObject(nullptr),
-    pDPDimSaveData(nullptr),
+    pDPSave(new ScDPSaveData()),
     sDataPilotTableName(),
     sApplicationData(),
     nSourceType(SQL),
@@ -124,152 +108,143 @@ ScXMLDataPilotTableContext::ScXMLDataPilotTableContext( ScXMLImport& rImport,
     bDrillDown(true),
     bHeaderGridLayout(false)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotTableAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_NAME :
+            switch (aIter.getToken())
             {
-                sDataPilotTableName = sValue;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_APPLICATION_DATA :
-            {
-                sApplicationData = sValue;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_GRAND_TOTAL :
-            {
-                if (IsXMLToken(sValue, XML_BOTH))
+                case XML_ELEMENT( TABLE, XML_NAME ):
                 {
-                    maRowGrandTotal.mbVisible = true;
-                    maColGrandTotal.mbVisible = true;
+                    sDataPilotTableName = aIter.toString();
                 }
-                else if (IsXMLToken(sValue, XML_ROW))
+                break;
+                case XML_ELEMENT( TABLE, XML_APPLICATION_DATA ):
                 {
-                    maRowGrandTotal.mbVisible = true;
-                    maColGrandTotal.mbVisible = false;
+                    sApplicationData = aIter.toString();
                 }
-                else if (IsXMLToken(sValue, XML_COLUMN))
+                break;
+                case XML_ELEMENT( TABLE, XML_GRAND_TOTAL ):
                 {
-                    maRowGrandTotal.mbVisible = false;
-                    maColGrandTotal.mbVisible = true;
+                    if (IsXMLToken(aIter, XML_BOTH))
+                    {
+                        maRowGrandTotal.mbVisible = true;
+                        maColGrandTotal.mbVisible = true;
+                    }
+                    else if (IsXMLToken(aIter, XML_ROW))
+                    {
+                        maRowGrandTotal.mbVisible = true;
+                        maColGrandTotal.mbVisible = false;
+                    }
+                    else if (IsXMLToken(aIter, XML_COLUMN))
+                    {
+                        maRowGrandTotal.mbVisible = false;
+                        maColGrandTotal.mbVisible = true;
+                    }
+                    else
+                    {
+                        maRowGrandTotal.mbVisible = false;
+                        maColGrandTotal.mbVisible = false;
+                    }
                 }
-                else
+                break;
+                case XML_ELEMENT( TABLE, XML_IGNORE_EMPTY_ROWS ):
                 {
-                    maRowGrandTotal.mbVisible = false;
-                    maColGrandTotal.mbVisible = false;
+                    bIgnoreEmptyRows = IsXMLToken(aIter, XML_TRUE);
                 }
+                break;
+                case XML_ELEMENT( TABLE, XML_IDENTIFY_CATEGORIES ):
+                {
+                    bIdentifyCategories = IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_TARGET_RANGE_ADDRESS ):
+                {
+                    sal_Int32 nOffset(0);
+                    bTargetRangeAddress = ScRangeStringConverter::GetRangeFromString( aTargetRangeAddress, aIter.toString(), pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset );
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_BUTTONS ):
+                {
+                    sButtons = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_SHOW_FILTER_BUTTON ):
+                {
+                    bShowFilter = IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_DRILL_DOWN_ON_DOUBLE_CLICK ):
+                {
+                    bDrillDown = IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_HEADER_GRID_LAYOUT ):
+                {
+                    bHeaderGridLayout = IsXMLToken(aIter, XML_TRUE);
+                }
+                break;
             }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_IGNORE_EMPTY_ROWS :
-            {
-                bIgnoreEmptyRows = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_IDENTIFY_CATEGORIES :
-            {
-                bIdentifyCategories = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_TARGET_RANGE_ADDRESS :
-            {
-                sal_Int32 nOffset(0);
-                bTargetRangeAddress = ScRangeStringConverter::GetRangeFromString( aTargetRangeAddress, sValue, pDoc, ::formula::FormulaGrammar::CONV_OOO, nOffset );
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_BUTTONS :
-            {
-                sButtons = sValue;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_SHOW_FILTER_BUTTON :
-            {
-                bShowFilter = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_DRILL_DOWN :
-            {
-                bDrillDown = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATA_PILOT_TABLE_ATTR_HEADER_GRID_LAYOUT :
-            {
-                bHeaderGridLayout = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
         }
     }
-
-    pDPObject = new ScDPObject(pDoc);
-    pDPSave.reset(new ScDPSaveData());
 }
 
 ScXMLDataPilotTableContext::~ScXMLDataPilotTableContext()
 {
-    delete pDPDimSaveData;
 }
 
-SvXMLImportContext *ScXMLDataPilotTableContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotTableContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotTableElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_SOURCE_SQL :
+        case XML_ELEMENT( TABLE, XML_DATABASE_SOURCE_SQL ):
         {
-            pContext = new ScXMLDPSourceSQLContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+            pContext = new ScXMLDPSourceSQLContext(GetScImport(), pAttribList, this);
             nSourceType = SQL;
         }
         break;
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_SOURCE_TABLE :
+        case XML_ELEMENT( TABLE, XML_DATABASE_SOURCE_TABLE ):
         {
-            pContext = new ScXMLDPSourceTableContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+            pContext = new ScXMLDPSourceTableContext(GetScImport(), pAttribList, this);
             nSourceType = TABLE;
         }
         break;
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_SOURCE_QUERY :
+        case XML_ELEMENT( TABLE, XML_DATABASE_SOURCE_QUERY ):
         {
-            pContext = new ScXMLDPSourceQueryContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+            pContext = new ScXMLDPSourceQueryContext(GetScImport(), pAttribList, this);
             nSourceType = QUERY;
         }
         break;
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_SOURCE_SERVICE :
+        case XML_ELEMENT( TABLE, XML_SOURCE_SERVICE ):
         {
-            pContext = new ScXMLSourceServiceContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+            pContext = new ScXMLSourceServiceContext(GetScImport(), pAttribList, this);
             nSourceType = SERVICE;
         }
         break;
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_GRAND_TOTAL:
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_GRAND_TOTAL_EXT:
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_GRAND_TOTAL ):
+        case XML_ELEMENT( TABLE_EXT, XML_DATA_PILOT_GRAND_TOTAL ):
         {
-            pContext = new ScXMLDataPilotGrandTotalContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+            pContext = new ScXMLDataPilotGrandTotalContext(GetScImport(), pAttribList, this);
         }
         break;
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_SOURCE_CELL_RANGE :
+        case XML_ELEMENT( TABLE, XML_SOURCE_CELL_RANGE ):
         {
-            pContext = new ScXMLSourceCellRangeContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+            pContext = new ScXMLSourceCellRangeContext(GetScImport(), pAttribList, this);
             nSourceType = CELLRANGE;
         }
         break;
-        case XML_TOK_DATA_PILOT_TABLE_ELEM_DATA_PILOT_FIELD :
-            pContext = new ScXMLDataPilotFieldContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_FIELD ):
+            pContext = new ScXMLDataPilotFieldContext(GetScImport(), pAttribList, this);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
@@ -315,7 +290,7 @@ const ScDPSaveDimension* getDimension(
     return nullptr;
 }
 
-ScDPOutputGeometry::FieldType toFieldType(sal_uInt16 nOrient)
+ScDPOutputGeometry::FieldType toFieldType(sheet::DataPilotFieldOrientation nOrient)
 {
     switch (nOrient)
     {
@@ -337,7 +312,7 @@ ScDPOutputGeometry::FieldType toFieldType(sal_uInt16 nOrient)
 
 }
 
-void ScXMLDataPilotTableContext::SetButtons()
+void ScXMLDataPilotTableContext::SetButtons(ScDPObject* pDPObject)
 {
     ScDPOutputGeometry aGeometry(aTargetRangeAddress, bShowFilter);
     aGeometry.setColumnFieldCount(mnColFieldCount);
@@ -345,6 +320,7 @@ void ScXMLDataPilotTableContext::SetButtons()
     aGeometry.setPageFieldCount(mnPageFieldCount);
     aGeometry.setDataFieldCount(mnDataFieldCount);
     aGeometry.setDataLayoutType(toFieldType(mnDataLayoutType));
+    aGeometry.setHeaderLayout(bHeaderGridLayout);
 
     std::vector<const ScDPSaveDimension*> aRowDims, aColDims, aPageDims;
     pDPSave->GetAllDimensionsByOrientation(sheet::DataPilotFieldOrientation_ROW, aRowDims);
@@ -375,16 +351,16 @@ void ScXMLDataPilotTableContext::SetButtons()
                 {
                     // Page dimension needs 2 buttons.
 
-                    pDoc->ApplyFlagsTab(aScAddress.Col(), aScAddress.Row(), aScAddress.Col(), aScAddress.Row(), aScAddress.Tab(), SC_MF_BUTTON);
+                    pDoc->ApplyFlagsTab(aScAddress.Col(), aScAddress.Row(), aScAddress.Col(), aScAddress.Row(), aScAddress.Tab(), ScMF::Button);
 
-                    sal_Int16 nMFlag = SC_MF_BUTTON_POPUP;
+                    ScMF nMFlag = ScMF::ButtonPopup;
                     if (bHasHidden)
-                        nMFlag |= SC_MF_HIDDEN_MEMBER;
+                        nMFlag |= ScMF::HiddenMember;
                     pDoc->ApplyFlagsTab(aScAddress.Col()+1, aScAddress.Row(), aScAddress.Col()+1, aScAddress.Row(), aScAddress.Tab(), nMFlag);
                 }
                 else
                 {
-                    sal_Int16 nMFlag = SC_MF_BUTTON;
+                    ScMF nMFlag = ScMF::Button;
                     if (bDataLayout)
                     {
                         // Data layout dimension only has a plain button with no popup.
@@ -393,9 +369,9 @@ void ScXMLDataPilotTableContext::SetButtons()
                     {
                         // Normal dimension has a popup arrow button.
                         if (bHasHidden)
-                            nMFlag |= SC_MF_HIDDEN_MEMBER;
+                            nMFlag |= ScMF::HiddenMember;
 
-                        nMFlag |= SC_MF_BUTTON_POPUP;
+                        nMFlag |= ScMF::ButtonPopup;
                     }
 
                     pDoc->ApplyFlagsTab(aScAddress.Col(), aScAddress.Row(), aScAddress.Col(), aScAddress.Row(), aScAddress.Tab(), nMFlag);
@@ -404,13 +380,12 @@ void ScXMLDataPilotTableContext::SetButtons()
         }
     }
 
-    if ( pDPObject )
-        pDPObject->RefreshAfterLoad();
+    pDPObject->RefreshAfterLoad();
 }
 
 void ScXMLDataPilotTableContext::SetSelectedPage( const OUString& rDimName, const OUString& rSelected )
 {
-    maSelectedPages.insert(SelectedPagesType::value_type(rDimName, rSelected));
+    maSelectedPages.emplace(rDimName, rSelected);
 }
 
 void ScXMLDataPilotTableContext::AddDimension(ScDPSaveDimension* pDim)
@@ -453,22 +428,23 @@ void ScXMLDataPilotTableContext::AddDimension(ScDPSaveDimension* pDim)
 void ScXMLDataPilotTableContext::AddGroupDim(const ScDPSaveNumGroupDimension& aNumGroupDim)
 {
     if (!pDPDimSaveData)
-        pDPDimSaveData = new ScDPDimensionSaveData();
+        pDPDimSaveData.reset( new ScDPDimensionSaveData );
     pDPDimSaveData->AddNumGroupDimension(aNumGroupDim);
 }
 
 void ScXMLDataPilotTableContext::AddGroupDim(const ScDPSaveGroupDimension& aGroupDim)
 {
     if (!pDPDimSaveData)
-        pDPDimSaveData = new ScDPDimensionSaveData();
+        pDPDimSaveData.reset( new ScDPDimensionSaveData );
     pDPDimSaveData->AddGroupDimension(aGroupDim);
 }
 
-void ScXMLDataPilotTableContext::EndElement()
+void SAL_CALL ScXMLDataPilotTableContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!bTargetRangeAddress)
         return;
 
+    std::unique_ptr<ScDPObject> pDPObject(new ScDPObject(pDoc));
     pDPObject->SetName(sDataPilotTableName);
     pDPObject->SetTag(sApplicationData);
     pDPObject->SetOutRange(aTargetRangeAddress);
@@ -485,7 +461,7 @@ void ScXMLDataPilotTableContext::EndElement()
             aImportDesc.aObject = sSourceObject;
             aImportDesc.nType = sheet::DataImportMode_SQL;
             aImportDesc.bNative = bIsNative;
-            rPivotSources.appendDBSource(pDPObject, aImportDesc);
+            rPivotSources.appendDBSource(pDPObject.get(), aImportDesc);
         }
         break;
         case TABLE :
@@ -494,7 +470,7 @@ void ScXMLDataPilotTableContext::EndElement()
             aImportDesc.aDBName = sDatabaseName;
             aImportDesc.aObject = sSourceObject;
             aImportDesc.nType = sheet::DataImportMode_TABLE;
-            rPivotSources.appendDBSource(pDPObject, aImportDesc);
+            rPivotSources.appendDBSource(pDPObject.get(), aImportDesc);
         }
         break;
         case QUERY :
@@ -503,14 +479,14 @@ void ScXMLDataPilotTableContext::EndElement()
             aImportDesc.aDBName = sDatabaseName;
             aImportDesc.aObject = sSourceObject;
             aImportDesc.nType = sheet::DataImportMode_QUERY;
-            rPivotSources.appendDBSource(pDPObject, aImportDesc);
+            rPivotSources.appendDBSource(pDPObject.get(), aImportDesc);
         }
         break;
         case SERVICE :
         {
             ScDPServiceDesc aServiceDesc(sServiceName, sServiceSourceName, sServiceSourceObject,
                                 sServiceUsername, sServicePassword);
-            rPivotSources.appendServiceSource(pDPObject, aServiceDesc);
+            rPivotSources.appendServiceSource(pDPObject.get(), aServiceDesc);
         }
         break;
         case CELLRANGE :
@@ -524,13 +500,13 @@ void ScXMLDataPilotTableContext::EndElement()
                 else
                     aSheetDesc.SetSourceRange(aSourceCellRangeAddress);
                 aSheetDesc.SetQueryParam(aSourceQueryParam);
-                rPivotSources.appendSheetSource(pDPObject, aSheetDesc);
+                rPivotSources.appendSheetSource(pDPObject.get(), aSheetDesc);
             }
         }
         break;
     }
 
-    rPivotSources.appendSelectedPages(pDPObject, maSelectedPages);
+    rPivotSources.appendSelectedPages(pDPObject.get(), maSelectedPages);
 
     pDPSave->SetRowGrand(maRowGrandTotal.mbVisible);
     pDPSave->SetColumnGrand(maColGrandTotal.mbVisible);
@@ -545,7 +521,7 @@ void ScXMLDataPilotTableContext::EndElement()
     pDPSave->SetFilterButton(bShowFilter);
     pDPSave->SetDrillDown(bDrillDown);
     if (pDPDimSaveData)
-        pDPSave->SetDimensionData(pDPDimSaveData);
+        pDPSave->SetDimensionData(pDPDimSaveData.get());
     pDPObject->SetSaveData(*pDPSave);
 
     ScDPCollection* pDPCollection = pDoc->GetDPCollection();
@@ -554,13 +530,9 @@ void ScXMLDataPilotTableContext::EndElement()
     if ( pDPCollection->GetByName(pDPObject->GetName()) )
         pDPObject->SetName( OUString() );     // ignore the invalid name, create a new name in AfterXMLLoading
 
-    if (!pDPCollection->InsertNewTable(pDPObject))
-    {
-        OSL_FAIL("cannot insert DPObject");
-        DELETEZ( pDPObject );
-    }
+    SetButtons(pDPObject.get());
 
-    SetButtons();
+    pDPCollection->InsertNewTable(std::move(pDPObject));
 }
 
 void ScXMLDataPilotTableContext::SetGrandTotal(
@@ -588,40 +560,26 @@ void ScXMLDataPilotTableContext::SetGrandTotal(
 }
 
 ScXMLDPSourceSQLContext::ScXMLDPSourceSQLContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDataPilotTableContext* pTempDataPilotTable) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDataPilotTable(pTempDataPilotTable)
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDataPilotTableContext* pDataPilotTable) :
+    ScXMLImportContext( rImport )
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSourceSQLAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_SQL_ATTR_DATABASE_NAME :
+            switch (aIter.getToken())
             {
-                pDataPilotTable->SetDatabaseName(sValue);
+                case XML_ELEMENT( TABLE, XML_DATABASE_NAME ):
+                    pDataPilotTable->SetDatabaseName(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_SQL_STATEMENT ):
+                    pDataPilotTable->SetSourceObject(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_PARSE_SQL_STATEMENT ):
+                    pDataPilotTable->SetNative(!IsXMLToken(aIter, XML_TRUE));
+                break;
             }
-            break;
-            case XML_TOK_SOURCE_SQL_ATTR_SQL_STATEMENT :
-            {
-                pDataPilotTable->SetSourceObject(sValue);
-            }
-            break;
-            case XML_TOK_SOURCE_SQL_ATTR_PARSE_SQL_STATEMENT :
-            {
-                pDataPilotTable->SetNative(!IsXMLToken(sValue, XML_TRUE));
-            }
-            break;
         }
     }
 }
@@ -630,47 +588,25 @@ ScXMLDPSourceSQLContext::~ScXMLDPSourceSQLContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPSourceSQLContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDPSourceSQLContext::EndElement()
-{
-}
-
 ScXMLDPSourceTableContext::ScXMLDPSourceTableContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDataPilotTableContext* pTempDataPilotTable) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDataPilotTable(pTempDataPilotTable)
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDataPilotTableContext* pDataPilotTable) :
+    ScXMLImportContext( rImport )
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSourceTableAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_TABLE_ATTR_DATABASE_NAME :
+            switch (aIter.getToken())
             {
-                pDataPilotTable->SetDatabaseName(sValue);
+                case XML_ELEMENT( TABLE, XML_DATABASE_NAME ):
+                    pDataPilotTable->SetDatabaseName(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_TABLE_NAME ):
+                case XML_ELEMENT( TABLE, XML_DATABASE_TABLE_NAME ):
+                    pDataPilotTable->SetSourceObject(aIter.toString());
+                break;
             }
-            break;
-            case XML_TOK_SOURCE_TABLE_ATTR_TABLE_NAME :
-            {
-                pDataPilotTable->SetSourceObject(sValue);
-            }
-            break;
         }
     }
 }
@@ -679,47 +615,24 @@ ScXMLDPSourceTableContext::~ScXMLDPSourceTableContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPSourceTableContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDPSourceTableContext::EndElement()
-{
-}
-
 ScXMLDPSourceQueryContext::ScXMLDPSourceQueryContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDataPilotTableContext* pTempDataPilotTable) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDataPilotTable(pTempDataPilotTable)
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDataPilotTableContext* pDataPilotTable) :
+    ScXMLImportContext( rImport )
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDatabaseRangeSourceQueryAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_QUERY_ATTR_DATABASE_NAME :
+            switch (aIter.getToken())
             {
-                pDataPilotTable->SetDatabaseName(sValue);
+                case XML_ELEMENT( TABLE, XML_DATABASE_NAME ):
+                    pDataPilotTable->SetDatabaseName(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_QUERY_NAME ):
+                    pDataPilotTable->SetSourceObject(aIter.toString());
+                break;
             }
-            break;
-            case XML_TOK_SOURCE_QUERY_ATTR_QUERY_NAME :
-            {
-                pDataPilotTable->SetSourceObject(sValue);
-            }
-            break;
         }
     }
 }
@@ -728,62 +641,33 @@ ScXMLDPSourceQueryContext::~ScXMLDPSourceQueryContext()
 {
 }
 
-SvXMLImportContext *ScXMLDPSourceQueryContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDPSourceQueryContext::EndElement()
-{
-}
-
 ScXMLSourceServiceContext::ScXMLSourceServiceContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDataPilotTableContext* pTempDataPilotTable) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDataPilotTable(pTempDataPilotTable)
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDataPilotTableContext* pDataPilotTable) :
+    ScXMLImportContext( rImport )
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotTableSourceServiceAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_SERVICE_ATTR_NAME :
+            switch (aIter.getToken())
             {
-                pDataPilotTable->SetServiceName(sValue);
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    pDataPilotTable->SetServiceName(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_SOURCE_NAME ):
+                    pDataPilotTable->SetServiceSourceName(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_OBJECT_NAME ):
+                    pDataPilotTable->SetServiceSourceObject(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_USER_NAME ):
+                    pDataPilotTable->SetServiceUsername(aIter.toString());
+                break;
+                case XML_ELEMENT( TABLE, XML_PASSWORD ):
+                    pDataPilotTable->SetServicePassword(aIter.toString());
+                break;
             }
-            break;
-            case XML_TOK_SOURCE_SERVICE_ATTR_SOURCE_NAME :
-            {
-                pDataPilotTable->SetServiceSourceName(sValue);
-            }
-            break;
-            case XML_TOK_SOURCE_SERVICE_ATTR_OBJECT_NAME :
-            {
-                pDataPilotTable->SetServiceSourceObject(sValue);
-            }
-            break;
-            case XML_TOK_SOURCE_SERVICE_ATTR_USER_NAME :
-            {
-                pDataPilotTable->SetServiceUsername(sValue);
-            }
-            break;
-            case XML_TOK_SOURCE_SERVICE_ATTR_PASSWORD :
-            {
-                pDataPilotTable->SetServicePassword(sValue);
-            }
-            break;
         }
     }
 }
@@ -792,58 +676,38 @@ ScXMLSourceServiceContext::~ScXMLSourceServiceContext()
 {
 }
 
-SvXMLImportContext *ScXMLSourceServiceContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLSourceServiceContext::EndElement()
-{
-}
-
-ScXMLImport& ScXMLDataPilotGrandTotalContext::GetScImport()
-{
-    return static_cast<ScXMLImport&>(GetImport());
-}
-
 ScXMLDataPilotGrandTotalContext::ScXMLDataPilotGrandTotalContext(
-    ScXMLImport& rImport, sal_uInt16 nPrefix, const OUString& rLName, const Reference<XAttributeList>& xAttrList,
+    ScXMLImport& rImport, const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
     ScXMLDataPilotTableContext* pTableContext ) :
-    SvXMLImportContext( rImport, nPrefix, rLName ),
+    ScXMLImportContext( rImport ),
     mpTableContext(pTableContext),
     meOrientation(NONE),
     mbVisible(false)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotGrandTotalAttrTokenMap();
-    for (sal_Int16 i = 0; i < nAttrCount; ++i)
+    if ( rAttrList.is() )
     {
-        const OUString& rAttrName  = xAttrList->getNameByIndex(i);
-        const OUString& rAttrValue = xAttrList->getValueByIndex(i);
-
-        OUString aLocalName;
-        sal_uInt16 nLocalPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(rAttrName, &aLocalName);
-        switch (rAttrTokenMap.Get(nLocalPrefix, aLocalName))
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATA_PILOT_GRAND_TOTAL_ATTR_DISPLAY:
-                mbVisible = IsXMLToken(rAttrValue, XML_TRUE);
-            break;
-            case XML_TOK_DATA_PILOT_GRAND_TOTAL_ATTR_ORIENTATION:
-                if (IsXMLToken(rAttrValue, XML_BOTH))
-                    meOrientation = BOTH;
-                else if (IsXMLToken(rAttrValue, XML_ROW))
-                    meOrientation = ROW;
-                else if (IsXMLToken(rAttrValue, XML_COLUMN))
-                    meOrientation = COLUMN;
-            break;
-            case XML_TOK_DATA_PILOT_GRAND_TOTAL_ATTR_DISPLAY_NAME:
-            case XML_TOK_DATA_PILOT_GRAND_TOTAL_ATTR_DISPLAY_NAME_EXT:
-                maDisplayName = rAttrValue;
-            break;
-            default:
+            switch (aIter.getToken())
+            {
+                case XML_ELEMENT( TABLE, XML_DISPLAY ):
+                    mbVisible = IsXMLToken(aIter, XML_TRUE);
                 break;
+                case XML_ELEMENT( TABLE, XML_ORIENTATION ):
+                    if (IsXMLToken(aIter, XML_BOTH))
+                        meOrientation = BOTH;
+                    else if (IsXMLToken(aIter, XML_ROW))
+                        meOrientation = ROW;
+                    else if (IsXMLToken(aIter, XML_COLUMN))
+                        meOrientation = COLUMN;
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_NAME ):
+                case XML_ELEMENT( TABLE_EXT, XML_DISPLAY_NAME ):
+                    maDisplayName = aIter.toString();
+                break;
+                default:
+                    break;
+            }
         }
     }
 }
@@ -852,13 +716,7 @@ ScXMLDataPilotGrandTotalContext::~ScXMLDataPilotGrandTotalContext()
 {
 }
 
-SvXMLImportContext* ScXMLDataPilotGrandTotalContext::CreateChildContext(
-    sal_uInt16 nPrefix, const OUString& rLocalName, const Reference<XAttributeList>& /*xAttrList*/ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
-}
-
-void ScXMLDataPilotGrandTotalContext::EndElement()
+    void SAL_CALL ScXMLDataPilotGrandTotalContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     XMLTokenEnum eOrient = XML_NONE;
     switch (meOrientation)
@@ -879,36 +737,29 @@ void ScXMLDataPilotGrandTotalContext::EndElement()
 }
 
 ScXMLSourceCellRangeContext::ScXMLSourceCellRangeContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotTableContext* pTempDataPilotTable) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotTable(pTempDataPilotTable)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotTableSourceCellRangeAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_SOURCE_CELL_RANGE_ATTR_CELL_RANGE_ADDRESS :
+            switch (aIter.getToken())
             {
-                ScRange aSourceRangeAddress;
-                sal_Int32 nOffset(0);
-                if (ScRangeStringConverter::GetRangeFromString( aSourceRangeAddress, sValue, GetScImport().GetDocument(), ::formula::FormulaGrammar::CONV_OOO, nOffset ))
-                    pDataPilotTable->SetSourceCellRangeAddress(aSourceRangeAddress);
+                case XML_ELEMENT( TABLE, XML_CELL_RANGE_ADDRESS ):
+                {
+                    ScRange aSourceRangeAddress;
+                    sal_Int32 nOffset(0);
+                    if (ScRangeStringConverter::GetRangeFromString( aSourceRangeAddress, aIter.toString(), GetScImport().GetDocument(), ::formula::FormulaGrammar::CONV_OOO, nOffset ))
+                        pDataPilotTable->SetSourceCellRangeAddress(aSourceRangeAddress);
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    pDataPilotTable->SetSourceRangeName(aIter.toString());
+                break;
             }
-            break;
-            case XML_TOK_SOURCE_CELL_RANGE_ATTR_NAME:
-                pDataPilotTable->SetSourceRangeName(sValue);
-            break;
         }
     }
 }
@@ -917,46 +768,39 @@ ScXMLSourceCellRangeContext::~ScXMLSourceCellRangeContext()
 {
 }
 
-SvXMLImportContext *ScXMLSourceCellRangeContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<
-                                          css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLSourceCellRangeContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotTableSourceCellRangeElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_SOURCE_CELL_RANGE_ELEM_FILTER :
-            pContext = new ScXMLDPFilterContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotTable);
+        case XML_ELEMENT( TABLE, XML_FILTER ):
+            pContext = new ScXMLDPFilterContext(GetScImport(), pAttribList, pDataPilotTable);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLSourceCellRangeContext::EndElement()
-{
-}
-
 ScXMLDataPilotFieldContext::ScXMLDataPilotFieldContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotTableContext* pTempDataPilotTable) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotTable(pTempDataPilotTable),
-    pDim(nullptr),
+    xDim(),
     fStart(0.0),
     fEnd(0.0),
     fStep(0.0),
     nUsedHierarchy(1),
     nGroupPart(0),
-    nFunction(0),
-    nOrientation(0),
+    nFunction(ScGeneralFunction::NONE),
+    nOrientation(sheet::DataPilotFieldOrientation_HIDDEN),
     bSelectedPage(false),
     bIsGroupField(false),
     bDateValue(false),
@@ -968,61 +812,40 @@ ScXMLDataPilotFieldContext::ScXMLDataPilotFieldContext( ScXMLImport& rImport,
     bool bDataLayout = false;
     bool bIgnoreSelectedPage = false;
     OUString aDisplayName;
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotFieldAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_SOURCE_FIELD_NAME :
+            switch (aIter.getToken())
             {
-                sName = sValue;
-                bHasName = true;
+                case XML_ELEMENT( TABLE, XML_SOURCE_FIELD_NAME ):
+                    sName = aIter.toString();
+                    bHasName = true;
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_NAME ):
+                case XML_ELEMENT( TABLE_EXT, XML_DISPLAY_NAME ):
+                    aDisplayName = aIter.toString();
+                break;
+                case XML_ELEMENT( TABLE, XML_IS_DATA_LAYOUT_FIELD ):
+                    bDataLayout = IsXMLToken(aIter, XML_TRUE);
+                break;
+                case XML_ELEMENT( TABLE, XML_FUNCTION ):
+                    nFunction = ScXMLConverter::GetFunctionFromString2( aIter.toString() );
+                break;
+                case XML_ELEMENT( TABLE, XML_ORIENTATION ):
+                    nOrientation = ScXMLConverter::GetOrientationFromString( aIter.toString() );
+                break;
+                case XML_ELEMENT( TABLE, XML_SELECTED_PAGE ):
+                    sSelectedPage = aIter.toString();
+                    bSelectedPage = true;
+                break;
+                case XML_ELEMENT( LO_EXT, XML_IGNORE_SELECTED_PAGE ):
+                    bIgnoreSelectedPage = true;
+                break;
+                case XML_ELEMENT( TABLE, XML_USED_HIERARCHY ):
+                    nUsedHierarchy = aIter.toInt32();
+                break;
             }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_DISPLAY_NAME:
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_DISPLAY_NAME_EXT:
-            {
-                aDisplayName = sValue;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_IS_DATA_LAYOUT_FIELD :
-            {
-                bDataLayout = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_FUNCTION :
-            {
-                nFunction = (sal_Int16) ScXMLConverter::GetFunctionFromString( sValue );
-            }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_ORIENTATION :
-            {
-                nOrientation = (sal_Int16) ScXMLConverter::GetOrientationFromString( sValue );
-            }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_SELECTED_PAGE :
-            {
-                sSelectedPage = sValue;
-                bSelectedPage = true;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_IGNORE_SELECTED_PAGE:
-            {
-                bIgnoreSelectedPage = true;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_FIELD_ATTR_USED_HIERARCHY :
-            {
-                nUsedHierarchy = sValue.toInt32();
-            }
-            break;
         }
     }
 
@@ -1032,9 +855,9 @@ ScXMLDataPilotFieldContext::ScXMLDataPilotFieldContext( ScXMLImport& rImport,
 
     if (bHasName)
     {
-        pDim = new ScDPSaveDimension(sName, bDataLayout);
+        xDim.reset(new ScDPSaveDimension(sName, bDataLayout));
         if (!aDisplayName.isEmpty())
-            pDim->SetLayoutName(aDisplayName);
+            xDim->SetLayoutName(aDisplayName);
     }
 }
 
@@ -1042,49 +865,48 @@ ScXMLDataPilotFieldContext::~ScXMLDataPilotFieldContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotFieldContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotFieldContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotFieldElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATA_PILOT_FIELD_ELEM_DATA_PILOT_LEVEL :
-            pContext = new ScXMLDataPilotLevelContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_LEVEL ):
+            pContext = new ScXMLDataPilotLevelContext(GetScImport(), pAttribList, this);
         break;
-        case XML_TOK_DATA_PILOT_FIELD_ELEM_DATA_PILOT_REFERENCE :
-            pContext = new ScXMLDataPilotFieldReferenceContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_FIELD_REFERENCE ):
+            pContext = new ScXMLDataPilotFieldReferenceContext(GetScImport(), pAttribList, this);
         break;
-        case XML_TOK_DATA_PILOT_FIELD_ELEM_DATA_PILOT_GROUPS :
-            pContext = new ScXMLDataPilotGroupsContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_GROUPS ):
+            pContext = new ScXMLDataPilotGroupsContext(GetScImport(), pAttribList, this);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDataPilotFieldContext::AddMember(ScDPSaveMember* pMember)
+void ScXMLDataPilotFieldContext::AddMember(std::unique_ptr<ScDPSaveMember> pMember)
 {
-    if (pDim)
+    if (xDim)
     {
-        pDim->AddMember(pMember);
-        if (!pMember->GetIsVisible())
+        bool isVisible = pMember->GetIsVisible();
+        xDim->AddMember(std::move(pMember));
+        if (!isVisible)
             // This member is hidden.
             mbHasHiddenMember = true;
     }
-    else
-        delete pMember;
 }
 
 void ScXMLDataPilotFieldContext::SetSubTotalName(const OUString& rName)
 {
-    if (pDim)
-        pDim->SetSubtotalName(rName);
+    if (xDim)
+        xDim->SetSubtotalName(rName);
 }
 
 void ScXMLDataPilotFieldContext::AddGroup(const ::std::vector<OUString>& rMembers, const OUString& rName)
@@ -1095,18 +917,18 @@ void ScXMLDataPilotFieldContext::AddGroup(const ::std::vector<OUString>& rMember
     aGroups.push_back(aGroup);
 }
 
-void ScXMLDataPilotFieldContext::EndElement()
+void SAL_CALL ScXMLDataPilotFieldContext::endFastElement( sal_Int32 /*nElement*/ )
 {
-    if (pDim)
+    if (xDim)
     {
-        pDim->SetUsedHierarchy(nUsedHierarchy);
-        pDim->SetFunction(nFunction);
-        pDim->SetOrientation(nOrientation);
+        xDim->SetUsedHierarchy(nUsedHierarchy);
+        xDim->SetFunction(nFunction);
+        xDim->SetOrientation(nOrientation);
         if (bSelectedPage)
         {
-            pDataPilotTable->SetSelectedPage(pDim->GetName(), sSelectedPage);
+            pDataPilotTable->SetSelectedPage(xDim->GetName(), sSelectedPage);
         }
-        pDataPilotTable->AddDimension(pDim);
+        pDataPilotTable->AddDimension(xDim.release());
         if (bIsGroupField)
         {
             ScDPNumGroupInfo aInfo;
@@ -1124,19 +946,13 @@ void ScXMLDataPilotFieldContext::EndElement()
                     aGroupDim.SetDateInfo(aInfo, nGroupPart);
                 else
                 {
-                    ::std::vector<ScXMLDataPilotGroup>::const_iterator aItr(aGroups.begin());
-                    ::std::vector<ScXMLDataPilotGroup>::const_iterator aEndItr(aGroups.end());
-                    while (aItr != aEndItr)
+                    for (const auto& rGroup : aGroups)
                     {
-                        ScDPSaveGroupItem aItem(aItr->aName);
-                        ::std::vector<OUString>::const_iterator aMembersItr(aItr->aMembers.begin());
-                        ::std::vector<OUString>::const_iterator aMembersEndItr(aItr->aMembers.end());
-                        while (aMembersItr != aMembersEndItr)
+                        ScDPSaveGroupItem aItem(rGroup.aName);
+                        for (const auto& rMember : rGroup.aMembers)
                         {
-                            aItem.AddElement(*aMembersItr);
-                            ++aMembersItr;
+                            aItem.AddElement(rMember);
                         }
-                        ++aItr;
                         aGroupDim.AddGroupItem(aItem);
                     }
                 }
@@ -1153,62 +969,61 @@ void ScXMLDataPilotFieldContext::EndElement()
     }
 }
 
-ScXMLDataPilotFieldReferenceContext::ScXMLDataPilotFieldReferenceContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const uno::Reference<xml::sax::XAttributeList>& xAttrList,
+ScXMLDataPilotFieldReferenceContext::ScXMLDataPilotFieldReferenceContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDataPilotFieldContext* pDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     sheet::DataPilotFieldReference aReference;
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue(xAttrList->getValueByIndex( i ));
-
-        if ( nPrefix == XML_NAMESPACE_TABLE )
+        for (auto &aIter : *rAttrList)
         {
-            if (IsXMLToken(aLocalName, XML_TYPE))
+            switch (aIter.getToken())
             {
-                if (IsXMLToken(sValue, XML_NONE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::NONE;
-                else if (IsXMLToken(sValue, XML_MEMBER_DIFFERENCE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE;
-                else if (IsXMLToken(sValue, XML_MEMBER_PERCENTAGE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE;
-                else if (IsXMLToken(sValue, XML_MEMBER_PERCENTAGE_DIFFERENCE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE;
-                else if (IsXMLToken(sValue, XML_RUNNING_TOTAL))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::RUNNING_TOTAL;
-                else if (IsXMLToken(sValue, XML_ROW_PERCENTAGE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ROW_PERCENTAGE;
-                else if (IsXMLToken(sValue, XML_COLUMN_PERCENTAGE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::COLUMN_PERCENTAGE;
-                else if (IsXMLToken(sValue, XML_TOTAL_PERCENTAGE))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::TOTAL_PERCENTAGE;
-                else if (IsXMLToken(sValue, XML_INDEX))
-                    aReference.ReferenceType = sheet::DataPilotFieldReferenceType::INDEX;
-            }
-            else if (IsXMLToken(aLocalName, XML_FIELD_NAME))
-            {
-                aReference.ReferenceField = sValue;
-            }
-            else if (IsXMLToken(aLocalName, XML_MEMBER_TYPE))
-            {
-                if (IsXMLToken(sValue, XML_NAMED))
-                    aReference.ReferenceItemType = sheet::DataPilotFieldReferenceItemType::NAMED;
-                else if (IsXMLToken(sValue, XML_PREVIOUS))
-                    aReference.ReferenceItemType = sheet::DataPilotFieldReferenceItemType::PREVIOUS;
-                else if (IsXMLToken(sValue, XML_NEXT))
-                    aReference.ReferenceItemType = sheet::DataPilotFieldReferenceItemType::NEXT;
-            }
-            else if (IsXMLToken(aLocalName, XML_MEMBER_NAME))
-            {
-                aReference.ReferenceItemName = sValue;
+                case XML_ELEMENT( TABLE, XML_TYPE ):
+                {
+                    if (IsXMLToken(aIter, XML_NONE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::NONE;
+                    else if (IsXMLToken(aIter, XML_MEMBER_DIFFERENCE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE;
+                    else if (IsXMLToken(aIter, XML_MEMBER_PERCENTAGE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE;
+                    else if (IsXMLToken(aIter, XML_MEMBER_PERCENTAGE_DIFFERENCE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE;
+                    else if (IsXMLToken(aIter, XML_RUNNING_TOTAL))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::RUNNING_TOTAL;
+                    else if (IsXMLToken(aIter, XML_ROW_PERCENTAGE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::ROW_PERCENTAGE;
+                    else if (IsXMLToken(aIter, XML_COLUMN_PERCENTAGE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::COLUMN_PERCENTAGE;
+                    else if (IsXMLToken(aIter, XML_TOTAL_PERCENTAGE))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::TOTAL_PERCENTAGE;
+                    else if (IsXMLToken(aIter, XML_INDEX))
+                        aReference.ReferenceType = sheet::DataPilotFieldReferenceType::INDEX;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_FIELD_NAME ):
+                {
+                    aReference.ReferenceField = aIter.toString();
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_MEMBER_TYPE ):
+                {
+                    if (IsXMLToken(aIter, XML_NAMED))
+                        aReference.ReferenceItemType = sheet::DataPilotFieldReferenceItemType::NAMED;
+                    else if (IsXMLToken(aIter, XML_PREVIOUS))
+                        aReference.ReferenceItemType = sheet::DataPilotFieldReferenceItemType::PREVIOUS;
+                    else if (IsXMLToken(aIter, XML_NEXT))
+                        aReference.ReferenceItemType = sheet::DataPilotFieldReferenceItemType::NEXT;
+                }
+                break;
+                case XML_ELEMENT( TABLE, XML_MEMBER_NAME ):
+                {
+                    aReference.ReferenceItemName = aIter.toString();
+                }
+                break;
             }
         }
     }
@@ -1220,35 +1035,24 @@ ScXMLDataPilotFieldReferenceContext::~ScXMLDataPilotFieldReferenceContext()
 }
 
 ScXMLDataPilotLevelContext::ScXMLDataPilotLevelContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotFieldContext* pTempDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotField(pTempDataPilotField)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotLevelAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATA_PILOT_LEVEL_ATTR_SHOW_EMPTY :
+            switch (aIter.getToken())
             {
-                pDataPilotField->SetShowEmpty(IsXMLToken(sValue, XML_TRUE));
+                case XML_ELEMENT( TABLE, XML_SHOW_EMPTY ):
+                    pDataPilotField->SetShowEmpty(IsXMLToken(aIter, XML_TRUE));
+                break;
+                case XML_ELEMENT( CALC_EXT, XML_REPEAT_ITEM_LABELS ):
+                    pDataPilotField->SetRepeatItemLabels(IsXMLToken(aIter, XML_TRUE));
+                break;
             }
-            break;
-            case XML_TOK_DATA_PILOT_LEVEL_ATTR_REPEAT_ITEM_LABELS :
-            {
-                pDataPilotField->SetRepeatItemLabels(IsXMLToken(sValue, XML_TRUE));
-            }
-            break;
         }
     }
 }
@@ -1257,82 +1061,69 @@ ScXMLDataPilotLevelContext::~ScXMLDataPilotLevelContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotLevelContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotLevelContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotLevelElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATA_PILOT_LEVEL_ELEM_DATA_PILOT_SUBTOTALS :
-            pContext = new ScXMLDataPilotSubTotalsContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotField);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_SUBTOTALS ):
+            pContext = new ScXMLDataPilotSubTotalsContext(GetScImport(), pDataPilotField);
         break;
-        case XML_TOK_DATA_PILOT_LEVEL_ELEM_DATA_PILOT_MEMBERS :
-            pContext = new ScXMLDataPilotMembersContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotField);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_MEMBERS ):
+            pContext = new ScXMLDataPilotMembersContext(GetScImport(), pDataPilotField);
         break;
-        case XML_TOK_DATA_PILOT_FIELD_ELEM_DATA_PILOT_DISPLAY_INFO :
-            pContext = new ScXMLDataPilotDisplayInfoContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotField);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_DISPLAY_INFO ):
+            pContext = new ScXMLDataPilotDisplayInfoContext(GetScImport(), pAttribList, pDataPilotField);
         break;
-        case XML_TOK_DATA_PILOT_FIELD_ELEM_DATA_PILOT_SORT_INFO :
-            pContext = new ScXMLDataPilotSortInfoContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotField);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_SORT_INFO ):
+            pContext = new ScXMLDataPilotSortInfoContext(GetScImport(), pAttribList, pDataPilotField);
         break;
-        case XML_TOK_DATA_PILOT_FIELD_ELEM_DATA_PILOT_LAYOUT_INFO :
-            pContext = new ScXMLDataPilotLayoutInfoContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotField);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_LAYOUT_INFO ):
+            pContext = new ScXMLDataPilotLayoutInfoContext(GetScImport(), pAttribList, pDataPilotField);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDataPilotLevelContext::EndElement()
-{
-}
-
-ScXMLDataPilotDisplayInfoContext::ScXMLDataPilotDisplayInfoContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+ScXMLDataPilotDisplayInfoContext::ScXMLDataPilotDisplayInfoContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDataPilotFieldContext* pDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     sheet::DataPilotFieldAutoShowInfo aInfo;
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue(xAttrList->getValueByIndex( i ));
-
-        if ( nPrefix == XML_NAMESPACE_TABLE )
+        for (auto &aIter : *rAttrList)
         {
-            if (IsXMLToken(aLocalName, XML_ENABLED))
+            switch (aIter.getToken())
             {
-                if (IsXMLToken(sValue, XML_TRUE))
-                    aInfo.IsEnabled = sal_True;
-                else
-                    aInfo.IsEnabled = false;
-            }
-            else if (IsXMLToken(aLocalName, XML_DISPLAY_MEMBER_MODE))
-            {
-                if (IsXMLToken(sValue, XML_FROM_TOP))
-                    aInfo.ShowItemsMode = sheet::DataPilotFieldShowItemsMode::FROM_TOP;
-                else if (IsXMLToken(sValue, XML_FROM_BOTTOM))
-                    aInfo.ShowItemsMode = sheet::DataPilotFieldShowItemsMode::FROM_BOTTOM;
-            }
-            else if (IsXMLToken(aLocalName, XML_MEMBER_COUNT))
-            {
-                aInfo.ItemCount = sValue.toInt32();
-            }
-            else if (IsXMLToken(aLocalName, XML_DATA_FIELD))
-            {
-                aInfo.DataField = sValue;
+                case XML_ELEMENT( TABLE, XML_ENABLED ):
+                    if (IsXMLToken(aIter, XML_TRUE))
+                        aInfo.IsEnabled = true;
+                    else
+                        aInfo.IsEnabled = false;
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_MEMBER_MODE ):
+                    if (IsXMLToken(aIter, XML_FROM_TOP))
+                        aInfo.ShowItemsMode = sheet::DataPilotFieldShowItemsMode::FROM_TOP;
+                    else if (IsXMLToken(aIter, XML_FROM_BOTTOM))
+                        aInfo.ShowItemsMode = sheet::DataPilotFieldShowItemsMode::FROM_BOTTOM;
+                break;
+                case XML_ELEMENT( TABLE, XML_MEMBER_COUNT ):
+                    aInfo.ItemCount = aIter.toInt32();
+                break;
+                case XML_ELEMENT( TABLE, XML_DATA_FIELD ):
+                    aInfo.DataField = aIter.toString();
+                break;
             }
         }
     }
@@ -1343,45 +1134,39 @@ ScXMLDataPilotDisplayInfoContext::~ScXMLDataPilotDisplayInfoContext()
 {
 }
 
-ScXMLDataPilotSortInfoContext::ScXMLDataPilotSortInfoContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+ScXMLDataPilotSortInfoContext::ScXMLDataPilotSortInfoContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDataPilotFieldContext* pDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     sheet::DataPilotFieldSortInfo aInfo;
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue(xAttrList->getValueByIndex( i ));
-
-        if ( nPrefix == XML_NAMESPACE_TABLE )
+        for (auto &aIter : *rAttrList)
         {
-            if (IsXMLToken(aLocalName, XML_ORDER))
+            switch (aIter.getToken())
             {
-                if (IsXMLToken(sValue, XML_ASCENDING))
-                    aInfo.IsAscending = sal_True;
-                else if (IsXMLToken(sValue, XML_DESCENDING))
-                    aInfo.IsAscending = false;
+                case XML_ELEMENT( TABLE, XML_ORDER ):
+                    if (IsXMLToken(aIter, XML_ASCENDING))
+                        aInfo.IsAscending = true;
+                    else if (IsXMLToken(aIter, XML_DESCENDING))
+                        aInfo.IsAscending = false;
+                break;
+                case XML_ELEMENT( TABLE, XML_SORT_MODE ):
+                    if (IsXMLToken(aIter, XML_NONE))
+                        aInfo.Mode = sheet::DataPilotFieldSortMode::NONE;
+                    else if (IsXMLToken(aIter, XML_MANUAL))
+                        aInfo.Mode = sheet::DataPilotFieldSortMode::MANUAL;
+                    else if (IsXMLToken(aIter, XML_NAME))
+                        aInfo.Mode = sheet::DataPilotFieldSortMode::NAME;
+                    else if (IsXMLToken(aIter, XML_DATA))
+                        aInfo.Mode = sheet::DataPilotFieldSortMode::DATA;
+                break;
+                case XML_ELEMENT( TABLE, XML_DATA_FIELD ):
+                    aInfo.Field = aIter.toString();
+                break;
             }
-            else if (IsXMLToken(aLocalName, XML_SORT_MODE))
-            {
-                if (IsXMLToken(sValue, XML_NONE))
-                    aInfo.Mode = sheet::DataPilotFieldSortMode::NONE;
-                else if (IsXMLToken(sValue, XML_MANUAL))
-                    aInfo.Mode = sheet::DataPilotFieldSortMode::MANUAL;
-                else if (IsXMLToken(sValue, XML_NAME))
-                    aInfo.Mode = sheet::DataPilotFieldSortMode::NAME;
-                else if (IsXMLToken(sValue, XML_DATA))
-                    aInfo.Mode = sheet::DataPilotFieldSortMode::DATA;
-            }
-            else if (IsXMLToken(aLocalName, XML_DATA_FIELD))
-                aInfo.Field = sValue;
         }
     }
     pDataPilotField->SetSortInfo(aInfo);
@@ -1391,40 +1176,33 @@ ScXMLDataPilotSortInfoContext::~ScXMLDataPilotSortInfoContext()
 {
 }
 
-ScXMLDataPilotLayoutInfoContext::ScXMLDataPilotLayoutInfoContext( ScXMLImport& rImport, sal_uInt16 nPrfx,
-                        const OUString& rLName,
-                        const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+ScXMLDataPilotLayoutInfoContext::ScXMLDataPilotLayoutInfoContext( ScXMLImport& rImport,
+                        const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                         ScXMLDataPilotFieldContext* pDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+    ScXMLImportContext( rImport )
 {
     sheet::DataPilotFieldLayoutInfo aInfo;
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue(xAttrList->getValueByIndex( i ));
-
-        if ( nPrefix == XML_NAMESPACE_TABLE )
+        for (auto &aIter : *rAttrList)
         {
-            if (IsXMLToken(aLocalName, XML_ADD_EMPTY_LINES))
+            switch (aIter.getToken())
             {
-                if (IsXMLToken(sValue, XML_TRUE))
-                    aInfo.AddEmptyLines = sal_True;
-                else
-                    aInfo.AddEmptyLines = false;
-            }
-            else if (IsXMLToken(aLocalName, XML_LAYOUT_MODE))
-            {
-                if (IsXMLToken(sValue, XML_TABULAR_LAYOUT))
-                    aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::TABULAR_LAYOUT;
-                else if (IsXMLToken(sValue, XML_OUTLINE_SUBTOTALS_TOP))
-                    aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::OUTLINE_SUBTOTALS_TOP;
-                else if (IsXMLToken(sValue, XML_OUTLINE_SUBTOTALS_BOTTOM))
-                    aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::OUTLINE_SUBTOTALS_BOTTOM;
+                case XML_ELEMENT( TABLE, XML_ADD_EMPTY_LINES ):
+                    if (IsXMLToken(aIter, XML_TRUE))
+                        aInfo.AddEmptyLines = true;
+                    else
+                        aInfo.AddEmptyLines = false;
+                break;
+                case XML_ELEMENT( TABLE, XML_LAYOUT_MODE ):
+                    if (IsXMLToken(aIter, XML_TABULAR_LAYOUT))
+                        aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::TABULAR_LAYOUT;
+                    else if (IsXMLToken(aIter, XML_OUTLINE_SUBTOTALS_TOP))
+                        aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::OUTLINE_SUBTOTALS_TOP;
+                    else if (IsXMLToken(aIter, XML_OUTLINE_SUBTOTALS_BOTTOM))
+                        aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::OUTLINE_SUBTOTALS_BOTTOM;
+                break;
             }
         }
     }
@@ -1435,14 +1213,9 @@ ScXMLDataPilotLayoutInfoContext::~ScXMLDataPilotLayoutInfoContext()
 }
 
 ScXMLDataPilotSubTotalsContext::ScXMLDataPilotSubTotalsContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */,
                                       ScXMLDataPilotFieldContext* pTempDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDataPilotField(pTempDataPilotField),
-    nFunctionCount(0),
-    pFunctions(nullptr)
+    ScXMLImportContext( rImport ),
+    pDataPilotField(pTempDataPilotField)
 {
 
     // has no attributes
@@ -1450,54 +1223,38 @@ ScXMLDataPilotSubTotalsContext::ScXMLDataPilotSubTotalsContext( ScXMLImport& rIm
 
 ScXMLDataPilotSubTotalsContext::~ScXMLDataPilotSubTotalsContext()
 {
-    delete[] pFunctions;
 }
 
-SvXMLImportContext *ScXMLDataPilotSubTotalsContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotSubTotalsContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotSubTotalsElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATA_PILOT_SUBTOTALS_ELEM_DATA_PILOT_SUBTOTAL :
-            pContext = new ScXMLDataPilotSubTotalContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_SUBTOTAL ):
+            pContext = new ScXMLDataPilotSubTotalContext(GetScImport(), pAttribList, this);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDataPilotSubTotalsContext::EndElement()
+void SAL_CALL ScXMLDataPilotSubTotalsContext::endFastElement( sal_Int32 /*nElement*/ )
 {
-    pDataPilotField->SetSubTotals(pFunctions, nFunctionCount);
+    pDataPilotField->SetSubTotals(maFunctions);
     if (!maDisplayName.isEmpty())
         pDataPilotField->SetSubTotalName(maDisplayName);
 }
 
-void ScXMLDataPilotSubTotalsContext::AddFunction(sal_Int16 nFunction)
+void ScXMLDataPilotSubTotalsContext::AddFunction(ScGeneralFunction nFunction)
 {
-    if (nFunctionCount)
-    {
-        ++nFunctionCount;
-        sal_uInt16* pTemp = new sal_uInt16[nFunctionCount];
-        for (sal_Int16 i = 0; i < nFunctionCount - 1; ++i)
-            pTemp[i] = pFunctions[i];
-        pTemp[nFunctionCount - 1] = nFunction;
-        delete[] pFunctions;
-        pFunctions = pTemp;
-    }
-    else
-    {
-        nFunctionCount = 1;
-        pFunctions = new sal_uInt16[nFunctionCount];
-        pFunctions[0] = nFunction;
-    }
+    maFunctions.push_back(nFunction);
 }
 
 void ScXMLDataPilotSubTotalsContext::SetDisplayName(const OUString& rName)
@@ -1506,35 +1263,24 @@ void ScXMLDataPilotSubTotalsContext::SetDisplayName(const OUString& rName)
 }
 
 ScXMLDataPilotSubTotalContext::ScXMLDataPilotSubTotalContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
-                                      ScXMLDataPilotSubTotalsContext* pTempDataPilotSubTotals) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
-    pDataPilotSubTotals(pTempDataPilotSubTotals)
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
+                                      ScXMLDataPilotSubTotalsContext* pDataPilotSubTotals) :
+    ScXMLImportContext( rImport )
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotSubTotalAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATA_PILOT_SUBTOTAL_ATTR_FUNCTION :
+            switch (aIter.getToken())
             {
-                pDataPilotSubTotals->AddFunction( sal::static_int_cast<sal_Int16>(
-                                ScXMLConverter::GetFunctionFromString( sValue ) ) );
+                case XML_ELEMENT( TABLE, XML_FUNCTION ):
+                    pDataPilotSubTotals->AddFunction( ScXMLConverter::GetFunctionFromString2( aIter.toString() ) );
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_NAME ):
+                case XML_ELEMENT( TABLE_EXT, XML_DISPLAY_NAME ):
+                    pDataPilotSubTotals->SetDisplayName(aIter.toString());
+                break;
             }
-            break;
-            case XML_TOK_DATA_PILOT_SUBTOTAL_ATTR_DISPLAY_NAME:
-            case XML_TOK_DATA_PILOT_SUBTOTAL_ATTR_DISPLAY_NAME_EXT:
-                pDataPilotSubTotals->SetDisplayName(sValue);
-            break;
         }
     }
 }
@@ -1543,23 +1289,9 @@ ScXMLDataPilotSubTotalContext::~ScXMLDataPilotSubTotalContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotSubTotalContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDataPilotSubTotalContext::EndElement()
-{
-}
-
 ScXMLDataPilotMembersContext::ScXMLDataPilotMembersContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */,
                                       ScXMLDataPilotFieldContext* pTempDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotField(pTempDataPilotField)
 {
     // has no attributes
@@ -1569,76 +1301,56 @@ ScXMLDataPilotMembersContext::~ScXMLDataPilotMembersContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotMembersContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<
-                                          css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotMembersContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    const SvXMLTokenMap& rTokenMap = GetScImport().GetDataPilotMembersElemTokenMap();
-    switch( rTokenMap.Get( nPrefix, rLName ) )
+    switch (nElement)
     {
-        case XML_TOK_DATA_PILOT_MEMBERS_ELEM_DATA_PILOT_MEMBER :
-            pContext = new ScXMLDataPilotMemberContext(GetScImport(), nPrefix, rLName, xAttrList, pDataPilotField);
+        case XML_ELEMENT( TABLE, XML_DATA_PILOT_MEMBER ):
+            pContext = new ScXMLDataPilotMemberContext(GetScImport(), pAttribList, pDataPilotField);
         break;
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDataPilotMembersContext::EndElement()
-{
-}
-
 ScXMLDataPilotMemberContext::ScXMLDataPilotMemberContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotFieldContext* pTempDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotField(pTempDataPilotField),
     bDisplay( true ),
     bDisplayDetails( true ),
     bHasName( false )
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    const SvXMLTokenMap& rAttrTokenMap = GetScImport().GetDataPilotMemberAttrTokenMap();
-    for( sal_Int16 i=0; i < nAttrCount; ++i )
+    if ( rAttrList.is() )
     {
-        const OUString& sAttrName(xAttrList->getNameByIndex( i ));
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        const OUString& sValue(xAttrList->getValueByIndex( i ));
-
-        switch( rAttrTokenMap.Get( nPrefix, aLocalName ) )
+        for (auto &aIter : *rAttrList)
         {
-            case XML_TOK_DATA_PILOT_MEMBER_ATTR_NAME :
+            switch (aIter.getToken())
             {
-                sName = sValue;
-                bHasName = true;
+                case XML_ELEMENT( TABLE, XML_NAME ):
+                    sName = aIter.toString();
+                    bHasName = true;
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY_NAME ):
+                case XML_ELEMENT( TABLE_EXT, XML_DISPLAY_NAME ):
+                    maDisplayName = aIter.toString();
+                break;
+                case XML_ELEMENT( TABLE, XML_DISPLAY ):
+                    bDisplay = IsXMLToken(aIter, XML_TRUE);
+                break;
+                case XML_ELEMENT( TABLE, XML_SHOW_DETAILS ):
+                    bDisplayDetails = IsXMLToken(aIter, XML_TRUE);
+                break;
             }
-            break;
-            case XML_TOK_DATA_PILOT_MEMBER_ATTR_DISPLAY_NAME:
-            case XML_TOK_DATA_PILOT_MEMBER_ATTR_DISPLAY_NAME_EXT:
-            {
-                maDisplayName = sValue;
-            }
-            break;
-            case XML_TOK_DATA_PILOT_MEMBER_ATTR_DISPLAY :
-            {
-                bDisplay = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
-            case XML_TOK_DATA_PILOT_MEMBER_ATTR_SHOW_DETAILS :
-            {
-                bDisplayDetails = IsXMLToken(sValue, XML_TRUE);
-            }
-            break;
         }
     }
 }
@@ -1647,32 +1359,23 @@ ScXMLDataPilotMemberContext::~ScXMLDataPilotMemberContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotMemberContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDataPilotMemberContext::EndElement()
+void SAL_CALL ScXMLDataPilotMemberContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (bHasName)   // #i53407# don't check sName, empty name is allowed
     {
-        ScDPSaveMember* pMember = new ScDPSaveMember(sName);
+        std::unique_ptr<ScDPSaveMember> pMember(new ScDPSaveMember(sName));
         if (!maDisplayName.isEmpty())
             pMember->SetLayoutName(maDisplayName);
         pMember->SetIsVisible(bDisplay);
         pMember->SetShowDetails(bDisplayDetails);
-        pDataPilotField->AddMember(pMember);
+        pDataPilotField->AddMember(std::move(pMember));
     }
 }
 
 ScXMLDataPilotGroupsContext::ScXMLDataPilotGroupsContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotFieldContext* pTempDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotField(pTempDataPilotField)
 {
     OUString                sGroupSource;
@@ -1684,81 +1387,87 @@ ScXMLDataPilotGroupsContext::ScXMLDataPilotGroupsContext( ScXMLImport& rImport,
     bool                    bAutoStart(true);
     bool                    bAutoEnd(true);
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName = xAttrList->getNameByIndex( i );
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue = xAttrList->getValueByIndex( i );
-
-        (void)nPrefix;  //! compare below!
-
-        if (IsXMLToken(aLocalName, XML_SOURCE_FIELD_NAME))
-                sGroupSource = sValue;
-        else if (IsXMLToken(aLocalName, XML_DATE_START))
+        for (auto &aIter : *rAttrList)
         {
-            bDateValue = true;
-            if (IsXMLToken(sValue, XML_AUTO))
-                bAutoStart = true;
-            else
+            switch (aIter.getToken() & TOKEN_MASK)
             {
-                GetScImport().GetMM100UnitConverter().convertDateTime(fStart, sValue);
-                bAutoStart = false;
+                case XML_SOURCE_FIELD_NAME :
+                {
+                    sGroupSource = aIter.toString();
+                }
+                break;
+                case XML_DATE_START :
+                {
+                    bDateValue = true;
+                    if (IsXMLToken(aIter, XML_AUTO))
+                        bAutoStart = true;
+                    else
+                    {
+                        GetScImport().GetMM100UnitConverter().convertDateTime(fStart, aIter.toString());
+                        bAutoStart = false;
+                    }
+                }
+                break;
+                case XML_DATE_END :
+                {
+                    bDateValue = true;
+                    if (IsXMLToken(aIter, XML_AUTO))
+                        bAutoEnd = true;
+                    else
+                    {
+                        GetScImport().GetMM100UnitConverter().convertDateTime(fEnd, aIter.toString());
+                        bAutoEnd = false;
+                    }
+                }
+                break;
+                case XML_START :
+                {
+                    if (IsXMLToken(aIter, XML_AUTO))
+                        bAutoStart = true;
+                    else
+                    {
+                        fStart = aIter.toDouble();
+                        bAutoStart = false;
+                    }
+                }
+                break;
+                case XML_END :
+                {
+                    if (IsXMLToken(aIter, XML_AUTO))
+                        bAutoEnd = true;
+                    else
+                    {
+                        fEnd = aIter.toDouble();
+                        bAutoEnd = false;
+                    }
+                }
+                break;
+                case XML_STEP :
+                {
+                    fStep = aIter.toDouble();
+                }
+                break;
+                case XML_GROUPED_BY :
+                {
+                    if (IsXMLToken(aIter, XML_SECONDS))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::SECONDS;
+                    else if (IsXMLToken(aIter, XML_MINUTES))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::MINUTES;
+                    else if (IsXMLToken(aIter, XML_HOURS))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::HOURS;
+                    else if (IsXMLToken(aIter, XML_DAYS))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::DAYS;
+                    else if (IsXMLToken(aIter, XML_MONTHS))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::MONTHS;
+                    else if (IsXMLToken(aIter, XML_QUARTERS))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::QUARTERS;
+                    else if (IsXMLToken(aIter, XML_YEARS))
+                        nGroupPart = css::sheet::DataPilotFieldGroupBy::YEARS;
+                }
+                break;
             }
-        }
-        else if (IsXMLToken(aLocalName, XML_DATE_END))
-        {
-            bDateValue = true;
-            if (IsXMLToken(sValue, XML_AUTO))
-                bAutoEnd = true;
-            else
-            {
-                GetScImport().GetMM100UnitConverter().convertDateTime(fEnd, sValue);
-                bAutoEnd = false;
-            }
-        }
-        else if (IsXMLToken(aLocalName, XML_START))
-        {
-            if (IsXMLToken(sValue, XML_AUTO))
-                bAutoStart = true;
-            else
-            {
-                ::sax::Converter::convertDouble(fStart, sValue);
-                bAutoStart = false;
-            }
-        }
-        else if (IsXMLToken(aLocalName, XML_END))
-        {
-            if (IsXMLToken(sValue, XML_AUTO))
-                bAutoEnd = true;
-            else
-            {
-                ::sax::Converter::convertDouble(fEnd, sValue);
-                bAutoEnd = false;
-            }
-        }
-        else if (IsXMLToken(aLocalName, XML_STEP))
-        {
-                ::sax::Converter::convertDouble(fStep, sValue);
-        }
-        else if (IsXMLToken(aLocalName, XML_GROUPED_BY))
-        {
-            if (IsXMLToken(sValue, XML_SECONDS))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::SECONDS;
-            else if (IsXMLToken(sValue, XML_MINUTES))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::MINUTES;
-            else if (IsXMLToken(sValue, XML_HOURS))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::HOURS;
-            else if (IsXMLToken(sValue, XML_DAYS))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::DAYS;
-            else if (IsXMLToken(sValue, XML_MONTHS))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::MONTHS;
-            else if (IsXMLToken(sValue, XML_QUARTERS))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::QUARTERS;
-            else if (IsXMLToken(sValue, XML_YEARS))
-                nGroupPart = css::sheet::DataPilotFieldGroupBy::YEARS;
         }
     }
     pDataPilotField->SetGrouping(sGroupSource, fStart, fEnd, fStep, nGroupPart, bDateValue, bAutoStart, bAutoEnd);
@@ -1768,50 +1477,35 @@ ScXMLDataPilotGroupsContext::~ScXMLDataPilotGroupsContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotGroupsContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotGroupsContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    if (nPrefix == XML_NAMESPACE_TABLE)
+    if (nElement == XML_ELEMENT( TABLE, XML_DATA_PILOT_GROUP ))
     {
-        if (IsXMLToken(rLName, XML_DATA_PILOT_GROUP))
-            pContext = new ScXMLDataPilotGroupContext(GetScImport(), nPrefix, rLName,  xAttrList, pDataPilotField);
+        pContext = new ScXMLDataPilotGroupContext(GetScImport(), pAttribList, pDataPilotField);
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDataPilotGroupsContext::EndElement()
-{
-}
-
 ScXMLDataPilotGroupContext::ScXMLDataPilotGroupContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotFieldContext* pTempDataPilotField) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotField(pTempDataPilotField)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName = xAttrList->getNameByIndex( i );
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue = xAttrList->getValueByIndex( i );
-
-        if (nPrefix == XML_NAMESPACE_TABLE)
-        {
-            if (IsXMLToken(aLocalName, XML_NAME))
-                sName = sValue;
-        }
+        auto &aIter( rAttrList->find( XML_ELEMENT( TABLE, XML_NAME ) ) );
+        if (aIter != rAttrList->end())
+            sName = aIter.toString();
     }
 }
 
@@ -1819,51 +1513,41 @@ ScXMLDataPilotGroupContext::~ScXMLDataPilotGroupContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotGroupContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
+uno::Reference< xml::sax::XFastContextHandler > SAL_CALL ScXMLDataPilotGroupContext::createFastChildContext(
+    sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList >& xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
+    sax_fastparser::FastAttributeList *pAttribList =
+        sax_fastparser::FastAttributeList::castToFastAttributeList( xAttrList );
 
-    if (nPrefix == XML_NAMESPACE_TABLE)
+    if (nElement == XML_ELEMENT( TABLE, XML_DATA_PILOT_MEMBER ) ||
+        nElement == XML_ELEMENT( TABLE, XML_DATA_PILOT_GROUP_MEMBER ))
     {
-        if (IsXMLToken(rLName, XML_DATA_PILOT_MEMBER) || IsXMLToken(rLName, XML_DATA_PILOT_GROUP_MEMBER))
-            pContext = new ScXMLDataPilotGroupMemberContext(GetScImport(), nPrefix, rLName, xAttrList, this);
+        pContext = new ScXMLDataPilotGroupMemberContext(GetScImport(), pAttribList, this);
     }
 
     if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
+        pContext = new SvXMLImportContext( GetImport() );
 
     return pContext;
 }
 
-void ScXMLDataPilotGroupContext::EndElement()
+void SAL_CALL ScXMLDataPilotGroupContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     pDataPilotField->AddGroup(aMembers, sName);
 }
 
 ScXMLDataPilotGroupMemberContext::ScXMLDataPilotGroupMemberContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList,
+                                      const rtl::Reference<sax_fastparser::FastAttributeList>& rAttrList,
                                       ScXMLDataPilotGroupContext* pTempDataPilotGroup) :
-    SvXMLImportContext( rImport, nPrfx, rLName ),
+    ScXMLImportContext( rImport ),
     pDataPilotGroup(pTempDataPilotGroup)
 {
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
-    for( sal_Int16 i=0; i < nAttrCount; i++ )
+    if ( rAttrList.is() )
     {
-        OUString sAttrName = xAttrList->getNameByIndex( i );
-        OUString aLocalName;
-        sal_uInt16 nPrefix = GetScImport().GetNamespaceMap().GetKeyByAttrName(
-                                            sAttrName, &aLocalName );
-        OUString sValue = xAttrList->getValueByIndex( i );
-
-        if (nPrefix == XML_NAMESPACE_TABLE)
-        {
-            if (IsXMLToken(aLocalName, XML_NAME))
-                sName = sValue;
-        }
+        auto &aIter( rAttrList->find( XML_ELEMENT( TABLE, XML_NAME ) ) );
+        if (aIter != rAttrList->end())
+            sName = aIter.toString();
     }
 }
 
@@ -1871,14 +1555,7 @@ ScXMLDataPilotGroupMemberContext::~ScXMLDataPilotGroupMemberContext()
 {
 }
 
-SvXMLImportContext *ScXMLDataPilotGroupMemberContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLName,
-                                            const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ )
-{
-    return new SvXMLImportContext( GetImport(), nPrefix, rLName );
-}
-
-void ScXMLDataPilotGroupMemberContext::EndElement()
+void SAL_CALL ScXMLDataPilotGroupMemberContext::endFastElement( sal_Int32 /*nElement*/ )
 {
     if (!sName.isEmpty())
         pDataPilotGroup->AddMember(sName);

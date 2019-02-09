@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/astoperation.hxx>
-#include <idlc/asttype.hxx>
-#include <idlc/astbasetype.hxx>
-#include <idlc/astparameter.hxx>
-#include <idlc/errorhandler.hxx>
+#include <astoperation.hxx>
+#include <asttype.hxx>
+#include <astbasetype.hxx>
+#include <astparameter.hxx>
+#include <errorhandler.hxx>
 
 #include <registry/writer.hxx>
 
@@ -38,11 +38,10 @@ bool AstOperation::isVariadic() const {
         && static_cast< AstParameter const * >(*(--i))->isRest();
 }
 
-bool AstOperation::dumpBlob(typereg::Writer & rBlob, sal_uInt16 index)
+void AstOperation::dumpBlob(typereg::Writer & rBlob, sal_uInt16 index)
 {
     sal_uInt16      nParam = getNodeCount(NT_parameter);
-    sal_uInt16      nExcep = nExceptions();
-    RTMethodMode    methodMode = RTMethodMode::TWOWAY;
+    sal_uInt16      nExcep = static_cast<sal_uInt16>(m_exceptions.size());
 
     OUString returnTypeName;
     if (m_pReturnType == nullptr) {
@@ -52,7 +51,7 @@ bool AstOperation::dumpBlob(typereg::Writer & rBlob, sal_uInt16 index)
             m_pReturnType->getRelativName(), RTL_TEXTENCODING_UTF8);
     }
     rBlob.setMethodData(
-        index, getDocumentation(), methodMode,
+        index, getDocumentation(), RTMethodMode::TWOWAY,
         OStringToOUString(getLocalName(), RTL_TEXTENCODING_UTF8),
         returnTypeName, nParam, nExcep);
 
@@ -102,25 +101,15 @@ bool AstOperation::dumpBlob(typereg::Writer & rBlob, sal_uInt16 index)
 
     if ( nExcep )
     {
-        DeclList::iterator iter = m_exceptions.begin();
-        DeclList::iterator end = m_exceptions.end();
         sal_uInt16 exceptIndex = 0;
-        while ( iter != end )
+        for (auto const& exception : m_exceptions)
         {
             rBlob.setMethodExceptionTypeName(
                 index, exceptIndex++,
                 OStringToOUString(
-                    (*iter)->getRelativName(), RTL_TEXTENCODING_UTF8));
-            ++iter;
+                    exception->getRelativName(), RTL_TEXTENCODING_UTF8));
         }
     }
-
-    return true;
-}
-
-AstDeclaration* AstOperation::addDeclaration(AstDeclaration* pDecl)
-{
-    return AstScope::addDeclaration(pDecl);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

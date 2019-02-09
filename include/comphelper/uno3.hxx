@@ -20,11 +20,8 @@
 #ifndef INCLUDED_COMPHELPER_UNO3_HXX
 #define INCLUDED_COMPHELPER_UNO3_HXX
 
-#include <rtl/instance.hxx>
-#include <comphelper/types.hxx>
 #include <com/sun/star/uno/XAggregation.hpp>
 #include <comphelper/sequence.hxx>
-#include <cppuhelper/typeprovider.hxx>
 
 
 namespace comphelper
@@ -41,7 +38,7 @@ namespace comphelper
     #define DECLARE_UNO3_AGG_DEFAULTS(classname, baseclass) \
         virtual void            SAL_CALL acquire() throw() override { baseclass::acquire(); } \
         virtual void            SAL_CALL release() throw() override { baseclass::release(); }    \
-        virtual css::uno::Any  SAL_CALL queryInterface(const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) override \
+        virtual css::uno::Any  SAL_CALL queryInterface(const css::uno::Type& _rType) override \
             { return baseclass::queryInterface(_rType); }
 
     /** Use this macro to forward XComponent methods to base class
@@ -69,29 +66,29 @@ namespace comphelper
     #define DECLARE_UNO3_XCOMPONENT_AGG_DEFAULTS(classname, baseclass, implhelper) \
         virtual void SAL_CALL acquire() throw() override { baseclass::acquire(); }   \
         virtual void SAL_CALL release() throw() override { baseclass::release(); }   \
-        virtual css::uno::Any  SAL_CALL queryInterface(const css::uno::Type& _rType) throw (css::uno::RuntimeException, std::exception) override \
+        virtual css::uno::Any  SAL_CALL queryInterface(const css::uno::Type& _rType) override \
             { return baseclass::queryInterface(_rType); }                               \
-        virtual void SAL_CALL dispose() throw (css::uno::RuntimeException, std::exception) override \
+        virtual void SAL_CALL dispose() override \
         {                                                                               \
             implhelper::dispose();                                                      \
         }                                                                               \
         virtual void SAL_CALL addEventListener(                                         \
-            css::uno::Reference< css::lang::XEventListener > const & xListener ) throw (css::uno::RuntimeException, std::exception) override \
+            css::uno::Reference< css::lang::XEventListener > const & xListener ) override \
         {                                                                               \
             implhelper::addEventListener(xListener);                                        \
         }                                                                               \
         virtual void SAL_CALL removeEventListener(                                      \
-            css::uno::Reference< css::lang::XEventListener > const & xListener ) throw (css::uno::RuntimeException, std::exception) override \
+            css::uno::Reference< css::lang::XEventListener > const & xListener ) override \
         {                                                                               \
             implhelper::removeEventListener(xListener);                                 \
         }
 
     //= deriving from multiple XInterface-derived classes
 
-    //= forwarding/merging XInterface funtionality
+    //= forwarding/merging XInterface functionality
 
     #define DECLARE_XINTERFACE( )   \
-        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) throw (css::uno::RuntimeException, std::exception) override; \
+        virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type& aType ) override; \
         virtual void SAL_CALL acquire() throw() override; \
         virtual void SAL_CALL release() throw() override;
 
@@ -101,7 +98,7 @@ namespace comphelper
 
     #define IMPLEMENT_FORWARD_XINTERFACE2( classname, refcountbase, baseclass2 ) \
         IMPLEMENT_FORWARD_REFCOUNT( classname, refcountbase ) \
-        css::uno::Any SAL_CALL classname::queryInterface( const css::uno::Type& _rType ) throw (css::uno::RuntimeException, std::exception) \
+        css::uno::Any SAL_CALL classname::queryInterface( const css::uno::Type& _rType ) \
         { \
             css::uno::Any aReturn = refcountbase::queryInterface( _rType ); \
             if ( !aReturn.hasValue() ) \
@@ -111,7 +108,7 @@ namespace comphelper
 
     #define IMPLEMENT_FORWARD_XINTERFACE3( classname, refcountbase, baseclass2, baseclass3 ) \
         IMPLEMENT_FORWARD_REFCOUNT( classname, refcountbase ) \
-        css::uno::Any SAL_CALL classname::queryInterface( const css::uno::Type& _rType ) throw (css::uno::RuntimeException, std::exception) \
+        css::uno::Any SAL_CALL classname::queryInterface( const css::uno::Type& _rType ) \
         { \
             css::uno::Any aReturn = refcountbase::queryInterface( _rType ); \
             if ( !aReturn.hasValue() ) \
@@ -124,20 +121,20 @@ namespace comphelper
         }
 
 
-    //= forwarding/merging XTypeProvider funtionality
+    //= forwarding/merging XTypeProvider functionality
 
     #define DECLARE_XTYPEPROVIDER( )    \
-        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) throw (css::uno::RuntimeException, std::exception) override; \
-        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override; \
+        virtual css::uno::Sequence< sal_Int8 > SAL_CALL getImplementationId(  ) override;
 
     #define IMPLEMENT_GET_IMPLEMENTATION_ID( classname ) \
-        css::uno::Sequence< sal_Int8 > SAL_CALL classname::getImplementationId(  ) throw (css::uno::RuntimeException, std::exception) \
+        css::uno::Sequence< sal_Int8 > SAL_CALL classname::getImplementationId(  ) \
         { \
             return css::uno::Sequence<sal_Int8>(); \
         }
 
     #define IMPLEMENT_FORWARD_XTYPEPROVIDER2( classname, baseclass1, baseclass2 ) \
-        css::uno::Sequence< css::uno::Type > SAL_CALL classname::getTypes(  ) throw (css::uno::RuntimeException, std::exception) \
+        css::uno::Sequence< css::uno::Type > SAL_CALL classname::getTypes(  ) \
         { \
             return ::comphelper::concatSequences( \
                 baseclass1::getTypes(), \
@@ -148,7 +145,7 @@ namespace comphelper
         IMPLEMENT_GET_IMPLEMENTATION_ID( classname )
 
     #define IMPLEMENT_FORWARD_XTYPEPROVIDER3( classname, baseclass1, baseclass2, baseclass3 ) \
-        css::uno::Sequence< css::uno::Type > SAL_CALL classname::getTypes(  ) throw (css::uno::RuntimeException, std::exception) \
+        css::uno::Sequence< css::uno::Type > SAL_CALL classname::getTypes(  ) \
         { \
             return ::comphelper::concatSequences( \
                 baseclass1::getTypes(), \
@@ -169,13 +166,11 @@ namespace comphelper
     template <class iface>
     bool query_aggregation(const css::uno::Reference< css::uno::XAggregation >& _rxAggregate, css::uno::Reference<iface>& _rxOut)
     {
-        _rxOut = static_cast<iface*>(nullptr);
+        _rxOut.clear();
         if (_rxAggregate.is())
         {
-            css::uno::Any aCheck = _rxAggregate->queryAggregation(
-                cppu::UnoType<iface>::get());
-            if (aCheck.hasValue())
-                _rxOut = *static_cast<const css::uno::Reference<iface>*>(aCheck.getValue());
+            _rxAggregate->queryAggregation(cppu::UnoType<iface>::get())
+                >>= _rxOut;
         }
         return _rxOut.is();
     }

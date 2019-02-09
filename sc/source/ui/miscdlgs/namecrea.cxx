@@ -19,44 +19,37 @@
 
 #undef SC_DLLIMPLEMENTATION
 
-#include "namecrea.hxx"
-#include "scresid.hxx"
+#include <namecrea.hxx>
 
-ScNameCreateDlg::ScNameCreateDlg( vcl::Window * pParent, sal_uInt16 nFlags )
-    : ModalDialog(pParent, "CreateNamesDialog", "modules/scalc/ui/createnamesdialog.ui")
+ScNameCreateDlg::ScNameCreateDlg(weld::Window * pParent, CreateNameFlags nFlags)
+    : GenericDialogController(pParent, "modules/scalc/ui/createnamesdialog.ui", "CreateNamesDialog")
+    , m_xTopBox(m_xBuilder->weld_check_button("top"))
+    , m_xLeftBox(m_xBuilder->weld_check_button("left"))
+    , m_xBottomBox(m_xBuilder->weld_check_button("bottom"))
+    , m_xRightBox(m_xBuilder->weld_check_button("right"))
 {
-    get(m_pTopBox, "top");
-    get(m_pLeftBox, "left");
-    get(m_pBottomBox, "bottom");
-    get(m_pRightBox, "right");
-    m_pTopBox->Check   ( (nFlags & NAME_TOP) != 0 );
-    m_pLeftBox->Check  ( (nFlags & NAME_LEFT) != 0 );
-    m_pBottomBox->Check( (nFlags & NAME_BOTTOM) != 0 );
-    m_pRightBox->Check ( (nFlags & NAME_RIGHT) != 0 );
+    m_xTopBox->set_active( bool(nFlags & CreateNameFlags::Top) );
+    m_xLeftBox->set_active( bool(nFlags & CreateNameFlags::Left) );
+    m_xBottomBox->set_active( bool(nFlags & CreateNameFlags::Bottom) );
+    m_xRightBox->set_active( bool(nFlags & CreateNameFlags::Right) );
 }
 
 ScNameCreateDlg::~ScNameCreateDlg()
 {
-    disposeOnce();
 }
 
-void ScNameCreateDlg::dispose()
+CreateNameFlags ScNameCreateDlg::GetFlags() const
 {
-    m_pTopBox.clear();
-    m_pLeftBox.clear();
-    m_pBottomBox.clear();
-    m_pRightBox.clear();
-    ModalDialog::dispose();
-}
+    CreateNameFlags nResult = CreateNameFlags::NONE;
 
-sal_uInt16 ScNameCreateDlg::GetFlags() const
-{
-    sal_uInt16  nResult = 0;
-
-    nResult |= m_pTopBox->IsChecked()      ? NAME_TOP:     0 ;
-    nResult |= m_pLeftBox->IsChecked()     ? NAME_LEFT:    0 ;
-    nResult |= m_pBottomBox->IsChecked()   ? NAME_BOTTOM:  0 ;
-    nResult |= m_pRightBox->IsChecked()    ? NAME_RIGHT:   0 ;
+    if (m_xTopBox->get_active())
+        nResult |= CreateNameFlags::Top;
+    if (m_xLeftBox->get_active())
+        nResult |= CreateNameFlags::Left;
+    if (m_xBottomBox->get_active())
+        nResult |= CreateNameFlags::Bottom;
+    if (m_xRightBox->get_active())
+        nResult |= CreateNameFlags::Right;
 
     return nResult;
 }

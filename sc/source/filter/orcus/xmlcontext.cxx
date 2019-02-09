@@ -7,25 +7,30 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "orcusfiltersimpl.hxx"
-#include "orcusinterface.hxx"
-#include "orcusxml.hxx"
-#include "document.hxx"
+#include <orcusfiltersimpl.hxx>
+#include <orcusinterface.hxx>
+#include <orcusxml.hxx>
+#include <document.hxx>
+#include <tokenarray.hxx>
 
-#include <svtools/treelistbox.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistbox.hxx>
+#include <vcl/treelistentry.hxx>
 #include <ucbhelper/content.hxx>
+#include <sal/log.hxx>
 
-#include <orcus/spreadsheet/import_interface.hpp>
 #include <orcus/xml_structure_tree.hpp>
 #include <orcus/xml_namespace.hpp>
 #include <orcus/orcus_xml.hpp>
-#include <orcus/global.hpp>
+#include <orcus/sax_parser_base.hpp>
+#include <orcus/stream.hpp>
 
-#include <com/sun/star/ucb/XCommandEnvironment.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <comphelper/processfactory.hxx>
 
 #include <string>
 #include <sstream>
+
+namespace com { namespace sun { namespace star { namespace ucb { class XCommandEnvironment; } } } }
 
 #define BUFFER_SIZE 4096
 
@@ -34,11 +39,18 @@ using namespace com::sun::star;
 namespace {
 
 ScOrcusXMLTreeParam::EntryData& setUserDataToEntry(
-    SvTreeListEntry& rEntry, ScOrcusXMLTreeParam::EntryDataVec& rStore, ScOrcusXMLTreeParam::EntryType eType)
+    SvTreeListEntry& rEntry, ScOrcusXMLTreeParam::UserDataStoreType& rStore, ScOrcusXMLTreeParam::EntryType eType)
 {
-    rStore.push_back(ScOrcusXMLTreeParam::EntryData(eType));
-    rEntry.SetUserData(&rStore.back());
-    return rStore.back();
+    rStore.push_back(std::make_unique<ScOrcusXMLTreeParam::EntryData>(eType));
+    rEntry.SetUserData(rStore.back().get());
+    return *rStore.back();
+}
+
+void setEntityNameToUserData(
+    ScOrcusXMLTreeParam::EntryData& rEntryData,
+    const orcus::xml_structure_tree::entity_name& entity, const orcus::xml_structure_tree::walker& walker)
+{
+    rEntryData.mnNamespaceID = walker.get_xmlns_index(entity.ns);
 }
 
 OUString toString(const orcus::xml_structure_tree::entity_name& entity, const orcus::xml_structure_tree::walker& walker)
@@ -66,9 +78,10 @@ void populateTree(
         return;
 
     ScOrcusXMLTreeParam::EntryData& rEntryData = setUserDataToEntry(
-        *pEntry, rParam.maUserDataStore,
+        *pEntry, rParam.m_UserDataStore,
         bRepeat ? ScOrcusXMLTreeParam::ElementRepeat : ScOrcusXMLTreeParam::ElementDefault);
-    rEntryData.mnNamespaceID = rWalker.get_xmlns_index(rElemName.ns);
+
+    setEntityNameToUserData(rEntryData, rElemName, rWalker);
 
     if (bRepeat)
     {
@@ -84,19 +97,16 @@ void populateTree(
 
     // Insert attributes.
     rWalker.get_attributes(aNames);
-    orcus::xml_structure_tree::entity_names_type::const_iterator it = aNames.begin();
-    orcus::xml_structure_tree::entity_names_type::const_iterator itEnd = aNames.end();
-    for (; it != itEnd; ++it)
+    for (const orcus::xml_structure_tree::entity_name& rAttrName : aNames)
     {
-        const orcus::xml_structure_tree::entity_name& rAttrName = *it;
         SvTreeListEntry* pAttr = rTreeCtrl.InsertEntry(toString(rAttrName, rWalker), pEntry);
 
         if (!pAttr)
             continue;
 
         ScOrcusXMLTreeParam::EntryData& rAttrData =
-            setUserDataToEntry(*pAttr, rParam.maUserDataStore, ScOrcusXMLTreeParam::Attribute);
-        rAttrData.mnNamespaceID = rWalker.get_xmlns_index(rAttrName.ns);
+            setUserDataToEntry(*pAttr, rParam.m_UserDataStore, ScOrcusXMLTreeParam::Attribute);
+        setEntityNameToUserData(rAttrData, rAttrName, rWalker);
 
         rTreeCtrl.SetExpandedEntryBmp(pAttr, rParam.maImgAttribute);
         rTreeCtrl.SetCollapsedEntryBmp(pAttr, rParam.maImgAttribute);
@@ -109,10 +119,10 @@ void populateTree(
     rEntryData.mbLeafNode = aNames.empty();
 
     // Insert child elements recursively.
-    for (it = aNames.begin(), itEnd = aNames.end(); it != itEnd; ++it)
+    for (const auto& rName : aNames)
     {
-        orcus::xml_structure_tree::element aElem = rWalker.descend(*it);
-        populateTree(rTreeCtrl, rWalker, *it, aElem.repeat, pEntry, rParam);
+        orcus::xml_structure_tree::element aElem = rWalker.descend(rName);
+        populateTree(rTreeCtrl, rWalker, rName, aElem.repeat, pEntry, rParam);
         rWalker.ascend();
     }
 }
@@ -132,7 +142,7 @@ public:
     }
 };
 
-class InsertFieldPath : public std::unary_function<OString, void>
+class InsertFieldPath
 {
     orcus::orcus_xml& mrFilter;
 public:
@@ -172,7 +182,7 @@ ScOrcusXMLContextImpl::~ScOrcusXMLContextImpl() {}
 
 void ScOrcusXMLContextImpl::loadXMLStructure(SvTreeListBox& rTreeCtrl, ScOrcusXMLTreeParam& rParam)
 {
-    rParam.maUserDataStore.clear();
+    rParam.m_UserDataStore.clear();
 
     std::string aStrm;
     loadContentFromURL(maPath, aStrm);
@@ -197,15 +207,19 @@ void ScOrcusXMLContextImpl::loadXMLStructure(SvTreeListBox& rTreeCtrl, ScOrcusXM
         orcus::xml_structure_tree::element aElem = aWalker.root();
         populateTree(rTreeCtrl, aWalker, aElem.name, aElem.repeat, nullptr, rParam);
     }
-    catch (const std::exception&)
+    catch (const orcus::sax::malformed_xml_error& e)
     {
-        // Parsing of this XML file failed.
+        SAL_WARN("sc.orcus", "Malformed XML error: " << e.what());
+    }
+    catch (const std::exception& e)
+    {
+        SAL_WARN("sc.orcus", "parsing failed with an unknown error " << e.what());
     }
 }
 
 namespace {
 
-class SetNamespaceAlias : public std::unary_function<size_t, void>
+class SetNamespaceAlias
 {
     orcus::orcus_xml& mrFilter;
     orcus::xmlns_repository& mrNsRepo;
@@ -228,7 +242,7 @@ public:
 
 void ScOrcusXMLContextImpl::importXML(const ScOrcusImportXMLParam& rParam)
 {
-    ScOrcusFactory aFactory(mrDoc);
+    ScOrcusFactory aFactory(mrDoc, true);
     OString aSysPath = ScOrcusFiltersImpl::toSystemPath(maPath);
     const char* path = aSysPath.getStr();
     try
@@ -238,42 +252,35 @@ void ScOrcusXMLContextImpl::importXML(const ScOrcusImportXMLParam& rParam)
         // Define all used namespaces.
         std::for_each(rParam.maNamespaces.begin(), rParam.maNamespaces.end(), SetNamespaceAlias(filter, maNsRepo));
 
+        // Set cell links.
+        for (const ScOrcusImportXMLParam::CellLink& rLink : rParam.maCellLinks)
         {
-            // Set cell links.
-            ScOrcusImportXMLParam::CellLinksType::const_iterator it = rParam.maCellLinks.begin();
-            ScOrcusImportXMLParam::CellLinksType::const_iterator itEnd = rParam.maCellLinks.end();
-            for (; it != itEnd; ++it)
-            {
-                const ScOrcusImportXMLParam::CellLink& rLink = *it;
-                OUString aTabName;
-                mrDoc.GetName(rLink.maPos.Tab(), aTabName);
-                filter.set_cell_link(
-                    rLink.maPath.getStr(),
-                    OUStringToOString(aTabName, RTL_TEXTENCODING_UTF8).getStr(),
-                    rLink.maPos.Row(), rLink.maPos.Col());
-            }
+            OUString aTabName;
+            mrDoc.GetName(rLink.maPos.Tab(), aTabName);
+            filter.set_cell_link(
+                rLink.maPath.getStr(),
+                OUStringToOString(aTabName, RTL_TEXTENCODING_UTF8).getStr(),
+                rLink.maPos.Row(), rLink.maPos.Col());
         }
 
+        // Set range links.
+        for (const ScOrcusImportXMLParam::RangeLink& rLink : rParam.maRangeLinks)
         {
-            // Set range links.
-            ScOrcusImportXMLParam::RangeLinksType::const_iterator it = rParam.maRangeLinks.begin();
-            ScOrcusImportXMLParam::RangeLinksType::const_iterator itEnd = rParam.maRangeLinks.end();
-            for (; it != itEnd; ++it)
-            {
-                const ScOrcusImportXMLParam::RangeLink& rLink = *it;
-                OUString aTabName;
-                mrDoc.GetName(rLink.maPos.Tab(), aTabName);
-                filter.start_range(
-                    OUStringToOString(aTabName, RTL_TEXTENCODING_UTF8).getStr(),
-                    rLink.maPos.Row(), rLink.maPos.Col());
+            OUString aTabName;
+            mrDoc.GetName(rLink.maPos.Tab(), aTabName);
+            filter.start_range(
+                OUStringToOString(aTabName, RTL_TEXTENCODING_UTF8).getStr(),
+                rLink.maPos.Row(), rLink.maPos.Col());
 
-                std::for_each(rLink.maFieldPaths.begin(), rLink.maFieldPaths.end(), InsertFieldPath(filter));
+            std::for_each(rLink.maFieldPaths.begin(), rLink.maFieldPaths.end(), InsertFieldPath(filter));
 
-                filter.commit_range();
-            }
+            filter.commit_range();
         }
 
-        filter.read_file(path);
+        std::string content = orcus::load_file_content(path);
+        filter.read_stream(content.data(), content.size());
+
+        aFactory.finalize();
     }
     catch (const std::exception&)
     {

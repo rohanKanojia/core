@@ -10,10 +10,9 @@
 #undef SC_DLLIMPLEMENTATION
 
 #include <scmod.hxx>
-#include "tpcompatibility.hxx"
-#include "sc.hrc"
-#include "scresid.hxx"
-#include "appoptio.hxx"
+#include <tpcompatibility.hxx>
+#include <sc.hrc>
+#include <appoptio.hxx>
 
 ScTpCompatOptions::ScTpCompatOptions(vcl::Window *pParent, const SfxItemSet &rCoreAttrs) :
     SfxTabPage(pParent, "OptCompatibilityPage","modules/scalc/ui/optcompatibilitypage.ui", &rCoreAttrs)
@@ -32,9 +31,9 @@ void ScTpCompatOptions::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> ScTpCompatOptions::Create(vcl::Window *pParent, const SfxItemSet *rCoreAttrs)
+VclPtr<SfxTabPage> ScTpCompatOptions::Create(TabPageParent pParent, const SfxItemSet *rCoreAttrs)
 {
-    return VclPtr<ScTpCompatOptions>::Create(pParent, *rCoreAttrs);
+    return VclPtr<ScTpCompatOptions>::Create(pParent.pParent, *rCoreAttrs);
 }
 
 bool ScTpCompatOptions::FillItemSet(SfxItemSet *rCoreAttrs)
@@ -44,7 +43,7 @@ bool ScTpCompatOptions::FillItemSet(SfxItemSet *rCoreAttrs)
     {
         rCoreAttrs->Put(
             SfxUInt16Item(
-                SID_SC_OPT_KEY_BINDING_COMPAT, m_pLbKeyBindings->GetSelectEntryPos()));
+                SID_SC_OPT_KEY_BINDING_COMPAT, m_pLbKeyBindings->GetSelectedEntryPos()));
         bRet = true;
     }
     return bRet;
@@ -75,9 +74,9 @@ void ScTpCompatOptions::Reset(const SfxItemSet *rCoreAttrs)
     m_pLbKeyBindings->SaveValue();
 }
 
-SfxTabPage::sfxpg ScTpCompatOptions::DeactivatePage(SfxItemSet* /*pSet*/)
+DeactivateRC ScTpCompatOptions::DeactivatePage(SfxItemSet* /*pSet*/)
 {
-    return KEEP_PAGE;
+    return DeactivateRC::KeepPage;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -22,17 +22,19 @@
 #include "inc/pdfihelper.hxx"
 #include "inc/pdfparse.hxx"
 
-#include <osl/diagnose.h>
 #include <osl/file.h>
 #include <osl/thread.h>
 #include <rtl/digest.h>
 #include <rtl/ref.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/io/XStream.hpp>
 #include <com/sun/star/io/XSeekable.hpp>
 #include <com/sun/star/io/TempFile.hpp>
 #include <comphelper/fileurl.hxx>
+#include <comphelper/hash.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <memory>
 #include <string.h>
@@ -57,7 +59,7 @@ public:
     FileEmitContext( const OUString&                            rOrigFile,
                      const uno::Reference< uno::XComponentContext >& xContext,
                      const pdfparse::PDFContainer*                   pTop );
-    virtual ~FileEmitContext();
+    virtual ~FileEmitContext() override;
 
     virtual bool         write( const void* pBuf, unsigned int nLen ) override;
     virtual unsigned int getCurPos() override;
@@ -187,7 +189,7 @@ PDFDetector::PDFDetector( const uno::Reference< uno::XComponentContext >& xConte
 {}
 
 // XExtendedFilterDetection
-OUString SAL_CALL PDFDetector::detect( uno::Sequence< beans::PropertyValue >& rFilterData ) throw( uno::RuntimeException, std::exception )
+OUString SAL_CALL PDFDetector::detect( uno::Sequence< beans::PropertyValue >& rFilterData )
 {
     osl::MutexGuard const guard( m_aMutex );
     bool bSuccess = false;
@@ -235,7 +237,7 @@ OUString SAL_CALL PDFDetector::detect( uno::Sequence< beans::PropertyValue >& rF
             if( nBytes > 5 )
             {
                 const sal_Int8* pBytes = aBuf.getConstArray();
-                for( unsigned int i = 0; i < nBytes-5; i++ )
+                for( sal_uInt64 i = 0; i < nBytes-5; i++ )
                 {
                     if( pBytes[i]   == '%' &&
                         pBytes[i+1] == 'P' &&
@@ -290,7 +292,7 @@ OUString SAL_CALL PDFDetector::detect( uno::Sequence< beans::PropertyValue >& rF
                 osl_closeFile( aFile );
             }
         } catch (css::io::IOException & e) {
-            SAL_WARN("sdext.pdfimport", "caught IOException " + e.Message);
+            SAL_WARN("sdext.pdfimport", "caught " << e);
             return OUString();
         }
         OUString aEmbedMimetype;
@@ -323,10 +325,6 @@ OUString SAL_CALL PDFDetector::detect( uno::Sequence< beans::PropertyValue >& rF
                 rFilterData[ nFilterNamePos ].Name = "FilterName";
             }
             aOutTypeName = "pdf_Portable_Document_Format";
-
-            OSL_TRACE( "setting filter name %s, input stream %s\n",
-                       OUStringToOString( aOutFilterName, RTL_TEXTENCODING_UTF8 ).getStr(),
-                       xEmbedStream.is() ? "present" : "not present" );
 
             rFilterData[nFilterNamePos].Value <<= aOutFilterName;
             if( xEmbedStream.is() )
@@ -386,19 +384,16 @@ OUString SAL_CALL PDFDetector::detect( uno::Sequence< beans::PropertyValue >& rF
 }
 
 OUString PDFDetector::getImplementationName()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return OUString("org.libreoffice.comp.documents.PDFDetector");
 }
 
 sal_Bool PDFDetector::supportsService(OUString const & ServiceName)
-    throw (css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 css::uno::Sequence<OUString> PDFDetector::getSupportedServiceNames()
-    throw (css::uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<OUString>{"com.sun.star.document.ImportFilter"};
 }
@@ -407,7 +402,6 @@ bool checkDocChecksum( const OUString& rInPDFFileURL,
                        sal_uInt32           nBytes,
                        const OUString& rChkSum )
 {
-    bool bRet = false;
     if( rChkSum.getLength() != 2* RTL_DIGEST_LENGTH_MD5 )
     {
         SAL_INFO(
@@ -420,7 +414,7 @@ bool checkDocChecksum( const OUString& rInPDFFileURL,
     // prepare checksum to test
     sal_uInt8 nTestChecksum[ RTL_DIGEST_LENGTH_MD5 ];
     const sal_Unicode* pChar = rChkSum.getStr();
-    for( unsigned int i = 0; i < RTL_DIGEST_LENGTH_MD5; i++ )
+    for(sal_uInt8 & rn : nTestChecksum)
     {
         sal_uInt8 nByte = sal_uInt8( ( (*pChar >= '0' && *pChar <= '9') ? *pChar - '0' :
                           ( (*pChar >= 'A' && *pChar <= 'F') ? *pChar - 'A' + 10 :
@@ -433,25 +427,24 @@ bool checkDocChecksum( const OUString& rInPDFFileURL,
                  ( (*pChar >= 'a' && *pChar <= 'f') ? *pChar - 'a' + 10 :
                  0 ) ) );
         pChar++;
-        nTestChecksum[i] = nByte;
+        rn = nByte;
     }
 
     // open file and calculate actual checksum up to index nBytes
-    sal_uInt8 nActualChecksum[ RTL_DIGEST_LENGTH_MD5 ];
-    memset( nActualChecksum, 0, sizeof(nActualChecksum) );
-    rtlDigest aActualDigest = rtl_digest_createMD5();
+    ::std::vector<unsigned char> nChecksum;
+    ::comphelper::Hash aDigest(::comphelper::HashType::MD5);
     oslFileHandle aRead = nullptr;
     oslFileError aErr = osl_File_E_None;
     if( (aErr = osl_openFile(rInPDFFileURL.pData,
                              &aRead,
                              osl_File_OpenFlag_Read )) == osl_File_E_None )
     {
-        sal_Int8 aBuf[4096];
+        sal_uInt8 aBuf[4096];
         sal_uInt32 nCur = 0;
         sal_uInt64 nBytesRead = 0;
         while( nCur < nBytes )
         {
-            sal_uInt32 nPass = (nBytes - nCur) > sizeof( aBuf ) ? sizeof( aBuf ) : nBytes - nCur;
+            sal_uInt32 nPass = std::min<sal_uInt32>(nBytes - nCur, sizeof( aBuf ));
             if( (aErr = osl_readFile( aRead, aBuf, nPass, &nBytesRead)) != osl_File_E_None
                 || nBytesRead == 0 )
             {
@@ -459,26 +452,16 @@ bool checkDocChecksum( const OUString& rInPDFFileURL,
             }
             nPass = static_cast<sal_uInt32>(nBytesRead);
             nCur += nPass;
-            rtl_digest_updateMD5( aActualDigest, aBuf, nPass );
+            aDigest.update(aBuf, nPass);
         }
-        rtl_digest_getMD5( aActualDigest, nActualChecksum, sizeof(nActualChecksum) );
+
+        nChecksum = aDigest.finalize();
         osl_closeFile( aRead );
     }
-    rtl_digest_destroyMD5( aActualDigest );
 
     // compare the contents
-    bRet = (0 == memcmp( nActualChecksum, nTestChecksum, sizeof( nActualChecksum ) ));
-#if OSL_DEBUG_LEVEL > 0
-    OSL_TRACE( "test checksum: " );
-    for( unsigned int i = 0; i < sizeof(nTestChecksum); i++ )
-        OSL_TRACE( "%.2X", int(nTestChecksum[i]) );
-    OSL_TRACE( "\n" );
-    OSL_TRACE( "file checksum: " );
-    for( unsigned int i = 0; i < sizeof(nActualChecksum); i++ )
-        OSL_TRACE( "%.2X", int(nActualChecksum[i]) );
-    OSL_TRACE( "\n" );
-#endif
-    return bRet;
+    return nChecksum.size() == RTL_DIGEST_LENGTH_MD5
+        && (0 == memcmp(nChecksum.data(), nTestChecksum, nChecksum.size()));
 }
 
 uno::Reference< io::XStream > getAdditionalStream( const OUString&                          rInPDFFileURL,
@@ -505,13 +488,12 @@ uno::Reference< io::XStream > getAdditionalStream( const OUString&              
             unsigned int nElements = pPDFFile->m_aSubElements.size();
             while( nElements-- > 0 )
             {
-                pdfparse::PDFTrailer* pTrailer = dynamic_cast<pdfparse::PDFTrailer*>(pPDFFile->m_aSubElements[nElements]);
+                pdfparse::PDFTrailer* pTrailer = dynamic_cast<pdfparse::PDFTrailer*>(pPDFFile->m_aSubElements[nElements].get());
                 if( pTrailer && pTrailer->m_pDict )
                 {
                     // search document checksum entry
                     std::unordered_map< OString,
-                                   pdfparse::PDFEntry*,
-                                   OStringHash >::iterator chk;
+                                   pdfparse::PDFEntry* >::iterator chk;
                     chk = pTrailer->m_pDict->m_aMap.find( "DocChecksum" );
                     if( chk == pTrailer->m_pDict->m_aMap.end() )
                     {
@@ -527,8 +509,7 @@ uno::Reference< io::XStream > getAdditionalStream( const OUString&              
 
                     // search for AdditionalStreams entry
                     std::unordered_map< OString,
-                                   pdfparse::PDFEntry*,
-                                   OStringHash >::iterator add_stream;
+                                   pdfparse::PDFEntry* >::iterator add_stream;
                     add_stream = pTrailer->m_pDict->m_aMap.find( "AdditionalStreams" );
                     if( add_stream == pTrailer->m_pDict->m_aMap.end() )
                     {
@@ -548,8 +529,8 @@ uno::Reference< io::XStream > getAdditionalStream( const OUString&              
                         continue;
 
                     // extract addstream and mimetype
-                    pdfparse::PDFName* pMimeType = dynamic_cast<pdfparse::PDFName*>(pStreams->m_aSubElements[0]);
-                    pdfparse::PDFObjectRef* pStreamRef = dynamic_cast<pdfparse::PDFObjectRef*>(pStreams->m_aSubElements[1]);
+                    pdfparse::PDFName* pMimeType = dynamic_cast<pdfparse::PDFName*>(pStreams->m_aSubElements[0].get());
+                    pdfparse::PDFObjectRef* pStreamRef = dynamic_cast<pdfparse::PDFObjectRef*>(pStreams->m_aSubElements[1].get());
 
                     SAL_WARN_IF( !pMimeType, "sdext.pdfimport", "error: no mimetype element" );
                     SAL_WARN_IF( !pStreamRef, "sdext.pdfimport", "error: no stream ref element" );
@@ -598,7 +579,6 @@ uno::Reference< io::XStream > getAdditionalStream( const OUString&              
                                     } while( bEntered && ! bAuthenticated );
                                 }
 
-                                OSL_TRACE( "password: %s", bAuthenticated ? "matches" : "does not match" );
                                 if( ! bAuthenticated )
                                     continue;
                             }
@@ -617,9 +597,6 @@ uno::Reference< io::XStream > getAdditionalStream( const OUString&              
         }
     }
 
-    OSL_TRACE( "extracted add stream: mimetype %s\n",
-               OUStringToOString( rOutMimetype,
-                                       RTL_TEXTENCODING_UTF8 ).getStr());
     return xEmbed;
 }
 

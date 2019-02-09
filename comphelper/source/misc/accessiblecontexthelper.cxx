@@ -22,46 +22,38 @@
 #include <cppuhelper/weakref.hxx>
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
+#include <com/sun/star/accessibility/IllegalAccessibleComponentStateException.hpp>
 #include <comphelper/accessibleeventnotifier.hxx>
+#include <comphelper/solarmutex.hxx>
 
 
 namespace comphelper
 {
-
-
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::lang;
     using namespace ::com::sun::star::accessibility;
-
-    IMutex::~IMutex() {}
 
     /** implementation class for OAccessibleContextHelper. No own thread safety!
     */
     class OContextHelper_Impl
     {
     private:
-        IMutex*                             m_pExternalLock;    // the optional additional external lock
-
         WeakReference< XAccessible >        m_aCreator;         // the XAccessible which created our XAccessibleContext
 
         AccessibleEventNotifier::TClientId  m_nClientId;
 
     public:
-        inline  Reference< XAccessible >    getCreator( ) const                 { return m_aCreator; }
+        Reference< XAccessible >    getCreator( ) const                 { return m_aCreator; }
         inline  void                        setCreator( const Reference< XAccessible >& _rAcc );
 
-        inline  IMutex*                     getExternalLock( )                  { return m_pExternalLock; }
-        inline  void                        setExternalLock( IMutex* _pLock )   { m_pExternalLock = _pLock; }
-
-        inline  AccessibleEventNotifier::TClientId
+        AccessibleEventNotifier::TClientId
                                             getClientId() const                 { return m_nClientId; }
-        inline  void                        setClientId( const AccessibleEventNotifier::TClientId _nId )
+        void                        setClientId( const AccessibleEventNotifier::TClientId _nId )
                                                                                 { m_nClientId = _nId; }
 
     public:
         OContextHelper_Impl()
-            :m_pExternalLock( nullptr )
-            ,m_nClientId( 0 )
+            :m_nClientId( 0 )
         {
         }
     };
@@ -72,38 +64,19 @@ namespace comphelper
         m_aCreator = _rAcc;
     }
 
-    OAccessibleContextHelper::OAccessibleContextHelper( IMutex* _pExternalLock )
+    OAccessibleContextHelper::OAccessibleContextHelper( )
         :OAccessibleContextHelper_Base( GetMutex() )
-        ,m_pImpl( nullptr )
+        ,m_pImpl(new OContextHelper_Impl)
     {
-        assert(_pExternalLock);
-        m_pImpl = new OContextHelper_Impl();
-        m_pImpl->setExternalLock( _pExternalLock );
-    }
-
-
-    void OAccessibleContextHelper::forgetExternalLock()
-    {
-        m_pImpl->setExternalLock( nullptr );
     }
 
 
     OAccessibleContextHelper::~OAccessibleContextHelper( )
     {
-        forgetExternalLock();
             // this ensures that the lock, which may be already destroyed as part of the derivee,
             // is not used anymore
 
         ensureDisposed();
-
-        delete m_pImpl;
-        m_pImpl = nullptr;
-    }
-
-
-    IMutex* OAccessibleContextHelper::getExternalLock( )
-    {
-        return m_pImpl->getExternalLock();
     }
 
 
@@ -111,7 +84,7 @@ namespace comphelper
     {
         // rhbz#1001768: de facto this class is locked by SolarMutex;
         // do not lock m_Mutex because it may cause deadlock
-        OMutexGuard aGuard( getExternalLock() );
+        osl::Guard<SolarMutex> aGuard(SolarMutex::get());
 
         if ( m_pImpl->getClientId( ) )
         {
@@ -121,9 +94,9 @@ namespace comphelper
     }
 
 
-    void SAL_CALL OAccessibleContextHelper::addAccessibleEventListener( const Reference< XAccessibleEventListener >& _rxListener ) throw (RuntimeException, std::exception)
+    void SAL_CALL OAccessibleContextHelper::addAccessibleEventListener( const Reference< XAccessibleEventListener >& _rxListener )
     {
-        OMutexGuard aGuard( getExternalLock() );
+        osl::Guard<SolarMutex> aGuard(SolarMutex::get());
             // don't use the OContextEntryGuard - it will throw an exception if we're not alive
             // anymore, while the most recent specification for XComponent states that we should
             // silently ignore the call in such a situation
@@ -144,16 +117,16 @@ namespace comphelper
     }
 
 
-    void SAL_CALL OAccessibleContextHelper::removeAccessibleEventListener( const Reference< XAccessibleEventListener >& _rxListener ) throw (RuntimeException, std::exception)
+    void SAL_CALL OAccessibleContextHelper::removeAccessibleEventListener( const Reference< XAccessibleEventListener >& _rxListener )
     {
-        OMutexGuard aGuard( getExternalLock() );
+        osl::Guard<SolarMutex> aGuard(SolarMutex::get());
             // don't use the OContextEntryGuard - it will throw an exception if we're not alive
             // anymore, while the most recent specification for XComponent states that we should
             // silently ignore the call in such a situation
         if ( !isAlive() )
             return;
 
-        if ( _rxListener.is() )
+        if ( _rxListener.is() && m_pImpl->getClientId() )
         {
             sal_Int32 nListenerCount = AccessibleEventNotifier::removeEventListener( m_pImpl->getClientId( ), _rxListener );
             if ( !nListenerCount )
@@ -191,7 +164,7 @@ namespace comphelper
 
     bool OAccessibleContextHelper::isAlive() const
     {
-        return !GetBroadcastHelper().bDisposed && !GetBroadcastHelper().bInDispose;
+        return !rBHelper.bDisposed && !rBHelper.bInDispose;
     }
 
 
@@ -204,7 +177,7 @@ namespace comphelper
 
     void OAccessibleContextHelper::ensureDisposed( )
     {
-        if ( !GetBroadcastHelper().bDisposed )
+        if ( !rBHelper.bDisposed )
         {
             OSL_ENSURE( 0 == m_refCount, "OAccessibleContextHelper::ensureDisposed: this method _has_ to be called from without your dtor only!" );
             acquire();
@@ -225,7 +198,7 @@ namespace comphelper
     }
 
 
-    sal_Int32 SAL_CALL OAccessibleContextHelper::getAccessibleIndexInParent(  ) throw (RuntimeException, std::exception)
+    sal_Int32 SAL_CALL OAccessibleContextHelper::getAccessibleIndexInParent(  )
     {
         OExternalLockGuard aGuard( this );
 
@@ -271,7 +244,7 @@ namespace comphelper
     }
 
 
-    Locale SAL_CALL OAccessibleContextHelper::getLocale(  ) throw (IllegalAccessibleComponentStateException, RuntimeException, std::exception)
+    Locale SAL_CALL OAccessibleContextHelper::getLocale(  )
     {
         // simply ask the parent
         Reference< XAccessible > xParent = getAccessibleParent();

@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "view/SlsFontProvider.hxx"
+#include <memory>
+#include <view/SlsFontProvider.hxx>
 
-#include "controller/SlideSorterController.hxx"
+#include <controller/SlideSorterController.hxx>
 
 #include <sfx2/app.hxx>
 #include <osl/getglobalmutex.hxx>

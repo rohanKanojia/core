@@ -30,7 +30,7 @@
 #include <memory>
 
 #include "gdimtftools.hxx"
-#include "viewlayer.hxx"
+#include <viewlayer.hxx>
 
 
 namespace slideshow
@@ -64,7 +64,7 @@ namespace slideshow
 
             /** Query the associated view layer of this shape
              */
-            ViewLayerSharedPtr getViewLayer() const;
+            const ViewLayerSharedPtr& getViewLayer() const;
 
             bool render( const GDIMetaFileSharedPtr& rMtf ) const;
 
@@ -76,7 +76,7 @@ namespace slideshow
 
             /** The view layer this object is part of.
              */
-            ViewLayerSharedPtr                                  mpViewLayer;
+            ViewLayerSharedPtr const                            mpViewLayer;
 
             /// Generated content bitmap, already with correct output size
             mutable css::uno::Reference< css::rendering::XBitmap >  mxBitmap;

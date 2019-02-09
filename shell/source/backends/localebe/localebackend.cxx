@@ -17,39 +17,45 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+#include <sal/log.hxx>
+
+#include <cassert>
+#include <limits>
 
 #include "localebackend.hxx"
 #include <com/sun/star/beans/Optional.hpp>
 #include <cppuhelper/supportsservice.hxx>
 #include <osl/time.h>
+#include <rtl/character.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <i18nlangtag/mslangid.hxx>
 
 #include <stdio.h>
 
 #ifdef _WIN32
-#if defined _MSC_VER
-#pragma warning(push, 1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
-OUString ImplGetLocale(LCID lcid)
+static css::beans::Optional<css::uno::Any> ImplGetLocale(LCID lcid)
 {
-    TCHAR buffer[8];
-    LPTSTR cp = buffer;
+    WCHAR buffer[8];
+    PWSTR cp = buffer;
 
-    cp += GetLocaleInfo( lcid, LOCALE_SISO639LANGNAME , buffer, 4 );
+    cp += GetLocaleInfoW( lcid, LOCALE_SISO639LANGNAME, buffer, 4 );
     if( cp > buffer )
     {
-        if( 0 < GetLocaleInfo( lcid, LOCALE_SISO3166CTRYNAME, cp, buffer + 8 - cp) )
+        if( 0 < GetLocaleInfoW( lcid, LOCALE_SISO3166CTRYNAME, cp, buffer + 8 - cp) )
             // #i50822# minus character must be written before cp
             *(cp - 1) = '-';
 
-        return OUString::createFromAscii(buffer);
+        return {true, css::uno::Any(OUString(o3tl::toU(buffer)))};
     }
 
-    return OUString();
+    return {false, {}};
 }
 
 #elif defined(MACOSX)
@@ -108,13 +114,13 @@ namespace /* private */
 
         CFStringRef sref = (CFGetTypeID(ref) == CFArrayGetTypeID()) ? static_cast<CFStringRef>(CFArrayGetValueAtIndex(static_cast<CFArrayRef>(ref), 0)) : static_cast<CFStringRef>(ref);
 
-        // NOTE: this API is only available with Mac OS X >=10.3. We need to use it because
+        // NOTE: this API is only available with macOS >=10.3. We need to use it because
         // Apple used non-ISO values on systems <10.2 like "German" for instance but didn't
-        // upgrade those values during upgrade to newer Mac OS X versions. See also #i54337#
+        // upgrade those values during upgrade to newer macOS versions. See also #i54337#
         return CFLocaleCreateCanonicalLocaleIdentifierFromString(kCFAllocatorDefault, sref);
     }
 
-    OUString ImplGetLocale(const char* pref)
+    css::beans::Optional<css::uno::Any> ImplGetLocale(const char* pref)
     {
         CFStringRef sref = ImplGetAppPreference(pref);
         CFStringGuard srefGuard(sref);
@@ -146,7 +152,7 @@ namespace /* private */
                 }
             }
         }
-        return aLocaleBuffer.makeStringAndClear();
+        return {true, css::uno::Any(aLocaleBuffer.makeStringAndClear())};
     }
 
 } // namespace /* private */
@@ -154,51 +160,79 @@ namespace /* private */
 #else
 
 #include <rtl/ustrbuf.hxx>
-#include <locale.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstring>
 
-/*
- * Note: setlocale is not at all thread safe, so is this code. It could
- * especially interfere with the stuff VCL is doing, so make sure this
- * is called from the main thread only.
- */
-
-static OUString ImplGetLocale(int category)
+static css::beans::Optional<css::uno::Any> ImplGetLocale(char const * category)
 {
-    const char *locale = setlocale(category, "");
+    const char *locale = std::getenv("LC_ALL");
+    if (locale == nullptr || *locale == '\0') {
+        locale = std::getenv(category);
+        if (locale == nullptr || *locale == '\0') {
+            locale = std::getenv("LANG");
+        }
+    }
 
     // Return "en-US" for C locales
-    if( (locale == nullptr) || ( locale[0] == 'C' && locale[1] == '\0' ) )
-        return OUString( "en-US"  );
+    if( (locale == nullptr) || *locale == '\0' || std::strcmp(locale, "C") == 0
+        || std::strcmp(locale, "POSIX") == 0 )
+        return {true, css::uno::Any(OUString("en-US"))};
 
 
     const char *cp;
     const char *uscore = nullptr;
+    const char *end = nullptr;
 
     // locale string have the format lang[_ctry][.encoding][@modifier]
-    // we are only interested in the first two items, so we handle
-    // '.' and '@' as string end.
+    // Let LanguageTag handle all conversion, but do a sanity and length check
+    // first.
+    // For the fallback we are only interested in the first two items, so we
+    // handle '.' and '@' as string end for that.
     for (cp = locale; *cp; cp++)
     {
-        if (*cp == '_')
+        if (*cp == '_' && !uscore)
             uscore = cp;
-        if (*cp == '.' || *cp == '@')
-            break;
+        if ((*cp == '.' || *cp == '@') && !end)
+            end = cp;
+        if (!rtl::isAscii(static_cast<unsigned char>(*cp))) {
+            SAL_INFO("shell", "locale env var with non-ASCII content");
+            return {false, {}};
+        }
+    }
+    assert(cp >= locale);
+    if (cp - locale > std::numeric_limits<sal_Int32>::max()) {
+        SAL_INFO("shell", "locale env var content too long");
+        return {false, {}};
     }
 
+    // This is a tad awkward.. but the easiest way to obtain what we're
+    // actually interested in. For example this also converts
+    // "ca_ES.UTF-8@valencia" to "ca-ES-valencia".
+    const OString aLocaleStr(locale);
+    const LanguageType nLang = MsLangId::convertUnxByteStringToLanguage( aLocaleStr);
+    if (nLang != LANGUAGE_DONTKNOW)
+    {
+        const OUString aLangTagStr( LanguageTag::convertToBcp47( nLang));
+        return {true, css::uno::Any(aLangTagStr)};
+    }
+
+    // As a fallback, strip encoding and modifier and return just a
+    // language-country combination and let the caller handle unknowns.
     OUStringBuffer aLocaleBuffer;
+    if (!end)
+        end = cp;
     if( uscore != nullptr )
     {
         aLocaleBuffer.appendAscii(locale, uscore++ - locale);
         aLocaleBuffer.append("-");
-        aLocaleBuffer.appendAscii(uscore, cp - uscore);
+        aLocaleBuffer.appendAscii(uscore, end - uscore);
     }
     else
     {
-        aLocaleBuffer.appendAscii(locale, cp - locale);
+        aLocaleBuffer.appendAscii(locale, end - locale);
     }
 
-    return aLocaleBuffer.makeStringAndClear();
+    return {true, css::uno::Any(aLocaleBuffer.makeStringAndClear())};
 }
 
 #endif
@@ -220,31 +254,31 @@ LocaleBackend* LocaleBackend::createInstance()
 }
 
 
-OUString LocaleBackend::getLocale()
+css::beans::Optional<css::uno::Any> LocaleBackend::getLocale()
 {
 #if defined(_WIN32)
     return ImplGetLocale( GetUserDefaultLCID() );
 #elif defined (MACOSX)
     return ImplGetLocale("AppleLocale");
 #else
-    return ImplGetLocale(LC_CTYPE);
+    return ImplGetLocale("LC_CTYPE");
 #endif
 }
 
 
-OUString LocaleBackend::getUILocale()
+css::beans::Optional<css::uno::Any> LocaleBackend::getUILocale()
 {
 #if defined(_WIN32)
     return ImplGetLocale( MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT) );
 #elif defined(MACOSX)
     return ImplGetLocale("AppleLanguages");
 #else
-    return ImplGetLocale(LC_MESSAGES);
+    return ImplGetLocale("LC_MESSAGES");
 #endif
 }
 
 
-OUString LocaleBackend::getSystemLocale()
+css::beans::Optional<css::uno::Any> LocaleBackend::getSystemLocale()
 {
 // note: the implementation differs from getLocale() only on Windows
 #if defined(_WIN32)
@@ -257,37 +291,23 @@ OUString LocaleBackend::getSystemLocale()
 
 void LocaleBackend::setPropertyValue(
     OUString const &, css::uno::Any const &)
-    throw (
-        css::beans::UnknownPropertyException, css::beans::PropertyVetoException,
-        css::lang::IllegalArgumentException, css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     throw css::lang::IllegalArgumentException(
-        OUString(
-            "setPropertyValue not supported"),
+        "setPropertyValue not supported",
         static_cast< cppu::OWeakObject * >(this), -1);
 }
 
 css::uno::Any LocaleBackend::getPropertyValue(
     OUString const & PropertyName)
-    throw (
-        css::beans::UnknownPropertyException, css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     if ( PropertyName == "Locale" ) {
-        return css::uno::makeAny(
-            css::beans::Optional< css::uno::Any >(
-                true, css::uno::makeAny(getLocale())));
+        return css::uno::Any(getLocale());
     } else if (PropertyName == "SystemLocale")
     {
-        return css::uno::makeAny(
-            css::beans::Optional< css::uno::Any >(
-                true, css::uno::makeAny(getSystemLocale())));
+        return css::uno::Any(getSystemLocale());
     } else if (PropertyName == "UILocale")
     {
-        return css::uno::makeAny(
-            css::beans::Optional< css::uno::Any >(
-                true, css::uno::makeAny(getUILocale())));
+        return css::uno::Any(getUILocale());
     } else {
         throw css::beans::UnknownPropertyException(
             PropertyName, static_cast< cppu::OWeakObject * >(this));
@@ -295,30 +315,27 @@ css::uno::Any LocaleBackend::getPropertyValue(
 }
 
 
-OUString SAL_CALL LocaleBackend::getBackendName() {
+OUString LocaleBackend::getBackendName() {
     return OUString("com.sun.star.comp.configuration.backend.LocaleBackend") ;
 }
 
 OUString SAL_CALL LocaleBackend::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
     return getBackendName() ;
 }
 
-uno::Sequence<OUString> SAL_CALL LocaleBackend::getBackendServiceNames()
+uno::Sequence<OUString> LocaleBackend::getBackendServiceNames()
 {
     uno::Sequence<OUString> aServiceNameList { "com.sun.star.configuration.backend.LocaleBackend" };
     return aServiceNameList ;
 }
 
 sal_Bool SAL_CALL LocaleBackend::supportsService(const OUString& aServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, aServiceName);
 }
 
 uno::Sequence<OUString> SAL_CALL LocaleBackend::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
     return getBackendServiceNames() ;
 }

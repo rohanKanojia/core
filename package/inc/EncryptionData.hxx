@@ -46,18 +46,20 @@ class EncryptionData : public BaseEncryptionData
 {
 public:
     css::uno::Sequence < sal_Int8 > m_aKey;
-    sal_Int32 m_nEncAlg;
-    sal_Int32 m_nCheckAlg;
-    sal_Int32 m_nDerivedKeySize;
-    sal_Int32 m_nStartKeyGenID;
+    sal_Int32 const m_nEncAlg;
+    sal_Int32 const m_nCheckAlg;
+    sal_Int32 const m_nDerivedKeySize;
+    sal_Int32 const m_nStartKeyGenID;
+    bool const m_bTryWrongSHA1;
 
-    EncryptionData( const BaseEncryptionData& aData, const css::uno::Sequence< sal_Int8 >& aKey, sal_Int32 nEncAlg, sal_Int32 nCheckAlg, sal_Int32 nDerivedKeySize, sal_Int32 nStartKeyGenID )
+    EncryptionData(const BaseEncryptionData& aData, const css::uno::Sequence< sal_Int8 >& aKey, sal_Int32 nEncAlg, sal_Int32 nCheckAlg, sal_Int32 nDerivedKeySize, sal_Int32 nStartKeyGenID, bool const bTryWrongSHA1)
     : BaseEncryptionData( aData )
     , m_aKey( aKey )
     , m_nEncAlg( nEncAlg )
     , m_nCheckAlg( nCheckAlg )
     , m_nDerivedKeySize( nDerivedKeySize )
     , m_nStartKeyGenID( nStartKeyGenID )
+    , m_bTryWrongSHA1(bTryWrongSHA1)
     {}
 
     EncryptionData( const EncryptionData& aData )
@@ -67,6 +69,7 @@ public:
     , m_nCheckAlg( aData.m_nCheckAlg )
     , m_nDerivedKeySize( aData.m_nDerivedKeySize )
     , m_nStartKeyGenID( aData.m_nStartKeyGenID )
+    , m_bTryWrongSHA1(aData.m_bTryWrongSHA1)
     {}
 };
 

@@ -31,7 +31,6 @@
 #include <com/sun/star/rendering/XBitmap.hpp>
 #include <com/sun/star/util/Color.hpp>
 #include <osl/diagnose.h>
-#include <boost/bind.hpp>
 #include <map>
 
 using namespace ::com::sun::star;
@@ -94,7 +93,6 @@ public:
     ReadContext (
         const Reference<XComponentContext>& rxContext,
         const Reference<rendering::XCanvas>& rxCanvas);
-    ~ReadContext();
 
     /** Read data describing a font from the node that can be reached from
         the given root via the given path.
@@ -127,7 +125,6 @@ class PaneStyle
 {
 public:
     PaneStyle();
-    ~PaneStyle();
 
     const SharedBitmapDescriptor GetBitmap (const OUString& sBitmapName) const;
 
@@ -150,15 +147,14 @@ private:
 
 public:
     void Read (
-        ReadContext& rReadContext,
+        const ReadContext& rReadContext,
         const Reference<container::XHierarchicalNameAccess>& rThemeRoot);
 
     SharedPaneStyle GetPaneStyle (const OUString& rsStyleName) const;
 
 private:
     void ProcessPaneStyle (
-        ReadContext& rReadContext,
-        const OUString& rsKey,
+        ReadContext const & rReadContext,
         const ::std::vector<css::uno::Any>& rValues);
 };
 
@@ -168,7 +164,6 @@ class ViewStyle
 {
 public:
     ViewStyle();
-    ~ViewStyle();
 
     const SharedBitmapDescriptor GetBitmap (const OUString& sBitmapName) const;
 
@@ -189,28 +184,21 @@ private:
 
 public:
     void Read (
-        ReadContext& rReadContext,
+        const ReadContext& rReadContext,
         const Reference<container::XHierarchicalNameAccess>& rThemeRoot);
 
     SharedViewStyle GetViewStyle (const OUString& rsStyleName) const;
 
 private:
     void ProcessViewStyle(
-        ReadContext& rReadContext,
+        ReadContext const & rReadContext,
         const Reference<beans::XPropertySet>& rxProperties);
 };
-
-class ViewDescriptor
-{
-};
-typedef std::shared_ptr<ViewDescriptor> SharedViewDescriptor;
-typedef ::std::vector<SharedViewDescriptor> ViewDescriptorContainer;
 
 class StyleAssociationContainer
 {
 public:
     void Read (
-        ReadContext& rReadContext,
         const Reference<container::XHierarchicalNameAccess>& rThemeRoot);
 
     OUString GetStyleName (const OUString& rsResourceName) const;
@@ -220,8 +208,6 @@ private:
     StyleAssociations maStyleAssociations;
 
     void ProcessStyleAssociation(
-        ReadContext& rReadContext,
-        const OUString& rsKey,
         const ::std::vector<css::uno::Any>& rValues);
 };
 
@@ -231,17 +217,14 @@ class PresenterTheme::Theme
 {
 public:
     Theme (
-        const OUString& rsName,
         const Reference<container::XHierarchicalNameAccess>& rThemeRoot,
         const OUString& rsNodeName);
-    ~Theme();
 
     void Read (
         PresenterConfigurationAccess& rConfiguration,
         ReadContext& rReadContext);
 
-    OUString msThemeName;
-    OUString msConfigurationNodeName;
+    OUString const msConfigurationNodeName;
     std::shared_ptr<Theme> mpParentTheme;
     SharedBitmapDescriptor mpBackground;
     PaneStyleContainer maPaneStyles;
@@ -257,7 +240,6 @@ public:
 
 private:
     void ProcessFont(
-        ReadContext& rReadContext,
         const OUString& rsKey,
         const Reference<beans::XPropertySet>& rxProperties);
 };
@@ -266,10 +248,8 @@ private:
 
 PresenterTheme::PresenterTheme (
     const css::uno::Reference<css::uno::XComponentContext>& rxContext,
-    const OUString& rsThemeName,
     const css::uno::Reference<css::rendering::XCanvas>& rxCanvas)
     : mxContext(rxContext),
-      msThemeName(rsThemeName),
       mpTheme(),
       mxCanvas(rxCanvas)
 {
@@ -286,10 +266,10 @@ std::shared_ptr<PresenterTheme::Theme> PresenterTheme::ReadTheme()
 
     PresenterConfigurationAccess aConfiguration (
         mxContext,
-        OUString("/org.openoffice.Office.PresenterScreen/"),
+        "/org.openoffice.Office.PresenterScreen/",
         PresenterConfigurationAccess::READ_ONLY);
 
-    return aReadContext.ReadTheme(aConfiguration, msThemeName);
+    return aReadContext.ReadTheme(aConfiguration, OUString());
 }
 
 bool PresenterTheme::HasCanvas() const
@@ -310,7 +290,7 @@ OUString PresenterTheme::GetStyleName (const OUString& rsResourceURL) const
 {
     OUString sStyleName;
     std::shared_ptr<Theme> pTheme (mpTheme);
-    while (sStyleName.isEmpty() && pTheme.get()!=nullptr)
+    while (sStyleName.isEmpty() && pTheme != nullptr)
     {
         sStyleName = pTheme->maStyleAssociations.GetStyleName(rsResourceURL);
         pTheme = pTheme->mpParentTheme;
@@ -322,7 +302,7 @@ OUString PresenterTheme::GetStyleName (const OUString& rsResourceURL) const
     const OUString& rsStyleName,
     const bool bOuter) const
 {
-    OSL_ASSERT(mpTheme.get() != nullptr);
+    OSL_ASSERT(mpTheme != nullptr);
 
     SharedPaneStyle pPaneStyle (mpTheme->GetPaneStyle(rsStyleName));
     if (pPaneStyle.get() != nullptr)
@@ -338,10 +318,9 @@ OUString PresenterTheme::GetStyleName (const OUString& rsResourceURL) const
 
 PresenterTheme::SharedFontDescriptor PresenterTheme::ReadFont (
     const Reference<container::XHierarchicalNameAccess>& rxNode,
-    const OUString& rsFontPath,
     const PresenterTheme::SharedFontDescriptor& rpDefault)
 {
-    return ReadContext::ReadFont(rxNode, rsFontPath, rpDefault);
+    return ReadContext::ReadFont(rxNode, OUString(), rpDefault);
 }
 
 bool PresenterTheme::ConvertToColor (
@@ -367,14 +346,14 @@ bool PresenterTheme::ConvertToColor (
 std::shared_ptr<PresenterConfigurationAccess> PresenterTheme::GetNodeForViewStyle (
     const OUString& rsStyleName) const
 {
-    if (mpTheme.get() == nullptr)
+    if (mpTheme == nullptr)
         return std::shared_ptr<PresenterConfigurationAccess>();
 
     // Open configuration for writing.
     std::shared_ptr<PresenterConfigurationAccess> pConfiguration (
         new PresenterConfigurationAccess(
             mxContext,
-            OUString("/org.openoffice.Office.PresenterScreen/"),
+            "/org.openoffice.Office.PresenterScreen/",
             PresenterConfigurationAccess::READ_WRITE));
 
     // Get configuration node for the view style container of the current
@@ -383,10 +362,11 @@ std::shared_ptr<PresenterConfigurationAccess> PresenterTheme::GetNodeForViewStyl
         "Presenter/Themes/" + mpTheme->msConfigurationNodeName + "/ViewStyles")))
     {
         pConfiguration->GoToChild(
-            ::boost::bind(&PresenterConfigurationAccess::IsStringPropertyEqual,
-                rsStyleName,
-                OUString("StyleName"),
-                _2));
+            [&rsStyleName] (OUString const&, uno::Reference<beans::XPropertySet> const& xProps)
+            {
+                return PresenterConfigurationAccess::IsStringPropertyEqual(
+                        rsStyleName, "StyleName", xProps);
+            });
     }
     return pConfiguration;
 }
@@ -395,16 +375,16 @@ SharedBitmapDescriptor PresenterTheme::GetBitmap (
     const OUString& rsStyleName,
     const OUString& rsBitmapName) const
 {
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
     {
         if (rsStyleName.isEmpty())
         {
             if (rsBitmapName == "Background")
             {
                 std::shared_ptr<Theme> pTheme (mpTheme);
-                while (pTheme.get()!=nullptr && pTheme->mpBackground.get()==nullptr)
+                while (pTheme != nullptr && pTheme->mpBackground.get() == nullptr)
                     pTheme = pTheme->mpParentTheme;
-                if (pTheme.get() != nullptr)
+                if (pTheme != nullptr)
                     return pTheme->mpBackground;
                 else
                     return SharedBitmapDescriptor();
@@ -436,21 +416,21 @@ SharedBitmapDescriptor PresenterTheme::GetBitmap (
 SharedBitmapDescriptor PresenterTheme::GetBitmap (
     const OUString& rsBitmapName) const
 {
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
     {
         if (rsBitmapName == "Background")
         {
             std::shared_ptr<Theme> pTheme (mpTheme);
-            while (pTheme.get()!=nullptr && pTheme->mpBackground.get()==nullptr)
+            while (pTheme != nullptr && pTheme->mpBackground.get() == nullptr)
                 pTheme = pTheme->mpParentTheme;
-            if (pTheme.get() != nullptr)
+            if (pTheme != nullptr)
                 return pTheme->mpBackground;
             else
                 return SharedBitmapDescriptor();
         }
         else
         {
-            if (mpTheme->mpIconContainer.get() != nullptr)
+            if (mpTheme->mpIconContainer != nullptr)
                 return mpTheme->mpIconContainer->GetBitmap(rsBitmapName);
         }
     }
@@ -460,7 +440,7 @@ SharedBitmapDescriptor PresenterTheme::GetBitmap (
 
 std::shared_ptr<PresenterBitmapContainer> PresenterTheme::GetBitmapContainer() const
 {
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
         return mpTheme->mpIconContainer;
     else
         return std::shared_ptr<PresenterBitmapContainer>();
@@ -469,7 +449,7 @@ std::shared_ptr<PresenterBitmapContainer> PresenterTheme::GetBitmapContainer() c
 PresenterTheme::SharedFontDescriptor PresenterTheme::GetFont (
     const OUString& rsStyleName) const
 {
-    if (mpTheme.get() != nullptr)
+    if (mpTheme != nullptr)
     {
         SharedPaneStyle pPaneStyle (mpTheme->GetPaneStyle(rsStyleName));
         if (pPaneStyle.get() != nullptr)
@@ -480,7 +460,7 @@ PresenterTheme::SharedFontDescriptor PresenterTheme::GetFont (
             return pViewStyle->GetFont();
 
         std::shared_ptr<Theme> pTheme (mpTheme);
-        while (pTheme.get() != nullptr)
+        while (pTheme != nullptr)
         {
             Theme::FontContainer::const_iterator iFont (pTheme->maFontContainer.find(rsStyleName));
             if (iFont != pTheme->maFontContainer.end())
@@ -505,7 +485,7 @@ PresenterTheme::FontDescriptor::FontDescriptor (
       mnXOffset(0),
       mnYOffset(0)
 {
-    if (rpDescriptor.get() != nullptr)
+    if (rpDescriptor != nullptr)
     {
         msFamilyName = rpDescriptor->msFamilyName;
         msStyleName = rpDescriptor->msStyleName;
@@ -576,6 +556,9 @@ double PresenterTheme::FontDescriptor::GetCellSizeForDesignSize (
     geometry::RealRectangle2D aBox (PresenterCanvasHelper::GetTextBoundingBox (xFont, "X"));
 
     const double nAscent (-aBox.Y1);
+    //tdf#112408
+    if (nAscent == 0)
+        return nDesignSize;
     const double nDescent (aBox.Y2);
     const double nScale = (nAscent+nDescent) / nAscent;
     return nDesignSize * nScale;
@@ -584,11 +567,9 @@ double PresenterTheme::FontDescriptor::GetCellSizeForDesignSize (
 //===== Theme =================================================================
 
 PresenterTheme::Theme::Theme (
-    const OUString& rsName,
     const Reference<container::XHierarchicalNameAccess>& rxThemeRoot,
     const OUString& rsNodeName)
-    : msThemeName(rsName),
-      msConfigurationNodeName(rsNodeName),
+    : msConfigurationNodeName(rsNodeName),
       mpParentTheme(),
       maPaneStyles(),
       maViewStyles(),
@@ -598,17 +579,10 @@ PresenterTheme::Theme::Theme (
 {
 }
 
-PresenterTheme::Theme::~Theme()
-{
-}
-
 void PresenterTheme::Theme::Read (
     PresenterConfigurationAccess& rConfiguration,
     ReadContext& rReadContext)
 {
-    PresenterConfigurationAccess::GetConfigurationNode(mxThemeRoot, "ThemeName")
-        >>= msThemeName;
-
     // Parent theme name.
     OUString sParentThemeName;
     if ((PresenterConfigurationAccess::GetConfigurationNode(mxThemeRoot, "ParentTheme")
@@ -627,7 +601,7 @@ void PresenterTheme::Theme::Read (
         SharedBitmapDescriptor());
 
     // Style associations.
-    maStyleAssociations.Read(rReadContext, mxThemeRoot);
+    maStyleAssociations.Read(mxThemeRoot);
 
     // Pane styles.
     maPaneStyles.Read(rReadContext, mxThemeRoot);
@@ -636,16 +610,12 @@ void PresenterTheme::Theme::Read (
     maViewStyles.Read(rReadContext, mxThemeRoot);
 
     // Read bitmaps.
-    mpIconContainer.reset(
-        new PresenterBitmapContainer(
-            Reference<container::XNameAccess>(
-                PresenterConfigurationAccess::GetConfigurationNode(mxThemeRoot, "Bitmaps"),
-                UNO_QUERY),
-            mpParentTheme.get()!=nullptr
-                ? mpParentTheme->mpIconContainer
-                : std::shared_ptr<PresenterBitmapContainer>(),
-            rReadContext.mxComponentContext,
-            rReadContext.mxCanvas));
+    mpIconContainer.reset(new PresenterBitmapContainer(
+        Reference<container::XNameAccess>(
+            PresenterConfigurationAccess::GetConfigurationNode(mxThemeRoot, "Bitmaps"), UNO_QUERY),
+        mpParentTheme != nullptr ? mpParentTheme->mpIconContainer
+                                 : std::shared_ptr<PresenterBitmapContainer>(),
+        rReadContext.mxComponentContext, rReadContext.mxCanvas));
 
     // Read fonts.
     Reference<container::XNameAccess> xFontNode(
@@ -653,8 +623,10 @@ void PresenterTheme::Theme::Read (
         UNO_QUERY);
     PresenterConfigurationAccess::ForAll(
         xFontNode,
-        ::boost::bind(&PresenterTheme::Theme::ProcessFont,
-            this, ::boost::ref(rReadContext), _1, _2));
+        [this] (OUString const& rKey, uno::Reference<beans::XPropertySet> const& xProps)
+        {
+            return this->ProcessFont(rKey, xProps);
+        });
 }
 
 SharedPaneStyle PresenterTheme::Theme::GetPaneStyle (const OUString& rsStyleName) const
@@ -662,7 +634,7 @@ SharedPaneStyle PresenterTheme::Theme::GetPaneStyle (const OUString& rsStyleName
     SharedPaneStyle pPaneStyle (maPaneStyles.GetPaneStyle(rsStyleName));
     if (pPaneStyle.get() != nullptr)
         return pPaneStyle;
-    else if (mpParentTheme.get() != nullptr)
+    else if (mpParentTheme != nullptr)
         return mpParentTheme->GetPaneStyle(rsStyleName);
     else
         return SharedPaneStyle();
@@ -673,18 +645,16 @@ SharedViewStyle PresenterTheme::Theme::GetViewStyle (const OUString& rsStyleName
     SharedViewStyle pViewStyle (maViewStyles.GetViewStyle(rsStyleName));
     if (pViewStyle.get() != nullptr)
         return pViewStyle;
-    else if (mpParentTheme.get() != nullptr)
+    else if (mpParentTheme != nullptr)
         return mpParentTheme->GetViewStyle(rsStyleName);
     else
         return SharedViewStyle();
 }
 
 void PresenterTheme::Theme::ProcessFont(
-    ReadContext& rReadContext,
     const OUString& rsKey,
     const Reference<beans::XPropertySet>& rxProperties)
 {
-    (void)rReadContext;
     maFontContainer[rsKey] = ReadContext::ReadFont(rxProperties, SharedFontDescriptor());
 }
 
@@ -708,10 +678,6 @@ ReadContext::ReadContext (
                 rxContext),
             UNO_QUERY_THROW);
     }
-}
-
-ReadContext::~ReadContext()
-{
 }
 
 PresenterTheme::SharedFontDescriptor ReadContext::ReadFont (
@@ -809,14 +775,14 @@ std::shared_ptr<PresenterTheme::Theme> ReadContext::ReadTheme (
                     >>= sThemeName;
                 if (sThemeName == sCurrentThemeName)
                 {
-                    pTheme.reset(new PresenterTheme::Theme(sThemeName,xTheme,rsKey));
+                    pTheme.reset(new PresenterTheme::Theme(xTheme,rsKey));
                     break;
                 }
             }
         }
     }
 
-    if (pTheme.get() != nullptr)
+    if (pTheme != nullptr)
     {
         pTheme->Read(rConfiguration, *this);
     }
@@ -842,7 +808,7 @@ BorderSize ReadContext::ReadBorderSize (const Reference<container::XNameAccess>&
 //===== PaneStyleContainer ====================================================
 
 void PaneStyleContainer::Read (
-    ReadContext& rReadContext,
+    const ReadContext& rReadContext,
     const Reference<container::XHierarchicalNameAccess>& rxThemeRoot)
 {
     Reference<container::XNameAccess> xPaneStyleList (
@@ -854,27 +820,26 @@ void PaneStyleContainer::Read (
     {
         ::std::vector<OUString> aProperties;
         aProperties.reserve(6);
-        aProperties.push_back("StyleName");
-        aProperties.push_back("ParentStyle");
-        aProperties.push_back("TitleFont");
-        aProperties.push_back("InnerBorderSize");
-        aProperties.push_back("OuterBorderSize");
-        aProperties.push_back("BorderBitmapList");
+        aProperties.emplace_back("StyleName");
+        aProperties.emplace_back("ParentStyle");
+        aProperties.emplace_back("TitleFont");
+        aProperties.emplace_back("InnerBorderSize");
+        aProperties.emplace_back("OuterBorderSize");
+        aProperties.emplace_back("BorderBitmapList");
         PresenterConfigurationAccess::ForAll(
             xPaneStyleList,
             aProperties,
-            ::boost::bind(&PaneStyleContainer::ProcessPaneStyle,
-                this, ::boost::ref(rReadContext), _1, _2));
+            [this, &rReadContext] (std::vector<uno::Any> const& rValues)
+            {
+                return this->ProcessPaneStyle(rReadContext, rValues);
+            });
     }
 }
 
 void PaneStyleContainer::ProcessPaneStyle(
-    ReadContext& rReadContext,
-    const OUString& rsKey,
+    ReadContext const & rReadContext,
     const ::std::vector<Any>& rValues)
 {
-    (void)rsKey;
-
     if (rValues.size() != 6)
         return;
 
@@ -886,13 +851,10 @@ void PaneStyleContainer::ProcessPaneStyle(
     if (rValues[1] >>= sParentStyleName)
     {
         // Find parent style.
-        ::std::vector<SharedPaneStyle>::const_iterator iStyle;
-        for (iStyle=mStyles.begin(); iStyle!=mStyles.end(); ++iStyle)
-            if ((*iStyle)->msStyleName.equals(sParentStyleName))
-            {
-                pStyle->mpParentStyle = *iStyle;
-                break;
-            }
+        auto iStyle = std::find_if(mStyles.begin(), mStyles.end(),
+            [&sParentStyleName](const SharedPaneStyle& rxStyle) { return rxStyle->msStyleName == sParentStyleName; });
+        if (iStyle != mStyles.end())
+            pStyle->mpParentStyle = *iStyle;
     }
 
     Reference<container::XHierarchicalNameAccess> xFontNode (rValues[2], UNO_QUERY);
@@ -904,7 +866,7 @@ void PaneStyleContainer::ProcessPaneStyle(
     Reference<container::XNameAccess> xOuterBorderSizeNode (rValues[4], UNO_QUERY);
     pStyle->maOuterBorderSize = ReadContext::ReadBorderSize(xOuterBorderSizeNode);
 
-    if (pStyle->mpParentStyle.get() != nullptr)
+    if (pStyle->mpParentStyle != nullptr)
     {
         pStyle->maInnerBorderSize.Merge(pStyle->mpParentStyle->maInnerBorderSize);
         pStyle->maOuterBorderSize.Merge(pStyle->mpParentStyle->maOuterBorderSize);
@@ -915,11 +877,9 @@ void PaneStyleContainer::ProcessPaneStyle(
         Reference<container::XNameAccess> xBitmapsNode (rValues[5], UNO_QUERY);
         pStyle->mpBitmaps.reset(new PresenterBitmapContainer(
             xBitmapsNode,
-            pStyle->mpParentStyle.get()!=nullptr
-                ? pStyle->mpParentStyle->mpBitmaps
-                : std::shared_ptr<PresenterBitmapContainer>(),
-            rReadContext.mxComponentContext,
-            rReadContext.mxCanvas,
+            pStyle->mpParentStyle != nullptr ? pStyle->mpParentStyle->mpBitmaps
+                                             : std::shared_ptr<PresenterBitmapContainer>(),
+            rReadContext.mxComponentContext, rReadContext.mxCanvas,
             rReadContext.mxPresenterHelper));
     }
 
@@ -928,10 +888,10 @@ void PaneStyleContainer::ProcessPaneStyle(
 
 SharedPaneStyle PaneStyleContainer::GetPaneStyle (const OUString& rsStyleName) const
 {
-    ::std::vector<SharedPaneStyle>::const_iterator iEnd (mStyles.end());
-    for (::std::vector<SharedPaneStyle>::const_iterator iStyle=mStyles.begin(); iStyle!=iEnd; ++iStyle)
-        if ((*iStyle)->msStyleName == rsStyleName)
-            return *iStyle;
+    auto iStyle = std::find_if(mStyles.begin(), mStyles.end(),
+        [&rsStyleName](const SharedPaneStyle& rxStyle) { return rxStyle->msStyleName == rsStyleName; });
+    if (iStyle != mStyles.end())
+        return *iStyle;
     return SharedPaneStyle();
 }
 
@@ -947,20 +907,16 @@ PaneStyle::PaneStyle()
 {
 }
 
-PaneStyle::~PaneStyle()
-{
-}
-
 const SharedBitmapDescriptor PaneStyle::GetBitmap (const OUString& rsBitmapName) const
 {
-    if (mpBitmaps.get() != nullptr)
+    if (mpBitmaps != nullptr)
     {
         const SharedBitmapDescriptor pBitmap = mpBitmaps->GetBitmap(rsBitmapName);
         if (pBitmap.get() != nullptr)
             return pBitmap;
     }
 
-    if (mpParentStyle.get() != nullptr)
+    if (mpParentStyle != nullptr)
         return mpParentStyle->GetBitmap(rsBitmapName);
     else
         return SharedBitmapDescriptor();
@@ -970,7 +926,7 @@ PresenterTheme::SharedFontDescriptor PaneStyle::GetFont() const
 {
     if (mpFont.get() != nullptr)
         return mpFont;
-    else if (mpParentStyle.get() != nullptr)
+    else if (mpParentStyle != nullptr)
         return mpParentStyle->GetFont();
     else
         return PresenterTheme::SharedFontDescriptor();
@@ -979,11 +935,9 @@ PresenterTheme::SharedFontDescriptor PaneStyle::GetFont() const
 //===== ViewStyleContainer ====================================================
 
 void ViewStyleContainer::Read (
-    ReadContext& rReadContext,
+    const ReadContext& rReadContext,
     const Reference<container::XHierarchicalNameAccess>& rxThemeRoot)
 {
-    (void)rReadContext;
-
     Reference<container::XNameAccess> xViewStyleList (
         PresenterConfigurationAccess::GetConfigurationNode(
             rxThemeRoot,
@@ -993,13 +947,15 @@ void ViewStyleContainer::Read (
     {
         PresenterConfigurationAccess::ForAll(
             xViewStyleList,
-            ::boost::bind(&ViewStyleContainer::ProcessViewStyle,
-                this, ::boost::ref(rReadContext), _2));
+            [this, &rReadContext] (OUString const&, uno::Reference<beans::XPropertySet> const& xProps)
+            {
+                return this->ProcessViewStyle(rReadContext, xProps);
+            });
     }
 }
 
 void ViewStyleContainer::ProcessViewStyle(
-    ReadContext& rReadContext,
+    ReadContext const & rReadContext,
     const Reference<beans::XPropertySet>& rxProperties)
 {
     std::shared_ptr<ViewStyle> pStyle (new ViewStyle());
@@ -1012,15 +968,14 @@ void ViewStyleContainer::ProcessViewStyle(
         >>= sParentStyleName)
     {
         // Find parent style.
-        ::std::vector<SharedViewStyle>::const_iterator iStyle;
-        for (iStyle=mStyles.begin(); iStyle!=mStyles.end(); ++iStyle)
-            if ((*iStyle)->msStyleName.equals(sParentStyleName))
-            {
-                pStyle->mpParentStyle = *iStyle;
-                pStyle->mpFont = (*iStyle)->mpFont;
-                pStyle->mpBackground = (*iStyle)->mpBackground;
-                break;
-            }
+        auto iStyle = std::find_if(mStyles.begin(), mStyles.end(),
+            [&sParentStyleName](const SharedViewStyle& rxStyle) { return rxStyle->msStyleName == sParentStyleName; });
+        if (iStyle != mStyles.end())
+        {
+            pStyle->mpParentStyle = *iStyle;
+            pStyle->mpFont = (*iStyle)->mpFont;
+            pStyle->mpBackground = (*iStyle)->mpBackground;
+        }
     }
 
     const OUString sPathToFont; // empty string
@@ -1048,10 +1003,10 @@ void ViewStyleContainer::ProcessViewStyle(
 
 SharedViewStyle ViewStyleContainer::GetViewStyle (const OUString& rsStyleName) const
 {
-    ::std::vector<SharedViewStyle>::const_iterator iEnd (mStyles.end());
-    for (::std::vector<SharedViewStyle>::const_iterator iStyle=mStyles.begin(); iStyle!=iEnd; ++iStyle)
-        if ((*iStyle)->msStyleName == rsStyleName)
-            return *iStyle;
+    auto iStyle = std::find_if(mStyles.begin(), mStyles.end(),
+        [&rsStyleName](const SharedViewStyle& rxStyle) { return rxStyle->msStyleName == rsStyleName; });
+    if (iStyle != mStyles.end())
+        return *iStyle;
     return SharedViewStyle();
 }
 
@@ -1062,10 +1017,6 @@ ViewStyle::ViewStyle()
       mpParentStyle(),
       mpFont(),
       mpBackground()
-{
-}
-
-ViewStyle::~ViewStyle()
 {
 }
 
@@ -1081,7 +1032,7 @@ PresenterTheme::SharedFontDescriptor ViewStyle::GetFont() const
 {
     if (mpFont.get() != nullptr)
         return mpFont;
-    else if (mpParentStyle.get() != nullptr)
+    else if (mpParentStyle != nullptr)
         return mpParentStyle->GetFont();
     else
         return PresenterTheme::SharedFontDescriptor();
@@ -1090,7 +1041,6 @@ PresenterTheme::SharedFontDescriptor ViewStyle::GetFont() const
 //===== StyleAssociationContainer =============================================
 
 void StyleAssociationContainer::Read (
-    ReadContext& rReadContext,
     const Reference<container::XHierarchicalNameAccess>& rxThemeRoot)
 {
     Reference<container::XNameAccess> xStyleAssociationList (
@@ -1106,8 +1056,10 @@ void StyleAssociationContainer::Read (
         PresenterConfigurationAccess::ForAll(
             xStyleAssociationList,
             aProperties,
-            ::boost::bind(&StyleAssociationContainer::ProcessStyleAssociation,
-                this, ::boost::ref(rReadContext), _1, _2));
+            [this] (std::vector<uno::Any> const& rValues)
+            {
+                return this->ProcessStyleAssociation(rValues);
+            });
     }
 }
 
@@ -1121,13 +1073,8 @@ OUString StyleAssociationContainer::GetStyleName (const OUString& rsResourceName
 }
 
 void StyleAssociationContainer::ProcessStyleAssociation(
-    ReadContext& rReadContext,
-    const OUString& rsKey,
     const ::std::vector<Any>& rValues)
 {
-    (void)rReadContext;
-    (void)rsKey;
-
     if (rValues.size() != 2)
         return;
 

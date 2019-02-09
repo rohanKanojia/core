@@ -26,7 +26,7 @@
 
 #include <hintids.hxx>
 
-#include <com/sun/star/util/SearchOptions2.hpp>
+#include <sal/log.hxx>
 #include <svl/cjkoptions.hxx>
 #include <svl/ctloptions.hxx>
 #include <svx/pageitem.hxx>
@@ -40,10 +40,8 @@
 #include <sal/macros.h>
 #include <sfx2/request.hxx>
 #include <svx/srchdlg.hxx>
-#include <svx/dialmgr.hxx>
 #include <svx/dialogs.hrc>
 #include <vcl/layout.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/wrkwin.hxx>
 #include <editeng/unolingu.hxx>
 #include <edtwin.hxx>
@@ -62,13 +60,12 @@
 #include <comphelper/lok.hxx>
 #include <comphelper/string.hxx>
 
-#include <view.hrc>
+#include <strings.hrc>
 #include <SwRewriter.hxx>
-#include <comcore.hrc>
 #include <IDocumentDrawModelAccess.hxx>
 #include <drawdoc.hxx>
 
-#include "PostItMgr.hxx"
+#include <PostItMgr.hxx>
 
 using namespace com::sun::star;
 using namespace ::com::sun::star::i18n;
@@ -82,7 +79,7 @@ struct SwSearchOptions
     SwDocPositions eStart, eEnd;
     bool bDontWrap;
 
-    SwSearchOptions( SwWrtShell* pSh, bool bBackward );
+    SwSearchOptions( SwWrtShell const * pSh, bool bBackward );
 };
 
 /// Adds rMatches using rKey as a key to the rTree tree.
@@ -102,7 +99,7 @@ static void lcl_addContainerToJson(boost::property_tree::ptree& rTree, const OSt
 }
 
 /// Emits LOK callbacks (count, selection) for search results.
-static void lcl_emitSearchResultCallbacks(SvxSearchItem* pSearchItem, SwWrtShell* pWrtShell, bool bHighlightAll)
+static void lcl_emitSearchResultCallbacks(SvxSearchItem const * pSearchItem, SwWrtShell const * pWrtShell, bool bHighlightAll)
 {
     // Emit a callback also about the selection rectangles, grouped by matches.
     if (SwPaM* pPaM = pWrtShell->GetCursor())
@@ -115,9 +112,8 @@ static void lcl_emitSearchResultCallbacks(SvxSearchItem* pSearchItem, SwWrtShell
                 std::vector<OString> aSelectionRectangles;
                 pShellCursor->SwSelPaintRects::Show(&aSelectionRectangles);
                 std::vector<OString> aRect;
-                for (size_t i = 0; i < aSelectionRectangles.size(); ++i)
+                for (const OString & rSelectionRectangle : aSelectionRectangles)
                 {
-                    const OString& rSelectionRectangle = aSelectionRectangles[i];
                     if (rSelectionRectangle.isEmpty())
                         continue;
                     aRect.push_back(rSelectionRectangle);
@@ -135,7 +131,7 @@ static void lcl_emitSearchResultCallbacks(SvxSearchItem* pSearchItem, SwWrtShell
         boost::property_tree::write_json(aStream, aTree);
         OString aPayload = aStream.str().c_str();
 
-        pWrtShell->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
+        pWrtShell->GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_RESULT_SELECTION, aPayload.getStr());
     }
 }
 
@@ -201,6 +197,7 @@ void SwView::ExecSearch(SfxRequest& rReq)
         case FN_REPEAT_SEARCH:
         case FID_SEARCH_NOW:
         {
+            sal_uInt16 nMoveType = SwView::GetMoveType();
             {
                 if(FID_SEARCH_NOW == nSlot && !rReq.IsAPI())
                     SwView::SetMoveType(NID_SRCH_REP);
@@ -246,7 +243,7 @@ void SwView::ExecSearch(SfxRequest& rReq)
                 {
                     Scroll(m_pWrtShell->GetCharRect().SVRect());
                     if (comphelper::LibreOfficeKit::isActive())
-                        lcl_emitSearchResultCallbacks(m_pSrchItem, m_pWrtShell, /* bHighlightAll = */ false);
+                        lcl_emitSearchResultCallbacks(m_pSrchItem, m_pWrtShell.get(), /* bHighlightAll = */ false);
                 }
                 rReq.SetReturnValue(SfxBoolItem(nSlot, bRet));
 #if HAVE_FEATURE_DESKTOP
@@ -264,27 +261,23 @@ void SwView::ExecSearch(SfxRequest& rReq)
             case SvxSearchCmd::FIND_ALL:
             {
                 // Disable LOK selection notifications during search.
-                SwDrawModel* pModel = m_pWrtShell->getIDocumentDrawModelAccess().GetDrawModel();
-                if (pModel)
-                    pModel->setTiledSearching(true);
+                m_pWrtShell->GetSfxViewShell()->setTiledSearching(true);
                 bool bRet = SearchAll();
-                if (pModel)
-                    pModel->setTiledSearching(false);
+                m_pWrtShell->GetSfxViewShell()->setTiledSearching(false);
 
                 if( !bRet )
                 {
 #if HAVE_FEATURE_DESKTOP
                     if( !bQuiet )
                     {
-                        m_pWrtShell->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_NOT_FOUND,
-                                m_pSrchItem->GetSearchString().toUtf8().getStr());
-                        SvxSearchDialogWrapper::SetSearchLabel(SL_NotFound);
+                        m_pWrtShell->GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, m_pSrchItem->GetSearchString().toUtf8().getStr());
+                        SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
                     }
 #endif
                     m_bFound = false;
                 }
                 else if (comphelper::LibreOfficeKit::isActive())
-                    lcl_emitSearchResultCallbacks(m_pSrchItem, m_pWrtShell, /* bHighlightAll = */ true);
+                    lcl_emitSearchResultCallbacks(m_pSrchItem, m_pWrtShell.get(), /* bHighlightAll = */ true);
                 rReq.SetReturnValue(SfxBoolItem(nSlot, bRet));
 #if HAVE_FEATURE_DESKTOP
                 {
@@ -315,15 +308,15 @@ void SwView::ExecSearch(SfxRequest& rReq)
                         if (bBack)
                             m_pWrtShell->Push();
                         OUString aReplace( m_pSrchItem->GetReplaceString() );
-                        SearchOptions2 aTmp( m_pSrchItem->GetSearchOptions() );
-                        OUString *pBackRef = ReplaceBackReferences( aTmp, m_pWrtShell->GetCursor() );
-                        if( pBackRef )
-                            m_pSrchItem->SetReplaceString( *pBackRef );
+                        i18nutil::SearchOptions2 aTmp( m_pSrchItem->GetSearchOptions() );
+                        boost::optional<OUString> xBackRef = sw::ReplaceBackReferences(aTmp,
+                            m_pWrtShell->GetCursor(), m_pWrtShell->GetLayout());
+                        if( xBackRef )
+                            m_pSrchItem->SetReplaceString( *xBackRef );
                         Replace();
-                        if( pBackRef )
+                        if( xBackRef )
                         {
                             m_pSrchItem->SetReplaceString( aReplace );
-                            delete pBackRef;
                         }
                         if (bBack)
                         {
@@ -358,37 +351,36 @@ void SwView::ExecSearch(SfxRequest& rReq)
 
             case SvxSearchCmd::REPLACE_ALL:
                 {
-                    SwSearchOptions aOpts( m_pWrtShell, m_pSrchItem->GetBackward() );
+                    SwSearchOptions aOpts( m_pWrtShell.get(), m_pSrchItem->GetBackward() );
                     m_bExtra = false;
                     sal_uLong nFound;
 
                     {   //Scope for SwWait-Object
                         SwWait aWait( *GetDocShell(), true );
                         m_pWrtShell->StartAllAction();
+
+                        // i#8288 "replace all" should not change cursor
+                        // position, so save current cursor
+                        m_pWrtShell->Push();
+
                         if (!m_pSrchItem->GetSelection())
                         {
                             // if we don't want to search in the selection...
                             m_pWrtShell->KillSelection(nullptr, false);
-                            // i#8288 "replace all" should not change cursor
-                            // position, so save current cursor
-                            m_pWrtShell->Push();
-                            if (DOCPOS_START == aOpts.eEnd)
+                            if (SwDocPositions::Start == aOpts.eEnd)
                             {
-                                m_pWrtShell->EndDoc();
+                                m_pWrtShell->EndOfSection();
                             }
                             else
                             {
-                                m_pWrtShell->SttDoc();
+                                m_pWrtShell->StartOfSection();
                             }
                         }
                         nFound = FUNC_Search( aOpts );
-                        if (!m_pSrchItem->GetSelection())
-                        {
-                            // create it just to overwrite it with stack cursor
-                            m_pWrtShell->CreateCursor();
-                            // i#8288 restore the original cursor position
-                            m_pWrtShell->Pop(false);
-                        }
+                        // create it just to overwrite it with stack cursor
+                         m_pWrtShell->CreateCursor();
+                        // i#8288 restore the original cursor position
+                        m_pWrtShell->Pop(SwCursorShell::PopMode::DeleteCurrent);
                         m_pWrtShell->EndAllAction();
                     }
 
@@ -398,18 +390,18 @@ void SwView::ExecSearch(SfxRequest& rReq)
 #if HAVE_FEATURE_DESKTOP
                         if( !bQuiet )
                         {
-                            m_pWrtShell->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_NOT_FOUND,
-                                    m_pSrchItem->GetSearchString().toUtf8().getStr());
-                            SvxSearchDialogWrapper::SetSearchLabel(SL_NotFound);
+                            m_pWrtShell->GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, m_pSrchItem->GetSearchString().toUtf8().getStr());
+                            SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
                         }
 #endif
                         m_bFound = false;
+                        SwView::SetMoveType(nMoveType);
                         return;
                     }
 
                     if( !bQuiet && ULONG_MAX != nFound)
                     {
-                        OUString sText( SW_RES( STR_NB_REPLACED ) );
+                        OUString sText( SwResId( STR_NB_REPLACED ) );
                         sText = sText.replaceFirst("XX", OUString::number( nFound ));
                         SvxSearchDialogWrapper::SetSearchLabel(sText);
                     }
@@ -433,6 +425,7 @@ void SwView::ExecSearch(SfxRequest& rReq)
 
             rReq.Done();
             m_eLastSearchCommand = m_pSrchItem->GetCommand();
+            SwView::SetMoveType(nMoveType);
         }
         break;
         case FID_SEARCH_SEARCHSET:
@@ -447,42 +440,29 @@ void SwView::ExecSearch(SfxRequest& rReq)
 /* 8 */         RES_CHRATR_BACKGROUND,  RES_CHRATR_BACKGROUND,
 /*10 */         RES_CHRATR_ROTATE,      RES_CHRATR_ROTATE,
 /*12 */         RES_CHRATR_SCALEW,      RES_CHRATR_RELIEF,
-// insert position for CJK/CTL attributes!
-/*14 */         RES_PARATR_LINESPACING, RES_PARATR_HYPHENZONE,
-/*16 */         RES_PARATR_REGISTER,    RES_PARATR_REGISTER,
-/*18 */         RES_PARATR_VERTALIGN,   RES_PARATR_VERTALIGN,
-/*20 */         RES_LR_SPACE,           RES_UL_SPACE,
-/*22 */         SID_ATTR_PARA_MODEL,    SID_ATTR_PARA_KEEP,
-/*24 */         0
+/*14 */         RES_CHRATR_OVERLINE,    RES_CHRATR_OVERLINE,
+/*16 */         RES_PARATR_LINESPACING, RES_PARATR_HYPHENZONE,
+/*18 */         RES_PARATR_REGISTER,    RES_PARATR_REGISTER,
+/*20 */         RES_PARATR_VERTALIGN,   RES_PARATR_VERTALIGN,
+/*22 */         RES_LR_SPACE,           RES_UL_SPACE,
+/*24 */         SID_ATTR_PARA_MODEL,    SID_ATTR_PARA_KEEP,
+/*26 */         0
             };
 
-            static const sal_uInt16 aCJKAttr[] =
-            {
-                RES_CHRATR_CJK_FONT,    RES_CHRATR_CJK_WEIGHT,
-                RES_CHRATR_EMPHASIS_MARK, RES_CHRATR_TWO_LINES,
-                RES_PARATR_SCRIPTSPACE, RES_PARATR_FORBIDDEN_RULES
-            };
-            static const sal_uInt16 aCTLAttr[] =
-            {
-                RES_CHRATR_CTL_FONT,    RES_CHRATR_CTL_WEIGHT
-            };
+            SfxItemSet aSet(m_pWrtShell->GetAttrPool(), aNormalAttr);
 
-            std::vector<sal_uInt16> aArr;
-            aArr.insert( aArr.begin(), aNormalAttr,
-                    aNormalAttr + SAL_N_ELEMENTS( aNormalAttr ));
             if( SW_MOD()->GetCTLOptions().IsCTLFontEnabled() )
             {
-                aArr.insert( aArr.begin() + 14, aCTLAttr,
-                        aCTLAttr + SAL_N_ELEMENTS( aCTLAttr ));
+                aSet.MergeRange(RES_CHRATR_CTL_FONT, RES_CHRATR_CTL_WEIGHT);
             }
             SvtCJKOptions aCJKOpt;
             if( aCJKOpt.IsAnyEnabled() )
             {
-                aArr.insert( aArr.begin() + 14, aCJKAttr,
-                        aCJKAttr + SAL_N_ELEMENTS( aCJKAttr ));
+                aSet.MergeRange(RES_CHRATR_CJK_FONT, RES_CHRATR_CJK_WEIGHT);
+                aSet.MergeRange(RES_CHRATR_EMPHASIS_MARK, RES_CHRATR_TWO_LINES);
+                aSet.MergeRange(RES_PARATR_SCRIPTSPACE, RES_PARATR_FORBIDDEN_RULES);
             }
 
-            SfxItemSet aSet( m_pWrtShell->GetAttrPool(), &aArr[0] );
             sal_uInt16 nWhich = SID_SEARCH_SEARCHSET;
 
             if ( FID_SEARCH_REPLACESET == nSlot )
@@ -504,20 +484,14 @@ void SwView::ExecSearch(SfxRequest& rReq)
         }
         break;
         default:
-#if OSL_DEBUG_LEVEL > 1
-            if(nSlot)
-            {
-                OString sStr("nSlot: " + OString::number(nSlot) + " wrong Dispatcher (viewsrch.cxx)");
-                OSL_FAIL(sStr.getStr());
-            }
-#endif
+            SAL_WARN_IF( nSlot, "sw", "nSlot: " << nSlot << " wrong Dispatcher (viewsrch.cxx)" );
             return;
     }
 }
 
 bool SwView::SearchAndWrap(bool bApi)
 {
-    SwSearchOptions aOpts( m_pWrtShell, m_pSrchItem->GetBackward() );
+    SwSearchOptions aOpts( m_pWrtShell.get(), m_pSrchItem->GetBackward() );
 
         // Remember starting position of the search for wraparound
         // Start- / EndAction perhaps because existing selections of 'search all'
@@ -529,10 +503,10 @@ bool SwView::SearchAndWrap(bool bApi)
     // occurrence in the document instead of the second.
     if( m_eLastSearchCommand == SvxSearchCmd::FIND_ALL )
     {
-        if( DOCPOS_START == aOpts.eEnd )
-            m_pWrtShell->EndDoc();
+        if( SwDocPositions::Start == aOpts.eEnd )
+            m_pWrtShell->EndOfSection();
         else
-            m_pWrtShell->SttDoc();
+            m_pWrtShell->StartOfSection();
     }
 
     // fdo#65014 : Ensure that the point of the cursor is at the extremity of the
@@ -595,9 +569,8 @@ bool SwView::SearchAndWrap(bool bApi)
         if( !bApi )
         {
 #if HAVE_FEATURE_DESKTOP
-            m_pWrtShell->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_NOT_FOUND,
-                    m_pSrchItem->GetSearchString().toUtf8().getStr());
-            SvxSearchDialogWrapper::SetSearchLabel(SL_NotFound);
+            m_pWrtShell->GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, m_pSrchItem->GetSearchString().toUtf8().getStr());
+            SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
 #endif
         }
         m_bFound = false;
@@ -608,13 +581,13 @@ bool SwView::SearchAndWrap(bool bApi)
         // Try again with WrapAround?
 
     m_pWrtShell->StartAllAction();
-    m_pWrtShell->Pop(false);
+    m_pWrtShell->Pop(SwCursorShell::PopMode::DeleteCurrent);
     pWait.reset(new SwWait( *GetDocShell(), true ));
 
-    bool bSrchBkwrd = DOCPOS_START == aOpts.eEnd;
+    bool bSrchBkwrd = SwDocPositions::Start == aOpts.eEnd;
 
-    aOpts.eEnd =  bSrchBkwrd ? DOCPOS_START : DOCPOS_END;
-    aOpts.eStart = bSrchBkwrd ? DOCPOS_END : DOCPOS_START;
+    aOpts.eEnd =  bSrchBkwrd ? SwDocPositions::Start : SwDocPositions::End;
+    aOpts.eStart = bSrchBkwrd ? SwDocPositions::End : SwDocPositions::Start;
 
     if (bHasSrchInOther)
     {
@@ -643,15 +616,14 @@ bool SwView::SearchAndWrap(bool bApi)
     if (m_bFound)
     {
         if (!bSrchBkwrd)
-            SvxSearchDialogWrapper::SetSearchLabel(SL_End);
+            SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::End);
         else
-            SvxSearchDialogWrapper::SetSearchLabel(SL_Start);
+            SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::Start);
     }
     else if(!bApi)
     {
-        m_pWrtShell->libreOfficeKitCallback(LOK_CALLBACK_SEARCH_NOT_FOUND,
-                m_pSrchItem->GetSearchString().toUtf8().getStr());
-        SvxSearchDialogWrapper::SetSearchLabel(SL_NotFound);
+        m_pWrtShell->GetSfxViewShell()->libreOfficeKitViewCallback(LOK_CALLBACK_SEARCH_NOT_FOUND, m_pSrchItem->GetSearchString().toUtf8().getStr());
+        SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::NotFound);
     }
 #endif
     return m_bFound;
@@ -662,20 +634,20 @@ bool SwView::SearchAll()
     SwWait aWait( *GetDocShell(), true );
     m_pWrtShell->StartAllAction();
 
-    SwSearchOptions aOpts( m_pWrtShell, m_pSrchItem->GetBackward() );
+    SwSearchOptions aOpts( m_pWrtShell.get(), m_pSrchItem->GetBackward() );
 
     if (!m_pSrchItem->GetSelection())
     {
         // Cancel existing selections, if should not be sought in selected areas.
         m_pWrtShell->KillSelection(nullptr, false);
 
-        if( DOCPOS_START == aOpts.eEnd )
-            m_pWrtShell->EndDoc();
+        if( SwDocPositions::Start == aOpts.eEnd )
+            m_pWrtShell->EndOfSection();
         else
-            m_pWrtShell->SttDoc();
+            m_pWrtShell->StartOfSection();
     }
     m_bExtra = false;
-    sal_uInt16 nFound = (sal_uInt16)FUNC_Search( aOpts );
+    sal_uInt16 nFound = static_cast<sal_uInt16>(FUNC_Search( aOpts ));
     m_bFound = 0 != nFound;
 
     m_pWrtShell->EndAllAction();
@@ -692,10 +664,10 @@ void SwView::Replace()
     {
         SwRewriter aRewriter;
         aRewriter.AddRule(UndoArg1, m_pSrchItem->GetSearchString());
-        aRewriter.AddRule(UndoArg2, SW_RESSTR(STR_YIELDS));
+        aRewriter.AddRule(UndoArg2, SwResId(STR_YIELDS));
         aRewriter.AddRule(UndoArg3, m_pSrchItem->GetReplaceString());
 
-        m_pWrtShell->StartUndo(UNDO_UI_REPLACE_STYLE, &aRewriter);
+        m_pWrtShell->StartUndo(SwUndoId::UI_REPLACE_STYLE, &aRewriter);
 
         m_pWrtShell->SetTextFormatColl( m_pWrtShell->GetParaStyle(
                             m_pSrchItem->GetReplaceString(),
@@ -714,8 +686,8 @@ void SwView::Replace()
         {
             /* check that the selection match the search string*/
             //save state
-            SwPosition aStartPos = (* m_pWrtShell->GetSwCursor()->Start());
-            SwPosition aEndPos = (* m_pWrtShell->GetSwCursor()->End());
+            SwPosition aStartPos = * m_pWrtShell->GetSwCursor()->Start();
+            SwPosition aEndPos = * m_pWrtShell->GetSwCursor()->End();
             bool   bHasSelection = m_pSrchItem->GetSelection();
             SvxSearchCmd nOldCmd = m_pSrchItem->GetCommand();
 
@@ -724,7 +696,7 @@ void SwView::Replace()
             m_pSrchItem->SetSelection(true);
 
             //check if it matches
-            SwSearchOptions aOpts( m_pWrtShell, m_pSrchItem->GetBackward() );
+            SwSearchOptions aOpts( m_pWrtShell.get(), m_pSrchItem->GetBackward() );
             if( ! FUNC_Search(aOpts) )
             {
 
@@ -776,17 +748,17 @@ void SwView::Replace()
     m_pWrtShell->EndAllAction();
 }
 
-SwSearchOptions::SwSearchOptions( SwWrtShell* pSh, bool bBackward )
+SwSearchOptions::SwSearchOptions( SwWrtShell const * pSh, bool bBackward )
 {
-    eStart = DOCPOS_CURR;
+    eStart = SwDocPositions::Curr;
     if( bBackward )
     {
-        eEnd = DOCPOS_START;
+        eEnd = SwDocPositions::Start;
         bDontWrap = pSh->IsEndOfDoc();
     }
     else
     {
-        eEnd = DOCPOS_END;
+        eEnd = SwDocPositions::End;
         bDontWrap = pSh->IsStartOfDoc();
     }
 }
@@ -794,16 +766,18 @@ SwSearchOptions::SwSearchOptions( SwWrtShell* pSh, bool bBackward )
 sal_uLong SwView::FUNC_Search( const SwSearchOptions& rOptions )
 {
 #if HAVE_FEATURE_DESKTOP
-    SvxSearchDialogWrapper::SetSearchLabel(SL_Empty);
+    SvxSearchDialogWrapper::SetSearchLabel(SearchLabel::Empty);
 #endif
     bool bDoReplace = m_pSrchItem->GetCommand() == SvxSearchCmd::REPLACE ||
                       m_pSrchItem->GetCommand() == SvxSearchCmd::REPLACE_ALL;
 
-    int eRanges = m_pSrchItem->GetSelection() ?
-        FND_IN_SEL : m_bExtra ? FND_IN_OTHER : FND_IN_BODY;
+    FindRanges eRanges = m_pSrchItem->GetSelection()
+                        ? FindRanges::InSel
+                        : m_bExtra
+                          ? FindRanges::InOther : FindRanges::InBody;
     if (m_pSrchItem->GetCommand() == SvxSearchCmd::FIND_ALL    ||
         m_pSrchItem->GetCommand() == SvxSearchCmd::REPLACE_ALL)
-        eRanges |= FND_IN_SELALL;
+        eRanges |= FindRanges::InSelAll;
 
     m_pWrtShell->SttSelect();
 
@@ -823,23 +797,23 @@ sal_uLong SwView::FUNC_Search( const SwSearchOptions& rOptions )
         ::SfxToSwPageDescAttr( *m_pWrtShell, aSrchSet );
     }
 
-    SfxItemSet* pReplSet = nullptr;
+    std::unique_ptr<SfxItemSet> pReplSet;
     if( bDoReplace && m_pReplList && m_pReplList->Count() )
     {
-        pReplSet = new SfxItemSet( m_pWrtShell->GetAttrPool(),
-                                        aSearchAttrRange );
+        pReplSet.reset( new SfxItemSet( m_pWrtShell->GetAttrPool(),
+                                        aSearchAttrRange ) );
         m_pReplList->Get( *pReplSet );
 
         // -- Page break with page template
         ::SfxToSwPageDescAttr( *m_pWrtShell, *pReplSet );
 
         if( !pReplSet->Count() )        // too bad, we don't know
-            DELETEZ( pReplSet );        // the attributes
+            pReplSet.reset();        // the attributes
     }
 
     // build SearchOptions to be used
 
-    SearchOptions2 aSearchOpt( m_pSrchItem->GetSearchOptions() );
+    i18nutil::SearchOptions2 aSearchOpt( m_pSrchItem->GetSearchOptions() );
     aSearchOpt.Locale = GetAppLanguageTag().getLocale();
     if( !bDoReplace )
         aSearchOpt.replaceString.clear();
@@ -852,18 +826,18 @@ sal_uLong SwView::FUNC_Search( const SwSearchOptions& rOptions )
             !m_pSrchItem->GetPattern(),
             rOptions.eStart,
             rOptions.eEnd,
-            FindRanges(eRanges),
+            eRanges,
             !m_pSrchItem->GetSearchString().isEmpty() ? &aSearchOpt : nullptr,
-            pReplSet );
+            pReplSet.get() );
     }
     else if( m_pSrchItem->GetPattern() )
     {
         // Searching (and replacing) templates
-        const OUString sRplStr( m_pSrchItem->GetReplaceString() );
+        const OUString& sRplStr( m_pSrchItem->GetReplaceString() );
         nFound = m_pWrtShell->SearchTempl( m_pSrchItem->GetSearchString(),
             rOptions.eStart,
             rOptions.eEnd,
-            FindRanges(eRanges),
+            eRanges,
             bDoReplace ? &sRplStr : nullptr );
     }
     else
@@ -872,7 +846,7 @@ sal_uLong SwView::FUNC_Search( const SwSearchOptions& rOptions )
         nFound = m_pWrtShell->SearchPattern(aSearchOpt, m_pSrchItem->GetNotes(),
                                           rOptions.eStart,
                                           rOptions.eEnd,
-                                          FindRanges(eRanges),
+                                          eRanges,
                                           bDoReplace );
     }
     m_pWrtShell->EndSelect();
@@ -884,7 +858,7 @@ SvxSearchDialog* SwView::GetSearchDialog()
 #if HAVE_FEATURE_DESKTOP
     const sal_uInt16 nId = SvxSearchDialogWrapper::GetChildWindowId();
     SvxSearchDialogWrapper *pWrp = static_cast<SvxSearchDialogWrapper*>( SfxViewFrame::Current()->GetChildWindow(nId) );
-    auto pSrchDlg = (pWrp) ? pWrp->getDialog() : nullptr;
+    auto pSrchDlg = pWrp ? pWrp->getDialog() : nullptr;
     return pSrchDlg;
 #else
     return nullptr;
@@ -914,7 +888,7 @@ void SwView::StateSearch(SfxItemSet &rSet)
                 if ( !m_pSrchItem )
                 {
                     m_pSrchItem = new SvxSearchItem( SID_SEARCH_ITEM );
-                    m_pSrchItem->SetFamily(SFX_STYLE_FAMILY_PARA);
+                    m_pSrchItem->SetFamily(SfxStyleFamily::Para);
                     m_pSrchItem->SetSearchString( m_pWrtShell->GetSelText() );
                 }
 

@@ -19,8 +19,8 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_UI_RELATIONDESIGN_RTABLECONNECTION_HXX
 #define INCLUDED_DBACCESS_SOURCE_UI_RELATIONDESIGN_RTABLECONNECTION_HXX
 
-#include "TableConnection.hxx"
-#include "RTableConnectionData.hxx"
+#include <TableConnection.hxx>
+#include <RTableConnectionData.hxx>
 
 namespace dbaui
 {
@@ -30,11 +30,11 @@ namespace dbaui
     public:
         ORelationTableConnection( ORelationTableView* pContainer, const TTableConnectionData::value_type& pTabConnData );
         ORelationTableConnection( const ORelationTableConnection& rConn );
-            // wichtiger Kommentar zum CopyConstructor siehe OTableConnection(const OTableConnection&)
+            // important comment to the CopyConstructor see OTableConnection(const OTableConnection&)
 
         ORelationTableConnection& operator=( const ORelationTableConnection& rConn );
 
-        virtual void Draw(vcl::RenderContext& rRenderContext, const Rectangle& rRect) override;
+        virtual void Draw(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect) override;
         using OTableConnection::Draw;
     };
 }

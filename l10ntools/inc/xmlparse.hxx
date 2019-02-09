@@ -20,9 +20,10 @@
 #ifndef INCLUDED_L10NTOOLS_INC_XMLPARSE_HXX
 #define INCLUDED_L10NTOOLS_INC_XMLPARSE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 #include <signal.h>
@@ -62,8 +63,8 @@ public:
     )
     : m_sName( rName ), m_sValue( rValue ) {}
 
-    OString GetName() const { return m_sName; }
-    OString GetValue() const { return m_sValue; }
+    const OString& GetName() const { return m_sName; }
+    const OString& GetValue() const { return m_sValue; }
 
     void setValue( const OString &rValue ){ m_sValue = rValue; }
 };
@@ -81,6 +82,11 @@ protected:
 public:
     virtual XMLNodeType GetNodeType() const = 0;
     virtual ~XMLNode(){}
+
+    XMLNode(XMLNode const &) = default;
+    XMLNode(XMLNode &&) = default;
+    XMLNode & operator =(XMLNode const &) = default;
+    XMLNode & operator =(XMLNode &&) = default;
 };
 
 
@@ -93,13 +99,11 @@ private:
 
 protected:
     XMLChildNode( XMLParentNode *pPar );
-    XMLChildNode(): m_pParent( nullptr ){};
     XMLChildNode( const XMLChildNode& rObj);
     XMLChildNode& operator=(const XMLChildNode& rObj);
 public:
     /// returns the parent of this node
     XMLParentNode *GetParent() { return m_pParent; }
-    virtual ~XMLChildNode(){};
 };
 
 typedef std::vector< XMLChildNode* > XMLChildNodeList;
@@ -117,12 +121,11 @@ private:
 protected:
     XMLParentNode( XMLParentNode *pPar )
         : XMLChildNode( pPar ) {}
-    XMLParentNode() {}
 
     XMLParentNode( const XMLParentNode& );
 
     XMLParentNode& operator=(const XMLParentNode& rObj);
-    virtual ~XMLParentNode();
+    virtual ~XMLParentNode() override;
 
 public:
     /// returns child list of this node
@@ -137,32 +140,29 @@ public:
 };
 
 /// Mapping numeric Language code <-> XML Element
-typedef std::unordered_map<OString, XMLElement*, OStringHash> LangHashMap;
+typedef std::unordered_map<OString, XMLElement*> LangHashMap;
 
 /// Mapping XML Element string identifier <-> Language Map
-typedef std::unordered_map<OString, LangHashMap*, OStringHash> XMLHashMap;
-
-/// Mapping XML tag names <-> have localizable strings
-typedef std::unordered_map<OString, sal_Bool, OStringHash> TagMap;
+typedef std::unordered_map<OString, LangHashMap*> XMLHashMap;
 
 /** Holds information of a XML file, is root node of tree
  */
-class XMLFile : public XMLParentNode
+class XMLFile final : public XMLParentNode
 {
 public:
     XMLFile(
         const OString &rFileName // the file name, empty if created from memory stream
     );
     XMLFile( const XMLFile& rObj ) ;
-    virtual ~XMLFile();
+    virtual ~XMLFile() override;
 
-    void Print( XMLNode *pCur = nullptr, sal_uInt16 nLevel = 0 );
-    void SearchL10NElements( XMLChildNode *pCur, int pos = 0 );
+    void Print( XMLNode *pCur, sal_uInt16 nLevel = 0 );
+    void SearchL10NElements( XMLChildNode *pCur );
     void Extract();
 
     XMLHashMap* GetStrings(){ return m_pXMLStrings.get(); }
     void Write( OString const &rFilename );
-    bool Write( std::ofstream &rStream, XMLNode *pCur = nullptr );
+    void Write( std::ofstream &rStream, XMLNode *pCur = nullptr );
 
     bool CheckExportStatus( XMLParentNode *pCur = nullptr );
 
@@ -171,18 +171,20 @@ public:
     virtual XMLNodeType GetNodeType() const override { return XMLNodeType::XFILE; }
 
     /// returns file name
-    OString GetName() const { return m_sFileName; }
+    const OString& GetName() const { return m_sFileName; }
     void SetName( const OString &rFilename ) { m_sFileName = rFilename; }
     const std::vector<OString>& getOrder() const { return m_vOrder; }
 
-protected:
+private:
 
     void InsertL10NElement( XMLElement* pElement);
 
     // DATA
     OString m_sFileName;
 
-    TagMap m_aNodes_localize;
+    /// Mapping XML tag names <-> have localizable strings
+    std::unordered_map<OString, bool> m_aNodes_localize;
+
     std::unique_ptr<XMLHashMap> m_pXMLStrings;
 
     std::vector <OString> m_vOrder;
@@ -204,32 +206,26 @@ class XMLElement : public XMLParentNode
 private:
     OString m_sElementName;
     std::unique_ptr<XMLAttributeList> m_pAttributes;
-    OString m_sProject;
-    OString m_sFilename;
     OString m_sId;
-    OString m_sOldRef;
-    OString m_sResourceType;
     OString m_sLanguageId;
-    int m_nPos;
 
 protected:
     void Print(XMLNode *pCur, OStringBuffer& rBuffer, bool bRootelement) const;
 public:
     /// create an element node
-    XMLElement(){}
     XMLElement(
         const OString &rName,    // the element name
         XMLParentNode *pParent   // parent node of this element
     );
 
-    virtual ~XMLElement();
+    virtual ~XMLElement() override;
     XMLElement(const XMLElement&);
 
     XMLElement& operator=(const XMLElement& rObj);
     virtual XMLNodeType GetNodeType() const override { return XMLNodeType::ELEMENT; }
 
     /// returns element name
-    OString GetName() const { return m_sElementName; }
+    const OString& GetName() const { return m_sElementName; }
 
     /// returns list of attributes of this element
     XMLAttributeList *GetAttributeList() { return m_pAttributes.get(); }
@@ -244,10 +240,6 @@ public:
 
     void SetId              ( OString const & sTheId )      { m_sId = sTheId; }
     void SetLanguageId      ( OString const & sLangId )     { m_sLanguageId = sLangId; }
-    void SetPos             ( int nPos )                    { m_nPos = nPos; }
-    void SetOldRef          ( OString const & sOldRef )     { m_sOldRef = sOldRef; }
-
-    OString GetOldref() const       { return m_sOldRef;      }
 };
 
 /** Holds character data
@@ -270,7 +262,7 @@ public:
     virtual XMLNodeType GetNodeType() const override { return XMLNodeType::DATA; }
 
     /// returns the data
-    OString GetData() const { return m_sData; }
+    const OString& GetData() const { return m_sData; }
 
     /// adds new character data to the existing one
     void AddData( const OString &rData ) { m_sData += rData; }
@@ -296,7 +288,7 @@ public:
     virtual XMLNodeType GetNodeType() const override { return XMLNodeType::COMMENT; }
 
     /// returns the comment
-    OString GetComment() const { return m_sComment; }
+    const OString& GetComment() const { return m_sComment; }
 };
 
 /** Holds additional file content like those for which no handler exists
@@ -319,7 +311,7 @@ public:
     virtual XMLNodeType GetNodeType() const override { return XMLNodeType::DEFAULT; }
 
     /// returns the comment
-    OString GetDefault() const { return m_sDefault; }
+    const OString& GetDefault() const { return m_sDefault; }
 };
 
 /** struct for error information, used by class SimpleXMLParser
@@ -352,7 +344,7 @@ private:
 
 
     void StartElement( const XML_Char *name, const XML_Char **atts );
-    void EndElement( const XML_Char *name );
+    void EndElement();
     void CharacterData( const XML_Char *s, int len );
     void Comment( const XML_Char *data );
     void Default( const XML_Char *s, int len );
@@ -362,10 +354,10 @@ public:
     SimpleXMLParser();
     ~SimpleXMLParser();
 
-    /// parse a file, returns NULL on criticall errors
-    XMLFile *Execute(
+    /// parse a file, return false on critical errors
+    bool Execute(
         const OString &rFileName,    // the file name
-        XMLFile *pXMLFileIn         // the XMLFile
+        XMLFile* pXMLFile  // the XMLFile
     );
 
     /// returns an error struct

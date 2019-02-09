@@ -37,7 +37,7 @@
       <Time100SecSeparator>,</Time100SecSeparator>
       <ListSeparator>;</ListSeparator>
       <LongDateDayOfWeekSeparator> </LongDateDayOfWeekSeparator>
-      <LongDateDaySeparator>.</LongDateDaySeparator>
+      <LongDateDaySeparator>. </LongDateDaySeparator>
       <LongDateMonthSeparator> </LongDateMonthSeparator>
       <LongDateYearSeparator> </LongDateYearSeparator>
     </Separators>
@@ -81,28 +81,28 @@
       <FormatCode>##0,00E+00</FormatCode>
     </FormatElement>
     <FormatElement msgid="PercentFormatskey1" default="true" type="short" usage="PERCENT_NUMBER" formatindex="8">
-      <FormatCode>0%</FormatCode>
+      <FormatCode>0" "%</FormatCode>
     </FormatElement>
     <FormatElement msgid="PercentFormatskey2" default="true" type="long" usage="PERCENT_NUMBER" formatindex="9">
-      <FormatCode>0,00%</FormatCode>
+      <FormatCode>0,00" "%</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey1" default="true" type="short" usage="CURRENCY" formatindex="12">
-      <FormatCode>[$kr-406] #.##0;[$kr-406] -#.##0</FormatCode>
+      <FormatCode>[$kr.-406] #.##0;[$kr.-406] -#.##0</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey2" default="false" type="medium" usage="CURRENCY" formatindex="13">
-      <FormatCode>[$kr-406] #.##0,00;[$kr-406] -#.##0,00</FormatCode>
+      <FormatCode>[$kr.-406] #.##0,00;[$kr.-406] -#.##0,00</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey3" default="false" type="medium" usage="CURRENCY" formatindex="14">
-      <FormatCode>[$kr-406] #.##0;[RED][$kr-406] -#.##0</FormatCode>
+      <FormatCode>[$kr.-406] #.##0;[RED][$kr.-406] -#.##0</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey4" default="true" type="medium" usage="CURRENCY" formatindex="15">
-      <FormatCode>[$kr-406] #.##0,00;[RED][$kr-406] -#.##0,00</FormatCode>
+      <FormatCode>[$kr.-406] #.##0,00;[RED][$kr.-406] -#.##0,00</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey5" default="false" type="medium" usage="CURRENCY" formatindex="16">
       <FormatCode>#.##0,00 CCC</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey6" default="false" type="medium" usage="CURRENCY" formatindex="17">
-      <FormatCode>[$kr-406] #.##0,--;[RED][$kr-406] -#.##0,--</FormatCode>
+      <FormatCode>[$kr.-406] #.##0,--;[RED][$kr.-406] -#.##0,--</FormatCode>
     </FormatElement>
     <FormatElement msgid="DateFormatskey1" default="true" type="short" usage="DATE" formatindex="18">
       <FormatCode>DD-MM-YY</FormatCode>
@@ -326,9 +326,16 @@
     </Calendar>
   </LC_CALENDAR>
   <LC_CURRENCY>
-    <Currency default="true" usedInCompatibleFormatCodes="true">
+    <Currency default="false" usedInCompatibleFormatCodes="false" legacyOnly="true">
       <CurrencyID>DKK</CurrencyID>
       <CurrencySymbol>kr</CurrencySymbol>
+      <BankSymbol>DKK</BankSymbol>
+      <CurrencyName>Dansk krone</CurrencyName>
+      <DecimalPlaces>2</DecimalPlaces>
+    </Currency>
+    <Currency default="true" usedInCompatibleFormatCodes="true">
+      <CurrencyID>DKK</CurrencyID>
+      <CurrencySymbol>kr.</CurrencySymbol>
       <BankSymbol>DKK</BankSymbol>
       <CurrencyName>Dansk krone</CurrencyName>
       <DecimalPlaces>2</DecimalPlaces>

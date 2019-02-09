@@ -16,27 +16,21 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "DateTime.hxx"
+#include <DateTime.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <tools/debug.hxx>
-#include "RptResId.hrc"
-#include "rptui_slotid.hrc"
-#include "ModuleHelper.hxx"
-#include "helpids.hrc"
-#include <vcl/msgbox.hxx>
+#include <rptui_slotid.hrc>
 #include <connectivity/dbconversion.hxx>
 #include <unotools/syslocale.hxx>
-#include "UITools.hxx"
-#include "RptDef.hxx"
-#include "uistrings.hrc"
-#include "ReportController.hxx"
-#include <com/sun/star/report/XFormattedField.hpp>
+#include <i18nlangtag/languagetag.hxx>
+#include <UITools.hxx>
+#include <RptDef.hxx>
+#include <strings.hxx>
+#include <ReportController.hxx>
 #include <com/sun/star/util/Time.hpp>
 #include <com/sun/star/util/NumberFormat.hpp>
 #include <com/sun/star/util/XNumberFormatPreviewer.hpp>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
 #include <com/sun/star/i18n/NumberFormatIndex.hpp>
-#include <comphelper/numbers.hxx>
 #include <algorithm>
 
 namespace rptui
@@ -47,25 +41,20 @@ using namespace ::comphelper;
 
 // class ODateTimeDialog
 
-ODateTimeDialog::ODateTimeDialog( vcl::Window* _pParent
-                                           ,const uno::Reference< report::XSection >& _xHoldAlive
-                                           ,OReportController* _pController)
-    : ModalDialog( _pParent, "DateTimeDialog" , "modules/dbreport/ui/datetimedialog.ui" )
+ODateTimeDialog::ODateTimeDialog(weld::Window* _pParent, const uno::Reference< report::XSection >& _xHoldAlive,
+                                 OReportController* _pController)
+    : GenericDialogController(_pParent, "modules/dbreport/ui/datetimedialog.ui", "DateTimeDialog")
 
-    , m_aDateControlling()
-    , m_aTimeControlling()
     , m_pController(_pController)
     , m_xHoldAlive(_xHoldAlive)
+    , m_xDate(m_xBuilder->weld_check_button("date"))
+    , m_xFTDateFormat(m_xBuilder->weld_label("datelistbox_label"))
+    , m_xDateListBox(m_xBuilder->weld_combo_box("datelistbox"))
+    , m_xTime(m_xBuilder->weld_check_button("time"))
+    , m_xFTTimeFormat(m_xBuilder->weld_label("timelistbox_label"))
+    , m_xTimeListBox(m_xBuilder->weld_combo_box("timelistbox"))
+    , m_xPB_OK(m_xBuilder->weld_button("ok"))
 {
-    get(m_pDate,"date");
-    get(m_pFTDateFormat,"datelistbox_label");
-    get(m_pDateListBox,"datelistbox");
-    get(m_pTime,"time");
-    get(m_pFTTimeFormat,"timelistbox_label");
-    get(m_pTimeListBox,"timelistbox");
-    get(m_pPB_OK,"ok");
-
-
     try
     {
         SvtSysLocale aSysLocale;
@@ -78,60 +67,37 @@ ODateTimeDialog::ODateTimeDialog( vcl::Window* _pParent
     {
     }
 
-    m_pDateListBox->SelectEntryPos(0);
+    m_xDateListBox->set_active(0);
+    m_xTimeListBox->set_active(0);
 
-    m_pTimeListBox->SelectEntryPos(0);
-
-    // use nice enhancement, to toggle enable/disable if a checkbox is checked or not
-    m_aDateControlling.enableOnCheckMark( *m_pDate, *m_pFTDateFormat, *m_pDateListBox);
-    m_aTimeControlling.enableOnCheckMark( *m_pTime, *m_pFTTimeFormat, *m_pTimeListBox);
-
-    CheckBox* aCheckBoxes[] = { m_pDate,m_pTime};
-    for ( size_t i = 0 ; i < SAL_N_ELEMENTS(aCheckBoxes); ++i)
-        aCheckBoxes[i]->SetClickHdl(LINK(this,ODateTimeDialog,CBClickHdl));
-
+    weld::CheckButton* aCheckBoxes[] = { m_xDate.get(), m_xTime.get() };
+    for (weld::CheckButton* pCheckBox : aCheckBoxes)
+        pCheckBox->connect_toggled(LINK(this,ODateTimeDialog,CBClickHdl));
+    CBClickHdl(*m_xTime);
 }
 
-    void ODateTimeDialog::InsertEntry(sal_Int16 _nNumberFormatId)
+void ODateTimeDialog::InsertEntry(sal_Int16 _nNumberFormatId)
+{
+    const bool bTime = util::NumberFormat::TIME == _nNumberFormatId;
+    weld::ComboBox* pListBox = m_xDateListBox.get();
+    if (bTime)
+        pListBox = m_xTimeListBox.get();
+
+    const uno::Reference< util::XNumberFormatter> xNumberFormatter = m_pController->getReportNumberFormatter();
+    const uno::Reference< util::XNumberFormats> xFormats = xNumberFormatter->getNumberFormatsSupplier()->getNumberFormats();
+    const uno::Sequence<sal_Int32> aFormatKeys = xFormats->queryKeys(_nNumberFormatId,m_nLocale,true);
+    const sal_Int32* pIter = aFormatKeys.getConstArray();
+    const sal_Int32* pEnd  = pIter + aFormatKeys.getLength();
+    for (;pIter != pEnd; ++pIter)
     {
-        const bool bTime = util::NumberFormat::TIME == _nNumberFormatId;
-        ListBox* pListBox = m_pDateListBox;
-        if ( bTime )
-            pListBox = m_pTimeListBox;
-
-        const uno::Reference< util::XNumberFormatter> xNumberFormatter = m_pController->getReportNumberFormatter();
-        const uno::Reference< util::XNumberFormats> xFormats = xNumberFormatter->getNumberFormatsSupplier()->getNumberFormats();
-        const uno::Sequence<sal_Int32> aFormatKeys = xFormats->queryKeys(_nNumberFormatId,m_nLocale,sal_True);
-        const sal_Int32* pIter = aFormatKeys.getConstArray();
-        const sal_Int32* pEnd  = pIter + aFormatKeys.getLength();
-        for(;pIter != pEnd;++pIter)
-        {
-            const sal_Int16 nPos = pListBox->InsertEntry(getFormatStringByKey(*pIter,xFormats,bTime));
-            pListBox->SetEntryData(nPos, reinterpret_cast<void*>(*pIter));
-        }
+        pListBox->append(OUString::number(*pIter), getFormatStringByKey(*pIter,xFormats,bTime));
     }
-
-ODateTimeDialog::~ODateTimeDialog()
-{
-    disposeOnce();
 }
 
-void ODateTimeDialog::dispose()
+short ODateTimeDialog::run()
 {
-    m_pDate.clear();
-    m_pFTDateFormat.clear();
-    m_pDateListBox.clear();
-    m_pTime.clear();
-    m_pFTTimeFormat.clear();
-    m_pTimeListBox.clear();
-    m_pPB_OK.clear();
-    ModalDialog::dispose();
-}
-
-short ODateTimeDialog::Execute()
-{
-    short nRet = ModalDialog::Execute();
-    if ( nRet == RET_OK && (m_pDate->IsChecked() || m_pTime->IsChecked()) )
+    short nRet = GenericDialogController::run();
+    if (nRet == RET_OK && (m_xDate->get_active() || m_xTime->get_active()))
     {
         try
         {
@@ -141,10 +107,10 @@ short ODateTimeDialog::Execute()
             aValues[nLength++].Value <<= m_xHoldAlive;
 
             aValues[nLength].Name = PROPERTY_TIME_STATE;
-            aValues[nLength++].Value <<= m_pTime->IsChecked();
+            aValues[nLength++].Value <<= m_xTime->get_active();
 
             aValues[nLength].Name = PROPERTY_DATE_STATE;
-            aValues[nLength++].Value <<= m_pDate->IsChecked();
+            aValues[nLength++].Value <<= m_xDate->get_active();
 
             aValues[nLength].Name = PROPERTY_FORMATKEYDATE;
             aValues[nLength++].Value <<= getFormatKey(true);
@@ -152,16 +118,19 @@ short ODateTimeDialog::Execute()
             aValues[nLength].Name = PROPERTY_FORMATKEYTIME;
             aValues[nLength++].Value <<= getFormatKey(false);
 
+            OutputDevice* pDefDev = Application::GetDefaultDevice();
             sal_Int32 nWidth = 0;
-            if ( m_pDate->IsChecked() )
+            if ( m_xDate->get_active() )
             {
-                OUString sDateFormat = m_pDateListBox->GetSelectEntry();
-                nWidth = LogicToLogic(PixelToLogic(Size(GetCtrlTextWidth(sDateFormat),0)).Width(),GetMapMode().GetMapUnit(),MAP_100TH_MM);
+                OUString sDateFormat = m_xDateListBox->get_active_text();
+                nWidth = OutputDevice::LogicToLogic(pDefDev->PixelToLogic(Size(pDefDev->GetCtrlTextWidth(sDateFormat),0)).Width(),
+                        pDefDev->GetMapMode().GetMapUnit(),MapUnit::Map100thMM);
             }
-            if ( m_pTime->IsChecked() )
+            if ( m_xTime->get_active() )
             {
-                OUString sDateFormat = m_pTimeListBox->GetSelectEntry();
-                nWidth = ::std::max<sal_Int32>(LogicToLogic(PixelToLogic(Size(GetCtrlTextWidth(sDateFormat),0)).Width(),GetMapMode().GetMapUnit(),MAP_100TH_MM),nWidth);
+                OUString sDateFormat = m_xTimeListBox->get_active_text();
+                nWidth = ::std::max<sal_Int32>(OutputDevice::LogicToLogic(pDefDev->PixelToLogic(Size(pDefDev->GetCtrlTextWidth(sDateFormat),0)).Width(),
+                        pDefDev->GetMapMode().GetMapUnit(),MapUnit::Map100thMM),nWidth);
             }
 
             if ( nWidth > 4000 )
@@ -197,28 +166,31 @@ OUString ODateTimeDialog::getFormatStringByKey(::sal_Int32 _nNumberFormatKey,con
     {
         Date aCurrentDate( Date::SYSTEM );
         static css::util::Date STANDARD_DB_DATE(30,12,1899);
-        nValue = ::dbtools::DBTypeConversion::toDouble(::dbtools::DBTypeConversion::toDate(static_cast<sal_Int32>(aCurrentDate.GetDate())),STANDARD_DB_DATE);
+        nValue = ::dbtools::DBTypeConversion::toDouble(::dbtools::DBTypeConversion::toDate(aCurrentDate.GetDate()),STANDARD_DB_DATE);
     }
 
     uno::Reference< util::XNumberFormatPreviewer> xPreviewer(m_pController->getReportNumberFormatter(),uno::UNO_QUERY);
     OSL_ENSURE(xPreviewer.is(),"XNumberFormatPreviewer is null!");
-    return xPreviewer->convertNumberToPreviewString(sFormat,nValue,m_nLocale,sal_True);
+    return xPreviewer->convertNumberToPreviewString(sFormat,nValue,m_nLocale,true);
 }
 
-IMPL_LINK_TYPED( ODateTimeDialog, CBClickHdl, Button*, _pBox, void )
+IMPL_LINK_NOARG(ODateTimeDialog, CBClickHdl, weld::ToggleButton&, void)
 {
-    if ( _pBox == m_pDate || _pBox == m_pTime)
+    const bool bDate = m_xDate->get_active();
+    m_xFTDateFormat->set_sensitive(bDate);
+    m_xDateListBox->set_sensitive(bDate);
+
+    const bool bTime = m_xTime->get_active();
+    m_xFTTimeFormat->set_sensitive(bTime);
+    m_xTimeListBox->set_sensitive(bTime);
+
+    if (!bDate && !bTime)
     {
-        bool bDate = m_pDate->IsChecked();
-        bool bTime = m_pTime->IsChecked();
-        if (!bDate && !bTime)
-        {
-            m_pPB_OK->Disable();
-        }
-        else
-        {
-            m_pPB_OK->Enable();
-        }
+        m_xPB_OK->set_sensitive(false);
+    }
+    else
+    {
+        m_xPB_OK->set_sensitive(true);
     }
 }
 
@@ -227,11 +199,11 @@ sal_Int32 ODateTimeDialog::getFormatKey(bool _bDate) const
     sal_Int32 nFormatKey;
     if ( _bDate )
     {
-         nFormatKey = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(m_pDateListBox->GetSelectEntryData()));
+         nFormatKey = m_xDateListBox->get_active_id().toInt32();
     }
     else
     {
-         nFormatKey = static_cast<sal_Int32>(reinterpret_cast<sal_IntPtr>(m_pTimeListBox->GetSelectEntryData()));
+         nFormatKey = m_xTimeListBox->get_active_id().toInt32();
     }
     return nFormatKey;
 }

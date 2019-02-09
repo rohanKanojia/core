@@ -30,10 +30,11 @@
 #include <xmloff/xmltoken.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <rtl/ustring.hxx>
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include <xmloff/xmltkmap.hxx>
 #include <xmloff/xmlexp.hxx>
 #include <xmloff/xmlimp.hxx>
+#include <xmloff/xmlement.hxx>
 
 using namespace ::com::sun::star;
 
@@ -55,7 +56,7 @@ enum SvXMLTokenMapAttrs
     XML_TOK_TABSTOP_END=XML_TOK_UNKNOWN
 };
 
-SvXMLEnumMapEntry const pXML_GradientStyle_Enum[] =
+SvXMLEnumMapEntry<awt::GradientStyle> const pXML_GradientStyle_Enum[] =
 {
     { XML_GRADIENTSTYLE_LINEAR,         awt::GradientStyle_LINEAR },
     { XML_GRADIENTSTYLE_AXIAL,          awt::GradientStyle_AXIAL },
@@ -63,7 +64,7 @@ SvXMLEnumMapEntry const pXML_GradientStyle_Enum[] =
     { XML_GRADIENTSTYLE_ELLIPSOID,      awt::GradientStyle_ELLIPTICAL },
     { XML_GRADIENTSTYLE_SQUARE,         awt::GradientStyle_SQUARE },
     { XML_GRADIENTSTYLE_RECTANGULAR,    awt::GradientStyle_RECT },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, awt::GradientStyle(0) }
 };
 
 // Import
@@ -94,7 +95,9 @@ void XMLGradientStyleImport::importXML(
         { XML_NAMESPACE_DRAW, XML_START_INTENSITY, XML_TOK_GRADIENT_STARTINT },
         { XML_NAMESPACE_DRAW, XML_END_INTENSITY, XML_TOK_GRADIENT_ENDINT },
         { XML_NAMESPACE_DRAW, XML_GRADIENT_ANGLE, XML_TOK_GRADIENT_ANGLE },
-        { XML_NAMESPACE_DRAW, XML_GRADIENT_BORDER, XML_TOK_GRADIENT_BORDER },
+        { XML_NAMESPACE_DRAW, XML_GRADIENT_BORDER, XML_TOK_GRADIENT_BORDER,
+            XML_ELEMENT( DRAW, XML_BORDER ) },
+        //  XML_GRADIENT_BORDER is a duplicate of XML_BORDER
         XML_TOKEN_MAP_END
     };
 
@@ -130,13 +133,7 @@ void XMLGradientStyleImport::importXML(
             aDisplayName = rStrValue;
             break;
         case XML_TOK_GRADIENT_STYLE:
-            {
-                sal_uInt16 eValue;
-                if( SvXMLUnitConverter::convertEnum( eValue, rStrValue, pXML_GradientStyle_Enum ) )
-                {
-                    aGradient.Style = (awt::GradientStyle) eValue;
-                }
-            }
+            SvXMLUnitConverter::convertEnum( aGradient.Style, rStrValue, pXML_GradientStyle_Enum );
             break;
         case XML_TOK_GRADIENT_CX:
             ::sax::Converter::convertPercent( nTmpValue, rStrValue );
@@ -217,13 +214,12 @@ void XMLGradientStyleExport::exportXML(
             {
                 // Name
                 bool bEncoded = false;
-                OUString aStrName( rStrName );
                 rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_NAME,
-                                      rExport.EncodeStyleName( aStrName,
+                                      rExport.EncodeStyleName( rStrName,
                                                                 &bEncoded ) );
                 if( bEncoded )
                     rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_DISPLAY_NAME,
-                                            aStrName );
+                                            rStrName );
 
                 aStrValue = aOut.makeStringAndClear();
                 rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_STYLE, aStrValue );

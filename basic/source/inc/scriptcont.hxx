@@ -24,6 +24,7 @@
 #include <basic/basmgr.hxx>
 #include <com/sun/star/script/vba/XVBAModuleInfo.hpp>
 #include <comphelper/uno3.hxx>
+#include <cppuhelper/implbase1.hxx>
 
 namespace basic
 {
@@ -31,32 +32,30 @@ namespace basic
 
 class SfxScriptLibraryContainer : public SfxLibraryContainer, public OldBasicPassword
 {
-    OUString maScriptLanguage;
     css::uno::Reference< css::container::XNameAccess > mxCodeNameAccess;
 
-    // Methods to distinguish between deffirent library types
-    virtual SfxLibrary* SAL_CALL implCreateLibrary( const OUString& aName ) override;
-    virtual SfxLibrary* SAL_CALL implCreateLibraryLink
+    // Methods to distinguish between different library types
+    virtual SfxLibrary* implCreateLibrary( const OUString& aName ) override;
+    virtual SfxLibrary* implCreateLibraryLink
         ( const OUString& aName, const OUString& aLibInfoFileURL,
           const OUString& StorageURL, bool ReadOnly ) override;
-    virtual css::uno::Any SAL_CALL createEmptyLibraryElement() override;
-    virtual bool SAL_CALL isLibraryElementValid(const css::uno::Any& rElement) const override;
-    virtual void SAL_CALL writeLibraryElement
+    virtual css::uno::Any createEmptyLibraryElement() override;
+    virtual bool isLibraryElementValid(const css::uno::Any& rElement) const override;
+    virtual void writeLibraryElement
     (
         const css::uno::Reference< css::container::XNameContainer>& xLibrary,
         const OUString& aElementName,
         const css::uno::Reference< css::io::XOutputStream >& xOutput
-    )
-        throw(css::uno::Exception) override;
+    ) override;
 
-    virtual css::uno::Any SAL_CALL importLibraryElement
+    virtual css::uno::Any importLibraryElement
     (
         const css::uno::Reference< css::container::XNameContainer>& xLibrary,
         const OUString& aElementName,
         const OUString& aFile,
         const css::uno::Reference< css::io::XInputStream >& xElementStream ) override;
 
-    virtual void SAL_CALL importFromOldStorage( const OUString& aFile ) override;
+    virtual void importFromOldStorage( const OUString& aFile ) override;
 
     virtual SfxLibraryContainer* createInstanceImpl() override;
 
@@ -72,9 +71,7 @@ class SfxScriptLibraryContainer : public SfxLibraryContainer, public OldBasicPas
                         const css::uno::Reference< css::ucb::XSimpleFileAccess3 >& rToUseSFI, const css::uno::Reference< css::task::XInteractionHandler >& Handler ) override;
 
     virtual bool implLoadPasswordLibrary( SfxLibrary* pLib, const OUString& Name,
-                                          bool bVerifyPasswordOnly=false )
-            throw(css::lang::WrappedTargetException,
-                  css::uno::RuntimeException, std::exception) override;
+                                          bool bVerifyPasswordOnly=false ) override;
 
     virtual void onNewRootStorage() override;
 
@@ -82,10 +79,10 @@ class SfxScriptLibraryContainer : public SfxLibraryContainer, public OldBasicPas
     // OldBasicPassword interface
     virtual void setLibraryPassword( const OUString& rLibraryName, const OUString& rPassword ) override;
 
-    virtual const sal_Char* SAL_CALL    getInfoFileName() const override;
-    virtual const sal_Char* SAL_CALL    getOldInfoFileName() const override;
-    virtual const sal_Char* SAL_CALL    getLibElementFileExtension() const override;
-    virtual const sal_Char* SAL_CALL    getLibrariesDir() const override;
+    virtual const sal_Char*    getInfoFileName() const override;
+    virtual const sal_Char*    getOldInfoFileName() const override;
+    virtual const sal_Char*    getLibElementFileExtension() const override;
+    virtual const sal_Char*    getLibrariesDir() const override;
 
 public:
     SfxScriptLibraryContainer();
@@ -93,34 +90,20 @@ public:
 
 
     // Methods XLibraryContainerPassword
-    virtual sal_Bool SAL_CALL isLibraryPasswordProtected( const OUString& Name )
-        throw (css::container::NoSuchElementException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL isLibraryPasswordVerified( const OUString& Name )
-        throw (css::lang::IllegalArgumentException,
-               css::container::NoSuchElementException,
-               css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL verifyLibraryPassword( const OUString& Name, const OUString& Password )
-        throw (css::lang::IllegalArgumentException,
-               css::container::NoSuchElementException,
-               css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL isLibraryPasswordProtected( const OUString& Name ) override;
+    virtual sal_Bool SAL_CALL isLibraryPasswordVerified( const OUString& Name ) override;
+    virtual sal_Bool SAL_CALL verifyLibraryPassword( const OUString& Name, const OUString& Password ) override;
     virtual void SAL_CALL changeLibraryPassword( const OUString& Name,
-        const OUString& OldPassword, const OUString& NewPassword )
-        throw (css::lang::IllegalArgumentException,
-               css::container::NoSuchElementException,
-               css::uno::RuntimeException, std::exception) override;
+        const OUString& OldPassword, const OUString& NewPassword ) override;
     // XLibraryQueryExecutable
-    virtual sal_Bool SAL_CALL HasExecutableCode(const OUString&)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL HasExecutableCode(const OUString&) override;
     // Methods XServiceInfo
-    virtual OUString SAL_CALL getImplementationName( )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames( )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName( ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames( ) override;
 };
 
 
-typedef std::unordered_map< OUString, css::script::ModuleInfo, OUStringHash > ModuleInfoMap;
+typedef std::unordered_map< OUString, css::script::ModuleInfo > ModuleInfoMap;
 
 typedef ::cppu::ImplHelper1< css::script::vba::XVBAModuleInfo > SfxScriptLibrary_BASE;
 
@@ -128,7 +111,7 @@ class SfxScriptLibrary : public SfxLibrary, public SfxScriptLibrary_BASE
 {
     friend class SfxScriptLibraryContainer;
 
-    typedef std::unordered_map< OUString, css::script::ModuleInfo, OUStringHash > ModuleInfoMap;
+    typedef std::unordered_map< OUString, css::script::ModuleInfo > ModuleInfoMap;
 
     bool mbLoadedSource;
     bool mbLoadedBinary;
@@ -161,15 +144,15 @@ public:
     DECLARE_XTYPEPROVIDER()
 
     // XVBAModuleInfo
-    virtual css::script::ModuleInfo SAL_CALL getModuleInfo( const OUString& ModuleName ) throw (css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasModuleInfo( const OUString& ModuleName ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL insertModuleInfo( const OUString& ModuleName, const css::script::ModuleInfo& ModuleInfo ) throw (css::lang::IllegalArgumentException, css::container::ElementExistException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL removeModuleInfo( const OUString& ModuleName ) throw (css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+    virtual css::script::ModuleInfo SAL_CALL getModuleInfo( const OUString& ModuleName ) override;
+    virtual sal_Bool SAL_CALL hasModuleInfo( const OUString& ModuleName ) override;
+    virtual void SAL_CALL insertModuleInfo( const OUString& ModuleName, const css::script::ModuleInfo& ModuleInfo ) override;
+    virtual void SAL_CALL removeModuleInfo( const OUString& ModuleName ) override;
 
     static bool containsValidModule( const css::uno::Any& _rElement );
 
 protected:
-    virtual bool SAL_CALL isLibraryElementValid(const css::uno::Any& rElement) const override;
+    virtual bool isLibraryElementValid(const css::uno::Any& rElement) const override;
 };
 
 

@@ -9,30 +9,33 @@
 
 #include <config_features.h>
 
-#include "formulagroup.hxx"
-#include "formulagroupcl.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
-#include "tokenarray.hxx"
-#include "compiler.hxx"
-#include "interpre.hxx"
-#include "scmatrix.hxx"
-#include "globalnames.hxx"
+#include <formulagroup.hxx>
+#include <formulagroupcl.hxx>
+#include <document.hxx>
+#include <formulacell.hxx>
+#include <tokenarray.hxx>
+#include <compiler.hxx>
+#include <interpre.hxx>
+#include <scmatrix.hxx>
+#include <globalnames.hxx>
+#include <comphelper/threadpool.hxx>
+#include <tools/cpuid.hxx>
 
 #include <formula/vectortoken.hxx>
 #include <officecfg/Office/Common.hxx>
+#include <officecfg/Office/Calc.hxx>
 #if HAVE_FEATURE_OPENCL
 #include <opencl/platforminfo.hxx>
 #endif
-#include <o3tl/make_unique.hxx>
 #include <rtl/bootstrap.hxx>
+#include <sal/log.hxx>
 
 #include <cstdio>
 #include <unordered_map>
 #include <vector>
 
 #if HAVE_FEATURE_OPENCL
-#include <opencl/openclwrapper.hxx>
+#  include <opencl/openclwrapper.hxx>
 #endif
 
 namespace sc {
@@ -86,8 +89,7 @@ FormulaGroupContext::ColArray* FormulaGroupContext::setCachedColArray(
     if (it == maColArrays.end())
     {
         std::pair<ColArraysType::iterator,bool> r =
-            maColArrays.insert(
-                ColArraysType::value_type(ColKey(nTab, nCol), ColArray(pNumArray, pStrArray)));
+            maColArrays.emplace(ColKey(nTab, nCol), ColArray(pNumArray, pStrArray));
 
         if (!r.second)
             // Somehow the insertion failed.
@@ -102,13 +104,20 @@ FormulaGroupContext::ColArray* FormulaGroupContext::setCachedColArray(
     return &rArray;
 }
 
+void FormulaGroupContext::discardCachedColArray( SCTAB nTab, SCCOL nCol )
+{
+    ColArraysType::iterator itColArray = maColArrays.find(ColKey(nTab, nCol));
+    if (itColArray != maColArrays.end())
+        maColArrays.erase(itColArray);
+}
+
 void FormulaGroupContext::ensureStrArray( ColArray& rColArray, size_t nArrayLen )
 {
     if (rColArray.mpStrArray)
         return;
 
     m_StrArrays.push_back(
-        o3tl::make_unique<sc::FormulaGroupContext::StrArrayType>(nArrayLen, nullptr));
+        std::make_unique<sc::FormulaGroupContext::StrArrayType>(nArrayLen, nullptr));
     rColArray.mpStrArray = m_StrArrays.back().get();
 }
 
@@ -121,7 +130,7 @@ void FormulaGroupContext::ensureNumArray( ColArray& rColArray, size_t nArrayLen 
     rtl::math::setNan(&fNan);
 
     m_NumArrays.push_back(
-        o3tl::make_unique<sc::FormulaGroupContext::NumArrayType>(nArrayLen, fNan));
+        std::make_unique<sc::FormulaGroupContext::NumArrayType>(nArrayLen, fNan));
     rColArray.mpNumArray = m_NumArrays.back().get();
 }
 
@@ -136,131 +145,6 @@ FormulaGroupContext::~FormulaGroupContext()
 CompiledFormula::CompiledFormula() {}
 
 CompiledFormula::~CompiledFormula() {}
-
-FormulaGroupInterpreterSoftware::FormulaGroupInterpreterSoftware() : FormulaGroupInterpreter()
-{
-}
-
-ScMatrixRef FormulaGroupInterpreterSoftware::inverseMatrix(const ScMatrix& /*rMat*/)
-{
-    return ScMatrixRef();
-}
-
-bool FormulaGroupInterpreterSoftware::interpret(ScDocument& rDoc, const ScAddress& rTopPos,
-                                                ScFormulaCellGroupRef& xGroup,
-                                                ScTokenArray& rCode)
-{
-    typedef std::unordered_map<const formula::FormulaToken*, formula::FormulaTokenRef> CachedTokensType;
-
-    // Decompose the group into individual cells and calculate them individually.
-
-    // The caller must ensure that the top position is the start position of
-    // the group.
-
-    ScAddress aTmpPos = rTopPos;
-    std::vector<formula::FormulaTokenRef> aResults;
-    aResults.reserve(xGroup->mnLength);
-    CachedTokensType aCachedTokens;
-
-    double fNan;
-    rtl::math::setNan(&fNan);
-
-    for (SCROW i = 0; i < xGroup->mnLength; ++i, aTmpPos.IncRow())
-    {
-        ScTokenArray aCode2;
-        for (const formula::FormulaToken* p = rCode.First(); p; p = rCode.Next())
-        {
-            CachedTokensType::iterator it = aCachedTokens.find(p);
-            if (it != aCachedTokens.end())
-            {
-                // This token is cached. Use the cached one.
-                aCode2.AddToken(*it->second);
-                continue;
-            }
-
-            switch (p->GetType())
-            {
-                case formula::svSingleVectorRef:
-                {
-                    const formula::SingleVectorRefToken* p2 = static_cast<const formula::SingleVectorRefToken*>(p);
-                    const formula::VectorRefArray& rArray = p2->GetArray();
-
-                    rtl_uString* pStr = nullptr;
-                    double fVal = fNan;
-                    if (static_cast<size_t>(i) < p2->GetArrayLength())
-                    {
-                        if (rArray.mpStringArray)
-                            // See if the cell is of string type.
-                            pStr = rArray.mpStringArray[i];
-
-                        if (!pStr && rArray.mpNumericArray)
-                            fVal = rArray.mpNumericArray[i];
-                    }
-
-                    if (pStr)
-                    {
-                        // This is a string cell.
-                        svl::SharedStringPool& rPool = rDoc.GetSharedStringPool();
-                        aCode2.AddString(rPool.intern(OUString(pStr)));
-                    }
-                    else if (rtl::math::isNan(fVal))
-                        // Value of NaN represents an empty cell.
-                        aCode2.AddToken(ScEmptyCellToken(false, false));
-                    else
-                        // Numeric cell.
-                        aCode2.AddDouble(fVal);
-                }
-                break;
-                case formula::svDoubleVectorRef:
-                {
-                    const formula::DoubleVectorRefToken* p2 = static_cast<const formula::DoubleVectorRefToken*>(p);
-                    size_t nRowStart = p2->IsStartFixed() ? 0 : i;
-                    size_t nRowEnd = p2->GetRefRowSize() - 1;
-                    if (!p2->IsEndFixed())
-                        nRowEnd += i;
-
-                    assert(nRowStart <= nRowEnd);
-                    ScMatrixRef pMat(new ScVectorRefMatrix(p2, nRowStart, nRowEnd - nRowStart + 1));
-
-                    if (p2->IsStartFixed() && p2->IsEndFixed())
-                    {
-                        // Cached the converted token for absolute range reference.
-                        ScComplexRefData aRef;
-                        ScRange aRefRange = rTopPos;
-                        aRefRange.aEnd.SetRow(rTopPos.Row() + nRowEnd);
-                        aRef.InitRange(aRefRange);
-                        formula::FormulaTokenRef xTok(new ScMatrixRangeToken(pMat, aRef));
-                        aCachedTokens.insert(CachedTokensType::value_type(p, xTok));
-                        aCode2.AddToken(*xTok);
-                    }
-                    else
-                    {
-                        ScMatrixToken aTok(pMat);
-                        aCode2.AddToken(aTok);
-                    }
-                }
-                break;
-                default:
-                    aCode2.AddToken(*p);
-            }
-        }
-
-        ScFormulaCell* pDest = rDoc.GetFormulaCell(aTmpPos);
-        if (!pDest)
-            return false;
-
-        ScCompiler aComp(&rDoc, aTmpPos, aCode2);
-        aComp.CompileTokenArray();
-        ScInterpreter aInterpreter(pDest, &rDoc, aTmpPos, aCode2);
-        aInterpreter.Interpret();
-        aResults.push_back(aInterpreter.GetResultToken());
-    } // for loop end (xGroup->mnLength)
-
-    if (!aResults.empty())
-        rDoc.SetFormulaResults(rTopPos, &aResults[0], aResults.size());
-
-    return true;
-}
 
 FormulaGroupInterpreter *FormulaGroupInterpreter::msInstance = nullptr;
 
@@ -279,15 +163,16 @@ FormulaGroupInterpreter *FormulaGroupInterpreter::getStatic()
         if (ScCalcConfig::isOpenCLEnabled())
         {
             const ScCalcConfig& rConfig = ScInterpreter::GetGlobalConfig();
-            switchOpenCLDevice(rConfig.maOpenCLDevice, rConfig.mbOpenCLAutoSelect);
+            if( !switchOpenCLDevice(rConfig.maOpenCLDevice, rConfig.mbOpenCLAutoSelect))
+            {
+                if( ScCalcConfig::getForceCalculationType() == ForceCalculationOpenCL )
+                {
+                    SAL_WARN( "opencl", "OpenCL forced but failed to initialize" );
+                    abort();
+                }
+            }
         }
 #endif
-
-        if (!msInstance && ScCalcConfig::isSwInterpreterEnabled()) // software interpreter
-        {
-            SAL_INFO("sc.core.formulagroup", "Create S/W interpreter");
-            msInstance = new sc::FormulaGroupInterpreterSoftware();
-        }
     }
 
     return msInstance;
@@ -297,7 +182,7 @@ FormulaGroupInterpreter *FormulaGroupInterpreter::getStatic()
 void FormulaGroupInterpreter::fillOpenCLInfo(std::vector<OpenCLPlatformInfo>& rPlatforms)
 {
     const std::vector<OpenCLPlatformInfo>& rPlatformsFromWrapper =
-        ::opencl::fillOpenCLInfo();
+        openclwrapper::fillOpenCLInfo();
 
     rPlatforms.assign(rPlatformsFromWrapper.begin(), rPlatformsFromWrapper.end());
 }
@@ -307,32 +192,20 @@ bool FormulaGroupInterpreter::switchOpenCLDevice(const OUString& rDeviceId, bool
     bool bOpenCLEnabled = ScCalcConfig::isOpenCLEnabled();
     if (!bOpenCLEnabled || (rDeviceId == OPENCL_SOFTWARE_DEVICE_CONFIG_NAME))
     {
-        bool bSwInterpreterEnabled = ScCalcConfig::isSwInterpreterEnabled();
-        if (msInstance)
-        {
-            // if we already have a software interpreter don't delete it
-            if (bSwInterpreterEnabled && dynamic_cast<sc::FormulaGroupInterpreterSoftware*>(msInstance))
-                return true;
-
-            delete msInstance;
-            msInstance = nullptr;
-        }
-
-        if (bSwInterpreterEnabled)
-        {
-            msInstance = new sc::FormulaGroupInterpreterSoftware();
-            return true;
-        }
-
+        delete msInstance;
+        msInstance = nullptr;
         return false;
     }
 
-    bool bSuccess = ::opencl::switchOpenCLDevice(&rDeviceId, bAutoSelect, bForceEvaluation);
+    OUString aSelectedCLDeviceVersionID;
+    bool bSuccess = openclwrapper::switchOpenCLDevice(&rDeviceId, bAutoSelect, bForceEvaluation, aSelectedCLDeviceVersionID);
+
     if (!bSuccess)
         return false;
 
     delete msInstance;
     msInstance = new sc::opencl::FormulaGroupInterpreterOpenCL();
+
     return true;
 }
 
@@ -347,7 +220,7 @@ void FormulaGroupInterpreter::getOpenCLDeviceInfo(sal_Int32& rDeviceId, sal_Int3
     size_t aDeviceId = static_cast<size_t>(-1);
     size_t aPlatformId = static_cast<size_t>(-1);
 
-    ::opencl::getOpenCLDeviceInfo(aDeviceId, aPlatformId);
+    openclwrapper::getOpenCLDeviceInfo(aDeviceId, aPlatformId);
     rDeviceId = aDeviceId;
     rPlatformId = aPlatformId;
 }
@@ -364,6 +237,13 @@ void FormulaGroupInterpreter::enableOpenCL_UnitTestsOnly()
     aConfig.mnOpenCLMinimumFormulaGroupSize = 2;
 
     ScInterpreter::SetGlobalConfig(aConfig);
+}
+
+void FormulaGroupInterpreter::disableOpenCL_UnitTestsOnly()
+{
+    std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
+    officecfg::Office::Common::Misc::UseOpenCL::set(false, batch);
+    batch->commit();
 }
 
 #endif

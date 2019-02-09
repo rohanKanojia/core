@@ -24,7 +24,6 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/drawing/XControlShape.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include "dbptypes.hxx"
 
 
@@ -35,7 +34,7 @@ namespace dbp
     struct OControlWizardContext;
     struct OOptionGroupSettings;
 
-    class OOptionGroupLayouter
+    class OOptionGroupLayouter final
     {
         css::uno::Reference< css::uno::XComponentContext >
                     mxContext;
@@ -45,13 +44,12 @@ namespace dbp
             const css::uno::Reference< css::uno::XComponentContext >& _rxContext
             );
 
-    public:
         void    doLayout(
             const OControlWizardContext& _rContext,
             const OOptionGroupSettings& _rSettings
         );
 
-    protected:
+    private:
         static void    implAnchorShape(
             const css::uno::Reference< css::beans::XPropertySet >& _rxShapeProps
             );

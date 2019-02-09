@@ -20,7 +20,14 @@
 #ifndef INCLUDED_OOX_OLE_AXCONTROLFRAGMENT_HXX
 #define INCLUDED_OOX_OLE_AXCONTROLFRAGMENT_HXX
 
+#include <oox/core/contexthandler.hxx>
+#include <oox/core/contexthandler2.hxx>
 #include <oox/core/fragmenthandler2.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace oox { class AttributeList; }
+namespace oox { namespace core { class XmlFilterBase; } }
 
 namespace oox {
 namespace ole {
@@ -34,7 +41,7 @@ class AxControlPropertyContext : public ::oox::core::ContextHandler2
 {
 public:
     explicit            AxControlPropertyContext(
-                            ::oox::core::FragmentHandler2& rFragment,
+                            ::oox::core::FragmentHandler2 const & rFragment,
                             ControlModelBase& rModel );
 
     virtual ::oox::core::ContextHandlerRef

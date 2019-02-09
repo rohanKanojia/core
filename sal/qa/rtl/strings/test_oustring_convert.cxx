@@ -20,9 +20,9 @@
 #include <sal/types.h>
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
-#include "rtl/strbuf.hxx"
-#include "rtl/string.hxx"
-#include "rtl/ustring.hxx"
+#include <rtl/strbuf.hxx>
+#include <rtl/string.hxx>
+#include <rtl/ustring.hxx>
 #include <sal/macros.h>
 
 namespace test { namespace oustring {
@@ -45,70 +45,70 @@ namespace {
 
 struct TestConvertToString
 {
-    sal_Unicode aSource[100];
-    sal_Int32 nLength;
-    rtl_TextEncoding nEncoding;
-    sal_uInt32 nFlags;
+    sal_Unicode const aSource[100];
+    sal_Int32 const nLength;
+    rtl_TextEncoding const nEncoding;
+    sal_uInt32 const nFlags;
     char const * pStrict;
     char const * pRelaxed;
 };
 
 void testConvertToString(TestConvertToString const & rTest)
 {
-    const rtl::OUString aSource(rTest.aSource, rTest.nLength);
-    rtl::OString aStrict(RTL_CONSTASCII_STRINGPARAM("12345"));
+    const OUString aSource(rTest.aSource, rTest.nLength);
+    OString aStrict(RTL_CONSTASCII_STRINGPARAM("12345"));
     bool bSuccess = aSource.convertToString(&aStrict, rTest.nEncoding,
                                             rTest.nFlags);
-    rtl::OString aRelaxed(rtl::OUStringToOString(aSource, rTest.nEncoding,
+    OString aRelaxed(OUStringToOString(aSource, rTest.nEncoding,
                                                  rTest.nFlags));
 
-    rtl::OStringBuffer aPrefix;
-    aPrefix.append(RTL_CONSTASCII_STRINGPARAM("{"));
+    OStringBuffer aPrefix;
+    aPrefix.append("{");
     for (sal_Int32 i = 0; i < rTest.nLength; ++i)
     {
-        aPrefix.append(RTL_CONSTASCII_STRINGPARAM("U+"));
+        aPrefix.append("U+");
         aPrefix.append(static_cast< sal_Int32 >(rTest.aSource[i]), 16);
         if (i + 1 < rTest.nLength)
-            aPrefix.append(RTL_CONSTASCII_STRINGPARAM(","));
+            aPrefix.append(",");
     }
-    aPrefix.append(RTL_CONSTASCII_STRINGPARAM("}, "));
+    aPrefix.append("}, ");
     aPrefix.append(static_cast< sal_Int32 >(rTest.nEncoding));
-    aPrefix.append(RTL_CONSTASCII_STRINGPARAM(", 0x"));
+    aPrefix.append(", 0x");
     aPrefix.append(static_cast< sal_Int32 >(rTest.nFlags), 16);
-    aPrefix.append(RTL_CONSTASCII_STRINGPARAM(" -> "));
+    aPrefix.append(" -> ");
 
     if (bSuccess)
     {
-        if (rTest.pStrict == nullptr || !aStrict.equals(rTest.pStrict))
+        if (rTest.pStrict == nullptr || aStrict != rTest.pStrict)
         {
-            rtl::OStringBuffer aMessage(aPrefix);
-            aMessage.append(RTL_CONSTASCII_STRINGPARAM("strict = \""));
+            OStringBuffer aMessage(aPrefix);
+            aMessage.append("strict = \"");
             aMessage.append(aStrict);
-            aMessage.append(RTL_CONSTASCII_STRINGPARAM("\""));
+            aMessage.append("\"");
             CPPUNIT_ASSERT_MESSAGE(aMessage.getStr(), false);
         }
     }
     else
     {
-        if (!aStrict.equals(rtl::OString(RTL_CONSTASCII_STRINGPARAM("12345"))))
+        if (aStrict != OString(RTL_CONSTASCII_STRINGPARAM("12345")))
         {
-            rtl::OStringBuffer aMessage(aPrefix);
-            aMessage.append(RTL_CONSTASCII_STRINGPARAM("modified output"));
+            OStringBuffer aMessage(aPrefix);
+            aMessage.append("modified output");
             CPPUNIT_ASSERT_MESSAGE(aMessage.getStr(), false);
         }
         if (rTest.pStrict != nullptr)
         {
-            rtl::OStringBuffer aMessage(aPrefix);
-            aMessage.append(RTL_CONSTASCII_STRINGPARAM("failed"));
+            OStringBuffer aMessage(aPrefix);
+            aMessage.append("failed");
             CPPUNIT_ASSERT_MESSAGE(aMessage.getStr(), false);
         }
     }
-    if (!aRelaxed.equals(rTest.pRelaxed))
+    if (aRelaxed != rTest.pRelaxed)
     {
-        rtl::OStringBuffer aMessage(aPrefix);
-        aMessage.append(RTL_CONSTASCII_STRINGPARAM("relaxed = \""));
+        OStringBuffer aMessage(aPrefix);
+        aMessage.append("relaxed = \"");
         aMessage.append(aRelaxed);
-        aMessage.append(RTL_CONSTASCII_STRINGPARAM("\""));
+        aMessage.append("\"");
         CPPUNIT_ASSERT_MESSAGE(aMessage.getStr(), false);
     }
 }
@@ -170,7 +170,7 @@ void test::oustring::Convert::convertToString()
               OUSTRING_TO_OSTRING_CVTFLAGS,
               "A?B",
               "A?B" } };
-    for (unsigned int i = 0; i < SAL_N_ELEMENTS(aTests); ++i)
+    for (size_t i = 0; i < SAL_N_ELEMENTS(aTests); ++i)
         testConvertToString(aTests[i]);
 }
 

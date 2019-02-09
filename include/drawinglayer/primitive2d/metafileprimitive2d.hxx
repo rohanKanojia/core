@@ -25,6 +25,7 @@
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <vcl/gdimtf.hxx>
+#include <vcl/gdimetafiletools.hxx>
 
 
 // MetafilePrimitive2D class
@@ -53,7 +54,7 @@ namespace drawinglayer
             have many advantages; Metafile would no longer have to be rendered by
             sub-systems and a standard way for converting Metafiles would exist.
          */
-        class DRAWINGLAYER_DLLPUBLIC MetafilePrimitive2D : public BufferedDecompositionPrimitive2D
+        class DRAWINGLAYER_DLLPUBLIC MetafilePrimitive2D : public BufferedDecompositionPrimitive2D, public MetafileAccessor
         {
         private:
             /// the geometry definition
@@ -64,7 +65,7 @@ namespace drawinglayer
 
         protected:
             /// local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
         public:
             /// constructor
             MetafilePrimitive2D(
@@ -80,6 +81,9 @@ namespace drawinglayer
 
             /// get range
             virtual basegfx::B2DRange getB2DRange(const geometry::ViewInformation2D& rViewInformation) const override;
+
+            /// from MetafileAccessor
+            virtual void accessMetafile(GDIMetaFile& rTargetMetafile) const override;
 
             /// provide unique ID
             DeclPrimitive2DIDBlock()

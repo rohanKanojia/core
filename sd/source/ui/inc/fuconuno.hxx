@@ -20,15 +20,17 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FUCONUNO_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FUCONUNO_HXX
 
-#include <svl/itemset.hxx>
 #include "fuconstr.hxx"
+#include <rtl/ustring.hxx>
+
+enum class SdrInventor : sal_uInt32;
 
 namespace sd {
 
 /**
  * draw control
  */
-class FuConstructUnoControl
+class FuConstructUnoControl final
     : public FuConstruct
 {
 public:
@@ -37,17 +39,15 @@ public:
     virtual void DoExecute( SfxRequest& rReq ) override;
 
     // Mouse- & Key-Events
-    virtual bool KeyInput(const KeyEvent& rKEvt) override;
-    virtual bool MouseMove(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonUp(const MouseEvent& rMEvt) override;
     virtual bool MouseButtonDown(const MouseEvent& rMEvt) override;
 
     virtual void Activate() override;
     virtual void Deactivate() override;
 
-    virtual SdrObject* CreateDefaultObject(const sal_uInt16 nID, const Rectangle& rRectangle) override;
+    virtual SdrObjectUniquePtr CreateDefaultObject(const sal_uInt16 nID, const ::tools::Rectangle& rRectangle) override;
 
-protected:
+private:
     FuConstructUnoControl(
         ViewShell* pViewSh,
         ::sd::Window* pWin,
@@ -55,11 +55,9 @@ protected:
         SdDrawDocument* pDoc,
         SfxRequest& rReq);
 
-    OUString aOldLayer;
-
-private:
-    sal_uInt32 nInventor;
-    sal_uInt16 nIdentifier;
+    OUString    aOldLayer;
+    SdrInventor nInventor;
+    sal_uInt16  nIdentifier;
 };
 
 } // end of namespace sd

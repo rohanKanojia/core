@@ -18,6 +18,7 @@
  */
 
 #include "scrollbar.hxx"
+#include <comphelper/property.hxx>
 #include <comphelper/streamsection.hxx>
 #include <comphelper/basicio.hxx>
 #include <rtl/math.hxx>
@@ -57,7 +58,7 @@ namespace frm
             }
             else
             {
-                nControlValue = (sal_Int32)::rtl::math::round( nExternalValue );
+                nControlValue = static_cast<sal_Int32>(::rtl::math::round( nExternalValue ));
             }
         }
         else
@@ -75,7 +76,7 @@ namespace frm
         Any aExternalDoubleValue;
         sal_Int32 nScrollValue = 0;
         if ( _rControlIntValue >>= nScrollValue )
-            aExternalDoubleValue <<= (double)nScrollValue;
+            aExternalDoubleValue <<= static_cast<double>(nScrollValue);
         else
         {
             OSL_FAIL( "translateControlIntToExternalDoubleValue: no integer scroll value!" );
@@ -106,7 +107,7 @@ namespace frm
     {
     }
 
-    OUString SAL_CALL OScrollBarModel::getImplementationName() throw ( RuntimeException, std::exception )
+    OUString SAL_CALL OScrollBarModel::getImplementationName()
     {
         return OUString( "com.sun.star.comp.forms.OScrollBarModel" );
     }
@@ -115,7 +116,7 @@ namespace frm
         // OBoundControlModel, our real base class, claims to support the DataAwareControlModel
         // service, which isn't really true for us. We only derive from this class
         // to benefit from the functionality for binding to spreadsheet cells
-    Sequence< OUString > SAL_CALL OScrollBarModel::getSupportedServiceNames() throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL OScrollBarModel::getSupportedServiceNames()
     {
         Sequence< OUString > aOwnNames( 2 );
         aOwnNames[ 0 ] = FRM_SUN_COMPONENT_SCROLLBAR;
@@ -130,12 +131,6 @@ namespace frm
     }
 
     IMPLEMENT_DEFAULT_CLONING( OScrollBarModel )
-
-
-    void SAL_CALL OScrollBarModel::disposing()
-    {
-        OBoundControlModel::disposing();
-    }
 
 
     void OScrollBarModel::describeFixedProperties( Sequence< Property >& _rProps ) const
@@ -162,7 +157,7 @@ namespace frm
     }
 
 
-    void OScrollBarModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue ) throw ( Exception, std::exception )
+    void OScrollBarModel::setFastPropertyValue_NoBroadcast( sal_Int32 _nHandle, const Any& _rValue )
     {
         switch ( _nHandle )
         {
@@ -179,7 +174,6 @@ namespace frm
 
     sal_Bool OScrollBarModel::convertFastPropertyValue(
                 Any& _rConvertedValue, Any& _rOldValue, sal_Int32 _nHandle, const Any& _rValue )
-                throw ( IllegalArgumentException )
     {
         bool bModified( false );
         switch ( _nHandle )
@@ -203,7 +197,7 @@ namespace frm
         switch ( _nHandle )
         {
         case PROPERTY_ID_DEFAULT_SCROLL_VALUE:
-            aReturn <<= (sal_Int32)0;
+            aReturn <<= sal_Int32(0);
             break;
 
         default:
@@ -231,18 +225,17 @@ namespace frm
 
     Any OScrollBarModel::getDefaultForReset() const
     {
-        return makeAny( (sal_Int32)m_nDefaultScrollValue );
+        return makeAny( m_nDefaultScrollValue );
     }
 
 
-    OUString SAL_CALL OScrollBarModel::getServiceName() throw( RuntimeException, std::exception )
+    OUString SAL_CALL OScrollBarModel::getServiceName()
     {
         return OUString(FRM_SUN_COMPONENT_SCROLLBAR);
     }
 
 
     void SAL_CALL OScrollBarModel::write( const Reference< XObjectOutputStream >& _rxOutStream )
-        throw( IOException, RuntimeException, std::exception )
     {
         OBoundControlModel::write( _rxOutStream );
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -258,7 +251,7 @@ namespace frm
     }
 
 
-    void SAL_CALL OScrollBarModel::read( const Reference< XObjectInputStream>& _rxInStream ) throw( IOException, RuntimeException, std::exception )
+    void SAL_CALL OScrollBarModel::read( const Reference< XObjectInputStream>& _rxInStream )
     {
         OBoundControlModel::read( _rxInStream );
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -303,7 +296,7 @@ namespace frm
 
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_forms_OScrollBarModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

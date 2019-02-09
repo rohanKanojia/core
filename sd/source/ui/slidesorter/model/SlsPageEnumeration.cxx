@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
 
 #include <utility>
 
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
+#include <model/SlsPageEnumeration.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
 
 using namespace ::sd::slidesorter;
 using namespace ::sd::slidesorter::model;
@@ -33,10 +35,9 @@ class PageEnumerationImpl
     : public Enumeration<SharedPageDescriptor>
 {
 public:
-    inline PageEnumerationImpl (
+    PageEnumerationImpl (
         const SlideSorterModel& rModel,
         const PageEnumeration::PagePredicate& rPredicate);
-    virtual ~PageEnumerationImpl();
     PageEnumerationImpl(const PageEnumerationImpl&) = delete;
     PageEnumerationImpl& operator=(const PageEnumerationImpl&) = delete;
     /** Create a copy of the called enumeration object.
@@ -56,7 +57,7 @@ private:
         It does not call AdvanceToNextValidElement() to skip elements that
         do not fulfill Predicate.
     */
-    inline PageEnumerationImpl (
+    PageEnumerationImpl (
         const SlideSorterModel& rModel,
         const PageEnumeration::PagePredicate& rPredicate,
         int nIndex);
@@ -64,10 +65,10 @@ private:
     /** Skip all elements that do not fulfill Predicate starting with the
         one pointed to by mnIndex.
     */
-    inline void AdvanceToNextValidElement();
+    void AdvanceToNextValidElement();
 };
 
-} // end of anonymouse namespace
+} // end of anonymous namespace
 
 namespace sd { namespace slidesorter { namespace model {
 
@@ -144,10 +145,6 @@ PageEnumerationImpl::PageEnumerationImpl (
     : mrModel(rModel),
       maPredicate(rPredicate),
       mnIndex(nIndex)
-{
-}
-
-PageEnumerationImpl::~PageEnumerationImpl()
 {
 }
 

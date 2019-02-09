@@ -22,14 +22,17 @@
 #include <com/sun/star/script/XTypeConverter.hpp>
 #include <com/sun/star/sdbc/DataType.hpp>
 #include <com/sun/star/util/NumberFormat.hpp>
+#include <com/sun/star/util/XNumberFormatter.hpp>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
 #include <com/sun/star/sdb/XColumnUpdate.hpp>
 #include <com/sun/star/sdb/XColumn.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/extract.hxx>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <comphelper/numbers.hxx>
+#include <comphelper/types.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <tools/diagnose_ex.h>
 
 
@@ -44,7 +47,7 @@ using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::uno;
 
-OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool bQuote,
+OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal,
                                               const Reference< XTypeConverter >&  _rxTypeConverter)
 {
     OUStringBuffer aRet;
@@ -59,7 +62,7 @@ OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool b
                 case DataType::BOOLEAN:
                 case DataType::TINYINT:
                 case DataType::SMALLINT:
-                    if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_BOOLEAN)
+                    if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_BOOLEAN)
                     {
                         if (::cppu::any2bool(_rVal))
                             aRet.append("1");
@@ -76,12 +79,11 @@ OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool b
                 case DataType::CHAR:
                 case DataType::VARCHAR:
                 case DataType::LONGVARCHAR:
-                    if (bQuote)
-                        aRet.append("'");
+                    aRet.append("'");
                     {
                         OUString aTemp;
                         _rxTypeConverter->convertToSimpleType(_rVal, TypeClass_STRING) >>= aTemp;
-                        sal_Int32 nIndex = (sal_Int32)-1;
+                        sal_Int32 nIndex = sal_Int32(-2);
                         const OUString sQuot("\'");
                         do
                         {
@@ -93,8 +95,7 @@ OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool b
 
                         aRet.append(aTemp);
                     }
-                    if (bQuote)
-                        aRet.append("'");
+                    aRet.append("'");
                     break;
                 case DataType::REAL:
                 case DataType::DOUBLE:
@@ -112,19 +113,19 @@ OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool b
                 {
                     DateTime aDateTime;
                     bool bOk = false;
-                    if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_DOUBLE)
+                    if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_DOUBLE)
                     {
                         double nValue = 0.0;
-                       _rVal >>= nValue;
-                       aDateTime = DBTypeConversion::toDateTime(nValue);
-                       bOk = true;
+                        _rVal >>= nValue;
+                        aDateTime = DBTypeConversion::toDateTime(nValue);
+                        bOk = true;
                     }
-                    else if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_STRING)
+                    else if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_STRING)
                     {
                         OUString sValue;
-                       _rVal >>= sValue;
-                       aDateTime = DBTypeConversion::toDateTime(sValue);
-                       bOk = true;
+                        _rVal >>= sValue;
+                        aDateTime = DBTypeConversion::toDateTime(sValue);
+                        bOk = true;
                     }
                     else
                         bOk = _rVal >>= aDateTime;
@@ -133,11 +134,9 @@ OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool b
                     // check if this is really a timestamp or only a date
                     if ( bOk )
                     {
-                        if (bQuote)
-                            aRet.append("{ts '");
+                        aRet.append("{ts '");
                         aRet.append(DBTypeConversion::toDateTimeString(aDateTime));
-                        if (bQuote)
-                            aRet.append("'}");
+                        aRet.append("'}");
                         break;
                     }
                     break;
@@ -146,55 +145,51 @@ OUString DBTypeConversion::toSQLString(sal_Int32 eType, const Any& _rVal, bool b
                 {
                     Date aDate;
                     bool bOk = false;
-                    if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_DOUBLE)
+                    if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_DOUBLE)
                     {
                         double nValue = 0.0;
-                       _rVal >>= nValue;
-                       aDate = DBTypeConversion::toDate(nValue);
-                       bOk = true;
+                        _rVal >>= nValue;
+                        aDate = DBTypeConversion::toDate(nValue);
+                        bOk = true;
                     }
-                    else if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_STRING)
+                    else if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_STRING)
                     {
                         OUString sValue;
-                       _rVal >>= sValue;
-                       aDate = DBTypeConversion::toDate(sValue);
-                       bOk = true;
+                        _rVal >>= sValue;
+                        aDate = DBTypeConversion::toDate(sValue);
+                        bOk = true;
                     }
                     else
                         bOk = _rVal >>= aDate;
                     OSL_ENSURE( bOk, "DBTypeConversion::toSQLString: _rVal is not date!");
-                    if (bQuote)
-                        aRet.append("{d '");
+                    aRet.append("{d '");
                     aRet.append(DBTypeConversion::toDateString(aDate));
-                    if (bQuote)
-                        aRet.append("'}");
+                    aRet.append("'}");
                 }   break;
                 case DataType::TIME:
                 {
                     css::util::Time aTime;
                     bool bOk = false;
-                    if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_DOUBLE)
+                    if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_DOUBLE)
                     {
                         double nValue = 0.0;
-                       _rVal >>= nValue;
-                       aTime = DBTypeConversion::toTime(nValue);
-                       bOk = true;
+                        _rVal >>= nValue;
+                        aTime = DBTypeConversion::toTime(nValue);
+                        bOk = true;
                     }
-                    else if (_rVal.getValueType().getTypeClass() == ::com::sun::star::uno::TypeClass_STRING)
+                    else if (_rVal.getValueType().getTypeClass() == css::uno::TypeClass_STRING)
                     {
                         OUString sValue;
-                       _rVal >>= sValue;
-                       aTime = DBTypeConversion::toTime(sValue);
-                       bOk = true;
+                        _rVal >>= sValue;
+                        aTime = DBTypeConversion::toTime(sValue);
+                        bOk = true;
                     }
                     else
                         bOk = _rVal >>= aTime;
                     OSL_ENSURE( bOk,"DBTypeConversion::toSQLString: _rVal is not time!");
-                    if (bQuote)
-                        aRet.append("{t '");
+                    aRet.append("{t '");
                     aRet.append(DBTypeConversion::toTimeString(aTime));
-                    if (bQuote)
-                        aRet.append("'}");
+                    aRet.append("'}");
                 } break;
             }
         }
@@ -234,7 +229,7 @@ void DBTypeConversion::setValue(const Reference<XColumnUpdate>& xVariant,
                                 const OUString& rString,
                                 sal_Int32 nKey,
                                 sal_Int16 nFieldType,
-                                sal_Int16 nKeyType) throw(::com::sun::star::lang::IllegalArgumentException)
+                                sal_Int16 nKeyType)
 {
     if (!rString.isEmpty())
     {
@@ -317,9 +312,9 @@ void DBTypeConversion::setValue(const Reference<XColumnUpdate>& xVariant,
     {
         switch (nFieldType)
         {
-            case ::com::sun::star::sdbc::DataType::CHAR:
-            case ::com::sun::star::sdbc::DataType::VARCHAR:
-            case ::com::sun::star::sdbc::DataType::LONGVARCHAR:
+            case css::sdbc::DataType::CHAR:
+            case css::sdbc::DataType::VARCHAR:
+            case css::sdbc::DataType::LONGVARCHAR:
                 xVariant->updateString(rString);
                 break;
             default:
@@ -332,7 +327,7 @@ void DBTypeConversion::setValue(const Reference<XColumnUpdate>& xVariant,
 void DBTypeConversion::setValue(const Reference<XColumnUpdate>& xVariant,
                                 const Date& rNullDate,
                                 const double& rValue,
-                                sal_Int16 nKeyType) throw(::com::sun::star::lang::IllegalArgumentException)
+                                sal_Int16 nKeyType)
 {
     switch (nKeyType & ~NumberFormat::DEFINED)
     {
@@ -417,14 +412,14 @@ double DBTypeConversion::getValue( const Reference< XColumn >& i_column, const D
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
         return 0.0;
     }
 }
 
 OUString DBTypeConversion::getFormattedValue(const Reference< XPropertySet>& _xColumn,
                                            const Reference<XNumberFormatter>& _xFormatter,
-                                           const ::com::sun::star::lang::Locale& _rLocale,
+                                           const css::lang::Locale& _rLocale,
                                            const Date& _rNullDate)
 {
     OSL_ENSURE(_xColumn.is() && _xFormatter.is(), "DBTypeConversion::getFormattedValue: invalid arg !");
@@ -444,7 +439,6 @@ OUString DBTypeConversion::getFormattedValue(const Reference< XPropertySet>& _xC
     if (!nKey)
     {
         Reference<XNumberFormats> xFormats( _xFormatter->getNumberFormatsSupplier()->getNumberFormats() );
-        Reference<XNumberFormatTypes> xTypeList(_xFormatter->getNumberFormatsSupplier()->getNumberFormats(), UNO_QUERY);
 
         nKey = ::dbtools::getDefaultNumberFormat(_xColumn,
                                            Reference< XNumberFormatTypes > (xFormats, UNO_QUERY),
@@ -488,12 +482,12 @@ OUString DBTypeConversion::getFormattedValue(const Reference<XColumn>& xVariant,
                          }
                          catch( const Exception& )
                          {
-                            DBG_UNHANDLED_EXCEPTION();
+                            DBG_UNHANDLED_EXCEPTION("connectivity.commontools");
                          }
                          // get a value which represents the given date, relative to the null date of the formatter
                          fValue -= toDays( rNullDate, aFormatterNullDate );
                          // format this value
-                        aString = xFormatter->convertNumberToString( nKey, fValue );
+                         aString = xFormatter->convertNumberToString( nKey, fValue );
                     }
                 }
                 break;

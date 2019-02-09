@@ -17,12 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "MeanValueRegressionCurveCalculator.hxx"
-#include "macros.hxx"
+#include <MeanValueRegressionCurveCalculator.hxx>
 
 #include <osl/diagnose.h>
 #include <rtl/math.hxx>
-#include <rtl/ustrbuf.hxx>
 
 using namespace ::com::sun::star;
 
@@ -42,7 +40,6 @@ MeanValueRegressionCurveCalculator::~MeanValueRegressionCurveCalculator()
 void SAL_CALL MeanValueRegressionCurveCalculator::recalculateRegression(
     const uno::Sequence< double >& /*aXValues*/,
     const uno::Sequence< double >& aYValues )
-    throw (uno::RuntimeException, std::exception)
 {
     const sal_Int32 nDataLength = aYValues.getLength();
     sal_Int32 nMax = nDataLength;
@@ -88,8 +85,6 @@ void SAL_CALL MeanValueRegressionCurveCalculator::recalculateRegression(
 }
 
 double SAL_CALL MeanValueRegressionCurveCalculator::getCurveValue( double /*x*/ )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     return m_fMeanValue;
 }
@@ -99,8 +94,6 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL MeanValueRegressionCurveCalculat
     const uno::Reference< chart2::XScaling >& xScalingX,
     const uno::Reference< chart2::XScaling >& xScalingY,
     sal_Bool bMaySkipPointsInCalculation )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     if( bMaySkipPointsInCalculation )
     {
@@ -118,12 +111,16 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL MeanValueRegressionCurveCalculat
 
 OUString MeanValueRegressionCurveCalculator::ImplGetRepresentation(
     const uno::Reference< util::XNumberFormatter >& xNumFormatter,
-    ::sal_Int32 nNumberFormatKey ) const
+    sal_Int32 nNumberFormatKey, sal_Int32* pFormulaLength /* = nullptr */ ) const
 {
-    OUString aBuf = "f(x) = " +
-                    getFormattedString( xNumFormatter, nNumberFormatKey, m_fMeanValue );
-
-    return aBuf;
+    OUString aBuf = OUString(mYName + " = ");
+    if ( pFormulaLength )
+    {
+        *pFormulaLength -= aBuf.getLength();
+        if ( *pFormulaLength <= 0 )
+            return OUString("###");
+    }
+    return ( aBuf + getFormattedString( xNumFormatter, nNumberFormatKey, m_fMeanValue, pFormulaLength ) );
 }
 
 } //  namespace chart

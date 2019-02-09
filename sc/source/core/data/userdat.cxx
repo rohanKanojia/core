@@ -17,58 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "userdat.hxx"
-#include "drwlayer.hxx"
-#include "rechead.hxx"
+#include <userdat.hxx>
 
-ScDrawObjFactory::ScDrawObjFactory()
-{
-    SdrObjFactory::InsertMakeUserDataHdl( LINK ( this, ScDrawObjFactory, MakeUserData ) );
-}
-
-ScDrawObjFactory::~ScDrawObjFactory()
-{
-    SdrObjFactory::RemoveMakeUserDataHdl( LINK ( this, ScDrawObjFactory, MakeUserData ) );
-}
-
-IMPL_STATIC_LINK_TYPED(
-    ScDrawObjFactory, MakeUserData, SdrObjFactory *, pObjFactory, void )
-{
-    if ( pObjFactory->nInventor == SC_DRAWLAYER )
-    {
-        if ( pObjFactory->nIdentifier == SC_UD_OBJDATA )
-            pObjFactory->pNewData = new ScDrawObjData;
-        else if ( pObjFactory->nIdentifier == SC_UD_IMAPDATA )
-            pObjFactory->pNewData = new ScIMapInfo;
-        else if ( pObjFactory->nIdentifier == SC_UD_MACRODATA )
-            pObjFactory->pNewData = new ScMacroInfo;
-        else
-        {
-            OSL_FAIL("MakeUserData: wrong ID");
-        }
-    }
-}
 
 ScDrawObjData::ScDrawObjData() :
-    SdrObjUserData( SC_DRAWLAYER, SC_UD_OBJDATA ),
+    SdrObjUserData( SdrInventor::ScOrSwDraw, SC_UD_OBJDATA ),
     maStart( ScAddress::INITIALIZE_INVALID ),
     maEnd( ScAddress::INITIALIZE_INVALID ),
-    meType( DrawingObject )
+    meType( DrawingObject ),
+    mbResizeWithCell( false )
 {
 }
 
-ScDrawObjData* ScDrawObjData::Clone( SdrObject* ) const
+std::unique_ptr<SdrObjUserData> ScDrawObjData::Clone( SdrObject* ) const
 {
-    return new ScDrawObjData( *this );
-}
-
-ScIMapInfo::ScIMapInfo() :
-    SdrObjUserData( SC_DRAWLAYER, SC_UD_IMAPDATA )
-{
+    return std::unique_ptr<SdrObjUserData>(new ScDrawObjData( *this ));
 }
 
 ScIMapInfo::ScIMapInfo( const ImageMap& rImageMap ) :
-    SdrObjUserData( SC_DRAWLAYER, SC_UD_IMAPDATA ),
+    SdrObjUserData( SdrInventor::ScOrSwDraw, SC_UD_IMAPDATA ),
     aImageMap( rImageMap )
 {
 }
@@ -83,13 +50,13 @@ ScIMapInfo::~ScIMapInfo()
 {
 }
 
-SdrObjUserData* ScIMapInfo::Clone( SdrObject* ) const
+std::unique_ptr<SdrObjUserData> ScIMapInfo::Clone( SdrObject* ) const
 {
-    return new ScIMapInfo( *this );
+    return std::unique_ptr<SdrObjUserData>(new ScIMapInfo( *this ));
 }
 
 ScMacroInfo::ScMacroInfo() :
-    SdrObjUserData( SC_DRAWLAYER, SC_UD_MACRODATA )
+    SdrObjUserData( SdrInventor::ScOrSwDraw, SC_UD_MACRODATA )
 {
 }
 
@@ -97,9 +64,9 @@ ScMacroInfo::~ScMacroInfo()
 {
 }
 
-SdrObjUserData* ScMacroInfo::Clone( SdrObject* /*pObj*/ ) const
+std::unique_ptr<SdrObjUserData> ScMacroInfo::Clone( SdrObject* /*pObj*/ ) const
 {
-   return new ScMacroInfo( *this );
+   return std::unique_ptr<SdrObjUserData>(new ScMacroInfo( *this ));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

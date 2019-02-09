@@ -24,9 +24,10 @@
 
 #include "attributeoutputbase.hxx"
 #include "fields.hxx"
-#include "IMark.hxx"
+#include <IMark.hxx>
 #include "docxexport.hxx"
 
+#include <editeng/boxitem.hxx>
 #include <sax/fshelper.hxx>
 #include <sax/fastattribs.hxx>
 #include <vcl/vclenum.hxx>
@@ -38,13 +39,14 @@
 #include <boost/optional.hpp>
 #include <oox/export/vmlexport.hxx>
 #include <oox/export/drawingml.hxx>
-#include <docxtablestyleexport.hxx>
+#include "docxtablestyleexport.hxx"
 
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 
 class SwGrfNode;
 class SdrObject;
+enum class SvxBoxItemLine;
 
 namespace docx { class FootnotesList; }
 namespace oox { namespace drawingml { class DrawingML; } }
@@ -64,6 +66,7 @@ enum DocxColBreakStatus
 {
     COLBRK_NONE,
     COLBRK_POSTPONE,
+    COLBRK_WRITEANDPOSTPONE,
     COLBRK_WRITE
 };
 
@@ -79,41 +82,15 @@ enum DocxColBreakStatus
  */
 struct OutputBorderOptions
 {
-    sal_Int32           tag;
-    bool                bUseStartEnd;
-    bool                bWriteTag;
-    bool                bWriteInsideHV;
-    bool                bWriteDistance;
-    SvxShadowLocation   aShadowLocation;
-    bool                bCheckDistanceSize;
-
-    OutputBorderOptions() : tag(0), bUseStartEnd(false), bWriteTag(true), bWriteInsideHV(false), bWriteDistance(false), aShadowLocation(SVX_SHADOW_NONE), bCheckDistanceSize(false) {}
+    sal_Int32           tag = 0;
+    bool                bUseStartEnd = false;
+    bool                bWriteTag = true;
+    bool                bWriteDistance = false;
+    SvxShadowLocation   aShadowLocation = SvxShadowLocation::NONE;
+    std::shared_ptr<editeng::WordBorderDistances> pDistances;
 };
 
-/**
- * A structure that holds information about the page margins.
- *
- */
-struct PageMargins
-{
-    sal_uInt16 nPageMarginLeft;
-    sal_uInt16 nPageMarginRight;
-    sal_uInt16 nPageMarginTop;
-    sal_uInt16 nPageMarginBottom;
-
-    PageMargins() : nPageMarginLeft(0), nPageMarginRight(0), nPageMarginTop(0), nPageMarginBottom(0) {}
-};
-
-/**
- * All the information that should be stashed away when we're in the middle of
- * of a table export and still have to do something else, e.g. export a shape.
- */
-struct DocxTableExportContext
-{
-    ww8::WW8TableInfo::Pointer_t m_pTableInfo;
-    bool m_bTableCellOpen;
-    sal_uInt32 m_nTableDepth;
-};
+struct DocxTableExportContext;
 
 /**
  * A structure that holds flags for the table export.
@@ -163,10 +140,10 @@ public:
     virtual void EndParagraphProperties(const SfxItemSet& rParagraphMarkerProperties, const SwRedlineData* pRedlineData, const SwRedlineData* pRedlineParagraphMarkerDeleted, const SwRedlineData* pRedlineParagraphMarkerInserted) override;
 
     /// Start of the text run.
-    virtual void StartRun( const SwRedlineData* pRedlineData, bool bSingleEmptyRun = false ) override;
+    virtual void StartRun( const SwRedlineData* pRedlineData, sal_Int32 nPos, bool bSingleEmptyRun = false ) override;
 
     /// End of the text run.
-    virtual void EndRun() override;
+    virtual void EndRun(const SwTextNode* pNode, sal_Int32 nPos, bool bLastRun = false) override;
 
     /// Called before we start outputting the attributes.
     virtual void StartRunProperties() override;
@@ -174,7 +151,7 @@ public:
     /// Called after we end outputting the attributes.
     virtual void EndRunProperties( const SwRedlineData* pRedlineData ) override;
 
-    virtual void FootnoteEndnoteRefTag() override;
+    virtual bool FootnoteEndnoteRefTag() override;
 
     virtual void SectFootnoteEndnotePr() override;
 
@@ -190,7 +167,7 @@ public:
     virtual void StartRuby( const SwTextNode& rNode, sal_Int32 nPos, const SwFormatRuby& rRuby ) override;
 
     /// Output ruby end.
-    virtual void EndRuby() override;
+    virtual void EndRuby(const SwTextNode& rNode, sal_Int32 nPos) override;
 
     /// Output URL start.
     virtual bool StartURL( const OUString& rUrl, const OUString& rTarget ) override;
@@ -217,7 +194,7 @@ public:
     void EndRedline( const SwRedlineData * pRedlineData );
 
     virtual void SetStateOfFlyFrame( FlyProcessingState nStateOfFlyFrame ) override;
-    virtual void SetAnchorIsLinkedToNode( bool bAnchorLinkedToNode = false ) override;
+    virtual void SetAnchorIsLinkedToNode( bool bAnchorLinkedToNode ) override;
     virtual bool IsFlyProcessingPostponed() override;
     virtual void ResetFlyProcessingFlag() override;
 
@@ -230,7 +207,7 @@ public:
     virtual void TableInfoRow( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
     virtual void TableDefinition( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
     virtual void TableDefaultBorders( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
-    void TableDefaultCellMargins( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
+    void TableDefaultCellMargins( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
     virtual void TableBackgrounds( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
     virtual void TableRowRedline( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
     virtual void TableCellRedline( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
@@ -241,7 +218,7 @@ public:
     virtual void TableNodeInfoInner( ww8::WW8TableNodeInfoInner::Pointer_t pNodeInfoInner ) override;
     virtual void TableOrientation( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
     virtual void TableSpacing( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner ) override;
-    virtual void TableRowEnd( sal_uInt32 nDepth = 1 ) override;
+    virtual void TableRowEnd( sal_uInt32 nDepth ) override;
 
     /// Start of the styles table.
     virtual void StartStyles() override;
@@ -250,7 +227,7 @@ public:
     virtual void EndStyles( sal_uInt16 nNumberOfStyles ) override;
 
     /// Write default style.
-    virtual void DefaultStyle( sal_uInt16 nStyle ) override;
+    virtual void DefaultStyle() override;
 
     /// Write Doc Defaults
     void DocDefaults( );
@@ -291,7 +268,7 @@ public:
     virtual void SectionBreak( sal_uInt8 nC, const WW8_SepInfo* pSectionInfo = nullptr ) override;
 
     // preserve DOCX page vertical alignment
-    virtual void TextVerticalAdjustment( const css::drawing::TextVerticalAdjust ) SAL_OVERRIDE;
+    virtual void TextVerticalAdjustment( const css::drawing::TextVerticalAdjust ) override;
 
     /// Start of the section properties.
     virtual void StartSection() override;
@@ -340,7 +317,7 @@ public:
     void FontPitchType( FontPitch ePitch ) const;
 
     /// Write out the font into the document, if it's an embedded font.
-    void EmbedFont( const OUString& name, FontFamily family, FontPitch pitch, rtl_TextEncoding encoding );
+    void EmbedFont( const OUString& name, FontFamily family, FontPitch pitch );
 
     /// Definition of a numbering instance.
     virtual void NumberingDefinition( sal_uInt16 nId, const SwNumRule &rRule ) override;
@@ -364,16 +341,20 @@ public:
         sal_Int16 nFirstLineIndex,
         sal_Int16 nListTabPos,
         const OUString &rNumberingString,
-        const SvxBrushItem* pBrush = nullptr ) override;
+        const SvxBrushItem* pBrush ) override;
 
-    void WriteField_Impl( const SwField* pField, ww::eField eType, const OUString& rFieldCmd, sal_uInt8 nMode );
+    void WriteField_Impl( const SwField* pField, ww::eField eType, const OUString& rFieldCmd, FieldFlags nMode );
     void WriteFormData_Impl( const ::sw::mark::IFieldmark& rFieldmark );
 
     void WriteBookmarks_Impl( std::vector< OUString >& rStarts, std::vector< OUString >& rEnds );
+    void WriteFinalBookmarks_Impl( std::vector< OUString >& rStarts, std::vector< OUString >& rEnds );
     void WriteAnnotationMarks_Impl( std::vector< OUString >& rStarts, std::vector< OUString >& rEnds );
-    void ClearRelIdCache();
+    void PushRelIdCache();
+    void PopRelIdCache();
     /// End possibly opened paragraph sdt block.
     void EndParaSdtBlock();
+
+    void WriteFloatingTable(ww8::Frame const* pParentFrame);
 
 private:
     /// Initialize the structures where we are going to collect some of the paragraph properties.
@@ -408,36 +389,39 @@ private:
     /// replacement graphics, set the first as 0, and pass the remaining three.
     ///
     /// @see WriteOLE2Obj()
-    void FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size& rSize, const SwFlyFrameFormat* pOLEFrameFormat = nullptr, SwOLENode* pOLENode = nullptr, const SdrObject* pSdrObj = nullptr);
-    void WriteSrcRect( const SdrObject* pSdrObj );
+    void FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size& rSize, const SwFlyFrameFormat* pOLEFrameFormat, SwOLENode* pOLENode, const SdrObject* pSdrObj = nullptr);
+    void WriteSrcRect( const SdrObject* pSdrObj, const SwFrameFormat* pFrameFormat );
     void WriteOLE2Obj( const SdrObject* pSdrObj, SwOLENode& rNode, const Size& rSize, const SwFlyFrameFormat* pFlyFrameFormat);
     bool WriteOLEChart( const SdrObject* pSdrObj, const Size& rSize );
-    bool WriteOLEMath( const SdrObject* pSdrObj, const SwOLENode& rNode, const Size& rSize );
-    bool PostponeOLE( const SdrObject* pSdrObj, SwOLENode& rNode, const Size& rSize, const SwFlyFrameFormat* pFlyFrameFormat );
+    bool WriteOLEMath( const SwOLENode& rNode );
+    void PostponeOLE( SwOLENode& rNode, const Size& rSize, const SwFlyFrameFormat* pFlyFrameFormat );
     void WriteOLE( SwOLENode& rNode, const Size& rSize, const SwFlyFrameFormat* rFlyFrameFormat );
+
+    void WriteActiveXControl(const SdrObject* pObject, const SwFrameFormat& rFrameFormat, bool bInsideRun);
+    bool ExportAsActiveXControl(const SdrObject* pObject) const;
 
     /// checks whether the current component is a diagram
     static bool IsDiagram (const SdrObject* sdrObject);
 
-    void InitTableHelper( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
-    void StartTable( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
-    void StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner );
-    void StartTableCell( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner, sal_uInt32 nCell, sal_uInt32 nRow );
-    void TableCellProperties( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner, sal_uInt32 nCell, sal_uInt32 nRow );
-    void EndTableCell( ww8::WW8TableNodeInfoInner::Pointer_t pTableTextNodeInfoInner, sal_uInt32 nCell, sal_uInt32 nRow );
+    void InitTableHelper( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
+    void StartTable( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
+    void StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner );
+    void StartTableCell( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner, sal_uInt32 nCell, sal_uInt32 nRow );
+    void TableCellProperties( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner, sal_uInt32 nCell, sal_uInt32 nRow );
+    void EndTableCell( sal_uInt32 nCell );
     void EndTableRow( );
     void EndTable();
-    void SyncNodelessCells(ww8::WW8TableNodeInfoInner::Pointer_t pInner, sal_Int32 nCell, sal_uInt32 nRow);
+    void SyncNodelessCells(ww8::WW8TableNodeInfoInner::Pointer_t const & pInner, sal_Int32 nCell, sal_uInt32 nRow);
     void PopulateFrameProperties(const SwFrameFormat* pFrameFormat, const Size& rSize);
     static bool TextBoxIsFramePr(const SwFrameFormat& rFrameFormat);
     /// End cell, row, and even the entire table if necessary.
-    void FinishTableRowCell( ww8::WW8TableNodeInfoInner::Pointer_t pInner, bool bForceEmptyParagraph = false );
+    void FinishTableRowCell( ww8::WW8TableNodeInfoInner::Pointer_t const & pInner, bool bForceEmptyParagraph = false );
 
     void WriteFFData( const FieldInfos& rInfos );
     void WritePendingPlaceholder();
 
     void EmbedFontStyle( const OUString& name, int tag, FontFamily family, FontItalic italic, FontWeight weight,
-        FontPitch pitch, rtl_TextEncoding encoding );
+        FontPitch pitch );
 
     /**
      * Translate an ico value to the corresponding HighlightColorValues enumaration item
@@ -680,6 +664,8 @@ protected:
 
     virtual bool AnalyzeURL( const OUString& rURL, const OUString& rTarget, OUString* pLinkURL, OUString* pMark ) override;
 
+    virtual void WriteBookmarkInActParagraph( const OUString& rName, sal_Int32 nFirstRunPos, sal_Int32 nLastRunPos ) override;
+
     /// Reference to the export, where to get the data from
     DocxExport &m_rExport;
 
@@ -691,41 +677,53 @@ protected:
 
 private:
 
-    void DoWriteBookmarks( );
+    void DoWriteBookmarkTagStart(const OUString & bookmarkName);
+    void DoWriteBookmarkTagEnd(const OUString & bookmarkName);
+    void DoWriteBookmarksStart(std::vector<OUString>& rStarts);
+    void DoWriteBookmarksEnd(std::vector<OUString>& rEnds);
+    void DoWriteBookmarkStartIfExist(sal_Int32 nRunPos);
+    void DoWriteBookmarkEndIfExist(sal_Int32 nRunPos);
+
+    void DoWritePermissionTagStart(const OUString & permission);
+    void DoWritePermissionTagEnd(const OUString & permission);
+    void DoWritePermissionsStart();
+    void DoWritePermissionsEnd();
+
     void DoWriteAnnotationMarks( );
     void WritePostponedGraphic();
     void WritePostponedMath(const SwOLENode* pObject);
     void WritePostponedFormControl(const SdrObject* pObject);
+    void WritePostponedActiveXControl(bool bInsideRun);
     void WritePostponedDiagram();
     void WritePostponedChart();
     void WritePostponedOLE();
-    void WritePostponedVMLDrawing();
     void WritePostponedDMLDrawing();
     void WritePostponedCustomShape();
 
     void WriteSdtBlock(sal_Int32& nSdtPrToken,
-                       css::uno::Reference<sax_fastparser::FastAttributeList>& pSdtPrTokenChildren,
-                       css::uno::Reference<sax_fastparser::FastAttributeList>& pSdtPrTokenAttributes,
-                       css::uno::Reference<sax_fastparser::FastAttributeList>& pSdtPrDataBindingAttrs,
+                       rtl::Reference<sax_fastparser::FastAttributeList>& pSdtPrTokenChildren,
+                       rtl::Reference<sax_fastparser::FastAttributeList>& pSdtPrTokenAttributes,
+                       rtl::Reference<sax_fastparser::FastAttributeList>& pSdtPrDataBindingAttrs,
                        OUString& rSdtPrAlias,
                        bool bPara);
     /// Closes a currently open SDT block.
     void EndSdtBlock();
 
-    void StartField_Impl( FieldInfos& rInfos, bool bWriteRun = false );
+    void StartField_Impl( const SwTextNode* pNode, sal_Int32 nPos, FieldInfos const & rInfos, bool bWriteRun = false );
     void DoWriteCmd( const OUString& rCmd );
-    void CmdField_Impl( FieldInfos& rInfos );
-    void EndField_Impl( FieldInfos& rInfos );
+    void CmdField_Impl( const SwTextNode* pNode, sal_Int32 nPos, FieldInfos const & rInfos, bool bWriteRun );
+    void EndField_Impl( const SwTextNode* pNode, sal_Int32 nPos, FieldInfos& rInfos );
+    void DoWriteFieldRunProperties( const SwTextNode* pNode, sal_Int32 nPos, bool bWriteCombChars = false );
 
-    static void AddToAttrList( css::uno::Reference<sax_fastparser::FastAttributeList>& pAttrList, sal_Int32 nAttrName, const sal_Char* sAttrValue );
-    static void AddToAttrList( css::uno::Reference<sax_fastparser::FastAttributeList>& pAttrList, sal_Int32 nArgs, ... );
+    static void AddToAttrList( rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList, sal_Int32 nAttrName, const sal_Char* sAttrValue );
+    static void AddToAttrList( rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList, sal_Int32 nArgs, ... );
 
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pFontsAttrList;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pEastAsianLayoutAttrList;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pCharLangAttrList;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pSectionSpacingAttrList;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pParagraphSpacingAttrList;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pHyperlinkAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pFontsAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pEastAsianLayoutAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pCharLangAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pSectionSpacingAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pParagraphSpacingAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pHyperlinkAttrList;
     /// If the current SDT around runs should be ended before the current run.
     bool m_bEndCharSdt;
     /// If an SDT around runs is currently open.
@@ -733,9 +731,9 @@ private:
     /// If an SDT around paragraphs is currently open.
     bool m_bStartedParaSdt;
     /// Attributes of the run color
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pColorAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pColorAttrList;
     /// Attributes of the paragraph background
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pBackgroundAttrList;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pBackgroundAttrList;
     OUString m_sOriginalBackgroundColor;
     OUString m_hyperLinkAnchor;
     bool m_endPageRef;
@@ -763,21 +761,36 @@ private:
     bool m_bAnchorLinkedToNode;
 
     /// Field data to remember in the text run
+    bool m_bPreventDoubleFieldsHandling;
     std::vector< FieldInfos > m_Fields;
     OUString m_sFieldBkm;
     sal_Int32 m_nNextBookmarkId;
     sal_Int32 m_nNextAnnotationMarkId;
 
+    OUString m_sRawText;
+
     /// Bookmarks to output
-    std::vector<OString> m_rBookmarksStart;
-    std::vector<OString> m_rBookmarksEnd;
+    std::vector<OUString> m_rBookmarksStart;
+    std::vector<OUString> m_rBookmarksEnd;
+
+    /// Bookmarks to output at the end
+    std::vector<OUString> m_rFinalBookmarksStart;
+    std::vector<OUString> m_rFinalBookmarksEnd;
+
+    /// Bookmarks of the current paragraph
+    std::multimap<sal_Int32, OUString> m_aBookmarksOfParagraphStart;
+    std::multimap<sal_Int32, OUString> m_aBookmarksOfParagraphEnd;
+
+    /// Permissions to output
+    std::vector<OUString> m_rPermissionsStart;
+    std::vector<OUString> m_rPermissionsEnd;
 
     /// Annotation marks to output
     std::vector<OString> m_rAnnotationMarksStart;
     std::vector<OString> m_rAnnotationMarksEnd;
 
     /// Maps of the bookmarks ids
-    std::map<OString, sal_Int32> m_rOpenedBookmarksIds;
+    std::map<OUString, sal_Int32> m_rOpenedBookmarksIds;
 
     /// Name of the last opened bookmark.
     OString m_sLastOpenedBookmark;
@@ -810,7 +823,12 @@ private:
     // beginning of the next paragraph
     DocxColBreakStatus m_nColBreakStatus;
 
+    // Remember that a page break has to be opened at the
+    // beginning of the next paragraph
+    bool m_bPostponedPageBreak;
+
     std::vector<ww8::Frame> m_aFramesOfParagraph;
+    std::set<const SwFrameFormat*> m_aFloatingTablesOfParagraph;
     sal_Int32 m_nTextFrameLevel;
 
     // close of hyperlink needed
@@ -826,34 +844,30 @@ private:
 
     struct PostponedGraphic
     {
-        PostponedGraphic( const SwGrfNode* n, Size s, const SwFlyFrameFormat* pOLEFrameFormat, SwOLENode* pOLENode, const SdrObject* sObj )
-            : grfNode( n ), size( s ), mOLEFrameFormat( pOLEFrameFormat ), mOLENode( pOLENode ), pSdrObj(sObj) {};
+        PostponedGraphic( const SwGrfNode* n, Size s, const SdrObject* sObj )
+            : grfNode( n ), size( s ), pSdrObj(sObj) {};
 
         const SwGrfNode* grfNode;
-        Size size;
-        const SwFlyFrameFormat* mOLEFrameFormat;
-        SwOLENode* mOLENode;
+        Size const size;
         const SdrObject* pSdrObj;
     };
-    std::unique_ptr< std::list<PostponedGraphic> > m_pPostponedGraphic;
+    std::unique_ptr< std::vector<PostponedGraphic> > m_pPostponedGraphic;
     struct PostponedDiagram
     {
         PostponedDiagram( const SdrObject* o, const SwFrameFormat* frm ) : object( o ), frame( frm ) {};
         const SdrObject* object;
         const SwFrameFormat* frame;
     };
-    std::unique_ptr< std::list<PostponedDiagram> > m_pPostponedDiagrams;
+    std::unique_ptr< std::vector<PostponedDiagram> > m_pPostponedDiagrams;
 
     struct PostponedDrawing
     {
-        PostponedDrawing( const SdrObject* sdrObj, const SwFrameFormat* frm, const Point* pt ) : object( sdrObj ), frame( frm ), point( pt ) {};
+        PostponedDrawing( const SdrObject* sdrObj, const SwFrameFormat* frm) : object( sdrObj ), frame( frm ) {};
         const SdrObject* object;
         const SwFrameFormat* frame;
-        const Point* point;
     };
-    std::unique_ptr< std::list<PostponedDrawing> > m_pPostponedVMLDrawings;
-    std::unique_ptr< std::list<PostponedDrawing> > m_pPostponedDMLDrawings;
-    std::unique_ptr< std::list<PostponedDrawing> > m_pPostponedCustomShape;
+    std::unique_ptr< std::vector<PostponedDrawing> > m_pPostponedDMLDrawings;
+    std::unique_ptr< std::vector<PostponedDrawing> > m_pPostponedCustomShape;
 
     struct PostponedOLE
     {
@@ -862,14 +876,14 @@ private:
         const Size size;
         const SwFlyFrameFormat* frame;
     };
-    std::unique_ptr< std::list<PostponedOLE> > m_pPostponedOLEs;
+    std::unique_ptr< std::vector<PostponedOLE> > m_pPostponedOLEs;
 
     std::vector<const SwOLENode*> m_aPostponedMaths;
     /// count charts consistently for unit tests
     unsigned int m_nChartCount;
-    const SdrObject* m_postponedChart;
-    Size m_postponedChartSize;
+    std::vector<std::pair<const SdrObject*, Size>> m_aPostponedCharts;
     std::vector<const SdrObject*> m_aPostponedFormControls;
+    std::vector<PostponedDrawing> m_aPostponedActiveXControls;
     const SwField* pendingPlaceholder;
     /// Maps postit fields to ID's, used in commentRangeStart/End, commentReference and comment.xml.
     std::vector< std::pair<const SwPostItField*, sal_Int32> > m_postitFields;
@@ -900,7 +914,7 @@ private:
     /// Is fake rotation detected, so rotation with 90 degrees should be ignored in this cell?
     bool m_bBtLr;
 
-    PageMargins m_pageMargins;
+    editeng::WordPageMargins m_pageMargins;
 
     std::shared_ptr<DocxTableStyleExport> m_pTableStyleExport;
     // flag to check if auto spacing was set in original file
@@ -911,21 +925,21 @@ private:
     bool m_setFootnote;
 
     /// RelId <-> Graphic* cache, so that in case of alternate content, the same graphic only gets written once.
-    std::map<const Graphic*, OString> m_aRelIdCache;
+    std::stack< std::map<const Graphic*, OString> > m_aRelIdCache;
     /// RelId <-> BitmapChecksum cache, similar to m_aRelIdCache, but used for non-Writer graphics, handled in oox.
-    std::map<BitmapChecksum, OUString> m_aSdrRelIdCache;
+    std::stack< std::map<BitmapChecksum, OUString> > m_aSdrRelIdCache;
 
     /// members to control the existence of grabbagged SDT properties in the paragraph
     sal_Int32 m_nParagraphSdtPrToken;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pParagraphSdtPrTokenChildren;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pParagraphSdtPrTokenAttributes;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pParagraphSdtPrDataBindingAttrs;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pParagraphSdtPrTokenChildren;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pParagraphSdtPrTokenAttributes;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pParagraphSdtPrDataBindingAttrs;
     /// members to control the existence of grabbagged SDT properties in the text run
     sal_Int32 m_nRunSdtPrToken;
     /// State of the Fly at current position
     FlyProcessingState m_nStateOfFlyFrame;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pRunSdtPrTokenChildren;
-    css::uno::Reference<sax_fastparser::FastAttributeList> m_pRunSdtPrDataBindingAttrs;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pRunSdtPrTokenChildren;
+    rtl::Reference<sax_fastparser::FastAttributeList> m_pRunSdtPrDataBindingAttrs;
     /// Value of the <w:alias> paragraph SDT element.
     OUString m_aParagraphSdtPrAlias;
     /// Same as m_aParagraphSdtPrAlias, but its content is available till the SDT is closed.
@@ -937,19 +951,19 @@ private:
     std::map<SvxBoxItemLine, css::table::BorderLine2> m_aTableStyleConf;
 
 public:
-    DocxAttributeOutput( DocxExport &rExport, ::sax_fastparser::FSHelperPtr pSerializer, oox::drawingml::DrawingML* pDrawingML );
+    DocxAttributeOutput( DocxExport &rExport, const ::sax_fastparser::FSHelperPtr& pSerializer, oox::drawingml::DrawingML* pDrawingML );
 
-    virtual ~DocxAttributeOutput();
+    virtual ~DocxAttributeOutput() override;
 
     /// Return the right export class.
     virtual DocxExport& GetExport() override;
     const DocxExport& GetExport() const { return const_cast< DocxAttributeOutput* >( this )->GetExport(); }
 
     /// For e.g. the output of the styles, we need to switch the serializer to another one.
-    void SetSerializer( ::sax_fastparser::FSHelperPtr pSerializer );
+    void SetSerializer( ::sax_fastparser::FSHelperPtr const & pSerializer );
 
     /// Occasionally need to use this serializer from the outside
-    ::sax_fastparser::FSHelperPtr GetSerializer( ) { return m_pSerializer; }
+    const ::sax_fastparser::FSHelperPtr& GetSerializer( ) { return m_pSerializer; }
 
     /// Do we have any footnotes?
     bool HasFootnotes() const;
@@ -961,7 +975,7 @@ public:
     void FootnotesEndnotes( bool bFootnotes );
 
     /// writes the footnotePr/endnotePr (depending on tag) section
-    static void WriteFootnoteEndnotePr( ::sax_fastparser::FSHelperPtr fs, int tag, const SwEndNoteInfo& info, int listtag );
+    static void WriteFootnoteEndnotePr( ::sax_fastparser::FSHelperPtr const & fs, int tag, const SwEndNoteInfo& info, int listtag );
 
     bool HasPostitFields() const;
     void WritePostitFields();
@@ -982,14 +996,27 @@ public:
     void SetAlternateContentChoiceOpen( bool bAltContentChoiceOpen ) { m_bAlternateContentChoiceOpen = bAltContentChoiceOpen; }
     bool IsAlternateContentChoiceOpen( ) { return m_bAlternateContentChoiceOpen; }
     void GetSdtEndBefore(const SdrObject* pSdrObj);
-    void SetStartedParaSdt(bool bStartedParaSdt);
-    bool IsStartedParaSdt();
     bool IsFirstParagraph() { return m_bIsFirstParagraph; }
 
     /// Stores the table export state to the passed context and resets own state.
     void pushToTableExportContext(DocxTableExportContext& rContext);
     /// Restores from the remembered state.
-    void popFromTableExportContext(DocxTableExportContext& rContext);
+    void popFromTableExportContext(DocxTableExportContext const & rContext);
+};
+
+/**
+* All the information that should be stashed away when we're in the middle of
+* of a table export and still have to do something else, e.g. export a shape.
+*/
+struct DocxTableExportContext
+{
+    DocxAttributeOutput& m_rOutput;
+    ww8::WW8TableInfo::Pointer_t m_pTableInfo;
+    bool m_bTableCellOpen;
+    bool m_bStartedParaSdt;
+    sal_uInt32 m_nTableDepth;
+    DocxTableExportContext(DocxAttributeOutput& rOutput) : m_rOutput(rOutput) { m_rOutput.pushToTableExportContext(*this); }
+    ~DocxTableExportContext() { m_rOutput.popFromTableExportContext(*this); }
 };
 
 #endif // INCLUDED_SW_SOURCE_FILTER_WW8_DOCXATTRIBUTEOUTPUT_HXX

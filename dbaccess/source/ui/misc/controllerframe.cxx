@@ -20,7 +20,6 @@
 #include <dbaccess/controllerframe.hxx>
 #include <dbaccess/IController.hxx>
 
-#include <com/sun/star/sdb/XOfficeDatabaseDocument.hpp>
 #include <com/sun/star/awt/XTopWindow.hpp>
 #include <com/sun/star/awt/XWindow2.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
@@ -54,8 +53,6 @@ namespace dbaui
     using ::com::sun::star::frame::XModel;
     using ::com::sun::star::frame::XController;
     using ::com::sun::star::frame::XController2;
-    using ::com::sun::star::frame::XFramesSupplier;
-    using ::com::sun::star::sdb::XOfficeDatabaseDocument;
     using ::com::sun::star::awt::XTopWindow;
     using ::com::sun::star::awt::XTopWindowListener;
     using ::com::sun::star::awt::XWindow2;
@@ -75,19 +72,19 @@ namespace dbaui
         void dispose();
 
     protected:
-        virtual ~FrameWindowActivationListener();
+        virtual ~FrameWindowActivationListener() override;
 
         // XTopWindowListener
-        virtual void SAL_CALL windowOpened( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowClosing( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowClosed( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowMinimized( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowNormalized( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowActivated( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL windowDeactivated( const css::lang::EventObject& e ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL windowOpened( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL windowClosing( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL windowClosed( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL windowMinimized( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL windowNormalized( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL windowActivated( const css::lang::EventObject& e ) override;
+        virtual void SAL_CALL windowDeactivated( const css::lang::EventObject& e ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
     private:
         void impl_checkDisposed_throw() const;
@@ -122,7 +119,7 @@ namespace dbaui
     static void lcl_setFrame_nothrow( ControllerFrame_Data& _rData, const Reference< XFrame >& _rxFrame )
     {
         // release old listener
-        if ( _rData.m_pListener.get() )
+        if (_rData.m_pListener)
         {
             _rData.m_pListener->dispose();
             _rData.m_pListener = nullptr;
@@ -145,7 +142,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -163,7 +160,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         return bIsActive;
     }
@@ -198,7 +195,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -217,7 +214,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -264,7 +261,7 @@ namespace dbaui
                 const vcl::Window* pContainerWindow = VCLUnoHelper::GetWindow( xContainerWindow );
                 ENSURE_OR_THROW( pContainerWindow, "no Window implementation for the frame's container window!" );
 
-                m_pData->m_bIsTopLevelDocumentWindow = ( pContainerWindow->GetExtendedStyle() & WB_EXT_DOCUMENT ) != 0;
+                m_pData->m_bIsTopLevelDocumentWindow = bool( pContainerWindow->GetExtendedStyle() & WindowExtendedStyle::Document );
             }
 
             const Reference< XTopWindow > xFrameContainer( xContainerWindow, UNO_QUERY );
@@ -273,7 +270,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 
@@ -283,44 +280,44 @@ namespace dbaui
             throw DisposedException( OUString(), *const_cast< FrameWindowActivationListener* >( this ) );
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowOpened( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowOpened( const EventObject& /*_rEvent*/ )
     {
         // not interested in
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowClosing( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowClosing( const EventObject& /*_rEvent*/ )
     {
         // not interested in
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowClosed( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowClosed( const EventObject& /*_rEvent*/ )
     {
         // not interested in
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowMinimized( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowMinimized( const EventObject& /*_rEvent*/ )
     {
         // not interested in
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowNormalized( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowNormalized( const EventObject& /*_rEvent*/ )
     {
         // not interested in
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowActivated( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowActivated( const EventObject& /*_rEvent*/ )
     {
         impl_checkDisposed_throw();
         lcl_updateActive_nothrow( *m_pData, true );
     }
 
-    void SAL_CALL FrameWindowActivationListener::windowDeactivated( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::windowDeactivated( const EventObject& /*_rEvent*/ )
     {
         impl_checkDisposed_throw();
         lcl_updateActive_nothrow( *m_pData, false );
     }
 
-    void SAL_CALL FrameWindowActivationListener::disposing( const EventObject& /*_rEvent*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL FrameWindowActivationListener::disposing( const EventObject& /*_rEvent*/ )
     {
         dispose();
     }

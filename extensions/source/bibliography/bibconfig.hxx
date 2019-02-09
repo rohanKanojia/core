@@ -94,20 +94,20 @@ class BibConfig : public utl::ConfigItem
 
     OUString   sQueryField;
     OUString   sQueryText;
-    MappingArray*               pMappingsArr;
+    MappingArray    mvMappings;
     long            nBeamerSize;
     long            nViewSize;
     bool        bShowColumnAssignmentWarning;
 
     OUString               aColumnDefaults[COLUMN_COUNT];
 
-    static css::uno::Sequence<OUString> GetPropertyNames();
+    static css::uno::Sequence<OUString> const & GetPropertyNames();
 
     virtual void    ImplCommit() override;
 
 public:
     BibConfig();
-    virtual ~BibConfig();
+    virtual ~BibConfig() override;
 
     virtual void            Notify( const css::uno::Sequence<OUString>& aPropertyNames) override;
 

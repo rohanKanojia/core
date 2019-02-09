@@ -17,27 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LayerTabBar.hxx"
+#include <LayerTabBar.hxx>
 #include <svx/svdlayer.hxx>
 #include <svx/svdpagv.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <sfx2/dispatch.hxx>
 
-#include "sdattr.hxx"
-#include "sdmod.hxx"
-#include "helpids.h"
-#include "app.hrc"
-#include "glob.hrc"
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "DrawViewShell.hxx"
-#include "Window.hxx"
-#include "View.hxx"
-#include "drawdoc.hxx"
-#include "sdresid.hxx"
-#include "DrawDocShell.hxx"
-#include "drawview.hxx"
-#include "undolayer.hxx"
+#include <sdattr.hxx>
+#include <sdmod.hxx>
+#include <helpids.h>
+#include <app.hrc>
+#include <strings.hrc>
+
+#include <DrawViewShell.hxx>
+#include <Window.hxx>
+#include <View.hxx>
+#include <drawdoc.hxx>
+#include <sdresid.hxx>
+#include <unokywds.hxx>
+#include <DrawDocShell.hxx>
+#include <drawview.hxx>
+#include <undolayer.hxx>
 
 namespace sd {
 
@@ -57,6 +58,78 @@ LayerTabBar::LayerTabBar(DrawViewShell* pViewSh, vcl::Window* pParent)
 
 LayerTabBar::~LayerTabBar()
 {
+    disposeOnce();
+}
+
+void LayerTabBar::dispose()
+{
+    DropTargetHelper::dispose();
+    TabBar::dispose();
+}
+
+OUString LayerTabBar::convertToLocalizedName(const OUString& rName)
+{
+    if ( rName == sUNO_LayerName_background )
+        return SdResId( STR_LAYER_BCKGRND );
+
+    if ( rName == sUNO_LayerName_background_objects )
+        return SdResId( STR_LAYER_BCKGRNDOBJ );
+
+    if ( rName == sUNO_LayerName_layout )
+        return SdResId( STR_LAYER_LAYOUT );
+
+    if ( rName == sUNO_LayerName_controls )
+        return SdResId( STR_LAYER_CONTROLS );
+
+    if ( rName == sUNO_LayerName_measurelines )
+        return SdResId( STR_LAYER_MEASURELINES );
+
+    return rName;
+}
+
+// Use a method name, that is specific to LayerTabBar to make code better readable
+OUString LayerTabBar::GetLayerName(sal_uInt16 nPageId) const
+{
+    return GetAuxiliaryText(nPageId);
+}
+
+void LayerTabBar::SetLayerName( sal_uInt16 nPageId, const OUString& rText )
+{
+    SetAuxiliaryText(nPageId, rText);
+}
+
+// Here "Page" is a tab in the LayerTabBar.
+void LayerTabBar::InsertPage( sal_uInt16 nPageId, const OUString& rText,
+                                TabBarPageBits nBits, sal_uInt16 nPos)
+{
+    OUString sLocalizedName(convertToLocalizedName(rText));
+    TabBar::InsertPage(nPageId, sLocalizedName, nBits, nPos );
+    SetLayerName(nPageId, rText);
+}
+
+void LayerTabBar::SetPageText( sal_uInt16 nPageId, const OUString& rText )
+{
+    OUString sLocalizedName(convertToLocalizedName(rText));
+    SetLayerName(nPageId, rText);
+    TabBar::SetPageText(nPageId, sLocalizedName);
+}
+
+bool LayerTabBar::IsLocalizedNameOfStandardLayer(const OUString& rName)
+{
+    return (   rName == SdResId(STR_LAYER_LAYOUT)
+            || rName == SdResId(STR_LAYER_CONTROLS)
+            || rName == SdResId(STR_LAYER_MEASURELINES)
+            || rName == SdResId(STR_LAYER_BCKGRND)
+            || rName == SdResId(STR_LAYER_BCKGRNDOBJ) );
+}
+
+bool LayerTabBar::IsRealNameOfStandardLayer(const OUString& rName)
+{
+    return (   rName == sUNO_LayerName_layout
+            || rName == sUNO_LayerName_controls
+            || rName == sUNO_LayerName_measurelines
+            || rName == sUNO_LayerName_background
+            || rName == sUNO_LayerName_background_objects );
 }
 
 void LayerTabBar::Select()
@@ -69,26 +142,102 @@ void LayerTabBar::MouseButtonDown(const MouseEvent& rMEvt)
 {
     bool bSetPageID=false;
 
-    if (rMEvt.IsLeft() && !rMEvt.IsMod1() && !rMEvt.IsMod2())
+    if (rMEvt.IsLeft())
     {
         Point aPosPixel = rMEvt.GetPosPixel();
-        sal_uInt16 aLayerId = GetPageId( PixelToLogic(aPosPixel) );
-
-        if (aLayerId == 0)
+        sal_uInt16 aTabId = GetPageId( PixelToLogic(aPosPixel) );
+        if (aTabId == 0)
         {
             SfxDispatcher* pDispatcher = pDrViewSh->GetViewFrame()->GetDispatcher();
             pDispatcher->Execute(SID_INSERTLAYER, SfxCallMode::SYNCHRON);
 
             bSetPageID=true;
         }
-        else if (rMEvt.IsShift())
+        else if (rMEvt.IsMod2())
         {
-            // Toggle between layer visible / hidden
-            OUString aName(GetPageText(aLayerId));
+            // direct editing of tab text
+            // make sure the clicked tab is the current tab otherwise Edit() acts on the wrong tab
+            if ( aTabId != GetCurPageId())
+            {
+                MouseEvent aSyntheticEvent (rMEvt.GetPosPixel(), 1, MouseEventModifiers::SYNTHETIC, MOUSE_LEFT, 0);
+                TabBar::MouseButtonDown(aSyntheticEvent);
+            }
+        }
+        else if (rMEvt.IsMod1() || rMEvt.IsShift())
+        {
+            // keyboard Shortcuts to change layer attributes
+
+            OUString aName(GetLayerName(aTabId));
             SdrPageView* pPV = pDrViewSh->GetView()->GetSdrPageView();
-            bool bVisible = pPV->IsLayerVisible(aName);
-            pPV->SetLayerVisible(aName, !bVisible);
+
+            // Save old state
+
+            bool bOldPrintable = pPV->IsLayerPrintable(aName);
+            bool bOldVisible = pPV->IsLayerVisible(aName);
+            bool bOldLocked = pPV->IsLayerLocked(aName);
+
+            bool bNewPrintable = bOldPrintable;
+            bool bNewVisible = bOldVisible;
+            bool bNewLocked = bOldLocked;
+
+            if (rMEvt.IsMod1() && rMEvt.IsShift())
+            {
+                // Shift+Ctrl: Toggle between layer printable / not printable
+                bNewPrintable = !bOldPrintable;
+                pPV->SetLayerPrintable(aName, bNewPrintable);
+            }
+            else if (rMEvt.IsShift())
+            {
+                // Shift: Toggle between layer visible / hidden
+                bNewVisible = !bOldVisible;
+                pPV->SetLayerVisible(aName, bNewVisible);
+            }
+            else // if (rMEvt.IsMod1())
+            {
+                // Ctrl: Toggle between layer locked / unlocked
+                bNewLocked = !bOldLocked;
+                pPV->SetLayerLocked(aName, bNewLocked);
+            }
+
             pDrViewSh->ResetActualLayer();
+
+            // Add Undo action
+
+            ::sd::View* pView = pDrViewSh->GetView();
+            DrawView* pDrView = dynamic_cast<DrawView*>(pView);
+
+            SdDrawDocument& rDoc = pView->GetDoc();
+            SdrLayer* pLayer = rDoc.GetLayerAdmin().GetLayer(aName);
+
+            if (pLayer)
+            {
+                assert (pDrView && "Change layer attribute undo action is only working with a SdDrawView");
+                if(pDrView)
+                {
+                    SfxUndoManager* pManager = rDoc.GetDocSh()->GetUndoManager();
+                    std::unique_ptr<SdLayerModifyUndoAction> pAction(new SdLayerModifyUndoAction(
+                        &rDoc,
+                        pLayer,
+                        aName,
+                        pLayer->GetTitle(),
+                        pLayer->GetDescription(),
+                        bOldVisible,
+                        bOldLocked,
+                        bOldPrintable,
+                        aName,
+                        pLayer->GetTitle(),
+                        pLayer->GetDescription(),
+                        bNewVisible,
+                        bNewLocked,
+                        bNewPrintable
+                        ));
+                    pManager->AddUndoAction(std::move(pAction));
+                }
+            }
+
+            // Mark document changed
+
+            pView->GetDoc().SetChanged();
         }
     }
 
@@ -120,12 +269,11 @@ sal_Int8 LayerTabBar::AcceptDrop( const AcceptDropEvent& rEvt )
 
     if( !pDrViewSh->GetDocSh()->IsReadOnly() )
     {
-        sal_uInt16          nPageId = SDRPAGE_NOTFOUND;
-        Point           aPos( PixelToLogic( rEvt.maPosPixel ) );
-        sal_uInt16 nLayerId = pDrViewSh->GetView()->GetDoc().GetLayerAdmin().GetLayerID(
-            GetPageText( GetPageId( aPos ) ), false );
+        Point         aPos( PixelToLogic( rEvt.maPosPixel ) );
+        OUString      sLayerName( GetLayerName(GetPageId(aPos)) );
+        SdrLayerID    nLayerId = pDrViewSh->GetView()->GetDoc().GetLayerAdmin().GetLayerID(sLayerName);
 
-        nRet = pDrViewSh->AcceptDrop( rEvt, *this, nullptr, nPageId, nLayerId );
+        nRet = pDrViewSh->AcceptDrop( rEvt, *this, nullptr, SDRPAGE_NOTFOUND, nLayerId );
 
         SwitchPage( aPos );
     }
@@ -138,10 +286,11 @@ sal_Int8 LayerTabBar::AcceptDrop( const AcceptDropEvent& rEvt )
  */
 sal_Int8 LayerTabBar::ExecuteDrop( const ExecuteDropEvent& rEvt )
 {
-    sal_uInt16          nPageId = SDRPAGE_NOTFOUND;
-    sal_uInt16 nLayerId = pDrViewSh->GetView()->GetDoc().GetLayerAdmin().GetLayerID(
-        GetPageText( GetPageId( PixelToLogic( rEvt.maPosPixel ) ) ), false );
-    sal_Int8        nRet = pDrViewSh->ExecuteDrop( rEvt, *this, nullptr, nPageId, nLayerId );
+    Point         aPos( PixelToLogic(rEvt.maPosPixel) );
+    OUString      sLayerName( GetLayerName(GetPageId(aPos)) );
+    SdrLayerID    nLayerId = pDrViewSh->GetView()->GetDoc().GetLayerAdmin().GetLayerID(sLayerName);
+
+    sal_Int8        nRet = pDrViewSh->ExecuteDrop( rEvt, *this, nullptr, SDRPAGE_NOTFOUND, nLayerId );
 
     EndSwitchPage();
 
@@ -161,18 +310,11 @@ void  LayerTabBar::Command(const CommandEvent& rCEvt)
 bool LayerTabBar::StartRenaming()
 {
     bool bOK = true;
-    OUString aLayerName = GetPageText( GetEditPageId() );
-    OUString aLayoutLayer = SD_RESSTR(STR_LAYER_LAYOUT);
-    OUString aControlsLayer = SD_RESSTR(STR_LAYER_CONTROLS);
-    OUString aMeasureLinesLayer = SD_RESSTR(STR_LAYER_MEASURELINES);
-    OUString aBackgroundLayer = SD_RESSTR(STR_LAYER_BCKGRND);
-    OUString aBackgroundObjLayer = SD_RESSTR(STR_LAYER_BCKGRNDOBJ);
+    OUString aLayerName = GetLayerName( GetEditPageId() );
 
-    if ( aLayerName == aLayoutLayer       || aLayerName == aControlsLayer  ||
-         aLayerName == aMeasureLinesLayer ||
-         aLayerName == aBackgroundLayer   || aLayerName == aBackgroundObjLayer )
+    if ( IsRealNameOfStandardLayer(aLayerName))
     {
-        // It is not allowed to change this names
+        // It is not allowed to change these names
         bOK = false;
     }
     else
@@ -200,28 +342,21 @@ TabBarAllowRenamingReturnCode LayerTabBar::AllowRenaming()
     OUString aNewName( GetEditText() );
 
     if (aNewName.isEmpty() ||
-        (rLayerAdmin.GetLayer( aNewName, false ) && aLayerName != aNewName) )
+        (rLayerAdmin.GetLayer( aNewName ) && aLayerName != aNewName) )
     {
-        // Name already exists
-        ScopedVclPtrInstance<WarningBox> aWarningBox( &pDrViewSh->GetViewFrame()->GetWindow(), WinBits( WB_OK ),
-                                SD_RESSTR( STR_WARN_NAME_DUPLICATE ) );
-        aWarningBox->Execute();
+        // Name already exists.
+        std::unique_ptr<weld::MessageDialog> xWarn(Application::CreateMessageDialog(pDrViewSh->GetViewFrame()->GetWindow().GetFrameWeld(),
+                                                   VclMessageType::Warning, VclButtonsType::Ok,
+                                                   SdResId(STR_WARN_NAME_DUPLICATE)));
+        xWarn->run();
         bOK = false;
     }
 
     if (bOK)
     {
-        OUString aLayoutLayer = SD_RESSTR(STR_LAYER_LAYOUT);
-        OUString aControlsLayer = SD_RESSTR(STR_LAYER_CONTROLS);
-        OUString aMeasureLinesLayer = SD_RESSTR(STR_LAYER_MEASURELINES);
-        OUString aBackgroundLayer = SD_RESSTR(STR_LAYER_BCKGRND);
-        OUString aBackgroundObjLayer = SD_RESSTR(STR_LAYER_BCKGRNDOBJ);
-
-        if ( aNewName == aLayoutLayer       || aNewName == aControlsLayer  ||
-             aNewName == aMeasureLinesLayer ||
-             aNewName == aBackgroundLayer   || aNewName == aBackgroundObjLayer )
+        if ( IsLocalizedNameOfStandardLayer(aNewName) || IsRealNameOfStandardLayer(aNewName) )
         {
-            // It is not allowed to use his names
+            // Standard layer names may not be changed.
             bOK = false;
         }
     }
@@ -239,17 +374,16 @@ void LayerTabBar::EndRenaming()
         SdDrawDocument& rDoc = pView->GetDoc();
         OUString aLayerName = pView->GetActiveLayer();
         SdrLayerAdmin& rLayerAdmin = rDoc.GetLayerAdmin();
-        SdrLayer* pLayer = rLayerAdmin.GetLayer(aLayerName, false);
+        SdrLayer* pLayer = rLayerAdmin.GetLayer(aLayerName);
 
         if (pLayer)
         {
             OUString aNewName( GetEditText() );
-
-            DBG_ASSERT( pDrView, "Rename layer undo action is only working with a SdDrawView" );
+            assert (pDrView && "Rename layer undo action is only working with a SdDrawView");
             if( pDrView )
             {
-                ::svl::IUndoManager* pManager = rDoc.GetDocSh()->GetUndoManager();
-                SdLayerModifyUndoAction* pAction = new SdLayerModifyUndoAction(
+                SfxUndoManager* pManager = rDoc.GetDocSh()->GetUndoManager();
+                std::unique_ptr<SdLayerModifyUndoAction> pAction(new SdLayerModifyUndoAction(
                     &rDoc,
                     pLayer,
                     aLayerName,
@@ -264,8 +398,8 @@ void LayerTabBar::EndRenaming()
                     pDrView->IsLayerVisible(aLayerName),
                     pDrView->IsLayerLocked(aLayerName),
                     pDrView->IsLayerPrintable(aLayerName)
-                    );
-                pManager->AddUndoAction( pAction );
+                    ));
+                pManager->AddUndoAction( std::move(pAction) );
             }
 
             // First notify View since SetName() calls ResetActualLayer() and
@@ -279,7 +413,7 @@ void LayerTabBar::EndRenaming()
 
 void LayerTabBar::ActivatePage()
 {
-    if ( /*IsInSwitching*/ true && pDrViewSh!=nullptr)
+    if (pDrViewSh!=nullptr)
     {
 
         SfxDispatcher* pDispatcher = pDrViewSh->GetViewFrame()->GetDispatcher();
@@ -289,13 +423,13 @@ void LayerTabBar::ActivatePage()
 
 void LayerTabBar::SendActivatePageEvent()
 {
-    CallEventListeners (VCLEVENT_TABBAR_PAGEACTIVATED,
+    CallEventListeners (VclEventId::TabbarPageActivated,
         reinterpret_cast<void*>(GetCurPageId()));
 }
 
 void LayerTabBar::SendDeactivatePageEvent()
 {
-    CallEventListeners (VCLEVENT_TABBAR_PAGEDEACTIVATED,
+    CallEventListeners (VclEventId::TabbarPageDeactivated,
         reinterpret_cast<void*>(GetCurPageId()));
 }
 

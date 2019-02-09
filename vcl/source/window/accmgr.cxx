@@ -17,25 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/debug.hxx>
 
 #include <accel.h>
 #include <vcl/accel.hxx>
 #include <accmgr.hxx>
 
+#include <algorithm>
+
 ImplAccelManager::~ImplAccelManager()
 {
-    delete mpAccelList;
-    delete mpSequenceList;
 }
 
 bool ImplAccelManager::InsertAccel( Accelerator* pAccel )
 {
     if ( !mpAccelList ) {
-        mpAccelList = new ImplAccelList;
+        mpAccelList.reset( new std::vector< Accelerator* > );
     } else {
-        for ( size_t i = 0, n = mpAccelList->size(); i < n; ++i ) {
-            if ( (*mpAccelList)[ i ] == pAccel ) {
+        for (Accelerator* i : *mpAccelList) {
+            if ( i == pAccel ) {
                 return false;
             }
         }
@@ -45,7 +44,7 @@ bool ImplAccelManager::InsertAccel( Accelerator* pAccel )
     return true;
 }
 
-void ImplAccelManager::RemoveAccel( Accelerator* pAccel )
+void ImplAccelManager::RemoveAccel( Accelerator const * pAccel )
 {
     // do we have a list ?
     if ( !mpAccelList )
@@ -58,8 +57,8 @@ void ImplAccelManager::RemoveAccel( Accelerator* pAccel )
     if ( mpSequenceList ) {
         for (sal_uInt16 i = 0; i < pAccel->GetItemCount(); ++i) {
             Accelerator* pSubAccel = pAccel->GetAccel( pAccel->GetItemId(i) );
-            for ( size_t j = 0, n = mpSequenceList->size(); j < n; ++j ) {
-                if ( (*mpSequenceList)[ j ] == pSubAccel ) {
+            for (Accelerator* j : *mpSequenceList) {
+                if ( j == pSubAccel ) {
                     EndSequence();
                     i = pAccel->GetItemCount();
                     break;
@@ -69,15 +68,9 @@ void ImplAccelManager::RemoveAccel( Accelerator* pAccel )
     }
 
     // throw it away
-    for ( ImplAccelList::iterator it = mpAccelList->begin();
-          it != mpAccelList->end();
-          ++it
-    ) {
-        if ( *it == pAccel ) {
-            mpAccelList->erase( it );
-            break;
-        }
-    }
+    auto it = std::find(mpAccelList->begin(), mpAccelList->end(), pAccel);
+    if (it != mpAccelList->end())
+        mpAccelList->erase( it );
 }
 
 void ImplAccelManager::EndSequence()
@@ -86,19 +79,16 @@ void ImplAccelManager::EndSequence()
     if ( !mpSequenceList )
         return;
 
-    for ( size_t i = 0, n = mpSequenceList->size(); i < n; ++i )
+    for (Accelerator* pTempAccel : *mpSequenceList)
     {
-        Accelerator* pTempAccel = (*mpSequenceList)[ i ];
-        pTempAccel->mbIsCancel = false;
         pTempAccel->mpDel = nullptr;
     }
 
     // delete sequence-list
-    delete mpSequenceList;
-    mpSequenceList = nullptr;
+    mpSequenceList.reset();
 }
 
-bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRepeat )
+bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode )
 {
     Accelerator* pAccel;
 
@@ -145,12 +135,11 @@ bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRep
                     // stop sequence (first call deactivate-handler)
                     EndSequence();
 
-                    // set accelerator of the actuel item
+                    // set accelerator of the actual item
                     // and call the handler
                     bool bDel = false;
                     pAccel->maCurKeyCode    = rKeyCode;
                     pAccel->mnCurId         = pEntry->mnId;
-                    pAccel->mnCurRepeat     = nRepeat;
                     pAccel->mpDel           = &bDel;
                     pAccel->Select();
 
@@ -159,7 +148,6 @@ bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRep
                     {
                         pAccel->maCurKeyCode    = vcl::KeyCode();
                         pAccel->mnCurId         = 0;
-                        pAccel->mnCurRepeat     = 0;
                         pAccel->mpDel           = nullptr;
                     }
 
@@ -183,9 +171,9 @@ bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRep
     }
 
     // step through the list of accelerators
-    for ( size_t i = 0, n = mpAccelList->size(); i < n; ++i )
+    for (Accelerator* i : *mpAccelList)
     {
-        pAccel = (*mpAccelList)[ i ];
+        pAccel = i;
 
         // is the entry contained ?
         ImplAccelEntry* pEntry = pAccel->ImplGetAccelData( rKeyCode );
@@ -198,7 +186,7 @@ bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRep
             {
 
                 // create sequence list
-                mpSequenceList = new ImplAccelList;
+                mpSequenceList.reset( new std::vector< Accelerator* > );
                 mpSequenceList->insert( mpSequenceList->begin(), pAccel     );
                 mpSequenceList->insert( mpSequenceList->begin(), pNextAccel );
 
@@ -220,7 +208,6 @@ bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRep
                     bool bDel = false;
                     pAccel->maCurKeyCode    = rKeyCode;
                     pAccel->mnCurId         = pEntry->mnId;
-                    pAccel->mnCurRepeat     = nRepeat;
                     pAccel->mpDel           = &bDel;
                     pAccel->Select();
 
@@ -229,7 +216,6 @@ bool ImplAccelManager::IsAccelKey( const vcl::KeyCode& rKeyCode, sal_uInt16 nRep
                     {
                         pAccel->maCurKeyCode    = vcl::KeyCode();
                         pAccel->mnCurId         = 0;
-                        pAccel->mnCurRepeat     = 0;
                         pAccel->mpDel           = nullptr;
                     }
 

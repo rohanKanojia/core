@@ -17,6 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <atlbase.h>
 #include <stdio.h>
@@ -318,7 +321,7 @@ OComponent::~OComponent()
 }
 
 
-// Funktions ==============================================================================
+// functions ==============================================================================
 
 Reference<XInterface> SAL_CALL OComponent_CreateInstance( const Reference<XMultiServiceFactory> & rSMgr ) throw(RuntimeException)
 {
@@ -350,7 +353,7 @@ extern "C" sal_Bool SAL_CALL component_writeInfo(   void * /*pServiceManager*/, 
         }
         catch(InvalidRegistryException &)
         {
-            OSL_FAIL( "### InvalidRegistryException!\n");
+            OSL_FAIL( "### InvalidRegistryException!");
         }
     }
     return sal_False;

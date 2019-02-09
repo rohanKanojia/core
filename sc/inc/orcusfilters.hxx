@@ -31,9 +31,17 @@ public:
 
     virtual bool importGnumeric(ScDocument& rDoc, SfxMedium& rMedium) const = 0;
 
+    virtual bool importExcel2003XML(ScDocument& rDoc, SfxMedium& rMedium) const = 0;
+
     virtual bool importXLSX(ScDocument& rDoc, SfxMedium& rMedium) const = 0;
 
     virtual bool importODS(ScDocument& rDoc, SfxMedium& rMedium) const = 0;
+
+    /**
+     * Used to import just the styles from an xml file.
+     */
+
+    virtual bool importODS_Styles(ScDocument& rDoc, OUString& aFileName) const = 0;
 
     /**
      * Create a context for XML file.  The context object stores session

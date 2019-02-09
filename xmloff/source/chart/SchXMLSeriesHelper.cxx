@@ -26,6 +26,8 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <rtl/ustring.h>
+#include <sal/log.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <typeinfo>
 
@@ -59,9 +61,9 @@ using ::com::sun::star::uno::Sequence;
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        SAL_WARN("xmloff.chart", "Exception caught. Type: " << OUString::createFromAscii( typeid( ex ).name() ) << ", Message: " << ex.Message );
+        DBG_UNHANDLED_EXCEPTION("xmloff.chart");
     }
 
     return aResult;
@@ -75,17 +77,14 @@ using ::com::sun::star::uno::Sequence;
     sal_Int32 nIndex=0;
 
     ::std::vector< Reference< chart2::XDataSeries > > aSeriesVector( SchXMLSeriesHelper::getDataSeriesFromDiagram( xDiagram ));
-    const ::std::vector< Reference< chart2::XDataSeries > >::const_iterator aSeriesEnd( aSeriesVector.end() );
-    for( ::std::vector< Reference< chart2::XDataSeries > >::const_iterator aSeriesIt( aSeriesVector.begin() )
-        ; aSeriesIt != aSeriesEnd
-        ; ++aSeriesIt, nIndex++ )
+    for( const Reference< chart2::XDataSeries >& xSeries : aSeriesVector )
     {
-        Reference< chart2::XDataSeries > xSeries( *aSeriesIt );
         if( xSeries.is() )
         {
             if( aRet.end() == aRet.find(xSeries) )
                 aRet[xSeries]=nIndex;
         }
+        nIndex++;
     }
     return aRet;
 }
@@ -185,14 +184,14 @@ uno::Reference< beans::XPropertySet > SchXMLSeriesHelper::createOldAPISeriesProp
                 if(xInit.is())
                 {
                     Sequence< uno::Any > aArguments(1);
-                    aArguments[0]=uno::makeAny(xSeries);
+                    aArguments[0] <<= xSeries;
                     xInit->initialize(aArguments);
                 }
             }
         }
         catch( const uno::Exception & rEx )
         {
-            SAL_INFO("xmloff.chart", "Exception caught SchXMLSeriesHelper::createOldAPISeriesPropertySet: " << rEx.Message );
+            SAL_INFO("xmloff.chart", "Exception caught SchXMLSeriesHelper::createOldAPISeriesPropertySet: " << rEx );
         }
     }
 
@@ -219,15 +218,15 @@ uno::Reference< beans::XPropertySet > SchXMLSeriesHelper::createOldAPIDataPointP
                 if(xInit.is())
                 {
                     Sequence< uno::Any > aArguments(2);
-                    aArguments[0]=uno::makeAny(xSeries);
-                    aArguments[1]=uno::makeAny(nPointIndex);
+                    aArguments[0] <<= xSeries;
+                    aArguments[1] <<= nPointIndex;
                     xInit->initialize(aArguments);
                 }
             }
         }
         catch( const uno::Exception & rEx )
         {
-            SAL_INFO("xmloff.chart", "Exception caught SchXMLSeriesHelper::createOldAPIDataPointPropertySet: " << rEx.Message );
+            SAL_INFO("xmloff.chart", "Exception caught SchXMLSeriesHelper::createOldAPIDataPointPropertySet: " << rEx );
         }
     }
 

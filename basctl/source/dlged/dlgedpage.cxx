@@ -17,49 +17,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dlgedpage.hxx"
-#include "dlged.hxx"
-#include "dlgedmod.hxx"
-#include "dlgedobj.hxx"
+#include <dlgedpage.hxx>
+#include <dlged.hxx>
+#include <dlgedmod.hxx>
+#include <dlgedobj.hxx>
 
 namespace basctl
 {
 
 
 DlgEdPage::DlgEdPage(DlgEdModel& rModel, bool bMasterPage)
-    : SdrPage(rModel, bMasterPage)
-    , pDlgEdForm(nullptr)
-{
-}
-
-DlgEdPage::DlgEdPage(const DlgEdPage& rSrcPage)
-    : SdrPage(rSrcPage)
-    , pDlgEdForm(nullptr)
+:   SdrPage(rModel, bMasterPage)
+    ,pDlgEdForm(nullptr)
 {
 }
 
 DlgEdPage::~DlgEdPage()
 {
-    Clear();
+    // clear SdrObjects with broadcasting
+    ClearSdrObjList();
 }
 
-
-SdrPage* DlgEdPage::Clone() const
+SdrPage* DlgEdPage::CloneSdrPage(SdrModel& rTargetModel) const
 {
-    return Clone(nullptr);
-}
-
-SdrPage* DlgEdPage::Clone(SdrModel* const pNewModel) const
-{
-    DlgEdPage* const pNewPage = new DlgEdPage( *this );
-    DlgEdModel* pDlgEdModel = nullptr;
-    if ( pNewModel )
-    {
-        pDlgEdModel = dynamic_cast<DlgEdModel*>( pNewModel );
-        assert(pDlgEdModel);
-    }
-    pNewPage->lateInit( *this, pDlgEdModel );
-    return pNewPage;
+    DlgEdModel& rDlgEdModel(static_cast< DlgEdModel& >(rTargetModel));
+    DlgEdPage* pClonedDlgEdPage(
+        new DlgEdPage(
+            rDlgEdModel,
+            IsMasterPage()));
+    pClonedDlgEdPage->SdrPage::lateInit(*this);
+    return pClonedDlgEdPage;
 }
 
 

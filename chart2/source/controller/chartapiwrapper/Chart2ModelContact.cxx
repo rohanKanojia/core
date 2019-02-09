@@ -18,18 +18,17 @@
  */
 
 #include "Chart2ModelContact.hxx"
-#include "ChartModelHelper.hxx"
-#include "LegendHelper.hxx"
-#include "CommonConverters.hxx"
-#include "macros.hxx"
-#include "servicenames.hxx"
-#include "ObjectIdentifier.hxx"
-#include "chartview/ExplicitValueProvider.hxx"
-#include "chartview/DrawModelWrapper.hxx"
-#include "AxisHelper.hxx"
-#include "DiagramHelper.hxx"
+#include <ChartModelHelper.hxx>
+#include <LegendHelper.hxx>
+#include <CommonConverters.hxx>
+#include <servicenames.hxx>
+#include <ObjectIdentifier.hxx>
+#include <chartview/ExplicitValueProvider.hxx>
+#include <chartview/DrawModelWrapper.hxx>
+#include <AxisHelper.hxx>
+#include <DiagramHelper.hxx>
 
-#include "ChartModel.hxx"
+#include <ChartModel.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
@@ -45,19 +44,18 @@ Chart2ModelContact::Chart2ModelContact(
     const Reference< uno::XComponentContext > & xContext ) :
         m_xContext( xContext ),
         m_xChartModel( nullptr ),
-        mpModel( nullptr ),
-        m_xChartView(nullptr)
+        mpModel( nullptr )
 {
 }
 
 Chart2ModelContact::~Chart2ModelContact()
 {
-    this->clear();
+    clear();
 }
 
 void Chart2ModelContact::setModel( const css::uno::Reference< css::frame::XModel >& xChartModel )
 {
-    this->clear();
+    clear();
     m_xChartModel = xChartModel;
     mpModel = dynamic_cast<ChartModel*>(xChartModel.get());
     uno::Reference< lang::XMultiServiceFactory > xTableFactory( xChartModel, uno::UNO_QUERY );
@@ -95,10 +93,10 @@ Reference< chart2::XChartDocument > Chart2ModelContact::getChart2Document() cons
 
 Reference< chart2::XDiagram > Chart2ModelContact::getChart2Diagram() const
 {
-    return ChartModelHelper::findDiagram( this->getChartModel() );
+    return ChartModelHelper::findDiagram( getChartModel() );
 }
 
-uno::Reference< lang::XUnoTunnel > Chart2ModelContact::getChartView() const
+uno::Reference< lang::XUnoTunnel > const & Chart2ModelContact::getChartView() const
 {
     if(!m_xChartView.is())
     {
@@ -176,8 +174,8 @@ awt::Size Chart2ModelContact::GetPageSize() const
 
 awt::Rectangle Chart2ModelContact::SubstractAxisTitleSizes( const awt::Rectangle& rPositionRect )
 {
-    awt::Rectangle aRect = ExplicitValueProvider::substractAxisTitleSizes(
-        *mpModel, getChartView(), rPositionRect );
+    awt::Rectangle aRect = ExplicitValueProvider::AddSubtractAxisTitleSizes(
+        *mpModel, getChartView(), rPositionRect, true );
     return aRect;
 }
 
@@ -186,8 +184,8 @@ awt::Rectangle Chart2ModelContact::GetDiagramRectangleIncludingTitle() const
     awt::Rectangle aRect( GetDiagramRectangleIncludingAxes() );
 
     //add axis title sizes to the diagram size
-    aRect = ExplicitValueProvider::addAxisTitleSizes(
-        *mpModel, getChartView(), aRect );
+    aRect = ExplicitValueProvider::AddSubtractAxisTitleSizes(
+        *mpModel, getChartView(), aRect, false );
 
     return aRect;
 }
@@ -197,7 +195,7 @@ awt::Rectangle Chart2ModelContact::GetDiagramRectangleIncludingAxes() const
     awt::Rectangle aRect(0,0,0,0);
     uno::Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( m_xChartModel ) );
 
-    if( DiagramPositioningMode_INCLUDING == DiagramHelper::getDiagramPositioningMode( xDiagram ) )
+    if( DiagramHelper::getDiagramPositioningMode( xDiagram ) == DiagramPositioningMode_INCLUDING )
         aRect = DiagramHelper::getDiagramRectangleFromModel(m_xChartModel);
     else
     {
@@ -213,7 +211,7 @@ awt::Rectangle Chart2ModelContact::GetDiagramRectangleExcludingAxes() const
     awt::Rectangle aRect(0,0,0,0);
     uno::Reference< XDiagram > xDiagram( ChartModelHelper::findDiagram( m_xChartModel ) );
 
-    if( DiagramPositioningMode_EXCLUDING == DiagramHelper::getDiagramPositioningMode( xDiagram ) )
+    if( DiagramHelper::getDiagramPositioningMode( xDiagram ) == DiagramPositioningMode_EXCLUDING )
         aRect = DiagramHelper::getDiagramRectangleFromModel(m_xChartModel);
     else
     {

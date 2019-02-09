@@ -25,13 +25,14 @@
 #include <sal/log.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
-#include <tools/resmgr.hxx>
 #include <unotools/bootstrap.hxx>
+#include <unotools/resmgr.hxx>
 #include <com/sun/star/frame/XDesktop2.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/uno/Reference.h>
-#include <osl/mutex.hxx>
+
 #include <memory>
+#include <thread>
 
 namespace com { namespace sun { namespace star { namespace uno {
     class XComponentContext;
@@ -70,25 +71,25 @@ class Desktop : public Application
         };
 
                                 Desktop();
-                                virtual ~Desktop();
+                                virtual ~Desktop() override;
         virtual int             Main( ) override;
         virtual void            Init() override;
         virtual void            InitFinished() override;
         virtual void            DeInit() override;
         virtual bool            QueryExit() override;
-        virtual void            Exception(sal_uInt16 nError) override;
+        virtual void            Exception(ExceptionCategory nCategory) override;
         virtual void            OverrideSystemSettings( AllSettings& rSettings ) override;
         virtual void            AppEvent( const ApplicationEvent& rAppEvent ) override;
 
-        DECL_LINK_TYPED( OpenClients_Impl, void*, void );
+        DECL_LINK( OpenClients_Impl, void*, void );
 
         static void             OpenClients();
         static void             OpenDefault();
+        static void             CheckOpenCLCompute(const css::uno::Reference<css::frame::XDesktop2> &);
 
-        DECL_STATIC_LINK_TYPED( Desktop, EnableAcceptors_Impl, void*, void);
+        DECL_STATIC_LINK( Desktop, EnableAcceptors_Impl, void*, void);
 
         static void             HandleAppEvent( const ApplicationEvent& rAppEvent );
-        static ResMgr*          GetDesktopResManager();
         static CommandLineArgs& GetCommandLineArgs();
 
         static void             HandleBootstrapErrors(
@@ -116,7 +117,7 @@ class Desktop : public Application
         // first-start (ever) related methods
         static bool             CheckExtensionDependencies();
 
-        void                    SynchronizeExtensionRepositories();
+        static void             SynchronizeExtensionRepositories(bool bCleanedExtensionCache, Desktop* pDesktop = nullptr);
         void                    SetSplashScreenText( const OUString& rText );
         void                    SetSplashScreenProgress( sal_Int32 );
 
@@ -129,9 +130,11 @@ class Desktop : public Application
                                     css::uno::Reference< css::uno::XComponentContext > const & context);
         static void             DeregisterServices();
 
+    public:
         static void             CreateTemporaryDirectory();
         static void             RemoveTemporaryDirectory();
 
+    private:
         static bool             InitializeConfiguration();
         static void             FlushConfiguration();
         static bool             InitializeQuickstartMode( const css::uno::Reference< css::uno::XComponentContext >& rxContext );
@@ -146,31 +149,18 @@ class Desktop : public Application
         void                    OpenSplashScreen();
         void                    CloseSplashScreen();
 
-        DECL_STATIC_LINK_TYPED( Desktop, ImplInitFilterHdl, ::ConvertData&, bool );
-        DECL_STATIC_LINK_TYPED( Desktop, AsyncInitFirstRun, Timer*, void );
+        DECL_STATIC_LINK( Desktop, ImplInitFilterHdl, ::ConvertData&, bool );
+        DECL_STATIC_LINK( Desktop, AsyncInitFirstRun, Timer*, void );
         /** checks if the office is run the first time
             <p>If so, <method>DoFirstRunInitializations</method> is called (asynchronously and delayed) and the
             respective flag in the configuration is reset.</p>
         */
         void                    CheckFirstRun( );
 
-        /** for ui-testing provide a mechanism to pseudo-restart by closing the
-            open frames and reopen the frame that appeared post initial startup
-        */
-        static void DoExecute();
-
-        /// does initializations which are necessary for the first run of the office
-        static void             DoFirstRunInitializations();
-
         static void             ShowBackingComponent(Desktop * progress);
-
-        static bool             SaveTasks();
-
-        static bool             isUIOnSessionShutdownAllowed();
 
         // on-demand acceptors
         static void             createAcceptor(const OUString& aDescription);
-        static void             enableAcceptors();
         static void             destroyAcceptor(const OUString& aDescription);
 
         bool                    m_bCleanedExtensionCache;
@@ -181,8 +171,7 @@ class Desktop : public Application
 
         std::unique_ptr<Lockfile> m_xLockfile;
         Timer                   m_firstRunTimer;
-
-        static ResMgr*          pResMgr;
+        std::thread             m_aUpdateThread;
 };
 
 OUString GetURL_Impl(
@@ -194,6 +183,7 @@ OUString ReplaceStringHookProc(const OUString& rStr);
 
 #if defined( UNX ) && !defined MACOSX && !defined IOS && !defined ANDROID && !defined LIBO_HEADLESS
 bool fire_glxtest_process();
+void reap_glxtest_process();
 #endif
 
 #endif // INCLUDED_DESKTOP_INC_APP_HXX

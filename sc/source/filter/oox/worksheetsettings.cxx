@@ -17,25 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "worksheetsettings.hxx"
+#include <memory>
+#include <worksheetsettings.hxx>
 
-#include <com/sun/star/util/XProtectable.hpp>
+#include <oox/core/binarycodec.hxx>
 #include <oox/core/filterbase.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/attributelist.hxx>
 #include <oox/token/properties.hxx>
-#include "biffinputstream.hxx"
-#include "pagesettings.hxx"
-#include "workbooksettings.hxx"
-#include "tabprotection.hxx"
-#include "document.hxx"
-#include "convuno.hxx"
+#include <oox/token/tokens.hxx>
+#include <pagesettings.hxx>
+#include <tabprotection.hxx>
+#include <document.hxx>
+#include <addressconverter.hxx>
+#include <biffhelper.hxx>
 
 namespace oox {
 namespace xls {
 
-using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::util;
 
 namespace {
 
@@ -57,6 +57,7 @@ SheetSettingsModel::SheetSettingsModel() :
 }
 
 SheetProtectionModel::SheetProtectionModel() :
+    mnSpinCount( 0 ),
     mnPasswordHash( 0 ),
     mbSheet( false ),
     mbObjects( false ),
@@ -108,6 +109,10 @@ void WorksheetSettings::importOutlinePr( const AttributeList& rAttribs )
 
 void WorksheetSettings::importSheetProtection( const AttributeList& rAttribs )
 {
+    maSheetProt.maAlgorithmName    = rAttribs.getString( XML_algorithmName, OUString());
+    maSheetProt.maHashValue        = rAttribs.getString( XML_hashValue, OUString());
+    maSheetProt.maSaltValue        = rAttribs.getString( XML_saltValue, OUString());
+    maSheetProt.mnSpinCount        = rAttribs.getUnsigned( XML_spinCount, 0);
     maSheetProt.mnPasswordHash     = oox::core::CodecHelper::getPasswordHash( rAttribs, XML_password );
     maSheetProt.mbSheet            = rAttribs.getBool( XML_sheet, false );
     maSheetProt.mbObjects          = rAttribs.getBool( XML_objects, false );
@@ -127,11 +132,6 @@ void WorksheetSettings::importSheetProtection( const AttributeList& rAttribs )
     maSheetProt.mbSelectUnlocked   = rAttribs.getBool( XML_selectUnlockedCells, false );
 }
 
-void WorksheetSettings::importProtectedRanges( const AttributeList& rAttribs )
-{
-    (void)rAttribs; // no attribs known (yet?)
-}
-
 void WorksheetSettings::importProtectedRange( const AttributeList& rAttribs )
 {
     ScEnhancedProtection aProt;
@@ -146,24 +146,18 @@ void WorksheetSettings::importProtectedRange( const AttributeList& rAttribs )
      * 'saltValue' and 'spinCount' that are written if the protection was newly
      * created. */
     aProt.mnPasswordVerifier = rAttribs.getIntegerHex( XML_password, 0);
-    aProt.maAlgorithmName = rAttribs.getString( XML_algorithmName, OUString());
-    aProt.maHashValue = rAttribs.getString( XML_hashValue, OUString());
-    aProt.maSaltValue = rAttribs.getString( XML_saltValue, OUString());
-    aProt.mnSpinCount = rAttribs.getUnsigned( XML_spinCount, 0);
+    aProt.maPasswordHash.maAlgorithmName = rAttribs.getString( XML_algorithmName, OUString());
+    aProt.maPasswordHash.maHashValue = rAttribs.getString( XML_hashValue, OUString());
+    aProt.maPasswordHash.maSaltValue = rAttribs.getString( XML_saltValue, OUString());
+    aProt.maPasswordHash.mnSpinCount = rAttribs.getUnsigned( XML_spinCount, 0);
     OUString aRefs( rAttribs.getString( XML_sqref, OUString()));
     if (!aRefs.isEmpty())
     {
-        ApiCellRangeList aRangeList;
-        getAddressConverter().convertToCellRangeList( aRangeList, aRefs, getSheetIndex(), true );
-        if (!aRangeList.empty())
+        std::unique_ptr<ScRangeList> xRangeList(new ScRangeList());
+        getAddressConverter().convertToCellRangeList( *xRangeList, aRefs, getSheetIndex(), true );
+        if (!xRangeList->empty())
         {
-            ScRangeList* pRangeList = aProt.maRangeList = new ScRangeList;
-            for (::std::vector< css::table::CellRangeAddress >::const_iterator itr( aRangeList.begin()), end( aRangeList.end()); itr != end; ++itr)
-            {
-                ScRange aRange;
-                ScUnoConversion::FillScRange( aRange, *itr);
-                pRangeList->Append( aRange);
-            }
+            aProt.maRangeList = xRangeList.release();
         }
     }
     maSheetProt.maEnhancedProtections.push_back( aProt);
@@ -212,21 +206,21 @@ void WorksheetSettings::importSheetProtection( SequenceInputStream& rStrm )
     maSheetProt.mnPasswordHash = rStrm.readuInt16();
     // no flags field for all these boolean flags?!?
     maSheetProt.mbSheet            = rStrm.readInt32() != 0;
-    maSheetProt.mbObjects          = rStrm.readInt32() != 0;
-    maSheetProt.mbScenarios        = rStrm.readInt32() != 0;
-    maSheetProt.mbFormatCells      = rStrm.readInt32() != 0;
-    maSheetProt.mbFormatColumns    = rStrm.readInt32() != 0;
-    maSheetProt.mbFormatRows       = rStrm.readInt32() != 0;
-    maSheetProt.mbInsertColumns    = rStrm.readInt32() != 0;
-    maSheetProt.mbInsertRows       = rStrm.readInt32() != 0;
-    maSheetProt.mbInsertHyperlinks = rStrm.readInt32() != 0;
-    maSheetProt.mbDeleteColumns    = rStrm.readInt32() != 0;
-    maSheetProt.mbDeleteRows       = rStrm.readInt32() != 0;
-    maSheetProt.mbSelectLocked     = rStrm.readInt32() != 0;
-    maSheetProt.mbSort             = rStrm.readInt32() != 0;
-    maSheetProt.mbAutoFilter       = rStrm.readInt32() != 0;
-    maSheetProt.mbPivotTables      = rStrm.readInt32() != 0;
-    maSheetProt.mbSelectUnlocked   = rStrm.readInt32() != 0;
+    maSheetProt.mbObjects          = rStrm.readInt32() == 0;
+    maSheetProt.mbScenarios        = rStrm.readInt32() == 0;
+    maSheetProt.mbFormatCells      = rStrm.readInt32() == 0;
+    maSheetProt.mbFormatColumns    = rStrm.readInt32() == 0;
+    maSheetProt.mbFormatRows       = rStrm.readInt32() == 0;
+    maSheetProt.mbInsertColumns    = rStrm.readInt32() == 0;
+    maSheetProt.mbInsertRows       = rStrm.readInt32() == 0;
+    maSheetProt.mbInsertHyperlinks = rStrm.readInt32() == 0;
+    maSheetProt.mbDeleteColumns    = rStrm.readInt32() == 0;
+    maSheetProt.mbDeleteRows       = rStrm.readInt32() == 0;
+    maSheetProt.mbSelectLocked     = rStrm.readInt32() == 0;
+    maSheetProt.mbSort             = rStrm.readInt32() == 0;
+    maSheetProt.mbAutoFilter       = rStrm.readInt32() == 0;
+    maSheetProt.mbPivotTables      = rStrm.readInt32() == 0;
+    maSheetProt.mbSelectUnlocked   = rStrm.readInt32() == 0;
 }
 
 void WorksheetSettings::importChartProtection( SequenceInputStream& rStrm )
@@ -249,6 +243,12 @@ void WorksheetSettings::finalizeImport()
     {
         ScTableProtection aProtect;
         aProtect.setProtected(true);
+        aProtect.setPasswordHash( maSheetProt.maAlgorithmName, maSheetProt.maHashValue,
+                maSheetProt.maSaltValue, maSheetProt.mnSpinCount);
+        // Set the simple hash after the proper hash because setting the proper
+        // hash resets the simple hash, yet if the simple hash is present we
+        // may as well use it and more important want to keep it for saving the
+        // document again.
         if (maSheetProt.mnPasswordHash)
         {
             Sequence<sal_Int8> aPass(2);
@@ -284,7 +284,7 @@ void WorksheetSettings::finalizeImport()
     // sheet tab color
     if( !maSheetSettings.maTabColor.isAuto() )
     {
-        sal_Int32 nColor = maSheetSettings.maTabColor.getColor( getBaseFilter().getGraphicHelper() );
+        ::Color nColor = maSheetSettings.maTabColor.getColor( getBaseFilter().getGraphicHelper() );
         aPropSet.setProperty( PROP_TabColor, nColor );
     }
 }

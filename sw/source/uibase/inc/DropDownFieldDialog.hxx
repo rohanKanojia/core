@@ -19,10 +19,7 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_DROPDOWNFIELDDIALOG_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_DROPDOWNFIELDDIALOG_HXX
 
-#include <svx/stddlg.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/lstbox.hxx>
-#include <vcl/button.hxx>
+#include <vcl/weld.hxx>
 
 class SwDropDownField;
 class SwField;
@@ -31,26 +28,36 @@ class SwWrtShell;
 // Dialog to edit drop down field selection
 namespace sw
 {
-class DropDownFieldDialog : public SvxStandardDialog
+class DropDownFieldDialog : public weld::GenericDialogController
 {
-    VclPtr<ListBox>            m_pListItemsLB;
+    SwWrtShell                 &m_rSh;
+    SwDropDownField*           m_pDropField;
 
-    VclPtr<OKButton>           m_pOKPB;
-    VclPtr<PushButton>         m_pNextPB;
+    weld::Button* m_pPressedButton;
+    std::unique_ptr<weld::TreeView> m_xListItemsLB;
+    std::unique_ptr<weld::Button>   m_xOKPB;
+    std::unique_ptr<weld::Button>   m_xPrevPB;
+    std::unique_ptr<weld::Button>   m_xNextPB;
+    std::unique_ptr<weld::Button>   m_xEditPB;
 
-    VclPtr<PushButton>         m_pEditPB;
-
-    SwWrtShell          &rSh;
-    SwDropDownField*    pDropField;
-
-    DECL_LINK_TYPED(ButtonHdl, Button*, void);
-    virtual void    Apply() override;
-    DECL_LINK_TYPED(DoubleClickHdl, ListBox&, void);
+    DECL_LINK(EditHdl, weld::Button&, void);
+    DECL_LINK(PrevHdl, weld::Button&, void);
+    DECL_LINK(NextHdl, weld::Button&, void);
+    void    Apply();
+    DECL_LINK(DoubleClickHdl, weld::TreeView&, void);
 public:
-    DropDownFieldDialog(   vcl::Window *pParent, SwWrtShell &rSh,
-                                SwField* pField, bool bNextButton = false );
-    virtual ~DropDownFieldDialog();
-    virtual void dispose() override;
+    DropDownFieldDialog(weld::Window *pParent, SwWrtShell &rSh,
+                        SwField* pField, bool bPrevButton, bool bNextButton);
+    virtual ~DropDownFieldDialog() override;
+    bool PrevButtonPressed() const;
+    bool NextButtonPressed() const;
+    virtual short run() override
+    {
+        short nRet = GenericDialogController::run();
+        if (nRet == RET_OK)
+            Apply();
+        return nRet;
+    }
 };
 } //namespace sw
 

@@ -40,44 +40,21 @@ FastSerializerHelper::~FastSerializerHelper()
     delete mpSerializer;
 }
 
-void FastSerializerHelper::startElementInternal(sal_Int32 elementTokenId, ...)
+void FastSerializerHelper::startElement(sal_Int32 elementTokenId, FSEND_t)
 {
-    va_list args;
-    va_start( args, elementTokenId );
-    TokenValueList& rAttrList = mpSerializer->getTokenValueList();
-
-    while (true)
-    {
-        sal_Int32 nName = va_arg(args, sal_Int32);
-        if (nName == FSEND_internal)
-            break;
-        const char* pValue = va_arg(args, const char*);
-        if (pValue)
-            rAttrList.push_back(TokenValue(nName, pValue));
-    }
-
     mpSerializer->startFastElement(elementTokenId);
-    va_end( args );
 }
-
-void FastSerializerHelper::singleElementInternal(sal_Int32 elementTokenId, ...)
+void FastSerializerHelper::pushAttributeValue(sal_Int32 attribute, const char* value)
 {
-    va_list args;
-    va_start( args, elementTokenId );
-    TokenValueList& rAttrList = mpSerializer->getTokenValueList();
-
-    while (true)
-    {
-        sal_Int32 nName = va_arg(args, sal_Int32);
-        if (nName == FSEND_internal)
-            break;
-        const char* pValue = va_arg(args, const char*);
-        if  (pValue)
-            rAttrList.push_back(TokenValue(nName, pValue));
-    }
-
+    mpSerializer->getTokenValueList().emplace_back(attribute, value);
+}
+void FastSerializerHelper::pushAttributeValue(sal_Int32 attribute, const OString& value)
+{
+    mpSerializer->getTokenValueList().emplace_back(attribute, value.getStr());
+}
+void FastSerializerHelper::singleElement(sal_Int32 elementTokenId, FSEND_t)
+{
     mpSerializer->singleFastElement(elementTokenId);
-    va_end( args );
 }
 
 void FastSerializerHelper::endElement(sal_Int32 elementTokenId)
@@ -148,7 +125,7 @@ FastSerializerHelper* FastSerializerHelper::writeId(sal_Int32 tokenId)
     return this;
 }
 
-css::uno::Reference< css::io::XOutputStream > FastSerializerHelper::getOutputStream()
+css::uno::Reference< css::io::XOutputStream > const & FastSerializerHelper::getOutputStream() const
 {
     return mpSerializer->getOutputStream();
 }

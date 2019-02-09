@@ -29,9 +29,9 @@
 namespace writerfilter
 {
 
-class QNameToString
+class QNameToString : public virtual SvRefBase
 {
-    typedef std::shared_ptr<QNameToString> Pointer_t;
+    typedef tools::SvRef<QNameToString> Pointer_t;
     typedef std::map < Id, std::string > Map;
 
     static Pointer_t pInstance;
@@ -40,14 +40,13 @@ class QNameToString
 
     Map mMap;
 
-protected:
     /**
        Generated.
      */
     QNameToString();
 
 public:
-    static Pointer_t Instance();
+    static Pointer_t const & Instance();
 
     std::string operator()(Id qName);
 };

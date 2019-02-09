@@ -17,16 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TablesSingleDlg.hxx"
+#include <TablesSingleDlg.hxx>
 #include "DbAdminImpl.hxx"
 #include "tablespage.hxx"
-#include <vcl/msgbox.hxx>
-#include "dsitems.hxx"
-#include <comphelper/processfactory.hxx>
-
-#include "propertysetitem.hxx"
-
-#include "dbu_dlg.hrc"
+#include <dsitems.hxx>
+#include <dbu_dlg.hxx>
 
 namespace dbaui
 {
@@ -38,21 +33,20 @@ using namespace com::sun::star::container;
 
     // OTableSubscriptionDialog
 OTableSubscriptionDialog::OTableSubscriptionDialog(vcl::Window* pParent
-            ,SfxItemSet* _pItems
+            ,const SfxItemSet* _pItems
             ,const Reference< XComponentContext >& _rxORB
             ,const css::uno::Any& _aDataSourceName)
     : SfxSingleTabDialog(pParent, _pItems, "TablesFilterDialog",
         "dbaccess/ui/tablesfilterdialog.ui")
-    , m_pImpl( new ODbDataSourceAdministrationHelper( _rxORB, pParent, this ) )
+    , m_pImpl( new ODbDataSourceAdministrationHelper( _rxORB, GetFrameWeld(), pParent ? pParent->GetFrameWeld() : nullptr, this ) )
     , m_bStopExecution(false)
-    , m_pOutSet(_pItems)
 {
     m_pImpl->setDataSourceOrName(_aDataSourceName);
     Reference< XPropertySet > xDatasource = m_pImpl->getCurrentDataSource();
-    m_pOutSet = new SfxItemSet( *_pItems );
+    m_pOutSet.reset(new SfxItemSet( *_pItems ));
 
     m_pImpl->translateProperties(xDatasource, *m_pOutSet);
-    SetInputSet(m_pOutSet);
+    SetInputSet(m_pOutSet.get());
 
     VclPtrInstance<OTableSubscriptionPage> pTabPage(get_content_area(), *m_pOutSet, this);
     pTabPage->SetServiceFactory(_rxORB);
@@ -66,7 +60,7 @@ OTableSubscriptionDialog::~OTableSubscriptionDialog()
 
 void OTableSubscriptionDialog::dispose()
 {
-    delete m_pOutSet;
+    m_pOutSet.reset();
     SfxSingleTabDialog::dispose();
 }
 
@@ -105,19 +99,19 @@ OUString OTableSubscriptionDialog::getConnectionURL() const
     return m_pImpl->getConnectionURL();
 }
 
-Reference< XPropertySet > OTableSubscriptionDialog::getCurrentDataSource()
+Reference< XPropertySet > const & OTableSubscriptionDialog::getCurrentDataSource()
 {
     return m_pImpl->getCurrentDataSource();
 }
 
 const SfxItemSet* OTableSubscriptionDialog::getOutputSet() const
 {
-    return m_pOutSet;
+    return m_pOutSet.get();
 }
 
 SfxItemSet* OTableSubscriptionDialog::getWriteOutputSet()
 {
-    return m_pOutSet;
+    return m_pOutSet.get();
 }
 
 }   // namespace dbaui

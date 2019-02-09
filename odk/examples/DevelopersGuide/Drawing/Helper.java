@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -44,8 +45,8 @@ public class Helper
     // __________ static helper methods __________
 
     /** Connect to an office, if no office is running a new instance is started.
-     * A new connection is established and the service manger from the running
-     * offic eis returned.
+     * A new connection is established and the service manager from the running
+     * office is returned.
      */
     public static XComponentContext connect()
         throws Exception
@@ -84,3 +85,5 @@ public class Helper
         return xComponent;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -21,11 +21,9 @@
 #define INCLUDED_FRAMEWORK_INC_UIELEMENT_DROPDOWNBOXTOOLBARCONTROLLER_HXX
 
 #include <com/sun/star/beans/NamedValue.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
 #include <com/sun/star/frame/ControlCommand.hpp>
 
 #include <uielement/complextoolbarcontroller.hxx>
-#include <vcl/lstbox.hxx>
 #include <vcl/vclptr.hxx>
 
 class ToolBox;
@@ -45,10 +43,10 @@ class DropdownToolbarController : public ComplexToolbarController
                                    sal_uInt16 nID,
                                    sal_Int32 nWidth,
                                    const OUString& aCommand );
-        virtual ~DropdownToolbarController();
+        virtual ~DropdownToolbarController() override;
 
         // XComponent
-        virtual void SAL_CALL dispose() throw ( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL dispose() override;
 
         // called from ListBoxControl
         void Select();

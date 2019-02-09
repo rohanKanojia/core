@@ -25,17 +25,19 @@
 #include <unotools/accessiblestatesethelper.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
+#include <sal/log.hxx>
+#include <tools/debug.hxx>
 
 #include <com/sun/star/accessibility/AccessibleEventId.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 using namespace ::com::sun::star;
 
-ThumbnailViewAcc::ThumbnailViewAcc( ThumbnailView* pParent, bool bIsTransientChildrenDisabled ) :
+ThumbnailViewAcc::ThumbnailViewAcc( ThumbnailView* pParent ) :
     ValueSetAccComponentBase (m_aMutex),
     mpParent( pParent ),
-    mbIsTransientChildrenDisabled( bIsTransientChildrenDisabled ),
     mbIsFocused(false)
 {
 }
@@ -46,26 +48,25 @@ ThumbnailViewAcc::~ThumbnailViewAcc()
 
 void ThumbnailViewAcc::FireAccessibleEvent( short nEventId, const uno::Any& rOldValue, const uno::Any& rNewValue )
 {
-    if( nEventId )
+    if( !nEventId )
+        return;
+
+    ::std::vector< uno::Reference< accessibility::XAccessibleEventListener > > aTmpListeners( mxEventListeners );
+    accessibility::AccessibleEventObject aEvtObject;
+
+    aEvtObject.EventId = nEventId;
+    aEvtObject.Source = static_cast<uno::XWeak*>(this);
+    aEvtObject.NewValue = rNewValue;
+    aEvtObject.OldValue = rOldValue;
+
+    for (auto const& tmpListener : aTmpListeners)
     {
-        ::std::vector< uno::Reference< accessibility::XAccessibleEventListener > > aTmpListeners( mxEventListeners );
-        accessibility::AccessibleEventObject aEvtObject;
-
-        aEvtObject.EventId = nEventId;
-        aEvtObject.Source = static_cast<uno::XWeak*>(this);
-        aEvtObject.NewValue = rNewValue;
-        aEvtObject.OldValue = rOldValue;
-
-        for (::std::vector< uno::Reference< accessibility::XAccessibleEventListener > >::const_iterator aIter( aTmpListeners.begin() ), aEnd( aTmpListeners.end() );
-            aIter != aEnd ; ++aIter)
+        try
         {
-            try
-            {
-                (*aIter)->notifyEvent( aEvtObject );
-            }
-            catch(const uno::Exception&)
-            {
-            }
+            tmpListener->notifyEvent( aEvtObject );
+        }
+        catch(const uno::Exception&)
+        {
         }
     }
 }
@@ -119,14 +120,12 @@ void ThumbnailViewAcc::LoseFocus()
 }
 
 uno::Reference< accessibility::XAccessibleContext > SAL_CALL ThumbnailViewAcc::getAccessibleContext()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return this;
 }
 
 sal_Int32 SAL_CALL ThumbnailViewAcc::getAccessibleChildCount()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     ThrowIfDisposed();
@@ -136,23 +135,19 @@ sal_Int32 SAL_CALL ThumbnailViewAcc::getAccessibleChildCount()
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getAccessibleChild( sal_Int32 i )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
-    uno::Reference< accessibility::XAccessible >    xRet;
     ThumbnailViewItem* pItem = getItem (sal::static_int_cast< sal_uInt16 >(i));
 
-    if( pItem )
-        xRet = pItem->GetAccessible( mbIsTransientChildrenDisabled );
-    else
+    if( !pItem )
         throw lang::IndexOutOfBoundsException();
 
+    uno::Reference< accessibility::XAccessible >  xRet = pItem->GetAccessible( /*bIsTransientChildrenDisabled*/false );
     return xRet;
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getAccessibleParent()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -166,7 +161,6 @@ uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getAcces
 }
 
 sal_Int32 SAL_CALL ThumbnailViewAcc::getAccessibleIndexInParent()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -191,26 +185,20 @@ sal_Int32 SAL_CALL ThumbnailViewAcc::getAccessibleIndexInParent()
 }
 
 sal_Int16 SAL_CALL ThumbnailViewAcc::getAccessibleRole()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     // #i73746# As the Java Access Bridge (v 2.0.1) uses "managesDescendants"
     // always if the role is LIST, we need a different role in this case
-    return (mbIsTransientChildrenDisabled
-            ? accessibility::AccessibleRole::PANEL
-            : accessibility::AccessibleRole::LIST );
+    return accessibility::AccessibleRole::LIST;
 }
 
 OUString SAL_CALL ThumbnailViewAcc::getAccessibleDescription()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    const SolarMutexGuard aSolarGuard;
     return OUString("ThumbnailView");
 }
 
 OUString SAL_CALL ThumbnailViewAcc::getAccessibleName()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -231,14 +219,12 @@ OUString SAL_CALL ThumbnailViewAcc::getAccessibleName()
 }
 
 uno::Reference< accessibility::XAccessibleRelationSet > SAL_CALL ThumbnailViewAcc::getAccessibleRelationSet()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     return uno::Reference< accessibility::XAccessibleRelationSet >();
 }
 
 uno::Reference< accessibility::XAccessibleStateSet > SAL_CALL ThumbnailViewAcc::getAccessibleStateSet()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     ::utl::AccessibleStateSetHelper* pStateSet = new ::utl::AccessibleStateSetHelper();
@@ -248,8 +234,7 @@ uno::Reference< accessibility::XAccessibleStateSet > SAL_CALL ThumbnailViewAcc::
     pStateSet->AddState (accessibility::AccessibleStateType::SENSITIVE);
     pStateSet->AddState (accessibility::AccessibleStateType::SHOWING);
     pStateSet->AddState (accessibility::AccessibleStateType::VISIBLE);
-    if ( !mbIsTransientChildrenDisabled )
-        pStateSet->AddState (accessibility::AccessibleStateType::MANAGES_DESCENDANTS);
+    pStateSet->AddState (accessibility::AccessibleStateType::MANAGES_DESCENDANTS);
     pStateSet->AddState (accessibility::AccessibleStateType::FOCUSABLE);
     if (mbIsFocused)
         pStateSet->AddState (accessibility::AccessibleStateType::FOCUSED);
@@ -258,7 +243,6 @@ uno::Reference< accessibility::XAccessibleStateSet > SAL_CALL ThumbnailViewAcc::
 }
 
 lang::Locale SAL_CALL ThumbnailViewAcc::getLocale()
-    throw (accessibility::IllegalAccessibleComponentStateException, uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -277,31 +261,29 @@ lang::Locale SAL_CALL ThumbnailViewAcc::getLocale()
 }
 
 void SAL_CALL ThumbnailViewAcc::addAccessibleEventListener( const uno::Reference< accessibility::XAccessibleEventListener >& rxListener )
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     ::osl::MutexGuard aGuard (m_aMutex);
 
-    if( rxListener.is() )
+    if( !rxListener.is() )
+        return;
+
+    bool bFound = false;
+
+    for (auto const& eventListener : mxEventListeners)
     {
-        std::vector< uno::Reference< accessibility::XAccessibleEventListener > >::const_iterator aIter = mxEventListeners.begin();
-        bool bFound = false;
-
-        while( !bFound && ( aIter != mxEventListeners.end() ) )
+        if( eventListener == rxListener )
         {
-            if( *aIter == rxListener )
-                bFound = true;
-            else
-                ++aIter;
+            bFound = true;
+            break;
         }
-
-        if (!bFound)
-            mxEventListeners.push_back( rxListener );
     }
+
+    if (!bFound)
+        mxEventListeners.push_back( rxListener );
 }
 
 void SAL_CALL ThumbnailViewAcc::removeAccessibleEventListener( const uno::Reference< accessibility::XAccessibleEventListener >& rxListener )
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     ::osl::MutexGuard aGuard (m_aMutex);
@@ -317,18 +299,16 @@ void SAL_CALL ThumbnailViewAcc::removeAccessibleEventListener( const uno::Refere
 }
 
 sal_Bool SAL_CALL ThumbnailViewAcc::containsPoint( const awt::Point& aPoint )
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const awt::Rectangle    aRect( getBounds() );
     const Point             aSize( aRect.Width, aRect.Height );
     const Point             aNullPoint, aTestPoint( aPoint.X, aPoint.Y );
 
-    return Rectangle( aNullPoint, aSize ).IsInside( aTestPoint );
+    return tools::Rectangle( aNullPoint, aSize ).IsInside( aTestPoint );
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getAccessibleAtPoint( const awt::Point& aPoint )
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -342,7 +322,7 @@ uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getAcces
         if( THUMBNAILVIEW_ITEM_NONEITEM != nItemPos )
         {
             ThumbnailViewItem *const pItem = mpParent->mFilteredItemList[nItemPos];
-            xRet = pItem->GetAccessible( mbIsTransientChildrenDisabled );
+            xRet = pItem->GetAccessible( /*bIsTransientChildrenDisabled*/false );
         }
     }
 
@@ -350,7 +330,6 @@ uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getAcces
 }
 
 awt::Rectangle SAL_CALL ThumbnailViewAcc::getBounds()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -367,7 +346,6 @@ awt::Rectangle SAL_CALL ThumbnailViewAcc::getBounds()
 }
 
 awt::Point SAL_CALL ThumbnailViewAcc::getLocation()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const awt::Rectangle    aRect( getBounds() );
@@ -380,7 +358,6 @@ awt::Point SAL_CALL ThumbnailViewAcc::getLocation()
 }
 
 awt::Point SAL_CALL ThumbnailViewAcc::getLocationOnScreen()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -394,7 +371,6 @@ awt::Point SAL_CALL ThumbnailViewAcc::getLocationOnScreen()
 }
 
 awt::Size SAL_CALL ThumbnailViewAcc::getSize()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const awt::Rectangle    aRect( getBounds() );
@@ -407,7 +383,6 @@ awt::Size SAL_CALL ThumbnailViewAcc::getSize()
 }
 
 void SAL_CALL ThumbnailViewAcc::grabFocus()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -415,68 +390,55 @@ void SAL_CALL ThumbnailViewAcc::grabFocus()
 }
 
 sal_Int32 SAL_CALL ThumbnailViewAcc::getForeground(  )
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    sal_uInt32 nColor = Application::GetSettings().GetStyleSettings().GetWindowTextColor().GetColor();
+    Color nColor = Application::GetSettings().GetStyleSettings().GetWindowTextColor();
     return static_cast<sal_Int32>(nColor);
 }
 
 sal_Int32 SAL_CALL ThumbnailViewAcc::getBackground(  )
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    sal_uInt32 nColor = Application::GetSettings().GetStyleSettings().GetWindowColor().GetColor();
+    Color nColor = Application::GetSettings().GetStyleSettings().GetWindowColor();
     return static_cast<sal_Int32>(nColor);
 }
 
 void SAL_CALL ThumbnailViewAcc::selectAccessibleChild( sal_Int32 nChildIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
     ThumbnailViewItem* pItem = getItem (sal::static_int_cast< sal_uInt16 >(nChildIndex));
 
-    if(pItem != nullptr)
-    {
-        mpParent->SelectItem( pItem->mnId );
-    }
-    else
+    if(pItem == nullptr)
         throw lang::IndexOutOfBoundsException();
+
+    mpParent->SelectItem( pItem->mnId );
 }
 
 sal_Bool SAL_CALL ThumbnailViewAcc::isAccessibleChildSelected( sal_Int32 nChildIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
     ThumbnailViewItem* pItem = getItem (sal::static_int_cast< sal_uInt16 >(nChildIndex));
-    bool            bRet = false;
 
-    if (pItem != nullptr)
-        bRet = mpParent->IsItemSelected( pItem->mnId );
-    else
+    if (pItem == nullptr)
         throw lang::IndexOutOfBoundsException();
 
-    return bRet;
+    return mpParent->IsItemSelected( pItem->mnId );
 }
 
 void SAL_CALL ThumbnailViewAcc::clearAccessibleSelection()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
-    const SolarMutexGuard aSolarGuard;
 }
 
 void SAL_CALL ThumbnailViewAcc::selectAllAccessibleChildren()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     // unsupported due to single selection only
 }
 
 sal_Int32 SAL_CALL ThumbnailViewAcc::getSelectedAccessibleChildCount()
-    throw (uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -494,7 +456,6 @@ sal_Int32 SAL_CALL ThumbnailViewAcc::getSelectedAccessibleChildCount()
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getSelectedAccessibleChild( sal_Int32 nSelectedChildIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -505,14 +466,13 @@ uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewAcc::getSelec
         ThumbnailViewItem* pItem = getItem(i);
 
         if( pItem && mpParent->IsItemSelected( pItem->mnId ) && ( nSelectedChildIndex == static_cast< sal_Int32 >( nSel++ ) ) )
-            xRet = pItem->GetAccessible( mbIsTransientChildrenDisabled );
+            xRet = pItem->GetAccessible( /*bIsTransientChildrenDisabled*/false );
     }
 
     return xRet;
 }
 
-void SAL_CALL ThumbnailViewAcc::deselectAccessibleChild( sal_Int32 nChildIndex )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
+void SAL_CALL ThumbnailViewAcc::deselectAccessibleChild( sal_Int32 )
 {
     ThrowIfDisposed();
     const SolarMutexGuard aSolarGuard;
@@ -520,10 +480,9 @@ void SAL_CALL ThumbnailViewAcc::deselectAccessibleChild( sal_Int32 nChildIndex )
     // the specified child is currently selected.
 //FIXME TODO    if (isAccessibleChildSelected(nChildIndex))
 //FIXME TODO        ;
-    (void) nChildIndex;
 }
 
-sal_Int64 SAL_CALL ThumbnailViewAcc::getSomething( const uno::Sequence< sal_Int8 >& rId ) throw( uno::RuntimeException, std::exception )
+sal_Int64 SAL_CALL ThumbnailViewAcc::getSomething( const uno::Sequence< sal_Int8 >& rId )
 {
     sal_Int64 nRet;
 
@@ -552,21 +511,17 @@ void SAL_CALL ThumbnailViewAcc::disposing()
     }
 
     // Inform all listeners that this objects is disposing.
-    ::std::vector<uno::Reference<accessibility::XAccessibleEventListener> >::const_iterator
-          aListenerIterator (aListenerListCopy.begin());
     lang::EventObject aEvent (static_cast<accessibility::XAccessible*>(this));
-    while (aListenerIterator != aListenerListCopy.end())
+    for (auto const& listener : aListenerListCopy)
     {
         try
         {
-            (*aListenerIterator)->disposing (aEvent);
+            listener->disposing (aEvent);
         }
         catch(const uno::Exception&)
         {
             // Ignore exceptions.
         }
-
-        ++aListenerIterator;
     }
 }
 
@@ -577,17 +532,16 @@ sal_uInt16 ThumbnailViewAcc::getItemCount() const
 
 ThumbnailViewItem* ThumbnailViewAcc::getItem (sal_uInt16 nIndex) const
 {
-    return mpParent->ImplGetVisibleItem (static_cast<sal_uInt16>(nIndex));
+    return mpParent->ImplGetVisibleItem (nIndex);
 }
 
 void ThumbnailViewAcc::ThrowIfDisposed()
-    throw (css::lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
-        OSL_TRACE ("Calling disposed object. Throwing exception:");
+        SAL_WARN("sfx", "Calling disposed object. Throwing exception:");
         throw lang::DisposedException (
-            OUString("object has been already disposed"),
+            "object has been already disposed",
             static_cast<uno::XWeak*>(this));
     }
     else
@@ -604,32 +558,6 @@ ThumbnailViewItemAcc::ThumbnailViewItemAcc( ThumbnailViewItem* pParent, bool bIs
 
 ThumbnailViewItemAcc::~ThumbnailViewItemAcc()
 {
-}
-
-void ThumbnailViewItemAcc::FireAccessibleEvent( short nEventId, const uno::Any& rOldValue, const uno::Any& rNewValue )
-{
-    if( nEventId )
-    {
-        ::std::vector< uno::Reference< accessibility::XAccessibleEventListener > > aTmpListeners( mxEventListeners );
-        accessibility::AccessibleEventObject aEvtObject;
-
-        aEvtObject.EventId = nEventId;
-        aEvtObject.Source = static_cast<uno::XWeak*>(this);
-        aEvtObject.NewValue = rNewValue;
-        aEvtObject.OldValue = rOldValue;
-
-        for (::std::vector< uno::Reference< accessibility::XAccessibleEventListener > >::const_iterator aIter( aTmpListeners.begin() ), aEnd( aTmpListeners.end() );
-            aIter != aEnd ; ++aIter)
-        {
-            try
-            {
-                (*aIter)->notifyEvent( aEvtObject );
-            }
-            catch(const uno::Exception&)
-            {
-            }
-        }
-    }
 }
 
 void ThumbnailViewItemAcc::ParentDestroyed()
@@ -666,25 +594,21 @@ ThumbnailViewItemAcc* ThumbnailViewItemAcc::getImplementation( const uno::Refere
 }
 
 uno::Reference< accessibility::XAccessibleContext > SAL_CALL ThumbnailViewItemAcc::getAccessibleContext()
-    throw (uno::RuntimeException, std::exception)
 {
     return this;
 }
 
 sal_Int32 SAL_CALL ThumbnailViewItemAcc::getAccessibleChildCount()
-    throw (uno::RuntimeException, std::exception)
 {
     return 0;
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewItemAcc::getAccessibleChild( sal_Int32 )
-    throw (lang::IndexOutOfBoundsException, uno::RuntimeException, std::exception)
 {
     throw lang::IndexOutOfBoundsException();
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewItemAcc::getAccessibleParent()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     uno::Reference< accessibility::XAccessible >    xRet;
@@ -696,7 +620,6 @@ uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewItemAcc::getA
 }
 
 sal_Int32 SAL_CALL ThumbnailViewItemAcc::getAccessibleIndexInParent()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     // The index defaults to -1 to indicate the child does not belong to its
@@ -736,19 +659,16 @@ sal_Int32 SAL_CALL ThumbnailViewItemAcc::getAccessibleIndexInParent()
 }
 
 sal_Int16 SAL_CALL ThumbnailViewItemAcc::getAccessibleRole()
-    throw (uno::RuntimeException, std::exception)
 {
     return accessibility::AccessibleRole::LIST_ITEM;
 }
 
 OUString SAL_CALL ThumbnailViewItemAcc::getAccessibleDescription()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString();
 }
 
 OUString SAL_CALL ThumbnailViewItemAcc::getAccessibleName()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     OUString aRet;
@@ -769,13 +689,11 @@ OUString SAL_CALL ThumbnailViewItemAcc::getAccessibleName()
 }
 
 uno::Reference< accessibility::XAccessibleRelationSet > SAL_CALL ThumbnailViewItemAcc::getAccessibleRelationSet()
-    throw (uno::RuntimeException, std::exception)
 {
     return uno::Reference< accessibility::XAccessibleRelationSet >();
 }
 
 uno::Reference< accessibility::XAccessibleStateSet > SAL_CALL ThumbnailViewItemAcc::getAccessibleStateSet()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     ::utl::AccessibleStateSetHelper*    pStateSet = new ::utl::AccessibleStateSetHelper;
@@ -805,7 +723,6 @@ uno::Reference< accessibility::XAccessibleStateSet > SAL_CALL ThumbnailViewItemA
 }
 
 lang::Locale SAL_CALL ThumbnailViewItemAcc::getLocale()
-    throw (accessibility::IllegalAccessibleComponentStateException, uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     uno::Reference< accessibility::XAccessible >    xParent( getAccessibleParent() );
@@ -823,30 +740,28 @@ lang::Locale SAL_CALL ThumbnailViewItemAcc::getLocale()
 }
 
 void SAL_CALL ThumbnailViewItemAcc::addAccessibleEventListener( const uno::Reference< accessibility::XAccessibleEventListener >& rxListener )
-    throw (uno::RuntimeException, std::exception)
 {
     const ::osl::MutexGuard aGuard( maMutex );
 
-    if( rxListener.is() )
+    if( !rxListener.is() )
+        return;
+
+    bool bFound = false;
+
+    for (auto const& eventListener : mxEventListeners)
     {
-           ::std::vector< uno::Reference< accessibility::XAccessibleEventListener > >::const_iterator aIter = mxEventListeners.begin();
-        bool bFound = false;
-
-        while( !bFound && ( aIter != mxEventListeners.end() ) )
+        if( eventListener == rxListener )
         {
-            if( *aIter == rxListener )
-                bFound = true;
-            else
-                ++aIter;
+            bFound = true;
+            break;
         }
-
-        if (!bFound)
-            mxEventListeners.push_back( rxListener );
     }
+
+    if (!bFound)
+        mxEventListeners.push_back( rxListener );
 }
 
 void SAL_CALL ThumbnailViewItemAcc::removeAccessibleEventListener( const uno::Reference< accessibility::XAccessibleEventListener >& rxListener )
-    throw (uno::RuntimeException, std::exception)
 {
     const ::osl::MutexGuard aGuard( maMutex );
 
@@ -861,33 +776,29 @@ void SAL_CALL ThumbnailViewItemAcc::removeAccessibleEventListener( const uno::Re
 }
 
 sal_Bool SAL_CALL ThumbnailViewItemAcc::containsPoint( const awt::Point& aPoint )
-    throw (uno::RuntimeException, std::exception)
 {
     const awt::Rectangle    aRect( getBounds() );
     const Point             aSize( aRect.Width, aRect.Height );
     const Point             aNullPoint, aTestPoint( aPoint.X, aPoint.Y );
 
-    return Rectangle( aNullPoint, aSize ).IsInside( aTestPoint );
+    return tools::Rectangle( aNullPoint, aSize ).IsInside( aTestPoint );
 }
 
 uno::Reference< accessibility::XAccessible > SAL_CALL ThumbnailViewItemAcc::getAccessibleAtPoint( const awt::Point& )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Reference< accessibility::XAccessible > xRet;
     return xRet;
 }
 
 awt::Rectangle SAL_CALL ThumbnailViewItemAcc::getBounds()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     awt::Rectangle      aRet;
 
     if( mpParent )
     {
-        Rectangle   aRect( mpParent->getDrawArea() );
-        Point       aOrigin;
-        Rectangle   aParentRect( aOrigin, mpParent->mrParent.GetOutputSizePixel() );
+        tools::Rectangle   aRect( mpParent->getDrawArea() );
+        tools::Rectangle   aParentRect( Point(), mpParent->mrParent.GetOutputSizePixel() );
 
         aRect.Intersection( aParentRect );
 
@@ -901,7 +812,6 @@ awt::Rectangle SAL_CALL ThumbnailViewItemAcc::getBounds()
 }
 
 awt::Point SAL_CALL ThumbnailViewItemAcc::getLocation()
-    throw (uno::RuntimeException, std::exception)
 {
     const awt::Rectangle    aRect( getBounds() );
     awt::Point              aRet;
@@ -913,7 +823,6 @@ awt::Point SAL_CALL ThumbnailViewItemAcc::getLocation()
 }
 
 awt::Point SAL_CALL ThumbnailViewItemAcc::getLocationOnScreen()
-    throw (uno::RuntimeException, std::exception)
 {
     const SolarMutexGuard aSolarGuard;
     awt::Point          aRet;
@@ -931,7 +840,6 @@ awt::Point SAL_CALL ThumbnailViewItemAcc::getLocationOnScreen()
 }
 
 awt::Size SAL_CALL ThumbnailViewItemAcc::getSize()
-    throw (uno::RuntimeException, std::exception)
 {
     const awt::Rectangle    aRect( getBounds() );
     awt::Size               aRet;
@@ -943,25 +851,22 @@ awt::Size SAL_CALL ThumbnailViewItemAcc::getSize()
 }
 
 void SAL_CALL ThumbnailViewItemAcc::grabFocus()
-    throw (uno::RuntimeException, std::exception)
 {
     // nothing to do
 }
 
 sal_Int32 SAL_CALL ThumbnailViewItemAcc::getForeground(  )
-    throw (uno::RuntimeException, std::exception)
 {
-    sal_uInt32 nColor = Application::GetSettings().GetStyleSettings().GetWindowTextColor().GetColor();
+    Color nColor = Application::GetSettings().GetStyleSettings().GetWindowTextColor();
     return static_cast<sal_Int32>(nColor);
 }
 
 sal_Int32 SAL_CALL ThumbnailViewItemAcc::getBackground(  )
-    throw (uno::RuntimeException, std::exception)
 {
-    return static_cast<sal_Int32>(Application::GetSettings().GetStyleSettings().GetWindowColor().GetColor());
+    return static_cast<sal_Int32>(Application::GetSettings().GetStyleSettings().GetWindowColor());
 }
 
-sal_Int64 SAL_CALL ThumbnailViewItemAcc::getSomething( const uno::Sequence< sal_Int8 >& rId ) throw( uno::RuntimeException, std::exception )
+sal_Int64 SAL_CALL ThumbnailViewItemAcc::getSomething( const uno::Sequence< sal_Int8 >& rId )
 {
     sal_Int64 nRet;
 

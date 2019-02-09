@@ -19,64 +19,42 @@
 
 #include <string.h>
 
-#include "pagedata.hxx"
+#include <pagedata.hxx>
 
 #include <osl/diagnose.h>
 
 ScPrintRangeData::ScPrintRangeData()
 {
-    nPagesX = nPagesY = 0;
-    pPageEndX = nullptr;
-    pPageEndY = nullptr;
     bTopDown = bAutomatic = true;
     nFirstPage = 1;
 }
 
 ScPrintRangeData::~ScPrintRangeData()
 {
-    delete[] pPageEndX;
-    delete[] pPageEndY;
 }
 
 void ScPrintRangeData::SetPagesX( size_t nCount, const SCCOL* pData )
 {
-    delete[] pPageEndX;
-    if ( nCount )
-    {
-        pPageEndX = new SCCOL[nCount];
-        memcpy( pPageEndX, pData, nCount * sizeof(SCCOL) );
-    }
-    else
-        pPageEndX = nullptr;
-    nPagesX = nCount;
+    mvPageEndX.resize( nCount );
+    memcpy( mvPageEndX.data(), pData, nCount * sizeof(SCCOL) );
 }
 
 void ScPrintRangeData::SetPagesY( size_t nCount, const SCROW* pData )
 {
-    delete[] pPageEndY;
-    if ( nCount )
-    {
-        pPageEndY = new SCROW[nCount];
-        memcpy( pPageEndY, pData, nCount * sizeof(SCROW) );
-    }
-    else
-        pPageEndY = nullptr;
-    nPagesY = nCount;
+    mvPageEndY.resize(nCount);
+    memcpy( mvPageEndY.data(), pData, nCount * sizeof(SCROW) );
 }
 
 ScPageBreakData::ScPageBreakData(size_t nMax)
 {
     nUsed = 0;
     if (nMax)
-        pData = new ScPrintRangeData[nMax];
-    else
-        pData = nullptr;
+        pData.reset( new ScPrintRangeData[nMax] );
     nAlloc = nMax;
 }
 
 ScPageBreakData::~ScPageBreakData()
 {
-    delete[] pData;
 }
 
 ScPrintRangeData& ScPageBreakData::GetData(size_t nPos)
@@ -85,7 +63,7 @@ ScPrintRangeData& ScPageBreakData::GetData(size_t nPos)
 
     if ( nPos >= nUsed )
     {
-        OSL_ENSURE(nPos == nUsed, "ScPageBreakData::GetData falsche Reihenfolge");
+        OSL_ENSURE(nPos == nUsed, "ScPageBreakData::GetData wrong order");
         nUsed = nPos+1;
     }
 
@@ -101,7 +79,7 @@ bool ScPageBreakData::operator==( const ScPageBreakData& rOther ) const
         if ( pData[i].GetPrintRange() != rOther.pData[i].GetPrintRange() )
             return false;
 
-    //! ScPrintRangeData komplett vergleichen ??
+    //! compare ScPrintRangeData completely ??
 
     return true;
 }
@@ -113,7 +91,7 @@ void ScPageBreakData::AddPages()
         long nPage = pData[0].GetFirstPage();
         for (size_t i=0; i+1<nUsed; i++)
         {
-            nPage += ((long)pData[i].GetPagesX())*pData[i].GetPagesY();
+            nPage += static_cast<long>(pData[i].GetPagesX())*pData[i].GetPagesY();
             pData[i+1].SetFirstPage( nPage );
         }
     }

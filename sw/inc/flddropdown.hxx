@@ -19,7 +19,7 @@
 #ifndef INCLUDED_SW_INC_FLDDROPDOWN_HXX
 #define INCLUDED_SW_INC_FLDDROPDOWN_HXX
 
-#include <com/sun/star/uno/Sequence.hxx>
+#include <com/sun/star/uno/Sequence.h>
 #include "swdllapi.h"
 #include "fldbas.hxx"
 
@@ -39,7 +39,7 @@ public:
     /**
        Destructor
     */
-    virtual ~SwDropDownFieldType();
+    virtual ~SwDropDownFieldType() override;
 
     /**
        Create a copy of this field type.
@@ -90,14 +90,14 @@ class SW_DLLPUBLIC SwDropDownField : public SwField
 
        @return the expanded value of the field
     */
-    virtual OUString Expand() const override;
+    virtual OUString ExpandImpl(SwRootFrame const* pLayout) const override;
 
     /**
        Creates a copy of this field.
 
        @return the copy of this field
     */
-    virtual SwField * Copy() const override;
+    virtual std::unique_ptr<SwField> Copy() const override;
 
 public:
     /**
@@ -117,7 +117,7 @@ public:
     /**
        Destructor
     */
-    virtual ~SwDropDownField();
+    virtual ~SwDropDownField() override;
 
     /**
        Returns the selected value.
@@ -211,11 +211,8 @@ public:
        rItem is not found the selection will be empty.
 
        @param rItem the item to be set
-
-       @retval true the selected item was successfully set
-       @retval false failure (empty selection)
     */
-    bool SetSelectedItem(const OUString & rItem);
+    void SetSelectedItem(const OUString & rItem);
 
     /**
        Sets the name of the field.

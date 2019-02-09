@@ -22,7 +22,6 @@
 #include <svl/svldllapi.h>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
 #include <com/sun/star/lang/XUnoTunnel.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <cppuhelper/implbase2.hxx>
 #include <memory>
 
@@ -33,13 +32,6 @@ namespace comphelper
 {
     class SharedMutex;
 }
-
-
-//  SvNumberFormatterServiceObj must be registered as service somewhere
-
-css::uno::Reference<css::uno::XInterface> SAL_CALL
-    SvNumberFormatterServiceObj_NewInstance(
-        const css::uno::Reference< css::lang::XMultiServiceFactory>& rSMgr );
 
 
 //  SvNumberFormatsSupplierObj: aggregate to document,
@@ -55,22 +47,19 @@ private:
 public:
                                 SvNumberFormatsSupplierObj();
                                 SvNumberFormatsSupplierObj(SvNumberFormatter* pForm);
-    virtual                     ~SvNumberFormatsSupplierObj();
+    virtual                     ~SvNumberFormatsSupplierObj() override;
 
     void                        SetNumberFormatter(SvNumberFormatter* pNew);
     SvNumberFormatter*          GetNumberFormatter() const;
 
                                 // XNumberFormatsSupplier
     virtual css::uno::Reference< css::beans::XPropertySet > SAL_CALL
-                                getNumberFormatSettings()
-                                    throw(css::uno::RuntimeException, std::exception) override;
+                                getNumberFormatSettings() override;
     virtual css::uno::Reference< css::util::XNumberFormats > SAL_CALL
-                                getNumberFormats()
-                                    throw(css::uno::RuntimeException, std::exception) override;
+                                getNumberFormats() override;
 
                                 // XUnoTunnel
-    virtual sal_Int64 SAL_CALL  getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier )
-                                        throw(css::uno::RuntimeException, std::exception) override;
+    virtual sal_Int64 SAL_CALL  getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
 
     static const css::uno::Sequence<sal_Int8>& getUnoTunnelId();
     static SvNumberFormatsSupplierObj* getImplementation( const css::uno::Reference<

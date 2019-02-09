@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgpolynode.hxx>
+#include <svgpolynode.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -32,16 +32,12 @@ namespace svgio
             bool bIsPolyline)
         :   SvgNode(SVGTokenPolygon, rDocument, pParent),
             maSvgStyleAttributes(*this),
-            mpPolygon(nullptr),
-            mpaTransform(nullptr),
             mbIsPolyline(bIsPolyline)
         {
         }
 
         SvgPolyNode::~SvgPolyNode()
         {
-            delete mpaTransform;
-            delete mpPolygon;
         }
 
         const SvgStyleAttributes* SvgPolyNode::getSvgStyleAttributes() const
@@ -55,7 +51,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -69,11 +65,11 @@ namespace svgio
                 {
                     basegfx::B2DPolygon aPath;
 
-                    if(basegfx::tools::importFromSvgPoints(aPath, aContent))
+                    if(basegfx::utils::importFromSvgPoints(aPath, aContent))
                     {
                         if(aPath.count())
                         {
-                            if(!isPolyline())
+                            if(!mbIsPolyline)
                             {
                                 aPath.setClosed(true);
                             }
@@ -104,11 +100,11 @@ namespace svgio
         {
             const SvgStyleAttributes* pStyle = getSvgStyleAttributes();
 
-            if(pStyle && getPolygon())
+            if(pStyle && mpPolygon)
             {
                 drawinglayer::primitive2d::Primitive2DContainer aNewTarget;
 
-                pStyle->add_path(basegfx::B2DPolyPolygon(*getPolygon()), aNewTarget, nullptr);
+                pStyle->add_path(basegfx::B2DPolyPolygon(*mpPolygon), aNewTarget, nullptr);
 
                 if(!aNewTarget.empty())
                 {

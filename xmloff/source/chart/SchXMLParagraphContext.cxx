@@ -18,7 +18,7 @@
  */
 
 
-#include "SchXMLImport.hxx"
+#include <SchXMLImport.hxx>
 #include "SchXMLParagraphContext.hxx"
 
 #include <xmloff/xmlnmspe.hxx>
@@ -80,20 +80,20 @@ void SchXMLParagraphContext::EndElement()
     mrText = maBuffer.makeStringAndClear();
 }
 
-SvXMLImportContext* SchXMLParagraphContext::CreateChildContext(
+SvXMLImportContextRef SchXMLParagraphContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >& )
 {
     if( nPrefix == XML_NAMESPACE_TEXT )
     {
-        if( rLocalName.equals( ::xmloff::token::GetXMLToken( ::xmloff::token::XML_TAB_STOP )))
+        if( rLocalName == ::xmloff::token::GetXMLToken( ::xmloff::token::XML_TAB_STOP ))
         {
-            maBuffer.append( sal_Unicode( 0x0009 ));  // tabulator
+            maBuffer.append( u'\x0009');  // tabulator
         }
-        else if( rLocalName.equals( ::xmloff::token::GetXMLToken( ::xmloff::token::XML_LINE_BREAK )))
+        else if( rLocalName == ::xmloff::token::GetXMLToken( ::xmloff::token::XML_LINE_BREAK ))
         {
-            maBuffer.append( sal_Unicode( 0x000A ));  // linefeed
+            maBuffer.append( u'\x000A');  // linefeed
         }
     }
 

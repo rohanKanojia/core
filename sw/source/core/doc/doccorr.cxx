@@ -48,7 +48,7 @@ namespace
         return pStartNode;
     }
 
-    inline bool lcl_PosCorrAbs(SwPosition & rPos,
+    bool lcl_PosCorrAbs(SwPosition & rPos,
         const SwPosition& rStart,
         const SwPosition& rEnd,
         const SwPosition& rNewPos)
@@ -61,7 +61,7 @@ namespace
         return false;
     };
 
-    inline bool lcl_PaMCorrAbs(SwPaM & rPam,
+    bool lcl_PaMCorrAbs(SwPaM & rPam,
         const SwPosition& rStart,
         const SwPosition& rEnd,
         const SwPosition& rNewPos)
@@ -72,18 +72,18 @@ namespace
         return bRet;
     };
 
-    inline void lcl_PaMCorrRel1(SwPaM * pPam,
+    void lcl_PaMCorrRel1(SwPaM * pPam,
         SwNode const * const pOldNode,
         const SwPosition& rNewPos,
         const sal_Int32 nCntIdx)
     {
         for(int nb = 0; nb < 2; ++nb)
-            if(&((pPam)->GetBound(bool(nb)).nNode.GetNode()) == pOldNode)
+            if(&(pPam->GetBound(bool(nb)).nNode.GetNode()) == pOldNode)
             {
-                (pPam)->GetBound(bool(nb)).nNode = rNewPos.nNode;
-                (pPam)->GetBound(bool(nb)).nContent.Assign(
+                pPam->GetBound(bool(nb)).nNode = rNewPos.nNode;
+                pPam->GetBound(bool(nb)).nContent.Assign(
                     const_cast<SwIndexReg*>(rNewPos.nContent.GetIdxReg()),
-                    nCntIdx + (pPam)->GetBound(bool(nb)).nContent.GetIndex());
+                    nCntIdx + pPam->GetBound(bool(nb)).nContent.GetIndex());
             }
     }
 }
@@ -109,9 +109,9 @@ void PaMCorrAbs( const SwPaM& rRange,
                 do {
                     lcl_PaMCorrAbs( *_pStackCursor, aStart, aEnd, aNewPos );
                 } while ( (_pStackCursor != nullptr ) &&
-                    ((_pStackCursor = static_cast<SwPaM *>(_pStackCursor->GetNext())) != pCursorShell->GetStackCursor()) );
+                    ((_pStackCursor = _pStackCursor->GetNext()) != pCursorShell->GetStackCursor()) );
 
-            for(SwPaM& rPaM : const_cast<SwShellCursor*>(pCursorShell->_GetCursor())->GetRingContainer())
+            for(SwPaM& rPaM : const_cast<SwShellCursor*>(pCursorShell->GetCursor_())->GetRingContainer())
             {
                 lcl_PaMCorrAbs( rPaM, aStart, aEnd, aNewPos );
             }
@@ -121,6 +121,7 @@ void PaMCorrAbs( const SwPaM& rRange,
         }
     }
 
+    pDoc->cleanupUnoCursorTable();
     for(const auto& pWeakUnoCursor : pDoc->mvUnoCursorTable)
     {
         auto pUnoCursor(pWeakUnoCursor.lock());
@@ -146,7 +147,7 @@ void PaMCorrAbs( const SwPaM& rRange,
             dynamic_cast<SwUnoTableCursor *>(pUnoCursor.get());
         if( pUnoTableCursor )
         {
-            for(SwPaM& rPaM : (&pUnoTableCursor->GetSelRing())->GetRingContainer())
+            for(SwPaM& rPaM : pUnoTableCursor->GetSelRing().GetRingContainer())
             {
                 bChange |=
                     lcl_PaMCorrAbs( rPaM, aStart, aEnd, aNewPos );
@@ -158,8 +159,8 @@ void PaMCorrAbs( const SwPaM& rRange,
         if (bChange && bLeaveSection)
         {
             // the UNO cursor has left its section. We need to notify it!
-            SwMsgPoolItem aHint( RES_UNOCURSOR_LEAVES_SECTION );
-            pUnoCursor->ModifyNotification( &aHint, nullptr );
+            sw::UnoCursorHint aHint;
+            pUnoCursor->m_aNotifier.Broadcast(aHint);
         }
     }
 }
@@ -171,7 +172,7 @@ void SwDoc::CorrAbs(const SwNodeIndex& rOldNode,
 {
     SwContentNode *const pContentNode( rOldNode.GetNode().GetContentNode() );
     SwPaM const aPam(rOldNode, 0,
-                     rOldNode, (pContentNode) ? pContentNode->Len() : 0);
+                     rOldNode, pContentNode ? pContentNode->Len() : 0);
     SwPosition aNewPos(rNewPos);
     aNewPos.nContent += nOffset;
 
@@ -213,9 +214,8 @@ void SwDoc::CorrAbs(
 {
     SwPosition aStart(*rRange.Start());
     SwPosition aEnd(*rRange.End());
-    SwPosition aNewPos(rNewPos);
 
-    _DelBookmarks( aStart.nNode, aEnd.nNode, nullptr, &aStart.nContent, &aEnd.nContent );
+    DelBookmarks( aStart.nNode, aEnd.nNode, nullptr, &aStart.nContent, &aEnd.nContent );
 
     if(bMoveCursor)
         ::PaMCorrAbs(rRange, rNewPos);
@@ -227,13 +227,13 @@ void SwDoc::CorrAbs(
     const SwPosition& rNewPos,
     bool bMoveCursor )
 {
-    _DelBookmarks( rStartNode, rEndNode );
+    DelBookmarks( rStartNode, rEndNode );
 
     if(bMoveCursor)
     {
         SwContentNode *const pContentNode( rEndNode.GetNode().GetContentNode() );
         SwPaM const aPam(rStartNode, 0,
-                         rEndNode, (pContentNode) ? pContentNode->Len() : 0);
+                         rEndNode, pContentNode ? pContentNode->Len() : 0);
         ::PaMCorrAbs(aPam, rNewPos);
     }
 }
@@ -261,9 +261,9 @@ void PaMCorrRel( const SwNodeIndex &rOldNode,
                 do {
                     lcl_PaMCorrRel1( _pStackCursor, pOldNode, aNewPos, nCntIdx );
                 } while ( (_pStackCursor != nullptr ) &&
-                    ((_pStackCursor = static_cast<SwPaM *>(_pStackCursor->GetNext())) != pCursorShell->GetStackCursor()) );
+                    ((_pStackCursor = _pStackCursor->GetNext()) != pCursorShell->GetStackCursor()) );
 
-            SwPaM* pStartPaM = pCursorShell->_GetCursor();
+            SwPaM* pStartPaM = pCursorShell->GetCursor_();
             for(SwPaM& rPaM : pStartPaM->GetRingContainer())
             {
                 lcl_PaMCorrRel1( &rPaM, pOldNode, aNewPos, nCntIdx);
@@ -274,6 +274,7 @@ void PaMCorrRel( const SwNodeIndex &rOldNode,
        }
     }
 
+    pDoc->cleanupUnoCursorTable();
     for(const auto& pWeakUnoCursor : pDoc->mvUnoCursorTable)
     {
         auto pUnoCursor(pWeakUnoCursor.lock());
@@ -288,7 +289,7 @@ void PaMCorrRel( const SwNodeIndex &rOldNode,
             dynamic_cast<SwUnoTableCursor*>(pUnoCursor.get());
         if( pUnoTableCursor )
         {
-            for(SwPaM& rPaM : (&pUnoTableCursor->GetSelRing())->GetRingContainer())
+            for(SwPaM& rPaM : pUnoTableCursor->GetSelRing().GetRingContainer())
             {
                 lcl_PaMCorrRel1( &rPaM, pOldNode, aNewPos, nCntIdx );
             }
@@ -306,10 +307,10 @@ void SwDoc::CorrRel(const SwNodeIndex& rOldNode,
     { // fix the Redlines
         SwRedlineTable& rTable = getIDocumentRedlineAccess().GetRedlineTable();
         SwPosition aNewPos(rNewPos);
-        for( SwRedlineTable::size_type n = 0; n < rTable.size(); ++n )
+        for(SwRangeRedline* p : rTable)
         {
             // lies on the position ??
-            lcl_PaMCorrRel1( rTable[ n ], &rOldNode.GetNode(), aNewPos, aNewPos.nContent.GetIndex() + nOffset );
+            lcl_PaMCorrRel1( p, &rOldNode.GetNode(), aNewPos, aNewPos.nContent.GetIndex() + nOffset );
         }
 
         // To-Do - need to add here 'SwExtraRedlineTable' also ?

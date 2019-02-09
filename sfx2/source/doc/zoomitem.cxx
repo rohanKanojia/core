@@ -24,7 +24,6 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <osl/diagnose.h>
-#include <sfx2/sfx.hrc>
 
 
 SfxPoolItem* SvxZoomItem::CreateDefault() { return new SvxZoomItem; }
@@ -48,49 +47,15 @@ SvxZoomItem::SvxZoomItem
 }
 
 
-SvxZoomItem::SvxZoomItem( const SvxZoomItem& rOrig )
-:   SfxUInt16Item( rOrig.Which(), rOrig.GetValue() ),
-    nValueSet( rOrig.GetValueSet() ),
-    eType( rOrig.GetType() )
-{
-}
-
-
-SvxZoomItem::~SvxZoomItem()
-{
-}
-
-
 SfxPoolItem* SvxZoomItem::Clone( SfxItemPool * /*pPool*/ ) const
 {
     return new SvxZoomItem( *this );
 }
 
 
-SfxPoolItem* SvxZoomItem::Create( SvStream& rStrm, sal_uInt16 /*nVersion*/ ) const
-{
-    sal_uInt16 nValue;
-    sal_uInt16 nValSet;
-    sal_Int8 nType;
-    rStrm.ReadUInt16( nValue ).ReadUInt16( nValSet ).ReadSChar( nType );
-    SvxZoomItem* pNew = new SvxZoomItem( (SvxZoomType)nType, nValue, Which() );
-    pNew->SetValueSet( static_cast<SvxZoomEnableFlags>(nValSet) );
-    return pNew;
-}
-
-
-SvStream& SvxZoomItem::Store( SvStream& rStrm, sal_uInt16 /*nItemVersion*/ ) const
-{
-    rStrm.WriteUInt16( GetValue() )
-         .WriteUInt16( static_cast<sal_uInt16>(nValueSet) )
-         .WriteSChar( static_cast<int>(eType) );
-    return rStrm;
-}
-
-
 bool SvxZoomItem::operator==( const SfxPoolItem& rAttr ) const
 {
-    DBG_ASSERT( SfxPoolItem::operator==(rAttr), "unequal types" );
+    assert(SfxPoolItem::operator==(rAttr));
 
     const SvxZoomItem& rItem = static_cast<const SvxZoomItem&>(rAttr);
 
@@ -117,9 +82,9 @@ bool SvxZoomItem::QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId ) const
             break;
         }
 
-        case MID_VALUE: rVal <<= (sal_Int32) GetValue(); break;
-        case MID_VALUESET: rVal <<= (sal_Int16) nValueSet; break;
-        case MID_TYPE: rVal <<= (sal_Int16) eType; break;
+        case MID_VALUE: rVal <<= static_cast<sal_Int32>(GetValue()); break;
+        case MID_VALUESET: rVal <<= static_cast<sal_Int16>(nValueSet); break;
+        case MID_TYPE: rVal <<= static_cast<sal_Int16>(eType); break;
         default:
             OSL_FAIL("sfx2::SvxZoomItem::QueryValue(), Wrong MemberId!");
             return false;
@@ -164,7 +129,7 @@ bool SvxZoomItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId )
 
                 if ( bAllConverted && nConvertedCount == ZOOM_PARAMS )
                 {
-                    SetValue( (sal_uInt16)nValueTmp );
+                    SetValue( static_cast<sal_uInt16>(nValueTmp) );
                     nValueSet = static_cast<SvxZoomEnableFlags>(nValueSetTmp);
                     eType = static_cast<SvxZoomType>(nTypeTmp);
                     return true;
@@ -177,7 +142,7 @@ bool SvxZoomItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId )
             sal_Int32 nVal = 0;
             if ( rVal >>= nVal )
             {
-                SetValue( (sal_uInt16)nVal );
+                SetValue( static_cast<sal_uInt16>(nVal) );
                 return true;
             }
             else

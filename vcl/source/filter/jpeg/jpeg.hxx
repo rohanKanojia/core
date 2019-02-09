@@ -23,16 +23,18 @@
 #include <vcl/graph.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <vcl/fltcall.hxx>
+#include <vcl/bitmap.hxx>
 #include <com/sun/star/uno/Sequence.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/task/XStatusIndicator.hpp>
+#include <bitmapwriteaccess.hxx>
 
-VCL_DLLPUBLIC bool ImportJPEG( SvStream& rInputStream, Graphic& rGraphic, void* pCallerData, GraphicFilterImportFlags nImportFlags );
+VCL_DLLPUBLIC bool ImportJPEG( SvStream& rInputStream, Graphic& rGraphic, GraphicFilterImportFlags nImportFlags, BitmapScopedWriteAccess* ppAccess );
 
 bool ExportJPEG(SvStream& rOutputStream,
                     const Graphic& rGraphic,
                     const css::uno::Sequence< css::beans::PropertyValue >* pFilterData,
-                    bool* pExportWasGrey = nullptr);
+                    bool* pExportWasGrey);
 
 #endif // INCLUDED_VCL_SOURCE_FILTER_JPEG_JPEG_HXX
 

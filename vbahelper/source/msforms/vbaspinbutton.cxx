@@ -22,25 +22,26 @@
 using namespace com::sun::star;
 using namespace ooo::vba;
 
-ScVbaSpinButton::ScVbaSpinButton(  const css::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, AbstractGeometryAttributes* pGeomHelper ) : SpinButtonImpl_BASE( xParent, xContext, xControl, xModel, pGeomHelper )
+ScVbaSpinButton::ScVbaSpinButton(  const css::uno::Reference< ov::XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< uno::XInterface >& xControl, const uno::Reference< frame::XModel >& xModel, std::unique_ptr<AbstractGeometryAttributes> pGeomHelper )
+    : SpinButtonImpl_BASE( xParent, xContext, xControl, xModel, std::move(pGeomHelper) )
 {
 }
 
 // Attributes
 uno::Any SAL_CALL
-ScVbaSpinButton::getValue() throw (css::uno::RuntimeException, std::exception)
+ScVbaSpinButton::getValue()
 {
     return  m_xProps->getPropertyValue( "SpinValue" );
 }
 
 void SAL_CALL
-ScVbaSpinButton::setValue( const uno::Any& _value ) throw (css::uno::RuntimeException, std::exception)
+ScVbaSpinButton::setValue( const uno::Any& _value )
 {
     m_xProps->setPropertyValue( "SpinValue", _value );
 }
 
 ::sal_Int32 SAL_CALL
-ScVbaSpinButton::getMax() throw (uno::RuntimeException, std::exception)
+ScVbaSpinButton::getMax()
 {
     sal_Int32 nMax = 0;
     m_xProps->getPropertyValue( "SpinValueMax" ) >>= nMax;
@@ -48,13 +49,13 @@ ScVbaSpinButton::getMax() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaSpinButton::setMax( sal_Int32 nVal ) throw (uno::RuntimeException, std::exception)
+ScVbaSpinButton::setMax( sal_Int32 nVal )
 {
     m_xProps->setPropertyValue( "SpinValueMax", uno::makeAny( nVal ) );
 }
 
 ::sal_Int32 SAL_CALL
-ScVbaSpinButton::getMin() throw (uno::RuntimeException, std::exception)
+ScVbaSpinButton::getMin()
 {
     sal_Int32 nVal = 0;
     m_xProps->getPropertyValue( "SpinValueMin" ) >>= nVal;
@@ -62,7 +63,7 @@ ScVbaSpinButton::getMin() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-ScVbaSpinButton::setMin( sal_Int32 nVal ) throw (uno::RuntimeException, std::exception)
+ScVbaSpinButton::setMin( sal_Int32 nVal )
 {
     m_xProps->setPropertyValue( "SpinValueMin", uno::makeAny( nVal ) );
 }
@@ -76,12 +77,10 @@ ScVbaSpinButton::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaSpinButton::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.msforms.Frame";
-    }
+        "ooo.vba.msforms.Frame"
+    };
     return aServiceNames;
 }
 

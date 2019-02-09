@@ -12,20 +12,54 @@
 
 #include <vcl/builder.hxx>
 #include <vcl/ctrl.hxx>
+#include <vcl/settings.hxx>
+#include <vector>
+
+namespace com { namespace sun { namespace star { namespace ui { class XContextChangeEventListener; } } } }
+
+class NotebookbarContextControl;
+class SystemWindow;
 
 /// This implements Widget Layout-based notebook-like menu bar.
-class NotebookBar : public Control, public VclBuilderContainer
+class VCL_DLLPUBLIC NotebookBar : public Control, public VclBuilderContainer
 {
+friend class NotebookBarContextChangeEventListener;
 public:
     NotebookBar(Window* pParent, const OString& rID, const OUString& rUIXMLDescription, const css::uno::Reference<css::frame::XFrame> &rFrame);
-    virtual ~NotebookBar();
-    virtual void dispose() SAL_OVERRIDE;
+    virtual ~NotebookBar() override;
+    virtual void dispose() override;
 
-    virtual Size GetOptimalSize() const SAL_OVERRIDE;
-    virtual void setPosSizePixel(long nX, long nY, long nWidth, long nHeight, PosSizeFlags nFlags = PosSizeFlags::All) SAL_OVERRIDE;
+    virtual bool PreNotify( NotifyEvent& rNEvt ) override;
+    virtual Size GetOptimalSize() const override;
+    virtual void setPosSizePixel(long nX, long nY, long nWidth, long nHeight, PosSizeFlags nFlags = PosSizeFlags::All) override;
+    virtual void Resize() override;
 
-    virtual void StateChanged(StateChangedType nType) override;
+    void SetSystemWindow(SystemWindow* pSystemWindow);
+
+    const css::uno::Reference<css::ui::XContextChangeEventListener>& getContextChangeEventListener() const { return m_pEventListener; }
+
+    void StateChanged(const StateChangedType nStateChange ) override;
+
+    void DataChanged(const DataChangedEvent& rDCEvt) override;
+
+    void ControlListener(bool bListen);
+
+private:
+    VclPtr<SystemWindow> m_pSystemWindow;
+    css::uno::Reference<css::ui::XContextChangeEventListener> m_pEventListener;
+    std::vector<NotebookbarContextControl*> m_pContextContainers;
+    css::uno::Reference<css::frame::XFrame> mxFrame;
+
+    AllSettings DefaultSettings;
+    AllSettings PersonaSettings;
+
+    void UpdateBackground();
+
+    void UpdateDefaultSettings();
+    void UpdatePersonaSettings();
+
 };
+
 
 #endif // INCLUDED_VCL_NOTEBOOKBAR_HXX
 

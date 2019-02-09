@@ -29,16 +29,14 @@
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/XPropertyAccess.hpp>
-#include <comphelper/property.hxx>
 #include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <osl/diagnose.h>
 #include <rtl/process.h>
-#include <comphelper/processfactory.hxx>
 #include <unotools/tempfile.hxx>
 #include <unotools/localfilehelper.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <unotools/streamwrap.hxx>
 
 using namespace ::com::sun::star;
@@ -61,42 +59,35 @@ private:
 protected:
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& rDescriptor ) throw(RuntimeException, std::exception) override;
-    virtual void SAL_CALL cancel( ) throw (RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& rDescriptor ) override;
+    virtual void SAL_CALL cancel( ) override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) throw(IllegalArgumentException, RuntimeException, std::exception) override;
+    virtual void SAL_CALL setSourceDocument( const Reference< XComponent >& xDoc ) override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) throw(Exception, RuntimeException, std::exception) override;
+    virtual void SAL_CALL initialize( const Sequence< Any >& aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw(RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames()  throw(RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 public:
 
     explicit    PDFFilter( const Reference< XComponentContext >& rxContext );
-    virtual     ~PDFFilter();
+    virtual     ~PDFFilter() override;
 };
 
+/// @throws RuntimeException
+OUString PDFFilter_getImplementationName ();
 
-OUString PDFFilter_getImplementationName ()
-    throw ( RuntimeException );
+/// @throws RuntimeException
+Sequence< OUString > PDFFilter_getSupportedServiceNames(  );
 
-
-bool SAL_CALL PDFFilter_supportsService( const OUString& ServiceName )
-    throw ( RuntimeException );
-
-
-Sequence< OUString > SAL_CALL PDFFilter_getSupportedServiceNames(  )
-    throw ( RuntimeException );
-
-
+/// @throws Exception
 Reference< XInterface >
-SAL_CALL PDFFilter_createInstance( const Reference< XMultiServiceFactory > & rSMgr)
-    throw ( Exception );
+PDFFilter_createInstance( const Reference< XMultiServiceFactory > & rSMgr);
 
 #endif // INCLUDED_FILTER_SOURCE_PDF_PDFFILTER_HXX
 

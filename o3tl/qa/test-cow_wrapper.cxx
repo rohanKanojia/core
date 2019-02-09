@@ -18,10 +18,10 @@
  */
 
 #include <sal/types.h>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 
 #include "cow_wrapper_clients.hxx"
 
@@ -111,25 +111,25 @@ public:
 
         {
             aTestObj1 = cow_wrapper_client1( 1 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj1.queryUnmodified(), 1);
+            CPPUNIT_ASSERT_EQUAL(1, aTestObj1.queryUnmodified());
             aTestObj2.modify( 2 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj2.queryUnmodified(), 2);
+            CPPUNIT_ASSERT_EQUAL(2, aTestObj2.queryUnmodified());
             aTestObj3.modify( 3 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj3.queryUnmodified(), 3);
+            CPPUNIT_ASSERT_EQUAL(3, aTestObj3.queryUnmodified());
 
             aTestObj4 = cow_wrapper_client2( 4 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj4.queryUnmodified(), 4);
+            CPPUNIT_ASSERT_EQUAL(4, aTestObj4.queryUnmodified());
             aTestObj5.modify( 5 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj5.queryUnmodified(), 5);
+            CPPUNIT_ASSERT_EQUAL(5, aTestObj5.queryUnmodified());
             aTestObj6.modify( 6 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj6.queryUnmodified(), 6);
+            CPPUNIT_ASSERT_EQUAL(6, aTestObj6.queryUnmodified());
 
             aTestObj7 = cow_wrapper_client3( 7 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj7.queryUnmodified(), 7);
+            CPPUNIT_ASSERT_EQUAL(7, aTestObj7.queryUnmodified());
             aTestObj8.modify( 8 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj8.queryUnmodified(), 8);
+            CPPUNIT_ASSERT_EQUAL(8, aTestObj8.queryUnmodified());
             aTestObj9.modify( 9 );
-            CPPUNIT_ASSERT_EQUAL(aTestObj9.queryUnmodified(), 9);
+            CPPUNIT_ASSERT_EQUAL(9, aTestObj9.queryUnmodified());
         }
         // all three temporaries are dead now
 
@@ -170,8 +170,8 @@ public:
             // will occur
             cow_wrapper_client5 aTestObj1(1);
             cow_wrapper_client5 aTestObj2( std::move( aTestObj1 ) );
-            CPPUNIT_ASSERT_MESSAGE("aTestObj2.use_count() == 1",
-                                   aTestObj2.use_count() == 1 );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj2.use_count()",
+                                         static_cast<sal_uInt32>(1), aTestObj2.use_count() );
 
             // the following should increment
             BogusRefCountPolicy::s_bShouldIncrement = true;
@@ -179,8 +179,8 @@ public:
             CPPUNIT_ASSERT_MESSAGE("s_bShouldIncrement == 0",
                                    !BogusRefCountPolicy::s_bShouldIncrement );
 
-            CPPUNIT_ASSERT_MESSAGE("aTestObj3.use_count() == 2",
-                                   aTestObj3.use_count() == 2 );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj3.use_count()",
+                                         static_cast<sal_uInt32>(2), aTestObj3.use_count() );
             {
                 cow_wrapper_client5 aTestObj4;
                 // the following should decrement the lvalue and then increment the rvalue
@@ -192,18 +192,18 @@ public:
                 CPPUNIT_ASSERT_MESSAGE("s_bShouldDecrement == 0",
                                        !BogusRefCountPolicy::s_bShouldDecrement );
 
-                CPPUNIT_ASSERT_MESSAGE("aTestObj2.use_count() == 3",
-                                       aTestObj2.use_count() == 3 );
-                CPPUNIT_ASSERT_MESSAGE("aTestObj3.use_count() == 3",
-                                       aTestObj3.use_count() == 3 );
-                CPPUNIT_ASSERT_MESSAGE("aTestObj4.use_count() == 3",
-                                       aTestObj4.use_count() == 3 );
-                CPPUNIT_ASSERT_MESSAGE("aTestObj2 == aTestObj3",
-                                       aTestObj2 == aTestObj3 );
-                CPPUNIT_ASSERT_MESSAGE("aTestObj3 == aTestObj4",
-                                       aTestObj3 == aTestObj4 );
-                CPPUNIT_ASSERT_MESSAGE("aTestObj2 == aTestObj4",
-                                       aTestObj2 == aTestObj4 );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj2.use_count()",
+                                             static_cast<sal_uInt32>(3), aTestObj2.use_count() );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj3.use_count()",
+                                             static_cast<sal_uInt32>(3), aTestObj3.use_count() );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj4.use_count()",
+                                             static_cast<sal_uInt32>(3), aTestObj4.use_count() );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj2 == aTestObj3",
+                                             aTestObj3, aTestObj2 );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj3 == aTestObj4",
+                                             aTestObj4, aTestObj3 );
+                CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj2 == aTestObj4",
+                                             aTestObj4, aTestObj2 );
 
                 // only decrement the lvalue before assignment
                 BogusRefCountPolicy::s_bShouldDecrement = true;
@@ -222,10 +222,10 @@ public:
             // aTestObj2 is defunct afterwards, one decrement happens
             BogusRefCountPolicy::s_bShouldDecrement = true;
             aTestObj3 = std::move( aTestObj2 );
-            CPPUNIT_ASSERT_MESSAGE("aTestObj2.use_count() == 0",
-                                   aTestObj2.use_count() == 0 );
-            CPPUNIT_ASSERT_MESSAGE("aTestObj3.use_count() == 1",
-                                   aTestObj3.use_count() == 1 );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj2.use_count()",
+                                         static_cast<sal_uInt32>(0), aTestObj2.use_count() ); // NOLINT(bugprone-use-after-move)
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("aTestObj3.use_count()",
+                                         static_cast<sal_uInt32>(1), aTestObj3.use_count() );
 
             cow_wrapper_client5 aTestObj5;
 
@@ -240,8 +240,8 @@ public:
             // aTestObj3 still holds a valid instance
             BogusRefCountPolicy::s_nEndOfScope = 1;
         }
-        CPPUNIT_ASSERT_MESSAGE("s_EndOfScope == 0",
-                               BogusRefCountPolicy::s_nEndOfScope == 0 );
+        CPPUNIT_ASSERT_EQUAL_MESSAGE("s_EndOfScope",
+                                     static_cast<sal_uInt32>(0), BogusRefCountPolicy::s_nEndOfScope );
     }
 
     // Change the following lines only, if you add, remove or rename

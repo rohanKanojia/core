@@ -57,16 +57,15 @@
  * @file
  * List object.
  ************************************************************************/
-#include "xflist.hxx"
-#include "xflistitem.hxx"
-#include "ixfstream.hxx"
-#include "ixfattrlist.hxx"
+#include <xfilter/xflist.hxx>
+#include <xfilter/xflistitem.hxx>
+#include <xfilter/ixfstream.hxx>
+#include <xfilter/ixfattrlist.hxx>
 
 XFList::XFList()
 {
     m_bOrdered = true;
     m_bContinueNumber = false;
-    m_pHeader = nullptr;
 }
 
 XFList::~XFList()
@@ -89,10 +88,6 @@ void    XFList::ToXml(IXFStream *pStrm)
     else
         pStrm->StartElement( "text:unordered-list" );
 
-    if( m_pHeader )
-    {
-        m_pHeader->ToXml(pStrm);
-    }
     XFContentContainer::ToXml(pStrm);
 
     if( m_bOrdered )

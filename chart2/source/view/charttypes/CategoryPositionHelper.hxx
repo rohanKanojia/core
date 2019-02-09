@@ -23,15 +23,16 @@
 namespace chart
 {
 
-/**
-*/
-
 class CategoryPositionHelper
 {
 public:
     CategoryPositionHelper( double fSeriesCount, double CategoryWidth = 1.0);
-    CategoryPositionHelper( const CategoryPositionHelper& rSource );
     virtual ~CategoryPositionHelper();
+
+    CategoryPositionHelper(CategoryPositionHelper const &) = default;
+    CategoryPositionHelper(CategoryPositionHelper &&) = default;
+    CategoryPositionHelper & operator =(CategoryPositionHelper const &) = default;
+    CategoryPositionHelper & operator =(CategoryPositionHelper &&) = default;
 
     double getScaledSlotWidth() const;
     virtual double getScaledSlotPos( double fCategoryX, double fSeriesNumber ) const;

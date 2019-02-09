@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
-#include "sal/types.h"
+#include <rtl/textcvt.h>
+#include <sal/types.h>
 
 #include "converter.hxx"
 #include "tenchelp.hxx"
@@ -29,7 +29,7 @@
 sal::detail::textenc::BadInputConversionAction
 sal::detail::textenc::handleBadInputTextToUnicodeConversion(
     bool bUndefined, bool bMultiByte, char cByte, sal_uInt32 nFlags,
-    sal_Unicode ** pDestBufPtr, sal_Unicode * pDestBufEnd, sal_uInt32 * pInfo)
+    sal_Unicode ** pDestBufPtr, const sal_Unicode * pDestBufEnd, sal_uInt32 * pInfo)
 {
     *pInfo |= bUndefined
         ? (bMultiByte
@@ -58,7 +58,7 @@ sal::detail::textenc::handleBadInputTextToUnicodeConversion(
         if (*pDestBufPtr != pDestBufEnd)
         {
             *(*pDestBufPtr)++ = RTL_TEXTCVT_BYTE_PRIVATE_START
-                | ((unsigned char) cByte);
+                | static_cast<unsigned char>(cByte);
             return BAD_INPUT_CONTINUE;
         }
         else
@@ -80,7 +80,7 @@ sal::detail::textenc::handleBadInputTextToUnicodeConversion(
 sal::detail::textenc::BadInputConversionAction
 sal::detail::textenc::handleBadInputUnicodeToTextConversion(
     bool bUndefined, sal_uInt32 nUtf32, sal_uInt32 nFlags, char ** pDestBufPtr,
-    char * pDestBufEnd, sal_uInt32 * pInfo, char const * pPrefix,
+    const char * pDestBufEnd, sal_uInt32 * pInfo, char const * pPrefix,
     sal_Size nPrefixLen, bool * pPrefixWritten)
 {
     // TODO! RTL_UNICODETOTEXT_FLAGS_UNDEFINED_REPLACE
@@ -141,7 +141,7 @@ sal::detail::textenc::handleBadInputUnicodeToTextConversion(
         cReplace = '_';
         break;
     }
-    if ((sal_Size) (pDestBufEnd - *pDestBufPtr) > nPrefixLen)
+    if (static_cast<sal_Size>(pDestBufEnd - *pDestBufPtr) > nPrefixLen)
     {
         while (nPrefixLen-- > 0)
             *(*pDestBufPtr)++ = *pPrefix++;
@@ -150,8 +150,7 @@ sal::detail::textenc::handleBadInputUnicodeToTextConversion(
             *pPrefixWritten = true;
         return BAD_INPUT_CONTINUE;
     }
-    else
-        return BAD_INPUT_NO_OUTPUT;
+    return BAD_INPUT_NO_OUTPUT;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

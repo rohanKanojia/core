@@ -20,71 +20,79 @@
 #ifndef INCLUDED_IO_SOURCE_SERVICES_HXX
 #define INCLUDED_IO_SOURCE_SERVICES_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/Sequence.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
 namespace io_acceptor{
-    Reference< XInterface > SAL_CALL acceptor_CreateInstance( const Reference< XComponentContext > & xCtx);
+    Reference< XInterface > acceptor_CreateInstance( const Reference< XComponentContext > & xCtx);
     OUString acceptor_getImplementationName();
     Sequence< OUString > acceptor_getSupportedServiceNames();
 }
 
 namespace stoc_connector {
-    Reference< XInterface > SAL_CALL connector_CreateInstance( const Reference< XComponentContext > & xCtx);
+    Reference< XInterface > connector_CreateInstance( const Reference< XComponentContext > & xCtx);
     OUString connector_getImplementationName();
     Sequence< OUString > connector_getSupportedServiceNames();
 }
 
 namespace io_TextInputStream {
-    Reference< XInterface > SAL_CALL TextInputStream_CreateInstance(SAL_UNUSED_PARAMETER const Reference< XComponentContext > &);
+    Reference< XInterface > TextInputStream_CreateInstance(SAL_UNUSED_PARAMETER const Reference< XComponentContext > &);
     OUString TextInputStream_getImplementationName();
     Sequence< OUString > TextInputStream_getSupportedServiceNames();
 }
 
 namespace io_TextOutputStream {
-    Reference< XInterface > SAL_CALL TextOutputStream_CreateInstance(SAL_UNUSED_PARAMETER const Reference< XComponentContext > &);
+    Reference< XInterface > TextOutputStream_CreateInstance(SAL_UNUSED_PARAMETER const Reference< XComponentContext > &);
     OUString TextOutputStream_getImplementationName();
     Sequence< OUString > TextOutputStream_getSupportedServiceNames();
 }
 
 namespace io_stm {
-    Reference< XInterface > SAL_CALL OPipeImpl_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw (Exception);
+    /// @throws Exception
+    Reference< XInterface > OPipeImpl_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString    OPipeImpl_getImplementationName();
     Sequence<OUString> OPipeImpl_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL ODataInputStream_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw (Exception);
+    /// @throws Exception
+    Reference< XInterface > ODataInputStream_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString    ODataInputStream_getImplementationName();
     Sequence<OUString> ODataInputStream_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL ODataOutputStream_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw (Exception);
+    /// @throws Exception
+    Reference< XInterface > ODataOutputStream_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString ODataOutputStream_getImplementationName();
     Sequence<OUString> ODataOutputStream_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL OMarkableOutputStream_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw (Exception);
+    /// @throws Exception
+    Reference< XInterface > OMarkableOutputStream_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString OMarkableOutputStream_getImplementationName();
     Sequence<OUString> OMarkableOutputStream_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL OMarkableInputStream_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw (Exception);
+    /// @throws Exception
+    Reference< XInterface > OMarkableInputStream_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString    OMarkableInputStream_getImplementationName() ;
     Sequence<OUString> OMarkableInputStream_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL OObjectOutputStream_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw(Exception);
+    /// @throws Exception
+    Reference< XInterface > OObjectOutputStream_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString OObjectOutputStream_getImplementationName();
     Sequence<OUString> OObjectOutputStream_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL OObjectInputStream_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw(Exception);
+    /// @throws Exception
+    Reference< XInterface > OObjectInputStream_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString    OObjectInputStream_getImplementationName() ;
     Sequence<OUString> OObjectInputStream_getSupportedServiceNames();
 
-    Reference< XInterface > SAL_CALL OPumpImpl_CreateInstance( const Reference< XComponentContext > & rSMgr ) throw (Exception);
+    /// @throws Exception
+    Reference< XInterface > OPumpImpl_CreateInstance( const Reference< XComponentContext > & rSMgr );
     OUString OPumpImpl_getImplementationName();
     Sequence<OUString> OPumpImpl_getSupportedServiceNames();
 }

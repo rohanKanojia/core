@@ -17,9 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ConfigColorScheme.hxx"
-#include "ContainerHelper.hxx"
-#include "macros.hxx"
+#include <ConfigColorScheme.hxx>
 
 #include <unotools/configitem.hxx>
 #include <sal/macros.h>
@@ -54,7 +52,6 @@ class ChartConfigItem : public ::utl::ConfigItem
 {
 public:
     explicit ChartConfigItem( ConfigColorScheme & rListener );
-    virtual ~ChartConfigItem() {}
 
     void addPropertyNotification( const OUString & rPropertyName );
     uno::Any getProperty( const OUString & aPropertyName );
@@ -66,7 +63,7 @@ protected:
 
 private:
     ConfigColorScheme &      m_rListener;
-    ::std::set< OUString >   m_aPropertiesToNotify;
+    std::set< OUString >   m_aPropertiesToNotify;
 };
 
 ChartConfigItem::ChartConfigItem( ConfigColorScheme & rListener ) :
@@ -89,7 +86,7 @@ void ChartConfigItem::ImplCommit()
 void ChartConfigItem::addPropertyNotification( const OUString & rPropertyName )
 {
     m_aPropertiesToNotify.insert( rPropertyName );
-    EnableNotification( comphelper::containerToSequence<OUString>( m_aPropertiesToNotify ));
+    EnableNotification( comphelper::containerToSequence( m_aPropertiesToNotify ));
 }
 
 uno::Any ChartConfigItem::getProperty( const OUString & aPropertyName )
@@ -121,14 +118,14 @@ void ConfigColorScheme::retrieveConfigColors()
         return;
 
     // create config item if necessary
-    if( ! m_apChartConfigItem.get())
+    if (!m_apChartConfigItem)
     {
         m_apChartConfigItem.reset(
             new impl::ChartConfigItem( *this ));
         m_apChartConfigItem->addPropertyNotification( aSeriesPropName );
     }
-    OSL_ASSERT( m_apChartConfigItem.get());
-    if( ! m_apChartConfigItem.get())
+    OSL_ASSERT(m_apChartConfigItem);
+    if (!m_apChartConfigItem)
         return;
 
     // retrieve colors
@@ -141,7 +138,6 @@ void ConfigColorScheme::retrieveConfigColors()
 
 // ____ XColorScheme ____
 ::sal_Int32 SAL_CALL ConfigColorScheme::getColorByIndex( ::sal_Int32 nIndex )
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_bNeedsUpdate )
         retrieveConfigColors();
@@ -167,39 +163,24 @@ void ConfigColorScheme::notify( const OUString & rPropertyName )
         m_bNeedsUpdate = true;
 }
 
-Sequence< OUString > ConfigColorScheme::getSupportedServiceNames_Static()
-{
-    Sequence<OUString> aServices { "com.sun.star.chart2.ColorScheme" };
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL ConfigColorScheme::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString ConfigColorScheme::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart2.ConfigDefaultColorScheme") ;
 }
 
 sal_Bool SAL_CALL ConfigColorScheme::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL ConfigColorScheme::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return { "com.sun.star.chart2.ColorScheme" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_chart2_ConfigDefaultColorScheme_get_implementation(css::uno::XComponentContext *context,
         css::uno::Sequence<css::uno::Any> const &)
 {

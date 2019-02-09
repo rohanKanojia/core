@@ -19,10 +19,11 @@
 
 #include <sfx2/sfxsids.hrc>
 #include "fontdialog.hxx"
-#include "formresid.hrc"
+#include <strings.hrc>
 #include "modulepcr.hxx"
-#include "formlocalid.hrc"
 #include <vcl/svapp.hxx>
+#include <vcl/unohelp.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <comphelper/types.hxx>
 #include <comphelper/extract.hxx>
@@ -131,7 +132,7 @@ namespace pcr
 
         sal_Int32 nValue(_nDefault);
         ::cppu::enum2int(nValue, aValue);
-        return (sal_Int16)nValue;
+        return static_cast<sal_Int16>(nValue);
     }
 
 
@@ -167,26 +168,18 @@ namespace pcr
             _rSet.InvalidateItem(_nItemId);
     }
 
-
     //= ControlCharacterDialog
-
-
-    ControlCharacterDialog::ControlCharacterDialog(vcl::Window* _pParent, const SfxItemSet& _rCoreSet)
-        : SfxTabDialog(_pParent, "ControlFontDialog",
-            "modules/spropctrlr/ui/controlfontdialog.ui", &_rCoreSet)
-        , m_nCharsId(0)
+    ControlCharacterDialog::ControlCharacterDialog(weld::Window* pParent, const SfxItemSet& _rCoreSet)
+        : SfxTabDialogController(pParent, "modules/spropctrlr/ui/controlfontdialog.ui", "ControlFontDialog", &_rCoreSet)
     {
         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        assert(pFact); //CreateFactory fail!
-        m_nCharsId = AddTabPage("font", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_CHAR_NAME), nullptr );
+        AddTabPage("font", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_CHAR_NAME), nullptr );
         AddTabPage("fonteffects", pFact->GetTabPageCreatorFunc(RID_SVXPAGE_CHAR_EFFECTS), nullptr );
     }
-
 
     ControlCharacterDialog::~ControlCharacterDialog()
     {
     }
-
 
     void ControlCharacterDialog::translatePropertiesToItems(const Reference< XPropertySet >& _rxModel, SfxItemSet* _pSet)
     {
@@ -207,30 +200,30 @@ namespace pcr
             OUString aFontStyleName  = aPropExtractor.getStringFontProperty(PROPERTY_FONT_STYLENAME, aDefaultFont.StyleName);
             sal_Int16   nFontFamily         = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_FAMILY, aDefaultFont.Family);
             sal_Int16   nFontCharset        = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_CHARSET, aDefaultFont.CharSet);
-            float   nFontHeight             = aPropExtractor.getFloatFontProperty(PROPERTY_FONT_HEIGHT, (float)aDefaultFont.Height);
+            float   nFontHeight             = aPropExtractor.getFloatFontProperty(PROPERTY_FONT_HEIGHT, static_cast<float>(aDefaultFont.Height));
             float   nFontWeight             = aPropExtractor.getFloatFontProperty(PROPERTY_FONT_WEIGHT, aDefaultFont.Weight);
-            css::awt::FontSlant nFontSlant  = static_cast<css::awt::FontSlant>(aPropExtractor.getInt16FontProperty(PROPERTY_FONT_SLANT, (sal_Int16)aDefaultFont.Slant));
+            css::awt::FontSlant nFontSlant  = static_cast<css::awt::FontSlant>(aPropExtractor.getInt16FontProperty(PROPERTY_FONT_SLANT, static_cast<sal_Int16>(aDefaultFont.Slant)));
             sal_Int16 nFontLineStyle        = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_UNDERLINE, aDefaultFont.Underline);
             sal_Int16 nFontStrikeout        = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_STRIKEOUT, aDefaultFont.Strikeout);
 
-            sal_Int32 nTextLineColor        = aPropExtractor.getInt32FontProperty(PROPERTY_TEXTLINECOLOR, COL_AUTO);
-            sal_Int16 nFontRelief           = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_RELIEF, (sal_Int16)aDefaultVCLFont.GetRelief());
-            sal_Int16 nFontEmphasisMark     = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_EMPHASIS_MARK, aDefaultVCLFont.GetEmphasisMark());
+            sal_Int32 nTextLineColor        = aPropExtractor.getInt32FontProperty(PROPERTY_TEXTLINECOLOR, sal_uInt32(COL_AUTO));
+            sal_Int16 nFontRelief           = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_RELIEF, static_cast<sal_Int16>(aDefaultVCLFont.GetRelief()));
+            sal_Int16 nFontEmphasisMark     = aPropExtractor.getInt16FontProperty(PROPERTY_FONT_EMPHASIS_MARK, static_cast<sal_uInt16>(aDefaultVCLFont.GetEmphasisMark()));
 
             Any aValue;
             bool bWordLineMode          = aPropExtractor.getCheckFontProperty(PROPERTY_WORDLINEMODE, aValue) ? aDefaultFont.WordLineMode : ::cppu::any2bool(aValue);
             sal_Int32 nColor32              = aPropExtractor.getInt32FontProperty(PROPERTY_TEXTCOLOR, 0);
 
             // build SfxItems with the values
-            SvxFontItem aFontItem((FontFamily)nFontFamily, aFontName, aFontStyleName, PITCH_DONTKNOW, nFontCharset, CFID_FONT);
+            SvxFontItem aFontItem(static_cast<FontFamily>(nFontFamily), aFontName, aFontStyleName, PITCH_DONTKNOW, nFontCharset, CFID_FONT);
 
-            nFontHeight = (float)OutputDevice::LogicToLogic(Size(0, (sal_Int32)nFontHeight), MAP_POINT, MAP_TWIP).Height();
-            SvxFontHeightItem aSvxFontHeightItem((sal_uInt32)nFontHeight,100,CFID_HEIGHT);
+            nFontHeight = static_cast<float>(OutputDevice::LogicToLogic(Size(0, static_cast<sal_Int32>(nFontHeight)), MapMode(MapUnit::MapPoint), MapMode(MapUnit::MapTwip)).Height());
+            SvxFontHeightItem aSvxFontHeightItem(static_cast<sal_uInt32>(nFontHeight),100,CFID_HEIGHT);
 
-            FontWeight      eWeight=VCLUnoHelper::ConvertFontWeight(nFontWeight);
-            FontItalic      eItalic=VCLUnoHelper::ConvertFontSlant(nFontSlant);
-            FontLineStyle    eUnderline=(FontLineStyle)nFontLineStyle;
-            FontStrikeout   eStrikeout=(FontStrikeout)nFontStrikeout;
+            FontWeight      eWeight=vcl::unohelper::ConvertFontWeight(nFontWeight);
+            FontItalic      eItalic=vcl::unohelper::ConvertFontSlant(nFontSlant);
+            FontLineStyle    eUnderline=static_cast<FontLineStyle>(nFontLineStyle);
+            FontStrikeout   eStrikeout=static_cast<FontStrikeout>(nFontStrikeout);
 
             SvxWeightItem       aWeightItem(eWeight,CFID_WEIGHT);
             SvxPostureItem      aPostureItem(eItalic,CFID_POSTURE);
@@ -241,24 +234,24 @@ namespace pcr
             SvxUnderlineItem    aUnderlineItem(eUnderline,CFID_UNDERLINE);
             aUnderlineItem.SetColor(Color(nTextLineColor));
 
-            SvxColorItem aSvxColorItem(nColor32,CFID_CHARCOLOR);
+            SvxColorItem aSvxColorItem(Color(nColor32),CFID_CHARCOLOR);
             SvxLanguageItem aLanguageItem(Application::GetSettings().GetUILanguageTag().getLanguageType(), CFID_LANGUAGE);
 
             // the 2 CJK props
-            SvxCharReliefItem aFontReliefItem((FontRelief)nFontRelief, CFID_RELIEF);
-            SvxEmphasisMarkItem aEmphasisMarkitem((FontEmphasisMark)nFontEmphasisMark, CFID_EMPHASIS);
+            SvxCharReliefItem aFontReliefItem(static_cast<FontRelief>(nFontRelief), CFID_RELIEF);
+            SvxEmphasisMarkItem aEmphasisMarkitem(static_cast<FontEmphasisMark>(nFontEmphasisMark), CFID_EMPHASIS);
 
-            _pSet->Put(aFontItem, CFID_FONT);
-            _pSet->Put(aSvxFontHeightItem,CFID_HEIGHT);
-            _pSet->Put(aWeightItem, CFID_WEIGHT);
-            _pSet->Put(aPostureItem, CFID_POSTURE);
-            _pSet->Put(aLanguageItem, CFID_LANGUAGE);
-            _pSet->Put(aUnderlineItem,CFID_UNDERLINE);
-            _pSet->Put(aCrossedOutItem,CFID_STRIKEOUT);
-            _pSet->Put(aWordLineModeItem, CFID_WORDLINEMODE);
-            _pSet->Put(aSvxColorItem, CFID_CHARCOLOR);
-            _pSet->Put(aFontReliefItem, CFID_RELIEF);
-            _pSet->Put(aEmphasisMarkitem, CFID_EMPHASIS);
+            _pSet->Put(aFontItem);
+            _pSet->Put(aSvxFontHeightItem);
+            _pSet->Put(aWeightItem);
+            _pSet->Put(aPostureItem);
+            _pSet->Put(aLanguageItem);
+            _pSet->Put(aUnderlineItem);
+            _pSet->Put(aCrossedOutItem);
+            _pSet->Put(aWordLineModeItem);
+            _pSet->Put(aSvxColorItem);
+            _pSet->Put(aFontReliefItem);
+            _pSet->Put(aEmphasisMarkitem);
 
             aPropExtractor.invalidateItem(PROPERTY_FONT_NAME, CFID_FONT, *_pSet);
             aPropExtractor.invalidateItem(PROPERTY_FONT_HEIGHT, CFID_HEIGHT, *_pSet);
@@ -285,9 +278,7 @@ namespace pcr
         _pSet->DisableItem(SID_ATTR_CHAR_CASEMAP);
         _pSet->DisableItem(SID_ATTR_CHAR_CONTOUR);
         _pSet->DisableItem(SID_ATTR_CHAR_SHADOWED);
-
     }
-
 
     namespace
     {
@@ -296,7 +287,6 @@ namespace pcr
             _out_properties.push_back( NamedValue( _name, _value ) );
         }
     }
-
 
     void ControlCharacterDialog::translateItemsToProperties( const SfxItemSet& _rSet, std::vector< NamedValue >& _out_properties )
     {
@@ -313,10 +303,10 @@ namespace pcr
                 const SvxFontItem& rFontItem =
                     static_cast<const SvxFontItem&>(_rSet.Get(CFID_FONT));
 
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_NAME     , makeAny(OUString(rFontItem.GetFamilyName())));
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_STYLENAME, makeAny(OUString(rFontItem.GetStyleName())));
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_FAMILY   , makeAny((sal_Int16)rFontItem.GetFamily()));
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_CHARSET  , makeAny((sal_Int16)rFontItem.GetCharSet()));
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_NAME     , makeAny(rFontItem.GetFamilyName()));
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_STYLENAME, makeAny(rFontItem.GetStyleName()));
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_FAMILY   , makeAny(static_cast<sal_Int16>(rFontItem.GetFamily())));
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_CHARSET  , makeAny(static_cast<sal_Int16>(rFontItem.GetCharSet())));
             }
 
 
@@ -328,7 +318,7 @@ namespace pcr
                 const SvxFontHeightItem& rSvxFontHeightItem =
                     static_cast<const SvxFontHeightItem&>(_rSet.Get(CFID_HEIGHT));
 
-                float nHeight = (float)OutputDevice::LogicToLogic(Size(0, rSvxFontHeightItem.GetHeight()), MAP_TWIP, MAP_POINT).Height();
+                float nHeight = static_cast<float>(OutputDevice::LogicToLogic(Size(0, rSvxFontHeightItem.GetHeight()), MapMode(MapUnit::MapTwip), MapMode(MapUnit::MapPoint)).Height());
                 lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_HEIGHT,makeAny(nHeight));
 
             }
@@ -342,7 +332,7 @@ namespace pcr
                 const SvxWeightItem& rWeightItem =
                     static_cast<const SvxWeightItem&>(_rSet.Get(CFID_WEIGHT));
 
-                float nWeight = VCLUnoHelper::ConvertFontWeight(rWeightItem.GetWeight());
+                float nWeight = vcl::unohelper::ConvertFontWeight(rWeightItem.GetWeight());
                 lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_WEIGHT,makeAny(nWeight));
             }
 
@@ -355,8 +345,8 @@ namespace pcr
                 const SvxPostureItem& rPostureItem =
                     static_cast<const SvxPostureItem&>(_rSet.Get(CFID_POSTURE));
 
-                css::awt::FontSlant eSlant = VCLUnoHelper::ConvertFontSlant(rPostureItem.GetPosture());
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_SLANT, makeAny((sal_Int16)eSlant));
+                css::awt::FontSlant eSlant = vcl::unohelper::ConvertFontSlant(rPostureItem.GetPosture());
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_SLANT, makeAny(static_cast<sal_Int16>(eSlant)));
             }
 
 
@@ -368,14 +358,14 @@ namespace pcr
                 const SvxUnderlineItem& rUnderlineItem =
                     static_cast<const SvxUnderlineItem&>(_rSet.Get(CFID_UNDERLINE));
 
-                sal_Int16 nUnderline = (sal_Int16)rUnderlineItem.GetLineStyle();
+                sal_Int16 nUnderline = static_cast<sal_Int16>(rUnderlineItem.GetLineStyle());
                 lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_UNDERLINE,makeAny(nUnderline));
 
                 // the text line color is transported in this item, too
-                sal_Int32 nColor = rUnderlineItem.GetColor().GetColor();
+                Color nColor = rUnderlineItem.GetColor();
 
                 Any aUnoColor;
-                if (COL_AUTO != (sal_uInt32)nColor)
+                if (COL_AUTO != nColor)
                     aUnoColor <<= nColor;
 
                 lcl_pushBackPropertyValue( _out_properties, PROPERTY_TEXTLINECOLOR, aUnoColor );
@@ -390,7 +380,7 @@ namespace pcr
                 const SvxCrossedOutItem& rCrossedOutItem =
                     static_cast<const SvxCrossedOutItem&>(_rSet.Get(CFID_STRIKEOUT));
 
-                sal_Int16 nStrikeout = (sal_Int16)rCrossedOutItem.GetStrikeout();
+                sal_Int16 nStrikeout = static_cast<sal_Int16>(rCrossedOutItem.GetStrikeout());
                 lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_STRIKEOUT,makeAny(nStrikeout));
             }
 
@@ -415,10 +405,10 @@ namespace pcr
                 const SvxColorItem& rColorItem =
                     static_cast<const SvxColorItem&>(_rSet.Get(CFID_CHARCOLOR));
 
-                sal_Int32 nColor = rColorItem.GetValue().GetColor();
+                Color nColor = rColorItem.GetValue();
 
                 Any aUnoColor;
-                if (COL_AUTO != (sal_uInt32)nColor)
+                if (COL_AUTO != nColor)
                     aUnoColor <<= nColor;
 
                 lcl_pushBackPropertyValue( _out_properties, PROPERTY_TEXTCOLOR, aUnoColor );
@@ -433,7 +423,7 @@ namespace pcr
                 const SvxCharReliefItem& rReliefItem =
                     static_cast<const SvxCharReliefItem&>(_rSet.Get(CFID_RELIEF));
 
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_RELIEF, makeAny((sal_Int16)rReliefItem.GetValue()) );
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_RELIEF, makeAny(static_cast<sal_Int16>(rReliefItem.GetValue())) );
             }
 
 
@@ -445,15 +435,14 @@ namespace pcr
                 const SvxEmphasisMarkItem& rEmphMarkItem =
                     static_cast<const SvxEmphasisMarkItem&>(_rSet.Get(CFID_EMPHASIS));
 
-                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_EMPHASIS_MARK, makeAny((sal_Int16)rEmphMarkItem.GetEmphasisMark()) );
+                lcl_pushBackPropertyValue( _out_properties, PROPERTY_FONT_EMPHASIS_MARK, makeAny(static_cast<sal_Int16>(rEmphMarkItem.GetEmphasisMark())) );
             }
         }
         catch (const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
-
 
     void ControlCharacterDialog::translateItemsToProperties( const SfxItemSet& _rSet, const Reference< XPropertySet >& _rxModel)
     {
@@ -470,24 +459,23 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
-
-    SfxItemSet* ControlCharacterDialog::createItemSet(SfxItemSet*& _rpSet, SfxItemPool*& _rpPool, SfxPoolItem**& _rppDefaults)
+    void ControlCharacterDialog::createItemSet(std::unique_ptr<SfxItemSet>& _rpSet, SfxItemPool*& _rpPool, std::vector<SfxPoolItem*>*& _rpDefaults)
     {
         // just to be sure ....
         _rpSet = nullptr;
         _rpPool = nullptr;
-        _rppDefaults = nullptr;
+        _rpDefaults = nullptr;
 
         // create and initialize the defaults
-        _rppDefaults = new SfxPoolItem*[CFID_LAST_ITEM_ID - CFID_FIRST_ITEM_ID + 1];
+        _rpDefaults = new std::vector<SfxPoolItem*>(CFID_LAST_ITEM_ID - CFID_FIRST_ITEM_ID + 1);
 
         vcl::Font aDefaultVCLFont = Application::GetDefaultDevice()->GetSettings().GetStyleSettings().GetAppFont();
 
-        SfxPoolItem** pCounter = _rppDefaults;  // want to modify this without affecting the out param _rppDefaults
+        SfxPoolItem** pCounter = _rpDefaults->data();  // want to modify this without affecting the out param _rppDefaults
         *pCounter++ = new SvxFontItem(aDefaultVCLFont.GetFamilyType(), aDefaultVCLFont.GetFamilyName(), aDefaultVCLFont.GetStyleName(), aDefaultVCLFont.GetPitch(), aDefaultVCLFont.GetCharSet(), CFID_FONT);
         *pCounter++ = new SvxFontHeightItem(aDefaultVCLFont.GetFontHeight(), 100, CFID_HEIGHT);
         *pCounter++ = new SvxWeightItem(aDefaultVCLFont.GetWeight(), CFID_WEIGHT);
@@ -506,7 +494,7 @@ namespace pcr
         *pCounter++ = new SvxPostureItem(aDefaultVCLFont.GetItalic(), CFID_CJK_POSTURE);
         *pCounter++ = new SvxLanguageItem(Application::GetSettings().GetUILanguageTag().getLanguageType(), CFID_CJK_LANGUAGE);
 
-        *pCounter++ = new SvxCaseMapItem(SVX_CASEMAP_NOT_MAPPED, CFID_CASEMAP);
+        *pCounter++ = new SvxCaseMapItem(SvxCaseMap::NotMapped, CFID_CASEMAP);
         *pCounter++ = new SvxContourItem(false, CFID_CONTOUR);
         *pCounter++ = new SvxShadowedItem(false, CFID_SHADOWED);
 
@@ -537,29 +525,22 @@ namespace pcr
             { SID_ATTR_CHAR_FONTLIST,           false }
         };
 
-        _rpPool = new SfxItemPool(OUString("PCRControlFontItemPool"), CFID_FIRST_ITEM_ID, CFID_LAST_ITEM_ID,
-            aItemInfos, _rppDefaults);
+        _rpPool = new SfxItemPool("PCRControlFontItemPool", CFID_FIRST_ITEM_ID, CFID_LAST_ITEM_ID,
+            aItemInfos, _rpDefaults);
         _rpPool->FreezeIdRanges();
 
         // and, finally, the set
-        _rpSet = new SfxItemSet(*_rpPool, true);
-
-        return _rpSet;
+        _rpSet.reset(new SfxItemSet(*_rpPool));
     }
 
-
-    void ControlCharacterDialog::destroyItemSet(SfxItemSet*& _rpSet, SfxItemPool*& _rpPool, SfxPoolItem**& _rppDefaults)
+    void ControlCharacterDialog::destroyItemSet(std::unique_ptr<SfxItemSet>& _rpSet, SfxItemPool*& _rpPool, std::vector<SfxPoolItem*>*& _rpDefaults)
     {
         // from the pool, get and remember the font list (needs to be deleted)
         const SvxFontListItem& rFontListItem = static_cast<const SvxFontListItem&>(_rpPool->GetDefaultItem(CFID_FONTLIST));
         const FontList* pFontList = rFontListItem.GetFontList();
 
         // _first_ delete the set (referring the pool)
-        if (_rpSet)
-        {
-            delete _rpSet;
-            _rpSet = nullptr;
-        }
+        _rpSet.reset();
 
         // delete the pool
         _rpPool->ReleaseDefaults(true);
@@ -568,24 +549,22 @@ namespace pcr
         _rpPool = nullptr;
 
         // reset the defaults ptr
-        _rppDefaults = nullptr;
+        _rpDefaults = nullptr;
             // no need to explicitly delete the defaults, this has been done by the ReleaseDefaults
 
         delete pFontList;
     }
 
-
-    void ControlCharacterDialog::PageCreated( sal_uInt16 _nId, SfxTabPage& _rPage )
+    void ControlCharacterDialog::PageCreated(const OString& rId, SfxTabPage& rPage)
     {
         SfxAllItemSet aSet(*(GetInputSetImpl()->GetPool()));
-        if ( _nId == m_nCharsId ) {
-            aSet.Put (SvxFontListItem(static_cast<const SvxFontListItem&>(GetInputSetImpl()->Get(CFID_FONTLIST))));
+        if (rId == "font")
+        {
+            aSet.Put (static_cast<const SvxFontListItem&>(GetInputSetImpl()->Get(CFID_FONTLIST)));
             aSet.Put (SfxUInt16Item(SID_DISABLE_CTL,DISABLE_HIDE_LANGUAGE));
-            _rPage.PageCreated(aSet);
+            rPage.PageCreated(aSet);
         }
     }
-
-
 }   // namespace pcr
 
 

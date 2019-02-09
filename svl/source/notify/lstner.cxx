@@ -21,17 +21,24 @@
 
 #include <svl/hint.hxx>
 #include <svl/SfxBroadcaster.hxx>
+#include <sal/backtrace.hxx>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <cassert>
 #include <deque>
-
+#include <memory>
+#include <map>
 
 typedef std::deque<SfxBroadcaster*> SfxBroadcasterArr_Impl;
 
 struct SfxListener::Impl
 {
     SfxBroadcasterArr_Impl maBCs;
+#ifdef DBG_UTIL
+    std::map<SfxBroadcaster*, std::unique_ptr<sal::BacktraceState>>
+        maCallStacks;
+#endif
 };
 
 // simple ctor of class SfxListener
@@ -50,7 +57,7 @@ SfxListener::SfxListener( const SfxListener &rListener ) : mpImpl(new Impl)
 
 // unregisters the SfxListener from its SfxBroadcasters
 
-SfxListener::~SfxListener()
+SfxListener::~SfxListener() COVERITY_NOEXCEPT_FALSE
 {
     // unregister at all remaining broadcasters
     for ( size_t nPos = 0; nPos < mpImpl->maBCs.size(); ++nPos )
@@ -68,27 +75,47 @@ void SfxListener::RemoveBroadcaster_Impl( SfxBroadcaster& rBroadcaster )
     auto it = std::find( mpImpl->maBCs.begin(), mpImpl->maBCs.end(), &rBroadcaster );
     if (it != mpImpl->maBCs.end()) {
         mpImpl->maBCs.erase( it );
+#ifdef DBG_UTIL
+        mpImpl->maCallStacks.erase( &rBroadcaster );
+#endif
     }
 }
 
 
-// registers a specific SfxBroadcaster
 
-void SfxListener::StartListening( SfxBroadcaster& rBroadcaster, bool bPreventDups )
+/**
+ Registers a specific SfxBroadcaster.
+
+ Some code uses duplicates as a kind of ref-counting thing i.e. they add and remove listeners
+ on different code paths, and they only really stop listening when the last EndListening() is called.
+*/
+void SfxListener::StartListening(SfxBroadcaster& rBroadcaster, DuplicateHandling eDuplicateHanding)
 {
-    if ( !bPreventDups || !IsListening( rBroadcaster ) )
+    bool bListeningAlready = IsListening( rBroadcaster );
+
+#ifdef DBG_UTIL
+    if (bListeningAlready && eDuplicateHanding == DuplicateHandling::Unexpected)
+    {
+        auto f = mpImpl->maCallStacks.find( &rBroadcaster );
+        SAL_WARN("svl", "previous StartListening call came from: " << sal::backtrace_to_string(f->second.get()));
+    }
+#endif
+    assert(!(bListeningAlready && eDuplicateHanding == DuplicateHandling::Unexpected) && "duplicate listener, try building with DBG_UTIL to find the other insert site.");
+
+    if (!bListeningAlready || eDuplicateHanding != DuplicateHandling::Prevent)
     {
         rBroadcaster.AddListener(*this);
         mpImpl->maBCs.push_back( &rBroadcaster );
-
+#ifdef DBG_UTIL
+        mpImpl->maCallStacks.emplace( &rBroadcaster, sal::backtrace_get(10) );
+#endif
         assert(IsListening(rBroadcaster) && "StartListening failed");
     }
 }
 
-
 // unregisters a specific SfxBroadcaster
 
-void SfxListener::EndListening( SfxBroadcaster& rBroadcaster, bool bAllDups )
+void SfxListener::EndListening( SfxBroadcaster& rBroadcaster, bool bRemoveAllDuplicates )
 {
     SfxBroadcasterArr_Impl::iterator beginIt = mpImpl->maBCs.begin();
     do
@@ -100,8 +127,11 @@ void SfxListener::EndListening( SfxBroadcaster& rBroadcaster, bool bAllDups )
         }
         rBroadcaster.RemoveListener(*this);
         beginIt = mpImpl->maBCs.erase( it );
+#ifdef DBG_UTIL
+        mpImpl->maCallStacks.erase( &rBroadcaster );
+#endif
     }
-    while ( bAllDups );
+    while ( bRemoveAllDuplicates );
 }
 
 
@@ -109,13 +139,16 @@ void SfxListener::EndListening( SfxBroadcaster& rBroadcaster, bool bAllDups )
 
 void SfxListener::EndListeningAll()
 {
-    // Attention: when optimizing this: Respect sideffects of RemoveListener!
+    // Attention: when optimizing this: respect side effects of RemoveListener!
     while ( !mpImpl->maBCs.empty() )
     {
         SfxBroadcaster *pBC = mpImpl->maBCs.front();
         pBC->RemoveListener(*this);
         mpImpl->maBCs.pop_front();
     }
+#ifdef DBG_UTIL
+    mpImpl->maCallStacks.clear();
+#endif
 }
 
 

@@ -10,25 +10,23 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <stdio.h>
 
-#include "bluthsndapi.hxx"
+#include <bluthsndapi.hxx>
 
-SfxBluetoothModel::SendMailResult SfxBluetoothModel::SaveAndSend( const css::uno::Reference< css::frame::XFrame >& xFrame,
-                            const OUString& rType )
+SfxBluetoothModel::SendMailResult SfxBluetoothModel::SaveAndSend( const css::uno::Reference< css::frame::XFrame >& xFrame )
 {
     SaveResult      eSaveResult;
     SendMailResult  eResult = SEND_MAIL_ERROR;
     OUString   aFileName;
 
-    eSaveResult  = SaveDocumentAsFormat( OUString(), xFrame, rType, aFileName );
+    eSaveResult  = SaveDocumentAsFormat( OUString(), xFrame, OUString(), aFileName );
     if( eSaveResult == SAVE_SUCCESSFULL )
     {
         maAttachedDocuments.push_back( aFileName );
-        return Send( xFrame );
+        return Send();
     }
     else if( eSaveResult == SAVE_CANCELLED )
         eResult = SEND_MAIL_CANCELLED;
@@ -36,8 +34,12 @@ SfxBluetoothModel::SendMailResult SfxBluetoothModel::SaveAndSend( const css::uno
     return eResult;
 }
 
-SfxBluetoothModel::SendMailResult SfxBluetoothModel::Send( const css::uno::Reference< css::frame::XFrame >& /*xFrame*/ )
+SfxBluetoothModel::SendMailResult SfxBluetoothModel::Send()
 {
+#ifndef LINUX
+    (void) this; // avoid loplugin:staticmethods
+    return SEND_MAIL_ERROR;
+#else
     char bthsend[300];
     SendMailResult eResult = SEND_MAIL_OK;
     OUString aFileName = maAttachedDocuments[0];
@@ -45,6 +47,7 @@ SfxBluetoothModel::SendMailResult SfxBluetoothModel::Send( const css::uno::Refer
     if( !system( bthsend ) )
         eResult = SEND_MAIL_ERROR;
     return eResult;
+#endif
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ExponentialRegressionCurveCalculator.hxx"
-#include "macros.hxx"
-#include "RegressionCalculationHelper.hxx"
+#include <ExponentialRegressionCurveCalculator.hxx>
+#include <RegressionCalculationHelper.hxx>
+#include <SpecialCharacters.hxx>
 
 #include <rtl/math.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -45,7 +45,6 @@ ExponentialRegressionCurveCalculator::~ExponentialRegressionCurveCalculator()
 void SAL_CALL ExponentialRegressionCurveCalculator::recalculateRegression(
     const uno::Sequence< double >& aXValues,
     const uno::Sequence< double >& aYValues )
-    throw (uno::RuntimeException, std::exception)
 {
     RegressionCalculationHelper::tDoubleVectorPair aValues(
         RegressionCalculationHelper::cleanup(
@@ -112,8 +111,6 @@ void SAL_CALL ExponentialRegressionCurveCalculator::recalculateRegression(
 }
 
 double SAL_CALL ExponentialRegressionCurveCalculator::getCurveValue( double x )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     double fResult;
     ::rtl::math::setNan( & fResult );
@@ -132,8 +129,6 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL ExponentialRegressionCurveCalcul
     const uno::Reference< chart2::XScaling >& xScalingX,
     const uno::Reference< chart2::XScaling >& xScalingY,
     sal_Bool bMaySkipPointsInCalculation )
-    throw (lang::IllegalArgumentException,
-           uno::RuntimeException, std::exception)
 {
     if( bMaySkipPointsInCalculation &&
         isLinearScaling( xScalingX ) &&
@@ -142,9 +137,9 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL ExponentialRegressionCurveCalcul
         // optimize result
         uno::Sequence< geometry::RealPoint2D > aResult( 2 );
         aResult[0].X = min;
-        aResult[0].Y = this->getCurveValue( min );
+        aResult[0].Y = getCurveValue( min );
         aResult[1].X = max;
-        aResult[1].Y = this->getCurveValue( max );
+        aResult[1].Y = getCurveValue( max );
 
         return aResult;
     }
@@ -154,40 +149,72 @@ uno::Sequence< geometry::RealPoint2D > SAL_CALL ExponentialRegressionCurveCalcul
 
 OUString ExponentialRegressionCurveCalculator::ImplGetRepresentation(
     const uno::Reference< util::XNumberFormatter >& xNumFormatter,
-    ::sal_Int32 nNumberFormatKey ) const
+    sal_Int32 nNumberFormatKey, sal_Int32* pFormulaMaxWidth /* = nullptr */ ) const
 {
-    double fIntercept = m_fSign * exp(m_fLogIntercept);
+    double fIntercept = exp(m_fLogIntercept);
     bool bHasSlope = !rtl::math::approxEqual( exp(m_fLogSlope), 1.0 );
     bool bHasLogSlope = !rtl::math::approxEqual( fabs(m_fLogSlope), 1.0 );
-    bool bHasIntercept = !rtl::math::approxEqual( m_fSign*fIntercept, 1.0 ) && fIntercept != 0.0;
+    bool bHasIntercept = !rtl::math::approxEqual( fIntercept, 1.0 ) && fIntercept != 0.0;
 
-    OUStringBuffer aBuf( "f(x) = " );
-
+    OUStringBuffer aBuf( mYName + " = " );
+    sal_Int32 nLineLength = aBuf.getLength();
+    sal_Int32 nValueLength=0;
+    if ( pFormulaMaxWidth && *pFormulaMaxWidth > 0 )
+    {          // count characters different from coefficients
+        sal_Int32 nCharMin = nLineLength + 10 + mXName.getLength();  // 10 = "exp( ", " x )" + 2 extra characters
+        if ( m_fSign < 0.0 )
+            nCharMin += 2;
+        if ( fIntercept == 0.0 || ( !bHasSlope && m_fLogIntercept != 0.0 ) )
+            nCharMin += 3; // " + " special case where equation is written exp( a + b x )
+        if ( ( bHasIntercept || fIntercept == 0.0 || ( !bHasSlope && m_fLogIntercept != 0.0 ) ) &&
+               bHasLogSlope )
+            nValueLength = ( *pFormulaMaxWidth - nCharMin ) / 2;
+        else
+            nValueLength = *pFormulaMaxWidth - nCharMin;
+        if ( nValueLength <= 0 )
+            nValueLength = 1;
+    }
+                    // temporary buffer
+    OUStringBuffer aTmpBuf("");
+        // if nValueLength not calculated then nullptr
+    sal_Int32* pValueLength = nValueLength ? &nValueLength : nullptr;
+    if ( m_fSign < 0.0 )
+        aTmpBuf.append( OUStringLiteral1(aMinusSign) ).append( " " );
     if ( bHasIntercept )
     {
-        aBuf.append( getFormattedString( xNumFormatter, nNumberFormatKey, fIntercept) );
-        aBuf.append( " exp( " );
+        OUString aValueString = getFormattedString( xNumFormatter, nNumberFormatKey, fIntercept, pValueLength );
+        if ( aValueString != "1" )  // aValueString may be rounded to 1 if nValueLength is small
+        {
+            aTmpBuf.append( aValueString ).append( " " );
+            addStringToEquation( aBuf, nLineLength, aTmpBuf, pFormulaMaxWidth );
+            aTmpBuf.truncate();
+        }
     }
-    else
+    aTmpBuf.append( "exp( " );
+    if ( !bHasIntercept )
     {
-       if ( m_fSign < 0.0 )
-            aBuf.append( "- " );
-       aBuf.append( "exp( " );
-       if ( fIntercept == 0.0 ||  // underflow, a true zero is impossible
-          ( !bHasSlope && m_fLogIntercept != 0.0 ) )    // show logarithmic output, if intercept and slope both are near one
+        if ( fIntercept == 0.0 ||  // underflow, a true zero is impossible
+           ( !bHasSlope && m_fLogIntercept != 0.0 ) )   // show logarithmic output, if intercept and slope both are near one
         {                                               // otherwise drop output of intercept, which is 1 here
-            aBuf.append( getFormattedString( xNumFormatter, nNumberFormatKey, m_fLogIntercept) );
-            aBuf.append( (m_fLogSlope < 0.0) ? OUStringLiteral(" ") : OUStringLiteral(" + "));
+            OUString aValueString = getFormattedString( xNumFormatter, nNumberFormatKey, m_fLogIntercept, pValueLength );
+            if ( aValueString != "0" )  // aValueString may be rounded to 0 if nValueLength is small
+            {
+                aTmpBuf.append( aValueString ).append( (m_fLogSlope < 0.0) ? OUStringLiteral(" ") : OUStringLiteral(" + ") );
+            }
         }
     }
     if ( m_fLogSlope < 0.0 )
-        aBuf.append( "- ");
+        aTmpBuf.append( OUStringLiteral1(aMinusSign) ).append( " " );
     if ( bHasLogSlope )
     {
-        aBuf.append( getFormattedString( xNumFormatter, nNumberFormatKey, fabs(m_fLogSlope)) );
-        aBuf.append( ' ' );
+        OUString aValueString = getFormattedString( xNumFormatter, nNumberFormatKey, fabs(m_fLogSlope), pValueLength );
+        if ( aValueString != "1" )  // aValueString may be rounded to 1 if nValueLength is small
+        {
+            aTmpBuf.append( aValueString ).append( " " );
+        }
     }
-    aBuf.append( "x )");
+    aTmpBuf.append( mXName ).append(" )");
+    addStringToEquation( aBuf, nLineLength, aTmpBuf, pFormulaMaxWidth );
 
     return aBuf.makeStringAndClear();
 }

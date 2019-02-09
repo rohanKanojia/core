@@ -18,50 +18,36 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/lineitem.hxx>
-#include <editeng/editdata.hxx>
 #include <editeng/shaditem.hxx>
 #include <editeng/brushitem.hxx>
 
-#include "fillinfo.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
-#include "table.hxx"
-#include "attrib.hxx"
-#include "attarray.hxx"
-#include "markarr.hxx"
-#include "markdata.hxx"
-#include "patattr.hxx"
-#include "poolhelp.hxx"
-#include "docpool.hxx"
-#include "conditio.hxx"
-#include "colorscale.hxx"
-#include "stlpool.hxx"
-#include "cellvalue.hxx"
-#include "mtvcellfunc.hxx"
+#include <fillinfo.hxx>
+#include <document.hxx>
+#include <table.hxx>
+#include <attrib.hxx>
+#include <attarray.hxx>
+#include <markarr.hxx>
+#include <markdata.hxx>
+#include <patattr.hxx>
+#include <poolhelp.hxx>
+#include <docpool.hxx>
+#include <conditio.hxx>
+#include <stlpool.hxx>
+#include <cellvalue.hxx>
+#include <mtvcellfunc.hxx>
 
 #include <vector>
 #include <memory>
-#include <o3tl/make_unique.hxx>
-
-const sal_uInt16 ROWINFO_MAX = 1024;
-
-enum FillInfoLinePos
-    {
-        FILP_TOP,
-        FILP_BOTTOM,
-        FILP_LEFT,
-        FILP_RIGHT
-    };
 
 // Similar as in output.cxx
 
-static void lcl_GetMergeRange( SCsCOL nX, SCsROW nY, SCSIZE nArrY,
-                            ScDocument* pDoc, RowInfo* pRowInfo,
-                            SCCOL nX1, SCROW nY1, SCCOL /* nX2 */, SCROW /* nY2 */, SCTAB nTab,
-                            SCsCOL& rStartX, SCsROW& rStartY, SCsCOL& rEndX, SCsROW& rEndY )
+static void lcl_GetMergeRange( SCCOL nX, SCROW nY, SCSIZE nArrY,
+                            const ScDocument* pDoc, RowInfo* pRowInfo,
+                            SCCOL nX1, SCROW nY1, SCTAB nTab,
+                            SCCOL& rStartX, SCROW& rStartY, SCCOL& rEndX, SCROW& rEndY )
 {
     CellInfo* pInfo = &pRowInfo[nArrY].pCellInfo[nX+1];
 
@@ -75,17 +61,16 @@ static void lcl_GetMergeRange( SCsCOL nX, SCsROW nY, SCSIZE nArrY,
     while (bHOver)              // nY constant
     {
         --rStartX;
-        if (rStartX >= (SCsCOL) nX1 && !pDoc->ColHidden(rStartX, nTab, nullptr, &nLastCol))
+        if (rStartX >= nX1 && !pDoc->ColHidden(rStartX, nTab, nullptr, &nLastCol))
         {
             bHOver = pRowInfo[nArrY].pCellInfo[rStartX+1].bHOverlapped;
             bVOver = pRowInfo[nArrY].pCellInfo[rStartX+1].bVOverlapped;
         }
         else
         {
-            sal_uInt16 nOverlap = static_cast<const ScMergeFlagAttr*>(pDoc->GetAttr(
-                                rStartX, rStartY, nTab, ATTR_MERGE_FLAG ))->GetValue();
-            bHOver = ((nOverlap & SC_MF_HOR) != 0);
-            bVOver = ((nOverlap & SC_MF_VER) != 0);
+            ScMF nOverlap = pDoc->GetAttr( rStartX, rStartY, nTab, ATTR_MERGE_FLAG )->GetValue();
+            bHOver = bool(nOverlap & ScMF::Hor);
+            bVOver = bool(nOverlap & ScMF::Ver);
         }
     }
 
@@ -96,32 +81,32 @@ static void lcl_GetMergeRange( SCsCOL nX, SCsROW nY, SCSIZE nArrY,
         if (nArrY>0)
             --nArrY;                        // local copy !
 
-        if (rStartX >= (SCsCOL) nX1 && rStartY >= (SCsROW) nY1 &&
+        if (rStartX >= nX1 && rStartY >= nY1 &&
             !pDoc->ColHidden(rStartX, nTab, nullptr, &nLastCol) &&
             !pDoc->RowHidden(rStartY, nTab, nullptr, &nLastRow) &&
-            (SCsROW) pRowInfo[nArrY].nRowNo == rStartY)
+            pRowInfo[nArrY].nRowNo == rStartY)
         {
             bVOver = pRowInfo[nArrY].pCellInfo[rStartX+1].bVOverlapped;
         }
         else
         {
-            sal_uInt16 nOverlap = static_cast<const ScMergeFlagAttr*>(pDoc->GetAttr(
-                                rStartX, rStartY, nTab, ATTR_MERGE_FLAG ))->GetValue();
-            bVOver = ((nOverlap & SC_MF_VER) != 0);
+            ScMF nOverlap = pDoc->GetAttr(
+                                rStartX, rStartY, nTab, ATTR_MERGE_FLAG )->GetValue();
+            bVOver = bool(nOverlap & ScMF::Ver);
         }
     }
 
     const ScMergeAttr* pMerge;
-    if (rStartX >= (SCsCOL) nX1 && rStartY >= (SCsROW) nY1 &&
+    if (rStartX >= nX1 && rStartY >= nY1 &&
         !pDoc->ColHidden(rStartX, nTab, nullptr, &nLastCol) &&
         !pDoc->RowHidden(rStartY, nTab, nullptr, &nLastRow) &&
-        (SCsROW) pRowInfo[nArrY].nRowNo == rStartY)
+        pRowInfo[nArrY].nRowNo == rStartY)
     {
-        pMerge = static_cast<const ScMergeAttr*>( &pRowInfo[nArrY].pCellInfo[rStartX+1].pPatternAttr->
-                                        GetItem(ATTR_MERGE));
+        pMerge = &pRowInfo[nArrY].pCellInfo[rStartX+1].pPatternAttr->
+                                        GetItem(ATTR_MERGE);
     }
     else
-        pMerge = static_cast<const ScMergeAttr*>( pDoc->GetAttr(rStartX,rStartY,nTab,ATTR_MERGE) );
+        pMerge = pDoc->GetAttr(rStartX,rStartY,nTab,ATTR_MERGE);
 
     rEndX = rStartX + pMerge->GetColMerge() - 1;
     rEndY = rStartY + pMerge->GetRowMerge() - 1;
@@ -132,7 +117,7 @@ namespace {
 class RowInfoFiller
 {
     ScDocument& mrDoc;
-    SCTAB mnTab;
+    SCTAB const mnTab;
     RowInfo* mpRowInfo;
     SCCOL mnArrX;
     SCSIZE mnArrY;
@@ -160,14 +145,13 @@ class RowInfoFiller
         RowInfo& rThisRowInfo = mpRowInfo[mnArrY];
         CellInfo& rInfo = rThisRowInfo.pCellInfo[mnArrX];
         rInfo.maCell = rCell;
-        rThisRowInfo.bEmptyText = false;
         rInfo.bEmptyCellText = false;
         ++mnArrY;
     }
 
 public:
-    RowInfoFiller(ScDocument& rDoc, SCTAB nTab, RowInfo* pRowInfo, SCCOL nArrX, SCSIZE& rArrY) :
-        mrDoc(rDoc), mnTab(nTab), mpRowInfo(pRowInfo), mnArrX(nArrX), mnArrY(rArrY),
+    RowInfoFiller(ScDocument& rDoc, SCTAB nTab, RowInfo* pRowInfo, SCCOL nArrX, SCSIZE nArrY) :
+        mrDoc(rDoc), mnTab(nTab), mpRowInfo(pRowInfo), mnArrX(nArrX), mnArrY(nArrY),
         mnHiddenEndRow(-1), mbHiddenRow(false) {}
 
     void operator() (size_t nRow, double fVal)
@@ -195,7 +179,7 @@ public:
     }
 };
 
-bool isRotateItemUsed(ScDocumentPool *pPool)
+bool isRotateItemUsed(const ScDocumentPool *pPool)
 {
     sal_uInt32 nRotCount = pPool->GetItemCount2( ATTR_ROTATE_VALUE );
     for (sal_uInt32 nItem=0; nItem<nRotCount; nItem++)
@@ -209,16 +193,16 @@ bool isRotateItemUsed(ScDocumentPool *pPool)
     return false;
 }
 
-void initRowInfo(ScDocument* pDoc, RowInfo* pRowInfo,
+void initRowInfo(const ScDocument* pDoc, RowInfo* pRowInfo, const SCSIZE nMaxRow,
         double fRowScale, SCROW nRow1, SCTAB nTab, SCROW& rYExtra, SCSIZE& rArrRow, SCROW& rRow2)
 {
     sal_uInt16 nDocHeight = ScGlobal::nStdRowHeight;
     SCROW nDocHeightEndRow = -1;
-    for (SCsROW nSignedY=((SCsROW)nRow1)-1; nSignedY<=(SCsROW)rYExtra; nSignedY++)
+    for (SCROW nSignedY=nRow1-1; nSignedY<=rYExtra; nSignedY++)
     {
         SCROW nY;
         if (nSignedY >= 0)
-            nY = (SCROW) nSignedY;
+            nY = nSignedY;
         else
             nY = MAXROW+1;          // invalid
 
@@ -235,21 +219,20 @@ void initRowInfo(ScDocument* pDoc, RowInfo* pRowInfo,
             RowInfo* pThisRowInfo = &pRowInfo[rArrRow];
             pThisRowInfo->pCellInfo = nullptr;                 // is loaded below
 
-            sal_uInt16 nHeight = (sal_uInt16) ( nDocHeight * fRowScale );
+            sal_uInt16 nHeight = static_cast<sal_uInt16>( nDocHeight * fRowScale );
             if (!nHeight)
                 nHeight = 1;
 
             pThisRowInfo->nRowNo        = nY;               //TODO: case < 0 ?
             pThisRowInfo->nHeight       = nHeight;
             pThisRowInfo->bEmptyBack    = true;
-            pThisRowInfo->bEmptyText    = true;
             pThisRowInfo->bChanged      = true;
             pThisRowInfo->bAutoFilter   = false;
             pThisRowInfo->bPivotButton  = false;
             pThisRowInfo->nRotMaxCol    = SC_ROTMAX_NONE;
 
             ++rArrRow;
-            if (rArrRow >= ROWINFO_MAX)
+            if (rArrRow >= nMaxRow)
             {
                 OSL_FAIL("FillInfo: Range too big" );
                 rYExtra = nSignedY;                         // End
@@ -257,41 +240,29 @@ void initRowInfo(ScDocument* pDoc, RowInfo* pRowInfo,
             }
         }
         else
-            if (nSignedY==(SCsROW) rYExtra)                 // hidden additional line?
+            if (nSignedY == rYExtra)                 // hidden additional line?
                 ++rYExtra;
     }
 }
 
-void initCellInfo(RowInfo* pRowInfo, SCSIZE nArrCount, SCCOL nRotMax, bool bPaintMarks,
-        const SvxShadowItem* pDefShadow, SCROW nBlockStartY, SCROW nBlockEndY,
-        SCCOL nBlockStartX, SCCOL nBlockEndX)
+void initCellInfo(RowInfo* pRowInfo, SCSIZE nArrCount, SCCOL nRotMax,
+        const SvxShadowItem* pDefShadow)
 {
     for (SCSIZE nArrRow = 0; nArrRow < nArrCount; ++nArrRow)
     {
         RowInfo& rThisRowInfo = pRowInfo[nArrRow];
-        SCROW nY = rThisRowInfo.nRowNo;
         rThisRowInfo.pCellInfo = new CellInfo[nRotMax + 1 + 2];  // to delete the caller!
 
         for (SCCOL nArrCol = 0; nArrCol <= nRotMax+2; ++nArrCol) // Preassign cell info
         {
             CellInfo& rInfo = rThisRowInfo.pCellInfo[nArrCol];
-            if (bPaintMarks)
-            {
-                SCCOL nX;
-                if (nArrCol>0)
-                    nX = nArrCol-1;
-                else
-                    nX = MAXCOL+1;      // invalid
-                rInfo.bMarked = (nX >= nBlockStartX && nX <= nBlockEndX &&
-                                 nY >= nBlockStartY && nY <= nBlockEndY);
-            }
             rInfo.bEmptyCellText = true;
             rInfo.pShadowAttr    = pDefShadow;
         }
     }
 }
 
-void initColWidths(RowInfo* pRowInfo, ScDocument* pDoc, double fColScale, SCTAB nTab, SCCOL nCol2, SCCOL nRotMax)
+void initColWidths(RowInfo* pRowInfo, const ScDocument* pDoc, double fColScale, SCTAB nTab, SCCOL nCol2, SCCOL nRotMax)
 {
     for (SCCOL nArrCol=nCol2+3; nArrCol<=nRotMax+2; nArrCol++)    // Add remaining widths
     {
@@ -300,7 +271,7 @@ void initColWidths(RowInfo* pRowInfo, ScDocument* pDoc, double fColScale, SCTAB 
         {
             if (!pDoc->ColHidden(nX, nTab))
             {
-                sal_uInt16 nThisWidth = (sal_uInt16) (pDoc->GetColWidth( nX, nTab ) * fColScale);
+                sal_uInt16 nThisWidth = static_cast<sal_uInt16>(pDoc->GetColWidth( nX, nTab ) * fColScale);
                 if (!nThisWidth)
                     nThisWidth = 1;
 
@@ -310,7 +281,7 @@ void initColWidths(RowInfo* pRowInfo, ScDocument* pDoc, double fColScale, SCTAB 
     }
 }
 
-bool handleConditionalFormat(ScConditionalFormatList* pCondFormList, const std::vector<sal_uInt32>& rCondFormats,
+bool handleConditionalFormat(ScConditionalFormatList& rCondFormList, const std::vector<sal_uInt32>& rCondFormats,
         CellInfo* pInfo, ScStyleSheetPool* pStlPool,
         const ScAddress& rAddr, bool& bHidden, bool& bHideFormula, bool bTabProtect)
 {
@@ -319,7 +290,7 @@ bool handleConditionalFormat(ScConditionalFormatList* pCondFormList, const std::
     for(std::vector<sal_uInt32>::const_iterator itr = rCondFormats.begin();
             itr != rCondFormats.end() && !bFound; ++itr)
     {
-        ScConditionalFormat* pCondForm = pCondFormList->GetFormat(*itr);
+        ScConditionalFormat* pCondForm = rCondFormList.GetFormat(*itr);
         if(!pCondForm)
             continue;
 
@@ -328,7 +299,7 @@ bool handleConditionalFormat(ScConditionalFormatList* pCondFormList, const std::
         if (!aData.aStyleName.isEmpty())
         {
             SfxStyleSheetBase* pStyleSheet =
-                pStlPool->Find( aData.aStyleName, SFX_STYLE_FAMILY_PARA );
+                pStlPool->Find( aData.aStyleName, SfxStyleFamily::Para );
             if ( pStyleSheet )
             {
                 //TODO: cache Style-Sets !!!
@@ -352,21 +323,21 @@ bool handleConditionalFormat(ScConditionalFormatList* pCondFormList, const std::
             // if style is not there, treat like no condition
         }
 
-        if(aData.pColorScale)
+        if(aData.mxColorScale)
         {
-            pInfo->pColorScale.reset(aData.pColorScale);
+            pInfo->mxColorScale = aData.mxColorScale;
             bFound = true;
         }
 
         if(aData.pDataBar)
         {
-            pInfo->pDataBar.reset(aData.pDataBar);
+            pInfo->pDataBar = std::move(aData.pDataBar);
             bFound = true;
         }
 
         if(aData.pIconSet)
         {
-            pInfo->pIconSet.reset(aData.pIconSet);
+            pInfo->pIconSet = std::move(aData.pIconSet);
             bFound = true;
         }
     }
@@ -385,17 +356,17 @@ void ScDocument::FillInfo(
 
     bool bLayoutRTL = IsLayoutRTL( nTab );
 
-    ScDocumentPool* pPool = xPoolHelper->GetDocPool();
-    ScStyleSheetPool* pStlPool = xPoolHelper->GetStylePool();
+    ScDocumentPool* pPool = mxPoolHelper->GetDocPool();
+    ScStyleSheetPool* pStlPool = mxPoolHelper->GetStylePool();
 
-    RowInfo* pRowInfo = rTabInfo.mpRowInfo;
+    RowInfo* pRowInfo = rTabInfo.mpRowInfo.get();
 
     const SvxBrushItem* pDefBackground =
-            static_cast<const SvxBrushItem*>( &pPool->GetDefaultItem( ATTR_BACKGROUND ) );
+            &pPool->GetDefaultItem( ATTR_BACKGROUND );
     const ScMergeAttr* pDefMerge =
-            static_cast<const ScMergeAttr*>( &pPool->GetDefaultItem( ATTR_MERGE ) );
+            &pPool->GetDefaultItem( ATTR_MERGE );
     const SvxShadowItem* pDefShadow =
-            static_cast<const SvxShadowItem*>( &pPool->GetDefaultItem( ATTR_SHADOW ) );
+            &pPool->GetDefaultItem( ATTR_SHADOW );
 
     SCSIZE nArrRow;
     SCSIZE nArrCount;
@@ -409,7 +380,6 @@ void ScDocument::FillInfo(
                                                 // for block marks of merged cells
                                                 // with hidden first row/column
     bool bPaintMarks = false;
-    bool bSkipMarks = false;
     SCCOL nBlockStartX = 0, nBlockEndX = 0;
     SCROW nBlockEndY = 0, nBlockStartY = 0;
     if (pMarkData && pMarkData->IsMarked())
@@ -423,9 +393,7 @@ void ScDocument::FillInfo(
             nBlockEndX = aTmpRange.aEnd.Col();
             nBlockEndY = aTmpRange.aEnd.Row();
             ExtendHidden( nBlockStartX, nBlockStartY, nBlockEndX, nBlockEndY, nTab );   //? needed ?
-            if (pMarkData->IsMarkNegative())
-                bSkipMarks = true;
-            else
+            if (!pMarkData->IsMarkNegative())
                 bPaintMarks = true;
         }
     }
@@ -434,7 +402,7 @@ void ScDocument::FillInfo(
 
     nArrRow=0;
     SCROW nYExtra = nRow2+1;
-    initRowInfo(this, pRowInfo, fRowScale, nRow1,
+    initRowInfo(this, pRowInfo, rTabInfo.mnArrCapacity, fRowScale, nRow1,
             nTab, nYExtra, nArrRow, nRow2);
     nArrCount = nArrRow;                                      // incl. Dummys
 
@@ -445,9 +413,9 @@ void ScDocument::FillInfo(
 
     SCCOL nRotMax = nCol2;
     if ( bAnyItem && HasAttrib( 0, nRow1, nTab, MAXCOL, nRow2+1, nTab,
-                                HASATTR_ROTATE | HASATTR_CONDITIONAL ) )
+                                HasAttrFlags::Rotate | HasAttrFlags::Conditional ) )
     {
-        //TODO: check Conditionals also for HASATTR_ROTATE ????
+        //TODO: check Conditionals also for HasAttrFlags::Rotate ????
 
         OSL_ENSURE( nArrCount>2, "nArrCount too small" );
         FindMaxRotCol( nTab, &pRowInfo[1], nArrCount-1, nCol1, nCol2 );
@@ -460,13 +428,12 @@ void ScDocument::FillInfo(
 
     //  Allocate cell information only after the test rotation
     //  to nRotMax due to nRotateDir Flag
-    initCellInfo(pRowInfo, nArrCount, nRotMax, bPaintMarks, pDefShadow,
-            nBlockStartY, nBlockEndY, nBlockStartX, nBlockEndX);
+    initCellInfo(pRowInfo, nArrCount, nRotMax, pDefShadow);
 
     initColWidths(pRowInfo, this, fColScale, nTab, nCol2, nRotMax);
 
     ScConditionalFormatList* pCondFormList = GetCondFormList(nTab);
-    if(pCondFormList)
+    if (pCondFormList)
         pCondFormList->startRendering();
 
     for (SCCOL nArrCol=0; nArrCol<=nCol2+2; nArrCol++)                    // left & right + 1
@@ -481,7 +448,7 @@ void ScDocument::FillInfo(
             // TODO: Optimize this loop.
             if (!ColHidden(nX, nTab))
             {
-                sal_uInt16 nThisWidth = (sal_uInt16) (GetColWidth( nX, nTab ) * fColScale);
+                sal_uInt16 nThisWidth = static_cast<sal_uInt16>(GetColWidth( nX, nTab ) * fColScale);
                 if (!nThisWidth)
                     nThisWidth = 1;
 
@@ -498,7 +465,7 @@ void ScDocument::FillInfo(
 
                 if (nX+1 >= nCol1)                                // Attribute/Blockmark from nX1-1
                 {
-                    ScAttrArray* pThisAttrArr = pThisCol->pAttrArray;       // Attribute
+                    ScAttrArray* pThisAttrArr = pThisCol->pAttrArray.get();       // Attribute
                     nArrRow = 0;
 
                     SCROW nCurRow=nRow1;                  // single rows
@@ -507,57 +474,62 @@ void ScDocument::FillInfo(
                     else
                         nArrRow = 1;
 
-                    SCROW nThisRow = nCurRow;                   // end of range
+                    SCROW nThisRow;
                     SCSIZE nIndex;
-                    (void) pThisAttrArr->Search( nCurRow, nIndex );
+                    if ( pThisAttrArr->Count() )
+                        (void) pThisAttrArr->Search( nCurRow, nIndex );
+                    else
+                        nIndex = 0;
 
                     do
                     {
-                        nThisRow=pThisAttrArr->pData[nIndex].nRow;              // End of range
-                        const ScPatternAttr* pPattern=pThisAttrArr->pData[nIndex].pPattern;
+                        const ScPatternAttr* pPattern = nullptr;
+                        if ( pThisAttrArr->Count() )
+                        {
+                            nThisRow = pThisAttrArr->mvData[nIndex].nEndRow;              // End of range
+                            pPattern = pThisAttrArr->mvData[nIndex].pPattern;
+                        }
+                        else
+                        {
+                            nThisRow = MAXROW;
+                            pPattern = GetDefPattern();
+                        }
 
-                        const SvxBrushItem* pBackground = static_cast<const SvxBrushItem*>(
-                                                        &pPattern->GetItem(ATTR_BACKGROUND));
-                        const SvxBoxItem* pLinesAttr = static_cast<const SvxBoxItem*>(
-                                                        &pPattern->GetItem(ATTR_BORDER));
+                        const SvxBrushItem* pBackground = &pPattern->GetItem(ATTR_BACKGROUND);
+                        const SvxBoxItem* pLinesAttr = &pPattern->GetItem(ATTR_BORDER);
 
-                        const SvxLineItem* pTLBRLine = static_cast< const SvxLineItem* >(
-                            &pPattern->GetItem( ATTR_BORDER_TLBR ) );
-                        const SvxLineItem* pBLTRLine = static_cast< const SvxLineItem* >(
-                            &pPattern->GetItem( ATTR_BORDER_BLTR ) );
+                        const SvxLineItem* pTLBRLine = &pPattern->GetItem( ATTR_BORDER_TLBR );
+                        const SvxLineItem* pBLTRLine = &pPattern->GetItem( ATTR_BORDER_BLTR );
 
-                        const SvxShadowItem* pShadowAttr = static_cast<const SvxShadowItem*>(
-                                                        &pPattern->GetItem(ATTR_SHADOW));
+                        const SvxShadowItem* pShadowAttr = &pPattern->GetItem(ATTR_SHADOW);
                         if (pShadowAttr != pDefShadow)
                             bAnyShadow = true;
 
-                        const ScMergeAttr* pMergeAttr = static_cast<const ScMergeAttr*>(
-                                                &pPattern->GetItem(ATTR_MERGE));
+                        const ScMergeAttr* pMergeAttr = &pPattern->GetItem(ATTR_MERGE);
                         bool bMerged = ( pMergeAttr != pDefMerge && *pMergeAttr != *pDefMerge );
-                        sal_uInt16 nOverlap = static_cast<const ScMergeFlagAttr*>( &pPattern->GetItemSet().
-                                                        Get(ATTR_MERGE_FLAG))->GetValue();
-                        bool bHOverlapped = ((nOverlap & SC_MF_HOR) != 0);
-                        bool bVOverlapped = ((nOverlap & SC_MF_VER) != 0);
-                        bool bAutoFilter  = ((nOverlap & SC_MF_AUTO) != 0);
-                        bool bPivotButton  = ((nOverlap & SC_MF_BUTTON) != 0);
-                        bool bScenario    = ((nOverlap & SC_MF_SCENARIO) != 0);
-                        bool bPivotPopupButton = ((nOverlap & SC_MF_BUTTON_POPUP) != 0);
-                        bool bFilterActive = ((nOverlap & SC_MF_HIDDEN_MEMBER) != 0);
+                        ScMF nOverlap = pPattern->GetItemSet().
+                                                        Get(ATTR_MERGE_FLAG).GetValue();
+                        bool bHOverlapped(nOverlap & ScMF::Hor);
+                        bool bVOverlapped(nOverlap & ScMF::Ver);
+                        bool bAutoFilter(nOverlap & ScMF::Auto);
+                        bool bPivotButton(nOverlap & ScMF::Button);
+                        bool bScenario(nOverlap & ScMF::Scenario);
+                        bool bPivotPopupButton(nOverlap & ScMF::ButtonPopup);
+                        bool bFilterActive(nOverlap & ScMF::HiddenMember);
                         if (bMerged||bHOverlapped||bVOverlapped)
                             bAnyMerged = true;                              // internal
 
                         bool bHidden, bHideFormula;
                         if (bTabProtect)
                         {
-                            const ScProtectionAttr& rProtAttr = static_cast<const ScProtectionAttr&>(
-                                                        pPattern->GetItem(ATTR_PROTECTION));
+                            const ScProtectionAttr& rProtAttr = pPattern->GetItem(ATTR_PROTECTION);
                             bHidden = rProtAttr.GetHideCell();
                             bHideFormula = rProtAttr.GetHideFormula();
                         }
                         else
                             bHidden = bHideFormula = false;
 
-                        const std::vector<sal_uInt32>& rCondFormats = static_cast<const ScCondFormatItem&>(pPattern->GetItem(ATTR_CONDITIONAL)).GetCondFormatData();
+                        const std::vector<sal_uInt32>& rCondFormats = pPattern->GetItem(ATTR_CONDITIONAL).GetCondFormatData();
                         bool bContainsCondFormat = !rCondFormats.empty();
 
                         do
@@ -600,9 +572,9 @@ void ScDocument::FillInfo(
                                     pThisRowInfo->bEmptyBack = false;
                                 }
 
-                                if (bContainsCondFormat)
+                                if (bContainsCondFormat && pCondFormList)
                                 {
-                                    bAnyCondition |= handleConditionalFormat(pCondFormList, rCondFormats, pInfo, pStlPool, ScAddress(nX, nCurRow, nTab),
+                                    bAnyCondition |= handleConditionalFormat(*pCondFormList, rCondFormats, pInfo, pStlPool, ScAddress(nX, nCurRow, nTab),
                                             bHidden, bHideFormula, bTabProtect);
                                 }
 
@@ -611,7 +583,7 @@ void ScDocument::FillInfo(
 
                                 ++nArrRow;
                             }
-                            else if (bRowHidden && nLastHiddenRow >= 0)
+                            else if (nLastHiddenRow >= 0)
                             {
                                 nCurRow = nLastHiddenRow;
                                 if (nCurRow > nThisRow)
@@ -622,7 +594,7 @@ void ScDocument::FillInfo(
                         while (nCurRow <= nThisRow && nCurRow <= nYExtra);
                         ++nIndex;
                     }
-                    while ( nIndex < pThisAttrArr->nCount && nThisRow < nYExtra );
+                    while ( nIndex < pThisAttrArr->Count() && nThisRow < nYExtra );
 
                     if (pMarkData && pMarkData->IsMultiMarked())
                     {
@@ -630,33 +602,17 @@ void ScDocument::FillInfo(
                         ScMarkArray aThisMarkArr(pMarkData->GetMarkArray( nX ));
                         nArrRow = 1;
                         nCurRow = nRow1;                                      // single rows
-                        nThisRow = nRow1;                                     // End of range
 
                         if ( aThisMarkArr.Search( nRow1, nIndex ) )
                         {
                             do
                             {
                                 nThisRow=aThisMarkArr.pData[nIndex].nRow;      // End of range
-                                const bool bThisMarked=aThisMarkArr.pData[nIndex].bMarked;
 
                                 do
                                 {
                                     if ( !RowHidden( nCurRow,nTab ) )
                                     {
-                                        if ( bThisMarked )
-                                        {
-                                            bool bSkip = bSkipMarks &&
-                                                        nX      >= nBlockStartX &&
-                                                        nX      <= nBlockEndX   &&
-                                                        nCurRow >= nBlockStartY &&
-                                                        nCurRow <= nBlockEndY;
-                                            if (!bSkip)
-                                            {
-                                                RowInfo* pThisRowInfo = &pRowInfo[nArrRow];
-                                                CellInfo* pInfo = &pThisRowInfo->pCellInfo[nArrCol];
-                                                pInfo->bMarked = true;
-                                            }
-                                        }
                                         ++nArrRow;
                                     }
                                     ++nCurRow;
@@ -685,10 +641,10 @@ void ScDocument::FillInfo(
         // STD_COL_WIDTH farthest to the left and right is needed for DrawExtraShadow
     }
 
-    if(pCondFormList)
+    if (pCondFormList)
         pCondFormList->endRendering();
 
-    //  bedingte Formatierung auswerten
+    // evaluate conditional formatting
     std::vector< std::unique_ptr<ScPatternAttr> > aAltPatterns;
     // favour preview over condition
     if (bAnyCondition || bAnyPreview)
@@ -705,7 +661,7 @@ void ScDocument::FillInfo(
                 {
                     if ( ScStyleSheet* pPreviewStyle = GetPreviewCellStyle( nCol, pRowInfo[nArrRow].nRowNo, nTab ) )
                     {
-                        aAltPatterns.push_back( o3tl::make_unique<ScPatternAttr>( *pInfo->pPatternAttr ) );
+                        aAltPatterns.push_back( std::make_unique<ScPatternAttr>( *pInfo->pPatternAttr ) );
                         pModifiedPatt = aAltPatterns.back().get();
                         pModifiedPatt->SetStyleSheet( pPreviewStyle );
                     }
@@ -740,10 +696,10 @@ void ScDocument::FillInfo(
                         bAnyShadow = true;
                     }
                 }
-                if( bAnyCondition && pInfo->pColorScale)
+                if( bAnyCondition && pInfo->mxColorScale)
                 {
                     pRowInfo[nArrRow].bEmptyBack = false;
-                    pInfo->pBackground = new SvxBrushItem(*pInfo->pColorScale, ATTR_BACKGROUND);
+                    pInfo->pBackground = new SvxBrushItem(*pInfo->mxColorScale, ATTR_BACKGROUND);
                 }
             }
         }
@@ -758,20 +714,20 @@ void ScDocument::FillInfo(
         for (nArrRow=0; nArrRow<nArrCount; nArrRow++)
         {
             RowInfo* pThisRowInfo = &pRowInfo[nArrRow];
-            SCsROW nSignedY = nArrRow ? pThisRowInfo->nRowNo : ((SCsROW)nRow1)-1;
+            SCROW nSignedY = nArrRow ? pThisRowInfo->nRowNo : nRow1-1;
 
             for (SCCOL nArrCol=nCol1; nArrCol<=nCol2+2; nArrCol++)                  // 1 more left and right
             {
-                SCsCOL nSignedX = ((SCsCOL) nArrCol) - 1;
+                SCCOL nSignedX = nArrCol - 1;
                 CellInfo* pInfo = &pThisRowInfo->pCellInfo[nArrCol];
 
                 if (pInfo->bMerged || pInfo->bHOverlapped || pInfo->bVOverlapped)
                 {
-                    SCsCOL nStartX;
-                    SCsROW nStartY;
-                    SCsCOL nEndX;
-                    SCsROW nEndY;
-                    lcl_GetMergeRange( nSignedX,nSignedY, nArrRow, this,pRowInfo, nCol1,nRow1,nCol2,nRow2,nTab,
+                    SCCOL nStartX;
+                    SCROW nStartY;
+                    SCCOL nEndX;
+                    SCROW nEndY;
+                    lcl_GetMergeRange( nSignedX,nSignedY, nArrRow, this,pRowInfo, nCol1,nRow1,nTab,
                                         nStartX,nStartY, nEndX,nEndY );
                     const ScPatternAttr* pStartPattern = GetPattern( nStartX,nStartY,nTab );
                     const SfxItemSet* pStartCond = GetCondResult( nStartX,nStartY,nTab );
@@ -798,10 +754,10 @@ void ScDocument::FillInfo(
 
                     bool bCellMarked = false;
                     if (bPaintMarks)
-                        bCellMarked = ( nStartX >= (SCsCOL) nBlockStartX
-                                    && nStartX <= (SCsCOL) nBlockEndX
-                                    && nStartY >= (SCsROW) nBlockStartY
-                                    && nStartY <= (SCsROW) nBlockEndY );
+                        bCellMarked = ( nStartX >= nBlockStartX
+                                    && nStartX <= nBlockEndX
+                                    && nStartY >= nBlockStartY
+                                    && nStartY <= nBlockEndY );
                     if (pMarkData && pMarkData->IsMultiMarked() && !bCellMarked)
                     {
                         ScMarkArray aThisMarkArr(pMarkData->GetMarkArray( nStartX ));
@@ -809,8 +765,6 @@ void ScDocument::FillInfo(
                         if ( aThisMarkArr.Search( nStartY, nIndex ) )
                             bCellMarked=aThisMarkArr.pData[nIndex].bMarked;
                     }
-
-                    pInfo->bMarked = bCellMarked;
                 }
             }
         }
@@ -830,13 +784,13 @@ void ScDocument::FillInfo(
 
                 CellInfo* pInfo = &pRowInfo[nArrRow].pCellInfo[nArrCol];
                 const SvxShadowItem* pThisAttr = pInfo->pShadowAttr;
-                SvxShadowLocation eLoc = pThisAttr ? pThisAttr->GetLocation() : SVX_SHADOW_NONE;
-                if (eLoc != SVX_SHADOW_NONE)
+                SvxShadowLocation eLoc = pThisAttr ? pThisAttr->GetLocation() : SvxShadowLocation::NONE;
+                if (eLoc != SvxShadowLocation::NONE)
                 {
                     //  or test on != eLoc
 
-                    SCsCOL nDxPos = 1;
-                    SCsCOL nDxNeg = -1;
+                    SCCOL nDxPos = 1;
+                    SCCOL nDxNeg = -1;
 
                     while ( nArrCol+nDxPos < nCol2+2 && pRowInfo[0].pCellInfo[nArrCol+nDxPos].nWidth == 0 )
                         ++nDxPos;
@@ -844,22 +798,22 @@ void ScDocument::FillInfo(
                         --nDxNeg;
 
                     bool bLeftDiff = !bLeft &&
-                            pRowInfo[nArrRow].pCellInfo[nArrCol+nDxNeg].pShadowAttr->GetLocation() == SVX_SHADOW_NONE;
+                            pRowInfo[nArrRow].pCellInfo[nArrCol+nDxNeg].pShadowAttr->GetLocation() == SvxShadowLocation::NONE;
                     bool bRightDiff = !bRight &&
-                            pRowInfo[nArrRow].pCellInfo[nArrCol+nDxPos].pShadowAttr->GetLocation() == SVX_SHADOW_NONE;
+                            pRowInfo[nArrRow].pCellInfo[nArrCol+nDxPos].pShadowAttr->GetLocation() == SvxShadowLocation::NONE;
                     bool bTopDiff = !bTop &&
-                            pRowInfo[nArrRow-1].pCellInfo[nArrCol].pShadowAttr->GetLocation() == SVX_SHADOW_NONE;
+                            pRowInfo[nArrRow-1].pCellInfo[nArrCol].pShadowAttr->GetLocation() == SvxShadowLocation::NONE;
                     bool bBottomDiff = !bBottom &&
-                            pRowInfo[nArrRow+1].pCellInfo[nArrCol].pShadowAttr->GetLocation() == SVX_SHADOW_NONE;
+                            pRowInfo[nArrRow+1].pCellInfo[nArrCol].pShadowAttr->GetLocation() == SvxShadowLocation::NONE;
 
                     if ( bLayoutRTL )
                     {
                         switch (eLoc)
                         {
-                            case SVX_SHADOW_BOTTOMRIGHT: eLoc = SVX_SHADOW_BOTTOMLEFT;  break;
-                            case SVX_SHADOW_BOTTOMLEFT:  eLoc = SVX_SHADOW_BOTTOMRIGHT; break;
-                            case SVX_SHADOW_TOPRIGHT:    eLoc = SVX_SHADOW_TOPLEFT;     break;
-                            case SVX_SHADOW_TOPLEFT:     eLoc = SVX_SHADOW_TOPRIGHT;    break;
+                            case SvxShadowLocation::BottomRight: eLoc = SvxShadowLocation::BottomLeft;  break;
+                            case SvxShadowLocation::BottomLeft:  eLoc = SvxShadowLocation::BottomRight; break;
+                            case SvxShadowLocation::TopRight:    eLoc = SvxShadowLocation::TopLeft;     break;
+                            case SvxShadowLocation::TopLeft:     eLoc = SvxShadowLocation::TopRight;    break;
                             default:
                             {
                                 // added to avoid warnings
@@ -869,7 +823,7 @@ void ScDocument::FillInfo(
 
                     switch (eLoc)
                     {
-                        case SVX_SHADOW_BOTTOMRIGHT:
+                        case SvxShadowLocation::BottomRight:
                             if (bBottomDiff)
                             {
                                 pRowInfo[nArrRow+1].pCellInfo[nArrCol].pHShadowOrigin = pThisAttr;
@@ -889,7 +843,7 @@ void ScDocument::FillInfo(
                             }
                             break;
 
-                        case SVX_SHADOW_BOTTOMLEFT:
+                        case SvxShadowLocation::BottomLeft:
                             if (bBottomDiff)
                             {
                                 pRowInfo[nArrRow+1].pCellInfo[nArrCol].pHShadowOrigin = pThisAttr;
@@ -909,7 +863,7 @@ void ScDocument::FillInfo(
                             }
                             break;
 
-                        case SVX_SHADOW_TOPRIGHT:
+                        case SvxShadowLocation::TopRight:
                             if (bTopDiff)
                             {
                                 pRowInfo[nArrRow-1].pCellInfo[nArrCol].pHShadowOrigin = pThisAttr;
@@ -929,7 +883,7 @@ void ScDocument::FillInfo(
                             }
                             break;
 
-                        case SVX_SHADOW_TOPLEFT:
+                        case SvxShadowLocation::TopLeft:
                             if (bTopDiff)
                             {
                                 pRowInfo[nArrRow-1].pCellInfo[nArrCol].pHShadowOrigin = pThisAttr;
@@ -970,7 +924,6 @@ void ScDocument::FillInfo(
 
     svx::frame::Array& rArray = rTabInfo.maArray;
     rArray.Initialize( nColCount, nRowCount );
-    rArray.SetUseDiagDoubleClipping( false );
 
     for( size_t nRow = 0; nRow < nRowCount; ++nRow )
     {
@@ -1008,17 +961,17 @@ void ScDocument::FillInfo(
                 SCROW nCurrDocRow = static_cast< SCROW >( (nCellInfoY > 0) ? rThisRowInfo.nRowNo : (nRow1 - 1) );
 
                 // find entire merged range in document, returns signed document coordinates
-                SCsCOL nFirstRealDocColS, nLastRealDocColS;
-                SCsROW nFirstRealDocRowS, nLastRealDocRowS;
-                lcl_GetMergeRange( static_cast< SCsCOL >( nCurrDocCol ), static_cast< SCsROW >( nCurrDocRow ),
-                    nCellInfoY, this, pRowInfo, nCol1,nRow1,nCol2,nRow2,nTab,
+                SCCOL nFirstRealDocColS, nLastRealDocColS;
+                SCROW nFirstRealDocRowS, nLastRealDocRowS;
+                lcl_GetMergeRange( nCurrDocCol, nCurrDocRow,
+                    nCellInfoY, this, pRowInfo, nCol1,nRow1,nTab,
                     nFirstRealDocColS, nFirstRealDocRowS, nLastRealDocColS, nLastRealDocRowS );
 
                 // *complete* merged range in document coordinates
-                SCCOL nFirstRealDocCol = static_cast< SCCOL >( nFirstRealDocColS );
-                SCROW nFirstRealDocRow = static_cast< SCROW >( nFirstRealDocRowS );
-                SCCOL nLastRealDocCol  = static_cast< SCCOL >( nLastRealDocColS );
-                SCROW nLastRealDocRow  = static_cast< SCROW >( nLastRealDocRowS );
+                SCCOL nFirstRealDocCol = nFirstRealDocColS;
+                SCROW nFirstRealDocRow = nFirstRealDocRowS;
+                SCCOL nLastRealDocCol  = nLastRealDocColS;
+                SCROW nLastRealDocRow  = nLastRealDocRowS;
 
                 // first visible column (nX1-1 is first processed document column)
                 SCCOL nFirstDocCol = (nCol1 > 0) ? ::std::max< SCCOL >( nFirstRealDocCol, nCol1 - 1 ) : nFirstRealDocCol;
@@ -1091,9 +1044,9 @@ void ScDocument::FillInfo(
                     if( const ScPatternAttr* pPattern = GetPattern( nFirstRealDocCol, nFirstRealDocRow, nTab ) )
                     {
                         const SfxItemSet* pCond = GetCondResult( nFirstRealDocCol, nFirstRealDocRow, nTab );
-                        pBox = static_cast< const SvxBoxItem* >( &pPattern->GetItem( ATTR_BORDER, pCond ) );
-                        pTLBR = static_cast< const SvxLineItem* >( &pPattern->GetItem( ATTR_BORDER_TLBR, pCond ) );
-                        pBLTR = static_cast< const SvxLineItem* >( &pPattern->GetItem( ATTR_BORDER_BLTR, pCond ) );
+                        pBox = &pPattern->GetItem( ATTR_BORDER, pCond );
+                        pTLBR = &pPattern->GetItem( ATTR_BORDER_TLBR, pCond );
+                        pBLTR = &pPattern->GetItem( ATTR_BORDER_BLTR, pCond );
                     }
                     else
                     {
@@ -1125,19 +1078,19 @@ void ScDocument::FillInfo(
         rArray.MirrorSelfX();
 }
 
-ScTableInfo::ScTableInfo()
-    : mpRowInfo(new RowInfo[ROWINFO_MAX])
+ScTableInfo::ScTableInfo(const SCSIZE capacity)
+    : mpRowInfo(new RowInfo[capacity])
     , mnArrCount(0)
+    , mnArrCapacity(capacity)
     , mbPageMode(false)
 {
-    memset(mpRowInfo, 0, ROWINFO_MAX*sizeof(RowInfo));
+    memset(static_cast<void*>(mpRowInfo.get()), 0, mnArrCapacity * sizeof(RowInfo));
 }
 
 ScTableInfo::~ScTableInfo()
 {
-    for( sal_uInt16 nIdx = 0; nIdx < ROWINFO_MAX; ++nIdx )
+    for( SCSIZE nIdx = 0; nIdx < mnArrCapacity; ++nIdx )
         delete [] mpRowInfo[ nIdx ].pCellInfo;
-    delete [] mpRowInfo;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

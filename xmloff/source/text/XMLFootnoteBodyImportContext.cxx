@@ -27,7 +27,6 @@
 #include <com/sun/star/xml/sax/XAttributeList.hpp>
 
 using ::com::sun::star::uno::Reference;
-using ::com::sun::star::beans::XPropertySet;
 using ::com::sun::star::xml::sax::XAttributeList;
 
 
@@ -39,7 +38,7 @@ XMLFootnoteBodyImportContext::XMLFootnoteBodyImportContext(
 {
 }
 
-SvXMLImportContext* XMLFootnoteBodyImportContext::CreateChildContext(
+SvXMLImportContextRef XMLFootnoteBodyImportContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
@@ -50,7 +49,7 @@ SvXMLImportContext* XMLFootnoteBodyImportContext::CreateChildContext(
                                                        nPrefix,
                                                        rLocalName,
                                                        xAttrList,
-                                                       XML_TEXT_TYPE_FOOTNOTE);
+                                                       XMLTextType::Footnote);
     if( !pContext )
         pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
 

@@ -19,14 +19,14 @@
 
 #include "CellLineStyleValueSet.hxx"
 #include <i18nlangtag/mslangid.hxx>
+#include <vcl/event.hxx>
 #include <vcl/settings.hxx>
 
 namespace sc { namespace sidebar {
 
-CellLineStyleValueSet::CellLineStyleValueSet( vcl::Window* pParent, const ResId& rResId)
-:   ValueSet( pParent, rResId ),
-    pVDev(nullptr),
-    nSelItem(0)
+CellLineStyleValueSet::CellLineStyleValueSet(vcl::Window* pParent)
+    : ValueSet(pParent, WB_TABSTOP)
+    , nSelItem(0)
 {
     SetColCount();
     SetLineCount( 9);
@@ -37,10 +37,9 @@ CellLineStyleValueSet::~CellLineStyleValueSet()
     disposeOnce();
 }
 
-void CellLineStyleValueSet::dispose()
+Size CellLineStyleValueSet::GetOptimalSize() const
 {
-    pVDev.disposeAndClear();
-    ValueSet::dispose();
+    return LogicToPixel(Size(80, 12 * 9), MapMode(MapUnit::MapAppFont));
 }
 
 void CellLineStyleValueSet::SetUnit(const OUString* str)
@@ -68,7 +67,7 @@ void CellLineStyleValueSet::SetSelItem(sal_uInt16 nSel)
 
 void CellLineStyleValueSet::UserDraw( const UserDrawEvent& rUDEvt )
 {
-    Rectangle aRect = rUDEvt.GetRect();
+    tools::Rectangle aRect = rUDEvt.GetRect();
     vcl::RenderContext* pDev = rUDEvt.GetRenderContext();
     sal_uInt16  nItemId = rUDEvt.GetItemId();
 
@@ -82,19 +81,15 @@ void CellLineStyleValueSet::UserDraw( const UserDrawEvent& rUDEvt )
 
     vcl::Font aFont(OutputDevice::GetDefaultFont(DefaultFontType::UI_SANS, MsLangId::getSystemLanguage(), GetDefaultFontFlags::OnlyOne));
     Size aSize = aFont.GetFontSize();
-    aSize.Height() = nRectHeight*3/5;
+    aSize.setHeight( nRectHeight*3/5 );
     aFont.SetFontSize( aSize );
-
-    long  nTLX = aBLPos.X() + 5,  nTLY = aBLPos.Y() + ( nRectHeight - nItemId )/2;
-    long  nTRX = aBLPos.X() + nRectWidth * 7 / 9 - 15, nTRY = aBLPos.Y() + ( nRectHeight - nItemId )/2;
 
     if( nSelItem ==  nItemId )
     {
-        Color aBackColor(50,107,197);
-        Rectangle aBackRect = aRect;
-        aBackRect.Top() += 3;
-        aBackRect.Bottom() -= 2;
-        pDev->SetFillColor(aBackColor);
+        tools::Rectangle aBackRect = aRect;
+        aBackRect.AdjustTop(3 );
+        aBackRect.AdjustBottom( -2 );
+        pDev->SetFillColor(Color(50,107,197));
         pDev->DrawRect(aBackRect);
     }
     else
@@ -104,13 +99,16 @@ void CellLineStyleValueSet::UserDraw( const UserDrawEvent& rUDEvt )
     }
 
     //draw text
-    if(nSelItem ==  nItemId )
+    if (nSelItem ==  nItemId )
         aFont.SetColor(COL_WHITE);
     else
         aFont.SetColor(GetSettings().GetStyleSettings().GetFieldTextColor()); //high contrast
 
     pDev->SetFont(aFont);
-    Point aStart(aBLPos.X() + nRectWidth * 7 / 9 - 5 , aBLPos.Y() + nRectHeight/6);
+    long nTextWidth = pDev->GetTextWidth(maStrUnit[nItemId - 1]);
+    long nTLX = aBLPos.X() + 5,  nTLY = aBLPos.Y() + ( nRectHeight - nItemId )/2;
+    long nTRX = aBLPos.X() + nRectWidth - nTextWidth - 15, nTRY = aBLPos.Y() + ( nRectHeight - nItemId )/2;
+    Point aStart(aBLPos.X() + nRectWidth - nTextWidth - 5 , aBLPos.Y() + nRectHeight/6);
     pDev->DrawText(aStart, maStrUnit[nItemId - 1]); //can't set DrawTextFlags::EndEllipsis here, or the text will disappear
 
     //draw line
@@ -131,27 +129,27 @@ void CellLineStyleValueSet::UserDraw( const UserDrawEvent& rUDEvt )
         case 2:
         case 3:
         case 4:
-            pDev->DrawRect(Rectangle(nTLX, nTLY , nTRX, nTRY + nItemId * 2 - 1 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY , nTRX, nTRY + nItemId * 2 - 1 ));
             break;
         case 5:
-            pDev->DrawRect(Rectangle(nTLX, nTLY , nTRX, nTRY + 1 ));
-            pDev->DrawRect(Rectangle(nTLX, nTLY + 3 , nTRX, nTRY + 4 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY , nTRX, nTRY + 1 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY + 3 , nTRX, nTRY + 4 ));
             break;
         case 6:
-            pDev->DrawRect(Rectangle(nTLX, nTLY , nTRX, nTRY + 1 ));
-            pDev->DrawRect(Rectangle(nTLX, nTLY + 5 , nTRX, nTRY + 6 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY , nTRX, nTRY + 1 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY + 5 , nTRX, nTRY + 6 ));
             break;
         case 7:
-            pDev->DrawRect(Rectangle(nTLX, nTLY , nTRX, nTRY + 1 ));
-            pDev->DrawRect(Rectangle(nTLX, nTLY + 3 , nTRX, nTRY + 6 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY , nTRX, nTRY + 1 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY + 3 , nTRX, nTRY + 6 ));
             break;
         case 8:
-            pDev->DrawRect(Rectangle(nTLX, nTLY , nTRX, nTRY + 3 ));
-            pDev->DrawRect(Rectangle(nTLX, nTLY + 5 , nTRX, nTRY + 6 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY , nTRX, nTRY + 3 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY + 5 , nTRX, nTRY + 6 ));
             break;
         case 9:
-            pDev->DrawRect(Rectangle(nTLX, nTLY , nTRX, nTRY + 3 ));
-            pDev->DrawRect(Rectangle(nTLX, nTLY + 5 , nTRX, nTRY + 8 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY , nTRX, nTRY + 3 ));
+            pDev->DrawRect(tools::Rectangle(nTLX, nTLY + 5 , nTRX, nTRY + 8 ));
             break;
     }
 

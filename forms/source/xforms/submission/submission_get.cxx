@@ -25,7 +25,6 @@
 #include <rtl/strbuf.hxx>
 #include <rtl/string.hxx>
 #include <osl/file.hxx>
-#include <comphelper/processfactory.hxx>
 #include <ucbhelper/content.hxx>
 #include <com/sun/star/io/Pipe.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
@@ -70,7 +69,7 @@ CSubmission::SubmissionResult CSubmissionGet::submit(const css::uno::Reference< 
 
     // append query string to the URL
     try {
-        OStringBuffer aUTF8QueryURL(OUStringToOString(m_aURLObj.GetMainURL(INetURLObject::NO_DECODE),
+        OStringBuffer aUTF8QueryURL(OUStringToOString(m_aURLObj.GetMainURL(INetURLObject::DecodeMechanism::NONE),
             RTL_TEXTENCODING_UTF8));
         OStringBuffer aQueryString;
 

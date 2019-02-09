@@ -17,27 +17,39 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/config.h>
 
 #include <cassert>
 
 #include <comphelper/string.hxx>
-#include <vcl/msgbox.hxx>
+#include <unotools/charclass.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#include "reffact.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "rangenam.hxx"
-#include "globalnames.hxx"
-#include "dbnamdlg.hxx"
+#include <reffact.hxx>
+#include <document.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <rangenam.hxx>
+#include <globalnames.hxx>
+#include <dbnamdlg.hxx>
 #include <dbdocfun.hxx>
 
 class DBSaveData;
 
 static DBSaveData* pSaveObj = nullptr;
 
-#define ERRORBOX(s) ScopedVclPtrInstance<MessageDialog>::Create(this, s)->Execute()
+namespace
+{
+    void ERRORBOX(weld::Window* pParent, const OUString& rString)
+    {
+        std::unique_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent,
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  rString));
+        xBox->run();
+    }
+}
 
 //  class DBSaveData
 
@@ -148,7 +160,7 @@ ScDbNameDlg::ScDbNameDlg(SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pPar
     m_pFTSource->SetStyle(m_pFTSource->GetStyle() | WB_NOLABEL);
     m_pFTOperations->SetStyle(m_pFTOperations->GetStyle() | WB_NOLABEL);
 
-    //  damit die Strings in der Resource bei den FixedTexten bleiben koennen:
+    //  so that the strings in the resource can stay with fixed texts:
     aStrSource      = m_pFTSource->GetText();
     aStrOperations  = m_pFTOperations->GetText();
 
@@ -216,14 +228,13 @@ void ScDbNameDlg::Init()
         pViewData->GetSimpleArea( nStartCol, nStartRow, nStartTab,
                                   nEndCol,   nEndRow,  nEndTab );
 
-        theCurArea = ScRange( ScAddress( nStartCol, nStartRow, nStartTab ),
-                              ScAddress( nEndCol,   nEndRow,   nEndTab ) );
+        theCurArea = ScRange( nStartCol, nStartRow, nStartTab, nEndCol, nEndRow, nEndTab);
 
         theAreaStr = theCurArea.Format(ScRefFlags::RANGE_ABS_3D, pDoc, aAddrDetails);
 
         if ( pDBColl )
         {
-            // Feststellen, ob definierter DB-Bereich markiert wurde:
+            // determine if the defined DB area has been marked:
             pDBData = pDBColl->GetDBAtCursor( nStartCol, nStartRow, nStartTab, ScDBDataPortion::TOP_LEFT );
             if ( pDBData )
             {
@@ -283,8 +294,8 @@ void ScDbNameDlg::SetInfoStrings( const ScDBData* pDBData )
     m_pFTOperations->SetText(aBuf.makeStringAndClear());
 }
 
-// Uebergabe eines mit der Maus selektierten Tabellenbereiches, der dann als
-//  neue Selektion im Referenz-Fenster angezeigt wird.
+// Transfer of a table area selected with the mouse, which is then displayed
+// as a new selection in the reference window.
 
 void ScDbNameDlg::SetReference( const ScRange& rRef, ScDocument* pDocP )
 {
@@ -313,9 +324,9 @@ void ScDbNameDlg::SetActive()
 {
     m_pEdAssign->GrabFocus();
 
-    //  kein NameModifyHdl, weil sonst Bereiche nicht geaendert werden koennen
-    //  (nach dem Aufziehen der Referenz wuerde der alte Inhalt wieder angezeigt)
-    //  (der ausgewaehlte DB-Name hat sich auch nicht veraendert)
+    //  No NameModifyHdl, because otherwise areas can not be changed
+    //  (the old content would be displayed again after the reference selection is pulled)
+    //  (the selected DB name has not changed either)
 
     RefInputDone();
 }
@@ -333,9 +344,8 @@ void ScDbNameDlg::UpdateNames()
 
     if (!rDBs.empty())
     {
-        DBsType::const_iterator itr = rDBs.begin(), itrEnd = rDBs.end();
-        for (; itr != itrEnd; ++itr)
-            m_pEdName->InsertEntry((*itr)->GetName());
+        for (const auto& rxDB : rDBs)
+            m_pEdName->InsertEntry(rxDB->GetName());
     }
     else
     {
@@ -388,13 +398,13 @@ bool ScDbNameDlg::IsRefInputMode() const
 
 // Handler:
 
-IMPL_LINK_NOARG_TYPED(ScDbNameDlg, OkBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScDbNameDlg, OkBtnHdl, Button*, void)
 {
     AddBtnHdl( nullptr );
 
-    // Der View die Aenderungen und die Remove-Liste uebergeben:
-    // beide werden nur als Referenz uebergeben, so dass an dieser
-    // Stelle keine Speicherleichen entstehen koennen:
+    // Pass the changes and the remove list to the view: both are
+    // transferred as a reference only, so that no dead memory can
+    // be created at this point:
     if ( pViewData )
     {
         ScDBDocFunc aFunc(*pViewData->GetDocShell());
@@ -404,21 +414,21 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, OkBtnHdl, Button*, void)
     Close();
 }
 
-IMPL_LINK_NOARG_TYPED(ScDbNameDlg, CancelBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScDbNameDlg, CancelBtnHdl, Button*, void)
 {
     Close();
 }
 
-IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AddBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScDbNameDlg, AddBtnHdl, Button*, void)
 {
     OUString  aNewName = comphelper::string::strip(m_pEdName->GetText(), ' ');
     OUString  aNewArea = m_pEdAssign->GetText();
 
     if ( !aNewName.isEmpty() && !aNewArea.isEmpty() )
     {
-        if ( ScRangeData::IsNameValid( aNewName, pDoc ) && aNewName != STR_DB_LOCAL_NONAME )
+        if ( ScRangeData::IsNameValid( aNewName, pDoc ) == ScRangeData::NAME_VALID && aNewName != STR_DB_LOCAL_NONAME )
         {
-            //  weil jetzt editiert werden kann, muss erst geparst werden
+            //  because editing can be done now, parsing is needed first
             ScRange aTmpRange;
             OUString aText = m_pEdAssign->GetText();
             if ( aTmpRange.ParseAny( aText, pDoc, aAddrDetails ) & ScRefFlags::VALID )
@@ -430,7 +440,7 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AddBtnHdl, Button*, void)
                 ScDBData* pOldEntry = aLocalDbCol.getNamedDBs().findByUpperName(ScGlobal::pCharClass->uppercase(aNewName));
                 if (pOldEntry)
                 {
-                    //  Bereich veraendern
+                    //  modify area
 
                     pOldEntry->MoveTo( aStart.Tab(), aStart.Col(), aStart.Row(),
                                                         aEnd.Col(), aEnd.Row() );
@@ -443,18 +453,18 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AddBtnHdl, Button*, void)
                 }
                 else
                 {
-                    //  neuen Bereich einfuegen
+                    //  insert new area
 
-                    ScDBData* pNewEntry = new ScDBData( aNewName, aStart.Tab(),
+                    std::unique_ptr<ScDBData> pNewEntry(new ScDBData( aNewName, aStart.Tab(),
                                                         aStart.Col(), aStart.Row(),
                                                         aEnd.Col(), aEnd.Row(),
                                                         true, m_pBtnHeader->IsChecked(),
-                                                        m_pBtnTotals->IsChecked() );
+                                                        m_pBtnTotals->IsChecked() ));
                     pNewEntry->SetDoSize( m_pBtnDoSize->IsChecked() );
                     pNewEntry->SetKeepFmt( m_pBtnKeepFmt->IsChecked() );
                     pNewEntry->SetStripData( m_pBtnStripData->IsChecked() );
 
-                    bool ins = aLocalDbCol.getNamedDBs().insert(pNewEntry);
+                    bool ins = aLocalDbCol.getNamedDBs().insert(std::move(pNewEntry));
                     assert(ins); (void)ins;
                 }
 
@@ -471,7 +481,7 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AddBtnHdl, Button*, void)
                 m_pBtnDoSize->Check( false );
                 m_pBtnKeepFmt->Check( false );
                 m_pBtnStripData->Check( false );
-                SetInfoStrings( nullptr );     // leer
+                SetInfoStrings( nullptr );     // empty
                 theCurArea = ScRange();
                 bSaved = true;
                 pSaveObj->Save();
@@ -479,14 +489,14 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AddBtnHdl, Button*, void)
             }
             else
             {
-                ERRORBOX( aStrInvalid );
+                ERRORBOX(GetFrameWeld(), aStrInvalid);
                 m_pEdAssign->SetSelection( Selection( 0, SELECTION_MAX ) );
                 m_pEdAssign->GrabFocus();
             }
         }
         else
         {
-            ERRORBOX( ScGlobal::GetRscString(STR_INVALIDNAME) );
+            ERRORBOX(GetFrameWeld(), ScResId(STR_INVALIDNAME));
             m_pEdName->SetSelection( Selection( 0, SELECTION_MAX ) );
             m_pEdName->GrabFocus();
         }
@@ -495,20 +505,20 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AddBtnHdl, Button*, void)
 
 namespace {
 
-class FindByName : public ::std::unary_function<std::unique_ptr<ScDBData>, bool>
+class FindByName
 {
     const OUString& mrName;
 public:
     explicit FindByName(const OUString& rName) : mrName(rName) {}
     bool operator() (std::unique_ptr<ScDBData> const& p) const
     {
-        return p->GetName().equals(mrName);
+        return p->GetName() == mrName;
     }
 };
 
 }
 
-IMPL_LINK_NOARG_TYPED(ScDbNameDlg, RemoveBtnHdl, Button*, void)
+IMPL_LINK_NOARG(ScDbNameDlg, RemoveBtnHdl, Button*, void)
 {
     OUString aStrEntry = m_pEdName->GetText();
     ScDBCollection::NamedDBs& rDBs = aLocalDbCol.getNamedDBs();
@@ -517,23 +527,24 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, RemoveBtnHdl, Button*, void)
 
     if (itr != rDBs.end())
     {
-        OUString aStrDelMsg = ScGlobal::GetRscString( STR_QUERY_DELENTRY );
+        OUString aStrDelMsg = ScResId( STR_QUERY_DELENTRY );
 
         OUStringBuffer aBuf;
         aBuf.append(aStrDelMsg.getToken(0, '#'));
         aBuf.append(aStrEntry);
         aBuf.append(aStrDelMsg.getToken(1, '#'));
-        ScopedVclPtrInstance< QueryBox > aBox(this, WinBits(WB_YES_NO|WB_DEF_YES), aBuf.makeStringAndClear());
-
-        if (RET_YES == aBox->Execute())
+        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                       aBuf.makeStringAndClear()));
+        xQueryBox->set_default_response(RET_YES);
+        if (RET_YES == xQueryBox->run())
         {
             SCTAB nTab;
             SCCOL nColStart, nColEnd;
             SCROW nRowStart, nRowEnd;
             (*itr)->GetArea( nTab, nColStart, nRowStart, nColEnd, nRowEnd );
-            aRemoveList.push_back(
-                ScRange( ScAddress( nColStart, nRowStart, nTab ),
-                         ScAddress( nColEnd,   nRowEnd,   nTab ) ) );
+            aRemoveList.emplace_back( ScAddress( nColStart, nRowStart, nTab ),
+                         ScAddress( nColEnd,   nRowEnd,   nTab ) );
 
             rDBs.erase(itr);
 
@@ -551,7 +562,7 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, RemoveBtnHdl, Button*, void)
             m_pBtnDoSize->Check( false );
             m_pBtnKeepFmt->Check( false );
             m_pBtnStripData->Check( false );
-            SetInfoStrings( nullptr );     // leer
+            SetInfoStrings( nullptr );     // empty
             bSaved=false;
             pSaveObj->Restore();
             NameModifyHdl( *m_pEdName );
@@ -559,7 +570,7 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, RemoveBtnHdl, Button*, void)
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDbNameDlg, NameModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(ScDbNameDlg, NameModifyHdl, Edit&, void)
 {
     OUString  theName     = m_pEdName->GetText();
     bool    bNameFound  = (COMBOBOX_ENTRY_NOTFOUND
@@ -575,8 +586,8 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, NameModifyHdl, Edit&, void)
         m_pOptions->Disable();
         //bSaved=sal_False;
         //pSaveObj->Restore();
-        //@BugID 54702 Enablen/Disablen nur noch in Basisklasse
-        //SFX_APPWINDOW->Disable(sal_False);        //! allgemeine Methode im ScAnyRefDlg
+        //@BugID 54702 enable/disable in the base class only
+        //SFX_APPWINDOW->Disable(sal_False);        //! general method in ScAnyRefDlg
         bRefInputMode = false;
     }
     else
@@ -616,15 +627,15 @@ IMPL_LINK_NOARG_TYPED(ScDbNameDlg, NameModifyHdl, Edit&, void)
 
         m_pAssignFrame->Enable();
 
-        //@BugID 54702 Enablen/Disablen nur noch in Basisklasse
+        //@BugID 54702 enable/disable in the base class only
         //SFX_APPWINDOW->Enable();
         bRefInputMode = true;
     }
 }
 
-IMPL_LINK_NOARG_TYPED(ScDbNameDlg, AssModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(ScDbNameDlg, AssModifyHdl, Edit&, void)
 {
-    //  hier parsen fuer Save() etc.
+    //  parse here for Save(), etc.
 
     ScRange aTmpRange;
     OUString aText = m_pEdAssign->GetText();

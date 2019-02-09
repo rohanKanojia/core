@@ -19,9 +19,9 @@
 
 
 #include "paralleltimecontainer.hxx"
-#include "delayevent.hxx"
+#include <delayevent.hxx>
 
-#include <boost/mem_fn.hpp>
+#include <functional>
 
 namespace slideshow {
 namespace internal {
@@ -32,8 +32,7 @@ void ParallelTimeContainer::activate_st()
     std::size_t const nResolvedNodes =
         static_cast<std::size_t>(std::count_if(
                                      maChildren.begin(), maChildren.end(),
-                                     boost::mem_fn(&AnimationNode::resolve) ));
-    (void) nResolvedNodes; // avoid warning
+                                     std::mem_fn(&AnimationNode::resolve) ));
     OSL_ENSURE( nResolvedNodes == maChildren.size(),
                 "### resolving all children failed!" );
 

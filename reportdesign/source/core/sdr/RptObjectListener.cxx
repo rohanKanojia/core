@@ -16,9 +16,9 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "RptObjectListener.hxx"
-#include "RptObject.hxx"
-#include "RptDef.hxx"
+#include <RptObjectListener.hxx>
+#include <RptObject.hxx>
+#include <RptDef.hxx>
 
 namespace rptui
 {
@@ -39,14 +39,14 @@ OObjectListener::~OObjectListener()
 // XEventListener
 
 
-void SAL_CALL OObjectListener::disposing( const  css::lang::EventObject& ) throw( css::uno::RuntimeException, std::exception)
+void SAL_CALL OObjectListener::disposing( const  css::lang::EventObject& )
 {
 }
 
 // XPropertyChangeListener
 
 
-void SAL_CALL OObjectListener::propertyChange( const  css::beans::PropertyChangeEvent& evt ) throw( css::uno::RuntimeException, std::exception)
+void SAL_CALL OObjectListener::propertyChange( const  css::beans::PropertyChangeEvent& evt )
 {
     m_pObject->_propertyChange( evt );
 }

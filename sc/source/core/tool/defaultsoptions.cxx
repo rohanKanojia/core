@@ -10,10 +10,14 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <osl/diagnose.h>
 
-#include "defaultsoptions.hxx"
-#include "miscuno.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
+#include <defaultsoptions.hxx>
+#include <miscuno.hxx>
+#include <global.hxx>
+#include <attrib.hxx>
+#include <scitems.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <sc.hrc>
 
 using namespace utl;
 using namespace com::sun::star::uno;
@@ -24,28 +28,10 @@ ScDefaultsOptions::ScDefaultsOptions()
     SetDefaults();
 }
 
-ScDefaultsOptions::ScDefaultsOptions( const ScDefaultsOptions& rCpy ) :
-    nInitTabCount( rCpy.nInitTabCount ),
-    aInitTabPrefix( rCpy.aInitTabPrefix )
-{
-}
-
-ScDefaultsOptions::~ScDefaultsOptions()
-{
-}
-
 void ScDefaultsOptions::SetDefaults()
 {
     nInitTabCount  = 1;
-    aInitTabPrefix = ScGlobal::GetRscString(STR_TABLE_DEF); // Default Prefix "Sheet"
-}
-
-ScDefaultsOptions& ScDefaultsOptions::operator=( const ScDefaultsOptions& rCpy )
-{
-    nInitTabCount  = rCpy.nInitTabCount;
-    aInitTabPrefix = rCpy.aInitTabPrefix;
-
-    return *this;
+    aInitTabPrefix = ScResId(STR_TABLE_DEF); // Default Prefix "Sheet"
 }
 
 bool ScDefaultsOptions::operator==( const ScDefaultsOptions& rOpt ) const
@@ -54,15 +40,9 @@ bool ScDefaultsOptions::operator==( const ScDefaultsOptions& rOpt ) const
         && rOpt.aInitTabPrefix == aInitTabPrefix;
 }
 
-ScTpDefaultsItem::ScTpDefaultsItem( sal_uInt16 nWhichP, const ScDefaultsOptions& rOpt ) :
-    SfxPoolItem ( nWhichP ),
+ScTpDefaultsItem::ScTpDefaultsItem( const ScDefaultsOptions& rOpt ) :
+    SfxPoolItem ( SID_SCDEFAULTSOPTIONS ),
     theOptions  ( rOpt )
-{
-}
-
-ScTpDefaultsItem::ScTpDefaultsItem( const ScTpDefaultsItem& rItem ) :
-    SfxPoolItem ( rItem ),
-    theOptions  ( rItem.theOptions )
 {
 }
 
@@ -87,25 +67,15 @@ SfxPoolItem* ScTpDefaultsItem::Clone( SfxItemPool * ) const
 
 #define SCDEFAULTSOPT_TAB_COUNT  0
 #define SCDEFAULTSOPT_TAB_PREFIX 1
-#define SCDEFAULTSOPT_COUNT      2
 
 Sequence<OUString> ScDefaultsCfg::GetPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "Sheet/SheetCount", // SCDEFAULTSOPT_TAB_COUNT
-        "Sheet/SheetPrefix" // SCDEFAULTSOPT_TAB_PREFIX
-    };
-    Sequence<OUString> aNames(SCDEFAULTSOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for (int i = 0; i < SCDEFAULTSOPT_COUNT; ++i)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"Sheet/SheetCount",   // SCDEFAULTSOPT_TAB_COUNT
+            "Sheet/SheetPrefix"}; // SCDEFAULTSOPT_TAB_PREFIX
 }
 
 ScDefaultsCfg::ScDefaultsCfg() :
-    ConfigItem( OUString( CFGPATH_FORMULA ) )
+    ConfigItem( CFGPATH_FORMULA )
 {
     OUString aPrefix;
 

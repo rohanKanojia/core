@@ -20,16 +20,19 @@
 #include <svx/svdlayer.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
+#include <svx/svdviter.hxx>
+#include <svx/svdview.hxx>
 
-#include "strings.hrc"
-#include "glob.hxx"
-#include "glob.hrc"
-#include "app.hrc"
+#include <strings.hrc>
+#include <strings.hxx>
+#include <glob.hxx>
+#include <app.hrc>
 
-#include "unmodpg.hxx"
-#include "sdpage.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
+#include <unmodpg.hxx>
+#include <sdpage.hxx>
+#include <sdresid.hxx>
+#include <unokywds.hxx>
+#include <drawdoc.hxx>
 
 
 ModifyPageUndoAction::ModifyPageUndoAction(
@@ -55,9 +58,9 @@ ModifyPageUndoAction::ModifyPageUndoAction(
     {
         maOldName = mpPage->GetName();
         SdrLayerAdmin& rLayerAdmin = mpDoc->GetLayerAdmin();
-        sal_uInt8 aBckgrnd = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRND), false);
-        sal_uInt8 aBckgrndObj = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false);
-        SetOfByte aVisibleLayers = mpPage->TRG_GetMasterPageVisibleLayers();
+        SdrLayerID aBckgrnd = rLayerAdmin.GetLayerID(sUNO_LayerName_background);
+        SdrLayerID aBckgrndObj = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
+        SdrLayerIDSet aVisibleLayers = mpPage->TRG_GetMasterPageVisibleLayers();
 
         mbOldBckgrndVisible = aVisibleLayers.IsSet(aBckgrnd);
         mbOldBckgrndObjsVisible = aVisibleLayers.IsSet(aBckgrndObj);
@@ -68,11 +71,9 @@ ModifyPageUndoAction::ModifyPageUndoAction(
         mbOldBckgrndObjsVisible = false;
     }
 
-    maComment = SD_RESSTR(STR_UNDO_MODIFY_PAGE);
+    SetComment( SdResId(STR_UNDO_MODIFY_PAGE) );
 }
 
-#include <svx/svdviter.hxx>
-#include <svx/svdview.hxx>
 void ModifyPageUndoAction::Undo()
 {
     // invalidate Selection, there could be objects deleted in this UNDO
@@ -95,7 +96,7 @@ void ModifyPageUndoAction::Undo()
         {
             mpPage->SetName(maOldName);
 
-            if (mpPage->GetPageKind() == PK_STANDARD)
+            if (mpPage->GetPageKind() == PageKind::Standard)
             {
                 SdPage* pNotesPage = static_cast<SdPage*>(mpDoc->GetPage(mpPage->GetPageNum() + 1));
                 pNotesPage->SetName(maOldName);
@@ -103,9 +104,9 @@ void ModifyPageUndoAction::Undo()
         }
 
         SdrLayerAdmin& rLayerAdmin = mpDoc->GetLayerAdmin();
-        sal_uInt8 aBckgrnd = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRND), false);
-        sal_uInt8 aBckgrndObj = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false);
-        SetOfByte aVisibleLayers;
+        SdrLayerID aBckgrnd = rLayerAdmin.GetLayerID(sUNO_LayerName_background);
+        SdrLayerID aBckgrndObj = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
+        SdrLayerIDSet aVisibleLayers;
         aVisibleLayers.Set(aBckgrnd, mbOldBckgrndVisible);
         aVisibleLayers.Set(aBckgrndObj, mbOldBckgrndObjsVisible);
         mpPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
@@ -138,7 +139,7 @@ void ModifyPageUndoAction::Redo()
         {
             mpPage->SetName(maNewName);
 
-            if (mpPage->GetPageKind() == PK_STANDARD)
+            if (mpPage->GetPageKind() == PageKind::Standard)
             {
                 SdPage* pNotesPage = static_cast<SdPage*>(mpDoc->GetPage(mpPage->GetPageNum() + 1));
                 pNotesPage->SetName(maNewName);
@@ -146,9 +147,9 @@ void ModifyPageUndoAction::Redo()
         }
 
         SdrLayerAdmin& rLayerAdmin = mpDoc->GetLayerAdmin();
-        sal_uInt8 aBckgrnd = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRND), false);
-        sal_uInt8 aBckgrndObj = rLayerAdmin.GetLayerID(SD_RESSTR(STR_LAYER_BCKGRNDOBJ), false);
-        SetOfByte aVisibleLayers;
+        SdrLayerID aBckgrnd = rLayerAdmin.GetLayerID(sUNO_LayerName_background);
+        SdrLayerID aBckgrndObj = rLayerAdmin.GetLayerID(sUNO_LayerName_background_objects);
+        SdrLayerIDSet aVisibleLayers;
         aVisibleLayers.Set(aBckgrnd, mbNewBckgrndVisible);
         aVisibleLayers.Set(aBckgrndObj, mbNewBckgrndObjsVisible);
         mpPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
@@ -163,11 +164,6 @@ ModifyPageUndoAction::~ModifyPageUndoAction()
 {
 }
 
-OUString ModifyPageUndoAction::GetComment() const
-{
-    return maComment;
-}
-
 RenameLayoutTemplateUndoAction::RenameLayoutTemplateUndoAction(
     SdDrawDocument* pDocument,
     const OUString& rOldLayoutName,
@@ -175,7 +171,7 @@ RenameLayoutTemplateUndoAction::RenameLayoutTemplateUndoAction(
     : SdUndoAction(pDocument)
     , maOldName(rOldLayoutName)
     , maNewName(rNewLayoutName)
-    , maComment(SD_RESSTR(STR_TITLE_RENAMESLIDE))
+    , maComment(SdResId(STR_TITLE_RENAMESLIDE))
 {
     sal_Int32 nPos = maOldName.indexOf(SD_LT_SEPARATOR);
     if (nPos != -1)
@@ -184,13 +180,13 @@ RenameLayoutTemplateUndoAction::RenameLayoutTemplateUndoAction(
 
 void RenameLayoutTemplateUndoAction::Undo()
 {
-    OUString aLayoutName(maNewName + SD_LT_SEPARATOR + SD_RESSTR(STR_LAYOUT_OUTLINE));
+    OUString aLayoutName(maNewName + SD_LT_SEPARATOR STR_LAYOUT_OUTLINE);
     mpDoc->RenameLayoutTemplate( aLayoutName, maOldName );
 }
 
 void RenameLayoutTemplateUndoAction::Redo()
 {
-    OUString aLayoutName(maOldName + SD_LT_SEPARATOR + SD_RESSTR(STR_LAYOUT_OUTLINE));
+    OUString aLayoutName(maOldName + SD_LT_SEPARATOR STR_LAYOUT_OUTLINE);
     mpDoc->RenameLayoutTemplate( aLayoutName, maNewName );
 }
 

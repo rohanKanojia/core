@@ -18,10 +18,9 @@
  */
 
 #include <string.h>
-#include "TConnection.hxx"
+#include <TConnection.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <comphelper/types.hxx>
-#include <comphelper/officeresourcebundle.hxx>
 #include <connectivity/dbexception.hxx>
 
 using namespace connectivity;
@@ -42,11 +41,11 @@ void OMetaConnection::disposing()
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     m_xMetaData = WeakReference< XDatabaseMetaData>();
-    for (OWeakRefArray::iterator i = m_aStatements.begin(); m_aStatements.end() != i; ++i)
+    for (auto const& statement : m_aStatements)
     {
         try
         {
-            Reference< XInterface > xStatement( i->get() );
+            Reference< XInterface > xStatement( statement.get() );
             ::comphelper::disposeComponent( xStatement );
         }
         catch (const DisposedException&)
@@ -56,26 +55,18 @@ void OMetaConnection::disposing()
     m_aStatements.clear();
 }
 //XUnoTunnel
-sal_Int64 SAL_CALL OMetaConnection::getSomething( const ::com::sun::star::uno::Sequence< sal_Int8 >& rId ) throw (::com::sun::star::uno::RuntimeException, std::exception)
+sal_Int64 SAL_CALL OMetaConnection::getSomething( const css::uno::Sequence< sal_Int8 >& rId )
 {
     return (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
         ? reinterpret_cast< sal_Int64 >( this )
-        : (sal_Int64)0;
+        : sal_Int64(0);
 }
 
 Sequence< sal_Int8 > OMetaConnection::getUnoTunnelImplementationId()
 {
-    static ::cppu::OImplementationId * pId = nullptr;
-    if (! pId)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (! pId)
-        {
-            static ::cppu::OImplementationId aId;
-            pId = &aId;
-        }
-    }
-    return pId->getImplementationId();
+    static ::cppu::OImplementationId implId;
+
+    return implId.getImplementationId();
 }
 
 ::dbtools::OPropertyMap& OMetaConnection::getPropMap()
@@ -84,11 +75,11 @@ Sequence< sal_Int8 > OMetaConnection::getUnoTunnelImplementationId()
     return s_aPropertyNameMap;
 }
 
-void OMetaConnection::throwGenericSQLException( sal_uInt16 _nErrorResourceId,const Reference< XInterface>& _xContext )
+void OMetaConnection::throwGenericSQLException(const char* pErrorResourceId, const Reference< XInterface>& _xContext )
 {
     OUString sErrorMessage;
-    if ( _nErrorResourceId )
-        sErrorMessage = m_aResources.getResourceString( _nErrorResourceId );
+    if (pErrorResourceId)
+        sErrorMessage = m_aResources.getResourceString(pErrorResourceId);
     Reference< XInterface> xContext = _xContext;
     if ( !xContext.is() )
         xContext = *this;

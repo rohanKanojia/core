@@ -17,9 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/configuration.hxx>
 #include <officecfg/Office/Common.hxx>
+#include <sal/log.hxx>
 
 #include "vlccommon.hxx"
 #include "vlcmanager.hxx"
@@ -29,20 +32,20 @@ using namespace ::com::sun::star;
 #define IMPL_NAME    "com.sun.star.comp.media.Manager_VLC"
 #define SERVICE_NAME "com.sun.star.comp.avmedia.Manager_VLC"
 
-static uno::Reference< uno::XInterface > SAL_CALL create_MediaPlayer( const uno::Reference< lang::XMultiServiceFactory >& rxFact )
+static uno::Reference< uno::XInterface > create_MediaPlayer( const uno::Reference< lang::XMultiServiceFactory >& /*rxFact*/ )
 {
-    SAL_INFO("avmedia", "create VLC Media player !\n");
+    SAL_INFO("avmedia", "create VLC Media player !");
 
     // Experimental for now - code is neither elegant nor well tested.
     uno::Reference< uno::XComponentContext > xContext = comphelper::getProcessComponentContext();
     if (!xContext.is() || !officecfg::Office::Common::Misc::ExperimentalMode::get(xContext))
         return nullptr;
 
-    static uno::Reference< uno::XInterface > manager( *new ::avmedia::vlc::Manager( rxFact ) );
+    static uno::Reference< uno::XInterface > manager( *new ::avmedia::vlc::Manager );
     return manager;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL avmediavlc_component_getFactory( const sal_Char* pImplName, void* pServiceManager, void* /*pRegistryKey*/ )
+extern "C" SAL_DLLPUBLIC_EXPORT void* avmediavlc_component_getFactory( const sal_Char* pImplName, void* pServiceManager, void* /*pRegistryKey*/ )
 {
     uno::Reference< lang::XSingleServiceFactory > xFactory;
     void*                                   pRet = nullptr;
@@ -52,7 +55,7 @@ extern "C" SAL_DLLPUBLIC_EXPORT void* SAL_CALL avmediavlc_component_getFactory( 
     if (!xContext.is() || !officecfg::Office::Common::Misc::ExperimentalMode::get(xContext))
         return nullptr;
 
-    SAL_INFO("avmedia", "Create VLC Media component: '" << pImplName << "'\n");
+    SAL_INFO("avmedia", "Create VLC Media component: " << pImplName);
     if( rtl_str_compare( pImplName, IMPL_NAME ) == 0 )
     {
         const OUString aServiceName( SERVICE_NAME );

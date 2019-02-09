@@ -27,11 +27,11 @@
 #include <com/sun/star/animations/Event.hpp>
 
 #include "generateevent.hxx"
-#include "shape.hxx"
-#include "subsettableshapemanager.hxx"
-#include "usereventqueue.hxx"
-#include "slideshowcontext.hxx"
-#include "delayevent.hxx"
+#include <shape.hxx>
+#include <subsettableshapemanager.hxx>
+#include <usereventqueue.hxx>
+#include <slideshowcontext.hxx>
+#include <delayevent.hxx>
 
 namespace slideshow {
 namespace internal {
@@ -188,7 +188,7 @@ EventSharedPtr generateEvent(
         case animations::EventTrigger::ON_PREV:
             OSL_FAIL( "event trigger ON_PREV not yet implemented, "
                         "mapped to ON_NEXT!" );
-            // FALLTHROUGH intended
+            [[fallthrough]];
         case animations::EventTrigger::ON_NEXT:
             pEvent = makeDelay( rFunctor,
                                 nDelay2 + nAdditionalDelay,

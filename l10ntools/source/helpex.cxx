@@ -17,22 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <cstring>
 
-#include "sal/main.h"
+#include <sal/main.h>
 
-#include "helpmerge.hxx"
-#include "common.hxx"
+#include <helpmerge.hxx>
+#include <common.hxx>
 #include <memory>
 
 #ifndef TESTDRIVER
 
-void WriteUsage()
+static void WriteUsage()
 {
     std::cout
         << (" Syntax: Helpex -[m]i FileIn -o FileOut [-m DataBase] [-l Lang]\n"
@@ -89,12 +89,12 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
                 while( !aInput.eof() )
                 {
                     // coverity[tainted_data] - this is a build time tool
-                    const OString sXhpFile( sTemp.data(), (sal_Int32)sTemp.length() );
+                    const OString sXhpFile( sTemp.data(), static_cast<sal_Int32>(sTemp.length()) );
                     HelpParser aParser( sXhpFile );
                     const OString sOutput(
                         aArgs.m_sOutputFile +
                         sXhpFile.copy( sXhpFile.lastIndexOf('/') ));
-                    if( !aParser.Merge( aArgs.m_sMergeSrc, sOutput,
+                    if( !aParser.Merge( sOutput,
                         aArgs.m_sLanguage, pMergeDataFile.get() ))
                     {
                         hasNoError = false;
@@ -113,17 +113,18 @@ SAL_IMPLEMENT_MAIN_WITH_ARGS(argc, argv)
                 }
                 hasNoError =
                     aParser.Merge(
-                        aArgs.m_sMergeSrc, aArgs.m_sOutputFile,
+                        aArgs.m_sOutputFile,
                         aArgs.m_sLanguage, pMergeDataFile.get() );
             }
         }
         else
         {
             HelpParser aParser( aArgs.m_sInputFile );
+            std::unique_ptr<XMLFile> xmlfile(new XMLFile( OString('0') ));
             hasNoError =
                 HelpParser::CreatePO(
                     aArgs.m_sOutputFile, aArgs.m_sInputFile,
-                    new XMLFile( OString('0') ), "help" );
+                    xmlfile.get(), "help" );
         }
     }
     catch (std::exception& e)

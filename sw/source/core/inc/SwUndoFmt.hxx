@@ -42,9 +42,9 @@ protected:
     bool bAuto;
 
 public:
-    SwUndoFormatCreate(SwUndoId nUndoId, SwFormat * pNew, SwFormat * pDerivedFrom,
+    SwUndoFormatCreate(SwUndoId nUndoId, SwFormat * pNew, SwFormat const * pDerivedFrom,
                     SwDoc * pDoc);
-    virtual ~SwUndoFormatCreate();
+    virtual ~SwUndoFormatCreate() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -61,14 +61,14 @@ class SwUndoFormatDelete : public SwUndo
 protected:
     OUString sDerivedFrom;
     SwDoc * pDoc;
-    OUString sOldName;
-    SfxItemSet aOldSet;
+    OUString const sOldName;
+    SfxItemSet const aOldSet;
     sal_uInt16 nId;     // FormatId related
     bool bAuto;
 
 public:
-    SwUndoFormatDelete(SwUndoId nUndoId, SwFormat * pOld, SwDoc * pDoc);
-    virtual ~SwUndoFormatDelete();
+    SwUndoFormatDelete(SwUndoId nUndoId, SwFormat const * pOld, SwDoc * pDoc);
+    virtual ~SwUndoFormatDelete() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -90,7 +90,7 @@ public:
     SwUndoRenameFormat(SwUndoId nUndoId, const OUString & sOldName,
                     const OUString & sNewName,
                     SwDoc * pDoc);
-    virtual ~SwUndoRenameFormat();
+    virtual ~SwUndoRenameFormat() override;
 
     virtual void UndoImpl( ::sw::UndoRedoContext & ) override;
     virtual void RedoImpl( ::sw::UndoRedoContext & ) override;
@@ -103,7 +103,7 @@ public:
 class SwUndoTextFormatCollCreate : public SwUndoFormatCreate
 {
 public:
-    SwUndoTextFormatCollCreate(SwTextFormatColl * pNew, SwTextFormatColl * pDerivedFrom,
+    SwUndoTextFormatCollCreate(SwTextFormatColl * pNew, SwTextFormatColl const * pDerivedFrom,
                            SwDoc * pDoc);
 
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
@@ -114,7 +114,7 @@ public:
 class SwUndoTextFormatCollDelete : public SwUndoFormatDelete
 {
 public:
-    SwUndoTextFormatCollDelete(SwTextFormatColl * pOld, SwDoc * pDoc);
+    SwUndoTextFormatCollDelete(SwTextFormatColl const * pOld, SwDoc * pDoc);
 
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
     virtual void Delete(SwFormat * pFormat) override;
@@ -124,14 +124,14 @@ public:
 class SwUndoCondTextFormatCollCreate : public SwUndoTextFormatCollCreate
 {
 public:
-    SwUndoCondTextFormatCollCreate(SwConditionTextFormatColl * pNew, SwTextFormatColl * pDerivedFrom, SwDoc * pDoc);
+    SwUndoCondTextFormatCollCreate(SwConditionTextFormatColl * pNew, SwTextFormatColl const * pDerivedFrom, SwDoc * pDoc);
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
 };
 
 class SwUndoCondTextFormatCollDelete : public SwUndoTextFormatCollDelete
 {
 public:
-    SwUndoCondTextFormatCollDelete(SwTextFormatColl * pOld, SwDoc * pDoc);
+    SwUndoCondTextFormatCollDelete(SwTextFormatColl const * pOld, SwDoc * pDoc);
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
 };
 
@@ -148,7 +148,7 @@ public:
 class SwUndoCharFormatCreate : public SwUndoFormatCreate
 {
 public:
-    SwUndoCharFormatCreate(SwCharFormat * pNew, SwCharFormat * pDerivedFrom,
+    SwUndoCharFormatCreate(SwCharFormat * pNew, SwCharFormat const * pDerivedFrom,
                            SwDoc * pDoc);
 
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
@@ -159,7 +159,7 @@ public:
 class SwUndoCharFormatDelete : public SwUndoFormatDelete
 {
 public:
-    SwUndoCharFormatDelete(SwCharFormat * pOld, SwDoc * pDoc);
+    SwUndoCharFormatDelete(SwCharFormat const * pOld, SwDoc * pDoc);
 
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
     virtual void Delete(SwFormat * pFormat) override;
@@ -178,10 +178,8 @@ public:
 
 class SwUndoFrameFormatCreate : public SwUndoFormatCreate
 {
-    bool bAuto;
-
 public:
-    SwUndoFrameFormatCreate(SwFrameFormat * pNew, SwFrameFormat * pDerivedFrom,
+    SwUndoFrameFormatCreate(SwFrameFormat * pNew, SwFrameFormat const * pDerivedFrom,
                        SwDoc * pDoc);
 
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
@@ -192,7 +190,7 @@ public:
 class SwUndoFrameFormatDelete : public SwUndoFormatDelete
 {
 public:
-    SwUndoFrameFormatDelete(SwFrameFormat * pOld, SwDoc * pDoc);
+    SwUndoFrameFormatDelete(SwFrameFormat const * pOld, SwDoc * pDoc);
 
     virtual SwFormat * Create(SwFormat * pDerivedFrom) override;
     virtual void Delete(SwFormat * pFormat) override;

@@ -17,19 +17,24 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unx/fontcache.hxx"
-#include "impfont.hxx"
-#include "unx/fontmanager.hxx"
+#include <memory>
+#include <unx/fontmanager.hxx>
+#include <impfont.hxx>
+#include <comphelper/sequence.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/sysdata.hxx>
 #include <vcl/vclenum.hxx>
 #include <vcl/wrkwin.hxx>
-#include "fontinstance.hxx"
+#include <fontinstance.hxx>
+#include <sallayout.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <i18nutil/unicode.hxx>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <unicode/uchar.h>
 #include <unicode/uscript.h>
+#include <officecfg/Office/Common.hxx>
+#include <org/freedesktop/PackageKit/SyncDbusSessionHelper.hpp>
 
 using namespace psp;
 
@@ -37,21 +42,16 @@ using namespace psp;
 #include <ft2build.h>
 #include <fontconfig/fcfreetype.h>
 
-#if ENABLE_DBUS
-#include <dbus/dbus-glib.h>
-#endif
-
 #include <cstdio>
 #include <cstdarg>
 
-#include <unotools/atom.hxx>
 #include <unotools/configmgr.hxx>
 
-#include "osl/module.h"
-#include "osl/thread.h"
-#include "osl/process.h"
+#include <osl/module.h>
+#include <osl/thread.h>
+#include <osl/process.h>
 
-#include "rtl/ustrbuf.hxx"
+#include <rtl/ustrbuf.hxx>
 
 #include <utility>
 #include <algorithm>
@@ -81,21 +81,19 @@ public:
     void clear();
 
 public:
-    FcResult LocalizedElementFromPattern(FcPattern* pPattern, FcChar8 **family,
+    FcResult LocalizedElementFromPattern(FcPattern const * pPattern, FcChar8 **family,
                                          const char *elementtype, const char *elementlangtype);
 //to-do, make private and add some cleaner accessor methods
-    std::unordered_map< OString, OString, OStringHash > m_aFontNameToLocalized;
-    std::unordered_map< OString, OString, OStringHash > m_aLocalizedToCanonical;
+    std::unordered_map< OString, OString > m_aFontNameToLocalized;
+    std::unordered_map< OString, OString > m_aLocalizedToCanonical;
 private:
     void cacheLocalizedFontNames(const FcChar8 *origfontname, const FcChar8 *bestfontname, const std::vector< lang_and_element > &lang_and_elements);
 
-    LanguageTag* m_pLanguageTag;
+    std::unique_ptr<LanguageTag> m_pLanguageTag;
 };
 
 FontCfgWrapper::FontCfgWrapper()
-    :
-        m_pOutlineSet( nullptr ),
-        m_pLanguageTag( nullptr )
+    : m_pOutlineSet( nullptr )
 {
     FcInit();
 }
@@ -119,6 +117,13 @@ void FontCfgWrapper::addFontSet( FcSetName eSetName )
         FcResult eOutRes = FcPatternGetBool( pPattern, FC_OUTLINE, 0, &bOutline );
         if( (eOutRes != FcResultMatch) || (bOutline == FcFalse) )
             continue;
+
+        // Ignore Type 1 fonts, too.
+        FcChar8* pFormat = nullptr;
+        FcResult eFormatRes = FcPatternGetString(pPattern, FC_FONTFORMAT, 0, &pFormat);
+        if ((eFormatRes == FcResultMatch) && (strcmp(reinterpret_cast<char*>(pFormat), "Type 1") == 0))
+            continue;
+
         FcPatternReference( pPattern );
         FcFontSetAdd( m_pOutlineSet, pPattern );
     }
@@ -143,7 +148,7 @@ namespace
 
     //Sort fonts so that fonts with the same family name are side-by-side, with
     //those with higher version numbers first
-    class SortFont : public ::std::binary_function< const FcPattern*, const FcPattern*, bool >
+    class SortFont
     {
     public:
         bool operator()(const FcPattern *a, const FcPattern *b)
@@ -170,7 +175,7 @@ namespace
     //See if this font is a duplicate with equal attributes which has already been
     //inserted, or if it an older version of an inserted fonts. Depends on FcFontSet
     //on being sorted with SortFont
-    bool isPreviouslyDuplicateOrObsoleted(FcFontSet *pFSet, int i)
+    bool isPreviouslyDuplicateOrObsoleted(FcFontSet const *pFSet, int i)
     {
         const FcPattern *a = pFSet->fonts[i];
 
@@ -215,8 +220,7 @@ FcFontSet* FontCfgWrapper::getFontSet()
     {
         m_pOutlineSet = FcFontSetCreate();
         addFontSet( FcSetSystem );
-        if( FcGetVersion() > 20400 ) // #i85462# prevent crashes
-            addFontSet( FcSetApplication );
+        addFontSet( FcSetApplication );
 
         ::std::sort(m_pOutlineSet->fonts,m_pOutlineSet->fonts+m_pOutlineSet->nfont,SortFont());
     }
@@ -258,22 +262,21 @@ namespace
         FcChar8* candidate = elements.begin()->second;
         /* FIXME-BCP47: once fontconfig supports language tags this
          * language-territory stuff needs to be changed! */
-        SAL_INFO_IF( !rLangTag.isIsoLocale(), "i18n", "localizedsorter::bestname - not an ISO locale");
+        SAL_INFO_IF( !rLangTag.isIsoLocale(), "vcl.fonts", "localizedsorter::bestname - not an ISO locale");
         OString sLangMatch(OUStringToOString(rLangTag.getLanguage().toAsciiLowerCase(), RTL_TEXTENCODING_UTF8));
         OString sFullMatch = sLangMatch;
         sFullMatch += OString('-');
         sFullMatch += OUStringToOString(rLangTag.getCountry().toAsciiLowerCase(), RTL_TEXTENCODING_UTF8);
 
-        std::vector<lang_and_element>::const_iterator aEnd = elements.end();
         bool alreadyclosematch = false;
         bool found_fallback_englishname = false;
-        for( std::vector<lang_and_element>::const_iterator aIter = elements.begin(); aIter != aEnd; ++aIter )
+        for (auto const& element : elements)
         {
-            const char *pLang = reinterpret_cast<const char*>(aIter->first);
-            if( rtl_str_compare( pLang, sFullMatch.getStr() ) == 0)
+            const char *pLang = reinterpret_cast<const char*>(element.first);
+            if( sFullMatch == pLang)
             {
                 // both language and country match
-                candidate = aIter->second;
+                candidate = element.second;
                 break;
             }
             else if( alreadyclosematch )
@@ -282,10 +285,10 @@ namespace
                 // override candidate only if there is a full match
                 continue;
             }
-            else if( rtl_str_compare( pLang, sLangMatch.getStr()) == 0)
+            else if( sLangMatch == pLang)
             {
                 // just the language matches
-                candidate = aIter->second;
+                candidate = element.second;
                 alreadyclosematch = true;
             }
             else if( found_fallback_englishname )
@@ -298,7 +301,7 @@ namespace
             {
                 // select a fallback candidate of the first english element
                 // name
-                candidate = aIter->second;
+                candidate = element.second;
                 found_fallback_englishname = true;
             }
         }
@@ -310,10 +313,9 @@ namespace
 void FontCfgWrapper::cacheLocalizedFontNames(const FcChar8 *origfontname, const FcChar8 *bestfontname,
     const std::vector< lang_and_element > &lang_and_elements)
 {
-    std::vector<lang_and_element>::const_iterator aEnd = lang_and_elements.end();
-    for (std::vector<lang_and_element>::const_iterator aIter = lang_and_elements.begin(); aIter != aEnd; ++aIter)
+    for (auto const& element : lang_and_elements)
     {
-        const char *candidate = reinterpret_cast<const char*>(aIter->second);
+        const char *candidate = reinterpret_cast<const char*>(element.second);
         if (rtl_str_compare(candidate, reinterpret_cast<const char*>(bestfontname)) != 0)
             m_aFontNameToLocalized[OString(candidate)] = OString(reinterpret_cast<const char*>(bestfontname));
     }
@@ -321,7 +323,7 @@ void FontCfgWrapper::cacheLocalizedFontNames(const FcChar8 *origfontname, const 
         m_aLocalizedToCanonical[OString(reinterpret_cast<const char*>(bestfontname))] = OString(reinterpret_cast<const char*>(origfontname));
 }
 
-FcResult FontCfgWrapper::LocalizedElementFromPattern(FcPattern* pPattern, FcChar8 **element,
+FcResult FontCfgWrapper::LocalizedElementFromPattern(FcPattern const * pPattern, FcChar8 **element,
                                                      const char *elementtype, const char *elementlangtype)
 {                                                /* e. g.:      ^ FC_FAMILY              ^ FC_FAMILYLANG */
     FcChar8 *origelement;
@@ -334,7 +336,7 @@ FcResult FontCfgWrapper::LocalizedElementFromPattern(FcPattern* pPattern, FcChar
         if (FcPatternGetString( pPattern, elementlangtype, 0, &elementlang ) == FcResultMatch)
         {
             std::vector< lang_and_element > lang_and_elements;
-            lang_and_elements.push_back(lang_and_element(elementlang, *element));
+            lang_and_elements.emplace_back(elementlang, *element);
             int k = 1;
             while (true)
             {
@@ -342,7 +344,7 @@ FcResult FontCfgWrapper::LocalizedElementFromPattern(FcPattern* pPattern, FcChar
                     break;
                 if (FcPatternGetString( pPattern, elementtype, k, element ) != FcResultMatch)
                     break;
-                lang_and_elements.push_back(lang_and_element(elementlang, *element));
+                lang_and_elements.emplace_back(elementlang, *element);
                 ++k;
             }
 
@@ -351,7 +353,7 @@ FcResult FontCfgWrapper::LocalizedElementFromPattern(FcPattern* pPattern, FcChar
             {
                 rtl_Locale* pLoc = nullptr;
                 osl_getProcessLocale(&pLoc);
-                m_pLanguageTag = new LanguageTag(*pLoc);
+                m_pLanguageTag.reset( new LanguageTag(*pLoc) );
             }
             *element = bestname(lang_and_elements, *m_pLanguageTag);
 
@@ -373,8 +375,7 @@ void FontCfgWrapper::clear()
         FcFontSetDestroy( m_pOutlineSet );
         m_pOutlineSet = nullptr;
     }
-    delete m_pLanguageTag;
-    m_pLanguageTag = nullptr;
+    m_pLanguageTag.reset();
 }
 
 /*
@@ -466,20 +467,16 @@ static void lcl_FcFontSetRemove(FcFontSet* pFSet, int i)
     memmove(pFSet->fonts + i, pFSet->fonts + i + 1, nTail*sizeof(FcPattern*));
 }
 
-void PrintFontManager::countFontconfigFonts( std::unordered_map<OString, int, OStringHash>& o_rVisitedPaths )
+void PrintFontManager::countFontconfigFonts( std::unordered_map<OString, int>& o_rVisitedPaths )
 {
-#if OSL_DEBUG_LEVEL > 1
     int nFonts = 0;
-#endif
     FontCfgWrapper& rWrapper = FontCfgWrapper::get();
 
     FcFontSet* pFSet = rWrapper.getFontSet();
-    const bool bMinimalFontset = utl::ConfigManager::IsAvoidConfig();
+    const bool bMinimalFontset = utl::ConfigManager::IsFuzzing();
     if( pFSet )
     {
-#if OSL_DEBUG_LEVEL > 1
-        fprintf( stderr, "found %d entries in fontconfig fontset\n", pFSet->nfont );
-#endif
+        SAL_INFO("vcl.fonts", "found " << pFSet->nfont << " entries in fontconfig fontset");
         for( int i = 0; i < pFSet->nfont; i++ )
         {
             FcChar8* file = nullptr;
@@ -509,20 +506,17 @@ void PrintFontManager::countFontconfigFonts( std::unordered_map<OString, int, OS
             if( eFileRes != FcResultMatch || eFamilyRes != FcResultMatch || eOutRes != FcResultMatch )
                 continue;
 
-#if (OSL_DEBUG_LEVEL > 2)
-            fprintf( stderr, "found font \"%s\" in file %s\n"
-                     "   weight = %d, slant = %d, style = \"%s\"\n"
-                     "   width = %d, spacing = %d, outline = %d, format %s\n"
-                     , family, file
-                     , eWeightRes == FcResultMatch ? weight : -1
-                     , eSpacRes == FcResultMatch ? slant : -1
-                     , eStyleRes == FcResultMatch ? (const char*) style : "<nil>"
-                     , eWeightRes == FcResultMatch ? width : -1
-                     , eSpacRes == FcResultMatch ? spacing : -1
-                     , eOutRes == FcResultMatch ? outline : -1
-                     , eFormatRes == FcResultMatch ? (const char*)format : "<unknown>"
-                     );
-#endif
+            SAL_INFO(
+                "vcl.fonts.detail",
+                "found font \"" << family << "\" in file " << file << ", weight = "
+                << (eWeightRes == FcResultMatch ? weight : -1) << ", slant = "
+                << (eSpacRes == FcResultMatch ? slant : -1) << ", style = \""
+                << (eStyleRes == FcResultMatch ? reinterpret_cast<const char*>(style) : "<nil>")
+                << "\",  width = " << (eWeightRes == FcResultMatch ? width : -1) << ", spacing = "
+                << (eSpacRes == FcResultMatch ? spacing : -1) << ", outline = "
+                << (eOutRes == FcResultMatch ? outline : -1) << ", format "
+                << (eFormatRes == FcResultMatch
+                    ? reinterpret_cast<const char*>(format) : "<unknown>"));
 
 //            OSL_ASSERT(eOutRes != FcResultMatch || outline);
 
@@ -532,38 +526,28 @@ void PrintFontManager::countFontconfigFonts( std::unordered_map<OString, int, OS
 
             if (isPreviouslyDuplicateOrObsoleted(pFSet, i))
             {
-#if OSL_DEBUG_LEVEL > 2
-                fprintf(stderr, "Ditching %s as duplicate/obsolete\n", file);
-#endif
+                SAL_INFO("vcl.fonts.detail", "Ditching " << file << " as duplicate/obsolete");
                 continue;
             }
 
             // see if this font is already cached
             // update attributes
-            std::list< PrintFont* > aFonts;
             OString aDir, aBase, aOrgPath( reinterpret_cast<char*>(file) );
             splitPath( aOrgPath, aDir, aBase );
 
             o_rVisitedPaths[aDir] = 1;
 
-            int nDirID = getDirectoryAtom( aDir, true );
-            if( ! m_pFontCache->getFontCacheFile( nDirID, aBase, aFonts ) )
+            int nDirID = getDirectoryAtom( aDir );
+            SAL_INFO("vcl.fonts.detail", "file " << aBase << " not cached");
+            // not known, analyze font file to get attributes
+            // not described by fontconfig (e.g. alias names, PSName)
+            if (eFormatRes != FcResultMatch)
+                format = nullptr;
+            std::vector<std::unique_ptr<PrintFont>> aFonts = analyzeFontFile( nDirID, aBase, reinterpret_cast<char*>(format) );
+            if(aFonts.empty())
             {
-#if OSL_DEBUG_LEVEL > 2
-                fprintf( stderr, "file %s not cached\n", aBase.getStr() );
-#endif
-                // not known, analyze font file to get attributes
-                // not described by fontconfig (e.g. alias names, PSName)
-                if (eFormatRes != FcResultMatch)
-                    format = nullptr;
-                analyzeFontFile( nDirID, aBase, aFonts, reinterpret_cast<char*>(format) );
-#if OSL_DEBUG_LEVEL > 1
-                if( aFonts.empty() )
-                    fprintf( stderr, "Warning: file \"%s\" is unusable to psprint\n", aOrgPath.getStr() );
-#endif
-            }
-            if( aFonts.empty() )
-            {
+                SAL_INFO(
+                    "vcl.fonts", "Warning: file \"" << aOrgPath << "\" is unusable to psprint");
                 //remove font, reuse index
                 //we want to remove unusable fonts here, in case there is a usable font
                 //which duplicates the properties of the unusable one
@@ -574,91 +558,74 @@ void PrintFontManager::countFontconfigFonts( std::unordered_map<OString, int, OS
                 continue;
             }
 
-            int nFamilyName = m_pAtoms->getAtom( ATOM_FAMILYNAME, OStringToOUString( OString( reinterpret_cast<char*>(family) ), RTL_TEXTENCODING_UTF8 ) );
-            PrintFont* pUpdate = aFonts.front();
-            std::list<PrintFont*>::const_iterator second_font = aFonts.begin();
-            ++second_font;
-            if( second_font != aFonts.end() ) // more than one font
+            std::unique_ptr<PrintFont> xUpdate;
+
+            if (aFonts.size() == 1) // one font
+                xUpdate = std::move(aFonts.front());
+            else // more than one font
             {
                 // a collection entry, get the correct index
                 if( eIndexRes == FcResultMatch && nCollectionEntry != -1 )
                 {
-                    for( std::list< PrintFont* >::iterator it = aFonts.begin(); it != aFonts.end(); ++it )
+                    for (auto & font : aFonts)
                     {
-                        if( (*it)->m_eType == fonttype::TrueType &&
-                            static_cast<TrueTypeFontFile*>(*it)->m_nCollectionEntry == nCollectionEntry )
+                        if( font->m_nCollectionEntry == nCollectionEntry )
                         {
-                            pUpdate = *it;
+                            xUpdate = std::move(font);
                             break;
                         }
                     }
+                }
+
+                if (xUpdate)
+                {
                     // update collection entry
                     // additional entries will be created in the cache
                     // if this is a new index (that is if the loop above
                     // ran to the end of the list)
-                    if( pUpdate->m_eType == fonttype::TrueType ) // sanity check, this should always be the case here
-                        static_cast<TrueTypeFontFile*>(pUpdate)->m_nCollectionEntry = nCollectionEntry;
+                    xUpdate->m_nCollectionEntry = nCollectionEntry;
                 }
                 else
                 {
-#if OSL_DEBUG_LEVEL > 1
-                    fprintf( stderr, "multiple fonts for file, but no index in fontconfig pattern ! (index res = %d collection entry = %d\nfile will not be used\n", eIndexRes, nCollectionEntry );
-#endif
+                    SAL_INFO(
+                        "vcl.fonts",
+                        "multiple fonts for file, but no index in fontconfig pattern ! (index res ="
+                        << eIndexRes << " collection entry = " << nCollectionEntry
+                        << "; file will not be used");
                     // we have found more than one font in this file
                     // but fontconfig will not tell us which index is meant
                     // -> something is in disorder, do not use this font
-                    pUpdate = nullptr;
                 }
             }
 
-            if( pUpdate )
+            if (xUpdate)
             {
                 // set family name
-                if( pUpdate->m_nFamilyName != nFamilyName )
-                {
-                }
                 if( eWeightRes == FcResultMatch )
-                    pUpdate->m_eWeight = convertWeight(weight);
+                    xUpdate->m_eWeight = convertWeight(weight);
                 if( eWidthRes == FcResultMatch )
-                    pUpdate->m_eWidth = convertWidth(width);
+                    xUpdate->m_eWidth = convertWidth(width);
                 if( eSpacRes == FcResultMatch )
-                    pUpdate->m_ePitch = convertSpacing(spacing);
+                    xUpdate->m_ePitch = convertSpacing(spacing);
                 if( eSlantRes == FcResultMatch )
-                    pUpdate->m_eItalic = convertSlant(slant);
+                    xUpdate->m_eItalic = convertSlant(slant);
                 if( eStyleRes == FcResultMatch )
                 {
-                    pUpdate->m_aStyleName = OStringToOUString( OString( reinterpret_cast<char*>(style) ), RTL_TEXTENCODING_UTF8 );
+                    xUpdate->m_aStyleName = OStringToOUString( OString( reinterpret_cast<char*>(style) ), RTL_TEXTENCODING_UTF8 );
                 }
 
-                // update font cache
-                m_pFontCache->updateFontCacheEntry( pUpdate, false );
                 // sort into known fonts
                 fontID aFont = m_nNextFontID++;
-                m_aFonts[ aFont ] = pUpdate;
+                m_aFonts[ aFont ] = std::move(xUpdate);
                 m_aFontFileToFontID[ aBase ].insert( aFont );
-#if OSL_DEBUG_LEVEL > 1
                 nFonts++;
-#endif
-#if OSL_DEBUG_LEVEL > 2
-                fprintf( stderr, "inserted font %s as fontID %d\n", family, aFont );
-#endif
-            }
-            // clean up the fonts we did not put into the list
-            for( std::list< PrintFont* >::iterator it = aFonts.begin(); it != aFonts.end(); ++it )
-            {
-                if( *it != pUpdate )
-                {
-                    m_pFontCache->updateFontCacheEntry( *it, false ); // prepare a cache entry for a collection item
-                    delete *it;
-                }
+                SAL_INFO("vcl.fonts.detail", "inserted font " << family << " as fontID " << aFont);
             }
         }
     }
 
     // how does one get rid of the config ?
-#if OSL_DEBUG_LEVEL > 1
-    fprintf( stderr, "inserted %d fonts from fontconfig\n", nFonts );
-#endif
+    SAL_INFO("vcl.fonts", "inserted " << nFonts << " fonts from fontconfig");
 }
 
 void PrintFontManager::deinitFontconfig()
@@ -666,22 +633,15 @@ void PrintFontManager::deinitFontconfig()
     FontCfgWrapper::release();
 }
 
-bool PrintFontManager::addFontconfigDir( const OString& rDirName )
+void PrintFontManager::addFontconfigDir( const OString& rDirName )
 {
-    // workaround for a stability problems in older FC versions
-    // when handling application specific fonts
-    const int nVersion = FcGetVersion();
-    if( nVersion <= 20400 )
-        return false;
     const char* pDirName = rDirName.getStr();
     bool bDirOk = (FcConfigAppFontAddDir(FcConfigGetCurrent(), reinterpret_cast<FcChar8 const *>(pDirName) ) == FcTrue);
 
-#if OSL_DEBUG_LEVEL > 1
-    fprintf( stderr, "FcConfigAppFontAddDir( \"%s\") => %d\n", pDirName, bDirOk );
-#endif
+    SAL_INFO("vcl.fonts", "FcConfigAppFontAddDir( \"" << pDirName << "\") => " << bDirOk);
 
     if( !bDirOk )
-        return false;
+        return;
 
     // load dir-specific fc-config file too if available
     const OString aConfFileName = rDirName + "/fc_local.conf";
@@ -693,9 +653,9 @@ bool PrintFontManager::addFontconfigDir( const OString& rDirName )
                         reinterpret_cast<FcChar8 const *>(aConfFileName.getStr()), FcTrue);
         if( !bCfgOk )
             fprintf( stderr, "FcConfigParseAndLoad( \"%s\") => %d\n", aConfFileName.getStr(), bCfgOk );
+    } else {
+        SAL_INFO("vcl.fonts", "cannot open " << aConfFileName);
     }
-
-    return true;
 }
 
 static void addtopattern(FcPattern *pPattern,
@@ -858,7 +818,7 @@ namespace
             default:
                 break;
         }
-        SAL_WARN_IF(bIsImpossible, "vcl", "In glyph fallback throwing away the language property of "
+        SAL_WARN_IF(bIsImpossible, "vcl.fonts", "In glyph fallback throwing away the language property of "
             << sLang << " because the detected script for '0x"
             << OUString::number(currentChar, 16)
             << "' is " << uscript_getName(eScript)
@@ -866,88 +826,40 @@ namespace
         return bIsImpossible;
     }
 
-    LanguageTag getExemplarLangTagForCodePoint(sal_uInt32 currentChar)
+    OUString getExemplarLangTagForCodePoint(sal_uInt32 currentChar)
     {
         int32_t script = u_getIntPropertyValue(currentChar, UCHAR_SCRIPT);
         UScriptCode eScript = static_cast<UScriptCode>(script);
         OStringBuffer aBuf(unicode::getExemplarLanguageForUScriptCode(eScript));
-        const char* pScriptCode = uscript_getShortName(eScript);
-        if (pScriptCode)
+        if (const char* pScriptCode = uscript_getShortName(eScript))
             aBuf.append('-').append(pScriptCode);
-        return LanguageTag(OStringToOUString(aBuf.makeStringAndClear(), RTL_TEXTENCODING_UTF8));
+        return OStringToOUString(aBuf.makeStringAndClear(), RTL_TEXTENCODING_UTF8);
     }
-
-#if ENABLE_DBUS
-    guint get_xid_for_dbus()
-    {
-        const vcl::Window *pTopWindow = Application::IsHeadlessModeEnabled() ? nullptr : Application::GetActiveTopWindow();
-        const SystemEnvData* pEnvData = pTopWindow ? pTopWindow->GetSystemData() : nullptr;
-        return pEnvData ? pEnvData->aWindow : 0;
-    }
-#endif
 }
 
-#if ENABLE_DBUS
-IMPL_LINK_NOARG_TYPED(PrintFontManager, autoInstallFontLangSupport, Timer *, void)
+IMPL_LINK_NOARG(PrintFontManager, autoInstallFontLangSupport, Timer *, void)
 {
-    guint xid = get_xid_for_dbus();
-
-    if (!xid)
-        return;
-
-    GError *error = nullptr;
-    /* get the DBUS session connection */
-    DBusGConnection *session_connection = dbus_g_bus_get(DBUS_BUS_SESSION, &error);
-    if (error != nullptr)
+    try
     {
-        g_debug ("DBUS cannot connect : %s", error->message);
-        g_error_free (error);
-        return;
+        using namespace org::freedesktop::PackageKit;
+        css::uno::Reference<XSyncDbusSessionHelper> xSyncDbusSessionHelper(SyncDbusSessionHelper::create(comphelper::getProcessComponentContext()));
+        xSyncDbusSessionHelper->InstallFontconfigResources(comphelper::containerToSequence(m_aCurrentRequests), "hide-finished");
+    }
+    catch (const css::uno::Exception& e)
+    {
+        SAL_INFO("vcl.fonts", "InstallFontconfigResources problem, caught " << e);
+        // Disable this method from now on. It's simply not available on some systems
+        // and leads to an error dialog being shown each time this is called tdf#104883
+        std::shared_ptr<comphelper::ConfigurationChanges> batch( comphelper::ConfigurationChanges::create() );
+        officecfg::Office::Common::PackageKit::EnableFontInstallation::set(false, batch);
+        batch->commit();
     }
 
-    /* get the proxy with gnome-session-manager */
-    DBusGProxy *proxy = dbus_g_proxy_new_for_name(session_connection,
-                                       "org.freedesktop.PackageKit",
-                                       "/org/freedesktop/PackageKit",
-                                       "org.freedesktop.PackageKit.Modify");
-    if (proxy == nullptr)
-    {
-        g_debug("Could not get DBUS proxy: org.freedesktop.PackageKit");
-        return;
-    }
-
-    gchar **fonts = static_cast<gchar**>(g_malloc((m_aCurrentRequests.size() + 1) * sizeof(gchar*)));
-    gchar **font = fonts;
-    for (std::vector<OString>::const_iterator aI = m_aCurrentRequests.begin(); aI != m_aCurrentRequests.end(); ++aI)
-        *font++ = const_cast<gchar*>(aI->getStr());
-    *font = nullptr;
-    gboolean res = dbus_g_proxy_call(proxy, "InstallFontconfigResources", &error,
-                 G_TYPE_UINT, xid, /* xid */
-                 G_TYPE_STRV, fonts, /* data */
-                 G_TYPE_STRING, "hide-finished", /* interaction */
-                 G_TYPE_INVALID,
-                 G_TYPE_INVALID);
-    /* check the return value */
-    if (!res)
-       g_debug("InstallFontconfigResources method failed");
-
-    /* check the error value */
-    if (error != nullptr)
-    {
-        g_debug("InstallFontconfigResources problem : %s", error->message);
-        g_error_free(error);
-    }
-
-    g_free(fonts);
-    g_object_unref(G_OBJECT (proxy));
     m_aCurrentRequests.clear();
 }
-#endif
 
-void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissingCodes )
+void PrintFontManager::Substitute(FontSelectPattern &rPattern, OUString& rMissingCodes)
 {
-    bool bRet = false;
-
     FontCfgWrapper& rWrapper = FontCfgWrapper::get();
 
     // build pattern argument for fontconfig query
@@ -966,12 +878,12 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
     // Add required Unicode characters, if any
     if ( !rMissingCodes.isEmpty() )
     {
-        FcCharSet *unicodes = FcCharSetCreate();
+        FcCharSet *codePoints = FcCharSetCreate();
         for( sal_Int32 nStrIndex = 0; nStrIndex < rMissingCodes.getLength(); )
         {
             // also handle unicode surrogates
             const sal_uInt32 nCode = rMissingCodes.iterateCodePoints( &nStrIndex );
-            FcCharSetAddChar( unicodes, nCode );
+            FcCharSetAddChar( codePoints, nCode );
             //if the codepoint is impossible for this lang tag, then clear it
             //and autodetect something useful
             if (!aLangAttrib.isEmpty() && isImpossibleCodePointForLang(aLangTag, nCode))
@@ -979,12 +891,12 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
             //#i105784#/rhbz#527719  improve selection of fallback font
             if (aLangAttrib.isEmpty())
             {
-                aLangTag = getExemplarLangTagForCodePoint(nCode);
+                aLangTag.reset(getExemplarLangTagForCodePoint(nCode));
                 aLangAttrib = mapToFontConfigLangTag(aLangTag);
             }
         }
-        FcPatternAddCharSet(pPattern, FC_CHARSET, unicodes);
-        FcCharSetDestroy(unicodes);
+        FcPatternAddCharSet(pPattern, FC_CHARSET, codePoints);
+        FcCharSetDestroy(codePoints);
     }
 
     if (!aLangAttrib.isEmpty())
@@ -1016,6 +928,8 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
     {
         if( pSet->nfont > 0 )
         {
+            bool bRet = false;
+
             //extract the closest match
             FcChar8* file = nullptr;
             FcResult eFileRes = FcPatternGetString(pSet->fonts[0], FC_FILE, 0, &file);
@@ -1027,7 +941,7 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
             {
                 OString aDir, aBase, aOrgPath( reinterpret_cast<char*>(file) );
                 splitPath( aOrgPath, aDir, aBase );
-                int nDirID = getDirectoryAtom( aDir, true );
+                int nDirID = getDirectoryAtom( aDir );
                 fontID aFont = findFontFileID( nDirID, aBase, nCollectionEntry );
                 if( aFont > 0 )
                 {
@@ -1037,7 +951,7 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
                 }
             }
 
-            SAL_WARN_IF(!bRet, "vcl", "no FC_FILE found, falling back to name search");
+            SAL_WARN_IF(!bRet, "vcl.fonts", "no FC_FILE found, falling back to name search");
 
             if (!bRet)
             {
@@ -1048,7 +962,7 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
                 if( eFamilyRes == FcResultMatch )
                 {
                     OString sFamily(reinterpret_cast<char*>(family));
-                    std::unordered_map< OString, OString, OStringHash >::const_iterator aI =
+                    std::unordered_map< OString, OString >::const_iterator aI =
                         rWrapper.m_aFontNameToLocalized.find(sFamily);
                     if (aI != rWrapper.m_aFontNameToLocalized.end())
                         sFamily = aI->second;
@@ -1081,25 +995,24 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
                 }
             }
 
-            // update rMissingCodes by removing resolved unicodes
+            // update rMissingCodes by removing resolved code points
             if( !rMissingCodes.isEmpty() )
             {
                 std::unique_ptr<sal_uInt32[]> const pRemainingCodes(new sal_uInt32[rMissingCodes.getLength()]);
                 int nRemainingLen = 0;
-                FcCharSet* unicodes;
-                if (!FcPatternGetCharSet(pSet->fonts[0], FC_CHARSET, 0, &unicodes))
+                FcCharSet* codePoints;
+                if (!FcPatternGetCharSet(pSet->fonts[0], FC_CHARSET, 0, &codePoints))
                 {
                     for( sal_Int32 nStrIndex = 0; nStrIndex < rMissingCodes.getLength(); )
                     {
-                        // also handle unicode surrogates
+                        // also handle surrogates
                         const sal_uInt32 nCode = rMissingCodes.iterateCodePoints( &nStrIndex );
-                        if (FcCharSetHasChar(unicodes, nCode) != FcTrue)
+                        if (FcCharSetHasChar(codePoints, nCode) != FcTrue)
                             pRemainingCodes[ nRemainingLen++ ] = nCode;
                     }
                 }
                 OUString sStillMissing(pRemainingCodes.get(), nRemainingLen);
-#if ENABLE_DBUS
-                if (get_xid_for_dbus())
+                if (!Application::IsHeadlessModeEnabled() && officecfg::Office::Common::PackageKit::EnableFontInstallation::get())
                 {
                     if (sStillMissing == rMissingCodes) //replaced nothing
                     {
@@ -1109,7 +1022,7 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
                         //scripts to default to a given language.
                         for (sal_Int32 i = 0; i < nRemainingLen; ++i)
                         {
-                            LanguageTag aOurTag = getExemplarLangTagForCodePoint(pRemainingCodes[i]);
+                            LanguageTag aOurTag(getExemplarLangTagForCodePoint(pRemainingCodes[i]));
                             OString sTag = OUStringToOString(aOurTag.getBcp47(), RTL_TEXTENCODING_UTF8);
                             if (m_aPreviousLangSupportRequests.find(sTag) != m_aPreviousLangSupportRequests.end())
                                 continue;
@@ -1118,7 +1031,7 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
                             if (!sTag.isEmpty() && m_aPreviousLangSupportRequests.find(sTag) == m_aPreviousLangSupportRequests.end())
                             {
                                 OString sReq = OString(":lang=") + sTag;
-                                m_aCurrentRequests.push_back(sReq);
+                                m_aCurrentRequests.push_back(OUString::fromUtf8(sReq));
                                 m_aPreviousLangSupportRequests.insert(sTag);
                             }
                         }
@@ -1129,13 +1042,16 @@ void PrintFontManager::Substitute( FontSelectPattern &rPattern, OUString& rMissi
                         m_aFontInstallerTimer.Start();
                     }
                 }
-#endif
                 rMissingCodes = sStillMissing;
             }
         }
 
         FcFontSetDestroy( pSet );
     }
+
+    SAL_INFO("vcl.fonts", "PrintFontManager::Substitute: replacing missing font: '"
+                              << rPattern.maTargetName << "' with '" << rPattern.maSearchName
+                              << "'");
 }
 
 FontConfigFontOptions::~FontConfigFontOptions()
@@ -1143,24 +1059,22 @@ FontConfigFontOptions::~FontConfigFontOptions()
     FcPatternDestroy(mpPattern);
 }
 
-    void *FontConfigFontOptions::GetPattern(void * face, bool bEmbolden) const
-    {
-        FcValue value;
-        value.type = FcTypeFTFace;
-        value.u.f = face;
-        FcPatternDel(mpPattern, FC_FT_FACE);
-        FcPatternAdd (mpPattern, FC_FT_FACE, value, FcTrue);
-        FcPatternDel(mpPattern, FC_EMBOLDEN);
-        FcPatternAddBool(mpPattern, FC_EMBOLDEN, bEmbolden ? FcTrue : FcFalse);
-#if 0
-        FcPatternDel(mpPattern, FC_VERTICAL_LAYOUT);
-        FcPatternAddBool(mpPattern, FC_VERTICAL_LAYOUT, bVerticalLayout ? FcTrue : FcFalse);
-#endif
-        return mpPattern;
-    }
+FcPattern *FontConfigFontOptions::GetPattern() const
+{
+    return mpPattern;
+}
 
-FontConfigFontOptions* PrintFontManager::getFontOptions(
-    const FastPrintFontInfo& rInfo, int nSize, void (*subcallback)(void*))
+void FontConfigFontOptions::SyncPattern(const OString& rFileName, int nIndex, bool bEmbolden)
+{
+    FcPatternDel(mpPattern, FC_FILE);
+    FcPatternAddString(mpPattern, FC_FILE, reinterpret_cast<FcChar8 const *>(rFileName.getStr()));
+    FcPatternDel(mpPattern, FC_INDEX);
+    FcPatternAddInteger(mpPattern, FC_INDEX, nIndex);
+    FcPatternDel(mpPattern, FC_EMBOLDEN);
+    FcPatternAddBool(mpPattern, FC_EMBOLDEN, bEmbolden ? FcTrue : FcFalse);
+}
+
+FontConfigFontOptions* PrintFontManager::getFontOptions(const FastPrintFontInfo& rInfo, int nSize)
 {
     FontCfgWrapper& rWrapper = FontCfgWrapper::get();
 
@@ -1170,7 +1084,7 @@ FontConfigFontOptions* PrintFontManager::getFontOptions(
 
     OString sFamily = OUStringToOString( rInfo.m_aFamilyName, RTL_TEXTENCODING_UTF8 );
 
-    std::unordered_map< OString, OString, OStringHash >::const_iterator aI = rWrapper.m_aLocalizedToCanonical.find(sFamily);
+    std::unordered_map< OString, OString >::const_iterator aI = rWrapper.m_aLocalizedToCanonical.find(sFamily);
     if (aI != rWrapper.m_aLocalizedToCanonical.end())
         sFamily = aI->second;
     if( !sFamily.isEmpty() )
@@ -1179,12 +1093,10 @@ FontConfigFontOptions* PrintFontManager::getFontOptions(
     addtopattern(pPattern, rInfo.m_eItalic, rInfo.m_eWeight, rInfo.m_eWidth, rInfo.m_ePitch);
     FcPatternAddDouble(pPattern, FC_PIXEL_SIZE, nSize);
 
-    FcBool embitmap = true, antialias = true, autohint = true, hinting = true;
     int hintstyle = FC_HINT_FULL;
 
     FcConfigSubstitute(pConfig, pPattern, FcMatchPattern);
-    if (subcallback)
-        subcallback(pPattern);
+    FontConfigFontOptions::cairo_font_options_substitute(pPattern);
     FcDefaultSubstitute(pPattern);
 
     FcResult eResult = FcResultNoMatch;
@@ -1192,35 +1104,10 @@ FontConfigFontOptions* PrintFontManager::getFontOptions(
     FcPattern* pResult = FcFontSetMatch( pConfig, &pFontSet, 1, pPattern, &eResult );
     if( pResult )
     {
-        FcResult eEmbeddedBitmap = FcPatternGetBool(pResult,
-            FC_EMBEDDED_BITMAP, 0, &embitmap);
-        FcResult eAntialias = FcPatternGetBool(pResult,
-            FC_ANTIALIAS, 0, &antialias);
-        FcResult eAutoHint = FcPatternGetBool(pResult,
-            FC_AUTOHINT, 0, &autohint);
-        FcResult eHinting = FcPatternGetBool(pResult,
-            FC_HINTING, 0, &hinting);
         (void) FcPatternGetInteger(pResult,
             FC_HINT_STYLE, 0, &hintstyle);
 
         pOptions = new FontConfigFontOptions(pResult);
-
-        if( eEmbeddedBitmap == FcResultMatch )
-            pOptions->meEmbeddedBitmap = embitmap ? EMBEDDEDBITMAP_TRUE : EMBEDDEDBITMAP_FALSE;
-        if( eAntialias == FcResultMatch )
-            pOptions->meAntiAlias = antialias ? ANTIALIAS_TRUE : ANTIALIAS_FALSE;
-        if( eAutoHint == FcResultMatch )
-            pOptions->meAutoHint = autohint ? AUTOHINT_TRUE : AUTOHINT_FALSE;
-        if( eHinting == FcResultMatch )
-            pOptions->meHinting = hinting ? HINTING_TRUE : HINTING_FALSE;
-        switch (hintstyle)
-        {
-            case FC_HINT_NONE:   pOptions->meHintStyle = HINT_NONE; break;
-            case FC_HINT_SLIGHT: pOptions->meHintStyle = HINT_SLIGHT; break;
-            case FC_HINT_MEDIUM: pOptions->meHintStyle = HINT_MEDIUM; break;
-            default: // fall through
-            case FC_HINT_FULL:   pOptions->meHintStyle = HINT_FULL; break;
-        }
     }
 
     // cleanup
@@ -1270,7 +1157,7 @@ void PrintFontManager::matchFont( FastPrintFontInfo& rInfo, const css::lang::Loc
             {
                 OString aDir, aBase, aOrgPath( reinterpret_cast<char*>(file) );
                 splitPath( aOrgPath, aDir, aBase );
-                int nDirID = getDirectoryAtom( aDir, true );
+                int nDirID = getDirectoryAtom( aDir );
                 fontID aFont = findFontFileID( nDirID, aBase, nCollectionEntry );
                 if( aFont > 0 )
                     getFontFastInfo( aFont, rInfo );

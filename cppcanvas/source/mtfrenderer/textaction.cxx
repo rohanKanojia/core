@@ -37,13 +37,14 @@
 #include <vcl/canvastools.hxx>
 #include <vcl/virdev.hxx>
 
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <canvas/canvastools.hxx>
-
 #include <memory>
+#include <sal/log.hxx>
 
 #include "textaction.hxx"
-#include "outdevstate.hxx"
+#include "textlineshelper.hxx"
+#include <outdevstate.hxx>
 #include "mtftools.hxx"
 
 
@@ -75,7 +76,7 @@ namespace cppcanvas
                                    nullptr,
                                    &rState.fontRotation );
 
-                basegfx::B2DHomMatrix aLocalTransformation(basegfx::tools::createRotateB2DHomMatrix(rState.fontRotation));
+                basegfx::B2DHomMatrix aLocalTransformation(basegfx::utils::createRotateB2DHomMatrix(rState.fontRotation));
                 aLocalTransformation.translate( rStartPoint.getX(),
                                                 rStartPoint.getY() );
                 ::canvas::tools::appendToRenderState( o_rRenderState,
@@ -152,16 +153,11 @@ namespace cppcanvas
                                                        rTextTransform );
             }
 
-            ::basegfx::B2DPolyPolygon textLinesFromLogicalOffsets( const uno::Sequence< double >&   rOffsets,
-                                                                   const tools::TextLineInfo&       rTextLineInfo )
+            void initLayoutWidth(double& rLayoutWidth, const uno::Sequence<double>& rOffsets)
             {
-                return tools::createTextLinesPolyPolygon(
-                    0.0,
-                    // extract character cell furthest to the right
-                    *(::std::max_element(
-                          rOffsets.getConstArray(),
-                          rOffsets.getConstArray() + rOffsets.getLength() )),
-                    rTextLineInfo );
+                ENSURE_OR_THROW(rOffsets.getLength(),
+                                  "::cppcanvas::internal::initLayoutWidth(): zero-length array" );
+                rLayoutWidth = *(std::max_element(rOffsets.begin(), rOffsets.end()));
             }
 
             uno::Sequence< double > setupDXArray( const long*   pCharWidths,
@@ -188,12 +184,12 @@ namespace cppcanvas
             uno::Sequence< double > setupDXArray( const OUString&    rText,
                                                   sal_Int32          nStartPos,
                                                   sal_Int32          nLen,
-                                                  VirtualDevice&     rVDev,
+                                                  VirtualDevice const & rVDev,
                                                   const OutDevState& rState )
             {
                 // no external DX array given, create one from given
                 // string
-                ::std::unique_ptr< long []> pCharWidths( new long[nLen] );
+                std::unique_ptr< long []> pCharWidths( new long[nLen] );
 
                 rVDev.GetTextArray( rText, pCharWidths.get(),
                                     nStartPos, nLen );
@@ -262,9 +258,10 @@ namespace cppcanvas
                                   "::cppcanvas::internal::initArrayAction(): Invalid font" );
 
                 o_rTextLayout->applyLogicalAdvancements( rOffsets );
+
             }
 
-            double getLineWidth( ::VirtualDevice&                rVDev,
+            double getLineWidth( ::VirtualDevice const &         rVDev,
                                  const OutDevState&              rState,
                                  const rendering::StringContext& rStringContext )
             {
@@ -282,6 +279,7 @@ namespace cppcanvas
                                    double&                                          o_rMinPos,
                                    double&                                          o_rMaxPos,
                                    const uno::Reference< rendering::XTextLayout >&  rOrigTextLayout,
+                                   double                                           nLayoutWidth,
                                    const ::cppcanvas::internal::Action::Subset&     rSubset )
             {
                 ENSURE_OR_THROW( rSubset.mnSubsetEnd > rSubset.mnSubsetBegin,
@@ -293,12 +291,6 @@ namespace cppcanvas
                 ENSURE_OR_THROW( aOrigOffsets.getLength() >= rSubset.mnSubsetEnd,
                                   "::cppcanvas::internal::calcSubsetOffsets(): invalid subset range range" );
 
-                // TODO(F3): It currently seems that for RTL text, the
-                // DX offsets are nevertheless increasing in logical
-                // text order (I'd expect they are decreasing,
-                // mimicking the fact that the text is output
-                // right-to-left). This breaks text effects for ALL
-                // RTL languages.
 
                 // determine leftmost position in given subset range -
                 // as the DX array contains the output positions
@@ -306,7 +298,7 @@ namespace cppcanvas
                 // assumed to have output position 0), correct begin
                 // iterator.
                 const double nMinPos( rSubset.mnSubsetBegin <= 0 ? 0 :
-                                      *(::std::min_element( pOffsets+rSubset.mnSubsetBegin-1,
+                                      *(std::min_element( pOffsets+rSubset.mnSubsetBegin-1,
                                                             pOffsets+rSubset.mnSubsetEnd )) );
 
                 // determine rightmost position in given subset range
@@ -315,9 +307,19 @@ namespace cppcanvas
                 // assumed to have output position 0), correct begin
                 // iterator.
                 const double nMaxPos(
-                    *(::std::max_element( pOffsets + (rSubset.mnSubsetBegin <= 0 ?
+                    *(std::max_element( pOffsets + (rSubset.mnSubsetBegin <= 0 ?
                                                       0 : rSubset.mnSubsetBegin-1),
                                           pOffsets + rSubset.mnSubsetEnd )) );
+
+                // Logical advancements always increase in logical text order.
+                // For RTL text, nMaxPos is the distance from the right edge to
+                // the leftmost position in the subset, so we have to convert
+                // it to the offset from the origin (i.e. left edge ).
+                // LTR: |---- min --->|---- max --->|            |
+                // RTL: |             |<--- max ----|<--- min ---|
+                //      |<- nOffset ->|                          |
+                const double nOffset = rOrigTextLayout->getMainTextDirection()
+                    ? nLayoutWidth - nMaxPos : nMinPos;
 
 
                 // adapt render state, to move text output to given offset
@@ -328,18 +330,18 @@ namespace cppcanvas
                 // with the output offset. Neglected for now, as it
                 // does not matter for drawing layer output
 
-                if( rSubset.mnSubsetBegin > 0 )
+                if (nOffset > 0.0)
                 {
                     ::basegfx::B2DHomMatrix aTranslation;
-                    if( rOrigTextLayout->getFont()->getFontRequest().FontDescription.IsVertical )
+                    if( rOrigTextLayout->getFont()->getFontRequest().FontDescription.IsVertical == css::util::TriState_YES )
                     {
                         // vertical text -> offset in y direction
-                        aTranslation.translate( 0.0, nMinPos );
+                        aTranslation.translate(0.0, nOffset);
                     }
                     else
                     {
                         // horizontal text -> offset in x direction
-                        aTranslation.translate( nMinPos, 0.0 );
+                        aTranslation.translate(nOffset, 0.0);
                     }
 
                     ::canvas::tools::appendToRenderState( io_rRenderState,
@@ -357,7 +359,7 @@ namespace cppcanvas
                 // move to new output position (subtract nMinPos,
                 // which is the new '0' position), copy only the range
                 // as given by rSubset.
-                ::std::transform( pOffsets + rSubset.mnSubsetBegin,
+                std::transform( pOffsets + rSubset.mnSubsetBegin,
                                   pOffsets + rSubset.mnSubsetEnd,
                                   pAdaptedOffsets,
                                   [nMinPos](double aPos) { return aPos - nMinPos; } );
@@ -376,10 +378,10 @@ namespace cppcanvas
                 // create temporary new text layout with subset string
 
 
-                const sal_Int32 nNewStartPos( rOrigContext.StartPosition + ::std::min(
+                const sal_Int32 nNewStartPos( rOrigContext.StartPosition + std::min(
                                                   rSubset.mnSubsetBegin, rOrigContext.Length-1 ) );
-                const sal_Int32 nNewLength( ::std::max(
-                                                ::std::min(
+                const sal_Int32 nNewLength( std::max(
+                                                std::min(
                                                     rSubset.mnSubsetEnd - rSubset.mnSubsetBegin,
                                                     rOrigContext.Length ),
                                                 sal_Int32( 0 ) ) );
@@ -417,6 +419,7 @@ namespace cppcanvas
                 Subset to prepare
              */
             void createSubsetLayout( uno::Reference< rendering::XTextLayout >&  io_rTextLayout,
+                                     double                                     nLayoutWidth,
                                      rendering::RenderState&                    io_rRenderState,
                                      double&                                    o_rMinPos,
                                      double&                                    o_rMaxPos,
@@ -455,6 +458,7 @@ namespace cppcanvas
                                            o_rMinPos,
                                            o_rMaxPos,
                                            io_rTextLayout,
+                                           nLayoutWidth,
                                            rSubset ) );
                 }
 
@@ -473,7 +477,7 @@ namespace cppcanvas
                 virtual ~TextRenderer() {}
 
                 /// Render text with given RenderState
-                virtual bool operator()( const rendering::RenderState& rRenderState ) const = 0;
+                virtual bool operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor, bool bNormalText ) const = 0;
             };
 
             /** Render effect text.
@@ -485,12 +489,12 @@ namespace cppcanvas
              */
             bool renderEffectText( const TextRenderer&                          rRenderer,
                                    const rendering::RenderState&                rRenderState,
-                                   const rendering::ViewState&                  /*rViewState*/,
                                    const uno::Reference< rendering::XCanvas >&  xCanvas,
                                    const ::Color&                               rShadowColor,
                                    const ::basegfx::B2DSize&                    rShadowOffset,
                                    const ::Color&                               rReliefColor,
-                                   const ::basegfx::B2DSize&                    rReliefOffset )
+                                   const ::basegfx::B2DSize&                    rReliefOffset,
+                                   const ::Color&                               rTextFillColor )
             {
                 ::Color aEmptyColor( COL_AUTO );
                 uno::Reference<rendering::XColorSpace> xColorSpace(
@@ -511,7 +515,7 @@ namespace cppcanvas
                         vcl::unotools::colorToDoubleSequence( rShadowColor,
                                                                 xColorSpace );
 
-                    rRenderer( aShadowState );
+                    rRenderer( aShadowState, rTextFillColor, false );
                 }
 
                 // draw relief text, if enabled
@@ -529,11 +533,11 @@ namespace cppcanvas
                         vcl::unotools::colorToDoubleSequence( rReliefColor,
                                                                 xColorSpace );
 
-                    rRenderer( aReliefState );
+                    rRenderer( aReliefState, rTextFillColor, false );
                 }
 
                 // draw normal text
-                rRenderer( rRenderState );
+                rRenderer( rRenderState, rTextFillColor, true );
 
                 return true;
             }
@@ -572,24 +576,6 @@ namespace cppcanvas
             void initEffectLinePolyPolygon( ::basegfx::B2DSize&                             o_rOverallSize,
                                             uno::Reference< rendering::XPolyPolygon2D >&    o_rTextLines,
                                             const CanvasSharedPtr&                          rCanvas,
-                                            const uno::Sequence< double >&                  rOffsets,
-                                            const tools::TextLineInfo&                      rLineInfo   )
-            {
-                const ::basegfx::B2DPolyPolygon aPoly(
-                    textLinesFromLogicalOffsets(
-                        rOffsets,
-                        rLineInfo ) );
-
-                o_rOverallSize = ::basegfx::tools::getRange( aPoly ).getRange();
-
-                o_rTextLines = ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon(
-                    rCanvas->getUNOCanvas()->getDevice(),
-                    aPoly );
-            }
-
-            void initEffectLinePolyPolygon( ::basegfx::B2DSize&                             o_rOverallSize,
-                                            uno::Reference< rendering::XPolyPolygon2D >&    o_rTextLines,
-                                            const CanvasSharedPtr&                          rCanvas,
                                             double                                          nLineWidth,
                                             const tools::TextLineInfo&                      rLineInfo   )
             {
@@ -597,7 +583,7 @@ namespace cppcanvas
                     tools::createTextLinesPolyPolygon( 0.0, nLineWidth,
                                                        rLineInfo ) );
 
-                o_rOverallSize = ::basegfx::tools::getRange( aPoly ).getRange();
+                o_rOverallSize = ::basegfx::utils::getRange( aPoly ).getRange();
 
                 o_rTextLines = ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon(
                     rCanvas->getUNOCanvas()->getDevice(),
@@ -772,7 +758,7 @@ namespace cppcanvas
                                   const OUString&     rText,
                                   sal_Int32                  nStartPos,
                                   sal_Int32                  nLen,
-                                  VirtualDevice&             rVDev,
+                                  VirtualDevice const &      rVDev,
                                   const CanvasSharedPtr&     rCanvas,
                                   const OutDevState&         rState );
 
@@ -784,7 +770,7 @@ namespace cppcanvas
                                   const OUString&            rText,
                                   sal_Int32                         nStartPos,
                                   sal_Int32                         nLen,
-                                  VirtualDevice&                    rVDev,
+                                  VirtualDevice const &             rVDev,
                                   const CanvasSharedPtr&            rCanvas,
                                   const OutDevState&                rState,
                                   const ::basegfx::B2DHomMatrix&    rTextTransform );
@@ -804,7 +790,10 @@ namespace cppcanvas
 
             private:
                 /// Interface TextRenderer
-                virtual bool operator()( const rendering::RenderState& rRenderState ) const override;
+                virtual bool operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor, bool bNormalText ) const override;
+
+                geometry::RealRectangle2D queryTextBounds() const;
+                css::uno::Reference<css::rendering::XPolyPolygon2D> queryTextBounds(const uno::Reference<rendering::XCanvas>& rCanvas) const;
 
                 // TODO(P2): This is potentially a real mass object
                 // (every character might be a separate TextAction),
@@ -819,12 +808,12 @@ namespace cppcanvas
                 rendering::RenderState                      maState;
                 const tools::TextLineInfo                   maTextLineInfo;
                 ::basegfx::B2DSize                          maLinesOverallSize;
-                const double                                mnLineWidth;
                 uno::Reference< rendering::XPolyPolygon2D > mxTextLines;
                 const ::basegfx::B2DSize                    maReliefOffset;
                 const ::Color                               maReliefColor;
                 const ::basegfx::B2DSize                    maShadowOffset;
                 const ::Color                               maShadowColor;
+                const ::Color                               maTextFillColor;
                 const sal_Int8                              maTextDirection;
             };
 
@@ -836,7 +825,7 @@ namespace cppcanvas
                                                 const OUString&     rText,
                                                 sal_Int32                  nStartPos,
                                                 sal_Int32                  nLen,
-                                                VirtualDevice&             rVDev,
+                                                VirtualDevice const &      rVDev,
                                                 const CanvasSharedPtr&     rCanvas,
                                                 const OutDevState&         rState ) :
                 mxFont( rState.xFont ),
@@ -845,7 +834,6 @@ namespace cppcanvas
                 maState(),
                 maTextLineInfo( tools::createTextLineInfo( rVDev, rState ) ),
                 maLinesOverallSize(),
-                mnLineWidth( getLineWidth( rVDev, rState, maStringContext ) ),
                 mxTextLines(),
                 maReliefOffset( rReliefOffset ),
                 maReliefColor( rReliefColor ),
@@ -853,10 +841,11 @@ namespace cppcanvas
                 maShadowColor( rShadowColor ),
                 maTextDirection( rState.textDirection )
             {
+                const double nLineWidth(getLineWidth( rVDev, rState, maStringContext ));
                 initEffectLinePolyPolygon( maLinesOverallSize,
                                            mxTextLines,
                                            rCanvas,
-                                           mnLineWidth,
+                                           nLineWidth,
                                            maTextLineInfo );
 
                 init( maState, mxFont,
@@ -875,7 +864,7 @@ namespace cppcanvas
                                                 const OUString&          rText,
                                                 sal_Int32                       nStartPos,
                                                 sal_Int32                       nLen,
-                                                VirtualDevice&                  rVDev,
+                                                VirtualDevice const &           rVDev,
                                                 const CanvasSharedPtr&          rCanvas,
                                                 const OutDevState&              rState,
                                                 const ::basegfx::B2DHomMatrix&  rTextTransform ) :
@@ -885,7 +874,6 @@ namespace cppcanvas
                 maState(),
                 maTextLineInfo( tools::createTextLineInfo( rVDev, rState ) ),
                 maLinesOverallSize(),
-                mnLineWidth( getLineWidth( rVDev, rState, maStringContext ) ),
                 mxTextLines(),
                 maReliefOffset( rReliefOffset ),
                 maReliefColor( rReliefColor ),
@@ -893,10 +881,11 @@ namespace cppcanvas
                 maShadowColor( rShadowColor ),
                 maTextDirection( rState.textDirection )
             {
+                const double nLineWidth( getLineWidth( rVDev, rState, maStringContext ) );
                 initEffectLinePolyPolygon( maLinesOverallSize,
                                            mxTextLines,
                                            rCanvas,
-                                           mnLineWidth,
+                                           nLineWidth,
                                            maTextLineInfo );
 
                 init( maState, mxFont,
@@ -907,7 +896,7 @@ namespace cppcanvas
                                   "::cppcanvas::internal::EffectTextAction(): Invalid font or lines" );
             }
 
-            bool EffectTextAction::operator()( const rendering::RenderState& rRenderState ) const
+            bool EffectTextAction::operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor, bool /*bNormalText*/ ) const
             {
                 const rendering::ViewState& rViewState( mpCanvas->getViewState() );
                 const uno::Reference< rendering::XCanvas >& rCanvas( mpCanvas->getUNOCanvas() );
@@ -915,6 +904,17 @@ namespace cppcanvas
                 rCanvas->fillPolyPolygon( mxTextLines,
                                           rViewState,
                                           rRenderState );
+
+                //rhbz#1589029 non-transparent text fill background support
+                if (rTextFillColor != COL_AUTO)
+                {
+                    rendering::RenderState aLocalState( rRenderState );
+                    aLocalState.DeviceColor = vcl::unotools::colorToDoubleSequence(
+                        rTextFillColor, rCanvas->getDevice()->getDeviceColorSpace());
+                    auto xTextBounds = queryTextBounds(rCanvas);
+                    // background of text
+                    rCanvas->fillPolyPolygon(xTextBounds, rViewState, aLocalState);
+                }
 
                 rCanvas->drawText( maStringContext, mxFont,
                                    rViewState,
@@ -934,12 +934,12 @@ namespace cppcanvas
 
                 return renderEffectText( *this,
                                          aLocalState,
-                                         mpCanvas->getViewState(),
                                          mpCanvas->getUNOCanvas(),
                                          maShadowColor,
                                          maShadowOffset,
                                          maReliefColor,
-                                         maReliefOffset );
+                                         maReliefOffset,
+                                         maTextFillColor);
             }
 
             bool EffectTextAction::renderSubset( const ::basegfx::B2DHomMatrix&   rTransformation,
@@ -954,7 +954,7 @@ namespace cppcanvas
                 return render( rTransformation );
             }
 
-            ::basegfx::B2DRange EffectTextAction::getBounds( const ::basegfx::B2DHomMatrix& rTransformation ) const
+            geometry::RealRectangle2D EffectTextAction::queryTextBounds() const
             {
                 // create XTextLayout, to have the
                 // XTextLayout::queryTextBounds() method available
@@ -964,11 +964,24 @@ namespace cppcanvas
                         maTextDirection,
                         0 ) );
 
+                return xTextLayout->queryTextBounds();
+            }
+
+            css::uno::Reference<css::rendering::XPolyPolygon2D> EffectTextAction::queryTextBounds(const uno::Reference<rendering::XCanvas>& rCanvas) const
+            {
+                auto aTextBounds = queryTextBounds();
+                auto aB2DBounds = ::basegfx::unotools::b2DRectangleFromRealRectangle2D(aTextBounds);
+                auto aTextBoundsPoly = ::basegfx::utils::createPolygonFromRect(aB2DBounds);
+                return ::basegfx::unotools::xPolyPolygonFromB2DPolygon(rCanvas->getDevice(), aTextBoundsPoly);
+            }
+
+            ::basegfx::B2DRange EffectTextAction::getBounds( const ::basegfx::B2DHomMatrix& rTransformation ) const
+            {
                 rendering::RenderState aLocalState( maState );
                 ::canvas::tools::prependToRenderState(aLocalState, rTransformation);
 
                 return calcEffectTextBounds( ::basegfx::unotools::b2DRectangleFromRealRectangle2D(
-                                                 xTextLayout->queryTextBounds() ),
+                                                 queryTextBounds() ),
                                              ::basegfx::B2DRange( 0,0,
                                                                   maLinesOverallSize.getX(),
                                                                   maLinesOverallSize.getY() ),
@@ -1044,6 +1057,7 @@ namespace cppcanvas
                 uno::Reference< rendering::XTextLayout >    mxTextLayout;
                 const CanvasSharedPtr                       mpCanvas;
                 rendering::RenderState                      maState;
+                double                                      mnLayoutWidth;
             };
 
             TextArrayAction::TextArrayAction( const ::basegfx::B2DPoint&        rStartPoint,
@@ -1057,6 +1071,8 @@ namespace cppcanvas
                 mpCanvas( rCanvas ),
                 maState()
             {
+                initLayoutWidth(mnLayoutWidth, rOffsets);
+
                 initArrayAction( maState,
                                  mxTextLayout,
                                  rStartPoint,
@@ -1080,6 +1096,8 @@ namespace cppcanvas
                 mpCanvas( rCanvas ),
                 maState()
             {
+                initLayoutWidth(mnLayoutWidth, rOffsets);
+
                 initArrayAction( maState,
                                  mxTextLayout,
                                  rStartPoint,
@@ -1118,6 +1136,7 @@ namespace cppcanvas
 
                 double nDummy0, nDummy1;
                 createSubsetLayout( xTextLayout,
+                                    mnLayoutWidth,
                                     aLocalState,
                                     nDummy0,
                                     nDummy1,
@@ -1156,6 +1175,7 @@ namespace cppcanvas
 
                 double nDummy0, nDummy1;
                 createSubsetLayout( xTextLayout,
+                                    mnLayoutWidth,
                                     aLocalState,
                                     nDummy0,
                                     nDummy1,
@@ -1189,11 +1209,12 @@ namespace cppcanvas
                                        const ::Color&                   rReliefColor,
                                        const ::basegfx::B2DSize&        rShadowOffset,
                                        const ::Color&                   rShadowColor,
+                                       const ::Color&                   rTextFillColor,
                                        const OUString&           rText,
                                        sal_Int32                        nStartPos,
                                        sal_Int32                        nLen,
                                        const uno::Sequence< double >&   rOffsets,
-                                       VirtualDevice&                   rVDev,
+                                       VirtualDevice const &            rVDev,
                                        const CanvasSharedPtr&           rCanvas,
                                        const OutDevState&               rState  );
                 EffectTextArrayAction( const ::basegfx::B2DPoint&       rStartPoint,
@@ -1201,11 +1222,12 @@ namespace cppcanvas
                                        const ::Color&                   rReliefColor,
                                        const ::basegfx::B2DSize&        rShadowOffset,
                                        const ::Color&                   rShadowColor,
+                                       const ::Color&                   rTextFillColor,
                                        const OUString&           rText,
                                        sal_Int32                        nStartPos,
                                        sal_Int32                        nLen,
                                        const uno::Sequence< double >&   rOffsets,
-                                       VirtualDevice&                   rVDev,
+                                       VirtualDevice const &            rVDev,
                                        const CanvasSharedPtr&           rCanvas,
                                        const OutDevState&               rState,
                                        const ::basegfx::B2DHomMatrix&   rTextTransform );
@@ -1225,7 +1247,9 @@ namespace cppcanvas
 
             private:
                 // TextRenderer interface
-                virtual bool operator()( const rendering::RenderState& rRenderState ) const override;
+                virtual bool operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor, bool bNormalText ) const override;
+
+                css::uno::Reference<css::rendering::XPolyPolygon2D> queryTextBounds(const uno::Reference<rendering::XCanvas>& rCanvas) const;
 
                 // TODO(P2): This is potentially a real mass object
                 // (every character might be a separate TextAction),
@@ -1238,12 +1262,13 @@ namespace cppcanvas
                 const CanvasSharedPtr                           mpCanvas;
                 rendering::RenderState                          maState;
                 const tools::TextLineInfo                       maTextLineInfo;
-                ::basegfx::B2DSize                              maLinesOverallSize;
-                uno::Reference< rendering::XPolyPolygon2D >     mxTextLines;
+                TextLinesHelper                                 maTextLinesHelper;
                 const ::basegfx::B2DSize                        maReliefOffset;
                 const ::Color                                   maReliefColor;
                 const ::basegfx::B2DSize                        maShadowOffset;
                 const ::Color                                   maShadowColor;
+                const ::Color                                   maTextFillColor;
+                double                                          mnLayoutWidth;
             };
 
             EffectTextArrayAction::EffectTextArrayAction( const ::basegfx::B2DPoint&        rStartPoint,
@@ -1251,29 +1276,28 @@ namespace cppcanvas
                                                           const ::Color&                    rReliefColor,
                                                           const ::basegfx::B2DSize&         rShadowOffset,
                                                           const ::Color&                    rShadowColor,
+                                                          const ::Color&                    rTextFillColor,
                                                           const OUString&            rText,
                                                           sal_Int32                         nStartPos,
                                                           sal_Int32                         nLen,
                                                           const uno::Sequence< double >&    rOffsets,
-                                                          VirtualDevice&                    rVDev,
+                                                          VirtualDevice const &             rVDev,
                                                           const CanvasSharedPtr&            rCanvas,
                                                           const OutDevState&                rState  ) :
                 mxTextLayout(),
                 mpCanvas( rCanvas ),
                 maState(),
                 maTextLineInfo( tools::createTextLineInfo( rVDev, rState ) ),
-                maLinesOverallSize(),
-                mxTextLines(),
+                maTextLinesHelper(mpCanvas, rState),
                 maReliefOffset( rReliefOffset ),
                 maReliefColor( rReliefColor ),
                 maShadowOffset( rShadowOffset ),
-                maShadowColor( rShadowColor )
+                maShadowColor( rShadowColor ),
+                maTextFillColor( rTextFillColor )
             {
-                initEffectLinePolyPolygon( maLinesOverallSize,
-                                           mxTextLines,
-                                           rCanvas,
-                                           rOffsets,
-                                           maTextLineInfo );
+                initLayoutWidth(mnLayoutWidth, rOffsets);
+
+                maTextLinesHelper.init(mnLayoutWidth, maTextLineInfo);
 
                 initArrayAction( maState,
                                  mxTextLayout,
@@ -1291,11 +1315,12 @@ namespace cppcanvas
                                                           const ::Color&                    rReliefColor,
                                                           const ::basegfx::B2DSize&         rShadowOffset,
                                                           const ::Color&                    rShadowColor,
+                                                          const ::Color&                    rTextFillColor,
                                                           const OUString&            rText,
                                                           sal_Int32                         nStartPos,
                                                           sal_Int32                         nLen,
                                                           const uno::Sequence< double >&    rOffsets,
-                                                          VirtualDevice&                    rVDev,
+                                                          VirtualDevice const &             rVDev,
                                                           const CanvasSharedPtr&            rCanvas,
                                                           const OutDevState&                rState,
                                                           const ::basegfx::B2DHomMatrix&    rTextTransform ) :
@@ -1303,18 +1328,16 @@ namespace cppcanvas
                 mpCanvas( rCanvas ),
                 maState(),
                 maTextLineInfo( tools::createTextLineInfo( rVDev, rState ) ),
-                maLinesOverallSize(),
-                mxTextLines(),
+                maTextLinesHelper(mpCanvas, rState),
                 maReliefOffset( rReliefOffset ),
                 maReliefColor( rReliefColor ),
                 maShadowOffset( rShadowOffset ),
-                maShadowColor( rShadowColor )
+                maShadowColor( rShadowColor ),
+                maTextFillColor( rTextFillColor )
             {
-                initEffectLinePolyPolygon( maLinesOverallSize,
-                                           mxTextLines,
-                                           rCanvas,
-                                           rOffsets,
-                                           maTextLineInfo );
+                initLayoutWidth(mnLayoutWidth, rOffsets);
+
+                maTextLinesHelper.init(mnLayoutWidth, maTextLineInfo);
 
                 initArrayAction( maState,
                                  mxTextLayout,
@@ -1328,14 +1351,31 @@ namespace cppcanvas
                                  &rTextTransform );
             }
 
-            bool EffectTextArrayAction::operator()( const rendering::RenderState& rRenderState ) const
+            css::uno::Reference<css::rendering::XPolyPolygon2D> EffectTextArrayAction::queryTextBounds(const uno::Reference<rendering::XCanvas>& rCanvas) const
+            {
+                const geometry::RealRectangle2D aTextBounds(mxTextLayout->queryTextBounds());
+                auto aB2DBounds = ::basegfx::unotools::b2DRectangleFromRealRectangle2D(aTextBounds);
+                auto aTextBoundsPoly = ::basegfx::utils::createPolygonFromRect(aB2DBounds);
+                return ::basegfx::unotools::xPolyPolygonFromB2DPolygon(rCanvas->getDevice(), aTextBoundsPoly);
+            }
+
+            bool EffectTextArrayAction::operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor, bool bNormalText) const
             {
                 const rendering::ViewState& rViewState( mpCanvas->getViewState() );
                 const uno::Reference< rendering::XCanvas >& rCanvas( mpCanvas->getUNOCanvas() );
 
-                rCanvas->fillPolyPolygon( mxTextLines,
-                                          rViewState,
-                                          rRenderState );
+                maTextLinesHelper.render(rRenderState, bNormalText);
+
+                //rhbz#1589029 non-transparent text fill background support
+                if (rTextFillColor != COL_AUTO)
+                {
+                    rendering::RenderState aLocalState(rRenderState);
+                    aLocalState.DeviceColor = vcl::unotools::colorToDoubleSequence(
+                        rTextFillColor, rCanvas->getDevice()->getDeviceColorSpace());
+                    auto xTextBounds = queryTextBounds(rCanvas);
+                    // background of text
+                    rCanvas->fillPolyPolygon(xTextBounds, rViewState, aLocalState);
+                }
 
                 rCanvas->drawTextLayout( mxTextLayout,
                                          rViewState,
@@ -1354,12 +1394,12 @@ namespace cppcanvas
 
                 return renderEffectText( *this,
                                          aLocalState,
-                                         mpCanvas->getViewState(),
                                          mpCanvas->getUNOCanvas(),
                                          maShadowColor,
                                          maShadowOffset,
                                          maReliefColor,
-                                         maReliefOffset );
+                                         maReliefOffset,
+                                         maTextFillColor);
             }
 
             class EffectTextArrayRenderHelper : public TextRenderer
@@ -1367,21 +1407,30 @@ namespace cppcanvas
             public:
                 EffectTextArrayRenderHelper( const uno::Reference< rendering::XCanvas >&        rCanvas,
                                              const uno::Reference< rendering::XTextLayout >&    rTextLayout,
-                                             const uno::Reference< rendering::XPolyPolygon2D >& rLinePolygon,
+                                             const TextLinesHelper&                             rTextLinesHelper,
                                              const rendering::ViewState&                        rViewState ) :
                     mrCanvas( rCanvas ),
                     mrTextLayout( rTextLayout ),
-                    mrLinePolygon( rLinePolygon ),
+                    mrTextLinesHelper( rTextLinesHelper ),
                     mrViewState( rViewState )
                 {
                 }
 
                 // TextRenderer interface
-                virtual bool operator()( const rendering::RenderState& rRenderState ) const override
+                virtual bool operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor,bool bNormalText) const override
                 {
-                    mrCanvas->fillPolyPolygon( mrLinePolygon,
-                                               mrViewState,
-                                               rRenderState );
+                    mrTextLinesHelper.render(rRenderState, bNormalText);
+
+                    //rhbz#1589029 non-transparent text fill background support
+                    if (rTextFillColor != COL_AUTO)
+                    {
+                        rendering::RenderState aLocalState(rRenderState);
+                        aLocalState.DeviceColor = vcl::unotools::colorToDoubleSequence(
+                            rTextFillColor, mrCanvas->getDevice()->getDeviceColorSpace());
+                        auto xTextBounds = queryTextBounds();
+                        // background of text
+                        mrCanvas->fillPolyPolygon(xTextBounds, mrViewState, aLocalState);
+                    }
 
                     mrCanvas->drawTextLayout( mrTextLayout,
                                               mrViewState,
@@ -1391,9 +1440,18 @@ namespace cppcanvas
                 }
 
             private:
+
+                css::uno::Reference<css::rendering::XPolyPolygon2D> queryTextBounds() const
+                {
+                    const geometry::RealRectangle2D aTextBounds(mrTextLayout->queryTextBounds());
+                    auto aB2DBounds = ::basegfx::unotools::b2DRectangleFromRealRectangle2D(aTextBounds);
+                    auto aTextBoundsPoly = ::basegfx::utils::createPolygonFromRect(aB2DBounds);
+                    return ::basegfx::unotools::xPolyPolygonFromB2DPolygon(mrCanvas->getDevice(), aTextBoundsPoly);
+                }
+
                 const uno::Reference< rendering::XCanvas >&         mrCanvas;
                 const uno::Reference< rendering::XTextLayout >&     mrTextLayout;
-                const uno::Reference< rendering::XPolyPolygon2D >&  mrLinePolygon;
+                const TextLinesHelper&                              mrTextLinesHelper;
                 const rendering::ViewState&                         mrViewState;
             };
 
@@ -1411,6 +1469,7 @@ namespace cppcanvas
                 double nMaxPos(aTextBounds.X2 - aTextBounds.X1);
 
                 createSubsetLayout( xTextLayout,
+                                    mnLayoutWidth,
                                     aLocalState,
                                     nMinPos,
                                     nMaxPos,
@@ -1427,12 +1486,8 @@ namespace cppcanvas
                 uno::Reference< rendering::XCanvas > xCanvas( mpCanvas->getUNOCanvas() );
                 const rendering::ViewState&          rViewState( mpCanvas->getViewState() );
 
-                uno::Reference< rendering::XPolyPolygon2D > xTextLines(
-                    ::basegfx::unotools::xPolyPolygonFromB2DPolyPolygon(
-                        xCanvas->getDevice(),
-                        tools::createTextLinesPolyPolygon(
-                            0.0, nMaxPos - nMinPos,
-                            maTextLineInfo ) ) );
+                TextLinesHelper aHelper = maTextLinesHelper;
+                aHelper.init(nMaxPos - nMinPos, maTextLineInfo);
 
 
                 // render everything
@@ -1441,15 +1496,15 @@ namespace cppcanvas
                 return renderEffectText(
                     EffectTextArrayRenderHelper( xCanvas,
                                                  xTextLayout,
-                                                 xTextLines,
+                                                 aHelper,
                                                  rViewState ),
                     aLocalState,
-                    rViewState,
                     xCanvas,
                     maShadowColor,
                     maShadowOffset,
                     maReliefColor,
-                    maReliefOffset );
+                    maReliefOffset,
+                    maTextFillColor);
             }
 
             ::basegfx::B2DRange EffectTextArrayAction::getBounds( const ::basegfx::B2DHomMatrix& rTransformation ) const
@@ -1457,11 +1512,13 @@ namespace cppcanvas
                 rendering::RenderState aLocalState( maState );
                 ::canvas::tools::prependToRenderState(aLocalState, rTransformation);
 
+                ::basegfx::B2DSize aSize = maTextLinesHelper.getOverallSize();
+
                 return calcEffectTextBounds( ::basegfx::unotools::b2DRectangleFromRealRectangle2D(
                                                  mxTextLayout->queryTextBounds() ),
                                              ::basegfx::B2DRange( 0,0,
-                                                                  maLinesOverallSize.getX(),
-                                                                  maLinesOverallSize.getY() ),
+                                                                  aSize.getX(),
+                                                                  aSize.getY() ),
                                              maReliefOffset,
                                              maShadowOffset,
                                              aLocalState,
@@ -1482,6 +1539,7 @@ namespace cppcanvas
                 double nMaxPos(aTextBounds.X2 - aTextBounds.X1);
 
                 createSubsetLayout( xTextLayout,
+                                    mnLayoutWidth,
                                     aLocalState,
                                     nMinPos,
                                     nMaxPos,
@@ -1502,7 +1560,7 @@ namespace cppcanvas
 
                 return calcEffectTextBounds( ::basegfx::unotools::b2DRectangleFromRealRectangle2D(
                                                  xTextLayout->queryTextBounds() ),
-                                             ::basegfx::tools::getRange( aPoly ),
+                                             ::basegfx::utils::getRange( aPoly ),
                                              maReliefOffset,
                                              maShadowOffset,
                                              aLocalState,
@@ -1530,7 +1588,7 @@ namespace cppcanvas
                                const ::basegfx::B2DRectangle&                       rOutlineBounds,
                                const uno::Reference< rendering::XPolyPolygon2D >&   rTextPoly,
                                const uno::Sequence< double >&                       rOffsets,
-                               VirtualDevice&                                       rVDev,
+                               VirtualDevice const &                                rVDev,
                                const CanvasSharedPtr&                               rCanvas,
                                const OutDevState&                                   rState  );
                 OutlineAction( const ::basegfx::B2DPoint&                           rStartPoint,
@@ -1541,7 +1599,7 @@ namespace cppcanvas
                                const ::basegfx::B2DRectangle&                       rOutlineBounds,
                                const uno::Reference< rendering::XPolyPolygon2D >&   rTextPoly,
                                const uno::Sequence< double >&                       rOffsets,
-                               VirtualDevice&                                       rVDev,
+                               VirtualDevice const &                                rVDev,
                                const CanvasSharedPtr&                               rCanvas,
                                const OutDevState&                                   rState,
                                const ::basegfx::B2DHomMatrix&                       rTextTransform );
@@ -1561,7 +1619,7 @@ namespace cppcanvas
 
             private:
                 // TextRenderer interface
-                virtual bool operator()( const rendering::RenderState& rRenderState ) const override;
+                virtual bool operator()( const rendering::RenderState& rRenderState, const ::Color& rTextFillColor, bool bNormalText ) const override;
 
                 // TODO(P2): This is potentially a real mass object
                 // (every character might be a separate TextAction),
@@ -1585,10 +1643,11 @@ namespace cppcanvas
                 const ::Color                                       maReliefColor;
                 const ::basegfx::B2DSize                            maShadowOffset;
                 const ::Color                                       maShadowColor;
+                const ::Color                                       maTextFillColor;
             };
 
             double calcOutlineWidth( const OutDevState& rState,
-                                     VirtualDevice&     rVDev )
+                                     VirtualDevice const & rVDev )
             {
                 const ::basegfx::B2DSize aFontSize( 0,
                                                     rVDev.GetFont().GetFontHeight() / 64.0 );
@@ -1607,7 +1666,7 @@ namespace cppcanvas
                                           const ::basegfx::B2DRectangle&                        rOutlineBounds,
                                           const uno::Reference< rendering::XPolyPolygon2D >&    rTextPoly,
                                           const uno::Sequence< double >&                        rOffsets,
-                                          VirtualDevice&                                        rVDev,
+                                          VirtualDevice const &                                 rVDev,
                                           const CanvasSharedPtr&                                rCanvas,
                                           const OutDevState&                                    rState  ) :
                 mxTextPoly( rTextPoly ),
@@ -1617,7 +1676,7 @@ namespace cppcanvas
                 mnOutlineWidth( calcOutlineWidth(rState,rVDev) ),
                 maFillColor(
                     vcl::unotools::colorToDoubleSequence(
-                        ::Color( COL_WHITE ),
+                        COL_WHITE,
                         rCanvas->getUNOCanvas()->getDevice()->getDeviceColorSpace() )),
                 maTextLineInfo( tools::createTextLineInfo( rVDev, rState ) ),
                 maLinesOverallSize(),
@@ -1628,10 +1687,14 @@ namespace cppcanvas
                 maShadowOffset( rShadowOffset ),
                 maShadowColor( rShadowColor )
             {
+                double nLayoutWidth = 0.0;
+
+                initLayoutWidth(nLayoutWidth, rOffsets);
+
                 initEffectLinePolyPolygon( maLinesOverallSize,
                                            mxTextLines,
                                            rCanvas,
-                                           rOffsets,
+                                           nLayoutWidth,
                                            maTextLineInfo );
 
                 init( maState,
@@ -1648,7 +1711,7 @@ namespace cppcanvas
                                           const ::basegfx::B2DRectangle&                        rOutlineBounds,
                                           const uno::Reference< rendering::XPolyPolygon2D >&    rTextPoly,
                                           const uno::Sequence< double >&                        rOffsets,
-                                          VirtualDevice&                                        rVDev,
+                                          VirtualDevice const &                                 rVDev,
                                           const CanvasSharedPtr&                                rCanvas,
                                           const OutDevState&                                    rState,
                                           const ::basegfx::B2DHomMatrix&                        rTextTransform ) :
@@ -1659,7 +1722,7 @@ namespace cppcanvas
                 mnOutlineWidth( calcOutlineWidth(rState,rVDev) ),
                 maFillColor(
                     vcl::unotools::colorToDoubleSequence(
-                        ::Color( COL_WHITE ),
+                        COL_WHITE,
                         rCanvas->getUNOCanvas()->getDevice()->getDeviceColorSpace() )),
                 maTextLineInfo( tools::createTextLineInfo( rVDev, rState ) ),
                 maLinesOverallSize(),
@@ -1670,10 +1733,13 @@ namespace cppcanvas
                 maShadowOffset( rShadowOffset ),
                 maShadowColor( rShadowColor )
             {
+                double nLayoutWidth = 0.0;
+                initLayoutWidth(nLayoutWidth, rOffsets);
+
                 initEffectLinePolyPolygon( maLinesOverallSize,
                                            mxTextLines,
                                            rCanvas,
-                                           rOffsets,
+                                           nLayoutWidth,
                                            maTextLineInfo );
 
                 init( maState,
@@ -1683,7 +1749,7 @@ namespace cppcanvas
                       rTextTransform );
             }
 
-            bool OutlineAction::operator()( const rendering::RenderState& rRenderState ) const
+            bool OutlineAction::operator()( const rendering::RenderState& rRenderState, const ::Color& /*rTextFillColor*/, bool /*bNormalText*/ ) const
             {
                 const rendering::ViewState&                 rViewState( mpCanvas->getViewState() );
                 const uno::Reference< rendering::XCanvas >& rCanvas( mpCanvas->getUNOCanvas() );
@@ -1735,12 +1801,12 @@ namespace cppcanvas
 
                 return renderEffectText( *this,
                                          aLocalState,
-                                         mpCanvas->getViewState(),
                                          mpCanvas->getUNOCanvas(),
                                          maShadowColor,
                                          maShadowOffset,
                                          maReliefColor,
-                                         maReliefOffset );
+                                         maReliefOffset,
+                                         maTextFillColor);
             }
 
 #if 0 // see #if'ed out use in OutlineAction::renderSubset below:
@@ -1754,7 +1820,7 @@ namespace cppcanvas
                                               double                                             nOutlineWidth ) :
                     maFillColor(
                         vcl::unotools::colorToDoubleSequence(
-                            ::Color( COL_WHITE ),
+                            ::COL_WHITE,
                             rCanvas->getDevice()->getDeviceColorSpace() )),
                     mnOutlineWidth( nOutlineWidth ),
                     mrCanvas( rCanvas ),
@@ -1909,7 +1975,7 @@ namespace cppcanvas
                 text, and creates a properly setup OutlineAction from
                 it.
              */
-            ActionSharedPtr createOutline( const ::basegfx::B2DPoint&       rStartPoint,
+            std::shared_ptr<Action> createOutline( const ::basegfx::B2DPoint&       rStartPoint,
                                            const ::basegfx::B2DSize&        rReliefOffset,
                                            const ::Color&                   rReliefColor,
                                            const ::basegfx::B2DSize&        rShadowOffset,
@@ -1949,7 +2015,7 @@ namespace cppcanvas
                 rVDev.SetFont(aOrigFont);
 
                 if( !bHaveOutlines )
-                    return ActionSharedPtr();
+                    return std::shared_ptr<Action>();
 
                 // remove offsetting from mapmode transformation
                 // (outline polygons must stay at origin, only need to
@@ -2008,14 +2074,14 @@ namespace cppcanvas
 
                 if( rParms.maTextTransformation.is_initialized() )
                 {
-                    return ActionSharedPtr(
+                    return std::shared_ptr<Action>(
                         new OutlineAction(
                             rStartPoint,
                             rReliefOffset,
                             rReliefColor,
                             rShadowOffset,
                             rShadowColor,
-                            ::basegfx::tools::getRange(aResultingPolyPolygon),
+                            ::basegfx::utils::getRange(aResultingPolyPolygon),
                             xTextPoly,
                             aCharWidthSeq,
                             rVDev,
@@ -2025,14 +2091,14 @@ namespace cppcanvas
                 }
                 else
                 {
-                    return ActionSharedPtr(
+                    return std::shared_ptr<Action>(
                         new OutlineAction(
                             rStartPoint,
                             rReliefOffset,
                             rReliefColor,
                             rShadowOffset,
                             rShadowColor,
-                            ::basegfx::tools::getRange(aResultingPolyPolygon),
+                            ::basegfx::utils::getRange(aResultingPolyPolygon),
                             xTextPoly,
                             aCharWidthSeq,
                             rVDev,
@@ -2044,11 +2110,12 @@ namespace cppcanvas
         } // namespace
 
 
-        ActionSharedPtr TextActionFactory::createTextAction( const ::Point&                 rStartPoint,
+        std::shared_ptr<Action> TextActionFactory::createTextAction( const ::Point&                 rStartPoint,
                                                              const ::Size&                  rReliefOffset,
                                                              const ::Color&                 rReliefColor,
                                                              const ::Size&                  rShadowOffset,
                                                              const ::Color&                 rShadowColor,
+                                                             const ::Color&                 rTextFillColor,
                                                              const OUString&                rText,
                                                              sal_Int32                      nStartPos,
                                                              sal_Int32                      nLen,
@@ -2107,7 +2174,7 @@ namespace cppcanvas
 
             const ::Color aEmptyColor( COL_AUTO );
 
-            ActionSharedPtr ret;
+            std::shared_ptr<Action> ret;
 
             // no DX array, and no need to subset - no need to store
             // DX array, then.
@@ -2123,7 +2190,7 @@ namespace cppcanvas
                     // nope
                     if( rParms.maTextTransformation.is_initialized() )
                     {
-                        ret = ActionSharedPtr( new TextAction(
+                        ret = std::shared_ptr<Action>( new TextAction(
                                                     aStartPoint,
                                                     rText,
                                                     nStartPos,
@@ -2134,7 +2201,7 @@ namespace cppcanvas
                     }
                     else
                     {
-                        ret = ActionSharedPtr( new TextAction(
+                        ret = std::shared_ptr<Action>( new TextAction(
                                                     aStartPoint,
                                                     rText,
                                                     nStartPos,
@@ -2147,7 +2214,7 @@ namespace cppcanvas
                 {
                     // at least one of the effects requested
                     if( rParms.maTextTransformation.is_initialized() )
-                        ret = ActionSharedPtr( new EffectTextAction(
+                        ret = std::shared_ptr<Action>( new EffectTextAction(
                                                     aStartPoint,
                                                     aReliefOffset,
                                                     rReliefColor,
@@ -2161,7 +2228,7 @@ namespace cppcanvas
                                                     rState,
                                                     *rParms.maTextTransformation ) );
                     else
-                        ret = ActionSharedPtr( new EffectTextAction(
+                        ret = std::shared_ptr<Action>( new EffectTextAction(
                                                     aStartPoint,
                                                     aReliefOffset,
                                                     rReliefColor,
@@ -2182,11 +2249,12 @@ namespace cppcanvas
                     !rState.textUnderlineStyle &&
                     !rState.textStrikeoutStyle &&
                     rReliefColor == aEmptyColor &&
-                    rShadowColor == aEmptyColor )
+                    rShadowColor == aEmptyColor &&
+                    rTextFillColor == aEmptyColor )
                 {
                     // nope
                     if( rParms.maTextTransformation.is_initialized() )
-                        ret = ActionSharedPtr( new TextArrayAction(
+                        ret = std::shared_ptr<Action>( new TextArrayAction(
                                                     aStartPoint,
                                                     rText,
                                                     nStartPos,
@@ -2196,7 +2264,7 @@ namespace cppcanvas
                                                     rState,
                                                     *rParms.maTextTransformation ) );
                     else
-                        ret = ActionSharedPtr( new TextArrayAction(
+                        ret = std::shared_ptr<Action>( new TextArrayAction(
                                                     aStartPoint,
                                                     rText,
                                                     nStartPos,
@@ -2209,12 +2277,13 @@ namespace cppcanvas
                 {
                     // at least one of the effects requested
                     if( rParms.maTextTransformation.is_initialized() )
-                        ret = ActionSharedPtr( new EffectTextArrayAction(
+                        ret = std::shared_ptr<Action>( new EffectTextArrayAction(
                                                     aStartPoint,
                                                     aReliefOffset,
                                                     rReliefColor,
                                                     aShadowOffset,
                                                     rShadowColor,
+                                                    rTextFillColor,
                                                     rText,
                                                     nStartPos,
                                                     nLen,
@@ -2224,12 +2293,13 @@ namespace cppcanvas
                                                     rState,
                                                     *rParms.maTextTransformation ) );
                     else
-                        ret = ActionSharedPtr( new EffectTextArrayAction(
+                        ret = std::shared_ptr<Action>( new EffectTextArrayAction(
                                                     aStartPoint,
                                                     aReliefOffset,
                                                     rReliefColor,
                                                     aShadowOffset,
                                                     rShadowColor,
+                                                    rTextFillColor,
                                                     rText,
                                                     nStartPos,
                                                     nLen,

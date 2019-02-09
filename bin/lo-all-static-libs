@@ -13,7 +13,7 @@ if test -z "$INSTDIR" ; then
     exit 1
 fi
 
-if test "$OS" != ANDROID -a "$OS" != IOS; then
+if test "$OS" != ANDROID -a "$OS" != iOS; then
     echo This script makes sense only in Android or iOS builds.
 fi
 
@@ -41,11 +41,24 @@ ANDROID)
     oslibs="$oslibs $WORKDIR/UnpackedTarball/freetype/objs/.libs/libfreetype.a"
     oslibs="$oslibs $WORKDIR/UnpackedTarball/pixman/pixman/.libs/libpixman-1.a"
     oslibs="$oslibs $WORKDIR/UnpackedTarball/cairo/src/.libs/libcairo.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/xmlsec/src/.libs/libxmlsec1.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/xmlsec/src/nss/.libs/libxmlsec1-nss.a"
     # Only liblo-bootstrap.a ends up here:
     oslibs="$oslibs $WORKDIR/LinkTarget/Library/lib*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/openssl/*.a"
+
+    # coinmp not used for iOS
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/Cbc/src/.libs/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/Cgl/src/.libs/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/Clp/src/.libs/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/Clp/src/OsiClp/.libs/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/CoinMP/src/.libs/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/CoinUtils/src/.libs/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/coinmp/Osi/src/Osi/.libs/*.a"
     ;;
-IOS)
+iOS)
     oslibs="$WORKDIR/UnpackedTarball/icu/source/stubdata/*.a"
+    oslibs="$oslibs $WORKDIR/UnpackedTarball/cppunit/src/cppunit/.libs/*.a"
     ;;
 *)
     oslibs=
@@ -56,16 +69,9 @@ echo $INSTDIR/$LIBO_LIB_FOLDER/lib*.a \
      $foolibs \
      $WORKDIR/LinkTarget/StaticLibrary/lib*.a \
      $oslibs \
-     $WORKDIR/UnpackedTarball/coinmp/Cbc/src/.libs/*.a \
-     $WORKDIR/UnpackedTarball/coinmp/Cgl/src/.libs/*.a \
-     $WORKDIR/UnpackedTarball/coinmp/Clp/src/.libs/*.a \
-     $WORKDIR/UnpackedTarball/coinmp/Clp/src/OsiClp/.libs/*.a \
-     $WORKDIR/UnpackedTarball/coinmp/CoinMP/src/.libs/*.a \
-     $WORKDIR/UnpackedTarball/coinmp/CoinUtils/src/.libs/*.a \
-     $WORKDIR/UnpackedTarball/coinmp/Osi/src/Osi/.libs/*.a \
-     $WORKDIR/UnpackedTarball/glew/lib/*.a \
      $WORKDIR/UnpackedTarball/icu/source/lib/*.a \
-     $WORKDIR/UnpackedTarball/langtag/liblangtag/.libs/*.a \
+     $WORKDIR/UnpackedTarball/libjpeg-turbo/.libs/*.a \
+     $WORKDIR/UnpackedTarball/liblangtag/liblangtag/.libs/*.a \
      $WORKDIR/UnpackedTarball/lcms2/src/.libs/*.a \
      $WORKDIR/UnpackedTarball/libabw/src/lib/.libs/*.a \
      $WORKDIR/UnpackedTarball/libcdr/src/lib/.libs/*.a \
@@ -75,9 +81,8 @@ echo $INSTDIR/$LIBO_LIB_FOLDER/lib*.a \
      $WORKDIR/UnpackedTarball/liborcus/src/*/.libs/*.a \
      $WORKDIR/UnpackedTarball/libvisio/src/lib/.libs/*.a \
      $WORKDIR/UnpackedTarball/libwp?/src/lib/.libs/*.a \
-     $WORKDIR/UnpackedTarball/openssl/*.a \
      $WORKDIR/UnpackedTarball/raptor/src/.libs/*.a \
      $WORKDIR/UnpackedTarball/rasqal/src/.libs/*.a \
      $WORKDIR/UnpackedTarball/redland/src/.libs/*.a \
-     $WORKDIR/UnpackedTarball/xml2/.libs/*.a \
-     $WORKDIR/UnpackedTarball/xslt/libxslt/.libs/*.a
+     $WORKDIR/UnpackedTarball/libxml2/.libs/*.a \
+     $WORKDIR/UnpackedTarball/libxslt/libxslt/.libs/*.a

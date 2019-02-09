@@ -17,11 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sdattr.hxx"
-#include "optsitem.hxx"
-#include "sdresid.hxx"
-#include "prntopts.hxx"
-#include "app.hrc"
+#include <sdattr.hxx>
+#include <optsitem.hxx>
+#include <prntopts.hxx>
+#include <app.hrc>
 #include <svl/intitem.hxx>
 #include <sfx2/request.hxx>
 
@@ -66,9 +65,6 @@ SdPrintOptions::SdPrintOptions( vcl::Window* pParent, const SfxItemSet& rInAttrs
 #ifndef MACOSX
     SetDrawMode();
 #endif
-
-    m_pCbxFront->SetAccessibleRelationLabeledBy( m_pRbtBooklet );
-    m_pCbxBack->SetAccessibleRelationLabeledBy( m_pRbtBooklet );
 }
 
 SdPrintOptions::~SdPrintOptions()
@@ -120,7 +116,7 @@ bool SdPrintOptions::FillItemSet( SfxItemSet* rAttrs )
         m_pRbtGrayscale->IsValueChangedFromSaved()||
         m_pRbtBlackWhite->IsValueChangedFromSaved())
     {
-        SdOptionsPrintItem aOptions( ATTR_OPTIONS_PRINT );
+        SdOptionsPrintItem aOptions;
 
         aOptions.GetOptionsPrint().SetDraw( m_pCbxDraw->IsChecked() );
         aOptions.GetOptionsPrint().SetNotes( m_pCbxNotes->IsChecked() );
@@ -206,13 +202,13 @@ void SdPrintOptions::Reset( const SfxItemSet* rAttrs )
     ClickBookletHdl( nullptr );
 }
 
-VclPtr<SfxTabPage> SdPrintOptions::Create( vcl::Window* pWindow,
+VclPtr<SfxTabPage> SdPrintOptions::Create( TabPageParent pWindow,
                                            const SfxItemSet* rOutAttrs )
 {
-    return VclPtr<SdPrintOptions>::Create( pWindow, *rOutAttrs );
+    return VclPtr<SdPrintOptions>::Create( pWindow.pParent, *rOutAttrs );
 }
 
-IMPL_LINK_TYPED( SdPrintOptions, ClickCheckboxHdl, Button*, pCbx, void )
+IMPL_LINK( SdPrintOptions, ClickCheckboxHdl, Button*, pCbx, void )
 {
     // there must be at least one of them checked
     if( !m_pCbxDraw->IsChecked() && !m_pCbxNotes->IsChecked() && !m_pCbxOutline->IsChecked() && !m_pCbxHandout->IsChecked() )
@@ -221,7 +217,7 @@ IMPL_LINK_TYPED( SdPrintOptions, ClickCheckboxHdl, Button*, pCbx, void )
     updateControls();
 }
 
-IMPL_LINK_NOARG_TYPED(SdPrintOptions, ClickBookletHdl, Button*, void)
+IMPL_LINK_NOARG(SdPrintOptions, ClickBookletHdl, Button*, void)
 {
     updateControls();
 }

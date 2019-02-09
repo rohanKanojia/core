@@ -29,7 +29,7 @@
 #include <comphelper/broadcasthelper.hxx>
 #include <comphelper/uno3.hxx>
 #include <cppuhelper/compbase4.hxx>
-#include "apitools.hxx"
+#include <apitools.hxx>
 
 namespace dbaui
 {
@@ -60,39 +60,42 @@ class OColumnControlModel :  public ::comphelper::OMutexAndBroadcastHelper
     sal_Int32                   m_nWidth;
 // [properties]
 
-    const css::uno::Reference< css::lang::XMultiServiceFactory>& getORB() const { return m_xORB; }
     void registerProperties();
 protected:
 
-    virtual ~OColumnControlModel();
+    virtual ~OColumnControlModel() override;
     OColumnControlModel(const OColumnControlModel* _pSource
                         ,const css::uno::Reference< css::lang::XMultiServiceFactory>& _rxFactory);
 public:
     explicit OColumnControlModel(const css::uno::Reference< css::lang::XMultiServiceFactory>& _rxFactory);
 
-// UNO Anbindung
+// UNO binding
     DECLARE_XINTERFACE( )
 
 // css::lang::XServiceInfo
-    DECLARE_SERVICE_INFO_STATIC();
+    DECLARE_SERVICE_INFO();
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static css::uno::Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
+    Create(const css::uno::Reference< css::lang::XMultiServiceFactory >&);
 
-    virtual css::uno::Sequence<css::uno::Type> SAL_CALL getTypes()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Sequence<css::uno::Type> SAL_CALL getTypes() override;
+    virtual css::uno::Sequence<sal_Int8> SAL_CALL getImplementationId() override;
 
 // css::uno::XAggregation
-    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& aType ) throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL queryAggregation( const css::uno::Type& aType ) override;
 
 //  css::io::XPersistObject
-    virtual OUString SAL_CALL getServiceName() throw ( css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getServiceName() override;
+    virtual void SAL_CALL write(const css::uno::Reference< css::io::XObjectOutputStream>& _rxOutStream) override;
+    virtual void SAL_CALL read(const css::uno::Reference< css::io::XObjectInputStream>& _rxInStream) override;
 
 // OPropertyArrayUsageHelper
     DECLARE_PROPERTYCONTAINER_DEFAULTS( );
 
-    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference< css::util::XCloneable > SAL_CALL createClone(  ) override;
 };
 
 }   // namespace dbaui

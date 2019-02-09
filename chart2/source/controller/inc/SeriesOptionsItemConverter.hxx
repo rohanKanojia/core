@@ -20,10 +20,11 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_SERIESOPTIONSITEMCONVERTER_HXX
 
 #include "ItemConverter.hxx"
+#include <com/sun/star/uno/Sequence.h>
 
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/chart2/XCoordinateSystem.hpp>
+namespace com { namespace sun { namespace star { namespace chart2 { class XCoordinateSystem; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace chart
 {
@@ -38,16 +39,14 @@ public:
         const css::uno::Reference< css::uno::XComponentContext > & xContext,
         const css::uno::Reference< css::beans::XPropertySet > & rPropertySet,
         SfxItemPool& rItemPool );
-    virtual ~SeriesOptionsItemConverter();
+    virtual ~SeriesOptionsItemConverter() override;
 
 protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
     virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
 
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw( css::uno::Exception ) override;
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw( css::uno::Exception ) override;
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const override;
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet ) override;
 
 private:
     css::uno::Reference< css::frame::XModel >  m_xChartModel;
@@ -63,8 +62,6 @@ private:
 
     bool m_bSupportingAxisSideBySide;
     bool m_bGroupBarsPerAxis;
-    bool m_bAllSeriesAttachedToSameAxis;
-    sal_Int32 m_nAllSeriesAxisIndex;
 
     bool m_bSupportingStartingAngle;
     sal_Int32 m_nStartingAngle;
@@ -77,6 +74,8 @@ private:
 
     bool m_bSupportingPlottingOfHiddenCells;
     bool m_bIncludeHiddenCells;
+
+    bool m_bHideLegendEntry;
 };
 
 } //  namespace wrapper

@@ -18,23 +18,28 @@
  */
 
 #include <svtools/wizardmachine.hxx>
-#include <svtools/helpid.hrc>
+#include <svtools/helpids.h>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include <vcl/msgbox.hxx>
 #include <svtools/svtresid.hxx>
-#include <svtools/svtools.hrc>
-
+#include <svtools/strings.hrc>
+#include <vcl/svapp.hxx>
+#include <stack>
 
 namespace svt
 {
-
-
     //= WizardPageImplData
-
     OWizardPage::OWizardPage(vcl::Window *pParent, const OString& rID,
         const OUString& rUIXMLDescription)
         : TabPage(pParent, rID, rUIXMLDescription)
+    {
+    }
+
+    OWizardPage::OWizardPage(TabPageParent pParent, const OUString& rUIXMLDescription, const OString& rID)
+        : TabPage(pParent.pPage ? Application::GetDefDialogParent() : pParent.pParent.get()) //just drag this along hidden in this scenario
+        , m_xBuilder(pParent.pPage ? Application::CreateBuilder(pParent.pPage, rUIXMLDescription)
+                                   : Application::CreateInterimBuilder(this, rUIXMLDescription))
+        , m_xContainer(m_xBuilder->weld_container(rID))
     {
     }
 
@@ -45,6 +50,7 @@ namespace svt
 
     void OWizardPage::dispose()
     {
+        m_xBuilder.reset();
         TabPage::dispose();
     }
 
@@ -96,18 +102,6 @@ namespace svt
         }
     };
 
-    OWizardMachine::OWizardMachine(vcl::Window* _pParent, const WinBits i_nStyle, WizardButtonFlags _nButtonFlags )
-        :WizardDialog( _pParent, i_nStyle )
-        ,m_pFinish(nullptr)
-        ,m_pCancel(nullptr)
-        ,m_pNextPage(nullptr)
-        ,m_pPrevPage(nullptr)
-        ,m_pHelp(nullptr)
-        ,m_pImpl( new WizardMachineImplData )
-    {
-        implConstruct( _nButtonFlags );
-    }
-
     OWizardMachine::OWizardMachine(vcl::Window* _pParent, WizardButtonFlags _nButtonFlags )
         :WizardDialog( _pParent, "WizardDialog", "svt/ui/wizarddialog.ui" )
         ,m_pFinish(nullptr)
@@ -130,7 +124,7 @@ namespace svt
         if (_nButtonFlags & WizardButtonFlags::HELP)
         {
             m_pHelp= VclPtr<HelpButton>::Create(this, WB_TABSTOP);
-            m_pHelp->SetSizePixel( LogicToPixel( Size( 50, 14 ), MAP_APPFONT ) );
+            m_pHelp->SetSizePixel(LogicToPixel(Size(50, 14), MapMode(MapUnit::MapAppFont)));
             m_pHelp->Show();
             AddButton( m_pHelp, WIZARDDIALOG_BUTTON_STDOFFSET_X);
         }
@@ -140,9 +134,10 @@ namespace svt
         {
             m_pPrevPage = VclPtr<PushButton>::Create(this, WB_TABSTOP);
             m_pPrevPage->SetHelpId( HID_WIZARD_PREVIOUS );
-            m_pPrevPage->SetSizePixel( LogicToPixel( Size( 50, 14 ), MAP_APPFONT ) );
-            m_pPrevPage->SetText(SVT_RESSTR(STR_WIZDLG_PREVIOUS));
+            m_pPrevPage->SetSizePixel(LogicToPixel(Size(50, 14), MapMode(MapUnit::MapAppFont)));
+            m_pPrevPage->SetText(SvtResId(STR_WIZDLG_PREVIOUS));
             m_pPrevPage->Show();
+            m_pPrevPage->set_id("previous");
 
             if (_nButtonFlags & WizardButtonFlags::NEXT)
                 AddButton( m_pPrevPage, ( WIZARDDIALOG_BUTTON_SMALLSTDOFFSET_X) );      // half x-offset to the next button
@@ -157,9 +152,10 @@ namespace svt
         {
             m_pNextPage = VclPtr<PushButton>::Create(this, WB_TABSTOP);
             m_pNextPage->SetHelpId( HID_WIZARD_NEXT );
-            m_pNextPage->SetSizePixel( LogicToPixel( Size( 50, 14 ), MAP_APPFONT ) );
-            m_pNextPage->SetText(OUString(SVT_RESSTR(STR_WIZDLG_NEXT)));
+            m_pNextPage->SetSizePixel(LogicToPixel(Size(50, 14), MapMode(MapUnit::MapAppFont)));
+            m_pNextPage->SetText(SvtResId(STR_WIZDLG_NEXT));
             m_pNextPage->Show();
+            m_pNextPage->set_id("next");
 
             AddButton( m_pNextPage, WIZARDDIALOG_BUTTON_STDOFFSET_X );
             SetNextButton( m_pNextPage );
@@ -170,9 +166,10 @@ namespace svt
         if (_nButtonFlags & WizardButtonFlags::FINISH)
         {
             m_pFinish = VclPtr<OKButton>::Create(this, WB_TABSTOP);
-            m_pFinish->SetSizePixel( LogicToPixel( Size( 50, 14 ), MAP_APPFONT ) );
-            m_pFinish->SetText(SVT_RESSTR(STR_WIZDLG_FINISH));
+            m_pFinish->SetSizePixel(LogicToPixel(Size(50, 14), MapMode(MapUnit::MapAppFont)));
+            m_pFinish->SetText(SvtResId(STR_WIZDLG_FINISH));
             m_pFinish->Show();
+            m_pFinish->set_id("finish");
 
             AddButton( m_pFinish, WIZARDDIALOG_BUTTON_STDOFFSET_X );
             m_pFinish->SetClickHdl( LINK( this, OWizardMachine, OnFinish ) );
@@ -182,7 +179,7 @@ namespace svt
         if (_nButtonFlags & WizardButtonFlags::CANCEL)
         {
             m_pCancel = VclPtr<CancelButton>::Create(this, WB_TABSTOP);
-            m_pCancel->SetSizePixel( LogicToPixel( Size( 50, 14 ), MAP_APPFONT ) );
+            m_pCancel->SetSizePixel(LogicToPixel(Size(50, 14), MapMode(MapUnit::MapAppFont)));
             m_pCancel->Show();
 
             AddButton( m_pCancel, WIZARDDIALOG_BUTTON_STDOFFSET_X );
@@ -211,8 +208,7 @@ namespace svt
                 if (pPage)
                     pPage->disposeOnce();
             }
-            delete m_pImpl;
-            m_pImpl = nullptr;
+            m_pImpl.reset();
         }
 
         WizardDialog::dispose();
@@ -227,7 +223,7 @@ namespace svt
         TabPage* pCurrentPage = GetPage(getCurrentState());
         if ( pCurrentPage && !pCurrentPage->GetText().isEmpty() )
         {
-            sCompleteTitle += (" - " + pCurrentPage->GetText());
+            sCompleteTitle += " - " + pCurrentPage->GetText();
         }
 
         SetText(sCompleteTitle);
@@ -245,7 +241,7 @@ namespace svt
     {
         if ( nullptr == GetPage( i_nState ) )
         {
-            TabPage* pNewPage = createPage( i_nState );
+            VclPtr<TabPage> pNewPage = createPage( i_nState );
             DBG_ASSERT( pNewPage, "OWizardMachine::GetOrCreatePage: invalid new page (NULL)!" );
 
             // fill up the page sequence of our base class (with dummies)
@@ -283,9 +279,7 @@ namespace svt
     bool OWizardMachine::DeactivatePage()
     {
         WizardState nCurrentState = getCurrentState();
-        if (!leaveState(nCurrentState) || !WizardDialog::DeactivatePage())
-            return false;
-        return true;
+        return leaveState(nCurrentState) && WizardDialog::DeactivatePage();
     }
 
 
@@ -311,7 +305,7 @@ namespace svt
     }
 
 
-    void OWizardMachine::implResetDefault(vcl::Window* _pWindow)
+    void OWizardMachine::implResetDefault(vcl::Window const * _pWindow)
     {
         vcl::Window* pChildLoop = _pWindow->GetWindow(GetWindowType::FirstChild);
         while (pChildLoop)
@@ -322,14 +316,13 @@ namespace svt
 
             // is it a button?
             WindowType eType = pChildLoop->GetType();
-            if  (   (WINDOW_BUTTON == eType)
-                ||  (WINDOW_PUSHBUTTON == eType)
-                ||  (WINDOW_OKBUTTON == eType)
-                ||  (WINDOW_CANCELBUTTON == eType)
-                ||  (WINDOW_HELPBUTTON == eType)
-                ||  (WINDOW_IMAGEBUTTON == eType)
-                ||  (WINDOW_MENUBUTTON == eType)
-                ||  (WINDOW_MOREBUTTON == eType)
+            if  (   (WindowType::PUSHBUTTON == eType)
+                ||  (WindowType::OKBUTTON == eType)
+                ||  (WindowType::CANCELBUTTON == eType)
+                ||  (WindowType::HELPBUTTON == eType)
+                ||  (WindowType::IMAGEBUTTON == eType)
+                ||  (WindowType::MENUBUTTON == eType)
+                ||  (WindowType::MOREBUTTON == eType)
                 )
             {
                 pChildLoop->SetStyle(pChildLoop->GetStyle() & ~WB_DEFBUTTON);
@@ -402,7 +395,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OWizardMachine, OnFinish, Button*, void)
+    IMPL_LINK_NOARG(OWizardMachine, OnFinish, Button*, void)
     {
         if ( isTravelingSuspended() )
             return;
@@ -513,7 +506,6 @@ namespace svt
 
         // get the next state
         nCurrentState = nNextState;
-        nNextState = determineNextState(nCurrentState);
 
         // show the (n+1)th page
         if (!ShowPage(nCurrentState))
@@ -558,7 +550,7 @@ namespace svt
 
     bool OWizardMachine::travelPrevious()
     {
-        DBG_ASSERT(m_pImpl->aStateHistory.size() > 0, "OWizardMachine::travelPrevious: have no previous page!");
+        DBG_ASSERT(!m_pImpl->aStateHistory.empty(), "OWizardMachine::travelPrevious: have no previous page!");
 
         // allowed to leave the current page?
         if ( !prepareLeaveCurrentState( eTravelBackward ) )
@@ -614,7 +606,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OWizardMachine, OnPrevPage, Button*, void)
+    IMPL_LINK_NOARG(OWizardMachine, OnPrevPage, Button*, void)
     {
         if ( isTravelingSuspended() )
             return;
@@ -623,7 +615,7 @@ namespace svt
     }
 
 
-    IMPL_LINK_NOARG_TYPED(OWizardMachine, OnNextPage, Button*, void)
+    IMPL_LINK_NOARG(OWizardMachine, OnNextPage, Button*, void)
     {
         if ( isTravelingSuspended() )
             return;

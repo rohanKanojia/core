@@ -4,62 +4,65 @@ sw/res/all_right.png cmd/sc_lastpage.png
 sw/res/one_left.png cmd/sc_navigateback.png
 sw/res/one_right.png cmd/sc_navigateforward.png
 sw/res/styfamnu.png cmd/sc_defaultbullet.png
-sw/imglst/nc20001.png cmd/sc_inserttable.png
-sw/imglst/nc20002.png cmd/sc_text.png
-sw/imglst/nc20003.png cmd/sc_insertgraphic.png
-sw/imglst/nc20004.png cmd/sc_drawchart.png
-sw/imglst/nc20005.png cmd/sc_insertbookmark.png
-sw/imglst/nc20006.png cmd/sc_insertsection.png
-sw/imglst/nc20007.png cmd/sc_inserthyperlink.png
-sw/imglst/nc20008.png cmd/sc_insertreferencefield.png
-sw/imglst/nc20009.png cmd/sc_insertindexesentry.png
-sw/imglst/nc20010.png cmd/sc_insertannotation.png
-sw/imglst/nc20011.png cmd/sc_insertdraw.png
-sw/imglst/sc20171.png cmd/sc_downsearch.png
-sw/imglst/sc20172.png cmd/sc_navigateback.png
-sw/imglst/sc20173.png cmd/sc_navigateforward.png
-sw/imglst/sc20174.png cmd/sc_upsearch.png
-sw/imglst/sc20175.png cmd/sc_flowchartshapes.flowchart-merge.png
-sw/imglst/sc20186.png cmd/sc_flowchartshapes.flowchart-extract.png
-sw/imglst/sc20235.png cmd/sc_inserthyperlink.png
-sw/imglst/sc20239.png cmd/sc_copy.png
-sw/imglst/sc20249.png cmd/sc_navigator.png
-sw/imglst/sf01.png cmd/sc_controlcodes.png
-sw/imglst/sf02.png cmd/sc_bold.png
-sw/imglst/sf04.png cmd/sc_adddirect.png
-sw/imglst/sf05.png cmd/sc_defaultbullet.png
-sw/imglst/sr20000.png cmd/sc_downsearch.png
-sw/imglst/sr20001.png cmd/sc_upsearch.png
-sw/imglst/sr20002.png cmd/sc_inserttable.png
-sw/imglst/sr20003.png cmd/sc_text.png
-sw/imglst/sr20004.png cmd/sc_adddirect.png
-sw/imglst/sr20005.png cmd/sc_insertdraw.png
-sw/imglst/sr20006.png cmd/sc_choosecontrols.png
-sw/imglst/sr20007.png cmd/sc_insertsection.png
-sw/imglst/sr20008.png cmd/sc_insertbookmark.png
-sw/imglst/sr20009.png cmd/sc_insertgraphic.png
-sw/imglst/sr20010.png cmd/sc_drawchart.png
-sw/imglst/sr20015.png cmd/sc_insertannotation.png
-sw/imglst/sr20016.png cmd/sc_searchdialog.png
-sw/imglst/sr20013.png cmd/sc_insertfootnote.png
-sw/imglst/sr20014.png sw/imglst/sc20183.png
-sw/imglst/sr20017.png cmd/sc_insertindexesentry.png
+sw/res/nc20001.png cmd/sc_inserttable.png
+sw/res/nc20002.png cmd/sc_text.png
+sw/res/nc20003.png cmd/sc_insertgraphic.png
+sw/res/nc20004.png cmd/sc_drawchart.png
+sw/res/nc20005.png cmd/sc_insertbookmark.png
+sw/res/nc20006.png cmd/sc_insertsection.png
+sw/res/nc20007.png cmd/sc_inserthyperlink.png
+sw/res/nc20008.png cmd/sc_insertreferencefield.png
+sw/res/nc20009.png cmd/sc_insertindexesentry.png
+sw/res/nc20010.png cmd/sc_insertannotation.png
+sw/res/nc20011.png cmd/sc_insertdraw.png
+sw/res/sc20171.png cmd/sc_downsearch.png
+sw/res/sc20172.png cmd/sc_navigateback.png
+sw/res/sc20173.png cmd/sc_navigateforward.png
+sw/res/sc20174.png cmd/sc_upsearch.png
+sw/res/sc20175.png cmd/sc_flowchartshapes.flowchart-merge.png
+sw/res/sc20186.png cmd/sc_flowchartshapes.flowchart-extract.png
+sw/res/sc20235.png cmd/sc_inserthyperlink.png
+sw/res/sc20239.png cmd/sc_copy.png
+sw/res/sc20249.png cmd/sc_navigator.png
+sw/res/sf01.png cmd/sc_controlcodes.png
+sw/res/sf02.png cmd/sc_bold.png
+sw/res/sf04.png cmd/sc_adddirect.png
+sw/res/sf05.png cmd/sc_defaultbullet.png
+sw/res/sr20000.png cmd/sc_downsearch.png
+sw/res/sr20001.png cmd/sc_upsearch.png
+sw/res/sr20002.png cmd/sc_inserttable.png
+sw/res/sr20003.png cmd/sc_text.png
+sw/res/sr20004.png cmd/sc_adddirect.png
+sw/res/sr20005.png cmd/sc_insertdraw.png
+sw/res/sr20006.png cmd/sc_choosecontrols.png
+sw/res/sr20007.png cmd/sc_insertsection.png
+sw/res/sr20008.png cmd/sc_insertbookmark.png
+sw/res/sr20009.png cmd/sc_insertgraphic.png
+sw/res/sr20010.png cmd/sc_drawchart.png
+sw/res/sr20015.png cmd/sc_insertannotation.png
+sw/res/sr20016.png cmd/sc_searchdialog.png
+sw/res/sr20013.png cmd/sc_insertfootnote.png
+sw/res/sr20014.png sw/res/sc20183.png
+sw/res/sr20017.png cmd/sc_insertindexesentry.png
 # Navigator - Calc
-sc/imglst/na05.png cmd/sc_upsearch.png
-sc/imglst/na06.png cmd/sc_downsearch.png
-sc/imglst/nc01.png cmd/sc_inserttable.png
-sc/imglst/nc04.png cmd/sc_insertgraphic.png
-sc/imglst/nc05.png cmd/sc_drawchart.png
-sc/imglst/nc06.png cmd/sc_insertannotation.png
-sc/imglst/nc08.png cmd/sc_insertdraw.png
+sc/res/na05.png cmd/sc_upsearch.png
+sc/res/na06.png cmd/sc_downsearch.png
+sc/res/nc01.png cmd/sc_inserttable.png
+sc/res/nc04.png cmd/sc_insertgraphic.png
+sc/res/nc05.png cmd/sc_drawchart.png
+sc/res/nc06.png cmd/sc_insertannotation.png
+sc/res/nc08.png cmd/sc_insertdraw.png
 sc/res/table.png cmd/sc_inserttable.png
 
-# File Menu
-cmd/sc_exporttopdf.png cmd/sc_exportdirecttopdf.png
+# Thesaurus
+cmd/lc_thesaurusdialog.png cmd/lc_thesaurus.png
+cmd/sc_thesaurusdialog.png cmd/sc_thesaurus.png
 
 # Print Preview Toolbar
 cmd/lc_showsinglepage.png cmd/lc_adddirect.png
 cmd/sc_showsinglepage.png cmd/sc_adddirect.png
+cmd/lc_closepreview.png cmd/lc_exitsearch.png
+cmd/sc_closepreview.png cmd/sc_exitsearch.png
 
 # Horizontal Text Alignment (align* is in calc and *para is used in writer)
 #cmd/lc_alignleft.png cmd/lc_leftpara.png
@@ -74,6 +77,8 @@ cmd/sc_showsinglepage.png cmd/sc_adddirect.png
 # Colors (fontcolor is used in writer's formatting toolbar)
 cmd/lc_fontcolor.png cmd/lc_color.png
 cmd/sc_fontcolor.png cmd/sc_color.png
+cmd/sc_tablecellbackgroundcolor.png cmd/sc_backgroundcolor.png
+cmd/lc_tablecellbackgroundcolor.png cmd/lc_backgroundcolor.png
 
 # Vertical Text Alignment (cellvert* is used in writer and align* is used in calc)
 cmd/lc_cellverttop.png cmd/lc_aligntop.png
@@ -92,6 +97,8 @@ cmd/sc_spellingandgrammardialog.png cmd/sc_spelling.png
 # Calc
 cmd/lc_numberformatcurrency.png cmd/lc_insertcurrencyfield.png
 cmd/sc_numberformatcurrency.png cmd/sc_insertcurrencyfield.png
+cmd/lc_numberformatcurrencysimple.png cmd/lc_insertcurrencyfield.png
+cmd/sc_numberformatcurrencysimple.png cmd/sc_insertcurrencyfield.png
 cmd/lc_linestyle.png cmd/lc_borderdialog.png
 cmd/sc_linestyle.png cmd/sc_borderdialog.png
 
@@ -128,6 +135,10 @@ cmd/sc_arrowtoolbox.png cmd/sc_linearrowend.png
 cmd/lc_tablesort.png cmd/lc_datasort.png
 cmd/sc_tablesort.png cmd/sc_datasort.png
 
+# Writer - Standard toolbar
+cmd/lc_charmapcontrol.png cmd/lc_insertsymbol.png
+cmd/sc_charmapcontrol.png cmd/sc_insertsymbol.png
+
 # Draw - Line and Filling Toolbar
 cmd/lc_advancedmode.png cmd/lc_toggleobjectrotatemode.png
 cmd/sc_advancedmode.png cmd/sc_toggleobjectrotatemode.png
@@ -140,23 +151,21 @@ cmd/sc_insertrowbreak.png cmd/sc_insertpagebreak.png
 cmd/lc_datafilterautofilter.png cmd/lc_autofilter.png
 cmd/sc_datafilterautofilter.png cmd/sc_autofilter.png
 
+# calc fx function symbol
+cmd/lc_functiondialog.png cmd/lc_insertformula.png
+cmd/sc_functiondialog.png cmd/sc_insertformula.png
+formula/res/fx.png cmd/sc_dbviewfunctions.png
+
 # text background colour Impress/Draw
 cmd/sc_charbackcolor.png cmd/sc_backcolor.png
 cmd/lc_charbackcolor.png cmd/lc_backcolor.png
 
-# insert rows and columns
-cmd/lc_insertrowsbefore.png cmd/lc_insertrows.png
-cmd/sc_insertrowsbefore.png cmd/sc_insertrows.png
-cmd/lc_insertcolumnsbefore.png cmd/lc_insertcolumns.png
-cmd/sc_insertcolumnsbefore.png cmd/sc_insertcolumns.png
-cmd/lc_insertrowsafter.png cmd/lc_insertrows.png
-cmd/sc_insertrowsafter.png cmd/sc_insertrows.png
-cmd/lc_insertcolumnsafter.png cmd/lc_insertcolumns.png
-cmd/sc_insertcolumnsafter.png cmd/sc_insertcolumns.png
-
 # simple save button
 cmd/lc_savesimple.png cmd/lc_save.png
 cmd/sc_savesimple.png cmd/sc_save.png
+
+cmd/lc_underlinesimple.png cmd/lc_underline.png
+cmd/sc_underlinesimple.png cmd/sc_underline.png
 
 # anchor menu
 cmd/lc_anchormenu.png cmd/lc_toggleanchortype.png
@@ -188,3 +197,53 @@ cmd/sc_deleteslide.png cmd/sc_deletepage.png
 cmd/sc_firstslide.png cmd/sc_firstpage.png
 cmd/sc_lastslide.png cmd/sc_lastpage.png
 cmd/sc_slidesetup.png cmd/sc_pagesetup.png
+
+cmd/lc_columnoperations.png cmd/lc_entirecolumn.png
+cmd/sc_columnoperations.png cmd/sc_entirecolumn.png
+cmd/lc_rowoperations.png cmd/lc_entirerow.png
+cmd/sc_rowoperations.png cmd/sc_entirerow.png
+
+cmd/lc_objectforwardone.png cmd/lc_forward.png
+cmd/sc_objectforwardone.png cmd/sc_forward.png
+cmd/lc_objectbackone.png cmd/lc_backward.png
+cmd/sc_objectbackone.png cmd/sc_backward.png
+
+# writer pdf and epub export
+cmd/lc_exporttopdf.png cmd/lc_exportdirecttopdf.png
+cmd/sc_exporttopdf.png cmd/sc_exportdirecttopdf.png
+cmd/lc_exporttoepub.png cmd/lc_exportdirecttoepub.png
+cmd/sc_exporttoepub.png cmd/sc_exportdirecttoepub.png
+
+# writer formatting style toolbar
+cmd/lc_bulletliststyle.png cmd/lc_defaultbullet.png
+cmd/sc_bulletliststyle.png cmd/sc_defaultbullet.png
+cmd/lc_numberliststyle.png cmd/lc_defaultnumbering.png
+cmd/sc_numberliststyle.png cmd/sc_defaultnumbering.png
+
+# view menu
+cmd/lc_viewsidebarstyles.png cmd/lc_designerdialog.png
+cmd/sc_viewsidebarstyles.png cmd/sc_designerdialog.png
+
+# writer text and table context menus
+cmd/sc_charactermenu.png cmd/sc_fontdialog.png
+cmd/sc_paragraphmenu.png cmd/sc_paragraphdialog.png
+cmd/sc_numberingmenu.png cmd/sc_outlinebullet.png
+
+# writer standard toolbar
+cmd/sc_charmapcontrol.png cmd/sc_insertsymbol.png
+cmd/sc_emojicontrol.png cmd/sc_symbolshapes.png
+
+# Vertical Text Alignment
+cmd/lc_cellverttop.png cmd/lc_aligntop.png
+cmd/lc_cellvertcenter.png cmd/lc_alignverticalcenter.png
+cmd/lc_cellvertbottom.png cmd/lc_alignbottom.png
+cmd/sc_cellverttop.png cmd/sc_aligntop.png
+cmd/sc_cellvertcenter.png cmd/sc_alignverticalcenter.png
+cmd/sc_cellvertbottom.png cmd/sc_alignbottom.png
+
+cmd/sc_commonaligntop.png cmd/sc_aligntop.png
+cmd/sc_commonalignverticalcenter.png cmd/sc_alignverticalcenter.png
+cmd/sc_commonalignbottom.png cmd/sc_alignbottom.png
+cmd/lc_commonaligntop.png cmd/lc_aligntop.png
+cmd/lc_commonalignverticalcenter.png cmd/lc_alignverticalcenter.png
+cmd/lc_commonalignbottom.png cmd/lc_alignbottom.png

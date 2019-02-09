@@ -20,14 +20,13 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_BIFFHELPER_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_BIFFHELPER_HXX
 
-#include <oox/helper/binarystreambase.hxx>
+#include <sal/types.h>
+#include <rtl/ustring.hxx>
 
 namespace oox { class SequenceInputStream; }
 
 namespace oox {
 namespace xls {
-
-class BiffInputStream;
 
 // BIFF12 record identifiers ==================================================
 
@@ -246,31 +245,52 @@ const sal_Int32 BIFF12_ID_XF                = 0x002F;
 
 // BIFF2-BIFF8 record identifiers =============================================
 
-/** An enumeration for all binary Excel file format types (BIFF types). */
-enum BiffType
-{
-    BIFF2 = 0,                  /// MS Excel 2.1.
-    BIFF3,                      /// MS Excel 3.0.
-    BIFF4,                      /// MS Excel 4.0.
-    BIFF5,                      /// MS Excel 5.0, MS Excel 7.0 (95).
-    BIFF8,                      /// MS Excel 8.0 (97), 9.0 (2000), 10.0 (XP), 11.0 (2003).
-    BIFF_UNKNOWN                /// Unknown BIFF version.
-};
+/** all binary Excel file format types (BIFF types).
+    BIFF2                      /// MS Excel 2.1.
+    BIFF3                      /// MS Excel 3.0.
+    BIFF4                      /// MS Excel 4.0.
+    BIFF5                      /// MS Excel 5.0, MS Excel 7.0 (95).
+    BIFF8                      /// MS Excel 8.0 (97), 9.0 (2000), 10.0 (XP), 11.0 (2003).
+    BIFF_UNKNOWN               /// Unknown BIFF version.
+*/
 
-const sal_uInt16 BIFF2_MAXRECSIZE           = 2080;
-const sal_uInt16 BIFF8_MAXRECSIZE           = 8224;
+//const sal_uInt16 BIFF2_MAXRECSIZE           = 2080;
+//const sal_uInt16 BIFF8_MAXRECSIZE           = 8224;
 
 // record identifiers ---------------------------------------------------------
 
+const sal_uInt16 BIFF2_ID_BOF               = 0x0009;
+const sal_uInt16 BIFF3_ID_BOF               = 0x0209;
+const sal_uInt16 BIFF4_ID_BOF               = 0x0409;
+const sal_uInt16 BIFF5_ID_BOF               = 0x0809;
+const sal_uInt16 BIFF_ID_CONT               = 0x003C;
+const sal_uInt16 BIFF_ID_EOF                = 0x000A;
+const sal_uInt16 BIFF_ID_PCDEFINITION       = 0x00C6;
+const sal_uInt16 BIFF_ID_PCDEFINITION2      = 0x0122;
+const sal_uInt16 BIFF_ID_PCDFDISCRETEPR     = 0x00D9;
+const sal_uInt16 BIFF_ID_PCDFIELD           = 0x00C7;
+const sal_uInt16 BIFF_ID_PCDFRANGEPR        = 0x00D8;
+const sal_uInt16 BIFF_ID_PCDFSQLTYPE        = 0x01BB;
+const sal_uInt16 BIFF_ID_PCITEM_BOOL        = 0x00CA;
+const sal_uInt16 BIFF_ID_PCITEM_DATE        = 0x00CE;
+const sal_uInt16 BIFF_ID_PCITEM_DOUBLE      = 0x00C9;
+const sal_uInt16 BIFF_ID_PCITEM_ERROR       = 0x00CB;
+const sal_uInt16 BIFF_ID_PCITEM_INDEXLIST   = 0x00C8;
+const sal_uInt16 BIFF_ID_PCITEM_INTEGER     = 0x00CC;
+const sal_uInt16 BIFF_ID_PCITEM_MISSING     = 0x00CF;
+const sal_uInt16 BIFF_ID_PCITEM_STRING      = 0x00CD;
+
+const sal_uInt16 BIFF_ID_UNKNOWN            = SAL_MAX_UINT16;
+
+/* Many of these constants might be unused, but please keep for documentation. If you notice
+ * hardcoded numbers in the code that actually correspond in meaning in the context (not just value)
+ * to one of the named constants, feel free to change it to use the constant instead, of course.
+ */
 const sal_uInt16 BIFF2_ID_ARRAY             = 0x0021;
 const sal_uInt16 BIFF3_ID_ARRAY             = 0x0221;
 const sal_uInt16 BIFF_ID_AUTOFILTER         = 0x009D;
 const sal_uInt16 BIFF2_ID_BLANK             = 0x0001;
 const sal_uInt16 BIFF3_ID_BLANK             = 0x0201;
-const sal_uInt16 BIFF2_ID_BOF               = 0x0009;
-const sal_uInt16 BIFF3_ID_BOF               = 0x0209;
-const sal_uInt16 BIFF4_ID_BOF               = 0x0409;
-const sal_uInt16 BIFF5_ID_BOF               = 0x0809;
 const sal_uInt16 BIFF_ID_BOOKBOOL           = 0x00DA;
 const sal_uInt16 BIFF_ID_BOOKEXT            = 0x0863;
 const sal_uInt16 BIFF2_ID_BOOLERR           = 0x0005;
@@ -358,7 +378,6 @@ const sal_uInt16 BIFF_ID_COLUMNDEFAULT      = 0x0020;
 const sal_uInt16 BIFF_ID_COLWIDTH           = 0x0024;
 const sal_uInt16 BIFF_ID_COMPRESSPICS       = 0x089B;
 const sal_uInt16 BIFF_ID_CONNECTION         = 0x0876;
-const sal_uInt16 BIFF_ID_CONT               = 0x003C;
 const sal_uInt16 BIFF_ID_COORDLIST          = 0x00A9;
 const sal_uInt16 BIFF_ID_COUNTRY            = 0x008C;
 const sal_uInt16 BIFF_ID_CRN                = 0x005A;
@@ -383,7 +402,6 @@ const sal_uInt16 BIFF_ID_DELTA              = 0x0010;
 const sal_uInt16 BIFF2_ID_DIMENSION         = 0x0000;
 const sal_uInt16 BIFF3_ID_DIMENSION         = 0x0200;
 const sal_uInt16 BIFF_ID_DXF                = 0x088D;
-const sal_uInt16 BIFF_ID_EOF                = 0x000A;
 const sal_uInt16 BIFF_ID_EXTERNALBOOK       = 0x01AE;
 const sal_uInt16 BIFF2_ID_EXTERNALNAME      = 0x0023;
 const sal_uInt16 BIFF3_ID_EXTERNALNAME      = 0x0223;
@@ -446,23 +464,9 @@ const sal_uInt16 BIFF_ID_PALETTE            = 0x0092;
 const sal_uInt16 BIFF_ID_PANE               = 0x0041;
 const sal_uInt16 BIFF_ID_PARAMQUERY         = 0x00DC;
 const sal_uInt16 BIFF_ID_PASSWORD           = 0x0013;
-const sal_uInt16 BIFF_ID_PCDEFINITION       = 0x00C6;
-const sal_uInt16 BIFF_ID_PCDEFINITION2      = 0x0122;
-const sal_uInt16 BIFF_ID_PCDFDISCRETEPR     = 0x00D9;
-const sal_uInt16 BIFF_ID_PCDFIELD           = 0x00C7;
 const sal_uInt16 BIFF_ID_PCDFIELDINDEX      = 0x0103;
 const sal_uInt16 BIFF_ID_PCDFORMULAFIELD    = 0x00F9;
-const sal_uInt16 BIFF_ID_PCDFRANGEPR        = 0x00D8;
-const sal_uInt16 BIFF_ID_PCDFSQLTYPE        = 0x01BB;
 const sal_uInt16 BIFF_ID_PCDSOURCE          = 0x00E3;
-const sal_uInt16 BIFF_ID_PCITEM_BOOL        = 0x00CA;
-const sal_uInt16 BIFF_ID_PCITEM_DATE        = 0x00CE;
-const sal_uInt16 BIFF_ID_PCITEM_DOUBLE      = 0x00C9;
-const sal_uInt16 BIFF_ID_PCITEM_ERROR       = 0x00CB;
-const sal_uInt16 BIFF_ID_PCITEM_INDEXLIST   = 0x00C8;
-const sal_uInt16 BIFF_ID_PCITEM_INTEGER     = 0x00CC;
-const sal_uInt16 BIFF_ID_PCITEM_MISSING     = 0x00CF;
-const sal_uInt16 BIFF_ID_PCITEM_STRING      = 0x00CD;
 const sal_uInt16 BIFF_ID_PHONETICPR         = 0x00EF;
 const sal_uInt16 BIFF_ID_PICTURE            = 0x00E9;
 const sal_uInt16 BIFF_ID_PIVOTCACHE         = 0x00D5;
@@ -532,10 +536,7 @@ const sal_uInt16 BIFF5_ID_XF                = 0x00E0;
 const sal_uInt16 BIFF_ID_XFCRC              = 0x087C;
 const sal_uInt16 BIFF_ID_XFEXT              = 0x087D;
 
-const sal_uInt16 BIFF_ID_UNKNOWN            = SAL_MAX_UINT16;
-
 // OBJ subrecord identifiers --------------------------------------------------
-
 const sal_uInt16 BIFF_ID_OBJEND             = 0x0000;   /// End of OBJ.
 const sal_uInt16 BIFF_ID_OBJMACRO           = 0x0004;   /// Macro link.
 const sal_uInt16 BIFF_ID_OBJBUTTON          = 0x0005;   /// Button data.
@@ -558,12 +559,6 @@ const sal_uInt16 BIFF_ID_OBJCMO             = 0x0015;   /// Common object settin
 
 // record constants -----------------------------------------------------------
 
-const sal_uInt16 BIFF_BOF_BIFF2             = 0x0200;
-const sal_uInt16 BIFF_BOF_BIFF3             = 0x0300;
-const sal_uInt16 BIFF_BOF_BIFF4             = 0x0400;
-const sal_uInt16 BIFF_BOF_BIFF5             = 0x0500;
-const sal_uInt16 BIFF_BOF_BIFF8             = 0x0600;
-
 const sal_uInt8 BIFF_ERR_NULL               = 0x00;
 const sal_uInt8 BIFF_ERR_DIV0               = 0x07;
 const sal_uInt8 BIFF_ERR_VALUE              = 0x0F;
@@ -571,6 +566,12 @@ const sal_uInt8 BIFF_ERR_REF                = 0x17;
 const sal_uInt8 BIFF_ERR_NAME               = 0x1D;
 const sal_uInt8 BIFF_ERR_NUM                = 0x24;
 const sal_uInt8 BIFF_ERR_NA                 = 0x2A;
+
+const sal_uInt16 BIFF_BOF_BIFF2             = 0x0200;
+const sal_uInt16 BIFF_BOF_BIFF3             = 0x0300;
+const sal_uInt16 BIFF_BOF_BIFF4             = 0x0400;
+const sal_uInt16 BIFF_BOF_BIFF5             = 0x0500;
+const sal_uInt16 BIFF_BOF_BIFF8             = 0x0600;
 
 const sal_uInt8 BIFF_DATATYPE_EMPTY         = 0;
 const sal_uInt8 BIFF_DATATYPE_DOUBLE        = 1;
@@ -603,28 +604,7 @@ public:
     // BIFF12 import ----------------------------------------------------------
 
     /** Reads a BIFF12 string with leading 16-bit or 32-bit length field. */
-    static OUString readString( SequenceInputStream& rStrm, bool b32BitLen = true, bool bAllowNulChars = false );
-
-    // BIFF2-BIFF8 import -----------------------------------------------------
-
-    /** Returns true, if the current record of the stream is a BOF record. */
-    static bool         isBofRecord( BiffInputStream& rStrm );
-
-    /** Skips a block of records up to the specified end record.
-
-        Skips all records until next end record. When this function returns,
-        the stream points to the end record, and the next call of the function
-        startNextRecord() at the stream will start the record following the end
-        record.
-
-        The identifier of the record that is active while this function is
-        called is used as start record identifier. This identifier is used to
-        correctly skip embedded record blocks with the same start and end
-        record identifier.
-
-        @return  True = stream points to the end record.
-     */
-    static bool         skipRecordBlock( BiffInputStream& rStrm, sal_uInt16 nEndRecId );
+    static OUString readString( SequenceInputStream& rStrm, bool b32BitLen = true );
 
 private:
                         BiffHelper() = delete;

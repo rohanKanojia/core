@@ -34,6 +34,7 @@ $(eval $(call gb_Library_add_defs,writerfilter,\
 ))
 
 $(eval $(call gb_Library_use_libraries,writerfilter,\
+    basegfx \
     comphelper \
     cppu \
     cppuhelper \
@@ -43,6 +44,7 @@ $(eval $(call gb_Library_use_libraries,writerfilter,\
     msfilter \
     oox \
     sal \
+    salhelper \
     sax \
     sfx \
     sot \
@@ -51,7 +53,6 @@ $(eval $(call gb_Library_use_libraries,writerfilter,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,writerfilter,\
@@ -63,6 +64,10 @@ $(eval $(call gb_Library_use_externals,writerfilter,\
 $(eval $(call gb_Library_add_exception_objects,writerfilter,\
 	writerfilter/source/rtftok/rtfcharsets \
 	writerfilter/source/rtftok/rtfcontrolwords \
+	writerfilter/source/rtftok/rtfdispatchdestination \
+	writerfilter/source/rtftok/rtfdispatchflag \
+	writerfilter/source/rtftok/rtfdispatchsymbol \
+	writerfilter/source/rtftok/rtfdispatchvalue \
 	writerfilter/source/rtftok/rtfdocumentfactory \
 	writerfilter/source/rtftok/rtfdocumentimpl \
 	writerfilter/source/rtftok/rtflookahead \
@@ -115,7 +120,6 @@ $(eval $(call gb_Library_add_exception_objects,writerfilter,\
     writerfilter/source/dmapper/util \
     writerfilter/source/filter/RtfFilter \
     writerfilter/source/filter/WriterFilter \
-    writerfilter/source/filter/WriterFilterDetection \
     writerfilter/source/ooxml/Handler \
     writerfilter/source/ooxml/OOXMLBinaryObjectReference \
     writerfilter/source/ooxml/OOXMLDocumentImpl \

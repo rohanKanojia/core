@@ -94,7 +94,7 @@ int main (int argc, char **argv)
         sTestName = "test";
         sTestName += argv[2];
 
-#if defined(SAL_W32)
+#if defined(_WIN32)
         OUString aDllName = OStringToOUString( sTestName , RTL_TEXTENCODING_ASCII_US );
 #else
         OUString aDllName("lib");
@@ -136,7 +136,7 @@ int main (int argc, char **argv)
     // loop until all test are performed
     while( nHandle != -1 )
     {
-        // Instantiate serivce
+        // Instantiate service
         Reference< XInterface > x =
             xSMgr->createInstance( OStringToOUString( argv[1] , RTL_TEXTENCODING_ASCII_US ) );
         if( ! x.is() )

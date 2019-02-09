@@ -19,14 +19,13 @@
 
 #include "tp_3D_SceneGeometry.hxx"
 
-#include "BaseGFXHelper.hxx"
-#include "macros.hxx"
-#include "DiagramHelper.hxx"
-#include "ChartTypeHelper.hxx"
-#include "ThreeDHelper.hxx"
-#include <rtl/math.hxx>
-#include <editeng/unoprnms.hxx>
+#include <DiagramHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <ThreeDHelper.hxx>
+#include <ControllerLockGuard.hxx>
 #include <com/sun/star/drawing/ProjectionMode.hpp>
+#include <tools/diagnose_ex.h>
+#include <tools/helpers.hxx>
 
 namespace chart
 {
@@ -35,15 +34,6 @@ using namespace ::com::sun::star;
 
 namespace
 {
-
-void lcl_shiftAngleToValidRange( sal_Int64& rnAngleDegree )
-{
-    //valid range:  ]-180,180]
-    while( rnAngleDegree<=-180 )
-        rnAngleDegree+=360;
-    while( rnAngleDegree>180 )
-        rnAngleDegree-=360;
-}
 
 void lcl_SetMetricFieldLimits( MetricField& rField, sal_Int64 nLimit )
 {
@@ -79,21 +69,20 @@ ThreeD_SceneGeometry_TabPage::ThreeD_SceneGeometry_TabPage( vcl::Window* pWindow
     double fXAngle, fYAngle, fZAngle;
     ThreeDHelper::getRotationAngleFromDiagram( m_xSceneProperties, fXAngle, fYAngle, fZAngle );
 
-    fXAngle = BaseGFXHelper::Rad2Deg( fXAngle );
-    fYAngle = BaseGFXHelper::Rad2Deg( fYAngle );
-    fZAngle = BaseGFXHelper::Rad2Deg( fZAngle );
+    fXAngle = basegfx::rad2deg(fXAngle);
+    fYAngle = basegfx::rad2deg(fYAngle);
+    fZAngle = basegfx::rad2deg(fZAngle);
 
     OSL_ENSURE( fZAngle>=-90 && fZAngle<=90, "z angle is out of valid range" );
 
     lcl_SetMetricFieldLimits( *m_pMFZRotation, 90 );
 
-    m_nXRotation = ::basegfx::fround(fXAngle*pow(10.0,m_pMFXRotation->GetDecimalDigits()));
-    m_nYRotation = ::basegfx::fround(-1.0*fYAngle*pow(10.0,m_pMFYRotation->GetDecimalDigits()));
-    m_nZRotation = ::basegfx::fround(-1.0*fZAngle*pow(10.0,m_pMFZRotation->GetDecimalDigits()));
-
-    lcl_shiftAngleToValidRange( m_nXRotation );
-    lcl_shiftAngleToValidRange( m_nYRotation );
-    lcl_shiftAngleToValidRange( m_nZRotation );
+    m_nXRotation = NormAngle180(
+        ::basegfx::fround(fXAngle * pow(10.0, m_pMFXRotation->GetDecimalDigits())));
+    m_nYRotation = NormAngle180(
+        ::basegfx::fround(-1.0 * fYAngle * pow(10.0, m_pMFYRotation->GetDecimalDigits())));
+    m_nZRotation = NormAngle180(
+        ::basegfx::fround(-1.0 * fZAngle * pow(10.0, m_pMFZRotation->GetDecimalDigits())));
 
     m_pMFXRotation->SetValue(m_nXRotation);
     m_pMFYRotation->SetValue(m_nYRotation);
@@ -143,8 +132,6 @@ ThreeD_SceneGeometry_TabPage::ThreeD_SceneGeometry_TabPage( vcl::Window* pWindow
     {
         m_pCbxRightAngledAxes->Enable(false);
     }
-    m_pMFPerspective->SetAccessibleName(m_pCbxPerspective->GetText());
-    m_pMFPerspective->SetAccessibleRelationLabeledBy(m_pCbxPerspective);
 }
 
 ThreeD_SceneGeometry_TabPage::~ThreeD_SceneGeometry_TabPage()
@@ -184,20 +171,20 @@ void ThreeD_SceneGeometry_TabPage::applyAnglesToModel()
     if( !m_pMFZRotation->IsEmptyFieldValue() )
         m_nZRotation = m_pMFZRotation->GetValue();
 
-    fXAngle = double(m_nXRotation)/double(pow(10.0,m_pMFXRotation->GetDecimalDigits()));
-    fYAngle = double(-1.0*m_nYRotation)/double(pow(10.0,m_pMFYRotation->GetDecimalDigits()));
-    fZAngle = double(-1.0*m_nZRotation)/double(pow(10.0,m_pMFZRotation->GetDecimalDigits()));
+    fXAngle = double(m_nXRotation)/pow(10.0,m_pMFXRotation->GetDecimalDigits());
+    fYAngle = double(-1.0*m_nYRotation)/pow(10.0,m_pMFYRotation->GetDecimalDigits());
+    fZAngle = double(-1.0*m_nZRotation)/pow(10.0,m_pMFZRotation->GetDecimalDigits());
 
-    fXAngle = BaseGFXHelper::Deg2Rad( fXAngle );
-    fYAngle = BaseGFXHelper::Deg2Rad( fYAngle );
-    fZAngle = BaseGFXHelper::Deg2Rad( fZAngle );
+    fXAngle = basegfx::deg2rad(fXAngle);
+    fYAngle = basegfx::deg2rad(fYAngle);
+    fZAngle = basegfx::deg2rad(fZAngle);
 
     ThreeDHelper::setRotationAngleToDiagram( m_xSceneProperties, fXAngle, fYAngle, fZAngle );
 
     m_bAngleChangePending = false;
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, AngleEdited, Edit&, void)
+IMPL_LINK_NOARG(ThreeD_SceneGeometry_TabPage, AngleEdited, Edit&, void)
 {
     m_nXRotation = m_pMFXRotation->GetValue();
     m_nYRotation = m_pMFYRotation->GetValue();
@@ -205,7 +192,7 @@ IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, AngleEdited, Edit&, void)
     m_bAngleChangePending = true;
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, AngleChanged, Edit&, void)
+IMPL_LINK_NOARG(ThreeD_SceneGeometry_TabPage, AngleChanged, Edit&, void)
 {
     applyAnglesToModel();
 }
@@ -220,34 +207,34 @@ void ThreeD_SceneGeometry_TabPage::applyPerspectiveToModel()
 
     try
     {
-        m_xSceneProperties->setPropertyValue( "D3DScenePerspective" , uno::makeAny( aMode ));
-        m_xSceneProperties->setPropertyValue( "Perspective" , uno::makeAny( (sal_Int32)m_pMFPerspective->GetValue() ));
+        m_xSceneProperties->setPropertyValue( "D3DScenePerspective" , uno::Any( aMode ));
+        m_xSceneProperties->setPropertyValue( "Perspective" , uno::Any( static_cast<sal_Int32>(m_pMFPerspective->GetValue()) ));
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     m_bPerspectiveChangePending = false;
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, PerspectiveEdited, Edit&, void)
+IMPL_LINK_NOARG(ThreeD_SceneGeometry_TabPage, PerspectiveEdited, Edit&, void)
 {
     m_bPerspectiveChangePending = true;
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, PerspectiveChanged, Edit&, void)
+IMPL_LINK_NOARG(ThreeD_SceneGeometry_TabPage, PerspectiveChanged, Edit&, void)
 {
     applyPerspectiveToModel();
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, PerspectiveToggled, CheckBox&, void)
+IMPL_LINK_NOARG(ThreeD_SceneGeometry_TabPage, PerspectiveToggled, CheckBox&, void)
 {
     m_pMFPerspective->Enable( m_pCbxPerspective->IsChecked() );
     applyPerspectiveToModel();
 }
 
-IMPL_LINK_NOARG_TYPED(ThreeD_SceneGeometry_TabPage, RightAngledAxesToggled, CheckBox&, void)
+IMPL_LINK_NOARG(ThreeD_SceneGeometry_TabPage, RightAngledAxesToggled, CheckBox&, void)
 {
     ControllerLockHelperGuard aGuard( m_rControllerLockHelper );
 

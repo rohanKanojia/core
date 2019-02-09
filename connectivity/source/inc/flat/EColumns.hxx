@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_FLAT_ECOLUMNS_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_FLAT_ECOLUMNS_HXX
 
-#include "file/FColumns.hxx"
+#include <file/FColumns.hxx>
 
 namespace connectivity
 {
@@ -33,7 +33,7 @@ namespace connectivity
         public:
             OFlatColumns(file::OFileTable* _pTable,
                             ::osl::Mutex& _rMutex,
-                            const TStringVector &_rVector
+                            const ::std::vector< OUString> &_rVector
                          ) : file::OColumns(_pTable,_rMutex,_rVector)
             {}
 

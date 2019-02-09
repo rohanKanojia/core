@@ -23,13 +23,11 @@
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
 
-#include <functional>
-
 namespace dbaccess
 {
 
     // TokenComposer
-    struct TokenComposer : public ::std::unary_function< OUString, void >
+    struct TokenComposer
     {
     private:
         #ifdef DBG_UTIL
@@ -53,7 +51,7 @@ namespace dbaccess
             #ifdef DBG_UTIL
             m_bUsed = false;
             #endif
-            m_aBuffer.makeStringAndClear();
+            m_aBuffer.setLength(0);
         }
 
     public:
@@ -67,6 +65,11 @@ namespace dbaccess
         virtual ~TokenComposer()
         {
         }
+
+        TokenComposer(TokenComposer const &) = default;
+        TokenComposer(TokenComposer &&) = default;
+        TokenComposer & operator =(TokenComposer const &) = default;
+        TokenComposer & operator =(TokenComposer &&) = default;
 
         void operator() (const OUString& lhs)
         {
@@ -96,8 +99,8 @@ namespace dbaccess
     {
         virtual void appendNonEmptyToNonEmpty( const OUString& lhs ) override
         {
-            m_aBuffer.insert( 0, (sal_Unicode)' ' );
-            m_aBuffer.insert( 0, (sal_Unicode)'(' );
+            m_aBuffer.insert( 0, ' ' );
+            m_aBuffer.insert( 0, '(' );
             m_aBuffer.append( " ) AND ( " );
             m_aBuffer.append( lhs );
             m_aBuffer.append( " )" );

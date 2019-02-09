@@ -21,13 +21,13 @@
 #include "xmlfilter.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlQuery.hxx"
 #include "xmlTable.hxx"
 #include "xmlComponent.hxx"
 #include "xmlHierarchyCollection.hxx"
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
-#include <tools/debug.hxx>
+#include <stringconstants.hxx>
 
 namespace dbaxml
 {
@@ -66,7 +66,7 @@ OXMLDocuments::~OXMLDocuments()
 
 }
 
-SvXMLImportContext* OXMLDocuments::CreateChildContext(
+SvXMLImportContextRef OXMLDocuments::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

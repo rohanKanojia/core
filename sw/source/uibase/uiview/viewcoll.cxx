@@ -17,20 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cmdid.h"
-#include "uiitems.hxx"
-#include <vcl/window.hxx>
+#include <cmdid.h>
+#include <uiitems.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svl/stritem.hxx>
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 
-#include "view.hxx"
-#include "wrtsh.hxx"
-#include "basesh.hxx"
+#include <view.hxx>
+#include <wrtsh.hxx>
+#include <basesh.hxx>
 
-void SwView::ExecColl(SfxRequest &rReq)
+void SwView::ExecColl(SfxRequest const &rReq)
 {
     const SfxItemSet* pArgs = rReq.GetArgs();
     const SfxPoolItem* pItem = nullptr;
@@ -46,8 +45,7 @@ void SwView::ExecColl(SfxRequest &rReq)
         {
             if( pArgs )
             {
-                if (pArgs &&
-                    SfxItemState::SET == pArgs->GetItemState( nWhich , true, &pItem ))
+                if (SfxItemState::SET == pArgs->GetItemState( nWhich , true, &pItem ))
                 {
                     if( static_cast<const SfxStringItem*>(pItem)->GetValue() !=
                                             GetWrtShell().GetCurPageStyle() )
@@ -55,7 +53,7 @@ void SwView::ExecColl(SfxRequest &rReq)
                         SfxStringItem aName(SID_STYLE_APPLY,
                                    static_cast<const SfxStringItem*>(pItem)->GetValue());
                         SfxUInt16Item aFamItem( SID_STYLE_FAMILY,
-                                            SFX_STYLE_FAMILY_PAGE);
+                                            sal_uInt16(SfxStyleFamily::Page));
                         SwPtrItem aShell(FN_PARAM_WRTSHELL, GetWrtShellPtr());
                         SfxRequest aReq(SID_STYLE_APPLY, SfxCallMode::SLOT, GetPool());
                         aReq.AppendItem(aName);

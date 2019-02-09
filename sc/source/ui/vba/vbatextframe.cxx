@@ -18,20 +18,22 @@
  */
 #include <vbahelper/helperdecl.hxx>
 #include <com/sun/star/drawing/TextFitToSizeType.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/text/XText.hpp>
+#include <sfx2/objsh.hxx>
 #include "vbatextframe.hxx"
 #include "vbacharacters.hxx"
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-ScVbaTextFrame::ScVbaTextFrame( uno::Sequence< uno::Any> const & args, uno::Reference< uno::XComponentContext> const & xContext ) throw ( lang::IllegalArgumentException ) :  ScVbaTextFrame_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext, getXSomethingFromArgs< drawing::XShape >( args, 1, false ) )
+ScVbaTextFrame::ScVbaTextFrame( uno::Sequence< uno::Any> const & args, uno::Reference< uno::XComponentContext> const & xContext ) :  ScVbaTextFrame_BASE( getXSomethingFromArgs< XHelperInterface >( args, 0 ), xContext, getXSomethingFromArgs< drawing::XShape >( args, 1, false ) )
 {
 }
 
 // Methods
 uno::Any SAL_CALL
-ScVbaTextFrame::Characters() throw (uno::RuntimeException, std::exception)
+ScVbaTextFrame::Characters()
 {
     uno::Reference< text::XSimpleText > xSimpleText( m_xShape, uno::UNO_QUERY_THROW );
     ScVbaPalette aPalette( SfxObjectShell::Current() );
@@ -49,16 +51,14 @@ ScVbaTextFrame::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaTextFrame::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.TextFrame";
-    }
+        "ooo.vba.excel.TextFrame"
+    };
     return aServiceNames;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 ScVbaTextFrame_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &arguments)

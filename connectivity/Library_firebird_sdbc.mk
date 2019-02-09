@@ -17,6 +17,7 @@ $(eval $(call gb_Library_use_externals,firebird_sdbc,\
 ))
 
 $(eval $(call gb_Library_set_include,firebird_sdbc,\
+	-I$(SRCDIR)/connectivity/inc \
 	-I$(SRCDIR)/connectivity/source/inc \
 	$$(INCLUDE) \
 	-I$(WORKDIR)/YaccTarget/connectivity/source/parse \
@@ -34,14 +35,15 @@ $(eval $(call gb_Library_use_libraries,firebird_sdbc, \
     utl \
     svt \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,firebird_sdbc,connectivity/source/drivers/firebird/firebird_sdbc))
 
 $(eval $(call gb_Library_add_exception_objects,firebird_sdbc,\
     connectivity/source/drivers/firebird/Blob \
+    connectivity/source/drivers/firebird/Clob \
     connectivity/source/drivers/firebird/Catalog \
+    connectivity/source/drivers/firebird/Column \
     connectivity/source/drivers/firebird/Columns \
     connectivity/source/drivers/firebird/Connection \
     connectivity/source/drivers/firebird/DatabaseMetaData \

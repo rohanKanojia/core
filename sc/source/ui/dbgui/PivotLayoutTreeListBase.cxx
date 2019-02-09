@@ -9,14 +9,12 @@
  * This file incorporates work covered by the following license notice:
  */
 
-#include "PivotLayoutTreeListBase.hxx"
-#include "PivotLayoutDialog.hxx"
+#include <PivotLayoutTreeListBase.hxx>
+#include <PivotLayoutDialog.hxx>
 
 #include <reffact.hxx>
-#include <svtools/treelistentry.hxx>
-#include "scabstdlg.hxx"
-
-using namespace std;
+#include <vcl/treelistentry.hxx>
+#include <scabstdlg.hxx>
 
 ScPivotLayoutTreeListBase::ScPivotLayoutTreeListBase(vcl::Window* pParent, WinBits nBits, SvPivotTreeListType eType)
     : SvTreeListBox(pParent, nBits)
@@ -52,11 +50,6 @@ DragDropMode ScPivotLayoutTreeListBase::NotifyStartDrag(TransferDataContainer& /
 void ScPivotLayoutTreeListBase::DragFinished(sal_Int8 /*nDropAction*/)
 {}
 
-sal_Int8 ScPivotLayoutTreeListBase::AcceptDrop(const AcceptDropEvent& rEvent)
-{
-    return SvTreeListBox::AcceptDrop(rEvent);
-}
-
 bool ScPivotLayoutTreeListBase::NotifyAcceptDrop(SvTreeListEntry* /*pEntry*/)
 {
     return true;
@@ -75,7 +68,7 @@ TriState ScPivotLayoutTreeListBase::NotifyCopying(SvTreeListEntry* /*pTarget*/, 
     return TRISTATE_FALSE;
 }
 
-bool ScPivotLayoutTreeListBase::HasEntry(SvTreeListEntry* pEntry)
+bool ScPivotLayoutTreeListBase::HasEntry(const SvTreeListEntry* pEntry)
 {
     SvTreeListEntry* pEachEntry;
     for (pEachEntry = First(); pEachEntry != nullptr; pEachEntry = Next(pEachEntry))
@@ -107,10 +100,7 @@ void ScPivotLayoutTreeListBase::PushEntriesToPivotFieldVector(ScPivotFieldVector
 void ScPivotLayoutTreeListBase::InsertEntryForSourceTarget(SvTreeListEntry* /*pSource*/, SvTreeListEntry* /*pTarget*/)
 {}
 
-void ScPivotLayoutTreeListBase::InsertEntryForItem(ScItemValue* /*pItemValue*/, sal_uLong /*nPosition*/)
-{}
-
-void ScPivotLayoutTreeListBase::RemoveEntryForItem(ScItemValue* pItemValue)
+void ScPivotLayoutTreeListBase::RemoveEntryForItem(const ScItemValue* pItemValue)
 {
     SvTreeListEntry* pEachEntry;
     for (pEachEntry = First(); pEachEntry != nullptr; pEachEntry = Next(pEachEntry))
@@ -128,17 +118,16 @@ void ScPivotLayoutTreeListBase::GetFocus()
 {
     SvTreeListBox::GetFocus();
 
-    if( GetGetFocusFlags() & GetFocusFlags::Mnemonic )
+    if (!mpParent || !mpParent->mpPreviouslyFocusedListBox)
+        return;
+
+    if (GetGetFocusFlags() & GetFocusFlags::Mnemonic)
     {
         SvTreeListEntry* pEntry = mpParent->mpPreviouslyFocusedListBox->GetCurEntry();
         if (pEntry)
             InsertEntryForSourceTarget(pEntry, nullptr);
-
-        if (mpParent->mpPreviouslyFocusedListBox != nullptr)
-            mpParent->mpPreviouslyFocusedListBox->GrabFocus();
+        mpParent->mpPreviouslyFocusedListBox->GrabFocus();
     }
-
-    mpParent->mpCurrentlyFocusedListBox = this;
 }
 
 void ScPivotLayoutTreeListBase::LoseFocus()

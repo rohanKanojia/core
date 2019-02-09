@@ -20,30 +20,25 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_MODULECONTROLLER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_MODULECONTROLLER_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 
-#include <osl/mutex.hxx>
 #include <com/sun/star/drawing/framework/XModuleController.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <cppuhelper/compbase.hxx>
 
 #include <memory>
-#include <set>
 
-namespace {
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+
+namespace sd { namespace framework {
 
 typedef ::cppu::WeakComponentImplHelper <
     css::drawing::framework::XModuleController,
     css::lang::XInitialization
     > ModuleControllerInterfaceBase;
 
-} // end of anonymous namespace.
-
-namespace sd { namespace framework {
-
-/** The ModuleController has to tasks:
+/** The ModuleController has two tasks:
 
     1. It reads the
     org.openoffice.Office.Impress/MultiPaneGUI/Framework/ResourceFactories
@@ -76,14 +71,12 @@ public:
 
     // XModuleController
 
-    virtual void SAL_CALL requestResource(const OUString& rsResourceURL)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL requestResource(const OUString& rsResourceURL) override;
 
     // XInitialization
 
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence<css::uno::Any>& aArguments)
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::uno::Any>& aArguments) override;
 
 private:
     css::uno::Reference<
@@ -94,18 +87,11 @@ private:
     class LoadedFactoryContainer;
     std::unique_ptr<LoadedFactoryContainer> mpLoadedFactories;
 
+    /// @throws std::exception
     ModuleController (
-        const css::uno::Reference<css::uno::XComponentContext>& rxContext)
-        throw (std::exception);
+        const css::uno::Reference<css::uno::XComponentContext>& rxContext);
     ModuleController (const ModuleController&) = delete;
-    virtual ~ModuleController() throw();
-
-    /** Load a list of URL to service mappings from the
-        /org.openoffice.Office.Impress/MultiPaneGUI/Framework/ResourceFactories
-        configuration entry.  The mappings are stored in the
-        mpResourceToFactoryMap member.
-    */
-    void LoadFactories (const css::uno::Reference<css::uno::XComponentContext>& rxContext);
+    virtual ~ModuleController() throw() override;
 
     /** Called for every entry in the ResourceFactories configuration entry.
     */

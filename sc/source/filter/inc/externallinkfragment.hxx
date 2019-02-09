@@ -26,8 +26,6 @@
 namespace oox {
 namespace xls {
 
-class ExternalLink;
-
 /** This class implements importing the sheetData element in external sheets.
 
     The sheetData element embedded in the externalBook element contains cached
@@ -67,7 +65,7 @@ private:
 private:
     css::uno::Reference< css::sheet::XExternalSheetCache >
                         mxSheetCache;               /// The sheet cache used to store external cell values.
-    ScAddress           maCurrPos; /// Position of current cell.
+    ScAddress           maCurrPos;                  /// Position of current cell.
     sal_Int32           mnCurrType;                 /// Data type of current cell.
 };
 

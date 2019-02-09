@@ -9,14 +9,17 @@
 
 #include "ChartAreaPanel.hxx"
 
-#include "ChartController.hxx"
-#include "ViewElementListProvider.hxx"
-#include "PropertyHelper.hxx"
+#include <ChartController.hxx>
+#include <ViewElementListProvider.hxx>
+#include <PropertyHelper.hxx>
 
-#include "chartview/DrawModelWrapper.hxx"
+#include <chartview/DrawModelWrapper.hxx>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
+#include <com/sun/star/chart2/XDiagram.hpp>
 
 #include <svx/xfltrit.hxx>
 #include <svx/xflftrit.hxx>
+#include <svx/xbtmpit.hxx>
 #include <svx/unomid.hxx>
 #include <vcl/svapp.hxx>
 
@@ -107,12 +110,12 @@ XGradient getXGradientForName(const css::uno::Reference<css::frame::XModel>& xMo
         size_t n = aRef->Count();
         for (size_t i = 0; i < n; ++i)
         {
-            XGradientEntry* pGradient = aRef->GetGradient(i);
+            const XGradientEntry* pGradient = aRef->GetGradient(i);
             if (!pGradient)
                 continue;
 
             if (pGradient->GetName() == rName)
-                return XGradient(pGradient->GetGradient());
+                return pGradient->GetGradient();
         }
     }
     catch (...)
@@ -155,7 +158,7 @@ XHatch getXHatchFromName(const css::uno::Reference<css::frame::XModel>& xModel,
         size_t n = aRef->Count();
         for (size_t i = 0; i < n; ++i)
         {
-            XHatchEntry* pHatch = aRef->GetHatch(i);
+            const XHatchEntry* pHatch = aRef->GetHatch(i);
             if (!pHatch)
                 continue;
 
@@ -163,7 +166,7 @@ XHatch getXHatchFromName(const css::uno::Reference<css::frame::XModel>& xModel,
             {
                 // we need to update the hatch name
                 rName = pHatch->GetName();
-                return XHatch(pHatch->GetHatch());
+                return pHatch->GetHatch();
             }
         }
     }
@@ -181,17 +184,33 @@ GraphicObject getXBitmapFromName(const css::uno::Reference<css::frame::XModel>& 
     try
     {
         ViewElementListProvider aProvider = getViewElementListProvider(xModel);
-        XBitmapListRef aRef = aProvider.GetBitmapList();
-        size_t n = aRef->Count();
+        XBitmapListRef aBmpRef = aProvider.GetBitmapList();
+        XPatternListRef aPatRef = aProvider.GetPatternList();
+
+        size_t n = aBmpRef->Count();
         for (size_t i = 0; i < n; ++i)
         {
-            XBitmapEntry* pBitmap = aRef->GetBitmap(i);
+            const XBitmapEntry* pBitmap = aBmpRef->GetBitmap(i);
             if (!pBitmap)
                 continue;
 
             if (pBitmap->GetName().equalsIgnoreAsciiCase(rName))
             {
-                return GraphicObject(pBitmap->GetGraphicObject());
+                return pBitmap->GetGraphicObject();
+            }
+        }
+
+        // perhaps it's a pattern
+        size_t m = aPatRef->Count();
+        for (size_t i = 0; i < m; ++i)
+        {
+            const XBitmapEntry* pBitmap = aPatRef->GetBitmap(i);
+            if (!pBitmap)
+                continue;
+
+            if (pBitmap->GetName().equalsIgnoreAsciiCase(rName))
+            {
+                return pBitmap->GetGraphicObject();
             }
         }
     }
@@ -294,7 +313,7 @@ void ChartAreaPanel::setFillTransparence(const XFillTransparenceItem& rItem)
     if (!xPropSet.is())
         return;
 
-    xPropSet->setPropertyValue("FillTransparence", css::uno::makeAny(rItem.GetValue()));
+    xPropSet->setPropertyValue("FillTransparence", css::uno::Any(rItem.GetValue()));
 }
 
 void ChartAreaPanel::setFillFloatTransparence(
@@ -307,15 +326,15 @@ void ChartAreaPanel::setFillFloatTransparence(
 
     if (!rItem.IsEnabled())
     {
-        xPropSet->setPropertyValue("FillTransparenceGradientName", css::uno::makeAny(OUString()));
+        xPropSet->setPropertyValue("FillTransparenceGradientName", css::uno::Any(OUString()));
         return;
     }
 
-    OUString aName = rItem.GetName();
+    const OUString& aName = rItem.GetName();
     css::uno::Any aGradientVal;
     rItem.QueryValue(aGradientVal, MID_FILLGRADIENT);
     OUString aNewName = PropertyHelper::addTransparencyGradientUniqueNameToTable(aGradientVal, css::uno::Reference<css::lang::XMultiServiceFactory>(mxModel, css::uno::UNO_QUERY_THROW), aName);
-    xPropSet->setPropertyValue("FillTransparenceGradientName", css::uno::makeAny(aNewName));
+    xPropSet->setPropertyValue("FillTransparenceGradientName", css::uno::Any(aNewName));
 }
 
 void ChartAreaPanel::setFillStyle(const XFillStyleItem& rItem)
@@ -325,7 +344,7 @@ void ChartAreaPanel::setFillStyle(const XFillStyleItem& rItem)
     if (!xPropSet.is())
         return;
 
-    xPropSet->setPropertyValue("FillStyle", css::uno::makeAny(rItem.GetValue()));
+    xPropSet->setPropertyValue("FillStyle", css::uno::Any(rItem.GetValue()));
 }
 
 void ChartAreaPanel::setFillStyleAndColor(const XFillStyleItem* pStyleItem,
@@ -336,8 +355,8 @@ void ChartAreaPanel::setFillStyleAndColor(const XFillStyleItem* pStyleItem,
         return;
 
     if (pStyleItem)
-        xPropSet->setPropertyValue("FillStyle", css::uno::makeAny(pStyleItem->GetValue()));
-    xPropSet->setPropertyValue("FillColor", css::uno::makeAny(rColorItem.GetValue()));
+        xPropSet->setPropertyValue("FillStyle", css::uno::Any(pStyleItem->GetValue()));
+    xPropSet->setPropertyValue("FillColor", css::uno::Any(rColorItem.GetValue()));
 }
 
 void ChartAreaPanel::setFillStyleAndGradient(const XFillStyleItem* pStyleItem,
@@ -349,8 +368,8 @@ void ChartAreaPanel::setFillStyleAndGradient(const XFillStyleItem* pStyleItem,
         return;
 
     if (pStyleItem)
-        xPropSet->setPropertyValue("FillStyle", css::uno::makeAny(pStyleItem->GetValue()));
-    xPropSet->setPropertyValue("FillGradientName", css::uno::makeAny(rGradientItem.GetValue()));
+        xPropSet->setPropertyValue("FillStyle", css::uno::Any(pStyleItem->GetValue()));
+    xPropSet->setPropertyValue("FillGradientName", css::uno::Any(rGradientItem.GetValue()));
 }
 
 void ChartAreaPanel::setFillStyleAndHatch(const XFillStyleItem* pStyleItem,
@@ -362,8 +381,8 @@ void ChartAreaPanel::setFillStyleAndHatch(const XFillStyleItem* pStyleItem,
         return;
 
     if (pStyleItem)
-        xPropSet->setPropertyValue("FillStyle", css::uno::makeAny(pStyleItem->GetValue()));
-    xPropSet->setPropertyValue("FillHatchName", css::uno::makeAny(rHatchItem.GetValue()));
+        xPropSet->setPropertyValue("FillStyle", css::uno::Any(pStyleItem->GetValue()));
+    xPropSet->setPropertyValue("FillHatchName", css::uno::Any(rHatchItem.GetValue()));
 }
 
 void ChartAreaPanel::setFillStyleAndBitmap(const XFillStyleItem* pStyleItem,
@@ -375,8 +394,13 @@ void ChartAreaPanel::setFillStyleAndBitmap(const XFillStyleItem* pStyleItem,
         return;
 
     if (pStyleItem)
-        xPropSet->setPropertyValue("FillStyle", css::uno::makeAny(pStyleItem->GetValue()));
-    xPropSet->setPropertyValue("FillBitmapName", css::uno::makeAny(rBitmapItem.GetValue()));
+        xPropSet->setPropertyValue("FillStyle", css::uno::Any(pStyleItem->GetValue()));
+
+    css::uno::Any aBitmap;
+    rBitmapItem.QueryValue(aBitmap, MID_BITMAP);
+    const OUString& aPreferredName = rBitmapItem.GetName();
+    aBitmap <<= PropertyHelper::addBitmapUniqueNameToTable(aBitmap, css::uno::Reference<css::lang::XMultiServiceFactory>(mxModel, css::uno::UNO_QUERY_THROW), aPreferredName);
+    xPropSet->setPropertyValue("FillBitmapName", aBitmap);
 }
 
 void ChartAreaPanel::updateData()
@@ -413,8 +437,8 @@ void ChartAreaPanel::updateData()
     {
        OUString aGradientName;
        xPropSet->getPropertyValue("FillGradientName") >>= aGradientName;
-       XGradient xGradient = getXGradientForName(mxModel, aGradientName);
-       XFillGradientItem aGradientItem(aGradientName, xGradient);
+       XGradient aGradient = getXGradientForName(mxModel, aGradientName);
+       XFillGradientItem aGradientItem(aGradientName, aGradient);
        updateFillGradient(false, true, &aGradientItem);
     }
 
@@ -422,8 +446,8 @@ void ChartAreaPanel::updateData()
     {
         OUString aHatchName;
         xPropSet->getPropertyValue("FillHatchName") >>= aHatchName;
-        XHatch xHatch = getXHatchFromName(mxModel, aHatchName);
-        XFillHatchItem aHatchItem(aHatchName, xHatch);
+        XHatch aHatch = getXHatchFromName(mxModel, aHatchName);
+        XFillHatchItem aHatchItem(aHatchName, aHatch);
         updateFillHatch(false, true, &aHatchItem);
     }
 
@@ -431,9 +455,9 @@ void ChartAreaPanel::updateData()
     {
         OUString aBitmapName;
         xPropSet->getPropertyValue("FillBitmapName") >>= aBitmapName;
-        GraphicObject xBitmap = getXBitmapFromName(mxModel, aBitmapName);
-        XFillBitmapItem aBitmapItem(aBitmapName, xBitmap);
-        XFillBitmapItem* pBitmapItem = nullptr;
+        GraphicObject aBitmap = getXBitmapFromName(mxModel, aBitmapName);
+        XFillBitmapItem aBitmapItem(aBitmapName, aBitmap);
+        std::unique_ptr<XFillBitmapItem> pBitmapItem;
         DrawModelWrapper* pModelWrapper = nullptr;
         try
         {
@@ -446,8 +470,7 @@ void ChartAreaPanel::updateData()
         catch (...)
         {
         }
-        updateFillBitmap(false, true, pBitmapItem ? pBitmapItem : &aBitmapItem);
-        delete pBitmapItem;
+        updateFillBitmap(false, true, pBitmapItem ? pBitmapItem.get() : &aBitmapItem);
     }
 
     if (xInfo->hasPropertyByName("FillTransparenceGradientName"))

@@ -11,11 +11,9 @@
 
 #include <com/sun/star/awt/XBitmap.hpp>
 #include <com/sun/star/graphic/XGraphic.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
-#include <com/sun/star/drawing/XControlShape.hpp>
 #include <com/sun/star/awt/Gradient.hpp>
 #include <com/sun/star/style/TabStop.hpp>
 #include <com/sun/star/view/XViewSettingsSupplier.hpp>
@@ -42,7 +40,6 @@
 #include <com/sun/star/xml/dom/XDocument.hpp>
 #include <com/sun/star/style/BreakType.hpp>
 #include <unotools/tempfile.hxx>
-#include <comphelper/sequenceashashmap.hxx>
 #include <com/sun/star/text/XDocumentIndex.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegmentCommand.hpp>
@@ -63,7 +60,7 @@ protected:
      */
     bool mustTestImportOf(const char* filename) const override {
         // If the testcase is stored in some other format, it's pointless to test.
-        return (OString(filename).endsWith(".docx"));
+        return OString(filename).endsWith(".docx");
     }
 };
 
@@ -86,13 +83,13 @@ DECLARE_OOXMLEXPORT_TEST(testN789482, "n789482.docx")
     getRun(xParagraph, 1, "Before. ");
 
     CPPUNIT_ASSERT_EQUAL(OUString("Delete"), getProperty<OUString>(getRun(xParagraph, 2), "RedlineType"));
-    CPPUNIT_ASSERT_EQUAL(sal_True, getProperty<sal_Bool>(getRun(xParagraph, 2), "IsStart"));
+    CPPUNIT_ASSERT_EQUAL(true, getProperty<bool>(getRun(xParagraph, 2), "IsStart"));
 
     getRun(xParagraph, 3, "www.test.com");
     CPPUNIT_ASSERT_EQUAL(OUString("http://www.test.com/"), getProperty<OUString>(getRun(xParagraph, 3), "HyperLinkURL"));
 
     CPPUNIT_ASSERT_EQUAL(OUString("Delete"), getProperty<OUString>(getRun(xParagraph, 4), "RedlineType"));
-    CPPUNIT_ASSERT_EQUAL(sal_False, getProperty<sal_Bool>(getRun(xParagraph, 4), "IsStart"));
+    CPPUNIT_ASSERT_EQUAL(false, getProperty<bool>(getRun(xParagraph, 4), "IsStart"));
 
     getRun(xParagraph, 5, " After.");
 }
@@ -146,13 +143,13 @@ DECLARE_OOXMLEXPORT_TEST(testFieldFlagO,"TOC_field_f.docx")
 
     // FIXME "p[2]" will have to be "p[1]", once the TOC import code is fixed
     // not to insert an empty paragraph before TOC.
-    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[2]/w:r[2]/w:instrText", " TOC \\z \\f \\o \"1-3\" \\u \\h");
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:sdt/w:sdtContent/w:p[1]/w:r[2]/w:instrText", " TOC \\z \\f \\o \"1-3\" \\u \\h");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testTOCFlag_f, "toc_doc.docx")
 {
     // Export logic for all TOC field flags was enclosed inside
-    // if( nsSwTOXElement::TOX_MARK & pTOX->GetCreateType() ) in ww8atr.cxx which gets true for \f,
+    // if( SwTOXElement::Mark & pTOX->GetCreateType() ) in ww8atr.cxx which gets true for \f,
     // this was the reason if there is \f flag present in original doc then only other flags like
     // \o \h \n used to come after RoundTrip.
     // This test case is to verify even if there is no \f flag in original doc, \h flag is getting
@@ -163,7 +160,7 @@ DECLARE_OOXMLEXPORT_TEST(testTOCFlag_f, "toc_doc.docx")
 
     // FIXME "p[2]" will have to be "p[1]", once the TOC import code is fixed
     // not to insert an empty paragraph before TOC.
-    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[2]/w:r[2]/w:instrText", " TOC \\z \\o \"1-3\" \\u \\h");
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:sdt/w:sdtContent/w:p[1]/w:r[2]/w:instrText", " TOC \\z \\o \"1-3\" \\u \\h");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testPreserveZfield,"preserve_Z_field_TOC.docx")
@@ -193,7 +190,7 @@ DECLARE_OOXMLEXPORT_TEST(testFieldFlagB,"TOC_field_b.docx")
 
     // FIXME "p[2]" will have to be "p[1]", once the TOC import code is fixed
     // not to insert an empty paragraph before TOC.
-    assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[2]/w:r[2]/w:instrText", " TOC \\b \"bookmark111\" \\o \"1-9\" \\h");
+    assertXPathContent(pXmlDoc, "/w:document/w:body/w:sdt/w:sdtContent/w:p[1]/w:r[2]/w:instrText", " TOC \\b \"bookmark111\" \\o \"1-9\" \\h");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testPreserveXfieldTOC, "PreserveXfieldTOC.docx")
@@ -432,7 +429,7 @@ DECLARE_OOXMLEXPORT_TEST(testFDO76163 , "fdo76163.docx")
     if (!pXmlDoc)
         return;
     //docx file after RT is getting corrupted.
-    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[2]/w:hyperlink/w:r[11]/w:fldChar", "fldCharType", "end" );
+    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[2]/w:hyperlink/w:r[10]/w:fldChar", "fldCharType", "end" );
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFDO78659, "fdo78659.docx")
@@ -451,7 +448,7 @@ DECLARE_OOXMLEXPORT_TEST(testFDO78654 , "fdo78654.docx")
         return;
     // In case of two "Hyperlink" tags in one paragraph and one of them
     // contains "PAGEREF" field then field end tag was missing from hyperlink.
-    assertXPath ( pXmlDoc, "/w:document/w:body/w:sdt/w:sdtContent/w:p[2]/w:hyperlink[3]/w:r[5]/w:fldChar", "fldCharType", "end" );
+    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[2]/w:hyperlink[3]/w:r[5]/w:fldChar", "fldCharType", "end" );
 }
 
 
@@ -498,8 +495,8 @@ DECLARE_OOXMLEXPORT_TEST(testFDO78590, "FDO78590.docx")
         return;
 
     // This is to ensure that the fld starts and ends inside a hyperlink...
-    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:framePr", "w", "9851" );
-    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[1]/w:pPr/w:framePr", "h", "1669" );
+    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[2]/w:pPr/w:framePr", "w", "9851" );
+    assertXPath ( pXmlDoc, "/w:document/w:body/w:p[2]/w:pPr/w:framePr", "h", "1669" );
 }
 
 DECLARE_OOXMLEXPORT_TEST(testSdtCitationRun, "sdt-citation-run.docx")
@@ -565,13 +562,13 @@ DECLARE_OOXMLEXPORT_TEST(testSdtDateDuplicate, "sdt-date-duplicate.docx")
 DECLARE_OOXMLEXPORT_TEST(testFdo81492, "fdo81492.docx")
 {
     if (xmlDocPtr pXmlDoc = parseExport())
-        assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[5]/w:instrText", "ADDIN EN.CITE.DATA");
+        assertXPathContent(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[9]/w:instrText", "ADDIN EN.CITE.DATA");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testEditTime, "fdo81341.docx")
 {
     /* Issue was LO was not able to Import and Export EditTime in seconds format.
-     * It was supporting Time in "HH:MM" format. But if DOCX conatins Time in seconds,
+     * It was supporting Time in "HH:MM" format. But if DOCX contains Time in seconds,
      * then LO was not able to display time in "HH:MM:SS" format.
      * While exporting LO was writing plain text instead of field entry.
      */
@@ -659,9 +656,9 @@ DECLARE_OOXMLEXPORT_TEST(testFixedDateFields, "fixed-date-field.docx")
     // Check fixed property was imported and date value was parsed correctly
     CPPUNIT_ASSERT_EQUAL(true, getProperty<bool>(xField, "IsFixed"));
     css::util::DateTime date = getProperty<css::util::DateTime>(xField, "DateTimeValue");
-    CPPUNIT_ASSERT_EQUAL((sal_uInt16)24, date.Day);
-    CPPUNIT_ASSERT_EQUAL((sal_uInt16)7, date.Month);
-    CPPUNIT_ASSERT_EQUAL((sal_Int16)2014, date.Year);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(24), date.Day);
+    CPPUNIT_ASSERT_EQUAL(sal_uInt16(7), date.Month);
+    CPPUNIT_ASSERT_EQUAL(sal_Int16(2014), date.Year);
 
     if (xmlDocPtr pXmlDoc = parseExport("word/document.xml"))
     {
@@ -669,6 +666,11 @@ DECLARE_OOXMLEXPORT_TEST(testFixedDateFields, "fixed-date-field.docx")
         // Check they are now exported correctly as fldChar with fldLock attribute
         assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r[1]/w:fldChar", "fldLock", "true");
     }
+}
+
+DECLARE_OOXMLEXPORT_TEST(testToxmarkHyperlink, "toxmarkhyperlink.fodt")
+{
+    // test that export doesn't assert with overlapping fields / hyperlink attr
 }
 
 DECLARE_OOXMLEXPORT_TEST(testOO34469, "ooo34469-1.odt")
@@ -683,6 +685,24 @@ DECLARE_OOXMLEXPORT_TEST(testOO39845, "ooo39845-7.odt")
         assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:hyperlink[1]", "anchor", "Figure4|graphic");
 }
 
+DECLARE_OOXMLEXPORT_TEST( testTdf85161, "tdf85161.docx" )
+{
+    CPPUNIT_ASSERT_EQUAL(OUString("Symbol"), getProperty<OUString>(getRun(getParagraph(1), 1), "CharFontName"));
+    CPPUNIT_ASSERT_EQUAL(OUString(u'\x5e'),getParagraph(1)->getString());
+}
+
+DECLARE_OOXMLEXPORT_TEST( testTdf66401, "tdf66401.docx")
+{
+    if (xmlDocPtr pXmlDoc = parseExport("word/document.xml"))
+    {
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[3]/w:rPr/w:rFonts", 1);
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[3]/w:rPr/w:rFonts", "ascii", "Arial Black");
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[3]/w:rPr/w:sz", "val", "24");
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[9]/w:rPr/w:rFonts", 1);
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[9]/w:rPr/w:rFonts", "ascii", "Arial Black");
+        assertXPath(pXmlDoc, "/w:document/w:body/w:p[1]/w:r[9]/w:rPr/w:sz", "val", "24");
+    }
+}
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

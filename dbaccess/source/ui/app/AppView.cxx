@@ -18,30 +18,29 @@
  */
 
 #include "AppView.hxx"
-#include "dbu_app.hrc"
+#include <strings.hrc>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
-#include "dbaccess_helpid.hrc"
 #include <vcl/toolbox.hxx>
+#include <vcl/event.hxx>
 #include <unotools/configmgr.hxx>
 #include <vcl/waitobj.hxx>
-#include <comphelper/types.hxx>
 #include <com/sun/star/datatransfer/clipboard/XClipboard.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdb/XQueriesSupplier.hpp>
 #include <unotools/syslocale.hxx>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include "AppDetailView.hxx"
-#include "tabletree.hxx"
+#include <tabletree.hxx>
 #include "AppSwapWindow.hxx"
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include "AppTitleWindow.hxx"
-#include "dsntypes.hxx"
-#include "dbustrings.hrc"
+#include <dsntypes.hxx>
+#include <stringconstants.hxx>
 #include <dbaccess/IController.hxx>
-#include "browserids.hxx"
+#include <browserids.hxx>
 #include <unotools/pathoptions.hxx>
 #include "AppController.hxx"
 
@@ -54,7 +53,6 @@ using namespace ::com::sun::star::sdbc;
 using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::datatransfer::clipboard;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::container;
 using ::com::sun::star::sdb::application::NamedDatabaseObject;
 
@@ -71,10 +69,8 @@ OAppBorderWindow::OAppBorderWindow(OApplicationView* _pParent,PreviewMode _ePrev
     m_pPanel->SetBorderStyle(WindowBorderStyle::MONO);
     VclPtrInstance<OApplicationSwapWindow> pSwap( m_pPanel, *this );
     pSwap->Show();
-    pSwap->SetUniqueId(UID_APP_SWAP_VIEW);
 
     m_pPanel->setChildWindow(pSwap);
-    m_pPanel->SetUniqueId(UID_APP_DATABASE_VIEW);
     m_pPanel->Show();
 
     m_pDetailView = VclPtr<OApplicationDetailView>::Create(*this,_ePreviewMode);
@@ -115,16 +111,13 @@ void OAppBorderWindow::Resize()
     long nOutputHeight  = aOutputSize.Height();
     long nX = 0;
 
-    Size aFLSize = LogicToPixel( Size( 3, 8 ), MAP_APPFONT );
+    Size aFLSize = LogicToPixel(Size(3, 8), MapMode(MapUnit::MapAppFont));
     if ( m_pPanel )
     {
         OApplicationSwapWindow* pSwap = getPanel();
-        if ( pSwap )
-        {
-            if ( pSwap->GetEntryCount() != 0 )
-                nX = pSwap->GetBoundingBox( pSwap->GetEntry(0) ).GetWidth() + aFLSize.Height();
-        }
-        nX = ::std::max(m_pPanel->GetWidthPixel() ,nX);
+        if ( pSwap && pSwap->GetEntryCount() != 0 )
+            nX = pSwap->GetBoundingBox( pSwap->GetEntry(0) ).GetWidth() + aFLSize.Height();
+        nX = std::max(m_pPanel->GetWidthPixel() ,nX);
         m_pPanel->SetPosSizePixel(Point(0,0),Size(nX,nOutputHeight));
     }
 
@@ -151,22 +144,16 @@ void OAppBorderWindow::ImplInitSettings()
 {
     // FIXME RenderContext
     const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
-    if( true )
-    {
-        vcl::Font aFont;
-        aFont = rStyleSettings.GetFieldFont();
-        aFont.SetColor( rStyleSettings.GetWindowTextColor() );
-        SetPointFont(*this, aFont);
-    }
 
-    if( true )
-    {
-        SetTextColor( rStyleSettings.GetFieldTextColor() );
-        SetTextFillColor();
-    }
+    vcl::Font aFont;
+    aFont = rStyleSettings.GetFieldFont();
+    aFont.SetColor( rStyleSettings.GetWindowTextColor() );
+    SetPointFont(*this, aFont);
 
-    if( true )
-        SetBackground( rStyleSettings.GetDialogColor() );
+    SetTextColor( rStyleSettings.GetFieldTextColor() );
+    SetTextFillColor();
+
+    SetBackground( rStyleSettings.GetDialogColor() );
 }
 
 
@@ -186,17 +173,7 @@ OApplicationView::OApplicationView( vcl::Window* pParent
     ,m_rAppController( _rAppController )
     ,m_eChildFocus(NONE)
 {
-
-    try
-    {
-        m_aLocale = SvtSysLocale().GetLanguageTag().getLocale();
-    }
-    catch(Exception&)
-    {
-    }
-
     m_pWin = VclPtr<OAppBorderWindow>::Create(this,_ePreviewMode);
-    m_pWin->SetUniqueId(UID_APP_VIEW_BORDER_WIN);
     m_pWin->Show();
 
     ImplInitSettings();
@@ -222,7 +199,7 @@ void OApplicationView::createIconAutoMnemonics( MnemonicGenerator& _rMnemonics )
         m_pWin->getPanel()->createIconAutoMnemonics( _rMnemonics );
 }
 
-void OApplicationView::setTaskExternalMnemonics( MnemonicGenerator& _rMnemonics )
+void OApplicationView::setTaskExternalMnemonics( MnemonicGenerator const & _rMnemonics )
 {
     if ( m_pWin && m_pWin->getDetailView() )
         m_pWin->getDetailView()->setTaskExternalMnemonics( _rMnemonics );
@@ -243,14 +220,14 @@ void OApplicationView::DataChanged( const DataChangedEvent& rDCEvt )
     }
 }
 
-void OApplicationView::resizeDocumentView(Rectangle& _rPlayground)
+void OApplicationView::resizeDocumentView(tools::Rectangle& _rPlayground)
 {
     if ( m_pWin && !_rPlayground.IsEmpty() )
     {
-        Size aFLSize = LogicToPixel( Size( 3, 3 ), MAP_APPFONT );
-        _rPlayground.Move( aFLSize.A(),aFLSize.B() );
+        Size aFLSize = LogicToPixel(Size(3, 3), MapMode(MapUnit::MapAppFont));
+        _rPlayground.Move( aFLSize.Width(),aFLSize.Height() );
         Size aOldSize = _rPlayground.GetSize();
-        _rPlayground.SetSize( Size(aOldSize.A() - 2*aFLSize.A(), aOldSize.B() - 2*aFLSize.B()) );
+        _rPlayground.SetSize( Size(aOldSize.Width() - 2*aFLSize.Width(), aOldSize.Height() - 2*aFLSize.Height()) );
 
         m_pWin->SetPosSizePixel(_rPlayground.TopLeft() , _rPlayground.GetSize() );
     }
@@ -344,7 +321,7 @@ OUString OApplicationView::getQualifiedName( SvTreeListEntry* _pEntry ) const
     return getDetailView()->getQualifiedName( _pEntry );
 }
 
-bool OApplicationView::isLeaf(SvTreeListEntry* _pEntry) const
+bool OApplicationView::isLeaf(SvTreeListEntry const * _pEntry) const
 {
     OSL_ENSURE(m_pWin && getDetailView(),"Detail view is NULL! -> GPF");
     return OApplicationDetailView::isLeaf(_pEntry);
@@ -404,7 +381,7 @@ sal_Int32 OApplicationView::getElementCount()
     return getDetailView()->getElementCount();
 }
 
-void OApplicationView::getSelectionElementNames( ::std::vector< OUString>& _rNames ) const
+void OApplicationView::getSelectionElementNames( std::vector< OUString>& _rNames ) const
 {
     OSL_ENSURE(m_pWin && getDetailView(),"Detail view is NULL! -> GPF");
     getDetailView()->getSelectionElementNames( _rNames );
@@ -524,7 +501,7 @@ void OApplicationView::showPreview( const OUString& _sDataSourceName,
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         if ( m_xObject.is() )
             startComponentListening(m_xObject);
@@ -550,22 +527,16 @@ void OApplicationView::ImplInitSettings()
 {
     // FIXME RenderContext
     const StyleSettings& rStyleSettings = GetSettings().GetStyleSettings();
-    if( true )
-    {
-        vcl::Font aFont;
-        aFont = rStyleSettings.GetFieldFont();
-        aFont.SetColor( rStyleSettings.GetWindowTextColor() );
-        SetPointFont(*this, aFont);
-    }
 
-    if( true )
-    {
-        SetTextColor( rStyleSettings.GetFieldTextColor() );
-        SetTextFillColor();
-    }
+    vcl::Font aFont;
+    aFont = rStyleSettings.GetFieldFont();
+    aFont.SetColor( rStyleSettings.GetWindowTextColor() );
+    SetPointFont(*this, aFont);
 
-    if( true )
-        SetBackground( rStyleSettings.GetFieldColor() );
+    SetTextColor( rStyleSettings.GetFieldTextColor() );
+    SetTextFillColor();
+
+    SetBackground( rStyleSettings.GetFieldColor() );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

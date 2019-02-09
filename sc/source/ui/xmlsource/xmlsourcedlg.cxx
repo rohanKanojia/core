@@ -7,21 +7,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "xmlsourcedlg.hxx"
-#include "sc.hrc"
-#include "scresid.hxx"
-#include "document.hxx"
-#include "orcusfilters.hxx"
-#include "filter.hxx"
-#include "reffact.hxx"
-#include "tabvwsh.hxx"
+#include <xmlsourcedlg.hxx>
+#include <sc.hrc>
+#include <bitmaps.hlst>
+#include <document.hxx>
+#include <orcusfilters.hxx>
+#include <filter.hxx>
+#include <reffact.hxx>
+#include <tabvwsh.hxx>
 
 #include <unotools/pathoptions.hxx>
 #include <tools/urlobj.hxx>
-#include <svtools/svlbitm.hxx>
-#include <svtools/treelistentry.hxx>
-#include <svtools/viewdataentry.hxx>
+#include <vcl/svlbitm.hxx>
+#include <vcl/treelistentry.hxx>
+#include <vcl/viewdataentry.hxx>
 #include <sfx2/objsh.hxx>
+#include <comphelper/processfactory.hxx>
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/ui/dialogs/FilePicker.hpp>
@@ -47,7 +48,7 @@ OUString getXPath(
     OUStringBuffer aBuf;
     for (const SvTreeListEntry* p = &rEntry; p; p = rTree.GetParent(p))
     {
-        const SvLBoxItem* pItem = p->GetFirstItem(SV_ITEM_ID_LBOXSTRING);
+        const SvLBoxItem* pItem = p->GetFirstItem(SvLBoxItemType::String);
         if (!pItem)
             continue;
 
@@ -78,7 +79,7 @@ ScXMLSourceDlg::ScXMLSourceDlg(
     get(mpFtSourceFile, "sourcefile");
     get(mpMapGrid, "mapgrid");
     get(mpLbTree, "tree");
-    Size aTreeSize(mpLbTree->LogicToPixel(Size(130, 120), MAP_APPFONT));
+    Size aTreeSize(mpLbTree->LogicToPixel(Size(130, 120), MapMode(MapUnit::MapAppFont)));
     mpLbTree->set_width_request(aTreeSize.Width());
     mpLbTree->set_height_request(aTreeSize.Height());
     get(mpRefEdit, "edit");
@@ -90,9 +91,9 @@ ScXMLSourceDlg::ScXMLSourceDlg(
 
     mpActiveEdit = mpRefEdit;
 
-    maXMLParam.maImgElementDefault = Image(ScResId(IMG_ELEMENT_DEFAULT));
-    maXMLParam.maImgElementRepeat = Image(ScResId(IMG_ELEMENT_REPEAT));
-    maXMLParam.maImgAttribute = Image(ScResId(IMG_ELEMENT_ATTRIBUTE));
+    maXMLParam.maImgElementDefault = Image(StockImage::Yes, RID_BMP_ELEMENT_DEFAULT);
+    maXMLParam.maImgElementRepeat = Image(StockImage::Yes, RID_BMP_ELEMENT_REPEAT);
+    maXMLParam.maImgAttribute = Image(StockImage::Yes, RID_BMP_ELEMENT_ATTRIBUTE);
 
     Link<Button*,void> aBtnHdl = LINK(this, ScXMLSourceDlg, BtnPressedHdl);
     mpBtnSelectSource->SetClickHdl(aBtnHdl);
@@ -193,7 +194,7 @@ void ScXMLSourceDlg::SelectSourceFile()
         INetURLObject aURL(maSrcPath);
         aURL.removeSegment();
         aURL.removeFinalSlash();
-        OUString aPath = aURL.GetMainURL(INetURLObject::NO_DECODE);
+        OUString aPath = aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE);
         xFilePicker->setDisplayDirectory(aPath);
     }
 
@@ -225,7 +226,7 @@ void ScXMLSourceDlg::LoadSourceFileStructure(const OUString& rPath)
     mpXMLContext->loadXMLStructure(*mpLbTree, maXMLParam);
 }
 
-void ScXMLSourceDlg::HandleGetFocus(Control* pCtrl)
+void ScXMLSourceDlg::HandleGetFocus(const Control* pCtrl)
 {
     mpActiveEdit = nullptr;
     if (pCtrl == mpRefEdit || pCtrl == mpRefBtn)
@@ -237,13 +238,13 @@ void ScXMLSourceDlg::HandleGetFocus(Control* pCtrl)
 
 namespace {
 
-class UnhighlightEntry : public std::unary_function<SvTreeListEntry*, void>
+class UnhighlightEntry
 {
     SvTreeListBox& mrTree;
 public:
     explicit UnhighlightEntry(SvTreeListBox& rTree) : mrTree(rTree) {}
 
-    void operator() (SvTreeListEntry* p)
+    void operator() (const SvTreeListEntry* p)
     {
         SvViewDataEntry* pView = mrTree.GetViewDataEntry(p);
         if (!pView)
@@ -260,7 +261,7 @@ public:
  * Otherwise the reference entry equals the current entry.  A reference
  * entry is the entry that stores mapped cell position.
  */
-SvTreeListEntry* getReferenceEntry(SvTreeListBox& rTree, SvTreeListEntry* pCurEntry)
+SvTreeListEntry* getReferenceEntry(const SvTreeListBox& rTree, SvTreeListEntry* pCurEntry)
 {
     SvTreeListEntry* pParent = rTree.GetParent(pCurEntry);
     SvTreeListEntry* pRefEntry = nullptr;
@@ -337,7 +338,7 @@ void ScXMLSourceDlg::DefaultElementSelected(SvTreeListEntry& rEntry)
     {
         // Only an element with no child elements (leaf element) can be linked.
         bool bHasChild = false;
-        for (SvTreeListEntry* pChild = mpLbTree->FirstChild(&rEntry); pChild; pChild = SvTreeListBox::NextSibling(pChild))
+        for (SvTreeListEntry* pChild = mpLbTree->FirstChild(&rEntry); pChild; pChild = pChild->NextSibling())
         {
             ScOrcusXMLTreeParam::EntryData* pUserData = ScOrcusXMLTreeParam::getUserData(*pChild);
             OSL_ASSERT(pUserData);
@@ -482,7 +483,7 @@ bool ScXMLSourceDlg::IsParentDirty(SvTreeListEntry* pEntry) const
 
 bool ScXMLSourceDlg::IsChildrenDirty(SvTreeListEntry* pEntry) const
 {
-    for (SvTreeListEntry* pChild = mpLbTree->FirstChild(pEntry); pChild; pChild = SvTreeListBox::NextSibling(pChild))
+    for (SvTreeListEntry* pChild = mpLbTree->FirstChild(pEntry); pChild; pChild = pChild->NextSibling())
     {
         ScOrcusXMLTreeParam::EntryData* pUserData = ScOrcusXMLTreeParam::getUserData(*pChild);
         OSL_ASSERT(pUserData);
@@ -557,26 +558,23 @@ void ScXMLSourceDlg::OkPressed()
 
     // Convert single cell links.
     {
-        std::set<const SvTreeListEntry*>::const_iterator it = maCellLinks.begin(), itEnd = maCellLinks.end();
-        for (; it != itEnd; ++it)
+        for (const SvTreeListEntry* pCellLink : maCellLinks)
         {
-            const SvTreeListEntry& rEntry = **it;
+            const SvTreeListEntry& rEntry = *pCellLink;
             OUString aPath = getXPath(*mpLbTree, rEntry, aParam.maNamespaces);
             const ScOrcusXMLTreeParam::EntryData* pUserData = ScOrcusXMLTreeParam::getUserData(rEntry);
 
-            aParam.maCellLinks.push_back(
-                ScOrcusImportXMLParam::CellLink(
-                    pUserData->maLinkedPos, OUStringToOString(aPath, RTL_TEXTENCODING_UTF8)));
+            aParam.maCellLinks.emplace_back(
+                    pUserData->maLinkedPos, OUStringToOString(aPath, RTL_TEXTENCODING_UTF8));
         }
     }
 
     // Convert range links. For now, an element with range link takes all its
     // child elements as its fields.
     {
-        std::set<const SvTreeListEntry*>::const_iterator it = maRangeLinks.begin(), itEnd = maRangeLinks.end();
-        for (; it != itEnd; ++it)
+        for (const SvTreeListEntry* pRangeLink : maRangeLinks)
         {
-            const SvTreeListEntry& rEntry = **it;
+            const SvTreeListEntry& rEntry = *pRangeLink;
             const ScOrcusXMLTreeParam::EntryData* pUserData = ScOrcusXMLTreeParam::getUserData(rEntry);
 
             ScOrcusImportXMLParam::RangeLink aRangeLink;
@@ -597,7 +595,7 @@ void ScXMLSourceDlg::OkPressed()
 
     // Don't forget to broadcast the change.
     SfxObjectShell* pShell = mpDoc->GetDocumentShell();
-    pShell->Broadcast(SfxSimpleHint(FID_DATACHANGED));
+    pShell->Broadcast(SfxHint(SfxHintId::ScDataChanged));
 
     // Repaint the grid to force repaint the cell values.
     ScTabViewShell* pViewShell = ScTabViewShell::GetActiveViewShell();
@@ -662,12 +660,12 @@ void ScXMLSourceDlg::RefEditModified()
     mpBtnOk->Enable(bHasLink);
 }
 
-IMPL_LINK_TYPED(ScXMLSourceDlg, GetFocusHdl, Control&, rCtrl, void)
+IMPL_LINK(ScXMLSourceDlg, GetFocusHdl, Control&, rCtrl, void)
 {
     HandleGetFocus(&rCtrl);
 }
 
-IMPL_LINK_TYPED(ScXMLSourceDlg, BtnPressedHdl, Button*, pBtn, void)
+IMPL_LINK(ScXMLSourceDlg, BtnPressedHdl, Button*, pBtn, void)
 {
     if (pBtn == mpBtnSelectSource)
         SelectSourceFile();
@@ -677,12 +675,12 @@ IMPL_LINK_TYPED(ScXMLSourceDlg, BtnPressedHdl, Button*, pBtn, void)
         CancelPressed();
 }
 
-IMPL_LINK_NOARG_TYPED(ScXMLSourceDlg, TreeItemSelectHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(ScXMLSourceDlg, TreeItemSelectHdl, SvTreeListBox*, void)
 {
     TreeItemSelected();
 }
 
-IMPL_LINK_NOARG_TYPED(ScXMLSourceDlg, RefModifiedHdl, Edit&, void)
+IMPL_LINK_NOARG(ScXMLSourceDlg, RefModifiedHdl, Edit&, void)
 {
     RefEditModified();
 }

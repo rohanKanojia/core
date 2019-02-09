@@ -8,7 +8,7 @@
  *
  */
 
-#include "oox/helper/grabbagstack.hxx"
+#include <oox/helper/grabbagstack.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <comphelper/sequence.hxx>
 
@@ -38,7 +38,7 @@ PropertyValue GrabBagStack::getRootProperty()
 
     PropertyValue aProperty;
     aProperty.Name = mCurrentElement.maElementName;
-    aProperty.Value = makeAny(comphelper::containerToSequence(mCurrentElement.maPropertyList));
+    aProperty.Value <<= comphelper::containerToSequence(mCurrentElement.maPropertyList);
 
     return aProperty;
 }

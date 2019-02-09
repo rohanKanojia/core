@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SlideSorter.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsSelectionManager.hxx"
-#include "controller/SlsSelectionObserver.hxx"
-#include "controller/SlsPageSelector.hxx"
-#include "controller/SlsFocusManager.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
+#include <SlideSorter.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsSelectionManager.hxx>
+#include <controller/SlsSelectionObserver.hxx>
+#include <controller/SlsPageSelector.hxx>
+#include <controller/SlsFocusManager.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
 #include <svx/svdmodel.hxx>
-#include "drawdoc.hxx"
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
 
 namespace sd { namespace slidesorter { namespace controller {
 
-SelectionObserver::Context::Context (SlideSorter& rSlideSorter)
+SelectionObserver::Context::Context (SlideSorter const & rSlideSorter)
     : mpSelectionObserver(
         rSlideSorter.GetController().GetSelectionManager()->GetSelectionObserver())
 {
@@ -38,7 +39,7 @@ SelectionObserver::Context::Context (SlideSorter& rSlideSorter)
         mpSelectionObserver->StartObservation();
 }
 
-SelectionObserver::Context::~Context()
+SelectionObserver::Context::~Context() COVERITY_NOEXCEPT_FALSE
 {
     if (mpSelectionObserver)
         mpSelectionObserver->EndObservation();
@@ -56,10 +57,10 @@ void SelectionObserver::Context::Abort()
 //===== SelectionObserver =====================================================
 
 SelectionObserver::SelectionObserver (SlideSorter& rSlideSorter)
-    : mrSlideSorter(rSlideSorter),
-      mbIsOvservationActive(false),
-      maInsertedPages(),
-      maDeletedPages()
+    : mrSlideSorter(rSlideSorter)
+    , mbIsObservationActive(false)
+    , mbPageEventOccurred(false)
+    , maInsertedPages()
 {
 }
 
@@ -69,46 +70,48 @@ SelectionObserver::~SelectionObserver()
 
 void SelectionObserver::NotifyPageEvent (const SdrPage* pSdrPage)
 {
-    if ( ! mbIsOvservationActive)
+    if (!mbIsObservationActive)
         return;
+
+    mbPageEventOccurred = true;
 
     const SdPage* pPage = dynamic_cast<const SdPage*>(pSdrPage);
     if (pPage == nullptr)
         return;
 
+    //NotifyPageEvent is called for add, remove, *and* change position so for
+    //the change position case we must ensure we don't end up with the slide
+    //duplicated in our list
+    std::vector<const SdPage*>::iterator iPage(
+        std::find(maInsertedPages.begin(), maInsertedPages.end(), pPage));
+    if (iPage != maInsertedPages.end())
+        maInsertedPages.erase(iPage);
+
     if (pPage->IsInserted())
         maInsertedPages.push_back(pPage);
-    else
-    {
-        ::std::vector<const SdPage*>::iterator iPage(
-            ::std::find(maInsertedPages.begin(), maInsertedPages.end(), pPage));
-        if (iPage != maInsertedPages.end())
-            maInsertedPages.erase(iPage);
-
-        maDeletedPages.push_back(pPage->GetPageNum());
-    }
 }
 
 void SelectionObserver::StartObservation()
 {
-    OSL_ASSERT(!mbIsOvservationActive);
+    OSL_ASSERT(!mbIsObservationActive);
     maInsertedPages.clear();
-    maDeletedPages.clear();
-    mbIsOvservationActive = true;
+    mbIsObservationActive = true;
 }
 
 void SelectionObserver::AbortObservation()
 {
-    OSL_ASSERT(mbIsOvservationActive);
-    mbIsOvservationActive = false;
+    OSL_ASSERT(mbIsObservationActive);
+    mbIsObservationActive = false;
     maInsertedPages.clear();
-    maDeletedPages.clear();
 }
 
 void SelectionObserver::EndObservation()
 {
-    OSL_ASSERT(mbIsOvservationActive);
-    mbIsOvservationActive = false;
+    OSL_ASSERT(mbIsObservationActive);
+    mbIsObservationActive = false;
+
+    if (!mbPageEventOccurred)
+        return;
 
     PageSelector& rSelector (mrSlideSorter.GetController().GetPageSelector());
     PageSelector::UpdateLock aUpdateLock (mrSlideSorter);
@@ -116,17 +119,12 @@ void SelectionObserver::EndObservation()
     if ( ! maInsertedPages.empty())
     {
         // Select the inserted pages.
-        for (::std::vector<const SdPage*>::const_iterator
-                 iPage(maInsertedPages.begin()),
-                 iEnd(maInsertedPages.end());
-             iPage!=iEnd;
-             ++iPage)
+        for (const auto& rpPage : maInsertedPages)
         {
-            rSelector.SelectPage(*iPage);
+            rSelector.SelectPage(rpPage);
         }
         maInsertedPages.clear();
     }
-    maDeletedPages.clear();
 
     aUpdateLock.Release();
     mrSlideSorter.GetController().GetFocusManager().SetFocusedPageToCurrentPage();

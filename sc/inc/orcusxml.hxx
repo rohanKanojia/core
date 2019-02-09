@@ -15,6 +15,7 @@
 #include <vcl/image.hxx>
 
 #include <vector>
+#include <memory>
 
 class SvTreeListEntry;
 
@@ -29,7 +30,7 @@ struct ScOrcusXMLTreeParam
     struct EntryData
     {
         size_t mnNamespaceID; /// numerical ID for xml namespace
-        EntryType meType;
+        EntryType const meType;
         ScAddress maLinkedPos; /// linked cell position (invalid if unlinked)
         bool mbRangeParent:1;
         bool mbLeafNode:1; /// Leaf if it has no child elements. Child Attributes don't count.
@@ -37,7 +38,7 @@ struct ScOrcusXMLTreeParam
         SC_DLLPUBLIC EntryData(EntryType eType);
     };
 
-    typedef std::vector<EntryData> EntryDataVec;
+    typedef std::vector<std::unique_ptr<EntryData>> UserDataStoreType;
 
     Image maImgElementDefault;
     Image maImgElementRepeat;
@@ -47,10 +48,9 @@ struct ScOrcusXMLTreeParam
      * Store all custom data instances since the tree control doesn't manage
      * the life cycle of user datas.
      */
-    EntryDataVec maUserDataStore;
+    UserDataStoreType m_UserDataStore;
 
-    static SC_DLLPUBLIC EntryData* getUserData(SvTreeListEntry& rEntry);
-    static SC_DLLPUBLIC const EntryData* getUserData(const SvTreeListEntry& rEntry);
+    static SC_DLLPUBLIC EntryData* getUserData(const SvTreeListEntry& rEntry);
 };
 
 struct ScOrcusImportXMLParam

@@ -17,13 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <rtl/ref.hxx>
+
 #include <xmloff/xmlprmap.hxx>
 #include <xmloff/xmlprhdl.hxx>
 #include <xmloff/xmltypes.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/maptype.hxx>
 #include <xmloff/prhdlfac.hxx>
-#include <tools/debug.hxx>
 
 #include "xmlbahdl.hxx"
 
@@ -107,7 +108,7 @@ struct XMLPropertySetMapper::Impl
     std::vector<XMLPropertySetMapperEntry_Impl> maMapEntries;
     std::vector<rtl::Reference <XMLPropertyHandlerFactory> > maHdlFactories;
 
-    bool mbOnlyExportMappings;
+    bool const mbOnlyExportMappings;
 
     explicit Impl( bool bForExport ) : mbOnlyExportMappings(bForExport) {}
 };
@@ -132,7 +133,7 @@ XMLPropertySetMapper::XMLPropertySetMapper(
                     XMLPropertySetMapperEntry_Impl aEntry( *pIter, rFactory );
                     mpImpl->maMapEntries.push_back( aEntry );
                 }
-                pIter++;
+                ++pIter;
             }
         }
         else
@@ -141,7 +142,7 @@ XMLPropertySetMapper::XMLPropertySetMapper(
             {
                 XMLPropertySetMapperEntry_Impl aEntry( *pIter, rFactory );
                 mpImpl->maMapEntries.push_back( aEntry );
-                pIter++;
+                ++pIter;
             }
         }
     }
@@ -154,21 +155,15 @@ XMLPropertySetMapper::~XMLPropertySetMapper()
 void XMLPropertySetMapper::AddMapperEntry(
     const rtl::Reference < XMLPropertySetMapper >& rMapper )
 {
-    for( vector < rtl::Reference < XMLPropertyHandlerFactory > >::iterator
-            aFIter = rMapper->mpImpl->maHdlFactories.begin();
-         aFIter != rMapper->mpImpl->maHdlFactories.end();
-         ++aFIter )
+    for( const auto& rHdlFactory : rMapper->mpImpl->maHdlFactories )
     {
-        mpImpl->maHdlFactories.push_back(*aFIter);
+        mpImpl->maHdlFactories.push_back(rHdlFactory);
     }
 
-    for( vector < XMLPropertySetMapperEntry_Impl >::iterator
-            aEIter = rMapper->mpImpl->maMapEntries.begin();
-         aEIter != rMapper->mpImpl->maMapEntries.end();
-         ++aEIter )
+    for( const auto& rMapEntry : rMapper->mpImpl->maMapEntries )
     {
-        if (!mpImpl->mbOnlyExportMappings || !(*aEIter).bImportOnly)
-            mpImpl->maMapEntries.push_back( *aEIter );
+        if (!mpImpl->mbOnlyExportMappings || !rMapEntry.bImportOnly)
+            mpImpl->maMapEntries.push_back( rMapEntry );
     }
 }
 
@@ -304,7 +299,7 @@ sal_Int32 XMLPropertySetMapper::FindEntryIndex(
     {
         const XMLPropertySetMapperEntry_Impl& rEntry = mpImpl->maMapEntries[nIndex];
         if( rEntry.nXMLNameSpace == nNameSpace &&
-            rEntry.sXMLAttributeName.equals( sXMLName ) &&
+            rEntry.sXMLAttributeName == sXMLName &&
             rEntry.sAPIPropertyName.equalsAscii( sApiName ) )
             return nIndex;
         else
@@ -342,8 +337,7 @@ void XMLPropertySetMapper::RemoveEntry( sal_Int32 nIndex )
     if( nIndex>=nEntries || nIndex<0 )
         return;
     vector < XMLPropertySetMapperEntry_Impl >::iterator aEIter = mpImpl->maMapEntries.begin();
-    for( sal_Int32 nN=0; nN<nIndex; nN++ )
-        ++aEIter;
+    std::advance(aEIter, nIndex);
     mpImpl->maMapEntries.erase( aEIter );
 }
 

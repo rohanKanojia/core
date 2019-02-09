@@ -33,8 +33,15 @@
 #include <cppuhelper/compbase.hxx>
 #include <sfx2/dllapi.h>
 #include <tools/link.hxx>
+#include <memory>
 
-class ResMgr;
+extern "C" {
+
+void SAL_DLLPUBLIC_EXPORT plugin_init_sys_tray();
+void SAL_DLLPUBLIC_EXPORT plugin_shutdown_sys_tray();
+
+}
+
 namespace sfx2
 {
     class FileDialogHelper;
@@ -61,8 +68,7 @@ class SFX2_DLLPUBLIC ShutdownIcon : public ShutdownIconServiceBase
         bool                    m_bVeto;
         bool                    m_bListenForTermination;
         bool                    m_bSystemDialogs;
-        ResMgr*                 m_pResMgr;
-        sfx2::FileDialogHelper* m_pFileDlg;
+        std::unique_ptr<sfx2::FileDialogHelper> m_pFileDlg;
         css::uno::Reference< css::uno::XComponentContext > m_xContext;
 
         static ShutdownIcon *pShutdownIcon; // one instance
@@ -80,16 +86,13 @@ class SFX2_DLLPUBLIC ShutdownIcon : public ShutdownIconServiceBase
     public:
         explicit ShutdownIcon( const css::uno::Reference< css::uno::XComponentContext > & rxContext );
 
-        virtual ~ShutdownIcon();
+        virtual ~ShutdownIcon() override;
 
-        virtual OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
 
-        virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override;
 
-        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 
         static ShutdownIcon* getInstance();
         static ShutdownIcon* createInstance();
@@ -106,15 +109,15 @@ class SFX2_DLLPUBLIC ShutdownIcon : public ShutdownIconServiceBase
         static bool GetAutostart();
         static bool bModalMode;
 
-        void init() throw( css::uno::Exception, std::exception );
+        /// @throws css::uno::Exception
+        void init();
 
-        OUString GetResString( int id );
         static OUString GetUrlDescription( const OUString& aUrl );
 
         void SetVeto( bool bVeto )  { m_bVeto = bVeto;}
 
         void                    StartFileDialog();
-        DECL_LINK_TYPED(DialogClosedHdl_Impl, sfx2::FileDialogHelper*, void);
+        DECL_LINK(DialogClosedHdl_Impl, sfx2::FileDialogHelper*, void);
 
         static bool IsQuickstarterInstalled();
 
@@ -122,31 +125,19 @@ class SFX2_DLLPUBLIC ShutdownIcon : public ShutdownIconServiceBase
         virtual void SAL_CALL disposing() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XTerminateListener
-        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent )
-            throw(css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent )
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
+        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-            throw( css::uno::Exception, std::exception ) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XFastPropertySet
         virtual void SAL_CALL setFastPropertyValue(       ::sal_Int32                  nHandle,
-                                                    const css::uno::Any& aValue )
-            throw (css::beans::UnknownPropertyException,
-                    css::beans::PropertyVetoException,
-                    css::lang::IllegalArgumentException,
-                    css::lang::WrappedTargetException,
-                    css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Any SAL_CALL getFastPropertyValue( ::sal_Int32 nHandle )
-            throw (css::beans::UnknownPropertyException,
-                    css::lang::WrappedTargetException,
-                    css::uno::RuntimeException, std::exception) override;
+                                                    const css::uno::Any& aValue ) override;
+        virtual css::uno::Any SAL_CALL getFastPropertyValue( ::sal_Int32 nHandle ) override;
 
         css::uno::Reference< css::frame::XDesktop2 > m_xDesktop;
 

@@ -24,7 +24,7 @@ using namespace ::com::sun::star;
 
 struct WordDialogTable
 {
-    sal_Int32 wdDialog;
+    sal_Int32 const wdDialog;
     const sal_Char* ooDialog;
 };
 
@@ -40,9 +40,8 @@ static const WordDialogTable aWordDialogTable[] =
 OUString
 SwVbaDialog::mapIndexToName( sal_Int32 nIndex )
 {
-    for (size_t i = 0; i < SAL_N_ELEMENTS(aWordDialogTable); ++i)
+    for (const WordDialogTable & rTable : aWordDialogTable)
     {
-        const WordDialogTable& rTable = aWordDialogTable[i];
         if( nIndex == rTable.wdDialog )
         {
             return OUString::createFromAscii( rTable.ooDialog );
@@ -60,12 +59,10 @@ SwVbaDialog::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaDialog::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.Dialog";
-    }
+        "ooo.vba.word.Dialog"
+    };
     return aServiceNames;
 }
 

@@ -20,22 +20,10 @@
 #ifndef INCLUDED_SYSTOOLS_WIN32_UWINAPI_H
 #define INCLUDED_SYSTOOLS_WIN32_UWINAPI_H
 
-#include <sal/macros.h>
-#ifdef _UWINAPI_
-#   define _KERNEL32_
-#   define _USER32_
-#   define _SHELL32_
-#endif
+#include "sal/macros.h"
 
 #include "prewin.h"
 #include "postwin.h"
-
-#ifdef __MINGW32__
-#include <basetyps.h>
-#ifdef _UWINAPI_
-#define WINBASEAPI
-#endif
-#endif
 
 #ifdef __cplusplus
 

@@ -25,16 +25,17 @@
 #include <osl/module.hxx>
 #include <rtl/ref.hxx>
 #include <svl/solar.hrc>
-#include <vcl/fltcall.hxx>
+#include <FltCallDialogParameter.hxx>
 #include <vcl/settings.hxx>
 #include "exportdialog.hxx"
 #include <uno/mapping.hxx>
 #include <tools/fldunit.hxx>
-#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/beans/XPropertyAccess.hpp>
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/document/XViewDataSupplier.hpp>
 #include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/uno/Sequence.h>
@@ -42,8 +43,8 @@
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
+#include <unotools/localedatawrapper.hxx>
 #include <unotools/syslocale.hxx>
-#include <comphelper/processfactory.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <memory>
@@ -70,63 +71,48 @@ class SvFilterOptionsDialog : public cppu::WeakImplHelper
     uno::Reference< lang::XComponent >
         mxSourceDocument;
 
+    css::uno::Reference<css::awt::XWindow> mxParent;
     OUString        maDialogTitle;
     FieldUnit       meFieldUnit;
-    bool        mbExportSelection;
+    bool            mbExportSelection;
+    bool            mbGraphicsSource;
 
 public:
 
     explicit SvFilterOptionsDialog( const uno::Reference< uno::XComponentContext >& _rxORB );
-    virtual ~SvFilterOptionsDialog();
 
     // XInterface
     virtual void SAL_CALL acquire() throw() override;
     virtual void SAL_CALL release() throw() override;
 
     // XInitialization
-    virtual void SAL_CALL initialize( const uno::Sequence< uno::Any > & aArguments )
-        throw ( uno::Exception, uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL initialize( const uno::Sequence< uno::Any > & aArguments ) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw ( uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName )
-        throw ( uno::RuntimeException, std::exception ) override;
-    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-        throw ( uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XPropertyAccess
-    virtual uno::Sequence< beans::PropertyValue > SAL_CALL getPropertyValues()
-        throw ( uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setPropertyValues( const uno::Sequence< beans::PropertyValue > & aProps )
-        throw ( beans::UnknownPropertyException, beans::PropertyVetoException,
-                lang::IllegalArgumentException, lang::WrappedTargetException,
-                uno::RuntimeException, std::exception ) override;
+    virtual uno::Sequence< beans::PropertyValue > SAL_CALL getPropertyValues() override;
+    virtual void SAL_CALL setPropertyValues( const uno::Sequence< beans::PropertyValue > & aProps ) override;
 
     // XExecuteDialog
-    virtual sal_Int16 SAL_CALL execute()
-        throw ( uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setTitle( const OUString& aTitle )
-        throw ( uno::RuntimeException, std::exception ) override;
+    virtual sal_Int16 SAL_CALL execute() override;
+    virtual void SAL_CALL setTitle( const OUString& aTitle ) override;
 
     // XExporter
-    virtual void SAL_CALL setSourceDocument( const uno::Reference< lang::XComponent >& xDoc )
-        throw ( lang::IllegalArgumentException, uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setSourceDocument( const uno::Reference< lang::XComponent >& xDoc ) override;
 
 };
 
 SvFilterOptionsDialog::SvFilterOptionsDialog( const uno::Reference< uno::XComponentContext >& rxContext ) :
     mxContext           ( rxContext ),
-    meFieldUnit         ( FUNIT_CM ),
-    mbExportSelection   ( false )
+    meFieldUnit         ( FieldUnit::CM ),
+    mbExportSelection   ( false ),
+    mbGraphicsSource    ( true )
 {
 }
-
-
-SvFilterOptionsDialog::~SvFilterOptionsDialog()
-{
-}
-
 
 void SAL_CALL SvFilterOptionsDialog::acquire() throw()
 {
@@ -140,24 +126,31 @@ void SAL_CALL SvFilterOptionsDialog::release() throw()
 }
 
 // XInitialization
-void SAL_CALL SvFilterOptionsDialog::initialize( const uno::Sequence< uno::Any > & )
-    throw ( uno::Exception, uno::RuntimeException, std::exception )
+void SAL_CALL SvFilterOptionsDialog::initialize(const uno::Sequence<uno::Any>& rArguments)
 {
+    for(const uno::Any& rArgument : rArguments)
+    {
+        beans::PropertyValue aProperty;
+        if (rArgument >>= aProperty)
+        {
+            if( aProperty.Name == "ParentWindow" )
+            {
+                aProperty.Value >>= mxParent;
+            }
+        }
+    }
 }
 
 // XServiceInfo
 OUString SAL_CALL SvFilterOptionsDialog::getImplementationName()
-    throw( uno::RuntimeException, std::exception )
 {
     return OUString( "com.sun.star.svtools.SvFilterOptionsDialog" );
 }
 sal_Bool SAL_CALL SvFilterOptionsDialog::supportsService( const OUString& rServiceName )
-    throw( uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 uno::Sequence< OUString > SAL_CALL SvFilterOptionsDialog::getSupportedServiceNames()
-    throw ( uno::RuntimeException, std::exception )
 {
     uno::Sequence<OUString> aRet { "com.sun.star.ui.dialogs.FilterOptionsDialog" };
     return aRet;
@@ -165,7 +158,6 @@ uno::Sequence< OUString > SAL_CALL SvFilterOptionsDialog::getSupportedServiceNam
 
 // XPropertyAccess
 uno::Sequence< beans::PropertyValue > SvFilterOptionsDialog::getPropertyValues()
-        throw ( uno::RuntimeException, std::exception )
 {
     sal_Int32 i, nCount;
     for ( i = 0, nCount = maMediaDescriptor.getLength(); i < nCount; i++ )
@@ -183,9 +175,6 @@ uno::Sequence< beans::PropertyValue > SvFilterOptionsDialog::getPropertyValues()
 }
 
 void SvFilterOptionsDialog::setPropertyValues( const uno::Sequence< beans::PropertyValue > & aProps )
-        throw ( beans::UnknownPropertyException, beans::PropertyVetoException,
-                lang::IllegalArgumentException, lang::WrappedTargetException,
-                uno::RuntimeException, std::exception )
 {
     maMediaDescriptor = aProps;
 
@@ -205,30 +194,35 @@ void SvFilterOptionsDialog::setPropertyValues( const uno::Sequence< beans::Prope
 
 // XExecutableDialog
 void SvFilterOptionsDialog::setTitle( const OUString& aTitle )
-    throw ( uno::RuntimeException, std::exception )
 {
     maDialogTitle = aTitle;
 }
 
 sal_Int16 SvFilterOptionsDialog::execute()
-    throw ( uno::RuntimeException, std::exception )
 {
     sal_Int16 nRet = ui::dialogs::ExecutableDialogResults::CANCEL;
 
-    OUString aFilterNameStr( "FilterName" );
     OUString aInternalFilterName;
+    uno::Reference<graphic::XGraphic> xGraphic;
     sal_Int32 j, nCount = maMediaDescriptor.getLength();
     for ( j = 0; j < nCount; j++ )
     {
-        if ( maMediaDescriptor[ j ].Name.equals( aFilterNameStr ) )
+        const OUString& rName = maMediaDescriptor[ j ].Name;
+        if ( rName == "FilterName" )
         {
             OUString aStr;
             maMediaDescriptor[ j ].Value >>= aStr;
             aInternalFilterName = aStr;
-            aInternalFilterName = aInternalFilterName.replaceAll( "draw_", "" );
-            aInternalFilterName = aInternalFilterName.replaceAll( "impress_", "" );
+            aInternalFilterName = aInternalFilterName.replaceFirst( "draw_", "" );
+            aInternalFilterName = aInternalFilterName.replaceFirst( "impress_", "" );
+            aInternalFilterName = aInternalFilterName.replaceFirst( "calc_", "" );
+            aInternalFilterName = aInternalFilterName.replaceFirst( "writer_", "" );
             break;
        }
+        else if ( rName == "Graphic" )
+        {
+            maMediaDescriptor[ j ].Value >>= xGraphic;
+        }
     }
     if ( !aInternalFilterName.isEmpty() )
     {
@@ -242,18 +236,15 @@ sal_Int16 SvFilterOptionsDialog::execute()
         }
         if ( nFormat < nFilterCount )
         {
-            FltCallDialogParameter aFltCallDlgPara( Application::GetDefDialogParent(), nullptr, meFieldUnit );
+            FltCallDialogParameter aFltCallDlgPara(Application::GetFrameWeld(mxParent), meFieldUnit);
             aFltCallDlgPara.aFilterData = maFilterDataSequence;
-
-            std::unique_ptr<ResMgr> pResMgr(ResMgr::CreateResMgr( "svt", Application::GetSettings().GetUILanguageTag() ));
-            aFltCallDlgPara.pResMgr = pResMgr.get();
-
             aFltCallDlgPara.aFilterExt = aGraphicFilter.GetExportFormatShortName( nFormat );
             bool bIsPixelFormat( aGraphicFilter.IsExportPixelFormat( nFormat ) );
-            if ( ScopedVclPtrInstance<ExportDialog>::Create( aFltCallDlgPara, mxContext, mxSourceDocument, mbExportSelection, bIsPixelFormat )->Execute() == RET_OK )
-                nRet = ui::dialogs::ExecutableDialogResults::OK;
 
-            pResMgr.reset();
+            ExportDialog aDialog(aFltCallDlgPara, mxContext, mxSourceDocument, mbExportSelection,
+                        bIsPixelFormat, mbGraphicsSource, xGraphic);
+            if (aDialog.run() == RET_OK)
+                nRet = ui::dialogs::ExecutableDialogResults::OK;
 
             // taking the out parameter from the dialog
             maFilterDataSequence = aFltCallDlgPara.aFilterData;
@@ -264,37 +255,47 @@ sal_Int16 SvFilterOptionsDialog::execute()
 
 // XEmporter
 void SvFilterOptionsDialog::setSourceDocument( const uno::Reference< lang::XComponent >& xDoc )
-        throw ( lang::IllegalArgumentException, uno::RuntimeException, std::exception )
 {
     mxSourceDocument = xDoc;
+
+    mbGraphicsSource = true;    // default Draw and Impress like it was before
 
     // try to set the corresponding metric unit
     OUString aConfigPath;
     uno::Reference< lang::XServiceInfo > xServiceInfo
             ( xDoc, uno::UNO_QUERY );
-    if ( xServiceInfo.is() )
+    if ( !xServiceInfo.is() )
+        return;
+
+    if ( xServiceInfo->supportsService("com.sun.star.presentation.PresentationDocument") )
+        aConfigPath = "Office.Impress/Layout/Other/MeasureUnit";
+    else if ( xServiceInfo->supportsService("com.sun.star.drawing.DrawingDocument") )
+        aConfigPath = "Office.Draw/Layout/Other/MeasureUnit";
+    else
     {
-        if ( xServiceInfo->supportsService("com.sun.star.presentation.PresentationDocument") )
-            aConfigPath = "Office.Impress/Layout/Other/MeasureUnit";
-        else if ( xServiceInfo->supportsService("com.sun.star.drawing.DrawingDocument") )
-            aConfigPath = "Office.Draw/Layout/Other/MeasureUnit";
-        if ( !aConfigPath.isEmpty() )
-        {
-            FilterConfigItem aConfigItem( aConfigPath );
-            OUString aPropertyName;
-            SvtSysLocale aSysLocale;
-            if ( aSysLocale.GetLocaleDataPtr()->getMeasurementSystemEnum() == MEASURE_METRIC )
-                aPropertyName = "Metric";
-            else
-                aPropertyName = "NonMetric";
-            meFieldUnit = (FieldUnit)aConfigItem.ReadInt32( aPropertyName, FUNIT_CM );
-        }
+        mbGraphicsSource = false;
+        if ( xServiceInfo->supportsService("com.sun.star.sheet.SpreadsheetDocument") )
+            aConfigPath = "Office.Calc/Layout/Other/MeasureUnit";
+        else if ( xServiceInfo->supportsService("com.sun.star.text.TextDocument") )
+            aConfigPath = "Office.Writer/Layout/Other/MeasureUnit";
+    }
+    if ( !aConfigPath.isEmpty() )
+    {
+        FilterConfigItem aConfigItem( aConfigPath );
+        OUString aPropertyName;
+        SvtSysLocale aSysLocale;
+        if ( aSysLocale.GetLocaleDataPtr()->getMeasurementSystemEnum() == MeasurementSystem::Metric )
+            aPropertyName = "Metric";
+        else
+            aPropertyName = "NonMetric";
+        meFieldUnit = static_cast<FieldUnit>(
+            aConfigItem.ReadInt32(aPropertyName, sal_Int32(FieldUnit::CM)));
     }
 }
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_svtools_SvFilterOptionsDialog_get_implementation(
     css::uno::XComponentContext * context,
     css::uno::Sequence<css::uno::Any> const &)

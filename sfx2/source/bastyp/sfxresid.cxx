@@ -17,33 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-
 #include <sfx2/sfxresid.hxx>
-#include "tools/resmgr.hxx"
+#include <unotools/resmgr.hxx>
 
-
-static ResMgr* pMgr=nullptr;
-
-SfxResId::SfxResId( sal_uInt16 nId ) :
-
-    ResId( nId, *GetResMgr() )
+OUString SfxResId(const char* pId)
 {
+    return Translate::get(pId, Translate::Create("sfx"));
 }
-
-ResMgr* SfxResId::GetResMgr()
-{
-    if ( !pMgr )
-    {
-        pMgr = ResMgr::CreateResMgr("sfx");
-    }
-
-    return pMgr;
-}
-
-void SfxResId::DeleteResMgr()
-{
-    DELETEZ( pMgr );
-}
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -67,7 +67,7 @@ namespace basegfx
             double getCut() const { return mfCut; }
         };
 
-        typedef ::std::vector< temporaryPoint > temporaryPointVector;
+        typedef std::vector< temporaryPoint > temporaryPointVector;
 
         class temporaryPolygonData
         {
@@ -77,7 +77,7 @@ namespace basegfx
 
         public:
             const B2DPolygon& getPolygon() const { return maPolygon; }
-            void setPolygon(const B2DPolygon& rNew) { maPolygon = rNew; maRange = tools::getRange(maPolygon); }
+            void setPolygon(const B2DPolygon& rNew) { maPolygon = rNew; maRange = utils::getRange(maPolygon); }
             const B2DRange& getRange() const { return maRange; }
             temporaryPointVector& getTemporaryPointVector() { return maPoints; }
         };
@@ -97,7 +97,7 @@ namespace basegfx
                 if(nCount)
                 {
                     // sort temp points to assure increasing fCut values and increasing indices
-                    ::std::sort(rTempPoints.begin(), rTempPoints.end());
+                    std::sort(rTempPoints.begin(), rTempPoints.end());
 
                     // prepare loop
                     B2DCubicBezier aEdge;
@@ -117,7 +117,7 @@ namespace basegfx
                             double fLeftStart(0.0);
 
                             // now add all points targeted to be at this index
-                            while(nNewInd < nTempPointCount && rTempPoints[nNewInd].getIndex() == a)
+                            while (nNewInd < nTempPointCount && rTempPoints[nNewInd].getIndex() == a && fLeftStart < 1.0)
                             {
                                 const temporaryPoint& rTempPoint = rTempPoints[nNewInd++];
 
@@ -142,10 +142,10 @@ namespace basegfx
                             while(nNewInd < nTempPointCount && rTempPoints[nNewInd].getIndex() == a)
                             {
                                 const temporaryPoint& rTempPoint = rTempPoints[nNewInd++];
-                                const B2DPoint aNewPoint(rTempPoint.getPoint());
+                                const B2DPoint& aNewPoint(rTempPoint.getPoint());
 
                                 // do not add points double
-                                if(!aRetval.getB2DPoint(aRetval.count() - 1L).equal(aNewPoint))
+                                if(!aRetval.getB2DPoint(aRetval.count() - 1).equal(aNewPoint))
                                 {
                                     aRetval.append(aNewPoint);
                                 }
@@ -160,7 +160,7 @@ namespace basegfx
                 if(rCandidate.isClosed())
                 {
                     // set closed flag and correct last point (which is added double now).
-                    tools::closeWithGeometryChange(aRetval);
+                    utils::closeWithGeometryChange(aRetval);
                 }
 
                 return aRetval;
@@ -180,16 +180,16 @@ namespace basegfx
             // cut positions in the polygon to relative cut positions on the original bezier
             // segment.
             const sal_uInt32 nTempPointCount(rPointVector.size());
-            const sal_uInt32 nEdgeCount(rPolygon.count() ? rPolygon.count() - 1L : 0);
+            const sal_uInt32 nEdgeCount(rPolygon.count() ? rPolygon.count() - 1 : 0);
 
             if(nTempPointCount && nEdgeCount)
             {
                 for(sal_uInt32 a(0); a < nTempPointCount; a++)
                 {
                     const temporaryPoint& rTempPoint = rPointVector[a];
-                    const double fCutPosInPolygon((double)rTempPoint.getIndex() + rTempPoint.getCut());
-                    const double fRelativeCutPos(fCutPosInPolygon / (double)nEdgeCount);
-                    rTempPoints.push_back(temporaryPoint(rTempPoint.getPoint(), nInd, fRelativeCutPos));
+                    const double fCutPosInPolygon(static_cast<double>(rTempPoint.getIndex()) + rTempPoint.getCut());
+                    const double fRelativeCutPos(fCutPosInPolygon / static_cast<double>(nEdgeCount));
+                    rTempPoints.emplace_back(rTempPoint.getPoint(), nInd, fRelativeCutPos);
                 }
             }
         }
@@ -251,8 +251,8 @@ namespace basegfx
                                 // add a cut point to each list. The lists may be the same for
                                 // self intersections.
                                 const B2DPoint aCutPoint(interpolate(rCurrA, rNextA, fCut));
-                                rTempPointsA.push_back(temporaryPoint(aCutPoint, nIndA, fCut));
-                                rTempPointsB.push_back(temporaryPoint(aCutPoint, nIndB, fCut2));
+                                rTempPointsA.emplace_back(aCutPoint, nIndA, fCut);
+                                rTempPointsB.emplace_back(aCutPoint, nIndB, fCut2);
                             }
                         }
                     }
@@ -287,13 +287,13 @@ namespace basegfx
 
                 for(sal_uInt32 a(0); a < nEdgeCountA; a++)
                 {
-                    const B2DPoint aNextA(rCandidateA.getB2DPoint(a + 1L));
+                    const B2DPoint aNextA(rCandidateA.getB2DPoint(a + 1));
                     const B2DRange aRangeA(aCurrA, aNextA);
                     B2DPoint aCurrB(rCandidateB.getB2DPoint(0));
 
                     for(sal_uInt32 b(0); b < nEdgeCountB; b++)
                     {
-                        const B2DPoint aNextB(rCandidateB.getB2DPoint(b + 1L));
+                        const B2DPoint aNextB(rCandidateB.getB2DPoint(b + 1));
                         const B2DRange aRangeB(aCurrB, aNextB);
 
                         if(aRangeA.overlaps(aRangeB))
@@ -340,13 +340,13 @@ namespace basegfx
                                                 // by outer methods and would just produce a double point
                                                 if(a)
                                                 {
-                                                    rTempPointsA.push_back(temporaryPoint(aCurrA, a, 0.0));
+                                                    rTempPointsA.emplace_back(aCurrA, a, 0.0);
                                                 }
                                             }
                                             else
                                             {
                                                 const B2DPoint aCutPoint(interpolate(aCurrA, aNextA, fCutA));
-                                                rTempPointsA.push_back(temporaryPoint(aCutPoint, a, fCutA));
+                                                rTempPointsA.emplace_back(aCutPoint, a, fCutA);
                                             }
 
                                             // #i111715# use fTools::equal instead of fTools::equalZero for better accuracy
@@ -356,13 +356,13 @@ namespace basegfx
                                                 // by outer methods and would just produce a double point
                                                 if(b)
                                                 {
-                                                    rTempPointsB.push_back(temporaryPoint(aCurrB, b, 0.0));
+                                                    rTempPointsB.emplace_back(aCurrB, b, 0.0);
                                                 }
                                             }
                                             else
                                             {
                                                 const B2DPoint aCutPoint(interpolate(aCurrB, aNextB, fCutB));
-                                                rTempPointsB.push_back(temporaryPoint(aCutPoint, b, fCutB));
+                                                rTempPointsB.emplace_back(aCutPoint, b, fCutB);
                                             }
                                         }
                                     }
@@ -412,10 +412,9 @@ namespace basegfx
             }
 
             // append remapped tempVector entries for edge to tempPoints for edge
-            for(size_t a(0); a < aTempPointVectorEdge.size(); a++)
+            for(temporaryPoint & rTempPoint : aTempPointVectorEdge)
             {
-                const temporaryPoint& rTempPoint = aTempPointVectorEdge[a];
-                rTempPointsB.push_back(temporaryPoint(rTempPoint.getPoint(), nIndB, rTempPoint.getCut()));
+                rTempPointsB.emplace_back(rTempPoint.getPoint(), nIndB, rTempPoint.getCut());
             }
         }
 
@@ -497,7 +496,7 @@ namespace basegfx
 
             if(nPointCount)
             {
-                const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1L);
+                const sal_uInt32 nEdgeCount(rCandidate.isClosed() ? nPointCount : nPointCount - 1);
 
                 if(nEdgeCount)
                 {
@@ -508,7 +507,7 @@ namespace basegfx
                         B2DCubicBezier aCubicA;
                         B2DCubicBezier aCubicB;
 
-                        for(sal_uInt32 a(0); a < nEdgeCount - 1L; a++)
+                        for(sal_uInt32 a(0); a < nEdgeCount - 1; a++)
                         {
                             rCandidate.getBezierSegment(a, aCubicA);
                             aCubicA.testAndSolveTrivialBezier();
@@ -521,7 +520,7 @@ namespace basegfx
                                 findEdgeCutsOneBezier(aCubicA, a, rTempPoints);
                             }
 
-                            for(sal_uInt32 b(a + 1L); b < nEdgeCount; b++)
+                            for(sal_uInt32 b(a + 1); b < nEdgeCount; b++)
                             {
                                 rCandidate.getBezierSegment(b, aCubicB);
                                 aCubicB.testAndSolveTrivialBezier();
@@ -566,15 +565,15 @@ namespace basegfx
                     {
                         B2DPoint aCurrA(rCandidate.getB2DPoint(0));
 
-                        for(sal_uInt32 a(0); a < nEdgeCount - 1L; a++)
+                        for(sal_uInt32 a(0); a < nEdgeCount - 1; a++)
                         {
-                            const B2DPoint aNextA(rCandidate.getB2DPoint(a + 1L == nPointCount ? 0 : a + 1L));
+                            const B2DPoint aNextA(rCandidate.getB2DPoint(a + 1 == nPointCount ? 0 : a + 1));
                             const B2DRange aRangeA(aCurrA, aNextA);
-                            B2DPoint aCurrB(rCandidate.getB2DPoint(a + 1L));
+                            B2DPoint aCurrB(rCandidate.getB2DPoint(a + 1));
 
-                            for(sal_uInt32 b(a + 1L); b < nEdgeCount; b++)
+                            for(sal_uInt32 b(a + 1); b < nEdgeCount; b++)
                             {
-                                const B2DPoint aNextB(rCandidate.getB2DPoint(b + 1L == nPointCount ? 0 : b + 1L));
+                                const B2DPoint aNextB(rCandidate.getB2DPoint(b + 1 == nPointCount ? 0 : b + 1));
                                 const B2DRange aRangeB(aCurrB, aNextB);
 
                                 // consecutive segments touch of course
@@ -634,7 +633,7 @@ namespace basegfx
 
                             if(areParallel(aEdgeVector, aTestVector))
                             {
-                                const double fCut((bTestUsingX)
+                                const double fCut(bTestUsingX
                                     ? aTestVector.getX() / aEdgeVector.getX()
                                     : aTestVector.getY() / aEdgeVector.getY());
                                 const double fZero(0.0);
@@ -642,7 +641,7 @@ namespace basegfx
 
                                 if(fTools::more(fCut, fZero) && fTools::less(fCut, fOne))
                                 {
-                                    rTempPoints.push_back(temporaryPoint(aTestPoint, nInd, fCut));
+                                    rTempPoints.emplace_back(aTestPoint, nInd, fCut);
                                 }
                             }
                         }
@@ -684,7 +683,7 @@ namespace basegfx
 
             if(nPointCount && nEdgePointCount)
             {
-                const sal_uInt32 nEdgeCount(rEdgePolygon.isClosed() ? nEdgePointCount : nEdgePointCount - 1L);
+                const sal_uInt32 nEdgeCount(rEdgePolygon.isClosed() ? nEdgePointCount : nEdgePointCount - 1);
                 B2DPoint aCurr(rEdgePolygon.getB2DPoint(0));
 
                 for(sal_uInt32 a(0); a < nEdgeCount; a++)
@@ -739,8 +738,8 @@ namespace basegfx
 
             if(nPointCountA && nPointCountB)
             {
-                const sal_uInt32 nEdgeCountA(rCandidateA.isClosed() ? nPointCountA : nPointCountA - 1L);
-                const sal_uInt32 nEdgeCountB(rCandidateB.isClosed() ? nPointCountB : nPointCountB - 1L);
+                const sal_uInt32 nEdgeCountA(rCandidateA.isClosed() ? nPointCountA : nPointCountA - 1);
+                const sal_uInt32 nEdgeCountB(rCandidateB.isClosed() ? nPointCountB : nPointCountB - 1);
 
                 if(nEdgeCountA && nEdgeCountB)
                 {
@@ -804,13 +803,13 @@ namespace basegfx
 
                         for(sal_uInt32 a(0); a < nEdgeCountA; a++)
                         {
-                            const B2DPoint aNextA(rCandidateA.getB2DPoint(a + 1L == nPointCountA ? 0 : a + 1L));
+                            const B2DPoint aNextA(rCandidateA.getB2DPoint(a + 1 == nPointCountA ? 0 : a + 1));
                             const B2DRange aRangeA(aCurrA, aNextA);
                             B2DPoint aCurrB(rCandidateB.getB2DPoint(0));
 
                             for(sal_uInt32 b(0); b < nEdgeCountB; b++)
                             {
-                                const B2DPoint aNextB(rCandidateB.getB2DPoint(b + 1L == nPointCountB ? 0 : b + 1L));
+                                const B2DPoint aNextB(rCandidateB.getB2DPoint(b + 1 == nPointCountB ? 0 : b + 1));
                                 const B2DRange aRangeB(aCurrB, aNextB);
 
                                 // consecutive segments touch of course
@@ -842,7 +841,7 @@ namespace basegfx
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
 
         B2DPolygon addPointsAtCutsAndTouches(const B2DPolygon& rCandidate)
@@ -862,7 +861,7 @@ namespace basegfx
             }
         }
 
-        B2DPolyPolygon addPointsAtCutsAndTouches(const B2DPolyPolygon& rCandidate, bool bSelfIntersections)
+        B2DPolyPolygon addPointsAtCutsAndTouches(const B2DPolyPolygon& rCandidate)
         {
             const sal_uInt32 nCount(rCandidate.count());
 
@@ -870,18 +869,10 @@ namespace basegfx
             {
                 B2DPolyPolygon aRetval;
 
-                if(1L == nCount)
+                if(nCount == 1)
                 {
-                    if(bSelfIntersections)
-                    {
-                        // remove self intersections
-                        aRetval.append(addPointsAtCutsAndTouches(rCandidate.getB2DPolygon(0)));
-                    }
-                    else
-                    {
-                        // copy source
-                        aRetval = rCandidate;
-                    }
+                    // remove self intersections
+                    aRetval.append(addPointsAtCutsAndTouches(rCandidate.getB2DPolygon(0)));
                 }
                 else
                 {
@@ -891,16 +882,8 @@ namespace basegfx
 
                     for(a = 0; a < nCount; a++)
                     {
-                        if(bSelfIntersections)
-                        {
-                            // use polygons with solved self intersections
-                            pTempData[a].setPolygon(addPointsAtCutsAndTouches(rCandidate.getB2DPolygon(a)));
-                        }
-                        else
-                        {
-                            // copy given polygons
-                            pTempData[a].setPolygon(rCandidate.getB2DPolygon(a));
-                        }
+                        // use polygons with solved self intersections
+                        pTempData[a].setPolygon(addPointsAtCutsAndTouches(rCandidate.getB2DPolygon(a)));
                     }
 
                     // now cuts and touches between the polygons
@@ -1008,7 +991,7 @@ namespace basegfx
 
                     for(sal_uInt32 m(0); m < nCountM; m++)
                     {
-                        const B2DPolygon aMask(rPolyMask.getB2DPolygon(m));
+                        const B2DPolygon& aMask(rPolyMask.getB2DPolygon(m));
                         const sal_uInt32 nCountB(aMask.count());
 
                         if(nCountB)
@@ -1071,7 +1054,7 @@ namespace basegfx
             return rCandidate;
         }
 
-    } // end of namespace tools
+    } // end of namespace utils
 } // end of namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

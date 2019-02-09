@@ -19,7 +19,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_WRAPCATALOG_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_ADO_WRAPCATALOG_HXX
 
-#include "ado/WrapTypeDefs.hxx"
+#include <ado/WrapTypeDefs.hxx>
 
 namespace connectivity
 {
@@ -28,10 +28,10 @@ namespace connectivity
         class WpADOCatalog : public WpOLEBase<_ADOCatalog>
         {
         public:
-            WpADOCatalog(_ADOCatalog* pInt = NULL)  :   WpOLEBase<_ADOCatalog>(pInt){}
+            WpADOCatalog(_ADOCatalog* pInt = nullptr)  :   WpOLEBase<_ADOCatalog>(pInt){}
             WpADOCatalog(const WpADOCatalog& rhs) : WpOLEBase<_ADOCatalog>(rhs) {}
 
-            inline WpADOCatalog& operator=(const WpADOCatalog& rhs)
+            WpADOCatalog& operator=(const WpADOCatalog& rhs)
                 {WpOLEBase<_ADOCatalog>::operator=(rhs); return *this;}
 
             OUString GetObjectOwner(const OUString& _rName, ObjectTypeEnum _eNum);

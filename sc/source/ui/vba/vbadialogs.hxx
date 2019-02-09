@@ -19,12 +19,12 @@
 #ifndef INCLUDED_SC_SOURCE_UI_VBA_VBADIALOGS_HXX
 #define INCLUDED_SC_SOURCE_UI_VBA_VBADIALOGS_HXX
 
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <ooo/vba/excel/XDialogs.hpp>
-#include <ooo/vba/XCollection.hpp>
-#include <vbahelper/vbahelperinterface.hxx>
 #include <vbahelper/vbadialogsbase.hxx>
 #include <cppuhelper/implbase.hxx>
+
+namespace ooo { namespace vba { class XHelperInterface; } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 typedef cppu::ImplInheritanceHelper< VbaDialogsBase, ov::excel::XDialogs > ScVbaDialogs_BASE;
 
@@ -32,10 +32,9 @@ class ScVbaDialogs : public ScVbaDialogs_BASE
 {
 public:
     ScVbaDialogs( const css::uno::Reference< ov::XHelperInterface >& xParent, const css::uno::Reference< css::uno::XComponentContext > &xContext, const css::uno::Reference< css::frame::XModel >& xModel ): ScVbaDialogs_BASE( xParent, xContext, xModel ) {}
-    virtual ~ScVbaDialogs() {}
 
     // XCollection
-    virtual css::uno::Any SAL_CALL Item( const css::uno::Any& Index ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Any SAL_CALL Item( const css::uno::Any& Index ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;

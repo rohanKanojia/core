@@ -10,6 +10,7 @@
 #ifndef INCLUDED_VCL_INC_OPENGL_X11_SALVD_H
 #define INCLUDED_VCL_INC_OPENGL_X11_SALVD_H
 
+#include <memory>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
@@ -23,27 +24,26 @@ class X11SalGraphics;
 class X11OpenGLSalVirtualDevice : public SalVirtualDevice
 {
     SalDisplay       *mpDisplay;
-    X11SalGraphics   *mpGraphics;
+    std::unique_ptr<X11SalGraphics>
+                      mpGraphics;
     bool              mbGraphics;         // is Graphics used
     SalX11Screen      mnXScreen;
     int               mnWidth;
     int               mnHeight;
-    sal_uInt16        mnDepth;
 
 public:
-    X11OpenGLSalVirtualDevice( SalGraphics *pGraphics,
-                               long &nDX, long &nDY,
-                               DeviceFormat eFormat,
+    X11OpenGLSalVirtualDevice( SalGraphics const *pGraphics,
+                               long nDX, long nDY,
                                const SystemGraphicsData *pData,
-                               X11SalGraphics* pNewGraphics);
-    virtual ~X11OpenGLSalVirtualDevice();
+                               std::unique_ptr<X11SalGraphics> pNewGraphics);
+    virtual ~X11OpenGLSalVirtualDevice() override;
 
     // SalGeometryProvider
     virtual long GetWidth() const override { return mnWidth; }
     virtual long GetHeight() const override { return mnHeight; }
 
     SalDisplay *            GetDisplay() const { return mpDisplay; }
-    SalX11Screen            GetXScreenNumber() const { return mnXScreen; }
+    const SalX11Screen&     GetXScreenNumber() const { return mnXScreen; }
 
     virtual SalGraphics*    AcquireGraphics() override;
     virtual void            ReleaseGraphics( SalGraphics* pGraphics ) override;

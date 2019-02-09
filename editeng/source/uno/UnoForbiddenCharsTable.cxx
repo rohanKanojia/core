@@ -17,9 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/container/NoSuchElementException.hpp>
 #include <editeng/UnoForbiddenCharsTable.hxx>
 #include <editeng/forbiddencharacterstable.hxx>
-#include <osl/mutex.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <vcl/svapp.hxx>
 #include <editeng/unolingu.hxx>
 
@@ -30,8 +33,8 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::i18n;
 using namespace ::cppu;
 
-SvxUnoForbiddenCharsTable::SvxUnoForbiddenCharsTable(::rtl::Reference<SvxForbiddenCharactersTable> xForbiddenChars) :
-    mxForbiddenChars( xForbiddenChars )
+SvxUnoForbiddenCharsTable::SvxUnoForbiddenCharsTable(std::shared_ptr<SvxForbiddenCharactersTable> const & xForbiddenChars)
+    : mxForbiddenChars(xForbiddenChars)
 {
 }
 
@@ -44,11 +47,10 @@ void SvxUnoForbiddenCharsTable::onChange()
 }
 
 ForbiddenCharacters SvxUnoForbiddenCharsTable::getForbiddenCharacters( const lang::Locale& rLocale )
-    throw(NoSuchElementException, RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    if(!mxForbiddenChars.is())
+    if (!mxForbiddenChars)
         throw RuntimeException();
 
     const LanguageType eLang = LanguageTag::convertToLanguageType( rLocale );
@@ -60,12 +62,11 @@ ForbiddenCharacters SvxUnoForbiddenCharsTable::getForbiddenCharacters( const lan
 }
 
 sal_Bool SvxUnoForbiddenCharsTable::hasForbiddenCharacters( const lang::Locale& rLocale )
-    throw(RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    if(!mxForbiddenChars.is())
-        return sal_False;
+    if (!mxForbiddenChars)
+        return false;
 
     const LanguageType eLang = LanguageTag::convertToLanguageType( rLocale );
     const ForbiddenCharacters* pForbidden = mxForbiddenChars->GetForbiddenCharacters( eLang, false );
@@ -74,11 +75,10 @@ sal_Bool SvxUnoForbiddenCharsTable::hasForbiddenCharacters( const lang::Locale& 
 }
 
 void SvxUnoForbiddenCharsTable::setForbiddenCharacters(const lang::Locale& rLocale, const ForbiddenCharacters& rForbiddenCharacters )
-    throw(RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    if(!mxForbiddenChars.is())
+    if (!mxForbiddenChars)
         throw RuntimeException();
 
     const LanguageType eLang = LanguageTag::convertToLanguageType( rLocale );
@@ -88,11 +88,10 @@ void SvxUnoForbiddenCharsTable::setForbiddenCharacters(const lang::Locale& rLoca
 }
 
 void SvxUnoForbiddenCharsTable::removeForbiddenCharacters( const lang::Locale& rLocale )
-    throw(RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    if(!mxForbiddenChars.is())
+    if (!mxForbiddenChars)
         throw RuntimeException();
 
     const LanguageType eLang = LanguageTag::convertToLanguageType( rLocale );
@@ -103,22 +102,20 @@ void SvxUnoForbiddenCharsTable::removeForbiddenCharacters( const lang::Locale& r
 
 // XSupportedLocales
 Sequence< lang::Locale > SAL_CALL SvxUnoForbiddenCharsTable::getLocales()
-    throw(RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
-    const sal_Int32 nCount = mxForbiddenChars.is() ? mxForbiddenChars->GetMap().size() : 0;
+    const sal_Int32 nCount = mxForbiddenChars ? mxForbiddenChars->GetMap().size() : 0;
 
     Sequence< lang::Locale > aLocales( nCount );
     if( nCount )
     {
         lang::Locale* pLocales = aLocales.getArray();
 
-        for( SvxForbiddenCharactersTable::Map::iterator it = mxForbiddenChars->GetMap().begin();
-             it != mxForbiddenChars->GetMap().end(); ++it )
+        for (auto const& elem : mxForbiddenChars->GetMap())
         {
-            const sal_uLong nLanguage = it->first;
-            *pLocales++ = LanguageTag( static_cast < LanguageType > (nLanguage) ).getLocale();
+            const LanguageType nLanguage = elem.first;
+            *pLocales++ = LanguageTag( nLanguage ).getLocale();
         }
     }
 
@@ -126,7 +123,6 @@ Sequence< lang::Locale > SAL_CALL SvxUnoForbiddenCharsTable::getLocales()
 }
 
 sal_Bool SAL_CALL SvxUnoForbiddenCharsTable::hasLocale( const lang::Locale& aLocale )
-    throw(RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 

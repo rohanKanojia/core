@@ -65,7 +65,7 @@ namespace
     class theChildAccessUnoTunnelId : public rtl::Static< UnoTunnelIdInit, theChildAccessUnoTunnelId > {};
 }
 
-css::uno::Sequence< sal_Int8 > ChildAccess::getTunnelId()
+css::uno::Sequence< sal_Int8 > const & ChildAccess::getTunnelId()
 {
     return theChildAccessUnoTunnelId::get().getSeq();
 }
@@ -151,7 +151,6 @@ void ChildAccess::release() throw () {
 }
 
 css::uno::Reference< css::uno::XInterface > ChildAccess::getParent()
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);
@@ -160,7 +159,6 @@ css::uno::Reference< css::uno::XInterface > ChildAccess::getParent()
 }
 
 void ChildAccess::setParent(css::uno::Reference< css::uno::XInterface > const &)
-    throw (css::lang::NoSupportException, css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);
@@ -171,7 +169,6 @@ void ChildAccess::setParent(css::uno::Reference< css::uno::XInterface > const &)
 
 sal_Int64 ChildAccess::getSomething(
     css::uno::Sequence< sal_Int8 > const & aIdentifier)
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);
@@ -255,7 +252,8 @@ void ChildAccess::setProperty(
 
 css::uno::Any ChildAccess::asValue()
 {
-    if (changedValue_.get() != nullptr) {
+    if (changedValue_ != nullptr)
+    {
         return *changedValue_;
     }
     css::uno::Any value;
@@ -271,9 +269,8 @@ css::uno::Any ChildAccess::asValue()
                 return child.is() ? child->asValue() : css::uno::Any();
             }
         }
-        value = css::uno::makeAny(
-                        css::uno::Reference< css::uno::XInterface >(
-                                static_cast< cppu::OWeakObject * >(this)));
+        value <<= css::uno::Reference< css::uno::XInterface >(
+                            static_cast< cppu::OWeakObject * >(this));
     }
     return value;
 }
@@ -299,7 +296,8 @@ void ChildAccess::commitChanges(bool valid, Modifications * globalModifications)
 {
     assert(globalModifications != nullptr);
     commitChildChanges(valid, globalModifications);
-    if (valid && changedValue_.get() != nullptr) {
+    if (valid && changedValue_ != nullptr)
+    {
         std::vector<OUString> path(getAbsolutePath());
         getComponents().addModification(path);
         globalModifications->add(path);
@@ -344,7 +342,6 @@ void ChildAccess::addSupportedServiceNames(
 }
 
 css::uno::Any ChildAccess::queryInterface(css::uno::Type const & aType)
-    throw (css::uno::RuntimeException, std::exception)
 {
     assert(thisIs(IS_ANY));
     osl::MutexGuard g(*lock_);

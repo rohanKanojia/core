@@ -25,17 +25,35 @@
 #include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/salgtype.hxx>
+#include <osl/thread.hxx>
+#include <vcl/vclenum.hxx>
 
 #include "displayconnectiondispatch.hxx"
 
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/ui/dialogs/XFilePicker2.hpp>
 #include <com/sun/star/ui/dialogs/XFolderPicker2.hpp>
+#include <memory>
 
+namespace com {
+namespace sun {
+namespace star {
+namespace awt {
+    class XWindow;
+}
+} } }
 namespace comphelper { class SolarMutex; }
+namespace vcl { class Window; }
+namespace weld {
+    class Builder;
+    class MessageDialog;
+    class Widget;
+    class Window;
+}
 struct SystemParentData;
 struct SalPrinterQueueInfo;
-struct ImplJobSetup;
+class ImplJobSetup;
+class OpenGLContext;
 class SalGraphics;
 class SalFrame;
 class SalObject;
@@ -57,21 +75,21 @@ class Menu;
 enum class VclInputFlags;
 enum class SalFrameStyleFlags;
 
-enum SalYieldResult { EVENT, TIMEOUT };
-
 typedef struct _cairo_font_options cairo_font_options_t;
 
-class VCL_PLUGIN_PUBLIC SalInstance
+class VCL_DLLPUBLIC SalInstance
 {
 private:
     rtl::Reference< vcl::DisplayConnectionDispatch > m_pEventInst;
+    const std::unique_ptr<comphelper::SolarMutex> m_pYieldMutex;
 
 public:
-    SalInstance() {}
+    SalInstance(std::unique_ptr<comphelper::SolarMutex> pMutex);
     virtual ~SalInstance();
 
     //called directly after Application::Init
     virtual void            AfterAppInit() {}
+    virtual bool            SVMainHook(int*) { return false; }
 
     // Frame
     // DisplayName for Unix ???
@@ -80,7 +98,7 @@ public:
     virtual void            DestroyFrame( SalFrame* pFrame ) = 0;
 
     // Object (System Child Window)
-    virtual SalObject*      CreateObject( SalFrame* pParent, SystemWindowData* pWindowData, bool bShow = true ) = 0;
+    virtual SalObject*      CreateObject( SalFrame* pParent, SystemWindowData* pWindowData, bool bShow ) = 0;
     virtual void            DestroyObject( SalObject* pObject ) = 0;
 
     // VirtualDevice
@@ -89,72 +107,74 @@ public:
     // pData allows for using a system dependent graphics or device context,
     // if a system context is passed in nDX and nDY are updated to reflect
     // its size; otherwise these remain unchanged.
-    virtual SalVirtualDevice*
+    virtual std::unique_ptr<SalVirtualDevice>
                             CreateVirtualDevice( SalGraphics* pGraphics,
                                                  long &rDX, long &rDY,
                                                  DeviceFormat eFormat, const SystemGraphicsData *pData = nullptr ) = 0;
 
     // Printer
     // pSetupData->mpDriverData can be 0
-    // pSetupData must be updatet with the current
+    // pSetupData must be updated with the current
     // JobSetup
     virtual SalInfoPrinter* CreateInfoPrinter( SalPrinterQueueInfo* pQueueInfo,
                                                ImplJobSetup* pSetupData ) = 0;
     virtual void            DestroyInfoPrinter( SalInfoPrinter* pPrinter ) = 0;
-    virtual SalPrinter*     CreatePrinter( SalInfoPrinter* pInfoPrinter ) = 0;
-    virtual void            DestroyPrinter( SalPrinter* pPrinter ) = 0;
+    virtual std::unique_ptr<SalPrinter> CreatePrinter( SalInfoPrinter* pInfoPrinter ) = 0;
 
     virtual void            GetPrinterQueueInfo( ImplPrnQueueList* pList ) = 0;
     virtual void            GetPrinterQueueState( SalPrinterQueueInfo* pInfo ) = 0;
-    virtual void            DeletePrinterQueueInfo( SalPrinterQueueInfo* pInfo ) = 0;
     virtual OUString        GetDefaultPrinter() = 0;
 
     // SalTimer
     virtual SalTimer*       CreateSalTimer() = 0;
-    // SalI18NImeStatus
-    virtual SalI18NImeStatus*
-                            CreateI18NImeStatus() = 0;
+    // interface to ime status window, only used by the X11 backend
+    virtual std::unique_ptr<SalI18NImeStatus>
+                            CreateI18NImeStatus();
     // SalSystem
     virtual SalSystem*      CreateSalSystem() = 0;
     // SalBitmap
-    virtual SalBitmap*      CreateSalBitmap() = 0;
+    virtual std::shared_ptr<SalBitmap> CreateSalBitmap() = 0;
 
     // YieldMutex
-    virtual comphelper::SolarMutex*
-                            GetYieldMutex() = 0;
-    virtual sal_uLong       ReleaseYieldMutex() = 0;
-    virtual void            AcquireYieldMutex( sal_uLong nCount ) = 0;
-    // return true, if yield mutex is owned by this thread, else false
-    virtual bool            CheckYieldMutex() = 0;
+    comphelper::SolarMutex* GetYieldMutex();
+    sal_uInt32              ReleaseYieldMutexAll();
+    void                    AcquireYieldMutex(sal_uInt32 nCount = 1);
+
+    // return true, if the current thread is the main thread
+    virtual bool            IsMainThread() const = 0;
 
     /**
      * Wait for the next event (if bWait) and dispatch it,
      * includes posted events, and timers.
      * If bHandleAllCurrentEvents - dispatch multiple posted
-     * user events. Returns true if events needed processing.
+     * user events. Returns true if events were processed.
      */
-    virtual SalYieldResult  DoYield(bool bWait, bool bHandleAllCurrentEvents, sal_uLong nReleased) = 0;
-    virtual bool            AnyInput( VclInputFlags nType ) = 0;
+    virtual bool           DoYield(bool bWait, bool bHandleAllCurrentEvents) = 0;
+    virtual bool           AnyInput( VclInputFlags nType ) = 0;
 
     // menus
-    virtual SalMenu*        CreateMenu( bool bMenuBar, Menu* pMenu );
-    virtual void            DestroyMenu( SalMenu* pMenu);
-    virtual SalMenuItem*    CreateMenuItem( const SalItemParams* pItemData );
-    virtual void            DestroyMenuItem( SalMenuItem* pItem );
+    virtual std::unique_ptr<SalMenu>     CreateMenu( bool bMenuBar, Menu* pMenu );
+    virtual std::unique_ptr<SalMenuItem> CreateMenuItem( const SalItemParams& pItemData );
 
-    // may return NULL to disable session management
-    virtual SalSession*     CreateSalSession() = 0;
+    // may return NULL to disable session management, only used by X11 backend
+    virtual std::unique_ptr<SalSession> CreateSalSession();
+
+    virtual OpenGLContext*  CreateOpenGLContext() = 0;
+
+    virtual weld::Builder* CreateBuilder(weld::Widget* pParent, const OUString& rUIRoot, const OUString& rUIFile);
+    static  weld::Builder* CreateInterimBuilder(vcl::Window* pParent, const OUString& rUIRoot, const OUString& rUIFile);
+    virtual weld::MessageDialog* CreateMessageDialog(weld::Widget* pParent, VclMessageType eMessageType,
+                                                     VclButtonsType eButtonType, const OUString& rPrimaryMessage);
+    virtual weld::Window* GetFrameWeld(const css::uno::Reference<css::awt::XWindow>& rWindow);
 
     // methods for XDisplayConnection
 
     void                    SetEventCallback( rtl::Reference< vcl::DisplayConnectionDispatch > const & pInstance )
         { m_pEventInst = pInstance; }
 
-    bool                    CallEventCallback( void* pEvent, int nBytes )
-        { return m_pEventInst.is() && m_pEventInst->dispatchEvent( pEvent, nBytes ); }
+    bool                    CallEventCallback( void const * pEvent, int nBytes );
 
-    enum ConnectionIdentifierType { AsciiCString, Blob };
-    virtual void*           GetConnectionIdentifier( ConnectionIdentifierType& rReturnedType, int& rReturnedBytes ) = 0;
+    virtual OUString        GetConnectionIdentifier() = 0;
 
     // dtrans implementation
     virtual css::uno::Reference< css::uno::XInterface > CreateClipboard( const css::uno::Sequence< css::uno::Any >& i_rArguments );
@@ -175,6 +195,8 @@ public:
     virtual void            jobStartedPrinterUpdate() {}
     virtual void            jobEndedPrinterUpdate() {}
 
+    virtual void            updateMainThread() {}
+
     /// get information about underlying versions
     virtual OUString        getOSVersion() { return OUString("-"); }
 
@@ -187,12 +209,7 @@ void DestroySalInstance( SalInstance* pInst );
 
 void SalAbort( const OUString& rErrorText, bool bDumpCore );
 
-VCL_PLUGIN_PUBLIC const OUString& SalGetDesktopEnvironment();
-
-void InitSalData();                         // called from Application-Ctor
-void DeInitSalData();                       // called from Application-Dtor
-
-void InitSalMain();
+VCL_DLLPUBLIC const OUString& SalGetDesktopEnvironment();
 
 #endif // INCLUDED_VCL_INC_SALINST_HXX
 

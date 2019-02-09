@@ -30,6 +30,9 @@
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <vcl/graphictools.hxx>
+#include <sal/log.hxx>
+#include <tools/helpers.hxx>
+#include <tools/debug.hxx>
 
 #include <zlib.h>
 
@@ -39,15 +42,14 @@
 #include <memory>
 
 using namespace ::swf;
-using namespace ::std;
 using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::beans;
 
-static MapMode aTWIPSMode( MAP_TWIP );
-static MapMode a100thmmMode( MAP_100TH_MM );
+static MapMode aTWIPSMode( MapUnit::MapTwip );
+static MapMode a100thmmMode( MapUnit::Map100thMM );
 
 
 Point Writer::map( const Point& rPoint ) const
@@ -58,8 +60,8 @@ Point Writer::map( const Point& rPoint ) const
 
     // AS: Produces a 'possible loss of data' warning that we can't fix without
     //  hurting code readability.
-    retPoint.X() = (long)( retPoint.X() * mnDocXScale );
-    retPoint.Y() = (long)( retPoint.Y() * mnDocYScale );
+    retPoint.setX( static_cast<long>( retPoint.X() * mnDocXScale ) );
+    retPoint.setY( static_cast<long>( retPoint.Y() * mnDocYScale ) );
 
     return retPoint;
 }
@@ -73,8 +75,8 @@ Size Writer::map( const Size& rSize ) const
 
     // AS: Produces a 'possible loss of data' warning that we can't fix without
     //  hurting code readability.
-    retSize.Width() = (long)( retSize.Width() * mnDocXScale );
-    retSize.Height() = (long)( retSize.Height() * mnDocYScale );
+    retSize.setWidth( static_cast<long>( retSize.Width() * mnDocXScale ) );
+    retSize.setHeight( static_cast<long>( retSize.Height() * mnDocYScale ) );
 
     return retSize;
 }
@@ -114,7 +116,7 @@ void Writer::Impl_addPolygon( BitStream& rBits, const tools::Polygon& rPoly, boo
 {
     Point aLastPoint( rPoly[0] );
 
-    Impl_addShapeRecordChange( rBits, _Int16(aLastPoint.X()),_Int16(aLastPoint.Y()), bFilled );
+    Impl_addShapeRecordChange( rBits, Int16_(aLastPoint.X()),Int16_(aLastPoint.Y()), bFilled );
 
     sal_uInt16 i = 0, nSize = rPoly.GetSize();
 
@@ -128,10 +130,10 @@ void Writer::Impl_addPolygon( BitStream& rBits, const tools::Polygon& rPoly, boo
             PolyFlags P1( rPoly.GetFlags( i ) );
             PolyFlags P4( rPoly.GetFlags( i + 3 ) );
 
-            if( ( POLY_NORMAL == P1 || POLY_SMOOTH == P1 || POLY_SYMMTR == P1 ) &&
-                ( POLY_CONTROL == rPoly.GetFlags( i + 1 ) ) &&
-                ( POLY_CONTROL == rPoly.GetFlags( i + 2 ) ) &&
-                ( POLY_NORMAL == P4 || POLY_SMOOTH == P4 || POLY_SYMMTR == P4 ) )
+            if( ( PolyFlags::Normal == P1 || PolyFlags::Smooth == P1 || PolyFlags::Symmetric == P1 ) &&
+                ( PolyFlags::Control == rPoly.GetFlags( i + 1 ) ) &&
+                ( PolyFlags::Control == rPoly.GetFlags( i + 2 ) ) &&
+                ( PolyFlags::Normal == P4 || PolyFlags::Smooth == P4 || PolyFlags::Symmetric == P4 ) )
             {
                 Impl_quadBezierApprox( rBits, aLastPoint, d*d,
                                       rPoly.GetPoint( i ).X(),   rPoly.GetPoint( i ).Y(),
@@ -148,7 +150,7 @@ void Writer::Impl_addPolygon( BitStream& rBits, const tools::Polygon& rPoly, boo
         const Point aPolyPoint( rPoly[ i ] );
         if( aPolyPoint != aLastPoint )
         {
-            Impl_addStraightEdgeRecord( rBits, _Int16(aPolyPoint.X() - aLastPoint.X()),_Int16(aPolyPoint.Y() - aLastPoint.Y()));
+            Impl_addStraightEdgeRecord( rBits, Int16_(aPolyPoint.X() - aLastPoint.X()),Int16_(aPolyPoint.Y() - aLastPoint.Y()));
             aLastPoint = aPolyPoint;
         }
     }
@@ -158,7 +160,7 @@ void Writer::Impl_addPolygon( BitStream& rBits, const tools::Polygon& rPoly, boo
         const Point aPolyPoint( rPoly[ 0 ] );
         if( aPolyPoint != aLastPoint )
         {
-            Impl_addStraightEdgeRecord( rBits, _Int16(aPolyPoint.X() - aLastPoint.X()),_Int16(aPolyPoint.Y() - aLastPoint.Y()));
+            Impl_addStraightEdgeRecord( rBits, Int16_(aPolyPoint.X() - aLastPoint.X()),Int16_(aPolyPoint.Y() - aLastPoint.Y()));
         }
     }
 }
@@ -175,7 +177,7 @@ void Writer::Impl_addShapeRecordChange( BitStream& rBits, sal_Int16 dx, sal_Int1
     rBits.writeUB( bFilled ? 1 : 0, 1 );        // StateFillStyle1
     rBits.writeUB( 1, 1 );          // StateMoveTo
 
-    sal_uInt16 nMoveBits = max( getMaxBitsSigned( dx ), getMaxBitsSigned( dy ) );
+    sal_uInt16 nMoveBits = std::max( getMaxBitsSigned( dx ), getMaxBitsSigned( dy ) );
 
     rBits.writeUB( nMoveBits, 5 );  // Number of bits per value
                                     // TODO: Optimize horizontal and vertical lines
@@ -193,7 +195,7 @@ void Writer::Impl_addStraightEdgeRecord( BitStream& rBits, sal_Int16 dx, sal_Int
     rBits.writeUB( 1, 1 );          // TypeFlag
     rBits.writeUB( 1, 1 );          // StraightFlag
 
-    sal_uInt16 nBits = max( getMaxBitsSigned( dx ), getMaxBitsSigned( dy ) );
+    sal_uInt16 nBits = std::max( getMaxBitsSigned( dx ), getMaxBitsSigned( dy ) );
 
     rBits.writeUB( nBits - 2, 4 );  // Number of bits per value
 
@@ -227,10 +229,10 @@ void Writer::Impl_addCurvedEdgeRecord( BitStream& rBits, sal_Int16 control_dx, s
     rBits.writeUB( 0, 1 );          // CurvedFlag
 
     sal_uInt8 nBits = static_cast<sal_uInt8>(
-        max( getMaxBitsSigned( control_dx ),
-            max( getMaxBitsSigned( control_dy ),
-                max( getMaxBitsSigned( anchor_dx ),
-                    max( getMaxBitsSigned( anchor_dy ), (sal_uInt16)3 ) ) ) ) );
+        std::max( getMaxBitsSigned( control_dx ),
+            std::max( getMaxBitsSigned( control_dy ),
+                std::max( getMaxBitsSigned( anchor_dx ),
+                    std::max( getMaxBitsSigned( anchor_dy ), sal_uInt16(3) ) ) ) ) );
 
     rBits.writeUB( nBits - 2, 4 );  // Number of bits per value
 
@@ -317,9 +319,9 @@ void Writer::Impl_writeGradientEx( const tools::PolyPolygon& rPolyPoly, const Gr
         tools::PolyPolygon aPolyPolygon( rPolyPoly );
         map( aPolyPolygon );
 
-        if( (rGradient.GetStyle() == GradientStyle_LINEAR && rGradient.GetAngle() == 900) || (rGradient.GetStyle() == GradientStyle_RADIAL)  )
+        if( (rGradient.GetStyle() == GradientStyle::Linear && rGradient.GetAngle() == 900) || (rGradient.GetStyle() == GradientStyle::Radial)  )
         {
-            const Rectangle aBoundRect( aPolyPolygon.GetBoundRect() );
+            const tools::Rectangle aBoundRect( aPolyPolygon.GetBoundRect() );
 
             FillStyle aFillStyle( aBoundRect, rGradient );
 
@@ -353,7 +355,7 @@ void Writer::setClipping( const tools::PolyPolygon* pClipPolyPolygon )
 //  differences in font that actually require different glyphs to be defined,
 //  and some that don't.  This function is meant to capture all the differences
 //  that we care about.
-bool compare_fonts_for_me(const vcl::Font& rFont1, const vcl::Font& rFont2)
+static bool compare_fonts_for_me(const vcl::Font& rFont1, const vcl::Font& rFont2)
 {
     return rFont1.GetFamilyName() == rFont2.GetFamilyName() &&
             rFont1.GetWeight() == rFont2.GetWeight() &&
@@ -366,20 +368,17 @@ bool compare_fonts_for_me(const vcl::Font& rFont1, const vcl::Font& rFont2)
 
 FlashFont& Writer::Impl_getFont( const vcl::Font& rFont )
 {
-    FontMap::iterator aIter( maFonts.begin() );
-    const FontMap::iterator aEnd( maFonts.end() );
-
-    for(; aIter != aEnd; ++aIter)
+    for (auto const& font : maFonts)
     {
-        const vcl::Font tempFont = (*aIter)->getFont();
+        const vcl::Font tempFont = font->getFont();
         if( compare_fonts_for_me(tempFont, rFont) )
         {
-            return **aIter;
+            return *font;
         }
     }
 
     FlashFont* pFont = new FlashFont( rFont, createID() );
-    maFonts.push_back( pFont );
+    maFonts.emplace_back( pFont );
     return *pFont;
 }
 
@@ -388,7 +387,7 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
 {
     const FontMetric aMetric( mpVDev->GetFontMetric() );
 
-    bool bTextSpecial = aMetric.IsShadow() || aMetric.IsOutline() || (aMetric.GetRelief() != RELIEF_NONE);
+    bool bTextSpecial = aMetric.IsShadow() || aMetric.IsOutline() || (aMetric.GetRelief() != FontRelief::NONE);
 
     if( !bTextSpecial )
     {
@@ -396,22 +395,22 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
     }
     else
     {
-        if( aMetric.GetRelief() != RELIEF_NONE )
+        if( aMetric.GetRelief() != FontRelief::NONE )
         {
             Color aReliefColor( COL_LIGHTGRAY );
             Color aTextColor( mpVDev->GetTextColor() );
 
-            if ( aTextColor.GetColor() == COL_BLACK )
-                aTextColor = Color( COL_WHITE );
+            if ( aTextColor == COL_BLACK )
+                aTextColor = COL_WHITE;
 
-            if ( aTextColor.GetColor() == COL_WHITE )
-                aReliefColor = Color( COL_BLACK );
+            if ( aTextColor == COL_WHITE )
+                aReliefColor = COL_BLACK;
 
 
             Point aPos( rPos );
             Point aOffset( 6,6 );
 
-            if ( aMetric.GetRelief() == RELIEF_ENGRAVED )
+            if ( aMetric.GetRelief() == FontRelief::Engraved )
             {
                 aPos -= aOffset;
             }
@@ -434,8 +433,8 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
                 Color aTextColor( mpVDev->GetTextColor() );
                 Color aShadowColor( COL_BLACK );
 
-                if ( (aTextColor.GetColor() == COL_BLACK) || (aTextColor.GetLuminance() < 8) )
-                    aShadowColor = Color( COL_LIGHTGRAY );
+                if ( (aTextColor == COL_BLACK) || (aTextColor.GetLuminance() < 8) )
+                    aShadowColor = COL_LIGHTGRAY;
 
                 Point aPos( rPos );
                 aPos += Point( nOff, nOff );
@@ -466,7 +465,7 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
                 aPos = rPos + Point(+6,+0);
                 Impl_writeText( aPos, rText, pDXArray, nWidth, mpVDev->GetTextColor() );
 
-                Impl_writeText( rPos, rText, pDXArray, nWidth, Color( COL_WHITE ) );
+                Impl_writeText( rPos, rText, pDXArray, nWidth, COL_WHITE );
             }
         }
     }
@@ -479,14 +478,13 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
     if( !nLen )
         return;
 
-    const bool bRTL = bool(mpVDev->GetLayoutMode() & TEXT_LAYOUT_BIDI_RTL);
+    const bool bRTL = bool(mpVDev->GetLayoutMode() & ComplexTextLayoutFlags::BiDiRtl);
 
     sal_Int16 nScriptType = ScriptType::LATIN;
     Reference < XBreakIterator > xBI( Impl_GetBreakIterator() );
     if( xBI.is() )
     {
-        const OUString oText( rText );
-        nScriptType = xBI->getScriptType( oText, 0 );
+        nScriptType = xBI->getScriptType( rText, 0 );
     }
 
     // if the text is either right to left or complex or asian, we
@@ -498,7 +496,7 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
     {
         // todo: optimize me as this will generate a huge amount of duplicate polygons
         tools::PolyPolygon aPolyPoygon;
-        mpVDev->GetTextOutline( aPolyPoygon, rText, (sal_uInt16)nLen, nWidth, pDXArray );
+        mpVDev->GetTextOutline( aPolyPoygon, rText, static_cast<sal_uInt16>(nLen), nWidth, pDXArray );
         aPolyPoygon.Translate( rPos );
         Impl_writePolyPolygon( aPolyPoygon, true, aTextColor, aTextColor );
     }
@@ -523,11 +521,11 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
 
         if( nLen > 1 )
         {
-            aNormSize.Width() = pDX[ nLen - 2 ] + mpVDev->GetTextWidth( OUString(rText[nLen - 1]) );
+            aNormSize.setWidth( pDX[ nLen - 2 ] + mpVDev->GetTextWidth( OUString(rText[nLen - 1]) ) );
 
             if( nWidth && aNormSize.Width() && ( nWidth != aNormSize.Width() ) )
             {
-                const double fFactor = (double) nWidth / aNormSize.Width();
+                const double fFactor = static_cast<double>(nWidth) / aNormSize.Width();
 
                 for( sal_Int32 i = 0; i < ( nLen - 1 ); i++ )
                     pDX[ i ] = FRound( pDX[ i ] * fFactor );
@@ -552,11 +550,11 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
         switch( aOldFont.GetAlignment() )
         {
             case ALIGN_TOP:
-                aBaseLinePos.Y() += aMetric.GetAscent();
+                aBaseLinePos.AdjustY(aMetric.GetAscent() );
             break;
 
             case ALIGN_BOTTOM:
-                aBaseLinePos.Y() -= aMetric.GetDescent();
+                aBaseLinePos.AdjustY( -(aMetric.GetDescent()) );
             break;
 
             default:
@@ -571,14 +569,14 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
 #if 0 // makes the calculated bound rect visible for debugging
 {
     tools::Polygon aTmpPoly( aPoly );
-    sal_uInt16 nID = FlashGeometryExporter::writePolygonShape( aMovieStream, aTmpPoly, false, Color(COL_MAGENTA), Color(COL_MAGENTA), mpClipPolyPolygon  );
+    sal_uInt16 nID = FlashGeometryExporter::writePolygonShape( aMovieStream, aTmpPoly, false, COL_MAGENTA, COL_MAGENTA, mpClipPolyPolygon  );
     ImplPlaceObject( nID );
 }
 #endif
 
         // CL: This is still a hack until we figure out how to calculate a correct bound rect
         //     for rotated text
-        Rectangle textBounds( 0, 0, static_cast<long>(mnDocWidth*mnDocXScale), static_cast<long>(mnDocHeight*mnDocYScale) );
+        tools::Rectangle textBounds( 0, 0, static_cast<long>(mnDocWidth*mnDocXScale), static_cast<long>(mnDocHeight*mnDocYScale) );
         double scale = 1.0;
 
         // scale width if we have a stretched text
@@ -593,14 +591,14 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
 
             const long n1 = aFont.GetFontSize().Width();
             const long n2 = aMetric2.GetFontSize().Width();
-            scale =  (double)n1 / (double)n2;
+            scale =  static_cast<double>(n1) / static_cast<double>(n2);
         }
 
-        basegfx::B2DHomMatrix m(basegfx::tools::createRotateB2DHomMatrix(static_cast<double>(nOrientation) * F_PI1800));
-        m.translate( double(aPt.X() / scale), double(aPt.Y()) );
+        basegfx::B2DHomMatrix m(basegfx::utils::createRotateB2DHomMatrix(static_cast<double>(nOrientation) * F_PI1800));
+        m.translate( aPt.X() / scale, double(aPt.Y()) );
         m.scale( scale, scale );
 
-        sal_Int16 nHeight = _Int16( map( Size( 0, aFont.GetFontHeight() ) ).Height() );
+        sal_Int16 nHeight = Int16_( map( Size( 0, aFont.GetFontHeight() ) ).Height() );
 
         startTag( TAG_DEFINETEXT );
 
@@ -620,12 +618,12 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
         mpTag->addUI8( 0x8c );
         mpTag->addUI16( rFlashFont.getID() );
         mpTag->addRGB( aTextColor );
-        mpTag->addUI16( _uInt16( nHeight ) );
+        mpTag->addUI16( uInt16_( nHeight ) );
 
         DBG_ASSERT( nLen <= 127, "TODO: handle text with more than 127 characters" );
 
         // Glyph record
-        mpTag->addUI8( (sal_uInt8) nLen );
+        mpTag->addUI8( static_cast<sal_uInt8>(nLen) );
 
         BitStream aBits;
 
@@ -644,7 +642,7 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
             }
 
             aBits.writeUB( rFlashFont.getGlyph(rText[i],mpVDev), nGlyphBits );
-            aBits.writeSB( _Int16(map( Size( (long)( nAdvance / scale ), 0 ) ).Width() ), nAdvanceBits );
+            aBits.writeSB( Int16_(map( Size( static_cast<long>( nAdvance / scale ), 0 ) ).Width() ), nAdvanceBits );
         }
 
         mpTag->addBits( aBits );
@@ -662,18 +660,18 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
         if( ( aOldFont.GetStrikeout() != STRIKEOUT_NONE ) || ( aOldFont.GetUnderline() != LINESTYLE_NONE ) )
         {
             tools::Polygon aPoly( 4 );
-            const long  nLineHeight = std::max( (long) FRound( aMetric.GetLineHeight() * 0.05 ), (long) 1 );
+            const long  nLineHeight = std::max<long>( FRound( aMetric.GetLineHeight() * 0.05 ), 1 );
 
             if( aOldFont.GetStrikeout() != STRIKEOUT_NONE )
             {
-                aPoly[ 0 ].X() = aBaseLinePos.X();
-                aPoly[ 0 ].Y() = aBaseLinePos.Y() - FRound( aMetric.GetAscent() * 0.26 ) - nLineHeight;
-                aPoly[ 1 ].X() = aPoly[ 0 ].X() + aNormSize.Width() - 1;
-                aPoly[ 1 ].Y() = aPoly[ 0 ].Y();
-                aPoly[ 2 ].X() = aPoly[ 1 ].X();
-                aPoly[ 2 ].Y() = aPoly[ 1 ].Y() + nLineHeight - 1;
-                aPoly[ 3 ].X() = aPoly[ 0 ].X();
-                aPoly[ 3 ].Y() = aPoly[ 2 ].Y();
+                aPoly[ 0 ].setX( aBaseLinePos.X() );
+                aPoly[ 0 ].setY( aBaseLinePos.Y() - FRound( aMetric.GetAscent() * 0.26 ) - nLineHeight );
+                aPoly[ 1 ].setX( aPoly[ 0 ].X() + aNormSize.Width() - 1 );
+                aPoly[ 1 ].setY( aPoly[ 0 ].Y() );
+                aPoly[ 2 ].setX( aPoly[ 1 ].X() );
+                aPoly[ 2 ].setY( aPoly[ 1 ].Y() + nLineHeight - 1 );
+                aPoly[ 3 ].setX( aPoly[ 0 ].X() );
+                aPoly[ 3 ].setY( aPoly[ 2 ].Y() );
 
                 Impl_writePolygon( aPoly, true, aTextColor, aTextColor );
             }
@@ -682,14 +680,14 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
             //  but it looks good to me.
             if( aOldFont.GetUnderline() != LINESTYLE_NONE )
             {
-                aPoly[ 0 ].X() = aBaseLinePos.X();
-                aPoly[ 0 ].Y() = static_cast<long>(aBaseLinePos.Y() + 1.5*nLineHeight);
-                aPoly[ 1 ].X() = aPoly[ 0 ].X() + aNormSize.Width() - 1;
-                aPoly[ 1 ].Y() = aPoly[ 0 ].Y();
-                aPoly[ 2 ].X() = aPoly[ 1 ].X();
-                aPoly[ 2 ].Y() = aPoly[ 1 ].Y() + nLineHeight - 1;
-                aPoly[ 3 ].X() = aPoly[ 0 ].X();
-                aPoly[ 3 ].Y() = aPoly[ 2 ].Y();
+                aPoly[ 0 ].setX( aBaseLinePos.X() );
+                aPoly[ 0 ].setY( static_cast<long>(aBaseLinePos.Y() + 1.5*nLineHeight) );
+                aPoly[ 1 ].setX( aPoly[ 0 ].X() + aNormSize.Width() - 1 );
+                aPoly[ 1 ].setY( aPoly[ 0 ].Y() );
+                aPoly[ 2 ].setX( aPoly[ 1 ].X() );
+                aPoly[ 2 ].setY( aPoly[ 1 ].Y() + nLineHeight - 1 );
+                aPoly[ 3 ].setX( aPoly[ 0 ].X() );
+                aPoly[ 3 ].setY( aPoly[ 2 ].Y() );
 
                 Impl_writePolygon( aPoly, true, aTextColor, aTextColor );
             }
@@ -698,74 +696,6 @@ void Writer::Impl_writeText( const Point& rPos, const OUString& rText, const lon
         mpVDev->SetFont( aOldFont );
     }
 }
-
-// AS: Because JPEGs require the alpha channel provided separately (JPEG does not
-//  natively support alpha channel, but SWF lets you provide it separately), we
-//  extract the alpha channel into a separate array here.
-void getBitmapData( const BitmapEx& aBmpEx, sal_uInt8*& tgadata, sal_uInt8*& tgaAlphadata, sal_uInt32& nWidth, sal_uInt32& nHeight )
-{
-    if( !aBmpEx.IsEmpty() )
-    {
-        Bitmap              aBmp( aBmpEx.GetBitmap() );
-        BitmapReadAccess*   pRAcc = aBmp.AcquireReadAccess();
-
-        if( pRAcc )
-        {
-            AlphaMask   aAlpha;
-            nWidth = pRAcc->Width();
-            nHeight = pRAcc->Height();
-            tgadata = new sal_uInt8[nWidth*nHeight*4];
-            tgaAlphadata = new sal_uInt8[nWidth*nHeight];
-            sal_uInt8* p = tgadata, *pAlpha = tgaAlphadata;
-
-
-            if( aBmpEx.IsAlpha() )
-                aAlpha = aBmpEx.GetAlpha();
-            else if( aBmpEx.IsTransparent() )
-                aAlpha = aBmpEx.GetMask();
-            else
-            {
-                sal_uInt8 cAlphaVal = 0;
-                aAlpha = AlphaMask( aBmp.GetSizePixel(), &cAlphaVal );
-            }
-
-            BitmapReadAccess* pAAcc = aAlpha.AcquireReadAccess();
-
-            if( pAAcc )
-            {
-                for( sal_uInt32 nY = 0; nY < nHeight; nY++ )
-                {
-                    for( sal_uInt32 nX = 0; nX < nWidth; nX++ )
-                    {
-                        const sal_uInt8     nAlpha = pAAcc->GetPixel( nY, nX ).GetIndex();
-                        const BitmapColor   aPixelColor( pRAcc->GetColor( nY, nX ) );
-
-                        if( nAlpha == 0xff )
-                        {
-                            *p++ = 0;
-                            *p++ = 0;
-                            *p++ = 0;
-                            *p++ = 0;
-                        }
-                        else
-                        {
-                            *p++ = 0xff-nAlpha;
-                            *p++ = aPixelColor.GetRed();
-                            *p++ = aPixelColor.GetGreen();
-                            *p++ = aPixelColor.GetBlue();
-                        }
-                        *pAlpha++ = 0xff - nAlpha;
-                    }
-                }
-
-                aAlpha.ReleaseAccess( pAAcc );
-            }
-
-            Bitmap::ReleaseAccess( pRAcc );
-        }
-    }
-}
-
 
 sal_uInt16 Writer::defineBitmap( const BitmapEx &bmpSource, sal_Int32 nJPEGQualityLevel )
 {
@@ -784,21 +714,22 @@ sal_uInt16 Writer::defineBitmap( const BitmapEx &bmpSource, sal_Int32 nJPEGQuali
     //  or Lossless compress it.
 
     // Figure out lossless size
-    sal_uInt8 *pImageData, *pAlphaData;
-    sal_uInt32 width(0), height(0);
+    std::vector<sal_uInt8> aImageData, aAlphaData;
 
-    getBitmapData( bmpSource, pImageData, pAlphaData, width, height );
+    sal_uInt32 width = bmpSource.GetPrefSize().Width();
+    sal_uInt32 height = bmpSource.GetPrefSize().Height();
+    bmpSource.GetSplitData(aImageData, aAlphaData );
     sal_uInt32 raw_size = width * height * 4;
-    uLongf compressed_size = raw_size + (sal_uInt32)(raw_size/100) + 12;
+    uLongf compressed_size = raw_size + static_cast<sal_uInt32>(raw_size/100) + 12;
     std::unique_ptr<sal_uInt8[]> pCompressed(new sal_uInt8[ compressed_size ]);
 
 #ifdef DBG_UTIL
-    if(compress2(pCompressed.get(), &compressed_size, pImageData, raw_size, Z_BEST_COMPRESSION) != Z_OK)
+    if(compress2(pCompressed.get(), &compressed_size, aImageData.data(), raw_size, Z_BEST_COMPRESSION) != Z_OK)
     {
-        DBG_ASSERT( false, "compress2 failed!" ); ((void)0);
+        SAL_WARN( "filter.flash", "compress2 failed!" ); ((void)0);
     }
 #else
-    compress2(pCompressed.get(), &compressed_size, pImageData, raw_size, Z_BEST_COMPRESSION);
+    compress2(pCompressed.get(), &compressed_size, aImageData.data(), raw_size, Z_BEST_COMPRESSION);
 #endif
 
     // AS: SWF files let you provide an Alpha mask for JPEG images, but we have
@@ -807,18 +738,22 @@ sal_uInt16 Writer::defineBitmap( const BitmapEx &bmpSource, sal_Int32 nJPEGQuali
     std::unique_ptr<sal_uInt8[]> pAlphaCompressed;
     if (bmpSource.IsAlpha() || bmpSource.IsTransparent())
     {
-        alpha_compressed_size = uLongf(width * height + (sal_uInt32)(raw_size/100) + 12);
+        alpha_compressed_size = uLongf(width * height + static_cast<sal_uInt32>(raw_size/100) + 12);
         pAlphaCompressed.reset(new sal_uInt8[ compressed_size ]);
 
 #ifdef DBG_UTIL
-        if(compress2(pAlphaCompressed.get(), &alpha_compressed_size, pAlphaData, width * height, Z_BEST_COMPRESSION) != Z_OK)
+        if(compress2(pAlphaCompressed.get(), &alpha_compressed_size, aAlphaData.data(), width * height, Z_BEST_COMPRESSION) != Z_OK)
         {
-            DBG_ASSERT( false, "compress2 failed!" ); ((void)0);
+            SAL_WARN( "filter.flash", "compress2 failed!" ); ((void)0);
         }
 #else
-        compress2(pAlphaCompressed.get(), &alpha_compressed_size, pAlphaData, width * height, Z_BEST_COMPRESSION);
+        compress2(pAlphaCompressed.get(), &alpha_compressed_size, aAlphaData.data(), width * height, Z_BEST_COMPRESSION);
 #endif
     }
+
+    // clear these early for less peak memory usage
+    aImageData.resize(0);
+    aAlphaData.resize(0);
 
     // Figure out JPEG size
     const sal_uInt8* pJpgData = nullptr;
@@ -840,7 +775,7 @@ sal_uInt16 Writer::defineBitmap( const BitmapEx &bmpSource, sal_Int32 nJPEGQuali
                                 aFilter.GetExportFormatNumberForShortName( JPG_SHORTNAME ), &aFilterData ) == ERRCODE_NONE )
     {
         pJpgData = static_cast<const sal_uInt8*>(aDstStm.GetData());
-        nJpgDataLength = aDstStm.Seek( STREAM_SEEK_TO_END );
+        nJpgDataLength = aDstStm.TellEnd();
     }
 
     // AS: Ok, now go ahead and use whichever is smaller.  If JPEG is smaller, then
@@ -851,24 +786,21 @@ sal_uInt16 Writer::defineBitmap( const BitmapEx &bmpSource, sal_Int32 nJPEGQuali
     else
         Impl_writeBmp( nBitmapId, width, height, pCompressed.get(), compressed_size );
 
-    delete[] pImageData;
-    delete[] pAlphaData;
-
     return nBitmapId;
 }
 
 
-void Writer::Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Size& rSz, const Point& /* rSrcPt */, const Size& /* rSrcSz */, const Rectangle& rClipRect, bool bNeedToMapClipRect )
+void Writer::Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Size& rSz, const Point& /* rSrcPt */, const Size& /* rSrcSz */, const tools::Rectangle& rClipRect, bool bNeedToMapClipRect )
 {
     if( !!rBmpEx )
     {
         BitmapEx bmpSource( rBmpEx );
 
-        Rectangle originalPixelRect = Rectangle(Point(), bmpSource.GetSizePixel());
+        tools::Rectangle originalPixelRect = tools::Rectangle(Point(), bmpSource.GetSizePixel());
 
         Point srcPt( map(rPt) );
         Size srcSize( map(rSz) );
-        Rectangle destRect( srcPt, srcSize );
+        tools::Rectangle destRect( srcPt, srcSize );
 
         // AS: Christian, my scaling factors are different than yours, and work better for me.
         //  However, I can't explain why exactly.  I got some of this by trial and error.
@@ -885,15 +817,15 @@ void Writer::Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Si
             //  clipping rectangle to get mapped.  However, sometimes there are multiple layers
             //  of mapping which eventually do cause the clipping rect to be mapped.
             Size clipSize( bNeedToMapClipRect ? map(rClipRect.GetSize()) : rClipRect.GetSize() );
-            Rectangle clipRect = Rectangle(Point(), clipSize);
+            tools::Rectangle clipRect = tools::Rectangle(Point(), clipSize);
             destRect.Intersection( clipRect );
 
-            Rectangle cropRect(destRect);
+            tools::Rectangle cropRect(destRect);
 
             // AS: The bmp origin is always 0,0 so we have to adjust before we crop.
             cropRect.Move(-srcPt.X(), -srcPt.Y());
             // AS: Rectangle has no scale function (?!) so I do it manually...
-            Rectangle cropPixelRect(static_cast<long>(cropRect.Left()*XScale),
+            tools::Rectangle cropPixelRect(static_cast<long>(cropRect.Left()*XScale),
                                     static_cast<long>(cropRect.Top()*YScale),
                                     static_cast<long>(cropRect.Right()*XScale),
                                     static_cast<long>(cropRect.Bottom()*YScale));
@@ -928,7 +860,7 @@ void Writer::Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Si
 
                 double qualityScale = (pixXScale + pixYScale)/2;
 
-                nJPEGQuality = (sal_Int32)( nJPEGQuality * qualityScale );
+                nJPEGQuality = static_cast<sal_Int32>( nJPEGQuality * qualityScale );
 
                 if (nJPEGQuality < 10)
                     nJPEGQuality += 3;
@@ -955,26 +887,26 @@ void Writer::Impl_writeImage( const BitmapEx& rBmpEx, const Point& rPt, const Si
 }
 
 
-void Writer::Impl_writeBmp( sal_uInt16 nBitmapId, sal_uInt32 width, sal_uInt32 height, sal_uInt8 *pCompressed, sal_uInt32 compressed_size )
+void Writer::Impl_writeBmp( sal_uInt16 nBitmapId, sal_uInt32 width, sal_uInt32 height, sal_uInt8 const *pCompressed, sal_uInt32 compressed_size )
 {
     startTag( TAG_DEFINEBITSLOSSLESS2 );
 
     mpTag->addUI16( nBitmapId );
     mpTag->addUI8( 5 );
-    mpTag->addUI16( _uInt16(width) );
-    mpTag->addUI16( _uInt16(height) );
+    mpTag->addUI16( uInt16_(width) );
+    mpTag->addUI16( uInt16_(height) );
 
-    mpTag->Write( pCompressed, compressed_size );
+    mpTag->WriteBytes(pCompressed, compressed_size);
 
     endTag();
 }
 
 
-void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal_uInt32 nJpgDataLength, sal_uInt8 *pAlphaCompressed, sal_uInt32 alpha_compressed_size )
+void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal_uInt32 nJpgDataLength, sal_uInt8 const *pAlphaCompressed, sal_uInt32 alpha_compressed_size )
 {
     // AS: Go through the actual JPEG bits, separating out the
     //  header fields from the actual image fields.  Fields are
-    //  identifed by 0xFFXX where XX is the field type.  Both
+    //  identified by 0xFFXX where XX is the field type.  Both
     //  the header and the image need start and stop (D8 and D9),
     //  so that's why you see those written to both.  I don't
     //  really know what the rest of these are, I got it to work
@@ -1031,8 +963,8 @@ void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal
         {
         case 0xD8:
         case 0xD9:
-            EncodingTableStream.Write( pJpgSearch, nLength );
-            ImageBitsStream.Write( pJpgSearch, nLength );
+            EncodingTableStream.WriteBytes(pJpgSearch, nLength);
+            ImageBitsStream.WriteBytes(pJpgSearch, nLength);
             break;
 
         case 0x01:
@@ -1040,7 +972,7 @@ void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal
         case 0xDC:
         case 0xDD:
         case 0xC4:
-            EncodingTableStream.Write( pJpgSearch, nLength );
+            EncodingTableStream.WriteBytes(pJpgSearch, nLength);
             break;
 
         case 0xC0:
@@ -1059,7 +991,7 @@ void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal
         case 0xCF:
         case 0xDA:
         case 0xE0:
-            ImageBitsStream.Write( pJpgSearch, nLength );
+            ImageBitsStream.WriteBytes(pJpgSearch, nLength);
             break;
 
         default:
@@ -1068,12 +1000,10 @@ void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal
         }
     }
 
-    EncodingTableStream.Seek( STREAM_SEEK_TO_END );
-    sal_uInt32 nEncodingTableSize = EncodingTableStream.Tell();
+    sal_uInt32 nEncodingTableSize = EncodingTableStream.TellEnd();
     EncodingTableStream.Seek( STREAM_SEEK_TO_BEGIN );
 
-    ImageBitsStream.Seek( STREAM_SEEK_TO_END );
-    sal_uInt32 nImageBitsSize = ImageBitsStream.Tell();
+    sal_uInt32 nImageBitsSize = ImageBitsStream.TellEnd();
     ImageBitsStream.Seek( STREAM_SEEK_TO_BEGIN );
 
     // AS: If we need alpha support, use TAG_DEFINEBITSJPEG3.
@@ -1085,10 +1015,10 @@ void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal
 
         mpTag->addUI32( nEncodingTableSize + nImageBitsSize );
 
-        mpTag->Write(EncodingTableStream.GetData(), nEncodingTableSize);
-        mpTag->Write(ImageBitsStream.GetData(), nImageBitsSize);
+        mpTag->WriteBytes(EncodingTableStream.GetData(), nEncodingTableSize);
+        mpTag->WriteBytes(ImageBitsStream.GetData(), nImageBitsSize);
 
-        mpTag->Write( pAlphaCompressed, alpha_compressed_size );
+        mpTag->WriteBytes(pAlphaCompressed, alpha_compressed_size);
 
         endTag();
     }
@@ -1098,8 +1028,8 @@ void Writer::Impl_writeJPEG(sal_uInt16 nBitmapId, const sal_uInt8* pJpgData, sal
 
         mpTag->addUI16( nBitmapId );
 
-        mpTag->Write(EncodingTableStream.GetData(), nEncodingTableSize);
-        mpTag->Write(ImageBitsStream.GetData(), nImageBitsSize);
+        mpTag->WriteBytes(EncodingTableStream.GetData(), nEncodingTableSize);
+        mpTag->WriteBytes(ImageBitsStream.GetData(), nImageBitsSize);
 
         endTag();
     }
@@ -1120,7 +1050,7 @@ void Writer::Impl_writeLine( const Point& rPt1, const Point& rPt2, const Color* 
 }
 
 
-void Writer::Impl_writeRect( const Rectangle& rRect, long nRadX, long nRadY )
+void Writer::Impl_writeRect( const tools::Rectangle& rRect, long nRadX, long nRadY )
 {
     if( (rRect.Top() == rRect.Bottom()) || (rRect.Left() == rRect.Right()) )
     {
@@ -1145,7 +1075,7 @@ void Writer::Impl_writeEllipse( const Point& rCenter, long nRadX, long nRadY )
 /** Writes the stroke defined by SvtGraphicStroke and returns true or it returns
     false if it can't handle this stroke.
 */
-bool Writer::Impl_writeStroke( SvtGraphicStroke& rStroke )
+bool Writer::Impl_writeStroke( SvtGraphicStroke const & rStroke )
 {
     tools::Polygon aPolygon;
     rStroke.getPath( aPolygon );
@@ -1171,15 +1101,15 @@ bool Writer::Impl_writeStroke( SvtGraphicStroke& rStroke )
 
     SvtGraphicStroke::DashArray aDashArray;
     rStroke.getDashArray( aDashArray );
-    if( 0 != aDashArray.size() )
+    if( !aDashArray.empty() )
         return false;       // todo: implement dashes
 
     Color aColor( mpVDev->GetLineColor() );
 
     if( 0.0 != rStroke.getTransparency() )
-        aColor.SetTransparency( sal::static_int_cast<sal_uInt8>( MinMax( (long int)( rStroke.getTransparency() * 0xff ), 0, 0xff ) ) );
+        aColor.SetTransparency( sal::static_int_cast<sal_uInt8>( MinMax( static_cast<long int>( rStroke.getTransparency() * 0xff ), 0, 0xff ) ) );
 
-    sal_uInt16 nShapeId = defineShape( aPolyPolygon, sal::static_int_cast<sal_uInt16>( mapRelative( (sal_Int32)( rStroke.getStrokeWidth() ) ) ), aColor );
+    sal_uInt16 nShapeId = defineShape( aPolyPolygon, sal::static_int_cast<sal_uInt16>( mapRelative( static_cast<sal_Int32>( rStroke.getStrokeWidth() ) ) ), aColor );
     maShapeIds.push_back( nShapeId );
     return true;
 }
@@ -1188,16 +1118,16 @@ bool Writer::Impl_writeStroke( SvtGraphicStroke& rStroke )
 /** Writes the filling defined by SvtGraphicFill and returns true or it returns
     false if it can't handle this filling.
 */
-bool Writer::Impl_writeFilling( SvtGraphicFill& rFilling )
+bool Writer::Impl_writeFilling( SvtGraphicFill const & rFilling )
 {
     tools::PolyPolygon aPolyPolygon;
     rFilling.getPath( aPolyPolygon );
 
-    Rectangle aOldRect( aPolyPolygon.GetBoundRect() );
+    tools::Rectangle aOldRect( aPolyPolygon.GetBoundRect() );
 
     map( aPolyPolygon );
 
-    Rectangle aNewRect( aPolyPolygon.GetBoundRect() );
+    tools::Rectangle aNewRect( aPolyPolygon.GetBoundRect() );
 
     switch( rFilling.getFillType() )
     {
@@ -1206,7 +1136,7 @@ bool Writer::Impl_writeFilling( SvtGraphicFill& rFilling )
             Color aColor( rFilling.getFillColor() );
 
             if( 0.0 != rFilling.getTransparency() )
-                aColor.SetTransparency( sal::static_int_cast<sal_uInt8>( MinMax( (long int)( rFilling.getTransparency() * 0xff ) , 0, 0xff ) ) );
+                aColor.SetTransparency( sal::static_int_cast<sal_uInt8>( MinMax( static_cast<long int>( rFilling.getTransparency() * 0xff ) , 0, 0xff ) ) );
 
             FillStyle aFillStyle( aColor );
 
@@ -1245,8 +1175,8 @@ bool Writer::Impl_writeFilling( SvtGraphicFill& rFilling )
             aMatrix.set(2, 2, 1.0);
 
             // scale bitmap
-            double XScale = aOldRect.GetWidth() ? (double)aNewRect.GetWidth()/aOldRect.GetWidth() : 1.0;
-            double YScale = aOldRect.GetHeight() ? (double)aNewRect.GetHeight()/aOldRect.GetHeight() : 1.0;
+            double XScale = aOldRect.GetWidth() ? static_cast<double>(aNewRect.GetWidth())/aOldRect.GetWidth() : 1.0;
+            double YScale = aOldRect.GetHeight() ? static_cast<double>(aNewRect.GetHeight())/aOldRect.GetHeight() : 1.0;
 
             aMatrix.scale( XScale, YScale );
 
@@ -1295,7 +1225,7 @@ bool Writer::Impl_writePageField( Rectangle& rTextBounds )
     aBits.writeUB( 0, 1 );                  // UseOutlines
     mpTag->addBits( aBits );
 
-    Color aColor( COL_BLACK );
+    Color aCOL_BLACK );
     mpTag->addRGB( aColor );
     mpTag->addString( "PageNumber" );
     mpTag->addString( "XXX" );
@@ -1322,7 +1252,7 @@ void Writer::Impl_handleLineInfoPolyPolygons(const LineInfo& rInfo, const basegf
         {
             for(sal_uInt32 a(0); a < aLinePolyPolygon.count(); a++)
             {
-                const basegfx::B2DPolygon aCandidate(aLinePolyPolygon.getB2DPolygon(a));
+                const basegfx::B2DPolygon& aCandidate(aLinePolyPolygon.getB2DPolygon(a));
                 Impl_writePolygon( tools::Polygon(aCandidate), false );
             }
         }
@@ -1338,7 +1268,7 @@ void Writer::Impl_handleLineInfoPolyPolygons(const LineInfo& rInfo, const basegf
             for(sal_uInt32 a(0); a < aFillPolyPolygon.count(); a++)
             {
                 const tools::Polygon aPolygon(aFillPolyPolygon.getB2DPolygon(a));
-                Impl_writePolyPolygon(tools::PolyPolygon(tools::Polygon(aPolygon)), true );
+                Impl_writePolyPolygon(tools::PolyPolygon(aPolygon), true );
             }
 
             mpVDev->SetLineColor(aOldLineColor);
@@ -1350,7 +1280,7 @@ void Writer::Impl_handleLineInfoPolyPolygons(const LineInfo& rInfo, const basegf
 
 void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
 {
-    Rectangle clipRect;
+    tools::Rectangle clipRect;
     int bMap = 0;
     for( size_t i = 0, nCount = rMtf.GetActionSize(); i < nCount; i++ )
     {
@@ -1411,7 +1341,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             case MetaActionType::ELLIPSE:
             {
                 const MetaEllipseAction*    pA = static_cast<const MetaEllipseAction*>(pAction);
-                const Rectangle&            rRect = pA->GetRect();
+                const tools::Rectangle&            rRect = pA->GetRect();
 
                 Impl_writeEllipse( rRect.Center(), rRect.GetWidth() >> 1, rRect.GetHeight() >> 1 );
             }
@@ -1429,21 +1359,21 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
                     case MetaActionType::ARC:
                     {
                         const MetaArcAction* pA = static_cast<const MetaArcAction*>(pAction);
-                        aPoly = tools::Polygon( pA->GetRect(), pA->GetStartPoint(), pA->GetEndPoint(), POLY_ARC );
+                        aPoly = tools::Polygon( pA->GetRect(), pA->GetStartPoint(), pA->GetEndPoint(), PolyStyle::Arc );
                     }
                     break;
 
                     case MetaActionType::PIE:
                     {
                         const MetaPieAction* pA = static_cast<const MetaPieAction*>(pAction);
-                        aPoly = tools::Polygon( pA->GetRect(), pA->GetStartPoint(), pA->GetEndPoint(), POLY_PIE );
+                        aPoly = tools::Polygon( pA->GetRect(), pA->GetStartPoint(), pA->GetEndPoint(), PolyStyle::Pie );
                     }
                     break;
 
                     case MetaActionType::CHORD:
                     {
                         const MetaChordAction* pA = static_cast<const MetaChordAction*>(pAction);
-                        aPoly = tools::Polygon( pA->GetRect(), pA->GetStartPoint(), pA->GetEndPoint(), POLY_CHORD );
+                        aPoly = tools::Polygon( pA->GetRect(), pA->GetStartPoint(), pA->GetEndPoint(), PolyStyle::Chord );
                     }
                     break;
 
@@ -1524,7 +1454,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
                 if( rPolyPoly.Count() )
                 {
                     // convert transparence from percent into 0x00 - 0xff
-                    sal_uInt8 nTransparence = (sal_uInt8) MinMax( FRound( pA->GetTransparence() * 2.55 ), 0, 255 );
+                    sal_uInt8 nTransparence = static_cast<sal_uInt8>(MinMax( FRound( pA->GetTransparence() * 2.55 ), 0, 255 ));
                     Impl_writePolyPolygon( rPolyPoly, true, nTransparence );
                 }
             }
@@ -1538,15 +1468,15 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
                 const Size                          aSrcSize( aTmpMtf.GetPrefSize() );
                 const Point                         aDestPt( pA->GetPoint() );
                 const Size                          aDestSize( pA->GetSize() );
-                const double                        fScaleX = aSrcSize.Width() ? (double) aDestSize.Width() / aSrcSize.Width() : 1.0;
-                const double                        fScaleY = aSrcSize.Height() ? (double) aDestSize.Height() / aSrcSize.Height() : 1.0;
+                const double                        fScaleX = aSrcSize.Width() ? static_cast<double>(aDestSize.Width()) / aSrcSize.Width() : 1.0;
+                const double                        fScaleY = aSrcSize.Height() ? static_cast<double>(aDestSize.Height()) / aSrcSize.Height() : 1.0;
                 long                                nMoveX, nMoveY;
 
                 if( fScaleX != 1.0 || fScaleY != 1.0 )
                 {
                     aTmpMtf.Scale( fScaleX, fScaleY );
-                    aSrcPt.X() = FRound( aSrcPt.X() * fScaleX );
-                    aSrcPt.Y() = FRound( aSrcPt.Y() * fScaleY );
+                    aSrcPt.setX( FRound( aSrcPt.X() * fScaleX ) );
+                    aSrcPt.setY( FRound( aSrcPt.Y() * fScaleY ) );
                 }
 
                 nMoveX = aDestPt.X() - aSrcPt.X();
@@ -1556,10 +1486,10 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
                     aTmpMtf.Move( nMoveX, nMoveY );
 
                 const Gradient& rGradient = pA->GetGradient();
-                sal_uInt32 nLuminance = ((sal_Int32)rGradient.GetStartColor().GetLuminance() + (sal_Int32)rGradient.GetEndColor().GetLuminance() ) >> 1;
+                sal_uInt32 nLuminance = (static_cast<sal_Int32>(rGradient.GetStartColor().GetLuminance()) + static_cast<sal_Int32>(rGradient.GetEndColor().GetLuminance()) ) >> 1;
 
                 sal_uInt8 nOldGlobalTransparency = mnGlobalTransparency;
-                mnGlobalTransparency = (sal_uInt8)MinMax( nLuminance, 0, 0xff );
+                mnGlobalTransparency = static_cast<sal_uInt8>(MinMax( nLuminance, 0, 0xff ));
 
                 mpVDev->Push();
                 Impl_writeActions( aTmpMtf );
@@ -1572,7 +1502,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             case MetaActionType::EPS:
             {
                 const MetaEPSAction*    pA = static_cast<const MetaEPSAction*>(pAction);
-                const GDIMetaFile       aGDIMetaFile( pA->GetSubstitute() );
+                const GDIMetaFile&      aGDIMetaFile( pA->GetSubstitute() );
                 bool                bFound = false;
 
                 for( size_t j = 0, nC = aGDIMetaFile.GetActionSize(); ( j < nC ) && !bFound; j++ )
@@ -1583,7 +1513,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
                     {
                         bFound = true;
                         const MetaBmpScaleAction* pBmpScaleAction = static_cast<const MetaBmpScaleAction*>(pSubstAct);
-                        Impl_writeImage( pBmpScaleAction->GetBitmap(),
+                        Impl_writeImage( BitmapEx(pBmpScaleAction->GetBitmap()),
                                       pA->GetPoint(), pA->GetSize(),
                                       Point(), pBmpScaleAction->GetBitmap().GetSizePixel(), clipRect, 1 == bMap  );
                     }
@@ -1684,7 +1614,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             {
                 const MetaBmpScaleAction* pA = static_cast<const MetaBmpScaleAction*>(pAction);
 
-                Impl_writeImage( pA->GetBitmap(),
+                Impl_writeImage( BitmapEx(pA->GetBitmap()),
                           pA->GetPoint(), pA->GetSize(),
                           Point(), pA->GetBitmap().GetSizePixel(), clipRect, 1 == bMap );
             }
@@ -1693,7 +1623,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             case MetaActionType::BMP:
             {
                 const MetaBmpAction* pA = static_cast<const MetaBmpAction*>(pAction);
-                Impl_writeImage( pA->GetBitmap(),
+                Impl_writeImage( BitmapEx(pA->GetBitmap()),
                           pA->GetPoint(), mpVDev->PixelToLogic( pA->GetBitmap().GetSizePixel()),
                           Point(), pA->GetBitmap().GetSizePixel(), clipRect, 1 ==bMap );
             }
@@ -1702,7 +1632,7 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             case MetaActionType::BMPSCALEPART:
             {
                 const MetaBmpScalePartAction* pA = static_cast<const MetaBmpScalePartAction*>(pAction);
-                Impl_writeImage( pA->GetBitmap(),
+                Impl_writeImage( BitmapEx(pA->GetBitmap()),
                           pA->GetDestPoint(), pA->GetDestSize(),
                           pA->GetSrcPoint(), pA->GetSrcSize(), clipRect, 1 == bMap );
             }
@@ -1767,8 +1697,8 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             {
                 const MetaISectRectClipRegionAction* pA = static_cast<const MetaISectRectClipRegionAction*>(pAction);
                 clipRect = pA->GetRect();
+                [[fallthrough]];
             }
-            // fall-through
             case MetaActionType::CLIPREGION:
             case MetaActionType::ISECTREGIONCLIPREGION:
             case MetaActionType::MOVECLIPREGION:
@@ -1780,8 +1710,8 @@ void Writer::Impl_writeActions( const GDIMetaFile& rMtf )
             case MetaActionType::MAPMODE:
             {
                 bMap++;
+                [[fallthrough]];
             }
-            // fall-through
             case MetaActionType::REFPOINT:
             case MetaActionType::LINECOLOR:
             case MetaActionType::FILLCOLOR:
@@ -1821,7 +1751,7 @@ void Writer::Impl_addStraightLine( BitStream& rBits, Point& rLastPoint,
 {
     Point aPoint( FRound(P2x), FRound(P2y) );
 
-    Impl_addStraightEdgeRecord( rBits, _Int16(aPoint.X() - rLastPoint.X()),_Int16(aPoint.Y() - rLastPoint.Y()));
+    Impl_addStraightEdgeRecord( rBits, Int16_(aPoint.X() - rLastPoint.X()),Int16_(aPoint.Y() - rLastPoint.Y()));
     rLastPoint = aPoint;
 
 }
@@ -1836,8 +1766,8 @@ void Writer::Impl_addQuadBezier( BitStream& rBits, Point& rLastPoint,
     Point aAnchorPoint( FRound(P3x), FRound(P3y) );
 
     Impl_addCurvedEdgeRecord( rBits,
-                                _Int16(aControlPoint.X() - rLastPoint.X()),_Int16(aControlPoint.Y() - rLastPoint.Y()),
-                                _Int16(aAnchorPoint.X() - aControlPoint.X()),_Int16(aAnchorPoint.Y() - aControlPoint.Y()) );
+                                Int16_(aControlPoint.X() - rLastPoint.X()),Int16_(aControlPoint.Y() - rLastPoint.Y()),
+                                Int16_(aAnchorPoint.X() - aControlPoint.X()),Int16_(aAnchorPoint.Y() - aControlPoint.Y()) );
     rLastPoint = aAnchorPoint;
 }
 
@@ -1989,7 +1919,7 @@ void Writer::Impl_quadBezierApprox( BitStream& rBits,
     }
 }
 
-Reference < XBreakIterator > Writer::Impl_GetBreakIterator()
+Reference < XBreakIterator > const & Writer::Impl_GetBreakIterator()
 {
     if ( !mxBreakIterator.is() )
     {

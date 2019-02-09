@@ -36,6 +36,7 @@ $(eval $(call gb_Library_use_external,xo,boost_headers))
 
 $(eval $(call gb_Library_use_custom_headers,xo,\
 	officecfg/registry \
+	xmloff/generated \
 ))
 
 $(eval $(call gb_Library_use_sdk_api,xo))
@@ -53,7 +54,6 @@ $(eval $(call gb_Library_use_libraries,xo,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,xo,\
@@ -90,6 +90,7 @@ $(eval $(call gb_Library_add_exception_objects,xo,\
     xmloff/source/core/DocumentSettingsContext \
     xmloff/source/core/DomBuilderContext \
     xmloff/source/core/DomExport \
+	xmloff/source/core/fasttokenhandler \
     xmloff/source/core/ProgressBarHelper \
     xmloff/source/core/PropertySetMerger \
     xmloff/source/core/RDFaExportHelper \
@@ -140,6 +141,7 @@ $(eval $(call gb_Library_add_exception_objects,xo,\
     xmloff/source/draw/sdxmlimp \
     xmloff/source/draw/shapeexport \
     xmloff/source/draw/shapeimport \
+    xmloff/source/draw/SignatureLineContext \
     xmloff/source/draw/xexptran \
     xmloff/source/draw/ximp3dobject \
     xmloff/source/draw/ximp3dscene \
@@ -251,6 +253,7 @@ $(eval $(call gb_Library_add_exception_objects,xo,\
     xmloff/source/style/postuhdl \
     xmloff/source/style/prhdlfac \
     xmloff/source/style/prstylei \
+	xmloff/source/style/prstylecond \
     xmloff/source/style/shadwhdl \
     xmloff/source/style/shdwdhdl \
     xmloff/source/style/styleexp \
@@ -365,5 +368,11 @@ $(eval $(call gb_Library_add_exception_objects,xo,\
     xmloff/source/xforms/xformsexport \
     xmloff/source/xforms/xformsimport \
 ))
+
+ifeq ($(CPUNAME),M68K)
+$(eval $(call gb_Library_add_cxxflags,xo,\
+    -mlong-jump-table-offsets \
+))
+endif
 
 # vim: set noet sw=4 ts=4:

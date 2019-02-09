@@ -20,11 +20,12 @@
 #ifndef INCLUDED_SLIDESHOW_SOURCE_ENGINE_ACTIVITIES_INTERPOLATION_HXX
 #define INCLUDED_SLIDESHOW_SOURCE_ENGINE_ACTIVITIES_INTERPOLATION_HXX
 
-#include <basegfx/tools/lerp.hxx>
+#include <basegfx/utils/lerp.hxx>
+#include <osl/diagnose.h>
 
 namespace basegfx
 {
-    namespace tools
+    namespace utils
     {
         // Interpolator specializations
         // ============================
@@ -81,7 +82,7 @@ namespace slideshow
                                   const ValueType&  rTo,
                                   double            t ) const
             {
-                return basegfx::tools::lerp( rFrom, rTo, t );
+                return basegfx::utils::lerp( rFrom, rTo, t );
             }
         };
 

@@ -25,7 +25,6 @@
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include <com/sun/star/inspection/XObjectInspectorUI.hpp>
 
 #include <connectivity/dbtools.hxx>
 #include <tools/link.hxx>
@@ -47,7 +46,7 @@ namespace pcr
     /** encapsulates the code for calling and managing a query design frame, used
         for interactively designing the Command property of a ->RowSet
     */
-    class SQLCommandDesigner : public SQLCommandDesigner_Base
+    class SQLCommandDesigner final : public SQLCommandDesigner_Base
     {
     private:
         css::uno::Reference< css::uno::XComponentContext >        m_xContext;
@@ -82,11 +81,11 @@ namespace pcr
         /** determines whether the SQL Command designer is currently active, i.e.
             if there currently exists a frame which allows the user entering the SQL command
         */
-        inline bool isActive() const { return m_xDesigner.is(); }
+        bool isActive() const { return m_xDesigner.is(); }
 
         /** returns the property adapter used by the instance
         */
-        inline const ::rtl::Reference< ISQLCommandAdapter >& getPropertyAdapter() const { return m_xObjectAdapter; }
+        const ::rtl::Reference< ISQLCommandAdapter >& getPropertyAdapter() const { return m_xObjectAdapter; }
 
         /** raises the designer window to top
             @precond
@@ -108,15 +107,14 @@ namespace pcr
         */
         void    dispose();
 
-    protected:
+    private:
         // XPropertyChangeListener
-        virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& evt ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL propertyChange( const css::beans::PropertyChangeEvent& evt ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
-    protected:
-        virtual ~SQLCommandDesigner();
+        virtual ~SQLCommandDesigner() override;
 
         /** opens a new frame for interactively designing an SQL command
             @precond
@@ -149,11 +147,6 @@ namespace pcr
         css::uno::Reference< css::frame::XFrame >
             impl_createEmptyParentlessTask_nothrow() const;
 
-        /** called whenever the component denoted by m_xDesigner has been closed
-            <em>by an external instance</em>
-        */
-        void impl_designerClosed_nothrow();
-
         /** closes the component denoted by m_xDesigner
             @precond
                 our designer component is actually active (->isActive)
@@ -170,7 +163,6 @@ namespace pcr
         */
         bool impl_trySuspendDesigner_nothrow() const;
 
-    private:
         SQLCommandDesigner( const SQLCommandDesigner& ) = delete;
         SQLCommandDesigner& operator=( const SQLCommandDesigner& ) = delete;
     };
@@ -193,7 +185,7 @@ namespace pcr
         /// sets a new EscapeProcessing property value
         virtual void     setEscapeProcessing( const bool _bEscapeProcessing ) const = 0;
 
-        virtual ~ISQLCommandAdapter();
+        virtual ~ISQLCommandAdapter() override;
     };
 
 

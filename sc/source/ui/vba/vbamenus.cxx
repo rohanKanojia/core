@@ -10,6 +10,7 @@
 #include "vbamenu.hxx"
 #include <cppuhelper/implbase.hxx>
 #include <ooo/vba/office/MsoControlType.hpp>
+#include <ooo/vba/XCommandBarControls.hpp>
 
 using namespace com::sun::star;
 using namespace ooo::vba;
@@ -22,45 +23,45 @@ class MenuEnumeration : public MenuEnumeration_BASE
     uno::Reference< uno::XComponentContext > m_xContext;
     uno::Reference< container::XEnumeration > m_xEnumeration;
 public:
-    MenuEnumeration( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration) throw ( uno::RuntimeException ) : m_xParent( xParent ), m_xContext( xContext ), m_xEnumeration( xEnumeration )
+    /// @throws uno::RuntimeException
+    MenuEnumeration( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< container::XEnumeration >& xEnumeration) : m_xParent( xParent ), m_xContext( xContext ), m_xEnumeration( xEnumeration )
     {
     }
-    virtual sal_Bool SAL_CALL hasMoreElements() throw ( uno::RuntimeException, std::exception ) override
+    virtual sal_Bool SAL_CALL hasMoreElements() override
     {
         return m_xEnumeration->hasMoreElements();
     }
-    virtual uno::Any SAL_CALL nextElement() throw ( container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception ) override
+    virtual uno::Any SAL_CALL nextElement() override
     {
         // FIXME: should be add menu
-        if( hasMoreElements() )
-        {
-            uno::Reference< XCommandBarControl > xCommandBarControl( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
-            if( xCommandBarControl->getType() == office::MsoControlType::msoControlPopup )
-            {
-                uno::Reference< excel::XMenu > xMenu( new ScVbaMenu( m_xParent, m_xContext, xCommandBarControl ) );
-                return uno::makeAny( xMenu );
-            }
-            nextElement();
-        }
-        else
+        if( !hasMoreElements() )
             throw container::NoSuchElementException();
+
+        uno::Reference< XCommandBarControl > xCommandBarControl( m_xEnumeration->nextElement(), uno::UNO_QUERY_THROW );
+        if( xCommandBarControl->getType() == office::MsoControlType::msoControlPopup )
+        {
+            uno::Reference< excel::XMenu > xMenu( new ScVbaMenu( m_xParent, m_xContext, xCommandBarControl ) );
+            return uno::makeAny( xMenu );
+        }
+        nextElement();
+
         return uno::Any();
     }
 };
 
-ScVbaMenus::ScVbaMenus( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< XCommandBarControls >& xCommandBarControls ) throw ( uno::RuntimeException ) : Menus_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBarControls( xCommandBarControls )
+ScVbaMenus::ScVbaMenus( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< uno::XComponentContext >& xContext, const uno::Reference< XCommandBarControls >& xCommandBarControls ) : Menus_BASE( xParent, xContext, uno::Reference< container::XIndexAccess>() ), m_xCommandBarControls( xCommandBarControls )
 {
 }
 
 // XEnumerationAccess
 uno::Type SAL_CALL
-ScVbaMenus::getElementType() throw ( uno::RuntimeException )
+ScVbaMenus::getElementType()
 {
     return cppu::UnoType<excel::XMenu>::get();
 }
 
 uno::Reference< container::XEnumeration >
-ScVbaMenus::createEnumeration() throw ( uno::RuntimeException )
+ScVbaMenus::createEnumeration()
 {
     uno::Reference< container::XEnumerationAccess > xEnumAccess( m_xCommandBarControls, uno::UNO_QUERY_THROW );
     return uno::Reference< container::XEnumeration >( new MenuEnumeration( this, mxContext, xEnumAccess->createEnumeration() ) );
@@ -74,7 +75,7 @@ ScVbaMenus::createCollectionObject( const uno::Any& aSource )
 }
 
 sal_Int32 SAL_CALL
-ScVbaMenus::getCount() throw(css::uno::RuntimeException)
+ScVbaMenus::getCount()
 {
     // FIXME: should check if it is a popup menu
     return m_xCommandBarControls->getCount();
@@ -82,7 +83,7 @@ ScVbaMenus::getCount() throw(css::uno::RuntimeException)
 
 // ScVbaCollectionBaseImpl
 uno::Any SAL_CALL
-ScVbaMenus::Item( const uno::Any& aIndex, const uno::Any& /*aIndex2*/ ) throw( uno::RuntimeException )
+ScVbaMenus::Item( const uno::Any& aIndex, const uno::Any& /*aIndex2*/ )
 {
     uno::Reference< XCommandBarControl > xCommandBarControl( m_xCommandBarControls->Item( aIndex, uno::Any() ), uno::UNO_QUERY_THROW );
     if( xCommandBarControl->getType() != office::MsoControlType::msoControlPopup )
@@ -90,10 +91,11 @@ ScVbaMenus::Item( const uno::Any& aIndex, const uno::Any& /*aIndex2*/ ) throw( u
     return uno::makeAny( uno::Reference< excel::XMenu > ( new ScVbaMenu( this, mxContext, xCommandBarControl ) ) );
 }
 
-uno::Reference< excel::XMenu > SAL_CALL ScVbaMenus::Add( const OUString& Caption, const css::uno::Any& Before, const css::uno::Any& Restore ) throw (css::script::BasicErrorException, css::uno::RuntimeException, std::exception)
+uno::Reference< excel::XMenu > SAL_CALL ScVbaMenus::Add( const OUString& Caption, const css::uno::Any& Before, const css::uno::Any& Restore )
 {
-    sal_Int32 nType = office::MsoControlType::msoControlPopup;
-    uno::Reference< XCommandBarControl > xCommandBarControl = m_xCommandBarControls->Add( uno::makeAny( nType ), uno::Any(), uno::Any(), Before, Restore );
+    uno::Reference< XCommandBarControl > xCommandBarControl = m_xCommandBarControls->Add(
+            uno::makeAny( office::MsoControlType::msoControlPopup ),
+            uno::Any(), uno::Any(), Before, Restore );
     xCommandBarControl->setCaption( Caption );
     return uno::Reference< excel::XMenu >( new ScVbaMenu( this, mxContext, xCommandBarControl ) );
 }
@@ -108,12 +110,10 @@ ScVbaMenus::getServiceImplName()
 uno::Sequence<OUString>
 ScVbaMenus::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.excel.Menus";
-    }
+        "ooo.vba.excel.Menus"
+    };
     return aServiceNames;
 }
 

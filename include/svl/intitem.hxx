@@ -51,18 +51,12 @@ public:
 
     SfxInt16Item(sal_uInt16 nWhich, SvStream & rStream);
 
-    SfxInt16Item(const SfxInt16Item & rItem):
-        SfxPoolItem(rItem), m_nValue(rItem.m_nValue)
-    {}
-
-    virtual ~SfxInt16Item() {}
-
     virtual bool operator ==(const SfxPoolItem & rItem) const override;
 
     virtual bool GetPresentation(SfxItemPresentation,
-                                                SfxMapUnit, SfxMapUnit,
+                                                MapUnit, MapUnit,
                                                 OUString & rText,
-                                                const IntlWrapper * = nullptr)
+                                                const IntlWrapper&)
         const override;
 
     virtual bool QueryValue( css::uno::Any& rVal,
@@ -127,6 +121,7 @@ public:
     virtual SfxPoolItem * Clone(SfxItemPool * = nullptr) const override
     { return new SfxInt32Item(*this); }
 
+    void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
 
@@ -146,6 +141,8 @@ public:
 
     virtual SfxPoolItem * Clone(SfxItemPool * = nullptr) const override
     { return new SfxUInt32Item(*this); }
+
+    void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
 #endif // INCLUDED_SVL_INTITEM_HXX

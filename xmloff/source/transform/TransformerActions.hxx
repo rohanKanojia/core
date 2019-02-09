@@ -31,25 +31,18 @@ struct NameKey_Impl
     sal_uInt16 m_nPrefix;
     OUString m_aLocalName;
 
-    inline NameKey_Impl( sal_uInt16 nPrfx,
-                         ::xmloff::token::XMLTokenEnum eLclNm ) :
-        m_nPrefix( nPrfx ),
-        m_aLocalName( ::xmloff::token::GetXMLToken( eLclNm ) )
-    {
-    }
-
-    inline NameKey_Impl( sal_uInt16 nPrfx, const OUString& rLclNm ) :
+    NameKey_Impl( sal_uInt16 nPrfx, const OUString& rLclNm ) :
         m_nPrefix( nPrfx ),
         m_aLocalName( rLclNm )
     {
     }
 
-    inline NameKey_Impl() :
+    NameKey_Impl() :
         m_nPrefix( XML_NAMESPACE_UNKNOWN )
     {
     }
 
-    inline void SetLocalName( ::xmloff::token::XMLTokenEnum eLclNm )
+    void SetLocalName( ::xmloff::token::XMLTokenEnum eLclNm )
     {
         m_aLocalName = ::xmloff::token::GetXMLToken( eLclNm );
     }
@@ -82,16 +75,7 @@ struct TransformerAction_Impl
     sal_uInt32 m_nParam2;
     sal_uInt32 m_nParam3;
 
-    inline TransformerAction_Impl( sal_uInt32 nActnTp, sal_uInt32 nPrm1,
-                                   sal_uInt32 nPrm2, sal_uInt32 nPrm3 ) :
-        m_nActionType( nActnTp ),
-        m_nParam1( nPrm1 ),
-        m_nParam2( nPrm2 ),
-        m_nParam3( nPrm3 )
-    {
-
-    }
-    inline TransformerAction_Impl() :
+    TransformerAction_Impl() :
         m_nActionType( XML_TACTION_EOT ),
         m_nParam1( 0 ),
         m_nParam2( 0 ),
@@ -136,10 +120,10 @@ class XMLTransformerActions :
                             NameHash_Impl, NameHash_Impl >
 {
 public:
-    explicit XMLTransformerActions( XMLTransformerActionInit *pInit );
+    explicit XMLTransformerActions( XMLTransformerActionInit const *pInit );
     ~XMLTransformerActions();
 
-    void Add( XMLTransformerActionInit *pInit );
+    void Add( XMLTransformerActionInit const *pInit );
 };
 
 #endif // INCLUDED_XMLOFF_SOURCE_TRANSFORM_TRANSFORMERACTIONS_HXX

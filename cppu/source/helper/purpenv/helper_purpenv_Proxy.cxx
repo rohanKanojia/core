@@ -20,25 +20,11 @@
 
 #include "Proxy.hxx"
 
-#include "sal/alloca.h"
-#include "uno/dispatcher.h"
-#include "typelib/typedescription.hxx"
-#include "cppu/EnvDcp.hxx"
-
-
-//#define LOG_LIFECYCLE_Proxy
-#ifdef LOG_LIFECYCLE_Proxy
-#  include <iostream>
-#  define LOG_LIFECYCLE_Proxy_emit(x) x
-
-#else
-#  define LOG_LIFECYCLE_Proxy_emit(x)
-
-#endif
-
+#include <sal/log.hxx>
+#include <uno/dispatcher.h>
+#include <typelib/typedescription.hxx>
 
 using namespace com::sun::star;
-
 
 static bool relatesToInterface(typelib_TypeDescription * pTypeDescr)
 {
@@ -91,9 +77,10 @@ static bool relatesToInterface(typelib_TypeDescription * pTypeDescr)
                 TYPELIB_DANGER_RELEASE( pTD );
                 if (bRel)
                     return true;
+                break;
             }
             default:
-                ;
+                break;
             }
         }
         if (pComp->pBaseTypeDescription)
@@ -110,7 +97,7 @@ static bool relatesToInterface(typelib_TypeDescription * pTypeDescr)
     return false;
 }
 
-extern "C" { static void SAL_CALL s_Proxy_dispatch(
+extern "C" { static void s_Proxy_dispatch(
     uno_Interface                 * pUnoI,
     typelib_TypeDescription const * pMemberType,
     void                          * pReturn,
@@ -141,8 +128,8 @@ extern "C" { static void SAL_CALL s_Proxy_dispatch(
         {
             param.pTypeRef = reinterpret_cast<typelib_InterfaceAttributeTypeDescription const *>(
                               pMemberType)->pAttributeTypeRef;
-            param.bIn = sal_True;
-            param.bOut = sal_False;
+            param.bIn = true;
+            param.bOut = false;
             nParams = 1;
             pParams = &param;
         }
@@ -170,20 +157,20 @@ extern "C" { static void SAL_CALL s_Proxy_dispatch(
                      ppException );
 }}
 
-extern "C" void SAL_CALL Proxy_free(SAL_UNUSED_PARAMETER uno_ExtEnvironment * /*pEnv*/, void * pProxy) SAL_THROW_EXTERN_C()
+extern "C" void Proxy_free(SAL_UNUSED_PARAMETER uno_ExtEnvironment * /*pEnv*/, void * pProxy) SAL_THROW_EXTERN_C()
 {
     Proxy * pThis = static_cast<Proxy * >(static_cast<uno_Interface *>(pProxy));
     delete pThis;
 }
 
 extern "C" {
-static void SAL_CALL s_Proxy_acquire(uno_Interface * pUnoI) SAL_THROW_EXTERN_C()
+static void s_Proxy_acquire(uno_Interface * pUnoI) SAL_THROW_EXTERN_C()
 {
     Proxy * pProxy = static_cast<Proxy *>(pUnoI);
     pProxy->acquire();
 }
 
-static void SAL_CALL s_Proxy_release(uno_Interface * pUnoI) SAL_THROW_EXTERN_C()
+static void s_Proxy_release(uno_Interface * pUnoI) SAL_THROW_EXTERN_C()
 {
     Proxy * pProxy = static_cast<Proxy *>(pUnoI);
     pProxy->release();
@@ -197,7 +184,7 @@ static void s_acquireAndRegister_v(va_list * pParam)
     uno_ExtEnvironment               * pEnv       = va_arg(*pParam, uno_ExtEnvironment *);
 
     pUnoI->acquire(pUnoI);
-     pEnv->registerInterface(pEnv, reinterpret_cast<void **>(&pUnoI), pOid, pTypeDescr);
+    pEnv->registerInterface(pEnv, reinterpret_cast<void **>(&pUnoI), pOid, pTypeDescr);
 }
 }
 
@@ -206,7 +193,7 @@ Proxy::Proxy(uno::Mapping                  const & to_from,
              uno_Environment                     * pFrom,
              uno_Interface                       * pUnoI,
              typelib_InterfaceTypeDescription    * pTypeDescr,
-             rtl::OUString                 const & rOId,
+             OUString                      const & rOId,
              cppu::helper::purpenv::ProbeFun     * probeFun,
              void                                * pProbeContext
 )
@@ -221,7 +208,7 @@ Proxy::Proxy(uno::Mapping                  const & to_from,
           m_probeFun     (probeFun),
           m_pProbeContext(pProbeContext)
 {
-    LOG_LIFECYCLE_Proxy_emit(fprintf(stderr, "LIFE: %s -> %p\n", "Proxy::Proxy(<>)", this));
+    SAL_INFO("cppu.purpenv", "LIFE: Proxy::Proxy(<>) -> " << this);
 
     typelib_typedescription_acquire(&m_pTypeDescr->aBase);
     if (!m_pTypeDescr->aBase.bComplete)
@@ -248,7 +235,7 @@ extern "C" { static void s_releaseAndRevoke_v(va_list * pParam)
 
 Proxy::~Proxy()
 {
-    LOG_LIFECYCLE_Proxy_emit(fprintf(stderr, "LIFE: %s -> %p\n", "Proxy::~Proxy()", this));
+    SAL_INFO("cppu.purpenv", "LIFE: Proxy::~Proxy() -> " << this);
 
     uno_Environment_invoke(m_to.get(), s_releaseAndRevoke_v, m_to.get(), m_pUnoI);
 

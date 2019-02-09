@@ -24,7 +24,6 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/frame/DispatchResultState.hpp>
 
-#include <comphelper/sequenceashashmap.hxx>
 #include <rtl/ustrbuf.hxx>
 
 #include <cppuhelper/queryinterface.hxx>
@@ -50,7 +49,7 @@ void SAL_CALL SoundHandler::release() throw()
        OWeakObject::release();
 }
 
-css::uno::Any SAL_CALL SoundHandler::queryInterface( const css::uno::Type& aType ) throw( css::uno::RuntimeException, std::exception )
+css::uno::Any SAL_CALL SoundHandler::queryInterface( const css::uno::Type& aType )
 {
        /* Attention: Don't use mutex or guard in this method!!! Is a method of XInterface.     */
         /* Ask for my own supported interfaces ...*/
@@ -70,40 +69,21 @@ css::uno::Any SAL_CALL SoundHandler::queryInterface( const css::uno::Type& aType
        return aReturn;
 }
 
-css::uno::Sequence< sal_Int8 > SAL_CALL SoundHandler::getImplementationId() throw( css::uno::RuntimeException, std::exception )
+css::uno::Sequence< sal_Int8 > SAL_CALL SoundHandler::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-css::uno::Sequence< css::uno::Type > SAL_CALL SoundHandler::getTypes() throw( css::uno::RuntimeException, std::exception )
+css::uno::Sequence< css::uno::Type > SAL_CALL SoundHandler::getTypes()
 {
-    /* Optimize this method !                                       */
-    /* We initialize a static variable only one time.               */
-    /* And we don't must use a mutex at every call!                 */
-    /* For the first call; pTypeCollection is NULL -                */
-    /* for the second call pTypeCollection is different from NULL!  */
-    static ::cppu::OTypeCollection* pTypeCollection = nullptr ;
-    if ( pTypeCollection == nullptr )
-    {
-        /* Ready for multithreading; get global mutex for first call of this method only! see before   */
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        /* Control these pointer again ... it can be, that another instance will be faster then these! */
-        if ( pTypeCollection == nullptr )
-        {
-            /* Create a static typecollection ...           */
-            static ::cppu::OTypeCollection aTypeCollection
-                (
-                    cppu::UnoType<css::lang::XTypeProvider>::get(),
-                    cppu::UnoType<css::lang::XServiceInfo>::get(),
-                    cppu::UnoType<css::frame::XNotifyingDispatch>::get(),
-                    cppu::UnoType<css::frame::XDispatch>::get(),
-                    cppu::UnoType<css::document::XExtendedFilterDetection>::get()
-                );
-            /* ... and set his address to static pointer! */
-            pTypeCollection = &aTypeCollection ;
-        }
-    }
-    return pTypeCollection->getTypes();
+    static ::cppu::OTypeCollection aTypeCollection(
+        cppu::UnoType<css::lang::XTypeProvider>::get(),
+        cppu::UnoType<css::lang::XServiceInfo>::get(),
+        cppu::UnoType<css::frame::XNotifyingDispatch>::get(),
+        cppu::UnoType<css::frame::XDispatch>::get(),
+        cppu::UnoType<css::document::XExtendedFilterDetection>::get());
+
+    return aTypeCollection.getTypes();
 }
 
 #define IMPLEMENTATIONNAME_SOUNDHANDLER OUString("com.sun.star.comp.framework.SoundHandler")
@@ -111,22 +91,21 @@ css::uno::Sequence< css::uno::Type > SAL_CALL SoundHandler::getTypes() throw( cs
 /*===========================================================================================================*/
 /* XServiceInfo */
 /*===========================================================================================================*/
-OUString SAL_CALL SoundHandler::getImplementationName() throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL SoundHandler::getImplementationName()
 {
     return IMPLEMENTATIONNAME_SOUNDHANDLER;
 }
 
 // XServiceInfo
-sal_Bool SAL_CALL SoundHandler::supportsService( const OUString& sServiceName ) throw( css::uno::RuntimeException, std::exception )
+sal_Bool SAL_CALL SoundHandler::supportsService( const OUString& sServiceName )
 {
     return cppu::supportsService(this, sServiceName);
 }
 
 // XServiceInfo
-css::uno::Sequence< OUString > SAL_CALL SoundHandler::getSupportedServiceNames() throw( css::uno::RuntimeException, std::exception )
+css::uno::Sequence< OUString > SAL_CALL SoundHandler::getSupportedServiceNames()
 {
-    css::uno::Sequence<OUString> seqServiceNames { "com.sun.star.frame.ContentHandler" };
-    return seqServiceNames;
+    return { "com.sun.star.frame.ContentHandler" };
 }
 
 /*-************************************************************************************************************
@@ -145,8 +124,9 @@ SoundHandler::SoundHandler()
         ,   ::cppu::OWeakObject (          )
         // Init member
     ,   m_bError        ( false    )
+    ,   m_aUpdateIdle   ( "avmedia SoundHandler Update" )
 {
-    m_aUpdateIdle.SetIdleHdl(LINK(this, SoundHandler, implts_PlayerNotify));
+    m_aUpdateIdle.SetInvokeHandler(LINK(this, SoundHandler, implts_PlayerNotify));
 }
 
 /*-************************************************************************************************************
@@ -185,7 +165,7 @@ SoundHandler::~SoundHandler()
 *//*-*************************************************************************************************************/
 void SAL_CALL SoundHandler::dispatchWithNotification(const css::util::URL&                                             aURL      ,
                                                      const css::uno::Sequence< css::beans::PropertyValue >&            lDescriptor,
-                                                     const css::uno::Reference< css::frame::XDispatchResultListener >& xListener ) throw(css::uno::RuntimeException, std::exception)
+                                                     const css::uno::Reference< css::frame::XDispatchResultListener >& xListener )
 {
     // SAFE {
     const ::osl::MutexGuard aLock( m_aLock );
@@ -221,13 +201,12 @@ void SAL_CALL SoundHandler::dispatchWithNotification(const css::util::URL&      
         // Count this request and initialize self-holder against dying by uno ref count ...
         m_xSelfHold.set(static_cast< ::cppu::OWeakObject* >(this), css::uno::UNO_QUERY);
         m_xPlayer->start();
-        m_aUpdateIdle.SetPriority( SchedulerPriority::LOWER );
+        m_aUpdateIdle.SetPriority( TaskPriority::HIGH_IDLE );
         m_aUpdateIdle.Start();
     }
-    catch( css::uno::Exception& e )
+    catch( css::uno::Exception& )
     {
         m_bError = true;
-        (void)e;
         m_xPlayer.clear();
     }
 
@@ -235,7 +214,7 @@ void SAL_CALL SoundHandler::dispatchWithNotification(const css::util::URL&      
 }
 
 void SAL_CALL SoundHandler::dispatch( const css::util::URL&                                  aURL       ,
-                                      const css::uno::Sequence< css::beans::PropertyValue >& lArguments ) throw( css::uno::RuntimeException, std::exception )
+                                      const css::uno::Sequence< css::beans::PropertyValue >& lArguments )
 {
     dispatchWithNotification(aURL, lArguments, css::uno::Reference< css::frame::XDispatchResultListener >());
 }
@@ -261,7 +240,7 @@ void SAL_CALL SoundHandler::dispatch( const css::util::URL&                     
     @onerror    We return nothing.
     @threadsafe yes
 *//*-*************************************************************************************************************/
-OUString SAL_CALL SoundHandler::detect( css::uno::Sequence< css::beans::PropertyValue >& lDescriptor ) throw( css::uno::RuntimeException, std::exception )
+OUString SAL_CALL SoundHandler::detect( css::uno::Sequence< css::beans::PropertyValue >& lDescriptor )
 {
     // Our default is "nothing". So we can return it, if detection failed or file type is really unknown.
     OUString sTypeName;
@@ -298,7 +277,7 @@ OUString SAL_CALL SoundHandler::detect( css::uno::Sequence< css::beans::Property
     @return     0 every time... it doesn't matter for us.
     @threadsafe yes
 *//*-*************************************************************************************************************/
-IMPL_LINK_NOARG_TYPED(SoundHandler, implts_PlayerNotify, Idle *, void)
+IMPL_LINK_NOARG(SoundHandler, implts_PlayerNotify, Timer *, void)
 {
     // SAFE {
     ::osl::ClearableMutexGuard aLock( m_aLock );
@@ -337,7 +316,7 @@ IMPL_LINK_NOARG_TYPED(SoundHandler, implts_PlayerNotify, Idle *, void)
 } // namespace framework
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_framework_SoundHandler_get_implementation(css::uno::XComponentContext*,
                                                             css::uno::Sequence<css::uno::Any> const &)
 {

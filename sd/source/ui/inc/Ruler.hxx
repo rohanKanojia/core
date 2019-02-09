@@ -26,10 +26,9 @@ namespace sd {
 
 class DrawViewShell;
 class RulerCtrlItem;
-class View;
 class Window;
 
-class Ruler
+class Ruler final
     : public SvxRuler
 {
 public:
@@ -40,7 +39,7 @@ public:
         SvxRulerSupportFlags nRulerFlags,
         SfxBindings& rBindings,
         WinBits nWinStyle);
-    virtual ~Ruler();
+    virtual ~Ruler() override;
     virtual void dispose() override;
 
     void SetNullOffset(const Point& rOffset);
@@ -48,15 +47,13 @@ public:
     bool IsHorizontal() const { return bHorz; }
 
     using ::Ruler::SetNullOffset;
-protected:
-    VclPtr< ::sd::Window> pSdWin;
+
+private:
     DrawViewShell* pDrViewShell;
-    RulerCtrlItem* pCtrlItem;
+    std::unique_ptr<RulerCtrlItem> pCtrlItem;
     bool bHorz;
 
     virtual void    MouseButtonDown(const MouseEvent& rMEvt) override;
-    virtual void    MouseButtonUp(const MouseEvent& rMEvt) override;
-    virtual void    MouseMove(const MouseEvent& rMEvt) override;
     virtual void    Command(const CommandEvent& rCEvt) override;
     virtual void    ExtraDown() override;
 };

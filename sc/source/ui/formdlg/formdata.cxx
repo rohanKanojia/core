@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "formdata.hxx"
+#include <formdata.hxx>
 
 ScFormEditData::ScFormEditData()
     : formula::FormEditData()
@@ -31,17 +31,9 @@ ScFormEditData::~ScFormEditData()
 {
 }
 
-ScFormEditData::ScFormEditData( const ScFormEditData& r )  : formula::FormEditData(r)
-{
-    *this = r;
-}
-
 void ScFormEditData::SaveValues()
 {
-    ScFormEditData* pTemp = new ScFormEditData(*this);
-
     Reset();
-    pParent = pTemp;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

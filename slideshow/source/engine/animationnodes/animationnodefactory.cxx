@@ -19,24 +19,16 @@
 
 
 #include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/animations/XAnimate.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
-#include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/presentation/TextAnimationType.hpp>
-#include <com/sun/star/animations/XAnimateSet.hpp>
 #include <com/sun/star/animations/XIterateContainer.hpp>
 #include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
-#include <com/sun/star/animations/XAnimateMotion.hpp>
-#include <com/sun/star/animations/XAnimateColor.hpp>
-#include <com/sun/star/animations/XAnimateTransform.hpp>
-#include <com/sun/star/animations/AnimationTransformType.hpp>
-#include <com/sun/star/animations/XTransitionFilter.hpp>
-#include <com/sun/star/animations/XAudio.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <basegfx/numeric/ftools.hxx>
+#include <sal/log.hxx>
 
-#include "animationnodefactory.hxx"
+#include <animationnodefactory.hxx>
 #include "paralleltimecontainer.hxx"
 #include "sequentialtimecontainer.hxx"
 #include "propertyanimationnode.hxx"
@@ -48,7 +40,7 @@
 #include "animationaudionode.hxx"
 #include "animationcommandnode.hxx"
 #include "nodetools.hxx"
-#include "tools.hxx"
+#include <tools.hxx>
 
 #include <memory>
 
@@ -174,7 +166,7 @@ bool implCreateIteratedNodes(
     }
 
     if( ::basegfx::fTools::equalZero( nIntervalTimeout ) )
-        OSL_TRACE( "implCreateIteratedNodes(): "
+        SAL_INFO("slideshow", "implCreateIteratedNodes(): "
                    "iterate interval close to zero, there's "
                    "no point in defining such an effect "
                    "(visually equivalent to whole-shape effect)" );
@@ -239,7 +231,7 @@ bool implCreateIteratedNodes(
         ENSURE_OR_RETURN_FALSE(
             aTarget.Paragraph >= 0 &&
             rTreeNodeSupplier.getNumberOfTreeNodes(
-                DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH ) > aTarget.Paragraph,
+                DocTreeNode::NodeType::LogicalParagraph ) > aTarget.Paragraph,
             "implCreateIteratedNodes(): paragraph index out of range" );
 
         pTargetSubset.reset(
@@ -249,7 +241,7 @@ bool implCreateIteratedNodes(
                 // type PARAGRAPH from this shape
                 rTreeNodeSupplier.getTreeNode(
                     aTarget.Paragraph,
-                    DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH ),
+                    DocTreeNode::NodeType::LogicalParagraph ),
                 rContext.maContext.mpSubsettableShapeManager ) );
 
         // iterate target is not the whole shape, but only
@@ -325,20 +317,20 @@ bool implCreateIteratedNodes(
         // determine type of subitem iteration (logical
         // text unit to animate)
         DocTreeNode::NodeType eIterateNodeType(
-            DocTreeNode::NODETYPE_LOGICAL_CHARACTER_CELL );
+            DocTreeNode::NodeType::LogicalCharacterCell );
 
         switch( xIterNode->getIterateType() )
         {
         case presentation::TextAnimationType::BY_PARAGRAPH:
-            eIterateNodeType = DocTreeNode::NODETYPE_LOGICAL_PARAGRAPH;
+            eIterateNodeType = DocTreeNode::NodeType::LogicalParagraph;
             break;
 
         case presentation::TextAnimationType::BY_WORD:
-            eIterateNodeType = DocTreeNode::NODETYPE_LOGICAL_WORD;
+            eIterateNodeType = DocTreeNode::NodeType::LogicalWord;
             break;
 
         case presentation::TextAnimationType::BY_LETTER:
-            eIterateNodeType = DocTreeNode::NODETYPE_LOGICAL_CHARACTER_CELL;
+            eIterateNodeType = DocTreeNode::NodeType::LogicalCharacterCell;
             break;
 
         default:
@@ -349,8 +341,8 @@ bool implCreateIteratedNodes(
         }
 
         if( bParagraphTarget &&
-            eIterateNodeType != DocTreeNode::NODETYPE_LOGICAL_WORD &&
-            eIterateNodeType != DocTreeNode::NODETYPE_LOGICAL_CHARACTER_CELL )
+            eIterateNodeType != DocTreeNode::NodeType::LogicalWord &&
+            eIterateNodeType != DocTreeNode::NodeType::LogicalCharacterCell )
         {
             // will not animate the whole paragraph, when
             // only the paragraph is animated at all.
@@ -581,15 +573,15 @@ AnimationNodeSharedPtr AnimationNodeFactory::createAnimationNode(
         xNode.is(),
         "AnimationNodeFactory::createAnimationNode(): invalid XAnimationNode" );
 
-    return BaseNodeSharedPtr( implCreateAnimationNode(
+    return implCreateAnimationNode(
                                   xNode,
                                   BaseContainerNodeSharedPtr(), // no parent
                                   NodeContext( rContext,
-                                               rSlideSize )));
+                                               rSlideSize ));
 }
 
 #if defined(DBG_UTIL)
-void AnimationNodeFactory::showTree( AnimationNodeSharedPtr& pRootNode )
+void AnimationNodeFactory::showTree( AnimationNodeSharedPtr const & pRootNode )
 {
     if( pRootNode )
         DEBUG_NODES_SHOWTREE( std::dynamic_pointer_cast<BaseContainerNode>(

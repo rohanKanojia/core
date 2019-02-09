@@ -36,11 +36,14 @@
 
 #include <rtl/ustrbuf.hxx>
 #include <rtl/strbuf.hxx>
-
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/sdbc/SQLException.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XParameters.hpp>
 #include <com/sun/star/sdbc/KeyRule.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
+#include <cppuhelper/exc_hlp.hxx>
 
 #include "pq_xindexes.hxx"
 #include "pq_xindex.hxx"
@@ -55,22 +58,17 @@ using com::sun::star::beans::XPropertySet;
 using com::sun::star::uno::Any;
 using com::sun::star::uno::makeAny;
 using com::sun::star::uno::UNO_QUERY;
-using com::sun::star::uno::XInterface;
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::Sequence;
 using com::sun::star::uno::RuntimeException;
 
-using com::sun::star::container::NoSuchElementException;
 using com::sun::star::container::XEnumerationAccess;
 using com::sun::star::container::XEnumeration;
 
-using com::sun::star::lang::WrappedTargetException;
 
 using com::sun::star::sdbcx::XColumnsSupplier;
 
 using com::sun::star::sdbc::XRow;
-using com::sun::star::sdbc::XCloseable;
-using com::sun::star::sdbc::XStatement;
 using com::sun::star::sdbc::XResultSet;
 using com::sun::star::sdbc::XParameters;
 using com::sun::star::sdbc::XPreparedStatement;
@@ -80,8 +78,8 @@ namespace pq_sdbc_driver
 {
 
 Indexes::Indexes(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings,
         const OUString &schemaName,
         const OUString &tableName)
@@ -95,21 +93,20 @@ Indexes::~Indexes()
 {}
 
 void Indexes::refresh()
-    throw (::com::sun::star::uno::RuntimeException, std::exception)
 {
     try
     {
-        if( isLog( m_pSettings, LogLevel::INFO ) )
+        if (isLog(m_pSettings, LogLevel::Info))
         {
             OStringBuffer buf;
             buf.append( "sdbcx.Indexes get refreshed for table " );
-            buf.append( OUStringToOString( m_schemaName, m_pSettings->encoding ) );
+            buf.append( OUStringToOString( m_schemaName, ConnectionSettings::encoding ) );
             buf.append( "." );
-            buf.append( OUStringToOString( m_tableName,m_pSettings->encoding ) );
-            log( m_pSettings, LogLevel::INFO, buf.makeStringAndClear().getStr() );
+            buf.append( OUStringToOString( m_tableName, ConnectionSettings::encoding ) );
+            log( m_pSettings, LogLevel::Info, buf.makeStringAndClear().getStr() );
         }
 
-        osl::MutexGuard guard( m_refMutex->mutex );
+        osl::MutexGuard guard( m_xMutex->GetMutex() );
         Statics & st = getStatics();
 
         Int2StringMap column2NameMap;
@@ -140,8 +137,8 @@ void Indexes::refresh()
         sal_Int32 index = 0;
         while( rs->next() )
         {
-            static const sal_Int32 C_SCHEMA = 1;
-            static const sal_Int32 C_TABLENAME = 2;
+            // C_SCHEMA = 1
+            // C_TABLENAME = 2
             static const sal_Int32 C_INDEXNAME = 3;
             static const sal_Int32 C_IS_CLUSTERED = 4;
             static const sal_Int32 C_IS_UNIQUE = 5;
@@ -149,20 +146,19 @@ void Indexes::refresh()
             static const sal_Int32 C_COLUMNS = 7;
             OUString currentIndexName = row->getString( C_INDEXNAME );
             Index *pIndex =
-                new Index( m_refMutex, m_origin, m_pSettings,
+                new Index( m_xMutex, m_origin, m_pSettings,
                            m_schemaName, m_tableName );
 
-            (void) C_SCHEMA; (void) C_TABLENAME;
-            sal_Bool isUnique = row->getBoolean( C_IS_UNIQUE );
-            sal_Bool isPrimary = row->getBoolean( C_IS_PRIMARY );
-            sal_Bool isClusterd = row->getBoolean( C_IS_CLUSTERED );
-            Reference< com::sun::star::beans::XPropertySet > prop = pIndex;
+            bool isUnique = row->getBoolean( C_IS_UNIQUE );
+            bool isPrimary = row->getBoolean( C_IS_PRIMARY );
+            bool isClusterd = row->getBoolean( C_IS_CLUSTERED );
+            Reference< css::beans::XPropertySet > prop = pIndex;
             pIndex->setPropertyValue_NoBroadcast_public(
-                st.IS_UNIQUE, Any( &isUnique, cppu::UnoType<bool>::get() ) );
+                st.IS_UNIQUE, Any( isUnique ) );
             pIndex->setPropertyValue_NoBroadcast_public(
-                st.IS_PRIMARY_KEY_INDEX, Any( &isPrimary, cppu::UnoType<bool>::get() ) );
+                st.IS_PRIMARY_KEY_INDEX, Any( isPrimary ) );
             pIndex->setPropertyValue_NoBroadcast_public(
-                st.IS_CLUSTERED, Any( &isClusterd, cppu::UnoType<bool>::get() ) );
+                st.IS_CLUSTERED, Any( isClusterd ) );
             pIndex->setPropertyValue_NoBroadcast_public(
                 st.NAME, makeAny( currentIndexName ) );
 
@@ -184,9 +180,11 @@ void Indexes::refresh()
         }
         m_name2index.swap( map );
     }
-    catch ( com::sun::star::sdbc::SQLException & e )
+    catch ( css::sdbc::SQLException & e )
     {
-        throw RuntimeException( e.Message , e.Context );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
 
     fire( RefreshedBroadcaster( *this ) );
@@ -194,10 +192,7 @@ void Indexes::refresh()
 
 
 void Indexes::appendByDescriptor(
-    const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor )
-    throw (::com::sun::star::sdbc::SQLException,
-           ::com::sun::star::container::ElementExistException,
-           ::com::sun::star::uno::RuntimeException, std::exception)
+    const css::uno::Reference< css::beans::XPropertySet >& descriptor )
 {
     Statics & st = getStatics();
     OUString name = extractStringProperty( descriptor, st.NAME );
@@ -246,23 +241,18 @@ void Indexes::appendByDescriptor(
 }
 
 void Indexes::dropByIndex( sal_Int32 index )
-    throw (::com::sun::star::sdbc::SQLException,
-           ::com::sun::star::lang::IndexOutOfBoundsException,
-           ::com::sun::star::uno::RuntimeException, std::exception)
 {
 
 
-    osl::MutexGuard guard( m_refMutex->mutex );
-    if( index < 0 ||  index >= (sal_Int32)m_values.size() )
+    osl::MutexGuard guard( m_xMutex->GetMutex() );
+    if( index < 0 ||  index >= static_cast<sal_Int32>(m_values.size()) )
     {
-        OUStringBuffer buf( 128 );
-        buf.append( "Indexes: Index out of range (allowed 0 to " );
-        buf.append( (sal_Int32) (m_values.size() -1) );
-        buf.append( ", got " );
-        buf.append( index );
-        buf.append( ")" );
-        throw com::sun::star::lang::IndexOutOfBoundsException(
-            buf.makeStringAndClear(), *this );
+        throw css::lang::IndexOutOfBoundsException(
+            "Indexes: Index out of range (allowed 0 to "
+            + OUString::number( m_values.size() -1 )
+            + ", got " + OUString::number( index )
+            + ")",
+            *this );
     }
 
     Reference< XPropertySet > set;
@@ -278,45 +268,43 @@ void Indexes::dropByIndex( sal_Int32 index )
 }
 
 
-::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > Indexes::createDataDescriptor()
-        throw (::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::beans::XPropertySet > Indexes::createDataDescriptor()
 {
-    return new IndexDescriptor( m_refMutex, m_origin, m_pSettings );
+    return new IndexDescriptor( m_xMutex, m_origin, m_pSettings );
 }
 
-Reference< com::sun::star::container::XNameAccess > Indexes::create(
-    const ::rtl::Reference< RefCountedMutex > & refMutex,
-    const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+Reference< css::container::XNameAccess > Indexes::create(
+    const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+    const css::uno::Reference< css::sdbc::XConnection >  & origin,
     ConnectionSettings *pSettings,
     const OUString & schemaName,
     const OUString & tableName)
 {
     Indexes *pIndexes = new Indexes( refMutex, origin, pSettings, schemaName, tableName );
-    Reference< com::sun::star::container::XNameAccess > ret = pIndexes;
+    Reference< css::container::XNameAccess > ret = pIndexes;
     pIndexes->refresh();
     return ret;
 }
 
 
 IndexDescriptors::IndexDescriptors(
-        const ::rtl::Reference< RefCountedMutex > & refMutex,
-        const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+        const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+        const css::uno::Reference< css::sdbc::XConnection >  & origin,
         ConnectionSettings *pSettings)
     : Container( refMutex, origin, pSettings,  getStatics().INDEX )
 {}
 
-Reference< com::sun::star::container::XNameAccess > IndexDescriptors::create(
-    const ::rtl::Reference< RefCountedMutex > & refMutex,
-    const ::com::sun::star::uno::Reference< com::sun::star::sdbc::XConnection >  & origin,
+Reference< css::container::XNameAccess > IndexDescriptors::create(
+    const ::rtl::Reference< comphelper::RefCountedMutex > & refMutex,
+    const css::uno::Reference< css::sdbc::XConnection >  & origin,
     ConnectionSettings *pSettings)
 {
     return new IndexDescriptors( refMutex, origin, pSettings );
 }
 
-::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet > IndexDescriptors::createDataDescriptor()
-        throw (::com::sun::star::uno::RuntimeException, std::exception)
+css::uno::Reference< css::beans::XPropertySet > IndexDescriptors::createDataDescriptor()
 {
-    return new IndexDescriptor( m_refMutex, m_origin, m_pSettings );
+    return new IndexDescriptor( m_xMutex, m_origin, m_pSettings );
 }
 
 };

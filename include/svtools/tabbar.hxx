@@ -23,7 +23,10 @@
 #include <svtools/svtdllapi.h>
 #include <tools/link.hxx>
 #include <vcl/window.hxx>
-#include <vector>
+#include <o3tl/typed_flags_set.hxx>
+#include <memory>
+
+class StyleSettings;
 
 /*
 
@@ -35,8 +38,6 @@ WB_MINSCROLL    - The tabs can be scrolled via 2 additional buttons
 WB_RANGESELECT  - Connected ranges can be selected
 WB_MULTISELECT  - single tabs can be selected
 WB_BORDER       - a border is drawn in the top and in the bottom
-WB_TOPBORDER    - a border is drawn in the top
-WB_3DTAB        - the tabs and the border are drawn in 3D
 WB_DRAG         - A StartDrag handler is called by the TabBar, if drag
                   and drop should be started. In addition, drag and drop
                   is activated in the TabBar with EnableDrop().
@@ -44,14 +45,22 @@ WB_SIZEABLE     - a Split handler is called by the TabBar, if the user
                   wants to change the width of the TabBar
 WB_STDTABBAR    - WB_BORDER
 
-If the TabBar should be used for example as Property bar, the WinBits
-WB_TOPBORDER and WB_3DTAB should be set instead of WB_BORDER.
-
 
 Allowed PageBits
 -----------------
 
-TPB_SPECIAL     - Different display of the TabText, e.g. for scenario pages.
+Setting page bits modify the display attributes of the tab name
+
+TabBarPageBits::Blue
+                - Display tab name in light blue, used in draw for
+                  invisible layers and in calc for scenario pages
+TabBarPageBits::Italic
+                - Display tab name italic, used in draw for
+                  locked layers
+TabBarPageBits::Underline
+                - Display tab name underlined, used in draw for
+                  non-printable layers
+
 
 Handlers
 -------
@@ -261,17 +270,27 @@ been carried out.
 
 class Button;
 
-#define WB_RANGESELECT      ((WinBits)0x00200000)
-#define WB_MULTISELECT      ((WinBits)0x00400000)
-#define WB_TOPBORDER        ((WinBits)0x04000000)
-#define WB_3DTAB            ((WinBits)0x08000000)
-#define WB_MINSCROLL        ((WinBits)0x20000000)
-#define WB_INSERTTAB        ((WinBits)0x40000000)
+#define WB_RANGESELECT      (WinBits(0x00200000))
+#define WB_MULTISELECT      (WinBits(0x00400000))
+#define WB_MINSCROLL        (WinBits(0x20000000))
+#define WB_INSERTTAB        (WinBits(0x40000000))
 #define WB_STDTABBAR        WB_BORDER
 
-typedef sal_uInt16 TabBarPageBits;
+// Page bits
 
-#define TPB_SPECIAL         ((TabBarPageBits)0x0001)
+enum class TabBarPageBits {
+    NONE       = 0x00,
+    Blue       = 0x01,
+    Italic     = 0x02,
+    Underline  = 0x04,
+};
+namespace o3tl {
+    template<> struct typed_flags<TabBarPageBits> : is_typed_flags<TabBarPageBits, 0x07> {};
+};
+
+    // interface checks only, do not use in regular control flow
+
+#define TPB_DISPLAY_NAME_ALLFLAGS  (TabBarPageBits::Blue | TabBarPageBits::Italic | TabBarPageBits::Underline)
 
 // - TabBar-Types - used in TabBar::AllowRenaming
 
@@ -282,15 +301,10 @@ enum TabBarAllowRenamingReturnCode {
 };
 
 class MouseEvent;
-class TrackingEvent;
 class DataChangedEvent;
-class ImplTabButton;
-class ImplTabSizer;
-class TabBarEdit;
 
 struct ImplTabBarItem;
 struct TabBar_Impl;
-typedef std::vector<ImplTabBarItem*> ImplTabBarList;
 
 
 class SVT_DLLPUBLIC TabBar : public vcl::Window
@@ -302,8 +316,6 @@ private:
     std::unique_ptr<TabBar_Impl> mpImpl;
 
     OUString        maEditText;
-    Color           maSelColor;
-    Color           maSelTextColor;
     Size            maWinSize;
     long            mnMaxPageWidth;
     long            mnCurMaxWidth;
@@ -322,14 +334,10 @@ private:
     bool            mbFormat : 1;
     bool            mbFirstFormat : 1;
     bool            mbSizeFormat : 1;
-    bool            mbAutoMaxWidth : 1;
-    bool            mbInSwitching : 1;
     bool            mbAutoEditMode : 1;
     bool            mbEditCanceled : 1;
     bool            mbDropPos : 1;
     bool            mbInSelect : 1;
-    bool            mbSelColor : 1;
-    bool            mbSelTextColor : 1;
     bool            mbMirrored : 1;
     bool            mbScrollAlwaysEnabled : 1;
 
@@ -353,12 +361,12 @@ private:
     SVT_DLLPRIVATE void            ImplSelect();
     SVT_DLLPRIVATE void            ImplActivatePage();
     SVT_DLLPRIVATE bool            ImplDeactivatePage();
-    SVT_DLLPRIVATE void            ImplPrePaint(vcl::RenderContext& rRenderContext);
+    SVT_DLLPRIVATE void            ImplPrePaint();
     SVT_DLLPRIVATE ImplTabBarItem* ImplGetLastTabBarItem( sal_uInt16 nItemCount );
 
-    DECL_DLLPRIVATE_LINK_TYPED(ImplClickHdl, Button*, void);
+    DECL_DLLPRIVATE_LINK(ImplClickHdl, Button*, void);
 
-    DECL_DLLPRIVATE_LINK_TYPED(ImplAddClickHandler, Button*, void);
+    DECL_DLLPRIVATE_LINK(ImplAddClickHandler, Button*, void);
 
     ImplTabBarItem* seek( size_t i );
     ImplTabBarItem* prev();
@@ -366,19 +374,21 @@ private:
 
 protected:
     virtual void AddTabClick();
+    OUString     GetAuxiliaryText(sal_uInt16 nPageId) const; // needed in derived class LayerTabBar
+    void         SetAuxiliaryText(sal_uInt16 nPageId, const OUString& rText );
 
 public:
     static const sal_uInt16 APPEND;
     static const sal_uInt16 PAGE_NOT_FOUND;
 
-                    TabBar( vcl::Window* pParent, WinBits nWinStyle = WB_STDTABBAR );
-    virtual         ~TabBar();
+                    TabBar( vcl::Window* pParent, WinBits nWinStyle );
+    virtual         ~TabBar() override;
     virtual void    dispose() override;
 
     virtual void    MouseMove( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonDown( const MouseEvent& rMEvt ) override;
     virtual void    MouseButtonUp( const MouseEvent& rMEvt ) override;
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void    Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void    Resize() override;
     virtual void    RequestHelp( const HelpEvent& rHEvt ) override;
     virtual void    StateChanged( StateChangedType nStateChange ) override;
@@ -395,8 +405,8 @@ public:
     virtual void    EndRenaming();
     virtual void    Mirror();
 
-    void            InsertPage( sal_uInt16 nPageId, const OUString& rText,
-                                TabBarPageBits nBits = 0,
+    virtual void    InsertPage( sal_uInt16 nPageId, const OUString& rText,
+                                TabBarPageBits nBits = TabBarPageBits::NONE,
                                 sal_uInt16 nPos = TabBar::APPEND );
     void            RemovePage( sal_uInt16 nPageId );
     void            MovePage( sal_uInt16 nPageId, sal_uInt16 nNewPos );
@@ -408,16 +418,17 @@ public:
 
     bool            IsPageEnabled( sal_uInt16 nPageId ) const;
 
-    void            SetPageBits( sal_uInt16 nPageId, TabBarPageBits nBits = 0 );
+    void            SetPageBits( sal_uInt16 nPageId, TabBarPageBits nBits );
     TabBarPageBits  GetPageBits( sal_uInt16 nPageId ) const;
 
     sal_uInt16      GetPageCount() const;
     sal_uInt16      GetPageId( sal_uInt16 nPos ) const;
     sal_uInt16      GetPagePos( sal_uInt16 nPageId ) const;
+    sal_uInt16      GetCurPagePos() const { return GetPagePos(GetCurPageId()); }
     sal_uInt16      GetPageId( const Point& rPos ) const;
-    Rectangle       GetPageRect( sal_uInt16 nPageId ) const;
+    tools::Rectangle       GetPageRect( sal_uInt16 nPageId ) const;
     // returns the rectangle in which page tabs are drawn
-    Rectangle       GetPageArea() const;
+    tools::Rectangle       GetPageArea() const;
 
     void            SetCurPageId( sal_uInt16 nPageId );
     sal_uInt16      GetCurPageId() const { return mnCurPageId; }
@@ -425,9 +436,10 @@ public:
     void            SetFirstPageId( sal_uInt16 nPageId );
     void            MakeVisible( sal_uInt16 nPageId );
 
-    void            SelectPage( sal_uInt16 nPageId, bool bSelect = true );
+    void            SelectPage( sal_uInt16 nPageId, bool bSelect );
     sal_uInt16      GetSelectPageCount() const;
     bool            IsPageSelected( sal_uInt16 nPageId ) const;
+    void            SetProtectionSymbol( sal_uInt16 nPageId, bool bProtection );
 
     void            SetMaxPageWidth( long nMaxWidth );
 
@@ -445,7 +457,7 @@ public:
         @param bMirrored  sal_True = the control will draw itself RTL in LTR GUI,
             and vice versa; sal_False = the control behaves according to the
             current direction of the GUI. */
-    void            SetMirrored(bool bMirrored = true);
+    void            SetMirrored(bool bMirrored);
     /** Returns true, if the control is set to mirrored mode (see SetMirrored()). */
     bool            IsMirrored() const { return mbMirrored; }
 
@@ -462,10 +474,9 @@ public:
     void            SwitchPage( const Point& rPos );
     void            EndSwitchPage();
 
-    void            SetPageText( sal_uInt16 nPageId, const OUString& rText );
+    virtual void    SetPageText( sal_uInt16 nPageId, const OUString& rText );
     OUString        GetPageText( sal_uInt16 nPageId ) const;
     OUString        GetHelpText( sal_uInt16 nPageId ) const;
-    OString         GetHelpId( sal_uInt16 nPageId ) const;
 
     long            GetSplitSize() const { return mnSplitSize; }
 

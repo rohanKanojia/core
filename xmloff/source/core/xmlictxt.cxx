@@ -25,6 +25,8 @@
 #include <com/sun/star/xml/sax/XLocator.hpp>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/xmlictxt.hxx>
+#include <sax/fastattribs.hxx>
+#include <comphelper/attributelist.hxx>
 
 using namespace ::com::sun::star;
 
@@ -46,11 +48,11 @@ SvXMLImportContext::~SvXMLImportContext()
 {
 }
 
-SvXMLImportContext *SvXMLImportContext::CreateChildContext( sal_uInt16 nPrefix,
-                                            const OUString& rLocalName,
-                                            const uno::Reference< xml::sax::XAttributeList >& xAttrList )
+SvXMLImportContextRef SvXMLImportContext::CreateChildContext( sal_uInt16 nPrefix,
+        const OUString& rLocalName,
+        const uno::Reference<xml::sax::XAttributeList>& )
 {
-    return mrImport.CreateContext( nPrefix, rLocalName, xAttrList );
+    return new SvXMLImportContext(mrImport, nPrefix, rLocalName);
 }
 
 void SvXMLImportContext::StartElement( const uno::Reference< xml::sax::XAttributeList >& )
@@ -66,48 +68,85 @@ void SvXMLImportContext::Characters( const OUString& )
 }
 
 // css::xml::sax::XFastContextHandler:
-void SAL_CALL SvXMLImportContext::startFastElement(sal_Int32, const uno::Reference< xml::sax::XFastAttributeList > &)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL SvXMLImportContext::startFastElement(sal_Int32 nElement, const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
 {
+    mrImport.isFastContext = false;
+    const OUString& rPrefix = SvXMLImport::getNamespacePrefixFromToken(nElement, &GetImport().GetNamespaceMap());
+    const OUString& rLocalName = SvXMLImport::getNameFromToken( nElement );
+    startUnknownElement( SvXMLImport::aDefaultNamespace, (rPrefix.isEmpty())? rLocalName : rPrefix + SvXMLImport::aNamespaceSeparator + rLocalName, Attribs );
 }
 
-void SAL_CALL SvXMLImportContext::startUnknownElement(const OUString &, const OUString &,
-    const uno::Reference< xml::sax::XFastAttributeList > &)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL SvXMLImportContext::startUnknownElement(const OUString & /*rNamespace*/, const OUString & rElementName,
+    const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
 {
+    if ( mrImport.maAttrList.is() )
+        mrImport.maAttrList->Clear();
+    else
+        mrImport.maAttrList = new comphelper::AttributeList;
+
+    mrImport.maNamespaceHandler->addNSDeclAttributes( mrImport.maAttrList );
+
+    if ( Attribs.is() )
+    {
+        sax_fastparser::FastAttributeList *pAttribList =
+            sax_fastparser::FastAttributeList::castToFastAttributeList( Attribs );
+
+        for( auto &it : *pAttribList )
+        {
+            sal_Int32 nToken = it.getToken();
+            const OUString& rAttrNamespacePrefix = SvXMLImport::getNamespacePrefixFromToken(nToken, &GetImport().GetNamespaceMap());
+            OUString sAttrName = SvXMLImport::getNameFromToken( nToken );
+            if ( !rAttrNamespacePrefix.isEmpty() )
+                sAttrName = rAttrNamespacePrefix + SvXMLImport::aNamespaceSeparator + sAttrName;
+
+            mrImport.maAttrList->AddAttribute( sAttrName, "CDATA", it.toString() );
+        }
+
+        uno::Sequence< xml::Attribute > unknownAttribs = Attribs->getUnknownAttributes();
+        sal_Int32 len = unknownAttribs.getLength();
+        for ( sal_Int32 i = 0; i < len; i++ )
+        {
+            const OUString& rAttrValue = unknownAttribs[i].Value;
+            const OUString& rAttrName = unknownAttribs[i].Name;
+            // note: rAttrName is expected to be namespace-prefixed here
+            mrImport.maAttrList->AddAttribute( rAttrName, "CDATA", rAttrValue );
+        }
+    }
+    mrImport.startElement( rElementName, mrImport.maAttrList.get() );
 }
 
-void SAL_CALL SvXMLImportContext::endFastElement(sal_Int32)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL SvXMLImportContext::endFastElement(sal_Int32 nElement)
 {
+    mrImport.isFastContext = false;
+    const OUString& rPrefix = SvXMLImport::getNamespacePrefixFromToken(nElement, &GetImport().GetNamespaceMap());
+    const OUString& rLocalName = SvXMLImport::getNameFromToken( nElement );
+    endUnknownElement( SvXMLImport::aDefaultNamespace, (rPrefix.isEmpty())? rLocalName : rPrefix + SvXMLImport::aNamespaceSeparator + rLocalName );
 }
 
-void SAL_CALL SvXMLImportContext::endUnknownElement (const OUString & , const OUString & )
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL SvXMLImportContext::endUnknownElement (const OUString & /*rNamespace*/, const OUString & rElementName)
 {
+    mrImport.endElement( rElementName );
 }
 
 uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SvXMLImportContext::createFastChildContext
     (sal_Int32 Element, const uno::Reference< xml::sax::XFastAttributeList > & Attribs)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
-    return mrImport.CreateFastContext( Element, Attribs );
+    // Call CreateFastContext only if it's the first element of the document
+    if ( mrImport.maFastContexts.empty() )
+        return mrImport.CreateFastContext( Element, Attribs );
+    else
+        return new SvXMLImportContext( GetImport() );
 }
 
 uno::Reference< xml::sax::XFastContextHandler > SAL_CALL SvXMLImportContext::createUnknownChildContext
     (const OUString &, const OUString &, const uno::Reference< xml::sax::XFastAttributeList > &)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
 {
-    return nullptr;
+    return this;
 }
 
-void SAL_CALL SvXMLImportContext::characters(const OUString &)
-    throw (uno::RuntimeException, xml::sax::SAXException, std::exception)
+void SAL_CALL SvXMLImportContext::characters(const OUString &rChars)
 {
-}
-
-void SvXMLImportContext::onDemandRescueUsefulDataFromTemporary( const SvXMLImportContext& )
-{
+    mrImport.Characters( rChars );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

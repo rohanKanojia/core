@@ -17,9 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svggnode.hxx>
-#include <drawinglayer/primitive2d/transformprimitive2d.hxx>
-#include <drawinglayer/primitive2d/unifiedtransparenceprimitive2d.hxx>
+#include <svggnode.hxx>
 
 namespace svgio
 {
@@ -30,15 +28,13 @@ namespace svgio
             SvgDocument& rDocument,
             SvgNode* pParent)
         :   SvgNode(aType, rDocument, pParent),
-            maSvgStyleAttributes(*this),
-            mpaTransform(nullptr)
+            maSvgStyleAttributes(*this)
         {
-            OSL_ENSURE(aType == SVGTokenDefs || aType == SVGTokenG, "SvgGNode should ony be used for Group and Defs (!)");
+            OSL_ENSURE(aType == SVGTokenDefs || aType == SVGTokenG, "SvgGNode should only be used for Group and Defs (!)");
         }
 
         SvgGNode::~SvgGNode()
         {
-            delete mpaTransform;
         }
 
         const SvgStyleAttributes* SvgGNode::getSvgStyleAttributes() const
@@ -61,7 +57,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)

@@ -30,15 +30,15 @@
 #include <frmatr.hxx>
 #include <frmfmt.hxx>
 #include <viscrs.hxx>
-#include <callnk.hxx>
+#include "callnk.hxx"
 #include <tabfrm.hxx>
 #include <ndtxt.hxx>
 #include <shellres.hxx>
 #include <cellatr.hxx>
 #include <cellfrm.hxx>
 #include <rowfrm.hxx>
-#include <trvltbl.hxx>
 #include <IDocumentLayoutAccess.hxx>
+#include <svx/srchdlg.hxx>
 
 /// set cursor into next/previous cell
 bool SwCursorShell::GoNextCell( bool bAppendLine )
@@ -66,7 +66,7 @@ bool SwCursorShell::GoNextCell( bool bAppendLine )
                     pTableNd = IsCursorInTable();
                 assert (pTableNd);
                 pTableBox = & pTableBox->FindEndOfRowSpan( pTableNd->GetTable(),
-                                                           (sal_uInt16)(pTableBox->getRowSpan() + pCursor->GetCursorRowSpanOffset() ) );
+                                                           static_cast<sal_uInt16>(pTableBox->getRowSpan() + pCursor->GetCursorRowSpanOffset() ) );
                 pTableBoxStartNode = pTableBox->GetSttNd();
             }
         }
@@ -92,11 +92,12 @@ bool SwCursorShell::GoNextCell( bool bAppendLine )
 
                 // the document might change; w/o Action views would not be notified
                 static_cast<SwEditShell*>(this)->StartAllAction();
-                bRet = mpDoc->InsertRow( SwTable::SelLineFromBox( pTableBox, aBoxes, false ));
+                bRet = mxDoc->InsertRow( SwTable::SelLineFromBox( pTableBox, aBoxes, false ));
                 static_cast<SwEditShell*>(this)->EndAllAction();
             }
         }
-        if( bRet && ( bRet = pCursor->GoNextCell() ) )
+        bRet = bRet && pCursor->GoNextCell();
+        if( bRet )
             UpdateCursor();
     }
     return bRet;
@@ -128,7 +129,7 @@ static const SwFrame* lcl_FindMostUpperCellFrame( const SwFrame* pFrame )
     return pFrame;
 }
 
-bool SwCursorShell::_SelTableRowOrCol( bool bRow, bool bRowSimple )
+bool SwCursorShell::SelTableRowOrCol( bool bRow, bool bRowSimple )
 {
     // check if the current cursor's SPoint/Mark are in a table
     SwFrame *pFrame = GetCurrFrame();
@@ -146,11 +147,11 @@ bool SwCursorShell::_SelTableRowOrCol( bool bRow, bool bRowSimple )
 
     // search box based on layout
     SwSelBoxes aBoxes;
-    SwTableSearchType eType = bRow ? nsSwTableSearchType::TBLSEARCH_ROW : nsSwTableSearchType::TBLSEARCH_COL;
+    SwTableSearchType eType = bRow ? SwTableSearchType::Row : SwTableSearchType::Col;
     const bool bCheckProtected = !IsReadOnlyAvailable();
 
     if( bCheckProtected )
-        eType = (SwTableSearchType)(eType | nsSwTableSearchType::TBLSEARCH_PROTECT);
+        eType = static_cast<SwTableSearchType>(eType | SwTableSearchType::Protect);
 
     if ( !bRowSimple )
     {
@@ -165,7 +166,7 @@ bool SwCursorShell::_SelTableRowOrCol( bool bRow, bool bRowSimple )
     // #i32329# Enhanced table selection
     else if ( pTable->IsNewModel() )
     {
-        const SwShellCursor *pCursor = _GetCursor();
+        const SwShellCursor *pCursor = GetCursor_();
         SwTable::SearchType eSearchType = bRow ? SwTable::SEARCH_ROW : SwTable::SEARCH_COL;
         pTable->CreateSelection( *pCursor, aBoxes, eSearchType, bCheckProtected );
         if( aBoxes.empty() )
@@ -176,10 +177,13 @@ bool SwCursorShell::_SelTableRowOrCol( bool bRow, bool bRowSimple )
     }
     else
     {
-        const SwShellCursor *pCursor = _GetCursor();
+        const SwShellCursor *pCursor = GetCursor_();
         const SwFrame* pStartFrame = pFrame;
         const SwContentNode *pCNd = pCursor->GetContentNode( false );
-        const SwFrame* pEndFrame   = pCNd ? pCNd->getLayoutFrame( GetLayout(), &pCursor->GetMkPos() ) : nullptr;
+        std::pair<Point, bool> const tmp(pCursor->GetMkPos(), true);
+        const SwFrame* pEndFrame = pCNd
+            ? pCNd->getLayoutFrame(GetLayout(), nullptr, &tmp)
+            : nullptr;
 
         if ( bRow )
         {
@@ -233,17 +237,17 @@ bool SwCursorShell::_SelTableRowOrCol( bool bRow, bool bRowSimple )
 
     // set start and end of a column
     m_pTableCursor->GetPoint()->nNode = *pEnd->GetSttNd();
-    m_pTableCursor->Move( fnMoveForward, fnGoContent );
+    m_pTableCursor->Move( fnMoveForward, GoInContent );
     m_pTableCursor->SetMark();
     m_pTableCursor->GetPoint()->nNode = *pStt->GetSttNd()->EndOfSectionNode();
-    m_pTableCursor->Move( fnMoveBackward, fnGoContent );
+    m_pTableCursor->Move( fnMoveBackward, GoInContent );
 
     // set PtPos 'close' to the reference table, otherwise we might get problems
     // with the repeated headlines check in UpdateCursor():
     if ( !bRow )
         m_pTableCursor->GetPtPos() = pMasterTabFrame->IsVertical()
-                                   ? pMasterTabFrame->Frame().TopRight()
-                                   : pMasterTabFrame->Frame().TopLeft();
+                                   ? pMasterTabFrame->getFrameArea().TopRight()
+                                   : pMasterTabFrame->getFrameArea().TopLeft();
 
     UpdateCursor();
     return true;
@@ -271,13 +275,13 @@ bool SwCursorShell::SelTable()
 
     m_pTableCursor->DeleteMark();
     m_pTableCursor->GetPoint()->nNode = *pTableNd;
-    m_pTableCursor->Move( fnMoveForward, fnGoContent );
+    m_pTableCursor->Move( fnMoveForward, GoInContent );
     m_pTableCursor->SetMark();
     // set MkPos 'close' to the master table, otherwise we might get problems
     // with the repeated headlines check in UpdateCursor():
-    m_pTableCursor->GetMkPos() = pMasterTabFrame->IsVertical() ? pMasterTabFrame->Frame().TopRight() : pMasterTabFrame->Frame().TopLeft();
+    m_pTableCursor->GetMkPos() = pMasterTabFrame->IsVertical() ? pMasterTabFrame->getFrameArea().TopRight() : pMasterTabFrame->getFrameArea().TopLeft();
     m_pTableCursor->GetPoint()->nNode = *pTableNd->EndOfSectionNode();
-    m_pTableCursor->Move( fnMoveBackward, fnGoContent );
+    m_pTableCursor->Move( fnMoveBackward, GoInContent );
     UpdateCursor();
     return true;
 }
@@ -316,12 +320,12 @@ bool SwCursorShell::SelTableBox()
     // 1. delete mark, and move point to first content node in box
     m_pTableCursor->DeleteMark();
     *(m_pTableCursor->GetPoint()) = SwPosition( *pStartNode );
-    m_pTableCursor->Move( fnMoveForward, fnGoNode );
+    m_pTableCursor->Move( fnMoveForward, GoInNode );
 
     // 2. set mark, and move point to last content node in box
     m_pTableCursor->SetMark();
     *(m_pTableCursor->GetPoint()) = SwPosition( *(pStartNode->EndOfSectionNode()) );
-    m_pTableCursor->Move( fnMoveBackward, fnGoNode );
+    m_pTableCursor->Move( fnMoveBackward, GoInNode );
 
     // 3. exchange
     m_pTableCursor->Exchange();
@@ -477,9 +481,11 @@ static bool lcl_FindPrevCell( SwNodeIndex& rIdx, bool bInReadOnly  )
     return true;
 }
 
-bool GotoPrevTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
+bool GotoPrevTable( SwPaM& rCurrentCursor, SwMoveFnCollection const & fnPosTable,
                     bool bInReadOnly )
 {
+    SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+
     SwNodeIndex aIdx( rCurrentCursor.GetPoint()->nNode );
 
     SwTableNode* pTableNd = aIdx.GetNode().FindTableNode();
@@ -497,14 +503,29 @@ bool GotoPrevTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
             aIdx.Assign( *pTableNd, - 1 );
     }
 
+    SwNodeIndex aOldIdx = aIdx;
+    sal_uLong nLastNd = rCurrentCursor.GetDoc()->GetNodes().Count() - 1;
     do {
         while( aIdx.GetIndex() &&
             nullptr == ( pTableNd = aIdx.GetNode().StartOfSectionNode()->GetTableNode()) )
-            --aIdx;
-
-        if( pTableNd ) // any further table node?
         {
-            if( fnPosTable == fnMoveForward ) // at the beginning?
+            --aIdx;
+            if ( aIdx == aOldIdx )
+            {
+                SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+                return false;
+            }
+        }
+
+        if ( !aIdx.GetIndex() )
+        {
+            SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::StartWrapped );
+            aIdx = nLastNd;
+            continue;
+        }
+
+        {
+            if( &fnPosTable == &fnMoveForward ) // at the beginning?
             {
                 aIdx = *aIdx.GetNode().StartOfSectionNode();
                 if( !lcl_FindNextCell( aIdx, bInReadOnly ))
@@ -529,70 +550,90 @@ bool GotoPrevTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
             if ( pTextNode )
             {
                 rCurrentCursor.GetPoint()->nNode = *pTextNode;
-                rCurrentCursor.GetPoint()->nContent.Assign( pTextNode, fnPosTable == fnMoveBackward ?
+                rCurrentCursor.GetPoint()->nContent.Assign( pTextNode, &fnPosTable == &fnMoveBackward ?
                                                       pTextNode->Len() :
                                                       0 );
             }
             return true;
         }
-    } while( pTableNd );
+    } while( true );
 
     return false;
 }
 
-bool GotoNextTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
+bool GotoNextTable( SwPaM& rCurrentCursor, SwMoveFnCollection const & fnPosTable,
                     bool bInReadOnly )
 {
+    SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::Empty );
+
     SwNodeIndex aIdx( rCurrentCursor.GetPoint()->nNode );
     SwTableNode* pTableNd = aIdx.GetNode().FindTableNode();
 
     if( pTableNd )
         aIdx.Assign( *pTableNd->EndOfSectionNode(), 1 );
 
+    SwNodeIndex aOldIdx = aIdx;
     sal_uLong nLastNd = rCurrentCursor.GetDoc()->GetNodes().Count() - 1;
     do {
         while( aIdx.GetIndex() < nLastNd &&
                 nullptr == ( pTableNd = aIdx.GetNode().GetTableNode()) )
-            ++aIdx;
-        if( pTableNd ) // any further table node?
         {
-            if( fnPosTable == fnMoveForward ) // at the beginning?
+            ++aIdx;
+            if ( aIdx == aOldIdx )
             {
-                if( !lcl_FindNextCell( aIdx, bInReadOnly ))
-                {
-                    // skip table
-                    aIdx.Assign( *pTableNd->EndOfSectionNode(), + 1 );
-                    continue;
-                }
+                SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::NavElementNotFound );
+                return false;
             }
-            else
-            {
-                aIdx = *aIdx.GetNode().EndOfSectionNode();
-                // check protected cells
-                if( !lcl_FindNextCell( aIdx, bInReadOnly ))
-                {
-                    // skip table
-                    aIdx.Assign( *pTableNd->EndOfSectionNode(), + 1 );
-                    continue;
-                }
-            }
-
-            SwTextNode* pTextNode = aIdx.GetNode().GetTextNode();
-            if ( pTextNode )
-            {
-                rCurrentCursor.GetPoint()->nNode = *pTextNode;
-                rCurrentCursor.GetPoint()->nContent.Assign( pTextNode, fnPosTable == fnMoveBackward ?
-                                                      pTextNode->Len() :
-                                                      0 );
-            }
-            return true;
         }
-    } while( pTableNd );
+
+        if ( aIdx.GetIndex() == nLastNd )
+        {
+            SvxSearchDialogWrapper::SetSearchLabel( SearchLabel::EndWrapped );
+            aIdx = 0;
+            continue;
+        }
+
+        assert( pTableNd );  // coverity, should never be nullptr
+
+        if( &fnPosTable == &fnMoveForward ) // at the beginning?
+        {
+            if( !lcl_FindNextCell( aIdx, bInReadOnly ))
+            {
+                // skip table
+                aIdx.Assign( *pTableNd->EndOfSectionNode(), + 1 );
+                continue;
+            }
+        }
+        else
+        {
+            aIdx = *aIdx.GetNode().EndOfSectionNode();
+            // check protected cells
+            if( !lcl_FindNextCell( aIdx, bInReadOnly ))
+            {
+                // skip table
+                aIdx.Assign( *pTableNd->EndOfSectionNode(), + 1 );
+                continue;
+            }
+        }
+
+        SwTextNode* pTextNode = aIdx.GetNode().GetTextNode();
+        if ( pTextNode )
+        {
+            rCurrentCursor.GetPoint()->nNode = *pTextNode;
+            rCurrentCursor.GetPoint()->nContent.Assign( pTextNode, &fnPosTable == &fnMoveBackward ?
+                                                  pTextNode->Len() :
+                                                  0 );
+        }
+        return true;
+
+    } while( true );
+
+    // the flow is such that it is not possible to get there
 
     return false;
 }
 
-bool GotoCurrTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
+bool GotoCurrTable( SwPaM& rCurrentCursor, SwMoveFnCollection const & fnPosTable,
                     bool bInReadOnly )
 {
     SwTableNode* pTableNd = rCurrentCursor.GetPoint()->nNode.GetNode().FindTableNode();
@@ -600,7 +641,7 @@ bool GotoCurrTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
         return false;
 
     SwTextNode* pTextNode = nullptr;
-    if( fnPosTable == fnMoveBackward ) // to the end of the table
+    if( &fnPosTable == &fnMoveBackward ) // to the end of the table
     {
         SwNodeIndex aIdx( *pTableNd->EndOfSectionNode() );
         if( !lcl_FindPrevCell( aIdx, bInReadOnly ))
@@ -618,7 +659,7 @@ bool GotoCurrTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
     if ( pTextNode )
     {
         rCurrentCursor.GetPoint()->nNode = *pTextNode;
-        rCurrentCursor.GetPoint()->nContent.Assign( pTextNode, fnPosTable == fnMoveBackward ?
+        rCurrentCursor.GetPoint()->nContent.Assign( pTextNode, &fnPosTable == &fnMoveBackward ?
                                                         pTextNode->Len() :
                                                         0 );
     }
@@ -626,22 +667,22 @@ bool GotoCurrTable( SwPaM& rCurrentCursor, SwPosTable fnPosTable,
     return true;
 }
 
-bool SwCursor::MoveTable( SwWhichTable fnWhichTable, SwPosTable fnPosTable )
+bool SwCursor::MoveTable( SwWhichTable fnWhichTable, SwMoveFnCollection const & fnPosTable )
 {
     bool bRet = false;
-    SwTableCursor* m_pTableCursor = dynamic_cast<SwTableCursor*>(this);
+    SwTableCursor* pTableCursor = dynamic_cast<SwTableCursor*>(this);
 
-    if( m_pTableCursor || !HasMark() )
+    if( pTableCursor || !HasMark() )
     {
         SwCursorSaveState aSaveState( *this );
         bRet = (*fnWhichTable)( *this, fnPosTable, IsReadOnlyAvailable() ) &&
-                !IsSelOvr( nsSwCursorSelOverFlags::SELOVER_CHECKNODESSECTION |
-                           nsSwCursorSelOverFlags::SELOVER_TOGGLE );
+                !IsSelOvr( SwCursorSelOverFlags::CheckNodeSection |
+                           SwCursorSelOverFlags::Toggle );
     }
     return bRet;
 }
 
-bool SwCursorShell::MoveTable( SwWhichTable fnWhichTable, SwPosTable fnPosTable )
+bool SwCursorShell::MoveTable( SwWhichTable fnWhichTable, SwMoveFnCollection const & fnPosTable )
 {
     SwCallLink aLk( *this ); // watch Cursor-Moves; call Link if needed
 

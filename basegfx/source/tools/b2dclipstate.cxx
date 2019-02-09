@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <basegfx/tools/b2dclipstate.hxx>
+#include <basegfx/utils/b2dclipstate.hxx>
 
 #include <basegfx/range/b2drange.hxx>
 #include <basegfx/range/b2dpolyrange.hxx>
@@ -28,11 +28,10 @@
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 #include <basegfx/polygon/b2dpolypolygoncutter.hxx>
 
-#include <osl/diagnose.h>
 
 namespace basegfx
 {
-namespace tools
+namespace utils
 {
     class ImplB2DClipState
     {
@@ -105,7 +104,7 @@ namespace tools
                 B2VectorOrientation::Positive);
         }
 
-        void addPolyPolygon(B2DPolyPolygon aPoly, Operation eOp)
+        void addPolyPolygon(const B2DPolyPolygon& aPoly, Operation eOp)
         {
             commitPendingRanges();
             if( mePendingOps != eOp )
@@ -173,7 +172,14 @@ namespace tools
             addPolyPolygon(rPolyPoly,XOR);
         }
 
-        B2DPolyPolygon getClipPoly() const
+        void transform(const basegfx::B2DHomMatrix& rTranslate)
+        {
+            maPendingRanges.transform(rTranslate);
+            maPendingPolygons.transform(rTranslate);
+            maClipPoly.transform(rTranslate);
+        }
+
+        B2DPolyPolygon const & getClipPoly() const
         {
             commitPendingRanges();
             commitPendingPolygons();
@@ -190,28 +196,28 @@ namespace tools
             // assumption: maClipPoly has kept polygons prepared for
             // clipping; i.e. no neutral polygons & correct
             // orientation
-            maPendingPolygons = tools::prepareForPolygonOperation(maPendingPolygons);
+            maPendingPolygons = utils::prepareForPolygonOperation(maPendingPolygons);
             const bool bIsEmpty=isNullClipPoly();
             const bool bIsCleared=!maClipPoly.count();
             switch(mePendingOps)
             {
                 case UNION:
-                    OSL_ASSERT( !bIsCleared );
+                    assert( !bIsCleared );
 
                     if( bIsEmpty )
                         maClipPoly = maPendingPolygons;
                     else
-                        maClipPoly = tools::solvePolygonOperationOr(
+                        maClipPoly = utils::solvePolygonOperationOr(
                             maClipPoly,
                             maPendingPolygons);
                     break;
                 case INTERSECT:
-                    OSL_ASSERT( !bIsEmpty );
+                    assert( !bIsEmpty );
 
                     if( bIsCleared )
                         maClipPoly = maPendingPolygons;
                     else
-                        maClipPoly = tools::solvePolygonOperationAnd(
+                        maClipPoly = utils::solvePolygonOperationAnd(
                             maClipPoly,
                             maPendingPolygons);
                     break;
@@ -229,18 +235,18 @@ namespace tools
                         // 'holes' here)
 
                         // going for an ugly hack meanwhile
-                        maClipPoly = tools::solvePolygonOperationXor(
+                        maClipPoly = utils::solvePolygonOperationXor(
                             B2DPolyPolygon(
-                                tools::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
+                                utils::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
                             maPendingPolygons);
                     }
                     else
-                        maClipPoly = tools::solvePolygonOperationXor(
+                        maClipPoly = utils::solvePolygonOperationXor(
                             maClipPoly,
                             maPendingPolygons);
                     break;
                 case SUBTRACT:
-                    OSL_ASSERT( !bIsEmpty );
+                    assert( !bIsEmpty );
 
                     // first union all pending ones, subtract en bloc then
                     maPendingPolygons = solveCrossovers(maPendingPolygons);
@@ -258,13 +264,13 @@ namespace tools
                         // 'holes' here)
 
                         // going for an ugly hack meanwhile
-                        maClipPoly = tools::solvePolygonOperationDiff(
+                        maClipPoly = utils::solvePolygonOperationDiff(
                             B2DPolyPolygon(
-                                tools::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
+                                utils::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
                             maPendingPolygons);
                     }
                     else
-                        maClipPoly = tools::solvePolygonOperationDiff(
+                        maClipPoly = utils::solvePolygonOperationDiff(
                             maClipPoly,
                             maPendingPolygons);
                     break;
@@ -286,7 +292,7 @@ namespace tools
             switch(mePendingOps)
             {
                 case UNION:
-                    OSL_ASSERT( !bIsCleared );
+                    assert( !bIsCleared );
 
                     aCollectedRanges = maPendingRanges.solveCrossovers();
                     aCollectedRanges = stripNeutralPolygons(aCollectedRanges);
@@ -294,12 +300,12 @@ namespace tools
                     if( bIsEmpty )
                         maClipPoly = aCollectedRanges;
                     else
-                        maClipPoly = tools::solvePolygonOperationOr(
+                        maClipPoly = utils::solvePolygonOperationOr(
                             maClipPoly,
                             aCollectedRanges);
                     break;
                 case INTERSECT:
-                    OSL_ASSERT( !bIsEmpty );
+                    assert( !bIsEmpty );
 
                     aCollectedRanges = maPendingRanges.solveCrossovers();
                     aCollectedRanges = stripNeutralPolygons(aCollectedRanges);
@@ -309,7 +315,7 @@ namespace tools
                     if( bIsCleared )
                         maClipPoly = aCollectedRanges;
                     else
-                        maClipPoly = tools::solvePolygonOperationAnd(
+                        maClipPoly = utils::solvePolygonOperationAnd(
                             maClipPoly,
                             aCollectedRanges);
                     break;
@@ -331,18 +337,18 @@ namespace tools
                         // 'holes' here)
 
                         // going for an ugly hack meanwhile
-                        maClipPoly = tools::solvePolygonOperationXor(
+                        maClipPoly = utils::solvePolygonOperationXor(
                             B2DPolyPolygon(
-                                tools::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
+                                utils::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
                             aCollectedRanges);
                     }
                     else
-                        maClipPoly = tools::solvePolygonOperationXor(
+                        maClipPoly = utils::solvePolygonOperationXor(
                             maClipPoly,
                             aCollectedRanges);
                     break;
                 case SUBTRACT:
-                    OSL_ASSERT( !bIsEmpty );
+                    assert( !bIsEmpty );
 
                     // first union all pending ranges, subtract en bloc then
                     aCollectedRanges = maPendingRanges.solveCrossovers();
@@ -360,13 +366,13 @@ namespace tools
                         // 'holes' here)
 
                         // going for an ugly hack meanwhile
-                        maClipPoly = tools::solvePolygonOperationDiff(
+                        maClipPoly = utils::solvePolygonOperationDiff(
                             B2DPolyPolygon(
-                                tools::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
+                                utils::createPolygonFromRect(B2DRange(-1E20,-1E20,1E20,1E20))),
                             aCollectedRanges);
                     }
                     else
-                        maClipPoly = tools::solvePolygonOperationDiff(
+                        maClipPoly = utils::solvePolygonOperationDiff(
                             maClipPoly,
                             aCollectedRanges);
                     break;
@@ -382,26 +388,21 @@ namespace tools
         mutable Operation      mePendingOps;
     };
 
-    B2DClipState::B2DClipState() :
-        mpImpl()
-    {}
+    B2DClipState::B2DClipState() = default;
 
-    B2DClipState::~B2DClipState()
-    {}
+    B2DClipState::~B2DClipState() = default;
 
-    B2DClipState::B2DClipState( const B2DClipState& rOrig ) :
-        mpImpl(rOrig.mpImpl)
-    {}
+    B2DClipState::B2DClipState( const B2DClipState& ) = default;
+
+    B2DClipState::B2DClipState( B2DClipState&& ) = default;
 
     B2DClipState::B2DClipState( const B2DPolyPolygon& rPolyPoly ) :
         mpImpl( ImplB2DClipState(rPolyPoly) )
     {}
 
-    B2DClipState& B2DClipState::operator=( const B2DClipState& rRHS )
-    {
-        mpImpl = rRHS.mpImpl;
-        return *this;
-    }
+    B2DClipState& B2DClipState::operator=( const B2DClipState& ) = default;
+
+    B2DClipState& B2DClipState::operator=( B2DClipState&& ) = default;
 
     void B2DClipState::makeNull()
     {
@@ -466,12 +467,18 @@ namespace tools
         mpImpl->xorPolyPolygon(rPolyPoly);
     }
 
-    B2DPolyPolygon B2DClipState::getClipPoly() const
+    B2DPolyPolygon const & B2DClipState::getClipPoly() const
     {
         return mpImpl->getClipPoly();
     }
 
-} // end of namespace tools
+    void B2DClipState::transform(const basegfx::B2DHomMatrix& rTranslate)
+    {
+        return mpImpl->transform(rTranslate);
+    }
+
+
+} // end of namespace utils
 } // end of namespace basegfx
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

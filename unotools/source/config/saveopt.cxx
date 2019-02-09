@@ -31,8 +31,6 @@
 
 #include <osl/diagnose.h>
 #include <osl/mutex.hxx>
-#include <comphelper/processfactory.hxx>
-#include "itemholder1.hxx"
 #include <officecfg/Office/Recovery.hxx>
 
 using namespace utl;
@@ -45,11 +43,11 @@ class SvtLoadOptions_Impl;
 
 struct SvtLoadSaveOptions_Impl
 {
-    SvtSaveOptions_Impl* pSaveOpt;
-    SvtLoadOptions_Impl* pLoadOpt;
+    std::unique_ptr<SvtSaveOptions_Impl> pSaveOpt;
+    std::unique_ptr<SvtLoadOptions_Impl> pLoadOpt;
 };
 
-static SvtLoadSaveOptions_Impl* pOptions = nullptr;
+static std::unique_ptr<SvtLoadSaveOptions_Impl> pOptions;
 static sal_Int32           nRefCount = 0;
 
 class SvtSaveOptions_Impl : public utl::ConfigItem
@@ -65,12 +63,9 @@ class SvtSaveOptions_Impl : public utl::ConfigItem
                                         bSaveDocView,
                                         bSaveRelINet,
                                         bSaveRelFSys,
-                                        bSaveUnpacked,
                                         bDoPrettyPrinting,
                                         bWarnAlienFormat,
-                                        bLoadDocPrinter,
-                                        bUseSHA1InODF12,
-                                        bUseBlowfishInODF12;
+                                        bLoadDocPrinter;
 
     SvtSaveOptions::ODFDefaultVersion   eODFDefaultVersion;
 
@@ -85,19 +80,15 @@ class SvtSaveOptions_Impl : public utl::ConfigItem
                                         bROSaveDocView,
                                         bROSaveRelINet,
                                         bROSaveRelFSys,
-                                        bROSaveUnpacked,
                                         bROWarnAlienFormat,
                                         bRODoPrettyPrinting,
                                         bROLoadDocPrinter,
-                                        bROODFDefaultVersion,
-                                        bROUseSHA1InODF12,
-                                        bROUseBlowfishInODF12;
+                                        bROODFDefaultVersion;
 
     virtual void            ImplCommit() override;
 
 public:
                             SvtSaveOptions_Impl();
-                            virtual ~SvtSaveOptions_Impl();
 
     virtual void            Notify( const css::uno::Sequence< OUString >& aPropertyNames ) override;
 
@@ -112,12 +103,9 @@ public:
     bool                    IsSaveDocView() const               { return bSaveDocView; }
     bool                    IsSaveRelINet() const               { return bSaveRelINet; }
     bool                    IsSaveRelFSys() const               { return bSaveRelFSys; }
-    bool                    IsSaveUnpacked() const              { return bSaveUnpacked; }
     bool                IsPrettyPrintingEnabled( ) const    { return bDoPrettyPrinting; }
     bool                IsWarnAlienFormat() const           { return bWarnAlienFormat; }
     bool                IsLoadDocPrinter() const            { return bLoadDocPrinter; }
-    bool                IsUseSHA1InODF12() const            { return bUseSHA1InODF12; }
-    bool                IsUseBlowfishInODF12() const        { return bUseBlowfishInODF12; }
 
     SvtSaveOptions::ODFDefaultVersion
                             GetODFDefaultVersion() const        { return eODFDefaultVersion; }
@@ -284,59 +272,50 @@ bool SvtSaveOptions_Impl::IsReadOnly( SvtSaveOptions::EOption eOption ) const
     bool bReadOnly = CFG_READONLY_DEFAULT;
     switch(eOption)
     {
-        case SvtSaveOptions::E_AUTOSAVETIME :
+        case SvtSaveOptions::EOption::AutoSaveTime :
             bReadOnly = bROAutoSaveTime;
             break;
-        case SvtSaveOptions::E_USEUSERDATA :
+        case SvtSaveOptions::EOption::UseUserData :
             bReadOnly = bROUseUserData;
             break;
-        case SvtSaveOptions::E_BACKUP :
+        case SvtSaveOptions::EOption::Backup :
             bReadOnly = bROBackup;
             break;
-        case SvtSaveOptions::E_AUTOSAVE :
+        case SvtSaveOptions::EOption::AutoSave :
             bReadOnly = bROAutoSave;
             break;
-        case SvtSaveOptions::E_AUTOSAVEPROMPT :
+        case SvtSaveOptions::EOption::AutoSavePrompt :
             bReadOnly = bROAutoSavePrompt;
             break;
-        case SvtSaveOptions::E_USERAUTOSAVE :
+        case SvtSaveOptions::EOption::UserAutoSave :
             bReadOnly = bROUserAutoSave;
             break;
-        case SvtSaveOptions::E_DOCINFSAVE :
+        case SvtSaveOptions::EOption::DocInfSave :
             bReadOnly = bRODocInfSave;
             break;
-        case SvtSaveOptions::E_SAVEWORKINGSET :
+        case SvtSaveOptions::EOption::SaveWorkingSet :
             bReadOnly = bROSaveWorkingSet;
             break;
-        case SvtSaveOptions::E_SAVEDOCVIEW :
+        case SvtSaveOptions::EOption::SaveDocView :
             bReadOnly = bROSaveDocView;
             break;
-        case SvtSaveOptions::E_SAVERELINET :
+        case SvtSaveOptions::EOption::SaveRelInet :
             bReadOnly = bROSaveRelINet;
             break;
-        case SvtSaveOptions::E_SAVERELFSYS :
+        case SvtSaveOptions::EOption::SaveRelFsys :
             bReadOnly = bROSaveRelFSys;
             break;
-        case SvtSaveOptions::E_SAVEUNPACKED :
-            bReadOnly = bROSaveUnpacked;
-            break;
-        case SvtSaveOptions::E_DOPRETTYPRINTING :
+        case SvtSaveOptions::EOption::DoPrettyPrinting :
             bReadOnly = bRODoPrettyPrinting;
             break;
-        case SvtSaveOptions::E_WARNALIENFORMAT :
+        case SvtSaveOptions::EOption::WarnAlienFormat :
             bReadOnly = bROWarnAlienFormat;
             break;
-        case SvtSaveOptions::E_LOADDOCPRINTER :
+        case SvtSaveOptions::EOption::LoadDocPrinter :
             bReadOnly = bROLoadDocPrinter;
             break;
-        case SvtSaveOptions::E_ODFDEFAULTVERSION :
+        case SvtSaveOptions::EOption::OdfDefaultVersion :
             bReadOnly = bROLoadDocPrinter;
-            break;
-        case SvtSaveOptions::E_USESHA1INODF12:
-            bReadOnly = bROUseSHA1InODF12;
-            break;
-        case SvtSaveOptions::E_USEBLOWFISHINODF12:
-            bReadOnly = bROUseBlowfishInODF12;
             break;
     }
     return bReadOnly;
@@ -350,18 +329,15 @@ bool SvtSaveOptions_Impl::IsReadOnly( SvtSaveOptions::EOption eOption ) const
 #define PROMPT              5
 #define EDITPROPERTY        6
 #define SAVEVIEWINFO        7
-#define UNPACKED            8
-#define PRETTYPRINTING      9
-#define WARNALIENFORMAT     10
-#define LOADDOCPRINTER      11
-#define FILESYSTEM          12
-#define INTERNET            13
-#define SAVEWORKINGSET      14
-#define ODFDEFAULTVERSION   15
-#define USESHA1INODF12      16
-#define USEBLOWFISHINODF12  17
+#define PRETTYPRINTING      8
+#define WARNALIENFORMAT     9
+#define LOADDOCPRINTER      10
+#define FILESYSTEM          11
+#define INTERNET            12
+#define SAVEWORKINGSET      13
+#define ODFDEFAULTVERSION   14
 
-Sequence< OUString > GetPropertyNames()
+static Sequence< OUString > GetPropertyNames()
 {
     static const char* aPropNames[] =
     {
@@ -373,19 +349,16 @@ Sequence< OUString > GetPropertyNames()
         "Document/AutoSavePrompt",
         "Document/EditProperty",
         "Document/ViewInfo",
-        "Document/Unpacked",
         "Document/PrettyPrinting",
         "Document/WarnAlienFormat",
         "Document/LoadPrinter",
         "URL/FileSystem",
         "URL/Internet",
         "WorkingSet",
-        "ODF/DefaultVersion",
-        "ODF/UseSHA1InODF12",
-        "ODF/UseBlowfishInODF12"
+        "ODF/DefaultVersion"
     };
 
-    const int nCount = sizeof( aPropNames ) / sizeof( const char* );
+    const int nCount = SAL_N_ELEMENTS( aPropNames );
     Sequence< OUString > aNames( nCount );
     OUString* pNames = aNames.getArray();
     for ( int i = 0; i < nCount; i++ )
@@ -395,7 +368,7 @@ Sequence< OUString > GetPropertyNames()
 }
 
 SvtSaveOptions_Impl::SvtSaveOptions_Impl()
-    : ConfigItem( OUString("Office.Common/Save") )
+    : ConfigItem( "Office.Common/Save" )
     , nAutoSaveTime( 0 )
     , bUseUserData( false )
     , bBackup( false )
@@ -407,12 +380,9 @@ SvtSaveOptions_Impl::SvtSaveOptions_Impl()
     , bSaveDocView( false )
     , bSaveRelINet( false )
     , bSaveRelFSys( false )
-    , bSaveUnpacked( false )
     , bDoPrettyPrinting( false )
     , bWarnAlienFormat( true )
     , bLoadDocPrinter( true )
-    , bUseSHA1InODF12( false )
-    , bUseBlowfishInODF12( false )
     , eODFDefaultVersion( SvtSaveOptions::ODFVER_LATEST )
     , bROAutoSaveTime( CFG_READONLY_DEFAULT )
     , bROUseUserData( CFG_READONLY_DEFAULT )
@@ -425,13 +395,10 @@ SvtSaveOptions_Impl::SvtSaveOptions_Impl()
     , bROSaveDocView( CFG_READONLY_DEFAULT )
     , bROSaveRelINet( CFG_READONLY_DEFAULT )
     , bROSaveRelFSys( CFG_READONLY_DEFAULT )
-    , bROSaveUnpacked( CFG_READONLY_DEFAULT )
     , bROWarnAlienFormat( CFG_READONLY_DEFAULT )
     , bRODoPrettyPrinting( CFG_READONLY_DEFAULT )
     , bROLoadDocPrinter( CFG_READONLY_DEFAULT )
     , bROODFDefaultVersion( CFG_READONLY_DEFAULT )
-    , bROUseSHA1InODF12( CFG_READONLY_DEFAULT )
-    , bROUseBlowfishInODF12( CFG_READONLY_DEFAULT )
 {
     Sequence< OUString > aNames = GetPropertyNames();
     Sequence< Any > aValues = GetProperties( aNames );
@@ -523,10 +490,6 @@ SvtSaveOptions_Impl::SvtSaveOptions_Impl()
                                     bSaveRelINet = bTemp;
                                     bROSaveRelINet = pROStates[nProp];
                                     break;
-                                case UNPACKED :
-                                    bSaveUnpacked = bTemp;
-                                    bROSaveUnpacked = pROStates[nProp];
-                                    break;
 
                                 case PRETTYPRINTING:
                                     bDoPrettyPrinting = bTemp;
@@ -543,16 +506,6 @@ SvtSaveOptions_Impl::SvtSaveOptions_Impl()
                                     bROLoadDocPrinter = pROStates[nProp];
                                     break;
 
-                                case USESHA1INODF12:
-                                    bUseSHA1InODF12 = bTemp;
-                                    bROUseSHA1InODF12 = pROStates[nProp];
-                                    break;
-
-                                case USEBLOWFISHINODF12:
-                                    bUseBlowfishInODF12 = bTemp;
-                                    bROUseBlowfishInODF12 = pROStates[nProp];
-                                    break;
-
                                 default :
                                     SAL_WARN( "unotools.config", "invalid index to load a path" );
                             }
@@ -567,7 +520,7 @@ SvtSaveOptions_Impl::SvtSaveOptions_Impl()
         }
     }
 
-    if (!utl::ConfigManager::IsAvoidConfig())
+    if (!utl::ConfigManager::IsFuzzing())
     {
         bAutoSave = officecfg::Office::Recovery::AutoSave::Enabled::get();
         nAutoSaveTime = officecfg::Office::Recovery::AutoSave::TimeIntervall::get();
@@ -580,9 +533,6 @@ SvtSaveOptions_Impl::SvtSaveOptions_Impl()
         bUserAutoSave = false;
     }
 }
-
-SvtSaveOptions_Impl::~SvtSaveOptions_Impl()
-{}
 
 void SvtSaveOptions_Impl::ImplCommit()
 {
@@ -683,14 +633,6 @@ void SvtSaveOptions_Impl::ImplCommit()
                     ++nRealCount;
                 }
                 break;
-            case UNPACKED :
-                if (!bROSaveUnpacked)
-                {
-                    pValues[nRealCount] <<= bSaveUnpacked;
-                    pNames[nRealCount] = pOrgNames[i];
-                    ++nRealCount;
-                }
-                break;
             case PRETTYPRINTING:
                 if (!bRODoPrettyPrinting)
                 {
@@ -719,22 +661,6 @@ void SvtSaveOptions_Impl::ImplCommit()
                 if (!bROODFDefaultVersion)
                 {
                     pValues[nRealCount] <<= (eODFDefaultVersion == SvtSaveOptions::ODFVER_LATEST) ? sal_Int16( 3 ) : sal_Int16( eODFDefaultVersion );
-                    pNames[nRealCount] = pOrgNames[i];
-                    ++nRealCount;
-                }
-                break;
-            case USESHA1INODF12:
-                if (!bROUseSHA1InODF12)
-                {
-                    pValues[nRealCount] <<= bUseSHA1InODF12;
-                    pNames[nRealCount] = pOrgNames[i];
-                    ++nRealCount;
-                }
-                break;
-            case USEBLOWFISHINODF12:
-                if (!bROUseBlowfishInODF12)
-                {
-                    pValues[nRealCount] <<= bUseBlowfishInODF12;
                     pNames[nRealCount] = pOrgNames[i];
                     ++nRealCount;
                 }
@@ -770,7 +696,6 @@ private:
 
 public:
                             SvtLoadOptions_Impl();
-                            virtual ~SvtLoadOptions_Impl();
 
     virtual void            Notify( const css::uno::Sequence< OUString >& aPropertyNames ) override;
 
@@ -781,7 +706,7 @@ public:
 const sal_Char cUserDefinedSettings[] = "UserDefinedSettings";
 
 SvtLoadOptions_Impl::SvtLoadOptions_Impl()
-    : ConfigItem( OUString("Office.Common/Load") )
+    : ConfigItem( "Office.Common/Load" )
     , bLoadUserDefinedSettings( false )
 {
     Sequence< OUString > aNames { cUserDefinedSettings };
@@ -789,20 +714,13 @@ SvtLoadOptions_Impl::SvtLoadOptions_Impl()
     EnableNotification( aNames );
     const Any* pValues = aValues.getConstArray();
     DBG_ASSERT( aValues.getLength() == aNames.getLength(), "GetProperties failed" );
-    if (pValues[0].getValueTypeClass() == css::uno::TypeClass_BOOLEAN)
-         bLoadUserDefinedSettings = *static_cast<sal_Bool const *>(pValues[0].getValue());
-}
-
-SvtLoadOptions_Impl::~SvtLoadOptions_Impl()
-{
+    pValues[0] >>= bLoadUserDefinedSettings;
 }
 
 void SvtLoadOptions_Impl::ImplCommit()
 {
-    Sequence< OUString > aNames { cUserDefinedSettings };
-    Sequence< Any > aValues( 1 );
-    aValues[0].setValue(&bLoadUserDefinedSettings, cppu::UnoType<bool>::get());
-    PutProperties( aNames, aValues );
+    PutProperties(
+        {cUserDefinedSettings}, {css::uno::Any(bLoadUserDefinedSettings)});
 }
 
 void SvtLoadOptions_Impl::Notify( const Sequence<OUString>& )
@@ -823,14 +741,12 @@ SvtSaveOptions::SvtSaveOptions()
     ::osl::MutexGuard aGuard( LocalSingleton::get() );
     if ( !pOptions )
     {
-        pOptions = new SvtLoadSaveOptions_Impl;
-        pOptions->pSaveOpt = new SvtSaveOptions_Impl;
-        pOptions->pLoadOpt = new SvtLoadOptions_Impl;
-
-        ItemHolder1::holdConfigItem(E_SAVEOPTIONS);
+        pOptions.reset(new SvtLoadSaveOptions_Impl);
+        pOptions->pSaveOpt.reset(new SvtSaveOptions_Impl);
+        pOptions->pLoadOpt.reset( new SvtLoadOptions_Impl);
    }
    ++nRefCount;
-    pImp = pOptions;
+    pImp = pOptions.get();
 }
 
 SvtSaveOptions::~SvtSaveOptions()
@@ -844,9 +760,7 @@ SvtSaveOptions::~SvtSaveOptions()
         if ( pOptions->pLoadOpt->IsModified() )
             pOptions->pLoadOpt->Commit();
 
-        DELETEZ( pOptions->pLoadOpt );
-        DELETEZ( pOptions->pSaveOpt );
-        DELETEZ( pOptions );
+        pOptions.reset();
     }
 }
 
@@ -960,11 +874,6 @@ bool SvtSaveOptions::IsSaveRelFSys() const
     return pImp->pSaveOpt->IsSaveRelFSys();
 }
 
-bool SvtSaveOptions::IsSaveUnpacked() const
-{
-    return pImp->pSaveOpt->IsSaveUnpacked();
-}
-
 void SvtSaveOptions::SetLoadUserSettings(bool b)
 {
     pImp->pLoadOpt->SetLoadUserSettings(b);
@@ -1035,16 +944,6 @@ SvtSaveOptions::ODFSaneDefaultVersion SvtSaveOptions::GetODFSaneDefaultVersion()
             return ODFSVER_012_EXT_COMPAT;
     }
     return ODFSVER_LATEST_EXTENDED;
-}
-
-bool SvtSaveOptions::IsUseSHA1InODF12() const
-{
-    return pImp->pSaveOpt->IsUseSHA1InODF12();
-}
-
-bool SvtSaveOptions::IsUseBlowfishInODF12() const
-{
-    return pImp->pSaveOpt->IsUseBlowfishInODF12();
 }
 
 bool SvtSaveOptions::IsReadOnly( SvtSaveOptions::EOption eOption ) const

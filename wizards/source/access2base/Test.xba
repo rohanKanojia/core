@@ -4,6 +4,11 @@
 &apos;Option Compatible
 
 Sub Main
+Dim a, b()
+	_ErrorHandler(False)
+&apos;	DebugPrint vbLF
+&apos;	TraceConsole()
+	exit sub
 End Sub
 
 </script:module>

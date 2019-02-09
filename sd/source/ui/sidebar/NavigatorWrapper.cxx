@@ -18,10 +18,10 @@
  */
 
 #include "NavigatorWrapper.hxx"
-#include "navigatr.hrc"
-#include "ViewShellBase.hxx"
+#include <ViewShellBase.hxx>
 
 #include <sfx2/sidebar/Theme.hxx>
+#include <navigatr.hxx>
 
 
 namespace sd { namespace sidebar {
@@ -33,9 +33,7 @@ NavigatorWrapper::NavigatorWrapper (
     : Control(pParent, 0),
       mrViewShellBase(rViewShellBase),
       maNavigator(VclPtr<SdNavigatorWin>::Create(
-        this,
-        SdResId(FLT_NAVIGATOR),
-        pBindings))
+        this, pBindings))
 {
     maNavigator->SetUpdateRequestFunctor(
             [this] () { return this->UpdateNavigator(); });
@@ -62,10 +60,8 @@ void NavigatorWrapper::Resize()
     maNavigator->SetSizePixel(GetSizePixel());
 }
 
-css::ui::LayoutSize NavigatorWrapper::GetHeightForWidth (const sal_Int32 nWidth)
+css::ui::LayoutSize NavigatorWrapper::GetHeightForWidth (const sal_Int32)
 {
-    (void)nWidth;
-
     return css::ui::LayoutSize(-1,-1,-1);
 }
 

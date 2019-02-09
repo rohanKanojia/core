@@ -50,7 +50,7 @@ class SW_DLLPUBLIC SwLineNumberInfo : public SwClient /**< purpose of derivation
     bool                bRestartEachPage;       /**< Restart counting at the first paragraph of each page
                                                        (even on follows when paragraphs are splitted) */
 protected:
-   virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
+    virtual void Modify( const SfxPoolItem*, const SfxPoolItem* ) override;
 
 public:
     SwLineNumberInfo();
@@ -64,7 +64,7 @@ public:
     const SvxNumberType &GetNumType() const             { return aType; }
     void                SetNumType( SvxNumberType aNew ){ aType = aNew; }
 
-    OUString GetDivider() const           { return aDivider; }
+    const OUString& GetDivider() const           { return aDivider; }
     void SetDivider( const OUString &r )  { aDivider = r; }
     sal_uInt16 GetDividerCountBy() const    { return nDividerCountBy; }
     void SetDividerCountBy( sal_uInt16 n )  { nDividerCountBy = n; }

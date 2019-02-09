@@ -20,9 +20,9 @@
 #ifndef INCLUDED_CODEMAKER_SOURCE_CPPUMAKER_CPPUTYPE_HXX
 #define INCLUDED_CODEMAKER_SOURCE_CPPUMAKER_CPPUTYPE_HXX
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/ref.hxx"
+#include <rtl/ref.hxx>
 
 namespace codemaker { class GeneratedTypeSet; }
 namespace rtl { class OUString; }
@@ -30,7 +30,7 @@ class CppuOptions;
 class TypeManager;
 
 void produce(
-    rtl::OUString const & name, rtl::Reference< TypeManager > const & manager,
+    OUString const & name, rtl::Reference< TypeManager > const & manager,
     codemaker::GeneratedTypeSet & generated, CppuOptions const & options);
 
 #endif

@@ -22,10 +22,12 @@
 #include "SlsQueueProcessor.hxx"
 #include "SlsRequestPriorityClass.hxx"
 #include "SlsRequestFactory.hxx"
-#include "cache/SlsPageCacheManager.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "controller/SlideSorterController.hxx"
+#include "SlsBitmapCache.hxx"
+#include <cache/SlsPageCacheManager.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <tools/debug.hxx>
 
 namespace sd { namespace slidesorter { namespace cache {
 
@@ -49,24 +51,24 @@ GenericPageCache::GenericPageCache (
 
 GenericPageCache::~GenericPageCache()
 {
-    if (mpQueueProcessor.get() != nullptr)
+    if (mpQueueProcessor != nullptr)
         mpQueueProcessor->Stop();
     maRequestQueue.Clear();
     mpQueueProcessor.reset();
 
-    if (mpBitmapCache.get() != nullptr)
+    if (mpBitmapCache != nullptr)
         PageCacheManager::Instance()->ReleaseCache(mpBitmapCache);
     mpBitmapCache.reset();
 }
 
 void GenericPageCache::ProvideCacheAndProcessor()
 {
-    if (mpBitmapCache.get() == nullptr)
+    if (mpBitmapCache == nullptr)
         mpBitmapCache = PageCacheManager::Instance()->GetCache(
             mpCacheContext->GetModel(),
             maPreviewSize);
 
-    if (mpQueueProcessor.get() == nullptr)
+    if (mpQueueProcessor == nullptr)
         mpQueueProcessor.reset(new QueueProcessor(
             maRequestQueue,
             mpBitmapCache,
@@ -87,11 +89,11 @@ void GenericPageCache::ChangePreviewSize (
             "GenericPageCache<>::GetPreviewBitmap(): bitmap requested with large width. "
             "This may indicate an error.");
 
-        if (mpBitmapCache.get() != nullptr)
+        if (mpBitmapCache != nullptr)
         {
             mpBitmapCache = PageCacheManager::Instance()->ChangeSize(
                 mpBitmapCache, maPreviewSize, rPreviewSize);
-            if (mpQueueProcessor.get() != nullptr)
+            if (mpQueueProcessor != nullptr)
             {
                 mpQueueProcessor->SetPreviewSize(rPreviewSize, bDoSuperSampling);
                 mpQueueProcessor->SetBitmapCache(mpBitmapCache);
@@ -102,13 +104,13 @@ void GenericPageCache::ChangePreviewSize (
     }
 }
 
-Bitmap GenericPageCache::GetPreviewBitmap (
+BitmapEx GenericPageCache::GetPreviewBitmap (
     const CacheKey aKey,
     const bool bResize)
 {
-    OSL_ASSERT(aKey != nullptr);
+    assert(aKey != nullptr);
 
-    Bitmap aPreview;
+    BitmapEx aPreview;
     bool bMayBeUpToDate = true;
     ProvideCacheAndProcessor();
     const SdrPage* pPage = mpCacheContext->GetPage(aKey);
@@ -140,23 +142,23 @@ Bitmap GenericPageCache::GetPreviewBitmap (
     return aPreview;
 }
 
-Bitmap GenericPageCache::GetMarkedPreviewBitmap (
+BitmapEx GenericPageCache::GetMarkedPreviewBitmap (
     const CacheKey aKey)
 {
-    OSL_ASSERT(aKey != nullptr);
+    assert(aKey != nullptr);
 
     ProvideCacheAndProcessor();
     const SdrPage* pPage = mpCacheContext->GetPage(aKey);
-    Bitmap aMarkedPreview (mpBitmapCache->GetMarkedBitmap(pPage));
+    BitmapEx aMarkedPreview (mpBitmapCache->GetMarkedBitmap(pPage));
 
     return aMarkedPreview;
 }
 
 void GenericPageCache::SetMarkedPreviewBitmap (
     const CacheKey aKey,
-    const Bitmap& rMarkedBitmap)
+    const BitmapEx& rMarkedBitmap)
 {
-    OSL_ASSERT(aKey != nullptr);
+    assert(aKey != nullptr);
 
     ProvideCacheAndProcessor();
     const SdrPage* pPage = mpCacheContext->GetPage(aKey);
@@ -167,7 +169,7 @@ void GenericPageCache::RequestPreviewBitmap (
     const CacheKey aKey,
     const bool bMayBeUpToDate)
 {
-    OSL_ASSERT(aKey != nullptr);
+    assert(aKey != nullptr);
 
     const SdrPage* pPage = mpCacheContext->GetPage(aKey);
 
@@ -179,7 +181,7 @@ void GenericPageCache::RequestPreviewBitmap (
         bIsUpToDate = mpBitmapCache->BitmapIsUpToDate (pPage);
     if (bIsUpToDate)
     {
-        const Bitmap aPreview (mpBitmapCache->GetBitmap(pPage));
+        const BitmapEx aPreview (mpBitmapCache->GetBitmap(pPage));
         if (aPreview.IsEmpty() || aPreview.GetSizePixel()!=maPreviewSize)
               bIsUpToDate = false;
     }
@@ -209,7 +211,7 @@ bool GenericPageCache::InvalidatePreviewBitmap (const CacheKey aKey)
         return pCacheManager->InvalidatePreviewBitmap(
             mpCacheContext->GetModel(),
             aKey);
-    else if (mpBitmapCache.get() != nullptr)
+    else if (mpBitmapCache != nullptr)
         return mpBitmapCache->InvalidateBitmap(mpCacheContext->GetPage(aKey));
     else
         return false;
@@ -265,14 +267,14 @@ void GenericPageCache::SetPreciousFlag (
 void GenericPageCache::Pause()
 {
     ProvideCacheAndProcessor();
-    if (mpQueueProcessor.get() != nullptr)
+    if (mpQueueProcessor != nullptr)
         mpQueueProcessor->Pause();
 }
 
 void GenericPageCache::Resume()
 {
     ProvideCacheAndProcessor();
-    if (mpQueueProcessor.get() != nullptr)
+    if (mpQueueProcessor != nullptr)
         mpQueueProcessor->Resume();
 }
 

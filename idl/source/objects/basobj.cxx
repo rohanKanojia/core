@@ -17,10 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
-#include <ctype.h>
-
-#include <tools/debug.hxx>
+#include <rtl/character.hxx>
 
 #include <basobj.hxx>
 #include <module.hxx>
@@ -49,7 +48,8 @@ void SvMetaObject::Back2Delimiter( SvStream & rOutStm )
     char c = 0;
     rOutStm.ReadChar( c );
 
-    while( isspace( c ) && rOutStm.Tell() != 1 )
+    while( rtl::isAsciiWhiteSpace( static_cast<unsigned char>(c) )
+           && rOutStm.Tell() != 1 )
     {
         rOutStm.SeekRel( -2 );
         rOutStm.ReadChar( c );
@@ -107,11 +107,6 @@ void SvMetaObject::ReadContextSvIdl( SvIdlDataBase &, SvTokenStream & )
 {
 }
 
-bool SvMetaObject::Test( SvTokenStream & )
-{
-    return true;
-}
-
 bool SvMetaObject::ReadSvIdl( SvIdlDataBase & rBase, SvTokenStream & rInStm )
 {
     sal_uInt32 nTokPos = rInStm.Tell();
@@ -128,13 +123,10 @@ bool SvMetaObject::ReadSvIdl( SvIdlDataBase & rBase, SvTokenStream & rInStm )
         bOk = rInStm.ReadIf( ']' );
     }
 
-    if( bOk )
+    if( bOk && rInStm.ReadIf( '{' ) )
     {
-        if( rInStm.ReadIf( '{' ) )
-        {
-            DoReadContextSvIdl( rBase, rInStm );
-            bOk = rInStm.ReadIf( '}' );
-        }
+        DoReadContextSvIdl( rBase, rInStm );
+        bOk = rInStm.ReadIf( '}' );
     }
 
     if( !bOk )

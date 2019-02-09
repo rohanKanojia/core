@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessibleGlobal.hxx"
-#include "AccessibleFilterMenuItem.hxx"
-#include "checklistmenu.hxx"
+#include <AccessibleGlobal.hxx>
+#include <AccessibleFilterMenuItem.hxx>
+#include <checklistmenu.hxx>
 
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <com/sun/star/accessibility/XAccessibleStateSet.hpp>
@@ -28,6 +28,7 @@
 #include <com/sun/star/accessibility/AccessibleEventObject.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/TextSegment.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
@@ -42,8 +43,7 @@ ScAccessibleFilterMenuItem::ScAccessibleFilterMenuItem(
     const Reference<XAccessible>& rxParent, ScMenuFloatingWindow* pWin, const OUString& rName, size_t nMenuPos) :
     ScAccessibleContextBase(rxParent, AccessibleRole::MENU_ITEM),
     mpWindow(pWin),
-    mnMenuPos(nMenuPos),
-    mbEnabled(true)
+    mnMenuPos(nMenuPos)
 {
     SetName(rName);
 }
@@ -53,58 +53,51 @@ ScAccessibleFilterMenuItem::~ScAccessibleFilterMenuItem()
 }
 
 sal_Int32 ScAccessibleFilterMenuItem::getAccessibleChildCount()
-    throw (RuntimeException, std::exception)
 {
     return 0;
 }
 
 Reference<XAccessible> ScAccessibleFilterMenuItem::getAccessibleChild(sal_Int32 /*nIndex*/)
-    throw (RuntimeException, IndexOutOfBoundsException, std::exception)
 {
     throw IndexOutOfBoundsException();
 }
 
 Reference<XAccessibleStateSet> ScAccessibleFilterMenuItem::getAccessibleStateSet()
-    throw (RuntimeException, std::exception)
 {
     updateStateSet();
     return mxStateSet;
 }
 
 OUString ScAccessibleFilterMenuItem::getImplementationName()
-    throw (RuntimeException, std::exception)
 {
     return OUString("ScAccessibleFilterMenuItem");
 }
 
 // XAccessibleAction
 
-sal_Int32 ScAccessibleFilterMenuItem::getAccessibleActionCount() throw (RuntimeException, std::exception)
+sal_Int32 ScAccessibleFilterMenuItem::getAccessibleActionCount()
 {
     return 1;
 }
 
 sal_Bool ScAccessibleFilterMenuItem::doAccessibleAction(sal_Int32 /*nIndex*/)
-    throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     mpWindow->executeMenuItem(mnMenuPos);
     return true;
 }
 
 OUString ScAccessibleFilterMenuItem::getAccessibleActionDescription(sal_Int32 /*nIndex*/)
-    throw (IndexOutOfBoundsException, RuntimeException, std::exception)
 {
     return OUString("click");
 }
 
 Reference<XAccessibleKeyBinding> ScAccessibleFilterMenuItem::getAccessibleActionKeyBinding(
-    sal_Int32 /*nIndex*/) throw (IndexOutOfBoundsException, RuntimeException, std::exception)
+    sal_Int32 /*nIndex*/)
 {
     return Reference<XAccessibleKeyBinding>();
 }
 
 Any SAL_CALL ScAccessibleFilterMenuItem::queryInterface( uno::Type const & rType )
-    throw (RuntimeException, std::exception)
 {
     Any any = ScAccessibleContextBase::queryInterface(rType);
     if (any.hasValue())
@@ -128,40 +121,28 @@ bool ScAccessibleFilterMenuItem::isSelected() const
     return mpWindow->isMenuItemSelected(mnMenuPos);
 }
 
-bool ScAccessibleFilterMenuItem::isFocused() const
-{
-    return isSelected();
-}
-
-void ScAccessibleFilterMenuItem::setEnabled(bool bEnabled)
-{
-    mbEnabled = bEnabled;
-}
-
-Rectangle ScAccessibleFilterMenuItem::GetBoundingBoxOnScreen() const
-    throw (RuntimeException, std::exception)
+tools::Rectangle ScAccessibleFilterMenuItem::GetBoundingBoxOnScreen() const
 {
     if (!mpWindow->IsVisible())
-        return Rectangle();
+        return tools::Rectangle();
 
     Point aPos = mpWindow->OutputToAbsoluteScreenPixel(Point(0,0));
     Point aMenuPos;
     Size aMenuSize;
     mpWindow->getMenuItemPosSize(mnMenuPos, aMenuPos, aMenuSize);
-    Rectangle aRect(aPos + aMenuPos, aMenuSize);
+    tools::Rectangle aRect(aPos + aMenuPos, aMenuSize);
     return aRect;
 }
 
-Rectangle ScAccessibleFilterMenuItem::GetBoundingBox() const
-    throw (RuntimeException, std::exception)
+tools::Rectangle ScAccessibleFilterMenuItem::GetBoundingBox() const
 {
     if (!mpWindow->IsVisible())
-        return Rectangle();
+        return tools::Rectangle();
 
     Point aMenuPos;
     Size aMenuSize;
     mpWindow->getMenuItemPosSize(mnMenuPos, aMenuPos, aMenuSize);
-    Rectangle aRect(aMenuPos, aMenuSize);
+    tools::Rectangle aRect(aMenuPos, aMenuSize);
     return aRect;
 }
 
@@ -181,7 +162,7 @@ void ScAccessibleFilterMenuItem::updateStateSet()
     p->insert(SENSITIVE);
     p->insert(OPAQUE);
 
-    if (isFocused())
+    if (isSelected())
         p->insert(FOCUSED);
 
     if (isSelected())

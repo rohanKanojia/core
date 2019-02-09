@@ -20,31 +20,21 @@
 #ifndef INCLUDED_SAL_TYPES_H
 #define INCLUDED_SAL_TYPES_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <stddef.h>
 
-#include <sal/macros.h>
-#include <sal/typesizes.h>
+#include "sal/macros.h"
+#include "sal/typesizes.h"
+
+#if defined LIBO_INTERNAL_ONLY
+#include "config_global.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if defined ( __MINGW32__ ) && !defined ( __USE_MINGW_ANSI_STDIO )
-/* Define to use the C99 formatting string for coherence reasons.
- * In mingw-w64 some functions are ported to the ms formatting string
- * some are not yet. This is the only way to make the formatting
- * strings work all the time
- */
-#define __USE_MINGW_ANSI_STDIO 1
-#endif
-
-/********************************************************************************/
-/* Data types
-*/
-
-/* Boolean */
 typedef unsigned char sal_Bool;
 #   define sal_False ((sal_Bool)0)
 #   define sal_True  ((sal_Bool)1)
@@ -120,7 +110,7 @@ typedef unsigned char       sal_uInt8;
         #error "Could not find 64-bit type, add support for your architecture"
     #endif
 #else
-    #error "Please define the 64-bit types for your architecture/compiler in sal/inc/sal/types.h"
+    #error "Please define the 64-bit types for your architecture/compiler in include/sal/types.h"
 #endif
 
 /** A legacy synonym for `char`.
@@ -141,19 +131,14 @@ typedef signed char sal_sChar;
 */
 typedef unsigned char sal_uChar;
 
-#if ( defined(SAL_W32) && !defined(__MINGW32__) )
-    // http://msdn.microsoft.com/en-us/library/s3f49ktz%28v=vs.80%29.aspx
-    // "By default wchar_t is a typedef for unsigned short."
-    // But MinGW has a native wchar_t, and on many places, we cannot deal with
-    // that, so sal_Unicode has to be explicitly typedef'd as sal_uInt16 there.
-    typedef wchar_t             sal_Unicode;
+#if defined LIBO_INTERNAL_ONLY && defined __cplusplus
+    #define SAL_UNICODE_NOTEQUAL_WCHAR_T
+    typedef char16_t sal_Unicode;
+#elif defined(_WIN32)
+    typedef wchar_t sal_Unicode;
 #else
     #define SAL_UNICODE_NOTEQUAL_WCHAR_T
-#if LIBO_INTERNAL_ONLY && defined __cplusplus
-    typedef char16_t sal_Unicode;
-#else
-    typedef sal_uInt16          sal_Unicode;
-#endif
+    typedef sal_uInt16 sal_Unicode;
 #endif
 
 typedef void *                   sal_Handle;
@@ -209,10 +194,6 @@ typedef void *                   sal_Handle;
     #error "Please make sure SAL_TYPES_SIZEOFPOINTER is defined for your architecture/compiler"
 #endif
 
-/********************************************************************************/
-/* Useful defines
- */
-
 /* The following SAL_MIN_INTn defines codify the assumption that the signed
  * sal_Int types use two's complement representation.  Defining them as
  * "-0x7F... - 1" instead of as "-0x80..." prevents warnings about applying the
@@ -241,21 +222,16 @@ typedef void *                   sal_Handle;
 
 #define SAL_MAX_ENUM 0x7fffffff
 
-#if defined(_MSC_VER) || defined(__MINGW32__)
+#if defined(_MSC_VER)
 #   define SAL_DLLPUBLIC_EXPORT    __declspec(dllexport)
 #   define SAL_JNI_EXPORT          __declspec(dllexport)
-#if defined(_MSC_VER)
 #   define SAL_DLLPUBLIC_IMPORT    __declspec(dllimport)
-#else
-#   define SAL_DLLPUBLIC_IMPORT
-#endif // defined(_MSC_VER)
 #   define SAL_DLLPRIVATE
 #   define SAL_DLLPUBLIC_TEMPLATE
 #   define SAL_DLLPUBLIC_RTTI
 #   define SAL_CALL         __cdecl
-#   define SAL_CALL_ELLIPSE __cdecl
 #elif defined SAL_UNX
-#   if defined(__GNUC__) && defined(HAVE_GCC_VISIBILITY_FEATURE)
+#   if defined(__GNUC__)
 #     if defined(DISABLE_DYNLOADING)
 #       define SAL_DLLPUBLIC_EXPORT  __attribute__ ((visibility("hidden")))
 #       define SAL_JNI_EXPORT        __attribute__ ((visibility("default")))
@@ -288,7 +264,6 @@ typedef void *                   sal_Handle;
 #     define SAL_DLLPUBLIC_RTTI
 #   endif
 #   define SAL_CALL
-#   define SAL_CALL_ELLIPSE
 #else
 #   error("unknown platform")
 #endif
@@ -299,7 +274,7 @@ typedef void *                   sal_Handle;
    These macros are used for inline declarations of exception classes, as in
    rtl/malformeduriexception.hxx.
 */
-#if defined(__GNUC__) && ! defined(__MINGW32__)
+#if defined(__GNUC__)
 #   if defined(DISABLE_DYNLOADING)
 #      define SAL_EXCEPTION_DLLPUBLIC_EXPORT __attribute__((visibility("default")))
 #    else
@@ -317,7 +292,9 @@ typedef void *                   sal_Handle;
     Compilers that support a construct of this nature will emit a compile
     time warning on unchecked return value.
 */
-#if (defined __GNUC__ \
+#if defined LIBO_INTERNAL_ONLY && defined __cplusplus
+#define SAL_WARN_UNUSED_RESULT [[nodiscard]]
+#elif (defined __GNUC__ \
      && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 1))) \
     || defined __clang__
 #   define SAL_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
@@ -335,12 +312,11 @@ typedef void *                   sal_Handle;
 #   define SAL_NO_VTABLE
 #endif
 
-#ifdef SAL_W32
+#ifdef _WIN32
 #   pragma pack(push, 8)
 #endif
 
 /** This is the binary specification of a SAL sequence.
-    <br>
 */
 typedef struct _sal_Sequence
 {
@@ -357,7 +333,7 @@ typedef struct _sal_Sequence
 
 #define SAL_SEQUENCE_HEADER_SIZE ((sal_Size) offsetof(sal_Sequence,elements))
 
-#if defined( SAL_W32)
+#if defined( _WIN32)
 #pragma pack(pop)
 #endif
 
@@ -368,6 +344,16 @@ typedef struct _sal_Sequence
     This is a macro so it can expand to nothing in C code.
 */
 #define SAL_THROW_EXTERN_C() throw ()
+
+/** To markup destructors that coverity warns might throw exceptions
+    which won't throw in practice, or where std::terminate is
+    an acceptable response if they do
+*/
+#if defined(LIBO_INTERNAL_ONLY) && defined(__COVERITY__)
+#   define COVERITY_NOEXCEPT_FALSE noexcept(false)
+#else
+#   define COVERITY_NOEXCEPT_FALSE
+#endif
 
 #else
 
@@ -421,28 +407,6 @@ namespace css = ::com::sun::star;
 #define SAL_OVERRIDE override
 #else
 #define SAL_OVERRIDE
-#endif
-
-/** C++11 "final" feature.
-
-    For LIBO_INTERNAL_ONLY, mark a class as non-derivable or a method as non-overridable.
-
-    @since LibreOffice 4.1
-*/
-#if defined LIBO_INTERNAL_ONLY
-#define SAL_FINAL final
-#else
-#define SAL_FINAL
-#endif
-
-/** C++11 "constexpr" feature.
-
-    @since LibreOffice 5.0
-*/
-#if HAVE_CXX11_CONSTEXPR
-#define SAL_CONSTEXPR constexpr
-#else
-#define SAL_CONSTEXPR
 #endif
 
 #endif /* __cplusplus */
@@ -502,13 +466,15 @@ template< typename T1, typename T2 > inline T1 static_int_cast(T2 n) {
 #endif
 
 /**
-   This macro is used to tag interfaces that are deprecated for both
-   internal and external API users, but where we are still writing
-   out the internal usage. Ultimately these should be replaced by
-   SAL_DEPRECATED, and then removed.
+   This macro is used in cppumaker-generated include files, to tag entities that
+   are marked as @deprecated in UNOIDL.
 
-   Use as follows:
-        SAL_DEPRECATED_INTERNAL("Don't use, it's evil.") void doit(int nPara);
+   It causes deprecation warnings to be generated in external code, but for now
+   is silenced in internal code.  It would need some substantial clean-up of
+   internal code to fix all warnings/errors generated by it.  (Once that is
+   done, it can become a synonym for SAL_DEPRECATED under LIBO_INTERNAL_ONLY,
+   too.  Completely removing the macro then would be incompatible, in case there
+   are include files still around generated with a cppumaker that emitted it.)
  */
 #ifdef LIBO_INTERNAL_ONLY
 #    define SAL_DEPRECATED_INTERNAL(message)
@@ -545,7 +511,7 @@ template< typename T1, typename T2 > inline T1 static_int_cast(T2 n) {
 
    Useful in cases where the compiler is "too clever" like when doing
    link-time code generation, and noticing that a called function
-   always throws, and fixing the problem cleanly so that it produceds
+   always throws, and fixing the problem cleanly so that it produces
    no warnings in normal non-LTO compilations either is not easy.
 
 */
@@ -608,8 +574,6 @@ template< typename T1, typename T2 > inline T1 static_int_cast(T2 n) {
 
 #if HAVE_GCC_ATTRIBUTE_WARN_UNUSED
 #define SAL_WARN_UNUSED __attribute__((warn_unused))
-#elif defined __clang__
-#define SAL_WARN_UNUSED __attribute__((annotate("lo_warn_unused")))
 #else
 #define SAL_WARN_UNUSED
 #endif
@@ -686,6 +650,27 @@ template< typename T1, typename T2 > inline T1 static_int_cast(T2 n) {
 #    define SAL_COLD
 #endif
 
+/// @endcond
+
+/// @cond INTERNAL
+/** Annotate pointer-returning functions to indicate that such a pointer
+    is never nullptr.
+
+    Note that MSVC supports this feature via it's SAL _Ret_notnull_
+    annotation, but since it's in a completely different place on
+    the function declaration, it's a little hard to support both.
+
+    @since LibreOffice 5.5
+*/
+#ifndef __has_attribute
+#define __has_attribute(x) 0
+#endif
+
+#if defined LIBO_INTERNAL_ONLY && ((defined __GNUC__ && !defined __clang__) || (defined __clang__ && __has_attribute(returns_nonnull)))
+#define SAL_RETURNS_NONNULL  __attribute__((returns_nonnull))
+#else
+#define SAL_RETURNS_NONNULL
+#endif
 /// @endcond
 
 #endif // INCLUDED_SAL_TYPES_H

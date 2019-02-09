@@ -11,7 +11,7 @@
 // implementations reachable via the service manager.  If a given implementation
 // is the only implementor of some service that has a zero-parameter
 // constructor, instantiate the implementation through that service name.  If a
-// given implementation does not offer any such contructors (because it does not
+// given implementation does not offer any such constructors (because it does not
 // support any single-interface--based service, or because for each relevant
 // service there are multiple implementations or it does not have an appropriate
 // constructor) but does support at least one accumulation-based service, then
@@ -24,9 +24,13 @@
 #include <cassert>
 #include <iostream>
 #include <map>
+#include <set>
 #include <utility>
 #include <vector>
 
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/container/XContentEnumerationAccess.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
@@ -94,6 +98,19 @@ bool contains(
     return true;
 }
 
+void addService(
+    css::uno::Reference<css::reflection::XServiceTypeDescription> const & service,
+    std::set<css::uno::Reference<css::reflection::XServiceTypeDescription>> * allServices)
+{
+    assert(allServices != nullptr);
+    if (!allServices->insert(service).second) {
+        return;
+    }
+    for (auto const & serv: service->getMandatoryServices()) {
+        addService(serv, allServices);
+    }
+}
+
 class Test: public test::BootstrapFixture {
 public:
     void test();
@@ -104,6 +121,7 @@ public:
 
 private:
     void createInstance(
+        css::uno::Reference<css::container::XHierarchicalNameAccess> const & typeManager,
         OUString const & name, bool withArguments,
         OUString const & implementationName,
         css::uno::Sequence<OUString> const & serviceNames,
@@ -126,11 +144,11 @@ void Test::test() {
     // ImplBorderWindow::ImplInit -> Window::ImplInit ->
     // WinSalInstance::CreateFrame -> ImplSendMessage -> SendMessageW):
     std::vector<OUString> blacklist;
-    blacklist.push_back("com.sun.star.comp.report.OReportDefinition");
+    blacklist.emplace_back("com.sun.star.comp.report.OReportDefinition");
 
     // <https://bugs.documentfoundation.org/show_bug.cgi?id=89343>
     // "~SwXMailMerge() goes into endless SwCache::Check()":
-    blacklist.push_back("SwXMailMerge");
+    blacklist.emplace_back("SwXMailMerge");
 
     css::uno::Reference<css::container::XContentEnumerationAccess> enumAcc(
         m_xContext->getServiceManager(), css::uno::UNO_QUERY_THROW);
@@ -146,8 +164,8 @@ void Test::test() {
             serviceName(theServiceName),
             defaultConstructor(theDefaultConstructor)
         {}
-        OUString serviceName;
-        bool defaultConstructor;
+        OUString const serviceName;
+        bool const defaultConstructor;
     };
     struct Implementation {
         Implementation(
@@ -168,9 +186,8 @@ void Test::test() {
             css::uno::UNO_SET_THROW);
         std::vector<css::uno::Reference<css::lang::XServiceInfo>> serviceImpls2;
         while (serviceImpls1->hasMoreElements()) {
-            serviceImpls2.push_back(
-                css::uno::Reference<css::lang::XServiceInfo>(
-                    serviceImpls1->nextElement(), css::uno::UNO_QUERY_THROW));
+            serviceImpls2.emplace_back(
+                    serviceImpls1->nextElement(), css::uno::UNO_QUERY_THROW);
         }
         css::uno::Reference<css::reflection::XServiceTypeDescription2> desc;
         if (typeMgr->hasByHierarchicalName(serviceNames[i])) {
@@ -216,7 +233,7 @@ void Test::test() {
                             "multiple implementations named \"" + msg(name)
                             + "\"")
                          .getStr()),
-                        j == k->second.factory);
+                        bool(j == k->second.factory));
                 }
                 CPPUNIT_ASSERT_MESSAGE(
                     (OString(
@@ -234,10 +251,9 @@ void Test::test() {
                                         ctors(desc->getConstructors());
                             for (sal_Int32 l = 0; l != ctors.getLength(); ++l) {
                                 if (!ctors[l]->getParameters().hasElements()) {
-                                    k->second.constructors.push_back(
-                                        Constructor(
+                                    k->second.constructors.emplace_back(
                                             serviceNames[i],
-                                            ctors[l]->isDefaultConstructor()));
+                                            ctors[l]->isDefaultConstructor());
                                     break;
                                 }
                             }
@@ -262,7 +278,7 @@ void Test::test() {
             if (i.second.constructors.empty()) {
                 if (i.second.accumulationBased) {
                     createInstance(
-                        i.first, false, i.first, i.second.serviceNames, &comps);
+                        typeMgr, i.first, false, i.first, i.second.serviceNames, &comps);
                 } else {
                     std::cout
                         << "no obvious way to instantiate implementation \""
@@ -271,7 +287,7 @@ void Test::test() {
             } else {
                 for (auto const & j: i.second.constructors) {
                     createInstance(
-                        j.serviceName, !j.defaultConstructor, i.first,
+                        typeMgr, j.serviceName, !j.defaultConstructor, i.first,
                         i.second.serviceNames, &comps);
                 }
             }
@@ -284,6 +300,7 @@ void Test::test() {
 }
 
 void Test::createInstance(
+    css::uno::Reference<css::container::XHierarchicalNameAccess> const & typeManager,
     OUString const & name, bool withArguments,
     OUString const & implementationName,
     css::uno::Sequence<OUString> const & serviceNames,
@@ -402,6 +419,96 @@ void Test::createInstance(
             + msg(expServs))
          .getStr()),
         contains(servs, expServs));
+    std::set<css::uno::Reference<css::reflection::XServiceTypeDescription>> allservs;
+    for (auto const & serv: servs) {
+        if (!typeManager->hasByHierarchicalName(serv)) {
+            std::cout
+                << "instantiating \"" << implementationName << "\" via \"" << name
+                << "\" supports fantasy service name \"" << serv << "\"\n";
+            continue;
+        }
+        addService(
+            css::uno::Reference<css::reflection::XServiceTypeDescription>(
+                typeManager->getByHierarchicalName(serv), css::uno::UNO_QUERY_THROW),
+            &allservs);
+    }
+    css::uno::Reference<css::beans::XPropertySetInfo> propsinfo;
+    for (auto const & serv: allservs) {
+        auto const props = serv->getProperties();
+        for (auto const & prop: props) {
+            auto const optional
+                = (prop->getPropertyFlags() & css::beans::PropertyAttribute::OPTIONAL) != 0;
+            if (!propsinfo.is()) {
+                css::uno::Reference<css::beans::XPropertySet> propset(inst, css::uno::UNO_QUERY);
+                if (!propset.is()) {
+                    CPPUNIT_ASSERT_MESSAGE(
+                        (OString(
+                            "instantiating \"" + msg(implementationName) + "\" via \"" + msg(name)
+                            + "\" reports service " + msg(serv->getName())
+                            + " with non-optional property \"" + msg(prop->getName())
+                            + "\" but does not implement css.uno.XPropertySet")
+                         .getStr()),
+                        optional);
+                    continue;
+                }
+                propsinfo = propset->getPropertySetInfo();
+                if (!propsinfo.is()) {
+                    //TODO: legal to return null in more cases? ("@returns NULL if the
+                    // implementation cannot or will not provide information about the properties")
+                    CPPUNIT_ASSERT_MESSAGE(
+                        (OString(
+                            "instantiating \"" + msg(implementationName) + "\" via \"" + msg(name)
+                            + "\" reports service " + msg(serv->getName())
+                            + " with non-optional property \"" + msg(prop->getName())
+                            + "\" but css.uno.XPropertySet::getPropertySetInfo returns null")
+                         .getStr()),
+                        optional);
+                    continue;
+                }
+            }
+            if (!propsinfo->hasPropertyByName(prop->getName())) {
+                static std::set<std::pair<OUString, OUString>> const blacklist{
+                    {"com.sun.star.comp.chart.DataSeries", "BorderDash"},
+                    {"com.sun.star.comp.chart2.ChartDocumentWrapper", "UserDefinedAttributes"},
+                    {"com.sun.star.comp.dbu.OColumnControlModel", "Tabstop"},
+                    {"com.sun.star.comp.report.OFormattedField", "Align"},
+                    {"com.sun.star.comp.report.OFormattedField", "BackgroundColor"},
+                    {"com.sun.star.comp.report.OFormattedField", "Border"},
+                    {"com.sun.star.comp.report.OFormattedField", "DefaultControl"},
+                    {"com.sun.star.comp.report.OFormattedField", "EffectiveDefault"},
+                    {"com.sun.star.comp.report.OFormattedField", "EffectiveMax"},
+                    {"com.sun.star.comp.report.OFormattedField", "EffectiveMin"},
+                    {"com.sun.star.comp.report.OFormattedField", "EffectiveValue"},
+                    {"com.sun.star.comp.report.OFormattedField", "Enabled"},
+                    {"com.sun.star.comp.report.OFormattedField", "FontEmphasisMark"},
+                    {"com.sun.star.comp.report.OFormattedField", "FontRelief"},
+                    {"com.sun.star.comp.report.OFormattedField", "HelpText"},
+                    {"com.sun.star.comp.report.OFormattedField", "HelpURL"},
+                    {"com.sun.star.comp.report.OFormattedField", "MaxTextLen"},
+                    {"com.sun.star.comp.report.OFormattedField", "Printable"},
+                    {"com.sun.star.comp.report.OFormattedField", "ReadOnly"},
+                    {"com.sun.star.comp.report.OFormattedField", "Spin"},
+                    {"com.sun.star.comp.report.OFormattedField", "Tabstop"},
+                    {"com.sun.star.comp.report.OFormattedField", "Text"},
+                    {"com.sun.star.comp.report.OFormattedField", "TextColor"},
+                    {"com.sun.star.comp.report.OFormattedField", "TextLineColor"},
+                    {"com.sun.star.comp.report.OFormattedField", "TreatAsNumber"},
+                    {"stardiv.Toolkit.UnoControlRoadmapModel", "Interactive"}};
+                if (blacklist.find({implementationName, prop->getName()}) != blacklist.end()) {
+                    continue;
+                }
+                CPPUNIT_ASSERT_MESSAGE(
+                    (OString(
+                        "instantiating \"" + msg(implementationName) + "\" via \"" + msg(name)
+                        + "\" reports service " + msg(serv->getName())
+                        + " with non-optional property \"" + msg(prop->getName())
+                        + ("\" but css.uno.XPropertySet::getPropertySetInfo's hasPropertyByName"
+                           " returns false"))
+                     .getStr()),
+                    optional);
+            }
+        }
+    }
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(Test);

@@ -20,15 +20,14 @@
 #include "XMLExportDDELinks.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
-#include <xmloff/nmspmap.hxx>
 #include <sax/tools/converter.hxx>
 #include "xmlexprt.hxx"
-#include "unonames.hxx"
-#include "document.hxx"
-#include "scmatrix.hxx"
+#include <unonames.hxx>
+#include <document.hxx>
+#include <scmatrix.hxx>
 #include <com/sun/star/sheet/XDDELink.hpp>
-
-class ScMatrix;
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 
 using namespace com::sun::star;
 using namespace xmloff::token;
@@ -65,9 +64,7 @@ void ScXMLExportDDELinks::WriteCell(const ScMatrixValue& aVal, sal_Int32 nRepeat
 
     if (nRepeat > 1)
     {
-        OUStringBuffer aBuf;
-        ::sax::Converter::convertNumber(aBuf, nRepeat);
-        rExport.AddAttribute(XML_NAMESPACE_TABLE, XML_NUMBER_COLUMNS_REPEATED, aBuf.makeStringAndClear());
+        rExport.AddAttribute(XML_NAMESPACE_TABLE, XML_NUMBER_COLUMNS_REPEATED, OUString::number(nRepeat));
     }
     SvXMLElementExport(rExport, XML_NAMESPACE_TABLE, XML_TABLE_CELL, true, true);
 }
@@ -88,9 +85,7 @@ void ScXMLExportDDELinks::WriteTable(const sal_Int32 nPos)
     SvXMLElementExport aTableElem(rExport, XML_NAMESPACE_TABLE, XML_TABLE, true, true);
     if (nCols > 1)
     {
-        OUStringBuffer aBuf;
-        ::sax::Converter::convertNumber(aBuf, static_cast<sal_Int32>(nCols));
-        rExport.AddAttribute(XML_NAMESPACE_TABLE, XML_NUMBER_COLUMNS_REPEATED, aBuf.makeStringAndClear());
+        rExport.AddAttribute(XML_NAMESPACE_TABLE, XML_NUMBER_COLUMNS_REPEATED, OUString::number(nCols));
     }
     {
         SvXMLElementExport aElemCol(rExport, XML_NAMESPACE_TABLE, XML_TABLE_COLUMN, true, true);
@@ -117,7 +112,7 @@ void ScXMLExportDDELinks::WriteTable(const sal_Int32 nPos)
     }
 }
 
-void ScXMLExportDDELinks::WriteDDELinks(uno::Reference<sheet::XSpreadsheetDocument>& xSpreadDoc)
+void ScXMLExportDDELinks::WriteDDELinks(const uno::Reference<sheet::XSpreadsheetDocument>& xSpreadDoc)
 {
     uno::Reference <beans::XPropertySet> xPropertySet (xSpreadDoc, uno::UNO_QUERY);
     if (xPropertySet.is())

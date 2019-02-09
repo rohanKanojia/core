@@ -17,17 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <config_features.h>
-
-#include "swabstdlg.hxx"
+#include <swabstdlg.hxx>
 
 #include <osl/module.hxx>
 
-typedef SwAbstractDialogFactory* (SAL_CALL *SwFuncPtrCreateDialogFactory)();
+typedef SwAbstractDialogFactory* (*SwFuncPtrCreateDialogFactory)();
 
 #ifndef DISABLE_DYNLOADING
 
-extern "C" { static void SAL_CALL thisModule() {} }
+extern "C" { static void thisModule() {} }
 
 #else
 
@@ -38,7 +36,6 @@ extern "C" SwAbstractDialogFactory* SwCreateDialogFactory();
 SwAbstractDialogFactory* SwAbstractDialogFactory::Create()
 {
     SwFuncPtrCreateDialogFactory fp = nullptr;
-#if HAVE_FEATURE_DESKTOP
 #ifndef DISABLE_DYNLOADING
     static ::osl::Module aDialogLibrary;
     static const OUString sLibName(SWUI_DLL_NAME);
@@ -47,9 +44,9 @@ SwAbstractDialogFactory* SwAbstractDialogFactory::Create()
         fp = reinterpret_cast<SwAbstractDialogFactory* (SAL_CALL*)()>(
             aDialogLibrary.getFunctionSymbol( "SwCreateDialogFactory" ));
 #else
-    fp = SwCreateDialogFactory();
+    fp = SwCreateDialogFactory;
 #endif
-#endif
+
     if ( fp )
         return fp();
     return nullptr;

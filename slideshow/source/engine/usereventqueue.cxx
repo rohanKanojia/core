@@ -19,18 +19,18 @@
 
 
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
-#include <comphelper/anytostring.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 
 #include <com/sun/star/awt/SystemPointer.hpp>
 #include <com/sun/star/awt/MouseButton.hpp>
 #include <com/sun/star/awt/MouseEvent.hpp>
 
-#include "delayevent.hxx"
-#include "usereventqueue.hxx"
-#include "cursormanager.hxx"
-#include "slideshowexceptions.hxx"
+#include <delayevent.hxx>
+#include <usereventqueue.hxx>
+#include <cursormanager.hxx>
+#include <slideshowexceptions.hxx>
 
 #include <vector>
 #include <queue>
@@ -158,9 +158,7 @@ public:
             maAnimationEventMap.end() )
         {
             // no entry for this animation -> create one
-            aIter = maAnimationEventMap.insert(
-                ImpAnimationEventMap::value_type( xNode,
-                                                  ImpEventVector() ) ).first;
+            aIter = maAnimationEventMap.emplace( xNode, ImpEventVector() ).first;
         }
 
         // add new event to queue
@@ -300,9 +298,7 @@ public:
         if( (aIter=maShapeEventMap.find( rShape )) == maShapeEventMap.end() )
         {
             // no entry for this shape -> create one
-            aIter = maShapeEventMap.insert(
-                ImpShapeEventMap::value_type( rShape,
-                                              ImpEventQueue() ) ).first;
+            aIter = maShapeEventMap.emplace(rShape, ImpEventQueue()).first;
         }
 
         // add new event to queue
@@ -318,29 +314,26 @@ protected:
 
         // find matching shape (scan reversely, to coarsely match
         // paint order)
-        ImpShapeEventMap::reverse_iterator       aCurrShape(maShapeEventMap.rbegin());
-        const ImpShapeEventMap::reverse_iterator aEndShape( maShapeEventMap.rend() );
-        while( aCurrShape != aEndShape )
+        auto aCurrShape = std::find_if(maShapeEventMap.rbegin(), maShapeEventMap.rend(),
+            [&aPosition](const ImpShapeEventMap::value_type& rShape) {
+                // TODO(F2): Get proper geometry polygon from the
+                // shape, to avoid having areas outside the shape
+                // react on the mouse
+                return rShape.first->getBounds().isInside( aPosition )
+                    && rShape.first->isVisible();
+            });
+        if (aCurrShape != maShapeEventMap.rend())
         {
-            // TODO(F2): Get proper geometry polygon from the
-            // shape, to avoid having areas outside the shape
-            // react on the mouse
-            if( aCurrShape->first->getBounds().isInside( aPosition ) &&
-                aCurrShape->first->isVisible() )
-            {
-                // shape hit, and shape is visible - report a
-                // hit
-                o_rHitShape = aCurrShape;
-                return true;
-            }
-
-            ++aCurrShape;
+            // shape hit, and shape is visible - report a
+            // hit
+            o_rHitShape = aCurrShape;
+            return true;
         }
 
         return false; // nothing hit
     }
 
-    bool sendEvent( ImpShapeEventMap::reverse_iterator& io_rHitShape )
+    bool sendEvent( ImpShapeEventMap::reverse_iterator const & io_rHitShape )
     {
         // take next event from queue
         const bool bRet( fireSingleEvent( io_rHitShape->second,
@@ -558,11 +551,9 @@ UserEventQueue::~UserEventQueue()
         // unregister all handlers
         clear();
     }
-    catch (uno::Exception &) {
-        OSL_FAIL( OUStringToOString(
-                        comphelper::anyToString(
-                            cppu::getCaughtException() ),
-                        RTL_TEXTENCODING_UTF8 ).getStr() );
+    catch (const uno::Exception& e)
+    {
+        SAL_WARN("slideshow", e);
     }
 }
 

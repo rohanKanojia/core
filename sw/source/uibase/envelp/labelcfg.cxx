@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <config_folders.h>
 
 #include <swtypes.hxx>
 #include <labelcfg.hxx>
 #include <labimp.hxx>
-#include <comphelper/string.hxx>
 #include <rtl/bootstrap.hxx>
 #include <unotools/configpaths.hxx>
 #include <xmlreader/xmlreader.hxx>
+#include <osl/diagnose.h>
 
 #include <unomid.h>
 
@@ -33,26 +34,26 @@ using namespace utl;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
 
-static inline void lcl_assertEndingItem(xmlreader::XmlReader& reader)
+static void lcl_assertEndingItem(xmlreader::XmlReader& reader)
 {
     int nsId;
     xmlreader::Span name;
     xmlreader::XmlReader::Result res;
-    res = reader.nextItem(xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
-    assert(res == xmlreader::XmlReader::RESULT_END);
+    res = reader.nextItem(xmlreader::XmlReader::Text::NONE, &name, &nsId);
+    assert(res == xmlreader::XmlReader::Result::End);
     (void) res;
 }
 
-static inline OUString lcl_getValue(xmlreader::XmlReader& reader,
+static OUString lcl_getValue(xmlreader::XmlReader& reader,
                                     const xmlreader::Span& span)
 {
     int nsId;
     xmlreader::Span name;
     xmlreader::XmlReader::Result res;
-    res = reader.nextItem(xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
-    assert(res == xmlreader::XmlReader::RESULT_BEGIN && name.equals(span));
-    res = reader.nextItem(xmlreader::XmlReader::TEXT_RAW, &name, &nsId);
-    assert(res == xmlreader::XmlReader::RESULT_TEXT);
+    res = reader.nextItem(xmlreader::XmlReader::Text::NONE, &name, &nsId);
+    assert(res == xmlreader::XmlReader::Result::Begin && name.equals(span));
+    res = reader.nextItem(xmlreader::XmlReader::Text::Raw, &name, &nsId);
+    assert(res == xmlreader::XmlReader::Result::Text);
     (void) res; (void) span;
     OUString sTmp = name.convertFromUtf8();
     lcl_assertEndingItem(reader);
@@ -86,17 +87,17 @@ SwLabelConfig::SwLabelConfig() :
 
     // fill m_aLabels and m_aManufacturers with the predefined labels
     res = reader.nextItem(
-            xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
+            xmlreader::XmlReader::Text::NONE, &name, &nsId);
     assert(
-        res == xmlreader::XmlReader::RESULT_BEGIN
+        res == xmlreader::XmlReader::Result::Begin
         && name.equals("manufacturers"));
     res = reader.nextItem(
-            xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
-    while (res != xmlreader::XmlReader::RESULT_END)
+            xmlreader::XmlReader::Text::NONE, &name, &nsId);
+    while (res != xmlreader::XmlReader::Result::End)
     {
         // Opening manufacturer
         assert(
-            res == xmlreader::XmlReader::RESULT_BEGIN
+            res == xmlreader::XmlReader::Result::Begin
             && name.equals("manufacturer"));
         // Get the name
         (void)reader.nextAttribute(&nsId, &name);
@@ -108,11 +109,11 @@ SwLabelConfig::SwLabelConfig() :
         for(;;) {
             // Opening label or ending manufacturer
             res = reader.nextItem(
-                    xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
-            if (res == xmlreader::XmlReader::RESULT_END)
+                    xmlreader::XmlReader::Text::NONE, &name, &nsId);
+            if (res == xmlreader::XmlReader::Result::End)
                 break;
             assert(
-                res == xmlreader::XmlReader::RESULT_BEGIN
+                res == xmlreader::XmlReader::Result::Begin
                 && name.equals("label"));
             // Get name value
             sName = lcl_getValue(reader, xmlreader::Span("name"));
@@ -127,11 +128,11 @@ SwLabelConfig::SwLabelConfig() :
         }
         // Get next manufacturer or end
         res = reader.nextItem(
-                xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
+                xmlreader::XmlReader::Text::NONE, &name, &nsId);
     };
     res = reader.nextItem(
-            xmlreader::XmlReader::TEXT_NONE, &name, &nsId);
-    assert(res == xmlreader::XmlReader::RESULT_DONE);
+            xmlreader::XmlReader::Text::NONE, &name, &nsId);
+    assert(res == xmlreader::XmlReader::Result::Done);
 
     // add to m_aLabels and m_aManufacturers the custom labels
     const Sequence<OUString>& rMan = GetNodeNames( OUString() );
@@ -176,45 +177,45 @@ void SwLabelConfig::Notify( const css::uno::Sequence< OUString >& ) {}
 static std::unique_ptr<SwLabRec> lcl_CreateSwLabRec(const OUString& rType, const OUString& rMeasure, const OUString& rManufacturer)
 {
     std::unique_ptr<SwLabRec> pNewRec(new SwLabRec);
-    pNewRec->aMake = rManufacturer;
-    pNewRec->lPWidth = 0;
-    pNewRec->lPHeight = 0;
-    pNewRec->aType = rType;
+    pNewRec->m_aMake = rManufacturer;
+    pNewRec->m_nPWidth = 0;
+    pNewRec->m_nPHeight = 0;
+    pNewRec->m_aType = rType;
     //all values are contained as colon-separated 1/100 mm values
     //except for the continuous flag ('C'/'S') and nCols, nRows (sal_Int32)
-    OUString sMeasure(rMeasure);
-    sal_uInt16 nTokenCount = comphelper::string::getTokenCount(sMeasure, ';');
-    for(sal_uInt16 i = 0; i < nTokenCount; i++)
+    sal_Int32 nTok{0};
+    sal_Int32 nIdx{rMeasure.isEmpty() ? -1 : 0};
+    while (nIdx>=0)
     {
-        OUString sToken(sMeasure.getToken(i, ';' ));
+        const OUString sToken(rMeasure.getToken(0, ';', nIdx));
         int nVal = sToken.toInt32();
-        switch(i)
+        switch(nTok++)
         {
-            case  0 : pNewRec->bCont = sToken[0] == 'C'; break;
-            case  1 : pNewRec->lHDist    = convertMm100ToTwip(nVal);  break;
-            case  2 : pNewRec->lVDist    = convertMm100ToTwip(nVal);  break;
-            case  3 : pNewRec->lWidth    = convertMm100ToTwip(nVal);  break;
-            case  4 : pNewRec->lHeight   = convertMm100ToTwip(nVal);  break;
-            case  5 : pNewRec->lLeft     = convertMm100ToTwip(nVal);  break;
-            case  6 : pNewRec->lUpper    = convertMm100ToTwip(nVal);  break;
-            case  7 : pNewRec->nCols     = nVal;                 break;
-            case  8 : pNewRec->nRows     = nVal;                 break;
-            case  9 : pNewRec->lPWidth   = convertMm100ToTwip(nVal);  break;
-            case 10 : pNewRec->lPHeight  = convertMm100ToTwip(nVal);  break;
+            case  0 : pNewRec->m_bCont = sToken[0] == 'C'; break;
+            case  1 : pNewRec->m_nHDist    = convertMm100ToTwip(nVal);  break;
+            case  2 : pNewRec->m_nVDist    = convertMm100ToTwip(nVal);  break;
+            case  3 : pNewRec->m_nWidth    = convertMm100ToTwip(nVal);  break;
+            case  4 : pNewRec->m_nHeight   = convertMm100ToTwip(nVal);  break;
+            case  5 : pNewRec->m_nLeft     = convertMm100ToTwip(nVal);  break;
+            case  6 : pNewRec->m_nUpper    = convertMm100ToTwip(nVal);  break;
+            case  7 : pNewRec->m_nCols     = nVal;                 break;
+            case  8 : pNewRec->m_nRows     = nVal;                 break;
+            case  9 : pNewRec->m_nPWidth   = convertMm100ToTwip(nVal);  break;
+            case 10 : pNewRec->m_nPHeight  = convertMm100ToTwip(nVal);  break;
         }
     }
     // lines added for compatibility with custom label definitions saved before patch fdo#44516
-    if (pNewRec->lPWidth == 0 || pNewRec->lPHeight == 0)
+    if (pNewRec->m_nPWidth == 0 || pNewRec->m_nPHeight == 0)
     {
         // old style definition (no paper dimensions), calculate probable values
-        pNewRec->lPWidth = 2 * pNewRec->lLeft + (pNewRec->nCols - 1) * pNewRec->lHDist + pNewRec->lWidth;
-        pNewRec->lPHeight = ( pNewRec->bCont ? pNewRec->nRows * pNewRec->lVDist : 2 * pNewRec->lUpper + (pNewRec->nRows - 1) * pNewRec->lVDist + pNewRec->lHeight );
+        pNewRec->m_nPWidth = 2 * pNewRec->m_nLeft + (pNewRec->m_nCols - 1) * pNewRec->m_nHDist + pNewRec->m_nWidth;
+        pNewRec->m_nPHeight = ( pNewRec->m_bCont ? pNewRec->m_nRows * pNewRec->m_nVDist : 2 * pNewRec->m_nUpper + (pNewRec->m_nRows - 1) * pNewRec->m_nVDist + pNewRec->m_nHeight );
     }
     return pNewRec;
 }
 
 static Sequence<PropertyValue> lcl_CreateProperties(
-    Sequence<OUString>& rPropNames, OUString& rMeasure, const SwLabRec& rRec)
+    Sequence<OUString> const & rPropNames, OUString& rMeasure, const SwLabRec& rRec)
 {
     const OUString* pNames = rPropNames.getConstArray();
     Sequence<PropertyValue> aRet(rPropNames.getLength());
@@ -226,21 +227,21 @@ static Sequence<PropertyValue> lcl_CreateProperties(
         pValues[nProp].Name = pNames[nProp];
         switch(nProp)
         {
-            case 0: pValues[nProp].Value <<= OUString(rRec.aType); break;
+            case 0: pValues[nProp].Value <<= rRec.m_aType; break;
             case 1:
             {
                 rMeasure.clear();
-                rMeasure += rRec.bCont ? OUString( "C" ) : OUString( "S" );      rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lHDist ) );   rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lVDist ) );   rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lWidth ) );   rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lHeight ) );  rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lLeft ) );    rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lUpper ) );   rMeasure += sColon;
-                rMeasure += OUString::number( rRec.nCols );                     rMeasure += sColon;
-                rMeasure += OUString::number( rRec.nRows );                     rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lPWidth ) );  rMeasure += sColon;
-                rMeasure += OUString::number( convertTwipToMm100( rRec.lPHeight ) );
+                rMeasure += rRec.m_bCont ? OUString( "C" ) : OUString( "S" );      rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nHDist ) );   rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nVDist ) );   rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nWidth ) );   rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nHeight ) );  rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nLeft ) );    rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nUpper ) );   rMeasure += sColon;
+                rMeasure += OUString::number( rRec.m_nCols );                     rMeasure += sColon;
+                rMeasure += OUString::number( rRec.m_nRows );                     rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nPWidth ) );  rMeasure += sColon;
+                rMeasure += OUString::number( convertTwipToMm100( rRec.m_nPHeight ) );
                 pValues[nProp].Value <<= rMeasure;
             }
             break;
@@ -254,9 +255,8 @@ void    SwLabelConfig::FillLabels(const OUString& rManufacturer, SwLabRecs& rLab
 {
     if (m_aLabels.find(rManufacturer) == m_aLabels.end())
         return;
-    for (std::map<OUString, SwLabelMeasure>::iterator it = m_aLabels[rManufacturer].begin();
-            it != m_aLabels[rManufacturer].end(); ++it)
-        rLabArr.push_back( lcl_CreateSwLabRec(it->first, it->second.m_aMeasure, rManufacturer) );
+    for (const auto& rEntry : m_aLabels[rManufacturer])
+        rLabArr.push_back( lcl_CreateSwLabRec(rEntry.first, rEntry.second.m_aMeasure, rManufacturer) );
 }
 
 bool    SwLabelConfig::HasLabel(const OUString& rManufacturer, const OUString& rType)
@@ -307,8 +307,7 @@ void SwLabelConfig::SaveLabel( const OUString& rManufacturer,
         sFoundNode += OUString::number( nIndex );
         while ( lcl_Exists( sFoundNode, aLabels ) )
         {
-            sFoundNode = sPrefix;
-            sFoundNode += OUString::number(nIndex++);
+            sFoundNode = sPrefix + OUString::number(nIndex++);
         }
     }
     else

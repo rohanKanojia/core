@@ -24,19 +24,14 @@
 #include <xmloff/nmspmap.hxx>
 #include "xmlEnums.hxx"
 #include "xmlHelper.hxx"
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include "xmlStyleImport.hxx"
 #include <ucbhelper/content.hxx>
-#include <tools/debug.hxx>
-#include <comphelper/namecontainer.hxx>
-#include <comphelper/genericpropertyset.hxx>
 #include <com/sun/star/awt/FontDescriptor.hpp>
-#include <com/sun/star/report/XReportControlModel.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
 namespace rptxml
 {
-    using namespace ::comphelper;
     using namespace ::com::sun::star;
     using namespace ::com::sun::star::uno;
     using namespace ::com::sun::star::beans;
@@ -74,8 +69,6 @@ OXMLComponent::OXMLComponent( ORptFilter& _rImport
                     m_xComponent->setName(sValue);
                     break;
                 case XML_TOK_TEXT_STYLE_NAME:
-                    m_sTextStyleName = sValue;
-                    break;
                 case XML_TOK_TRANSFORM:
                     break;
                 default:
@@ -84,7 +77,7 @@ OXMLComponent::OXMLComponent( ORptFilter& _rImport
         }
         catch(const Exception&)
         {
-            OSL_FAIL("Exception catched while putting props into report component!");
+            OSL_FAIL("Exception caught while putting props into report component!");
         }
     }
 }

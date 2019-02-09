@@ -67,8 +67,6 @@ public:
 
     ~ExtensionCmdQueue();
 
-    /**
-    */
     void addExtension( const OUString &rExtensionURL,
                        const OUString &rRepository,
                        const bool bWarnUser );
@@ -87,8 +85,8 @@ public:
 
     bool isBusy();
 private:
-    ExtensionCmdQueue(ExtensionCmdQueue &) = delete;
-    void operator =(ExtensionCmdQueue &) = delete;
+    ExtensionCmdQueue(ExtensionCmdQueue const &) = delete;
+    ExtensionCmdQueue& operator =(ExtensionCmdQueue const &) = delete;
 
     class Thread;
 

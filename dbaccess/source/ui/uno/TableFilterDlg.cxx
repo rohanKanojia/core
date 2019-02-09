@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbu_reghelper.hxx"
-#include "uiservices.hxx"
+#include <dbu_reghelper.hxx>
+#include <uiservices.hxx>
 #include "TableFilterDlg.hxx"
-#include "TablesSingleDlg.hxx"
+#include <TablesSingleDlg.hxx>
 #include <comphelper/processfactory.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 
 using namespace dbaui;
 
-extern "C" void SAL_CALL createRegistryInfo_OTableFilterDialog()
+extern "C" void createRegistryInfo_OTableFilterDialog()
 {
     static OMultiInstanceAutoRegistration< OTableFilterDialog > aAutoRegistration;
 }
@@ -42,38 +43,38 @@ OTableFilterDialog::OTableFilterDialog(const Reference< XComponentContext >& _rx
 {
 }
 
-Sequence<sal_Int8> SAL_CALL OTableFilterDialog::getImplementationId(  ) throw(RuntimeException, std::exception)
+Sequence<sal_Int8> SAL_CALL OTableFilterDialog::getImplementationId(  )
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-Reference< XInterface > SAL_CALL OTableFilterDialog::Create(const Reference< XMultiServiceFactory >& _rxFactory)
+Reference< XInterface > OTableFilterDialog::Create(const Reference< XMultiServiceFactory >& _rxFactory)
 {
     return *(new OTableFilterDialog( comphelper::getComponentContext(_rxFactory) ));
 }
 
-OUString SAL_CALL OTableFilterDialog::getImplementationName() throw(RuntimeException, std::exception)
+OUString SAL_CALL OTableFilterDialog::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
-OUString OTableFilterDialog::getImplementationName_Static() throw(RuntimeException)
+OUString OTableFilterDialog::getImplementationName_Static()
 {
     return OUString("org.openoffice.comp.dbu.OTableFilterDialog");
 }
 
-css::uno::Sequence<OUString> SAL_CALL OTableFilterDialog::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OTableFilterDialog::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
 
-css::uno::Sequence<OUString> OTableFilterDialog::getSupportedServiceNames_Static() throw(RuntimeException)
+css::uno::Sequence<OUString> OTableFilterDialog::getSupportedServiceNames_Static()
 {
     css::uno::Sequence<OUString> aSupported { "com.sun.star.sdb.TableFilterDialog" };
     return aSupported;
 }
 
-Reference<XPropertySetInfo>  SAL_CALL OTableFilterDialog::getPropertySetInfo() throw(RuntimeException, std::exception)
+Reference<XPropertySetInfo>  SAL_CALL OTableFilterDialog::getPropertySetInfo()
 {
     Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
     return xInfo;
@@ -91,9 +92,9 @@ Reference<XPropertySetInfo>  SAL_CALL OTableFilterDialog::getPropertySetInfo() t
     return new ::cppu::OPropertyArrayHelper(aProps);
 }
 
-VclPtr<Dialog> OTableFilterDialog::createDialog(vcl::Window* _pParent)
+svt::OGenericUnoDialog::Dialog OTableFilterDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
 {
-    return VclPtr<OTableSubscriptionDialog>::Create(_pParent, m_pDatasourceItems, m_aContext, m_aInitialSelection);
+    return svt::OGenericUnoDialog::Dialog(VclPtr<OTableSubscriptionDialog>::Create(VCLUnoHelper::GetWindow(rParent), m_pDatasourceItems.get(), m_aContext, m_aInitialSelection));
 }
 
 }   // namespace dbaui

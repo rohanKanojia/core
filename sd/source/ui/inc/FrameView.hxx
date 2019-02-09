@@ -22,7 +22,7 @@
 
 #include "ViewShell.hxx"
 #include <svx/svdview.hxx>
-#include "pres.hxx"
+#include <pres.hxx>
 
 class SdDrawDocument;
 class SdOptions;
@@ -38,12 +38,12 @@ class SD_DLLPUBLIC FrameView
 public:
     FrameView(SdDrawDocument* pDrawDoc, FrameView* pFrameView = nullptr );
     FrameView(const FrameView& rFrameView);
-    virtual ~FrameView();
+    virtual ~FrameView() override;
 
     void Connect();
     void Disconnect();
 
-    void Update(SdOptions* pOptions);
+    void Update(SdOptions const * pOptions);
 
     void  SetStandardHelpLines(const SdrHelpLineList& rHelpLines)
                              { maStandardHelpLines = rHelpLines; }
@@ -55,17 +55,17 @@ public:
                              { maHandoutHelpLines = rHelpLines; }
     const SdrHelpLineList& GetHandoutHelpLines() { return maHandoutHelpLines; }
 
-    void SetVisibleLayers(const SetOfByte& rVisibleLayers)
+    void SetVisibleLayers(const SdrLayerIDSet& rVisibleLayers)
                          { maVisibleLayers = rVisibleLayers; }
-    const SetOfByte& GetVisibleLayers() { return maVisibleLayers; }
+    const SdrLayerIDSet& GetVisibleLayers() { return maVisibleLayers; }
 
-    void SetLockedLayers(const SetOfByte& rLockedLayers)
+    void SetLockedLayers(const SdrLayerIDSet& rLockedLayers)
                         { maLockedLayers = rLockedLayers; }
-    const SetOfByte& GetLockedLayers() { return maLockedLayers; }
+    const SdrLayerIDSet& GetLockedLayers() { return maLockedLayers; }
 
-    void SetPrintableLayers(const SetOfByte& rPrintableLayers)
+    void SetPrintableLayers(const SdrLayerIDSet& rPrintableLayers)
                          { maPrintableLayers = rPrintableLayers; }
-    const SetOfByte& GetPrintableLayers() { return maPrintableLayers; }
+    const SdrLayerIDSet& GetPrintableLayers() { return maPrintableLayers; }
 
     void SetRuler(const bool bRulerOn)
                  { mbRuler = bRulerOn; }
@@ -79,9 +79,9 @@ public:
                  { mbNoAttribs = bNoAttr; }
     bool IsNoAttribs() const { return mbNoAttribs; }
 
-    void SetVisArea(const Rectangle& rVisArea)
+    void SetVisArea(const ::tools::Rectangle& rVisArea)
                  { maVisArea = rVisArea; }
-    const Rectangle GetVisArea() { return maVisArea; }
+    const ::tools::Rectangle& GetVisArea() { return maVisArea; }
 
     void SetPageKind(PageKind eKind) { mePageKind = eKind; }
     PageKind GetPageKind() const { return mePageKind; }
@@ -124,10 +124,10 @@ public:
                  { mbQuickEdit = bQEdit; }
     bool IsQuickEdit() const { return mbQuickEdit; }
 
-    void        SetDoubleClickTextEdit( bool bOn = true ) { mbDoubleClickTextEdit = bOn; }
+    void        SetDoubleClickTextEdit( bool bOn ) { mbDoubleClickTextEdit = bOn; }
     bool    IsDoubleClickTextEdit() const { return mbDoubleClickTextEdit; }
 
-    void        SetClickChangeRotation( bool bOn = true ) { mbClickChangeRotation = bOn; }
+    void        SetClickChangeRotation( bool bOn ) { mbClickChangeRotation = bOn; }
     bool    IsClickChangeRotation() const { return mbClickChangeRotation; }
 
     /** Remember the type of the view shell that was (or soon will be)
@@ -154,8 +154,6 @@ public:
                  { mnPresViewShellId = nId; }
     sal_uInt16 GetPresentationViewShellId() const { return mnPresViewShellId; }
 
-    void SetSlotId(sal_uInt16 nId) { mnSlotId = nId; }
-
     void SetSlidesPerRow(sal_uInt16 nSlides) { mnSlidesPerRow = nSlides; }
     sal_uInt16 GetSlidesPerRow() const { return mnSlidesPerRow; }
 
@@ -165,26 +163,26 @@ public:
     void SetIsNavigatorShowingAllShapes (const bool bIsNavigatorShowingAllShapes);
     bool IsNavigatorShowingAllShapes() const { return mbIsNavigatorShowingAllShapes;}
 
-    void    WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >&, bool bBrowse = false );
-    void    ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >&, bool bBrowse = false );
+    void    WriteUserDataSequence ( css::uno::Sequence < css::beans::PropertyValue >& );
+    void    ReadUserDataSequence ( const css::uno::Sequence < css::beans::PropertyValue >& );
 
 private:
     sal_uInt16          mnRefCount;
     bool                mbRuler;
-    SetOfByte           maVisibleLayers;
-    SetOfByte           maLockedLayers;
-    SetOfByte           maPrintableLayers;
+    SdrLayerIDSet           maVisibleLayers;
+    SdrLayerIDSet           maLockedLayers;
+    SdrLayerIDSet           maPrintableLayers;
     SdrHelpLineList     maStandardHelpLines;
     SdrHelpLineList     maNotesHelpLines;
     SdrHelpLineList     maHandoutHelpLines;
     bool                mbNoColors;        ///< structuring mode
     bool                mbNoAttribs;       ///< structuring mode
-    Rectangle           maVisArea;         ///< visible area
+    ::tools::Rectangle           maVisArea;         ///< visible area
     PageKind            mePageKind;        ///< kind of page (standard, notes, handout)
     sal_uInt16          mnSelectedPage;
     PageKind            mePageKindOnLoad;
     sal_uInt16          mnSelectedPageOnLoad;
-    EditMode            meEditMode; ///< edit mode in drawing mode (Page/MasterPage)
+    EditMode            mePageEditMode; ///< edit mode in drawing mode (Page/MasterPage)
     // EditMode            meStandardEditMode; ///< edit mode in drawing mode (Page/MasterPage)
     // EditMode            meNotesEditMode;    ///< edit mode in notes mode (Page/MasterPage)
     // EditMode            meHandoutEditMode;  ///< edit mode in handout mode (Page/MasterPage)
@@ -194,7 +192,6 @@ private:
     bool                mbDoubleClickTextEdit; ///< text mode after double click
     bool                mbClickChangeRotation; ///< single click switches between selection/rotation mode
     sal_uInt16          mnPresViewShellId;  ///< ViewShell from which the presentation was started
-    sal_uInt16          mnSlotId;           ///< SlotId, which was initial mentioned
     sal_uInt16          mnSlidesPerRow;     ///< slides per row on the slide-desk
     DrawModeFlags       mnDrawMode;         ///< draw mode for the normal window
     /** Remember whether the navigator shows all shapes (<TRUE/>) or only

@@ -31,20 +31,19 @@ class ItemHolder1 : private ItemHolderMutexBase
     // member
     private:
 
-        TItems m_lItems;
+        std::vector<TItemInfo> m_lItems;
 
     // c++ interface
     public:
 
         ItemHolder1();
-        virtual ~ItemHolder1();
+        virtual ~ItemHolder1() override;
         static void holdConfigItem(EItem eItem);
 
     // uno interface
     public:
 
-        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing(const css::lang::EventObject& aEvent) override;
 
     // helper
     private:
@@ -52,7 +51,6 @@ class ItemHolder1 : private ItemHolderMutexBase
         void impl_addItem(EItem eItem);
         void impl_releaseAllItems();
         static void impl_newItem(TItemInfo& rItem);
-        static void impl_deleteItem(TItemInfo& rItem);
 };
 
 // namespaces

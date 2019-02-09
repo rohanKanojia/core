@@ -33,7 +33,6 @@
 
 #include <cppuhelper/servicefactory.hxx>
 
-#include <osl/diagnose.h>
 
 using namespace ::cppu;
 using namespace ::com::sun::star::uno;
@@ -42,7 +41,7 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
 // Needed to switch on solaris threads
-#ifdef SOLARIS
+#ifdef __sun
 extern "C" void ChangeGlobalInit();
 #endif
 
@@ -53,7 +52,7 @@ int main (int argc, char **argv)
         printf( "usage : testcomponent service dll [additional dlls]\n" );
         exit( 0 );
     }
-#ifdef SOLARIS
+#ifdef __sun
     // switch on threads in solaris
     ChangeGlobalInit();
 #endif
@@ -84,7 +83,7 @@ int main (int argc, char **argv)
     {
         // Load dll for the tested component
         for( int n = 2 ; n <argc ; n ++ ) {
-#ifdef SAL_W32
+#ifdef _WIN32
             OUString aDllName = OStringToOUString( argv[n] , RTL_TEXTENCODING_ASCII_US );
 #else
             OUString aDllName = "lib";
@@ -112,7 +111,7 @@ int main (int argc, char **argv)
         sTestName = "test";
         sTestName += argv[2];
 
-#ifdef SAL_W32
+#ifdef _WIN32
         OUString aDllName = OStringToOUString( sTestName , RTL_TEXTENCODING_ASCII_US );
 #else
         OUString aDllName = "lib";
@@ -154,7 +153,7 @@ int main (int argc, char **argv)
     // loop until all test are performed
     while( nHandle != -1 )
     {
-        // Instantiate serivce
+        // Instantiate service
         Reference< XInterface > x =
             xSMgr->createInstance( OStringToOUString( argv[1] , RTL_TEXTENCODING_ASCII_US ) );
         if( ! x.is() )

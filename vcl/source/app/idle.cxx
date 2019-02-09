@@ -18,50 +18,50 @@
  */
 
 #include <vcl/idle.hxx>
-#include "saltimer.hxx"
+#include <vcl/scheduler.hxx>
+#include <svdata.hxx>
+#include <saltimer.hxx>
 
-void Idle::Invoke()
+Idle::Idle( bool bAuto, const sal_Char *pDebugName )
+    : Timer( bAuto, pDebugName )
 {
-    maIdleHdl.Call( this );
+    SetPriority( TaskPriority::DEFAULT_IDLE );
 }
 
-Idle& Idle::operator=( const Idle& rIdle )
+Idle::Idle( const sal_Char *pDebugName )
+    : Idle( false, pDebugName )
 {
-    Scheduler::operator=(rIdle);
-    maIdleHdl = rIdle.maIdleHdl;
-    return *this;
-}
-
-Idle::Idle( const sal_Char *pDebugName ) : Scheduler( pDebugName )
-{
-}
-
-Idle::Idle( const Idle& rIdle ) : Scheduler(rIdle)
-{
-    maIdleHdl = rIdle.maIdleHdl;
 }
 
 void Idle::Start()
 {
-    Scheduler::Start();
-    Scheduler::ImplStartTimer(Scheduler::ImmediateTimeoutMs);
+    Task::Start();
+
+    sal_uInt64 nPeriod = Scheduler::ImmediateTimeoutMs;
+    if (Scheduler::GetDeterministicMode())
+    {
+        switch ( GetPriority() )
+        {
+            case TaskPriority::DEFAULT_IDLE:
+            case TaskPriority::LOWEST:
+                nPeriod = Scheduler::InfiniteTimeoutMs;
+                break;
+            default:
+                break;
+        }
+    }
+
+    Task::StartTimer(nPeriod);
 }
 
-bool Idle::ReadyForSchedule( bool bTimerOnly, sal_uInt64 /* nTimeNow */ ) const
+sal_uInt64 Idle::UpdateMinPeriod( sal_uInt64 /* nMinPeriod */, sal_uInt64 /* nTimeNow */ ) const
 {
-    // always ready if not only looking for timers.
-    return !bTimerOnly;
+    return Scheduler::ImmediateTimeoutMs;
 }
 
-bool Idle::IsIdle() const
+AutoIdle::AutoIdle( const sal_Char *pDebugName )
+    : Idle( true, pDebugName )
 {
-    return true;
-}
-
-sal_uInt64 Idle::UpdateMinPeriod( sal_uInt64 /* nMinPeriod */, sal_uInt64 /* nTime */ ) const
-{
-    assert(false); // idles currently don't hit this.
-    return ImmediateTimeoutMs;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

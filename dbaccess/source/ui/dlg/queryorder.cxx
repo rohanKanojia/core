@@ -17,17 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbu_tbl.hrc"
-#include "queryorder.hxx"
-#include "dbustrings.hrc"
+#include <strings.hrc>
+#include <strings.hxx>
+#include <core_resource.hxx>
+#include <queryorder.hxx>
+#include <stringconstants.hxx>
 #include <com/sun/star/sdb/XSingleSelectQueryComposer.hpp>
 #include <com/sun/star/sdbc/ColumnSearch.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <tools/debug.hxx>
-#include "moduledbu.hxx"
 #include <connectivity/sqliterator.hxx>
 #include <connectivity/dbtools.hxx>
-#include <comphelper/extract.hxx>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <tools/diagnose_ex.h>
 #include <vcl/settings.hxx>
@@ -44,47 +44,39 @@ using namespace ::com::sun::star::sdbcx;
 using namespace ::com::sun::star::beans;
 
 
-DlgOrderCrit::DlgOrderCrit(vcl::Window * pParent,
+DlgOrderCrit::DlgOrderCrit(weld::Window * pParent,
     const Reference< XConnection>& _rxConnection,
     const Reference< XSingleSelectQueryComposer >& _rxComposer,
     const Reference< XNameAccess>& _rxCols)
-    : ModalDialog(pParent, "SortDialog", "dbaccess/ui/sortdialog.ui")
-    , aSTR_NOENTRY(ModuleRes(STR_VALUE_NONE))
+    : GenericDialogController(pParent, "dbaccess/ui/sortdialog.ui", "SortDialog")
     , m_xQueryComposer(_rxComposer)
     , m_xColumns(_rxCols)
     , m_xConnection(_rxConnection)
+    , m_xLB_ORDERFIELD1(m_xBuilder->weld_combo_box("field1"))
+    , m_xLB_ORDERVALUE1(m_xBuilder->weld_combo_box("value1"))
+    , m_xLB_ORDERFIELD2(m_xBuilder->weld_combo_box("field2"))
+    , m_xLB_ORDERVALUE2(m_xBuilder->weld_combo_box("value2"))
+    , m_xLB_ORDERFIELD3(m_xBuilder->weld_combo_box("field3"))
+    , m_xLB_ORDERVALUE3(m_xBuilder->weld_combo_box("value3"))
 {
+    m_aColumnList[0] = m_xLB_ORDERFIELD1.get();
+    m_aColumnList[1] = m_xLB_ORDERFIELD2.get();
+    m_aColumnList[2] = m_xLB_ORDERFIELD3.get();
 
-    get(m_pLB_ORDERFIELD1, "field1");
-    get(m_pLB_ORDERVALUE1, "value1");
-    get(m_pLB_ORDERFIELD2, "field2");
-    get(m_pLB_ORDERVALUE2, "value2");
-    get(m_pLB_ORDERFIELD3, "field3");
-    get(m_pLB_ORDERVALUE3, "value3");
+    m_aValueList[0] = m_xLB_ORDERVALUE1.get();
+    m_aValueList[1] = m_xLB_ORDERVALUE2.get();
+    m_aValueList[2] = m_xLB_ORDERVALUE3.get();
 
-    AllSettings aSettings( GetSettings() );
-    StyleSettings aStyle( aSettings.GetStyleSettings() );
-    aStyle.SetAutoMnemonic( false );
-    aSettings.SetStyleSettings( aStyle );
-    SetSettings( aSettings );
-
-    m_aColumnList[0] = m_pLB_ORDERFIELD1;
-    m_aColumnList[1] = m_pLB_ORDERFIELD2;
-    m_aColumnList[2] = m_pLB_ORDERFIELD3;
-
-    m_aValueList[0] = m_pLB_ORDERVALUE1;
-    m_aValueList[1] = m_pLB_ORDERVALUE2;
-    m_aValueList[2] = m_pLB_ORDERVALUE3;
-
-    for (int j=0; j < DOG_ROWS; ++j)
+    OUString aSTR_NOENTRY(DBA_RES(STR_VALUE_NONE));
+    for (auto j : m_aColumnList)
     {
-        m_aColumnList[j]->InsertEntry( aSTR_NOENTRY );
+        j->append_text(aSTR_NOENTRY);
     }
 
     for (int j=0; j < DOG_ROWS; ++j)
     {
-        m_aColumnList[j]->SelectEntryPos(0);
-        m_aValueList[j]->SelectEntryPos(0);
+        m_aColumnList[j]->set_active(0);
+        m_aValueList[j]->set_active(0);
     }
     try
     {
@@ -104,9 +96,9 @@ DlgOrderCrit::DlgOrderCrit(vcl::Window * pParent,
                 sal_Int32 eColumnSearch = dbtools::getSearchColumnFlag(m_xConnection,nDataType);
                 if(eColumnSearch != ColumnSearch::NONE)
                 {
-                    for (int j=0; j < DOG_ROWS; ++j)
+                    for (auto j : m_aColumnList)
                     {
-                        m_aColumnList[j]->InsertEntry(*pIter);
+                        j->append_text(*pIter);
                     }
                 }
             }
@@ -117,33 +109,19 @@ DlgOrderCrit::DlgOrderCrit(vcl::Window * pParent,
     }
     catch(const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
     EnableLines();
 
-    m_pLB_ORDERFIELD1->SetSelectHdl(LINK(this,DlgOrderCrit,FieldListSelectHdl));
-    m_pLB_ORDERFIELD2->SetSelectHdl(LINK(this,DlgOrderCrit,FieldListSelectHdl));
+    m_xLB_ORDERFIELD1->connect_changed(LINK(this,DlgOrderCrit,FieldListSelectHdl));
+    m_xLB_ORDERFIELD2->connect_changed(LINK(this,DlgOrderCrit,FieldListSelectHdl));
 }
 
 DlgOrderCrit::~DlgOrderCrit()
 {
-    disposeOnce();
 }
 
-void DlgOrderCrit::dispose()
-{
-    m_pLB_ORDERFIELD1.clear();
-    m_pLB_ORDERVALUE1.clear();
-    m_pLB_ORDERFIELD2.clear();
-    m_pLB_ORDERVALUE2.clear();
-    m_pLB_ORDERFIELD3.clear();
-    m_pLB_ORDERVALUE3.clear();
-    for (auto& a : m_aColumnList) a.clear();
-    for (auto& a : m_aValueList) a.clear();
-    ModalDialog::dispose();
-}
-
-IMPL_LINK_NOARG_TYPED( DlgOrderCrit, FieldListSelectHdl, ListBox&, void )
+IMPL_LINK_NOARG( DlgOrderCrit, FieldListSelectHdl, weld::ComboBox&, void )
 {
     EnableLines();
 }
@@ -170,45 +148,45 @@ void DlgOrderCrit::impl_initializeOrderList_nothrow()
             xColumn->getPropertyValue( sNameProperty ) >>= sColumnName;
             xColumn->getPropertyValue( sAscendingProperty ) >>= bIsAscending;
 
-            m_aColumnList[i]->SelectEntry( sColumnName );
-            m_aValueList[i]->SelectEntryPos( bIsAscending ? 0 : 1 );
+            m_aColumnList[i]->set_active_text(sColumnName);
+            m_aValueList[i]->set_active(bIsAscending ? 0 : 1);
         }
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 }
 
 void DlgOrderCrit::EnableLines()
 {
 
-    if ( m_pLB_ORDERFIELD1->GetSelectEntryPos() == 0 )
+    if ( m_xLB_ORDERFIELD1->get_active() == 0 )
     {
-        m_pLB_ORDERFIELD2->Disable();
-        m_pLB_ORDERVALUE2->Disable();
+        m_xLB_ORDERFIELD2->set_sensitive(false);
+        m_xLB_ORDERVALUE2->set_sensitive(false);
 
-        m_pLB_ORDERFIELD2->SelectEntryPos( 0 );
-        m_pLB_ORDERVALUE2->SelectEntryPos( 0 );
+        m_xLB_ORDERFIELD2->set_active( 0 );
+        m_xLB_ORDERVALUE2->set_active( 0 );
     }
     else
     {
-        m_pLB_ORDERFIELD2->Enable();
-        m_pLB_ORDERVALUE2->Enable();
+        m_xLB_ORDERFIELD2->set_sensitive(true);
+        m_xLB_ORDERVALUE2->set_sensitive(true);
     }
 
-    if ( m_pLB_ORDERFIELD2->GetSelectEntryPos() == 0 )
+    if ( m_xLB_ORDERFIELD2->get_active() == 0 )
     {
-        m_pLB_ORDERFIELD3->Disable();
-        m_pLB_ORDERVALUE3->Disable();
+        m_xLB_ORDERFIELD3->set_sensitive(false);
+        m_xLB_ORDERVALUE3->set_sensitive(false);
 
-        m_pLB_ORDERFIELD3->SelectEntryPos( 0 );
-        m_pLB_ORDERVALUE3->SelectEntryPos( 0 );
+        m_xLB_ORDERFIELD3->set_active( 0 );
+        m_xLB_ORDERVALUE3->set_active( 0 );
     }
     else
     {
-        m_pLB_ORDERFIELD3->Enable();
-        m_pLB_ORDERVALUE3->Enable();
+        m_xLB_ORDERFIELD3->set_sensitive(true);
+        m_xLB_ORDERVALUE3->set_sensitive(true);
     }
 }
 
@@ -216,28 +194,26 @@ OUString DlgOrderCrit::GetOrderList( ) const
 {
     Reference<XDatabaseMetaData> xMetaData = m_xConnection->getMetaData();
     OUString sQuote  = xMetaData.is() ? xMetaData->getIdentifierQuoteString() : OUString();
-    static const char sDESC[] = " DESC ";
-    static const char sASC[] = " ASC ";
 
     Reference< XNameAccess> xColumns = Reference< XColumnsSupplier >(m_xQueryComposer,UNO_QUERY)->getColumns();
 
-    OUString sOrder;
+    OUStringBuffer sOrder;
     for( sal_uInt16 i=0 ; i<DOG_ROWS; i++ )
     {
-        if(m_aColumnList[i]->GetSelectEntryPos() != 0)
+        if (m_aColumnList[i]->get_active() != 0)
         {
             if(!sOrder.isEmpty())
-                sOrder += ",";
+                sOrder.append(",");
 
-            OUString sName = m_aColumnList[i]->GetSelectEntry();
-            sOrder += ::dbtools::quoteName(sQuote,sName);
-            if(m_aValueList[i]->GetSelectEntryPos())
-                sOrder += sDESC;
+            OUString sName = m_aColumnList[i]->get_active_text();
+            sOrder.append(::dbtools::quoteName(sQuote,sName));
+            if (m_aValueList[i]->get_active())
+                sOrder.append(" DESC ");
             else
-                sOrder += sASC;
+                sOrder.append(" ASC ");
         }
     }
-    return sOrder;
+    return sOrder.makeStringAndClear();
 }
 
 void DlgOrderCrit::BuildOrderPart()

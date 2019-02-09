@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "rtl/textcvt.h"
+#include <rtl/textcvt.h>
 
 #include "handleundefinedunicodetotextchar.hxx"
 #include "tcvtbyte.hxx"
@@ -42,16 +42,16 @@ sal_Size ImplSymbolToUnicode( SAL_UNUSED_PARAMETER const void*,
     {
         if ( pDestBuf == pEndDestBuf )
         {
-            *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+            *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
             break;
         }
 
         /* 0-31 (all Control-Character get the same Unicode value) */
-        unsigned char c = (unsigned char)*pSrcBuf;
+        unsigned char c = static_cast<unsigned char>(*pSrcBuf);
         if ( c <= 0x1F )
-            *pDestBuf = (sal_Unicode)c;
+            *pDestBuf = static_cast<sal_Unicode>(c);
         else
-            *pDestBuf = ((sal_Unicode)c)+0xF000;
+            *pDestBuf = static_cast<sal_Unicode>(c)+0xF000;
         pDestBuf++;
         pSrcBuf++;
     }
@@ -136,13 +136,13 @@ sal_Size ImplUpperCharToUnicode( const void* pData,
     pEndSrcBuf  = pSrcBuf+nSrcBytes;
     if ( pDestBuf == pEndDestBuf )
     {
-        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOSMALL;
+        *pInfo |= RTL_TEXTTOUNICODE_INFO_ERROR | RTL_TEXTTOUNICODE_INFO_DESTBUFFERTOOSMALL;
         *pSrcCvtBytes = 0;
         return 0;
     }
     while ( pSrcBuf < pEndSrcBuf )
     {
-        unsigned char c = (unsigned char)*pSrcBuf;
+        unsigned char c = static_cast<unsigned char>(*pSrcBuf);
         if (c < 0x80)
             cConv = c;
         else

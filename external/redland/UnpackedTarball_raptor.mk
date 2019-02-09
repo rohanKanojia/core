@@ -11,6 +11,8 @@ $(eval $(call gb_UnpackedTarball_UnpackedTarball,raptor))
 
 $(eval $(call gb_UnpackedTarball_set_tarball,raptor,$(RAPTOR_TARBALL),,redland))
 
+$(eval $(call gb_UnpackedTarball_update_autoconf_configs,raptor,build))
+
 # configure generated files for MSVC
 $(eval $(call gb_UnpackedTarball_add_file,raptor,src/raptor2.h,external/redland/raptor/raptor2.h))
 $(eval $(call gb_UnpackedTarball_add_file,raptor,src/raptor_config.h,external/redland/raptor/raptor_config.h))
@@ -19,12 +21,14 @@ $(eval $(call gb_UnpackedTarball_set_patchlevel,raptor,0))
 
 $(eval $(call gb_UnpackedTarball_add_patches,raptor,\
 	external/redland/raptor/raptor-freebsd.patch.1 \
-	$(if $(filter WNTGCC,$(OS)$(COM)),external/redland/raptor/raptor-mingw.patch.1) \
+	external/redland/raptor/raptor-msvc.patch.1 \
 	$(if $(filter-out WNT,$(OS)),external/redland/raptor/raptor-bundled-soname.patch.1) \
 	$(if $(filter ANDROID,$(OS)),external/redland/raptor/raptor-android.patch.1) \
 	external/redland/raptor/ubsan.patch \
 	$(if $(SYSTEM_LIBXML),,external/redland/raptor/rpath.patch) \
 	external/redland/raptor/xml2-config.patch \
+	external/redland/raptor/0001-Calcualte-max-nspace-declarations-correctly-for-XML-.patch.1 \
+	external/redland/raptor/libtool.patch \
 ))
 
 # vim: set noet sw=4 ts=4:

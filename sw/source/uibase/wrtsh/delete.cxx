@@ -22,6 +22,8 @@
 #include <editeng/lrspitem.hxx>
 #include <view.hxx>
 #include <drawbase.hxx>
+#include <unobaseclass.hxx>
+#include <rtl/character.hxx>
 
 inline void SwWrtShell::OpenMark()
 {
@@ -42,15 +44,34 @@ inline void SwWrtShell::CloseMark( bool bOkFlag )
     EndAllAction();
 }
 
+namespace {
+
+bool isUnicodeVariationSequenceSelector( sal_uInt32 nCode )
+{
+    return ( nCode >= 0xFE00 && nCode <= 0xFE0F )   // Variation Selectors block
+        || ( nCode >= 0xE0100 && nCode <= 0xE01EF );// Variation Selectors Supplement block
+}
+
+// Return if the character might be a base character of a CJK ideographic variation sequence
+bool isCJKIVSCharacters( sal_uInt32 nCode )
+{
+    return ( nCode >= 0x4E00 && nCode <= 0x9FFF )       // CJK Unified Ideographs
+        || ( nCode >= 0x3400 && nCode <= 0x4DBF )       // CJK Unified Ideographs Extension A
+        || ( nCode >= 0x20000 && nCode <= 0x2A6DF );    // CJK Unified Ideographs Extension B
+}
+
+}
+
+
 // #i23725#
 bool SwWrtShell::TryRemoveIndent()
 {
     bool bResult = false;
 
-    SfxItemSet aAttrSet(GetAttrPool(), RES_LR_SPACE, RES_LR_SPACE);
+    SfxItemSet aAttrSet(GetAttrPool(), svl::Items<RES_LR_SPACE, RES_LR_SPACE>{});
     GetCurAttr(aAttrSet);
 
-    SvxLRSpaceItem aItem = static_cast<const SvxLRSpaceItem &>(aAttrSet.Get(RES_LR_SPACE));
+    SvxLRSpaceItem aItem = aAttrSet.Get(RES_LR_SPACE);
     short aOldFirstLineOfst = aItem.GetTextFirstLineOfst();
 
     if (aOldFirstLineOfst > 0)
@@ -93,9 +114,9 @@ void SwWrtShell::DelLine()
     SetMark();
     SwCursorShell::RightMargin();
 
-    long nRet = Delete();
-    Pop(false);
-    if( nRet )
+    bool bRet = Delete();
+    Pop(SwCursorShell::PopMode::DeleteCurrent);
+    if( bRet )
         UpdateAttr();
 }
 
@@ -103,23 +124,23 @@ void SwWrtShell::DelToStartOfLine()
 {
     OpenMark();
     SwCursorShell::LeftMargin();
-    long nRet = Delete();
-    CloseMark( 0 != nRet );
+    bool bRet = Delete();
+    CloseMark( bRet );
 }
 
 void SwWrtShell::DelToEndOfLine()
 {
     OpenMark();
     SwCursorShell::RightMargin();
-    long nRet = Delete();
-    CloseMark( 0 != nRet );
+    bool bRet = Delete();
+    CloseMark( bRet );
 }
 
-long SwWrtShell::DelLeft()
+bool SwWrtShell::DelLeft()
 {
     // If it's a Fly, throw it away
-    int nSelType = GetSelectionType();
-    const int nCmp = nsSelectionType::SEL_FRM | nsSelectionType::SEL_GRF | nsSelectionType::SEL_OLE | nsSelectionType::SEL_DRW;
+    SelectionType nSelType = GetSelectionType();
+    const SelectionType nCmp = SelectionType::Frame | SelectionType::Graphic | SelectionType::Ole | SelectionType::DrawObject;
     if( nCmp & nSelType )
     {
         // #108205# Remember object's position.
@@ -140,7 +161,7 @@ long SwWrtShell::DelLeft()
             GotoNextFly();
         }
 
-        return 1L;
+        return true;
     }
 
     // If a selection exists, erase this
@@ -164,7 +185,7 @@ long SwWrtShell::DelLeft()
             }
             else
                 EnterStdMode();
-            return 1L;
+            return true;
         }
         else
             EnterStdMode();
@@ -176,6 +197,10 @@ long SwWrtShell::DelLeft()
 
     if( SwCursorShell::IsSttPara())
     {
+        // Start/EndAllAction to avoid cursor flickering
+        UnoActionContext c(GetDoc());
+        SwCursorShell::Push();
+
         // #i4032# Don't actually call a 'delete' if we
         // changed the table cell, compare DelRight().
         const SwStartNode * pSNdOld = pWasInTableNd ?
@@ -184,23 +209,34 @@ long SwWrtShell::DelLeft()
 
         // If the cursor is at the beginning of a paragraph, try to step
         // backwards. On failure we are done.
-        if( !SwCursorShell::Left(1,CRSR_SKIP_CHARS) )
-            return 0;
+        bool bDoSomething = SwCursorShell::Left(1,CRSR_SKIP_CHARS);
 
-        // If the cursor entered or left a table (or both) we are done. No step
-        // back.
-        const SwTableNode* pIsInTableNd = SwCursorShell::IsCursorInTable();
-        if( pIsInTableNd != pWasInTableNd )
-            return 0;
+        if (bDoSomething)
+        {
+            // If the cursor entered or left a table (or both) we are done.
+            const SwTableNode* pIsInTableNd = SwCursorShell::IsCursorInTable();
+            bDoSomething = pIsInTableNd == pWasInTableNd;
 
-        const SwStartNode* pSNdNew = pIsInTableNd ?
-                                     GetSwCursor()->GetNode().FindTableBoxStartNode() :
-                                     nullptr;
+            if (bDoSomething)
+            {
+                const SwStartNode* pSNdNew = pIsInTableNd ?
+                    GetSwCursor()->GetNode().FindTableBoxStartNode() :
+                    nullptr;
 
-        // #i4032# Don't actually call a 'delete' if we
-        // changed the table cell, compare DelRight().
-        if ( pSNdOld != pSNdNew )
-            return 0;
+                // #i4032# Don't actually call a 'delete' if we
+                // changed the table cell, compare DelRight().
+                bDoSomething = pSNdOld == pSNdNew;
+            }
+        }
+
+        if (!bDoSomething)
+        {
+            // tdf#115132 Restore previous position and we are done
+            SwCursorShell::Pop(SwCursorShell::PopMode::DeleteCurrent);
+            return false;
+        }
+
+        SwCursorShell::Pop(SwCursorShell::PopMode::DeleteStack);
 
         OpenMark();
         SwCursorShell::Right(1,CRSR_SKIP_CHARS);
@@ -209,35 +245,67 @@ long SwWrtShell::DelLeft()
     }
     else
     {
+        // If we are just to the right to a fieldmark, then remove it completely
+        const SwPosition* pCurPos = GetCursor()->GetPoint();
+        SwPosition aPrevChar(*pCurPos);
+        --aPrevChar.nContent;
+        sw::mark::IFieldmark* pFm = getIDocumentMarkAccess()->getFieldmarkFor(aPrevChar);
+        if (pFm && pFm->GetMarkEnd() == *pCurPos)
+        {
+            getIDocumentMarkAccess()->deleteMark(pFm);
+            return true;
+        }
+
         OpenMark();
-        SwCursorShell::Left(1,CRSR_SKIP_CHARS);
+        SwCursorShell::Left(1, CRSR_SKIP_CHARS);
+        if (SvtScriptType::ASIAN == GetScriptType())
+        {
+            sal_uInt32 nCode = GetChar(false);
+            if ( rtl::isSurrogate( nCode ) )
+            {
+                OUString sStr = GetSelText();
+                sal_Int32 nIndex = 0;
+                nCode = sStr.iterateCodePoints( &nIndex );
+            }
+
+            if ( isUnicodeVariationSequenceSelector( nCode ) )
+            {
+                SwCursorShell::Push();
+                SwCursorShell::Left(1, CRSR_SKIP_CHARS);
+                OUString sStr = GetSelText();
+                sal_Int32 nIndex = 0;
+                nCode = sStr.iterateCodePoints( &nIndex );
+                if ( isCJKIVSCharacters( nCode ) )
+                    SwCursorShell::Pop( SwCursorShell::PopMode::DeleteStack );
+                else
+                    SwCursorShell::Pop( SwCursorShell::PopMode::DeleteCurrent ); // For the weak script.
+            }
+        }
     }
-    long nRet = Delete();
-    if( !nRet && bSwap )
+    bool bRet = Delete();
+    if( !bRet && bSwap )
         SwCursorShell::SwapPam();
-    CloseMark( 0 != nRet );
-    return nRet;
+    CloseMark( bRet );
+    return bRet;
 }
 
-long SwWrtShell::DelRight()
+bool SwWrtShell::DelRight()
 {
         // Will be or'ed, if a tableselection exists;
-        // will here be implemented on nsSelectionType::SEL_TBL
-    long nRet = 0;
-    int nSelection = GetSelectionType();
-    if(nSelection & nsSelectionType::SEL_TBL_CELLS)
-        nSelection = nsSelectionType::SEL_TBL;
-    if(nSelection & nsSelectionType::SEL_TXT)
-        nSelection = nsSelectionType::SEL_TXT;
+        // will here be implemented on SelectionType::Table
+    bool bRet = false;
+    SelectionType nSelection = GetSelectionType();
+    if(nSelection & SelectionType::TableCell)
+        nSelection = SelectionType::Table;
+    if(nSelection & SelectionType::Text)
+        nSelection = SelectionType::Text;
 
-    const SwTableNode * pWasInTableNd = nullptr;
-
-    switch( nSelection & ~(nsSelectionType::SEL_BEZ) )
+    switch( nSelection & ~SelectionType::Ornament )
     {
-    case nsSelectionType::SEL_POSTIT:
-    case nsSelectionType::SEL_TXT:
-    case nsSelectionType::SEL_TBL:
-    case nsSelectionType::SEL_NUM:
+    case SelectionType::PostIt:
+    case SelectionType::Text:
+    case SelectionType::Table:
+    case SelectionType::NumberList:
             //  If a selection exists, erase it.
         if( IsSelection() )
         {
@@ -259,90 +327,85 @@ long SwWrtShell::DelRight()
                 }
                 else
                     EnterStdMode();
-                nRet = 1L;
+                bRet = true;
                 break;
             }
             else
                 EnterStdMode();
         }
 
-        pWasInTableNd = IsCursorInTable();
-
-        if( nsSelectionType::SEL_TXT & nSelection && SwCursorShell::IsSttPara() &&
-            SwCursorShell::IsEndPara() )
+        if (SwCursorShell::IsEndPara())
         {
-            // save cursor
+            // Start/EndAllAction to avoid cursor flickering
+            UnoActionContext c(GetDoc());
+
+            const SwTableNode* pWasInTableNd = IsCursorInTable();
+            // #108049# Save the startnode of the current cell
+            const SwStartNode* pSNdOld = pWasInTableNd ?
+                GetSwCursor()->GetNode().FindTableBoxStartNode() : nullptr;
+            bool bCheckDelFull = SelectionType::Text & nSelection && SwCursorShell::IsSttPara();
+            bool bDelFull = false;
+            bool bDoNothing = false;
+
+            // #i41424# Introduced a couple of
+            // Push()-Pop() pairs here. The reason for this is that a
+            // Right()-Left() combination does not make sure, that
+            // the cursor will be in its initial state, because there
+            // may be a numbering in front of the next paragraph.
             SwCursorShell::Push();
 
-            bool bDelFull = false;
-            if ( SwCursorShell::Right(1,CRSR_SKIP_CHARS) )
+            if (SwCursorShell::Right(1, CRSR_SKIP_CHARS))
             {
-                const SwTableNode * pCurrTableNd = IsCursorInTable();
-                bDelFull = pCurrTableNd && pCurrTableNd != pWasInTableNd;
+                const SwTableNode* pCurrTableNd = IsCursorInTable();
+                bDelFull = bCheckDelFull && pCurrTableNd && pCurrTableNd != pWasInTableNd;
+                if (!bDelFull && (IsCursorInTable() || (pCurrTableNd != pWasInTableNd)))
+                {
+                    // #108049# Save the startnode of the current cell.
+                    // May be different to pSNdOld as we have moved.
+                    const SwStartNode* pSNdNew = pCurrTableNd ?
+                        GetSwCursor()->GetNode().FindTableBoxStartNode() : nullptr;
+
+                    // tdf#115132 Only keep cursor position instead of deleting
+                    // if we have moved to a different cell
+                    bDoNothing = pSNdOld != pSNdNew;
+                }
             }
 
             // restore cursor
-            SwCursorShell::Pop( false );
+            SwCursorShell::Pop(SwCursorShell::PopMode::DeleteCurrent);
 
-            if( bDelFull )
+            if (bDelFull)
             {
                 DelFullPara();
                 UpdateAttr();
+            }
+            if (bDelFull || bDoNothing)
+                break;
+        }
+
+        {
+            // If we are just ahead of a fieldmark, then remove it completely
+            sw::mark::IFieldmark* pFm = GetCurrentFieldmark();
+            if (pFm && pFm->GetMarkStart() == *GetCursor()->GetPoint())
+            {
+                getIDocumentMarkAccess()->deleteMark(pFm);
+                bRet = true;
                 break;
             }
         }
 
-        {
-            // #108049# Save the startnode of the current cell
-            const SwStartNode * pSNdOld;
-            pSNdOld = GetSwCursor()->GetNode().FindTableBoxStartNode();
-
-            if ( SwCursorShell::IsEndPara() )
-            {
-                // #i41424# Introduced a couple of
-                // Push()-Pop() pairs here. The reason for this is that a
-                // Right()-Left() combination does not make sure, that
-                // the cursor will be in its initial state, because there
-                // may be a numbering in front of the next paragraph.
-                SwCursorShell::Push();
-
-                if ( SwCursorShell::Right(1, CRSR_SKIP_CHARS) )
-                {
-                    if (IsCursorInTable() || (pWasInTableNd != IsCursorInTable()))
-                    {
-                        /** #108049# Save the startnode of the current
-                            cell. May be different to pSNdOld as we have
-                            moved. */
-                        const SwStartNode * pSNdNew = GetSwCursor()
-                            ->GetNode().FindTableBoxStartNode();
-
-                        /** #108049# Only move instead of deleting if we
-                            have moved to a different cell */
-                        if (pSNdOld != pSNdNew)
-                        {
-                            SwCursorShell::Pop();
-                            break;
-                        }
-                    }
-                }
-
-                // restore cursor
-                SwCursorShell::Pop( false );
-            }
-        }
-
         OpenMark();
-        SwCursorShell::Right(1,CRSR_SKIP_CELLS);
-        nRet = Delete();
-        CloseMark( 0 != nRet );
+        SwCursorShell::Right(1, CRSR_SKIP_CELLS);
+        bRet = Delete();
+        CloseMark( bRet );
         break;
 
-    case nsSelectionType::SEL_FRM:
-    case nsSelectionType::SEL_GRF:
-    case nsSelectionType::SEL_OLE:
-    case nsSelectionType::SEL_DRW:
-    case nsSelectionType::SEL_DRW_TXT:
-    case nsSelectionType::SEL_DRW_FORM:
+    case SelectionType::Frame:
+    case SelectionType::Graphic:
+    case SelectionType::Ole:
+    case SelectionType::DrawObject:
+    case SelectionType::DrawObjectEditMode:
+    case SelectionType::DbForm:
         {
             // #108205# Remember object's position.
             Point aTmpPt = GetObjRect().TopLeft();
@@ -373,19 +436,20 @@ long SwWrtShell::DelRight()
         // <IsFrameSelected()> can't be true - see above.
         {
             nSelection = GetSelectionType();
-            if ( nsSelectionType::SEL_FRM & nSelection ||
-                 nsSelectionType::SEL_GRF & nSelection ||
-                 nsSelectionType::SEL_OLE & nSelection ||
-                 nsSelectionType::SEL_DRW & nSelection )
+            if ( SelectionType::Frame & nSelection ||
+                 SelectionType::Graphic & nSelection ||
+                 SelectionType::Ole & nSelection ||
+                 SelectionType::DrawObject & nSelection )
             {
                 EnterSelFrameMode();
                 GotoNextFly();
             }
         }
-        nRet = 1;
+        bRet = true;
         break;
+    default: break;
     }
-    return nRet;
+    return bRet;
 }
 
 void SwWrtShell::DelToEndOfPara()
@@ -394,14 +458,14 @@ void SwWrtShell::DelToEndOfPara()
     ResetCursorStack();
     Push();
     SetMark();
-    if( !MovePara(fnParaCurr,fnParaEnd))
+    if( !MovePara(GoCurrPara,fnParaEnd))
     {
-        Pop(false);
+        Pop(SwCursorShell::PopMode::DeleteCurrent);
         return;
     }
-    long nRet = Delete();
-    Pop(false);
-    if( nRet )
+    bool bRet = Delete();
+    Pop(SwCursorShell::PopMode::DeleteCurrent);
+    if( bRet )
         UpdateAttr();
 }
 
@@ -411,14 +475,14 @@ void SwWrtShell::DelToStartOfPara()
     ResetCursorStack();
     Push();
     SetMark();
-    if( !MovePara(fnParaCurr,fnParaStart))
+    if( !MovePara(GoCurrPara,fnParaStart))
     {
-        Pop(false);
+        Pop(SwCursorShell::PopMode::DeleteCurrent);
         return;
     }
-    long nRet = Delete();
-    Pop(false);
-    if( nRet )
+    bool bRet = Delete();
+    Pop(SwCursorShell::PopMode::DeleteCurrent);
+    if( bRet )
         UpdateAttr();
 }
 
@@ -431,16 +495,16 @@ void SwWrtShell::DelToStartOfSentence()
     if(IsStartOfDoc())
         return;
     OpenMark();
-    long nRet = _BwdSentence() ? Delete() : 0;
-    CloseMark( 0 != nRet );
+    bool bRet = BwdSentence_() && Delete();
+    CloseMark( bRet );
 }
 
-long SwWrtShell::DelToEndOfSentence()
+bool SwWrtShell::DelToEndOfSentence()
 {
     if(IsEndOfDoc())
-        return 0;
+        return false;
     OpenMark();
-    long nRet(0);
+    bool bRet(false);
     // fdo#60967: special case that is documented in help: delete
     // paragraph following table if cursor is at end of last cell in table
     if (IsEndOfTable())
@@ -452,21 +516,21 @@ long SwWrtShell::DelToEndOfSentence()
             SetMark();
             if (!IsEndPara()) // can only be at the end if it's empty
             {   // for an empty paragraph this would actually select the _next_
-                SwCursorShell::MovePara(fnParaCurr, fnParaEnd);
+                SwCursorShell::MovePara(GoCurrPara, fnParaEnd);
             }
             if (!IsEndOfDoc()) // do not delete last paragraph in body text
             {
-                nRet = DelFullPara() ? 1 : 0;
+                bRet = DelFullPara();
             }
         }
-        Pop(false);
+        Pop(SwCursorShell::PopMode::DeleteCurrent);
     }
     else
     {
-        nRet = _FwdSentence() ? Delete() : 0;
+        bRet = FwdSentence_() && Delete();
     }
-    CloseMark( 0 != nRet );
-    return nRet;
+    CloseMark( bRet );
+    return bRet;
 }
 
 void SwWrtShell::DelNxtWord()
@@ -478,14 +542,14 @@ void SwWrtShell::DelNxtWord()
     EnterStdMode();
     SetMark();
     if(IsEndWrd() && !IsStartWord())
-        _NxtWrdForDelete(); // #i92468#
+        NxtWrdForDelete(); // #i92468#
     if(IsStartWord() || IsEndPara())
-        _NxtWrdForDelete(); // #i92468#
+        NxtWrdForDelete(); // #i92468#
     else
-        _EndWrd();
+        EndWrd();
 
-    long nRet = Delete();
-    if( nRet )
+    bool bRet = Delete();
+    if( bRet )
         UpdateAttr();
     else
         SwapPam();
@@ -501,15 +565,15 @@ void SwWrtShell::DelPrvWord()
     EnterStdMode();
     SetMark();
     if ( !IsStartWord() ||
-         !_PrvWrdForDelete() ) // #i92468#
+         !PrvWrdForDelete() ) // #i92468#
     {
         if (IsEndWrd() || IsSttPara())
-            _PrvWrdForDelete(); // #i92468#
+            PrvWrdForDelete(); // #i92468#
         else
-            _SttWrd();
+            SttWrd();
     }
-    long nRet = Delete();
-    if( nRet )
+    bool bRet = Delete();
+    if( bRet )
         UpdateAttr();
     else
         SwapPam();

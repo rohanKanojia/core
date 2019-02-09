@@ -19,8 +19,10 @@
 #ifndef INCLUDED_SW_INC_NDNOTXT_HXX
 #define INCLUDED_SW_INC_NDNOTXT_HXX
 
+#include <memory>
 #include "node.hxx"
 
+class Size;
 namespace tools { class PolyPolygon; }
 
 // SwNoTextNode
@@ -30,12 +32,12 @@ class SW_DLLPUBLIC SwNoTextNode : public SwContentNode
     friend class SwNodes;
     friend class SwNoTextFrame;
 
-    tools::PolyPolygon *pContour;
-    bool bAutomaticContour : 1; // automatic contour polygon, not manipulated
-    bool bContourMapModeValid : 1; // contour map mode is not the graphics's
+    std::unique_ptr<tools::PolyPolygon> m_pContour;
+    bool m_bAutomaticContour : 1; // automatic contour polygon, not manipulated
+    bool m_bContourMapModeValid : 1; // contour map mode is not the graphics's
                                    // preferred map mode, but either
                                       // MM100 or pixel
-    bool bPixelContour : 1;     // contour map mode is invalid and pixel.
+    bool m_bPixelContour : 1;     // contour map mode is invalid and pixel.
 
     // Creates for all derivations an AttrSet with ranges for frame- and
     // graphics-attributes (only called by SwContentNode).
@@ -45,15 +47,15 @@ class SW_DLLPUBLIC SwNoTextNode : public SwContentNode
     SwNoTextNode &operator=( const SwNoTextNode& ) = delete;
 
 protected:
-    SwNoTextNode( const SwNodeIndex &rWhere, const sal_uInt8 nNdType,
-                SwGrfFormatColl *pGrColl, SwAttrSet* pAutoAttr = nullptr );
+    SwNoTextNode( const SwNodeIndex &rWhere, const SwNodeType nNdType,
+                SwGrfFormatColl *pGrColl, SwAttrSet const * pAutoAttr );
 
 public:
-    virtual ~SwNoTextNode();
+    virtual ~SwNoTextNode() override;
 
     virtual SwContentFrame *MakeFrame( SwFrame* ) override;
 
-    inline SwGrfFormatColl *GetGrfColl() const { return const_cast<SwGrfFormatColl*>(static_cast<const SwGrfFormatColl*>(GetRegisteredIn())); }
+    SwGrfFormatColl *GetGrfColl() const { return const_cast<SwGrfFormatColl*>(static_cast<const SwGrfFormatColl*>(GetRegisteredIn())); }
 
     virtual Size GetTwipSize() const = 0;
 
@@ -68,12 +70,12 @@ public:
     void               SetContour( const tools::PolyPolygon *pPoly,
                                    bool bAutomatic = false );
     const tools::PolyPolygon *HasContour() const;
-    bool               _HasContour() const { return pContour!=nullptr; };
+    bool               HasContour_() const { return m_pContour!=nullptr; };
     void               GetContour( tools::PolyPolygon &rPoly ) const;
     void               CreateContour();
 
-    void               SetAutomaticContour( bool bSet ) { bAutomaticContour = bSet; }
-    bool               HasAutomaticContour() const { return bAutomaticContour; }
+    void               SetAutomaticContour( bool bSet ) { m_bAutomaticContour = bSet; }
+    bool               HasAutomaticContour() const { return m_bAutomaticContour; }
 
     // set either a MM100 or pixel contour
     void               SetContourAPI( const tools::PolyPolygon *pPoly );
@@ -81,10 +83,10 @@ public:
     // get either a MM100 or pixel contour, return false if no contour is set.
     bool               GetContourAPI( tools::PolyPolygon &rPoly ) const;
 
-    void               SetPixelContour( bool bSet ) { bPixelContour = bSet; }
+    void               SetPixelContour( bool bSet ) { m_bPixelContour = bSet; }
     bool               IsPixelContour() const;
 
-    bool               IsContourMapModeValid() const { return bContourMapModeValid; }
+    bool               IsContourMapModeValid() const { return m_bContourMapModeValid; }
 
     // Obtains the graphic with SwapIn for GrfNode via GetData for OLE.
     Graphic GetGraphic() const;
@@ -93,11 +95,11 @@ public:
 // Inline methods from Node.hxx - we know TextNode only here!!
 inline SwNoTextNode *SwNode::GetNoTextNode()
 {
-    return ND_NOTXTNODE & m_nNodeType ? static_cast<SwNoTextNode*>(this) : nullptr;
+    return SwNodeType::NoTextMask & m_nNodeType ? static_cast<SwNoTextNode*>(this) : nullptr;
 }
 inline const SwNoTextNode *SwNode::GetNoTextNode() const
 {
-    return ND_NOTXTNODE & m_nNodeType ? static_cast<const SwNoTextNode*>(this) : nullptr;
+    return SwNodeType::NoTextMask & m_nNodeType ? static_cast<const SwNoTextNode*>(this) : nullptr;
 }
 
 #endif // INCLUDED_SW_INC_NDNOTXT_HXX

@@ -17,11 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/helper/propertyset.hxx"
+#include <oox/helper/propertyset.hxx>
 
+#include <com/sun/star/beans/XMultiPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <osl/diagnose.h>
 #include <rtl/strbuf.hxx>
-#include "oox/helper/propertymap.hxx"
+#include <sal/log.hxx>
+#include <oox/helper/propertymap.hxx>
 
 namespace oox {
 
@@ -117,7 +120,7 @@ bool PropertySet::implGetPropertyValue( Any& orValue, const OUString& rPropName 
     catch( Exception& e)
     {
         SAL_WARN( "oox", "PropertySet::implGetPropertyValue - cannot get property \"" <<
-                  rPropName << "\" Error: " << e.Message);
+                  rPropName << "\" Error: " << e);
     }
     return false;
 }
@@ -132,7 +135,7 @@ bool PropertySet::implSetPropertyValue( const OUString& rPropName, const Any& rV
     catch( Exception& e)
     {
         SAL_WARN( "oox", "PropertySet::implSetPropertyValue - cannot set property \"" <<
-                  rPropName << "\" Error: " << e.Message);
+                  rPropName << "\" Error: " << e);
     }
     return false;
 }
@@ -140,7 +143,7 @@ bool PropertySet::implSetPropertyValue( const OUString& rPropName, const Any& rV
 #ifdef DBG_UTIL
 void PropertySet::dump()
 {
-    PropertyMap::dump( Reference< XPropertySet >( getXPropertySet(), UNO_QUERY ) );
+    PropertyMap::dump( mxPropSet );
 }
 #endif
 

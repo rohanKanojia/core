@@ -29,9 +29,11 @@ OUString getFileURLFromSystemPath(OUString const & path) {
 
 test::Directories::Directories() {
     const char* pSrcRoot = getenv( "SRC_ROOT" );
-    CPPUNIT_ASSERT_MESSAGE("SRC_ROOT env variable not set", pSrcRoot != nullptr && pSrcRoot[0] != 0);
+    CPPUNIT_ASSERT_MESSAGE("SRC_ROOT env variable not set", pSrcRoot != nullptr);
+    CPPUNIT_ASSERT_MESSAGE("SRC_ROOT env variable not set", pSrcRoot[0] != 0);
     const char* pWorkdirRoot = getenv( "WORKDIR_FOR_BUILD" );
-    CPPUNIT_ASSERT_MESSAGE("$WORKDIR_FOR_BUILD env variable not set", pWorkdirRoot != nullptr && pWorkdirRoot[0] != 0);
+    CPPUNIT_ASSERT_MESSAGE("$WORKDIR_FOR_BUILD env variable not set", pWorkdirRoot != nullptr);
+    CPPUNIT_ASSERT_MESSAGE("$WORKDIR_FOR_BUILD env variable not set", pWorkdirRoot[0] != 0);
     m_aSrcRootPath = OUString::createFromAscii( pSrcRoot );
     m_aSrcRootURL = getFileURLFromSystemPath(m_aSrcRootPath);
 
@@ -39,31 +41,24 @@ test::Directories::Directories() {
     m_aWorkdirRootURL = getFileURLFromSystemPath(m_aWorkdirRootPath);
 }
 
-OUString test::Directories::getURLFromSrc( const char *pPath )
-{
-    return m_aSrcRootURL + OUString::createFromAscii( pPath );
-}
-
-OUString test::Directories::getURLFromSrc( const OUString& rPath )
+OUString test::Directories::getURLFromSrc(const OUString& rPath) const
 {
     return m_aSrcRootURL + rPath;
 }
 
-OUString test::Directories::getPathFromSrc( const char *pPath )
+OUString test::Directories::getPathFromSrc(const OUString& rPath) const
 {
-    return m_aSrcRootPath + OUString::createFromAscii( pPath );
+    return m_aSrcRootPath + rPath;
 }
 
-OUString test::Directories::getURLFromWorkdir( const char *pPath )
+OUString test::Directories::getURLFromWorkdir(const OUString& rPath) const
 {
-    return m_aWorkdirRootURL + OUString::createFromAscii( pPath );
+    return m_aWorkdirRootURL + rPath;
 }
 
-#ifdef _WIN32 // ifdef just to keep it out of unusedcode.easy
-OUString test::Directories::getPathFromWorkdir( const char *pPath )
+OUString test::Directories::getPathFromWorkdir(const OUString& rPath) const
 {
-    return m_aWorkdirRootPath + OUString::createFromAscii( pPath );
+    return m_aWorkdirRootPath + rPath;
 }
-#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -21,6 +21,8 @@
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/EmbedVerbs.hpp>
 #include <com/sun/star/embed/EmbedUpdateModes.hpp>
+#include <com/sun/star/embed/UnreachableStateException.hpp>
+#include <com/sun/star/embed/WrongStateException.hpp>
 #include <com/sun/star/embed/XEmbeddedClient.hpp>
 #include <com/sun/star/embed/XInplaceClient.hpp>
 #include <com/sun/star/embed/XWindowSupplier.hpp>
@@ -29,17 +31,15 @@
 #include <com/sun/star/util/XCloseBroadcaster.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XDispatchProviderInterception.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/embed/EmbedMapUnits.hpp>
 
 #include <cppuhelper/queryinterface.hxx>
 #include <cppuhelper/typeprovider.hxx>
+#include <osl/diagnose.h>
 
-#include "specialobject.hxx"
-#include "intercept.hxx"
+#include <specialobject.hxx>
+#include <intercept.hxx>
 
 using namespace ::com::sun::star;
 
@@ -53,11 +53,10 @@ OSpecialEmbeddedObject::OSpecialEmbeddedObject( const uno::Reference< uno::XComp
 
 
 uno::Any SAL_CALL OSpecialEmbeddedObject::queryInterface( const uno::Type& rType )
-        throw( uno::RuntimeException, std::exception )
 {
     uno::Any aReturn;
 
-    aReturn <<= ::cppu::queryInterface( rType,
+    aReturn = ::cppu::queryInterface( rType,
                                         static_cast< embed::XEmbeddedObject* >( this ),
                                         static_cast< embed::XInplaceObject* >( this ),
                                         static_cast< embed::XVisualObject* >( this ),
@@ -74,10 +73,6 @@ uno::Any SAL_CALL OSpecialEmbeddedObject::queryInterface( const uno::Type& rType
 
 
 embed::VisualRepresentation SAL_CALL OSpecialEmbeddedObject::getPreferredVisualRepresentation( sal_Int64 nAspect )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -88,7 +83,7 @@ embed::VisualRepresentation SAL_CALL OSpecialEmbeddedObject::getPreferredVisualR
         throw embed::WrongStateException( "The own object has no model!",
                                     static_cast< ::cppu::OWeakObject* >(this) );
 
-    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!\n" );
+    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!" );
     if ( nAspect == embed::Aspects::MSOLE_ICON )
         // no representation can be retrieved
         throw embed::WrongStateException( "Illegal call!",
@@ -100,16 +95,12 @@ embed::VisualRepresentation SAL_CALL OSpecialEmbeddedObject::getPreferredVisualR
 }
 
 void SAL_CALL OSpecialEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, const awt::Size& aSize )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
-    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!\n" );
+    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!" );
     if ( nAspect == embed::Aspects::MSOLE_ICON )
         // no representation can be retrieved
         throw embed::WrongStateException( "Illegal call!",
@@ -119,16 +110,12 @@ void SAL_CALL OSpecialEmbeddedObject::setVisualAreaSize( sal_Int64 nAspect, cons
 }
 
 awt::Size SAL_CALL OSpecialEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
-    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!\n" );
+    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!" );
     if ( nAspect == embed::Aspects::MSOLE_ICON )
         // no representation can be retrieved
         throw embed::WrongStateException( "Illegal call!",
@@ -142,14 +129,12 @@ awt::Size SAL_CALL OSpecialEmbeddedObject::getVisualAreaSize( sal_Int64 nAspect 
 }
 
 sal_Int32 SAL_CALL OSpecialEmbeddedObject::getMapUnit( sal_Int64 nAspect )
-        throw ( uno::Exception,
-                uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
 
-    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!\n" );
+    OSL_ENSURE( nAspect != embed::Aspects::MSOLE_ICON, "For iconified objects no graphical replacement is required!" );
     if ( nAspect == embed::Aspects::MSOLE_ICON )
         // no representation can be retrieved
         throw embed::WrongStateException( "Illegal call!",
@@ -159,10 +144,6 @@ sal_Int32 SAL_CALL OSpecialEmbeddedObject::getMapUnit( sal_Int64 nAspect )
 }
 
 void SAL_CALL OSpecialEmbeddedObject::changeState( sal_Int32 nNewState )
-        throw ( css::embed::UnreachableStateException,
-                css::embed::WrongStateException,
-                css::uno::Exception,
-                css::uno::RuntimeException, std::exception )
 {
     if ( nNewState == embed::EmbedStates::UI_ACTIVE )
         nNewState = embed::EmbedStates::INPLACE_ACTIVE;
@@ -170,11 +151,6 @@ void SAL_CALL OSpecialEmbeddedObject::changeState( sal_Int32 nNewState )
 }
 
 void SAL_CALL OSpecialEmbeddedObject::doVerb( sal_Int32 nVerbID )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                embed::UnreachableStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -187,11 +163,10 @@ void SAL_CALL OSpecialEmbeddedObject::doVerb( sal_Int32 nVerbID )
     if ( nVerbID == -7 )
     {
 
-        uno::Reference < ui::dialogs::XExecutableDialog > xDlg( m_pDocHolder->GetComponent(), uno::UNO_QUERY );
-        if ( xDlg.is() )
-            xDlg->execute();
-        else
+        uno::Reference < ui::dialogs::XExecutableDialog > xDlg( m_xDocHolder->GetComponent(), uno::UNO_QUERY );
+        if ( !xDlg.is() )
             throw embed::UnreachableStateException();
+        xDlg->execute();
     }
     else
         OCommonEmbeddedObject::doVerb( nVerbID );

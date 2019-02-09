@@ -52,18 +52,6 @@ public class FieldColumn
 
     private CommandMetaData m_aCommandMetaData;
 
-    public FieldColumn(CommandMetaData oCommandMetaData, String _DisplayFieldName)
-    {
-        m_sDisplayFieldName = _DisplayFieldName;
-        m_sCommandName = oCommandMetaData.getCommandName();
-        m_sFieldName = getOnlyFieldName(m_sDisplayFieldName, m_sCommandName);
-// TODO: could be wrong here!
-//        FieldTitle = _DisplayFieldName; // oCommandMetaData.getFieldTitle(m_sFieldName);
-        FieldTitle = m_sFieldName;
-        DBMetaData.CommandObject oTable = oCommandMetaData.getTableByName(m_sCommandName);
-        initializeFormatKeys(oCommandMetaData, oTable.getColumns());
-    }
-
     public FieldColumn(CommandMetaData oCommandMetaData, String _FieldName, String _CommandName, boolean _bInstantiateByDisplayName)
     {
         m_sCommandName = _CommandName;
@@ -278,7 +266,7 @@ public class FieldColumn
                     bIsNumberFormat = true;
                     break;
 
-                case DataType.DECIMAL: // ==   3;  [mit Nachkommastellen]
+                case DataType.DECIMAL: // ==   3;  [with fractional part]
                 case DataType.FLOAT: // ==   6;
                 case DataType.REAL: // ==   7;
                 case DataType.DOUBLE: // ==   8;
@@ -381,7 +369,7 @@ public class FieldColumn
                 break;
 
             case DataType.NUMERIC: // ==   2;
-            case DataType.DECIMAL: // ==   3;  [mit Nachkommastellen]
+            case DataType.DECIMAL: // ==   3;  [with fractional part]
             case DataType.FLOAT: // ==   6;
             case DataType.REAL: // ==   7;
             case DataType.DOUBLE: // ==   8;

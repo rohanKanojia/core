@@ -23,7 +23,7 @@
 #include <unotools/configitem.hxx>
 #include <i18nlangtag/lang.h>
 #include <osl/diagnose.h>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 #define FONT_STANDARD       0
 #define FONT_OUTLINE        1
@@ -58,7 +58,7 @@ class SW_DLLPUBLIC SwStdFontConfig : public utl::ConfigItem
     OUString    sDefaultFonts[DEF_FONT_COUNT];
     sal_Int32   nDefaultFontHeight[DEF_FONT_COUNT];
 
-    SAL_DLLPRIVATE css::uno::Sequence<OUString>    GetPropertyNames();
+    SAL_DLLPRIVATE static css::uno::Sequence<OUString> const & GetPropertyNames();
 
     void ChangeString(sal_uInt16 nFontType, const OUString& rSet)
         {
@@ -75,7 +75,7 @@ class SW_DLLPUBLIC SwStdFontConfig : public utl::ConfigItem
 
 public:
     SwStdFontConfig();
-    virtual ~SwStdFontConfig();
+    virtual ~SwStdFontConfig() override;
 
     virtual void Notify( const css::uno::Sequence< OUString >& aPropertyNames ) override;
 

@@ -17,20 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "uielement/dropdownboxtoolbarcontroller.hxx"
+#include <uielement/dropdownboxtoolbarcontroller.hxx>
 
 #include <com/sun/star/util/XURLTransformer.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
-#include <com/sun/star/frame/status/ItemStatus.hpp>
-#include <com/sun/star/frame/status/ItemState.hpp>
-#include <com/sun/star/frame/status/Visibility.hpp>
-#include <com/sun/star/frame/XControlNotificationListener.hpp>
 
 #include <svtools/toolboxcontroller.hxx>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/mnemonic.hxx>
+#include <vcl/lstbox.hxx>
 #include <vcl/toolbox.hxx>
 
 using namespace ::com::sun::star;
@@ -39,21 +34,20 @@ using namespace css::uno;
 using namespace css::beans;
 using namespace css::lang;
 using namespace css::frame;
-using namespace css::frame::status;
 using namespace css::util;
 
 namespace framework
 {
 
 // Wrapper class to notify controller about events from ListBox.
-// Unfortunaltly the events are notifed through virtual methods instead
+// Unfortunaltly the events are notified through virtual methods instead
 // of Listeners.
 
 class ListBoxControl : public ListBox
 {
     public:
         ListBoxControl( vcl::Window* pParent, WinBits nStyle, DropdownToolbarController* pListBoxListener );
-        virtual ~ListBoxControl();
+        virtual ~ListBoxControl() override;
         virtual void dispose() override;
 
         virtual void Select() override;
@@ -130,7 +124,7 @@ DropdownToolbarController::DropdownToolbarController(
 
     // default dropdown size
     ::Size aLogicalSize( 0, 160 );
-    ::Size aPixelSize = m_pListBoxControl->LogicToPixel( aLogicalSize, MAP_APPFONT );
+    ::Size aPixelSize = m_pListBoxControl->LogicToPixel(aLogicalSize, MapMode(MapUnit::MapAppFont));
 
     m_pListBoxControl->SetSizePixel( ::Size( nWidth, aPixelSize.Height() ));
     m_pToolbar->SetItemWindow( m_nID, m_pListBoxControl );
@@ -142,7 +136,6 @@ DropdownToolbarController::~DropdownToolbarController()
 }
 
 void SAL_CALL DropdownToolbarController::dispose()
-throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarMutexGuard;
 
@@ -155,7 +148,7 @@ throw ( RuntimeException, std::exception )
 Sequence<PropertyValue> DropdownToolbarController::getExecuteArgs(sal_Int16 KeyModifier) const
 {
     Sequence<PropertyValue> aArgs( 2 );
-    OUString aSelectedText = m_pListBoxControl->GetSelectEntry();
+    OUString aSelectedText = m_pListBoxControl->GetSelectedEntry();
 
     // Add key modifier to argument list
     aArgs[0].Name = "KeyModifier";
@@ -215,14 +208,13 @@ void DropdownToolbarController::executeControlCommand( const css::frame::Control
     }
     else if ( rControlCommand.Command == "AddEntry" )
     {
-        sal_Int32      nPos( LISTBOX_APPEND );
         OUString   aText;
         for ( sal_Int32 i = 0; i < rControlCommand.Arguments.getLength(); i++ )
         {
             if ( rControlCommand.Arguments[i].Name == "Text" )
             {
                 if ( rControlCommand.Arguments[i].Value >>= aText )
-                    m_pListBoxControl->InsertEntry( aText, nPos );
+                    m_pListBoxControl->InsertEntry( aText, LISTBOX_APPEND );
                 break;
             }
         }
@@ -239,7 +231,7 @@ void DropdownToolbarController::executeControlCommand( const css::frame::Control
                 if ( rControlCommand.Arguments[i].Value >>= nTmpPos )
                 {
                     if (( nTmpPos >= 0 ) &&
-                        ( nTmpPos < sal_Int32( m_pListBoxControl->GetEntryCount() )))
+                        ( nTmpPos < m_pListBoxControl->GetEntryCount() ))
                         nPos = nTmpPos;
                 }
             }
@@ -258,7 +250,7 @@ void DropdownToolbarController::executeControlCommand( const css::frame::Control
                 sal_Int32 nPos( -1 );
                 if ( rControlCommand.Arguments[i].Value >>= nPos )
                 {
-                    if ( 0 <= nPos && nPos < sal_Int32( m_pListBoxControl->GetEntryCount() ))
+                    if ( 0 <= nPos && nPos < m_pListBoxControl->GetEntryCount() )
                         m_pListBoxControl->RemoveEntry( nPos );
                 }
                 break;

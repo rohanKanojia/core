@@ -61,8 +61,8 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSORTOPT_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPSORTOPT_HXX
 
-#include "lwpheader.hxx"
-#include "lwpobjstrm.hxx"
+#include <lwpheader.hxx>
+#include <lwpobjstrm.hxx>
 
 /**
  * @brief       sort key class for LwpSortOption
@@ -83,9 +83,7 @@ public:
 class LwpSortOption
 {
 public:
-    LwpSortOption(){}
     explicit LwpSortOption(LwpObjectStream* pStrm);
-    ~LwpSortOption(){}
 public:
     void Read(LwpObjectStream *pStrm);
 private:

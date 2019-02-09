@@ -11,6 +11,7 @@ $(eval $(call gb_Library_Library,dbaxml))
 
 $(eval $(call gb_Library_set_include,dbaxml,\
     $$(INCLUDE) \
+    -I$(SRCDIR)/dbaccess/inc \
     -I$(SRCDIR)/dbaccess/source/inc \
 ))
 
@@ -36,7 +37,6 @@ $(eval $(call gb_Library_use_libraries,dbaxml,\
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,dbaxml,dbaccess/source/filter/xml/dbaxml))
@@ -69,7 +69,6 @@ $(eval $(call gb_Library_add_exception_objects,dbaxml,\
     dbaccess/source/filter/xml/xmlTableFilterList \
     dbaccess/source/filter/xml/xmlTableFilterPattern \
     dbaccess/source/shared/flt_reghelper \
-    dbaccess/source/shared/xmlstrings \
 ))
 
 # vim: set noet sw=4 ts=4:

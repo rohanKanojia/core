@@ -20,13 +20,13 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_MODEL_SLSPAGEDESCRIPTOR_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_MODEL_SLSPAGEDESCRIPTOR_HXX
 
-#include "model/SlsVisualState.hxx"
-#include <com/sun/star/drawing/XDrawPage.hpp>
+#include <model/SlsVisualState.hxx>
 #include <tools/gen.hxx>
-#include <vcl/bitmap.hxx>
-#include <sfx2/viewfrm.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 
-#include <boost/enable_shared_from_this.hpp>
+#include <memory>
+
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawPage; } } } }
 
 class SdPage;
 class SdrPage;
@@ -44,7 +44,7 @@ namespace sd { namespace slidesorter { namespace model {
     fade symbol.</p>
 */
 class PageDescriptor
-    : public ::boost::enable_shared_from_this<PageDescriptor>
+    : public ::std::enable_shared_from_this<PageDescriptor>
 {
 public:
     /** Create a PageDescriptor for the given SdPage object.
@@ -56,7 +56,7 @@ public:
             separately.
         @param nIndex
             This index is displayed in the view as page number.  It is not
-            necessaryily the page index (not even when you add or subtract 1
+            necessarily the page index (not even when you add or subtract 1
             or use (x-1)/2 magic).
     */
     PageDescriptor (
@@ -72,7 +72,7 @@ public:
 
     /** Return the page that is represented by the descriptor as XDrawPage reference.
     */
-    css::uno::Reference<css::drawing::XDrawPage> GetXDrawPage() const { return mxPage;}
+    const css::uno::Reference<css::drawing::XDrawPage>& GetXDrawPage() const { return mxPage;}
 
     /** Returns the index of the page as it is displayed in the view as page
         number.  The value may differ from the index returned by the
@@ -110,9 +110,9 @@ public:
 
     VisualState& GetVisualState() { return maVisualState;}
 
-    Rectangle GetBoundingBox() const;
-    Point GetLocation (const bool bIgnoreLocation = false) const;
-    void SetBoundingBox (const Rectangle& rBoundingBox);
+    ::tools::Rectangle GetBoundingBox() const;
+    Point GetLocation (const bool bIgnoreLocation) const;
+    void SetBoundingBox (const ::tools::Rectangle& rBoundingBox);
 
 private:
     SdPage* mpPage;
@@ -124,7 +124,7 @@ private:
     */
     sal_Int32 mnIndex;
 
-    Rectangle maBoundingBox;
+    ::tools::Rectangle maBoundingBox;
     VisualState maVisualState;
 
     bool mbIsSelected : 1;

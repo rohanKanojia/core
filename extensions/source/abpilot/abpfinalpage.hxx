@@ -32,9 +32,8 @@
 namespace abp
 {
 
-    class FinalPage : public AddressBookSourcePage
+    class FinalPage final : public AddressBookSourcePage
     {
-    protected:
         VclPtr< ::svt::OFileURLControl>  m_pLocation;
         VclPtr<PushButton>       m_pBrowse;
         VclPtr<CheckBox>         m_pRegisterName;
@@ -44,17 +43,17 @@ namespace abp
         VclPtr<Edit>             m_pName;
         VclPtr<FixedText>        m_pDuplicateNameError;
 
-        svx::DatabaseLocationInputController*
+        std::unique_ptr<svx::DatabaseLocationInputController>
                         m_pLocationController;
 
         StringBag       m_aInvalidDataSourceNames;
 
     public:
-        explicit FinalPage(OAddessBookSourcePilot* _pParent);
-        virtual ~FinalPage();
+        explicit FinalPage(OAddressBookSourcePilot* _pParent);
+        virtual ~FinalPage() override;
         virtual void dispose() override;
 
-    protected:
+    private:
         // OWizardPage overridables
         virtual void        initializePage() override;
         virtual bool        commitPage( ::svt::WizardTypes::CommitPageReason _eReason ) override;
@@ -66,10 +65,9 @@ namespace abp
         // OImportPage overridables
         virtual bool        canAdvance() const override;
 
-    private:
-        DECL_LINK_TYPED( OnNameModified, Edit&, void );
-        DECL_LINK_TYPED(OnRegister, Button*, void);
-        DECL_LINK_TYPED(OnEmbed, Button*, void);
+        DECL_LINK( OnNameModified, Edit&, void );
+        DECL_LINK(OnRegister, Button*, void);
+        DECL_LINK(OnEmbed, Button*, void);
 
         bool    isValidName() const;
         void        implCheckName();

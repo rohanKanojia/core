@@ -41,7 +41,7 @@ class UpdateCheck;
 class UpdateCheckInitData {
 
 public:
-    inline rtl::Reference< UpdateCheck > SAL_CALL operator() () const;
+    inline rtl::Reference< UpdateCheck > operator() () const;
 };
 
 class WorkerThread : public osl::Thread
@@ -58,10 +58,10 @@ class UpdateCheck :
 {
     UpdateCheck();
 
-    virtual ~UpdateCheck();
+    virtual ~UpdateCheck() override;
 
 public:
-    inline SAL_CALL operator rtl::Reference< UpdateCheckConfigListener > ()
+    operator rtl::Reference< UpdateCheckConfigListener > ()
         { return static_cast< UpdateCheckConfigListener * > (this); }
 
     void initialize(const css::uno::Sequence<css::beans::NamedValue>& rValues,
@@ -140,7 +140,7 @@ private:
 
     /* This method turns on the menubar icon and triggers the bubble window
      */
-    void handleMenuBarUI( rtl::Reference< UpdateHandler > rUpdateHandler,
+    void handleMenuBarUI( const rtl::Reference< UpdateHandler >& rUpdateHandler,
                           UpdateState& eState, bool suppressBubble );
     enum State {
         NOT_INITIALIZED,
@@ -169,7 +169,7 @@ private:
     friend class UpdateCheckInitData;
 };
 
-inline rtl::Reference< UpdateCheck > SAL_CALL
+inline rtl::Reference< UpdateCheck >
 UpdateCheckInitData::operator() () const
 {
     return rtl::Reference< UpdateCheck > (new UpdateCheck());

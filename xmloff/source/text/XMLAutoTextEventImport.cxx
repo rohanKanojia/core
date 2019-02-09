@@ -23,6 +23,7 @@
 #include <com/sun/star/document/XEventsSupplier.hpp>
 #include <com/sun/star/uno/XInterface.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <facreg.hxx>
 #include "XMLAutoTextContainerEventImport.hxx"
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmltoken.hxx>
@@ -46,7 +47,7 @@ using ::xmloff::token::IsXMLToken;
 using ::xmloff::token::XML_AUTO_TEXT_EVENTS;
 
 XMLAutoTextEventImport::XMLAutoTextEventImport(
-    const css::uno::Reference< css::uno::XComponentContext >& xContext) throw()
+    const css::uno::Reference< css::uno::XComponentContext >& xContext)
 :   SvXMLImport(xContext, "")
 {
 }
@@ -57,7 +58,6 @@ XMLAutoTextEventImport::~XMLAutoTextEventImport() throw()
 
 void XMLAutoTextEventImport::initialize(
     const Sequence<Any> & rArguments )
-        throw(Exception, RuntimeException, std::exception)
 {
     // The events may come as either an XNameReplace or XEventsSupplier.
 
@@ -85,7 +85,7 @@ void XMLAutoTextEventImport::initialize(
 }
 
 
-SvXMLImportContext* XMLAutoTextEventImport::CreateContext(
+SvXMLImportContext* XMLAutoTextEventImport::CreateDocumentContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList > & xAttrList )
@@ -98,12 +98,12 @@ SvXMLImportContext* XMLAutoTextEventImport::CreateContext(
     }
     else
     {
-        return SvXMLImport::CreateContext(nPrefix, rLocalName, xAttrList);
+        return SvXMLImport::CreateDocumentContext(nPrefix, rLocalName, xAttrList);
     }
 }
 
 
-Sequence< OUString > SAL_CALL
+Sequence< OUString >
     XMLAutoTextEventImport_getSupportedServiceNames()
         throw()
 {
@@ -111,14 +111,13 @@ Sequence< OUString > SAL_CALL
     return aSeq;
 }
 
-OUString SAL_CALL XMLAutoTextEventImport_getImplementationName() throw()
+OUString XMLAutoTextEventImport_getImplementationName() throw()
 {
     return OUString( "com.sun.star.comp.Writer.XMLOasisAutotextEventsImporter" );
 }
 
-Reference< XInterface > SAL_CALL XMLAutoTextEventImport_createInstance(
+Reference< XInterface > XMLAutoTextEventImport_createInstance(
         const Reference< XMultiServiceFactory > & rSMgr)
-    throw( Exception )
 {
     return static_cast<cppu::OWeakObject*>(new XMLAutoTextEventImport( comphelper::getComponentContext(rSMgr) ));
 }

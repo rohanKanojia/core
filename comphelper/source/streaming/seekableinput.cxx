@@ -17,11 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
+
+#include <com/sun/star/io/IOException.hpp>
+#include <com/sun/star/io/NotConnectedException.hpp>
 #include <com/sun/star/io/TempFile.hpp>
 #include <com/sun/star/io/XOutputStream.hpp>
 
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/seekableinput.hxx>
 
 using namespace ::com::sun::star;
@@ -32,7 +35,7 @@ namespace comphelper
 const sal_Int32 nConstBufferSize = 32000;
 
 
-void copyInputToOutput_Impl( const uno::Reference< io::XInputStream >& xIn,
+static void copyInputToOutput_Impl( const uno::Reference< io::XInputStream >& xIn,
                             const uno::Reference< io::XOutputStream >& xOut )
 {
     sal_Int32 nRead;
@@ -116,10 +119,6 @@ void OSeekableInputWrapper::PrepareCopy_Impl()
 // XInputStream
 
 sal_Int32 SAL_CALL OSeekableInputWrapper::readBytes( uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
-    throw ( io::NotConnectedException,
-            io::BufferSizeExceededException,
-            io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -133,10 +132,6 @@ sal_Int32 SAL_CALL OSeekableInputWrapper::readBytes( uno::Sequence< sal_Int8 >& 
 
 
 sal_Int32 SAL_CALL OSeekableInputWrapper::readSomeBytes( uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
-    throw ( io::NotConnectedException,
-            io::BufferSizeExceededException,
-            io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -150,10 +145,6 @@ sal_Int32 SAL_CALL OSeekableInputWrapper::readSomeBytes( uno::Sequence< sal_Int8
 
 
 void SAL_CALL OSeekableInputWrapper::skipBytes( sal_Int32 nBytesToSkip )
-    throw ( io::NotConnectedException,
-            io::BufferSizeExceededException,
-            io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -167,9 +158,6 @@ void SAL_CALL OSeekableInputWrapper::skipBytes( sal_Int32 nBytesToSkip )
 
 
 sal_Int32 SAL_CALL OSeekableInputWrapper::available()
-    throw ( io::NotConnectedException,
-            io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -183,9 +171,6 @@ sal_Int32 SAL_CALL OSeekableInputWrapper::available()
 
 
 void SAL_CALL OSeekableInputWrapper::closeInput()
-    throw ( io::NotConnectedException,
-            io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -208,9 +193,6 @@ void SAL_CALL OSeekableInputWrapper::closeInput()
 // XSeekable
 
 void SAL_CALL OSeekableInputWrapper::seek( sal_Int64 location )
-    throw ( lang::IllegalArgumentException,
-            io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -224,8 +206,6 @@ void SAL_CALL OSeekableInputWrapper::seek( sal_Int64 location )
 
 
 sal_Int64 SAL_CALL OSeekableInputWrapper::getPosition()
-    throw ( io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -239,8 +219,6 @@ sal_Int64 SAL_CALL OSeekableInputWrapper::getPosition()
 
 
 sal_Int64 SAL_CALL OSeekableInputWrapper::getLength()
-    throw ( io::IOException,
-            uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 

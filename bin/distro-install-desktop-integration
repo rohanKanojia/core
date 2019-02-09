@@ -7,34 +7,33 @@ fi
 
 PRODUCTVERSION_NODOT=`echo $PRODUCTVERSION | sed -e "s/\.//"`
 
-mkdir -p $DESTDIR$PREFIXDIR/bin
-
+mkdir -p "$DESTDIR$BINDIR"
 
 create_wrapper()
 {
-    echo "Install $PREFIXDIR/bin/$1"
+    echo "Install $BINDIR/$1"
 
-    if test -L "$DESTDIR$PREFIXDIR/bin/$1" ; then
-        # do not overwrite $PREFIXDIR/bin/libreoffice symlink created by create_tree.sh
+    if test -L "$DESTDIR$BINDIR/$1" ; then
+        # do not overwrite $BINDIR/libreoffice symlink created by create_tree.sh
         # the symlink is necessary by java UNO components to find
         # the UNO installation using $PATH; this function used to be provided
-        # by $PREFIXDIR/bin/soffice symlink, see
+        # by $BINDIR/soffice symlink, see
         # http://udk.openoffice.org/common/man/spec/transparentofficecomponents.html
         # Note: if you want to support parallel installation of more OOo versions
         #       you cannot include this link directly into the package
         #       For example, the Novell package mark this symlink as %ghost
         #	and update it in %post and %postun
-        echo "     skip already existing symlink $PREFIXDIR/bin/$1"
+        echo "     skip already existing symlink $BINDIR/$1"
     else
-        mkdir -p $DESTDIR$PREFIXDIR/bin
-        cat <<EOT >$DESTDIR$PREFIXDIR/bin/$1
+        mkdir -p "$DESTDIR$BINDIR"
+        cat <<EOT >"$DESTDIR$BINDIR/$1"
 #!/bin/sh
 $INSTALLDIR/program/$2 $3 "\$@"
 EOT
-        chmod 755 $DESTDIR$PREFIXDIR/bin/$1
+        chmod 755 "$DESTDIR$BINDIR/$1"
     fi
     # put into file list
-    test -f "$DESTDIR/$4" && echo "$PREFIXDIR/bin/$1" >>$DESTDIR/$4
+    test -f "$DESTDIR/$4" && echo "$BINDIR/$1" >>$DESTDIR/$4
 }
 
 create_man_link()
@@ -52,7 +51,7 @@ install_man()
     echo "Install $MANDIR/man1/$1.1.gz"
 
     mkdir -p $DESTDIR$MANDIR/man1
-    cp sysui/desktop/man/$1.1 $DESTDIR$MANDIR/man1 || exit 1;
+    cp "${SRCDIR?}"/sysui/desktop/man/$1.1 $DESTDIR$MANDIR/man1 || exit 1;
     gzip -f $DESTDIR$MANDIR/man1/$1.1
     test -f "$DESTDIR/$2" && echo "$MANDIR/man1/$1.1.gz" >>"$DESTDIR/$2"
 }
@@ -96,8 +95,7 @@ add_wrapper()
 # install desktop integration from plain packages
 sysui_temp=`mktemp -d -t distro-pack-desktop-integration-XXXXXX`
 cp -a workdir/CustomTarget/sysui/share/libreoffice/* "$sysui_temp"
-cp -a sysui/desktop/share/create_tree.sh "$sysui_temp"
-builddir=`pwd`
+cp -a "${SRCDIR?}"/sysui/desktop/share/create_tree.sh "$sysui_temp"
 cd $sysui_temp
 # we want non-versioned stuff in the distro packages
 sed -i \
@@ -105,18 +103,18 @@ sed -i \
     -e "s/\($INSTALLDIRNAME\)$PRODUCTVERSION/\1/" \
     -e "s/\($PRODUCTNAME\) $PRODUCTVERSION/\1/" \
     *
-# call in subshell to do not malfrom PRODUCTVERSION, ...
+# call in subshell to do not malform PRODUCTVERSION, ...
 (
     export OFFICE_PREFIX=$LIBDIR
     export PREFIX=$INSTALLDIRNAME
     export ICON_PREFIX=$INSTALLDIRNAME
-    export ICON_SOURCE_DIR=$builddir/sysui/desktop/icons
+    export ICON_SOURCE_DIR="${SRCDIR?}"/sysui/desktop/icons
     export PRODUCTVERSION=
     export KDEMAINDIR=$PREFIXDIR
     export PREFIXDIR=${PREFIXDIR}
     export GNOMEDIR=$PREFIXDIR
     export GNOME_MIME_THEME=hicolor
-    export APPDATA_SOURCE_DIR=$builddir/sysui/desktop/appstream-appdata
+    export APPDATA_SOURCE_DIR="${SRCDIR?}"/sysui/desktop/appstream-appdata
     bash ./create_tree.sh
 )
 cd -
@@ -142,7 +140,6 @@ cd -
 # desktop files will be added by the corresponding add_wrapper command
 if test -f $DESTDIR/gid_Module_Root_Brand ; then
     for dir in $PREFIXDIR/share/application-registry \
-               $PREFIXDIR/share/mimelnk/application \
                $PREFIXDIR/share/mime/packages \
                $PREFIXDIR/share/mime-info \
                $PREFIXDIR/share/icons ; do
@@ -167,28 +164,28 @@ add_wrapper unopkg         unopkg  ""            "unopkg"      ""               
 # there are two more desktop files for optional filters
 test -f $DESTDIR/gid_Module_Optional_Xsltfiltersamples && echo "$PREFIXDIR/share/applications/libreoffice-xsltfilter.desktop" >>"$DESTDIR/gid_Module_Optional_Xsltfiltersamples"
 
-# $PREFIXDIR/bin/ooffice symlink is necessary by java UNO components to find
+# $BINDIR/ooffice symlink is necessary by java UNO components to find
 # the UNO installation using $PATH, see
 # http://udk.openoffice.org/common/man/spec/transparentofficecomponents.html
 # Note: if you want to support parallel installation of more OOo versions
 #       you cannot include this link directly into the package
 #       For example, the Novell package mark this symlink as %ghost
 #	and update it in %post and %postun
-ln -sf $INSTALLDIR/program/soffice $DESTDIR$PREFIXDIR/bin/soffice
-test -f $DESTDIR/gid_Module_Root_Brand && echo "$PREFIXDIR/bin/soffice" >>$DESTDIR/gid_Module_Root_Brand
+ln -sf "$INSTALLDIR/program/soffice" "$DESTDIR$BINDIR/soffice"
+test -f $DESTDIR/gid_Module_Root_Brand && echo "$BINDIR/soffice" >>$DESTDIR/gid_Module_Root_Brand
 
 # create bash completion
 mkdir -p $DESTDIR/usr/share/bash-completion/completions
-./bin/generate-bash-completion bin/bash-completion.in $DESTDIR/usr/share/bash-completion/completions/$INSTALLDIRNAME.sh
+"${SRCDIR?}"/bin/generate-bash-completion.py bin/bash-completion.in $DESTDIR/usr/share/bash-completion/completions/$INSTALLDIRNAME.sh
 test -f $DESTDIR/gid_Module_Root_Brand && echo "/usr/share/bash-completion/completions/$INSTALLDIRNAME.sh" >>$DESTDIR/gid_Module_Root_Brand
 if test "$WITH_COMPAT_OOWRAPPERS" = "TRUE" ; then
-    ./bin/generate-bash-completion --compat-oowrappers bin/bash-completion.in $DESTDIR/usr/share/bash-completion/completions/ooffice.sh
+    "${SRCDIR?}"/bin/generate-bash-completion.py --compat-oowrappers bin/bash-completion.in $DESTDIR/usr/share/bash-completion/completions/ooffice.sh
     test -f $DESTDIR/gid_Module_Root_Brand && echo "/usr/share/bash-completion/completions/ooffice.sh" >>$DESTDIR/gid_Module_Root_Brand
 fi
 
 echo "Install $OOINSTDIR/basis$VERSION/program/java-set-classpath";
 mkdir -p $DESTDIR$INSTALLDIR/program
-sed -e "s|@INSTALLDIR@|$INSTALLDIR|g" bin/java-set-classpath.in >| "$DESTDIR$INSTALLDIR/program/java-set-classpath" || exit 1;
+sed -e "s|@INSTALLDIR@|$INSTALLDIR|g" "${SRCDIR?}"/bin/java-set-classpath.in >| "$DESTDIR$INSTALLDIR/program/java-set-classpath" || exit 1;
 chmod 755 "$DESTDIR$INSTALLDIR/program/java-set-classpath"
 test -f $DESTDIR/gid_Module_Root_Brand && echo "$INSTALLDIR/program/java-set-classpath" >>$DESTDIR/gid_Module_Root_Brand
 

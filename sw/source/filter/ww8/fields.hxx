@@ -130,7 +130,7 @@ namespace ww
     /** Find the English Field Name from a winword index
 
         See OpenOffice.org issue 12831
-        (http://www.openoffice.org/issues/show_bug.cgi?id=12831) and MS
+        (https://bz.apache.org/ooo/show_bug.cgi?id=12831) and MS
         Knowledge Base article 268717
         (http://support.microsoft.com/default.aspx?scid=kb;en-us;268717) for
         details of why to use english field names and not localized ones since
@@ -141,9 +141,6 @@ namespace ww
 
         @return 0 if not found, otherwise the fieldname as a C style ASCII
         string
-
-        @author
-        <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
     */
     const char *GetEnglishFieldName(eField eIndex) throw();
 }

@@ -34,7 +34,6 @@
 
 using ::std::vector;
 using ::com::sun::star::uno::Sequence;
-using ::com::sun::star::xml::Attribute;
 using ::com::sun::star::io::XOutputStream;
 
 #define HAS_NAMESPACE(x) ((x & 0xffff0000) != 0)
@@ -83,7 +82,7 @@ namespace sax_fastparser {
         rtl_math_doubleToString(
             &mpDoubleStr, &mnDoubleStrCapacity, 0, value, rtl_math_StringFormat_G,
             RTL_STR_MAX_VALUEOFDOUBLE - RTL_CONSTASCII_LENGTH("-x.E-xxx"), '.', nullptr,
-            0, sal_True);
+            0, true);
 
         write(mpDoubleStr->buffer, mpDoubleStr->length);
         // and "clear" the string
@@ -102,6 +101,29 @@ namespace sax_fastparser {
         write( sOutput.getStr(), sOutput.getLength(), bEscape );
     }
 
+    /** Characters not allowed in XML 1.0
+        XML 1.1 would exclude only U+0000
+     */
+    static bool invalidChar( char c )
+    {
+        if (static_cast<unsigned char>(c) >= 0x20)
+            return false;
+
+        switch (c)
+        {
+            case 0x09:
+            case 0x0a:
+            case 0x0d:
+                return false;
+        }
+        return true;
+    }
+
+    static bool isHexDigit( char c )
+    {
+        return ('0' <= c && c <= '9') || ('A' <= c && c <= 'F') || ('a' <= c && c <= 'f');
+    }
+
     void FastSaxSerializer::write( const char* pStr, sal_Int32 nLen, bool bEscape )
     {
         if (nLen == -1)
@@ -113,6 +135,9 @@ namespace sax_fastparser {
             return;
         }
 
+        const sal_Int32 kXescapeLen = 7;
+        char bufXescape[kXescapeLen+1];
+        sal_Int32 nNextXescape = 0;
         for (sal_Int32 i = 0; i < nLen; ++i)
         {
             char c = pStr[ i ];
@@ -123,9 +148,99 @@ namespace sax_fastparser {
                 case '&':   writeBytes( "&amp;", 5 );    break;
                 case '\'':  writeBytes( "&apos;", 6 );   break;
                 case '"':   writeBytes( "&quot;", 6 );   break;
-                case '\n':  writeBytes( "&#10;", 5 );    break;
-                case '\r':  writeBytes( "&#13;", 5 );    break;
-                default:    writeBytes( &c, 1 );          break;
+                case '\t':
+#if 0
+                            // Seems OOXML prefers the _xHHHH_ escape over the
+                            // entity in *some* cases, apparently in attribute
+                            // values but not in element data.
+                            // Would need to distinguish at a higher level.
+                            if (mbXescape)
+                            {
+                                snprintf( bufXescape, kXescapeLen+1, "_x%04x_",
+                                        static_cast<unsigned int>(static_cast<unsigned char>(c)));
+                                writeBytes( bufXescape, kXescapeLen);
+                            }
+                            else
+#endif
+                            {
+                                writeBytes( "&#9;", 4 );
+                            }
+                break;
+                case '\n':
+#if 0
+                            if (mbXescape)
+                            {
+                                snprintf( bufXescape, kXescapeLen+1, "_x%04x_",
+                                        static_cast<unsigned int>(static_cast<unsigned char>(c)));
+                                writeBytes( bufXescape, kXescapeLen);
+                            }
+                            else
+#endif
+                            {
+                                writeBytes( "&#10;", 5 );
+                            }
+                break;
+                case '\r':
+#if 0
+                            if (mbXescape)
+                            {
+                                snprintf( bufXescape, kXescapeLen+1, "_x%04x_",
+                                        static_cast<unsigned int>(static_cast<unsigned char>(c)));
+                                writeBytes( bufXescape, kXescapeLen);
+                            }
+                            else
+#endif
+                            {
+                                writeBytes( "&#13;", 5 );
+                            }
+                break;
+                default:
+                            {
+                                // Escape characters not valid in XML 1.0 as
+                                // _xHHHH_. A literal "_xHHHH_" has to be
+                                // escaped as _x005F_xHHHH_ (effectively
+                                // escaping the leading '_').
+                                // See ECMA-376-1:2016 page 3736,
+                                // 22.4.2.4 bstr (Basic String)
+                                // for reference.
+                                if (c == '_' && i >= nNextXescape && i <= nLen - kXescapeLen &&
+                                        pStr[i+6] == '_' &&
+                                        ((pStr[i+1] | 0x20) == 'x') &&
+                                        isHexDigit( pStr[i+2] ) &&
+                                        isHexDigit( pStr[i+3] ) &&
+                                        isHexDigit( pStr[i+4] ) &&
+                                        isHexDigit( pStr[i+5] ))
+                                {
+                                    // OOXML has the odd habit to write some
+                                    // names using this that when re-saving
+                                    // should *not* be escaped, specifically
+                                    // _x0020_ for blanks in w:xpath values.
+                                    if (strncmp( pStr+i+2, "0020", 4) != 0)
+                                    {
+                                        writeBytes( "_x005F_", kXescapeLen);
+                                        // Remember this escapement so in
+                                        // _xHHHH_xHHHH_ only the first '_' is
+                                        // escaped.
+                                        nNextXescape = i + kXescapeLen;
+                                        break;
+                                    }
+                                }
+                                if (invalidChar(c))
+                                {
+                                    snprintf( bufXescape, kXescapeLen+1, "_x%04x_",
+                                            static_cast<unsigned int>(static_cast<unsigned char>(c)));
+                                    writeBytes( bufXescape, kXescapeLen);
+                                    break;
+                                }
+                                /* TODO: also U+FFFE and U+FFFF are not allowed
+                                 * in XML 1.0, assuming we're writing UTF-8
+                                 * those should be escaped as well to be
+                                 * conformant. Likely that would involve
+                                 * scanning for both encoded sequences and
+                                 * write as _xHHHH_? */
+                            }
+                            writeBytes( &c, 1 );
+                break;
             }
         }
     }
@@ -139,11 +254,18 @@ namespace sax_fastparser {
     void FastSaxSerializer::writeId( ::sal_Int32 nElement )
     {
         if( HAS_NAMESPACE( nElement ) ) {
-            writeBytes(mxFastTokenHandler->getUTF8Identifier(NAMESPACE(nElement)));
+            auto const Namespace(mxFastTokenHandler->getUTF8Identifier(NAMESPACE(nElement)));
+            assert(Namespace.getLength() != 0);
+            writeBytes(Namespace);
             writeBytes(sColon, N_CHARS(sColon));
-            writeBytes(mxFastTokenHandler->getUTF8Identifier(TOKEN(nElement)));
-        } else
-            writeBytes(mxFastTokenHandler->getUTF8Identifier(nElement));
+            auto const Element(mxFastTokenHandler->getUTF8Identifier(TOKEN(nElement)));
+            assert(Element.getLength() != 0);
+            writeBytes(Element);
+        } else {
+            auto const Element(mxFastTokenHandler->getUTF8Identifier(nElement));
+            assert(Element.getLength() != 0);
+            writeBytes(Element);
+        }
     }
 
 #ifdef DBG_UTIL
@@ -165,7 +287,7 @@ namespace sax_fastparser {
     }
 #endif
 
-    void FastSaxSerializer::startFastElement( ::sal_Int32 Element, FastAttributeList* pAttrList )
+    void FastSaxSerializer::startFastElement( ::sal_Int32 Element, FastAttributeList const * pAttrList )
     {
         if ( !mbMarkStackEmpty )
         {
@@ -227,7 +349,7 @@ namespace sax_fastparser {
         writeBytes(sClosingBracket, N_CHARS(sClosingBracket));
     }
 
-    void FastSaxSerializer::singleFastElement( ::sal_Int32 Element, FastAttributeList* pAttrList )
+    void FastSaxSerializer::singleFastElement( ::sal_Int32 Element, FastAttributeList const * pAttrList )
     {
         if ( !mbMarkStackEmpty )
         {
@@ -246,7 +368,7 @@ namespace sax_fastparser {
         writeBytes(sSlashAndClosingBracket, N_CHARS(sSlashAndClosingBracket));
     }
 
-    css::uno::Reference< css::io::XOutputStream > FastSaxSerializer::getOutputStream()
+    css::uno::Reference< css::io::XOutputStream > const & FastSaxSerializer::getOutputStream() const
     {
         return maCachedOutputStream.getOutputStream();
     }
@@ -256,11 +378,11 @@ namespace sax_fastparser {
 #ifdef DBG_UTIL
         ::std::set<OString> DebugAttributes;
 #endif
-        for (size_t j = 0; j < maTokenValues.size(); j++)
+        for (const TokenValue & rTokenValue : maTokenValues)
         {
             writeBytes(sSpace, N_CHARS(sSpace));
 
-            sal_Int32 nToken = maTokenValues[j].nToken;
+            sal_Int32 nToken = rTokenValue.nToken;
             writeId(nToken);
 
 #ifdef DBG_UTIL
@@ -272,14 +394,14 @@ namespace sax_fastparser {
 
             writeBytes(sEqualSignAndQuote, N_CHARS(sEqualSignAndQuote));
 
-            write(maTokenValues[j].pValue, -1, true);
+            write(rTokenValue.pValue, -1, true);
 
             writeBytes(sQuote, N_CHARS(sQuote));
         }
         maTokenValues.clear();
     }
 
-    void FastSaxSerializer::writeFastAttributeList(FastAttributeList& rAttrList)
+    void FastSaxSerializer::writeFastAttributeList(FastAttributeList const & rAttrList)
     {
 #ifdef DBG_UTIL
         ::std::set<OString> DebugAttributes;
@@ -406,7 +528,7 @@ namespace sax_fastparser {
         // flush, so that we get everything in getData()
         maCachedOutputStream.flush();
 
-        if (maMarkStack.size() == 1 && eMergeType != MergeMarks::IGNORE)
+        if (maMarkStack.size() == 1)
         {
 #ifdef DBG_UTIL
             while (!maMarkStack.top()->m_DebugEndedElements.empty())
@@ -470,8 +592,6 @@ namespace sax_fastparser {
                     topDebugEndedElements,
                     topDebugStartedElements);
                 break;
-            case MergeMarks::IGNORE:
-                break;
         }
 #endif
         if (maMarkStack.empty())
@@ -489,8 +609,6 @@ namespace sax_fastparser {
             case MergeMarks::APPEND:   maMarkStack.top()->append( aMerge );   break;
             case MergeMarks::PREPEND:  maMarkStack.top()->prepend( aMerge );  break;
             case MergeMarks::POSTPONE: maMarkStack.top()->postpone( aMerge ); break;
-            case MergeMarks::IGNORE:   break;
-
         }
     }
 
@@ -501,6 +619,21 @@ namespace sax_fastparser {
 
     void FastSaxSerializer::writeBytes( const char* pStr, size_t nLen )
     {
+#if OSL_DEBUG_LEVEL > 0
+        {
+            bool bGood = true;
+            for (size_t i=0; i < nLen; ++i)
+            {
+                if (invalidChar(pStr[i]))
+                {
+                    bGood = false;
+                    SAL_WARN("sax", "FastSaxSerializer::writeBytes - illegal XML character 0x" <<
+                            std::hex << int(static_cast<unsigned char>(pStr[i])));
+                }
+            }
+            SAL_WARN_IF( !bGood && nLen > 1, "sax", "in '" << OString(pStr,std::min<sal_Int32>(nLen,42)) << "'");
+        }
+#endif
         maCachedOutputStream.writeBytes( reinterpret_cast<const sal_Int8*>(pStr), nLen );
     }
 

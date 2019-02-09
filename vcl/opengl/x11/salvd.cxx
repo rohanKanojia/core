@@ -10,7 +10,6 @@
 #include <vcl/sysdata.hxx>
 
 #include <unx/salunx.h>
-#include <unx/saldata.hxx>
 #include <unx/saldisp.hxx>
 #include <unx/salgdi.h>
 #include <unx/salvd.h>
@@ -33,36 +32,22 @@ void X11SalGraphics::Init( X11OpenGLSalVirtualDevice *pDevice )
     mxImpl->Init();
 }
 
-X11OpenGLSalVirtualDevice::X11OpenGLSalVirtualDevice( SalGraphics* pGraphics,
-                                                      long &nDX, long &nDY,
-                                                      DeviceFormat eFormat,
+X11OpenGLSalVirtualDevice::X11OpenGLSalVirtualDevice( SalGraphics const * pGraphics,
+                                                      long nDX, long nDY,
                                                       const SystemGraphicsData *pData,
-                                                      X11SalGraphics* pNewGraphics) :
-    mpGraphics(pNewGraphics),
+                                                      std::unique_ptr<X11SalGraphics> pNewGraphics) :
+    mpGraphics(std::move(pNewGraphics)),
     mbGraphics( false ),
     mnXScreen( 0 )
 {
     assert(mpGraphics);
 
-    sal_uInt16 nBitCount;
-    switch (eFormat)
-    {
-        case DeviceFormat::BITMASK:
-            nBitCount = 1;
-            break;
-        default:
-            nBitCount = pGraphics->GetBitCount();
-            break;
-
-    }
-
     // TODO Check where a VirtualDevice is created from SystemGraphicsData
     assert( pData == nullptr ); (void)pData;
 
-    mpDisplay  = vcl_sal::getSalDisplay(GetGenericData());
-    mnDepth    = nBitCount;
-    mnXScreen  = pGraphics ? static_cast<X11SalGraphics*>(pGraphics)->GetScreenNumber() :
-                             vcl_sal::getSalDisplay(GetGenericData())->GetDefaultXScreen();
+    mpDisplay  = vcl_sal::getSalDisplay(GetGenericUnixSalData());
+    mnXScreen  = pGraphics ? static_cast<X11SalGraphics const *>(pGraphics)->GetScreenNumber() :
+                             vcl_sal::getSalDisplay(GetGenericUnixSalData())->GetDefaultXScreen();
     mnWidth    = nDX;
     mnHeight   = nDY;
     mpGraphics->Init( this );
@@ -70,7 +55,6 @@ X11OpenGLSalVirtualDevice::X11OpenGLSalVirtualDevice( SalGraphics* pGraphics,
 
 X11OpenGLSalVirtualDevice::~X11OpenGLSalVirtualDevice()
 {
-    delete mpGraphics;
 }
 
 SalGraphics* X11OpenGLSalVirtualDevice::AcquireGraphics()
@@ -81,7 +65,7 @@ SalGraphics* X11OpenGLSalVirtualDevice::AcquireGraphics()
     if( mpGraphics )
         mbGraphics = true;
 
-    return mpGraphics;
+    return mpGraphics.get();
 }
 
 void X11OpenGLSalVirtualDevice::ReleaseGraphics( SalGraphics* )

@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "java/ContextClassLoader.hxx"
-#include "java/lang/Object.hxx"
+#include <java/ContextClassLoader.hxx>
+#include <java/lang/Object.hxx>
 
 
 namespace connectivity { namespace jdbc
@@ -31,7 +31,7 @@ namespace connectivity { namespace jdbc
     using ::connectivity::java_lang_Object;
 
     ContextClassLoaderScope::ContextClassLoaderScope( JNIEnv& environment, const GlobalRef< jobject >& newClassLoader,
-        const ::comphelper::ResourceBasedEventLogger& _rLoggerForErrors, const Reference< XInterface >& _rxErrorContext )
+        const ::comphelper::EventLogger& _rLoggerForErrors, const Reference< XInterface >& _rxErrorContext )
         :m_environment( environment )
         ,m_currentThread( environment )
         ,m_oldContextClassLoader( environment )
@@ -92,7 +92,7 @@ namespace connectivity { namespace jdbc
     }
 
 
-    void ContextClassLoaderScope::pop()
+    ContextClassLoaderScope::~ContextClassLoaderScope()
     {
         if ( isActive() )
         {

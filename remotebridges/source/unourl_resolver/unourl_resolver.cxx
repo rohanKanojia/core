@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rtl/malformeduriexception.hxx"
+#include <rtl/malformeduriexception.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -30,12 +30,9 @@
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "cppuhelper/unourl.hxx"
-#include <osl/diagnose.h>
-#include <osl/mutex.hxx>
+#include <cppuhelper/unourl.hxx>
 
 using namespace cppu;
-using namespace osl;
 using namespace com::sun::star::uno;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::connection;
@@ -47,13 +44,13 @@ using namespace com::sun::star::registry;
 namespace unourl_resolver
 {
 
-Sequence< OUString > resolver_getSupportedServiceNames()
+static Sequence< OUString > resolver_getSupportedServiceNames()
 {
     Sequence< OUString > seqNames { "com.sun.star.bridge.UnoUrlResolver" };
     return seqNames;
 }
 
-OUString resolver_getImplementationName()
+static OUString resolver_getImplementationName()
 {
     return OUString(IMPLNAME);
 }
@@ -65,16 +62,14 @@ class ResolverImpl : public WeakImplHelper< XServiceInfo, XUnoUrlResolver >
 
 public:
     explicit ResolverImpl( const Reference< XComponentContext > & xSMgr );
-    virtual ~ResolverImpl();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw(css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString & rServiceName ) throw(css::uno::RuntimeException, std::exception) override;
-    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString & rServiceName ) override;
+    virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // XUnoUrlResolver
-    virtual Reference< XInterface > SAL_CALL resolve( const OUString & rUnoUrl )
-        throw (NoConnectException, ConnectionSetupException, RuntimeException, std::exception) override;
+    virtual Reference< XInterface > SAL_CALL resolve( const OUString & rUnoUrl ) override;
 };
 
 ResolverImpl::ResolverImpl( const Reference< XComponentContext > & xCtx )
@@ -82,30 +77,24 @@ ResolverImpl::ResolverImpl( const Reference< XComponentContext > & xCtx )
     , _xCtx( xCtx )
 {}
 
-ResolverImpl::~ResolverImpl() {}
-
 // XServiceInfo
 OUString ResolverImpl::getImplementationName()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return resolver_getImplementationName();
 }
 
 sal_Bool ResolverImpl::supportsService( const OUString & rServiceName )
-    throw(css::uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > ResolverImpl::getSupportedServiceNames()
-    throw(css::uno::RuntimeException, std::exception)
 {
     return resolver_getSupportedServiceNames();
 }
 
 // XUnoUrlResolver
 Reference< XInterface > ResolverImpl::resolve( const OUString & rUnoUrl )
-    throw (NoConnectException, ConnectionSetupException, RuntimeException, std::exception)
 {
     OUString aProtocolDescr;
     OUString aConnectDescr;
@@ -124,11 +113,7 @@ Reference< XInterface > ResolverImpl::resolve( const OUString & rUnoUrl )
 
     Reference< XConnector > xConnector(
         _xSMgr->createInstanceWithContext( "com.sun.star.connection.Connector", _xCtx ),
-        UNO_QUERY );
-
-    if (! xConnector.is())
-        throw RuntimeException("no connector!" );
-
+        UNO_QUERY_THROW );
     Reference< XConnection > xConnection( xConnector->connect( aConnectDescr ) );
 
     // As soon as singletons are ready, switch to singleton !
@@ -144,7 +129,7 @@ Reference< XInterface > ResolverImpl::resolve( const OUString & rUnoUrl )
     return xRet;
 }
 
-static Reference< XInterface > SAL_CALL ResolverImpl_create( const Reference< XComponentContext > & xCtx )
+static Reference< XInterface > ResolverImpl_create( const Reference< XComponentContext > & xCtx )
 {
     return Reference< XInterface >( *new ResolverImpl( xCtx ) );
 }
@@ -163,7 +148,7 @@ static const struct ImplementationEntry g_entries[] =
     { nullptr, nullptr, nullptr, nullptr, nullptr, 0 }
 };
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL uuresolver_component_getFactory(
+extern "C" SAL_DLLPUBLIC_EXPORT void * uuresolver_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager, void * pRegistryKey )
 {
     return component_getFactoryHelper( pImplName, pServiceManager, pRegistryKey , g_entries );

@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cmdid.h"
-#include "hintids.hxx"
+#include <cmdid.h>
+#include <hintids.hxx>
 #include <editeng/sizeitem.hxx>
 #include <editeng/brushitem.hxx>
 #include <sfx2/app.hxx>
@@ -33,21 +33,19 @@
 
 #include <numrule.hxx>
 #include <fmtornt.hxx>
-#include "wrtsh.hxx"
-#include "swmodule.hxx"
-#include "frmatr.hxx"
-#include "helpid.h"
-#include "globals.hrc"
-#include "shells.hrc"
-#include "uinums.hxx"
-#include "listsh.hxx"
-#include "poolfmt.hxx"
-#include "view.hxx"
-#include "edtwin.hxx"
+#include <wrtsh.hxx>
+#include <swmodule.hxx>
+#include <frmatr.hxx>
+#include <globals.hrc>
+#include <uinums.hxx>
+#include <listsh.hxx>
+#include <poolfmt.hxx>
+#include <view.hxx>
+#include <edtwin.hxx>
 
-#define SwListShell
+#define ShellClass_SwListShell
 #include <sfx2/msg.hxx>
-#include "swslots.hxx"
+#include <swslots.hxx>
 
 #include <IDocumentOutlineNodes.hxx>
 
@@ -55,7 +53,7 @@ SFX_IMPL_INTERFACE(SwListShell, SwBaseShell)
 
 void SwListShell::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_NUM_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Num_Toolbox);
 }
 
 
@@ -65,8 +63,8 @@ void SwListShell::InitInterface_Impl()
 // function is quite similar the code in SwContentTree::ExecCommand.
 static void lcl_OutlineUpDownWithSubPoints( SwWrtShell& rSh, bool bMove, bool bUp )
 {
-    const sal_uInt16 nActPos = rSh.GetOutlinePos();
-    if ( nActPos < USHRT_MAX && rSh.IsOutlineMovable( nActPos ) )
+    const SwOutlineNodes::size_type nActPos = rSh.GetOutlinePos();
+    if ( nActPos < SwOutlineNodes::npos && rSh.IsOutlineMovable( nActPos ) )
     {
         rSh.Push();
         rSh.MakeOutlineSel( nActPos, nActPos, true );
@@ -75,25 +73,31 @@ static void lcl_OutlineUpDownWithSubPoints( SwWrtShell& rSh, bool bMove, bool bU
         {
             const IDocumentOutlineNodes* pIDoc( rSh.getIDocumentOutlineNodesAccess() );
             const int nActLevel = pIDoc->getOutlineLevel( nActPos );
-            sal_Int32 nActEndPos = nActPos + 1;
-            sal_Int16 nDir = 0;
+            SwOutlineNodes::size_type nActEndPos = nActPos + 1;
+            SwOutlineNodes::difference_type nDir = 0;
 
             if ( !bUp )
             {
                 // Move down with subpoints:
                 while ( nActEndPos < pIDoc->getOutlineNodesCount() &&
-                        pIDoc->getOutlineLevel( nActEndPos ) > nActLevel )
+                       (!pIDoc->isOutlineInLayout(nActEndPos, *rSh.GetLayout())
+                        || nActLevel < pIDoc->getOutlineLevel(nActEndPos)))
+                {
                     ++nActEndPos;
+                }
 
                 if ( nActEndPos < pIDoc->getOutlineNodesCount() )
                 {
                     // The current subpoint which should be moved
                     // starts at nActPos and ends at nActEndPos - 1
                     --nActEndPos;
-                    sal_Int32 nDest = nActEndPos + 2;
+                    SwOutlineNodes::size_type nDest = nActEndPos + 2;
                     while ( nDest < pIDoc->getOutlineNodesCount() &&
-                            pIDoc->getOutlineLevel( nDest ) > nActLevel )
+                           (!pIDoc->isOutlineInLayout(nDest, *rSh.GetLayout())
+                            || nActLevel < pIDoc->getOutlineLevel(nDest)))
+                    {
                         ++nDest;
+                    }
 
                     nDir = nDest - 1 - nActEndPos;
                 }
@@ -103,10 +107,14 @@ static void lcl_OutlineUpDownWithSubPoints( SwWrtShell& rSh, bool bMove, bool bU
                 // Move up with subpoints:
                 if ( nActPos > 0 )
                 {
-                    --nActEndPos;
-                    sal_Int32 nDest = nActPos - 1;
-                    while ( nDest > 0 && pIDoc->getOutlineLevel( nDest ) > nActLevel )
+                    nActEndPos = nActPos;
+                    SwOutlineNodes::size_type nDest = nActPos - 1;
+                    while (nDest > 0 &&
+                           (!pIDoc->isOutlineInLayout(nDest, *rSh.GetLayout())
+                            || nActLevel < pIDoc->getOutlineLevel(nDest)))
+                    {
                         --nDest;
+                    }
 
                     nDir = nDest - nActPos;
                 }
@@ -125,7 +133,7 @@ static void lcl_OutlineUpDownWithSubPoints( SwWrtShell& rSh, bool bMove, bool bU
         }
 
         rSh.ClearMark();
-        rSh.Pop( false );
+        rSh.Pop(SwCursorShell::PopMode::DeleteCurrent);
     }
 }
 
@@ -274,7 +282,6 @@ SwListShell::SwListShell(SwView &_rView) :
     SwBaseShell(_rView)
 {
     SetName("List");
-    SetHelpId(SW_LISTSHELL);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

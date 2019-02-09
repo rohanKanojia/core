@@ -18,8 +18,11 @@
  */
 #include "vbastyles.hxx"
 #include "vbastyle.hxx"
+#include <basic/sberrors.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <ooo/vba/excel/XRange.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
@@ -32,7 +35,13 @@ lcl_createAPIStyleToVBAObject( const css::uno::Any& aObject, const uno::Referenc
     return uno::makeAny( xStyle );
 }
 
-ScVbaStyles::ScVbaStyles( const uno::Reference< XHelperInterface >& xParent, const uno::Reference< css::uno::XComponentContext > & xContext, const uno::Reference< frame::XModel >& xModel ) throw ( script::BasicErrorException ) : ScVbaStyles_BASE( xParent, xContext, uno::Reference< container::XIndexAccess >( ScVbaStyle::getStylesNameContainer( xModel ), uno::UNO_QUERY_THROW ) ), mxModel( xModel ), mxParent( xParent )
+ScVbaStyles::ScVbaStyles( const uno::Reference< XHelperInterface >& xParent,
+                          const uno::Reference< css::uno::XComponentContext > & xContext,
+                          const uno::Reference< frame::XModel >& xModel )
+: ScVbaStyles_BASE( xParent,
+                    xContext,
+                    uno::Reference< container::XIndexAccess >( ScVbaStyle::getStylesNameContainer( xModel ), uno::UNO_QUERY_THROW ) ),
+  mxModel( xModel )
 {
     try
     {
@@ -46,7 +55,7 @@ ScVbaStyles::ScVbaStyles( const uno::Reference< XHelperInterface >& xParent, con
 }
 
 uno::Sequence< OUString >
-ScVbaStyles::getStyleNames() throw ( uno::RuntimeException )
+ScVbaStyles::getStyleNames()
 {
     return mxNameContainerCellStyles->getElementNames();
 }
@@ -58,7 +67,7 @@ ScVbaStyles::createCollectionObject(const uno::Any& aObject)
 }
 
 uno::Type SAL_CALL
-ScVbaStyles::getElementType() throw (uno::RuntimeException)
+ScVbaStyles::getElementType()
 {
     return cppu::UnoType<excel::XStyle>::get();
 }
@@ -75,11 +84,11 @@ class EnumWrapper : public EnumerationHelper_BASE
         sal_Int32 nIndex;
 public:
         EnumWrapper( const uno::Reference< container::XIndexAccess >& xIndexAccess, const uno::Reference<XHelperInterface >& xParent, const uno::Reference<uno::XComponentContext >& xContext, const uno::Reference<frame::XModel >& xModel ) : m_xIndexAccess( xIndexAccess ), m_xParent( xParent ), m_xContext( xContext ), m_xModel( xModel ), nIndex( 0 ) {}
-        virtual sal_Bool SAL_CALL hasMoreElements(  ) throw (uno::RuntimeException, std::exception) override
+        virtual sal_Bool SAL_CALL hasMoreElements(  ) override
         {
                 return ( nIndex < m_xIndexAccess->getCount() );
         }
-        virtual uno::Any SAL_CALL nextElement(  ) throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception) override
+        virtual uno::Any SAL_CALL nextElement(  ) override
         {
             try
             {
@@ -112,13 +121,13 @@ public:
 }
 
 uno::Reference< container::XEnumeration > SAL_CALL
-ScVbaStyles::createEnumeration() throw (uno::RuntimeException)
+ScVbaStyles::createEnumeration()
 {
     return new EnumWrapper( m_xIndexAccess, mxParent, mxContext, mxModel );
 }
 
 uno::Reference< excel::XStyle > SAL_CALL
-ScVbaStyles::Add( const OUString& _sName, const uno::Any& _aBasedOn ) throw (script::BasicErrorException, uno::RuntimeException, std::exception)
+ScVbaStyles::Add( const OUString& _sName, const uno::Any& _aBasedOn )
 {
     uno::Reference< excel::XStyle > aRet;
     try
@@ -130,14 +139,7 @@ ScVbaStyles::Add( const OUString& _sName, const uno::Any& _aBasedOn ) throw (scr
             if ( _aBasedOn >>= oRange)
             {
                 uno::Reference< excel::XStyle > oStyle( oRange->getStyle(), uno::UNO_QUERY_THROW );
-                if ( oStyle.is() )
-                {
-                    sParentCellStyleName = oStyle->getName();
-                }
-                else
-                {
-                    DebugHelper::basicexception(ERRCODE_BASIC_BAD_ARGUMENT, OUString() );
-                }
+                sParentCellStyleName = oStyle->getName();
             }
             else
             {
@@ -165,7 +167,7 @@ ScVbaStyles::Add( const OUString& _sName, const uno::Any& _aBasedOn ) throw (scr
 }
 
 void
-ScVbaStyles::Delete(const OUString& _sStyleName) throw ( script::BasicErrorException )
+ScVbaStyles::Delete(const OUString& _sStyleName)
 {
     try
     {
@@ -187,12 +189,10 @@ ScVbaStyles::getServiceImplName()
 uno::Sequence< OUString >
 ScVbaStyles::getServiceNames()
 {
-        static uno::Sequence< OUString > aServiceNames;
-        if ( aServiceNames.getLength() == 0 )
+        static uno::Sequence< OUString > const aServiceNames
         {
-                aServiceNames.realloc( 1 );
-                aServiceNames[ 0 ] = "ooo.vba.excel.XStyles";
-        }
+            "ooo.vba.excel.XStyles"
+        };
         return aServiceNames;
 }
 

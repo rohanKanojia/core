@@ -22,11 +22,11 @@
 
 #include <vector>
 
-#include "iexternalmediashapebase.hxx"
-#include "unoview.hxx"
-#include "subsettableshapemanager.hxx"
-#include "slideshowexceptions.hxx"
-#include "slideshowcontext.hxx"
+#include <iexternalmediashapebase.hxx>
+#include <unoview.hxx>
+#include <subsettableshapemanager.hxx>
+#include <slideshowexceptions.hxx>
+#include <slideshowcontext.hxx>
 
 
 namespace slideshow
@@ -59,7 +59,7 @@ namespace slideshow
             ExternalShapeBase( const css::uno::Reference< css::drawing::XShape >&   xShape,
                                double                                       nPrio,
                                const SlideShowContext&                      rContext ); // throw ShapeLoadFailedException;
-            virtual ~ExternalShapeBase();
+            virtual ~ExternalShapeBase() override;
 
             virtual css::uno::Reference< css::drawing::XShape > getXShape() const override;
 
@@ -126,7 +126,7 @@ namespace slideshow
 
             // The attributes of this Shape
             const double                                                            mnPriority;
-            ::basegfx::B2DRectangle                                                 maBounds;
+            ::basegfx::B2DRectangle const                                           maBounds;
         };
     }
 }

@@ -24,6 +24,7 @@
 #include <svx/xpoly.hxx>
 #include <svx/svxdllapi.h>
 #include <basegfx/vector/b2enums.hxx>
+#include <memory>
 
 class ImpPathForDragAndCreate;
 
@@ -37,58 +38,56 @@ public:
     SdrObjKind                  meKind;
 
     SdrPathObjGeoData();
-    virtual ~SdrPathObjGeoData();
+    virtual ~SdrPathObjGeoData() override;
 };
 
 
-class SVX_DLLPUBLIC SdrPathObj : public SdrTextObj
+class SVX_DLLPUBLIC SdrPathObj final : public SdrTextObj
 {
 private:
     friend class ImpPathForDragAndCreate;
 
-protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
 
     basegfx::B2DPolyPolygon maPathPolygon;
     SdrObjKind                  meKind;
 
     // for isolation of old Drag/Create code
-    ImpPathForDragAndCreate*    mpDAC;
-
-    // brightness - used in EnhancedCustomShapes2d.cxx for DARKEN[LESS] and LIGHTEN[LESS] segments implementation
-    double mdBrightness;
+    std::unique_ptr<ImpPathForDragAndCreate> mpDAC;
 
     // helper functions for GET, SET, INS etc. PNT
     void ImpSetClosed(bool bClose);
     void ImpForceKind();
     void ImpForceLineAngle();
     ImpPathForDragAndCreate& impGetDAC() const;
-    void impDeleteDAC() const;
+
+private:
+    // protected destructor - due to final, make private
+    virtual ~SdrPathObj() override;
 
 public:
-    virtual void SetRectsDirty(bool bNotMyself = false) override;
-    double GetBrightness() { return mdBrightness; }
-
-    SdrPathObj(SdrObjKind eNewKind);
-    SdrPathObj(SdrObjKind eNewKind, const basegfx::B2DPolyPolygon& rPathPoly, double dBrightness = 1.0);
-    virtual ~SdrPathObj();
+    SdrPathObj(
+        SdrModel& rSdrModel,
+        SdrObjKind eNewKind);
+    SdrPathObj(
+        SdrModel& rSdrModel,
+        SdrObjKind eNewKind,
+        const basegfx::B2DPolyPolygon& rPathPoly);
 
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
     virtual sal_uInt16 GetObjIdentifier() const override;
-    virtual void TakeUnrotatedSnapRect(Rectangle& rRect) const override;
-    virtual SdrPathObj* Clone() const override;
+    virtual void TakeUnrotatedSnapRect(tools::Rectangle& rRect) const override;
+    virtual SdrPathObj* CloneSdrObject(SdrModel& rTargetModel) const override;
     SdrPathObj& operator=(const SdrPathObj& rObj);
 
     virtual OUString TakeObjNameSingul() const override;
     virtual OUString TakeObjNamePlural() const override;
     virtual basegfx::B2DPolyPolygon TakeXorPoly() const override;
     virtual void RecalcSnapRect() override;
-    virtual void NbcSetSnapRect(const Rectangle& rRect) override;
+    virtual void NbcSetSnapRect(const tools::Rectangle& rRect) override;
     virtual sal_uInt32 GetHdlCount() const override;
-    virtual SdrHdl* GetHdl(sal_uInt32 nHdlNum) const override;
-    virtual sal_uInt32 GetPlusHdlCount(const SdrHdl& rHdl) const override;
-    virtual SdrHdl* GetPlusHdl(const SdrHdl& rHdl, sal_uInt32 nPlNum) const override;
     virtual void AddToHdlList(SdrHdlList& rHdlList) const override;
+    virtual void AddToPlusHdlList(SdrHdlList& rHdlList, SdrHdl& rHdl) const override;
 
     // special drag methods
     virtual bool hasSpecialDrag() const override;
@@ -125,12 +124,12 @@ public:
 
     // insert point
     sal_uInt32 NbcInsPointOld(const Point& rPos, bool bNewObj);
-    sal_uInt32 NbcInsPoint(sal_uInt32 i, const Point& rPos, bool bNewObj);
+    sal_uInt32 NbcInsPoint(const Point& rPos, bool bNewObj);
 
     // rip at given point
     SdrObject* RipPoint(sal_uInt32 nHdlNum, sal_uInt32& rNewPt0Index);
 
-protected:
+private:
     virtual SdrObjGeoData* NewGeoData() const override;
     virtual void SaveGeoData(SdrObjGeoData& rGeo) const override;
     virtual void RestGeoData(const SdrObjGeoData& rGeo) override;

@@ -19,8 +19,8 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_OPTASIAN_HXX
 #define INCLUDED_CUI_SOURCE_INC_OPTASIAN_HXX
 
+#include <memory>
 #include <sfx2/tabdlg.hxx>
-#include <vcl/group.hxx>
 #include <vcl/button.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
@@ -46,18 +46,18 @@ class SvxAsianLayoutPage : public SfxTabPage
     VclPtr<Edit>        m_pEndED;
     VclPtr<FixedText>   m_pHintFT;
 
-    SvxAsianLayoutPage_Impl* pImpl;
+    std::unique_ptr<SvxAsianLayoutPage_Impl> pImpl;
 
-    DECL_LINK_TYPED(LanguageHdl, ListBox&, void);
-    DECL_LINK_TYPED(ChangeStandardHdl, Button*, void);
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
+    DECL_LINK(LanguageHdl, ListBox&, void);
+    DECL_LINK(ChangeStandardHdl, Button*, void);
+    DECL_LINK(ModifyHdl, Edit&, void);
 
 public:
     SvxAsianLayoutPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxAsianLayoutPage();
+    virtual ~SvxAsianLayoutPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>  Create( vcl::Window* pParent, const SfxItemSet* rAttrSet );
+    static VclPtr<SfxTabPage>  Create( TabPageParent pParent, const SfxItemSet* rAttrSet );
     static const sal_uInt16*  GetRanges();
     virtual bool        FillItemSet( SfxItemSet* rSet ) override;
     virtual void        Reset( const SfxItemSet* rSet ) override;

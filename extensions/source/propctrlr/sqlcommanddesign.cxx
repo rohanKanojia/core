@@ -19,7 +19,8 @@
 
 #include "sqlcommanddesign.hxx"
 #include "formstrings.hxx"
-#include "formresid.hrc"
+#include <command.hrc>
+#include <strings.hrc>
 #include "modulepcr.hxx"
 #include "unourl.hxx"
 
@@ -29,18 +30,14 @@
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XTitle.hpp>
 #include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/lang/NullPointerException.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
-#include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
 
-#include <svtools/localresaccess.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
 
@@ -50,7 +47,6 @@ namespace pcr
 
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::lang::XMultiComponentFactory;
     using ::com::sun::star::beans::PropertyChangeEvent;
     using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::frame::XFrame;
@@ -64,17 +60,13 @@ namespace pcr
     using ::com::sun::star::lang::XComponent;
     using ::com::sun::star::frame::XComponentLoader;
     using ::com::sun::star::beans::XPropertySet;
-    using ::com::sun::star::beans::XPropertySetInfo;
-    using ::com::sun::star::frame::XController;
     using ::com::sun::star::frame::XTitle;
     using ::com::sun::star::lang::EventObject;
     using ::com::sun::star::lang::NullPointerException;
     using ::com::sun::star::lang::DisposedException;
     using ::com::sun::star::uno::XComponentContext;
-    using ::com::sun::star::frame::XFramesSupplier;
     using ::com::sun::star::frame::XFrames;
     using ::com::sun::star::util::XCloseable;
-    using ::com::sun::star::uno::TypeClass_STRING;
     using ::com::sun::star::lang::XMultiServiceFactory;
     using ::com::sun::star::frame::XDispatchProvider;
     using ::com::sun::star::frame::XDispatch;
@@ -118,7 +110,7 @@ namespace pcr
     }
 
 
-    void SAL_CALL SQLCommandDesigner::propertyChange( const PropertyChangeEvent& Event ) throw (RuntimeException, std::exception)
+    void SAL_CALL SQLCommandDesigner::propertyChange( const PropertyChangeEvent& Event )
     {
         OSL_ENSURE( m_xDesigner.is() && ( Event.Source == m_xDesigner ), "SQLCommandDesigner::propertyChange: where did this come from?" );
 
@@ -143,17 +135,17 @@ namespace pcr
             catch( const Exception& )
             {
                 // not allowed to leave, so silence it
-                DBG_UNHANDLED_EXCEPTION();
+                DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
             }
         }
     }
 
 
-    void SAL_CALL SQLCommandDesigner::disposing( const EventObject& Source ) throw (RuntimeException, std::exception)
+    void SAL_CALL SQLCommandDesigner::disposing( const EventObject& Source )
     {
         if ( m_xDesigner.is() && ( Source.Source == m_xDesigner ) )
         {
-            impl_designerClosed_nothrow();
+            m_aCloseLink.Call( *this );
             m_xDesigner.clear();
         }
     }
@@ -212,7 +204,7 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
     }
 
@@ -237,7 +229,7 @@ namespace pcr
             aArgs[1].Name  = PROPERTY_COMMAND;
             aArgs[1].Value <<= m_xObjectAdapter->getSQLCommand();
             aArgs[2].Name  = PROPERTY_COMMANDTYPE;
-            aArgs[2].Value <<= (sal_Int32)CommandType::COMMAND;
+            aArgs[2].Value <<= sal_Int32(CommandType::COMMAND);
             aArgs[3].Name  = PROPERTY_ESCAPE_PROCESSING;
             aArgs[3].Value <<= m_xObjectAdapter->getEscapeProcessing();
 
@@ -269,14 +261,13 @@ namespace pcr
             Reference< XTitle> xTitle(xQueryDesign,UNO_QUERY);
             if ( xTitle.is() )
             {
-                ::svt::OLocalResourceAccess aEnumStrings( PcrRes( RID_RSC_ENUM_COMMAND_TYPE ), RSC_RESOURCE );
-                OUString sDisplayName = PcrRes(CommandType::COMMAND + 1).toString();
-                xTitle->setTitle( sDisplayName );
+                OUString sDisplayName = PcrRes(RID_RSC_ENUM_COMMAND_TYPE[CommandType::COMMAND]);
+                xTitle->setTitle(sDisplayName);
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
             m_xDesigner.clear();
         }
         osl_atomic_decrement(&m_refCount);
@@ -299,25 +290,19 @@ namespace pcr
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
         return xFrame;
     }
 
 
-    void SQLCommandDesigner::impl_designerClosed_nothrow()
-    {
-        m_aCloseLink.Call( *this );
-    }
-
-
     void SQLCommandDesigner::impl_closeDesigner_nothrow()
     {
-        OSL_PRECOND( isActive(), "SQLCommandDesigner::impl_closeDesigner_nothrow: invalid calle!" );
+        OSL_PRECOND( isActive(), "SQLCommandDesigner::impl_closeDesigner_nothrow: invalid call!" );
         // close it
         try
         {
-            // do not listen anymore ....
+            // do not listen anymore...
             Reference< XPropertySet > xProps( m_xDesigner, UNO_QUERY );
             if ( xProps.is() )
                 xProps->removePropertyChangeListener( PROPERTY_ACTIVECOMMAND, this );
@@ -326,7 +311,7 @@ namespace pcr
             // instead of calling XCloseable::close directly. The latter method would also close
             // the frame, but not care for things like shutting down the office when the last
             // frame is gone ...
-            const UnoURL aCloseURL( OUString( ".uno:CloseDoc" ),
+            const UnoURL aCloseURL( ".uno:CloseDoc",
                 Reference< XMultiServiceFactory >( m_xORB, UNO_QUERY ) );
 
             Reference< XDispatchProvider > xProvider( m_xDesigner->getFrame(), UNO_QUERY_THROW );
@@ -341,12 +326,12 @@ namespace pcr
                 // fallback: use the XCloseable::close (with all possible disadvantages)
                 Reference< XCloseable > xClose( m_xDesigner->getFrame(), UNO_QUERY );
                 if ( xClose.is() )
-                    xClose->close( sal_True );
+                    xClose->close( true );
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
 
         m_xDesigner.clear();
@@ -359,11 +344,11 @@ namespace pcr
         bool bAllow = true;
         try
         {
-            bAllow = m_xDesigner->suspend( sal_True );
+            bAllow = m_xDesigner->suspend( true );
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.propctrlr");
         }
         return bAllow;
     }

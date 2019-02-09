@@ -40,8 +40,7 @@ public:
     explicit SvxColorItem(const sal_uInt16 nId);
     SvxColorItem(const Color& aColor, const sal_uInt16 nId);
     SvxColorItem(SvStream& rStream, const sal_uInt16 nId);
-    SvxColorItem(const SvxColorItem& rCopy);
-    virtual ~SvxColorItem();
+    virtual ~SvxColorItem() override;
 
     // "pure virtual Methods" from SfxPoolItem
     virtual bool operator==(const SfxPoolItem& rPoolItem) const override;
@@ -50,24 +49,27 @@ public:
     virtual sal_uInt16 GetVersion(sal_uInt16 nFileVersion) const override;
 
     virtual bool GetPresentation(SfxItemPresentation ePres,
-                                 SfxMapUnit eCoreMetric, SfxMapUnit ePresMetric,
-                                 OUString &rText, const IntlWrapper* pIntlWrapper = nullptr) const override;
+                                 MapUnit eCoreMetric, MapUnit ePresMetric,
+                                 OUString &rText, const IntlWrapper& rIntlWrapper) const override;
 
     virtual SfxPoolItem* Clone(SfxItemPool* pPool = nullptr) const override;
     virtual SfxPoolItem* Create(SvStream& rStream, sal_uInt16 nVersion) const override;
     virtual SvStream& Store(SvStream& rStream, sal_uInt16 nVersion) const override;
 
-    inline SvxColorItem& operator=(const SvxColorItem& rColor)
+    SvxColorItem& operator=(const SvxColorItem& rColor)
     {
         SetValue(rColor.GetValue());
         return *this;
     }
+    SvxColorItem(SvxColorItem const &) = default; // SfxPoolItem copy function dichotomy
 
     const Color& GetValue() const
     {
         return mColor;
     }
     void SetValue(const Color& rNewColor);
+
+    void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
 // XXX: to be moved in a separate header.
@@ -78,12 +80,8 @@ class EDITENG_DLLPUBLIC SvxBackgroundColorItem : public SvxColorItem
 
         SvxBackgroundColorItem(const sal_uInt16 nId);
         SvxBackgroundColorItem(const Color& rCol, const sal_uInt16 nId);
-        SvxBackgroundColorItem(SvStream& rStrm, const sal_uInt16 nId);
-        SvxBackgroundColorItem(const SvxBackgroundColorItem& rCopy);
 
         virtual SfxPoolItem* Clone(SfxItemPool* pPool = nullptr) const override;
-        virtual SvStream& Store(SvStream& rStream, sal_uInt16 nVersion) const override;
-        virtual SfxPoolItem* Create(SvStream &, sal_uInt16) const override;
         virtual bool QueryValue(css::uno::Any& rVal, sal_uInt8 nMemberId = 0) const override;
         virtual bool PutValue(const css::uno::Any& rVal, sal_uInt8 nMemberId) override;
 };

@@ -18,12 +18,12 @@
  */
 
 #include <svx/svxdlg.hxx>
-#include <vcl/msgbox.hxx>
 #include <sfx2/filedlghelper.hxx>
 #include <sfx2/app.hxx>
 #include <svl/aeitem.hxx>
-#include <svtools/svtabbx.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/svtabbx.hxx>
+#include <vcl/treelistentry.hxx>
+#include <vcl/fixed.hxx>
 #include <tools/urlobj.hxx>
 #include <vcl/svapp.hxx>
 #include <unotools/defaultoptions.hxx>
@@ -32,10 +32,9 @@
 #include <unotools/moduleoptions.hxx>
 #include <unotools/viewoptions.hxx>
 
-#include "optpath.hxx"
+#include <optpath.hxx>
 #include <dialmgr.hxx>
-#include <cuires.hrc>
-#include "helpid.hrc"
+#include <strings.hrc>
 #include <comphelper/configuration.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
@@ -52,6 +51,8 @@
 #include <officecfg/Office/Common.hxx>
 #include "optHeaderTabListbox.hxx"
 #include <vcl/help.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace css;
 using namespace css::beans;
@@ -70,7 +71,7 @@ using namespace svx;
 #define POSTFIX_USER        "_user"
 #define POSTFIX_WRITABLE    "_writable"
 #define VAR_ONE             "%1"
-#define IODLG_CONFIGNAME    OUString("FilePicker_Save")
+#define IODLG_CONFIGNAME    "FilePicker_Save"
 
 // struct OptPath_Impl ---------------------------------------------------
 
@@ -147,29 +148,28 @@ static OUString getCfgName_Impl( sal_uInt16 _nHandle )
 
 static OUString Convert_Impl( const OUString& rValue )
 {
-    OUString aReturn;
     if (rValue.isEmpty())
-        return aReturn;
+        return OUString();
 
     sal_Int32 nPos = 0;
-
+    OUStringBuffer aReturn;
     for (;;)
     {
         OUString aValue = rValue.getToken( 0, MULTIPATH_DELIMITER, nPos );
         INetURLObject aObj( aValue );
         if ( aObj.GetProtocol() == INetProtocol::File )
-            aReturn += aObj.PathToFileName();
+            aReturn.append(aObj.PathToFileName());
         if ( nPos < 0 )
             break;
-        aReturn += OUStringLiteral1<MULTIPATH_DELIMITER>();
+        aReturn.append(MULTIPATH_DELIMITER);
     }
 
-    return aReturn;
+    return aReturn.makeStringAndClear();
 }
 
 // functions -------------------------------------------------------------
 
-bool IsMultiPath_Impl( const sal_uInt16 nIndex )
+static bool IsMultiPath_Impl( const sal_uInt16 nIndex )
 {
 #if OSL_DEBUG_LEVEL > 1
     return ( SvtPathOptions::PATH_AUTOCORRECT == nIndex ||
@@ -191,11 +191,11 @@ bool IsMultiPath_Impl( const sal_uInt16 nIndex )
 // class SvxPathTabPage --------------------------------------------------
 
 SvxPathTabPage::SvxPathTabPage(vcl::Window* pParent, const SfxItemSet& rSet)
-    :SfxTabPage( pParent, "OptPathsPage", "cui/ui/optpathspage.ui", &rSet)
+    : SfxTabPage( pParent, "OptPathsPage", "cui/ui/optpathspage.ui", &rSet)
+    , pImpl( new OptPath_Impl(get<FixedImage>("lock")->GetImage(),
+        get<FixedText>("editpaths")->GetText()) )
     , xDialogListener ( new ::svt::DialogClosedListener() )
 {
-    pImpl = new OptPath_Impl(get<FixedImage>("lock")->GetImage(),
-        get<FixedText>("editpaths")->GetText());
     get(m_pStandardBtn, "default");
     get(m_pPathBtn, "edit");
     get(m_pPathCtrl, "paths");
@@ -204,7 +204,7 @@ SvxPathTabPage::SvxPathTabPage(vcl::Window* pParent, const SfxItemSet& rSet)
     m_pPathBtn->SetClickHdl( LINK( this, SvxPathTabPage, PathHdl_Impl ) );
 
     Size aControlSize(236 , 147);
-    aControlSize = LogicToPixel(aControlSize, MAP_APPFONT);
+    aControlSize = LogicToPixel(aControlSize, MapMode(MapUnit::MapAppFont));
     m_pPathCtrl->set_width_request(aControlSize.Width());
     m_pPathCtrl->set_height_request(aControlSize.Height());
     WinBits nBits = WB_SORT | WB_HSCROLL | WB_CLIPCHILDREN | WB_TABSTOP;
@@ -216,22 +216,22 @@ SvxPathTabPage::SvxPathTabPage(vcl::Window* pParent, const SfxItemSet& rSet)
 
     rBar.InsertItem( ITEMID_TYPE, get<FixedText>("type")->GetText(),
                             0,
-                            HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER | HeaderBarItemBits::CLICKABLE | HeaderBarItemBits::UPARROW );
+                            HeaderBarItemBits::LEFT | HeaderBarItemBits::CLICKABLE | HeaderBarItemBits::UPARROW );
     rBar.InsertItem( ITEMID_PATH, get<FixedText>("path")->GetText(),
                             0,
-                            HeaderBarItemBits::LEFT | HeaderBarItemBits::VCENTER );
+                            HeaderBarItemBits::LEFT );
 
     long nWidth1 = rBar.GetTextWidth(rBar.GetItemText(ITEMID_TYPE));
     long nWidth2 = rBar.GetTextWidth(rBar.GetItemText(ITEMID_PATH));
 
-    long aTabs[] = {3, 0, 0, 0};
-    aTabs[2] = nWidth1 + 12;
-    aTabs[3] = aTabs[2] + nWidth2 + 12;
-    pPathBox->SetTabs(aTabs, MAP_PIXEL);
+    long aTabs[] = {0, 0, 0};
+    aTabs[1] = nWidth1 + 12;
+    aTabs[2] = aTabs[1] + nWidth2 + 12;
+    pPathBox->SetTabs(SAL_N_ELEMENTS(aTabs), aTabs, MapUnit::MapPixel);
 
     pPathBox->SetDoubleClickHdl( LINK( this, SvxPathTabPage, DoubleClickPathHdl_Impl ) );
     pPathBox->SetSelectHdl( LINK( this, SvxPathTabPage, PathSelect_Impl ) );
-    pPathBox->SetSelectionMode( MULTIPLE_SELECTION );
+    pPathBox->SetSelectionMode( SelectionMode::Multiple );
     pPathBox->SetHighlightRange();
 
     xDialogListener->SetDialogClosedLink( LINK( this, SvxPathTabPage, DialogClosedHdl ) );
@@ -251,18 +251,17 @@ void SvxPathTabPage::dispose()
             delete static_cast<PathUserData_Impl*>(pPathBox->GetEntry(i)->GetUserData());
         pPathBox.disposeAndClear();
     }
-    delete pImpl;
-    pImpl = nullptr;
+    pImpl.reset();
     m_pPathCtrl.clear();
     m_pStandardBtn.clear();
     m_pPathBtn.clear();
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> SvxPathTabPage::Create( vcl::Window* pParent,
+VclPtr<SfxTabPage> SvxPathTabPage::Create( TabPageParent pParent,
                                            const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxPathTabPage>::Create( pParent, *rAttrSet );
+    return VclPtr<SvxPathTabPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 bool SvxPathTabPage::FillItemSet( SfxItemSet* )
@@ -277,7 +276,6 @@ bool SvxPathTabPage::FillItemSet( SfxItemSet* )
     return true;
 }
 
-
 void SvxPathTabPage::Reset( const SfxItemSet* )
 {
     pPathBox->Clear();
@@ -286,95 +284,90 @@ void SvxPathTabPage::Reset( const SfxItemSet* )
     long nWidth1 = rBar.GetTextWidth(rBar.GetItemText(1));
     long nWidth2 = rBar.GetTextWidth(rBar.GetItemText(2));
 
-    for( sal_uInt16 i = 0; i <= (sal_uInt16)SvtPathOptions::PATH_CLASSIFICATION; ++i )
+    for( sal_uInt16 i = 0; i <= sal_uInt16(SvtPathOptions::PATH_CLASSIFICATION); ++i )
     {
         // only writer uses autotext
         if ( i == SvtPathOptions::PATH_AUTOTEXT
             && !SvtModuleOptions().IsModuleInstalled( SvtModuleOptions::EModule::WRITER ) )
             continue;
 
+        const char* pId = nullptr;
+
         switch (i)
         {
             case SvtPathOptions::PATH_AUTOCORRECT:
+                pId = RID_SVXSTR_KEY_AUTOCORRECT_DIR;
+                break;
             case SvtPathOptions::PATH_AUTOTEXT:
+                pId = RID_SVXSTR_KEY_GLOSSARY_PATH;
+                break;
             case SvtPathOptions::PATH_BACKUP:
+                pId = RID_SVXSTR_KEY_BACKUP_PATH;
+                break;
             case SvtPathOptions::PATH_GALLERY:
+                pId = RID_SVXSTR_KEY_GALLERY_DIR;
+                break;
             case SvtPathOptions::PATH_GRAPHIC:
+                pId = RID_SVXSTR_KEY_GRAPHICS_PATH;
+                break;
             case SvtPathOptions::PATH_TEMP:
+                pId = RID_SVXSTR_KEY_TEMP_PATH;
+                break;
             case SvtPathOptions::PATH_TEMPLATE:
+                pId = RID_SVXSTR_KEY_TEMPLATE_PATH;
+                break;
             case SvtPathOptions::PATH_DICTIONARY:
+                pId = RID_SVXSTR_KEY_DICTIONARY_PATH;
+                break;
             case SvtPathOptions::PATH_CLASSIFICATION:
+                pId = RID_SVXSTR_KEY_CLASSIFICATION_PATH;
+                break;
 #if OSL_DEBUG_LEVEL > 1
             case SvtPathOptions::PATH_LINGUISTIC:
+                pId = RID_SVXSTR_KEY_LINGUISTIC_DIR;
+                break;
 #endif
             case SvtPathOptions::PATH_WORK:
+                pId = RID_SVXSTR_KEY_WORK_PATH;
+                break;
+        }
+
+        if (pId)
+        {
+            OUString aStr(CuiResId(pId));
+
+            nWidth1 = std::max(nWidth1, pPathBox->GetTextWidth(aStr));
+            aStr += "\t";
+            OUString sInternal, sUser, sWritable;
+            bool bReadOnly = false;
+            GetPathList( i, sInternal, sUser, sWritable, bReadOnly );
+            OUString sTmpPath = sUser;
+            if ( !sTmpPath.isEmpty() && !sWritable.isEmpty() )
+                sTmpPath += OUStringLiteral1(MULTIPATH_DELIMITER);
+            sTmpPath += sWritable;
+            const OUString aValue = Convert_Impl( sTmpPath );
+            nWidth2 = std::max(nWidth2, pPathBox->GetTextWidth(aValue));
+            aStr += aValue;
+            SvTreeListEntry* pEntry = pPathBox->InsertEntry( aStr );
+            if ( bReadOnly )
             {
-                sal_uInt32 nId = RID_SVXSTR_PATH_NAME_START + i;
-                if (i == SvtPathOptions::PATH_CLASSIFICATION)
-                    // RID_SVXSTR_KEY_USERDICTIONARY_DIR already took our slot, so name the key explicitly.
-                    nId = RID_SVXSTR_KEY_CLASSIFICATION_PATH;
-                OUString aStr(CUI_RES(nId));
-
-                nWidth1 = std::max(nWidth1, pPathBox->GetTextWidth(aStr));
-                aStr += "\t";
-                OUString sInternal, sUser, sWritable;
-                bool bReadOnly = false;
-                GetPathList( i, sInternal, sUser, sWritable, bReadOnly );
-                OUString sTmpPath = sUser;
-                if ( !sTmpPath.isEmpty() && !sWritable.isEmpty() )
-                    sTmpPath += OUStringLiteral1<MULTIPATH_DELIMITER>();
-                sTmpPath += sWritable;
-                const OUString aValue = Convert_Impl( sTmpPath );
-                nWidth2 = std::max(nWidth2, pPathBox->GetTextWidth(aValue));
-                aStr += aValue;
-                SvTreeListEntry* pEntry = pPathBox->InsertEntry( aStr );
-                if ( bReadOnly )
-                {
-                    pPathBox->SetCollapsedEntryBmp( pEntry, pImpl->m_aLockImage );
-                }
-                PathUserData_Impl* pPathImpl = new PathUserData_Impl(i);
-                pPathImpl->sUserPath = sUser;
-                pPathImpl->sWritablePath = sWritable;
-                pEntry->SetUserData( pPathImpl );
+                pPathBox->SetCollapsedEntryBmp( pEntry, pImpl->m_aLockImage );
             }
+            PathUserData_Impl* pPathImpl = new PathUserData_Impl(i);
+            pPathImpl->sUserPath = sUser;
+            pPathImpl->sWritablePath = sWritable;
+            pEntry->SetUserData( pPathImpl );
         }
+
     }
 
-    long aTabs[] = {3, 0, 0, 0};
-    aTabs[2] = nWidth1 + 12;
-    aTabs[3] = aTabs[2] + nWidth2 + 12;
-    pPathBox->SetTabs(aTabs, MAP_PIXEL);
+    long aTabs[] = {0, 0, 0};
+    aTabs[1] = nWidth1 + 12;
+    aTabs[2] = aTabs[1] + nWidth2 + 12;
+    pPathBox->SetTabs(SAL_N_ELEMENTS(aTabs), aTabs, MapUnit::MapPixel);
 
-#if 0
-    String aUserData = GetUserData();
-    if ( aUserData.Len() )
-    {
-        fprintf(stderr, "FOO\n");
-
-        // restore column width
-        rBar.SetItemSize( ITEMID_TYPE, aUserData.GetToken(0).ToInt32() );
-        HeaderEndDrag_Impl( &rBar );
-        // restore sort direction
-        sal_Bool bUp = (sal_Bool)(sal_uInt16)aUserData.GetToken(1).ToInt32();
-        HeaderBarItemBits nBits = rBar.GetItemBits(ITEMID_TYPE);
-
-        if ( bUp )
-        {
-            nBits &= ~HeaderBarItemBits::UPARROW;
-            nBits |= HeaderBarItemBits::DOWNARROW;
-        }
-        else
-        {
-            nBits &= ~HeaderBarItemBits::DOWNARROW;
-            nBits |= HeaderBarItemBits::UPARROW;
-        }
-        rBar.SetItemBits( ITEMID_TYPE, nBits );
-        HeaderSelect_Impl( &rBar );
-    }
-#endif
     PathSelect_Impl( nullptr );
 }
-
 
 void SvxPathTabPage::FillUserData()
 {
@@ -387,8 +380,7 @@ void SvxPathTabPage::FillUserData()
     SetUserData( aUserData );
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathSelect_Impl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(SvxPathTabPage, PathSelect_Impl, SvTreeListBox*, void)
 {
     sal_uInt16 nSelCount = 0;
     SvTreeListEntry* pEntry = pPathBox->FirstSelected();
@@ -408,8 +400,7 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathSelect_Impl, SvTreeListBox*, void)
     m_pStandardBtn->Enable( nSelCount > 0 && bEnable);
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxPathTabPage, StandardHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxPathTabPage, StandardHdl_Impl, Button*, void)
 {
     SvTreeListEntry* pEntry = pPathBox->FirstSelected();
     while ( pEntry )
@@ -441,13 +432,14 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, StandardHdl_Impl, Button*, void)
                 if ( !bFound )
                 {
                     if ( !sTemp.isEmpty() )
-                        sTemp += OUStringLiteral1<MULTIPATH_DELIMITER>();
+                        sTemp += OUStringLiteral1(MULTIPATH_DELIMITER);
                     sTemp += sOnePath;
                 }
             }
             while ( nOldPos >= 0 );
 
-            OUString sUserPath, sWritablePath;
+            OUString sWritablePath;
+            OUStringBuffer sUserPath;
             if ( !sTemp.isEmpty() )
             {
                 sal_Int32 nNextPos = 0;
@@ -461,13 +453,13 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, StandardHdl_Impl, Button*, void)
                         break;
                     }
                     if ( !sUserPath.isEmpty() )
-                        sUserPath += OUStringLiteral1<MULTIPATH_DELIMITER>();
-                    sUserPath += sToken;
+                        sUserPath.append(MULTIPATH_DELIMITER);
+                    sUserPath.append(sToken);
                 }
             }
             pPathBox->SetEntryText( Convert_Impl( sTemp ), pEntry, 1 );
             pPathImpl->eState = SfxItemState::SET;
-            pPathImpl->sUserPath = sUserPath;
+            pPathImpl->sUserPath = sUserPath.makeStringAndClear();
             pPathImpl->sWritablePath = sWritablePath;
         }
         pEntry = pPathBox->NextSelected( pEntry );
@@ -490,7 +482,6 @@ void SvxPathTabPage::ChangeCurrentEntry( const OUString& _rFolder )
     GetPathList( pPathImpl->nRealId, sInternal, sUser, sWritable, bReadOnly );
     sUser = pPathImpl->sUserPath;
     sWritable = pPathImpl->sWritablePath;
-    sal_uInt16 nPos = pPathImpl->nRealId;
 
     // old path is an URL?
     INetURLObject aObj( sWritable );
@@ -499,20 +490,20 @@ void SvxPathTabPage::ChangeCurrentEntry( const OUString& _rFolder )
     aNewObj.removeFinalSlash();
 
     // then the new path also an URL else system path
-    OUString sNewPathStr = bURL ? _rFolder : aNewObj.getFSysPath( INetURLObject::FSYS_DETECT );
+    OUString sNewPathStr = bURL ? _rFolder : aNewObj.getFSysPath( FSysStyle::Detect );
 
     bool bChanged =
 #ifdef UNX
 // Unix is case sensitive
         ( sNewPathStr != sWritable );
 #else
-        ( !sNewPathStr.equalsIgnoreAsciiCase( sWritable ) );
+        !sNewPathStr.equalsIgnoreAsciiCase( sWritable );
 #endif
 
     if ( bChanged )
     {
         pPathBox->SetEntryText( Convert_Impl( sNewPathStr ), pEntry, 1 );
-        nPos = (sal_uInt16)pPathBox->GetModel()->GetAbsPos( pEntry );
+        sal_uInt16 nPos = static_cast<sal_uInt16>(pPathBox->GetModel()->GetAbsPos( pEntry ));
         pPathImpl = static_cast<PathUserData_Impl*>(pPathBox->GetEntry(nPos)->GetUserData());
         pPathImpl->eState = SfxItemState::SET;
         pPathImpl->sWritablePath = sNewPathStr;
@@ -520,7 +511,7 @@ void SvxPathTabPage::ChangeCurrentEntry( const OUString& _rFolder )
         {
             // Remove view options entry so the new work path
             // will be used for the next open dialog.
-            SvtViewOptions aDlgOpt( E_DIALOG, IODLG_CONFIGNAME );
+            SvtViewOptions aDlgOpt( EViewType::Dialog, IODLG_CONFIGNAME );
             aDlgOpt.Delete();
             // Reset also last used dir in the sfx application instance
             SfxApplication *pSfxApp = SfxGetpApp();
@@ -538,13 +529,13 @@ void SvxPathTabPage::ChangeCurrentEntry( const OUString& _rFolder )
 }
 
 
-IMPL_LINK_NOARG_TYPED(SvxPathTabPage, DoubleClickPathHdl_Impl, SvTreeListBox*, bool)
+IMPL_LINK_NOARG(SvxPathTabPage, DoubleClickPathHdl_Impl, SvTreeListBox*, bool)
 {
     PathHdl_Impl(nullptr);
     return false;
 }
 
-IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(SvxPathTabPage, PathHdl_Impl, Button*, void)
 {
     SvTreeListEntry* pEntry = pPathBox->GetCurEntry();
     sal_uInt16 nPos = ( pEntry != nullptr ) ? static_cast<PathUserData_Impl*>(pEntry->GetUserData())->nRealId : 0;
@@ -566,57 +557,53 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathHdl_Impl, Button*, void)
     if ( IsMultiPath_Impl( nPos ) )
     {
         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        if ( pFact )
+        ScopedVclPtr<AbstractSvxMultiPathDialog> pMultiDlg(
+            pFact->CreateSvxMultiPathDialog(GetDialogFrameWeld()));
+
+        OUString sPath( sUser );
+        if ( !sPath.isEmpty() )
+            sPath += OUStringLiteral1(MULTIPATH_DELIMITER);
+        sPath += sWritable;
+        pMultiDlg->SetPath( sPath );
+
+        const OUString sPathName = SvTabListBox::GetEntryText( pEntry, 0 );
+        const OUString sNewTitle = pImpl->m_sMultiPathDlg.replaceFirst( VAR_ONE, sPathName );
+        pMultiDlg->SetTitle( sNewTitle );
+
+        if ( pMultiDlg->Execute() == RET_OK && pEntry )
         {
-            std::unique_ptr<AbstractSvxMultiPathDialog> pMultiDlg(
-                pFact->CreateSvxMultiPathDialog( this ));
-            DBG_ASSERT( pMultiDlg, "Dialog creation failed!" );
-
-            OUString sPath( sUser );
-            if ( !sPath.isEmpty() )
-                sPath += OUStringLiteral1<MULTIPATH_DELIMITER>();
-            sPath += sWritable;
-            pMultiDlg->SetPath( sPath );
-
-            const OUString sPathName = SvTabListBox::GetEntryText( pEntry, 0 );
-            const OUString sNewTitle = pImpl->m_sMultiPathDlg.replaceFirst( VAR_ONE, sPathName );
-            pMultiDlg->SetTitle( sNewTitle );
-
-            if ( pMultiDlg->Execute() == RET_OK && pEntry )
+            sUser.clear();
+            sWritable.clear();
+            OUString sFullPath;
+            OUString sNewPath = pMultiDlg->GetPath();
+            if ( !sNewPath.isEmpty() )
             {
-                sUser.clear();
-                sWritable.clear();
-                OUString sFullPath;
-                OUString sNewPath = pMultiDlg->GetPath();
-                if ( !sNewPath.isEmpty() )
+                sal_Int32 nNextPos = 0;
+                for (;;)
                 {
-                    sal_Int32 nNextPos = 0;
-                    for (;;)
+                    const OUString sToken(sNewPath.getToken( 0, MULTIPATH_DELIMITER, nNextPos ));
+                    if ( nNextPos<0 )
                     {
-                        const OUString sToken(sNewPath.getToken( 0, MULTIPATH_DELIMITER, nNextPos ));
-                        if ( nNextPos<0 )
-                        {
-                            // Last token need a different handling
-                            sWritable = sToken;
-                            break;
-                        }
-                        if ( !sUser.isEmpty() )
-                            sUser += OUStringLiteral1<MULTIPATH_DELIMITER>();
-                        sUser += sToken;
+                        // Last token need a different handling
+                        sWritable = sToken;
+                        break;
                     }
-                    sFullPath = sUser;
-                    if ( !sFullPath.isEmpty() )
-                        sFullPath += OUStringLiteral1<MULTIPATH_DELIMITER>();
-                    sFullPath += sWritable;
+                    if ( !sUser.isEmpty() )
+                        sUser += OUStringLiteral1(MULTIPATH_DELIMITER);
+                    sUser += sToken;
                 }
-
-                pPathBox->SetEntryText( Convert_Impl( sFullPath ), pEntry, 1 );
-                // save modified flag
-                PathUserData_Impl* pPathImpl = static_cast<PathUserData_Impl*>(pEntry->GetUserData());
-                pPathImpl->eState = SfxItemState::SET;
-                pPathImpl->sUserPath = sUser;
-                pPathImpl->sWritablePath = sWritable;
+                sFullPath = sUser;
+                if ( !sFullPath.isEmpty() )
+                    sFullPath += OUStringLiteral1(MULTIPATH_DELIMITER);
+                sFullPath += sWritable;
             }
+
+            pPathBox->SetEntryText( Convert_Impl( sFullPath ), pEntry, 1 );
+            // save modified flag
+            PathUserData_Impl* pPathImpl = static_cast<PathUserData_Impl*>(pEntry->GetUserData());
+            pPathImpl->eState = SfxItemState::SET;
+            pPathImpl->sUserPath = sUser;
+            pPathImpl->sWritablePath = sWritable;
         }
     }
     else if (pEntry && !bPickFile)
@@ -627,7 +614,7 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathHdl_Impl, Button*, void)
             xFolderPicker = FolderPicker::create(xContext);
 
             INetURLObject aURL( sWritable, INetProtocol::File );
-            xFolderPicker->setDisplayDirectory( aURL.GetMainURL( INetURLObject::NO_DECODE ) );
+            xFolderPicker->setDisplayDirectory( aURL.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
 
             Reference< XAsynchronousExecutableDialog > xAsyncDlg( xFolderPicker, UNO_QUERY );
             if ( xAsyncDlg.is() )
@@ -635,11 +622,11 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathHdl_Impl, Button*, void)
             else
             {
                 short nRet = xFolderPicker->execute();
-                if ( ExecutableDialogResults::OK != nRet )
+                if (ExecutableDialogResults::OK != nRet)
                     return;
 
-                OUString sFolder( xFolderPicker->getDirectory() );
-                ChangeCurrentEntry( sFolder );
+                OUString sFolder(xFolderPicker->getDirectory());
+                ChangeCurrentEntry(sFolder);
             }
         }
         catch( Exception& )
@@ -660,15 +647,15 @@ IMPL_LINK_NOARG_TYPED(SvxPathTabPage, PathHdl_Impl, Button*, void)
                 ChangeCurrentEntry(aPathSeq[0]);
             }
         }
-        catch (const uno::Exception& rException)
+        catch (const uno::Exception&)
         {
-            SAL_WARN("cui.options", "SvxPathTabPage::PathHdl_Impl: exception from file picker: " << rException.Message);
+            DBG_UNHANDLED_EXCEPTION("cui.options", "exception from file picker");
         }
     }
 }
 
 
-IMPL_LINK_TYPED( SvxPathTabPage, HeaderSelect_Impl, HeaderBar*, pBar, void )
+IMPL_LINK( SvxPathTabPage, HeaderSelect_Impl, HeaderBar*, pBar, void )
 {
     if (!pBar || pBar->GetCurItemId() != ITEMID_TYPE)
         return;
@@ -695,7 +682,7 @@ IMPL_LINK_TYPED( SvxPathTabPage, HeaderSelect_Impl, HeaderBar*, pBar, void )
 }
 
 
-IMPL_LINK_TYPED( SvxPathTabPage, HeaderEndDrag_Impl, HeaderBar*, pBar, void )
+IMPL_LINK( SvxPathTabPage, HeaderEndDrag_Impl, HeaderBar*, pBar, void )
 {
     if (!pBar || !pBar->GetCurItemId())
         return;
@@ -716,25 +703,22 @@ IMPL_LINK_TYPED( SvxPathTabPage, HeaderEndDrag_Impl, HeaderBar*, pBar, void )
         for ( sal_uInt16 i = 1; i <= nTabs; ++i )
         {
             long _nWidth = pBar->GetItemSize(i);
-            aSz.Width() =  _nWidth + nTmpSz;
+            aSz.setWidth(  _nWidth + nTmpSz );
             nTmpSz += _nWidth;
-            pPathBox->SetTab( i, PixelToLogic( aSz, MapMode(MAP_APPFONT) ).Width() );
+            pPathBox->SetTab( i, PixelToLogic( aSz, MapMode(MapUnit::MapAppFont) ).Width() );
         }
     }
 }
 
-
-IMPL_LINK_TYPED( SvxPathTabPage, DialogClosedHdl, DialogClosedEvent*, pEvt, void )
+IMPL_LINK( SvxPathTabPage, DialogClosedHdl, DialogClosedEvent*, pEvt, void )
 {
-    if ( RET_OK == pEvt->DialogResult )
+    if (RET_OK == pEvt->DialogResult)
     {
-        DBG_ASSERT( xFolderPicker.is(), "SvxPathTabPage::DialogClosedHdl(): no folder picker" );
-
+        assert(xFolderPicker.is() && "SvxPathTabPage::DialogClosedHdl(): no folder picker");
         OUString sURL = xFolderPicker->getDirectory();
         ChangeCurrentEntry( sURL );
     }
 }
-
 
 void SvxPathTabPage::GetPathList(
     sal_uInt16 _nPathHandle, OUString& _rInternalPath,
@@ -822,18 +806,18 @@ void SvxPathTabPage::SetPathList(
         sal_Int32 nPos = 0;
         for ( sal_Int32 i = 0; i < nCount; ++i )
             pArray[i] = _rUserPath.getToken( 0, MULTIPATH_DELIMITER, nPos );
-        Any aValue = makeAny( aPathSeq );
+        Any aValue( aPathSeq );
         pImpl->m_xPathSettings->setPropertyValue(
             sCfgName + POSTFIX_USER, aValue);
 
         // then the writable path
-        aValue = makeAny( _rWritablePath );
+        aValue <<= _rWritablePath;
         pImpl->m_xPathSettings->setPropertyValue(
             sCfgName + POSTFIX_WRITABLE, aValue);
     }
     catch( const Exception& e )
     {
-        SAL_WARN("cui.tabpages", "caught: " << e.Message);
+        SAL_WARN("cui.options", "caught: " << e);
     }
 }
 

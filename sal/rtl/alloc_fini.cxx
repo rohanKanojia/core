@@ -19,29 +19,7 @@
 
 #include <rtl/instance.hxx>
 
-#include "rtllifecycle.h"
-
-namespace
-{
-    struct rtlMemorySingleton
-    {
-        rtlMemorySingleton()
-        {
-            rtl_memory_init();
-        }
-        ~rtlMemorySingleton()
-        {
-            rtl_memory_fini();
-        }
-    };
-    class theMemorySingleton
-        : public rtl::Static<rtlMemorySingleton, theMemorySingleton>{};
-}
-
-void ensureMemorySingleton()
-{
-    theMemorySingleton::get();
-}
+#include <rtllifecycle.h>
 
 namespace
 {

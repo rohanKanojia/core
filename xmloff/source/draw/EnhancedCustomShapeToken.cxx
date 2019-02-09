@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "EnhancedCustomShapeToken.hxx"
+#include <EnhancedCustomShapeToken.hxx>
 #include <osl/mutex.hxx>
 #include <unordered_map>
 #include <memory>
@@ -36,7 +36,7 @@ static ::osl::Mutex& getHashMapMutex()
 struct TokenTable
 {
     const char*                         pS;
-    EnhancedCustomShapeTokenEnum        pE;
+    EnhancedCustomShapeTokenEnum const  pE;
 };
 
 static const TokenTable pTokenTableArray[] =
@@ -108,6 +108,7 @@ static const TokenTable pTokenTableArray[] =
     { "MirroredY",                          EAS_MirroredY },
     { "ViewBox",                            EAS_ViewBox },
     { "TextRotateAngle",                    EAS_TextRotateAngle },
+    { "TextPreRotateAngle",                 EAS_TextPreRotateAngle },
     { "ExtrusionAllowed",                   EAS_ExtrusionAllowed },
     { "TextPathAllowed",                    EAS_TextPathAllowed },
     { "ConcentricGradientFillAllowed",      EAS_ConcentricGradientFillAllowed },
@@ -141,7 +142,7 @@ static const TokenTable pTokenTableArray[] =
     { "Origin",                             EAS_Origin },
     { "Color",                              EAS_Color },
     { "Switched",                           EAS_Switched },
-     { "Polar",                             EAS_Polar },
+    { "Polar",                              EAS_Polar },
     { "RangeXMinimum",                      EAS_RangeXMinimum },
     { "RangeXMaximum",                      EAS_RangeXMaximum },
     { "RangeYMinimum",                      EAS_RangeYMinimum },
@@ -175,10 +176,8 @@ EnhancedCustomShapeTokenEnum EASGet( const OUString& rShapeType )
         if ( !pHashMap )
         {
             TypeNameHashMap* pH = new TypeNameHashMap;
-            const TokenTable* pPtr = pTokenTableArray;
-            const TokenTable* pEnd = pPtr + ( sizeof( pTokenTableArray ) / sizeof( TokenTable ) );
-            for ( ; pPtr < pEnd; pPtr++ )
-                (*pH)[ pPtr->pS ] = pPtr->pE;
+            for (auto const & pair : pTokenTableArray)
+                (*pH)[pair.pS] = pair.pE;
             pHashMap = pH;
         }
     }
@@ -186,7 +185,7 @@ EnhancedCustomShapeTokenEnum EASGet( const OUString& rShapeType )
     int i, nLen = rShapeType.getLength();
     std::unique_ptr<char[]> pBuf(new char[ nLen + 1 ]);
     for ( i = 0; i < nLen; i++ )
-        pBuf[ i ] = (char)rShapeType[ i ];
+        pBuf[ i ] = static_cast<char>(rShapeType[ i ]);
     pBuf[ i ] = 0;
     TypeNameHashMap::iterator aHashIter( pHashMap->find( pBuf.get() ) );
     if ( aHashIter != pHashMap->end() )
@@ -197,8 +196,8 @@ EnhancedCustomShapeTokenEnum EASGet( const OUString& rShapeType )
 OUString EASGet( const EnhancedCustomShapeTokenEnum eToken )
 {
     sal_uInt32 i = eToken >= EAS_Last
-        ? (sal_uInt32)EAS_NotFound
-        : (sal_uInt32)eToken;
+        ? sal_uInt32(EAS_NotFound)
+        : static_cast<sal_uInt32>(eToken);
     return OUString::createFromAscii( pTokenTableArray[ i ].pS );
 }
 

@@ -19,7 +19,6 @@
 
 
 #include <connectivity/predicateinput.hxx>
-#include <comphelper/processfactory.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbtools.hxx>
 #include <com/sun/star/i18n/LocaleData.hpp>
@@ -41,7 +40,6 @@ namespace dbtools
     using ::com::sun::star::sdbc::XConnection;
     using ::com::sun::star::util::XNumberFormatsSupplier;
     using ::com::sun::star::util::NumberFormatter;
-    using ::com::sun::star::util::XNumberFormatter;
     using ::com::sun::star::uno::UNO_QUERY_THROW;
     using ::com::sun::star::uno::XComponentContext;
     using ::com::sun::star::beans::XPropertySet;
@@ -50,7 +48,6 @@ namespace dbtools
     using ::com::sun::star::uno::Exception;
     using ::com::sun::star::uno::Reference;
     using ::com::sun::star::i18n::LocaleData;
-    using ::com::sun::star::i18n::XLocaleData;
     using ::com::sun::star::i18n::LocaleDataItem;
     using ::com::sun::star::uno::Any;
 
@@ -66,7 +63,7 @@ namespace dbtools
 
         sal_Unicode nReturn( _nFallback );
         if ( !_rSeparator.isEmpty() )
-            nReturn = static_cast< sal_Char >( _rSeparator[0] );
+            nReturn = _rSeparator[0];
         return nReturn;
     }
 
@@ -81,7 +78,7 @@ namespace dbtools
             {
                 aLocaleData = m_xLocaleData->getLocaleItem( _rLocale );
                 _rDecSep = lcl_getSeparatorChar( aLocaleData.decimalSeparator, _rDecSep );
-                _rThdSep = lcl_getSeparatorChar( aLocaleData.decimalSeparator, _rThdSep );
+                _rThdSep = lcl_getSeparatorChar( aLocaleData.thousandSeparator, _rThdSep );
                 return true;
             }
         }
@@ -126,9 +123,9 @@ namespace dbtools
     }
 
 
-    OSQLParseNode* OPredicateInputController::implPredicateTree(OUString& _rErrorMessage, const OUString& _rStatement, const Reference< XPropertySet > & _rxField) const
+    std::unique_ptr<OSQLParseNode> OPredicateInputController::implPredicateTree(OUString& _rErrorMessage, const OUString& _rStatement, const Reference< XPropertySet > & _rxField) const
     {
-        OSQLParseNode* pReturn = const_cast< OSQLParser& >( m_aParser ).predicateTree( _rErrorMessage, _rStatement, m_xFormatter, _rxField );
+        std::unique_ptr<OSQLParseNode> pReturn = const_cast< OSQLParser& >( m_aParser ).predicateTree( _rErrorMessage, _rStatement, m_xFormatter, _rxField );
         if ( !pReturn )
         {   // is it a text field ?
             sal_Int32 nType = DataType::OTHER;
@@ -148,19 +145,16 @@ namespace dbtools
                     )
                 {
                     static const char sSingleQuote[] = "'";
-                    static const char sDoubleQuote[] =  "''";
 
                     sal_Int32 nIndex = -1;
                     sal_Int32 nTemp = 0;
                     while ( -1 != ( nIndex = sQuoted.indexOf( '\'',nTemp ) ) )
                     {
-                        sQuoted = sQuoted.replaceAt( nIndex, 1, sDoubleQuote );
+                        sQuoted = sQuoted.replaceAt( nIndex, 1, "''" );
                         nTemp = nIndex+2;
                     }
 
-                    OUString sTemp( sSingleQuote );
-                    ( sTemp += sQuoted ) += sSingleQuote;
-                    sQuoted = sTemp;
+                    sQuoted = sSingleQuote + sQuoted + sSingleQuote;
                 }
                 pReturn = const_cast< OSQLParser& >( m_aParser ).predicateTree( _rErrorMessage, sQuoted, m_xFormatter, _rxField );
             }
@@ -248,7 +242,7 @@ namespace dbtools
             // parse the string
             OUString sError;
             OUString sTransformedText( _rPredicateValue );
-            OSQLParseNode* pParseNode = implPredicateTree( sError, sTransformedText, _rxField );
+            std::unique_ptr<OSQLParseNode> pParseNode = implPredicateTree( sError, sTransformedText, _rxField );
             if ( _pErrorMessage ) *_pErrorMessage = sError;
 
             if ( pParseNode )
@@ -261,10 +255,9 @@ namespace dbtools
                 sTransformedText.clear();
                 pParseNode->parseNodeToPredicateStr(
                     sTransformedText, m_xConnection, m_xFormatter, _rxField, OUString(),
-                    rParseContext.getPreferredLocale(), (sal_Char)nDecSeparator, &rParseContext
+                    rParseContext.getPreferredLocale(), static_cast<sal_Char>(nDecSeparator), &rParseContext
                 );
                 _rPredicateValue = sTransformedText;
-                delete pParseNode;
 
                 bSuccess = true;
             }
@@ -281,15 +274,13 @@ namespace dbtools
         OUString sReturn;
         if ( _rxField.is() )
         {
-            OUString sValue( _rPredicateValue );
-
             // The following is mostly stolen from the former implementation in the parameter dialog
             // (dbaccess/source/ui/dlg/paramdialog.cxx). I do not fully understand this .....
 
             OUString sError;
-            OSQLParseNode* pParseNode = implPredicateTree( sError, sValue, _rxField );
+            std::unique_ptr<OSQLParseNode> pParseNode = implPredicateTree( sError, _rPredicateValue, _rxField );
 
-            implParseNode(pParseNode, true) >>= sReturn;
+            implParseNode(std::move(pParseNode), true) >>= sReturn;
         }
 
         return sReturn;
@@ -300,9 +291,8 @@ namespace dbtools
     {
         OUString sReturn = _rPredicateValue;
         OUString sError;
-        OUString sField = _sField;
         sal_Int32 nIndex = 0;
-        sField = sField.getToken(0,'(',nIndex);
+        OUString sField = _sField.getToken(0, '(', nIndex);
         if(nIndex == -1)
             sField = _sField;
         sal_Int32 nType = ::connectivity::OSQLParser::getFunctionReturnType(sField,&m_aParser.getContext());
@@ -312,13 +302,6 @@ namespace dbtools
             OUString sSql = "SELECT * FROM x WHERE " + sField + _rPredicateValue;
             std::unique_ptr<OSQLParseNode> pParseNode( const_cast< OSQLParser& >( m_aParser ).parseTree( sError, sSql, true ) );
             nType = DataType::DOUBLE;
-            if ( pParseNode.get() )
-            {
-                OSQLParseNode* pColumnRef = pParseNode->getByRule(OSQLParseNode::column_ref);
-                if ( pColumnRef )
-                {
-                }
-            }
         }
 
         Reference<XDatabaseMetaData> xMeta = m_xConnection->getMetaData();
@@ -340,10 +323,10 @@ namespace dbtools
         pColumn->setFunction(true);
         pColumn->setRealName(sField);
 
-        OSQLParseNode* pParseNode = implPredicateTree( sError, _rPredicateValue, xColumn );
+        std::unique_ptr<OSQLParseNode> pParseNode = implPredicateTree( sError, _rPredicateValue, xColumn );
         if(pParseNode)
         {
-            implParseNode(pParseNode, true) >>= sReturn;
+            implParseNode(std::move(pParseNode), true) >>= sReturn;
         }
         return sReturn;
     }
@@ -355,28 +338,25 @@ namespace dbtools
 
         if ( _rxField.is() )
         {
-            OUString sValue( _rPredicateValue );
-
             // The following is mostly stolen from the former implementation in the parameter dialog
             // (dbaccess/source/ui/dlg/paramdialog.cxx). I do not fully understand this .....
 
             OUString sError;
-            OSQLParseNode* pParseNode = implPredicateTree( sError, sValue, _rxField );
+            std::unique_ptr<OSQLParseNode> pParseNode = implPredicateTree( sError, _rPredicateValue, _rxField );
 
-            return implParseNode(pParseNode, false);
+            return implParseNode(std::move(pParseNode), false);
         }
 
         return Any();
     }
 
-    Any OPredicateInputController::implParseNode(OSQLParseNode* pParseNode, bool _bForStatementUse) const
+    Any OPredicateInputController::implParseNode(std::unique_ptr<OSQLParseNode> pParseNode, bool _bForStatementUse) const
     {
         if ( ! pParseNode )
             return Any();
         else
         {
             OUString sReturn;
-            std::shared_ptr<OSQLParseNode> xTakeOwnership(pParseNode);
             OSQLParseNode* pOdbcSpec = pParseNode->getByRule( OSQLParseNode::odbc_fct_spec );
             if ( pOdbcSpec )
             {

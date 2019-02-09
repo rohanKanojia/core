@@ -18,18 +18,16 @@
  */
 
 #include <com/sun/star/linguistic2/ProofreadingResult.hpp>
-#include <com/sun/star/linguistic2/XProofreader.hpp>
 #include <com/sun/star/linguistic2/XProofreadingIterator.hpp>
 #include <com/sun/star/text/XFlatParagraph.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
-#include <comphelper/string.hxx>
+#include <o3tl/any.hxx>
 
 #include <unoflatpara.hxx>
 
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <hintids.hxx>
 #include <linguistic/lngprops.hxx>
-#include <vcl/msgbox.hxx>
 #include <editeng/unolingu.hxx>
 #include <editeng/svxacorr.hxx>
 #include <editeng/langitem.hxx>
@@ -42,13 +40,13 @@
 #include <IDocumentRedlineAccess.hxx>
 #include <rootfrm.hxx>
 #include <pam.hxx>
+#include <pamtyp.hxx>
 #include <swundo.hxx>
 #include <ndtxt.hxx>
 #include <viewopt.hxx>
 #include <viscrs.hxx>
 #include <SwGrammarMarkUp.hxx>
 #include <mdiexp.hxx>
-#include <statstr.hrc>
 #include <cntfrm.hxx>
 #include <splargs.hxx>
 #include <redline.hxx>
@@ -66,34 +64,34 @@ using namespace ::com::sun::star::linguistic2;
 class SwLinguIter
 {
     SwEditShell *pSh;
-    SwPosition  *pStart;
-    SwPosition  *pEnd;
-    SwPosition  *pCurr;
-    SwPosition  *pCurrX;
+    std::unique_ptr<SwPosition> m_pStart;
+    std::unique_ptr<SwPosition> m_pEnd;
+    std::unique_ptr<SwPosition> m_pCurr;
+    std::unique_ptr<SwPosition> m_pCurrX;
     sal_uInt16 nCursorCnt;
 public:
     SwLinguIter();
 
-    inline SwEditShell *GetSh()             { return pSh; }
+    SwEditShell *GetSh()             { return pSh; }
 
-    inline const SwPosition *GetEnd() const { return pEnd; }
-    inline void SetEnd( SwPosition* pNew ){ delete pEnd; pEnd = pNew; }
+    const SwPosition *GetEnd() const { return m_pEnd.get(); }
+    void SetEnd(SwPosition* pNew) { m_pEnd.reset(pNew); }
 
-    inline const SwPosition *GetStart() const { return pStart; }
-    inline void SetStart( SwPosition* pNew ){ delete pStart; pStart = pNew; }
+    const SwPosition *GetStart() const { return m_pStart.get(); }
+    void SetStart(SwPosition* pNew) { m_pStart.reset(pNew); }
 
-    inline const SwPosition *GetCurr() const { return pCurr; }
-    inline void SetCurr( SwPosition* pNew ){ delete pCurr; pCurr = pNew; }
+    const SwPosition *GetCurr() const { return m_pCurr.get(); }
+    void SetCurr(SwPosition* pNew) { m_pCurr.reset(pNew); }
 
-    inline const SwPosition *GetCurrX() const { return pCurrX; }
-    inline void SetCurrX( SwPosition* pNew ){ delete pCurrX; pCurrX = pNew; }
+    const SwPosition *GetCurrX() const { return m_pCurrX.get(); }
+    void SetCurrX(SwPosition* pNew) { m_pCurrX.reset(pNew); }
 
-    inline sal_uInt16& GetCursorCnt(){ return nCursorCnt; }
+    sal_uInt16& GetCursorCnt(){ return nCursorCnt; }
 
     // for the UI:
-    void _Start( SwEditShell *pSh, SwDocPositions eStart,
+    void Start_( SwEditShell *pSh, SwDocPositions eStart,
                 SwDocPositions eEnd );
-    void _End(bool bRestoreSelection = true);
+    void End_(bool bRestoreSelection = true);
 };
 
 // #i18881# to be able to identify the positions of the changed words
@@ -113,18 +111,17 @@ class SwSpellIter : public SwLinguIter
 
     SpellContentPositions               aLastPositions;
     bool                                bBackToStartOfSentence;
-    bool                                bMoveToEndOfSentence;
 
-    void    CreatePortion(uno::Reference< XSpellAlternatives > xAlt,
+    void    CreatePortion(uno::Reference< XSpellAlternatives > const & xAlt,
                 linguistic2::ProofreadingResult* pGrammarResult,
                 bool bIsField, bool bIsHidden);
 
-    void    AddPortion(uno::Reference< XSpellAlternatives > xAlt,
+    void    AddPortion(uno::Reference< XSpellAlternatives > const & xAlt,
                        linguistic2::ProofreadingResult* pGrammarResult,
                        const SpellContentPositions& rDeletedRedlines);
 public:
     SwSpellIter() :
-        bBackToStartOfSentence(false), bMoveToEndOfSentence(false) {}
+        bBackToStartOfSentence(false) {}
 
     void Start( SwEditShell *pSh, SwDocPositions eStart, SwDocPositions eEnd );
 
@@ -132,9 +129,8 @@ public:
 
     bool                                SpellSentence(svx::SpellPortions& rPortions, bool bIsGrammarCheck);
     void                                ToSentenceStart();
-    const svx::SpellPortions          GetLastPortions() const { return aLastPortions;}
-    SpellContentPositions               GetLastPositions() const {return aLastPositions;}
-    void                                ContinueAfterThisSentence() { bMoveToEndOfSentence = true; }
+    const svx::SpellPortions&           GetLastPortions() const { return aLastPortions;}
+    const SpellContentPositions&        GetLastPositions() const {return aLastPositions;}
 };
 
 /// used for text conversion
@@ -157,7 +153,7 @@ class SwHyphIter : public SwLinguIter
     // With that we save a GetFrame() in Hyphenate //TODO: does it actually matter?
     const SwTextNode *m_pLastNode;
     SwTextFrame  *m_pLastFrame;
-    friend SwTextFrame * sw::SwHyphIterCacheLastTextFrame(SwTextNode* pNode, const sw::Creator& rCreator);
+    friend SwTextFrame * sw::SwHyphIterCacheLastTextFrame(SwTextNode const * pNode, const sw::Creator& rCreator);
 
     bool bOldIdle;
     static void DelSoftHyph( SwPaM &rPam );
@@ -183,16 +179,12 @@ static SwHyphIter*  g_pHyphIter = nullptr;
 
 SwLinguIter::SwLinguIter()
     : pSh(nullptr)
-    , pStart(nullptr)
-    , pEnd(nullptr)
-    , pCurr(nullptr)
-    , pCurrX(nullptr)
     , nCursorCnt(0)
 {
     // TODO missing: ensurance of re-entrance, OSL_ENSURE( etc.
 }
 
-void SwLinguIter::_Start( SwEditShell *pShell, SwDocPositions eStart,
+void SwLinguIter::Start_( SwEditShell *pShell, SwDocPositions eStart,
                             SwDocPositions eEnd )
 {
     // TODO missing: ensurance of re-entrance, locking
@@ -205,7 +197,7 @@ void SwLinguIter::_Start( SwEditShell *pShell, SwDocPositions eStart,
 
     SET_CURR_SHELL( pSh );
 
-    OSL_ENSURE( !pEnd, "SwLinguIter::_Start without End?");
+    OSL_ENSURE(!m_pEnd, "SwLinguIter::Start_ without End?");
 
     SwPaM *pCursor = pSh->GetCursor();
 
@@ -223,7 +215,7 @@ void SwLinguIter::_Start( SwEditShell *pShell, SwDocPositions eStart,
             pSh->Push();
             pSh->DestroyCursor();
         }
-        pSh->Pop( false );
+        pSh->Pop(SwCursorShell::PopMode::DeleteCurrent);
     }
     else
     {
@@ -237,8 +229,8 @@ void SwLinguIter::_Start( SwEditShell *pShell, SwDocPositions eStart,
     if ( *pCursor->GetPoint() > *pCursor->GetMark() )
         pCursor->Exchange();
 
-    pStart = new SwPosition( *pCursor->GetPoint() );
-    pEnd = new SwPosition( *pCursor->GetMark() );
+    m_pStart.reset(new SwPosition(*pCursor->GetPoint()));
+    m_pEnd.reset(new SwPosition(*pCursor->GetMark()));
     if( bSetCurr )
     {
         SwPosition* pNew = new SwPosition( *GetStart() );
@@ -250,24 +242,24 @@ void SwLinguIter::_Start( SwEditShell *pShell, SwDocPositions eStart,
     pCursor->SetMark();
 }
 
-void SwLinguIter::_End(bool bRestoreSelection)
+void SwLinguIter::End_(bool bRestoreSelection)
 {
     if( !pSh )
         return;
 
-    OSL_ENSURE( pEnd, "SwLinguIter::_End without end?");
+    OSL_ENSURE(m_pEnd, "SwLinguIter::End_ without end?");
     if(bRestoreSelection)
     {
         while( nCursorCnt-- )
-            pSh->Pop( false );
+            pSh->Pop(SwCursorShell::PopMode::DeleteCurrent);
 
         pSh->KillPams();
         pSh->ClearMark();
     }
-    DELETEZ(pStart);
-    DELETEZ(pEnd);
-    DELETEZ(pCurr);
-    DELETEZ(pCurrX);
+    m_pStart.reset();
+    m_pEnd.reset();
+    m_pCurr.reset();
+    m_pCurrX.reset();
 
     pSh = nullptr;
 }
@@ -280,7 +272,7 @@ void SwSpellIter::Start( SwEditShell *pShell, SwDocPositions eStart,
 
     xSpeller = ::GetSpellChecker();
     if ( xSpeller.is() )
-        _Start( pShell, eStart, eEnd );
+        Start_( pShell, eStart, eEnd );
     aLastPortions.clear();
     aLastPositions.clear();
 }
@@ -306,11 +298,10 @@ uno::Any SwSpellIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
         if ( !pCursor->HasMark() )
             pCursor->SetMark();
 
-        uno::Reference< beans::XPropertySet >  xProp( GetLinguPropertySet() );
         *pMySh->GetCursor()->GetPoint() = *GetCurr();
         *pMySh->GetCursor()->GetMark() = *GetEnd();
         pMySh->GetDoc()->Spell(*pMySh->GetCursor(),
-                    xSpeller, pPageCnt, pPageSt, false ) >>= xSpellRet;
+            xSpeller, pPageCnt, pPageSt, false, pMySh->GetLayout()) >>= xSpellRet;
         bGoOn = GetCursorCnt() > 1;
         if( xSpellRet.is() )
         {
@@ -322,7 +313,7 @@ uno::Any SwSpellIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
         }
         if( bGoOn )
         {
-            pMySh->Pop( false );
+            pMySh->Pop(SwCursorShell::PopMode::DeleteCurrent);
             pCursor = pMySh->GetCursor();
             if ( *pCursor->GetPoint() > *pCursor->GetMark() )
                 pCursor->Exchange();
@@ -347,7 +338,7 @@ void SwConvIter::Start( SwEditShell *pShell, SwDocPositions eStart,
 {
     if( GetSh() )
         return;
-    _Start( pShell, eStart, eEnd );
+    Start_( pShell, eStart, eEnd );
 }
 
 uno::Any SwConvIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
@@ -376,7 +367,7 @@ uno::Any SwConvIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
         // call function to find next text portion to be converted
         uno::Reference< linguistic2::XSpellChecker1 > xEmpty;
         pMySh->GetDoc()->Spell( *pMySh->GetCursor(),
-                    xEmpty, pPageCnt, pPageSt, false, &rArgs ) >>= aConvText;
+            xEmpty, pPageCnt, pPageSt, false, pMySh->GetLayout(), &rArgs) >>= aConvText;
 
         bGoOn = GetCursorCnt() > 1;
         if( !aConvText.isEmpty() )
@@ -390,7 +381,7 @@ uno::Any SwConvIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
         }
         if( bGoOn )
         {
-            pMySh->Pop( false );
+            pMySh->Pop(SwCursorShell::PopMode::DeleteCurrent);
             pCursor = pMySh->GetCursor();
             if ( *pCursor->GetPoint() > *pCursor->GetMark() )
                 pCursor->Exchange();
@@ -412,8 +403,8 @@ uno::Any SwConvIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
 bool SwHyphIter::IsAuto()
 {
     uno::Reference< beans::XPropertySet >  xProp( ::GetLinguPropertySet() );
-    return xProp.is() && *static_cast<sal_Bool const *>(xProp->getPropertyValue(
-                                UPN_IS_HYPH_AUTO ).getValue());
+    return xProp.is() && *o3tl::doAccess<bool>(xProp->getPropertyValue(
+                                UPN_IS_HYPH_AUTO ));
 }
 
 void SwHyphIter::ShowSelection()
@@ -440,7 +431,7 @@ void SwHyphIter::Start( SwEditShell *pShell, SwDocPositions eStart, SwDocPositio
     // nothing to do (at least not in the way as in the "else" part)
     bOldIdle = pShell->GetViewOptions()->IsIdle();
     pShell->GetViewOptions()->SetIdle( false );
-    _Start( pShell, eStart, eEnd );
+    Start_( pShell, eStart, eEnd );
 }
 
 // restore selections
@@ -449,7 +440,7 @@ void SwHyphIter::End()
     if( !GetSh() )
         return;
     GetSh()->GetViewOptions()->SetIdle( bOldIdle );
-    _End();
+    End_();
 }
 
 uno::Any SwHyphIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
@@ -494,7 +485,7 @@ uno::Any SwHyphIter::Continue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
 
         if( bGoOn )
         {
-            pMySh->Pop( false );
+            pMySh->Pop(SwCursorShell::PopMode::DeleteCurrent);
             pCursor = pMySh->GetCursor();
             if ( *pCursor->GetPoint() > *pCursor->GetMark() )
                 pCursor->Exchange();
@@ -571,8 +562,7 @@ void SwHyphIter::InsertSoftHyph( const sal_Int32 nHyphPos )
 namespace sw {
 
 SwTextFrame *
-SwHyphIterCacheLastTextFrame(SwTextNode *const pNode,
-        const sw::Creator& create)
+SwHyphIterCacheLastTextFrame(SwTextNode const * pNode, const sw::Creator& create)
 {
     assert(g_pHyphIter);
     if (pNode != g_pHyphIter->m_pLastNode || !g_pHyphIter->m_pLastFrame)
@@ -616,7 +606,7 @@ bool SwEditShell::HasHyphIter()
 void SwEditShell::SetLinguRange( SwDocPositions eStart, SwDocPositions eEnd )
 {
     SwPaM *pCursor = GetCursor();
-    MakeFindRange( static_cast<sal_uInt16>(eStart), static_cast<sal_uInt16>(eEnd), pCursor );
+    MakeFindRange( eStart, eEnd, pCursor );
     if( *pCursor->GetPoint() > *pCursor->GetMark() )
         pCursor->Exchange();
 }
@@ -630,14 +620,12 @@ void SwEditShell::SpellStart(
     // do not spell if interactive spelling is active elsewhere
     if (!pConvArgs && !g_pSpellIter)
     {
-        OSL_ENSURE( !g_pSpellIter, "wer ist da schon am spellen?" );
         g_pSpellIter = new SwSpellIter;
         pLinguIter = g_pSpellIter;
     }
     // do not do text conversion if it is active elsewhere
     if (pConvArgs && !g_pConvIter)
     {
-        OSL_ENSURE( !g_pConvIter, "text conversion already active!" );
         g_pConvIter = new SwConvIter( *pConvArgs );
         pLinguIter = g_pConvIter;
     }
@@ -660,19 +648,17 @@ void SwEditShell::SpellStart(
         g_pConvIter->Start( this, eStart, eEnd );
 }
 
-void SwEditShell::SpellEnd( SwConversionArgs *pConvArgs, bool bRestoreSelection )
+void SwEditShell::SpellEnd( SwConversionArgs const *pConvArgs, bool bRestoreSelection )
 {
     if (!pConvArgs && g_pSpellIter && g_pSpellIter->GetSh() == this)
     {
-        OSL_ENSURE( g_pSpellIter, "where is my Iterator?" );
-        g_pSpellIter->_End(bRestoreSelection);
+        g_pSpellIter->End_(bRestoreSelection);
         delete g_pSpellIter;
         g_pSpellIter = nullptr;
     }
     if (pConvArgs && g_pConvIter && g_pConvIter->GetSh() == this)
     {
-        OSL_ENSURE( g_pConvIter, "where is my Iterator?" );
-        g_pConvIter->_End();
+        g_pConvIter->End_();
         delete g_pConvIter;
         g_pConvIter = nullptr;
     }
@@ -681,7 +667,7 @@ void SwEditShell::SpellEnd( SwConversionArgs *pConvArgs, bool bRestoreSelection 
 /// @returns SPL_ return values as in splchk.hxx
 uno::Any SwEditShell::SpellContinue(
         sal_uInt16* pPageCnt, sal_uInt16* pPageSt,
-        SwConversionArgs *pConvArgs )
+        SwConversionArgs const *pConvArgs )
 {
     uno::Any aRes;
 
@@ -754,7 +740,6 @@ void SwEditShell::HyphStart( SwDocPositions eStart, SwDocPositions eEnd )
     // do not hyphenate if interactive hyphenation is active elsewhere
     if (!g_pHyphIter)
     {
-        OSL_ENSURE( !g_pHyphIter, "who is already hyphenating?" );
         g_pHyphIter = new SwHyphIter;
         g_pHyphIter->Start( this, eStart, eEnd );
     }
@@ -763,9 +748,9 @@ void SwEditShell::HyphStart( SwDocPositions eStart, SwDocPositions eEnd )
 /// restore selections
 void SwEditShell::HyphEnd()
 {
+    assert(g_pHyphIter);
     if (g_pHyphIter->GetSh() == this)
     {
-        OSL_ENSURE( g_pHyphIter, "No Iterator" );
         g_pHyphIter->End();
         delete g_pHyphIter;
         g_pHyphIter = nullptr;
@@ -776,6 +761,7 @@ void SwEditShell::HyphEnd()
 uno::Reference< uno::XInterface >
     SwEditShell::HyphContinue( sal_uInt16* pPageCnt, sal_uInt16* pPageSt )
 {
+    assert(g_pHyphIter);
     if (g_pHyphIter->GetSh() != this)
         return nullptr;
 
@@ -792,7 +778,6 @@ uno::Reference< uno::XInterface >
             *pPageSt = 1;
     }
 
-    OSL_ENSURE( g_pHyphIter, "No Iterator" );
     //JP 18.07.95: prevent displaying selection on error messages. NO StartAction so that all
     //             Paints are also disabled.
     ++mnStartAction;
@@ -812,14 +797,14 @@ uno::Reference< uno::XInterface >
  */
 void SwEditShell::InsertSoftHyph( const sal_Int32 nHyphPos )
 {
-    OSL_ENSURE( g_pHyphIter, "where is my Iterator?" );
+    assert(g_pHyphIter);
     g_pHyphIter->InsertSoftHyph( nHyphPos );
 }
 
 /// ignore hyphenation
 void SwEditShell::HyphIgnore()
 {
-    OSL_ENSURE( g_pHyphIter, "No Iterator" );
+    assert(g_pHyphIter);
     //JP 18.07.95: prevent displaying selection on error messages. NO StartAction so that all
     //             Paints are also disabled.
     ++mnStartAction;
@@ -827,6 +812,65 @@ void SwEditShell::HyphIgnore()
     --mnStartAction;
 
     g_pHyphIter->ShowSelection();
+}
+
+void SwEditShell::HandleCorrectionError(const OUString& aText, SwPosition aPos, sal_Int32 nBegin,
+                                        sal_Int32 nLen, const Point* pPt,
+                                        SwRect& rSelectRect)
+{
+    // save the start and end positions of the line and the starting point
+    Push();
+    LeftMargin();
+    const sal_Int32 nLineStart = GetCursor()->GetPoint()->nContent.GetIndex();
+    RightMargin();
+    const sal_Int32 nLineEnd = GetCursor()->GetPoint()->nContent.GetIndex();
+    Pop(PopMode::DeleteCurrent);
+
+    // make sure the selection build later from the data below does
+    // not "in word" character to the left and right in order to
+    // preserve those. Therefore count those "in words" in order to
+    // modify the selection accordingly.
+    const sal_Unicode* pChar = aText.getStr();
+    sal_Int32 nLeft = 0;
+    while (*pChar++ == CH_TXTATR_INWORD)
+        ++nLeft;
+    pChar = aText.getLength() ? aText.getStr() + aText.getLength() - 1 : nullptr;
+    sal_Int32 nRight = 0;
+    while (pChar && *pChar-- == CH_TXTATR_INWORD)
+        ++nRight;
+
+    aPos.nContent = nBegin + nLeft;
+    SwPaM* pCursor = GetCursor();
+    *pCursor->GetPoint() = aPos;
+    pCursor->SetMark();
+    ExtendSelection( true, nLen - nLeft - nRight );
+    // don't determine the rectangle in the current line
+    const sal_Int32 nWordStart = (nBegin + nLeft) < nLineStart ? nLineStart : nBegin + nLeft;
+    // take one less than the line end - otherwise the next line would be calculated
+    const sal_Int32 nWordEnd = (nBegin + nLen - nLeft - nRight) > nLineEnd
+                            ? nLineEnd : (nBegin + nLen - nLeft - nRight);
+    Push();
+    pCursor->DeleteMark();
+    SwIndex& rContent = GetCursor()->GetPoint()->nContent;
+    rContent = nWordStart;
+    SwRect aStartRect;
+    SwCursorMoveState aState;
+    aState.m_bRealWidth = true;
+    SwContentNode* pContentNode = pCursor->GetContentNode();
+    std::pair<Point, bool> tmp;
+    if (pPt)
+    {
+        tmp.first = *pPt;
+        tmp.second = false;
+    }
+    SwContentFrame *const pContentFrame = pContentNode->getLayoutFrame(GetLayout(), pCursor->GetPoint(), pPt ? &tmp : nullptr);
+
+    pContentFrame->GetCharRect( aStartRect, *pCursor->GetPoint(), &aState );
+    rContent = nWordEnd - 1;
+    SwRect aEndRect;
+    pContentFrame->GetCharRect( aEndRect, *pCursor->GetPoint(),&aState );
+    rSelectRect = aStartRect.Union( aEndRect );
+    Pop(PopMode::DeleteCurrent);
 }
 
 /** Get a list of potential corrections for misspelled word.
@@ -848,34 +892,34 @@ uno::Reference< XSpellAlternatives >
     SwPosition aPos( *pCursor->GetPoint() );
      Point aPt( *pPt );
     SwCursorMoveState eTmpState( MV_SETONLYTEXT );
-    SwTextNode *pNode;
-    SwWrongList *pWrong;
-    if( GetLayout()->GetCursorOfst( &aPos, aPt, &eTmpState ) &&
-        nullptr != (pNode = aPos.nNode.GetNode().GetTextNode()) &&
-        nullptr != (pWrong = pNode->GetWrong()) &&
-        !pNode->IsInProtectSect() )
+    SwTextNode *pNode = nullptr;
+    SwWrongList *pWrong = nullptr;
+    if (GetLayout()->GetCursorOfst( &aPos, aPt, &eTmpState ))
+        pNode = aPos.nNode.GetNode().GetTextNode();
+    if (nullptr != pNode)
+        pWrong = pNode->GetWrong();
+    if (nullptr != pWrong && !pNode->IsInProtectSect())
     {
         sal_Int32 nBegin = aPos.nContent.GetIndex();
         sal_Int32 nLen = 1;
-        if( pWrong->InWrongWord(nBegin,nLen) && !pNode->IsSymbol(nBegin) )
+        if (pWrong->InWrongWord(nBegin, nLen) && !pNode->IsSymbolAt(nBegin))
         {
             const OUString aText(pNode->GetText().copy(nBegin, nLen));
-            OUString aWord( aText );
-            aWord = comphelper::string::remove(aWord, CH_TXTATR_BREAKWORD);
-            aWord = comphelper::string::remove(aWord, CH_TXTATR_INWORD);
+            OUString aWord = aText.replaceAll(OUStringLiteral1(CH_TXTATR_BREAKWORD), "")
+                                  .replaceAll(OUStringLiteral1(CH_TXTATR_INWORD), "");
 
             uno::Reference< XSpellChecker1 >  xSpell( ::GetSpellChecker() );
             if( xSpell.is() )
             {
-                LanguageType eActLang = (LanguageType)pNode->GetLang( nBegin, nLen );
-                if( xSpell->hasLanguage( eActLang ))
+                LanguageType eActLang = pNode->GetLang( nBegin, nLen );
+                if( xSpell->hasLanguage( static_cast<sal_uInt16>(eActLang) ))
                 {
                     // restrict the maximal number of suggestions displayed
                     // in the context menu.
                     // Note: That could of course be done by clipping the
                     // resulting sequence but the current third party
                     // implementations result differs greatly if the number of
-                    // suggestions to be retuned gets changed. Statistically
+                    // suggestions to be returned gets changed. Statistically
                     // it gets much better if told to return e.g. only 7 strings
                     // than returning e.g. 16 suggestions and using only the
                     // first 7. Thus we hand down the value to use to that
@@ -883,61 +927,15 @@ uno::Reference< XSpellAlternatives >
                     Sequence< PropertyValue > aPropVals(1);
                     PropertyValue &rVal = aPropVals.getArray()[0];
                     rVal.Name = UPN_MAX_NUMBER_OF_SUGGESTIONS;
-                    rVal.Value <<= (sal_Int16) 7;
+                    rVal.Value <<= sal_Int16(7);
 
-                    xSpellAlt = xSpell->spell( aWord, eActLang, aPropVals );
+                    xSpellAlt = xSpell->spell( aWord, static_cast<sal_uInt16>(eActLang), aPropVals );
                 }
             }
 
             if ( xSpellAlt.is() )   // error found?
             {
-                // save the start and end positions of the line and the starting point
-                Push();
-                LeftMargin();
-                const sal_Int32 nLineStart = GetCursor()->GetPoint()->nContent.GetIndex();
-                RightMargin();
-                const sal_Int32 nLineEnd = GetCursor()->GetPoint()->nContent.GetIndex();
-                Pop(false);
-
-                // make sure the selection build later from the data below does
-                // not "in word" character to the left and right in order to
-                // preserve those. Therefore count those "in words" in order to
-                // modify the selection accordingly.
-                const sal_Unicode* pChar = aText.getStr();
-                sal_Int32 nLeft = 0;
-                while (pChar && *pChar++ == CH_TXTATR_INWORD)
-                    ++nLeft;
-                pChar = aText.getLength() ? aText.getStr() + aText.getLength() - 1 : nullptr;
-                sal_Int32 nRight = 0;
-                while (pChar && *pChar-- == CH_TXTATR_INWORD)
-                    ++nRight;
-
-                aPos.nContent = nBegin + nLeft;
-                pCursor = GetCursor();
-                *pCursor->GetPoint() = aPos;
-                pCursor->SetMark();
-                ExtendSelection( true, nLen - nLeft - nRight );
-                // don't determine the rectangle in the current line
-                const sal_Int32 nWordStart = (nBegin + nLeft) < nLineStart ? nLineStart : nBegin + nLeft;
-                // take one less than the line end - otherwise the next line would be calculated
-                const sal_Int32 nWordEnd = (nBegin + nLen - nLeft - nRight) > nLineEnd
-                                        ? nLineEnd : (nBegin + nLen - nLeft - nRight);
-                Push();
-                pCursor->DeleteMark();
-                SwIndex& rContent = GetCursor()->GetPoint()->nContent;
-                rContent = nWordStart;
-                SwRect aStartRect;
-                SwCursorMoveState aState;
-                aState.m_bRealWidth = true;
-                SwContentNode* pContentNode = pCursor->GetContentNode();
-                SwContentFrame *pContentFrame = pContentNode->getLayoutFrame( GetLayout(), pPt, pCursor->GetPoint(), false);
-
-                pContentFrame->GetCharRect( aStartRect, *pCursor->GetPoint(), &aState );
-                rContent = nWordEnd - 1;
-                SwRect aEndRect;
-                pContentFrame->GetCharRect( aEndRect, *pCursor->GetPoint(),&aState );
-                rSelectRect = aStartRect.Union( aEndRect );
-                Pop(false);
+                HandleCorrectionError( aText, aPos, nBegin, nLen, pPt, rSelectRect );
             }
         }
     }
@@ -960,12 +958,13 @@ bool SwEditShell::GetGrammarCorrection(
     SwPosition aPos( *pCursor->GetPoint() );
     Point aPt( *pPt );
     SwCursorMoveState eTmpState( MV_SETONLYTEXT );
-    SwTextNode *pNode;
-    SwGrammarMarkUp *pWrong;
-    if( GetLayout()->GetCursorOfst( &aPos, aPt, &eTmpState ) &&
-        nullptr != (pNode = aPos.nNode.GetNode().GetTextNode()) &&
-        nullptr != (pWrong = pNode->GetGrammarCheck()) &&
-        !pNode->IsInProtectSect() )
+    SwTextNode *pNode = nullptr;
+    SwGrammarMarkUp *pWrong = nullptr;
+    if (GetLayout()->GetCursorOfst( &aPos, aPt, &eTmpState ))
+        pNode = aPos.nNode.GetNode().GetTextNode();
+    if (nullptr != pNode)
+        pWrong = pNode->GetGrammarCheck();
+    if (nullptr != pWrong && !pNode->IsInProtectSect())
     {
         sal_Int32 nBegin = aPos.nContent.GetIndex();
         sal_Int32 nLen = 1;
@@ -973,14 +972,14 @@ bool SwEditShell::GetGrammarCorrection(
         {
             const OUString aText(pNode->GetText().copy(nBegin, nLen));
 
-            uno::Reference< linguistic2::XProofreadingIterator >  xGCIterator( mpDoc->GetGCIterator() );
+            uno::Reference< linguistic2::XProofreadingIterator >  xGCIterator( mxDoc->GetGCIterator() );
             if (xGCIterator.is())
             {
-                uno::Reference< lang::XComponent > xDoc( mpDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY );
+                uno::Reference< lang::XComponent > xDoc( mxDoc->GetDocShell()->GetBaseModel(), uno::UNO_QUERY );
 
                 // Expand the string:
-                const ModelToViewHelper aConversionMap(*pNode);
-                OUString aExpandText = aConversionMap.getViewText();
+                const ModelToViewHelper aConversionMap(*pNode, GetLayout());
+                const OUString& aExpandText = aConversionMap.getViewText();
                 // get XFlatParagraph to use...
                 uno::Reference< text::XFlatParagraph > xFlatPara = new SwXFlatParagraph( *pNode, aExpandText, aConversionMap );
 
@@ -1015,53 +1014,7 @@ bool SwEditShell::GetGrammarCorrection(
 
             if (rResult.aErrors.getLength() > 0)    // error found?
             {
-                // save the start and end positions of the line and the starting point
-                Push();
-                LeftMargin();
-                const sal_Int32 nLineStart = GetCursor()->GetPoint()->nContent.GetIndex();
-                RightMargin();
-                const sal_Int32 nLineEnd = GetCursor()->GetPoint()->nContent.GetIndex();
-                Pop(false);
-
-                // make sure the selection build later from the data below does
-                // not include "in word" character to the left and right in
-                // order to preserve those. Therefore count those "in words" in
-                // order to modify the selection accordingly.
-                const sal_Unicode* pChar = aText.getStr();
-                sal_Int32 nLeft = 0;
-                while (pChar && *pChar++ == CH_TXTATR_INWORD)
-                    ++nLeft;
-                pChar = aText.getLength() ? aText.getStr() + aText.getLength() - 1 : nullptr;
-                sal_Int32 nRight = 0;
-                while (pChar && *pChar-- == CH_TXTATR_INWORD)
-                    ++nRight;
-
-                aPos.nContent = nBegin + nLeft;
-                pCursor = GetCursor();
-                *pCursor->GetPoint() = aPos;
-                pCursor->SetMark();
-                ExtendSelection( true, nLen - nLeft - nRight );
-                // don't determine the rectangle in the current line
-                const sal_Int32 nWordStart = (nBegin + nLeft) < nLineStart ? nLineStart : nBegin + nLeft;
-                // take one less than the line end - otherwise the next line would be calculated
-                const sal_Int32 nWordEnd = (nBegin + nLen - nLeft - nRight) > nLineEnd
-                                        ? nLineEnd : (nBegin + nLen - nLeft - nRight);
-                Push();
-                pCursor->DeleteMark();
-                SwIndex& rContent = GetCursor()->GetPoint()->nContent;
-                rContent = nWordStart;
-                SwRect aStartRect;
-                SwCursorMoveState aState;
-                aState.m_bRealWidth = true;
-                SwContentNode* pContentNode = pCursor->GetContentNode();
-                SwContentFrame *pContentFrame = pContentNode->getLayoutFrame( GetLayout(), pPt, pCursor->GetPoint(), false);
-
-                pContentFrame->GetCharRect( aStartRect, *pCursor->GetPoint(), &aState );
-                rContent = nWordEnd - 1;
-                SwRect aEndRect;
-                pContentFrame->GetCharRect( aEndRect, *pCursor->GetPoint(),&aState );
-                rSelectRect = aStartRect.Union( aEndRect );
-                Pop(false);
+                HandleCorrectionError( aText, aPos, nBegin, nLen, pPt, rSelectRect );
             }
         }
     }
@@ -1094,14 +1047,8 @@ void SwEditShell::PutSpellingToSentenceStart()
 
 static sal_uInt32 lcl_CountRedlines(const svx::SpellPortions& rLastPortions)
 {
-    sal_uInt32 nRet = 0;
-    SpellPortions::const_iterator aIter = rLastPortions.begin();
-    for( ; aIter != rLastPortions.end(); ++aIter)
-    {
-        if( aIter->bIsHidden )
-            ++nRet;
-    }
-    return nRet;
+    return static_cast<sal_uInt32>(std::count_if(rLastPortions.begin(), rLastPortions.end(),
+        [](const svx::SpellPortion& rPortion) { return rPortion.bIsHidden; }));
 }
 
 void SwEditShell::MoveContinuationPosToEndOfCheckedSentence()
@@ -1111,7 +1058,6 @@ void SwEditShell::MoveContinuationPosToEndOfCheckedSentence()
     if (g_pSpellIter)
     {
         g_pSpellIter->SetCurr( new SwPosition( *g_pSpellIter->GetCurrX() ) );
-        g_pSpellIter->ContinueAfterThisSentence();
     }
 }
 
@@ -1121,167 +1067,164 @@ void SwEditShell::ApplyChangedSentence(const svx::SpellPortions& rNewPortions, b
     // sentence got removed in the dialog
 
     OSL_ENSURE(  g_pSpellIter, "SpellIter missing" );
-    if (g_pSpellIter &&
-        g_pSpellIter->GetLastPortions().size() > 0) // no portions -> no text to be changed
+    if (!g_pSpellIter ||
+        g_pSpellIter->GetLastPortions().empty()) // no portions -> no text to be changed
+        return;
+
+    const SpellPortions& rLastPortions = g_pSpellIter->GetLastPortions();
+    const SpellContentPositions  rLastPositions = g_pSpellIter->GetLastPositions();
+    OSL_ENSURE(!rLastPortions.empty() &&
+            rLastPortions.size() == rLastPositions.size(),
+            "last vectors of spelling results are not set or not equal");
+
+    // iterate over the new portions, beginning at the end to take advantage of the previously
+    // saved content positions
+
+    mxDoc->GetIDocumentUndoRedo().StartUndo( SwUndoId::UI_TEXT_CORRECTION, nullptr );
+    StartAction();
+
+    SwPaM *pCursor = GetCursor();
+    // save cursor position (which should be at the end of the current sentence)
+    // for later restoration
+    Push();
+
+    sal_uInt32 nRedlinePortions = lcl_CountRedlines(rLastPortions);
+    if((rLastPortions.size() - nRedlinePortions) == rNewPortions.size())
     {
-        const SpellPortions& rLastPortions = g_pSpellIter->GetLastPortions();
-        const SpellContentPositions  rLastPositions = g_pSpellIter->GetLastPositions();
-        OSL_ENSURE(rLastPortions.size() > 0 &&
-                rLastPortions.size() == rLastPositions.size(),
-                "last vectors of spelling results are not set or not equal");
+        OSL_ENSURE( !rNewPortions.empty(), "rNewPortions should not be empty here" );
+        OSL_ENSURE( !rLastPortions.empty(), "rLastPortions should not be empty here" );
+        OSL_ENSURE( !rLastPositions.empty(), "rLastPositions should not be empty here" );
 
-        // iterate over the new portions, beginning at the end to take advantage of the previously
-        // saved content positions
-
-        mpDoc->GetIDocumentUndoRedo().StartUndo( UNDO_UI_TEXT_CORRECTION, nullptr );
-        StartAction();
-
-        SwPaM *pCursor = GetCursor();
-        // save cursor position (which should be at the end of the current sentence)
-        // for later restoration
-        Push();
-
-        sal_uInt32 nRedlinePortions = lcl_CountRedlines(rLastPortions);
-        if((rLastPortions.size() - nRedlinePortions) == rNewPortions.size())
+        // the simple case: the same number of elements on both sides
+        // each changed element has to be applied to the corresponding source element
+        svx::SpellPortions::const_iterator aCurrentNewPortion = rNewPortions.end();
+        SpellPortions::const_iterator aCurrentOldPortion = rLastPortions.end();
+        SpellContentPositions::const_iterator aCurrentOldPosition = rLastPositions.end();
+        do
         {
-            OSL_ENSURE( !rNewPortions.empty(), "rNewPortions should not be empty here" );
-            OSL_ENSURE( !rLastPortions.empty(), "rLastPortions should not be empty here" );
-            OSL_ENSURE( !rLastPositions.empty(), "rLastPositions should not be empty here" );
-
-            // the simple case: the same number of elements on both sides
-            // each changed element has to be applied to the corresponding source element
-            svx::SpellPortions::const_iterator aCurrentNewPortion = rNewPortions.end();
-            SpellPortions::const_iterator aCurrentOldPortion = rLastPortions.end();
-            SpellContentPositions::const_iterator aCurrentOldPosition = rLastPositions.end();
-            do
+            --aCurrentNewPortion;
+            --aCurrentOldPortion;
+            --aCurrentOldPosition;
+            //jump over redline portions
+            while(aCurrentOldPortion->bIsHidden)
             {
-                --aCurrentNewPortion;
-                --aCurrentOldPortion;
-                --aCurrentOldPosition;
-                //jump over redline portions
-                while(aCurrentOldPortion->bIsHidden)
+                if (aCurrentOldPortion  != rLastPortions.begin() &&
+                    aCurrentOldPosition != rLastPositions.begin())
                 {
-                    if (aCurrentOldPortion  != rLastPortions.begin() &&
-                        aCurrentOldPosition != rLastPositions.begin())
-                    {
-                        --aCurrentOldPortion;
-                        --aCurrentOldPosition;
-                    }
-                    else
-                    {
-                        OSL_FAIL("ApplyChangedSentence: iterator positions broken" );
-                        break;
-                    }
+                    --aCurrentOldPortion;
+                    --aCurrentOldPosition;
                 }
-                if ( !pCursor->HasMark() )
-                    pCursor->SetMark();
-                pCursor->GetPoint()->nContent = aCurrentOldPosition->nLeft;
-                pCursor->GetMark()->nContent = aCurrentOldPosition->nRight;
-                sal_uInt16 nScriptType = SvtLanguageOptions::GetI18NScriptTypeOfLanguage( aCurrentNewPortion->eLanguage );
-                sal_uInt16 nLangWhichId = RES_CHRATR_LANGUAGE;
-                switch(nScriptType)
+                else
                 {
-                    case css::i18n::ScriptType::ASIAN : nLangWhichId = RES_CHRATR_CJK_LANGUAGE; break;
-                    case css::i18n::ScriptType::COMPLEX : nLangWhichId = RES_CHRATR_CTL_LANGUAGE; break;
-                }
-                if(aCurrentNewPortion->sText != aCurrentOldPortion->sText)
-                {
-                    // change text ...
-                    mpDoc->getIDocumentContentOperations().DeleteAndJoin(*pCursor);
-                    // ... and apply language if necessary
-                    if(aCurrentNewPortion->eLanguage != aCurrentOldPortion->eLanguage)
-                        SetAttrItem( SvxLanguageItem(aCurrentNewPortion->eLanguage, nLangWhichId) );
-                    mpDoc->getIDocumentContentOperations().InsertString(*pCursor, aCurrentNewPortion->sText);
-                }
-                else if(aCurrentNewPortion->eLanguage != aCurrentOldPortion->eLanguage)
-                {
-                    // apply language
-                    SetAttrItem( SvxLanguageItem(aCurrentNewPortion->eLanguage, nLangWhichId) );
-                }
-                else if( aCurrentNewPortion->bIgnoreThisError )
-                {
-                    // add the 'ignore' markup to the TextNode's grammar ignore markup list
-                    IgnoreGrammarErrorAt( *pCursor );
-                    OSL_FAIL("TODO: add ignore mark to text node");
-                }
-                if(aCurrentNewPortion == rNewPortions.begin())
+                    OSL_FAIL("ApplyChangedSentence: iterator positions broken" );
                     break;
-            }
-            while(aCurrentNewPortion != rNewPortions.begin());
-        }
-        else
-        {
-            OSL_ENSURE( !rLastPositions.empty(), "rLastPositions should not be empty here" );
-
-            // select the complete sentence
-            SpellContentPositions::const_iterator aCurrentEndPosition = rLastPositions.end();
-            --aCurrentEndPosition;
-            SpellContentPositions::const_iterator aCurrentStartPosition = rLastPositions.begin();
-            pCursor->GetPoint()->nContent = aCurrentStartPosition->nLeft;
-            pCursor->GetMark()->nContent = aCurrentEndPosition->nRight;
-
-            // delete the sentence completely
-            mpDoc->getIDocumentContentOperations().DeleteAndJoin(*pCursor);
-            svx::SpellPortions::const_iterator aCurrentNewPortion = rNewPortions.begin();
-            while(aCurrentNewPortion != rNewPortions.end())
-            {
-                // set the language attribute
-                SvtScriptType nScriptType = GetScriptType();
-                sal_uInt16 nLangWhichId = RES_CHRATR_LANGUAGE;
-                switch(nScriptType)
-                {
-                    case SvtScriptType::ASIAN : nLangWhichId = RES_CHRATR_CJK_LANGUAGE; break;
-                    case SvtScriptType::COMPLEX : nLangWhichId = RES_CHRATR_CTL_LANGUAGE; break;
-                    default: break;
                 }
-                SfxItemSet aSet(GetAttrPool(), nLangWhichId, nLangWhichId, 0);
-                GetCurAttr( aSet );
-                const SvxLanguageItem& rLang = static_cast<const SvxLanguageItem& >(aSet.Get(nLangWhichId));
-                if(rLang.GetLanguage() != aCurrentNewPortion->eLanguage)
+            }
+            if ( !pCursor->HasMark() )
+                pCursor->SetMark();
+            pCursor->GetPoint()->nContent = aCurrentOldPosition->nLeft;
+            pCursor->GetMark()->nContent = aCurrentOldPosition->nRight;
+            sal_uInt16 nScriptType = SvtLanguageOptions::GetI18NScriptTypeOfLanguage( aCurrentNewPortion->eLanguage );
+            sal_uInt16 nLangWhichId = RES_CHRATR_LANGUAGE;
+            switch(nScriptType)
+            {
+                case css::i18n::ScriptType::ASIAN : nLangWhichId = RES_CHRATR_CJK_LANGUAGE; break;
+                case css::i18n::ScriptType::COMPLEX : nLangWhichId = RES_CHRATR_CTL_LANGUAGE; break;
+            }
+            if(aCurrentNewPortion->sText != aCurrentOldPortion->sText)
+            {
+                // change text ...
+                mxDoc->getIDocumentContentOperations().DeleteAndJoin(*pCursor);
+                // ... and apply language if necessary
+                if(aCurrentNewPortion->eLanguage != aCurrentOldPortion->eLanguage)
                     SetAttrItem( SvxLanguageItem(aCurrentNewPortion->eLanguage, nLangWhichId) );
-                // insert the new string
-                mpDoc->getIDocumentContentOperations().InsertString(*pCursor, aCurrentNewPortion->sText);
-
-                // set the cursor to the end of the inserted string
-                *pCursor->Start() = *pCursor->End();
-                ++aCurrentNewPortion;
+                mxDoc->getIDocumentContentOperations().InsertString(*pCursor, aCurrentNewPortion->sText);
+            }
+            else if(aCurrentNewPortion->eLanguage != aCurrentOldPortion->eLanguage)
+            {
+                // apply language
+                SetAttrItem( SvxLanguageItem(aCurrentNewPortion->eLanguage, nLangWhichId) );
+            }
+            else if( aCurrentNewPortion->bIgnoreThisError )
+            {
+                // add the 'ignore' markup to the TextNode's grammar ignore markup list
+                IgnoreGrammarErrorAt( *pCursor );
+                OSL_FAIL("TODO: add ignore mark to text node");
             }
         }
-
-        // restore cursor to the end of the sentence
-        // (will work also if the sentence length has changed,
-        // since cursors get updated automatically!)
-        Pop( false );
-
-        // collapse cursor to the end of the modified sentence
-        *pCursor->Start() = *pCursor->End();
-        if (bRecheck)
-        {
-            // in grammar check the current sentence has to be checked again
-            GoStartSentence();
-        }
-        // set continuation position for spell/grammar checking to the end of this sentence
-        g_pSpellIter->SetCurr( new SwPosition(*pCursor->Start()) );
-
-        mpDoc->GetIDocumentUndoRedo().EndUndo( UNDO_UI_TEXT_CORRECTION, nullptr );
-        EndAction();
+        while(aCurrentNewPortion != rNewPortions.begin());
     }
+    else
+    {
+        OSL_ENSURE( !rLastPositions.empty(), "rLastPositions should not be empty here" );
+
+        // select the complete sentence
+        SpellContentPositions::const_iterator aCurrentEndPosition = rLastPositions.end();
+        --aCurrentEndPosition;
+        SpellContentPositions::const_iterator aCurrentStartPosition = rLastPositions.begin();
+        pCursor->GetPoint()->nContent = aCurrentStartPosition->nLeft;
+        pCursor->GetMark()->nContent = aCurrentEndPosition->nRight;
+
+        // delete the sentence completely
+        mxDoc->getIDocumentContentOperations().DeleteAndJoin(*pCursor);
+        for(const auto& rCurrentNewPortion : rNewPortions)
+        {
+            // set the language attribute
+            SvtScriptType nScriptType = GetScriptType();
+            sal_uInt16 nLangWhichId = RES_CHRATR_LANGUAGE;
+            switch(nScriptType)
+            {
+                case SvtScriptType::ASIAN : nLangWhichId = RES_CHRATR_CJK_LANGUAGE; break;
+                case SvtScriptType::COMPLEX : nLangWhichId = RES_CHRATR_CTL_LANGUAGE; break;
+                default: break;
+            }
+            SfxItemSet aSet(GetAttrPool(), {{nLangWhichId, nLangWhichId}});
+            GetCurAttr( aSet );
+            const SvxLanguageItem& rLang = static_cast<const SvxLanguageItem& >(aSet.Get(nLangWhichId));
+            if(rLang.GetLanguage() != rCurrentNewPortion.eLanguage)
+                SetAttrItem( SvxLanguageItem(rCurrentNewPortion.eLanguage, nLangWhichId) );
+            // insert the new string
+            mxDoc->getIDocumentContentOperations().InsertString(*pCursor, rCurrentNewPortion.sText);
+
+            // set the cursor to the end of the inserted string
+            *pCursor->Start() = *pCursor->End();
+        }
+    }
+
+    // restore cursor to the end of the sentence
+    // (will work also if the sentence length has changed,
+    // since cursors get updated automatically!)
+    Pop(PopMode::DeleteCurrent);
+
+    // collapse cursor to the end of the modified sentence
+    *pCursor->Start() = *pCursor->End();
+    if (bRecheck)
+    {
+        // in grammar check the current sentence has to be checked again
+        GoStartSentence();
+    }
+    // set continuation position for spell/grammar checking to the end of this sentence
+    g_pSpellIter->SetCurr( new SwPosition(*pCursor->Start()) );
+
+    mxDoc->GetIDocumentUndoRedo().EndUndo( SwUndoId::UI_TEXT_CORRECTION, nullptr );
+    EndAction();
+
 }
 /** Collect all deleted redlines of the current text node
  *  beginning at the start of the cursor position
  */
-static SpellContentPositions lcl_CollectDeletedRedlines(SwEditShell* pSh)
+static SpellContentPositions lcl_CollectDeletedRedlines(SwEditShell const * pSh)
 {
     SpellContentPositions aRedlines;
     SwDoc* pDoc = pSh->GetDoc();
-    const bool bShowChg = IDocumentRedlineAccess::IsShowChanges( pDoc->getIDocumentRedlineAccess().GetRedlineMode() );
+    const bool bShowChg = IDocumentRedlineAccess::IsShowChanges( pDoc->getIDocumentRedlineAccess().GetRedlineFlags() );
     if ( bShowChg )
     {
         SwPaM *pCursor = pSh->GetCursor();
         const SwPosition* pStartPos = pCursor->Start();
         const SwTextNode* pTextNode = pCursor->GetNode().GetTextNode();
 
-        sal_uInt16 nAct = pDoc->getIDocumentRedlineAccess().GetRedlinePos( *pTextNode, USHRT_MAX );
+        SwRedlineTable::size_type nAct = pDoc->getIDocumentRedlineAccess().GetRedlinePos( *pTextNode, USHRT_MAX );
         const sal_Int32 nStartIndex = pStartPos->nContent.GetIndex();
         for ( ; nAct < pDoc->getIDocumentRedlineAccess().GetRedlineTable().size(); nAct++ )
         {
@@ -1310,7 +1253,7 @@ static SpellContentPositions lcl_CollectDeletedRedlines(SwEditShell* pSh)
 }
 
 /// remove the redline positions after the current selection
-static void lcl_CutRedlines( SpellContentPositions& aDeletedRedlines, SwEditShell* pSh )
+static void lcl_CutRedlines( SpellContentPositions& aDeletedRedlines, SwEditShell const * pSh )
 {
     if(!aDeletedRedlines.empty())
     {
@@ -1333,14 +1276,10 @@ static SpellContentPosition  lcl_FindNextDeletedRedline(
     aRet.nLeft = aRet.nRight = SAL_MAX_INT32;
     if(!rDeletedRedlines.empty())
     {
-        SpellContentPositions::const_iterator aIter = rDeletedRedlines.begin();
-        for( ; aIter != rDeletedRedlines.end(); ++aIter)
-        {
-            if(aIter->nLeft < nSearchFrom)
-                continue;
+        auto aIter = std::find_if_not(rDeletedRedlines.begin(), rDeletedRedlines.end(),
+            [nSearchFrom](const SpellContentPosition& rPos) { return rPos.nLeft < nSearchFrom; });
+        if (aIter != rDeletedRedlines.end())
             aRet = *aIter;
-            break;
-        }
     }
     return aRet;
 }
@@ -1376,7 +1315,7 @@ bool SwSpellIter::SpellSentence(svx::SpellPortions& rPortions, bool bIsGrammarCh
         }
         uno::Any aSpellRet =
         pMySh->GetDoc()->Spell(*pCursor,
-                    xSpeller, nullptr, nullptr, bIsGrammarCheck );
+            xSpeller, nullptr, nullptr, bIsGrammarCheck, pMySh->GetLayout());
         aSpellRet >>= xSpellRet;
         aSpellRet >>= aGrammarResult;
         bGoOn = GetCursorCnt() > 1;
@@ -1392,7 +1331,7 @@ bool SwSpellIter::SpellSentence(svx::SpellPortions& rPortions, bool bIsGrammarCh
         }
         if( bGoOn )
         {
-            pMySh->Pop( false );
+            pMySh->Pop(SwCursorShell::PopMode::DeleteCurrent);
             pCursor = pMySh->GetCursor();
             if ( *pCursor->GetPoint() > *pCursor->GetMark() )
                 pCursor->Exchange();
@@ -1444,8 +1383,8 @@ bool SwSpellIter::SpellSentence(svx::SpellPortions& rPortions, bool bIsGrammarCh
         pMySh->GoEndSentence();
         if( bGrammarErrorFound )
         {
-            const ModelToViewHelper aConversionMap(static_cast<SwTextNode&>(pCursor->GetNode()));
-            OUString aExpandText = aConversionMap.getViewText();
+            const ModelToViewHelper aConversionMap(static_cast<SwTextNode&>(pCursor->GetNode()), pMySh->GetLayout());
+            const OUString& aExpandText = aConversionMap.getViewText();
             sal_Int32 nSentenceEnd =
                 aConversionMap.ConvertToViewPosition( aGrammarResult.nBehindEndOfSentencePosition );
             // remove trailing space
@@ -1476,7 +1415,7 @@ bool SwSpellIter::SpellSentence(svx::SpellPortions& rPortions, bool bIsGrammarCh
                 xSpellRet = nullptr;
                 // don't search for grammar errors here anymore!
                 pMySh->GetDoc()->Spell(*pCursor,
-                            xSpeller, nullptr, nullptr, false ) >>= xSpellRet;
+                    xSpeller, nullptr, nullptr, false, pMySh->GetLayout()) >>= xSpellRet;
                 if ( *pCursor->GetPoint() > *pCursor->GetMark() )
                     pCursor->Exchange();
                 SetCurr( new SwPosition( *pCursor->GetPoint() ));
@@ -1562,60 +1501,61 @@ static LanguageType lcl_GetLanguage(SwEditShell& rSh)
         case SvtScriptType::COMPLEX : nLangWhichId = RES_CHRATR_CTL_LANGUAGE; break;
         default: break;
     }
-    SfxItemSet aSet(rSh.GetAttrPool(), nLangWhichId, nLangWhichId, 0);
+    SfxItemSet aSet(rSh.GetAttrPool(), {{nLangWhichId, nLangWhichId}});
     rSh.GetCurAttr( aSet );
     const SvxLanguageItem& rLang = static_cast<const SvxLanguageItem& >(aSet.Get(nLangWhichId));
     return rLang.GetLanguage();
 }
 
 /// create a text portion at the given position
-void SwSpellIter::CreatePortion(uno::Reference< XSpellAlternatives > xAlt,
+void SwSpellIter::CreatePortion(uno::Reference< XSpellAlternatives > const & xAlt,
                         linguistic2::ProofreadingResult* pGrammarResult,
         bool bIsField, bool bIsHidden)
 {
     svx::SpellPortion aPortion;
     OUString sText;
     GetSh()->GetSelectedText( sText );
-    if(!sText.isEmpty())
+    if(sText.isEmpty())
+        return;
+
+    // in case of redlined deletions the selection of an error is not the same as the _real_ word
+    if(xAlt.is())
+        aPortion.sText = xAlt->getWord();
+    else if(pGrammarResult)
     {
-        // in case of redlined deletions the selection of an error is not the same as the _real_ word
-        if(xAlt.is())
-            aPortion.sText = xAlt->getWord();
-        else if(pGrammarResult)
+        aPortion.bIsGrammarError = true;
+        if(pGrammarResult->aErrors.getLength())
         {
-            aPortion.bIsGrammarError = true;
-            if(pGrammarResult->aErrors.getLength())
+            aPortion.aGrammarError = pGrammarResult->aErrors[0];
+            aPortion.sText = pGrammarResult->aText.copy( aPortion.aGrammarError.nErrorStart, aPortion.aGrammarError.nErrorLength );
+            aPortion.xGrammarChecker = pGrammarResult->xProofreader;
+            const beans::PropertyValue* pProperties = pGrammarResult->aProperties.getConstArray();
+            for( sal_Int32 nProp = 0; nProp < pGrammarResult->aProperties.getLength(); ++nProp )
             {
-                aPortion.aGrammarError = pGrammarResult->aErrors[0];
-                aPortion.sText = pGrammarResult->aText.copy( aPortion.aGrammarError.nErrorStart, aPortion.aGrammarError.nErrorLength );
-                aPortion.xGrammarChecker = pGrammarResult->xProofreader;
-                const beans::PropertyValue* pProperties = pGrammarResult->aProperties.getConstArray();
-                for( sal_Int32 nProp = 0; nProp < pGrammarResult->aProperties.getLength(); ++nProp )
+                if ( pProperties->Name == "DialogTitle" )
                 {
-                    if ( pProperties->Name == "DialogTitle" )
-                    {
-                        pProperties->Value >>= aPortion.sDialogTitle;
-                        break;
-                    }
+                    pProperties->Value >>= aPortion.sDialogTitle;
+                    break;
                 }
             }
         }
-        else
-            aPortion.sText = sText;
-        aPortion.eLanguage = lcl_GetLanguage(*GetSh());
-        aPortion.bIsField = bIsField;
-        aPortion.bIsHidden = bIsHidden;
-        aPortion.xAlternatives = xAlt;
-        SpellContentPosition aPosition;
-        SwPaM *pCursor = GetSh()->GetCursor();
-        aPosition.nLeft = pCursor->Start()->nContent.GetIndex();
-        aPosition.nRight = pCursor->End()->nContent.GetIndex();
-        aLastPortions.push_back(aPortion);
-        aLastPositions.push_back(aPosition);
     }
+    else
+        aPortion.sText = sText;
+    aPortion.eLanguage = lcl_GetLanguage(*GetSh());
+    aPortion.bIsField = bIsField;
+    aPortion.bIsHidden = bIsHidden;
+    aPortion.xAlternatives = xAlt;
+    SpellContentPosition aPosition;
+    SwPaM *pCursor = GetSh()->GetCursor();
+    aPosition.nLeft = pCursor->Start()->nContent.GetIndex();
+    aPosition.nRight = pCursor->End()->nContent.GetIndex();
+    aLastPortions.push_back(aPortion);
+    aLastPositions.push_back(aPosition);
+
 }
 
-void    SwSpellIter::AddPortion(uno::Reference< XSpellAlternatives > xAlt,
+void    SwSpellIter::AddPortion(uno::Reference< XSpellAlternatives > const & xAlt,
                                 linguistic2::ProofreadingResult* pGrammarResult,
                                 const SpellContentPositions& rDeletedRedlines)
 {

@@ -7,6 +7,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#if !defined _WIN32 //TODO, #include <sys/mman.h>
+
 #include <cassert>
 #include <string>
 #include <iostream>
@@ -27,10 +29,10 @@
 namespace {
 
 class UnusedMethodsRemove:
-    public RecursiveASTVisitor<UnusedMethodsRemove>, public loplugin::RewritePlugin
+    public loplugin::FilteringRewritePlugin<UnusedMethodsRemove>
 {
 public:
-    explicit UnusedMethodsRemove(InstantiationData const & data);
+    explicit UnusedMethodsRemove(loplugin::InstantiationData const & data);
     ~UnusedMethodsRemove();
 
     virtual void run() override { TraverseDecl(compiler.getASTContext().getTranslationUnitDecl()); }
@@ -51,7 +53,7 @@ size_t getFilesize(const char* filename)
     return st.st_size;
 }
 
-UnusedMethodsRemove::UnusedMethodsRemove(InstantiationData const & data): RewritePlugin(data)
+UnusedMethodsRemove::UnusedMethodsRemove(loplugin::InstantiationData const & data): FilteringRewritePlugin(data)
 {
     static const char sInputFile[] = SRCDIR "/result.txt";
     mmapFilesize = getFilesize(sInputFile);
@@ -74,12 +76,12 @@ UnusedMethodsRemove::~UnusedMethodsRemove()
 std::string niceName(const CXXMethodDecl* functionDecl)
 {
     std::string s =
-        compat::getReturnType(*functionDecl).getCanonicalType().getAsString()
+        functionDecl->getReturnType().getCanonicalType().getAsString()
         + " " + functionDecl->getParent()->getQualifiedNameAsString()
         + "::" + functionDecl->getNameAsString()
         + "(";
     bool bFirst = true;
-    for (const ParmVarDecl *pParmVarDecl : functionDecl->params()) {
+    for (const ParmVarDecl *pParmVarDecl : functionDecl->parameters()) {
         if (bFirst)
             bFirst = false;
         else
@@ -102,8 +104,7 @@ bool UnusedMethodsRemove::VisitCXXMethodDecl( const CXXMethodDecl* functionDecl 
         return true;
     }
     // ignore stuff that forms part of the stable URE interface
-    if (isInUnoIncludeFile(compiler.getSourceManager().getSpellingLoc(
-                              functionDecl->getCanonicalDecl()->getNameInfo().getLoc()))) {
+    if (isInUnoIncludeFile(functionDecl)) {
         return true;
     }
 
@@ -135,7 +136,7 @@ bool UnusedMethodsRemove::VisitCXXMethodDecl( const CXXMethodDecl* functionDecl 
         report(
             DiagnosticsEngine::Warning,
             "Could not remove unused method (" + niceName(functionDecl) + ")",
-            functionDecl->getLocStart())
+            compat::getBeginLoc(functionDecl))
           << functionDecl->getSourceRange();
     }
     return true;
@@ -145,5 +146,7 @@ bool UnusedMethodsRemove::VisitCXXMethodDecl( const CXXMethodDecl* functionDecl 
 loplugin::Plugin::Registration< UnusedMethodsRemove > X("unusedmethodsremove", false);
 
 }
+
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

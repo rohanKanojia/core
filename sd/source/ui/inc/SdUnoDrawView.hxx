@@ -21,7 +21,6 @@
 #define INCLUDED_SD_SOURCE_UI_INC_SDUNODRAWVIEW_HXX
 
 #include "DrawSubController.hxx"
-#include "DrawViewShell.hxx"
 #include <cppuhelper/basemutex.hxx>
 
 class SdXImpressDocument;
@@ -33,10 +32,11 @@ class XLayer;
 namespace sd {
 
 class DrawViewShell;
+class View;
 
 /** This class implements the DrawViewShell specific part of the controller.
 */
-class SdUnoDrawView
+class SdUnoDrawView final
     : private cppu::BaseMutex,
       public DrawSubControllerInterfaceBase
 {
@@ -44,78 +44,60 @@ public:
     SdUnoDrawView (
         DrawViewShell& rViewShell,
         View& rView) throw();
-    virtual ~SdUnoDrawView() throw();
+    virtual ~SdUnoDrawView() throw() override;
 
     // XSelectionSupplier
 
     virtual sal_Bool SAL_CALL select (
-        const css::uno::Any& aSelection)
-        throw (css::lang::IllegalArgumentException,
-               css::uno::RuntimeException,
-               std::exception) override;
+        const css::uno::Any& aSelection) override;
 
-    virtual css::uno::Any SAL_CALL getSelection()
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+    virtual css::uno::Any SAL_CALL getSelection() override;
 
     virtual void SAL_CALL addSelectionChangeListener (
-        const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener)
-        throw(css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener) override;
 
     virtual void SAL_CALL removeSelectionChangeListener (
-        const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener)
-        throw(css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener) override;
 
     // XDrawView
 
     virtual void SAL_CALL setCurrentPage (
-        const css::uno::Reference<css::drawing::XDrawPage >& xPage)
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+        const css::uno::Reference<css::drawing::XDrawPage >& xPage) override;
 
-    virtual css::uno::Reference<css::drawing::XDrawPage> SAL_CALL getCurrentPage()
-        throw(css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference<css::drawing::XDrawPage> SAL_CALL getCurrentPage() override;
 
     // XFastPropertySet
 
     virtual void SAL_CALL setFastPropertyValue (
         sal_Int32 nHandle,
-        const css::uno::Any& rValue)
-        throw(css::beans::UnknownPropertyException,
-            css::beans::PropertyVetoException,
-            css::lang::IllegalArgumentException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) override;
+        const css::uno::Any& rValue) override;
 
     virtual css::uno::Any SAL_CALL getFastPropertyValue (
-        sal_Int32 nHandle)
-        throw(css::beans::UnknownPropertyException,
-            css::lang::WrappedTargetException,
-            css::uno::RuntimeException, std::exception) override;
+        sal_Int32 nHandle) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName(  ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName(  ) override;
+    virtual sal_Bool SAL_CALL supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames(  ) override;
 
-protected:
-    bool getMasterPageMode() const throw();
-    void setMasterPageMode(bool MasterPageMode_) throw();
-    bool getLayerMode() const throw();
-    void setLayerMode(bool LayerMode_) throw();
-public:
     /** Return a reference to the active layer object.
         @return
             The returned value may be empty when the internal state of this
             view is not valid (like during destruction.)
     */
-    css::uno::Reference< css::drawing::XLayer> getActiveLayer() throw ();
-protected:
+    css::uno::Reference< css::drawing::XLayer> getActiveLayer();
+
+private:
+    bool getMasterPageMode() const throw();
+    void setMasterPageMode(bool MasterPageMode_) throw();
+    bool getLayerMode() const throw();
+    void setLayerMode(bool LayerMode_) throw();
     /** Make the specified object the active layer.
         @param rxLayer
             The new layer object.
+        @throws css::uno::RuntimeException
     */
-    void setActiveLayer (const css::uno::Reference< css::drawing::XLayer>& rxLayer) throw (css::uno::RuntimeException, std::exception);
+    void setActiveLayer (const css::uno::Reference< css::drawing::XLayer>& rxLayer);
 
     void SetZoom( sal_Int16 nZoom );
     sal_Int16 GetZoom() const;
@@ -127,11 +109,10 @@ protected:
 
     css::uno::Any getDrawViewMode() const;
 
-private:
+    SdXImpressDocument* GetModel() const throw();
+
     DrawViewShell& mrDrawViewShell;
     sd::View& mrView;
-
-    SdXImpressDocument* GetModel() const throw();
 };
 
 } // end of namespace sd

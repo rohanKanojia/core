@@ -34,10 +34,9 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         SwXMLTextBlocks & rBlocks,
         const OUString &rFileName,
-        css::uno::Reference< css::xml::sax::XDocumentHandler> &rHandler);
+        css::uno::Reference< css::xml::sax::XDocumentHandler> const &rHandler);
 
-    virtual ~SwXMLBlockListExport() {}
-    sal_uInt32 exportDoc( enum ::xmloff::token::XMLTokenEnum eClass) override;
+    ErrCode exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
     void ExportAutoStyles_() override {}
     void ExportMasterStyles_ () override {}
     void ExportContent_() override {}
@@ -53,10 +52,9 @@ public:
         const css::uno::Reference< css::uno::XComponentContext >& rContext,
         SwXMLTextBlocks & rBlocks,
         const OUString &rFileName,
-        css::uno::Reference< css::xml::sax::XDocumentHandler> &rHandler);
+        css::uno::Reference< css::xml::sax::XDocumentHandler> const &rHandler);
 
-    virtual ~SwXMLTextBlockExport() {}
-    sal_uInt32 exportDoc(enum ::xmloff::token::XMLTokenEnum /*eClass*/) override {return 0;}
+    ErrCode exportDoc(enum ::xmloff::token::XMLTokenEnum /*eClass*/) override { return ERRCODE_NONE; }
     void exportDoc(const OUString & rText);
     void ExportAutoStyles_() override {}
     void ExportMasterStyles_ () override {}

@@ -23,8 +23,7 @@
 #include <vcl/opengl/OpenGLContext.hxx>
 
 #include <vcl/salbtype.hxx>
-#include "opengl/bmpop.hxx"
-#include "opengl/texture.hxx"
+#include <opengl/texture.hxx>
 
 #include <salbmp.hxx>
 
@@ -33,6 +32,10 @@
 
 struct  BitmapBuffer;
 class   BitmapPalette;
+namespace vcl
+{
+    class Kernel;
+}
 
 class VCL_PLUGIN_PUBLIC OpenGLSalBitmap : public SalBitmap
 {
@@ -42,18 +45,17 @@ private:
     BitmapPalette                       maPalette;
     std::shared_ptr<sal_uInt8>          mpUserBuffer;
     sal_uInt16                          mnBits;
-    sal_uInt16                          mnBytesPerRow;
+    sal_uInt32                          mnBytesPerRow;
     int                                 mnWidth;
     int                                 mnHeight;
-    std::deque< OpenGLSalBitmapOp* >    maPendingOps;
 
     virtual void updateChecksum() const override;
 
-    bool calcChecksumGL(OpenGLTexture& rInputTexture, ChecksumType& rChecksum) const;
+    bool calcChecksumGL(OpenGLTexture& rInputTexture, BitmapChecksum& rChecksum) const;
 
 public:
     OpenGLSalBitmap();
-    virtual ~OpenGLSalBitmap();
+    virtual ~OpenGLSalBitmap() override;
 
 public:
 
@@ -66,30 +68,29 @@ public:
                             Size& rSize,
                             bool bMask = false ) override;
 
-    void            Destroy() override;
+    void            Destroy() final override;
 
     Size            GetSize() const override;
     sal_uInt16      GetBitCount() const override;
 
-    BitmapBuffer   *AcquireBuffer( BitmapAccessMode nMode ) override;
+    BitmapBuffer*   AcquireBuffer( BitmapAccessMode nMode ) override;
     void            ReleaseBuffer( BitmapBuffer* pBuffer, BitmapAccessMode nMode ) override;
 
     bool            GetSystemData( BitmapSystemData& rData ) override;
 
+    bool            ScalingSupported() const override;
     bool            Scale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag ) override;
-    bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uLong nTol ) override;
+    bool            Replace( const Color& rSearchColor, const Color& rReplaceColor, sal_uInt8 nTol ) override;
     bool            ConvertToGreyscale() override;
 
 public:
 
-    bool            Create( const OpenGLTexture& rTex, long nX, long nY, long nWidth, long nHeight );
+    void            Create( const OpenGLTexture& rTex, long nX, long nY, long nWidth, long nHeight );
     OpenGLTexture&  GetTexture() const;
-    static rtl::Reference<OpenGLContext> GetBitmapContext();
     const BitmapPalette& GetBitmapPalette() const { return maPalette; }
 
 private:
 
-    void            ExecuteOperations();
     GLuint          CreateTexture();
     bool            AllocateUserData();
     bool            ReadTexture();
@@ -104,7 +105,7 @@ private:
 
 public:
 
-    bool ImplScale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag );
+    void ImplScale( const double& rScaleX, const double& rScaleY, BmpScaleFlag nScaleFlag );
 };
 
 #endif // INCLUDED_VCL_INC_OPENGL_SALBMP_H

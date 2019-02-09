@@ -17,22 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "com/sun/star/uno/Reference.hxx"
-#include "com/sun/star/uno/RuntimeException.hpp"
-#include "com/sun/star/uno/XInterface.hpp"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
-#include "uno/current_context.h"
-#include "uno/dispatcher.hxx"
-#include "uno/lbnames.h"
+#include <com/sun/star/uno/Reference.hxx>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/uno/XInterface.hpp>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
+#include <uno/current_context.h>
+#include <uno/dispatcher.hxx>
+#include <uno/lbnames.h>
 
 #include "currentcontext.hxx"
 
-namespace binaryurp {
-
-namespace current_context {
+namespace binaryurp::current_context {
 
 css::uno::UnoInterfaceReference get() {
     css::uno::UnoInterfaceReference cc;
@@ -53,8 +51,6 @@ void set(css::uno::UnoInterfaceReference const & value) {
     {
         throw css::uno::RuntimeException("uno_setCurrentContext failed");
     }
-}
-
 }
 
 }

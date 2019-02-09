@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbu_reghelper.hxx"
-#include "uiservices.hxx"
+#include <dbu_reghelper.hxx>
+#include <uiservices.hxx>
 #include <com/sun/star/document/XEventListener.hpp>
 #include <com/sun/star/container/XSet.hpp>
 #include "DBTypeWizDlgSetup.hxx"
-#include "dbwizsetup.hxx"
+#include <dbwizsetup.hxx>
+#include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/sdb/XOfficeDatabaseDocument.hpp>
 #include <com/sun/star/sdbc/XDataSource.hpp>
-#include <vcl/msgbox.hxx>
 #include <comphelper/processfactory.hxx>
+#include <toolkit/helper/vclunohelper.hxx>
 
 using namespace dbaui;
 
-extern "C" void SAL_CALL createRegistryInfo_ODBTypeWizDialogSetup()
+extern "C" void createRegistryInfo_ODBTypeWizDialogSetup()
 {
     static OMultiInstanceAutoRegistration< ODBTypeWizDialogSetup > aAutoRegistration;
 }
@@ -56,39 +57,39 @@ ODBTypeWizDialogSetup::ODBTypeWizDialogSetup(const Reference< XComponentContext 
         &m_bStartTableWizard, cppu::UnoType<bool>::get());
 }
 
-Sequence<sal_Int8> SAL_CALL ODBTypeWizDialogSetup::getImplementationId(  ) throw(RuntimeException, std::exception)
+Sequence<sal_Int8> SAL_CALL ODBTypeWizDialogSetup::getImplementationId(  )
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
-Reference< XInterface > SAL_CALL ODBTypeWizDialogSetup::Create(const Reference< XMultiServiceFactory >& _rxFactory)
+Reference< XInterface > ODBTypeWizDialogSetup::Create(const Reference< XMultiServiceFactory >& _rxFactory)
 {
     Reference < XInterface > xDBWizard = *(new ODBTypeWizDialogSetup( comphelper::getComponentContext(_rxFactory) ));
     return xDBWizard;
 }
 
-OUString SAL_CALL ODBTypeWizDialogSetup::getImplementationName() throw(RuntimeException, std::exception)
+OUString SAL_CALL ODBTypeWizDialogSetup::getImplementationName()
 {
     return getImplementationName_Static();
 }
 
-OUString ODBTypeWizDialogSetup::getImplementationName_Static() throw(RuntimeException)
+OUString ODBTypeWizDialogSetup::getImplementationName_Static()
 {
     return OUString("org.openoffice.comp.dbu.ODBTypeWizDialogSetup");
 }
 
-css::uno::Sequence<OUString> SAL_CALL ODBTypeWizDialogSetup::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL ODBTypeWizDialogSetup::getSupportedServiceNames()
 {
     return getSupportedServiceNames_Static();
 }
 
-css::uno::Sequence<OUString> ODBTypeWizDialogSetup::getSupportedServiceNames_Static() throw(RuntimeException)
+css::uno::Sequence<OUString> ODBTypeWizDialogSetup::getSupportedServiceNames_Static()
 {
     css::uno::Sequence<OUString> aSupported { "com.sun.star.sdb.DatabaseWizardDialog" };
     return aSupported;
 }
 
-Reference<XPropertySetInfo>  SAL_CALL ODBTypeWizDialogSetup::getPropertySetInfo() throw(RuntimeException, std::exception)
+Reference<XPropertySetInfo>  SAL_CALL ODBTypeWizDialogSetup::getPropertySetInfo()
 {
     return createPropertySetInfo( getInfoHelper() );
 }
@@ -105,16 +106,16 @@ Reference<XPropertySetInfo>  SAL_CALL ODBTypeWizDialogSetup::getPropertySetInfo(
     return new ::cppu::OPropertyArrayHelper(aProps);
 }
 
-VclPtr<Dialog> ODBTypeWizDialogSetup::createDialog(vcl::Window* _pParent)
+svt::OGenericUnoDialog::Dialog ODBTypeWizDialogSetup::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
 {
-    return VclPtr<ODbTypeWizDialogSetup>::Create(_pParent, m_pDatasourceItems, m_aContext, m_aInitialSelection);
+    return svt::OGenericUnoDialog::Dialog(VclPtr<ODbTypeWizDialogSetup>::Create(VCLUnoHelper::GetWindow(rParent), m_pDatasourceItems.get(), m_aContext, m_aInitialSelection));
 }
 
 void ODBTypeWizDialogSetup::executedDialog(sal_Int16 _nExecutionResult)
 {
     if ( _nExecutionResult == RET_OK )
     {
-        const ODbTypeWizDialogSetup* pDialog = static_cast< ODbTypeWizDialogSetup* >( m_pDialog.get() );
+        const ODbTypeWizDialogSetup* pDialog = static_cast<ODbTypeWizDialogSetup*>(m_aDialog.m_xVclDialog.get());
         m_bOpenDatabase = pDialog->IsDatabaseDocumentToBeOpened();
         m_bStartTableWizard = pDialog->IsTableWizardToBeStarted();
     }

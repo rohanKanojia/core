@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <frmsidebarwincontainer.hxx>
+#include "frmsidebarwincontainer.hxx"
 
 #include <map>
 #include <fmtfld.hxx>
 #include <txtfld.hxx>
-#include <SidebarWin.hxx>
+#include <AnnotationWin.hxx>
 
 namespace {
     struct SidebarWinKey
@@ -39,16 +39,7 @@ namespace {
         }
     };
 
-    struct SidebarWinOrder
-    {
-        bool operator()( const SidebarWinKey& rSidebarWinKeyA,
-                             const SidebarWinKey& rSidebarWinKeyB ) const
-        {
-            return rSidebarWinKeyA < rSidebarWinKeyB;
-        }
-    };
-
-    typedef ::std::map < SidebarWinKey, VclPtr<sw::sidebarwindows::SwSidebarWin>, SidebarWinOrder > SidebarWinContainer;
+    typedef std::map < SidebarWinKey, VclPtr<sw::annotation::SwAnnotationWin> > SidebarWinContainer;
 
     struct FrameKey
     {
@@ -64,37 +55,28 @@ namespace {
         }
     };
 
-    struct FrameOrder
-    {
-        bool operator()( const FrameKey& rFrameKeyA,
-                             const FrameKey& rFrameKeyB ) const
-        {
-            return rFrameKeyA < rFrameKeyB;
-        }
-    };
-
-    typedef ::std::map < FrameKey, SidebarWinContainer, FrameOrder > _FrameSidebarWinContainer;
+    typedef std::map < FrameKey, SidebarWinContainer > FrameSidebarWinContainer_;
 }
 
 namespace sw { namespace sidebarwindows {
 
-class FrameSidebarWinContainer : public _FrameSidebarWinContainer
+class FrameSidebarWinContainer : public FrameSidebarWinContainer_
 {
 };
 
 SwFrameSidebarWinContainer::SwFrameSidebarWinContainer()
-    : mpFrameSidebarWinContainer( new FrameSidebarWinContainer() )
+    : mpFrameSidebarWinContainer( new FrameSidebarWinContainer )
 {}
 
 SwFrameSidebarWinContainer::~SwFrameSidebarWinContainer()
 {
     mpFrameSidebarWinContainer->clear();
-    delete mpFrameSidebarWinContainer;
+    mpFrameSidebarWinContainer.reset();
 }
 
 bool SwFrameSidebarWinContainer::insert( const SwFrame& rFrame,
                                        const SwFormatField& rFormatField,
-                                       SwSidebarWin& rSidebarWin )
+                                       sw::annotation::SwAnnotationWin& rSidebarWin )
 {
     bool bInserted( false );
 
@@ -113,7 +95,7 @@ bool SwFrameSidebarWinContainer::insert( const SwFrame& rFrame,
 }
 
 bool SwFrameSidebarWinContainer::remove( const SwFrame& rFrame,
-                                       const SwSidebarWin& rSidebarWin )
+                                         const sw::annotation::SwAnnotationWin & rSidebarWin )
 {
     bool bRemoved( false );
 
@@ -122,16 +104,12 @@ bool SwFrameSidebarWinContainer::remove( const SwFrame& rFrame,
     if ( aFrameIter != mpFrameSidebarWinContainer->end() )
     {
         SidebarWinContainer& rSidebarWinContainer = (*aFrameIter).second;
-        for ( SidebarWinContainer::iterator aIter = rSidebarWinContainer.begin();
-              aIter != rSidebarWinContainer.end();
-              ++aIter )
+        auto aIter = std::find_if(rSidebarWinContainer.begin(), rSidebarWinContainer.end(),
+            [&rSidebarWin](const SidebarWinContainer::value_type& rEntry) { return rEntry.second == &rSidebarWin; });
+        if ( aIter != rSidebarWinContainer.end() )
         {
-            if ( (*aIter).second == &rSidebarWin )
-            {
-                rSidebarWinContainer.erase( aIter );
-                bRemoved = true;
-                break;
-            }
+            rSidebarWinContainer.erase( aIter );
+            bRemoved = true;
         }
     }
 
@@ -152,31 +130,23 @@ bool SwFrameSidebarWinContainer::empty( const SwFrame& rFrame )
     return bEmpty;
 }
 
-SwSidebarWin* SwFrameSidebarWinContainer::get( const SwFrame& rFrame,
+sw::annotation::SwAnnotationWin* SwFrameSidebarWinContainer::get( const SwFrame& rFrame,
                                              const sal_Int32 nIndex )
 {
-    SwSidebarWin* pRet( nullptr );
+    sw::annotation::SwAnnotationWin* pRet( nullptr );
 
     FrameKey aFrameKey( &rFrame );
     FrameSidebarWinContainer::iterator aFrameIter = mpFrameSidebarWinContainer->find( aFrameKey );
-    if ( aFrameIter != mpFrameSidebarWinContainer->end() )
+    if ( aFrameIter != mpFrameSidebarWinContainer->end() && nIndex >= 0 )
     {
         SidebarWinContainer& rSidebarWinContainer = (*aFrameIter).second;
-        sal_Int32 nCounter( nIndex );
-        for ( SidebarWinContainer::iterator aIter = rSidebarWinContainer.begin();
-              nCounter >= 0 && aIter != rSidebarWinContainer.end();
-              ++aIter )
+        if (nIndex < sal_Int32(rSidebarWinContainer.size()))
         {
-            if ( nCounter == 0 )
-            {
-                pRet = (*aIter).second;
-                break;
-            }
-
-            --nCounter;
+            auto aIter = rSidebarWinContainer.begin();
+            std::advance(aIter, nIndex);
+            pRet = (*aIter).second;
         }
     }
-
     return pRet;
 }
 
@@ -190,11 +160,9 @@ void SwFrameSidebarWinContainer::getAll( const SwFrame& rFrame,
     if ( aFrameIter != mpFrameSidebarWinContainer->end() )
     {
         SidebarWinContainer& rSidebarWinContainer = (*aFrameIter).second;
-        for ( SidebarWinContainer::iterator aIter = rSidebarWinContainer.begin();
-              aIter != rSidebarWinContainer.end();
-              ++aIter )
+        for ( const auto& rEntry : rSidebarWinContainer )
         {
-            pSidebarWins->push_back( (*aIter).second );
+            pSidebarWins->push_back( rEntry.second );
         }
     }
 }

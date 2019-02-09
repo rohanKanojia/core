@@ -44,11 +44,11 @@ class XMLParaContext : public SvXMLImportContext
     OUString             m_sDatatype;
     bool                 m_bHaveAbout;
     sal_Int8             nOutlineLevel;
-    XMLHints_Impl       *pHints;
+    std::unique_ptr<XMLHints_Impl> m_xHints;
     // Lost outline numbering in master document (#i73509#)
     bool                 mbOutlineLevelAttrFound;
     bool                 bIgnoreLeadingSpace;
-    bool                 bHeading;
+    bool const           bHeading;
     bool                 bIsListHeader;
     bool                 bIsRestart;
     sal_Int16            nStartValue;
@@ -63,9 +63,9 @@ public:
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList,
             bool bHeading );
 
-    virtual ~XMLParaContext();
+    virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 
@@ -79,8 +79,6 @@ class XMLNumberedParaContext : public SvXMLImportContext
     sal_Int16 m_Level;
     /// text:start-value
     sal_Int16 m_StartValue;
-    /// xml:id
-    OUString m_XmlId;
     /// text:list-id
     OUString m_ListId;
     /// text:style-name
@@ -94,11 +92,9 @@ public:
             const OUString& i_rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & i_xAttrList );
 
-    virtual ~XMLNumberedParaContext();
-
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 i_nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 i_nPrefix,
             const OUString& i_rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & i_xAttrList ) override;
 

@@ -20,6 +20,8 @@
 #ifndef INCLUDED_SW_INC_FMTMETA_HXX
 #define INCLUDED_SW_INC_FMTMETA_HXX
 
+#include "calbck.hxx"
+
 #include <cppuhelper/weakref.hxx>
 
 #include <svl/poolitem.hxx>
@@ -79,6 +81,7 @@ class SwTextMeta;
 class SwXMeta;
 class SwXMetaField;
 class SwTextNode;
+class SwDoc;
 namespace sw {
     class Meta;
     class MetaFieldManager;
@@ -107,7 +110,7 @@ public:
     /// takes ownership
     explicit SwFormatMeta( std::shared_ptr< ::sw::Meta > const & i_pMeta,
                         const sal_uInt16 i_nWhich );
-    virtual ~SwFormatMeta();
+    virtual ~SwFormatMeta() override;
 
     /// SfxPoolItem
     virtual bool             operator==( const SfxPoolItem & ) const override;
@@ -124,6 +127,7 @@ namespace sw {
 class Meta
     : public ::sfx2::Metadatable
     , public SwModify
+    , public sw::BroadcasterMixin
 {
 protected:
     friend class ::SwFormatMeta; ///< SetFormatMeta, NotifyChangeTextNode
@@ -141,7 +145,6 @@ protected:
     SwFormatMeta * GetFormatMeta() const { return m_pFormat; }
     void SetFormatMeta( SwFormatMeta * const i_pFormat ) { m_pFormat = i_pFormat; };
 
-    void NotifyChangeTextNodeImpl();
     void NotifyChangeTextNode(SwTextNode *const pTextNode);
 
     css::uno::WeakReference<css::rdf::XMetadatable> const& GetXMeta() const
@@ -153,8 +156,8 @@ protected:
     virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew ) override;
 
 public:
-    explicit Meta(SwFormatMeta * const i_pFormat = nullptr);
-    virtual ~Meta();
+    explicit Meta(SwFormatMeta * const i_pFormat);
+    virtual ~Meta() override;
 
     /// sfx2::Metadatable
     virtual ::sfx2::IXmlIdRegistry& GetRegistry() override;
@@ -180,9 +183,9 @@ private:
     bool IsFixedLanguage() const    { return m_bIsFixedLanguage; }
     void SetIsFixedLanguage(bool b) { m_bIsFixedLanguage = b; }
 
-    explicit MetaField(SwFormatMeta * const i_pFormat = nullptr,
-            const sal_uInt32 nNumberFormat = SAL_MAX_UINT32,
-            const bool bIsFixedLanguage = false );
+    explicit MetaField(SwFormatMeta * const i_pFormat,
+            const sal_uInt32 nNumberFormat,
+            const bool bIsFixedLanguage );
 
 public:
     /// get prefix/suffix from the RDF repository. @throws RuntimeException
@@ -194,7 +197,7 @@ public:
 class SW_DLLPUBLIC MetaFieldManager
 {
 private:
-    typedef ::std::vector< std::weak_ptr<MetaField> > MetaFieldList_t;
+    typedef std::vector< std::weak_ptr<MetaField> > MetaFieldList_t;
     MetaFieldList_t m_MetaFields;
     /// Document properties of a clipboard document, empty for non-clipboard documents.
     css::uno::Reference<css::document::XDocumentProperties> m_xDocumentProperties;
@@ -209,10 +212,10 @@ public:
                 const sal_uInt32 nNumberFormat = SAL_MAX_UINT32,
                 const bool bIsFixedLanguage = false );
     /// get all meta fields
-    ::std::vector< css::uno::Reference<css::text::XTextField> > getMetaFields();
+    std::vector< css::uno::Reference<css::text::XTextField> > getMetaFields();
     /// Copy document properties from rSource to m_xDocumentProperties.
     void copyDocumentProperties(const SwDoc& rSource);
-    css::uno::Reference<css::document::XDocumentProperties> getDocumentProperties();
+    const css::uno::Reference<css::document::XDocumentProperties>& getDocumentProperties();
 };
 
 } // namespace sw

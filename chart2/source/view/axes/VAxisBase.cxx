@@ -18,10 +18,15 @@
  */
 
 #include "VAxisBase.hxx"
-#include "ShapeFactory.hxx"
-#include "CommonConverters.hxx"
+#include <ShapeFactory.hxx>
+#include <ExplicitCategoriesProvider.hxx>
 #include "Tickmarks.hxx"
-#include "macros.hxx"
+#include <com/sun/star/drawing/XShapes.hpp>
+#include <com/sun/star/chart2/AxisType.hpp>
+#include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+
+#include <osl/diagnose.h>
 
 #include <memory>
 
@@ -58,7 +63,7 @@ void VAxisBase::initAxisLabelProperties( const css::awt::Size& rFontReferenceSiz
     if( !m_aAxisProperties.m_bDisplayLabels )
         return;
 
-    if( AxisType::SERIES==m_aAxisProperties.m_nAxisType )
+    if( m_aAxisProperties.m_nAxisType==AxisType::SERIES )
     {
         if( m_aAxisProperties.m_xAxisTextProvider.is() )
             m_aTextLabels = m_aAxisProperties.m_xAxisTextProvider->getTextualData();
@@ -71,7 +76,7 @@ void VAxisBase::initAxisLabelProperties( const css::awt::Size& rFontReferenceSiz
             return;
         }
     }
-    else if( AxisType::CATEGORY==m_aAxisProperties.m_nAxisType )
+    else if( m_aAxisProperties.m_nAxisType==AxisType::CATEGORY )
     {
         if( m_aAxisProperties.m_pExplicitCategoriesProvider )
             m_aTextLabels = m_aAxisProperties.m_pExplicitCategoriesProvider->getSimpleCategories();
@@ -81,13 +86,13 @@ void VAxisBase::initAxisLabelProperties( const css::awt::Size& rFontReferenceSiz
 
     m_aAxisLabelProperties.nNumberFormatKey = m_aAxisProperties.m_nNumberFormatKey;
     m_aAxisLabelProperties.init(m_aAxisProperties.m_xAxisModel);
-    if( m_aAxisProperties.m_bComplexCategories && AxisType::CATEGORY == m_aAxisProperties.m_nAxisType )
-        m_aAxisLabelProperties.eStaggering = SIDE_BY_SIDE;
+    if( m_aAxisProperties.m_bComplexCategories && m_aAxisProperties.m_nAxisType == AxisType::CATEGORY )
+        m_aAxisLabelProperties.eStaggering = AxisLabelStaggering::SideBySide;
 }
 
 bool VAxisBase::isDateAxis() const
 {
-    return AxisType::DATE == m_aScale.AxisType;
+    return m_aScale.AxisType == AxisType::DATE;
 }
 bool VAxisBase::isComplexCategoryAxis() const
 {
@@ -144,7 +149,6 @@ bool VAxisBase::isAnythingToDraw()
 void VAxisBase::setExplicitScaleAndIncrement(
               const ExplicitScaleData& rScale
             , const ExplicitIncrementData& rIncrement )
-            throw (uno::RuntimeException)
 {
     m_bReCreateAllTickInfos = true;
     m_aScale = rScale;
@@ -153,7 +157,7 @@ void VAxisBase::setExplicitScaleAndIncrement(
 
 void VAxisBase::createAllTickInfos( TickInfoArraysType& rAllTickInfos )
 {
-    std::unique_ptr< TickFactory > apTickFactory( this->createTickFactory() );
+    std::unique_ptr< TickFactory > apTickFactory( createTickFactory() );
     if( m_aScale.ShiftedCategoryPosition )
         apTickFactory->getAllTicksShifted( rAllTickInfos );
     else
@@ -179,7 +183,7 @@ bool VAxisBase::prepareShapeCreation()
         return true;
 
     //create named group shape
-    m_xGroupShape_Shapes = this->createGroupShape( m_xLogicTarget, m_nDimension==2 ? m_aCID : "");
+    m_xGroupShape_Shapes = createGroupShape( m_xLogicTarget, m_nDimension==2 ? m_aCID : "");
 
     if( m_aAxisProperties.m_bDisplayLabels )
         m_xTextTarget = m_pShapeFactory->createGroup2D( m_xFinalTarget, m_aCID );
@@ -210,19 +214,14 @@ void VAxisBase::removeTextShapesFromTicks()
 {
     if( m_xTextTarget.is() )
     {
-        TickInfoArraysType::iterator aDepthIter = m_aAllTickInfos.begin();
-        const TickInfoArraysType::const_iterator aDepthEnd  = m_aAllTickInfos.end();
-        for( ; aDepthIter != aDepthEnd; ++aDepthIter )
+        for (auto & tickInfos : m_aAllTickInfos)
         {
-            TickInfoArrayType::iterator aTickIter = (*aDepthIter).begin();
-            const TickInfoArrayType::const_iterator aTickEnd  = (*aDepthIter).end();
-            for( ; aTickIter != aTickEnd; ++aTickIter )
+            for (auto & tickInfo : tickInfos)
             {
-                TickInfo& rTickInfo = (*aTickIter);
-                if(rTickInfo.xTextShape.is())
+                if(tickInfo.xTextShape.is())
                 {
-                    m_xTextTarget->remove(rTickInfo.xTextShape);
-                    rTickInfo.xTextShape = nullptr;
+                    m_xTextTarget->remove(tickInfo.xTextShape);
+                    tickInfo.xTextShape = nullptr;
                 }
             }
         }
@@ -231,7 +230,7 @@ void VAxisBase::removeTextShapesFromTicks()
 
 void VAxisBase::updateUnscaledValuesAtTicks( TickIter& rIter )
 {
-    Reference< XScaling > xInverseScaling( nullptr );
+    Reference< XScaling > xInverseScaling;
     if( m_aScale.Scaling.is() )
         xInverseScaling = m_aScale.Scaling->getInverseScaling();
 

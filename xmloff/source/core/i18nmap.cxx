@@ -18,16 +18,15 @@
  */
 
 #include <rtl/ustring.hxx>
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include <xmloff/i18nmap.hxx>
 
-bool SvI18NMap::Add( sal_uInt16 nKind, const OUString& rName,
+void SvI18NMap::Add( sal_uInt16 nKind, const OUString& rName,
                      const OUString& rNewName )
 {
     SvI18NMapEntry_Key aKey(nKind, rName);
-    bool bIsNewInsertion = m_aMap.insert(SvI18NMap_Impl::value_type(aKey, rNewName)).second;
+    bool bIsNewInsertion = m_aMap.emplace(aKey, rNewName).second;
     SAL_INFO_IF(!bIsNewInsertion, "xmloff.core", "SvI18NMap::Add: item with key \"" << rName << "\" registered already, likely invalid input file");
-    return bIsNewInsertion;
 }
 
 const OUString& SvI18NMap::Get( sal_uInt16 nKind, const OUString& rName ) const

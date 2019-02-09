@@ -18,73 +18,70 @@
  */
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_TAUTOFMT_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_TAUTOFMT_HXX
+
+#include <tools/link.hxx>
 #include <sfx2/basedlgs.hxx>
+#include <sal/types.h>
+#include <rtl/ustring.hxx>
+#include <vcl/weld.hxx>
 
-#include <vcl/fixed.hxx>
-
-#include <vcl/lstbox.hxx>
-
-#include <vcl/button.hxx>
-
-#include <vcl/morebtn.hxx>
-
-#include <vcl/virdev.hxx>
+#include "wrtsh.hxx"
+#include "autoformatpreview.hxx"
+#include <tblafmt.hxx>
 
 class SwTableAutoFormat;
-class AutoFormatPreview;
 class SwTableAutoFormatTable;
 class SwWrtShell;
 
-enum AutoFormatLine { TOP_LINE, BOTTOM_LINE, LEFT_LINE, RIGHT_LINE };
-
-class SwAutoFormatDlg : public SfxModalDialog
+class SwAutoFormatDlg : public SfxDialogController
 {
-    VclPtr<ListBox>        m_pLbFormat;
-    VclPtr<VclContainer>   m_pFormatting;
-    VclPtr<CheckBox>       m_pBtnNumFormat;
-    VclPtr<CheckBox>       m_pBtnBorder;
-    VclPtr<CheckBox>       m_pBtnFont;
-    VclPtr<CheckBox>       m_pBtnPattern;
-    VclPtr<CheckBox>       m_pBtnAlignment;
-    VclPtr<OKButton>       m_pBtnOk;
-    VclPtr<CancelButton>   m_pBtnCancel;
-    VclPtr<PushButton>     m_pBtnAdd;
-    VclPtr<PushButton>     m_pBtnRemove;
-    VclPtr<PushButton>     m_pBtnRename;
-    OUString        aStrTitle;
-    OUString        aStrLabel;
-    OUString        aStrClose;
-    OUString        aStrDelTitle;
-    OUString        aStrDelMsg;
-    OUString        aStrRenameTitle;
-    OUString        aStrInvalidFormat;
-    VclPtr<AutoFormatPreview> m_pWndPreview;
+    OUString const  m_aStrTitle;
+    OUString const  m_aStrLabel;
+    OUString const  m_aStrClose;
+    OUString const  m_aStrDelTitle;
+    OUString const  m_aStrDelMsg;
+    OUString const  m_aStrRenameTitle;
+    OUString const  m_aStrInvalidFormat;
 
-    SwWrtShell*             pShell;
-    SwTableAutoFormatTable*      pTableTable;
-    sal_uInt8                   nIndex;
-    sal_uInt8                   nDfltStylePos;
-    bool                    bCoreDataChanged : 1;
-    bool                    bSetAutoFormat : 1;
+    SwWrtShell*     m_pShell;
+    sal_uInt8       m_nIndex;
+    sal_uInt8       m_nDfltStylePos;
+    bool            m_bCoreDataChanged : 1;
+    bool const      m_bSetAutoFormat : 1;
+
+    AutoFormatPreview m_aWndPreview;
+    std::unique_ptr<SwTableAutoFormatTable> m_xTableTable;
+
+    std::unique_ptr<weld::TreeView> m_xLbFormat;
+    std::unique_ptr<weld::CheckButton> m_xBtnNumFormat;
+    std::unique_ptr<weld::CheckButton> m_xBtnBorder;
+    std::unique_ptr<weld::CheckButton> m_xBtnFont;
+    std::unique_ptr<weld::CheckButton> m_xBtnPattern;
+    std::unique_ptr<weld::CheckButton> m_xBtnAlignment;
+    std::unique_ptr<weld::Button> m_xBtnCancel;
+    std::unique_ptr<weld::Button> m_xBtnAdd;
+    std::unique_ptr<weld::Button> m_xBtnRemove;
+    std::unique_ptr<weld::Button> m_xBtnRename;
+    std::unique_ptr<weld::CustomWeld> m_xWndPreview;
 
     void Init( const SwTableAutoFormat* pSelFormat );
     void UpdateChecks( const SwTableAutoFormat&, bool bEnableBtn );
 
-    DECL_LINK_TYPED( CheckHdl, Button*, void );
-    DECL_LINK_TYPED(OkHdl, Button*, void);
-    DECL_LINK_TYPED( AddHdl, Button*, void );
-    DECL_LINK_TYPED( RemoveHdl, Button*, void );
-    DECL_LINK_TYPED( RenameHdl, Button*, void );
-    DECL_LINK_TYPED( SelFormatHdl, ListBox&, void );
+    DECL_LINK(CheckHdl, weld::ToggleButton&, void);
+    DECL_LINK(AddHdl, weld::Button&, void);
+    DECL_LINK(RemoveHdl, weld::Button&, void);
+    DECL_LINK(RenameHdl, weld::Button&, void);
+    DECL_LINK(SelFormatHdl, weld::TreeView&, void);
 
 public:
-    SwAutoFormatDlg( vcl::Window* pParent, SwWrtShell* pShell,
-                        bool bSetAutoFormat = true,
-                        const SwTableAutoFormat* pSelFormat = nullptr );
-    virtual ~SwAutoFormatDlg();
-    virtual void dispose() override;
+    SwAutoFormatDlg(weld::Window* pParent, SwWrtShell* pShell,
+                    bool bSetAutoFormat, const SwTableAutoFormat* pSelFormat);
 
-    void FillAutoFormatOfIndex( SwTableAutoFormat*& rToFill ) const;
+    virtual short run() override;
+
+    SwTableAutoFormat* FillAutoFormatOfIndex() const;
+
+    virtual ~SwAutoFormatDlg() override;
 };
 
 #endif // SW_AUTOFMT_HXX

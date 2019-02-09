@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DTABLE_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_DBASE_DTABLE_HXX
 
-#include "file/FTable.hxx"
+#include <file/FTable.hxx>
 #include <connectivity/sdbcx/VColumn.hxx>
 #include <connectivity/CommonTools.hxx>
 #include <tools/urlobj.hxx>
@@ -55,14 +55,30 @@ namespace connectivity
                             };
 
         private:
-            struct DBFHeader {                       /* Header struct */
-                                DBFType      db_typ;                        /* File type                    */
-                                sal_uInt8    db_aedat[3];                   /* Date of last change          */
-                                                                            /* YY MM DD                     */
-                                sal_uInt32  db_anz;                         /* Data set count               */
-                                sal_uInt16  db_kopf;                        /* Header length                */
-                                sal_uInt16  db_slng;                        /* Data set length              */
-                                sal_uInt8   db_frei[20];                    /* Reserved                     */
+            // sources: https://www.clicketyclick.dk/databases/xbase/format/dbf.html (dBASE III and 5)
+            // http://www.dbase.com/KnowledgeBase/int/db7_file_fmt.htm (dBASE 7) which is similar at least for this part
+            struct DBFHeader {                                                                   //   address/pos in trailer
+                                DBFType     type;                      // dBASE/xBASE type, see DBFType 00h
+                                sal_uInt8   dateElems[3];              // Date of last change (YYMMDD)  01h
+                                sal_uInt32  nbRecords;                 // Number of records             04h
+                                sal_uInt16  headerLength;              //                               08h
+                                sal_uInt16  recordLength;              // Length of 1 record            10h
+                                sal_uInt8   trailer[20];
+                                // this last field contains these data:
+                                // - reserved:2 bytes:should be filled with 0                           12h/0
+                                // - incomplete transaction:1 byte:dBASE IV                             14h/2
+                                                 // 00h Transaction ended (or rolled back)
+                                                 // 01h Transaction started
+                                // - encryptionFlag:1 byte: dBASE IV                                    15h/3
+                                                 // 00h not encrypted
+                                                 // 01h for encrypted
+                                // - freeRecordThread:4 bytes:reserved for LAN only                     16h/4
+                                // - multiUserdBASE:8 bytes:reserved for multi-user dBASE (dBASE III+)  20h/8
+                                // - MDXFlag:1 byte:dBASE IV                                            28h/16
+                                                 // 0x01 if a production .MDX file exists for this table
+                                                 // 0x00 if no .MDX file exists
+                                // - languageDriver:1 byte:codepage (from Foxpro)                       29h/17
+                                // - reserved:2 bytes: should be filled with 0                          30h/18
                             };
             struct DBFColumn {                       /* Column descriptors */
                                 sal_uInt8    db_fnm[11];                     /* Field name                  */
@@ -70,7 +86,7 @@ namespace connectivity
                                 sal_uInt32   db_adr;                         /* Field address               */
                                 sal_uInt8    db_flng;                        /* Field length                */
                                 sal_uInt8    db_dez;                         /* Decimal places for N        */
-                                sal_uInt8    db_frei2[14];                   /* Reserved                    */
+                                sal_uInt8    db_free2[14];                   /* Reserved                    */
                             };
             struct DBFMemoHeader
             {
@@ -85,38 +101,40 @@ namespace connectivity
                 }
             };
 
-            ::std::vector<sal_Int32> m_aTypes;      // holds all types for columns just to avoid to ask the propertyset
-            ::std::vector<sal_Int32> m_aPrecisions; // same as above
-            ::std::vector<sal_Int32> m_aScales;
-            ::std::vector<sal_Int32> m_aRealFieldLengths;
+            std::vector<sal_Int32> m_aTypes;      // holds all types for columns just to avoid to ask the propertyset
+            std::vector<sal_Int32> m_aPrecisions; // same as above
+            std::vector<sal_Int32> m_aScales;
+            std::vector<sal_Int32> m_aRealFieldLengths;
             DBFHeader       m_aHeader;
             DBFMemoHeader   m_aMemoHeader;
-            SvStream*       m_pMemoStream;
+            std::unique_ptr<SvStream> m_pMemoStream;
             rtl_TextEncoding m_eEncoding;
-            bool        m_bWriteableMemo;
 
             void alterColumn(sal_Int32 index,
-                             const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet>& descriptor ,
-                             const ::com::sun::star::uno::Reference< ::com::sun::star::sdbcx::XDataDescriptorFactory>& xOldColumn );
+                             const css::uno::Reference< css::beans::XPropertySet>& descriptor ,
+                             const css::uno::Reference< css::sdbcx::XDataDescriptorFactory>& xOldColumn );
             void readHeader();
             void fillColumns();
             OUString createTempFile();
             void copyData(ODbaseTable* _pNewTable,sal_Int32 _nPos);
             bool CreateFile(const INetURLObject& aFile, bool& bCreateMemo);
             bool CreateMemoFile(const INetURLObject& aFile);
-            bool HasMemoFields() const { return m_aHeader.db_typ > dBaseIV;}
-            bool ReadMemoHeader();
-            bool ReadMemo(sal_Size nBlockNo, ORowSetValue& aVariable);
+            bool HasMemoFields() const { return m_aHeader.type > dBaseIV;}
+            void ReadMemoHeader();
+            bool ReadMemo(std::size_t nBlockNo, ORowSetValue& aVariable);
 
-            bool WriteMemo(const ORowSetValue& aVariable, sal_Size& rBlockNr);
+            void WriteMemo(const ORowSetValue& aVariable, std::size_t& rBlockNr);
             bool WriteBuffer();
-            bool UpdateBuffer(OValueRefVector& rRow, const OValueRefRow& pOrgRow, const ::com::sun::star::uno::Reference< ::com::sun::star::container::XIndexAccess>& _xCols, bool bForceAllFields);
-            ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet> isUniqueByColumnName(sal_Int32 _nColumnPos);
+            bool UpdateBuffer(OValueRefVector& rRow, const OValueRefRow& pOrgRow, const css::uno::Reference< css::container::XIndexAccess>& _xCols, bool bForceAllFields);
+            css::uno::Reference< css::beans::XPropertySet> isUniqueByColumnName(sal_Int32 _nColumnPos);
             bool AllocBuffer();
 
             void throwInvalidDbaseFormat();
-            void SAL_CALL renameImpl( const OUString& newName ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::container::ElementExistException, ::com::sun::star::uno::RuntimeException, std::exception);
-            void throwInvalidColumnType(const sal_uInt16 _nErrorId,const OUString& _sColumnName);
+            /// @throws css::sdbc::SQLException
+            /// @throws css::container::ElementExistException
+            /// @throws css::uno::RuntimeException
+            void renameImpl( const OUString& newName );
+            void throwInvalidColumnType(const char* pErrorId, const OUString& _sColumnName);
 
         protected:
             virtual void FileClose() override;
@@ -142,37 +160,37 @@ namespace connectivity
             virtual bool seekRow(IResultSetHelper::Movement eCursorPosition, sal_Int32 nOffset, sal_Int32& nCurPos) override;
             virtual bool fetchRow(OValueRefRow& _rRow,const OSQLColumns& _rCols, bool bRetrieveData) override;
 
-            virtual ::com::sun::star::uno::Any SAL_CALL queryInterface( const ::com::sun::star::uno::Type & rType ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Any SAL_CALL queryInterface( const css::uno::Type & rType ) override;
             //XTypeProvider
-            virtual ::com::sun::star::uno::Sequence< ::com::sun::star::uno::Type > SAL_CALL getTypes(  ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Sequence< css::uno::Type > SAL_CALL getTypes(  ) override;
             virtual void SAL_CALL disposing() override;
 
-            // com::sun::star::lang::XUnoTunnel
-            virtual sal_Int64 SAL_CALL getSomething( const ::com::sun::star::uno::Sequence< sal_Int8 >& aIdentifier ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
-            static ::com::sun::star::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
+            // css::lang::XUnoTunnel
+            virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+            static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
             // XAlterTable
-            virtual void SAL_CALL alterColumnByName( const OUString& colName, const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::container::NoSuchElementException, ::com::sun::star::uno::RuntimeException, std::exception) override;
-            virtual void SAL_CALL alterColumnByIndex( sal_Int32 index, const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::lang::IndexOutOfBoundsException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL alterColumnByName( const OUString& colName, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
+            virtual void SAL_CALL alterColumnByIndex( sal_Int32 index, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
             // XRename
-            virtual void SAL_CALL rename( const OUString& newName ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::container::ElementExistException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL rename( const OUString& newName ) override;
 
             bool    DropImpl();
             bool    CreateImpl();
 
 
-            virtual bool InsertRow(OValueRefVector& rRow, const ::com::sun::star::uno::Reference< ::com::sun::star::container::XIndexAccess>& _xCols) override;
+            virtual bool InsertRow(OValueRefVector& rRow, const css::uno::Reference< css::container::XIndexAccess>& _xCols) override;
             virtual bool DeleteRow(const OSQLColumns& _rCols) override;
-            virtual bool UpdateRow(OValueRefVector& rRow, OValueRefRow& pOrgRow,const ::com::sun::star::uno::Reference< ::com::sun::star::container::XIndexAccess>& _xCols) override;
+            virtual bool UpdateRow(OValueRefVector& rRow, OValueRefRow& pOrgRow,const css::uno::Reference< css::container::XIndexAccess>& _xCols) override;
 
-            virtual void addColumn(const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet>& descriptor) override;
+            virtual void addColumn(const css::uno::Reference< css::beans::XPropertySet>& descriptor) override;
             virtual void dropColumn(sal_Int32 _nPos) override;
 
-            static OUString   getEntry(file::OConnection* _pConnection,const OUString& _sURL );
+            static OUString   getEntry(file::OConnection const * _pConnection,const OUString& _sURL );
             static bool     Drop_Static(const OUString& _sUrl, bool _bHasMemoFields, sdbcx::OCollection* _pIndexes );
 
             virtual void refreshHeader() override;
 
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData> getMetaData() const override;
+            virtual css::uno::Reference< css::sdbc::XDatabaseMetaData> getMetaData() const override;
         };
     }
 }

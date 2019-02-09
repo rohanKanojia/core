@@ -31,9 +31,11 @@
 #include <cppuhelper/implbase.hxx>
 
 #include <unotools/mediadescriptor.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#include <DocumentHandler.hxx>
-#include <WPXSvInputStream.hxx>
+#include "DocumentHandler.hxx"
+#include "WPXSvInputStream.hxx"
 
 #include <xmloff/attrlist.hxx>
 
@@ -41,91 +43,90 @@
 
 namespace writerperfect
 {
-
 namespace detail
 {
-
-template<class Generator>
-class ImportFilterImpl : public cppu::WeakImplHelper
-    <
-    css::document::XFilter,
-    css::document::XImporter,
-    css::document::XExtendedFilterDetection,
-    css::lang::XInitialization
-    >
+template <class Generator>
+class ImportFilterImpl
+    : public cppu::WeakImplHelper<css::document::XFilter, css::document::XImporter,
+                                  css::document::XExtendedFilterDetection,
+                                  css::lang::XInitialization>
 {
 public:
-    ImportFilterImpl(const css::uno::Reference< css::uno::XComponentContext > &rxContext)
+    ImportFilterImpl(const css::uno::Reference<css::uno::XComponentContext>& rxContext)
         : mxContext(rxContext)
     {
     }
 
-    virtual ~ImportFilterImpl()
+    const css::uno::Reference<css::uno::XComponentContext>& getXContext() const
     {
+        return mxContext;
     }
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter(const css::uno::Sequence< css::beans::PropertyValue > &rDescriptor)
-    throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL
+    filter(const css::uno::Sequence<css::beans::PropertyValue>& rDescriptor) override
     {
         utl::MediaDescriptor aDescriptor(rDescriptor);
-        css::uno::Reference < css::io::XInputStream > xInputStream;
+        css::uno::Reference<css::io::XInputStream> xInputStream;
         aDescriptor[utl::MediaDescriptor::PROP_INPUTSTREAM()] >>= xInputStream;
         if (!xInputStream.is())
         {
             OSL_ASSERT(false);
-            return sal_False;
+            return false;
         }
 
+        css::uno::Reference<css::awt::XWindow> xDialogParent;
+        aDescriptor["ParentWindow"] >>= xDialogParent;
+
         // An XML import service: what we push sax messages to..
-        css::uno::Reference < css::xml::sax::XDocumentHandler > xInternalHandler(
+        css::uno::Reference<css::xml::sax::XDocumentHandler> xInternalHandler(
             mxContext->getServiceManager()->createInstanceWithContext(
                 DocumentHandlerFor<Generator>::name(), mxContext),
             css::uno::UNO_QUERY_THROW);
 
         // The XImporter sets up an empty target document for XDocumentHandler to write to..
-        css::uno::Reference < css::document::XImporter > xImporter(xInternalHandler, css::uno::UNO_QUERY);
+        css::uno::Reference<css::document::XImporter> xImporter(xInternalHandler,
+                                                                css::uno::UNO_QUERY);
         xImporter->setTargetDocument(mxDoc);
 
         // OO Graphics Handler: abstract class to handle document SAX messages, concrete implementation here
         // writes to in-memory target doc
-        DocumentHandler xHandler(xInternalHandler);
+        DocumentHandler aHandler(xInternalHandler);
 
         WPXSvInputStream input(xInputStream);
 
         Generator exporter;
-        exporter.addDocumentHandler(&xHandler, ODF_FLAT_XML);
+        exporter.addDocumentHandler(&aHandler, ODF_FLAT_XML);
 
-        this->doRegisterHandlers(exporter);
+        doRegisterHandlers(exporter);
 
-        return this->doImportDocument(input, exporter, aDescriptor);
+        return doImportDocument(Application::GetFrameWeld(xDialogParent), input, exporter,
+                                aDescriptor);
     }
 
-    virtual void SAL_CALL cancel()
-    throw (css::uno::RuntimeException, std::exception) override
-    {
-    }
+    virtual void SAL_CALL cancel() override {}
 
     // XImporter
-    virtual void SAL_CALL setTargetDocument(const css::uno::Reference< css::lang::XComponent > &xDoc)
-    throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception) override
+    const css::uno::Reference<css::lang::XComponent>& getTargetDocument() const { return mxDoc; }
+    virtual void SAL_CALL
+    setTargetDocument(const css::uno::Reference<css::lang::XComponent>& xDoc) override
     {
         mxDoc = xDoc;
     }
 
     //XExtendedFilterDetection
-    virtual OUString SAL_CALL detect(css::uno::Sequence< css::beans::PropertyValue > &Descriptor)
-    throw(css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL
+    detect(css::uno::Sequence<css::beans::PropertyValue>& Descriptor) override
     {
         OUString sTypeName;
         sal_Int32 nLength = Descriptor.getLength();
         sal_Int32 location = nLength;
-        const css::beans::PropertyValue *pValue = Descriptor.getConstArray();
-        css::uno::Reference < css::io::XInputStream > xInputStream;
-        for (sal_Int32 i = 0 ; i < nLength; i++)
+        const css::beans::PropertyValue* pValue = Descriptor.getConstArray();
+        css::uno::Reference<css::io::XInputStream> xInputStream;
+        for (sal_Int32 i = 0; i < nLength; i++)
         {
             if (pValue[i].Name == "TypeName")
-                location=i;
+                location = i;
             else if (pValue[i].Name == "InputStream")
                 pValue[i].Value >>= xInputStream;
         }
@@ -135,33 +136,32 @@ public:
 
         WPXSvInputStream input(xInputStream);
 
-        if (this->doDetectFormat(input, sTypeName))
+        if (doDetectFormat(input, sTypeName))
         {
             assert(!sTypeName.isEmpty());
 
             if (location == nLength)
             {
-                Descriptor.realloc(nLength+1);
+                Descriptor.realloc(nLength + 1);
                 Descriptor[location].Name = "TypeName";
             }
 
-            Descriptor[location].Value <<=sTypeName;
+            Descriptor[location].Value <<= sTypeName;
         }
 
         return sTypeName;
     }
 
     // XInitialization
-    virtual void SAL_CALL initialize(const css::uno::Sequence< css::uno::Any > &aArguments)
-    throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL initialize(const css::uno::Sequence<css::uno::Any>& aArguments) override
     {
-        css::uno::Sequence < css::beans::PropertyValue > aAnySeq;
+        css::uno::Sequence<css::beans::PropertyValue> aAnySeq;
         sal_Int32 nLength = aArguments.getLength();
         if (nLength && (aArguments[0] >>= aAnySeq))
         {
-            const css::beans::PropertyValue *pValue = aAnySeq.getConstArray();
+            const css::beans::PropertyValue* pValue = aAnySeq.getConstArray();
             nLength = aAnySeq.getLength();
-            for (sal_Int32 i = 0 ; i < nLength; i++)
+            for (sal_Int32 i = 0; i < nLength; i++)
             {
                 if (pValue[i].Name == "Type")
                 {
@@ -173,28 +173,30 @@ public:
     }
 
 private:
-    virtual bool doDetectFormat(librevenge::RVNGInputStream &rInput, OUString &rTypeName) = 0;
-    virtual bool doImportDocument(librevenge::RVNGInputStream &rInput, Generator &rGenerator, utl::MediaDescriptor &rDescriptor) = 0;
-    virtual void doRegisterHandlers(Generator &) {};
+    virtual bool doDetectFormat(librevenge::RVNGInputStream& rInput, OUString& rTypeName) = 0;
+    virtual bool doImportDocument(weld::Window* pParent, librevenge::RVNGInputStream& rInput,
+                                  Generator& rGenerator, utl::MediaDescriptor& rDescriptor)
+        = 0;
+    virtual void doRegisterHandlers(Generator&){};
 
-    css::uno::Reference< css::uno::XComponentContext > mxContext;
-    css::uno::Reference< css::lang::XComponent > mxDoc;
+    css::uno::Reference<css::uno::XComponentContext> mxContext;
+    css::uno::Reference<css::lang::XComponent> mxDoc;
     OUString msFilterName;
 };
-
 }
 
 /** A base class for import filters.
  */
-template<class Generator>
-struct ImportFilter : public cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>, css::lang::XServiceInfo>
+template <class Generator>
+struct ImportFilter : public cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>,
+                                                         css::lang::XServiceInfo>
 {
-    ImportFilter(const css::uno::Reference<css::uno::XComponentContext> &rxContext)
-        : cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>, css::lang::XServiceInfo>(rxContext)
+    ImportFilter(const css::uno::Reference<css::uno::XComponentContext>& rxContext)
+        : cppu::ImplInheritanceHelper<detail::ImportFilterImpl<Generator>, css::lang::XServiceInfo>(
+              rxContext)
     {
     }
 };
-
 }
 
 #endif // INCLUDED_WRITERPERFECT_INC_WRITERPERFECT_IMPORTFILTER_HXX

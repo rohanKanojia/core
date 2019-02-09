@@ -28,6 +28,7 @@
 #include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 
 #include <string.h>
 #include <vector>
@@ -68,6 +69,10 @@ namespace com { namespace sun { namespace star { namespace awt
 {
     struct Rectangle;
     class  XWindow2;
+} } } }
+
+namespace com { namespace sun { namespace star { namespace beans {
+    struct PropertyValue;
 } } } }
 
 class Color;
@@ -313,7 +318,7 @@ namespace canvas
 
             @param i_rxCanvas
             Input parameter, the canvas representation for which the device information
-            is to be retrieveds
+            is to be retrieved
 
             @param o_rxParams
             Output parameter, the sequence of Anys that hold the device parameters. Layout is as described above
@@ -329,7 +334,7 @@ namespace canvas
             Use this method for dead-simple bitmap implementations,
             that map all their formats to 8888 RGBA color.
          */
-        CANVASTOOLS_DLLPUBLIC css::uno::Reference< css::rendering::XIntegerBitmapColorSpace> getStdColorSpace();
+        CANVASTOOLS_DLLPUBLIC css::uno::Reference< css::rendering::XIntegerBitmapColorSpace> const & getStdColorSpace();
 
         /** Return a color space for a default RGB integer format
 
@@ -337,7 +342,7 @@ namespace canvas
             that map all their formats to 8888 RGB color (the last byte
             is unused).
          */
-        CANVASTOOLS_DLLPUBLIC css::uno::Reference< css::rendering::XIntegerBitmapColorSpace> getStdColorSpaceWithoutAlpha();
+        CANVASTOOLS_DLLPUBLIC css::uno::Reference< css::rendering::XIntegerBitmapColorSpace> const & getStdColorSpaceWithoutAlpha();
 
         /** Return a memory layout for a default RGBA integer format
 
@@ -346,9 +351,6 @@ namespace canvas
          */
         CANVASTOOLS_DLLPUBLIC css::rendering::IntegerBitmapLayout getStdMemoryLayout(
             const css::geometry::IntegerSize2D& rBitmapSize );
-
-        /// Convert standard 8888 RGBA color to vcl color
-        CANVASTOOLS_DLLPUBLIC ::Color stdIntSequenceToColor( const css::uno::Sequence<sal_Int8>& rColor );
 
         /// Convert standard 8888 RGBA color to vcl color
         CANVASTOOLS_DLLPUBLIC css::uno::Sequence<sal_Int8> colorToStdIntSequence( const ::Color& rColor );
@@ -377,7 +379,7 @@ namespace canvas
                 ( arg>TargetLimits::max() ) )                               // overflow will happen
             {
 # if OSL_DEBUG_LEVEL > 2
-                OSL_TRACE("numeric_cast detected data loss");
+                SAL_WARN("canvas", "numeric_cast detected data loss");
 #endif
                 throw css::uno::RuntimeException(
                     "numeric_cast detected data loss",
@@ -460,9 +462,7 @@ namespace canvas
                 if( !mbCaseSensitive &&
                     aStr != aStr.toAsciiLowerCase() )
                 {
-                    OSL_TRACE("ValueMap::ValueMap(): Key %s is not lowercase",
-                              pMap->maKey);
-                    OSL_FAIL( "ValueMap::ValueMap(): Key is not lowercase" );
+                    SAL_WARN("canvas", "ValueMap::ValueMap(): Key is not lowercase " << pMap->maKey);
                 }
 
                 if( mnEntries > 1 )
@@ -472,9 +472,8 @@ namespace canvas
                         if( !mapComparator(pMap[0], pMap[1]) &&
                             mapComparator(pMap[1], pMap[0]) )
                         {
-                            OSL_TRACE("ValueMap::ValueMap(): Map is not sorted, keys %s and %s are wrong",
-                                      pMap[0].maKey,
-                                      pMap[1].maKey);
+                            SAL_WARN("canvas", "ValueMap::ValueMap(): Map is not sorted, keys are wrong, "
+                                      << pMap[0].maKey << " and " << pMap[1].maKey);
                             OSL_FAIL( "ValueMap::ValueMap(): Map is not sorted" );
                         }
 
@@ -482,9 +481,7 @@ namespace canvas
                         if( !mbCaseSensitive &&
                             aStr2 != aStr2.toAsciiLowerCase() )
                         {
-                            OSL_TRACE("ValueMap::ValueMap(): Key %s is not lowercase",
-                                      pMap[1].maKey);
-                            OSL_FAIL( "ValueMap::ValueMap(): Key is not lowercase" );
+                            SAL_WARN("canvas", "ValueMap::ValueMap(): Key is not lowercase" << pMap[1].maKey);
                         }
                     }
                 }
@@ -556,6 +553,9 @@ namespace canvas
                         const css::rendering::RenderState& renderState,
                         OutputDevice& rOutDev,
                         OutputDevice* p2ndOutDev=nullptr);
+
+        CANVASTOOLS_DLLPUBLIC void extractExtraFontProperties(const css::uno::Sequence<css::beans::PropertyValue>& rExtraFontProperties,
+                        sal_uInt32& rEmphasisMark);
     }
 }
 

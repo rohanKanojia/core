@@ -13,14 +13,22 @@ $(eval $(call gb_ExternalProject_register_targets,hunspell,\
 	build \
 ))
 
+hunspell_CPPCLAGS=$(CPPFLAGS)
+
+ifneq (,$(filter ANDROID DRAGONFLY FREEBSD iOS LINUX NETBSD OPENBSD,$(OS)))
+ifneq (,$(gb_ENABLE_DBGUTIL))
+hunspell_CPPFLAGS+=-D_GLIBCXX_DEBUG
+endif
+endif
+
 $(call gb_ExternalProject_get_state_target,hunspell,build):
 	$(call gb_ExternalProject_run,build,\
-		LIBS="$(gb_STDLIBS) $(LIBS)" \
 		./configure --disable-shared --disable-nls --with-pic \
 			$(if $(CROSS_COMPILING),--build=$(BUILD_PLATFORM) --host=$(HOST_PLATFORM))\
 			$(if $(filter AIX,$(OS)),CFLAGS="-D_LINUX_SOURCE_COMPAT") \
-			$(if $(filter-out WNTGCC,$(OS)$(COM)),,LDFLAGS="-Wl,--enable-runtime-pseudo-reloc-v2") \
-		&& $(MAKE) \
+			$(if $(hunspell_CPPFLAGS),CPPFLAGS='$(hunspell_CPPFLAGS)') \
+			CXXFLAGS="$(CXXFLAGS) $(if $(ENABLE_OPTIMIZED),$(gb_COMPILEROPTFLAGS),$(gb_COMPILERNOOPTFLAGS)) $(if $(debug),$(gb_DEBUGINFO_FLAGS))" \
+		&& cd src/hunspell && $(MAKE) \
 	)
 
 # vim: set noet sw=4 ts=4:

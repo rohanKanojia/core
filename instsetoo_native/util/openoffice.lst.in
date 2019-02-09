@@ -4,24 +4,25 @@ Globals
     {
         variables
         {
+            LIBO_VERSION_MAJOR @LIBO_VERSION_MAJOR@
             UREPACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
             URELAYERVERSION 1
             REFERENCEOOOMAJORMINOR 4.1
-            WINDOWSBASISROOTNAME LibreOffice @LIBO_VERSION_MAJOR@
+            WINDOWSBASISROOTNAME LibreOffice
             UNIXBASISROOTNAME libreoffice@LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             HIDELICENSEDIALOG 1
             PACKAGEPREFIX
             BASISPACKAGEPREFIX libobasis
             UREPACKAGEPREFIX libreoffice
             SOLSUREPACKAGEPREFIX libreoffice
-            REGISTRATION_HOST https://registration.libreoffice.org/RegistrationWeb
-            REGISTRATIONURL http://survey.libreoffice.org/user/index.php
             PROGRESSBARCOLOR 0,0,0
             PROGRESSSIZE 444,8
+            PROGRESSSIZEHIGH 617,12
             PROGRESSPOSITION 35,153
+            PROGRESSPOSITIONHIGH 46,212
             PROGRESSFRAMECOLOR 102,102,102
             PROGRESSTEXTBASELINE 145
-            PROGRESSTEXTCOLOR 255,255,255
+            PROGRESSTEXTCOLOR 0,0,0
             NATIVEPROGRESS false
             REGISTRYLAYERNAME Layers
             SERVICEPACK 1
@@ -31,7 +32,6 @@ Globals
             PACKAGEMAP package_names.txt,package_names_ext.txt
             WINDOWSPATCHLEVEL 8
             OOODOWNLOADNAME 1
-            STARTCENTER_HIDE_EXTERNAL_LINKS 0
             64BITPRODUCT @WINDOWS_X64@
             WINDOWSSDKVERSION @WINDOWS_SDK_VERSION@
         }
@@ -44,7 +44,7 @@ LibreOffice
     {
         variables
         {
-            PRODUCTNAME LibreOffice
+            PRODUCTNAME @PRODUCTNAME@
             PRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             PRODUCTEXTENSION .@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
             POSTVERSIONEXTENSION
@@ -55,7 +55,7 @@ LibreOffice
             ABOUTBOXPRODUCTVERSIONSUFFIX @LIBO_VERSION_SUFFIX_SUFFIX@
             BASEPRODUCTVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@
             PCPFILENAME libreoffice.pcp
-            UPDATEURL http://update.libreoffice.org/check.php
+            UPDATEURL https://update.libreoffice.org/check.php
             ADD_INCLUDE_FILES cli_ure/version/version.txt,unoil/climaker/version.txt
             ADDSYSTEMINTEGRATION 1
             PACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
@@ -67,11 +67,10 @@ LibreOffice
             OOODOWNLOADNAME 1
             CHANGETARGETDIR 1
             PATCHCODEFILE ooo_patchcodes.txt
-            STARTCENTER_ADDFEATURE_URL http://extensions.libreoffice.org/
+            STARTCENTER_ADDFEATURE_URL https://extensions.libreoffice.org/
             STARTCENTER_INFO_URL https://www.libreoffice.org/
-            STARTCENTER_TEMPLREP_URL http://templates.libreoffice.org/
-            DICT_REPO_URL http://extensions.libreoffice.org/dictionaries/
-            STARTCENTER_HIDE_EXTERNAL_LINKS 0
+            STARTCENTER_TEMPLREP_URL https://templates.libreoffice.org/
+            DICT_REPO_URL https://extensions.libreoffice.org/dictionaries/
         }
         active          1
         compression     5
@@ -79,7 +78,7 @@ LibreOffice
         downloadname    LibreOffice_{productversion}_{os}_install_{languages}
         langpackdownloadname    LibreOffice_{productversion}_languagepack_{os}_install_{languages}
         helppackdownloadname    LibreOffice_{productversion}_helppack_{os}_install_{languages}
-        include         {installscriptdir},{customtargetpath}/readlicense_oo/readme,{customtargetpath}/sysui/{pkgtype},{customtargetpath}/setup_native,{filelistpath}/PackageSet,{filelistpath}/GeneratedPackage,{filelistpath}/Package,{filelistpath}/ExtensionPackage,{extensionsdir},{licensepath},{packinfopath}
+        include         {installscriptdir},{customtargetpath}/readlicense_oo/readme,{customtargetpath}/sysui/{pkgtype},{customtargetpath}/setup_native,{filelistpath}/PackageSet,{filelistpath}/GeneratedPackage,{filelistpath}/Package,{filelistpath}/ExtensionPackage,{filelistpath}/CustomTarget/helpcontent2/help3xsl/filelists,{extensionsdir},{licensepath},{packinfopath}
     }
 }
 
@@ -106,7 +105,7 @@ LibreOfficeDev
             UREPACKAGEPREFIX libreofficedev
             SOLSUREPACKAGEPREFIX libreofficedev
             REGISTRYLAYERNAME LayerDev
-            UPDATEURL http://update.libreoffice.org/check.php
+            UPDATEURL https://update.libreoffice.org/check.php
             ADD_INCLUDE_FILES cli_ure/version/version.txt,unoil/climaker/version.txt
             ADDSYSTEMINTEGRATION 1
             PACKAGEVERSION @LIBO_VERSION_MAJOR@.@LIBO_VERSION_MINOR@.@LIBO_VERSION_MICRO@.@LIBO_VERSION_PATCH@@LIBO_VERSION_SUFFIX@
@@ -120,11 +119,10 @@ LibreOfficeDev
             PATCHCODEFILE ooodev_patchcodes.txt
             CODEFILENAME codes_ooodev.txt
             LOCALUSERDIR $ORIGIN/..
-            STARTCENTER_ADDFEATURE_URL http://extensions.libreoffice.org/
+            STARTCENTER_ADDFEATURE_URL https://extensions.libreoffice.org/
             STARTCENTER_INFO_URL https://www.libreoffice.org/
-            STARTCENTER_TEMPLREP_URL http://templates.libreoffice.org/
-            DICT_REPO_URL http://extensions.libreoffice.org/dictionaries/
-            STARTCENTER_HIDE_EXTERNAL_LINKS 0
+            STARTCENTER_TEMPLREP_URL https://templates.libreoffice.org/
+            DICT_REPO_URL https://extensions.libreoffice.org/dictionaries/
         }
         active          1
         compression     5
@@ -132,7 +130,7 @@ LibreOfficeDev
         downloadname    LibreOfficeDev_{productversion}_{os}_install_{languages}
         langpackdownloadname    LibreOfficeDev_{productversion}_languagepack_{os}_install_{languages}
         helppackdownloadname    LibreOfficeDev_{productversion}_helppack_{os}_install_{languages}
-        include         {installscriptdir},{customtargetpath}/readlicense_oo/readme,{customtargetpath}/sysui/{pkgtype},{customtargetpath}/setup_native,{filelistpath}/PackageSet,{filelistpath}/GeneratedPackage,{filelistpath}/Package,{filelistpath}/ExtensionPackage,{extensionsdir},{licensepath},{packinfopath}
+        include         {installscriptdir},{customtargetpath}/readlicense_oo/readme,{customtargetpath}/sysui/{pkgtype},{customtargetpath}/setup_native,{filelistpath}/PackageSet,{filelistpath}/GeneratedPackage,{filelistpath}/Package,{filelistpath}/ExtensionPackage,{filelistpath}/CustomTarget/helpcontent2/help3xsl/filelists,{extensionsdir},{licensepath},{packinfopath}
     }
 }
 
@@ -162,11 +160,10 @@ LibreOffice_SDK
             NOSHORTDIRECTORYNAMES 1
             CHANGETARGETDIR 1
             DONTUSESTARTMENUFOLDER 1
-            STARTCENTER_ADDFEATURE_URL http://extensions.libreoffice.org/
+            STARTCENTER_ADDFEATURE_URL https://extensions.libreoffice.org/
             STARTCENTER_INFO_URL https://www.libreoffice.org/
-            STARTCENTER_TEMPLREP_URL http://templates.libreoffice.org/
-            DICT_REPO_URL http://extensions.libreoffice.org/dictionaries/
-            STARTCENTER_HIDE_EXTERNAL_LINKS 0
+            STARTCENTER_TEMPLREP_URL https://templates.libreoffice.org/
+            DICT_REPO_URL https://extensions.libreoffice.org/dictionaries/
         }
         active 1
         compression 5
@@ -208,11 +205,10 @@ LibreOfficeDev_SDK
             NOSHORTDIRECTORYNAMES 1
             CHANGETARGETDIR 1
             DONTUSESTARTMENUFOLDER 1
-            STARTCENTER_ADDFEATURE_URL http://extensions.libreoffice.org/
+            STARTCENTER_ADDFEATURE_URL https://extensions.libreoffice.org/
             STARTCENTER_INFO_URL https://www.libreoffice.org/
-            STARTCENTER_TEMPLREP_URL http://templates.libreoffice.org/
-            DICT_REPO_URL http://extensions.libreoffice.org/dictionaries/
-            STARTCENTER_HIDE_EXTERNAL_LINKS 0
+            STARTCENTER_TEMPLREP_URL https://templates.libreoffice.org/
+            DICT_REPO_URL https://extensions.libreoffice.org/dictionaries/
         }
         active 1
         compression 5

@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include "methodguard.hxx"
 #include "loghandler.hxx"
@@ -77,29 +78,29 @@ namespace logging
         Reference<XComponentContext>    m_xContext;
         LogHandlerHelper                m_aHandlerHelper;
         OUString                 m_sFileURL;
-        ::std::unique_ptr< ::osl::File >  m_pFile;
+        std::unique_ptr< ::osl::File >  m_pFile;
         FileValidity                    m_eFileValidity;
 
     public:
         FileHandler(const css::uno::Reference<XComponentContext> &context,
                 const css::uno::Sequence<css::uno::Any> &arguments);
-        virtual ~FileHandler();
+        virtual ~FileHandler() override;
 
     private:
         // XLogHandler
-        virtual OUString SAL_CALL getEncoding() throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL setEncoding( const OUString& _encoding ) throw (RuntimeException, std::exception) override;
-        virtual Reference< XLogFormatter > SAL_CALL getFormatter() throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL setFormatter( const Reference< XLogFormatter >& _formatter ) throw (RuntimeException, std::exception) override;
-        virtual ::sal_Int32 SAL_CALL getLevel() throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL setLevel( ::sal_Int32 _level ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL flush(  ) throw (RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL publish( const LogRecord& Record ) throw (RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getEncoding() override;
+        virtual void SAL_CALL setEncoding( const OUString& _encoding ) override;
+        virtual Reference< XLogFormatter > SAL_CALL getFormatter() override;
+        virtual void SAL_CALL setFormatter( const Reference< XLogFormatter >& _formatter ) override;
+        virtual ::sal_Int32 SAL_CALL getLevel() override;
+        virtual void SAL_CALL setLevel( ::sal_Int32 _level ) override;
+        virtual void SAL_CALL flush(  ) override;
+        virtual sal_Bool SAL_CALL publish( const LogRecord& Record ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL supportsService( const OUString& _rServiceName ) throw(RuntimeException, std::exception) override;
-        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool SAL_CALL supportsService( const OUString& _rServiceName ) override;
+        virtual Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
         // OComponentHelper
         virtual void SAL_CALL disposing() override;
@@ -186,13 +187,9 @@ namespace logging
         #if OSL_DEBUG_LEVEL > 0
             if ( m_eFileValidity == eInvalid )
             {
-                OStringBuffer sMessage;
-                sMessage.append( "FileHandler::impl_prepareFile_nothrow: could not open the designated log file:" );
-                sMessage.append( "\nURL: " );
-                sMessage.append( OString( m_sFileURL.getStr(), m_sFileURL.getLength(), osl_getThreadTextEncoding() ) );
-                sMessage.append( "\nerror code: " );
-                sMessage.append( (sal_Int32)res );
-                OSL_FAIL( sMessage.makeStringAndClear().getStr() );
+                SAL_WARN( "extensions.logging", "FileHandler::impl_prepareFile_nothrow: could not open the designated log file:"
+                            "\nURL: " << m_sFileURL
+                            << "\nerror code: " << static_cast<sal_Int32>(res) );
             }
         #endif
             if ( m_eFileValidity == eValid )
@@ -209,7 +206,7 @@ namespace logging
 
     void FileHandler::impl_writeString_nothrow( const OString& _rEntry )
     {
-        OSL_PRECOND( m_pFile.get(), "FileHandler::impl_writeString_nothrow: no file!" );
+        OSL_PRECOND(m_pFile, "FileHandler::impl_writeString_nothrow: no file!");
 
         sal_uInt64 nBytesToWrite( _rEntry.getLength() );
         sal_uInt64 nBytesWritten( 0 );
@@ -229,7 +226,7 @@ namespace logging
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("extensions.logging");
         }
     }
 
@@ -260,7 +257,7 @@ namespace logging
     }
 
 
-    OUString SAL_CALL FileHandler::getEncoding() throw (RuntimeException, std::exception)
+    OUString SAL_CALL FileHandler::getEncoding()
     {
         MethodGuard aGuard( *this );
         OUString sEncoding;
@@ -269,45 +266,45 @@ namespace logging
     }
 
 
-    void SAL_CALL FileHandler::setEncoding( const OUString& _rEncoding ) throw (RuntimeException, std::exception)
+    void SAL_CALL FileHandler::setEncoding( const OUString& _rEncoding )
     {
         MethodGuard aGuard( *this );
         OSL_VERIFY( m_aHandlerHelper.setEncoding( _rEncoding ) );
     }
 
 
-    Reference< XLogFormatter > SAL_CALL FileHandler::getFormatter() throw (RuntimeException, std::exception)
+    Reference< XLogFormatter > SAL_CALL FileHandler::getFormatter()
     {
         MethodGuard aGuard( *this );
         return m_aHandlerHelper.getFormatter();
     }
 
 
-    void SAL_CALL FileHandler::setFormatter( const Reference< XLogFormatter >& _rxFormatter ) throw (RuntimeException, std::exception)
+    void SAL_CALL FileHandler::setFormatter( const Reference< XLogFormatter >& _rxFormatter )
     {
         MethodGuard aGuard( *this );
         m_aHandlerHelper.setFormatter( _rxFormatter );
     }
 
 
-    ::sal_Int32 SAL_CALL FileHandler::getLevel() throw (RuntimeException, std::exception)
+    ::sal_Int32 SAL_CALL FileHandler::getLevel()
     {
         MethodGuard aGuard( *this );
         return m_aHandlerHelper.getLevel();
     }
 
 
-    void SAL_CALL FileHandler::setLevel( ::sal_Int32 _nLevel ) throw (RuntimeException, std::exception)
+    void SAL_CALL FileHandler::setLevel( ::sal_Int32 _nLevel )
     {
         MethodGuard aGuard( *this );
         m_aHandlerHelper.setLevel( _nLevel );
     }
 
 
-    void SAL_CALL FileHandler::flush(  ) throw (RuntimeException, std::exception)
+    void SAL_CALL FileHandler::flush(  )
     {
         MethodGuard aGuard( *this );
-        if(!m_pFile.get())
+        if (!m_pFile)
         {
             OSL_PRECOND(false, "FileHandler::flush: no file!");
             return;
@@ -317,39 +314,39 @@ namespace logging
     }
 
 
-    sal_Bool SAL_CALL FileHandler::publish( const LogRecord& _rRecord ) throw (RuntimeException, std::exception)
+    sal_Bool SAL_CALL FileHandler::publish( const LogRecord& _rRecord )
     {
         MethodGuard aGuard( *this );
 
         if ( !impl_prepareFile_nothrow() )
-            return sal_False;
+            return false;
 
         OString sEntry;
         if ( !m_aHandlerHelper.formatForPublishing( _rRecord, sEntry ) )
-            return sal_False;
+            return false;
 
         impl_writeString_nothrow( sEntry );
-        return sal_True;
+        return true;
     }
 
-    OUString SAL_CALL FileHandler::getImplementationName() throw(RuntimeException, std::exception)
+    OUString SAL_CALL FileHandler::getImplementationName()
     {
         return OUString("com.sun.star.comp.extensions.FileHandler");
     }
 
-    sal_Bool SAL_CALL FileHandler::supportsService( const OUString& _rServiceName ) throw(RuntimeException, std::exception)
+    sal_Bool SAL_CALL FileHandler::supportsService( const OUString& _rServiceName )
     {
         return cppu::supportsService(this, _rServiceName);
     }
 
-    Sequence< OUString > SAL_CALL FileHandler::getSupportedServiceNames() throw(RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL FileHandler::getSupportedServiceNames()
     {
         return { "com.sun.star.logging.FileHandler" };
     }
 
 } // namespace logging
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_extensions_FileHandler(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &arguments)

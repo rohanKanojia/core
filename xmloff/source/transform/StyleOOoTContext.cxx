@@ -42,6 +42,8 @@
 #include <rtl/ustrbuf.hxx>
 #include <rtl/math.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
+#include <array>
 
 using namespace ::xmloff::token;
 using namespace ::com::sun::star::uno;
@@ -61,7 +63,7 @@ const sal_uInt16 MAX_PROP_TYPES = 4;
     { XML_PROP_TYPE_##a, XML_PROP_TYPE_##END, \
         XML_PROP_TYPE_END, XML_PROP_TYPE_END }
 
-static const XMLPropType aPropTypes[XML_FAMILY_TYPE_END][MAX_PROP_TYPES] =
+static const std::array<XMLPropType,MAX_PROP_TYPES> aPropTypes[XML_FAMILY_TYPE_END] =
 {
     ENTRY3( GRAPHIC, PARAGRAPH, TEXT ),         // XML_FAMILY_TYPE_GRAPHIC,
     ENTRY3( GRAPHIC, PARAGRAPH, TEXT ),         // XML_FAMILY_TYPE_PRESENTATION,
@@ -85,7 +87,6 @@ static const XMLPropType aPropTypes[XML_FAMILY_TYPE_END][MAX_PROP_TYPES] =
     ENTRY1( END ),                              // XML_FAMILY_TYPE_FILL_IMAGE,
     ENTRY1( END ),                              // XML_FAMILY_TYPE_STROKE_DASH,
     ENTRY1( END ),                              // XML_FAMILY_TYPE_MARKER,
-    ENTRY1( END )                               // XML_FAMILY_TYPE_PRESENTATION_PAGE_LAYOUT,
 };
 
 static const XMLTokenEnum aPropTokens[XML_PROP_TYPE_END] =
@@ -150,8 +151,6 @@ public:
     XMLTypedPropertiesOOoTContext_Impl( XMLTransformerBase& rTransformer,
                            const OUString& rQName );
 
-    virtual ~XMLTypedPropertiesOOoTContext_Impl();
-
     using XMLPersAttrListTContext::AddAttribute;
     void AddAttribute( const OUString &sName ,
                        const OUString &sValue );
@@ -168,10 +167,6 @@ XMLTypedPropertiesOOoTContext_Impl::XMLTypedPropertiesOOoTContext_Impl(
     const OUString& rQName ) :
     XMLPersElemContentTContext( rImp, rQName ),
     m_xAttrList( new XMLMutableAttributeList() )
-{
-}
-
-XMLTypedPropertiesOOoTContext_Impl::~XMLTypedPropertiesOOoTContext_Impl()
 {
 }
 
@@ -215,11 +210,11 @@ class XMLPropertiesOOoTContext_Impl : public XMLTransformerContext
     ::rtl::Reference < XMLTypedPropertiesOOoTContext_Impl >
         m_aPropContexts[MAX_PROP_TYPES];
 
-    typedef XMLPropType XMLPropTypes[MAX_PROP_TYPES];
+    using XMLPropTypes = std::array<XMLPropType, MAX_PROP_TYPES>;
 
-    XMLPropTypes m_aPropTypes;
+    XMLPropTypes const & m_rPropTypes;
 
-    bool m_bPersistent;
+    bool const m_bPersistent;
 
     XMLTypedPropertiesOOoTContext_Impl *GetPropContextAndAction(
             TransformerAction_Impl& rAction,
@@ -234,8 +229,6 @@ public:
                            const OUString& rQName,
                                const XMLPropTypes& rTypes,
                                bool bPersistent );
-
-    virtual ~XMLPropertiesOOoTContext_Impl();
 
     rtl::Reference<XMLTransformerContext> CreateChildContext(
             sal_uInt16 nPrefix,
@@ -261,7 +254,7 @@ XMLTypedPropertiesOOoTContext_Impl
     sal_uInt16 nIndex = MAX_PROP_TYPES;
     for( sal_uInt16 i=0; i< MAX_PROP_TYPES; i++ )
     {
-        if( m_aPropTypes[i] == eType )
+        if( m_rPropTypes[i] == eType )
         {
             nIndex = i;
             break;
@@ -278,7 +271,7 @@ XMLTypedPropertiesOOoTContext_Impl
                     GetTransformer().GetNamespaceMap().GetQNameByKey(
                         XML_NAMESPACE_STYLE,
                         ::xmloff::token::GetXMLToken(
-                            aPropTokens[m_aPropTypes[nIndex]] ) ));
+                            aPropTokens[m_rPropTypes[nIndex]] ) ));
     }
 
     return m_aPropContexts[nIndex].get();
@@ -295,10 +288,10 @@ XMLTypedPropertiesOOoTContext_Impl
 
     XMLTransformerActions::key_type aKey( nPrefix, rLocalName );
     sal_uInt16 i=0;
-    while( i < MAX_PROP_TYPES && XML_PROP_TYPE_END!=m_aPropTypes[i])
+    while( i < MAX_PROP_TYPES && XML_PROP_TYPE_END!=m_rPropTypes[i])
     {
         sal_uInt16 nActionMap =
-            (bElem ? aElemActionMaps : aAttrActionMaps)[m_aPropTypes[i]];
+            (bElem ? aElemActionMaps : aAttrActionMaps)[m_rPropTypes[i]];
         if( nActionMap < MAX_OOO_PROP_ACTIONS )
         {
             XMLTransformerActions *pActions =
@@ -323,25 +316,16 @@ XMLTypedPropertiesOOoTContext_Impl
 #ifdef DBG_UTIL
     if( !( XML_NAMESPACE_NONE == nPrefix ||
                 (XML_NAMESPACE_UNKNOWN_FLAG & nPrefix) ||
-                XML_PROP_TYPE_END==m_aPropTypes[1] ||
-                (i<MAX_PROP_TYPES && XML_PROP_TYPE_END!=m_aPropTypes[i]) ) )
+                XML_PROP_TYPE_END==m_rPropTypes[1] ||
+                (i<MAX_PROP_TYPES && XML_PROP_TYPE_END!=m_rPropTypes[i]) ) )
     {
-        OString aTmp("Didn't find property: ");
-        const OUString& rPrefix =
-            GetTransformer().GetNamespaceMap().GetPrefixByKey( nPrefix );
-        aTmp += OString( rPrefix.getStr(), rPrefix.getLength(),
-                                RTL_TEXTENCODING_ASCII_US );
-        aTmp += OString( ':' );
-        aTmp += OString( rLocalName.getStr(), rLocalName.getLength(),
-                                RTL_TEXTENCODING_ASCII_US );
-        aTmp += OString(", assuming <style:");
-        const OUString& rName =
-            ::xmloff::token::GetXMLToken( aPropTokens[m_aPropTypes[0]] );
-        aTmp += OString( rName.getStr(), rName.getLength(),
-                                RTL_TEXTENCODING_ASCII_US );
-        aTmp += OString( '>' );
-
-        OSL_FAIL(aTmp.getStr());
+        SAL_WARN("xmloff", "Didn't find property: "
+                << GetTransformer().GetNamespaceMap().GetPrefixByKey( nPrefix )
+                << ":"
+                << rLocalName
+                << ", assuming <style:"
+                << ::xmloff::token::GetXMLToken( aPropTokens[m_rPropTypes[0]] )
+                << ">" );
     }
 #endif
 
@@ -353,7 +337,7 @@ XMLTypedPropertiesOOoTContext_Impl
                     GetTransformer().GetNamespaceMap().GetQNameByKey(
                         XML_NAMESPACE_STYLE,
                         ::xmloff::token::GetXMLToken(
-                            aPropTokens[m_aPropTypes[nIndex]] ) ));
+                            aPropTokens[m_rPropTypes[nIndex]] ) ));
     }
 
     return m_aPropContexts[nIndex].get();
@@ -365,16 +349,9 @@ XMLPropertiesOOoTContext_Impl::XMLPropertiesOOoTContext_Impl(
     const XMLPropTypes& rTypes,
     bool bPersistent    ) :
     XMLTransformerContext( rImp, rQName ),
+    // remember the types that belong to the attribute and element lists
+    m_rPropTypes(rTypes),
     m_bPersistent( bPersistent )
-{
-    for( sal_uInt16 i=0; i < MAX_PROP_TYPES; ++i )
-    {
-        // remember the types that belong to the attribute and element lists
-        m_aPropTypes[i] = rTypes[i];
-    }
-}
-
-XMLPropertiesOOoTContext_Impl::~XMLPropertiesOOoTContext_Impl()
 {
 }
 
@@ -392,8 +369,6 @@ rtl::Reference<XMLTransformerContext> XMLPropertiesOOoTContext_Impl::CreateChild
 void XMLPropertiesOOoTContext_Impl::StartElement(
         const Reference< XAttributeList >& rAttrList )
 {
-    Reference< XAttributeList > xAttrList( rAttrList );
-
     XMLTypedPropertiesOOoTContext_Impl * pIntervalMinorDivisorContext = nullptr;
     double fIntervalMajor = 0.0;
     double fIntervalMinor = 0.0;
@@ -407,16 +382,16 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
        produces styles with both attributes. (#i49139#)
     */
     bool bExistStyleMirror( false );
-    OUString aStyleMirrorAttrValue;
+    OUStringBuffer aStyleMirrorAttrValue;
     bool bExistDrawMirror( false );
     OUString aDrawMirrorAttrValue;
     XMLTypedPropertiesOOoTContext_Impl* pMirrorContext( nullptr );
 
-    sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
+    sal_Int16 nAttrCount = rAttrList.is() ? rAttrList->getLength() : 0;
     for( sal_Int16 i=0; i < nAttrCount; i++ )
     {
-        const OUString sAttrName = xAttrList->getNameByIndex( i );
-        const OUString sAttrValue = xAttrList->getValueByIndex( i );
+        const OUString sAttrName = rAttrList->getNameByIndex( i );
+        const OUString sAttrValue = rAttrList->getValueByIndex( i );
         OUString aLocalName;
         sal_uInt16 nPrefix =
             GetTransformer().GetNamespaceMap().GetKeyByAttrName( sAttrName,
@@ -435,7 +410,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
             {
                 pContext->AddAttribute( sAttrName, sAttrValue );
                 XMLTypedPropertiesOOoTContext_Impl *pContext2 =
-                    GetPropContext( (XMLPropType)aAction.m_nParam1 );
+                    GetPropContext( static_cast<XMLPropType>(aAction.m_nParam1) );
                 if( pContext2 )
                     pContext2->AddAttribute( sAttrName, sAttrValue );
             }
@@ -492,7 +467,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
                 XMLTransformerBase::ReplaceSingleInchWithIn( aAttrValue );
                 pContext->AddAttribute( sAttrName, aAttrValue );
                 XMLTypedPropertiesOOoTContext_Impl *pContext2 =
-                    GetPropContext( (XMLPropType)aAction.m_nParam1 );
+                    GetPropContext( static_cast<XMLPropType>(aAction.m_nParam1) );
                 if( pContext2 )
                     pContext2->AddAttribute( sAttrName, aAttrValue );
             }
@@ -506,7 +481,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
             break;
         case XML_PTACTION_LINE_MODE:
             {
-                OUString aAttrValue( GetXMLToken(
+                const OUString& aAttrValue( GetXMLToken(
                                         IsXMLToken( sAttrValue, XML_TRUE )
                                             ? XML_CONTINUOUS
                                             : XML_SKIP_WHITE_SPACE) );
@@ -525,7 +500,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
             break;
         case XML_PTACTION_KEEP_WITH_NEXT:
             {
-                OUString aAttrValue( GetXMLToken(
+                const OUString& aAttrValue( GetXMLToken(
                                         IsXMLToken( sAttrValue, XML_TRUE )
                                             ? XML_ALWAYS
                                             : XML_AUTO) );
@@ -812,12 +787,13 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
                 XMLPersAttrListTContext *pSymbolImageContext = new XMLPersAttrListTContext(
                     GetTransformer(), GetTransformer().GetNamespaceMap().GetQNameByKey(
                         XML_NAMESPACE_CHART, GetXMLToken( XML_SYMBOL_IMAGE )));
+                rtl::Reference<XMLTransformerContext> xSymbolImageContext(pSymbolImageContext);
 
                 OUString aAttrValue( sAttrValue );
                 if( GetTransformer().ConvertURIToOASIS( aAttrValue, true ))
                 {
                     pSymbolImageContext->AddAttribute( XML_NAMESPACE_XLINK, XML_HREF, aAttrValue );
-                    pContext->AddContent( pSymbolImageContext );
+                    pContext->AddContent(xSymbolImageContext);
                 }
             }
             break;
@@ -900,20 +876,20 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
                 {
                     if ( !aStyleMirrorAttrValue.isEmpty() )
                     {
-                        aStyleMirrorAttrValue += " ";
+                        aStyleMirrorAttrValue.append(" ");
                     }
 
                     if ( IsXMLToken( aToken, XML_HORIZONTAL_ON_LEFT_PAGES ) )
                     {
-                        aStyleMirrorAttrValue += GetXMLToken( XML_HORIZONTAL_ON_EVEN );
+                        aStyleMirrorAttrValue.append(GetXMLToken( XML_HORIZONTAL_ON_EVEN ));
                     }
                     else if ( IsXMLToken( aToken, XML_HORIZONTAL_ON_RIGHT_PAGES ) )
                     {
-                        aStyleMirrorAttrValue += GetXMLToken( XML_HORIZONTAL_ON_ODD );
+                        aStyleMirrorAttrValue.append(GetXMLToken( XML_HORIZONTAL_ON_ODD ));
                     }
                     else
                     {
-                        aStyleMirrorAttrValue += aToken;
+                        aStyleMirrorAttrValue.append(aToken);
                     }
                 }
                 bExistStyleMirror = true;
@@ -923,7 +899,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
         case XML_ATACTION_GAMMA_OOO:        // converts double value to percentage
             {
                 double fValue = sAttrValue.toDouble();
-                sal_Int32 nValue = (sal_Int32)((fValue * 100.0) + ( fValue > 0 ? 0.5 : - 0.5 ) );
+                sal_Int32 nValue = static_cast<sal_Int32>((fValue * 100.0) + ( fValue > 0 ? 0.5 : - 0.5 ) );
 
                 OUStringBuffer aOut;
                 ::sax::Converter::convertPercent( aOut, nValue );
@@ -961,7 +937,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
         pMirrorContext->AddAttribute(
                         GetTransformer().GetNamespaceMap().GetQNameByKey(
                                 XML_NAMESPACE_STYLE, GetXMLToken( XML_MIRROR ) ),
-                        aStyleMirrorAttrValue);
+                        aStyleMirrorAttrValue.makeStringAndClear());
     }
     else if ( bExistDrawMirror )
     {
@@ -992,7 +968,7 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
             aProtectAttrValue += rSize;
         }
 
-        // coverity[var_deref_model] - pProtectContext is assigned in a superset of the enclosing if condition entry logic
+        assert(pProtectContext && "coverity[var_deref_model] - pProtectContext should be assigned in a superset of the enclosing if condition entry logic");
         pProtectContext->AddAttribute( GetTransformer().GetNamespaceMap().GetQNameByKey( XML_NAMESPACE_STYLE, GetXMLToken( XML_PROTECT ) ), aProtectAttrValue );
     }
 
@@ -1003,13 +979,11 @@ void XMLPropertiesOOoTContext_Impl::StartElement(
             sal_Int32 nIntervalMinorDivisor = static_cast< sal_Int32 >(
                 ::rtl::math::round( fIntervalMajor / fIntervalMinor ));
 
-            OUStringBuffer aBuf;
-            ::sax::Converter::convertNumber( aBuf, nIntervalMinorDivisor );
             pIntervalMinorDivisorContext->AddAttribute(
                 GetTransformer().GetNamespaceMap().GetQNameByKey(
                     XML_NAMESPACE_CHART,
                     GetXMLToken( XML_INTERVAL_MINOR_DIVISOR )),
-                aBuf.makeStringAndClear());
+                OUString::number( nIntervalMinorDivisor ));
         }
     }
 }
@@ -1028,10 +1002,10 @@ void XMLPropertiesOOoTContext_Impl::Characters( const OUString& )
 void XMLPropertiesOOoTContext_Impl::Export()
 {
 
-    for( sal_uInt16 i=0; i < MAX_PROP_TYPES; i++ )
+    for(rtl::Reference<XMLTypedPropertiesOOoTContext_Impl> & rPropContext : m_aPropContexts)
     {
-        if( m_aPropContexts[i].is() )
-            m_aPropContexts[i]->Export();
+        if( rPropContext.is() )
+            rPropContext->Export();
     }
 }
 
@@ -1268,8 +1242,7 @@ void XMLStyleOOoTContext::StartElement(
     if( m_bPersistent )
         XMLPersElemContentTContext::StartElement( xAttrList );
     else
-        GetTransformer().GetDocHandler()->startElement( GetExportQName(),
-                                                        xAttrList );
+        GetTransformer().GetDocHandler()->startElement( GetExportQName(), xAttrList );
 }
 
 void XMLStyleOOoTContext::EndElement()
@@ -1293,7 +1266,7 @@ bool XMLStyleOOoTContext::IsPersistent() const
 XMLTransformerActions *XMLStyleOOoTContext::CreateTransformerActions(
         sal_uInt16 nType )
 {
-    XMLTransformerActionInit *pInit = nullptr;
+    XMLTransformerActionInit const *pInit = nullptr;
 
     switch( nType )
     {

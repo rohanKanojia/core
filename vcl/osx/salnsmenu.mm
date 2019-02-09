@@ -18,14 +18,15 @@
  */
 
 #include <sal/config.h>
+#include <osl/diagnose.h>
 
 #include <vcl/window.hxx>
 
-#include "osx/salinst.h"
-#include "osx/saldata.hxx"
-#include "osx/salframe.h"
-#include "osx/salmenu.h"
-#include "osx/salnsmenu.h"
+#include <osx/salinst.h>
+#include <osx/saldata.hxx>
+#include <osx/salframe.h>
+#include <osx/salmenu.h>
+#include <osx/salnsmenu.h>
 
 @implementation SalNSMenu
 -(id)initWithMenu: (AquaSalMenu*)pMenu
@@ -36,7 +37,6 @@
 
 -(void)menuNeedsUpdate: (NSMenu*)pMenu
 {
-    (void)pMenu;
     SolarMutexGuard aGuard;
 
     if( mpMenu )
@@ -49,8 +49,8 @@
             aMenuEvt.mpMenu = mpMenu->mpVCLMenu;
             if( aMenuEvt.mpMenu )
             {
-                pFrame->CallCallback(SALEVENT_MENUACTIVATE, &aMenuEvt);
-                pFrame->CallCallback(SALEVENT_MENUDEACTIVATE, &aMenuEvt);
+                pFrame->CallCallback(SalEvent::MenuActivate, &aMenuEvt);
+                pFrame->CallCallback(SalEvent::MenuDeactivate, &aMenuEvt);
             }
             else
                 OSL_FAIL( "unconnected menu" );
@@ -58,6 +58,7 @@
         else if( mpMenu->mpVCLMenu )
         {
             mpMenu->mpVCLMenu->Activate();
+            mpMenu->mpVCLMenu->Deactivate();
 
             // Hide disabled items
             NSArray* elements = [pMenu itemArray];
@@ -94,18 +95,45 @@
     (void)aSender;
     SolarMutexGuard aGuard;
 
+    // tdf#49853 Keyboard shortcuts are also handled by the menu bar, but at least some of them
+    // must still end up in the view. This is necessary to handle common edit actions in docked
+    // windows (e.g. in toolbar fields).
+    NSEvent* pEvent = [NSApp currentEvent];
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // 'NSAlternateKeyMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSCommandKeyMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSControlKeyMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSKeyDown' is deprecated: first deprecated in macOS 10.12
+        // 'NSShiftKeyMask' is deprecated: first deprecated in macOS 10.12
+    if( pEvent && [pEvent type] == NSKeyDown )
+    {
+        unsigned int nModMask = ([pEvent modifierFlags] & (NSShiftKeyMask|NSControlKeyMask|NSAlternateKeyMask|NSCommandKeyMask));
+        NSString* charactersIgnoringModifiers = [pEvent charactersIgnoringModifiers];
+        if( nModMask == NSCommandKeyMask &&
+          ( [charactersIgnoringModifiers isEqualToString: @"v"] ||
+            [charactersIgnoringModifiers isEqualToString: @"c"] ||
+            [charactersIgnoringModifiers isEqualToString: @"x"] ||
+            [charactersIgnoringModifiers isEqualToString: @"a"] ||
+            [charactersIgnoringModifiers isEqualToString: @"z"] ) )
+        {
+            [[[NSApp keyWindow] contentView] keyDown: pEvent];
+            return;
+        }
+    }
+SAL_WNODEPRECATED_DECLARATIONS_POP
+
     const AquaSalFrame* pFrame = mpMenuItem->mpParentMenu ? mpMenuItem->mpParentMenu->getFrame() : nullptr;
     if( pFrame && AquaSalFrame::isAlive( pFrame ) && ! pFrame->GetWindow()->IsInModalMode() )
     {
         SalMenuEvent aMenuEvt( mpMenuItem->mnId, mpMenuItem->mpVCLMenu );
-        pFrame->CallCallback(SALEVENT_MENUCOMMAND, &aMenuEvt);
+        pFrame->CallCallback(SalEvent::MenuCommand, &aMenuEvt);
     }
     else if( mpMenuItem->mpVCLMenu )
     {
         // if an item from submenu was selected. the corresponding Window does not exist because
         // we use native popup menus, so we have to set the selected menuitem directly
         // incidentally this of course works for top level popup menus, too
-        PopupMenu * pPopupMenu = dynamic_cast<PopupMenu *>(mpMenuItem->mpVCLMenu);
+        PopupMenu * pPopupMenu = dynamic_cast<PopupMenu *>(mpMenuItem->mpVCLMenu.get());
         if( pPopupMenu )
         {
             // FIXME: revise this ugly code
@@ -139,7 +167,12 @@
 {
     NSGraphicsContext* pContext = [NSGraphicsContext currentContext];
     [pContext saveGraphicsState];
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // "'drawStatusBarBackgroundInRect:withHighlight:' is deprecated: first deprecated in macOS
+        // 10.14 - Use the standard button instead which handles highlight drawing, making this
+        // method obsolete"
     [SalData::getStatusItem() drawStatusBarBackgroundInRect: aRect withHighlight: NO];
+SAL_WNODEPRECATED_DECLARATIONS_POP
     if( AquaSalMenu::pCurrentMenuBar )
     {
         const std::vector< AquaSalMenu::MenuBarButtonEntry >& rButtons( AquaSalMenu::pCurrentMenuBar->getButtons() );
@@ -152,7 +185,10 @@
             aImgRect.origin.y = floor((aFrame.size.height - aFromRect.size.height)/2);
             aImgRect.size = aFromRect.size;
             if( rButtons[i].mpNSImage )
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+    // 'NSCompositeSourceOver' is deprecated: first deprecated in macOS 10.12
                 [rButtons[i].mpNSImage drawInRect: aImgRect fromRect: aFromRect operation: NSCompositeSourceOver fraction: 1.0];
+SAL_WNODEPRECATED_DECLARATIONS_POP
             aImgRect.origin.x += aFromRect.size.width + 2;
         }
     }
@@ -180,7 +216,7 @@
                 if( AquaSalMenu::pCurrentMenuBar->mpFrame && AquaSalFrame::isAlive( AquaSalMenu::pCurrentMenuBar->mpFrame ) )
                 {
                     SalMenuEvent aMenuEvt( rButtons[i].maButton.mnId, AquaSalMenu::pCurrentMenuBar->mpVCLMenu );
-                    AquaSalMenu::pCurrentMenuBar->mpFrame->CallCallback(SALEVENT_MENUBUTTONCOMMAND, &aMenuEvt);
+                    AquaSalMenu::pCurrentMenuBar->mpFrame->CallCallback(SalEvent::MenuButtonCommand, &aMenuEvt);
                 }
                 return;
             }
@@ -203,7 +239,7 @@
             aSize.width = 2;
             for( size_t i = 0; i < rButtons.size(); ++i )
             {
-                NSRect aImgRect = { { static_cast<CGFloat>(aSize.width),
+                NSRect aImgRect = { { aSize.width,
                                       static_cast<CGFloat>(floor((aSize.height-rButtons[i].maButton.maImage.GetSizePixel().Height())/2)) },
                                     { static_cast<CGFloat>(rButtons[i].maButton.maImage.GetSizePixel().Width()),
                                       static_cast<CGFloat>(rButtons[i].maButton.maImage.GetSizePixel().Height()) } };

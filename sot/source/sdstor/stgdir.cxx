@@ -20,7 +20,7 @@
 
 #include <string.h>
 
-#include "sot/stg.hxx"
+#include <sot/stg.hxx>
 #include "stgelem.hxx"
 #include "stgcache.hxx"
 #include "stgstrms.hxx"
@@ -45,8 +45,8 @@
 // Committing means copying aEntry to aSave. Reverting means to copy aSave
 // to aEntry, delete newly created entries and to reactivate removed entries.
 
-// Problem der Implementation: Keine Hierarchischen commits. Daher nur
-// insgesamt transaktionsorientert oder direkt.
+// Problem of implementation: No hierarchical commits. Therefore only
+// overall transaction-oriented or direct.
 
 StgDirEntry::StgDirEntry( const void* pBuffer, sal_uInt32 nBufferLen, sal_uInt64 nUnderlyingStreamSize, bool * pbOk ) : StgAvlNode()
 {
@@ -67,7 +67,6 @@ void StgDirEntry::InitMembers()
     m_aSave       = m_aEntry;
     m_pUp         =
     m_pDown       = nullptr;
-    m_ppRoot      = nullptr;
     m_pStgStrm    = nullptr;
     m_pCurStrm    =
     m_pTmpStrm    = nullptr;
@@ -77,8 +76,6 @@ void StgDirEntry::InitMembers()
     m_nMode       = StreamMode::READ;
     m_bDirect     = true;
     m_bInvalid    =
-    m_bCreated    =
-    m_bRenamed    =
     m_bRemoved    =
     m_bTemp       =
     m_bDirty      =
@@ -95,9 +92,9 @@ StgDirEntry::~StgDirEntry()
 
 // Comparison function
 
-short StgDirEntry::Compare( const StgAvlNode* p ) const
+sal_Int32 StgDirEntry::Compare( const StgAvlNode* p ) const
 {
-    short nResult = -1;
+    sal_Int32 nResult = -1;
     if ( p )
     {
         const StgDirEntry* pEntry = static_cast<const StgDirEntry*>(p);
@@ -151,20 +148,19 @@ void StgDirEntry::DelTemp( bool bForce )
             bForce = true;
         m_pDown->DelTemp( bForce );
     }
-    if( ( bForce || m_bInvalid )
-     && ( m_aEntry.GetType() != STG_ROOT ) /* && ( nRefCnt <= 1 ) */ )
+    if( !( bForce || m_bInvalid ) || ( m_aEntry.GetType() == STG_ROOT ) )
+        return;
+
+    Close();
+    if( m_pUp )
     {
-        Close();
-        if( m_pUp )
+        // this deletes the element if refcnt == 0!
+        bool bDel = m_nRefCnt == 0;
+        StgAvlNode::Remove( reinterpret_cast<StgAvlNode**>(&m_pUp->m_pDown), this, bDel );
+        if( !bDel )
         {
-            // this deletes the element if refcnt == 0!
-            bool bDel = m_nRefCnt == 0;
-            StgAvlNode::Remove( reinterpret_cast<StgAvlNode**>(&m_pUp->m_pDown), this, bDel );
-            if( !bDel )
-            {
-                m_pLeft = m_pRight = m_pDown = nullptr;
-                m_bInvalid = m_bZombie = true;
-            }
+            m_pLeft = m_pRight = m_pDown = nullptr;
+            m_bInvalid = m_bZombie = true;
         }
     }
 }
@@ -184,9 +180,8 @@ bool StgDirEntry::Store( StgDirStrm& rStrm )
     if( m_pRight )
         if( !static_cast<StgDirEntry*>(m_pRight)->Store( rStrm ) )
             return false;
-    if( m_pDown )
-        if( !m_pDown->Store( rStrm ) )
-            return false;
+    if( m_pDown && !m_pDown->Store( rStrm ) )
+        return false;
     return true;
 }
 
@@ -263,7 +258,7 @@ bool StgDirEntry::IsDirty()
 
 void StgDirEntry::OpenStream( StgIo& rIo )
 {
-    sal_Int32 nThreshold = (sal_uInt16) rIo.m_aHdr.GetThreshold();
+    sal_Int32 nThreshold = static_cast<sal_uInt16>(rIo.m_aHdr.GetThreshold());
     delete m_pStgStrm;
     if( m_aEntry.GetSize() < nThreshold )
         m_pStgStrm = new StgSmallStrm( rIo, *this );
@@ -272,7 +267,7 @@ void StgDirEntry::OpenStream( StgIo& rIo )
     if( m_bInvalid && m_aEntry.GetSize() )
     {
         // This entry has invalid data, so delete that data
-        SetSize( 0L );
+        SetSize( 0 );
 //      bRemoved = bInvalid = false;
     }
     m_nPos = 0;
@@ -281,7 +276,7 @@ void StgDirEntry::OpenStream( StgIo& rIo )
 // Close the open stream without committing. If the entry is marked as
 // temporary, delete it.
 // Do not delete pCurStrm here!
-// (TLX:??? Zumindest pStgStrm muss deleted werden.)
+// (TLX:??? At least pStgStrm must be deleted.)
 
 void StgDirEntry::Close()
 {
@@ -293,7 +288,7 @@ void StgDirEntry::Close()
 
 // Get the current stream size
 
-sal_Int32 StgDirEntry::GetSize()
+sal_Int32 StgDirEntry::GetSize() const
 {
     sal_Int32 n;
     if( m_pTmpStrm )
@@ -322,7 +317,7 @@ bool StgDirEntry::SetSize( sal_Int32 nNewSize )
     {
         m_pTmpStrm->SetSize( nNewSize );
         m_pStgStrm->GetIo().SetError( m_pTmpStrm->GetError() );
-        return m_pTmpStrm->GetError() == SVSTREAM_OK;
+        return m_pTmpStrm->GetError() == ERRCODE_NONE;
     }
     else
     {
@@ -339,13 +334,13 @@ bool StgDirEntry::SetSize( sal_Int32 nNewSize )
         if( nNewSize >= nThreshold && m_pStgStrm->IsSmallStrm() )
         {
             pOld = m_pStgStrm;
-            nOldSize = (sal_uInt16) pOld->GetSize();
+            nOldSize = static_cast<sal_uInt16>(pOld->GetSize());
             m_pStgStrm = new StgDataStrm( rIo, STG_EOF, 0 );
         }
         else if( nNewSize < nThreshold && !m_pStgStrm->IsSmallStrm() )
         {
             pOld = m_pStgStrm;
-            nOldSize = (sal_uInt16) nNewSize;
+            nOldSize = static_cast<sal_uInt16>(nNewSize);
             m_pStgStrm = new StgSmallStrm( rIo, STG_EOF );
         }
         // now set the new size
@@ -358,8 +353,8 @@ bool StgDirEntry::SetSize( sal_Int32 nNewSize )
                 if( nOldSize )
                 {
                     std::unique_ptr<sal_uInt8[]> pBuf(new sal_uInt8[ nOldSize ]);
-                    pOld->Pos2Page( 0L );
-                    m_pStgStrm->Pos2Page( 0L );
+                    pOld->Pos2Page( 0 );
+                    m_pStgStrm->Pos2Page( 0 );
                     if( pOld->Read( pBuf.get(), nOldSize )
                         && m_pStgStrm->Write( pBuf.get(), nOldSize ) )
                         bRes = true;
@@ -417,13 +412,11 @@ sal_Int32 StgDirEntry::Seek( sal_Int32 nNew )
         if( nNew < 0 )
             nNew = nSize;
 
-        // try to enlarge, the readonly streams should not allow this
+        // try to enlarge, readonly streams do not allow this
         if( nNew > nSize )
         {
             if ( !( m_nMode & StreamMode::WRITE ) || !SetSize( nNew ) )
             {
-                SAL_WARN_IF(!(m_nMode & StreamMode::WRITE), "sot",
-                    "Trying to resize readonly stream by seeking, could be a wrong offset: " << nNew);
                 return m_nPos;
             }
             else
@@ -443,9 +436,9 @@ sal_Int32 StgDirEntry::Read( void* p, sal_Int32 nLen )
     if( nLen <= 0 )
         return 0;
     if( m_pTmpStrm )
-        nLen = m_pTmpStrm->Read( p, nLen );
+        nLen = m_pTmpStrm->ReadBytes( p, nLen );
     else if( m_pCurStrm )
-        nLen = m_pCurStrm->Read( p, nLen );
+        nLen = m_pCurStrm->ReadBytes( p, nLen );
     else
     {
         OSL_ENSURE( m_pStgStrm, "The pointer may not be NULL!" );
@@ -479,7 +472,7 @@ sal_Int32 StgDirEntry::Write( const void* p, sal_Int32 nLen )
 
     if( m_pTmpStrm )
     {
-        nLen = m_pTmpStrm->Write( p, nLen );
+        nLen = m_pTmpStrm->WriteBytes( p, nLen );
         m_pStgStrm->GetIo().SetError( m_pTmpStrm->GetError() );
     }
     else
@@ -500,26 +493,26 @@ sal_Int32 StgDirEntry::Write( const void* p, sal_Int32 nLen )
 void StgDirEntry::Copy( BaseStorageStream& rDest )
 {
     sal_Int32 n = GetSize();
-    if( rDest.SetSize( n ) && n )
+    if( !(rDest.SetSize( n ) && n) )
+        return;
+
+    sal_uLong Pos = rDest.Tell();
+    sal_uInt8 aTempBytes[ 4096 ];
+    void* p = static_cast<void*>( aTempBytes );
+    Seek( 0 );
+    rDest.Seek( 0 );
+    while( n )
     {
-        sal_uLong Pos = rDest.Tell();
-        sal_uInt8 aTempBytes[ 4096 ];
-        void* p = static_cast<void*>( aTempBytes );
-        Seek( 0L );
-        rDest.Seek( 0L );
-        while( n )
-        {
-            sal_Int32 nn = n;
-            if( nn > 4096 )
-                nn = 4096;
-            if( Read( p, nn ) != nn )
-                break;
-            if( sal::static_int_cast<sal_Int32>(rDest.Write( p, nn )) != nn )
-                break;
-            n -= nn;
-        }
-        rDest.Seek( Pos );             // ?! Seems to be undocumented !
+        sal_Int32 nn = n;
+        if( nn > 4096 )
+            nn = 4096;
+        if( Read( p, nn ) != nn )
+            break;
+        if( sal::static_int_cast<sal_Int32>(rDest.Write( p, nn )) != nn )
+            break;
+        n -= nn;
     }
+    rDest.Seek( Pos );             // ?! Seems to be undocumented !
 }
 
 // Commit this entry
@@ -563,7 +556,7 @@ bool StgDirEntry::Strm2Tmp()
         {
             // It was already committed once
             m_pTmpStrm = new StgTmpStrm;
-            if( m_pTmpStrm->GetError() == SVSTREAM_OK && m_pTmpStrm->Copy( *m_pCurStrm ) )
+            if( m_pTmpStrm->GetError() == ERRCODE_NONE && m_pTmpStrm->Copy( *m_pCurStrm ) )
                 return true;
             n = 1;  // indicates error
         }
@@ -571,7 +564,7 @@ bool StgDirEntry::Strm2Tmp()
         {
             n = m_aEntry.GetSize();
             m_pTmpStrm = new StgTmpStrm( n );
-            if( m_pTmpStrm->GetError() == SVSTREAM_OK )
+            if( m_pTmpStrm->GetError() == ERRCODE_NONE )
             {
                 if( n )
                 {
@@ -581,15 +574,15 @@ bool StgDirEntry::Strm2Tmp()
 
                     sal_uInt8 aTempBytes[ 4096 ];
                     void* p = static_cast<void*>( aTempBytes );
-                    m_pStgStrm->Pos2Page( 0L );
+                    m_pStgStrm->Pos2Page( 0 );
                     while( n )
                     {
                         sal_uLong nn = n;
                         if( nn > 4096 )
                             nn = 4096;
-                        if( (sal_uLong) m_pStgStrm->Read( p, nn ) != nn )
+                        if( static_cast<sal_uLong>(m_pStgStrm->Read( p, nn )) != nn )
                             break;
-                        if( m_pTmpStrm->Write( p, nn ) != nn )
+                        if (m_pTmpStrm->WriteBytes( p, nn ) != nn)
                             break;
                         n -= nn;
                     }
@@ -630,26 +623,26 @@ bool StgDirEntry::Tmp2Strm()
         OSL_ENSURE( m_pStgStrm, "The pointer may not be NULL!" );
         if ( !m_pStgStrm )
             return false;
-        sal_uLong n = m_pTmpStrm->GetSize();
-        StgStrm* pNewStrm;
+        sal_uInt64 n = m_pTmpStrm->GetSize();
+        std::unique_ptr<StgStrm> pNewStrm;
         StgIo& rIo = m_pStgStrm->GetIo();
-        sal_uLong nThreshold = (sal_uLong) rIo.m_aHdr.GetThreshold();
+        sal_uLong nThreshold = static_cast<sal_uLong>(rIo.m_aHdr.GetThreshold());
         if( n < nThreshold )
-            pNewStrm = new StgSmallStrm( rIo, STG_EOF );
+            pNewStrm.reset(new StgSmallStrm( rIo, STG_EOF ));
         else
-            pNewStrm = new StgDataStrm( rIo, STG_EOF );
+            pNewStrm.reset(new StgDataStrm( rIo, STG_EOF ));
         if( pNewStrm->SetSize( n ) )
         {
             sal_uInt8 p[ 4096 ];
-            m_pTmpStrm->Seek( 0L );
+            m_pTmpStrm->Seek( 0 );
             while( n )
             {
-                sal_uLong nn = n;
+                sal_uInt64 nn = n;
                 if( nn > 4096 )
                     nn = 4096;
-                if( m_pTmpStrm->Read( p, nn ) != nn )
+                if (m_pTmpStrm->ReadBytes( p, nn ) != nn)
                     break;
-                if( (sal_uLong) pNewStrm->Write( p, nn ) != nn )
+                if( static_cast<sal_uLong>(pNewStrm->Write( p, nn )) != nn )
                     break;
                 n -= nn;
             }
@@ -657,42 +650,20 @@ bool StgDirEntry::Tmp2Strm()
             {
                 m_pTmpStrm->Seek( m_nPos );
                 m_pStgStrm->GetIo().SetError( m_pTmpStrm->GetError() );
-                delete pNewStrm;
                 return false;
             }
             else
             {
-                m_pStgStrm->SetSize( 0L );
+                m_pStgStrm->SetSize( 0 );
                 delete m_pStgStrm;
-                m_pStgStrm = pNewStrm;
-                pNewStrm->SetEntry( *this );
-                pNewStrm->Pos2Page( m_nPos );
+                m_pStgStrm = pNewStrm.release();
+                m_pStgStrm->SetEntry(*this);
+                m_pStgStrm->Pos2Page(m_nPos);
                 delete m_pTmpStrm;
                 delete m_pCurStrm;
                 m_pTmpStrm = m_pCurStrm = nullptr;
                 m_aSave = m_aEntry;
             }
-        }
-    }
-    return true;
-}
-
-// Check if the given entry is contained in this entry
-
-bool StgDirEntry::IsContained( StgDirEntry* pStg )
-{
-    if( m_aEntry.GetType() == STG_STORAGE )
-    {
-        StgIterator aIter( *this );
-        StgDirEntry* p = aIter.First();
-        while( p )
-        {
-            if( !p->m_aEntry.Compare( pStg->m_aEntry ) )
-                return false;
-            if( p->m_aEntry.GetType() == STG_STORAGE )
-                if( !p->IsContained( pStg ) )
-                    return false;
-            p = aIter.Next();
         }
     }
     return true;
@@ -729,11 +700,9 @@ void StgDirEntry::Invalidate( bool bDel )
 StgDirStrm::StgDirStrm( StgIo& r )
           : StgDataStrm( r, r.m_aHdr.GetTOCStart(), -1 )
           , m_pRoot( nullptr )
-          , m_nEntries( 0 )
 {
     if( r.GetError() )
         return;
-    m_nEntries = m_nPageSize / STGENTRY_SIZE;
     if( m_nStart == STG_EOF )
     {
         StgEntry aRoot;
@@ -762,89 +731,72 @@ StgDirStrm::~StgDirStrm()
 
 void StgDirStrm::SetupEntry( sal_Int32 n, StgDirEntry* pUpper )
 {
-    void* p = ( n == STG_FREE ) ? nullptr : GetEntry( n );
-    if( p )
+    void* p = ( n == STG_FREE ) ? nullptr : GetEntry( n, false );
+    if( !p )
+        return;
+
+    SvStream *pUnderlyingStream = m_rIo.GetStrm();
+    sal_uInt64 nUnderlyingStreamSize = pUnderlyingStream->TellEnd();
+
+    bool bOk(false);
+    std::unique_ptr<StgDirEntry> pCur(new StgDirEntry( p, STGENTRY_SIZE, nUnderlyingStreamSize, &bOk ));
+
+    if( !bOk )
     {
-        SvStream *pUnderlyingStream = m_rIo.GetStrm();
-        sal_uInt64 nCur = pUnderlyingStream->Tell();
-        sal_uInt64 nUnderlyingStreamSize = pUnderlyingStream->Seek(STREAM_SEEK_TO_END);
-        pUnderlyingStream->Seek(nCur);
+        m_rIo.SetError( SVSTREAM_GENERALERROR );
+        // an error occurred
+        return;
+    }
 
-        bool bOk(false);
-        StgDirEntry* pCur = new StgDirEntry( p, STGENTRY_SIZE, nUnderlyingStreamSize, &bOk );
+    // better it is
+    if( !pUpper )
+        pCur->m_aEntry.SetType( STG_ROOT );
 
-        if( !bOk )
+    sal_Int32 nLeft = pCur->m_aEntry.GetLeaf( STG_LEFT );
+    sal_Int32 nRight = pCur->m_aEntry.GetLeaf( STG_RIGHT );
+    // substorage?
+    sal_Int32 nLeaf = STG_FREE;
+    if( pCur->m_aEntry.GetType() == STG_STORAGE || pCur->m_aEntry.GetType() == STG_ROOT )
+    {
+        nLeaf = pCur->m_aEntry.GetLeaf( STG_CHILD );
+        if (nLeaf != STG_FREE && nLeaf == n)
         {
-            delete pCur;
             m_rIo.SetError( SVSTREAM_GENERALERROR );
-            // an error occurred
             return;
         }
-
-        // better it is
-        if( !pUpper )
-            pCur->m_aEntry.SetType( STG_ROOT );
-
-        sal_Int32 nLeft = pCur->m_aEntry.GetLeaf( STG_LEFT );
-        sal_Int32 nRight = pCur->m_aEntry.GetLeaf( STG_RIGHT );
-        // substorage?
-        sal_Int32 nLeaf = STG_FREE;
-        if( pCur->m_aEntry.GetType() == STG_STORAGE || pCur->m_aEntry.GetType() == STG_ROOT )
-        {
-            nLeaf = pCur->m_aEntry.GetLeaf( STG_CHILD );
-            if (nLeaf != STG_FREE && nLeaf == n)
-            {
-                delete pCur;
-                m_rIo.SetError( SVSTREAM_GENERALERROR );
-                return;
-            }
-        }
-
-        if( nLeaf != 0 && nLeft != 0 && nRight != 0 )
-        {
-            //fdo#41642 Do we need to check full chain upwards for loops ?
-            if (pUpper)
-            {
-                if (pUpper->m_aEntry.GetLeaf(STG_CHILD) == nLeaf)
-                {
-                    OSL_FAIL("Leaf node of upper StgDirEntry is same as current StgDirEntry's leaf node. Circular entry chain, discarding link");
-                    delete pCur;
-                    return;
-                }
-
-                StgDirEntry *pUpperUpper = pUpper->m_pUp;
-                if (pUpperUpper && pUpperUpper->m_aEntry.GetLeaf(STG_CHILD) == nLeaf)
-                {
-                    OSL_FAIL("Leaf node of upper-upper StgDirEntry is same as current StgDirEntry's leaf node. Circular entry chain, discarding link");
-                    delete pCur;
-                    return;
-                }
-            }
-
-            if( StgAvlNode::Insert
-                ( reinterpret_cast<StgAvlNode**>( pUpper ? &pUpper->m_pDown : &m_pRoot ), pCur ) )
-            {
-                pCur->m_pUp    = pUpper;
-                pCur->m_ppRoot = &m_pRoot;
-            }
-            else
-            {
-                // bnc#682484: There are some really broken docs out there
-                // that contain duplicate entries in 'Directory' section
-                // so don't set the error flag here and just skip those
-                // (was: rIo.SetError( SVSTREAM_CANNOT_MAKE );)
-                delete pCur;
-                return;
-            }
-            SetupEntry( nLeft, pUpper );
-            SetupEntry( nRight, pUpper );
-            SetupEntry( nLeaf, pCur );
-        }
-        else
-        {
-            delete pCur;
-        }
     }
+
+    if( !(nLeaf != 0 && nLeft != 0 && nRight != 0) )
+        return;
+
+    //fdo#41642
+    StgDirEntry *pUp = pUpper;
+    while (pUp)
+    {
+        if (pUp->m_aEntry.GetLeaf(STG_CHILD) == nLeaf)
+        {
+            SAL_WARN("sot", "Leaf node of upper StgDirEntry is same as current StgDirEntry's leaf node. Circular entry chain, discarding link");
+            return;
+        }
+        pUp = pUp->m_pUp;
+    }
+
+    if( StgAvlNode::Insert
+        ( reinterpret_cast<StgAvlNode**>( pUpper ? &pUpper->m_pDown : &m_pRoot ), pCur.get() ) )
+    {
+        pCur->m_pUp    = pUpper;
+    }
+    else
+    {
+        // bnc#682484: There are some really broken docs out there
+        // that contain duplicate entries in 'Directory' section
+        // so don't set the error flag here and just skip those
+        // (was: rIo.SetError( SVSTREAM_CANNOT_MAKE );)
+        return;
+    }
+    SetupEntry( nLeft, pUpper );
+    SetupEntry( nRight, pUpper );
+    SetupEntry( nLeaf, pCur.release() );
 }
 
 // Extend or shrink the directory stream.
@@ -874,7 +826,8 @@ bool StgDirStrm::Store()
     sal_Int32 nOldStart = m_nStart;       // save for later deletion
     sal_Int32 nOldSize  = m_nSize;
     m_nStart = m_nPage = STG_EOF;
-    m_nSize  = m_nPos = 0;
+    m_nSize = 0;
+    SetPos(0, true);
     m_nOffset = 0;
     // Delete all temporary entries
     m_pRoot->DelTemp( false );
@@ -935,11 +888,7 @@ StgDirEntry* StgDirStrm::Find( StgDirEntry& rStg, const OUString& rName )
     {
         StgEntry aEntry;
         aEntry.Init();
-        if( !aEntry.SetName( rName ) )
-        {
-            m_rIo.SetError( SVSTREAM_GENERALERROR );
-            return nullptr;
-        }
+        aEntry.SetName( rName );
         // Look in the directory attached to the entry
         StgDirEntry aTest( aEntry );
         return static_cast<StgDirEntry*>( rStg.m_pDown->Find( &aTest ) );
@@ -955,11 +904,7 @@ StgDirEntry* StgDirStrm::Create( StgDirEntry& rStg, const OUString& rName, StgEn
     StgEntry aEntry;
     aEntry.Init();
     aEntry.SetType( eType );
-    if( !aEntry.SetName( rName ) )
-    {
-        m_rIo.SetError( SVSTREAM_GENERALERROR );
-        return nullptr;
-    }
+    aEntry.SetName( rName );
     StgDirEntry* pRes = Find( rStg, rName );
     if( pRes )
     {
@@ -971,26 +916,24 @@ StgDirEntry* StgDirStrm::Create( StgDirEntry& rStg, const OUString& rName, StgEn
         pRes->m_bInvalid =
         pRes->m_bRemoved =
         pRes->m_bTemp    = false;
-        pRes->m_bCreated =
         pRes->m_bDirty   = true;
+        return pRes;
     }
     else
     {
-        pRes = new StgDirEntry( aEntry );
-        if( StgAvlNode::Insert( reinterpret_cast<StgAvlNode**>(&rStg.m_pDown), pRes ) )
+        std::unique_ptr<StgDirEntry> pNewRes(new StgDirEntry( aEntry ));
+        if( StgAvlNode::Insert( reinterpret_cast<StgAvlNode**>(&rStg.m_pDown), pNewRes.get() ) )
         {
-            pRes->m_pUp    = &rStg;
-            pRes->m_ppRoot = &m_pRoot;
-            pRes->m_bCreated =
-            pRes->m_bDirty = true;
+            pNewRes->m_pUp    = &rStg;
+            pNewRes->m_bDirty = true;
         }
         else
         {
             m_rIo.SetError( SVSTREAM_CANNOT_MAKE );
-            delete pRes; pRes = nullptr;
+            pNewRes.reset();
         }
+        return pNewRes.release();
     }
-    return pRes;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -21,10 +21,10 @@
 #include <typelib/typedescription.hxx>
 #include <uno/data.h>
 #include <osl/endian.h>
-#include "bridges/cpp_uno/shared/bridge.hxx"
-#include "bridges/cpp_uno/shared/cppinterfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/types.hxx"
-#include "bridges/cpp_uno/shared/vtablefactory.hxx"
+#include "bridge.hxx"
+#include "cppinterfaceproxy.hxx"
+#include "types.hxx"
+#include "vtablefactory.hxx"
 #include "call.hxx"
 #include "share.hxx"
 
@@ -38,7 +38,6 @@ using namespace com::sun::star::uno;
 #ifdef BRDEBUG
 #include <rtl/strbuf.hxx>
 #include <rtl/ustrbuf.hxx>
-#include <osl/mutex.hxx>
 using namespace ::std;
 using namespace ::osl;
 using namespace ::rtl;
@@ -51,8 +50,6 @@ using namespace ::rtl;
 #ifdef ANDROID
 #include <unistd.h>
 #endif
-
-using namespace ::com::sun::star::uno;
 
 namespace CPPU_CURRENT_NAMESPACE
 {
@@ -114,7 +111,7 @@ namespace
   {
     /*  Most MIPS ABIs view the arguments as a struct, of which the
         first N words go in registers and the rest go on the stack.  If I < N, the
-        Ith word might go in Ith integer argument register or the Ith
+        With word might go in With integer argument register or the With
         floating-point one.  For these ABIs, we only need to remember the number
         of words passed so far.  We are interested only in n64 ABI,so it is the
         case.
@@ -628,7 +625,7 @@ bridges::cpp_uno::shared::VtableFactory::mapBlockToVtable(void * block)
 }
 
 
-sal_Size bridges::cpp_uno::shared::VtableFactory::getBlockSize(
+std::size_t bridges::cpp_uno::shared::VtableFactory::getBlockSize(
     sal_Int32 slotCount)
 {
     return (slotCount + 2) * sizeof (Slot) + slotCount * codeSnippetSize;

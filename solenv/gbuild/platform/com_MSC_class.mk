@@ -40,29 +40,31 @@ $(call gb_Helper_abbreviate_dirs,\
 	mkdir -p $(dir $(1)) $(dir $(4)) && \
 	unset INCLUDE && \
 	$(if $(filter YES,$(CXXOBJECT_X64)), $(CXX_X64_BINARY), \
-		$(if $(filter %.c,$(3)), $(gb_CC), $(gb_CXX))) \
+		$(if $(filter YES,$(PE_X86)), $(CXX_X86_BINARY), \
+			$(if $(filter %.c,$(3)), $(gb_CC), \
+				$(if $(filter -clr,$(2)), \
+					$(MSVC_CXX) -I$(SRCDIR)/solenv/clang-cl,$(gb_CXX))))) \
 		$(DEFS) \
 		$(gb_LTOFLAGS) \
 		$(2) \
-		$(if $(EXTERNAL_CODE),$(if $(COM_IS_CLANG),-Wno-undef),$(gb_DEFS_INTERNAL)) \
-		$(if $(WARNINGS_NOT_ERRORS),,$(gb_CFLAGS_WERROR)) \
+		$(if $(EXTERNAL_CODE), \
+			$(if $(filter -clr,$(2)),,$(if $(COM_IS_CLANG),-Wno-undef)), \
+			$(gb_DEFS_INTERNAL)) \
+		$(if $(WARNINGS_NOT_ERRORS),$(if $(ENABLE_WERROR),$(if $(PLUGIN_WARNINGS_AS_ERRORS),$(gb_COMPILER_PLUGINS_WARNINGS_AS_ERRORS))),$(gb_CFLAGS_WERROR)) \
+		$(if $(filter -clr,$(2)),,$(if $(5),$(gb_COMPILER_PLUGINS))) \
+		$(if $(COMPILER_TEST),-fsyntax-only -ferror-limit=0 -Xclang -verify) \
 		-Fd$(PDBFILE) \
 		$(PCHFLAGS) \
-		$(gb_COMPILERDEPFLAGS) \
-		-I$(dir $(3)) \
+		$(if $(COMPILER_TEST),,$(gb_COMPILERDEPFLAGS)) \
 		$(INCLUDE) \
 		$(if $(filter YES,$(CXXOBJECT_X64)), -U_X86_ -D_AMD64_,) \
+		$(if $(filter YES,$(PE_X86)), -D_X86_ -U_AMD64_,) \
 		-c $(3) \
-		-Fo$(1)) $(call gb_create_deps,$(4),$(1),$(3))
+		-Fo$(1)) $(if $(filter $(true),$(gb_SYMBOL)),/link /DEBUG:FASTLINK) \
+		$(if $(COMPILER_TEST),,$(call gb_create_deps,$(4),$(1),$(3)))
 endef
 
 # PrecompiledHeader class
-
-# Note: MSVC has a race condition when dealing with .pdb files, that can result in error C1033 when
-# the .pdb file already exists and two cl.exe invocations try to modify it at the same time (which
-# is apparently most likely when generating both .pch files). The no-exceptions variant should be
-# rarely needed now, but in case this turns out to be a problem in practice, this will need to
-# be handled somehow (such as order-dependency of one on another).
 
 gb_PrecompiledHeader_get_enableflags = -Yu$(1).hxx \
 	-FI$(1).hxx \
@@ -82,7 +84,6 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(if $(EXTERNAL_CODE),$(if $(COM_IS_CLANG),-Wno-undef),$(gb_DEFS_INTERNAL)) \
 		$(gb_LTOFLAGS) \
 		$(gb_COMPILERDEPFLAGS) \
-		-I$(dir $(3)) \
 		$(6) \
 		-c $(3) \
 		-Yc$(notdir $(patsubst %.cxx,%.hxx,$(3))) -Fp$(1) -Fo$(1).obj) $(call gb_create_deps,$(call gb_PrecompiledHeader_get_dep_target_tmp,$(2)),$(1),$(3))
@@ -96,7 +97,7 @@ define gb_AsmObject__command
 $(call gb_Output_announce,$(2),$(true),ASM,3)
 $(call gb_Helper_abbreviate_dirs,\
 	mkdir -p $(dir $(1)) $(dir $(4)) && \
-	"$(ML_EXE)" /c /Cp $(gb_AFLAGS) -D$(COM) /Fo$(1) $(3)) && \
+	"$(ML_EXE)" /safeseh /c /Cp $(gb_AFLAGS) -D$(COM) /Fo$(1) $(3)) && \
 	echo "$(1) : $(3)" > $(4)
 endef
 
@@ -105,9 +106,10 @@ endef
 
 gb_LinkTarget_CFLAGS := $(gb_CFLAGS)
 gb_LinkTarget_CXXFLAGS := $(gb_CXXFLAGS)
+gb_LinkTarget_CXXCLRFLAGS := $(gb_CXXCLRFLAGS)
 
 gb_LinkTarget_INCLUDE :=\
-	$(subst -I. , ,$(SOLARINC)) \
+	$(SOLARINC) \
 	$(foreach inc,$(subst ;, ,$(JDKINC)),-I$(inc)) \
 	-I$(BUILDDIR)/config_$(gb_Side) \
 
@@ -148,6 +150,8 @@ else
 MSC_SUBSYSTEM_VERSION=$(COMMA)5.01
 endif
 
+# the sort on the libraries is used to filter out duplicates to keep commandline
+# length in check - otherwise the dupes easily hit the limit when linking mergedlib
 define gb_LinkTarget__command
 $(call gb_Output_announce,$(2),$(true),LNK,4)
 $(call gb_Helper_abbreviate_dirs,\
@@ -157,6 +161,8 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(foreach object,$(GENCXXOBJECTS),$(call gb_GenCxxObject_get_target,$(object))) \
 		$(foreach object,$(COBJECTS),$(call gb_CObject_get_target,$(object))) \
 		$(foreach object,$(GENCOBJECTS),$(call gb_GenCObject_get_target,$(object))) \
+		$(foreach object,$(CXXCLROBJECTS),$(call gb_CxxClrObject_get_target,$(object))) \
+		$(foreach object,$(GENCXXCLROBJECTS),$(call gb_GenCxxClrObject_get_target,$(object))) \
 		$(foreach object,$(ASMOBJECTS),$(call gb_AsmObject_get_target,$(object))) \
 		$(foreach extraobjectlist,$(EXTRAOBJECTLISTS),$(shell cat $(extraobjectlist))) \
 		$(PCHOBJS) $(NATIVERES)) && \
@@ -168,24 +174,31 @@ $(call gb_Helper_abbreviate_dirs,\
 		$(if $(filter Executable,$(TARGETTYPE)),$(gb_Executable_TARGETTYPEFLAGS)) \
 		$(if $(filter YES,$(LIBRARY_X64)),,$(if $(filter YES,$(TARGETGUI)), -SUBSYSTEM:WINDOWS$(MSC_SUBSYSTEM_VERSION), -SUBSYSTEM:CONSOLE$(MSC_SUBSYSTEM_VERSION))) \
 		$(if $(filter YES,$(LIBRARY_X64)), -MACHINE:X64) \
+		$(if $(filter YES,$(PE_X86)), -MACHINE:X86) \
 		$(if $(filter YES,$(LIBRARY_X64)), \
-			-LIBPATH:$(COMPATH)/lib/amd64 \
+			-LIBPATH:$(COMPATH)/lib/x64 \
 			-LIBPATH:$(WINDOWS_SDK_HOME)/lib/x64 \
-		    $(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x64) \
-		    $(if $(filter-out 120,$(VCVER)),-LIBPATH:$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/ucrt/x64)) \
+			-LIBPATH:$(UCRTSDKDIR)lib/$(UCRTVERSION)/ucrt/x64 \
+		    $(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x64)) \
+		$(if $(filter YES,$(PE_X86)), \
+			-LIBPATH:$(COMPATH)/lib/x86 \
+			-LIBPATH:$(WINDOWS_SDK_HOME)/lib/x86 \
+			-LIBPATH:$(UCRTSDKDIR)lib/$(UCRTVERSION)/ucrt/x86 \
+			$(if $(filter 80 81 10,$(WINDOWS_SDK_VERSION)),-LIBPATH:$(WINDOWS_SDK_HOME)/lib/$(WINDOWS_SDK_LIB_SUBDIR)/um/x86)) \
 		$(T_LDFLAGS) \
+		$(if $(filter Library CppunitTest Executable,$(TARGETTYPE)),/NATVIS:$(SRCDIR)/solenv/vs/LibreOffice.natvis) \
 		@$${RESPONSEFILE} \
-		$(foreach lib,$(LINKED_LIBS),$(call gb_Library_get_ilibfilename,$(lib))) \
-		$(foreach lib,$(LINKED_STATIC_LIBS),$(call gb_StaticLibrary_get_filename,$(lib))) \
+		$(foreach lib,$(sort $(LINKED_LIBS)),$(call gb_Library_get_ilibfilename,$(lib))) \
+		$(foreach lib,$(sort $(LINKED_STATIC_LIBS)),$(call gb_StaticLibrary_get_filename,$(lib))) \
 		$(if $(filter-out StaticLibrary,$(TARGETTYPE)),\
-			$(T_LIBS) user32.lib \
+			$(sort $(T_LIBS)) user32.lib \
 			-manifestfile:$(WORKDIR)/LinkTarget/$(2).manifest \
 			-pdb:$(call gb_LinkTarget__get_pdb_filename,$(WORKDIR)/LinkTarget/$(2))) \
 		$(if $(ILIBTARGET),-out:$(1) -implib:$(ILIBTARGET),-out:$(1)); RC=$$?; rm $${RESPONSEFILE} \
 	$(if $(filter Library,$(TARGETTYPE)),; if [ ! -f $(ILIBTARGET) ]; then rm -f $(1); exit 42; fi) \
-	$(if $(filter Library,$(TARGETTYPE)),&& if [ -f $(WORKDIR)/LinkTarget/$(2).manifest ]; then mt.exe $(MTFLAGS) -nologo -manifest $(WORKDIR)/LinkTarget/$(2).manifest -outputresource:$(1)\;2 && touch -r $(1) $(WORKDIR)/LinkTarget/$(2).manifest $(ILIBTARGET); fi) \
-	$(if $(filter Executable,$(TARGETTYPE)),&& if [ -f $(WORKDIR)/LinkTarget/$(2).manifest ]; then mt.exe $(MTFLAGS) -nologo -manifest $(WORKDIR)/LinkTarget/$(2).manifest -outputresource:$(1)\;1 && touch -r $(1) $(WORKDIR)/LinkTarget/$(2).manifest; fi) \
-	$(if $(filter YES,$(TARGETGUI)),&& if [ -f $(SRCDIR)/solenv/inc/DeclareDPIAware.manifest ]; then mt.exe $(MTFLAGS) -nologo -manifest $(SRCDIR)/solenv/inc/DeclareDPIAware.manifest -updateresource:$(1)\;1 ; fi) \
+	$(if $(filter Library,$(TARGETTYPE)),&& if [ -f $(WORKDIR)/LinkTarget/$(2).manifest ]; then mt.exe $(MTFLAGS) -nologo -manifest $(WORKDIR)/LinkTarget/$(2).manifest $(SRCDIR)/solenv/gbuild/platform/win_compatibility.manifest -outputresource:$(1)\;2 && touch -r $(1) $(WORKDIR)/LinkTarget/$(2).manifest $(ILIBTARGET); fi) \
+	$(if $(filter Executable,$(TARGETTYPE)),&& if [ -f $(WORKDIR)/LinkTarget/$(2).manifest ]; then mt.exe $(MTFLAGS) -nologo -manifest $(WORKDIR)/LinkTarget/$(2).manifest $(SRCDIR)/solenv/gbuild/platform/win_compatibility.manifest -outputresource:$(1)\;1 && touch -r $(1) $(WORKDIR)/LinkTarget/$(2).manifest; fi) \
+	$(if $(filter Executable,$(TARGETTYPE)),&& mt.exe $(MTFLAGS) -nologo -manifest $(SRCDIR)/solenv/gbuild/platform/DeclareDPIAware.manifest -updateresource:$(1)\;1 ) \
 	$(if $(filter Library,$(TARGETTYPE)),&& \
 		echo $(notdir $(1)) > $(WORKDIR)/LinkTarget/$(2).exports.tmp && \
 		$(if $(filter YES,$(LIBRARY_X64)),$(LINK_X64_BINARY),$(gb_LINK)) \
@@ -209,8 +222,7 @@ endef
 gb_Windows_PE_TARGETTYPEFLAGS := \
 	-release \
 	-opt:noref \
-	-incremental:no \
-	-debug \
+	$(if $(filter $(true),$(gb_SYMBOL)),-debug) \
 	$(if $(filter NO,$(LIBRARY_X64)), -safeseh) \
 	-nxcompat \
 	-dynamicbase \
@@ -424,7 +436,6 @@ endef
 
 define gb_Module_DEBUGRUNCOMMAND
 printf "\nAttach the debugger to soffice.bin\n\n"
-unset VCL_HIDE_WINDOWS && \
 OFFICESCRIPT=`mktemp` && \
 printf "$(INSTROOT)/$(LIBO_BIN_FOLDER)/soffice.exe" > $${OFFICESCRIPT} && \
 printf " --norestore --nologo '--accept=pipe,name=$(USER);urp;'\n" >> $${OFFICESCRIPT} && \
@@ -438,30 +449,10 @@ endef
 # PythonTest class
 
 gb_PythonTest_PRECOMMAND := $(gb_CppunitTest_CPPTESTPRECOMMAND)
-gb_PythonTest_DEPS := $(call gb_Package_get_target,python3)
+gb_PythonTest_DEPS = $(call gb_Package_get_target,python3) $(call gb_Executable_get_target,python)
 
 ifeq ($(strip $(CPPUNITTRACE)),TRUE)
 gb_CppunitTest_GDBTRACE := '$(DEVENV)' /debugexe
-endif
-
-# SrsPartTarget class
-
-ifeq ($(gb_FULLDEPS),$(true))
-# FIXME this is used before TargetLocations is read?
-gb_SrsPartTarget__command_target = $(WORKDIR)/LinkTarget/Executable/makedepend.exe
-define gb_SrsPartTarget__command_dep
-$(call gb_Helper_abbreviate_dirs,\
-	$(call gb_Executable_get_target,makedepend) \
-		$(INCLUDE) \
-		$(DEFS) \
-		$(2) \
-		-o .src \
-		-p $(dir $(call gb_SrsPartTarget_get_target,$(1))) \
-		-f $(call gb_SrsPartTarget_get_dep_target,$(1)))
-endef
-else
-gb_SrsPartTarget__command_target =
-gb_SrsPartTarget__command_dep =
 endif
 
 # WinResTarget class
@@ -525,11 +516,11 @@ $(call gb_ExternalProject_get_preparation_target,$(1)) : $(call gb_Executable_ge
 $(call gb_ExternalProject_get_state_target,$(1),$(2)): WRAPPERS := $(gb_AUTOCONF_WRAPPERS)
 endef
 
-# Set INCLUDE and LIB variables and unset MAKEFLAGS when using nmake
+# Set INCLUDE and LIB variables and unset MAKE/MAKEFLAGS when using nmake
 #
 # gb_ExternalProject_use_nmake project state_target
 define gb_ExternalProject_use_nmake
-$(call gb_ExternalProject_get_state_target,$(1),$(2)): NMAKE := $(true)
+$(call gb_ExternalProject_get_state_target,$(1),$(2)): NMAKE := $(gb_NMAKE_VARS)
 endef
 
 # if ccache is enabled, then split it and use lastword as REAL_FOO
@@ -545,7 +536,14 @@ gb_AUTOCONF_WRAPPERS = \
     LD="$(shell cygpath -w $(COMPATH)/bin/link.exe) -nologo"
 
 gb_ExternalProject_INCLUDE := \
-	$(subst -I,,$(subst $(WHITESPACE),;,$(subst -I. , ,$(SOLARINC))))
+	$(subst -I,,$(subst $(WHITESPACE),;,$(SOLARINC)))
+
+gb_NMAKE_VARS = \
+	CC="$(shell cygpath -w $(filter-out -%,$(CC))) $(filter -%,$(CC))" \
+	INCLUDE="$(gb_ExternalProject_INCLUDE)" \
+	LIB="$(ILIB)" \
+	MAKEFLAGS= \
+	MAKE=
 
 # InstallScript class
 
@@ -585,6 +583,18 @@ $(call gb_Helper_abbreviate_dirs,\
 
 endef
 
+# use file list file because swriter has too many files for command line
+define gb_UIConfig__gla11y_command
+$(call gb_ExternalExecutale__check_registration,python)
+$(call gb_Helper_abbreviate_dirs,\
+	FILES=$(call var2file,$(shell $(gb_MKTEMP)),100,$(UIFILES)) && \
+	$(gb_UIConfig_LXML_PATH) $(gb_Helper_set_ld_path) \
+	$(call gb_ExternalExecutable_get_command,python) \
+	$(gb_UIConfig_gla11y_SCRIPT) $(gb_UIConfig_gla11y_PARAMETERS) -o $@ -L $$FILES
+)
+
+endef
+
 # UIMenubarTarget class
 
 define gb_UIMenubarTarget__command
@@ -596,8 +606,8 @@ endef
 gb_UIMenubarTarget_UIMenubarTarget_platform :=
 
 # Python
-gb_Python_PRECOMMAND := PATH="$(shell cygpath -w $(INSTDIR)/program)" PYTHONHOME="$(INSTDIR)/program/python-core-$(PYTHON_VERSION)" PYTHONPATH="$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib;$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib/lib-dynload:$(INSTDIR)/program"
-gb_Python_INSTALLED_EXECUTABLE := $(INSTROOT)/$(LIBO_BIN_FOLDER)/python-core-$(PYTHON_VERSION)/bin/python.exe
+gb_Python_PRECOMMAND := PATH="$(shell cygpath -w $(INSTDIR)/program)" PYTHONHOME="$(INSTDIR)/program/python-core-$(PYTHON_VERSION)" PYTHONPATH="$${PYPATH:+$$PYPATH:}$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib;$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib/lib-dynload:$(INSTDIR)/program"
+gb_Python_INSTALLED_EXECUTABLE := $(INSTROOT)/$(LIBO_BIN_FOLDER)/python.exe
 
 gb_ICU_PRECOMMAND := PATH="$(shell cygpath -w $(WORKDIR_FOR_BUILD)/UnpackedTarball/icu/source/lib)"
 

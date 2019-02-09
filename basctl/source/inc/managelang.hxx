@@ -25,7 +25,7 @@
 #include <vcl/dialog.hxx>
 #include <vcl/fixed.hxx>
 
-class SvxLanguageBox;
+class LanguageBox;
 
 namespace basctl
 {
@@ -46,52 +46,52 @@ struct LanguageEntry
 extern bool localesAreEqual( const css::lang::Locale& rLocaleLeft,
                              const css::lang::Locale& rLocaleRight );
 
-class ManageLanguageDialog : public ModalDialog
+class ManageLanguageDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<ListBox>            m_pLanguageLB;
-    VclPtr<PushButton>         m_pAddPB;
-    VclPtr<PushButton>         m_pDeletePB;
-    VclPtr<PushButton>         m_pMakeDefPB;
-
     std::shared_ptr<LocalizationMgr> m_xLocalizationMgr;
 
     OUString            m_sDefLangStr;
     OUString            m_sCreateLangStr;
 
+    std::unique_ptr<weld::TreeView> m_xLanguageLB;
+    std::unique_ptr<weld::Button> m_xAddPB;
+    std::unique_ptr<weld::Button> m_xDeletePB;
+    std::unique_ptr<weld::Button> m_xMakeDefPB;
+
     void                Init();
     void                FillLanguageBox();
     void                ClearLanguageBox();
 
-    DECL_LINK_TYPED(AddHdl, Button*, void);
-    DECL_LINK_TYPED(DeleteHdl, Button*, void);
-    DECL_LINK_TYPED(MakeDefHdl, Button*, void);
-    DECL_LINK_TYPED(SelectHdl, ListBox&, void);
+    DECL_LINK(AddHdl, weld::Button&, void);
+    DECL_LINK(DeleteHdl, weld::Button&, void);
+    DECL_LINK(MakeDefHdl, weld::Button&, void);
+    DECL_LINK(SelectHdl, weld::TreeView&, void);
 
 public:
-    ManageLanguageDialog( vcl::Window* pParent, std::shared_ptr<LocalizationMgr> _pLMgr );
-    virtual ~ManageLanguageDialog();
-    virtual void dispose() override;
+    ManageLanguageDialog(weld::Window* pParent, std::shared_ptr<LocalizationMgr> const & _pLMgr);
+    virtual ~ManageLanguageDialog() override;
 };
 
-class SetDefaultLanguageDialog : public ModalDialog
+class SetDefaultLanguageDialog : public weld::GenericDialogController
 {
 private:
-    VclPtr<FixedText>          m_pLanguageFT;
-    VclPtr<SvxLanguageBox>     m_pLanguageLB;
-    VclPtr<FixedText>          m_pCheckLangFT;
-    VclPtr<SvxCheckListBox>    m_pCheckLangLB;
-    VclPtr<FixedText>          m_pDefinedFT;
-    VclPtr<FixedText>          m_pAddedFT;
-
     std::shared_ptr<LocalizationMgr> m_xLocalizationMgr;
 
     void                FillLanguageBox();
 
+    std::unique_ptr<weld::Label> m_xLanguageFT;
+    std::unique_ptr<weld::TreeView> m_xLanguageLB;
+    std::unique_ptr<weld::Label> m_xCheckLangFT;
+    std::unique_ptr<weld::TreeView> m_xCheckLangLB;
+    std::unique_ptr<weld::Label> m_xDefinedFT;
+    std::unique_ptr<weld::Label> m_xAddedFT;
+    std::unique_ptr<weld::Label> m_xAltTitle;
+    std::unique_ptr<::LanguageBox> m_xLanguageCB;
+
 public:
-    SetDefaultLanguageDialog(vcl::Window* pParent, std::shared_ptr<LocalizationMgr> xLMgr);
-    virtual ~SetDefaultLanguageDialog();
-    virtual void dispose() override;
+    SetDefaultLanguageDialog(weld::Window* pParent, std::shared_ptr<LocalizationMgr> const & xLMgr);
+    virtual ~SetDefaultLanguageDialog() override;
 
     css::uno::Sequence< css::lang::Locale >   GetLocales() const;
 };

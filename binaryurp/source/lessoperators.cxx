@@ -17,20 +17,20 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <algorithm>
 #include <cassert>
 
-#include "rtl/byteseq.hxx"
-#include "rtl/ustring.hxx"
-#include "sal/types.h"
-#include "typelib/typeclass.h"
-#include "typelib/typedescription.hxx"
+#include <rtl/byteseq.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <typelib/typeclass.h>
+#include <typelib/typedescription.hxx>
 
 #include "lessoperators.hxx"
 
-namespace com { namespace sun { namespace star { namespace uno {
+namespace com::sun::star::uno {
 
 bool operator <(TypeDescription const & left, TypeDescription const & right) {
     assert(left.is() && right.is());
@@ -42,7 +42,7 @@ bool operator <(TypeDescription const & left, TypeDescription const & right) {
           OUString::unacquired(&right.get()->pTypeName)));
 }
 
-} } } }
+}
 
 namespace rtl {
 

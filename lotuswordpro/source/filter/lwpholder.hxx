@@ -61,7 +61,7 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPHOLDER_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPHOLDER_HXX
 
-#include "lwpobj.hxx"
+#include <lwpobj.hxx>
 #include "lwpdlvlist.hxx"
 /**
  * @brief   VO_HEADHOLDER, LwpDLVListHeadHolder,
@@ -70,11 +70,11 @@
 class LwpDLVListHeadHolder : public LwpObject
 {
 public:
-    LwpDLVListHeadHolder(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpDLVListHeadHolder(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     void Read() override;
     LwpObjectID& GetHeadID() { return m_DLVHead;}
 private:
-    virtual ~LwpDLVListHeadHolder(){}
+    virtual ~LwpDLVListHeadHolder() override {}
 
     LwpObjectID m_DLVHead;
 };
@@ -82,17 +82,17 @@ private:
  * @brief   VO_HEADTAILHOLDER, LwpDLVListHeadTailHolder,
  *      contains a LwpDLVListHeadTail (Head and tail id)
 */
-class LwpDLVListHeadTailHolder : public LwpObject
+class LwpDLVListHeadTailHolder final : public LwpObject
 {
 public:
-    LwpDLVListHeadTailHolder(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpDLVListHeadTailHolder(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     void Read() override;
     LwpObjectID& GetHead(){ return m_HeadTail.GetHead();}
     LwpObjectID& GetTail(){ return m_HeadTail.GetTail();}
-protected:
-    LwpDLVListHeadTail m_HeadTail;
 private:
-    virtual ~LwpDLVListHeadTailHolder(){}
+    virtual ~LwpDLVListHeadTailHolder() override {}
+
+    LwpDLVListHeadTail m_HeadTail;
 };
 /**
  * @brief   LwpObjectHolder, which is LwpDLVList, contains an id to an object
@@ -101,11 +101,11 @@ private:
 class LwpObjectHolder : public LwpDLVList
 {
 public:
-    LwpObjectHolder(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpObjectHolder(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     void Read() override;
     LwpObjectID& GetObject() { return m_Object; }
 protected:
-    virtual ~LwpObjectHolder(){}
+    virtual ~LwpObjectHolder() override {}
 
     LwpObjectID m_Object;
 };
@@ -114,16 +114,16 @@ protected:
  * @brief       VO_LISTLIST object in .lwp file
  *
  */
-class LwpListList : public LwpObjectHolder
+class LwpListList final : public LwpObjectHolder
 {
 public:
-    LwpListList(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpListList(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     void Read() override;
     LwpObjectID& GetHead(){ return m_HeadTail.GetHead();}
-protected:
-    LwpDLVListHeadTail m_HeadTail;
 private:
-    virtual ~LwpListList(){}
+    virtual ~LwpListList() override {}
+
+    LwpDLVListHeadTail m_HeadTail;
 };
 
 #endif

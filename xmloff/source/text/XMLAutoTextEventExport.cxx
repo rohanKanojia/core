@@ -18,8 +18,7 @@
  */
 
 #include "XMLAutoTextEventExport.hxx"
-#include "facreg.hxx"
-#include <com/sun/star/frame/XModel.hpp>
+#include <facreg.hxx>
 #include <com/sun/star/xml/sax/XDocumentHandler.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -29,7 +28,9 @@
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/uno/Exception.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <rtl/ustrbuf.hxx>
+#include <osl/diagnose.h>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
@@ -43,12 +44,9 @@ using namespace ::com::sun::star;
 using namespace ::xmloff::token;
 
 using ::std::set;
-using ::com::sun::star::beans::XPropertySet;
-using ::com::sun::star::beans::PropertyValue;
 using ::com::sun::star::container::XNameAccess;
 using ::com::sun::star::container::XNameReplace;
 using ::com::sun::star::document::XEventsSupplier;
-using ::com::sun::star::frame::XModel;
 using ::com::sun::star::lang::XMultiServiceFactory;
 using ::com::sun::star::uno::Any;
 using ::com::sun::star::uno::Exception;
@@ -73,7 +71,6 @@ XMLAutoTextEventExport::~XMLAutoTextEventExport()
 
 void XMLAutoTextEventExport::initialize(
     const Sequence<Any> & rArguments )
-        throw(uno::Exception, uno::RuntimeException, std::exception)
 {
     if (rArguments.getLength() > 1)
     {
@@ -104,7 +101,7 @@ void XMLAutoTextEventExport::initialize(
 }
 
 
-sal_uInt32 XMLAutoTextEventExport::exportDoc( enum XMLTokenEnum )
+ErrCode XMLAutoTextEventExport::exportDoc( enum XMLTokenEnum )
 {
     if( !(getExportFlags() & SvXMLExportFlags::OASIS) )
     {
@@ -154,7 +151,7 @@ sal_uInt32 XMLAutoTextEventExport::exportDoc( enum XMLTokenEnum )
         GetDocHandler()->endDocument();
     }
 
-    return 0;
+    return ERRCODE_NONE;
 }
 
 bool XMLAutoTextEventExport::hasEvents()
@@ -207,42 +204,40 @@ void XMLAutoTextEventExport::ExportContent_() {}
 
 // methods to support the component registration
 
-Sequence< OUString > SAL_CALL XMLAutoTextEventExport_getSupportedServiceNames()
+Sequence< OUString > XMLAutoTextEventExport_getSupportedServiceNames()
     throw()
 {
     Sequence<OUString> aSeq { XMLAutoTextEventExport_getImplementationName() };
     return aSeq;
 }
 
-OUString SAL_CALL XMLAutoTextEventExport_getImplementationName() throw()
+OUString XMLAutoTextEventExport_getImplementationName() throw()
 {
     return OUString( "com.sun.star.comp.Writer.XMLOasisAutotextEventsExporter"  );
 }
 
-Reference< XInterface > SAL_CALL XMLAutoTextEventExport_createInstance(
+Reference< XInterface > XMLAutoTextEventExport_createInstance(
         const Reference< XMultiServiceFactory > & rSMgr)
-    throw( Exception )
 {
     return static_cast<cppu::OWeakObject*>(new XMLAutoTextEventExport( comphelper::getComponentContext(rSMgr), XMLAutoTextEventExport_getImplementationName(), SvXMLExportFlags::ALL|SvXMLExportFlags::OASIS));
 }
 
 // methods to support the component registration
 
-Sequence< OUString > SAL_CALL XMLAutoTextEventExportOOO_getSupportedServiceNames()
+Sequence< OUString > XMLAutoTextEventExportOOO_getSupportedServiceNames()
     throw()
 {
     Sequence<OUString> aSeq { XMLAutoTextEventExportOOO_getImplementationName() };
     return aSeq;
 }
 
-OUString SAL_CALL XMLAutoTextEventExportOOO_getImplementationName() throw()
+OUString XMLAutoTextEventExportOOO_getImplementationName() throw()
 {
     return OUString( "com.sun.star.comp.Writer.XMLAutotextEventsExporter"  );
 }
 
-Reference< XInterface > SAL_CALL XMLAutoTextEventExportOOO_createInstance(
+Reference< XInterface > XMLAutoTextEventExportOOO_createInstance(
         const Reference< XMultiServiceFactory > & rSMgr)
-    throw( Exception )
 {
     return static_cast<cppu::OWeakObject*>(new XMLAutoTextEventExport( comphelper::getComponentContext(rSMgr), XMLAutoTextEventExportOOO_getImplementationName(), SvXMLExportFlags::ALL));
 }

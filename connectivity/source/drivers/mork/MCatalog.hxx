@@ -25,13 +25,12 @@ namespace connectivity
 {
     namespace mork
     {
-        // please don't name the class the same name as in an other namespaces
+        // please don't name the class the same name as in another namespaces
         // some compilers have problems with this task as I noticed on windows
         class OConnection;
         class OCatalog : public connectivity::sdbcx::OCatalog
         {
             OConnection*    m_pConnection;      // used to get the metadata
-            ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XDatabaseMetaData > m_xMetaData; // just to make things easier
 
         public:
             // implementation of the pure virtual methods
@@ -39,7 +38,7 @@ namespace connectivity
             virtual void refreshViews() override ;
             virtual void refreshGroups() override;
             virtual void refreshUsers() override ;
-            virtual ::com::sun::star::uno::Reference< ::com::sun::star::container::XNameAccess > SAL_CALL getTables(  ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual css::uno::Reference< css::container::XNameAccess > SAL_CALL getTables(  ) override;
         public:
             explicit OCatalog(OConnection* _pCon);
 

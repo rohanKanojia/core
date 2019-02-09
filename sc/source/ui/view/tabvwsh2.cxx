@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/lok.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svl/aeitem.hxx>
@@ -25,21 +26,21 @@
 #include <svl/languageoptions.hxx>
 #include <sfx2/dispatch.hxx>
 
-#include "tabvwsh.hxx"
-#include "drawsh.hxx"
-#include "drawview.hxx"
-#include "fupoor.hxx"
-#include "fuconrec.hxx"
-#include "fuconpol.hxx"
-#include "fuconarc.hxx"
-#include "fuconuno.hxx"
-#include "fusel.hxx"
-#include "futext.hxx"
-#include "fuinsert.hxx"
-#include "global.hxx"
-#include "sc.hrc"
-#include "scmod.hxx"
-#include "appoptio.hxx"
+#include <tabvwsh.hxx>
+#include <drawsh.hxx>
+#include <drawview.hxx>
+#include <fupoor.hxx>
+#include <fuconrec.hxx>
+#include <fuconpol.hxx>
+#include <fuconarc.hxx>
+#include <fuconuno.hxx>
+#include <fusel.hxx>
+#include <futext.hxx>
+#include <fuinsert.hxx>
+#include <global.hxx>
+#include <sc.hrc>
+#include <scmod.hxx>
+#include <appoptio.hxx>
 #include <gridwin.hxx>
 
 // Create default drawing objects via keyboard
@@ -90,7 +91,7 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
     if ( nNewId == SID_DRAW_CHART )
     {
         // #i71254# directly insert a chart instead of drawing its output rectangle
-        FuInsertChart(this, pWin, pView, pDoc, rReq);
+        FuInsertChart(*this, pWin, pView, pDoc, rReq);
         return;
     }
 
@@ -183,18 +184,15 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
     nDrawSfxId = nNewId;
     sDrawCustom.clear();    // value is set below for custom shapes
 
-    if ( nNewId != SID_DRAW_CHART )             // chart not with DrawShell
+    if (nNewId == SID_DRAW_TEXT || nNewId == SID_DRAW_TEXT_VERTICAL
+        || nNewId == SID_DRAW_TEXT_MARQUEE || nNewId == SID_DRAW_NOTEEDIT)
+        SetDrawTextShell(true);
+    else
     {
-        if ( nNewId == SID_DRAW_TEXT || nNewId == SID_DRAW_TEXT_VERTICAL ||
-                nNewId == SID_DRAW_TEXT_MARQUEE || nNewId == SID_DRAW_NOTEEDIT )
-            SetDrawTextShell( true );
+        if (bEx || pView->GetMarkedObjectList().GetMarkCount() != 0)
+            SetDrawShellOrSub();
         else
-        {
-            if ( bEx || pView->GetMarkedObjectList().GetMarkCount() != 0 )
-                SetDrawShellOrSub();
-            else
-                SetDrawShell( false );
-        }
+            SetDrawShell(false);
     }
 
     if (pTabView->GetDrawFuncPtr())
@@ -207,25 +205,40 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
         pTabView->SetDrawFuncPtr(nullptr);
     }
 
+    SfxRequest aNewReq(rReq);
+    aNewReq.SetSlot(nDrawSfxId);
+
     assert(nNewId != SID_DRAW_CHART); //#i71254# handled already above
+
+    // for LibreOfficeKit - choosing a shape should construct it directly
+    bool bCreateDirectly = false;
 
     switch (nNewId)
     {
         case SID_OBJECT_SELECT:
-            // Nicht immer zurueckschalten
+            // not always switch back
             if(pView->GetMarkedObjectList().GetMarkCount() == 0) SetDrawShell(bEx);
-            pTabView->SetDrawFuncPtr(new FuSelection(this, pWin, pView, pDoc, rReq));
+            pTabView->SetDrawFuncPtr(new FuSelection(*this, pWin, pView, pDoc, aNewReq));
             break;
 
         case SID_DRAW_LINE:
+        case SID_DRAW_XLINE:
+        case SID_LINE_ARROW_END:
+        case SID_LINE_ARROW_CIRCLE:
+        case SID_LINE_ARROW_SQUARE:
+        case SID_LINE_ARROW_START:
+        case SID_LINE_CIRCLE_ARROW:
+        case SID_LINE_SQUARE_ARROW:
+        case SID_LINE_ARROWS:
         case SID_DRAW_RECT:
         case SID_DRAW_ELLIPSE:
-            pTabView->SetDrawFuncPtr(new FuConstRectangle(this, pWin, pView, pDoc, rReq));
+        case SID_DRAW_MEASURELINE:
+            pTabView->SetDrawFuncPtr(new FuConstRectangle(*this, pWin, pView, pDoc, aNewReq));
             break;
 
         case SID_DRAW_CAPTION:
         case SID_DRAW_CAPTION_VERTICAL:
-            pTabView->SetDrawFuncPtr(new FuConstRectangle(this, pWin, pView, pDoc, rReq));
+            pTabView->SetDrawFuncPtr(new FuConstRectangle(*this, pWin, pView, pDoc, aNewReq));
             pView->SetFrameDragSingles( false );
             rBindings.Invalidate( SID_BEZIER_EDIT );
             break;
@@ -238,25 +251,25 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
         case SID_DRAW_BEZIER_FILL:
         case SID_DRAW_FREELINE:
         case SID_DRAW_FREELINE_NOFILL:
-            pTabView->SetDrawFuncPtr(new FuConstPolygon(this, pWin, pView, pDoc, rReq));
+            pTabView->SetDrawFuncPtr(new FuConstPolygon(*this, pWin, pView, pDoc, aNewReq));
             break;
 
         case SID_DRAW_ARC:
         case SID_DRAW_PIE:
         case SID_DRAW_CIRCLECUT:
-            pTabView->SetDrawFuncPtr(new FuConstArc(this, pWin, pView, pDoc, rReq));
+            pTabView->SetDrawFuncPtr(new FuConstArc(*this, pWin, pView, pDoc, aNewReq));
             break;
 
         case SID_DRAW_TEXT:
         case SID_DRAW_TEXT_VERTICAL:
         case SID_DRAW_TEXT_MARQUEE:
         case SID_DRAW_NOTEEDIT:
-            pTabView->SetDrawFuncPtr(new FuText(this, pWin, pView, pDoc, rReq));
+            pTabView->SetDrawFuncPtr(new FuText(*this, pWin, pView, pDoc, aNewReq));
             break;
 
         case SID_FM_CREATE_CONTROL:
             SetDrawFormShell(true);
-            pTabView->SetDrawFuncPtr(new FuConstUnoControl(this, pWin, pView, pDoc, rReq));
+            pTabView->SetDrawFuncPtr(new FuConstUnoControl(*this, pWin, pView, pDoc, aNewReq));
             nFormSfxId = nNewFormId;
             break;
 
@@ -268,7 +281,10 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
         case SID_DRAWTBX_CS_STAR :
         case SID_DRAW_CS_ID :
         {
-            pTabView->SetDrawFuncPtr( new FuConstCustomShape( this, pWin, pView, pDoc, rReq ));
+            pTabView->SetDrawFuncPtr(new FuConstCustomShape(*this, pWin, pView, pDoc, aNewReq));
+
+            bCreateDirectly = comphelper::LibreOfficeKit::isActive();
+
             if ( nNewId != SID_DRAW_CS_ID )
             {
                 const SfxStringItem* pEnumCommand = rReq.GetArg<SfxStringItem>(nNewId);
@@ -299,7 +315,7 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
     // with qualifier construct directly
     FuPoor* pFuActual = GetDrawFuncPtr();
 
-    if(pFuActual && (rReq.GetModifier() & KEY_MOD1))
+    if(pFuActual && ((rReq.GetModifier() & KEY_MOD1) || bCreateDirectly))
     {
         // Create default drawing objects via keyboard
         const ScAppOptions& rAppOpt = SC_MOD()->GetAppOptions();
@@ -307,11 +323,21 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
         sal_uInt32 nDefaultObjectSizeHeight = rAppOpt.GetDefaultObjectSizeHeight();
 
         // calc position and size
-        Rectangle aVisArea = pWin->PixelToLogic(Rectangle(Point(0,0), pWin->GetOutputSizePixel()));
-        Point aPagePos = aVisArea.Center();
-        aPagePos.X() -= nDefaultObjectSizeWidth / 2;
-        aPagePos.Y() -= nDefaultObjectSizeHeight / 2;
-        Rectangle aNewObjectRectangle(aPagePos, Size(nDefaultObjectSizeWidth, nDefaultObjectSizeHeight));
+        bool bLOKIsActive = comphelper::LibreOfficeKit::isActive();
+        Point aInsertPos;
+        if(!bLOKIsActive)
+        {
+            tools::Rectangle aVisArea = pWin->PixelToLogic(tools::Rectangle(Point(0,0), pWin->GetOutputSizePixel()));
+            aInsertPos = aVisArea.Center();
+            aInsertPos.AdjustX( -sal_Int32(nDefaultObjectSizeWidth / 2) );
+            aInsertPos.AdjustY( -sal_Int32(nDefaultObjectSizeHeight / 2) );
+        }
+        else
+        {
+            aInsertPos = GetInsertPos();
+        }
+
+        tools::Rectangle aNewObjectRectangle(aInsertPos, Size(nDefaultObjectSizeWidth, nDefaultObjectSizeHeight));
 
         ScDrawView* pDrView = GetScDrawView();
 
@@ -322,12 +348,12 @@ void ScTabViewShell::ExecDraw(SfxRequest& rReq)
             if(pPageView)
             {
                 // create the default object
-                SdrObject* pObj = pFuActual->CreateDefaultObject(nNewId, aNewObjectRectangle);
+                SdrObjectUniquePtr pObj = pFuActual->CreateDefaultObject(nNewId, aNewObjectRectangle);
 
                 if(pObj)
                 {
                     // insert into page
-                    pView->InsertObjectAtView(pObj, *pPageView);
+                    pView->InsertObjectAtView(pObj.release(), *pPageView);
 
                     if ( nNewId == SID_DRAW_CAPTION || nNewId == SID_DRAW_CAPTION_VERTICAL )
                     {
@@ -361,6 +387,15 @@ void ScTabViewShell::GetDrawState(SfxItemSet &rSet)
                 break;
 
             case SID_DRAW_LINE:
+            case SID_DRAW_XLINE:
+            case SID_LINE_ARROW_END:
+            case SID_LINE_ARROW_CIRCLE:
+            case SID_LINE_ARROW_SQUARE:
+            case SID_LINE_ARROW_START:
+            case SID_LINE_CIRCLE_ARROW:
+            case SID_LINE_SQUARE_ARROW:
+            case SID_LINE_ARROWS:
+            case SID_DRAW_MEASURELINE:
             case SID_DRAW_RECT:
             case SID_DRAW_ELLIPSE:
             case SID_DRAW_POLYGON:

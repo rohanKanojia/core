@@ -20,6 +20,9 @@
 #ifndef INCLUDED_SW_SOURCE_FILTER_INC_MSFILTER_HXX
 #define INCLUDED_SW_SOURCE_FILTER_INC_MSFILTER_HXX
 
+#include <sal/config.h>
+
+#include <cstddef>
 #include <set>
 #include <map>
 #include <vector>
@@ -29,7 +32,7 @@
 #include <rtl/textenc.h>
 #include <tools/gen.hxx>
 #include <filter/msfilter/util.hxx>
-#include <fltshell.hxx>
+#include "fltshell.hxx"
 #include <redline.hxx>
 #include <shellio.hxx>
 #include <svl/zforlist.hxx>
@@ -63,9 +66,6 @@ namespace sw
 
             @return
                 a msoffice equivalent charset identifier
-
-            @author
-                <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
         */
         sal_uInt8 rtl_TextEncodingToWinCharset(rtl_TextEncoding eTextEncoding);
 
@@ -78,53 +78,29 @@ namespace sw
         sal_uInt8 rtl_TextEncodingToWinCharsetRTF(OUString const& rFontName,
                 OUString const& rAltName, rtl_TextEncoding eTextEncoding);
 
-        /** Import a MSWord XE field. Suitable for .doc and .rtf
-
-            @param rDoc
-                the document to insert into
-
-            @param rPaM
-                the position in the document to insert into
-
-            @param rXE
-                the arguments of the original word XE field
-
-            @author
-                <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
-        */
-        void ImportXE(SwDoc &rDoc, SwPaM &rPaM, const OUString &rXE);
-
         /** Convert from DTTM to Writer's DateTime
 
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a
         */
-        long DateTime2DTTM( const DateTime& rDT );
+        sal_uInt32 DateTime2DTTM( const DateTime& rDT );
 
         /** Convert from Word Date/Time field str to Writer's Date Time str
 
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a
         */
-        sal_uLong MSDateTimeFormatToSwFormat(OUString& rParams, SvNumberFormatter *pFormatter, sal_uInt16 &rLang, bool bHijri, sal_uInt16 nDocLang);
+        sal_uLong MSDateTimeFormatToSwFormat(OUString& rParams, SvNumberFormatter *pFormatter, LanguageType &rLang, bool bHijri, LanguageType nDocLang);
 
         /*Used to identify if the previous token is AM time field*/
-        bool IsPreviousAM(OUString& rParams, sal_Int32 nPos);
+        bool IsPreviousAM(OUString const & rParams, sal_Int32 nPos);
 
         /*Used to identify if the next token is PM time field*/
-        bool IsNextPM(OUString& rParams, sal_Int32 nPos);
+        bool IsNextPM(OUString const & rParams, sal_Int32 nPos);
 
         /** Used by MSDateTimeFormatToSwFormat to identify AM time fields
 
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a
         */
-        bool IsNotAM(OUString& rParams, sal_Int32 nPos);
+        bool IsNotAM(OUString const & rParams, sal_Int32 nPos);
 
         /** Another function used by MSDateTimeFormatToSwFormat
 
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a
         */
         void SwapQuotesInField(OUString &rFormat);
 
@@ -133,7 +109,7 @@ namespace sw
     namespace util
     {
         /// Redlining Authors, map word author key to writer author value
-        typedef std::map<sal_uInt16, sal_uInt16> AuthorInfos;
+        typedef std::map<sal_uInt16, std::size_t> AuthorInfos;
 
         /** Clips a value to MAX/MIN 16bit value to make it safe for use
             as a position value to give to writer. i.e. +-57.8cm. Sometimes
@@ -141,14 +117,11 @@ namespace sw
             this captures such ones and clips them to values which are
             still outside the document, but of a value that doesn't cause
             problems for writer's layout, e.g. see
-            http://www.openoffice.org/issues/show_bug.cgi?id=i9245
+            https://bz.apache.org/ooo/show_bug.cgi?id=i9245
 
             @param nIn
 
             @return nIn clipped to min/max 16bit value
-
-            @author
-                <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
         */
         SwTwips MakeSafePositioningValue(SwTwips nIn);
 
@@ -171,9 +144,6 @@ namespace sw
             was already in existence, for the cut and paste/insert file mode we
             should not modify the returned style if it is already in use as it
             is does not belong to us to change.
-
-            @author
-                <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
         */
         class ParaStyleMapper
         {
@@ -231,15 +201,12 @@ namespace sw
             was already in existence, for the cut and paste/insert file mode we
             should not modify the returned style if it is already in use as it
             is does not belong to us to change.
-
-            @author
-                <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
         */
         class CharStyleMapper
         {
         private:
             //I hate these things stupid pImpl things, but its warranted here
-            ::myImplHelpers::StyleMapperImpl<SwCharFormat> *mpImpl;
+            std::unique_ptr<::myImplHelpers::StyleMapperImpl<SwCharFormat>> mpImpl;
         public:
             explicit CharStyleMapper(SwDoc &rDoc);
             ~CharStyleMapper();
@@ -277,9 +244,6 @@ namespace sw
             Given a fontname description find the best primary and secondary
             fallback font to use from MSWord's persp font
 
-            @author
-            <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
-
             @see #i10242#/#i19164# for examples
         */
         class FontMapExport
@@ -308,11 +272,8 @@ namespace sw
             their layout frms deleted and recalculated. This TableManager
             detects the necessity to do this, and all tables inserted into
             a document should be registered with this manager with
-            InsertTable, and before finialization DelAndMakeTableFrames should
+            InsertTable, and before finalization DelAndMakeTableFrames should
             be called.
-
-            @author
-            <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
 
             @see #i25782# for examples
         */
@@ -320,24 +281,18 @@ namespace sw
         {
         public:
             typedef std::map<InsertedTableClient *, SwNodeIndex *> TableMap;
-            typedef TableMap::iterator TableMapIter;
             void DelAndMakeTableFrames();
             void InsertTable(SwTableNode &rTableNode, SwPaM &rPaM);
             explicit InsertedTablesManager(const SwDoc &rDoc);
         private:
-            bool mbHasRoot;
+            bool const mbHasRoot;
             TableMap maTables;
         };
 
-        /**
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a>
-         */
         class RedlineStack
         {
         private:
-            std::vector<SwFltStackEntry *> maStack;
-            typedef std::vector<SwFltStackEntry *>::reverse_iterator myriter;
+            std::vector<std::unique_ptr<SwFltStackEntry>> maStack;
             SwDoc &mrDoc;
 
             RedlineStack(RedlineStack const&) = delete;
@@ -345,6 +300,7 @@ namespace sw
 
         public:
             explicit RedlineStack(SwDoc &rDoc) : mrDoc(rDoc) {}
+            void MoveAttrs(const SwPosition& rPos);
             void open(const SwPosition& rPos, const SfxPoolItem& rAttr);
             bool close(const SwPosition& rPos, RedlineType_t eType);
             void close(const SwPosition& rPos, RedlineType_t eType,
@@ -353,32 +309,24 @@ namespace sw
             ~RedlineStack();
         };
 
-        /**
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a>
-         */
         class SetInDocAndDelete
         {
         private:
             SwDoc &mrDoc;
         public:
             explicit SetInDocAndDelete(SwDoc &rDoc) : mrDoc(rDoc) {}
-            void operator()(SwFltStackEntry *pEntry);
+            void operator()(std::unique_ptr<SwFltStackEntry> & pEntry);
         private:
             SetInDocAndDelete& operator=(const SetInDocAndDelete&) = delete;
         };
 
-        /**
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a>
-         */
         class SetEndIfOpen       //Subclass from something ?
         {
         private:
             const SwPosition &mrPos;
         public:
             explicit SetEndIfOpen(const SwPosition &rPos) : mrPos(rPos) {}
-                void operator()(SwFltStackEntry *pEntry) const
+                void operator()(const std::unique_ptr<SwFltStackEntry> & pEntry) const
             {
                 if (pEntry->bOpen)
                     pEntry->SetEndPos(mrPos);
@@ -387,16 +335,10 @@ namespace sw
             SetEndIfOpen& operator=(const SetEndIfOpen&) = delete;
         };
 
-        /**
-            @author
-                <a href="mailto:mmaher@openoffice.org">Martin Maher</a>
-         */
-        class CompareRedlines:
-            public std::binary_function<const SwFltStackEntry*, const SwFltStackEntry*,
-            bool>
+        class CompareRedlines
         {
         public:
-            bool operator()(const SwFltStackEntry *pOneE, const SwFltStackEntry *pTwoE)
+            bool operator()(const std::unique_ptr<SwFltStackEntry> & pOneE, const std::unique_ptr<SwFltStackEntry> & pTwoE)
                 const;
         };
 
@@ -432,7 +374,6 @@ namespace sw
         };
 
         typedef std::vector<CharRunEntry> CharRuns;
-        typedef CharRuns::const_iterator cCharRunIter;
 
         /** Collect the ranges of Text which share
 
@@ -449,9 +390,6 @@ namespace sw
             @return STL container of CharRuns which describe the shared
             direction, script and optionally script of the contiguous sequences
             of characters
-
-            @author
-            <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
 
             @see #i22537# for example
         */

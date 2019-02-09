@@ -20,11 +20,11 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_TOKSTACK_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_TOKSTACK_HXX
 
-#include <string.h>
-#include "compiler.hxx"
-#include "tokenarray.hxx"
-#include <osl/diagnose.h>
+#include <tokenarray.hxx>
+#include <refdata.hxx>
+#include <sal/log.hxx>
 
+#include <memory>
 #include <vector>
 
 namespace svl {
@@ -44,12 +44,11 @@ struct TokenId
                         TokenId() : nId( 0 ) {}
                         TokenId( sal_uInt16 n ) : nId( n ) {}
                         TokenId( const TokenId& r ) : nId( r.nId ) {}
-    inline  TokenId&    operator =( const TokenId& r ) { nId = r.nId; return *this; }
-    inline  TokenId&    operator =( sal_uInt16 n ) { nId = n; return *this; }
-    inline              operator const sal_uInt16&() const { return nId; }
+    TokenId&    operator =( const TokenId& r ) { nId = r.nId; return *this; }
+    TokenId&    operator =( sal_uInt16 n ) { nId = n; return *this; }
+    operator const sal_uInt16&() const { return nId; }
 };
 
-struct ScComplexRefData;
 class TokenStack;
 
 enum E_TYPE
@@ -66,8 +65,65 @@ enum E_TYPE
     T_Matrix,   // token for inline arrays
     T_ExtName,  // token for external names
     T_ExtRefC,
-    T_ExtRefA,
-    T_Error     // for check in case of error
+    T_ExtRefA
+};
+
+template<typename T, int InitialCapacity>
+struct TokenPoolPool
+{
+    std::unique_ptr<T[]> ppP_Str;
+    sal_uInt16                            m_capacity;
+    sal_uInt16                            m_writemark;
+
+    TokenPoolPool() :
+        ppP_Str( new T[InitialCapacity] ),
+        m_capacity(InitialCapacity),
+        m_writemark(0)
+    {
+    }
+    bool Grow(sal_uInt16 nByMin = 1)
+    {
+        sal_uInt16 nP_StrNew = lcl_canGrow(m_capacity, nByMin);
+        if (!nP_StrNew)
+            return false;
+
+        T* ppP_StrNew = new T[ nP_StrNew ];
+
+        for( sal_uInt16 i = 0 ; i < m_capacity ; i++ )
+            ppP_StrNew[ i ] = std::move(ppP_Str[ i ]);
+
+        m_capacity = nP_StrNew;
+
+        ppP_Str.reset( ppP_StrNew );
+        return true;
+    }
+    /** Returns the new number of elements, or 0 if overflow. */
+    static sal_uInt16 lcl_canGrow( sal_uInt16 nOld, sal_uInt16 nByMin )
+    {
+        if (!nOld)
+            return nByMin ? nByMin : 1;
+        if (nOld == SAL_MAX_UINT16)
+            return 0;
+        sal_uInt32 nNew = ::std::max( static_cast<sal_uInt32>(nOld) * 2,
+                static_cast<sal_uInt32>(nOld) + nByMin);
+        if (nNew > SAL_MAX_UINT16)
+            nNew = SAL_MAX_UINT16;
+        if (nNew - nByMin < nOld)
+            nNew = 0;
+        return static_cast<sal_uInt16>(nNew);
+    }
+    T* getIfInRange(sal_uInt16 n) const
+    {
+         return ( n < m_capacity ) ? &ppP_Str[ n ] : nullptr;
+    }
+    T const & operator[](sal_uInt16 n) const
+    {
+         return ppP_Str[ n ];
+    }
+    T & operator[](sal_uInt16 n)
+    {
+         return ppP_Str[ n ];
+    }
 };
 
 class TokenPool
@@ -77,25 +133,19 @@ class TokenPool
 private:
     svl::SharedStringPool& mrStringPool;
 
-        OUString**                      ppP_Str;    // Pool for Strings
-        sal_uInt16                      nP_Str;     // ...with size
-        sal_uInt16                      nP_StrAkt;  // ...and Write-Mark
+        TokenPoolPool<std::unique_ptr<OUString>, 4>
+                                        ppP_Str;    // Pool for Strings
 
-        double*                     pP_Dbl;     // Pool for Doubles
-        sal_uInt16                      nP_Dbl;
-        sal_uInt16                      nP_DblAkt;
+        TokenPoolPool<double, 8>        pP_Dbl;     // Pool for Doubles
 
-        sal_uInt16*                     pP_Err;     // Pool for error codes
-        sal_uInt16                      nP_Err;
-        sal_uInt16                      nP_ErrAkt;
+        TokenPoolPool<sal_uInt16, 8>
+                                        pP_Err;     // Pool for error codes
 
-        ScSingleRefData**               ppP_RefTr;  // Pool for References
-        sal_uInt16                      nP_RefTr;
-        sal_uInt16                      nP_RefTrAkt;
-
-        sal_uInt16*                     pP_Id;      // Pool for Id-sets
+        TokenPoolPool<std::unique_ptr<ScSingleRefData>, 32>
+                                        ppP_RefTr;  // Pool for References
+        std::unique_ptr<sal_uInt16[]>   pP_Id;      // Pool for Id-sets
         sal_uInt16                      nP_Id;
-        sal_uInt16                      nP_IdAkt;
+        sal_uInt16                      nP_IdCurrent;
         sal_uInt16                      nP_IdLast;  // last set-start
 
         struct  EXTCONT
@@ -105,22 +155,15 @@ private:
                                     EXTCONT( const DefTokenId e, const OUString& r ) :
                                         eId( e ), aText( r ){}
         };
-        EXTCONT**                   ppP_Ext;
-        sal_uInt16                      nP_Ext;
-        sal_uInt16                      nP_ExtAkt;
+        TokenPoolPool<std::unique_ptr<EXTCONT>, 32>
+                                        ppP_Ext;
 
-        struct  NLFCONT
-        {
-            ScSingleRefData         aRef;
-                                    NLFCONT( const ScSingleRefData& r ) : aRef( r ) {}
-        };
-        NLFCONT**                   ppP_Nlf;
-        sal_uInt16                      nP_Nlf;
-        sal_uInt16                      nP_NlfAkt;
+        TokenPoolPool<std::unique_ptr<ScSingleRefData>, 16>
+                                        ppP_Nlf;
 
-        ScMatrix**                  ppP_Matrix;     // Pool for Matrices
+        std::unique_ptr<ScMatrix*[]>    ppP_Matrix;     // Pool for Matrices
         sal_uInt16                      nP_Matrix;
-        sal_uInt16                      nP_MatrixAkt;
+        sal_uInt16                      nP_MatrixCurrent;
 
         /** for storage of named ranges */
         struct RangeName
@@ -156,32 +199,30 @@ private:
         };
         ::std::vector<ExtAreaRef>   maExtAreaRefs;
 
-        sal_uInt16*                     pElement;   // Array with Indices for elements
-        E_TYPE*                         pType;      // ...with Type-Info
-        sal_uInt16*                     pSize;      // ...with size (Anz. sal_uInt16)
+        std::unique_ptr<sal_uInt16[]>   pElement;   // Array with Indices for elements
+        std::unique_ptr<E_TYPE[]>       pType;      // ...with Type-Info
+        std::unique_ptr<sal_uInt16[]>   pSize;      // ...with size (Anz. sal_uInt16)
         sal_uInt16                      nElement;
-        sal_uInt16                      nElementAkt;
+        sal_uInt16                      nElementCurrent;
 
         static const sal_uInt16         nScTokenOff;// Offset for SC-Token
 #ifdef DBG_UTIL
         sal_uInt16                      m_nRek; // recursion counter
 #endif
-        ScTokenArray*               pScToken;   // Token array
 
-        bool                        GrowString();
-        bool                        GrowDouble();
-/* TODO: in case we had FormulaTokenArray::AddError() */
-#if 0
-        bool                        GrowError();
-#endif
-        bool                        GrowTripel( sal_uInt16 nByMin = 1 );
+        bool                        GrowTripel( sal_uInt16 nByMin );
         bool                        GrowId();
         bool                        GrowElement();
-        bool                        GrowExt();
-        bool                        GrowNlf();
         bool                        GrowMatrix();
-        bool                        GetElement( const sal_uInt16 nId );
-        bool                        GetElementRek( const sal_uInt16 nId );
+                                    /** @return false means nElementCurrent range
+                                        below nScTokenOff would overflow or
+                                        further allocation is not possible, no
+                                        new ID available other than
+                                        nElementCurrent+1.
+                                     */
+        bool                        CheckElementOrGrow();
+        bool                        GetElement( const sal_uInt16 nId, ScTokenArray* pScToken );
+        bool                        GetElementRek( const sal_uInt16 nId, ScTokenArray* pScToken );
         void                        ClearMatrix();
 public:
     TokenPool( svl::SharedStringPool& rSPool );
@@ -210,7 +251,7 @@ public:
         const TokenId               StoreExtRef( sal_uInt16 nFileId, const OUString& rTabName, const ScSingleRefData& rRef );
         const TokenId               StoreExtRef( sal_uInt16 nFileId, const OUString& rTabName, const ScComplexRefData& rRef );
 
-        inline const ScTokenArray*  operator []( const TokenId& rId );
+        std::unique_ptr<ScTokenArray> GetTokenArray( const TokenId& rId );
         void                        Reset();
         bool                        IsSingleOp( const TokenId& rId, const DefTokenId eId ) const;
         const OUString*             GetExternal( const TokenId& rId ) const;
@@ -222,30 +263,30 @@ class TokenStack
 
 {
     private:
-        TokenId*                    pStack;     // Stack as Array
-        sal_uInt16                      nPos;       // Write-mark
-        sal_uInt16                      nSize;      // first Index outside of stack
+        std::unique_ptr<TokenId[]>  pStack;       // Stack as Array
+        sal_uInt16                  nPos;         // Write-mark
+        static const sal_uInt16     nSize = 1024; // first Index outside of stack
     public:
-                                    TokenStack( sal_uInt16 nNewSize = 1024 );
+                                    TokenStack();
                                     ~TokenStack();
         inline TokenStack&          operator <<( const TokenId& rNewId );
         inline void                 operator >>( TokenId &rId );
 
         inline void                 Reset();
 
-        inline bool                 HasMoreTokens() const { return nPos > 0; }
+        bool                 HasMoreTokens() const { return nPos > 0; }
         inline const TokenId        Get();
 };
 
 inline const TokenId TokenStack::Get()
 {
-    OSL_ENSURE( nPos > 0,
-        "*TokenStack::Get(): is empty, is empty, ..." );
-
     TokenId nRet;
 
     if( nPos == 0 )
+    {
+        SAL_WARN("sc.filter", "*TokenStack::Get(): is empty, is empty, ...");
         nRet = 0;
+    }
     else
     {
         nPos--;
@@ -257,11 +298,14 @@ inline const TokenId TokenStack::Get()
 
 inline TokenStack &TokenStack::operator <<( const TokenId& rNewId )
 {// Element on Stack
-    OSL_ENSURE( nPos < nSize, "*TokenStack::<<(): Stack overflow" );
     if( nPos < nSize )
     {
         pStack[ nPos ] = rNewId;
         nPos++;
+    }
+    else
+    {
+        SAL_WARN("sc.filter", "*TokenStack::<<(): Stack overflow for " << static_cast<sal_uInt16>(rNewId));
     }
 
     return *this;
@@ -269,12 +313,15 @@ inline TokenStack &TokenStack::operator <<( const TokenId& rNewId )
 
 inline void TokenStack::operator >>( TokenId& rId )
 {// Element of Stack
-    OSL_ENSURE( nPos > 0,
-        "*TokenStack::>>(): is empty, is empty, ..." );
     if( nPos > 0 )
     {
         nPos--;
         rId = pStack[ nPos ];
+    }
+    else
+    {
+        SAL_WARN("sc.filter", "*TokenStack::>>(): is empty, is empty, ...");
+        rId = 0;
     }
 }
 
@@ -288,42 +335,61 @@ inline TokenPool& TokenPool::operator <<( const TokenId& rId )
     // POST: rId's are stored consecutively in Pool under a new Id;
     //       finalize with >> or Store()
     // rId -> ( sal_uInt16 ) rId - 1;
-    OSL_ENSURE( ( sal_uInt16 ) rId < nScTokenOff,
-        "-TokenPool::operator <<: TokenId in DefToken-Range!" );
+    sal_uInt16 nId = static_cast<sal_uInt16>(rId);
+    if (nId == 0)
+    {
+        // This would result in nId-1==0xffff, create error.
+        SAL_WARN("sc.filter", "-TokenPool::operator <<: TokenId 0");
+        nId = static_cast<sal_uInt16>(ocErrNull) + nScTokenOff + 1;
+    }
+    else if (nId >= nScTokenOff)
+    {
+        SAL_WARN("sc.filter", "-TokenPool::operator <<: TokenId in DefToken-Range! " << static_cast<sal_uInt16>(rId));
 
-    if( nP_IdAkt >= nP_Id )
-        if (!GrowId())
-            return *this;
+        // Do not "invent" OpCode values by arbitrarily mapping into the Calc
+        // space. This badly smells like an overflow or binary garbage, so
+        // treat as error.
+        nId = static_cast<sal_uInt16>(ocErrNull) + nScTokenOff + 1;
+    }
 
-    pP_Id[ nP_IdAkt ] = ( ( sal_uInt16 ) rId ) - 1;
-    nP_IdAkt++;
+    if( nP_IdCurrent >= nP_Id && !GrowId())
+        return *this;
+
+    pP_Id[ nP_IdCurrent ] = nId - 1;
+    nP_IdCurrent++;
 
     return *this;
 }
 
 inline TokenPool& TokenPool::operator <<( const DefTokenId eId )
 {
-    OSL_ENSURE( ( sal_uInt32 ) eId + nScTokenOff < 0xFFFF,
-        "-TokenPool::operator<<: enum too large!" );
+    if (static_cast<sal_uInt32>(eId) + nScTokenOff >= 0xFFFF)
+    {
+        SAL_WARN("sc.filter", "-TokenPool::operator<<: enum too large! " << static_cast<sal_uInt32>(eId));
+    }
 
-    if( nP_IdAkt >= nP_Id )
-        if (!GrowId())
-            return *this;
+    if( nP_IdCurrent >= nP_Id && !GrowId())
+        return *this;
 
-    pP_Id[ nP_IdAkt ] = ( ( sal_uInt16 ) eId ) + nScTokenOff;
-    nP_IdAkt++;
+    pP_Id[ nP_IdCurrent ] = static_cast<sal_uInt16>(eId) + nScTokenOff;
+    nP_IdCurrent++;
 
     return *this;
 }
 
 inline TokenPool& TokenPool::operator <<( TokenStack& rStack )
 {
-    if( nP_IdAkt >= nP_Id )
-        if (!GrowId())
-            return *this;
+    if( nP_IdCurrent >= nP_Id && !GrowId())
+        return *this;
 
-    pP_Id[ nP_IdAkt ] = ( ( sal_uInt16 ) rStack.Get() ) - 1;
-    nP_IdAkt++;
+    sal_uInt16 nId = static_cast<sal_uInt16>(rStack.Get());
+    if (nId == 0)
+    {
+        // Indicates error, so generate one. Empty stack, overflow, ...
+        nId = static_cast<sal_uInt16>(ocErrNull) + nScTokenOff + 1;
+    }
+    pP_Id[ nP_IdCurrent ] = nId - 1;
+    nP_IdCurrent++;
 
     return *this;
 }
@@ -342,16 +408,16 @@ inline const TokenId TokenPool::Store()
     return nId;
 }
 
-const inline ScTokenArray* TokenPool::operator []( const TokenId& rId )
+inline std::unique_ptr<ScTokenArray> TokenPool::GetTokenArray( const TokenId& rId )
 {
-    pScToken->ClearScTokenArray();
+    std::unique_ptr<ScTokenArray> pScToken( new ScTokenArray );
 
     if( rId )
     {//...only if rId > 0!
 #ifdef DBG_UTIL
         m_nRek = 0;
 #endif
-        GetElement( ( sal_uInt16 ) rId - 1 );
+        GetElement( static_cast<sal_uInt16>(rId) - 1, pScToken.get());
     }
 
     return pScToken;

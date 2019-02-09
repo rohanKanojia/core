@@ -27,6 +27,7 @@
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <drawinglayer/processor2d/processor2dtools.hxx>
 #include <svx/unoapi.hxx>
+#include <tools/debug.hxx>
 #include <memory>
 
 namespace sdr { namespace contact {
@@ -92,7 +93,7 @@ void ObjectContactOfObjListPainter::ProcessDisplay(DisplayInfo& rDisplayInfo)
                 aViewRange.transform(pTargetDevice->GetInverseViewTransformation());
             }
 
-            // upate local ViewInformation2D
+            // update local ViewInformation2D
             const drawinglayer::geometry::ViewInformation2D aNewViewInformation2D(
                 basegfx::B2DHomMatrix(),
                 pTargetDevice->GetViewTransformation(),
@@ -105,7 +106,7 @@ void ObjectContactOfObjListPainter::ProcessDisplay(DisplayInfo& rDisplayInfo)
             // collect primitive data in a sequence; this will already use the updated ViewInformation2D
             drawinglayer::primitive2d::Primitive2DContainer xPrimitiveSequence;
 
-            for(sal_uInt32 a(0L); a < nCount; a++)
+            for(sal_uInt32 a(0); a < nCount; a++)
             {
                 const ViewObjectContact& rViewObjectContact = GetPaintObjectViewContact(a).GetViewObjectContact(*this);
 
@@ -128,12 +129,6 @@ void ObjectContactOfObjListPainter::ProcessDisplay(DisplayInfo& rDisplayInfo)
     }
 }
 
-// VirtualDevice?
-bool ObjectContactOfObjListPainter::isOutputToVirtualDevice() const
-{
-    return (OUTDEV_VIRDEV == mrTargetOutputDevice.GetOutDevType());
-}
-
 // recording MetaFile?
 bool ObjectContactOfObjListPainter::isOutputToRecordingMetaFile() const
 {
@@ -144,7 +139,7 @@ bool ObjectContactOfObjListPainter::isOutputToRecordingMetaFile() const
 // pdf export?
 bool ObjectContactOfObjListPainter::isOutputToPDFFile() const
 {
-    return (nullptr != mrTargetOutputDevice.GetPDFWriter());
+    return OUTDEV_PDF == mrTargetOutputDevice.GetOutDevType();
 }
 
 OutputDevice* ObjectContactOfObjListPainter::TryToGetOutputDevice() const
@@ -154,7 +149,7 @@ OutputDevice* ObjectContactOfObjListPainter::TryToGetOutputDevice() const
 
 sal_uInt32 ObjectContactOfPagePainter::GetPaintObjectCount() const
 {
-    return (GetStartPage() ? 1L : 0L);
+    return (GetStartPage() ? 1 : 0);
 }
 
 ViewContact& ObjectContactOfPagePainter::GetPaintObjectViewContact(sal_uInt32 /*nIndex*/)
@@ -164,11 +159,10 @@ ViewContact& ObjectContactOfPagePainter::GetPaintObjectViewContact(sal_uInt32 /*
 }
 
 ObjectContactOfPagePainter::ObjectContactOfPagePainter(
-    const SdrPage* pPage,
     ObjectContact& rOriginalObjectContact)
 :   ObjectContactPainter(),
     mrOriginalObjectContact(rOriginalObjectContact),
-    mxStartPage(const_cast< SdrPage* >(pPage)) // no SdrPageWeakRef available to hold a const SdrPage*
+    mxStartPage()
 {
 }
 
@@ -180,7 +174,7 @@ void ObjectContactOfPagePainter::SetStartPage(const SdrPage* pPage)
 {
     if(pPage != GetStartPage())
     {
-        mxStartPage.reset(const_cast< SdrPage* >(pPage)); // no SdrPageWeakRef available to hold a const SdrPage*
+        mxStartPage.reset(const_cast< SdrPage* >(pPage)); // no tools::WeakReference<SdrPage> available to hold a const SdrPage*
     }
 }
 

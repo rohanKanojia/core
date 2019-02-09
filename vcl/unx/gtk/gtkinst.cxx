@@ -31,9 +31,11 @@
 #include <unx/gtk/gtksalmenu.hxx>
 #include <headless/svpvd.hxx>
 #include <headless/svpbmp.hxx>
+#include <salimestatus.hxx>
 #include <vcl/inputtypes.hxx>
 #include <unx/genpspgraphics.h>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <rtl/uri.hxx>
 
 #include <vcl/settings.hxx>
@@ -42,7 +44,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "unx/gtk/gtkprintwrapper.hxx"
+#include <unx/gtk/gtkprintwrapper.hxx>
 
 extern "C"
 {
@@ -64,13 +66,29 @@ extern "C"
             "vcl.gtk",
             "create vcl plugin instance with gtk version " << gtk_major_version
                 << " " << gtk_minor_version << " " << gtk_micro_version);
+
+#if !GTK_CHECK_VERSION(3,0,0)
         if( gtk_major_version < 2 || // very unlikely sanity check
             ( gtk_major_version == 2 && gtk_minor_version < 4 ) )
         {
-            g_warning("require a newer gtk than %d.%d for gdk_threads_set_lock_functions", (int) gtk_major_version, gtk_minor_version);
+            g_warning("require a newer gtk than %d.%d for gdk_threads_set_lock_functions", static_cast<int>(gtk_major_version), gtk_minor_version);
             return nullptr;
         }
+#else
+        if (gtk_major_version == 3 && gtk_minor_version < 18)
+        {
+            g_warning("require gtk >= 3.18 for theme expectations");
+            return nullptr;
+        }
+#endif
 
+        // for gtk2 it is always built with X support, so this is always called
+        // for gtk3 it is normally built with X and Wayland support, if
+        // X is supported GDK_WINDOWING_X11 is defined and this is always
+        // called, regardless of if we're running under X or Wayland.
+        // We can't use (GDK_IS_X11_DISPLAY(pDisplay)) to only do it under
+        // X, because we need to do it earlier than we have a display
+#if !GTK_CHECK_VERSION(3,0,0) || defined(GDK_WINDOWING_X11)
         /* #i92121# workaround deadlocks in the X11 implementation
         */
         static const char* pNoXInitThreads = getenv( "SAL_NO_XINITTHREADS" );
@@ -80,40 +98,26 @@ extern "C"
         */
         if( ! ( pNoXInitThreads && *pNoXInitThreads ) )
             XInitThreads();
-
-#if GTK_CHECK_VERSION(3,0,0)
-        if (gtk_minor_version < 14)
-        {
-            g_warning("require a newer gtk than 3.%d for theme expectations", gtk_minor_version);
-            return nullptr;
-        }
-
-        const gchar* pVersion = gtk_check_version( 3, 2, 0 );
-        if( pVersion )
-        {
-            SAL_WARN("vcl.gtk", "gtk version conflict: " << pVersion);
-            return nullptr;
-        }
 #endif
 
-        GtkYieldMutex *pYieldMutex;
-
         // init gdk thread protection
-        if ( !g_thread_supported() )
+        bool const sup = g_thread_supported();
+            // extracted from the 'if' to avoid Clang -Wunreachable-code
+        if ( !sup )
             g_thread_init( nullptr );
 
         gdk_threads_set_lock_functions (GdkThreadsEnter, GdkThreadsLeave);
         SAL_INFO("vcl.gtk", "Hooked gdk threads locks");
 
-        pYieldMutex = new GtkYieldMutex();
+        auto pYieldMutex = std::make_unique<GtkYieldMutex>();
 
         gdk_threads_init();
 
-        GtkInstance* pInstance = new GtkInstance( pYieldMutex );
+        GtkInstance* pInstance = new GtkInstance( std::move(pYieldMutex) );
         SAL_INFO("vcl.gtk", "creating GtkInstance " << pInstance);
 
         // Create SalData, this does not leak
-        new GtkData( pInstance );
+        new GtkSalData( pInstance );
 
         return pInstance;
     }
@@ -150,13 +154,15 @@ static VclInputFlags categorizeEvent(const GdkEvent *pEvent)
 }
 #endif
 
-GtkInstance::GtkInstance( SalYieldMutex* pMutex )
+GtkInstance::GtkInstance( std::unique_ptr<SalYieldMutex> pMutex )
 #if GTK_CHECK_VERSION(3,0,0)
-    : SvpSalInstance( pMutex )
+    : SvpSalInstance( std::move(pMutex) )
 #else
-    : X11SalInstance( pMutex )
+    : X11SalInstance( std::move(pMutex) )
 #endif
+    , m_pTimer(nullptr)
     , bNeedsInit(true)
+    , m_pLastCairoFontOptions(nullptr)
 {
 }
 
@@ -166,12 +172,6 @@ GtkInstance::GtkInstance( SalYieldMutex* pMutex )
 //UI in a LTR locale
 void GtkInstance::AfterAppInit()
 {
-    OUString aLocaleString(Application::GetSettings().GetUILanguageTag().getGlibcLocaleString(".UTF-8"));
-    if (!aLocaleString.isEmpty())
-    {
-        OUString envVar("LANGUAGE");
-        osl_setEnvironment(envVar.pData, aLocaleString.pData);
-    }
     EnsureInit();
 }
 
@@ -180,18 +180,19 @@ void GtkInstance::EnsureInit()
     if (!bNeedsInit)
         return;
     // initialize SalData
-    GtkData *pSalData = GetGtkSalData();
+    GtkSalData *pSalData = GetGtkSalData();
     pSalData->Init();
-    GtkData::initNWF();
+    GtkSalData::initNWF();
 
     InitAtkBridge();
 
     ImplSVData* pSVData = ImplGetSVData();
-    delete pSVData->maAppData.mpToolkitName;
-#if GTK_CHECK_VERSION(3,0,0)
-    pSVData->maAppData.mpToolkitName = new OUString("gtk3");
+#ifdef GTK_TOOLKIT_NAME
+    pSVData->maAppData.mxToolkitName = OUString(GTK_TOOLKIT_NAME);
+#elif GTK_CHECK_VERSION(3,0,0)
+    pSVData->maAppData.mxToolkitName = OUString("gtk3");
 #else
-    pSVData->maAppData.mpToolkitName = new OUString("gtk2");
+    pSVData->maAppData.mxToolkitName = OUString("gtk2");
 #endif
 
     bNeedsInit = false;
@@ -199,9 +200,9 @@ void GtkInstance::EnsureInit()
 
 GtkInstance::~GtkInstance()
 {
-    while( !m_aTimers.empty() )
-        delete *m_aTimers.begin();
+    assert( nullptr == m_pTimer );
     DeInitAtkBridge();
+    ResetLastSeenCairoFontOptions(nullptr);
 }
 
 SalFrame* GtkInstance::CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle )
@@ -232,13 +233,23 @@ SalObject* GtkInstance::CreateObject( SalFrame* pParent, SystemWindowData* pWind
     return new GtkSalObject( static_cast<GtkSalFrame*>(pParent), bShow );
 }
 
+#if !GTK_CHECK_VERSION(3,0,0)
+std::unique_ptr<SalI18NImeStatus> GtkInstance::CreateI18NImeStatus()
+{
+    //we want the default SalInstance::CreateI18NImeStatus returns the no-op
+    //stub here, not the X11Instance::CreateI18NImeStatus which the gtk2
+    //one would use otherwise
+    return SalInstance::CreateI18NImeStatus();
+}
+#endif
+
 extern "C"
 {
     typedef void*(* getDefaultFnc)();
     typedef void(* addItemFnc)(void *, const char *);
 }
 
-void GtkInstance::AddToRecentDocumentList(const OUString& rFileUrl, const OUString& rMimeType, const OUString& rDocumentService)
+void GtkInstance::AddToRecentDocumentList(const OUString& rFileUrl, const OUString&, const OUString&)
 {
     EnsureInit();
     OString sGtkURL;
@@ -259,8 +270,6 @@ void GtkInstance::AddToRecentDocumentList(const OUString& rFileUrl, const OUStri
     }
     GtkRecentManager *manager = gtk_recent_manager_get_default ();
     gtk_recent_manager_add_item (manager, sGtkURL.getStr());
-    (void)rMimeType;
-    (void)rDocumentService;
 }
 
 SalInfoPrinter* GtkInstance::CreateInfoPrinter( SalPrinterQueueInfo* pQueueInfo,
@@ -278,12 +287,12 @@ SalInfoPrinter* GtkInstance::CreateInfoPrinter( SalPrinterQueueInfo* pQueueInfo,
 #endif
 }
 
-SalPrinter* GtkInstance::CreatePrinter( SalInfoPrinter* pInfoPrinter )
+std::unique_ptr<SalPrinter> GtkInstance::CreatePrinter( SalInfoPrinter* pInfoPrinter )
 {
     EnsureInit();
 #if defined ENABLE_GTK_PRINT || GTK_CHECK_VERSION(3,0,0)
     mbPrinterInit = true;
-    return new GtkSalPrinter( pInfoPrinter );
+    return std::unique_ptr<SalPrinter>(new GtkSalPrinter( pInfoPrinter ));
 #else
     return Superclass_t::CreatePrinter( pInfoPrinter );
 #endif
@@ -296,46 +305,54 @@ SalPrinter* GtkInstance::CreatePrinter( SalInfoPrinter* pInfoPrinter )
  * for each pair, so we can accurately restore
  * it later.
  */
-thread_local sal_uIntPtr GtkYieldMutex::yieldCount;
+thread_local std::stack<sal_uInt32> GtkYieldMutex::yieldCounts;
 
 void GtkYieldMutex::ThreadsEnter()
 {
     acquire();
-    for (; yieldCount != 0; --yieldCount) {
-        acquire();
+    if (!yieldCounts.empty()) {
+        auto n = yieldCounts.top();
+        yieldCounts.pop();
+        for (; n != 0; --n) {
+            acquire();
+        }
     }
 }
 
 void GtkYieldMutex::ThreadsLeave()
 {
-    assert(mnCount != 0);
-    assert(yieldCount == 0);
-    yieldCount = mnCount - 1;
-    for (sal_uIntPtr i = 0; i != yieldCount + 1; ++i) {
+    assert(m_nCount != 0);
+    auto n = m_nCount - 1;
+    yieldCounts.push(n);
+    for (sal_uIntPtr i = 0; i != n + 1; ++i) {
         release();
     }
 }
 
-SalVirtualDevice* GtkInstance::CreateVirtualDevice( SalGraphics *pG,
+std::unique_ptr<SalVirtualDevice> GtkInstance::CreateVirtualDevice( SalGraphics *pG,
                                                     long &nDX, long &nDY,
                                                     DeviceFormat eFormat,
                                                     const SystemGraphicsData *pGd )
 {
     EnsureInit();
 #if GTK_CHECK_VERSION(3,0,0)
-    (void)pG; (void) pGd;
-    SvpSalVirtualDevice* pNew = new SvpSalVirtualDevice(eFormat);
+    (void) pGd;
+    SvpSalGraphics *pSvpSalGraphics = dynamic_cast<SvpSalGraphics*>(pG);
+    assert(pSvpSalGraphics);
+    std::unique_ptr<SalVirtualDevice> pNew(new SvpSalVirtualDevice(eFormat, pSvpSalGraphics->getSurface()));
     pNew->SetSize( nDX, nDY );
     return pNew;
 #else
     GtkSalGraphics *pGtkSalGraphics = dynamic_cast<GtkSalGraphics*>(pG);
     assert(pGtkSalGraphics);
     return CreateX11VirtualDevice(pG, nDX, nDY, eFormat, pGd,
-            new GtkSalGraphics(pGtkSalGraphics->GetGtkFrame(), pGtkSalGraphics->GetGtkWidget()));
+            std::make_unique<GtkSalGraphics>(pGtkSalGraphics->GetGtkFrame(),
+                               pGtkSalGraphics->GetGtkWidget(),
+                               pGtkSalGraphics->GetScreenNumber()));
 #endif
 }
 
-SalBitmap* GtkInstance::CreateSalBitmap()
+std::shared_ptr<SalBitmap> GtkInstance::CreateSalBitmap()
 {
     EnsureInit();
 #if GTK_CHECK_VERSION(3,0,0)
@@ -347,62 +364,44 @@ SalBitmap* GtkInstance::CreateSalBitmap()
 
 #ifdef ENABLE_GMENU_INTEGRATION
 
-SalMenu* GtkInstance::CreateMenu( bool bMenuBar, Menu* pVCLMenu )
+std::unique_ptr<SalMenu> GtkInstance::CreateMenu( bool bMenuBar, Menu* pVCLMenu )
 {
     EnsureInit();
     GtkSalMenu* pSalMenu = new GtkSalMenu( bMenuBar );
     pSalMenu->SetMenu( pVCLMenu );
-    return pSalMenu;
+    return std::unique_ptr<SalMenu>(pSalMenu);
 }
 
-void GtkInstance::DestroyMenu( SalMenu* pMenu )
+std::unique_ptr<SalMenuItem> GtkInstance::CreateMenuItem( const SalItemParams & rItemData )
 {
     EnsureInit();
-    delete pMenu;
-}
-
-SalMenuItem* GtkInstance::CreateMenuItem( const SalItemParams* pItemData )
-{
-    EnsureInit();
-    return new GtkSalMenuItem( pItemData );
-}
-
-void GtkInstance::DestroyMenuItem( SalMenuItem* pItem )
-{
-    EnsureInit();
-    delete pItem;
+    return std::unique_ptr<SalMenuItem>(new GtkSalMenuItem( &rItemData ));
 }
 
 #else // not ENABLE_GMENU_INTEGRATION
 
-SalMenu*     GtkInstance::CreateMenu( bool, Menu* )          { return nullptr; }
-void         GtkInstance::DestroyMenu( SalMenu* )                {}
-SalMenuItem* GtkInstance::CreateMenuItem( const SalItemParams* ) { return nullptr; }
-void         GtkInstance::DestroyMenuItem( SalMenuItem* )        {}
+std::unique_ptr<SalMenu>     GtkInstance::CreateMenu( bool, Menu* )          { return nullptr; }
+std::unique_ptr<SalMenuItem> GtkInstance::CreateMenuItem( const SalItemParams & ) { return nullptr; }
 
 #endif
 
 SalTimer* GtkInstance::CreateSalTimer()
 {
     EnsureInit();
-    GtkSalTimer *pTimer = new GtkSalTimer();
-    m_aTimers.push_back( pTimer );
-    return pTimer;
+    assert( nullptr == m_pTimer );
+    if ( nullptr == m_pTimer )
+        m_pTimer = new GtkSalTimer();
+    return m_pTimer;
 }
 
-void GtkInstance::RemoveTimer (SalTimer *pTimer)
+void GtkInstance::RemoveTimer ()
 {
     EnsureInit();
-    std::vector<GtkSalTimer *>::iterator it;
-    it = std::find( m_aTimers.begin(), m_aTimers.end(), pTimer );
-    if( it != m_aTimers.end() )
-        m_aTimers.erase( it );
+    m_pTimer = nullptr;
 }
 
-SalYieldResult GtkInstance::DoYield(bool bWait, bool bHandleAllCurrentEvents, sal_uLong const nReleased)
+bool GtkInstance::DoYield(bool bWait, bool bHandleAllCurrentEvents)
 {
-    (void) nReleased;
-    assert(nReleased == 0); // not implemented
     EnsureInit();
     return GetGtkSalData()->Yield( bWait, bHandleAllCurrentEvents );
 }
@@ -410,12 +409,7 @@ SalYieldResult GtkInstance::DoYield(bool bWait, bool bHandleAllCurrentEvents, sa
 bool GtkInstance::IsTimerExpired()
 {
     EnsureInit();
-    for( std::vector<GtkSalTimer *>::iterator it = m_aTimers.begin();
-         it != m_aTimers.end(); ++it )
-        if( (*it)->Expired() )
-            return true;
-
-    return false;
+    return (m_pTimer && m_pTimer->Expired());
 }
 
 bool GtkInstance::AnyInput( VclInputFlags nType )
@@ -463,7 +457,7 @@ GenPspGraphics *GtkInstance::CreatePrintGraphics()
     return new GenPspGraphics();
 }
 
-std::shared_ptr<vcl::unx::GtkPrintWrapper>
+std::shared_ptr<vcl::unx::GtkPrintWrapper> const &
 GtkInstance::getPrintWrapper() const
 {
     if (!m_xPrintWrapper)
@@ -473,7 +467,25 @@ GtkInstance::getPrintWrapper() const
 
 const cairo_font_options_t* GtkInstance::GetCairoFontOptions()
 {
-    return gdk_screen_get_font_options(gdk_screen_get_default());
+    const cairo_font_options_t* pCairoFontOptions = gdk_screen_get_font_options(gdk_screen_get_default());
+    if (!m_pLastCairoFontOptions && pCairoFontOptions)
+        m_pLastCairoFontOptions = cairo_font_options_copy(pCairoFontOptions);
+    return pCairoFontOptions;
+}
+
+const cairo_font_options_t* GtkInstance::GetLastSeenCairoFontOptions()
+{
+    return m_pLastCairoFontOptions;
+}
+
+void GtkInstance::ResetLastSeenCairoFontOptions(const cairo_font_options_t* pCairoFontOptions)
+{
+    if (m_pLastCairoFontOptions)
+        cairo_font_options_destroy(m_pLastCairoFontOptions);
+    if (pCairoFontOptions)
+        m_pLastCairoFontOptions = cairo_font_options_copy(pCairoFontOptions);
+    else
+        m_pLastCairoFontOptions = nullptr;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

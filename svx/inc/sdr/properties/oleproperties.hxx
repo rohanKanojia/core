@@ -30,6 +30,9 @@ namespace sdr
         class OleProperties : public RectangleProperties
         {
         protected:
+            // apply the correct SfyStyleSheet from SdrObject's SdrModel
+            virtual void applyDefaultStyleSheetFromSdrModel() override;
+
         public:
             // basic constructor
             explicit OleProperties(SdrObject& rObj);
@@ -38,10 +41,10 @@ namespace sdr
             OleProperties(const OleProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~OleProperties();
+            virtual ~OleProperties() override;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
 
             // force default attributes for a specific object type, called from
             // DefaultProperties::GetObjectItemSet() if a new ItemSet is created

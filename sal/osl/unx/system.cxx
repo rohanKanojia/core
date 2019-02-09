@@ -28,14 +28,18 @@
 
 /* struct passwd differs on some platforms */
 
-#if defined(MACOSX) || defined(IOS) || defined(OPENBSD) || defined(NETBSD)
+#if defined(MACOSX) || defined(IOS) || defined(OPENBSD) || defined(NETBSD) || defined(HAIKU)
 
-//No mutex needed on Mac OS X, gethostbyname is thread safe
+//No mutex needed on macOS, gethostbyname is thread safe
 
 #if defined(MACOSX)
 
 #define RTL_MUTEX_LOCK
 #define RTL_MUTEX_UNLOCK
+
+#include <premac.h>
+#include <Foundation/Foundation.h>
+#include <postmac.h>
 
 #else //defined(MACOSX)
 
@@ -162,6 +166,15 @@ int macxp_resolveAlias(char *path, int buflen)
   CFErrorRef cferror;
   CFDataRef cfbookmark;
 
+  // Don't even try anything for files inside the app bundle. Just a
+  // waste of time.
+
+  static const char * const appBundle = [[[NSBundle mainBundle] bundlePath] UTF8String];
+
+  const size_t appBundleLen = strlen(appBundle);
+  if (strncmp(path, appBundle, appBundleLen) == 0 && path[appBundleLen] == '/')
+      return 0;
+
   char *unprocessedPath = path;
 
   if ( *unprocessedPath == '/' )
@@ -245,53 +258,6 @@ int macxp_resolveAlias(char *path, int buflen)
 #endif  /* defined MACOSX */
 
 #endif /* NO_PTHREAD_RTL */
-
-#if defined(FREEBSD)
-char *fcvt(double value, int ndigit, int *decpt, int *sign)
-{
-  static char ret[256];
-  char buf[256],zahl[256],format[256]="%";
-
-  if (value==0.0) value=1e-30;
-
-  if (value<0.0) *sign=1; else *sign=0;
-
-  if (value<1.0)
-  {
-    *decpt=(int)log10(value);
-    value*=pow(10.0,1-*decpt);
-    ndigit+=*decpt-1;
-    if (ndigit<0) ndigit=0;
-  }
-  else
-  {
-    *decpt=(int)log10(value)+1;
-  }
-
-  sprintf(zahl,"%d",ndigit);
-  strcat(format,zahl);
-  strcat(format,".");
-  strcat(format,zahl);
-  strcat(format,"f");
-
-  sprintf(buf,format,value);
-
-  if (ndigit!=0)
-  {
-    char *v1=strtok(buf,".");
-    char *v2=strtok(NULL,".");
-    strcpy(ret,v1);
-    strcat(ret,v2);
-  }
-  else
-  {
-    strcpy(ret,buf);
-  }
-
-  return ret;
-}
-
-#endif
 
 //might be useful on other platforms, but doesn't compiler under MACOSX anyway
 #if defined(__GNUC__) && defined(LINUX)

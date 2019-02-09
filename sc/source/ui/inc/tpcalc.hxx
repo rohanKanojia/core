@@ -23,8 +23,6 @@
 #include <sfx2/tabdlg.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/field.hxx>
-#include <vcl/group.hxx>
-#include <svtools/stdctrl.hxx>
 #include "editfield.hxx"
 
 class ScDocOptions;
@@ -33,17 +31,17 @@ class ScTpCalcOptions : public SfxTabPage
 {
     friend class VclPtr<ScTpCalcOptions>;
 public:
-    static  VclPtr<SfxTabPage> Create          ( vcl::Window*               pParent,
+    static  VclPtr<SfxTabPage> Create          ( TabPageParent pParent,
                                           const SfxItemSet*     rCoreSet );
     virtual bool        FillItemSet     ( SfxItemSet* rCoreSet ) override;
     virtual void        Reset           ( const SfxItemSet* rCoreSet ) override;
     using SfxTabPage::DeactivatePage;
-    virtual sfxpg       DeactivatePage  ( SfxItemSet* pSet = nullptr ) override;
+    virtual DeactivateRC   DeactivatePage  ( SfxItemSet* pSet ) override;
 
 private:
                 ScTpCalcOptions( vcl::Window*            pParent,
                                  const SfxItemSet&  rCoreSet );
-                virtual ~ScTpCalcOptions();
+                virtual ~ScTpCalcOptions() override;
     virtual void dispose() override;
 
 private:
@@ -69,16 +67,18 @@ private:
     VclPtr<FixedText>      m_pFtPrec;
     VclPtr<NumericField>   m_pEdPrec;
 
-    ScDocOptions*          pOldOptions;
-    ScDocOptions*          pLocalOptions;
-    sal_uInt16             nWhichCalc;
+    VclPtr<CheckBox>       m_pBtnThread;
+
+    std::unique_ptr<ScDocOptions> pOldOptions;
+    std::unique_ptr<ScDocOptions> pLocalOptions;
+    sal_uInt16 const             nWhichCalc;
 
 private:
     void            Init();
 
     // Handler:
-    DECL_LINK_TYPED( RadioClickHdl, Button*, void );
-    DECL_LINK_TYPED( CheckClickHdl, Button*, void );
+    DECL_LINK( RadioClickHdl, Button*, void );
+    DECL_LINK( CheckClickHdl, Button*, void );
 };
 
 #endif

@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doceventnotifier.hxx"
-#include "scriptdocument.hxx"
+#include <doceventnotifier.hxx>
+#include <scriptdocument.hxx>
 
 #include <com/sun/star/frame/theGlobalEventBroadcaster.hpp>
 
@@ -70,13 +70,13 @@ namespace basctl
         Impl& operator=(const Impl&) = delete;
 
         Impl (DocumentEventListener&, Reference<XModel> const& rxDocument);
-        virtual ~Impl ();
+        virtual ~Impl () override;
 
         // XDocumentEventListener
-        virtual void SAL_CALL documentEventOccured( const DocumentEvent& Event ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL documentEventOccured( const DocumentEvent& Event ) override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const csslang::EventObject& Event ) throw (RuntimeException, std::exception) override;
+        virtual void SAL_CALL disposing( const csslang::EventObject& Event ) override;
 
         // ComponentHelper
         virtual void SAL_CALL disposing() override;
@@ -115,7 +115,7 @@ namespace basctl
         }
     }
 
-    void SAL_CALL DocumentEventNotifier::Impl::documentEventOccured( const DocumentEvent& _rEvent ) throw (RuntimeException, std::exception)
+    void SAL_CALL DocumentEventNotifier::Impl::documentEventOccured( const DocumentEvent& _rEvent )
     {
         ::osl::ClearableMutexGuard aGuard( m_aMutex );
 
@@ -133,7 +133,7 @@ namespace basctl
             const sal_Char* pEventName;
             void (DocumentEventListener::*listenerMethod)( const ScriptDocument& _rDocument );
         };
-        EventEntry aEvents[] = {
+        static EventEntry const aEvents[] = {
             { "OnNew",          &DocumentEventListener::onDocumentCreated },
             { "OnLoad",         &DocumentEventListener::onDocumentOpened },
             { "OnSave",         &DocumentEventListener::onDocumentSave },
@@ -145,9 +145,9 @@ namespace basctl
             { "OnModeChanged",  &DocumentEventListener::onDocumentModeChanged }
         };
 
-        for ( size_t i=0; i < SAL_N_ELEMENTS( aEvents ); ++i )
+        for (EventEntry const & aEvent : aEvents)
         {
-            if ( !_rEvent.EventName.equalsAscii( aEvents[i].pEventName ) )
+            if ( !_rEvent.EventName.equalsAscii( aEvent.pEventName ) )
                 continue;
 
             ScriptDocument aDocument( xDocument );
@@ -162,13 +162,13 @@ namespace basctl
                     // somebody took the chance to dispose us -> bail out
                     return;
 
-                (m_pListener->*aEvents[i].listenerMethod)( aDocument );
+                (m_pListener->*aEvent.listenerMethod)( aDocument );
             }
             break;
         }
     }
 
-    void SAL_CALL DocumentEventNotifier::Impl::disposing( const csslang::EventObject& /*Event*/ ) throw (RuntimeException, std::exception)
+    void SAL_CALL DocumentEventNotifier::Impl::disposing( const csslang::EventObject& /*Event*/ )
     {
         SolarMutexGuard aSolarGuard;
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -209,7 +209,7 @@ namespace basctl
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("basctl.basicide");
         }
     }
 

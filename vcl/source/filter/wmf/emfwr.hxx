@@ -28,6 +28,7 @@
 
 class LineInfo;
 namespace basegfx { class B2DPolygon; }
+enum class EmfPlusRecordType;
 
 class EMFWriter
 {
@@ -36,7 +37,7 @@ private:
     ScopedVclPtr<VirtualDevice> maVDev;
     MapMode             maDestMapMode;
     SvStream& m_rStm;
-    bool*               mpHandlesUsed;
+    std::vector<bool>       mHandlesUsed;
     sal_uLong               mnHandleCount;
     sal_uLong               mnRecordCount;
     sal_uLong               mnRecordPos;
@@ -53,9 +54,9 @@ private:
 
     void                ImplBeginRecord( sal_uInt32 nType );
     void                ImplEndRecord();
-    void                ImplBeginPlusRecord( sal_uInt16 nType, sal_uInt16 nFlags );
+    void                ImplBeginPlusRecord( EmfPlusRecordType nType, sal_uInt16 nFlags );
     void                ImplEndPlusRecord();
-    void                ImplPlusRecord( sal_uInt16 nType, sal_uInt16 nFlags );
+    void                ImplPlusRecord( EmfPlusRecordType nType, sal_uInt16 nFlags );
     void                ImplBeginCommentRecord( sal_Int32 nCommentType );
     void                ImplEndCommentRecord();
 
@@ -72,7 +73,7 @@ private:
     void                ImplWriteExtent( long nExtent );
     void                ImplWritePoint( const Point& rPoint );
     void                ImplWriteSize( const Size& rSize);
-    void                ImplWriteRect( const Rectangle& rRect );
+    void                ImplWriteRect( const tools::Rectangle& rRect );
     void                ImplWritePath( const tools::PolyPolygon& rPolyPoly, bool bClose );
     void                ImplWritePolygonRecord( const tools::Polygon& rPoly, bool bClose );
     void                ImplWritePolyPolygonRecord( const tools::PolyPolygon& rPolyPoly );
@@ -83,8 +84,8 @@ private:
     void                ImplWrite( const GDIMetaFile& rMtf );
     void                WriteEMFPlusHeader( const Size &rMtfSizePix, const Size &rMtfSizeLog );
     void                ImplWritePlusEOF();
-    void                ImplWritePlusFillPolygonRecord( const tools::Polygon& rPoly, const sal_uInt32& nTrans );
-    void                ImplWritePlusColor( const Color& rColor, const sal_uInt32& nTrans );
+    void                ImplWritePlusFillPolygonRecord( const tools::Polygon& rPoly, sal_uInt32 nTrans );
+    void                ImplWritePlusColor( const Color& rColor, sal_uInt32 nTrans );
     void                ImplWritePlusPoint( const Point& rPoint );
 
 public:
@@ -92,7 +93,6 @@ public:
     explicit EMFWriter(SvStream &rStream)
         : maVDev( VclPtr<VirtualDevice>::Create() )
         , m_rStm(rStream)
-        , mpHandlesUsed(nullptr)
         , mnHandleCount(0)
         , mnRecordCount(0)
         , mnRecordPos(0)

@@ -40,12 +40,12 @@
 
 using namespace com::sun::star;
 
-void SdrTextObj::NbcSetSnapRect(const Rectangle& rRect)
+void SdrTextObj::NbcSetSnapRect(const tools::Rectangle& rRect)
 {
     if (aGeo.nRotationAngle!=0 || aGeo.nShearAngle!=0)
     {
         // Either the rotation or shear angle exists.
-        Rectangle aSR0(GetSnapRect());
+        tools::Rectangle aSR0(GetSnapRect());
         long nWdt0=aSR0.Right()-aSR0.Left();
         long nHgt0=aSR0.Bottom()-aSR0.Top();
         long nWdt1=rRect.Right()-rRect.Left();
@@ -67,12 +67,12 @@ void SdrTextObj::NbcSetSnapRect(const Rectangle& rRect)
     }
 }
 
-const Rectangle& SdrTextObj::GetLogicRect() const
+const tools::Rectangle& SdrTextObj::GetLogicRect() const
 {
     return maRect;
 }
 
-void SdrTextObj::NbcSetLogicRect(const Rectangle& rRect)
+void SdrTextObj::NbcSetLogicRect(const tools::Rectangle& rRect)
 {
     maRect = rRect;
     ImpJustifyRect(maRect);
@@ -94,28 +94,28 @@ long SdrTextObj::GetShearAngle(bool /*bVertical*/) const
 
 void SdrTextObj::NbcMove(const Size& rSiz)
 {
-    MoveRect(maRect,rSiz);
-    MoveRect(aOutRect,rSiz);
-    MoveRect(maSnapRect,rSiz);
+    maRect.Move(rSiz);
+    aOutRect.Move(rSiz);
+    maSnapRect.Move(rSiz);
     SetRectsDirty(true);
 }
 
 void SdrTextObj::NbcResize(const Point& rRef, const Fraction& xFact, const Fraction& yFact)
 {
-    bool bNoShearMerk=aGeo.nShearAngle==0;
-    bool bRota90Merk=bNoShearMerk && aGeo.nRotationAngle % 9000 ==0;
+    bool bNotSheared=aGeo.nShearAngle==0;
+    bool bRotate90=bNotSheared && aGeo.nRotationAngle % 9000 ==0;
     bool bXMirr=(xFact.GetNumerator()<0) != (xFact.GetDenominator()<0);
     bool bYMirr=(yFact.GetNumerator()<0) != (yFact.GetDenominator()<0);
     if (bXMirr || bYMirr) {
         Point aRef1(GetSnapRect().Center());
         if (bXMirr) {
             Point aRef2(aRef1);
-            aRef2.Y()++;
+            aRef2.AdjustY( 1 );
             NbcMirrorGluePoints(aRef1,aRef2);
         }
         if (bYMirr) {
             Point aRef2(aRef1);
-            aRef2.X()++;
+            aRef2.AdjustX( 1 );
             NbcMirrorGluePoints(aRef1,aRef2);
         }
     }
@@ -153,10 +153,10 @@ void SdrTextObj::NbcResize(const Point& rRef, const Fraction& xFact, const Fract
         Poly2Rect(aPol, maRect, aGeo);
     }
 
-    if (bRota90Merk) {
+    if (bRotate90) {
         bool bRota90=aGeo.nRotationAngle % 9000 ==0;
         if (!bRota90) { // there's seems to be a rounding error occurring: correct it
-            long a=NormAngle360(aGeo.nRotationAngle);
+            long a=NormAngle36000(aGeo.nRotationAngle);
             if (a<4500) a=0;
             else if (a<13500) a=9000;
             else if (a<22500) a=18000;
@@ -165,7 +165,7 @@ void SdrTextObj::NbcResize(const Point& rRef, const Fraction& xFact, const Fract
             aGeo.nRotationAngle=a;
             aGeo.RecalcSinCos();
         }
-        if (bNoShearMerk!=(aGeo.nShearAngle==0)) { // correct a rounding error occurring with Shear
+        if (bNotSheared!=(aGeo.nShearAngle==0)) { // correct a rounding error occurring with Shear
             aGeo.nShearAngle=0;
             aGeo.RecalcTan();
         }
@@ -175,7 +175,7 @@ void SdrTextObj::NbcResize(const Point& rRef, const Fraction& xFact, const Fract
 
     AdaptTextMinSize();
 
-    if(bTextFrame && (!pModel || !pModel->IsPasteResize()))
+    if(bTextFrame && !getSdrModelFromSdrObject().IsPasteResize())
     {
         NbcAdjustTextFrameWidthAndHeight();
     }
@@ -191,16 +191,16 @@ void SdrTextObj::NbcRotate(const Point& rRef, long nAngle, double sn, double cs)
     long dy=maRect.Bottom()-maRect.Top();
     Point aP(maRect.TopLeft());
     RotatePoint(aP,rRef,sn,cs);
-    maRect.Left()=aP.X();
-    maRect.Top()=aP.Y();
-    maRect.Right()=maRect.Left()+dx;
-    maRect.Bottom()=maRect.Top()+dy;
+    maRect.SetLeft(aP.X() );
+    maRect.SetTop(aP.Y() );
+    maRect.SetRight(maRect.Left()+dx );
+    maRect.SetBottom(maRect.Top()+dy );
     if (aGeo.nRotationAngle==0) {
-        aGeo.nRotationAngle=NormAngle360(nAngle);
+        aGeo.nRotationAngle=NormAngle36000(nAngle);
         aGeo.nSin=sn;
         aGeo.nCos=cs;
     } else {
-        aGeo.nRotationAngle=NormAngle360(aGeo.nRotationAngle+nAngle);
+        aGeo.nRotationAngle=NormAngle36000(aGeo.nRotationAngle+nAngle);
         aGeo.RecalcSinCos();
     }
     SetRectsDirty();
@@ -208,7 +208,7 @@ void SdrTextObj::NbcRotate(const Point& rRef, long nAngle, double sn, double cs)
     SetGlueReallyAbsolute(false);
 }
 
-void SdrTextObj::NbcShear(const Point& rRef, long nAngle, double tn, bool bVShear)
+void SdrTextObj::NbcShear(const Point& rRef, long /*nAngle*/, double tn, bool bVShear)
 {
     SetGlueReallyAbsolute(true);
 
@@ -226,19 +226,19 @@ void SdrTextObj::NbcShear(const Point& rRef, long nAngle, double tn, bool bVShea
     }
     ImpCheckShear();
     SetRectsDirty();
-    NbcShearGluePoints(rRef,nAngle,tn,bVShear);
+    NbcShearGluePoints(rRef,tn,bVShear);
     SetGlueReallyAbsolute(false);
 }
 
 void SdrTextObj::NbcMirror(const Point& rRef1, const Point& rRef2)
 {
     SetGlueReallyAbsolute(true);
-    bool bNoShearMerk=aGeo.nShearAngle==0;
-    bool bRota90Merk = false;
-    if (bNoShearMerk &&
+    bool bNotSheared=aGeo.nShearAngle==0;
+    bool bRotate90 = false;
+    if (bNotSheared &&
         (rRef1.X()==rRef2.X() || rRef1.Y()==rRef2.Y() ||
          std::abs(rRef1.X()-rRef2.X())==std::abs(rRef1.Y()-rRef2.Y()))) {
-        bRota90Merk=aGeo.nRotationAngle % 9000 ==0;
+        bRotate90=aGeo.nRotationAngle % 9000 ==0;
     }
     tools::Polygon aPol(Rect2Poly(maRect,aGeo));
     sal_uInt16 i;
@@ -255,10 +255,10 @@ void SdrTextObj::NbcMirror(const Point& rRef1, const Point& rRef2)
     aPol[4]=aPol0[1];
     Poly2Rect(aPol,maRect,aGeo);
 
-    if (bRota90Merk) {
+    if (bRotate90) {
         bool bRota90=aGeo.nRotationAngle % 9000 ==0;
-        if (bRota90Merk && !bRota90) { // there's seems to be a rounding error occurring: correct it
-            long a=NormAngle360(aGeo.nRotationAngle);
+        if (bRotate90 && !bRota90) { // there's seems to be a rounding error occurring: correct it
+            long a=NormAngle36000(aGeo.nRotationAngle);
             if (a<4500) a=0;
             else if (a<13500) a=9000;
             else if (a<22500) a=18000;
@@ -268,7 +268,7 @@ void SdrTextObj::NbcMirror(const Point& rRef1, const Point& rRef2)
             aGeo.RecalcSinCos();
         }
     }
-    if (bNoShearMerk!=(aGeo.nShearAngle==0)) { // correct a rounding error occurring with Shear
+    if (bNotSheared!=(aGeo.nShearAngle==0)) { // correct a rounding error occurring with Shear
         aGeo.nShearAngle=0;
         aGeo.RecalcTan();
     }
@@ -295,7 +295,7 @@ SdrObject* SdrTextObj::ImpConvertContainedTextToSdrPathObjs(bool bToPoly) const
     }
 
     // get primitives
-    const drawinglayer::primitive2d::Primitive2DContainer xSequence(GetViewContact().getViewIndependentPrimitive2DSequence());
+    const drawinglayer::primitive2d::Primitive2DContainer xSequence(GetViewContact().getViewIndependentPrimitive2DContainer());
 
     if(!xSequence.empty())
     {
@@ -313,7 +313,7 @@ SdrObject* SdrTextObj::ImpConvertContainedTextToSdrPathObjs(bool bToPoly) const
         if(nResultCount)
         {
             // prepare own target
-            SdrObjGroup* pGroup = new SdrObjGroup();
+            SdrObjGroup* pGroup = new SdrObjGroup(getSdrModelFromSdrObject());
             SdrObjList* pObjectList = pGroup->GetSubList();
 
             // process results
@@ -329,14 +329,14 @@ SdrObject* SdrTextObj::ImpConvertContainedTextToSdrPathObjs(bool bToPoly) const
                     {
                         if(aPolyPolygon.areControlPointsUsed())
                         {
-                            aPolyPolygon = basegfx::tools::adaptiveSubdivideByAngle(aPolyPolygon);
+                            aPolyPolygon = basegfx::utils::adaptiveSubdivideByAngle(aPolyPolygon);
                         }
                     }
                     else
                     {
                         if(!aPolyPolygon.areControlPointsUsed())
                         {
-                            aPolyPolygon = basegfx::tools::expandToCurve(aPolyPolygon);
+                            aPolyPolygon = basegfx::utils::expandToCurve(aPolyPolygon);
                         }
                     }
 
@@ -355,7 +355,10 @@ SdrObject* SdrTextObj::ImpConvertContainedTextToSdrPathObjs(bool bToPoly) const
                         aAttributeSet.Put(XFillStyleItem(drawing::FillStyle_SOLID));
 
                         // create filled SdrPathObj
-                        pPathObj = new SdrPathObj(OBJ_PATHFILL, aPolyPolygon);
+                        pPathObj = new SdrPathObj(
+                            getSdrModelFromSdrObject(),
+                            OBJ_PATHFILL,
+                            aPolyPolygon);
                     }
                     else
                     {
@@ -366,18 +369,16 @@ SdrObject* SdrTextObj::ImpConvertContainedTextToSdrPathObjs(bool bToPoly) const
                         aAttributeSet.Put(XFillStyleItem(drawing::FillStyle_NONE));
 
                         // create line SdrPathObj
-                        pPathObj = new SdrPathObj(OBJ_PATHLINE, aPolyPolygon);
+                        pPathObj = new SdrPathObj(
+                            getSdrModelFromSdrObject(),
+                            OBJ_PATHLINE,
+                            aPolyPolygon);
                     }
 
                     // copy basic information from original
                     pPathObj->ImpSetAnchorPos(GetAnchorPos());
                     pPathObj->NbcSetLayer(GetLayer());
-
-                    if(GetModel())
-                    {
-                        pPathObj->SetModel(GetModel());
-                        pPathObj->NbcSetStyleSheet(GetStyleSheet(), true);
-                    }
+                    pPathObj->NbcSetStyleSheet(GetStyleSheet(), true);
 
                     // apply prepared ItemSet and add to target
                     pPathObj->SetMergedItemSet(aAttributeSet);
@@ -388,12 +389,17 @@ SdrObject* SdrTextObj::ImpConvertContainedTextToSdrPathObjs(bool bToPoly) const
             // postprocess; if no result and/or only one object, simplify
             if(!pObjectList->GetObjCount())
             {
-                delete pGroup;
+                // always use SdrObject::Free(...) for SdrObjects (!)
+                SdrObject* pTemp(pGroup);
+                SdrObject::Free(pTemp);
             }
             else if(1 == pObjectList->GetObjCount())
             {
                 pRetval = pObjectList->RemoveObject(0);
-                delete pGroup;
+
+                // always use SdrObject::Free(...) for SdrObjects (!)
+                SdrObject* pTemp(pGroup);
+                SdrObject::Free(pTemp);
             }
             else
             {
@@ -429,32 +435,28 @@ SdrObject* SdrTextObj::ImpConvertMakeObj(const basegfx::B2DPolyPolygon& rPolyPol
     // #i37011#
     if(!bBezier)
     {
-        aB2DPolyPolygon = basegfx::tools::adaptiveSubdivideByAngle(aB2DPolyPolygon);
+        aB2DPolyPolygon = basegfx::utils::adaptiveSubdivideByAngle(aB2DPolyPolygon);
         ePathKind = bClosed ? OBJ_POLY : OBJ_PLIN;
     }
 
-    SdrPathObj* pPathObj = new SdrPathObj(ePathKind, aB2DPolyPolygon);
+    SdrPathObj* pPathObj = new SdrPathObj(
+        getSdrModelFromSdrObject(),
+        ePathKind,
+        aB2DPolyPolygon);
 
     if(bBezier)
     {
         // create bezier curves
-        pPathObj->SetPathPoly(basegfx::tools::expandToCurve(pPathObj->GetPathPoly()));
+        pPathObj->SetPathPoly(basegfx::utils::expandToCurve(pPathObj->GetPathPoly()));
     }
 
     pPathObj->ImpSetAnchorPos(aAnchor);
-    pPathObj->NbcSetLayer(SdrLayerID(GetLayer()));
-
-    if(pModel)
-    {
-        pPathObj->SetModel(pModel);
-
-        sdr::properties::ItemChangeBroadcaster aC(*pPathObj);
-
-        pPathObj->ClearMergedItem();
-        pPathObj->SetMergedItemSet(GetObjectItemSet());
-        pPathObj->GetProperties().BroadcastItemChange(aC);
-        pPathObj->NbcSetStyleSheet(GetStyleSheet(), true);
-    }
+    pPathObj->NbcSetLayer(GetLayer());
+    sdr::properties::ItemChangeBroadcaster aC(*pPathObj);
+    pPathObj->ClearMergedItem();
+    pPathObj->SetMergedItemSet(GetObjectItemSet());
+    pPathObj->GetProperties().BroadcastItemChange(aC);
+    pPathObj->NbcSetStyleSheet(GetStyleSheet(), true);
 
     return pPathObj;
 }
@@ -489,7 +491,7 @@ SdrObject* SdrTextObj::ImpConvertAddText(SdrObject* pObj, bool bBezier) const
     else
     {
         // not yet a group, create one and add partial and new shapes
-        SdrObjGroup* pGrp=new SdrObjGroup;
+        SdrObjGroup* pGrp=new SdrObjGroup(getSdrModelFromSdrObject());
         SdrObjList* pOL=pGrp->GetSubList();
         pOL->InsertObject(pObj);
         pOL->InsertObject(pText);

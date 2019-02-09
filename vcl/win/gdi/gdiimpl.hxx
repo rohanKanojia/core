@@ -17,12 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "salgdiimpl.hxx"
-#include "win/salgdi.h"
+#ifndef INCLUDED_VCL_WIN_GDI_GDIIMPL_HXX
+#define INCLUDED_VCL_WIN_GDI_GDIIMPL_HXX
+
+#include <salgdiimpl.hxx>
+#include <win/salgdi.h>
 
 #include <vcl/gradient.hxx>
 
-#include "svsys.h"
+#include <svsys.h>
+#include <ControlCacheKey.hxx>
 
 class WinSalGraphics;
 
@@ -36,22 +40,30 @@ private:
     HPEN mhPen; // Pen
     bool mbStockPen : 1; // is Pen a stockpen
     bool mbBrush : 1; // is Brush (FALSE == NULL_BRUSH)
-    bool mbStockBrush : 1; // is Brush a stcokbrush
+    bool mbStockBrush : 1; // is Brush a stockbrush
     HBRUSH mhBrush; // Brush
     COLORREF mnPenColor; // PenColor
     COLORREF mnBrushColor; // BrushColor
 
     // remember RGB values for SetLineColor/SetFillColor
-    SalColor                maLineColor;
-    SalColor                maFillColor;
+    Color                maLineColor;
+    Color                maFillColor;
 
-    bool tryDrawBitmapGdiPlus(const SalTwoRect& rTR, const SalBitmap& rSrcBitmap);
+    bool TryDrawBitmapGDIPlus(const SalTwoRect& rTR, const SalBitmap& rSrcBitmap);
+    void DrawPixelImpl(long nX, long nY, COLORREF crColor);
 
+    HPEN SearchStockPen(COLORREF nPenColor);
+    HPEN MakePen(Color nColor);
+    void ResetPen(HPEN hNewPen);
+
+    HBRUSH SearchStockBrush(COLORREF nBrushColor);
+    HBRUSH MakeBrush(Color nColor);
+    void ResetBrush(HBRUSH hNewBrush);
 public:
 
     explicit WinSalGraphicsImpl(WinSalGraphics& rParent);
 
-    virtual ~WinSalGraphicsImpl();
+    virtual ~WinSalGraphicsImpl() override;
 
     virtual void Init() override;
 
@@ -73,14 +85,14 @@ public:
     virtual void SetLineColor() override;
 
     // set the line color to a specific color
-    virtual void SetLineColor( SalColor nSalColor ) override;
+    virtual void SetLineColor( Color nColor ) override;
 
     // set the fill color to transparent (= don't fill)
     virtual void SetFillColor() override;
 
     // set the fill color to a specific color, shapes will be
     // filled accordingly
-    virtual void SetFillColor( SalColor nSalColor ) override;
+    virtual void SetFillColor( Color nColor ) override;
 
     // enable/disable XOR drawing
     virtual void SetXORMode( bool bSet, bool bInvertOnly ) override;
@@ -93,7 +105,7 @@ public:
 
     // draw --> LineColor and FillColor and RasterOp and ClipRegion
     virtual void drawPixel( long nX, long nY ) override;
-    virtual void drawPixel( long nX, long nY, SalColor nSalColor ) override;
+    virtual void drawPixel( long nX, long nY, Color nColor ) override;
 
     virtual void drawLine( long nX1, long nY1, long nX2, long nY2 ) override;
 
@@ -104,37 +116,43 @@ public:
     virtual void drawPolygon( sal_uInt32 nPoints, const SalPoint* pPtAry ) override;
 
     virtual void drawPolyPolygon( sal_uInt32 nPoly, const sal_uInt32* pPoints, PCONSTSALPOINT* pPtAry ) override;
-    virtual bool drawPolyPolygon( const basegfx::B2DPolyPolygon&, double fTransparency ) override;
+
+    virtual bool drawPolyPolygon(
+                const basegfx::B2DHomMatrix& rObjectToDevice,
+                const basegfx::B2DPolyPolygon&,
+                double fTransparency) override;
 
     virtual bool drawPolyLine(
+                const basegfx::B2DHomMatrix& rObjectToDevice,
                 const basegfx::B2DPolygon&,
                 double fTransparency,
                 const basegfx::B2DVector& rLineWidths,
                 basegfx::B2DLineJoin,
-                css::drawing::LineCap) override;
+                css::drawing::LineCap,
+                double fMiterMinimumAngle,
+                bool bPixelSnapHairline) override;
 
     virtual bool drawPolyLineBezier(
                 sal_uInt32 nPoints,
                 const SalPoint* pPtAry,
-                const sal_uInt8* pFlgAry ) override;
+                const PolyFlags* pFlgAry ) override;
 
     virtual bool drawPolygonBezier(
                 sal_uInt32 nPoints,
                 const SalPoint* pPtAry,
-                const sal_uInt8* pFlgAry ) override;
+                const PolyFlags* pFlgAry ) override;
 
     virtual bool drawPolyPolygonBezier(
                 sal_uInt32 nPoly,
                 const sal_uInt32* pPoints,
                 const SalPoint* const* pPtAry,
-                const sal_uInt8* const* pFlgAry ) override;
+                const PolyFlags* const* pFlgAry ) override;
 
     // CopyArea --> No RasterOp, but ClipRegion
     virtual void copyArea(
                 long nDestX, long nDestY,
                 long nSrcX, long nSrcY,
-                long nSrcWidth, long nSrcHeight,
-                sal_uInt16 nFlags ) override;
+                long nSrcWidth, long nSrcHeight, bool bWindowInvalidate ) override;
 
     // CopyBits and DrawBitmap --> RasterOp and ClipRegion
     // CopyBits() --> pSrcGraphics == NULL, then CopyBits on same Graphics
@@ -150,11 +168,11 @@ public:
     virtual void drawMask(
                 const SalTwoRect& rPosAry,
                 const SalBitmap& rSalBitmap,
-                SalColor nMaskColor ) override;
+                Color nMaskColor ) override;
 
-    virtual SalBitmap* getBitmap( long nX, long nY, long nWidth, long nHeight ) override;
+    virtual std::shared_ptr<SalBitmap> getBitmap( long nX, long nY, long nWidth, long nHeight ) override;
 
-    virtual SalColor getPixel( long nX, long nY ) override;
+    virtual Color getPixel( long nX, long nY ) override;
 
     // invert --> ClipRegion (only Windows or VirDevs)
     virtual void invert(
@@ -225,5 +243,7 @@ public:
     virtual bool RenderAndCacheNativeControl(OpenGLCompatibleDC& rWhite, OpenGLCompatibleDC& rBlack,
                                              int nX, int nY , ControlCacheKey& aControlCacheKey);
 };
+
+#endif // INCLUDED_VCL_WIN_GDI_GDIIMPL_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

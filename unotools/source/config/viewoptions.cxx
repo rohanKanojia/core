@@ -20,13 +20,16 @@
 #include <unotools/viewoptions.hxx>
 #include <com/sun/star/uno/Any.hxx>
 
+#include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <unotools/configpaths.hxx>
+#include <unotools/configmgr.hxx>
 #include <comphelper/configurationhelper.hxx>
 #include <comphelper/processfactory.hxx>
 
@@ -55,13 +58,8 @@
                 }
 #endif // DEBUG_VIEWOPTIONS
 
-#define SVTVIEWOPTIONS_LOG_UNEXPECTED_EXCEPTION(SVTVIEWOPTIONS_LOG_UNEXPECTED_EXCEPTION_PARAM_EXCEPTION)            \
-    {                                                                                                               \
-        OUStringBuffer sMsg(256);                                                                            \
-        sMsg.append("Unexpected exception catched. Original message was:\n\""      );                          \
-        sMsg.append     (SVTVIEWOPTIONS_LOG_UNEXPECTED_EXCEPTION_PARAM_EXCEPTION.Message);                          \
-        sMsg.append("\""                                                           );                          \
-    }
+#define SVTVIEWOPTIONS_LOG_UNEXPECTED_EXCEPTION(ex)            \
+        SAL_WARN("unotools", "Unexpected exception caught. Original message was: " << ex.Message);
 
 //  initialization!
 
@@ -85,14 +83,14 @@ sal_Int32                    SvtViewOptions::m_nRefCount_Windows         =   0  
                     between added/changed/removed elements without any complex mask or bool flag information.
                     Caches from configuration and our own one are synchronized every time - if we do so.
 *//*-*************************************************************************************************************/
-class SvtViewOptionsBase_Impl
+class SvtViewOptionsBase_Impl final
 {
 
     public:
         enum State { STATE_NONE, STATE_FALSE, STATE_TRUE };
 
         explicit SvtViewOptionsBase_Impl(const OUString& rList);
-        virtual                                        ~SvtViewOptionsBase_Impl (                                                                );
+                 ~SvtViewOptionsBase_Impl (                                                                );
         bool                                            Exists                  ( const OUString&                                sName    );
         void                                            Delete                  ( const OUString&                                sName    );
         OUString                                        GetWindowState          ( const OUString&                                sName    );
@@ -101,9 +99,9 @@ class SvtViewOptionsBase_Impl
         css::uno::Sequence< css::beans::NamedValue >    GetUserData             ( const OUString&                                sName    );
         void                                            SetUserData             ( const OUString&                                sName    ,
                                                                                   const css::uno::Sequence< css::beans::NamedValue >&   lData    );
-        sal_Int32                                       GetPageID               ( const OUString&                                sName    );
+        OString                                         GetPageID               ( const OUString&                                sName    );
         void                                            SetPageID               ( const OUString&                                sName    ,
-                                                                                        sal_Int32                                       nID      );
+                                                                                  const OString&                                 sID      );
         State                                           GetVisible              ( const OUString&                                sName    );
         void                                            SetVisible              ( const OUString&                                sName    ,
                                                                                         bool                                        bVisible );
@@ -118,7 +116,7 @@ class SvtViewOptionsBase_Impl
                                                                            bool         bCreateIfMissing);
 
     private:
-        OUString                                    m_sListName;
+        OUString const                                    m_sListName;
         css::uno::Reference< css::container::XNameAccess > m_xRoot;
         css::uno::Reference< css::container::XNameAccess > m_xSet;
 
@@ -149,7 +147,7 @@ SvtViewOptionsBase_Impl::SvtViewOptionsBase_Impl( const OUString& sList )
         ,   m_nWriteCount( 0     )
         #endif
 {
-    if (utl::ConfigManager::IsAvoidConfig())
+    if (utl::ConfigManager::IsFuzzing())
         return;
 
     try
@@ -438,32 +436,31 @@ void SvtViewOptionsBase_Impl::SetUserItem( const OUString& sName  ,
         }
 }
 
-sal_Int32 SvtViewOptionsBase_Impl::GetPageID( const OUString& sName )
+OString SvtViewOptionsBase_Impl::GetPageID( const OUString& sName )
 {
     #ifdef DEBUG_VIEWOPTIONS
     ++m_nReadCount;
     #endif
 
-    sal_Int32 nID = 0;
+    OUString sID;
     try
     {
         css::uno::Reference< css::beans::XPropertySet > xNode(
             impl_getSetNode(sName, false),
             css::uno::UNO_QUERY);
         if (xNode.is())
-            xNode->getPropertyValue(PROPERTY_PAGEID) >>= nID;
+            xNode->getPropertyValue(PROPERTY_PAGEID) >>= sID;
     }
     catch(const css::uno::Exception& ex)
         {
-            nID = 0;
             SVTVIEWOPTIONS_LOG_UNEXPECTED_EXCEPTION(ex)
         }
 
-    return nID;
+    return sID.toUtf8();
 }
 
 void SvtViewOptionsBase_Impl::SetPageID( const OUString& sName ,
-                                               sal_Int32        nID   )
+                                         const OString& sID )
 {
     #ifdef DEBUG_VIEWOPTIONS
     ++m_nWriteCount;
@@ -474,7 +471,7 @@ void SvtViewOptionsBase_Impl::SetPageID( const OUString& sName ,
         css::uno::Reference< css::beans::XPropertySet > xNode(
             impl_getSetNode(sName, true),
             css::uno::UNO_QUERY_THROW);
-        xNode->setPropertyValue(PROPERTY_PAGEID, css::uno::makeAny(nID));
+        xNode->setPropertyValue(PROPERTY_PAGEID, css::uno::makeAny(OUString::fromUtf8(sID)));
         ::comphelper::ConfigurationHelper::flush(m_xRoot);
     }
     catch(const css::uno::Exception& ex)
@@ -581,7 +578,7 @@ SvtViewOptions::SvtViewOptions(       EViewType        eType     ,
     // Search for right dat container for this view type and initialize right data container or set right ref count!
     switch( eType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     // Increase ref count for dialog data container first.
                                     ++m_nRefCount_Dialogs;
                                     // If these instance the first user of the dialog data container - create these impl static container!
@@ -589,44 +586,44 @@ SvtViewOptions::SvtViewOptions(       EViewType        eType     ,
                                     {
                                         //m_pDataContainer_Dialogs = new SvtViewDialogOptions_Impl( LIST_DIALOGS );
                                         m_pDataContainer_Dialogs = new SvtViewOptionsBase_Impl( LIST_DIALOGS );
-                                        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_DIALOG);
+                                        ItemHolder1::holdConfigItem(EItem::ViewOptionsDialog);
                                     }
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     // Increase ref count for tab-dialog data container first.
                                     ++m_nRefCount_TabDialogs;
                                     // If these instance the first user of the tab-dialog data container - create these impl static container!
                                     if( m_nRefCount_TabDialogs == 1 )
                                     {
                                         m_pDataContainer_TabDialogs = new SvtViewOptionsBase_Impl( LIST_TABDIALOGS );
-                                        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_TABDIALOG);
+                                        ItemHolder1::holdConfigItem(EItem::ViewOptionsTabDialog);
                                     }
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     // Increase ref count for tab-page data container first.
                                     ++m_nRefCount_TabPages;
                                     // If these instance the first user of the tab-page data container - create these impl static container!
                                     if( m_nRefCount_TabPages == 1 )
                                     {
                                         m_pDataContainer_TabPages = new SvtViewOptionsBase_Impl( LIST_TABPAGES );
-                                        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_TABPAGE);
+                                        ItemHolder1::holdConfigItem(EItem::ViewOptionsTabPage);
                                     }
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     // Increase ref count for window data container first.
                                     ++m_nRefCount_Windows;
                                     // If these instance the first user of the window data container - create these impl static container!
                                     if( m_nRefCount_Windows == 1 )
                                     {
                                         m_pDataContainer_Windows = new SvtViewOptionsBase_Impl( LIST_WINDOWS );
-                                        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_WINDOW);
+                                        ItemHolder1::holdConfigItem(EItem::ViewOptionsWindow);
                                     }
                                 }
                                 break;
-        default             :   OSL_FAIL( "SvtViewOptions::SvtViewOptions()\nThese view type is unknown! All following calls at these instance will do nothing!\n" );
+        default             :   OSL_FAIL( "SvtViewOptions::SvtViewOptions()\nThese view type is unknown! All following calls at these instance will do nothing!" );
     }
 }
 
@@ -640,7 +637,7 @@ SvtViewOptions::~SvtViewOptions()
     // Search for right dat container for this view type and deinitialize right data container or set right ref count!
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     // Decrease ref count for dialog data container first.
                                     --m_nRefCount_Dialogs;
                                     // If these instance the last user of the dialog data container - delete these impl static container!
@@ -651,7 +648,7 @@ SvtViewOptions::~SvtViewOptions()
                                     }
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     // Decrease ref count for tab-dialog data container first.
                                     --m_nRefCount_TabDialogs;
                                     // If these instance the last user of the tab-dialog data container - delete these impl static container!
@@ -662,7 +659,7 @@ SvtViewOptions::~SvtViewOptions()
                                     }
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     // Decrease ref count for tab-page data container first.
                                     --m_nRefCount_TabPages;
                                     // If these instance the last user of the tab-page data container - delete these impl static container!
@@ -673,7 +670,7 @@ SvtViewOptions::~SvtViewOptions()
                                     }
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     // Decrease ref count for window data container first.
                                     --m_nRefCount_Windows;
                                     // If these instance the last user of the window data container - delete these impl static container!
@@ -697,19 +694,19 @@ bool SvtViewOptions::Exists() const
     bool bExists = false;
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     bExists = m_pDataContainer_Dialogs->Exists( m_sViewName );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     bExists = m_pDataContainer_TabDialogs->Exists( m_sViewName );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     bExists = m_pDataContainer_TabPages->Exists( m_sViewName );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     bExists = m_pDataContainer_Windows->Exists( m_sViewName );
                                 }
                                 break;
@@ -726,13 +723,13 @@ void SvtViewOptions::Delete()
 
     switch( m_eViewType )
     {
-        case E_DIALOG    :  m_pDataContainer_Dialogs->Delete( m_sViewName );
+        case EViewType::Dialog    :  m_pDataContainer_Dialogs->Delete( m_sViewName );
                             break;
-        case E_TABDIALOG :  m_pDataContainer_TabDialogs->Delete( m_sViewName );
+        case EViewType::TabDialog :  m_pDataContainer_TabDialogs->Delete( m_sViewName );
                             break;
-        case E_TABPAGE   :  m_pDataContainer_TabPages->Delete( m_sViewName );
+        case EViewType::TabPage   :  m_pDataContainer_TabPages->Delete( m_sViewName );
                             break;
-        case E_WINDOW    :  m_pDataContainer_Windows->Delete( m_sViewName );
+        case EViewType::Window    :  m_pDataContainer_Windows->Delete( m_sViewName );
                             break;
     }
 }
@@ -747,19 +744,19 @@ OUString SvtViewOptions::GetWindowState() const
     OUString sState;
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     sState = m_pDataContainer_Dialogs->GetWindowState( m_sViewName );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog:{
                                     sState = m_pDataContainer_TabDialogs->GetWindowState( m_sViewName );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     sState = m_pDataContainer_TabPages->GetWindowState( m_sViewName );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     sState = m_pDataContainer_Windows->GetWindowState( m_sViewName );
                                 }
                                 break;
@@ -776,19 +773,19 @@ void SvtViewOptions::SetWindowState( const OUString& sState )
 
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     m_pDataContainer_Dialogs->SetWindowState( m_sViewName, sState );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     m_pDataContainer_TabDialogs->SetWindowState( m_sViewName, sState );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     m_pDataContainer_TabPages->SetWindowState( m_sViewName, sState );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     m_pDataContainer_Windows->SetWindowState( m_sViewName, sState );
                                 }
                                 break;
@@ -797,34 +794,34 @@ void SvtViewOptions::SetWindowState( const OUString& sState )
 
 //  public method
 
-sal_Int32 SvtViewOptions::GetPageID() const
+OString SvtViewOptions::GetPageID() const
 {
     // Ready for multithreading
     ::osl::MutexGuard aGuard( GetOwnStaticMutex() );
 
     // Safe impossible cases.
     // These call isn't allowed for dialogs, tab-pages or windows!
-    OSL_ENSURE( !(m_eViewType==E_DIALOG||m_eViewType==E_TABPAGE||m_eViewType==E_WINDOW), "SvtViewOptions::GetPageID()\nCall not allowed for Dialogs, TabPages or Windows! I do nothing!\n" );
+    OSL_ENSURE( !(m_eViewType==EViewType::Dialog||m_eViewType==EViewType::TabPage||m_eViewType==EViewType::Window), "SvtViewOptions::GetPageID()\nCall not allowed for Dialogs, TabPages or Windows! I do nothing!" );
 
-    sal_Int32 nID = 0;
-    if( m_eViewType == E_TABDIALOG )
-        nID = m_pDataContainer_TabDialogs->GetPageID( m_sViewName );
-    return nID;
+    OString sID;
+    if( m_eViewType == EViewType::TabDialog )
+        sID = m_pDataContainer_TabDialogs->GetPageID( m_sViewName );
+    return sID;
 }
 
 //  public method
 
-void SvtViewOptions::SetPageID( sal_Int32 nID )
+void SvtViewOptions::SetPageID(const OString& rID)
 {
     // Ready for multithreading
     ::osl::MutexGuard aGuard( GetOwnStaticMutex() );
 
     // Safe impossible cases.
     // These call isn't allowed for dialogs, tab-pages or windows!
-    OSL_ENSURE( !(m_eViewType==E_DIALOG||m_eViewType==E_TABPAGE||m_eViewType==E_WINDOW), "SvtViewOptions::SetPageID()\nCall not allowed for Dialogs, TabPages or Windows! I do nothing!\n" );
+    OSL_ENSURE( !(m_eViewType==EViewType::Dialog||m_eViewType==EViewType::TabPage||m_eViewType==EViewType::Window), "SvtViewOptions::SetPageID()\nCall not allowed for Dialogs, TabPages or Windows! I do nothing!" );
 
-    if( m_eViewType == E_TABDIALOG )
-        m_pDataContainer_TabDialogs->SetPageID( m_sViewName, nID );
+    if( m_eViewType == EViewType::TabDialog )
+        m_pDataContainer_TabDialogs->SetPageID(m_sViewName, rID);
 }
 
 //  public method
@@ -836,10 +833,10 @@ bool SvtViewOptions::IsVisible() const
 
     // Safe impossible cases.
     // These call isn't allowed for dialogs, tab-dialogs or tab-pages!
-    OSL_ENSURE( !(m_eViewType==E_DIALOG||m_eViewType==E_TABDIALOG||m_eViewType==E_TABPAGE), "SvtViewOptions::IsVisible()\nCall not allowed for Dialogs, TabDialogs or TabPages! I do nothing!\n" );
+    OSL_ENSURE( !(m_eViewType==EViewType::Dialog||m_eViewType==EViewType::TabDialog||m_eViewType==EViewType::TabPage), "SvtViewOptions::IsVisible()\nCall not allowed for Dialogs, TabDialogs or TabPages! I do nothing!" );
 
     bool bState = false;
-    if( m_eViewType == E_WINDOW )
+    if( m_eViewType == EViewType::Window )
         bState = m_pDataContainer_Windows->GetVisible( m_sViewName ) == SvtViewOptionsBase_Impl::STATE_TRUE;
 
     return bState;
@@ -854,9 +851,9 @@ void SvtViewOptions::SetVisible( bool bState )
 
     // Safe impossible cases.
     // These call isn't allowed for dialogs, tab-dialogs or tab-pages!
-    OSL_ENSURE( !(m_eViewType==E_DIALOG||m_eViewType==E_TABDIALOG||m_eViewType==E_TABPAGE), "SvtViewOptions::SetVisible()\nCall not allowed for Dialogs, TabDialogs or TabPages! I do nothing!\n" );
+    OSL_ENSURE( !(m_eViewType==EViewType::Dialog||m_eViewType==EViewType::TabDialog||m_eViewType==EViewType::TabPage), "SvtViewOptions::SetVisible()\nCall not allowed for Dialogs, TabDialogs or TabPages! I do nothing!" );
 
-    if( m_eViewType == E_WINDOW )
+    if( m_eViewType == EViewType::Window )
         m_pDataContainer_Windows->SetVisible( m_sViewName, bState );
 }
 
@@ -869,10 +866,10 @@ bool SvtViewOptions::HasVisible() const
 
     // Safe impossible cases.
     // These call isn't allowed for dialogs, tab-dialogs or tab-pages!
-    OSL_ENSURE( !(m_eViewType==E_DIALOG||m_eViewType==E_TABDIALOG||m_eViewType==E_TABPAGE), "SvtViewOptions::IsVisible()\nCall not allowed for Dialogs, TabDialogs or TabPages! I do nothing!\n" );
+    OSL_ENSURE( !(m_eViewType==EViewType::Dialog||m_eViewType==EViewType::TabDialog||m_eViewType==EViewType::TabPage), "SvtViewOptions::IsVisible()\nCall not allowed for Dialogs, TabDialogs or TabPages! I do nothing!" );
 
     bool bState = false;
-    if( m_eViewType == E_WINDOW )
+    if( m_eViewType == EViewType::Window )
         bState = m_pDataContainer_Windows->GetVisible( m_sViewName ) != SvtViewOptionsBase_Impl::STATE_NONE;
 
     return bState;
@@ -886,19 +883,19 @@ css::uno::Sequence< css::beans::NamedValue > SvtViewOptions::GetUserData() const
     css::uno::Sequence< css::beans::NamedValue > lData;
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     lData = m_pDataContainer_Dialogs->GetUserData( m_sViewName );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     lData = m_pDataContainer_TabDialogs->GetUserData( m_sViewName );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     lData = m_pDataContainer_TabPages->GetUserData( m_sViewName );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     lData = m_pDataContainer_Windows->GetUserData( m_sViewName );
                                 }
                                 break;
@@ -913,19 +910,19 @@ void SvtViewOptions::SetUserData( const css::uno::Sequence< css::beans::NamedVal
 
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     m_pDataContainer_Dialogs->SetUserData( m_sViewName, lData );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     m_pDataContainer_TabDialogs->SetUserData( m_sViewName, lData );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     m_pDataContainer_TabPages->SetUserData( m_sViewName, lData );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     m_pDataContainer_Windows->SetUserData( m_sViewName, lData );
                                 }
                                 break;
@@ -940,19 +937,19 @@ css::uno::Any SvtViewOptions::GetUserItem( const OUString& sName ) const
     css::uno::Any aItem;
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     aItem = m_pDataContainer_Dialogs->GetUserItem( m_sViewName, sName );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     aItem = m_pDataContainer_TabDialogs->GetUserItem( m_sViewName, sName );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     aItem = m_pDataContainer_TabPages->GetUserItem( m_sViewName, sName );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     aItem = m_pDataContainer_Windows->GetUserItem( m_sViewName, sName );
                                 }
                                 break;
@@ -968,19 +965,19 @@ void SvtViewOptions::SetUserItem( const OUString& sName  ,
 
     switch( m_eViewType )
     {
-        case E_DIALOG       :   {
+        case EViewType::Dialog: {
                                     m_pDataContainer_Dialogs->SetUserItem( m_sViewName, sName, aValue );
                                 }
                                 break;
-        case E_TABDIALOG    :   {
+        case EViewType::TabDialog: {
                                     m_pDataContainer_TabDialogs->SetUserItem( m_sViewName, sName, aValue );
                                 }
                                 break;
-        case E_TABPAGE      :   {
+        case EViewType::TabPage:{
                                     m_pDataContainer_TabPages->SetUserItem( m_sViewName, sName, aValue );
                                 }
                                 break;
-        case E_WINDOW       :   {
+        case EViewType::Window: {
                                     m_pDataContainer_Windows->SetUserItem( m_sViewName, sName, aValue );
                                 }
                                 break;
@@ -1005,22 +1002,22 @@ void SvtViewOptions::AcquireOptions()
     if( ++m_nRefCount_Dialogs == 1 )
     {
         m_pDataContainer_Dialogs = new SvtViewOptionsBase_Impl( LIST_DIALOGS );
-        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_DIALOG);
+        ItemHolder1::holdConfigItem(EItem::ViewOptionsDialog);
     }
     if( ++m_nRefCount_TabDialogs == 1 )
     {
         m_pDataContainer_TabDialogs = new SvtViewOptionsBase_Impl( LIST_TABDIALOGS );
-        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_TABDIALOG);
+        ItemHolder1::holdConfigItem(EItem::ViewOptionsTabDialog);
     }
     if( ++m_nRefCount_TabPages == 1 )
     {
         m_pDataContainer_TabPages = new SvtViewOptionsBase_Impl( LIST_TABPAGES );
-        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_TABPAGE);
+        ItemHolder1::holdConfigItem(EItem::ViewOptionsTabPage);
     }
     if( ++m_nRefCount_Windows == 1 )
     {
         m_pDataContainer_Windows = new SvtViewOptionsBase_Impl( LIST_WINDOWS );
-        ItemHolder1::holdConfigItem(E_VIEWOPTIONS_WINDOW);
+        ItemHolder1::holdConfigItem(EItem::ViewOptionsWindow);
     }
 }
 

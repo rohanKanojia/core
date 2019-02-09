@@ -26,8 +26,8 @@
 #include <sfx2/viewfac.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/zoomitem.hxx>
-#include "swdllapi.h"
-#include "shellid.hxx"
+#include <swdllapi.h>
+#include <shellid.hxx>
 
 class SwViewOption;
 class SwDocShell;
@@ -53,7 +53,7 @@ class SwPagePreviewWin : public vcl::Window
     Fraction maScale;
     SwPagePreview& mrView;
     bool mbCalcScaleForPreviewLayout;
-    Rectangle maPaintedPreviewDocRect;
+    tools::Rectangle maPaintedPreviewDocRect;
     SwPagePreviewLayout* mpPgPreviewLayout;
 
     void SetPagePreview( sal_uInt8 nRow, sal_uInt8 nCol );
@@ -62,10 +62,10 @@ class SwPagePreviewWin : public vcl::Window
 
 public:
     SwPagePreviewWin( vcl::Window* pParent, SwPagePreview& rView );
-    virtual ~SwPagePreviewWin();
+    virtual ~SwPagePreviewWin() override;
 
     // calls SwViewShell::Paint
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect ) override;
     virtual void KeyInput( const KeyEvent & ) override;
     virtual void Command( const CommandEvent& rCEvt ) override;
     virtual void MouseButtonDown(const MouseEvent& rMEvt) override;
@@ -136,7 +136,7 @@ public:
     void AdjustPreviewToNewZoom( const sal_uInt16 _nZoomFactor,
                                  const SvxZoomType _eZoomType );
 
-    const Rectangle& GetPaintedPreviewDocRect() const
+    const tools::Rectangle& GetPaintedPreviewDocRect() const
     {
         return maPaintedPreviewDocRect;
     }
@@ -162,28 +162,28 @@ class SW_DLLPUBLIC SwPagePreview: public SfxViewShell
 {
     // ViewWindow and handle to core
     // current dispatcher shell
-    VclPtr<SwPagePreviewWin> pViewWin;
+    VclPtr<SwPagePreviewWin> m_pViewWin;
     //viewdata of the previous SwView and the new cursor position
-    OUString sSwViewData;
+    OUString m_sSwViewData;
     //and the new cursor position if the user double click in the PagePreview
-    OUString sNewCursorPos;
+    OUString m_sNewCursorPosition;
     // to support keyboard the number of the page to go to can be set too
-    sal_uInt16 nNewPage;
+    sal_uInt16 m_nNewPage;
     // visible range
-    OUString sPageStr;
-    Size aDocSz;
-    Rectangle               aVisArea;
+    OUString const m_sPageStr;
+    Size m_aDocSize;
+    tools::Rectangle               m_aVisArea;
 
     // MDI control elements
-    VclPtr<SwScrollbar> pHScrollbar;
-    VclPtr<SwScrollbar> pVScrollbar;
+    VclPtr<SwScrollbar> m_pHScrollbar;
+    VclPtr<SwScrollbar> m_pVScrollbar;
     bool mbHScrollbarEnabled : 1;
     bool mbVScrollbarEnabled : 1;
     // dummy window for filling the lower right edge when both scrollbars are active
-    VclPtr<vcl::Window> pScrollFill;
+    VclPtr<vcl::Window> m_pScrollFill;
 
     sal_uInt16 mnPageCount;
-    bool bNormalPrint;
+    bool m_bNormalPrint;
 
     // New members to reset design mode at draw view for form shell on switching
     // back from writer page preview to normal view.
@@ -193,17 +193,17 @@ class SW_DLLPUBLIC SwPagePreview: public SfxViewShell
     SAL_DLLPRIVATE void Init();
     SAL_DLLPRIVATE Point AlignToPixel(const Point& rPt) const;
 
-    SAL_DLLPRIVATE void _CreateScrollbar( bool bHori);
-    DECL_DLLPRIVATE_LINK_TYPED(ScrollHdl, ScrollBar*, void);
-    DECL_DLLPRIVATE_LINK_TYPED(EndScrollHdl, ScrollBar*, void);
+    SAL_DLLPRIVATE void CreateScrollbar( bool bHori);
+    DECL_DLLPRIVATE_LINK(ScrollHdl, ScrollBar*, void);
+    DECL_DLLPRIVATE_LINK(EndScrollHdl, ScrollBar*, void);
     SAL_DLLPRIVATE bool ChgPage( int eMvMode, bool bUpdateScrollbar = true );
 
     SAL_DLLPRIVATE virtual SfxPrinter*     GetPrinter( bool bCreate = false ) override;
     SAL_DLLPRIVATE virtual sal_uInt16      SetPrinter( SfxPrinter *pNewPrinter, SfxPrinterChangeFlags nDiffFlags = SFX_PRINTER_ALL ) override;
     SAL_DLLPRIVATE virtual bool            HasPrintOptionsPage() const override;
-    SAL_DLLPRIVATE virtual VclPtr<SfxTabPage> CreatePrintOptionsPage(vcl::Window *pParent, const SfxItemSet &rOptions ) override;
+    SAL_DLLPRIVATE virtual VclPtr<SfxTabPage> CreatePrintOptionsPage(TabPageParent pParent, const SfxItemSet &rOptions) override;
 
-    SAL_DLLPRIVATE void CalcAndSetBorderPixel( SvBorder &rToFill, bool bInner );
+    SAL_DLLPRIVATE void CalcAndSetBorderPixel( SvBorder &rToFill );
 
     /** Helper method to execute SfxRequest FN_PAGE_UP and FN_PAGE_DOWN
 
@@ -214,11 +214,11 @@ class SW_DLLPUBLIC SwPagePreview: public SfxViewShell
         @param _pReq
         optional input parameter - pointer to the <SfxRequest> instance, if existing.
     */
-    SAL_DLLPRIVATE void _ExecPgUpAndPgDown( const bool  _bPgUp,
-                             SfxRequest* _pReq = nullptr );
+    SAL_DLLPRIVATE void ExecPgUpAndPgDown( const bool  _bPgUp,
+                             SfxRequest* _pReq );
 
 protected:
-    virtual void    InnerResizePixel( const Point &rOfs, const Size &rSize ) override;
+    virtual void    InnerResizePixel( const Point &rOfs, const Size &rSize, bool inplaceEditModeChange ) override;
     virtual void    OuterResizePixel( const Point &rOfs, const Size &rSize ) override;
 
     void         SetZoom(SvxZoomType eSet, sal_uInt16 nFactor);
@@ -232,14 +232,14 @@ private:
     static void InitInterface_Impl();
 
 public:
-    inline SwViewShell* GetViewShell() const
-    { return pViewWin->GetViewShell(); }
-    inline void RepaintCoreRect( const SwRect& rRect )
-    { pViewWin->RepaintCoreRect( rRect ); }
+    SwViewShell* GetViewShell() const
+    { return m_pViewWin->GetViewShell(); }
+    void RepaintCoreRect( const SwRect& rRect )
+    { m_pViewWin->RepaintCoreRect( rRect ); }
 
     void DocSzChgd(const Size& rNewSize);
 
-    void SetVisArea( const Rectangle& );
+    void SetVisArea( const tools::Rectangle& );
 
     void ScrollViewSzChg();
     void ScrollDocSzChg();
@@ -249,16 +249,15 @@ public:
     void EnableVScrollbar(bool bEnable);
 
     sal_uInt16 GetPageCount() const        { return mnPageCount; }
-    sal_uInt16 GetSelectedPage() const {return pViewWin->SelectedPage();}
+    sal_uInt16 GetSelectedPage() const {return m_pViewWin->SelectedPage();}
 
     bool HandleWheelCommands( const CommandEvent& );
 
-    OUString GetPrevSwViewData() const       { return sSwViewData; }
-    void SetNewCursorPos( const OUString& rStr ) { sNewCursorPos = rStr; }
-    const OUString& GetNewCursorPos() const           { return sNewCursorPos; }
+    const OUString& GetPrevSwViewData() const       { return m_sSwViewData; }
+    void SetNewCursorPos( const OUString& rStr ) { m_sNewCursorPosition = rStr; }
+    const OUString& GetNewCursorPos() const           { return m_sNewCursorPosition; }
 
-    sal_uInt16 GetNewPage() const {return nNewPage;}
-    void SetNewPage(sal_uInt16 nSet)  {nNewPage = nSet;}
+    sal_uInt16 GetNewPage() const {return m_nNewPage;}
 
     // Handler
     void Execute(SfxRequest&);
@@ -268,16 +267,16 @@ public:
     SwDocShell* GetDocShell();
 
     // apply Accessiblity options
-    void ApplyAccessiblityOptions(SvtAccessibilityOptions& rAccessibilityOptions);
+    void ApplyAccessiblityOptions(SvtAccessibilityOptions const & rAccessibilityOptions);
 
     // Inline method to request values of new members
     // <mbResetFormDesignMode> and <mbFormDesignModeToReset>
-    inline bool ResetFormDesignMode() const
+    bool ResetFormDesignMode() const
     {
         return mbResetFormDesignMode;
     }
 
-    inline bool FormDesignModeToReset() const
+    bool FormDesignModeToReset() const
     {
         return mbFormDesignModeToReset;
     }
@@ -294,7 +293,7 @@ public:
     void SetVScrollbarThumbPos( const sal_uInt16 _nNewThumbPos );
 
     SwPagePreview( SfxViewFrame* pFrame, SfxViewShell* );
-    virtual ~SwPagePreview();
+    virtual ~SwPagePreview() override;
 };
 
 

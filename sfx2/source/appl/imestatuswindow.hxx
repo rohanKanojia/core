@@ -87,18 +87,16 @@ public:
     using ImeStatusWindow_Impl::operator delete;
 
 private:
-    ImeStatusWindow(ImeStatusWindow &) = delete;
+    ImeStatusWindow(ImeStatusWindow const &) = delete;
     void operator =(const ImeStatusWindow&) = delete;
 
-    virtual ~ImeStatusWindow();
+    virtual ~ImeStatusWindow() override;
 
     virtual void SAL_CALL
-    disposing(css::lang::EventObject const & rSource)
-        throw (css::uno::RuntimeException, std::exception) override;
+    disposing(css::lang::EventObject const & rSource) override;
 
     virtual void SAL_CALL
-    propertyChange(css::beans::PropertyChangeEvent const & rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+    propertyChange(css::beans::PropertyChangeEvent const & rEvent) override;
 
     css::uno::Reference< css::beans::XPropertySet >
     getConfig();

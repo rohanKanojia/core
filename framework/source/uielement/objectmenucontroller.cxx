@@ -22,13 +22,9 @@
 #include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/awt/MenuItemStyle.hpp>
-#include <com/sun/star/frame/XDispatchProvider.hpp>
 
 #include <com/sun/star/embed/VerbAttributes.hpp>
 #include <com/sun/star/embed/VerbDescriptor.hpp>
-#include <com/sun/star/frame/XDispatch.hpp>
-#include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XPopupMenuController.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 
 #include <svtools/popupmenucontrollerbase.hxx>
@@ -57,38 +53,31 @@ class ObjectMenuController :  public svt::PopupMenuControllerBase
 
 public:
     explicit ObjectMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-    virtual ~ObjectMenuController();
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.ObjectMenuController");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.frame.PopupMenuController" };
-        return aSeq;
+        return {"com.sun.star.frame.PopupMenuController"};
     }
 
     // XStatusListener
-    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL statusChanged( const css::frame::FeatureStateEvent& Event ) override;
 
     // XEventListener
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw ( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
 private:
-    void fillPopupMenu( const css::uno::Sequence< css::embed::VerbDescriptor >& rVerbCommandSeq, css::uno::Reference< css::awt::XPopupMenu >& rPopupMenu );
-
-    css::uno::Reference< css::frame::XDispatch >  m_xObjectUpdateDispatch;
+    void fillPopupMenu( const css::uno::Sequence< css::embed::VerbDescriptor >& rVerbCommandSeq, css::uno::Reference< css::awt::XPopupMenu > const & rPopupMenu );
 };
 
 ObjectMenuController::ObjectMenuController( const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
@@ -96,12 +85,8 @@ ObjectMenuController::ObjectMenuController( const css::uno::Reference< css::uno:
 {
 }
 
-ObjectMenuController::~ObjectMenuController()
-{
-}
-
 // private function
-void ObjectMenuController::fillPopupMenu( const Sequence< css::embed::VerbDescriptor >& rVerbCommandSeq, Reference< css::awt::XPopupMenu >& rPopupMenu )
+void ObjectMenuController::fillPopupMenu( const Sequence< css::embed::VerbDescriptor >& rVerbCommandSeq, Reference< css::awt::XPopupMenu > const & rPopupMenu )
 {
     const css::embed::VerbDescriptor* pVerbCommandArray = rVerbCommandSeq.getConstArray();
     VCLXPopupMenu*                    pPopupMenu        = static_cast<VCLXPopupMenu *>(VCLXMenu::GetImplementation( rPopupMenu ));
@@ -133,14 +118,13 @@ void ObjectMenuController::fillPopupMenu( const Sequence< css::embed::VerbDescri
 }
 
 // XEventListener
-void SAL_CALL ObjectMenuController::disposing( const EventObject& ) throw ( RuntimeException, std::exception )
+void SAL_CALL ObjectMenuController::disposing( const EventObject& )
 {
     Reference< css::awt::XMenuListener > xHolder(static_cast<OWeakObject *>(this), UNO_QUERY );
 
     osl::MutexGuard aLock( m_aMutex );
     m_xFrame.clear();
     m_xDispatch.clear();
-    m_xObjectUpdateDispatch.clear();
 
     if ( m_xPopupMenu.is() )
         m_xPopupMenu->removeMenuListener( Reference< css::awt::XMenuListener >(static_cast<OWeakObject *>(this), UNO_QUERY ));
@@ -148,7 +132,7 @@ void SAL_CALL ObjectMenuController::disposing( const EventObject& ) throw ( Runt
 }
 
 // XStatusListener
-void SAL_CALL ObjectMenuController::statusChanged( const FeatureStateEvent& Event ) throw ( RuntimeException, std::exception )
+void SAL_CALL ObjectMenuController::statusChanged( const FeatureStateEvent& Event )
 {
     Sequence < css::embed::VerbDescriptor > aVerbCommandSeq;
     if ( Event.State >>= aVerbCommandSeq )
@@ -161,7 +145,7 @@ void SAL_CALL ObjectMenuController::statusChanged( const FeatureStateEvent& Even
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_ObjectMenuController_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

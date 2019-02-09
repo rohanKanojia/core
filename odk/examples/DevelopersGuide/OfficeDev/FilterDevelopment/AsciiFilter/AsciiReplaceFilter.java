@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -215,7 +216,7 @@ public class AsciiReplaceFilter
         * For external user of us we must provide our internal filter name
         * (which is registered inside configuration package TypeDetection).
         * User will be able then to ask there for further information about us.
-        * Otherwhise we must implement a full featured XPropertySet...
+        * Otherwise we must implement a full featured XPropertySet...
         *
         * @return our internal filter name of configuration
         */
@@ -455,7 +456,7 @@ public class AsciiReplaceFilter
 
                 // copy current buffer to the document model.
                 // Create a new paragraph for every line inside original file.
-                // May not all data could be readed - but that doesn't matter here.
+                // May not all data could be read - but that doesn't matter here.
                 // Reason: somewhere cancelled this function.
                 // But check for optional replace request before...
                 int nStart  =  0;
@@ -697,3 +698,5 @@ public class AsciiReplaceFilter
         return xFactory;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

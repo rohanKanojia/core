@@ -28,6 +28,7 @@
 #include "transporttypes.hxx"
 
 #include <list>
+#include <vector>
 
 class SchXMLImportHelper;
 
@@ -50,12 +51,12 @@ struct SeriesDefaultsAndStyles
     css::uno::Any    maSymbolTypeDefault;
     css::uno::Any    maDataCaptionDefault;
 
-    css::uno::Any    maErrorIndicatorDefault;
-    css::uno::Any    maErrorCategoryDefault;
-    css::uno::Any    maConstantErrorLowDefault;
-    css::uno::Any    maConstantErrorHighDefault;
-    css::uno::Any    maPercentageErrorDefault;
-    css::uno::Any    maErrorMarginDefault;
+    css::uno::Any const  maErrorIndicatorDefault;
+    css::uno::Any const  maErrorCategoryDefault;
+    css::uno::Any const  maConstantErrorLowDefault;
+    css::uno::Any const  maConstantErrorHighDefault;
+    css::uno::Any const  maPercentageErrorDefault;
+    css::uno::Any const  maErrorMarginDefault;
 
     css::uno::Any    maMeanValueDefault;
     css::uno::Any    maRegressionCurvesDefault;
@@ -69,8 +70,8 @@ struct SeriesDefaultsAndStyles
     css::uno::Any    maLinesOnProperty;
 
     //styles for series and datapoints
-    ::std::list< DataRowPointStyle > maSeriesStyleList;
-    ::std::list< RegressionStyle >   maRegressionStyleList;
+    ::std::vector< DataRowPointStyle > maSeriesStyleVector;
+    ::std::vector< RegressionStyle >   maRegressionStyleVector;
 };
 
 class SchXMLChartContext : public SvXMLImportContext
@@ -78,11 +79,11 @@ class SchXMLChartContext : public SvXMLImportContext
 public:
     SchXMLChartContext( SchXMLImportHelper& rImpHelper,
                         SvXMLImport& rImport, const OUString& rLocalName );
-    virtual ~SchXMLChartContext();
+    virtual ~SchXMLChartContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
     virtual void EndElement() override;
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
@@ -104,6 +105,8 @@ private:
     OUString msCategoriesAddress;
     OUString msChartAddress;
 
+    OUString msDataPilotSource;
+
     SeriesDefaultsAndStyles maSeriesDefaultsAndStyles;
     tSchXMLLSequencesPerIndex maLSequencesPerIndex;
 
@@ -117,11 +120,8 @@ private:
     /** @descr  This method bundles some settings to the chart model and executes them with
             a locked controller.  This includes setting the chart type.
         @param  aServiceName The name of the service the diagram is initialized with.
-        @param  bSetWitchData   Indicates whether the data set takes it's data series from
-            rows or from columns.
     */
-    void    InitChart   (const OUString & rChartTypeServiceName,
-                        bool bSetSwitchData);
+    void    InitChart   (const OUString & rChartTypeServiceName);
 
     void MergeSeriesForStockChart();
 };
@@ -138,11 +138,11 @@ public:
     SchXMLTitleContext( SchXMLImportHelper& rImpHelper,
                         SvXMLImport& rImport, const OUString& rLocalName,
                         OUString& rTitle,
-                        css::uno::Reference< css::drawing::XShape >& xTitleShape );
-    virtual ~SchXMLTitleContext();
+                        css::uno::Reference< css::drawing::XShape > const & xTitleShape );
+    virtual ~SchXMLTitleContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;

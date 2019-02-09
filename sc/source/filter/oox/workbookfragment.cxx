@@ -17,55 +17,54 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "workbookfragment.hxx"
+#include <workbookfragment.hxx>
 
-#include <com/sun/star/table/CellAddress.hpp>
 #include <oox/core/filterbase.hxx>
+#include <oox/core/xmlfilterbase.hxx>
 #include <oox/drawingml/themefragmenthandler.hxx>
 #include <oox/helper/attributelist.hxx>
+#include <oox/helper/binaryinputstream.hxx>
 #include <oox/helper/progressbar.hxx>
-#include <oox/helper/propertyset.hxx>
 #include <oox/ole/olestorage.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
-#include "biffinputstream.hxx"
-#include "chartsheetfragment.hxx"
-#include "connectionsfragment.hxx"
-#include "externallinkbuffer.hxx"
-#include "externallinkfragment.hxx"
-#include "formulabuffer.hxx"
-#include "pivotcachebuffer.hxx"
-#include "sharedstringsbuffer.hxx"
-#include "sharedstringsfragment.hxx"
-#include "revisionfragment.hxx"
-#include "stylesfragment.hxx"
-#include "tablebuffer.hxx"
-#include "themebuffer.hxx"
-#include "viewsettings.hxx"
-#include "workbooksettings.hxx"
-#include "worksheetbuffer.hxx"
-#include "worksheethelper.hxx"
-#include "worksheetfragment.hxx"
-#include "sheetdatacontext.hxx"
-#include "extlstcontext.hxx"
-#include "officecfg/Office/Common.hxx"
+#include <chartsheetfragment.hxx>
+#include <connectionsfragment.hxx>
+#include <externallinkbuffer.hxx>
+#include <externallinkfragment.hxx>
+#include <formulabuffer.hxx>
+#include <pivotcachebuffer.hxx>
+#include <sharedstringsfragment.hxx>
+#include <revisionfragment.hxx>
+#include <stylesfragment.hxx>
+#include <tablebuffer.hxx>
+#include <themebuffer.hxx>
+#include <viewsettings.hxx>
+#include <workbooksettings.hxx>
+#include <worksheetbuffer.hxx>
+#include <worksheethelper.hxx>
+#include <worksheetfragment.hxx>
+#include <extlstcontext.hxx>
+#include <documentimport.hxx>
+#include <biffhelper.hxx>
 
-#include "document.hxx"
-#include "docsh.hxx"
-#include "calcconfig.hxx"
-#include "globstr.hrc"
+#include <document.hxx>
+#include <docsh.hxx>
+#include <calcconfig.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <scmod.hxx>
+#include <formulaopt.hxx>
 
 #include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 
 #include <oox/core/fastparser.hxx>
-#include <salhelper/thread.hxx>
 #include <comphelper/threadpool.hxx>
-#include <osl/conditn.hxx>
+#include <sal/log.hxx>
 
-#include <algorithm>
-#include <queue>
-#include <thread>
 #include <memory>
 
 #include <oox/ole/vbaproject.hxx>
@@ -79,7 +78,6 @@ namespace xls {
 using namespace ::com::sun::star::io;
 using namespace ::com::sun::star::table;
 using namespace ::com::sun::star::uno;
-using namespace ::com::sun::star::sheet;
 using namespace ::oox::core;
 
 using ::oox::drawingml::ThemeFragmentHandler;
@@ -222,9 +220,11 @@ class WorkerThread : public comphelper::ThreadTask
     rtl::Reference<FragmentHandler> mxHandler;
 
 public:
-    WorkerThread( WorkbookFragment& rWorkbookHandler,
+    WorkerThread( const std::shared_ptr<comphelper::ThreadTaskTag> & pTag,
+                  WorkbookFragment& rWorkbookHandler,
                   const rtl::Reference<FragmentHandler>& xHandler,
                   sal_Int32 &rSheetsLeft ) :
+        comphelper::ThreadTask( pTag ),
         mrSheetsLeft( rSheetsLeft ),
         mrWorkbookHandler( rWorkbookHandler ),
         mxHandler( xHandler )
@@ -236,16 +236,16 @@ public:
         // We hold the solar mutex in all threads except for
         // the small safe section of the inner loop in
         // sheetdatacontext.cxx
-        SAL_INFO( "sc.filter",  "start wait on solar\n" );
-        SolarMutexGuard maGuard;
-        SAL_INFO( "sc.filter",  "got solar\n" );
+        SAL_INFO( "sc.filter",  "start wait on solar" );
+        SolarMutexGuard aGuard;
+        SAL_INFO( "sc.filter",  "got solar" );
 
         std::unique_ptr<oox::core::FastParser> xParser(
-                mrWorkbookHandler.getOoxFilter().createParser() );
+                oox::core::XmlFilterBase::createParser() );
 
-        SAL_INFO( "sc.filter",  "start import\n" );
+        SAL_INFO( "sc.filter",  "start import" );
         mrWorkbookHandler.importOoxFragment( mxHandler, *xParser );
-        SAL_INFO( "sc.filter",  "end import, release solar\n" );
+        SAL_INFO( "sc.filter",  "end import, release solar" );
         mrSheetsLeft--;
         assert( mrSheetsLeft >= 0 );
         if( mrSheetsLeft == 0 )
@@ -267,7 +267,7 @@ class ProgressBarTimer : private Timer
             , mxWrapped(xRef)
         {
         }
-        virtual ~ProgressWrapper() {}
+
         // IProgressBar
         virtual double getPosition() const override { return mfPosition; }
         virtual void   setPosition( double fPosition ) override { mfPosition = fPosition; }
@@ -288,72 +288,55 @@ public:
     {
         SetTimeout( 500 );
     }
-    virtual ~ProgressBarTimer()
+    virtual ~ProgressBarTimer() override
     {
         aSegments.clear();
     }
-    ISegmentProgressBarRef wrapProgress( const ISegmentProgressBarRef &xProgress )
+    const ISegmentProgressBarRef& wrapProgress( const ISegmentProgressBarRef &xProgress )
     {
         aSegments.push_back( ISegmentProgressBarRef( new ProgressWrapper( xProgress ) ) );
         return aSegments.back();
     }
     virtual void Invoke() override
     {
-        for( size_t i = 0; i < aSegments.size(); i++)
-            static_cast< ProgressWrapper *>( aSegments[ i ].get() )->UpdateBar();
+        for(std::shared_ptr<ISegmentProgressBar> & pSegment : aSegments)
+            static_cast< ProgressWrapper *>( pSegment.get() )->UpdateBar();
     }
 };
 
 void importSheetFragments( WorkbookFragment& rWorkbookHandler, SheetFragmentVector& rSheets )
 {
-    sal_Int32 nThreads = std::min( rSheets.size(), (size_t) std::max(std::thread::hardware_concurrency(), 1U) );
+    rWorkbookHandler.getDocImport().initForSheets();
 
-    Reference< XComponentContext > xContext = comphelper::getProcessComponentContext();
+    // test sequential read in this mode
+    comphelper::ThreadPool &rSharedPool = comphelper::ThreadPool::getSharedOptimalPool();
+    std::shared_ptr<comphelper::ThreadTaskTag> pTag = comphelper::ThreadPool::createThreadTaskTag();
 
-    const char *pEnv;
-    if( ( pEnv = getenv( "SC_IMPORT_THREADS" ) ) )
-        nThreads = rtl_str_toInt32( pEnv, 10 );
-
-    if( nThreads != 0 )
+    sal_Int32 nSheetsLeft = 0;
+    ProgressBarTimer aProgressUpdater;
+    for( auto& [rxSheetGlob, rxFragment] : rSheets )
     {
-        // test sequential read in this mode
-        if( nThreads < 0)
-            nThreads = 0;
-        comphelper::ThreadPool aPool( nThreads );
+         // getting at the WorksheetGlobals is rather unpleasant
+         IWorksheetProgress *pProgress = WorksheetHelper::getWorksheetInterface( rxSheetGlob );
+         pProgress->setCustomRowProgress(
+                     aProgressUpdater.wrapProgress(
+                             pProgress->getRowProgress() ) );
+         rSharedPool.pushTask( std::make_unique<WorkerThread>( pTag, rWorkbookHandler, rxFragment,
+                                           /* ref */ nSheetsLeft ) );
+         nSheetsLeft++;
+     }
 
-        sal_Int32 nSheetsLeft = 0;
-        ProgressBarTimer aProgressUpdater;
-        SheetFragmentVector::iterator it = rSheets.begin(), itEnd = rSheets.end();
-        for( ; it != itEnd; ++it )
-        {
-            // getting at the WorksheetGlobals is rather unpleasant
-            IWorksheetProgress *pProgress = WorksheetHelper::getWorksheetInterface( it->first );
-            pProgress->setCustomRowProgress(
-                        aProgressUpdater.wrapProgress(
-                                pProgress->getRowProgress() ) );
-            aPool.pushTask( new WorkerThread( rWorkbookHandler, it->second,
-                                              /* ref */ nSheetsLeft ) );
-            nSheetsLeft++;
-        }
+     // coverity[loop_top] - this isn't an infinite loop where nSheetsLeft gets decremented by the above threads
+     while( nSheetsLeft > 0)
+     {
+         // This is a much more controlled re-enterancy hazard than
+         // allowing a yield deeper inside the filter code for progress
+         // bar updating.
+         Application::Yield();
+     }
+     rSharedPool.waitUntilDone(pTag);
 
-        // coverity[loop_top] - this isn't an infinite loop where nSheetsLeft gets decremented by the above threads
-        while( nSheetsLeft > 0)
-        {
-            // This is a much more controlled re-enterancy hazard than
-            // allowing a yield deeper inside the filter code for progress
-            // bar updating.
-            Application::Yield();
-        }
-        aPool.waitUntilEmpty();
-
-        // threads joined in ThreadPool destructor
-    }
-    else // single threaded iteration
-    {
-        SheetFragmentVector::iterator it = rSheets.begin(), itEnd = rSheets.end();
-        for( ; it != itEnd; ++it )
-            rWorkbookHandler.importOoxFragment( it->second );
-    }
+     // threads joined in ThreadPool destructor
 }
 
 }
@@ -393,7 +376,7 @@ void WorkbookFragment::finalizeImport()
         loaded. Additionally, the instances of the WorkbookGlobals structures
         have to be stored for every sheet. */
     SheetFragmentVector aSheetFragments;
-    std::vector<WorksheetHelper*> maHelpers;
+    std::vector<WorksheetHelper*> aHelpers;
     WorksheetBuffer& rWorksheets = getWorksheets();
     sal_Int32 nWorksheetCount = rWorksheets.getWorksheetCount();
     for( sal_Int32 nWorksheet = 0; nWorksheet < nWorksheetCount; ++nWorksheet )
@@ -407,27 +390,27 @@ void WorkbookFragment::finalizeImport()
             OSL_ENSURE( !aFragmentPath.isEmpty(), "WorkbookFragment::finalizeImport - cannot access sheet fragment" );
             if( !aFragmentPath.isEmpty() )
             {
-                // leave space for formula processing ( calcuate the segments as
+                // leave space for formula processing ( calculate the segments as
                 // if there is an extra sheet )
                 double fSegmentLength = getProgressBar().getFreeLength() / (nWorksheetCount - ( nWorksheet - 1) );
                 ISegmentProgressBarRef xSheetSegment = getProgressBar().createSegment( fSegmentLength );
 
                 // get the sheet type according to the relations type
-                WorksheetType eSheetType = SHEETTYPE_EMPTYSHEET;
+                WorksheetType eSheetType = WorksheetType::Empty;
                 if( pRelation->maType == CREATE_OFFICEDOC_RELATION_TYPE( "worksheet" ) ||
                         pRelation->maType == CREATE_OFFICEDOC_RELATION_TYPE_STRICT( "worksheet" ))
-                    eSheetType = SHEETTYPE_WORKSHEET;
+                    eSheetType = WorksheetType::Work;
                 else if( pRelation->maType == CREATE_OFFICEDOC_RELATION_TYPE( "chartsheet" ) ||
                         pRelation->maType == CREATE_OFFICEDOC_RELATION_TYPE_STRICT( "chartsheet" ))
-                    eSheetType = SHEETTYPE_CHARTSHEET;
+                    eSheetType = WorksheetType::Chart;
                 else if( (pRelation->maType == CREATE_MSOFFICE_RELATION_TYPE( "xlMacrosheet" )) ||
                          (pRelation->maType == CREATE_MSOFFICE_RELATION_TYPE( "xlIntlMacrosheet" )) )
-                    eSheetType = SHEETTYPE_MACROSHEET;
+                    eSheetType = WorksheetType::Macro;
                 else if( pRelation->maType == CREATE_OFFICEDOC_RELATION_TYPE( "dialogsheet" ) ||
                         pRelation->maType == CREATE_OFFICEDOC_RELATION_TYPE_STRICT(" dialogsheet" ))
-                    eSheetType = SHEETTYPE_DIALOGSHEET;
-                OSL_ENSURE( eSheetType != SHEETTYPE_EMPTYSHEET, "WorkbookFragment::finalizeImport - unknown sheet type" );
-                if( eSheetType != SHEETTYPE_EMPTYSHEET )
+                    eSheetType = WorksheetType::Dialog;
+                OSL_ENSURE( eSheetType != WorksheetType::Empty, "WorkbookFragment::finalizeImport - unknown sheet type" );
+                if( eSheetType != WorksheetType::Empty )
                 {
                     // create the WorksheetGlobals object
                     WorksheetGlobalsRef xSheetGlob = WorksheetHelper::constructGlobals( *this, xSheetSegment, eSheetType, nCalcSheet );
@@ -438,25 +421,24 @@ void WorkbookFragment::finalizeImport()
                         ::rtl::Reference< WorksheetFragmentBase > xFragment;
                         switch( eSheetType )
                         {
-                            case SHEETTYPE_WORKSHEET:
-                            case SHEETTYPE_MACROSHEET:
-                            case SHEETTYPE_DIALOGSHEET:
+                            case WorksheetType::Work:
+                            case WorksheetType::Macro:
+                            case WorksheetType::Dialog:
                                 xFragment.set( new WorksheetFragment( *xSheetGlob, aFragmentPath ) );
                             break;
-                            case SHEETTYPE_CHARTSHEET:
+                            case WorksheetType::Chart:
                                 xFragment.set( new ChartsheetFragment( *xSheetGlob, aFragmentPath ) );
                             break;
                             // coverity[dead_error_begin] - following conditions exist to avoid compiler warning
-                            case SHEETTYPE_EMPTYSHEET:
-                            case SHEETTYPE_MODULESHEET:
+                            case WorksheetType::Empty:
                                 break;
                         }
 
                         // insert the fragment into the map
                         if( xFragment.is() )
                         {
-                            aSheetFragments.push_back( SheetFragmentHandler( xSheetGlob, xFragment.get() ) );
-                            maHelpers.push_back(xFragment.get());
+                            aSheetFragments.emplace_back( xSheetGlob, xFragment.get() );
+                            aHelpers.push_back(xFragment.get());
                         }
                     }
                 }
@@ -465,7 +447,7 @@ void WorkbookFragment::finalizeImport()
     }
 
     // setup structure sizes for the number of sheets
-    getFormulaBuffer().SetSheetCount( aSheetFragments.size() );
+    getFormulaBuffer().SetSheetCount( nWorksheetCount );
 
     // create all database ranges and defined names, in that order
     getTables().finalizeImport();
@@ -500,33 +482,49 @@ void WorkbookFragment::finalizeImport()
 
     recalcFormulaCells();
 
-    for( std::vector<WorksheetHelper*>::iterator aIt = maHelpers.begin(), aEnd = maHelpers.end(); aIt != aEnd; ++aIt )
+    for( WorksheetHelper* pHelper : aHelpers )
     {
-        (*aIt)->finalizeDrawingImport();
+        pHelper->finalizeDrawingImport();
     }
 
-    for( SheetFragmentVector::iterator aIt = aSheetFragments.begin(), aEnd = aSheetFragments.end(); aIt != aEnd; ++aIt )
+    for( auto& [rxSheetGlob, rxFragment] : aSheetFragments )
     {
         // delete fragment object and WorkbookGlobals object, will free all allocated sheet buffers
-        aIt->second.clear();
-        aIt->first.reset();
+        rxFragment.clear();
+        rxSheetGlob.reset();
     }
 
     OUString aRevHeadersPath = getFragmentPathFromFirstType(CREATE_OFFICEDOC_RELATION_TYPE("revisionHeaders"));
     if (!aRevHeadersPath.isEmpty())
     {
-        std::unique_ptr<oox::core::FastParser> xParser(getOoxFilter().createParser());
+        std::unique_ptr<oox::core::FastParser> xParser(oox::core::XmlFilterBase::createParser());
         rtl::Reference<oox::core::FragmentHandler> xFragment(new RevisionHeadersFragment(*this, aRevHeadersPath));
         importOoxFragment(xFragment, *xParser);
     }
+
+    // attach macros to registered objects now that all objects have been created.
+    getBaseFilter().getVbaProject().attachMacros();
 }
 
 namespace {
 
-ScDocShell& getDocShell(ScDocument& rDoc)
+ScDocShell& getDocShell(const ScDocument& rDoc)
 {
     return static_cast<ScDocShell&>(*rDoc.GetDocumentShell());
 }
+
+class MessageWithCheck : public weld::MessageDialogController
+{
+private:
+    std::unique_ptr<weld::CheckButton> m_xWarningOnBox;
+public:
+    MessageWithCheck(weld::Window *pParent, const OUString& rUIFile, const OString& rDialogId)
+        : MessageDialogController(pParent, rUIFile, rDialogId, "ask")
+        , m_xWarningOnBox(m_xBuilder->weld_check_button("ask"))
+    {
+    }
+    bool get_active() const { return m_xWarningOnBox->get_active(); }
+};
 
 }
 
@@ -544,15 +542,15 @@ void WorkbookFragment::recalcFormulaCells()
         if (rDoc.IsUserInteractionEnabled())
         {
             // Ask the user if full re-calculation is desired.
-            ScopedVclPtrInstance<QueryBox> aBox(
-                ScDocShell::GetActiveDialogParent(), WinBits(WB_YES_NO | WB_DEF_YES),
-                ScGlobal::GetRscString(STR_QUERY_FORMULA_RECALC_ONLOAD_XLS));
-            aBox->SetCheckBoxText(ScGlobal::GetRscString(STR_ALWAYS_PERFORM_SELECTED));
+            vcl::Window* pWin = ScDocShell::GetActiveDialogParent();
 
-            sal_Int32 nRet = aBox->Execute();
-            bHardRecalc = nRet == RET_YES;
+            MessageWithCheck aQueryBox(pWin ? pWin->GetFrameWeld() : nullptr, "modules/scalc/ui/recalcquerydialog.ui", "RecalcQueryDialog");
+            aQueryBox.set_primary_text(ScResId(STR_QUERY_FORMULA_RECALC_ONLOAD_XLS));
+            aQueryBox.set_default_response(RET_YES);
 
-            if (aBox->GetCheckBoxState())
+            bHardRecalc = aQueryBox.run() == RET_YES;
+
+            if (aQueryBox.get_active())
             {
                 // Always perform selected action in the future.
                 std::shared_ptr<comphelper::ConfigurationChanges> batch(comphelper::ConfigurationChanges::create());
@@ -571,9 +569,14 @@ void WorkbookFragment::recalcFormulaCells()
         bHardRecalc = true;
 
     if (bHardRecalc)
-        rDocSh.DoHardRecalc(false);
+        rDocSh.DoHardRecalc();
     else
-        rDoc.CalcFormulaTree(false, true, false);
+    {
+        getDocImport().broadcastRecalcAfterImport();
+        // Full ScDocument::CalcFormulaTree() of all dirty cells is not
+        // necessary here, the View will recalculate them in the visible area,
+        // or any other method accessing formula cell results.
+    }
 }
 
 // private --------------------------------------------------------------------

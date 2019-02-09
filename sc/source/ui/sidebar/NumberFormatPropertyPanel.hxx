@@ -46,7 +46,7 @@ public:
         const DataChangedEvent& rEvent) override;
 
     virtual void HandleContextChange(
-        const ::sfx2::sidebar::EnumContext& rContext) override;
+        const vcl::EnumContext& rContext) override;
 
     virtual void NotifyItemUpdate(
         const sal_uInt16 nSId,
@@ -56,38 +56,41 @@ public:
 
     SfxBindings* GetBindings() { return mpBindings;}
 
-    // constructor/destuctor
+    // constructor/destructor
     NumberFormatPropertyPanel(
         vcl::Window* pParent,
         const css::uno::Reference<css::frame::XFrame>& rxFrame,
         SfxBindings* pBindings);
-    virtual ~NumberFormatPropertyPanel();
+    virtual ~NumberFormatPropertyPanel() override;
     virtual void dispose() override;
 private:
     //ui controls
     VclPtr<ListBox>                                mpLbCategory;
     VclPtr<ToolBox>                                mpTBCategory;
+    VclPtr<FixedText>                              mpFtDecimals;
     VclPtr<NumericField>                           mpEdDecimals;
+    VclPtr<FixedText>                              mpFtDenominator;
+    VclPtr<NumericField>                           mpEdDenominator;
+    VclPtr<FixedText>                              mpFtLeadZeroes;
     VclPtr<NumericField>                           mpEdLeadZeroes;
     VclPtr<CheckBox>                               mpBtnNegRed;
     VclPtr<CheckBox>                               mpBtnThousand;
-
-    OUString                                maThousandSeparator;
-    OUString                                maEngineeringNotation;
+    VclPtr<CheckBox>                               mpBtnEngineering;
 
     ::sfx2::sidebar::ControllerItem         maNumFormatControl;
     ::sfx2::sidebar::ControllerItem         maFormatControl;
 
     sal_Int32                               mnCategorySelected;
 
-    ::sfx2::sidebar::EnumContext            maContext;
-    SfxBindings*                            mpBindings;
+    vcl::EnumContext                        maContext;
+    SfxBindings* const                      mpBindings;
 
-    DECL_LINK_TYPED(NumFormatSelectHdl, ListBox&, void);
-    DECL_LINK_TYPED(NumFormatValueHdl, Edit&, void);
-    DECL_LINK_TYPED(NumFormatValueClickHdl, Button*, void);
+    DECL_LINK(NumFormatSelectHdl, ListBox&, void);
+    DECL_LINK(NumFormatValueHdl, Edit&, void);
+    DECL_LINK(NumFormatValueClickHdl, Button*, void);
 
     void Initialize();
+    void DisableControls();
 };
 
 } } // end of namespace ::sc::sidebar

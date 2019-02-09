@@ -15,8 +15,9 @@ comments show that Writer core dates back until at least November
 == Source contents ==
  * core: Writer core (document model, layout, UNO API implementation)
  * filter: Writer internal filters
-   * ascii: plan text filter
+   * ascii: plain text filter
    * basflt
+   * docx: wrapper for the UNO DOCX import filter (in writerfilter) for autotext purposes
    * html: HTML filter
    * inc: include files for filters
    * rtf: thin copy&paste helper around the UNO RTF import filter (in writerfilter)
@@ -109,15 +110,15 @@ There are several sub-categories of SwTextAttr:
 
 There are multiple model classes involved for fields:
 
-- enum RES_FIELDS enumerates the different types of fields.
+- enum SwFieldIds enumerates the different types of fields.
 - SwFieldType contains some shared stuff for all fields of a type.
   There are many subclasses of SwFieldType, one for each different type
   of field.
   For most types of fields there is one shared instance of this per type,
-  which is created in DocumentFieldsManager::_InitFieldTypes()
+  which is created in DocumentFieldsManager::InitFieldTypes()
   but for some there are more than one, and they are dynamically created, see
   DocumentFieldsManager::InsertFieldType().  An example for the latter are
-  variable fields (RES_GETEXPFLD/RES_SETEXPFLD), with one SwFieldType per
+  variable fields (SwFieldIds::GetExp/SwFieldIds::SetExp), with one SwFieldType per
   variable.
 - SwXFieldMaster is the UNO wrapper of a field type.
   It is a SwClient registered at the SwFieldType.
@@ -139,3 +140,72 @@ There are multiple model classes involved for fields:
   Its life-cycle is determined by UNO clients outside of sw; it will get
   disposed when the SwFormatField dies.
 
+=== Lists ===
+
+- SwNumFormat (subclass of SvxNumFormat) determines the formatting of a single
+  numbering level.
+
+- SwNumRule (NOT a subclass of SvxNumRule) is a *list style*, containing one
+  SwNumFormat per list level.
+  SwNumRule::maTextNodeList is the list of SwTextNode that have this list style
+  applied.
+
+- SwNumberTreeNode is a base class that represents an abstract node in a
+  hierarchical tree of numbered nodes.
+
+- SwNodeNum is the subclass of SwNumberTreeNode that connects it with an
+  actual SwTextNode and also with a SwNumRule;
+  SwTextNode::mpNodeNum points back in the other direction
+
+- SwList represents a list, which is (mostly) a vector of SwNodeNum trees,
+  one per SwNodes top-level section (why that?).
+
+- IDocumentListsAccess, sw::DocumentListsManager owns all SwList instances,
+  and maintains mappings:
+  + from list-id to SwList
+  + from list style name to SwList (the "default" SwList for that list style)
+
+- IDocumentListItems, sw::DocumentListItemsManager contains a set of all
+  SwNodeNum instances, ordered by SwNode index
+
+- the special Outline numbering rule: SwDoc::mpOutlineRule
+
+- IDocumentOutlineNodes, sw::DocumentOutlineNodesManager maintain
+  a list (which is actually stored in SwNodes::m_pOutlineNodes) of SwTextNodes
+  that either have the Outline numrule applied,
+  or have the RES_PARATR_OUTLINELEVEL item set (note that in the latter case,
+  the SwTextNode does not have a SwNodeNum and is not associated with the
+  SwDoc::mpOutlineRule).
+
+- SwTextNodes and paragraph styles have items/properties:
+  + RES_PARATR_OUTLINELEVEL/"OutlineLevel" to specify an outline level without
+    necessarily having the outline SwNumRule assigned
+  + RES_PARATR_NUMRULE/"NumberingStyleName" the list style to apply; may be
+    empty "" which means no list style (to override inherited value)
+  Only SwTextNode has these items:
+  + RES_PARATR_LIST_ID/"ListId"
+    determines the SwList to which the node is added
+  + RES_PARATR_LIST_LEVEL/"NumberingLevel"
+    the level at which the SwTextNode will appear in the list
+  + RES_PARATR_LIST_ISRESTART/"ParaIsNumberingRestart"
+    restart numbering sequence at this SwTextNode
+  + RES_PARATR_LIST_RESTARTVALUE/"NumberingStartValue"
+    restart numbering sequence at this SwTextNode with this value
+  + RES_PARATR_LIST_ISCOUNTED/"NumberingIsNumber"
+    determines if the node is actually counted in the numbering sequence;
+    these are different from "phantoms" because there's still a SwTextNode.
+
+Note that there is no UNO service to represent a list.
+
+=== Layout ===
+
+The layout is a tree of SwFrame subclasses, the following relationships are
+possible between frames:
+
+- You can visit the tree by following the upper, lower, next and previous pointers.
+- The functionality of flowing of a frame across multiple parents (e.g. pages)
+  is implemented in SwFlowFrame, which is not an SwFrame subclass. The logical
+  chain of such frames can be visited using the follow and precede pointers.
+  ("Leaf" is a term that refers to such a relationship.)
+- In case a frame is split into multiple parts, then the first one is called
+  master, while the others are called follows.

@@ -25,7 +25,7 @@
 
 #include <svx/ipolypolygoneditorcontroller.hxx>
 
-class SVX_DLLPUBLIC SdrPolyEditView: public SdrEditView, public IPolyPolygonEditorController
+class SVX_DLLPUBLIC SdrPolyEditView : public SdrEditView, public IPolyPolygonEditorController
 {
     friend class                SdrEditView;
 
@@ -37,17 +37,19 @@ protected:
     SdrPathSegmentKind          eMarkedSegmentsKind;
 
 private:
-    SVX_DLLPRIVATE void ImpClearVars();
     SVX_DLLPRIVATE void ImpResetPolyPossibilityFlags();
     SVX_DLLPRIVATE void ImpCheckPolyPossibilities();
 
-    typedef void (*PPolyTrFunc)(Point&, Point*, Point*, const void*, const void*, const void*, const void*, const void*);
-    SVX_DLLPRIVATE void ImpTransformMarkedPoints(PPolyTrFunc pTrFunc, const void* p1=nullptr, const void* p2=nullptr, const void* p3=nullptr, const void* p4=nullptr, const void* p5=nullptr);
+    typedef void (*PPolyTrFunc)(Point&, Point*, Point*, const void*, const void*, const void*, const void*);
+    SVX_DLLPRIVATE void ImpTransformMarkedPoints(PPolyTrFunc pTrFunc, const void* p1, const void* p2=nullptr, const void* p3=nullptr, const void* p4=nullptr);
 
 protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrPolyEditView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrPolyEditView();
+    SdrPolyEditView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
+
+    virtual ~SdrPolyEditView() override;
 
 public:
     bool IsSetMarkedPointsSmoothPossible() const override;

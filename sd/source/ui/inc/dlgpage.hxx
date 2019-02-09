@@ -28,7 +28,7 @@ enum class ChangeType;
 /**
  * Page configuration-tab-dialog
  */
-class SdPageDlg : public SfxTabDialog
+class SdPageDlg : public SfxTabDialogController
 {
 private:
     const SfxObjectShell* mpDocShell;
@@ -37,15 +37,12 @@ private:
     XGradientListRef      mpGradientList;
     XHatchListRef         mpHatchingList;
     XBitmapListRef        mpBitmapList;
-    sal_uInt16            mnArea;
-    sal_uInt16            mnPage;
-
+    XPatternListRef       mpPatternList;
 public:
 
-    SdPageDlg( SfxObjectShell* pDocSh, vcl::Window* pParent, const SfxItemSet* pAttr, bool bAreaPage = true );
-    virtual ~SdPageDlg() {};
+    SdPageDlg(SfxObjectShell const * pDocSh, weld::Window* pParent, const SfxItemSet* pAttr, bool bAreaPage);
 
-    virtual void PageCreated(sal_uInt16 nId, SfxTabPage& rPage) override;
+    virtual void PageCreated(const OString& rId, SfxTabPage& rPage) override;
 };
 
 #endif // INCLUDED_SD_SOURCE_UI_INC_DLGPAGE_HXX

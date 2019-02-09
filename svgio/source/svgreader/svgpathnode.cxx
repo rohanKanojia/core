@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <svgio/svgreader/svgpathnode.hxx>
+#include <svgpathnode.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
 
 namespace svgio
@@ -29,16 +29,12 @@ namespace svgio
             SvgNode* pParent)
         :   SvgNode(SVGTokenPath, rDocument, pParent),
             maSvgStyleAttributes(*this),
-            mpPolyPolygon(nullptr),
-            mpaTransform(nullptr),
             maPathLength()
         {
         }
 
         SvgPathNode::~SvgPathNode()
         {
-            delete mpPolyPolygon;
-            delete mpaTransform;
         }
 
         const SvgStyleAttributes* SvgPathNode::getSvgStyleAttributes() const
@@ -52,7 +48,7 @@ namespace svgio
             SvgNode::parseAttribute(rTokenName, aSVGToken, aContent);
 
             // read style attributes
-            maSvgStyleAttributes.parseStyleAttribute(rTokenName, aSVGToken, aContent, false);
+            maSvgStyleAttributes.parseStyleAttribute(aSVGToken, aContent, false);
 
             // parse own
             switch(aSVGToken)
@@ -66,7 +62,7 @@ namespace svgio
                 {
                     basegfx::B2DPolyPolygon aPath;
 
-                    if(basegfx::tools::importFromSvgD(aPath, aContent, false, &maHelpPointIndices))
+                    if(basegfx::utils::importFromSvgD(aPath, aContent, false, &maHelpPointIndices))
                     {
                         if(aPath.count())
                         {
@@ -91,7 +87,7 @@ namespace svgio
 
                     if(readSingleNumber(aContent, aNum))
                     {
-                        setPathLength(aNum);
+                        maPathLength = aNum;
                     }
                     break;
                 }

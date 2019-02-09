@@ -17,27 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/customshapeproperties.hxx"
-#include "oox/helper/helper.hxx"
-#include "oox/helper/propertymap.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/token/tokenmap.hxx"
+#include <drawingml/customshapeproperties.hxx>
+#include <oox/helper/propertymap.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokenmap.hxx>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/beans/XMultiPropertySet.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/graphic/XGraphicTransformer.hpp>
-#include <com/sun/star/drawing/XShape.hpp>
-#include <com/sun/star/drawing/XEnhancedCustomShapeDefaulter.hpp>
+#include <com/sun/star/beans/PropertyValues.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/drawing/EnhancedCustomShapeAdjustmentValue.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeTextFrame.hpp>
-#include <osl/diagnose.h>
+#include <com/sun/star/drawing/XEnhancedCustomShapeDefaulter.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
 #include <comphelper/sequence.hxx>
+#include <sal/log.hxx>
 
-using namespace ::oox::core;
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
-using namespace ::com::sun::star::graphic;
 using namespace ::com::sun::star::drawing;
 
 namespace oox { namespace drawingml {
@@ -55,14 +53,14 @@ CustomShapeProperties::~CustomShapeProperties()
 {
 }
 
-uno::Sequence< sal_Int8 > CustomShapeProperties::getShapePresetTypeName() const
+uno::Sequence< sal_Int8 > const & CustomShapeProperties::getShapePresetTypeName() const
 {
     return StaticTokenMap::get().getUtf8TokenName( mnShapePresetType );
 }
 
 sal_Int32 CustomShapeProperties::SetCustomShapeGuideValue( std::vector< CustomShapeGuide >& rGuideList, const CustomShapeGuide& rGuide )
 {
-    sal_uInt32 nIndex = 0;
+    std::vector<CustomShapeGuide>::size_type nIndex = 0;
     for( ; nIndex < rGuideList.size(); nIndex++ )
     {
         if ( rGuideList[ nIndex ].maName == rGuide.maName )
@@ -109,7 +107,7 @@ static OUString GetConnectorShapeType( sal_Int32 nType )
     return sType;
 }
 
-void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFilterBase */,
+void CustomShapeProperties::pushToPropSet(
     const Reference < XPropertySet >& xPropSet, const Reference < XShape > & xShape, const awt::Size &aSize )
 {
     if ( mnShapePresetType >= 0 )
@@ -145,14 +143,13 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
 
             aPropertyMap = maPresetDataMap[mnShapePresetType];
 #ifdef DEBUG
-            aPropertyMap.dumpCode();
+            aPropertyMap.dumpCode( aPropertyMap.makePropertySet() );
 #endif
         }
 
         aPropertyMap.setProperty( PROP_MirroredX, mbMirroredX );
         aPropertyMap.setProperty( PROP_MirroredY, mbMirroredY );
         aPropertyMap.setProperty( PROP_TextPreRotateAngle, mnTextRotateAngle );
-        aPropertyMap.setProperty( PROP_IsPostRotateAngle, true); // For OpenXML Imports
         Sequence< PropertyValue > aSeq = aPropertyMap.makePropertyValueSequence();
         aPropSet.setProperty( PROP_CustomShapeGeometry, aSeq );
 
@@ -167,18 +164,18 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
             for ( i = 0; i < nCount; i++ )
             {
                 const OUString sAdjustmentValues("AdjustmentValues");
-                if ( aGeoPropSeq[ i ].Name.equals( sAdjustmentValues ) )
+                if ( aGeoPropSeq[ i ].Name == sAdjustmentValues )
                 {
                     OUString presetTextWarp;
                     if ( aGeoPropSeq[ i ].Value >>= presetTextWarp )
                     {
-                        aPropertyMap.setProperty( PROP_PresetTextWarp, Any( presetTextWarp ) );
+                        aPropertyMap.setProperty( PROP_PresetTextWarp, presetTextWarp );
                     }
                 }
             }
         }
 
-        if ( maAdjustmentGuideList.size() )
+        if ( !maAdjustmentGuideList.empty() )
         {
             const OUString sType = "Type";
             if ( aGeoPropSet >>= aGeoPropSeq )
@@ -187,31 +184,30 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
                 for ( i = 0; i < nCount; i++ )
                 {
                     const OUString sAdjustmentValues("AdjustmentValues");
-                    if ( aGeoPropSeq[ i ].Name.equals( sAdjustmentValues ) )
+                    if ( aGeoPropSeq[ i ].Name == sAdjustmentValues )
                     {
                         uno::Sequence< css::drawing::EnhancedCustomShapeAdjustmentValue > aAdjustmentSeq;
                         if ( aGeoPropSeq[ i ].Value >>= aAdjustmentSeq )
                         {
                             int nIndex=0;
-                            for (std::vector< CustomShapeGuide >::const_iterator aIter( maAdjustmentGuideList.begin() ), aEnd(maAdjustmentGuideList.end());
-                             aIter != aEnd; ++aIter)
+                            for (auto const& adjustmentGuide : maAdjustmentGuideList)
                             {
-                                if ( (*aIter).maName.getLength() > 3 )
+                                if ( adjustmentGuide.maName.getLength() > 3 )
                                 {
-                                    sal_Int32 nAdjustmentIndex = (*aIter).maName.copy( 3 ).toInt32() - 1;
+                                    sal_Int32 nAdjustmentIndex = adjustmentGuide.maName.copy( 3 ).toInt32() - 1;
                                     if ( ( nAdjustmentIndex >= 0 ) && ( nAdjustmentIndex < aAdjustmentSeq.getLength() ) )
                                     {
                                         EnhancedCustomShapeAdjustmentValue aAdjustmentVal;
-                                        aAdjustmentVal.Value <<= (*aIter).maFormula.toInt32();
+                                        aAdjustmentVal.Value <<= adjustmentGuide.maFormula.toInt32();
                                         aAdjustmentVal.State = PropertyState_DIRECT_VALUE;
-                                        aAdjustmentVal.Name = (*aIter).maName;
+                                        aAdjustmentVal.Name = adjustmentGuide.maName;
                                         aAdjustmentSeq[ nAdjustmentIndex ] = aAdjustmentVal;
                                     }
                                 } else if ( aAdjustmentSeq.getLength() > 0 ) {
                                     EnhancedCustomShapeAdjustmentValue aAdjustmentVal;
-                                    aAdjustmentVal.Value <<= (*aIter).maFormula.toInt32();
+                                    aAdjustmentVal.Value <<= adjustmentGuide.maFormula.toInt32();
                                     aAdjustmentVal.State = PropertyState_DIRECT_VALUE;
-                                    aAdjustmentVal.Name = (*aIter).maName;
+                                    aAdjustmentVal.Name = adjustmentGuide.maName;
                                     aAdjustmentSeq[ nIndex++ ] = aAdjustmentVal;
                                 }
                             }
@@ -219,7 +215,7 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
                             xPropSet->setPropertyValue( sCustomShapeGeometry, Any( aGeoPropSeq ) );
                         }
                     }
-                    else if ( aGeoPropSeq[ i ].Name.equals( sType ) )
+                    else if ( aGeoPropSeq[ i ].Name == sType )
                     {
                         if ( sConnectorShapeType.getLength() > 0 )
                             aGeoPropSeq[ i ].Value <<= sConnectorShapeType;
@@ -232,7 +228,6 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
     }
     else
     {
-        sal_uInt32 i;
         PropertyMap aPropertyMap;
         aPropertyMap.setProperty( PROP_Type, OUString( "ooxml-non-primitive" ));
         aPropertyMap.setProperty( PROP_MirroredX, mbMirroredX );
@@ -242,12 +237,12 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
         // This size specifically affects scaling.
         // Note 2: Width and Height are set to 0 to force scaling to 1.
         awt::Rectangle aViewBox( 0, 0, aSize.Width, aSize.Height );
-        if( maGuideList.size() )
+        if( !maGuideList.empty() )
             aViewBox = awt::Rectangle( 0, 0, 0, 0 );
         aPropertyMap.setProperty( PROP_ViewBox, aViewBox);
 
         Sequence< EnhancedCustomShapeAdjustmentValue > aAdjustmentValues( maAdjustmentGuideList.size() );
-        for ( i = 0; i < maAdjustmentGuideList.size(); i++ )
+        for ( std::vector<CustomShapeGuide>::size_type i = 0; i < maAdjustmentGuideList.size(); i++ )
         {
             EnhancedCustomShapeAdjustmentValue aAdjustmentVal;
             aAdjustmentVal.Value <<= maAdjustmentGuideList[ i ].maFormula.toInt32();
@@ -270,22 +265,23 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
             aPath.setProperty( PROP_TextFrames, aTextFrames);
         }
 
-        sal_uInt32 j, k, nParameterPairs = 0;
-        for ( i = 0; i < maPath2DList.size(); i++ )
-            nParameterPairs += maPath2DList[ i ].parameter.size();
+        sal_uInt32 nParameterPairs = 0;
+        for ( auto const & i: maPath2DList )
+            nParameterPairs += i.parameter.size();
 
         Sequence< EnhancedCustomShapeParameterPair > aParameterPairs( nParameterPairs );
-        for ( i = 0, k = 0; i < maPath2DList.size(); i++ )
-            for ( j = 0; j < maPath2DList[ i ].parameter.size(); j++ )
-                aParameterPairs[ k++ ] = maPath2DList[ i ].parameter[ j ];
+        sal_uInt32 k = 0;
+        for ( auto const & i: maPath2DList )
+            for ( auto const & j: i.parameter )
+                aParameterPairs[ k++ ] = j;
         aPath.setProperty( PROP_Coordinates, aParameterPairs);
 
-        if ( maPath2DList.size() )
+        if ( !maPath2DList.empty() )
         {
             bool bAllZero = true;
-            for ( i=0; i < maPath2DList.size(); i++ )
+            for ( auto const & i: maPath2DList )
             {
-                if ( maPath2DList[i].w || maPath2DList[i].h ) {
+                if ( i.w || i.h ) {
                     bAllZero = false;
                     break;
                 }
@@ -293,7 +289,7 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
 
             if ( !bAllZero ) {
                 Sequence< awt::Size > aSubViewSize( maPath2DList.size() );
-                for ( i=0; i < maPath2DList.size(); i++ )
+                for ( std::vector<Path2D>::size_type i=0; i < maPath2DList.size(); i++ )
                 {
                     aSubViewSize[i].Width = static_cast< sal_Int32 >( maPath2DList[i].w );
                     aSubViewSize[i].Height = static_cast< sal_Int32 >( maPath2DList[i].h );
@@ -310,12 +306,12 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
         aPropertyMap.setProperty( PROP_Path, aPathSequence);
 
         Sequence< OUString > aEquations( maGuideList.size() );
-        for ( i = 0; i < maGuideList.size(); i++ )
+        for ( std::vector<CustomShapeGuide>::size_type i = 0; i < maGuideList.size(); i++ )
             aEquations[ i ] = maGuideList[ i ].maFormula;
         aPropertyMap.setProperty( PROP_Equations, aEquations);
 
         Sequence< PropertyValues > aHandles( maAdjustHandleList.size() );
-        for ( i = 0; i < maAdjustHandleList.size(); i++ )
+        for ( std::vector<AdjustHandle>::size_type i = 0; i < maAdjustHandleList.size(); i++ )
         {
             PropertyMap aHandle;
             // maAdjustmentHandle[ i ].gdRef1 ... maAdjustmentHandle[ i ].gdRef2 ... :(
@@ -326,7 +322,25 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
             // adjustment value is decisive
             if ( maAdjustHandleList[ i ].polar )
             {
+                // Polar handles in DrawingML
+                // 1. don't have reference center, so PROP_Polar isn't needed.
+                // 2. position always use planar coordinates.
+                // 3. use RefAngle and RefR to specify adjustment value to be updated.
+                // 4. The unit of angular adjustment values are 6000th degree.
+
                 aHandle.setProperty( PROP_Position, maAdjustHandleList[ i ].pos);
+                if ( maAdjustHandleList[ i ].gdRef1.has() )
+                {
+                    sal_Int32 nIndex = GetCustomShapeGuideValue( maAdjustmentGuideList, maAdjustHandleList[ i ].gdRef1.get() );
+                    if ( nIndex >= 0 )
+                        aHandle.setProperty( PROP_RefR, nIndex);
+                }
+                if ( maAdjustHandleList[ i ].gdRef2.has() )
+                {
+                    sal_Int32 nIndex = GetCustomShapeGuideValue( maAdjustmentGuideList, maAdjustHandleList[ i ].gdRef2.get() );
+                    if ( nIndex >= 0 )
+                        aHandle.setProperty( PROP_RefAngle, nIndex);
+                }
                 if ( maAdjustHandleList[ i ].min1.has() )
                     aHandle.setProperty( PROP_RadiusRangeMinimum, maAdjustHandleList[ i ].min1.get());
                 if ( maAdjustHandleList[ i ].max1.has() )
@@ -370,11 +384,13 @@ void CustomShapeProperties::pushToPropSet( const ::oox::core::FilterBase& /* rFi
         aPropertyMap.setProperty( PROP_Handles, aHandles);
 
 #ifdef DEBUG
+        // Note that the script oox/source/drawingml/customshapes/generatePresetsData.pl looks
+        // for these ==cscode== and ==csdata== markers, so don't "clean up" these SAL_INFOs.
         SAL_INFO("oox.cscode", "==cscode== begin");
-        aPropertyMap.dumpCode();
+        aPropertyMap.dumpCode( aPropertyMap.makePropertySet() );
         SAL_INFO("oox.cscode", "==cscode== end");
         SAL_INFO("oox.csdata", "==csdata== begin");
-        aPropertyMap.dumpData();
+        aPropertyMap.dumpData( aPropertyMap.makePropertySet() );
         SAL_INFO("oox.csdata", "==csdata== end");
 #endif
         // converting the vector to a sequence

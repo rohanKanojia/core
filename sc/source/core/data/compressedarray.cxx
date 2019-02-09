@@ -17,17 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "compressedarray.hxx"
-#include "address.hxx"
+#include <compressedarray.hxx>
+#include <global.hxx>
 
-#include <algorithm>
+static const size_t nScCompressedArrayDelta = 4;
 
 template< typename A, typename D >
-ScCompressedArray<A,D>::ScCompressedArray( A nMaxAccessP, const D& rValue,
-        size_t nDeltaP )
+ScCompressedArray<A,D>::ScCompressedArray( A nMaxAccessP, const D& rValue )
     : nCount(1)
     , nLimit(1)
-    , nDelta( nDeltaP > 0 ? nDeltaP : 1)
     , pData( new DataEntry[1])
     , nMaxAccess( nMaxAccessP)
 {
@@ -36,48 +34,8 @@ ScCompressedArray<A,D>::ScCompressedArray( A nMaxAccessP, const D& rValue,
 }
 
 template< typename A, typename D >
-ScCompressedArray<A,D>::ScCompressedArray( A nMaxAccessP, const D* pDataArray,
-        size_t nDataCount )
-    : nCount(0)
-    , nLimit( nDataCount)
-    , nDelta( nScCompressedArrayDelta)
-    , pData( new DataEntry[nDataCount])
-    , nMaxAccess( nMaxAccessP)
-{
-    D aValue = pDataArray[0];
-    for (size_t j=0; j<nDataCount; ++j)
-    {
-        if (!(aValue == pDataArray[j]))
-        {
-            pData[nCount].aValue = aValue;
-            pData[nCount].nEnd = j-1;
-            ++nCount;
-            aValue = pDataArray[j];
-        }
-    }
-    pData[nCount].aValue = aValue;
-    pData[nCount].nEnd = nMaxAccess;
-    ++nCount;
-    Resize( nCount);
-}
-
-template< typename A, typename D >
 ScCompressedArray<A,D>::~ScCompressedArray()
 {
-    delete[] pData;
-}
-
-template< typename A, typename D >
-void ScCompressedArray<A,D>::Resize( size_t nNewLimit)
-{
-    if ((nCount <= nNewLimit && nNewLimit < nLimit) || nLimit < nNewLimit)
-    {
-        nLimit = nNewLimit;
-        DataEntry* pNewData = new DataEntry[nLimit];
-        memcpy( pNewData, pData, nCount*sizeof(DataEntry));
-        delete[] pData;
-        pData = pNewData;
-    }
 }
 
 template< typename A, typename D >
@@ -126,13 +84,12 @@ void ScCompressedArray<A,D>::SetValue( A nStart, A nEnd, const D& rValue )
             size_t nNeeded = nCount + 2;
             if (nLimit < nNeeded)
             {
-                nLimit += nDelta;
+                nLimit += nScCompressedArrayDelta;
                 if (nLimit < nNeeded)
                     nLimit = nNeeded;
-                DataEntry* pNewData = new DataEntry[nLimit];
-                memcpy( pNewData, pData, nCount*sizeof(DataEntry));
-                delete[] pData;
-                pData = pNewData;
+                std::unique_ptr<DataEntry[]> pNewData(new DataEntry[nLimit]);
+                memcpy( pNewData.get(), pData.get(), nCount*sizeof(DataEntry));
+                pData = std::move(pNewData);
             }
 
             size_t ni;          // number of leading entries
@@ -205,7 +162,7 @@ void ScCompressedArray<A,D>::SetValue( A nStart, A nEnd, const D& rValue )
                 }
                 if (ni < nj)
                 {   // remove entries
-                    memmove( pData + ni, pData + nj,
+                    memmove( pData.get() + ni, pData.get() + nj,
                             (nCount - nj) * sizeof(DataEntry));
                     nCount -= nj - ni;
                 }
@@ -216,11 +173,11 @@ void ScCompressedArray<A,D>::SetValue( A nStart, A nEnd, const D& rValue )
                 if (nInsert <= nCount)
                 {
                     if (!bSplit)
-                        memmove( pData + nInsert + 1, pData + nInsert,
+                        memmove( pData.get() + nInsert + 1, pData.get() + nInsert,
                                 (nCount - nInsert) * sizeof(DataEntry));
                     else
                     {
-                        memmove( pData + nInsert + 2, pData + nInsert,
+                        memmove( pData.get() + nInsert + 2, pData.get() + nInsert,
                                 (nCount - nInsert) * sizeof(DataEntry));
                         pData[nInsert+1] = pData[nInsert-1];
                         nCount++;
@@ -237,18 +194,20 @@ void ScCompressedArray<A,D>::SetValue( A nStart, A nEnd, const D& rValue )
 }
 
 template< typename A, typename D >
-void ScCompressedArray<A,D>::CopyFrom( const ScCompressedArray<A,D>& rArray, A nStart,
-        A nEnd )
+void ScCompressedArray<A,D>::CopyFrom( const ScCompressedArray<A,D>& rArray, A nDestStart,
+        A nDestEnd, A nSrcStart )
 {
+    assert( this != &rArray && "cannot copy self->self" );
     size_t nIndex = 0;
     A nRegionEnd;
-    for (A j=nStart; j<=nEnd; ++j)
+    for (A j=nDestStart; j<=nDestEnd; ++j)
     {
-        const D& rValue = (j==nStart ?
-                rArray.GetValue( j, nIndex, nRegionEnd) :
+        const D& rValue = (j==nDestStart ?
+                rArray.GetValue( j - nDestStart + nSrcStart, nIndex, nRegionEnd) :
                 rArray.GetNextValue( nIndex, nRegionEnd));
-        if (nRegionEnd > nEnd)
-            nRegionEnd = nEnd;
+        nRegionEnd = nRegionEnd - nSrcStart + nDestStart;
+        if (nRegionEnd > nDestEnd)
+            nRegionEnd = nDestEnd;
         this->SetValue( j, nRegionEnd, rValue);
         j = nRegionEnd;
     }
@@ -277,6 +236,19 @@ const D& ScCompressedArray<A,D>::Insert( A nStart, size_t nAccessCount )
 }
 
 template< typename A, typename D >
+void ScCompressedArray<A,D>::InsertPreservingSize( A nStart, size_t nAccessCount, const D& rFillValue )
+{
+    const A nPrevLastPos = GetLastPos();
+
+    Insert(nStart, nAccessCount);
+    for (A i = nStart; i < A(nStart + nAccessCount); ++i)
+        SetValue(i, rFillValue);
+
+    const A nNewLastPos = GetLastPos();
+    Remove(nPrevLastPos, nNewLastPos - nPrevLastPos);
+}
+
+template< typename A, typename D >
 void ScCompressedArray<A,D>::Remove( A nStart, size_t nAccessCount )
 {
     A nEnd = nStart + nAccessCount - 1;
@@ -300,7 +272,7 @@ void ScCompressedArray<A,D>::Remove( A nStart, size_t nAccessCount )
         }
         else
             nRemove = 1;
-        memmove( pData + nIndex, pData + nIndex + nRemove, (nCount - (nIndex +
+        memmove( pData.get() + nIndex, pData.get() + nIndex + nRemove, (nCount - (nIndex +
                         nRemove)) * sizeof(DataEntry));
         nCount -= nRemove;
     }
@@ -310,6 +282,35 @@ void ScCompressedArray<A,D>::Remove( A nStart, size_t nAccessCount )
         pData[nIndex].nEnd -= nAccessCount;
     } while (++nIndex < nCount);
     pData[nCount-1].nEnd = nMaxAccess;
+}
+
+template< typename A, typename D >
+void ScCompressedArray<A,D>::RemovePreservingSize( A nStart, size_t nAccessCount, const D& rFillValue )
+{
+    const A nPrevLastPos = GetLastPos();
+
+    Remove(nStart, nAccessCount);
+
+    const A nNewLastPos = GetLastPos();
+    InsertPreservingSize(nNewLastPos, nNewLastPos - nPrevLastPos, rFillValue);
+}
+
+template< typename A, typename D >
+void ScCompressedArray<A,D>::Iterator::operator++()
+{
+    ++mnRegion;
+    if (mnRegion > mrArray.pData[mnIndex].nEnd)
+        ++mnIndex;
+}
+
+template< typename A, typename D >
+typename ScCompressedArray<A,D>::Iterator ScCompressedArray<A,D>::Iterator::operator+(size_t nAccessCount) const
+{
+    A nRegion = mnRegion + nAccessCount;
+    auto nIndex = mnIndex;
+    while (nRegion > mrArray.pData[nIndex].nEnd)
+        ++nIndex;
+    return Iterator(mrArray, nIndex, nRegion);
 }
 
 // === ScBitMaskCompressedArray ==============================================
@@ -326,7 +327,7 @@ void ScBitMaskCompressedArray<A,D>::AndValue( A nStart, A nEnd,
     {
         if ((this->pData[nIndex].aValue & rValueToAnd) != this->pData[nIndex].aValue)
         {
-            A nS = ::std::max( (nIndex>0 ? this->pData[nIndex-1].nEnd+1 : 0), nStart);
+            A nS = ::std::max<A>( (nIndex>0 ? this->pData[nIndex-1].nEnd+1 : 0), nStart);
             A nE = ::std::min( this->pData[nIndex].nEnd, nEnd);
             this->SetValue( nS, nE, this->pData[nIndex].aValue & rValueToAnd);
             if (nE >= nEnd)
@@ -352,7 +353,7 @@ void ScBitMaskCompressedArray<A,D>::OrValue( A nStart, A nEnd,
     {
         if ((this->pData[nIndex].aValue | rValueToOr) != this->pData[nIndex].aValue)
         {
-            A nS = ::std::max( (nIndex>0 ? this->pData[nIndex-1].nEnd+1 : 0), nStart);
+            A nS = ::std::max<A>( (nIndex>0 ? this->pData[nIndex-1].nEnd+1 : 0), nStart);
             A nE = ::std::min( this->pData[nIndex].nEnd, nEnd);
             this->SetValue( nS, nE, this->pData[nIndex].aValue | rValueToOr);
             if (nE >= nEnd)
@@ -392,7 +393,7 @@ A ScBitMaskCompressedArray<A,D>::GetLastAnyBitAccess( const D& rBitMask ) const
     size_t nIndex = this->nCount-1;
     while (true)
     {
-        if ((this->pData[nIndex].aValue & rBitMask) != 0)
+        if (this->pData[nIndex].aValue & rBitMask)
         {
             nEnd = this->pData[nIndex].nEnd;
             break;  // while
@@ -414,7 +415,10 @@ A ScBitMaskCompressedArray<A,D>::GetLastAnyBitAccess( const D& rBitMask ) const
 
 // === Force instantiation of specializations ================================
 
-template class ScCompressedArray< SCROW, sal_uInt8>;             // flags, base class
-template class ScBitMaskCompressedArray< SCROW, sal_uInt8>;      // flags
+template class ScCompressedArray< SCROW, CRFlags>;             // flags, base class
+template class ScBitMaskCompressedArray< SCROW, CRFlags>;      // flags
+template class ScCompressedArray< SCCOL, sal_uInt16>;
+template class ScCompressedArray< SCCOL, CRFlags>;
+template class ScBitMaskCompressedArray< SCCOL, CRFlags>;
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

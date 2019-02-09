@@ -25,23 +25,20 @@
 
 #include "MasterPageContainer.hxx"
 #include "DocumentHelper.hxx"
-#include "pres.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "sdpage.hxx"
-#include "glob.hxx"
-#include "glob.hrc"
-#include "app.hrc"
-#include "res_bmp.hrc"
-#include "strings.hrc"
-#include "DrawViewShell.hxx"
-#include "DrawController.hxx"
-#include "SlideSorterViewShell.hxx"
+#include <pres.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <sdpage.hxx>
+#include <glob.hxx>
+#include <app.hrc>
+
+#include <DrawViewShell.hxx>
+#include <DrawController.hxx>
+#include <SlideSorterViewShell.hxx>
 #include "PreviewValueSet.hxx"
-#include "ViewShellBase.hxx"
+#include <ViewShellBase.hxx>
 #include <sfx2/objface.hxx>
-#include "sdresid.hxx"
-#include "drawview.hxx"
+#include <drawview.hxx>
 #include <vcl/image.hxx>
 #include <vcl/floatwin.hxx>
 #include <svl/languageoptions.hxx>
@@ -52,9 +49,9 @@
 #include <svx/dlgutil.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svxids.hrc>
-#include "FrameView.hxx"
-#include "stlpool.hxx"
-#include "unmovss.hxx"
+#include <FrameView.hxx>
+#include <stlpool.hxx>
+#include <unmovss.hxx>
 #include <sfx2/request.hxx>
 #include <svl/itempool.hxx>
 #include <sfx2/sidebar/Theme.hxx>
@@ -63,6 +60,11 @@
 using namespace ::com::sun::star::text;
 
 namespace sd { namespace sidebar {
+
+    /** menu entry that is executed as default action when the left mouse button is
+        clicked over a master page.
+    */
+static const char gsDefaultClickAction[] = "applyselect";
 
 MasterPagesSelector::MasterPagesSelector (
     vcl::Window* pParent,
@@ -75,7 +77,6 @@ MasterPagesSelector::MasterPagesSelector (
       mpContainer(rpContainer),
       mrDocument(rDocument),
       mrBase(rBase),
-      mnDefaultClickAction(SID_TP_APPLY_TO_ALL_SLIDES),
       maCurrentItemList(),
       maTokenToValueSetIndex(),
       maLockedMasterPages(),
@@ -112,6 +113,7 @@ void MasterPagesSelector::dispose()
 
     Link<MasterPageContainerChangeEvent&,void> aChangeListener (LINK(this,MasterPagesSelector,ContainerChangeListener));
     mpContainer->RemoveChangeListener(aChangeListener);
+    mpContainer.reset();
     PreviewValueSet::dispose();
 }
 
@@ -137,25 +139,22 @@ void MasterPagesSelector::UpdateLocks (const ItemList& rItemList)
     // deletion and re-creation of MasterPageDescriptor objects.
 
     // Lock the master pages in the given list.
-    ItemList::const_iterator iItem;
-    for (iItem=rItemList.begin(); iItem!=rItemList.end(); ++iItem)
+    for (const auto& rItem : rItemList)
     {
-        mpContainer->AcquireToken(*iItem);
-        aNewLockList.push_back(*iItem);
+        mpContainer->AcquireToken(rItem);
+        aNewLockList.push_back(rItem);
     }
 
     // Release the previously locked master pages.
-    ItemList::const_iterator iPage;
-    ItemList::const_iterator iEnd (maLockedMasterPages.end());
-    for (iPage=maLockedMasterPages.begin(); iPage!=iEnd; ++iPage)
-        mpContainer->ReleaseToken(*iPage);
+    for (const auto& rPage : maLockedMasterPages)
+        mpContainer->ReleaseToken(rPage);
 
     maLockedMasterPages.swap(aNewLockList);
 }
 
 void MasterPagesSelector::Fill()
 {
-    ::std::unique_ptr<ItemList> pItemList (new ItemList());
+    ::std::unique_ptr<ItemList> pItemList (new ItemList);
 
     Fill(*pItemList);
 
@@ -163,20 +162,20 @@ void MasterPagesSelector::Fill()
     UpdateItemList(std::move(pItemList));
 }
 
-ResId MasterPagesSelector::GetContextMenuResId() const
+OUString MasterPagesSelector::GetContextMenuUIFile() const
 {
-    return SdResId(RID_TASKPANE_MASTERPAGESSELECTOR_POPUP);
+    return OUString("modules/simpress/ui/mastermenu.ui");
 }
 
-IMPL_LINK_NOARG_TYPED(MasterPagesSelector, ClickHandler, ValueSet*, void)
+IMPL_LINK_NOARG(MasterPagesSelector, ClickHandler, ValueSet*, void)
 {
     // We use the framework to assign the clicked-on master page because we
     // so use the same mechanism as the context menu does (where we do not
     // have the option to call the assignment method directly.)
-    ExecuteCommand(mnDefaultClickAction);
+    ExecuteCommand(gsDefaultClickAction);
 }
 
-IMPL_LINK_TYPED(MasterPagesSelector, RightClickHandler, const MouseEvent&, rEvent, void)
+IMPL_LINK(MasterPagesSelector, RightClickHandler, const MouseEvent&, rEvent, void)
 {
     // Here we only prepare the display of the context menu: the item under
     // the mouse is selected.  The actual display of the context menu is
@@ -205,7 +204,7 @@ void MasterPagesSelector::Command (const CommandEvent& rEvent)
         {
             // Use the currently selected item and show the popup menu in its
             // center.
-            const sal_uInt16 nIndex = PreviewValueSet::GetSelectItemId();
+            const sal_uInt16 nIndex = PreviewValueSet::GetSelectedItemId();
             if (nIndex > 0)
             {
                 // The position of the upper left corner of the context menu is
@@ -215,12 +214,13 @@ void MasterPagesSelector::Command (const CommandEvent& rEvent)
                 Point aPosition (rEvent.GetMousePosPixel());
                 if ( ! rEvent.IsMouseEvent())
                 {
-                    Rectangle aBBox (PreviewValueSet::GetItemRect(nIndex));
+                    ::tools::Rectangle aBBox (PreviewValueSet::GetItemRect(nIndex));
                     aPosition = aBBox.Center();
                 }
 
                 // Setup the menu.
-                std::unique_ptr<PopupMenu> pMenu (new PopupMenu(GetContextMenuResId()));
+                VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), GetContextMenuUIFile(), "");
+                VclPtr<PopupMenu> pMenu(aBuilder.get_menu("menu"));
                 FloatingWindow* pMenuWindow = dynamic_cast<FloatingWindow*>(pMenu->GetWindow());
                 if (pMenuWindow != nullptr)
                     pMenuWindow->SetPopupModeFlags(
@@ -230,7 +230,7 @@ void MasterPagesSelector::Command (const CommandEvent& rEvent)
                 ProcessPopupMenu(*pMenu);
 
                 // Show the menu.
-                pMenu->Execute(this, Rectangle(aPosition,Size(1,1)), PopupMenuFlags::ExecuteDown);
+                pMenu->Execute(this, ::tools::Rectangle(aPosition,Size(1,1)), PopupMenuFlags::ExecuteDown);
             }
         }
         break;
@@ -242,12 +242,12 @@ void MasterPagesSelector::ProcessPopupMenu (Menu& rMenu)
 {
     // Disable some entries.
     if (mpContainer->GetPreviewSize() == MasterPageContainer::SMALL)
-        rMenu.EnableItem(SID_TP_SHOW_SMALL_PREVIEW, false);
+        rMenu.EnableItem(rMenu.GetItemId("small"), false);
     else
-        rMenu.EnableItem(SID_TP_SHOW_LARGE_PREVIEW, false);
+        rMenu.EnableItem(rMenu.GetItemId("large"), false);
 }
 
-IMPL_LINK_TYPED(MasterPagesSelector, OnMenuItemSelected, Menu*, pMenu, bool)
+IMPL_LINK(MasterPagesSelector, OnMenuItemSelected, Menu*, pMenu, bool)
 {
     if (pMenu == nullptr)
     {
@@ -256,78 +256,64 @@ IMPL_LINK_TYPED(MasterPagesSelector, OnMenuItemSelected, Menu*, pMenu, bool)
     }
 
     pMenu->Deactivate();
-    ExecuteCommand(pMenu->GetCurItemId());
+    ExecuteCommand(pMenu->GetCurItemIdent());
     return false;
 }
 
-void MasterPagesSelector::ExecuteCommand (const sal_Int32 nCommandId)
+void MasterPagesSelector::ExecuteCommand(const OString &rIdent)
 {
-    switch (nCommandId)
+    if (rIdent == "applyall")
     {
-        case SID_TP_APPLY_TO_ALL_SLIDES:
-            mrBase.SetBusyState (true);
-            AssignMasterPageToAllSlides (GetSelectedMasterPage());
-            mrBase.SetBusyState (false);
-            break;
-
-        case SID_TP_APPLY_TO_SELECTED_SLIDES:
-            mrBase.SetBusyState (true);
-            AssignMasterPageToSelectedSlides (GetSelectedMasterPage());
-            mrBase.SetBusyState (false);
-            break;
-
-        case SID_TP_USE_FOR_NEW_PRESENTATIONS:
-            DBG_ASSERT (false,
-                "Using slides as default for new presentations"
-                " is not yet implemented");
-            break;
-
-        case SID_TP_SHOW_SMALL_PREVIEW:
-        case SID_TP_SHOW_LARGE_PREVIEW:
+        mrBase.SetBusyState (true);
+        AssignMasterPageToAllSlides (GetSelectedMasterPage());
+        mrBase.SetBusyState (false);
+    }
+    else if (rIdent == "applyselect")
+    {
+        mrBase.SetBusyState (true);
+        AssignMasterPageToSelectedSlides (GetSelectedMasterPage());
+        mrBase.SetBusyState (false);
+    }
+    else if (rIdent == "large")
+    {
+        mrBase.SetBusyState (true);
+        mpContainer->SetPreviewSize(MasterPageContainer::LARGE);
+        mrBase.SetBusyState (false);
+        if (mxSidebar.is())
+            mxSidebar->requestLayout();
+    }
+    else if (rIdent == "small")
+    {
+        mrBase.SetBusyState (true);
+        mpContainer->SetPreviewSize(MasterPageContainer::SMALL);
+        mrBase.SetBusyState (false);
+        if (mxSidebar.is())
+            mxSidebar->requestLayout();
+    }
+    else if (rIdent == "edit")
+    {
+        using namespace ::com::sun::star;
+        uno::Reference<drawing::XDrawPage> xSelectedMaster;
+        SdPage* pMasterPage = GetSelectedMasterPage();
+        assert(pMasterPage); //rhbz#902884
+        if (pMasterPage)
+            xSelectedMaster.set(pMasterPage->getUnoPage(), uno::UNO_QUERY);
+        SfxViewFrame* pViewFrame = mrBase.GetViewFrame();
+        if (pViewFrame != nullptr && xSelectedMaster.is())
         {
-            mrBase.SetBusyState (true);
-            mpContainer->SetPreviewSize(
-                nCommandId==SID_TP_SHOW_SMALL_PREVIEW
-                ? MasterPageContainer::SMALL
-                : MasterPageContainer::LARGE);
-            mrBase.SetBusyState (false);
-            if (mxSidebar.is())
-                mxSidebar->requestLayout();
-            break;
-        }
-
-        case SID_TP_EDIT_MASTER:
-        {
-            using namespace ::com::sun::star;
-            uno::Reference<drawing::XDrawPage> xSelectedMaster;
-            SdPage* pMasterPage = GetSelectedMasterPage();
-            assert(pMasterPage); //rhbz#902884
-            if (pMasterPage)
-                xSelectedMaster.set(pMasterPage->getUnoPage(), uno::UNO_QUERY);
-            SfxViewFrame* pViewFrame = mrBase.GetViewFrame();
-            if (pViewFrame != nullptr && xSelectedMaster.is())
+            SfxDispatcher* pDispatcher = pViewFrame->GetDispatcher();
+            if (pDispatcher != nullptr)
             {
-                SfxDispatcher* pDispatcher = pViewFrame->GetDispatcher();
-                if (pDispatcher != nullptr)
-                {
-                    sal_uInt16 nIndex = PreviewValueSet::GetSelectItemId();
-                    pDispatcher->Execute(SID_MASTERPAGE, SfxCallMode::SYNCHRON);
-                    PreviewValueSet::SelectItem (nIndex);
-                    mrBase.GetDrawController().setCurrentPage(xSelectedMaster);
-                }
+                sal_uInt16 nIndex = PreviewValueSet::GetSelectedItemId();
+                pDispatcher->Execute(SID_MASTERPAGE, SfxCallMode::SYNCHRON);
+                PreviewValueSet::SelectItem (nIndex);
+                mrBase.GetDrawController().setCurrentPage(xSelectedMaster);
             }
-            break;
         }
-
-        case SID_CUT:
-        case SID_COPY:
-        case SID_PASTE:
-            // Cut, copy, and paste are not supported and thus are ignored.
-            break;
     }
 }
 
-IMPL_LINK_TYPED(MasterPagesSelector, ContainerChangeListener, MasterPageContainerChangeEvent&, rEvent, void)
+IMPL_LINK(MasterPagesSelector, ContainerChangeListener, MasterPageContainerChangeEvent&, rEvent, void)
 {
     NotifyContainerChangeEvent(rEvent);
 }
@@ -337,11 +323,11 @@ SdPage* MasterPagesSelector::GetSelectedMasterPage()
     const ::osl::MutexGuard aGuard (maMutex);
 
     SdPage* pMasterPage = nullptr;
-    sal_uInt16 nIndex = PreviewValueSet::GetSelectItemId();
+    sal_uInt16 nIndex = PreviewValueSet::GetSelectedItemId();
     UserData* pData = GetUserData(nIndex);
     if (pData != nullptr)
     {
-        pMasterPage = mpContainer->GetPageObjectForToken(pData->second);
+        pMasterPage = mpContainer->GetPageObjectForToken(pData->second, true);
     }
     return pMasterPage;
 }
@@ -354,7 +340,7 @@ void MasterPagesSelector::AssignMasterPageToAllSlides (SdPage* pMasterPage)
     if (pMasterPage == nullptr)
         return;
 
-    sal_uInt16 nPageCount = mrDocument.GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nPageCount = mrDocument.GetSdPageCount(PageKind::Standard);
     if (nPageCount == 0)
         return;
 
@@ -363,10 +349,10 @@ void MasterPagesSelector::AssignMasterPageToAllSlides (SdPage* pMasterPage)
     // assigned.
     OUString sFullLayoutName(pMasterPage->GetLayoutName());
     ::sd::slidesorter::SharedPageSelection pPageList (
-        new ::sd::slidesorter::SlideSorterViewShell::PageSelection());
+        new ::sd::slidesorter::SlideSorterViewShell::PageSelection);
     for (sal_uInt16 nPageIndex=0; nPageIndex<nPageCount; nPageIndex++)
     {
-        SdPage* pPage = mrDocument.GetSdPage (nPageIndex, PK_STANDARD);
+        SdPage* pPage = mrDocument.GetSdPage (nPageIndex, PageKind::Standard);
         if (pPage != nullptr && pPage->GetLayoutName() != sFullLayoutName)
         {
             pPageList->push_back (pPage);
@@ -417,35 +403,36 @@ void MasterPagesSelector::NotifyContainerChangeEvent (const MasterPageContainerC
 
     switch (rEvent.meEventType)
     {
-        case MasterPageContainerChangeEvent::SIZE_CHANGED:
+        case MasterPageContainerChangeEvent::EventType::SIZE_CHANGED:
             PreviewValueSet::SetPreviewSize(mpContainer->GetPreviewSizePixel());
             UpdateAllPreviews();
             break;
 
-        case MasterPageContainerChangeEvent::PREVIEW_CHANGED:
+        case MasterPageContainerChangeEvent::EventType::PREVIEW_CHANGED:
         {
             int nIndex (GetIndexForToken(rEvent.maChildToken));
             if (nIndex >= 0)
             {
                 PreviewValueSet::SetItemImage (
-                    (sal_uInt16)nIndex,
+                    static_cast<sal_uInt16>(nIndex),
                     mpContainer->GetPreviewForToken(rEvent.maChildToken));
-                PreviewValueSet::Invalidate(PreviewValueSet::GetItemRect((sal_uInt16)nIndex));
+                PreviewValueSet::Invalidate(PreviewValueSet::GetItemRect(static_cast<sal_uInt16>(nIndex)));
             }
         }
         break;
 
-        case MasterPageContainerChangeEvent::DATA_CHANGED:
+        case MasterPageContainerChangeEvent::EventType::DATA_CHANGED:
         {
             InvalidateItem(rEvent.maChildToken);
             Fill();
         }
         break;
 
-        case MasterPageContainerChangeEvent::CHILD_REMOVED:
+        case MasterPageContainerChangeEvent::EventType::CHILD_REMOVED:
         {
             int nIndex (GetIndexForToken(rEvent.maChildToken));
             SetItem(nIndex, MasterPageContainer::NIL_TOKEN);
+            break;
         }
 
         default:
@@ -453,38 +440,22 @@ void MasterPagesSelector::NotifyContainerChangeEvent (const MasterPageContainerC
    }
 }
 
-MasterPagesSelector::UserData* MasterPagesSelector::CreateUserData (
-    int nIndex,
-    MasterPageContainer::Token aToken)
-{
-    return new UserData(nIndex,aToken);
-}
-
 MasterPagesSelector::UserData* MasterPagesSelector::GetUserData (int nIndex) const
 {
     const ::osl::MutexGuard aGuard (maMutex);
 
     if (nIndex>0 && static_cast<unsigned int>(nIndex)<=PreviewValueSet::GetItemCount())
-        return static_cast<UserData*>(PreviewValueSet::GetItemData((sal_uInt16)nIndex));
+        return static_cast<UserData*>(PreviewValueSet::GetItemData(static_cast<sal_uInt16>(nIndex)));
     else
         return nullptr;
 }
 
-void MasterPagesSelector::SetUserData (int nIndex, UserData* pData)
+void MasterPagesSelector::SetUserData (int nIndex, std::unique_ptr<UserData> pData)
 {
     const ::osl::MutexGuard aGuard (maMutex);
 
-    if (nIndex>0 && static_cast<unsigned int>(nIndex)<=PreviewValueSet::GetItemCount())
-    {
-        UserData* pOldData = GetUserData(nIndex);
-        if (pOldData!=nullptr && pOldData!=pData)
-            delete pOldData;
-        PreviewValueSet::SetItemData((sal_uInt16)nIndex, pData);
-    }
-}
-
-void MasterPagesSelector::UpdateSelection()
-{
+    delete GetUserData(nIndex);
+    PreviewValueSet::SetItemData(static_cast<sal_uInt16>(nIndex), pData.release());
 }
 
 void MasterPagesSelector::SetItem (
@@ -517,7 +488,7 @@ void MasterPagesSelector::SetItem (
                         mpContainer->GetPageNameForToken(aToken),
                         nIndex);
                 }
-                SetUserData(nIndex, CreateUserData(nIndex,aToken));
+                SetUserData(nIndex, std::make_unique<UserData>(nIndex,aToken));
 
                 AddTokenToIndexEntry(nIndex,aToken);
             }
@@ -599,7 +570,7 @@ void MasterPagesSelector::UpdateAllPreviews()
                 mpContainer->RequestPreview(aToken);
         }
     }
-    PreviewValueSet::Rearrange(true);
+    PreviewValueSet::Rearrange();
 }
 
 void MasterPagesSelector::ClearPageSet()
@@ -609,8 +580,7 @@ void MasterPagesSelector::ClearPageSet()
     for (size_t nIndex=1; nIndex<=PreviewValueSet::GetItemCount(); nIndex++)
     {
         UserData* pData = GetUserData(nIndex);
-        if (pData != nullptr)
-            delete pData;
+        delete pData;
     }
     PreviewValueSet::Clear();
 }
@@ -644,15 +614,9 @@ void MasterPagesSelector::InvalidateItem (MasterPageContainer::Token aToken)
 {
     const ::osl::MutexGuard aGuard (maMutex);
 
-    ItemList::iterator iItem;
-    for (iItem=maCurrentItemList.begin(); iItem!=maCurrentItemList.end(); ++iItem)
-    {
-        if (*iItem == aToken)
-        {
-            *iItem = MasterPageContainer::NIL_TOKEN;
-            break;
-        }
-    }
+    auto iItem = std::find(maCurrentItemList.begin(), maCurrentItemList.end(), aToken);
+    if (iItem != maCurrentItemList.end())
+        *iItem = MasterPageContainer::NIL_TOKEN;
 }
 
 void MasterPagesSelector::UpdateItemList (::std::unique_ptr<ItemList> && pNewItemList)

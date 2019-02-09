@@ -25,7 +25,7 @@
 #include <svx/xtable.hxx>
 
 class SdrModel;
-class SvxFormatCellsDialog : public SfxTabDialog
+class SvxFormatCellsDialog : public SfxTabDialogController
 {
 private:
     const SfxItemSet&   mrOutAttrs;
@@ -34,14 +34,12 @@ private:
     XGradientListRef    mpGradientList;
     XHatchListRef       mpHatchingList;
     XBitmapListRef      mpBitmapList;
-
-    sal_uInt16          m_nAreaPageId;
-    sal_uInt16          m_nBorderPageId;
+    XPatternListRef     mpPatternList;
 
 public:
-    SvxFormatCellsDialog( vcl::Window* pParent, const SfxItemSet* pAttr, SdrModel* pModel );
+    SvxFormatCellsDialog(weld::Window* pParent, const SfxItemSet* pAttr, const SdrModel& rModel);
 
-    virtual void PageCreated( sal_uInt16 nId, SfxTabPage &rPage ) override;
+    virtual void PageCreated(const OString& rId, SfxTabPage &rPage) override;
 
 };
 

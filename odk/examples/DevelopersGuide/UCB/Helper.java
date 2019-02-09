@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -62,7 +63,7 @@ public class Helper {
 
     /**
      *  Constructor, create a new instance of the ucb. UNO is bootstrapped and
-     *  the remote office service manger is used to create the ucb. If necessary
+     *  the remote office service manager is used to create the ucb. If necessary
      *  a new office process is started.
      */
     public Helper(String url) throws java.lang.Exception {
@@ -237,3 +238,5 @@ public class Helper {
         return "";
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

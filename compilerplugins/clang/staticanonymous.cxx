@@ -6,7 +6,7 @@
  *
  */
 #include "plugin.hxx"
-#include "compat.hxx"
+
 /*
 This is a compile check.
 
@@ -17,18 +17,17 @@ namespace loplugin
 {
 
 class StaticAnonymous
-    : public RecursiveASTVisitor< StaticAnonymous >
-    , public Plugin
+    : public loplugin::FilteringPlugin<StaticAnonymous>
     {
     public:
-        StaticAnonymous( const InstantiationData& data );
+        explicit StaticAnonymous( const InstantiationData& data );
         virtual void run() override;
         bool VisitFunctionDecl( FunctionDecl* func );
 
     };
 
 StaticAnonymous::StaticAnonymous( const InstantiationData& data )
-    : Plugin( data )
+    : FilteringPlugin( data )
     {
     }
 
@@ -45,13 +44,13 @@ bool StaticAnonymous::VisitFunctionDecl( FunctionDecl* func )
         return true;
     if( func -> isInAnonymousNamespace () )
     {
-      if ( !isa<CXXMethodDecl>(func) && !compat::isInExternCContext(*func) )
+      if ( !isa<CXXMethodDecl>(func) && !func->isInExternCContext() )
          {
             if(func-> getStorageClass() == SC_Static)
                {
                     report( DiagnosticsEngine::Warning,
                         "redundant 'static' keyword in unnamed namespace",
-                        func->getLocStart());
+                        compat::getBeginLoc(func));
                }
          }
     }

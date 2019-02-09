@@ -8,32 +8,75 @@
  */
 
 #include <test/unoapi_test.hxx>
+#include <test/document/xlinktargetsupplier.hxx>
+#include <test/sheet/spreadsheetdocumentsettings.hxx>
+#include <test/sheet/xcalculatable.hxx>
+#include <test/sheet/xconsolidatable.hxx>
+#include <test/sheet/xdocumentauditing.hxx>
 #include <test/sheet/xgoalseek.hxx>
+
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/sheet/XSpreadsheets.hpp>
+#include <com/sun/star/uno/XInterface.hpp>
+
+#include <com/sun/star/uno/Reference.hxx>
 
 using namespace css;
 using namespace css::uno;
 
 namespace sc_apitest {
 
-#define NUMBER_OF_TESTS 1
-
-class ScModelObj : public UnoApiTest, public apitest::XGoalSeek
+class ScModelObj : public UnoApiTest,
+                   public apitest::SpreadsheetDocumentSettings,
+                   public apitest::XCalculatable,
+                   public apitest::XConsolidatable,
+                   public apitest::XDocumentAuditing,
+                   public apitest::XGoalSeek,
+                   public apitest::XLinkTargetSupplier
 {
 public:
     virtual void setUp() override;
     virtual void tearDown() override;
 
     virtual uno::Reference< uno::XInterface > init() override;
+    virtual uno::Reference< uno::XInterface > getXMSF() override;
+    virtual uno::Sequence<uno::Reference<table::XCell>> getXCells() override;
 
     ScModelObj();
 
     CPPUNIT_TEST_SUITE(ScModelObj);
+
+    // SpreadsheetDocumentSettings
+    CPPUNIT_TEST(testSpreadsheetDocumentSettingsProperties);
+
+    // XCalculatable
+    CPPUNIT_TEST(testCalculate);
+    CPPUNIT_TEST(testCalculateAll);
+    CPPUNIT_TEST(testEnableAutomaticCaclulation);
+
+    // XConsolidatable
+    CPPUNIT_TEST(testCreateConsolidationDescriptor);
+    CPPUNIT_TEST(testConsolidate);
+
+    // XDocumentAuditing
+    CPPUNIT_TEST(testRefreshArrows);
+
+    // XGoalSeek
     CPPUNIT_TEST(testSeekGoal);
+
+    // XLinkTargetSupplier
+    CPPUNIT_TEST(testGetLinks);
+
     CPPUNIT_TEST_SUITE_END();
 
 private:
-    static sal_Int32 nTest;
-    static uno::Reference< lang::XComponent > mxComponent;
+    uno::Reference< lang::XComponent > mxComponent;
+    uno::Sequence<uno::Reference<table::XCell>> m_xCells;
 };
 
 ScModelObj::ScModelObj()
@@ -41,34 +84,49 @@ ScModelObj::ScModelObj()
 {
 }
 
-sal_Int32 ScModelObj::nTest = 0;
-uno::Reference< lang::XComponent > ScModelObj::mxComponent;
-
 uno::Reference< uno::XInterface > ScModelObj::init()
 {
-    OUString aFileURL;
-    createFileURL("ScModelObj.ods", aFileURL);
-    if(!mxComponent.is())
-        mxComponent = loadFromDesktop(aFileURL, "com.sun.star.sheet.SpreadsheetDocument");
-    CPPUNIT_ASSERT(mxComponent.is());
+    uno::Reference<sheet::XSpreadsheetDocument> xDoc(mxComponent, UNO_QUERY_THROW);
 
-    return mxComponent;
+    uno::Reference<frame::XModel> xModel(xDoc, UNO_QUERY_THROW);
+
+    uno::Reference<sheet::XSpreadsheets> xSheets(xDoc->getSheets(), UNO_QUERY_THROW);
+    uno::Reference<container::XIndexAccess> xIA(xSheets, UNO_QUERY_THROW);
+    uno::Reference<sheet::XSpreadsheet> xSheet(xIA->getByIndex(0), UNO_QUERY_THROW);
+
+    m_xCells.realloc(3);
+    m_xCells[0] = xSheet->getCellByPosition(4, 5);
+    m_xCells[0]->setValue(15);
+    m_xCells[1] = xSheet->getCellByPosition(5, 5);
+    m_xCells[1]->setValue(10);
+    m_xCells[2] = xSheet->getCellByPosition(6, 5);
+    m_xCells[2]->setFormula("= E6 * F6");
+
+    return xModel;
+}
+
+uno::Reference<uno::XInterface> ScModelObj::getXMSF()
+{
+    return getMultiServiceFactory();
+}
+
+uno::Sequence<uno::Reference<table::XCell>> ScModelObj::getXCells()
+{
+    return m_xCells;
 }
 
 void ScModelObj::setUp()
 {
-    nTest++;
     UnoApiTest::setUp();
+    // create a calc document
+    OUString aFileURL;
+    createFileURL("ScModelObj.ods", aFileURL);
+    mxComponent = loadFromDesktop(aFileURL, "com.sun.star.sheet.SpreadsheetDocument");
 }
 
 void ScModelObj::tearDown()
 {
-    if (nTest == NUMBER_OF_TESTS)
-    {
-        closeDocument(mxComponent);
-        mxComponent.clear();
-    }
-
+    closeDocument(mxComponent);
     UnoApiTest::tearDown();
 }
 

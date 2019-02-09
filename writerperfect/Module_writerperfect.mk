@@ -25,23 +25,30 @@ $(eval $(call gb_Module_add_targets,writerperfect,\
 	Library_wpftimpress \
 	Library_wpftwriter \
 	Library_writerperfect \
+	UIConfig_writerperfect \
 ))
 
 $(eval $(call gb_Module_add_l10n_targets,writerperfect,\
-	AllLangResTarget_writerperfect \
-	UIConfig_writerperfect \
+	AllLangMoTarget_wpt \
 ))
 
 $(eval $(call gb_Module_add_check_targets,writerperfect,\
 	CppunitTest_writerperfect_stream \
+	CppunitTest_writerperfect_wpftimport \
 ))
 
 $(eval $(call gb_Module_add_slowcheck_targets,writerperfect,\
 	CppunitTest_writerperfect_calc \
 	CppunitTest_writerperfect_draw \
+	$(if $(SYSTEM_EPUBGEN),,CppunitTest_writerperfect_epubexport) \
+	CppunitTest_writerperfect_import \
 	CppunitTest_writerperfect_impress \
 	CppunitTest_writerperfect_writer \
-	StaticLibrary_writerperfect_importtestbase \
+	Library_wpftqahelper \
+))
+
+$(eval $(call gb_Module_add_uicheck_targets,writerperfect,\
+    UITest_writerperfect_epubexport \
 ))
 
 # vim: set noet sw=4 ts=4:

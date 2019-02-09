@@ -21,7 +21,7 @@
 #define INCLUDED_IDL_INC_PARSER_HXX
 
 #include <rtl/ustring.hxx>
-#include <types.hxx>
+#include "types.hxx"
 
 class SvTokenStream;
 class SvIdlDataBase;
@@ -30,6 +30,7 @@ class SvMetaTypeEnum;
 class SvStringHashEntry;
 class SvMetaType;
 class SvMetaClass;
+class SvBOOL;
 
 class SvIdlParser
 {
@@ -44,22 +45,26 @@ public:
     void         ReadInclude( SvMetaModule& rModule );
     void         ReadInterfaceOrShell( SvMetaModule& rModule, MetaTypeType aMetaTypeType );
     void         ReadInterfaceOrShellEntry( SvMetaClass& rClass );
-    bool         ReadInterfaceOrShellSlot( SvMetaSlot& rSlot );
-    void         ReadInterfaceOrShellMethodOrAttribute( SvMetaAttribute& rAttr );
+    bool         ReadSlot( SvMetaSlot& rSlot );
+    void         ReadInterfaceOrShellMethod( SvMetaAttribute& rAttr );
     void         ReadItem();
     void         ReadStruct();
     void         ReadEnum();
     void         ReadEnumValue( SvMetaTypeEnum& rEnum );
+    void         ReadSlotId(SvIdentifier& rSlotId);
+    void         ReadSlotAttribute( SvMetaSlot& rSlot );
     SvMetaClass* ReadKnownClass();
     SvMetaType*  ReadKnownType();
     void         Read(char cChar);
+    bool         ReadIfBoolAttribute( SvBOOL&, SvStringHashEntry const * pName);
+    void         ReadIfIdAttribute( SvIdentifier& rIdentifier, SvStringHashEntry const * pName );
     bool         ReadIf(char cChar);
     void         ReadDelimiter();
     bool         ReadIfDelimiter();
     OString      ReadIdentifier();
     OString      ReadString();
-    void         Read(SvStringHashEntry*);
-    bool         ReadIf(SvStringHashEntry*);
+    void         Read(SvStringHashEntry const *);
+    bool         ReadIf(SvStringHashEntry const *);
 };
 
 #endif // INCLUDED_IDL_INC_PARSER_HXX

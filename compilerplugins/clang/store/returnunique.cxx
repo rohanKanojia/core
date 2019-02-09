@@ -12,15 +12,16 @@
 // unique_ptr is returned directly.  (But other occurrences might be fine the
 // way they are, hence place this plugin into store/).
 
+#include <memory>
 #include "plugin.hxx"
 
 namespace {
 
 class ReturnUnique:
-    public RecursiveASTVisitor<ReturnUnique>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<ReturnUnique>
 {
 public:
-    explicit ReturnUnique(InstantiationData const & data): Plugin(data) {}
+    explicit ReturnUnique(InstantiationData const & data): FilteringPlugin(data) {}
 
     void run() override {
         if (compiler.getLangOpts().CPlusPlus) {

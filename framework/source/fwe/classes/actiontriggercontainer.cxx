@@ -43,13 +43,12 @@ ActionTriggerContainer::~ActionTriggerContainer()
 
 // XInterface
 Any SAL_CALL ActionTriggerContainer::queryInterface( const Type& aType )
-throw ( RuntimeException, std::exception )
 {
     Any a = ::cppu::queryInterface(
                 aType ,
-                (static_cast< XMultiServiceFactory* >(this)),
-                (static_cast< XServiceInfo* >(this)),
-                (static_cast< XTypeProvider* >(this)));
+                static_cast< XMultiServiceFactory* >(this),
+                static_cast< XServiceInfo* >(this),
+                static_cast< XTypeProvider* >(this));
 
     if( a.hasValue() )
     {
@@ -71,7 +70,6 @@ void ActionTriggerContainer::release() throw()
 
 // XMultiServiceFactory
 Reference< XInterface > SAL_CALL ActionTriggerContainer::createInstance( const OUString& aServiceSpecifier )
-throw ( css::uno::Exception, RuntimeException, std::exception)
 {
     if ( aServiceSpecifier == SERVICENAME_ACTIONTRIGGER )
         return static_cast<OWeakObject *>( new ActionTriggerPropertySet());
@@ -84,13 +82,11 @@ throw ( css::uno::Exception, RuntimeException, std::exception)
 }
 
 Reference< XInterface > SAL_CALL ActionTriggerContainer::createInstanceWithArguments( const OUString& ServiceSpecifier, const Sequence< Any >& /*Arguments*/ )
-throw ( Exception, RuntimeException, std::exception)
 {
     return createInstance( ServiceSpecifier );
 }
 
 Sequence< OUString > SAL_CALL ActionTriggerContainer::getAvailableServiceNames()
-throw ( RuntimeException, std::exception )
 {
     Sequence< OUString > aSeq( 3 );
 
@@ -103,56 +99,35 @@ throw ( RuntimeException, std::exception )
 
 // XServiceInfo
 OUString SAL_CALL ActionTriggerContainer::getImplementationName()
-throw ( RuntimeException, std::exception )
 {
     return OUString( IMPLEMENTATIONNAME_ACTIONTRIGGERCONTAINER );
 }
 
 sal_Bool SAL_CALL ActionTriggerContainer::supportsService( const OUString& ServiceName )
-throw ( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 Sequence< OUString > SAL_CALL ActionTriggerContainer::getSupportedServiceNames()
-throw ( RuntimeException, std::exception )
 {
     Sequence< OUString > seqServiceNames { SERVICENAME_ACTIONTRIGGERCONTAINER };
     return seqServiceNames;
 }
 
 // XTypeProvider
-Sequence< Type > SAL_CALL ActionTriggerContainer::getTypes() throw ( RuntimeException, std::exception )
+Sequence< Type > SAL_CALL ActionTriggerContainer::getTypes()
 {
-    // Optimize this method !
-    // We initialize a static variable only one time. And we don't must use a mutex at every call!
-    // For the first call; pTypeCollection is NULL - for the second call pTypeCollection is different from NULL!
-    static ::cppu::OTypeCollection* pTypeCollection = nullptr;
-
-    if ( pTypeCollection == nullptr )
-    {
-        // Ready for multithreading; get global mutex for first call of this method only! see before
-        osl::MutexGuard aGuard( osl::Mutex::getGlobalMutex() );
-
-        // Control these pointer again ... it can be, that another instance will be faster then these!
-        if ( pTypeCollection == nullptr )
-        {
-            // Create a static typecollection ...
-            static ::cppu::OTypeCollection aTypeCollection(
+    // Create a static typecollection ...
+    static ::cppu::OTypeCollection ourTypeCollection(
                         cppu::UnoType<XMultiServiceFactory>::get(),
                         cppu::UnoType<XIndexContainer>::get(),
                         cppu::UnoType<XServiceInfo>::get(),
                         cppu::UnoType<XTypeProvider>::get());
 
-            // ... and set his address to static pointer!
-            pTypeCollection = &aTypeCollection;
-        }
-    }
-
-    return pTypeCollection->getTypes();
+    return ourTypeCollection.getTypes();
 }
 
-Sequence< sal_Int8 > SAL_CALL ActionTriggerContainer::getImplementationId() throw ( RuntimeException, std::exception )
+Sequence< sal_Int8 > SAL_CALL ActionTriggerContainer::getImplementationId()
 {
     return css::uno::Sequence<sal_Int8>();
 }

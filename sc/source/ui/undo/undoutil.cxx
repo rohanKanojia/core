@@ -17,18 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "undoutil.hxx"
+#include <undoutil.hxx>
 
-#include "docsh.hxx"
-#include "tabvwsh.hxx"
-#include "document.hxx"
-#include "dbdata.hxx"
-#include "globstr.hrc"
-#include "globalnames.hxx"
-#include "global.hxx"
-#include "markdata.hxx"
+#include <docsh.hxx>
+#include <tabvwsh.hxx>
+#include <document.hxx>
+#include <dbdata.hxx>
+#include <globalnames.hxx>
+#include <global.hxx>
+#include <markdata.hxx>
 
-void ScUndoUtil::MarkSimpleBlock( ScDocShell* pDocShell,
+void ScUndoUtil::MarkSimpleBlock( const ScDocShell* pDocShell,
                                 SCCOL nStartX, SCROW nStartY, SCTAB nStartZ,
                                 SCCOL nEndX, SCROW nEndY, SCTAB nEndZ )
 {
@@ -51,7 +50,7 @@ void ScUndoUtil::MarkSimpleBlock( ScDocShell* pDocShell,
     }
 }
 
-void ScUndoUtil::MarkSimpleBlock( ScDocShell* pDocShell,
+void ScUndoUtil::MarkSimpleBlock( const ScDocShell* pDocShell,
                                 const ScAddress& rBlockStart,
                                 const ScAddress& rBlockEnd )
 {
@@ -59,14 +58,14 @@ void ScUndoUtil::MarkSimpleBlock( ScDocShell* pDocShell,
                                 rBlockEnd.Col(), rBlockEnd.Row(), rBlockEnd.Tab() );
 }
 
-void ScUndoUtil::MarkSimpleBlock( ScDocShell* pDocShell,
+void ScUndoUtil::MarkSimpleBlock( const ScDocShell* pDocShell,
                                 const ScRange& rRange )
 {
     MarkSimpleBlock( pDocShell, rRange.aStart.Col(), rRange.aStart.Row(), rRange.aStart.Tab(),
                                 rRange.aEnd.Col(),   rRange.aEnd.Row(),   rRange.aEnd.Tab()   );
 }
 
-ScDBData* ScUndoUtil::GetOldDBData( ScDBData* pUndoData, ScDocument* pDoc, SCTAB nTab,
+ScDBData* ScUndoUtil::GetOldDBData( const ScDBData* pUndoData, ScDocument* pDoc, SCTAB nTab,
                                     SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2 )
 {
     ScDBData* pRet = pDoc->GetDBAtArea( nTab, nCol1, nRow1, nCol2, nRow2 );
@@ -81,14 +80,13 @@ ScDBData* ScUndoUtil::GetOldDBData( ScDBData* pUndoData, ScDocument* pDoc, SCTAB
                 bWasTemp = true;
         }
         OSL_ENSURE(bWasTemp, "Undo: didn't find database range");
-        (void)bWasTemp;
         pRet = pDoc->GetAnonymousDBData(nTab);
         if (!pRet)
         {
-            pRet = new ScDBData( OUString(STR_DB_LOCAL_NONAME), nTab,
+            pRet = new ScDBData( STR_DB_LOCAL_NONAME, nTab,
                                 nCol1,nRow1, nCol2,nRow2, true,
                                 pDoc->HasColHeader( nCol1,nRow1,nCol2,nRow2,nTab ) );
-            pDoc->SetAnonymousDBData(nTab,pRet);
+            pDoc->SetAnonymousDBData(nTab, std::unique_ptr<ScDBData>(pRet));
         }
     }
 
@@ -108,7 +106,7 @@ void ScUndoUtil::PaintMore( ScDocShell* pDocShell,
     if (nRow2<MAXROW) ++nRow2;
 
     pDocShell->PostPaint( nCol1,nRow1,rRange.aStart.Tab(),
-                          nCol2,nRow2,rRange.aEnd.Tab(), PAINT_GRID );
+                          nCol2,nRow2,rRange.aEnd.Tab(), PaintPartFlags::Grid );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

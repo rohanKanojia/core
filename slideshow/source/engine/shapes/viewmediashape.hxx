@@ -26,7 +26,7 @@
 #include <memory>
 #include <vcl/vclptr.hxx>
 
-#include "viewlayer.hxx"
+#include <viewlayer.hxx>
 
 class SystemChildWindow;
 namespace vcl { class Window; }
@@ -55,7 +55,7 @@ namespace slideshow
             The class is able to render the associated media shape on
             View implementations.
          */
-        class ViewMediaShape
+        class ViewMediaShape final
         {
         public:
             /** Create a ViewMediaShape for the given View
@@ -69,7 +69,7 @@ namespace slideshow
 
             /** destroy the object
              */
-            virtual ~ViewMediaShape();
+            ~ViewMediaShape();
 
             /// Forbid copy construction
             ViewMediaShape(const ViewMediaShape&) = delete;
@@ -78,7 +78,7 @@ namespace slideshow
 
             /** Query the associated view layer of this shape
              */
-            ViewLayerSharedPtr getViewLayer() const;
+            const ViewLayerSharedPtr& getViewLayer() const;
 
             // animation methods
 
@@ -146,9 +146,8 @@ namespace slideshow
             void implInitializePlayerWindow( const ::basegfx::B2DRectangle& rBounds,
                                              const css::uno::Sequence< css::uno::Any >& rVCLDeviceParams,
                                              const OUString& rMimeType );
-            ViewLayerSharedPtr                    mpViewLayer;
+            ViewLayerSharedPtr const              mpViewLayer;
             VclPtr< SystemChildWindow >           mpMediaWindow;
-            VclPtr< vcl::Window >                 mpEventHandlerParent;
             mutable css::awt::Point               maWindowOffset;
             mutable ::basegfx::B2DRectangle       maBounds;
 

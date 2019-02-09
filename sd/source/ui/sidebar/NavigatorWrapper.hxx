@@ -21,8 +21,8 @@
 
 #include <sfx2/sidebar/ILayoutableWindow.hxx>
 #include <vcl/ctrl.hxx>
-#include "navigatr.hxx"
 
+class SdNavigatorWin;
 class SfxBindings;
 namespace sd { class ViewShellBase; }
 
@@ -44,7 +44,7 @@ public:
         vcl::Window* pParent,
         sd::ViewShellBase& rViewShellBase,
         SfxBindings* pBindings);
-    virtual ~NavigatorWrapper();
+    virtual ~NavigatorWrapper() override;
     virtual void dispose() override;
 
     // Control

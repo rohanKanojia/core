@@ -33,7 +33,7 @@ namespace dmapper
 /**
    Class containing the data to describe a table cell.
  */
-class CellData
+class CellData final : public virtual SvRefBase
 {
     /**
        Handle to start of cell.
@@ -53,21 +53,19 @@ class CellData
     bool mbOpen;
 
 public:
-    typedef std::shared_ptr<CellData> Pointer_t;
+    typedef tools::SvRef<CellData> Pointer_t;
 
-    CellData(css::uno::Reference<css::text::XTextRange> start, TablePropertyMapPtr pProps)
+    CellData(css::uno::Reference<css::text::XTextRange> const & start, TablePropertyMapPtr pProps)
     : mStart(start), mEnd(start), mpProps(pProps), mbOpen(true)
     {
     }
-
-    virtual ~CellData() {}
 
     /**
        Set the end handle of a cell.
 
        @param end     the end handle of the cell
     */
-    void setEnd(css::uno::Reference<css::text::XTextRange> end) { mEnd = end; mbOpen = false; }
+    void setEnd(css::uno::Reference<css::text::XTextRange> const & end) { mEnd = end; mbOpen = false; }
 
     /**
        Adds properties to the cell.
@@ -77,7 +75,7 @@ public:
     void insertProperties(TablePropertyMapPtr pProps)
     {
         if( mpProps.get() )
-            mpProps->InsertProps(pProps);
+            mpProps->InsertProps(pProps.get());
         else
             mpProps = pProps;
     }
@@ -95,7 +93,7 @@ public:
     /**
        Return properties of the cell.
      */
-    TablePropertyMapPtr getProperties() { return mpProps; }
+    const TablePropertyMapPtr& getProperties() { return mpProps; }
 
     bool isOpen() const { return mbOpen; }
 };
@@ -103,7 +101,7 @@ public:
 /**
    Class to handle data of a table row.
  */
-class RowData
+class RowData final : public virtual SvRefBase
 {
     typedef ::std::vector<CellData::Pointer_t> Cells;
 
@@ -118,16 +116,14 @@ class RowData
     mutable TablePropertyMapPtr mpProperties;
 
 public:
-    typedef std::shared_ptr<RowData> Pointer_t;
+    typedef tools::SvRef<RowData> Pointer_t;
 
     RowData() {}
 
     RowData(const RowData& rRowData)
-    : mCells(rRowData.mCells), mpProperties(rRowData.mpProperties)
+    : SvRefBase(), mCells(rRowData.mCells), mpProperties(rRowData.mpProperties)
     {
     }
-
-    virtual ~RowData() {}
 
     /**
        Add a cell to the row.
@@ -165,19 +161,8 @@ public:
             if( !mpProperties.get() )
                 mpProperties = pProperties;
             else
-                mpProperties->InsertProps(pProperties);
+                mpProperties->InsertProps(pProperties.get());
         }
-    }
-
-    /**
-       Add properties to a cell of the row.
-
-       @param i          index of the cell
-       @param pProps     the properties to add
-     */
-    void insertCellProperties(unsigned int i, TablePropertyMapPtr pProps)
-    {
-        mCells[i]->insertProperties(pProps);
     }
 
     /**
@@ -222,7 +207,7 @@ public:
 
        @param i      index of the cell
      */
-    TablePropertyMapPtr getCellProperties(unsigned int i) const
+    TablePropertyMapPtr const & getCellProperties(unsigned int i) const
     {
         return mCells[i]->getProperties();
     }
@@ -230,7 +215,7 @@ public:
     /**
        Return properties of the row.
      */
-    TablePropertyMapPtr getProperties()
+    const TablePropertyMapPtr& getProperties()
     {
         return mpProperties;
     }
@@ -239,7 +224,7 @@ public:
 /**
    Class that holds the data of a table.
  */
-class TableData
+class TableData : public virtual SvRefBase
 {
     typedef RowData::Pointer_t RowPointer_t;
     typedef ::std::vector<RowPointer_t> Rows;
@@ -257,7 +242,7 @@ class TableData
     /**
        depth of the current table in a hierarchy of tables
      */
-    unsigned int mnDepth;
+    unsigned int const mnDepth;
 
     /**
        initialize mpRow
@@ -265,10 +250,9 @@ class TableData
     void newRow() { mpRow = RowPointer_t(new RowData()); }
 
 public:
-    typedef std::shared_ptr<TableData> Pointer_t;
+    typedef tools::SvRef<TableData> Pointer_t;
 
-    TableData(unsigned int nDepth) : mnDepth(nDepth) { newRow(); }
-    ~TableData() {}
+    explicit TableData(unsigned int nDepth) : mnDepth(nDepth) { newRow(); }
 
     /**
        End the current row.
@@ -326,17 +310,6 @@ public:
     }
 
     /**
-       Add properties to a cell of the current row.
-
-       @param i       index of the cell
-       @param pProps  properties to add
-     */
-    void insertCellProperties(unsigned int i, TablePropertyMapPtr pProps)
-    {
-        mpRow->insertCellProperties(i, pProps);
-    }
-
-    /**
        Return number of rows in the table.
      */
     unsigned int getRowCount()
@@ -357,12 +330,12 @@ public:
 
        @param i     index of the row
     */
-    const RowPointer_t getRow(unsigned int i) const
+    RowPointer_t const & getRow(unsigned int i) const
     {
         return mRows[i];
     }
 
-    const RowPointer_t getCurrentRow() const
+    const RowPointer_t& getCurrentRow() const
     {
         return mpRow;
     }

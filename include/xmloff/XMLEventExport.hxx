@@ -23,12 +23,11 @@
 #include <sal/config.h>
 #include <xmloff/dllapi.h>
 #include <sal/types.h>
-#include <com/sun/star/uno/Sequence.hxx>
-#include <com/sun/star/uno/Reference.hxx>
 #include <rtl/ustring.hxx>
 #include <xmloff/xmlevent.hxx>
 
 #include <map>
+#include <memory>
 
 class SvXMLExport;
 namespace com { namespace sun { namespace star {
@@ -38,7 +37,10 @@ namespace com { namespace sun { namespace star {
     namespace beans { struct PropertyValue; }
 } } }
 
-typedef ::std::map< OUString, XMLEventExportHandler* > HandlerMap;
+namespace com { namespace sun { namespace star { namespace uno { template <class interface_type> class Reference; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+
+typedef ::std::map< OUString, std::unique_ptr<XMLEventExportHandler> > HandlerMap;
 typedef ::std::map< OUString, XMLEventName > NameMap;
 
 /**
@@ -58,8 +60,6 @@ typedef ::std::map< OUString, XMLEventName > NameMap;
  */
 class XMLOFF_DLLPUBLIC XMLEventExport
 {
-    const OUString sEventType;
-
     SvXMLExport& rExport;
 
     HandlerMap aHandlerMap;
@@ -68,9 +68,11 @@ class XMLOFF_DLLPUBLIC XMLEventExport
     bool bExtNamespace;
 
 public:
-    XMLEventExport(SvXMLExport& rExport,
-                   const XMLEventNameTranslation* pTranslationTable = nullptr);
+    XMLEventExport(SvXMLExport& rExport);
     ~XMLEventExport();
+
+    XMLEventExport& operator=( XMLEventExport const & ) = delete; // MSVC2017 workaround
+    XMLEventExport( XMLEventExport const & ) = delete; // MSVC2017 workaround
 
     /// register an EventExportHandler for a particular script type
     ///
@@ -78,26 +80,26 @@ public:
     /// no pointers to a handler registered with AddHandler() should be
     /// held by anyone.
     void AddHandler( const OUString& rName,
-                     XMLEventExportHandler* rHandler );
+                     std::unique_ptr<XMLEventExportHandler> pHandler );
 
     /// register additional event names
     void AddTranslationTable( const XMLEventNameTranslation* pTransTable );
 
-    /// export the events (calls EventExport::Export(Reference<XNameAcess>) )
-    void Export( css::uno::Reference<css::document::XEventsSupplier> & xAccess,
+    /// export the events (calls EventExport::Export(Reference<XNameAccess>) )
+    void Export( css::uno::Reference<css::document::XEventsSupplier> const & xAccess,
                 bool bUseWhitespace = true);
 
-    /// export the events (calls EventExport::Export(Reference<XNameAcess>) )
-    void Export( css::uno::Reference<css::container::XNameReplace> & xAccess,
+    /// export the events (calls EventExport::Export(Reference<XNameAccess>) )
+    void Export( css::uno::Reference<css::container::XNameReplace> const & xAccess,
                 bool bUseWhitespace = true);
 
     /// export the events (writes <office:events> element)
-    void Export( css::uno::Reference<css::container::XNameAccess> & xAccess,
+    void Export( css::uno::Reference<css::container::XNameAccess> const & xAccess,
                 bool bUseWhitespace = true);
 
     /// export the events, but write <officeooo:events> element
     /// (for new file format additions)
-    void ExportExt( css::uno::Reference<css::container::XNameAccess> & xAccess);
+    void ExportExt( css::uno::Reference<css::container::XNameAccess> const & xAccess);
 
     /// export a single event (writes <office:events> element)
     void ExportSingleEvent(

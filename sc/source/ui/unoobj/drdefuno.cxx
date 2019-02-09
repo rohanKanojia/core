@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drdefuno.hxx"
-#include "docsh.hxx"
-#include "drwlayer.hxx"
+#include <drdefuno.hxx>
+#include <docsh.hxx>
+#include <drwlayer.hxx>
 
 using namespace ::com::sun::star;
 
@@ -43,8 +43,7 @@ ScDrawDefaultsObj::~ScDrawDefaultsObj() throw ()
 
 void ScDrawDefaultsObj::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
     {
         pDocShell = nullptr;       // document gone
     }

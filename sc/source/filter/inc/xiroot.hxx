@@ -56,7 +56,7 @@ class XclImpTabViewSettings;
 class XclImpSheetProtectBuffer;
 class XclImpDocProtectBuffer;
 
-class _ScRangeListTabs;
+class ScRangeListTabs;
 class ExcelToSc;
 class ScDocumentImport;
 
@@ -118,8 +118,8 @@ struct XclImpRootData : public XclRootData
     bool                mbHasBasic;         /// true = document contains VB project.
 
     explicit            XclImpRootData( XclBiff eBiff, SfxMedium& rMedium,
-                            tools::SvRef<SotStorage> xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc );
-    virtual             ~XclImpRootData();
+                            const tools::SvRef<SotStorage>& xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc );
+    virtual             ~XclImpRootData() override;
 };
 
 /** Access to global data from other classes. */
@@ -129,8 +129,8 @@ public:
     explicit            XclImpRoot( XclImpRootData& rImpRootData );
 
     /** Returns this root instance - for code readability in derived classes. */
-    inline const XclImpRoot& GetRoot() const { return *this; }
-    inline XclImpRoot& GetRoot() { return *this; }
+    const XclImpRoot& GetRoot() const { return *this; }
+    XclImpRoot& GetRoot() { return *this; }
 
     /** Sets a code page read from a CODEPAGE record for byte string import. */
     void                SetCodePage( sal_uInt16 nCodePage );
@@ -163,9 +163,9 @@ public:
     XclImpXFRangeBuffer& GetXFRangeBuffer() const;
 
     /** Returns the buffer that contains all print areas in the document. */
-    _ScRangeListTabs&   GetPrintAreaBuffer() const;
+    ScRangeListTabs&   GetPrintAreaBuffer() const;
     /** Returns the buffer that contains all print titles in the document. */
-    _ScRangeListTabs&   GetTitleAreaBuffer() const;
+    ScRangeListTabs&   GetTitleAreaBuffer() const;
 
     /** Returns the buffer that contains the sheet creation order. */
     XclImpTabInfo&      GetTabInfo() const;
@@ -204,9 +204,9 @@ public:
     static OUString      GetScAddInName( const OUString& rXclName );
 
     /** Returns true, if the document contains a VB project. */
-    inline bool         HasBasic() const { return mrImpData.mbHasBasic; }
+    bool         HasBasic() const { return mrImpData.mbHasBasic; }
     /** Called to indicate that the document contains a VB project. */
-    inline void         SetHasBasic() { mrImpData.mbHasBasic = true; }
+    void         SetHasBasic() { mrImpData.mbHasBasic = true; }
     /** Reads the CODENAME record and inserts the codename into the document. */
     void                ReadCodeName( XclImpStream& rStrm, bool bGlobals );
 

@@ -21,7 +21,8 @@
 #include "ChartModelClone.hxx"
 #include "UndoActions.hxx"
 
-#include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/document/XUndoManager.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 
 #include <tools/diagnose_ex.h>
 
@@ -45,13 +46,13 @@ UndoGuard::UndoGuard( const OUString& i_undoString, const uno::Reference< docume
 
 UndoGuard::~UndoGuard()
 {
-    if ( !!m_pDocumentSnapshot )
+    if ( m_pDocumentSnapshot )
         discardSnapshot();
 }
 
 void UndoGuard::commit()
 {
-    if ( !m_bActionPosted && !!m_pDocumentSnapshot )
+    if ( !m_bActionPosted && m_pDocumentSnapshot )
     {
         try
         {
@@ -61,7 +62,7 @@ void UndoGuard::commit()
         }
         catch( const uno::Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
     m_bActionPosted = true;
@@ -126,7 +127,7 @@ HiddenUndoContext::HiddenUndoContext( const Reference< document::XUndoManager > 
     }
     catch( const uno::Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("chart2");
         m_xUndoManager.clear();
             // prevents the leaveUndoContext in the dtor
     }
@@ -141,7 +142,7 @@ HiddenUndoContext::~HiddenUndoContext()
     }
     catch( const uno::Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 

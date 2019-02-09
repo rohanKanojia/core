@@ -21,7 +21,6 @@
 #include <config_features.h>
 
 #include <osl/file.hxx>
-#include <osl/mutex.hxx>
 
 #include <rtl/bootstrap.hxx>
 #include <rtl/ustring.hxx>
@@ -36,12 +35,16 @@
 
 #include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/sequence.hxx>
 #include <cppuhelper/bootstrap.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
+#include <com/sun/star/ucb/CommandAbortedException.hpp>
+#include <com/sun/star/ucb/CommandFailedException.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
+#include <com/sun/star/deployment/DeploymentException.hpp>
 #include <com/sun/star/deployment/XPackage.hpp>
 #include <com/sun/star/deployment/ExtensionManager.hpp>
 #include <com/sun/star/deployment/LicenseException.hpp>
@@ -54,9 +57,9 @@
 #include <com/sun/star/ui/dialogs/ExecutableDialogResults.hpp>
 #include <com/sun/star/util/XChangesBatch.hpp>
 
-#include "app.hxx"
+#include <app.hxx>
 
-#include "../deployment/inc/dp_misc.h"
+#include <dp_misc.h>
 
 using namespace desktop;
 using namespace com::sun::star;
@@ -81,25 +84,22 @@ public:
     SilentCommandEnv(
         uno::Reference<uno::XComponentContext> const & xContext,
         Desktop* pDesktop );
-    virtual ~SilentCommandEnv();
+    virtual ~SilentCommandEnv() override;
 
     // XCommandEnvironment
     virtual uno::Reference<task::XInteractionHandler > SAL_CALL
-    getInteractionHandler() throw (uno::RuntimeException, std::exception) override;
+    getInteractionHandler() override;
     virtual uno::Reference<ucb::XProgressHandler >
-    SAL_CALL getProgressHandler() throw (uno::RuntimeException, std::exception) override;
+    SAL_CALL getProgressHandler() override;
 
     // XInteractionHandler
     virtual void SAL_CALL handle(
-        uno::Reference<task::XInteractionRequest > const & xRequest )
-        throw (uno::RuntimeException, std::exception) override;
+        uno::Reference<task::XInteractionRequest > const & xRequest ) override;
 
     // XProgressHandler
-    virtual void SAL_CALL push( uno::Any const & Status )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL update( uno::Any const & Status )
-        throw (uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL pop() throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL push( uno::Any const & Status ) override;
+    virtual void SAL_CALL update( uno::Any const & Status ) override;
+    virtual void SAL_CALL pop() override;
 };
 
 
@@ -115,19 +115,18 @@ SilentCommandEnv::SilentCommandEnv(
 
 SilentCommandEnv::~SilentCommandEnv()
 {
-    mpDesktop->SetSplashScreenText( OUString() );
+    if (mpDesktop)
+        mpDesktop->SetSplashScreenText(OUString());
 }
 
 
 Reference<task::XInteractionHandler> SilentCommandEnv::getInteractionHandler()
-    throw (uno::RuntimeException, std::exception)
 {
     return this;
 }
 
 
 Reference<ucb::XProgressHandler> SilentCommandEnv::getProgressHandler()
-    throw (uno::RuntimeException, std::exception)
 {
     return this;
 }
@@ -135,7 +134,6 @@ Reference<ucb::XProgressHandler> SilentCommandEnv::getProgressHandler()
 
 // XInteractionHandler
 void SilentCommandEnv::handle( Reference< task::XInteractionRequest> const & xRequest )
-    throw (uno::RuntimeException, std::exception)
 {
     deployment::LicenseException licExc;
 
@@ -184,12 +182,11 @@ void SilentCommandEnv::handle( Reference< task::XInteractionRequest> const & xRe
 
 // XProgressHandler
 void SilentCommandEnv::push( uno::Any const & rStatus )
-    throw (uno::RuntimeException, std::exception)
 {
     OUString sText;
     mnLevel += 1;
 
-    if ( rStatus.hasValue() && ( rStatus >>= sText) )
+    if (mpDesktop && rStatus.hasValue() && (rStatus >>= sText))
     {
         if ( mnLevel <= 3 )
             mpDesktop->SetSplashScreenText( sText );
@@ -200,17 +197,16 @@ void SilentCommandEnv::push( uno::Any const & rStatus )
 
 
 void SilentCommandEnv::update( uno::Any const & rStatus )
-    throw (uno::RuntimeException, std::exception)
 {
     OUString sText;
-    if ( rStatus.hasValue() && ( rStatus >>= sText) )
+    if (mpDesktop && rStatus.hasValue() && (rStatus >>= sText))
     {
         mpDesktop->SetSplashScreenText( sText );
     }
 }
 
 
-void SilentCommandEnv::pop() throw (uno::RuntimeException, std::exception)
+void SilentCommandEnv::pop()
 {
     mnLevel -= 1;
 }
@@ -220,7 +216,7 @@ void SilentCommandEnv::pop() throw (uno::RuntimeException, std::exception)
 
 static const char aAccessSrvc[] = "com.sun.star.configuration.ConfigurationUpdateAccess";
 
-static sal_Int16 impl_showExtensionDialog( uno::Reference< uno::XComponentContext > &xContext )
+static sal_Int16 impl_showExtensionDialog( uno::Reference< uno::XComponentContext > const &xContext )
 {
     OUString sServiceName = "com.sun.star.deployment.ui.UpdateRequiredDialog";
     uno::Reference< uno::XInterface > xService;
@@ -249,7 +245,7 @@ static bool impl_checkDependencies( const uno::Reference< uno::XComponentContext
 
     if ( !xExtensionManager.is() )
     {
-       SAL_WARN( "desktop.app", "Could not get the Extension Manager!" );
+        SAL_WARN( "desktop.app", "Could not get the Extension Manager!" );
         return true;
     }
 
@@ -261,12 +257,15 @@ static bool impl_checkDependencies( const uno::Reference< uno::XComponentContext
     catch ( const ucb::CommandFailedException & ) { return true; }
     catch ( const ucb::CommandAbortedException & ) { return true; }
     catch ( const lang::IllegalArgumentException & e ) {
-        throw uno::RuntimeException( e.Message, e.Context );
+        css::uno::Any anyEx = cppu::getCaughtException();
+        throw css::lang::WrappedTargetRuntimeException( e.Message,
+                        e.Context, anyEx );
     }
 
-    sal_Int32 nMax = 2;
 #ifdef DEBUG
-    nMax = 3;
+    sal_Int32 const nMax = 3;
+#else
+    sal_Int32 const nMax = 2;
 #endif
 
     for ( sal_Int32 i = 0; i < xAllPackages.getLength(); ++i )
@@ -295,8 +294,7 @@ static bool impl_checkDependencies( const uno::Reference< uno::XComponentContext
                 }
                 catch ( const uno::RuntimeException & ) { throw; }
                 catch (const uno::Exception & exc) {
-                    (void) exc;
-                   SAL_WARN( "desktop.app", "" <<  exc.Message );
+                   SAL_WARN( "desktop.app", exc );
                 }
 
                 if ( bRegistered )
@@ -328,7 +326,7 @@ static void impl_setNeedsCompatCheck()
                 comphelper::getProcessComponentContext() ) );
 
         Sequence< Any > theArgs(1);
-        beans::NamedValue v( OUString("nodepath"),
+        beans::NamedValue v( "nodepath",
                       makeAny( OUString("org.openoffice.Setup/Office") ) );
         theArgs[0] <<= v;
         Reference< beans::XPropertySet > pset(
@@ -359,7 +357,7 @@ static bool impl_needsCompatCheck()
                 comphelper::getProcessComponentContext() ) );
 
         Sequence< Any > theArgs(1);
-        beans::NamedValue v( OUString("nodepath"),
+        beans::NamedValue v( "nodepath",
                       makeAny( OUString("org.openoffice.Setup/Office") ) );
         theArgs[0] <<= v;
         Reference< beans::XPropertySet > pset(
@@ -413,13 +411,13 @@ bool Desktop::CheckExtensionDependencies()
         return false;
 }
 
-void Desktop::SynchronizeExtensionRepositories()
+void Desktop::SynchronizeExtensionRepositories(bool bCleanedExtensionCache, Desktop* pDesktop)
 {
     uno::Reference< uno::XComponentContext > context(
         comphelper::getProcessComponentContext());
     uno::Reference< ucb::XCommandEnvironment > silent(
-        new SilentCommandEnv(context, this));
-    if (m_bCleanedExtensionCache) {
+        new SilentCommandEnv(context, pDesktop));
+    if (bCleanedExtensionCache) {
         deployment::ExtensionManager::get(context)->reinstallDeployedExtensions(
             true, "user", Reference<task::XAbortChannel>(), silent);
 #if !HAVE_FEATURE_MACOSX_SANDBOX
@@ -428,9 +426,12 @@ void Desktop::SynchronizeExtensionRepositories()
                 silent->getInteractionHandler());
 #endif
     } else {
-        // reinstallDeployedExtensions above already calls syncRepositories
-        // internally:
-        dp_misc::syncRepositories(false, silent);
+        // reinstallDeployedExtensions above already calls syncRepositories internally
+
+        // Force syncing repositories on startup. There are cases where the extension
+        // registration becomes invalid which leads to extensions not starting up, although
+        // installed and active. Syncing extension repos on startup fixes that.
+        dp_misc::syncRepositories(/*force=*/true, silent);
     }
 }
 

@@ -31,15 +31,19 @@
 #include "callbacks.hxx"
 #include "strings.hxx"
 
+enum class BoolAttrFlags {
+    DefaultFalse          = 0x00,
+    DefaultTrue           = 0x01,
+    DefaultVoid           = 0x02,
+    InverseSemantics      = 0x04,
+};
+namespace o3tl {
+    template<> struct typed_flags<BoolAttrFlags> : is_typed_flags<BoolAttrFlags, 0x07> {};
+}
+
 namespace xmloff
 {
 
-#define BOOLATTR_DEFAULT_FALSE          0x00
-#define BOOLATTR_DEFAULT_TRUE           0x01
-#define BOOLATTR_DEFAULT_VOID           0x02
-#define BOOLATTR_DEFAULT_MASK           0x03
-
-#define BOOLATTR_INVERSE_SEMANTICS      0x04
     // if sal_True, indicates that the semantic of the property referred by <arg>_pPropertyName</arg>
     // is inverse to the semantic of the XML attribute.<br/>
     // I.e. if the property value is <TRUE/>, <FALSE/> has to be written and vice versa.
@@ -60,7 +64,7 @@ namespace xmloff
         StringSet       m_aRemainingProps;
             // see examinePersistence
 
-        void exportRelativeTargetLocation(const OUString& _sPropertyName,sal_Int32 _nProperty,bool _bAddType);
+        void exportRelativeTargetLocation(const OUString& _sPropertyName, CCAFlags _nProperty,bool _bAddType);
 
     protected:
         IFormsExportContext&    m_rContext;
@@ -146,7 +150,7 @@ namespace xmloff
             const sal_uInt16 _nNamespaceKey,
             const sal_Char* _pAttributeName,
             const OUString& _rPropertyName,
-            const sal_Int8 _nBooleanAttributeFlags);
+            const BoolAttrFlags _nBooleanAttributeFlags);
 
         /** add an attribute which is represented by a sal_Int16 property to the export context
 
@@ -206,13 +210,26 @@ namespace xmloff
                 the default of the attribute. If the current property value equals this default, no
                 attribute is added.
         */
+        template<typename EnumT>
         void exportEnumPropertyAttribute(
             const sal_uInt16 _nNamespaceKey,
             const sal_Char* _pAttributeName,
             const OUString& _rPropertyName,
-            const SvXMLEnumMapEntry* _pValueMap,
-            const sal_Int32 _nDefault,
-            const bool _bVoidDefault = false);
+            const SvXMLEnumMapEntry<EnumT>* _pValueMap,
+            const EnumT _nDefault,
+            const bool _bVoidDefault = false)
+        {
+            exportEnumPropertyAttributeImpl(_nNamespaceKey, _pAttributeName, _rPropertyName,
+                            reinterpret_cast<const SvXMLEnumMapEntry<sal_uInt16>*>(_pValueMap),
+                            static_cast<sal_Int16>(_nDefault), _bVoidDefault);
+        }
+        void exportEnumPropertyAttributeImpl(
+            const sal_uInt16 _nNamespaceKey,
+            const sal_Char* _pAttributeName,
+            const OUString& _rPropertyName,
+            const SvXMLEnumMapEntry<sal_uInt16>* _pValueMap,
+            const sal_uInt16 _nDefault,
+            const bool _bVoidDefault);
 
         // some very special methods for some very special attribute/property pairs
 
@@ -233,7 +250,7 @@ namespace xmloff
 
             <p>If _bAddType is set, an additional xlink:type="simple" attribute is also added.</p>
         */
-        inline void exportTargetLocationAttribute(bool _bAddType) { exportRelativeTargetLocation(PROPERTY_TARGETURL,CCA_TARGET_LOCATION,_bAddType); }
+        void exportTargetLocationAttribute(bool _bAddType) { exportRelativeTargetLocation(PROPERTY_TARGETURL,CCAFlags::TargetLocation,_bAddType); }
 
         /** add the form:image attribute to the export context.
 
@@ -241,7 +258,7 @@ namespace xmloff
 
             <p>The property needs a special handling because the URL's need to be made relative</p>
         */
-        inline void exportImageDataAttribute() { exportRelativeTargetLocation(PROPERTY_IMAGEURL,CCA_IMAGE_DATA,false); }
+        void exportImageDataAttribute() { exportRelativeTargetLocation(PROPERTY_GRAPHIC, CCAFlags::ImageData, false); }
 
         /** flag the style properties as 'already exported'
 
@@ -340,20 +357,17 @@ namespace xmloff
 #ifdef DBG_UTIL
                 void AddAttribute(sal_uInt16 _nPrefix, const sal_Char* _pName, const OUString& _rValue);
                 void AddAttribute( sal_uInt16 _nPrefix, const OUString& _rName, const OUString& _rValue );
-                void AddAttributeASCII( sal_uInt16 nPrefix, const sal_Char *pName, const sal_Char *pValue );
                 void AddAttribute(sal_uInt16 _nPrefix, ::xmloff::token::XMLTokenEnum _eName, const OUString& _rValue);
                 void AddAttribute(sal_uInt16 _nPrefix, ::xmloff::token::XMLTokenEnum _eName, ::xmloff::token::XMLTokenEnum _eValue );
 #else
         //  in the product version, inline this, so it does not cost us extra time calling into our method
-        inline  void AddAttribute(sal_uInt16 _nPrefix, const sal_Char* _pName, const OUString& _rValue)
+        void AddAttribute(sal_uInt16 _nPrefix, const sal_Char* _pName, const OUString& _rValue)
             { m_rContext.getGlobalContext().AddAttribute(_nPrefix, _pName, _rValue); }
-        inline void AddAttribute( sal_uInt16 _nPrefix, const OUString& _rName, const OUString& _rValue )
+        void AddAttribute( sal_uInt16 _nPrefix, const OUString& _rName, const OUString& _rValue )
             { m_rContext.getGlobalContext().AddAttribute( _nPrefix, _rName, _rValue ); }
-        inline  void AddAttributeASCII( sal_uInt16 _nPrefix, const sal_Char* _pName, const sal_Char *pValue )
-            { m_rContext.getGlobalContext().AddAttributeASCII(_nPrefix, _pName, pValue); }
-        inline void AddAttribute(sal_uInt16 _nPrefix, ::xmloff::token::XMLTokenEnum _eName, const OUString& _rValue)
+        void AddAttribute(sal_uInt16 _nPrefix, ::xmloff::token::XMLTokenEnum _eName, const OUString& _rValue)
             { m_rContext.getGlobalContext().AddAttribute(_nPrefix, _eName, _rValue); }
-        inline void AddAttribute(sal_uInt16 _nPrefix, ::xmloff::token::XMLTokenEnum _eName, ::xmloff::token::XMLTokenEnum _eValue )
+        void AddAttribute(sal_uInt16 _nPrefix, ::xmloff::token::XMLTokenEnum _eName, ::xmloff::token::XMLTokenEnum _eValue )
             { m_rContext.getGlobalContext().AddAttribute(_nPrefix, _eName, _eValue); }
 #endif
 

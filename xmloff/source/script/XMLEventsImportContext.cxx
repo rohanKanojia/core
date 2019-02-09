@@ -19,7 +19,7 @@
 
 #include <xmloff/XMLEventsImportContext.hxx>
 
-#include "XMLEventImportHelper.hxx"
+#include <XMLEventImportHelper.hxx>
 
 #include <com/sun/star/document/XEventsSupplier.hpp>
 #include <xmloff/xmlimp.hxx>
@@ -86,7 +86,7 @@ void XMLEventsImportContext::EndElement()
     // nothing to be done
 }
 
-SvXMLImportContext* XMLEventsImportContext::CreateChildContext(
+SvXMLImportContextRef XMLEventsImportContext::CreateChildContext(
     sal_uInt16 p_nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )
@@ -145,12 +145,9 @@ void XMLEventsImportContext::SetEvents(
         xEvents = xNameRepl;
 
         // now iterate over vector and a) insert b) delete all elements
-        EventsVector::iterator aEnd = aCollectEvents.end();
-        for(EventsVector::iterator aIter = aCollectEvents.begin();
-            aIter != aEnd;
-            ++aIter)
+        for(const auto& rEvent : aCollectEvents)
         {
-            AddEventValues(aIter->first, aIter->second);
+            AddEventValues(rEvent.first, rEvent.second);
         }
         aCollectEvents.clear();
     }
@@ -164,12 +161,8 @@ void XMLEventsImportContext::GetEventSequence(
     // (This shouldn't take a lot of time, since this method should only get
     //  called if only one (or few) events are being expected)
 
-    // iterate over vector until end or rName is found;
-    EventsVector::iterator aIter = aCollectEvents.begin();
-    while( (aIter != aCollectEvents.end()) && (aIter->first != rName) )
-    {
-        ++aIter;
-    }
+    auto aIter = std::find_if(aCollectEvents.begin(), aCollectEvents.end(),
+        [&rName](EventNameValuesPair& rEvent) { return rEvent.first == rName; });
 
     // if we're not at the end, set the sequence
     if (aIter != aCollectEvents.end())
@@ -188,12 +181,9 @@ void XMLEventsImportContext::AddEventValues(
         // set event (if name is known)
         if (xEvents->hasByName(rEventName))
         {
-            Any aAny;
-            aAny <<= rValues;
-
             try
             {
-                xEvents->replaceByName(rEventName, aAny);
+                xEvents->replaceByName(rEventName, Any(rValues));
             } catch ( const IllegalArgumentException & rException )
             {
                 Sequence<OUString> aMsgParams { rEventName };

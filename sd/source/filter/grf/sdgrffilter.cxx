@@ -17,9 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#ifdef _MSC_VER
-#pragma warning (disable:4190)
-#endif
 #include <com/sun/star/drawing/GraphicExportFilter.hpp>
 #include <com/sun/star/graphic/GraphicProvider.hpp>
 #include <com/sun/star/graphic/XGraphicProvider.hpp>
@@ -28,24 +25,24 @@
 #include <com/sun/star/ucb/XSimpleFileAccess2.hpp>
 
 #include <unotools/localfilehelper.hxx>
-#include <tools/errinf.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/errinf.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/metaact.hxx>
 #include <vcl/virdev.hxx>
+#include <sfx2/sfxsids.hrc>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/frame.hxx>
 #include <svx/svdograf.hxx>
 #include <svx/svdpagv.hxx>
 
-#include "../../ui/inc/strings.hrc"
-#include "../../ui/inc/DrawViewShell.hxx"
-#include "../../ui/inc/DrawDocShell.hxx"
-#include "../../ui/inc/ClientView.hxx"
-#include "../../ui/inc/FrameView.hxx"
+#include <strings.hrc>
+#include <DrawViewShell.hxx>
+#include <DrawDocShell.hxx>
+#include <ClientView.hxx>
+#include <FrameView.hxx>
 
-#include "comphelper/anytostring.hxx"
-#include "cppuhelper/exc_hlp.hxx"
+#include <cppuhelper/exc_hlp.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <unotools/pathoptions.hxx>
@@ -53,11 +50,11 @@
 #include <vcl/graphicfilter.hxx>
 #include <svx/xoutbmp.hxx>
 
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
-#include "sdresid.hxx"
-#include "sdgrffilter.hxx"
-#include "../../ui/inc/ViewShellBase.hxx"
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
+#include <sdresid.hxx>
+#include <sdgrffilter.hxx>
+#include <ViewShellBase.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -66,7 +63,7 @@
 #include <com/sun/star/document/XExporter.hpp>
 #include <com/sun/star/view/XSelectionSupplier.hpp>
 #include <com/sun/star/drawing/XDrawView.hpp>
-#include "../../ui/inc/DrawController.hxx"
+#include <DrawController.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
@@ -86,36 +83,28 @@ using namespace ::sfx2;
 class SdGRFFilter_ImplInteractionHdl : public ::cppu::WeakImplHelper< css::task::XInteractionHandler >
 {
     css::uno::Reference< css::task::XInteractionHandler > m_xInter;
-    sal_uInt16 nFilterError;
+    ErrCode nFilterError;
 
     public:
 
-    explicit SdGRFFilter_ImplInteractionHdl( css::uno::Reference< css::task::XInteractionHandler > xInteraction ) :
+    explicit SdGRFFilter_ImplInteractionHdl( css::uno::Reference< css::task::XInteractionHandler > const & xInteraction ) :
         m_xInter( xInteraction ),
-        nFilterError( GRFILTER_OK )
+        nFilterError( ERRCODE_NONE )
         {}
 
-    virtual ~SdGRFFilter_ImplInteractionHdl();
+    ErrCode const & GetErrorCode() const { return nFilterError; };
 
-    sal_uInt16 GetErrorCode() const { return nFilterError; };
-
-    virtual void SAL_CALL   handle( const css::uno::Reference< css::task::XInteractionRequest >& )
-                                throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL   handle( const css::uno::Reference< css::task::XInteractionRequest >& ) override;
 };
 
-SdGRFFilter_ImplInteractionHdl::~SdGRFFilter_ImplInteractionHdl()
-{
-}
-
 void SdGRFFilter_ImplInteractionHdl::handle( const css::uno::Reference< css::task::XInteractionRequest >& xRequest )
-        throw( css::uno::RuntimeException, std::exception )
 {
     if( !m_xInter.is() )
         return;
 
     css::drawing::GraphicFilterRequest aErr;
     if ( xRequest->getRequest() >>= aErr )
-        nFilterError = (sal_uInt16)aErr.ErrCode;
+        nFilterError = ErrCode(aErr.ErrCode);
     else
         m_xInter->handle( xRequest );
 }
@@ -130,128 +119,125 @@ SdGRFFilter::~SdGRFFilter()
 {
 }
 
-void SdGRFFilter::HandleGraphicFilterError( sal_uInt16 nFilterError, sal_uLong nStreamError )
+void SdGRFFilter::HandleGraphicFilterError( ErrCode nFilterError, ErrCode nStreamError )
 {
-    sal_uInt16 nId;
-
-    switch( nFilterError )
+    if (ERRCODE_NONE != nStreamError)
     {
-        case GRFILTER_OPENERROR:
-            nId = STR_IMPORT_GRFILTER_OPENERROR;
-            break;
-        case GRFILTER_IOERROR:
-            nId = STR_IMPORT_GRFILTER_IOERROR;
-            break;
-        case GRFILTER_FORMATERROR:
-            nId = STR_IMPORT_GRFILTER_FORMATERROR;
-            break;
-        case GRFILTER_VERSIONERROR:
-            nId = STR_IMPORT_GRFILTER_VERSIONERROR;
-            break;
-        case GRFILTER_TOOBIG:
-            nId = STR_IMPORT_GRFILTER_TOOBIG;
-            break;
-        case 0 :
-            nId = 0;
-            break;
-
-        default:
-        case GRFILTER_FILTERERROR:
-            nId = STR_IMPORT_GRFILTER_FILTERERROR;
-            break;
+        ErrorHandler::HandleError(nStreamError);
+        return;
     }
 
-    if( ERRCODE_NONE != nStreamError )
-        ErrorHandler::HandleError( nStreamError );
-    else if( STR_IMPORT_GRFILTER_IOERROR == nId )
+    const char* pId;
+
+    if( nFilterError == ERRCODE_GRFILTER_OPENERROR )
+        pId = STR_IMPORT_GRFILTER_OPENERROR;
+    else if( nFilterError == ERRCODE_GRFILTER_IOERROR )
+        pId = STR_IMPORT_GRFILTER_IOERROR;
+    else if( nFilterError == ERRCODE_GRFILTER_FORMATERROR )
+        pId = STR_IMPORT_GRFILTER_FORMATERROR;
+    else if( nFilterError == ERRCODE_GRFILTER_VERSIONERROR )
+        pId = STR_IMPORT_GRFILTER_VERSIONERROR;
+    else if( nFilterError == ERRCODE_GRFILTER_TOOBIG )
+        pId = STR_IMPORT_GRFILTER_TOOBIG;
+    else if( nFilterError == ERRCODE_NONE )
+        pId = nullptr;
+    else
+        pId = STR_IMPORT_GRFILTER_FILTERERROR;
+
+    if (pId && strcmp(pId, STR_IMPORT_GRFILTER_IOERROR) == 0)
         ErrorHandler::HandleError( ERRCODE_IO_GENERAL );
     else
     {
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(nullptr, SD_RESSTR(nId));
-        aErrorBox->Execute();
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(nullptr,
+                                                       VclMessageType::Warning, VclButtonsType::Ok, pId ? SdResId(pId) : OUString()));
+        xErrorBox->run();
     }
 }
 
 bool SdGRFFilter::Import()
 {
     Graphic         aGraphic;
-    const OUString  aFileName( mrMedium.GetURLObject().GetMainURL( INetURLObject::NO_DECODE ) );
+    const OUString  aFileName( mrMedium.GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
     GraphicFilter& rGraphicFilter = GraphicFilter::GetGraphicFilter();
     const sal_uInt16 nFilter = rGraphicFilter.GetImportFormatNumberForTypeName( mrMedium.GetFilter()->GetTypeName() );
     bool        bRet = false;
 
-        SvStream*       pIStm = mrMedium.GetInStream();
-        sal_uInt16          nReturn = pIStm ? rGraphicFilter.ImportGraphic( aGraphic, aFileName, *pIStm, nFilter ) : 1;
+    SvStream*       pIStm = mrMedium.GetInStream();
+    ErrCode         nReturn = pIStm ? rGraphicFilter.ImportGraphic( aGraphic, aFileName, *pIStm, nFilter ) : ErrCode(1);
 
-        if( nReturn )
-            HandleGraphicFilterError( nReturn, rGraphicFilter.GetLastError().nStreamError );
-        else
+    if( nReturn )
+        HandleGraphicFilterError( nReturn, rGraphicFilter.GetLastError().nStreamError );
+    else
+    {
+        if( mrDocument.GetPageCount() == 0 )
+            mrDocument.CreateFirstPages();
+
+        SdPage*     pPage = mrDocument.GetSdPage( 0, PageKind::Standard );
+        Point       aPos;
+        Size        aPagSize( pPage->GetSize() );
+        Size        aGrfSize( OutputDevice::LogicToLogic( aGraphic.GetPrefSize(),
+                                aGraphic.GetPrefMapMode(), MapMode(MapUnit::Map100thMM)));
+
+        aPagSize.AdjustWidth( -(pPage->GetLeftBorder() + pPage->GetRightBorder()) );
+        aPagSize.AdjustHeight( -(pPage->GetUpperBorder() + pPage->GetLowerBorder()) );
+
+        // scale to fit page
+        if ( ( ( aGrfSize.Height() > aPagSize.Height() ) || ( aGrfSize.Width() > aPagSize.Width() ) ) &&
+                aGrfSize.Height() && aPagSize.Height() )
         {
-            if( mrDocument.GetPageCount() == 0 )
-                mrDocument.CreateFirstPages();
+            double fGrfWH = static_cast<double>(aGrfSize.Width()) / aGrfSize.Height();
+            double fWinWH = static_cast<double>(aPagSize.Width()) / aPagSize.Height();
 
-            SdPage*     pPage = mrDocument.GetSdPage( 0, PK_STANDARD );
-            Point       aPos;
-            Size        aPagSize( pPage->GetSize() );
-            Size        aGrfSize( OutputDevice::LogicToLogic( aGraphic.GetPrefSize(),
-                                  aGraphic.GetPrefMapMode(), MAP_100TH_MM ) );
-
-            aPagSize.Width() -= pPage->GetLftBorder() + pPage->GetRgtBorder();
-            aPagSize.Height() -= pPage->GetUppBorder() + pPage->GetLwrBorder();
-
-            // scale to fit page
-            if ( ( ( aGrfSize.Height() > aPagSize.Height() ) || ( aGrfSize.Width() > aPagSize.Width() ) ) &&
-                 aGrfSize.Height() && aPagSize.Height() )
+            // adjust graphic to page size (scales)
+            if( fGrfWH < fWinWH )
             {
-                double fGrfWH = (double) aGrfSize.Width() / aGrfSize.Height();
-                double fWinWH = (double) aPagSize.Width() / aPagSize.Height();
-
-                // adjust graphic to page size (scales)
-                if( fGrfWH < fWinWH )
-                {
-                    aGrfSize.Width() = (long) ( aPagSize.Height() * fGrfWH );
-                    aGrfSize.Height() = aPagSize.Height();
-                }
-                else if( fGrfWH > 0.F )
-                {
-                    aGrfSize.Width() = aPagSize.Width();
-                    aGrfSize.Height()= (long) ( aPagSize.Width() / fGrfWH );
-                }
+                aGrfSize.setWidth( static_cast<long>( aPagSize.Height() * fGrfWH ) );
+                aGrfSize.setHeight( aPagSize.Height() );
             }
-
-            // set output rectangle for graphic
-            aPos.X() = ( ( aPagSize.Width() - aGrfSize.Width() ) >> 1 ) + pPage->GetLftBorder();
-            aPos.Y() = ( ( aPagSize.Height() - aGrfSize.Height() ) >> 1 )  + pPage->GetUppBorder();
-
-            pPage->InsertObject( new SdrGrafObj( aGraphic, Rectangle( aPos, aGrfSize ) ) );
-            bRet = true;
+            else if( fGrfWH > 0.F )
+            {
+                aGrfSize.setWidth( aPagSize.Width() );
+                aGrfSize.setHeight( static_cast<long>( aPagSize.Width() / fGrfWH ) );
+            }
         }
+
+        // set output rectangle for graphic
+        aPos.setX( ( ( aPagSize.Width() - aGrfSize.Width() ) >> 1 ) + pPage->GetLeftBorder() );
+        aPos.setY( ( ( aPagSize.Height() - aGrfSize.Height() ) >> 1 )  + pPage->GetUpperBorder() );
+
+        pPage->InsertObject(
+            new SdrGrafObj(
+                pPage->getSdrModelFromSdrPage(),
+                aGraphic,
+                ::tools::Rectangle(aPos, aGrfSize)));
+        bRet = true;
+    }
+
     return bRet;
 }
 
 bool SdGRFFilter::Export()
 {
     // SJ: todo: error handling, the GraphicExportFilter does not support proper errorhandling
-
     bool bRet = false;
 
-     uno::Reference< uno::XComponentContext > xContext = ::comphelper::getProcessComponentContext();
+    uno::Reference< uno::XComponentContext > xContext = ::comphelper::getProcessComponentContext();
     uno::Reference< drawing::XGraphicExportFilter > xExporter = drawing::GraphicExportFilter::create( xContext );
 
     SdPage* pPage = nullptr;
     sd::DrawViewShell*  pDrawViewShell = dynamic_cast<::sd::DrawViewShell* >(mrDocShell.GetViewShell() );
 
-    PageKind ePageKind = PK_STANDARD;
+    PageKind ePageKind = PageKind::Standard;
     if( pDrawViewShell )
     {
         ePageKind = pDrawViewShell->GetPageKind();
-        if( PK_HANDOUT == ePageKind )
-            pPage = mrDocument.GetSdPage( 0, PK_HANDOUT );
+        if( PageKind::Handout == ePageKind )
+            pPage = mrDocument.GetSdPage( 0, PageKind::Handout );
         else
             pPage = pDrawViewShell->GetActualPage();
     }
     else
-        pPage = mrDocument.GetSdPage( 0, PK_STANDARD );
+        pPage = mrDocument.GetSdPage( 0, PageKind::Standard );
 
     if ( pPage )
     {
@@ -268,12 +254,11 @@ bool SdGRFFilter::Export()
                 const sal_uInt16 nFilter = rGraphicFilter.GetExportFormatNumberForTypeName( aTypeName );
                 if ( nFilter != GRFILTER_FORMAT_NOTFOUND )
                 {
-                    uno::Reference< task::XInteractionHandler > mXInteractionHandler;
+                    uno::Reference< task::XInteractionHandler > xInteractionHandler;
 
                     beans::PropertyValues aArgs;
                     TransformItems( SID_SAVEASDOC, *pSet, aArgs );
 
-                    OUString sInteractionHandler( "InteractionHandler" );
                     OUString sFilterName( "FilterName" );
                     OUString sShortName( rGraphicFilter.GetExportFormatShortName( nFilter ) );
 
@@ -288,13 +273,13 @@ bool SdGRFFilter::Export()
                             aArgs[ i ].Name = sFilterName;
                             aArgs[ i ].Value <<= sShortName;
                         }
-                        else if ( rStr == sInteractionHandler )
+                        else if ( rStr == "InteractionHandler" )
                         {
                             uno::Reference< task::XInteractionHandler > xHdl;
                             if ( aArgs[ i ].Value >>= xHdl )
                             {
-                                mXInteractionHandler = new SdGRFFilter_ImplInteractionHdl( xHdl );
-                                aArgs[ i ].Value <<= mXInteractionHandler;
+                                xInteractionHandler = new SdGRFFilter_ImplInteractionHdl( xHdl );
+                                aArgs[ i ].Value <<= xInteractionHandler;
                             }
                         }
                     }
@@ -307,7 +292,7 @@ bool SdGRFFilter::Export()
 
                     // take selection if needed
                     if( ( SfxItemState::SET == pSet->GetItemState( SID_SELECTION ) )
-                        && static_cast< const SfxBoolItem& >( pSet->Get( SID_SELECTION ) ).GetValue()
+                        && pSet->Get( SID_SELECTION ).GetValue()
                         && pDrawViewShell )
                     {
                         uno::Reference< view::XSelectionSupplier > xSelectionSupplier(
@@ -322,9 +307,9 @@ bool SdGRFFilter::Export()
                     }
                     xExporter->setSourceDocument( xSource );
                     bRet = xExporter->filter( aArgs );
-                    if ( !bRet && mXInteractionHandler.is() )
+                    if ( !bRet && xInteractionHandler.is() )
                         SdGRFFilter::HandleGraphicFilterError(
-                            static_cast< SdGRFFilter_ImplInteractionHdl* >( mXInteractionHandler.get() )->GetErrorCode(),
+                            static_cast< SdGRFFilter_ImplInteractionHdl* >( xInteractionHandler.get() )->GetErrorCode(),
                                             rGraphicFilter.GetLastError().nStreamError );
                 }
              }

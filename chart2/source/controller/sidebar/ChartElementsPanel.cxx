@@ -17,39 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <sfx2/sidebar/ResourceDefinitions.hrc>
-#include <sfx2/sidebar/Theme.hxx>
-#include <sfx2/sidebar/ControlFactory.hxx>
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 
 #include "ChartElementsPanel.hxx"
-#include "ChartController.hxx"
-#include <sfx2/bindings.hxx>
-#include <sfx2/dispatch.hxx>
-#include <sfx2/imagemgr.hxx>
+#include <ChartController.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/lstbox.hxx>
-#include <vcl/field.hxx>
-#include <vcl/toolbox.hxx>
-#include <svl/intitem.hxx>
-#include <svl/stritem.hxx>
 #include <comphelper/processfactory.hxx>
 
-#include "LegendHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "AxisHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "ChartTypeHelper.hxx"
+#include <LegendHelper.hxx>
+#include <ChartModelHelper.hxx>
+#include <AxisHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <ChartTypeHelper.hxx>
 
-#include "ChartModel.hxx"
+#include <ChartModel.hxx>
 
 
 using namespace css;
 using namespace css::uno;
-using ::sfx2::sidebar::Theme;
 
 namespace chart { namespace sidebar {
 
@@ -118,7 +107,14 @@ void setLegendVisible(const css::uno::Reference<css::frame::XModel>& xModel, boo
 
 bool isTitleVisisble(const css::uno::Reference<css::frame::XModel>& xModel, TitleHelper::eTitleType eTitle)
 {
-    return TitleHelper::getTitle(eTitle, xModel).is();
+    css::uno::Reference<css::uno::XInterface> xTitle = TitleHelper::getTitle(eTitle, xModel);
+    if (!xTitle.is())
+        return false;
+
+    css::uno::Reference<css::beans::XPropertySet> xPropSet(xTitle, css::uno::UNO_QUERY_THROW);
+    css::uno::Any aAny = xPropSet->getPropertyValue("Visible");
+    bool bVisible = aAny.get<bool>();
+    return bVisible;
 }
 
 bool isGridVisible(const css::uno::Reference<css::frame::XModel>& xModel, GridType eType)
@@ -129,11 +125,10 @@ bool isGridVisible(const css::uno::Reference<css::frame::XModel>& xModel, GridTy
         sal_Int32 nDimensionIndex = 0;
         if (eType == GridType::HOR_MAJOR || eType == GridType::HOR_MINOR)
             nDimensionIndex = 1;
-        sal_Int32 nCooSysIndex = 0;
 
         bool bMajor = (eType == GridType::HOR_MAJOR || eType == GridType::VERT_MAJOR);
 
-        bool bHasGrid = AxisHelper::isGridShown(nDimensionIndex, nCooSysIndex, bMajor, xDiagram);
+        bool bHasGrid = AxisHelper::isGridShown(nDimensionIndex, 0, bMajor, xDiagram);
         return bHasGrid;
     }
     return false;
@@ -153,7 +148,7 @@ void setGridVisible(const css::uno::Reference<css::frame::XModel>& xModel, GridT
 
         if (bVisible)
             AxisHelper::showGrid(nDimensionIndex, nCooSysIndex, bMajor,
-                    xDiagram, comphelper::getProcessComponentContext());
+                    xDiagram);
         else
             AxisHelper::hideGrid(nDimensionIndex, nCooSysIndex, bMajor, xDiagram);
     }
@@ -260,8 +255,8 @@ void setLegendPos(const css::uno::Reference<css::frame::XModel>& xModel, sal_Int
             assert(false);
     }
 
-    xLegendProp->setPropertyValue("AnchorPosition", css::uno::makeAny(eLegendPos));
-    xLegendProp->setPropertyValue("Expansion", css::uno::makeAny(eExpansion));
+    xLegendProp->setPropertyValue("AnchorPosition", css::uno::Any(eLegendPos));
+    xLegendProp->setPropertyValue("Expansion", css::uno::Any(eExpansion));
 
     if (eLegendPos != chart2::LegendPosition_CUSTOM)
     {
@@ -387,14 +382,23 @@ css::uno::Reference<css::chart2::XChartType> getChartType(const css::uno::Refere
 {
     css::uno::Reference<css::chart2::XChartDocument> xChartDoc(xModel, css::uno::UNO_QUERY_THROW);
     css::uno::Reference<chart2::XDiagram > xDiagram = xChartDoc->getFirstDiagram();
+    if (!xDiagram.is()) {
+        return css::uno::Reference<css::chart2::XChartType>();
+    }
 
     css::uno::Reference<css::chart2::XCoordinateSystemContainer > xCooSysContainer( xDiagram, css::uno::UNO_QUERY_THROW );
 
     css::uno::Sequence<css::uno::Reference<css::chart2::XCoordinateSystem>> xCooSysSequence(xCooSysContainer->getCoordinateSystems());
 
+    if (xCooSysSequence.getLength() == 0)
+        return css::uno::Reference<css::chart2::XChartType>();
+
     css::uno::Reference<css::chart2::XChartTypeContainer> xChartTypeContainer(xCooSysSequence[0], css::uno::UNO_QUERY_THROW);
 
     css::uno::Sequence<css::uno::Reference<css::chart2::XChartType>> xChartTypeSequence(xChartTypeContainer->getChartTypes());
+
+    if (xChartTypeSequence.getLength() == 0)
+        return css::uno::Reference<css::chart2::XChartType>();
 
     return xChartTypeSequence[0];
 }
@@ -411,6 +415,7 @@ void ChartElementsPanel::updateData()
     SolarMutexGuard aGuard;
 
     mpCBLegend->Check(isLegendVisible(mxModel));
+    mpBoxLegend->Enable( isLegendVisible(mxModel) );
     mpCBTitle->Check(isTitleVisisble(mxModel, TitleHelper::MAIN_TITLE));
     mpCBSubtitle->Check(isTitleVisisble(mxModel, TitleHelper::SUB_TITLE));
     mpCBXAxisTitle->Check(isTitleVisisble(mxModel, TitleHelper::X_AXIS_TITLE));
@@ -496,7 +501,7 @@ void ChartElementsPanel::DataChanged(
 }
 
 void ChartElementsPanel::HandleContextChange(
-    const ::sfx2::sidebar::EnumContext& rContext)
+    const vcl::EnumContext& rContext)
 {
     if(maContext == rContext)
     {
@@ -529,7 +534,7 @@ void ChartElementsPanel::updateModel(
     xBroadcasterNew->addModifyListener(mxListener);
 }
 
-IMPL_LINK_TYPED(ChartElementsPanel, CheckBoxHdl, Button*, pButton, void)
+IMPL_LINK(ChartElementsPanel, CheckBoxHdl, Button*, pButton, void)
 {
     CheckBox* pCheckBox = static_cast<CheckBox*>(pButton);
     bool bChecked = pCheckBox->IsChecked();
@@ -572,9 +577,9 @@ IMPL_LINK_TYPED(ChartElementsPanel, CheckBoxHdl, Button*, pButton, void)
         setGridVisible(mxModel, GridType::HOR_MINOR, bChecked);
 }
 
-IMPL_LINK_NOARG_TYPED(ChartElementsPanel, LegendPosHdl, ListBox&, void)
+IMPL_LINK_NOARG(ChartElementsPanel, LegendPosHdl, ListBox&, void)
 {
-    sal_Int32 nPos = mpLBLegendPosition->GetSelectEntryPos();
+    sal_Int32 nPos = mpLBLegendPosition->GetSelectedEntryPos();
     setLegendPos(mxModel, nPos);
 }
 
@@ -583,11 +588,11 @@ void ChartElementsPanel::setTitleVisible(TitleHelper::eTitleType eTitle, bool bV
     if (bVisible)
     {
         OUString aText = eTitle == TitleHelper::SUB_TITLE ? maTextSubTitle : maTextTitle;
-        TitleHelper::createTitle(eTitle, aText, mxModel, comphelper::getProcessComponentContext());
+        TitleHelper::createOrShowTitle(eTitle, aText, mxModel, comphelper::getProcessComponentContext());
     }
     else
     {
-        TitleHelper::removeTitle(eTitle, mxModel);
+        TitleHelper::hideTitle(eTitle, mxModel);
     }
 }
 

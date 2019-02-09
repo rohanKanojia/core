@@ -7,7 +7,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "dumpfilter.hxx"
+#include <dumpfilter.hxx>
 
 #include <wrtsh.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -76,7 +76,6 @@ namespace sw
 
     // XFilter
     sal_Bool LayoutDumpFilter::filter( const uno::Sequence< beans::PropertyValue >& aDescriptor )
-        throw (uno::RuntimeException, std::exception)
     {
         bool bRet = false;
 
@@ -97,7 +96,7 @@ namespace sw
             // Get sure that the whole layout is processed: set a visible area
             // even though there isn't any need of it
             pXDoc->GetDocShell()->GetWrtShell()->StartAction();
-            Rectangle aRect( 0, 0, 26000, 21000 );
+            tools::Rectangle aRect( 0, 0, 26000, 21000 );
             pXDoc->GetDocShell()->SetVisArea( aRect );
             pLayout->InvalidateAllContent( SwInvalidateFlags::Size );
             pXDoc->GetDocShell()->GetWrtShell()->EndAction();
@@ -122,38 +121,33 @@ namespace sw
         return bRet;
     }
 
-    void LayoutDumpFilter::cancel(  ) throw (uno::RuntimeException, std::exception)
+    void LayoutDumpFilter::cancel(  )
     {
     }
 
     // XExporter
     void LayoutDumpFilter::setSourceDocument( const uno::Reference< lang::XComponent >& xDoc )
-        throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
     {
         m_xSrcDoc = xDoc;
     }
 
     // XInitialization
     void LayoutDumpFilter::initialize( const uno::Sequence< uno::Any >& )
-        throw (uno::Exception, uno::RuntimeException, std::exception)
     {
     }
 
     // XServiceInfo
     OUString LayoutDumpFilter::getImplementationName(  )
-        throw (uno::RuntimeException, std::exception)
     {
         return OUString( "com.sun.star.comp.Writer.LayoutDump" );
     }
 
     sal_Bool LayoutDumpFilter::supportsService( const OUString& rServiceName )
-        throw (uno::RuntimeException, std::exception)
     {
         return cppu::supportsService(this, rServiceName);
     }
 
     uno::Sequence< OUString > LayoutDumpFilter::getSupportedServiceNames()
-        throw (uno::RuntimeException, std::exception)
     {
         uno::Sequence<OUString> aSeq { "com.sun.star.document.ExportFilter" };
         return aSeq;
@@ -162,7 +156,7 @@ namespace sw
 } // Namespace sw
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_comp_Writer_LayoutDump_get_implementation(css::uno::XComponentContext*,
                                 css::uno::Sequence<css::uno::Any> const &)
 {

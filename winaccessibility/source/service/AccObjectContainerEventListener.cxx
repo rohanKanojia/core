@@ -26,9 +26,9 @@
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/XAccessibleEventBroadcaster.hpp>
 
-#include "AccObjectContainerEventListener.hxx"
-#include "AccObjectManagerAgent.hxx"
-#include "unomsaaevent.hxx"
+#include <AccObjectContainerEventListener.hxx>
+#include <AccObjectManagerAgent.hxx>
+#include <unomsaaevent.hxx>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star::accessibility;
@@ -60,7 +60,7 @@ void AccObjectContainerEventListener::HandleStateChangedEvent(Any oldValue, Any 
 }
 /**
  *  handle the VISIBLE_DATA_CHANGED event
- *  For SHAPES, the visiable_data_changed event should be mapped to LOCATION_CHANGED event
+ *  For SHAPES, the visible_data_changed event should be mapped to LOCATION_CHANGED event
   */
 void AccObjectContainerEventListener::HandleVisibleDataChangedEvent()
 {

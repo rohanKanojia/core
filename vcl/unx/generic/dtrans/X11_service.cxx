@@ -17,9 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unx/salinst.h"
+#include <unx/salinst.h>
 
-#include <X11_clipboard.hxx>
+#include "X11_clipboard.hxx"
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
@@ -34,19 +35,19 @@ using namespace com::sun::star::datatransfer::clipboard;
 using namespace com::sun::star::awt;
 using namespace x11;
 
-Sequence< OUString > SAL_CALL x11::X11Clipboard_getSupportedServiceNames()
+Sequence< OUString > x11::X11Clipboard_getSupportedServiceNames()
 {
     Sequence< OUString > aRet { "com.sun.star.datatransfer.clipboard.SystemClipboard" };
     return aRet;
 }
 
-Sequence< OUString > SAL_CALL x11::Xdnd_getSupportedServiceNames()
+Sequence< OUString > x11::Xdnd_getSupportedServiceNames()
 {
     Sequence< OUString > aRet { "com.sun.star.datatransfer.dnd.X11DragSource" };
     return aRet;
 }
 
-Sequence< OUString > SAL_CALL x11::Xdnd_dropTarget_getSupportedServiceNames()
+Sequence< OUString > x11::Xdnd_dropTarget_getSupportedServiceNames()
 {
     Sequence< OUString > aRet { "com.sun.star.datatransfer.dnd.X11DropTarget" };
     return aRet;

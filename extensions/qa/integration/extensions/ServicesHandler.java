@@ -50,7 +50,7 @@ public class ServicesHandler implements XPropertyHandler
             try
             {
                 // translate the service name into a URL to dispatch
-                String documentationURL = "http://api.libreoffice.org/docs/common/ref/" + m_serviceName.replace('.','/') + ".html";
+                String documentationURL = "https://api.libreoffice.org/docs/common/ref/" + m_serviceName.replace('.','/') + ".html";
                 System.out.println( documentationURL );
 
                 // the OpenHyperlink command, to be dispatched to the Desktop
@@ -94,12 +94,12 @@ public class ServicesHandler implements XPropertyHandler
 
     public void addEventListener(com.sun.star.lang.XEventListener _eventListener)
     {
-        // ingnoring this
+        // ignoring this
     }
 
     public void addPropertyChangeListener(com.sun.star.beans.XPropertyChangeListener _propertyChangeListener) throws com.sun.star.lang.NullPointerException
     {
-        // ingnoring this
+        // ignoring this
     }
 
     public Object convertToControlValue(String _propertyName, Object _propertyValue, com.sun.star.uno.Type type) throws com.sun.star.beans.UnknownPropertyException

@@ -19,14 +19,12 @@
 #ifndef INCLUDED_SC_INC_CHGVISET_HXX
 #define INCLUDED_SC_INC_CHGVISET_HXX
 
+#include <memory>
 #include <tools/datetime.hxx>
+#include <unotools/textsearch.hxx>
 #include <svx/ctredlin.hxx>
 #include "rangelst.hxx"
 #include "scdllapi.h"
-
-namespace utl {
-    class TextSearch;
-}
 
 class ScDocument;
 
@@ -34,7 +32,8 @@ class SC_DLLPUBLIC ScChangeViewSettings
 {
 private:
 
-    utl::TextSearch*    pCommentSearcher;
+    std::unique_ptr<utl::TextSearch>
+                        pCommentSearcher;
     DateTime            aFirstDateTime;
     DateTime            aLastDateTime;
     OUString            aAuthorToShow;
@@ -46,7 +45,6 @@ private:
     bool                bIsAuthor;
     bool                bIsComment;
     bool                bIsRange;
-    bool                bEveryoneButMe;
     bool                bShowAccepted;
     bool                bShowRejected;
     bool                mbIsActionRange;
@@ -56,8 +54,7 @@ private:
 public:
 
     ScChangeViewSettings()
-        : pCommentSearcher(nullptr)
-        , aFirstDateTime(DateTime::EMPTY)
+        : aFirstDateTime(DateTime::EMPTY)
         , aLastDateTime(DateTime::EMPTY)
         , eDateMode(SvxRedlinDateMode::BEFORE)
         , bShowIt(false)
@@ -65,7 +62,6 @@ public:
         , bIsAuthor(false)
         , bIsComment(false)
         , bIsRange(false)
-        , bEveryoneButMe(false)
         , bShowAccepted(false)
         , bShowRejected(false)
         , mbIsActionRange(false)
@@ -96,18 +92,16 @@ public:
     bool                HasAuthor() const {return bIsAuthor;}
     void                SetHasAuthor(bool bFlag) {bIsAuthor=bFlag;}
 
-    OUString            GetTheAuthorToShow()const {return aAuthorToShow;}
+    const OUString&     GetTheAuthorToShow()const {return aAuthorToShow;}
     void                SetTheAuthorToShow(const OUString& aString){aAuthorToShow=aString;}
 
     bool                HasComment() const {return bIsComment;}
     void                SetHasComment(bool bFlag) {bIsComment=bFlag;}
 
-    OUString            GetTheComment()const {return aComment;}
+    const OUString&     GetTheComment()const {return aComment;}
     void                SetTheComment(const OUString& aString);
 
     bool                IsValidComment(const OUString* pCommentStr) const;
-
-    bool                IsEveryoneButMe() const {return bEveryoneButMe;}
 
     bool                HasRange() const {return bIsRange;}
     void                SetHasRange(bool bFlag) {bIsRange=bFlag;}

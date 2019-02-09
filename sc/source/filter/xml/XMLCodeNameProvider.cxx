@@ -18,8 +18,9 @@
  */
 
 #include "XMLCodeNameProvider.hxx"
-#include "document.hxx"
-#include "comphelper/sequence.hxx"
+#include <document.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <comphelper/sequence.hxx>
 
 using namespace com::sun::star;
 
@@ -29,11 +30,10 @@ bool XMLCodeNameProvider::_getCodeName( const uno::Any& aAny, OUString& rCodeNam
     if( !(aAny >>= aProps) )
         return false;
 
-    OUString sCodeNameProp("CodeName");
     sal_Int32 nPropCount = aProps.getLength();
     for( sal_Int32 i=0; i<nPropCount; i++ )
     {
-        if( aProps[i].Name == sCodeNameProp )
+        if( aProps[i].Name == "CodeName" )
         {
             OUString sCodeName;
             if( aProps[i].Value >>= sCodeName )
@@ -47,10 +47,11 @@ bool XMLCodeNameProvider::_getCodeName( const uno::Any& aAny, OUString& rCodeNam
     return false;
 }
 
+static constexpr OUStringLiteral gsDocName( "*doc*" );
+static constexpr OUStringLiteral gsCodeNameProp( "CodeName" );
+
 XMLCodeNameProvider::XMLCodeNameProvider( ScDocument* pDoc ) :
-    mpDoc( pDoc ),
-    msDocName( "*doc*" ),
-    msCodeNameProp( "CodeName" )
+    mpDoc( pDoc )
 {
 }
 
@@ -59,16 +60,15 @@ XMLCodeNameProvider::~XMLCodeNameProvider()
 }
 
 sal_Bool SAL_CALL XMLCodeNameProvider::hasByName( const OUString& aName )
-    throw (uno::RuntimeException, std::exception )
 {
-    if( aName == msDocName )
+    if( aName == gsDocName )
         return !mpDoc->GetCodeName().isEmpty();
 
     SCTAB nCount = mpDoc->GetTableCount();
     OUString sSheetName, sCodeName;
     for( SCTAB i = 0; i < nCount; i++ )
     {
-        if( mpDoc->GetName( i, sSheetName ) && sSheetName.equals(aName) )
+        if( mpDoc->GetName( i, sSheetName ) && sSheetName == aName )
         {
             mpDoc->GetCodeName( i, sCodeName );
             return !sCodeName.isEmpty();
@@ -79,13 +79,11 @@ sal_Bool SAL_CALL XMLCodeNameProvider::hasByName( const OUString& aName )
 }
 
 uno::Any SAL_CALL XMLCodeNameProvider::getByName( const OUString& aName )
-    throw (container::NoSuchElementException,
-           lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     uno::Any aRet;
     uno::Sequence<beans::PropertyValue> aProps(1);
-    aProps[0].Name = msCodeNameProp;
-    if( aName == msDocName )
+    aProps[0].Name = gsCodeNameProp;
+    if( aName == gsDocName )
     {
         OUString sUCodeName( mpDoc->GetCodeName() );
         aProps[0].Value <<= sUCodeName;
@@ -97,7 +95,7 @@ uno::Any SAL_CALL XMLCodeNameProvider::getByName( const OUString& aName )
     OUString sSheetName, sCodeName;
     for( SCTAB i = 0; i < nCount; i++ )
     {
-        if( mpDoc->GetName( i, sSheetName ) && sSheetName.equals(aName) )
+        if( mpDoc->GetName( i, sSheetName ) && sSheetName == aName )
         {
             mpDoc->GetCodeName( i, sCodeName );
             aProps[0].Value <<= sCodeName;
@@ -110,14 +108,13 @@ uno::Any SAL_CALL XMLCodeNameProvider::getByName( const OUString& aName )
 }
 
 uno::Sequence< OUString > SAL_CALL XMLCodeNameProvider::getElementNames(  )
-    throw (uno::RuntimeException, std::exception)
 {
     SCTAB nCount = mpDoc->GetTableCount() + 1;
     std::vector< OUString > aNames;
     aNames.reserve(nCount);
 
     if( !mpDoc->GetCodeName().isEmpty() )
-        aNames.push_back(msDocName);
+        aNames.push_back(gsDocName);
 
     OUString sSheetName, sCodeName;
     for( SCTAB i = 0; i < nCount; i++ )
@@ -134,16 +131,14 @@ uno::Sequence< OUString > SAL_CALL XMLCodeNameProvider::getElementNames(  )
 }
 
 uno::Type SAL_CALL XMLCodeNameProvider::getElementType(  )
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get();
 }
 
 sal_Bool SAL_CALL XMLCodeNameProvider::hasElements()
-    throw (uno::RuntimeException, std::exception )
 {
     if( !mpDoc->GetCodeName().isEmpty() )
-        return sal_True;
+        return true;
 
     SCTAB nCount = mpDoc->GetTableCount();
     OUString sSheetName, sCodeName;
@@ -151,7 +146,7 @@ sal_Bool SAL_CALL XMLCodeNameProvider::hasElements()
     {
         mpDoc->GetCodeName( i, sCodeName );
         if (!sCodeName.isEmpty() && mpDoc->GetName(i, sSheetName))
-            return sal_True;
+            return true;
     }
 
     return false;

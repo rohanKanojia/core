@@ -22,6 +22,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/awt/PosSize.hpp>
 #include <com/sun/star/util/XModeChangeBroadcaster.hpp>
+#include <comphelper/lok.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/random.hxx>
 #include <vcl/svapp.hxx>
@@ -31,19 +32,18 @@
 #include <svx/svdview.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/sdrpaintwindow.hxx>
-#include <sdr/contact/objectcontactofpageview.hxx>
+#include <svx/sdr/contact/objectcontactofpageview.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
-#include <osl/mutex.hxx>
 #include <svx/fmview.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
-
+#include <sfx2/lokhelper.hxx>
 
 using namespace ::com::sun::star;
 
 struct SdrPageWindow::Impl
 {
     // #110094# ObjectContact section
-    mutable sdr::contact::ObjectContactOfPageView* mpObjectContact;
+    mutable sdr::contact::ObjectContact* mpObjectContact;
 
     // the SdrPageView this window belongs to
     SdrPageView& mrPageView;
@@ -63,14 +63,10 @@ struct SdrPageWindow::Impl
         mpOriginalPaintWindow(nullptr)
     {
     }
-
-    ~Impl()
-    {
-    }
 };
 
 
-uno::Reference<awt::XControlContainer> SdrPageWindow::GetControlContainer( bool _bCreateIfNecessary ) const
+uno::Reference<awt::XControlContainer> const & SdrPageWindow::GetControlContainer( bool _bCreateIfNecessary ) const
 {
     if (!mpImpl->mxControlContainer.is() && _bCreateIfNecessary)
     {
@@ -138,7 +134,7 @@ SdrPageWindow::~SdrPageWindow()
 
     if (mpImpl->mxControlContainer.is())
     {
-        SdrView& rView = GetPageView().GetView();
+        auto & rView = static_cast<SdrPaintView &>(GetPageView().GetView());
 
         // notify derived views
         FmFormView* pViewAsFormView = dynamic_cast< FmFormView* >( &rView );
@@ -149,8 +145,6 @@ SdrPageWindow::~SdrPageWindow()
         uno::Reference< lang::XComponent > xComponent(mpImpl->mxControlContainer, uno::UNO_QUERY);
         xComponent->dispose();
     }
-
-    delete mpImpl;
 }
 
 SdrPageView& SdrPageWindow::GetPageView() const
@@ -169,7 +163,7 @@ const SdrPaintWindow* SdrPageWindow::GetOriginalPaintWindow() const
 }
 
 // OVERLAY MANAGER
-rtl::Reference< sdr::overlay::OverlayManager > SdrPageWindow::GetOverlayManager() const
+rtl::Reference< sdr::overlay::OverlayManager > const & SdrPageWindow::GetOverlayManager() const
 {
     return GetPaintWindow().GetOverlayManager();
 }
@@ -234,16 +228,16 @@ namespace
 
         if(aCandidate.areControlPointsUsed())
         {
-            aCandidate = basegfx::tools::adaptiveSubdivideByAngle(rCandidate);
+            aCandidate = basegfx::utils::adaptiveSubdivideByAngle(rCandidate);
         }
 
         if(aCandidate.count())
         {
-            const sal_uInt32 nLoopCount(aCandidate.isClosed() ? aCandidate.count() : aCandidate.count() - 1L);
+            const sal_uInt32 nLoopCount(aCandidate.isClosed() ? aCandidate.count() : aCandidate.count() - 1);
             rOutDev.SetFillColor();
             rOutDev.SetLineColor(aColor);
 
-            for(sal_uInt32 a(0L); a < nLoopCount; a++)
+            for(sal_uInt32 a(0); a < nLoopCount; a++)
             {
                 const basegfx::B2DPoint aBStart(aCandidate.getB2DPoint(a));
                 const basegfx::B2DPoint aBEnd(aCandidate.getB2DPoint((a + 1) % aCandidate.count()));
@@ -256,26 +250,26 @@ namespace
 
     void impTryTest(const SdrPageView& rPageView, OutputDevice& rOutDev)
     {
-        if(rPageView.GetPage() && rPageView.GetPage()->GetObjCount() >= 2L)
+        if(rPageView.GetPage() && rPageView.GetPage()->GetObjCount() >= 2)
         {
             SdrPage* pPage = rPageView.GetPage();
-            SdrObject* pObjA = pPage->GetObj(0L);
+            SdrObject* pObjA = pPage->GetObj(0);
 
-            if(pObjA && dynamic_cast<const SdrPathObj*>( pObjA) !=  nullptr)
+            if(dynamic_cast<const SdrPathObj*>( pObjA))
             {
                 basegfx::B2DPolyPolygon aPolyA(pObjA->GetPathPoly());
-                aPolyA = basegfx::tools::correctOrientations(aPolyA);
+                aPolyA = basegfx::utils::correctOrientations(aPolyA);
 
                 basegfx::B2DPolyPolygon aPolyB;
 
-                for(sal_uInt32 a(1L); a < rPageView.GetPage()->GetObjCount(); a++)
+                for(sal_uInt32 a(1); a < rPageView.GetPage()->GetObjCount(); a++)
                 {
                     SdrObject* pObjB = pPage->GetObj(a);
 
-                    if(pObjB && dynamic_cast<const SdrPathObj*>( pObjB) !=  nullptr)
+                    if(dynamic_cast<const SdrPathObj*>( pObjB))
                     {
                         basegfx::B2DPolyPolygon aCandidate(pObjB->GetPathPoly());
-                        aCandidate = basegfx::tools::correctOrientations(aCandidate);
+                        aCandidate = basegfx::utils::correctOrientations(aCandidate);
                         aPolyB.append(aCandidate);
                     }
                 }
@@ -284,15 +278,15 @@ namespace
                 {
                     // poly A is the clipregion, clip poly b against it. Algo depends on
                     // poly b being closed.
-                    basegfx::B2DPolyPolygon aResult(basegfx::tools::clipPolyPolygonOnPolyPolygon(aPolyB, aPolyA));
+                    basegfx::B2DPolyPolygon aResult(basegfx::utils::clipPolyPolygonOnPolyPolygon(aPolyB, aPolyA));
 
-                    for(sal_uInt32 a(0L); a < aResult.count(); a++)
+                    for(auto const& rPolygon : aResult)
                     {
                         int nR = comphelper::rng::uniform_int_distribution(0, 254);
                         int nG = comphelper::rng::uniform_int_distribution(0, 254);
                         int nB = comphelper::rng::uniform_int_distribution(0, 254);
                         Color aColor(nR, nG, nB);
-                        impPaintStrokePolygon(aResult.getB2DPolygon(a), rOutDev, aColor);
+                        impPaintStrokePolygon(rPolygon, rOutDev, aColor);
                     }
                 }
             }
@@ -313,7 +307,7 @@ void SdrPageWindow::RedrawAll( sdr::contact::ViewObjectContactRedirector* pRedir
 
     // get to be processed layers
     const bool bPrinter(GetPaintWindow().OutputToPrinter());
-    SetOfByte aProcessLayers = bPrinter ? mpImpl->mrPageView.GetPrintableLayers() : mpImpl->mrPageView.GetVisibleLayers();
+    SdrLayerIDSet aProcessLayers = bPrinter ? mpImpl->mrPageView.GetPrintableLayers() : mpImpl->mrPageView.GetVisibleLayers();
 
     // create PaintInfoRec; use Rectangle only temporarily
     const vcl::Region& rRegion = GetPaintWindow().GetRedrawRegion();
@@ -324,7 +318,7 @@ void SdrPageWindow::RedrawAll( sdr::contact::ViewObjectContactRedirector* pRedir
     // Draw all layers. do NOT draw form layer from CompleteRedraw, this is done separately
     // as a single layer paint
     const SdrLayerAdmin& rLayerAdmin = rModel.GetLayerAdmin();
-    const SdrLayerID nControlLayerId = rLayerAdmin.GetLayerID(rLayerAdmin.GetControlLayerName(), false);
+    const SdrLayerID nControlLayerId = rLayerAdmin.GetLayerID(rLayerAdmin.GetControlLayerName());
     aProcessLayers.Clear(nControlLayerId);
 
     // still something to paint?
@@ -354,7 +348,9 @@ void SdrPageWindow::RedrawAll( sdr::contact::ViewObjectContactRedirector* pRedir
 #endif // CLIPPER_TEST
 }
 
-void SdrPageWindow::RedrawLayer( const SdrLayerID* pId, sdr::contact::ViewObjectContactRedirector* pRedirector )
+void SdrPageWindow::RedrawLayer(const SdrLayerID* pId,
+        sdr::contact::ViewObjectContactRedirector* pRedirector,
+        basegfx::B2IRectangle const*const pPageFrame)
 {
     // set redirector
     GetObjectContact().SetViewObjectContactRedirector(pRedirector);
@@ -365,14 +361,14 @@ void SdrPageWindow::RedrawLayer( const SdrLayerID* pId, sdr::contact::ViewObject
 
     // get the layers to process
     const bool bPrinter(GetPaintWindow().OutputToPrinter());
-    SetOfByte aProcessLayers = bPrinter ? mpImpl->mrPageView.GetPrintableLayers() : mpImpl->mrPageView.GetVisibleLayers();
+    SdrLayerIDSet aProcessLayers = bPrinter ? mpImpl->mrPageView.GetPrintableLayers() : mpImpl->mrPageView.GetVisibleLayers();
 
     // is the given layer visible at all?
     if(aProcessLayers.IsSet(*pId))
     {
         // find out if we are painting the ControlLayer
         const SdrLayerAdmin& rLayerAdmin = rModel.GetLayerAdmin();
-        const SdrLayerID nControlLayerId = rLayerAdmin.GetLayerID(rLayerAdmin.GetControlLayerName(), false);
+        const SdrLayerID nControlLayerId = rLayerAdmin.GetLayerID(rLayerAdmin.GetControlLayerName());
         const bool bControlLayerProcessingActive(nControlLayerId == *pId);
 
         // create PaintInfoRec, use Rectangle only temporarily
@@ -397,6 +393,11 @@ void SdrPageWindow::RedrawLayer( const SdrLayerID* pId, sdr::contact::ViewObject
         // #i72889# no page painting for layer painting
         aDisplayInfo.SetPageProcessingActive(false);
 
+        if (pPageFrame) // Writer page frame for anchor based clipping
+        {
+            aDisplayInfo.SetWriterPageFrame(*pPageFrame);
+        }
+
         // paint page
         GetObjectContact().ProcessDisplay(aDisplayInfo);
     }
@@ -408,7 +409,7 @@ void SdrPageWindow::RedrawLayer( const SdrLayerID* pId, sdr::contact::ViewObject
 // Invalidate call, used from ObjectContact(OfPageView) in InvalidatePartOfView(...)
 void SdrPageWindow::InvalidatePageWindow(const basegfx::B2DRange& rRange)
 {
-    if(GetPageView().IsVisible() && GetPaintWindow().OutputToWindow())
+    if (GetPageView().IsVisible() && GetPaintWindow().OutputToWindow())
     {
         const SvtOptionsDrawinglayer aDrawinglayerOpt;
         vcl::Window& rWindow(static_cast< vcl::Window& >(GetPaintWindow().GetOutputDevice()));
@@ -422,7 +423,7 @@ void SdrPageWindow::InvalidatePageWindow(const basegfx::B2DRange& rRange)
             aDiscreteRange.grow(1.0);
         }
 
-        const Rectangle aVCLDiscreteRectangle(
+        const tools::Rectangle aVCLDiscreteRectangle(
             static_cast<long>(floor(aDiscreteRange.getMinX())),
             static_cast<long>(floor(aDiscreteRange.getMinY())),
             static_cast<long>(ceil(aDiscreteRange.getMaxX())),
@@ -433,13 +434,33 @@ void SdrPageWindow::InvalidatePageWindow(const basegfx::B2DRange& rRange)
         rWindow.Invalidate(aVCLDiscreteRectangle, InvalidateFlags::NoErase);
         rWindow.EnableMapMode(bWasMapModeEnabled);
     }
+    else if (comphelper::LibreOfficeKit::isActive())
+    {
+        // we don't really have to have a paint window with LOK; OTOH we know
+        // that the drawinglayer units are 100ths of mm, so they are easy to
+        // convert to twips
+        const tools::Rectangle aRect100thMM(
+            static_cast<long>(floor(rRange.getMinX())),
+            static_cast<long>(floor(rRange.getMinY())),
+            static_cast<long>(ceil(rRange.getMaxX())),
+            static_cast<long>(ceil(rRange.getMaxY())));
+
+        const tools::Rectangle aRectTwips = OutputDevice::LogicToLogic(aRect100thMM, MapMode(MapUnit::Map100thMM), MapMode(MapUnit::MapTwip));
+
+        if (SfxViewShell* pViewShell = SfxViewShell::Current())
+            SfxLokHelper::notifyInvalidation(pViewShell, aRectTwips.toString());
+    }
 }
 
 // ObjectContact section
 const sdr::contact::ObjectContact& SdrPageWindow::GetObjectContact() const
 {
     if (!mpImpl->mpObjectContact)
-        mpImpl->mpObjectContact = new sdr::contact::ObjectContactOfPageView(const_cast<SdrPageWindow&>(*this));
+    {
+        mpImpl->mpObjectContact = GetPageView().GetView().createViewSpecificObjectContact(
+            const_cast<SdrPageWindow&>(*this),
+            "svx::svdraw::SdrPageWindow mpObjectContact");
+    }
 
     return *mpImpl->mpObjectContact;
 }
@@ -447,7 +468,11 @@ const sdr::contact::ObjectContact& SdrPageWindow::GetObjectContact() const
 sdr::contact::ObjectContact& SdrPageWindow::GetObjectContact()
 {
     if (!mpImpl->mpObjectContact)
-        mpImpl->mpObjectContact = new sdr::contact::ObjectContactOfPageView(*this);
+    {
+        mpImpl->mpObjectContact = GetPageView().GetView().createViewSpecificObjectContact(
+             *this,
+             "svx::svdraw::SdrPageWindow mpObjectContact" );
+    }
 
     return *mpImpl->mpObjectContact;
 }

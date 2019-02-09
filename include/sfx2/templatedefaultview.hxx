@@ -11,18 +11,26 @@
 #define INCLUDED_SFX2_TEMPLATEDEFAULTVIEW_HXX
 
 #include <sfx2/templatelocalview.hxx>
-#include <sfx2/recentdocsviewitem.hxx>
 
-class SFX2_DLLPUBLIC TemplateDefaultView : public TemplateLocalView
+class SFX2_DLLPUBLIC TemplateDefaultView final : public TemplateLocalView
 {
 public:
     TemplateDefaultView(Window *pParent);
 
     virtual void reload() override;
-protected:
+
+    virtual void showAllTemplates () override;
+
+    virtual void KeyInput( const KeyEvent& rKEvt ) override;
+
+    virtual void MouseButtonDown( const MouseEvent& rMEvt ) override;
+
+    void createContextMenu();
+
+    DECL_LINK(ContextMenuSelectHdl, Menu*, void);
+
+private:
     long    mnItemMaxSize;
-    long    mnTextHeight;
-    long    mnItemPadding;
 };
 
 #endif // INCLUDED_SFX2_TEMPLATEDEFAULTVIEW_HXX

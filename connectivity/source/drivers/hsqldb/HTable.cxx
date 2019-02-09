@@ -18,8 +18,8 @@
  */
 
 #include <string.h>
-#include "hsqldb/HTable.hxx"
-#include "hsqldb/HTables.hxx"
+#include <hsqldb/HTable.hxx>
+#include <hsqldb/HTables.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <com/sun/star/sdbcx/KeyType.hpp>
@@ -29,16 +29,15 @@
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbcx/Privilege.hpp>
 #include <comphelper/property.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbtools.hxx>
 #include <connectivity/sdbcx/VColumn.hxx>
 #include <connectivity/TKeys.hxx>
 #include <connectivity/TIndexes.hxx>
 #include <connectivity/TColumnsHelper.hxx>
-#include "hsqldb/HCatalog.hxx"
-#include "hsqldb/HColumns.hxx"
-#include "TConnection.hxx"
+#include <hsqldb/HCatalog.hxx>
+#include <hsqldb/HColumns.hxx>
+#include <TConnection.hxx>
 
 #include <tools/diagnose_ex.h>
 
@@ -109,41 +108,33 @@ void OHSQLTable::construct()
     return *static_cast<OHSQLTable_PROP*>(this)->getArrayHelper(isNew() ? 1 : 0);
 }
 
-sdbcx::OCollection* OHSQLTable::createColumns(const TStringVector& _rNames)
+sdbcx::OCollection* OHSQLTable::createColumns(const ::std::vector< OUString>& _rNames)
 {
     OHSQLColumns* pColumns = new OHSQLColumns(*this,m_aMutex,_rNames);
     pColumns->setParent(this);
     return pColumns;
 }
 
-sdbcx::OCollection* OHSQLTable::createKeys(const TStringVector& _rNames)
+sdbcx::OCollection* OHSQLTable::createKeys(const ::std::vector< OUString>& _rNames)
 {
     return new OKeysHelper(this,m_aMutex,_rNames);
 }
 
-sdbcx::OCollection* OHSQLTable::createIndexes(const TStringVector& _rNames)
+sdbcx::OCollection* OHSQLTable::createIndexes(const ::std::vector< OUString>& _rNames)
 {
     return new OIndexesHelper(this,m_aMutex,_rNames);
 }
 
 Sequence< sal_Int8 > OHSQLTable::getUnoTunnelImplementationId()
 {
-    static ::cppu::OImplementationId * pId = nullptr;
-    if (! pId)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (! pId)
-        {
-            static ::cppu::OImplementationId aId;
-            pId = &aId;
-        }
-    }
-    return pId->getImplementationId();
+    static ::cppu::OImplementationId implId;
+
+    return implId.getImplementationId();
 }
 
-// com::sun::star::lang::XUnoTunnel
+// css::lang::XUnoTunnel
 
-sal_Int64 OHSQLTable::getSomething( const Sequence< sal_Int8 > & rId ) throw (RuntimeException, std::exception)
+sal_Int64 OHSQLTable::getSomething( const Sequence< sal_Int8 > & rId )
 {
     return (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
                 ? reinterpret_cast< sal_Int64 >( this )
@@ -151,7 +142,7 @@ sal_Int64 OHSQLTable::getSomething( const Sequence< sal_Int8 > & rId ) throw (Ru
 }
 
 // XAlterTable
-void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Reference< XPropertySet >& descriptor ) throw(SQLException, NoSuchElementException, RuntimeException, std::exception)
+void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Reference< XPropertySet >& descriptor )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(
@@ -162,7 +153,7 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
 #endif
         );
 
-    if ( !m_pColumns || !m_pColumns->hasByName(colName) )
+    if ( !m_xColumns || !m_xColumns->hasByName(colName) )
         throw NoSuchElementException(colName,*this);
 
 
@@ -170,7 +161,7 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
     {
         // first we have to check what should be altered
         Reference<XPropertySet> xProp;
-        m_pColumns->getByName(colName) >>= xProp;
+        m_xColumns->getByName(colName) >>= xProp;
         // first check the types
         sal_Int32 nOldType = 0,nNewType = 0,nOldPrec = 0,nNewPrec = 0,nOldScale = 0,nNewScale = 0;
         OUString sOldTypeName, sNewTypeName;
@@ -183,7 +174,7 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
         xProp->getPropertyValue(rProp.getNameByIndex(PROPERTY_ID_TYPENAME))     >>= sOldTypeName;
         descriptor->getPropertyValue(rProp.getNameByIndex(PROPERTY_ID_TYPENAME))>>= sNewTypeName;
 
-        // and precsions and scale
+        // and precision and scale
         xProp->getPropertyValue(rProp.getNameByIndex(PROPERTY_ID_PRECISION))    >>= nOldPrec;
         descriptor->getPropertyValue(rProp.getNameByIndex(PROPERTY_ID_PRECISION))>>= nNewPrec;
         xProp->getPropertyValue(rProp.getNameByIndex(PROPERTY_ID_SCALE))        >>= nOldScale;
@@ -202,7 +193,7 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
         // now we should look if the name of the column changed
         OUString sNewColumnName;
         descriptor->getPropertyValue(rProp.getNameByIndex(PROPERTY_ID_NAME)) >>= sNewColumnName;
-        if ( !sNewColumnName.equals(colName) )
+        if ( sNewColumnName != colName )
         {
             const OUString sQuote = getMetaData()->getIdentifierQuoteString(  );
 
@@ -223,7 +214,7 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
             ||  bOldAutoIncrement != bAutoIncrement )
         {
             // special handling because they change the type names to distinguish
-            // if a column should be an auto_incmrement one
+            // if a column should be an auto_increment one
             if ( bOldAutoIncrement != bAutoIncrement )
             {
                 /// TODO: insert special handling for auto increment "IDENTITY" and primary key
@@ -245,14 +236,14 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
         else if(sOldDefault.isEmpty() && !sNewDefault.isEmpty())
             alterDefaultValue(sNewDefault,sNewColumnName);
 
-        m_pColumns->refresh();
+        m_xColumns->refresh();
     }
     else
     {
-        if(m_pColumns)
+        if(m_xColumns)
         {
-            m_pColumns->dropByName(colName);
-            m_pColumns->appendByDescriptor(descriptor);
+            m_xColumns->dropByName(colName);
+            m_xColumns->appendByDescriptor(descriptor);
         }
     }
 
@@ -260,9 +251,7 @@ void SAL_CALL OHSQLTable::alterColumnByName( const OUString& colName, const Refe
 
 void OHSQLTable::alterColumnType(sal_Int32 nNewType,const OUString& _rColName, const Reference<XPropertySet>& _xDescriptor)
 {
-    OUString sSql = getAlterTableColumnPart();
-
-    sSql += " ALTER COLUMN ";
+    OUString sSql = getAlterTableColumnPart() + " ALTER COLUMN ";
 #if OSL_DEBUG_LEVEL > 0
     try
     {
@@ -274,7 +263,7 @@ void OHSQLTable::alterColumnType(sal_Int32 nNewType,const OUString& _rColName, c
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("connectivity.hsqldb");
     }
 #else
     (void)_rColName;
@@ -340,12 +329,12 @@ void OHSQLTable::executeStatement(const OUString& _rStatement )
     }
 }
 
-Sequence< Type > SAL_CALL OHSQLTable::getTypes(  ) throw(RuntimeException, std::exception)
+Sequence< Type > SAL_CALL OHSQLTable::getTypes(  )
 {
     if ( m_Type == "VIEW" )
     {
         Sequence< Type > aTypes = OTableHelper::getTypes();
-        ::std::vector<Type> aOwnTypes;
+        std::vector<Type> aOwnTypes;
         aOwnTypes.reserve(aTypes.getLength());
         const Type* pIter = aTypes.getConstArray();
         const Type* pEnd = pIter + aTypes.getLength();
@@ -362,7 +351,7 @@ Sequence< Type > SAL_CALL OHSQLTable::getTypes(  ) throw(RuntimeException, std::
 }
 
 // XRename
-void SAL_CALL OHSQLTable::rename( const OUString& newName ) throw(SQLException, ElementExistException, RuntimeException, std::exception)
+void SAL_CALL OHSQLTable::rename( const OUString& newName )
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     checkDisposed(
@@ -398,7 +387,7 @@ void SAL_CALL OHSQLTable::rename( const OUString& newName ) throw(SQLException, 
 }
 
 
-Any SAL_CALL OHSQLTable::queryInterface( const Type & rType ) throw(RuntimeException, std::exception)
+Any SAL_CALL OHSQLTable::queryInterface( const Type & rType )
 {
     if( m_Type == "VIEW" && rType == cppu::UnoType<XRename>::get())
         return Any();

@@ -120,6 +120,32 @@ File id \
     Styles = (FILELIST, USE_INTERNAL_RIGHTS, PACKED); \
 End
 
+#define PACKAGE_FILELIST_COMPONENTCONDITION(id,name,cond) \
+File id \
+    Dir = FILELIST_DIR; \
+    Name = name; \
+    Styles = (FILELIST, USE_INTERNAL_RIGHTS, PACKED); \
+    ComponentCondition = cond; \
+End
+
+#ifdef WNT
+#define PACKAGE_FILELIST_FONT(id,name) \
+File id \
+    Dir = FILELIST_DIR; \
+    Name = name; \
+    Styles = (FILELIST, USE_INTERNAL_RIGHTS, PACKED, FONT); \
+End
+#else
+#define PACKAGE_FILELIST_FONT PACKAGE_FILELIST
+#endif // WNT
+
+#define SDK_PACKAGE_FILELIST(id,name) \
+File id \
+    Dir = FILELIST_SDK_DIR; \
+    Name = name; \
+    Styles = (FILELIST, USE_INTERNAL_RIGHTS, PACKED); \
+End
+
 #define PACKED_LIB_FILE_BODY \
         LIB_FILE_BODY; \
         Styles = (PACKED); \
@@ -163,7 +189,7 @@ End
     End
 
 #ifdef MACOSX
-// links are craeted at configure time by odk/config/setsdkenv_unix.sh.in
+// links are created at configure time by odk/config/setsdkenv_unix.sh.in
 #define SDK_LIBRARY_LINK(id,name,target)
 #elif defined(WNT)
 #define SDK_LIBRARY_LINK(id,name,target) \
@@ -181,34 +207,6 @@ End
      Dir = gid_Dir_Lib_Sdk; \
      Name = name; \
      Target = target; \
-    End
-#endif
-
-#define STD_RES_FILE(id,name) \
-    File id \
-        TXT_FILE_BODY; \
-        RESFILE_ALL_LANG(name); \
-        Dir     = gid_Dir_Resource; \
-        Styles  = (PACKED); \
-    End
-
-#ifdef UNX
-#define STD_FONT_FILELIST(id,name) \
-    File id \
-        TXT_FILE_BODY; \
-        Dir       = FILELIST_DIR; \
-        Styles    = (FILELIST, PACKED, FONT_WARN_IF_EXISTS); \
-        Name      = name; \
-    End
-#endif
-
-#ifdef WNT
-#define STD_FONT_FILELIST(id,name) \
-    File id \
-        TXT_FILE_BODY; \
-        Dir       = FILELIST_DIR; \
-        Styles   = (FILELIST,PACKED,FONT,DONT_DELETE,FONT_WARN_IF_EXISTS); \
-        Name      = name; \
     End
 #endif
 
@@ -264,6 +262,26 @@ End
         ComponentCondition = STRING(CONCAT3(REGISTER_,cond,=1)); \
     End
 
+#define CONDITIONAL_REGISTRY_ENTRY_EXT_MEDIATYPE(name,cond,key,mediatype) \
+    RegistryItem gid_Regitem__MediaType_##name \
+        ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+        ModuleID = gid_Module_Root_Reg_##name; \
+        Subkey = STRING(CONCAT2(.,key)); \
+        Name = STRING(Content Type); \
+        Value = STRING(mediatype); \
+        ComponentCondition = STRING(CONCAT3(REGISTER_,cond,=1)); \
+    End
+
+#define CONDITIONAL_REGISTRY_ENTRY_MEDIATYPE_DEF_EXT(name,cond,key,mediatype) \
+    RegistryItem gid_Regitem__MediaType_DefExt_##name \
+        ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+        ModuleID = gid_Module_Root_Reg_##name; \
+        Subkey = STRING(CONCAT2(MIME\Database\Content Type\,mediatype)); \
+        Name = STRING(Extension); \
+        Value = STRING(CONCAT2(.,key)); \
+        ComponentCondition = STRING(CONCAT3(REGISTER_,cond,=1)); \
+    End
+
 #define REGISTRY_ENTRY_DOC(name,modid,disp_name) \
     RegistryItem CONCAT2(gid_Regitem_Openoffice_,name) \
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
@@ -276,7 +294,6 @@ End
     RegistryItem CONCAT3(gid_Regitem_Openoffice_,name,_AppUserModelID) \
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
         ModuleID = modid; \
-        ComponentCondition = STRING(VersionNT >= 601); \
         Subkey = STRING(CONCAT2(LibreOffice.,name)); \
         Name = STRING(AppUserModelID); \
         Value = STRING(CONCAT2(TheDocumentFoundation.LibreOffice.,doc_type)); \
@@ -298,7 +315,7 @@ End
         Value = STRING(default); \
     End
 
-#define REGISTRY_ENTRY_NEW_CMD(name,modid,app) \
+#define REGISTRY_ENTRY_NEW_CMD_PPA(name,modid,progpath_program_app) \
     RegistryItem CONCAT3(gid_Regitem_Openoffice_,name,_Shell_New) \
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
         ModuleID = modid; \
@@ -309,32 +326,44 @@ End
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
         ModuleID = modid; \
         Subkey = STRING(CONCAT3(LibreOffice.,name,\shell\new\command)); \
-        Value = "\"<progpath>\program\\" STRING(app) "\" -n \"%1\""; \
+        Value = "\"" STRING(progpath_program_app) "\" -n \"%1\""; \
     End
 
-#define REGISTRY_ENTRY_OPEN_CMD(name,modid,app) \
+#define REGISTRY_ENTRY_NEW_CMD(name,modid,app) \
+	REGISTRY_ENTRY_NEW_CMD_PPA(name,modid,<progpath>\program\app)
+
+#define REGISTRY_ENTRY_OPEN_CMD_PPA(name,modid,progpath_program_app) \
     RegistryItem CONCAT3(gid_Regitem_Openoffice_,name,_Shell_Open_Command) \
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
         ModuleID = modid; \
         Subkey = STRING(CONCAT3(LibreOffice.,name,\shell\open\command)); \
-        Value = "\"<progpath>\program\\" STRING(app) "\" -o \"%1\""; \
+        Value = "\"" STRING(progpath_program_app) "\" -o \"%1\""; \
     End
 
-#define REGISTRY_ENTRY_PRINT_CMD(name,modid,app) \
+#define REGISTRY_ENTRY_OPEN_CMD(name,modid,app) \
+	REGISTRY_ENTRY_OPEN_CMD_PPA(name,modid,<progpath>\program\app)
+
+#define REGISTRY_ENTRY_PRINT_CMD_PPA(name,modid,progpath_program_app) \
     RegistryItem CONCAT3(gid_Regitem_Openoffice_,name,_Shell_Print_Command) \
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
         ModuleID = modid; \
         Subkey = STRING(CONCAT3(LibreOffice.,name,\shell\print\command)); \
-        Value = "\"<progpath>\program\\" STRING(app) "\" -p \"%1\""; \
+        Value = "\"" STRING(progpath_program_app) "\" -p \"%1\""; \
     End
 
-#define REGISTRY_ENTRY_PRINTTO_CMD(name,modid,app) \
+#define REGISTRY_ENTRY_PRINT_CMD(name,modid,app) \
+	REGISTRY_ENTRY_PRINT_CMD_PPA(name,modid,<progpath>\program\app)
+
+#define REGISTRY_ENTRY_PRINTTO_CMD_PPA(name,modid,progpath_program_app) \
     RegistryItem CONCAT3(gid_Regitem_Openoffice_,name,_Shell_Printto_Command) \
         ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
         ModuleID = modid; \
         Subkey = STRING(CONCAT3(LibreOffice.,name,\shell\printto\command)); \
-        Value = "\"<progpath>\program\\" STRING(app) "\" -pt \"%2\" \"%1\""; \
+        Value = "\"" STRING(progpath_program_app) "\" -pt \"%2\" \"%1\""; \
     End
+
+#define REGISTRY_ENTRY_PRINTTO_CMD(name,modid,app) \
+	REGISTRY_ENTRY_PRINTTO_CMD_PPA(name,modid,<progpath>\program\app)
 
 #define REGISTRY_ENTRY_CAPABILITIES(name,modid,key,doc_type) \
     RegistryItem CONCAT2(gid_Regitem_Software_Manufacturer_Productname_Productversion_Capabilities_FileAssociations_,name) \
@@ -356,7 +385,17 @@ End
         Styles = (); \
     End
 
-#define CONDITIONAL_REGISTER_DOC_EXTENSION(name,modid,key,cond,disp_name,icon_id,app,default,doc_type) \
+#define REGISTRY_ENTRY_CAPABILITIES_URL(scheme,name,modid,handler) \
+    RegistryItem CONCAT2(gid_Regitem_Software_Manufacturer_Productname_Productversion_Capabilities_URLAssociations_,name) \
+        ParentID = PREDEFINED_HKEY_LOCAL_MACHINE; \
+        ModuleID = modid; \
+        Subkey = STRING(Software\%MANUFACTURER\%PRODUCTNAME%PRODUCTADDON\%PRODUCTVERSION\Capabilities\URLAssociations); \
+        Name = scheme; \
+        Value = handler; \
+        Styles = (); \
+    End
+
+#define CONDITIONAL_REGISTER_DOC_OPEN_EXTENSION(name,modid,key,cond,disp_name,icon_id,app,default,doc_type) \
     CONDITIONAL_MODULE_ENTRY(name,modid) \
     REGISTRY_ENTRY_OPEN_WITH(name,cond,doc_type,modid,key) \
     CONDITIONAL_REGISTRY_ENTRY_EXT(name,cond,key) \
@@ -364,11 +403,14 @@ End
     REGISTRY_ENTRY_APPUSERMODELID(name,modid,doc_type) \
     REGISTRY_ENTRY_ICON(name,modid,icon_id) \
     REGISTRY_ENTRY_SHELL(name,default,modid) \
-    REGISTRY_ENTRY_NEW_CMD(name,modid,app) \
     REGISTRY_ENTRY_OPEN_CMD(name,modid,app) \
+    REGISTRY_ENTRY_CAPABILITIES(name,modid,key,doc_type) \
+
+#define CONDITIONAL_REGISTER_DOC_EXTENSION(name,modid,key,cond,disp_name,icon_id,app,default,doc_type) \
+    CONDITIONAL_REGISTER_DOC_OPEN_EXTENSION(name,modid,key,cond,disp_name,icon_id,app,default,doc_type) \
+    REGISTRY_ENTRY_NEW_CMD(name,modid,app) \
     REGISTRY_ENTRY_PRINT_CMD(name,modid,app) \
     REGISTRY_ENTRY_PRINTTO_CMD(name,modid,app) \
-    REGISTRY_ENTRY_CAPABILITIES(name,modid,key,doc_type) \
 
 #define CONDITIONAL_REGISTER_DOCTEMPLATE_EXTENSION(name,modid,key,cond,disp_name,icon_id,app,default,doc_type) \
     CONDITIONAL_MODULE_ENTRY(name,modid) \
@@ -392,7 +434,6 @@ End
     RegistryItem CONCAT2(gid_Regitem_Software_Microsoft_Windows_CurrentVersion_PropertySystem_PropertyHandlers_,extension) \
         ParentID = PREDEFINED_HKEY_LOCAL_MACHINE; \
         ModuleID = gid_Module_Optional_Winexplorerext; \
-        ComponentCondition = "VersionNT >= 600"; \
         Subkey = STRING(CONCAT2(SOFTWARE\Microsoft\Windows\CurrentVersion\PropertySystem\PropertyHandlers\.,extension)); \
         Value = "{AE424E85-F6DF-4910-A6A9-438797986431}"; \
     End \
@@ -400,7 +441,7 @@ End
     RegistryItem CONCAT3(gid_Regitem_Software_Microsoft_Windows_CurrentVersion_PropertySystem_PropertyHandlers_,extension,_x64) \
         ParentID = PREDEFINED_HKEY_LOCAL_MACHINE; \
         ModuleID = gid_Module_Optional_Winexplorerext_x64; \
-        ComponentCondition = "VersionNT64 >= 600"; \
+        ComponentCondition = "VersionNT64"; \
         Subkey = STRING(CONCAT2(SOFTWARE\Microsoft\Windows\CurrentVersion\PropertySystem\PropertyHandlers\.,extension)); \
         Value = "{AE424E85-F6DF-4910-A6A9-438797986431}"; \
     End
@@ -411,7 +452,6 @@ End
     RegistryItem CONCAT2(gid_Regitem_Software_Microsoft_Windows_CurrentVersion_PropertySystem_PropertyHandlers_,extension) \
         ParentID = PREDEFINED_HKEY_LOCAL_MACHINE; \
         ModuleID = gid_Module_Optional_Winexplorerext; \
-        ComponentCondition = "VersionNT >= 600"; \
         Subkey = STRING(CONCAT2(SOFTWARE\Microsoft\Windows\CurrentVersion\PropertySystem\PropertyHandlers\.,extension)); \
         Value = "{AE424E85-F6DF-4910-A6A9-438797986431}"; \
     End
@@ -467,12 +507,12 @@ End
 
 #include <langmacros.inc>
 
-#define UI_FILELIST_ALL_LANG(name, file) \
-    File CONCAT3(gid_File_Share_Config_Sofficecfg_uiconfig_, name, _Lang) \
+#define MO_FILELIST_ALL_LANG(name) \
+    File CONCAT3(gid_File_Res_, name, _Lang) \
         TXT_FILE_BODY; \
         Styles = (PACKED); \
-        Dir = gid_Dir_Share_Config_Sofficecfg; \
-        UI_ALL_LANG_BUT_EN_US(file); \
+        Dir = gid_Dir_Resource; \
+        MO_ALL_LANG_EXCEPT_EN_US_AND_QTZ(name); \
     End
 
 #define URE_PRIVATE_LIB(id,name) \
@@ -532,5 +572,50 @@ File gid_File_Extra_GallFiles##id \
     Name = STRING(CONCAT3(Gallery/Files/,id,.filelist)); \
 End
 
+#define REGISTER_URI_HANDLER_IMPL(protocol,protid,modid,cond) \
+RegistryItem CONCAT2(gid_Regitem_,protid) \
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+    ModuleID = modid; \
+    Subkey = STRING(protocol); \
+    Value = "URL:" STRING(protocol) " Protocol"; \
+    cond \
+End \
+RegistryItem CONCAT3(gid_Regitem_,protid,_URL_Protocol) \
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+    ModuleID = modid; \
+    Subkey = STRING(protocol); \
+    Name = "URL Protocol"; \
+End \
+RegistryItem CONCAT3(gid_Regitem_,protid,_UseOriginalUrlEncoding) \
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+    ModuleID = modid; \
+    Subkey = STRING(protocol); \
+    Name = "UseOriginalUrlEncoding"; \
+    Value = "#1"; \
+End \
+RegistryItem CONCAT3(gid_Regitem_,protid,_DefaultIcon) \
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+    ModuleID = modid; \
+    Subkey = STRING(CONCAT2(protocol,\DefaultIcon)); \
+    Value = "<progpath>\program\soffice.bin,0"; \
+End \
+RegistryItem CONCAT3(gid_Regitem_,protid,_shell_open_command) \
+    ParentID = PREDEFINED_HKEY_CLASSES_ROOT; \
+    ModuleID = modid; \
+    Subkey = STRING(CONCAT2(protocol,\shell\open\command)); \
+    Value = "\"<progpath>\program\soffice.exe\" \"%1\""; \
+End
+
+#define REG_COND(cond) \
+    ComponentCondition = STRING(CONCAT2(cond,=1));
+
+#define REG_EMPTY_COND
+
+#define REGISTER_URI_HANDLER(protocol,protid,modid) \
+    REGISTER_URI_HANDLER_IMPL(protocol,protid,modid,REG_EMPTY_COND)
+
+#define CONDITIONAL_REGISTER_URI_HANDLER(protocol,protid,modid,cond) \
+    CONDITIONAL_MODULE_ENTRY(protid,modid) \
+    REGISTER_URI_HANDLER_IMPL(protocol,protid,gid_Module_Root_Reg_##protid,REG_COND(cond))
 
 #endif // MACROS_INC

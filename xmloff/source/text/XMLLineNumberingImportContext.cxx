@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "XMLLineNumberingImportContext.hxx"
+#include <XMLLineNumberingImportContext.hxx>
 #include "XMLLineNumberingSeparatorImportContext.hxx"
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/text/XLineNumberingProperties.hpp>
@@ -30,6 +30,7 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnumi.hxx>
+#include <xmloff/xmlement.hxx>
 
 
 using namespace ::com::sun::star;
@@ -42,23 +43,24 @@ using ::com::sun::star::xml::sax::XAttributeList;
 using ::com::sun::star::text::XLineNumberingProperties;
 
 
+static const OUStringLiteral gsCharStyleName("CharStyleName");
+static const OUStringLiteral gsCountEmptyLines("CountEmptyLines");
+static const OUStringLiteral gsCountLinesInFrames("CountLinesInFrames");
+static const OUStringLiteral gsDistance("Distance");
+static const OUStringLiteral gsInterval("Interval");
+static const OUStringLiteral gsSeparatorText("SeparatorText");
+static const OUStringLiteral gsNumberPosition("NumberPosition");
+static const OUStringLiteral gsNumberingType("NumberingType");
+static const OUStringLiteral gsIsOn("IsOn");
+static const OUStringLiteral gsRestartAtEachPage("RestartAtEachPage");
+static const OUStringLiteral gsSeparatorInterval("SeparatorInterval");
+
 XMLLineNumberingImportContext::XMLLineNumberingImportContext(
     SvXMLImport& rImport,
     sal_uInt16 nPrfx,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList)
 :   SvXMLStyleContext(rImport, nPrfx, rLocalName, xAttrList, XML_STYLE_FAMILY_TEXT_LINENUMBERINGCONFIG)
-,   sCharStyleName("CharStyleName")
-,   sCountEmptyLines("CountEmptyLines")
-,   sCountLinesInFrames("CountLinesInFrames")
-,   sDistance("Distance")
-,   sInterval("Interval")
-,   sSeparatorText("SeparatorText")
-,   sNumberPosition("NumberPosition")
-,   sNumberingType("NumberingType")
-,   sIsOn("IsOn")
-,   sRestartAtEachPage("RestartAtEachPage")
-,   sSeparatorInterval("SeparatorInterval")
 ,   sNumFormat(GetXMLToken(XML_1))
 ,   sNumLetterSync(GetXMLToken(XML_FALSE))
 ,   nOffset(-1)
@@ -117,7 +119,7 @@ void XMLLineNumberingImportContext::StartElement(
             GetKeyByAttrName( xAttrList->getNameByIndex(i), &sLocalName );
 
         ProcessAttribute(
-            (enum LineNumberingToken)aTokenMap.Get(nPrefix, sLocalName),
+            static_cast<enum LineNumberingToken>(aTokenMap.Get(nPrefix, sLocalName)),
             xAttrList->getValueByIndex(i));
     }
 }
@@ -181,7 +183,7 @@ void XMLLineNumberingImportContext::ProcessAttribute(
 
         case XML_TOK_LINENUMBERING_NUMBER_POSITION:
         {
-            static const SvXMLEnumMapEntry aLineNumberPositionMap[] =
+            static const SvXMLEnumMapEntry<sal_Int16> aLineNumberPositionMap[] =
             {
                 { XML_LEFT,     style::LineNumberPosition::LEFT },
                 { XML_RIGHT,    style::LineNumberPosition::RIGHT },
@@ -190,19 +192,15 @@ void XMLLineNumberingImportContext::ProcessAttribute(
                 { XML_TOKEN_INVALID, 0 }
             };
 
-            sal_uInt16 nTmp16;
-            if (SvXMLUnitConverter::convertEnum(nTmp16, sValue,
-                                                aLineNumberPositionMap))
-            {
-                nNumberPosition = nTmp16;
-            }
+            (void)SvXMLUnitConverter::convertEnum(nNumberPosition, sValue,
+                                                  aLineNumberPositionMap);
             break;
         }
 
         case XML_TOK_LINENUMBERING_INCREMENT:
             if (::sax::Converter::convertNumber(nTmp, sValue, 0))
             {
-                nIncrement = (sal_Int16)nTmp;
+                nIncrement = static_cast<sal_Int16>(nTmp);
             }
             break;
     }
@@ -230,53 +228,38 @@ void XMLLineNumberingImportContext::CreateAndInsert(bool)
             {
                 aAny <<= GetImport().GetStyleDisplayName(
                             XML_STYLE_FAMILY_TEXT_TEXT, sStyleName );
-                xLineNumbering->setPropertyValue(sCharStyleName, aAny);
+                xLineNumbering->setPropertyValue(gsCharStyleName, aAny);
             }
 
-            aAny <<= sSeparator;
-            xLineNumbering->setPropertyValue(sSeparatorText, aAny);
-
-            aAny <<= nOffset;
-            xLineNumbering->setPropertyValue(sDistance, aAny);
-
-            aAny <<= nNumberPosition;
-            xLineNumbering->setPropertyValue(sNumberPosition, aAny);
+            xLineNumbering->setPropertyValue(gsSeparatorText, Any(sSeparator));
+            xLineNumbering->setPropertyValue(gsDistance, Any(nOffset));
+            xLineNumbering->setPropertyValue(gsNumberPosition, Any(nNumberPosition));
 
             if (nIncrement >= 0)
             {
-                aAny <<= nIncrement;
-                xLineNumbering->setPropertyValue(sInterval, aAny);
+                xLineNumbering->setPropertyValue(gsInterval, Any(nIncrement));
             }
 
             if (nSeparatorIncrement >= 0)
             {
-                aAny <<= nSeparatorIncrement;
-                xLineNumbering->setPropertyValue(sSeparatorInterval, aAny);
+                xLineNumbering->setPropertyValue(gsSeparatorInterval, Any(nSeparatorIncrement));
             }
 
-            aAny.setValue(&bNumberLines, cppu::UnoType<bool>::get());
-            xLineNumbering->setPropertyValue(sIsOn, aAny);
-
-            aAny.setValue(&bCountEmptyLines, cppu::UnoType<bool>::get());
-            xLineNumbering->setPropertyValue(sCountEmptyLines, aAny);
-
-            aAny.setValue(&bCountInFloatingFrames, cppu::UnoType<bool>::get());
-            xLineNumbering->setPropertyValue(sCountLinesInFrames, aAny);
-
-            aAny.setValue(&bRestartNumbering, cppu::UnoType<bool>::get());
-            xLineNumbering->setPropertyValue(sRestartAtEachPage, aAny);
+            xLineNumbering->setPropertyValue(gsIsOn, Any(bNumberLines));
+            xLineNumbering->setPropertyValue(gsCountEmptyLines, Any(bCountEmptyLines));
+            xLineNumbering->setPropertyValue(gsCountLinesInFrames, Any(bCountInFloatingFrames));
+            xLineNumbering->setPropertyValue(gsRestartAtEachPage, Any(bRestartNumbering));
 
             sal_Int16 nNumType = NumberingType::ARABIC;
             GetImport().GetMM100UnitConverter().convertNumFormat( nNumType,
                                                     sNumFormat,
                                                     sNumLetterSync );
-            aAny <<= nNumType;
-            xLineNumbering->setPropertyValue(sNumberingType, aAny);
+            xLineNumbering->setPropertyValue(gsNumberingType, Any(nNumType));
         }
     }
 }
 
-SvXMLImportContext* XMLLineNumberingImportContext::CreateChildContext(
+SvXMLImportContextRef XMLLineNumberingImportContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList> & xAttrList )

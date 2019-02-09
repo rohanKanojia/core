@@ -22,7 +22,6 @@
 
 #include <sfx2/basedlgs.hxx>
 #include "IItemSetHelper.hxx"
-#include <comphelper/uno3.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
 #include <memory>
@@ -42,18 +41,18 @@ class ODbDataSourceAdministrationHelper;
     // OTableSubscriptionDialog
     class OTableSubscriptionDialog : public SfxSingleTabDialog, public IItemSetHelper
     {
-        ::std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
+        std::unique_ptr<ODbDataSourceAdministrationHelper>  m_pImpl;
         bool m_bStopExecution; // set when the dialog should not be executed
 
-        SfxItemSet*             m_pOutSet;
+        std::unique_ptr<SfxItemSet> m_pOutSet;
     public:
 
         OTableSubscriptionDialog(vcl::Window* pParent
-            ,SfxItemSet* _pItems
+            ,const SfxItemSet* _pItems
             ,const css::uno::Reference< css::uno::XComponentContext >& _rxORB
             ,const css::uno::Any& _aDataSourceName
         );
-        virtual ~OTableSubscriptionDialog();
+        virtual ~OTableSubscriptionDialog() override;
         virtual void dispose() override;
 
         // forwards from ODbDataSourceAdministrationHelper
@@ -61,8 +60,8 @@ class ODbDataSourceAdministrationHelper;
         bool        getCurrentSettings(css::uno::Sequence< css::beans::PropertyValue >& _rDriverParams);
         void        clearPassword();
         OUString    getConnectionURL() const;
-        css::uno::Reference< css::beans::XPropertySet >   getCurrentDataSource();
-        inline void endExecution() { m_bStopExecution = true; }
+        css::uno::Reference< css::beans::XPropertySet > const & getCurrentDataSource();
+        void endExecution() { m_bStopExecution = true; }
 
         virtual const SfxItemSet* getOutputSet() const override;
         virtual SfxItemSet* getWriteOutputSet() override;

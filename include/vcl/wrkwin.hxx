@@ -20,7 +20,6 @@
 #ifndef INCLUDED_VCL_WRKWIN_HXX
 #define INCLUDED_VCL_WRKWIN_HXX
 
-#include <tools/solar.h>
 #include <vcl/dllapi.h>
 #include <vcl/syswin.hxx>
 #include <o3tl/typed_flags_set.hxx>
@@ -34,13 +33,11 @@ enum class PresentationFlags
 {
     NONE           = 0x0000,
     HideAllApps    = 0x0001,
-    NoFullScreen   = 0x0002,
-    NoAutoShow     = 0x0004,
 };
 
 namespace o3tl
 {
-    template<> struct typed_flags<PresentationFlags> : is_typed_flags<PresentationFlags, 0x0007> {};
+    template<> struct typed_flags<PresentationFlags> : is_typed_flags<PresentationFlags, 0x0001> {};
 }
 
 
@@ -63,13 +60,13 @@ private:
 protected:
     explicit        WorkWindow( WindowType nType );
     SAL_DLLPRIVATE void ImplInit( vcl::Window* pParent, WinBits nStyle, SystemParentData* pSystemParentData = nullptr );
-    SAL_DLLPRIVATE void ImplSetFrameState( sal_uLong aFrameState );
+    SAL_DLLPRIVATE void ImplSetFrameState( WindowStateState aFrameState );
 
 public:
     explicit        WorkWindow( vcl::Window* pParent, WinBits nStyle = WB_STDWORK );
     explicit        WorkWindow( vcl::Window* pParent, const css::uno::Any& aSystemWorkWindowToken, WinBits nStyle = WB_STDWORK );
     explicit        WorkWindow( SystemParentData* pParent ); // Not in the REMOTE-Version
-    virtual         ~WorkWindow();
+    virtual         ~WorkWindow() override;
     virtual void    dispose() override;
 
     virtual bool    Close() override;
@@ -79,22 +76,21 @@ public:
     /**
      @overload void ShowFullScreenMode(bool bFullScreenMode, sal_Int32 nDisplayScreen)
     */
-    void            ShowFullScreenMode( bool bFullScreenMode = true );
-    void            EndFullScreenMode() { ShowFullScreenMode( false ); }
+    void            ShowFullScreenMode( bool bFullScreenMode );
     bool            IsFullScreenMode() const { return mbFullScreenMode; }
 
     void            StartPresentationMode( bool   bPresentation,
                                            PresentationFlags nFlags,
-                                           sal_uInt32  nDisplayScreen );
+                                           sal_Int32  nDisplayScreen );
     /**
      @overload void StartPresentationMode( PresentationFlags nFlags, sal_uInt32 nDisplayScreen)
     */
-    void            StartPresentationMode( PresentationFlags nFlags = PresentationFlags::NONE );
+    void            StartPresentationMode( PresentationFlags nFlags );
     bool            IsPresentationMode() const { return mbPresentationMode; }
 
     bool            IsMinimized() const;
 
-    bool            SetPluginParent( SystemParentData* pParent );
+    void            SetPluginParent( SystemParentData* pParent );
 
     void            Minimize();
     void            Restore();

@@ -17,23 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "framework/PresentationFactory.hxx"
+#include <framework/PresentationFactory.hxx>
 
-#include "framework/FrameworkHelper.hxx"
-#include "DrawController.hxx"
-#include "ViewShellBase.hxx"
-#include "facreg.hxx"
+#include <DrawController.hxx>
+#include <ViewShellBase.hxx>
+#include <facreg.hxx>
 #include <com/sun/star/drawing/framework/XControllerManager.hpp>
+#include <com/sun/star/drawing/framework/XView.hpp>
 #include <cppuhelper/compbase.hxx>
 #include <tools/diagnose_ex.h>
-#include "slideshow.hxx"
+#include <slideshow.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::drawing::framework;
 
-using ::sd::framework::FrameworkHelper;
 
 namespace sd { namespace framework {
 
@@ -46,16 +45,14 @@ class PresentationFactoryProvider
       public PresentationFactoryProviderInterfaceBase
 {
 public:
-    explicit PresentationFactoryProvider (const Reference<XComponentContext>& rxContext);
-    virtual ~PresentationFactoryProvider();
+    PresentationFactoryProvider ();
 
     virtual void SAL_CALL disposing() override;
 
     // XInitialization
 
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence<css::uno::Any>& aArguments)
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::uno::Any>& aArguments) override;
 };
 
 typedef ::cppu::WeakComponentImplHelper <XView> PresentationViewInterfaceBase;
@@ -71,14 +68,13 @@ class PresentationView
 public:
     explicit PresentationView (const Reference<XResourceId>& rxViewId)
         : PresentationViewInterfaceBase(maMutex),mxResourceId(rxViewId) {};
-    virtual ~PresentationView() {};
 
     // XView
 
-    virtual Reference<XResourceId> SAL_CALL getResourceId() throw (RuntimeException, std::exception) override
+    virtual Reference<XResourceId> SAL_CALL getResourceId() override
     { return mxResourceId; };
 
-    virtual sal_Bool SAL_CALL isAnchorOnly() throw (RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL isAnchorOnly() override
     { return false; }
 
 private:
@@ -89,7 +85,7 @@ private:
 
 //===== PresentationFactory ===================================================
 
-const OUString PresentationFactory::msPresentationViewURL("private:resource/view/Presentation");
+static const char gsPresentationViewURL[] = "private:resource/view/Presentation";
 
 PresentationFactory::PresentationFactory (
     const Reference<frame::XController>& rxController)
@@ -105,7 +101,7 @@ PresentationFactory::PresentationFactory (
     }
     catch (RuntimeException&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("sd");
     }
 }
 
@@ -121,23 +117,20 @@ void SAL_CALL PresentationFactory::disposing()
 
 Reference<XResource> SAL_CALL PresentationFactory::createResource (
     const Reference<XResourceId>& rxViewId)
-    throw (RuntimeException, IllegalArgumentException, WrappedTargetException, std::exception)
 {
     ThrowIfDisposed();
 
     if (rxViewId.is())
-        if ( ! rxViewId->hasAnchor() && rxViewId->getResourceURL().equals(msPresentationViewURL))
+        if ( ! rxViewId->hasAnchor() && rxViewId->getResourceURL() == gsPresentationViewURL)
             return new PresentationView(rxViewId);
 
     return Reference<XResource>();
 }
 
 void SAL_CALL PresentationFactory::releaseResource (
-    const Reference<XResource>& rxView)
-    throw (RuntimeException, std::exception)
+    const Reference<XResource>&)
 {
     ThrowIfDisposed();
-    (void)rxView;
 
     Reference<lang::XUnoTunnel> xTunnel (mxController, UNO_QUERY);
     if (xTunnel.is())
@@ -156,23 +149,16 @@ void SAL_CALL PresentationFactory::releaseResource (
 //===== XConfigurationChangeListener ==========================================
 
 void SAL_CALL PresentationFactory::notifyConfigurationChange (
-    const ConfigurationChangeEvent& rEvent)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEvent;
-}
+    const ConfigurationChangeEvent&)
+{}
 
 //===== lang::XEventListener ==================================================
 
 void SAL_CALL PresentationFactory::disposing (
-    const lang::EventObject& rEventObject)
-    throw (RuntimeException, std::exception)
-{
-    (void)rEventObject;
-}
+    const lang::EventObject&)
+{}
 
 void PresentationFactory::ThrowIfDisposed() const
-    throw (lang::DisposedException)
 {
     if (rBHelper.bDisposed || rBHelper.bInDispose)
     {
@@ -185,14 +171,8 @@ namespace {
 
 //===== PresentationFactoryProvider ===========================================
 
-PresentationFactoryProvider::PresentationFactoryProvider (
-    const Reference<XComponentContext>& rxContext)
+PresentationFactoryProvider::PresentationFactoryProvider ()
     : PresentationFactoryProviderInterfaceBase(maMutex)
-{
-    (void)rxContext;
-}
-
-PresentationFactoryProvider::~PresentationFactoryProvider()
 {
 }
 
@@ -204,7 +184,6 @@ void PresentationFactoryProvider::disposing()
 
 void SAL_CALL PresentationFactoryProvider::initialize(
     const Sequence<Any>& aArguments)
-    throw (Exception, RuntimeException, std::exception)
 {
     if (aArguments.getLength() > 0)
     {
@@ -216,12 +195,12 @@ void SAL_CALL PresentationFactoryProvider::initialize(
             Reference<XConfigurationController> xCC (xCM->getConfigurationController());
             if (xCC.is())
                 xCC->addResourceFactory(
-                    PresentationFactory::msPresentationViewURL,
+                    gsPresentationViewURL,
                     new PresentationFactory(xController));
         }
         catch (RuntimeException&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("sd");
         }
     }
 }
@@ -231,11 +210,11 @@ void SAL_CALL PresentationFactoryProvider::initialize(
 } } // end of namespace sd::framework
 
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
-com_sun_star_comp_Draw_framework_PresentationFactoryProvider_get_implementation(css::uno::XComponentContext* context,
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
+com_sun_star_comp_Draw_framework_PresentationFactoryProvider_get_implementation(css::uno::XComponentContext*,
                                                                     css::uno::Sequence<css::uno::Any> const &)
 {
-    return cppu::acquire(new sd::framework::PresentationFactoryProvider(context));
+    return cppu::acquire(new sd::framework::PresentationFactoryProvider);
 }
 
 

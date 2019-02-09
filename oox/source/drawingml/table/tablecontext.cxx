@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <osl/diagnose.h>
-#include "oox/helper/attributelist.hxx"
-#include "drawingml/guidcontext.hxx"
-#include "drawingml/table/tablecontext.hxx"
-#include "drawingml/table/tableproperties.hxx"
-#include "drawingml/table/tablestylecontext.hxx"
-#include "drawingml/table/tablerowcontext.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <drawingml/guidcontext.hxx>
+#include <drawingml/table/tablecontext.hxx>
+#include <drawingml/table/tableproperties.hxx>
+#include <drawingml/table/tablestylecontext.hxx>
+#include <drawingml/table/tablerowcontext.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
 
 namespace oox { namespace drawingml { namespace table {
 
-TableContext::TableContext( ContextHandler2Helper& rParent, ShapePtr pShapePtr )
+TableContext::TableContext( ContextHandler2Helper const & rParent, const ShapePtr& pShapePtr )
 : ShapeContext( rParent, ShapePtr(), pShapePtr )
 , mrTableProperties( *pShapePtr->getTableProperties().get() )
 {
@@ -48,13 +49,12 @@ TableContext::onCreateContext( ::sal_Int32 aElementToken, const AttributeList& r
     {
     case A_TOKEN( tblPr ):              // CT_TableProperties
         {
-            mrTableProperties.isRtl() = rAttribs.getBool( XML_rtl, false );
-            mrTableProperties.isFirstRow() = rAttribs.getBool( XML_firstRow, false );
-            mrTableProperties.isFirstCol() = rAttribs.getBool( XML_firstCol, false );
-            mrTableProperties.isLastRow() = rAttribs.getBool( XML_lastRow, false );
-            mrTableProperties.isLastCol() = rAttribs.getBool( XML_lastCol, false );
-            mrTableProperties.isBandRow() = rAttribs.getBool( XML_bandRow, false );
-            mrTableProperties.isBandCol() = rAttribs.getBool( XML_bandCol, false );
+            mrTableProperties.setFirstRow( rAttribs.getBool( XML_firstRow, false ) );
+            mrTableProperties.setFirstCol( rAttribs.getBool( XML_firstCol, false ) );
+            mrTableProperties.setLastRow( rAttribs.getBool( XML_lastRow, false ) );
+            mrTableProperties.setLastCol( rAttribs.getBool( XML_lastCol, false ) );
+            mrTableProperties.setBandRow( rAttribs.getBool( XML_bandRow, false ) );
+            mrTableProperties.setBandCol( rAttribs.getBool( XML_bandCol, false ) );
         }
         break;
     case A_TOKEN( tableStyle ):         // CT_TableStyle
@@ -77,7 +77,7 @@ TableContext::onCreateContext( ::sal_Int32 aElementToken, const AttributeList& r
     case A_TOKEN( tr ):                 // CT_TableRow
         {
             std::vector< TableRow >& rvTableRows( mrTableProperties.getTableRows() );
-            rvTableRows.resize( rvTableRows.size() + 1 );
+            rvTableRows.emplace_back();
             return new TableRowContext( *this, rAttribs, rvTableRows.back() );
         }
     }

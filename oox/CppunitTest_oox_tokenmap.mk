@@ -16,10 +16,7 @@ $(eval $(call gb_CppunitTest_add_exception_objects,oox_tokenmap,\
 
 $(eval $(call gb_CppunitTest_use_custom_headers,oox_tokenmap,oox/generated))
 
-$(eval $(call gb_CppunitTest_use_api,oox_tokenmap,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,oox_tokenmap))
 
 $(eval $(call gb_CppunitTest_use_library_objects,oox_tokenmap,oox))
 
@@ -38,6 +35,7 @@ endif
 endif
 
 $(eval $(call gb_CppunitTest_use_libraries,oox_tokenmap,\
+    avmedia \
     basegfx \
     comphelper \
     cppu \
@@ -60,7 +58,6 @@ $(eval $(call gb_CppunitTest_use_libraries,oox_tokenmap,\
     vcl \
     xo \
     xmlscript \
-    $(gb_UWINAPI) \
 ))
 
 # vim: set noet sw=4 ts=4:

@@ -17,14 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/astscope.hxx>
-#include <idlc/astbasetype.hxx>
-#include <idlc/astinterface.hxx>
-#include <idlc/errorhandler.hxx>
+#include <astscope.hxx>
+#include <astbasetype.hxx>
+#include <astinterface.hxx>
+#include <errorhandler.hxx>
 #include <osl/diagnose.h>
 
 
-bool isGlobal(const OString& scopedName)
+static bool isGlobal(const OString& scopedName)
 {
     return scopedName.isEmpty() || scopedName.startsWith(":");
 }
@@ -48,7 +48,7 @@ AstDeclaration* AstScope::addDeclaration(AstDeclaration* pDecl)
     {
         if ( pDecl->hasAncestor(pDeclaration) )
         {
-            ErrorHandler::error2(EIDL_REDEF_SCOPE, pDecl, pDeclaration);
+            ErrorHandler::error2(ErrorCode::RedefScope, pDecl, pDeclaration);
             return nullptr;
         }
         if ( (pDecl->getNodeType() == pDeclaration->getNodeType()) &&
@@ -75,7 +75,7 @@ AstDeclaration* AstScope::addDeclaration(AstDeclaration* pDecl)
             return pDecl;
         }
 
-        ErrorHandler::error2(EIDL_REDEF_SCOPE, scopeAsDecl(this), pDecl);
+        ErrorHandler::error2(ErrorCode::RedefScope, scopeAsDecl(this), pDecl);
         return nullptr;
     }
 
@@ -83,7 +83,7 @@ AstDeclaration* AstScope::addDeclaration(AstDeclaration* pDecl)
     return pDecl;
 }
 
-sal_uInt16 AstScope::getNodeCount(NodeType nodeType)
+sal_uInt16 AstScope::getNodeCount(NodeType nodeType) const
 {
     DeclList::const_iterator iter = getIteratorBegin();
     DeclList::const_iterator end = getIteratorEnd();
@@ -150,11 +150,8 @@ AstDeclaration* AstScope::lookupByName(const OString& scopedName)
 
              // Special case for scope which is an interface. We
              // have to look in the inherited interfaces as well.
-            if ( !pDecl )
-            {
-                if (m_nodeType == NT_interface)
-                    pDecl = lookupInInherited(scopedName);
-            }
+            if ( !pDecl && m_nodeType == NT_interface )
+                pDecl = lookupInInherited(scopedName);
        }
     }
 
@@ -196,15 +193,10 @@ AstDeclaration* AstScope::lookupByName(const OString& scopedName)
 
 AstDeclaration* AstScope::lookupByNameLocal(const OString& name) const
 {
-    DeclList::const_iterator iter(m_declarations.begin());
-    DeclList::const_iterator end(m_declarations.end());
-
-    while ( iter != end )
+    for (auto const& declaration : m_declarations)
     {
-        AstDeclaration* pDecl = *iter;
-        if ( pDecl->getLocalName() == name )
-            return pDecl;
-        ++iter;
+        if ( declaration->getLocalName() == name )
+            return declaration;
     }
     return nullptr;
 }
@@ -223,20 +215,15 @@ AstDeclaration* AstScope::lookupInInherited(const OString& scopedName) const
     }
 
     // OK, loop through inherited interfaces. Stop when you find it
-    AstInterface::InheritedInterfaces::const_iterator iter(
-        pInterface->getAllInheritedInterfaces().begin());
-    AstInterface::InheritedInterfaces::const_iterator end(
-        pInterface->getAllInheritedInterfaces().end());
-    while ( iter != end )
+    for (auto const& elem : pInterface->getAllInheritedInterfaces())
     {
-        AstInterface const * resolved = iter->getResolved();
+        AstInterface const * resolved = elem.getResolved();
         AstDeclaration* pDecl = resolved->lookupByNameLocal(scopedName);
         if ( pDecl )
             return pDecl;
         pDecl = resolved->lookupInInherited(scopedName);
         if ( pDecl )
             return pDecl;
-        ++iter;
     }
     // Not found
     return nullptr;
@@ -319,7 +306,7 @@ AstDeclaration* AstScope::lookupPrimitiveType(ExprType type)
     return nullptr;
 }
 
-AstDeclaration* AstScope::lookupForAdd(AstDeclaration* pDecl)
+AstDeclaration* AstScope::lookupForAdd(AstDeclaration const * pDecl) const
 {
     if ( !pDecl )
         return nullptr;

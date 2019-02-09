@@ -83,16 +83,30 @@ public class ExternalFile implements IFile{
 
     @Override
     public List<IFile> listFiles(FileFilter filter) {
-        // TODO: no filtering yet
+        File file;
+        try{
+            List<IFile> children = new ArrayList<IFile>();
+            for (DocumentFile child : docFile.listFiles()) {
+                file = new File(new URI(child.getUri().toString()));
+                if(filter.accept(file))
+                    children.add(new ExternalFile(provider, child, context));
+            }
+            return children;
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        /* if something goes wrong */
         return listFiles();
+
     }
 
     @Override
-    public IFile getParent() {
+    public IFile getParent(Context context) {
         // this is the root node
         if(docFile.getParentFile() == null) return null;
 
-        return new ExternalFile(provider, docFile.getParentFile(), context);
+        return new ExternalFile(provider, docFile.getParentFile(), this.context);
     }
 
     @Override

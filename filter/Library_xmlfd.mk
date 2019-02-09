@@ -30,9 +30,9 @@ $(eval $(call gb_Library_use_libraries,xmlfd,\
 	cppuhelper \
 	cppu \
 	sal \
+	svl \
 	utl \
 	tl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,xmlfd,\

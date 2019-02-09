@@ -17,15 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sharedstringsbuffer.hxx"
-
-#include "biffinputstream.hxx"
+#include <sharedstringsbuffer.hxx>
 
 namespace oox {
 namespace xls {
-
-using namespace ::com::sun::star::text;
-using namespace ::com::sun::star::uno;
 
 SharedStringsBuffer::SharedStringsBuffer( const WorkbookHelper& rHelper ) :
      WorkbookHelper( rHelper )

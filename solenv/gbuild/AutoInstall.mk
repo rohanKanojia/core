@@ -15,6 +15,7 @@ $(dir $(call gb_AutoInstall_get_target,%)).dir :
 $(call gb_AutoInstall_get_target,%) : $(GBUILDDIR)/AutoInstall.mk \
 		$(SRCDIR)/Repository.mk $(SRCDIR)/RepositoryExternal.mk \
 		$(BUILDDIR)/config_host.mk \
+		$(GBUILDDIR)/gen-autoinstall.py \
 		$(call gb_ExternalExecutable_get_dependencies,python)
 	$(call gb_Output_announce,$*,$(true),AIN,3)
 	SDKLIBFILE=$(call var2file,$(shell $(gb_MKTEMP)),100,\
@@ -36,6 +37,7 @@ $(call gb_AutoInstall_get_target,%) : $(GBUILDDIR)/AutoInstall.mk \
 			$(GBUILDDIR)/gen-autoinstall.py \
 			'$*' '$(SCP2COMPONENTCONDITION)' \
 			'$(SCP2LIBTEMPLATE)' '$(SCP2EXETEMPLATE)' '$(SCP2JARTEMPLATE)' \
+			'$(SCP2PKGTEMPLATE)' \
 			$${SDKLIBFILE} $${LIBFILE} $${EXEFILE} $${JARFILE} $${PKGFILE} \
 			> $@ \
 	&& rm -f $${SDKLIBFILE} $${LIBFILE} $${EXEFILE} $${JARFILE} $${PKGFILE}
@@ -53,7 +55,7 @@ $(call gb_Helper_make_userfriendly_targets,all,AutoInstall)
 
 endef
 
-# gb_AutoInstall_add_module module lib_template exe_template jar_template componentcondition
+# gb_AutoInstall_add_module module lib_template exe_template jar_template package_template componentcondition
 define gb_AutoInstall_add_module
 $(call gb_AutoInstall_get_target,all) : $(call gb_AutoInstall_get_target,$(1))
 $(call gb_AutoInstall_get_clean_target,all) : $(call gb_AutoInstall_get_clean_target,$(1))
@@ -64,7 +66,8 @@ $(call gb_AutoInstall_get_target,$(1)) :| $(dir $(call gb_AutoInstall_get_target
 $(call gb_AutoInstall_get_target,$(1)) : SCP2LIBTEMPLATE := $(2)
 $(call gb_AutoInstall_get_target,$(1)) : SCP2EXETEMPLATE := $(3)
 $(call gb_AutoInstall_get_target,$(1)) : SCP2JARTEMPLATE := $(4)
-$(call gb_AutoInstall_get_target,$(1)) : SCP2COMPONENTCONDITION := $(5)
+$(call gb_AutoInstall_get_target,$(1)) : SCP2PKGTEMPLATE := $(5)
+$(call gb_AutoInstall_get_target,$(1)) : SCP2COMPONENTCONDITION := $(6)
 
 endef
 

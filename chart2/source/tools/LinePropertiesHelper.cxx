@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LinePropertiesHelper.hxx"
-#include "macros.hxx"
+#include <LinePropertiesHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/drawing/LineDash.hpp>
 #include <com/sun/star/drawing/LineJoint.hpp>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 
@@ -32,59 +33,52 @@ namespace chart
 {
 
 void LinePropertiesHelper::AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
     // Line Properties see service drawing::LineProperties
-    rOutProperties.push_back(
-        Property( "LineStyle",
+    rOutProperties.emplace_back( "LineStyle",
                   PROP_LINE_STYLE,
                   cppu::UnoType<drawing::LineStyle>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-     rOutProperties.push_back(
-         Property( "LineDash",
+    rOutProperties.emplace_back( "LineDash",
                    PROP_LINE_DASH,
                    cppu::UnoType<drawing::LineDash>::get(),
                    beans::PropertyAttribute::BOUND
-                   | beans::PropertyAttribute::MAYBEVOID ));
+                   | beans::PropertyAttribute::MAYBEVOID );
 
 //not in service description
-    rOutProperties.push_back(
-        Property( "LineDashName",
+    rOutProperties.emplace_back( "LineDashName",
                   PROP_LINE_DASH_NAME,
                   cppu::UnoType<OUString>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEDEFAULT
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 
-    rOutProperties.push_back(
-        Property( "LineColor",
+    rOutProperties.emplace_back( "LineColor",
                   PROP_LINE_COLOR,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "LineTransparence",
+    rOutProperties.emplace_back( "LineTransparence",
                   PROP_LINE_TRANSPARENCE,
                   cppu::UnoType<sal_Int16>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "LineWidth",
+    rOutProperties.emplace_back( "LineWidth",
                   PROP_LINE_WIDTH,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 
-    rOutProperties.push_back(
-        Property( "LineJoint",
+    rOutProperties.emplace_back( "LineJoint",
                   PROP_LINE_JOINT,
                   cppu::UnoType<drawing::LineJoint>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 void LinePropertiesHelper::AddDefaultsToMap(
@@ -111,16 +105,16 @@ bool LinePropertiesHelper::IsLineVisible( const css::uno::Reference<
             {
                 sal_Int16 nLineTransparence=0;
                 xLineProperties->getPropertyValue( "LineTransparence" ) >>= nLineTransparence;
-                if(100!=nLineTransparence)
+                if(nLineTransparence!=100)
                 {
                     bRet = true;
                 }
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return bRet;
 }
@@ -135,17 +129,17 @@ void LinePropertiesHelper::SetLineVisible( const css::uno::Reference<
             drawing::LineStyle aLineStyle(drawing::LineStyle_SOLID);
             xLineProperties->getPropertyValue( "LineStyle" ) >>= aLineStyle;
             if( aLineStyle == drawing::LineStyle_NONE )
-                xLineProperties->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_SOLID ) );
+                xLineProperties->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_SOLID ) );
 
             sal_Int16 nLineTransparence=0;
             xLineProperties->getPropertyValue( "LineTransparence" ) >>= nLineTransparence;
-            if(100==nLineTransparence)
-                xLineProperties->setPropertyValue( "LineTransparence", uno::makeAny( sal_Int16(0) ) );
+            if(nLineTransparence==100)
+                xLineProperties->setPropertyValue( "LineTransparence", uno::Any( sal_Int16(0) ) );
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -159,12 +153,12 @@ void LinePropertiesHelper::SetLineInvisible( const css::uno::Reference<
             drawing::LineStyle aLineStyle(drawing::LineStyle_SOLID);
             xLineProperties->getPropertyValue( "LineStyle" ) >>= aLineStyle;
             if( aLineStyle != drawing::LineStyle_NONE )
-                xLineProperties->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_NONE ) );
+                xLineProperties->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_NONE ) );
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -175,12 +169,12 @@ void LinePropertiesHelper::SetLineColor( const css::uno::Reference<
     {
         if( xLineProperties.is() )
         {
-            xLineProperties->setPropertyValue( "LineColor", uno::makeAny( nColor ) );
+            xLineProperties->setPropertyValue( "LineColor", uno::Any( nColor ) );
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 

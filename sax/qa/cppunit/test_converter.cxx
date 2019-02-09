@@ -32,9 +32,8 @@
 #include <com/sun/star/util/Duration.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 
-#include "sax/tools/converter.hxx"
-#include <comphelper/sequence.hxx>
-#include "sal/log.hxx"
+#include <sax/tools/converter.hxx>
+#include <sal/log.hxx>
 
 
 using namespace ::com::sun::star;
@@ -58,7 +57,6 @@ public:
     void testPercent();
     void testColor();
     void testNumber();
-    void testBase64();
 
     CPPUNIT_TEST_SUITE(ConverterTest);
     CPPUNIT_TEST(testDuration);
@@ -70,7 +68,6 @@ public:
     CPPUNIT_TEST(testPercent);
     CPPUNIT_TEST(testColor);
     CPPUNIT_TEST(testNumber);
-    CPPUNIT_TEST(testBase64);
     CPPUNIT_TEST_SUITE_END();
 
 private:
@@ -79,9 +76,9 @@ private:
 void doTest(util::Duration const & rid, char const*const pis,
         char const*const i_pos = nullptr)
 {
-    char const*const pos((i_pos) ? i_pos : pis);
+    char const*const pos(i_pos ? i_pos : pis);
     util::Duration od;
-    OUString is(::rtl::OUString::createFromAscii(pis));
+    OUString is(OUString::createFromAscii(pis));
     SAL_INFO("sax.cppunit","about to convert '" << is << "'");
     bool bSuccess = Converter::convertDuration(od, is);
     SAL_INFO("sax.cppunit","" << (od.Negative ? "-" : "+")  << " " << od.Years << "Y " << od.Months << "M " << od.Days << "D " << od.Hours << "H " << od.Minutes << "M " << od.Seconds << "S " << od.NanoSeconds << "n");
@@ -155,12 +152,12 @@ bool eqDateTime(const util::DateTime& a, const util::DateTime& b) {
 void doTest(util::DateTime const & rdt, char const*const pis,
         char const*const i_pos = nullptr)
 {
-    char const*const pos((i_pos) ? i_pos : pis);
+    char const*const pos(i_pos ? i_pos : pis);
     OUString is(OUString::createFromAscii(pis));
     util::DateTime odt;
     SAL_INFO("sax.cppunit","about to convert '" << is << "'");
-    bool bSuccess( Converter::parseDateTime(odt, nullptr, is) );
-    SAL_INFO("sax.cppunit","Y:" << odt.Year << " M:" << odt.Month << " D:" << odt.Day << "  H:" << odt.Hours << " M:" << odt.Minutes << " S:" << odt.Seconds << " nS:" << odt.NanoSeconds << " UTC: " << (bool)odt.IsUTC);
+    bool bSuccess( Converter::parseDateTime(odt, is) );
+    SAL_INFO("sax.cppunit","Y:" << odt.Year << " M:" << odt.Month << " D:" << odt.Day << "  H:" << odt.Hours << " M:" << odt.Minutes << " S:" << odt.Seconds << " nS:" << odt.NanoSeconds << " UTC: " << static_cast<bool>(odt.IsUTC));
     CPPUNIT_ASSERT(bSuccess);
     CPPUNIT_ASSERT(eqDateTime(rdt, odt));
     OUStringBuffer buf;
@@ -173,8 +170,7 @@ void doTest(util::DateTime const & rdt, char const*const pis,
 void doTestDateTimeF(char const*const pis)
 {
     util::DateTime odt;
-    bool bSuccess = Converter::parseDateTime(odt, nullptr,
-            OUString::createFromAscii(pis));
+    bool bSuccess = Converter::parseDateTime(odt, OUString::createFromAscii(pis));
     SAL_INFO("sax.cppunit","Y:" << odt.Year << " M:" << odt.Month << " D:" << odt.Day << "  H:" << odt.Hours << "H M:" << odt.Minutes << " S:" << odt.Seconds << " nS:" << odt.NanoSeconds);
     CPPUNIT_ASSERT(!bSuccess);
 }
@@ -250,16 +246,16 @@ void ConverterTest::testDateTime()
 void doTestTime(util::DateTime const & rdt, char const*const pis,
         char const*const i_pos = nullptr)
 {
-    char const*const pos((i_pos) ? i_pos : pis);
+    char const*const pos(i_pos ? i_pos : pis);
     OUString is(OUString::createFromAscii(pis));
     util::DateTime odt;
     SAL_INFO("sax.cppunit","about to convert '" << is << "'");
-    bool bSuccess( Converter::parseTimeOrDateTime(odt, nullptr, is) );
-    SAL_INFO("sax.cppunit","Y:" << odt.Year << " M:" << odt.Month << " D:" << odt.Day << "  H:" << odt.Hours << " M:" << odt.Minutes << " S:" << odt.Seconds << " nS:" << odt.NanoSeconds << " UTC: " << (bool)odt.IsUTC);
+    bool bSuccess( Converter::parseTimeOrDateTime(odt, is) );
+    SAL_INFO("sax.cppunit","Y:" << odt.Year << " M:" << odt.Month << " D:" << odt.Day << "  H:" << odt.Hours << " M:" << odt.Minutes << " S:" << odt.Seconds << " nS:" << odt.NanoSeconds << " UTC: " << static_cast<bool>(odt.IsUTC));
     CPPUNIT_ASSERT(bSuccess);
     CPPUNIT_ASSERT(eqDateTime(rdt, odt));
     OUStringBuffer buf;
-    Converter::convertTimeOrDateTime(buf, odt, nullptr);
+    Converter::convertTimeOrDateTime(buf, odt);
     SAL_INFO("sax.cppunit","" << buf.toString());
     CPPUNIT_ASSERT_EQUAL(OUString::createFromAscii(pos),
                          buf.makeStringAndClear());
@@ -268,8 +264,7 @@ void doTestTime(util::DateTime const & rdt, char const*const pis,
 void doTestTimeF(char const*const pis)
 {
     util::DateTime odt;
-    bool bSuccess = Converter::parseTimeOrDateTime(odt, nullptr,
-            OUString::createFromAscii(pis));
+    bool bSuccess = Converter::parseTimeOrDateTime(odt, OUString::createFromAscii(pis));
     SAL_INFO("sax.cppunit","Y:" << odt.Year << " M:" << odt.Month << " D:" << odt.Day << "  H:" << odt.Hours << "H M:" << odt.Minutes << " S:" << odt.Seconds << " nS:" << odt.NanoSeconds);
     CPPUNIT_ASSERT_MESSAGE(pis, !bSuccess);
 }
@@ -507,6 +502,7 @@ void ConverterTest::testMeasure()
     doTestMeasureToString("979.928cm", 555550, MeasureUnit::TWIP, MeasureUnit::CM);
     doTestMeasureToString("111.1pt", 2222, MeasureUnit::TWIP, MeasureUnit::POINT);
     doTestMeasureToString("385.7986in", 555550, MeasureUnit::TWIP, MeasureUnit::INCH);
+    doTestMeasureToString("-2147483.648cm", std::numeric_limits<sal_Int32>::min(), MeasureUnit::MM_100TH, MeasureUnit::CM);
 }
 
 void doTestStringToBool(bool bBool, char const*const pis)
@@ -610,15 +606,6 @@ void doTestStringToNumber(sal_Int32 nValue, char const*const pis, sal_Int32 nMin
     CPPUNIT_ASSERT_EQUAL(nValue, nTemp);
 }
 
-void doTestNumberToString(char const*const pis, sal_Int32 nValue)
-{
-    OUString const is(OUString::createFromAscii(pis));
-    OUStringBuffer buf;
-    Converter::convertNumber(buf, nValue);
-    SAL_INFO("sax.cppunit","" << buf.toString());
-    CPPUNIT_ASSERT_EQUAL(is, buf.makeStringAndClear());
-}
-
 void ConverterTest::testNumber()
 {
     doTestStringToNumber(30, "30", 1, 40);
@@ -626,51 +613,6 @@ void ConverterTest::testNumber()
     doTestStringToNumber(-30, "7", -100, -30);
     doTestStringToNumber(0, "-0", 0, 1);
     doTestStringToNumber(0, "666", -0, 0);
-    doTestNumberToString("333", 333);
-    doTestNumberToString("-1", -1);
-    doTestNumberToString("0", 0000);
-    doTestNumberToString("-1", -0001);
-    doTestNumberToString("0", -0);
-}
-
-void doTestEncodeBase64(char const*const pis, const uno::Sequence<sal_Int8>& aPass)
-{
-    OUString const is(OUString::createFromAscii(pis));
-    OUStringBuffer buf;
-    Converter::encodeBase64(buf, aPass);
-    SAL_INFO("sax.cppunit","" << buf.toString());
-    CPPUNIT_ASSERT_EQUAL(is, buf.makeStringAndClear());
-}
-
-void doTestDecodeBase64(const uno::Sequence<sal_Int8>& aPass, char const*const pis)
-{
-    OUString const is(OUString::createFromAscii(pis));
-    uno::Sequence< sal_Int8 > tempSequence;
-    Converter::decodeBase64(tempSequence, is);
-    SAL_INFO("sax.cppunit","" << is);
-    bool b = (tempSequence==aPass);
-    CPPUNIT_ASSERT(b);
-}
-
-void ConverterTest::testBase64()
-{
-    std::vector< sal_Int8 > tempSeq { 0, 0, 0, 0, 0, 1, 2, 3 };
-    uno::Sequence< sal_Int8 > tempSequence = comphelper::containerToSequence(tempSeq);
-    doTestEncodeBase64("AAAAAAABAgM=", tempSequence);
-    doTestDecodeBase64(tempSequence, "AAAAAAABAgM=");
-    tempSeq[0] = sal_Int8(5);
-    tempSeq[1] = sal_Int8(2);
-    tempSeq[2] = sal_Int8(3);
-    tempSequence = comphelper::containerToSequence(tempSeq);
-    doTestEncodeBase64("BQIDAAABAgM=", tempSequence);
-    doTestDecodeBase64(tempSequence, "BQIDAAABAgM=");
-    tempSeq[0] = sal_Int8(sal_uInt8(200));
-    tempSeq[1] = sal_Int8(31);
-    tempSeq[2] = sal_Int8(77);
-    tempSeq[3] = sal_Int8(111);
-    tempSequence = comphelper::containerToSequence(tempSeq);
-    doTestEncodeBase64("yB9NbwABAgM=", tempSequence);
-    doTestDecodeBase64(tempSequence, "yB9NbwABAgM=");
 }
 
 CPPUNIT_TEST_SUITE_REGISTRATION(ConverterTest);

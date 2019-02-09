@@ -19,8 +19,12 @@
 
 
 #include <string.h>
-#include <dxfreprd.hxx>
-#include "osl/nlsupport.h"
+#include "dxfreprd.hxx"
+#include <osl/nlsupport.h>
+#include <officecfg/Setup.hxx>
+#include <officecfg/Office/Linguistic.hxx>
+#include <unotools/wincodepage.hxx>
+#include <unotools/configmgr.hxx>
 
 //------------------DXFBoundingBox--------------------------------------------
 
@@ -54,10 +58,6 @@ DXFPalette::DXFPalette()
 {
     short i,j,nHue,nNSat,nVal,nC[3],nmax,nmed,nmin;
     sal_uInt8 nV;
-
-    pRed  =new sal_uInt8[256];
-    pGreen=new sal_uInt8[256];
-    pBlue =new sal_uInt8[256];
 
     // colors 0 - 9 (normal colors)
     SetColor(0, 0x00, 0x00, 0x00); // actually never being used
@@ -95,24 +95,21 @@ DXFPalette::DXFPalette()
                     for (j=0; j<3; j++) nC[j]=(nC[j]>>1)+128;
                 }
                 for (j=0; j<3; j++) nC[j]=nC[j]*nVal/5;
-                SetColor((sal_uInt8)(i++),(sal_uInt8)nC[0],(sal_uInt8)nC[1],(sal_uInt8)nC[2]);
+                SetColor(static_cast<sal_uInt8>(i++),static_cast<sal_uInt8>(nC[0]),static_cast<sal_uInt8>(nC[1]),static_cast<sal_uInt8>(nC[2]));
             }
         }
     }
 
     // Farben 250 - 255 (shades of gray)
     for (i=0; i<6; i++) {
-        nV=(sal_uInt8)(i*38+65);
-        SetColor((sal_uInt8)(250+i),nV,nV,nV);
+        nV=static_cast<sal_uInt8>(i*38+65);
+        SetColor(static_cast<sal_uInt8>(250+i),nV,nV,nV);
     }
 }
 
 
 DXFPalette::~DXFPalette()
 {
-    delete[] pBlue;
-    delete[] pGreen;
-    delete[] pRed;
 }
 
 
@@ -128,19 +125,39 @@ void DXFPalette::SetColor(sal_uInt8 nIndex, sal_uInt8 nRed, sal_uInt8 nGreen, sa
 
 
 DXFRepresentation::DXFRepresentation()
-    : bUseUTF8(false)
+    : mEnc(RTL_TEXTENCODING_DONTKNOW)
+    , mbInCalc(false)
 {
-    setTextEncoding(osl_getTextEncodingFromLocale(nullptr)); // Use default encoding if none specified
     setGlobalLineTypeScale(1.0);
 }
-
 
 DXFRepresentation::~DXFRepresentation()
 {
 }
 
+namespace {
 
-bool DXFRepresentation::Read( SvStream & rIStream, sal_uInt16 /*nMinPercent*/, sal_uInt16 /*nMaxPercent*/)
+OUString getLODefaultLanguage()
+{
+    if (utl::ConfigManager::IsFuzzing())
+        return OUString("en-US");
+
+    OUString result(officecfg::Office::Linguistic::General::DefaultLocale::get());
+    if (result.isEmpty())
+        result = officecfg::Setup::L10N::ooSetupSystemLocale::get();
+    return result;
+}
+
+}
+
+rtl_TextEncoding DXFRepresentation::getTextEncoding() const
+{
+    return (isTextEncodingSet()) ?
+        mEnc :
+        osl_getTextEncodingFromLocale(nullptr); // Use default encoding if none specified
+}
+
+bool DXFRepresentation::Read( SvStream & rIStream )
 {
     bool bRes;
 
@@ -196,18 +213,48 @@ void DXFRepresentation::ReadHeader(DXFGroupReader & rDGR)
             {
                 if (!rDGR.Read(1))
                     continue;
-                if (rDGR.GetS() >= "AC1021")
-                    bUseUTF8 = true;
+                // Versions of AutoCAD up to Release 12 (inclusive, AC1009)
+                // were DOS software and used OEM encoding for storing strings.
+                // Release 13 (AC1012) had both DOS and Windows variants.
+                // Its Windows variant, and later releases used ANSI encodings for
+                // strings (up to version 2006, which was the last one to do so).
+                // Later versions (2007+, AC1021+) use UTF-8 for that.
+                // Other (non-Autodesk) implementations may have used different
+                // encodings for storing to corresponding formats, but there's
+                // no way to know that.
+                // See http://autodesk.blogs.com/between_the_lines/autocad-release-history.html
+                if ((rDGR.GetS() <= "AC1009") || (rDGR.GetS() == "AC2.22") || (rDGR.GetS() == "AC2.21") || (rDGR.GetS() == "AC2.10") ||
+                    (rDGR.GetS() == "AC1.50") || (rDGR.GetS() == "AC1.40") || (rDGR.GetS() == "AC1.2")  || (rDGR.GetS() == "MC0.0"))
+                {
+                    // Set OEM encoding for old DOS formats
+                    // only if the encoding is not set yet
+                    // e.g. by previous $DWGCODEPAGE
+                    if (!isTextEncodingSet())
+                        setTextEncoding(utl_getWinTextEncodingFromLangStr(getLODefaultLanguage().toUtf8().getStr(), true));
+                }
+                else if (rDGR.GetS() >= "AC1021")
+                    setTextEncoding(RTL_TEXTENCODING_UTF8);
+                else
+                {
+                    // Set ANSI encoding for old Windows formats
+                    // only if the encoding is not set yet
+                    // e.g. by previous $DWGCODEPAGE
+                    if (!isTextEncodingSet())
+                        setTextEncoding(utl_getWinTextEncodingFromLangStr(getLODefaultLanguage().toUtf8().getStr()));
+                }
             }
             else if (rDGR.GetS() == "$DWGCODEPAGE")
             {
                 if (!rDGR.Read(3))
                     continue;
 
+                // If we already use UTF8, then don't update encoding anymore
+                if (mEnc == RTL_TEXTENCODING_UTF8)
+                    continue;
                 // FIXME: we really need a whole table of
                 // $DWGCODEPAGE to encodings mappings
-                if ( (rDGR.GetS().equalsIgnoreAsciiCase("ANSI_932")) ||
-                     (rDGR.GetS().equalsIgnoreAsciiCase("DOS932")) )
+                else if ( (rDGR.GetS().equalsIgnoreAsciiCase("ANSI_932")) ||
+                          (rDGR.GetS().equalsIgnoreAsciiCase("DOS932")) )
                 {
                     setTextEncoding(RTL_TEXTENCODING_MS_932);
                 }
@@ -243,6 +290,10 @@ void DXFRepresentation::ReadHeader(DXFGroupReader & rDGR)
 void DXFRepresentation::CalcBoundingBox(const DXFEntities & rEntities,
                                         DXFBoundingBox & rBox)
 {
+    if (mbInCalc)
+        return;
+    mbInCalc = true;
+
     DXFBasicEntity * pBE=rEntities.pFirst;
     while (pBE!=nullptr) {
         switch (pBE->eType) {
@@ -387,14 +438,15 @@ void DXFRepresentation::CalcBoundingBox(const DXFEntities & rEntities,
         }
         pBE=pBE->pSucc;
     }
+    mbInCalc = false;
 }
 
 namespace {
-    inline bool lcl_isDec(sal_Unicode ch)
+    bool lcl_isDec(sal_Unicode ch)
     {
         return ch >= L'0' && ch <= L'9';
     }
-    inline bool lcl_isHex(sal_Unicode ch)
+    bool lcl_isHex(sal_Unicode ch)
     {
         return lcl_isDec(ch) || (ch >= L'A' && ch <= L'F') || (ch >= L'a' && ch <= L'f');
     }
@@ -402,12 +454,15 @@ namespace {
 
 OUString DXFRepresentation::ToOUString(const OString& s) const
 {
-    OUString result = OStringToOUString(s, getTextEncoding());
+    OUString result = OStringToOUString(s, getTextEncoding(),
+                                           RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_ERROR
+                                         | RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_ERROR
+                                         | RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR);
     result = result.replaceAll("%%o", "")                     // Overscore - simply remove
                    .replaceAll("%%u", "")                     // Underscore - simply remove
-                   .replaceAll("%%d", OUString(sal_Unicode(L'\u00B0'))) // Degrees symbol (°)
-                   .replaceAll("%%p", OUString(sal_Unicode(L'\u00B1'))) // Tolerance symbol (±)
-                   .replaceAll("%%c", OUString(sal_Unicode(L'\u2205'))) // Diameter symbol
+                   .replaceAll("%%d", OUStringLiteral1(0x00B0)) // Degrees symbol (°)
+                   .replaceAll("%%p", OUStringLiteral1(0x00B1)) // Tolerance symbol (±)
+                   .replaceAll("%%c", OUStringLiteral1(0x2205)) // Diameter symbol
                    .replaceAll("%%%", "%");                   // Percent symbol
 
     sal_Int32 pos = result.indexOf("%%"); // %%nnn, where nnn - 3-digit decimal ASCII code

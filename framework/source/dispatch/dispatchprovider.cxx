@@ -26,11 +26,11 @@
 
 #include <pattern/window.hxx>
 #include <threadhelp/transactionguard.hxx>
-#include <dispatchcommands.h>
 #include <protocols.h>
 #include <services.h>
 #include <targets.h>
 #include <general.h>
+#include "isstartmoduledispatch.hxx"
 
 #include <com/sun/star/frame/XDesktop.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
@@ -39,11 +39,11 @@
 #include <com/sun/star/document/XTypeDetection.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
 
-#include <osl/diagnose.h>
 #include <rtl/string.h>
 #include <rtl/ustring.hxx>
 #include <vcl/svapp.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 namespace framework{
 
@@ -97,7 +97,7 @@ DispatchProvider::~DispatchProvider()
 */
 css::uno::Reference< css::frame::XDispatch > SAL_CALL DispatchProvider::queryDispatch( const css::util::URL&  aURL             ,
                                                                                        const OUString& sTargetFrameName ,
-                                                                                             sal_Int32        nSearchFlags     ) throw( css::uno::RuntimeException, std::exception )
+                                                                                             sal_Int32        nSearchFlags     )
 {
     css::uno::Reference< css::frame::XDispatch > xDispatcher;
 
@@ -128,7 +128,7 @@ css::uno::Reference< css::frame::XDispatch > SAL_CALL DispatchProvider::queryDis
 
     @threadsafe yes
 */
-css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL DispatchProvider::queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptions ) throw( css::uno::RuntimeException, std::exception )
+css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL DispatchProvider::queryDispatches( const css::uno::Sequence< css::frame::DispatchDescriptor >& lDescriptions )
 {
     // Create return list - which must have same size then the given descriptor
     // It's not allowed to pack it!
@@ -144,11 +144,6 @@ css::uno::Sequence< css::uno::Reference< css::frame::XDispatch > > SAL_CALL Disp
     }
 
     return lDispatcher;
-}
-
-bool lcl_isStartModuleDispatch (const css::util::URL& aURL)
-{
-    return aURL.Complete == CMD_UNO_SHOWSTARTMODULE;
 }
 
 /**
@@ -181,7 +176,7 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryDeskt
     //  It's not the right place to create a new task here - because we are queried for a dispatch object
     //  only, which can handle such request. Such dispatcher should create the required task on demand.
     //  Normally the functionality for "_blank" is provided by findFrame() - but that would create it directly
-    //  here. Thats why we must "intercept" here.
+    //  here. that's why we must "intercept" here.
 
     if (sTargetFrameName==SPECIALTARGET_BLANK)
     {
@@ -197,13 +192,13 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryDeskt
         if (implts_isLoadableContent(aURL))
             xDispatcher = implts_getOrCreateDispatchHelper( E_DEFAULTDISPATCHER, xDesktop );
 
-        if (lcl_isStartModuleDispatch(aURL))
+        if (isStartModuleDispatch(aURL))
             xDispatcher = implts_getOrCreateDispatchHelper( E_STARTMODULEDISPATCHER, xDesktop );
     }
 
     // I.III) "_self", "", "_top"
     //  The desktop can't load any document - but he can handle some special protocols like "uno", "slot" ...
-    //  Why is "top" here handled too? Because the desktop is the topest frame. Normally it's superflous
+    //  Why is "top" here handled too? Because the desktop is the topest frame. Normally it's superfluous
     //  to use this target - but we can handle it in the same manner then "_self".
 
     else if (
@@ -251,30 +246,28 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryFrame
     // 0) Some URLs are dispatched in a generic way (e.g. by the menu) using the default target "".
     //    But they are specified to use her own fix target. Detect such URLs here and use the correct target.
 
-    OUString sTargetName = sTargetFrameName;
-
     // I) handle special cases which not right for using findFrame() first
 
     // I.I) "_blank", "_default"
     //  It's not the right place to create a new task here. Only the desktop can do that.
     //  Normally the functionality for "_blank" is provided by findFrame() - but that would create it directly
-    //  here. Thats why we must "intercept" here.
+    //  here. that's why we must "intercept" here.
 
     if (
-        (sTargetName==SPECIALTARGET_BLANK  ) ||
-        (sTargetName==SPECIALTARGET_DEFAULT)
+        (sTargetFrameName==SPECIALTARGET_BLANK  ) ||
+        (sTargetFrameName==SPECIALTARGET_DEFAULT)
        )
     {
         css::uno::Reference< css::frame::XDispatchProvider > xParent( xFrame->getCreator(), css::uno::UNO_QUERY );
         if (xParent.is())
-            xDispatcher = xParent->queryDispatch(aURL, sTargetName, 0); // it's a special target - ignore search flags
+            xDispatcher = xParent->queryDispatch(aURL, sTargetFrameName, 0); // it's a special target - ignore search flags
     }
 
     // I.II) "_beamer"
     //  Special sub frame of a top frame only. Search or create it. ... OK it's currently a little bit HACKI.
     //  Only the sfx (means the controller) can create it.
 
-    else if (sTargetName==SPECIALTARGET_BEAMER)
+    else if (sTargetFrameName==SPECIALTARGET_BEAMER)
     {
         css::uno::Reference< css::frame::XDispatchProvider > xBeamer( xFrame->findFrame( SPECIALTARGET_BEAMER, css::frame::FrameSearchFlag::CHILDREN | css::frame::FrameSearchFlag::SELF ), css::uno::UNO_QUERY );
         if (xBeamer.is())
@@ -294,7 +287,7 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryFrame
     // I.IV) "_parent"
     //  Our parent frame (if it exist) should handle this URL.
 
-    else if (sTargetName==SPECIALTARGET_PARENT)
+    else if (sTargetFrameName==SPECIALTARGET_PARENT)
     {
         css::uno::Reference< css::frame::XDispatchProvider > xParent( xFrame->getCreator(), css::uno::UNO_QUERY );
         if (xParent.is())
@@ -306,14 +299,14 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryFrame
     //  This request must be forwarded to any parent frame, till we reach a top frame.
     //  If no parent exist, we can handle itself.
 
-    else if (sTargetName==SPECIALTARGET_TOP)
+    else if (sTargetFrameName==SPECIALTARGET_TOP)
     {
         if (xFrame->isTop())
         {
             // If we are this top frame itself (means our owner frame)
             // we should call ourself recursiv with a better target "_self".
             // So we can share the same code! (see reaction for "_self" inside this method too.)
-            xDispatcher = this->queryDispatch(aURL,SPECIALTARGET_SELF,0);
+            xDispatcher = queryDispatch(aURL,SPECIALTARGET_SELF,0);
         }
         else
         {
@@ -327,13 +320,13 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryFrame
 
     // I.VI) "_self", ""
     //  Our owner frame should handle this URL. But we can't do it for all of them.
-    //  So we ask the internal setted controller first. If he disagree we try to find a registered
+    //  So we ask the internal set controller first. If he disagree we try to find a registered
     //  protocol handler. If this failed too - we check for a loadable content and in case of true
-    //  we load it into the frame by returning specilized dispatch object.
+    //  we load it into the frame by returning specialized dispatch object.
 
     else if (
-             (sTargetName==SPECIALTARGET_SELF)  ||
-             (sTargetName.isEmpty())
+             (sTargetFrameName==SPECIALTARGET_SELF)  ||
+             (sTargetFrameName.isEmpty())
             )
     {
         // There exist a hard coded interception for special URLs.
@@ -396,12 +389,12 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryFrame
                   nRightFlags &= ~css::frame::FrameSearchFlag::CREATE;
 
         // try to find any existing target and ask him for his dispatcher
-        css::uno::Reference< css::frame::XFrame > xFoundFrame = xFrame->findFrame(sTargetName, nRightFlags);
+        css::uno::Reference< css::frame::XFrame > xFoundFrame = xFrame->findFrame(sTargetFrameName, nRightFlags);
         if (xFoundFrame.is())
         {
             // Attention: Found target is our own owner frame!
             // Don't ask him for his dispatcher. We know it already - it's our self dispatch helper.
-            // Otherwhise we can start a never ending recursiv call. Why?
+            // Otherwise we can start a never ending recursiv call. Why?
             // Somewere called our owner frame - he called some interceptor objects - and may by this dispatch provider
             // is called. If wa use queryDispatch() on our owner frame again - we start this call stack again ... and again.
             if (xFoundFrame==xFrame)
@@ -423,7 +416,7 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_queryFrame
         {
             css::uno::Reference< css::frame::XDispatchProvider > xParent( xFrame->getCreator(), css::uno::UNO_QUERY );
             if (xParent.is())
-                xDispatcher = xParent->queryDispatch(aURL, sTargetName, css::frame::FrameSearchFlag::CREATE);
+                xDispatcher = xParent->queryDispatch(aURL, sTargetFrameName, css::frame::FrameSearchFlag::CREATE);
         }
     }
 
@@ -498,11 +491,10 @@ css::uno::Reference< css::frame::XDispatch > DispatchProvider::implts_searchProt
     @short      get or create new dispatch helper
     @descr      Sometimes we need some helper implementations to support dispatching of special URLs or commands.
                 But it's not a good idea to hold these services for the whole life time of this provider instance.
-                We should create it on demand ...
-                Thats why we implement this method. It return an already existing helper or create a new one otherwise.
+                We should create it on demand...
+                That's why we implement this method. It return an already existing helper or create a new one otherwise.
 
     @attention  The parameter sTarget and nSearchFlags are defaulted to "" and 0!
-                Please use it only, if you can be sure, that the really given by the outside calli!
                 Mostly it depends from the parameter eHelper is they are required or not.
 
     @param      eHelper

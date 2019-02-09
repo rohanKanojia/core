@@ -18,23 +18,19 @@
  */
 
 #include "StockChartTypeTemplate.hxx"
-#include "macros.hxx"
-#include "DataSeriesHelper.hxx"
+#include <DataSeriesHelper.hxx>
 #include "StockDataInterpreter.hxx"
-#include "CartesianCoordinateSystem.hxx"
-#include "AxisHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "servicenames_charttypes.hxx"
-#include "servicenames_coosystems.hxx"
-#include "ContainerHelper.hxx"
-#include "AxisIndexDefines.hxx"
-#include <com/sun/star/chart2/AxisType.hpp>
-#include <com/sun/star/chart2/data/XDataSource.hpp>
+#include <DiagramHelper.hxx>
+#include <servicenames_charttypes.hxx>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
-#include "PropertyHelper.hxx"
+#include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <PropertyHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <vector>
 #include <algorithm>
@@ -45,7 +41,6 @@ using namespace ::com::sun::star::chart2;
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::beans::Property;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -59,32 +54,28 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "Volume",
+    rOutProperties.emplace_back( "Volume",
                   PROP_STOCKCHARTTYPE_TEMPLATE_VOLUME,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "Open",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "Open",
                   PROP_STOCKCHARTTYPE_TEMPLATE_OPEN,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "LowHigh",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "LowHigh",
                   PROP_STOCKCHARTTYPE_TEMPLATE_LOW_HIGH,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
-    rOutProperties.push_back(
-        Property( "Japanese",
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( "Japanese",
                   PROP_STOCKCHARTTYPE_TEMPLATE_JAPANESE,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 struct StaticStockChartTypeTemplateDefaults_Initializer
@@ -120,10 +111,10 @@ struct StaticStockChartTypeTemplateInfoHelper_Initializer
 private:
     static Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -165,22 +156,21 @@ StockChartTypeTemplate::StockChartTypeTemplate(
 {
     setFastPropertyValue_NoBroadcast(
         PROP_STOCKCHARTTYPE_TEMPLATE_OPEN,
-        uno::makeAny( ( eVariant == OPEN_LOW_HI_CLOSE ||
-                        eVariant == VOL_OPEN_LOW_HI_CLOSE )));
+        uno::Any( ( eVariant == StockVariant::Open ||
+                        eVariant == StockVariant::VolumeOpen )));
     setFastPropertyValue_NoBroadcast(
         PROP_STOCKCHARTTYPE_TEMPLATE_VOLUME,
-        uno::makeAny( ( eVariant == VOL_LOW_HI_CLOSE ||
-                        eVariant == VOL_OPEN_LOW_HI_CLOSE )));
+        uno::Any( ( eVariant == StockVariant::Volume ||
+                        eVariant == StockVariant::VolumeOpen )));
     setFastPropertyValue_NoBroadcast(
         PROP_STOCKCHARTTYPE_TEMPLATE_JAPANESE,
-        uno::makeAny( bJapaneseStyle ));
+        uno::Any( bJapaneseStyle ));
 }
 
 StockChartTypeTemplate::~StockChartTypeTemplate()
 {}
 // ____ OPropertySet ____
 uno::Any StockChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticStockChartTypeTemplateDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -196,7 +186,6 @@ uno::Any StockChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL StockChartTypeTemplate::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticStockChartTypeTemplateInfo::get();
 }
@@ -222,7 +211,6 @@ void SAL_CALL StockChartTypeTemplate::applyStyle(
     ::sal_Int32 nChartTypeIndex,
     ::sal_Int32 nSeriesIndex,
     ::sal_Int32 nSeriesCount )
-    throw (uno::RuntimeException, std::exception)
 {
     ChartTypeTemplate::applyStyle( xSeries, nChartTypeIndex, nSeriesIndex, nSeriesCount );
     try
@@ -231,20 +219,17 @@ void SAL_CALL StockChartTypeTemplate::applyStyle(
 
         bool bHasVolume = false;
         getFastPropertyValue( PROP_STOCKCHARTTYPE_TEMPLATE_VOLUME ) >>= bHasVolume;
-        if( bHasVolume )
-        {
-            if( nChartTypeIndex != 0 )
-                nNewAxisIndex = 1;
-        }
+        if( bHasVolume && nChartTypeIndex != 0 )
+            nNewAxisIndex = 1;
 
         Reference< beans::XPropertySet > xProp( xSeries, uno::UNO_QUERY );
         if( xProp.is() )
-            xProp->setPropertyValue( "AttachedAxisIndex", uno::makeAny( nNewAxisIndex ) );
+            xProp->setPropertyValue( "AttachedAxisIndex", uno::Any( nNewAxisIndex ) );
 
         if( bHasVolume && nChartTypeIndex==0 )
         {
             //switch lines off for volume bars
-            DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::makeAny( drawing::LineStyle_NONE ) );
+            DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::Any( drawing::LineStyle_NONE ) );
         }
         else
         {
@@ -254,32 +239,30 @@ void SAL_CALL StockChartTypeTemplate::applyStyle(
                 drawing::LineStyle eStyle = drawing::LineStyle_NONE;
                 xProp->getPropertyValue( "LineStyle" ) >>= eStyle;
                 if( eStyle == drawing::LineStyle_NONE )
-                    xProp->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_SOLID ));
+                    xProp->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_SOLID ));
             }
         }
 
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL StockChartTypeTemplate::resetStyles(
     const Reference< chart2::XDiagram >& xDiagram )
-    throw (uno::RuntimeException, std::exception)
 {
     ChartTypeTemplate::resetStyles( xDiagram );
     if( getDimension() == 3 )
     {
-        ::std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
+        std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
             DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
-        for( ::std::vector< Reference< chart2::XDataSeries > >::iterator aIt( aSeriesVec.begin());
-             aIt != aSeriesVec.end(); ++aIt )
+        for (auto const& series : aSeriesVec)
         {
-            Reference< beans::XPropertySet > xProp( *aIt, uno::UNO_QUERY );
+            Reference< beans::XPropertySet > xProp(series, uno::UNO_QUERY);
             if( xProp.is() )
-                xProp->setPropertyValue( "AttachedAxisIndex", uno::makeAny( sal_Int32(0) ) );
+                xProp->setPropertyValue( "AttachedAxisIndex", uno::Any( sal_Int32(0) ) );
         }
     }
 
@@ -366,9 +349,9 @@ void StockChartTypeTemplate::createChartTypes(
         Reference< beans::XPropertySet > xCTProp( xCT, uno::UNO_QUERY );
         if( xCTProp.is())
         {
-            xCTProp->setPropertyValue( "Japanese", uno::makeAny( bJapaneseStyle ));
-            xCTProp->setPropertyValue( "ShowFirst", uno::makeAny( bShowFirst ));
-            xCTProp->setPropertyValue( "ShowHighLow", uno::makeAny( bShowHighLow ));
+            xCTProp->setPropertyValue( "Japanese", uno::Any( bJapaneseStyle ));
+            xCTProp->setPropertyValue( "ShowFirst", uno::Any( bShowFirst ));
+            xCTProp->setPropertyValue( "ShowHighLow", uno::Any( bShowHighLow ));
         }
 
         if( aSeriesSeq.getLength() > nSeriesIndex &&
@@ -395,9 +378,9 @@ void StockChartTypeTemplate::createChartTypes(
         Reference< XChartTypeContainer > xCTCnt( rCoordSys[ 0 ], uno::UNO_QUERY_THROW );
         xCTCnt->setChartTypes( comphelper::containerToSequence(aChartTypeVec) );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -405,7 +388,6 @@ void StockChartTypeTemplate::createChartTypes(
 sal_Bool SAL_CALL StockChartTypeTemplate::matchesTemplate(
     const uno::Reference< XDiagram >& xDiagram,
     sal_Bool /* bAdaptProperties */ )
-    throw (uno::RuntimeException, std::exception)
 {
     bool bResult = false;
 
@@ -453,11 +435,7 @@ sal_Bool SAL_CALL StockChartTypeTemplate::matchesTemplate(
                 break;
         }
 
-        if( xCandleStickChartType.is() &&
-            ( ( bHasVolume &&
-                xVolumeChartType.is() ) ||
-              ( ! bHasVolume &&
-                ! xVolumeChartType.is() )))
+        if (xCandleStickChartType.is() && bHasVolume == xVolumeChartType.is())
         {
             bResult = true;
 
@@ -476,9 +454,9 @@ sal_Bool SAL_CALL StockChartTypeTemplate::matchesTemplate(
             }
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return bResult;
@@ -486,7 +464,6 @@ sal_Bool SAL_CALL StockChartTypeTemplate::matchesTemplate(
 
 Reference< XChartType > SAL_CALL StockChartTypeTemplate::getChartTypeForNewSeries(
         const uno::Sequence< Reference< chart2::XChartType > >& aFormerlyUsedChartTypes )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< chart2::XChartType > xResult;
 
@@ -498,19 +475,18 @@ Reference< XChartType > SAL_CALL StockChartTypeTemplate::getChartTypeForNewSerie
                          CHART2_SERVICE_NAME_CHARTTYPE_LINE ), uno::UNO_QUERY_THROW );
         ChartTypeTemplate::copyPropertiesFromOldToNewCoordinateSystem( aFormerlyUsedChartTypes, xResult );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;
 }
 
 Reference< XDataInterpreter > SAL_CALL StockChartTypeTemplate::getDataInterpreter()
-    throw (uno::RuntimeException, std::exception)
 {
     if( ! m_xDataInterpreter.is())
-        m_xDataInterpreter.set( new StockDataInterpreter( m_eStockVariant, GetComponentContext() ) );
+        m_xDataInterpreter.set( new StockDataInterpreter( m_eStockVariant ) );
 
     return m_xDataInterpreter;
 }

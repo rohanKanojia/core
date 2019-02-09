@@ -19,22 +19,15 @@
 #ifndef INCLUDED_SFX2_TEMPLDLG_HXX
 #define INCLUDED_SFX2_TEMPLDLG_HXX
 
+#include <memory>
 #include <sal/config.h>
 #include <sfx2/dllapi.h>
 #include <vcl/ctrl.hxx>
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 
 #include <sfx2/dockwin.hxx>
 #include <sfx2/childwin.hxx>
 #include <sfx2/basedlgs.hxx>
-
-namespace SfxTemplate
-{
-    // converts from SFX_STYLE_FAMILY Ids to 1-5
-    sal_uInt16 SFX2_DLLPUBLIC SfxFamilyIdToNId(SfxStyleFamily nFamily);
-    // converts from 1-5 to SFX_STYLE_FAMILY Ids
-    SfxStyleFamily SFX2_DLLPUBLIC NIdToSfxFamilyId(sal_uInt16 nId);
-}
 
 class SfxTemplateDialog_Impl;
 
@@ -42,10 +35,9 @@ class SFX2_DLLPUBLIC SfxTemplatePanelControl : public vcl::Window
 {
 public:
     SfxTemplatePanelControl(SfxBindings* pBindings, vcl::Window* pParentWindow);
-    virtual ~SfxTemplatePanelControl();
+    virtual ~SfxTemplatePanelControl() override;
     virtual void dispose() override;
 
-    virtual void DataChanged( const DataChangedEvent& _rDCEvt ) override;
     virtual void Resize() override;
     virtual void StateChanged( StateChangedType nStateChange ) override;
 

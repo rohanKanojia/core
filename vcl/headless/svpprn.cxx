@@ -19,17 +19,17 @@
 
 #include <vcl/svapp.hxx>
 #include <vcl/timer.hxx>
-#include <vcl/printerinfomanager.hxx>
+#include <printerinfomanager.hxx>
 
-#include "jobset.h"
-#include "print.h"
-#include "salptype.hxx"
-#include "saldatabasic.hxx"
+#include <jobset.h>
+#include <print.h>
+#include <salptype.hxx>
+#include <saldatabasic.hxx>
 
-#include "unx/genpspgraphics.h"
+#include <unx/genpspgraphics.h>
 
-#include "headless/svpprn.hxx"
-#include "headless/svpinst.hxx"
+#include <headless/svpprn.hxx>
+#include <headless/svpinst.hxx>
 
 using namespace psp;
 
@@ -56,21 +56,21 @@ static OUString getPdfDir( const PrinterInfo& rInfo )
     return aDir;
 }
 
-inline int PtTo10Mu( int nPoints ) { return (int)((((double)nPoints)*35.27777778)+0.5); }
+static int PtTo10Mu( int nPoints ) { return static_cast<int>((static_cast<double>(nPoints)*35.27777778)+0.5); }
 
 static void copyJobDataToJobSetup( ImplJobSetup* pJobSetup, JobData& rData )
 {
-    pJobSetup->meOrientation    = (Orientation)(rData.m_eOrientation == orientation::Landscape ? ORIENTATION_LANDSCAPE : ORIENTATION_PORTRAIT);
+    pJobSetup->SetOrientation( rData.m_eOrientation == orientation::Landscape ? Orientation::Landscape : Orientation::Portrait );
 
     // copy page size
     OUString aPaper;
     int width, height;
 
     rData.m_aContext.getPageSize( aPaper, width, height );
-    pJobSetup->mePaperFormat    = PaperInfo::fromPSName(OUStringToOString( aPaper, RTL_TEXTENCODING_ISO_8859_1 ));
-    pJobSetup->mnPaperWidth     = 0;
-    pJobSetup->mnPaperHeight    = 0;
-    if( pJobSetup->mePaperFormat == PAPER_USER )
+    pJobSetup->SetPaperFormat( PaperInfo::fromPSName(OUStringToOString( aPaper, RTL_TEXTENCODING_ISO_8859_1 )) );
+    pJobSetup->SetPaperWidth( 0 );
+    pJobSetup->SetPaperHeight( 0 );
+    if( pJobSetup->GetPaperFormat() == PAPER_USER )
     {
         // transform to 100dth mm
         width               = PtTo10Mu( width );
@@ -78,13 +78,13 @@ static void copyJobDataToJobSetup( ImplJobSetup* pJobSetup, JobData& rData )
 
         if( rData.m_eOrientation == psp::orientation::Portrait )
         {
-            pJobSetup->mnPaperWidth = width;
-            pJobSetup->mnPaperHeight= height;
+            pJobSetup->SetPaperWidth( width );
+            pJobSetup->SetPaperHeight( height );
         }
         else
         {
-            pJobSetup->mnPaperWidth = height;
-            pJobSetup->mnPaperHeight= width;
+            pJobSetup->SetPaperWidth( height );
+            pJobSetup->SetPaperHeight( width );
         }
     }
 
@@ -92,27 +92,29 @@ static void copyJobDataToJobSetup( ImplJobSetup* pJobSetup, JobData& rData )
     const PPDKey* pKey = nullptr;
     const PPDValue* pValue = nullptr;
 
-    pJobSetup->mnPaperBin = 0xffff;
+    pJobSetup->SetPaperBin( 0xffff );
     if( rData.m_pParser )
         pKey                    = rData.m_pParser->getKey( OUString( "InputSlot"  ) );
     if( pKey )
         pValue                  = rData.m_aContext.getValue( pKey );
     if( pKey && pValue )
     {
-        for( pJobSetup->mnPaperBin = 0;
-             pValue != pKey->getValue( pJobSetup->mnPaperBin ) &&
-                 pJobSetup->mnPaperBin < pKey->countValues();
-             pJobSetup->mnPaperBin++ )
-            ;
-        if( pJobSetup->mnPaperBin >= pKey->countValues() || pValue == pKey->getDefaultValue() )
-            pJobSetup->mnPaperBin = 0xffff;
+        int nPaperBin;
+        for( nPaperBin = 0;
+             pValue != pKey->getValue( nPaperBin ) &&
+                 nPaperBin < pKey->countValues();
+             nPaperBin++ );
+        pJobSetup->SetPaperBin(
+            (nPaperBin == pKey->countValues()
+             || pValue == pKey->getDefaultValue())
+            ? 0xffff : nPaperBin);
     }
 
     // copy duplex
     pKey = nullptr;
     pValue = nullptr;
 
-    pJobSetup->meDuplexMode = DUPLEX_UNKNOWN;
+    pJobSetup->SetDuplexMode( DuplexMode::Unknown );
     if( rData.m_pParser )
         pKey = rData.m_pParser->getKey( OUString( "Duplex"  ) );
     if( pKey )
@@ -123,43 +125,43 @@ static void copyJobDataToJobSetup( ImplJobSetup* pJobSetup, JobData& rData )
             pValue->m_aOption.startsWithIgnoreAsciiCase( "Simplex" )
            )
         {
-            pJobSetup->meDuplexMode = DUPLEX_OFF;
+            pJobSetup->SetDuplexMode( DuplexMode::Off );
         }
         else if( pValue->m_aOption.equalsIgnoreAsciiCase( "DuplexNoTumble" ) )
         {
-            pJobSetup->meDuplexMode = DUPLEX_LONGEDGE;
+            pJobSetup->SetDuplexMode( DuplexMode::LongEdge );
         }
         else if( pValue->m_aOption.equalsIgnoreAsciiCase( "DuplexTumble" ) )
         {
-            pJobSetup->meDuplexMode = DUPLEX_SHORTEDGE;
+            pJobSetup->SetDuplexMode( DuplexMode::ShortEdge );
         }
     }
 
     // copy the whole context
-    if( pJobSetup->mpDriverData )
-        rtl_freeMemory( pJobSetup->mpDriverData );
+    if( pJobSetup->GetDriverData() )
+        std::free( const_cast<sal_uInt8*>(pJobSetup->GetDriverData()) );
 
     sal_uInt32 nBytes;
     void* pBuffer = nullptr;
     if( rData.getStreamBuffer( pBuffer, nBytes ) )
     {
-        pJobSetup->mnDriverDataLen = nBytes;
-        pJobSetup->mpDriverData = static_cast<sal_uInt8*>(pBuffer);
+        pJobSetup->SetDriverDataLen( nBytes );
+        pJobSetup->SetDriverData( static_cast<sal_uInt8*>(pBuffer) );
     }
     else
     {
-        pJobSetup->mnDriverDataLen = 0;
-        pJobSetup->mpDriverData = nullptr;
+        pJobSetup->SetDriverDataLen( 0 );
+        pJobSetup->SetDriverData( nullptr );
     }
 }
 
 // SalInstance
 
 SalInfoPrinter* SvpSalInstance::CreateInfoPrinter( SalPrinterQueueInfo* pQueueInfo,
-                                                   ImplJobSetup*            pJobSetup )
+                                                   ImplJobSetup*        pJobSetup )
 {
     // create and initialize SalInfoPrinter
-    SvpSalInfoPrinter* pPrinter = new SvpSalInfoPrinter();
+    SvpSalInfoPrinter* pPrinter = new SvpSalInfoPrinter;
 
     if( pJobSetup )
     {
@@ -168,12 +170,13 @@ SalInfoPrinter* SvpSalInstance::CreateInfoPrinter( SalPrinterQueueInfo* pQueueIn
         pPrinter->m_aJobData = aInfo;
         pPrinter->m_aPrinterGfx.Init( pPrinter->m_aJobData );
 
-        if( pJobSetup->mpDriverData )
-            JobData::constructFromStreamBuffer( pJobSetup->mpDriverData, pJobSetup->mnDriverDataLen, aInfo );
+        if( pJobSetup->GetDriverData() )
+            JobData::constructFromStreamBuffer( pJobSetup->GetDriverData(),
+                                                pJobSetup->GetDriverDataLen(), aInfo );
 
-        pJobSetup->mnSystem         = JOBSETUP_SYSTEM_UNIX;
-        pJobSetup->maPrinterName    = pQueueInfo->maPrinterName;
-        pJobSetup->maDriver         = aInfo.m_aDriverName;
+        pJobSetup->SetSystem( JOBSETUP_SYSTEM_UNIX );
+        pJobSetup->SetPrinterName( pQueueInfo->maPrinterName );
+        pJobSetup->SetDriver( aInfo.m_aDriverName );
         copyJobDataToJobSetup( pJobSetup, aInfo );
     }
 
@@ -185,18 +188,13 @@ void SvpSalInstance::DestroyInfoPrinter( SalInfoPrinter* pPrinter )
     delete pPrinter;
 }
 
-SalPrinter* SvpSalInstance::CreatePrinter( SalInfoPrinter* pInfoPrinter )
+std::unique_ptr<SalPrinter> SvpSalInstance::CreatePrinter( SalInfoPrinter* pInfoPrinter )
 {
     // create and initialize SalPrinter
     SvpSalPrinter* pPrinter = new SvpSalPrinter( pInfoPrinter );
     pPrinter->m_aJobData = static_cast<SvpSalInfoPrinter*>(pInfoPrinter)->m_aJobData;
 
-    return pPrinter;
-}
-
-void SvpSalInstance::DestroyPrinter( SalPrinter* pPrinter )
-{
-    delete pPrinter;
+    return std::unique_ptr<SalPrinter>(pPrinter);
 }
 
 void SvpSalInstance::GetPrinterQueueInfo( ImplPrnQueueList* pList )
@@ -208,19 +206,18 @@ void SvpSalInstance::GetPrinterQueueInfo( ImplPrnQueueList* pList )
         // #i62663# synchronize possible asynchronouse printer detection now
         rManager.checkPrintersChanged( true );
     }
-    ::std::list< OUString > aPrinters;
+    ::std::vector< OUString > aPrinters;
     rManager.listPrinters( aPrinters );
 
-    for( ::std::list< OUString >::iterator it = aPrinters.begin(); it != aPrinters.end(); ++it )
+    for (auto const& printer : aPrinters)
     {
-        const PrinterInfo& rInfo( rManager.getPrinterInfo( *it ) );
-        // Neuen Eintrag anlegen
-        SalPrinterQueueInfo* pInfo = new SalPrinterQueueInfo;
-        pInfo->maPrinterName    = *it;
+        const PrinterInfo& rInfo( rManager.getPrinterInfo(printer) );
+        // create new entry
+        std::unique_ptr<SalPrinterQueueInfo> pInfo(new SalPrinterQueueInfo);
+        pInfo->maPrinterName    = printer;
         pInfo->maDriver         = rInfo.m_aDriverName;
         pInfo->maLocation       = rInfo.m_aLocation;
         pInfo->maComment        = rInfo.m_aComment;
-        pInfo->mpSysData        = nullptr;
 
         sal_Int32 nIndex = 0;
         while( nIndex != -1 )
@@ -233,13 +230,8 @@ void SvpSalInstance::GetPrinterQueueInfo( ImplPrnQueueList* pList )
             }
         }
 
-        pList->Add( pInfo );
+        pList->Add( std::move(pInfo) );
     }
-}
-
-void SvpSalInstance::DeletePrinterQueueInfo( SalPrinterQueueInfo* pInfo )
-{
-    delete pInfo;
 }
 
 void SvpSalInstance::GetPrinterQueueState( SalPrinterQueueInfo* )
@@ -254,10 +246,9 @@ OUString SvpSalInstance::GetDefaultPrinter()
 
 void SvpSalInstance::PostPrintersChanged()
 {
-    const std::list< SalFrame* >& rList = SvpSalInstance::s_pDefaultInstance->getFrames();
-    for( std::list< SalFrame* >::const_iterator it = rList.begin();
-         it != rList.end(); ++it )
-        SvpSalInstance::s_pDefaultInstance->PostEvent( *it, nullptr, SALEVENT_PRINTERCHANGED );
+    SvpSalInstance *pInst = SvpSalInstance::s_pDefaultInstance;
+    for (auto pSalFrame : pInst->getFrames() )
+        pInst->PostEvent( pSalFrame, nullptr, SalEvent::PrinterChanged );
 }
 
 GenPspGraphics *SvpSalInstance::CreatePrintGraphics()
@@ -265,7 +256,7 @@ GenPspGraphics *SvpSalInstance::CreatePrintGraphics()
     return new GenPspGraphics();
 }
 
-bool SvpSalInfoPrinter::Setup( SalFrame*, ImplJobSetup* )
+bool SvpSalInfoPrinter::Setup( weld::Window*, ImplJobSetup* )
 {
     return false;
 }

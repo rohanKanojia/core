@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 
 #include <svx/svxdlg.hxx>
@@ -28,29 +28,24 @@
 #include <editeng/spltitem.hxx>
 #include <editeng/widwitem.hxx>
 #include <sot/exchange.hxx>
-#include <vcl/msgbox.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 
-#include "sc.hrc"
-#include "drtxtob.hxx"
-#include "drawview.hxx"
-#include "viewdata.hxx"
-#include "scresid.hxx"
+#include <sc.hrc>
+#include <drtxtob.hxx>
+#include <drawview.hxx>
+#include <viewdata.hxx>
 #include <gridwin.hxx>
 
-#include "scabstdlg.hxx"
+#include <scabstdlg.hxx>
 #include <memory>
 
 bool ScDrawTextObjectBar::ExecuteCharDlg( const SfxItemSet& rArgs,
                                                 SfxItemSet& rOutSet , sal_uInt16 nSlot)
 {
     ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-    assert(pFact && "ScAbstractFactory create fail!");
-
-    std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateScCharDlg(
-        pViewData->GetDialogParent(), &rArgs,
+    ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateScCharDlg(
+        pViewData->GetFrameWeld(), &rArgs,
         pViewData->GetSfxDocShell()));
-    assert(pDlg && "Dialog create fail!");
     if (nSlot == SID_CHAR_DLG_EFFECT)
     {
         pDlg->SetCurPageId("fonteffects");
@@ -71,32 +66,27 @@ bool ScDrawTextObjectBar::ExecuteParaDlg( const SfxItemSet& rArgs,
                                                 SfxItemSet& rOutSet )
 {
     SfxItemPool* pArgPool = rArgs.GetPool();
-    SfxItemSet aNewAttr( *pArgPool,
-                            EE_ITEMS_START, EE_ITEMS_END,
-                            SID_ATTR_PARA_HYPHENZONE, SID_ATTR_PARA_HYPHENZONE,
-                            SID_ATTR_PARA_PAGEBREAK, SID_ATTR_PARA_PAGEBREAK,
-                            SID_ATTR_PARA_SPLIT, SID_ATTR_PARA_SPLIT,
-                            SID_ATTR_PARA_WIDOWS, SID_ATTR_PARA_WIDOWS,
-                            SID_ATTR_PARA_ORPHANS, SID_ATTR_PARA_ORPHANS,
-                            0 );
+    SfxItemSet aNewAttr(
+        *pArgPool,
+        svl::Items<
+            EE_ITEMS_START, EE_ITEMS_END,
+            SID_ATTR_PARA_PAGEBREAK, SID_ATTR_PARA_WIDOWS>{});
     aNewAttr.Put( rArgs );
 
-    // Die Werte sind erst einmal uebernommen worden, um den Dialog anzuzeigen.
-    // Muss natuerlich noch geaendert werden
+    // Values have been taken over once to show the dialog.
+    // Has to be changed
     // aNewAttr.Put( SvxParaDlgLimitsItem( 567 * 50, 5670) );
 
     aNewAttr.Put( SvxHyphenZoneItem( false, SID_ATTR_PARA_HYPHENZONE ) );
-    aNewAttr.Put( SvxFormatBreakItem( SVX_BREAK_NONE, SID_ATTR_PARA_PAGEBREAK ) );
+    aNewAttr.Put( SvxFormatBreakItem( SvxBreak::NONE, SID_ATTR_PARA_PAGEBREAK ) );
     aNewAttr.Put( SvxFormatSplitItem( true, SID_ATTR_PARA_SPLIT)  );
     aNewAttr.Put( SvxWidowsItem( 0, SID_ATTR_PARA_WIDOWS) );
     aNewAttr.Put( SvxOrphansItem( 0, SID_ATTR_PARA_ORPHANS) );
 
     ScAbstractDialogFactory* pFact = ScAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "ScAbstractFactory create fail!");
 
-    std::unique_ptr<SfxAbstractTabDialog> pDlg(pFact->CreateScParagraphDlg(
-        pViewData->GetDialogParent(), &aNewAttr));
-    OSL_ENSURE(pDlg, "Dialog create fail!");
+    ScopedVclPtr<SfxAbstractTabDialog> pDlg(pFact->CreateScParagraphDlg(
+        pViewData->GetFrameWeld(), &aNewAttr));
     bool bRet = ( pDlg->Execute() == RET_OK );
 
     if ( bRet )
@@ -114,10 +104,12 @@ void ScDrawTextObjectBar::ExecutePasteContents( SfxRequest & /* rReq */ )
     SdrView* pView = pViewData->GetScDrawView();
     OutlinerView* pOutView = pView->GetTextEditOutlinerView();
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    std::unique_ptr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog( pViewData->GetDialogParent() ));
+    vcl::Window* pWin = pViewData->GetDialogParent();
+    ScopedVclPtr<SfxAbstractPasteDialog> pDlg(pFact->CreatePasteDialog(pWin ? pWin->GetFrameWeld() : nullptr));
 
     pDlg->Insert( SotClipboardFormatId::STRING, EMPTY_OUSTRING );
     pDlg->Insert( SotClipboardFormatId::RTF,    EMPTY_OUSTRING );
+    pDlg->Insert( SotClipboardFormatId::RICHTEXT,  EMPTY_OUSTRING );
 
     TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( pViewData->GetActiveWin() ) );
 

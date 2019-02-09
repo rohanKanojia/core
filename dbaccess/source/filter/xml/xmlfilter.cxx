@@ -18,14 +18,19 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
+#include <vcl/errinf.hxx>
+#include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
+#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <com/sun/star/packages/WrongPasswordException.hpp>
 #include <com/sun/star/packages/zip/ZipIOException.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/sdb/XOfficeDatabaseDocument.hpp>
 #include "xmlfilter.hxx"
 #include "xmlservices.hxx"
-#include "flt_reghelper.hxx"
+#include <flt_reghelper.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 #include <xmloff/xmlnmspe.hxx>
@@ -35,35 +40,36 @@
 #include <xmloff/nmspmap.hxx>
 #include <com/sun/star/xml/sax/InputSource.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
+#include <com/sun/star/xml/sax/SAXParseException.hpp>
 #include <xmloff/ProgressBarHelper.hxx>
 #include <sfx2/docfile.hxx>
 #include <com/sun/star/io/XInputStream.hpp>
 #include <com/sun/star/uno/XNamingService.hpp>
 #include "xmlDatabase.hxx"
 #include "xmlEnums.hxx"
-#include "xmlstrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <xmloff/DocumentSettingsContext.hxx>
 #include "xmlStyleImport.hxx"
 #include <xmloff/xmluconv.hxx>
 #include "xmlHelper.hxx"
 #include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
-#include <osl/mutex.hxx>
 #include <svtools/sfxecode.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/types.hxx>
 #include <comphelper/namedvaluecollection.hxx>
-#include <comphelper/uno3.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <connectivity/DriversConfig.hxx>
-#include "dsntypes.hxx"
+#include <dsntypes.hxx>
 #include <rtl/strbuf.hxx>
+#include <rtl/uri.hxx>
 
 using namespace ::com::sun::star;
 
-extern "C" void SAL_CALL createRegistryInfo_ODBFilter( )
+extern "C" void createRegistryInfo_ODBFilter( )
 {
     static ::dbaxml::OMultiInstanceAutoRegistration< ::dbaxml::ODBFilter > aAutoRegistration;
 }
@@ -71,12 +77,9 @@ extern "C" void SAL_CALL createRegistryInfo_ODBFilter( )
 
 namespace dbaxml
 {
-    sal_Char const sXML_np__db[] = "_db";
-    sal_Char const sXML_np___db[] = "__db";
-
     using namespace ::com::sun::star::util;
     /// read a component (file + filter version)
-sal_Int32 ReadThroughComponent(
+static ErrCode ReadThroughComponent(
     const uno::Reference<XInputStream>& xInputStream,
     const uno::Reference<XComponent>& xModelComponent,
     const uno::Reference<XComponentContext> & rxContext,
@@ -97,7 +100,7 @@ sal_Int32 ReadThroughComponent(
     // get filter
     OSL_ENSURE( _xFilter.is(), "Can't instantiate filter component." );
     if( !_xFilter.is() )
-        return 1;
+        return ErrCode(1);
 
     // connect parser and filter
     xParser->setDocumentHandler( _xFilter );
@@ -114,15 +117,15 @@ sal_Int32 ReadThroughComponent(
     catch (const SAXParseException& r)
     {
 #if OSL_DEBUG_LEVEL > 0
-        SAL_WARN("dbaccess", "SAX parse exception catched while importing:\n" << r.Message << r.LineNumber << "," << r.ColumnNumber);
+        SAL_WARN("dbaccess", "SAX parse exception caught while importing: " << r << r.LineNumber << "," << r.ColumnNumber);
 #else
         (void)r;
 #endif
-        return 1;
+        return ErrCode(1);
     }
     catch (const SAXException&)
     {
-        return 1;
+        return ErrCode(1);
     }
     catch (const packages::zip::ZipIOException&)
     {
@@ -130,16 +133,16 @@ sal_Int32 ReadThroughComponent(
     }
     catch (const Exception&)
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("dbaccess");
     }
 
     // success!
-    return 0;
+    return ERRCODE_NONE;
 }
 
 
 /// read a component (storage version)
-sal_Int32 ReadThroughComponent(
+static ErrCode ReadThroughComponent(
     const uno::Reference< embed::XStorage >& xStorage,
     const uno::Reference<XComponent>& xModelComponent,
     const sal_Char* pStreamName,
@@ -158,7 +161,7 @@ sal_Int32 ReadThroughComponent(
         {
             bool bEncrypted = false;
             // open stream (and set parser input)
-        OUString sStreamName = OUString::createFromAscii(pStreamName);
+            OUString sStreamName = OUString::createFromAscii(pStreamName);
             if ( !xStorage->hasByName( sStreamName ) || !xStorage->isStreamElement( sStreamName ) )
             {
                 // stream name not found! Then try the compatibility name.
@@ -166,12 +169,12 @@ sal_Int32 ReadThroughComponent(
 
                 // do we even have an alternative name?
                 if ( nullptr == pCompatibilityStreamName )
-                    return 0;
+                    return ERRCODE_NONE;
 
                 // if so, does the stream exist?
                 sStreamName = OUString::createFromAscii(pCompatibilityStreamName);
                 if ( !xStorage->hasByName( sStreamName ) || !xStorage->isStreamElement( sStreamName ) )
-                    return 0;
+                    return ERRCODE_NONE;
             }
 
             // get input stream
@@ -187,7 +190,7 @@ sal_Int32 ReadThroughComponent(
         }
         catch (const uno::Exception&)
         {
-            return 1; // TODO/LATER: error handling
+            return ErrCode(1); // TODO/LATER: error handling
         }
 
         uno::Reference< XInputStream > xInputStream = xDocStream->getInputStream();
@@ -199,7 +202,7 @@ sal_Int32 ReadThroughComponent(
     }
 
     // TODO/LATER: better error handling
-    return 1;
+    return ErrCode(1);
 }
 
 
@@ -210,11 +213,11 @@ ODBFilter::ODBFilter( const uno::Reference< XComponentContext >& _rxContext )
 
     GetMM100UnitConverter().SetCoreMeasureUnit(util::MeasureUnit::MM_10TH);
     GetMM100UnitConverter().SetXMLMeasureUnit(util::MeasureUnit::CM);
-    GetNamespaceMap().Add( sXML_np__db,
+    GetNamespaceMap().Add( "_db",
                         GetXMLToken(XML_N_DB),
                         XML_NAMESPACE_DB );
 
-    GetNamespaceMap().Add( sXML_np___db,
+    GetNamespaceMap().Add( "__db",
                         GetXMLToken(XML_N_DB_OASIS),
                         XML_NAMESPACE_DB );
 }
@@ -227,14 +230,12 @@ ODBFilter::~ODBFilter() throw()
 
 
 OUString ODBFilter::getImplementationName_Static()
-    throw (css::uno::RuntimeException)
 {
     return OUString("com.sun.star.comp.sdb.DBFilter");
 }
 
 
 css::uno::Sequence<OUString> ODBFilter::getSupportedServiceNames_Static()
-    throw (css::uno::RuntimeException)
 {
     css::uno::Sequence<OUString> s { "com.sun.star.document.ImportFilter" };
     return s;
@@ -242,42 +243,48 @@ css::uno::Sequence<OUString> ODBFilter::getSupportedServiceNames_Static()
 
 
 css::uno::Reference< css::uno::XInterface >
-    SAL_CALL ODBFilter::Create(const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxORB)
+    ODBFilter::Create(const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxORB)
 {
     return static_cast< XServiceInfo* >(new ODBFilter( comphelper::getComponentContext(_rxORB)));
 }
 
-
-sal_Bool SAL_CALL ODBFilter::filter( const Sequence< PropertyValue >& rDescriptor )
-    throw (RuntimeException, std::exception)
+namespace {
+class FocusWindowWaitGuard
 {
-    uno::Reference< css::awt::XWindow > xWindow;
+public:
+    FocusWindowWaitGuard()
     {
         SolarMutexGuard aGuard;
-        vcl::Window*     pFocusWindow = Application::GetFocusWindow();
-        xWindow = VCLUnoHelper::GetInterface( pFocusWindow );
-        if( pFocusWindow )
-            pFocusWindow->EnterWait();
+        mpWindow.set(Application::GetFocusWindow());
+        if (mpWindow)
+            mpWindow->EnterWait();
     }
+    ~FocusWindowWaitGuard()
+    {
+        if (mpWindow)
+        {
+            SolarMutexGuard aGuard;
+            mpWindow->LeaveWait();
+        }
+    }
+private:
+    VclPtr<vcl::Window> mpWindow;
+};
+}
+
+sal_Bool SAL_CALL ODBFilter::filter( const Sequence< PropertyValue >& rDescriptor )
+{
+    FocusWindowWaitGuard aWindowFocusGuard;
     bool    bRet = false;
 
     if ( GetModel().is() )
         bRet = implImport( rDescriptor );
-
-    if ( xWindow.is() )
-    {
-        SolarMutexGuard aGuard;
-        vcl::Window* pFocusWindow = VCLUnoHelper::GetWindow( xWindow );
-        if ( pFocusWindow )
-            pFocusWindow->LeaveWait();
-    }
 
     return bRet;
 }
 
 
 bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
-    throw (RuntimeException, std::exception)
 {
     OUString sFileName;
     ::comphelper::NamedValueCollection aMediaDescriptor( rDescriptor );
@@ -300,18 +307,44 @@ bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
     {
         uno::Reference<XComponent> xCom(GetModel(),UNO_QUERY);
 
-        tools::SvRef<SfxMedium> pMedium(nullptr);
+        tools::SvRef<SfxMedium> pMedium;
         if (!xStorage.is())
         {
             OUString sStreamRelPath;
             if (sFileName.startsWithIgnoreAsciiCase("vnd.sun.star.pkg:"))
             {
-                // In this case the host contains the real path, and the path is the embedded stream name.
-                INetURLObject aURL(sFileName);
-                sFileName = aURL.GetHost(INetURLObject::DECODE_WITH_CHARSET);
-                sStreamRelPath = aURL.GetURLPath(INetURLObject::DECODE_WITH_CHARSET);
-                if (sStreamRelPath.startsWith("/"))
-                    sStreamRelPath = sStreamRelPath.copy(1);
+                // In this case the authority contains the real path, and the path is the embedded stream name.
+                auto const uri = css::uri::UriReferenceFactory::create(GetComponentContext())
+                    ->parse(sFileName);
+                if (uri.is() && uri->isAbsolute() && uri->isHierarchical()
+                    && uri->hasAuthority() && !uri->hasQuery() && !uri->hasFragment())
+                {
+                    auto const auth = uri->getAuthority();
+                    auto const decAuth = rtl::Uri::decode(
+                        auth, rtl_UriDecodeStrict, RTL_TEXTENCODING_UTF8);
+                    auto path = uri->getPath();
+                    if (!path.isEmpty()) {
+                        assert(path[0] == '/');
+                        path = path.copy(1);
+                    }
+                    auto const decPath = rtl::Uri::decode(
+                        path, rtl_UriDecodeStrict, RTL_TEXTENCODING_UTF8);
+                        //TODO: really decode path?
+                    if (auth.isEmpty() == decAuth.isEmpty() && path.isEmpty() == decPath.isEmpty())
+                    {
+                        // Decoding of auth and path to UTF-8 succeeded:
+                        sFileName = decAuth;
+                        sStreamRelPath = decPath;
+                    } else {
+                        SAL_WARN(
+                            "dbaccess",
+                            "<" << sFileName << "> cannot be parse as vnd.sun.star.pkg URL");
+                    }
+                } else {
+                    SAL_WARN(
+                        "dbaccess",
+                        "<" << sFileName << "> cannot be parse as vnd.sun.star.pkg URL");
+                }
             }
 
             pMedium = new SfxMedium(sFileName, (StreamMode::READ | StreamMode::NOCREATE));
@@ -322,11 +355,13 @@ bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
                 if (!sStreamRelPath.isEmpty())
                     xStorage = xStorage->openStorageElement(sStreamRelPath, embed::ElementModes::READ);
             }
+            catch (const RuntimeException&)
+            {
+                throw;
+            }
             catch (const Exception&)
             {
                 Any aError = ::cppu::getCaughtException();
-                if  (aError.isExtractableTo(::cppu::UnoType<RuntimeException>::get()))
-                    throw;
                 throw lang::WrappedTargetRuntimeException(OUString(), *this, aError);
             }
         }
@@ -337,7 +372,7 @@ bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
         SetNumberFormatsSupplier(xNum);
 
         uno::Reference<XComponent> xModel(GetModel(),UNO_QUERY);
-        sal_Int32 nRet = ReadThroughComponent( xStorage
+        ErrCode nRet = ReadThroughComponent( xStorage
                                     ,xModel
                                     ,"settings.xml"
                                     ,"Settings.xml"
@@ -345,7 +380,7 @@ bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
                                     ,this
                                     );
 
-        if ( nRet == 0 )
+        if ( nRet == ERRCODE_NONE )
             nRet = ReadThroughComponent( xStorage
                                     ,xModel
                                     ,"content.xml"
@@ -354,28 +389,24 @@ bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
                                     ,this
                                     );
 
-        bRet = nRet == 0;
+        bRet = nRet == ERRCODE_NONE;
 
         if ( bRet )
         {
             uno::Reference< XModifiable > xModi(GetModel(),UNO_QUERY);
             if ( xModi.is() )
-                xModi->setModified(sal_False);
+                xModi->setModified(false);
         }
         else
         {
-            switch( nRet )
+            if ( nRet == ERRCODE_IO_BROKENPACKAGE )
+                    ;// TODO/LATER: no way to transport the error outside from the filter!
+            else
             {
-                case ERRCODE_IO_BROKENPACKAGE:
-                    // TODO/LATER: no way to transport the error outside from the filter!
-                    break;
-                default:
-                {
-                    // TODO/LATER: this is completely wrong! Filter code should never call ErrorHandler directly! But for now this is the only way!
-                    ErrorHandler::HandleError( nRet );
-                    if( nRet & ERRCODE_WARNING_MASK )
-                        bRet = true;
-                }
+                // TODO/LATER: this is completely wrong! Filter code should never call ErrorHandler directly! But for now this is the only way!
+                ErrorHandler::HandleError( nRet );
+                if( nRet.IsWarning() )
+                    bRet = true;
             }
         }
     }
@@ -383,8 +414,140 @@ bool ODBFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
     return bRet;
 }
 
+class DBXMLDocumentSettingsContext : public SvXMLImportContext
+{
+public:
+    DBXMLDocumentSettingsContext(SvXMLImport & rImport,
+           sal_uInt16 const nPrefix,
+           const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
 
-SvXMLImportContext* ODBFilter::CreateContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+           const OUString& rLocalName,
+           const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        if (nPrefix == XML_NAMESPACE_OFFICE && IsXMLToken(rLocalName, XML_SETTINGS))
+        {
+            return new XMLDocumentSettingsContext(GetImport(), nPrefix, rLocalName, xAttrList);
+        }
+        else
+        {
+            return new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+        }
+    }
+};
+
+class DBXMLDocumentStylesContext : public SvXMLImportContext
+{
+public:
+    DBXMLDocumentStylesContext(SvXMLImport & rImport,
+            sal_uInt16 const nPrefix,
+            const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+        const OUString& rLocalName,
+        const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        SvXMLImportContext *pContext = nullptr;
+
+        ODBFilter & rImport(static_cast<ODBFilter&>(GetImport()));
+        const SvXMLTokenMap& rTokenMap = rImport.GetDocContentElemTokenMap();
+        switch (rTokenMap.Get(nPrefix, rLocalName))
+        {
+            case XML_TOK_CONTENT_STYLES:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateStylesContext(nPrefix, rLocalName, xAttrList, false);
+                break;
+            case XML_TOK_CONTENT_AUTOSTYLES:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateStylesContext(nPrefix, rLocalName, xAttrList, true);
+                break;
+            default:
+                break;
+        }
+
+        if (!pContext)
+            pContext = new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+
+        return pContext;
+    }
+};
+
+class DBXMLDocumentBodyContext : public SvXMLImportContext
+{
+public:
+    DBXMLDocumentBodyContext(SvXMLImport & rImport,
+           sal_uInt16 const nPrefix,
+           const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+           const OUString& rLocalName,
+           const uno::Reference<xml::sax::XAttributeList> &) override
+    {
+        if ((XML_NAMESPACE_OFFICE == nPrefix || XML_NAMESPACE_OOO == nPrefix)
+            && IsXMLToken(rLocalName, XML_DATABASE))
+        {
+            ODBFilter & rImport(static_cast<ODBFilter&>(GetImport()));
+            rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+            return new OXMLDatabase(rImport, nPrefix, rLocalName );
+        }
+        else
+        {
+            return new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+        }
+    }
+};
+
+class DBXMLDocumentContentContext : public SvXMLImportContext
+{
+public:
+    DBXMLDocumentContentContext(SvXMLImport & rImport,
+            sal_uInt16 const nPrefix,
+            const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+        const OUString& rLocalName,
+        const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        SvXMLImportContext *pContext = nullptr;
+
+        ODBFilter & rImport(static_cast<ODBFilter&>(GetImport()));
+        const SvXMLTokenMap& rTokenMap = rImport.GetDocContentElemTokenMap();
+        switch (rTokenMap.Get(nPrefix, rLocalName))
+        {
+            case XML_TOK_CONTENT_AUTOSTYLES:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateStylesContext(nPrefix, rLocalName, xAttrList, true);
+                break;
+            case XML_TOK_CONTENT_SCRIPTS:
+                pContext = new XMLScriptContext(GetImport(), rLocalName, rImport.GetModel());
+                break;
+            case XML_TOK_CONTENT_BODY:
+                pContext = new DBXMLDocumentBodyContext(rImport, nPrefix, rLocalName);
+                break;
+            default:
+                break;
+        }
+
+        if (!pContext)
+            pContext = new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+
+        return pContext;
+    }
+};
+
+SvXMLImportContext* ODBFilter::CreateDocumentContext(sal_uInt16 const nPrefix,
                                       const OUString& rLocalName,
                                       const uno::Reference< css::xml::sax::XAttributeList >& xAttrList )
 {
@@ -395,27 +558,20 @@ SvXMLImportContext* ODBFilter::CreateContext( sal_uInt16 nPrefix,
     {
         case XML_TOK_DOC_SETTINGS:
             GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = new XMLDocumentSettingsContext( *this, nPrefix, rLocalName,xAttrList );
-            break;
-        case XML_TOK_DOC_DATABASE:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = new OXMLDatabase( *this, nPrefix, rLocalName );
+            pContext = new DBXMLDocumentSettingsContext(*this, nPrefix, rLocalName);
             break;
         case XML_TOK_DOC_STYLES:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = CreateStylesContext(nPrefix, rLocalName, xAttrList, false);
+            pContext = new DBXMLDocumentStylesContext(*this, nPrefix, rLocalName);
             break;
-        case XML_TOK_DOC_AUTOSTYLES:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = CreateStylesContext(nPrefix, rLocalName, xAttrList, true);
+        case XML_TOK_DOC_CONTENT:
+            pContext = new DBXMLDocumentContentContext(*this, nPrefix, rLocalName);
             break;
-        case XML_TOK_DOC_SCRIPT:
-            pContext = CreateScriptContext( rLocalName );
+        default:
             break;
     }
 
     if ( !pContext )
-        pContext = SvXMLImport::CreateContext( nPrefix, rLocalName, xAttrList );
+        pContext = SvXMLImport::CreateDocumentContext( nPrefix, rLocalName, xAttrList );
 
     return pContext;
 }
@@ -467,7 +623,7 @@ void ODBFilter::fillPropertyMap(const Any& _rValue,TPropertyNameMap& _rMap)
     {
         Sequence<PropertyValue> aValue;
         pIter->Value >>= aValue;
-        _rMap.insert(TPropertyNameMap::value_type(pIter->Name,aValue));
+        _rMap.emplace( pIter->Name,aValue );
     }
 
 }
@@ -475,19 +631,16 @@ void ODBFilter::fillPropertyMap(const Any& _rValue,TPropertyNameMap& _rMap)
 
 const SvXMLTokenMap& ODBFilter::GetDocElemTokenMap() const
 {
-    if ( !m_pDocElemTokenMap.get() )
+    if (!m_pDocElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
-            { XML_NAMESPACE_OFFICE, XML_SETTINGS,           XML_TOK_DOC_SETTINGS    },
-            { XML_NAMESPACE_OOO,    XML_SETTINGS,           XML_TOK_DOC_SETTINGS    },
-            { XML_NAMESPACE_OFFICE, XML_STYLES,             XML_TOK_DOC_STYLES      },
-            { XML_NAMESPACE_OOO,    XML_STYLES,             XML_TOK_DOC_STYLES      },
-            { XML_NAMESPACE_OFFICE, XML_AUTOMATIC_STYLES,   XML_TOK_DOC_AUTOSTYLES  },
-            { XML_NAMESPACE_OOO,    XML_AUTOMATIC_STYLES,   XML_TOK_DOC_AUTOSTYLES  },
-            { XML_NAMESPACE_OFFICE, XML_DATABASE,           XML_TOK_DOC_DATABASE    },
-            { XML_NAMESPACE_OOO,    XML_DATABASE,           XML_TOK_DOC_DATABASE    },
-            { XML_NAMESPACE_OFFICE, XML_SCRIPTS,            XML_TOK_DOC_SCRIPT      },
+            { XML_NAMESPACE_OFFICE, XML_DOCUMENT_SETTINGS,  XML_TOK_DOC_SETTINGS    },
+            { XML_NAMESPACE_OOO,    XML_DOCUMENT_SETTINGS,  XML_TOK_DOC_SETTINGS    },
+            { XML_NAMESPACE_OFFICE, XML_DOCUMENT_STYLES,    XML_TOK_DOC_STYLES      },
+            { XML_NAMESPACE_OOO,    XML_DOCUMENT_STYLES,    XML_TOK_DOC_STYLES      },
+            { XML_NAMESPACE_OFFICE, XML_DOCUMENT_CONTENT,   XML_TOK_DOC_CONTENT     },
+            { XML_NAMESPACE_OOO,    XML_DOCUMENT_CONTENT,   XML_TOK_DOC_CONTENT     },
             XML_TOKEN_MAP_END
         };
         m_pDocElemTokenMap.reset(new SvXMLTokenMap( aElemTokenMap ));
@@ -495,10 +648,30 @@ const SvXMLTokenMap& ODBFilter::GetDocElemTokenMap() const
     return *m_pDocElemTokenMap;
 }
 
+const SvXMLTokenMap& ODBFilter::GetDocContentElemTokenMap() const
+{
+    if (!m_pDocContentElemTokenMap)
+    {
+        static const SvXMLTokenMapEntry aElemTokenMap[]=
+        {
+            { XML_NAMESPACE_OFFICE, XML_STYLES,             XML_TOK_CONTENT_STYLES      },
+            { XML_NAMESPACE_OOO,    XML_STYLES,             XML_TOK_CONTENT_STYLES      },
+            { XML_NAMESPACE_OFFICE, XML_AUTOMATIC_STYLES,   XML_TOK_CONTENT_AUTOSTYLES  },
+            { XML_NAMESPACE_OOO,    XML_AUTOMATIC_STYLES,   XML_TOK_CONTENT_AUTOSTYLES  },
+            { XML_NAMESPACE_OFFICE, XML_SCRIPTS,            XML_TOK_CONTENT_SCRIPTS     },
+            { XML_NAMESPACE_OFFICE, XML_BODY,               XML_TOK_CONTENT_BODY        },
+            { XML_NAMESPACE_OOO,    XML_BODY,               XML_TOK_CONTENT_BODY        },
+            XML_TOKEN_MAP_END
+        };
+        m_pDocContentElemTokenMap.reset(new SvXMLTokenMap( aElemTokenMap ));
+    }
+    return *m_pDocContentElemTokenMap;
+}
+
 
 const SvXMLTokenMap& ODBFilter::GetDatabaseElemTokenMap() const
 {
-    if ( !m_pDatabaseElemTokenMap.get() )
+    if (!m_pDatabaseElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -519,7 +692,7 @@ const SvXMLTokenMap& ODBFilter::GetDatabaseElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetDataSourceElemTokenMap() const
 {
-    if ( !m_pDataSourceElemTokenMap.get() )
+    if (!m_pDataSourceElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -571,7 +744,7 @@ const SvXMLTokenMap& ODBFilter::GetDataSourceElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetLoginElemTokenMap() const
 {
-    if ( !m_pLoginElemTokenMap.get() )
+    if (!m_pLoginElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -589,7 +762,7 @@ const SvXMLTokenMap& ODBFilter::GetLoginElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetDatabaseDescriptionElemTokenMap() const
 {
-    if ( !m_pDatabaseDescriptionElemTokenMap.get() )
+    if (!m_pDatabaseDescriptionElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -605,7 +778,7 @@ const SvXMLTokenMap& ODBFilter::GetDatabaseDescriptionElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetDataSourceInfoElemTokenMap() const
 {
-    if ( !m_pDataSourceInfoElemTokenMap.get() )
+    if (!m_pDataSourceInfoElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -632,7 +805,7 @@ const SvXMLTokenMap& ODBFilter::GetDataSourceInfoElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetDocumentsElemTokenMap() const
 {
-    if ( !m_pDocumentsElemTokenMap.get() )
+    if (!m_pDocumentsElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -653,7 +826,7 @@ const SvXMLTokenMap& ODBFilter::GetDocumentsElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetComponentElemTokenMap() const
 {
-    if ( !m_pComponentElemTokenMap.get() )
+    if (!m_pComponentElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -673,7 +846,7 @@ const SvXMLTokenMap& ODBFilter::GetComponentElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetQueryElemTokenMap() const
 {
-    if ( !m_pQueryElemTokenMap.get() )
+    if (!m_pQueryElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -698,7 +871,7 @@ const SvXMLTokenMap& ODBFilter::GetQueryElemTokenMap() const
 
 const SvXMLTokenMap& ODBFilter::GetColumnElemTokenMap() const
 {
-    if ( !m_pColumnElemTokenMap.get() )
+    if (!m_pColumnElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -731,13 +904,7 @@ SvXMLImportContext* ODBFilter::CreateStylesContext(sal_uInt16 _nPrefix,const OUS
 }
 
 
-SvXMLImportContext* ODBFilter::CreateScriptContext( const OUString& _rLocalName )
-{
-    return new XMLScriptContext( *this, _rLocalName, GetModel() );
-}
-
-
-rtl::Reference < XMLPropertySetMapper > ODBFilter::GetTableStylesPropertySetMapper() const
+rtl::Reference < XMLPropertySetMapper > const & ODBFilter::GetTableStylesPropertySetMapper() const
 {
     if ( !m_xTableStylesPropertySetMapper.is() )
     {
@@ -747,7 +914,7 @@ rtl::Reference < XMLPropertySetMapper > ODBFilter::GetTableStylesPropertySetMapp
 }
 
 
-rtl::Reference < XMLPropertySetMapper > ODBFilter::GetColumnStylesPropertySetMapper() const
+rtl::Reference < XMLPropertySetMapper > const & ODBFilter::GetColumnStylesPropertySetMapper() const
 {
     if ( !m_xColumnStylesPropertySetMapper.is() )
     {
@@ -757,7 +924,7 @@ rtl::Reference < XMLPropertySetMapper > ODBFilter::GetColumnStylesPropertySetMap
 }
 
 
-rtl::Reference < XMLPropertySetMapper > ODBFilter::GetCellStylesPropertySetMapper() const
+rtl::Reference < XMLPropertySetMapper > const & ODBFilter::GetCellStylesPropertySetMapper() const
 {
     if ( !m_xCellStylesPropertySetMapper.is() )
     {
@@ -791,7 +958,7 @@ void ODBFilter::setPropertyInfo()
         }
         catch (const Exception&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
     }
 }

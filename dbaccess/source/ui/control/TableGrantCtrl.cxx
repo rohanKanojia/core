@@ -17,15 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "TableGrantCtrl.hxx"
-#include <tools/debug.hxx>
+#include <TableGrantCtrl.hxx>
+#include <core_resource.hxx>
 #include <com/sun/star/sdbcx/XTablesSupplier.hpp>
 #include <com/sun/star/sdbcx/Privilege.hpp>
 #include <com/sun/star/sdbcx/PrivilegeObject.hpp>
 #include <com/sun/star/sdbcx/XUsersSupplier.hpp>
 #include <com/sun/star/sdbcx/XAuthorizable.hpp>
-#include "dbu_control.hrc"
-#include "UITools.hxx"
+#include <vcl/svapp.hxx>
+#include <strings.hrc>
+#include <UITools.hxx>
 
 using namespace ::com::sun::star::accessibility;
 using namespace ::com::sun::star::container;
@@ -53,17 +54,17 @@ OTableGrantControl::OTableGrantControl( vcl::Window* pParent, WinBits nBits)
     ,m_nDataPos( 0 )
     ,m_nDeactivateEvent(nullptr)
 {
-    // Spalten einfuegen
+    // insert columns
     sal_uInt16 i=1;
-    InsertDataColumn( i, OUString(ModuleRes(STR_TABLE_PRIV_NAME)  ), 75);
+    InsertDataColumn( i, DBA_RES(STR_TABLE_PRIV_NAME), 75);
     FreezeColumn(i++);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_SELECT)), 75);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_INSERT)), 75);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_DELETE)), 75);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_UPDATE)), 75);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_ALTER)), 75);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_REFERENCE)), 75);
-    InsertDataColumn( i++, OUString(ModuleRes(STR_TABLE_PRIV_DROP)), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_SELECT), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_INSERT), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_DELETE), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_UPDATE), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_ALTER), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_REFERENCE), 75);
+    InsertDataColumn( i++, DBA_RES(STR_TABLE_PRIV_DROP), 75);
 
     while(--i)
         SetColumnWidth(i,GetAutoColumnWidth(i));
@@ -125,7 +126,7 @@ void OTableGrantControl::Init()
 {
     EditBrowseBox::Init();
 
-    // ComboBox instanzieren
+    // instantiate ComboBox
     if(!m_pCheckCell)
     {
         m_pCheckCell    = VclPtr<CheckBoxControl>::Create( &GetDataWindow() );
@@ -137,16 +138,11 @@ void OTableGrantControl::Init()
     }
 
     UpdateTables();
-    // Browser Mode setzen
-    BrowserMode nMode = BrowserMode::COLUMNSELECTION | BrowserMode::HLINES | BrowserMode::VLINES |
-                        BrowserMode::HIDECURSOR      | BrowserMode::HIDESELECT;
+    // set browser mode
+    BrowserMode const nMode = BrowserMode::COLUMNSELECTION | BrowserMode::HLINES | BrowserMode::VLINES |
+                              BrowserMode::HIDECURSOR      | BrowserMode::HIDESELECT;
 
     SetMode(nMode);
-}
-
-void OTableGrantControl::Resize()
-{
-    EditBrowseBox::Resize();
 }
 
 bool OTableGrantControl::PreNotify(NotifyEvent& rNEvt)
@@ -167,13 +163,13 @@ bool OTableGrantControl::PreNotify(NotifyEvent& rNEvt)
     return EditBrowseBox::PreNotify(rNEvt);
 }
 
-IMPL_LINK_NOARG_TYPED(OTableGrantControl, AsynchActivate, void*, void)
+IMPL_LINK_NOARG(OTableGrantControl, AsynchActivate, void*, void)
 {
     m_nDeactivateEvent = nullptr;
     ActivateCell();
 }
 
-IMPL_LINK_NOARG_TYPED(OTableGrantControl, AsynchDeactivate, void*, void)
+IMPL_LINK_NOARG(OTableGrantControl, AsynchDeactivate, void*, void)
 {
     m_nDeactivateEvent = nullptr;
     DeactivateCell();
@@ -247,9 +243,9 @@ bool OTableGrantControl::SaveModified()
     catch(SQLException& e)
     {
         bErg = false;
-        ::dbaui::showError(::dbtools::SQLExceptionInfo(e),GetParent(),m_xContext);
+        ::dbtools::showError(::dbtools::SQLExceptionInfo(e),VCLUnoHelper::GetInterface(GetParent()),m_xContext);
     }
-    if(bErg && Controller().Is())
+    if(bErg && Controller().is())
         Controller()->ClearModified();
     if(!bErg)
         UpdateTables();
@@ -307,7 +303,7 @@ void OTableGrantControl::fillPrivilege(sal_Int32 _nRow) const
         }
         catch(SQLException& e)
         {
-            ::dbaui::showError(::dbtools::SQLExceptionInfo(e),GetParent(),m_xContext);
+            ::dbtools::showError(::dbtools::SQLExceptionInfo(e),VCLUnoHelper::GetInterface(GetParent()),m_xContext);
         }
         catch(Exception& )
         {
@@ -391,16 +387,16 @@ bool OTableGrantControl::SeekRow( long nRow )
     return (nRow <= m_aTableNames.getLength());
 }
 
-void OTableGrantControl::PaintCell( OutputDevice& rDev, const Rectangle& rRect, sal_uInt16 nColumnId ) const
+void OTableGrantControl::PaintCell( OutputDevice& rDev, const tools::Rectangle& rRect, sal_uInt16 nColumnId ) const
 {
 
     if(nColumnId != COL_TABLE_NAME)
     {
         TTablePrivilegeMap::const_iterator aFind = findPrivilege(m_nDataPos);
         if(aFind != m_aPrivMap.end())
-            PaintTristate(rDev, rRect, isAllowed(nColumnId,aFind->second.nRights) ? TRISTATE_TRUE : TRISTATE_FALSE,isAllowed(nColumnId,aFind->second.nWithGrant));
+            PaintTristate(rRect, isAllowed(nColumnId,aFind->second.nRights) ? TRISTATE_TRUE : TRISTATE_FALSE,isAllowed(nColumnId,aFind->second.nWithGrant));
         else
-            PaintTristate(rDev, rRect, TRISTATE_FALSE, false);
+            PaintTristate(rRect, TRISTATE_FALSE, false);
     }
     else
     {

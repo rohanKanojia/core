@@ -18,27 +18,24 @@ $(eval $(call gb_CppunitTest_add_exception_objects,filter_pict_test, \
 ))
 
 $(eval $(call gb_CppunitTest_use_libraries,filter_pict_test, \
-        cppu \
-        comphelper \
+	cppu \
+	comphelper \
 	basegfx \
 	sal \
+	salhelper \
 	test \
-        tk \
+	tk \
 	tl \
-        utl \
+	utl \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_library_objects,filter_pict_test, \
     gie \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,filter_pict_test,\
-    udkapi \
-    offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,filter_pict_test))
 
 $(eval $(call gb_CppunitTest_use_ure,filter_pict_test))
 $(eval $(call gb_CppunitTest_use_vcl,filter_pict_test))

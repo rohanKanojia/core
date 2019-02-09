@@ -17,52 +17,43 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/layout.hxx>
-
-#include "ids.hrc"
+#include <unotools/resmgr.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <strings.hrc>
 #include "masterpassworddlg.hxx"
 
 // MasterPasswordDialog---------------------------------------------------
 
-
-IMPL_LINK_NOARG_TYPED(MasterPasswordDialog, OKHdl_Impl, Button*, void)
+IMPL_LINK_NOARG(MasterPasswordDialog, OKHdl_Impl, weld::Button&, void)
 {
-    EndDialog( RET_OK );
+    m_xDialog->response(RET_OK);
 }
-
 
 MasterPasswordDialog::MasterPasswordDialog
 (
-    vcl::Window*                                pParent,
-    css::task::PasswordRequestMode              aDialogMode,
-    ResMgr*                                     pResMgr
+    weld::Window*                               pParent,
+    css::task::PasswordRequestMode              nDialogMode,
+    const std::locale&                          rLocale
 )
-    : ModalDialog(pParent, "MasterPasswordDialog", "uui/ui/masterpassworddlg.ui")
-    , nDialogMode(aDialogMode)
-    , pResourceMgr(pResMgr)
+    : GenericDialogController(pParent, "uui/ui/masterpassworddlg.ui", "MasterPasswordDialog")
+    , rResLocale(rLocale)
+    , m_xEDMasterPassword(m_xBuilder->weld_entry("password"))
+    , m_xOKBtn(m_xBuilder->weld_button("ok"))
 {
-    get(m_pEDMasterPassword, "password");
-    get(m_pOKBtn, "ok");
     if( nDialogMode == css::task::PasswordRequestMode_PASSWORD_REENTER )
     {
-        OUString aErrorMsg( ResId( STR_ERROR_MASTERPASSWORD_WRONG, *pResourceMgr ));
-        ScopedVclPtrInstance< MessageDialog > aErrorBox(pParent, aErrorMsg);
-        aErrorBox->Execute();
+        OUString aErrorMsg(Translate::get(STR_ERROR_MASTERPASSWORD_WRONG, rResLocale));
+        std::unique_ptr<weld::MessageDialog> xErrorBox(Application::CreateMessageDialog(pParent,
+                                                       VclMessageType::Warning, VclButtonsType::Ok, aErrorMsg));
+        xErrorBox->run();
     }
 
-    m_pOKBtn->SetClickHdl( LINK( this, MasterPasswordDialog, OKHdl_Impl ) );
+    m_xOKBtn->connect_clicked( LINK( this, MasterPasswordDialog, OKHdl_Impl ) );
 };
 
 MasterPasswordDialog::~MasterPasswordDialog()
 {
-    disposeOnce();
-}
-
-void MasterPasswordDialog::dispose()
-{
-    m_pEDMasterPassword.clear();
-    m_pOKBtn.clear();
-    ModalDialog::dispose();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

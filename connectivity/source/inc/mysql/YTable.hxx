@@ -36,7 +36,7 @@ namespace connectivity
         {
             sal_Int32 m_nPrivileges; // we have to set our privileges by our own
 
-            /** executes the statmenmt.
+            /** executes the statement.
                 @param  _rStatement
                     The statement to execute.
                 */
@@ -47,19 +47,19 @@ namespace connectivity
                 @param  _rNames
                     The column names.
             */
-            virtual sdbcx::OCollection* createColumns(const TStringVector& _rNames) override;
+            virtual sdbcx::OCollection* createColumns(const ::std::vector< OUString>& _rNames) override;
 
             /** creates the key collection for the table
                 @param  _rNames
                     The key names.
             */
-            virtual sdbcx::OCollection* createKeys(const TStringVector& _rNames) override;
+            virtual sdbcx::OCollection* createKeys(const ::std::vector< OUString>& _rNames) override;
 
             /** creates the index collection for the table
                 @param  _rNames
                     The index names.
             */
-            virtual sdbcx::OCollection* createIndexes(const TStringVector& _rNames) override;
+            virtual sdbcx::OCollection* createIndexes(const ::std::vector< OUString>& _rNames) override;
 
             /** Returns always "RENAME TABLE " even for views.
             *
@@ -72,9 +72,6 @@ namespace connectivity
                 This method needs to be implemented in derived classes.
                 <BR>
                 The method gets called with s_aMutex acquired.
-                <BR>
-                as long as IPropertyArrayHelper has no virtual destructor, the implementation of ~OPropertyArrayUsageHelper
-                assumes that you created an ::cppu::OPropertyArrayHelper when deleting s_pProps.
                 @return                         an pointer to the newly created array helper. Must not be NULL.
             */
             virtual ::cppu::IPropertyArrayHelper* createArrayHelper(sal_Int32 nId) const override;
@@ -82,31 +79,31 @@ namespace connectivity
 
         public:
             OMySQLTable(    sdbcx::OCollection* _pTables,
-                            const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XConnection >& _xConnection);
+                            const css::uno::Reference< css::sdbc::XConnection >& _xConnection);
             OMySQLTable(    sdbcx::OCollection* _pTables,
-                            const ::com::sun::star::uno::Reference< ::com::sun::star::sdbc::XConnection >& _xConnection,
+                            const css::uno::Reference< css::sdbc::XConnection >& _xConnection,
                             const OUString& Name,
                             const OUString& Type,
-                            const OUString& Description = OUString(),
-                            const OUString& SchemaName = OUString(),
-                            const OUString& CatalogName = OUString(),
-                            sal_Int32 _nPrivileges = 0
+                            const OUString& Description,
+                            const OUString& SchemaName,
+                            const OUString& CatalogName,
+                            sal_Int32 _nPrivileges
                 );
 
             // ODescriptor
             virtual void construct() override;
-            // com::sun::star::lang::XUnoTunnel
-            virtual sal_Int64 SAL_CALL getSomething( const ::com::sun::star::uno::Sequence< sal_Int8 >& aIdentifier ) throw(::com::sun::star::uno::RuntimeException, std::exception) override;
-            static ::com::sun::star::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
+            // css::lang::XUnoTunnel
+            virtual sal_Int64 SAL_CALL getSomething( const css::uno::Sequence< sal_Int8 >& aIdentifier ) override;
+            static css::uno::Sequence< sal_Int8 > getUnoTunnelImplementationId();
 
             // XAlterTable
-            virtual void SAL_CALL alterColumnByName( const OUString& colName, const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& descriptor ) throw(::com::sun::star::sdbc::SQLException, ::com::sun::star::container::NoSuchElementException, ::com::sun::star::uno::RuntimeException, std::exception) override;
+            virtual void SAL_CALL alterColumnByName( const OUString& colName, const css::uno::Reference< css::beans::XPropertySet >& descriptor ) override;
             /** returns the ALTER TABLE XXX statement
             */
             OUString getAlterTableColumnPart();
 
             // some methods to alter table structures
-            void alterColumnType(sal_Int32 nNewType,const OUString& _rColName,const ::com::sun::star::uno::Reference< ::com::sun::star::beans::XPropertySet >& _xDescriptor);
+            void alterColumnType(sal_Int32 nNewType,const OUString& _rColName,const css::uno::Reference< css::beans::XPropertySet >& _xDescriptor);
             void alterDefaultValue(const OUString& _sNewDefault,const OUString& _rColName);
             void dropDefaultValue(const OUString& _sNewDefault);
 

@@ -23,7 +23,7 @@
 
 using namespace ::com::sun::star;
 
-static inline AtkObject *
+static AtkObject *
 atk_object_wrapper_conditional_ref( const uno::Reference< accessibility::XAccessible >& rxAccessible )
 {
     if( rxAccessible.is() )
@@ -48,8 +48,9 @@ getAsConst( const OUString& rString )
 
 /*****************************************************************************/
 
+/// @throws uno::RuntimeException
 static css::uno::Reference<css::accessibility::XAccessibleTable>
-    getTable( AtkTable *pTable ) throw (uno::RuntimeException)
+    getTable( AtkTable *pTable )
 {
     AtkObjectWrapper *pWrap = ATK_OBJECT_WRAPPER( pTable );
     if( pWrap )

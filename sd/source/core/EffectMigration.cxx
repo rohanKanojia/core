@@ -21,9 +21,6 @@
 #include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
 #include <com/sun/star/presentation/TextAnimationType.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
-#include <com/sun/star/animations/Event.hpp>
-#include <com/sun/star/animations/EventTrigger.hpp>
-#include <com/sun/star/animations/Timing.hpp>
 #include <comphelper/processfactory.hxx>
 #include <com/sun/star/animations/AnimationFill.hpp>
 #include <com/sun/star/animations/XAnimate.hpp>
@@ -33,8 +30,8 @@
 #include <svx/svdopath.hxx>
 #include <svx/svdogrp.hxx>
 #include <svx/svditer.hxx>
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
 #include <CustomAnimationPreset.hxx>
 #include <TransitionPreset.hxx>
 #include <EffectMigration.hxx>
@@ -51,11 +48,11 @@ using ::com::sun::star::beans::NamedValue;
 
 struct deprecated_FadeEffect_conversion_table_entry
 {
-    FadeEffect  meFadeEffect;
+    FadeEffect const  meFadeEffect;
     const sal_Char* mpPresetId;
 }
 
-deprecated_FadeEffect_conversion_table[] =
+const deprecated_FadeEffect_conversion_table[] =
 {
 // OOo 1.x transitions
     { FadeEffect_FADE_FROM_LEFT,            "wipe-right" },
@@ -163,7 +160,7 @@ wedge                           wedge
 
 void EffectMigration::SetFadeEffect( SdPage* pPage, css::presentation::FadeEffect eNewEffect)
 {
-    deprecated_FadeEffect_conversion_table_entry* pEntry = deprecated_FadeEffect_conversion_table;
+    deprecated_FadeEffect_conversion_table_entry const * pEntry = deprecated_FadeEffect_conversion_table;
     while( (pEntry->meFadeEffect != FadeEffect_NONE) && (pEntry->meFadeEffect != eNewEffect) )
         pEntry++;
 
@@ -173,18 +170,14 @@ void EffectMigration::SetFadeEffect( SdPage* pPage, css::presentation::FadeEffec
 
         const TransitionPresetList& rPresetList = TransitionPreset::getTransitionPresetList();
 
-        TransitionPresetList::const_iterator aIt( rPresetList.begin());
-        const TransitionPresetList::const_iterator aEndIt( rPresetList.end());
-        for( ; aIt != aEndIt; ++aIt )
+        auto aIt = std::find_if(rPresetList.begin(), rPresetList.end(),
+            [&aPresetId](const TransitionPresetPtr& rxPreset) { return rxPreset->getPresetId() == aPresetId; });
+        if (aIt != rPresetList.end())
         {
-            if( (*aIt)->getPresetId() == aPresetId)
-            {
-                pPage->setTransitionType( (*aIt)->getTransition() );
-                pPage->setTransitionSubtype( (*aIt)->getSubtype() );
-                pPage->setTransitionDirection( (*aIt)->getDirection() );
-                pPage->setTransitionFadeColor( (*aIt)->getFadeColor() );
-                break;
-            }
+            pPage->setTransitionType( (*aIt)->getTransition() );
+            pPage->setTransitionSubtype( (*aIt)->getSubtype() );
+            pPage->setTransitionDirection( (*aIt)->getDirection() );
+            pPage->setTransitionFadeColor( (*aIt)->getFadeColor() );
         }
     }
     else
@@ -199,34 +192,33 @@ void EffectMigration::SetFadeEffect( SdPage* pPage, css::presentation::FadeEffec
 FadeEffect EffectMigration::GetFadeEffect( const SdPage* pPage )
 {
     const TransitionPresetList & rPresetList = TransitionPreset::getTransitionPresetList();
-    TransitionPresetList::const_iterator aIt( rPresetList.begin());
-    const TransitionPresetList::const_iterator aEndIt( rPresetList.end());
-    for( ; aIt != aEndIt; ++aIt )
+    auto aIt = std::find_if(rPresetList.begin(), rPresetList.end(),
+        [&pPage](const TransitionPresetPtr& rxPreset) {
+            return (rxPreset->getTransition() == pPage->getTransitionType())
+                && (rxPreset->getSubtype() == pPage->getTransitionSubtype())
+                && (rxPreset->getDirection() == pPage->getTransitionDirection())
+                && (rxPreset->getFadeColor() == pPage->getTransitionFadeColor());
+        });
+    if (aIt != rPresetList.end())
     {
-        if( ( (*aIt)->getTransition() == pPage->getTransitionType() ) &&
-            ( (*aIt)->getSubtype() == pPage->getTransitionSubtype() ) &&
-            ( (*aIt)->getDirection() == pPage->getTransitionDirection() ) &&
-            ( (*aIt)->getFadeColor() == pPage->getTransitionFadeColor() ) )
-        {
-            const OUString& aPresetId = (*aIt)->getPresetId();
+        const OUString& aPresetId = (*aIt)->getPresetId();
 
-            deprecated_FadeEffect_conversion_table_entry* pEntry = deprecated_FadeEffect_conversion_table;
-            while( (pEntry->meFadeEffect != FadeEffect_NONE) && (!aPresetId.equalsAscii( pEntry->mpPresetId ) ) )
-                pEntry++;
+        deprecated_FadeEffect_conversion_table_entry const * pEntry = deprecated_FadeEffect_conversion_table;
+        while( (pEntry->meFadeEffect != FadeEffect_NONE) && (!aPresetId.equalsAscii( pEntry->mpPresetId ) ) )
+            pEntry++;
 
-            return pEntry->meFadeEffect;
-        }
+        return pEntry->meFadeEffect;
     }
     return FadeEffect_NONE;
 }
 
 struct deprecated_AnimationEffect_conversion_table_entry
 {
-    AnimationEffect meEffect;
+    AnimationEffect const meEffect;
     const sal_Char* mpPresetId;
     const sal_Char* mpPresetSubType;
 }
-deprecated_AnimationEffect_conversion_table[] =
+const deprecated_AnimationEffect_conversion_table[] =
 {
 // OOo 1.x entrance effects
     { AnimationEffect_APPEAR, "ooo-entrance-appear",nullptr },
@@ -393,30 +385,45 @@ deprecated_AnimationEffect_conversion_table[] =
     { AnimationEffect_NONE, nullptr, nullptr }
 };
 
-EffectSequence::iterator ImplFindEffect( MainSequencePtr& pMainSequence, const Reference< XShape >& rShape, sal_Int16 nSubItem )
+static EffectSequence::iterator ImplFindEffect( MainSequencePtr const & pMainSequence, const Reference< XShape >& rShape, sal_Int16 nSubItem )
 {
-    EffectSequence::iterator aIter;
-
-    for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
-    {
-        CustomAnimationEffectPtr pEffect( (*aIter) );
-        if( (pEffect->getTargetShape() == rShape) && (pEffect->getTargetSubItem() == nSubItem) )
-            break;
-    }
-
-    return aIter;
+    return std::find_if(pMainSequence->getBegin(), pMainSequence->getEnd(),
+        [&rShape, &nSubItem](const CustomAnimationEffectPtr& pEffect) {
+            return (pEffect->getTargetShape() == rShape)
+                && (pEffect->getTargetSubItem() == nSubItem);
+        });
 }
 
-static bool implIsInsideGroup( SdrObject* pObj )
+static bool implIsInsideGroup( SdrObject const * pObj )
 {
-    return pObj && pObj->GetObjList() && pObj->GetObjList()->GetUpList();
+    // TTTT for current state of transition, SdrObject has a parent*
+    // to a SdrObjList. That may be a SdrPage or a SdrObjGroup, both
+    // are already derived from SdrObjList. To finally check, use
+    // the method 'getSdrObjectFromSdrObjList' - if it's not a SdrPage,
+    // it will return SdrObjGroup or E3dScene -> SdrObject.
+    // For future states, test for SdrObject. Trying to get the SdrPage
+    // will in the future depend on the Object(this) to be inserted to a
+    // SdrPage, regardless of e.g. being a group member.
+    if(nullptr == pObj)
+    {
+        return false;
+    }
+
+    SdrObjList* pSdrObjList(pObj->getParentSdrObjListFromSdrObject());
+
+    if(nullptr == pSdrObjList)
+    {
+        return false;
+    }
+
+    return (nullptr != pSdrObjList->getSdrObjectFromSdrObjList());
 }
 
 void EffectMigration::SetAnimationEffect( SvxShape* pShape, AnimationEffect eEffect )
 {
-    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->GetPage(),
+    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->getSdrPageFromSdrObject(),
                 "sd::EffectMigration::SetAnimationEffect(), invalid argument!" );
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
@@ -435,7 +442,7 @@ void EffectMigration::SetAnimationEffect( SvxShape* pShape, AnimationEffect eEff
     const CustomAnimationPresets& rPresets = CustomAnimationPresets::getCustomAnimationPresets();
 
     CustomAnimationPresetPtr pPreset( rPresets.getEffectDescriptor( aPresetId ) );
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     if( pPreset.get() && pMainSequence.get() )
     {
@@ -490,14 +497,14 @@ void EffectMigration::SetAnimationEffect( SvxShape* pShape, AnimationEffect eEff
                 {
                     CustomAnimationEffectPtr pEffect( new CustomAnimationEffect( xNode ) );
                     pEffect->setTarget( makeAny( xShape ) );
-                    SdPage* pPage = dynamic_cast< SdPage* >( pObj->GetPage() );
+                    SdPage* pPage = dynamic_cast< SdPage* >( pObj->getSdrPageFromSdrObject() );
                     const bool bManual = (pPage == nullptr) || (pPage->GetPresChange() == PRESCHANGE_MANUAL);
                     if( !bManual )
                         pEffect->setNodeType( EffectNodeType::AFTER_PREVIOUS );
 
                     pMainSequence->append( pEffect );
 
-                    if( ( pObj->GetObjInventor() == SdrInventor ) && ( pObj->GetObjIdentifier() == OBJ_OUTLINETEXT ) )
+                    if( ( pObj->GetObjInventor() == SdrInventor::Default ) && ( pObj->GetObjIdentifier() == OBJ_OUTLINETEXT ) )
                     {
                         // special case for outline text, effects are always mapped to text group effect
                         pMainSequence->
@@ -513,11 +520,11 @@ void EffectMigration::SetAnimationEffect( SvxShape* pShape, AnimationEffect eEff
             CustomAnimationEffectPtr pEffect;
             if( aIterAsWhole != aEnd )
             {
-                pEffect = (*aIterAsWhole);
+                pEffect = *aIterAsWhole;
             }
             else
             {
-                pEffect = (*aIterOnlyBackground);
+                pEffect = *aIterOnlyBackground;
             }
 
             if( pEffect.get() )
@@ -525,7 +532,7 @@ void EffectMigration::SetAnimationEffect( SvxShape* pShape, AnimationEffect eEff
                 if( (pEffect->getPresetId() != aPresetId) ||
                     (pEffect->getPresetSubType() != aPresetSubType) )
                 {
-                    pMainSequence->replace( pEffect, pPreset, aPresetSubType );
+                    pMainSequence->replace( pEffect, pPreset, aPresetSubType, -1.0 );
                 }
             }
         }
@@ -538,30 +545,24 @@ AnimationEffect EffectMigration::GetAnimationEffect( SvxShape* pShape )
     OUString aPresetSubType;
 
     SdrObject* pObj = pShape->GetSdrObject();
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     if( pMainSequence.get() )
     {
         const Reference< XShape > xShape( pShape );
 
-        EffectSequence::iterator aIter;
+        EffectSequence::iterator aIter = std::find_if(pMainSequence->getBegin(), pMainSequence->getEnd(),
+            [&xShape](const CustomAnimationEffectPtr& pEffect) {
+                return (pEffect->getTargetShape() == xShape)
+                    && ((pEffect->getTargetSubItem() == ShapeAnimationSubType::ONLY_BACKGROUND)
+                        || (pEffect->getTargetSubItem() == ShapeAnimationSubType::AS_WHOLE))
+                    && (pEffect->getDuration() != 0.1); // ignore appear effects created from old text effect import
+            });
 
-        for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
+        if (aIter != pMainSequence->getEnd())
         {
-            CustomAnimationEffectPtr pEffect( (*aIter) );
-            if( pEffect->getTargetShape() == xShape )
-            {
-                if( (pEffect->getTargetSubItem() == ShapeAnimationSubType::ONLY_BACKGROUND) ||
-                    (pEffect->getTargetSubItem() == ShapeAnimationSubType::AS_WHOLE))
-                {
-                    if( pEffect->getDuration() != 0.1 ) // ignore appear effects created from old text effect import
-                    {
-                        aPresetId = (*aIter)->getPresetId();
-                        aPresetSubType = (*aIter)->getPresetSubType();
-                        break;
-                    }
-                }
-            }
+            aPresetId = (*aIter)->getPresetId();
+            aPresetSubType = (*aIter)->getPresetSubType();
         }
     }
 
@@ -576,9 +577,9 @@ AnimationEffect EffectMigration::GetAnimationEffect( SvxShape* pShape )
 
 void EffectMigration::SetTextAnimationEffect( SvxShape* pShape, AnimationEffect eEffect )
 {
-    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->GetPage(),
+    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->getSdrPageFromSdrObject(),
                 "sd::EffectMigration::SetAnimationEffect(), invalid argument!" );
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
@@ -606,7 +607,7 @@ void EffectMigration::SetTextAnimationEffect( SvxShape* pShape, AnimationEffect 
     // create an effect from this preset
     CustomAnimationPresetPtr pPreset( rPresets.getEffectDescriptor( aPresetId ) );
 
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     if( pPreset.get() && pMainSequence.get() )
     {
@@ -633,14 +634,14 @@ void EffectMigration::SetTextAnimationEffect( SvxShape* pShape, AnimationEffect 
             EffectSequence::iterator aIterOnlyBackground( ImplFindEffect( pMainSequence, xShape, ShapeAnimationSubType::ONLY_BACKGROUND ) );
             if( aIterOnlyBackground != aEnd )
             {
-                pShapeEffect = (*aIterOnlyBackground);
+                pShapeEffect = *aIterOnlyBackground;
             }
             else
             {
                 EffectSequence::iterator aIterAsWhole( ImplFindEffect( pMainSequence, xShape, ShapeAnimationSubType::AS_WHOLE ) );
                 if( aIterAsWhole != aEnd )
                 {
-                    pShapeEffect = (*aIterAsWhole);
+                    pShapeEffect = *aIterAsWhole;
                 }
                 else
                 {
@@ -655,7 +656,7 @@ void EffectMigration::SetTextAnimationEffect( SvxShape* pShape, AnimationEffect 
                         pShapeEffect->setDuration( 0.1 );
                         pMainSequence->append( pShapeEffect );
 
-                        SdPage* pPage = dynamic_cast< SdPage* >( pObj->GetPage() );
+                        SdPage* pPage = dynamic_cast< SdPage* >( pObj->getSdrPageFromSdrObject() );
                         if( pPage && pPage->GetPresChange() != PRESCHANGE_MANUAL )
                             pShapeEffect->setNodeType( EffectNodeType::AFTER_PREVIOUS );
                     }
@@ -664,7 +665,7 @@ void EffectMigration::SetTextAnimationEffect( SvxShape* pShape, AnimationEffect 
 
             if( pShapeEffect.get() )
             {
-                SdPage* pPage = dynamic_cast< SdPage* >( pObj->GetPage() );
+                SdPage* pPage = dynamic_cast< SdPage* >( pObj->getSdrPageFromSdrObject() );
                 const bool bManual = (pPage == nullptr) || (pPage->GetPresChange() == PRESCHANGE_MANUAL);
 
                 // now create effects for each paragraph
@@ -681,22 +682,21 @@ void EffectMigration::SetTextAnimationEffect( SvxShape* pShape, AnimationEffect 
             // now we have a group, so check if all effects are same as we like to have them
             const EffectSequence& rEffects = pGroup->getEffects();
 
-            EffectSequence::const_iterator aIter;
-            for( aIter = rEffects.begin(); aIter != rEffects.end(); ++aIter )
+            for( auto& rxEffect : rEffects )
             {
                 // only work on paragraph targets
-                if( (*aIter)->getTarget().getValueType() == ::cppu::UnoType<ParagraphTarget>::get() )
+                if( rxEffect->getTarget().getValueType() == ::cppu::UnoType<ParagraphTarget>::get() )
                 {
-                    if( ((*aIter)->getPresetId() != aPresetId) ||
-                        ((*aIter)->getPresetSubType() != aPresetSubType) )
+                    if( (rxEffect->getPresetId() != aPresetId) ||
+                        (rxEffect->getPresetSubType() != aPresetSubType) )
                     {
-                        (*aIter)->replaceNode( pPreset->create( aPresetSubType ) );
+                        rxEffect->replaceNode( pPreset->create( aPresetSubType ) );
                     }
 
                     if( bLaserEffect )
                     {
-                        (*aIter)->setIterateType( TextAnimationType::BY_LETTER );
-                        (*aIter)->setIterateInterval( 0.5 );// TODO:
+                        rxEffect->setIterateType( TextAnimationType::BY_LETTER );
+                        rxEffect->setIterateInterval( 0.5 );// TODO:
                                                              // Determine
                                                              // interval
                                                              // according
@@ -720,7 +720,7 @@ AnimationEffect EffectMigration::GetTextAnimationEffect( SvxShape* pShape )
     SdrObject* pObj = pShape->GetSdrObject();
     if( pObj )
     {
-        sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+        sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
         if( pMainSequence.get() )
         {
@@ -749,7 +749,7 @@ bool EffectMigration::ConvertPreset( const OUString& rPresetId, const OUString* 
     if( !rPresetId.isEmpty() )
     {
         // first try a match for preset id and subtype
-        deprecated_AnimationEffect_conversion_table_entry* p = deprecated_AnimationEffect_conversion_table;
+        deprecated_AnimationEffect_conversion_table_entry const * p = deprecated_AnimationEffect_conversion_table;
         while( p->mpPresetId )
         {
             if( rPresetId.equalsAscii( p->mpPresetId ) &&
@@ -773,7 +773,7 @@ bool EffectMigration::ConvertPreset( const OUString& rPresetId, const OUString* 
 
 bool EffectMigration::ConvertAnimationEffect( const AnimationEffect& rEffect, OUString& rPresetId, OUString& rPresetSubType )
 {
-    deprecated_AnimationEffect_conversion_table_entry* p = deprecated_AnimationEffect_conversion_table;
+    deprecated_AnimationEffect_conversion_table_entry const * p = deprecated_AnimationEffect_conversion_table;
     while( p->mpPresetId )
     {
         if( p->meEffect == rEffect )
@@ -803,9 +803,9 @@ double EffectMigration::ConvertAnimationSpeed( AnimationSpeed eSpeed )
 
 void EffectMigration::SetAnimationSpeed( SvxShape* pShape, AnimationSpeed eSpeed )
 {
-    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->GetPage(),
+    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->getSdrPageFromSdrObject(),
                 "sd::EffectMigration::SetAnimationEffect(), invalid argument!" );
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
@@ -814,7 +814,7 @@ void EffectMigration::SetAnimationSpeed( SvxShape* pShape, AnimationSpeed eSpeed
 
     double fDuration = ConvertAnimationSpeed( eSpeed );
 
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     const Reference< XShape > xShape( pShape );
 
@@ -823,7 +823,7 @@ void EffectMigration::SetAnimationSpeed( SvxShape* pShape, AnimationSpeed eSpeed
 
     for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
     {
-        CustomAnimationEffectPtr pEffect( (*aIter) );
+        CustomAnimationEffectPtr pEffect( *aIter );
         if( pEffect->getTargetShape() == xShape )
         {
             if( pEffect->getDuration() != 0.1 )
@@ -839,25 +839,21 @@ void EffectMigration::SetAnimationSpeed( SvxShape* pShape, AnimationSpeed eSpeed
 AnimationSpeed EffectMigration::GetAnimationSpeed( SvxShape* pShape )
 {
     SdrObject* pObj = pShape->GetSdrObject();
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     const Reference< XShape > xShape( pShape );
 
-    EffectSequence::iterator aIter;
-
     double fDuration = 1.0;
 
-    for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
+    EffectSequence::iterator aIter = std::find_if(pMainSequence->getBegin(), pMainSequence->getEnd(),
+        [&xShape](const CustomAnimationEffectPtr& pEffect) {
+            return (pEffect->getTargetShape() == xShape)
+                && (pEffect->getDuration() != 0.1);
+        });
+    if (aIter != pMainSequence->getEnd())
     {
-        CustomAnimationEffectPtr pEffect( (*aIter) );
-        if( pEffect->getTargetShape() == xShape )
-        {
-            if( pEffect->getDuration() != 0.1 )
-            {
-                fDuration = pEffect->getDuration();
-                break;
-            }
-        }
+        CustomAnimationEffectPtr pEffect( *aIter );
+        fDuration = pEffect->getDuration();
     }
 
     return ConvertDuration( fDuration );
@@ -879,16 +875,16 @@ AnimationSpeed EffectMigration::ConvertDuration( double fDuration )
 
 void EffectMigration::SetDimColor( SvxShape* pShape, sal_Int32 nColor )
 {
-    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->GetPage(),
+    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->getSdrPageFromSdrObject(),
                 "sd::EffectMigration::SetAnimationEffect(), invalid argument!" );
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
     if( implIsInsideGroup( pObj ) )
         return;
 
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     const Reference< XShape > xShape( pShape );
 
@@ -897,7 +893,7 @@ void EffectMigration::SetDimColor( SvxShape* pShape, sal_Int32 nColor )
 
     for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
     {
-        CustomAnimationEffectPtr pEffect( (*aIter) );
+        CustomAnimationEffectPtr pEffect( *aIter );
         if( pEffect->getTargetShape() == xShape )
         {
             pEffect->setHasAfterEffect( true );
@@ -917,23 +913,21 @@ sal_Int32 EffectMigration::GetDimColor( SvxShape* pShape )
     if( pShape )
     {
         SdrObject* pObj = pShape->GetSdrObject();
-        if( pObj && pObj->GetPage() )
+        if( pObj && pObj->getSdrPageFromSdrObject() )
         {
-            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
             const Reference< XShape > xShape( pShape );
-            EffectSequence::iterator aIter;
-
-            for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
+            EffectSequence::iterator aIter = std::find_if(pMainSequence->getBegin(), pMainSequence->getEnd(),
+                [&xShape](const CustomAnimationEffectPtr& pEffect) {
+                    return (pEffect->getTargetShape() == xShape)
+                        && pEffect->getDimColor().hasValue()
+                        && pEffect->hasAfterEffect();
+                });
+            if (aIter != pMainSequence->getEnd())
             {
-                CustomAnimationEffectPtr pEffect( (*aIter) );
-                if( (pEffect->getTargetShape() == xShape) &&
-                    pEffect->getDimColor().hasValue() &&
-                    pEffect->hasAfterEffect())
-                {
-                    pEffect->getDimColor() >>= nColor;
-                    break;
-                }
+                CustomAnimationEffectPtr pEffect( *aIter );
+                pEffect->getDimColor() >>= nColor;
             }
         }
     }
@@ -943,16 +937,16 @@ sal_Int32 EffectMigration::GetDimColor( SvxShape* pShape )
 
 void EffectMigration::SetDimHide( SvxShape* pShape, bool bDimHide )
 {
-    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->GetPage(),
+    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->getSdrPageFromSdrObject(),
                 "sd::EffectMigration::SetAnimationEffect(), invalid argument!" );
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
     if( implIsInsideGroup( pObj ) )
         return;
 
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     const Reference< XShape > xShape( pShape );
 
@@ -961,7 +955,7 @@ void EffectMigration::SetDimHide( SvxShape* pShape, bool bDimHide )
 
     for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
     {
-        CustomAnimationEffectPtr pEffect( (*aIter) );
+        CustomAnimationEffectPtr pEffect( *aIter );
         if( pEffect->getTargetShape() == xShape )
         {
             pEffect->setHasAfterEffect( bDimHide );
@@ -984,23 +978,20 @@ bool EffectMigration::GetDimHide( SvxShape* pShape )
     if( pShape )
     {
         SdrObject* pObj = pShape->GetSdrObject();
-        if( pObj && pObj->GetPage() )
+        if( pObj && pObj->getSdrPageFromSdrObject() )
         {
-            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
             const Reference< XShape > xShape( pShape );
 
-            EffectSequence::iterator aIter;
-            for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
+            EffectSequence::iterator aIter = std::find_if(pMainSequence->getBegin(), pMainSequence->getEnd(),
+                [&xShape](const CustomAnimationEffectPtr& pEffect) { return pEffect->getTargetShape() == xShape; });
+            if (aIter != pMainSequence->getEnd())
             {
-                CustomAnimationEffectPtr pEffect( (*aIter) );
-                if( pEffect->getTargetShape() == xShape )
-                {
-                    bRet = pEffect->hasAfterEffect() &&
-                            !pEffect->getDimColor().hasValue() &&
-                            (!pEffect->IsAfterEffectOnNext());
-                    break;
-                }
+                CustomAnimationEffectPtr pEffect( *aIter );
+                bRet = pEffect->hasAfterEffect() &&
+                        !pEffect->getDimColor().hasValue() &&
+                        (!pEffect->IsAfterEffectOnNext());
             }
         }
     }
@@ -1010,9 +1001,9 @@ bool EffectMigration::GetDimHide( SvxShape* pShape )
 
 void EffectMigration::SetDimPrevious( SvxShape* pShape, bool bDimPrevious )
 {
-    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->GetPage(),
+    DBG_ASSERT( pShape && pShape->GetSdrObject() && pShape->GetSdrObject()->getSdrPageFromSdrObject(),
                 "sd::EffectMigration::SetAnimationEffect(), invalid argument!" );
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
@@ -1022,9 +1013,9 @@ void EffectMigration::SetDimPrevious( SvxShape* pShape, bool bDimPrevious )
     Any aColor;
 
     if( bDimPrevious )
-        aColor <<= (sal_Int32)COL_LIGHTGRAY;
+        aColor <<= COL_LIGHTGRAY;
 
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     const Reference< XShape > xShape( pShape );
 
@@ -1033,7 +1024,7 @@ void EffectMigration::SetDimPrevious( SvxShape* pShape, bool bDimPrevious )
 
     for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
     {
-        CustomAnimationEffectPtr pEffect( (*aIter) );
+        CustomAnimationEffectPtr pEffect( *aIter );
         if( pEffect->getTargetShape() == xShape )
         {
             pEffect->setHasAfterEffect( bDimPrevious );
@@ -1054,23 +1045,20 @@ bool EffectMigration::GetDimPrevious( SvxShape* pShape )
     if( pShape )
     {
         SdrObject* pObj = pShape->GetSdrObject();
-        if( pObj && pObj->GetPage() )
+        if( pObj && pObj->getSdrPageFromSdrObject() )
         {
-            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
             const Reference< XShape > xShape( pShape );
 
-            EffectSequence::iterator aIter;
-            for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
+            EffectSequence::iterator aIter = std::find_if(pMainSequence->getBegin(), pMainSequence->getEnd(),
+                [&xShape](const CustomAnimationEffectPtr& pEffect) { return pEffect->getTargetShape() == xShape; });
+            if (aIter != pMainSequence->getEnd())
             {
-                CustomAnimationEffectPtr pEffect( (*aIter) );
-                if( pEffect->getTargetShape() == xShape )
-                {
-                    bRet = pEffect->hasAfterEffect() &&
-                            pEffect->getDimColor().hasValue() &&
-                            pEffect->IsAfterEffectOnNext();
-                    break;
-                }
+                CustomAnimationEffectPtr pEffect( *aIter );
+                bRet = pEffect->hasAfterEffect() &&
+                        pEffect->getDimColor().hasValue() &&
+                        pEffect->IsAfterEffectOnNext();
             }
         }
     }
@@ -1080,11 +1068,11 @@ bool EffectMigration::GetDimPrevious( SvxShape* pShape )
 
 void EffectMigration::SetPresentationOrder( SvxShape* pShape, sal_Int32 nNewPos )
 {
-    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->GetPage() )
+    if( !pShape || !pShape->GetSdrObject() || !pShape->GetSdrObject()->getSdrPageFromSdrObject() )
         return;
 
     SdrObject* pObj = pShape->GetSdrObject();
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     EffectSequence& rSequence = pMainSequence->getSequence();
     sal_Int32 nPos;
@@ -1100,7 +1088,7 @@ void EffectMigration::SetPresentationOrder( SvxShape* pShape, sal_Int32 nNewPos 
         EffectSequence::iterator aEnd( rSequence.end() );
         for( nPos = 0; aIter != aEnd; ++aIter )
         {
-            CustomAnimationEffectPtr pEffect = (*aIter);
+            CustomAnimationEffectPtr pEffect = *aIter;
 
             if( !xCurrent.is() )
             {
@@ -1135,33 +1123,25 @@ void EffectMigration::SetPresentationOrder( SvxShape* pShape, sal_Int32 nNewPos 
     {
         std::vector< CustomAnimationEffectPtr > aEffects;
 
-        std::vector< EffectSequence::iterator >::iterator aIter( aEffectVector[nCurrentPos].begin() );
-        std::vector< EffectSequence::iterator >::iterator aEnd( aEffectVector[nCurrentPos].end() );
-        while( aIter != aEnd )
+        for( auto& rIter : aEffectVector[nCurrentPos] )
         {
-            aEffects.push_back( (*(*aIter)) );
-            rSequence.erase( (*aIter++) );
+            aEffects.push_back( *rIter );
+            rSequence.erase( rIter );
         }
 
         if( nNewPos > nCurrentPos )
             nNewPos++;
 
-        std::vector< CustomAnimationEffectPtr >::iterator aTempIter( aEffects.begin() );
-        std::vector< CustomAnimationEffectPtr >::iterator aTempEnd( aEffects.end() );
-
-        if( nNewPos == (sal_Int32)aEffectVector.size() )
+        if( nNewPos == static_cast<sal_Int32>(aEffectVector.size()) )
         {
-            while( aTempIter != aTempEnd )
-            {
-                rSequence.push_back( (*aTempIter++) );
-            }
+            std::copy(aEffects.begin(), aEffects.end(), std::back_inserter(rSequence));
         }
         else
         {
             EffectSequence::iterator aPos( aEffectVector[nNewPos][0] );
-            while( aTempIter != aTempEnd )
+            for( const auto& rEffect : aEffects )
             {
-                rSequence.insert( aPos, (*aTempIter++) );
+                rSequence.insert( aPos, rEffect );
             }
         }
     }
@@ -1169,26 +1149,22 @@ void EffectMigration::SetPresentationOrder( SvxShape* pShape, sal_Int32 nNewPos 
 
 /** Returns the position of the given SdrObject in the Presentation order.
  *  This function returns -1 if the SdrObject is not in the Presentation order
- *  or if its the path-object.
+ *  or if it's the path-object.
  */
 sal_Int32 EffectMigration::GetPresentationOrder( SvxShape* pShape )
 {
     sal_Int32 nPos = -1, nFound = -1;
 
     SdrObject* pObj = pShape->GetSdrObject();
-    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+    sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
     EffectSequence& rSequence = pMainSequence->getSequence();
 
     Reference< XShape > xThis( pShape );
     Reference< XShape > xCurrent;
 
-    EffectSequence::iterator aIter( rSequence.begin() );
-    EffectSequence::iterator aEnd( rSequence.end() );
-    for( ; aIter != aEnd; ++aIter )
+    for( CustomAnimationEffectPtr& pEffect : rSequence )
     {
-        CustomAnimationEffectPtr pEffect = (*aIter);
-
         if( !xCurrent.is() || pEffect->getTargetShape() != xCurrent )
         {
             nPos++;
@@ -1206,12 +1182,12 @@ sal_Int32 EffectMigration::GetPresentationOrder( SvxShape* pShape )
     return nFound;
 }
 
-void EffectMigration::UpdateSoundEffect( SvxShape* pShape, SdAnimationInfo* pInfo )
+void EffectMigration::UpdateSoundEffect( SvxShape* pShape, SdAnimationInfo const * pInfo )
 {
     if( pInfo )
     {
         SdrObject* pObj = pShape->GetSdrObject();
-        sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+        sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
         const Reference< XShape > xShape( pShape );
 
@@ -1224,7 +1200,7 @@ void EffectMigration::UpdateSoundEffect( SvxShape* pShape, SdAnimationInfo* pInf
 
         for( aIter = pMainSequence->getBegin(); aIter != pMainSequence->getEnd(); ++aIter )
         {
-            CustomAnimationEffectPtr pEffect( (*aIter) );
+            CustomAnimationEffectPtr pEffect( *aIter );
             if( pEffect->getTargetShape() == xShape )
             {
                 if( !aSoundFile.isEmpty() )
@@ -1251,9 +1227,9 @@ OUString EffectMigration::GetSoundFile( SvxShape* pShape )
     if( pShape )
     {
         SdrObject* pObj = pShape->GetSdrObject();
-        if( pObj && pObj->GetPage() )
+        if( pObj && pObj->getSdrPageFromSdrObject() )
         {
-            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->GetPage())->getMainSequence();
+            sd::MainSequencePtr pMainSequence = static_cast<SdPage*>(pObj->getSdrPageFromSdrObject())->getMainSequence();
 
             const Reference< XShape > xShape( pShape );
 
@@ -1263,7 +1239,7 @@ OUString EffectMigration::GetSoundFile( SvxShape* pShape )
                     (aSoundFile.isEmpty()) && (aIter != pMainSequence->getEnd());
                     ++aIter )
             {
-                CustomAnimationEffectPtr pEffect( (*aIter) );
+                CustomAnimationEffectPtr pEffect( *aIter );
                 if( pEffect->getTargetShape() == xShape )
                 {
                     if( pEffect->getAudio().is() )
@@ -1280,7 +1256,7 @@ bool EffectMigration::GetSoundOn( SvxShape* pShape )
     return !GetSoundFile( pShape ).isEmpty();
 }
 
-void EffectMigration::SetAnimationPath( SvxShape* pShape, SdrPathObj* pPathObj )
+void EffectMigration::SetAnimationPath( SvxShape* pShape, SdrPathObj const * pPathObj )
 {
     if( pShape && pPathObj )
     {
@@ -1289,7 +1265,7 @@ void EffectMigration::SetAnimationPath( SvxShape* pShape, SdrPathObj* pPathObj )
         if( pObj )
         {
             const Reference< XShape > xShape( pShape );
-            SdPage* pPage = dynamic_cast< SdPage* >(pPathObj->GetPage());
+            SdPage* pPage = dynamic_cast< SdPage* >(pPathObj->getSdrPageFromSdrObject());
             if( pPage )
             {
                 std::shared_ptr< sd::MainSequence > pMainSequence( pPage->getMainSequence() );
@@ -1301,17 +1277,15 @@ void EffectMigration::SetAnimationPath( SvxShape* pShape, SdrPathObj* pPathObj )
 }
 
 // #i42894# helper which creates the needed XAnimate for changing visibility and all the (currently) needed embeddings
-void createVisibilityOnOffNode(Reference< XTimeContainer >& rxParentContainer, SdrObject& rCandidate, bool bVisible, bool bOnClick, double fDuration)
+static void createVisibilityOnOffNode(Reference< XTimeContainer > const & rxParentContainer, SdrObject& rCandidate, bool bVisible, bool bOnClick, double fDuration)
 {
     Reference< XMultiServiceFactory > xMsf(::comphelper::getProcessServiceFactory());
-    Any aAny;
 
     // create par container node
     Reference< XAnimationNode > xOuterSeqTimeContainer(xMsf->createInstance("com.sun.star.animations.ParallelTimeContainer"), UNO_QUERY_THROW);
 
     // set begin
-    aAny <<= (double)(0.0);
-    xOuterSeqTimeContainer->setBegin(aAny);
+    xOuterSeqTimeContainer->setBegin(Any(0.0));
 
     // set fill
     xOuterSeqTimeContainer->setFill(AnimationFill::HOLD);
@@ -1329,12 +1303,10 @@ void createVisibilityOnOffNode(Reference< XTimeContainer >& rxParentContainer, S
     Reference< XAnimationNode > xAnimateSetForLast(xMsf->createInstance("com.sun.star.animations.AnimateSet"), UNO_QUERY_THROW);
 
     // set begin
-    aAny <<= (double)(0.0);
-    xAnimateSetForLast->setBegin(aAny);
+    xAnimateSetForLast->setBegin(Any(0.0));
 
     // set duration
-    aAny <<= fDuration;
-    xAnimateSetForLast->setDuration(aAny);
+    xAnimateSetForLast->setDuration(Any(fDuration));
 
     // set fill
     xAnimateSetForLast->setFill(AnimationFill::HOLD);
@@ -1342,15 +1314,13 @@ void createVisibilityOnOffNode(Reference< XTimeContainer >& rxParentContainer, S
     // set target
     Reference< XAnimate > xAnimate(xAnimateSetForLast, UNO_QUERY);
     Reference< XShape > xTargetShape(rCandidate.getUnoShape(), UNO_QUERY);
-    aAny <<= xTargetShape;
-    xAnimate->setTarget(aAny);
+    xAnimate->setTarget(Any(xTargetShape));
 
     // set AttributeName
     xAnimate->setAttributeName("Visibility");
 
     // set attribute value
-    aAny <<= bVisible;
-    xAnimate->setTo(aAny);
+    xAnimate->setTo(Any(bVisible));
 
     // ad set node to par node
     Reference< XTimeContainer > xParentContainer(xOuterSeqTimeContainer, UNO_QUERY_THROW);
@@ -1365,9 +1335,9 @@ void createVisibilityOnOffNode(Reference< XTimeContainer >& rxParentContainer, S
 // fallback will create the needed SMIL animation stuff. Unfortunately the members of the group
 // have to be moved directly to the page, else the (explained to be generic, thus I expected this to
 // work) animations will not work in slideshow
-void EffectMigration::CreateAnimatedGroup(SdrObjGroup& rGroupObj, SdPage& rPage)
+void EffectMigration::CreateAnimatedGroup(SdrObjGroup const & rGroupObj, SdPage& rPage)
 {
-    // aw080 will give a vector immeditately
+    // aw080 will give a vector immediately
     SdrObjListIter aIter(rGroupObj);
 
     if(aIter.Count())
@@ -1391,11 +1361,9 @@ void EffectMigration::CreateAnimatedGroup(SdrObjGroup& rGroupObj, SdPage& rPage)
             // create main node
             Reference< XMultiServiceFactory > xMsf(::comphelper::getProcessServiceFactory());
             Reference< XAnimationNode > xOuterSeqTimeContainer(xMsf->createInstance("com.sun.star.animations.ParallelTimeContainer"), UNO_QUERY_THROW);
-            Any aAny;
 
             // set begin
-            aAny <<= (double)(0.0);
-            xOuterSeqTimeContainer->setBegin(aAny);
+            xOuterSeqTimeContainer->setBegin(Any(0.0));
 
             // prepare parent container
             Reference< XTimeContainer > xParentContainer(xOuterSeqTimeContainer, UNO_QUERY_THROW);
@@ -1431,6 +1399,31 @@ void EffectMigration::CreateAnimatedGroup(SdrObjGroup& rGroupObj, SdPage& rPage)
             // add to main sequence and rebuild
             pMainSequence->createEffects(xOuterSeqTimeContainer);
             pMainSequence->rebuild();
+        }
+    }
+}
+
+void EffectMigration::DocumentLoaded(SdDrawDocument & rDoc)
+{
+    if (DocumentType::Draw == rDoc.GetDocumentType())
+        return; // no animations in Draw
+    for (sal_uInt16 n = 0; n < rDoc.GetSdPageCount(PageKind::Standard); ++n)
+    {
+        SdPage *const pPage = rDoc.GetSdPage(n, PageKind::Standard);
+        if (pPage->hasAnimationNode())
+        {
+            // this will force the equivalent of the MainSequence::onTimerHdl
+            // so that the animations are present in export-able representation
+            // *before* the import is finished
+            pPage->getMainSequence()->getRootNode();
+        }
+    }
+    for (sal_uInt16 n = 0; n < rDoc.GetMasterSdPageCount(PageKind::Standard); ++n)
+    {
+        SdPage *const pPage = rDoc.GetMasterSdPage(n, PageKind::Standard);
+        if (pPage->hasAnimationNode())
+        {
+            pPage->getMainSequence()->getRootNode();
         }
     }
 }

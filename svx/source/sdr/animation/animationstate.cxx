@@ -39,7 +39,7 @@ namespace sdr
             {
                 const sal_Int32 nCount(maAnimatedPrimitives.size());
 
-                for(sal_Int32 a(0L); a < nCount; a++)
+                for(sal_Int32 a(0); a < nCount; a++)
                 {
                     const drawinglayer::primitive2d::Primitive2DReference xRef(maAnimatedPrimitives[a]);
                     const drawinglayer::primitive2d::AnimatedSwitchPrimitive2D* pCandidate = dynamic_cast< const drawinglayer::primitive2d::AnimatedSwitchPrimitive2D* >(xRef.get());
@@ -80,7 +80,7 @@ namespace sdr
                 // next time point exists, use it
                 sal_uInt32 nNextTime;
 
-                if(fNextTime >= (double)0xffffff00)
+                if(fNextTime >= double(0xffffff00))
                 {
                     // take care for very late points in time, e.g. when a text animation stops
                     // in a defined AnimationEntryFixed with endless (0xffffffff) duration
@@ -88,12 +88,12 @@ namespace sdr
                 }
                 else
                 {
-                    nNextTime = (sal_uInt32)fNextTime;
+                    nNextTime = static_cast<sal_uInt32>(fNextTime);
                 }
 
                 // ensure step forward in integer timing, the floating step difference maybe smaller than 1.0. Use
                 // at least 25ms for next step
-                const sal_uInt32 nMinimumStepTime((sal_uInt32)fCurrentTime + 25L);
+                const sal_uInt32 nMinimumStepTime(static_cast<sal_uInt32>(fCurrentTime) + 25);
 
                 if(nNextTime <= nMinimumStepTime)
                 {
@@ -102,7 +102,7 @@ namespace sdr
 
                 // set time and reactivate by re-adding to the scheduler
                 SetTime(nNextTime);
-                mrVOContact.GetObjectContact().getPrimitiveAnimator().InsertEvent(this);
+                mrVOContact.GetObjectContact().getPrimitiveAnimator().InsertEvent(*this);
             }
         }
 

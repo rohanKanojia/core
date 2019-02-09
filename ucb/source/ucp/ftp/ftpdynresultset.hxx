@@ -20,8 +20,9 @@
 #ifndef INCLUDED_UCB_SOURCE_UCP_FTP_FTPDYNRESULTSET_HXX
 #define INCLUDED_UCB_SOURCE_UCP_FTP_FTPDYNRESULTSET_HXX
 
-#include "rtl/ref.hxx"
-#include "ucbhelper/resultsethelper.hxx"
+#include <memory>
+#include <rtl/ref.hxx>
+#include <ucbhelper/resultsethelper.hxx>
 
 #include "ftpcontent.hxx"
 
@@ -31,7 +32,7 @@ namespace ftp {
 
     class DynamicResultSet : public ::ucbhelper::ResultSetImplHelper
     {
-        ResultSetFactory*                    m_pFactory;
+        std::unique_ptr<ResultSetFactory>          m_pFactory;
 
     private:
         virtual void initStatic() override;
@@ -41,9 +42,9 @@ namespace ftp {
         DynamicResultSet(
             const css::uno::Reference< css::uno::XComponentContext >& rxContext,
             const css::ucb::OpenCommandArgument2& rCommand,
-            ResultSetFactory* pFactory );
+            std::unique_ptr<ResultSetFactory> pFactory );
 
-        virtual ~DynamicResultSet();
+        virtual ~DynamicResultSet() override;
     };
 
 }

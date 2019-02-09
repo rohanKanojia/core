@@ -26,8 +26,8 @@ class ScGridMerger
 {
 private:
     VclPtr<OutputDevice> pDev;
-    long            nOneX;
-    long            nOneY;
+    long const      nOneX;
+    long const      nOneY;
     long            nFixStart;
     long            nFixEnd;
     long            nVarStart;
@@ -42,8 +42,8 @@ public:
                 ScGridMerger( OutputDevice* pOutDev, long nOnePixelX, long nOnePixelY );
                 ~ScGridMerger();
 
-    void        AddHorLine(bool bWorksInPixels, long nX1, long nX2, long nY);
-    void        AddVerLine(bool bWorksInPixels, long nX, long nY1, long nY2);
+    void        AddHorLine(bool bWorksInPixels, long nX1, long nX2, long nY, bool bDashed = false);
+    void        AddVerLine(bool bWorksInPixels, long nX, long nY1, long nY2, bool bDashed = false);
     void        Flush();
 };
 

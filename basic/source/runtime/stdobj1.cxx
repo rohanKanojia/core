@@ -19,9 +19,9 @@
 
 #include <vcl/wrkwin.hxx>
 #include <vcl/svapp.hxx>
-#include <svtools/transfer.hxx>
-#include "runtime.hxx"
-#include "sbstdobj.hxx"
+#include <vcl/transfer.hxx>
+#include <runtime.hxx>
+#include <sbstdobj.hxx>
 
 #define ATTR_IMP_TYPE           1
 #define ATTR_IMP_WIDTH          2
@@ -56,7 +56,7 @@ SbxObject* SbStdFactory::CreateObject( const OUString& rClassName )
 }
 
 
-void SbStdPicture::PropType( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdPicture::PropType( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
     {
@@ -67,16 +67,16 @@ void SbStdPicture::PropType( SbxVariable* pVar, SbxArray*, bool bWrite )
     GraphicType eType = aGraphic.GetType();
     sal_Int16 nType = 0;
 
-    if( eType == GRAPHIC_BITMAP )
+    if( eType == GraphicType::Bitmap )
         nType = 1;
-    else if( eType != GRAPHIC_NONE )
+    else if( eType != GraphicType::NONE )
         nType = 2;
 
     pVar->PutInteger( nType );
 }
 
 
-void SbStdPicture::PropWidth( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdPicture::PropWidth( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
     {
@@ -86,12 +86,12 @@ void SbStdPicture::PropWidth( SbxVariable* pVar, SbxArray*, bool bWrite )
 
     Size aSize = aGraphic.GetPrefSize();
     aSize = Application::GetAppWindow()->LogicToPixel( aSize, aGraphic.GetPrefMapMode() );
-    aSize = Application::GetAppWindow()->PixelToLogic( aSize, MapMode( MAP_TWIP ) );
+    aSize = Application::GetAppWindow()->PixelToLogic( aSize, MapMode( MapUnit::MapTwip ) );
 
-    pVar->PutInteger( (sal_Int16)aSize.Width() );
+    pVar->PutInteger( static_cast<sal_Int16>(aSize.Width()) );
 }
 
-void SbStdPicture::PropHeight( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdPicture::PropHeight( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
     {
@@ -101,36 +101,29 @@ void SbStdPicture::PropHeight( SbxVariable* pVar, SbxArray*, bool bWrite )
 
     Size aSize = aGraphic.GetPrefSize();
     aSize = Application::GetAppWindow()->LogicToPixel( aSize, aGraphic.GetPrefMapMode() );
-    aSize = Application::GetAppWindow()->PixelToLogic( aSize, MapMode( MAP_TWIP ) );
+    aSize = Application::GetAppWindow()->PixelToLogic( aSize, MapMode( MapUnit::MapTwip ) );
 
-    pVar->PutInteger( (sal_Int16)aSize.Height() );
+    pVar->PutInteger( static_cast<sal_Int16>(aSize.Height()) );
 }
 
 
 SbStdPicture::SbStdPicture() :
-    SbxObject( OUString("Picture"))
+    SbxObject( "Picture" )
 {
     // Properties
-    SbxVariable* p = Make( "Type", SbxCLASS_PROPERTY, SbxVARIANT );
+    SbxVariable* p = Make( "Type", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::Read | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_TYPE );
-    p = Make( "Width", SbxCLASS_PROPERTY, SbxVARIANT );
+    p = Make( "Width", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::Read | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_WIDTH );
-    p = Make( "Height", SbxCLASS_PROPERTY, SbxVARIANT );
+    p = Make( "Height", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::Read | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_HEIGHT );
 }
 
 SbStdPicture::~SbStdPicture()
 {
-}
-
-
-SbxVariable* SbStdPicture::Find( const OUString& rName, SbxClassType t )
-{
-    // entered already?
-    return SbxObject::Find( rName, t );
 }
 
 
@@ -141,23 +134,22 @@ void SbStdPicture::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 
     if( pHint )
     {
-        if( pHint->GetId() == SBX_HINT_INFOWANTED )
+        if( pHint->GetId() == SfxHintId::BasicInfoWanted )
         {
             SbxObject::Notify( rBC, rHint );
             return;
         }
 
         SbxVariable* pVar   = pHint->GetVar();
-        SbxArray*    pPar_  = pVar->GetParameters();
         const sal_uInt32 nWhich = pVar->GetUserData();
-        bool         bWrite = pHint->GetId() == SBX_HINT_DATACHANGED;
+        bool         bWrite = pHint->GetId() == SfxHintId::BasicDataChanged;
 
-        // Propteries
+        // Properties
         switch( nWhich )
         {
-            case ATTR_IMP_TYPE:     PropType( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_WIDTH:    PropWidth( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_HEIGHT:   PropHeight( pVar, pPar_, bWrite ); return;
+            case ATTR_IMP_TYPE:     PropType( pVar, bWrite ); return;
+            case ATTR_IMP_WIDTH:    PropWidth( pVar, bWrite ); return;
+            case ATTR_IMP_HEIGHT:   PropHeight( pVar, bWrite ); return;
         }
 
         SbxObject::Notify( rBC, rHint );
@@ -165,7 +157,7 @@ void SbStdPicture::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 }
 
 
-void SbStdFont::PropBold( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdFont::PropBold( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
         SetBold( pVar->GetBool() );
@@ -173,7 +165,7 @@ void SbStdFont::PropBold( SbxVariable* pVar, SbxArray*, bool bWrite )
         pVar->PutBool( IsBold() );
 }
 
-void SbStdFont::PropItalic( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdFont::PropItalic( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
         SetItalic( pVar->GetBool() );
@@ -181,7 +173,7 @@ void SbStdFont::PropItalic( SbxVariable* pVar, SbxArray*, bool bWrite )
         pVar->PutBool( IsItalic() );
 }
 
-void SbStdFont::PropStrikeThrough( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdFont::PropStrikeThrough( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
         SetStrikeThrough( pVar->GetBool() );
@@ -189,7 +181,7 @@ void SbStdFont::PropStrikeThrough( SbxVariable* pVar, SbxArray*, bool bWrite )
         pVar->PutBool( IsStrikeThrough() );
 }
 
-void SbStdFont::PropUnderline( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdFont::PropUnderline( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
         SetUnderline( pVar->GetBool() );
@@ -197,19 +189,19 @@ void SbStdFont::PropUnderline( SbxVariable* pVar, SbxArray*, bool bWrite )
         pVar->PutBool( IsUnderline() );
 }
 
-void SbStdFont::PropSize( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdFont::PropSize( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
-        SetSize( (sal_uInt16)pVar->GetInteger() );
+        SetSize( static_cast<sal_uInt16>(pVar->GetInteger()) );
     else
-        pVar->PutInteger( (sal_Int16)GetSize() );
+        pVar->PutInteger( static_cast<sal_Int16>(GetSize()) );
 }
 
-void SbStdFont::PropName( SbxVariable* pVar, SbxArray*, bool bWrite )
+void SbStdFont::PropName( SbxVariable* pVar, bool bWrite )
 {
     if( bWrite )
     {
-        SetFontName( pVar->GetOUString() );
+        aName = pVar->GetOUString();
     }
     else
     {
@@ -219,7 +211,7 @@ void SbStdFont::PropName( SbxVariable* pVar, SbxArray*, bool bWrite )
 
 
 SbStdFont::SbStdFont()
-    : SbxObject( OUString("Font") )
+    : SbxObject( "Font" )
     , bBold(false)
     , bItalic(false)
     , bStrikeThrough(false)
@@ -227,24 +219,24 @@ SbStdFont::SbStdFont()
     , nSize(0)
 {
     // Properties
-    SbxVariable* p = Make( "Bold", SbxCLASS_PROPERTY, SbxVARIANT );
+    SbxVariable* p = Make( "Bold", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::ReadWrite | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_BOLD );
-    p = Make( "Italic", SbxCLASS_PROPERTY, SbxVARIANT );
+    p = Make( "Italic", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::ReadWrite | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_ITALIC );
-    p = Make( "StrikeThrough", SbxCLASS_PROPERTY, SbxVARIANT );
+    p = Make( "StrikeThrough", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::ReadWrite | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_STRIKETHROUGH );
-    p = Make( "Underline", SbxCLASS_PROPERTY, SbxVARIANT );
+    p = Make( "Underline", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::ReadWrite | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_UNDERLINE );
-    p = Make( "Size", SbxCLASS_PROPERTY, SbxVARIANT );
+    p = Make( "Size", SbxClassType::Property, SbxVARIANT );
     p->SetFlags( SbxFlagBits::ReadWrite | SbxFlagBits::DontStore );
     p->SetUserData( ATTR_IMP_SIZE );
 
     // handle name property yourself
-    p = Find( "Name", SbxCLASS_PROPERTY );
+    p = Find( "Name", SbxClassType::Property );
     assert(p && "No Name Property");
     p->SetUserData( ATTR_IMP_NAME );
 }
@@ -253,37 +245,31 @@ SbStdFont::~SbStdFont()
 {
 }
 
-SbxVariable* SbStdFont::Find( const OUString& rName, SbxClassType t )
-{
-    return SbxObject::Find( rName, t );
-}
-
 void SbStdFont::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
     const SbxHint* pHint = dynamic_cast<const SbxHint*>(&rHint);
 
     if( pHint )
     {
-        if( pHint->GetId() == SBX_HINT_INFOWANTED )
+        if( pHint->GetId() == SfxHintId::BasicInfoWanted )
         {
             SbxObject::Notify( rBC, rHint );
             return;
         }
 
         SbxVariable* pVar   = pHint->GetVar();
-        SbxArray*    pPar_  = pVar->GetParameters();
         const sal_uInt32 nWhich = pVar->GetUserData();
-        bool         bWrite = pHint->GetId() == SBX_HINT_DATACHANGED;
+        bool         bWrite = pHint->GetId() == SfxHintId::BasicDataChanged;
 
-        // Propteries
+        // Properties
         switch( nWhich )
         {
-            case ATTR_IMP_BOLD:         PropBold( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_ITALIC:       PropItalic( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_STRIKETHROUGH:PropStrikeThrough( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_UNDERLINE:    PropUnderline( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_SIZE:         PropSize( pVar, pPar_, bWrite ); return;
-            case ATTR_IMP_NAME:         PropName( pVar, pPar_, bWrite ); return;
+            case ATTR_IMP_BOLD:         PropBold( pVar, bWrite ); return;
+            case ATTR_IMP_ITALIC:       PropItalic( pVar, bWrite ); return;
+            case ATTR_IMP_STRIKETHROUGH:PropStrikeThrough(  pVar, bWrite ); return;
+            case ATTR_IMP_UNDERLINE:    PropUnderline( pVar, bWrite ); return;
+            case ATTR_IMP_SIZE:         PropSize( pVar, bWrite ); return;
+            case ATTR_IMP_NAME:         PropName( pVar, bWrite ); return;
         }
 
         SbxObject::Notify( rBC, rHint );
@@ -291,7 +277,7 @@ void SbStdFont::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 }
 
 
-void SbStdClipboard::MethClear( SbxVariable*, SbxArray* pPar_, bool )
+void SbStdClipboard::MethClear( SbxArray const * pPar_ )
 {
     if( pPar_ && (pPar_->Count() > 1) )
     {
@@ -301,10 +287,8 @@ void SbStdClipboard::MethClear( SbxVariable*, SbxArray* pPar_, bool )
 
 }
 
-void SbStdClipboard::MethGetData( SbxVariable* pVar, SbxArray* pPar_, bool )
+void SbStdClipboard::MethGetData( SbxArray* pPar_ )
 {
-    (void)pVar;
-
     if( !pPar_ || (pPar_->Count() != 2) )
     {
         StarBASIC::Error( ERRCODE_BASIC_BAD_NUMBER_OF_ARGS );
@@ -320,7 +304,7 @@ void SbStdClipboard::MethGetData( SbxVariable* pVar, SbxArray* pPar_, bool )
 
 }
 
-void SbStdClipboard::MethGetFormat( SbxVariable* pVar, SbxArray* pPar_, bool )
+void SbStdClipboard::MethGetFormat( SbxVariable* pVar, SbxArray* pPar_ )
 {
     if( !pPar_ || (pPar_->Count() != 2) )
     {
@@ -338,7 +322,7 @@ void SbStdClipboard::MethGetFormat( SbxVariable* pVar, SbxArray* pPar_, bool )
     pVar->PutBool( false );
 }
 
-void SbStdClipboard::MethGetText( SbxVariable* pVar, SbxArray* pPar_, bool )
+void SbStdClipboard::MethGetText( SbxVariable* pVar, SbxArray const * pPar_ )
 {
     if( pPar_ && (pPar_->Count() > 1) )
     {
@@ -349,10 +333,8 @@ void SbStdClipboard::MethGetText( SbxVariable* pVar, SbxArray* pPar_, bool )
     pVar->PutString( OUString() );
 }
 
-void SbStdClipboard::MethSetData( SbxVariable* pVar, SbxArray* pPar_, bool )
+void SbStdClipboard::MethSetData( SbxArray* pPar_ )
 {
-    (void)pVar;
-
     if( !pPar_ || (pPar_->Count() != 3) )
     {
         StarBASIC::Error( ERRCODE_BASIC_BAD_NUMBER_OF_ARGS );
@@ -368,10 +350,8 @@ void SbStdClipboard::MethSetData( SbxVariable* pVar, SbxArray* pPar_, bool )
 
 }
 
-void SbStdClipboard::MethSetText( SbxVariable* pVar, SbxArray* pPar_, bool )
+void SbStdClipboard::MethSetText( SbxArray const * pPar_ )
 {
-    (void)pVar;
-
     if( !pPar_ || (pPar_->Count() != 2) )
     {
         StarBASIC::Error( ERRCODE_BASIC_BAD_NUMBER_OF_ARGS );
@@ -382,29 +362,29 @@ void SbStdClipboard::MethSetText( SbxVariable* pVar, SbxArray* pPar_, bool )
 
 
 SbStdClipboard::SbStdClipboard() :
-    SbxObject( OUString("Clipboard") )
+    SbxObject( "Clipboard" )
 {
-    SbxVariable* p = Find( "Name", SbxCLASS_PROPERTY );
+    SbxVariable* p = Find( "Name", SbxClassType::Property );
     assert(p && "No Name Property");
     p->SetUserData( ATTR_IMP_NAME );
 
     // register methods
-    p = Make( "Clear", SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( "Clear", SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
     p->SetUserData( METH_CLEAR );
-    p = Make( "GetData", SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( "GetData", SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
     p->SetUserData( METH_GETDATA );
-    p = Make( "GetFormat", SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( "GetFormat", SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
     p->SetUserData( METH_GETFORMAT );
-    p = Make( "GetText", SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( "GetText", SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
     p->SetUserData( METH_GETTEXT );
-    p = Make( "SetData", SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( "SetData", SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
     p->SetUserData( METH_SETDATA );
-    p = Make( "SetText", SbxCLASS_METHOD, SbxEMPTY );
+    p = Make( "SetText", SbxClassType::Method, SbxEMPTY );
     p->SetFlag( SbxFlagBits::DontStore );
     p->SetUserData( METH_SETTEXT );
 }
@@ -413,20 +393,13 @@ SbStdClipboard::~SbStdClipboard()
 {
 }
 
-
-SbxVariable* SbStdClipboard::Find( const OUString& rName, SbxClassType t )
-{
-    return SbxObject::Find( rName, t );
-}
-
-
 void SbStdClipboard::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
 {
     const SbxHint* pHint = dynamic_cast<const SbxHint*>(&rHint);
 
     if( pHint )
     {
-        if( pHint->GetId() == SBX_HINT_INFOWANTED )
+        if( pHint->GetId() == SfxHintId::BasicInfoWanted )
         {
             SbxObject::Notify( rBC, rHint );
             return;
@@ -435,17 +408,16 @@ void SbStdClipboard::Notify( SfxBroadcaster& rBC, const SfxHint& rHint )
         SbxVariable* pVar   = pHint->GetVar();
         SbxArray*    pPar_  = pVar->GetParameters();
         const sal_uInt32 nWhich = pVar->GetUserData();
-        bool         bWrite = pHint->GetId() == SBX_HINT_DATACHANGED;
 
         // Methods
         switch( nWhich )
         {
-            case METH_CLEAR:            MethClear( pVar, pPar_, bWrite ); return;
-            case METH_GETDATA:          MethGetData( pVar, pPar_, bWrite ); return;
-            case METH_GETFORMAT:        MethGetFormat( pVar, pPar_, bWrite ); return;
-            case METH_GETTEXT:          MethGetText( pVar, pPar_, bWrite ); return;
-            case METH_SETDATA:          MethSetData( pVar, pPar_, bWrite ); return;
-            case METH_SETTEXT:          MethSetText( pVar, pPar_, bWrite ); return;
+            case METH_CLEAR:            MethClear( pPar_ ); return;
+            case METH_GETDATA:          MethGetData( pPar_ ); return;
+            case METH_GETFORMAT:        MethGetFormat( pVar, pPar_ ); return;
+            case METH_GETTEXT:          MethGetText( pVar, pPar_ ); return;
+            case METH_SETDATA:          MethSetData( pPar_ ); return;
+            case METH_SETTEXT:          MethSetText( pPar_ ); return;
         }
 
         SbxObject::Notify( rBC, rHint );

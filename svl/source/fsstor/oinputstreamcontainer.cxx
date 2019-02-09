@@ -29,71 +29,48 @@ OFSInputStreamContainer::OFSInputStreamContainer( const uno::Reference< io::XInp
 , m_xSeekable( xStream, uno::UNO_QUERY )
 , m_bSeekable( false )
 , m_bDisposed( false )
-, m_pListenersContainer( nullptr )
 {
     m_bSeekable = m_xSeekable.is();
 }
 
 OFSInputStreamContainer::~OFSInputStreamContainer()
 {
-    if ( m_pListenersContainer )
-    {
-        delete m_pListenersContainer;
-        m_pListenersContainer = nullptr;
-    }
 }
 
 uno::Sequence< uno::Type > SAL_CALL OFSInputStreamContainer::getTypes()
-        throw ( uno::RuntimeException, std::exception )
 {
-    static ::cppu::OTypeCollection* pTypeCollection = nullptr ;
-
-    if ( pTypeCollection == nullptr )
+    if (m_bSeekable)
     {
-        ::osl::MutexGuard aGuard( m_aMutex ) ;
+        static cppu::OTypeCollection aTypeCollection(cppu::UnoType<io::XStream>::get(),
+                                                     cppu::UnoType<io::XInputStream>::get(),
+                                                     cppu::UnoType<io::XSeekable>::get());
 
-        if ( pTypeCollection == nullptr )
-        {
-            if ( m_bSeekable )
-            {
-                static ::cppu::OTypeCollection aTypeCollection(
-                        cppu::UnoType<io::XStream>::get(),
-                        cppu::UnoType<io::XInputStream>::get(),
-                        cppu::UnoType<io::XSeekable>::get());
-
-                pTypeCollection = &aTypeCollection ;
-            }
-            else
-            {
-                static ::cppu::OTypeCollection aTypeCollection(
-                        cppu::UnoType<io::XStream>::get(),
-                        cppu::UnoType<io::XInputStream>::get());
-
-                pTypeCollection = &aTypeCollection ;
-            }
-        }
+        return aTypeCollection.getTypes();
     }
+    else
+    {
+        static cppu::OTypeCollection aTypeCollection(cppu::UnoType<io::XStream>::get(),
+                                                     cppu::UnoType<io::XInputStream>::get());
 
-    return pTypeCollection->getTypes() ;
-
+        return aTypeCollection.getTypes();
+    }
 }
 
 uno::Any SAL_CALL OFSInputStreamContainer::queryInterface( const uno::Type& rType )
-        throw( uno::RuntimeException, std::exception )
 {
     // Attention:
     //  Don't use mutex or guard in this method!!! Is a method of XInterface.
 
     uno::Any aReturn;
     if ( m_bSeekable )
-        aReturn = uno::Any( ::cppu::queryInterface( rType,
+        aReturn = ::cppu::queryInterface( rType,
                                            static_cast< io::XStream* >( this ),
                                            static_cast< io::XInputStream* >( this ),
-                                           static_cast< io::XSeekable* >( this ) ) );
+                                           static_cast< io::XSeekable* >( this ) );
     else
-        aReturn = uno::Any( ::cppu::queryInterface( rType,
+        aReturn = ::cppu::queryInterface( rType,
                                            static_cast< io::XStream* >( this ),
-                                           static_cast< io::XInputStream* >( this ) ) );
+                                           static_cast< io::XInputStream* >( this ) );
 
     if ( aReturn.hasValue() )
         return aReturn ;
@@ -114,10 +91,6 @@ void SAL_CALL OFSInputStreamContainer::release()
 }
 
 sal_Int32 SAL_CALL OFSInputStreamContainer::readBytes( uno::Sequence< sal_Int8 >& aData, sal_Int32 nBytesToRead )
-        throw ( io::NotConnectedException,
-                io::BufferSizeExceededException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -131,10 +104,6 @@ sal_Int32 SAL_CALL OFSInputStreamContainer::readBytes( uno::Sequence< sal_Int8 >
 }
 
 sal_Int32 SAL_CALL OFSInputStreamContainer::readSomeBytes( uno::Sequence< sal_Int8 >& aData, sal_Int32 nMaxBytesToRead )
-        throw ( io::NotConnectedException,
-                io::BufferSizeExceededException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -148,10 +117,6 @@ sal_Int32 SAL_CALL OFSInputStreamContainer::readSomeBytes( uno::Sequence< sal_In
 }
 
 void SAL_CALL OFSInputStreamContainer::skipBytes( sal_Int32 nBytesToSkip )
-        throw ( io::NotConnectedException,
-                io::BufferSizeExceededException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -165,9 +130,6 @@ void SAL_CALL OFSInputStreamContainer::skipBytes( sal_Int32 nBytesToSkip )
 }
 
 sal_Int32 SAL_CALL OFSInputStreamContainer::available(  )
-        throw ( io::NotConnectedException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -181,9 +143,6 @@ sal_Int32 SAL_CALL OFSInputStreamContainer::available(  )
 }
 
 void SAL_CALL OFSInputStreamContainer::closeInput(  )
-        throw ( io::NotConnectedException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -197,7 +156,6 @@ void SAL_CALL OFSInputStreamContainer::closeInput(  )
 }
 
 uno::Reference< io::XInputStream > SAL_CALL OFSInputStreamContainer::getInputStream()
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -211,7 +169,6 @@ uno::Reference< io::XInputStream > SAL_CALL OFSInputStreamContainer::getInputStr
 }
 
 uno::Reference< io::XOutputStream > SAL_CALL OFSInputStreamContainer::getOutputStream()
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -222,9 +179,6 @@ uno::Reference< io::XOutputStream > SAL_CALL OFSInputStreamContainer::getOutputS
 }
 
 void SAL_CALL OFSInputStreamContainer::seek( sal_Int64 location )
-        throw ( lang::IllegalArgumentException,
-                io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -238,8 +192,6 @@ void SAL_CALL OFSInputStreamContainer::seek( sal_Int64 location )
 }
 
 sal_Int64 SAL_CALL OFSInputStreamContainer::getPosition()
-        throw ( io::IOException,
-                uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -253,8 +205,6 @@ sal_Int64 SAL_CALL OFSInputStreamContainer::getPosition()
 }
 
 sal_Int64 SAL_CALL OFSInputStreamContainer::getLength()
-        throw ( io::IOException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -268,7 +218,6 @@ sal_Int64 SAL_CALL OFSInputStreamContainer::getLength()
 }
 
 void SAL_CALL OFSInputStreamContainer::dispose(  )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -290,7 +239,6 @@ void SAL_CALL OFSInputStreamContainer::dispose(  )
 }
 
 void SAL_CALL OFSInputStreamContainer::addEventListener( const uno::Reference< lang::XEventListener >& xListener )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
@@ -298,13 +246,12 @@ void SAL_CALL OFSInputStreamContainer::addEventListener( const uno::Reference< l
         throw lang::DisposedException();
 
     if ( !m_pListenersContainer )
-        m_pListenersContainer = new ::comphelper::OInterfaceContainerHelper2( m_aMutex );
+        m_pListenersContainer.reset( new ::comphelper::OInterfaceContainerHelper2( m_aMutex ) );
 
     m_pListenersContainer->addInterface( xListener );
 }
 
 void SAL_CALL OFSInputStreamContainer::removeEventListener( const uno::Reference< lang::XEventListener >& xListener )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 

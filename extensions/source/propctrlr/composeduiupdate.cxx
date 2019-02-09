@@ -21,6 +21,7 @@
 
 #include <com/sun/star/inspection/XObjectInspectorUI.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
+#include <com/sun/star/lang/NullPointerException.hpp>
 #include <com/sun/star/inspection/PropertyLineElement.hpp>
 #include <osl/mutex.hxx>
 #include <rtl/ref.hxx>
@@ -33,7 +34,6 @@ namespace pcr
 {
 
 
-    using ::com::sun::star::uno::Exception;
     using ::com::sun::star::lang::DisposedException;
     using ::com::sun::star::lang::NullPointerException;
     using ::com::sun::star::inspection::XPropertyHandler;
@@ -41,17 +41,13 @@ namespace pcr
     using ::com::sun::star::inspection::XObjectInspectorUI;
     using ::com::sun::star::inspection::XPropertyControl;
     using ::com::sun::star::uno::RuntimeException;
-    using ::com::sun::star::lang::NoSupportException;
     using ::com::sun::star::inspection::XPropertyControlObserver;
 
     namespace PropertyLineElement = ::com::sun::star::inspection::PropertyLineElement;
 
     namespace
     {
-        struct HandlerLess : public ::std::binary_function  <   Reference< XPropertyHandler >
-                                                            ,   Reference< XPropertyHandler >
-                                                            ,   bool
-                                                            >
+        struct HandlerLess
         {
             bool operator()( const Reference< XPropertyHandler >& lhs, const Reference< XPropertyHandler >& rhs) const
             {
@@ -60,8 +56,8 @@ namespace pcr
         };
 
 
-        typedef ::std::set< OUString >       StringBag;
-        typedef ::std::map< sal_Int16, StringBag >  MapIntToStringBag;
+        typedef std::set< OUString >       StringBag;
+        typedef std::map< sal_Int16, StringBag >  MapIntToStringBag;
     }
 
 
@@ -134,26 +130,19 @@ namespace pcr
         void dispose();
 
         // XObjectInspectorUI overridables
-        virtual void SAL_CALL enablePropertyUI( const OUString& _rPropertyName, sal_Bool _bEnable ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL enablePropertyUIElements( const OUString& _rPropertyName, ::sal_Int16 _nElements, sal_Bool _bEnable ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL rebuildPropertyUI( const OUString& _rPropertyName ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL showPropertyUI( const OUString& _rPropertyName ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL hidePropertyUI( const OUString& _rPropertyName ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL showCategory( const OUString& _rCategory, sal_Bool _bShow ) throw (RuntimeException, std::exception) override;
-        virtual Reference< XPropertyControl > SAL_CALL getPropertyControl( const OUString& _rPropertyName ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL registerControlObserver( const Reference< XPropertyControlObserver >& Observer ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL revokeControlObserver( const Reference< XPropertyControlObserver >& Observer ) throw (RuntimeException, std::exception) override;
-        virtual void SAL_CALL setHelpSectionText( const OUString& _HelpText ) throw (NoSupportException, RuntimeException, std::exception) override;
-
-        // UNOCompatibleNonUNOReference overridables
-        virtual void SAL_CALL acquire() throw() override;
-        virtual void SAL_CALL release() throw() override;
+        virtual void SAL_CALL enablePropertyUI( const OUString& _rPropertyName, sal_Bool _bEnable ) override;
+        virtual void SAL_CALL enablePropertyUIElements( const OUString& _rPropertyName, ::sal_Int16 _nElements, sal_Bool _bEnable ) override;
+        virtual void SAL_CALL rebuildPropertyUI( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL showPropertyUI( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL hidePropertyUI( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL showCategory( const OUString& _rCategory, sal_Bool _bShow ) override;
+        virtual Reference< XPropertyControl > SAL_CALL getPropertyControl( const OUString& _rPropertyName ) override;
+        virtual void SAL_CALL registerControlObserver( const Reference< XPropertyControlObserver >& Observer ) override;
+        virtual void SAL_CALL revokeControlObserver( const Reference< XPropertyControlObserver >& Observer ) override;
+        virtual void SAL_CALL setHelpSectionText( const OUString& HelpText ) override;
 
     protected:
-        virtual ~CachedInspectorUI();
-
-        /// determines whether the instance is already disposed
-        inline bool isDisposed() const { return m_bDisposed; }
+        virtual ~CachedInspectorUI() override;
 
         /// throws an exception if the component is already disposed
         void checkDisposed() const;
@@ -210,22 +199,9 @@ namespace pcr
     }
 
 
-    void SAL_CALL CachedInspectorUI::acquire() throw()
-    {
-        osl_atomic_increment( &m_refCount );
-    }
-
-
-    void SAL_CALL CachedInspectorUI::release() throw()
-    {
-        if ( 0 == osl_atomic_decrement( &m_refCount ) )
-            delete this;
-    }
-
-
     void CachedInspectorUI::checkDisposed() const
     {
-        if ( isDisposed() )
+        if (m_bDisposed)
             throw DisposedException();
     }
 
@@ -246,7 +222,7 @@ namespace pcr
     }
 
 
-    void CachedInspectorUI::enablePropertyUI( const OUString& _rPropertyName, sal_Bool _bEnable ) throw (RuntimeException, std::exception)
+    void CachedInspectorUI::enablePropertyUI( const OUString& _rPropertyName, sal_Bool _bEnable )
     {
         MethodGuard aGuard( *this );
         if ( !m_rMaster.shouldContinuePropertyHandling( _rPropertyName ) )
@@ -277,7 +253,7 @@ namespace pcr
     }
 
 
-    void CachedInspectorUI::enablePropertyUIElements( const OUString& _rPropertyName, sal_Int16 _nElements, sal_Bool _bEnable ) throw (RuntimeException, std::exception)
+    void CachedInspectorUI::enablePropertyUIElements( const OUString& _rPropertyName, sal_Int16 _nElements, sal_Bool _bEnable )
     {
         MethodGuard aGuard( *this );
         if ( !m_rMaster.shouldContinuePropertyHandling( _rPropertyName ) )
@@ -291,7 +267,7 @@ namespace pcr
     }
 
 
-    void CachedInspectorUI::rebuildPropertyUI( const OUString& _rPropertyName ) throw (RuntimeException, std::exception)
+    void CachedInspectorUI::rebuildPropertyUI( const OUString& _rPropertyName )
     {
         MethodGuard aGuard( *this );
         if ( !m_rMaster.shouldContinuePropertyHandling( _rPropertyName ) )
@@ -303,7 +279,7 @@ namespace pcr
     }
 
 
-    void CachedInspectorUI::showPropertyUI( const OUString& _rPropertyName ) throw (RuntimeException, std::exception)
+    void CachedInspectorUI::showPropertyUI( const OUString& _rPropertyName )
     {
         MethodGuard aGuard( *this );
         if ( !m_rMaster.shouldContinuePropertyHandling( _rPropertyName ) )
@@ -317,7 +293,7 @@ namespace pcr
     }
 
 
-    void CachedInspectorUI::hidePropertyUI( const OUString& _rPropertyName ) throw (RuntimeException, std::exception)
+    void CachedInspectorUI::hidePropertyUI( const OUString& _rPropertyName )
     {
         MethodGuard aGuard( *this );
         if ( !m_rMaster.shouldContinuePropertyHandling( _rPropertyName ) )
@@ -328,7 +304,7 @@ namespace pcr
     }
 
 
-    void CachedInspectorUI::showCategory( const OUString& _rCategory, sal_Bool _bShow ) throw (RuntimeException, std::exception)
+    void CachedInspectorUI::showCategory( const OUString& _rCategory, sal_Bool _bShow )
     {
         MethodGuard aGuard( *this );
 
@@ -337,7 +313,7 @@ namespace pcr
     }
 
 
-    Reference< XPropertyControl > SAL_CALL CachedInspectorUI::getPropertyControl( const OUString& _rPropertyName ) throw (RuntimeException, std::exception)
+    Reference< XPropertyControl > SAL_CALL CachedInspectorUI::getPropertyControl( const OUString& _rPropertyName )
     {
         MethodGuard aGuard( *this );
         if ( !m_rMaster.shouldContinuePropertyHandling( _rPropertyName ) )
@@ -347,33 +323,33 @@ namespace pcr
     }
 
 
-    void SAL_CALL CachedInspectorUI::registerControlObserver( const Reference< XPropertyControlObserver >& _Observer ) throw (RuntimeException, std::exception)
+    void SAL_CALL CachedInspectorUI::registerControlObserver( const Reference< XPropertyControlObserver >& Observer )
     {
         OSL_FAIL( "CachedInspectorUI::registerControlObserver: not expected to be called!" );
             // CachedInspectorUI is used as context for the controls, and we don't expect them to
             // register listeners themself
-        m_rMaster.getDelegatorUI()->registerControlObserver( _Observer );
+        m_rMaster.getDelegatorUI()->registerControlObserver( Observer );
     }
 
 
-    void SAL_CALL CachedInspectorUI::revokeControlObserver( const Reference< XPropertyControlObserver >& _Observer ) throw (RuntimeException, std::exception)
+    void SAL_CALL CachedInspectorUI::revokeControlObserver( const Reference< XPropertyControlObserver >& Observer )
     {
         OSL_FAIL( "CachedInspectorUI::revokeControlObserver: not expected to be called!" );
             // CachedInspectorUI is used as context for the controls, and we don't expect them to
             // register listeners themself
-        m_rMaster.getDelegatorUI()->revokeControlObserver( _Observer );
+        m_rMaster.getDelegatorUI()->revokeControlObserver( Observer );
     }
 
 
-    void SAL_CALL CachedInspectorUI::setHelpSectionText( const OUString& _HelpText ) throw (NoSupportException, RuntimeException, std::exception)
+    void SAL_CALL CachedInspectorUI::setHelpSectionText( const OUString& HelpText )
     {
-        m_rMaster.getDelegatorUI()->setHelpSectionText( _HelpText );
+        m_rMaster.getDelegatorUI()->setHelpSectionText( HelpText );
     }
 
 
     // HandlerMap
 
-    typedef ::std::map  <   Reference< XPropertyHandler >
+    typedef std::map  <   Reference< XPropertyHandler >
                         ,   ::rtl::Reference< CachedInspectorUI >
                         ,   HandlerLess
                         >   ImplMapHandlerToUI;
@@ -414,7 +390,7 @@ namespace pcr
     {
 
         // an STL-compatible structure which collects strings from a CachedInspectorUI instances
-        struct StringBagCollector : public ::std::unary_function< ImplMapHandlerToUI::value_type, void >
+        struct StringBagCollector
         {
         private:
             StringBag&                      m_rBag;
@@ -431,13 +407,13 @@ namespace pcr
 
             static void collectAll( StringBag& _rAll, const ImplMapHandlerToUI& _rMap, CachedInspectorUI::FGetStringBag _pGetter )
             {
-                ::std::for_each( _rMap.begin(), _rMap.end(), StringBagCollector( _rAll, _pGetter ) );
+                std::for_each( _rMap.begin(), _rMap.end(), StringBagCollector( _rAll, _pGetter ) );
             }
         };
 
 
         // an STL-compatible structure which cleans a certain string bag in a CachedInspectorUI instances
-        struct StringBagClearer : public ::std::unary_function< ImplMapHandlerToUI::value_type, void >
+        struct StringBagClearer
         {
         private:
             CachedInspectorUI::FGetStringBag  m_pGetter;
@@ -452,7 +428,7 @@ namespace pcr
 
             static void clearAll( const ImplMapHandlerToUI& _rMap, CachedInspectorUI::FGetStringBag _pGetter )
             {
-                ::std::for_each( _rMap.begin(), _rMap.end(), StringBagClearer( _pGetter ) );
+                std::for_each( _rMap.begin(), _rMap.end(), StringBagClearer( _pGetter ) );
             }
         };
 
@@ -462,7 +438,7 @@ namespace pcr
 
         // an STL-compatible struct which calls a certain member method (taking a string) at a
         //    given ->XObjectInspectorUI instance
-        struct PropertyUIOperator : public ::std::unary_function< OUString, void >
+        struct PropertyUIOperator
         {
         private:
             Reference< XObjectInspectorUI > m_xUpdater;
@@ -482,7 +458,7 @@ namespace pcr
 
             static void forEach( const StringBag& _rProperties, const Reference< XObjectInspectorUI >& _rxDelegatorUI, FPropertyUISetter _pSetter )
             {
-                ::std::for_each( _rProperties.begin(), _rProperties.end(), PropertyUIOperator( _rxDelegatorUI, _pSetter ) );
+                std::for_each( _rProperties.begin(), _rProperties.end(), PropertyUIOperator( _rxDelegatorUI, _pSetter ) );
             }
         };
 
@@ -532,7 +508,7 @@ namespace pcr
         typedef void ( SAL_CALL XObjectInspectorUI::*FPropertyUIFlagSetter )( const OUString&, sal_Bool );
 
 
-        // an implementaiton of the ->IStringKeyBooleanUIUpdate interface which calls
+        // an implementation of the ->IStringKeyBooleanUIUpdate interface which calls
         // am arbitrary ->XObjectInspectorUI method taking a string and a boolean flag
         class DefaultStringKeyBooleanUIUpdate : public IStringKeyBooleanUIUpdate
         {
@@ -562,7 +538,7 @@ namespace pcr
 
         // an STL-compatible structure which applies a ->IStringKeyBooleanUIUpdate::updateUIForKey
         // operation with a fixed boolean value, for a given string value
-        struct BooleanUIAspectUpdate : public ::std::unary_function< OUString, void >
+        struct BooleanUIAspectUpdate
         {
         private:
             const IStringKeyBooleanUIUpdate&    m_rUpdater;
@@ -582,7 +558,7 @@ namespace pcr
 
             static void forEach( const StringBag& _rProperties, const IStringKeyBooleanUIUpdate& _rUpdater, bool _bFlag )
             {
-                ::std::for_each( _rProperties.begin(), _rProperties.end(), BooleanUIAspectUpdate( _rUpdater, _bFlag ) );
+                std::for_each( _rProperties.begin(), _rProperties.end(), BooleanUIAspectUpdate( _rUpdater, _bFlag ) );
             }
         };
 
@@ -590,7 +566,7 @@ namespace pcr
         // BooleanUIAspectUpdate
 
         // an STL-compatible structure subtracting a given string from a fixed ->StringBag
-        struct StringBagComplement : public ::std::unary_function< OUString, void >
+        struct StringBagComplement
         {
         private:
             StringBag&  m_rMinuend;
@@ -605,7 +581,7 @@ namespace pcr
 
             static void subtract( StringBag& _rMinuend, const StringBag& _rSubtrahend )
             {
-                ::std::for_each( _rSubtrahend.begin(), _rSubtrahend.end(), StringBagComplement( _rMinuend ) );
+                std::for_each( _rSubtrahend.begin(), _rSubtrahend.end(), StringBagComplement( _rMinuend ) );
             }
         };
 
@@ -735,14 +711,14 @@ namespace pcr
     }
 
 
-    void SAL_CALL ComposedPropertyUIUpdate::suspendAutoFire()
+    void ComposedPropertyUIUpdate::suspendAutoFire()
     {
         impl_checkDisposed();
         osl_atomic_increment( &m_nSuspendCounter );
     }
 
 
-    void SAL_CALL ComposedPropertyUIUpdate::resumeAutoFire()
+    void ComposedPropertyUIUpdate::resumeAutoFire()
     {
         impl_checkDisposed();
         if ( 0 == osl_atomic_decrement( &m_nSuspendCounter ) )
@@ -764,26 +740,23 @@ namespace pcr
     }
 
 
-    Reference< XObjectInspectorUI > ComposedPropertyUIUpdate::getDelegatorUI() const
+    Reference< XObjectInspectorUI > const & ComposedPropertyUIUpdate::getDelegatorUI() const
     {
         impl_checkDisposed();
         return m_xDelegatorUI;
     }
 
 
-    void SAL_CALL ComposedPropertyUIUpdate::dispose()
+    void ComposedPropertyUIUpdate::dispose()
     {
         if ( impl_isDisposed() )
             return;
 
         OSL_ENSURE( m_nSuspendCounter == 0, "ComposedPropertyUIUpdate::dispose: still suspended, the changes will be lost!" );
 
-        for ( ImplMapHandlerToUI::const_iterator singleUI = m_pCollectedUIs->aHandlers.begin();
-              singleUI != m_pCollectedUIs->aHandlers.end();
-              ++singleUI
-            )
+        for (auto const& singleUI : m_pCollectedUIs->aHandlers)
         {
-            singleUI->second->dispose();
+            singleUI.second->dispose();
         }
         m_pCollectedUIs.reset();
         m_xDelegatorUI.set( nullptr );

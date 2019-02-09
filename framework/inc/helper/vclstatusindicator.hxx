@@ -20,7 +20,6 @@
 #ifndef INCLUDED_FRAMEWORK_INC_HELPER_VCLSTATUSINDICATOR_HXX
 #define INCLUDED_FRAMEWORK_INC_HELPER_VCLSTATUSINDICATOR_HXX
 
-#include <macros/xinterface.hxx>
 #include <general.h>
 
 #include <com/sun/star/task/XStatusIndicator.hpp>
@@ -70,31 +69,26 @@ class VCLStatusIndicator : public  ::cppu::WeakImplHelper< css::task::XStatusInd
         VCLStatusIndicator(const css::uno::Reference< css::awt::XWindow >&               xParentWindow);
 
         /// dtor
-        virtual ~VCLStatusIndicator();
+        virtual ~VCLStatusIndicator() override;
 
         /// XStatusIndicator
         virtual void SAL_CALL start(const OUString& sText ,
-                                          sal_Int32        nRange)
-            throw(css::uno::RuntimeException, std::exception) override;
+                                          sal_Int32        nRange) override;
 
-        virtual void SAL_CALL reset()
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL reset() override;
 
-        virtual void SAL_CALL end()
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL end() override;
 
-        virtual void SAL_CALL setText(const OUString& sText)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setText(const OUString& sText) override;
 
-        virtual void SAL_CALL setValue(sal_Int32 nValue)
-            throw(css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL setValue(sal_Int32 nValue) override;
 
     // helper
 
     private:
 
         static void impl_recalcLayout(vcl::Window* pStatusBar   ,
-                                      vcl::Window* pParentWindow);
+                                      vcl::Window const * pParentWindow);
 };
 
 } // namespace framework

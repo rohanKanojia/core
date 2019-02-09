@@ -20,12 +20,12 @@
 #include <vcl/svapp.hxx>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/uno/RuntimeException.hpp>
-#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <flyfrm.hxx>
 #include "accembedded.hxx"
-#include "cntfrm.hxx"
-#include "ndole.hxx"
+#include <cntfrm.hxx>
+#include <notxtfrm.hxx>
+#include <ndole.hxx>
 #include <doc.hxx>
 #include <docsh.hxx>
 
@@ -36,7 +36,7 @@ using namespace ::com::sun::star::accessibility;
 const sal_Char sImplementationName[] = "com.sun.star.comp.Writer.SwAccessibleEmbeddedObject";
 
 SwAccessibleEmbeddedObject::SwAccessibleEmbeddedObject(
-        SwAccessibleMap* pInitMap,
+        std::shared_ptr<SwAccessibleMap> const& pInitMap,
         const SwFlyFrame* pFlyFrame  ) :
     SwAccessibleNoTextFrame( pInitMap, AccessibleRole::EMBEDDED_OBJECT, pFlyFrame )
 {
@@ -49,7 +49,6 @@ SwAccessibleEmbeddedObject::~SwAccessibleEmbeddedObject()
 // XInterface
 css::uno::Any SAL_CALL
     SwAccessibleEmbeddedObject::queryInterface (const css::uno::Type & rType)
-    throw (css::uno::RuntimeException, std::exception)
 {
     css::uno::Any aReturn = SwAccessibleNoTextFrame::queryInterface (rType);
     if ( ! aReturn.hasValue())
@@ -73,19 +72,16 @@ void SAL_CALL
 }
 
 OUString SAL_CALL SwAccessibleEmbeddedObject::getImplementationName()
-        throw( uno::RuntimeException, std::exception )
 {
     return OUString(sImplementationName);
 }
 
 sal_Bool SAL_CALL SwAccessibleEmbeddedObject::supportsService(const OUString& sTestServiceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, sTestServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL SwAccessibleEmbeddedObject::getSupportedServiceNames()
-        throw( uno::RuntimeException, std::exception )
 {
     uno::Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
@@ -95,14 +91,12 @@ uno::Sequence< OUString > SAL_CALL SwAccessibleEmbeddedObject::getSupportedServi
 }
 
 uno::Sequence< sal_Int8 > SAL_CALL SwAccessibleEmbeddedObject::getImplementationId()
-        throw(uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 // XAccessibleExtendedAttributes
 css::uno::Any SAL_CALL SwAccessibleEmbeddedObject::getExtendedAttributes()
-        throw (css::lang::IndexOutOfBoundsException, css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -117,7 +111,8 @@ css::uno::Any SAL_CALL SwAccessibleEmbeddedObject::getExtendedAttributes()
         pCFrame = pFFrame->ContainsContent();
         if( pCFrame )
         {
-            SwContentNode* pCNode = pCFrame->GetNode();
+            assert(pCFrame->IsNoTextFrame());
+            SwContentNode *const pCNode = static_cast<SwNoTextFrame*>(pCFrame)->GetNode();
             if( pCNode )
             {
                 style += static_cast<SwOLENode*>(pCNode)->GetOLEObj().GetStyleString();

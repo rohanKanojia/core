@@ -23,11 +23,11 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlFileBasedDatabase.hxx"
 #include "xmlServerDatabase.hxx"
-#include "xmlstrings.hrc"
-#include <tools/debug.hxx>
+#include <stringconstants.hxx>
 #include <tools/diagnose_ex.h>
 
 namespace dbaxml
@@ -47,7 +47,7 @@ OXMLDatabaseDescription::~OXMLDatabaseDescription()
 
 }
 
-SvXMLImportContext* OXMLDatabaseDescription::CreateChildContext(
+SvXMLImportContextRef OXMLDatabaseDescription::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )

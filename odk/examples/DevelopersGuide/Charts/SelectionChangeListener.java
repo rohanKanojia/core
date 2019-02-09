@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -207,7 +208,7 @@ public class SelectionChangeListener implements XSelectionChangeListener {
 
             int button = com.sun.star.awt.MessageBoxButtons.BUTTONS_OK;
             XMessageBoxFactory aMBF = UnoRuntime.queryInterface(XMessageBoxFactory.class, aToolKit);
-            XMessageBox xMB = aMBF.createMessageBox(aWinPeer, MessageBoxType.INFOBOX, button, "Event-Notify", "Listener was called, selcetion has changed");
+            XMessageBox xMB = aMBF.createMessageBox(aWinPeer, MessageBoxType.INFOBOX, button, "Event-Notify", "Listener was called, selection has changed");
             xMB.execute();
         }
     }
@@ -215,3 +216,5 @@ public class SelectionChangeListener implements XSelectionChangeListener {
     private final XChartDocument            maChartDocument;
     private final XComponentContext         maContext;
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -21,15 +21,13 @@
 #define INCLUDED_SC_INC_COMPRESSEDARRAY_HXX
 
 #include <cstddef>
-#include <algorithm>
+#include <memory>
 
 #include "scdllapi.h"
 
-const size_t nScCompressedArrayDelta = 4;
-
 /** Compressed array of row (or column) entries, e.g. heights, flags, ...
 
-    The array stores ranges of values such that consecutive values occupy only
+    The array stores ranges of values such that equal consecutive values occupy only
     one entry. Initially it consists of one DataEntry with an implied start
     row/column of 0 and an end row/column of access type maximum value.
 
@@ -48,6 +46,19 @@ const size_t nScCompressedArrayDelta = 4;
 template< typename A, typename D > class ScCompressedArray
 {
 public:
+    class Iterator
+    {
+        friend ScCompressedArray;
+        const ScCompressedArray& mrArray;
+        size_t             mnIndex = 0;
+        A                  mnRegion = 0;
+        Iterator(const ScCompressedArray& rArray) : mrArray(rArray) {}
+        Iterator(const ScCompressedArray& rArray, size_t nIndex, A nRegion) : mrArray(rArray), mnIndex(nIndex), mnRegion(nRegion) {}
+    public:
+        void operator++();
+        Iterator operator+(size_t) const;
+        const D & operator*() const { return mrArray.pData[mnIndex].aValue; }
+    };
     struct DataEntry
     {
         A   nEnd;           // start is end of previous entry + 1
@@ -57,45 +68,51 @@ public:
 
     /** Construct with nMaxAccess=MAXROW, for example. */
                                 ScCompressedArray( A nMaxAccess,
-                                        const D& rValue,
-                                        size_t nDelta = nScCompressedArrayDelta );
-    /** Construct from a plain array of D */
-                                ScCompressedArray( A nMaxAccess,
-                                        const D* pDataArray, size_t nDataCount );
+                                        const D& rValue );
     virtual                     ~ScCompressedArray();
-    void                        Resize( size_t nNewSize );
     void                        Reset( const D& rValue );
     void                        SetValue( A nPos, const D& rValue );
     void                        SetValue( A nStart, A nEnd, const D& rValue );
+    [[nodiscard]]
     const D&                    GetValue( A nPos ) const;
+    [[nodiscard]]
+    A                           GetLastPos() const { return pData[nCount-1].nEnd; }
 
     /** Get value for a row, and it's region end row */
+    [[nodiscard]]
     const D&                    GetValue( A nPos, size_t& nIndex, A& nEnd ) const;
 
     /** Get next value and it's region end row. If nIndex<nCount, nIndex is
         incremented first. If the resulting nIndex>=nCount, the value of the
         last entry is returned again. */
+    [[nodiscard]]
     const D&                    GetNextValue( size_t& nIndex, A& nEnd ) const;
 
     /** Insert rows before nStart and copy value for inserted rows from
         nStart-1, return that value. */
     const D&                    Insert( A nStart, size_t nCount );
+    void                        InsertPreservingSize( A nStart, size_t nCount, const D& rFillValue );
 
     void                        Remove( A nStart, size_t nCount );
+    void                        RemovePreservingSize( A nStart, size_t nCount, const D& rFillValue );
 
     /** Copy rArray.nStart+nSourceDy to this.nStart */
     void                        CopyFrom( const ScCompressedArray& rArray,
-                                    A nStart, A nEnd );
+                                    A nStart, A nEnd )
+                                { CopyFrom(rArray, nStart, nEnd, nStart); }
+    void                        CopyFrom( const ScCompressedArray& rArray,
+                                    A nDestStart, A nDestEnd, A nSrcStart );
 
     // methods public for the coupled array sum methods
     /** Obtain index into entries for nPos */
     SC_DLLPUBLIC size_t                      Search( A nPos ) const;
 
+    Iterator                    begin() const { return Iterator(*this); }
+
 protected:
     size_t                      nCount;
     size_t                      nLimit;
-    size_t                      nDelta;
-    DataEntry*                  pData;
+    std::unique_ptr<DataEntry[]> pData;
     A                           nMaxAccess;
 };
 
@@ -105,9 +122,8 @@ void ScCompressedArray<A,D>::Reset( const D& rValue )
     // Create a temporary copy in case we got a reference passed that points to
     // a part of the array to be reallocated.
     D aTmpVal( rValue);
-    delete[] pData;
     nCount = nLimit = 1;
-    pData = new DataEntry[1];
+    pData.reset(new DataEntry[1]);
     pData[0].aValue = aTmpVal;
     pData[0].nEnd = nMaxAccess;
 }
@@ -151,14 +167,8 @@ template< typename A, typename D > class ScBitMaskCompressedArray : public ScCom
 {
 public:
                                 ScBitMaskCompressedArray( A nMaxAccessP,
-                                        const D& rValue,
-                                        size_t nDeltaP = nScCompressedArrayDelta )
-                                    : ScCompressedArray<A,D>( nMaxAccessP, rValue, nDeltaP)
-                                    {}
-                                ScBitMaskCompressedArray( A nMaxAccessP,
-                                        const D* pDataArray, size_t nDataCount )
-                                    : ScCompressedArray<A,D>( nMaxAccessP,
-                                            pDataArray, nDataCount)
+                                        const D& rValue )
+                                    : ScCompressedArray<A,D>( nMaxAccessP, rValue )
                                     {}
     void                        AndValue( A nPos, const D& rValueToAnd );
     void                        OrValue( A nPos, const D& rValueToOr );

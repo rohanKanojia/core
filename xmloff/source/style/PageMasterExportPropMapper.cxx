@@ -20,12 +20,12 @@
 #include "PageMasterExportPropMapper.hxx"
 #include <xmloff/xmltoken.hxx>
 #include <comphelper/types.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
 #include <xmloff/PageMasterStyleMap.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <rtl/ref.hxx>
 #include <comphelper/extract.hxx>
-
-//UUUU
 #include <xmloff/txtprmap.hxx>
 
 using namespace ::com::sun::star;
@@ -34,7 +34,7 @@ using namespace ::com::sun::star::beans;
 using namespace ::comphelper;
 using namespace ::xmloff::token;
 
-static inline bool lcl_HasSameLineWidth( const table::BorderLine2& rLine1, const table::BorderLine2& rLine2 )
+static bool lcl_HasSameLineWidth( const table::BorderLine2& rLine1, const table::BorderLine2& rLine2 )
 {
     return  (rLine1.InnerLineWidth == rLine2.InnerLineWidth) &&
             (rLine1.OuterLineWidth == rLine2.OuterLineWidth) &&
@@ -42,7 +42,7 @@ static inline bool lcl_HasSameLineWidth( const table::BorderLine2& rLine1, const
             (rLine1.LineWidth == rLine2.LineWidth);
 }
 
-static inline void lcl_RemoveState( XMLPropertyState* pState )
+static void lcl_RemoveState( XMLPropertyState* pState )
 {
     pState->mnIndex = -1;
     pState->maValue.clear();
@@ -58,7 +58,7 @@ static void lcl_RemoveStateIfZero16( XMLPropertyState* pState )
 static void lcl_AddState(::std::vector< XMLPropertyState >& rPropState, sal_Int32 nIndex, const OUString& rProperty, const uno::Reference< beans::XPropertySet >& xProps)
 {
     if(::cppu::any2bool(xProps->getPropertyValue(rProperty)))
-        rPropState.push_back(XMLPropertyState (nIndex, css::uno::Any(true)));
+        rPropState.emplace_back(nIndex, css::uno::Any(true));
 }
 
 // helper struct to handle equal XMLPropertyState's for page, header and footer
@@ -66,10 +66,6 @@ static void lcl_AddState(::std::vector< XMLPropertyState >& rPropState, sal_Int3
 struct XMLPropertyStateBuffer
 {
     XMLPropertyState*       pPMMarginAll;
-    XMLPropertyState*       pPMMarginTop;
-    XMLPropertyState*       pPMMarginBottom;
-    XMLPropertyState*       pPMMarginLeft;
-    XMLPropertyState*       pPMMarginRight;
 
     XMLPropertyState*       pPMBorderAll;
     XMLPropertyState*       pPMBorderTop;
@@ -95,10 +91,6 @@ struct XMLPropertyStateBuffer
 
 XMLPropertyStateBuffer::XMLPropertyStateBuffer()
     :   pPMMarginAll( nullptr )
-    ,   pPMMarginTop( nullptr )
-    ,   pPMMarginBottom( nullptr )
-    ,   pPMMarginLeft( nullptr )
-    ,   pPMMarginRight( nullptr )
     ,
         pPMBorderAll( nullptr ),
         pPMBorderTop( nullptr ),
@@ -326,7 +318,6 @@ void XMLPageMasterExportPropMapper::ContextFilter(
 
     XMLPropertyState*       pPrint              = nullptr;
 
-    //UUUU
     XMLPropertyState* pRepeatOffsetX = nullptr;
     XMLPropertyState* pRepeatOffsetY = nullptr;
     XMLPropertyState* pHeaderRepeatOffsetX = nullptr;
@@ -336,9 +327,9 @@ void XMLPageMasterExportPropMapper::ContextFilter(
 
     rtl::Reference < XMLPropertySetMapper > aPropMapper(getPropertySetMapper());
 
-    for( ::std::vector< XMLPropertyState >::iterator aIter = rPropState.begin(); aIter != rPropState.end(); ++aIter )
+    for( auto& rProp : rPropState )
     {
-        XMLPropertyState *pProp = &(*aIter);
+        XMLPropertyState *pProp = &rProp;
         sal_Int16 nContextId    = aPropMapper->GetEntryContextId( pProp->mnIndex );
         sal_Int16 nFlag         = nContextId & CTF_PM_FLAGMASK;
         sal_Int16 nSimpleId     = nContextId & (~CTF_PM_FLAGMASK | XML_PM_CTF_START);
@@ -355,10 +346,6 @@ void XMLPageMasterExportPropMapper::ContextFilter(
         switch( nSimpleId )
         {
             case CTF_PM_MARGINALL:          pBuffer->pPMMarginAll           = pProp;    break;
-            case CTF_PM_MARGINTOP:          pBuffer->pPMMarginTop           = pProp;    break;
-            case CTF_PM_MARGINBOTTOM:       pBuffer->pPMMarginBottom        = pProp;    break;
-            case CTF_PM_MARGINLEFT:         pBuffer->pPMMarginLeft          = pProp;    break;
-            case CTF_PM_MARGINRIGHT:        pBuffer->pPMMarginRight         = pProp;    break;
             case CTF_PM_BORDERALL:          pBuffer->pPMBorderAll           = pProp;    break;
             case CTF_PM_BORDERTOP:          pBuffer->pPMBorderTop           = pProp;    break;
             case CTF_PM_BORDERBOTTOM:       pBuffer->pPMBorderBottom        = pProp;    break;
@@ -393,37 +380,31 @@ void XMLPageMasterExportPropMapper::ContextFilter(
             case CTP_PM_GRID_SNAP_TO_CHARS:     pPMGridSnapToChars  = pProp;    break;
             case CTP_PM_GRID_SNAP_TO:       pPMGridSnapTo = pProp;    break;
 
-            //UUUU
             case CTF_PM_REPEAT_OFFSET_X:
                 pRepeatOffsetX = pProp;
                 break;
 
-            //UUUU
             case CTF_PM_REPEAT_OFFSET_Y:
                 pRepeatOffsetY = pProp;
                 break;
 
-            //UUUU
             case CTF_PM_HEADERREPEAT_OFFSET_X:
                 pHeaderRepeatOffsetX = pProp;
                 break;
 
-            //UUUU
             case CTF_PM_HEADERREPEAT_OFFSET_Y:
                 pHeaderRepeatOffsetY = pProp;
                 break;
 
-            //UUUU
             case CTF_PM_FOOTERREPEAT_OFFSET_X:
                 pFooterRepeatOffsetX = pProp;
                 break;
 
-            //UUUU
             case CTF_PM_FOOTERREPEAT_OFFSET_Y:
                 pFooterRepeatOffsetY = pProp;
                 break;
 
-            //UUUU Sort out empty entries
+            // Sort out empty entries
             case CTF_PM_FILLGRADIENTNAME:
             case CTF_PM_FILLHATCHNAME:
             case CTF_PM_FILLBITMAPNAME:
@@ -439,7 +420,7 @@ void XMLPageMasterExportPropMapper::ContextFilter(
             case CTF_PM_FOOTERFILLBITMAPNAME:
             case CTF_PM_FOOTERFILLTRANSNAME:
             {
-                rtl::OUString aStr;
+                OUString aStr;
 
                 if( (pProp->maValue >>= aStr) && 0 == aStr.getLength() )
                 {
@@ -457,7 +438,7 @@ void XMLPageMasterExportPropMapper::ContextFilter(
         }
     }
 
-    //UUUU These entries need to be reduced to a single one for XML export.
+    // These entries need to be reduced to a single one for XML export.
     // Both would be exported as 'draw:tile-repeat-offset' following a percent
     // value and a 'vertical' or 'horizontal' tag as mark. If both would be active
     // and both would be exported this would create an XML error (same property twice)
@@ -475,7 +456,7 @@ void XMLPageMasterExportPropMapper::ContextFilter(
         }
     }
 
-    //UUUU Same as above for Header
+    // Same as above for Header
     if(pHeaderRepeatOffsetX && pHeaderRepeatOffsetY)
     {
         sal_Int32 nOffset(0);
@@ -490,7 +471,7 @@ void XMLPageMasterExportPropMapper::ContextFilter(
         }
     }
 
-    //UUUU Same as above for Footer
+    // Same as above for Footer
     if(pFooterRepeatOffsetX && pFooterRepeatOffsetY)
     {
         sal_Int32 nOffset(0);

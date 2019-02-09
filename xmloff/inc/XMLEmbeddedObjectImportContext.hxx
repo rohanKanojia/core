@@ -43,9 +43,9 @@ public:
                                     const OUString& rLName,
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList );
 
-    virtual ~XMLEmbeddedObjectImportContext();
+    virtual ~XMLEmbeddedObjectImportContext() override;
 
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
@@ -55,8 +55,7 @@ public:
 
     virtual void Characters( const OUString& rChars ) override;
 
-    void SetComponent(
-        css::uno::Reference< css::lang::XComponent >& rComp );
+    void SetComponent( css::uno::Reference< css::lang::XComponent > const & rComp );
 
 };
 

@@ -13,8 +13,9 @@ $(eval $(call gb_Module_add_targets,avmedia,\
 	Library_avmedia \
 ))
 
+ifneq ($(USE_AVMEDIA_DUMMY),TRUE)
 $(eval $(call gb_Module_add_l10n_targets,avmedia,\
-	AllLangResTarget_avmedia \
+    AllLangMoTarget_avmedia \
 ))
 
 ifeq ($(ENABLE_GSTREAMER_1_0),TRUE)
@@ -36,29 +37,17 @@ $(eval $(call gb_Module_add_targets,avmedia,\
 endif
 
 ifeq ($(OS),MACOSX)
-ifneq ($(ENABLE_MACOSX_SANDBOX),TRUE)
-$(eval $(call gb_Module_add_targets,avmedia,\
-	Library_avmediaQuickTime \
-))
-endif
-endif
-
-ifeq ($(OS),MACOSX)
 $(eval $(call gb_Module_add_targets,avmedia,\
 	Library_avmediaMacAVF \
 ))
 endif
 
-ifneq ($(ENABLE_DIRECTX),)
+ifeq ($(OS),WNT)
 $(eval $(call gb_Module_add_targets,avmedia,\
 	Library_avmediawin \
 ))
 endif
 
-ifeq ($(ENABLE_GLTF),TRUE)
-$(eval $(call gb_Module_add_targets,avmedia,\
-	Library_avmediaogl \
-))
 endif
 
 # vim: set noet sw=4 ts=4:

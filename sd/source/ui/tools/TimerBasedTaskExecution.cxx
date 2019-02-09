@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tools/TimerBasedTaskExecution.hxx"
-#include "tools/AsynchronousTask.hxx"
+#include <tools/TimerBasedTaskExecution.hxx>
+#include <tools/AsynchronousTask.hxx>
 #include <tools/time.hxx>
 #include <osl/diagnose.h>
-#include "sal/log.hxx"
+#include <sal/log.hxx>
 #include <memory>
 
 namespace sd { namespace tools {
@@ -48,7 +48,8 @@ std::shared_ptr<TimerBasedTaskExecution> TimerBasedTaskExecution::Create (
     // Let the new object have a shared_ptr to itself, so that it can
     // release itself when the AsynchronousTask has been executed
     // completely.
-    pExecution->SetSelf(pExecution);
+    if (pExecution->mpTask != nullptr)
+        pExecution->mpSelf = pExecution;
     return pExecution;
 }
 
@@ -88,8 +89,7 @@ TimerBasedTaskExecution::TimerBasedTaskExecution (
       mpSelf(),
       mnMaxTimePerStep(nMaxTimePerStep)
 {
-    Link<Timer *, void> aLink(LINK(this,TimerBasedTaskExecution,TimerCallback));
-    maTimer.SetTimeoutHdl(aLink);
+    maTimer.SetInvokeHandler( LINK(this,TimerBasedTaskExecution,TimerCallback) );
     maTimer.SetTimeout(nMillisecondsBetweenSteps);
     maTimer.Start();
 }
@@ -99,16 +99,9 @@ TimerBasedTaskExecution::~TimerBasedTaskExecution()
     maTimer.Stop();
 }
 
-void TimerBasedTaskExecution::SetSelf (
-    const std::shared_ptr<TimerBasedTaskExecution>& rpSelf)
+IMPL_LINK_NOARG(TimerBasedTaskExecution, TimerCallback, Timer *, void)
 {
-    if (mpTask.get() != nullptr)
-        mpSelf = rpSelf;
-}
-
-IMPL_LINK_NOARG_TYPED(TimerBasedTaskExecution, TimerCallback, Timer *, void)
-{
-    if (mpTask.get() != nullptr)
+    if (mpTask != nullptr)
     {
         if (mpTask->HasNextStep())
         {

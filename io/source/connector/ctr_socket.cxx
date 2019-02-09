@@ -19,6 +19,7 @@
 
 
 #include "connector.hxx"
+#include <com/sun/star/io/IOException.hpp>
 #include <rtl/ustrbuf.hxx>
 #include <exception>
 
@@ -30,7 +31,7 @@ using namespace ::com::sun::star::connection;
 
 namespace stoc_connector {
     template<class T>
-    void notifyListeners(SocketConnection * pCon, bool * notified, T t)
+    static void notifyListeners(SocketConnection * pCon, bool * notified, T t)
     {
           XStreamListener_hash_set listeners;
 
@@ -48,7 +49,7 @@ namespace stoc_connector {
     }
 
 
-    static void callStarted(Reference<XStreamListener> xStreamListener)
+    static void callStarted(const Reference<XStreamListener>& xStreamListener)
     {
         xStreamListener->started();
     }
@@ -58,7 +59,7 @@ namespace stoc_connector {
 
         explicit callError(const Any & any);
 
-        void operator () (Reference<XStreamListener> xStreamListener);
+        void operator () (const Reference<XStreamListener>& xStreamListener);
     };
 
     callError::callError(const Any & aAny)
@@ -66,12 +67,12 @@ namespace stoc_connector {
     {
     }
 
-    void callError::operator () (Reference<XStreamListener> xStreamListener)
+    void callError::operator () (const Reference<XStreamListener>& xStreamListener)
     {
         xStreamListener->error(any);
     }
 
-    static void callClosed(Reference<XStreamListener> xStreamListener)
+    static void callClosed(const Reference<XStreamListener>& xStreamListener)
     {
         xStreamListener->closed();
     }
@@ -103,21 +104,19 @@ namespace stoc_connector {
 
         OUStringBuffer buf( 256 );
         buf.append( ",peerPort=" );
-        buf.append( (sal_Int32) nPort );
+        buf.append( nPort );
         buf.append( ",peerHost=" );
         buf.append( m_socket.getPeerHost() );
 
         buf.append( ",localPort=" );
-        buf.append( (sal_Int32) nPort );
+        buf.append( nPort );
         buf.append( ",localHost=" );
         buf.append( m_socket.getLocalHost( ) );
 
-        m_sDescription += buf.makeStringAndClear();
+        m_sDescription += buf;
     }
 
     sal_Int32 SocketConnection::read( Sequence < sal_Int8 > & aReadBytes , sal_Int32 nBytesToRead )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception)
     {
         if( ! m_nStatus )
         {
@@ -148,9 +147,7 @@ namespace stoc_connector {
         }
         else
         {
-            OUString message("ctr_socket.cxx:SocketConnection::read: error - connection already closed");
-
-            IOException ioException(message, static_cast<XConnection *>(this));
+            IOException ioException("ctr_socket.cxx:SocketConnection::read: error - connection already closed", static_cast<XConnection *>(this));
 
             Any any;
             any <<= ioException;
@@ -162,8 +159,6 @@ namespace stoc_connector {
     }
 
     void SocketConnection::write( const Sequence < sal_Int8 > &seq )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception)
     {
         if( ! m_nStatus )
         {
@@ -184,9 +179,7 @@ namespace stoc_connector {
         }
         else
         {
-            OUString message("ctr_socket.cxx:SocketConnection::write: error - connection already closed");
-
-            IOException ioException(message, static_cast<XConnection *>(this));
+            IOException ioException("ctr_socket.cxx:SocketConnection::write: error - connection already closed", static_cast<XConnection *>(this));
 
             Any any;
             any <<= ioException;
@@ -198,15 +191,11 @@ namespace stoc_connector {
     }
 
     void SocketConnection::flush( )
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception)
     {
 
     }
 
     void SocketConnection::close()
-            throw(css::io::IOException,
-                  css::uno::RuntimeException, std::exception)
     {
             // ensure that close is called only once
         if( 1 == osl_atomic_increment( (&m_nStatus) ) )
@@ -217,21 +206,20 @@ namespace stoc_connector {
     }
 
     OUString SocketConnection::getDescription()
-            throw( css::uno::RuntimeException, std::exception)
     {
         return m_sDescription;
     }
 
 
     // XConnectionBroadcaster
-    void SAL_CALL SocketConnection::addStreamListener(const Reference<XStreamListener> & aListener) throw(RuntimeException, std::exception)
+    void SAL_CALL SocketConnection::addStreamListener(const Reference<XStreamListener> & aListener)
     {
         MutexGuard guard(_mutex);
 
         _listeners.insert(aListener);
     }
 
-    void SAL_CALL SocketConnection::removeStreamListener(const Reference<XStreamListener> & aListener) throw(RuntimeException, std::exception)
+    void SAL_CALL SocketConnection::removeStreamListener(const Reference<XStreamListener> & aListener)
     {
         MutexGuard guard(_mutex);
 

@@ -12,6 +12,7 @@
 #include <rtl/string.hxx>
 #include <rtl/uri.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <o3tl/runtimetooustring.hxx>
 #include <osl/file.hxx>
 #include <osl/thread.h>
 #include <algorithm>
@@ -25,8 +26,7 @@ HelpIndexer::HelpIndexer(OUString const &lang, OUString const &module,
     OUString const &srcDir, OUString const &outDir)
     : d_lang(lang), d_module(module)
 {
-    d_indexDir = OUStringBuffer(outDir).append('/').
-        append(module).append(".idxl").makeStringAndClear();
+    d_indexDir = outDir + OUStringLiteral1('/') + module + ".idxl";
     d_captionDir = srcDir + "/caption";
     d_contentDir = srcDir + "/content";
 }
@@ -60,8 +60,9 @@ bool HelpIndexer::indexDocuments()
 
         // Index the identified help files
         Document doc;
-        for (std::set<OUString>::iterator i = d_files.begin(); i != d_files.end(); ++i) {
-            helpDocument(*i, &doc);
+        for (auto const& elem : d_files)
+        {
+            helpDocument(elem, &doc);
             writer.addDocument(&doc);
             doc.clear();
         }
@@ -72,7 +73,7 @@ bool HelpIndexer::indexDocuments()
     }
     catch (CLuceneError &e)
     {
-        d_error = OUString::createFromAscii(e.what());
+        d_error = o3tl::runtimeToOUString(e.what());
         return false;
     }
 
@@ -95,7 +96,7 @@ bool HelpIndexer::scanForFiles(OUString const & path) {
     osl::Directory dir(path);
     if (osl::FileBase::E_None != dir.open()) {
         d_error = "Error reading directory " + path;
-        return true;
+        return false;
     }
 
     osl::DirectoryItem item;
@@ -110,7 +111,7 @@ bool HelpIndexer::scanForFiles(OUString const & path) {
     return true;
 }
 
-void HelpIndexer::helpDocument(OUString const & fileName, Document *doc) {
+void HelpIndexer::helpDocument(OUString const & fileName, Document *doc) const {
     // Add the help path as an indexed, untokenized field.
 
     OUString path = "#HLP#" + d_module + "/" + fileName;

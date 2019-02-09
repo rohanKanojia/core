@@ -166,7 +166,7 @@ void
 {
     Nlist *np;
     static uchar onestr[2] = "1";
-    static Token onetoken[1] = {{NUMBER, 0, 0, 1, onestr, 0}};
+    static Token onetoken[1] = {{NUMBER, 0, 1, onestr, 0}};
     static Tokenrow onetr = {onetoken, onetoken, onetoken + 1, 1};
 
     trp->tp = trp->bp;
@@ -577,7 +577,7 @@ void
                 {
                     if (len + ntp->len + ntp->wslen > sizeof(tt))
                     {
-                        error(ERROR, "## string concatination buffer overrun");
+                        error(ERROR, "## string concatenation buffer overrun");
                         break;
                     }
 
@@ -587,8 +587,9 @@ void
                                 ntp->len + ntp->wslen);
                         len += ntp->len + ntp->wslen;
                     }
-                    else    // Leerzeichen um ## herum entfernen:
+                    else
                     {
+                        // remove spaces around ##
                         strncpy((char *) tt + len, (char *) ntp->t, ntp->len);
                         len += ntp->len;
                     }
@@ -624,7 +625,7 @@ void
  * corresponding index in the argname array.  Return -1 if not found.
  */
 int
-    lookuparg(Nlist * mac, Token * tp)
+    lookuparg(Nlist * mac, Token const * tp)
 {
     Token *ap;
 
@@ -645,7 +646,7 @@ int
 Tokenrow *
     stringify(Tokenrow * vp)
 {
-    static Token t = {STRING, 0, 0, 0, NULL, 0};
+    static Token t = {STRING, 0, 0, NULL, 0};
     static Tokenrow tr = {&t, &t, &t + 1, 1};
     Token *tp;
     uchar s[STRLEN];

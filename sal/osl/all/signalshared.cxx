@@ -19,11 +19,12 @@
 
 #include <sal/config.h>
 
+#include <stdlib.h>
+
 #include <signalshared.hxx>
 
 #include <osl/diagnose.h>
 
-bool bErrorReportingEnabled = true;
 bool bInitSignal = false;
 
 namespace
@@ -54,7 +55,7 @@ oslSignalAction callSignalHandler(oslSignalInfo* pInfo)
     oslSignalHandlerImpl* pHandler = SignalList;
     oslSignalAction Action = osl_Signal_ActCallNextHdl;
 
-    while (pHandler != nullptr)
+    while (pHandler)
     {
         if ((Action = pHandler->Handler(pHandler->pData, pInfo))
                 != osl_Signal_ActCallNextHdl)
@@ -68,18 +69,15 @@ oslSignalAction callSignalHandler(oslSignalInfo* pInfo)
 
 oslSignalHandler SAL_CALL osl_addSignalHandler(oslSignalHandlerFunction handler, void* pData)
 {
-    OSL_ASSERT(handler != nullptr);
-    if (handler == nullptr)
-    {
+    if (!handler)
         return nullptr;
-    }
 
-    if (! bInitSignal)
+    if (!bInitSignal)
         bInitSignal = initSignal();
 
     oslSignalHandlerImpl* pHandler = static_cast<oslSignalHandlerImpl*>(calloc(1, sizeof(oslSignalHandlerImpl)));
 
-    if (pHandler != nullptr)
+    if (pHandler)
     {
         pHandler->Handler = handler;
         pHandler->pData   = pData;
@@ -99,9 +97,7 @@ oslSignalHandler SAL_CALL osl_addSignalHandler(oslSignalHandlerFunction handler,
 
 sal_Bool SAL_CALL osl_removeSignalHandler(oslSignalHandler handler)
 {
-    OSL_ASSERT(handler != nullptr);
-
-    if (! bInitSignal)
+    if (!bInitSignal)
         bInitSignal = initSignal();
 
     osl_acquireMutex(SignalListMutex);
@@ -109,7 +105,7 @@ sal_Bool SAL_CALL osl_removeSignalHandler(oslSignalHandler handler)
     oslSignalHandlerImpl* pHandler = SignalList;
     oslSignalHandlerImpl* pPrevious = nullptr;
 
-    while (pHandler != nullptr)
+    while (pHandler)
     {
         if (pHandler == handler)
         {
@@ -120,12 +116,12 @@ sal_Bool SAL_CALL osl_removeSignalHandler(oslSignalHandler handler)
 
             osl_releaseMutex(SignalListMutex);
 
-            if (SignalList == nullptr)
+            if (!SignalList)
                 bInitSignal = deInitSignal();
 
             free(pHandler);
 
-            return sal_True;
+            return true;
         }
 
         pPrevious = pHandler;
@@ -134,20 +130,20 @@ sal_Bool SAL_CALL osl_removeSignalHandler(oslSignalHandler handler)
 
     osl_releaseMutex(SignalListMutex);
 
-    return sal_False;
+    return false;
 }
 
 oslSignalAction SAL_CALL osl_raiseSignal(sal_Int32 userSignal, void* userData)
 {
-    if (! bInitSignal)
+    if (!bInitSignal)
         bInitSignal = initSignal();
 
     osl_acquireMutex(SignalListMutex);
 
     oslSignalInfo info;
-    info.Signal     = osl_Signal_User;
+    info.Signal = osl_Signal_User;
     info.UserSignal = userSignal;
-    info.UserData   = userData;
+    info.UserData = userData;
 
     oslSignalAction action = callSignalHandler(&info);
 
@@ -156,12 +152,10 @@ oslSignalAction SAL_CALL osl_raiseSignal(sal_Int32 userSignal, void* userData)
     return action;
 }
 
-sal_Bool SAL_CALL osl_setErrorReporting( sal_Bool bEnable )
+sal_Bool SAL_CALL osl_setErrorReporting( sal_Bool /*bEnable*/ )
 {
-    bool bOld = bErrorReportingEnabled;
-    bErrorReportingEnabled = bEnable;
-    onErrorReportingChanged(bEnable);
-    return bOld;
+    // this is part of the stable API
+    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

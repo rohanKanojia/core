@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "calendarImpl.hxx"
-#include "localedata.hxx"
-#include <comphelper/processfactory.hxx>
+#include <calendarImpl.hxx>
+#include <localedata.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 #define ERROR RuntimeException()
 
@@ -35,16 +35,12 @@ CalendarImpl::CalendarImpl(const Reference< XComponentContext > &rxContext) : m_
 
 CalendarImpl::~CalendarImpl()
 {
-    // Clear lookuptable
-    for (size_t l = 0; l < lookupTable.size(); l++)
-        delete lookupTable[l];
-    lookupTable.clear();
 }
 
 void SAL_CALL
-CalendarImpl::loadDefaultCalendar( const Locale& rLocale ) throw(RuntimeException, std::exception)
+CalendarImpl::loadDefaultCalendar( const Locale& rLocale )
 {
-    Sequence< Calendar2 > xC = LocaleDataImpl().getAllCalendars2(rLocale);
+    Sequence< Calendar2 > xC = LocaleDataImpl::get()->getAllCalendars2(rLocale);
     for (sal_Int32 i = 0; i < xC.getLength(); i++) {
         if (xC[i].Default) {
             loadCalendar(xC[i].Name, rLocale);
@@ -55,15 +51,15 @@ CalendarImpl::loadDefaultCalendar( const Locale& rLocale ) throw(RuntimeExceptio
 }
 
 void SAL_CALL
-CalendarImpl::loadCalendar(const OUString& uniqueID, const Locale& rLocale ) throw (RuntimeException, std::exception)
+CalendarImpl::loadCalendar(const OUString& uniqueID, const Locale& rLocale )
 {
     Reference < XCalendar4 > xOldCalendar( xCalendar );  // backup
     sal_Int32 i;
 
     for (i = 0; i < sal::static_int_cast<sal_Int32>(lookupTable.size()); i++) {
-        lookupTableItem *listItem = lookupTable[i];
-        if (uniqueID == listItem->uniqueID) {
-            xCalendar = listItem->xCalendar;
+        lookupTableItem &listItem = lookupTable[i];
+        if (uniqueID == listItem.uniqueID) {
+            xCalendar = listItem.xCalendar;
             break;
         }
     }
@@ -74,7 +70,7 @@ CalendarImpl::loadCalendar(const OUString& uniqueID, const Locale& rLocale ) thr
 
         if ( ! xI.is() ) {
             // check if the calendar is defined in localedata, load gregorian calendar service.
-            Sequence< Calendar2 > xC = LocaleDataImpl().getAllCalendars2(rLocale);
+            Sequence< Calendar2 > xC = LocaleDataImpl::get()->getAllCalendars2(rLocale);
             for (i = 0; i < xC.getLength(); i++) {
                 if (uniqueID == xC[i].Name) {
                     xI = m_xContext->getServiceManager()->createInstanceWithContext("com.sun.star.i18n.Calendar_gregorian", m_xContext);
@@ -83,12 +79,11 @@ CalendarImpl::loadCalendar(const OUString& uniqueID, const Locale& rLocale ) thr
             }
         }
 
-        if ( xI.is() )
-            xCalendar.set(xI, UNO_QUERY);
-        else
+        if ( !xI.is() )
             throw ERROR;
+        xCalendar.set(xI, UNO_QUERY);
 
-        lookupTable.push_back( new lookupTableItem(uniqueID, xCalendar) );
+        lookupTable.emplace_back( uniqueID, xCalendar );
     }
 
     if ( !xCalendar.is() )
@@ -109,27 +104,25 @@ CalendarImpl::loadCalendar(const OUString& uniqueID, const Locale& rLocale ) thr
 }
 
 Calendar2 SAL_CALL
-CalendarImpl::getLoadedCalendar2() throw(RuntimeException, std::exception)
+CalendarImpl::getLoadedCalendar2()
 {
-    if (xCalendar.is())
-        return xCalendar->getLoadedCalendar2();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getLoadedCalendar2();
 }
 
 Calendar SAL_CALL
-CalendarImpl::getLoadedCalendar() throw(RuntimeException, std::exception)
+CalendarImpl::getLoadedCalendar()
 {
-    if (xCalendar.is())
-        return xCalendar->getLoadedCalendar();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getLoadedCalendar();
 }
 
 Sequence< OUString > SAL_CALL
-CalendarImpl::getAllCalendars( const Locale& rLocale ) throw(RuntimeException, std::exception)
+CalendarImpl::getAllCalendars( const Locale& rLocale )
 {
-    Sequence< Calendar2 > xC = LocaleDataImpl().getAllCalendars2(rLocale);
+    Sequence< Calendar2 > xC = LocaleDataImpl::get()->getAllCalendars2(rLocale);
     sal_Int32 nLen = xC.getLength();
     Sequence< OUString > xSeq( nLen );
     for (sal_Int32 i = 0; i < nLen; i++)
@@ -138,237 +131,212 @@ CalendarImpl::getAllCalendars( const Locale& rLocale ) throw(RuntimeException, s
 }
 
 void SAL_CALL
-CalendarImpl::setDateTime( double fTimeInDays ) throw(RuntimeException, std::exception)
+CalendarImpl::setDateTime( double fTimeInDays )
 {
-    if (xCalendar.is())
-        xCalendar->setDateTime( fTimeInDays );
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    xCalendar->setDateTime( fTimeInDays );
 }
 
 double SAL_CALL
-CalendarImpl::getDateTime() throw(RuntimeException, std::exception)
+CalendarImpl::getDateTime()
 {
-    if (xCalendar.is())
-        return xCalendar->getDateTime();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getDateTime();
 }
 
 void SAL_CALL
-CalendarImpl::setLocalDateTime( double fTimeInDays ) throw(RuntimeException, std::exception)
+CalendarImpl::setLocalDateTime( double fTimeInDays )
 {
-    if (xCalendar.is())
-        xCalendar->setLocalDateTime( fTimeInDays );
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    xCalendar->setLocalDateTime( fTimeInDays );
 }
 
 double SAL_CALL
-CalendarImpl::getLocalDateTime() throw(RuntimeException, std::exception)
+CalendarImpl::getLocalDateTime()
 {
-    if (xCalendar.is())
-        return xCalendar->getLocalDateTime();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getLocalDateTime();
 }
 
 OUString SAL_CALL
-CalendarImpl::getUniqueID() throw(RuntimeException, std::exception)
+CalendarImpl::getUniqueID()
 {
-    if (xCalendar.is())
-        return xCalendar->getUniqueID();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getUniqueID();
 }
 
 void SAL_CALL
-CalendarImpl::setValue( sal_Int16 fieldIndex, sal_Int16 value ) throw(RuntimeException, std::exception)
+CalendarImpl::setValue( sal_Int16 fieldIndex, sal_Int16 value )
 {
-    if (xCalendar.is())
-        xCalendar->setValue( fieldIndex, value );
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    xCalendar->setValue( fieldIndex, value );
 }
 
 sal_Int16 SAL_CALL
-CalendarImpl::getValue( sal_Int16 fieldIndex ) throw(RuntimeException, std::exception)
+CalendarImpl::getValue( sal_Int16 fieldIndex )
 {
-    if (xCalendar.is())
-        return xCalendar->getValue( fieldIndex );
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getValue( fieldIndex );
 }
 
 void SAL_CALL
-CalendarImpl::addValue( sal_Int16 fieldIndex, sal_Int32 amount ) throw(RuntimeException, std::exception)
+CalendarImpl::addValue( sal_Int16 fieldIndex, sal_Int32 amount )
 {
-    if (xCalendar.is())
-        xCalendar->addValue( fieldIndex, amount);
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    xCalendar->addValue( fieldIndex, amount);
 }
 
 sal_Int16 SAL_CALL
-CalendarImpl::getFirstDayOfWeek() throw(RuntimeException, std::exception)
+CalendarImpl::getFirstDayOfWeek()
 {
-    if (xCalendar.is())
-        return xCalendar->getFirstDayOfWeek();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getFirstDayOfWeek();
 }
 
 void SAL_CALL
 CalendarImpl::setFirstDayOfWeek( sal_Int16 day )
-throw(RuntimeException, std::exception)
 {
-    if (xCalendar.is())
-        xCalendar->setFirstDayOfWeek(day);
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    xCalendar->setFirstDayOfWeek(day);
 }
 
 void SAL_CALL
-CalendarImpl::setMinimumNumberOfDaysForFirstWeek( sal_Int16 days ) throw(RuntimeException, std::exception)
+CalendarImpl::setMinimumNumberOfDaysForFirstWeek( sal_Int16 days )
 {
-    if (xCalendar.is())
-        xCalendar->setMinimumNumberOfDaysForFirstWeek(days);
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    xCalendar->setMinimumNumberOfDaysForFirstWeek(days);
 }
 
 sal_Int16 SAL_CALL
-CalendarImpl::getMinimumNumberOfDaysForFirstWeek() throw(RuntimeException, std::exception)
+CalendarImpl::getMinimumNumberOfDaysForFirstWeek()
 {
-    if (xCalendar.is())
-        return xCalendar->getMinimumNumberOfDaysForFirstWeek();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getMinimumNumberOfDaysForFirstWeek();
 }
 
 
 OUString SAL_CALL
-CalendarImpl::getDisplayName( sal_Int16 displayIndex, sal_Int16 idx, sal_Int16 nameType ) throw(RuntimeException, std::exception)
+CalendarImpl::getDisplayName( sal_Int16 displayIndex, sal_Int16 idx, sal_Int16 nameType )
 {
-    if (xCalendar.is())
-        return xCalendar->getDisplayName( displayIndex, idx, nameType );
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getDisplayName( displayIndex, idx, nameType );
 }
 
 sal_Int16 SAL_CALL
-CalendarImpl::getNumberOfMonthsInYear() throw(RuntimeException, std::exception)
+CalendarImpl::getNumberOfMonthsInYear()
 {
-    if (xCalendar.is())
-        return xCalendar->getNumberOfMonthsInYear();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getNumberOfMonthsInYear();
 }
 
 
 sal_Int16 SAL_CALL
-CalendarImpl::getNumberOfDaysInWeek() throw(RuntimeException, std::exception)
+CalendarImpl::getNumberOfDaysInWeek()
 {
-    if (xCalendar.is())
-        return xCalendar->getNumberOfDaysInWeek();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getNumberOfDaysInWeek();
 }
 
 
 Sequence< CalendarItem > SAL_CALL
-CalendarImpl::getDays() throw(RuntimeException, std::exception)
+CalendarImpl::getDays()
 {
-    if (xCalendar.is())
-        return xCalendar->getDays();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getDays();
 }
 
 
 Sequence< CalendarItem > SAL_CALL
-CalendarImpl::getMonths() throw(RuntimeException, std::exception)
+CalendarImpl::getMonths()
 {
-    if (xCalendar.is())
-        return xCalendar->getMonths();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getMonths();
 }
 
 
 Sequence< CalendarItem2 > SAL_CALL
-CalendarImpl::getDays2() throw(RuntimeException, std::exception)
+CalendarImpl::getDays2()
 {
-    if (xCalendar.is())
-        return xCalendar->getDays2();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getDays2();
 }
 
 
 Sequence< CalendarItem2 > SAL_CALL
-CalendarImpl::getMonths2() throw(RuntimeException, std::exception)
+CalendarImpl::getMonths2()
 {
-    if (xCalendar.is())
-        return xCalendar->getMonths2();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getMonths2();
 }
 
 
 Sequence< CalendarItem2 > SAL_CALL
-CalendarImpl::getGenitiveMonths2() throw(RuntimeException, std::exception)
+CalendarImpl::getGenitiveMonths2()
 {
-    if (xCalendar.is())
-        return xCalendar->getGenitiveMonths2();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getGenitiveMonths2();
 }
 
 
 Sequence< CalendarItem2 > SAL_CALL
-CalendarImpl::getPartitiveMonths2() throw(RuntimeException, std::exception)
+CalendarImpl::getPartitiveMonths2()
 {
-    if (xCalendar.is())
-        return xCalendar->getPartitiveMonths2();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getPartitiveMonths2();
 }
 
 
 sal_Bool SAL_CALL
-CalendarImpl::isValid() throw(RuntimeException, std::exception)
+CalendarImpl::isValid()
 {
-    if (xCalendar.is())
-        return xCalendar->isValid();
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->isValid();
 }
 
 OUString SAL_CALL
 CalendarImpl::getDisplayString( sal_Int32 nCalendarDisplayCode, sal_Int16 nNativeNumberMode )
-    throw (RuntimeException, std::exception)
 {
-    if (xCalendar.is())
-        return xCalendar->getDisplayString(nCalendarDisplayCode, nNativeNumberMode);
-    else
-        throw ERROR ;
+    if (!xCalendar.is())
+        throw ERROR;
+    return xCalendar->getDisplayString(nCalendarDisplayCode, nNativeNumberMode);
 }
 
 OUString SAL_CALL
-CalendarImpl::getImplementationName() throw( RuntimeException, std::exception )
+CalendarImpl::getImplementationName()
 {
     return OUString("com.sun.star.i18n.CalendarImpl");
 }
 
 sal_Bool SAL_CALL
-CalendarImpl::supportsService(const OUString& rServiceName) throw( RuntimeException, std::exception )
+CalendarImpl::supportsService(const OUString& rServiceName)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence< OUString > SAL_CALL
-CalendarImpl::getSupportedServiceNames() throw( RuntimeException, std::exception )
+CalendarImpl::getSupportedServiceNames()
 {
     Sequence< OUString > aRet(2);
     aRet[0] = "com.sun.star.i18n.LocaleCalendar";
@@ -376,6 +344,6 @@ CalendarImpl::getSupportedServiceNames() throw( RuntimeException, std::exception
     return aRet;
 }
 
-}}}}
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

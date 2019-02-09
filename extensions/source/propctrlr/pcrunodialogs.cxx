@@ -20,7 +20,9 @@
 #include <sal/config.h>
 
 #include <com/sun/star/beans/NamedValue.hpp>
-
+#include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/awt/XWindow.hpp>
+#include <toolkit/helper/vclunohelper.hxx>
 #include "pcrservices.hxx"
 #include "pcrunodialogs.hxx"
 #include "formstrings.hxx"
@@ -28,7 +30,7 @@
 #include "taborder.hxx"
 #include "pcrcommon.hxx"
 
-extern "C" void SAL_CALL createRegistryInfo_OTabOrderDialog()
+extern "C" void createRegistryInfo_OTabOrderDialog()
 {
     ::pcr::OAutoRegistration< ::pcr::OTabOrderDialog > aAutoRegistration;
 }
@@ -58,58 +60,53 @@ namespace pcr
             &m_xTabbingModel, cppu::UnoType<decltype(m_xTabbingModel)>::get() );
     }
 
-
     OTabOrderDialog::~OTabOrderDialog()
     {
-        if ( m_pDialog )
+        if (m_aDialog)
         {
             ::osl::MutexGuard aGuard( m_aMutex );
-            if ( m_pDialog )
+            if (m_aDialog)
                 destroyDialog();
         }
     }
 
-
-    Sequence<sal_Int8> SAL_CALL OTabOrderDialog::getImplementationId(  ) throw(RuntimeException, std::exception)
+    Sequence<sal_Int8> SAL_CALL OTabOrderDialog::getImplementationId(  )
     {
         return css::uno::Sequence<sal_Int8>();
     }
 
 
-    Reference< XInterface > SAL_CALL OTabOrderDialog::Create( const Reference< XComponentContext >& _rxContext )
+    Reference< XInterface > OTabOrderDialog::Create( const Reference< XComponentContext >& _rxContext )
     {
         return *( new OTabOrderDialog( _rxContext ) );
     }
 
 
-    OUString SAL_CALL OTabOrderDialog::getImplementationName() throw(RuntimeException, std::exception)
+    OUString SAL_CALL OTabOrderDialog::getImplementationName()
     {
         return getImplementationName_static();
     }
 
 
-    OUString OTabOrderDialog::getImplementationName_static() throw(RuntimeException)
+    OUString OTabOrderDialog::getImplementationName_static()
     {
         return OUString("org.openoffice.comp.form.ui.OTabOrderDialog");
     }
 
 
-    css::uno::Sequence<OUString> SAL_CALL OTabOrderDialog::getSupportedServiceNames() throw(RuntimeException, std::exception)
+    css::uno::Sequence<OUString> SAL_CALL OTabOrderDialog::getSupportedServiceNames()
     {
         return getSupportedServiceNames_static();
     }
 
 
-    css::uno::Sequence<OUString> OTabOrderDialog::getSupportedServiceNames_static() throw(RuntimeException)
+    css::uno::Sequence<OUString> OTabOrderDialog::getSupportedServiceNames_static()
     {
-        css::uno::Sequence<OUString> aSupported(2);
-        aSupported.getArray()[0] = "com.sun.star.form.ui.TabOrderDialog";
-        aSupported.getArray()[1] = "com.sun.star.form.TabOrderDialog";
-        return aSupported;
+        return css::uno::Sequence<OUString>{ "com.sun.star.form.ui.TabOrderDialog", "com.sun.star.form.TabOrderDialog" };
     }
 
 
-    Reference<XPropertySetInfo>  SAL_CALL OTabOrderDialog::getPropertySetInfo() throw(RuntimeException, std::exception)
+    Reference<XPropertySetInfo>  SAL_CALL OTabOrderDialog::getPropertySetInfo()
     {
         Reference<XPropertySetInfo>  xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
@@ -129,13 +126,12 @@ namespace pcr
         return new ::cppu::OPropertyArrayHelper( aProps );
     }
 
-
-    VclPtr<Dialog> OTabOrderDialog::createDialog( vcl::Window* _pParent )
+    svt::OGenericUnoDialog::Dialog OTabOrderDialog::createDialog(const css::uno::Reference<css::awt::XWindow>& rParent)
     {
-        return VclPtr<TabOrderDialog>::Create( _pParent, m_xTabbingModel, m_xControlContext, m_aContext );
+        return svt::OGenericUnoDialog::Dialog(VclPtr<TabOrderDialog>::Create(VCLUnoHelper::GetWindow(rParent), m_xTabbingModel, m_xControlContext, m_aContext));
     }
 
-    void OTabOrderDialog::initialize( const Sequence< Any >& aArguments ) throw(Exception, RuntimeException, std::exception)
+    void OTabOrderDialog::initialize( const Sequence< Any >& aArguments )
     {
         Reference<css::awt::XTabControllerModel> xTabbingModel;
         Reference<css::awt::XControlContainer> xControlContext;
@@ -144,15 +140,15 @@ namespace pcr
         {
             Sequence< Any > aNewArguments( 3 );
             aNewArguments[0] <<= NamedValue(
-                OUString( "TabbingModel" ),
+                "TabbingModel",
                 makeAny( xTabbingModel )
             );
             aNewArguments[1] <<= NamedValue(
-                OUString( "ControlContext" ),
+                "ControlContext",
                 makeAny( xControlContext )
             );
             aNewArguments[2] <<= NamedValue(
-                OUString( "ParentWindow"  ),
+                "ParentWindow",
                 makeAny( xParentWindow )
             );
             OTabOrderDialog_DBase::initialize(aNewArguments);

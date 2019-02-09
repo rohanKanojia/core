@@ -17,21 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fulinend.hxx"
+#include <fulinend.hxx>
 #include <svx/xtable.hxx>
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
 #include <svx/svdobj.hxx>
 #include <svx/svdopath.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#include "strings.hrc"
-#include "ViewShell.hxx"
-#include "helpids.h"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "View.hxx"
-#include "Window.hxx"
+#include <strings.hrc>
+#include <ViewShell.hxx>
+#include <helpids.h>
+#include <sdresid.hxx>
+#include <drawdoc.hxx>
+#include <View.hxx>
+#include <Window.hxx>
 #include <memory>
 
 namespace sd {
@@ -70,7 +71,7 @@ void FuLineEnd::DoExecute( SfxRequest& )
             pObj->TakeObjInfo( aInfoRec );
 
             if( aInfoRec.bCanConvToPath &&
-                pObj->GetObjInventor() == SdrInventor &&
+                pObj->GetObjInventor() == SdrInventor::Default &&
                 pObj->GetObjIdentifier() != OBJ_GRUP )
                 // bCanConvToPath is sal_True for group objects,
                 // but it crashes on ConvertToPathObj()!
@@ -91,8 +92,8 @@ void FuLineEnd::DoExecute( SfxRequest& )
 
         XLineEndListRef pLineEndList = mpDoc->GetLineEndList();
 
-        OUString aNewName( SD_RESSTR( STR_LINEEND ) );
-        OUString aDesc( SD_RESSTR( STR_DESC_LINEEND ) );
+        OUString aNewName( SdResId( STR_LINEEND ) );
+        OUString aDesc( SdResId( STR_DESC_LINEEND ) );
         OUString aName;
 
         long nCount = pLineEndList->Count();
@@ -101,9 +102,7 @@ void FuLineEnd::DoExecute( SfxRequest& )
 
         while( !bDifferent )
         {
-            aName = aNewName;
-            aName += " ";
-            aName += OUString::number(j++);
+            aName = aNewName + " " + OUString::number(j++);
             bDifferent = true;
             for( long i = 0; i < nCount && bDifferent; i++ )
             {
@@ -113,34 +112,31 @@ void FuLineEnd::DoExecute( SfxRequest& )
         }
 
         SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-        std::unique_ptr<AbstractSvxNameDialog> pDlg(pFact ? pFact->CreateSvxNameDialog( nullptr, aName, aDesc ) : nullptr);
+        ScopedVclPtr<AbstractSvxNameDialog> pDlg( pFact->CreateSvxNameDialog( nullptr, aName, aDesc ) );
 
-        if( pDlg )
+        pDlg->SetEditHelpId( HID_SD_NAMEDIALOG_LINEEND );
+
+        if( pDlg->Execute() == RET_OK )
         {
-            pDlg->SetEditHelpId( HID_SD_NAMEDIALOG_LINEEND );
+            pDlg->GetName( aName );
+            bDifferent = true;
 
-            if( pDlg->Execute() == RET_OK )
+            for( long i = 0; i < nCount && bDifferent; i++ )
             {
-                pDlg->GetName( aName );
-                bDifferent = true;
+                if( aName == pLineEndList->GetLineEnd( i )->GetName() )
+                    bDifferent = false;
+            }
 
-                for( long i = 0; i < nCount && bDifferent; i++ )
-                {
-                    if( aName == pLineEndList->GetLineEnd( i )->GetName() )
-                        bDifferent = false;
-                }
-
-                if( bDifferent )
-                {
-                    XLineEndEntry* pEntry = new XLineEndEntry( aPolyPolygon, aName );
-                    pLineEndList->Insert( pEntry);
-                }
-                else
-                {
-                    ScopedVclPtrInstance<WarningBox> aWarningBox( mpWindow, WinBits( WB_OK ),
-                            SD_RESSTR( STR_WARN_NAME_DUPLICATE ) );
-                    aWarningBox->Execute();
-                }
+            if( bDifferent )
+            {
+                pLineEndList->Insert(std::make_unique<XLineEndEntry>(aPolyPolygon, aName));
+            }
+            else
+            {
+                std::unique_ptr<weld::MessageDialog> xWarn(Application::CreateMessageDialog(mpWindow ? mpWindow->GetFrameWeld() : nullptr,
+                                                           VclMessageType::Warning, VclButtonsType::Ok,
+                                                           SdResId(STR_WARN_NAME_DUPLICATE)));
+                xWarn->run();
             }
         }
     }

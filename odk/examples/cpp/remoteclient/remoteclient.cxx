@@ -46,6 +46,8 @@
 
 #include <com/sun/star/lang/XMain.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 
 #include <com/sun/star/io/XOutputStream.hpp>
 #include <com/sun/star/io/XInputStream.hpp>
@@ -209,7 +211,8 @@ Sequence< OUString > getSupportedServiceNames()
         MutexGuard guard( Mutex::getGlobalMutex() );
         if( !pNames )
         {
-            static Sequence< OUString > seqNames { "com.sun.star.bridge.example.RemoteClientSample" };
+            static Sequence< OUString > seqNames(1);
+            seqNames[0] = "com.sun.star.bridge.example.RemoteClientSample";
             pNames = &seqNames;
         }
     }

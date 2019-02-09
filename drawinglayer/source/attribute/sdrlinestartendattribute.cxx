@@ -35,7 +35,6 @@ namespace drawinglayer
             double                                  mfStartWidth;           // 1/100th mm
             double                                  mfEndWidth;             // 1/100th mm
 
-            // bitfield
             bool                                    mbStartActive : 1;     // start of Line is active
             bool                                    mbEndActive : 1;       // end of Line is active
             bool                                    mbStartCentered : 1;   // Line is centered on line start point
@@ -121,25 +120,20 @@ namespace drawinglayer
         {
         }
 
-        SdrLineStartEndAttribute::SdrLineStartEndAttribute(const SdrLineStartEndAttribute& rCandidate)
-        :   mpSdrLineStartEndAttribute(rCandidate.mpSdrLineStartEndAttribute)
-        {
-        }
+        SdrLineStartEndAttribute::SdrLineStartEndAttribute(const SdrLineStartEndAttribute&) = default;
 
-        SdrLineStartEndAttribute::~SdrLineStartEndAttribute()
-        {
-        }
+        SdrLineStartEndAttribute::SdrLineStartEndAttribute(SdrLineStartEndAttribute&&) = default;
+
+        SdrLineStartEndAttribute::~SdrLineStartEndAttribute() = default;
 
         bool SdrLineStartEndAttribute::isDefault() const
         {
             return mpSdrLineStartEndAttribute.same_object(theGlobalDefault::get());
         }
 
-        SdrLineStartEndAttribute& SdrLineStartEndAttribute::operator=(const SdrLineStartEndAttribute& rCandidate)
-        {
-            mpSdrLineStartEndAttribute = rCandidate.mpSdrLineStartEndAttribute;
-            return *this;
-        }
+        SdrLineStartEndAttribute& SdrLineStartEndAttribute::operator=(const SdrLineStartEndAttribute&) = default;
+
+        SdrLineStartEndAttribute& SdrLineStartEndAttribute::operator=(SdrLineStartEndAttribute&&) = default;
 
         bool SdrLineStartEndAttribute::operator==(const SdrLineStartEndAttribute& rCandidate) const
         {

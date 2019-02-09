@@ -19,41 +19,34 @@
 
 #include "DataBrowserModel.hxx"
 #include "DialogModel.hxx"
-#include "ChartModelHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSeriesHelper.hxx"
-#include "PropertyHelper.hxx"
-#include "ControllerLockGuard.hxx"
-#include "macros.hxx"
-#include "StatisticsHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "ChartTypeHelper.hxx"
-#include "chartview/ExplicitValueProvider.hxx"
-#include "ExplicitCategoriesProvider.hxx"
+#include <ChartModelHelper.hxx>
+#include <DiagramHelper.hxx>
+#include <DataSeriesHelper.hxx>
+#include <ControllerLockGuard.hxx>
+#include <StatisticsHelper.hxx>
+#include <ChartTypeHelper.hxx>
+#include <chartview/ExplicitValueProvider.hxx>
+#include <ExplicitCategoriesProvider.hxx>
 
-#include "ChartModel.hxx"
+#include <ChartModel.hxx>
 #include <unonames.hxx>
 
 #include <com/sun/star/container/XIndexReplace.hpp>
-#include <com/sun/star/chart2/XAxis.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
 #include <com/sun/star/chart2/XInternalDataProvider.hpp>
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/data/XDataSource.hpp>
-#include <com/sun/star/chart2/data/XDataSink.hpp>
 #include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
 #include <com/sun/star/chart2/data/XNumericalDataSequence.hpp>
 #include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
+#include <tools/diagnose_ex.h>
+#include <comphelper/property.hxx>
 
 #include <rtl/math.hxx>
 
 #include <algorithm>
-
-#if OSL_DEBUG_LEVEL > 1
-#include <cstdio>
-#endif
 
 using namespace ::com::sun::star;
 
@@ -75,9 +68,9 @@ OUString lcl_getRole(
         {
             xProp->getPropertyValue( "Role" ) >>= aResult;
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
     return aResult;
@@ -115,7 +108,7 @@ bool lcl_SequenceOfSeriesIsShared(
         Reference< chart2::data::XDataSource > xSource( xSeries, uno::UNO_QUERY_THROW );
         Sequence< Reference< chart2::data::XLabeledDataSequence > > aLSeq( xSource->getDataSequences());
         for( sal_Int32 i=0; i<aLSeq.getLength(); ++i )
-            if (aLSeq[i].is() && DataSeriesHelper::getRole(aLSeq[i]).equals(aValuesRole))
+            if (aLSeq[i].is() && DataSeriesHelper::getRole(aLSeq[i]) == aValuesRole)
             {
                 // getValues().is(), because lcl_getRole checked that already
                 bResult = (aValuesRep == aLSeq[i]->getValues()->getSourceRangeRepresentation());
@@ -123,14 +116,14 @@ bool lcl_SequenceOfSeriesIsShared(
                 break;
             }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return bResult;
 }
 
-typedef ::std::vector< Reference< chart2::data::XLabeledDataSequence > > lcl_tSharedSeqVec;
+typedef std::vector< Reference< chart2::data::XLabeledDataSequence > > lcl_tSharedSeqVec;
 
 lcl_tSharedSeqVec lcl_getSharedSequences( const Sequence< Reference< chart2::XDataSeries > > & rSeries )
 {
@@ -176,7 +169,7 @@ sal_Int32 lcl_getValuesRepresentationIndex(
     return nResult;
 }
 
-struct lcl_RepresentationsOfLSeqMatch : public ::std::unary_function< Reference< chart2::data::XLabeledDataSequence >, bool >
+struct lcl_RepresentationsOfLSeqMatch
 {
     explicit lcl_RepresentationsOfLSeqMatch( const Reference< chart2::data::XLabeledDataSequence > & xLSeq ) :
             m_aValuesRep( xLSeq.is() ?
@@ -194,14 +187,14 @@ private:
     OUString m_aValuesRep;
 };
 
-struct lcl_RolesOfLSeqMatch : public ::std::unary_function< Reference< chart2::data::XLabeledDataSequence >, bool >
+struct lcl_RolesOfLSeqMatch
 {
     explicit lcl_RolesOfLSeqMatch( const Reference< chart2::data::XLabeledDataSequence > & xLSeq ) :
         m_aRole(DataSeriesHelper::getRole(xLSeq)) {}
 
     bool operator() ( const Reference< chart2::data::XLabeledDataSequence > & xLSeq )
     {
-        return DataSeriesHelper::getRole(xLSeq).equals(m_aRole);
+        return DataSeriesHelper::getRole(xLSeq) == m_aRole;
     }
 private:
     OUString m_aRole;
@@ -239,10 +232,9 @@ struct DataBrowserModel::tDataColumn
     {}
 };
 
-struct DataBrowserModel::implColumnLess : public ::std::binary_function<
-        DataBrowserModel::tDataColumn, DataBrowserModel::tDataColumn, bool >
+struct DataBrowserModel::implColumnLess
 {
-    bool operator() ( const first_argument_type & rLeft, const second_argument_type & rRight )
+    bool operator() ( const DataBrowserModel::tDataColumn & rLeft, const DataBrowserModel::tDataColumn & rRight )
     {
         if( rLeft.m_xLabeledDataSequence.is() && rRight.m_xLabeledDataSequence.is())
         {
@@ -267,7 +259,7 @@ DataBrowserModel::~DataBrowserModel()
 
 namespace
 {
-struct lcl_DataSeriesOfHeaderMatches : public ::std::unary_function< ::chart::DataBrowserModel::tDataHeader, bool >
+struct lcl_DataSeriesOfHeaderMatches
 {
     explicit lcl_DataSeriesOfHeaderMatches(
         const Reference< chart2::XDataSeries > & xSeriesToCompareWith ) :
@@ -284,7 +276,7 @@ private:
 
 void DataBrowserModel::insertDataSeries( sal_Int32 nAfterColumnIndex )
 {
-    OSL_ASSERT( m_apDialogModel.get());
+    OSL_ASSERT(m_apDialogModel);
     Reference< chart2::XInternalDataProvider > xDataProvider(
         m_apDialogModel->getDataProvider(), uno::UNO_QUERY );
 
@@ -312,7 +304,7 @@ void DataBrowserModel::insertDataSeries( sal_Int32 nAfterColumnIndex )
         // Find the corresponding header and determine the last column of this
         // data series.
         tDataHeaderVector::const_iterator aIt(
-            ::std::find_if( m_aHeaders.begin(), m_aHeaders.end(),
+            std::find_if( m_aHeaders.begin(), m_aHeaders.end(),
                             lcl_DataSeriesOfHeaderMatches( xSeries )));
         if( aIt != m_aHeaders.end())
             nStartCol = aIt->m_nEndColumn;
@@ -355,7 +347,7 @@ void DataBrowserModel::insertDataSeries( sal_Int32 nAfterColumnIndex )
         for (sal_Int32 nIndex = nStartCol; nSeqIdx < nSeqSize; ++nSeqIdx)
         {
             lcl_tSharedSeqVec::const_iterator aSharedIt(
-                ::std::find_if( aSharedSequences.begin(), aSharedSequences.end(),
+                std::find_if( aSharedSequences.begin(), aSharedSequences.end(),
                                 lcl_RolesOfLSeqMatch( aLSequences[nSeqIdx] )));
 
             if( aSharedIt != aSharedSequences.end())
@@ -395,7 +387,7 @@ void DataBrowserModel::insertDataSeries( sal_Int32 nAfterColumnIndex )
         //give the new series the same number format as the former series especially for bubble charts thus the bubble size values can be edited with same format immediately
         Reference< beans::XPropertySet > xNewSeriesProps( xNewSeries, uno::UNO_QUERY );
         if( xNewSeriesProps.is() )
-            xNewSeriesProps->setPropertyValue(CHART_UNONAME_NUMFMT , uno::makeAny(nSeriesNumberFormat));
+            xNewSeriesProps->setPropertyValue(CHART_UNONAME_NUMFMT , uno::Any(nSeriesNumberFormat));
     }
 
     updateFromModel();
@@ -405,7 +397,7 @@ void DataBrowserModel::insertComplexCategoryLevel( sal_Int32 nAfterColumnIndex )
 {
     //create a new text column for complex categories
 
-    OSL_ASSERT( m_apDialogModel.get());
+    OSL_ASSERT(m_apDialogModel);
     Reference< chart2::XInternalDataProvider > xDataProvider( m_apDialogModel->getDataProvider(), uno::UNO_QUERY );
     if (!xDataProvider.is())
         return;
@@ -443,7 +435,7 @@ void DataBrowserModel::removeComplexCategoryLevel( sal_Int32 nAtColumnIndex )
 
 void DataBrowserModel::removeDataSeriesOrComplexCategoryLevel( sal_Int32 nAtColumnIndex )
 {
-    OSL_ASSERT( m_apDialogModel.get());
+    OSL_ASSERT(m_apDialogModel);
     if (nAtColumnIndex < 0 || static_cast<size_t>(nAtColumnIndex) >= m_aColumns.size())
         // Out of bound.
         return;
@@ -490,19 +482,17 @@ void DataBrowserModel::removeDataSeriesOrComplexCategoryLevel( sal_Int32 nAtColu
     Sequence<Reference<chart2::data::XLabeledDataSequence> > aSequencesOfDeleted = xSourceOfDeleted->getDataSequences();
     for (sal_Int32 i = 0; i < aSequencesOfDeleted.getLength(); ++i)
     {
-        std::vector<Reference<chart2::data::XLabeledDataSequence> >::const_iterator aHitIt(
-            ::std::find_if( aAllDataSeqs.begin(), aAllDataSeqs.end(),
-                lcl_RepresentationsOfLSeqMatch( aSequencesOfDeleted[i] )));
         // if not used by the remaining series this sequence can be deleted
-        if( aHitIt == aAllDataSeqs.end() )
+        if( std::none_of( aAllDataSeqs.begin(), aAllDataSeqs.end(),
+                         lcl_RepresentationsOfLSeqMatch( aSequencesOfDeleted[i] )) )
             aSequenceIndexesToDelete.push_back( lcl_getValuesRepresentationIndex( aSequencesOfDeleted[i] ) );
     }
 
     // delete unnecessary sequences of the internal data
     // iterate using greatest index first, so that deletion does not
     // shift other sequences that will be deleted later
-    ::std::sort( aSequenceIndexesToDelete.begin(), aSequenceIndexesToDelete.end());
-    for( ::std::vector< sal_Int32 >::reverse_iterator aIt(
+    std::sort( aSequenceIndexesToDelete.begin(), aSequenceIndexesToDelete.end());
+    for( std::vector< sal_Int32 >::reverse_iterator aIt(
              aSequenceIndexesToDelete.rbegin()); aIt != aSequenceIndexesToDelete.rend(); ++aIt )
     {
         if( *aIt != -1 )
@@ -514,13 +504,13 @@ void DataBrowserModel::removeDataSeriesOrComplexCategoryLevel( sal_Int32 nAtColu
 
 void DataBrowserModel::swapDataSeries( sal_Int32 nFirstColumnIndex )
 {
-    OSL_ASSERT( m_apDialogModel.get());
+    OSL_ASSERT(m_apDialogModel);
     if( static_cast< tDataColumnVector::size_type >( nFirstColumnIndex ) < m_aColumns.size() - 1 )
     {
         Reference< chart2::XDataSeries > xSeries( m_aColumns[nFirstColumnIndex].m_xDataSeries );
         if( xSeries.is())
         {
-            m_apDialogModel->moveSeries( xSeries, DialogModel::MOVE_DOWN );
+            m_apDialogModel->moveSeries( xSeries, DialogModel::MoveDirection::Down );
             updateFromModel();
         }
     }
@@ -528,7 +518,7 @@ void DataBrowserModel::swapDataSeries( sal_Int32 nFirstColumnIndex )
 
 void DataBrowserModel::swapDataPointForAllSeries( sal_Int32 nFirstIndex )
 {
-    OSL_ASSERT( m_apDialogModel.get());
+    OSL_ASSERT(m_apDialogModel);
     Reference< chart2::XInternalDataProvider > xDataProvider(
         m_apDialogModel->getDataProvider(), uno::UNO_QUERY );
     // lockControllers
@@ -563,11 +553,10 @@ void DataBrowserModel::removeDataPointForAllSeries( sal_Int32 nAtIndex )
 DataBrowserModel::tDataHeader DataBrowserModel::getHeaderForSeries(
     const Reference< chart2::XDataSeries > & xSeries ) const
 {
-    for( tDataHeaderVector::const_iterator aIt( m_aHeaders.begin());
-         aIt != m_aHeaders.end(); ++aIt )
+    for (auto const& elemHeader : m_aHeaders)
     {
-        if( aIt->m_xDataSeries == xSeries )
-            return (*aIt);
+        if( elemHeader.m_xDataSeries == xSeries )
+            return elemHeader;
     }
     return tDataHeader();
 }
@@ -581,7 +570,7 @@ Reference< chart2::XDataSeries >
     return nullptr;
 }
 
-DataBrowserModel::eCellType DataBrowserModel::getCellType( sal_Int32 nAtColumn, sal_Int32 /* nAtRow */ ) const
+DataBrowserModel::eCellType DataBrowserModel::getCellType( sal_Int32 nAtColumn ) const
 {
     eCellType eResult = TEXT;
     tDataColumnVector::size_type nIndex( nAtColumn );
@@ -651,7 +640,7 @@ OUString DataBrowserModel::getCellText( sal_Int32 nAtColumn, sal_Int32 nAtRow )
     return aResult;
 }
 
-sal_uInt32 DataBrowserModel::getNumberFormatKey( sal_Int32 nAtColumn, sal_Int32 /* nAtRow */ )
+sal_uInt32 DataBrowserModel::getNumberFormatKey( sal_Int32 nAtColumn )
 {
     tDataColumnVector::size_type nIndex( nAtColumn );
     if( nIndex < m_aColumns.size())
@@ -691,9 +680,8 @@ bool DataBrowserModel::setCellAny( sal_Int32 nAtColumn, sal_Int32 nAtRow, const 
             if( xModifiable.is() )
                 xModifiable->setModified(true);
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            (void)(ex);
             bResult = false;
         }
     }
@@ -702,14 +690,14 @@ bool DataBrowserModel::setCellAny( sal_Int32 nAtColumn, sal_Int32 nAtRow, const 
 
 bool DataBrowserModel::setCellNumber( sal_Int32 nAtColumn, sal_Int32 nAtRow, double fValue )
 {
-    return (getCellType( nAtColumn, nAtRow ) == NUMBER) &&
-        setCellAny( nAtColumn, nAtRow, uno::makeAny( fValue ));
+    return (getCellType( nAtColumn ) == NUMBER) &&
+        setCellAny( nAtColumn, nAtRow, uno::Any( fValue ));
 }
 
 bool DataBrowserModel::setCellText( sal_Int32 nAtColumn, sal_Int32 nAtRow, const OUString & rText )
 {
-    return (getCellType( nAtColumn, nAtRow ) == TEXT) &&
-        setCellAny( nAtColumn, nAtRow, uno::makeAny( rText ));
+    return (getCellType( nAtColumn ) == TEXT) &&
+        setCellAny( nAtColumn, nAtRow, uno::Any( rText ));
 }
 
 sal_Int32 DataBrowserModel::getColumnCount() const
@@ -720,13 +708,12 @@ sal_Int32 DataBrowserModel::getColumnCount() const
 sal_Int32 DataBrowserModel::getMaxRowCount() const
 {
     sal_Int32 nResult = 0;
-    tDataColumnVector::const_iterator aIt( m_aColumns.begin());
-    for( ; aIt != m_aColumns.end(); ++aIt )
+    for (auto const& column : m_aColumns)
     {
-        if( aIt->m_xLabeledDataSequence.is())
+        if( column.m_xLabeledDataSequence.is())
         {
             Reference< chart2::data::XDataSequence > xSeq(
-                aIt->m_xLabeledDataSequence->getValues());
+                column.m_xLabeledDataSequence->getValues());
             if( !xSeq.is())
                 continue;
             sal_Int32 nLength( xSeq->getData().getLength());
@@ -761,10 +748,9 @@ bool DataBrowserModel::isCategoriesColumn( sal_Int32 nColumnIndex ) const
 sal_Int32 DataBrowserModel::getCategoryColumnCount()
 {
     sal_Int32 nLastTextColumnIndex = -1;
-    tDataColumnVector::const_iterator aIt = m_aColumns.begin();
-    for( ; aIt != m_aColumns.end(); ++aIt )
+    for (auto const& column : m_aColumns)
     {
-        if( !aIt->m_xDataSeries.is() )
+        if( !column.m_xDataSeries.is() )
             nLastTextColumnIndex++;
         else
             break;
@@ -838,12 +824,11 @@ void DataBrowserModel::updateFromModel()
 
                 Sequence< Reference< chart2::XDataSeries > > aSeries( xSeriesCnt->getDataSeries());
                 lcl_tSharedSeqVec aSharedSequences( lcl_getSharedSequences( aSeries ));
-                for( lcl_tSharedSeqVec::const_iterator aIt( aSharedSequences.begin());
-                     aIt != aSharedSequences.end(); ++aIt )
+                for (auto const& sharedSequence : aSharedSequences)
                 {
                     tDataColumn aSharedSequence;
-                    aSharedSequence.m_xLabeledDataSequence = *aIt;
-                    aSharedSequence.m_aUIRoleName = lcl_getUIRoleName( *aIt );
+                    aSharedSequence.m_xLabeledDataSequence = sharedSequence;
+                    aSharedSequence.m_aUIRoleName = lcl_getUIRoleName(sharedSequence);
                     aSharedSequence.m_eCellType = NUMBER;
                     // as the sequences are shared it should be ok to take the first series
                     // @todo: dimension index 0 for x-values used here. This is just a guess.
@@ -875,7 +860,7 @@ void DataBrowserModel::updateFromModel()
                             sal_Int32 nSequenceNumberFormatKey = nYAxisNumberFormatKey;
                             OUString aRole = DataSeriesHelper::getRole(aLSeqs[nSeqIdx]);
 
-                            if( aRole.equals( aRoleForDataLabelNumberFormat ) )
+                            if( aRole == aRoleForDataLabelNumberFormat )
                             {
                                 nSequenceNumberFormatKey = ExplicitValueProvider::getExplicitNumberFormatKeyForDataLabel(
                                     Reference< beans::XPropertySet >( xSeries, uno::UNO_QUERY ), xSeries, -1, xDiagram );
@@ -883,17 +868,16 @@ void DataBrowserModel::updateFromModel()
                             else if( aRole == "values-x" )
                                 nSequenceNumberFormatKey = nXAxisNumberFormat;
 
-                            if( ::std::find_if( aSharedSequences.begin(), aSharedSequences.end(),
-                                             lcl_RepresentationsOfLSeqMatch( aLSeqs[nSeqIdx] )) == aSharedSequences.end())
+                            if( std::none_of( aSharedSequences.begin(), aSharedSequences.end(),
+                                             lcl_RepresentationsOfLSeqMatch( aLSeqs[nSeqIdx] )) )
                             {
                                 // no shared sequence
-                                m_aColumns.push_back(
-                                    tDataColumn(
+                                m_aColumns.emplace_back(
                                         aSeries[nSeriesIdx],
                                         lcl_getUIRoleName( aLSeqs[nSeqIdx] ),
                                         aLSeqs[nSeqIdx],
                                         NUMBER,
-                                        nSequenceNumberFormatKey ));
+                                        nSequenceNumberFormatKey );
                                 ++nHeaderEnd;
                             }
                             // else skip
@@ -904,10 +888,7 @@ void DataBrowserModel::updateFromModel()
                             Reference< beans::XPropertySet > xProp( aCooSysSeq[nCooSysIdx], uno::UNO_QUERY );
                             xProp->getPropertyValue( "SwapXAndYAxis" ) >>= bSwapXAndYAxis;
                         }
-                        catch( const beans::UnknownPropertyException & ex )
-                        {
-                            (void)ex;
-                        }
+                        catch( const beans::UnknownPropertyException & ) {}
 
                         // add ranges for error bars if present for a series
                         if( StatisticsHelper::usesErrorBarRanges( aSeries[nSeriesIdx] ))
@@ -916,17 +897,16 @@ void DataBrowserModel::updateFromModel()
                         if( StatisticsHelper::usesErrorBarRanges( aSeries[nSeriesIdx], /* bYError = */ false ))
                             addErrorBarRanges( aSeries[nSeriesIdx], nYAxisNumberFormatKey, nSeqIdx, nHeaderEnd, false );
 
-                        m_aHeaders.push_back(
-                            tDataHeader(
+                        m_aHeaders.emplace_back(
                                 aSeries[nSeriesIdx],
                                 aChartTypes[nCTIdx],
                                 bSwapXAndYAxis,
                                 nHeaderStart,
-                                nHeaderEnd - 1 ));
+                                nHeaderEnd - 1 );
 
                         nHeaderStart = nHeaderEnd;
 
-                        ::std::sort( m_aColumns.begin() + nStartColIndex, m_aColumns.end(), implColumnLess() );
+                        std::sort( m_aColumns.begin() + nStartColIndex, m_aColumns.end(), implColumnLess() );
                     }
                 }
             }
@@ -942,7 +922,7 @@ void DataBrowserModel::addErrorBarRanges(
 {
     try
     {
-        ::std::vector< Reference< chart2::data::XLabeledDataSequence > > aSequences;
+        std::vector< Reference< chart2::data::XLabeledDataSequence > > aSequences;
 
         Reference< chart2::data::XDataSource > xErrorSource(
             StatisticsHelper::getErrorBars( xDataSeries, bYError ), uno::UNO_QUERY );
@@ -963,23 +943,17 @@ void DataBrowserModel::addErrorBarRanges(
         if( xErrorLSequence.is())
             aSequences.push_back( xErrorLSequence );
 
-        for( ::std::vector< Reference< chart2::data::XLabeledDataSequence > >::const_iterator aIt( aSequences.begin());
-             aIt != aSequences.end(); ++aIt )
+        for (Reference<chart2::data::XLabeledDataSequence> const & rDataSequence : aSequences)
         {
-            m_aColumns.push_back(
-                tDataColumn(
-                    xDataSeries,
-                    lcl_getUIRoleName( *aIt ),
-                    *aIt,
-                    NUMBER,
-                    nNumberFormatKey ));
+            m_aColumns.emplace_back(xDataSeries, lcl_getUIRoleName(rDataSequence),
+                                             rDataSequence, NUMBER, nNumberFormatKey);
             ++rInOutSequenceIndex;
             ++rInOutHeaderEnd;
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 

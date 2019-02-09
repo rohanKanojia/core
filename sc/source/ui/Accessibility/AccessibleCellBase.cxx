@@ -17,19 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "AccessibleCellBase.hxx"
-#include "attrib.hxx"
-#include "scitems.hxx"
-#include "miscuno.hxx"
-#include "document.hxx"
-#include "docfunc.hxx"
-#include "docsh.hxx"
-#include "formulacell.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "unonames.hxx"
-#include "detfunc.hxx"
-#include "chgtrack.hxx"
+#include <AccessibleCellBase.hxx>
+#include <attrib.hxx>
+#include <scitems.hxx>
+#include <miscuno.hxx>
+#include <document.hxx>
+#include <docfunc.hxx>
+#include <docsh.hxx>
+#include <formulacell.hxx>
+#include <strings.hxx>
+#include <unonames.hxx>
+#include <detfunc.hxx>
+#include <chgtrack.hxx>
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
@@ -38,9 +37,10 @@
 #include <com/sun/star/sheet/XSheetAnnotation.hpp>
 #include <com/sun/star/sheet/XSheetAnnotationAnchor.hpp>
 #include <com/sun/star/text/XSimpleText.hpp>
+#include <com/sun/star/table/BorderLine.hpp>
+#include <com/sun/star/table/ShadowFormat.hpp>
 #include <editeng/brushitem.hxx>
 #include <comphelper/sequence.hxx>
-#include <comphelper/servicehelper.hxx>
 #include <sfx2/objsh.hxx>
 #include <vcl/svapp.hxx>
 
@@ -48,6 +48,8 @@
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::accessibility;
+
+#define DEFAULT_LINE_WIDTH 2
 
 //=====  internal  ============================================================
 
@@ -70,8 +72,7 @@ ScAccessibleCellBase::~ScAccessibleCellBase()
 
     //=====  XAccessibleComponent  ============================================
 
-bool SAL_CALL ScAccessibleCellBase::isVisible()
-    throw (uno::RuntimeException, std::exception)
+bool ScAccessibleCellBase::isVisible()
 {
      SolarMutexGuard aGuard;
     IsObjectValid();
@@ -91,7 +92,6 @@ bool SAL_CALL ScAccessibleCellBase::isVisible()
 }
 
 sal_Int32 SAL_CALL ScAccessibleCellBase::getForeground()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -131,7 +131,6 @@ sal_Int32 SAL_CALL ScAccessibleCellBase::getForeground()
 }
 
 sal_Int32 SAL_CALL ScAccessibleCellBase::getBackground()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -175,7 +174,6 @@ sal_Int32 SAL_CALL ScAccessibleCellBase::getBackground()
     //=====  XInterface  =====================================================
 
 uno::Any SAL_CALL ScAccessibleCellBase::queryInterface( uno::Type const & rType )
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Any aAny (ScAccessibleCellBaseImpl::queryInterface(rType));
     return aAny.hasValue() ? aAny : ScAccessibleContextBase::queryInterface(rType);
@@ -197,25 +195,22 @@ void SAL_CALL ScAccessibleCellBase::release()
 
 sal_Int32
     ScAccessibleCellBase::getAccessibleIndexInParent()
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
     return mnIndex;
 }
 
-OUString SAL_CALL
+OUString
     ScAccessibleCellBase::createAccessibleDescription()
-    throw (uno::RuntimeException, std::exception)
 {
-    OUString sDescription = OUString(ScResId(STR_ACC_CELL_DESCR));
+    OUString sDescription = STR_ACC_CELL_DESCR;
 
     return sDescription;
 }
 
-OUString SAL_CALL
+OUString
     ScAccessibleCellBase::createAccessibleName()
-    throw (uno::RuntimeException, std::exception)
 {
     // Document not needed, because only the cell address, but not the tablename is needed
     // always us OOO notation
@@ -226,7 +221,6 @@ OUString SAL_CALL
 
 uno::Any SAL_CALL
     ScAccessibleCellBase::getCurrentValue()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -240,7 +234,6 @@ uno::Any SAL_CALL
 
 sal_Bool SAL_CALL
     ScAccessibleCellBase::setCurrentValue( const uno::Any& aNumber )
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -265,28 +258,19 @@ sal_Bool SAL_CALL
 
 uno::Any SAL_CALL
     ScAccessibleCellBase::getMaximumValue(  )
-    throw (uno::RuntimeException, std::exception)
 {
-    uno::Any aAny;
-    aAny <<= DBL_MAX;
-
-    return aAny;
+    return uno::Any(DBL_MAX);
 }
 
 uno::Any SAL_CALL
     ScAccessibleCellBase::getMinimumValue(  )
-    throw (uno::RuntimeException, std::exception)
 {
-    uno::Any aAny;
-    aAny <<= -DBL_MAX;
-
-    return aAny;
+    return uno::Any(-DBL_MAX);
 }
 
     //=====  XServiceInfo  ====================================================
 
 OUString SAL_CALL ScAccessibleCellBase::getImplementationName()
-        throw (uno::RuntimeException, std::exception)
 {
     return OUString("ScAccessibleCellBase");
 }
@@ -294,14 +278,12 @@ OUString SAL_CALL ScAccessibleCellBase::getImplementationName()
     //=====  XTypeProvider  ===================================================
 
 uno::Sequence< uno::Type > SAL_CALL ScAccessibleCellBase::getTypes()
-        throw (uno::RuntimeException, std::exception)
 {
     return comphelper::concatSequences(ScAccessibleCellBaseImpl::getTypes(), ScAccessibleContextBase::getTypes());
 }
 
 uno::Sequence<sal_Int8> SAL_CALL
     ScAccessibleCellBase::getImplementationId()
-    throw (uno::RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
@@ -315,12 +297,11 @@ bool ScAccessibleCellBase::IsEditable(
     return bEditable;
 }
 
-OUString SAL_CALL ScAccessibleCellBase::GetNote()
-                                throw (css::uno::RuntimeException)
+OUString ScAccessibleCellBase::GetNote()
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
-    OUString msNote;
+    OUString sNote;
     if (mpDoc)
     {
         SfxObjectShell* pObjSh = mpDoc->GetDocumentShell();
@@ -349,7 +330,7 @@ OUString SAL_CALL ScAccessibleCellBase::GetNote()
                                     uno::Reference <text::XSimpleText> xText (xSheetAnnotation, uno::UNO_QUERY);
                                     if (xText.is())
                                     {
-                                        msNote = xText->getString();
+                                        sNote = xText->getString();
                                     }
                                 }
                             }
@@ -359,13 +340,10 @@ OUString SAL_CALL ScAccessibleCellBase::GetNote()
             }
         }
     }
-    return msNote;
+    return sNote;
 }
 
-#include <com/sun/star/table/ShadowFormat.hpp>
-
-OUString SAL_CALL ScAccessibleCellBase::getShadowAttrs()
-                                        throw (css::uno::RuntimeException, std::exception)
+OUString ScAccessibleCellBase::getShadowAttrs()
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -431,24 +409,21 @@ OUString SAL_CALL ScAccessibleCellBase::getShadowAttrs()
     }
     //else return all the shadow properties
     sShadowAttrs += "Location=";
-    sShadowAttrs += OUString::number( (sal_Int32)nLocationVal );
+    sShadowAttrs += OUString::number( nLocationVal );
     sShadowAttrs += sInnerSplit;
     sShadowAttrs += "ShadowWidth=";
-    sShadowAttrs += OUString::number( (sal_Int32)aShadowFmt.ShadowWidth ) ;
+    sShadowAttrs += OUString::number( static_cast<sal_Int32>(aShadowFmt.ShadowWidth) ) ;
     sShadowAttrs += sInnerSplit;
     sShadowAttrs += "IsTransparent=";
-    sShadowAttrs += OUString::number( (int)aShadowFmt.IsTransparent ) ;
+    sShadowAttrs += OUString::number( static_cast<int>(aShadowFmt.IsTransparent) ) ;
     sShadowAttrs += sInnerSplit;
     sShadowAttrs += "Color=";
-    sShadowAttrs += OUString::number( (sal_Int32)aShadowFmt.Color );
+    sShadowAttrs += OUString::number( static_cast<sal_Int32>(aShadowFmt.Color) );
     sShadowAttrs += sOuterSplit;
     return sShadowAttrs;
 }
 
-#include <com/sun/star/table/BorderLine.hpp>
-
-OUString SAL_CALL ScAccessibleCellBase::getBorderAttrs()
-                                        throw (css::uno::RuntimeException, std::exception)
+OUString ScAccessibleCellBase::getBorderAttrs()
 {
     SolarMutexGuard aGuard;
     IsObjectValid();
@@ -498,14 +473,14 @@ OUString SAL_CALL ScAccessibleCellBase::getBorderAttrs()
     bool bIn = mpDoc && mpDoc->IsCellInChangeTrack(maCellAddress,&aColor);
     if (bIn)
     {
-        aTopBorder.Color = aColor.GetColor();
-        aBottomBorder.Color = aColor.GetColor();
-        aLeftBorder.Color = aColor.GetColor();
-        aRightBorder.Color = aColor.GetColor();
-        aTopBorder.OuterLineWidth =2;
-        aBottomBorder.OuterLineWidth =2;
-        aLeftBorder.OuterLineWidth =2;
-        aRightBorder.OuterLineWidth =2;
+        aTopBorder.Color = sal_Int32(aColor);
+        aBottomBorder.Color = sal_Int32(aColor);
+        aLeftBorder.Color = sal_Int32(aColor);
+        aRightBorder.Color = sal_Int32(aColor);
+        aTopBorder.OuterLineWidth = DEFAULT_LINE_WIDTH;
+        aBottomBorder.OuterLineWidth = DEFAULT_LINE_WIDTH;
+        aLeftBorder.OuterLineWidth = DEFAULT_LINE_WIDTH;
+        aRightBorder.OuterLineWidth = DEFAULT_LINE_WIDTH;
     }
 
     //construct border attributes string
@@ -521,36 +496,36 @@ OUString SAL_CALL ScAccessibleCellBase::getBorderAttrs()
     else//add all the border properties to the return string.
     {
         sBorderAttrs += "TopBorder:Color=";
-        sBorderAttrs += OUString::number( (sal_Int32)aTopBorder.Color );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aTopBorder.Color) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "InnerLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aTopBorder.InnerLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aTopBorder.InnerLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "OuterLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aTopBorder.OuterLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aTopBorder.OuterLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "LineDistance=";
-        sBorderAttrs += OUString::number( (sal_Int32)aTopBorder.LineDistance );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aTopBorder.LineDistance) );
         sBorderAttrs += sOuterSplit;
     }
     //bottom border
     if ( aBottomBorder.InnerLineWidth == 0 && aBottomBorder.OuterLineWidth == 0 )
     {
-        sBorderAttrs += "BottomBorde:;";
+        sBorderAttrs += "BottomBorder:;";
     }
     else
     {
         sBorderAttrs += "BottomBorder:Color=";
-        sBorderAttrs += OUString::number( (sal_Int32)aBottomBorder.Color );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aBottomBorder.Color) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "InnerLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aBottomBorder.InnerLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aBottomBorder.InnerLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "OuterLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aBottomBorder.OuterLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aBottomBorder.OuterLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "LineDistance=";
-        sBorderAttrs += OUString::number( (sal_Int32)aBottomBorder.LineDistance );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aBottomBorder.LineDistance) );
         sBorderAttrs += sOuterSplit;
     }
     //left border
@@ -561,16 +536,16 @@ OUString SAL_CALL ScAccessibleCellBase::getBorderAttrs()
     else
     {
         sBorderAttrs += "LeftBorder:Color=";
-        sBorderAttrs += OUString::number( (sal_Int32)aLeftBorder.Color );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aLeftBorder.Color) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "InnerLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aLeftBorder.InnerLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aLeftBorder.InnerLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "OuterLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aLeftBorder.OuterLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aLeftBorder.OuterLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "LineDistance=";
-        sBorderAttrs += OUString::number( (sal_Int32)aLeftBorder.LineDistance );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aLeftBorder.LineDistance) );
         sBorderAttrs += sOuterSplit;
     }
     //right border
@@ -581,24 +556,23 @@ OUString SAL_CALL ScAccessibleCellBase::getBorderAttrs()
     else
     {
         sBorderAttrs += "RightBorder:Color=";
-        sBorderAttrs += OUString::number( (sal_Int32)aRightBorder.Color );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aRightBorder.Color) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "InnerLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aRightBorder.InnerLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aRightBorder.InnerLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "OuterLineWidth=";
-        sBorderAttrs += OUString::number( (sal_Int32)aRightBorder.OuterLineWidth );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aRightBorder.OuterLineWidth) );
         sBorderAttrs += sInnerSplit;
         sBorderAttrs += "LineDistance=";
-        sBorderAttrs += OUString::number( (sal_Int32)aRightBorder.LineDistance );
+        sBorderAttrs += OUString::number( static_cast<sal_Int32>(aRightBorder.LineDistance) );
         sBorderAttrs += sOuterSplit;
     }
     return sBorderAttrs;
 }
 //end of cell attributes
 
-OUString SAL_CALL ScAccessibleCellBase::GetAllDisplayNote()
-    throw (css::uno::RuntimeException, std::exception)
+OUString ScAccessibleCellBase::GetAllDisplayNote()
 {
     OUString strNote;
     OUString strTrackText;

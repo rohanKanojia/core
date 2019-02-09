@@ -34,11 +34,9 @@ namespace pcr
 
     //= OPropertyInfoService
 
-    class OPropertyInfoService
+    class OPropertyInfoService final
                 :public IPropertyInfoService
-                ,public PcrClient
     {
-    protected:
         static sal_uInt16               s_nCount;
         static OPropertyInfoImpl*       s_pPropertyInfos;
         // TODO: a real structure which allows quick access by name as well as by id
@@ -50,11 +48,11 @@ namespace pcr
         virtual OString                        getPropertyHelpId(sal_Int32 _nId) const override;
         virtual sal_Int16                      getPropertyPos(sal_Int32 _nId) const override;
         virtual sal_uInt32                     getPropertyUIFlags(sal_Int32 _nId) const override;
-        virtual ::std::vector< OUString >      getPropertyEnumRepresentations(sal_Int32 _nId) const override;
+        virtual std::vector< OUString >      getPropertyEnumRepresentations(sal_Int32 _nId) const override;
 
         bool                                   isComposeable( const OUString& _rPropertyName ) const;
 
-    protected:
+    private:
         static const OPropertyInfoImpl* getPropertyInfo();
 
         static const OPropertyInfoImpl* getPropertyInfo(const OUString& _rName);
@@ -85,14 +83,14 @@ namespace pcr
         DefaultEnumRepresentation( const IPropertyInfoService& _rInfo, const css::uno::Type& _rType, sal_Int32 _nPropertyId );
 
     protected:
-        virtual ~DefaultEnumRepresentation();
+        virtual ~DefaultEnumRepresentation() override;
 
     protected:
         // IPropertyEnumRepresentation implementqation
-        virtual ::std::vector< OUString >
-                                    SAL_CALL getDescriptions() const override;
-        virtual void                SAL_CALL getValueFromDescription( const OUString& _rDescription, css::uno::Any& _out_rValue ) const override;
-        virtual OUString            SAL_CALL getDescriptionForValue( const css::uno::Any& _rEnumValue ) const override;
+        virtual std::vector< OUString >
+                                    getDescriptions() const override;
+        virtual void                getValueFromDescription( const OUString& _rDescription, css::uno::Any& _out_rValue ) const override;
+        virtual OUString            getDescriptionForValue( const css::uno::Any& _rEnumValue ) const override;
 
     private:
         DefaultEnumRepresentation( const DefaultEnumRepresentation& ) = delete;
@@ -114,8 +112,9 @@ namespace pcr
 #define PROP_FLAG_COMPOSEABLE       0x00000080  // the property is "composeable", i.e. an intersection of property
                                                 //  sets should expose it, if all elements do
 #define PROP_FLAG_EXPERIMENTAL      0x00000100  // the property is experimental, i.e. should not appear in the
-                                                // UI, unless experimental properties are enabled by a configuraiton
+                                                // UI, unless experimental properties are enabled by a configuration
                                                 // option
+#define PROP_FLAG_REPORT_INVISIBLE  0x00000200  // the property should not appear in the Report Designer UI
 
 
     //= property ids (for all browseable properties)
@@ -326,6 +325,7 @@ namespace pcr
     #define PROPERTY_ID_SCROLL_HEIGHT               204
     #define PROPERTY_ID_SCROLL_TOP                  205
     #define PROPERTY_ID_SCROLL_LEFT                 206
+    #define PROPERTY_ID_TYPEDITEMLIST               207
 
 
 } // namespace pcr

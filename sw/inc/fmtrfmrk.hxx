@@ -23,7 +23,7 @@
 #include <cppuhelper/weakref.hxx>
 #include <svl/poolitem.hxx>
 
-#include <calbck.hxx>
+#include "calbck.hxx"
 
 namespace com { namespace sun { namespace star {
     namespace text { class XTextContent; }
@@ -36,19 +36,20 @@ class SwTextRefMark;
 class SwFormatRefMark
     : public SfxPoolItem
     , public SwModify
+    , public sw::BroadcasterMixin
 {
     friend class SwTextRefMark;
-    SwTextRefMark* pTextAttr;
+    SwTextRefMark* m_pTextAttr;
 
     SwFormatRefMark& operator=(const SwFormatRefMark& rRefMark) = delete;
-    OUString aRefName;
+    OUString m_aRefName;
 
     css::uno::WeakReference<css::text::XTextContent> m_wXReferenceMark;
 
 public:
     SwFormatRefMark( const OUString& rText );
     SwFormatRefMark( const SwFormatRefMark& rRefMark );
-    virtual ~SwFormatRefMark( );
+    virtual ~SwFormatRefMark( ) override;
 
     /// "Pure virtual methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
@@ -60,10 +61,10 @@ public:
 
     void InvalidateRefMark();
 
-    const SwTextRefMark *GetTextRefMark() const   { return pTextAttr; }
+    const SwTextRefMark *GetTextRefMark() const   { return m_pTextAttr; }
 
-    inline       OUString &GetRefName()       { return aRefName; }
-    inline const OUString &GetRefName() const { return aRefName; }
+    OUString &GetRefName()       { return m_aRefName; }
+    const OUString &GetRefName() const { return m_aRefName; }
 
     css::uno::WeakReference<css::text::XTextContent> const& GetXRefMark() const
         { return m_wXReferenceMark; }

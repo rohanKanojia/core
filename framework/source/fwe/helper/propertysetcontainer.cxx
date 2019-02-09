@@ -19,6 +19,7 @@
 
 #include <helper/propertysetcontainer.hxx>
 
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <cppuhelper/queryinterface.hxx>
 #include <vcl/svapp.hxx>
 
@@ -55,14 +56,13 @@ void SAL_CALL PropertySetContainer::release() throw ()
 }
 
 Any SAL_CALL PropertySetContainer::queryInterface( const Type& rType )
-throw ( RuntimeException, std::exception )
 {
     Any a = ::cppu::queryInterface(
                 rType ,
-                (static_cast< XIndexContainer* >(this)),
-                (static_cast< XIndexReplace* >(this)),
-                (static_cast< XIndexAccess* >(this)),
-                (static_cast< XElementAccess* >(this)) );
+                static_cast< XIndexContainer* >(this),
+                static_cast< XIndexReplace* >(this),
+                static_cast< XIndexAccess* >(this),
+                static_cast< XElementAccess* >(this) );
 
     if( a.hasValue() )
     {
@@ -74,77 +74,63 @@ throw ( RuntimeException, std::exception )
 
 // XIndexContainer
 void SAL_CALL PropertySetContainer::insertByIndex( sal_Int32 Index, const css::uno::Any& Element )
-    throw ( IllegalArgumentException, IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
     sal_Int32 nSize = m_aPropertySetVector.size();
 
-    if ( nSize >= Index )
-    {
-        Reference< XPropertySet > aPropertySetElement;
-
-        if ( Element >>= aPropertySetElement )
-        {
-            if ( nSize == Index )
-                m_aPropertySetVector.push_back( aPropertySetElement );
-            else
-            {
-                PropertySetVector::iterator aIter = m_aPropertySetVector.begin();
-                aIter += Index;
-                m_aPropertySetVector.insert( aIter, aPropertySetElement );
-            }
-        }
-        else
-        {
-            throw IllegalArgumentException(
-                WRONG_TYPE_EXCEPTION,
-                static_cast<OWeakObject *>(this), 2 );
-        }
-    }
-    else
+    if ( nSize < Index )
         throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    Reference< XPropertySet > aPropertySetElement;
+
+    if ( !(Element >>= aPropertySetElement) )
+    {
+        throw IllegalArgumentException(
+            WRONG_TYPE_EXCEPTION,
+            static_cast<OWeakObject *>(this), 2 );
+    }
+
+    if ( nSize == Index )
+        m_aPropertySetVector.push_back( aPropertySetElement );
+    else
+    {
+        PropertySetVector::iterator aIter = m_aPropertySetVector.begin();
+        aIter += Index;
+        m_aPropertySetVector.insert( aIter, aPropertySetElement );
+    }
 }
 
 void SAL_CALL PropertySetContainer::removeByIndex( sal_Int32 nIndex )
-    throw ( IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
-    if ( (sal_Int32)m_aPropertySetVector.size() > nIndex )
-    {
-        m_aPropertySetVector.erase(m_aPropertySetVector.begin() +  nIndex);
-    }
-    else
+    if ( static_cast<sal_Int32>(m_aPropertySetVector.size()) <= nIndex )
         throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    m_aPropertySetVector.erase(m_aPropertySetVector.begin() +  nIndex);
 }
 
 // XIndexReplace
 void SAL_CALL PropertySetContainer::replaceByIndex( sal_Int32 Index, const css::uno::Any& Element )
-    throw ( IllegalArgumentException, IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception)
 {
-    if ( (sal_Int32)m_aPropertySetVector.size() > Index )
-    {
-        Reference< XPropertySet > aPropertySetElement;
-
-        if ( Element >>= aPropertySetElement )
-        {
-            m_aPropertySetVector[ Index ] = aPropertySetElement;
-        }
-        else
-        {
-            throw IllegalArgumentException(
-                WRONG_TYPE_EXCEPTION,
-                static_cast<OWeakObject *>(this), 2 );
-        }
-    }
-    else
+    if ( static_cast<sal_Int32>(m_aPropertySetVector.size()) <= Index )
         throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    Reference< XPropertySet > aPropertySetElement;
+
+    if ( !(Element >>= aPropertySetElement) )
+    {
+        throw IllegalArgumentException(
+            WRONG_TYPE_EXCEPTION,
+            static_cast<OWeakObject *>(this), 2 );
+    }
+
+    m_aPropertySetVector[ Index ] = aPropertySetElement;
 }
 
 // XIndexAccess
 sal_Int32 SAL_CALL PropertySetContainer::getCount()
-    throw ( RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
@@ -152,24 +138,17 @@ sal_Int32 SAL_CALL PropertySetContainer::getCount()
 }
 
 Any SAL_CALL PropertySetContainer::getByIndex( sal_Int32 Index )
-    throw ( IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
-    if ( (sal_Int32)m_aPropertySetVector.size() > Index )
-    {
-        Any a;
-
-        a <<= m_aPropertySetVector[ Index ];
-        return a;
-    }
-    else
+    if ( static_cast<sal_Int32>(m_aPropertySetVector.size()) <= Index )
         throw IndexOutOfBoundsException( OUString(), static_cast<OWeakObject *>(this) );
+
+    return Any(m_aPropertySetVector[ Index ]);
 }
 
 // XElementAccess
 sal_Bool SAL_CALL PropertySetContainer::hasElements()
-    throw (css::uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 

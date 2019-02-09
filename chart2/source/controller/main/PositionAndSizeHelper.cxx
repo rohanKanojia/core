@@ -17,18 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PositionAndSizeHelper.hxx"
-#include "macros.hxx"
-#include "ChartModelHelper.hxx"
-#include "ControllerLockGuard.hxx"
+#include <PositionAndSizeHelper.hxx>
+#include <ControllerLockGuard.hxx>
 #include <com/sun/star/chart2/LegendPosition.hpp>
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
 #include <com/sun/star/chart2/RelativePosition.hpp>
 #include <com/sun/star/chart2/RelativeSize.hpp>
-#include "chartview/ExplicitValueProvider.hxx"
 
 #include <tools/gen.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/awt/Rectangle.hpp>
 
 namespace chart
 {
@@ -43,10 +41,10 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
 {
     if(!xObjectProp.is())
         return false;
-    Rectangle aObjectRect( Point(rNewPositionAndSize.X,rNewPositionAndSize.Y), Size(rNewPositionAndSize.Width,rNewPositionAndSize.Height) );
-    Rectangle aPageRect( Point(rPageRectangle.X,rPageRectangle.Y), Size(rPageRectangle.Width,rPageRectangle.Height) );
+    tools::Rectangle aObjectRect( Point(rNewPositionAndSize.X,rNewPositionAndSize.Y), Size(rNewPositionAndSize.Width,rNewPositionAndSize.Height) );
+    tools::Rectangle aPageRect( Point(rPageRectangle.X,rPageRectangle.Y), Size(rPageRectangle.Width,rPageRectangle.Height) );
 
-    if( OBJECTTYPE_TITLE==eObjectType )
+    if( eObjectType==OBJECTTYPE_TITLE )
     {
         //@todo decide whether x is primary or secondary
         chart2::RelativePosition aRelativePosition;
@@ -55,9 +53,9 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
         Point aPos = aObjectRect.TopLeft();
         aRelativePosition.Primary = (double(aPos.X())+double(aObjectRect.getWidth())/2.0)/double(aPageRect.getWidth());
         aRelativePosition.Secondary = (double(aPos.Y())+double(aObjectRect.getHeight())/2.0)/double(aPageRect.getHeight());
-        xObjectProp->setPropertyValue( "RelativePosition", uno::makeAny(aRelativePosition) );
+        xObjectProp->setPropertyValue( "RelativePosition", uno::Any(aRelativePosition) );
     }
-    else if( OBJECTTYPE_DATA_CURVE_EQUATION==eObjectType )
+    else if( eObjectType==OBJECTTYPE_DATA_CURVE_EQUATION )
     {
         //@todo decide whether x is primary or secondary
         chart2::RelativePosition aRelativePosition;
@@ -66,12 +64,12 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
         Point aPos = aObjectRect.TopLeft();
         aRelativePosition.Primary = double(aPos.X())/double(aPageRect.getWidth());
         aRelativePosition.Secondary = double(aPos.Y())/double(aPageRect.getHeight());
-        xObjectProp->setPropertyValue( "RelativePosition", uno::makeAny(aRelativePosition) );
+        xObjectProp->setPropertyValue( "RelativePosition", uno::Any(aRelativePosition) );
     }
-    else if(OBJECTTYPE_LEGEND==eObjectType)
+    else if(eObjectType==OBJECTTYPE_LEGEND)
     {
-        xObjectProp->setPropertyValue( "AnchorPosition", uno::makeAny(LegendPosition(LegendPosition_CUSTOM)));
-        xObjectProp->setPropertyValue( "Expansion", uno::makeAny(css::chart::ChartLegendExpansion_CUSTOM));
+        xObjectProp->setPropertyValue( "AnchorPosition", uno::Any(LegendPosition_CUSTOM));
+        xObjectProp->setPropertyValue( "Expansion", uno::Any(css::chart::ChartLegendExpansion_CUSTOM));
         chart2::RelativePosition aRelativePosition;
         chart2::RelativeSize aRelativeSize;
         Point aAnchor = aObjectRect.TopLeft();
@@ -83,7 +81,7 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
             static_cast< double >( aAnchor.Y()) /
             static_cast< double >( aPageRect.getHeight());
 
-        xObjectProp->setPropertyValue( "RelativePosition", uno::makeAny(aRelativePosition) );
+        xObjectProp->setPropertyValue( "RelativePosition", uno::Any(aRelativePosition) );
 
         aRelativeSize.Primary =
             static_cast< double >( aObjectRect.getWidth()) /
@@ -96,9 +94,9 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
         if (aRelativeSize.Secondary > 1.0)
             aRelativeSize.Secondary = 1.0;
 
-        xObjectProp->setPropertyValue( "RelativeSize", uno::makeAny(aRelativeSize) );
+        xObjectProp->setPropertyValue( "RelativeSize", uno::Any(aRelativeSize) );
     }
-    else if(OBJECTTYPE_DIAGRAM==eObjectType || OBJECTTYPE_DIAGRAM_WALL==eObjectType || OBJECTTYPE_DIAGRAM_FLOOR==eObjectType)
+    else if(eObjectType==OBJECTTYPE_DIAGRAM || eObjectType==OBJECTTYPE_DIAGRAM_WALL || eObjectType==OBJECTTYPE_DIAGRAM_FLOOR)
     {
         //@todo decide whether x is primary or secondary
 
@@ -109,7 +107,7 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
         Point aPos = aObjectRect.Center();
         aRelativePosition.Primary = double(aPos.X())/double(aPageRect.getWidth());
         aRelativePosition.Secondary = double(aPos.Y())/double(aPageRect.getHeight());
-        xObjectProp->setPropertyValue( "RelativePosition", uno::makeAny(aRelativePosition) );
+        xObjectProp->setPropertyValue( "RelativePosition", uno::Any(aRelativePosition) );
 
         //set size:
         RelativeSize aRelativeSize;
@@ -117,7 +115,7 @@ bool PositionAndSizeHelper::moveObject( ObjectType eObjectType
         //and in the middle of the page
         aRelativeSize.Primary = double(aObjectRect.getWidth())/double(aPageRect.getWidth());
         aRelativeSize.Secondary = double(aObjectRect.getHeight())/double(aPageRect.getHeight());
-        xObjectProp->setPropertyValue( "RelativeSize", uno::makeAny(aRelativeSize) );
+        xObjectProp->setPropertyValue( "RelativeSize", uno::Any(aRelativeSize) );
     }
     else
         return false;
@@ -136,7 +134,7 @@ bool PositionAndSizeHelper::moveObject( const OUString& rObjectCID
 
     uno::Reference< beans::XPropertySet > xObjectProp = ObjectIdentifier::getObjectPropertySet( rObjectCID, xChartModel );
     ObjectType eObjectType( ObjectIdentifier::getObjectType( rObjectCID ) );
-    if(OBJECTTYPE_DIAGRAM==eObjectType || OBJECTTYPE_DIAGRAM_WALL==eObjectType || OBJECTTYPE_DIAGRAM_FLOOR==eObjectType)
+    if(eObjectType==OBJECTTYPE_DIAGRAM || eObjectType==OBJECTTYPE_DIAGRAM_WALL || eObjectType==OBJECTTYPE_DIAGRAM_FLOOR)
     {
         xObjectProp.set( ObjectIdentifier::getDiagramForCID( rObjectCID, xChartModel ), uno::UNO_QUERY );
         if(!xObjectProp.is())

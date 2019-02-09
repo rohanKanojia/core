@@ -11,8 +11,7 @@
 #ifndef TOXWHITESPACESTRIPPER_HXX_
 #define TOXWHITESPACESTRIPPER_HXX_
 
-#include "rtl/ustring.hxx"
-#include <swdllapi.h>
+#include <rtl/ustring.hxx>
 #include <vector>
 
 namespace sw {
@@ -38,7 +37,7 @@ public:
     sal_Int32
     GetPositionInStrippedString(sal_Int32 pos) const;
 
-    OUString
+    const OUString&
     GetStrippedString() const { return mStripped;}
 
 private:

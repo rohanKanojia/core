@@ -47,7 +47,7 @@ namespace ftp {
         void SetMonth(sal_uInt16 month) { Month = month; }
         void SetDay(sal_uInt16 day) { Day = day; }
         // Only zero allowed and used for time-argument
-        void SetTime(sal_uInt16) { Hours = Minutes = Seconds = NanoSeconds = 0; }
+        void SetTime() { Hours = 0; Minutes = 0; Seconds = 0; NanoSeconds = 0; }
         void SetHour(sal_uInt16 hours) { Hours = hours; }
         void SetMin(sal_uInt16 minutes) { Minutes = minutes; }
         void SetSec(sal_uInt16 seconds) { Seconds = seconds; }
@@ -80,7 +80,7 @@ namespace ftp {
         FTPDirentry()
             : m_aDate(),
               m_nMode(INETCOREFTP_FILEMODE_UNKNOWN),
-              m_nSize((sal_uInt32)(-1)) { }
+              m_nSize(sal_uInt32(-1)) { }
 
         void clear() {
             m_aURL.clear();
@@ -143,7 +143,7 @@ namespace ftp {
             sal_uInt16      nHour,
             DateTime& rDateTime);
 
-        static bool setYear (
+        static void setYear (
             DateTime& rDateTime,
             sal_uInt16  nYear);
 

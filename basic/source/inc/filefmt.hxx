@@ -43,9 +43,9 @@ class SvStream;
 // Version 13: tdf#94617 store methods nStart information greater than sal_Int16 limit
 //
 
-#define B_LEGACYVERSION 0x00000011L
-#define B_EXT_IMG_VERSION 0x00000012L
-#define B_CURVERSION 0x00000013L
+#define B_LEGACYVERSION 0x00000011
+#define B_EXT_IMG_VERSION 0x00000012
+#define B_CURVERSION 0x00000013
 
 // The file contains either a module- or a library-record.
 // Those records contain further records. Every record's got
@@ -156,8 +156,8 @@ enum class FileOffset {
 //  sal_uInt32 the record's length
 //  sal_uInt16 number of strings
 // Data for every public:
-//  sal_uInt16 1. Zeile (Sub XXX)
-//  sal_uInt16 2. Zeile (End Sub)
+//  sal_uInt16 1st line (Sub XXX)
+//  sal_uInt16 2nd line (End Sub)
 
 // SBX-objects:
 // sal_uInt16 number of objects

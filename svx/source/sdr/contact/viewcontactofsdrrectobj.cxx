@@ -47,33 +47,28 @@ drawinglayer::primitive2d::Primitive2DContainer ViewContactOfSdrRectObj::createV
             false));
 
     // take unrotated snap rect (direct model data) for position and size
-    Rectangle rRectangle = GetRectObj().GetGeoRect();
-    // Hack for calc, transform position of object according
-    // to current zoom so as objects relative position to grid
-    // appears stable
-    rRectangle += GetRectObj().GetGridOffset();
+    const tools::Rectangle aRectangle(GetRectObj().GetGeoRect());
     const ::basegfx::B2DRange aObjectRange(
-        rRectangle.Left(), rRectangle.Top(),
-        rRectangle.Right(), rRectangle.Bottom() );
+        aRectangle.Left(), aRectangle.Top(),
+        aRectangle.Right(), aRectangle.Bottom() );
 
     const GeoStat& rGeoStat(GetRectObj().GetGeoStat());
 
     // fill object matrix
-    basegfx::B2DHomMatrix aObjectMatrix(basegfx::tools::createScaleShearXRotateTranslateB2DHomMatrix(
+    basegfx::B2DHomMatrix aObjectMatrix(basegfx::utils::createScaleShearXRotateTranslateB2DHomMatrix(
         aObjectRange.getWidth(), aObjectRange.getHeight(),
         rGeoStat.nShearAngle ? tan((36000 - rGeoStat.nShearAngle) * F_PI18000) : 0.0,
         rGeoStat.nRotationAngle ? (36000 - rGeoStat.nRotationAngle) * F_PI18000 : 0.0,
         aObjectRange.getMinX(), aObjectRange.getMinY()));
 
     // calculate corner radius
-    sal_uInt32 nCornerRadius((static_cast<const SdrMetricItem&>(rItemSet.Get(SDRATTR_ECKENRADIUS))).GetValue());
+    sal_uInt32 nCornerRadius(rItemSet.Get(SDRATTR_ECKENRADIUS).GetValue());
     double fCornerRadiusX;
     double fCornerRadiusY;
     drawinglayer::primitive2d::calculateRelativeCornerRadius(nCornerRadius, aObjectRange, fCornerRadiusX, fCornerRadiusY);
 
     // #i105856# use knowledge about pickthrough from the model
-    const bool bPickThroughTransparentTextFrames(
-        GetRectObj().GetModel() && GetRectObj().GetModel()->IsPickThroughTransparentTextFrames());
+    const bool bPickThroughTransparentTextFrames(GetRectObj().getSdrModelFromSdrObject().IsPickThroughTransparentTextFrames());
 
     // create primitive. Always create primitives to allow the decomposition of
     // SdrRectanglePrimitive2D to create needed invisible elements for HitTest and/or BoundRect

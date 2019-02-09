@@ -18,14 +18,13 @@
  */
 
 #include "XYDataInterpreter.hxx"
-#include "DataSeries.hxx"
-#include "macros.hxx"
-#include "DataSeriesHelper.hxx"
-#include "CommonConverters.hxx"
-#include "ContainerHelper.hxx"
-#include <com/sun/star/beans/XPropertySet.hpp>
+#include <DataSeries.hxx>
+#include <DataSeriesHelper.hxx>
+#include <CommonConverters.hxx>
 #include <com/sun/star/chart2/data/XDataSink.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
@@ -37,9 +36,8 @@ using ::com::sun::star::uno::Sequence;
 namespace chart
 {
 
-XYDataInterpreter::XYDataInterpreter(
-    const uno::Reference< uno::XComponentContext > & xContext ) :
-        DataInterpreter( xContext )
+XYDataInterpreter::XYDataInterpreter() :
+        DataInterpreter()
 {
 }
 
@@ -52,7 +50,6 @@ chart2::InterpretedData SAL_CALL XYDataInterpreter::interpretDataSource(
     const Reference< chart2::data::XDataSource >& xSource,
     const Sequence< beans::PropertyValue >& aArguments,
     const Sequence< Reference< XDataSeries > >& aSeriesToReUse )
-    throw (uno::RuntimeException, std::exception)
 {
     if( ! xSource.is())
         return InterpretedData();
@@ -97,45 +94,43 @@ chart2::InterpretedData SAL_CALL XYDataInterpreter::interpretDataSource(
                     SetRole( aData[nDataIdx]->getValues(), "values-y");
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
     // create DataSeries
-    vector< Reference< data::XLabeledDataSequence > >::const_iterator
-          aSequencesVecIt = aSequencesVec.begin();
-
-    sal_Int32 nSeriesIndex = 0;
     vector< Reference< XDataSeries > > aSeriesVec;
     aSeriesVec.reserve( aSequencesVec.size());
 
     Reference< data::XLabeledDataSequence > xClonedXValues = xValuesX;
     Reference< util::XCloneable > xCloneable( xValuesX, uno::UNO_QUERY );
 
-    for( ;aSequencesVecIt != aSequencesVec.end(); ++aSequencesVecIt, ++nSeriesIndex )
+    sal_Int32 nSeriesIndex = 0;
+    for (auto const& elem : aSequencesVec)
     {
         vector< Reference< data::XLabeledDataSequence > > aNewData;
 
-        if( aSequencesVecIt != aSequencesVec.begin() && xCloneable.is() )
+        if( nSeriesIndex && xCloneable.is() )
             xClonedXValues.set( xCloneable->createClone(), uno::UNO_QUERY );
         if( xValuesX.is() )
             aNewData.push_back( xClonedXValues );
 
-        aNewData.push_back( *aSequencesVecIt );
+        aNewData.push_back(elem);
 
         Reference< XDataSeries > xSeries;
         if( nSeriesIndex < aSeriesToReUse.getLength())
             xSeries.set( aSeriesToReUse[nSeriesIndex] );
         else
-            xSeries.set( new DataSeries( GetComponentContext() ) );
+            xSeries.set( new DataSeries );
         OSL_ASSERT( xSeries.is() );
         Reference< data::XDataSink > xSink( xSeries, uno::UNO_QUERY );
         OSL_ASSERT( xSink.is() );
         xSink->setData( comphelper::containerToSequence( aNewData ) );
 
         aSeriesVec.push_back( xSeries );
+        ++nSeriesIndex;
     }
 
     Sequence< Sequence< Reference< XDataSeries > > > aSeries(1);
@@ -145,7 +140,6 @@ chart2::InterpretedData SAL_CALL XYDataInterpreter::interpretDataSource(
 
 chart2::InterpretedData SAL_CALL XYDataInterpreter::reinterpretDataSeries(
     const chart2::InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     InterpretedData aResult( aInterpretedData );
 
@@ -170,7 +164,7 @@ chart2::InterpretedData SAL_CALL XYDataInterpreter::reinterpretDataSeries(
             {
                 vector< Reference< data::XLabeledDataSequence > > aValueSeqVec(
                     DataSeriesHelper::getAllDataSequencesByRole(
-                        xSeriesSource->getDataSequences(), "values", true ));
+                        xSeriesSource->getDataSequences(), "values" ));
                 if( xValuesX.is())
                     aValueSeqVec.erase( find( aValueSeqVec.begin(), aValueSeqVec.end(), xValuesX ));
                 if( xValuesY.is())
@@ -211,20 +205,20 @@ chart2::InterpretedData SAL_CALL XYDataInterpreter::reinterpretDataSeries(
             Sequence< Reference< data::XLabeledDataSequence > > aSeqs( xSeriesSource->getDataSequences());
             if( aSeqs.getLength() != aNewSequences.getLength() )
             {
-#if OSL_DEBUG_LEVEL > 1
+#ifdef DBG_UTIL
                 sal_Int32 j=0;
                 for( ; j<aSeqs.getLength(); ++j )
                 {
-                    OSL_ENSURE( aSeqs[j] == xValuesY || aSeqs[j] == xValuesX, "All sequences should be used" );
+                    SAL_WARN_IF((aSeqs[j] == xValuesY || aSeqs[j] == xValuesX), "chart2.template", "All sequences should be used" );
                 }
 #endif
                 Reference< data::XDataSink > xSink( xSeriesSource, uno::UNO_QUERY_THROW );
                 xSink->setData( aNewSequences );
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
@@ -234,7 +228,6 @@ chart2::InterpretedData SAL_CALL XYDataInterpreter::reinterpretDataSeries(
 // criterion: all series must have exactly two data::XLabeledDataSequences
 sal_Bool SAL_CALL XYDataInterpreter::isDataCompatible(
     const chart2::InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     Sequence< Reference< XDataSeries > > aSeries( FlattenSequence( aInterpretedData.Series ));
     for( sal_Int32 i=0; i<aSeries.getLength(); ++i )
@@ -244,15 +237,15 @@ sal_Bool SAL_CALL XYDataInterpreter::isDataCompatible(
             Reference< data::XDataSource > xSrc( aSeries[i], uno::UNO_QUERY_THROW );
             Sequence< Reference< data::XLabeledDataSequence > > aSeq( xSrc->getDataSequences());
             if( aSeq.getLength() != 2 )
-                return sal_False;
+                return false;
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
-    return sal_True;
+    return true;
 }
 
 } // namespace chart

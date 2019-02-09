@@ -6,6 +6,7 @@
 # if it wants to stop the commit.
 
 use strict;
+use lib "solenv/clang-format";
 #use File::Copy;
 #use Cwd;
 
@@ -14,8 +15,8 @@ $ENV{LC_ALL} = "C";
 sub check_whitespaces($)
 {
     my ($h) = @_;
-    my $src_limited = "c|cpp|cxx|h|hrc|hxx|idl|inl|java|map|MK|pmk|pl|pm|sdi|sh|src|tab|ui|xcu|xml";
-    my $src_full = "c|cpp|cxx|h|hrc|hxx|idl|inl|java|map|mk|MK|pmk|pl|pm|sdi|sh|src|tab|ui|xcu|xml";
+    my $src_limited = "c|cpp|cxx|h|hrc|hxx|idl|inl|java|swift|map|MK|pmk|pl|pm|sdi|sh|src|tab|ui|xcu|xml|xsl|py";
+    my $src_full = "c|cpp|cxx|h|hrc|hxx|idl|inl|java|swift|map|mk|MK|pmk|pl|pm|sdi|sh|src|tab|ui|xcu|xml|xsl|py";
 
     my $found_bad = 0;
     my $filename;
@@ -86,13 +87,185 @@ sub check_whitespaces($)
             }
             if (/<property name="use_markup">True<\/property>/)
             {
-                bad_line("use font attributes instead of use-markup", $_, $src_limited);
+                bad_line("use font attributes instead of use-markup", $_, "ui");
+            }
+            if (/<property name="tooltip_markup"/ )
+            {
+                bad_line("use tooltip_text instead of tooltip_markup", $_, "ui");
+            }
+            if ((/translatable="yes"/) and not(/context=/))
+            {
+                bad_line("translatable .ui file line without context", $_, "ui");
+            }
+            if ((/<interface/) and not(/domain=/))
+            {
+                bad_line(".ui file without translation domain", $_, "ui");
             }
         }
     }
     if ( $found_bad)
     {
         exit($found_bad);
+    }
+}
+
+sub check_author()
+{
+    my $author = `git var GIT_AUTHOR_IDENT`;
+    chomp $author;
+    if ($author =~ /^Your Name <you\@example.com>/)
+    {
+        print("ERROR: You have a suspicious author identity: '$author'\n");
+        exit(1);
+    }
+}
+
+sub check_style($)
+{
+    if (! -e "solenv/clang-format/ClangFormat.pm")
+    {
+        # Commit happens in a submodule.
+        return;
+    }
+
+    require ClangFormat;
+    ClangFormat->import();
+
+    my ($h) = @_;
+    my $src = ClangFormat::get_extension_regex();
+    my @bad_names = ();
+    my $blacklist_names = ClangFormat::get_blacklist();
+    my $clang_format = ClangFormat::find();
+
+    # Get a list of non-deleted changed files.
+    open (FILES, "git diff-index --cached --diff-filter=AM --name-only $h |") ||  die "Cannot run git diff.";
+    while (my $filename = <FILES>)
+    {
+        chomp $filename;
+        if ($filename =~ /\.($src)$/ and !exists($blacklist_names->{$filename}))
+        {
+            if (!defined($clang_format))
+            {
+                my $version = ClangFormat::get_wanted_version();
+                my $opt_lo = ClangFormat::get_own_directory();
+
+                print("\nWARNING: Commit touches new (non-blacklisted) files, but no clang-format"
+                      . " ${version}\n");
+                print(" found (via CLANG_FORMAT or PATH env vars, or in ${opt_lo}).\n\n");
+
+                my $platform = "linux64";
+                my $download = "wget";
+                if ($^O eq "cygwin")
+                {
+                    $platform = "win.exe";
+                }
+                elsif ($^O eq "darwin")
+                {
+                    $platform = "mac";
+                    $download = "curl -O";
+                }
+
+                print("To get a suitable binary, please do:\n\n");
+                print("mkdir -p $opt_lo\n");
+                print("cd $opt_lo\n");
+                print("$download https://dev-www.libreoffice.org/bin/clang-format-$version-$platform\n");
+                print("cp clang-format-$version-$platform clang-format\n");
+                print("chmod +x clang-format\n\n");
+
+                print("(Or read solenv/clang-format/README on how to build it yourself.\n");
+                return;
+            }
+            if (!ClangFormat::check_style($clang_format, $filename))
+            {
+                push @bad_names, $filename;
+            }
+        }
+    }
+
+    # Enforce style.
+    if (scalar @bad_names)
+    {
+        my $autostyle = `git config libreoffice.autostyle`;
+        chomp $autostyle;
+        if ($autostyle ne "true")
+        {
+            print("\nThe above differences were found between the code to commit \n");
+            print("and the clang-format rules. You can apply these changes with:\n");
+            print("\n$clang_format -i " . join(" ", @bad_names) . "\n\n");
+            print("Aborting commit. Apply changes and commit again or skip checking\n");
+            print("with --no-verify (not recommended).\n");
+            exit(1);
+        }
+        else
+        {
+            # 'git config libreoffice.autostyle true' was invoked to run
+            # clang-format automatically.
+            print("\nThe above differences were found between the code to commit \n");
+            print("and the clang-format rules. Fixing these now automatically.\n");
+            print("Running '$clang_format -i " . join(" ", @bad_names) . "' for you...\n");
+            system("$clang_format -i " . join(" ", @bad_names));
+            # TODO this stages all local modifications, staging originally
+            # unstaged hunks.
+            system("git add " . join(" ", @bad_names));
+            print("Done.\n");
+        }
+    }
+}
+
+sub check_submodules($)
+{
+    my ($h) = @_;
+
+    my $toplevel = `git rev-parse --show-toplevel`;
+    chomp $toplevel;
+
+    # trick to get a list of submodules - directly read from the .gitmodules
+    open(SUBMODULES, "git config --file '$toplevel'/.gitmodules --get-regexp path | awk '{ print \$2 }' |" ) ||  die "Cannot run git config on the .gitmodules.";
+    while (<SUBMODULES>)
+    {
+        chomp;
+
+        my $ignore = `git config submodule.$_.ignore`;
+        chomp $ignore;
+        if ($ignore eq 'all')
+        {
+            print <<EOM;
+Error: Your git configuration has submodule.$_.ignore set to 'all'.
+
+This is dangerous and can lead to accidentally pushing unwanted changes to
+submodules.
+
+To fix it, please do:
+
+  git config --unset submodule.$_.ignore
+
+EOM
+            exit(1);
+        }
+
+        my $diff = `git diff --cached --name-only -z $h -- $_`;
+        chomp $diff;
+        if ($diff ne '')
+        {
+            print <<EOM;
+Error: You are trying to commit changes to submodule $_ from the main repo.
+
+Please do not do that, commit only to the submodule, the git hook on the
+server will make sure the appropriate change is mirrored in the main repo.
+
+To remove the change, you can do:
+
+  git submodule update $_
+
+If it fails with 'error: Server does not allow request for unadvertised object',
+run the following:
+
+  git submodule sync
+  git submodule update $_
+
+EOM
+            exit(1);
+        }
     }
 }
 
@@ -139,6 +312,14 @@ EOM
 open( FILES, "git diff --cached --name-only --diff-filter=A -z $against |" ) ||  die "Cannot run git diff-index.";
 while (<FILES>)
 {
+    if (/\.ui$/) # .ui files can get large
+    {
+        continue;
+    }
+    if (/\.xsl$/) # XSLT
+    {
+        continue;
+    }
     my $size = `git cat-file -s :$_`;
     # For now let's say large is 500KB
     my $limit = 500;
@@ -151,6 +332,15 @@ while (<FILES>)
 
 # fix whitespace in code
 check_whitespaces( $against);
+
+# fix style in code
+check_style($against);
+
+# catch missing author info
+check_author();
+
+# catch commits to the submodules
+check_submodules($against);
 
 # all OK
 exit( 0 );

@@ -17,12 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <vcl/wrkwin.hxx>
-#include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
-#include <vcl/svapp.hxx>
-#include <editsel.hxx>
-#include <impedit.hxx>
+#include "editsel.hxx"
+#include "impedit.hxx"
 #include <editeng/editview.hxx>
 
 
@@ -44,12 +40,10 @@ void EditSelFunctionSet::DestroyAnchor()
     // Only with multiple selection
 }
 
-bool EditSelFunctionSet::SetCursorAtPoint( const Point& rPointPixel, bool )
+void EditSelFunctionSet::SetCursorAtPoint( const Point& rPointPixel, bool )
 {
     if ( pCurView )
-        return pCurView->pImpEditView->SetCursorAtPoint( rPointPixel );
-
-    return false;
+        pCurView->pImpEditView->SetCursorAtPoint( rPointPixel );
 }
 
 bool EditSelFunctionSet::IsSelectionAtPoint( const Point& rPointPixel )
@@ -84,7 +78,7 @@ void EditSelFunctionSet::DeselectAll()
 
 EditSelectionEngine::EditSelectionEngine() : SelectionEngine( nullptr )
 {
-    SetSelectionMode( RANGE_SELECTION );
+    SetSelectionMode( SelectionMode::Range );
     EnableDrag( true );
 }
 

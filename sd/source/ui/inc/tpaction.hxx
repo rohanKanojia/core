@@ -21,10 +21,8 @@
 #define INCLUDED_SD_SOURCE_UI_INC_TPACTION_HXX
 
 #include <com/sun/star/presentation/ClickAction.hpp>
-#include <com/sun/star/presentation/AnimationEffect.hpp>
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
-#include <svx/dlgctrl.hxx>
 #include <sfx2/tabdlg.hxx>
 #include <sfx2/basedlgs.hxx>
 #include "sdtreelb.hxx"
@@ -44,7 +42,7 @@ class SdActionDlg : public SfxSingleTabDialog
 private:
     const SfxItemSet&   rOutAttrs;
 public:
-    SdActionDlg(vcl::Window* pParent, const SfxItemSet* pAttr, ::sd::View* pView);
+    SdActionDlg(vcl::Window* pParent, const SfxItemSet* pAttr, ::sd::View const * pView);
 };
 
 /**
@@ -78,10 +76,10 @@ private:
     OUString                aLastFile;
     ::std::vector< long >   aVerbVector;
 
-    DECL_LINK_TYPED( ClickSearchHdl, Button*, void );
-    DECL_LINK_TYPED( ClickActionHdl, ListBox&, void );
-    DECL_LINK_TYPED( SelectTreeHdl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( CheckFileHdl, Control&, void );
+    DECL_LINK( ClickSearchHdl, Button*, void );
+    DECL_LINK( ClickActionHdl, ListBox&, void );
+    DECL_LINK( SelectTreeHdl, SvTreeListBox*, void );
+    DECL_LINK( CheckFileHdl, Control&, void );
 
     void                    UpdateTree();
     void                    OpenFileDialog();
@@ -89,20 +87,20 @@ private:
     void                    SetActualClickAction( css::presentation::ClickAction eCA );
     void                    SetEditText( OUString const & rStr );
     OUString                GetEditText( bool bURL = false );
-    static sal_uInt16       GetClickActionSdResId( css::presentation::ClickAction eCA );
+    static const char*      GetClickActionSdResId(css::presentation::ClickAction eCA);
 
 public:
             SdTPAction( vcl::Window* pParent, const SfxItemSet& rInAttrs );
-            virtual ~SdTPAction();
+            virtual ~SdTPAction() override;
     virtual void dispose() override;
 
-    static  VclPtr<SfxTabPage> Create( vcl::Window*, const SfxItemSet& );
+    static  VclPtr<SfxTabPage> Create( TabPageParent, const SfxItemSet& );
 
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;
 
     virtual void ActivatePage( const SfxItemSet& rSet ) override;
-    virtual sfxpg DeactivatePage( SfxItemSet* pSet ) override;
+    virtual DeactivateRC DeactivatePage( SfxItemSet* pSet ) override;
 
     void    Construct();
 

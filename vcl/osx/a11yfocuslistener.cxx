@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "osx/a11yfocustracker.hxx"
-#include "osx/a11yfactory.h"
+#include <osx/a11yfocustracker.hxx>
+#include <osx/a11yfactory.h>
 
 #include "a11yfocuslistener.hxx"
 
@@ -27,7 +27,7 @@ using namespace ::com::sun::star::uno;
 
 rtl::Reference< AquaA11yFocusListener > AquaA11yFocusListener::theListener;
 
-rtl::Reference< AquaA11yFocusListener > AquaA11yFocusListener::get()
+rtl::Reference< AquaA11yFocusListener > const & AquaA11yFocusListener::get()
 {
     if ( ! theListener.is() )
         theListener = new AquaA11yFocusListener();
@@ -42,7 +42,7 @@ AquaA11yFocusListener::AquaA11yFocusListener() : m_focusedObject(nil)
 id AquaA11yFocusListener::getFocusedUIElement()
 {
     if ( nil == m_focusedObject ) {
-        Reference< XAccessible > xAccessible( AquaA11yFocusTracker::get().getFocusedObject() );
+        Reference< XAccessible > xAccessible( TheAquaA11yFocusTracker::get().getFocusedObject() );
         try {
             if( xAccessible.is() ) {
                 Reference< XAccessibleContext > xContext(xAccessible->getAccessibleContext());
@@ -57,7 +57,7 @@ id AquaA11yFocusListener::getFocusedUIElement()
     return m_focusedObject;
 }
 
-void SAL_CALL
+void
 AquaA11yFocusListener::focusedObjectChanged(const Reference< XAccessible >& xAccessible)
 {
     if ( nil != m_focusedObject ) {

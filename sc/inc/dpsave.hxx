@@ -20,11 +20,9 @@
 #ifndef INCLUDED_SC_INC_DPSAVE_HXX
 #define INCLUDED_SC_INC_DPSAVE_HXX
 
-#include <list>
 #include <memory>
 #include <vector>
 
-#include <com/sun/star/sheet/XDimensionsSupplier.hpp>
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 #include <rtl/ustring.hxx>
 #include <sal/types.h>
@@ -34,8 +32,10 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <boost/optional.hpp>
 
 namespace com { namespace sun { namespace star { namespace sheet {
+    class XDimensionsSupplier;
     struct DataPilotFieldReference;
     struct DataPilotFieldSortInfo;
     struct DataPilotFieldAutoShowInfo;
@@ -44,6 +44,7 @@ namespace com { namespace sun { namespace star { namespace sheet {
 
 class ScDPDimensionSaveData;
 class ScDPTableData;
+enum class ScGeneralFunction;
 
 // classes to save Data Pilot settings
 
@@ -51,7 +52,7 @@ class ScDPSaveMember
 {
 private:
     OUString aName;
-    std::unique_ptr<OUString> mpLayoutName; // custom name to be displayed in the table.
+    boost::optional<OUString> mpLayoutName; // custom name to be displayed in the table.
     sal_uInt16 nVisibleMode;
     sal_uInt16 nShowDetailsMode;
 
@@ -78,13 +79,13 @@ public:
     void SetName( const OUString& rNew ); // used if the source member was renamed (groups)
 
     SC_DLLPUBLIC void SetLayoutName( const OUString& rName );
-    SC_DLLPUBLIC const OUString*  GetLayoutName() const;
+    SC_DLLPUBLIC const boost::optional<OUString> & GetLayoutName() const;
     void RemoveLayoutName();
 
     void WriteToSource( const css::uno::Reference<css::uno::XInterface>& xMember,
                             sal_Int32 nPosition );
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void Dump(int nIndent = 0) const;
 #endif
 };
@@ -93,30 +94,28 @@ class SC_DLLPUBLIC ScDPSaveDimension
 {
 private:
     OUString aName;
-    std::unique_ptr<OUString> mpLayoutName;
-    std::unique_ptr<OUString> mpSubtotalName;
+    boost::optional<OUString> mpLayoutName;
+    boost::optional<OUString> mpSubtotalName;
     bool bIsDataLayout;
     bool bDupFlag;
-    sal_uInt16 nOrientation;
-    sal_uInt16 nFunction; // enum GeneralFunction, for data dimensions
+    css::sheet::DataPilotFieldOrientation nOrientation;
+    ScGeneralFunction nFunction; // for data dimensions
     long nUsedHierarchy;
     sal_uInt16 nShowEmptyMode; //! at level
     bool bRepeatItemLabels; //! at level
     bool bSubTotalDefault; //! at level
-    long nSubTotalCount;
-    sal_uInt16* pSubTotalFuncs; // enum GeneralFunction
-    css::sheet::DataPilotFieldReference* pReferenceValue;
-    css::sheet::DataPilotFieldSortInfo* pSortInfo; // (level)
-    css::sheet::DataPilotFieldAutoShowInfo* pAutoShowInfo; // (level)
-    css::sheet::DataPilotFieldLayoutInfo* pLayoutInfo; // (level)
+    std::vector<ScGeneralFunction> maSubTotalFuncs;
+    std::unique_ptr<css::sheet::DataPilotFieldReference> pReferenceValue;
+    std::unique_ptr<css::sheet::DataPilotFieldSortInfo> pSortInfo; // (level)
+    std::unique_ptr<css::sheet::DataPilotFieldAutoShowInfo> pAutoShowInfo; // (level)
+    std::unique_ptr<css::sheet::DataPilotFieldLayoutInfo> pLayoutInfo; // (level)
 
 public:
-    typedef std::unordered_set<OUString, OUStringHash> MemberSetType;
-    typedef std::unordered_map <OUString, ScDPSaveMember*, OUStringHash> MemberHash;
-    typedef std::list <ScDPSaveMember*> MemberList;
+    typedef std::unordered_set<OUString> MemberSetType;
+    typedef std::vector<ScDPSaveMember*> MemberList;
 
 private:
-    MemberHash maMemberHash;
+    std::unordered_map<OUString, std::unique_ptr<ScDPSaveMember>> maMemberHash;
     MemberList maMemberList;
 
 public:
@@ -129,7 +128,7 @@ public:
     const MemberList& GetMembers() const
         { return maMemberList; }
 
-    void AddMember(ScDPSaveMember* pMember);
+    void AddMember(std::unique_ptr<ScDPSaveMember> pMember);
 
     void SetDupFlag(bool bSet)
         { bDupFlag = bSet; }
@@ -145,13 +144,13 @@ public:
 
     void SetName( const OUString& rNew ); // used if the source dim was renamed (groups)
 
-    void SetOrientation(sal_uInt16 nNew);
-    void SetSubTotals(long nCount, const sal_uInt16* pFuncs);
+    void SetOrientation(css::sheet::DataPilotFieldOrientation nNew);
+    void SetSubTotals(std::vector<ScGeneralFunction> const & rFuncs);
     long GetSubTotalsCount() const
-        { return nSubTotalCount; }
+        { return maSubTotalFuncs.size(); }
 
-    sal_uInt16 GetSubTotalFunc(long nIndex) const
-        { return pSubTotalFuncs[nIndex]; }
+    ScGeneralFunction GetSubTotalFunc(long nIndex) const
+        { return maSubTotalFuncs[nIndex]; }
 
     bool HasShowEmpty() const;
     void SetShowEmpty(bool bSet);
@@ -162,8 +161,8 @@ public:
     bool GetRepeatItemLabels() const
         { return bRepeatItemLabels; }
 
-    void SetFunction(sal_uInt16 nNew); // enum GeneralFunction
-    sal_uInt16 GetFunction() const
+    void SetFunction(ScGeneralFunction nNew);
+    ScGeneralFunction GetFunction() const
         { return nFunction; }
 
     void SetUsedHierarchy(long nNew);
@@ -171,36 +170,36 @@ public:
         { return nUsedHierarchy; }
 
     void SetLayoutName(const OUString& rName);
-    const OUString* GetLayoutName() const;
+    const boost::optional<OUString> & GetLayoutName() const;
     void RemoveLayoutName();
     void SetSubtotalName(const OUString& rName);
-    const OUString* GetSubtotalName() const;
+    const boost::optional<OUString> & GetSubtotalName() const;
     void RemoveSubtotalName();
 
     bool IsMemberNameInUse(const OUString& rName) const;
 
     const css::sheet::DataPilotFieldReference* GetReferenceValue() const
-        { return pReferenceValue; }
+        { return pReferenceValue.get(); }
 
     void SetReferenceValue(const css::sheet::DataPilotFieldReference* pNew);
 
     const css::sheet::DataPilotFieldSortInfo* GetSortInfo() const
-        { return pSortInfo; }
+        { return pSortInfo.get(); }
 
     void SetSortInfo(const css::sheet::DataPilotFieldSortInfo* pNew);
     const css::sheet::DataPilotFieldAutoShowInfo* GetAutoShowInfo() const
-        { return pAutoShowInfo; }
+        { return pAutoShowInfo.get(); }
 
     void SetAutoShowInfo(const css::sheet::DataPilotFieldAutoShowInfo* pNew);
     const css::sheet::DataPilotFieldLayoutInfo* GetLayoutInfo() const
-        { return pLayoutInfo; }
+        { return pLayoutInfo.get(); }
 
     void SetLayoutInfo(const css::sheet::DataPilotFieldLayoutInfo* pNew);
 
     void SetCurrentPage( const OUString* pPage ); // NULL = no selection (all)
     OUString GetCurrentPage() const; // only for ODF compatibility
 
-    sal_uInt16 GetOrientation() const
+    css::sheet::DataPilotFieldOrientation GetOrientation() const
         { return nOrientation; }
 
     ScDPSaveMember* GetExistingMemberByName(const OUString& rName);
@@ -220,28 +219,28 @@ public:
 
     void WriteToSource( const css::uno::Reference<css::uno::XInterface>& xDim );
 
-    void UpdateMemberVisibility(const std::unordered_map< OUString, bool, OUStringHash>& rData);
+    void UpdateMemberVisibility(const std::unordered_map< OUString, bool>& rData);
 
     bool HasInvisibleMember() const;
 
     void RemoveObsoleteMembers(const MemberSetType& rMembers);
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void Dump(int nIndent = 0) const;
 #endif
 };
 
 class ScDPSaveData
 {
-    typedef std::unordered_map<OUString, size_t, OUStringHash> DupNameCountType;
+    typedef std::unordered_map<OUString, size_t> DupNameCountType;
 public:
-    typedef std::unordered_map<OUString, size_t, OUStringHash> DimOrderType;
+    typedef std::unordered_map<OUString, size_t> DimOrderType;
     typedef std::vector<std::unique_ptr<ScDPSaveDimension>> DimsType;
 
 private:
     DimsType m_DimList;
     DupNameCountType maDupNameCounts; /// keep track of number of duplicates in each name.
-    ScDPDimensionSaveData* pDimensionData; // settings that create new dimensions
+    std::unique_ptr<ScDPDimensionSaveData> pDimensionData; // settings that create new dimensions
     sal_uInt16 nColumnGrandMode;
     sal_uInt16 nRowGrandMode;
     sal_uInt16 nIgnoreEmptyMode;
@@ -253,7 +252,7 @@ private:
      *  created. */
     bool mbDimensionMembersBuilt;
 
-    std::unique_ptr<OUString> mpGrandTotalName;
+    boost::optional<OUString> mpGrandTotalName;
     mutable std::unique_ptr<DimOrderType> mpDimOrder; // dimension order for row and column dimensions, to traverse result tree.
 
 public:
@@ -266,7 +265,7 @@ public:
     bool operator== ( const ScDPSaveData& r ) const;
 
     SC_DLLPUBLIC void SetGrandTotalName(const OUString& rName);
-    SC_DLLPUBLIC const OUString* GetGrandTotalName() const;
+    SC_DLLPUBLIC const boost::optional<OUString> & GetGrandTotalName() const;
 
     const DimsType& GetDimensions() const { return m_DimList; }
 
@@ -314,7 +313,7 @@ public:
 
     void RemoveDimensionByName(const OUString& rName);
 
-    ScDPSaveDimension* GetInnermostDimension(sal_uInt16 nOrientation);
+    ScDPSaveDimension* GetInnermostDimension(css::sheet::DataPilotFieldOrientation nOrientation);
     ScDPSaveDimension* GetFirstDimension(css::sheet::DataPilotFieldOrientation eOrientation);
     long GetDataDimensionCount() const;
 
@@ -327,11 +326,11 @@ public:
     bool GetRowGrand() const
         { return bool(nRowGrandMode); }
 
-    void SetIgnoreEmptyRows( bool bSet );
+    SC_DLLPUBLIC void SetIgnoreEmptyRows( bool bSet );
     bool GetIgnoreEmptyRows() const
         { return bool(nIgnoreEmptyMode); }
 
-    void SetRepeatIfEmpty( bool bSet );
+    SC_DLLPUBLIC void SetRepeatIfEmpty( bool bSet );
     bool GetRepeatIfEmpty() const
         { return bool(nRepeatEmptyMode); }
 
@@ -347,12 +346,12 @@ public:
     bool IsEmpty() const;
 
     const ScDPDimensionSaveData* GetExistingDimensionData() const
-        { return pDimensionData; }
+        { return pDimensionData.get(); }
 
     void RemoveAllGroupDimensions( const OUString& rSrcDimName, std::vector<OUString>* pDeletedNames = nullptr );
 
     SC_DLLPUBLIC ScDPDimensionSaveData* GetDimensionData(); // create if not there
-    void SetDimensionData( const ScDPDimensionSaveData* pNew ); // copied
+    SC_DLLPUBLIC void SetDimensionData( const ScDPDimensionSaveData* pNew ); // copied
     void BuildAllDimensionMembers(ScDPTableData* pData);
     void SyncAllDimensionMembers(ScDPTableData* pData);
 
@@ -363,7 +362,7 @@ public:
      */
     SC_DLLPUBLIC bool HasInvisibleMember(const OUString& rDimName) const;
 
-#if DEBUG_PIVOT_TABLE
+#if DUMP_PIVOT_TABLE
     void Dump() const;
 #endif
 

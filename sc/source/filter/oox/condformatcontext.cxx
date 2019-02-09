@@ -17,17 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "condformatcontext.hxx"
-#include "extlstcontext.hxx"
+#include <condformatcontext.hxx>
+#include <extlstcontext.hxx>
 
-#include "condformatbuffer.hxx"
+#include <biffhelper.hxx>
+#include <condformatbuffer.hxx>
+#include <oox/token/namespaces.hxx>
 
 namespace oox {
 namespace xls {
 
 using ::oox::core::ContextHandlerRef;
 
-ColorScaleContext::ColorScaleContext( CondFormatContext& rFragment, CondFormatRuleRef xRule ) :
+ColorScaleContext::ColorScaleContext( CondFormatContext& rFragment, CondFormatRuleRef const & xRule ) :
     WorksheetContextBase( rFragment ),
     mxRule( xRule )
 {
@@ -63,7 +65,7 @@ void ColorScaleContext::onStartElement( const AttributeList& rAttribs )
     }
 }
 
-DataBarContext::DataBarContext( CondFormatContext& rFragment, CondFormatRuleRef xRule ) :
+DataBarContext::DataBarContext( CondFormatContext& rFragment, CondFormatRuleRef const & xRule ) :
     WorksheetContextBase( rFragment ),
     mxRule( xRule )
 {
@@ -251,7 +253,9 @@ void CondFormatContext::onEndRecord()
     {
         case BIFF12_ID_CONDFORMATTING:
             if( mxCondFmt.get() )
-                mxCondFmt->finalizeImport();
+            {
+                mxCondFmt->setReadyForFinalize();
+            }
             break;
     }
 }

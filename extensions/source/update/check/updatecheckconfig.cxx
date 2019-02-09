@@ -28,16 +28,11 @@
 #include <osl/time.h>
 #include <osl/file.hxx>
 #include <sal/macros.h>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #ifdef _WIN32
-#ifdef _MSC_VER
-#pragma warning(push,1) // disable warnings within system headers
-#pragma warning(disable: 4917)
-#endif
+#include <objbase.h>
 #include <shlobj.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
 #endif
 
 namespace container = com::sun::star::container ;
@@ -145,31 +140,31 @@ UpdateCheckROModel::getUpdateEntry(UpdateInfo& rInfo) const
     rInfo.Version = getStringValue(UPDATE_VERSION);
     rInfo.Description = getStringValue(UPDATE_DESCRIPTION);
 
-    sal_Bool isDirectDownload = sal_False;
+    bool isDirectDownload = false;
     m_aNameAccess.getValue(IS_DIRECT_DOWNLOAD) >>= isDirectDownload;
 
     rInfo.Sources.push_back( DownloadSource( isDirectDownload, getStringValue(DOWNLOAD_URL) ) );
 
-    OString aStr(RELEASE_NOTE);
     for(sal_Int32 n=1; n < 6; ++n )
     {
         OUString aUStr = getStringValue(
-            OString(aStr + OString::number(n)).getStr());
+            OString(OStringLiteral(RELEASE_NOTE) + OString::number(n)).getStr());
         if( !aUStr.isEmpty() )
-            rInfo.ReleaseNotes.push_back(ReleaseNote((sal_Int8) n, aUStr));
+            rInfo.ReleaseNotes.push_back(ReleaseNote(static_cast<sal_Int8>(n), aUStr));
     }
 }
 
-OUString UpdateCheckConfig::getDesktopDirectory()
+OUString UpdateCheckConfig::getDownloadsDirectory()
 {
     OUString aRet;
 
 #ifdef _WIN32
-    WCHAR szPath[MAX_PATH];
+    PWSTR szPath;
 
-    if (TRUE == SHGetSpecialFolderPathW(nullptr, szPath, CSIDL_DESKTOPDIRECTORY, true))
+    if (SHGetKnownFolderPath(FOLDERID_Downloads, 0, nullptr, &szPath) == S_OK)
     {
-        aRet = OUString( reinterpret_cast< sal_Unicode * >(szPath) );
+        aRet = o3tl::toU(szPath);
+        CoTaskMemFree(szPath);
         osl::FileBase::getFileURLFromSystemPath( aRet, aRet );
     }
 #else
@@ -196,7 +191,7 @@ OUString UpdateCheckConfig::getAllUsersDirectory()
 
     if (TRUE == SHGetSpecialFolderPathW(nullptr, szPath, CSIDL_COMMON_DOCUMENTS, true))
     {
-        aRet = OUString( reinterpret_cast< sal_Unicode * >(szPath) );
+        aRet = o3tl::toU(szPath);
         osl::FileBase::getFileURLFromSystemPath( aRet, aRet );
     }
 #else
@@ -229,22 +224,22 @@ UpdateCheckConfig::get(
 
     beans::PropertyValue aProperty;
     aProperty.Name  = "nodepath";
-    aProperty.Value = uno::makeAny( OUString("org.openoffice.Office.Jobs/Jobs/UpdateCheck/Arguments") );
+    aProperty.Value <<= OUString("org.openoffice.Office.Jobs/Jobs/UpdateCheck/Arguments");
 
     uno::Sequence< uno::Any > aArgumentList( 1 );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aArgumentList[0] <<= aProperty;
 
     uno::Reference< container::XNameContainer > xContainer(
         xConfigProvider->createInstanceWithArguments(
             "com.sun.star.configuration.ConfigurationUpdateAccess", aArgumentList ),
         uno::UNO_QUERY_THROW );
 
-    aProperty.Value = uno::makeAny( OUString("/org.openoffice.Office.ExtensionManager/ExtensionUpdateData/IgnoredUpdates") );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aProperty.Value <<= OUString("/org.openoffice.Office.ExtensionManager/ExtensionUpdateData/IgnoredUpdates");
+    aArgumentList[0] <<= aProperty;
     uno::Reference< container::XNameContainer > xIgnoredExt( xConfigProvider->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationUpdateAccess", aArgumentList ), uno::UNO_QUERY_THROW );
 
-    aProperty.Value = uno::makeAny( OUString("/org.openoffice.Office.ExtensionManager/ExtensionUpdateData/AvailableUpdates") );
-    aArgumentList[0] = uno::makeAny( aProperty );
+    aProperty.Value <<= OUString("/org.openoffice.Office.ExtensionManager/ExtensionUpdateData/AvailableUpdates");
+    aArgumentList[0] <<= aProperty;
     uno::Reference< container::XNameContainer > xUpdateAvail( xConfigProvider->createInstanceWithArguments( "com.sun.star.configuration.ConfigurationUpdateAccess", aArgumentList ), uno::UNO_QUERY_THROW );
 
     return new UpdateCheckConfig( xContainer, xUpdateAvail, xIgnoredExt, rListener );
@@ -253,7 +248,7 @@ UpdateCheckConfig::get(
 bool
 UpdateCheckConfig::isAutoCheckEnabled() const
 {
-    sal_Bool nValue = sal_False;
+    bool nValue = false;
     const_cast < UpdateCheckConfig *> (this)->getByName( AUTOCHECK_ENABLED ) >>= nValue;
     return nValue;
 }
@@ -261,7 +256,7 @@ UpdateCheckConfig::isAutoCheckEnabled() const
 bool
 UpdateCheckConfig::isAutoDownloadEnabled() const
 {
-    sal_Bool nValue = sal_False;
+    bool nValue = false;
     const_cast < UpdateCheckConfig *> (this)->getByName( AUTODOWNLOAD_ENABLED ) >>= nValue;
     return nValue;
 }
@@ -346,10 +341,10 @@ UpdateCheckConfig::clearLocalFileName()
     const sal_uInt8 nItems = 2;
     const OUString aNameList[nItems] = { OUString(LOCAL_FILE), OUString(DOWNLOAD_SIZE) };
 
-    for( sal_uInt8 i=0; i < nItems; ++i )
+    for(const auto & i : aNameList)
     {
-        if( m_xContainer->hasByName(aNameList[i]) )
-            m_xContainer->removeByName(aNameList[i]);
+        if( m_xContainer->hasByName(i) )
+            m_xContainer->removeByName(i);
     }
 
     commitChanges();
@@ -413,9 +408,9 @@ UpdateCheckConfig::clearUpdateFound()
 {
     OUString aName;
 
-    for( sal_uInt32 n=0; n < nUpdateEntryProperties; ++n )
+    for(const char* aUpdateEntryPropertie : aUpdateEntryProperties)
     {
-        aName = OUString::createFromAscii(aUpdateEntryProperties[n]);
+        aName = OUString::createFromAscii(aUpdateEntryPropertie);
 
         try {
             if( m_xContainer->hasByName(aName) )
@@ -449,20 +444,19 @@ UpdateCheckConfig::getImplName()
 }
 
 uno::Type SAL_CALL
-UpdateCheckConfig::getElementType() throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::getElementType()
 {
     return m_xContainer->getElementType();
 }
 
 sal_Bool SAL_CALL
-UpdateCheckConfig::hasElements() throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::hasElements()
 {
     return m_xContainer->hasElements();
 }
 
 uno::Any SAL_CALL
 UpdateCheckConfig::getByName( const OUString& aName )
-    throw (container::NoSuchElementException, lang::WrappedTargetException,  uno::RuntimeException, std::exception)
 {
     uno::Any aValue = m_xContainer->getByName( aName );
 
@@ -473,27 +467,25 @@ UpdateCheckConfig::getByName( const OUString& aName )
         aValue >>= aStr;
 
         if( aStr.isEmpty() )
-            aValue = uno::makeAny(getDesktopDirectory());
+            aValue <<= getDownloadsDirectory();
     }
     return aValue;
 }
 
 uno::Sequence< OUString > SAL_CALL
-UpdateCheckConfig::getElementNames() throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::getElementNames()
 {
     return m_xContainer->getElementNames();
 }
 
 sal_Bool SAL_CALL
-UpdateCheckConfig::hasByName( const OUString& aName ) throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::hasByName( const OUString& aName )
 {
     return m_xContainer->hasByName( aName );
 }
 
 void SAL_CALL
 UpdateCheckConfig::replaceByName( const OUString& aName, const uno::Any& aElement )
-    throw (lang::IllegalArgumentException, container::NoSuchElementException,
-           lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     return m_xContainer->replaceByName( aName, aElement );
 }
@@ -502,7 +494,6 @@ UpdateCheckConfig::replaceByName( const OUString& aName, const uno::Any& aElemen
 
 void SAL_CALL
 UpdateCheckConfig::commitChanges()
-    throw (lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     uno::Reference< util::XChangesBatch > xChangesBatch(m_xContainer, uno::UNO_QUERY);
     if( xChangesBatch.is() && xChangesBatch->hasPendingChanges() )
@@ -520,7 +511,7 @@ UpdateCheckConfig::commitChanges()
                 aChangesSet[i].Accessor >>= aString;
                 if( aString.endsWith(AUTOCHECK_ENABLED "']") )
                 {
-                    sal_Bool bEnabled = sal_False;
+                    bool bEnabled = false;
                     aChangesSet[i].Element >>= bEnabled;
                     m_rListener->autoCheckStatusChanged(bEnabled);
                 }
@@ -545,17 +536,17 @@ UpdateCheckConfig::commitChanges()
 }
 
 sal_Bool SAL_CALL
-UpdateCheckConfig::hasPendingChanges(  ) throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::hasPendingChanges(  )
 {
     uno::Reference< util::XChangesBatch > xChangesBatch(m_xContainer, uno::UNO_QUERY);
     if( xChangesBatch.is() )
         return xChangesBatch->hasPendingChanges();
 
-    return sal_False;
+    return false;
 }
 
 uno::Sequence< util::ElementChange > SAL_CALL
-UpdateCheckConfig::getPendingChanges(  ) throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::getPendingChanges(  )
 {
     uno::Reference< util::XChangesBatch > xChangesBatch(m_xContainer, uno::UNO_QUERY);
     if( xChangesBatch.is() )
@@ -660,20 +651,19 @@ bool UpdateCheckConfig::isVersionGreater( const OUString& rVersion1,
 }
 
 OUString SAL_CALL
-UpdateCheckConfig::getImplementationName()  throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::getImplementationName()
 {
     return getImplName();
 }
 
 sal_Bool SAL_CALL
 UpdateCheckConfig::supportsService(OUString const & serviceName)
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, serviceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
-UpdateCheckConfig::getSupportedServiceNames()  throw (uno::RuntimeException, std::exception)
+UpdateCheckConfig::getSupportedServiceNames()
 {
     return getServiceNames();
 }

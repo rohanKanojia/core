@@ -21,21 +21,23 @@
 
 #include <tools/datetime.hxx>
 #include <o3tl/sorted_vector.hxx>
+#include <vcl/errcode.hxx>
+#include <rtl/ref.hxx>
 
 class SwPaM;
 class SwDoc;
 class SvxMacroTableDtor;
 
-// Name eines Textblocks:
+// Name of a text block:
 
 class SwBlockName
 {
     friend class SwImpBlocks;
     sal_uInt16 nHashS, nHashL;     // Hash codes for testing
 public:
-    OUString aShort;               /// Shortname
+    OUString const aShort;               /// Shortname
     OUString aLong;                /// Longname
-    OUString aPackageName;         /// Package name
+    OUString const aPackageName;         /// Package name
     bool bIsOnlyTextFlagInit : 1;   /// Is the Flag valid?
     bool bIsOnlyText : 1;           /// Unformatted text
 
@@ -46,33 +48,31 @@ public:
     bool operator< ( const SwBlockName& r ) const { return aShort <  r.aShort; }
 };
 
-class SwBlockNames : public o3tl::sorted_vector<SwBlockName*, o3tl::less_ptr_to<SwBlockName> > {};
+class SwBlockNames : public o3tl::sorted_vector<std::unique_ptr<SwBlockName>, o3tl::less_uniqueptr_to<SwBlockName> > {};
 
 class SwImpBlocks
 {
     friend class SwTextBlocks;
 protected:
-    OUString aFile;                     // Physical file name
-    OUString aName;                     // Logical file name
-    OUString aCur;                      // Current text
-    OUString aShort, aLong;             // Short- and longname (PutDoc)
-    OUString sBaseURL;                  // Base URL - has to be set at the Readers and Writers
-    SwBlockNames aNames;                // List of all Blocks
-    Date aDateModified;                 // For aligning the Actions
-    tools::Time aTimeModified;
-    SwDoc* pDoc;                        // Document to be switched
-    sal_uInt16 nCur;                    // Current Index
-    bool bReadOnly : 1;
-    bool bInPutMuchBlocks : 1;          // Put serveral block entries
-    bool bInfoChanged : 1;              // Whether any info of TextBlock changed
+    OUString const m_aFile;                     // Physical file name
+    OUString m_aName;                     // Logical file name
+    OUString m_aCurrentText;                      // Current text
+    OUString m_aShort, m_aLong;             // Short- and longname (PutDoc)
+    OUString m_sBaseURL;                  // Base URL - has to be set at the Readers and Writers
+    SwBlockNames m_aNames;                // List of all Blocks
+    Date m_aDateModified;                 // For aligning the Actions
+    tools::Time m_aTimeModified;
+    rtl::Reference<SwDoc> m_xDoc;                        // Document to be switched
+    sal_uInt16 m_nCurrentIndex;                    // Current Index
+    bool m_bReadOnly : 1;
+    bool m_bInPutMuchBlocks : 1;          // Put several block entries
+    bool m_bInfoChanged : 1;              // Whether any info of TextBlock changed
 
-    SwImpBlocks( const OUString&, bool = false );
-    virtual ~SwImpBlocks();
+    explicit SwImpBlocks( const OUString& );
 
     enum class FileType {
         NoFile,  // Not present
         None,    // No TB file
-        SW2,     // SW2 file
         SW3,     // SW3 file
         XML      // XML Block List
     };
@@ -80,12 +80,14 @@ protected:
     virtual FileType GetFileType() const = 0;
 
     virtual void   ClearDoc();          // Delete Doc content
-    SwPaM* MakePaM();                   // Span PaM over Doc
+    std::unique_ptr<SwPaM> MakePaM();   // Span PaM over Doc
     virtual void   AddName( const OUString&, const OUString&, bool bOnlyText = false );
     bool   IsFileChanged() const;
     void   Touch();
 
 public:
+    virtual ~SwImpBlocks();
+
     static sal_uInt16 Hash( const OUString& );        /// Hashcode for Block names
     sal_uInt16 GetCount() const;                      /// Get count of Text Blocks
     sal_uInt16 GetIndex( const OUString& ) const;     /// Index for shortnames
@@ -94,31 +96,31 @@ public:
     OUString GetLongName( sal_uInt16 ) const;         /// Return longname for index
     OUString GetPackageName( sal_uInt16 ) const;      /// Return packagename for index
 
-    OUString GetFileName() const {return aFile;}      /// Return physical file name
+    const OUString& GetFileName() const {return m_aFile;}      /// Return physical file name
     void SetName( const OUString& rName )             /// Logic name
-        { aName = rName; bInfoChanged = true; }
-    OUString GetName()
-        { return aName; }
+        { m_aName = rName; m_bInfoChanged = true; }
+    const OUString& GetName()
+        { return m_aName; }
 
-    OUString            GetBaseURL() const { return sBaseURL;}
-    void                SetBaseURL( const OUString& rURL ) { sBaseURL = rURL; }
+    const OUString&     GetBaseURL() const { return m_sBaseURL;}
+    void                SetBaseURL( const OUString& rURL ) { m_sBaseURL = rURL; }
 
-    virtual sal_uLong Delete( sal_uInt16 ) = 0;
-    virtual sal_uLong Rename( sal_uInt16, const OUString&, const OUString& ) = 0;
-    virtual sal_uLong CopyBlock( SwImpBlocks& rImp, OUString& rShort, const OUString& rLong) = 0;
-    virtual sal_uLong GetDoc( sal_uInt16 ) = 0;
-    virtual sal_uLong BeginPutDoc( const OUString&, const OUString& ) = 0;
-    virtual sal_uLong PutDoc() = 0;
-    virtual sal_uLong PutText( const OUString&, const OUString&, const OUString& ) = 0;
-    virtual sal_uLong MakeBlockList() = 0;
+    virtual ErrCode Delete( sal_uInt16 ) = 0;
+    virtual ErrCode Rename( sal_uInt16, const OUString&, const OUString& ) = 0;
+    virtual ErrCode CopyBlock( SwImpBlocks& rImp, OUString& rShort, const OUString& rLong) = 0;
+    virtual ErrCode GetDoc( sal_uInt16 ) = 0;
+    virtual ErrCode BeginPutDoc( const OUString&, const OUString& ) = 0;
+    virtual ErrCode PutDoc() = 0;
+    virtual ErrCode PutText( const OUString&, const OUString&, const OUString& ) = 0;
+    virtual ErrCode MakeBlockList() = 0;
 
-    virtual sal_uLong OpenFile( bool bReadOnly = true ) = 0;
+    virtual ErrCode OpenFile( bool bReadOnly = true ) = 0;
     virtual void  CloseFile() = 0;
 
     virtual bool IsOnlyTextBlock( const OUString& rShort ) const;
 
-    virtual sal_uLong GetMacroTable( sal_uInt16 nIdx, SvxMacroTableDtor& rMacroTable );
-    virtual sal_uLong SetMacroTable( sal_uInt16 nIdx,
+    virtual ErrCode GetMacroTable( sal_uInt16 nIdx, SvxMacroTableDtor& rMacroTable );
+    virtual ErrCode SetMacroTable( sal_uInt16 nIdx,
                                  const SvxMacroTableDtor& rMacroTable );
     virtual bool PutMuchEntries( bool bOn );
 };

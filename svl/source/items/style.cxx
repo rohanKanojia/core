@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <svl/style.hxx>
 
 #include <com/sun/star/lang/XComponent.hpp>
@@ -24,9 +25,8 @@
 #include <sal/log.hxx>
 #include <tools/tenccvt.hxx>
 #include <osl/diagnose.h>
-#include <comphelper/processfactory.hxx>
 #include <unotools/intlwrapper.hxx>
-#include <svl/smplhint.hxx>
+#include <svl/hint.hxx>
 #include <svl/poolitem.hxx>
 #include <svl/itemset.hxx>
 #include <svl/itempool.hxx>
@@ -35,6 +35,7 @@
 #include <unotools/syslocale.hxx>
 #include <algorithm>
 #include <comphelper/servicehelper.hxx>
+#include <rtl/ustrbuf.hxx>
 
 #include <string.h>
 
@@ -53,30 +54,28 @@ public:
 
     sal_uInt32 mnStyles;
     sal_uInt32 mnPools;
-}
-aDbgStyleSheetReferences;
+};
 
+static DbgStyleSheetReferences aDbgStyleSheetReferences;
 #endif
 
 
-SfxStyleSheetHintExtended::SfxStyleSheetHintExtended
+SfxStyleSheetModifiedHint::SfxStyleSheetModifiedHint
 (
-    sal_uInt16          nAction,        // SfxStyleSheetHintId::... (see above)
     const OUString&     rOldName,
     SfxStyleSheetBase&  rStyleSheet     // Remains with the caller
 )
-:   SfxStyleSheetHint( nAction, rStyleSheet ),
+:   SfxStyleSheetHint( SfxHintId::StyleSheetModified, rStyleSheet ),
     aName( rOldName )
 {}
 
 
 SfxStyleSheetHint::SfxStyleSheetHint
 (
-    sal_uInt16              nAction,    // SfxStyleSheetHintId::... (see above)
+    SfxHintId           nAction,
     SfxStyleSheetBase&  rStyleSheet     // Remains with the caller
 )
-:   pStyleSh( &rStyleSheet ),
-    nHint( nAction )
+:   SfxHint(nAction), pStyleSh( &rStyleSheet )
 {}
 
 
@@ -86,7 +85,7 @@ private:
     SfxStyleSheetBasePool_Impl(const SfxStyleSheetBasePool_Impl&) = delete;
     SfxStyleSheetBasePool_Impl& operator=(const SfxStyleSheetBasePool_Impl&) = delete;
 public:
-    SfxStyleSheetIteratorPtr pIter;
+    std::shared_ptr<SfxStyleSheetIterator> pIter;
 
     /** This member holds the indexed style sheets.
      *
@@ -101,8 +100,8 @@ public:
 };
 
 
-SfxStyleSheetBase::SfxStyleSheetBase( const OUString& rName, SfxStyleSheetBasePool* p, SfxStyleFamily eFam, sal_uInt16 mask )
-    : pPool( p )
+SfxStyleSheetBase::SfxStyleSheetBase( const OUString& rName, SfxStyleSheetBasePool* p, SfxStyleFamily eFam, SfxStyleSearchBits mask )
+    : m_pPool( p )
     , nFamily( eFam )
     , aName( rName )
     , aParent()
@@ -119,8 +118,8 @@ SfxStyleSheetBase::SfxStyleSheetBase( const OUString& rName, SfxStyleSheetBasePo
 }
 
 SfxStyleSheetBase::SfxStyleSheetBase( const SfxStyleSheetBase& r )
-    : comphelper::OWeakTypeObject()
-    , pPool( r.pPool )
+    : comphelper::OWeakTypeObject(r)
+    , m_pPool( r.m_pPool )
     , nFamily( r.nFamily )
     , aName( r.aName )
     , aParent( r.aParent )
@@ -167,40 +166,27 @@ bool SfxStyleSheetBase::SetName(const OUString& rName, bool bReIndexNow)
     if( aName != rName )
     {
         OUString aOldName = aName;
-        SfxStyleSheetBase *pOther = pPool->Find( rName, nFamily ) ;
+        SfxStyleSheetBase *pOther = m_pPool->Find( rName, nFamily ) ;
         if ( pOther && pOther != this )
             return false;
 
-        SfxStyleFamily eTmpFam = pPool->GetSearchFamily();
-        sal_uInt16 nTmpMask = pPool->GetSearchMask();
+        SfxStyleFamily eTmpFam = m_pPool->GetSearchFamily();
+        SfxStyleSearchBits nTmpMask = m_pPool->GetSearchMask();
 
-        pPool->SetSearchMask(nFamily);
+        m_pPool->SetSearchMask(nFamily);
 
         if ( !aName.isEmpty() )
-            pPool->ChangeParent( aName, rName, false );
+            m_pPool->ChangeParent( aName, rName, false );
 
         if ( aFollow == aName )
             aFollow = rName;
         aName = rName;
         if (bReIndexNow)
-            pPool->Reindex();
-        pPool->SetSearchMask(eTmpFam, nTmpMask);
-        pPool->Broadcast( SfxStyleSheetHintExtended(
-            SfxStyleSheetHintId::MODIFIED, aOldName, *this ) );
+            m_pPool->Reindex();
+        m_pPool->SetSearchMask(eTmpFam, nTmpMask);
+        m_pPool->Broadcast( SfxStyleSheetModifiedHint( aOldName, *this ) );
     }
     return true;
-}
-
-OUString SfxStyleSheetBase::GetDisplayName() const
-{
-    if( maDisplayName.isEmpty() )
-    {
-        return aName;
-    }
-    else
-    {
-        return maDisplayName;
-    }
 }
 
 // Change Parent
@@ -216,7 +202,7 @@ bool SfxStyleSheetBase::SetParent( const OUString& rName )
 
     if( aParent != rName )
     {
-        SfxStyleSheetBase* pIter = pPool->Find(rName, nFamily);
+        SfxStyleSheetBase* pIter = m_pPool->Find(rName, nFamily);
         if( !rName.isEmpty() && !pIter )
         {
             OSL_FAIL( "StyleSheet-Parent not found" );
@@ -229,19 +215,19 @@ bool SfxStyleSheetBase::SetParent( const OUString& rName )
             {
                 if(pIter->GetName() == aName)
                     return false;
-                pIter = pPool->Find(pIter->GetParent(), nFamily);
+                pIter = m_pPool->Find(pIter->GetParent(), nFamily);
             }
         }
         aParent = rName;
     }
-    pPool->Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::MODIFIED, *this ) );
+    m_pPool->Broadcast( SfxStyleSheetHint( SfxHintId::StyleSheetModified, *this ) );
     return true;
 }
 
 void SfxStyleSheetBase::SetHidden( bool hidden )
 {
     bHidden = hidden;
-    pPool->Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::MODIFIED, *this ) );
+    m_pPool->Broadcast( SfxStyleSheetHint( SfxHintId::StyleSheetModified, *this ) );
 }
 
 /**
@@ -256,14 +242,14 @@ bool SfxStyleSheetBase::SetFollow( const OUString& rName )
 {
     if( aFollow != rName )
     {
-        if( !pPool->Find( rName, nFamily ) )
+        if( !m_pPool->Find( rName, nFamily ) )
         {
-            SAL_WARN( "svl", "StyleSheet-Follow not found" );
+            SAL_WARN( "svl.items", "StyleSheet-Follow not found" );
             return false;
         }
         aFollow = rName;
     }
-    pPool->Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::MODIFIED, *this ) );
+    m_pPool->Broadcast( SfxStyleSheetHint( SfxHintId::StyleSheetModified, *this ) );
     return true;
 }
 
@@ -275,7 +261,7 @@ SfxItemSet& SfxStyleSheetBase::GetItemSet()
 {
     if( !pSet )
     {
-        pSet = new SfxItemSet( pPool->GetPool() );
+        pSet = new SfxItemSet( m_pPool->GetPool() );
         bMySet = true;
     }
     return *pSet;
@@ -283,7 +269,7 @@ SfxItemSet& SfxStyleSheetBase::GetItemSet()
 
 std::unique_ptr<SfxItemSet> SfxStyleSheetBase::GetItemSetForPreview()
 {
-    return std::unique_ptr<SfxItemSet>(new SfxItemSet(GetItemSet()));
+    return std::make_unique<SfxItemSet>(GetItemSet());
 }
 
 /**
@@ -339,29 +325,29 @@ bool SfxStyleSheetBase::IsUsed() const
 /**
  * Return set attributes
  */
-OUString SfxStyleSheetBase::GetDescription( SfxMapUnit eMetric )
+OUString SfxStyleSheetBase::GetDescription( MapUnit eMetric )
 {
     SfxItemIter aIter( GetItemSet() );
-    OUString aDesc;
+    OUStringBuffer aDesc;
     const SfxPoolItem* pItem = aIter.FirstItem();
 
-    IntlWrapper aIntlWrapper( SvtSysLocale().GetLanguageTag() );
+    IntlWrapper aIntlWrapper(SvtSysLocale().GetUILanguageTag());
     while ( pItem )
     {
         OUString aItemPresentation;
 
         if ( !IsInvalidItem( pItem ) &&
-             pPool->GetPool().GetPresentation(
-                *pItem, eMetric, aItemPresentation, &aIntlWrapper ) )
+             m_pPool->GetPool().GetPresentation(
+                *pItem, eMetric, aItemPresentation, aIntlWrapper ) )
         {
             if ( !aDesc.isEmpty() && !aItemPresentation.isEmpty() )
-                aDesc += " + ";
+                aDesc.append(" + ");
             if ( !aItemPresentation.isEmpty() )
-                aDesc += aItemPresentation;
+                aDesc.append(aItemPresentation);
         }
         pItem = aIter.NextItem();
     }
-    return aDesc;
+    return aDesc.makeStringAndClear();
 }
 
 SfxStyleFamily SfxStyleSheetIterator::GetSearchFamily() const
@@ -369,10 +355,10 @@ SfxStyleFamily SfxStyleSheetIterator::GetSearchFamily() const
     return nSearchFamily;
 }
 
-inline bool SfxStyleSheetIterator::IsTrivialSearch()
+inline bool SfxStyleSheetIterator::IsTrivialSearch() const
 {
-    return (( nMask & SFXSTYLEBIT_ALL_VISIBLE ) == SFXSTYLEBIT_ALL_VISIBLE) &&
-        (GetSearchFamily() == SFX_STYLE_FAMILY_ALL);
+    return (( nMask & SfxStyleSearchBits::AllVisible ) == SfxStyleSearchBits::AllVisible) &&
+        (GetSearchFamily() == SfxStyleFamily::All);
 }
 
 namespace {
@@ -380,45 +366,45 @@ namespace {
 struct DoesStyleMatchStyleSheetPredicate final : public svl::StyleSheetPredicate
 {
     explicit DoesStyleMatchStyleSheetPredicate(SfxStyleSheetIterator *it)
-            : mIterator(it) {;}
+            : mIterator(it) {}
 
     bool
     Check(const SfxStyleSheetBase& styleSheet) override
     {
-        bool bMatchFamily = ((mIterator->GetSearchFamily() == SFX_STYLE_FAMILY_ALL) ||
+        bool bMatchFamily = ((mIterator->GetSearchFamily() == SfxStyleFamily::All) ||
                 ( styleSheet.GetFamily() == mIterator->GetSearchFamily() ));
 
         bool bUsed = mIterator->SearchUsed() && styleSheet.IsUsed( );
 
-        bool bSearchHidden = ( mIterator->GetSearchMask() & SFXSTYLEBIT_HIDDEN );
+        bool bSearchHidden( mIterator->GetSearchMask() & SfxStyleSearchBits::Hidden );
         bool bMatchVisibility = !( !bSearchHidden && styleSheet.IsHidden() && !bUsed );
-        bool bOnlyHidden = mIterator->GetSearchMask( ) == SFXSTYLEBIT_HIDDEN && styleSheet.IsHidden( );
+        bool bOnlyHidden = mIterator->GetSearchMask( ) == SfxStyleSearchBits::Hidden && styleSheet.IsHidden( );
 
         bool bMatches = bMatchFamily && bMatchVisibility
-            && (( styleSheet.GetMask() & ( mIterator->GetSearchMask() & ~SFXSTYLEBIT_USED )) ||
+            && (( styleSheet.GetMask() & ( mIterator->GetSearchMask() & ~SfxStyleSearchBits::Used )) ||
                 bUsed || bOnlyHidden ||
-                ( mIterator->GetSearchMask() & SFXSTYLEBIT_ALL_VISIBLE ) == SFXSTYLEBIT_ALL_VISIBLE );
+                ( mIterator->GetSearchMask() & SfxStyleSearchBits::AllVisible ) == SfxStyleSearchBits::AllVisible );
         return bMatches;
     }
 
-    SfxStyleSheetIterator *mIterator;
+    SfxStyleSheetIterator * const mIterator;
 };
 
 }
 
 SfxStyleSheetIterator::SfxStyleSheetIterator(SfxStyleSheetBasePool *pBase,
-                                             SfxStyleFamily eFam, sal_uInt16 n)
-    : pAktStyle(nullptr)
-    , nAktPosition(0)
+                                             SfxStyleFamily eFam, SfxStyleSearchBits n)
+    : pCurrentStyle(nullptr)
+    , nCurrentPosition(0)
 {
     pBasePool=pBase;
     nSearchFamily=eFam;
     bSearchUsed=false;
-        if( (( n & SFXSTYLEBIT_ALL_VISIBLE ) != SFXSTYLEBIT_ALL_VISIBLE )
-                && ((n & SFXSTYLEBIT_USED) == SFXSTYLEBIT_USED))
+        if( (( n & SfxStyleSearchBits::AllVisible ) != SfxStyleSearchBits::AllVisible )
+                && ((n & SfxStyleSearchBits::Used) == SfxStyleSearchBits::Used))
     {
         bSearchUsed = true;
-        n &= ~SFXSTYLEBIT_USED;
+        n &= ~SfxStyleSearchBits::Used;
     }
     nMask=n;
 }
@@ -432,16 +418,16 @@ sal_uInt16 SfxStyleSheetIterator::Count()
     sal_uInt16 n = 0;
     if( IsTrivialSearch())
     {
-        n = (sal_uInt16) pBasePool->pImp->mxIndexedStyleSheets->GetNumberOfStyleSheets();
+        n = static_cast<sal_uInt16>(pBasePool->pImpl->mxIndexedStyleSheets->GetNumberOfStyleSheets());
     }
-    else if(nMask == SFXSTYLEBIT_ALL)
+    else if(nMask == SfxStyleSearchBits::All)
     {
-        n = static_cast<sal_uInt16>(pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetPositionsByFamily(nSearchFamily).size());
+        n = static_cast<sal_uInt16>(pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetPositionsByFamily(nSearchFamily).size());
     }
     else
     {
         DoesStyleMatchStyleSheetPredicate predicate(this);
-        n = pBasePool->pImp->mxIndexedStyleSheets->GetNumberOfStyleSheetsWithPredicate(predicate);
+        n = pBasePool->pImpl->mxIndexedStyleSheets->GetNumberOfStyleSheetsWithPredicate(predicate);
     }
     return n;
 }
@@ -451,26 +437,26 @@ SfxStyleSheetBase* SfxStyleSheetIterator::operator[](sal_uInt16 nIdx)
     SfxStyleSheetBase* retval = nullptr;
     if( IsTrivialSearch())
     {
-        retval = pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetByPosition(nIdx).get();
-        nAktPosition = nIdx;
+        retval = pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetByPosition(nIdx);
+        nCurrentPosition = nIdx;
     }
-    else if(nMask == SFXSTYLEBIT_ALL)
+    else if(nMask == SfxStyleSearchBits::All)
     {
         rtl::Reference< SfxStyleSheetBase > ref =
-        pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetByPosition(
-                pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetPositionsByFamily(nSearchFamily).at(nIdx))
+        pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetByPosition(
+                pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetPositionsByFamily(nSearchFamily).at(nIdx))
                 ;
         retval = ref.get();
-        nAktPosition = nIdx;
+        nCurrentPosition = nIdx;
     }
     else
     {
         DoesStyleMatchStyleSheetPredicate predicate(this);
         rtl::Reference< SfxStyleSheetBase > ref =
-                pBasePool->pImp->mxIndexedStyleSheets->GetNthStyleSheetThatMatchesPredicate(nIdx, predicate);
+                pBasePool->pImpl->mxIndexedStyleSheets->GetNthStyleSheetThatMatchesPredicate(nIdx, predicate);
         if (ref.get() != nullptr)
         {
-            nAktPosition = pBasePool->pImp->mxIndexedStyleSheets->FindStyleSheetPosition(*ref);
+            nCurrentPosition = pBasePool->pImpl->mxIndexedStyleSheets->FindStyleSheetPosition(*ref);
             retval = ref.get();
         }
     }
@@ -500,38 +486,38 @@ SfxStyleSheetBase* SfxStyleSheetIterator::Next()
 
     if ( IsTrivialSearch() )
     {
-        unsigned nStyleSheets = pBasePool->pImp->mxIndexedStyleSheets->GetNumberOfStyleSheets();
-        unsigned newPosition = nAktPosition +1;
+        unsigned nStyleSheets = pBasePool->pImpl->mxIndexedStyleSheets->GetNumberOfStyleSheets();
+        unsigned newPosition = nCurrentPosition +1;
         if (nStyleSheets > newPosition)
         {
-            nAktPosition = newPosition;
-            retval = pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetByPosition(nAktPosition).get();
+            nCurrentPosition = newPosition;
+            retval = pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetByPosition(nCurrentPosition);
         }
     }
-    else if(nMask == SFXSTYLEBIT_ALL)
+    else if(nMask == SfxStyleSearchBits::All)
     {
-        unsigned newPosition = nAktPosition +1;
+        unsigned newPosition = nCurrentPosition +1;
         const std::vector<unsigned>& familyVector =
-            pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetPositionsByFamily(nSearchFamily);
+            pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetPositionsByFamily(nSearchFamily);
         if (familyVector.size() > newPosition)
         {
-            nAktPosition = newPosition;
-            unsigned stylePosition = familyVector.at(newPosition);
-            retval = pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetByPosition(stylePosition).get();
+            nCurrentPosition = newPosition;
+            unsigned stylePosition = familyVector[newPosition];
+            retval = pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetByPosition(stylePosition);
         }
     }
     else
     {
         DoesStyleMatchStyleSheetPredicate predicate(this);
         rtl::Reference< SfxStyleSheetBase > ref =
-                pBasePool->pImp->mxIndexedStyleSheets->GetNthStyleSheetThatMatchesPredicate(
-                        0, predicate, nAktPosition+1);
+                pBasePool->pImpl->mxIndexedStyleSheets->GetNthStyleSheetThatMatchesPredicate(
+                        0, predicate, nCurrentPosition+1);
         retval = ref.get();
         if (retval != nullptr) {
-            nAktPosition = pBasePool->pImp->mxIndexedStyleSheets->FindStyleSheetPosition(*ref);
+            nCurrentPosition = pBasePool->pImpl->mxIndexedStyleSheets->FindStyleSheetPosition(*ref);
         }
     }
-    pAktStyle = retval;
+    pCurrentStyle = retval;
     return retval;
 }
 
@@ -540,45 +526,44 @@ SfxStyleSheetBase* SfxStyleSheetIterator::Find(const OUString& rStr)
     DoesStyleMatchStyleSheetPredicate predicate(this);
 
     std::vector<unsigned> positions =
-            pBasePool->pImp->mxIndexedStyleSheets->FindPositionsByNameAndPredicate(rStr, predicate,
-                    svl::IndexedStyleSheets::RETURN_FIRST);
+            pBasePool->pImpl->mxIndexedStyleSheets->FindPositionsByNameAndPredicate(rStr, predicate,
+                    svl::IndexedStyleSheets::SearchBehavior::ReturnFirst);
     if (positions.empty()) {
         return nullptr;
     }
 
     unsigned pos = positions.front();
-    SfxStyleSheetBase* pStyle = pBasePool->pImp->mxIndexedStyleSheets->GetStyleSheetByPosition(pos).get();
-    nAktPosition = pos;
-    pAktStyle = pStyle;
-    return pAktStyle;
+    SfxStyleSheetBase* pStyle = pBasePool->pImpl->mxIndexedStyleSheets->GetStyleSheetByPosition(pos);
+    nCurrentPosition = pos;
+    pCurrentStyle = pStyle;
+    return pCurrentStyle;
 }
 
-sal_uInt16 SfxStyleSheetIterator::GetSearchMask() const
+SfxStyleSearchBits SfxStyleSheetIterator::GetSearchMask() const
 {
-    sal_uInt16 mask = nMask;
+    SfxStyleSearchBits mask = nMask;
 
     if ( bSearchUsed )
-        mask |= SFXSTYLEBIT_USED;
+        mask |= SfxStyleSearchBits::Used;
     return mask;
 }
 
 
 SfxStyleSheetIterator& SfxStyleSheetBasePool::GetIterator_Impl()
 {
-    if( !pImp->pIter || (pImp->pIter->GetSearchMask() != nMask) || (pImp->pIter->GetSearchFamily() != nSearchFamily) )
+    if( !pImpl->pIter || (pImpl->pIter->GetSearchMask() != nMask) || (pImpl->pIter->GetSearchFamily() != nSearchFamily) )
     {
-        pImp->pIter = CreateIterator( nSearchFamily, nMask );
+        pImpl->pIter = CreateIterator( nSearchFamily, nMask );
     }
 
-    return *pImp->pIter;
+    return *pImpl->pIter;
 }
 
 SfxStyleSheetBasePool::SfxStyleSheetBasePool( SfxItemPool& r ) :
-    pImp(new SfxStyleSheetBasePool_Impl),
-    aAppName(r.GetName()),
+    pImpl(new SfxStyleSheetBasePool_Impl),
     rPool(r),
-    nSearchFamily(SFX_STYLE_FAMILY_PARA),
-    nMask(SFXSTYLEBIT_ALL)
+    nSearchFamily(SfxStyleFamily::Para),
+    nMask(SfxStyleSearchBits::All)
 {
 #ifdef DBG_UTIL
     aDbgStyleSheetReferences.mnPools++;
@@ -587,9 +572,8 @@ SfxStyleSheetBasePool::SfxStyleSheetBasePool( SfxItemPool& r ) :
 
 SfxStyleSheetBasePool::SfxStyleSheetBasePool( const SfxStyleSheetBasePool& r ) :
     SfxBroadcaster( r ),
-    comphelper::OWeakTypeObject(),
-    pImp(new SfxStyleSheetBasePool_Impl),
-    aAppName(r.aAppName),
+    comphelper::OWeakTypeObject(r),
+    pImpl(new SfxStyleSheetBasePool_Impl),
     rPool(r.rPool),
     nSearchFamily(r.nSearchFamily),
     nMask( r.nMask )
@@ -607,14 +591,13 @@ SfxStyleSheetBasePool::~SfxStyleSheetBasePool()
     aDbgStyleSheetReferences.mnPools--;
 #endif
 
-    Broadcast( SfxSimpleHint(SFX_HINT_DYING) );
+    Broadcast( SfxHint(SfxHintId::Dying) );
     Clear();
-    delete pImp;
 }
 
 bool SfxStyleSheetBasePool::SetParent(SfxStyleFamily eFam, const OUString& rStyle, const OUString& rParent)
 {
-    SfxStyleSheetIterator aIter(this,eFam,SFXSTYLEBIT_ALL);
+    SfxStyleSheetIterator aIter(this,eFam,SfxStyleSearchBits::All);
     SfxStyleSheetBase *pStyle = aIter.Find(rStyle);
     OSL_ENSURE(pStyle, "Template not found. Writer with solar <2541?");
     if(pStyle)
@@ -624,26 +607,26 @@ bool SfxStyleSheetBasePool::SetParent(SfxStyleFamily eFam, const OUString& rStyl
 }
 
 
-void SfxStyleSheetBasePool::SetSearchMask(SfxStyleFamily eFam, sal_uInt16 n)
+void SfxStyleSheetBasePool::SetSearchMask(SfxStyleFamily eFam, SfxStyleSearchBits n)
 {
     nSearchFamily = eFam; nMask = n;
 }
 
 
-SfxStyleSheetIteratorPtr SfxStyleSheetBasePool::CreateIterator
+std::unique_ptr<SfxStyleSheetIterator> SfxStyleSheetBasePool::CreateIterator
 (
  SfxStyleFamily eFam,
- sal_uInt16 mask
+ SfxStyleSearchBits mask
 )
 {
-    return SfxStyleSheetIteratorPtr(new SfxStyleSheetIterator(this,eFam,mask));
+    return std::make_unique<SfxStyleSheetIterator>(this,eFam,mask);
 }
 
 SfxStyleSheetBase* SfxStyleSheetBasePool::Create
 (
     const OUString& rName,
     SfxStyleFamily eFam,
-    sal_uInt16 mask
+    SfxStyleSearchBits mask
 )
 {
     return new SfxStyleSheetBase( rName, this, eFam, mask );
@@ -654,9 +637,9 @@ SfxStyleSheetBase* SfxStyleSheetBasePool::Create( const SfxStyleSheetBase& r )
     return new SfxStyleSheetBase( r );
 }
 
-SfxStyleSheetBase& SfxStyleSheetBasePool::Make( const OUString& rName, SfxStyleFamily eFam, sal_uInt16 mask)
+SfxStyleSheetBase& SfxStyleSheetBasePool::Make( const OUString& rName, SfxStyleFamily eFam, SfxStyleSearchBits mask)
 {
-    OSL_ENSURE( eFam != SFX_STYLE_FAMILY_ALL, "svl::SfxStyleSheetBasePool::Make(), FamilyAll is not a allowed Familie" );
+    OSL_ENSURE( eFam != SfxStyleFamily::All, "svl::SfxStyleSheetBasePool::Make(), FamilyAll is not a allowed Familie" );
 
     SfxStyleSheetIterator aIter(this, eFam, mask);
     rtl::Reference< SfxStyleSheetBase > xStyle( aIter.Find( rName ) );
@@ -666,9 +649,9 @@ SfxStyleSheetBase& SfxStyleSheetBasePool::Make( const OUString& rName, SfxStyleF
     {
         xStyle = Create( rName, eFam, mask );
         StoreStyleSheet(xStyle);
-        Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::CREATED, *xStyle.get() ) );
+        Broadcast(SfxStyleSheetHint(SfxHintId::StyleSheetCreated, *xStyle));
     }
-    return *xStyle.get();
+    return *xStyle;
 }
 
 /**
@@ -683,8 +666,8 @@ void SfxStyleSheetBasePool::Add( const SfxStyleSheetBase& rSheet )
         Remove( pOld );
     }
     rtl::Reference< SfxStyleSheetBase > xNew( Create( rSheet ) );
-    pImp->mxIndexedStyleSheets->AddStyleSheet(xNew);
-    Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::CHANGED, *xNew.get() ) );
+    pImpl->mxIndexedStyleSheets->AddStyleSheet(xNew);
+    Broadcast(SfxStyleSheetHint(SfxHintId::StyleSheetChanged, *xNew));
 }
 
 SfxStyleSheetBasePool& SfxStyleSheetBasePool::operator=( const SfxStyleSheetBasePool& r )
@@ -701,7 +684,7 @@ namespace {
 struct AddStyleSheetCallback : svl::StyleSheetCallback
 {
     explicit AddStyleSheetCallback(SfxStyleSheetBasePool *pool)
-    : mPool(pool) {;}
+    : mPool(pool) {}
 
     void DoIt(const SfxStyleSheetBase& ssheet) override
     {
@@ -717,7 +700,7 @@ SfxStyleSheetBasePool& SfxStyleSheetBasePool::operator+=( const SfxStyleSheetBas
     if( &r != this )
     {
         AddStyleSheetCallback callback(this);
-        pImp->mxIndexedStyleSheets->ApplyToAllStyleSheets(callback);
+        pImpl->mxIndexedStyleSheets->ApplyToAllStyleSheets(callback);
     }
     return *this;
 }
@@ -734,7 +717,7 @@ SfxStyleSheetBase *SfxStyleSheetBasePool::operator[](sal_uInt16 nIdx)
 
 SfxStyleSheetBase* SfxStyleSheetBasePool::Find(const OUString& rName,
                                                SfxStyleFamily eFam,
-                                               sal_uInt16 mask)
+                                               SfxStyleSearchBits mask)
 {
     SfxStyleSheetIterator aIter(this,eFam,mask);
     return aIter.Find(rName);
@@ -752,32 +735,32 @@ SfxStyleSheetBase* SfxStyleSheetBasePool::Next()
 
 void SfxStyleSheetBasePool::Remove( SfxStyleSheetBase* p )
 {
-    if( p )
-    {
-        // Reference to keep p alive until after Broadcast call!
-        rtl::Reference<SfxStyleSheetBase> xP(p);
-        bool bWasRemoved = pImp->mxIndexedStyleSheets->RemoveStyleSheet(xP);
-        if( bWasRemoved )
-        {
-            // Adapt all styles which have this style as parant
-            ChangeParent( p->GetName(), p->GetParent() );
+    if( !p )
+        return;
 
-            // #120015# Do not dispose, the removed StyleSheet may still be used in
-            // existing SdrUndoAttrObj incarnations. Rely on refcounting for disposal,
-            // this works well under normal conditions (checked breaking and counting
-            // on SfxStyleSheetBase constructors and destructors)
+    // Reference to keep p alive until after Broadcast call!
+    rtl::Reference<SfxStyleSheetBase> xP(p);
+    bool bWasRemoved = pImpl->mxIndexedStyleSheets->RemoveStyleSheet(xP);
+    if( !bWasRemoved )
+        return;
 
-            // css::uno::Reference< css::lang::XComponent > xComp( static_cast< ::cppu::OWeakObject* >((*aIter).get()), css::uno::UNO_QUERY );
-            // if( xComp.is() ) try
-            // {
-            //  xComp->dispose();
-            // }
-            // catch( css::uno::Exception& )
-            // {
-            // }
-            Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::ERASED, *p ) );
-        }
-    }
+    // Adapt all styles which have this style as parant
+    ChangeParent( p->GetName(), p->GetParent() );
+
+    // #120015# Do not dispose, the removed StyleSheet may still be used in
+    // existing SdrUndoAttrObj incarnations. Rely on refcounting for disposal,
+    // this works well under normal conditions (checked breaking and counting
+    // on SfxStyleSheetBase constructors and destructors)
+
+    // css::uno::Reference< css::lang::XComponent > xComp( static_cast< ::cppu::OWeakObject* >((*aIter).get()), css::uno::UNO_QUERY );
+    // if( xComp.is() ) try
+    // {
+    //  xComp->dispose();
+    // }
+    // catch( css::uno::Exception& )
+    // {
+    // }
+    Broadcast( SfxStyleSheetHint( SfxHintId::StyleSheetErased, *p ) );
 }
 
 void SfxStyleSheetBasePool::Insert( SfxStyleSheetBase* p )
@@ -795,7 +778,7 @@ void SfxStyleSheetBasePool::Insert( SfxStyleSheetBase* p )
     }
 #endif
     StoreStyleSheet(rtl::Reference< SfxStyleSheetBase >( p ) );
-    Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::CREATED, *p ) );
+    Broadcast( SfxStyleSheetHint( SfxHintId::StyleSheetCreated, *p ) );
 }
 
 namespace
@@ -804,7 +787,7 @@ namespace
 struct StyleSheetDisposerFunctor final : public svl::StyleSheetDisposer
 {
     explicit StyleSheetDisposerFunctor(SfxStyleSheetBasePool* pool)
-            : mPool(pool) {;}
+            : mPool(pool) {}
 
     void
     Dispose(rtl::Reference<SfxStyleSheetBase> styleSheet) override
@@ -818,7 +801,7 @@ struct StyleSheetDisposerFunctor final : public svl::StyleSheetDisposer
         catch( css::uno::Exception& )
         {
         }
-        mPool->Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::ERASED, *styleSheet.get() ) );
+        mPool->Broadcast(SfxStyleSheetHint(SfxHintId::StyleSheetErased, *styleSheet));
     }
 
     SfxStyleSheetBasePool* mPool;
@@ -829,14 +812,14 @@ struct StyleSheetDisposerFunctor final : public svl::StyleSheetDisposer
 void SfxStyleSheetBasePool::Clear()
 {
     StyleSheetDisposerFunctor cleanup(this);
-    pImp->mxIndexedStyleSheets->Clear(cleanup);
+    pImpl->mxIndexedStyleSheets->Clear(cleanup);
 }
 
 void SfxStyleSheetBasePool::ChangeParent(const OUString& rOld,
                                          const OUString& rNew,
                                          bool bVirtual)
 {
-    const sal_uInt16 nTmpMask = GetSearchMask();
+    const SfxStyleSearchBits nTmpMask = GetSearchMask();
     SetSearchMask(GetSearchFamily());
     for( SfxStyleSheetBase* p = First(); p; p = Next() )
     {
@@ -851,18 +834,10 @@ void SfxStyleSheetBasePool::ChangeParent(const OUString& rOld,
     SetSearchMask(GetSearchFamily(), nTmpMask);
 }
 
-void SfxStyleSheetBase::Load( SvStream&, sal_uInt16 )
-{
-}
-
-void SfxStyleSheetBase::Store( SvStream& )
-{
-}
-
 SfxStyleSheet::SfxStyleSheet(const OUString &rName,
                              const SfxStyleSheetBasePool& r_Pool,
                              SfxStyleFamily eFam,
-                             sal_uInt16 mask )
+                             SfxStyleSearchBits mask )
     : SfxStyleSheetBase(rName, const_cast< SfxStyleSheetBasePool* >( &r_Pool ), eFam, mask)
 {
 }
@@ -877,7 +852,7 @@ SfxStyleSheet::SfxStyleSheet(const SfxStyleSheet& rStyle)
 
 SfxStyleSheet::~SfxStyleSheet()
 {
-    Broadcast( SfxStyleSheetHint( SfxStyleSheetHintId::INDESTRUCTION, *this ) );
+    Broadcast( SfxStyleSheetHint( SfxHintId::StyleSheetInDestruction, *this ) );
 }
 
 
@@ -891,14 +866,14 @@ bool SfxStyleSheet::SetParent( const OUString& rName )
         // Remove from notification chain of the old parent if applicable
         if(!aOldParent.isEmpty())
         {
-            SfxStyleSheet *pParent = static_cast<SfxStyleSheet *>(pPool->Find(aOldParent, nFamily));
+            SfxStyleSheet *pParent = static_cast<SfxStyleSheet *>(m_pPool->Find(aOldParent, nFamily));
             if(pParent)
                 EndListening(*pParent);
         }
         // Add to the notification chain of the new parent
         if(!aParent.isEmpty())
         {
-            SfxStyleSheet *pParent = static_cast<SfxStyleSheet *>(pPool->Find(aParent, nFamily));
+            SfxStyleSheet *pParent = static_cast<SfxStyleSheet *>(m_pPool->Find(aParent, nFamily));
             if(pParent)
                 StartListening(*pParent);
         }
@@ -927,13 +902,13 @@ SfxStyleSheetPool::SfxStyleSheetPool( SfxItemPool const& rSet)
 }
 
 SfxStyleSheetBase* SfxStyleSheetPool::Create( const OUString& rName,
-                                              SfxStyleFamily eFam, sal_uInt16 mask )
+                                              SfxStyleFamily eFam, SfxStyleSearchBits mask )
 {
     return new SfxStyleSheet( rName, *this, eFam, mask );
 }
 
-SfxUnoStyleSheet::SfxUnoStyleSheet( const OUString& _rName, const SfxStyleSheetBasePool& _rPool, SfxStyleFamily _eFamily, sal_uInt16 _nMaske )
-: ::cppu::ImplInheritanceHelper2< SfxStyleSheet, css::style::XStyle, css::lang::XUnoTunnel >( _rName, _rPool, _eFamily, _nMaske )
+SfxUnoStyleSheet::SfxUnoStyleSheet( const OUString& _rName, const SfxStyleSheetBasePool& _rPool, SfxStyleFamily _eFamily, SfxStyleSearchBits _nMask )
+: cppu::ImplInheritanceHelper<SfxStyleSheet, css::style::XStyle, css::lang::XUnoTunnel>(_rName, _rPool, _eFamily, _nMask)
 {
 }
 
@@ -952,7 +927,7 @@ SfxUnoStyleSheet* SfxUnoStyleSheet::getUnoStyleSheet( const css::uno::Reference<
 /**
  * XUnoTunnel
  */
-::sal_Int64 SAL_CALL SfxUnoStyleSheet::getSomething( const css::uno::Sequence< ::sal_Int8 >& rId ) throw (css::uno::RuntimeException, std::exception)
+::sal_Int64 SAL_CALL SfxUnoStyleSheet::getSomething( const css::uno::Sequence< ::sal_Int8 >& rId )
 {
     if( rId.getLength() == 16 && 0 == memcmp( getIdentifier().getConstArray(), rId.getConstArray(), 16 ) )
     {
@@ -967,7 +942,7 @@ SfxUnoStyleSheet* SfxUnoStyleSheet::getUnoStyleSheet( const css::uno::Reference<
 void
 SfxStyleSheetBasePool::StoreStyleSheet(const rtl::Reference< SfxStyleSheetBase >& xStyle)
 {
-    pImp->mxIndexedStyleSheets->AddStyleSheet(xStyle);
+    pImpl->mxIndexedStyleSheets->AddStyleSheet(xStyle);
 }
 
 namespace
@@ -983,19 +958,19 @@ const css::uno::Sequence< ::sal_Int8 >& SfxUnoStyleSheet::getIdentifier()
 void
 SfxStyleSheetBasePool::Reindex()
 {
-    pImp->mxIndexedStyleSheets->Reindex();
+    pImpl->mxIndexedStyleSheets->Reindex();
 }
 
 const svl::IndexedStyleSheets&
 SfxStyleSheetBasePool::GetIndexedStyleSheets() const
 {
-    return *pImp->mxIndexedStyleSheets;
+    return *pImpl->mxIndexedStyleSheets;
 }
 
-rtl::Reference<SfxStyleSheetBase>
+SfxStyleSheetBase*
 SfxStyleSheetBasePool::GetStyleSheetByPositionInIndex(unsigned pos)
 {
-    return pImp->mxIndexedStyleSheets->GetStyleSheetByPosition(pos);
+    return pImpl->mxIndexedStyleSheets->GetStyleSheetByPosition(pos);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

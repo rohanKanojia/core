@@ -25,9 +25,9 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/XMLBase64ImportContext.hxx>
 #include <com/sun/star/io/XOutputStream.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 
-
-using namespace ::com::sun::star;
+using namespace css;
 
 enum SvXMLTokenMapAttrs
 {
@@ -35,7 +35,6 @@ enum SvXMLTokenMapAttrs
     XML_TOK_SYMBOL_IMAGE_TYPE,
     XML_TOK_SYMBOL_IMAGE_ACTUATE,
     XML_TOK_SYMBOL_IMAGE_SHOW,
-    XML_TOK_SYMBOL_IMAGE_END = XML_TOK_UNKNOWN
 };
 
 static const SvXMLTokenMapEntry aSymbolImageAttrTokenMap[] =
@@ -89,7 +88,7 @@ void XMLSymbolImageContext::StartElement( const uno::Reference< xml::sax::XAttri
     }
 }
 
-SvXMLImportContext* XMLSymbolImageContext::CreateChildContext(
+SvXMLImportContextRef XMLSymbolImageContext::CreateChildContext(
     sal_uInt16 nPrefix, const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList > & xAttrList )
 {
@@ -116,22 +115,22 @@ SvXMLImportContext* XMLSymbolImageContext::CreateChildContext(
 
 void XMLSymbolImageContext::EndElement()
 {
-    OUString sResolvedURL;
+    uno::Reference<graphic::XGraphic> xGraphic;
 
-    if( !msURL.isEmpty() )
+    if (!msURL.isEmpty())
     {
-        sResolvedURL = GetImport().ResolveGraphicObjectURL( msURL, false );
+        xGraphic = GetImport().loadGraphicByURL(msURL);
     }
-    else if( mxBase64Stream.is() )
+    else if (mxBase64Stream.is())
     {
-        sResolvedURL = GetImport().ResolveGraphicObjectURLFromBase64( mxBase64Stream );
+        xGraphic = GetImport().loadGraphicFromBase64(mxBase64Stream);
         mxBase64Stream = nullptr;
     }
 
-    if( !sResolvedURL.isEmpty())
+    if (xGraphic.is())
     {
         // aProp is a member of XMLElementPropertyContext
-        aProp.maValue <<= sResolvedURL;
+        aProp.maValue <<= xGraphic;
         SetInsert( true );
     }
 

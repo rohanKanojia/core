@@ -17,9 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-// include files
-
-#include <osl_Condition_Const.h>
+#include "osl_Condition_Const.h"
 #include <stdlib.h>
 
 using namespace osl;
@@ -28,8 +26,7 @@ enum ConditionType
 {
     thread_type_set,
     thread_type_reset,
-    thread_type_wait,
-    thread_type_check
+    thread_type_wait
 };
 
 /** thread for testing Condition.
@@ -40,14 +37,9 @@ public:
     //get the Condition to operate
     ConditionThread( ::osl::Condition& Con, ConditionType tType): m_MyCon( Con ), m_MyType( tType ) { }
 
-    virtual ~ConditionThread( )
-    {
-        // LLA: do not throw in DTors!
-        // LLA: CPPUNIT_ASSERT_MESSAGE( "#ConditionThread does not shutdown properly.\n", sal_False == this -> isRunning( ) );
-    }
 protected:
     ::osl::Condition& m_MyCon;
-    ConditionType m_MyType;
+    ConditionType const m_MyType;
 
     void SAL_CALL run() override
     {
@@ -65,11 +57,8 @@ protected:
     }
 };
 
-// test code start here
-
 namespace osl_Condition
 {
-
     /** testing the method:
         Condition()
     */
@@ -78,30 +67,30 @@ namespace osl_Condition
     public:
         bool bRes, bRes1;
 
-        void ctors_001( )
+        void ctors_create()
         {
             ::osl::Condition aCond;
-            bRes = aCond.check( );
+            bRes = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: create a condition its initial check state should be sal_False.",
-                                    !bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: create a condition its initial check state should be sal_False.",
+                                   !bRes );
         }
 
-        void ctors_002( )
+        void ctors_createAndSet()
         {
             ::osl::Condition aCond;
-            aCond.set( );
-            bRes = aCond.check( );
+            aCond.set();
+            bRes = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: create a condition and set it.",
-                                    bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: create a condition and set it.",
+                                   bRes );
         }
 
-        CPPUNIT_TEST_SUITE( ctors );
-        CPPUNIT_TEST( ctors_001 );
-        CPPUNIT_TEST( ctors_002 );
-        CPPUNIT_TEST_SUITE_END( );
-    }; // class ctors
+        CPPUNIT_TEST_SUITE(ctors);
+        CPPUNIT_TEST(ctors_create);
+        CPPUNIT_TEST(ctors_createAndSet);
+        CPPUNIT_TEST_SUITE_END();
+    };
 
     /** testing the method:
         void set()
@@ -111,40 +100,44 @@ namespace osl_Condition
     public:
         bool bRes, bRes1, bRes2;
 
-        void set_001( )
+        void set_createAndSet()
         {
             ::osl::Condition aCond;
-            aCond.set( );
-            bRes = aCond.check( );
+            aCond.set();
+            bRes = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: check state should be sal_True after set.",
-                                    bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: check state should be sal_True after set.",
+                                   bRes );
         }
 
-        void set_002( )
+        void set_threadWaitRelease()
         {
             ::osl::Condition aCond;
-            ConditionThread myThread1( aCond, thread_type_wait );
+            ConditionThread myThread1(aCond, thread_type_wait);
             myThread1.create();
-            bRes = myThread1.isRunning( );
+            bRes = myThread1.isRunning();
 
-            ConditionThread myThread2( aCond, thread_type_set );
+            ConditionThread myThread2(aCond, thread_type_set);
             myThread2.create();
 
-            myThread1.join( );
-            bRes1 = myThread1.isRunning( );
-            bRes2 = aCond.check( );
-            myThread2.join( );
+            myThread1.join();
+            bRes1 = myThread1.isRunning();
+            bRes2 = aCond.check();
+            myThread2.join();
 
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: use one thread to set the condition in order to release another thread.",
+                                   bRes);
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: use one thread to set the condition in order to release another thread.",
+                                   !bRes1);
             CPPUNIT_ASSERT_MESSAGE( "#test comment#: use one thread to set the condition in order to release another thread.",
-                                    bRes && !bRes1 && bRes2 );
+                                   bRes2);
         }
 
-        CPPUNIT_TEST_SUITE( set );
-        CPPUNIT_TEST( set_001 );
-        CPPUNIT_TEST( set_002 );
+        CPPUNIT_TEST_SUITE(set);
+        CPPUNIT_TEST(set_createAndSet);
+        CPPUNIT_TEST(set_threadWaitRelease);
         CPPUNIT_TEST_SUITE_END( );
-    }; // class set
+    };
 
     /** testing the method:
         void reset()
@@ -154,41 +147,47 @@ namespace osl_Condition
     public:
         bool bRes, bRes1, bRes2;
 
-        void reset_001( )
+        void reset_resetWaitAndSet()
         {
             ::osl::Condition aCond;
-            aCond.reset( );
+            aCond.reset();
 
-            ConditionThread myThread( aCond, thread_type_wait );
+            ConditionThread myThread(aCond, thread_type_wait);
             myThread.create();
-            bRes = myThread.isRunning( );
-            bRes2 = aCond.check( );
+            bRes = myThread.isRunning();
+            bRes2 = aCond.check();
 
-            aCond.set( );
-            myThread.join( );
-            bRes1 = myThread.isRunning( );
+            aCond.set();
+            myThread.join();
+            bRes1 = myThread.isRunning();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: wait will cause a reset thread block, use set to release it.",
-                                    bRes && !bRes1 && !bRes2 );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: wait will cause a reset thread block, use set to release it.",
+                                   bRes);
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: wait will cause a reset thread block, use set to release it.",
+                                   !bRes1);
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: wait will cause a reset thread block, use set to release it.",
+                                   !bRes2);
         }
 
-        void reset_002( )
+        void reset_resetAndSet()
         {
             ::osl::Condition aCond;
-            aCond.reset( );
-            bRes = aCond.check( );
-            aCond.set( );
-            bRes1 = aCond.check( );
+            aCond.reset();
+            bRes = aCond.check();
+            aCond.set();
+            bRes1 = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: create a condition and reset/set it.",
-                                    !bRes && bRes1 );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: create a condition and reset/set it.",
+                                   !bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: create a condition and reset/set it.",
+                                   bRes1 );
         }
 
-        CPPUNIT_TEST_SUITE( reset );
-        CPPUNIT_TEST( reset_001 );
-        CPPUNIT_TEST( reset_002 );
-        CPPUNIT_TEST_SUITE_END( );
-    }; // class reset
+        CPPUNIT_TEST_SUITE(reset);
+        CPPUNIT_TEST(reset_resetWaitAndSet);
+        CPPUNIT_TEST(reset_resetAndSet);
+        CPPUNIT_TEST_SUITE_END();
+    };
 
     /** testing the method:
         Result wait(const TimeValue *pTimeout = 0)
@@ -197,22 +196,21 @@ namespace osl_Condition
     {
     public:
         bool bRes, bRes1, bRes2;
-        TimeValue *tv1;
+        std::unique_ptr<TimeValue> tv1;
 
-        void setUp( ) override
+        void setUp() override
         {
-            tv1 = new TimeValue;
+            tv1.reset(new TimeValue);
             tv1->Seconds = 1;
             tv1->Nanosec = 0;
-
         }
 
-        void tearDown( ) override
+        void tearDown() override
         {
-            delete tv1;
+            tv1.reset();
         }
 
-        void wait_001( )
+        void wait_testAllCombos( )
         {
             ::osl::Condition cond1;
             ::osl::Condition cond2;
@@ -221,40 +219,46 @@ namespace osl_Condition
             cond1.set();
             cond2.set();
 
-            osl::Condition::Result r1=cond1.wait(tv1);
+            osl::Condition::Result r1=cond1.wait(tv1.get());
             osl::Condition::Result r2=cond2.wait();
-            osl::Condition::Result r3=cond3.wait(tv1);
+            osl::Condition::Result r3=cond3.wait(tv1.get());
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: test three types of wait.",
-                                    (r1 == ::osl::Condition::result_ok) &&
-                                    (r2 == ::osl::Condition::result_ok) &&
-                                    (r3 == ::osl::Condition::result_timeout) );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "#test comment#: test three types of wait.",
+                                    ::osl::Condition::result_ok, r1 );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "#test comment#: test three types of wait.",
+                                    ::osl::Condition::result_ok, r2 );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE( "#test comment#: test three types of wait.",
+                                    ::osl::Condition::result_timeout, r3 );
         }
 
-        void wait_002( )
+        void wait_timeoutWaits()
         {
             ::osl::Condition aCond;
             ::osl::Condition::Result wRes, wRes1;
 
-            aCond.reset( );
-            bRes = aCond.check( );
-            wRes = aCond.wait( tv1 );
+            aCond.reset();
+            bRes = aCond.check();
+            wRes = aCond.wait(tv1.get());
 
-            aCond.set( );
-            wRes1 = aCond.wait( tv1 );
-            bRes1 = aCond.check( );
+            aCond.set();
+            wRes1 = aCond.wait(tv1.get());
+            bRes1 = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: wait a condition after set/reset.",
-                                    !bRes && bRes1 &&
-                                    ( ::osl::Condition::result_timeout == wRes ) &&
-                                    ( ::osl::Condition::result_ok == wRes1 ) );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: wait a condition after set/reset.",
+                                   !bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: wait a condition after set/reset.",
+                                   bRes1 );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("#test comment#: wait a condition after set/reset.",
+                                   ::osl::Condition::result_timeout, wRes );
+            CPPUNIT_ASSERT_EQUAL_MESSAGE("#test comment#: wait a condition after set/reset.",
+                                   ::osl::Condition::result_ok, wRes1 );
         }
 
-        CPPUNIT_TEST_SUITE( wait );
-        CPPUNIT_TEST( wait_001 );
-        CPPUNIT_TEST( wait_002 );
-        CPPUNIT_TEST_SUITE_END( );
-    }; // class wait
+        CPPUNIT_TEST_SUITE(wait);
+        CPPUNIT_TEST(wait_testAllCombos);
+        CPPUNIT_TEST(wait_timeoutWaits);
+        CPPUNIT_TEST_SUITE_END();
+    };
 
     /** testing the method:
         sal_Bool check()
@@ -264,49 +268,53 @@ namespace osl_Condition
     public:
         bool bRes, bRes1, bRes2;
 
-        void check_001( )
+        void check_checkStates()
         {
             ::osl::Condition aCond;
 
-            aCond.reset( );
-            bRes = aCond.check( );
-            aCond.set( );
-            bRes1 = aCond.check( );
+            aCond.reset();
+            bRes = aCond.check();
+            aCond.set();
+            bRes1 = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: check the condition states.",
-                                    !bRes && bRes1 );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: check the condition states.",
+                                   !bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: check the condition states.",
+                                   bRes1 );
         }
 
-        void check_002( )
+        void check_threadedCheckStates( )
         {
             ::osl::Condition aCond;
-            aCond.reset( );
+            aCond.reset();
 
-            ConditionThread myThread( aCond, thread_type_set );
-            myThread.create( );
-            myThread.join( );
-            bRes = aCond.check( );
+            ConditionThread myThread(aCond, thread_type_set);
+            myThread.create();
+            myThread.join();
+            bRes = aCond.check();
 
-            ConditionThread myThread1( aCond, thread_type_reset );
-            myThread1.create( );
-            myThread1.join( );
-            bRes1 = aCond.check( );
+            ConditionThread myThread1(aCond, thread_type_reset);
+            myThread1.create();
+            myThread1.join();
+            bRes1 = aCond.check();
 
-            CPPUNIT_ASSERT_MESSAGE( "#test comment#: use threads to set/reset Condition and check it in main routine.",
-                                    bRes && !bRes1 );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: use threads to set/reset Condition and check it in main routine.",
+                                   bRes );
+            CPPUNIT_ASSERT_MESSAGE("#test comment#: use threads to set/reset Condition and check it in main routine.",
+                                   !bRes1 );
         }
 
-        CPPUNIT_TEST_SUITE( check );
-        CPPUNIT_TEST( check_001 );
-        CPPUNIT_TEST( check_002 );
-        CPPUNIT_TEST_SUITE_END( );
-    }; // class check
+        CPPUNIT_TEST_SUITE(check);
+        CPPUNIT_TEST(check_checkStates);
+        CPPUNIT_TEST(check_threadedCheckStates);
+        CPPUNIT_TEST_SUITE_END();
+    };
 
-CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::ctors);
-CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::set);
-CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::reset);
-CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::wait);
-CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::check);
+    CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::ctors);
+    CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::set);
+    CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::reset);
+    CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::wait);
+    CPPUNIT_TEST_SUITE_REGISTRATION(osl_Condition::check);
 
 } // namespace osl_Condition
 

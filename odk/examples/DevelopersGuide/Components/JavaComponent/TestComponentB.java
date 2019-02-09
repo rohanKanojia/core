@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -38,7 +39,7 @@ import com.sun.star.test.XSomethingB;
 import com.sun.star.uno.Type;
 
 // TestComponentB implements all necessary interfaces self, this is only
-// for demonstration. More convenient is to use the impelmentation WeakBase or
+// for demonstration. More convenient is to use the implementation WeakBase or
 // ComponentBase, see implementation of TestComponentA.
 public class TestComponentB implements XTypeProvider, XServiceInfo, XSomethingB {
     static final String __serviceName= "com.sun.star.test.SomethingB";
@@ -87,3 +88,5 @@ public class TestComponentB implements XTypeProvider, XServiceInfo, XSomethingB 
         return retValue;
     }
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -41,13 +41,15 @@
 #include <comphelper/configurationhelper.hxx>
 #include <comphelper/processfactory.hxx>
 #include <i18nlangtag/mslangid.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <o3tl/enumarray.hxx>
+#include <tools/diagnose_ex.h>
 
 using namespace utl;
 using namespace com::sun::star;
 
 // vOptionNames[] -- names of the user option entries
-// The order corresponds to the #define USER_OPT_* list in useroptions.hxx.
+// The order must correspond to the enum class UserOptToken in useroptions.hxx.
 static o3tl::enumarray<UserOptToken, char const *> vOptionNames = {
     "l",                         // UserOptToken::City
     "o",                         // UserOptToken::Company
@@ -65,7 +67,10 @@ static o3tl::enumarray<UserOptToken, char const *> vOptionNames = {
     "initials",                  // UserOptToken::ID
     "postalcode",                // UserOptToken::Zip
     "fathersname",               // UserOptToken::FathersName
-    "apartment"                  // UserOptToken::Apartment
+    "apartment",                 // UserOptToken::Apartment
+    "signingkey",                // UserOptToken::SigningKey
+    "encryptionkey",             // UserOptToken::EncryptionKey
+    "encrypttoself"              // UserOptToken::EncryptToSelf
 };
 
 std::weak_ptr<SvtUserOptions::Impl> SvtUserOptions::xSharedImpl;
@@ -76,9 +81,9 @@ public:
     explicit ChangeListener (Impl& rParent): m_rParent(rParent) { }
 
     // XChangesListener
-    virtual void SAL_CALL changesOccurred (util::ChangesEvent const& Event) throw(uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL changesOccurred (util::ChangesEvent const& Event) override;
     // XEventListener
-    virtual void SAL_CALL disposing (lang::EventObject const& Source) throw(uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing (lang::EventObject const& Source) override;
 
 private:
     Impl& m_rParent;
@@ -94,21 +99,28 @@ public:
     bool IsTokenReadonly (UserOptToken nToken) const;
     OUString GetToken (UserOptToken nToken) const;
     void     SetToken (UserOptToken nToken, OUString const& rNewToken);
+    bool     GetBoolValue (UserOptToken nToken) const;
+    void     SetBoolValue (UserOptToken nToken, bool bNewValue);
     void     Notify ();
 
 private:
     uno::Reference<util::XChangesListener> m_xChangeListener;
     uno::Reference<container::XNameAccess> m_xCfg;
     uno::Reference<beans::XPropertySet>    m_xData;
+
+    template < typename ValueType >
+    ValueType GetValue_Impl( UserOptToken nToken ) const;
+    template < typename ValueType >
+    void SetValue_Impl( UserOptToken nToken, ValueType const& rNewValue );
 };
 
-void SvtUserOptions::ChangeListener::changesOccurred (util::ChangesEvent const& rEvent) throw(uno::RuntimeException, std::exception)
+void SvtUserOptions::ChangeListener::changesOccurred (util::ChangesEvent const& rEvent)
 {
     if (rEvent.Changes.getLength())
         m_rParent.Notify();
 }
 
-void SvtUserOptions::ChangeListener::disposing (lang::EventObject const& rSource) throw(uno::RuntimeException, std::exception)
+void SvtUserOptions::ChangeListener::disposing (lang::EventObject const& rSource)
 {
     try
     {
@@ -144,29 +156,31 @@ SvtUserOptions::Impl::Impl() :
         {
         }
     }
-    catch (uno::Exception const& ex)
+    catch (uno::Exception const&)
     {
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
         m_xCfg.clear();
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
     }
 }
 
-OUString SvtUserOptions::Impl::GetToken (UserOptToken nToken) const
+template < typename ValueType >
+ValueType SvtUserOptions::Impl::GetValue_Impl (UserOptToken nToken) const
 {
-    OUString sToken;
+    ValueType sToken = ValueType();
     try
     {
         if (m_xData.is())
             m_xData->getPropertyValue(OUString::createFromAscii(vOptionNames[nToken])) >>= sToken;
     }
-    catch (uno::Exception const& ex)
+    catch (uno::Exception const&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
     return sToken;
 }
 
-void SvtUserOptions::Impl::SetToken (UserOptToken nToken, OUString const& sToken)
+template < typename ValueType >
+void SvtUserOptions::Impl::SetValue_Impl (UserOptToken nToken, ValueType const& sToken)
 {
     try
     {
@@ -174,42 +188,62 @@ void SvtUserOptions::Impl::SetToken (UserOptToken nToken, OUString const& sToken
              m_xData->setPropertyValue(OUString::createFromAscii(vOptionNames[nToken]), uno::makeAny(sToken));
         comphelper::ConfigurationHelper::flush(m_xCfg);
     }
-    catch (uno::Exception const& ex)
+    catch (uno::Exception const&)
     {
-        SAL_WARN("unotools.config", "Caught unexpected: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("unotools.config");
     }
+}
+
+OUString SvtUserOptions::Impl::GetToken (UserOptToken nToken) const
+{
+    return GetValue_Impl<OUString>( nToken );
+}
+
+void SvtUserOptions::Impl::SetToken (UserOptToken nToken, OUString const& sToken)
+{
+    SetValue_Impl<OUString>( nToken, sToken );
+}
+
+bool SvtUserOptions::Impl::GetBoolValue (UserOptToken nToken) const
+{
+    return GetValue_Impl<bool>( nToken );
+}
+
+void SvtUserOptions::Impl::SetBoolValue (UserOptToken nToken, bool bNewValue)
+{
+    SetValue_Impl<bool>( nToken, bNewValue );
 }
 
 OUString SvtUserOptions::Impl::GetFullName () const
 {
     OUString sFullName;
-    switch (LanguageType const eLang = SvtSysLocale().GetUILanguageTag().getLanguageType())
+    LanguageType const eLang = SvtSysLocale().GetUILanguageTag().getLanguageType();
+    if (eLang == LANGUAGE_RUSSIAN)
     {
-        case LANGUAGE_RUSSIAN:
+        sFullName = GetToken(UserOptToken::FirstName).trim();
+        if (!sFullName.isEmpty())
+            sFullName += " ";
+        sFullName += GetToken(UserOptToken::FathersName).trim();
+        if (!sFullName.isEmpty())
+            sFullName += " ";
+        sFullName += GetToken(UserOptToken::LastName).trim();
+    }
+    else
+    {
+        if (MsLangId::isFamilyNameFirst(eLang))
+        {
+            sFullName = GetToken(UserOptToken::LastName).trim();
+            if (!sFullName.isEmpty())
+                sFullName += " ";
+            sFullName += GetToken(UserOptToken::FirstName).trim();
+        }
+        else
+        {
             sFullName = GetToken(UserOptToken::FirstName).trim();
             if (!sFullName.isEmpty())
                 sFullName += " ";
-            sFullName += GetToken(UserOptToken::FathersName).trim();
-            if (!sFullName.isEmpty())
-                sFullName += " ";
             sFullName += GetToken(UserOptToken::LastName).trim();
-            break;
-        default:
-            if (MsLangId::isFamilyNameFirst(eLang))
-            {
-                sFullName = GetToken(UserOptToken::LastName).trim();
-                if (!sFullName.isEmpty())
-                    sFullName += " ";
-                sFullName += GetToken(UserOptToken::FirstName).trim();
-            }
-            else
-            {
-                sFullName = GetToken(UserOptToken::FirstName).trim();
-                if (!sFullName.isEmpty())
-                    sFullName += " ";
-                sFullName += GetToken(UserOptToken::LastName).trim();
-            }
-            break;
+        }
     }
 
     return sFullName;
@@ -217,7 +251,7 @@ OUString SvtUserOptions::Impl::GetFullName () const
 
 void SvtUserOptions::Impl::Notify ()
 {
-    NotifyListeners(0);
+    NotifyListeners(ConfigurationHints::NONE);
 }
 
 bool SvtUserOptions::Impl::IsTokenReadonly (UserOptToken nToken) const
@@ -238,7 +272,7 @@ SvtUserOptions::SvtUserOptions ()
     {
         xImpl.reset(new Impl);
         xSharedImpl = xImpl;
-        ItemHolder1::holdConfigItem(E_USEROPTIONS);
+        ItemHolder1::holdConfigItem(EItem::UserOptions);
     }
     xImpl = xSharedImpl.lock();
     xImpl->AddListener(this);
@@ -276,6 +310,8 @@ OUString SvtUserOptions::GetTelephoneHome  () const { return GetToken(UserOptTok
 OUString SvtUserOptions::GetTelephoneWork  () const { return GetToken(UserOptToken::TelephoneWork); }
 OUString SvtUserOptions::GetFax            () const { return GetToken(UserOptToken::Fax); }
 OUString SvtUserOptions::GetEmail          () const { return GetToken(UserOptToken::Email); }
+OUString SvtUserOptions::GetSigningKey     () const { return GetToken(UserOptToken::SigningKey); }
+OUString SvtUserOptions::GetEncryptionKey  () const { return GetToken(UserOptToken::EncryptionKey); }
 
 bool SvtUserOptions::IsTokenReadonly (UserOptToken nToken) const
 {
@@ -293,6 +329,18 @@ void SvtUserOptions::SetToken (UserOptToken nToken, OUString const& rNewToken)
 {
     osl::MutexGuard aGuard(GetInitMutex());
     xImpl->SetToken(nToken, rNewToken);
+}
+
+void SvtUserOptions::SetBoolValue (UserOptToken nToken, bool bNewValue)
+{
+    osl::MutexGuard aGuard(GetInitMutex());
+    xImpl->SetBoolValue(nToken, bNewValue);
+}
+
+bool SvtUserOptions::GetEncryptToSelf() const
+{
+    osl::MutexGuard aGuard(GetInitMutex());
+    return xImpl->GetBoolValue(UserOptToken::EncryptToSelf);
 }
 
 OUString SvtUserOptions::GetFullName () const

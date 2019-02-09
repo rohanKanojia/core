@@ -20,14 +20,13 @@
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/dispatch.hxx>
 
-#include "cmdid.h"
-#include "swmodule.hxx"
-#include "view.hxx"
-#include "edtwin.hxx"
-#include "label.hrc"
+#include <cmdid.h>
+#include <swmodule.hxx>
+#include <view.hxx>
+#include <edtwin.hxx>
 
-#include "syncbtn.hxx"
-#include "swtypes.hxx"
+#include <syncbtn.hxx>
+#include <swtypes.hxx>
 
 SFX_IMPL_FLOATINGWINDOW( SwSyncChildWin, FN_SYNC_LABELS )
 
@@ -79,7 +78,7 @@ void SwSyncBtnDlg::dispose()
     SfxFloatingWindow::dispose();
 }
 
-IMPL_STATIC_LINK_NOARG_TYPED(SwSyncBtnDlg, BtnHdl, Button*, void)
+IMPL_STATIC_LINK_NOARG(SwSyncBtnDlg, BtnHdl, Button*, void)
 {
     SfxViewFrame::Current()->GetDispatcher()->Execute(FN_UPDATE_ALL_LINKS, SfxCallMode::ASYNCHRON);
 }

@@ -24,15 +24,13 @@
 
 class XMLControlOASISTransformerContext : public XMLTransformerContext
 {
-    OUString m_aElemQName;
-    bool m_bCreateControl;
+    OUString const m_aElemQName;
+    bool const m_bCreateControl;
 
 public:
     XMLControlOASISTransformerContext( XMLTransformerBase& rTransformer,
                            const OUString& rQName,
                               bool bCreateControl );
-
-    virtual ~XMLControlOASISTransformerContext();
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 

@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include "TokenContext.hxx"
 #include <xmloff/xmltkmap.hxx>
@@ -25,18 +26,15 @@
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmlerror.hxx>
 
-#include <tools/debug.hxx>
 #include <algorithm>
 
 using com::sun::star::uno::Reference;
 using com::sun::star::xml::sax::XAttributeList;
 
-
-struct SvXMLTokenMapEntry aEmptyMap[1] =
+const SvXMLTokenMapEntry aEmptyMap[1] =
 {
     XML_TOKEN_MAP_END
 };
-
 
 TokenContext::TokenContext( SvXMLImport& rImport,
                             sal_uInt16 nPrefix,
@@ -49,10 +47,6 @@ TokenContext::TokenContext( SvXMLImport& rImport,
 {
 }
 
-TokenContext::~TokenContext()
-{
-}
-
 void TokenContext::StartElement(
     const Reference<XAttributeList>& xAttributeList )
 {
@@ -60,7 +54,7 @@ void TokenContext::StartElement(
     // - if in map: call HandleAttribute
     // - xmlns:... : ignore
     // - other: warning
-    DBG_ASSERT( mpAttributes != nullptr, "no token map for attributes" );
+    SAL_WARN_IF( mpAttributes == nullptr, "xmloff", "no token map for attributes" );
     SvXMLTokenMap aMap( mpAttributes );
 
     sal_Int16 nCount = xAttributeList->getLength();
@@ -91,7 +85,7 @@ void TokenContext::StartElement(
     }
 }
 
-SvXMLImportContext* TokenContext::CreateChildContext(
+SvXMLImportContextRef TokenContext::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const Reference<XAttributeList>& xAttrList )
@@ -100,7 +94,7 @@ SvXMLImportContext* TokenContext::CreateChildContext(
 
     SvXMLImportContext* pContext = nullptr;
 
-    DBG_ASSERT( mpChildren != nullptr, "no token map for child elements" );
+    SAL_WARN_IF( mpChildren == nullptr, "xmloff", "no token map for child elements" );
     SvXMLTokenMap aMap( mpChildren );
     sal_uInt16 nToken = aMap.Get( nPrefix, rLocalName );
     if( nToken != XML_TOK_UNKNOWN )
@@ -121,9 +115,9 @@ SvXMLImportContext* TokenContext::CreateChildContext(
 static bool lcl_IsWhiteSpace( sal_Unicode c )
 {
     return c == ' '
-        || c == sal_Unicode( 0x09 )
-        || c == sal_Unicode( 0x0A )
-        || c == sal_Unicode( 0x0D );
+        || c == u'\x0009'
+        || c == u'\x000A'
+        || c == u'\x000D';
 }
 
 void TokenContext::Characters( const OUString& rCharacters )

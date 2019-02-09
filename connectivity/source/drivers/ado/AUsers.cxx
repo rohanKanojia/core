@@ -17,16 +17,16 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "ado/AUsers.hxx"
-#include "ado/AUser.hxx"
-#include "ado/ATable.hxx"
-#include "ado/AConnection.hxx"
+#include <ado/AUsers.hxx>
+#include <ado/AUser.hxx>
+#include <ado/ATable.hxx>
+#include <ado/AConnection.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/sdbc/XResultSet.hpp>
 #include <connectivity/sdbcx/IRefreshable.hxx>
 #include <comphelper/types.hxx>
 #include <connectivity/dbexception.hxx>
-#include "resource/ado_res.hrc"
+#include <strings.hrc>
 
 using namespace comphelper;
 using namespace connectivity;
@@ -42,7 +42,7 @@ sdbcx::ObjectType OUsers::createObject(const OUString& _rName)
     return new OAdoUser(m_pCatalog,isCaseSensitive(),_rName);
 }
 
-void OUsers::impl_refresh() throw(RuntimeException)
+void OUsers::impl_refresh()
 {
     m_aCollection.Refresh();
 }
@@ -55,12 +55,12 @@ Reference< XPropertySet > OUsers::createDescriptor()
 // XAppend
 sdbcx::ObjectType OUsers::appendObject( const OUString& _rForName, const Reference< XPropertySet >& descriptor )
 {
-    OUserExtend* pUser = NULL;
-    if ( !getImplementation( pUser, descriptor ) || pUser == NULL )
+    OUserExtend* pUser = nullptr;
+    if ( !getImplementation( pUser, descriptor ) || pUser == nullptr )
         m_pCatalog->getConnection()->throwGenericSQLException( STR_INVALID_USER_DESCRIPTOR_ERROR,static_cast<XTypeProvider*>(this) );
 
-    ADOUsers* pUsers = (ADOUsers*)m_aCollection;
-    pUsers->Append(OLEVariant(pUser->getImpl()),OLEString(pUser->getPassword()));
+    ADOUsers* pUsers = static_cast<ADOUsers*>(m_aCollection);
+    pUsers->Append(OLEVariant(pUser->getImpl()),OLEString(pUser->getPassword()).asBSTR());
 
     return createObject( _rForName );
 }

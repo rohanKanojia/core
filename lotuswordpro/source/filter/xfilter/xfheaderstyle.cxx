@@ -57,8 +57,8 @@
  * @file
  * Header style,exist in page-master object.
  ************************************************************************/
-#include "xfheaderstyle.hxx"
-#include "xfbgimage.hxx"
+#include <xfilter/xfheaderstyle.hxx>
+#include <xfilter/xfbgimage.hxx>
 
 XFHeaderStyle::XFHeaderStyle(bool isFooter)
 {
@@ -66,16 +66,10 @@ XFHeaderStyle::XFHeaderStyle(bool isFooter)
     m_bDynamicSpace = true;
     m_fHeight = -1;
     m_fMinHeight = -1;
-    m_pBorders = nullptr;
-    m_pShadow = nullptr;
-    m_pBGImage = nullptr;
 }
 
 XFHeaderStyle::~XFHeaderStyle()
 {
-    delete m_pBorders;
-    delete m_pBGImage;
-    delete m_pShadow;
 }
 
 void    XFHeaderStyle::SetMargins(double left, double right, double bottom)
@@ -104,21 +98,19 @@ void    XFHeaderStyle::SetMinHeight(double minHeight)
 
 void    XFHeaderStyle::SetShadow(XFShadow *pShadow)
 {
-    if( m_pShadow && (pShadow != m_pShadow) )
-        delete m_pShadow;
-    m_pShadow = pShadow;
+    if( pShadow == m_pShadow.get() )
+        return;
+    m_pShadow.reset( pShadow );
 }
 
-void    XFHeaderStyle::SetBorders(XFBorders *pBorders)
+void    XFHeaderStyle::SetBorders(std::unique_ptr<XFBorders> pBorders)
 {
-    delete m_pBorders;
-    m_pBorders = pBorders;
+    m_pBorders = std::move(pBorders);
 }
 
-void    XFHeaderStyle::SetBackImage(XFBGImage *image)
+void    XFHeaderStyle::SetBackImage(std::unique_ptr<XFBGImage>& rImage)
 {
-    delete m_pBGImage;
-    m_pBGImage = image;
+    m_pBGImage = std::move(rImage);
 }
 
 void    XFHeaderStyle::SetBackColor(XFColor color)

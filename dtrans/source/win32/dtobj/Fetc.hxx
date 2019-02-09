@@ -22,17 +22,15 @@
 
 #include <sal/types.h>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+#include <objidl.h>
 
 /**********************************************************************
  stl container elements must fulfill the following requirements:
- 1. they need a copy ctor and assignement operator(?)
+ 1. they need a copy ctor and assignment operator(?)
  2. they must be comparable
  because the FORMATETC structure has a pointer to a TARGETDEVICE
  structure we need a simple wrapper class to fulfill these needs
@@ -43,7 +41,7 @@ class CFormatEtc
 public:
     CFormatEtc( );
     explicit CFormatEtc( const FORMATETC& aFormatEtc );
-    CFormatEtc( CLIPFORMAT cf, DWORD tymed = TYMED_HGLOBAL, DVTARGETDEVICE* ptd = NULL, DWORD dwAspect = DVASPECT_CONTENT, LONG lindex = -1 );
+    CFormatEtc( CLIPFORMAT cf, DWORD tymed = TYMED_HGLOBAL, DVTARGETDEVICE* ptd = nullptr, DWORD dwAspect = DVASPECT_CONTENT, LONG lindex = -1 );
     CFormatEtc( const CFormatEtc& theOther );
 
     ~CFormatEtc( );
@@ -69,12 +67,12 @@ public:
 private:
     FORMATETC m_FormatEtc;
 
-    friend sal_Int32 operator==( const CFormatEtc& lhs, const CFormatEtc& rhs );
-    friend sal_Int32 operator!=( const CFormatEtc& lhs, const CFormatEtc& rhs );
+    friend bool operator==( const CFormatEtc& lhs, const CFormatEtc& rhs );
+    friend bool operator!=( const CFormatEtc& lhs, const CFormatEtc& rhs );
 };
 
-sal_Int32 operator==( const CFormatEtc& lhs, const CFormatEtc& rhs );
-sal_Int32 operator!=( const CFormatEtc& lhs, const CFormatEtc& rhs );
+bool operator==( const CFormatEtc& lhs, const CFormatEtc& rhs );
+bool operator!=( const CFormatEtc& lhs, const CFormatEtc& rhs );
 
 #endif
 

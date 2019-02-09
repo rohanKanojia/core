@@ -21,7 +21,7 @@
 
 //************ Class: java.lang.Class
 
-#include "java/lang/Object.hxx"
+#include <java/lang/Object.hxx>
 
 namespace connectivity
 {
@@ -32,7 +32,7 @@ namespace connectivity
         static jclass theClass;
     public:
         virtual jclass getMyClass() const override;
-        virtual ~java_lang_Class();
+        virtual ~java_lang_Class() override;
         // a Constructor, that is needed for when Returning the Object is needed:
         java_lang_Class( JNIEnv * pEnv, jobject myObj ) : java_lang_Object( pEnv, myObj ){}
 

@@ -17,19 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "addrdlg.hxx"
+#include <addrdlg.hxx>
 #include <svx/svxdlg.hxx>
-#include <sfx2/sfx.hrc>
+#include <sfx2/pageids.hxx>
+#include <vcl/layout.hxx>
 
 SwAddrDlg::SwAddrDlg(vcl::Window* pParent, const SfxItemSet& rSet)
     : SfxSingleTabDialog(pParent, rSet)
 {
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "Dialog creation failed!");
     ::CreateTabPage fnCreatePage = pFact->GetTabPageCreatorFunc( RID_SFXPAGE_GENERAL );
     if ( fnCreatePage )
     {
-        SfxTabPage* pPage2 = (*fnCreatePage)(get_content_area(), &rSet);
+        VclPtr<SfxTabPage> pPage2 = (*fnCreatePage)(TabPageParent(get_content_area()), &rSet);
         SetTabPage(pPage2);
     }
 }

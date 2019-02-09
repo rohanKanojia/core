@@ -31,6 +31,7 @@
 
 #include <cppuhelper/supportsservice.hxx>
 
+#include <sal/log.hxx>
 #include <rtl/string.hxx>
 #include <salhelper/thread.hxx>
 #include <vcl/svapp.hxx>
@@ -102,7 +103,7 @@ public:
 private:
     void processQueue();
 
-    DECL_STATIC_LINK_TYPED(MissingPluginInstaller, launchUi, void*, void);
+    DECL_STATIC_LINK(MissingPluginInstaller, launchUi, void*, void);
 
     osl::Mutex mutex_;
     std::set<OString> reported_;
@@ -235,7 +236,7 @@ void MissingPluginInstaller::processQueue() {
 }
 
 
-IMPL_STATIC_LINK_TYPED(MissingPluginInstaller, launchUi, void *, p, void)
+IMPL_STATIC_LINK(MissingPluginInstaller, launchUi, void *, p, void)
 {
     MissingPluginInstallerThread* thread = static_cast<MissingPluginInstallerThread*>(p);
     rtl::Reference<MissingPluginInstallerThread> ref(thread, SAL_NO_ACQUIRE);
@@ -266,7 +267,9 @@ void MissingPluginInstallerThread::execute() {
             details.swap(inst.currentDetails_);
         }
         std::vector<char *> args;
-        for (auto const & i: details) {
+        args.reserve(details.size());
+        for (auto const& i : details)
+        {
             args.push_back(const_cast<char *>(i.getStr()));
         }
         args.push_back(nullptr);
@@ -422,6 +425,7 @@ void Player::processMessage( GstMessage *message )
             if (mbPlayPending)
                 mbPlayPending = ((newstate == GST_STATE_READY) || (newstate == GST_STATE_PAUSED));
         }
+        break;
     default:
         break;
     }
@@ -476,7 +480,7 @@ GstBusSyncReply Player::processSyncMessage( GstMessage *message )
 #endif
         {
             SAL_INFO( "avmedia.gstreamer", AVVERSION << this << " processSyncMessage prepare window id: " <<
-                      GST_MESSAGE_TYPE_NAME( message ) << " " << (int)mnWindowID );
+                      GST_MESSAGE_TYPE_NAME( message ) << " " << static_cast<int>(mnWindowID) );
             if( mpXOverlay )
                 g_object_unref( G_OBJECT ( mpXOverlay ) );
             g_object_set( GST_MESSAGE_SRC( message ), "force-aspect-ratio", FALSE, nullptr );
@@ -495,7 +499,7 @@ GstBusSyncReply Player::processSyncMessage( GstMessage *message )
 
             gst_message_parse_state_changed (message, nullptr, &newstate, &pendingstate);
 
-            SAL_INFO( "avmedia.gstreamer", AVVERSION << this << " state change received, new state " << (int)newstate << " pending " << (int)pendingstate );
+            SAL_INFO( "avmedia.gstreamer", AVVERSION << this << " state change received, new state " << static_cast<int>(newstate) << " pending " << static_cast<int>(pendingstate) );
             if( newstate == GST_STATE_PAUSED &&
                 pendingstate == GST_STATE_VOID_PENDING ) {
 
@@ -613,7 +617,7 @@ void Player::preparePlaybin( const OUString& rURL, GstElement *pSink )
     mpPlaybin = gst_element_factory_make( "playbin", nullptr );
 
     //tdf#96989 on systems with flat-volumes setting the volume directly on the
-    //playbin to 100% results in setting the global volums to 100% of the
+    //playbin to 100% results in setting the global volume to 100% of the
     //maximum. We expect to set as % of the current volume.
     mpVolumeControl = gst_element_factory_make( "volume", nullptr );
     GstElement *pAudioSink = gst_element_factory_make( "autoaudiosink", nullptr );
@@ -683,12 +687,11 @@ bool Player::create( const OUString& rURL )
 
 
 void SAL_CALL Player::start()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
     // set the pipeline state to READY and run the loop
-    if( mbInitialized && nullptr != mpPlaybin )
+    if( mbInitialized && mpPlaybin != nullptr )
     {
         gst_element_set_state( mpPlaybin, GST_STATE_PLAYING );
         mbPlayPending = true;
@@ -697,7 +700,6 @@ void SAL_CALL Player::start()
 
 
 void SAL_CALL Player::stop()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -711,7 +713,6 @@ void SAL_CALL Player::stop()
 
 
 sal_Bool SAL_CALL Player::isPlaying()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -720,7 +721,7 @@ sal_Bool SAL_CALL Player::isPlaying()
     // return whether the pipeline is in PLAYING STATE or not
     if( !mbPlayPending && mbInitialized && mpPlaybin )
     {
-        bRet = GST_STATE_PLAYING == GST_STATE( mpPlaybin );
+        bRet = GST_STATE( mpPlaybin ) == GST_STATE_PLAYING;
     }
 
     SAL_INFO( "avmedia.gstreamer", AVVERSION "isPlaying " << bRet );
@@ -730,7 +731,6 @@ sal_Bool SAL_CALL Player::isPlaying()
 
 
 double SAL_CALL Player::getDuration()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -746,7 +746,6 @@ double SAL_CALL Player::getDuration()
 
 
 void SAL_CALL Player::setMediaTime( double fTime )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -767,7 +766,6 @@ void SAL_CALL Player::setMediaTime( double fTime )
 
 
 double SAL_CALL Player::getMediaTime()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -785,7 +783,6 @@ double SAL_CALL Player::getMediaTime()
 
 
 void SAL_CALL Player::setPlaybackLoop( sal_Bool bSet )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     // TODO check how to do with GST
@@ -794,7 +791,6 @@ void SAL_CALL Player::setPlaybackLoop( sal_Bool bSet )
 
 
 sal_Bool SAL_CALL Player::isPlaybackLoop()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     // TODO check how to do with GST
@@ -803,7 +799,6 @@ sal_Bool SAL_CALL Player::isPlaybackLoop()
 
 
 void SAL_CALL Player::setMute( sal_Bool bSet )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -826,7 +821,6 @@ void SAL_CALL Player::setMute( sal_Bool bSet )
 
 
 sal_Bool SAL_CALL Player::isMute()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -835,7 +829,6 @@ sal_Bool SAL_CALL Player::isMute()
 
 
 void SAL_CALL Player::setVolumeDB( sal_Int16 nVolumeDB )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -852,7 +845,6 @@ void SAL_CALL Player::setVolumeDB( sal_Int16 nVolumeDB )
 
 
 sal_Int16 SAL_CALL Player::getVolumeDB()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -863,7 +855,7 @@ sal_Int16 SAL_CALL Player::getVolumeDB()
 
         g_object_get( G_OBJECT( mpVolumeControl ), "volume", &nGstVolume, nullptr );
 
-        nVolumeDB = (sal_Int16) ( 20.0*log10 ( nGstVolume ) );
+        nVolumeDB = static_cast<sal_Int16>( 20.0*log10 ( nGstVolume ) );
     }
 
     return nVolumeDB;
@@ -871,7 +863,6 @@ sal_Int16 SAL_CALL Player::getVolumeDB()
 
 
 awt::Size SAL_CALL Player::getPreferredPlayerWindowSize()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -899,7 +890,6 @@ awt::Size SAL_CALL Player::getPreferredPlayerWindowSize()
 
 
 uno::Reference< ::media::XPlayerWindow > SAL_CALL Player::createPlayerWindow( const uno::Sequence< uno::Any >& rArguments )
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
 
@@ -933,6 +923,8 @@ uno::Reference< ::media::XPlayerWindow > SAL_CALL Player::createPlayerWindow( co
                 {
                     mbUseGtkSink = true;
                     g_object_get(pVideosink, "widget", &mpGtkWidget, nullptr);
+                    gtk_widget_set_vexpand(mpGtkWidget, true);
+                    gtk_widget_set_hexpand(mpGtkWidget, true);
                     GtkWidget *pParent = static_cast<GtkWidget*>(pEnvData->pWidget);
                     gtk_container_add (GTK_CONTAINER(pParent), mpGtkWidget);
 
@@ -946,7 +938,7 @@ uno::Reference< ::media::XPlayerWindow > SAL_CALL Player::createPlayerWindow( co
                 {
                     mbUseGtkSink = false;
                     mnWindowID = pEnvData->aWindow;
-                    SAL_INFO( "avmedia.gstreamer", AVVERSION "set window id to " << (int)mnWindowID << " XOverlay " << mpXOverlay);
+                    SAL_INFO( "avmedia.gstreamer", AVVERSION "set window id to " << static_cast<int>(mnWindowID) << " XOverlay " << mpXOverlay);
                     gst_element_set_state( mpPlaybin, GST_STATE_PAUSED );
                     if ( mpXOverlay != nullptr )
                         gst_video_overlay_set_window_handle( mpXOverlay, mnWindowID );
@@ -961,7 +953,6 @@ uno::Reference< ::media::XPlayerWindow > SAL_CALL Player::createPlayerWindow( co
 
 
 uno::Reference< media::XFrameGrabber > SAL_CALL Player::createFrameGrabber()
-    throw (uno::RuntimeException, std::exception)
 {
     ::osl::MutexGuard aGuard(m_aMutex);
     FrameGrabber* pFrameGrabber = nullptr;
@@ -976,25 +967,20 @@ uno::Reference< media::XFrameGrabber > SAL_CALL Player::createFrameGrabber()
 
 
 OUString SAL_CALL Player::getImplementationName()
-    throw (uno::RuntimeException, std::exception)
 {
     return OUString( AVMEDIA_GST_PLAYER_IMPLEMENTATIONNAME );
 }
 
 
 sal_Bool SAL_CALL Player::supportsService( const OUString& ServiceName )
-    throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 
 uno::Sequence< OUString > SAL_CALL Player::getSupportedServiceNames()
-    throw (uno::RuntimeException, std::exception)
 {
-    uno::Sequence<OUString> aRet { AVMEDIA_GST_PLAYER_SERVICENAME };
-
-    return aRet;
+    return { AVMEDIA_GST_PLAYER_SERVICENAME };
 }
 
 } // namespace gstreamer

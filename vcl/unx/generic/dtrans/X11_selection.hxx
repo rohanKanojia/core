@@ -31,11 +31,12 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/frame/XDesktop2.hpp>
 #include <osl/thread.h>
-
 #include <osl/conditn.hxx>
+#include <rtl/ref.hxx>
 
 #include <list>
 #include <unordered_map>
+#include <vector>
 
 #include <X11/Xlib.h>
 
@@ -75,14 +76,13 @@ namespace x11 {
         bool                        m_bActive;
         sal_Int8                    m_nDefaultActions;
         ::Window                    m_aTargetWindow;
-        SelectionManager*           m_pSelectionManager;
-        css::uno::Reference< css::datatransfer::dnd::XDragSource >
+        rtl::Reference<SelectionManager>
                                     m_xSelectionManager;
-        ::std::list< css::uno::Reference< css::datatransfer::dnd::XDropTargetListener > >
-                            m_aListeners;
+        ::std::vector< css::uno::Reference< css::datatransfer::dnd::XDropTargetListener > >
+                                    m_aListeners;
 
         DropTarget();
-        virtual ~DropTarget();
+        virtual ~DropTarget() override;
 
         // convenience functions that loop over listeners
         void dragEnter( const css::datatransfer::dnd::DropTargetDragEnterEvent& dtde ) throw();
@@ -91,21 +91,21 @@ namespace x11 {
         void drop( const css::datatransfer::dnd::DropTargetDropEvent& dtde ) throw();
 
         // XInitialization
-        virtual void        SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& args ) throw ( css::uno::Exception, std::exception ) override;
+        virtual void        SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& args ) override;
 
         // XDropTarget
-        virtual void        SAL_CALL addDropTargetListener( const css::uno::Reference< css::datatransfer::dnd::XDropTargetListener >& ) throw(std::exception) override;
-        virtual void        SAL_CALL removeDropTargetListener( const css::uno::Reference< css::datatransfer::dnd::XDropTargetListener >& ) throw(std::exception) override;
-        virtual sal_Bool    SAL_CALL isActive() throw(std::exception) override;
-        virtual void        SAL_CALL setActive( sal_Bool active ) throw(std::exception) override;
-        virtual sal_Int8    SAL_CALL getDefaultActions() throw(std::exception) override;
-        virtual void        SAL_CALL setDefaultActions( sal_Int8 actions ) throw(std::exception) override;
+        virtual void        SAL_CALL addDropTargetListener( const css::uno::Reference< css::datatransfer::dnd::XDropTargetListener >& ) override;
+        virtual void        SAL_CALL removeDropTargetListener( const css::uno::Reference< css::datatransfer::dnd::XDropTargetListener >& ) override;
+        virtual sal_Bool    SAL_CALL isActive() override;
+        virtual void        SAL_CALL setActive( sal_Bool active ) override;
+        virtual sal_Int8    SAL_CALL getDefaultActions() override;
+        virtual void        SAL_CALL setDefaultActions( sal_Int8 actions ) override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(std::exception) override;
-        virtual sal_Bool    SAL_CALL supportsService( const OUString& ServiceName ) throw(std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool    SAL_CALL supportsService( const OUString& ServiceName ) override;
         virtual css::uno::Sequence< OUString >
-                            SAL_CALL getSupportedServiceNames() throw(std::exception) override;
+                            SAL_CALL getSupportedServiceNames() override;
     };
 
     class SelectionManagerHolder :
@@ -120,26 +120,26 @@ namespace x11 {
             m_xRealDragSource;
     public:
         SelectionManagerHolder();
-        virtual ~SelectionManagerHolder();
+        virtual ~SelectionManagerHolder() override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName() throw(std::exception) override;
-        virtual sal_Bool    SAL_CALL supportsService( const OUString& ServiceName ) throw(std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool    SAL_CALL supportsService( const OUString& ServiceName ) override;
         virtual css::uno::Sequence< OUString >
-                            SAL_CALL getSupportedServiceNames() throw(std::exception) override;
+                            SAL_CALL getSupportedServiceNames() override;
 
         // XInitialization
-        virtual void        SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& arguments ) throw( css::uno::Exception, std::exception ) override;
+        virtual void        SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& arguments ) override;
 
         // XDragSource
-        virtual sal_Bool    SAL_CALL isDragImageSupported() throw(std::exception) override;
-        virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) throw(std::exception) override;
+        virtual sal_Bool    SAL_CALL isDragImageSupported() override;
+        virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) override;
         virtual void        SAL_CALL startDrag(
             const css::datatransfer::dnd::DragGestureEvent& trigger,
             sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
             const css::uno::Reference< css::datatransfer::XTransferable >& transferable,
             const css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
-            ) throw(std::exception) override;
+            ) override;
 
     };
 
@@ -152,7 +152,7 @@ namespace x11 {
         >,
         public SelectionAdaptor
     {
-        static std::unordered_map< OUString, SelectionManager*, OUStringHash >& getInstances();
+        static std::unordered_map< OUString, SelectionManager* >& getInstances();
 
         // for INCR type selection transfer
         // INCR protocol is used if the data cannot
@@ -183,7 +183,6 @@ namespace x11 {
 
             State                       m_eState;
             SelectionAdaptor*           m_pAdaptor;
-            Atom                        m_aAtom;
             ::osl::Condition            m_aDataArrived;
             css::uno::Sequence< sal_Int8 > m_aData;
             css::uno::Sequence< css::datatransfer::DataFlavor >
@@ -207,7 +206,6 @@ namespace x11 {
 
             Selection() : m_eState( Inactive ),
                           m_pAdaptor( nullptr ),
-                          m_aAtom( None ),
                           m_aRequestedType( None ),
                           m_nLastTimestamp( 0 ),
                           m_bHaveUTF16( false ),
@@ -235,7 +233,6 @@ namespace x11 {
                     m_pTarget( rEntry.m_pTarget ),
                     m_aRootWindow( rEntry.m_aRootWindow )
                 {}
-            ~DropTargetEntry() {}
 
             DropTarget* operator->() const { return m_pTarget; }
             DropTargetEntry& operator=(const DropTargetEntry& rEntry)
@@ -275,7 +272,6 @@ namespace x11 {
         css::uno::Reference< css::datatransfer::XTransferable >
                                     m_xDropTransferable;
         int                         m_nLastX, m_nLastY;
-        Time                        m_nDropTimestamp;
         // set to true when calling drop()
         // if another XdndEnter is received this shows that
         // someone forgot to call dropComplete - we should reset
@@ -310,7 +306,6 @@ namespace x11 {
         bool                        m_bDropSent;
         time_t                      m_nDropTimeout;
         bool                        m_bWaitingForPrimaryConversion;
-        Time                        m_nDragTimestamp;
 
         // drag cursors
         Cursor                      m_aMoveCursor;
@@ -326,14 +321,12 @@ namespace x11 {
                                     m_aDropTargets;
 
         // some special atoms that are needed often
-        Atom                        m_nCLIPBOARDAtom;
         Atom                        m_nTARGETSAtom;
         Atom                        m_nTIMESTAMPAtom;
         Atom                        m_nTEXTAtom;
         Atom                        m_nINCRAtom;
         Atom                        m_nCOMPOUNDAtom;
         Atom                        m_nMULTIPLEAtom;
-        Atom                        m_nUTF16Atom;
         Atom                        m_nImageBmpAtom;
         Atom                        m_nXdndAware;
         Atom                        m_nXdndEnter;
@@ -349,12 +342,11 @@ namespace x11 {
         Atom                        m_nXdndActionMove;
         Atom                        m_nXdndActionLink;
         Atom                        m_nXdndActionAsk;
-        Atom                        m_nXdndActionPrivate;
 
         // caching for atoms
         std::unordered_map< Atom, OUString >
                                     m_aAtomToString;
-        std::unordered_map< OUString, Atom, OUStringHash >
+        std::unordered_map< OUString, Atom >
                                     m_aStringToAtom;
 
         // the registered selections
@@ -365,24 +357,24 @@ namespace x11 {
                                     m_aIncrementals;
 
         // do not use X11 multithreading capabilities
-        // since this leads to deadlocks in different Xlib implentations
+        // since this leads to deadlocks in different Xlib implementations
         // (XFree as well as Xsun) use an own mutex instead
         ::osl::Mutex                m_aMutex;
         bool                        m_bShutDown;
 
         SelectionManager();
-        virtual ~SelectionManager();
+        virtual ~SelectionManager() override;
 
         SelectionAdaptor* getAdaptor( Atom selection );
         PixmapHolder* getPixmapHolder( Atom selection );
 
         // handle various events
         bool handleSelectionRequest( XSelectionRequestEvent& rRequest );
-        bool handleSendPropertyNotify( XPropertyEvent& rNotify );
-        bool handleReceivePropertyNotify( XPropertyEvent& rNotify );
-        bool handleSelectionNotify( XSelectionEvent& rNotify );
-        bool handleDragEvent( XEvent& rMessage );
-        bool handleDropEvent( XClientMessageEvent& rMessage );
+        bool handleSendPropertyNotify( XPropertyEvent const & rNotify );
+        bool handleReceivePropertyNotify( XPropertyEvent const & rNotify );
+        bool handleSelectionNotify( XSelectionEvent const & rNotify );
+        bool handleDragEvent( XEvent const & rMessage );
+        bool handleDropEvent( XClientMessageEvent const & rMessage );
 
         // dnd helpers
         void sendDragStatus( Atom nDropAction );
@@ -418,7 +410,7 @@ namespace x11 {
 
         // compound text conversion
         OString convertToCompound( const OUString& rText );
-        OUString convertFromCompound( const char* pText, int nLen = -1 );
+        OUString convertFromCompound( const char* pText, int nLen );
 
         sal_Int8 getUserDragAction() const;
         sal_Int32 getSelectionTimeout();
@@ -435,7 +427,7 @@ namespace x11 {
         osl::Mutex& getMutex() { return m_aMutex; }
 
         Atom getAtom( const OUString& rString );
-        const OUString& getString( Atom nAtom );
+        OUString getString( Atom nAtom );
 
         // type conversion
         // note: convertTypeToNative does NOT clear the list, so you can append
@@ -453,33 +445,32 @@ namespace x11 {
         void deregisterDropTarget( ::Window aXLIB_Window );
 
         // for XDropTarget{Drag|Drop}Context
-        void accept( sal_Int8 dragOperation, ::Window aDropXLIB_Window, Time aTimestamp );
-        void reject( ::Window aDropXLIB_Window, Time aTimestamp );
-        void dropComplete( bool success, ::Window aDropXLIB_Window, Time aTimestamp );
+        void accept( sal_Int8 dragOperation, ::Window aDropXLIB_Window );
+        void reject( ::Window aDropXLIB_Window );
+        void dropComplete( bool success, ::Window aDropXLIB_Window );
 
         // for XDragSourceContext
         sal_Int32 getCurrentCursor() { return m_aCurrentCursor;}
-        void setCursor( sal_Int32 cursor, ::Window aDropXLIB_Window, Time aTimestamp );
+        void setCursor( sal_Int32 cursor, ::Window aDropXLIB_Window );
         void transferablesFlavorsChanged();
 
         void shutdown() throw();
 
         // XInitialization
-        virtual void        SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& arguments ) throw( css::uno::Exception, std::exception ) override;
+        virtual void        SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& arguments ) override;
 
         // XEventHandler
-        virtual sal_Bool    SAL_CALL handleEvent(const css::uno::Any& event)
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual sal_Bool    SAL_CALL handleEvent(const css::uno::Any& event) override;
 
         // XDragSource
-        virtual sal_Bool    SAL_CALL isDragImageSupported() throw(std::exception) override;
-        virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) throw(std::exception) override;
+        virtual sal_Bool    SAL_CALL isDragImageSupported() override;
+        virtual sal_Int32   SAL_CALL getDefaultCursor( sal_Int8 dragAction ) override;
         virtual void        SAL_CALL startDrag(
             const css::datatransfer::dnd::DragGestureEvent& trigger,
             sal_Int8 sourceActions, sal_Int32 cursor, sal_Int32 image,
             const css::uno::Reference< css::datatransfer::XTransferable >& transferable,
             const css::uno::Reference< css::datatransfer::dnd::XDragSourceListener >& listener
-            ) throw(std::exception) override;
+            ) override;
 
         // SelectionAdaptor for XdndSelection Drag (we are drag source)
         virtual css::uno::Reference< css::datatransfer::XTransferable > getTransferable() throw() override;
@@ -488,20 +479,18 @@ namespace x11 {
         virtual css::uno::Reference< css::uno::XInterface > getReference() throw() override;
 
         // XEventListener
-        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
         // XTerminateListener
-        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent )
-                throw( css::frame::TerminationVetoException, css::uno::RuntimeException, std::exception ) override;
-        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent )
-                throw( css::uno::RuntimeException, std::exception ) override;
+        virtual void SAL_CALL queryTermination( const css::lang::EventObject& aEvent ) override;
+        virtual void SAL_CALL notifyTermination( const css::lang::EventObject& aEvent ) override;
     };
 
-    css::uno::Sequence< OUString > SAL_CALL Xdnd_getSupportedServiceNames();
+    css::uno::Sequence< OUString > Xdnd_getSupportedServiceNames();
     css::uno::Reference< css::uno::XInterface > SAL_CALL Xdnd_createInstance(
         const css::uno::Reference< css::lang::XMultiServiceFactory > & xMultiServiceFactory);
 
-    css::uno::Sequence< OUString > SAL_CALL Xdnd_dropTarget_getSupportedServiceNames();
+    css::uno::Sequence< OUString > Xdnd_dropTarget_getSupportedServiceNames();
     css::uno::Reference< css::uno::XInterface > SAL_CALL Xdnd_dropTarget_createInstance(
         const css::uno::Reference< css::lang::XMultiServiceFactory > & xMultiServiceFactory);
 

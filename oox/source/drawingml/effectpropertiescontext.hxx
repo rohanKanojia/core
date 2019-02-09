@@ -17,21 +17,20 @@ namespace oox { namespace drawingml {
 struct EffectProperties;
 struct Effect;
 
-class EffectPropertiesContext : public ::oox::core::ContextHandler2
+class EffectPropertiesContext final : public ::oox::core::ContextHandler2
 {
 public:
-    EffectPropertiesContext( ::oox::core::ContextHandler2Helper& rParent,
+    EffectPropertiesContext( ::oox::core::ContextHandler2Helper const & rParent,
             EffectProperties& rEffectProperties ) throw();
-    virtual ~EffectPropertiesContext();
+    virtual ~EffectPropertiesContext() override;
 
     virtual ::oox::core::ContextHandlerRef
         onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 
-protected:
-    EffectProperties& mrEffectProperties;
-
 private:
     static void saveUnsupportedAttribs( Effect& rEffect, const AttributeList& rAttribs );
+
+    EffectProperties& mrEffectProperties;
 };
 
 } }

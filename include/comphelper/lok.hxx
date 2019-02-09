@@ -11,6 +11,9 @@
 #define INCLUDED_COMPHELPER_LOK_HXX
 
 #include <comphelper/comphelperdllapi.h>
+#include <rtl/ustring.hxx>
+
+class LanguageTag;
 
 // Interface between the LibreOfficeKit implementation called by LibreOfficeKit clients and other
 // LibreOffice code.
@@ -36,10 +39,51 @@ COMPHELPER_DLLPUBLIC void setStatusIndicatorCallback(void (*callback)(void *data
 // Check whether the code is running as invoked through LibreOfficeKit.
 COMPHELPER_DLLPUBLIC bool isActive();
 
-/// Check whether clients register a callback for each view.
-COMPHELPER_DLLPUBLIC bool isViewCallback();
-/// Set whether clients register a callback for each view.
-COMPHELPER_DLLPUBLIC void setViewCallback(bool bViewCallback);
+/// Shift the coordinates before rendering each bitmap.
+/// Used by Calc to render each tile separately.
+/// This should be unnecessary (and removed) once Calc
+/// moves to using 100MM Unit.
+COMPHELPER_DLLPUBLIC void setLocalRendering(bool bLocalRendering = true);
+COMPHELPER_DLLPUBLIC bool isLocalRendering();
+
+/// Check whether clients want a part number in an invalidation payload.
+COMPHELPER_DLLPUBLIC bool isPartInInvalidation();
+/// Set whether clients want a part number in an invalidation payload.
+COMPHELPER_DLLPUBLIC void setPartInInvalidation(bool bPartInInvalidation);
+
+/// Check if we are doing tiled painting.
+COMPHELPER_DLLPUBLIC bool isTiledPainting();
+/// Set if we are doing tiled painting.
+COMPHELPER_DLLPUBLIC void setTiledPainting(bool bTiledPainting);
+/// Check if we are painting the dialog.
+COMPHELPER_DLLPUBLIC bool isDialogPainting();
+/// Set if we are painting the dialog.
+COMPHELPER_DLLPUBLIC void setDialogPainting(bool bDialogPainting);
+/// Set the DPI scale for rendering for hi-dpi displays.  Used also for zoom in Calc.
+COMPHELPER_DLLPUBLIC void setDPIScale(double fDPIScale);
+/// Get the DPI scale for rendering for hi-dpi displays.  Used also for zoom in Calc.
+COMPHELPER_DLLPUBLIC double getDPIScale();
+/// Set if we want no annotations rendering
+COMPHELPER_DLLPUBLIC void setTiledAnnotations(bool bTiledAnnotations);
+/// Check if annotations rendering is turned off
+COMPHELPER_DLLPUBLIC bool isTiledAnnotations();
+/// Set if we want range based header data
+COMPHELPER_DLLPUBLIC void setRangeHeaders(bool bTiledAnnotations);
+/// Check if range based header data is enabled
+COMPHELPER_DLLPUBLIC bool isRangeHeaders();
+
+
+/// Check whether clients want viewId in visible cursor invalidation payload.
+COMPHELPER_DLLPUBLIC bool isViewIdForVisCursorInvalidation();
+/// Set whether clients want viewId in visible cursor invalidation payload.
+COMPHELPER_DLLPUBLIC void setViewIdForVisCursorInvalidation(bool bViewIdForVisCursorInvalidation);
+
+/// Update the current LOK's language.
+COMPHELPER_DLLPUBLIC void setLanguageTag(const LanguageTag& languageTag);
+/// Get the current LOK's language.
+COMPHELPER_DLLPUBLIC const LanguageTag& getLanguageTag();
+/// If the language name should be used for this LOK instance.
+COMPHELPER_DLLPUBLIC bool isWhitelistedLanguage(const OUString& lang);
 
 // Status indicator handling. Even if in theory there could be several status indicators active at
 // the same time, in practice there is only one at a time, so we don't handle any identification of

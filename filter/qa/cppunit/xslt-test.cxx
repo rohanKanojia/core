@@ -7,7 +7,11 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <sal/config.h>
+
+#include <condition_variable>
 #include <limits>
+#include <mutex>
 
 #include <cppunit/TestAssert.h>
 #include <cppunit/TestFixture.h>
@@ -15,11 +19,11 @@
 #include <cppunit/plugin/TestPlugIn.h>
 
 #include <sal/types.h>
+#include <sal/log.hxx>
 
 #include <rtl/ref.hxx>
 
 #include <osl/file.hxx>
-#include <osl/thread.h>
 
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/io/XStreamListener.hpp>
@@ -51,21 +55,36 @@ public:
     CPPUNIT_TEST_SUITE_END();
 };
 
-struct Listener : public ::cppu::WeakImplHelper<io::XStreamListener>
+class Listener : public ::cppu::WeakImplHelper<io::XStreamListener>
 {
-    bool m_bDone;
-
+public:
     Listener() : m_bDone(false) {}
 
+    void wait() {
+        std::unique_lock<std::mutex> g(m_mutex);
+        m_cond.wait(g, [this]() { return m_bDone; });
+    }
+
+private:
+    std::mutex m_mutex;
+    std::condition_variable m_cond;
+    bool m_bDone;
+
     virtual void SAL_CALL disposing(const lang::EventObject&) throw() override {}
-    virtual void SAL_CALL started() throw() override { m_bDone = false; }
-    virtual void SAL_CALL closed() throw() override { m_bDone = true; }
-    virtual void SAL_CALL terminated() throw() override { m_bDone = true; }
-    virtual void SAL_CALL error(const uno::Any& e) throw(uno::RuntimeException, std::exception) override
+    virtual void SAL_CALL started() throw() override {}
+    virtual void SAL_CALL closed() throw() override { notifyDone(); }
+    virtual void SAL_CALL terminated() throw() override { notifyDone(); }
+    virtual void SAL_CALL error(const uno::Any& e) override
     {
-        m_bDone = true; // set on error too, otherwise main thread waits forever
-        SAL_WARN("filter.xslt", "exception " << e);
+        notifyDone(); // set on error too, otherwise main thread waits forever
+        SAL_WARN("filter.xslt", e);
         CPPUNIT_FAIL("exception while in XSLT");
+    }
+
+    void notifyDone() {
+        std::unique_lock<std::mutex> g(m_mutex);
+        m_bDone = true;
+        m_cond.notify_all();
     }
 };
 
@@ -76,7 +95,7 @@ void XsltFilterTest::testXsltCopyNew()
     oslFileHandle tempFile;
     OUString tempURL;
     osl::File::RC rc = osl::File::createTempFile(nullptr, &tempFile, &tempURL);
-    CPPUNIT_ASSERT(osl::FileBase::E_None == rc);
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None, rc);
     osl_closeFile(tempFile); // close it so xSFA can open it on WNT
 
     OUString source(
@@ -109,10 +128,7 @@ void XsltFilterTest::testXsltCopyNew()
 
     xXslt->start();
 
-    TimeValue delay;
-    delay.Seconds = 0;
-    delay.Nanosec = 1000000;
-    while (!xListener->m_bDone) { osl_waitThread(&delay); }
+    xListener->wait();
 
     xIn->closeInput();
     xOut->closeOutput();
@@ -133,7 +149,7 @@ void XsltFilterTest::testXsltCopyOld()
     oslFileHandle tempFile;
     OUString tempURL;
     osl::File::RC rc = osl::File::createTempFile(nullptr, &tempFile, &tempURL);
-    CPPUNIT_ASSERT(osl::FileBase::E_None == rc);
+    CPPUNIT_ASSERT_EQUAL(osl::FileBase::E_None, rc);
     osl_closeFile(tempFile); // close it so xSFA can open it on WNT
 
     OUString source(
@@ -171,10 +187,7 @@ void XsltFilterTest::testXsltCopyOld()
 
     xXslt->start();
 
-    TimeValue delay;
-    delay.Seconds = 0;
-    delay.Nanosec = 1000000;
-    while (!xListener->m_bDone) { osl_waitThread(&delay); }
+    xListener->wait();
 
     xIn->closeInput();
     xOut->closeOutput();

@@ -6,7 +6,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
-#include <LatentStyleHandler.hxx>
+#include "LatentStyleHandler.hxx"
 #include <ooxml/resourceids.hxx>
 
 namespace writerfilter
@@ -21,15 +21,13 @@ LatentStyleHandler::LatentStyleHandler() :
 {
 }
 
-LatentStyleHandler::~LatentStyleHandler()
-{
-}
+LatentStyleHandler::~LatentStyleHandler() = default;
 
-void LatentStyleHandler::lcl_attribute(Id rName, Value& rVal)
+void LatentStyleHandler::lcl_attribute(Id nId, Value& rVal)
 {
     beans::PropertyValue aValue;
     bool bFound = true;
-    switch (rName)
+    switch (nId)
     {
     case NS_ooxml::LN_CT_LsdException_name:
         aValue.Name = "name";
@@ -58,7 +56,7 @@ void LatentStyleHandler::lcl_attribute(Id rName, Value& rVal)
     }
     if (bFound)
     {
-        aValue.Value = uno::makeAny(rVal.getString());
+        aValue.Value <<= rVal.getString();
         m_aAttributes.push_back(aValue);
     }
 }
@@ -68,7 +66,7 @@ void LatentStyleHandler::lcl_sprm(Sprm& /*rSprm*/)
 {
 }
 
-std::vector<beans::PropertyValue> LatentStyleHandler::getAttributes() const
+const std::vector<beans::PropertyValue>& LatentStyleHandler::getAttributes() const
 {
     return m_aAttributes;
 }

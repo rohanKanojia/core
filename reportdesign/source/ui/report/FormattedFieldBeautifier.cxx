@@ -21,7 +21,6 @@
 #include <FormattedFieldBeautifier.hxx>
 
 #include <com/sun/star/report/XFormattedField.hpp>
-#include <com/sun/star/report/XImageControl.hpp>
 #include <com/sun/star/awt/XVclWindowPeer.hpp>
 
 #include <RptObject.hxx>
@@ -30,7 +29,7 @@
 #include <ViewsWindow.hxx>
 #include <ReportSection.hxx>
 #include <ReportController.hxx>
-#include <uistrings.hrc>
+#include <strings.hxx>
 #include <reportformula.hxx>
 #include <toolkit/helper/property.hxx>
 
@@ -49,14 +48,14 @@ namespace rptui
 
     FormattedFieldBeautifier::FormattedFieldBeautifier(const OReportController& _aController)
         :m_rReportController(_aController)
-        ,m_nTextColor(-1)
+        ,m_nTextColor(0xffffffff)
     {
     }
 
 
-    sal_Int32 FormattedFieldBeautifier::getTextColor()
+    Color FormattedFieldBeautifier::getTextColor()
     {
-        if (m_nTextColor == -1)
+        if (m_nTextColor == Color(0xffffffff))
         {
             svtools::ExtendedColorConfig aConfig;
             m_nTextColor = aConfig.GetColorValue(CFG_REPORTDESIGNER, DBTEXTBOXBOUNDCONTENT).getColor();
@@ -87,7 +86,7 @@ namespace rptui
                     bool bSet = true;
                     if ( aFormula.getType() == ReportFormula::Field )
                     {
-                        const OUString sColumnName = aFormula.getFieldName();
+                        const OUString& sColumnName = aFormula.getFieldName();
                         OUString sLabel = m_rReportController.getColumnLabel_throw(sColumnName);
                         if ( !sLabel.isEmpty() )
                         {
@@ -101,14 +100,13 @@ namespace rptui
                     if ( bSet )
                         sDataField = aFormula.getEqualUndecoratedContent();
                 }
-            }
 
-            if ( xControlModel.is() )
                 setPlaceholderText( getVclWindowPeer( xControlModel.get() ), sDataField );
+            }
         }
         catch (const uno::Exception &)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
 
@@ -154,7 +152,7 @@ namespace rptui
     }
 
 
-    uno::Reference<awt::XVclWindowPeer> FormattedFieldBeautifier::getVclWindowPeer(const uno::Reference< report::XReportComponent >& _xComponent) throw(uno::RuntimeException)
+    uno::Reference<awt::XVclWindowPeer> FormattedFieldBeautifier::getVclWindowPeer(const uno::Reference< report::XReportComponent >& _xComponent)
     {
         uno::Reference<awt::XVclWindowPeer> xVclWindowPeer;
 

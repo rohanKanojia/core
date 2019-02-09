@@ -18,17 +18,16 @@
  */
 
 #include "DrawCommandDispatch.hxx"
-#include "DrawCommandDispatch.hrc"
-#include "ChartController.hxx"
-#include "DrawViewWrapper.hxx"
-#include "chartview/DrawModelWrapper.hxx"
-#include "macros.hxx"
+#include "DrawCommandDispatch.h"
+#include <ChartController.hxx>
+#include <DrawViewWrapper.hxx>
+#include <chartview/DrawModelWrapper.hxx>
 
-#include <osl/mutex.hxx>
+#include <com/sun/star/frame/CommandGroup.hpp>
 #include <vcl/svapp.hxx>
 #include <svl/itempool.hxx>
 #include <editeng/adjustitem.hxx>
-#include <svx/dialogs.hrc>
+#include <svx/strings.hrc>
 #include <svx/dialmgr.hxx>
 #include <svx/fmmodel.hxx>
 #include <svx/gallery.hxx>
@@ -43,27 +42,12 @@
 #include <svx/xtable.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
 
-#include <functional>
-
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::frame;
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
 
-namespace
-{
-
-    // comparing two PropertyValue instances
-    struct PropertyValueCompare : public ::std::binary_function< beans::PropertyValue, OUString, bool >
-    {
-        bool operator() ( const beans::PropertyValue& rPropValue, const OUString& rName ) const
-        {
-            return rPropValue.Name.equals( rName );
-        }
-    };
-
-} // anonymous namespace
 
 namespace chart
 {
@@ -79,11 +63,6 @@ DrawCommandDispatch::~DrawCommandDispatch()
 {
 }
 
-void DrawCommandDispatch::initialize()
-{
-    FeatureCommandDispatchBase::initialize();
-}
-
 bool DrawCommandDispatch::isFeatureSupported( const OUString& rCommandURL )
 {
     sal_uInt16 nFeatureId = 0;
@@ -92,17 +71,17 @@ bool DrawCommandDispatch::isFeatureSupported( const OUString& rCommandURL )
     return parseCommandURL( rCommandURL, &nFeatureId, &aBaseCommand, &aCustomShapeType );
 }
 
-::basegfx::B2DPolyPolygon getPolygon( sal_uInt16 nResId, SdrModel& rModel )
+static ::basegfx::B2DPolyPolygon getPolygon(const char* pResId, const SdrModel& rModel)
 {
     ::basegfx::B2DPolyPolygon aReturn;
     XLineEndListRef pLineEndList = rModel.GetLineEndList();
     if ( pLineEndList.is() )
     {
-        OUString aName( SVX_RESSTR( nResId ) );
+        OUString aName(SvxResId(pResId));
         long nCount = pLineEndList->Count();
         for ( long nIndex = 0; nIndex < nCount; ++nIndex )
         {
-            XLineEndEntry* pEntry = pLineEndList->GetLineEnd( nIndex );
+            const XLineEndEntry* pEntry = pLineEndList->GetLineEnd(nIndex);
             if ( pEntry->GetName() == aName )
             {
                 aReturn = pEntry->GetLineEnd();
@@ -124,7 +103,7 @@ void DrawCommandDispatch::setAttributes( SdrObject* pObj )
             bool bAttributesAppliedFromGallery = false;
             if ( GalleryExplorer::GetSdrObjCount( GALLERY_THEME_POWERPOINT ) )
             {
-                ::std::vector< OUString > aObjList;
+                std::vector< OUString > aObjList;
                 if ( GalleryExplorer::FillObjListTitle( GALLERY_THEME_POWERPOINT, aObjList ) )
                 {
                     for ( size_t i = 0; i < aObjList.size(); ++i )
@@ -132,28 +111,31 @@ void DrawCommandDispatch::setAttributes( SdrObject* pObj )
                         if ( aObjList[ i ].equalsIgnoreAsciiCase( m_aCustomShapeType ) )
                         {
                             FmFormModel aModel;
-                            SfxItemPool& rPool = aModel.GetItemPool();
+                            SfxItemPool& rPool(aModel.GetItemPool());
                             rPool.FreezeIdRanges();
+
                             if ( GalleryExplorer::GetSdrObj( GALLERY_THEME_POWERPOINT, i, &aModel ) )
                             {
                                 const SdrObject* pSourceObj = aModel.GetPage( 0 )->GetObj( 0 );
                                 if ( pSourceObj )
                                 {
                                     const SfxItemSet& rSource = pSourceObj->GetMergedItemSet();
-                                    SfxItemSet aDest( pObj->GetModel()->GetItemPool(),          // ranges from SdrAttrObj
-                                        SDRATTR_START, SDRATTR_SHADOW_LAST,
-                                        SDRATTR_MISC_FIRST, SDRATTR_MISC_LAST,
-                                        SDRATTR_TEXTDIRECTION, SDRATTR_TEXTDIRECTION,
-                                        // Graphic Attributes
-                                        SDRATTR_GRAF_FIRST, SDRATTR_GRAF_LAST,
-                                        // 3d Properties
-                                        SDRATTR_3D_FIRST, SDRATTR_3D_LAST,
-                                        // CustomShape properties
-                                        SDRATTR_CUSTOMSHAPE_FIRST, SDRATTR_CUSTOMSHAPE_LAST,
-                                        // range from SdrTextObj
-                                        EE_ITEMS_START, EE_ITEMS_END,
-                                        // end
-                                        0, 0);
+                                    SfxItemSet aDest(
+                                        pObj->getSdrModelFromSdrObject().GetItemPool(),
+                                        svl::Items<
+                                            // Ranges from SdrAttrObj:
+                                            SDRATTR_START, SDRATTR_SHADOW_LAST,
+                                            SDRATTR_MISC_FIRST,
+                                                SDRATTR_MISC_LAST,
+                                            SDRATTR_TEXTDIRECTION,
+                                                SDRATTR_TEXTDIRECTION,
+                                            // Graphic attributes, 3D
+                                            // properties, CustomShape
+                                            // properties:
+                                            SDRATTR_GRAF_FIRST,
+                                                SDRATTR_CUSTOMSHAPE_LAST,
+                                            // Range from SdrTextObj:
+                                            EE_ITEMS_START, EE_ITEMS_END>{});
                                     aDest.Set( rSource );
                                     pObj->SetMergedItemSet( aDest );
                                     sal_Int32 nAngle = pSourceObj->GetRotateAngle();
@@ -172,7 +154,7 @@ void DrawCommandDispatch::setAttributes( SdrObject* pObj )
             }
             if ( !bAttributesAppliedFromGallery )
             {
-                pObj->SetMergedItem( SvxAdjustItem( SVX_ADJUST_CENTER, 0 ) );
+                pObj->SetMergedItem( SvxAdjustItem( SvxAdjust::Center, 0 ) );
                 pObj->SetMergedItem( SdrTextVertAdjustItem( SDRTEXTVERTADJUST_CENTER ) );
                 pObj->SetMergedItem( SdrTextHorzAdjustItem( SDRTEXTHORZADJUST_BLOCK ) );
                 pObj->SetMergedItem( makeSdrTextAutoGrowHeightItem( false ) );
@@ -213,14 +195,14 @@ void DrawCommandDispatch::setLineEnds( SfxItemSet& rAttr )
             long nWidth = 300; // (1/100th mm)
             if ( aSet.GetItemState( XATTR_LINEWIDTH ) != SfxItemState::DONTCARE )
             {
-                long nValue = static_cast<const XLineWidthItem&>( aSet.Get( XATTR_LINEWIDTH ) ).GetValue();
+                long nValue = aSet.Get( XATTR_LINEWIDTH ).GetValue();
                 if ( nValue > 0 )
                 {
                     nWidth = nValue * 3;
                 }
             }
 
-            rAttr.Put( XLineEndItem( SVX_RESSTR( RID_SVXSTR_ARROW ), aArrow ) );
+            rAttr.Put( XLineEndItem( SvxResId( RID_SVXSTR_ARROW ), aArrow ) );
             rAttr.Put( XLineEndWidthItem( nWidth ) );
         }
     }
@@ -233,7 +215,6 @@ void DrawCommandDispatch::disposing()
 
 // XEventListener
 void DrawCommandDispatch::disposing( const lang::EventObject& /* Source */ )
-    throw (uno::RuntimeException, std::exception)
 {
 }
 
@@ -283,8 +264,6 @@ FeatureState DrawCommandDispatch::getState( const OUString& rCommand )
 
 void DrawCommandDispatch::execute( const OUString& rCommand, const Sequence< beans::PropertyValue>& rArgs )
 {
-    (void)rArgs;
-
     ChartDrawMode eDrawMode = CHARTDRAW_SELECT;
     SdrObjKind eKind = OBJ_NONE;
 
@@ -378,10 +357,11 @@ void DrawCommandDispatch::execute( const OUString& rCommand, const Sequence< bea
                 const OUString sKeyModifier( "KeyModifier" );
                 const beans::PropertyValue* pIter = rArgs.getConstArray();
                 const beans::PropertyValue* pEnd  = pIter + rArgs.getLength();
-                const beans::PropertyValue* pKeyModifier = ::std::find_if(
-                    pIter, pEnd, ::std::bind2nd( PropertyValueCompare(), std::cref( sKeyModifier ) ) );
+                const beans::PropertyValue* pKeyModifier = std::find_if(pIter, pEnd,
+                                                                [&sKeyModifier](const beans::PropertyValue& lhs)
+                                                                {return lhs.Name == sKeyModifier;} );
                 sal_Int16 nKeyModifier = 0;
-                if ( pKeyModifier != pEnd && pKeyModifier && ( pKeyModifier->Value >>= nKeyModifier ) && nKeyModifier == KEY_MOD1 )
+                if ( pKeyModifier != pEnd && ( pKeyModifier->Value >>= nKeyModifier ) && nKeyModifier == KEY_MOD1 )
                 {
                     if ( eDrawMode == CHARTDRAW_INSERT )
                     {
@@ -390,12 +370,7 @@ void DrawCommandDispatch::execute( const OUString& rCommand, const Sequence< bea
                         {
                             SdrPageView* pPageView = pDrawViewWrapper->GetSdrPageView();
                             pDrawViewWrapper->InsertObjectAtView( pObj, *pPageView );
-                            Reference< drawing::XShape > xShape( pObj->getUnoShape(), uno::UNO_QUERY );
-                            if ( xShape.is() )
-                            {
-                                m_pChartController->m_aSelection.setSelection( xShape );
-                                m_pChartController->m_aSelection.applySelection( pDrawViewWrapper );
-                            }
+                            m_pChartController->SetAndApplySelection(Reference<drawing::XShape>(pObj->getUnoShape(), uno::UNO_QUERY));
                             if ( nFeatureId == COMMAND_ID_DRAW_TEXT )
                             {
                                 m_pChartController->StartTextEdit();
@@ -448,18 +423,20 @@ SdrObject* DrawCommandDispatch::createDefaultObject( const sal_uInt16 nID )
         if ( pPage )
         {
             SolarMutexGuard aGuard;
-            pObj = SdrObjFactory::MakeNewObject( pDrawViewWrapper->GetCurrentObjInventor(),
-                pDrawViewWrapper->GetCurrentObjIdentifier(), pPage );
+
+            pObj = SdrObjFactory::MakeNewObject(
+                pDrawModelWrapper->getSdrModel(),
+                pDrawViewWrapper->GetCurrentObjInventor(),
+                pDrawViewWrapper->GetCurrentObjIdentifier());
+
             if ( pObj )
             {
-                long nDefaultObjectSizeWidth = 4000;
-                long nDefaultObjectSizeHeight = 2500;
-                Size aObjectSize( nDefaultObjectSizeWidth, nDefaultObjectSizeHeight );
-                Rectangle aPageRect( Rectangle( Point( 0, 0 ), pPage->GetSize() ) );
+                Size aObjectSize( 4000, 2500 );
+                tools::Rectangle aPageRect( tools::Rectangle( Point( 0, 0 ), pPage->GetSize() ) );
                 Point aObjectPos = aPageRect.Center();
-                aObjectPos.X() -= aObjectSize.Width() / 2;
-                aObjectPos.Y() -= aObjectSize.Height() / 2;
-                Rectangle aRect( aObjectPos, aObjectSize );
+                aObjectPos.AdjustX( -(aObjectSize.Width() / 2) );
+                aObjectPos.AdjustY( -(aObjectSize.Height() / 2) );
+                tools::Rectangle aRect( aObjectPos, aObjectSize );
 
                 switch ( nID )
                 {
@@ -530,7 +507,7 @@ SdrObject* DrawCommandDispatch::createDefaultObject( const sal_uInt16 nID )
                         {
                             if ( dynamic_cast<const SdrCaptionObj*>( pObj) !=  nullptr )
                             {
-                                bool bIsVertical( COMMAND_ID_DRAW_CAPTION_VERTICAL == nID );
+                                bool bIsVertical( nID == COMMAND_ID_DRAW_CAPTION_VERTICAL );
                                 SdrTextObj* pTextObj = dynamic_cast< SdrTextObj* >( pObj );
                                 if ( pTextObj )
                                 {

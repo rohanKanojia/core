@@ -23,6 +23,7 @@
 #include <svl/svldllapi.h>
 #include <com/sun/star/uno/Reference.h>
 #include <tools/stream.hxx>
+#include <memory>
 
 namespace com { namespace sun { namespace star { namespace io {
     class XInputStream;
@@ -36,14 +37,14 @@ class SVL_DLLPUBLIC SvInputStream: public SvStream
 {
     css::uno::Reference< css::io::XInputStream >   m_xStream;
     css::uno::Reference< css::io::XSeekable >      m_xSeekable;
-    SvDataPipe_Impl *                              m_pPipe;
+    std::unique_ptr<SvDataPipe_Impl>               m_pPipe;
     sal_uInt64                                     m_nSeekedFrom;
 
     SVL_DLLPRIVATE bool open();
 
-    SVL_DLLPRIVATE virtual sal_uLong GetData(void * pData, sal_uLong nSize) override;
+    SVL_DLLPRIVATE virtual std::size_t GetData(void * pData, std::size_t nSize) override;
 
-    SVL_DLLPRIVATE virtual sal_uLong PutData(void const *, sal_uLong) override;
+    SVL_DLLPRIVATE virtual std::size_t PutData(void const *, std::size_t) override;
 
     SVL_DLLPRIVATE virtual sal_uInt64 SeekPos(sal_uInt64 nPos) override;
 
@@ -54,7 +55,7 @@ class SVL_DLLPUBLIC SvInputStream: public SvStream
 public:
     SvInputStream( css::uno::Reference< css::io::XInputStream > const & rTheStream );
 
-    virtual ~SvInputStream();
+    virtual ~SvInputStream() override;
 };
 
 #endif // INCLUDED_SVL_INSTRM_HXX

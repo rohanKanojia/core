@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawdoc.hxx"
-#include "unoaprms.hxx"
-#include "anminfo.hxx"
+#include <drawdoc.hxx>
+#include <unoaprms.hxx>
+#include <anminfo.hxx>
 
 
 void SdAnimationPrmsUndoAction::Undo()
@@ -27,10 +27,10 @@ void SdAnimationPrmsUndoAction::Undo()
     // no new info created: restore data
     if (!bInfoCreated)
     {
-        SdDrawDocument* pDoc   = static_cast<SdDrawDocument*>(pObject->GetModel());
+        SdDrawDocument* pDoc(dynamic_cast< SdDrawDocument* >(&pObject->getSdrModelFromSdrObject()));
         if( pDoc )
         {
-            SdAnimationInfo* pInfo = pDoc->GetAnimationInfo( pObject );
+            SdAnimationInfo* pInfo = SdDrawDocument::GetAnimationInfo( pObject );
 
             pInfo->mbActive     = bOldActive;
             pInfo->meEffect      = eOldEffect;
@@ -45,7 +45,6 @@ void SdAnimationPrmsUndoAction::Undo()
             pInfo->meClickAction = eOldClickAction;
             pInfo->SetBookmark( aOldBookmark );
             pInfo->mnVerb        = nOldVerb;
-            pInfo->mnPresOrder   = nOldPresOrder;
 
             pInfo->meSecondEffect    = eOldSecondEffect;
             pInfo->meSecondSpeed     = eOldSecondSpeed;
@@ -82,7 +81,6 @@ void SdAnimationPrmsUndoAction::Redo()
     pInfo->meClickAction = eNewClickAction;
     pInfo->SetBookmark( aNewBookmark );
     pInfo->mnVerb        = nNewVerb;
-    pInfo->mnPresOrder   = nNewPresOrder;
 
     pInfo->meSecondEffect    = eNewSecondEffect;
     pInfo->meSecondSpeed     = eNewSecondSpeed;

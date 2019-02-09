@@ -17,8 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/text/XTextField.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
 #include <textapi.hxx>
@@ -26,8 +24,15 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/editeng.hxx>
 #include <editeng/outlobj.hxx>
-#include "Outliner.hxx"
+#include <editeng/unoforou.hxx>
+#include <editeng/unoprnms.hxx>
+#include <editeng/unoipset.hxx>
+#include <Outliner.hxx>
 #include <svx/svdpool.hxx>
+#include <svx/svdundo.hxx>
+
+namespace com { namespace sun { namespace star { namespace container { class XNameContainer; } } } }
+namespace com { namespace sun { namespace star { namespace text { class XTextField; } } } }
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::text;
@@ -40,29 +45,21 @@ class UndoTextAPIChanged : public SdrUndoAction
 {
 public:
     UndoTextAPIChanged( SdrModel& rModel, TextApiObject* pTextObj );
-    virtual ~UndoTextAPIChanged();
 
     virtual void Undo() override;
     virtual void Redo() override;
 
 protected:
-    OutlinerParaObject* mpOldText;
-    OutlinerParaObject* mpNewText;
+    std::unique_ptr<OutlinerParaObject> mpOldText;
+    std::unique_ptr<OutlinerParaObject> mpNewText;
     rtl::Reference< TextApiObject > mxTextObj;
 };
 
 UndoTextAPIChanged::UndoTextAPIChanged(SdrModel& rModel, TextApiObject* pTextObj )
 : SdrUndoAction( rModel )
 , mpOldText( pTextObj->CreateText() )
-, mpNewText( nullptr )
 , mxTextObj( pTextObj )
 {
-}
-
-UndoTextAPIChanged::~UndoTextAPIChanged()
-{
-    delete mpOldText;
-    delete mpNewText;
 }
 
 void UndoTextAPIChanged::Undo()
@@ -93,7 +90,7 @@ class TextAPIEditSource : public SvxEditSource
     // refcounted
     std::shared_ptr<TextAPIEditSource_Impl> m_xImpl;
 
-    virtual SvxEditSource*      Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual void                UpdateData() override;
     explicit            TextAPIEditSource( const TextAPIEditSource& rSource );
@@ -102,13 +99,13 @@ public:
     explicit            TextAPIEditSource(SdDrawDocument* pDoc);
 
     void                Dispose();
-    void                SetText( OutlinerParaObject& rText );
-    OutlinerParaObject* CreateText();
+    void                SetText( OutlinerParaObject const & rText );
+    std::unique_ptr<OutlinerParaObject> CreateText();
     OUString            GetText();
     SdDrawDocument*     GetDoc() { return m_xImpl->mpDoc; }
 };
 
-const SvxItemPropertySet* ImplGetSdTextPortionPropertyMap()
+static const SvxItemPropertySet* ImplGetSdTextPortionPropertyMap()
 {
     static const SfxItemPropertyMapEntry aSdTextPortionPropertyEntries[] =
     {
@@ -127,9 +124,9 @@ const SvxItemPropertySet* ImplGetSdTextPortionPropertyMap()
     return &aSdTextPortionPropertyMap;
 }
 
-TextApiObject::TextApiObject( TextAPIEditSource* pEditSource )
-: SvxUnoText( pEditSource, ImplGetSdTextPortionPropertyMap(), Reference < XText >() )
-, mpSource(pEditSource)
+TextApiObject::TextApiObject( std::unique_ptr<TextAPIEditSource> pEditSource )
+: SvxUnoText( pEditSource.get(), ImplGetSdTextPortionPropertyMap(), Reference < XText >() )
+, mpSource(std::move(pEditSource))
 {
 }
 
@@ -140,31 +137,30 @@ TextApiObject::~TextApiObject() throw()
 
 rtl::Reference< TextApiObject > TextApiObject::create( SdDrawDocument* pDoc )
 {
-    rtl::Reference< TextApiObject > xRet( new TextApiObject( new TextAPIEditSource( pDoc ) ) );
+    rtl::Reference< TextApiObject > xRet( new TextApiObject( std::make_unique<TextAPIEditSource>( pDoc ) ) );
     return xRet;
 }
 
-void SAL_CALL TextApiObject::dispose() throw(RuntimeException)
+void TextApiObject::dispose()
 {
     if( mpSource )
     {
         mpSource->Dispose();
-        delete mpSource;
-        mpSource = nullptr;
+        mpSource.reset();
     }
 
 }
 
-OutlinerParaObject* TextApiObject::CreateText()
+std::unique_ptr<OutlinerParaObject> TextApiObject::CreateText()
 {
     return mpSource->CreateText();
 }
 
-void TextApiObject::SetText( OutlinerParaObject& rText )
+void TextApiObject::SetText( OutlinerParaObject const & rText )
 {
     SdrModel* pModel = mpSource->GetDoc();
     if( pModel && pModel->IsUndoEnabled() )
-        pModel->AddUndo( new UndoTextAPIChanged( *pModel, this ) );
+        pModel->AddUndo( std::make_unique<UndoTextAPIChanged>( *pModel, this ) );
 
     mpSource->SetText( rText );
     maSelection.nStartPara = EE_PARA_MAX_COUNT;
@@ -191,9 +187,9 @@ TextAPIEditSource::TextAPIEditSource(const TextAPIEditSource& rSource)
 {
 }
 
-SvxEditSource* TextAPIEditSource::Clone() const
+std::unique_ptr<SvxEditSource> TextAPIEditSource::Clone() const
 {
-    return new TextAPIEditSource( *this );
+    return std::unique_ptr<SvxEditSource>(new TextAPIEditSource( *this ));
 }
 
 void TextAPIEditSource::UpdateData()
@@ -227,8 +223,8 @@ SvxTextForwarder* TextAPIEditSource::GetTextForwarder()
     if (!m_xImpl->mpOutliner)
     {
         //init draw model first
-        m_xImpl->mpOutliner = new Outliner(m_xImpl->mpDoc, OUTLINERMODE_TEXTOBJECT);
-        m_xImpl->mpDoc->SetCalcFieldValueHdl(m_xImpl->mpOutliner);
+        m_xImpl->mpOutliner = new SdOutliner(m_xImpl->mpDoc, OutlinerMode::TextObject);
+        SdDrawDocument::SetCalcFieldValueHdl(m_xImpl->mpOutliner);
     }
 
     if (!m_xImpl->mpTextForwarder)
@@ -237,22 +233,22 @@ SvxTextForwarder* TextAPIEditSource::GetTextForwarder()
     return m_xImpl->mpTextForwarder;
 }
 
-void TextAPIEditSource::SetText( OutlinerParaObject& rText )
+void TextAPIEditSource::SetText( OutlinerParaObject const & rText )
 {
     if (m_xImpl->mpDoc)
     {
         if (!m_xImpl->mpOutliner)
         {
             //init draw model first
-            m_xImpl->mpOutliner = new Outliner(m_xImpl->mpDoc, OUTLINERMODE_TEXTOBJECT);
-            m_xImpl->mpDoc->SetCalcFieldValueHdl(m_xImpl->mpOutliner);
+            m_xImpl->mpOutliner = new SdOutliner(m_xImpl->mpDoc, OutlinerMode::TextObject);
+            SdDrawDocument::SetCalcFieldValueHdl(m_xImpl->mpOutliner);
         }
 
         m_xImpl->mpOutliner->SetText( rText );
     }
 }
 
-OutlinerParaObject* TextAPIEditSource::CreateText()
+std::unique_ptr<OutlinerParaObject> TextAPIEditSource::CreateText()
 {
     if (m_xImpl->mpDoc && m_xImpl->mpOutliner)
         return m_xImpl->mpOutliner->CreateParaObject();

@@ -17,9 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/log.hxx>
 #include <ucbhelper/contentidentifier.hxx>
 #include <ucbhelper/contenthelper.hxx>
+#include <ucbhelper/getcomponentcontext.hxx>
+#include <ucbhelper/macros.hxx>
+#include <cppuhelper/queryinterface.hxx>
 #include <com/sun/star/ucb/ContentCreationException.hpp>
+#include <com/sun/star/ucb/IllegalIdentifierException.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include "gio_provider.hxx"
 #include "gio_content.hxx"
 
@@ -30,8 +36,6 @@ namespace gio
 uno::Reference< css::ucb::XContent > SAL_CALL
 ContentProvider::queryContent(
             const uno::Reference< css::ucb::XContentIdentifier >& Identifier )
-    throw( css::ucb::IllegalIdentifierException,
-           uno::RuntimeException, std::exception )
 {
     SAL_INFO("ucb.ucp.gio", "QueryContent: " << Identifier->getContentIdentifier());
     osl::MutexGuard aGuard( m_aMutex );
@@ -80,12 +84,11 @@ void SAL_CALL ContentProvider::release()
 }
 
 css::uno::Any SAL_CALL ContentProvider::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< lang::XTypeProvider* >(this)),
-                                               (static_cast< lang::XServiceInfo* >(this)),
-                                               (static_cast< css::ucb::XContentProvider* >(this))
+                                               static_cast< lang::XTypeProvider* >(this),
+                                               static_cast< lang::XServiceInfo* >(this),
+                                               static_cast< css::ucb::XContentProvider* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -95,15 +98,29 @@ XTYPEPROVIDER_IMPL_3( ContentProvider,
                       lang::XServiceInfo,
                       css::ucb::XContentProvider );
 
-XSERVICEINFO_IMPL_1_CTX( ContentProvider,
-                     OUString( "com.sun.star.comp.GIOContentProvider" ),
-                     "com.sun.star.ucb.GIOContentProvider" );
+XSERVICEINFO_COMMOM_IMPL( ContentProvider,
+                          OUString( "com.sun.star.comp.GIOContentProvider" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+ContentProvider_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & rSMgr )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new ContentProvider( ucbhelper::getComponentContext(rSMgr) ));
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
+
+css::uno::Sequence< OUString >
+ContentProvider::getSupportedServiceNames_Static()
+{
+    css::uno::Sequence< OUString > aSNS { "com.sun.star.ucb.GIOContentProvider" };
+    return aSNS;
+}
 
 ONE_INSTANCE_SERVICE_FACTORY_IMPL( ContentProvider );
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT void * SAL_CALL ucpgio1_component_getFactory( const sal_Char *pImplName,
+extern "C" SAL_DLLPUBLIC_EXPORT void * ucpgio1_component_getFactory( const sal_Char *pImplName,
     void *pServiceManager, void * )
 {
     void * pRet = nullptr;

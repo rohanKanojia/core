@@ -22,11 +22,10 @@
 #include <unotools/accessiblestatesethelper.hxx>
 #include <com/sun/star/accessibility/AccessibleStateType.hpp>
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
-#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include "accpage.hxx"
 
-#include "access.hrc"
+#include <strings.hrc>
 #include <pagefrm.hxx>
 
 using namespace ::com::sun::star;
@@ -35,7 +34,6 @@ using namespace ::com::sun::star::accessibility;
 using uno::RuntimeException;
 using uno::Sequence;
 
-const sal_Char sServiceName[] = "com.sun.star.text.AccessiblePageView";
 const sal_Char sImplementationName[] = "com.sun.star.comp.Writer.SwAccessiblePageView";
 
 bool SwAccessiblePage::IsSelected()
@@ -54,7 +52,7 @@ void SwAccessiblePage::GetStates(
     // FOCUSED
     if( IsSelected() )
     {
-        OSL_ENSURE( bIsSelected, "bSelected out of sync" );
+        OSL_ENSURE( m_bIsSelected, "bSelected out of sync" );
         ::rtl::Reference < SwAccessibleContext > xThis( this );
         GetMap()->SetCursorContext( xThis );
 
@@ -64,15 +62,15 @@ void SwAccessiblePage::GetStates(
     }
 }
 
-void SwAccessiblePage::_InvalidateCursorPos()
+void SwAccessiblePage::InvalidateCursorPos_()
 {
     bool bNewSelected = IsSelected();
     bool bOldSelected;
 
     {
         osl::MutexGuard aGuard( m_Mutex );
-        bOldSelected = bIsSelected;
-        bIsSelected = bNewSelected;
+        bOldSelected = m_bIsSelected;
+        m_bIsSelected = bNewSelected;
     }
 
     if( bNewSelected )
@@ -91,7 +89,7 @@ void SwAccessiblePage::_InvalidateCursorPos()
     }
 }
 
-void SwAccessiblePage::_InvalidateFocus()
+void SwAccessiblePage::InvalidateFocus_()
 {
     vcl::Window *pWin = GetWindow();
     if( pWin )
@@ -100,7 +98,7 @@ void SwAccessiblePage::_InvalidateFocus()
 
         {
             osl::MutexGuard aGuard( m_Mutex );
-            bSelected = bIsSelected;
+            bSelected = m_bIsSelected;
         }
         OSL_ENSURE( bSelected, "focus object should be selected" );
 
@@ -109,16 +107,14 @@ void SwAccessiblePage::_InvalidateFocus()
     }
 }
 
-SwAccessiblePage::SwAccessiblePage( SwAccessibleMap* pInitMap,
+SwAccessiblePage::SwAccessiblePage(std::shared_ptr<SwAccessibleMap> const& pInitMap,
                                     const SwFrame* pFrame )
     : SwAccessibleContext( pInitMap, AccessibleRole::PANEL, pFrame )
-    , bIsSelected( false )
+    , m_bIsSelected( false )
 {
-    OSL_ENSURE( pFrame != nullptr, "need frame" );
-    OSL_ENSURE( pInitMap != nullptr, "need map" );
-    OSL_ENSURE( pFrame->IsPageFrame(), "need page frame" );
-
-    SolarMutexGuard aGuard;
+    assert(pFrame != nullptr);
+    assert(pInitMap != nullptr);
+    assert(pFrame->IsPageFrame());
 
     OUString sPage = OUString::number(
         static_cast<const SwPageFrame*>( GetFrame() )->GetPhyPageNum() );
@@ -132,41 +128,36 @@ SwAccessiblePage::~SwAccessiblePage()
 bool SwAccessiblePage::HasCursor()
 {
     osl::MutexGuard aGuard( m_Mutex );
-    return bIsSelected;
+    return m_bIsSelected;
 }
 
 OUString SwAccessiblePage::getImplementationName( )
-    throw( RuntimeException, std::exception )
 {
     return OUString(sImplementationName);
 }
 
 sal_Bool SwAccessiblePage::supportsService( const OUString& rServiceName)
-    throw( RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 Sequence<OUString> SwAccessiblePage::getSupportedServiceNames( )
-    throw( RuntimeException, std::exception )
 {
     Sequence< OUString > aRet(2);
     OUString* pArray = aRet.getArray();
-    pArray[0] = sServiceName;
+    pArray[0] = "com.sun.star.text.AccessiblePageView";
     pArray[1] = sAccessibleServiceName;
     return aRet;
 }
 
 Sequence< sal_Int8 > SAL_CALL SwAccessiblePage::getImplementationId()
-        throw(RuntimeException, std::exception)
 {
     return css::uno::Sequence<sal_Int8>();
 }
 
 OUString SwAccessiblePage::getAccessibleDescription( )
-    throw( RuntimeException, std::exception )
 {
-    CHECK_FOR_DEFUNC( css::accessibility::XAccessibleContext );
+    ThrowIfDisposed();
 
     OUString sArg( GetFormattedPageNumber() );
     return GetResource( STR_ACCESS_PAGE_DESC, &sArg );

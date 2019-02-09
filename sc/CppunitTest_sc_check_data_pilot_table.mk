@@ -8,6 +8,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
 #*************************************************************************
+
 $(eval $(call gb_CppunitTest_CppunitTest,sc_check_data_pilot_table))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,sc_check_data_pilot_table, \
@@ -15,46 +16,16 @@ $(eval $(call gb_CppunitTest_add_exception_objects,sc_check_data_pilot_table, \
 ))
 
 $(eval $(call gb_CppunitTest_use_libraries,sc_check_data_pilot_table, \
-        basegfx \
-        comphelper \
-        cppu \
-        cppuhelper \
-        drawinglayer \
-        editeng \
-        for \
-        forui \
-        i18nlangtag \
-        msfilter \
-        oox \
-        sal \
-        salhelper \
-        sax \
-        sb \
-        sc \
-        scqahelper \
-        sfx \
-        sot \
-        subsequenttest \
-        svl \
-        svt \
-        svx \
-        svxcore \
-        test \
-        tk \
-        tl \
-        ucbhelper \
-        unotest \
-        utl \
-        vbahelper \
-        vcl \
-        xo \
-        $(gb_UWINAPI) \
+	cppu \
+	sal \
+	subsequenttest \
+	test \
+	unotest \
+	utl \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_check_data_pilot_table,\
-        -I$(SRCDIR)/sc/source/ui/inc \
-        -I$(SRCDIR)/sc/inc \
-        $$(INCLUDE) \
+	$$(INCLUDE) \
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_check_data_pilot_table,\
@@ -66,36 +37,7 @@ $(eval $(call gb_CppunitTest_use_ure,sc_check_data_pilot_table))
 $(eval $(call gb_CppunitTest_use_vcl,sc_check_data_pilot_table))
 
 $(eval $(call gb_CppunitTest_use_components,sc_check_data_pilot_table,\
-    basic/util/sb \
-    comphelper/util/comphelp \
-    configmgr/source/configmgr \
-    dbaccess/util/dba \
-    filter/source/config/cache/filterconfig1 \
-    forms/util/frm \
-    framework/util/fwk \
-    i18npool/util/i18npool \
-    oox/util/oox \
-    package/source/xstor/xstor \
-    package/util/package2 \
-    sax/source/expatwrap/expwrap \
-    scripting/source/basprov/basprov \
-    scripting/util/scriptframe \
-    sc/util/sc \
-    sc/util/scd \
-    sc/util/scfilt \
-    $(call gb_Helper_optional,SCRIPTING, \
-            sc/util/vbaobj) \
-    sfx2/util/sfx \
-    sot/util/sot \
-    svl/source/fsstor/fsstorage \
-    toolkit/util/tk \
-    ucb/source/core/ucb1 \
-    ucb/source/ucp/file/ucpfile1 \
-    ucb/source/ucp/tdoc/ucptdoc1 \
-    unotools/util/utl \
-    unoxml/source/rdf/unordf \
-    unoxml/source/service/unoxml \
-        svtools/util/svt \
+	$(sc_unoapi_common_components) \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sc_check_data_pilot_table))

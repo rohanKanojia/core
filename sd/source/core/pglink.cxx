@@ -19,9 +19,9 @@
 
 #include <sfx2/linkmgr.hxx>
 
-#include "pglink.hxx"
-#include "sdpage.hxx"
-#include "drawdoc.hxx"
+#include <pglink.hxx>
+#include <sdpage.hxx>
+#include <drawdoc.hxx>
 
 /*************************************************************************
 |*
@@ -57,7 +57,7 @@ SdPageLink::~SdPageLink()
 ::sfx2::SvBaseLink::UpdateResult SdPageLink::DataChanged(
     const OUString&, const css::uno::Any& )
 {
-    SdDrawDocument* pDoc = static_cast<SdDrawDocument*>( pPage->GetModel() );
+    SdDrawDocument* pDoc = static_cast<SdDrawDocument*>( &pPage->getSdrModelFromSdrPage() );
     sfx2::LinkManager* pLinkManager = pDoc!=nullptr ? pDoc->GetLinkManager() : nullptr;
 
     if (pLinkManager)
@@ -84,29 +84,27 @@ SdPageLink::~SdPageLink()
             if (aBookmarkName.isEmpty())
             {
                 // no page name specified: we assume it is the first page
-                aBookmarkName = pBookmarkDoc->GetSdPage(0, PK_STANDARD)->GetName();
+                aBookmarkName = pBookmarkDoc->GetSdPage(0, PageKind::Standard)->GetName();
                 pPage->SetBookmarkName(aBookmarkName);
             }
 
             std::vector<OUString> aBookmarkList;
             aBookmarkList.push_back(aBookmarkName);
             sal_uInt16 nInsertPos = pPage->GetPageNum();
-            bool bLink = true;
-            bool bReplace = true;
             bool bNoDialogs = false;
             bool bCopy = false;
 
-            if (pDoc->s_pDocLockedInsertingLinks)
+            if (SdDrawDocument::s_pDocLockedInsertingLinks)
             {
                 // resolving links while loading pDoc
                 bNoDialogs = true;
                 bCopy = true;
             }
 
-            pDoc->InsertBookmarkAsPage(aBookmarkList, nullptr, bLink, bReplace,
+            pDoc->InsertBookmarkAsPage(aBookmarkList, nullptr, true/*bLink*/, true/*bReplace*/,
                                        nInsertPos, bNoDialogs, nullptr, bCopy, true, true);
 
-            if (!pDoc->s_pDocLockedInsertingLinks)
+            if (!SdDrawDocument::s_pDocLockedInsertingLinks)
                 pDoc->CloseBookmarkDoc();
         }
     }

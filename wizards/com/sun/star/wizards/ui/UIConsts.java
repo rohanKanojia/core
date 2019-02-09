@@ -20,17 +20,8 @@ package com.sun.star.wizards.ui;
 
 public interface UIConsts
 {
-
-    int RID_COMMON = 500;
-    int RID_DB_COMMON = 1000;
-    int RID_FORM = 2200;
-    int RID_QUERY = 2300;
-    int RID_REPORT = 2400;
-    int RID_TABLE = 2600;
-    int RID_IMG_FORM = 1100;
     Integer INVISIBLESTEP = 99;
-    String INFOIMAGEURL = "private:resource/dbu/image/19205";
-    String INFOIMAGEURL_HC = "private:resource/dbu/image/19230";
+    String INFOIMAGEURL = "private:graphicrepository/dbaccess/res/exinfo.png";
     /**
      * The tabindex of the navigation buttons in a wizard must be assigned a very
      * high tabindex because on every step their taborder must appear at the end

@@ -18,14 +18,19 @@
  */
 
 #include <osl/thread.h>
+#include <o3tl/safeint.hxx>
 #include <tools/poly.hxx>
 #include <tools/fract.hxx>
+#include <tools/stream.hxx>
+#include <sal/log.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/dibtools.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/lineinfo.hxx>
+#include <vcl/gdimtf.hxx>
 
 #include <math.h>
+#include <algorithm>
 #include <memory>
 
 class FilterConfigItem;
@@ -33,7 +38,7 @@ class FilterConfigItem;
 enum PenStyle { PEN_NULL, PEN_SOLID, PEN_DOT, PEN_DASH, PEN_DASHDOT };
 
 
-// -----------------------------Feld-Typen-------------------------------
+// -----------------------------Field Types-------------------------------
 
 #define BegDocumnMagic 0xA8A8 /* Begin Document */
 #define EndDocumnMagic 0xA8A9 /* End Document   */
@@ -54,15 +59,15 @@ enum PenStyle { PEN_NULL, PEN_SOLID, PEN_DOT, PEN_DASH, PEN_DASHDOT };
 #define BegObEnv1Magic 0xC7A8 /* Begin Object Environment Group */
 #define EndObEnv1Magic 0xC7A9 /* End Object Environment Group   */
 
-#define BegGrfObjMagic 0xBBA8 /* Begin Graphics Object   */
-#define EndGrfObjMagic 0xBBA9 /* End Graphics Object     */
-#define DscGrfObjMagic 0xBBA6 /* Graphics Data Descritor */
-#define DatGrfObjMagic 0xBBEE /* Graphics Data           */
+#define BegGrfObjMagic 0xBBA8 /* Begin Graphics Object    */
+#define EndGrfObjMagic 0xBBA9 /* End Graphics Object      */
+#define DscGrfObjMagic 0xBBA6 /* Graphics Data Descriptor */
+#define DatGrfObjMagic 0xBBEE /* Graphics Data            */
 
 #define MapCodFntMagic 0x8AAB /* Map Coded Font    */
 #define MapDatResMagic 0xC3AB /* Map Data Resource */
 
-// -----------------------------Order-Typen-------------------------------
+// -----------------------------Order Types-------------------------------
 
 #define GOrdGivArc 0xC6   /* 1 Arc at given position   */
 #define GOrdCurArc 0x86   /* 1 Arc at current position */
@@ -234,20 +239,20 @@ struct OSPath
 
 struct OSFont {
     OSFont *  pSucc;
-    sal_uLong nID;
+    sal_uInt32 nID;
     vcl::Font aFont;
 };
 
 struct OSBitmap {
     OSBitmap * pSucc;
-    sal_uLong  nID;
+    sal_uInt32 nID;
     Bitmap     aBitmap;
 
     // required during reading of the bitmap:
     SvStream * pBMP; // pointer to temporary Windows-BMP file or NULL
     sal_uInt32 nWidth, nHeight;
     sal_uInt16 nBitsPerPixel;
-    sal_uLong  nMapPos;
+    sal_uInt32 nMapPos;
 };
 
 struct OSAttr
@@ -276,51 +281,35 @@ struct OSAttr
     Color    aImgBgCol;
     RasterOp eImgMix;
     RasterOp eImgBgMix;
-    long     nArcP, nArcQ, nArcR, nArcS;
+    sal_Int32 nArcP, nArcQ, nArcR, nArcS;
     short    nChrAng;
-//  long     nChrBreakExtra;
     Size     aChrCellSize;
-//  sal_uInt8     nChrDir;
-//  long     nChrExtra;
-//  sal_uInt8     nChrPrec;
-    sal_uLong    nChrSet;
-//  Size     aChrShear;
+    sal_uInt32 nChrSet;
     Point    aCurPos;
-//  long     nFracLinWidth;
-//  sal_uInt8     nLinEnd;
-//  sal_uInt8     nLinJoin;
     PenStyle eLinStyle;
     sal_uInt16   nLinWidth;
     Size     aMrkCellSize;
     sal_uInt8     nMrkPrec;
     sal_uInt8     nMrkSet;
     sal_uInt8     nMrkSymbol;
-//  //...    aModTransform;
-//  Point    aPatRef;
-//  sal_uInt8     nPatSet;
     bool     bFill;
-//  sal_uLong    nPickId;
-//  //...    aSegBound;
     sal_uInt16   nStrLinWidth;
-//  sal_uInt8     nTxtAlignHor,nTxtAlignVer;
-//  //...    aViewTransform;
-//  //...    aViewWindow;
 
     OSAttr()
         : pSucc(nullptr)
         , nPushOrder(0)
         , nIvAttrA(0)
         , nIvAttrP(0)
-        , eLinMix(ROP_OVERPAINT)
-        , eLinBgMix(ROP_OVERPAINT)
-        , eChrMix(ROP_OVERPAINT)
-        , eChrBgMix(ROP_OVERPAINT)
-        , eMrkMix(ROP_OVERPAINT)
-        , eMrkBgMix(ROP_OVERPAINT)
-        , ePatMix(ROP_OVERPAINT)
-        , ePatBgMix(ROP_OVERPAINT)
-        , eImgMix(ROP_OVERPAINT)
-        , eImgBgMix(ROP_OVERPAINT)
+        , eLinMix(RasterOp::OverPaint)
+        , eLinBgMix(RasterOp::OverPaint)
+        , eChrMix(RasterOp::OverPaint)
+        , eChrBgMix(RasterOp::OverPaint)
+        , eMrkMix(RasterOp::OverPaint)
+        , eMrkBgMix(RasterOp::OverPaint)
+        , ePatMix(RasterOp::OverPaint)
+        , ePatBgMix(RasterOp::OverPaint)
+        , eImgMix(RasterOp::OverPaint)
+        , eImgBgMix(RasterOp::OverPaint)
         , nArcP(0)
         , nArcQ(0)
         , nArcR(0)
@@ -342,15 +331,14 @@ class OS2METReader {
 
 private:
 
-    long ErrorCode;
+    int ErrorCode;
 
     SvStream      * pOS2MET;             // the OS2MET file to be read
     VclPtr<VirtualDevice> pVirDev;       // here the drawing methods are being called
                                          // While doing this a recording in the GDIMetaFile
                                          // will take place.
-    sal_uLong       nOrigPos;            // initial position  in pOS2MET
-    Rectangle       aBoundingRect;       // bounding rectangle as stored in the file
-    Rectangle       aCalcBndRect;        // bounding rectangle calculated on our own
+    tools::Rectangle       aBoundingRect;       // bounding rectangle as stored in the file
+    tools::Rectangle       aCalcBndRect;        // bounding rectangle calculated on our own
     MapMode         aGlobMapMode;        // resolution of the picture
     bool        bCoord32;
 
@@ -371,7 +359,7 @@ private:
     OSAttr   aAttr;
     OSAttr   * pAttrStack;
 
-    SvStream * pOrdFile;
+    std::unique_ptr<SvStream> xOrdFile;
 
     void AddPointsToPath(const tools::Polygon & rPoly);
     void AddPointsToArea(const tools::Polygon & rPoly);
@@ -379,11 +367,11 @@ private:
     void PushAttr(sal_uInt16 nPushOrder);
     void PopAttr();
 
-    void ChangeBrush( const Color& rPatColor, const Color& rBGColor, bool bFill );
+    void ChangeBrush( const Color& rPatColor, bool bFill );
     void SetPen( const Color& rColor, sal_uInt16 nStrLinWidth = 0, PenStyle ePenStyle = PEN_SOLID );
     void SetRasterOp(RasterOp eROP);
 
-    void SetPalette0RGB(sal_uInt16 nIndex, sal_uLong nCol);
+    void SetPalette0RGB(sal_uInt16 nIndex, sal_uInt32 nCol);
     sal_uInt32 GetPalette0RGB(sal_uInt32 nIndex);
         // gets color from palette, or, if it doesn't exist,
         // interprets nIndex as immediate RGB value.
@@ -395,9 +383,9 @@ private:
     void        DrawPolygon( const tools::Polygon& rPolygon );
     void        DrawPolyPolygon( const tools::PolyPolygon& rPolygon );
     sal_uInt16  ReadBigEndianWord();
-    sal_uLong   ReadBigEndian3BytesLong();
-    sal_uLong   ReadLittleEndian3BytesLong();
-    long        ReadCoord(bool b32);
+    sal_uInt32  ReadBigEndian3BytesLong();
+    sal_uInt32  ReadLittleEndian3BytesLong();
+    sal_Int32   ReadCoord(bool b32);
     Point       ReadPoint( const bool bAdjustBoundRect = true );
     static RasterOp    OS2MixToRasterOp(sal_uInt8 nMix);
     void        ReadLine(bool bGivenPos, sal_uInt16 nOrderLen);
@@ -414,7 +402,7 @@ private:
     void        ReadFilletSharp(bool bGivenPos, sal_uInt16 nOrderLen);
     void        ReadMarker(bool bGivenPos, sal_uInt16 nOrderLen);
     void        ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen);
-    void        ReadDsc(sal_uInt16 nDscID, sal_uInt16 nDscLen);
+    void        ReadDsc(sal_uInt16 nDscID);
     void        ReadImageData(sal_uInt16 nDataID, sal_uInt16 nDataLen);
     void        ReadFont(sal_uInt16 nFieldSize);
     void        ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize);
@@ -425,7 +413,7 @@ public:
     ~OS2METReader();
 
     void ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaFile );
-        // Reads from the stream a OS2MET file und and fills up the GDIMetaFile
+        // Reads from the stream a OS2MET file and fills up the GDIMetaFile
 
 };
 
@@ -435,7 +423,6 @@ OS2METReader::OS2METReader()
     : ErrorCode(0)
     , pOS2MET(nullptr)
     , pVirDev(nullptr)
-    , nOrigPos(0)
     , aBoundingRect()
     , aCalcBndRect()
     , aGlobMapMode()
@@ -450,22 +437,68 @@ OS2METReader::OS2METReader()
     , aDefAttr()
     , aAttr()
     , pAttrStack(nullptr)
-    , pOrdFile(nullptr)
 {
+    pVirDev = VclPtr<VirtualDevice>::Create();
+    pVirDev->EnableOutput(false);
 }
 
 OS2METReader::~OS2METReader()
 {
+    pVirDev.disposeAndClear();
+
+    while (pAreaStack!=nullptr) {
+        OSArea * p=pAreaStack;
+        pAreaStack=p->pSucc;
+        delete p;
+    }
+
+    while (pPathStack!=nullptr) {
+        OSPath * p=pPathStack;
+        pPathStack=p->pSucc;
+        delete p;
+    }
+
+    while (pPathList!=nullptr) {
+        OSPath * p=pPathList;
+        pPathList=p->pSucc;
+        delete p;
+    }
+
+    while (pFontList!=nullptr) {
+        OSFont * p=pFontList;
+        pFontList=p->pSucc;
+        delete p;
+    }
+
+    while (pBitmapList!=nullptr) {
+        OSBitmap * p=pBitmapList;
+        pBitmapList=p->pSucc;
+        delete p->pBMP;
+        delete p;
+    }
+
+    while (pAttrStack!=nullptr) {
+        OSAttr * p=pAttrStack;
+        pAttrStack=p->pSucc;
+        delete p;
+    }
+
+    while (pPaletteStack!=nullptr) {
+        OSPalette * p=pPaletteStack;
+        pPaletteStack=p->pSucc;
+        delete[] p->p0RGB;
+        delete p;
+    }
 }
 
 bool OS2METReader::IsLineInfo()
 {
-    return ( ! ( aLineInfo.IsDefault() || ( aLineInfo.GetStyle() == LINE_NONE ) || ( pVirDev->GetLineColor() == COL_TRANSPARENT ) ) );
+    return ( ! ( aLineInfo.IsDefault() || ( aLineInfo.GetStyle() == LineStyle::NONE ) || ( pVirDev->GetLineColor() == COL_TRANSPARENT ) ) );
 }
 
 void OS2METReader::DrawPolyLine( const tools::Polygon& rPolygon )
 {
-    if ( aLineInfo.GetStyle() == LINE_DASH || ( aLineInfo.GetWidth() > 1 ) )
+    if ( aLineInfo.GetStyle() == LineStyle::Dash || ( aLineInfo.GetWidth() > 1 ) )
         pVirDev->DrawPolyLine( rPolygon, aLineInfo );
     else
         pVirDev->DrawPolyLine( rPolygon );
@@ -510,7 +543,7 @@ void OS2METReader::AddPointsToArea(const tools::Polygon & rPoly)
     else {
         tools::Polygon aLastPoly(pPP->GetObject(pPP->Count()-1));
         nOldSize=aLastPoly.GetSize();
-        if (aLastPoly.GetPoint(nOldSize-1)==rPoly.GetPoint(0)) nOldSize--;
+        if (nOldSize && aLastPoly.GetPoint(nOldSize-1)==rPoly.GetPoint(0)) nOldSize--;
         nNewSize=nOldSize+rPoly.GetSize();
         aLastPoly.SetSize(nNewSize);
         for (i=nOldSize; i<nNewSize; i++) {
@@ -531,7 +564,7 @@ void OS2METReader::AddPointsToPath(const tools::Polygon & rPoly)
     else {
         tools::Polygon aLastPoly(pPP->GetObject(pPP->Count()-1));
         nOldSize=aLastPoly.GetSize();
-        if (aLastPoly.GetPoint(nOldSize-1)!=rPoly.GetPoint(0)) pPP->Insert(rPoly);
+        if (nOldSize && aLastPoly.GetPoint(nOldSize-1)!=rPoly.GetPoint(0)) pPP->Insert(rPoly);
         else {
             nOldSize--;
             nNewSize=nOldSize+rPoly.GetSize();
@@ -668,14 +701,14 @@ void OS2METReader::PopAttr()
     delete p;
 }
 
-void OS2METReader::ChangeBrush(const Color& rPatColor, const Color& /*rBGColor*/, bool bFill )
+void OS2METReader::ChangeBrush(const Color& rPatColor, bool bFill )
 {
     Color aColor;
 
     if( bFill )
         aColor = rPatColor;
     else
-        aColor = Color( COL_TRANSPARENT );
+        aColor = COL_TRANSPARENT;
 
     if( pVirDev->GetFillColor() != aColor )
         pVirDev->SetFillColor( aColor );
@@ -683,7 +716,7 @@ void OS2METReader::ChangeBrush(const Color& rPatColor, const Color& /*rBGColor*/
 
 void OS2METReader::SetPen( const Color& rColor, sal_uInt16 nLineWidth, PenStyle ePenStyle )
 {
-    LineStyle eLineStyle( LINE_SOLID );
+    LineStyle eLineStyle( LineStyle::Solid );
 
     if ( pVirDev->GetLineColor() != rColor )
         pVirDev->SetLineColor( rColor );
@@ -694,15 +727,15 @@ void OS2METReader::SetPen( const Color& rColor, sal_uInt16 nLineWidth, PenStyle 
     switch ( ePenStyle )
     {
         case PEN_NULL :
-            eLineStyle = LINE_NONE;
+            eLineStyle = LineStyle::NONE;
         break;
         case PEN_DASHDOT :
             nDashCount++;
-            //fall-through
+            [[fallthrough]];
         case PEN_DOT :
             nDotCount++;
             nDashCount--;
-            //fall-through
+            [[fallthrough]];
         case PEN_DASH :
             nDashCount++;
             aLineInfo.SetDotCount( nDotCount );
@@ -710,7 +743,7 @@ void OS2METReader::SetPen( const Color& rColor, sal_uInt16 nLineWidth, PenStyle 
             aLineInfo.SetDistance( nLineWidth );
             aLineInfo.SetDotLen( nLineWidth );
             aLineInfo.SetDashLen( nLineWidth << 2 );
-            eLineStyle = LINE_DASH;
+            eLineStyle = LineStyle::Dash;
         break;
         case PEN_SOLID:
         break;  // -Wall not handled...
@@ -723,7 +756,7 @@ void OS2METReader::SetRasterOp(RasterOp eROP)
     if (pVirDev->GetRasterOp()!=eROP) pVirDev->SetRasterOp(eROP);
 }
 
-void OS2METReader::SetPalette0RGB(sal_uInt16 nIndex, sal_uLong nCol)
+void OS2METReader::SetPalette0RGB(sal_uInt16 nIndex, sal_uInt32 nCol)
 {
     if (pPaletteStack==nullptr) {
         pPaletteStack=new OSPalette;
@@ -768,26 +801,26 @@ sal_uInt16 OS2METReader::ReadBigEndianWord()
 {
     sal_uInt8 nLo(0), nHi(0);
     pOS2MET->ReadUChar( nHi ).ReadUChar( nLo );
-    return (((sal_uInt16)nHi)<<8)|(((sal_uInt16)nLo)&0x00ff);
+    return (static_cast<sal_uInt16>(nHi)<<8)|(static_cast<sal_uInt16>(nLo)&0x00ff);
 }
 
-sal_uLong OS2METReader::ReadBigEndian3BytesLong()
+sal_uInt32 OS2METReader::ReadBigEndian3BytesLong()
 {
     sal_uInt8 nHi(0);
     pOS2MET->ReadUChar( nHi );
     sal_uInt16 nLo = ReadBigEndianWord();
-    return ((((sal_uLong)nHi)<<16)&0x00ff0000)|((sal_uLong)nLo);
+    return ((static_cast<sal_uInt32>(nHi)<<16)&0x00ff0000)|static_cast<sal_uInt32>(nLo);
 }
 
-sal_uLong OS2METReader::ReadLittleEndian3BytesLong()
+sal_uInt32 OS2METReader::ReadLittleEndian3BytesLong()
 {
     sal_uInt8 nHi,nMed,nLo;
 
     pOS2MET->ReadUChar( nLo ).ReadUChar( nMed ).ReadUChar( nHi );
-    return ((((sal_uLong)nHi)&0xff)<<16)|((((sal_uLong)nMed)&0xff)<<8)|(((sal_uLong)nLo)&0xff);
+    return ((static_cast<sal_uInt32>(nHi)&0xff)<<16)|((static_cast<sal_uInt32>(nMed)&0xff)<<8)|(static_cast<sal_uInt32>(nLo)&0xff);
 }
 
-long OS2METReader::ReadCoord(bool b32)
+sal_Int32 OS2METReader::ReadCoord(bool b32)
 {
     sal_Int32 l(0);
 
@@ -798,15 +831,18 @@ long OS2METReader::ReadCoord(bool b32)
 
 Point OS2METReader::ReadPoint( const bool bAdjustBoundRect )
 {
-    long x,y;
-
-    x=ReadCoord(bCoord32);
-    y=ReadCoord(bCoord32);
+    sal_Int32 x = ReadCoord(bCoord32);
+    sal_Int32 y = ReadCoord(bCoord32);
     x=x-aBoundingRect.Left();
     y=aBoundingRect.Bottom()-y;
 
-    if ( bAdjustBoundRect )
-        aCalcBndRect.Union(Rectangle(x,y,x+1,y+1));
+    if (bAdjustBoundRect)
+    {
+        if (x == SAL_MAX_INT32 || y == SAL_MAX_INT32)
+            pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
+        else
+            aCalcBndRect.Union(tools::Rectangle(x, y, x + 1, y + 1));
+    }
 
     return Point(x,y);
 }
@@ -814,10 +850,10 @@ Point OS2METReader::ReadPoint( const bool bAdjustBoundRect )
 RasterOp OS2METReader::OS2MixToRasterOp(sal_uInt8 nMix)
 {
     switch (nMix) {
-        case 0x0c: return ROP_INVERT;
-        case 0x04: return ROP_XOR;
-        case 0x0b: return ROP_XOR;
-        default:   return ROP_OVERPAINT;
+        case 0x0c: return RasterOp::Invert;
+        case 0x04: return RasterOp::Xor;
+        case 0x0b: return RasterOp::Xor;
+        default:   return RasterOp::OverPaint;
     }
 }
 
@@ -849,26 +885,21 @@ void OS2METReader::ReadRelLine(bool bGivenPos, sal_uInt16 nOrderLen)
     sal_uInt16 i,nPolySize;
     Point aP0;
 
-
     if (bGivenPos) {
         aP0=ReadPoint();
         if (bCoord32) nOrderLen-=8; else nOrderLen-=4;
     }
     else aP0=aAttr.aCurPos;
+    if (nOrderLen > pOS2MET->remainingSize())
+        throw css::uno::Exception("attempt to read past end of input", nullptr);
     nPolySize=nOrderLen/2;
     if (nPolySize==0) return;
     tools::Polygon aPolygon(nPolySize);
     for (i=0; i<nPolySize; i++) {
-#if defined SOLARIS && defined PPC
-        sal_uInt8 nunsignedbyte;
-        *pOS2MET >> nunsignedbyte; aP0.X()+=(sal_Int8)nunsignedbyte;
-        *pOS2MET >> nunsignedbyte; aP0.Y()+=(sal_Int8)nunsignedbyte;
-#else
         sal_Int8 nsignedbyte;
-        pOS2MET->ReadSChar( nsignedbyte ); aP0.X()+=(long)nsignedbyte;
-        pOS2MET->ReadSChar( nsignedbyte ); aP0.Y()-=(long)nsignedbyte;
-#endif
-        aCalcBndRect.Union(Rectangle(aP0,Size(1,1)));
+        pOS2MET->ReadSChar( nsignedbyte ); aP0.AdjustX(static_cast<sal_Int32>(nsignedbyte));
+        pOS2MET->ReadSChar( nsignedbyte ); aP0.AdjustY(-static_cast<sal_Int32>(nsignedbyte));
+        aCalcBndRect.Union(tools::Rectangle(aP0,Size(1,1)));
         aPolygon.SetPoint(aP0,i);
     }
     aAttr.aCurPos=aPolygon.GetPoint(nPolySize-1);
@@ -886,7 +917,6 @@ void OS2METReader::ReadBox(bool bGivenPos)
 {
     sal_uInt8       nFlags;
     Point       P0;
-    long        nHRound,nVRound;
 
     pOS2MET->ReadUChar( nFlags );
     pOS2MET->SeekRel(1);
@@ -896,11 +926,11 @@ void OS2METReader::ReadBox(bool bGivenPos)
     else
         P0 = aAttr.aCurPos;
 
-    aAttr.aCurPos=ReadPoint();
-    nHRound=ReadCoord(bCoord32);
-    nVRound=ReadCoord(bCoord32);
+    aAttr.aCurPos = ReadPoint();
+    sal_Int32 nHRound = ReadCoord(bCoord32);
+    sal_Int32 nVRound = ReadCoord(bCoord32);
 
-    Rectangle aBoxRect( P0, aAttr.aCurPos );
+    tools::Rectangle aBoxRect( P0, aAttr.aCurPos );
 
     if ( pAreaStack )
         AddPointsToArea( tools::Polygon( aBoxRect ) );
@@ -915,12 +945,12 @@ void OS2METReader::ReadBox(bool bGivenPos)
 
         if ( nFlags & 0x40 )
         {
-            ChangeBrush(aAttr.aPatCol,aAttr.aPatBgCol,aAttr.bFill);
+            ChangeBrush(aAttr.aPatCol, aAttr.bFill);
             SetRasterOp(aAttr.ePatMix);
         }
         else
         {
-            ChangeBrush( Color( COL_TRANSPARENT ), Color( COL_TRANSPARENT ), false );
+            ChangeBrush( COL_TRANSPARENT, false );
             SetRasterOp(aAttr.eLinMix);
         }
 
@@ -947,14 +977,13 @@ void OS2METReader::ReadBitBlt()
     Size aSize;
     sal_uInt32 nID;
     OSBitmap * pB;
-    long nt;
 
     pOS2MET->SeekRel(4);
     pOS2MET->ReadUInt32( nID );
     pOS2MET->SeekRel(4);
     aP1=ReadPoint(); aP2=ReadPoint();
-    if (aP1.X() > aP2.X()) { nt=aP1.X(); aP1.X()=aP2.X(); aP2.X()=nt; }
-    if (aP1.Y() > aP2.Y()) { nt=aP1.Y(); aP1.Y()=aP2.Y(); aP2.Y()=nt; }
+    if (aP1.X() > aP2.X()) { auto nt=aP1.X(); aP1.setX(aP2.X() ); aP2.setX(nt ); }
+    if (aP1.Y() > aP2.Y()) { auto nt=aP1.Y(); aP1.setY(aP2.Y() ); aP2.setY(nt ); }
     aSize=Size(aP2.X()-aP1.X(),aP2.Y()-aP1.Y());
 
     pB=pBitmapList;
@@ -1017,7 +1046,7 @@ void OS2METReader::ReadChrStr(bool bGivenPos, bool bMove, bool bExtra, sal_uInt1
     aSize = Size( pVirDev->GetTextWidth(aStr), pVirDev->GetTextHeight() );
     if ( aAttr.nChrAng == 0 )
     {
-        aCalcBndRect.Union(Rectangle( Point(aP0.X(),aP0.Y()-aSize.Height()),
+        aCalcBndRect.Union(tools::Rectangle( Point(aP0.X(),aP0.Y()-aSize.Height()),
                                       Size(aSize.Width(),aSize.Height()*2)));
         if (bMove)
             aAttr.aCurPos = Point( aP0.X() + aSize.Width(), aP0.Y());
@@ -1030,11 +1059,11 @@ void OS2METReader::ReadChrStr(bool bGivenPos, bool bMove, bool bExtra, sal_uInt1
         aDummyPoly.SetPoint( Point( aP0.X(), aP0.Y() - aSize.Height() ), 1);                // BOTTOM LEFT
         aDummyPoly.SetPoint( Point( aP0.X() + aSize.Width(), aP0.Y() ), 2);                 // TOP RIGHT
         aDummyPoly.SetPoint( Point( aP0.X() + aSize.Width(), aP0.Y() - aSize.Height() ), 3);// BOTTOM RIGHT
-        aDummyPoly.Rotate( aP0, (short)aAttr.nChrAng );
+        aDummyPoly.Rotate( aP0, aAttr.nChrAng );
         if ( bMove )
             aAttr.aCurPos = aDummyPoly.GetPoint( 0 );
-        aCalcBndRect.Union( Rectangle( aDummyPoly.GetPoint( 0 ), aDummyPoly.GetPoint( 3 ) ) );
-        aCalcBndRect.Union( Rectangle( aDummyPoly.GetPoint( 1 ), aDummyPoly.GetPoint( 2 ) ) );
+        aCalcBndRect.Union( tools::Rectangle( aDummyPoly.GetPoint( 0 ), aDummyPoly.GetPoint( 3 ) ) );
+        aCalcBndRect.Union( tools::Rectangle( aDummyPoly.GetPoint( 1 ), aDummyPoly.GetPoint( 2 ) ) );
     }
 }
 
@@ -1073,21 +1102,19 @@ void OS2METReader::ReadArc(bool bGivenPos)
     w1=fmod((atan2(x1-cx,y1-cy)-atan2(x2-cx,y2-cy)),6.28318530718); if (w1<0) w1+=6.28318530718;
     w3=fmod((atan2(x3-cx,y3-cy)-atan2(x2-cx,y2-cy)),6.28318530718); if (w3<0) w3+=6.28318530718;
     if (w3<w1) {
-        pVirDev->DrawArc(Rectangle((long)(cx-rx),(long)(cy-ry),
-                                   (long)(cx+rx),(long)(cy+ry)),aP1,aP3);
+        pVirDev->DrawArc(tools::Rectangle(static_cast<sal_Int32>(cx-rx),static_cast<sal_Int32>(cy-ry),
+                                   static_cast<sal_Int32>(cx+rx),static_cast<sal_Int32>(cy+ry)),aP1,aP3);
     }
     else {
-        pVirDev->DrawArc(Rectangle((long)(cx-rx),(long)(cy-ry),
-                                   (long)(cx+rx),(long)(cy+ry)),aP3,aP1);
+        pVirDev->DrawArc(tools::Rectangle(static_cast<sal_Int32>(cx-rx),static_cast<sal_Int32>(cy-ry),
+                                   static_cast<sal_Int32>(cx+rx),static_cast<sal_Int32>(cy+ry)),aP3,aP1);
     }
 }
 
 void OS2METReader::ReadFullArc(bool bGivenPos, sal_uInt16 nOrderSize)
 {
     Point aCenter;
-    long nP,nQ;
-    Rectangle aRect;
-    sal_uInt32 nMul; sal_uInt16 nMulS;
+    tools::Rectangle aRect;
 
     if (bGivenPos) {
         aCenter=ReadPoint();
@@ -1095,22 +1122,26 @@ void OS2METReader::ReadFullArc(bool bGivenPos, sal_uInt16 nOrderSize)
     }
     else aCenter=aAttr.aCurPos;
 
-    nP=aAttr.nArcP; nQ=aAttr.nArcQ;
-    if (nP<0) nP=-nP;
-    if (nQ<0) nQ=-nQ;
+    sal_Int32 nP = aAttr.nArcP;
+    sal_Int32 nQ = aAttr.nArcQ;
+    if (nP < 0)
+        nP = o3tl::saturating_toggle_sign(nP);
+    if (nQ < 0)
+        nQ = o3tl::saturating_toggle_sign(nQ);
+    sal_uInt32 nMul(0); sal_uInt16 nMulS(0);
     if (nOrderSize>=4) pOS2MET->ReadUInt32( nMul );
-    else { pOS2MET->ReadUInt16( nMulS ); nMul=((sal_uLong)nMulS)<<8; }
+    else { pOS2MET->ReadUInt16( nMulS ); nMul=static_cast<sal_uInt32>(nMulS)<<8; }
     if (nMul!=0x00010000) {
         nP=(nP*nMul)>>16;
         nQ=(nQ*nMul)>>16;
     }
 
-    aRect=Rectangle(aCenter.X()-nP,aCenter.Y()-nQ,
+    aRect=tools::Rectangle(aCenter.X()-nP,aCenter.Y()-nQ,
                     aCenter.X()+nP,aCenter.Y()+nQ);
     aCalcBndRect.Union(aRect);
 
     if (pAreaStack!=nullptr) {
-        ChangeBrush(aAttr.aPatCol,aAttr.aPatBgCol,aAttr.bFill);
+        ChangeBrush(aAttr.aPatCol, aAttr.bFill);
         SetRasterOp(aAttr.ePatMix);
         if ((pAreaStack->nFlags&0x40)!=0)
             SetPen( aAttr.aLinCol, aAttr.nStrLinWidth, aAttr.eLinStyle );
@@ -1120,7 +1151,7 @@ void OS2METReader::ReadFullArc(bool bGivenPos, sal_uInt16 nOrderSize)
     else
     {
         SetPen( aAttr.aLinCol, aAttr.nStrLinWidth, aAttr.eLinStyle );
-        ChangeBrush(Color( COL_TRANSPARENT ),Color( COL_TRANSPARENT ),false);
+        ChangeBrush(COL_TRANSPARENT, false);
         SetRasterOp(aAttr.eLinMix);
     }
     pVirDev->DrawEllipse(aRect);
@@ -1129,10 +1160,7 @@ void OS2METReader::ReadFullArc(bool bGivenPos, sal_uInt16 nOrderSize)
 void OS2METReader::ReadPartialArc(bool bGivenPos, sal_uInt16 nOrderSize)
 {
     Point aP0, aCenter,aPStart,aPEnd;
-    sal_Int32 nP,nQ,nStart, nSweep;
-    Rectangle aRect;
-    sal_uInt32 nMul; sal_uInt16 nMulS;
-    double fStart, fEnd;
+    tools::Rectangle aRect;
 
     if (bGivenPos) {
         aP0=ReadPoint();
@@ -1141,25 +1169,30 @@ void OS2METReader::ReadPartialArc(bool bGivenPos, sal_uInt16 nOrderSize)
     else aP0=aAttr.aCurPos;
     aCenter=ReadPoint();
 
-    nP=aAttr.nArcP; nQ=aAttr.nArcQ;
-    if (nP<0) nP=-nP;
-    if (nQ<0) nQ=-nQ;
+    sal_Int32 nP = aAttr.nArcP;
+    sal_Int32 nQ = aAttr.nArcQ;
+    if (nP < 0)
+        nP = o3tl::saturating_toggle_sign(nP);
+    if (nQ < 0)
+        nQ = o3tl::saturating_toggle_sign(nQ);
+    sal_uInt32 nMul(0); sal_uInt16 nMulS(0);
     if (nOrderSize>=12) pOS2MET->ReadUInt32( nMul );
-    else { pOS2MET->ReadUInt16( nMulS ); nMul=((sal_uLong)nMulS)<<8; }
+    else { pOS2MET->ReadUInt16( nMulS ); nMul=static_cast<sal_uInt32>(nMulS)<<8; }
     if (nMul!=0x00010000) {
         nP=(nP*nMul)>>16;
         nQ=(nQ*nMul)>>16;
     }
 
+    sal_Int32 nStart(0), nSweep(0);
     pOS2MET->ReadInt32( nStart ).ReadInt32( nSweep );
-    fStart=((double)nStart)/65536.0/180.0*3.14159265359;
-    fEnd=fStart+((double)nSweep)/65536.0/180.0*3.14159265359;
-    aPStart=Point(aCenter.X()+(sal_Int32)( cos(fStart)*nP),
-                  aCenter.Y()+(sal_Int32)(-sin(fStart)*nQ));
-    aPEnd=  Point(aCenter.X()+(sal_Int32)( cos(fEnd)*nP),
-                  aCenter.Y()+(sal_Int32)(-sin(fEnd)*nQ));
+    double fStart = static_cast<double>(nStart)/65536.0/180.0*3.14159265359;
+    double fEnd = fStart+ static_cast<double>(nSweep)/65536.0/180.0*3.14159265359;
+    aPStart=Point(aCenter.X()+static_cast<sal_Int32>( cos(fStart)*nP),
+                  aCenter.Y()+static_cast<sal_Int32>(-sin(fStart)*nQ));
+    aPEnd=  Point(aCenter.X()+static_cast<sal_Int32>( cos(fEnd)*nP),
+                  aCenter.Y()+static_cast<sal_Int32>(-sin(fEnd)*nQ));
 
-    aRect=Rectangle(aCenter.X()-nP,aCenter.Y()-nQ,
+    aRect=tools::Rectangle(aCenter.X()-nP,aCenter.Y()-nQ,
                     aCenter.X()+nP,aCenter.Y()+nQ);
     aCalcBndRect.Union(aRect);
 
@@ -1201,18 +1234,18 @@ void OS2METReader::ReadPolygons()
             return;
         }
         if (i==0) ++nNumPoints;
-        aPoly.SetSize((short)nNumPoints);
+        aPoly.SetSize(static_cast<short>(nNumPoints));
         for (sal_uInt32 j=0; j<nNumPoints; ++j)
         {
             if (i==0 && j==0) aPoint=aAttr.aCurPos;
             else aPoint=ReadPoint();
-            aPoly.SetPoint(aPoint,(short)j);
+            aPoly.SetPoint(aPoint,static_cast<short>(j));
             if (i==nNumPolys-1 && j==nNumPoints-1) aAttr.aCurPos=aPoint;
         }
         aPolyPoly.Insert(aPoly);
     }
 
-    ChangeBrush(aAttr.aPatCol,aAttr.aPatBgCol,aAttr.bFill);
+    ChangeBrush(aAttr.aPatCol, aAttr.bFill);
     SetRasterOp(aAttr.ePatMix);
     if ((nFlags&0x01)!=0)
         SetPen( aAttr.aLinCol, aAttr.nStrLinWidth, aAttr.eLinStyle );
@@ -1335,19 +1368,19 @@ void OS2METReader::ReadMarker(bool bGivenPos, sal_uInt16 nOrderLen)
     SetRasterOp(aAttr.eMrkMix);
     if (aAttr.nMrkSymbol>=5 && aAttr.nMrkSymbol<=9)
     {
-        ChangeBrush(aAttr.aMrkCol,aAttr.aMrkCol,true);
+        ChangeBrush(aAttr.aMrkCol, true);
     }
     else
     {
-        ChangeBrush(Color(COL_TRANSPARENT),Color(COL_TRANSPARENT),false);
+        ChangeBrush(COL_TRANSPARENT, false);
     }
     if (bCoord32) nNumPoints=nOrderLen/8; else nNumPoints=nOrderLen/4;
     if (!bGivenPos) nNumPoints++;
     for (i=0; i<nNumPoints; i++) {
         if (i!=0 || bGivenPos) aAttr.aCurPos=ReadPoint();
-        const long x = aAttr.aCurPos.X();
-        const long y=aAttr.aCurPos.Y();
-        aCalcBndRect.Union(Rectangle(x-5,y-5,x+5,y+5));
+        const auto x = aAttr.aCurPos.X();
+        const auto y = aAttr.aCurPos.Y();
+        aCalcBndRect.Union(tools::Rectangle(x-5,y-5,x+5,y+5));
         switch (aAttr.nMrkSymbol) {
             case  2:   // PLUS
                 pVirDev->DrawLine(Point(x-4,y),Point(x+4,y));
@@ -1412,10 +1445,10 @@ void OS2METReader::ReadMarker(bool bGivenPos, sal_uInt16 nOrderLen)
                 break;
             }
             case  9:   // DOT
-                pVirDev->DrawEllipse(Rectangle(x-1,y-1,x+1,y+1));
+                pVirDev->DrawEllipse(tools::Rectangle(x-1,y-1,x+1,y+1));
                 break;
             case 10:   // SMALLCIRCLE
-                pVirDev->DrawEllipse(Rectangle(x-2,y-2,x+2,y+2));
+                pVirDev->DrawEllipse(tools::Rectangle(x-2,y-2,x+2,y+2));
                 break;
             case 64:   // BLANK
                 break;
@@ -1510,7 +1543,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                     else
                         SetPen( aAttr.aLinCol, aAttr.nStrLinWidth, aAttr.eLinStyle );
 
-                    ChangeBrush(p->aCol,p->aBgCol,p->bFill);
+                    ChangeBrush(p->aCol, p->bFill);
                     SetRasterOp(p->eMix);
                     DrawPolyPolygon( p->aPPoly );
                 }
@@ -1570,7 +1603,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                     if( p->bStroke )
                     {
                         SetPen( aAttr.aPatCol, aAttr.nStrLinWidth );
-                        ChangeBrush(Color(COL_TRANSPARENT),Color(COL_TRANSPARENT),false);
+                        ChangeBrush(COL_TRANSPARENT, false);
                         SetRasterOp( aAttr.ePatMix );
                         if ( IsLineInfo() )
                         {
@@ -1583,7 +1616,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                     else
                     {
                         SetPen( COL_TRANSPARENT, 0, PEN_NULL );
-                        ChangeBrush( aAttr.aPatCol, aAttr.aPatBgCol, aAttr.bFill );
+                        ChangeBrush( aAttr.aPatCol, aAttr.bFill );
                         SetRasterOp( aAttr.ePatMix );
                         pVirDev->DrawPolyPolygon( p->aPPoly );
                     }
@@ -1618,7 +1651,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             {
                 SetPen( aAttr.aLinCol, aAttr.nStrLinWidth, aAttr.eLinStyle );
                 SetRasterOp(aAttr.eLinMix);
-                ChangeBrush(Color(COL_TRANSPARENT),Color(COL_TRANSPARENT),false);
+                ChangeBrush(COL_TRANSPARENT, false);
                 nC=p->aPPoly.Count();
                 for (i=0; i<nC; i++)
                 {
@@ -1673,9 +1706,9 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         case GOrdStkPop: PopAttr(); break;
 
         case GOrdPIvAtr: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSIvAtr: {
             sal_uInt8 nA, nP, nFlags, nMix;
-            sal_uLong nVal;
             Color aCol;
             RasterOp eROP;
             pOS2MET->ReadUChar( nA ).ReadUChar( nP ).ReadUChar( nFlags );
@@ -1701,11 +1734,11 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                     }
                 }
                 else {
-                    nVal=ReadLittleEndian3BytesLong();
-                    if      ((nFlags&0x40)!=0 && nVal==1) aCol=Color(COL_BLACK);
-                    else if ((nFlags&0x40)!=0 && nVal==2) aCol=Color(COL_WHITE);
-                    else if ((nFlags&0x40)!=0 && nVal==4) aCol=Color(COL_WHITE);
-                    else if ((nFlags&0x40)!=0 && nVal==5) aCol=Color(COL_BLACK);
+                    const auto nVal = ReadLittleEndian3BytesLong();
+                    if      ((nFlags&0x40)!=0 && nVal==1) aCol=COL_BLACK;
+                    else if ((nFlags&0x40)!=0 && nVal==2) aCol=COL_WHITE;
+                    else if ((nFlags&0x40)!=0 && nVal==4) aCol=COL_WHITE;
+                    else if ((nFlags&0x40)!=0 && nVal==5) aCol=COL_BLACK;
                     else aCol=GetPaletteColor(nVal);
                     if (nA==1) switch (nP) {
                         case 1: aAttr.aLinCol=aCol; break;
@@ -1748,9 +1781,9 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             break;
         }
         case GOrdPIxCol: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSIxCol: {
             sal_uInt8 nFlags;
-            sal_uLong nVal;
             Color aCol;
             pOS2MET->ReadUChar( nFlags );
             if ((nFlags&0x80)!=0) {
@@ -1761,11 +1794,11 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                 aAttr.aImgCol=aDefAttr.aImgCol;
             }
             else {
-                nVal=ReadLittleEndian3BytesLong();
-                if      ((nFlags&0x40)!=0 && nVal==1) aCol=Color(COL_BLACK);
-                else if ((nFlags&0x40)!=0 && nVal==2) aCol=Color(COL_WHITE);
-                else if ((nFlags&0x40)!=0 && nVal==4) aCol=Color(COL_WHITE);
-                else if ((nFlags&0x40)!=0 && nVal==5) aCol=Color(COL_BLACK);
+                const auto nVal = ReadLittleEndian3BytesLong();
+                if      ((nFlags&0x40)!=0 && nVal==1) aCol=COL_BLACK;
+                else if ((nFlags&0x40)!=0 && nVal==2) aCol=COL_WHITE;
+                else if ((nFlags&0x40)!=0 && nVal==4) aCol=COL_WHITE;
+                else if ((nFlags&0x40)!=0 && nVal==5) aCol=COL_BLACK;
                 else aCol=GetPaletteColor(nVal);
                 aAttr.aLinCol = aAttr.aChrCol = aAttr.aMrkCol = aAttr.aPatCol =
                 aAttr.aImgCol = aCol;
@@ -1775,13 +1808,14 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
 
         case GOrdPColor:
         case GOrdPXtCol: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSColor:
         case GOrdSXtCol: {
             sal_uInt8 nbyte;
             sal_uInt16 nVal;
             Color aCol;
             if (nOrderID==GOrdPColor || nOrderID==GOrdSColor) {
-                pOS2MET->ReadUChar( nbyte ); nVal=((sal_uInt16)nbyte)|0xff00;
+                pOS2MET->ReadUChar( nbyte ); nVal=static_cast<sal_uInt16>(nbyte)|0xff00;
             }
             else pOS2MET->ReadUInt16( nVal );
             if (nVal==0x0000 || nVal==0xff00)  {
@@ -1792,10 +1826,10 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                 aAttr.aImgCol=aDefAttr.aImgCol;
             }
             else {
-                if      (nVal==0x0007) aCol=Color(COL_WHITE);
-                else if (nVal==0x0008) aCol=Color(COL_BLACK);
+                if      (nVal==0x0007) aCol=COL_WHITE;
+                else if (nVal==0x0008) aCol=COL_BLACK;
                 else if (nVal==0xff08) aCol=GetPaletteColor(1);
-                else aCol=GetPaletteColor(((sal_uLong)nVal) & 0x000000ff);
+                else aCol=GetPaletteColor(static_cast<sal_uInt32>(nVal) & 0x000000ff);
                 aAttr.aLinCol = aAttr.aChrCol = aAttr.aMrkCol = aAttr.aPatCol =
                 aAttr.aImgCol = aCol;
             }
@@ -1803,6 +1837,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPBgCol: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSBgCol: {
             sal_uInt16 nVal;
             Color aCol;
@@ -1815,19 +1850,19 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                 aAttr.aImgBgCol=aDefAttr.aImgBgCol;
             }
             else {
-                if      (nVal==0x0007) aCol=Color(COL_WHITE);
-                else if (nVal==0x0008) aCol=Color(COL_BLACK);
+                if      (nVal==0x0007) aCol=COL_WHITE;
+                else if (nVal==0x0008) aCol=COL_BLACK;
                 else if (nVal==0xff08) aCol=GetPaletteColor(0);
-                else aCol=GetPaletteColor(((sal_uLong)nVal) & 0x000000ff);
+                else aCol=GetPaletteColor(static_cast<sal_uInt32>(nVal) & 0x000000ff);
                 aAttr.aLinBgCol = aAttr.aChrBgCol = aAttr.aMrkBgCol =
                 aAttr.aPatBgCol = aAttr.aImgBgCol = aCol;
             }
             break;
         }
         case GOrdPBxCol: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSBxCol: {
             sal_uInt8 nFlags;
-            sal_uLong nVal;
             Color aCol;
             pOS2MET->ReadUChar( nFlags );
             if ((nFlags&0x80)!=0) {
@@ -1838,11 +1873,11 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
                 aAttr.aImgBgCol=aDefAttr.aImgBgCol;
             }
             else {
-                nVal=ReadLittleEndian3BytesLong();
-                if      ((nFlags&0x40)!=0 && nVal==1) aCol=Color(COL_BLACK);
-                else if ((nFlags&0x40)!=0 && nVal==2) aCol=Color(COL_WHITE);
-                else if ((nFlags&0x40)!=0 && nVal==4) aCol=Color(COL_WHITE);
-                else if ((nFlags&0x40)!=0 && nVal==5) aCol=Color(COL_BLACK);
+                const auto nVal = ReadLittleEndian3BytesLong();
+                if      ((nFlags&0x40)!=0 && nVal==1) aCol=COL_BLACK;
+                else if ((nFlags&0x40)!=0 && nVal==2) aCol=COL_WHITE;
+                else if ((nFlags&0x40)!=0 && nVal==4) aCol=COL_WHITE;
+                else if ((nFlags&0x40)!=0 && nVal==5) aCol=COL_BLACK;
                 else aCol=GetPaletteColor(nVal);
                 aAttr.aLinBgCol = aAttr.aChrBgCol = aAttr.aMrkBgCol =
                 aAttr.aPatBgCol = aAttr.aImgBgCol = aCol;
@@ -1851,6 +1886,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPMixMd: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSMixMd: {
             sal_uInt8 nMix;
             pOS2MET->ReadUChar( nMix );
@@ -1868,6 +1904,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             break;
         }
         case GOrdPBgMix: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSBgMix: {
             sal_uInt8 nMix;
             pOS2MET->ReadUChar( nMix );
@@ -1885,10 +1922,12 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             break;
         }
         case GOrdPPtSet: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSPtSet: SAL_INFO("filter.os2met","GOrdSPtSet");
             break;
 
         case GOrdPPtSym: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSPtSym: {
             sal_uInt8 nPatt;
             pOS2MET->ReadUChar( nPatt );
@@ -1897,18 +1936,22 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPPtRef: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSPtRef: SAL_INFO("filter.os2met","GOrdSPtRef");
             break;
 
         case GOrdPLnEnd: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSLnEnd:
             break;
 
         case GOrdPLnJoi: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSLnJoi:
             break;
 
         case GOrdPLnTyp: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSLnTyp: {
             sal_uInt8 nType;
             pOS2MET->ReadUChar( nType );
@@ -1923,18 +1966,21 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             break;
         }
         case GOrdPLnWdt: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSLnWdt: {
             sal_uInt8 nbyte;
             pOS2MET->ReadUChar( nbyte );
             if (nbyte==0) aAttr.nLinWidth=aDefAttr.nLinWidth;
-            else aAttr.nLinWidth=(sal_uInt16)nbyte-1;
+            else aAttr.nLinWidth=static_cast<sal_uInt16>(nbyte)-1;
             break;
         }
         case GOrdPFrLWd: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSFrLWd:
             break;
 
         case GOrdPStLWd: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSStLWd :
         {
             sal_uInt8 nFlags;
@@ -1945,49 +1991,59 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             else
             {
                 pOS2MET->SeekRel( 1 );
-                long nWd = ReadCoord( bCoord32 );
-                if ( nWd < 0 )
-                    nWd = -nWd;
-                aAttr.nStrLinWidth = (sal_uInt16)nWd;
+                sal_Int32 nWd = ReadCoord( bCoord32 );
+                if (nWd < 0)
+                    nWd = o3tl::saturating_toggle_sign(nWd);
+                aAttr.nStrLinWidth = static_cast<sal_uInt16>(nWd);
             }
             break;
         }
         case GOrdPChDir: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChDir:
             break;
 
         case GOrdPChPrc: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChPrc:
             break;
 
         case GOrdPChSet: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChSet: {
             sal_uInt8 nbyte; pOS2MET->ReadUChar( nbyte );
-            aAttr.nChrSet=((sal_uLong)nbyte)&0xff;
+            aAttr.nChrSet=static_cast<sal_uInt32>(nbyte)&0xff;
             break;
         }
         case GOrdPChAng: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChAng: {
-            long nX,nY;
-            nX=ReadCoord(bCoord32); nY=ReadCoord(bCoord32);
+            sal_Int32 nX = ReadCoord(bCoord32);
+            sal_Int32 nY = ReadCoord(bCoord32);
             if (nX>=0 && nY==0) aAttr.nChrAng=0;
             else {
-                aAttr.nChrAng=(short)(atan2((double)nY,(double)nX)/3.1415926539*1800.0);
+                aAttr.nChrAng=static_cast<short>(atan2(static_cast<double>(nY),static_cast<double>(nX))/3.1415926539*1800.0);
                 while (aAttr.nChrAng<0) aAttr.nChrAng+=3600;
                 aAttr.nChrAng%=3600;
             }
             break;
         }
         case GOrdPChBrx: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChBrx:
             break;
 
         case GOrdPChCel: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChCel: {
             sal_uInt8 nbyte;
             sal_uInt16 nLen=nOrderLen;
-            aAttr.aChrCellSize.Width()=ReadCoord(bCoord32);
-            aAttr.aChrCellSize.Height()=ReadCoord(bCoord32);
+            auto nWidth = ReadCoord(bCoord32);
+            auto nHeight = ReadCoord(bCoord32);
+            if (nWidth < 0 || nHeight < 0)
+                aAttr.aChrCellSize = aDefAttr.aChrCellSize;
+            else
+                aAttr.aChrCellSize = Size(nWidth, nHeight);
             if (bCoord32) nLen-=8; else nLen-=4;
             if (nLen>=4) {
                 pOS2MET->SeekRel(4); nLen-=4;
@@ -1995,23 +2051,27 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             if (nLen>=2) {
                 pOS2MET->ReadUChar( nbyte );
                 if ((nbyte&0x80)==0 && aAttr.aChrCellSize==Size(0,0))
-                    aAttr.aChrCellSize=aDefAttr.aChrCellSize;
+                    aAttr.aChrCellSize = aDefAttr.aChrCellSize;
             }
             break;
         }
         case GOrdPChXtr: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChXtr:
             break;
 
         case GOrdPChShr: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSChShr:
             break;
 
         case GOrdPTxAlg: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSTxAlg: SAL_INFO("filter.os2met","GOrdSTxAlg");
             break;
 
         case GOrdPMkPrc: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSMkPrc: {
             sal_uInt8 nbyte;
             pOS2MET->ReadUChar( nbyte );
@@ -2021,6 +2081,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPMkSet: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSMkSet: {
             sal_uInt8 nbyte;
             pOS2MET->ReadUChar( nbyte );
@@ -2030,6 +2091,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPMkSym: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSMkSym: {
             sal_uInt8 nbyte;
             pOS2MET->ReadUChar( nbyte );
@@ -2039,11 +2101,12 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPMkCel: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSMkCel: {
             sal_uInt8 nbyte;
             sal_uInt16 nLen=nOrderLen;
-            aAttr.aMrkCellSize.Width()=ReadCoord(bCoord32);
-            aAttr.aMrkCellSize.Height()=ReadCoord(bCoord32);
+            aAttr.aMrkCellSize.setWidth(ReadCoord(bCoord32) );
+            aAttr.aMrkCellSize.setHeight(ReadCoord(bCoord32) );
             if (bCoord32) nLen-=8; else nLen-=4;
             if (nLen>=2) {
                 pOS2MET->ReadUChar( nbyte );
@@ -2054,6 +2117,7 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
         }
 
         case GOrdPArcPa: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSArcPa:
             aAttr.nArcP=ReadCoord(bCoord32);
             aAttr.nArcQ=ReadCoord(bCoord32);
@@ -2062,15 +2126,18 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             break;
 
         case GOrdPCrPos: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSCrPos:
             aAttr.aCurPos=ReadPoint();
             break;
 
         case GOrdPMdTrn: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSMdTrn: SAL_INFO("filter.os2met","GOrdSMdTrn");
             break;
 
         case GOrdPPkIdn: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSPkIdn: SAL_INFO("filter.os2met","GOrdSPkIdn");
             break;
 
@@ -2078,13 +2145,14 @@ void OS2METReader::ReadOrder(sal_uInt16 nOrderID, sal_uInt16 nOrderLen)
             break;
 
         case GOrdPVwWin: PushAttr(nOrderID);
+            [[fallthrough]];
         case GOrdSVwWin: SAL_INFO("filter.os2met","GOrdSVwWin");
             break;
         default: SAL_INFO("filter.os2met","Unknown order: " << nOrderID);
     }
 }
 
-void OS2METReader::ReadDsc(sal_uInt16 nDscID, sal_uInt16 /*nDscLen*/)
+void OS2METReader::ReadDsc(sal_uInt16 nDscID)
 {
     switch (nDscID) {
         case 0x00f7: { // 'Specify GVM Subset'
@@ -2104,7 +2172,6 @@ void OS2METReader::ReadDsc(sal_uInt16 nDscID, sal_uInt16 /*nDscLen*/)
             // 'Set Picture Descriptor'
             bool b32;
             sal_uInt8 nbyte,nUnitType;
-            long x1,y1,x2,y2,nt,xr,yr;
 
             pOS2MET->SeekRel(2);
             pOS2MET->ReadUChar( nbyte );
@@ -2122,44 +2189,44 @@ void OS2METReader::ReadDsc(sal_uInt16 nDscID, sal_uInt16 /*nDscLen*/)
 
             pOS2MET->ReadUChar( nUnitType );
 
-            xr=ReadCoord(b32);
-            yr=ReadCoord(b32);
+            sal_Int32 xr = ReadCoord(b32);
+            sal_Int32 yr = ReadCoord(b32);
 
             ReadCoord(b32);
 
             if (nUnitType==0x00 && xr>0 && yr>0)
-                aGlobMapMode=MapMode(MAP_INCH,Point(0,0),Fraction(10,xr),Fraction(10,yr));
+                aGlobMapMode=MapMode(MapUnit::MapInch,Point(0,0),Fraction(10,xr),Fraction(10,yr));
             else if (nUnitType==0x01 && xr>0 && yr>0)
-                aGlobMapMode=MapMode(MAP_CM,Point(0,0),Fraction(10,xr),Fraction(10,yr));
+                aGlobMapMode=MapMode(MapUnit::MapCM,Point(0,0),Fraction(10,xr),Fraction(10,yr));
             else
                 aGlobMapMode=MapMode();
 
-            x1=ReadCoord(b32);
-            x2=ReadCoord(b32);
-            y1=ReadCoord(b32);
-            y2=ReadCoord(b32);
+            sal_Int32 x1 = ReadCoord(b32);
+            sal_Int32 x2 = ReadCoord(b32);
+            sal_Int32 y1 = ReadCoord(b32);
+            sal_Int32 y2 = ReadCoord(b32);
 
             if (x1>x2)
             {
-                nt=x1;
+                const auto nt = x1;
                 x1=x2;
                 x2=nt;
             }
 
             if (y1>y2)
             {
-                nt=y1;
+                const auto nt = y1;
                 y1=y2;
                 y2=nt;
             }
 
-            aBoundingRect.Left() = x1;
-            aBoundingRect.Right() = x2;
-            aBoundingRect.Top() = y1;
-            aBoundingRect.Bottom() = y2;
+            aBoundingRect.SetLeft( x1 );
+            aBoundingRect.SetRight( x2 );
+            aBoundingRect.SetTop( y1 );
+            aBoundingRect.SetBottom( y2 );
 
             // no output beside this bounding rect
-            pVirDev->IntersectClipRegion( Rectangle( Point(), aBoundingRect.GetSize() ) );
+            pVirDev->IntersectClipRegion( tools::Rectangle( Point(), aBoundingRect.GetSize() ) );
 
             break;
         }
@@ -2213,38 +2280,38 @@ void OS2METReader::ReadImageData(sal_uInt16 nDataID, sal_uInt16 nDataLen)
                     return;
                 }
                 // write (Windows-)BITMAPINFOHEADER:
-                (p->pBMP)->WriteUInt32( 40 ).WriteUInt32( p->nWidth ).WriteUInt32( p->nHeight );
-                (p->pBMP)->WriteUInt16( 1 ).WriteUInt16( p->nBitsPerPixel );
-                (p->pBMP)->WriteUInt32( 0 ).WriteUInt32( 0 ).WriteUInt32( 0 ).WriteUInt32( 0 );
-                (p->pBMP)->WriteUInt32( 0 ).WriteUInt32( 0 );
+                p->pBMP->WriteUInt32( 40 ).WriteUInt32( p->nWidth ).WriteUInt32( p->nHeight );
+                p->pBMP->WriteUInt16( 1 ).WriteUInt16( p->nBitsPerPixel );
+                p->pBMP->WriteUInt32( 0 ).WriteUInt32( 0 ).WriteUInt32( 0 ).WriteUInt32( 0 );
+                p->pBMP->WriteUInt32( 0 ).WriteUInt32( 0 );
                 // write color table:
                 if (p->nBitsPerPixel<=8) {
                     sal_uInt16 i, nColTabSize=1<<(p->nBitsPerPixel);
-                    for (i=0; i<nColTabSize; i++) (p->pBMP)->WriteUInt32( GetPalette0RGB(i) );
+                    for (i=0; i<nColTabSize; i++) p->pBMP->WriteUInt32( GetPalette0RGB(i) );
                 }
             }
             // OK, now the map data is being pushed. Unfortunately OS2 and BMP
             // do have a different RGB ordering when using 24-bit
             std::unique_ptr<sal_uInt8[]> pBuf(new sal_uInt8[nDataLen]);
-            pOS2MET->Read(pBuf.get(),nDataLen);
-            if (p->nBitsPerPixel==24) {
-                sal_uLong i, j, nAlign, nBytesPerLine;
-                sal_uInt8 nTemp;
-                nBytesPerLine=(p->nWidth*3+3)&0xfffffffc;
-                nAlign=p->nMapPos-(p->nMapPos % nBytesPerLine);
-                i=0;
+            pOS2MET->ReadBytes(pBuf.get(), nDataLen);
+            sal_uInt32 nBytesPerLineToSwap = (p->nBitsPerPixel == 24) ?
+                ((p->nWidth * 3 + 3) & 0xfffffffc) : 0;
+            if (nBytesPerLineToSwap) {
+                sal_uInt32 nAlign = p->nMapPos - (p->nMapPos % nBytesPerLineToSwap);
+                sal_uInt32 i=0;
                 while (nAlign+i+2<p->nMapPos+nDataLen) {
                     if (nAlign+i>=p->nMapPos) {
-                        j=nAlign+i-p->nMapPos;
-                        nTemp=pBuf[j]; pBuf[j]=pBuf[j+2]; pBuf[j+2]=nTemp;
+                        sal_uInt32 j = nAlign + i - p->nMapPos;
+                        std::swap(pBuf[j], pBuf[j+2]);
                     }
-                    i+=3; if (i+2>=nBytesPerLine) {
-                        nAlign+=nBytesPerLine;
+                    i+=3;
+                    if (i + 2 >= nBytesPerLineToSwap) {
+                        nAlign += nBytesPerLineToSwap;
                         i=0;
                     }
                 }
             }
-            p->pBMP->Write(pBuf.get(),nDataLen);
+            p->pBMP->WriteBytes(pBuf.get(), nDataLen);
             p->nMapPos+=nDataLen;
             break;
         }
@@ -2258,7 +2325,6 @@ void OS2METReader::ReadImageData(sal_uInt16 nDataID, sal_uInt16 nDataLen)
 
 void OS2METReader::ReadFont(sal_uInt16 nFieldSize)
 {
-    sal_uLong nPos, nMaxPos;
     sal_uInt8 nByte, nTripType, nTripType2;
     OSFont * pF=new OSFont;
     pF->pSucc=pFontList; pFontList=pF;
@@ -2266,12 +2332,12 @@ void OS2METReader::ReadFont(sal_uInt16 nFieldSize)
     pF->aFont.SetTransparent(true);
     pF->aFont.SetAlignment(ALIGN_BASELINE);
 
-    nPos=pOS2MET->Tell();
-    nMaxPos=nPos+(sal_uLong)nFieldSize;
+    auto nPos=pOS2MET->Tell();
+    auto nMaxPos = nPos + nFieldSize;
     pOS2MET->SeekRel(2); nPos+=2;
-    while (nPos<nMaxPos && pOS2MET->GetError()==0) {
+    while (nPos<nMaxPos && pOS2MET->GetError()==ERRCODE_NONE) {
         pOS2MET->ReadUChar( nByte );
-        sal_uInt16 nLen = ((sal_uInt16)nByte) & 0x00ff;
+        sal_uInt16 nLen = static_cast<sal_uInt16>(nByte) & 0x00ff;
         if (nLen == 0)
         {
             pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
@@ -2287,7 +2353,7 @@ void OS2METReader::ReadFont(sal_uInt16 nFieldSize)
                     case 0x08: { // Font Typeface
                         char str[33];
                         pOS2MET->SeekRel(1);
-                        pOS2MET->Read( &str, 32 );
+                        pOS2MET->ReadBytes( &str, 32 );
                         str[ 32 ] = 0;
                         OUString aStr( str, strlen(str), osl_getThreadTextEncoding() );
                         if ( aStr.compareToIgnoreAsciiCase( "Helv" ) == 0 )
@@ -2302,7 +2368,7 @@ void OS2METReader::ReadFont(sal_uInt16 nFieldSize)
                 switch (nTripType2) {
                     case 0x05:   //Icid
                         pOS2MET->ReadUChar( nByte );
-                        pF->nID=((sal_uLong)nByte)&0xff;
+                        pF->nID=static_cast<sal_uInt32>(nByte)&0xff;
                         break;
                 }
                 break;
@@ -2349,22 +2415,20 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
         case EndColAtrMagic:
             break;
         case BlkColAtrMagic: {
-            sal_uLong nPos, nMaxPos;
             sal_uInt8 nbyte;
-            sal_uLong nCol;
             sal_uInt16 nStartIndex, nEndIndex, i, nElemLen, nBytesPerCol;
 
-            nPos=pOS2MET->Tell();
-            nMaxPos=nPos+(sal_uLong)nFieldSize;
+            auto nPos = pOS2MET->Tell();
+            auto nMaxPos = nPos + nFieldSize;
             pOS2MET->SeekRel(3); nPos+=3;
-            while (nPos<nMaxPos && pOS2MET->GetError()==0) {
-                pOS2MET->ReadUChar( nbyte ); nElemLen=((sal_uInt16)nbyte) & 0x00ff;
+            while (nPos<nMaxPos && pOS2MET->GetError()==ERRCODE_NONE) {
+                pOS2MET->ReadUChar( nbyte ); nElemLen=static_cast<sal_uInt16>(nbyte) & 0x00ff;
                 if (nElemLen>11) {
                     pOS2MET->SeekRel(4);
                     nStartIndex=ReadBigEndianWord();
                     pOS2MET->SeekRel(3);
                     pOS2MET->ReadUChar( nbyte );
-                    nBytesPerCol=((sal_uInt16)nbyte) & 0x00ff;
+                    nBytesPerCol=static_cast<sal_uInt16>(nbyte) & 0x00ff;
                     if (nBytesPerCol == 0)
                     {
                         pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
@@ -2374,15 +2438,15 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
                     nEndIndex=nStartIndex+(nElemLen-11)/nBytesPerCol;
                     for (i=nStartIndex; i<nEndIndex; i++) {
                         if (nBytesPerCol > 3) pOS2MET->SeekRel(nBytesPerCol-3);
-                        nCol=ReadBigEndian3BytesLong();
-                        SetPalette0RGB(i,nCol);
+                        auto nCol = ReadBigEndian3BytesLong();
+                        SetPalette0RGB(i, nCol);
                     }
                 }
                 else if (nElemLen<10) {
                     pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
                     ErrorCode=4;
                 }
-                nPos+=(sal_uLong)nElemLen;
+                nPos += nElemLen;
                 pOS2MET->Seek(nPos);
             }
             break;
@@ -2396,12 +2460,14 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
             pB->pBMP=nullptr; pB->nWidth=0; pB->nHeight=0; pB->nBitsPerPixel=0;
             pB->nMapPos=0;
             // determine ID of the bitmap:
-            sal_uInt8 i,nbyte,nbyte2;
             pB->nID=0;
-            for (i=0; i<4; i++) {
-                pOS2MET->ReadUChar( nbyte ).ReadUChar( nbyte2 );
-                nbyte=((nbyte-0x30)<<4)|(nbyte2-0x30);
-                pB->nID=(pB->nID>>8)|(((sal_uLong)nbyte)<<24);
+            for (sal_uInt8 i = 0; i < 4; ++i) {
+                sal_uInt8 nbyte(0),nbyte2(0);
+                pOS2MET->ReadUChar(nbyte).ReadUChar(nbyte2);
+                nbyte -= 0x30;
+                nbyte2 -= 0x30;
+                nbyte = (nbyte << 4) | nbyte2;
+                pB->nID=(pB->nID>>8)|(static_cast<sal_uInt32>(nbyte)<<24);
             }
             // put new palette on the palette stack: (will be filled later)
             OSPalette * pP=new OSPalette;
@@ -2412,7 +2478,7 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
         case EndImgObjMagic: {
             // read temporary Windows BMP file:
             if (pBitmapList==nullptr || pBitmapList->pBMP==nullptr ||
-                pBitmapList->pBMP->GetError()!=0) {
+                pBitmapList->pBMP->GetError()!=ERRCODE_NONE) {
                 pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
                 ErrorCode=5;
                 return;
@@ -2421,7 +2487,7 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
 
             ReadDIB(pBitmapList->aBitmap, *(pBitmapList->pBMP), false);
 
-            if (pBitmapList->pBMP->GetError()!=0) {
+            if (pBitmapList->pBMP->GetError()!=ERRCODE_NONE) {
                 pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
                 ErrorCode=6;
             }
@@ -2430,7 +2496,7 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
             OSPalette * pP=pPaletteStack;
             if (pP!=nullptr) {
                 pPaletteStack=pP->pSucc;
-                if (pP->p0RGB!=nullptr) delete[] pP->p0RGB;
+                delete[] pP->p0RGB;
                 delete pP;
             }
             break;
@@ -2440,24 +2506,23 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
         case DatImgObjMagic: {
             sal_uInt16 nDataID, nDataLen;
             sal_uInt8 nbyte;
-            sal_uLong nPos, nMaxPos;
 
-            nPos=pOS2MET->Tell();
-            nMaxPos=nPos+(sal_uLong)nFieldSize;
-            while (nPos<nMaxPos && pOS2MET->GetError()==0) {
-                pOS2MET->ReadUChar( nbyte ); nDataID=((sal_uInt16)nbyte)&0x00ff;
+            auto nPos = pOS2MET->Tell();
+            auto nMaxPos = nPos + nFieldSize;
+            while (nPos<nMaxPos && pOS2MET->GetError()==ERRCODE_NONE) {
+                pOS2MET->ReadUChar( nbyte ); nDataID=static_cast<sal_uInt16>(nbyte)&0x00ff;
                 if (nDataID==0x00fe) {
                     pOS2MET->ReadUChar( nbyte );
-                    nDataID=(nDataID<<8)|(((sal_uInt16)nbyte)&0x00ff);
+                    nDataID=(nDataID<<8)|(static_cast<sal_uInt16>(nbyte)&0x00ff);
                     nDataLen=ReadBigEndianWord();
                     nPos+=4;
                 }
                 else {
-                    pOS2MET->ReadUChar( nbyte ); nDataLen=((sal_uInt16)nbyte)&0x00ff;
+                    pOS2MET->ReadUChar( nbyte ); nDataLen=static_cast<sal_uInt16>(nbyte)&0x00ff;
                     nPos+=2;
                 }
                 ReadImageData(nDataID, nDataLen);
-                nPos+=(sal_uLong)nDataLen;
+                nPos += nDataLen;
                 pOS2MET->Seek(nPos);
             }
             break;
@@ -2471,20 +2536,20 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
             break;
         case EndGrfObjMagic: {
             SvStream * pSave;
-            sal_uLong nPos, nMaxPos;
             sal_uInt16 nOrderID, nOrderLen;
             sal_uInt8 nbyte;
 
-            if (pOrdFile==nullptr) break;
+            if (!xOrdFile)
+                break;
 
-            // In pOrdFile all "DatGrfObj" fields were collected so that the
+            // In xOrdFile all "DatGrfObj" fields were collected so that the
             // therein contained "Orders" are continuous and not segmented by fields.
             // To read them from the memory stream without having any trouble,
             // we use a  little trick:
 
             pSave=pOS2MET;
-            pOS2MET=pOrdFile; //(!)
-            nMaxPos=pOS2MET->Tell();
+            pOS2MET=xOrdFile.get(); //(!)
+            auto nMaxPos = pOS2MET->Tell();
             pOS2MET->Seek(0);
 
             // "Segment header":
@@ -2495,11 +2560,11 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
             else pOS2MET->SeekRel(-1); // no header, go back one byte
 
             // loop through Order:
-            while (pOS2MET->Tell()<nMaxPos && pOS2MET->GetError()==0) {
-                pOS2MET->ReadUChar( nbyte ); nOrderID=((sal_uInt16)nbyte) & 0x00ff;
+            while (pOS2MET->Tell()<nMaxPos && pOS2MET->GetError()==ERRCODE_NONE) {
+                pOS2MET->ReadUChar( nbyte ); nOrderID=static_cast<sal_uInt16>(nbyte) & 0x00ff;
                 if (nOrderID==0x00fe) {
                     pOS2MET->ReadUChar( nbyte );
-                    nOrderID=(nOrderID << 8) | (((sal_uInt16)nbyte) & 0x00ff);
+                    nOrderID=(nOrderID << 8) | (static_cast<sal_uInt16>(nbyte) & 0x00ff);
                 }
                 if (nOrderID>0x00ff || nOrderID==GOrdPolygn) {
                     // ooo: As written in OS2 documentation, the order length should now
@@ -2507,14 +2572,14 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
                     // In reality there are files in which the length is stored as little endian word
                     // (at least for nOrderID==GOrdPolygn)
                     // So we throw a coin or what else can we do?
-                    pOS2MET->ReadUChar( nbyte ); nOrderLen=(sal_uInt16)nbyte&0x00ff;
-                    pOS2MET->ReadUChar( nbyte ); if (nbyte!=0) nOrderLen=nOrderLen<<8|(((sal_uInt16)nbyte)&0x00ff);
+                    pOS2MET->ReadUChar( nbyte ); nOrderLen=static_cast<sal_uInt16>(nbyte)&0x00ff;
+                    pOS2MET->ReadUChar( nbyte ); if (nbyte!=0) nOrderLen=nOrderLen<<8|(static_cast<sal_uInt16>(nbyte)&0x00ff);
                 }
                 else if (nOrderID==GOrdSTxAlg || nOrderID==GOrdPTxAlg) nOrderLen=2;
                 else if ((nOrderID&0xff88)==0x0008) nOrderLen=1;
                 else if (nOrderID==0x0000 || nOrderID==0x00ff) nOrderLen=0;
-                else { pOS2MET->ReadUChar( nbyte ); nOrderLen=((sal_uInt16)nbyte) & 0x00ff; }
-                nPos=pOS2MET->Tell();
+                else { pOS2MET->ReadUChar( nbyte ); nOrderLen=static_cast<sal_uInt16>(nbyte) & 0x00ff; }
+                auto nPos=pOS2MET->Tell();
                 ReadOrder(nOrderID, nOrderLen);
                 if (nPos+nOrderLen < pOS2MET->Tell()) {
                     SAL_INFO("filter.os2met","Order is shorter than expected. OrderID: " << nOrderID << " Position: " << nPos);
@@ -2526,36 +2591,35 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
             }
 
             pOS2MET=pSave;
-            if (pOrdFile->GetError()) {
+            if (xOrdFile->GetError()) {
                 pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
                 ErrorCode=10;
             }
-            delete pOrdFile; pOrdFile=nullptr;
+            xOrdFile.reset();
             break;
         }
         case DscGrfObjMagic: {
-            sal_uLong nPos, nMaxPos;
             sal_uInt16 nDscID, nDscLen;
             sal_uInt8 nbyte;
 
-            nMaxPos=pOS2MET->Tell()+(sal_uLong)nFieldSize;
-            while (pOS2MET->Tell()<nMaxPos && pOS2MET->GetError()==0) {
-                pOS2MET->ReadUChar( nbyte ); nDscID =((sal_uInt16)nbyte) & 0x00ff;
-                pOS2MET->ReadUChar( nbyte ); nDscLen=((sal_uInt16)nbyte) & 0x00ff;
-                nPos=pOS2MET->Tell();
-                ReadDsc(nDscID, nDscLen);
+            auto nMaxPos = pOS2MET->Tell() + nFieldSize;
+            while (pOS2MET->Tell()<nMaxPos && pOS2MET->GetError()==ERRCODE_NONE) {
+                pOS2MET->ReadUChar( nbyte ); nDscID =static_cast<sal_uInt16>(nbyte) & 0x00ff;
+                pOS2MET->ReadUChar( nbyte ); nDscLen=static_cast<sal_uInt16>(nbyte) & 0x00ff;
+                auto nPos = pOS2MET->Tell();
+                ReadDsc(nDscID);
                 pOS2MET->Seek(nPos+nDscLen);
             }
             break;
         }
         case DatGrfObjMagic: {
-            if (pOrdFile==nullptr) {
-                pOrdFile = new SvMemoryStream;
-                pOrdFile->SetEndian(SvStreamEndian::LITTLE);
+            if (!xOrdFile) {
+                xOrdFile.reset(new SvMemoryStream);
+                xOrdFile->SetEndian(SvStreamEndian::LITTLE);
             }
             std::unique_ptr<sal_uInt8[]> pBuf(new sal_uInt8[nFieldSize]);
-            pOS2MET->Read(pBuf.get(),nFieldSize);
-            pOrdFile->Write(pBuf.get(),nFieldSize);
+            pOS2MET->ReadBytes(pBuf.get(), nFieldSize);
+            xOrdFile->WriteBytes(pBuf.get(), nFieldSize);
             break;
         }
         case MapCodFntMagic:
@@ -2569,12 +2633,10 @@ void OS2METReader::ReadField(sal_uInt16 nFieldType, sal_uInt16 nFieldSize)
 
 void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaFile )
 {
-    sal_uLong nPercent, nLastPercent;
-
     ErrorCode=0;
 
-    pOS2MET             = &rStreamOS2MET;
-    nOrigPos            = pOS2MET->Tell();
+    pOS2MET = &rStreamOS2MET;
+    auto nOrigPos = pOS2MET->Tell();
     SvStreamEndian nOrigNumberFormat = pOS2MET->GetEndian();
 
     bCoord32 = true;
@@ -2586,26 +2648,26 @@ void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaF
     pBitmapList=nullptr;
     pAttrStack=nullptr;
 
-    aDefAttr.aLinCol     =Color(COL_BLACK);
-    aDefAttr.aLinBgCol   =Color(COL_WHITE);
-    aDefAttr.eLinMix     =ROP_OVERPAINT;
-    aDefAttr.eLinBgMix   =ROP_OVERPAINT;
-    aDefAttr.aChrCol     =Color(COL_BLACK);
-    aDefAttr.aChrBgCol   =Color(COL_WHITE);
-    aDefAttr.eChrMix     =ROP_OVERPAINT;
-    aDefAttr.eChrBgMix   =ROP_OVERPAINT;
-    aDefAttr.aMrkCol     =Color(COL_BLACK);
-    aDefAttr.aMrkBgCol   =Color(COL_WHITE);
-    aDefAttr.eMrkMix     =ROP_OVERPAINT;
-    aDefAttr.eMrkBgMix   =ROP_OVERPAINT;
-    aDefAttr.aPatCol     =Color(COL_BLACK);
-    aDefAttr.aPatBgCol   =Color(COL_WHITE);
-    aDefAttr.ePatMix     =ROP_OVERPAINT;
-    aDefAttr.ePatBgMix   =ROP_OVERPAINT;
-    aDefAttr.aImgCol     =Color(COL_BLACK);
-    aDefAttr.aImgBgCol   =Color(COL_WHITE);
-    aDefAttr.eImgMix     =ROP_OVERPAINT;
-    aDefAttr.eImgBgMix   =ROP_OVERPAINT;
+    aDefAttr.aLinCol     =COL_BLACK;
+    aDefAttr.aLinBgCol   =COL_WHITE;
+    aDefAttr.eLinMix     =RasterOp::OverPaint;
+    aDefAttr.eLinBgMix   =RasterOp::OverPaint;
+    aDefAttr.aChrCol     =COL_BLACK;
+    aDefAttr.aChrBgCol   =COL_WHITE;
+    aDefAttr.eChrMix     =RasterOp::OverPaint;
+    aDefAttr.eChrBgMix   =RasterOp::OverPaint;
+    aDefAttr.aMrkCol     =COL_BLACK;
+    aDefAttr.aMrkBgCol   =COL_WHITE;
+    aDefAttr.eMrkMix     =RasterOp::OverPaint;
+    aDefAttr.eMrkBgMix   =RasterOp::OverPaint;
+    aDefAttr.aPatCol     =COL_BLACK;
+    aDefAttr.aPatBgCol   =COL_WHITE;
+    aDefAttr.ePatMix     =RasterOp::OverPaint;
+    aDefAttr.ePatBgMix   =RasterOp::OverPaint;
+    aDefAttr.aImgCol     =COL_BLACK;
+    aDefAttr.aImgBgCol   =COL_WHITE;
+    aDefAttr.eImgMix     =RasterOp::OverPaint;
+    aDefAttr.eImgBgMix   =RasterOp::OverPaint;
     aDefAttr.nArcP       =1;
     aDefAttr.nArcQ       =1;
     aDefAttr.nArcR       =0;
@@ -2625,27 +2687,15 @@ void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaF
 
     aAttr=aDefAttr;
 
-    pOrdFile=nullptr;
+    xOrdFile.reset();
 
-    pVirDev = VclPtr<VirtualDevice>::Create();
-    pVirDev->EnableOutput(false);
     rGDIMetaFile.Record(pVirDev);
 
     pOS2MET->SetEndian(SvStreamEndian::LITTLE);
 
-    sal_uInt64 const nStartPos = pOS2MET->Tell();
-    sal_uInt64 const nRemaining = pOS2MET->remainingSize();
-
-    nLastPercent=0;
-
     sal_uInt64 nPos = pOS2MET->Tell();
 
     for (;;) {
-
-        nPercent = (nPos-nStartPos)*100 / nRemaining;
-        if (nLastPercent+4<=nPercent) {
-            nLastPercent=nPercent;
-        }
 
         sal_uInt16 nFieldSize = ReadBigEndianWord();
         sal_uInt8 nMagicByte(0);
@@ -2667,7 +2717,7 @@ void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaF
         if (nFieldType==EndDocumnMagic)
             break;
 
-        if (pOS2MET->IsEof() || nFieldSize < 8)
+        if (pOS2MET->eof() || nFieldSize < 8)
         {
             pOS2MET->SetError(SVSTREAM_FILEFORMAT_ERROR);
             ErrorCode=8;
@@ -2696,7 +2746,6 @@ void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaF
     }
 
     rGDIMetaFile.Stop();
-    pVirDev.disposeAndClear();
 
     rGDIMetaFile.SetPrefMapMode( aGlobMapMode );
 
@@ -2710,52 +2759,6 @@ void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaF
         rGDIMetaFile.SetPrefSize( aCalcBndRect.GetSize() );
     }
 
-    if (pOrdFile!=nullptr) delete pOrdFile;
-
-    while (pAreaStack!=nullptr) {
-        OSArea * p=pAreaStack;
-        pAreaStack=p->pSucc;
-        delete p;
-    }
-
-    while (pPathStack!=nullptr) {
-        OSPath * p=pPathStack;
-        pPathStack=p->pSucc;
-        delete p;
-    }
-
-    while (pPathList!=nullptr) {
-        OSPath * p=pPathList;
-        pPathList=p->pSucc;
-        delete p;
-    }
-
-    while (pFontList!=nullptr) {
-        OSFont * p=pFontList;
-        pFontList=p->pSucc;
-        delete p;
-    }
-
-    while (pBitmapList!=nullptr) {
-        OSBitmap * p=pBitmapList;
-        pBitmapList=p->pSucc;
-        if (p->pBMP!=nullptr) delete p->pBMP;
-        delete p;
-    }
-
-    while (pAttrStack!=nullptr) {
-        OSAttr * p=pAttrStack;
-        pAttrStack=p->pSucc;
-        delete p;
-    }
-
-    while (pPaletteStack!=nullptr) {
-        OSPalette * p=pPaletteStack;
-        pPaletteStack=p->pSucc;
-        if (p->p0RGB!=nullptr) delete[] p->p0RGB;
-        delete p;
-    }
-
     pOS2MET->SetEndian(nOrigNumberFormat);
 
     if (pOS2MET->GetError()) {
@@ -2766,7 +2769,7 @@ void OS2METReader::ReadOS2MET( SvStream & rStreamOS2MET, GDIMetaFile & rGDIMetaF
 
 //================== GraphicImport - the exported function ================
 
-extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT bool
 imeGraphicImport( SvStream & rStream, Graphic & rGraphic, FilterConfigItem* )
 {
     OS2METReader    aOS2METReader;

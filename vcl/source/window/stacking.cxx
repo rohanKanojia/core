@@ -19,6 +19,7 @@
 
 #include <vcl/window.hxx>
 #include <vcl/taskpanelist.hxx>
+#include <sal/log.hxx>
 
 // declare system types in sysdata.hxx
 #include <vcl/sysdata.hxx>
@@ -46,9 +47,9 @@ using ::com::sun::star::awt::XTopWindow;
 
 struct ImplCalcToTopData
 {
-    ImplCalcToTopData*       mpNext;
-    VclPtr<vcl::Window>      mpWindow;
-    vcl::Region*             mpInvalidateRegion;
+    std::unique_ptr<ImplCalcToTopData> mpNext;
+    VclPtr<vcl::Window>                mpWindow;
+    std::unique_ptr<vcl::Region>       mpInvalidateRegion;
 };
 
 namespace vcl {
@@ -211,7 +212,7 @@ void Window::ImplToBottomChild()
 
 void Window::ImplCalcToTop( ImplCalcToTopData* pPrevData )
 {
-    DBG_ASSERT( ImplIsOverlapWindow(), "Window::ImplCalcToTop(): Is not a OverlapWindow" );
+    SAL_WARN_IF( !ImplIsOverlapWindow(), "vcl", "Window::ImplCalcToTop(): Is not a OverlapWindow" );
 
     if ( !mpWindowImpl->mbFrame )
     {
@@ -219,7 +220,7 @@ void Window::ImplCalcToTop( ImplCalcToTopData* pPrevData )
         {
             // calculate region, where the window overlaps with other windows
             Point aPoint( mnOutOffX, mnOutOffY );
-            vcl::Region  aRegion( Rectangle( aPoint,
+            vcl::Region  aRegion( tools::Rectangle( aPoint,
                                         Size( mnOutWidth, mnOutHeight ) ) );
             vcl::Region  aInvalidateRegion;
             ImplCalcOverlapRegionOverlaps( aRegion, aInvalidateRegion );
@@ -227,10 +228,9 @@ void Window::ImplCalcToTop( ImplCalcToTopData* pPrevData )
             if ( !aInvalidateRegion.IsEmpty() )
             {
                 ImplCalcToTopData* pData    = new ImplCalcToTopData;
-                pPrevData->mpNext           = pData;
-                pData->mpNext               = nullptr;
+                pPrevData->mpNext.reset(pData);
                 pData->mpWindow             = this;
-                pData->mpInvalidateRegion   = new vcl::Region( aInvalidateRegion );
+                pData->mpInvalidateRegion.reset(new vcl::Region( aInvalidateRegion ));
             }
         }
     }
@@ -238,7 +238,7 @@ void Window::ImplCalcToTop( ImplCalcToTopData* pPrevData )
 
 void Window::ImplToTop( ToTopFlags nFlags )
 {
-    DBG_ASSERT( ImplIsOverlapWindow(), "Window::ImplToTop(): Is not a OverlapWindow" );
+    SAL_WARN_IF( !ImplIsOverlapWindow(), "vcl", "Window::ImplToTop(): Is not a OverlapWindow" );
 
     if ( mpWindowImpl->mbFrame )
     {
@@ -252,13 +252,13 @@ void Window::ImplToTop( ToTopFlags nFlags )
             // do not bring floating windows on the client to top
             if( !ImplGetClientWindow() || !(ImplGetClientWindow()->GetStyle() & WB_SYSTEMFLOATWIN) )
             {
-                sal_uInt16 nSysFlags = 0;
+                SalFrameToTop nSysFlags = SalFrameToTop::NONE;
                 if ( nFlags & ToTopFlags::RestoreWhenMin )
-                    nSysFlags |= SAL_FRAME_TOTOP_RESTOREWHENMIN;
+                    nSysFlags |= SalFrameToTop::RestoreWhenMin;
                 if ( nFlags & ToTopFlags::ForegroundTask )
-                    nSysFlags |= SAL_FRAME_TOTOP_FOREGROUNDTASK;
+                    nSysFlags |= SalFrameToTop::ForegroundTask;
                 if ( nFlags & ToTopFlags::GrabFocusOnly )
-                    nSysFlags |= SAL_FRAME_TOTOP_GRABFOCUS_ONLY;
+                    nSysFlags |= SalFrameToTop::GrabFocusOnly;
                 mpWindowImpl->mpFrame->ToTop( nSysFlags );
             }
         }
@@ -317,7 +317,6 @@ void Window::ImplStartToTop( ToTopFlags nFlags )
 {
     ImplCalcToTopData   aStartData;
     ImplCalcToTopData*  pCurData;
-    ImplCalcToTopData*  pNextData;
     vcl::Window* pOverlapWindow;
     if ( ImplIsOverlapWindow() )
         pOverlapWindow = this;
@@ -332,7 +331,7 @@ void Window::ImplStartToTop( ToTopFlags nFlags )
     {
         pTempOverlapWindow->ImplCalcToTop( pCurData );
         if ( pCurData->mpNext )
-            pCurData = pCurData->mpNext;
+            pCurData = pCurData->mpNext.get();
         pTempOverlapWindow = pTempOverlapWindow->mpWindowImpl->mpOverlapWindow;
     }
     while ( !pTempOverlapWindow->mpWindowImpl->mbFrame );
@@ -342,7 +341,7 @@ void Window::ImplStartToTop( ToTopFlags nFlags )
     {
         pTempOverlapWindow->ImplCalcToTop( pCurData );
         if ( pCurData->mpNext )
-            pCurData = pCurData->mpNext;
+            pCurData = pCurData->mpNext.get();
         pTempOverlapWindow = pTempOverlapWindow->mpWindowImpl->mpNext;
     }
 
@@ -355,14 +354,11 @@ void Window::ImplStartToTop( ToTopFlags nFlags )
     }
     while ( !pTempOverlapWindow->mpWindowImpl->mbFrame );
     // as last step invalidate the invalid areas
-    pCurData = aStartData.mpNext;
+    pCurData = aStartData.mpNext.get();
     while ( pCurData )
     {
-        pCurData->mpWindow->ImplInvalidateFrameRegion( pCurData->mpInvalidateRegion, InvalidateFlags::Children );
-        pNextData = pCurData->mpNext;
-        delete pCurData->mpInvalidateRegion;
-        delete pCurData;
-        pCurData = pNextData;
+        pCurData->mpWindow->ImplInvalidateFrameRegion( pCurData->mpInvalidateRegion.get(), InvalidateFlags::Children );
+        pCurData = pCurData->mpNext.get();
     }
 }
 
@@ -463,7 +459,7 @@ void Window::SetZOrder( vcl::Window* pRefWindow, ZOrderFlags nFlags )
     if (!pRefWindow || pRefWindow == this || mpWindowImpl->mbFrame)
         return;
 
-    DBG_ASSERT( pRefWindow->mpWindowImpl->mpParent == mpWindowImpl->mpParent, "Window::SetZOrder() - pRefWindow has other parent" );
+    SAL_WARN_IF( pRefWindow->mpWindowImpl->mpParent != mpWindowImpl->mpParent, "vcl", "Window::SetZOrder() - pRefWindow has other parent" );
     if ( nFlags & ZOrderFlags::Before )
     {
         if ( pRefWindow->mpWindowImpl->mpPrev.get() == this )
@@ -559,7 +555,7 @@ void Window::SetZOrder( vcl::Window* pRefWindow, ZOrderFlags nFlags )
             {
                 // Invalidate all windows which are next to each other
                 // Is INCOMPLETE !!!
-                Rectangle   aWinRect( Point( mnOutOffX, mnOutOffY ), Size( mnOutWidth, mnOutHeight ) );
+                tools::Rectangle   aWinRect( Point( mnOutOffX, mnOutOffY ), Size( mnOutWidth, mnOutHeight ) );
                 vcl::Window*     pWindow = nullptr;
                 if ( ImplIsOverlapWindow() )
                 {
@@ -573,7 +569,7 @@ void Window::SetZOrder( vcl::Window* pRefWindow, ZOrderFlags nFlags )
                 {
                     if ( pWindow == this )
                         break;
-                    Rectangle aCompRect( Point( pWindow->mnOutOffX, pWindow->mnOutOffY ),
+                    tools::Rectangle aCompRect( Point( pWindow->mnOutOffX, pWindow->mnOutOffY ),
                                          Size( pWindow->mnOutWidth, pWindow->mnOutHeight ) );
                     if ( aWinRect.IsOver( aCompRect ) )
                         pWindow->Invalidate( InvalidateFlags::Children | InvalidateFlags::NoTransparent );
@@ -586,7 +582,7 @@ void Window::SetZOrder( vcl::Window* pRefWindow, ZOrderFlags nFlags )
                 {
                     if ( pWindow != this )
                     {
-                        Rectangle aCompRect( Point( pWindow->mnOutOffX, pWindow->mnOutOffY ),
+                        tools::Rectangle aCompRect( Point( pWindow->mnOutOffX, pWindow->mnOutOffY ),
                                              Size( pWindow->mnOutWidth, pWindow->mnOutHeight ) );
                         if ( aWinRect.IsOver( aCompRect ) )
                         {
@@ -625,7 +621,7 @@ bool Window::IsTopWindow() const
         return false;
 
     ImplGetWinData();
-    if( mpWindowImpl->mpWinData->mnIsTopWindow == (sal_uInt16)~0)    // still uninitialized
+    if( mpWindowImpl->mpWinData->mnIsTopWindow == sal_uInt16(~0))    // still uninitialized
     {
         // #113722#, cache result of expensive queryInterface call
         vcl::Window *pThisWin = const_cast<vcl::Window*>(this);
@@ -661,8 +657,8 @@ vcl::Window* Window::ImplFindWindow( const Point& rFramePos )
     if ( !mpWindowImpl->mbVisible )
         return nullptr;
 
-    sal_uInt16 nHitTest = ImplHitTest( rFramePos );
-    if ( nHitTest & WINDOW_HITTEST_INSIDE )
+    WindowHitTest nHitTest = ImplHitTest( rFramePos );
+    if ( nHitTest & WindowHitTest::Inside )
     {
         // and then we check all child windows
         pTempWindow = mpWindowImpl->mpFirstChild;
@@ -674,7 +670,7 @@ vcl::Window* Window::ImplFindWindow( const Point& rFramePos )
             pTempWindow = pTempWindow->mpWindowImpl->mpNext;
         }
 
-        if ( nHitTest & WINDOW_HITTEST_TRANSPARENT )
+        if ( nHitTest & WindowHitTest::Transparent )
             return nullptr;
         else
             return this;
@@ -732,8 +728,8 @@ void Window::ImplResetReallyVisible()
     // For this, the data member of the event must not be NULL.
     // Previously, we did this in Window::Show, but there some events got lost in certain situations.
     if( bBecameReallyInvisible && ImplIsAccessibleCandidate() )
-        CallEventListeners( VCLEVENT_WINDOW_HIDE, this );
-        // TODO. It's kind of a hack that we're re-using the VCLEVENT_WINDOW_HIDE. Normally, we should
+        CallEventListeners( VclEventId::WindowHide, this );
+        // TODO. It's kind of a hack that we're re-using the VclEventId::WindowHide. Normally, we should
         // introduce another event which explicitly triggers the Accessibility implementations.
 
     vcl::Window* pWindow = mpWindowImpl->mpFirstOverlap;
@@ -842,10 +838,10 @@ static SystemWindow *ImplGetLastSystemWindow( vcl::Window *pWin )
 
 void Window::SetParent( vcl::Window* pNewParent )
 {
-    DBG_ASSERT( pNewParent, "Window::SetParent(): pParent == NULL" );
-    DBG_ASSERT( pNewParent != this, "someone tried to reparent a window to itself" );
+    SAL_WARN_IF( !pNewParent, "vcl", "Window::SetParent(): pParent == NULL" );
+    SAL_WARN_IF( pNewParent == this, "vcl", "someone tried to reparent a window to itself" );
 
-    if( pNewParent == this )
+    if( !pNewParent || pNewParent == this )
         return;
 
     // check if the taskpanelist would change and move the window pointer accordingly
@@ -973,8 +969,8 @@ void Window::SetParent( vcl::Window* pNewParent )
     // also convert Activate-Status
     if ( bNewFrame )
     {
-        if ( (GetType() == WINDOW_BORDERWINDOW) &&
-             (ImplGetWindow()->GetType() == WINDOW_FLOATINGWINDOW) )
+        if ( (GetType() == WindowType::BORDERWINDOW) &&
+             (ImplGetWindow()->GetType() == WindowType::FLOATINGWINDOW) )
             static_cast<ImplBorderWindow*>(this)->SetDisplayActive( mpWindowImpl->mpFrameData->mbHasFocus );
     }
 
@@ -985,7 +981,7 @@ void Window::SetParent( vcl::Window* pNewParent )
         mpWindowImpl->mpFrameData->mpFocusWin = Application::GetFocusWindow();
         if ( !mpWindowImpl->mpFrameData->mbHasFocus )
         {
-            mpWindowImpl->mpFrame->ToTop( 0 );
+            mpWindowImpl->mpFrame->ToTop( SalFrameToTop::NONE );
         }
     }
 
@@ -999,10 +995,15 @@ void Window::SetParent( vcl::Window* pNewParent )
         pNewSysWin->GetTaskPaneList()->AddWindow( this );
 
     if( (GetStyle() & WB_OWNERDRAWDECORATION) && mpWindowImpl->mbFrame )
-        ImplGetOwnerDrawList().push_back( this );
+        ImplGetOwnerDrawList().emplace_back(this );
 
     if ( bVisible )
         Show( true, ShowFlags::NoFocusChange | ShowFlags::NoActivate );
+}
+
+bool Window::IsAncestorOf( const vcl::Window& rWindow ) const
+{
+    return ImplIsRealParentPath(&rWindow);
 }
 
 sal_uInt16 Window::GetChildCount() const
@@ -1064,9 +1065,6 @@ vcl::Window* Window::GetWindow( GetWindowType nType ) const
         case GetWindowType::FirstOverlap:
             return mpWindowImpl->mpFirstOverlap;
 
-        case GetWindowType::LastOverlap:
-            return mpWindowImpl->mpLastOverlap;
-
         case GetWindowType::Overlap:
             if ( ImplIsOverlapWindow() )
                 return const_cast<vcl::Window*>(this);
@@ -1080,7 +1078,7 @@ vcl::Window* Window::GetWindow( GetWindowType nType ) const
                 return mpWindowImpl->mpOverlapWindow->mpWindowImpl->mpOverlapWindow;
 
         case GetWindowType::Client:
-            return const_cast<vcl::Window*>(this)->ImplGetWindow();
+            return this->ImplGetWindow();
 
         case GetWindowType::RealParent:
             return ImplGetParent();
@@ -1095,23 +1093,6 @@ vcl::Window* Window::GetWindow( GetWindowType nType ) const
 
         case GetWindowType::FirstTopWindowChild:
             return ImplGetWinData()->maTopWindowChildren.empty() ? nullptr : (*ImplGetWinData()->maTopWindowChildren.begin()).get();
-
-        case GetWindowType::LastTopWindowChild:
-            return ImplGetWinData()->maTopWindowChildren.empty() ? nullptr : (*ImplGetWinData()->maTopWindowChildren.rbegin()).get();
-
-        case GetWindowType::PrevTopWindowSibling:
-        {
-            if ( !mpWindowImpl->mpRealParent )
-                return nullptr;
-            const ::std::list< VclPtr<vcl::Window> >& rTopWindows( mpWindowImpl->mpRealParent->ImplGetWinData()->maTopWindowChildren );
-            ::std::list< VclPtr<vcl::Window> >::const_iterator myPos =
-                ::std::find( rTopWindows.begin(), rTopWindows.end(), this );
-            if ( myPos == rTopWindows.end() )
-                return nullptr;
-            if ( myPos == rTopWindows.begin() )
-                return nullptr;
-            return *--myPos;
-        }
 
         case GetWindowType::NextTopWindowSibling:
         {
@@ -1130,11 +1111,11 @@ vcl::Window* Window::GetWindow( GetWindowType nType ) const
     return nullptr;
 }
 
-bool Window::IsChild( const vcl::Window* pWindow, bool bSystemWindow ) const
+bool Window::IsChild( const vcl::Window* pWindow ) const
 {
     do
     {
-        if ( !bSystemWindow && pWindow->ImplIsOverlapWindow() )
+        if ( pWindow->ImplIsOverlapWindow() )
             break;
 
         pWindow = pWindow->ImplGetParent();
@@ -1164,8 +1145,8 @@ void Window::ImplSetFrameParent( const vcl::Window* pParent )
         // and reparent them
         if( ImplIsRealParentPath( pFrameWindow ) )
         {
-            DBG_ASSERT( mpWindowImpl->mpFrame != pFrameWindow->mpWindowImpl->mpFrame, "SetFrameParent to own" );
-            DBG_ASSERT( mpWindowImpl->mpFrame, "no frame" );
+            SAL_WARN_IF( mpWindowImpl->mpFrame == pFrameWindow->mpWindowImpl->mpFrame, "vcl", "SetFrameParent to own" );
+            SAL_WARN_IF( !mpWindowImpl->mpFrame, "vcl", "no frame" );
             SalFrame* pParentFrame = pParent ? pParent->mpWindowImpl->mpFrame : nullptr;
             pFrameWindow->mpWindowImpl->mpFrame->SetParent( pParentFrame );
         }

@@ -24,14 +24,14 @@
 #include <vcl/status.hxx>
 
 #include <swtypes.hxx>
-#include <utlui.hrc>
+#include <strings.hrc>
 
-#include "wrtsh.hxx"
-#include "view.hxx"
-#include "swmodule.hxx"
-#include "cmdid.h"
-#include "docsh.hxx"
-#include "tmplctrl.hxx"
+#include <wrtsh.hxx>
+#include <view.hxx>
+#include <swmodule.hxx>
+#include <cmdid.h>
+#include <docsh.hxx>
+#include <tmplctrl.hxx>
 
 SFX_IMPL_STATUSBAR_CONTROL( SwTemplateControl, SfxStringItem );
 
@@ -64,7 +64,7 @@ SwTemplateControl::SwTemplateControl( sal_uInt16 _nSlotId,
                                       StatusBar& rStb ) :
     SfxStatusBarControl( _nSlotId, _nId, rStb )
 {
-    GetStatusBar().SetQuickHelpText(GetId(), SW_RESSTR(STR_TMPLCTRL_HINT));
+    GetStatusBar().SetQuickHelpText(GetId(), SwResId(STR_TMPLCTRL_HINT));
 }
 
 SwTemplateControl::~SwTemplateControl()
@@ -74,13 +74,14 @@ SwTemplateControl::~SwTemplateControl()
 void SwTemplateControl::StateChanged(
     sal_uInt16 /*nSID*/, SfxItemState eState, const SfxPoolItem* pState )
 {
-    if( eState != SfxItemState::DEFAULT || dynamic_cast< const SfxVoidItem *>( pState ) !=  nullptr )
-        GetStatusBar().SetItemText( GetId(), OUString() );
-    else if ( dynamic_cast< const SfxStringItem *>( pState ) !=  nullptr )
+    const SfxStringItem* pItem = nullptr;
+    if (SfxItemState::DEFAULT == eState && (pItem = dynamic_cast<const SfxStringItem*>(pState)))
     {
-        sTemplate = static_cast<const SfxStringItem*>(pState)->GetValue();
-        GetStatusBar().SetItemText( GetId(), sTemplate );
+        sTemplate = pItem->GetValue();
+        GetStatusBar().SetItemText(GetId(), sTemplate);
     }
+    else
+        GetStatusBar().SetItemText(GetId(), OUString());
 }
 
 void SwTemplateControl::Paint( const UserDrawEvent&  )
@@ -93,30 +94,30 @@ void SwTemplateControl::Command( const CommandEvent& rCEvt )
     if ( rCEvt.GetCommand() == CommandEventId::ContextMenu &&
             !GetStatusBar().GetItemText( GetId() ).isEmpty() )
     {
-        SwTemplatePopup_Impl aPop;
+        ScopedVclPtrInstance<SwTemplatePopup_Impl> aPop;
         {
             SwView* pView = ::GetActiveView();
-            SwWrtShell* pWrtShell;
-            if( pView && nullptr != (pWrtShell = pView->GetWrtShellPtr()) &&
+            SwWrtShell *const pWrtShell(pView ? pView->GetWrtShellPtr() : nullptr);
+            if (nullptr != pWrtShell &&
                 !pWrtShell->SwCursorShell::HasSelection()&&
                 !pWrtShell->IsSelFrameMode() &&
                 !pWrtShell->IsObjSelected())
             {
                 SfxStyleSheetBasePool* pPool = pView->GetDocShell()->
                                                             GetStyleSheetPool();
-                pPool->SetSearchMask(SFX_STYLE_FAMILY_PAGE);
+                pPool->SetSearchMask(SfxStyleFamily::Page);
                 if( pPool->Count() > 1 )
                 {
                     sal_uInt16 nCount = 0;
                     SfxStyleSheetBase* pStyle = pPool->First();
                     while( pStyle )
                     {
-                        aPop.InsertItem( ++nCount, pStyle->GetName() );
+                        aPop->InsertItem( ++nCount, pStyle->GetName() );
                         pStyle = pPool->Next();
                     }
 
-                    aPop.Execute( &GetStatusBar(), rCEvt.GetMousePosPixel());
-                    const sal_uInt16 nCurrId = aPop.GetCurId();
+                    aPop->Execute( &GetStatusBar(), rCEvt.GetMousePosPixel());
+                    const sal_uInt16 nCurrId = aPop->GetCurId();
                     if( nCurrId != USHRT_MAX)
                     {
                         // looks a bit awkward, but another way is not possible

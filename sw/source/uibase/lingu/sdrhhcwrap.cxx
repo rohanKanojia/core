@@ -26,14 +26,13 @@
 #include <sfx2/printer.hxx>
 #include <svx/svdmodel.hxx>
 #include <editeng/langitem.hxx>
-#include <com/sun/star/beans/XPropertySet.hpp>
 #include <linguistic/lngprops.hxx>
 #include <sfx2/sfxuno.hxx>
 #include <svx/svdview.hxx>
 #include <editeng/unolingu.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <drawdoc.hxx>
-#include <sdrhhcwrap.hxx>
+#include "sdrhhcwrap.hxx"
 #include <frmfmt.hxx>
 #include <docsh.hxx>
 #include <wrtsh.hxx>
@@ -54,10 +53,9 @@ SdrHHCWrapper::SdrHHCWrapper( SwView* pVw,
        bool bInteractive ) :
     SdrOutliner(pVw->GetDocShell()->GetDoc()->getIDocumentDrawModelAccess().GetDrawModel()->
                              GetDrawOutliner().GetEmptyItemSet().GetPool(),
-                OUTLINERMODE_TEXTOBJECT ),
+                OutlinerMode::TextObject ),
     pView( pVw ),
     pTextObj( nullptr ),
-    pOutlView( nullptr ),
     nOptions( nConvOptions ),
     nDocIndex( 0 ),
     nSourceLang( nSourceLanguage ),
@@ -67,21 +65,21 @@ SdrHHCWrapper::SdrHHCWrapper( SwView* pVw,
 {
     SetRefDevice( pView->GetDocShell()->GetDoc()->getIDocumentDeviceAccess().getPrinter( false ) );
 
-    MapMode aMapMode (MAP_TWIP);
+    MapMode aMapMode (MapUnit::MapTwip);
     SetRefMapMode(aMapMode);
 
      Size aSize( 1, 1 );
     SetPaperSize( aSize );
 
-    pOutlView = new OutlinerView( this, &(pView->GetEditWin()) );
+    pOutlView.reset( new OutlinerView( this, &(pView->GetEditWin()) ) );
     pOutlView->GetOutliner()->SetRefDevice(pView->GetWrtShell().getIDocumentDeviceAccess().getPrinter( false ));
 
     // Hack: all SdrTextObj attributes should be transferred to EditEngine
-    pOutlView->SetBackgroundColor( Color( COL_WHITE ) );
+    pOutlView->SetBackgroundColor( COL_WHITE );
 
-    InsertView( pOutlView );
+    InsertView( pOutlView.get() );
     Point aPoint( 0, 0 );
-     Rectangle aRect( aPoint, aSize );
+     tools::Rectangle aRect( aPoint, aSize );
     pOutlView->SetOutputArea( aRect );
 //  SetText( NULL );
     ClearModifyFlag();
@@ -95,10 +93,10 @@ SdrHHCWrapper::~SdrHHCWrapper()
         OSL_ENSURE( pSdrView, "SdrHHCWrapper without DrawView?" );
         pSdrView->SdrEndTextEdit( true );
         SetUpdateMode(false);
-        pOutlView->SetOutputArea( Rectangle( Point(), Size(1, 1) ) );
+        pOutlView->SetOutputArea( tools::Rectangle( Point(), Size(1, 1) ) );
     }
-    RemoveView( pOutlView );
-    delete pOutlView;
+    RemoveView( pOutlView.get() );
+    pOutlView.reset();
 }
 
 void SdrHHCWrapper::StartTextConversion()
@@ -116,7 +114,7 @@ bool SdrHHCWrapper::ConvertNextDocument()
         OSL_ENSURE( pSdrView, "SdrHHCWrapper without DrawView?" );
         pSdrView->SdrEndTextEdit( true );
         SetUpdateMode(false);
-        pOutlView->SetOutputArea( Rectangle( Point(), Size(1, 1) ) );
+        pOutlView->SetOutputArea( tools::Rectangle( Point(), Size(1, 1) ) );
         SetPaperSize( Size(1, 1) );
         Clear();
         pTextObj = nullptr;
@@ -126,15 +124,15 @@ bool SdrHHCWrapper::ConvertNextDocument()
 
     std::list<SdrTextObj*> aTextObjs;
     SwDrawContact::GetTextObjectsFromFormat( aTextObjs, pView->GetDocShell()->GetDoc() );
-    for ( std::list<SdrTextObj*>::iterator aIt = aTextObjs.begin(); aIt != aTextObjs.end(); ++aIt )
+    for (auto const& textObj : aTextObjs)
     {
-        pTextObj = (*aIt);
-        if ( pTextObj )
+        pTextObj = textObj;
+        if (textObj)
         {
-            OutlinerParaObject* pParaObj = pTextObj->GetOutlinerParaObject();
+            OutlinerParaObject* pParaObj = textObj->GetOutlinerParaObject();
             if ( pParaObj )
             {
-                SetPaperSize( pTextObj->GetLogicRect().GetSize() );
+                SetPaperSize( textObj->GetLogicRect().GetSize() );
                 SetText( *pParaObj );
 
                 ClearModifyFlag();
@@ -152,12 +150,12 @@ bool SdrHHCWrapper::ConvertNextDocument()
                     SdrPageView* pPV = pSdrView->GetSdrPageView();
                     nDocIndex = n;
                     bNextDoc = true;
-                    pOutlView->SetOutputArea( Rectangle( Point(), Size(1,1)));
+                    pOutlView->SetOutputArea( tools::Rectangle( Point(), Size(1,1)));
                     SetPaperSize( pTextObj->GetLogicRect().GetSize() );
                     SetUpdateMode(true);
                     pView->GetWrtShell().MakeVisible(pTextObj->GetLogicRect());
 
-                    pSdrView->SdrBeginTextEdit(pTextObj, pPV, &pView->GetEditWin(), false, this, pOutlView, true, true);
+                    pSdrView->SdrBeginTextEdit(pTextObj, pPV, &pView->GetEditWin(), false, this, pOutlView.get(), true, true);
                 }
                 else
                     SetUpdateMode(false);

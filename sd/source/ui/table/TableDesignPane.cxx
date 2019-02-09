@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sddll.hxx"
+#include <sddll.hxx>
 
 #include <com/sun/star/beans/XMultiPropertyStates.hpp>
 #include <com/sun/star/frame/XController.hpp>
@@ -25,9 +25,8 @@
 #include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <vcl/bitmapaccess.hxx>
+#include <vcl/virdev.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/builderfactory.hxx>
@@ -47,15 +46,13 @@
 #include <o3tl/enumrange.hxx>
 
 #include "TableDesignPane.hxx"
-#include "createtabledesignpanel.hxx"
+#include <createtabledesignpanel.hxx>
 
-#include "DrawDocShell.hxx"
-#include "ViewShellBase.hxx"
-#include "DrawViewShell.hxx"
-#include "DrawController.hxx"
-#include "glob.hrc"
-#include "sdresid.hxx"
-#include "EventMultiplexer.hxx"
+#include <DrawDocShell.hxx>
+#include <ViewShellBase.hxx>
+#include <DrawViewShell.hxx>
+#include <DrawController.hxx>
+#include <EventMultiplexer.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -77,45 +74,29 @@ static const sal_Int32 nCellHeight = 7; // one pixel is shared with the next cel
 static const sal_Int32 nBitmapWidth = (nCellWidth * nPreviewColumns) - (nPreviewColumns - 1);
 static const sal_Int32 nBitmapHeight = (nCellHeight * nPreviewRows) - (nPreviewRows - 1);
 
-static const OUString* getPropertyNames()
+static const OUStringLiteral gPropNames[CB_COUNT] =
 {
-    static const OUString gPropNames[ CB_COUNT ] =
-    {
-        OUString("UseFirstRowStyle") ,
-        OUString("UseLastRowStyle") ,
-        OUString("UseBandingRowStyle") ,
-        OUString("UseFirstColumnStyle") ,
-        OUString("UseLastColumnStyle") ,
-        OUString("UseBandingColumnStyle")
-    };
-    return &gPropNames[0];
-}
+    "UseFirstRowStyle",
+    "UseLastRowStyle",
+    "UseBandingRowStyle",
+    "UseFirstColumnStyle",
+    "UseLastColumnStyle",
+    "UseBandingColumnStyle"
+};
 
-TableDesignWidget::TableDesignWidget( VclBuilderContainer* pParent, ViewShellBase& rBase, bool bModal )
+TableDesignWidget::TableDesignWidget( VclBuilderContainer* pParent, ViewShellBase& rBase )
     : mrBase(rBase)
-    , mbModal(bModal)
-    , mbStyleSelected(false)
-    , mbOptionsChanged(false)
 {
     pParent->get(m_pValueSet, "previews");
     m_pValueSet->SetStyle(m_pValueSet->GetStyle() | WB_NO_DIRECTSELECT | WB_FLATVALUESET | WB_ITEMBORDER);
     m_pValueSet->SetExtraSpacing(8);
-    m_pValueSet->setModal(mbModal);
-    if( !mbModal )
-    {
-        m_pValueSet->SetColor();
-    }
-    else
-    {
-        m_pValueSet->SetColor( Color( COL_WHITE ) );
-        m_pValueSet->SetBackground( Color( COL_WHITE ) );
-    }
+    m_pValueSet->setModal(false);
+    m_pValueSet->SetColor();
     m_pValueSet->SetSelectHdl (LINK(this, TableDesignWidget, implValueSetHdl));
 
-    const OUString* pPropNames = getPropertyNames();
     for (sal_uInt16 i = CB_HEADER_ROW; i <= CB_BANDED_COLUMNS; ++i)
     {
-        pParent->get(m_aCheckBoxes[i], OUStringToOString(pPropNames[i], RTL_TEXTENCODING_UTF8));
+        pParent->get(m_aCheckBoxes[i], OString(gPropNames[i].data, gPropNames[i].size));
         m_aCheckBoxes[i]->SetClickHdl( LINK( this, TableDesignWidget, implCheckBoxHdl ) );
     }
 
@@ -145,7 +126,7 @@ TableDesignWidget::~TableDesignWidget()
     removeListener();
 }
 
-static SfxBindings* getBindings( ViewShellBase& rBase )
+static SfxBindings* getBindings( ViewShellBase const & rBase )
 {
     if( rBase.GetMainViewShell().get() && rBase.GetMainViewShell()->GetViewFrame() )
         return &rBase.GetMainViewShell()->GetViewFrame()->GetBindings();
@@ -153,7 +134,7 @@ static SfxBindings* getBindings( ViewShellBase& rBase )
         return nullptr;
 }
 
-static SfxDispatcher* getDispatcher( ViewShellBase& rBase )
+static SfxDispatcher* getDispatcher( ViewShellBase const & rBase )
 {
     if( rBase.GetMainViewShell().get() && rBase.GetMainViewShell()->GetViewFrame() )
         return rBase.GetMainViewShell()->GetViewFrame()->GetDispatcher();
@@ -161,11 +142,9 @@ static SfxDispatcher* getDispatcher( ViewShellBase& rBase )
         return nullptr;
 }
 
-IMPL_LINK_NOARG_TYPED(TableDesignWidget, implValueSetHdl, ValueSet*, void)
+IMPL_LINK_NOARG(TableDesignWidget, implValueSetHdl, ValueSet*, void)
 {
-    mbStyleSelected = true;
-    if( !mbModal )
-        ApplyStyle();
+    ApplyStyle();
 }
 
 void TableDesignWidget::ApplyStyle()
@@ -173,7 +152,7 @@ void TableDesignWidget::ApplyStyle()
     try
     {
         OUString sStyleName;
-        sal_Int32 nIndex = static_cast< sal_Int32 >( m_pValueSet->GetSelectItemId() ) - 1;
+        sal_Int32 nIndex = static_cast< sal_Int32 >( m_pValueSet->GetSelectedItemId() ) - 1;
 
         if( (nIndex >= 0) && (nIndex < mxTableFamily->getCount()) )
         {
@@ -192,7 +171,7 @@ void TableDesignWidget::ApplyStyle()
                 SfxRequest aReq( SID_TABLE_STYLE, SfxCallMode::SYNCHRON, SfxGetpApp()->GetPool() );
                 aReq.AppendItem( SfxStringItem( SID_TABLE_STYLE, sStyleName ) );
 
-                rtl::Reference< sdr::SelectionController > xController( pView->getSelectionController() );
+                const rtl::Reference< sdr::SelectionController >& xController( pView->getSelectionController() );
                 if( xController.is() )
                     xController->Execute( aReq );
 
@@ -218,13 +197,9 @@ void TableDesignWidget::ApplyStyle()
     }
 }
 
-IMPL_LINK_NOARG_TYPED(TableDesignWidget, implCheckBoxHdl, Button*, void)
+IMPL_LINK_NOARG(TableDesignWidget, implCheckBoxHdl, Button*, void)
 {
-    mbOptionsChanged = true;
-
-    if( !mbModal )
-        ApplyOptions();
-
+    ApplyOptions();
     FillDesignPreviewControl();
 }
 
@@ -248,7 +223,7 @@ void TableDesignWidget::ApplyOptions()
         SdrView* pView = mrBase.GetDrawView();
         if( pView )
         {
-            rtl::Reference< sdr::SelectionController > xController( pView->getSelectionController() );
+            const rtl::Reference< sdr::SelectionController >& xController( pView->getSelectionController() );
             if( xController.is() )
             {
                 xController->Execute( aReq );
@@ -271,27 +246,24 @@ void TableDesignWidget::onSelectionChanged()
     if( mxView.is() ) try
     {
         Reference< XSelectionSupplier >  xSel( mxView, UNO_QUERY_THROW );
-        if (xSel.is())
+        Any aSel( xSel->getSelection() );
+        Sequence< XShape > xShapeSeq;
+        if( aSel >>= xShapeSeq )
         {
-            Any aSel( xSel->getSelection() );
-            Sequence< XShape > xShapeSeq;
-            if( aSel >>= xShapeSeq )
-            {
-                if( xShapeSeq.getLength() == 1 )
-                    aSel <<= xShapeSeq[0];
-            }
-            else
-            {
-                Reference< XShapes > xShapes( aSel, UNO_QUERY );
-                if( xShapes.is() && (xShapes->getCount() == 1) )
-                    aSel <<= xShapes->getByIndex(0);
-            }
+            if( xShapeSeq.getLength() == 1 )
+                aSel <<= xShapeSeq[0];
+        }
+        else
+        {
+            Reference< XShapes > xShapes( aSel, UNO_QUERY );
+            if( xShapes.is() && (xShapes->getCount() == 1) )
+                aSel = xShapes->getByIndex(0);
+        }
 
-            Reference< XShapeDescriptor > xDesc( aSel, UNO_QUERY );
-            if( xDesc.is() && ( xDesc->getShapeType() == "com.sun.star.drawing.TableShape" || xDesc->getShapeType() == "com.sun.star.presentation.TableShape" ) )
-            {
-                xNewSelection.set( xDesc, UNO_QUERY );
-            }
+        Reference< XShapeDescriptor > xDesc( aSel, UNO_QUERY );
+        if( xDesc.is() && ( xDesc->getShapeType() == "com.sun.star.drawing.TableShape" || xDesc->getShapeType() == "com.sun.star.presentation.TableShape" ) )
+        {
+            xNewSelection.set( xDesc, UNO_QUERY );
         }
     }
     catch( Exception& )
@@ -317,8 +289,7 @@ void TableValueSet::Resize()
         Image aImage = GetItemImage(GetItemId(0));
         Size aItemSize = aImage.GetSizePixel();
 
-        aItemSize.Width() += 10;
-        aItemSize.Height() += 10;
+        aItemSize.AdjustHeight(10 );
         int nColumnCount = (aValueSetSize.Width() - GetScrollWidth()) / aItemSize.Width();
         if (nColumnCount < 1)
             nColumnCount = 1;
@@ -329,12 +300,12 @@ void TableValueSet::Resize()
 
         int nVisibleRowCount = (aValueSetSize.Height()+2) / aItemSize.Height();
 
-        SetColCount ((sal_uInt16)nColumnCount);
-        SetLineCount ((sal_uInt16)nRowCount);
+        SetColCount (static_cast<sal_uInt16>(nColumnCount));
+        SetLineCount (static_cast<sal_uInt16>(nRowCount));
 
         if( !m_bModal )
         {
-            WinBits nStyle = GetStyle() & ~(WB_VSCROLL);
+            WinBits nStyle = GetStyle() & ~WB_VSCROLL;
             if( nRowCount > nVisibleRowCount )
             {
                 nStyle |= WB_VSCROLL;
@@ -365,28 +336,20 @@ void TableValueSet::updateSettings()
     }
 }
 
-VCL_BUILDER_DECL_FACTORY(TableValueSet)
-{
-    WinBits nWinStyle = WB_TABSTOP;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
-    if (!sBorder.isEmpty())
-        nWinStyle |= WB_BORDER;
-    rRet = VclPtr<TableValueSet>::Create(pParent, nWinStyle);
-}
+VCL_BUILDER_FACTORY_CONSTRUCTOR(TableValueSet, WB_TABSTOP)
 
 void TableDesignWidget::updateControls()
 {
-    static const sal_Bool gDefaults[CB_COUNT] = { sal_True, sal_False, sal_True, sal_False, sal_False, sal_False };
+    static const bool gDefaults[CB_COUNT] = { true, false, true, false, false, false };
 
     const bool bHasTable = mxSelectedTable.is();
-    const OUString* pPropNames = getPropertyNames();
 
     for (sal_uInt16 i = CB_HEADER_ROW; i <= CB_BANDED_COLUMNS; ++i)
     {
         bool bUse = gDefaults[i];
         if( bHasTable ) try
         {
-            mxSelectedTable->getPropertyValue( *pPropNames++ ) >>= bUse;
+            mxSelectedTable->getPropertyValue( gPropNames[i] ) >>= bUse;
         }
         catch( Exception& )
         {
@@ -416,7 +379,7 @@ void TableDesignWidget::updateControls()
                 {
                     if( aNames[nIndex] == sStyleName )
                     {
-                        nSelection = (sal_uInt16)nIndex+1;
+                        nSelection = static_cast<sal_uInt16>(nIndex)+1;
                         break;
                     }
                 }
@@ -429,13 +392,7 @@ void TableDesignWidget::updateControls()
 void TableDesignWidget::addListener()
 {
     Link<tools::EventMultiplexerEvent&,void> aLink( LINK(this,TableDesignWidget,EventMultiplexerListener) );
-    mrBase.GetEventMultiplexer()->AddEventListener (
-        aLink,
-        tools::EventMultiplexerEvent::EID_EDIT_VIEW_SELECTION
-        | tools::EventMultiplexerEvent::EID_CURRENT_PAGE
-        | tools::EventMultiplexerEvent::EID_MAIN_VIEW_REMOVED
-        | tools::EventMultiplexerEvent::EID_MAIN_VIEW_ADDED
-        | tools::EventMultiplexerEvent::EID_DISPOSING);
+    mrBase.GetEventMultiplexer()->AddEventListener( aLink );
 }
 
 void TableDesignWidget::removeListener()
@@ -444,25 +401,27 @@ void TableDesignWidget::removeListener()
     mrBase.GetEventMultiplexer()->RemoveEventListener( aLink );
 }
 
-IMPL_LINK_TYPED(TableDesignWidget,EventMultiplexerListener,
+IMPL_LINK(TableDesignWidget,EventMultiplexerListener,
     tools::EventMultiplexerEvent&, rEvent, void)
 {
     switch (rEvent.meEventId)
     {
-        case tools::EventMultiplexerEvent::EID_CURRENT_PAGE:
-        case tools::EventMultiplexerEvent::EID_EDIT_VIEW_SELECTION:
+        case EventMultiplexerEventId::CurrentPageChanged:
+        case EventMultiplexerEventId::EditViewSelection:
             onSelectionChanged();
             break;
 
-        case tools::EventMultiplexerEvent::EID_MAIN_VIEW_REMOVED:
+        case EventMultiplexerEventId::MainViewRemoved:
             mxView.clear();
             onSelectionChanged();
             break;
 
-        case tools::EventMultiplexerEvent::EID_MAIN_VIEW_ADDED:
+        case EventMultiplexerEventId::MainViewAdded:
             mxView.set( mrBase.GetController(), UNO_QUERY );
             onSelectionChanged();
             break;
+
+        default: break;
     }
 }
 
@@ -485,24 +444,24 @@ CellInfo::CellInfo( const Reference< XStyle >& xStyle )
 
         // get style fill color
         if( !GetDraftFillColor(rSet, maCellColor) )
-            maCellColor.SetColor( COL_TRANSPARENT );
+            maCellColor = COL_TRANSPARENT;
 
         // get style text color
-        const SvxColorItem* pTextColor = dynamic_cast<const SvxColorItem*>( rSet.GetItem(EE_CHAR_COLOR) );
+        const SvxColorItem* pTextColor = rSet.GetItem(EE_CHAR_COLOR);
         if( pTextColor )
             maTextColor = pTextColor->GetValue();
         else
-            maTextColor.SetColor( COL_TRANSPARENT );
+            maTextColor = COL_TRANSPARENT;
 
         // get border
-        const SvxBoxItem* pBoxItem = dynamic_cast<const SvxBoxItem*>(rSet.GetItem( SDRATTR_TABLE_BORDER ) );
+        const SvxBoxItem* pBoxItem = rSet.GetItem( SDRATTR_TABLE_BORDER );
         if( pBoxItem )
             maBorder = *pBoxItem;
     }
 }
 
 typedef std::vector< std::shared_ptr< CellInfo > > CellInfoVector;
-typedef std::shared_ptr< CellInfo > CellInfoMatrix[nPreviewColumns][nPreviewRows];
+typedef std::shared_ptr< CellInfo > CellInfoMatrix[nPreviewColumns * nPreviewRows];
 
 struct TableStyleSettings
 {
@@ -612,12 +571,12 @@ static void FillCellInfoMatrix( const CellInfoVector& rStyle, const TableStyleSe
                 xCellInfo = rStyle[sdr::table::body_style];
             }
 
-            rMatrix[nCol][nRow] = xCellInfo;
+            rMatrix[(nCol * nPreviewColumns) + nRow] = xCellInfo;
         }
     }
 }
 
-const Bitmap CreateDesignPreview( const Reference< XIndexAccess >& xTableStyle, const TableStyleSettings& rSettings, bool bIsPageDark )
+static const BitmapEx CreateDesignPreview( const Reference< XIndexAccess >& xTableStyle, const TableStyleSettings& rSettings, bool bIsPageDark )
 {
     CellInfoVector aCellInfoVector(sdr::table::style_count);
     FillCellInfoVector( xTableStyle, aCellInfoVector );
@@ -625,117 +584,115 @@ const Bitmap CreateDesignPreview( const Reference< XIndexAccess >& xTableStyle, 
     CellInfoMatrix aMatrix;
     FillCellInfoMatrix( aCellInfoVector, rSettings, aMatrix );
 
-// bbbbbbbbbbbb w = 12 pixel
-// bccccccccccb h = 7 pixel
-// bccccccccccb b = border color
-// bcttttttttcb c = cell color
-// bccccccccccb t = text color
-// bccccccccccb
-// bbbbbbbbbbbb
+    // bbbbbbbbbbbb w = 12 pixel
+    // bccccccccccb h = 7 pixel
+    // bccccccccccb b = border color
+    // bcttttttttcb c = cell color
+    // bccccccccccb t = text color
+    // bccccccccccb
+    // bbbbbbbbbbbb
 
-    Bitmap aPreviewBmp( Size( nBitmapWidth, nBitmapHeight), 24, nullptr );
-    BitmapWriteAccess* pAccess = aPreviewBmp.AcquireWriteAccess();
-    if( pAccess )
+    ScopedVclPtr<VirtualDevice> pVirDev(VclPtr<VirtualDevice>::Create());
+    Size aBmpSize(nBitmapWidth, nBitmapHeight);
+    pVirDev->SetOutputSizePixel(aBmpSize);
+
+    pVirDev->SetBackground( bIsPageDark ? COL_BLACK : COL_WHITE );
+    pVirDev->Erase();
+
+    // first draw cell background and text line previews
+    sal_Int32 nY = 0;
+    sal_Int32 nRow;
+    for( nRow = 0; nRow < nPreviewRows; ++nRow, nY += nCellHeight-1 )
     {
-        pAccess->Erase( Color( bIsPageDark ? COL_BLACK : COL_WHITE ) );
-
-        // first draw cell background and text line previews
-        sal_Int32 nY = 0;
-        sal_Int32 nRow;
-        for( nRow = 0; nRow < nPreviewRows; ++nRow, nY += nCellHeight-1 )
+        sal_Int32 nX = 0;
+        for( sal_Int32 nCol = 0; nCol < nPreviewColumns; ++nCol, nX += nCellWidth-1 )
         {
-            sal_Int32 nX = 0;
-            for( sal_Int32 nCol = 0; nCol < nPreviewColumns; ++nCol, nX += nCellWidth-1 )
+            std::shared_ptr< CellInfo > xCellInfo(aMatrix[(nCol * nPreviewColumns) + nRow]);
+
+            Color aTextColor( COL_AUTO );
+            if( xCellInfo.get() )
             {
-                std::shared_ptr< CellInfo > xCellInfo( aMatrix[nCol][nRow] );
+                // fill cell background
+                const ::tools::Rectangle aRect( nX, nY, nX + nCellWidth - 1, nY + nCellHeight - 1 );
 
-                Color aTextColor( COL_AUTO );
-                if( xCellInfo.get() )
+                if( xCellInfo->maCellColor != COL_TRANSPARENT )
                 {
-                    // fill cell background
-                    const Rectangle aRect( nX, nY, nX + nCellWidth - 1, nY + nCellHeight - 1 );
-
-                    if( xCellInfo->maCellColor.GetColor() != COL_TRANSPARENT )
-                    {
-                        pAccess->SetFillColor( xCellInfo->maCellColor );
-                        pAccess->FillRect( aRect );
-                    }
-
-                    aTextColor = xCellInfo->maTextColor;
+                    pVirDev->SetFillColor( xCellInfo->maCellColor );
+                    pVirDev->DrawRect( aRect );
                 }
 
-                // draw text preview line
-                if( aTextColor.GetColor() == COL_AUTO )
-                    aTextColor.SetColor( bIsPageDark ? COL_WHITE : COL_BLACK );
-                pAccess->SetLineColor( aTextColor );
-                const Point aPnt1( nX + 2, nY + ((nCellHeight - 1 ) >> 1) );
-                const Point aPnt2( nX + nCellWidth - 3, aPnt1.Y() );
-                pAccess->DrawLine( aPnt1, aPnt2 );
+                aTextColor = xCellInfo->maTextColor;
             }
+
+            // draw text preview line
+            if( aTextColor == COL_AUTO )
+                aTextColor = bIsPageDark ? COL_WHITE : COL_BLACK;
+            pVirDev->SetLineColor( aTextColor );
+            const Point aPnt1( nX + 2, nY + ((nCellHeight - 1 ) >> 1) );
+            const Point aPnt2( nX + nCellWidth - 3, aPnt1.Y() );
+            pVirDev->DrawLine( aPnt1, aPnt2 );
         }
-
-        // second draw border lines
-        nY = 0;
-        for( nRow = 0; nRow < nPreviewRows; ++nRow, nY += nCellHeight-1 )
-        {
-            sal_Int32 nX = 0;
-            for( sal_Int32 nCol = 0; nCol < nPreviewColumns; ++nCol, nX += nCellWidth-1 )
-            {
-                std::shared_ptr< CellInfo > xCellInfo( aMatrix[nCol][nRow] );
-
-                if( xCellInfo.get() )
-                {
-                    const Point aPntTL( nX, nY );
-                    const Point aPntTR( nX + nCellWidth - 1, nY );
-                    const Point aPntBL( nX, nY + nCellHeight - 1 );
-                    const Point aPntBR( nX + nCellWidth - 1, nY + nCellHeight - 1 );
-
-                    sal_Int32 border_diffs[8] = { 0,-1, 0,1, -1,0, 1,0 };
-                    sal_Int32* pDiff = &border_diffs[0];
-
-                    // draw top border
-                    for( SvxBoxItemLine nLine : o3tl::enumrange<SvxBoxItemLine>() )
-                    {
-                        const ::editeng::SvxBorderLine* pBorderLine = xCellInfo->maBorder.GetLine(nLine);
-                        if( !pBorderLine || ((pBorderLine->GetOutWidth() == 0) && (pBorderLine->GetInWidth()==0)) )
-                            continue;
-
-                        sal_Int32 nBorderCol = nCol + *pDiff++;
-                        sal_Int32 nBorderRow = nRow + *pDiff++;
-                        if( (nBorderCol >= 0) && (nBorderCol < nPreviewColumns) && (nBorderRow >= 0) && (nBorderRow < nPreviewRows) )
-                        {
-                            // check border
-                            std::shared_ptr< CellInfo > xBorderInfo( aMatrix[nBorderCol][nBorderRow] );
-                            if( xBorderInfo.get() )
-                            {
-                                const ::editeng::SvxBorderLine* pBorderLine2 = xBorderInfo->maBorder.GetLine(static_cast<SvxBoxItemLine>(static_cast<int>(nLine)^1));
-                                if( pBorderLine2 && pBorderLine2->HasPriority(*pBorderLine) )
-                                    continue; // other border line wins
-                            }
-                        }
-
-                        pAccess->SetLineColor( pBorderLine->GetColor() );
-                        switch( nLine )
-                        {
-                        case SvxBoxItemLine::TOP: pAccess->DrawLine( aPntTL, aPntTR ); break;
-                        case SvxBoxItemLine::BOTTOM: pAccess->DrawLine( aPntBL, aPntBR ); break;
-                        case SvxBoxItemLine::LEFT: pAccess->DrawLine( aPntTL, aPntBL ); break;
-                        case SvxBoxItemLine::RIGHT: pAccess->DrawLine( aPntTR, aPntBR ); break;
-                        }
-                    }
-                }
-            }
-        }
-
-        Bitmap::ReleaseAccess( pAccess );
     }
 
-    return aPreviewBmp;
+    // second draw border lines
+    nY = 0;
+    for( nRow = 0; nRow < nPreviewRows; ++nRow, nY += nCellHeight-1 )
+    {
+        sal_Int32 nX = 0;
+        for( sal_Int32 nCol = 0; nCol < nPreviewColumns; ++nCol, nX += nCellWidth-1 )
+        {
+            std::shared_ptr< CellInfo > xCellInfo(aMatrix[(nCol * nPreviewColumns) + nRow]);
+
+            if( xCellInfo.get() )
+            {
+                const Point aPntTL( nX, nY );
+                const Point aPntTR( nX + nCellWidth - 1, nY );
+                const Point aPntBL( nX, nY + nCellHeight - 1 );
+                const Point aPntBR( nX + nCellWidth - 1, nY + nCellHeight - 1 );
+
+                sal_Int32 border_diffs[8] = { 0,-1, 0,1, -1,0, 1,0 };
+                sal_Int32* pDiff = &border_diffs[0];
+
+                // draw top border
+                for( SvxBoxItemLine nLine : o3tl::enumrange<SvxBoxItemLine>() )
+                {
+                    const ::editeng::SvxBorderLine* pBorderLine = xCellInfo->maBorder.GetLine(nLine);
+                    if( !pBorderLine || ((pBorderLine->GetOutWidth() == 0) && (pBorderLine->GetInWidth()==0)) )
+                        continue;
+
+                    sal_Int32 nBorderCol = nCol + *pDiff++;
+                    sal_Int32 nBorderRow = nRow + *pDiff++;
+                    if( (nBorderCol >= 0) && (nBorderCol < nPreviewColumns) && (nBorderRow >= 0) && (nBorderRow < nPreviewRows) )
+                    {
+                        // check border
+                        std::shared_ptr< CellInfo > xBorderInfo(aMatrix[(nBorderCol * nPreviewColumns) + nBorderRow]);
+                        if( xBorderInfo.get() )
+                        {
+                            const ::editeng::SvxBorderLine* pBorderLine2 = xBorderInfo->maBorder.GetLine(static_cast<SvxBoxItemLine>(static_cast<int>(nLine)^1));
+                            if( pBorderLine2 && pBorderLine2->HasPriority(*pBorderLine) )
+                                continue; // other border line wins
+                        }
+                    }
+
+                    pVirDev->SetLineColor( pBorderLine->GetColor() );
+                    switch( nLine )
+                    {
+                    case SvxBoxItemLine::TOP: pVirDev->DrawLine( aPntTL, aPntTR ); break;
+                    case SvxBoxItemLine::BOTTOM: pVirDev->DrawLine( aPntBL, aPntBR ); break;
+                    case SvxBoxItemLine::LEFT: pVirDev->DrawLine( aPntTL, aPntBL ); break;
+                    case SvxBoxItemLine::RIGHT: pVirDev->DrawLine( aPntTR, aPntBR ); break;
+                    }
+                }
+            }
+        }
+    }
+
+    return pVirDev->GetBitmapEx(Point(0,0), aBmpSize);
 }
 
 void TableDesignWidget::FillDesignPreviewControl()
 {
-    sal_uInt16 nSelectedItem = m_pValueSet->GetSelectItemId();
+    sal_uInt16 nSelectedItem = m_pValueSet->GetSelectedItemId();
     m_pValueSet->Clear();
     try
     {
@@ -776,13 +733,14 @@ void TableDesignWidget::FillDesignPreviewControl()
         sal_Int32 nRows = (nCount+2)/3;
         m_pValueSet->SetColCount(nCols);
         m_pValueSet->SetLineCount(nRows);
-        WinBits nStyle = m_pValueSet->GetStyle() & ~(WB_VSCROLL);
+        WinBits nStyle = m_pValueSet->GetStyle() & ~WB_VSCROLL;
         m_pValueSet->SetStyle(nStyle);
         Size aSize(m_pValueSet->GetOptimalSize());
-        aSize.Width() += (10 * nCols);
-        aSize.Height() += (10 * nRows);
+        aSize.AdjustWidth(10 * nCols);
+        aSize.AdjustHeight(10 * nRows);
         m_pValueSet->set_width_request(aSize.Width());
         m_pValueSet->set_height_request(aSize.Height());
+        m_pValueSet->Resize();
     }
     catch( Exception& )
     {
@@ -791,29 +749,17 @@ void TableDesignWidget::FillDesignPreviewControl()
     m_pValueSet->SelectItem(nSelectedItem);
 }
 
-short TableDesignDialog::Execute()
-{
-    if( ModalDialog::Execute() )
-    {
-        if( aImpl.isStyleChanged() )
-            aImpl.ApplyStyle();
-
-        if( aImpl.isOptionsChanged() )
-            aImpl.ApplyOptions();
-        return RET_OK;
-    }
-    return RET_CANCEL;
-}
-
 VclPtr<vcl::Window> createTableDesignPanel( vcl::Window* pParent, ViewShellBase& rBase )
 {
-    return VclPtr<TableDesignPane>::Create( pParent, rBase );
-}
-
-void showTableDesignDialog( vcl::Window* pParent, ViewShellBase& rBase )
-{
-    ScopedVclPtrInstance< TableDesignDialog > xDialog( pParent, rBase );
-    xDialog->Execute();
+    VclPtr<TableDesignPane> pRet = nullptr;
+    try
+    {
+        pRet = VclPtr<TableDesignPane>::Create( pParent, rBase );
+    }
+    catch (const uno::Exception&)
+    {
+    }
+    return pRet;
 }
 
 }

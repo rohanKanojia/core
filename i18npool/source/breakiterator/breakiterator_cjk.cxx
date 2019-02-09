@@ -22,27 +22,26 @@
 #include <i18nutil/unicode.hxx>
 
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 //      ----------------------------------------------------
 //      class BreakIterator_CJK
 //      ----------------------------------------------------;
 
-BreakIterator_CJK::BreakIterator_CJK() :
-    dict( nullptr ),
-    hangingCharacters()
+BreakIterator_CJK::BreakIterator_CJK()
 {
     cBreakIterator = "com.sun.star.i18n.BreakIterator_CJK";
 }
 
 Boundary SAL_CALL
 BreakIterator_CJK::previousWord(const OUString& text, sal_Int32 anyPos,
-        const lang::Locale& nLocale, sal_Int16 wordType) throw(RuntimeException, std::exception)
+        const css::lang::Locale& nLocale, sal_Int16 wordType)
 {
-    if (dict) {
-        result = dict->previousWord(text, anyPos, wordType);
+    if (m_xDict) {
+        result = m_xDict->previousWord(text, anyPos, wordType);
         // #109813# for non-CJK, single character word, fallback to ICU breakiterator.
         if (result.endPos - result.startPos != 1 ||
                 getScriptType(text, result.startPos) == ScriptType::ASIAN)
@@ -56,10 +55,10 @@ BreakIterator_CJK::previousWord(const OUString& text, sal_Int32 anyPos,
 
 Boundary SAL_CALL
 BreakIterator_CJK::nextWord(const OUString& text, sal_Int32 anyPos,
-        const lang::Locale& nLocale, sal_Int16 wordType) throw(RuntimeException, std::exception)
+        const css::lang::Locale& nLocale, sal_Int16 wordType)
 {
-    if (dict) {
-        result = dict->nextWord(text, anyPos, wordType);
+    if (m_xDict) {
+        result = m_xDict->nextWord(text, anyPos, wordType);
         // #109813# for non-CJK, single character word, fallback to ICU breakiterator.
         if (result.endPos - result.startPos != 1 ||
                 getScriptType(text, result.startPos) == ScriptType::ASIAN)
@@ -73,11 +72,10 @@ BreakIterator_CJK::nextWord(const OUString& text, sal_Int32 anyPos,
 
 Boundary SAL_CALL
 BreakIterator_CJK::getWordBoundary( const OUString& text, sal_Int32 anyPos,
-        const lang::Locale& nLocale, sal_Int16 wordType, sal_Bool bDirection )
-        throw(RuntimeException, std::exception)
+        const css::lang::Locale& nLocale, sal_Int16 wordType, sal_Bool bDirection )
 {
-    if (dict) {
-        result = dict->getWordBoundary(text, anyPos, wordType, bDirection);
+    if (m_xDict) {
+        result = m_xDict->getWordBoundary(text, anyPos, wordType, bDirection);
         // #109813# for non-CJK, single character word, fallback to ICU breakiterator.
         if (result.endPos - result.startPos != 1 ||
                 getScriptType(text, result.startPos) == ScriptType::ASIAN)
@@ -86,23 +84,48 @@ BreakIterator_CJK::getWordBoundary( const OUString& text, sal_Int32 anyPos,
     return BreakIterator_Unicode::getWordBoundary(text, anyPos, nLocale, wordType, bDirection);
 }
 
+namespace {
+bool isHangul( sal_Unicode cCh )
+{
+    return (cCh >= 0xAC00 && cCh <= 0xD7AF) || (cCh >= 0x1100 && cCh <= 0x11FF);
+}
+}
+
 LineBreakResults SAL_CALL BreakIterator_CJK::getLineBreak(
         const OUString& Text, sal_Int32 nStartPos,
-        const lang::Locale& /*rLocale*/, sal_Int32 /*nMinBreakPos*/,
+        const css::lang::Locale& /*rLocale*/, sal_Int32 /*nMinBreakPos*/,
         const LineBreakHyphenationOptions& /*hOptions*/,
-        const LineBreakUserOptions& bOptions ) throw(RuntimeException, std::exception)
+        const LineBreakUserOptions& bOptions )
 {
     LineBreakResults lbr;
+
+    const sal_Int32 nOldStartPos = nStartPos;
 
     if (bOptions.allowPunctuationOutsideMargin &&
             hangingCharacters.indexOf(Text[nStartPos]) != -1 &&
             (Text.iterateCodePoints( &nStartPos ), nStartPos == Text.getLength())) {
         ; // do nothing
     } else if (bOptions.applyForbiddenRules && 0 < nStartPos && nStartPos < Text.getLength()) {
+
         while (nStartPos > 0 &&
                 (bOptions.forbiddenBeginCharacters.indexOf(Text[nStartPos]) != -1 ||
                  bOptions.forbiddenEndCharacters.indexOf(Text[nStartPos-1]) != -1))
             Text.iterateCodePoints( &nStartPos, -1);
+    }
+
+    // Prevent cutting Korean words in the middle.
+    if (nOldStartPos == nStartPos && nStartPos < Text.getLength()
+        && isHangul(Text[nStartPos]))
+    {
+        while ( nStartPos >= 0 && isHangul( Text[nStartPos] ) )
+            --nStartPos;
+
+        // beginning of the last Korean word.
+        if ( nStartPos < nOldStartPos )
+            ++nStartPos;
+
+        if ( nStartPos == 0 )
+            nStartPos = nOldStartPos;
     }
 
     lbr.breakIndex = nStartPos;
@@ -110,20 +133,15 @@ LineBreakResults SAL_CALL BreakIterator_CJK::getLineBreak(
     return lbr;
 }
 
-#define LOCALE(language, country) lang::Locale(language, country, OUString())
+#define LOCALE(language, country) css::lang::Locale(language, country, OUString())
 //      ----------------------------------------------------
 //      class BreakIterator_zh
 //      ----------------------------------------------------;
 BreakIterator_zh::BreakIterator_zh()
 {
-    dict = new xdictionary("zh");
-    hangingCharacters = LocaleDataImpl().getHangingCharacters(LOCALE("zh", "CN"));
+    m_xDict = std::make_unique<xdictionary>("zh");
+    hangingCharacters = LocaleDataImpl::get()->getHangingCharacters(LOCALE("zh", "CN"));
     cBreakIterator = "com.sun.star.i18n.BreakIterator_zh";
-}
-
-BreakIterator_zh::~BreakIterator_zh()
-{
-    delete dict;
 }
 
 //      ----------------------------------------------------
@@ -131,14 +149,9 @@ BreakIterator_zh::~BreakIterator_zh()
 //      ----------------------------------------------------;
 BreakIterator_zh_TW::BreakIterator_zh_TW()
 {
-    dict = new xdictionary("zh");
-    hangingCharacters = LocaleDataImpl().getHangingCharacters(LOCALE("zh", "TW"));
+    m_xDict = std::make_unique<xdictionary>("zh");
+    hangingCharacters = LocaleDataImpl::get()->getHangingCharacters(LOCALE("zh", "TW"));
     cBreakIterator = "com.sun.star.i18n.BreakIterator_zh_TW";
-}
-
-BreakIterator_zh_TW::~BreakIterator_zh_TW()
-{
-    delete dict;
 }
 
 //      ----------------------------------------------------
@@ -146,15 +159,10 @@ BreakIterator_zh_TW::~BreakIterator_zh_TW()
 //      ----------------------------------------------------;
 BreakIterator_ja::BreakIterator_ja()
 {
-    dict = new xdictionary("ja");
-    dict->setJapaneseWordBreak();
-    hangingCharacters = LocaleDataImpl().getHangingCharacters(LOCALE("ja", "JP"));
+    m_xDict = std::make_unique<xdictionary>("ja");
+    m_xDict->setJapaneseWordBreak();
+    hangingCharacters = LocaleDataImpl::get()->getHangingCharacters(LOCALE("ja", "JP"));
     cBreakIterator = "com.sun.star.i18n.BreakIterator_ja";
-}
-
-BreakIterator_ja::~BreakIterator_ja()
-{
-    delete dict;
 }
 
 //      ----------------------------------------------------
@@ -162,14 +170,10 @@ BreakIterator_ja::~BreakIterator_ja()
 //      ----------------------------------------------------;
 BreakIterator_ko::BreakIterator_ko()
 {
-    hangingCharacters = LocaleDataImpl().getHangingCharacters(LOCALE("ko", "KR"));
+    hangingCharacters = LocaleDataImpl::get()->getHangingCharacters(LOCALE("ko", "KR"));
     cBreakIterator = "com.sun.star.i18n.BreakIterator_ko";
 }
 
-BreakIterator_ko::~BreakIterator_ko()
-{
 }
-
-} } } }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

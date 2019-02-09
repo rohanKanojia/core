@@ -91,12 +91,18 @@ namespace slideshow
 
             ~ShapeSubset();
 
+            // For a rationale for this hacky combination of user-provided dtor, defaulted copy
+            // ctor, and deleted copy assignment op, see the "TODO(Q1)" comment in
+            // CloningNodeCreator (slideshow/source/engine/animationnodes/animationnodefactory.cxx):
+            ShapeSubset(ShapeSubset const &) = default;
+            void operator =(ShapeSubset const &) = delete;
+
             /** Get the actual subset shape.
 
                 If the subset is currently revoked, this method
                 returns the original shape.
              */
-            AttributableShapeSharedPtr  getSubsetShape() const;
+            AttributableShapeSharedPtr const &  getSubsetShape() const;
 
             /** Enable the subset shape.
 
@@ -122,16 +128,16 @@ namespace slideshow
 
             /** Query subset this object represents
              */
-            DocTreeNode getSubset() const;
+            const DocTreeNode& getSubset() const;
 
         private:
             // default copy/assignment are okay
             //ShapeSubset(const ShapeSubset&);
             //ShapeSubset& operator=( const ShapeSubset& );
 
-            AttributableShapeSharedPtr       mpOriginalShape;
+            AttributableShapeSharedPtr const mpOriginalShape;
             AttributableShapeSharedPtr       mpSubsetShape;
-            DocTreeNode                      maTreeNode;
+            DocTreeNode const                maTreeNode;
             SubsettableShapeManagerSharedPtr mpShapeManager;
         };
     }

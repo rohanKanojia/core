@@ -20,6 +20,10 @@
 #ifndef INCLUDED_SVX_SDR_PROPERTIES_EMPTYPROPERTIES_HXX
 #define INCLUDED_SVX_SDR_PROPERTIES_EMPTYPROPERTIES_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <svx/sdr/properties/properties.hxx>
 
 
@@ -31,10 +35,10 @@ namespace sdr
         {
         protected:
             // the to be used ItemSet
-            SfxItemSet*                                     mpEmptyItemSet;
+            std::unique_ptr<SfxItemSet> mpEmptyItemSet;
 
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
 
             // test changeability for a single item
             virtual bool AllowItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem = nullptr) const override;
@@ -52,14 +56,8 @@ namespace sdr
             // basic constructor
             explicit EmptyProperties(SdrObject& rObj);
 
-            // constructor for copying, but using new object
-            EmptyProperties(const EmptyProperties& rProps, SdrObject& rObj);
-
-            // destructor
-            virtual ~EmptyProperties();
-
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
 
             // get itemset
             virtual const SfxItemSet& GetObjectItemSet() const override;
@@ -74,8 +72,8 @@ namespace sdr
             virtual void ClearObjectItem(const sal_uInt16 nWhich = 0) override;
 
             // clear single item direct, do not do any notifies or things like that.
-            // Also supports complete deleteion of items when default parameter 0 is used.
-            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich = 0) override;
+            // Also supports complete deletion of items when default parameter 0 is used.
+            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich) override;
 
             // set complete item set
             virtual void SetObjectItemSet(const SfxItemSet& rSet) override;

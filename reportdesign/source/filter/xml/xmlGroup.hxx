@@ -26,9 +26,8 @@
 namespace rptxml
 {
     class ORptFilter;
-    class OXMLGroup : public SvXMLImportContext
+    class OXMLGroup final : public SvXMLImportContext
     {
-    protected:
         css::uno::Reference< css::report::XGroups >   m_xGroups;
         css::uno::Reference< css::report::XGroup >    m_xGroup;
 
@@ -43,9 +42,9 @@ namespace rptxml
                     ,const OUString& rLName
                     ,const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList
                     );
-        virtual ~OXMLGroup();
+        virtual ~OXMLGroup() override;
 
-        virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+        virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                     const OUString& rLocalName,
                     const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;
 

@@ -21,22 +21,30 @@
 #define INCLUDED_SVX_XOUTBMP_HXX
 
 #include <vcl/graph.hxx>
+#include <vcl/errcode.hxx>
 #include <com/sun/star/uno/Sequence.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <svx/svxdllapi.h>
+#include <o3tl/typed_flags_set.hxx>
+#include <vcl/salctype.hxx>
 
-#define XOUTBMP_MIRROR_HORZ             0x00000001L
-#define XOUTBMP_MIRROR_VERT             0x00000010L
 
-#define XOUTBMP_CONTOUR_HORZ            0x00000001L
-#define XOUTBMP_CONTOUR_VERT            0x00000002L
-#define XOUTBMP_CONTOUR_EDGEDETECT      0x00000004L
-#define XOUTBMP_DONT_ADD_EXTENSION      0x00000008L
-
-#define XOUTBMP_DONT_EXPAND_FILENAME    0x10000000L
-#define XOUTBMP_USE_GIF_IF_POSSIBLE     0x20000000L
-#define XOUTBMP_USE_GIF_IF_SENSIBLE     0x40000000L
-#define XOUTBMP_USE_NATIVE_IF_POSSIBLE  0x80000000L
+enum class XOutFlags {
+    NONE                 = 0x00000000,
+    MirrorHorz           = 0x00000001,
+    MirrorVert           = 0x00000010,
+    ContourHorz          = 0x00000001,
+    ContourVert          = 0x00000002,
+    ContourEdgeDetect    = 0x00000004,
+    DontAddExtension     = 0x00000008,
+    DontExpandFilename   = 0x00010000,
+    UseGifIfPossible     = 0x00020000,
+    UseGifIfSensible     = 0x00040000,
+    UseNativeIfPossible  = 0x00080000,
+};
+namespace o3tl {
+    template<> struct typed_flags<XOutFlags> : is_typed_flags<XOutFlags, 0x000f001f> {};
+}
 
 class GraphicFilter;
 class VirtualDevice;
@@ -53,23 +61,23 @@ public:
 
     static Graphic      MirrorGraphic( const Graphic& rGraphic, const BmpMirrorFlags nMirrorFlags );
     static Animation    MirrorAnimation( const Animation& rAnimation, bool bHMirr, bool bVMirr );
-    static sal_uInt16   WriteGraphic( const Graphic& rGraphic, OUString& rFileName,
-                                      const OUString& rFilterName, const sal_uIntPtr nFlags = 0L,
-                                      const Size* pMtfSize_100TH_MM = nullptr );
-    static bool         GraphicToBase64(const Graphic& rGraphic, OUString& rOUString);
+    static ErrCode      WriteGraphic( const Graphic& rGraphic, OUString& rFileName,
+                                      const OUString& rFilterName, const XOutFlags nFlags,
+                                      const Size* pMtfSize_100TH_MM = nullptr,
+                                      const css::uno::Sequence< css::beans::PropertyValue >* pFilterData = nullptr);
+    static bool GraphicToBase64(const Graphic& rGraphic, OUString& rOUString,
+                                bool bAddPrefix = true,
+                                ConvertDataFormat aTargetFormat = ConvertDataFormat::Unknown);
 
-    static sal_uInt16   ExportGraphic( const Graphic& rGraphic, const INetURLObject& rURL,
+    static ErrCode      ExportGraphic( const Graphic& rGraphic, const INetURLObject& rURL,
                                        GraphicFilter& rFilter, const sal_uInt16 nFormat,
-                                       const css::uno::Sequence< css::beans::PropertyValue >* pFilterData = nullptr );
+                                       const css::uno::Sequence< css::beans::PropertyValue >* pFilterData );
 
     static Bitmap       DetectEdges( const Bitmap& rBmp, const sal_uInt8 cThreshold );
 
-    static tools::Polygon GetCountour( const Bitmap& rBmp, const sal_uIntPtr nContourFlags,
-                                       const sal_uInt8 cEdgeDetectThreshold = 50,
-                                       const Rectangle* pWorkRect = nullptr );
+    static tools::Polygon GetContour( const Bitmap& rBmp, const XOutFlags nContourFlags,
+                                       const tools::Rectangle* pWorkRect );
 };
-
-SVX_DLLPUBLIC bool DitherBitmap( Bitmap& rBitmap );
 
 #endif // INCLUDED_SVX_XOUTBMP_HXX
 

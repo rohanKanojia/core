@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 #include <com/sun/star/text/XDocumentIndexesSupplier.hpp>
 #include <com/sun/star/text/XTextSectionsSupplier.hpp>
 #include <com/sun/star/style/BreakType.hpp>
@@ -45,8 +45,6 @@
 #include <swmodule.hxx>
 
 #include <cmdid.h>
-#include <utlui.hrc>
-#include <index.hrc>
 #include <globals.hrc>
 #include <SwStyleNameMapper.hxx>
 #include <swuicnttab.hxx>
@@ -61,20 +59,20 @@ using namespace ::com::sun::star::ucb;
 using namespace ::com::sun::star::uno;
 using namespace com::sun::star::ui::dialogs;
 
-static void lcl_SetProp( uno::Reference< XPropertySetInfo > & xInfo,
-                           uno::Reference< XPropertySet > & xProps,
+static void lcl_SetProp( uno::Reference< XPropertySetInfo > const & xInfo,
+                           uno::Reference< XPropertySet > const & xProps,
                          OUString const & aPropName, const OUString& rValue)
 {
     if(xInfo->hasPropertyByName(aPropName))
     {
         uno::Any aValue;
-        aValue <<= OUString(rValue);
+        aValue <<= rValue;
         xProps->setPropertyValue(aPropName, aValue);
     }
 }
 
-static void lcl_SetProp( uno::Reference< XPropertySetInfo > & xInfo,
-                           uno::Reference< XPropertySet > & xProps,
+static void lcl_SetProp( uno::Reference< XPropertySetInfo > const & xInfo,
+                           uno::Reference< XPropertySet > const & xProps,
                            OUString const & aPropName, sal_Int16 nValue )
 {
     if(xInfo->hasPropertyByName(aPropName))
@@ -86,8 +84,8 @@ static void lcl_SetProp( uno::Reference< XPropertySetInfo > & xInfo,
 }
 
 static void lcl_SetBOOLProp(
-                uno::Reference< beans::XPropertySetInfo > & xInfo,
-                uno::Reference< beans::XPropertySet > & xProps,
+                uno::Reference< beans::XPropertySetInfo > const & xInfo,
+                uno::Reference< beans::XPropertySet > const & xProps,
                 OUString const & aPropName, bool bValue )
 {
     if(xInfo->hasPropertyByName(aPropName))
@@ -96,31 +94,27 @@ static void lcl_SetBOOLProp(
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SwMultiTOXTabDialog, CreateExample_Hdl, SwOneExampleFrame&, void)
+IMPL_LINK_NOARG(SwMultiTOXTabDialog, CreateExample_Hdl, SwOneExampleFrame&, void)
 {
     try
     {
-         uno::Reference< frame::XModel > & xModel = pExampleFrame->GetModel();
+         uno::Reference< frame::XModel > & xModel = m_pExampleFrame->GetModel();
         uno::Reference< lang::XUnoTunnel > xDocTunnel(xModel, uno::UNO_QUERY);
         SwXTextDocument* pDoc = reinterpret_cast<SwXTextDocument*>(xDocTunnel->getSomething(SwXTextDocument::getUnoTunnelId()));
 
         if( pDoc )
-            pDoc->GetDocShell()->_LoadStyles( *rSh.GetView().GetDocShell(), true );
-
-         uno::Reference< lang::XMultiServiceFactory >  xFact(
-                                             xModel, uno::UNO_QUERY);
+            pDoc->GetDocShell()->LoadStyles_( *m_rWrtShell.GetView().GetDocShell(), true );
 
          uno::Reference< text::XTextSectionsSupplier >  xSectionSupplier(
                                                  xModel, uno::UNO_QUERY);
          uno::Reference< container::XNameAccess >  xSections =
                                         xSectionSupplier->getTextSections();
 
-        OUString sSectionName("IndexSection_");
         for(int i = 0; i < 7; ++i )
         {
-            OUString sTmp( sSectionName ); sTmp += OUString::number(i);
+            OUString sTmp = "IndexSection_" + OUString::number(i);
             uno::Any aSection = xSections->getByName( sTmp );
-            aSection >>= pxIndexSectionsArr[i]->xContainerSection;
+            aSection >>= m_vTypeData[i].m_pxIndexSections->xContainerSection;
          }
          uno::Reference< text::XDocumentIndexesSupplier >  xIdxSupp(xModel, uno::UNO_QUERY);
          uno::Reference< container::XIndexAccess >  xIdxs = xIdxSupp->getDocumentIndexes();
@@ -133,7 +127,7 @@ IMPL_LINK_NOARG_TYPED(SwMultiTOXTabDialog, CreateExample_Hdl, SwOneExampleFrame&
             aIdx >>= xIdx;
             xIdx->dispose();
         }
-        CreateOrUpdateExample(eCurrentTOXType.eType);
+        CreateOrUpdateExample(m_eCurrentTOXType.eType);
     }
     catch (const Exception&)
     {
@@ -144,7 +138,7 @@ IMPL_LINK_NOARG_TYPED(SwMultiTOXTabDialog, CreateExample_Hdl, SwOneExampleFrame&
 void SwMultiTOXTabDialog::CreateOrUpdateExample(
     TOXTypes nTOXIndex, sal_uInt16 nPage, sal_uInt16 nCurrentLevel)
 {
-    if(!pExampleFrame || !pExampleFrame->IsInitialized())
+    if(!m_pExampleFrame || !m_pExampleFrame->IsInitialized())
         return;
 
     try
@@ -160,17 +154,17 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
             "com.sun.star.text.Bibliography"
         };
 
-         OSL_ENSURE(pxIndexSectionsArr[nTOXIndex] &&
-                        pxIndexSectionsArr[nTOXIndex]->xContainerSection.is(),
+         OSL_ENSURE(m_vTypeData[nTOXIndex].m_pxIndexSections &&
+                        m_vTypeData[nTOXIndex].m_pxIndexSections->xContainerSection.is(),
                             "Section not created");
-         uno::Reference< frame::XModel > & xModel = pExampleFrame->GetModel();
+         uno::Reference< frame::XModel > & xModel = m_pExampleFrame->GetModel();
          bool bInitialCreate = true;
-         if(!pxIndexSectionsArr[nTOXIndex]->xDocumentIndex.is())
+         if(!m_vTypeData[nTOXIndex].m_pxIndexSections->xDocumentIndex.is())
          {
              bInitialCreate = true;
-             if(!pxIndexSectionsArr[nTOXIndex]->xContainerSection.is())
+             if(!m_vTypeData[nTOXIndex].m_pxIndexSections->xContainerSection.is())
                  throw uno::RuntimeException();
-             uno::Reference< text::XTextRange >  xAnchor = pxIndexSectionsArr[nTOXIndex]->xContainerSection->getAnchor();
+             uno::Reference< text::XTextRange >  xAnchor = m_vTypeData[nTOXIndex].m_pxIndexSections->xContainerSection->getAnchor();
              xAnchor = xAnchor->getStart();
              uno::Reference< text::XTextCursor >  xCursor = xAnchor->getText()->createTextCursorByRange(xAnchor);
 
@@ -178,24 +172,24 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
 
              OUString sIndexTypeName(OUString::createFromAscii( IndexServiceNames[
                     nTOXIndex <= TOX_AUTHORITIES ? nTOXIndex : TOX_USER] ));
-             pxIndexSectionsArr[nTOXIndex]->xDocumentIndex.set(xFact->createInstance(sIndexTypeName), uno::UNO_QUERY);
-             uno::Reference< text::XTextContent >  xContent(pxIndexSectionsArr[nTOXIndex]->xDocumentIndex, uno::UNO_QUERY);
+             m_vTypeData[nTOXIndex].m_pxIndexSections->xDocumentIndex.set(xFact->createInstance(sIndexTypeName), uno::UNO_QUERY);
+             uno::Reference< text::XTextContent >  xContent(m_vTypeData[nTOXIndex].m_pxIndexSections->xDocumentIndex, uno::UNO_QUERY);
              uno::Reference< text::XTextRange >  xRg(xCursor, uno::UNO_QUERY);
-             xCursor->getText()->insertTextContent(xRg, xContent, sal_False);
+             xCursor->getText()->insertTextContent(xRg, xContent, false);
          }
          for(sal_uInt16 i = 0 ; i <= TOX_AUTHORITIES; i++)
          {
-            uno::Reference< beans::XPropertySet >  xSectPr(pxIndexSectionsArr[i]->xContainerSection, uno::UNO_QUERY);
+            uno::Reference< beans::XPropertySet >  xSectPr(m_vTypeData[i].m_pxIndexSections->xContainerSection, uno::UNO_QUERY);
             if(xSectPr.is())
             {
                 xSectPr->setPropertyValue(UNO_NAME_IS_VISIBLE, makeAny(i == nTOXIndex));
             }
          }
          // set properties
-         uno::Reference< beans::XPropertySet >  xIdxProps(pxIndexSectionsArr[nTOXIndex]->xDocumentIndex, uno::UNO_QUERY);
+         uno::Reference< beans::XPropertySet >  xIdxProps(m_vTypeData[nTOXIndex].m_pxIndexSections->xDocumentIndex, uno::UNO_QUERY);
          uno::Reference< beans::XPropertySetInfo >  xInfo = xIdxProps->getPropertySetInfo();
-         SwTOXDescription& rDesc = GetTOXDescription(eCurrentTOXType);
-         sal_uInt16 nIdxOptions = rDesc.GetIndexOptions();
+         SwTOXDescription& rDesc = GetTOXDescription(m_eCurrentTOXType);
+         SwTOIOptions nIdxOptions = rDesc.GetIndexOptions();
          if(bInitialCreate || !nPage || nPage == TOX_PAGE_SELECT)
          {
             //title
@@ -203,10 +197,10 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
                 lcl_SetProp(xInfo, xIdxProps, UNO_NAME_TITLE, *rDesc.GetTitle());
 
             //stylenames
-            sal_uInt16  nContentOptions = rDesc.GetContentOptions();
+            SwTOXElement  nContentOptions = rDesc.GetContentOptions();
             if(xInfo->hasPropertyByName(UNO_NAME_LEVEL_PARAGRAPH_STYLES))
             {
-                bool bOn = 0!=(nContentOptions&nsSwTOXElement::TOX_TEMPLATE    );
+                bool bOn( nContentOptions&SwTOXElement::Template );
                 uno::Any aStyleNames(xIdxProps->getPropertyValue(UNO_NAME_LEVEL_PARAGRAPH_STYLES));
                 uno::Reference< container::XIndexReplace >  xAcc;
                 aStyleNames >>= xAcc;
@@ -220,35 +214,36 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
                         comphelper::string::getTokenCount(sLevel, TOX_STYLE_DELIMITER);
                     uno::Sequence<OUString> aStyles(nStyles);
                     OUString* pArr = aStyles.getArray();
-                    for(sal_Int32 nStyle = 0; nStyle < nStyles; nStyle++)
-                        pArr[nStyle] = sLevel.getToken(nStyle, TOX_STYLE_DELIMITER);
+                    sal_Int32 nPos {0};
+                    for(sal_Int32 nStyle = 0; nStyle < nStyles; ++nStyle)
+                        pArr[nStyle] = sLevel.getToken(0, TOX_STYLE_DELIMITER, nPos);
                     uno::Any aAny(&aStyles, cppu::UnoType<uno::Sequence<OUString>>::get());
                     xAcc->replaceByIndex(i, aAny);
                 }
             }
-            lcl_SetProp(xInfo, xIdxProps, UNO_NAME_LEVEL, (sal_Int16)rDesc.GetLevel());
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_MARKS,           0!=(nContentOptions&nsSwTOXElement::TOX_MARK        ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_OUTLINE,         0!=(nContentOptions&nsSwTOXElement::TOX_OUTLINELEVEL));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_EMBEDDED_OBJECTS,0!=(nContentOptions&nsSwTOXElement::TOX_OLE            ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_TABLES ,         0!=(nContentOptions&nsSwTOXElement::TOX_TABLE          ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_GRAPHIC_OBJECTS, 0!=(nContentOptions&nsSwTOXElement::TOX_GRAPHIC        ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_TEXT_FRAMES,     0!=(nContentOptions&nsSwTOXElement::TOX_FRAME          ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_LABELS,          0!=(nContentOptions&nsSwTOXElement::TOX_SEQUENCE       ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_HIDE_TAB_LEADER_AND_PAGE_NUMBERS,          0!=(nContentOptions&nsSwTOXElement::TOX_TABLEADER       ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_TAB_IN_TOC,                  0!=(nContentOptions&nsSwTOXElement::TOX_TAB_IN_TOC       ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_TOC_NEWLINE,                 0!=(nContentOptions&nsSwTOXElement::TOX_NEWLINE));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_TOC_PARAGRAPH_OUTLINE_LEVEL,                 0!=(nContentOptions&nsSwTOXElement::TOX_PARAGRAPH_OUTLINE_LEVEL));
+            lcl_SetProp(xInfo, xIdxProps, UNO_NAME_LEVEL, static_cast<sal_Int16>(rDesc.GetLevel()));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_MARKS,           bool(nContentOptions & SwTOXElement::Mark        ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_OUTLINE,         bool(nContentOptions & SwTOXElement::OutlineLevel));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_EMBEDDED_OBJECTS,bool(nContentOptions & SwTOXElement::Ole            ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_TABLES ,         bool(nContentOptions & SwTOXElement::Table          ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_GRAPHIC_OBJECTS, bool(nContentOptions & SwTOXElement::Graphic        ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_TEXT_FRAMES,     bool(nContentOptions & SwTOXElement::Frame          ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_LABELS,          bool(nContentOptions & SwTOXElement::Sequence       ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_HIDE_TAB_LEADER_AND_PAGE_NUMBERS, bool(nContentOptions & SwTOXElement::TableLeader       ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_TAB_IN_TOC,                  bool(nContentOptions & SwTOXElement::TableInToc       ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_TOC_NEWLINE,                 bool(nContentOptions & SwTOXElement::Newline));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_TOC_PARAGRAPH_OUTLINE_LEVEL, bool(nContentOptions & SwTOXElement::ParagraphOutlineLevel));
 
             lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_CHAPTER, rDesc.IsFromChapter());
             lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_IS_PROTECTED, rDesc.IsReadonly());
 
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_COMBINED_ENTRIES,        0 != (nIdxOptions&nsSwTOIOptions::TOI_SAME_ENTRY        ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_P_P,                     0 != (nIdxOptions&nsSwTOIOptions::TOI_FF                   ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_IS_CASE_SENSITIVE,           0 != (nIdxOptions&nsSwTOIOptions::TOI_CASE_SENSITIVE     ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_KEY_AS_ENTRY,            0 != (nIdxOptions&nsSwTOIOptions::TOI_KEY_AS_ENTRY     ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_ALPHABETICAL_SEPARATORS, 0 != (nIdxOptions&nsSwTOIOptions::TOI_ALPHA_DELIMITTER));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_DASH,                    0 != (nIdxOptions&nsSwTOIOptions::TOI_DASH             ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_UPPER_CASE,              0 != (nIdxOptions&nsSwTOIOptions::TOI_INITIAL_CAPS     ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_COMBINED_ENTRIES,        bool(nIdxOptions & SwTOIOptions::SameEntry        ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_P_P,                     bool(nIdxOptions & SwTOIOptions::FF                   ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_IS_CASE_SENSITIVE,           bool(nIdxOptions & SwTOIOptions::CaseSensitive     ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_KEY_AS_ENTRY,            bool(nIdxOptions & SwTOIOptions::KeyAsEntry     ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_ALPHABETICAL_SEPARATORS, bool(nIdxOptions & SwTOIOptions::AlphaDelimiter));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_DASH,                    bool(nIdxOptions & SwTOIOptions::Dash             ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_UPPER_CASE,              bool(nIdxOptions & SwTOIOptions::InitialCaps     ));
 
             OUString aTmpName( SwStyleNameMapper::GetSpecialExtraProgName( rDesc.GetSequenceName() ) );
             lcl_SetProp(xInfo, xIdxProps, UNO_NAME_LABEL_CATEGORY, aTmpName );
@@ -263,18 +258,18 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
             }
             lcl_SetProp(xInfo, xIdxProps, UNO_NAME_LABEL_DISPLAY_TYPE, nSet);
 
-            sal_uInt16  nOLEOptions = rDesc.GetOLEOptions();
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_MATH,   0 != (nsSwTOOElements::TOO_MATH &nOLEOptions           ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_CHART,  0 != (nsSwTOOElements::TOO_CHART    &nOLEOptions       ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_CALC,   0 != (nsSwTOOElements::TOO_CALC &nOLEOptions           ));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_DRAW,   0 != (nsSwTOOElements::TOO_DRAW_IMPRESS&nOLEOptions));
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_OTHER_EMBEDDED_OBJECTS, 0 != (nsSwTOOElements::TOO_OTHER & nOLEOptions));
+            SwTOOElements  nOLEOptions = rDesc.GetOLEOptions();
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_MATH,   bool(SwTOOElements::Math &nOLEOptions           ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_CHART,  bool(SwTOOElements::Chart    &nOLEOptions       ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_CALC,   bool(SwTOOElements::Calc &nOLEOptions           ));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_STAR_DRAW,   bool(SwTOOElements::DrawImpress&nOLEOptions));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_CREATE_FROM_OTHER_EMBEDDED_OBJECTS, bool(SwTOOElements::Other & nOLEOptions));
          }
-         const SwForm* pForm = GetForm(eCurrentTOXType);
+         const SwForm* pForm = GetForm(m_eCurrentTOXType);
          if(bInitialCreate || !nPage || nPage == TOX_PAGE_ENTRY)
          {
             lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_IS_COMMA_SEPARATED, pForm->IsCommaSeparated());
-            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_ALPHABETICAL_SEPARATORS, 0 != (nIdxOptions&nsSwTOIOptions::TOI_ALPHA_DELIMITTER));
+            lcl_SetBOOLProp(xInfo, xIdxProps, UNO_NAME_USE_ALPHABETICAL_SEPARATORS, bool(nIdxOptions&SwTOIOptions::AlphaDelimiter));
             const bool bUseCurrent = nCurrentLevel < pForm->GetFormMax();
             const sal_uInt16 nStartLevel = bUseCurrent ? nCurrentLevel : 0;
             const sal_uInt16 nEndLevel = bUseCurrent ? nCurrentLevel : pForm->GetFormMax() - 1;
@@ -289,14 +284,12 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
 
                     // #i24377#
                     SwFormTokens aPattern = pForm->GetPattern(nCurrLevel);
-                    SwFormTokens::iterator aIt = aPattern.begin();
 
-                    while(aIt != aPattern.end())
+                    for(const auto& aToken : aPattern)
                     {
                         if( aSequPropVals.getLength() <= nTokenIndex)
                             aSequPropVals.realloc(nTokenIndex + 10);
 
-                        SwFormToken aToken = *aIt; // #i24377#
                         switch(aToken.eTokenType)
                         {
                             case TOKEN_ENTRY_NO     :
@@ -339,29 +332,27 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
                         pPropValArr[0].Name = "TokenType";
                         pPropValArr[0].Value <<= sTokenType;
                         pPropValArr[1].Name = "CharacterStyleName";
-                        pPropValArr[1].Value <<= OUString(aToken.sCharStyleName);
+                        pPropValArr[1].Value <<= aToken.sCharStyleName;
                         if(TOKEN_TAB_STOP == aToken.eTokenType)
                         {
                             pPropValArr[2].Name = "TabStopRightAligned";
-                            pPropValArr[2].Value <<= SVX_TAB_ADJUST_END == aToken.eTabAlign;
+                            pPropValArr[2].Value <<= SvxTabAdjust::End == aToken.eTabAlign;
                             pPropValArr[3].Name = "TabStopFillCharacter";
                             pPropValArr[3].Value <<= OUString(aToken.cTabFillChar);
                             pPropValArr[4].Name = "TabStopPosition";
                             SwTwips nTempPos = aToken.nTabStopPosition >= 0 ?
                                                             aToken.nTabStopPosition : 0;
                             nTempPos = convertTwipToMm100(nTempPos);
-                            pPropValArr[4].Value <<= (sal_Int32)nTempPos;
+                            pPropValArr[4].Value <<= static_cast<sal_Int32>(nTempPos);
                         }
                         else if(TOKEN_TEXT == aToken.eTokenType)
                         {
                             pPropValArr[2].Name = "Text";
-                            pPropValArr[2].Value <<= OUString(aToken.sText);
+                            pPropValArr[2].Value <<= aToken.sText;
                         }
                         beans::PropertyValues* pValues = aSequPropVals.getArray();
                         pValues[nTokenIndex] = aPropVals;
                         nTokenIndex++;
-
-                        ++aIt; // #i24377#
                     }
                     aSequPropVals.realloc(nTokenIndex);
 
@@ -381,7 +372,7 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
             lcl_SetProp(xInfo, xIdxProps, "ParaStyleHeading", pForm->GetTemplate(0));
             sal_uInt16 nOffset = 0;
             sal_uInt16 nEndLevel = 2;
-            switch(eCurrentTOXType.eType)
+            switch(m_eCurrentTOXType.eType)
             {
                 case  TOX_INDEX:
                 {
@@ -403,7 +394,7 @@ void SwMultiTOXTabDialog::CreateOrUpdateExample(
                     pForm->GetTemplate(i + nOffset));
             }
         }
-        pxIndexSectionsArr[nTOXIndex]->xDocumentIndex->update();
+        m_vTypeData[nTOXIndex].m_pxIndexSections->xDocumentIndex->update();
 
     }
     catch (const Exception&)

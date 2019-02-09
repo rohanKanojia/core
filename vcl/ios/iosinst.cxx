@@ -23,7 +23,7 @@
 
 #include "ios/iosinst.hxx"
 #include "headless/svpdummies.hxx"
-#include "generic/gendata.hxx"
+#include "unx/gendata.hxx"
 #include "quartz/utils.h"
 #include <vcl/layout.hxx>
 #include <vcl/settings.hxx>
@@ -31,20 +31,20 @@
 // Horrible hack
 static int viewWidth = 1, viewHeight = 1;
 
-class IosSalData : public SalGenericData
+class IosSalData : public GenericUnixSalData
 {
 public:
     explicit IosSalData(SalInstance *pInstance)
-        : SalGenericData(SAL_DATA_IOS, pInstance)
+        : GenericUnixSalData(SAL_DATA_IOS, pInstance)
     {
     }
     virtual void ErrorTrapPush() {}
     virtual bool ErrorTrapPop( bool ) { return false; }
 };
 
-void IosSalInstance::GetWorkArea( Rectangle& rRect )
+void IosSalInstance::GetWorkArea( tools::Rectangle& rRect )
 {
-    rRect = Rectangle( Point( 0, 0 ),
+    rRect = tools::Rectangle( Point( 0, 0 ),
                        Size( viewWidth, viewHeight ) );
 }
 
@@ -58,8 +58,8 @@ IosSalInstance *IosSalInstance::getInstance()
     return static_cast<IosSalInstance *>(pData->m_pInstance);
 }
 
-IosSalInstance::IosSalInstance( SalYieldMutex *pMutex )
-    : SvpSalInstance( pMutex )
+IosSalInstance::IosSalInstance( std::unique_ptr<SalYieldMutex> pMutex )
+    : SvpSalInstance( std::move(pMutex) )
 {
 }
 
@@ -73,8 +73,7 @@ public:
     virtual ~IosSalSystem() {}
     virtual int ShowNativeDialog( const OUString& rTitle,
                                   const OUString& rMessage,
-                                  const std::list< OUString >& rButtons,
-                                  int nDefButton );
+                                  const std::vector< OUString >& rButtons );
 };
 
 SalSystem *IosSalInstance::CreateSalSystem()
@@ -87,16 +86,14 @@ class IosSalFrame : public SvpSalFrame
 public:
     IosSalFrame( IosSalInstance *pInstance,
                      SalFrame           *pParent,
-                     SalFrameStyleFlags  nSalFrameStyle,
-                     SystemParentData   *pSysParent )
-        : SvpSalFrame( pInstance, pParent, nSalFrameStyle,
-                       pSysParent )
+                     SalFrameStyleFlags  nSalFrameStyle)
+        : SvpSalFrame( pInstance, pParent, nSalFrameStyle )
     {
         if (pParent == NULL && viewWidth > 1 && viewHeight > 1)
             SetPosSize(0, 0, viewWidth, viewHeight, SAL_FRAME_POSSIZE_WIDTH | SAL_FRAME_POSSIZE_HEIGHT);
     }
 
-    virtual void GetWorkArea( Rectangle& rRect ) override
+    virtual void GetWorkArea( tools::Rectangle& rRect ) override
     {
         IosSalInstance::getInstance()->GetWorkArea( rRect );
     }
@@ -118,7 +115,6 @@ public:
         aStyleSet.SetMenuFont( aFont );
         aStyleSet.SetToolFont( aFont );
         aStyleSet.SetLabelFont( aFont );
-        aStyleSet.SetInfoFont( aFont );
         aStyleSet.SetRadioCheckFont( aFont );
         aStyleSet.SetPushButtonFont( aFont );
         aStyleSet.SetFieldFont( aFont );
@@ -132,18 +128,14 @@ public:
 
 SalFrame *IosSalInstance::CreateChildFrame( SystemParentData* pParent, SalFrameStyleFlags nStyle )
 {
-    return new IosSalFrame( this, NULL, nStyle, pParent );
+    pParent = NULL;
+    return new IosSalFrame( this, NULL, nStyle );
 }
 
 SalFrame *IosSalInstance::CreateFrame( SalFrame* pParent, SalFrameStyleFlags nStyle )
 {
-    return new IosSalFrame( this, pParent, nStyle, NULL );
+    return new IosSalFrame( this, pParent, nStyle );
 }
-
-// All the interesting stuff is slaved from the IosSalInstance
-void InitSalData()   {}
-void DeInitSalData() {}
-void InitSalMain()   {}
 
 void SalAbort( const OUString& rErrorText, bool bDumpCore )
 {
@@ -173,25 +165,23 @@ SalData::~SalData()
 // This is our main entry point:
 SalInstance *CreateSalInstance()
 {
-    IosSalInstance* pInstance = new IosSalInstance( new SalYieldMutex() );
+    IosSalInstance* pInstance = new IosSalInstance( std::make_unique<SvpSalYieldMutex>() );
     new IosSalData( pInstance );
-    pInstance->AcquireYieldMutex(1);
+    pInstance->AcquireYieldMutex();
     return pInstance;
 }
 
 void DestroySalInstance( SalInstance *pInst )
 {
-    pInst->ReleaseYieldMutex();
+    pInst->ReleaseYieldMutexAll();
     delete pInst;
 }
 
 int IosSalSystem::ShowNativeDialog( const OUString& rTitle,
                                     const OUString& rMessage,
-                                    const std::list< OUString >& rButtons,
-                                    int nDefButton )
+                                    const std::vector< OUString >& rButtons )
 {
     (void)rButtons;
-    (void)nDefButton;
 
     NSLog(@"%@: %@", CreateNSString(rTitle), CreateNSString(rMessage));
 

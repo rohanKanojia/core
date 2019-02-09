@@ -29,29 +29,30 @@
 
 struct IsoLanguageCountryEntry;
 struct IsoLanguageScriptCountryEntry;
+struct Bcp47CountryEntry;
 
 /** Methods related to Microsoft language IDs. For details about MS-LANGIDs
     please see lang.h */
-class I18NLANGTAG_DLLPUBLIC MsLangId
+class SAL_WARN_UNUSED I18NLANGTAG_DLLPUBLIC MsLangId
 {
 public:
 
     /// Create a LangID from a primary and a sublanguage.
-    static inline LanguageType makeLangID( LanguageType nSubLangId, LanguageType nPriLangId)
+    static LanguageType makeLangID( LanguageType nSubLangId, LanguageType nPriLangId)
     {
-        return (nSubLangId << 10) | nPriLangId;
+        return LanguageType((sal_uInt16(nSubLangId) << 10) | sal_uInt16(nPriLangId));
     }
 
     /// Get the primary language of a LangID.
-    static inline LanguageType getPrimaryLanguage( LanguageType nLangID)
+    static LanguageType getPrimaryLanguage( LanguageType nLangID)
     {
-        return nLangID & LANGUAGE_MASK_PRIMARY;
+        return LanguageType(sal_uInt16(nLangID) & LANGUAGE_MASK_PRIMARY);
     }
 
     /// Get the sublanguage of a LangID.
-    static inline LanguageType getSubLanguage( LanguageType nLangID)
+    static LanguageType getSubLanguage( LanguageType nLangID)
     {
-        return (nLangID & ~LANGUAGE_MASK_PRIMARY) >> 10;
+        return LanguageType((sal_uInt16(nLangID) & ~LANGUAGE_MASK_PRIMARY) >> 10);
     }
 
     /** Language/locale of category LC_CTYPE (on Unix, else the system
@@ -162,16 +163,10 @@ public:
         Also used to map UI localizations using reserved ISO codes to something
         "official" but not identical in order to not pollute documents with
         invalid ISO codes.
-
-        @param bUserInterfaceSelection
-            If TRUE, don't replace such UI-only locale. Only use for
-                     Tools->Options->LanguageSettings->UserInterface listbox.
-            If FALSE, do replace.
      */
-    static LanguageType getReplacementForObsoleteLanguage( LanguageType nLang,
-            bool bUserInterfaceSelection = false );
+    static LanguageType getReplacementForObsoleteLanguage( LanguageType nLang );
 
-    /** Whether locale is legacy, i.e. country ot confederation doesn't exist anymore. */
+    /** Whether locale is legacy, i.e. country or confederation doesn't exist anymore. */
     static bool isLegacy( LanguageType nLang );
 
 
@@ -249,9 +244,9 @@ public:
         I18NLANGTAG_DLLPRIVATE static css::lang::Locale getOverride(
                 const css::lang::Locale & rLocale );
 
-        /** Used by convertLocaleToLanguage(Locale) */
+        /** Used by convertLocaleToLanguageImpl(Locale) and LanguageTagImpl::convertLocaleToLang() */
         I18NLANGTAG_DLLPRIVATE static LanguageType convertIsoNamesToLanguage(
-                const OUString& rLang, const OUString& rCountry );
+                const OUString& rLang, const OUString& rCountry, bool bSkipIsoTable );
 
 
         /** Used by convertUnxByteStringToLanguage(OString) */
@@ -267,16 +262,14 @@ public:
         I18NLANGTAG_DLLPRIVATE static css::lang::Locale getLocale(
                 const IsoLanguageScriptCountryEntry * pEntry );
 
+        /** Used by lookupFallbackLocale(Locale) */
+        I18NLANGTAG_DLLPRIVATE static css::lang::Locale getLocale(
+                const Bcp47CountryEntry * pEntry );
 
-        /** Convert a LanguageType to a Locale.
 
-            @param bResolveSystem
-                   If bResolveSystem==true, a LANGUAGE_SYSTEM is resolved.
-                   If bResolveSystem==false, a LANGUAGE_SYSTEM results in an
-                   empty Locale.
-          */
+        /** Convert a LanguageType to a Locale. */
         I18NLANGTAG_DLLPRIVATE static css::lang::Locale convertLanguageToLocale(
-                LanguageType nLang, bool bResolveSystem );
+                LanguageType nLang );
 
         /** Used by convertLanguageToLocale(LanguageType,bool) and
             getLocale(IsoLanguageCountryEntry*) and

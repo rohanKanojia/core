@@ -20,15 +20,15 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_MODULE_TOOLBARMODULE_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_MODULE_TOOLBARMODULE_HXX
 
-#include "ToolBarManager.hxx"
+#include <ToolBarManager.hxx>
 #include <com/sun/star/drawing/framework/XConfigurationChangeListener.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/XTabBar.hpp>
-#include <com/sun/star/frame/XController.hpp>
-#include <osl/mutex.hxx>
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
+#include <o3tl/deleter.hxx>
 #include <memory>
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
 
 namespace sd {
 class ViewShellBase;
@@ -36,11 +36,9 @@ class ViewShellBase;
 
 namespace sd { namespace framework {
 
-namespace {
-    typedef ::cppu::WeakComponentImplHelper <
-        css::drawing::framework::XConfigurationChangeListener
-        > ToolBarModuleInterfaceBase;
-}
+typedef ::cppu::WeakComponentImplHelper <
+    css::drawing::framework::XConfigurationChangeListener
+    > ToolBarModuleInterfaceBase;
 
 /** This module is responsible for locking the ToolBarManager during
     configuration updates and for triggering ToolBarManager updates.
@@ -56,27 +54,25 @@ public:
     */
     explicit ToolBarModule (
         const css::uno::Reference<css::frame::XController>& rxController);
-    virtual ~ToolBarModule();
+    virtual ~ToolBarModule() override;
 
     virtual void SAL_CALL disposing() override;
 
     // XConfigurationChangeListener
 
     virtual void SAL_CALL notifyConfigurationChange (
-        const css::drawing::framework::ConfigurationChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::drawing::framework::ConfigurationChangeEvent& rEvent) override;
 
     // XEventListener
 
     virtual void SAL_CALL disposing (
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
 private:
     css::uno::Reference<
         css::drawing::framework::XConfigurationController> mxConfigurationController;
     ViewShellBase* mpBase;
-    std::unique_ptr<ToolBarManager::UpdateLock> mpToolBarManagerLock;
+    std::unique_ptr<ToolBarManager::UpdateLock, o3tl::default_delete<ToolBarManager::UpdateLock>> mpToolBarManagerLock;
     bool mbMainViewSwitchUpdatePending;
 
     void HandleUpdateStart();

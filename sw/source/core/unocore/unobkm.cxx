@@ -18,10 +18,16 @@
  */
 
 #include <unobookmark.hxx>
-#include <osl/mutex.hxx>
+
 #include <comphelper/interfacecontainer2.hxx>
+#include <comphelper/sequence.hxx>
+#include <comphelper/servicehelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <osl/mutex.hxx>
+#include <svl/itemprop.hxx>
+#include <svl/listener.hxx>
 #include <vcl/svapp.hxx>
+#include <xmloff/odffields.hxx>
 
 #include <TextCursorHelper.hxx>
 #include <unotextrange.hxx>
@@ -34,68 +40,64 @@
 #include <docary.hxx>
 #include <swundo.hxx>
 #include <docsh.hxx>
-#include <xmloff/odffields.hxx>
-#include <comphelper/servicehelper.hxx>
-#include <comphelper/sequence.hxx>
 
 using namespace ::sw::mark;
 using namespace ::com::sun::star;
 
 class SwXBookmark::Impl
-    : public SwClient
+    : public SvtListener
 {
 private:
     ::osl::Mutex m_Mutex; // just for OInterfaceContainerHelper2
 
 public:
     uno::WeakReference<uno::XInterface> m_wThis;
-    ::comphelper::OInterfaceContainerHelper2  m_EventListeners;
-    SwDoc *                     m_pDoc;
-    ::sw::mark::IMark *         m_pRegisteredBookmark;
-    OUString             m_sMarkName;
+    ::comphelper::OInterfaceContainerHelper2 m_EventListeners;
+    SwDoc* m_pDoc;
+    ::sw::mark::IMark* m_pRegisteredBookmark;
+    OUString m_sMarkName;
+    bool m_bHidden;
+    OUString m_HideCondition;
 
-    Impl(   SwDoc *const pDoc, ::sw::mark::IMark *const /*pBookmark*/)
-        : SwClient()
-        , m_EventListeners(m_Mutex)
+    Impl( SwDoc *const pDoc )
+        : m_EventListeners(m_Mutex)
         , m_pDoc(pDoc)
         , m_pRegisteredBookmark(nullptr)
+        , m_bHidden(false)
     {
         // DO NOT registerInMark here! (because SetXBookmark would delete rThis)
     }
 
     void registerInMark(SwXBookmark & rThis, ::sw::mark::IMark *const pBkmk);
 protected:
-    // SwClient
-    virtual void Modify( const SfxPoolItem *pOld, const SfxPoolItem *pNew) override;
+    virtual void Notify(const SfxHint&) override;
 
 };
 
-void SwXBookmark::Impl::Modify(const SfxPoolItem *pOld, const SfxPoolItem *pNew)
+void SwXBookmark::Impl::Notify(const SfxHint& rHint)
 {
-    ClientModify(this, pOld, pNew);
-    if (GetRegisteredIn())
+    if(rHint.GetId() == SfxHintId::Dying)
     {
-        return; // core object still alive
+        m_pRegisteredBookmark = nullptr;
+        m_pDoc = nullptr;
+        uno::Reference<uno::XInterface> const xThis(m_wThis);
+        if (!xThis.is())
+        {   // fdo#72695: if UNO object is already dead, don't revive it with event
+            return;
+        }
+        lang::EventObject const ev(xThis);
+        m_EventListeners.disposeAndClear(ev);
     }
-
-    m_pRegisteredBookmark = nullptr;
-    m_pDoc = nullptr;
-    uno::Reference<uno::XInterface> const xThis(m_wThis);
-    if (!xThis.is())
-    {   // fdo#72695: if UNO object is already dead, don't revive it with event
-        return;
-    }
-    lang::EventObject const ev(xThis);
-    m_EventListeners.disposeAndClear(ev);
 }
 
-void SwXBookmark::Impl::registerInMark(SwXBookmark & rThis,
-        ::sw::mark::IMark *const pBkmk)
+void SwXBookmark::Impl::registerInMark(SwXBookmark& rThis,
+        ::sw::mark::IMark* const pBkmk)
 {
-    const uno::Reference<text::XTextContent> xBookmark(& rThis);
+    const uno::Reference<text::XTextContent> xBookmark(&rThis);
     if (pBkmk)
     {
-        pBkmk->Add(this);
+        EndListeningAll();
+        StartListening(pBkmk->GetNotifier());
         ::sw::mark::MarkBase *const pMarkBase(dynamic_cast< ::sw::mark::MarkBase * >(pBkmk));
         OSL_ENSURE(pMarkBase, "registerInMark: no MarkBase?");
         if (pMarkBase)
@@ -106,7 +108,15 @@ void SwXBookmark::Impl::registerInMark(SwXBookmark & rThis,
     else if (m_pRegisteredBookmark)
     {
         m_sMarkName = m_pRegisteredBookmark->GetName();
-        m_pRegisteredBookmark->Remove(this);
+
+        // the following applies only to bookmarks (not to fieldmarks)
+        IBookmark* pBookmark = dynamic_cast<IBookmark*>(m_pRegisteredBookmark);
+        if (pBookmark)
+        {
+            m_bHidden = pBookmark->IsHidden();
+            m_HideCondition = pBookmark->GetHideCondition();
+        }
+        EndListeningAll();
     }
     m_pRegisteredBookmark = pBkmk;
     // need a permanent Reference to initialize m_wThis
@@ -124,15 +134,13 @@ const ::sw::mark::IMark* SwXBookmark::GetBookmark() const
     return m_pImpl->m_pRegisteredBookmark;
 }
 
-SwXBookmark::SwXBookmark(
-    ::sw::mark::IMark *const pBkmk,
-    SwDoc *const pDoc)
-    : m_pImpl( new SwXBookmark::Impl(pDoc, pBkmk) )
+SwXBookmark::SwXBookmark(SwDoc *const pDoc)
+    : m_pImpl( new SwXBookmark::Impl(pDoc) )
 {
 }
 
 SwXBookmark::SwXBookmark()
-    : m_pImpl( new SwXBookmark::Impl(nullptr, nullptr) )
+    : m_pImpl( new SwXBookmark::Impl(nullptr) )
 {
 }
 
@@ -160,7 +168,7 @@ uno::Reference<text::XTextContent> SwXBookmark::CreateXBookmark(
             "<SwXBookmark::GetObject(..)>"
             "SwXBookmark requested for non-bookmark mark and non-annotation mark.");
         SwXBookmark *const pXBookmark =
-            (pBookmark) ? new SwXBookmark(pBookmark, &rDoc) : new SwXBookmark;
+            pBookmark ? new SwXBookmark(&rDoc) : new SwXBookmark;
         xBookmark.set(pXBookmark);
         pXBookmark->m_pImpl->registerInMark(*pXBookmark, pMarkBase);
     }
@@ -190,7 +198,6 @@ const uno::Sequence< sal_Int8 > & SwXBookmark::getUnoTunnelId()
 }
 
 sal_Int64 SAL_CALL SwXBookmark::getSomething( const uno::Sequence< sal_Int8 >& rId )
-throw (uno::RuntimeException, std::exception)
 {
     return ::sw::UnoTunnelImpl<SwXBookmark>(rId, this);
 }
@@ -198,7 +205,6 @@ throw (uno::RuntimeException, std::exception)
 void SwXBookmark::attachToRangeEx(
     const uno::Reference< text::XTextRange > & xTextRange,
     IDocumentMarkAccess::MarkType eType)
-throw (lang::IllegalArgumentException, uno::RuntimeException)
 {
     if (m_pImpl->m_pRegisteredBookmark)
     {
@@ -217,7 +223,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException)
     }
 
     SwDoc *const pDoc =
-        (pRange) ? &pRange->GetDoc() : ((pCursor) ? pCursor->GetDoc() : nullptr);
+        pRange ? &pRange->GetDoc() : (pCursor ? pCursor->GetDoc() : nullptr);
     if (!pDoc)
     {
         throw lang::IllegalArgumentException();
@@ -244,7 +250,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException)
     }
     m_pImpl->registerInMark(*this,
         m_pImpl->m_pDoc->getIDocumentMarkAccess()->makeMark(
-            aPam, m_pImpl->m_sMarkName, eType));
+            aPam, m_pImpl->m_sMarkName, eType, ::sw::mark::InsertMode::New));
     // #i81002#
     // Check, if bookmark has been created.
     // E.g., the creation of a cross-reference bookmark is suppress,
@@ -258,20 +264,17 @@ throw (lang::IllegalArgumentException, uno::RuntimeException)
 }
 
 void SwXBookmark::attachToRange( const uno::Reference< text::XTextRange > & xTextRange )
-throw (lang::IllegalArgumentException, uno::RuntimeException)
 {
     attachToRangeEx(xTextRange, IDocumentMarkAccess::MarkType::BOOKMARK);
 }
 
 void SAL_CALL SwXBookmark::attach( const uno::Reference< text::XTextRange > & xTextRange )
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     attachToRange( xTextRange );
 }
 
 uno::Reference< text::XTextRange > SAL_CALL SwXBookmark::getAnchor()
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -287,7 +290,6 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL SwXBookmark::dispose()
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if (m_pImpl->m_pRegisteredBookmark)
@@ -298,7 +300,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL SwXBookmark::addEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_EventListeners.addInterface(xListener);
@@ -306,14 +307,12 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL SwXBookmark::removeEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_EventListeners.removeInterface(xListener);
 }
 
 OUString SAL_CALL SwXBookmark::getName()
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -323,7 +322,6 @@ throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL SwXBookmark::setName(const OUString& rName)
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -353,7 +351,7 @@ throw (uno::RuntimeException, std::exception)
 }
 
 OUString SAL_CALL
-SwXBookmark::getImplementationName() throw (uno::RuntimeException, std::exception)
+SwXBookmark::getImplementationName()
 {
     return OUString("SwXBookmark");
 }
@@ -367,13 +365,12 @@ static char const*const g_ServicesBookmark[] =
 static const size_t g_nServicesBookmark(SAL_N_ELEMENTS(g_ServicesBookmark));
 
 sal_Bool SAL_CALL SwXBookmark::supportsService(const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
-SwXBookmark::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+SwXBookmark::getSupportedServiceNames()
 {
     return ::sw::GetSupportedServiceNamesImpl(
             g_nServicesBookmark, g_ServicesBookmark);
@@ -390,13 +387,13 @@ uno::Reference<frame::XModel> SwXBookmark::GetModel()
     if (m_pImpl->m_pDoc)
     {
         SwDocShell const * const pShell( m_pImpl->m_pDoc->GetDocShell() );
-        return (pShell) ? pShell->GetModel() : nullptr;
+        return pShell ? pShell->GetModel() : nullptr;
     }
     return nullptr;
 }
 
 uno::Reference< beans::XPropertySetInfo > SAL_CALL
-SwXBookmark::getPropertySetInfo() throw (uno::RuntimeException, std::exception)
+SwXBookmark::getPropertySetInfo()
 {
     SolarMutexGuard g;
 
@@ -408,19 +405,49 @@ SwXBookmark::getPropertySetInfo() throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL
 SwXBookmark::setPropertyValue(const OUString& PropertyName,
-        const uno::Any& /*rValue*/)
-throw (beans::UnknownPropertyException, beans::PropertyVetoException,
-    lang::IllegalArgumentException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
+        const uno::Any& rValue)
 {
+    if (PropertyName == UNO_NAME_BOOKMARK_HIDDEN)
+    {
+        bool bNewValue = false;
+        if (!(rValue >>= bNewValue))
+            throw lang::IllegalArgumentException("Property BookmarkHidden requires value of type boolean", nullptr, 0);
+
+        IBookmark* pBookmark = dynamic_cast<IBookmark*>(m_pImpl->m_pRegisteredBookmark);
+        if (pBookmark)
+        {
+            pBookmark->Hide(bNewValue);
+        }
+        else
+        {
+            m_pImpl->m_bHidden = bNewValue;
+        }
+        return;
+    }
+    else if (PropertyName == UNO_NAME_BOOKMARK_CONDITION)
+    {
+        OUString newValue;
+        if (!(rValue >>= newValue))
+            throw lang::IllegalArgumentException("Property BookmarkCondition requires value of type string", nullptr, 0);
+
+        IBookmark* pBookmark = dynamic_cast<IBookmark*>(m_pImpl->m_pRegisteredBookmark);
+        if (pBookmark)
+        {
+            pBookmark->SetHideCondition(newValue);
+        }
+        else
+        {
+            m_pImpl->m_HideCondition = newValue;
+        }
+        return;
+    }
+
     // nothing to set here
     throw lang::IllegalArgumentException("Property is read-only: "
             + PropertyName, static_cast< cppu::OWeakObject * >(this), 0 );
 }
 
 uno::Any SAL_CALL SwXBookmark::getPropertyValue(const OUString& rPropertyName)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
@@ -431,6 +458,30 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
         {
             aRet <<= getName();
         }
+        else if (rPropertyName == UNO_NAME_BOOKMARK_HIDDEN)
+        {
+            IBookmark* pBookmark = dynamic_cast<IBookmark*>(m_pImpl->m_pRegisteredBookmark);
+            if (pBookmark)
+            {
+                aRet <<= pBookmark->IsHidden();
+            }
+            else
+            {
+                aRet <<= m_pImpl->m_bHidden;
+            }
+        }
+        else if (rPropertyName == UNO_NAME_BOOKMARK_CONDITION)
+        {
+            IBookmark* pBookmark = dynamic_cast<IBookmark*>(m_pImpl->m_pRegisteredBookmark);
+            if (pBookmark)
+            {
+                aRet <<= pBookmark->GetHideCondition();
+            }
+            else
+            {
+                aRet <<= m_pImpl->m_HideCondition;
+            }
+        }
     }
     return aRet;
 }
@@ -439,8 +490,6 @@ void SAL_CALL
 SwXBookmark::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXBookmark::addPropertyChangeListener(): not implemented");
 }
@@ -449,8 +498,6 @@ void SAL_CALL
 SwXBookmark::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXBookmark::removePropertyChangeListener(): not implemented");
 }
@@ -459,8 +506,6 @@ void SAL_CALL
 SwXBookmark::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXBookmark::addVetoableChangeListener(): not implemented");
 }
@@ -469,19 +514,16 @@ void SAL_CALL
 SwXBookmark::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXBookmark::removeVetoableChangeListener(): not implemented");
 }
 
-SwXFieldmark::SwXFieldmark(bool _isReplacementObject, ::sw::mark::IMark* pBkm, SwDoc* pDc)
-    : SwXFieldmark_Base(pBkm, pDc)
+SwXFieldmark::SwXFieldmark(bool _isReplacementObject, SwDoc* pDc)
+    : SwXFieldmark_Base(pDc)
     , isReplacementObject(_isReplacementObject)
 { }
 
 void SwXFieldmarkParameters::insertByName(const OUString& aName, const uno::Any& aElement)
-    throw (lang::IllegalArgumentException, container::ElementExistException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark::parameter_map_t* pParameters = getCoreParameters();
@@ -491,7 +533,6 @@ void SwXFieldmarkParameters::insertByName(const OUString& aName, const uno::Any&
 }
 
 void SwXFieldmarkParameters::removeByName(const OUString& aName)
-    throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     if(!getCoreParameters()->erase(aName))
@@ -499,7 +540,6 @@ void SwXFieldmarkParameters::removeByName(const OUString& aName)
 }
 
 void SwXFieldmarkParameters::replaceByName(const OUString& aName, const uno::Any& aElement)
-    throw (lang::IllegalArgumentException, container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark::parameter_map_t* pParameters = getCoreParameters();
@@ -510,7 +550,6 @@ void SwXFieldmarkParameters::replaceByName(const OUString& aName, const uno::Any
 }
 
 uno::Any SwXFieldmarkParameters::getByName(const OUString& aName)
-    throw (container::NoSuchElementException, lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark::parameter_map_t* pParameters = getCoreParameters();
@@ -521,7 +560,6 @@ uno::Any SwXFieldmarkParameters::getByName(const OUString& aName)
 }
 
 uno::Sequence<OUString> SwXFieldmarkParameters::getElementNames()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark::parameter_map_t* pParameters = getCoreParameters();
@@ -529,7 +567,6 @@ uno::Sequence<OUString> SwXFieldmarkParameters::getElementNames()
 }
 
 sal_Bool SwXFieldmarkParameters::hasByName(const OUString& aName)
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark::parameter_map_t* pParameters = getCoreParameters();
@@ -537,34 +574,30 @@ sal_Bool SwXFieldmarkParameters::hasByName(const OUString& aName)
 }
 
 uno::Type SwXFieldmarkParameters::getElementType()
-    throw (uno::RuntimeException, std::exception)
 {
     return ::cppu::UnoType<void>::get();
 }
 
 sal_Bool SwXFieldmarkParameters::hasElements()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     return !getCoreParameters()->empty();
 }
 
-void SwXFieldmarkParameters::Modify(const SfxPoolItem *pOld, const SfxPoolItem *pNew)
+void SwXFieldmarkParameters::Notify(const SfxHint& rHint)
 {
-    ClientModify(this, pOld, pNew);
+    if(rHint.GetId() == SfxHintId::Dying)
+        m_pFieldmark = nullptr;
 }
 
 IFieldmark::parameter_map_t* SwXFieldmarkParameters::getCoreParameters()
-    throw (uno::RuntimeException)
 {
-    const IFieldmark* pFieldmark = dynamic_cast< const IFieldmark* >(GetRegisteredIn());
-    if(!pFieldmark)
+    if(!m_pFieldmark)
         throw uno::RuntimeException();
-    return const_cast< IFieldmark* >(pFieldmark)->GetParameters();
+    return m_pFieldmark->GetParameters();
 }
 
 void SwXFieldmark::attachToRange( const uno::Reference < text::XTextRange >& xTextRange )
-    throw(lang::IllegalArgumentException, uno::RuntimeException)
 {
 
     attachToRangeEx( xTextRange,
@@ -572,7 +605,6 @@ void SwXFieldmark::attachToRange( const uno::Reference < text::XTextRange >& xTe
 }
 
 OUString SwXFieldmark::getFieldType()
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     const IFieldmark *pBkm = dynamic_cast<const IFieldmark*>(GetBookmark());
@@ -582,7 +614,6 @@ OUString SwXFieldmark::getFieldType()
 }
 
 void SwXFieldmark::setFieldType(const OUString & fieldType)
-    throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark *pBkm = const_cast<IFieldmark*>(
@@ -593,7 +624,6 @@ void SwXFieldmark::setFieldType(const OUString & fieldType)
 }
 
 uno::Reference<container::XNameContainer> SwXFieldmark::getParameters()
-    throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     IFieldmark *pBkm = const_cast<IFieldmark*>(
@@ -621,11 +651,11 @@ SwXFieldmark::CreateXFieldmark(SwDoc & rDoc, ::sw::mark::IMark *const pMark,
         // FIXME: These belong in XTextFieldsSupplier
         SwXFieldmark* pXBkmk = nullptr;
         if (dynamic_cast< ::sw::mark::TextFieldmark* >(pMark))
-            pXBkmk = new SwXFieldmark(false, pMark, &rDoc);
+            pXBkmk = new SwXFieldmark(false, &rDoc);
         else if (dynamic_cast< ::sw::mark::CheckboxFieldmark* >(pMark))
-            pXBkmk = new SwXFieldmark(true, pMark, &rDoc);
+            pXBkmk = new SwXFieldmark(true, &rDoc);
         else
-            pXBkmk = new SwXFieldmark(isReplacementObject, nullptr, &rDoc);
+            pXBkmk = new SwXFieldmark(isReplacementObject, &rDoc);
 
         xMark.set(pXBkmk);
         pXBkmk->registerInMark(*pXBkmk, pMarkBase);
@@ -641,7 +671,7 @@ SwXFieldmark::getCheckboxFieldmark()
     {
         // evil #TODO #FIXME casting away the const-ness
         pCheckboxFm = const_cast<sw::mark::ICheckboxFieldmark*>(dynamic_cast< const ::sw::mark::ICheckboxFieldmark* >( GetBookmark()));
-        OSL_ASSERT( GetBookmark() == nullptr || pCheckboxFm != nullptr );
+        assert( GetBookmark() == nullptr || pCheckboxFm != nullptr );
             // unclear to me whether GetBookmark() can be null here
     }
     return  pCheckboxFm;
@@ -654,20 +684,16 @@ SwXFieldmark::getCheckboxFieldmark()
 void SAL_CALL
 SwXFieldmark::setPropertyValue(const OUString& PropertyName,
         const uno::Any& rValue)
-throw (beans::UnknownPropertyException, beans::PropertyVetoException,
-    lang::IllegalArgumentException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
     if ( PropertyName == "Checked" )
     {
         ::sw::mark::ICheckboxFieldmark* pCheckboxFm = getCheckboxFieldmark();
         bool bChecked( false );
-        if ( pCheckboxFm && ( rValue >>= bChecked ) )
-            pCheckboxFm->SetChecked( bChecked );
-        else
+        if ( !(pCheckboxFm && ( rValue >>= bChecked )) )
             throw uno::RuntimeException();
 
+        pCheckboxFm->SetChecked( bChecked );
     }
     else
         SwXFieldmark_Base::setPropertyValue( PropertyName, rValue );
@@ -677,17 +703,15 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
 // docx import filter thus not published via PropertySet info )
 
 uno::Any SAL_CALL SwXFieldmark::getPropertyValue(const OUString& rPropertyName)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
     if ( rPropertyName == "Checked" )
     {
         ::sw::mark::ICheckboxFieldmark* pCheckboxFm = getCheckboxFieldmark();
-        if ( pCheckboxFm )
-            return uno::makeAny( pCheckboxFm->IsChecked() );
-        else
+        if ( !pCheckboxFm )
             throw uno::RuntimeException();
+
+        return uno::makeAny( pCheckboxFm->IsChecked() );
     }
     return SwXFieldmark_Base::getPropertyValue( rPropertyName );
 }

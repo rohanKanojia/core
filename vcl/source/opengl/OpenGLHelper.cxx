@@ -15,6 +15,8 @@
 #include <rtl/digest.h>
 #include <rtl/strbuf.hxx>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
+#include <tools/stream.hxx>
 #include <config_folders.h>
 #include <vcl/salbtype.hxx>
 #include <vcl/bitmapaccess.hxx>
@@ -31,20 +33,21 @@
 #include <deque>
 #include <unordered_map>
 
-#include "svdata.hxx"
-#include "salgdi.hxx"
-#include "salinst.hxx"
-#include "opengl/zone.hxx"
-#include "opengl/watchdog.hxx"
-#include <osl/conditn.h>
+#include <svdata.hxx>
+#include <salgdi.hxx>
+#include <salinst.hxx>
+#include <opengl/zone.hxx>
+#include <opengl/watchdog.hxx>
+#include <osl/conditn.hxx>
 #include <vcl/opengl/OpenGLWrapper.hxx>
 #include <vcl/opengl/OpenGLContext.hxx>
 #include <desktop/crashreport.hxx>
+#include <bitmapwriteaccess.hxx>
 
-#if defined UNX && !defined MACOSX && !defined IOS && !defined ANDROID
-#include "opengl/x11/X11DeviceInfo.hxx"
+#if defined UNX && !defined MACOSX && !defined IOS && !defined ANDROID && !defined HAIKU
+#include <opengl/x11/X11DeviceInfo.hxx>
 #elif defined (_WIN32)
-#include "opengl/win/WinDeviceInfo.hxx"
+#include <opengl/win/WinDeviceInfo.hxx>
 #endif
 
 static bool volatile gbInShaderCompile = false;
@@ -67,7 +70,6 @@ OString loadShader(const OUString& rFilename)
 {
     OUString aFileURL = getShaderFolder() + rFilename +".glsl";
     osl::File aFile(aFileURL);
-    SAL_INFO("vcl.opengl", "Reading " << aFileURL);
     if(aFile.open(osl_File_OpenFlag_Read) == osl::FileBase::E_None)
     {
         sal_uInt64 nSize = 0;
@@ -77,11 +79,12 @@ OString loadShader(const OUString& rFilename)
         aFile.read(content.get(), nSize, nBytesRead);
         assert(nSize == nBytesRead);
         content.get()[nBytesRead] = 0;
+        SAL_INFO("vcl.opengl", "Read " << nBytesRead << " bytes from " << aFileURL);
         return OString(content.get());
     }
     else
     {
-        SAL_WARN("vcl.opengl", "could not load the file: " << aFileURL);
+        SAL_WARN("vcl.opengl", "Could not open " << aFileURL);
     }
 
     return OString();
@@ -89,7 +92,7 @@ OString loadShader(const OUString& rFilename)
 
 OString& getShaderSource(const OUString& rFilename)
 {
-    static std::unordered_map<OUString, OString, OUStringHash> aMap;
+    static std::unordered_map<OUString, OString> aMap;
 
     if (aMap.find(rFilename) == aMap.end())
     {
@@ -102,8 +105,8 @@ OString& getShaderSource(const OUString& rFilename)
 }
 
 namespace {
-    int LogCompilerError(GLuint nId, const rtl::OUString &rDetail,
-                         const rtl::OUString &rName, bool bShaderNotProgram)
+    int LogCompilerError(GLuint nId, const OUString &rDetail,
+                         const OUString &rName, bool bShaderNotProgram)
     {
         OpenGLZone aZone;
 
@@ -141,8 +144,7 @@ static void addPreamble(OString& rShaderSource, const OString& rPreamble)
     if (rPreamble.isEmpty())
         return;
 
-    OString aVersionStr("#version");
-    int nVersionStrStartPos = rShaderSource.indexOf(aVersionStr);
+    int nVersionStrStartPos = rShaderSource.indexOf("#version");
 
     if (nVersionStrStartPos == -1)
     {
@@ -170,7 +172,7 @@ namespace
 
     OString getHexString(const sal_uInt8* pData, sal_uInt32 nLength)
     {
-        static const char* pHexData = "0123456789ABCDEF";
+        static const char* const pHexData = "0123456789ABCDEF";
 
         bool bIsZero = true;
         OStringBuffer aHexStr;
@@ -198,6 +200,28 @@ namespace
         return getHexString(pBuffer, RTL_DIGEST_LENGTH_MD5);
     }
 
+    OString getDeviceInfoString()
+    {
+#if defined( SAL_UNX ) && !defined( MACOSX ) && !defined( IOS )&& !defined( ANDROID ) && !defined( HAIKU )
+        const X11OpenGLDeviceInfo aInfo;
+        return aInfo.GetOS() +
+            aInfo.GetOSRelease() +
+            aInfo.GetRenderer() +
+            aInfo.GetVendor() +
+            aInfo.GetVersion();
+#elif defined( _WIN32 )
+        const WinOpenGLDeviceInfo aInfo;
+        return OUStringToOString(aInfo.GetAdapterVendorID(), RTL_TEXTENCODING_UTF8) +
+            OUStringToOString(aInfo.GetAdapterDeviceID(), RTL_TEXTENCODING_UTF8) +
+            OUStringToOString(aInfo.GetDriverVersion(), RTL_TEXTENCODING_UTF8) +
+            OString::number(aInfo.GetWindowsVersion());
+#else
+        return OString(reinterpret_cast<const char*>(glGetString(GL_VENDOR))) +
+            OString(reinterpret_cast<const char*>(glGetString(GL_RENDERER))) +
+            OString(reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+#endif
+    }
+
     OString getStringDigest( const OUString& rVertexShaderName,
                              const OUString& rFragmentShaderName,
                              const OString& rPreamble )
@@ -207,27 +231,7 @@ namespace
         OString aFragmentShaderSource = getShaderSource( rFragmentShaderName );
 
         // get info about the graphic device
-#if defined( SAL_UNX ) && !defined( MACOSX ) && !defined( IOS )&& !defined( ANDROID )
-        static const X11OpenGLDeviceInfo aInfo;
-        static const OString aDeviceInfo (
-                aInfo.GetOS() +
-                aInfo.GetOSRelease() +
-                aInfo.GetRenderer() +
-                aInfo.GetVendor() +
-                aInfo.GetVersion() );
-#elif defined( _WIN32 )
-        static const WinOpenGLDeviceInfo aInfo;
-        static const OString aDeviceInfo (
-                OUStringToOString( aInfo.GetAdapterVendorID(), RTL_TEXTENCODING_UTF8 ) +
-                OUStringToOString( aInfo.GetAdapterDeviceID(), RTL_TEXTENCODING_UTF8 ) +
-                OUStringToOString( aInfo.GetDriverVersion(), RTL_TEXTENCODING_UTF8 ) +
-                OString::number( aInfo.GetWindowsVersion() ) );
-#else
-        static const OString aDeviceInfo (
-                OString( reinterpret_cast<const char*>(glGetString(GL_VENDOR)) ) +
-                OString( reinterpret_cast<const char*>(glGetString(GL_RENDERER)) ) +
-                OString( reinterpret_cast<const char*>(glGetString(GL_VERSION)) ) );
-#endif
+        static const OString aDeviceInfo (getDeviceInfoString());
 
         OString aMessage;
         aMessage += rPreamble;
@@ -245,14 +249,14 @@ namespace
 
         osl::Directory::create(url);
 
-        return rtl::OUStringToOString(url, RTL_TEXTENCODING_UTF8);
+        return OUStringToOString(url, RTL_TEXTENCODING_UTF8);
     }
 
 
     bool writeProgramBinary( const OString& rBinaryFileName,
                              const std::vector<sal_uInt8>& rBinary )
     {
-        osl::File aFile(rtl::OStringToOUString(rBinaryFileName, RTL_TEXTENCODING_UTF8));
+        osl::File aFile(OStringToOUString(rBinaryFileName, RTL_TEXTENCODING_UTF8));
         osl::FileBase::RC eStatus = aFile.open(
                 osl_File_OpenFlag_Write | osl_File_OpenFlag_Create );
 
@@ -281,7 +285,7 @@ namespace
     bool readProgramBinary( const OString& rBinaryFileName,
                             std::vector<sal_uInt8>& rBinary )
     {
-        osl::File aFile( rtl::OStringToOUString( rBinaryFileName, RTL_TEXTENCODING_UTF8 ) );
+        osl::File aFile( OStringToOUString( rBinaryFileName, RTL_TEXTENCODING_UTF8 ) );
         if(aFile.open( osl_File_OpenFlag_Read ) == osl::FileBase::E_None)
         {
             sal_uInt64 nSize = 0;
@@ -290,12 +294,12 @@ namespace
             sal_uInt64 nBytesRead = 0;
             aFile.read( rBinary.data(), nSize, nBytesRead );
             assert( nSize == nBytesRead );
-            SAL_INFO("vcl.opengl", "Loading file: '" << rBinaryFileName << "': success" );
+            VCL_GL_INFO("Loading file: '" << rBinaryFileName << "': success" );
             return true;
         }
         else
         {
-            SAL_WARN("vcl.opengl", "Loading file: '" << rBinaryFileName << "': FAIL");
+            VCL_GL_INFO("Loading file: '" << rBinaryFileName << "': FAIL");
         }
 
         return false;
@@ -308,10 +312,10 @@ namespace
     {
         OString aFileName;
         aFileName += getCacheFolder();
-        aFileName += rtl::OUStringToOString( rVertexShaderName, RTL_TEXTENCODING_UTF8 ) + "-";
-        aFileName += rtl::OUStringToOString( rFragmentShaderName, RTL_TEXTENCODING_UTF8 ) + "-";
+        aFileName += OUStringToOString( rVertexShaderName, RTL_TEXTENCODING_UTF8 ) + "-";
+        aFileName += OUStringToOString( rFragmentShaderName, RTL_TEXTENCODING_UTF8 ) + "-";
         if (!rGeometryShaderName.isEmpty())
-            aFileName += rtl::OUStringToOString( rGeometryShaderName, RTL_TEXTENCODING_UTF8 ) + "-";
+            aFileName += OUStringToOString( rGeometryShaderName, RTL_TEXTENCODING_UTF8 ) + "-";
         aFileName += rDigest + ".bin";
         return aFileName;
     }
@@ -347,7 +351,7 @@ namespace
         GLenum nBinaryFormat = GL_NONE;
 
         glGetProgramiv( nProgramID, GL_PROGRAM_BINARY_LENGTH, &nBinaryLength );
-        if( !( nBinaryLength > 0 ) )
+        if( nBinaryLength <= 0 )
         {
             SAL_WARN( "vcl.opengl", "Binary size is zero" );
             return;
@@ -371,7 +375,7 @@ namespace
     }
 }
 
-rtl::OString OpenGLHelper::GetDigest( const OUString& rVertexShaderName,
+OString OpenGLHelper::GetDigest( const OUString& rVertexShaderName,
                                       const OUString& rFragmentShaderName,
                                       const OString& rPreamble )
 {
@@ -401,12 +405,11 @@ GLint OpenGLHelper::LoadShaders(const OUString& rVertexShaderName,
         aGeometryShaderSource = getShaderSource(rGeometryShaderName);
 
     GLint bBinaryResult = GL_FALSE;
-    if( GLEW_ARB_get_program_binary && !rDigest.isEmpty() )
+    if (epoxy_has_gl_extension("GL_ARB_get_program_binary") && !rDigest.isEmpty())
     {
         OString aFileName =
                 createFileName(rVertexShaderName, rFragmentShaderName, rGeometryShaderName, rDigest);
         bBinaryResult = loadProgramBinary(ProgramID, aFileName);
-        VCL_GL_INFO("Load binary shader from '" << aFileName << "'" << bBinaryResult);
         CHECK_GL_ERROR();
     }
 
@@ -474,7 +477,7 @@ GLint OpenGLHelper::LoadShaders(const OUString& rVertexShaderName,
     if (bHasGeometryShader)
         glAttachShader(ProgramID, GeometryShaderID);
 
-    if( GLEW_ARB_get_program_binary && !rDigest.isEmpty() )
+    if (epoxy_has_gl_extension("GL_ARB_get_program_binary") && !rDigest.isEmpty())
     {
         glProgramParameteri(ProgramID, GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
         glLinkProgram(ProgramID);
@@ -533,30 +536,6 @@ GLint OpenGLHelper::LoadShaders(const OUString& rVertexShaderName,
     return LoadShaders(rVertexShaderName, rFragmentShaderName, OUString(), "", "");
 }
 
-void OpenGLHelper::ConvertBitmapExToRGBATextureBuffer(const BitmapEx& rBitmapEx, sal_uInt8* o_pRGBABuffer, const bool bFlip)
-{
-    long nBmpWidth = rBitmapEx.GetSizePixel().Width();
-    long nBmpHeight = rBitmapEx.GetSizePixel().Height();
-
-    Bitmap aBitmap (rBitmapEx.GetBitmap());
-    AlphaMask aAlpha (rBitmapEx.GetAlpha());
-    Bitmap::ScopedReadAccess pReadAccces( aBitmap );
-    AlphaMask::ScopedReadAccess pAlphaReadAccess( aAlpha );
-    size_t i = 0;
-    for (long ny = (bFlip ? nBmpHeight - 1 : 0); (bFlip ? ny >= 0 : ny < nBmpHeight); (bFlip ? ny-- : ny++))
-    {
-        Scanline pAScan = pAlphaReadAccess ? pAlphaReadAccess->GetScanline(ny) : nullptr;
-        for(long nx = 0; nx < nBmpWidth; nx++)
-        {
-            BitmapColor aCol = pReadAccces->GetColor( ny, nx );
-            o_pRGBABuffer[i++] = aCol.GetRed();
-            o_pRGBABuffer[i++] = aCol.GetGreen();
-            o_pRGBABuffer[i++] = aCol.GetBlue();
-            o_pRGBABuffer[i++] = pAScan ? 255 - *pAScan++ : 255;
-        }
-    }
-}
-
 void OpenGLHelper::renderToFile(long nWidth, long nHeight, const OUString& rFileName)
 {
     OpenGLZone aZone;
@@ -583,8 +562,8 @@ BitmapEx OpenGLHelper::ConvertBGRABufferToBitmapEx(const sal_uInt8* const pBuffe
     AlphaMask aAlpha( Size(nWidth, nHeight) );
 
     {
-        Bitmap::ScopedWriteAccess pWriteAccess( aBitmap );
-        AlphaMask::ScopedWriteAccess pAlphaWriteAccess( aAlpha );
+        BitmapScopedWriteAccess pWriteAccess( aBitmap );
+        AlphaScopedWriteAccess pAlphaWriteAccess( aAlpha );
 
         size_t nCurPos = 0;
         for( long y = 0; y < nHeight; ++y)
@@ -608,7 +587,7 @@ BitmapEx OpenGLHelper::ConvertBGRABufferToBitmapEx(const sal_uInt8* const pBuffe
 const char* OpenGLHelper::GLErrorString(GLenum errorCode)
 {
     static const struct {
-        GLenum code;
+        GLenum const code;
         const char *string;
     } errors[]=
     {
@@ -666,7 +645,7 @@ std::ostream& operator<<(std::ostream& rStrm, const glm::mat4& rMatrix)
 }
 
 void OpenGLHelper::createFramebuffer(long nWidth, long nHeight, GLuint& nFramebufferId,
-        GLuint& nRenderbufferDepthId, GLuint& nRenderbufferColorId, bool bRenderbuffer)
+        GLuint& nRenderbufferDepthId, GLuint& nRenderbufferColorId)
 {
     OpenGLZone aZone;
 
@@ -676,29 +655,18 @@ void OpenGLHelper::createFramebuffer(long nWidth, long nHeight, GLuint& nFramebu
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, nWidth, nHeight);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-    if(bRenderbuffer)
-    {
-        // create a renderbuffer for color attachment
-        glGenRenderbuffers(1, &nRenderbufferColorId);
-        glBindRenderbuffer(GL_RENDERBUFFER, nRenderbufferColorId);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, nWidth, nHeight);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    }
-    else
-    {
-        glGenTextures(1, &nRenderbufferColorId);
-        glBindTexture(GL_TEXTURE_2D, nRenderbufferColorId);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, nWidth, nHeight, 0,
-                             GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    glGenTextures(1, &nRenderbufferColorId);
+    glBindTexture(GL_TEXTURE_2D, nRenderbufferColorId);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, nWidth, nHeight, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                GL_TEXTURE_2D, nRenderbufferColorId, 0);
-    }
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D, nRenderbufferColorId, 0);
 
     // create a framebuffer object and attach renderbuffer
     glGenFramebuffers(1, &nFramebufferId);
@@ -774,13 +742,20 @@ bool OpenGLHelper::isDeviceBlacklisted()
     {
         OpenGLZone aZone;
 
-#if defined UNX && !defined MACOSX && !defined IOS && !defined ANDROID
+#if defined UNX && !defined MACOSX && !defined IOS && !defined ANDROID && !defined HAIKU
         X11OpenGLDeviceInfo aInfo;
         bBlacklisted = aInfo.isDeviceBlocked();
         SAL_INFO("vcl.opengl", "blacklisted: " << bBlacklisted);
 #elif defined( _WIN32 )
         WinOpenGLDeviceInfo aInfo;
         bBlacklisted = aInfo.isDeviceBlocked();
+
+        if (aInfo.GetWindowsVersion() == 0x00060001 && /* Windows 7 */
+            (aInfo.GetAdapterVendorID() == "0x1002" || aInfo.GetAdapterVendorID() == "0x1022")) /* AMD */
+        {
+            SAL_INFO("vcl.opengl", "Relaxing watchdog timings.");
+            OpenGLZone::relaxWatchdogTimings();
+        }
 #else
         bBlacklisted = false;
 #endif
@@ -795,10 +770,7 @@ bool OpenGLHelper::supportsVCLOpenGL()
     static bool bDisableGL = !!getenv("SAL_DISABLEGL");
     bool bBlacklisted = isDeviceBlacklisted();
 
-    if (bDisableGL || bBlacklisted)
-        return false;
-    else
-        return true;
+    return !bDisableGL && !bBlacklisted;
 }
 
 void OpenGLZone::enter() { gnEnterCount++; }
@@ -806,8 +778,18 @@ void OpenGLZone::leave() { gnLeaveCount++; }
 
 namespace {
     static volatile bool gbWatchdogFiring = false;
-    static oslCondition gpWatchdogExit = nullptr;
+    static osl::Condition* gpWatchdogExit = nullptr;
+    static WatchdogTimings gWatchdogTimings;
     static rtl::Reference<OpenGLWatchdogThread> gxWatchdog;
+}
+
+WatchdogTimings::WatchdogTimings()
+    : maTimingValues{
+                     {{6,   20} /* 1.5s,  5s */, {20, 120} /*  5s, 30s */,
+                      {60, 240} /*  15s, 60s */, {60, 240} /* 15s, 60s */}
+                    }
+    , mbRelaxed(false)
+{
 }
 
 OpenGLWatchdogThread::OpenGLWatchdogThread()
@@ -817,25 +799,20 @@ OpenGLWatchdogThread::OpenGLWatchdogThread()
 
 void OpenGLWatchdogThread::execute()
 {
-    // delays to take various actions in 1/4 of a second increments.
-    static const int nDisableEntries[2] = { 6 /* 1.5s */, 20 /* 5s */ };
-    static const int nAbortAfter[2]     = { 20 /* 10s */, 120 /* 30s */ };
-
     int nUnchanged = 0; // how many unchanged nEnters
-    TimeValue aHalfSecond(0, 1000*1000*1000*0.25);
+    TimeValue aQuarterSecond(0, 1000*1000*1000*0.25);
     bool bAbortFired = false;
 
     do {
         sal_uInt64 nLastEnters = OpenGLZone::gnEnterCount;
 
-        osl_waitCondition(gpWatchdogExit, &aHalfSecond);
+        gpWatchdogExit->wait(&aQuarterSecond);
 
         if (OpenGLZone::isInZone())
         {
-            int nType = 0;
             // The shader compiler can take a long time, first time.
-            if (gbInShaderCompile)
-                nType = 1;
+            WatchdogTimingMode eMode = gbInShaderCompile ? WatchdogTimingMode::SHADER_COMPILE : WatchdogTimingMode::NORMAL;
+            WatchdogTimingsValues aTimingValues = gWatchdogTimings.getWatchdogTimingsValues(eMode);
 
             if (nLastEnters == OpenGLZone::gnEnterCount)
                 nUnchanged++;
@@ -844,12 +821,12 @@ void OpenGLWatchdogThread::execute()
             SAL_INFO("vcl.opengl", "GL watchdog - unchanged " <<
                      nUnchanged << " enter count " <<
                      OpenGLZone::gnEnterCount << " type " <<
-                     (nType ? "in shader" : "normal gl") <<
-                     "breakpoints mid: " << nDisableEntries[nType] <<
-                     " max " << nAbortAfter[nType]);
+                     (eMode == WatchdogTimingMode::SHADER_COMPILE ? "in shader" : "normal gl") <<
+                     "breakpoints mid: " << aTimingValues.mnDisableEntries <<
+                     " max " << aTimingValues.mnAbortAfter);
 
             // Not making progress
-            if (nUnchanged >= nDisableEntries[nType])
+            if (nUnchanged >= aTimingValues.mnDisableEntries)
             {
                 static bool bFired = false;
                 if (!bFired)
@@ -870,7 +847,7 @@ void OpenGLWatchdogThread::execute()
             }
 
             // Not making even more progress
-            if (nUnchanged >= nAbortAfter[nType])
+            if (nUnchanged >= aTimingValues.mnAbortAfter)
             {
                 if (!bAbortFired)
                 {
@@ -886,13 +863,13 @@ void OpenGLWatchdogThread::execute()
         {
             nUnchanged = 0;
         }
-    } while (!osl_checkCondition(gpWatchdogExit));
+    } while (!gpWatchdogExit->check());
 }
 
 void OpenGLWatchdogThread::start()
 {
     assert (gxWatchdog == nullptr);
-    gpWatchdogExit = osl_createCondition();
+    gpWatchdogExit = new osl::Condition();
     gxWatchdog.set(new OpenGLWatchdogThread());
     gxWatchdog->launch();
 }
@@ -903,7 +880,7 @@ void OpenGLWatchdogThread::stop()
         return; // in watchdog thread
 
     if (gpWatchdogExit)
-        osl_setCondition(gpWatchdogExit);
+        gpWatchdogExit->set();
 
     if (gxWatchdog.is())
     {
@@ -911,8 +888,7 @@ void OpenGLWatchdogThread::stop()
         gxWatchdog.clear();
     }
 
-    if (gpWatchdogExit)
-        osl_destroyCondition(gpWatchdogExit);
+    delete gpWatchdogExit;
     gpWatchdogExit = nullptr;
 }
 
@@ -944,9 +920,29 @@ void OpenGLZone::hardDisable()
     }
 }
 
+void OpenGLZone::relaxWatchdogTimings()
+{
+    gWatchdogTimings.setRelax(true);
+}
+
 OpenGLVCLContextZone::OpenGLVCLContextZone()
 {
     OpenGLContext::makeVCLCurrent();
+}
+
+namespace
+{
+    bool bTempOpenGLDisabled = false;
+}
+
+PreDefaultWinNoOpenGLZone::PreDefaultWinNoOpenGLZone()
+{
+    bTempOpenGLDisabled = true;
+}
+
+PreDefaultWinNoOpenGLZone::~PreDefaultWinNoOpenGLZone()
+{
+    bTempOpenGLDisabled = false;
 }
 
 bool OpenGLHelper::isVCLOpenGLEnabled()
@@ -955,12 +951,18 @@ bool OpenGLHelper::isVCLOpenGLEnabled()
      * The !bSet part should only be called once! Changing the results in the same
      * run will mix OpenGL and normal rendering.
      */
+
     static bool bSet = false;
     static bool bEnable = false;
     static bool bForceOpenGL = false;
 
-    // If we are a console app, then we don't use OpenGL
-    if ( Application::IsConsoleOnly() )
+    // No hardware rendering, so no OpenGL
+    if (Application::IsBitmapRendering())
+        return false;
+
+    //tdf#106155, disable GL while loading certain bitmaps needed for the initial toplevel windows
+    //under raw X (kde) vclplug
+    if (bTempOpenGLDisabled)
         return false;
 
     if (bSet)
@@ -971,33 +973,30 @@ bool OpenGLHelper::isVCLOpenGLEnabled()
      * There are a number of cases that these environment variables cover:
      *  * SAL_FORCEGL forces OpenGL independent of any other option
      *  * SAL_DISABLEGL or a blacklisted driver avoid the use of OpenGL if SAL_FORCEGL is not set
-     *  * SAL_ENABLEGL overrides VCL_HIDE_WINDOWS and the configuration variable
-     *  * the configuration variable is checked if no environment variable is set
      */
 
     bSet = true;
     bForceOpenGL = !!getenv("SAL_FORCEGL") || officecfg::Office::Common::VCL::ForceOpenGL::get();
 
     bool bRet = false;
+    bool bSupportsVCLOpenGL = supportsVCLOpenGL();
+    // always call supportsVCLOpenGL to de-zombie the glxtest child process on X11
     if (bForceOpenGL)
     {
         bRet = true;
     }
-    else if (!supportsVCLOpenGL())
-    {
-        bRet = false;
-    }
-    else
+    else if (bSupportsVCLOpenGL)
     {
         static bool bEnableGLEnv = !!getenv("SAL_ENABLEGL");
 
         bEnable = bEnableGLEnv;
 
-        static bool bDuringBuild = getenv("VCL_HIDE_WINDOWS");
-        if (bDuringBuild && !bEnable /* env. enable overrides */)
-            bEnable = false;
-        else if (officecfg::Office::Common::VCL::UseOpenGL::get())
+        if (officecfg::Office::Common::VCL::UseOpenGL::get())
             bEnable = true;
+
+        // Force disable in safe mode
+        if (Application::IsSafeModeEnabled())
+            bEnable = false;
 
         bRet = bEnable;
     }
@@ -1019,11 +1018,15 @@ bool OpenGLWrapper::isVCLOpenGLEnabled()
 
 void OpenGLHelper::debugMsgStream(std::ostringstream const &pStream)
 {
-    debugMsgPrint ("%x: %s", osl_getThreadIdentifier(nullptr),
-                   pStream.str().c_str());
+    debugMsgPrint(0, "%x: %s", osl_getThreadIdentifier(nullptr), pStream.str().c_str());
 }
 
-void OpenGLHelper::debugMsgPrint(const char *pFormat, ...)
+void OpenGLHelper::debugMsgStreamWarn(std::ostringstream const &pStream)
+{
+    debugMsgPrint(1, "%x: %s", osl_getThreadIdentifier(nullptr), pStream.str().c_str());
+}
+
+void OpenGLHelper::debugMsgPrint(const int nType, const char *pFormat, ...)
 {
     va_list aArgs;
     va_start (aArgs, pFormat);
@@ -1037,22 +1040,29 @@ void OpenGLHelper::debugMsgPrint(const char *pFormat, ...)
 
     bool bHasContext = OpenGLContext::hasCurrent();
     if (!bHasContext)
-        strcat(pStr, "- no GL context");
+        strcat(pStr, " (no GL context)");
 
-    SAL_INFO("vcl.opengl", pStr);
+    if (nType == 0)
+    {
+        SAL_INFO("vcl.opengl", pStr);
+    }
+    else if (nType == 1)
+    {
+        SAL_WARN("vcl.opengl", pStr);
+    }
 
     if (bHasContext)
     {
         OpenGLZone aZone;
 
-        if (GLEW_KHR_debug)
+        if (epoxy_has_gl_extension("GL_KHR_debug"))
             glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION,
                                  GL_DEBUG_TYPE_OTHER,
                                  1, // one[sic] id is as good as another ?
                                  // GL_DEBUG_SEVERITY_NOTIFICATION for >= GL4.3 ?
                                  GL_DEBUG_SEVERITY_LOW,
                                  strlen(pStr), pStr);
-        else if (GLEW_AMD_debug_output)
+        else if (epoxy_has_gl_extension("GL_AMD_debug_output"))
             glDebugMessageInsertAMD(GL_DEBUG_CATEGORY_APPLICATION_AMD,
                                     GL_DEBUG_SEVERITY_LOW_AMD,
                                     1, // one[sic] id is as good as another ?
@@ -1060,127 +1070,6 @@ void OpenGLHelper::debugMsgPrint(const char *pFormat, ...)
     }
 
     va_end (aArgs);
-}
-
-#if defined UNX && !defined MACOSX && !defined IOS && !defined ANDROID && !defined(LIBO_HEADLESS)
-
-bool OpenGLHelper::GetVisualInfo(Display* pDisplay, int nScreen, XVisualInfo& rVI)
-{
-    OpenGLZone aZone;
-
-    XVisualInfo* pVI;
-    int aAttrib[] = { GLX_RGBA,
-                      GLX_RED_SIZE, 8,
-                      GLX_GREEN_SIZE, 8,
-                      GLX_BLUE_SIZE, 8,
-                      GLX_DEPTH_SIZE, 24,
-                      GLX_STENCIL_SIZE, 8,
-                      None };
-
-    pVI = glXChooseVisual( pDisplay, nScreen, aAttrib );
-    if( !pVI )
-        return false;
-
-    rVI = *pVI;
-    XFree( pVI );
-
-    CHECK_GL_ERROR();
-    return true;
-}
-
-GLXFBConfig OpenGLHelper::GetPixmapFBConfig( Display* pDisplay, bool& bInverted )
-{
-    OpenGLZone aZone;
-
-    int nScreen = DefaultScreen( pDisplay );
-    GLXFBConfig *aFbConfigs;
-    int i, nFbConfigs, nValue;
-
-    aFbConfigs = glXGetFBConfigs( pDisplay, nScreen, &nFbConfigs );
-    for( i = 0; i < nFbConfigs; i++ )
-    {
-        glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_DRAWABLE_TYPE, &nValue );
-        if( !(nValue & GLX_PIXMAP_BIT) )
-            continue;
-
-        glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_BIND_TO_TEXTURE_TARGETS_EXT, &nValue );
-        if( !(nValue & GLX_TEXTURE_2D_BIT_EXT) )
-            continue;
-
-        glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_DEPTH_SIZE, &nValue );
-        if( nValue != 24 )
-            continue;
-
-        glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_RED_SIZE, &nValue );
-        if( nValue != 8 )
-            continue;
-        SAL_INFO( "vcl.opengl", "Red is " << nValue );
-
-        // TODO: lfrb: Make it configurable wrt RGB/RGBA
-        glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_BIND_TO_TEXTURE_RGB_EXT, &nValue );
-        if( nValue == False )
-        {
-            glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_BIND_TO_TEXTURE_RGBA_EXT, &nValue );
-            if( nValue == False )
-                continue;
-        }
-
-        glXGetFBConfigAttrib( pDisplay, aFbConfigs[i], GLX_Y_INVERTED_EXT, &nValue );
-
-        // Looks like that X sends GLX_DONT_CARE but this usually means "true" for most
-        // of the X implementations. Investigation on internet pointed that this could be
-        // safely "true" all the time (for example gnome-shell always assumes "true").
-        bInverted = nValue == True || nValue == int(GLX_DONT_CARE);
-
-        break;
-    }
-
-    if( i == nFbConfigs )
-    {
-        SAL_WARN( "vcl.opengl", "Unable to find FBconfig for pixmap texturing" );
-        return nullptr;
-    }
-
-    CHECK_GL_ERROR();
-    return aFbConfigs[i];
-}
-
-#endif
-
-OutputDevice::PaintScope::PaintScope(OutputDevice *pDev)
-    : pHandle( nullptr )
-{
-    if( pDev->mpGraphics || pDev->AcquireGraphics() )
-    {
-    }
-}
-
-/**
- * Flush all the queued rendering commands to the screen for this context.
- */
-void OutputDevice::PaintScope::flush()
-{
-    if( pHandle )
-    {
-        OpenGLContext *pContext = static_cast<OpenGLContext *>( pHandle );
-        pHandle = nullptr;
-        pContext->mnPainting--;
-        assert( pContext->mnPainting >= 0 );
-        if( pContext->mnPainting == 0 )
-        {
-            pContext->makeCurrent();
-            pContext->AcquireDefaultFramebuffer();
-            glFlush();
-            pContext->swapBuffers();
-            CHECK_GL_ERROR();
-        }
-        pContext->release();
-    }
-}
-
-OutputDevice::PaintScope::~PaintScope()
-{
-    flush();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

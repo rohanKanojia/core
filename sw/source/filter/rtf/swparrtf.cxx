@@ -23,12 +23,15 @@
 #include <doc.hxx>
 #include <docsh.hxx>
 #include <IDocumentStylePoolAccess.hxx>
+#include <swdll.hxx>
 #include <swerror.h>
 
 #include <unotextrange.hxx>
 
 #include <unotools/streamwrap.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <sal/log.hxx>
 
 #include <com/sun/star/document/XFilter.hpp>
 #include <com/sun/star/document/XImporter.hpp>
@@ -38,24 +41,27 @@ using namespace ::com::sun::star;
 /// Glue class to call RtfImport as an internal filter, needed by copy&paste support.
 class SwRTFReader : public Reader
 {
-    virtual sal_uLong Read(SwDoc&, const OUString& rBaseURL, SwPaM&, const OUString&) override;
+    ErrCode Read(SwDoc& rDoc, const OUString& rBaseURL, SwPaM& rPam,
+                 const OUString& rFileName) override;
 };
 
-sal_uLong SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rPam, const OUString&)
+ErrCode SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rPam,
+                          const OUString& /*rFileName*/)
 {
-    if (!pStrm)
+    if (!m_pStream)
         return ERR_SWG_READ_ERROR;
 
     // We want to work in an empty paragraph.
     // Step 1: XTextRange will be updated when content is inserted, so we know
     // the end position.
-    const uno::Reference<text::XTextRange> xInsertPosition = SwXTextRange::CreateXTextRange(rDoc, *rPam.GetPoint(), nullptr);
+    const uno::Reference<text::XTextRange> xInsertPosition
+        = SwXTextRange::CreateXTextRange(rDoc, *rPam.GetPoint(), nullptr);
     std::shared_ptr<SwNodeIndex> pSttNdIdx(new SwNodeIndex(rDoc.GetNodes()));
     const SwPosition* pPos = rPam.GetPoint();
 
     // Step 2: Split once and remember the node that has been split.
     rDoc.getIDocumentContentOperations().SplitNode(*pPos, false);
-    *pSttNdIdx = pPos->nNode.GetIndex()-1;
+    *pSttNdIdx = pPos->nNode.GetIndex() - 1;
 
     // Step 3: Split again.
     rDoc.getIDocumentContentOperations().SplitNode(*pPos, false);
@@ -64,36 +70,37 @@ sal_uLong SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rP
 
     // Step 4: Insert all content into the new node
     rPam.Move(fnMoveBackward);
-    rDoc.SetTextFormatColl(rPam, rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool(RES_POOLCOLL_STANDARD, false));
+    rDoc.SetTextFormatColl(
+        rPam, rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool(RES_POOLCOLL_STANDARD, false));
 
     SwDocShell* pDocShell(rDoc.GetDocShell());
-    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(comphelper::getProcessServiceFactory());
-    uno::Reference<uno::XInterface> xInterface(xMultiServiceFactory->createInstance("com.sun.star.comp.Writer.RtfFilter"), uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(
+        comphelper::getProcessServiceFactory());
+    uno::Reference<uno::XInterface> xInterface(
+        xMultiServiceFactory->createInstance("com.sun.star.comp.Writer.RtfFilter"),
+        uno::UNO_QUERY_THROW);
 
     uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY_THROW);
     uno::Reference<lang::XComponent> xDstDoc(pDocShell->GetModel(), uno::UNO_QUERY_THROW);
     xImporter->setTargetDocument(xDstDoc);
 
-    const uno::Reference<text::XTextRange> xInsertTextRange =
-        SwXTextRange::CreateXTextRange(rDoc, *rPam.GetPoint(), nullptr);
+    const uno::Reference<text::XTextRange> xInsertTextRange
+        = SwXTextRange::CreateXTextRange(rDoc, *rPam.GetPoint(), nullptr);
 
     uno::Reference<document::XFilter> xFilter(xInterface, uno::UNO_QUERY_THROW);
-    uno::Sequence<beans::PropertyValue> aDescriptor(3);
-    aDescriptor[0].Name = "InputStream";
-    uno::Reference<io::XStream> xStream(new utl::OStreamWrapper(*pStrm));
-    aDescriptor[0].Value <<= xStream;
-    aDescriptor[1].Name = "InsertMode";
-    aDescriptor[1].Value <<= sal_True;
-    aDescriptor[2].Name = "TextInsertModeRange";
-    aDescriptor[2].Value <<= xInsertTextRange;
-    sal_uLong ret(0);
+    uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence(
+        { { "InputStream",
+            uno::Any(uno::Reference<io::XStream>(new utl::OStreamWrapper(*m_pStream))) },
+          { "InsertMode", uno::Any(true) },
+          { "TextInsertModeRange", uno::Any(xInsertTextRange) } }));
+    auto ret = ERRCODE_NONE;
     try
     {
         xFilter->filter(aDescriptor);
     }
     catch (uno::Exception const& e)
     {
-        SAL_WARN("sw.rtf", "SwRTFReader::Read(): exception: " << e.Message);
+        SAL_WARN("sw.rtf", "SwRTFReader::Read(): " << e);
         ret = ERR_SWG_READ_ERROR;
     }
 
@@ -107,7 +114,8 @@ sal_uLong SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rP
         // Revert the first split node.
         SwTextNode* pTextNode = pSttNdIdx->GetNode().GetTextNode();
         SwNodeIndex aNxtIdx(*pSttNdIdx);
-        if (pTextNode && pTextNode->CanJoinNext(&aNxtIdx) && pSttNdIdx->GetIndex() + 1 == aNxtIdx.GetIndex())
+        if (pTextNode && pTextNode->CanJoinNext(&aNxtIdx)
+            && pSttNdIdx->GetIndex() + 1 == aNxtIdx.GetIndex())
         {
             // If the PaM points to the first new node, move the PaM to the
             // end of the previous node.
@@ -135,7 +143,8 @@ sal_uLong SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rP
         // Revert the second split node.
         SwTextNode* pTextNode = pSttNdIdx2->GetNode().GetTextNode();
         SwNodeIndex aPrevIdx(*pSttNdIdx2);
-        if (pTextNode && pTextNode->CanJoinPrev(&aPrevIdx) && pSttNdIdx2->GetIndex() - 1 == aPrevIdx.GetIndex())
+        if (pTextNode && pTextNode->CanJoinPrev(&aPrevIdx)
+            && pSttNdIdx2->GetIndex() - 1 == aPrevIdx.GetIndex())
         {
             // If the last new node isn't empty, convert  the node's text
             // attributes into hints. Otherwise, set the new node's
@@ -152,9 +161,39 @@ sal_uLong SwRTFReader::Read(SwDoc& rDoc, const OUString& /*rBaseURL*/, SwPaM& rP
     return ret;
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT Reader* SAL_CALL ImportRTF()
+extern "C" SAL_DLLPUBLIC_EXPORT Reader* ImportRTF() { return new SwRTFReader; }
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportRTF(SvStream& rStream)
 {
-    return new SwRTFReader();
+    SwGlobals::ensure();
+
+    SfxObjectShellLock xDocSh(new SwDocShell(SfxObjectCreateMode::INTERNAL));
+    xDocSh->DoInitNew();
+
+    uno::Reference<lang::XMultiServiceFactory> xMultiServiceFactory(
+        comphelper::getProcessServiceFactory());
+    uno::Reference<uno::XInterface> xInterface(
+        xMultiServiceFactory->createInstance("com.sun.star.comp.Writer.RtfFilter"),
+        uno::UNO_QUERY_THROW);
+
+    uno::Reference<document::XImporter> xImporter(xInterface, uno::UNO_QUERY_THROW);
+    uno::Reference<lang::XComponent> xDstDoc(xDocSh->GetModel(), uno::UNO_QUERY_THROW);
+    xImporter->setTargetDocument(xDstDoc);
+
+    uno::Reference<document::XFilter> xFilter(xInterface, uno::UNO_QUERY_THROW);
+    uno::Sequence<beans::PropertyValue> aDescriptor(comphelper::InitPropertySequence(
+        { { "InputStream",
+            uno::Any(uno::Reference<io::XStream>(new utl::OStreamWrapper(rStream))) } }));
+    bool bRet = true;
+    try
+    {
+        xFilter->filter(aDescriptor);
+    }
+    catch (...)
+    {
+        bRet = false;
+    }
+    return bRet;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

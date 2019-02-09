@@ -24,6 +24,8 @@
 #include "xeroot.hxx"
 #include <memory>
 
+struct XclAddress;
+
 // External reference log =====================================================
 
 /** Log entry for external references in a formula, used i.e. in change tracking. */
@@ -51,7 +53,7 @@ class XclExpFormulaCompiler : protected XclExpRoot
 {
 public:
     explicit            XclExpFormulaCompiler( const XclExpRoot& rRoot );
-    virtual             ~XclExpFormulaCompiler();
+    virtual             ~XclExpFormulaCompiler() override;
 
     /** Creates and returns the token array of a formula. */
     XclTokenArrayRef    CreateFormula(

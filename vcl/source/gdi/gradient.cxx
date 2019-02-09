@@ -19,7 +19,6 @@
 
 #include <tools/stream.hxx>
 #include <tools/vcompat.hxx>
-#include <tools/debug.hxx>
 #include <tools/gen.hxx>
 #include <vcl/gradient.hxx>
 
@@ -27,8 +26,7 @@ Impl_Gradient::Impl_Gradient() :
     maStartColor( COL_BLACK ),
     maEndColor( COL_WHITE )
 {
-    mnRefCount          = 1;
-    meStyle             = GradientStyle_LINEAR;
+    meStyle             = GradientStyle::Linear;
     mnAngle             = 0;
     mnBorder            = 0;
     mnOfsX              = 50;
@@ -42,7 +40,6 @@ Impl_Gradient::Impl_Gradient( const Impl_Gradient& rImplGradient ) :
     maStartColor( rImplGradient.maStartColor ),
     maEndColor( rImplGradient.maEndColor )
 {
-    mnRefCount          = 1;
     meStyle             = rImplGradient.meStyle;
     mnAngle             = rImplGradient.mnAngle;
     mnBorder            = rImplGradient.mnBorder;
@@ -55,7 +52,7 @@ Impl_Gradient::Impl_Gradient( const Impl_Gradient& rImplGradient ) :
 
 bool Impl_Gradient::operator==( const Impl_Gradient& rImpl_Gradient ) const
 {
-    if ( (meStyle           == rImpl_Gradient.meStyle)           &&
+    return (meStyle           == rImpl_Gradient.meStyle)           &&
          (mnAngle           == rImpl_Gradient.mnAngle)           &&
          (mnBorder          == rImpl_Gradient.mnBorder)          &&
          (mnOfsX            == rImpl_Gradient.mnOfsX)            &&
@@ -64,20 +61,14 @@ bool Impl_Gradient::operator==( const Impl_Gradient& rImpl_Gradient ) const
          (mnIntensityStart  == rImpl_Gradient.mnIntensityStart)  &&
          (mnIntensityEnd    == rImpl_Gradient.mnIntensityEnd)    &&
          (maStartColor      == rImpl_Gradient.maStartColor)      &&
-         (maEndColor        == rImpl_Gradient.maEndColor) )
-         return true;
-    return false;
+         (maEndColor        == rImpl_Gradient.maEndColor);
 }
 
-Gradient::Gradient() :
-    mpImplGradient()
-{
-}
+Gradient::Gradient() = default;
 
-Gradient::Gradient( const Gradient& rGradient ) :
-    mpImplGradient( rGradient.mpImplGradient )
-{
-}
+Gradient::Gradient( const Gradient& ) = default;
+
+Gradient::Gradient( Gradient&& ) = default;
 
 Gradient::Gradient( GradientStyle eStyle,
                     const Color& rStartColor, const Color& rEndColor ) :
@@ -88,9 +79,7 @@ Gradient::Gradient( GradientStyle eStyle,
     mpImplGradient->maEndColor      = rEndColor;
 }
 
-Gradient::~Gradient()
-{
-}
+Gradient::~Gradient() = default;
 
 void Gradient::SetStyle( GradientStyle eStyle )
 {
@@ -142,12 +131,12 @@ void Gradient::SetSteps( sal_uInt16 nSteps )
     mpImplGradient->mnStepCount = nSteps;
 }
 
-void Gradient::GetBoundRect( const Rectangle& rRect, Rectangle& rBoundRect, Point& rCenter ) const
+void Gradient::GetBoundRect( const tools::Rectangle& rRect, tools::Rectangle& rBoundRect, Point& rCenter ) const
 {
-    Rectangle aRect( rRect );
+    tools::Rectangle aRect( rRect );
     sal_uInt16 nAngle = GetAngle() % 3600;
 
-    if( GetStyle() == GradientStyle_LINEAR || GetStyle() == GradientStyle_AXIAL )
+    if( GetStyle() == GradientStyle::Linear || GetStyle() == GradientStyle::Axial )
     {
         const double    fAngle = nAngle * F_PI1800;
         const double    fWidth = aRect.GetWidth();
@@ -158,17 +147,17 @@ void Gradient::GetBoundRect( const Rectangle& rRect, Rectangle& rBoundRect, Poin
                           fWidth  * fabs( sin( fAngle ) );
                 fDX     = (fDX - fWidth)  * 0.5 + 0.5;
                 fDY     = (fDY - fHeight) * 0.5 + 0.5;
-        aRect.Left()   -= (long) fDX;
-        aRect.Right()  += (long) fDX;
-        aRect.Top()    -= (long) fDY;
-        aRect.Bottom() += (long) fDY;
+        aRect.AdjustLeft( -static_cast<long>(fDX) );
+        aRect.AdjustRight(static_cast<long>(fDX) );
+        aRect.AdjustTop( -static_cast<long>(fDY) );
+        aRect.AdjustBottom(static_cast<long>(fDY) );
 
         rBoundRect = aRect;
         rCenter = rRect.Center();
     }
     else
     {
-        if( GetStyle() == GradientStyle_SQUARE || GetStyle() == GradientStyle_RECT )
+        if( GetStyle() == GradientStyle::Square || GetStyle() == GradientStyle::Rect )
         {
             const double    fAngle = nAngle * F_PI1800;
             const double    fWidth = aRect.GetWidth();
@@ -179,99 +168,92 @@ void Gradient::GetBoundRect( const Rectangle& rRect, Rectangle& rBoundRect, Poin
             fDX = ( fDX - fWidth  ) * 0.5 + 0.5;
             fDY = ( fDY - fHeight ) * 0.5 + 0.5;
 
-            aRect.Left()   -= (long) fDX;
-            aRect.Right()  += (long) fDX;
-            aRect.Top()    -= (long) fDY;
-            aRect.Bottom() += (long) fDY;
+            aRect.AdjustLeft( -static_cast<long>(fDX) );
+            aRect.AdjustRight(static_cast<long>(fDX) );
+            aRect.AdjustTop( -static_cast<long>(fDY) );
+            aRect.AdjustBottom(static_cast<long>(fDY) );
         }
 
         Size aSize( aRect.GetSize() );
 
-        if( GetStyle() == GradientStyle_RADIAL )
+        if( GetStyle() == GradientStyle::Radial )
         {
             // Calculation of radii for circle
-            aSize.Width() = (long)(0.5 + sqrt((double)aSize.Width()*(double)aSize.Width() + (double)aSize.Height()*(double)aSize.Height()));
-            aSize.Height() = aSize.Width();
+            aSize.setWidth( static_cast<long>(0.5 + sqrt(static_cast<double>(aSize.Width())*static_cast<double>(aSize.Width()) + static_cast<double>(aSize.Height())*static_cast<double>(aSize.Height()))) );
+            aSize.setHeight( aSize.Width() );
         }
-        else if( GetStyle() == GradientStyle_ELLIPTICAL )
+        else if( GetStyle() == GradientStyle::Elliptical )
         {
             // Calculation of radii for ellipse
-            aSize.Width() = (long)( 0.5 + (double) aSize.Width()  * 1.4142 );
-            aSize.Height() = (long)( 0.5 + (double) aSize.Height() * 1.4142 );
+            aSize.setWidth( static_cast<long>( 0.5 + static_cast<double>(aSize.Width())  * 1.4142 ) );
+            aSize.setHeight( static_cast<long>( 0.5 + static_cast<double>(aSize.Height()) * 1.4142 ) );
         }
 
         // Calculate new centers
-        long    nZWidth = aRect.GetWidth() * (long) GetOfsX() / 100;
-        long    nZHeight = aRect.GetHeight() * (long) GetOfsY() / 100;
-        long    nBorderX = (long) GetBorder() * aSize.Width()  / 100;
-        long    nBorderY = (long) GetBorder() * aSize.Height() / 100;
+        long    nZWidth = aRect.GetWidth() * static_cast<long>(GetOfsX()) / 100;
+        long    nZHeight = aRect.GetHeight() * static_cast<long>(GetOfsY()) / 100;
+        long    nBorderX = static_cast<long>(GetBorder()) * aSize.Width()  / 100;
+        long    nBorderY = static_cast<long>(GetBorder()) * aSize.Height() / 100;
         rCenter = Point( aRect.Left() + nZWidth, aRect.Top() + nZHeight );
 
         // Respect borders
-        aSize.Width() -= nBorderX;
-        aSize.Height() -= nBorderY;
+        aSize.AdjustWidth( -nBorderX );
+        aSize.AdjustHeight( -nBorderY );
 
         // Recalculate output rectangle
-        aRect.Left() = rCenter.X() - ( aSize.Width() >> 1 );
-        aRect.Top() = rCenter.Y() - ( aSize.Height() >> 1 );
+        aRect.SetLeft( rCenter.X() - ( aSize.Width() >> 1 ) );
+        aRect.SetTop( rCenter.Y() - ( aSize.Height() >> 1 ) );
 
         aRect.SetSize( aSize );
         rBoundRect = aRect;
     }
 }
 
-Gradient& Gradient::operator=( const Gradient& rGradient )
-{
-    mpImplGradient = rGradient.mpImplGradient;
+Gradient& Gradient::operator=( const Gradient& ) = default;
 
-    return *this;
-}
+Gradient& Gradient::operator=( Gradient&& ) = default;
 
 bool Gradient::operator==( const Gradient& rGradient ) const
 {
     return mpImplGradient == rGradient.mpImplGradient;
 }
 
-SvStream& ReadImpl_Gradient( SvStream& rIStm, Impl_Gradient& rImpl_Gradient )
+SvStream& ReadGradient( SvStream& rIStm, Gradient& rGradient )
 {
     VersionCompat   aCompat( rIStm, StreamMode::READ );
     sal_uInt16          nTmp16;
 
-    rIStm.ReadUInt16( nTmp16 ); rImpl_Gradient.meStyle = (GradientStyle) nTmp16;
+    rIStm.ReadUInt16( nTmp16 ); rGradient.mpImplGradient->meStyle = static_cast<GradientStyle>(nTmp16);
 
-    ReadColor( rIStm, rImpl_Gradient.maStartColor );
-    ReadColor( rIStm, rImpl_Gradient.maEndColor );
-    rIStm.ReadUInt16( rImpl_Gradient.mnAngle ).             ReadUInt16( rImpl_Gradient.mnBorder ).             ReadUInt16( rImpl_Gradient.mnOfsX ).             ReadUInt16( rImpl_Gradient.mnOfsY ).             ReadUInt16( rImpl_Gradient.mnIntensityStart ).             ReadUInt16( rImpl_Gradient.mnIntensityEnd ).             ReadUInt16( rImpl_Gradient.mnStepCount );
+    ReadColor( rIStm, rGradient.mpImplGradient->maStartColor );
+    ReadColor( rIStm, rGradient.mpImplGradient->maEndColor );
+    rIStm.ReadUInt16( rGradient.mpImplGradient->mnAngle )
+         .ReadUInt16( rGradient.mpImplGradient->mnBorder )
+         .ReadUInt16( rGradient.mpImplGradient->mnOfsX )
+         .ReadUInt16( rGradient.mpImplGradient->mnOfsY )
+         .ReadUInt16( rGradient.mpImplGradient->mnIntensityStart )
+         .ReadUInt16( rGradient.mpImplGradient->mnIntensityEnd )
+         .ReadUInt16( rGradient.mpImplGradient->mnStepCount );
 
     return rIStm;
 }
 
-SvStream& WriteImpl_Gradient( SvStream& rOStm, const Impl_Gradient& rImpl_Gradient )
+SvStream& WriteGradient( SvStream& rOStm, const Gradient& rGradient )
 {
     VersionCompat aCompat( rOStm, StreamMode::WRITE, 1 );
 
-    rOStm.WriteUInt16( rImpl_Gradient.meStyle );
-    WriteColor( rOStm, rImpl_Gradient.maStartColor );
-    WriteColor( rOStm, rImpl_Gradient.maEndColor );
-    rOStm.WriteUInt16( rImpl_Gradient.mnAngle )
-         .WriteUInt16( rImpl_Gradient.mnBorder )
-         .WriteUInt16( rImpl_Gradient.mnOfsX )
-         .WriteUInt16( rImpl_Gradient.mnOfsY )
-         .WriteUInt16( rImpl_Gradient.mnIntensityStart )
-         .WriteUInt16( rImpl_Gradient.mnIntensityEnd )
-         .WriteUInt16( rImpl_Gradient.mnStepCount );
+    rOStm.WriteUInt16( static_cast<sal_uInt16>(rGradient.mpImplGradient->meStyle) );
+    WriteColor( rOStm, rGradient.mpImplGradient->maStartColor );
+    WriteColor( rOStm, rGradient.mpImplGradient->maEndColor );
+    rOStm.WriteUInt16( rGradient.mpImplGradient->mnAngle )
+         .WriteUInt16( rGradient.mpImplGradient->mnBorder )
+         .WriteUInt16( rGradient.mpImplGradient->mnOfsX )
+         .WriteUInt16( rGradient.mpImplGradient->mnOfsY )
+         .WriteUInt16( rGradient.mpImplGradient->mnIntensityStart )
+         .WriteUInt16( rGradient.mpImplGradient->mnIntensityEnd )
+         .WriteUInt16( rGradient.mpImplGradient->mnStepCount );
 
     return rOStm;
-}
-
-SvStream& ReadGradient( SvStream& rIStm, Gradient& rGradient )
-{
-    return ReadImpl_Gradient( rIStm, *rGradient.mpImplGradient );
-}
-
-SvStream& WriteGradient( SvStream& rOStm, const Gradient& rGradient )
-{
-    return WriteImpl_Gradient( rOStm, *rGradient.mpImplGradient );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

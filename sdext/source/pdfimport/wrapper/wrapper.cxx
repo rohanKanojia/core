@@ -19,42 +19,45 @@
 
 #include <config_folders.h>
 
-#include "contentsink.hxx"
-#include "pdfparse.hxx"
-#include "pdfihelper.hxx"
-#include "wrapper.hxx"
+#include <contentsink.hxx>
+#include <pdfparse.hxx>
+#include <pdfihelper.hxx>
+#include <wrapper.hxx>
 
-#include "osl/file.h"
-#include "osl/file.hxx"
-#include "osl/thread.h"
-#include "osl/process.h"
-#include "osl/diagnose.h"
-#include "rtl/bootstrap.hxx"
-#include "rtl/ustring.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/strbuf.hxx"
-#include "rtl/byteseq.hxx"
+#include <osl/file.h>
+#include <osl/file.hxx>
+#include <osl/thread.h>
+#include <osl/process.h>
+#include <osl/diagnose.h>
+#include <rtl/bootstrap.hxx>
+#include <rtl/ustring.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/strbuf.hxx>
+#include <rtl/byteseq.hxx>
+#include <sal/log.hxx>
 
-#include "cppuhelper/exc_hlp.hxx"
-#include "com/sun/star/io/XInputStream.hpp"
-#include "com/sun/star/uno/XComponentContext.hpp"
-#include "com/sun/star/awt/FontDescriptor.hpp"
-#include "com/sun/star/beans/XMaterialHolder.hpp"
-#include "com/sun/star/rendering/PathCapType.hpp"
-#include "com/sun/star/rendering/PathJoinType.hpp"
-#include "com/sun/star/rendering/XColorSpace.hpp"
-#include "com/sun/star/rendering/XPolyPolygon2D.hpp"
-#include "com/sun/star/rendering/XBitmap.hpp"
-#include "com/sun/star/geometry/Matrix2D.hpp"
-#include "com/sun/star/geometry/AffineMatrix2D.hpp"
-#include "com/sun/star/geometry/RealRectangle2D.hpp"
-#include "com/sun/star/task/XInteractionHandler.hpp"
+#include <comphelper/lok.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <cppuhelper/exc_hlp.hxx>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/awt/FontDescriptor.hpp>
+#include <com/sun/star/beans/XMaterialHolder.hpp>
+#include <com/sun/star/rendering/PathCapType.hpp>
+#include <com/sun/star/rendering/PathJoinType.hpp>
+#include <com/sun/star/rendering/XColorSpace.hpp>
+#include <com/sun/star/rendering/XPolyPolygon2D.hpp>
+#include <com/sun/star/rendering/XBitmap.hpp>
+#include <com/sun/star/geometry/Matrix2D.hpp>
+#include <com/sun/star/geometry/AffineMatrix2D.hpp>
+#include <com/sun/star/geometry/RealRectangle2D.hpp>
+#include <com/sun/star/task/XInteractionHandler.hpp>
 
-#include "basegfx/point/b2dpoint.hxx"
-#include "basegfx/polygon/b2dpolypolygon.hxx"
-#include "basegfx/polygon/b2dpolygon.hxx"
-#include "basegfx/tools/canvastools.hxx"
-#include "basegfx/tools/unopolypolygon.hxx"
+#include <basegfx/point/b2dpoint.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <basegfx/polygon/b2dpolygon.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/unopolypolygon.hxx>
 
 #include <vcl/metric.hxx>
 #include <vcl/font.hxx>
@@ -64,9 +67,16 @@
 #include <unordered_map>
 #include <string.h>
 #include <stdlib.h>
-#include <ctype.h>
 
-#include "rtl/bootstrap.h"
+#include <rtl/bootstrap.h>
+
+#include <rtl/character.hxx>
+
+#include <vcl/bitmapaccess.hxx>
+#include <vcl/bitmap.hxx>
+#include <vcl/graph.hxx>
+#include <vcl/pdfread.hxx>
+#include <vcl/pngwrite.hxx>
 
 using namespace com::sun::star;
 
@@ -133,7 +143,7 @@ enum parseKey {
 #pragma clang diagnostic ignored "-Wdeprecated-register"
 #pragma clang diagnostic ignored "-Wextra-tokens"
 #endif
-#include "hash.cxx"
+#include <hash.cxx>
 #if defined _MSC_VER && defined __clang__
 #pragma clang diagnostic pop
 #endif
@@ -143,6 +153,7 @@ class Parser
     typedef std::unordered_map< sal_Int64,
                            FontAttributes > FontMapType;
 
+    ScopedVclPtr<VirtualDevice> m_xDev;
     const uno::Reference<uno::XComponentContext> m_xContext;
     const ContentSinkSharedPtr                   m_pSink;
     const oslFileHandle                          m_pErr;
@@ -199,58 +210,51 @@ public:
     void parseLine( const OString& rLine );
 };
 
-
-namespace
+/** Unescapes line-ending characters in input string. These
+    characters are encoded as pairs of characters: '\\' 'n', resp.
+    '\\' 'r'. This function converts them back to '\n', resp. '\r'.
+  */
+OString lcl_unescapeLineFeeds(const OString& i_rStr)
 {
+    const size_t nOrigLen(sal::static_int_cast<size_t>(i_rStr.getLength()));
+    const sal_Char* const pOrig(i_rStr.getStr());
+    std::unique_ptr<sal_Char[]> pBuffer(new sal_Char[nOrigLen + 1]);
 
-    /** Unescapes line-ending characters in input string. These
-        characters are encoded as pairs of characters: '\\' 'n', resp.
-        '\\' 'r'. This function converts them back to '\n', resp. '\r'.
-      */
-    OString lcl_unescapeLineFeeds(const OString& i_rStr)
+    const sal_Char* pRead(pOrig);
+    sal_Char* pWrite(pBuffer.get());
+    const sal_Char* pCur(pOrig);
+    while ((pCur = strchr(pCur, '\\')) != nullptr)
     {
-        const size_t nOrigLen(sal::static_int_cast<size_t>(i_rStr.getLength()));
-        const sal_Char* const pOrig(i_rStr.getStr());
-        std::unique_ptr<sal_Char[]> pBuffer(new sal_Char[nOrigLen + 1]);
-
-        const sal_Char* pRead(pOrig);
-        sal_Char* pWrite(pBuffer.get());
-        const sal_Char* pCur(pOrig);
-        while ((pCur = strchr(pCur, '\\')) != nullptr)
+        const sal_Char cNext(pCur[1]);
+        if (cNext == 'n' || cNext == 'r' || cNext == '\\')
         {
-            const sal_Char cNext(pCur[1]);
-            if (cNext == 'n' || cNext == 'r' || cNext == '\\')
-            {
-                const size_t nLen(pCur - pRead);
-                strncpy(pWrite, pRead, nLen);
-                pWrite += nLen;
-                *pWrite = cNext == 'n' ? '\n' : (cNext == 'r' ? '\r' : '\\');
-                ++pWrite;
-                pCur = pRead = pCur + 2;
-            }
-            else
-            {
-                // Just continue on the next character. The current
-                // block will be copied the next time it goes through the
-                // 'if' branch.
-                ++pCur;
-            }
-        }
-        // maybe there are some data to copy yet
-        if (sal::static_int_cast<size_t>(pRead - pOrig) < nOrigLen)
-        {
-            const size_t nLen(nOrigLen - (pRead - pOrig));
+            const size_t nLen(pCur - pRead);
             strncpy(pWrite, pRead, nLen);
             pWrite += nLen;
+            *pWrite = cNext == 'n' ? '\n' : (cNext == 'r' ? '\r' : '\\');
+            ++pWrite;
+            pCur = pRead = pCur + 2;
         }
-        *pWrite = '\0';
-
-        OString aResult(pBuffer.get());
-        return aResult;
+        else
+        {
+            // Just continue on the next character. The current
+            // block will be copied the next time it goes through the
+            // 'if' branch.
+            ++pCur;
+        }
     }
+    // maybe there are some data to copy yet
+    if (sal::static_int_cast<size_t>(pRead - pOrig) < nOrigLen)
+    {
+        const size_t nLen(nOrigLen - (pRead - pOrig));
+        strncpy(pWrite, pRead, nLen);
+        pWrite += nLen;
+    }
+    *pWrite = '\0';
 
+    OString aResult(pBuffer.get());
+    return aResult;
 }
-
 
 OString Parser::readNextToken()
 {
@@ -397,7 +401,6 @@ void Parser::readLineCap()
     switch( readInt32() )
     {
         default:
-            // FALLTHROUGH intended
         case 0: nCap = rendering::PathCapType::BUTT; break;
         case 1: nCap = rendering::PathCapType::ROUND; break;
         case 2: nCap = rendering::PathCapType::SQUARE; break;
@@ -430,7 +433,6 @@ void Parser::readLineJoin()
     switch( readInt32() )
     {
         default:
-            // FALLTHROUGH intended
         case 0: nJoin = rendering::PathJoinType::MITER; break;
         case 1: nJoin = rendering::PathJoinType::ROUND; break;
         case 2: nJoin = rendering::PathJoinType::BEVEL; break;
@@ -468,9 +470,12 @@ sal_Int32 Parser::parseFontCheckForString(
     if (nCopyLen < nAttribLen)
         return 0;
     for (sal_Int32 i = 0; i < nAttribLen; ++i)
-        if (tolower(pCopy[i]) != pAttrib[i]
-            && toupper(pCopy[i]) != pAttrib[i])
+    {
+        sal_uInt32 nCode = pAttrib[i];
+        if (rtl::toAsciiLowerCase(pCopy[i]) != nCode
+            && rtl::toAsciiUpperCase(pCopy[i]) != nCode)
             return 0;
+    }
     rResult.isItalic |= bItalic;
     rResult.isBold |= bBold;
     return nAttribLen;
@@ -519,6 +524,24 @@ void Parser::parseFontFamilyName( FontAttributes& rResult )
             nLen -= nAttribLen;
             pCopy += nAttribLen;
         }
+        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-LightOblique"), rResult, true, false))
+        {
+            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-LightOblique");
+            nLen -= nAttribLen;
+            pCopy += nAttribLen;
+        }
+        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-Light"), rResult, false, false))
+        {
+            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-Light");
+            nLen -= nAttribLen;
+            pCopy += nAttribLen;
+        }
+        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-BoldOblique"), rResult, true, true))
+        {
+            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-BoldOblique");
+            nLen -= nAttribLen;
+            pCopy += nAttribLen;
+        }
         else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-Bold"), rResult, false, true))
         {
             sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-Bold");
@@ -537,21 +560,9 @@ void Parser::parseFontFamilyName( FontAttributes& rResult )
             nLen -= nAttribLen;
             pCopy += nAttribLen;
         }
-        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-LightOblique"), rResult, true, false))
+        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-Oblique"), rResult, true, false))
         {
-            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-LightOblique");
-            nLen -= nAttribLen;
-            pCopy += nAttribLen;
-        }
-        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-BoldOblique"), rResult, true, true))
-        {
-            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-BoldOblique");
-            nLen -= nAttribLen;
-            pCopy += nAttribLen;
-        }
-        else if (parseFontCheckForString(pCopy, nLen, RTL_CONSTASCII_STRINGPARAM("-Light"), rResult, false, false))
-        {
-            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-Light");
+            sal_Int32 nAttribLen = RTL_CONSTASCII_LENGTH("-Oblique");
             nLen -= nAttribLen;
             pCopy += nAttribLen;
         }
@@ -662,13 +673,12 @@ void Parser::readFont()
 
     }
 
-    static VclPtr<VirtualDevice> vDev;
-    if (!vDev)
-        vDev = VclPtr<VirtualDevice>::Create();
+    if (!m_xDev)
+        m_xDev.disposeAndReset(VclPtr<VirtualDevice>::Create());
 
     vcl::Font font(aResult.familyName, Size(0, 1000));
-    vDev->SetFont(font);
-    FontMetric metric(vDev->GetFontMetric());
+    m_xDev->SetFont(font);
+    FontMetric metric(m_xDev->GetFontMetric());
     aResult.ascent = metric.GetAscent() / 1000.0;
 
     m_aFontMap[nFontID] = aResult;
@@ -679,29 +689,20 @@ void Parser::readFont()
 
 uno::Sequence<beans::PropertyValue> Parser::readImageImpl()
 {
-    static const char aJpegMarker[] = "JPEG";
-    static const char aPbmMarker[]  = "PBM";
-    static const char aPpmMarker[]  = "PPM";
-    static const char aPngMarker[]  = "PNG";
-    static const char aJpegFile[]   = "DUMMY.JPEG";
-    static const char aPbmFile[]    = "DUMMY.PBM";
-    static const char aPpmFile[]    = "DUMMY.PPM";
-    static const char aPngFile[]    = "DUMMY.PNG";
-
     OString aToken = readNextToken();
     const sal_Int32 nImageSize( readInt32() );
 
     OUString           aFileName;
-    if( aToken == aPngMarker )
-        aFileName = aPngFile;
-    else if( aToken == aJpegMarker )
-        aFileName = aJpegFile;
-    else if( aToken == aPbmMarker )
-        aFileName = aPbmFile;
+    if( aToken == "PNG" )
+        aFileName = "DUMMY.PNG";
+    else if( aToken == "JPEG" )
+        aFileName = "DUMMY.JPEG";
+    else if( aToken == "PBM" )
+        aFileName = "DUMMY.PBM";
     else
     {
-        SAL_WARN_IF(aToken != aPpmMarker,"sdext.pdfimport","Invalid bitmap format");
-        aFileName = aPpmFile;
+        SAL_WARN_IF(aToken != "PPM","sdext.pdfimport","Invalid bitmap format");
+        aFileName = "DUMMY.PPM";
     }
 
     uno::Sequence<sal_Int8> aDataSequence(nImageSize);
@@ -716,19 +717,11 @@ uno::Sequence<beans::PropertyValue> Parser::readImageImpl()
         xFactory->createInstanceWithArgumentsAndContext( "com.sun.star.io.SequenceInputStream", aStreamCreationArgs, m_xContext ),
         uno::UNO_QUERY_THROW );
 
-    uno::Sequence<beans::PropertyValue> aSequence(3);
-    aSequence[0] = beans::PropertyValue( OUString("URL"),
-                                         0,
-                                         uno::makeAny(aFileName),
-                                         beans::PropertyState_DIRECT_VALUE );
-    aSequence[1] = beans::PropertyValue( OUString("InputStream"),
-                                         0,
-                                         uno::makeAny( xDataStream ),
-                                         beans::PropertyState_DIRECT_VALUE );
-    aSequence[2] = beans::PropertyValue( OUString("InputSequence"),
-                                         0,
-                                         uno::makeAny(aDataSequence),
-                                         beans::PropertyState_DIRECT_VALUE );
+    uno::Sequence<beans::PropertyValue> aSequence( comphelper::InitPropertySequence({
+            { "URL", uno::makeAny(aFileName) },
+            { "InputStream", uno::makeAny( xDataStream ) },
+            { "InputSequence", uno::makeAny(aDataSequence) }
+        }));
 
     return aSequence;
 }
@@ -757,8 +750,8 @@ void Parser::readImage()
             aMaxRange[i] = aDataSequence[i+nMaskColors/2] / 255.0;
         }
 
-        aMaskRanges[0] = uno::makeAny(aMinRange);
-        aMaskRanges[1] = uno::makeAny(aMaxRange);
+        aMaskRanges[0] <<= aMinRange;
+        aMaskRanges[1] <<= aMaxRange;
 
         m_pSink->drawColorMaskedImage( aImg, aMaskRanges );
     }
@@ -773,7 +766,7 @@ void Parser::readMask()
     readInt32(nHeight);
     readInt32(nInvert);
 
-    m_pSink->drawMask( readImageImpl(), nInvert );
+    m_pSink->drawMask( readImageImpl(), nInvert != 0);
 }
 
 void Parser::readLink()
@@ -826,7 +819,6 @@ void Parser::parseLine( const OString& rLine )
     OSL_PRECOND( m_xContext.is(), "Invalid service factory" );
 
     m_nNextToken = 0; m_nCharIndex = 0; m_aLine = rLine;
-    uno::Reference<rendering::XPolyPolygon2D> xPoly;
     const OString& rCmd = readNextToken();
     const hash_entry* pEntry = PdfKeywordHash::in_word_set( rCmd.getStr(),
                                                             rCmd.getLength() );
@@ -955,15 +947,7 @@ static bool checkEncryption( const OUString&                               i_rPa
                             } while( bEntered && ! bAuthenticated );
                         }
 
-                        OSL_TRACE( "password: %s", bAuthenticated ? "matches" : "does not match" );
                         bSuccess = bAuthenticated;
-                    }
-                    if( bAuthenticated )
-                    {
-                        OUStringBuffer aBuf( 128 );
-                        aBuf.append( "_OOO_pdfi_Credentials_" );
-                        aBuf.append( pPDFFile->getDecryptionKey() );
-                        io_rPwd = aBuf.makeStringAndClear();
                     }
                 }
                 else if( i_xIHdl.is() )
@@ -1022,12 +1006,12 @@ public:
     }
 };
 
-bool xpdf_ImportFromFile( const OUString&                             rURL,
-                          const ContentSinkSharedPtr&                        rSink,
-                          const uno::Reference< task::XInteractionHandler >& xIHdl,
-                          const OUString&                               rPwd,
-                          const uno::Reference< uno::XComponentContext >&    xContext,
-                          const OUString&                                    rFilterOptions )
+bool xpdf_ImportFromFile(const OUString& rURL,
+                         const ContentSinkSharedPtr& rSink,
+                         const uno::Reference<task::XInteractionHandler>& xIHdl,
+                         const OUString& rPwd,
+                         const uno::Reference<uno::XComponentContext>& xContext,
+                         const OUString& rFilterOptions)
 {
     OSL_ASSERT(rSink);
 

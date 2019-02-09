@@ -20,7 +20,6 @@
 #include <svl/SfxBroadcaster.hxx>
 
 #include <svl/hint.hxx>
-#include <svl/smplhint.hxx>
 #include <svl/lstner.hxx>
 #include <tools/debug.hxx>
 
@@ -53,9 +52,9 @@ void SfxBroadcaster::Broadcast( const SfxHint &rHint )
 
 // unregister all listeners
 
-SfxBroadcaster::~SfxBroadcaster()
+SfxBroadcaster::~SfxBroadcaster() COVERITY_NOEXCEPT_FALSE
 {
-    Broadcast( SfxSimpleHint(SFX_HINT_DYING) );
+    Broadcast( SfxHint(SfxHintId::Dying) );
 
     // remove all still registered listeners
     for (size_t i = 0; i < mpImpl->m_Listeners.size(); ++i)
@@ -125,13 +124,32 @@ void SfxBroadcaster::Forward(SfxBroadcaster& rBC, const SfxHint& rHint)
 void SfxBroadcaster::RemoveListener( SfxListener& rListener )
 {
     DBG_TESTSOLARMUTEX();
-    SfxListenerArr_Impl::iterator aIter = std::find(
-            mpImpl->m_Listeners.begin(), mpImpl->m_Listeners.end(), &rListener);
-    assert(aIter != mpImpl->m_Listeners.end()); // "RemoveListener: Listener unknown"
+
+    // First, check the slots either side of the last removed slot, makes a significant
+    // difference when the list is large.
+    int positionOfRemovedElement = -1;
+    if (!mpImpl->m_RemovedPositions.empty())
+    {
+        auto i = mpImpl->m_RemovedPositions.back();
+        if (i < mpImpl->m_Listeners.size() - 2 && mpImpl->m_Listeners[i+1] == &rListener)
+        {
+            positionOfRemovedElement = i + 1;
+        }
+        else if (i > 0 && mpImpl->m_Listeners[i-1] == &rListener)
+        {
+            positionOfRemovedElement = i-1;
+        }
+    }
+    // then scan the whole list if we didn't find it
+    if (positionOfRemovedElement == -1)
+    {
+        SfxListenerArr_Impl::iterator aIter = std::find(
+                mpImpl->m_Listeners.begin(), mpImpl->m_Listeners.end(), &rListener);
+        positionOfRemovedElement = std::distance(mpImpl->m_Listeners.begin(), aIter);
+    }
     // DO NOT erase the listener, set the pointer to 0
     // because the current continuation may contain this->Broadcast
-    *aIter = nullptr;
-    size_t positionOfRemovedElement = std::distance(mpImpl->m_Listeners.begin(), aIter);
+    mpImpl->m_Listeners[positionOfRemovedElement] = nullptr;
     mpImpl->m_RemovedPositions.push_back(positionOfRemovedElement);
 }
 

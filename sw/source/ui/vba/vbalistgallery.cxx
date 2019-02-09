@@ -24,7 +24,7 @@
 using namespace ::ooo::vba;
 using namespace ::com::sun::star;
 
-SwVbaListGallery::SwVbaListGallery( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< text::XTextDocument >& xTextDoc, sal_Int32 nType ) throw ( uno::RuntimeException ) : SwVbaListGallery_BASE( rParent, rContext ), mxTextDocument( xTextDoc ), mnType( nType )
+SwVbaListGallery::SwVbaListGallery( const uno::Reference< ooo::vba::XHelperInterface >& rParent, const uno::Reference< uno::XComponentContext >& rContext, const uno::Reference< text::XTextDocument >& xTextDoc, sal_Int32 nType ) : SwVbaListGallery_BASE( rParent, rContext ), mxTextDocument( xTextDoc ), mnType( nType )
 {
 }
 
@@ -33,7 +33,7 @@ SwVbaListGallery::~SwVbaListGallery()
 }
 
 uno::Any SAL_CALL
-SwVbaListGallery::ListTemplates( const uno::Any& index ) throw (uno::RuntimeException, std::exception)
+SwVbaListGallery::ListTemplates( const uno::Any& index )
 {
     uno::Reference< XCollection > xCol( new SwVbaListTemplates( mxParent, mxContext, mxTextDocument, mnType ) );
     if ( index.hasValue() )
@@ -50,12 +50,10 @@ SwVbaListGallery::getServiceImplName()
 uno::Sequence< OUString >
 SwVbaListGallery::getServiceNames()
 {
-    static uno::Sequence< OUString > aServiceNames;
-    if ( aServiceNames.getLength() == 0 )
+    static uno::Sequence< OUString > const aServiceNames
     {
-        aServiceNames.realloc( 1 );
-        aServiceNames[ 0 ] = "ooo.vba.word.ListGallery";
-    }
+        "ooo.vba.word.ListGallery"
+    };
     return aServiceNames;
 }
 

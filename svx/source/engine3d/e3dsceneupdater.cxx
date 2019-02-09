@@ -25,34 +25,30 @@
 
 
 E3DModifySceneSnapRectUpdater::E3DModifySceneSnapRectUpdater(const SdrObject* pObject)
-:   mpScene(nullptr),
-    mpViewInformation3D(nullptr)
+:   mpScene(nullptr)
 {
     // Secure old 3D transformation stack before modification
-    if(pObject)
+    if(const E3dObject* pE3dObject = dynamic_cast< const E3dObject* >(pObject))
     {
-        const E3dObject* pE3dObject = dynamic_cast< const E3dObject* >(pObject);
+        mpScene = pE3dObject->getRootE3dSceneFromE3dObject();
 
-        if(pE3dObject)
+        if(nullptr != mpScene && mpScene->getRootE3dSceneFromE3dObject() == mpScene)
         {
-            mpScene = pE3dObject->GetScene();
+            // if there is a scene and it's the outmost scene, get current 3D range
+            const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(mpScene->GetViewContact());
+            const basegfx::B3DRange aAllContentRange(rVCScene.getAllContentRange3D());
 
-            if(mpScene && mpScene->GetScene() == mpScene)
+            if(aAllContentRange.isEmpty())
             {
-                // if there is a scene and it's the outmost scene, get current 3D range
-                const sdr::contact::ViewContactOfE3dScene& rVCScene = static_cast< sdr::contact::ViewContactOfE3dScene& >(mpScene->GetViewContact());
-                const basegfx::B3DRange aAllContentRange(rVCScene.getAllContentRange3D());
-
-                if(aAllContentRange.isEmpty())
-                {
-                    // no content, nothing to do
-                    mpScene = nullptr;
-                }
-                else
-                {
-                    // secure current 3D transformation stack
-                    mpViewInformation3D = new drawinglayer::geometry::ViewInformation3D(rVCScene.getViewInformation3D(aAllContentRange));
-                }
+                // no content, nothing to do
+                mpScene = nullptr;
+            }
+            else
+            {
+                // secure current 3D transformation stack
+                mpViewInformation3D.reset(
+                    new drawinglayer::geometry::ViewInformation3D(
+                        rVCScene.getViewInformation3D(aAllContentRange)));
             }
         }
     }
@@ -83,8 +79,7 @@ E3DModifySceneSnapRectUpdater::~E3DModifySceneSnapRectUpdater()
                     mpViewInformation3D->getDeviceToView(),
                     mpViewInformation3D->getViewTime(),
                     mpViewInformation3D->getExtendedInformationSequence());
-                delete mpViewInformation3D;
-                mpViewInformation3D = pNew;
+                mpViewInformation3D.reset(pNew);
             }
 
             // transform content range to scene-relative coordinates using old 3d transformation stack
@@ -99,7 +94,7 @@ E3DModifySceneSnapRectUpdater::~E3DModifySceneSnapRectUpdater()
             aSnapRange.transform(rVCScene.getObjectTransformation());
 
             // snap to (old) integer
-            const Rectangle aNewSnapRect(
+            const tools::Rectangle aNewSnapRect(
                 sal_Int32(floor(aSnapRange.getMinX())), sal_Int32(floor(aSnapRange.getMinY())),
                 sal_Int32(ceil(aSnapRange.getMaxX())), sal_Int32(ceil(aSnapRange.getMaxY())));
 
@@ -111,8 +106,6 @@ E3DModifySceneSnapRectUpdater::~E3DModifySceneSnapRectUpdater()
             }
         }
     }
-
-    delete mpViewInformation3D;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

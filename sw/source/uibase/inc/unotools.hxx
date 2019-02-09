@@ -21,18 +21,14 @@
 
 #include <vcl/button.hxx>
 #include <vcl/edit.hxx>
-#include <vcl/dialog.hxx>
 #include <vcl/fixed.hxx>
 #include <vcl/layout.hxx>
 #include <vcl/idle.hxx>
-#include <actctrl.hxx>
+#include "actctrl.hxx"
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/awt/XControl.hpp>
-#include <com/sun/star/container/XNamed.hpp>
-#include <tools/resary.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 class SwOneExampleFrame;
 
@@ -47,16 +43,6 @@ public:
     virtual void Resize() override;
 };
 
-class MenuResource : public Resource
-{
-    ResStringArray      aMenuArray;
-
-public:
-    MenuResource(const ResId& rResId);
-
-    ResStringArray& GetMenuArray() {return aMenuArray;}
-};
-
 #define EX_SHOW_ONLINE_LAYOUT   0x001
 
 // hard zoom value
@@ -68,48 +54,47 @@ class SwView;
 
 class SW_DLLPUBLIC SwOneExampleFrame
 {
-    css::uno::Reference< css::awt::XControl >         _xControl;
-    css::uno::Reference< css::frame::XModel >         _xModel;
-    css::uno::Reference< css::frame::XController >    _xController;
-    css::uno::Reference< css::text::XTextCursor >     _xCursor;
+    css::uno::Reference< css::awt::XControl >         m_xControl;
+    css::uno::Reference< css::frame::XModel >         m_xModel;
+    css::uno::Reference< css::frame::XController >    m_xController;
+    css::uno::Reference< css::text::XTextCursor >     m_xCursor;
 
-    VclPtr<SwFrameCtrlWindow> aTopWindow;
-    Idle            aLoadedIdle;
-    Link<SwOneExampleFrame&,void> aInitializedLink;
+    VclPtr<SwFrameCtrlWindow> m_aTopWindow;
+    Idle            m_aLoadedIdle;
+    Link<SwOneExampleFrame&,void> m_aInitializedLink;
 
-    MenuResource    aMenuRes;
-    OUString        sArgumentURL;
+    OUString        m_sArgumentURL;
 
-    SwView*         pModuleView;
+    SwView* const    m_pModuleView;
 
-    sal_uInt32          nStyleFlags;
+    sal_uInt32 const m_nStyleFlags;
 
-    bool            bIsInitialized;
-    bool            bServiceAvailable;
+    bool            m_bIsInitialized;
+    bool            m_bServiceAvailable;
 
     static  bool    bShowServiceNotAvailableMessage;
 
-    DECL_DLLPRIVATE_LINK_TYPED( TimeoutHdl, Idle*, void );
-    DECL_DLLPRIVATE_LINK_TYPED( PopupHdl, Menu*, bool );
+    DECL_DLLPRIVATE_LINK( TimeoutHdl, Timer*, void );
+    DECL_DLLPRIVATE_LINK( PopupHdl, Menu*, bool );
 
     SAL_DLLPRIVATE void  CreateControl();
     SAL_DLLPRIVATE void  DisposeControl();
 
 public:
     SwOneExampleFrame(vcl::Window& rWin,
-                    sal_uInt32 nStyleFlags = EX_SHOW_ONLINE_LAYOUT,
-                    const Link<SwOneExampleFrame&,void>* pInitalizedLink = nullptr,
+                    sal_uInt32 nStyleFlags,
+                    const Link<SwOneExampleFrame&,void>* pInitalizedLink,
                     const OUString* pURL = nullptr);
     ~SwOneExampleFrame();
 
-    css::uno::Reference< css::frame::XModel > &       GetModel()      {return _xModel;}
-    css::uno::Reference< css::frame::XController > &  GetController() {return _xController;}
-    css::uno::Reference< css::text::XTextCursor > &   GetTextCursor() {return _xCursor;}
+    css::uno::Reference< css::frame::XModel > &       GetModel()      {return m_xModel;}
+    css::uno::Reference< css::frame::XController > &  GetController() {return m_xController;}
+    css::uno::Reference< css::text::XTextCursor > &   GetTextCursor() {return m_xCursor;}
 
     void ClearDocument();
 
-    bool IsInitialized() const {return bIsInitialized;}
-    bool IsServiceAvailable() const {return bServiceAvailable;}
+    bool IsInitialized() const {return m_bIsInitialized;}
+    bool IsServiceAvailable() const {return m_bServiceAvailable;}
 
     void CreatePopup(const Point& rPt);
 

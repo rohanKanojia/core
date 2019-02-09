@@ -17,16 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "cellkeytranslator.hxx"
+#include <memory>
+#include <global.hxx>
+#include <cellkeytranslator.hxx>
 #include <comphelper/processfactory.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <i18nlangtag/lang.h>
+#include <i18nutil/transliteration.hxx>
 #include <rtl/ustring.hxx>
-
-#include <com/sun/star/i18n/TransliterationModules.hpp>
+#include <unotools/syslocale.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 
 using ::com::sun::star::uno::Sequence;
-using ::std::list;
 
 using namespace ::com::sun::star;
 
@@ -75,7 +77,7 @@ ScCellKeyword::ScCellKeyword(const sal_Char* pName, OpCode eOpCode, const lang::
 ::std::unique_ptr<ScCellKeywordTranslator> ScCellKeywordTranslator::spInstance;
 
 static void lclMatchKeyword(OUString& rName, const ScCellKeywordHashMap& aMap,
-                            OpCode eOpCode = ocNone, const lang::Locale* pLocale = nullptr)
+                            OpCode eOpCode, const lang::Locale* pLocale)
 {
     ScCellKeywordHashMap::const_iterator itrEnd = aMap.end();
     ScCellKeywordHashMap::const_iterator itr = aMap.find(rName);
@@ -97,57 +99,55 @@ static void lclMatchKeyword(OUString& rName, const ScCellKeywordHashMap& aMap,
     LocaleMatch eLocaleMatchLevel = LOCALE_MATCH_NONE;
     bool bOpCodeMatched = false;
 
-    list<ScCellKeyword>::const_iterator itrListEnd = itr->second.end();
-    list<ScCellKeyword>::const_iterator itrList = itr->second.begin();
-    for ( ; itrList != itrListEnd; ++itrList )
+    for (auto const& elem : itr->second)
     {
         if ( eOpCode != ocNone && pLocale )
         {
-            if ( itrList->meOpCode == eOpCode )
+            if (elem.meOpCode == eOpCode)
             {
-                LocaleMatch eLevel = lclLocaleCompare(itrList->mrLocale, aLanguageTag);
+                LocaleMatch eLevel = lclLocaleCompare(elem.mrLocale, aLanguageTag);
                 if ( eLevel == LOCALE_MATCH_ALL )
                 {
                     // Name with matching opcode and locale found.
-                    rName = OUString::createFromAscii( itrList->mpName );
+                    rName = OUString::createFromAscii( elem.mpName );
                     return;
                 }
                 else if ( eLevel > eLocaleMatchLevel )
                 {
                     // Name with a better matching locale.
                     eLocaleMatchLevel = eLevel;
-                    aBestMatchName = itrList->mpName;
+                    aBestMatchName = elem.mpName;
                 }
                 else if ( !bOpCodeMatched )
                     // At least the opcode matches.
-                    aBestMatchName = itrList->mpName;
+                    aBestMatchName = elem.mpName;
 
                 bOpCodeMatched = true;
             }
         }
         else if ( eOpCode != ocNone && !pLocale )
         {
-            if ( itrList->meOpCode == eOpCode )
+            if ( elem.meOpCode == eOpCode )
             {
                 // Name with a matching opcode preferred.
-                rName = OUString::createFromAscii( itrList->mpName );
+                rName = OUString::createFromAscii( elem.mpName );
                 return;
             }
         }
         else if ( pLocale )
         {
-            LocaleMatch eLevel = lclLocaleCompare(itrList->mrLocale, aLanguageTag);
+            LocaleMatch eLevel = lclLocaleCompare(elem.mrLocale, aLanguageTag);
             if ( eLevel == LOCALE_MATCH_ALL )
             {
                 // Name with matching locale preferred.
-                rName = OUString::createFromAscii( itrList->mpName );
+                rName = OUString::createFromAscii( elem.mpName );
                 return;
             }
             else if ( eLevel > eLocaleMatchLevel )
             {
                 // Name with a better matching locale.
                 eLocaleMatchLevel = eLevel;
-                aBestMatchName = itrList->mpName;
+                aBestMatchName = elem.mpName;
             }
         }
     }
@@ -158,18 +158,19 @@ static void lclMatchKeyword(OUString& rName, const ScCellKeywordHashMap& aMap,
 
 void ScCellKeywordTranslator::transKeyword(OUString& rName, const lang::Locale* pLocale, OpCode eOpCode)
 {
-    if ( !spInstance.get() )
+    if (!spInstance)
         spInstance.reset( new ScCellKeywordTranslator );
 
-    LanguageType eLang = pLocale ? LanguageTag(*pLocale).makeFallback().getLanguageType() : LANGUAGE_SYSTEM;
+    LanguageType nLang = pLocale ?
+        LanguageTag(*pLocale).makeFallback().getLanguageType() : ScGlobal::pSysLocale->GetLanguageTag().getLanguageType();
     Sequence<sal_Int32> aOffsets;
-    rName = spInstance->maTransWrapper.transliterate(rName, eLang, 0, rName.getLength(), &aOffsets);
+    rName = spInstance->maTransWrapper.transliterate(rName, nLang, 0, rName.getLength(), &aOffsets);
     lclMatchKeyword(rName, spInstance->maStringNameMap, eOpCode, pLocale);
 }
 
 ScCellKeywordTranslator::ScCellKeywordTranslator() :
     maTransWrapper( ::comphelper::getProcessComponentContext(),
-                    i18n::TransliterationModules_LOWERCASE_UPPERCASE )
+                    TransliterationFlags::LOWERCASE_UPPERCASE )
 {
     init();
 }
@@ -182,7 +183,7 @@ struct TransItem
 {
     const sal_Unicode*  from;
     const sal_Char*     to;
-    OpCode              func;
+    OpCode const        func;
 };
 
 void ScCellKeywordTranslator::init()
@@ -212,9 +213,8 @@ void ScCellKeywordTranslator::addToMap(const OUString& rKey, const sal_Char* pNa
     if ( itr == itrEnd )
     {
         // New keyword.
-        list<ScCellKeyword> aList;
-        aList.push_back(aKeyItem);
-        maStringNameMap.insert( ScCellKeywordHashMap::value_type(rKey, aList) );
+        std::vector<ScCellKeyword> aVector { aKeyItem };
+        maStringNameMap.emplace(rKey, aVector);
     }
     else
         itr->second.push_back(aKeyItem);

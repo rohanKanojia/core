@@ -21,6 +21,7 @@
 #define INCLUDED_SW_SOURCE_FILTER_WW8_SORTEDARRAY_HXX
 
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <algorithm>
 
 //simple template that manages a static [] array by sorting at construction
@@ -30,9 +31,6 @@ namespace ww
     /** simple template that manages a static array
 
         The template sorts the array at construction in place.
-
-        @author
-        <a href="mailto:cmc@openoffice.org">Caol&aacute;n McNamara</a>
     */
     template<class C> class SortedArray
     {
@@ -98,7 +96,7 @@ namespace ww
             }
             if (bBroken)
             {
-               OSL_FAIL( OUStringToOString( sError, RTL_TEXTENCODING_ASCII_US ).getStr() );
+               SAL_WARN( "sw", sError );
             }
 #endif
         }

@@ -20,42 +20,40 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_LINENUM_HXX
 
 #include <sfx2/basedlgs.hxx>
-#include <vcl/button.hxx>
-#include <vcl/layout.hxx>
-#include <vcl/lstbox.hxx>
-#include <numberingtypelistbox.hxx>
+#include "numberingtypelistbox.hxx"
 
-namespace vcl { class Window; }
 class SwView;
 class SwWrtShell;
 
-class SwLineNumberingDlg : public SfxModalDialog
+class SwLineNumberingDlg : public SfxDialogController
 {
 private:
-    SwWrtShell* pSh;
-    VclPtr<VclContainer> m_pBodyContent;
-    VclPtr<vcl::Window> m_pDivIntervalFT;
-    VclPtr<NumericField> m_pDivIntervalNF;
-    VclPtr<vcl::Window> m_pDivRowsFT;
-    VclPtr<NumericField> m_pNumIntervalNF;
-    VclPtr<ListBox> m_pCharStyleLB;
-    VclPtr<SwNumberingTypeListBox> m_pFormatLB;
-    VclPtr<ListBox> m_pPosLB;
-    VclPtr<MetricField> m_pOffsetMF;
-    VclPtr<Edit> m_pDivisorED;
-    VclPtr<CheckBox> m_pCountEmptyLinesCB;
-    VclPtr<CheckBox> m_pCountFrameLinesCB;
-    VclPtr<CheckBox> m_pRestartEachPageCB;
-    VclPtr<CheckBox> m_pNumberingOnCB;
-    VclPtr<CheckBox> m_pNumberingOnFooterHeader;
-    DECL_LINK_TYPED(OKHdl, Button*, void);
-    DECL_LINK_TYPED(LineOnOffHdl, Button* = nullptr, void);
-    DECL_LINK_TYPED(ModifyHdl, Edit&, void);
+    SwWrtShell* m_pSh;
+    std::unique_ptr<weld::Widget> m_xBodyContent;
+    std::unique_ptr<weld::Widget> m_xDivIntervalFT;
+    std::unique_ptr<weld::SpinButton> m_xDivIntervalNF;
+    std::unique_ptr<weld::Widget> m_xDivRowsFT;
+    std::unique_ptr<weld::SpinButton> m_xNumIntervalNF;
+    std::unique_ptr<weld::ComboBox> m_xCharStyleLB;
+    std::unique_ptr<SwNumberingTypeListBox> m_xFormatLB;
+    std::unique_ptr<weld::ComboBox> m_xPosLB;
+    std::unique_ptr<weld::MetricSpinButton> m_xOffsetMF;
+    std::unique_ptr<weld::Entry> m_xDivisorED;
+    std::unique_ptr<weld::CheckButton> m_xCountEmptyLinesCB;
+    std::unique_ptr<weld::CheckButton> m_xCountFrameLinesCB;
+    std::unique_ptr<weld::CheckButton> m_xRestartEachPageCB;
+    std::unique_ptr<weld::CheckButton> m_xNumberingOnCB;
+    std::unique_ptr<weld::CheckButton> m_xNumberingOnFooterHeader;
+    std::unique_ptr<weld::Button> m_xOKButton;
+    std::unique_ptr<weld::Widget> m_xNumIntervalFT;
+    std::unique_ptr<weld::Widget> m_xNumRowsFT;
+    DECL_LINK(OKHdl, weld::Button&, void);
+    DECL_LINK(LineOnOffHdl, weld::Button&, void);
+    DECL_LINK(ModifyHdl, weld::Entry&, void);
 
 public:
-    SwLineNumberingDlg(SwView *pVw);
-    virtual ~SwLineNumberingDlg();
-    virtual void dispose() override;
+    SwLineNumberingDlg(const SwView& rVw);
+    virtual ~SwLineNumberingDlg() override;
 };
 
 #endif

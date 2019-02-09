@@ -16,6 +16,7 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlReportElementBase.hxx"
 #include "xmlfilter.hxx"
 #include "xmlControlProperty.hxx"
@@ -38,7 +39,7 @@ OXMLReportElementBase::OXMLReportElementBase( ORptFilter& rImport
     SvXMLImportContext( rImport, nPrfx, rLName )
 ,m_rImport(rImport)
 ,m_pContainer(_pContainer)
-,m_xComponent(_xComponent)
+,m_xReportComponent(_xComponent)
 {
 }
 
@@ -47,18 +48,18 @@ OXMLReportElementBase::~OXMLReportElementBase()
 {
 }
 
-SvXMLImportContext* OXMLReportElementBase::CreateChildContext(
+SvXMLImportContextRef OXMLReportElementBase::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = _CreateChildContext(nPrefix,rLocalName,xAttrList);
-    if( !pContext )
-        pContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
-    return pContext;
+    SvXMLImportContextRef xContext = CreateChildContext_(nPrefix,rLocalName,xAttrList);
+    if (!xContext)
+        xContext = new SvXMLImportContext( GetImport(), nPrefix, rLocalName );
+    return xContext;
 }
 
-SvXMLImportContext* OXMLReportElementBase::_CreateChildContext(
+SvXMLImportContextRef OXMLReportElementBase::CreateChildContext_(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
@@ -70,7 +71,7 @@ SvXMLImportContext* OXMLReportElementBase::_CreateChildContext(
     {
         case XML_TOK_REPORT_ELEMENT:
             {
-                uno::Reference<report::XReportControlModel> xReportModel(m_xComponent,uno::UNO_QUERY);
+                uno::Reference<report::XReportControlModel> xReportModel(m_xReportComponent,uno::UNO_QUERY);
                 if ( xReportModel.is() )
                 {
                     m_rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
@@ -80,7 +81,7 @@ SvXMLImportContext* OXMLReportElementBase::_CreateChildContext(
             break;
         case XML_TOK_PROPERTIES:
             m_rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = new OXMLControlProperty( m_rImport, nPrefix, rLocalName,xAttrList,m_xComponent.get());
+            pContext = new OXMLControlProperty( m_rImport, nPrefix, rLocalName,xAttrList,m_xReportComponent.get());
             break;
         default:
             break;
@@ -93,8 +94,8 @@ void OXMLReportElementBase::EndElement()
 {
     try
     {
-        if ( m_pContainer && m_pContainer->getSection().is() && m_xComponent.is() )
-            m_pContainer->getSection()->add(m_xComponent.get());
+        if ( m_pContainer && m_pContainer->getSection().is() && m_xReportComponent.is() )
+            m_pContainer->getSection()->add(m_xReportComponent.get());
     }
     catch(Exception&)
     {

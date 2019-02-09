@@ -25,16 +25,13 @@
 #include "dbdata.hxx"
 #include "scdllapi.h"
 
-#include <com/sun/star/table/CellAddress.hpp>
-#include <com/sun/star/table/CellRangeAddress.hpp>
-#include <com/sun/star/uno/Sequence.hxx>
+namespace com { namespace sun { namespace star { namespace table { struct CellAddress; } } } }
+namespace com { namespace sun { namespace star { namespace table { struct CellRangeAddress; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
 
 class ScArea;
 class ScDocument;
-class ScRange;
-class ScRangeName;
 class ScRangeList;
-class ScDBCollection;
 
 enum RutlNameScope { RUTL_NONE=0, RUTL_NAMES, RUTL_DBASE };
 
@@ -42,41 +39,40 @@ class SC_DLLPUBLIC ScRangeUtil
 {
 public:
                 ScRangeUtil()  {}
-                ~ScRangeUtil() {}
 
-    static bool MakeArea        ( const OUString&     rAreaStr,
+    static bool MakeArea        ( const OUString&   rAreaStr,
                                   ScArea&           rArea,
-                                  ScDocument*       pDoc,
+                                  const ScDocument* pDoc,
                                   SCTAB         nTab,
-                                  ScAddress::Details const & rDetails = ScAddress::detailsOOOa1 );
+                                  ScAddress::Details const & rDetails );
 
     static void CutPosString    ( const OUString&     theAreaStr,
                                   OUString&           thePosStr );
 
     static bool IsAbsTabArea    ( const OUString&   rAreaStr,
-                                  ScDocument*       pDoc,
-                                  ScArea***         pppAreas    = nullptr,
-                                  sal_uInt16*       pAreaCount  = nullptr,
+                                  const ScDocument* pDoc,
+                                  std::unique_ptr<ScArea[]>* ppAreas,
+                                  sal_uInt16*       pAreaCount,
                                   bool              bAcceptCellRef = false,
                                   ScAddress::Details const & rDetails = ScAddress::detailsOOOa1 );
 
     static bool IsAbsArea       ( const OUString& rAreaStr,
-                                  ScDocument*   pDoc,
+                                  const ScDocument* pDoc,
                                   SCTAB     nTab,
-                                  OUString*     pCompleteStr = nullptr,
+                                  OUString*     pCompleteStr,
                                   ScRefAddress* pStartPos    = nullptr,
                                   ScRefAddress* pEndPos      = nullptr,
                                   ScAddress::Details const & rDetails = ScAddress::detailsOOOa1 );
 
     static bool IsAbsPos        ( const OUString& rPosStr,
-                                  ScDocument*   pDoc,
+                                  const ScDocument* pDoc,
                                   SCTAB     nTab,
-                                  OUString*       pCompleteStr = nullptr,
+                                  OUString*       pCompleteStr,
                                   ScRefAddress* pPosTripel   = nullptr,
                                   ScAddress::Details const & rDetails = ScAddress::detailsOOOa1 );
 
     static bool MakeRangeFromName( const OUString& rName,
-                                    ScDocument*     pDoc,
+                                    const ScDocument* pDoc,
                                     SCTAB           nCurTab,
                                     ScRange&        rRange,
                                   RutlNameScope eScope=RUTL_NAMES,
@@ -154,13 +150,6 @@ public:
                             sal_Unicode cSeparator = ' ');
 
 /// String to Range API
-    static bool     GetAddressFromString(
-                            css::table::CellAddress& rAddress,
-                            const OUString& rAddressStr,
-                            const ScDocument* pDocument,
-                            formula::FormulaGrammar::AddressConvention eConv,
-                            sal_Int32& nOffset,
-                            sal_Unicode cSeparator = ' ');
     static bool     GetRangeFromString(
                             css::table::CellRangeAddress& rRange,
                             const OUString& rRangeStr,
@@ -177,7 +166,7 @@ public:
                             formula::FormulaGrammar::AddressConvention eConv,
                             sal_Unicode cSeparator = ' ',
                             bool bAppendStr = false,
-                            ScRefFlags nFormatFlags = (ScRefFlags::VALID | ScRefFlags::TAB_3D) );
+                            ScRefFlags nFormatFlags = ScRefFlags::VALID | ScRefFlags::TAB_3D );
     static void         GetStringFromRange(
                             OUString& rString,
                             const ScRange& rRange,
@@ -185,7 +174,7 @@ public:
                             formula::FormulaGrammar::AddressConvention eConv,
                             sal_Unicode cSeparator = ' ',
                             bool bAppendStr = false,
-                            ScRefFlags nFormatFlags = (ScRefFlags::VALID | ScRefFlags::TAB_3D) );
+                            ScRefFlags nFormatFlags = ScRefFlags::VALID | ScRefFlags::TAB_3D );
     static void         GetStringFromRangeList(
                             OUString& rString,
                             const ScRangeList* pRangeList,
@@ -198,9 +187,9 @@ public:
                             const ScArea& rArea,
                             const ScDocument* pDocument,
                             formula::FormulaGrammar::AddressConvention eConv,
-                            sal_Unicode cSeparator = ' ',
+                            sal_Unicode cSeparator,
                             bool bAppendStr = false,
-                            ScRefFlags nFormatFlags = (ScRefFlags::VALID | ScRefFlags::TAB_3D) );
+                            ScRefFlags nFormatFlags = ScRefFlags::VALID | ScRefFlags::TAB_3D );
 
 /// Range to String API
     static void         GetStringFromAddress(
@@ -217,7 +206,7 @@ public:
                             formula::FormulaGrammar::AddressConvention eConv,
                             sal_Unicode cSeparator = ' ',
                             bool bAppendStr = false,
-                            ScRefFlags nFormatFlags = (ScRefFlags::VALID | ScRefFlags::TAB_3D) );
+                            ScRefFlags nFormatFlags = ScRefFlags::VALID | ScRefFlags::TAB_3D );
     static void         GetStringFromRangeList(
                             OUString& rString,
                             const css::uno::Sequence< css::table::CellRangeAddress >& rRangeSeq,
@@ -229,7 +218,7 @@ public:
     static void         GetStringFromXMLRangeString(
                             OUString& rString,
                             const OUString& rXMLRange,
-                            ScDocument* pDoc );
+                            const ScDocument* pDoc );
 
 /// String to RangeData core
     static ScRangeData* GetRangeDataFromString(const OUString& rString, const SCTAB nTab, const ScDocument* pDoc);
@@ -244,9 +233,6 @@ public:
                     SCCOL colEnd   = 0,
                     SCROW rowEnd   = 0 );
 
-            ScArea( const ScArea& r );
-
-    ScArea& operator=   ( const ScArea& r );
     bool    operator==  ( const ScArea& r ) const;
 
 public:
@@ -271,11 +257,18 @@ private:
     bool            bFirstPass;
 
 public:
-            ScAreaNameIterator( ScDocument* pDoc );
-            ~ScAreaNameIterator() {}
+            ScAreaNameIterator( const ScDocument* pDoc );
 
     bool Next( OUString& rName, ScRange& rRange );
     bool WasDBName() const { return !bFirstPass; }
+};
+
+struct SC_DLLPUBLIC ScRangeUpdater
+{
+    ScRangeUpdater() = delete;
+
+    static void UpdateInsertTab(ScAddress& rAddr, const sc::RefUpdateInsertTabContext& rCxt);
+    static void UpdateDeleteTab(ScAddress& rAddr, const sc::RefUpdateDeleteTabContext& rCxt);
 };
 
 #endif // INCLUDED_SC_INC_RANGEUTL_HXX

@@ -18,10 +18,9 @@
  */
 
 #include "AppSwapWindow.hxx"
-#include <tools/debug.hxx>
-#include "dbaccess_helpid.hrc"
-#include "dbu_app.hrc"
+#include <helpids.h>
 #include "AppView.hxx"
+#include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/syswin.hxx>
 #include <vcl/menu.hxx>
@@ -63,7 +62,7 @@ void OApplicationSwapWindow::dispose()
 
 void OApplicationSwapWindow::Resize()
 {
-    Size aFLSize = LogicToPixel( Size( 8, 0 ), MAP_APPFONT );
+    Size aFLSize = LogicToPixel(Size(8, 0), MapMode(MapUnit::MapAppFont));
     long nX = 0;
     if ( m_aIconControl->GetEntryCount() != 0 )
         nX = m_aIconControl->GetBoundingBox( m_aIconControl->GetEntry(0) ).GetWidth() + aFLSize.Width();
@@ -130,7 +129,7 @@ bool OApplicationSwapWindow::interceptKeyInput( const KeyEvent& _rEvent )
 ElementType OApplicationSwapWindow::getElementType() const
 {
     SvxIconChoiceCtrlEntry* pEntry = m_aIconControl->GetSelectedEntry();
-    return ( pEntry ) ? *static_cast<ElementType*>(pEntry->GetUserData()) : E_NONE;
+    return pEntry ? *static_cast<ElementType*>(pEntry->GetUserData()) : E_NONE;
 }
 
 bool OApplicationSwapWindow::onContainerSelected( ElementType _eType )
@@ -149,7 +148,7 @@ bool OApplicationSwapWindow::onContainerSelected( ElementType _eType )
     return false;
 }
 
-IMPL_LINK_TYPED(OApplicationSwapWindow, OnContainerSelectHdl, SvtIconChoiceCtrl*, _pControl, void)
+IMPL_LINK(OApplicationSwapWindow, OnContainerSelectHdl, SvtIconChoiceCtrl*, _pControl, void)
 {
     SvxIconChoiceCtrlEntry* pEntry = _pControl->GetSelectedEntry();
     ElementType eType = E_NONE;
@@ -160,7 +159,7 @@ IMPL_LINK_TYPED(OApplicationSwapWindow, OnContainerSelectHdl, SvtIconChoiceCtrl*
     }
 }
 
-IMPL_LINK_NOARG_TYPED(OApplicationSwapWindow, ChangeToLastSelected, void*, void)
+IMPL_LINK_NOARG(OApplicationSwapWindow, ChangeToLastSelected, void*, void)
 {
     selectContainer(m_eLastType);
 }

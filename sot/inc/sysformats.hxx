@@ -21,15 +21,30 @@
 #define INCLUDED_SOT_SYSFORMATS_HXX
 
 #ifdef _WIN32
-#ifdef _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable: 4917)
-#endif
 #include <shlobj.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
 #endif
-#endif
+
+#include <sot/sotdllapi.h>
+#include <sot/exchange.hxx>
+#include <sot/formats.hxx>
+
+struct SotAction_Impl
+{
+    SotClipboardFormatId const   nFormatId;          // Clipboard Id
+    sal_uInt16 const             nAction;            // Action Id
+    SotExchangeActionFlags const nFlags;             // Action Id
+    sal_uInt8 const              nContextCheckId;    // additional check of content in clipboard
+
+    constexpr SotAction_Impl(SotClipboardFormatId _nFormatId, sal_uInt16 _nAction, SotExchangeActionFlags _nFlags, sal_uInt8 _nContextCheckId)
+        : nFormatId(_nFormatId), nAction(_nAction), nFlags(_nFlags), nContextCheckId(_nContextCheckId) {}
+    constexpr SotAction_Impl(SotClipboardFormatId _nFormatId, sal_uInt16 _nAction)
+        : nFormatId(_nFormatId), nAction(_nAction), nFlags(SotExchangeActionFlags::NONE), nContextCheckId(0) {}
+};
+
+namespace sot
+{
+SOT_DLLPUBLIC const SotAction_Impl* GetExchangeDestinationWriterFreeAreaCopy();
+}
 
 #endif // INCLUDED_SOT_SYSFORMATS_HXX
 

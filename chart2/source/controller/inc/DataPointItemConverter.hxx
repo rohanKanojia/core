@@ -21,13 +21,16 @@
 
 #include "ItemConverter.hxx"
 #include "GraphicPropertyItemConverter.hxx"
+#include <com/sun/star/uno/Sequence.h>
 
-#include <com/sun/star/chart2/XDataSeries.hpp>
-#include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/frame/XModel.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
+#include <tools/color.hxx>
 
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace awt { struct Size; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XDataSeries; } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 class SdrModel;
 
@@ -44,8 +47,7 @@ public:
         SfxItemPool& rItemPool,
         SdrModel& rDrawModel,
         const css::uno::Reference<css::lang::XMultiServiceFactory>& xNamedPropertyContainerFactory,
-        GraphicPropertyItemConverter::eGraphicObjectType eMapTo =
-            GraphicPropertyItemConverter::FILLED_DATA_POINT,
+        GraphicObjectType eMapTo,
         const css::awt::Size* pRefSize = nullptr,
         bool bDataSeries = false,
         bool bUseSpecialFillColor = false,
@@ -54,7 +56,7 @@ public:
         sal_Int32 nNumberFormat = 0,
         sal_Int32 nPercentNumberFormat = 0 );
 
-    virtual ~DataPointItemConverter();
+    virtual ~DataPointItemConverter() override;
 
     virtual void FillItemSet( SfxItemSet & rOutItemSet ) const override;
     virtual bool ApplyItemSet( const SfxItemSet & rItemSet ) override;
@@ -63,17 +65,15 @@ protected:
     virtual const sal_uInt16 * GetWhichPairs() const override;
     virtual bool GetItemProperty( tWhichIdType nWhichId, tPropertyNameWithMemberId & rOutProperty ) const override;
 
-    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const
-        throw (css::uno::Exception) override;
-    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet )
-        throw (css::uno::Exception) override;
+    virtual void FillSpecialItem( sal_uInt16 nWhichId, SfxItemSet & rOutItemSet ) const override;
+    virtual bool ApplySpecialItem( sal_uInt16 nWhichId, const SfxItemSet & rItemSet ) override;
 
 private:
-    ::std::vector< ItemConverter * >    m_aConverters;
+    std::vector< std::unique_ptr<ItemConverter> > m_aConverters;
     bool                                m_bDataSeries;
     bool                                m_bOverwriteLabelsForAttributedDataPointsAlso;
     bool                                m_bUseSpecialFillColor;
-    sal_Int32                           m_nSpecialFillColor;
+    Color                               m_nSpecialFillColor;
     sal_Int32                           m_nNumberFormat;
     sal_Int32                           m_nPercentNumberFormat;
     css::uno::Sequence<sal_Int32>       m_aAvailableLabelPlacements;

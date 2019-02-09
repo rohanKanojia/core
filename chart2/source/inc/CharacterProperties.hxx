@@ -22,11 +22,12 @@
 #include "PropertyHelper.hxx"
 #include "FastPropertyIdRanges.hxx"
 #include "charttoolsdllapi.hxx"
-#include <com/sun/star/beans/Property.hpp>
-#include <com/sun/star/beans/XMultiPropertySet.hpp>
 #include <com/sun/star/awt/FontDescriptor.hpp>
 
 #include <vector>
+
+namespace com { namespace sun { namespace star { namespace beans { class XMultiPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace beans { struct Property; } } } }
 
 namespace chart
 {
@@ -121,7 +122,7 @@ namespace CharacterProperties
     };
 
     OOO_DLLPUBLIC_CHARTTOOLS void AddPropertiesToVector(
-        ::std::vector< css::beans::Property > & rOutProperties );
+        std::vector< css::beans::Property > & rOutProperties );
 
     OOO_DLLPUBLIC_CHARTTOOLS void AddDefaultsToMap( ::chart::tPropertyValueMap & rOutMap );
 

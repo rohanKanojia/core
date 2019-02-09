@@ -20,23 +20,17 @@
 #ifndef INCLUDED_VCL_INC_QUARTZ_SALVD_H
 #define INCLUDED_VCL_INC_QUARTZ_SALVD_H
 
-#include "premac.h"
+#include <premac.h>
 #ifdef MACOSX
 #include <ApplicationServices/ApplicationServices.h>
 #else
 #include <CoreGraphics/CoreGraphics.h>
 #endif
-#include "postmac.h"
+#include <postmac.h>
 
-#include "quartz/salgdi.h"
+#include <quartz/salgdi.h>
 
-#include "salvd.hxx"
-
-struct SalVirDevData
-{
-};
-
-typedef struct SalVirDevData   SalVirDevData;
+#include <salvd.hxx>
 
 class AquaSalGraphics;
 
@@ -54,7 +48,7 @@ private:
 
 public:
     AquaSalVirtualDevice( AquaSalGraphics* pGraphic, long &nDX, long &nDY, DeviceFormat eFormat, const SystemGraphicsData *pData );
-    virtual ~AquaSalVirtualDevice();
+    virtual ~AquaSalVirtualDevice() override;
 
     virtual SalGraphics*            AcquireGraphics() override;
     virtual void                    ReleaseGraphics( SalGraphics* pGraphics ) override;

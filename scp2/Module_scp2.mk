@@ -12,7 +12,6 @@ $(eval $(call gb_Module_Module,scp2))
 $(eval $(call gb_Module_add_targets,scp2,\
 	AutoInstall \
 	CustomTarget_langmacros \
-	InstallModule_accessories \
 	InstallModule_base \
 	InstallModule_calc \
 	InstallModule_draw \
@@ -32,21 +31,16 @@ $(eval $(call gb_Module_add_targets,scp2,\
 		InstallScript_sdkoo \
 	) \
 	$(if $(filter WNT,$(OS)),\
-		$(if $(DISABLE_ACTIVEX),,InstallModule_activex) \
+		InstallModule_activex \
 		InstallModule_quickstart \
 		InstallModule_windows \
-		$(if $(filter MSC,$(COM)),\
-			InstallModule_winexplorerext \
-		) \
+		InstallModule_winexplorerext \
 	) \
 	$(if $(filter TRUE,$(ENABLE_EVOAB2) $(ENABLE_GIO) $(ENABLE_GTK) $(ENABLE_GTK3)),\
 		InstallModule_gnome \
 	) \
-	$(if $(filter TRUE,$(ENABLE_KDE4)),\
+	$(if $(filter TRUE,$(ENABLE_QT5) $(ENABLE_KDE5) $(ENABLE_GTK3_KDE5)),\
 		InstallModule_kde \
-	) \
-	$(if $(filter TRUE,$(ENABLE_TDE)),\
-		InstallModule_tde \
 	) \
 ))
 

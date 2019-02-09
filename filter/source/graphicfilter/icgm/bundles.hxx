@@ -24,6 +24,7 @@
 #include "cgmtypes.hxx"
 #include <vcl/salbtype.hxx>
 #include <vector>
+#include <memory>
 
 
 class Bundle
@@ -43,10 +44,14 @@ public:
         , mnColor( 0 )
         {};
 
-    virtual Bundle*     Clone() { return new Bundle( *this ); };
-            Bundle&     operator=( Bundle& rBundle );
+    virtual std::unique_ptr<Bundle> Clone() { return std::make_unique<Bundle>( *this ); };
 
     virtual            ~Bundle() {} ;
+
+    Bundle(Bundle const &) = default;
+    Bundle(Bundle &&) = default;
+    Bundle & operator =(Bundle const &) = default;
+    Bundle & operator =(Bundle &&) = default;
 };
 
 
@@ -62,8 +67,7 @@ public:
         , nLineWidth(0)
     {}
 
-    virtual Bundle* Clone() override { return new LineBundle( *this ); }
-    LineBundle& operator=( LineBundle& rLineBundle );
+    virtual std::unique_ptr<Bundle> Clone() override { return std::make_unique<LineBundle>( *this ); }
 };
 
 
@@ -79,9 +83,7 @@ public:
         , nMarkerSize( 0.0 )
         {};
 
-    virtual Bundle*     Clone() override { return new MarkerBundle( *this ); } ;
-            MarkerBundle&   operator=( MarkerBundle& rMarkerBundle );
-    virtual             ~MarkerBundle() {};
+    virtual std::unique_ptr<Bundle> Clone() override { return std::make_unique<MarkerBundle>( *this ); } ;
 };
 
 
@@ -96,8 +98,7 @@ public:
         : eEdgeType(ET_NONE)
         , nEdgeWidth(0)
     {}
-    virtual Bundle*     Clone() override { return new EdgeBundle( *this ); }
-    EdgeBundle& operator=( EdgeBundle& rEdgeBundle );
+    virtual std::unique_ptr<Bundle> Clone() override { return std::make_unique<EdgeBundle>( *this ); }
 };
 
 
@@ -117,9 +118,7 @@ public:
         , nCharacterSpacing( 0.0 )
         {};
 
-    virtual Bundle*     Clone() override { return new TextBundle( *this ); } ;
-            TextBundle& operator=( TextBundle& rTextBundle );
-    virtual             ~TextBundle() {};
+    virtual std::unique_ptr<Bundle> Clone() override { return std::make_unique<TextBundle>( *this ); } ;
 };
 
 
@@ -136,17 +135,18 @@ public:
         , nFillPatternIndex(0)
         , nFillHatchIndex(0)
     {}
-    virtual Bundle*     Clone() override { return new FillBundle( *this ); }
-    FillBundle& operator=( FillBundle& rFillBundle );
+    virtual std::unique_ptr<Bundle> Clone() override { return std::make_unique<FillBundle>( *this ); }
 };
 
 
 class FontEntry
 {
 public:
-    sal_Int8*           pFontName;
+    std::unique_ptr<sal_Int8[]>
+                        pFontName;
     CharSetType         eCharSetType;
-    sal_Int8*           pCharSetValue;
+    std::unique_ptr<sal_Int8[]>
+                        pCharSetValue;
     sal_uInt32          nFontType;          // bit 0 = 1 -> Italic,
                                             // bit 1 = 1 -> Bold
 
@@ -158,7 +158,7 @@ class CGMFList
 {
     sal_uInt32      nFontNameCount;
     sal_uInt32      nCharSetCount;
-    ::std::vector< FontEntry* >
+    ::std::vector< std::unique_ptr<FontEntry> >
                     aFontEntryList;
     void            ImplDeleteList();
 
@@ -168,9 +168,9 @@ public:
 
     sal_uInt32      nFontsAvailable;
     FontEntry*      GetFontEntry( sal_uInt32 );
-    void            InsertName( sal_uInt8* pSource, sal_uInt32 nSize );
-    void            InsertCharSet( CharSetType, sal_uInt8* pSource, sal_uInt32 nSize );
-    CGMFList&       operator=( CGMFList& rFontList );
+    void            InsertName( sal_uInt8 const * pSource, sal_uInt32 nSize );
+    void            InsertCharSet( CharSetType, sal_uInt8 const * pSource, sal_uInt32 nSize );
+    CGMFList&       operator=( const CGMFList& rFontList );
 };
 
 #endif

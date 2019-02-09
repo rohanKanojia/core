@@ -26,18 +26,14 @@
 #include "hgzip.h"
 #include "hstream.hxx"
 
-#ifndef local
-#  define local static
-#endif
-
 #define Z_BUFSIZE   (1024 * 4)
 
 #define ALLOC(size) malloc(size)
 #define TRYFREE(p) {if (p) free(p);}
 
-local int get_byte(gz_stream * s);
-local int destroy(gz_stream * s);
-local uLong getLong(gz_stream * s);
+static int get_byte(gz_stream * s);
+static int destroy(gz_stream * s);
+static uLong getLong(gz_stream * s);
 
 /* ===========================================================================
    Opens a gzip (.gz) file for reading or writing. The mode parameter
@@ -65,14 +61,13 @@ gz_stream *gz_open(HStream & _stream)
     s->stream.zfree = nullptr;
     s->stream.opaque = nullptr;
     s->stream.next_in = s->inbuf = Z_NULL;
-    s->stream.next_out = s->outbuf = Z_NULL;
+    s->stream.next_out = Z_NULL;
     s->stream.avail_in = s->stream.avail_out = 0;
 //s->_inputstream = NULL;
     s->z_err = Z_OK;
     s->z_eof = 0;
     s->crc = crc32(0L, Z_NULL, 0);
     s->msg = nullptr;
-    s->transparent = 0;
 
     s->mode = 'r';
 
@@ -100,7 +95,7 @@ gz_stream *gz_open(HStream & _stream)
    for end of file.
    IN assertion: the stream s has been successfully opened for reading.
 */
-local int get_byte(gz_stream * s)
+static int get_byte(gz_stream * s)
 {
     if (s->z_eof)
         return EOF;
@@ -125,7 +120,7 @@ local int get_byte(gz_stream * s)
  * Cleanup then free the given gz_stream. Return a zlib error code.
  * Try freeing in the reverse order of allocations.
  */
-local int destroy(gz_stream * s)
+static int destroy(gz_stream * s)
 {
     int err = Z_OK;
 
@@ -142,7 +137,6 @@ local int destroy(gz_stream * s)
         err = s->z_err;
 
     TRYFREE(s->inbuf);
-    TRYFREE(s->outbuf);
     TRYFREE(s);
     return err;
 }
@@ -154,17 +148,17 @@ local int destroy(gz_stream * s)
    Reads the given number of uncompressed bytes from the compressed file.
    gz_read returns the number of bytes actually read (0 for end of file).
 */
-int gz_read(gz_stream * file, voidp buf, unsigned len)
+size_t gz_read(gz_stream * file, voidp buf, unsigned len)
 {
 //printf("@@ gz_read : len : %d\t",len);
     gz_stream *s = file;
     Bytef *start = static_cast<Bytef *>(buf);                 /* starting point for crc computation */
     Byte *next_out;                               /* == stream.next_out but not forced far (for MSDOS) */
     if (s == nullptr)
-        return Z_STREAM_ERROR;
+        return 0;
 
     if (s->z_err == Z_DATA_ERROR || s->z_err == Z_ERRNO)
-        return -1;
+        return 0;
     if (s->z_err == Z_STREAM_END)
         return 0;                                 /* EOF */
 
@@ -173,29 +167,6 @@ int gz_read(gz_stream * file, voidp buf, unsigned len)
 
     while (s->stream.avail_out != 0)
     {
-        if (s->transparent)
-        {
-/* Copy first the lookahead bytes: */
-            uInt n = s->stream.avail_in;
-
-            if (n > s->stream.avail_out)
-                n = s->stream.avail_out;
-            if (n > 0)
-            {
-                memcpy(s->stream.next_out, s->stream.next_in, n);
-                next_out += n;
-                s->stream.next_out = next_out;
-                s->stream.next_in += n;
-                s->stream.avail_out -= n;
-                s->stream.avail_in -= n;
-            }
-            if (s->stream.avail_out > 0)
-            {
-                s->stream.avail_out -=
-                    s->_inputstream->readBytes(next_out, s->stream.avail_out);
-            }
-            return (int) (len - s->stream.avail_out);
-        }
         if (s->stream.avail_in == 0 && !s->z_eof)
         {
 
@@ -213,7 +184,7 @@ int gz_read(gz_stream * file, voidp buf, unsigned len)
         if (s->z_err == Z_STREAM_END)
         {
 /* Check CRC and original size */
-            s->crc = crc32(s->crc, start, (uInt) (s->stream.next_out - start));
+            s->crc = crc32(s->crc, start, static_cast<uInt>(s->stream.next_out - start));
             start = s->stream.next_out;
 
             if (getLong(s) != s->crc || getLong(s) != s->stream.total_out)
@@ -229,8 +200,8 @@ int gz_read(gz_stream * file, voidp buf, unsigned len)
         if (s->z_err != Z_OK || s->z_eof)
             break;
     }
-    s->crc = crc32(s->crc, start, (uInt) (s->stream.next_out - start));
-    return (int) (len - s->stream.avail_out);
+    s->crc = crc32(s->crc, start, static_cast<uInt>(s->stream.next_out - start));
+    return len - s->stream.avail_out;
 }
 
 /* ===========================================================================
@@ -261,7 +232,7 @@ int gz_flush(gz_stream * file, int flush)
     return Z_ERRNO;
       }
       */
-            s->stream.next_out = s->outbuf;
+            s->stream.next_out = nullptr;
             s->stream.avail_out = Z_BUFSIZE;
         }
         if (done)
@@ -283,13 +254,13 @@ int gz_flush(gz_stream * file, int flush)
 /* ===========================================================================
    Reads a long in LSB order from the given gz_stream. Sets
 */
-local uLong getLong(gz_stream * s)
+static uLong getLong(gz_stream * s)
 {
-    uLong x = (unsigned char) get_byte(s);
+    uLong x = static_cast<unsigned char>(get_byte(s));
 
-    x += ((unsigned char) get_byte(s)) << 8;
-    x += ((unsigned char) get_byte(s)) << 16;
-    x += ((unsigned char) get_byte(s)) << 24;
+    x += static_cast<unsigned char>(get_byte(s)) << 8;
+    x += static_cast<unsigned char>(get_byte(s)) << 16;
+    x += static_cast<unsigned char>(get_byte(s)) << 24;
     if (s->z_eof)
     {
         s->z_err = Z_DATA_ERROR;

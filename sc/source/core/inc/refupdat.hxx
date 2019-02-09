@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SC_SOURCE_CORE_INC_REFUPDAT_HXX
 #define INCLUDED_SC_SOURCE_CORE_INC_REFUPDAT_HXX
 
-#include "global.hxx"
+#include <global.hxx>
 
 class ScDocument;
 class ScBigRange;
@@ -43,18 +43,11 @@ class ScRefUpdate
 {
 public:
 
-    /// What type of reference is to be updated.
-    enum WhatType
-    {
-        ALL,        /// all references
-        ABSOLUTE    /// only absolute references
-    };
-
     static ScRefUpdateRes Update
-        ( ScDocument* pDoc, UpdateRefMode eUpdateRefMode,
+        ( const ScDocument* pDoc, UpdateRefMode eUpdateRefMode,
                             SCCOL nCol1, SCROW nRow1, SCTAB nTab1,
                             SCCOL nCol2, SCROW nRow2, SCTAB nTab2,
-                            SCsCOL nDx, SCsROW nDy, SCsTAB nDz,
+                            SCCOL nDx, SCROW nDy, SCTAB nDz,
                             SCCOL& theCol1, SCROW& theRow1, SCTAB& theTab1,
                             SCCOL& theCol2, SCROW& theRow2, SCTAB& theTab2 );
 
@@ -63,13 +56,13 @@ public:
                                 sal_Int32 nDx, sal_Int32 nDy, sal_Int32 nDz,
                                 ScBigRange& rWhat );
 
-    static void MoveRelWrap( ScDocument* pDoc, const ScAddress& rPos,
+    static void MoveRelWrap( const ScDocument* pDoc, const ScAddress& rPos,
                              SCCOL nMaxCol, SCROW nMaxRow, ScComplexRefData& rRef );
 
     static ScRefUpdateRes UpdateTranspose(
-        ScDocument* pDoc, const ScRange& rSource, const ScAddress& rDest, ScRange& rRef );
+        const ScDocument* pDoc, const ScRange& rSource, const ScAddress& rDest, ScRange& rRef );
 
-    static void DoTranspose( SCsCOL& rCol, SCsROW& rRow, SCsTAB& rTab, ScDocument* pDoc,
+    static void DoTranspose( SCCOL& rCol, SCROW& rRow, SCTAB& rTab, const ScDocument* pDoc,
                                 const ScRange& rSource, const ScAddress& rDest );
 
     static ScRefUpdateRes UpdateGrow(

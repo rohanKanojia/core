@@ -21,22 +21,26 @@
 #define INCLUDED_SD_SOURCE_UI_ANNOTATIONS_ANNOTATIONMANAGERIMPL_HXX
 
 #include <com/sun/star/document/XEventListener.hpp>
-#include <com/sun/star/office/XAnnotationAccess.hpp>
 
 #include <rtl/ustring.hxx>
 
 #include <cppuhelper/basemutex.hxx>
 #include <cppuhelper/compbase.hxx>
 
-#include "ViewShellBase.hxx"
-
 #include "annotationtag.hxx"
 
+namespace com { namespace sun { namespace star { namespace drawing { class XDrawView; } } } }
+namespace com { namespace sun { namespace star { namespace office { class XAnnotationAccess; } } } }
+namespace com { namespace sun { namespace star { namespace office { class XAnnotation; } } } }
+
 class SfxRequest;
+class SdPage;
+class SdDrawDocument;
 
 namespace sd
 {
 
+class ViewShellBase;
 typedef std::vector< rtl::Reference< AnnotationTag > > AnnotationTagVector;
 
 namespace tools {
@@ -58,35 +62,36 @@ public:
     virtual void SAL_CALL disposing () override;
 
     // XEventListener
-    virtual void SAL_CALL notifyEvent( const css::document::EventObject& Event ) throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL notifyEvent( const css::document::EventObject& Event ) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
-    void ExecuteAnnotation (SfxRequest& rRequest);
+    void ExecuteAnnotation (SfxRequest const & rRequest);
     void GetAnnotationState (SfxItemSet& rItemSet);
 
-    void ExecuteInsertAnnotation(SfxRequest& rReq);
-    void ExecuteDeleteAnnotation(SfxRequest& rReq);
-    void ExecuteReplyToAnnotation(SfxRequest& rReq);
+    void ExecuteInsertAnnotation(SfxRequest const & rReq);
+    void ExecuteDeleteAnnotation(SfxRequest const & rReq);
+    void ExecuteEditAnnotation(SfxRequest const & rReq);
+    void ExecuteReplyToAnnotation(SfxRequest const & rReq);
 
     void SelectNextAnnotation(bool bForeward);
 
     void SelectAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, bool bEdit = false );
     void GetSelectedAnnotation( css::uno::Reference< css::office::XAnnotation >& xAnnotation );
 
-    void InsertAnnotation();
+    void InsertAnnotation(const OUString& rText);
     void DeleteAnnotation( const css::uno::Reference< css::office::XAnnotation >& xAnnotation );
     void DeleteAnnotationsByAuthor( const OUString& sAuthor );
     void DeleteAllAnnotations();
 
-    void ExecuteAnnotationContextMenu( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, vcl::Window* pParent, const Rectangle& rContextRect, bool bButtonMenu = false );
+    void ExecuteAnnotationContextMenu( const css::uno::Reference< css::office::XAnnotation >& xAnnotation, vcl::Window* pParent, const ::tools::Rectangle& rContextRect, bool bButtonMenu = false );
 
     static Color GetColorDark(sal_uInt16 aAuthorIndex);
     static Color GetColorLight(sal_uInt16 aAuthorIndex);
     static Color GetColor(sal_uInt16 aAuthorIndex);
 
     // callbacks
-    void onTagSelected( AnnotationTag& rTag );
-    void onTagDeselected( AnnotationTag& rTag );
+    void onTagSelected( AnnotationTag const & rTag );
+    void onTagDeselected( AnnotationTag const & rTag );
 
     void onSelectionChanged();
 
@@ -95,22 +100,24 @@ public:
 
     void invalidateSlots();
 
-    DECL_LINK_TYPED(EventMultiplexerListener, tools::EventMultiplexerEvent&, void);
-    DECL_LINK_TYPED(UpdateTagsHdl, void *, void);
+    DECL_LINK(EventMultiplexerListener, tools::EventMultiplexerEvent&, void);
+    DECL_LINK(UpdateTagsHdl, void *, void);
 
     void UpdateTags(bool bSynchron = false);
     void CreateTags();
     void DisposeTags();
 
-    SdPage* GetNextPage( SdPage* pPage, bool bForeward );
-    SdPage* GetFirstPage();
-    SdPage* GetLastPage();
+    SdPage* GetNextPage( SdPage const * pPage, bool bForeward );
 
     SdPage* GetCurrentPage();
 
     SdDrawDocument* GetDoc() { return mpDoc; }
 
     void ShowAnnotations(bool bShow);
+
+    // tdf#99388 and tdf#99712 flag to transport if the PopupMenu is active
+    bool getPopupMenuActive() const { return mbPopupMenuActive; }
+    void setPopupMenuActive(bool bNew) { mbPopupMenuActive = bNew; }
 
 private:
     ViewShellBase& mrBase;
@@ -123,8 +130,11 @@ private:
     css::uno::Reference< css::office::XAnnotation > mxSelectedAnnotation;
 
     bool mbShowAnnotations;
+    bool mbPopupMenuActive;
     ImplSVEvent * mnUpdateTagsEvent;
     vcl::Font maFont;
+
+    css::uno::Reference<css::office::XAnnotation> GetAnnotationById(sal_uInt32 nAnnotationId);
 };
 
 OUString getAnnotationDateTimeString( const css::uno::Reference< css::office::XAnnotation >& xAnnotation );

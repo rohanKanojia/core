@@ -44,10 +44,9 @@ namespace drawinglayer
             3D objects needed for the line tubes and the edge roundings
             in full 3D.
          */
-        class DRAWINGLAYER_DLLPUBLIC PolygonTubePrimitive3D : public PolygonHairlinePrimitive3D
+        class DRAWINGLAYER_DLLPUBLIC PolygonTubePrimitive3D final : public PolygonHairlinePrimitive3D
         {
-        private:
-            /// hold the last decompositon since it's expensive
+            /// hold the last decomposition since it's expensive
             Primitive3DContainer                         maLast3DDecomposition;
 
             /// visualisation parameters
@@ -57,13 +56,11 @@ namespace drawinglayer
             basegfx::B2DLineJoin                        maLineJoin;
             css::drawing::LineCap                       maLineCap;
 
-        protected:
             /** access methods to maLast3DDecomposition. The usage of this methods may allow
                 later thread-safe stuff to be added if needed. Only to be used by getDecomposition()
                 implementations for buffering the last decomposition.
              */
             const Primitive3DContainer& getLast3DDecomposition() const { return maLast3DDecomposition; }
-            void setLast3DDecomposition(const Primitive3DContainer& rNew) { maLast3DDecomposition = rNew; }
 
             /// local decomposition.
             Primitive3DContainer impCreate3DDecomposition(const geometry::ViewInformation3D& rViewInformation) const;
@@ -76,8 +73,8 @@ namespace drawinglayer
                 double fRadius,
                 basegfx::B2DLineJoin aLineJoin,
                 css::drawing::LineCap aLineCap,
-                double fDegreeStepWidth = 10.0 * F_PI180,
-                double fMiterMinimumAngle = 15.0 * F_PI180);
+                double fDegreeStepWidth = basegfx::deg2rad(10.0),
+                double fMiterMinimumAngle = basegfx::deg2rad(15.0));
 
             /// data read access
             double getRadius() const { return mfRadius; }

@@ -23,7 +23,7 @@
 #include "ViewShell.hxx"
 #include "ViewShellManager.hxx"
 #include "ToolBarManager.hxx"
-
+#include <o3tl/deleter.hxx>
 #include <memory>
 
 class SvxIMapDlg;
@@ -36,7 +36,6 @@ namespace sd {
 class ViewShell::Implementation
 {
 public:
-    bool mbIsShowingUIControls;
     bool mbIsMainViewShell;
     /// Set to true when the ViewShell::Init() method has been called.
     bool mbIsInitialized;
@@ -72,9 +71,9 @@ public:
                 when IsUICaptured() returns <TRUE/>.
         */
         void Release (bool bForce = false);
-        DECL_LINK_TYPED(TimeoutCallback, Timer *, void);
+        DECL_LINK(TimeoutCallback, Timer *, void);
     private:
-        ::std::unique_ptr<ToolBarManager::UpdateLock> mpLock;
+        ::std::unique_ptr<ToolBarManager::UpdateLock, o3tl::default_delete<ToolBarManager::UpdateLock>> mpLock;
         /** The timer is used both as a safe guard to unlock the update lock
             when Release() is not called explicitly.  It is also used to
             defer the release of the lock to a time when the UI is not
@@ -92,12 +91,12 @@ public:
         class Deleter;
         friend class Deleter;
     };
-    // The member is not a unqiue_ptr because it takes over its own life time
+    // The member is not a unique_ptr because it takes over its own life time
     // control.
     std::weak_ptr<ToolBarManagerLock> mpUpdateLockForMouse;
 
     Implementation (ViewShell& rViewShell);
-    ~Implementation();
+    ~Implementation() COVERITY_NOEXCEPT_FALSE;
 
     /** Process the SID_MODIFY slot.
     */
@@ -111,7 +110,7 @@ public:
         @param pPage
             If a NULL pointer is given then this call is ignored.
     */
-    void AssignLayout ( SfxRequest& rRequest, PageKind ePageKind );
+    void AssignLayout ( SfxRequest const & rRequest, PageKind ePageKind );
 
     /** Determine the view id of the view shell.  This corresponds to the
         view id stored in the SfxViewFrame class.
@@ -128,13 +127,13 @@ public:
         used by the SFX as factories.  They only set the initial pane
         configuration, nothing more.
 
-        So what we do here in essence is to return on of the
+        So what we do here in essence is to return one of the
         ViewShellFactoryIds that can be used to select the factory that
         creates the ViewShellBase subclass with the initial pane
         configuration that has in the center pane a view shell of the same
         type as mrViewShell.
     */
-    sal_uInt16 GetViewId();
+    SfxInterfaceId GetViewId();
 
     /** Return a pointer to the image map dialog that is displayed in some
         child window.

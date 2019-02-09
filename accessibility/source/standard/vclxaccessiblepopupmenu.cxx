@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <accessibility/standard/vclxaccessiblepopupmenu.hxx>
+#include <standard/vclxaccessiblepopupmenu.hxx>
 
 #include <com/sun/star/accessibility/AccessibleRole.hpp>
 #include <vcl/svapp.hxx>
@@ -31,17 +31,6 @@ using namespace ::comphelper;
 // class VCLXAccessiblePopupMenu
 
 
-VCLXAccessiblePopupMenu::VCLXAccessiblePopupMenu( Menu* pMenu )
-    :OAccessibleMenuComponent( pMenu )
-{
-}
-
-
-VCLXAccessiblePopupMenu::~VCLXAccessiblePopupMenu()
-{
-}
-
-
 bool VCLXAccessiblePopupMenu::IsFocused()
 {
     return !IsChildHighlighted();
@@ -51,23 +40,22 @@ bool VCLXAccessiblePopupMenu::IsFocused()
 // XServiceInfo
 
 
-OUString VCLXAccessiblePopupMenu::getImplementationName() throw (RuntimeException, std::exception)
+OUString VCLXAccessiblePopupMenu::getImplementationName()
 {
     return OUString( "com.sun.star.comp.toolkit.AccessiblePopupMenu" );
 }
 
 
-Sequence< OUString > VCLXAccessiblePopupMenu::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > VCLXAccessiblePopupMenu::getSupportedServiceNames()
 {
-    Sequence< OUString > aNames { "com.sun.star.awt.AccessiblePopupMenu" };
-    return aNames;
+    return { "com.sun.star.awt.AccessiblePopupMenu" };
 }
 
 
 // XAccessibleContext
 
 
-sal_Int32 VCLXAccessiblePopupMenu::getAccessibleIndexInParent(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessiblePopupMenu::getAccessibleIndexInParent(  )
 {
     OExternalLockGuard aGuard( this );
 
@@ -75,7 +63,7 @@ sal_Int32 VCLXAccessiblePopupMenu::getAccessibleIndexInParent(  ) throw (Runtime
 }
 
 
-sal_Int16 VCLXAccessiblePopupMenu::getAccessibleRole(  ) throw (RuntimeException, std::exception)
+sal_Int16 VCLXAccessiblePopupMenu::getAccessibleRole(  )
 {
     OExternalLockGuard aGuard( this );
 
@@ -86,11 +74,11 @@ sal_Int16 VCLXAccessiblePopupMenu::getAccessibleRole(  ) throw (RuntimeException
 // XAccessibleExtendedComponent
 
 
-sal_Int32 VCLXAccessiblePopupMenu::getBackground(  ) throw (RuntimeException, std::exception)
+sal_Int32 VCLXAccessiblePopupMenu::getBackground(  )
 {
     OExternalLockGuard aGuard( this );
 
-    return Application::GetSettings().GetStyleSettings().GetMenuColor().GetColor();
+    return sal_Int32(Application::GetSettings().GetStyleSettings().GetMenuColor());
 }
 
 

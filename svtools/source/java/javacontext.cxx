@@ -19,7 +19,6 @@
 
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Type.hxx>
-#include <svtools/svtresid.hxx>
 #include <svtools/javacontext.hxx>
 #include <svtools/javainteractionhandler.hxx>
 
@@ -30,8 +29,7 @@ namespace svt
 
 JavaContext::JavaContext( const Reference< XCurrentContext > & ctx)
     : m_aRefCount(0),
-      m_xNextContext( ctx ),
-      m_bShowErrorsOnce(true)
+      m_xNextContext( ctx )
 {
 }
 
@@ -40,7 +38,6 @@ JavaContext::~JavaContext()
 }
 
 Any SAL_CALL JavaContext::queryInterface(const Type& aType )
-    throw (RuntimeException, std::exception)
 {
     if (aType == cppu::UnoType<XInterface>::get())
         return Any(Reference<XInterface>(static_cast<XInterface*>(this)));
@@ -60,7 +57,7 @@ void SAL_CALL JavaContext::release(  ) throw ()
         delete this;
 }
 
-Any SAL_CALL JavaContext::getValueByName( const OUString& Name) throw (RuntimeException, std::exception)
+Any SAL_CALL JavaContext::getValueByName( const OUString& Name)
 {
     Any retVal;
 
@@ -69,9 +66,9 @@ Any SAL_CALL JavaContext::getValueByName( const OUString& Name) throw (RuntimeEx
         {
             osl::MutexGuard aGuard(osl::Mutex::getGlobalMutex());
             if (!m_xHandler.is())
-                m_xHandler.set( new JavaInteractionHandler(m_bShowErrorsOnce));
+                m_xHandler.set( new JavaInteractionHandler );
         }
-        retVal = makeAny(m_xHandler);
+        retVal <<= m_xHandler;
 
     }
     else if( m_xNextContext.is() )

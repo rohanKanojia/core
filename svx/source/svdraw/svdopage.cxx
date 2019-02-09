@@ -19,8 +19,8 @@
 
 
 #include <svx/svdopage.hxx>
-#include "svdglob.hxx"
-#include "svx/svdstr.hrc"
+#include <svx/dialmgr.hxx>
+#include <svx/strings.hrc>
 #include <svx/svdtrans.hxx>
 #include <svx/svdetc.hxx>
 #include <svx/svdmodel.hxx>
@@ -31,21 +31,22 @@
 #include <svl/itemset.hxx>
 #include <sdr/properties/pageproperties.hxx>
 #include <svx/sdr/contact/viewcontactofpageobj.hxx>
+#include <o3tl/make_unique.hxx>
 
 
 // BaseProperties section
 
-sdr::properties::BaseProperties* SdrPageObj::CreateObjectSpecificProperties()
+std::unique_ptr<sdr::properties::BaseProperties> SdrPageObj::CreateObjectSpecificProperties()
 {
-    return new sdr::properties::PageProperties(*this);
+    return o3tl::make_unique<sdr::properties::PageProperties>(*this);
 }
 
 
 // DrawContact section
 
-sdr::contact::ViewContact* SdrPageObj::CreateObjectSpecificViewContact()
+std::unique_ptr<sdr::contact::ViewContact> SdrPageObj::CreateObjectSpecificViewContact()
 {
-    return new sdr::contact::ViewContactOfPageObj(*this);
+    return o3tl::make_unique<sdr::contact::ViewContactOfPageObj>(*this);
 }
 
 
@@ -64,9 +65,11 @@ void SdrPageObj::PageInDestruction(const SdrPage& rPage)
     }
 }
 
-
-SdrPageObj::SdrPageObj(SdrPage* pNewPage)
-:   mpShownPage(pNewPage)
+SdrPageObj::SdrPageObj(
+    SdrModel& rSdrModel,
+    SdrPage* pNewPage)
+:   SdrObject(rSdrModel),
+    mpShownPage(pNewPage)
 {
     if(mpShownPage)
     {
@@ -74,8 +77,12 @@ SdrPageObj::SdrPageObj(SdrPage* pNewPage)
     }
 }
 
-SdrPageObj::SdrPageObj(const Rectangle& rRect, SdrPage* pNewPage)
-:   mpShownPage(pNewPage)
+SdrPageObj::SdrPageObj(
+    SdrModel& rSdrModel,
+    const tools::Rectangle& rRect,
+    SdrPage* pNewPage)
+:   SdrObject(rSdrModel),
+    mpShownPage(pNewPage)
 {
     if(mpShownPage)
     {
@@ -135,7 +142,6 @@ void SdrPageObj::TakeObjInfo(SdrObjTransformInfoRec& rInfo) const
     rInfo.bMirror45Allowed  =false;
     rInfo.bMirror90Allowed  =false;
     rInfo.bTransparenceAllowed = false;
-    rInfo.bGradientAllowed = false;
     rInfo.bShearAllowed     =false;
     rInfo.bEdgeRadiusAllowed=false;
     rInfo.bNoOrthoDesired   =false;
@@ -145,9 +151,9 @@ void SdrPageObj::TakeObjInfo(SdrObjTransformInfoRec& rInfo) const
     rInfo.bCanConvToPolyLineToArea=false;
 }
 
-SdrPageObj* SdrPageObj::Clone() const
+SdrPageObj* SdrPageObj::CloneSdrObject(SdrModel& rTargetModel) const
 {
-    return CloneHelper< SdrPageObj >();
+    return CloneHelper< SdrPageObj >(rTargetModel);
 }
 
 SdrPageObj& SdrPageObj::operator=(const SdrPageObj& rObj)
@@ -161,7 +167,7 @@ SdrPageObj& SdrPageObj::operator=(const SdrPageObj& rObj)
 
 OUString SdrPageObj::TakeObjNameSingul() const
 {
-    OUStringBuffer sName(ImpGetResStr(STR_ObjNameSingulPAGE));
+    OUStringBuffer sName(SvxResId(STR_ObjNameSingulPAGE));
 
     OUString aName(GetName());
     if (!aName.isEmpty())
@@ -177,7 +183,7 @@ OUString SdrPageObj::TakeObjNameSingul() const
 
 OUString SdrPageObj::TakeObjNamePlural() const
 {
-    return ImpGetResStr(STR_ObjNamePluralPAGE);
+    return SvxResId(STR_ObjNamePluralPAGE);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

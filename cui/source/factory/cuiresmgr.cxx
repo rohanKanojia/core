@@ -18,21 +18,11 @@
  */
 
 #include <dialmgr.hxx>
-#include <svl/solar.hrc>
-#include <vcl/svapp.hxx>
-#include <vcl/settings.hxx>
+#include <unotools/resmgr.hxx>
 
-// struct DialogsResMgr --------------------------------------------------
-ResMgr* CuiResMgr::GetResMgr()
+OUString CuiResId(const char *pKey)
 {
-    static ResMgr* pResMgr=nullptr;
-
-    if ( !pResMgr )
-    {
-        pResMgr = ResMgr::CreateResMgr("cui", Application::GetSettings().GetUILanguageTag());
-    }
-
-    return pResMgr;
+    return Translate::get(pKey, Translate::Create("cui"));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

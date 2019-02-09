@@ -12,6 +12,9 @@
 
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
+#include <vcl/fixed.hxx>
+#include <vcl/edit.hxx>
+#include <vcl/vclmedit.hxx>
 
 class CrashReportDialog : public Dialog
 {
@@ -19,16 +22,25 @@ public:
 
     explicit CrashReportDialog(vcl::Window* pParent);
 
-    virtual ~CrashReportDialog();
+    virtual ~CrashReportDialog() override;
 
     virtual void dispose() override;
+
+    virtual bool Close() override;
 
 private:
 
     VclPtr<Button> mpBtnSend;
     VclPtr<Button> mpBtnCancel;
+    VclPtr<Button> mpBtnClose;
+    VclPtr<FixedText> mpEditPreUpload;
+    VclPtr<VclMultiLineEdit> mpEditPostUpload;
+    VclPtr<VclMultiLineEdit> mpFtBugReport;
+    VclPtr<CheckBox> mpCBSafeMode;
 
-    DECL_LINK_TYPED(BtnHdl, Button*, void);
+    OUString maSuccessMsg;
+
+    DECL_LINK(BtnHdl, Button*, void);
 };
 
 #endif

@@ -17,14 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
-#include <com/sun/star/text/XTextDocument.hpp>
+#include <hintids.hxx>
 #include <xmloff/XMLFontAutoStylePool.hxx>
 #include <editeng/fontitem.hxx>
 #include <unotext.hxx>
 #include <doc.hxx>
-#include <xmlexp.hxx>
-#include <xmlimp.hxx>
+#include "xmlexp.hxx"
+#include "xmlimp.hxx"
 #include <IDocumentSettingAccess.hxx>
 
 using namespace ::com::sun::star::uno;
@@ -33,23 +32,20 @@ using namespace ::com::sun::star::text;
 
 class SwXMLFontAutoStylePool_Impl: public XMLFontAutoStylePool
 {
-    public:
-    SwXMLFontAutoStylePool_Impl( SwXMLExport& rExport, bool blockFontEmbedding );
+public:
+    SwXMLFontAutoStylePool_Impl(SwXMLExport& rExport, bool bFontEmbedding);
 };
 
-SwXMLFontAutoStylePool_Impl::SwXMLFontAutoStylePool_Impl(
-    SwXMLExport& _rExport, bool blockFontEmbedding ) :
-    XMLFontAutoStylePool( _rExport, blockFontEmbedding )
+SwXMLFontAutoStylePool_Impl::SwXMLFontAutoStylePool_Impl(SwXMLExport& _rExport, bool bFontEmbedding)
+    : XMLFontAutoStylePool(_rExport, bFontEmbedding)
 {
-    sal_uInt16 aWhichIds[3] = { RES_CHRATR_FONT, RES_CHRATR_CJK_FONT,
-                                RES_CHRATR_CTL_FONT };
+    sal_uInt16 const aWhichIds[3] = { RES_CHRATR_FONT, RES_CHRATR_CJK_FONT,
+                                      RES_CHRATR_CTL_FONT };
 
     const SfxItemPool& rPool = _rExport.getDoc()->GetAttrPool();
     const SfxPoolItem* pItem;
-    for( size_t i=0; i < SAL_N_ELEMENTS(aWhichIds); ++i )
+    for(sal_uInt16 nWhichId : aWhichIds)
     {
-        const sal_uInt16 nWhichId = aWhichIds[i];
-
         const SvxFontItem& rFont =
             static_cast<const SvxFontItem&>(rPool.GetDefaultItem( nWhichId ));
         Add( rFont.GetFamilyName(), rFont.GetStyleName(),
@@ -68,6 +64,13 @@ SwXMLFontAutoStylePool_Impl::SwXMLFontAutoStylePool_Impl(
             }
         }
     }
+    auto const & pDocument = _rExport.getDoc();
+
+    m_bEmbedUsedOnly = pDocument->getIDocumentSettingAccess().get(DocumentSettingId::EMBED_USED_FONTS);
+    m_bEmbedLatinScript = pDocument->getIDocumentSettingAccess().get(DocumentSettingId::EMBED_LATIN_SCRIPT_FONTS);
+    m_bEmbedAsianScript = pDocument->getIDocumentSettingAccess().get(DocumentSettingId::EMBED_ASIAN_SCRIPT_FONTS);
+    m_bEmbedComplexScript = pDocument->getIDocumentSettingAccess().get(DocumentSettingId::EMBED_COMPLEX_SCRIPT_FONTS);
+
 }
 
 XMLFontAutoStylePool* SwXMLExport::CreateFontAutoStylePool()
@@ -90,4 +93,3 @@ void SwXMLImport::NotifyEmbeddedFontRead()
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
-

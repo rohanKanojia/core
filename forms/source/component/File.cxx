@@ -21,14 +21,11 @@
 
 #include <com/sun/star/form/FormComponentType.hpp>
 
-#include "property.hrc"
-#include "services.hxx"
+#include <services.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <tools/debug.hxx>
-#include <comphelper/container.hxx>
 #include <comphelper/basicio.hxx>
-#include <comphelper/guarding.hxx>
-#include <comphelper/processfactory.hxx>
+#include <comphelper/property.hxx>
 
 
 namespace frm
@@ -49,25 +46,15 @@ using namespace ::com::sun::star::util;
 
 Sequence<Type> OFileControlModel::_getTypes()
 {
-    static Sequence<Type> aTypes;
-    if (!aTypes.getLength())
-    {
-        // my base class
-        Sequence<Type> aBaseClassTypes = OControlModel::_getTypes();
-
-        Sequence<Type> aOwnTypes(1);
-        Type* pOwnTypes = aOwnTypes.getArray();
-        pOwnTypes[0] = cppu::UnoType<XReset>::get();
-
-        aTypes = concatSequences(aBaseClassTypes, aOwnTypes);
-    }
+    static Sequence<Type> const aTypes =
+        concatSequences(OControlModel::_getTypes(), Sequence<Type>{ cppu::UnoType<XReset>::get() });
     return aTypes;
 }
 
 
 // XServiceInfo
 
-css::uno::Sequence<OUString>  OFileControlModel::getSupportedServiceNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString>  OFileControlModel::getSupportedServiceNames()
 {
     css::uno::Sequence<OUString> aSupported = OControlModel::getSupportedServiceNames();
     aSupported.realloc(aSupported.getLength() + 2);
@@ -109,7 +96,7 @@ OFileControlModel::~OFileControlModel()
 IMPLEMENT_DEFAULT_CLONING( OFileControlModel )
 
 
-Any SAL_CALL OFileControlModel::queryAggregation(const Type& _rType) throw (RuntimeException, std::exception)
+Any SAL_CALL OFileControlModel::queryAggregation(const Type& _rType)
 {
     Any aReturn = OControlModel::queryAggregation(_rType);
     if (!aReturn.hasValue())
@@ -153,7 +140,7 @@ void OFileControlModel::getFastPropertyValue(Any& rValue, sal_Int32 nHandle) con
 }
 
 
-void OFileControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const Any& rValue) throw ( css::uno::Exception, std::exception)
+void OFileControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, const Any& rValue)
 {
     switch (nHandle)
     {
@@ -168,7 +155,6 @@ void OFileControlModel::setFastPropertyValue_NoBroadcast(sal_Int32 nHandle, cons
 
 
 sal_Bool OFileControlModel::convertFastPropertyValue(Any& rConvertedValue, Any& rOldValue, sal_Int32 nHandle, const Any& rValue)
-                            throw( IllegalArgumentException )
 {
     switch (nHandle)
     {
@@ -189,13 +175,13 @@ void OFileControlModel::describeFixedProperties( Sequence< Property >& _rProps )
 }
 
 
-OUString SAL_CALL OFileControlModel::getServiceName() throw ( css::uno::RuntimeException, std::exception)
+OUString SAL_CALL OFileControlModel::getServiceName()
 {
     return OUString(FRM_COMPONENT_FILECONTROL);   // old (non-sun) name for compatibility !
 }
 
 
-void OFileControlModel::write(const Reference<css::io::XObjectOutputStream>& _rxOutStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OFileControlModel::write(const Reference<css::io::XObjectOutputStream>& _rxOutStream)
 {
     OControlModel::write(_rxOutStream);
 
@@ -209,7 +195,7 @@ void OFileControlModel::write(const Reference<css::io::XObjectOutputStream>& _rx
 }
 
 
-void OFileControlModel::read(const Reference<css::io::XObjectInputStream>& _rxInStream) throw ( css::io::IOException, css::uno::RuntimeException, std::exception)
+void OFileControlModel::read(const Reference<css::io::XObjectInputStream>& _rxInStream)
 {
     OControlModel::read(_rxInStream);
     ::osl::MutexGuard aGuard(m_aMutex);
@@ -235,7 +221,7 @@ void OFileControlModel::read(const Reference<css::io::XObjectInputStream>& _rxIn
 }
 
 
-void SAL_CALL OFileControlModel::reset() throw ( css::uno::RuntimeException, std::exception)
+void SAL_CALL OFileControlModel::reset()
 {
     ::comphelper::OInterfaceIteratorHelper2 aIter(m_aResetListeners);
     EventObject aEvt(static_cast<XWeak*>(this));
@@ -245,41 +231,30 @@ void SAL_CALL OFileControlModel::reset() throw ( css::uno::RuntimeException, std
 
     if (bContinue)
     {
-        {
-            // If Models are threadSafe
-            ::osl::MutexGuard aGuard(m_aMutex);
-            _reset();
-        }
+        // don't lock our mutex as setting aggregate properties
+        // may cause any uno controls belonging to us to lock the solar mutex, which is potentially dangerous with
+        // our own mutex locked
+        m_xAggregateSet->setPropertyValue(PROPERTY_TEXT, makeAny(m_sDefaultValue));
         m_aResetListeners.notifyEach( &XResetListener::resetted, aEvt );
     }
 }
 
 
-void OFileControlModel::addResetListener(const Reference<XResetListener>& _rxListener) throw ( css::uno::RuntimeException, std::exception)
+void OFileControlModel::addResetListener(const Reference<XResetListener>& _rxListener)
 {
     m_aResetListeners.addInterface(_rxListener);
 }
 
 
-void OFileControlModel::removeResetListener(const Reference<XResetListener>& _rxListener) throw ( css::uno::RuntimeException, std::exception)
+void OFileControlModel::removeResetListener(const Reference<XResetListener>& _rxListener)
 {
     m_aResetListeners.removeInterface(_rxListener);
 }
 
 
-void OFileControlModel::_reset()
-{
-    {   // release our mutex once (it's acquired in the calling method !), as setting aggregate properties
-        // may cause any uno controls belonging to us to lock the solar mutex, which is potentially dangerous with
-        // our own mutex locked
-        MutexRelease aRelease(m_aMutex);
-        m_xAggregateSet->setPropertyValue(PROPERTY_TEXT, makeAny(m_sDefaultValue));
-    }
-}
-
 }   // namespace frm
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 com_sun_star_form_OFileControlModel_get_implementation(css::uno::XComponentContext* component,
         css::uno::Sequence<css::uno::Any> const &)
 {

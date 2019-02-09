@@ -22,6 +22,7 @@
 #include <IDocumentDeviceAccess.hxx>
 #include <sal/types.h>
 #include <vcl/vclptr.hxx>
+#include <memory>
 
 class SwDoc;
 class SfxPrinter;
@@ -59,7 +60,7 @@ public:
 
     void setPrintData(/*[in]*/ const SwPrintData& rPrtData ) override;
 
-    virtual ~DocumentDeviceManager();
+    virtual ~DocumentDeviceManager() override;
 
 private:
 
@@ -75,7 +76,7 @@ private:
     SwDoc& m_rDoc;
     VclPtr<SfxPrinter> mpPrt;
     VclPtr<VirtualDevice> mpVirDev;
-    SwPrintData* mpPrtData;
+    std::unique_ptr<SwPrintData> mpPrtData;
 };
 
 }

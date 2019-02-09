@@ -20,6 +20,7 @@
 #define INCLUDED_SVX_SIDEBAR_SIDEBARDIALCONTROL_HXX
 
 #include <svx/dialcontrol.hxx>
+#include <vcl/field.hxx>
 
 namespace svx { namespace sidebar {
 
@@ -28,7 +29,7 @@ namespace svx { namespace sidebar {
 class SVX_DLLPUBLIC SidebarDialControl : public svx::DialControl
 {
 public:
-    SidebarDialControl (vcl::Window* pParent, WinBits nBits = 0);
+    SidebarDialControl (vcl::Window* pParent, WinBits nBits);
 
     virtual Size GetOptimalSize() const override;
     virtual void MouseButtonDown (const MouseEvent& rMEvt) override;

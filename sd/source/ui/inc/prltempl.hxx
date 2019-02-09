@@ -20,11 +20,10 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_PRLTEMPL_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_PRLTEMPL_HXX
 
-#include "sdresid.hxx"
 #include <sfx2/tabdlg.hxx>
-#include <svx/tabarea.hxx>
+#include <svx/xtable.hxx>
 
-#include "prlayout.hxx"
+#include <prlayout.hxx>
 
 class SfxObjectShell;
 class SfxStyleSheetBase;
@@ -33,7 +32,7 @@ class SfxStyleSheetBasePool;
 /**
  * Template-Tab-Dialog
  */
-class SdPresLayoutTemplateDlg : public SfxTabDialog
+class SdPresLayoutTemplateDlg : public SfxTabDialogController
 {
 private:
     const SfxObjectShell*   mpDocShell;
@@ -42,51 +41,24 @@ private:
     XGradientListRef      pGradientList;
     XHatchListRef         pHatchingList;
     XBitmapListRef        pBitmapList;
+    XPatternListRef       pPatternList;
     XDashListRef          pDashList;
     XLineEndListRef       pLineEndList;
 
-    sal_uInt16              nPageType;
-    sal_uInt16              nDlgType;
-    sal_uInt16              nPos;
+    PresentationObjects const ePO;
 
-    sal_uInt16            mnLine;
-    sal_uInt16            mnArea;
-    sal_uInt16            mnShadow;
-    sal_uInt16            mnTransparency;
-    sal_uInt16            mnFont;
-    sal_uInt16            mnEffects;
-    sal_uInt16            mnParagr;
-    sal_uInt16            mnTextAtt;
-    sal_uInt16            mnBullet;
-    sal_uInt16            mnNum;
-    sal_uInt16            mnBitmap;
-    sal_uInt16            mnOptions;
-    sal_uInt16            mnTab;
-    sal_uInt16            mnAsian;
-    sal_uInt16            mnAlign;
-
-    ChangeType          nColorTableState;
-    ChangeType          nBitmapListState;
-    ChangeType          nGradientListState;
-    ChangeType          nHatchingListState;
-
-    PresentationObjects ePO;
-
-    virtual void        PageCreated( sal_uInt16 nId, SfxTabPage &rPage ) override;
+    virtual void        PageCreated(const OString& rId, SfxTabPage &rPage) override;
 
     // for mapping with the new SvxNumBulletItem
     SfxItemSet aInputSet;
-    SfxItemSet* pOutSet;
+    std::unique_ptr<SfxItemSet> pOutSet;
     const SfxItemSet* pOrgSet;
 
     sal_uInt16 GetOutlineLevel() const;
 
-    using SfxTabDialog::GetOutputItemSet;
-
 public:
-    SdPresLayoutTemplateDlg( SfxObjectShell* pDocSh, vcl::Window* pParent, SdResId DlgId, SfxStyleSheetBase& rStyleBase, PresentationObjects ePO, SfxStyleSheetBasePool* pSSPool );
-    virtual ~SdPresLayoutTemplateDlg();
-    virtual void dispose() override;
+    SdPresLayoutTemplateDlg(SfxObjectShell const * pDocSh, weld::Window* pParent, bool bBackground, SfxStyleSheetBase& rStyleBase, PresentationObjects ePO, SfxStyleSheetBasePool* pSSPool);
+    virtual ~SdPresLayoutTemplateDlg() override;
 
     const SfxItemSet* GetOutputItemSet() const;
 };

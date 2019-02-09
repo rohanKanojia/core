@@ -19,33 +19,31 @@
 
 #include <unotools/localedatawrapper.hxx>
 
-#include "colrowba.hxx"
-#include "document.hxx"
-#include "scmod.hxx"
-#include "tabvwsh.hxx"
-#include "docsh.hxx"
-#include "appoptio.hxx"
-#include "globstr.hrc"
-#include "markdata.hxx"
-#include "tabview.hxx"
+#include <colrowba.hxx>
+#include <document.hxx>
+#include <scmod.hxx>
+#include <tabvwsh.hxx>
+#include <docsh.hxx>
+#include <appoptio.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <markdata.hxx>
+#include <tabview.hxx>
 #include <columnspanset.hxx>
 
 static OUString lcl_MetricString( long nTwips, const OUString& rText )
 {
     if ( nTwips <= 0 )
-        return ScGlobal::GetRscString(STR_TIP_HIDE);
+        return ScResId(STR_TIP_HIDE);
     else
     {
         FieldUnit eUserMet = SC_MOD()->GetAppOptions().GetAppMetric();
 
-        sal_Int64 nUserVal = MetricField::ConvertValue( nTwips*100, 1, 2, FUNIT_TWIP, eUserMet );
+        sal_Int64 nUserVal = MetricField::ConvertValue( nTwips*100, 1, 2, FieldUnit::TWIP, eUserMet );
 
-        OUString aStr = rText;
-        aStr += " ";
-        aStr += ScGlobal::pLocaleData->getNum( nUserVal, 2 );
-        aStr += " ";
-        aStr += SdrFormatter::GetUnitStr(eUserMet);
-
+        OUString aStr = rText + " "
+                        + ScGlobal::pLocaleData->getNum( nUserVal, 2 )
+                        + " " + SdrFormatter::GetUnitStr(eUserMet);
         return aStr;
     }
 }
@@ -64,11 +62,6 @@ ScColBar::~ScColBar()
 {
 }
 
-inline bool ScColBar::UseNumericHeader() const
-{
-    return pTabView->GetViewData().GetDocument()->GetAddressConvention() == formula::FormulaGrammar::CONV_XL_R1C1;
-}
-
 SCCOLROW ScColBar::GetPos() const
 {
     return pTabView->GetViewData().GetPosX(meWhich);
@@ -82,12 +75,12 @@ sal_uInt16 ScColBar::GetEntrySize( SCCOLROW nEntryNo ) const
     if (pDoc->ColHidden(static_cast<SCCOL>(nEntryNo), nTab))
         return 0;
     else
-        return (sal_uInt16) ScViewData::ToPixel( pDoc->GetColWidth( static_cast<SCCOL>(nEntryNo), nTab ), rViewData.GetPPTX() );
+        return static_cast<sal_uInt16>(ScViewData::ToPixel( pDoc->GetColWidth( static_cast<SCCOL>(nEntryNo), nTab ), rViewData.GetPPTX() ));
 }
 
 OUString ScColBar::GetEntryText( SCCOLROW nEntryNo ) const
 {
-    return UseNumericHeader()
+    return pTabView->GetViewData().GetDocument()->GetAddressConvention() == formula::FormulaGrammar::CONV_XL_R1C1
         ? OUString::number(nEntryNo + 1)
         : ScColToAlpha( static_cast<SCCOL>(nEntryNo) );
 }
@@ -105,7 +98,7 @@ void ScColBar::SetEntrySize( SCCOLROW nPos, sal_uInt16 nNewSize )
         eMode = SC_SIZE_OPTIMAL;
     }
     else
-        nSizeTwips = (sal_uInt16) ( nNewSize / rViewData.GetPPTX() );
+        nSizeTwips = static_cast<sal_uInt16>( nNewSize / rViewData.GetPPTX() );
 
     const ScMarkData& rMark = rViewData.GetMarkData();
 
@@ -124,7 +117,7 @@ void ScColBar::SetEntrySize( SCCOLROW nPos, sal_uInt16 nNewSize )
                     ++nEnd;
                 if (!rMark.IsColumnMarked(nEnd))
                     --nEnd;
-                aRanges.push_back(sc::ColRowSpan(nStart,nEnd));
+                aRanges.emplace_back(nStart,nEnd);
                 nStart = nEnd+1;
             }
             else
@@ -133,7 +126,7 @@ void ScColBar::SetEntrySize( SCCOLROW nPos, sal_uInt16 nNewSize )
     }
     else
     {
-        aRanges.push_back(sc::ColRowSpan(nPos,nPos));
+        aRanges.emplace_back(nPos,nPos);
     }
 
     rViewData.GetView()->SetWidthOrHeight(true, aRanges, eMode, nSizeTwips);
@@ -195,7 +188,7 @@ bool ScColBar::ResizeAllowed() const
 
 void ScColBar::DrawInvert( long nDragPosP )
 {
-    Rectangle aRect( nDragPosP,0, nDragPosP+HDR_SLIDERSIZE-1,GetOutputSizePixel().Width()-1 );
+    tools::Rectangle aRect( nDragPosP,0, nDragPosP+HDR_SLIDERSIZE-1,GetOutputSizePixel().Width()-1 );
     Update();
     Invert(aRect);
 
@@ -204,8 +197,8 @@ void ScColBar::DrawInvert( long nDragPosP )
 
 OUString ScColBar::GetDragHelp( long nVal )
 {
-    long nTwips = (long) ( nVal / pTabView->GetViewData().GetPPTX() );
-    return lcl_MetricString( nTwips, ScGlobal::GetRscString(STR_TIP_WIDTH) );
+    long nTwips = static_cast<long>( nVal / pTabView->GetViewData().GetPPTX() );
+    return lcl_MetricString( nTwips, ScResId(STR_TIP_WIDTH) );
 }
 
 bool ScColBar::IsLayoutRTL() const        // override only for columns
@@ -242,8 +235,8 @@ sal_uInt16 ScRowBar::GetEntrySize( SCCOLROW nEntryNo ) const
     if (pDoc->RowHidden(nEntryNo, nTab, nullptr, &nLastRow))
         return 0;
     else
-        return (sal_uInt16) ScViewData::ToPixel( pDoc->GetOriginalHeight( nEntryNo,
-                    nTab ), rViewData.GetPPTY() );
+        return static_cast<sal_uInt16>(ScViewData::ToPixel( pDoc->GetOriginalHeight( nEntryNo,
+                    nTab ), rViewData.GetPPTY() ));
 }
 
 OUString ScRowBar::GetEntryText( SCCOLROW nEntryNo ) const
@@ -264,7 +257,7 @@ void ScRowBar::SetEntrySize( SCCOLROW nPos, sal_uInt16 nNewSize )
         eMode = SC_SIZE_OPTIMAL;
     }
     else
-        nSizeTwips = (sal_uInt16) ( nNewSize / rViewData.GetPPTY() );
+        nSizeTwips = static_cast<sal_uInt16>( nNewSize / rViewData.GetPPTY() );
 
     const ScMarkData& rMark = rViewData.GetMarkData();
 
@@ -283,7 +276,7 @@ void ScRowBar::SetEntrySize( SCCOLROW nPos, sal_uInt16 nNewSize )
                     ++nEnd;
                 if (!rMark.IsRowMarked(nEnd))
                     --nEnd;
-                aRanges.push_back(sc::ColRowSpan(nStart,nEnd));
+                aRanges.emplace_back(nStart,nEnd);
                 nStart = nEnd+1;
             }
             else
@@ -292,7 +285,7 @@ void ScRowBar::SetEntrySize( SCCOLROW nPos, sal_uInt16 nNewSize )
     }
     else
     {
-        aRanges.push_back(sc::ColRowSpan(nPos,nPos));
+        aRanges.emplace_back(nPos,nPos);
     }
 
     rViewData.GetView()->SetWidthOrHeight(false, aRanges, eMode, nSizeTwips);
@@ -354,7 +347,7 @@ bool ScRowBar::ResizeAllowed() const
 
 void ScRowBar::DrawInvert( long nDragPosP )
 {
-    Rectangle aRect( 0,nDragPosP, GetOutputSizePixel().Width()-1,nDragPosP+HDR_SLIDERSIZE-1 );
+    tools::Rectangle aRect( 0,nDragPosP, GetOutputSizePixel().Width()-1,nDragPosP+HDR_SLIDERSIZE-1 );
     Update();
     Invert(aRect);
 
@@ -363,8 +356,8 @@ void ScRowBar::DrawInvert( long nDragPosP )
 
 OUString ScRowBar::GetDragHelp( long nVal )
 {
-    long nTwips = (long) ( nVal / pTabView->GetViewData().GetPPTY() );
-    return lcl_MetricString( nTwips, ScGlobal::GetRscString(STR_TIP_HEIGHT) );
+    long nTwips = static_cast<long>( nVal / pTabView->GetViewData().GetPPTY() );
+    return lcl_MetricString( nTwips, ScResId(STR_TIP_HEIGHT) );
 }
 
 SCROW ScRowBar::GetHiddenCount( SCROW nEntryNo ) const // override only for rows

@@ -11,7 +11,7 @@ $(eval $(call gb_CustomTarget_CustomTarget,i18npool/breakiterator))
 
 i18npool_BIDIR := $(call gb_CustomTarget_get_workdir,i18npool/breakiterator)
 
-ifeq ($(OS),IOS)
+ifeq ($(OS),iOS)
 
 $(call gb_CustomTarget_get_target,i18npool/breakiterator) : \
 	$(i18npool_BIDIR)/dict_ja.data $(i18npool_BIDIR)/dict_zh.data $(i18npool_BIDIR)/OpenOffice_dat.c
@@ -74,7 +74,7 @@ $(i18npool_BIDIR)/OpenOffice_dat.c : $(SRCDIR)/i18npool/CustomTarget_breakiterat
 		$(call gb_ExternalExecutable_get_command,gencmn) -n OpenOffice -t tmp -S -d $(i18npool_BIDIR)/ 0 $${RESPONSEFILE} && \
 		rm -f $${RESPONSEFILE} && \
 		echo '#ifdef _MSC_VER' > $@ && \
-		echo '#pragma warning( disable : 4229 4668 )' >> $@ && \
+		echo '#pragma warning( disable : 4229 )' >> $@ && \
 		echo '#endif' >> $@ && \
 		cat $(subst _dat,_tmp,$@) >> $@)
 
@@ -87,7 +87,9 @@ $(i18npool_BIDIR)/%_brk.c : $(i18npool_BIDIR)/%.brk $(call gb_ExternalExecutable
 $(i18npool_BIDIR)/%.brk : $(i18npool_BIDIR)/%.txt $(call gb_ExternalExecutable_get_dependencies,genbrk)
 	$(call gb_Output_announce,$(subst $(WORKDIR)/,,$@),$(true),BRK,1)
 	$(call gb_Helper_abbreviate_dirs,\
-		$(call gb_ExternalExecutable_get_command,genbrk) -r $< -o $@ $(if $(findstring s,$(MAKEFLAGS)),> /dev/null))
+		$(call gb_ExternalExecutable_get_command,genbrk) \
+		$(if $(SYSTEM_ICU),,-i $(call gb_UnpackedTarball_get_dir,icu)/source/data/out/tmp) \
+		-r $< -o $@ $(if $(findstring s,$(MAKEFLAGS)),> /dev/null))
 
 # fdo#31271 ")" reclassified in more recent Unicode Standards / ICU 4.4
 # * Prepend set empty as of Unicode Version 6.1 / ICU 49, which bails out if used.

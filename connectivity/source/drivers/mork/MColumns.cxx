@@ -37,7 +37,7 @@ sdbcx::ObjectType OColumns::createObject(const OUString& _rName)
     Reference< XResultSet > xResult = m_pTable->getConnection()->getMetaData()->getColumns(
         aCatalog, sSchemaName, sTableName, _rName);
 
-    sdbcx::ObjectType xRet = nullptr;
+    sdbcx::ObjectType xRet;
     if(xResult.is())
     {
         Reference< XRow > xRow(xResult,UNO_QUERY);
@@ -71,7 +71,7 @@ sdbcx::ObjectType OColumns::createObject(const OUString& _rName)
 }
 
 
-void OColumns::impl_refresh() throw(RuntimeException)
+void OColumns::impl_refresh()
 {
     m_pTable->refreshColumns();
 }

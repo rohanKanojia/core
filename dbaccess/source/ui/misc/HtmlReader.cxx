@@ -17,19 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "HtmlReader.hxx"
+#include <HtmlReader.hxx>
 #include <connectivity/dbconversion.hxx>
 #include <connectivity/dbtools.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/stream.hxx>
 #include <tools/tenccvt.hxx>
-#include <comphelper/extract.hxx>
 #include <comphelper/string.hxx>
-#include "dbu_misc.hrc"
-#include "dbustrings.hrc"
+#include <strings.hrc>
+#include <stringconstants.hxx>
 #include <sfx2/sfxhtml.hxx>
 #include <osl/diagnose.h>
-#include "moduledbu.hxx"
+#include <core_resource.hxx>
 #include <com/sun/star/sdbcx/XDataDescriptorFactory.hpp>
 #include <com/sun/star/sdbcx/XColumnsSupplier.hpp>
 #include <com/sun/star/sdbcx/XAppend.hpp>
@@ -45,14 +44,14 @@
 #include <svtools/htmltokn.h>
 #include <svtools/htmlkywd.hxx>
 #include <tools/color.hxx>
-#include "WCopyTable.hxx"
-#include "WExtendPages.hxx"
-#include "WNameMatch.hxx"
-#include "WColumnSelect.hxx"
-#include "QEnumTypes.hxx"
-#include "WCPage.hxx"
+#include <WCopyTable.hxx>
+#include <WExtendPages.hxx>
+#include <WNameMatch.hxx>
+#include <WColumnSelect.hxx>
+#include <QEnumTypes.hxx>
+#include <WCPage.hxx>
 #include <rtl/tencinfo.h>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
@@ -69,16 +68,11 @@ using namespace ::com::sun::star::awt;
 // OHTMLReader
 OHTMLReader::OHTMLReader(SvStream& rIn,const SharedConnection& _rxConnection,
                         const Reference< css::util::XNumberFormatter >& _rxNumberF,
-                        const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-                        const TColumnVector* pList,
-                        const OTypeInfoMap* _pInfoMap)
+                        const css::uno::Reference< css::uno::XComponentContext >& _rxContext)
     : HTMLParser(rIn)
-    , ODatabaseExport( _rxConnection, _rxNumberF, _rxContext, pList, _pInfoMap, rIn )
+    , ODatabaseExport( _rxConnection, _rxNumberF, _rxContext, rIn )
     , m_nTableCount(0)
-    , m_nWidth(0)
     , m_nColumnWidth(87)
-    , m_bMetaOptions(false)
-    , m_bSDNum(false)
 {
     SetSrcEncoding( GetExtendedCompatibilityTextEncoding(  RTL_TEXTENCODING_ISO_8859_1 ) );
     // If the file starts with a BOM, switch to UCS2.
@@ -96,10 +90,7 @@ OHTMLReader::OHTMLReader(SvStream& rIn,
     : HTMLParser(rIn)
     , ODatabaseExport( nRows, _rColumnPositions, _rxNumberF, _rxContext, pList, _pInfoMap, _bAutoIncrementEnabled, rIn )
     , m_nTableCount(0)
-    , m_nWidth(0)
     , m_nColumnWidth(87)
-    , m_bMetaOptions(false)
-    , m_bSDNum(false)
 {
     SetSrcEncoding( GetExtendedCompatibilityTextEncoding(  RTL_TEXTENCODING_ISO_8859_1 ) );
     // If the file starts with a BOM, switch to UCS2.
@@ -116,42 +107,40 @@ SvParserState OHTMLReader::CallParser()
     rInput.ResetError();
     SvParserState  eParseState = HTMLParser::CallParser();
     SetColumnTypes(m_pColumnList,m_pInfoMap);
-    return m_bFoundTable ? eParseState : SVPAR_ERROR;
+    return m_bFoundTable ? eParseState : SvParserState::Error;
 }
 
-void OHTMLReader::NextToken( int nToken )
+#if defined _MSC_VER
+#pragma warning(disable: 4702) // unreachable code, bug in MSVC2015
+#endif
+void OHTMLReader::NextToken( HtmlTokenId nToken )
 {
     if(m_bError || !m_nRows) // if there is an error or no more rows to check, return immediately
         return;
-    if ( nToken ==  HTML_META )
+    if ( nToken ==  HtmlTokenId::META )
         setTextEncoding();
 
     if(m_xConnection.is())    // names, which CTOR was called and hence, if a table should be created
     {
         switch(nToken)
         {
-            case HTML_TABLE_ON:
+            case HtmlTokenId::TABLE_ON:
                 ++m_nTableCount;
                 {   // can also be TD or TH, if there was no TABLE before
                     const HTMLOptions& rHtmlOptions = GetOptions();
-                    for (size_t i = 0, n = rHtmlOptions.size(); i < n; ++i)
+                    for (const auto & rOption : rHtmlOptions)
                     {
-                        const HTMLOption& rOption = rHtmlOptions[i];
-                        switch( rOption.GetToken() )
-                        {
-                            case HTML_O_WIDTH:
-                            {   // percentage: of document width respectively outer cell
-                                m_nColumnWidth = GetWidthPixel( rOption );
-                            }
-                            break;
+                        if( rOption.GetToken() == HtmlOptionId::WIDTH )
+                        {   // percentage: of document width respectively outer cell
+                            m_nColumnWidth = GetWidthPixel( rOption );
                         }
                     }
                 }
-                //fall-through
-            case HTML_THEAD_ON:
-            case HTML_TBODY_ON:
+                [[fallthrough]];
+            case HtmlTokenId::THEAD_ON:
+            case HtmlTokenId::TBODY_ON:
                 {
-                    sal_Size nTell = rInput.Tell(); // perhaps alters position of the stream
+                    sal_uInt64 const nTell = rInput.Tell(); // perhaps alters position of the stream
                     if ( !m_xTable.is() )
                     {// use first line as header
                         m_bError = !CreateTable(nToken);
@@ -160,13 +149,13 @@ void OHTMLReader::NextToken( int nToken )
                     }
                 }
                 break;
-            case HTML_TABLE_OFF:
+            case HtmlTokenId::TABLE_OFF:
                 if(!--m_nTableCount)
                 {
                     m_xTable = nullptr;
                 }
                 break;
-            case HTML_TABLEROW_ON:
+            case HtmlTokenId::TABLEROW_ON:
                 if ( m_pUpdateHelper.get() )
                 {
                     try
@@ -182,21 +171,21 @@ void OHTMLReader::NextToken( int nToken )
                 else
                     m_bError = true;
                 break;
-            case HTML_TEXTTOKEN:
-            case HTML_SINGLECHAR:
+            case HtmlTokenId::TEXTTOKEN:
+            case HtmlTokenId::SINGLECHAR:
                 if ( m_bInTbl ) //&& !m_bSDNum ) // important, as otherwise we also get the names of the fonts
                     m_sTextToken += aToken;
                 break;
-            case HTML_PARABREAK_OFF:
+            case HtmlTokenId::PARABREAK_OFF:
                 m_sCurrent += m_sTextToken;
                 break;
-            case HTML_PARABREAK_ON:
+            case HtmlTokenId::PARABREAK_ON:
                 m_sTextToken.clear();
                 break;
-            case HTML_TABLEDATA_ON:
+            case HtmlTokenId::TABLEDATA_ON:
                 fetchOptions();
                 break;
-            case HTML_TABLEDATA_OFF:
+            case HtmlTokenId::TABLEDATA_OFF:
                 {
                     if ( !m_sCurrent.isEmpty() )
                         m_sTextToken = m_sCurrent;
@@ -212,10 +201,10 @@ void OHTMLReader::NextToken( int nToken )
                     m_sCurrent.clear();
                     m_nColumnPos++;
                     eraseTokens();
-                    m_bSDNum = m_bInTbl = false;
+                    m_bInTbl = false;
                 }
                 break;
-            case HTML_TABLEROW_OFF:
+            case HtmlTokenId::TABLEROW_OFF:
                 if ( !m_pUpdateHelper.get() )
                 {
                     m_bError = true;
@@ -235,47 +224,48 @@ void OHTMLReader::NextToken( int nToken )
                 }
                 m_nColumnPos = 0;
                 break;
+            default: break;
         }
     }
     else // branch only valid for type checking
     {
         switch(nToken)
         {
-            case HTML_THEAD_ON:
-            case HTML_TBODY_ON:
+            case HtmlTokenId::THEAD_ON:
+            case HtmlTokenId::TBODY_ON:
                 // The head of the column is not included
                 if(m_bHead)
                 {
                     do
                     {}
-                    while(GetNextToken() != HTML_TABLEROW_OFF);
+                    while(GetNextToken() != HtmlTokenId::TABLEROW_OFF);
                     m_bHead = false;
                 }
                 break;
-            case HTML_TABLEDATA_ON:
-            case HTML_TABLEHEADER_ON:
+            case HtmlTokenId::TABLEDATA_ON:
+            case HtmlTokenId::TABLEHEADER_ON:
                 fetchOptions();
                 break;
-            case HTML_TEXTTOKEN:
-            case HTML_SINGLECHAR:
+            case HtmlTokenId::TEXTTOKEN:
+            case HtmlTokenId::SINGLECHAR:
                 if ( m_bInTbl ) // && !m_bSDNum ) // important, as otherwise we also get the names of the fonts
                     m_sTextToken += aToken;
                 break;
-            case HTML_PARABREAK_OFF:
+            case HtmlTokenId::PARABREAK_OFF:
                 m_sCurrent += m_sTextToken;
                 break;
-            case HTML_PARABREAK_ON:
+            case HtmlTokenId::PARABREAK_ON:
                 m_sTextToken.clear();
                 break;
-            case HTML_TABLEDATA_OFF:
+            case HtmlTokenId::TABLEDATA_OFF:
                 if ( !m_sCurrent.isEmpty() )
                     m_sTextToken = m_sCurrent;
                 adjustFormat();
                 m_nColumnPos++;
-                m_bSDNum = m_bInTbl = false;
+                m_bInTbl = false;
                 m_sCurrent.clear();
                 break;
-            case HTML_TABLEROW_OFF:
+            case HtmlTokenId::TABLEROW_OFF:
                 if ( !m_sCurrent.isEmpty() )
                     m_sTextToken = m_sCurrent;
                 adjustFormat();
@@ -283,6 +273,7 @@ void OHTMLReader::NextToken( int nToken )
                 m_nRows--;
                 m_sCurrent.clear();
                 break;
+            default: break;
         }
     }
 }
@@ -291,20 +282,17 @@ void OHTMLReader::fetchOptions()
 {
     m_bInTbl = true;
     const HTMLOptions& options = GetOptions();
-    for (size_t i = 0, n = options.size(); i < n; ++i)
+    for (const auto & rOption : options)
     {
-        const HTMLOption& rOption = options[i];
         switch( rOption.GetToken() )
         {
-            case HTML_O_SDVAL:
-            {
+            case HtmlOptionId::SDVAL:
                 m_sValToken = rOption.GetString();
-                m_bSDNum = true;
-            }
             break;
-            case HTML_O_SDNUM:
+            case HtmlOptionId::SDNUM:
                 m_sNumToken = rOption.GetString();
             break;
+            default: break;
         }
     }
 }
@@ -312,67 +300,63 @@ void OHTMLReader::fetchOptions()
 void OHTMLReader::TableDataOn(SvxCellHorJustify& eVal)
 {
     const HTMLOptions& rHtmlOptions = GetOptions();
-    for (size_t i = 0, n = rHtmlOptions.size(); i < n; ++i)
+    for (const auto & rOption : rHtmlOptions)
     {
-        const HTMLOption& rOption = rHtmlOptions[i];
         switch( rOption.GetToken() )
         {
-            case HTML_O_ALIGN:
+            case HtmlOptionId::ALIGN:
             {
                 const OUString& rOptVal = rOption.GetString();
                 if (rOptVal.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_AL_right ))
-                    eVal = SVX_HOR_JUSTIFY_RIGHT;
+                    eVal = SvxCellHorJustify::Right;
                 else if (rOptVal.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_AL_center ))
-                    eVal = SVX_HOR_JUSTIFY_CENTER;
+                    eVal = SvxCellHorJustify::Center;
                 else if (rOptVal.equalsIgnoreAsciiCase( OOO_STRING_SVTOOLS_HTML_AL_left ))
-                    eVal = SVX_HOR_JUSTIFY_LEFT;
+                    eVal = SvxCellHorJustify::Left;
                 else
-                    eVal = SVX_HOR_JUSTIFY_STANDARD;
+                    eVal = SvxCellHorJustify::Standard;
             }
             break;
-            case HTML_O_WIDTH:
-                m_nWidth = GetWidthPixel( rOption );
-            break;
+            default: break;
         }
     }
 }
 
-void OHTMLReader::TableFontOn(FontDescriptor& _rFont,sal_Int32 &_rTextColor)
+void OHTMLReader::TableFontOn(FontDescriptor& _rFont, Color &_rTextColor)
 {
     const HTMLOptions& rHtmlOptions = GetOptions();
-    for (size_t i = 0, n = rHtmlOptions.size(); i < n; ++i)
+    for (const auto & rOption : rHtmlOptions)
     {
-        const HTMLOption& rOption = rHtmlOptions[i];
         switch( rOption.GetToken() )
         {
-        case HTML_O_COLOR:
+        case HtmlOptionId::COLOR:
             {
                 Color aColor;
                 rOption.GetColor( aColor );
                 _rTextColor = aColor.GetRGBColor();
             }
             break;
-        case HTML_O_FACE :
+        case HtmlOptionId::FACE :
             {
                 const OUString& rFace = rOption.GetString();
-                OUString aFontName;
+                OUStringBuffer aFontName;
                 sal_Int32 nPos = 0;
                 while( nPos != -1 )
                 {
-                    // list fo fonts, VCL: semicolon as separator, HTML: comma
+                    // list of fonts, VCL: semicolon as separator, HTML: comma
                     OUString aFName = rFace.getToken( 0, ',', nPos );
                     aFName = comphelper::string::strip(aFName, ' ');
                     if( !aFontName.isEmpty() )
-                        aFontName += ";";
-                    aFontName += aFName;
+                        aFontName.append(";");
+                    aFontName.append(aFName);
                 }
                 if ( !aFontName.isEmpty() )
-                    _rFont.Name = aFontName;
+                    _rFont.Name = aFontName.makeStringAndClear();
             }
             break;
-        case HTML_O_SIZE :
+        case HtmlOptionId::SIZE :
             {
-                sal_Int16 nSize = (sal_Int16) rOption.GetNumber();
+                sal_Int16 nSize = static_cast<sal_Int16>(rOption.GetNumber());
                 if ( nSize == 0 )
                     nSize = 1;
                 else if ( nSize < DBAUI_HTML_FONTSIZES )
@@ -381,6 +365,7 @@ void OHTMLReader::TableFontOn(FontDescriptor& _rFont,sal_Int32 &_rTextColor)
                 _rFont.Height = nSize;
             }
             break;
+        default: break;
         }
     }
 }
@@ -390,24 +375,24 @@ sal_Int16 OHTMLReader::GetWidthPixel( const HTMLOption& rOption )
     const OUString& rOptVal = rOption.GetString();
     if ( rOptVal.indexOf('%') != -1 )
     {   // percentage
-        OSL_ENSURE( m_nColumnWidth, "WIDTH Option: m_nColumnWidth==0 und Width%" );
-        return (sal_Int16)((rOption.GetNumber() * m_nColumnWidth) / 100);
+        OSL_ENSURE( m_nColumnWidth, "WIDTH Option: m_nColumnWidth==0 and Width%" );
+        return static_cast<sal_Int16>((rOption.GetNumber() * m_nColumnWidth) / 100);
     }
     else
     {
         if ( rOptVal.indexOf('*') != -1 )
-        {   // relativ to what?!?
+        {   // relative to what?!?
 //TODO: collect ColArray of all relevant values and then MakeCol
             return 0;
         }
         else
-            return (sal_Int16)rOption.GetNumber();  // pixel
+            return static_cast<sal_Int16>(rOption.GetNumber());  // pixel
     }
 }
 
-bool OHTMLReader::CreateTable(int nToken)
+bool OHTMLReader::CreateTable(HtmlTokenId nToken)
 {
-    OUString aTempName(ModuleRes(STR_TBL_TITLE));
+    OUString aTempName(DBA_RES(STR_TBL_TITLE));
     aTempName = aTempName.getToken(0,' ');
     aTempName = ::dbtools::createUniqueName(m_xTables, aTempName);
 
@@ -418,35 +403,35 @@ bool OHTMLReader::CreateTable(int nToken)
 
     OUString aTableName;
     FontDescriptor aFont = VCLUnoHelper::CreateFontDescriptor(Application::GetSettings().GetStyleSettings().GetAppFont());
-    sal_Int32 nTextColor = 0;
+    Color nTextColor;
     do
     {
         switch (nToken)
         {
-            case HTML_TEXTTOKEN:
-            case HTML_SINGLECHAR:
+            case HtmlTokenId::TEXTTOKEN:
+            case HtmlTokenId::SINGLECHAR:
                 if(bTableHeader)
                     aColumnName += aToken;
                 if(bCaption)
                     aTableName += aToken;
                 break;
-            case HTML_PARABREAK_OFF:
+            case HtmlTokenId::PARABREAK_OFF:
                 m_sCurrent += aColumnName;
                 break;
-            case HTML_PARABREAK_ON:
+            case HtmlTokenId::PARABREAK_ON:
                 m_sTextToken.clear();
                 break;
-            case HTML_TABLEDATA_ON:
-            case HTML_TABLEHEADER_ON:
+            case HtmlTokenId::TABLEDATA_ON:
+            case HtmlTokenId::TABLEHEADER_ON:
                 TableDataOn(eVal);
                 bTableHeader = true;
                 break;
-            case HTML_TABLEDATA_OFF:
-            case HTML_TABLEHEADER_OFF:
+            case HtmlTokenId::TABLEDATA_OFF:
+            case HtmlTokenId::TABLEHEADER_OFF:
                 {
                     aColumnName = comphelper::string::strip(aColumnName, ' ' );
                     if (aColumnName.isEmpty() || m_bAppendFirstLine )
-                        aColumnName = ModuleRes(STR_COLUMN_NAME);
+                        aColumnName = DBA_RES(STR_COLUMN_NAME);
                     else if ( !m_sCurrent.isEmpty() )
                         aColumnName = m_sCurrent;
 
@@ -455,17 +440,17 @@ bool OHTMLReader::CreateTable(int nToken)
                     aColumnName.clear();
                     m_sCurrent.clear();
 
-                    eVal = SVX_HOR_JUSTIFY_STANDARD;
+                    eVal = SvxCellHorJustify::Standard;
                     bTableHeader = false;
                 }
                 break;
 
-            case HTML_TITLE_ON:
-            case HTML_CAPTION_ON:
+            case HtmlTokenId::TITLE_ON:
+            case HtmlTokenId::CAPTION_ON:
                 bCaption = true;
                 break;
-            case HTML_TITLE_OFF:
-            case HTML_CAPTION_OFF:
+            case HtmlTokenId::TITLE_OFF:
+            case HtmlTokenId::CAPTION_OFF:
                 aTableName = comphelper::string::strip(aTableName, ' ');
                 if(aTableName.isEmpty())
                     aTableName = ::dbtools::createUniqueName(m_xTables, aTableName);
@@ -473,25 +458,26 @@ bool OHTMLReader::CreateTable(int nToken)
                     aTableName = aTempName;
                 bCaption = false;
                 break;
-            case HTML_FONT_ON:
+            case HtmlTokenId::FONT_ON:
                 TableFontOn(aFont,nTextColor);
                 break;
-            case HTML_BOLD_ON:
+            case HtmlTokenId::BOLD_ON:
                 aFont.Weight = css::awt::FontWeight::BOLD;
                 break;
-            case HTML_ITALIC_ON:
+            case HtmlTokenId::ITALIC_ON:
                 aFont.Slant = css::awt::FontSlant_ITALIC;
                 break;
-            case HTML_UNDERLINE_ON:
+            case HtmlTokenId::UNDERLINE_ON:
                 aFont.Underline = css::awt::FontUnderline::SINGLE;
                 break;
-            case HTML_STRIKE_ON:
+            case HtmlTokenId::STRIKE_ON:
                 aFont.Strikeout = css::awt::FontStrikeout::SINGLE;
                 break;
+            default: break;
         }
         nToken = GetNextToken();
     }
-    while (nToken != HTML_TABLEROW_OFF);
+    while (nToken != HtmlTokenId::TABLEROW_OFF);
 
     if ( !m_sCurrent.isEmpty() )
         aColumnName = m_sCurrent;
@@ -516,13 +502,7 @@ bool OHTMLReader::CreateTable(int nToken)
 
 void OHTMLReader::setTextEncoding()
 {
-    m_bMetaOptions = true;
     ParseMetaOptions(nullptr, nullptr);
-}
-
-void OHTMLReader::release()
-{
-    ReleaseRef();
 }
 
 TypeSelectionPageFactory OHTMLReader::getTypeSelectionPageFactory()

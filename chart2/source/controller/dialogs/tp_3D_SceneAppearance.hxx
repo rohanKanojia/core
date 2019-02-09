@@ -20,13 +20,11 @@
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_DIALOGS_TP_3D_SCENEAPPEARANCE_HXX
 
 #include <vcl/tabpage.hxx>
-#include <vcl/field.hxx>
 #include <vcl/button.hxx>
 #include <vcl/lstbox.hxx>
-#include <com/sun/star/drawing/ShadeMode.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 
-#include "ControllerLockGuard.hxx"
+namespace chart { class ControllerLockHelper; }
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 namespace chart
 {
@@ -38,15 +36,15 @@ public:
         vcl::Window* pWindow,
         const css::uno::Reference< css::frame::XModel > & xChartModel,
         ControllerLockHelper & rControllerLockHelper );
-    virtual ~ThreeD_SceneAppearance_TabPage();
+    virtual ~ThreeD_SceneAppearance_TabPage() override;
     virtual void dispose() override;
 
     virtual void ActivatePage() override;
 
 private:
-    DECL_LINK_TYPED( SelectSchemeHdl, ListBox&, void );
-    DECL_LINK_TYPED( SelectShading, CheckBox&, void );
-    DECL_LINK_TYPED( SelectRoundedEdgeOrObjectLines, CheckBox&, void );
+    DECL_LINK( SelectSchemeHdl, ListBox&, void );
+    DECL_LINK( SelectShading, CheckBox&, void );
+    DECL_LINK( SelectRoundedEdgeOrObjectLines, CheckBox&, void );
 
     void initControlsFromModel();
     void applyShadeModeToModel();

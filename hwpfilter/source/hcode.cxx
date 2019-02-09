@@ -423,7 +423,7 @@ static hchar s_hh2ks(hchar hh)
         return 0x2020;
     if (hh >= HCA_TG)
     {
-        return sal::static_int_cast<hchar>((tblhhtg_ks[hh - HCA_TG]));
+        return sal::static_int_cast<hchar>(tblhhtg_ks[hh - HCA_TG]);
     }
     hh -= HCA_KSS;
     idx = hh / 0x60 + 161;
@@ -444,7 +444,7 @@ static hchar s_hh2kssm(hchar hh)
     if ((idx < 0x34 || idx >= 0x38) && idx != 0x1F)
         return 0;
     if (hh >= HCA_TG)
-        return sal::static_int_cast<hchar>((hhtg_tg[hh - HCA_TG]));
+        return sal::static_int_cast<hchar>(hhtg_tg[hh - HCA_TG]);
     if (idx == 0x1F)
         hh = hh - 0x1F00 + 0x360;
     else
@@ -473,7 +473,7 @@ static hchar lineCharConv(hchar ch)
         case 0x3060 + '\'' - 31:
         case 0x3060 + '\"' - 31:
             ch--;
-
+            [[fallthrough]];
         case 0x3060 + '\'' - 32:
         case 0x3060 + '\"' - 32:
         case 0x3060 + '{' - 32:
@@ -565,9 +565,7 @@ static int is_jaso(hchar hh)
 
 static hchar jaso2ks(hchar hh)
 {
-    unsigned int i;
-
-    for (i = 0; i < SAL_N_ELEMENTS(jaso_hh_code); i++)
+    for (size_t i = 0; i < SAL_N_ELEMENTS(jaso_hh_code); i++)
         if (hh == jaso_hh_code[i])
     {
         return sal::static_int_cast<hchar>(0xa4a1 + i);
@@ -895,13 +893,13 @@ int hcharconv(hchar ch, hchar *dest, int codeType)
     if (ch < 128){
          dest[0] = ch;
         return 1;
-     }
+    }
     if (IsHangul(ch))
     {
-          hchar ch2 = ch;
+        hchar ch2 = ch;
         if (codeType == KS)
             ch = cdkssm2ks_han(ch);
-          else if( codeType == UNICODE ){
+        else if( codeType == UNICODE ){
                 if( ch2 == 0xd3c5 ){
                     dest[0] = 0xd55c;
                     return 1 ;
@@ -909,8 +907,8 @@ int hcharconv(hchar ch, hchar *dest, int codeType)
                 int res = kssm_hangul_to_ucs2(ch, dest);
                //printf("hcharconv Hangul[%04x]\n",dest[0]);
                 return res;
-          }
-          dest[0] = ch;
+        }
+        dest[0] = ch;
         return 1;
     }
       /* Chinese characters have a value of 4888 kinds from 0x4000. */
@@ -938,12 +936,12 @@ int hcharconv(hchar ch, hchar *dest, int codeType)
             lo = sal::static_int_cast<unsigned char>(index % (0xFE - 0xA1 + 1) + 0xA1);
             ch = (hi << 8) | lo;
         }
-          else if(codeType == UNICODE){
+        else if(codeType == UNICODE){
                 hi = sal::static_int_cast<unsigned char>(index / (0xFE - 0xA1 + 1) + 0xCA);
                 lo = sal::static_int_cast<unsigned char>(index % (0xFE - 0xA1 + 1) + 0xA1);
                 ch = (hi << 8) | lo;
                 ch = ksc5601_han_to_ucs2(ch);
-          }
+        }
         else
         {
             hi = sal::static_int_cast<unsigned char>(index / (0x100 - 0x31 - 0x11 - 2) + 0xE0);
@@ -1139,14 +1137,11 @@ int kssm_hangul_to_ucs2(hchar ch, hchar *dest)
 hchar ksc5601_sym_to_ucs2 (hchar input)
 {
     unsigned char ch = sal::static_int_cast<unsigned char>(input >> 8);
-    unsigned char ch2;
-    int idx;
-
-    ch2 = sal::static_int_cast<unsigned char>(input & 0xff);
-    idx = (ch - 0xA1) * 94 + (ch2 - 0xA1);
-    if (idx <= 1114 && idx >= 0){
-    hchar value = ksc5601_2uni_page21[idx];
-    return value ? value :  0x25a1;
+    unsigned char ch2 = sal::static_int_cast<unsigned char>(input & 0xff);
+    int idx = (ch - 0xA1) * 94 + (ch2 - 0xA1);
+    if (idx >= 0 && idx < static_cast<int>(SAL_N_ELEMENTS(ksc5601_2uni_page21))) {
+        hchar value = ksc5601_2uni_page21[idx];
+        return value ? value :  0x25a1;
     }
     return 0x25a1;
 }
@@ -1154,15 +1149,12 @@ hchar ksc5601_sym_to_ucs2 (hchar input)
 hchar ksc5601_han_to_ucs2 (hchar input)
 {
     unsigned char ch = sal::static_int_cast<unsigned char>(input >> 8);
-    unsigned char ch2;
-    int idx;
-
-    ch2 = sal::static_int_cast<unsigned char>(input & 0xff);
-    idx = (ch - 0xA1) * 94 + (ch2 - 0xA1);
-    if (idx >= 3854){
-    // Hanja : row 42 - row 93 : 3854 = 94 * (42-1)
-    hchar value = ksc5601_2uni_page21[idx - 3854];
-    return value ? value : '?';
+    unsigned char ch2 = sal::static_int_cast<unsigned char>(input & 0xff);
+    int idx = (ch - 0xA1) * 94 + (ch2 - 0xA1);
+    if (idx >= 3854 && idx < static_cast<int>(3854 + SAL_N_ELEMENTS(ksc5601_2uni_page21))) {
+        // Hanja : row 42 - row 93 : 3854 = 94 * (42-1)
+        hchar value = ksc5601_2uni_page21[idx - 3854];
+        return value ? value : '?';
     }
     return '?';
 }
@@ -1217,6 +1209,8 @@ hchar_string hstr2ucsstr(hchar const* hstr)
 hchar_string kstr2hstr(unsigned char const* src)
 {
     hchar_string ret;
+    if (!src)
+        return ret;
     for (unsigned int i = 0; src[i] != '\0' ; i++)
     {
         if ( src[i] < 127 )
@@ -1248,7 +1242,7 @@ char *hcolor2str(uchar color, uchar shade, char *buf, bool bIsChar)
 {
     unsigned short red,green,blue;
 
-    switch( (int)color )
+    switch( static_cast<int>(color) )
     {
         case 0 :                                  // black
             red =  0xff * (100 - shade ) /100;
@@ -1304,7 +1298,7 @@ char *hcolor2str(uchar color, uchar shade, char *buf, bool bIsChar)
 ::std::string urltounix(const char *src)
 {
     ::std::string ret;
-    unsigned int i = 0;
+    std::size_t i = 0;
     if( src[0] == 'C' && src[1] == ':' && src[2] == '\\' ) // Home Dir
     {
         ret.append("file://");
@@ -1325,7 +1319,7 @@ char *hcolor2str(uchar color, uchar shade, char *buf, bool bIsChar)
     {
         // nothing special here, just copy
     }
-     else
+    else
     {
         unsigned int srclen = strlen(src);
         if (3 < srclen)
@@ -1377,7 +1371,7 @@ char *hcolor2str(uchar color, uchar shade, char *buf, bool bIsChar)
             }
         }
     }
-    for (unsigned int i = 0; i < strlen(src); i++)
+    for (size_t i = 0; i < strlen(src); i++)
     {
         if (src[i] == '\\') {
             ret.push_back('/');

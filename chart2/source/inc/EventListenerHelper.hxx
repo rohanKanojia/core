@@ -19,13 +19,11 @@
 #ifndef INCLUDED_CHART2_SOURCE_INC_EVENTLISTENERHELPER_HXX
 #define INCLUDED_CHART2_SOURCE_INC_EVENTLISTENERHELPER_HXX
 
-#include <com/sun/star/lang/XEventListener.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
 
-#include <list>
 #include <algorithm>
-#include <functional>
-#include <utility>
+
+namespace com { namespace sun { namespace star { namespace lang { class XEventListener; } } } }
 
 namespace chart
 {
@@ -36,7 +34,7 @@ namespace impl
 {
 
 template< class InterfaceRef >
-struct addListenerFunctor : public ::std::unary_function< InterfaceRef, void >
+struct addListenerFunctor
 {
     explicit addListenerFunctor( const css::uno::Reference< css::lang::XEventListener > & xListener ) :
             m_xListener( xListener )
@@ -54,7 +52,7 @@ private:
 };
 
 template< class InterfaceRef >
-struct removeListenerFunctor : public ::std::unary_function< InterfaceRef, void >
+struct removeListenerFunctor
 {
     explicit removeListenerFunctor( const css::uno::Reference<  css::lang::XEventListener > & xListener ) :
             m_xListener( xListener )
@@ -91,7 +89,7 @@ void addListenerToAllElements(
     const css::uno::Reference< css::lang::XEventListener > & xListener )
 {
     if( xListener.is())
-        ::std::for_each( rContainer.begin(), rContainer.end(),
+        std::for_each( rContainer.begin(), rContainer.end(),
                          impl::addListenerFunctor< typename Container::value_type >( xListener ));
 }
 
@@ -113,7 +111,7 @@ void removeListenerFromAllElements(
     const css::uno::Reference< css::lang::XEventListener > & xListener )
 {
     if( xListener.is())
-        ::std::for_each( rContainer.begin(), rContainer.end(),
+        std::for_each( rContainer.begin(), rContainer.end(),
                          impl::removeListenerFunctor< typename Container::value_type >( xListener ));
 }
 

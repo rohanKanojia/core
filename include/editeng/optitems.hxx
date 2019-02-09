@@ -20,41 +20,7 @@
 #define INCLUDED_EDITENG_OPTITEMS_HXX
 
 #include <svl/poolitem.hxx>
-#include <com/sun/star/uno/Reference.hxx>
 #include <editeng/editengdllapi.h>
-
-// forward ---------------------------------------------------------------
-namespace com { namespace sun { namespace star {
-namespace linguistic2{
-    class XSpellChecker1;
-}}}}
-
-
-// class SfxSpellCheckItem -----------------------------------------------
-
-class EDITENG_DLLPUBLIC SfxSpellCheckItem: public SfxPoolItem
-{
-public:
-
-    SfxSpellCheckItem( css::uno::Reference<
-                            css::linguistic2::XSpellChecker1 >  &xChecker,
-                       sal_uInt16 nWhich  );
-    SfxSpellCheckItem( const SfxSpellCheckItem& rItem );
-
-    virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
-
-    virtual SfxPoolItem*    Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual bool            operator==( const SfxPoolItem& ) const override;
-
-    const css::uno::Reference< css::linguistic2::XSpellChecker1 >&
-            GetXSpellChecker() const { return xSpellCheck; }
-
-private:
-    css::uno::Reference< css::linguistic2::XSpellChecker1 >   xSpellCheck;
-};
 
 
 // class SfxHyphenRegionItem ---------------------------------------------
@@ -67,30 +33,20 @@ class EDITENG_DLLPUBLIC SfxHyphenRegionItem: public SfxPoolItem
 public:
 
     SfxHyphenRegionItem( const sal_uInt16 nId  );
-    SfxHyphenRegionItem( const SfxHyphenRegionItem& rItem );
 
     virtual bool             operator==( const SfxPoolItem& ) const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText, const IntlWrapper& ) const override;
 
     virtual SfxPoolItem*     Clone( SfxItemPool *pPool = nullptr ) const override;
-    virtual SfxPoolItem*     Create( SvStream& rStrm, sal_uInt16 nVer ) const override;
-    virtual SvStream&        Store( SvStream& rStrm, sal_uInt16 ) const override;
 
-    inline sal_uInt8 &GetMinLead() { return nMinLead; }
-    inline sal_uInt8 GetMinLead() const { return nMinLead; }
+    sal_uInt8 &GetMinLead() { return nMinLead; }
+    sal_uInt8 GetMinLead() const { return nMinLead; }
 
-    inline sal_uInt8 &GetMinTrail() { return nMinTrail; }
-    inline sal_uInt8 GetMinTrail() const { return nMinTrail; }
-
-    inline SfxHyphenRegionItem& operator=( const SfxHyphenRegionItem& rNew )
-    {
-        nMinLead = rNew.GetMinLead();
-        nMinTrail = rNew.GetMinTrail();
-        return *this;
-    }
+    sal_uInt8 &GetMinTrail() { return nMinTrail; }
+    sal_uInt8 GetMinTrail() const { return nMinTrail; }
 };
 
 #endif

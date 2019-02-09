@@ -38,8 +38,6 @@ ifeq "$(DEBUG)" "yes"
 JAVAC_FLAGS+=-g
 endif
 
-JAVABIN=bin
-
 ###########################################################################
 #
 # Windows specific settings
@@ -113,8 +111,14 @@ SDK_JAVA_INCLUDES = -I"$(OO_SDK_JAVA_HOME)/include" -I"$(OO_SDK_JAVA_HOME)/inclu
 # define for used compiler necessary for UNO
 # -DCPPU_ENV=msci -- windows msvc 4.x - 7.x
 
-CC_DEFINES_JNI=-DWIN32 -DWNT -D_DLL -DCPPU_ENV=msci
-CC_DEFINES=-DWIN32 -DWNT -D_DLL -DCPPU_ENV=msci
+ifeq "$(PROCTYPE)" "x86_64"
+CPPU_ENV=mscx
+else
+CPPU_ENV=msci
+endif
+
+CC_DEFINES_JNI=-DWIN32 -DWNT -D_DLL -DCPPU_ENV=$(CPPU_ENV)
+CC_DEFINES=-DWIN32 -DWNT -D_DLL -DCPPU_ENV=$(CPPU_ENV)
 CC_OUTPUT_SWITCH=-Fo
 
 LIBO_SDK_LDFLAGS_STDLIBS = $(LIBO_SDK_DETAIL_LDFLAGS_MSVCRT) kernel32.lib
@@ -215,7 +219,7 @@ SDK_JAVA_INCLUDES = -I"$(OO_SDK_JAVA_HOME)/include" -I"$(OO_SDK_JAVA_HOME)/inclu
 # define for used compiler necessary for UNO
 
 CC_DEFINES_JNI=-DUNX -DSOLARIS -DCPPU_ENV=$(CPPU_ENV) -DGCC
-CC_DEFINES=-DUNX -DSOLARIS -DSPARC -DCPPU_ENV=$(CPPU_ENV)  -DHAVE_GCC_VISIBILITY_FEATURE -DGCC
+CC_DEFINES=-DUNX -DSOLARIS -DSPARC -DCPPU_ENV=$(CPPU_ENV) -DGCC
 CC_OUTPUT_SWITCH=-o 
 
 LIBO_SDK_LDFLAGS_STDLIBS =
@@ -269,6 +273,35 @@ endif
 
 ifeq "$(PROCTYPE)" "powerpc64"
 JAVA_PROC_TYPE=ppc64
+endif
+
+ifeq "$(PROCTYPE)" "powerpc64_le"
+JAVA_PROC_TYPE=ppc64le
+endif
+
+ifeq "$(PROCTYPE)" "arm_eabi"
+JAVA_PROC_TYPE=arm
+endif
+
+ifeq "$(PROCTYPE)" "arm_oabi"
+JAVA_PROC_TYPE=arm
+endif
+
+ifeq "$(PROCTYPE)" "mips_eb"
+JAVA_PROC_TYPE=mips
+endif
+
+ifeq "$(PROCTYPE)" "mips_el"
+JAVA_PROC_TYPE=mipsel
+endif
+
+ifeq "$(PROCTYPE)" "mips64_el"
+JAVA_PROC_TYPE=mips64el
+endif
+
+ifeq "$(PROCTYPE)" "sparc64"
+UNOPKG_PLATFORM=Linux_SPARC64
+JAVA_PROC_TYPE=sparcv9
 endif
 
 OS=LINUX
@@ -325,10 +358,14 @@ ifeq "$(PROCTYPE)" "powerpc"
 CC_FLAGS+=-fPIC
 endif
 
+ifeq "$(PROCTYPE)" "x86"
+CC_FLAGS+=-m32
+endif
+
 SDK_JAVA_INCLUDES = -I"$(OO_SDK_JAVA_HOME)/include" -I"$(OO_SDK_JAVA_HOME)/include/linux"
 CC_INCLUDES=-I. -I$(OUT)/inc -I$(OUT)/inc/examples -I$(PRJ)/include
 CC_DEFINES_JNI=-DUNX -DGCC -DLINUX -DCPPU_ENV=$(CPPU_ENV)
-CC_DEFINES=-DUNX -DGCC -DLINUX -DCPPU_ENV=$(CPPU_ENV) -DHAVE_GCC_VISIBILITY_FEATURE
+CC_DEFINES=-DUNX -DGCC -DLINUX -DCPPU_ENV=$(CPPU_ENV)
 
 CC_OUTPUT_SWITCH=-o
 
@@ -339,11 +376,21 @@ LIBRARY_LINK_FLAGS=-shared -Wl,-z,origin '-Wl,-rpath,$$ORIGIN'
 ifeq "$(PROCTYPE)" "powerpc"
 LIBRARY_LINK_FLAGS+=-fPIC
 endif
+
+ifeq "$(PROCTYPE)" "x86"
+LIBRARY_LINK_FLAGS+=-m32
+endif
+
 COMP_LINK_FLAGS=$(LIBRARY_LINK_FLAGS)
 
 EXE_LINK_FLAGS=-Wl,--allow-shlib-undefined -Wl,-export-dynamic -Wl,-z,defs -Wl,--no-whole-archive
+
+ifeq "$(PROCTYPE)" "x86"
+EXE_LINK_FLAGS+=-m32
+endif
+
 LINK_LIBS=-L"$(OUT)/lib" -L"$(OO_SDK_HOME)/lib" -L"$(OO_SDK_URE_LIB_DIR)"
-LINK_JAVA_LIBS=-L"$(OO_SDK_JAVA_HOME)/jre/lib/$(JAVA_PROC_TYPE)"
+LINK_JAVA_LIBS=-L"$(OO_SDK_JAVA_HOME)/jre/lib/$(JAVA_PROC_TYPE)" -L"$(OO_SDK_JAVA_HOME)/lib"
 
 URE_MISC=$(OFFICE_PROGRAM_PATH)
 
@@ -357,7 +404,6 @@ endif
 ifeq "$(PLATFORM)" "macosx"
 
 UNOPKG_PLATFORM=MacOSX_x86_64
-JAVABIN=Commands
 
 OS=MACOSX
 PS=/
@@ -414,7 +460,7 @@ CC_FLAGS=-c -fPIC -fno-common $(GCC_ARCH_OPTION) -fvisibility=hidden $(OPT_FLAGS
 SDK_JAVA_INCLUDES = -I/System/Library/Frameworks/JavaVM.framework/Versions/Current/Headers -I/System/Library/Frameworks/JavaVM.framework/Headers
 CC_INCLUDES=-I. -I$(OUT)/inc -I$(OUT)/inc/examples -I$(PRJ)/include
 CC_DEFINES_JNI=-DUNX -DGCC -DMACOSX -DCPPU_ENV=$(CPPU_ENV)
-CC_DEFINES=-DUNX -DGCC -DMACOSX -DCPPU_ENV=$(CPPU_ENV) -DHAVE_GCC_VISIBILITY_FEATURE
+CC_DEFINES=-DUNX -DGCC -DMACOSX -DCPPU_ENV=$(CPPU_ENV)
 
 CC_OUTPUT_SWITCH=-o
 
@@ -520,7 +566,7 @@ CC_FLAGS=-c -g -fPIC -DPIC $(PTHREAD_CFLAGS) -fvisibility=hidden $(OPT_FLAGS)
 SDK_JAVA_INCLUDES = -I"$(OO_SDK_JAVA_HOME)/include" -I"$(OO_SDK_JAVA_HOME)/include/freebsd"
 CC_INCLUDES=-I. -I$(OUT)/inc -I$(OUT)/inc/examples -I$(PRJ)/include
 CC_DEFINES_JNI=-DUNX -DGCC -DFREEBSD -DCPPU_ENV=$(CPPU_ENV)
-CC_DEFINES=-DUNX -DGCC -DFREEBSD -DCPPU_ENV=$(CPPU_ENV) -DHAVE_GCC_VISIBILITY_FEATURE
+CC_DEFINES=-DUNX -DGCC -DFREEBSD -DCPPU_ENV=$(CPPU_ENV)
 
 CC_OUTPUT_SWITCH=-o
 

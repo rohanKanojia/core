@@ -20,24 +20,20 @@
 #ifndef INCLUDED_SD_SOURCE_UI_FRAMEWORK_MODULE_VIEWTABBARMODULE_HXX
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_MODULE_VIEWTABBARMODULE_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 
 #include <com/sun/star/drawing/framework/XConfigurationChangeListener.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/XTabBar.hpp>
-#include <com/sun/star/frame/XController.hpp>
-#include <osl/mutex.hxx>
 #include <cppuhelper/compbase.hxx>
 
-namespace {
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationController; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XTabBar; } } } } }
+namespace com { namespace sun { namespace star { namespace frame { class XController; } } } }
+
+namespace sd { namespace framework {
 
 typedef ::cppu::WeakComponentImplHelper <
     css::drawing::framework::XConfigurationChangeListener
     > ViewTabBarModuleInterfaceBase;
-
-} // end of anonymous namespace.
-
-namespace sd { namespace framework {
 
 /** This module is responsible for showing the ViewTabBar above the view in
     the center pane.
@@ -59,21 +55,19 @@ public:
         const css::uno::Reference<css::frame::XController>& rxController,
         const css::uno::Reference<
             css::drawing::framework::XResourceId>& rxViewTabBarId);
-    virtual ~ViewTabBarModule();
+    virtual ~ViewTabBarModule() override;
 
     virtual void SAL_CALL disposing() override;
 
     // XConfigurationChangeListener
 
     virtual void SAL_CALL notifyConfigurationChange (
-        const css::drawing::framework::ConfigurationChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::drawing::framework::ConfigurationChangeEvent& rEvent) override;
 
     // XEventListener
 
     virtual void SAL_CALL disposing (
-        const css::lang::EventObject& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::lang::EventObject& rEvent) override;
 
 private:
     css::uno::Reference<

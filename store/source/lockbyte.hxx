@@ -20,23 +20,23 @@
 #ifndef INCLUDED_STORE_SOURCE_LOCKBYTE_HXX
 #define INCLUDED_STORE_SOURCE_LOCKBYTE_HXX
 
-#include "sal/types.h"
+#include <sal/config.h>
 
-#include "rtl/ref.hxx"
-#include "rtl/ustring.h"
-#include "salhelper/simplereferenceobject.hxx"
+#include <memory>
 
-#include "store/types.h"
+#include <sal/types.h>
+
+#include <rtl/ustring.h>
+#include <salhelper/simplereferenceobject.hxx>
+
+#include <store/types.h>
 #include "storbase.hxx"
+
+namespace rtl { template <class reference_type> class Reference; }
 
 namespace store
 {
 
-/*========================================================================
- *
- * ILockBytes interface.
- *
- *======================================================================*/
 class ILockBytes : public virtual salhelper::SimpleReferenceObject
 {
 public:
@@ -53,7 +53,7 @@ public:
         @param  nOffset [in]
      */
     storeError readPageAt (
-        PageHolder & rPage,
+        std::shared_ptr<PageData> & rPage,
         sal_uInt32   nOffset);
 
     /**
@@ -61,7 +61,7 @@ public:
         @param  nOffset [in]
      */
     storeError writePageAt (
-        PageHolder const & rPage,
+        std::shared_ptr<PageData> const & rPage,
         sal_uInt32         nOffset);
 
     /**
@@ -104,7 +104,7 @@ public:
     storeError flush();
 
 protected:
-    virtual ~ILockBytes() {}
+    virtual ~ILockBytes() override {}
 
 private:
     /** Implementation (abstract).
@@ -114,11 +114,11 @@ private:
         sal_uInt16                              nPageSize) = 0;
 
     virtual storeError readPageAt_Impl (
-        PageHolder & rPage,
+        std::shared_ptr<PageData> & rPage,
         sal_uInt32   nOffset) = 0;
 
     virtual storeError writePageAt_Impl (
-        PageHolder const & rPage,
+        std::shared_ptr<PageData> const & rPage,
         sal_uInt32         nOffset) = 0;
 
     virtual storeError readAt_Impl (
@@ -140,29 +140,15 @@ private:
     virtual storeError flush_Impl() = 0;
 };
 
-/*========================================================================
- *
- * ILockBytes factories.
- *
- *======================================================================*/
-
-storeError
-FileLockBytes_createInstance (
+storeError FileLockBytes_createInstance (
   rtl::Reference< store::ILockBytes > & rxLockBytes,
   rtl_uString *   pFilename,
   storeAccessMode eAccessMode
 );
 
-storeError
-MemoryLockBytes_createInstance (
+storeError MemoryLockBytes_createInstance (
   rtl::Reference< store::ILockBytes > & rxLockBytes
 );
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 } // namespace store
 

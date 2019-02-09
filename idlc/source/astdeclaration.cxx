@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/astdeclaration.hxx>
-#include <idlc/astscope.hxx>
+#include <astdeclaration.hxx>
+#include <astscope.hxx>
 #include <rtl/strbuf.hxx>
 #include <osl/diagnose.h>
 
-static OString sGlobal("::");
+static const OString sGlobal("::");
 
 static OString convertName(const OString& name)
 {

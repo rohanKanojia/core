@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <string.h>
 
 #include <toolkit/awt/vclxfont.hxx>
@@ -27,6 +28,7 @@
 #include <rtl/uuid.h>
 #include <rtl/ustring.h>
 
+#include <vcl/metric.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/svapp.hxx>
 
@@ -40,15 +42,13 @@ VCLXFont::VCLXFont()
 
 VCLXFont::~VCLXFont()
 {
-    delete mpFontMetric;
 }
 
 void VCLXFont::Init( css::awt::XDevice& rxDev, const vcl::Font& rFont )
 {
     mxDevice = &rxDev;
 
-    delete mpFontMetric;
-    mpFontMetric = nullptr;
+    mpFontMetric.reset();
 
     maFont = rFont;
 }
@@ -62,7 +62,7 @@ bool VCLXFont::ImplAssertValidFontMetric()
         {
             vcl::Font aOldFont = pOutDev->GetFont();
             pOutDev->SetFont( maFont );
-            mpFontMetric = new FontMetric( pOutDev->GetFontMetric() );
+            mpFontMetric.reset( new FontMetric( pOutDev->GetFontMetric() ) );
             pOutDev->SetFont( aOldFont );
         }
     }
@@ -71,13 +71,13 @@ bool VCLXFont::ImplAssertValidFontMetric()
 
 
 // css::uno::XInterface
-css::uno::Any VCLXFont::queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Any VCLXFont::queryInterface( const css::uno::Type & rType )
 {
     css::uno::Any aRet = ::cppu::queryInterface( rType,
-                                        (static_cast< css::awt::XFont* >(this)),
-                                        (static_cast< css::awt::XFont2* >(this)),
-                                        (static_cast< css::lang::XUnoTunnel* >(this)),
-                                        (static_cast< css::lang::XTypeProvider* >(this)) );
+                                        static_cast< css::awt::XFont* >(this),
+                                        static_cast< css::awt::XFont2* >(this),
+                                        static_cast< css::lang::XUnoTunnel* >(this),
+                                        static_cast< css::lang::XTypeProvider* >(this) );
     return (aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType ));
 }
 
@@ -90,7 +90,7 @@ IMPL_XTYPEPROVIDER_START( VCLXFont )
 IMPL_XTYPEPROVIDER_END
 
 
-css::awt::FontDescriptor VCLXFont::getFontDescriptor(  ) throw(css::uno::RuntimeException, std::exception)
+css::awt::FontDescriptor VCLXFont::getFontDescriptor(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -98,7 +98,7 @@ css::awt::FontDescriptor VCLXFont::getFontDescriptor(  ) throw(css::uno::Runtime
 
 }
 
-css::awt::SimpleFontMetric VCLXFont::getFontMetric(  ) throw(css::uno::RuntimeException, std::exception)
+css::awt::SimpleFontMetric VCLXFont::getFontMetric(  )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -108,7 +108,7 @@ css::awt::SimpleFontMetric VCLXFont::getFontMetric(  ) throw(css::uno::RuntimeEx
     return aFM;
 }
 
-sal_Int16 VCLXFont::getCharWidth( sal_Unicode c ) throw(css::uno::RuntimeException, std::exception)
+sal_Int16 VCLXFont::getCharWidth( sal_Unicode c )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -127,7 +127,7 @@ sal_Int16 VCLXFont::getCharWidth( sal_Unicode c ) throw(css::uno::RuntimeExcepti
     return nRet;
 }
 
-css::uno::Sequence< sal_Int16 > VCLXFont::getCharWidths( sal_Unicode nFirst, sal_Unicode nLast ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence< sal_Int16 > VCLXFont::getCharWidths( sal_Unicode nFirst, sal_Unicode nLast )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -152,7 +152,7 @@ css::uno::Sequence< sal_Int16 > VCLXFont::getCharWidths( sal_Unicode nFirst, sal
     return aSeq;
 }
 
-sal_Int32 VCLXFont::getStringWidth( const OUString& str ) throw(css::uno::RuntimeException, std::exception)
+sal_Int32 VCLXFont::getStringWidth( const OUString& str )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -168,7 +168,7 @@ sal_Int32 VCLXFont::getStringWidth( const OUString& str ) throw(css::uno::Runtim
     return nRet;
 }
 
-sal_Int32 VCLXFont::getStringWidthArray( const OUString& str, css::uno::Sequence< sal_Int32 >& rDXArray ) throw(css::uno::RuntimeException, std::exception)
+sal_Int32 VCLXFont::getStringWidthArray( const OUString& str, css::uno::Sequence< sal_Int32 >& rDXArray )
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
 
@@ -190,14 +190,13 @@ sal_Int32 VCLXFont::getStringWidthArray( const OUString& str, css::uno::Sequence
     return nRet;
 }
 
-void VCLXFont::getKernPairs( css::uno::Sequence< sal_Unicode >& /*rnChars1*/, css::uno::Sequence< sal_Unicode >& /*rnChars2*/, css::uno::Sequence< sal_Int16 >& /*rnKerns*/ ) throw(css::uno::RuntimeException, std::exception)
+void VCLXFont::getKernPairs( css::uno::Sequence< sal_Unicode >& /*rnChars1*/, css::uno::Sequence< sal_Unicode >& /*rnChars2*/, css::uno::Sequence< sal_Int16 >& /*rnKerns*/ )
 {
     // NOTE: this empty method is just used for keeping the related UNO-API stable
 }
 
 // css::awt::XFont2
 sal_Bool VCLXFont::hasGlyphs( const OUString& aText )
-    throw(css::uno::RuntimeException, std::exception)
 {
     ::osl::Guard< ::osl::Mutex > aGuard( GetMutex() );
     SolarMutexGuard aSolarGuard;
@@ -205,14 +204,13 @@ sal_Bool VCLXFont::hasGlyphs( const OUString& aText )
     OutputDevice* pOutDev = VCLUnoHelper::GetOutputDevice( mxDevice );
     if ( pOutDev )
     {
-        OUString aStr( aText );
-        if ( pOutDev->HasGlyphs( maFont, aStr ) == -1 )
+        if ( pOutDev->HasGlyphs( maFont, aText ) == -1 )
         {
-            return sal_True;
+            return true;
         }
     }
 
-    return sal_False;
+    return false;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

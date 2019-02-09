@@ -7,30 +7,29 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "columniterator.hxx"
-#include "column.hxx"
-#include "document.hxx"
-#include "table.hxx"
+#include <columniterator.hxx>
+#include <column.hxx>
+#include <document.hxx>
+#include <table.hxx>
 
 #include <osl/diagnose.h>
 
 ScColumnTextWidthIterator::ScColumnTextWidthIterator(ScColumn& rCol, SCROW nStartRow, SCROW nEndRow) :
-    mrCellTextAttrs(rCol.maCellTextAttrs),
     mnEnd(static_cast<size_t>(nEndRow)),
-    mnCurPos(0),
-    miBlockCur(mrCellTextAttrs.begin()),
-    miBlockEnd(mrCellTextAttrs.end())
+    mnCurPos(0)
 {
+    miBlockCur = rCol.maCellTextAttrs.begin();
+    miBlockEnd = rCol.maCellTextAttrs.end();
     init(nStartRow, nEndRow);
 }
 
 ScColumnTextWidthIterator::ScColumnTextWidthIterator(ScDocument& rDoc, const ScAddress& rStartPos, SCROW nEndRow) :
-    mrCellTextAttrs(rDoc.maTabs[rStartPos.Tab()]->aCol[rStartPos.Col()].maCellTextAttrs),
     mnEnd(static_cast<size_t>(nEndRow)),
-    mnCurPos(0),
-    miBlockCur(mrCellTextAttrs.begin()),
-    miBlockEnd(mrCellTextAttrs.end())
+    mnCurPos(0)
 {
+    auto & rCellTextAttrs = rDoc.maTabs[rStartPos.Tab()]->aCol[rStartPos.Col()].maCellTextAttrs;
+    miBlockCur = rCellTextAttrs.begin();
+    miBlockEnd = rCellTextAttrs.end();
     init(rStartPos.Row(), nEndRow);
 }
 
@@ -41,7 +40,7 @@ void ScColumnTextWidthIterator::next()
 
     if (miDataCur != miDataEnd)
     {
-        // Stil in the same block. We're good.
+        // Still in the same block. We're good.
         checkEndRow();
         return;
     }
@@ -62,7 +61,7 @@ void ScColumnTextWidthIterator::next()
     }
 
     // Reached the end.
-    OSL_ASSERT(miBlockCur == miBlockEnd);
+    assert(miBlockCur == miBlockEnd);
 }
 
 bool ScColumnTextWidthIterator::hasCell() const
@@ -72,19 +71,19 @@ bool ScColumnTextWidthIterator::hasCell() const
 
 SCROW ScColumnTextWidthIterator::getPos() const
 {
-    OSL_ASSERT(miBlockCur != miBlockEnd && miDataCur != miDataEnd);
+    assert(miBlockCur != miBlockEnd && miDataCur != miDataEnd);
     return static_cast<SCROW>(mnCurPos);
 }
 
 sal_uInt16 ScColumnTextWidthIterator::getValue() const
 {
-    OSL_ASSERT(miBlockCur != miBlockEnd && miDataCur != miDataEnd);
+    assert(miBlockCur != miBlockEnd && miDataCur != miDataEnd);
     return miDataCur->mnTextWidth;
 }
 
 void ScColumnTextWidthIterator::setValue(sal_uInt16 nVal)
 {
-    OSL_ASSERT(miBlockCur != miBlockEnd && miDataCur != miDataEnd);
+    assert(miBlockCur != miBlockEnd && miDataCur != miDataEnd);
     miDataCur->mnTextWidth = nVal;
 }
 
@@ -141,7 +140,7 @@ void ScColumnTextWidthIterator::init(SCROW nStartRow, SCROW nEndRow)
     }
 
     // Not found.
-    OSL_ASSERT(miBlockCur == miBlockEnd);
+    assert(miBlockCur == miBlockEnd);
 }
 
 void ScColumnTextWidthIterator::getDataIterators(size_t nOffsetInBlock)
@@ -166,6 +165,47 @@ void ScColumnTextWidthIterator::checkEndRow()
 
     // We're below the end position. End the iteration.
     miBlockCur = miBlockEnd;
+}
+
+namespace sc {
+
+ColumnIterator::ColumnIterator( const CellStoreType& rCells, SCROW nRow1, SCROW nRow2 ) :
+    maPos(rCells.position(nRow1)),
+    maPosEnd(rCells.position(maPos.first, nRow2)),
+    mbComplete(false)
+{
+}
+
+ColumnIterator::~ColumnIterator() {}
+
+void ColumnIterator::next()
+{
+    if ( maPos == maPosEnd)
+        mbComplete = true;
+    else
+        maPos = CellStoreType::next_position(maPos);
+}
+
+SCROW ColumnIterator::getRow() const
+{
+    return CellStoreType::logical_position(maPos);
+}
+
+bool ColumnIterator::hasCell() const
+{
+    return !mbComplete;
+}
+
+mdds::mtv::element_t ColumnIterator::getType() const
+{
+    return maPos.first->type;
+}
+
+ScRefCellValue ColumnIterator::getCell() const
+{
+    return toRefCell(maPos.first, maPos.second);
+}
+
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

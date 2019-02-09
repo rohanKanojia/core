@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "doc.hxx"
-#include "frmtool.hxx"
-#include "hints.hxx"
+#include <doc.hxx>
+#include <frmtool.hxx>
+#include <hints.hxx>
 #include <fmtornt.hxx>
-#include "rootfrm.hxx"
-#include "txtfrm.hxx"
-#include "flyfrms.hxx"
+#include <rootfrm.hxx>
+#include <txtfrm.hxx>
+#include <flyfrms.hxx>
 #include <dflyobj.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentDrawModelAccess.hxx>
@@ -31,12 +31,12 @@
 SwFlyInContentFrame::SwFlyInContentFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch ) :
     SwFlyFrame( pFormat, pSib, pAnch )
 {
-    m_bInCnt = bInvalidLayout = bInvalidContent = true;
+    m_bInCnt = true;
     SwTwips nRel = pFormat->GetVertOrient().GetPos();
     // OD 2004-05-27 #i26791# - member <aRelPos> moved to <SwAnchoredObject>
     Point aRelPos;
     if( pAnch && pAnch->IsVertical() )
-        aRelPos.setX(pAnch->IsReverse() ? nRel : -nRel);
+        aRelPos.setX(-nRel);
     else
         aRelPos.setY(nRel);
     SetCurrRelPos( aRelPos );
@@ -65,24 +65,29 @@ void SwFlyInContentFrame::SetRefPoint( const Point& rPoint,
 {
     // OD 2004-05-27 #i26791# - member <aRelPos> moved to <SwAnchoredObject>
     OSL_ENSURE( rPoint != aRef || rRelAttr != GetCurrRelPos(), "SetRefPoint: no change" );
-    SwFlyNotify *pNotify = nullptr;
+    std::unique_ptr<SwFlyNotify> pNotify;
     // No notify at a locked fly frame, if a fly frame is locked, there's
     // already a SwFlyNotify object on the stack (MakeAll).
     if( !IsLocked() )
-        pNotify = new SwFlyNotify( this );
+        pNotify.reset(new SwFlyNotify( this ));
     aRef = rPoint;
     SetCurrRelPos( rRelAttr );
-    SWRECTFN( GetAnchorFrame() )
-    (Frame().*fnRect->fnSetPos)( rPoint + rRelPos );
+    SwRectFnSet aRectFnSet(GetAnchorFrame());
+
+    {
+        SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+        aRectFnSet.SetPos( aFrm, rPoint + rRelPos );
+    }
+
     // #i68520#
     InvalidateObjRectWithSpaces();
     if( pNotify )
     {
         InvalidatePage();
-        mbValidPos = false;
+        setFrameAreaPositionValid(false);
         m_bInvalid  = true;
         Calc(getRootFrame()->GetCurrShell()->GetOut());
-        delete pNotify;
+        pNotify.reset();
     }
 }
 
@@ -130,7 +135,7 @@ void SwFlyInContentFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem *pN
 /// Here the content gets formatted initially.
 void SwFlyInContentFrame::Format( vcl::RenderContext* pRenderContext, const SwBorderAttrs *pAttrs )
 {
-    if ( !Frame().Height() )
+    if ( !getFrameArea().Height() )
     {
         Lock(); //don't format the anchor on the crook.
         SwContentFrame *pContent = ContainsContent();
@@ -150,19 +155,16 @@ void SwFlyInContentFrame::Format( vcl::RenderContext* pRenderContext, const SwBo
  **/
 void SwFlyInContentFrame::MakeObjPos()
 {
-    if ( !mbValidPos )
+    if ( !isFrameAreaPositionValid() )
     {
-        mbValidPos = true;
+        setFrameAreaPositionValid(true);
         SwFlyFrameFormat *pFormat = GetFormat();
         const SwFormatVertOrient &rVert = pFormat->GetVertOrient();
         //Update the current values in the format if needed, during this we of
         //course must not send any Modify.
         const bool bVert = GetAnchorFrame()->IsVertical();
-        const bool bRev = GetAnchorFrame()->IsReverse();
         SwTwips nOld = rVert.GetPos();
         SwTwips nAct = bVert ? -GetCurrRelPos().X() : GetCurrRelPos().Y();
-        if( bRev )
-            nAct = -nAct;
         if( nAct != nOld )
         {
             SwFormatVertOrient aVert( rVert );
@@ -174,7 +176,7 @@ void SwFlyInContentFrame::MakeObjPos()
     }
 }
 
-void SwFlyInContentFrame::_ActionOnInvalidation( const InvalidationType _nInvalid )
+void SwFlyInContentFrame::ActionOnInvalidation( const InvalidationType _nInvalid )
 {
     if ( INVALID_POS == _nInvalid || INVALID_ALL == _nInvalid )
         AnchorFrame()->Prepare( PREP_FLY_ATTR_CHG, &GetFrameFormat() );
@@ -189,7 +191,7 @@ void SwFlyInContentFrame::NotifyBackground( SwPageFrame *, const SwRect& rRect,
         AnchorFrame()->Prepare( eHint, static_cast<void const *>(&rRect) );
 }
 
-const Point SwFlyInContentFrame::GetRelPos() const
+Point const & SwFlyInContentFrame::GetRelPos() const
 {
     Calc(getRootFrame()->GetCurrShell()->GetOut());
     return GetCurrRelPos();
@@ -222,26 +224,31 @@ void SwFlyInContentFrame::MakeAll(vcl::RenderContext* /*pRenderContext*/)
     const SwBorderAttrs &rAttrs = *aAccess.Get();
 
     if ( IsClipped() )
-        mbValidSize = m_bHeightClipped = m_bWidthClipped = false;
+    {
+        setFrameAreaSizeValid(false);
+        m_bHeightClipped = m_bWidthClipped = false;
+    }
 
-    while ( !mbValidPos || !mbValidSize || !mbValidPrtArea || !m_bValidContentPos )
+    while ( !isFrameAreaPositionValid() || !isFrameAreaSizeValid() || !isFramePrintAreaValid() || !m_bValidContentPos )
     {
         //Only stop, if the flag is set!!
-        if ( !mbValidSize )
+        if ( !isFrameAreaSizeValid() )
         {
-            mbValidPrtArea = false;
+            setFramePrintAreaValid(false);
         }
 
-        if ( !mbValidPrtArea )
+        if ( !isFramePrintAreaValid() )
         {
             MakePrtArea( rAttrs );
             m_bValidContentPos = false;
         }
 
-        if ( !mbValidSize )
+        if ( !isFrameAreaSizeValid() )
+        {
             Format( getRootFrame()->GetCurrShell()->GetOut(), &rAttrs );
+        }
 
-        if ( !mbValidPos )
+        if ( !isFrameAreaPositionValid() )
         {
             MakeObjPos();
         }
@@ -251,15 +258,17 @@ void SwFlyInContentFrame::MakeAll(vcl::RenderContext* /*pRenderContext*/)
 
         // re-activate clipping of as-character anchored Writer fly frames
         // depending on compatibility option <ClipAsCharacterAnchoredWriterFlyFrames>
-        if ( mbValidPos && mbValidSize &&
-             GetFormat()->getIDocumentSettingAccess().get( DocumentSettingId::CLIP_AS_CHARACTER_ANCHORED_WRITER_FLY_FRAME ) )
+        if ( isFrameAreaPositionValid() &&
+            isFrameAreaSizeValid() &&
+            GetFormat()->getIDocumentSettingAccess().get( DocumentSettingId::CLIP_AS_CHARACTER_ANCHORED_WRITER_FLY_FRAME ) )
         {
             SwFrame* pFrame = AnchorFrame();
-            if ( Frame().Left() == (pFrame->Frame().Left()+pFrame->Prt().Left()) &&
-                 Frame().Width() > pFrame->Prt().Width() )
+            if ( getFrameArea().Left() == (pFrame->getFrameArea().Left()+pFrame->getFramePrintArea().Left()) &&
+                 getFrameArea().Width() > pFrame->getFramePrintArea().Width() )
             {
-                Frame().Width( pFrame->Prt().Width() );
-                mbValidPrtArea = false;
+                SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                aFrm.Width( pFrame->getFramePrintArea().Width() );
+                setFramePrintAreaValid(false);
                 m_bWidthClipped = true;
             }
         }

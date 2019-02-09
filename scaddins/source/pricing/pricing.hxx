@@ -30,6 +30,7 @@
 
 #include <string.h>
 #include <vector>
+#include <memory>
 #include <com/sun/star/lang/XServiceName.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
@@ -37,145 +38,79 @@
 #include <com/sun/star/sheet/XCompatibilityNames.hpp>
 #include <com/sun/star/sheet/addin/XPricingFunctions.hpp>
 #include <cppuhelper/implbase.hxx>
-#include <tools/resid.hxx>
-#include <tools/rc.hxx>
-#include <tools/resary.hxx>
 
-#define RETURN_FINITE(d)    if( ::rtl::math::isFinite( d ) ) return d; else throw css::lang::IllegalArgumentException()
+#define RETURN_FINITE(d)    if( !::rtl::math::isFinite( d ) ) throw css::lang::IllegalArgumentException(); return d;
 
 
 namespace sca {
 namespace pricing {
 
-class ScaResId : public ResId
+enum class ScaCategory
 {
-public:
-                                ScaResId( sal_uInt16 nResId, ResMgr& rResMgr );
-};
-
-
-class ScaResStringLoader : public Resource
-{
-private:
-    OUString                    aStr;
-
-public:
-    inline                      ScaResStringLoader( sal_uInt16 nResId, sal_uInt16 nStrId, ResMgr& rResMgr );
-
-    inline const OUString&      GetString() const   { return aStr; }
-
-};
-
-
-inline ScaResStringLoader::ScaResStringLoader( sal_uInt16 nResId, sal_uInt16 nStrId, ResMgr& rResMgr ) :
-    Resource( ScaResId( nResId, rResMgr ) ),
-    aStr( ScaResId( nStrId, rResMgr ) )
-{
-    FreeResource();
-}
-
-
-class ScaResStringArrLoader : public Resource
-{
-private:
-    ResStringArray              aStrArray;
-
-public:
-    inline                      ScaResStringArrLoader( sal_uInt16 nResId, sal_uInt16 nArrayId, ResMgr& rResMgr );
-
-    inline const ResStringArray& GetStringArray() const { return aStrArray; }
-};
-
-inline ScaResStringArrLoader::ScaResStringArrLoader( sal_uInt16 nResId, sal_uInt16 nArrayId, ResMgr& rResMgr ) :
-    Resource( ScaResId( nResId, rResMgr ) ),
-    aStrArray( ScaResId( nArrayId, rResMgr ) )
-{
-    FreeResource();
-}
-
-
-class ScaResPublisher : public Resource
-{
-public:
-    explicit ScaResPublisher( const ScaResId& rResId ) : Resource( rResId ) {}
-
-    bool             IsAvailableRes( const ResId& rResId ) const
-                                    { return Resource::IsAvailableRes( rResId ); }
-    void                 FreeResource()
-                                    { Resource::FreeResource(); }
-};
-
-
-class ScaFuncRes : public Resource
-{
-public:
-                                ScaFuncRes( ResId& rResId, ResMgr& rResMgr, sal_uInt16 nIndex, OUString& rRet );
-};
-
-
-enum ScaCategory
-{
-    ScaCat_AddIn,
-    ScaCat_DateTime,
-    ScaCat_Text,
-    ScaCat_Finance,
-    ScaCat_Inf,
-    ScaCat_Math,
-    ScaCat_Tech
+    DateTime,
+    Text,
+    Finance,
+    Inf,
+    Math,
+    Tech
 };
 
 struct ScaFuncDataBase
 {
     const sal_Char*             pIntName;           // internal name (get***)
-    sal_uInt16                  nUINameID;          // resource ID to UI name
-    sal_uInt16                  nDescrID;           // resource ID to description, parameter names and ~ description
-    sal_uInt16                  nCompListID;        // resource ID to list of valid names
-    sal_uInt16                  nParamCount;        // number of named / described parameters
-    ScaCategory                 eCat;               // function category
-    bool                    bDouble;            // name already exist in Calc
-    bool                    bWithOpt;           // first parameter is internal
+    const char*                 pUINameID;          // resource ID to UI name
+    const char**                pDescrID;           // resource ID to description, parameter names and ~ description
+    // pCompName was originally meant to be able to load Excel documents that for
+    // some time were stored with localized function names.
+    // This is not relevant to this add-in, so we only supply the same
+    // (English) function names again.
+    // see also: GetExcelName() or GetCompNames() or getCompatibilityNames()
+    const char*                 pCompName;
+    sal_uInt16 const            nParamCount;        // number of named / described parameters
+    ScaCategory const           eCat;               // function category
+    bool const                  bDouble;            // name already exist in Calc
+    bool const                  bWithOpt;           // first parameter is internal
 };
 
-class ScaFuncData
+class ScaFuncData final
 {
 private:
-    OUString             aIntName;           // internal name (get***)
-    sal_uInt16                  nUINameID;          // resource ID to UI name
-    sal_uInt16                  nDescrID;           // leads also to parameter descriptions!
-    sal_uInt16                  nCompListID;        // resource ID to list of valid names
-    sal_uInt16                  nParamCount;        // num of parameters
-    std::vector<OUString>       aCompList;          // list of all valid names
-    ScaCategory                 eCat;               // function category
-    bool                    bDouble;            // name already exist in Calc
-    bool                    bWithOpt;           // first parameter is internal
+    OUString const          aIntName;           // internal name (get***)
+    const char*             pUINameID;          // resource ID to UI name
+    const char**            pDescrID;           // leads also to parameter descriptions!
+    sal_uInt16 const        nParamCount;        // num of parameters
+    std::vector<OUString>   aCompList;          // list of all valid names
+    ScaCategory const       eCat;               // function category
+    bool const              bDouble;            // name already exist in Calc
+    bool const              bWithOpt;           // first parameter is internal
 
 public:
-                                ScaFuncData( const ScaFuncDataBase& rBaseData, ResMgr& rRscMgr );
-    virtual                     ~ScaFuncData();
+    ScaFuncData(const ScaFuncDataBase& rBaseData);
+    ~ScaFuncData();
 
-    inline sal_uInt16           GetUINameID() const     { return nUINameID; }
-    inline sal_uInt16           GetDescrID() const      { return nDescrID; }
-    inline ScaCategory          GetCategory() const     { return eCat; }
-    inline bool                 IsDouble() const        { return bDouble; }
+    const char*          GetUINameID() const     { return pUINameID; }
+    const char**         GetDescrID() const      { return pDescrID; }
+    ScaCategory          GetCategory() const     { return eCat; }
+    bool                 IsDouble() const        { return bDouble; }
 
     sal_uInt16                  GetStrIndex( sal_uInt16 nParam ) const;
-    inline bool                 Is( const OUString& rCompare ) const
+    bool                 Is( const OUString& rCompare ) const
                                                     { return aIntName == rCompare; }
 
-    inline const std::vector<OUString>& GetCompNameList() const { return aCompList; }
+    const std::vector<OUString>& GetCompNameList() const { return aCompList; }
 };
 
 
 typedef std::vector<ScaFuncData> ScaFuncDataList;
 
-void InitScaFuncDataList ( ScaFuncDataList& rMap, ResMgr& rResMgr );
+void InitScaFuncDataList(ScaFuncDataList& rMap);
 
 // Predicate for use with std::find_if
 struct FindScaFuncData
 {
     const OUString& m_rId;
     explicit FindScaFuncData( const OUString& rId ) : m_rId(rId) {}
-    bool operator() ( ScaFuncData& rCandidate ) const { return rCandidate.Is(m_rId); }
+    bool operator() ( ScaFuncData const & rCandidate ) const { return rCandidate.Is(m_rId); }
 };
 
 } // namespace pricing
@@ -197,49 +132,50 @@ class ScaPricingAddIn : public ::cppu::WeakImplHelper<
 {
 private:
     css::lang::Locale  aFuncLoc;
-    css::lang::Locale* pDefLocales;
-    ResMgr*                     pResMgr;
-    sca::pricing::ScaFuncDataList*            pFuncDataList;
+    std::unique_ptr<css::lang::Locale[]> pDefLocales;
+    std::locale        aResLocale;
+    std::unique_ptr<sca::pricing::ScaFuncDataList> pFuncDataList;
 
 
     void                        InitDefLocales();
     const css::lang::Locale& GetLocale( sal_uInt32 nIndex );
-    ResMgr&                     GetResMgr() throw( css::uno::RuntimeException, std::exception );
     void                        InitData();
 
-    OUString             GetDisplFuncStr( sal_uInt16 nResId ) throw( css::uno::RuntimeException, std::exception );
-    OUString             GetFuncDescrStr( sal_uInt16 nResId, sal_uInt16 nStrIndex ) throw( css::uno::RuntimeException, std::exception );
+    /// @throws css::uno::RuntimeException
+    OUString             GetFuncDescrStr(const char** pResId, sal_uInt16 nStrIndex);
 
 public:
                                 ScaPricingAddIn();
-    virtual                     ~ScaPricingAddIn();
+    virtual                     ~ScaPricingAddIn() override;
+
+    OUString ScaResId(const char* pResId);
 
     static OUString      getImplementationName_Static();
     static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
 
                                 // XAddIn
-    virtual OUString SAL_CALL getProgrammaticFuntionName( const OUString& aDisplayName ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getDisplayFunctionName( const OUString& aProgrammaticName ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getFunctionDescription( const OUString& aProgrammaticName ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getDisplayArgumentName( const OUString& aProgrammaticName, sal_Int32 nArgument ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getArgumentDescription( const OUString& aProgrammaticName, sal_Int32 nArgument ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getProgrammaticCategoryName( const OUString& aProgrammaticName ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual OUString SAL_CALL getDisplayCategoryName( const OUString& aProgrammaticName ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getProgrammaticFuntionName( const OUString& aDisplayName ) override;
+    virtual OUString SAL_CALL getDisplayFunctionName( const OUString& aProgrammaticName ) override;
+    virtual OUString SAL_CALL getFunctionDescription( const OUString& aProgrammaticName ) override;
+    virtual OUString SAL_CALL getDisplayArgumentName( const OUString& aProgrammaticName, sal_Int32 nArgument ) override;
+    virtual OUString SAL_CALL getArgumentDescription( const OUString& aProgrammaticName, sal_Int32 nArgument ) override;
+    virtual OUString SAL_CALL getProgrammaticCategoryName( const OUString& aProgrammaticName ) override;
+    virtual OUString SAL_CALL getDisplayCategoryName( const OUString& aProgrammaticName ) override;
 
                                 // XCompatibilityNames
-    virtual css::uno::Sequence< css::sheet::LocalizedName > SAL_CALL getCompatibilityNames( const OUString& aProgrammaticName ) throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Sequence< css::sheet::LocalizedName > SAL_CALL getCompatibilityNames( const OUString& aProgrammaticName ) override;
 
                                 // XLocalizable
-    virtual void SAL_CALL       setLocale( const css::lang::Locale& eLocale ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::lang::Locale SAL_CALL getLocale() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL       setLocale( const css::lang::Locale& eLocale ) override;
+    virtual css::lang::Locale SAL_CALL getLocale() override;
 
                                 // XServiceName
-    virtual OUString SAL_CALL getServiceName() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getServiceName() override;
 
                                 // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName() throw( css::uno::RuntimeException, std::exception ) override;
-    virtual sal_Bool SAL_CALL   supportsService( const OUString& ServiceName ) throw( css::uno::RuntimeException, std::exception ) override;
-    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw( css::uno::RuntimeException, std::exception ) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL   supportsService( const OUString& ServiceName ) override;
+    virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
 
     //  methods from own interfaces start here
@@ -249,22 +185,22 @@ public:
             double r, double rf, double T, double strike,
             double barrier_low, double barrier_up, double rebate,
             const OUString& put_call, const OUString& in_out,
-            const OUString& continuous, const css::uno::Any& greek ) throw( css::uno::RuntimeException, css::lang::IllegalArgumentException, std::exception ) override;
+            const OUString& continuous, const css::uno::Any& greek ) override;
 
    virtual double SAL_CALL getOptTouch( double spot, double vol,
             double r, double rf, double T,
             double barrier_low, double barrier_up,
             const OUString& for_dom, const OUString& in_out,
-            const OUString& barriercont, const css::uno::Any& greekstr ) throw( css::uno::RuntimeException, css::lang::IllegalArgumentException, std::exception ) override;
+            const OUString& barriercont, const css::uno::Any& greekstr ) override;
 
    virtual double SAL_CALL getOptProbHit( double spot, double vol,
             double mu, double T,
-            double barrier_low, double barrier_up ) throw( css::uno::RuntimeException, css::lang::IllegalArgumentException, std::exception ) override;
+            double barrier_low, double barrier_up ) override;
 
    virtual double SAL_CALL getOptProbInMoney( double spot, double vol,
             double mu, double T,
             double barrier_low, double barrier_up,
-            const css::uno::Any& strikeval, const css::uno::Any& put_call ) throw( css::uno::RuntimeException, css::lang::IllegalArgumentException, std::exception ) override;
+            const css::uno::Any& strikeval, const css::uno::Any& put_call ) override;
 
 };
 

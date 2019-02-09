@@ -18,77 +18,64 @@
  */
 
 #include <tools/date.hxx>
+#include <tools/lineend.hxx>
 #include <tools/time.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/settings.hxx>
 #include <svl/itempool.hxx>
 #include <svl/itemset.hxx>
 #include <unotools/useroptions.hxx>
 #include <unotools/localedatawrapper.hxx>
-#include <comphelper/processfactory.hxx>
 #include <svx/svxids.hrc>
 
-#include <cuires.hrc>
 #include <svx/postattr.hxx>
-#include "postdlg.hxx"
-#include <dialmgr.hxx>
-
-#include "helpid.hrc"
+#include <postdlg.hxx>
 
 // class SvxPostItDialog -------------------------------------------------
 
-SvxPostItDialog::SvxPostItDialog(vcl::Window* pParent, const SfxItemSet& rCoreSet,
+SvxPostItDialog::SvxPostItDialog(weld::Window* pParent, const SfxItemSet& rCoreSet,
     bool bPrevNext)
-    : SfxModalDialog(pParent, "CommentDialog", "cui/ui/comment.ui")
-    , rSet(rCoreSet)
-    , pOutSet(nullptr)
+    : SfxDialogController(pParent, "cui/ui/comment.ui", "CommentDialog")
+    , m_rSet(rCoreSet)
+    , m_xLastEditFT(m_xBuilder->weld_label("lastedit"))
+    , m_xAltTitle(m_xBuilder->weld_label("alttitle"))
+    , m_xEditED(m_xBuilder->weld_text_view("edit"))
+    , m_xInsertAuthor(m_xBuilder->weld_widget("insertauthor"))
+    , m_xAuthorBtn(m_xBuilder->weld_button("author"))
+    , m_xOKBtn(m_xBuilder->weld_button("ok"))
+    , m_xPrevBtn(m_xBuilder->weld_button("previous"))
+    , m_xNextBtn(m_xBuilder->weld_button("next"))
 {
-    get(m_pLastEditFT, "lastedit");
-    get(m_pInsertAuthor, "insertauthor");
-    get(m_pAuthorBtn, "author");
-    get(m_pOKBtn, "ok");
-    get(m_pPrevBtn, "previous");
-    get(m_pNextBtn, "next");
-    get(m_pEditED, "edit");
-
-    m_pPrevBtn->SetClickHdl( LINK( this, SvxPostItDialog, PrevHdl ) );
-    m_pNextBtn->SetClickHdl( LINK( this, SvxPostItDialog, NextHdl ) );
-    m_pAuthorBtn->SetClickHdl( LINK( this, SvxPostItDialog, Stamp ) );
-    m_pOKBtn->SetClickHdl( LINK( this, SvxPostItDialog, OKHdl ) );
-
-    vcl::Font aFont( m_pEditED->GetFont() );
-    aFont.SetWeight( WEIGHT_LIGHT );
-    m_pEditED->SetFont( aFont );
+    m_xPrevBtn->connect_clicked( LINK( this, SvxPostItDialog, PrevHdl ) );
+    m_xNextBtn->connect_clicked( LINK( this, SvxPostItDialog, NextHdl ) );
+    m_xAuthorBtn->connect_clicked( LINK( this, SvxPostItDialog, Stamp ) );
+    m_xOKBtn->connect_clicked( LINK( this, SvxPostItDialog, OKHdl ) );
 
     bool bNew = true;
     sal_uInt16 nWhich = 0;
 
-    if ( !bPrevNext )
-    {
-        m_pPrevBtn->Hide();
-        m_pNextBtn->Hide();
-    }
+    m_xPrevBtn->show(bPrevNext);
+    m_xNextBtn->show(bPrevNext);
 
-    nWhich = rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_AUTHOR );
+    nWhich = m_rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_AUTHOR );
     OUString aAuthorStr, aDateStr;
 
-    if ( rSet.GetItemState( nWhich ) >= SfxItemState::DEFAULT )
+    if (m_rSet.GetItemState( nWhich ) >= SfxItemState::DEFAULT)
     {
         bNew = false;
         const SvxPostItAuthorItem& rAuthor =
-            static_cast<const SvxPostItAuthorItem&>(rSet.Get( nWhich ));
+            static_cast<const SvxPostItAuthorItem&>(m_rSet.Get(nWhich));
         aAuthorStr = rAuthor.GetValue();
     }
     else
         aAuthorStr = SvtUserOptions().GetID();
 
-    nWhich = rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_DATE );
+    nWhich = m_rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_DATE );
 
-    if ( rSet.GetItemState( nWhich ) >= SfxItemState::DEFAULT )
+    if (m_rSet.GetItemState( nWhich ) >= SfxItemState::DEFAULT)
     {
         const SvxPostItDateItem& rDate =
-            static_cast<const SvxPostItDateItem&>(rSet.Get( nWhich ));
+            static_cast<const SvxPostItDateItem&>(m_rSet.Get( nWhich ));
         aDateStr = rDate.GetValue();
     }
     else
@@ -97,58 +84,37 @@ SvxPostItDialog::SvxPostItDialog(vcl::Window* pParent, const SfxItemSet& rCoreSe
         aDateStr = rLocaleWrapper.getDate( Date( Date::SYSTEM ) );
     }
 
-    nWhich = rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_TEXT );
+    nWhich = m_rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_TEXT );
 
     OUString aTextStr;
-    if ( rSet.GetItemState( nWhich ) >= SfxItemState::DEFAULT )
+    if (m_rSet.GetItemState( nWhich ) >= SfxItemState::DEFAULT)
     {
         const SvxPostItTextItem& rText =
-            static_cast<const SvxPostItTextItem&>(rSet.Get( nWhich ));
+            static_cast<const SvxPostItTextItem&>(m_rSet.Get( nWhich ));
         aTextStr = rText.GetValue();
     }
 
     ShowLastAuthor(aAuthorStr, aDateStr);
 
-    //lock to initial .ui placeholder size before replacing contents
-    Size aSize(m_pEditED->get_preferred_size());
-    m_pEditED->set_width_request(aSize.Width());
-    m_pEditED->set_height_request(aSize.Height());
-
-    m_pEditED->SetText(convertLineEnd(aTextStr, GetSystemLineEnd()));
+    //lock to an initial size before replacing contents
+    m_xEditED->set_size_request(m_xEditED->get_approximate_digit_width() * 32,
+                                m_xEditED->get_height_rows(10));
+    m_xEditED->set_text(convertLineEnd(aTextStr, GetSystemLineEnd()));
 
     if (!bNew)
-        SetText( get<FixedText>("alttitle")->GetText() );
+        m_xDialog->set_title(m_xAltTitle->get_label());
 }
 
 
 SvxPostItDialog::~SvxPostItDialog()
 {
-    disposeOnce();
 }
-
-void SvxPostItDialog::dispose()
-{
-    delete pOutSet;
-    pOutSet = nullptr;
-    m_pLastEditFT.clear();
-    m_pEditED.clear();
-    m_pInsertAuthor.clear();
-    m_pAuthorBtn.clear();
-    m_pOKBtn.clear();
-    m_pPrevBtn.clear();
-    m_pNextBtn.clear();
-    SfxModalDialog::dispose();
-}
-
 
 void SvxPostItDialog::ShowLastAuthor(const OUString& rAuthor, const OUString& rDate)
 {
-    OUString sTxt( rAuthor );
-    sTxt += ", ";
-    sTxt += rDate;
-    m_pLastEditFT->SetText( sTxt );
+    OUString sTxt = rAuthor + ", " + rDate;
+    m_xLastEditFT->set_label( sTxt );
 }
-
 
 const sal_uInt16* SvxPostItDialog::GetRanges()
 {
@@ -161,63 +127,55 @@ const sal_uInt16* SvxPostItDialog::GetRanges()
     return pRanges;
 }
 
-
 void SvxPostItDialog::EnableTravel(bool bNext, bool bPrev)
 {
-    m_pPrevBtn->Enable(bPrev);
-    m_pNextBtn->Enable(bNext);
+    m_xPrevBtn->set_sensitive(bPrev);
+    m_xNextBtn->set_sensitive(bNext);
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxPostItDialog, PrevHdl, Button*, void)
+IMPL_LINK_NOARG(SvxPostItDialog, PrevHdl, weld::Button&, void)
 {
-    aPrevHdlLink.Call( *this );
+    m_aPrevHdlLink.Call( *this );
 }
 
-IMPL_LINK_NOARG_TYPED(SvxPostItDialog, NextHdl, Button*, void)
+IMPL_LINK_NOARG(SvxPostItDialog, NextHdl, weld::Button&, void)
 {
-    aNextHdlLink.Call( *this );
+    m_aNextHdlLink.Call( *this );
 }
 
-IMPL_LINK_NOARG_TYPED(SvxPostItDialog, Stamp, Button*, void)
+IMPL_LINK_NOARG(SvxPostItDialog, Stamp, weld::Button&, void)
 {
     Date aDate( Date::SYSTEM );
     tools::Time aTime( tools::Time::SYSTEM );
     OUString aTmp( SvtUserOptions().GetID() );
     const LocaleDataWrapper& rLocaleWrapper( Application::GetSettings().GetLocaleDataWrapper() );
-    OUString aStr( m_pEditED->GetText() );
+    OUString aStr( m_xEditED->get_text() );
     aStr += "\n---- ";
 
     if ( !aTmp.isEmpty() )
     {
-        aStr += aTmp;
-        aStr += ", ";
+     aStr += aTmp + ", ";
     }
-    aStr += rLocaleWrapper.getDate(aDate);
-    aStr += ", ";
-    aStr += rLocaleWrapper.getTime(aTime, false);
-    aStr += " ----\n";
-
+    aStr += rLocaleWrapper.getDate(aDate) + ", " + rLocaleWrapper.getTime(aTime, false) + " ----\n";
     aStr = convertLineEnd(aStr, GetSystemLineEnd());
 
-    m_pEditED->SetText(aStr);
+    m_xEditED->set_text(aStr);
     sal_Int32 nLen = aStr.getLength();
-    m_pEditED->GrabFocus();
-    m_pEditED->SetSelection( Selection( nLen, nLen ) );
+    m_xEditED->grab_focus();
+    m_xEditED->select_region(nLen, nLen);
 }
 
-
-IMPL_LINK_NOARG_TYPED(SvxPostItDialog, OKHdl, Button*, void)
+IMPL_LINK_NOARG(SvxPostItDialog, OKHdl, weld::Button&, void)
 {
     const LocaleDataWrapper& rLocaleWrapper( Application::GetSettings().GetLocaleDataWrapper() );
-    pOutSet = new SfxItemSet( rSet );
-    pOutSet->Put( SvxPostItAuthorItem( SvtUserOptions().GetID(),
-                                         rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_AUTHOR ) ) );
-    pOutSet->Put( SvxPostItDateItem( rLocaleWrapper.getDate( Date( Date::SYSTEM ) ),
-                                     rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_DATE ) ) );
-    pOutSet->Put( SvxPostItTextItem( m_pEditED->GetText(),
-                                     rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_TEXT ) ) );
-    EndDialog( RET_OK );
+    m_xOutSet.reset(new SfxItemSet(m_rSet));
+    m_xOutSet->Put( SvxPostItAuthorItem(SvtUserOptions().GetID(),
+                                        m_rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_AUTHOR ) ) );
+    m_xOutSet->Put( SvxPostItDateItem(rLocaleWrapper.getDate( Date( Date::SYSTEM ) ),
+                                       m_rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_DATE ) ) );
+    m_xOutSet->Put( SvxPostItTextItem(m_xEditED->get_text(),
+                                      m_rSet.GetPool()->GetWhich( SID_ATTR_POSTIT_TEXT ) ) );
+    m_xDialog->response(RET_OK);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

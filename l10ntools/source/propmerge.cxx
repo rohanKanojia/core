@@ -7,15 +7,16 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <cstdlib>
 #include <cassert>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
 
-#include "export.hxx"
-#include "common.hxx"
-#include "propmerge.hxx"
+#include <export.hxx>
+#include <common.hxx>
+#include <propmerge.hxx>
 
 namespace
 {
@@ -112,7 +113,7 @@ PropParser::PropParser(
     {
         std::cerr
             << "Propex error: Cannot open source file: "
-            << m_sSource.getStr() << std::endl;
+            << m_sSource << std::endl;
         return;
     }
     m_bIsInitialized = true;
@@ -131,7 +132,7 @@ void PropParser::Extract( const OString& rPOFile )
     {
         std::cerr
             << "Propex error: Cannot open pofile for extract: "
-            << rPOFile.getStr() << std::endl;
+            << rPOFile << std::endl;
         return;
     }
 
@@ -162,24 +163,23 @@ void PropParser::Merge( const OString &rMergeSrc, const OString &rDestinationFil
     if( !aDestination.is_open() ) {
         std::cerr
             << "Propex error: Cannot open source file for merge: "
-            << rDestinationFile.getStr() << std::endl;
+            << rDestinationFile << std::endl;
         return;
     }
 
-    MergeDataFile* pMergeDataFile = nullptr;
+    std::unique_ptr<MergeDataFile> pMergeDataFile;
     if( m_sLang != "qtz" )
     {
-        pMergeDataFile = new MergeDataFile( rMergeSrc, m_sSource, false, false );
+        pMergeDataFile.reset( new MergeDataFile( rMergeSrc, m_sSource, false, false ) );
 
         const std::vector<OString> vLanguages = pMergeDataFile->GetLanguages();
-        if( vLanguages.size()>=1 && vLanguages[0] != m_sLang )
+        if( !vLanguages.empty() && vLanguages[0] != m_sLang )
         {
             std::cerr
                 << ("Propex error: given language conflicts with language of"
                     " Mergedata file: ")
-                << m_sLang.getStr() << " - "
-                << vLanguages[0].getStr() << std::endl;
-            delete pMergeDataFile;
+                << m_sLang << " - "
+                << vLanguages[0] << std::endl;
             return;
         }
     }
@@ -205,27 +205,26 @@ void PropParser::Merge( const OString &rMergeSrc, const OString &rDestinationFil
                 MergeEntrys* pEntrys = pMergeDataFile->GetMergeEntrys( &aResData );
                 if( pEntrys )
                 {
-                    pEntrys->GetText( sNewText, STRING_TYP_TEXT, m_sLang );
+                    pEntrys->GetText( sNewText, m_sLang );
                 }
             }
             if( !sNewText.isEmpty() )
             {
-                aDestination << OString(sID + "=").getStr();
+                aDestination << OString(sID + "=");
                 lcl_PrintJavaStyle( sNewText, aDestination );
                 aDestination << std::endl;
             }
             else
             {
-                aDestination << sLine.getStr() << std::endl;
+                aDestination << sLine << std::endl;
             }
         }
         else
         {
-            aDestination << sLine.getStr() << std::endl;
+            aDestination << sLine << std::endl;
         }
     }
     aDestination.close();
-    delete pMergeDataFile;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

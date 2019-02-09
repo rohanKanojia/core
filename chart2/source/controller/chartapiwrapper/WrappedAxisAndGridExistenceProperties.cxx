@@ -18,10 +18,12 @@
  */
 
 #include "WrappedAxisAndGridExistenceProperties.hxx"
-#include "AxisHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "TitleHelper.hxx"
-#include "macros.hxx"
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <AxisHelper.hxx>
+#include <WrappedProperty.hxx>
+#include "Chart2ModelContact.hxx"
+#include <TitleHelper.hxx>
+#include <osl/diagnose.h>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Any;
@@ -36,17 +38,13 @@ class WrappedAxisAndGridExistenceProperty : public WrappedProperty
 {
 public:
     WrappedAxisAndGridExistenceProperty( bool bAxis, bool bMain, sal_Int32 nDimensionIndex
-        , std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedAxisAndGridExistenceProperty();
+        , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact );
 
-    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const override;
 
 private: //member
     std::shared_ptr< Chart2ModelContact >   m_spChart2ModelContact;
@@ -55,26 +53,26 @@ private: //member
     sal_Int32   m_nDimensionIndex;
 };
 
-void WrappedAxisAndGridExistenceProperties::addWrappedProperties( std::vector< WrappedProperty* >& rList
+void WrappedAxisAndGridExistenceProperties::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
             , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( true, true, 0, spChart2ModelContact ) );//x axis
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( true, false, 0, spChart2ModelContact ) );//x secondary axis
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( false, true, 0, spChart2ModelContact ) );//x grid
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( false, false, 0, spChart2ModelContact ) );//x help grid
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( true, true, 0, spChart2ModelContact ) );//x axis
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( true, false, 0, spChart2ModelContact ) );//x secondary axis
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( false, true, 0, spChart2ModelContact ) );//x grid
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( false, false, 0, spChart2ModelContact ) );//x help grid
 
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( true, true, 1, spChart2ModelContact ) );//y axis
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( true, false, 1, spChart2ModelContact ) );//y secondary axis
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( false, true, 1, spChart2ModelContact ) );//y grid
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( false, false, 1, spChart2ModelContact ) );//y help grid
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( true, true, 1, spChart2ModelContact ) );//y axis
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( true, false, 1, spChart2ModelContact ) );//y secondary axis
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( false, true, 1, spChart2ModelContact ) );//y grid
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( false, false, 1, spChart2ModelContact ) );//y help grid
 
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( true, true, 2, spChart2ModelContact ) );//z axis
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( false, true, 2, spChart2ModelContact ) );//z grid
-    rList.push_back( new WrappedAxisAndGridExistenceProperty( false, false, 2, spChart2ModelContact ) );//z help grid
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( true, true, 2, spChart2ModelContact ) );//z axis
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( false, true, 2, spChart2ModelContact ) );//z grid
+    rList.emplace_back( new WrappedAxisAndGridExistenceProperty( false, false, 2, spChart2ModelContact ) );//z help grid
 }
 
 WrappedAxisAndGridExistenceProperty::WrappedAxisAndGridExistenceProperty( bool bAxis, bool bMain, sal_Int32 nDimensionIndex
-                , std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
+                , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact )
             : WrappedProperty(OUString(),OUString())
             , m_spChart2ModelContact( spChart2ModelContact )
             , m_bAxis( bAxis )
@@ -139,12 +137,7 @@ WrappedAxisAndGridExistenceProperty::WrappedAxisAndGridExistenceProperty( bool b
     }
 }
 
-WrappedAxisAndGridExistenceProperty::~WrappedAxisAndGridExistenceProperty()
-{
-}
-
 void WrappedAxisAndGridExistenceProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     bool bNewValue = false;
     if( ! (rOuterValue >>= bNewValue) )
@@ -162,7 +155,7 @@ void WrappedAxisAndGridExistenceProperty::setPropertyValue( const Any& rOuterVal
         if( m_bAxis )
             AxisHelper::showAxis( m_nDimensionIndex, m_bMain, xDiagram, m_spChart2ModelContact->m_xContext );
         else
-            AxisHelper::showGrid( m_nDimensionIndex, 0, m_bMain, xDiagram, m_spChart2ModelContact->m_xContext );
+            AxisHelper::showGrid( m_nDimensionIndex, 0, m_bMain, xDiagram );
     }
     else
     {
@@ -174,7 +167,6 @@ void WrappedAxisAndGridExistenceProperty::setPropertyValue( const Any& rOuterVal
 }
 
 Any WrappedAxisAndGridExistenceProperty::getPropertyValue( const Reference< beans::XPropertySet >& /* xInnerPropertySet */ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     Reference< chart2::XDiagram > xDiagram( m_spChart2ModelContact->getChart2Diagram() );
@@ -192,7 +184,6 @@ Any WrappedAxisAndGridExistenceProperty::getPropertyValue( const Reference< bean
 }
 
 Any WrappedAxisAndGridExistenceProperty::getPropertyDefault( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     aRet <<= false;
@@ -203,35 +194,31 @@ class WrappedAxisTitleExistenceProperty : public WrappedProperty
 {
 public:
     WrappedAxisTitleExistenceProperty( sal_Int32 nTitleIndex
-        , std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedAxisTitleExistenceProperty();
+        , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact );
 
-    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const override;
 
 private: //member
     std::shared_ptr< Chart2ModelContact >   m_spChart2ModelContact;
     TitleHelper::eTitleType             m_eTitleType;
 };
 
-void WrappedAxisTitleExistenceProperties::addWrappedProperties( std::vector< WrappedProperty* >& rList
+void WrappedAxisTitleExistenceProperties::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
             , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
-    rList.push_back( new WrappedAxisTitleExistenceProperty( 0, spChart2ModelContact ) );//x axis title
-    rList.push_back( new WrappedAxisTitleExistenceProperty( 1, spChart2ModelContact ) );//y axis title
-    rList.push_back( new WrappedAxisTitleExistenceProperty( 2, spChart2ModelContact ) );//z axis title
-    rList.push_back( new WrappedAxisTitleExistenceProperty( 3, spChart2ModelContact ) );//secondary x axis title
-    rList.push_back( new WrappedAxisTitleExistenceProperty( 4, spChart2ModelContact ) );//secondary y axis title
+    rList.emplace_back( new WrappedAxisTitleExistenceProperty( 0, spChart2ModelContact ) );//x axis title
+    rList.emplace_back( new WrappedAxisTitleExistenceProperty( 1, spChart2ModelContact ) );//y axis title
+    rList.emplace_back( new WrappedAxisTitleExistenceProperty( 2, spChart2ModelContact ) );//z axis title
+    rList.emplace_back( new WrappedAxisTitleExistenceProperty( 3, spChart2ModelContact ) );//secondary x axis title
+    rList.emplace_back( new WrappedAxisTitleExistenceProperty( 4, spChart2ModelContact ) );//secondary y axis title
 }
 
-WrappedAxisTitleExistenceProperty::WrappedAxisTitleExistenceProperty( sal_Int32 nTitleIndex
-                , std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
+WrappedAxisTitleExistenceProperty::WrappedAxisTitleExistenceProperty(sal_Int32 nTitleIndex
+                , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
             : WrappedProperty(OUString(),OUString())
             , m_spChart2ModelContact( spChart2ModelContact )
             , m_eTitleType( TitleHelper::Y_AXIS_TITLE )
@@ -261,12 +248,7 @@ WrappedAxisTitleExistenceProperty::WrappedAxisTitleExistenceProperty( sal_Int32 
     }
 }
 
-WrappedAxisTitleExistenceProperty::~WrappedAxisTitleExistenceProperty()
-{
-}
-
 void WrappedAxisTitleExistenceProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     bool bNewValue = false;
     if( ! (rOuterValue >>= bNewValue) )
@@ -280,8 +262,7 @@ void WrappedAxisTitleExistenceProperty::setPropertyValue( const Any& rOuterValue
 
     if( bNewValue )
     {
-        OUString aTitleText;
-        TitleHelper::createTitle(  m_eTitleType, aTitleText
+        TitleHelper::createTitle(  m_eTitleType, OUString()
             , m_spChart2ModelContact->getChartModel(), m_spChart2ModelContact->m_xContext );
     }
     else
@@ -291,7 +272,6 @@ void WrappedAxisTitleExistenceProperty::setPropertyValue( const Any& rOuterValue
 }
 
 Any WrappedAxisTitleExistenceProperty::getPropertyValue( const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     bool bHasTitle = false;
 
@@ -306,7 +286,6 @@ Any WrappedAxisTitleExistenceProperty::getPropertyValue( const Reference< beans:
 }
 
 Any WrappedAxisTitleExistenceProperty::getPropertyDefault( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     aRet <<= false;
@@ -317,17 +296,13 @@ class WrappedAxisLabelExistenceProperty : public WrappedProperty
 {
 public:
     WrappedAxisLabelExistenceProperty( bool bMain, sal_Int32 nDimensionIndex
-        , std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedAxisLabelExistenceProperty();
+        , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact );
 
-    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    virtual css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const override;
 
 private: //member
     std::shared_ptr< Chart2ModelContact >   m_spChart2ModelContact;
@@ -335,18 +310,18 @@ private: //member
     sal_Int32   m_nDimensionIndex;
 };
 
-void WrappedAxisLabelExistenceProperties::addWrappedProperties( std::vector< WrappedProperty* >& rList
+void WrappedAxisLabelExistenceProperties::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
             , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
-    rList.push_back( new WrappedAxisLabelExistenceProperty( true, 0, spChart2ModelContact ) );//x axis
-    rList.push_back( new WrappedAxisLabelExistenceProperty( true, 1, spChart2ModelContact ) );//y axis
-    rList.push_back( new WrappedAxisLabelExistenceProperty( true, 2, spChart2ModelContact ) );//z axis
-    rList.push_back( new WrappedAxisLabelExistenceProperty( false, 0, spChart2ModelContact ) );//secondary x axis
-    rList.push_back( new WrappedAxisLabelExistenceProperty( false, 1, spChart2ModelContact ) );//secondary y axis
+    rList.emplace_back( new WrappedAxisLabelExistenceProperty( true, 0, spChart2ModelContact ) );//x axis
+    rList.emplace_back( new WrappedAxisLabelExistenceProperty( true, 1, spChart2ModelContact ) );//y axis
+    rList.emplace_back( new WrappedAxisLabelExistenceProperty( true, 2, spChart2ModelContact ) );//z axis
+    rList.emplace_back( new WrappedAxisLabelExistenceProperty( false, 0, spChart2ModelContact ) );//secondary x axis
+    rList.emplace_back( new WrappedAxisLabelExistenceProperty( false, 1, spChart2ModelContact ) );//secondary y axis
 }
 
-WrappedAxisLabelExistenceProperty::WrappedAxisLabelExistenceProperty( bool bMain, sal_Int32 nDimensionIndex
-                , std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
+WrappedAxisLabelExistenceProperty::WrappedAxisLabelExistenceProperty(bool bMain, sal_Int32 nDimensionIndex
+                , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
             : WrappedProperty(OUString(),OUString())
             , m_spChart2ModelContact( spChart2ModelContact )
             , m_bMain( bMain )
@@ -367,12 +342,7 @@ WrappedAxisLabelExistenceProperty::WrappedAxisLabelExistenceProperty( bool bMain
     }
 }
 
-WrappedAxisLabelExistenceProperty::~WrappedAxisLabelExistenceProperty()
-{
-}
-
 void WrappedAxisLabelExistenceProperty::setPropertyValue( const Any& rOuterValue, const Reference< beans::XPropertySet >& xInnerPropertySet ) const
-                throw (beans::UnknownPropertyException, beans::PropertyVetoException, lang::IllegalArgumentException, lang::WrappedTargetException, uno::RuntimeException)
 {
     bool bNewValue = false;
     if( ! (rOuterValue >>= bNewValue) )
@@ -391,14 +361,13 @@ void WrappedAxisLabelExistenceProperty::setPropertyValue( const Any& rOuterValue
         //create axis if needed
         xProp.set( AxisHelper::createAxis( m_nDimensionIndex, m_bMain, xDiagram, m_spChart2ModelContact->m_xContext ), uno::UNO_QUERY );
         if( xProp.is() )
-            xProp->setPropertyValue( "Show", uno::makeAny( sal_False ) );
+            xProp->setPropertyValue( "Show", uno::Any( false ) );
     }
     if( xProp.is() )
         xProp->setPropertyValue( "DisplayLabels", rOuterValue );
 }
 
 Any WrappedAxisLabelExistenceProperty::getPropertyValue( const Reference< beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     Reference< chart2::XDiagram > xDiagram( m_spChart2ModelContact->getChart2Diagram() );
@@ -411,7 +380,6 @@ Any WrappedAxisLabelExistenceProperty::getPropertyValue( const Reference< beans:
 }
 
 Any WrappedAxisLabelExistenceProperty::getPropertyDefault( const Reference< beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (beans::UnknownPropertyException, lang::WrappedTargetException, uno::RuntimeException)
 {
     Any aRet;
     aRet <<= true;

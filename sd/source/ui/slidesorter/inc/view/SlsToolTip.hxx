@@ -20,8 +20,10 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSTOOLTIP_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_VIEW_SLSTOOLTIP_HXX
 
-#include "SlideSorter.hxx"
-#include "model/SlsSharedPageDescriptor.hxx"
+#include <model/SlsSharedPageDescriptor.hxx>
+#include <vcl/timer.hxx>
+
+namespace sd { namespace slidesorter { class SlideSorter; } }
 
 namespace sd { namespace slidesorter { namespace view {
 
@@ -56,19 +58,13 @@ private:
     SlideSorter& mrSlideSorter;
     model::SharedPageDescriptor mpDescriptor;
     OUString msCurrentHelpText;
-    sal_uLong mnHelpWindowHandle;
+    void* mnHelpWindowHandle;
     Timer maShowTimer;
     Timer maHiddenTimer;
 
-    /** Request to show the tool tip.
-        @param bForce
-            When <TRUE/> then the tool tip is show right away.  Otherwise it
-            is shown after a short delay.
-    */
-    void Show (const bool bForce);
     void DoShow();
 
-    DECL_LINK_TYPED(DelayTrigger, Timer*, void);
+    DECL_LINK(DelayTrigger, Timer*, void);
 };
 
 } } } // end of namespace ::sd::slidesorter::view

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <idlc/astenum.hxx>
+#include <astenum.hxx>
 
 #include <registry/version.h>
 #include <registry/writer.hxx>
@@ -43,7 +43,7 @@ AstConstant* AstEnum::checkValue(AstExpression* pExpr)
         AstDeclaration* pDecl = *iter;
         AstConstant* pConst = static_cast<AstConstant*>(pDecl);
 
-        if (pConst->getConstValue()->compare(pExpr))
+        if (pConst->getConstValue()->compareLong(pExpr))
             return pConst;
 
         ++iter;
@@ -66,13 +66,12 @@ bool AstEnum::dump(RegistryKey& rKey)
         return false;
     }
 
-    OUString emptyStr;
     sal_uInt16 nConst = getNodeCount(NT_enum_val);
     if ( nConst > 0 )
     {
         typereg::Writer aBlob(
             m_bPublished ? TYPEREG_VERSION_1 : TYPEREG_VERSION_0,
-            getDocumentation(), emptyStr, RT_TYPE_ENUM, m_bPublished,
+            getDocumentation(), "", RT_TYPE_ENUM, m_bPublished,
             OStringToOUString(getRelativName(), RTL_TEXTENCODING_UTF8), 0,
             nConst, 0, 0);
 
@@ -91,7 +90,7 @@ bool AstEnum::dump(RegistryKey& rKey)
         sal_uInt32 aBlobSize;
         void const * pBlob = aBlob.getBlob(&aBlobSize);
 
-        if (localKey.setValue(emptyStr, RegValueType::BINARY,
+        if (localKey.setValue("", RegValueType::BINARY,
                                 const_cast<RegValue>(pBlob), aBlobSize) != RegError::NO_ERROR)
         {
             fprintf(stderr, "%s: warning, could not set value of key \"%s\" in %s\n",
@@ -102,11 +101,6 @@ bool AstEnum::dump(RegistryKey& rKey)
     }
 
     return true;
-}
-
-AstDeclaration* AstEnum::addDeclaration(AstDeclaration* pDecl)
-{
-    return AstScope::addDeclaration(pDecl);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

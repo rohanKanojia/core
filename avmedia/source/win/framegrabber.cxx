@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#if defined _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable: 4917)
-#endif
+#include <sal/config.h>
+
+#include <memory>
+
 #include <prewin.h>
 #include <postwin.h>
 #include <objbase.h>
@@ -28,9 +28,6 @@
 #include <Amvideo.h>
 #include "interface.hxx"
 #include <uuids.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
 
 #include "framegrabber.hxx"
 #include "player.hxx"
@@ -40,6 +37,7 @@
 #include <tools/stream.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/dibtools.hxx>
+#include <o3tl/char16_t2wchar_t.hxx>
 
 #define AVMEDIA_WIN_FRAMEGRABBER_IMPLEMENTATIONNAME "com.sun.star.comp.avmedia.FrameGrabber_DirectX"
 #define AVMEDIA_WIN_FRAMEGRABBER_SERVICENAME "com.sun.star.media.FrameGrabber_DirectX"
@@ -52,7 +50,7 @@ namespace avmedia { namespace win {
 FrameGrabber::FrameGrabber( const uno::Reference< lang::XMultiServiceFactory >& rxMgr ) :
     mxMgr( rxMgr )
 {
-    ::CoInitialize( NULL );
+    ::CoInitialize( nullptr );
 }
 
 
@@ -61,22 +59,28 @@ FrameGrabber::~FrameGrabber()
     ::CoUninitialize();
 }
 
+namespace {
 
-IMediaDet* FrameGrabber::implCreateMediaDet( const OUString& rURL ) const
+IMediaDet* implCreateMediaDet( const OUString& rURL )
 {
-    IMediaDet* pDet = NULL;
+    IMediaDet* pDet = nullptr;
 
-    if( SUCCEEDED( CoCreateInstance( CLSID_MediaDet, NULL, CLSCTX_INPROC_SERVER, IID_IMediaDet, (void**) &pDet ) ) )
+    if( SUCCEEDED( CoCreateInstance( CLSID_MediaDet, nullptr, CLSCTX_INPROC_SERVER, IID_IMediaDet, reinterpret_cast<void**>(&pDet) ) ) )
     {
         OUString aLocalStr;
 
         if( osl::FileBase::getSystemPathFromFileURL( rURL, aLocalStr )
             == osl::FileBase::E_None )
         {
-            if( !SUCCEEDED( pDet->put_Filename( ::SysAllocString( reinterpret_cast<LPCOLESTR>(aLocalStr.getStr()) ) ) ) )
+            BSTR bstrFilename = SysAllocString(o3tl::toW(aLocalStr.getStr()));
+            if( !SUCCEEDED( pDet->put_Filename( bstrFilename ) ) )
             {
+                // Shouldn't we free this string unconditionally, not only in case of failure?
+                // I cannot find information why do we pass a newly allocated BSTR to the put_Filename
+                // and if it frees the string internally
+                SysFreeString(bstrFilename);
                 pDet->Release();
-                pDet = NULL;
+                pDet = nullptr;
             }
         }
     }
@@ -84,6 +88,7 @@ IMediaDet* FrameGrabber::implCreateMediaDet( const OUString& rURL ) const
     return pDet;
 }
 
+}
 
 bool FrameGrabber::create( const OUString& rURL )
 {
@@ -94,7 +99,7 @@ bool FrameGrabber::create( const OUString& rURL )
     {
         maURL = rURL;
         pDet->Release();
-        pDet = NULL;
+        pDet = nullptr;
     }
     else
         maURL.clear();
@@ -104,7 +109,6 @@ bool FrameGrabber::create( const OUString& rURL )
 
 
 uno::Reference< graphic::XGraphic > SAL_CALL FrameGrabber::grabFrame( double fMediaTime )
-    throw (uno::RuntimeException)
 {
     uno::Reference< graphic::XGraphic > xRet;
     IMediaDet*                          pDet = implCreateMediaDet( maURL );
@@ -153,29 +157,29 @@ uno::Reference< graphic::XGraphic > SAL_CALL FrameGrabber::grabFrame( double fMe
 
                 if( aMediaType.cbFormat != 0 )
                 {
-                    ::CoTaskMemFree( (PVOID) aMediaType.pbFormat );
+                    ::CoTaskMemFree( aMediaType.pbFormat );
                     aMediaType.cbFormat = 0;
-                    aMediaType.pbFormat = NULL;
+                    aMediaType.pbFormat = nullptr;
                 }
 
-                if( aMediaType.pUnk != NULL )
+                if( aMediaType.pUnk != nullptr )
                 {
                     aMediaType.pUnk->Release();
-                    aMediaType.pUnk = NULL;
+                    aMediaType.pUnk = nullptr;
                 }
             }
 
             if( ( nWidth > 0 ) && ( nHeight > 0 ) &&
-                SUCCEEDED( pDet->GetBitmapBits( 0, &nSize, NULL, nWidth, nHeight ) ) &&
+                SUCCEEDED( pDet->GetBitmapBits( 0, &nSize, nullptr, nWidth, nHeight ) ) &&
                 ( nSize > 0  ) )
             {
-                char* pBuffer = new char[ nSize ];
+                auto pBuffer = std::unique_ptr<char[]>(new char[ nSize ]);
 
                 try
                 {
-                    if( SUCCEEDED( pDet->GetBitmapBits( fMediaTime, NULL, pBuffer, nWidth, nHeight ) ) )
+                    if( SUCCEEDED( pDet->GetBitmapBits( fMediaTime, nullptr, pBuffer.get(), nWidth, nHeight ) ) )
                     {
-                        SvMemoryStream  aMemStm( pBuffer, nSize, StreamMode::READ | StreamMode::WRITE );
+                        SvMemoryStream  aMemStm( pBuffer.get(), nSize, StreamMode::READ | StreamMode::WRITE );
                         Bitmap          aBmp;
 
                         if( ReadDIB(aBmp, aMemStm, false ) && !aBmp.IsEmpty() )
@@ -188,8 +192,6 @@ uno::Reference< graphic::XGraphic > SAL_CALL FrameGrabber::grabFrame( double fMe
                 catch( ... )
                 {
                 }
-
-                delete [] pBuffer;
             }
         }
 
@@ -201,25 +203,20 @@ uno::Reference< graphic::XGraphic > SAL_CALL FrameGrabber::grabFrame( double fMe
 
 
 OUString SAL_CALL FrameGrabber::getImplementationName(  )
-    throw (uno::RuntimeException)
 {
     return OUString( AVMEDIA_WIN_FRAMEGRABBER_IMPLEMENTATIONNAME );
 }
 
 
 sal_Bool SAL_CALL FrameGrabber::supportsService( const OUString& ServiceName )
-    throw (uno::RuntimeException)
 {
     return cppu::supportsService(this, ServiceName);
 }
 
 
 uno::Sequence< OUString > SAL_CALL FrameGrabber::getSupportedServiceNames(  )
-    throw (uno::RuntimeException)
 {
-    uno::Sequence<OUString> aRet { AVMEDIA_WIN_FRAMEGRABBER_SERVICENAME };
-
-    return aRet;
+    return { AVMEDIA_WIN_FRAMEGRABBER_SERVICENAME };
 }
 
 } // namespace win

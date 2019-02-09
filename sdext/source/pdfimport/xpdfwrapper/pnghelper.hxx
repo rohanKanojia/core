@@ -20,7 +20,7 @@
 #ifndef INCLUDED_SDEXT_SOURCE_PDFIMPORT_XPDFWRAPPER_PNGHELPER_HXX
 #define INCLUDED_SDEXT_SOURCE_PDFIMPORT_XPDFWRAPPER_PNGHELPER_HXX
 
-#include "sal/types.h"
+#include <sal/types.h>
 #include "pdfioutdev_gpl.hxx"
 
 
@@ -40,7 +40,7 @@ namespace pdfi
         static void append( sal_uInt32 i_nValue, OutputBuffer& o_rOutputBuf )
         {
             size_t nCur = o_rOutputBuf.size();
-            o_rOutputBuf.insert( o_rOutputBuf.end(), 4, (Output_t)0 );
+            o_rOutputBuf.insert( o_rOutputBuf.end(), 4, Output_t(0) );
             set( i_nValue, o_rOutputBuf, nCur );
         }
 
@@ -59,8 +59,8 @@ namespace pdfi
                                Stream*           str,
                                int               width,
                                int               height,
-                               GfxRGB&           zeroColor,
-                               GfxRGB&           oneColor,
+                               GfxRGB const &    zeroColor,
+                               GfxRGB const &    oneColor,
                                bool              bIsMask
                                );
         static void createPng( OutputBuffer& o_rOutputBuf,

@@ -17,14 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "inspagob.hxx"
+#include <inspagob.hxx>
 
-#include "strings.hrc"
-#include "res_bmp.hrc"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "ViewShell.hxx"
+#include <strings.hrc>
+
+#include <bitmaps.hlst>
+#include <sdresid.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <ViewShell.hxx>
 
 SdInsertPagesObjsDlg::SdInsertPagesObjsDlg(
     vcl::Window* pWindow, const SdDrawDocument* pInDoc,
@@ -48,7 +49,7 @@ SdInsertPagesObjsDlg::SdInsertPagesObjsDlg(
 
     // insert text
     if( !pMedium )
-        SetText( SD_RESSTR( STR_INSERT_TEXT ) );
+        SetText( SdResId( STR_INSERT_TEXT ) );
 
     Reset();
 }
@@ -74,16 +75,14 @@ void SdInsertPagesObjsDlg::Reset()
 {
     if( pMedium )
     {
-        m_pLbTree->SetSelectionMode( MULTIPLE_SELECTION );
+        m_pLbTree->SetSelectionMode( SelectionMode::Multiple );
 
         // transfer ownership of Medium
         m_pLbTree->Fill( mpDoc, pMedium, rName );
     }
     else
     {
-        Color aColor( COL_WHITE );
-        Bitmap aBmpText( SdResId( BMP_DOC_TEXT ) );
-        Image aImgText( aBmpText, aColor );
+        Image aImgText(StockImage::Yes, BMP_DOC_TEXT);
         m_pLbTree->InsertEntry( rName, aImgText, aImgText );
     }
 
@@ -114,7 +113,7 @@ std::vector<OUString> SdInsertPagesObjsDlg::GetList( const sal_uInt16 nType )
  */
 bool SdInsertPagesObjsDlg::IsLink()
 {
-    return( m_pCbxLink->IsChecked() );
+    return m_pCbxLink->IsChecked();
 }
 
 /**
@@ -122,13 +121,13 @@ bool SdInsertPagesObjsDlg::IsLink()
  */
 bool SdInsertPagesObjsDlg::IsRemoveUnnessesaryMasterPages() const
 {
-    return( m_pCbxMasters->IsChecked() );
+    return m_pCbxMasters->IsChecked();
 }
 
 /**
  * Enabled and selects end-color-LB
  */
-IMPL_LINK_NOARG_TYPED(SdInsertPagesObjsDlg, SelectObjectHdl, SvTreeListBox*, void)
+IMPL_LINK_NOARG(SdInsertPagesObjsDlg, SelectObjectHdl, SvTreeListBox*, void)
 {
     if( m_pLbTree->IsLinkableSelected() )
         m_pCbxLink->Enable();

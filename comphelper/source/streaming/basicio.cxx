@@ -18,7 +18,7 @@
  */
 
 #include <comphelper/basicio.hxx>
-
+#include <com/sun/star/awt/FontDescriptor.hpp>
 
 namespace comphelper
 {
@@ -53,7 +53,7 @@ const css::uno::Reference<css::io::XObjectInputStream>& operator >> (
         const css::uno::Reference<css::io::XObjectInputStream>& _rxInStream,
         css::awt::FontDescriptor& _rFont)
 {
-    // schreiben des Fontdescriptors
+    // writing the FontDescriptor
     _rFont.Name = _rxInStream->readUTF();
     _rFont.Height = _rxInStream->readShort();
     _rFont.Width = _rxInStream->readShort();
@@ -63,12 +63,12 @@ const css::uno::Reference<css::io::XObjectInputStream>& operator >> (
     _rFont.Pitch = _rxInStream->readShort();
     _rFont.CharacterWidth = static_cast< float >(_rxInStream->readDouble());
     _rFont.Weight = static_cast< float >(_rxInStream->readDouble());
-    _rFont.Slant = (css::awt::FontSlant)_rxInStream->readShort();
+    _rFont.Slant = static_cast<css::awt::FontSlant>(_rxInStream->readShort());
     _rFont.Underline = _rxInStream->readShort();
     _rFont.Strikeout = _rxInStream->readShort();
     _rFont.Orientation = static_cast< float >(_rxInStream->readDouble());
-    _rFont.Kerning = _rxInStream->readBoolean();
-    _rFont.WordLineMode = _rxInStream->readBoolean();
+    _rFont.Kerning = _rxInStream->readBoolean() != 0;
+    _rFont.WordLineMode = _rxInStream->readBoolean() != 0;
     _rFont.Type = _rxInStream->readShort();
     return _rxInStream;
 }

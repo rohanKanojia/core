@@ -18,17 +18,9 @@
  */
 
 #include "StockDataInterpreter.hxx"
-#include "DataSeries.hxx"
-#include "macros.hxx"
-#include "DataSeriesHelper.hxx"
-#include "CommonConverters.hxx"
-#include "ContainerHelper.hxx"
-#include <com/sun/star/beans/XPropertySet.hpp>
+#include <DataSeries.hxx>
 #include <com/sun/star/chart2/data/XDataSink.hpp>
-
-#include <vector>
-#include <algorithm>
-#include <iterator>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::chart2;
@@ -36,16 +28,14 @@ using namespace ::std;
 
 using ::com::sun::star::uno::Reference;
 using ::com::sun::star::uno::Sequence;
-using namespace ::chart::ContainerHelper;
 
 namespace chart
 {
 
 // explicit
 StockDataInterpreter::StockDataInterpreter(
-    StockChartTypeTemplate::StockVariant eVariant,
-    const Reference< uno::XComponentContext > & xContext ) :
-        DataInterpreter( xContext ),
+    StockChartTypeTemplate::StockVariant eVariant ) :
+        DataInterpreter(),
         m_eStockVariant( eVariant )
 {}
 
@@ -57,7 +47,6 @@ InterpretedData SAL_CALL StockDataInterpreter::interpretDataSource(
     const Reference< data::XDataSource >& xSource,
     const Sequence< beans::PropertyValue >& rArguments,
     const Sequence< Reference< XDataSeries > >& rSeriesToReUse )
-    throw (uno::RuntimeException, std::exception)
 {
     if( ! xSource.is())
         return InterpretedData();
@@ -68,10 +57,10 @@ InterpretedData SAL_CALL StockDataInterpreter::interpretDataSource(
 
     // sub-type properties
     const StockChartTypeTemplate::StockVariant eVar( GetStockVariant());
-    const bool bHasOpenValues (( eVar == StockChartTypeTemplate::OPEN_LOW_HI_CLOSE ) ||
-                               ( eVar == StockChartTypeTemplate::VOL_OPEN_LOW_HI_CLOSE ));
-    const bool bHasVolume (( eVar == StockChartTypeTemplate::VOL_LOW_HI_CLOSE ) ||
-                           ( eVar == StockChartTypeTemplate::VOL_OPEN_LOW_HI_CLOSE ));
+    const bool bHasOpenValues (( eVar == StockChartTypeTemplate::StockVariant::Open ) ||
+                               ( eVar == StockChartTypeTemplate::StockVariant::VolumeOpen ));
+    const bool bHasVolume (( eVar == StockChartTypeTemplate::StockVariant::Volume ) ||
+                           ( eVar == StockChartTypeTemplate::StockVariant::VolumeOpen ));
     const bool bHasCategories( HasCategories( rArguments, aData ));
 
     // necessary roles for "full series"
@@ -241,16 +230,15 @@ InterpretedData SAL_CALL StockDataInterpreter::interpretDataSource(
                 if( nReUsedSeriesIdx < rSeriesToReUse.getLength())
                     xSeries.set( rSeriesToReUse[nReUsedSeriesIdx] );
                 else
-                    xSeries.set( new DataSeries( GetComponentContext() ) );
+                    xSeries.set( new DataSeries );
                 OSL_ASSERT( xSeries.is() );
                 Reference< data::XDataSink > xSink( xSeries, uno::UNO_QUERY_THROW );
-                OSL_ASSERT( xSink.is() );
                 xSink->setData( aSequences[nGroupIndex][nSeriesIdx] );
                 aResultSeries[nGroupIndex][nSeriesIdx].set( xSeries );
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -265,22 +253,21 @@ InterpretedData SAL_CALL StockDataInterpreter::interpretDataSource(
 // volume to one with volume)
 sal_Bool SAL_CALL StockDataInterpreter::isDataCompatible(
     const InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     // high/low/close
     sal_Int32 nNumberOfNecessarySequences = 3;
     // open
     StockChartTypeTemplate::StockVariant eVar( GetStockVariant());
-    if( ( eVar == StockChartTypeTemplate::OPEN_LOW_HI_CLOSE ) ||
-        ( eVar == StockChartTypeTemplate::VOL_OPEN_LOW_HI_CLOSE ))
+    if( ( eVar == StockChartTypeTemplate::StockVariant::Open ) ||
+        ( eVar == StockChartTypeTemplate::StockVariant::VolumeOpen ))
         ++nNumberOfNecessarySequences;
     // volume
-    bool bHasVolume = (( eVar == StockChartTypeTemplate::VOL_LOW_HI_CLOSE ) ||
-                       ( eVar == StockChartTypeTemplate::VOL_OPEN_LOW_HI_CLOSE ));
+    bool bHasVolume = (( eVar == StockChartTypeTemplate::StockVariant::Volume ) ||
+                       ( eVar == StockChartTypeTemplate::StockVariant::VolumeOpen ));
 
     // 1. correct number of sub-types
     if( aInterpretedData.Series.getLength() < (bHasVolume ? 2 : 1 ))
-        return sal_False;
+        return false;
 
     // 2. a. volume -- use default check
     if( bHasVolume )
@@ -289,7 +276,7 @@ sal_Bool SAL_CALL StockDataInterpreter::isDataCompatible(
                 InterpretedData( Sequence< Sequence< Reference< XDataSeries > > >(
                                      aInterpretedData.Series.getConstArray(), 1 ),
                                  aInterpretedData.Categories )))
-            return sal_False;
+            return false;
     }
 
     // 2. b. candlestick
@@ -297,7 +284,7 @@ sal_Bool SAL_CALL StockDataInterpreter::isDataCompatible(
         OSL_ASSERT( aInterpretedData.Series.getLength() > (bHasVolume ? 1 : 0));
         Sequence< Reference< XDataSeries > > aSeries( aInterpretedData.Series[(bHasVolume ? 1 : 0)] );
         if(!aSeries.getLength())
-            return sal_False;
+            return false;
         for( sal_Int32 i=0; i<aSeries.getLength(); ++i )
         {
             try
@@ -305,11 +292,11 @@ sal_Bool SAL_CALL StockDataInterpreter::isDataCompatible(
                 Reference< data::XDataSource > xSrc( aSeries[i], uno::UNO_QUERY_THROW );
                 Sequence< Reference< data::XLabeledDataSequence > > aSeq( xSrc->getDataSequences());
                 if( aSeq.getLength() != nNumberOfNecessarySequences )
-                    return sal_False;
+                    return false;
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
@@ -317,12 +304,11 @@ sal_Bool SAL_CALL StockDataInterpreter::isDataCompatible(
     // 2. c. additional series
     // ignore
 
-    return sal_True;
+    return true;
 }
 
 InterpretedData SAL_CALL StockDataInterpreter::reinterpretDataSeries(
     const InterpretedData& aInterpretedData )
-    throw (uno::RuntimeException, std::exception)
 {
     // prerequisite: StockDataInterpreter::isDataCompatible() returned true
     return aInterpretedData;

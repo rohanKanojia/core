@@ -19,6 +19,8 @@
 
 
 #include <algorithm>
+#include <osl/diagnose.h>
+#include <tools/debug.hxx>
 #include <svl/style.hxx>
 #include <com/sun/star/i18n/WordType.hpp>
 
@@ -34,7 +36,7 @@
 #include <editeng/unoforou.hxx>
 #include <editeng/unofored.hxx>
 #include <editeng/outlobj.hxx>
-#include <unofored_internal.hxx>
+#include "unofored_internal.hxx"
 
 using namespace ::com::sun::star;
 
@@ -42,8 +44,6 @@ using namespace ::com::sun::star;
 SvxOutlinerForwarder::SvxOutlinerForwarder( Outliner& rOutl, bool bOutlText /* = false */ ) :
     rOutliner( rOutl ),
     bOutlinerText( bOutlText ),
-    mpAttribsCache( nullptr ),
-    mpParaAttribsCache( nullptr ),
     mnParaAttribsCache( 0 )
 {
 }
@@ -79,13 +79,10 @@ static SfxItemSet ImplOutlinerForwarderGetAttribs( const ESelection& rSel, EditE
 
         switch( nOnlyHardAttrib )
         {
-        case EditEngineAttribs_All:
+        case EditEngineAttribs::All:
             nFlags = GetAttribsFlags::ALL;
             break;
-        case EditEngineAttribs_HardAndPara:
-            nFlags = GetAttribsFlags::PARAATTRIBS|GetAttribsFlags::CHARATTRIBS;
-            break;
-        case EditEngineAttribs_OnlyHard:
+        case EditEngineAttribs::OnlyHard:
             nFlags = GetAttribsFlags::CHARATTRIBS;
             break;
         default:
@@ -101,10 +98,10 @@ static SfxItemSet ImplOutlinerForwarderGetAttribs( const ESelection& rSel, EditE
 
 SfxItemSet SvxOutlinerForwarder::GetAttribs( const ESelection& rSel, EditEngineAttribs nOnlyHardAttrib ) const
 {
-    if( mpAttribsCache && ( EditEngineAttribs_All == nOnlyHardAttrib ) )
+    if( mpAttribsCache && ( EditEngineAttribs::All == nOnlyHardAttrib ) )
     {
         // have we the correct set in cache?
-        if( const_cast<SvxOutlinerForwarder*>(this)->maAttribCacheSelection.IsEqual(rSel) )
+        if( maAttribCacheSelection == rSel )
         {
             // yes! just return the cache
             return *mpAttribsCache;
@@ -112,20 +109,19 @@ SfxItemSet SvxOutlinerForwarder::GetAttribs( const ESelection& rSel, EditEngineA
         else
         {
             // no, we need delete the old cache
-            delete mpAttribsCache;
-            mpAttribsCache = nullptr;
+            mpAttribsCache.reset();
         }
     }
 
     //! Does it not exist on the Outliner?
     //! and why is the GetAttribs on the EditEngine not a const?
-    EditEngine& rEditEngine = (EditEngine&)rOutliner.GetEditEngine();
+    EditEngine& rEditEngine = const_cast<EditEngine&>(rOutliner.GetEditEngine());
 
     SfxItemSet aSet( ImplOutlinerForwarderGetAttribs( rSel, nOnlyHardAttrib, rEditEngine ) );
 
-    if( EditEngineAttribs_All == nOnlyHardAttrib )
+    if( EditEngineAttribs::All == nOnlyHardAttrib )
     {
-        mpAttribsCache = new SfxItemSet( aSet );
+        mpAttribsCache.reset(new SfxItemSet( aSet ));
         maAttribCacheSelection = rSel;
     }
 
@@ -149,15 +145,14 @@ SfxItemSet SvxOutlinerForwarder::GetParaAttribs( sal_Int32 nPara ) const
         else
         {
             // no, we need delete the old cache
-            delete mpParaAttribsCache;
-            mpParaAttribsCache = nullptr;
+            mpParaAttribsCache.reset();
         }
     }
 
-    mpParaAttribsCache = new SfxItemSet( rOutliner.GetParaAttribs( nPara ) );
+    mpParaAttribsCache.reset(new SfxItemSet( rOutliner.GetParaAttribs( nPara ) ));
     mnParaAttribsCache = nPara;
 
-    EditEngine& rEditEngine = (EditEngine&)rOutliner.GetEditEngine();
+    EditEngine& rEditEngine = const_cast<EditEngine&>(rOutliner.GetEditEngine());
 
     SfxStyleSheet* pStyle = rEditEngine.GetStyleSheet( nPara );
     if( pStyle )
@@ -192,7 +187,7 @@ SfxItemPool* SvxOutlinerForwarder::GetPool() const
 
 void SvxOutlinerForwarder::GetPortions( sal_Int32 nPara, std::vector<sal_Int32>& rList ) const
 {
-    ((EditEngine&)rOutliner.GetEditEngine()).GetPortions( nPara, rList );
+    const_cast<EditEngine&>(rOutliner.GetEditEngine()).GetPortions( nPara, rList );
 }
 
 void SvxOutlinerForwarder::QuickInsertText( const OUString& rText, const ESelection& rSel )
@@ -226,14 +221,13 @@ void SvxOutlinerForwarder::QuickSetAttribs( const SfxItemSet& rSet, const ESelec
     rOutliner.QuickSetAttribs( rSet, rSel );
 }
 
-OUString SvxOutlinerForwarder::CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, Color*& rpTxtColor, Color*& rpFldColor )
+OUString SvxOutlinerForwarder::CalcFieldValue( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos, boost::optional<Color>& rpTxtColor, boost::optional<Color>& rpFldColor )
 {
     return rOutliner.CalcFieldValue( rField, nPara, nPos, rpTxtColor, rpFldColor );
 }
 
-void SvxOutlinerForwarder::FieldClicked( const SvxFieldItem& rField, sal_Int32 nPara, sal_Int32 nPos )
+void SvxOutlinerForwarder::FieldClicked( const SvxFieldItem& /*rField*/, sal_Int32 /*nPara*/, sal_Int32 /*nPos*/ )
 {
-    rOutliner.FieldClicked( rField, nPara, nPos );
 }
 
 bool SvxOutlinerForwarder::IsValid() const
@@ -245,7 +239,7 @@ bool SvxOutlinerForwarder::IsValid() const
 
 SfxItemState SvxOutlinerForwarder::GetItemState( const ESelection& rSel, sal_uInt16 nWhich ) const
 {
-    return GetSvxEditEngineItemState( (EditEngine&)rOutliner.GetEditEngine(), rSel, nWhich );
+    return GetSvxEditEngineItemState( rOutliner.GetEditEngine(), rSel, nWhich );
 }
 
 SfxItemState SvxOutlinerForwarder::GetItemState( sal_Int32 nPara, sal_uInt16 nWhich ) const
@@ -257,17 +251,8 @@ SfxItemState SvxOutlinerForwarder::GetItemState( sal_Int32 nPara, sal_uInt16 nWh
 
 void SvxOutlinerForwarder::flushCache()
 {
-    if( mpAttribsCache )
-    {
-        delete mpAttribsCache;
-        mpAttribsCache = nullptr;
-    }
-
-    if( mpParaAttribsCache )
-    {
-        delete mpParaAttribsCache;
-        mpParaAttribsCache = nullptr;
-    }
+    mpAttribsCache.reset();
+    mpParaAttribsCache.reset();
 }
 
 LanguageType SvxOutlinerForwarder::GetLanguage( sal_Int32 nPara, sal_Int32 nIndex ) const
@@ -290,18 +275,21 @@ EBulletInfo SvxOutlinerForwarder::GetBulletInfo( sal_Int32 nPara ) const
     return rOutliner.GetBulletInfo( nPara );
 }
 
-Rectangle SvxOutlinerForwarder::GetCharBounds( sal_Int32 nPara, sal_Int32 nIndex ) const
+tools::Rectangle SvxOutlinerForwarder::GetCharBounds( sal_Int32 nPara, sal_Int32 nIndex ) const
 {
     // EditEngine's 'internal' methods like GetCharacterBounds()
     // don't rotate for vertical text.
     Size aSize( rOutliner.CalcTextSize() );
-    ::std::swap( aSize.Width(), aSize.Height() );
+    // swap width and height
+    long tmp = aSize.Width();
+    aSize.setWidth(aSize.Height());
+    aSize.setHeight(tmp);
     bool bIsVertical( rOutliner.IsVertical() );
 
     // #108900# Handle virtual position one-past-the end of the string
     if( nIndex >= GetTextLen(nPara) )
     {
-        Rectangle aLast;
+        tools::Rectangle aLast;
 
         if( nIndex )
         {
@@ -337,26 +325,9 @@ Rectangle SvxOutlinerForwarder::GetCharBounds( sal_Int32 nPara, sal_Int32 nIndex
     }
 }
 
-Rectangle SvxOutlinerForwarder::GetParaBounds( sal_Int32 nPara ) const
+tools::Rectangle SvxOutlinerForwarder::GetParaBounds( sal_Int32 nPara ) const
 {
-    Point aPnt = rOutliner.GetDocPosTopLeft( nPara );
-    Size aSize = rOutliner.CalcTextSize();
-
-    if( rOutliner.IsVertical() )
-    {
-        // Hargl. Outliner's 'external' methods return the rotated
-        // dimensions, 'internal' methods like GetTextHeight( n )
-        // don't rotate.
-        sal_uLong nWidth = rOutliner.GetTextHeight( nPara );
-
-        return Rectangle( aSize.Width() - aPnt.Y() - nWidth, 0, aSize.Width() - aPnt.Y(), aSize.Height() );
-    }
-    else
-    {
-        sal_uLong nHeight = rOutliner.GetTextHeight( nPara );
-
-        return Rectangle( 0, aPnt.Y(), aSize.Width(), aPnt.Y() + nHeight );
-    }
+    return rOutliner.GetParaBounds( nPara );
 }
 
 MapMode SvxOutlinerForwarder::GetMapMode() const
@@ -372,7 +343,10 @@ OutputDevice* SvxOutlinerForwarder::GetRefDevice() const
 bool SvxOutlinerForwarder::GetIndexAtPoint( const Point& rPos, sal_Int32& nPara, sal_Int32& nIndex ) const
 {
     Size aSize( rOutliner.CalcTextSize() );
-    ::std::swap( aSize.Width(), aSize.Height() );
+    // swap width and height
+    long tmp = aSize.Width();
+    aSize.setWidth(aSize.Height());
+    aSize.setHeight(tmp);
     Point aEEPos( SvxEditSourceHelper::UserSpaceToEE( rPos,
                                                       aSize,
                                                       rOutliner.IsVertical() ));
@@ -403,7 +377,8 @@ bool SvxOutlinerForwarder::GetWordIndices( sal_Int32 nPara, sal_Int32 nIndex, sa
 
 bool SvxOutlinerForwarder::GetAttributeRun( sal_Int32& nStartIndex, sal_Int32& nEndIndex, sal_Int32 nPara, sal_Int32 nIndex, bool bInCell ) const
 {
-    return SvxEditSourceHelper::GetAttributeRun( nStartIndex, nEndIndex, rOutliner.GetEditEngine(), nPara, nIndex, bInCell );
+    SvxEditSourceHelper::GetAttributeRun( nStartIndex, nEndIndex, rOutliner.GetEditEngine(), nPara, nIndex, bInCell );
+    return true;
 }
 
 sal_Int32 SvxOutlinerForwarder::GetLineCount( sal_Int32 nPara ) const
@@ -476,9 +451,9 @@ bool SvxOutlinerForwarder::SetDepth( sal_Int32 nPara, sal_Int16 nNewDepth )
         {
             rOutliner.SetDepth( pPara, nNewDepth );
 
-//          const bool bOutlinerText = pSdrObject && (pSdrObject->GetObjInventor() == SdrInventor) && (pSdrObject->GetObjIdentifier() == OBJ_OUTLINETEXT);
+//          const bool bOutlinerText = pSdrObject && (pSdrObject->GetObjInventor() == SdrInventor::Default) && (pSdrObject->GetObjIdentifier() == OBJ_OUTLINETEXT);
             if( bOutlinerText )
-                rOutliner.SetLevelDependendStyleSheet( nPara );
+                rOutliner.SetLevelDependentStyleSheet( nPara );
 
             return true;
         }
@@ -570,9 +545,8 @@ void  SvxOutlinerForwarder::CopyText(const SvxTextForwarder& rSource)
     const SvxOutlinerForwarder* pSourceForwarder = dynamic_cast< const SvxOutlinerForwarder* >( &rSource );
     if( !pSourceForwarder )
         return;
-    OutlinerParaObject* pNewOutlinerParaObject = pSourceForwarder->rOutliner.CreateParaObject();
+    std::unique_ptr<OutlinerParaObject> pNewOutlinerParaObject = pSourceForwarder->rOutliner.CreateParaObject();
     rOutliner.SetText( *pNewOutlinerParaObject );
-    delete pNewOutlinerParaObject;
 }
 
 

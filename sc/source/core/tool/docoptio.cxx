@@ -19,25 +19,22 @@
 
 #include <vcl/svapp.hxx>
 #include <svl/zforlist.hxx>
+#include <osl/diagnose.h>
 
 #include <com/sun/star/uno/Any.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 
-#include "cfgids.hxx"
-#include "docoptio.hxx"
-#include "rechead.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "miscuno.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
+#include <docoptio.hxx>
+#include <rechead.hxx>
+#include <sc.hrc>
+#include <miscuno.hxx>
+#include <global.hxx>
 
 using namespace utl;
 using namespace com::sun::star::uno;
 
 
 using sc::HMMToTwips;
-using sc::TwipsToHMM;
 using sc::TwipsToEvenHMM;
 
 static sal_uInt16 lcl_GetDefaultTabDist()
@@ -48,37 +45,11 @@ static sal_uInt16 lcl_GetDefaultTabDist()
         return 720;                 // 1/2"
 }
 
-//      ScDocOptions - Dokument-Optionen
+//      ScDocOptions - document options
 
 ScDocOptions::ScDocOptions()
 {
     ResetDocOptions();
-}
-
-ScDocOptions::ScDocOptions( const ScDocOptions& rCpy )
-        :   fIterEps( rCpy.fIterEps ),
-            nIterCount( rCpy.nIterCount ),
-            nPrecStandardFormat( rCpy.nPrecStandardFormat ),
-            nDay( rCpy.nDay ),
-            nMonth( rCpy.nMonth ),
-            nYear( rCpy.nYear ),
-            nYear2000( rCpy.nYear2000 ),
-            nTabDistance( rCpy.nTabDistance ),
-            eFormulaSearchType( rCpy.eFormulaSearchType ),
-            bIsIgnoreCase( rCpy.bIsIgnoreCase ),
-            bIsIter( rCpy.bIsIter ),
-            bCalcAsShown( rCpy.bCalcAsShown ),
-            bMatchWholeCell( rCpy.bMatchWholeCell ),
-            bDoAutoSpell( rCpy.bDoAutoSpell ),
-            bLookUpColRowNames( rCpy.bLookUpColRowNames ),
-            bFormulaRegexEnabled( rCpy.bFormulaRegexEnabled ),
-            bFormulaWildcardsEnabled( rCpy.bFormulaWildcardsEnabled ),
-            bWriteCalcConfig( rCpy.bWriteCalcConfig )
-{
-}
-
-ScDocOptions::~ScDocOptions()
-{
 }
 
 void ScDocOptions::ResetDocOptions()
@@ -97,23 +68,51 @@ void ScDocOptions::ResetDocOptions()
     bMatchWholeCell     = true;
     bDoAutoSpell        = false;
     bLookUpColRowNames  = true;
-    bFormulaRegexEnabled= true;
-    bFormulaWildcardsEnabled= false;
-    eFormulaSearchType  = eSearchTypeUnknown;
+    bFormulaRegexEnabled= false;
+    bFormulaWildcardsEnabled= true;
+    eFormulaSearchType  = utl::SearchParam::SearchType::Wildcard;
     bWriteCalcConfig    = true;
 }
 
-//      ScTpCalcItem - Daten fuer die CalcOptions-TabPage
+void ScDocOptions::SetFormulaRegexEnabled( bool bVal )
+{
+    if (bVal)
+    {
+        bFormulaRegexEnabled = true;
+        bFormulaWildcardsEnabled = false;
+        eFormulaSearchType = utl::SearchParam::SearchType::Regexp;
+    }
+    else if (!bFormulaRegexEnabled)
+        ;   // nothing changes for setting false to false
+    else
+    {
+        bFormulaRegexEnabled = false;
+        eFormulaSearchType = utl::SearchParam::SearchType::Unknown;
+    }
+}
+
+void ScDocOptions::SetFormulaWildcardsEnabled( bool bVal )
+{
+    if (bVal)
+    {
+        bFormulaRegexEnabled = false;
+        bFormulaWildcardsEnabled = true;
+        eFormulaSearchType = utl::SearchParam::SearchType::Wildcard;
+    }
+    else if (!bFormulaWildcardsEnabled)
+        ;   // nothing changes for setting false to false
+    else
+    {
+        bFormulaWildcardsEnabled = false;
+        eFormulaSearchType = utl::SearchParam::SearchType::Unknown;
+    }
+}
+
+//      ScTpCalcItem - data for the CalcOptions TabPage
 
 ScTpCalcItem::ScTpCalcItem( sal_uInt16 nWhichP, const ScDocOptions& rOpt )
     :   SfxPoolItem ( nWhichP ),
         theOptions  ( rOpt )
-{
-}
-
-ScTpCalcItem::ScTpCalcItem( const ScTpCalcItem& rItem )
-    :   SfxPoolItem ( rItem ),
-        theOptions  ( rItem.theOptions )
 {
 }
 
@@ -152,60 +151,39 @@ SfxPoolItem* ScTpCalcItem::Clone( SfxItemPool * ) const
 #define SCCALCOPT_FINDLABEL         10
 #define SCCALCOPT_REGEX             11
 #define SCCALCOPT_WILDCARDS         12
-#define SCCALCOPT_COUNT             13
 
 #define CFGPATH_DOCLAYOUT   "Office.Calc/Layout/Other"
 
 #define SCDOCLAYOUTOPT_TABSTOP      0
-#define SCDOCLAYOUTOPT_COUNT        1
 
 Sequence<OUString> ScDocCfg::GetCalcPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "IterativeReference/Iteration",     // SCCALCOPT_ITER_ITER
-        "IterativeReference/Steps",         // SCCALCOPT_ITER_STEPS
-        "IterativeReference/MinimumChange", // SCCALCOPT_ITER_MINCHG
-        "Other/Date/DD",                    // SCCALCOPT_DATE_DAY
-        "Other/Date/MM",                    // SCCALCOPT_DATE_MONTH
-        "Other/Date/YY",                    // SCCALCOPT_DATE_YEAR
-        "Other/DecimalPlaces",              // SCCALCOPT_DECIMALS
-        "Other/CaseSensitive",              // SCCALCOPT_CASESENSITIVE
-        "Other/Precision",                  // SCCALCOPT_PRECISION
-        "Other/SearchCriteria",             // SCCALCOPT_SEARCHCRIT
-        "Other/FindLabel",                  // SCCALCOPT_FINDLABEL
-        "Other/RegularExpressions",         // SCCALCOPT_REGEX
-        "Other/Wildcards",                  // SCCALCOPT_WILDCARDS
-    };
-    Sequence<OUString> aNames(SCCALCOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCCALCOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    return aNames;
+    return {"IterativeReference/Iteration",     // SCCALCOPT_ITER_ITER
+            "IterativeReference/Steps",         // SCCALCOPT_ITER_STEPS
+            "IterativeReference/MinimumChange", // SCCALCOPT_ITER_MINCHG
+            "Other/Date/DD",                    // SCCALCOPT_DATE_DAY
+            "Other/Date/MM",                    // SCCALCOPT_DATE_MONTH
+            "Other/Date/YY",                    // SCCALCOPT_DATE_YEAR
+            "Other/DecimalPlaces",              // SCCALCOPT_DECIMALS
+            "Other/CaseSensitive",              // SCCALCOPT_CASESENSITIVE
+            "Other/Precision",                  // SCCALCOPT_PRECISION
+            "Other/SearchCriteria",             // SCCALCOPT_SEARCHCRIT
+            "Other/FindLabel",                  // SCCALCOPT_FINDLABEL
+            "Other/RegularExpressions",         // SCCALCOPT_REGEX
+            "Other/Wildcards"};                 // SCCALCOPT_WILDCARDS
 }
 
 Sequence<OUString> ScDocCfg::GetLayoutPropertyNames()
 {
-    static const char* aPropNames[] =
-    {
-        "TabStop/NonMetric"         // SCDOCLAYOUTOPT_TABSTOP
-    };
-    Sequence<OUString> aNames(SCDOCLAYOUTOPT_COUNT);
-    OUString* pNames = aNames.getArray();
-    for(int i = 0; i < SCDOCLAYOUTOPT_COUNT; i++)
-        pNames[i] = OUString::createFromAscii(aPropNames[i]);
-
-    //  adjust for metric system
     if (ScOptionsUtil::IsMetricSystem())
-        pNames[SCDOCLAYOUTOPT_TABSTOP] = "TabStop/Metric";
-
-    return aNames;
+        return {"TabStop/Metric"};    // SCDOCLAYOUTOPT_TABSTOP
+    else
+        return {"TabStop/NonMetric"}; // SCDOCLAYOUTOPT_TABSTOP
 }
 
 ScDocCfg::ScDocCfg() :
-    aCalcItem( OUString( CFGPATH_CALC ) ),
-    aLayoutItem(OUString(CFGPATH_DOCLAYOUT))
+    aCalcItem( CFGPATH_CALC ),
+    aLayoutItem(CFGPATH_DOCLAYOUT)
 {
     sal_Int32 nIntVal = 0;
 
@@ -213,7 +191,8 @@ ScDocCfg::ScDocCfg() :
     Sequence<Any> aValues;
     const Any* pValues = nullptr;
 
-    sal_uInt16 nDateDay, nDateMonth, nDateYear;
+    sal_uInt16 nDateDay, nDateMonth;
+    sal_Int16 nDateYear;
     GetDate( nDateDay, nDateMonth, nDateYear );
 
     aNames = GetCalcPropertyNames();
@@ -235,22 +214,22 @@ ScDocCfg::ScDocCfg() :
                         SetIter( ScUnoHelpFunctions::GetBoolFromAny( pValues[nProp] ) );
                         break;
                     case SCCALCOPT_ITER_STEPS:
-                        if (pValues[nProp] >>= nIntVal) SetIterCount( (sal_uInt16) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetIterCount( static_cast<sal_uInt16>(nIntVal) );
                         break;
                     case SCCALCOPT_ITER_MINCHG:
                         if (pValues[nProp] >>= fDoubleVal) SetIterEps( fDoubleVal );
                         break;
                     case SCCALCOPT_DATE_DAY:
-                        if (pValues[nProp] >>= nIntVal) nDateDay = (sal_uInt16) nIntVal;
+                        if (pValues[nProp] >>= nIntVal) nDateDay = static_cast<sal_uInt16>(nIntVal);
                         break;
                     case SCCALCOPT_DATE_MONTH:
-                        if (pValues[nProp] >>= nIntVal) nDateMonth = (sal_uInt16) nIntVal;
+                        if (pValues[nProp] >>= nIntVal) nDateMonth = static_cast<sal_uInt16>(nIntVal);
                         break;
                     case SCCALCOPT_DATE_YEAR:
-                        if (pValues[nProp] >>= nIntVal) nDateYear = (sal_uInt16) nIntVal;
+                        if (pValues[nProp] >>= nIntVal) nDateYear = static_cast<sal_Int16>(nIntVal);
                         break;
                     case SCCALCOPT_DECIMALS:
-                        if (pValues[nProp] >>= nIntVal) SetStdPrecision( (sal_uInt16) nIntVal );
+                        if (pValues[nProp] >>= nIntVal) SetStdPrecision( static_cast<sal_uInt16>(nIntVal) );
                         break;
                     case SCCALCOPT_CASESENSITIVE:
                         // content is reversed
@@ -296,7 +275,7 @@ ScDocCfg::ScDocCfg() :
                     case SCDOCLAYOUTOPT_TABSTOP:
                         // TabDistance in ScDocOptions is in twips
                         if (pValues[nProp] >>= nIntVal)
-                            SetTabDistance( (sal_uInt16) HMMToTwips( nIntVal ) );
+                            SetTabDistance( static_cast<sal_uInt16>(HMMToTwips( nIntVal )) );
                         break;
                 }
             }
@@ -305,13 +284,14 @@ ScDocCfg::ScDocCfg() :
     aLayoutItem.SetCommitLink( LINK( this, ScDocCfg, LayoutCommitHdl ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ScDocCfg, CalcCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScDocCfg, CalcCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetCalcPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
     Any* pValues = aValues.getArray();
 
-    sal_uInt16 nDateDay, nDateMonth, nDateYear;
+    sal_uInt16 nDateDay, nDateMonth;
+    sal_Int16 nDateYear;
     GetDate( nDateDay, nDateMonth, nDateYear );
 
     for(int nProp = 0; nProp < aNames.getLength(); nProp++)
@@ -319,51 +299,51 @@ IMPL_LINK_NOARG_TYPED(ScDocCfg, CalcCommitHdl, ScLinkConfigItem&, void)
         switch(nProp)
         {
             case SCCALCOPT_ITER_ITER:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], IsIter() );
+                pValues[nProp] <<= IsIter();
                 break;
             case SCCALCOPT_ITER_STEPS:
-                pValues[nProp] <<= (sal_Int32) GetIterCount();
+                pValues[nProp] <<= static_cast<sal_Int32>(GetIterCount());
                 break;
             case SCCALCOPT_ITER_MINCHG:
-                pValues[nProp] <<= (double) GetIterEps();
+                pValues[nProp] <<= GetIterEps();
                 break;
             case SCCALCOPT_DATE_DAY:
-                pValues[nProp] <<= (sal_Int32) nDateDay;
+                pValues[nProp] <<= static_cast<sal_Int32>(nDateDay);
                 break;
             case SCCALCOPT_DATE_MONTH:
-                pValues[nProp] <<= (sal_Int32) nDateMonth;
+                pValues[nProp] <<= static_cast<sal_Int32>(nDateMonth);
                 break;
             case SCCALCOPT_DATE_YEAR:
-                pValues[nProp] <<= (sal_Int32) nDateYear;
+                pValues[nProp] <<= static_cast<sal_Int32>(nDateYear);
                 break;
             case SCCALCOPT_DECIMALS:
-                pValues[nProp] <<= (sal_Int32) GetStdPrecision();
+                pValues[nProp] <<= static_cast<sal_Int32>(GetStdPrecision());
                 break;
             case SCCALCOPT_CASESENSITIVE:
                 // content is reversed
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], !IsIgnoreCase() );
+                pValues[nProp] <<= !IsIgnoreCase();
                 break;
             case SCCALCOPT_PRECISION:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], IsCalcAsShown() );
+                pValues[nProp] <<= IsCalcAsShown();
                 break;
             case SCCALCOPT_SEARCHCRIT:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], IsMatchWholeCell() );
+                pValues[nProp] <<= IsMatchWholeCell();
                 break;
             case SCCALCOPT_FINDLABEL:
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], IsLookUpColRowNames() );
+                pValues[nProp] <<= IsLookUpColRowNames();
                 break;
             case SCCALCOPT_REGEX :
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], IsFormulaRegexEnabled() );
+                pValues[nProp] <<= IsFormulaRegexEnabled();
                 break;
             case SCCALCOPT_WILDCARDS :
-                ScUnoHelpFunctions::SetBoolInAny( pValues[nProp], IsFormulaWildcardsEnabled() );
+                pValues[nProp] <<= IsFormulaWildcardsEnabled();
                 break;
         }
     }
     aCalcItem.PutProperties(aNames, aValues);
 }
 
-IMPL_LINK_NOARG_TYPED(ScDocCfg, LayoutCommitHdl, ScLinkConfigItem&, void)
+IMPL_LINK_NOARG(ScDocCfg, LayoutCommitHdl, ScLinkConfigItem&, void)
 {
     Sequence<OUString> aNames = GetLayoutPropertyNames();
     Sequence<Any> aValues(aNames.getLength());
@@ -377,7 +357,7 @@ IMPL_LINK_NOARG_TYPED(ScDocCfg, LayoutCommitHdl, ScLinkConfigItem&, void)
                 //  TabDistance in ScDocOptions is in twips
                 //  use only even numbers, so defaults don't get changed
                 //  by modifying other settings in the same config item
-                pValues[nProp] <<= (sal_Int32) TwipsToEvenHMM( GetTabDistance() );
+                pValues[nProp] <<= static_cast<sal_Int32>(TwipsToEvenHMM( GetTabDistance() ));
                 break;
         }
     }

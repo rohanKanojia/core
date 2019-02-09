@@ -26,10 +26,7 @@
 #include "pres.hxx"
 #include <svx/svdobj.hxx>
 #include <tools/color.hxx>
-#include <sddllapi.h>
-
-class SdrObject;
-class SdrPathObj;
+#include "sddllapi.h"
 
 class SD_DLLPUBLIC SdAnimationInfo : public SdrObjUserData
 {
@@ -42,22 +39,20 @@ public:
     css::presentation::AnimationSpeed  meSpeed;      ///< Speed of the animation
     bool                        mbActive;       ///< turned on?
     bool                        mbDimPrevious;  ///< Object fade out
-    bool                        mbIsMovie;      ///< if group object than it is a sequence of them.
+    bool const                  mbIsMovie;      ///< if group object than it is a sequence of them.
     bool                        mbDimHide;      ///< hide rather than dim
     Color                       maBlueScreen;   ///< identifies "background pixels"
     Color                       maDimColor;     ///< for fading the object
     OUString                    maSoundFile;    ///< Path to the sound file in MS DOS notation
     bool                        mbSoundOn;      ///< Sound on / off
     bool                        mbPlayFull;     ///< play sound completely.
-    SdrPathObj*                 mpPathObj;      ///< The path object
     css::presentation::ClickAction     meClickAction;  ///< Action at mouse click
     css::presentation::AnimationEffect meSecondEffect; ///< for object fading.
     css::presentation::AnimationSpeed  meSecondSpeed;  ///< for object fading.
-    OUString                    maSecondSoundFile; ///< for object fading.
+    OUString const              maSecondSoundFile; ///< for object fading.
     bool                        mbSecondSoundOn;   ///< for object fading.
     bool                        mbSecondPlayFull;  ///< for object fading.
     sal_uInt16                  mnVerb;            ///< for OLE object
-    sal_uLong                   mnPresOrder;
     SdrObject&                  mrObject;
 
     void           SetBookmark( const OUString& rBookmark );
@@ -65,9 +60,9 @@ public:
 public:
                             SAL_DLLPRIVATE SdAnimationInfo(SdrObject& rObject);
                             SAL_DLLPRIVATE SdAnimationInfo(const SdAnimationInfo& rAnmInfo, SdrObject& rObject);
-    SAL_DLLPRIVATE virtual                 ~SdAnimationInfo();
+    SAL_DLLPRIVATE virtual                 ~SdAnimationInfo() override;
 
-    SAL_DLLPRIVATE virtual SdrObjUserData* Clone(SdrObject* pObject) const override;
+    SAL_DLLPRIVATE virtual std::unique_ptr<SdrObjUserData> Clone(SdrObject* pObject) const override;
 };
 
 #endif // INCLUDED_SD_INC_ANMINFO_HXX

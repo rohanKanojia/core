@@ -11,18 +11,17 @@
 
 #include <vcl/IconThemeScanner.hxx>
 #include <vcl/IconThemeInfo.hxx>
+#include <config_mpl.h>
 
 #include <algorithm>
 
 namespace vcl {
 
-/*static*/ const OUString
-IconThemeSelector::FALLBACK_ICON_THEME_ID("tango");
+/*static*/ const OUStringLiteral IconThemeSelector::FALLBACK_ICON_THEME_ID("tango");
 
 namespace {
 
-    class SameTheme :
-        public std::unary_function<const vcl::IconThemeInfo &, bool>
+    class SameTheme
     {
     private:
         const OUString& m_rThemeId;
@@ -44,34 +43,40 @@ bool icon_theme_is_in_installed_themes(const OUString& theme,
 } // end anonymous namespace
 
 IconThemeSelector::IconThemeSelector()
-: mUseHighContrastTheme(false)
+    : mUseHighContrastTheme(false)
+    , mPreferDarkIconTheme(false)
 {
 }
 
 /*static*/ OUString
 IconThemeSelector::GetIconThemeForDesktopEnvironment(const OUString& desktopEnvironment)
 {
+#ifdef _WIN32
+    (void)desktopEnvironment;
+    return OUString("colibre");
+#else
     OUString r;
-    if ( desktopEnvironment.equalsIgnoreAsciiCase("tde") ||
-         desktopEnvironment.equalsIgnoreAsciiCase("kde") ) {
-        r = "crystal";
-    }
-    else if ( desktopEnvironment.equalsIgnoreAsciiCase("kde4") ) {
-        r = "oxygen";
-    }
-    else if ( desktopEnvironment.equalsIgnoreAsciiCase("kde5") ) {
+    if ( desktopEnvironment.equalsIgnoreAsciiCase("kde5") ||
+         desktopEnvironment.equalsIgnoreAsciiCase("lxqt") ) {
         r = "breeze";
     }
-    else if ( desktopEnvironment.equalsIgnoreAsciiCase("MacOSX") ) {
+    else if ( desktopEnvironment.equalsIgnoreAsciiCase("macosx") ) {
+#if MPL_HAVE_SUBSET
+        r = "tango";
+#else
         r = "breeze";
+#endif
     }
-    else if ( desktopEnvironment.equalsIgnoreAsciiCase("unity") ) {
-        r = "breeze";
-    }
-    else {
+    else if ( desktopEnvironment.equalsIgnoreAsciiCase("gnome") ||
+         desktopEnvironment.equalsIgnoreAsciiCase("mate") ||
+         desktopEnvironment.equalsIgnoreAsciiCase("unity") ) {
+        r = "elementary";
+    } else
+    {
         r = FALLBACK_ICON_THEME_ID;
     }
     return r;
+#endif // _WIN32
 }
 
 OUString
@@ -82,6 +87,10 @@ IconThemeSelector::SelectIconThemeForDesktopEnvironment(
     if (!mPreferredIconTheme.isEmpty()) {
         if (icon_theme_is_in_installed_themes(mPreferredIconTheme, installedThemes)) {
             return mPreferredIconTheme;
+        }
+        //if a dark variant is preferred, and we didn't have an exact match, then try our one and only dark theme
+        if (mPreferDarkIconTheme && icon_theme_is_in_installed_themes("breeze_dark", installedThemes)) {
+            return OUString("breeze_dark");
         }
     }
 
@@ -118,9 +127,12 @@ IconThemeSelector::SetUseHighContrastTheme(bool v)
 }
 
 void
-IconThemeSelector::SetPreferredIconTheme(const OUString& theme)
+IconThemeSelector::SetPreferredIconTheme(const OUString& theme, bool bDarkIconTheme)
 {
-    mPreferredIconTheme = theme;
+    // lower case theme name, and (tdf#120175) replace - with _
+    // see icon-themes/README
+    mPreferredIconTheme = theme.toAsciiLowerCase().replace('-','_');
+    mPreferDarkIconTheme = bDarkIconTheme;
 }
 
 bool
@@ -130,6 +142,9 @@ IconThemeSelector::operator==(const vcl::IconThemeSelector& other) const
         return true;
     }
     if (mPreferredIconTheme != other.mPreferredIconTheme) {
+        return false;
+    }
+    if (mPreferDarkIconTheme != other.mPreferDarkIconTheme) {
         return false;
     }
     if (mUseHighContrastTheme != other.mUseHighContrastTheme) {

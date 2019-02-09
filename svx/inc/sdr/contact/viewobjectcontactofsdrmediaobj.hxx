@@ -23,6 +23,7 @@
 #include <svx/sdr/contact/viewobjectcontactofsdrobj.hxx>
 #include <svx/sdr/contact/viewobjectcontact.hxx>
 #include <tools/gen.hxx>
+#include <memory>
 
 namespace avmedia { class MediaItem; }
 namespace vcl { class Window; }
@@ -40,7 +41,7 @@ namespace sdr
             ViewObjectContactOfSdrMediaObj( ObjectContact& rObjectContact,
                                             ViewContact& rViewContact,
                                             const ::avmedia::MediaItem& rMediaItem );
-            virtual ~ViewObjectContactOfSdrMediaObj();
+            virtual ~ViewObjectContactOfSdrMediaObj() override;
 
         public:
 
@@ -53,7 +54,7 @@ namespace sdr
 
         private:
 
-            sdr::contact::SdrMediaWindow* mpMediaWindow;
+            std::unique_ptr<sdr::contact::SdrMediaWindow> mpMediaWindow;
 
         };
     } // end of namespace contact

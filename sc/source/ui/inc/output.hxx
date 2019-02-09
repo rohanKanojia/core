@@ -20,12 +20,14 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_OUTPUT_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_OUTPUT_HXX
 
-#include "address.hxx"
-#include "cellvalue.hxx"
+#include <address.hxx>
+#include <cellvalue.hxx>
 #include <tools/color.hxx>
 #include <tools/fract.hxx>
-#include <com/sun/star/embed/XEmbeddedObject.hpp>
-#include <drawinglayer/processor2d/baseprocessor2d.hxx>
+#include <tools/gen.hxx>
+#include <editeng/svxenum.hxx>
+#include <vcl/outdev.hxx>
+#include <o3tl/deleter.hxx>
 
 namespace sc {
     struct SpellCheckContext;
@@ -34,14 +36,12 @@ namespace sc {
 namespace editeng {
     struct MisspellRanges;
 }
+namespace drawinglayer { namespace processor2d { class BaseProcessor2D; } }
 
-class Rectangle;
 namespace vcl { class Font; }
-class OutputDevice;
 class EditEngine;
 class ScDocument;
 class ScPatternAttr;
-class SdrObject;
 struct RowInfo;
 struct ScTableInfo;
 class ScTabViewShell;
@@ -55,7 +55,8 @@ class SdrPaintWindow;
 
 enum ScOutputType { OUTTYPE_WINDOW, OUTTYPE_PRINTER };
 
-class ScFieldEditEngine;
+class ClearableClipRegion;
+typedef std::unique_ptr<ClearableClipRegion, o3tl::default_delete<ClearableClipRegion>> ClearableClipRegionPtr;
 
 class ScOutputData
 {
@@ -64,8 +65,8 @@ friend class ScGridWindow;
 private:
     struct OutputAreaParam
     {
-        Rectangle   maAlignRect;
-        Rectangle   maClipRect;
+        tools::Rectangle   maAlignRect;
+        tools::Rectangle   maClipRect;
         long        mnColWidth;
         long        mnLeftClipLength; /// length of the string getting cut off on the left.
         long        mnRightClipLength; /// length of the string getting cut off on the right.
@@ -76,24 +77,22 @@ private:
     class DrawEditParam
     {
     public:
-        SvxCellHorJustify       meHorJustAttr;      ///< alignment attribute
+        SvxCellHorJustify const       meHorJustAttr;      ///< alignment attribute
         SvxCellHorJustify       meHorJustContext;   ///< context depending on attribute, content and direction
         SvxCellHorJustify       meHorJustResult;    ///< result for EditEngine
         SvxCellVerJustify       meVerJust;
-        SvxCellJustifyMethod    meHorJustMethod;
-        SvxCellJustifyMethod    meVerJustMethod;
+        SvxCellJustifyMethod const    meHorJustMethod;
+        SvxCellJustifyMethod const    meVerJustMethod;
         SvxCellOrientation      meOrient;
         SCSIZE                  mnArrY;
         SCCOL                   mnX;
-        SCROW                   mnY;
         SCCOL                   mnCellX;
         SCROW                   mnCellY;
-        SCTAB                   mnTab;
         long                    mnPosX;
         long                    mnPosY;
         long                    mnInitPosX;
-        bool                    mbBreak:1;
-        bool                    mbCellIsValue:1;
+        bool const              mbBreak:1;
+        bool const              mbCellIsValue:1;
         bool                    mbAsianVertical:1;
         bool                    mbPixelToLogic:1;
         bool                    mbHyphenatorSet:1;
@@ -110,10 +109,10 @@ private:
 
         explicit DrawEditParam(const ScPatternAttr* pPattern, const SfxItemSet* pCondSet, bool bCellIsValue);
 
-        bool readCellContent(ScDocument* pDoc, bool bShowNullValues, bool bShowFormulas, bool bSyntaxMode, bool bUseStyleColor, bool bForceAutoColor, bool& rWrapFields);
+        bool readCellContent(const ScDocument* pDoc, bool bShowNullValues, bool bShowFormulas, bool bSyntaxMode, bool bUseStyleColor, bool bForceAutoColor, bool& rWrapFields);
         void setPatternToEngine(bool bUseStyleColor);
         void calcMargins(long& rTop, long& rLeft, long& rBottom, long& rRight, double nPPTX, double nPPTY) const;
-        void calcPaperSize(Size& rPaperSize, const Rectangle& rAlignRect, double nPPTX, double nPPTY) const;
+        void calcPaperSize(Size& rPaperSize, const tools::Rectangle& rAlignRect, double nPPTX, double nPPTY) const;
         void getEngineSize(ScFieldEditEngine* pEngine, long& rWidth, long& rHeight) const;
         bool hasLineBreak() const;
         bool isHyperlinkCell() const;
@@ -133,12 +132,11 @@ private:
          *                    finished, this parameter will store the new
          *                    position.
          */
-        void calcStartPosForVertical(Point& rLogicStart, long nCellWidth, long nEngineWidth, long nTopM, OutputDevice* pRefDevice);
+        void calcStartPosForVertical(Point& rLogicStart, long nCellWidth, long nEngineWidth, long nTopM, const OutputDevice* pRefDevice);
 
         void setAlignmentToEngine();
         bool adjustHorAlignment(ScFieldEditEngine* pEngine);
-        void adjustForRTL();
-        void adjustForHyperlinkInPDF(Point aURLStart, OutputDevice* pDev);
+        void adjustForHyperlinkInPDF(Point aURLStart, const OutputDevice* pDev);
     };
 
     VclPtr<OutputDevice> mpDev;        // Device
@@ -146,29 +144,27 @@ private:
     VclPtr<OutputDevice> pFmtDevice;   // reference for text formatting
     ScTableInfo& mrTabInfo;
     RowInfo* pRowInfo;          // Info block
-    SCSIZE nArrCount;           // occupied lines in info block
+    SCSIZE const nArrCount;           // occupied lines in info block
     ScDocument* mpDoc;          // Document
     SCTAB nTab;                 // sheet
-    long nScrX;                 // Output Startpos. (Pixel)
-    long nScrY;
+    long const nScrX;                 // Output Startpos. (Pixel)
+    long const nScrY;
     long nScrW;                 // Output size (Pixel)
     long nScrH;
     long nMirrorW;              // Visible output width for mirroring (default: nScrW)
-    SCCOL nX1;                  // Start-/End coordinates
-    SCROW nY1;                  //  ( incl. hidden )
-    SCCOL nX2;
-    SCROW nY2;
+    SCCOL const nX1;                  // Start-/End coordinates
+    SCROW const nY1;                  //  ( incl. hidden )
+    SCCOL const nX2;
+    SCROW const nY2;
     SCCOL nVisX1;               // Start-/End coordinates
     SCROW nVisY1;               //  ( visible range )
     SCCOL nVisX2;
     SCROW nVisY2;
-    ScOutputType eType;         // Screen/Printer ...
-    double mnPPTX;              // Pixel per Twips
-    double mnPPTY;
+    ScOutputType const eType;         // Screen/Printer ...
+    double const mnPPTX;              // Pixel per Twips
+    double const mnPPTY;
     Fraction aZoomX;
     Fraction aZoomY;
-
-    SdrObject* pEditObj;        // Omit when painting
 
     ScTabViewShell* pViewShell; // for connect from visible plug-ins
 
@@ -179,18 +175,17 @@ private:
     SCROW nEditRow;
 
     bool bMetaFile;             // Output to metafile (not pixels!)
-    bool bSingleGrid;           // beim Gitter bChanged auswerten
 
     bool bPagebreakMode;        // Page break preview
-    bool bSolidBackground;      // white instead of transparant
+    bool bSolidBackground;      // white instead of transparent
 
     bool mbUseStyleColor;
-    bool mbForceAutoColor;
+    bool const mbForceAutoColor;
 
     bool mbSyntaxMode;          // Syntax highlighting
-    Color* pValueColor;
-    Color* pTextColor;
-    Color* pFormulaColor;
+    std::unique_ptr<Color> pValueColor;
+    std::unique_ptr<Color> pTextColor;
+    std::unique_ptr<Color> pFormulaColor;
 
     Color   aGridColor;
 
@@ -201,10 +196,8 @@ private:
 
     bool    bSnapPixel;
 
-    bool    bAnyRotated;        // internal
     bool    bAnyClipped;        // internal
     bool    bTabProtected;
-    sal_uInt8   nTabTextDirection;  // EEHorizontalTextDirection values
     bool    bLayoutRTL;
 
     // #i74769# use SdrPaintWindow direct, remember it during BeginDrawLayers/EndDrawLayers
@@ -215,7 +208,7 @@ private:
 
     bool            GetMergeOrigin( SCCOL nX, SCROW nY, SCSIZE nArrY,
                                     SCCOL& rOverX, SCROW& rOverY, bool bVisRowChanged );
-    bool IsEmptyCellText( RowInfo* pThisRowInfo, SCCOL nX, SCROW nY );
+    bool IsEmptyCellText( const RowInfo* pThisRowInfo, SCCOL nX, SCROW nY );
     void GetVisibleCell( SCCOL nCol, SCROW nRow, SCTAB nTab, ScRefCellValue& rCell );
 
     bool IsAvailable( SCCOL nX, SCROW nY );
@@ -227,20 +220,20 @@ private:
                                    bool bBreak, bool bOverwrite,
                                    OutputAreaParam& rParam );
 
-    void            ShrinkEditEngine( EditEngine& rEngine, const Rectangle& rAlignRect,
+    void            ShrinkEditEngine( EditEngine& rEngine, const tools::Rectangle& rAlignRect,
                                     long nLeftM, long nTopM, long nRightM, long nBottomM,
-                                    bool bWidth, sal_uInt16 nOrient, long nAttrRotate, bool bPixelToLogic,
+                                    bool bWidth, SvxCellOrientation nOrient, long nAttrRotate, bool bPixelToLogic,
                                     long& rEngineWidth, long& rEngineHeight, long& rNeededPixel,
                                     bool& rLeftClip, bool& rRightClip );
 
     void SetSyntaxColor( vcl::Font* pFont, const ScRefCellValue& rCell );
-    void SetEditSyntaxColor( EditEngine& rEngine, ScRefCellValue& rCell );
+    void SetEditSyntaxColor( EditEngine& rEngine, const ScRefCellValue& rCell );
 
     double          GetStretch();
 
-    void            DrawRotatedFrame(vcl::RenderContext& rRenderContext, const Color* pForceColor);       // pixel
+    void            DrawRotatedFrame(vcl::RenderContext& rRenderContext);       // pixel
 
-    drawinglayer::processor2d::BaseProcessor2D*  CreateProcessor2D( );
+    std::unique_ptr<drawinglayer::processor2d::BaseProcessor2D> CreateProcessor2D( );
 
     void DrawEditStandard(DrawEditParam& rParam);
     void DrawEditBottomTop(DrawEditParam& rParam);
@@ -253,10 +246,24 @@ private:
     void ShowClipMarks( DrawEditParam& rParam, long nEngineHeight, const Size& aCellSize,
                         bool bMerged, OutputAreaParam& aAreaParam );
 
-    bool Clip( DrawEditParam& rParam, const Size& aCellSize, OutputAreaParam& aAreaParam,
-               long nEngineHeight, bool bWrapFields);
+    ClearableClipRegionPtr Clip(DrawEditParam& rParam, const Size& aCellSize, OutputAreaParam& aAreaParam,
+                                long nEngineHeight, bool bWrapFields);
+
+    bool AdjustAreaParamClipRect(OutputAreaParam& rAreaParam);
+    long SetEngineTextAndGetWidth( DrawEditParam& rParam, const OUString& rSetString,
+                                   long& rNeededPixel, long nAddWidthPixels );
+
+    // Check for and set cell rotations at OutputData to have it available
+    // in the svx tooling to render the borders. Moved to private section
+    // and the single call to end of constructor to be sure this always happens
+    void    SetCellRotations();
 
 public:
+    /**
+     * @param nNewScrX: X-Offset in the output device for the table
+     * @param nNewScrY: Y-Offset in the output device for the table
+     *
+     */
                     ScOutputData( OutputDevice* pNewDev, ScOutputType eNewType,
                                     ScTableInfo& rTabInfo, ScDocument* pNewDoc,
                                     SCTAB nNewTab, long nNewScrX, long nNewScrY,
@@ -267,12 +274,11 @@ public:
 
                     ~ScOutputData();
 
-    void SetSpellCheckContext( const sc::SpellCheckContext* pCxt );
+    void    SetSpellCheckContext( const sc::SpellCheckContext* pCxt );
     void    SetContentDevice( OutputDevice* pContentDev );
 
     void    SetRefDevice( OutputDevice* pRDev ) { mpRefDevice = pFmtDevice = pRDev; }
     void    SetFmtDevice( OutputDevice* pRDev ) { pFmtDevice = pRDev; }
-    void    SetEditObject( SdrObject* pObj )    { pEditObj = pObj; }
     void    SetViewShell( ScTabViewShell* pSh ) { pViewShell = pSh; }
 
     void    SetDrawView( FmFormView* pNew )     { pDrawView = pNew; }
@@ -283,12 +289,11 @@ public:
     void    SetEditCell( SCCOL nCol, SCROW nRow );
     void    SetSyntaxMode( bool bNewMode );
     void    SetMetaFileMode( bool bNewMode );
-    void    SetSingleGrid( bool bNewMode );
     void    SetGridColor( const Color& rColor );
     void    SetMarkClipped( bool bSet );
-    void    SetShowNullValues ( bool bSet = true );
-    void    SetShowFormulas   ( bool bSet = true );
-    void    SetShowSpellErrors( bool bSet = true );
+    void    SetShowNullValues ( bool bSet );
+    void    SetShowFormulas   ( bool bSet );
+    void    SetShowSpellErrors( bool bSet );
     void    SetMirrorWidth( long nNew );
     long    GetScrW() const     { return nScrW; }
     long    GetScrH() const     { return nScrH; }
@@ -299,7 +304,7 @@ public:
     void    DrawStrings( bool bPixelToLogic = false );
 
     /// Draw all strings, or provide Rectangle where the text (defined by rAddress) would be drawn.
-    Rectangle LayoutStrings(bool bPixelToLogic = false, bool bPaint = true, const ScAddress &rAddress = ScAddress());
+    tools::Rectangle LayoutStrings(bool bPixelToLogic, bool bPaint = true, const ScAddress &rAddress = ScAddress());
 
     void    DrawDocumentBackground();
     void    DrawBackground(vcl::RenderContext& rRenderContext);
@@ -309,20 +314,17 @@ public:
 
                     // with logic MapMode set!
     void    DrawEdit(bool bPixelToLogic);
-
-    void    FindRotated();
     void    DrawRotated(bool bPixelToLogic);        // logical
 
     void    DrawClear();
 
     // #i72502# printer only command set
-    Point PrePrintDrawingLayer(long nLogStX, long nLogStY );
-    void PostPrintDrawingLayer(const Point& rMMOffset); // #i74768# need offset for FormLayer
-    void PrintDrawingLayer(const sal_uInt16 nLayer, const Point& rMMOffset);
+    Point   PrePrintDrawingLayer(long nLogStX, long nLogStY );
+    void    PostPrintDrawingLayer(const Point& rMMOffset); // #i74768# need offset for FormLayer
+    void    PrintDrawingLayer(SdrLayerID nLayer, const Point& rMMOffset);
 
     // only screen:
-    void    DrawingSingle(const sal_uInt16 nLayer);
-    void    DrawSelectiveObjects(const sal_uInt16 nLayer);
+    void    DrawSelectiveObjects(SdrLayerID nLayer);
 
     bool    SetChangedClip();       // sal_False = not
     vcl::Region  GetChangedAreaRegion();

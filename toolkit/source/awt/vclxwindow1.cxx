@@ -27,9 +27,9 @@
 #include <prewin.h>
 #include <postwin.h>
 #elif defined ( MACOSX )
-#include "premac.h"
+#include <premac.h>
 #include <Cocoa/Cocoa.h>
-#include "postmac.h"
+#include <postmac.h>
 #endif
 #include <vcl/sysdata.hxx>
 
@@ -37,8 +37,8 @@
 void VCLXWindow::SetSystemParent_Impl( const css::uno::Any& rHandle )
 {
     // does only work for WorkWindows
-    vcl::Window *pWindow = GetWindow();
-    if ( pWindow->GetType() != WINDOW_WORKWINDOW )
+    VclPtr<vcl::Window> pWindow = GetWindow();
+    if ( pWindow->GetType() != WindowType::WORKWINDOW )
     {
         css::uno::RuntimeException aException;
         aException.Message = "not a work window";
@@ -78,7 +78,7 @@ void VCLXWindow::SetSystemParent_Impl( const css::uno::Any& rHandle )
     SystemParentData aSysParentData;
     aSysParentData.nSize = sizeof ( SystemParentData );
 #if defined(_WIN32)
-    aSysParentData.hWnd = (HWND) nHandle;
+    aSysParentData.hWnd = reinterpret_cast<HWND>(nHandle);
 #elif defined( MACOSX )
     aSysParentData.pView = reinterpret_cast<NSView*>(nHandle);
 #elif defined( ANDROID )
@@ -86,12 +86,12 @@ void VCLXWindow::SetSystemParent_Impl( const css::uno::Any& rHandle )
 #elif defined( IOS )
     // Nothing
 #elif defined( UNX )
-    aSysParentData.aWindow = (long)nHandle;
+    aSysParentData.aWindow = static_cast<long>(nHandle);
     aSysParentData.bXEmbedSupport = bXEmbed;
 #endif
 
     // set system parent
-    static_cast<WorkWindow*>(pWindow)->SetPluginParent( &aSysParentData );
+    static_cast<WorkWindow*>(pWindow.get())->SetPluginParent( &aSysParentData );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

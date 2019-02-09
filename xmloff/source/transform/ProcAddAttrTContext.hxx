@@ -24,8 +24,8 @@
 
 class XMLProcAddAttrTransformerContext : public XMLProcAttrTransformerContext
 {
-    OUString m_aAttrQName;
-    OUString m_aAttrValue;
+    OUString const m_aAttrQName;
+    OUString const m_aAttrValue;
 
 public:
     XMLProcAddAttrTransformerContext( XMLTransformerBase& rTransformer,
@@ -37,7 +37,7 @@ public:
                               ::xmloff::token::XMLTokenEnum eAToken,
                               ::xmloff::token::XMLTokenEnum eVToken );
 
-    virtual ~XMLProcAddAttrTransformerContext();
+    virtual ~XMLProcAddAttrTransformerContext() override;
 
     virtual void StartElement( const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 };

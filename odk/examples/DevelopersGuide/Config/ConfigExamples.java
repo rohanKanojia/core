@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*************************************************************************
  *
  *  The Contents of this file are made available subject to the terms of
@@ -846,7 +847,7 @@ public class ConfigExamples
         ATTENTION: This example requires an older version of the
                    org.openoffice.Office.DataAccess schema.
                    It does not work with the current schema.
-                   Because of this, the method currenty does nothing.
+                   Because of this, the method currently does nothing.
                    You can still use the techniques shown in the example code.
     */
     void storeSampleDataSource()
@@ -1097,3 +1098,5 @@ public class ConfigExamples
 
 // ------- the end -----------
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

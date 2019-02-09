@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "columnsettings.hxx"
-#include "dbastrings.hrc"
+#include <columnsettings.hxx>
+#include <stringconstants.hxx>
+#include <strings.hxx>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
@@ -31,14 +32,11 @@ namespace dbaccess
 {
 
     using ::com::sun::star::uno::Reference;
-    using ::com::sun::star::uno::XInterface;
     using ::com::sun::star::uno::UNO_QUERY;
     using ::com::sun::star::uno::UNO_SET_THROW;
     using ::com::sun::star::uno::Exception;
-    using ::com::sun::star::uno::RuntimeException;
     using ::com::sun::star::uno::Any;
     using ::com::sun::star::uno::Type;
-    using ::com::sun::star::lang::IllegalArgumentException;
     using ::com::sun::star::beans::XPropertySet;
     using ::com::sun::star::beans::XPropertySetInfo;
 
@@ -135,16 +133,16 @@ namespace dbaccess
                 { OUString(PROPERTY_HIDDEN),           PROPERTY_ID_HIDDEN }
             };
 
-            for ( size_t i=0; i < SAL_N_ELEMENTS( aProps ); ++i )
+            for (const auto & aProp : aProps)
             {
-                if ( xPSI->hasPropertyByName( aProps[i].sName ) )
-                    if ( !isDefaulted( aProps[i].nHandle, _rxColumn->getPropertyValue( aProps[i].sName ) ) )
+                if ( xPSI->hasPropertyByName( aProp.sName ) )
+                    if ( !isDefaulted( aProp.nHandle, _rxColumn->getPropertyValue( aProp.sName ) ) )
                         return false;
             }
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         return true;
     }

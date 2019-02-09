@@ -18,31 +18,29 @@
  */
 
 #include "ConnectionPageSetup.hxx"
-#include "dbu_dlg.hrc"
+#include <strings.hrc>
+#include <core_resource.hxx>
+#include <dbu_dlg.hxx>
 #include <svl/itemset.hxx>
 #include <unotools/pathoptions.hxx>
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
-#include "dsitems.hxx"
-#include "dbaccess_helpid.hrc"
-#include "localresaccess.hxx"
+#include <dsitems.hxx>
 #include <osl/process.h>
-#include <vcl/msgbox.hxx>
-#include "dbadmin.hxx"
-#include <comphelper/types.hxx>
+#include <dbadmin.hxx>
 #include <vcl/stdtext.hxx>
-#include "sqlmessage.hxx"
+#include <sqlmessage.hxx>
 #include "odbcconfig.hxx"
 #include "dsselect.hxx"
 #include <svl/filenotation.hxx>
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/awt/XWindow.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
 #include <com/sun/star/ucb/XProgressHandler.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
-#include "UITools.hxx"
+#include <UITools.hxx>
 #include <unotools/localfilehelper.hxx>
 #include <unotools/ucbhelper.hxx>
 #include <ucbhelper/commandenvironment.hxx>
@@ -63,57 +61,57 @@ namespace dbaui
     using namespace ::dbtools;
     using namespace ::svt;
 
-    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateDbaseTabPage( vcl::Window* pParent, const SfxItemSet& _rAttrSet )
+    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateDbaseTabPage(TabPageParent pParent, const SfxItemSet& _rAttrSet)
     {
-        return VclPtr<OConnectionTabPageSetup>::Create ( pParent, "ConnectionPage", "dbaccess/ui/dbwizconnectionpage.ui", _rAttrSet, STR_DBASE_HELPTEXT, STR_DBASE_HEADERTEXT, STR_DBASE_PATH_OR_FILE );
+        return VclPtr<OConnectionTabPageSetup>::Create ( pParent, "dbaccess/ui/dbwizconnectionpage.ui", "ConnectionPage", _rAttrSet, STR_DBASE_HELPTEXT, STR_DBASE_HEADERTEXT, STR_DBASE_PATH_OR_FILE );
     }
 
-    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateMSAccessTabPage( vcl::Window* pParent, const SfxItemSet& _rAttrSet )
+    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateMSAccessTabPage(TabPageParent pParent, const SfxItemSet& _rAttrSet)
     {
-        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "ConnectionPage", "dbaccess/ui/dbwizconnectionpage.ui", _rAttrSet, STR_MSACCESS_HELPTEXT, STR_MSACCESS_HEADERTEXT, STR_MSACCESS_MDB_FILE );
+        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "dbaccess/ui/dbwizconnectionpage.ui", "ConnectionPage", _rAttrSet, STR_MSACCESS_HELPTEXT, STR_MSACCESS_HEADERTEXT, STR_MSACCESS_MDB_FILE );
     }
 
-    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateADOTabPage( vcl::Window* pParent, const SfxItemSet& _rAttrSet )
+    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateADOTabPage(TabPageParent pParent, const SfxItemSet& _rAttrSet)
     {
-        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "ConnectionPage", "dbaccess/ui/dbwizconnectionpage.ui", _rAttrSet, STR_ADO_HELPTEXT, STR_ADO_HEADERTEXT, STR_COMMONURL );
+        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "dbaccess/ui/dbwizconnectionpage.ui", "ConnectionPage", _rAttrSet, STR_ADO_HELPTEXT, STR_ADO_HEADERTEXT, STR_COMMONURL );
     }
 
-    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateODBCTabPage( vcl::Window* pParent, const SfxItemSet& _rAttrSet )
+    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateODBCTabPage(TabPageParent pParent, const SfxItemSet& _rAttrSet)
     {
-        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "ConnectionPage", "dbaccess/ui/dbwizconnectionpage.ui", _rAttrSet, STR_ODBC_HELPTEXT, STR_ODBC_HEADERTEXT, STR_NAME_OF_ODBC_DATASOURCE );
+        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "dbaccess/ui/dbwizconnectionpage.ui", "ConnectionPage", _rAttrSet, STR_ODBC_HELPTEXT, STR_ODBC_HEADERTEXT, STR_NAME_OF_ODBC_DATASOURCE );
     }
 
-    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateUserDefinedTabPage( vcl::Window* pParent, const SfxItemSet& _rAttrSet )
+    VclPtr<OGenericAdministrationPage> OConnectionTabPageSetup::CreateUserDefinedTabPage(TabPageParent pParent, const SfxItemSet& _rAttrSet)
     {
-        return VclPtr<OConnectionTabPageSetup>::Create( pParent, "ConnectionPage", "dbaccess/ui/dbwizconnectionpage.ui", _rAttrSet, USHRT_MAX, USHRT_MAX, STR_COMMONURL );
+        return VclPtr<OConnectionTabPageSetup>::Create(pParent, "dbaccess/ui/dbwizconnectionpage.ui", "ConnectionPage", _rAttrSet, nullptr, nullptr, STR_COMMONURL);
     }
 
-    OConnectionTabPageSetup::OConnectionTabPageSetup(vcl::Window* pParent, const OString& _rId, const OUString& _rUIXMLDescription, const SfxItemSet& _rCoreAttrs, sal_uInt16 _nHelpTextResId, sal_uInt16 _nHeaderResId, sal_uInt16 _nUrlResId)
-        :OConnectionHelper(pParent, _rId, _rUIXMLDescription, _rCoreAttrs)
+    OConnectionTabPageSetup::OConnectionTabPageSetup(TabPageParent pParent, const OUString& _rUIXMLDescription, const OString& _rId, const SfxItemSet& _rCoreAttrs, const char* pHelpTextResId, const char* pHeaderResId, const char* pUrlResId)
+        : OConnectionHelper(pParent, _rUIXMLDescription, _rId, _rCoreAttrs)
+        , m_xHelpText(m_xBuilder->weld_label("helptext"))
+        , m_xHeaderText(m_xBuilder->weld_label("header"))
     {
-        get(m_pHelpText, "helptext");
-        get(m_pHeaderText, "header");
 
-        if ( USHRT_MAX != _nHelpTextResId )
+        if (pHelpTextResId != nullptr)
         {
-            OUString sHelpText = ModuleRes(_nHelpTextResId);
-            m_pHelpText->SetText(sHelpText);
+            OUString sHelpText = DBA_RES(pHelpTextResId);
+            m_xHelpText->set_label(sHelpText);
         }
         else
-            m_pHelpText->Hide();
+            m_xHelpText->hide();
 
-        if ( USHRT_MAX != _nHeaderResId )
-            m_pHeaderText->SetText(ModuleRes(_nHeaderResId));
+        if (pHeaderResId != nullptr)
+            m_xHeaderText->set_label(DBA_RES(pHeaderResId));
 
-        if ( USHRT_MAX != _nUrlResId )
+        if (pUrlResId != nullptr)
         {
-            OUString sLabelText = ModuleRes(_nUrlResId);
-            m_pFT_Connection->SetText(sLabelText);
+            OUString sLabelText = DBA_RES(pUrlResId);
+            m_xFT_Connection->set_label(sLabelText);
         }
         else
-            m_pFT_Connection->Hide();
+            m_xFT_Connection->hide();
 
-        m_pConnectionURL->SetModifyHdl(LINK(this, OConnectionTabPageSetup, OnEditModified));
+        m_xConnectionURL->connect_changed(LINK(this, OConnectionTabPageSetup, OnEditModified));
 
         SetRoadmapStateValue(false);
     }
@@ -121,13 +119,6 @@ namespace dbaui
     OConnectionTabPageSetup::~OConnectionTabPageSetup()
     {
         disposeOnce();
-    }
-
-    void OConnectionTabPageSetup::dispose()
-    {
-        m_pHelpText.clear();
-        m_pHeaderText.clear();
-        OConnectionHelper::dispose();
     }
 
     void OConnectionTabPageSetup::implInitControls(const SfxItemSet& _rSet, bool _bSaveValue)
@@ -166,21 +157,23 @@ namespace dbaui
     bool OConnectionTabPageSetup::FillItemSet(SfxItemSet* _rSet)
     {
         bool bChangedSomething = false;
-        fillString(*_rSet,m_pConnectionURL, DSID_CONNECTURL, bChangedSomething);
+        fillString(*_rSet,m_xConnectionURL.get(), DSID_CONNECTURL, bChangedSomething);
         return bChangedSomething;
     }
+
     bool OConnectionTabPageSetup::checkTestConnection()
     {
         if ( m_pCollection->determineType(m_eType) ==  ::dbaccess::DST_POSTGRES )
             return true;
-        return !m_pConnectionURL->IsVisible() || !m_pConnectionURL->GetTextNoPrefix().isEmpty();
+        return !m_xConnectionURL->get_visible() || !m_xConnectionURL->GetTextNoPrefix().isEmpty();
     }
 
-    IMPL_LINK_NOARG_TYPED(OConnectionTabPageSetup, OnEditModified, Edit&, void)
+    IMPL_LINK_NOARG(OConnectionTabPageSetup, OnEditModified, weld::Entry&, void)
     {
         SetRoadmapStateValue(checkTestConnection());
         callModifiedHdl();
     }
+
 }   // namespace dbaui
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

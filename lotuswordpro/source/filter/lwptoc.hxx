@@ -67,16 +67,16 @@ class XFIndex;
  * @brief
  * VO_TOCSUPERTABLELAYOUT object
  */
-class LwpTocSuperLayout : public LwpSuperTableLayout
+class LwpTocSuperLayout final : public LwpSuperTableLayout
 {
 public:
-    LwpTocSuperLayout(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
-    virtual ~LwpTocSuperLayout();
+    LwpTocSuperLayout(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
+    virtual ~LwpTocSuperLayout() override;
     void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
     virtual LWP_LAYOUT_TYPE GetLayoutType () override { return LWP_TOC_SUPERTABLE_LAYOUT;}
     virtual void XFConvertFrame(XFContentContainer* pCont, sal_Int32 nStart = 0, sal_Int32 nEnd = 0, bool bAll = false) override;
-protected:
+private:
     void Read() override;
     bool GetRightAlignPageNumber(sal_uInt16 index);
     bool GetUsePageNumber(sal_uInt16 index);
@@ -84,7 +84,7 @@ protected:
     LwpTocLevelData * GetSearchLevelPtr(sal_uInt16 index);
     static LwpTocLevelData * GetNextSearchLevelPtr(sal_uInt16 index, LwpTocLevelData * pCurData);
     void AddSourceStyle(XFIndex* pToc, LwpTocLevelData * pLevel,  LwpFoundry * pFoundry);
-private:
+
     enum {MAX_LEVELS = 9};
     enum
     {
@@ -144,15 +144,15 @@ public:
         USETEXT = 0x01,
         USENUMBER = 0x02
     };
-    LwpTocLevelData(LwpObjectHeader &objHdr, LwpSvStream* pStrm);
+    LwpTocLevelData(LwpObjectHeader const &objHdr, LwpSvStream* pStrm);
     void RegisterStyle() override;
     virtual void XFConvert(XFContentContainer* pCont) override;
-    inline sal_uInt16 GetLevel(){return m_nLevel;}
-    inline bool GetUseText(){   return (m_nFlags & USETEXT) != 0;}
-    inline OUString GetSearchStyle(){return m_SearchName.str();}
-    inline bool GetUseLeadingText(){    return (m_nFlags & USENUMBER) != 0;}
+    sal_uInt16 GetLevel(){return m_nLevel;}
+    bool GetUseText(){   return (m_nFlags & USETEXT) != 0;}
+    OUString const & GetSearchStyle(){return m_SearchName.str();}
+    bool GetUseLeadingText(){    return (m_nFlags & USENUMBER) != 0;}
 private:
-    virtual ~LwpTocLevelData();
+    virtual ~LwpTocLevelData() override;
 
     sal_uInt16 m_nFlags;
     sal_uInt16 m_nLevel;

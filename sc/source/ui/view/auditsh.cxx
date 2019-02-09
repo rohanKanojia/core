@@ -17,22 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <svl/srchitem.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/objsh.hxx>
 #include <sfx2/request.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 
-#include "auditsh.hxx"
-#include "tabvwsh.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "document.hxx"
+#include <auditsh.hxx>
+#include <tabvwsh.hxx>
+#include <sc.hrc>
+#include <document.hxx>
 
-#define ScAuditingShell
-#include "scslots.hxx"
+#define ShellClass_ScAuditingShell
+#include <scslots.hxx>
 
 
 SFX_IMPL_INTERFACE(ScAuditingShell, SfxShell)
@@ -48,22 +47,21 @@ ScAuditingShell::ScAuditingShell(ScViewData* pData) :
     nFunction( SID_FILL_ADD_PRED )
 {
     SetPool( &pViewData->GetViewShell()->GetPool() );
-    ::svl::IUndoManager* pMgr = pViewData->GetSfxDocShell()->GetUndoManager();
+    SfxUndoManager* pMgr = pViewData->GetSfxDocShell()->GetUndoManager();
     SetUndoManager( pMgr );
     if ( !pViewData->GetDocument()->IsUndoEnabled() )
     {
         pMgr->SetMaxUndoActionCount( 0 );
     }
-    SetHelpId( HID_SCSHELL_AUDIT );
     SetName("Auditing");
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Auditing));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Auditing));
 }
 
 ScAuditingShell::~ScAuditingShell()
 {
 }
 
-void ScAuditingShell::Execute( SfxRequest& rReq )
+void ScAuditingShell::Execute( const SfxRequest& rReq )
 {
     SfxBindings& rBindings = pViewData->GetBindings();
     sal_uInt16 nSlot = rReq.GetSlot();
@@ -96,8 +94,8 @@ void ScAuditingShell::Execute( SfxRequest& rReq )
                     {
                         OSL_ENSURE( dynamic_cast<const SfxInt16Item*>( pXItem) != nullptr && dynamic_cast<const SfxInt32Item*>( pYItem) !=  nullptr,
                                         "wrong items" );
-                        SCsCOL nCol = static_cast<SCsCOL>(static_cast<const SfxInt16Item*>(pXItem)->GetValue());
-                        SCsROW nRow = static_cast<SCsROW>(static_cast<const SfxInt32Item*>(pYItem)->GetValue());
+                        SCCOL nCol = static_cast<SCCOL>(static_cast<const SfxInt16Item*>(pXItem)->GetValue());
+                        SCROW nRow = static_cast<SCROW>(static_cast<const SfxInt32Item*>(pYItem)->GetValue());
                         ScViewFunc* pView = pViewData->GetView();
                         pView->MoveCursorAbs( nCol, nRow, SC_FOLLOW_LINE, false, false );
                         switch ( nFunction )

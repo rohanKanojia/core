@@ -38,6 +38,9 @@ public:
         ,nHeight(sal_uInt16(rSize.Height()))
     {
     }
+#if defined(__COVERITY__)
+    ~SwPosSize() COVERITY_NOEXCEPT_FALSE {}
+#endif
     sal_uInt16 Height() const { return nHeight; }
     void Height( const sal_uInt16 nNew ) { nHeight = nNew; }
     sal_uInt16 Width() const { return nWidth; }
@@ -52,12 +55,6 @@ public:
     {
         nHeight = sal_uInt16(rSize.Width());
         nWidth = sal_uInt16(rSize.Height());
-    }
-    SwPosSize& operator=(const SwPosSize &rSize )
-    {
-        nWidth  = rSize.Width();
-        nHeight = rSize.Height();
-        return *this;
     }
     SwPosSize& operator=( const Size &rSize )
     {

@@ -27,10 +27,10 @@
 #include <basegfx/point/b2dpoint.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/range/b2drectangle.hxx>
-#include <basegfx/tools/canvastools.hxx>
-#include <basegfx/tools/keystoplerp.hxx>
-#include <basegfx/tools/lerp.hxx>
-#include <basegfx/tools/tools.hxx>
+#include <basegfx/utils/canvastools.hxx>
+#include <basegfx/utils/keystoplerp.hxx>
+#include <basegfx/utils/lerp.hxx>
+#include <basegfx/utils/tools.hxx>
 #include <com/sun/star/rendering/TexturingMode.hpp>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
@@ -50,7 +50,7 @@ namespace dxcanvas
     {
         typedef std::shared_ptr< Gdiplus::PathGradientBrush >   PathGradientBrushSharedPtr;
 
-        bool fillLinearGradient( GraphicsSharedPtr&                             rGraphics,
+        bool fillLinearGradient( GraphicsSharedPtr const & rGraphics,
                                  const ::canvas::ParametricPolyPolygon::Values& /*rValues*/,
                                  const std::vector< Gdiplus::Color >&           rColors,
                                  const std::vector< Gdiplus::REAL >&            rStops,
@@ -98,12 +98,12 @@ namespace dxcanvas
             aRightBottom*= aTextureTransform;
 
             Gdiplus::RectF aBounds;
-            rFillPath->GetBounds( &aBounds, NULL, NULL );
+            rFillPath->GetBounds( &aBounds );
 
             // now, we potentially have to enlarge our gradient area
             // atop and below the transformed [0,1]x[0,1] unit rect,
             // for the gradient to fill the complete bound rect.
-            ::basegfx::tools::infiniteLineFromParallelogram( aLeftTop,
+            ::basegfx::utils::infiniteLineFromParallelogram( aLeftTop,
                                                              aLeftBottom,
                                                              aRightTop,
                                                              aRightBottom,
@@ -186,9 +186,9 @@ namespace dxcanvas
 
         int numColorSteps( const Gdiplus::Color& rColor1, const Gdiplus::Color& rColor2 )
         {
-            return ::std::max(
+            return std::max(
                 labs( rColor1.GetRed() - rColor2.GetRed() ),
-                ::std::max(
+                std::max(
                     labs( rColor1.GetGreen() - rColor2.GetGreen() ),
                     labs( rColor1.GetBlue()  - rColor2.GetBlue() ) ) );
         }
@@ -196,7 +196,7 @@ namespace dxcanvas
         bool fillPolygonalGradient( const ::canvas::ParametricPolyPolygon::Values& rValues,
                                     const std::vector< Gdiplus::Color >&           rColors,
                                     const std::vector< Gdiplus::REAL >&            rStops,
-                                    GraphicsSharedPtr&                             rGraphics,
+                                    GraphicsSharedPtr const & rGraphics,
                                     const GraphicsPathSharedPtr&                   rPath,
                                     const rendering::ViewState&                    viewState,
                                     const rendering::RenderState&                  renderState,
@@ -277,7 +277,7 @@ namespace dxcanvas
                 // subdivide polygon _before_ rendering, would otherwise have
                 // to be performed on every loop turn.
                 if( aOuterPoly.areControlPointsUsed() )
-                    aOuterPoly = ::basegfx::tools::adaptiveSubdivideByAngle(aOuterPoly);
+                    aOuterPoly = ::basegfx::utils::adaptiveSubdivideByAngle(aOuterPoly);
 
                 aInnerPoly = aOuterPoly;
                 aOuterPoly.transform(aTextureTransform);
@@ -319,7 +319,7 @@ namespace dxcanvas
                 Gdiplus::GraphicsPath aCurrPath;
                 Gdiplus::SolidBrush   aFillBrush( rColors[0] );
                 const sal_uInt32      nNumPoints( aOuterPoly.count() );
-                basegfx::tools::KeyStopLerp aLerper(rValues.maStops);
+                basegfx::utils::KeyStopLerp aLerper(rValues.maStops);
                 for( int i=1; i<nStepCount; ++i )
                 {
                     std::ptrdiff_t nIndex;
@@ -328,9 +328,9 @@ namespace dxcanvas
                     std::tie(nIndex,fAlpha)=aLerper.lerp(fT);
 
                     const Gdiplus::Color aFillColor(
-                        static_cast<BYTE>( basegfx::tools::lerp(rColors[nIndex].GetRed(),rColors[nIndex+1].GetRed(),fAlpha) ),
-                        static_cast<BYTE>( basegfx::tools::lerp(rColors[nIndex].GetGreen(),rColors[nIndex+1].GetGreen(),fAlpha) ),
-                        static_cast<BYTE>( basegfx::tools::lerp(rColors[nIndex].GetBlue(),rColors[nIndex+1].GetBlue(),fAlpha) ) );
+                        static_cast<BYTE>( basegfx::utils::lerp(rColors[nIndex].GetRed(),rColors[nIndex+1].GetRed(),fAlpha) ),
+                        static_cast<BYTE>( basegfx::utils::lerp(rColors[nIndex].GetGreen(),rColors[nIndex+1].GetGreen(),fAlpha) ),
+                        static_cast<BYTE>( basegfx::utils::lerp(rColors[nIndex].GetBlue(),rColors[nIndex+1].GetBlue(),fAlpha) ) );
 
                     aFillBrush.SetColor( aFillColor );
                     aCurrPath.Reset(); aCurrPath.StartFigure();
@@ -422,7 +422,7 @@ namespace dxcanvas
         bool fillGradient( const ::canvas::ParametricPolyPolygon::Values& rValues,
                            const std::vector< Gdiplus::Color >&           rColors,
                            const std::vector< Gdiplus::REAL >&            rStops,
-                           GraphicsSharedPtr&                             rGraphics,
+                           GraphicsSharedPtr const & rGraphics,
                            const GraphicsPathSharedPtr&                   rPath,
                            const rendering::ViewState&                    viewState,
                            const rendering::RenderState&                  renderState,
@@ -440,7 +440,6 @@ namespace dxcanvas
                     break;
 
                 case ::canvas::ParametricPolyPolygon::GradientType::Elliptical:
-                    // FALLTHROUGH intended
                 case ::canvas::ParametricPolyPolygon::GradientType::Rectangular:
                     fillPolygonalGradient( rValues,
                                            rColors,
@@ -461,7 +460,7 @@ namespace dxcanvas
         }
 
         void fillBitmap( const uno::Reference< rendering::XBitmap >& xBitmap,
-                         GraphicsSharedPtr&                          rGraphics,
+                         GraphicsSharedPtr const & rGraphics,
                          const GraphicsPathSharedPtr&                rPath,
                          const rendering::Texture&                   rTexture )
         {
@@ -602,7 +601,7 @@ namespace dxcanvas
         }
 
         // TODO(P1): Provide caching here.
-        return uno::Reference< rendering::XCachedPrimitive >(NULL);
+        return uno::Reference< rendering::XCachedPrimitive >(nullptr);
     }
 }
 

@@ -34,7 +34,6 @@ namespace drawinglayer
             basegfx::BColor                         maColor;
             basegfx::B3DVector                      maDirection;
 
-            // bitfield
             bool                                    mbSpecular : 1;
 
             ImpSdr3DLightAttribute(
@@ -75,20 +74,11 @@ namespace drawinglayer
         {
         }
 
-        Sdr3DLightAttribute::Sdr3DLightAttribute(const Sdr3DLightAttribute& rCandidate)
-        :   mpSdr3DLightAttribute(rCandidate.mpSdr3DLightAttribute)
-        {
-        }
+        Sdr3DLightAttribute::Sdr3DLightAttribute(const Sdr3DLightAttribute&) = default;
 
-        Sdr3DLightAttribute::~Sdr3DLightAttribute()
-        {
-        }
+        Sdr3DLightAttribute::~Sdr3DLightAttribute() = default;
 
-        Sdr3DLightAttribute& Sdr3DLightAttribute::operator=(const Sdr3DLightAttribute& rCandidate)
-        {
-            mpSdr3DLightAttribute = rCandidate.mpSdr3DLightAttribute;
-            return *this;
-        }
+        Sdr3DLightAttribute& Sdr3DLightAttribute::operator=(const Sdr3DLightAttribute&) = default;
 
         bool Sdr3DLightAttribute::operator==(const Sdr3DLightAttribute& rCandidate) const
         {

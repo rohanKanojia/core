@@ -18,13 +18,15 @@
  */
 
 #include "WrappedStockProperties.hxx"
-#include "macros.hxx"
-#include "FastPropertyIdRanges.hxx"
-#include "DiagramHelper.hxx"
-#include "ChartModelHelper.hxx"
-#include "ControllerLockGuard.hxx"
+#include "Chart2ModelContact.hxx"
+#include <FastPropertyIdRanges.hxx>
+#include <DiagramHelper.hxx>
+#include <ControllerLockGuard.hxx>
+#include <WrappedProperty.hxx>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <tools/diagnose_ex.h>
 
 using namespace ::com::sun::star;
 using ::com::sun::star::uno::Reference;
@@ -40,14 +42,11 @@ class WrappedStockProperty : public WrappedProperty
 public:
     explicit WrappedStockProperty( const OUString& rOuterName
         , const css::uno::Any& rDefaulValue
-        , std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedStockProperty();
+        , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact );
 
-    void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                    throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    void setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
-    css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const
-                            throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    css::uno::Any getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& xInnerPropertyState ) const override;
 
     virtual uno::Reference< chart2::XChartTypeTemplate > getNewTemplate( bool bNewValue, const OUString& rCurrentTemplate, const Reference< lang::XMultiServiceFactory >& xFactory ) const = 0;
 
@@ -59,19 +58,15 @@ protected:
 
 WrappedStockProperty::WrappedStockProperty( const OUString& rOuterName
     , const css::uno::Any& rDefaulValue
-    , std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
+    , const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact )
     : WrappedProperty(rOuterName,OUString())
         , m_spChart2ModelContact(spChart2ModelContact)
         , m_aOuterValue()
         , m_aDefaultValue(rDefaulValue)
 {
 }
-WrappedStockProperty::~WrappedStockProperty()
-{
-}
 
 void WrappedStockProperty::setPropertyValue( const css::uno::Any& rOuterValue, const css::uno::Reference< css::beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                throw (css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException)
 {
     bool bNewValue = false;
     if( ! (rOuterValue >>= bNewValue) )
@@ -99,16 +94,15 @@ void WrappedStockProperty::setPropertyValue( const css::uno::Any& rOuterValue, c
                 ControllerLockGuardUNO aCtrlLockGuard( m_spChart2ModelContact->getChartModel() );
                 xTemplate->changeDiagram( xDiagram );
             }
-            catch( const uno::Exception & ex )
+            catch( const uno::Exception & )
             {
-                ASSERT_EXCEPTION( ex );
+                DBG_UNHANDLED_EXCEPTION("chart2");
             }
         }
     }
 }
 
 css::uno::Any WrappedStockProperty::getPropertyDefault( const css::uno::Reference< css::beans::XPropertyState >& /*xInnerPropertyState*/ ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException)
 {
     return m_aDefaultValue;
 }
@@ -116,33 +110,27 @@ css::uno::Any WrappedStockProperty::getPropertyDefault( const css::uno::Referenc
 class WrappedVolumeProperty : public WrappedStockProperty
 {
 public:
-    explicit WrappedVolumeProperty( std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedVolumeProperty();
+    explicit WrappedVolumeProperty(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
 
-    css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                            throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
     uno::Reference< chart2::XChartTypeTemplate > getNewTemplate( bool bNewValue, const OUString& rCurrentTemplate, const Reference< lang::XMultiServiceFactory >& xFactory ) const override;
 };
 
-WrappedVolumeProperty::WrappedVolumeProperty( std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
-        : WrappedStockProperty( "Volume", uno::makeAny(sal_False) , spChart2ModelContact )
-{
-}
-WrappedVolumeProperty::~WrappedVolumeProperty()
+WrappedVolumeProperty::WrappedVolumeProperty(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
+        : WrappedStockProperty( "Volume", uno::Any(false) , spChart2ModelContact )
 {
 }
 
 css::uno::Any WrappedVolumeProperty::getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException)
 {
     Reference< chart2::XChartDocument > xChartDoc( m_spChart2ModelContact->getChart2Document() );
     Reference< chart2::XDiagram > xDiagram( m_spChart2ModelContact->getChart2Diagram() );
     if( xDiagram.is() && xChartDoc.is() )
     {
-        ::std::vector< uno::Reference< chart2::XDataSeries > > aSeriesVector(
+        std::vector< uno::Reference< chart2::XDataSeries > > aSeriesVector(
             DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
-        if( aSeriesVector.size() > 0 )
+        if( !aSeriesVector.empty() )
         {
             Reference< lang::XMultiServiceFactory > xFact( xChartDoc->getChartTypeManager(), uno::UNO_QUERY );
             DiagramHelper::tTemplateWithServiceName aTemplateAndService =
@@ -162,7 +150,7 @@ css::uno::Any WrappedVolumeProperty::getPropertyValue( const css::uno::Reference
 
 uno::Reference< chart2::XChartTypeTemplate > WrappedVolumeProperty::getNewTemplate( bool bNewValue, const OUString& rCurrentTemplate, const Reference< lang::XMultiServiceFactory >& xFactory ) const
 {
-    uno::Reference< chart2::XChartTypeTemplate > xTemplate(nullptr);
+    uno::Reference< chart2::XChartTypeTemplate > xTemplate;
 
     if(!xFactory.is())
         return xTemplate;
@@ -187,31 +175,27 @@ uno::Reference< chart2::XChartTypeTemplate > WrappedVolumeProperty::getNewTempla
 class WrappedUpDownProperty : public WrappedStockProperty
 {
 public:
-    explicit WrappedUpDownProperty( std::shared_ptr< Chart2ModelContact > spChart2ModelContact );
-    virtual ~WrappedUpDownProperty();
+    explicit WrappedUpDownProperty(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact);
 
-    css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const
-                            throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException) override;
+    css::uno::Any getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& xInnerPropertySet ) const override;
 
     uno::Reference< chart2::XChartTypeTemplate > getNewTemplate( bool bNewValue, const OUString& rCurrentTemplate, const Reference< lang::XMultiServiceFactory >& xFactory ) const override;
 };
-WrappedUpDownProperty::WrappedUpDownProperty( std::shared_ptr< Chart2ModelContact > spChart2ModelContact )
-        : WrappedStockProperty( "UpDown", uno::makeAny(sal_False) , spChart2ModelContact )
+
+WrappedUpDownProperty::WrappedUpDownProperty(const std::shared_ptr<Chart2ModelContact>& spChart2ModelContact)
+        : WrappedStockProperty( "UpDown", uno::Any(false) , spChart2ModelContact )
 {
 }
-WrappedUpDownProperty::~WrappedUpDownProperty()
-{
-}
+
 css::uno::Any WrappedUpDownProperty::getPropertyValue( const css::uno::Reference< css::beans::XPropertySet >& /*xInnerPropertySet*/ ) const
-                        throw (css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException)
 {
     Reference< chart2::XChartDocument > xChartDoc( m_spChart2ModelContact->getChart2Document() );
     Reference< chart2::XDiagram > xDiagram( m_spChart2ModelContact->getChart2Diagram() );
     if( xDiagram.is() && xChartDoc.is() )
     {
-        ::std::vector< uno::Reference< chart2::XDataSeries > > aSeriesVector(
+        std::vector< uno::Reference< chart2::XDataSeries > > aSeriesVector(
             DiagramHelper::getDataSeriesFromDiagram( xDiagram ) );
-        if( aSeriesVector.size() > 0 )
+        if( !aSeriesVector.empty() )
         {
             Reference< lang::XMultiServiceFactory > xFact( xChartDoc->getChartTypeManager(), uno::UNO_QUERY );
             DiagramHelper::tTemplateWithServiceName aTemplateAndService =
@@ -230,7 +214,7 @@ css::uno::Any WrappedUpDownProperty::getPropertyValue( const css::uno::Reference
 }
 uno::Reference< chart2::XChartTypeTemplate > WrappedUpDownProperty::getNewTemplate( bool bNewValue, const OUString& rCurrentTemplate, const Reference< lang::XMultiServiceFactory >& xFactory ) const
 {
-    uno::Reference< chart2::XChartTypeTemplate > xTemplate(nullptr);
+    uno::Reference< chart2::XChartTypeTemplate > xTemplate;
     if( bNewValue ) //add open series
     {
         if( rCurrentTemplate == "com.sun.star.chart2.template.StockLowHighClose" )
@@ -259,29 +243,27 @@ enum
 
 }//anonymous namespace
 
-void WrappedStockProperties::addProperties( ::std::vector< Property > & rOutProperties )
+void WrappedStockProperties::addProperties( std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "Volume",
+    rOutProperties.emplace_back( "Volume",
                   PROP_CHART_STOCK_VOLUME,
                   cppu::UnoType<sal_Bool>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEDEFAULT
-                  | beans::PropertyAttribute::MAYBEVOID ));
-    rOutProperties.push_back(
-        Property( "UpDown",
+                  | beans::PropertyAttribute::MAYBEVOID );
+    rOutProperties.emplace_back( "UpDown",
                   PROP_CHART_STOCK_UPDOWN,
                   cppu::UnoType<sal_Bool>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEDEFAULT
-                  | beans::PropertyAttribute::MAYBEVOID ));
+                  | beans::PropertyAttribute::MAYBEVOID );
 }
 
-void WrappedStockProperties::addWrappedProperties( std::vector< WrappedProperty* >& rList
+void WrappedStockProperties::addWrappedProperties( std::vector< std::unique_ptr<WrappedProperty> >& rList
                                     , const std::shared_ptr< Chart2ModelContact >& spChart2ModelContact )
 {
-    rList.push_back( new WrappedVolumeProperty( spChart2ModelContact ) );
-    rList.push_back( new WrappedUpDownProperty( spChart2ModelContact ) );
+    rList.emplace_back( new WrappedVolumeProperty( spChart2ModelContact ) );
+    rList.emplace_back( new WrappedUpDownProperty( spChart2ModelContact ) );
 }
 
 } //namespace wrapper

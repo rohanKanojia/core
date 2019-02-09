@@ -17,17 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "PaneChildWindows.hxx"
-#include "PaneDockingWindow.hxx"
-#include "ViewShellBase.hxx"
-#include "framework/FrameworkHelper.hxx"
-#include "taskpane/ToolPanelViewShell.hxx"
-#include "app.hrc"
-#include "strings.hrc"
-#include "sdresid.hxx"
-
-#include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/ResourceActivationMode.hpp>
+#include <PaneChildWindows.hxx>
+#include <PaneDockingWindow.hxx>
+#include <ViewShellBase.hxx>
+#include <framework/FrameworkHelper.hxx>
+#include <app.hrc>
+#include <strings.hrc>
+#include <sdresid.hxx>
 
 #include <sfx2/app.hxx>
 #include <sfx2/dockwin.hxx>
@@ -37,10 +33,6 @@
 
 namespace sd {
 
-using ::com::sun::star::drawing::framework::XResourceId;
-using ::com::sun::star::drawing::framework::XConfigurationController;
-using ::com::sun::star::drawing::framework::ResourceActivationMode_ADD;
-using ::com::sun::star::drawing::framework::ResourceActivationMode_REPLACE;
 
 SFX_IMPL_DOCKINGWINDOW_WITHID(LeftPaneImpressChildWindow, SID_LEFT_PANE_IMPRESS)
 SFX_IMPL_DOCKINGWINDOW_WITHID(LeftPaneDrawChildWindow, SID_LEFT_PANE_DRAW)
@@ -51,16 +43,15 @@ PaneChildWindow::PaneChildWindow (
     sal_uInt16 nId,
     SfxBindings* pBindings,
     SfxChildWinInfo* pInfo,
-    const sal_uInt16 nTitleBarResId,
-    SfxChildAlignment eAlignment)
+    const char* pTitleBarResId)
     : SfxChildWindow (pParentWindow, nId)
 {
     SetWindow( VclPtr<PaneDockingWindow>::Create(
         pBindings,
         this,
         pParentWindow,
-        SD_RESSTR(nTitleBarResId)));
-    SetAlignment(eAlignment);
+        SdResId(pTitleBarResId)));
+    SetAlignment(SfxChildAlignment::LEFT);
     static_cast<SfxDockingWindow*>(GetWindow())->Initialize(pInfo);
     SetHideNotDelete(true);
 
@@ -93,8 +84,7 @@ LeftPaneImpressChildWindow::LeftPaneImpressChildWindow (
         nId,
         pBindings,
         pInfo,
-        STR_LEFT_PANE_IMPRESS_TITLE,
-        SfxChildAlignment::LEFT)
+        STR_LEFT_PANE_IMPRESS_TITLE)
 {
 }
 
@@ -109,8 +99,7 @@ LeftPaneDrawChildWindow::LeftPaneDrawChildWindow (
         nId,
         pBindings,
         pInfo,
-        STR_LEFT_PANE_DRAW_TITLE,
-        SfxChildAlignment::LEFT)
+        STR_LEFT_PANE_DRAW_TITLE)
 {
 }
 

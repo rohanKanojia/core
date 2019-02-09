@@ -25,7 +25,6 @@
 #include "layerexport.hxx"
 #include "propertyexport.hxx"
 #include <osl/diagnose.h>
-#include <comphelper/extract.hxx>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include "officeforms.hxx"
 
@@ -38,7 +37,6 @@ namespace xmloff
     using namespace ::com::sun::star::beans;
     using namespace ::com::sun::star::container;
     using namespace ::com::sun::star::drawing;
-    using namespace ::com::sun::star::frame;
 
     //= OFormLayerXMLExport
 

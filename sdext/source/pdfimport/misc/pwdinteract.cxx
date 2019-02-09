@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <cassert>
 
-#include "pdfihelper.hxx"
+#include <pdfihelper.hxx>
 
 #include <com/sun/star/task/ErrorCodeRequest.hpp>
 #include <com/sun/star/task/XInteractionHandler.hpp>
@@ -32,9 +32,8 @@
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <osl/mutex.hxx>
-#include <osl/diagnose.h>
 #include <rtl/ref.hxx>
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
 
 using namespace com::sun::star;
 
@@ -47,7 +46,7 @@ class PDFPasswordRequest:
 {
 private:
     mutable osl::Mutex            m_aMutex;
-    uno::Any                      m_aRequest;
+    uno::Any const                m_aRequest;
     OUString                 m_aPassword;
     bool                          m_bSelected;
 
@@ -57,20 +56,20 @@ public:
     PDFPasswordRequest& operator=(const PDFPasswordRequest&) = delete;
 
     // XInteractionRequest
-    virtual uno::Any SAL_CALL getRequest(  ) throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations(  ) throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Any SAL_CALL getRequest(  ) override;
+    virtual uno::Sequence< uno::Reference< task::XInteractionContinuation > > SAL_CALL getContinuations(  ) override;
 
     // XInteractionPassword
-    virtual void SAL_CALL setPassword( const OUString& rPwd ) throw (uno::RuntimeException, std::exception) override;
-    virtual OUString SAL_CALL getPassword() throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setPassword( const OUString& rPwd ) override;
+    virtual OUString SAL_CALL getPassword() override;
 
     // XInteractionContinuation
-    virtual void SAL_CALL select() throw (uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL select() override;
 
     bool isSelected() const { osl::MutexGuard const guard( m_aMutex ); return m_bSelected; }
 
 private:
-    virtual ~PDFPasswordRequest() {}
+    virtual ~PDFPasswordRequest() override {}
 };
 
 PDFPasswordRequest::PDFPasswordRequest( bool bFirstTry, const OUString& rName ) :
@@ -86,33 +85,33 @@ PDFPasswordRequest::PDFPasswordRequest( bool bFirstTry, const OUString& rName ) 
     m_bSelected(false)
 {}
 
-uno::Any PDFPasswordRequest::getRequest() throw (uno::RuntimeException, std::exception)
+uno::Any PDFPasswordRequest::getRequest()
 {
     return m_aRequest;
 }
 
-uno::Sequence< uno::Reference< task::XInteractionContinuation > > PDFPasswordRequest::getContinuations() throw (uno::RuntimeException, std::exception)
+uno::Sequence< uno::Reference< task::XInteractionContinuation > > PDFPasswordRequest::getContinuations()
 {
     uno::Sequence< uno::Reference< task::XInteractionContinuation > > aRet( 1 );
     aRet[0] = this;
     return aRet;
 }
 
-void PDFPasswordRequest::setPassword( const OUString& rPwd ) throw (uno::RuntimeException, std::exception)
+void PDFPasswordRequest::setPassword( const OUString& rPwd )
 {
     osl::MutexGuard const guard( m_aMutex );
 
     m_aPassword = rPwd;
 }
 
-OUString PDFPasswordRequest::getPassword() throw (uno::RuntimeException, std::exception)
+OUString PDFPasswordRequest::getPassword()
 {
     osl::MutexGuard const guard( m_aMutex );
 
     return m_aPassword;
 }
 
-void PDFPasswordRequest::select() throw (uno::RuntimeException, std::exception)
+void PDFPasswordRequest::select()
 {
     osl::MutexGuard const guard( m_aMutex );
 
@@ -128,19 +127,19 @@ public:
     UnsupportedEncryptionFormatRequest& operator=(const UnsupportedEncryptionFormatRequest&) = delete;
 
 private:
-    virtual ~UnsupportedEncryptionFormatRequest() {}
+    virtual ~UnsupportedEncryptionFormatRequest() override {}
 
-    virtual uno::Any SAL_CALL getRequest() throw (uno::RuntimeException, std::exception) override {
+    virtual uno::Any SAL_CALL getRequest() override {
         return uno::makeAny(
             task::ErrorCodeRequest(
                 OUString(), uno::Reference< uno::XInterface >(),
-                ERRCODE_IO_WRONGVERSION));
+                sal_uInt32(ERRCODE_IO_WRONGVERSION)));
             //TODO: should be something more informative than crudely reused
             // ERRCODE_IO_WRONGVERSION
     }
 
     virtual uno::Sequence< uno::Reference< task::XInteractionContinuation > >
-    SAL_CALL getContinuations() throw (uno::RuntimeException, std::exception) override {
+    SAL_CALL getContinuations() override {
         return
             uno::Sequence< uno::Reference< task::XInteractionContinuation > >();
     }
@@ -169,7 +168,6 @@ bool getPassword( const uno::Reference< task::XInteractionHandler >& xHandler,
     {
     }
 
-    OSL_TRACE( "request %s selected", xReq->isSelected() ? "was" : "was not" );
     if( xReq->isSelected() )
     {
         bSuccess = true;

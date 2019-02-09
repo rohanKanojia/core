@@ -20,7 +20,7 @@
 #ifndef INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_SQL_DRIVERPROPERTYINFO_HXX
 #define INCLUDED_CONNECTIVITY_SOURCE_INC_JAVA_SQL_DRIVERPROPERTYINFO_HXX
 
-#include "java/lang/Object.hxx"
+#include <java/lang/Object.hxx>
 #include <com/sun/star/sdbc/DriverPropertyInfo.hpp>
 
 namespace connectivity
@@ -36,9 +36,7 @@ namespace connectivity
         static jclass theClass;
     public:
         virtual jclass getMyClass() const override;
-        virtual ~java_sql_DriverPropertyInfo();
-        // A ctor that is needed for returning the object
-        java_sql_DriverPropertyInfo( JNIEnv * pEnv, jobject myObj ) : java_lang_Object( pEnv, myObj ){}
+        virtual ~java_sql_DriverPropertyInfo() override;
     };
 }
 

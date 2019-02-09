@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fuexpand.hxx"
+#include <fuexpand.hxx>
 
 #include <sfx2/viewfrm.hxx>
 #include <svx/svdotext.hxx>
@@ -26,20 +26,22 @@
 #include <sfx2/printer.hxx>
 #include <editeng/outlobj.hxx>
 #include <svx/svdetc.hxx>
+#include <xmloff/autolayout.hxx>
+#include <sal/log.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
-#include "pres.hxx"
-#include "View.hxx"
-#include "sdpage.hxx"
-#include "Outliner.hxx"
-#include "drawview.hxx"
-#include "drawdoc.hxx"
-#include "ViewShell.hxx"
-#include "DrawDocShell.hxx"
-#include "sdresid.hxx"
-#include "optsitem.hxx"
-#include "sdmod.hxx"
+#include <app.hrc>
+#include <strings.hrc>
+#include <pres.hxx>
+#include <View.hxx>
+#include <sdpage.hxx>
+#include <Outliner.hxx>
+#include <drawview.hxx>
+#include <drawdoc.hxx>
+#include <ViewShell.hxx>
+#include <DrawDocShell.hxx>
+#include <sdresid.hxx>
+#include <optsitem.hxx>
+#include <sdmod.hxx>
 #include <sfx2/dispatch.hxx>
 #include <editeng/eeitem.hxx>
 
@@ -73,13 +75,13 @@ void FuExpandPage::DoExecute( SfxRequest& )
     // find selected page (only standard pages)
     SdPage* pActualPage = nullptr;
     sal_uInt16 i = 0;
-    sal_uInt16 nCount = mpDoc->GetSdPageCount(PK_STANDARD);
+    sal_uInt16 nCount = mpDoc->GetSdPageCount(PageKind::Standard);
 
     while (!pActualPage && i < nCount)
     {
-        if (mpDoc->GetSdPage(i, PK_STANDARD)->IsSelected())
+        if (mpDoc->GetSdPage(i, PageKind::Standard)->IsSelected())
         {
-            pActualPage = mpDoc->GetSdPage(i, PK_STANDARD);
+            pActualPage = mpDoc->GetSdPage(i, PageKind::Standard);
         }
 
         i++;
@@ -87,18 +89,17 @@ void FuExpandPage::DoExecute( SfxRequest& )
 
     if (pActualPage)
     {
-        ::sd::Outliner* pOutl =
-              new ::sd::Outliner( mpDoc, OUTLINERMODE_OUTLINEOBJECT );
-        pOutl->SetUpdateMode(false);
-        pOutl->EnableUndo(false);
+        SdOutliner aOutliner( mpDoc, OutlinerMode::OutlineObject );
+        aOutliner.SetUpdateMode(false);
+        aOutliner.EnableUndo(false);
 
         if (mpDocSh)
-            pOutl->SetRefDevice( SD_MOD()->GetRefDevice( *mpDocSh ) );
+            aOutliner.SetRefDevice( SD_MOD()->GetVirtualRefDevice() );
 
-        pOutl->SetDefTab( mpDoc->GetDefaultTabulator() );
-        pOutl->SetStyleSheetPool(static_cast<SfxStyleSheetPool*>(mpDoc->GetStyleSheetPool()));
+        aOutliner.SetDefTab( mpDoc->GetDefaultTabulator() );
+        aOutliner.SetStyleSheetPool(static_cast<SfxStyleSheetPool*>(mpDoc->GetStyleSheetPool()));
 
-        SetOfByte aVisibleLayers = pActualPage->TRG_GetMasterPageVisibleLayers();
+        SdrLayerIDSet aVisibleLayers = pActualPage->TRG_GetMasterPageVisibleLayers();
         sal_uInt16 nActualPageNum = pActualPage->GetPageNum();
         SdPage* pActualNotesPage = static_cast<SdPage*>(mpDoc->GetPage(nActualPageNum + 1));
         SdrTextObj* pActualOutline = static_cast<SdrTextObj*>(pActualPage->GetPresObj(PRESOBJ_OUTLINE));
@@ -108,38 +109,38 @@ void FuExpandPage::DoExecute( SfxRequest& )
             const bool bUndo = mpView->IsUndoEnabled();
 
             if( bUndo )
-                mpView->BegUndo(SD_RESSTR(STR_UNDO_EXPAND_PAGE));
+                mpView->BegUndo(SdResId(STR_UNDO_EXPAND_PAGE));
 
             // set current structuring-object into outliner
             OutlinerParaObject* pParaObj = pActualOutline->GetOutlinerParaObject();
-            pOutl->SetText(*pParaObj);
+            aOutliner.SetText(*pParaObj);
 
             // remove hard paragraph- and character attributes
-            SfxItemSet aEmptyEEAttr(mpDoc->GetPool(), EE_ITEMS_START, EE_ITEMS_END);
-            sal_Int32 nParaCount1 = pOutl->GetParagraphCount();
+            SfxItemSet aEmptyEEAttr(mpDoc->GetPool(), svl::Items<EE_ITEMS_START, EE_ITEMS_END>{});
+            sal_Int32 nParaCount1 = aOutliner.GetParagraphCount();
 
             for (sal_Int32 nPara = 0; nPara < nParaCount1; nPara++)
             {
-                pOutl->RemoveCharAttribs(nPara);
-                pOutl->SetParaAttribs(nPara, aEmptyEEAttr);
+                aOutliner.RemoveCharAttribs(nPara);
+                aOutliner.SetParaAttribs(nPara, aEmptyEEAttr);
             }
 
             sal_uInt16 nPos = 2;
-            Paragraph* pPara = pOutl->GetParagraph( 0 );
+            Paragraph* pPara = aOutliner.GetParagraph( 0 );
 
             while (pPara)
             {
-                sal_Int32 nParaPos = pOutl->GetAbsPos( pPara );
-                sal_Int16 nDepth = pOutl->GetDepth( nParaPos );
+                sal_Int32 nParaPos = aOutliner.GetAbsPos( pPara );
+                sal_Int16 nDepth = aOutliner.GetDepth( nParaPos );
                 if ( nDepth == 0 )
                 {
                     // page with title & structuring!
                     SdPage* pPage = mpDoc->AllocSdPage(false);
                     pPage->SetSize(pActualPage->GetSize() );
-                    pPage->SetBorder(pActualPage->GetLftBorder(),
-                                     pActualPage->GetUppBorder(),
-                                     pActualPage->GetRgtBorder(),
-                                     pActualPage->GetLwrBorder() );
+                    pPage->SetBorder(pActualPage->GetLeftBorder(),
+                                     pActualPage->GetUpperBorder(),
+                                     pActualPage->GetRightBorder(),
+                                     pActualPage->GetLowerBorder() );
                     pPage->SetName(OUString());
 
                     // insert page after current page
@@ -152,17 +153,17 @@ void FuExpandPage::DoExecute( SfxRequest& )
                     // use MasterPage of the current page
                     pPage->TRG_SetMasterPage(pActualPage->TRG_GetMasterPage());
                     pPage->SetLayoutName(pActualPage->GetLayoutName());
-                    pPage->SetAutoLayout(AUTOLAYOUT_ENUM, true);
+                    pPage->SetAutoLayout(AUTOLAYOUT_TITLE_CONTENT, true);
                     pPage->TRG_SetMasterPageVisibleLayers(aVisibleLayers);
 
                     // notes-page
                     SdPage* pNotesPage = mpDoc->AllocSdPage(false);
                     pNotesPage->SetSize(pActualNotesPage->GetSize());
-                    pNotesPage->SetBorder(pActualNotesPage->GetLftBorder(),
-                                          pActualNotesPage->GetUppBorder(),
-                                          pActualNotesPage->GetRgtBorder(),
-                                          pActualNotesPage->GetLwrBorder() );
-                    pNotesPage->SetPageKind(PK_NOTES);
+                    pNotesPage->SetBorder(pActualNotesPage->GetLeftBorder(),
+                                          pActualNotesPage->GetUpperBorder(),
+                                          pActualNotesPage->GetRightBorder(),
+                                          pActualNotesPage->GetLowerBorder() );
+                    pNotesPage->SetPageKind(PageKind::Notes);
                     pNotesPage->SetName(OUString());
 
                     // insert page after current page
@@ -184,24 +185,23 @@ void FuExpandPage::DoExecute( SfxRequest& )
                     if (!pTextObj)
                         continue;
 
-                    OutlinerParaObject* pOutlinerParaObject = pOutl->CreateParaObject( nParaPos, 1);
-                    pOutlinerParaObject->SetOutlinerMode(OUTLINERMODE_TITLEOBJECT);
+                    std::unique_ptr<OutlinerParaObject> pOutlinerParaObject = aOutliner.CreateParaObject( nParaPos, 1);
+                    pOutlinerParaObject->SetOutlinerMode(OutlinerMode::TitleObject);
 
                     if( pOutlinerParaObject->GetDepth(0) != -1 )
                     {
-                        SdrOutliner* pTempOutl = SdrMakeOutliner(OUTLINERMODE_TITLEOBJECT, *mpDoc);
+                        std::unique_ptr<SdrOutliner> pTempOutl = SdrMakeOutliner(OutlinerMode::TitleObject, *mpDoc);
 
                         pTempOutl->SetText( *pOutlinerParaObject );
 
-                        delete pOutlinerParaObject;
+                        pOutlinerParaObject.reset();
 
                         pTempOutl->SetDepth( pTempOutl->GetParagraph( 0 ), -1 );
 
                         pOutlinerParaObject = pTempOutl->CreateParaObject();
-                        delete pTempOutl;
                     }
 
-                    pTextObj->SetOutlinerParaObject(pOutlinerParaObject);
+                    pTextObj->SetOutlinerParaObject(std::move(pOutlinerParaObject));
 
                     pTextObj->SetEmptyPresObj(false);
 
@@ -209,15 +209,15 @@ void FuExpandPage::DoExecute( SfxRequest& )
                     pTextObj->NbcSetStyleSheet(pSheet, false);
 
                     SdrTextObj* pOutlineObj = nullptr;
-                    sal_Int32 nChildCount = pOutl->GetChildCount(pPara);
+                    sal_Int32 nChildCount = aOutliner.GetChildCount(pPara);
                     if (nChildCount > 0)
                         pOutlineObj = static_cast<SdrTextObj*>( pPage->GetPresObj(PRESOBJ_OUTLINE) );
                     if (pOutlineObj)
                     {
                         // create structuring text objects
-                        OutlinerParaObject* pOPO = pOutl->CreateParaObject(++nParaPos, nChildCount);
+                        std::unique_ptr<OutlinerParaObject> pOPO = aOutliner.CreateParaObject(++nParaPos, nChildCount);
 
-                        SdrOutliner* pTempOutl = SdrMakeOutliner(OUTLINERMODE_OUTLINEOBJECT, *mpDoc);
+                        std::unique_ptr<SdrOutliner> pTempOutl = SdrMakeOutliner(OutlinerMode::OutlineObject, *mpDoc);
                         pTempOutl->SetText( *pOPO );
 
                         sal_Int32 nParaCount2 = pTempOutl->GetParagraphCount();
@@ -229,11 +229,10 @@ void FuExpandPage::DoExecute( SfxRequest& )
                                 pTempOutl->GetDepth( nPara ) - 1);
                         }
 
-                        delete pOPO;
                         pOPO = pTempOutl->CreateParaObject();
-                        delete pTempOutl;
+                        pTempOutl.reset();
 
-                        pOutlineObj->SetOutlinerParaObject( pOPO );
+                        pOutlineObj->SetOutlinerParaObject( std::move(pOPO) );
                         pOutlineObj->SetEmptyPresObj(false);
 
                         // remove hard attributes (Flag to sal_True)
@@ -244,14 +243,12 @@ void FuExpandPage::DoExecute( SfxRequest& )
                     }
                 }
 
-                pPara = pOutl->GetParagraph( ++nParaPos );
+                pPara = aOutliner.GetParagraph( ++nParaPos );
             }
 
             if( bUndo )
                 mpView->EndUndo();
         }
-
-        delete pOutl;
 
         mpViewShell->GetViewFrame()->GetDispatcher()->Execute(SID_DELETE_PAGE, SfxCallMode::SYNCHRON | SfxCallMode::RECORD);
     }

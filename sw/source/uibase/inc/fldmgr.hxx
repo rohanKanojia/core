@@ -19,12 +19,13 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_FLDMGR_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_FLDMGR_HXX
 
-#include "swdllapi.h"
-#include "swtypes.hxx"
+#include <swdllapi.h>
+#include <swtypes.hxx>
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/uno/Any.h>
-#include <vector>
 #include <vcl/vclptr.hxx>
+#include <memory>
+#include <vector>
 
 namespace com{namespace sun{namespace star{
     namespace container{
@@ -43,6 +44,7 @@ class SbModule;
 class SvxMacroItem;
 class SvNumberFormatter;
 namespace vcl { class Window; }
+enum class SwFieldIds : sal_uInt16;
 
 // the groups of fields
 enum SwFieldGroups
@@ -57,29 +59,29 @@ enum SwFieldGroups
 
 struct SwFieldGroupRgn
 {
-    sal_uInt16 nStart;
-    sal_uInt16 nEnd;
+    sal_uInt16 const nStart;
+    sal_uInt16 const nEnd;
 };
 
 // the field manager handles the insertation of fields
 // with command strings
 struct SwInsertField_Data
 {
-    sal_uInt16 m_nTypeId;
-    sal_uInt16 m_nSubType;
+    sal_uInt16 const m_nTypeId;
+    sal_uInt16 const m_nSubType;
     const OUString m_sPar1;
     const OUString m_sPar2;
-    sal_uLong m_nFormatId;
-    SwWrtShell* m_pSh;
-    sal_Unicode m_cSeparator;
-    bool m_bIsAutomaticLanguage;
-    css::uno::Any m_aDBDataSource;
+    sal_uInt32 const m_nFormatId;
+    SwWrtShell* const m_pSh;
+    sal_Unicode const m_cSeparator;
+    bool const m_bIsAutomaticLanguage;
+    css::uno::Any const m_aDBDataSource;
     css::uno::Any m_aDBConnection;
     css::uno::Any m_aDBColumn;
     VclPtr<vcl::Window> m_pParent; // parent dialog used for SwWrtShell::StartInputFieldDlg()
 
     SwInsertField_Data(sal_uInt16 nType, sal_uInt16 nSub, const OUString& rPar1, const OUString& rPar2,
-                    sal_uLong nFormatId, SwWrtShell* pShell = nullptr, sal_Unicode cSep = ' ', bool bIsAutoLanguage = true) :
+                    sal_uInt32 nFormatId, SwWrtShell* pShell = nullptr, sal_Unicode cSep = ' ', bool bIsAutoLanguage = true) :
         m_nTypeId(nType),
         m_nSubType(nSub),
         m_sPar1(rPar1),
@@ -89,62 +91,56 @@ struct SwInsertField_Data
         m_cSeparator(cSep),
         m_bIsAutomaticLanguage(bIsAutoLanguage),
         m_pParent(nullptr) {}
-
-    SwInsertField_Data() :
-        m_pSh(nullptr),
-        m_cSeparator(' '),
-        m_bIsAutomaticLanguage(true){}
 };
 
 class SW_DLLPUBLIC SwFieldMgr
 {
 private:
-    SwField*            pCurField;
-    const SvxMacroItem* pMacroItem;
-    SwWrtShell*         pWrtShell; // can be ZERO too!
-    OUString          aCurPar1;
-    OUString          aCurPar2;
-    OUString          sCurFrame;
+    SwField*            m_pCurField;
+    SwWrtShell*         m_pWrtShell; // can be ZERO too!
+    OUString          m_aCurPar1;
+    OUString          m_aCurPar2;
+    OUString          m_sCurFrame;
 
-    OUString          sMacroPath;
-    OUString          sMacroName;
+    OUString          m_sMacroPath;
+    OUString          m_sMacroName;
 
-    sal_uLong           nCurFormat;
-    bool            bEvalExp;
+    sal_uInt32          m_nCurFormat;
+    bool            m_bEvalExp;
 
-    SAL_DLLPRIVATE sal_uInt16            GetCurrLanguage() const;
+    SAL_DLLPRIVATE LanguageType    GetCurrLanguage() const;
 
-    css::uno::Reference<css::text::XNumberingTypeInfo> xNumberingInfo;
-    SAL_DLLPRIVATE css::uno::Reference<css::text::XNumberingTypeInfo> GetNumberingInfo()const;
+    css::uno::Reference<css::text::XNumberingTypeInfo> m_xNumberingInfo;
+    SAL_DLLPRIVATE css::uno::Reference<css::text::XNumberingTypeInfo> const & GetNumberingInfo()const;
 
 public:
     explicit SwFieldMgr(SwWrtShell* pSh = nullptr);
     ~SwFieldMgr();
 
     void                SetWrtShell( SwWrtShell* pShell )
-                        {   pWrtShell = pShell;     }
+                        {   m_pWrtShell = pShell;     }
 
      // insert field using TypeID (TYP_ ...)
     bool InsertField( const SwInsertField_Data& rData );
 
     // change the current field directly
-    void            UpdateCurField(sal_uLong nFormat,
+    void            UpdateCurField(sal_uInt32 nFormat,
                                  const OUString& rPar1,
                                  const OUString& rPar2,
-                                 SwField * _pField = nullptr);
+                                 std::unique_ptr<SwField> _pField = nullptr);
 
-    OUString        GetCurFieldPar1() const { return aCurPar1; }
-    OUString        GetCurFieldPar2() const { return aCurPar2; }
+    const OUString& GetCurFieldPar1() const { return m_aCurPar1; }
+    const OUString& GetCurFieldPar2() const { return m_aCurPar2; }
 
     // determine a field
     SwField*        GetCurField();
 
-    void            InsertFieldType(SwFieldType& rType);
+    void            InsertFieldType(SwFieldType const & rType);
 
-    bool            ChooseMacro(const OUString &rSelMacro = OUString());
+    bool            ChooseMacro();
     void            SetMacroPath(const OUString& rPath);
-    inline OUString GetMacroPath() const         { return sMacroPath; }
-    inline OUString GetMacroName() const         { return sMacroName; }
+    const OUString& GetMacroPath() const         { return m_sMacroPath; }
+    const OUString& GetMacroName() const         { return m_sMacroName; }
 
     // previous and next of the same type
     bool GoNextPrev( bool bNext = true, SwFieldType* pTyp = nullptr );
@@ -159,15 +155,15 @@ public:
 
     // access to field types via ResId
     size_t          GetFieldTypeCount() const;
-    SwFieldType*    GetFieldType(sal_uInt16 nResId, size_t nField = 0) const;
-    SwFieldType*    GetFieldType(sal_uInt16 nResId, const OUString& rName) const;
+    SwFieldType*    GetFieldType(SwFieldIds nResId, size_t nField = 0) const;
+    SwFieldType*    GetFieldType(SwFieldIds nResId, const OUString& rName) const;
 
-    void            RemoveFieldType(sal_uInt16 nResId, const OUString& rName);
+    void            RemoveFieldType(SwFieldIds nResId, const OUString& rName);
 
     // access via TypeId from the dialog
     // Ids for a range of fields
     static const SwFieldGroupRgn& GetGroupRange(bool bHtmlMode, sal_uInt16 nGrpId);
-    static sal_uInt16           GetGroup(sal_uInt16 nTypeId, sal_uInt16 nSubType = 0);
+    static sal_uInt16           GetGroup(sal_uInt16 nTypeId, sal_uInt16 nSubType);
 
     // the current field's TypeId
     sal_uInt16          GetCurTypeId() const;
@@ -185,19 +181,19 @@ public:
 
     // format to a type
     sal_uInt16          GetFormatCount(sal_uInt16 nTypeId, bool bHtmlMode) const;
-    OUString            GetFormatStr(sal_uInt16 nTypeId, sal_uLong nFormatId) const;
-    sal_uInt16          GetFormatId(sal_uInt16 nTypeId, sal_uLong nFormatId) const;
-    sal_uLong           GetDefaultFormat(sal_uInt16 nTypeId, bool bIsText, SvNumberFormatter* pFormatter);
+    OUString            GetFormatStr(sal_uInt16 nTypeId, sal_uInt32 nFormatId) const;
+    sal_uInt16          GetFormatId(sal_uInt16 nTypeId, sal_uInt32 nFormatId) const;
+    sal_uInt32          GetDefaultFormat(sal_uInt16 nTypeId, bool bIsText, SvNumberFormatter* pFormatter);
 
     // turn off evaluation of expression fields for insertation
     // of many expression fields (see labels)
 
     inline void     SetEvalExpFields(bool bEval);
-    void            EvalExpFields(SwWrtShell* pSh = nullptr);
+    void            EvalExpFields(SwWrtShell* pSh);
 };
 
 inline void SwFieldMgr::SetEvalExpFields(bool bEval)
-    { bEvalExp = bEval; }
+    { m_bEvalExp = bEval; }
 
 #endif
 

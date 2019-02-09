@@ -24,6 +24,7 @@
 #include <doc.hxx>
 #include <IDocumentTimerAccess.hxx>
 #include <o3tl/sorted_vector.hxx>
+#include <memory>
 
 class SwTextField;
 class SwIndex;
@@ -38,12 +39,13 @@ class SwFlyFrameFormat;
 class SwDoc;
 class SwNode;
 struct SwPosition;
+enum class SwFieldIds : sal_uInt16;
 
 // Update expression fields
-class _SetGetExpField
+class SetGetExpField
 {
-    sal_uLong nNode;
-    sal_Int32 nContent;
+    sal_uLong m_nNode;
+    sal_Int32 m_nContent;
     union {
         const SwTextField* pTextField;
         const SwSection* pSection;
@@ -52,48 +54,45 @@ class _SetGetExpField
         const SwTableBox* pTBox;
         const SwTextINetFormat* pTextINet;
         const SwFlyFrameFormat* pFlyFormat;
-    } CNTNT;
-    enum _SetGetExpFieldType
+    } m_CNTNT;
+    enum SetGetExpFieldType
         {
             TEXTFIELD, TEXTTOXMARK, SECTIONNODE, CRSRPOS, TABLEBOX,
             TEXTINET, FLYFRAME
-        } eSetGetExpFieldType;
+        } m_eSetGetExpFieldType;
 
 public:
-    _SetGetExpField( const SwNodeIndex& rNdIdx, const SwTextField* pField = nullptr,
+    SetGetExpField( const SwNodeIndex& rNdIdx, const SwTextField* pField = nullptr,
                     const SwIndex* pIdx = nullptr );
 
-    _SetGetExpField( const SwNodeIndex& rNdIdx, const SwTextINetFormat& rINet,
-                    const SwIndex* pIdx = nullptr );
+    SetGetExpField( const SwNodeIndex& rNdIdx, const SwTextINetFormat& rINet );
 
-    _SetGetExpField( const SwSectionNode& rSectNode,
+    SetGetExpField( const SwSectionNode& rSectNode,
                     const SwPosition* pPos = nullptr  );
 
-    _SetGetExpField( const SwTableBox& rTableBox,
-                    const SwPosition* pPos = nullptr  );
+    SetGetExpField( const SwTableBox& rTableBox  );
 
-    _SetGetExpField( const SwNodeIndex& rNdIdx, const SwTextTOXMark& rTOX,
-                    const SwIndex* pIdx );
+    SetGetExpField( const SwNodeIndex& rNdIdx, const SwTextTOXMark& rTOX );
 
-    _SetGetExpField( const SwPosition& rPos );
+    SetGetExpField( const SwPosition& rPos );
 
-    _SetGetExpField( const SwFlyFrameFormat& rFlyFormat, const SwPosition* pPos = nullptr );
+    SetGetExpField( const SwFlyFrameFormat& rFlyFormat, const SwPosition* pPos );
 
-    bool operator==( const _SetGetExpField& rField ) const;
-    bool operator<( const _SetGetExpField& rField ) const;
+    bool operator==( const SetGetExpField& rField ) const;
+    bool operator<( const SetGetExpField& rField ) const;
 
     const SwTextField* GetTextField() const
-        { return TEXTFIELD == eSetGetExpFieldType ? CNTNT.pTextField : nullptr; }
+        { return TEXTFIELD == m_eSetGetExpFieldType ? m_CNTNT.pTextField : nullptr; }
     const SwSection* GetSection() const
-        { return SECTIONNODE == eSetGetExpFieldType ? CNTNT.pSection : nullptr; }
+        { return SECTIONNODE == m_eSetGetExpFieldType ? m_CNTNT.pSection : nullptr; }
     const SwTextINetFormat* GetINetFormat() const
-        { return TEXTINET == eSetGetExpFieldType ? CNTNT.pTextINet : nullptr; }
+        { return TEXTINET == m_eSetGetExpFieldType ? m_CNTNT.pTextINet : nullptr; }
     const SwFlyFrameFormat* GetFlyFormat() const
-        { return FLYFRAME == eSetGetExpFieldType ? CNTNT.pFlyFormat : nullptr; }
+        { return FLYFRAME == m_eSetGetExpFieldType ? m_CNTNT.pFlyFormat : nullptr; }
 
-    sal_uLong GetNode() const { return nNode; }
-    sal_Int32 GetContent() const { return nContent; }
-    const void* GetPointer() const { return CNTNT.pTextField; }
+    sal_uLong GetNode() const { return m_nNode; }
+    sal_Int32 GetContent() const { return m_nContent; }
+    const void* GetPointer() const { return m_CNTNT.pTextField; }
 
     void GetPosOfContent( SwPosition& rPos ) const;
 
@@ -103,17 +102,15 @@ public:
     void SetBodyPos( const SwContentFrame& rFrame );
 };
 
-class _SetGetExpFields : public o3tl::sorted_vector<_SetGetExpField*, o3tl::less_ptr_to<_SetGetExpField> >
+class SetGetExpFields : public o3tl::sorted_vector<std::unique_ptr<SetGetExpField>, o3tl::less_uniqueptr_to<SetGetExpField> >
 {
-public:
-    ~_SetGetExpFields() { DeleteAndDestroyAll(); }
 };
 
 // struct for saving strings from the SetExp's string fields
-struct _HashStr : public SwHash
+struct HashStr : public SwHash
 {
     OUString aSetStr;
-    _HashStr( const OUString& rName, const OUString& rText, _HashStr* = nullptr );
+    HashStr( const OUString& rName, const OUString& rText, HashStr* );
 };
 
 struct SwCalcFieldType : public SwHash
@@ -126,7 +123,7 @@ struct SwCalcFieldType : public SwHash
 };
 
 // search for the string that was saved under rName in the hash table
-OUString LookString( SwHash** ppTable, sal_uInt16 nSize, const OUString& rName );
+OUString LookString( SwHashTable<HashStr> const & rTable, const OUString& rName );
 
 const int GETFLD_ALL        = 3;        // combine flags via OR
 const int GETFLD_CALC       = 1;
@@ -134,25 +131,25 @@ const int GETFLD_EXPAND     = 2;
 
 class SwDocUpdateField
 {
-    _SetGetExpFields* pFieldSortLst;    // current field list for calculation
-    SwCalcFieldType*  aFieldTypeTable[ TBLSZ ];
+    std::unique_ptr<SetGetExpFields> m_pFieldSortList; ///< current field list for calculation
+    SwHashTable<SwCalcFieldType> m_FieldTypeTable;
 
-    sal_uLong nNodes;               // if the node count is different
-    sal_uInt8 nFieldLstGetMode;
-    SwDoc* pDocument;
+    sal_uLong m_nNodes; ///< to check if the node count changed
+    int m_nFieldListGetMode;
+    SwDoc& m_rDoc;
 
-    bool bInUpdateFields : 1;     // currently there is an UpdateFields
-    bool bFieldsDirty : 1;        // some fields are invalid
+    bool m_bInUpdateFields : 1; ///< currently in an UpdateFields call
+    bool m_bFieldsDirty : 1;    ///< some fields are invalid
 
-    void _MakeFieldList( SwDoc& pDoc, int eGetMode );
-    void GetBodyNode( const SwTextField& , sal_uInt16 nFieldWhich );
+    void MakeFieldList_( SwDoc& pDoc, int eGetMode );
+    void GetBodyNode( const SwTextField& , SwFieldIds nFieldWhich );
     void GetBodyNode( const SwSectionNode&);
 
 public:
-    SwDocUpdateField(SwDoc* pDocument);
+    SwDocUpdateField(SwDoc& rDocument);
     ~SwDocUpdateField();
 
-    const _SetGetExpFields* GetSortLst() const { return pFieldSortLst; }
+    const SetGetExpFields* GetSortList() const { return m_pFieldSortList.get(); }
 
     void MakeFieldList( SwDoc& rDoc, bool bAll, int eGetMode );
 
@@ -161,21 +158,21 @@ public:
     void InsertFieldType( const SwFieldType& rType );
     void RemoveFieldType( const SwFieldType& rType );
 
-    bool IsInUpdateFields() const         { return bInUpdateFields; }
-    void SetInUpdateFields( bool b )      { bInUpdateFields = b; }
+    bool IsInUpdateFields() const         { return m_bInUpdateFields; }
+    void SetInUpdateFields( bool b )      { m_bInUpdateFields = b; }
 
-    bool IsFieldsDirty() const          { return bFieldsDirty; }
+    bool IsFieldsDirty() const          { return m_bFieldsDirty; }
     void SetFieldsDirty( bool b )
     {
-        bFieldsDirty = b;
+        m_bFieldsDirty = b;
 
         if (b)
         {
-            pDocument->getIDocumentTimerAccess().StartBackgroundJobs();
+            m_rDoc.getIDocumentTimerAccess().StartIdling();
         }
     }
 
-    SwHash* const * GetFieldTypeTable() const { return reinterpret_cast<SwHash* const *>(aFieldTypeTable); }
+    SwHashTable<SwCalcFieldType> const& GetFieldTypeTable() const { return m_FieldTypeTable; }
 };
 
 #endif

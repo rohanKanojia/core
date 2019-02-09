@@ -8,6 +8,7 @@
  */
 
 #include "Columns.hxx"
+#include "Column.hxx"
 
 #include <com/sun/star/sdbc/XRow.hpp>
 
@@ -24,13 +25,19 @@ using namespace ::com::sun::star::uno;
 
 Columns::Columns(Table& rTable,
                  Mutex& rMutex,
-                 const TStringVector& rVector):
+                 const ::std::vector< OUString>& rVector):
     OColumnsHelper(rTable,
                    true, // TODO: is this case sensitivity?
                    rMutex,
-                   rVector)
+                   rVector,
+                   /*bUseHardRef*/true)
 {
     OColumnsHelper::setParent(&rTable);
+}
+
+Reference< css::beans::XPropertySet > Columns::createDescriptor()
+{
+    return new Column;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

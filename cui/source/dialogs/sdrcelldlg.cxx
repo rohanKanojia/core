@@ -19,51 +19,46 @@
 
 #include <svl/cjkoptions.hxx>
 #include <svx/flagsdef.hxx>
-#include "cuires.hrc"
-#include "sdrcelldlg.hxx"
-#include "dialmgr.hxx"
-#include "cuitabarea.hxx"
-#include "svx/svdmodel.hxx"
-#include "border.hxx"
+#include <sdrcelldlg.hxx>
+#include <cuitabarea.hxx>
+#include <svx/svdmodel.hxx>
+#include <border.hxx>
 #include <svx/dialogs.hrc>
 
-SvxFormatCellsDialog::SvxFormatCellsDialog( vcl::Window* pParent, const SfxItemSet* pAttr, SdrModel* pModel )
-    : SfxTabDialog(pParent, "FormatCellsDialog", "cui/ui/formatcellsdialog.ui", pAttr)
+SvxFormatCellsDialog::SvxFormatCellsDialog(weld::Window* pParent, const SfxItemSet* pAttr, const SdrModel& rModel)
+    : SfxTabDialogController(pParent, "cui/ui/formatcellsdialog.ui", "FormatCellsDialog", pAttr)
     , mrOutAttrs(*pAttr)
-    , mpColorTab(pModel->GetColorList())
-    , mpGradientList(pModel->GetGradientList())
-    , mpHatchingList(pModel->GetHatchList())
-    , mpBitmapList(pModel->GetBitmapList())
-    , m_nAreaPageId(0)
+    , mpColorTab(rModel.GetColorList())
+    , mpGradientList(rModel.GetGradientList())
+    , mpHatchingList(rModel.GetHatchList())
+    , mpBitmapList(rModel.GetBitmapList())
+    , mpPatternList(rModel.GetPatternList())
 {
     AddTabPage("name", RID_SVXPAGE_CHAR_NAME);
     AddTabPage("effects", RID_SVXPAGE_CHAR_EFFECTS);
-    m_nBorderPageId = AddTabPage("border", RID_SVXPAGE_BORDER );
-    m_nAreaPageId = AddTabPage("area", RID_SVXPAGE_AREA);
+    AddTabPage("border", RID_SVXPAGE_BORDER );
+    AddTabPage("area", RID_SVXPAGE_AREA);
 }
 
-void SvxFormatCellsDialog::PageCreated( sal_uInt16 nId, SfxTabPage &rPage )
+void SvxFormatCellsDialog::PageCreated(const OString& rId, SfxTabPage &rPage)
 {
-    if (nId == m_nAreaPageId)
+    if (rId == "area")
     {
         SvxAreaTabPage& rAreaPage = static_cast<SvxAreaTabPage&>(rPage);
         rAreaPage.SetColorList( mpColorTab );
         rAreaPage.SetGradientList( mpGradientList );
         rAreaPage.SetHatchingList( mpHatchingList );
         rAreaPage.SetBitmapList( mpBitmapList );
-        rAreaPage.SetPageType( PT_AREA );
-        rAreaPage.SetDlgType( 1 );
-        rAreaPage.SetPos( 0 );
-        rAreaPage.Construct();
+        rAreaPage.SetPatternList( mpPatternList );
         rAreaPage.ActivatePage( mrOutAttrs );
     }
-    else if (nId == m_nBorderPageId)
+    else if (rId == "border")
     {
         SvxBorderTabPage& rBorderPage = static_cast<SvxBorderTabPage&>(rPage);
         rBorderPage.SetTableMode();
     }
     else
-        SfxTabDialog::PageCreated( nId, rPage );
+        SfxTabDialogController::PageCreated(rId, rPage);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

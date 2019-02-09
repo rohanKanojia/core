@@ -51,16 +51,14 @@ namespace xmloff
     {
         friend class OFormLayerXMLImport;
 
-    protected:
         SvXMLImport&                        m_rImporter;
         OAttribute2Property                 m_aAttributeMetaData;
 
         /// the supplier for the forms of the currently imported page
         css::uno::Reference< css::form::XFormsSupplier2 >
                                             m_xCurrentPageFormsSupp;
-        SvXMLStylesContext*                 m_pAutoStyles;
+        rtl::Reference<SvXMLStylesContext>  m_xAutoStyles;
 
-    protected:
         typedef std::map< OUString, css::uno::Reference< css::beans::XPropertySet > > MapString2PropertySet;
         typedef std::map<css::uno::Reference<css::drawing::XDrawPage>, MapString2PropertySet, ODrawPageCompare> MapDrawPage2Map;
 
@@ -95,8 +93,8 @@ namespace xmloff
             const OUString& _rReferringControls);
 
         // OFormLayerXMLImport_Impl
-        inline OAttribute2Property&         getAttributeMap()   { return m_aAttributeMetaData; }
-        inline SvXMLImport&                 getGlobalContext()  { return m_rImporter; }
+        OAttribute2Property&         getAttributeMap()   { return m_aAttributeMetaData; }
+        SvXMLImport&                 getGlobalContext()  { return m_rImporter; }
         const SvXMLStyleContext*            getStyleElement(const OUString& _rStyleName) const;
         void                                enterEventContext();
         void                                leaveEventContext();
@@ -129,8 +127,9 @@ namespace xmloff
             const OUString& _rSubmissionID
         );
 
-        virtual ~OFormLayerXMLImport_Impl();
-    protected:
+        ~OFormLayerXMLImport_Impl() override;
+
+    private:
         explicit OFormLayerXMLImport_Impl(SvXMLImport& _rImporter);
 
         /** start importing the forms of the given page

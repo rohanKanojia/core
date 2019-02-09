@@ -59,7 +59,6 @@ $(eval $(call gb_Library_use_libraries,sm,\
         utl \
         vcl \
         xo \
-		$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,sm,\
@@ -73,6 +72,7 @@ $(eval $(call gb_Library_add_exception_objects,sm,\
         starmath/source/document \
         starmath/source/edit \
         starmath/source/format \
+        starmath/source/mathmlattr \
         starmath/source/mathmlexport \
         starmath/source/mathmlimport \
         starmath/source/mathtype \
@@ -88,6 +88,7 @@ $(eval $(call gb_Library_add_exception_objects,sm,\
         starmath/source/symbol \
         starmath/source/tmpdevice \
         starmath/source/typemap \
+        starmath/source/uiobject \
         starmath/source/unodoc \
         starmath/source/unofilter \
         starmath/source/unomodel \
@@ -107,8 +108,5 @@ $(eval $(call gb_SdiTarget_set_include,starmath/sdi/smslots,\
         -I$(SRCDIR)/sfx2/sdi \
         $$(INCLUDE) \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,sm,sm))
 
 # vim: set noet sw=4 ts=4:

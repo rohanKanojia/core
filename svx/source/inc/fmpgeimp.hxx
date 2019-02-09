@@ -25,15 +25,13 @@
 #include <com/sun/star/form/XForm.hpp>
 #include <com/sun/star/form/XForms.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/container/XMap.hpp>
 
 #include <tools/link.hxx>
-#include <comphelper/uno3.hxx>
 #include <cppuhelper/weakref.hxx>
 
-#include "svx/svxdllapi.h"
+#include <svx/svxdllapi.h>
 #include <map>
 
 class FmFormObj;
@@ -42,11 +40,11 @@ class SdrObject;
 
 
 // FmFormPageImpl
-// lauscht an allen Containern, um festzustellen, wann Objecte
-// eingefuegt worden sind und wann diese entfernt wurden
+// Listens to all containers to determine when objects have been inserted
+// and when they have been removed
 
 
-class SVX_DLLPRIVATE FmFormPageImpl
+class FmFormPageImpl final
 {
     css::uno::Reference< css::form::XForm >               xCurrentForm;
     css::uno::Reference< css::form::XForms >              m_xForms;
@@ -64,7 +62,7 @@ public:
 
     void initFrom( FmFormPageImpl& i_foreignImpl );
 
-    //  nur wichtig fuer den DesignMode
+    //  only important for the DesignMode
     void setCurForm(const css::uno::Reference< css::form::XForm>& xForm);
     css::uno::Reference< css::form::XForm> getDefaultForm();
 
@@ -83,14 +81,14 @@ public:
     );
 
     // activation handling
-    inline  bool    hasEverBeenActivated( ) const { return !m_bFirstActivation; }
-    inline  void        setHasBeenActivated( ) { m_bFirstActivation = false; }
+    bool    hasEverBeenActivated( ) const { return !m_bFirstActivation; }
+    void        setHasBeenActivated( ) { m_bFirstActivation = false; }
 
     const css::uno::Reference< css::form::XForms>& getForms( bool _bForceCreate = true );
 
     void        SetFormsCreationHdl( const Link<FmFormPageImpl&,void>& _rFormsCreationHdl ) { m_aFormsCreationHdl = _rFormsCreationHdl; }
 
-protected:
+private:
     /** finds a form with a given data source signature
         @param rForm
             the form to start the search with. This form, including all possible sub forms,
@@ -139,7 +137,6 @@ private:
     css::uno::Reference< css::container::XMap >
         impl_createControlShapeMap_nothrow();
 
-private:
     FmFormPageImpl( const FmFormPageImpl& ) = delete;
     FmFormPageImpl& operator=( const FmFormPageImpl& ) = delete;
 };

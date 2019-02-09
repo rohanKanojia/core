@@ -32,18 +32,14 @@
 class SVX_DLLPUBLIC XFillBackgroundItem : public SfxBoolItem
 {
 public:
-                            static SfxPoolItem* CreateDefault();
                             XFillBackgroundItem( bool bFill = false );
-                            SVX_DLLPRIVATE XFillBackgroundItem( SvStream& rIn );
-
 
     SVX_DLLPRIVATE virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    SVX_DLLPRIVATE virtual SfxPoolItem*    Create( SvStream& rIn, sal_uInt16 nVer ) const override;
 
     SVX_DLLPRIVATE virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText, const IntlWrapper * = nullptr ) const override;
+                                                 MapUnit eCoreMetric,
+                                                 MapUnit ePresMetric,
+                                                 OUString &rText, const IntlWrapper& ) const override;
 };
 
 #endif

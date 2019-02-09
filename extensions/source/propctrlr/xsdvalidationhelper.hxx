@@ -52,7 +52,7 @@ namespace pcr
 
         /** retrieves the names of all XForms models in the document the control lives in
         */
-        void    getAvailableDataTypeNames( ::std::vector< OUString >& /* [out] */ _rNames ) const;
+        void    getAvailableDataTypeNames( std::vector< OUString >& /* [out] */ _rNames ) const;
 
         /** retrieves a particular data type given by name
         */
@@ -127,7 +127,7 @@ namespace pcr
         static OUString
                 getBasicTypeNameForClass(
                     sal_Int16 _nClass,
-                    css::uno::Reference< css::xforms::XDataTypeRepository > _rxRepository
+                    const css::uno::Reference< css::xforms::XDataTypeRepository >& _rxRepository
                 );
     };
 

@@ -23,8 +23,9 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 
 #include <svx/gridctrl.hxx>
-#include <svtools/transfer.hxx>
+#include <vcl/transfer.hxx>
 #include <svx/svxdllapi.h>
+#include <memory>
 
 
 // FmGridHeader
@@ -35,11 +36,11 @@ class SAL_WARN_UNUSED SVX_DLLPUBLIC FmGridHeader
             ,public DropTargetHelper
 {
 protected:
-    FmGridHeaderData*       m_pImpl;
+    std::unique_ptr<FmGridHeaderData>       m_pImpl;
 
 public:
     FmGridHeader( BrowseBox* pParent, WinBits nWinBits = WB_STDHEADERBAR | WB_DRAG );
-    virtual ~FmGridHeader();
+    virtual ~FmGridHeader() override;
     virtual void dispose() override;
 
 public:
@@ -78,7 +79,7 @@ protected:
     */
     void notifyColumnSelect(sal_uInt16 nColumnId);
 private:
-    DECL_LINK_TYPED( OnAsyncExecuteDrop, void*, void );
+    DECL_LINK( OnAsyncExecuteDrop, void*, void );
 };
 
 
@@ -108,16 +109,16 @@ public:
     virtual void KeyInput( const KeyEvent& rKEvt ) override;
 
     // css::beans::XPropertyChangeListener
-    void SAL_CALL propertyChange(const css::beans::PropertyChangeEvent& evt);
+    void propertyChange(const css::beans::PropertyChangeEvent& evt);
 
     // css::form::XPositioningListener
-    void positioned(const css::lang::EventObject& rEvent);
+    void positioned();
 
     // XBound
     bool commit();
 
     // css::form::XInsertListener
-    void inserted(const css::lang::EventObject& rEvent);
+    void inserted();
 
     void markColumn(sal_uInt16 nId);
     bool isColumnMarked(sal_uInt16 nId) const;
@@ -132,7 +133,7 @@ public:
         @return
             The name of the specified object.
     */
-    virtual OUString GetAccessibleObjectName( ::svt::AccessibleBrowseBoxObjType eObjType,sal_Int32 _nPosition = -1) const override;
+    virtual OUString GetAccessibleObjectName( ::vcl::AccessibleBrowseBoxObjType eObjType,sal_Int32 _nPosition = -1) const override;
 
     /** return the description of the specified object.
         @param  eObjType
@@ -142,7 +143,7 @@ public:
         @return
             The description of the specified object.
     */
-    virtual OUString GetAccessibleObjectDescription( ::svt::AccessibleBrowseBoxObjType eObjType,sal_Int32 _nPosition = -1) const override;
+    virtual OUString GetAccessibleObjectDescription( ::vcl::AccessibleBrowseBoxObjType eObjType,sal_Int32 _nPosition = -1) const override;
 
 protected:
     virtual void Command(const CommandEvent& rEvt) override;
@@ -185,14 +186,12 @@ protected:
     bool selectBookmarks(const css::uno::Sequence< css::uno::Any>& _rBookmarks);
 
     /** returns if a column is selected
-        @param  nColumnId
-            The column id.
         @param  _pColumn
             The column to compare with.
         @return
             <TRUE/> if the column is selected, otherwise <FALSE/>
     */
-    bool isColumnSelected(sal_uInt16 nColumnId,DbGridColumn* _pColumn);
+    bool isColumnSelected(DbGridColumn const * _pColumn);
 };
 
 #endif // INCLUDED_SVX_FMGRIDCL_HXX

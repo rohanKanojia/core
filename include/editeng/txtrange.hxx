@@ -23,9 +23,10 @@
 #include <editeng/editengdllapi.h>
 #include <tools/gen.hxx>
 #include <deque>
+#include <memory>
 
 namespace tools { class PolyPolygon; }
-class Rectangle;
+namespace tools { class Rectangle; }
 
 namespace basegfx {
     class B2DPolyPolygon;
@@ -43,9 +44,9 @@ class EDITENG_DLLPUBLIC TextRanger
         RangeCache(const Range& rng) : range(rng) {};
     };
     std::deque<RangeCache> mRangeCache; //!< Cached range calculations.
-    tools::PolyPolygon *mpPolyPolygon; // Surface polygon
-    tools::PolyPolygon *mpLinePolyPolygon; // Line polygon
-    Rectangle *pBound;  // Comprehensive rectangle
+    std::unique_ptr<tools::PolyPolygon> mpPolyPolygon; // Surface polygon
+    std::unique_ptr<tools::PolyPolygon> mpLinePolyPolygon; // Line polygon
+    std::unique_ptr<tools::Rectangle> pBound;  // Comprehensive rectangle
     sal_uInt16 nCacheSize;  // Cache-Size
     sal_uInt16 nRight;      // Distance Contour-Text
     sal_uInt16 nLeft;       // Distance Text-Contour
@@ -53,12 +54,12 @@ class EDITENG_DLLPUBLIC TextRanger
     sal_uInt16 nLower;      // Distance Text-Contour
     sal_uInt32 nPointCount; // Number of polygon points
     bool       bSimple : 1; // Just outside edge
-    bool       bInner  : 1; // TRUE: Objekt inline (EditEngine);
-                            // FALSE: Objekt flow (StarWriter);
+    bool       bInner  : 1; // TRUE: Object inline (EditEngine);
+                            // FALSE: Object flow (StarWriter);
     bool       bVertical :1;// for vertical writing mode
 
     TextRanger( const TextRanger& ) = delete;
-    const Rectangle& GetBoundRect_();
+    const tools::Rectangle& GetBoundRect_();
 public:
     TextRanger( const basegfx::B2DPolyPolygon& rPolyPolygon,
                 const basegfx::B2DPolyPolygon* pLinePolyPolygon,
@@ -74,9 +75,8 @@ public:
     bool IsSimple() const { return bSimple; }
     bool IsInner() const { return bInner; }
     bool IsVertical() const { return bVertical; }
-    const tools::PolyPolygon& GetPolyPolygon() const { return *mpPolyPolygon; }
-    const Rectangle& GetBoundRect()
-        { return pBound ? static_cast< const Rectangle& >(*pBound) : GetBoundRect_(); }
+    const tools::Rectangle& GetBoundRect()
+        { return pBound ? const_cast< const tools::Rectangle& >(*pBound) : GetBoundRect_(); }
     void SetUpper( sal_uInt16 nNew ){ nUpper = nNew; }
     void SetLower( sal_uInt16 nNew ){ nLower = nNew; }
     void SetVertical( bool bNew );

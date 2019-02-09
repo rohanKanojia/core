@@ -10,7 +10,7 @@
 #include <sal/types.h>
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
-#include "rtl/ustring.hxx"
+#include <rtl/ustring.hxx>
 
 namespace test { namespace oustring {
 
@@ -30,9 +30,9 @@ CPPUNIT_TEST_SUITE_REGISTRATION(test::oustring::StartsWith);
 
 void test::oustring::StartsWith::startsWith()
 {
-    CPPUNIT_ASSERT( rtl::OUString( "foobar" ).startsWith( "foo" ));
-    CPPUNIT_ASSERT( !rtl::OUString( "foo" ).startsWith( "foobar" ));
-    CPPUNIT_ASSERT( !rtl::OUString( "foobar" ).startsWith( "oo" ));
+    CPPUNIT_ASSERT( OUString( "foobar" ).startsWith( "foo" ));
+    CPPUNIT_ASSERT( !OUString( "foo" ).startsWith( "foobar" ));
+    CPPUNIT_ASSERT( !OUString( "foobar" ).startsWith( "oo" ));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

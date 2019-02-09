@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.22.1 -->
+<interface domain="sfx">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="SearchDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Find on this Page</property>
+    <property name="title" translatable="yes" context="searchdialog|SearchDialog">Find on this Page</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
+    <child>
+      <placeholder/>
+    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox3">
         <property name="can_focus">False</property>
@@ -17,8 +22,8 @@
             <property name="can_focus">False</property>
             <property name="layout_style">end</property>
             <child>
-              <object class="GtkButton" id="search">
-                <property name="label" translatable="yes">_Find</property>
+              <object class="GtkButton" id="ok">
+                <property name="label" translatable="yes" context="searchdialog|search">_Find</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="can_default">True</property>
@@ -68,7 +73,7 @@
                 <property name="can_focus">False</property>
                 <property name="row_spacing">6</property>
                 <child>
-                  <object class="GtkComboBox" id="searchterm">
+                  <object class="GtkComboBoxText" id="searchterm">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="valign">center</property>
@@ -76,7 +81,8 @@
                     <property name="has_entry">True</property>
                     <child internal-child="entry">
                       <object class="GtkEntry" id="combobox-entry1">
-                        <property name="can_focus">False</property>
+                        <property name="can_focus">True</property>
+                        <property name="activates_default">True</property>
                       </object>
                     </child>
                   </object>
@@ -89,10 +95,10 @@
                   <object class="GtkLabel" id="label1">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="xalign">0</property>
-                    <property name="label" translatable="yes">_Search for:</property>
+                    <property name="label" translatable="yes" context="searchdialog|label1">_Search for:</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">searchterm</property>
+                    <property name="xalign">0</property>
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
@@ -114,7 +120,7 @@
                 <property name="column_spacing">12</property>
                 <child>
                   <object class="GtkCheckButton" id="matchcase">
-                    <property name="label" translatable="yes">Ma_tch case</property>
+                    <property name="label" translatable="yes" context="searchdialog|matchcase">Ma_tch case</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -129,7 +135,7 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="wholewords">
-                    <property name="label" translatable="yes">Whole wor_ds only</property>
+                    <property name="label" translatable="yes" context="searchdialog|wholewords">Whole wor_ds only</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -144,7 +150,7 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="backwards">
-                    <property name="label" translatable="yes">Bac_kwards</property>
+                    <property name="label" translatable="yes" context="searchdialog|backwards">Bac_kwards</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -159,7 +165,7 @@
                 </child>
                 <child>
                   <object class="GtkCheckButton" id="wrap">
-                    <property name="label" translatable="yes">Wrap _around</property>
+                    <property name="label" translatable="yes" context="searchdialog|wrap">Wrap _around</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="receives_default">False</property>
@@ -189,8 +195,8 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">search</action-widget>
-      <action-widget response="0">close</action-widget>
+      <action-widget response="101">ok</action-widget>
+      <action-widget response="-7">close</action-widget>
     </action-widgets>
   </object>
 </interface>

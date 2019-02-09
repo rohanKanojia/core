@@ -23,59 +23,55 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <svx/svxdllapi.h>
-
+#include <memory>
 
 namespace svx
 {
-
-
     class ODADescriptorImpl;
 
-
     //= DataAccessDescriptorProperty
-
-    enum DataAccessDescriptorProperty
+    enum class DataAccessDescriptorProperty
     {
-        daDataSource,           /// data source name            (string)
-        daDatabaseLocation,     /// database file URL           (string)
-        daConnectionResource,   /// database driver URL         (string)
-        daConnection,           /// connection                  (XConnection)
+        DataSource,           /// data source name            (string)
+        DatabaseLocation,     /// database file URL           (string)
+        ConnectionResource,   /// database driver URL         (string)
+        Connection,           /// connection                  (XConnection)
 
-        daCommand,              /// command                     (string)
-        daCommandType,          /// command type                (long)
-        daEscapeProcessing,     /// escape processing           (boolean)
-        daFilter,               /// additional filter           (string)
-        daCursor,               /// the cursor                  (XResultSet)
+        Command,              /// command                     (string)
+        CommandType,          /// command type                (long)
+        EscapeProcessing,     /// escape processing           (boolean)
+        Filter,               /// additional filter           (string)
+        Cursor,               /// the cursor                  (XResultSet)
 
-        daColumnName,           /// column name                 (string)
-        daColumnObject,         /// column object               (XPropertySet)
+        ColumnName,           /// column name                 (string)
+        ColumnObject,         /// column object               (XPropertySet)
 
-        daSelection,            /// selection                   (sequence< any >)
-        daBookmarkSelection,    /// selection are bookmarks?    (boolean)
+        Selection,            /// selection                   (sequence< any >)
+        BookmarkSelection,    /// selection are bookmarks?    (boolean)
 
-        daComponent             /// component name              (XContent)
+        Component             /// component name              (XContent)
     };
-
 
     //= ODataAccessDescriptor
 
     /** class encapsulating the css::sdb::DataAccessDescriptor service.
     */
-    class SAL_WARN_UNUSED SVX_DLLPUBLIC ODataAccessDescriptor
+    class SAL_WARN_UNUSED SVX_DLLPUBLIC ODataAccessDescriptor final
     {
-    protected:
-        ODADescriptorImpl*      m_pImpl;
+        std::unique_ptr<ODADescriptorImpl>      m_pImpl;
 
     public:
         ODataAccessDescriptor();
         ODataAccessDescriptor( const ODataAccessDescriptor& _rSource );
+        ODataAccessDescriptor( ODataAccessDescriptor&& _rSource );
         ODataAccessDescriptor( const css::uno::Reference< css::beans::XPropertySet >& _rValues );
         ODataAccessDescriptor( const css::uno::Sequence< css::beans::PropertyValue >& _rValues );
 
         // allows to construct a descriptor from an Any containing either an XPropertySet or a property value sequence
         ODataAccessDescriptor( const css::uno::Any& _rValues );
 
-        const ODataAccessDescriptor& operator=(const ODataAccessDescriptor& _rSource);
+        ODataAccessDescriptor& operator=(const ODataAccessDescriptor& _rSource);
+        ODataAccessDescriptor& operator=(ODataAccessDescriptor&& _rSource);
 
         ~ODataAccessDescriptor();
 
@@ -83,7 +79,7 @@ namespace svx
             <p>If you call this method more than once, without writing any values between both calls, the same object
             is returned. If you wrote values, a new object is returned.</p>
         */
-        css::uno::Sequence< css::beans::PropertyValue >
+        css::uno::Sequence< css::beans::PropertyValue > const &
                     createPropertyValueSequence();
 
         /** initialized the descriptor from the property values given
@@ -112,11 +108,9 @@ namespace svx
         */
                 css::uno::Any& operator [] ( DataAccessDescriptorProperty _eWhich );
 
-
         /** returns either the data source name if given or the database location
         */
         OUString getDataSource() const;
-
 
         /** set the data source name, if it is not file URL
             @param  _sDataSourceNameOrLocation
@@ -125,11 +119,8 @@ namespace svx
         void setDataSource(const OUString& _sDataSourceNameOrLocation);
     };
 
-
 }
 
-
 #endif // INCLUDED_SVX_DATAACCESSDESCRIPTOR_HXX
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

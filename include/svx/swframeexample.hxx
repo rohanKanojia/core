@@ -1,4 +1,3 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -20,33 +19,34 @@
 #ifndef INCLUDED_SVX_SWFRAMEEXAMPLE_HXX
 #define INCLUDED_SVX_SWFRAMEEXAMPLE_HXX
 
-#include <vcl/window.hxx>
 #include <tools/color.hxx>
 #include <tools/gen.hxx>
 #include <svx/svxdllapi.h>
+#include <svx/swframetypes.hxx>
+#include <vcl/customweld.hxx>
+#include <vcl/window.hxx>
+#include <com/sun/star/text/WrapTextMode.hpp>
 
-// class SwFrmPagePreview -------------------------------------------------------
-
-class SVX_DLLPUBLIC SvxSwFrameExample : public vcl::Window
+class SVX_DLLPUBLIC SwFrameExample : public weld::CustomWidgetController
 {
-    Color       m_aTransColor;      // transparency
-    Color       m_aBgCol;           // background
-    Color       m_aFrameColor;      // graphic frame
-    Color       m_aAlignColor;      // align anchor
-    Color       m_aBorderCol;       // frame of doc
-    Color       m_aPrintAreaCol;    // frame of printable area of doc
-    Color       m_aTxtCol;          // symbolised text
-    Color       m_aBlankCol;        // area of symbol for blank
-    Color       m_aBlankFrameCol;   // frame of symbol for blank
+    Color       m_aTransColor;      ///< transparency
+    Color       m_aBgCol;           ///< background
+    Color       m_aFrameColor;      ///< graphic frame
+    Color       m_aAlignColor;      ///< align anchor
+    Color       m_aBorderCol;       ///< frame of doc
+    Color       m_aPrintAreaCol;    ///< frame of printable area of doc
+    Color       m_aTxtCol;          ///< symbolised text
+    Color       m_aBlankCol;        ///< area of symbol for blank
+    Color       m_aBlankFrameCol;   ///< frame of symbol for blank
 
-    Rectangle   aPage;
-    Rectangle   aPagePrtArea;
-    Rectangle   aTextLine;
-    Rectangle   aPara;
-    Rectangle   aParaPrtArea;
-    Rectangle   aFrameAtFrame;
-    Rectangle   aDrawObj;
-    Rectangle   aAutoCharFrame;
+    tools::Rectangle   aPage;
+    tools::Rectangle   aPagePrtArea;
+    tools::Rectangle   aTextLine;
+    tools::Rectangle   aPara;
+    tools::Rectangle   aParaPrtArea;
+    tools::Rectangle   aFrameAtFrame;
+    tools::Rectangle   aDrawObj;
+    tools::Rectangle   aAutoCharFrame;
     Size        aFrmSize;
 
     short       nHAlign;
@@ -55,38 +55,39 @@ class SVX_DLLPUBLIC SvxSwFrameExample : public vcl::Window
     short       nVAlign;
     short       nVRel;
 
-    short       nWrap;
-    short       nAnchor;
+    css::text::WrapTextMode nWrap;
+    RndStdIds   nAnchor;
     bool        bTrans;
 
     Point       aRelPos;
 
     void InitColors_Impl();
     void InitAllRects_Impl(vcl::RenderContext& rRenderContext);
-    void CalcBoundRect_Impl(Rectangle &rRect);
-    Rectangle DrawInnerFrame_Impl(vcl::RenderContext& rRenderContext, const Rectangle &rRect, const Color &rFillColor, const Color &rBorderColor);
+    void CalcBoundRect_Impl(const vcl::RenderContext& rRenderContext, tools::Rectangle &rRect);
+    tools::Rectangle DrawInnerFrame_Impl(vcl::RenderContext& rRenderContext, const tools::Rectangle &rRect, const Color &rFillColor, const Color &rBorderColor);
 
-    virtual void Paint(vcl::RenderContext& rRenderContext, const Rectangle&) override;
-    virtual Size GetOptimalSize() const override;
-protected:
-    virtual void DataChanged( const DataChangedEvent& rDCEvt ) override;
+    virtual void StyleUpdated() override;
+    virtual void Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle&) override;
 public:
 
-    SvxSwFrameExample(vcl::Window* pParent, WinBits nStyle);
+    SwFrameExample();
 
-    inline void SetWrap(sal_uInt16 nW)          { nWrap     = nW; }
+    virtual void SetDrawingArea(weld::DrawingArea* pDrawingArea) override;
 
-    inline void SetHAlign(short nH)          { nHAlign   = nH; }
-    inline void SetHoriRel(short nR)         { nHRel     = nR; }
+    void SetWrap(css::text::WrapTextMode nW) { nWrap     = nW; }
 
-    inline void SetVAlign(short nV)          { nVAlign   = nV; }
-    inline void SetVertRel(short nR)         { nVRel     = nR; }
+    void SetHAlign(short nH)          { nHAlign   = nH; }
+    void SetHoriRel(short nR)         { nHRel     = nR; }
 
-    inline void SetTransparent(bool bT)      { bTrans    = bT; }
-    inline void SetAnchor(short nA)          { nAnchor   = nA; }
+    void SetVAlign(short nV)          { nVAlign   = nV; }
+    void SetVertRel(short nR)         { nVRel     = nR; }
+
+    void SetTransparent(bool bT)      { bTrans    = bT; }
+    void SetAnchor(RndStdIds nA) { nAnchor   = nA; }
 
     void SetRelPos(const Point& rP);
 };
+
 
 
 #endif // INCLUDED_SVX_SWFRAMEEXAMPLE_HXX

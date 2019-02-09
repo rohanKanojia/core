@@ -60,7 +60,7 @@
 
 #include "lwpproplist.hxx"
 
-LwpPropListElement::LwpPropListElement(LwpObjectHeader &objHdr, LwpSvStream *pStrm)
+LwpPropListElement::LwpPropListElement(LwpObjectHeader const &objHdr, LwpSvStream *pStrm)
 :LwpDLVList(objHdr,pStrm)
 {
 }
@@ -73,14 +73,14 @@ LwpPropListElement* LwpPropListElement::GetNext()
 void LwpPropListElement::Read()
 {
     LwpDLVList::Read();
-    m_Name.Read(m_pObjStrm);
-    m_Value.Read(m_pObjStrm);
+    m_Name.Read(m_pObjStrm.get());
+    m_Value.Read(m_pObjStrm.get());
     m_pObjStrm->SkipExtra();
 }
 
 bool LwpPropListElement::IsNamed(const OUString& name)
 {
-    return name.equals(m_Name.str());
+    return name == m_Name.str();
 }
 
 OUString LwpPropList::GetNamedProperty(const OUString& name)
@@ -90,7 +90,7 @@ OUString LwpPropList::GetNamedProperty(const OUString& name)
     {
         return pProp->GetValue().str();
     }
-    return OUString("");
+    return OUString();
 }
 
 LwpPropListElement* LwpPropList::FindPropByName(const OUString& name)
@@ -104,11 +104,6 @@ LwpPropListElement* LwpPropList::FindPropByName(const OUString& name)
         pElement = pElement->GetNext();
     }
     return nullptr;
-}
-
-void LwpPropList::Read(LwpObjectStream* pObjStrm)
-{
-    LwpDLVListHead::Read(pObjStrm);
 }
 
 LwpPropListElement* LwpPropList::GetFirst()
@@ -130,7 +125,7 @@ OUString LwpPropList::EnumNamedProperty(OUString& name,OUString& value)
             if(pElement)
                 return  pElement->GetName().str();
         }
-        return OUString("");
+        return OUString();
     }
     else
     {
@@ -142,7 +137,7 @@ OUString LwpPropList::EnumNamedProperty(OUString& name,OUString& value)
             if(pElement)
                 return  pElement->GetName().str();
         }
-        return OUString("");
+        return OUString();
     }
 }
 

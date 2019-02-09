@@ -17,38 +17,41 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xlstyle.hxx"
+#include <xlstyle.hxx>
 #include <com/sun/star/awt/FontFamily.hpp>
 #include <com/sun/star/awt/FontSlant.hpp>
+#include <com/sun/star/awt/FontStrikeout.hpp>
 #include <com/sun/star/awt/FontUnderline.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 #include <vcl/font.hxx>
 #include <sal/macros.h>
+#include <sal/log.hxx>
 #include <rtl/tencinfo.h>
 #include <svtools/colorcfg.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
+#include <vcl/unohelp.hxx>
 #include <editeng/svxfont.hxx>
-#include "global.hxx"
-#include "xlroot.hxx"
+#include <global.hxx>
+#include <xlroot.hxx>
+#include <xltools.hxx>
 // Color data =================================================================
 
 /** Standard EGA colors, bright. */
 #define EXC_PALETTE_EGA_COLORS_LIGHT \
-            0x000000, 0xFFFFFF, 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFF00, 0xFF00FF, 0x00FFFF
+            Color(0x000000), Color(0xFFFFFF), Color(0xFF0000), Color(0x00FF00), Color(0x0000FF), Color(0xFFFF00), Color(0xFF00FF), Color(0x00FFFF)
 /** Standard EGA colors, dark. */
 #define EXC_PALETTE_EGA_COLORS_DARK \
-            0x800000, 0x008000, 0x000080, 0x808000, 0x800080, 0x008080, 0xC0C0C0, 0x808080
+            Color(0x800000), Color(0x008000), Color(0x000080), Color(0x808000), Color(0x800080), Color(0x008080), Color(0xC0C0C0), Color(0x808080)
 
 /** Default color table for BIFF2. */
-static const ColorData spnDefColorTable2[] =
+static const Color spnDefColorTable2[] =
 {
 /*  0 */    EXC_PALETTE_EGA_COLORS_LIGHT
 };
 
 /** Default color table for BIFF3/BIFF4. */
-static const ColorData spnDefColorTable3[] =
+static const Color spnDefColorTable3[] =
 {
 /*  0 */    EXC_PALETTE_EGA_COLORS_LIGHT,
 /*  8 */    EXC_PALETTE_EGA_COLORS_LIGHT,
@@ -56,29 +59,29 @@ static const ColorData spnDefColorTable3[] =
 };
 
 /** Default color table for BIFF5/BIFF7. */
-static const ColorData spnDefColorTable5[] =
+static const Color spnDefColorTable5[] =
 {
 /*  0 */    EXC_PALETTE_EGA_COLORS_LIGHT,
 /*  8 */    EXC_PALETTE_EGA_COLORS_LIGHT,
 /* 16 */    EXC_PALETTE_EGA_COLORS_DARK,
-/* 24 */    0x8080FF, 0x802060, 0xFFFFC0, 0xA0E0E0, 0x600080, 0xFF8080, 0x0080C0, 0xC0C0FF,
-/* 32 */    0x000080, 0xFF00FF, 0xFFFF00, 0x00FFFF, 0x800080, 0x800000, 0x008080, 0x0000FF,
-/* 40 */    0x00CFFF, 0x69FFFF, 0xE0FFE0, 0xFFFF80, 0xA6CAF0, 0xDD9CB3, 0xB38FEE, 0xE3E3E3,
-/* 48 */    0x2A6FF9, 0x3FB8CD, 0x488436, 0x958C41, 0x8E5E42, 0xA0627A, 0x624FAC, 0x969696,
-/* 56 */    0x1D2FBE, 0x286676, 0x004500, 0x453E01, 0x6A2813, 0x85396A, 0x4A3285, 0x424242
+/* 24 */    Color(0x8080FF), Color(0x802060), Color(0xFFFFC0), Color(0xA0E0E0), Color(0x600080), Color(0xFF8080), Color(0x0080C0), Color(0xC0C0FF),
+/* 32 */    Color(0x000080), Color(0xFF00FF), Color(0xFFFF00), Color(0x00FFFF), Color(0x800080), Color(0x800000), Color(0x008080), Color(0x0000FF),
+/* 40 */    Color(0x00CFFF), Color(0x69FFFF), Color(0xE0FFE0), Color(0xFFFF80), Color(0xA6CAF0), Color(0xDD9CB3), Color(0xB38FEE), Color(0xE3E3E3),
+/* 48 */    Color(0x2A6FF9), Color(0x3FB8CD), Color(0x488436), Color(0x958C41), Color(0x8E5E42), Color(0xA0627A), Color(0x624FAC), Color(0x969696),
+/* 56 */    Color(0x1D2FBE), Color(0x286676), Color(0x004500), Color(0x453E01), Color(0x6A2813), Color(0x85396A), Color(0x4A3285), Color(0x424242)
 };
 
 /** Default color table for BIFF8. */
-static const ColorData spnDefColorTable8[] =
+static const Color spnDefColorTable8[] =
 {
 /*  0 */    EXC_PALETTE_EGA_COLORS_LIGHT,
 /*  8 */    EXC_PALETTE_EGA_COLORS_LIGHT,
 /* 16 */    EXC_PALETTE_EGA_COLORS_DARK,
-/* 24 */    0x9999FF, 0x993366, 0xFFFFCC, 0xCCFFFF, 0x660066, 0xFF8080, 0x0066CC, 0xCCCCFF,
-/* 32 */    0x000080, 0xFF00FF, 0xFFFF00, 0x00FFFF, 0x800080, 0x800000, 0x008080, 0x0000FF,
-/* 40 */    0x00CCFF, 0xCCFFFF, 0xCCFFCC, 0xFFFF99, 0x99CCFF, 0xFF99CC, 0xCC99FF, 0xFFCC99,
-/* 48 */    0x3366FF, 0x33CCCC, 0x99CC00, 0xFFCC00, 0xFF9900, 0xFF6600, 0x666699, 0x969696,
-/* 56 */    0x003366, 0x339966, 0x003300, 0x333300, 0x993300, 0x993366, 0x333399, 0x333333
+/* 24 */    Color(0x9999FF), Color(0x993366), Color(0xFFFFCC), Color(0xCCFFFF), Color(0x660066), Color(0xFF8080), Color(0x0066CC), Color(0xCCCCFF),
+/* 32 */    Color(0x000080), Color(0xFF00FF), Color(0xFFFF00), Color(0x00FFFF), Color(0x800080), Color(0x800000), Color(0x008080), Color(0x0000FF),
+/* 40 */    Color(0x00CCFF), Color(0xCCFFFF), Color(0xCCFFCC), Color(0xFFFF99), Color(0x99CCFF), Color(0xFF99CC), Color(0xCC99FF), Color(0xFFCC99),
+/* 48 */    Color(0x3366FF), Color(0x33CCCC), Color(0x99CC00), Color(0xFFCC00), Color(0xFF9900), Color(0xFF6600), Color(0x666699), Color(0x969696),
+/* 56 */    Color(0x003366), Color(0x339966), Color(0x003300), Color(0x333300), Color(0x993300), Color(0x993366), Color(0x333399), Color(0x333333)
 };
 
 #undef EXC_PALETTE_EGA_COLORS_LIGHT
@@ -89,9 +92,9 @@ XclDefaultPalette::XclDefaultPalette( const XclRoot& rRoot ) :
     mnTableSize( 0 )
 {
     const StyleSettings& rSett = Application::GetSettings().GetStyleSettings();
-    mnWindowText = rSett.GetWindowTextColor().GetColor();
-    mnWindowBack = rSett.GetWindowColor().GetColor();
-    mnFaceColor = rSett.GetFaceColor().GetColor();
+    mnWindowText = rSett.GetWindowTextColor();
+    mnWindowBack = rSett.GetWindowColor();
+    mnFaceColor = rSett.GetFaceColor();
     // Don't use the system HelpBack and HelpText colours as it causes problems
     // with modern gnome. This is because mnNoteText and mnNoteBack are used
     // when colour indices ( instead of real colours ) are specified.
@@ -106,8 +109,8 @@ XclDefaultPalette::XclDefaultPalette( const XclRoot& rRoot ) :
     // ) lessens the chance of the one colour being an unsuitable combination
     // because by default the note text is black and the note background is
     // a light yellow colour ( very similar to Excel's normal defaults )
-    mnNoteText =  svtools::ColorConfig::GetDefaultColor( svtools::FONTCOLOR ).GetColor();
-    mnNoteBack =  svtools::ColorConfig::GetDefaultColor( svtools::CALCNOTESBACKGROUND ).GetColor();
+    mnNoteText =  svtools::ColorConfig::GetDefaultColor( svtools::FONTCOLOR );
+    mnNoteBack =  svtools::ColorConfig::GetDefaultColor( svtools::CALCNOTESBACKGROUND );
 
     // default colors
     switch( rRoot.GetBiff() )
@@ -134,9 +137,9 @@ XclDefaultPalette::XclDefaultPalette( const XclRoot& rRoot ) :
     }
 }
 
-ColorData XclDefaultPalette::GetDefColorData( sal_uInt16 nXclIndex ) const
+Color XclDefaultPalette::GetDefColor( sal_uInt16 nXclIndex ) const
 {
-    ColorData nColor;
+    Color nColor;
     if( nXclIndex < mnTableSize )
         nColor = mpnColorTable[ nXclIndex ];
     else switch( nXclIndex )
@@ -153,7 +156,7 @@ ColorData XclDefaultPalette::GetDefColorData( sal_uInt16 nXclIndex ) const
         case EXC_COLOR_NOTETEXT:        nColor = mnNoteText;    break;
         case EXC_COLOR_FONTAUTO:        nColor = COL_AUTO;      break;
         default:
-            OSL_TRACE( "XclDefaultPalette::GetDefColorData - unknown default color index: %d", nXclIndex );
+            SAL_WARN("sc",  "XclDefaultPalette::GetDefColor - unknown default color index: " << nXclIndex );
             nColor = COL_AUTO;
     }
     return nColor;
@@ -186,7 +189,7 @@ void XclFontData::Clear()
 {
     maName.clear();
     maStyle.clear();
-    maColor.SetColor( COL_AUTO );
+    maColor = COL_AUTO;
     mnHeight = 0;
     mnWeight = EXC_FONTWGHT_DONTKNOW;
     mnEscapem = EXC_FONTESC_NONE;
@@ -286,11 +289,11 @@ FontLineStyle XclFontData::GetScUnderline() const
 
 SvxEscapement XclFontData::GetScEscapement() const
 {
-    SvxEscapement eScEscapem = SVX_ESCAPEMENT_OFF;
+    SvxEscapement eScEscapem = SvxEscapement::Off;
     switch( mnEscapem )
     {
-        case EXC_FONTESC_SUPER: eScEscapem = SVX_ESCAPEMENT_SUPERSCRIPT;    break;
-        case EXC_FONTESC_SUB:   eScEscapem = SVX_ESCAPEMENT_SUBSCRIPT;      break;
+        case EXC_FONTESC_SUPER: eScEscapem = SvxEscapement::Superscript;    break;
+        case EXC_FONTESC_SUB:   eScEscapem = SvxEscapement::Subscript;      break;
     }
     return eScEscapem;
 }
@@ -417,7 +420,7 @@ Awt::FontSlant XclFontData::GetApiPosture() const
 
 float XclFontData::GetApiWeight() const
 {
-    return VCLUnoHelper::ConvertFontWeight( GetScWeight() );
+    return vcl::unohelper::ConvertFontWeight( GetScWeight() );
 }
 
 sal_Int16 XclFontData::GetApiUnderline() const
@@ -479,7 +482,7 @@ void XclFontData::SetApiPosture( Awt::FontSlant eApiPosture )
 
 void XclFontData::SetApiWeight( float fApiWeight )
 {
-    SetScWeight( VCLUnoHelper::ConvertFontWeight( fApiWeight ) );
+    SetScWeight( vcl::unohelper::ConvertFontWeight( fApiWeight ) );
 }
 
 void XclFontData::SetApiUnderline( sal_Int16 nApiUnderl )
@@ -659,8 +662,8 @@ void XclFontPropSetHelper::ReadFontProperties( XclFontData& rFontData,
         case EXC_FONTPROPSET_CONTROL:
         {
             OUString aApiFontName;
-            float fApiHeight, fApiWeight;
-            sal_Int16 nApiFamily, nApiCharSet, nApiPosture, nApiUnderl, nApiStrikeout;
+            float fApiHeight(0.0), fApiWeight(0.0);
+            sal_Int16 nApiFamily(0), nApiCharSet(0), nApiPosture(0), nApiUnderl(0), nApiStrikeout(0);
 
             // read font properties
             maHlpControl.ReadFromPropertySet( rPropSet );
@@ -710,7 +713,7 @@ void XclFontPropSetHelper::WriteFontProperties(
             lclWriteChartFont( rPropSet, maHlpChCmplx, maHlpChCmplxNoName, rFontData, bHasCmplx );
 
             // font escapement
-            if( rFontData.GetScEscapement() != SVX_ESCAPEMENT_OFF )
+            if( rFontData.GetScEscapement() != SvxEscapement::Off )
             {
                 maHlpChEscapement.InitializeWrite();
                 maHlpChEscapement << rFontData.GetApiEscapement() << EXC_API_ESC_HEIGHT;
@@ -758,19 +761,19 @@ namespace {
 const NfIndexTableOffset PRV_NF_INDEX_REUSE = NF_INDEX_TABLE_ENTRIES;
 
 /** German primary language not defined, LANGUAGE_GERMAN belongs to Germany. */
-const LanguageType PRV_LANGUAGE_GERMAN_PRIM = LANGUAGE_GERMAN & LANGUAGE_MASK_PRIMARY;
+constexpr LanguageType PRV_LANGUAGE_GERMAN_PRIM = primary(LANGUAGE_GERMAN);
 /** French primary language not defined, LANGUAGE_FRENCH belongs to France. */
-const LanguageType PRV_LANGUAGE_FRENCH_PRIM = LANGUAGE_FRENCH & LANGUAGE_MASK_PRIMARY;
+constexpr LanguageType PRV_LANGUAGE_FRENCH_PRIM = primary(LANGUAGE_FRENCH);
 /** Parent language identifier for Asian languages. */
-const LanguageType PRV_LANGUAGE_ASIAN_PRIM = LANGUAGE_CHINESE & LANGUAGE_MASK_PRIMARY;
+constexpr LanguageType PRV_LANGUAGE_ASIAN_PRIM = primary(LANGUAGE_CHINESE);
 
 /** Stores the number format used in Calc for an Excel built-in number format. */
 struct XclBuiltInFormat
 {
     sal_uInt16          mnXclNumFmt;    /// Excel built-in index.
     const sal_Char*     mpFormat;       /// Format string, may be 0 (meOffset used then).
-    NfIndexTableOffset  meOffset;       /// SvNumberFormatter format index, if mpFormat==0.
-    sal_uInt16          mnXclReuseFmt;  /// Use this Excel format, if meOffset==PRV_NF_INDEX_REUSE.
+    NfIndexTableOffset const  meOffset;       /// SvNumberFormatter format index, if mpFormat==0.
+    sal_uInt16 const          mnXclReuseFmt;  /// Use this Excel format, if meOffset==PRV_NF_INDEX_REUSE.
 };
 
 /** Defines a literal Excel built-in number format. */
@@ -829,8 +832,8 @@ static const XclBuiltInFormat spBuiltInFormats_DONTKNOW[] =
     EXC_NUMFMT_OFFSET(   9, NF_PERCENT_INT ),           // 0%
     EXC_NUMFMT_OFFSET(  10, NF_PERCENT_DEC2 ),          // 0.00%
     EXC_NUMFMT_OFFSET(  11, NF_SCIENTIFIC_000E00 ),     // 0.00E+00
-    EXC_NUMFMT_OFFSET(  12, NF_FRACTION_1 ),            // # ?/?
-    EXC_NUMFMT_OFFSET(  13, NF_FRACTION_2 ),            // # ??/??
+    EXC_NUMFMT_OFFSET(  12, NF_FRACTION_1D ),            // # ?/?
+    EXC_NUMFMT_OFFSET(  13, NF_FRACTION_2D ),            // # ??/??
 
     // 14...22 date and time formats
     EXC_NUMFMT_OFFSET(  14, NF_DATE_SYS_DDMMYYYY ),
@@ -1397,7 +1400,7 @@ static const XclBuiltInFormat spBuiltInFormats_THAI[] =
 struct XclBuiltInFormatTable
 {
     LanguageType        meLanguage;         /// The language of this table.
-    LanguageType        meParentLang;       /// The language of the parent table.
+    LanguageType const        meParentLang;       /// The language of the parent table.
     const XclBuiltInFormat* mpFormats;      /// The number format table.
 };
 
@@ -1449,7 +1452,7 @@ static const XclBuiltInFormatTable spBuiltInFormatTables[] =
 
 XclNumFmtBuffer::XclNumFmtBuffer( const XclRoot& rRoot ) :
     meSysLang( rRoot.GetSysLanguage() ),
-    mnStdScNumFmt( rRoot.GetFormatter().GetStandardFormat( ScGlobal::eLnge ) )
+    mnStdScNumFmt( rRoot.GetFormatter().GetStandardIndex( ScGlobal::eLnge ) )
 {
     // *** insert default formats (BIFF5+ only)***
 
@@ -1476,9 +1479,8 @@ void XclNumFmtBuffer::InsertBuiltinFormats()
     // build a map containing tables for all languages
     typedef ::std::map< LanguageType, const XclBuiltInFormatTable* > XclBuiltInMap;
     XclBuiltInMap aBuiltInMap;
-    for( const XclBuiltInFormatTable* pTable = spBuiltInFormatTables;
-            pTable != STATIC_ARRAY_END( spBuiltInFormatTables ); ++pTable )
-        aBuiltInMap[ pTable->meLanguage ] = pTable;
+    for(const auto &rTable : spBuiltInFormatTables)
+        aBuiltInMap[ rTable.meLanguage ] = &rTable;
 
     // build a list of table pointers for the current language, with all parent tables
     typedef ::std::vector< const XclBuiltInFormatTable* > XclBuiltInVec;
@@ -1489,7 +1491,7 @@ void XclNumFmtBuffer::InsertBuiltinFormats()
     // language not supported
     if( aBuiltInVec.empty() )
     {
-        OSL_TRACE( "XclNumFmtBuffer::InsertBuiltinFormats - language 0x%04hX not supported (#i29949#)", meSysLang );
+        SAL_WARN("sc",  "XclNumFmtBuffer::InsertBuiltinFormats - language not supported (#i29949#) 0x" << std::hex << meSysLang );
         XclBuiltInMap::const_iterator aMIt = aBuiltInMap.find( LANGUAGE_DONTKNOW );
         OSL_ENSURE( aMIt != aBuiltInMap.end(), "XclNumFmtBuffer::InsertBuiltinFormats - default map not found" );
         if( aMIt != aBuiltInMap.end() )
@@ -1523,8 +1525,8 @@ void XclNumFmtBuffer::InsertBuiltinFormats()
     }
 
     // copy reused number formats
-    for( XclReuseMap::const_iterator aRIt = aReuseMap.begin(), aREnd = aReuseMap.end(); aRIt != aREnd; ++aRIt )
-        maFmtMap[ aRIt->first ] = maFmtMap[ aRIt->second ];
+    for( const auto& [rXclNumFmt, rXclReuseFmt] : aReuseMap )
+        maFmtMap[ rXclNumFmt ] = maFmtMap[ rXclReuseFmt ];
 }
 
 // Cell formatting data (XF) ==================================================
@@ -1554,17 +1556,17 @@ XclCellAlign::XclCellAlign() :
 
 SvxCellHorJustify XclCellAlign::GetScHorAlign() const
 {
-    SvxCellHorJustify eHorJust = SVX_HOR_JUSTIFY_STANDARD;
+    SvxCellHorJustify eHorJust = SvxCellHorJustify::Standard;
     switch( mnHorAlign )
     {
-        case EXC_XF_HOR_GENERAL:    eHorJust = SVX_HOR_JUSTIFY_STANDARD;    break;
-        case EXC_XF_HOR_LEFT:       eHorJust = SVX_HOR_JUSTIFY_LEFT;        break;
+        case EXC_XF_HOR_GENERAL:    eHorJust = SvxCellHorJustify::Standard;    break;
+        case EXC_XF_HOR_LEFT:       eHorJust = SvxCellHorJustify::Left;        break;
         case EXC_XF_HOR_CENTER_AS:
-        case EXC_XF_HOR_CENTER:     eHorJust = SVX_HOR_JUSTIFY_CENTER;      break;
-        case EXC_XF_HOR_RIGHT:      eHorJust = SVX_HOR_JUSTIFY_RIGHT;       break;
-        case EXC_XF_HOR_FILL:       eHorJust = SVX_HOR_JUSTIFY_REPEAT;      break;
+        case EXC_XF_HOR_CENTER:     eHorJust = SvxCellHorJustify::Center;      break;
+        case EXC_XF_HOR_RIGHT:      eHorJust = SvxCellHorJustify::Right;       break;
+        case EXC_XF_HOR_FILL:       eHorJust = SvxCellHorJustify::Repeat;      break;
         case EXC_XF_HOR_JUSTIFY:
-        case EXC_XF_HOR_DISTRIB:    eHorJust = SVX_HOR_JUSTIFY_BLOCK;       break;
+        case EXC_XF_HOR_DISTRIB:    eHorJust = SvxCellHorJustify::Block;       break;
         default:    OSL_FAIL( "XclCellAlign::GetScHorAlign - unknown horizontal alignment" );
     }
     return eHorJust;
@@ -1572,19 +1574,19 @@ SvxCellHorJustify XclCellAlign::GetScHorAlign() const
 
 SvxCellJustifyMethod XclCellAlign::GetScHorJustifyMethod() const
 {
-    return (mnHorAlign == EXC_XF_HOR_DISTRIB) ? SVX_JUSTIFY_METHOD_DISTRIBUTE : SVX_JUSTIFY_METHOD_AUTO;
+    return (mnHorAlign == EXC_XF_HOR_DISTRIB) ? SvxCellJustifyMethod::Distribute : SvxCellJustifyMethod::Auto;
 }
 
 SvxCellVerJustify XclCellAlign::GetScVerAlign() const
 {
-    SvxCellVerJustify eVerJust = SVX_VER_JUSTIFY_STANDARD;
+    SvxCellVerJustify eVerJust = SvxCellVerJustify::Standard;
     switch( mnVerAlign )
     {
-        case EXC_XF_VER_TOP:        eVerJust = SVX_VER_JUSTIFY_TOP;         break;
-        case EXC_XF_VER_CENTER:     eVerJust = SVX_VER_JUSTIFY_CENTER;      break;
-        case EXC_XF_VER_BOTTOM:     eVerJust = SVX_VER_JUSTIFY_STANDARD;    break;
+        case EXC_XF_VER_TOP:        eVerJust = SvxCellVerJustify::Top;         break;
+        case EXC_XF_VER_CENTER:     eVerJust = SvxCellVerJustify::Center;      break;
+        case EXC_XF_VER_BOTTOM:     eVerJust = SvxCellVerJustify::Standard;    break;
         case EXC_XF_VER_JUSTIFY:
-        case EXC_XF_VER_DISTRIB:    eVerJust = SVX_VER_JUSTIFY_BLOCK;       break;
+        case EXC_XF_VER_DISTRIB:    eVerJust = SvxCellVerJustify::Block;       break;
         default:    OSL_FAIL( "XclCellAlign::GetScVerAlign - unknown vertical alignment" );
     }
     return eVerJust;
@@ -1592,17 +1594,17 @@ SvxCellVerJustify XclCellAlign::GetScVerAlign() const
 
 SvxCellJustifyMethod XclCellAlign::GetScVerJustifyMethod() const
 {
-    return (mnVerAlign == EXC_XF_VER_DISTRIB) ? SVX_JUSTIFY_METHOD_DISTRIBUTE : SVX_JUSTIFY_METHOD_AUTO;
+    return (mnVerAlign == EXC_XF_VER_DISTRIB) ? SvxCellJustifyMethod::Distribute : SvxCellJustifyMethod::Auto;
 }
 
 SvxFrameDirection XclCellAlign::GetScFrameDir() const
 {
-    SvxFrameDirection eFrameDir = FRMDIR_ENVIRONMENT;
+    SvxFrameDirection eFrameDir = SvxFrameDirection::Environment;
     switch( mnTextDir )
     {
-        case EXC_XF_TEXTDIR_CONTEXT:    eFrameDir = FRMDIR_ENVIRONMENT;     break;
-        case EXC_XF_TEXTDIR_LTR:        eFrameDir = FRMDIR_HORI_LEFT_TOP;   break;
-        case EXC_XF_TEXTDIR_RTL:        eFrameDir = FRMDIR_HORI_RIGHT_TOP;  break;
+        case EXC_XF_TEXTDIR_CONTEXT:    eFrameDir = SvxFrameDirection::Environment;     break;
+        case EXC_XF_TEXTDIR_LTR:        eFrameDir = SvxFrameDirection::Horizontal_LR_TB;   break;
+        case EXC_XF_TEXTDIR_RTL:        eFrameDir = SvxFrameDirection::Horizontal_RL_TB;  break;
         default:    OSL_FAIL( "XclCellAlign::GetScFrameDir - unknown CTL text direction" );
     }
     return eFrameDir;
@@ -1612,12 +1614,12 @@ void XclCellAlign::SetScHorAlign( SvxCellHorJustify eHorJust )
 {
     switch( eHorJust )
     {
-        case SVX_HOR_JUSTIFY_STANDARD:  mnHorAlign = EXC_XF_HOR_GENERAL;    break;
-        case SVX_HOR_JUSTIFY_LEFT:      mnHorAlign = EXC_XF_HOR_LEFT;       break;
-        case SVX_HOR_JUSTIFY_CENTER:    mnHorAlign = EXC_XF_HOR_CENTER;     break;
-        case SVX_HOR_JUSTIFY_RIGHT:     mnHorAlign = EXC_XF_HOR_RIGHT;      break;
-        case SVX_HOR_JUSTIFY_BLOCK:     mnHorAlign = EXC_XF_HOR_JUSTIFY;    break;
-        case SVX_HOR_JUSTIFY_REPEAT:    mnHorAlign = EXC_XF_HOR_FILL;       break;
+        case SvxCellHorJustify::Standard:  mnHorAlign = EXC_XF_HOR_GENERAL;    break;
+        case SvxCellHorJustify::Left:      mnHorAlign = EXC_XF_HOR_LEFT;       break;
+        case SvxCellHorJustify::Center:    mnHorAlign = EXC_XF_HOR_CENTER;     break;
+        case SvxCellHorJustify::Right:     mnHorAlign = EXC_XF_HOR_RIGHT;      break;
+        case SvxCellHorJustify::Block:     mnHorAlign = EXC_XF_HOR_JUSTIFY;    break;
+        case SvxCellHorJustify::Repeat:    mnHorAlign = EXC_XF_HOR_FILL;       break;
         default:                        mnHorAlign = EXC_XF_HOR_GENERAL;
             OSL_FAIL( "XclCellAlign::SetScHorAlign - unknown horizontal alignment" );
     }
@@ -1627,10 +1629,10 @@ void XclCellAlign::SetScVerAlign( SvxCellVerJustify eVerJust )
 {
     switch( eVerJust )
     {
-        case SVX_VER_JUSTIFY_STANDARD:  mnVerAlign = EXC_XF_VER_BOTTOM; break;
-        case SVX_VER_JUSTIFY_TOP:       mnVerAlign = EXC_XF_VER_TOP;    break;
-        case SVX_VER_JUSTIFY_CENTER:    mnVerAlign = EXC_XF_VER_CENTER; break;
-        case SVX_VER_JUSTIFY_BOTTOM:    mnVerAlign = EXC_XF_VER_BOTTOM; break;
+        case SvxCellVerJustify::Standard:  mnVerAlign = EXC_XF_VER_BOTTOM; break;
+        case SvxCellVerJustify::Top:       mnVerAlign = EXC_XF_VER_TOP;    break;
+        case SvxCellVerJustify::Center:    mnVerAlign = EXC_XF_VER_CENTER; break;
+        case SvxCellVerJustify::Bottom:    mnVerAlign = EXC_XF_VER_BOTTOM; break;
         default:                        mnVerAlign = EXC_XF_VER_BOTTOM;
             OSL_FAIL( "XclCellAlign::SetScVerAlign - unknown vertical alignment" );
     }
@@ -1640,9 +1642,9 @@ void XclCellAlign::SetScFrameDir( SvxFrameDirection eFrameDir )
 {
     switch( eFrameDir )
     {
-        case FRMDIR_ENVIRONMENT:    mnTextDir = EXC_XF_TEXTDIR_CONTEXT; break;
-        case FRMDIR_HORI_LEFT_TOP:  mnTextDir = EXC_XF_TEXTDIR_LTR;     break;
-        case FRMDIR_HORI_RIGHT_TOP: mnTextDir = EXC_XF_TEXTDIR_RTL;     break;
+        case SvxFrameDirection::Environment:      mnTextDir = EXC_XF_TEXTDIR_CONTEXT; break;
+        case SvxFrameDirection::Horizontal_LR_TB: mnTextDir = EXC_XF_TEXTDIR_LTR;     break;
+        case SvxFrameDirection::Horizontal_RL_TB: mnTextDir = EXC_XF_TEXTDIR_RTL;     break;
         default:                    mnTextDir = EXC_XF_TEXTDIR_CONTEXT;
             OSL_FAIL( "XclCellAlign::SetScFrameDir - unknown CTL text direction" );
     }

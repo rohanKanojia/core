@@ -19,9 +19,9 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_TABLEMGR_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_TABLEMGR_HXX
 
-#include "swdllapi.h"
-#include "swtypes.hxx"
-#include "tabcol.hxx"
+#include <swdllapi.h>
+#include <swtypes.hxx>
+#include <tabcol.hxx>
 
 class SwFrameFormat;
 class SwWrtShell;
@@ -41,21 +41,19 @@ const char cParaDelim = 0x0a;
 
 class SW_DLLPUBLIC SwTableFUNC
 {
-    SwFrameFormat    *pFormat;
+    SwFrameFormat * const pFormat;
     SwWrtShell  *pSh;
-    bool        bCopy;
     SwTabCols   aCols;
 
 private:
     SAL_DLLPRIVATE int GetRightSeparator(int nNum) const;
 
 public:
-    inline SwTableFUNC(SwFrameFormat &);
            SwTableFUNC(SwWrtShell *pShell);
            ~SwTableFUNC();
 
     void    InitTabCols();
-    void    ColWidthDlg(vcl::Window *pParent );
+    void    ColWidthDlg(weld::Window *pParent);
     SwTwips GetColWidth(sal_uInt16 nNum) const;
     SwTwips GetMaxColWidth(sal_uInt16 nNum) const;
     void    SetColWidth(sal_uInt16 nNum, SwTwips nWidth );
@@ -69,15 +67,8 @@ public:
 
     /// @return the XModel of the newly inserted chart if successful
     css::uno::Reference< css::frame::XModel >
-        InsertChart( css::uno::Reference< css::chart2::data::XDataProvider > &rxDataProvider, bool bFillWithData, const OUString &rCellRange, SwFlyFrameFormat** ppFlyFrameFormat = nullptr );
+        InsertChart( css::uno::Reference< css::chart2::data::XDataProvider > const &rxDataProvider, bool bFillWithData, const OUString &rCellRange, SwFlyFrameFormat** ppFlyFrameFormat = nullptr );
 };
-
-inline SwTableFUNC::SwTableFUNC(SwFrameFormat &rFormat) :
-    pFormat(&rFormat),
-    pSh(nullptr),
-    bCopy(false)
-{
-}
 
 #endif
 

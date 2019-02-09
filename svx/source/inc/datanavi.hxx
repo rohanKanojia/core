@@ -29,16 +29,16 @@
 #include <vcl/tabpage.hxx>
 #include <vcl/toolbox.hxx>
 #include <vcl/idle.hxx>
+#include <vcl/weld.hxx>
 #include <svtools/inettbc.hxx>
 #include <svtools/simptabl.hxx>
 #include <svtools/svmedit.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/treelistbox.hxx>
 #include <sfx2/dockwin.hxx>
 #include <sfx2/childwin.hxx>
 #include <sfx2/ctrlitem.hxx>
 #include <svx/dialmgr.hxx>
-#include <svx/dialogs.hrc>
-#include <svx/fmresids.hrc>
+#include <svx/strings.hrc>
 #include <svx/svxdllapi.h>
 #include <rtl/ref.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -85,24 +85,11 @@ namespace svxform
     class DataNavigatorWindow;
     class AddInstanceDialog;
 
-    typedef css::uno::Reference< css::xforms::XFormsUIHelper1 >         XFormsUIHelper1_ref;
-    typedef css::uno::Reference< css::xml::dom::XNode >                 XNode_ref;
-    typedef css::uno::Reference< css::beans::XPropertySet >             XPropertySet_ref;
-    typedef css::uno::Reference< css::xforms::XModel >                  XModel_ref;
-    typedef css::uno::Reference< css::container::XContainer >           XContainer_ref;
-    typedef css::uno::Reference< css::container::XNameContainer >       XNameContainer_ref;
-    typedef css::uno::Reference< css::frame::XFrame >                   XFrame_ref;
-    typedef css::uno::Reference< css::frame::XModel >                   XFrameModel_ref;
-    typedef css::uno::Reference< css::xml::dom::events::XEventTarget >  XEventTarget_ref;
-    typedef css::uno::Reference< css::xforms::XSubmission >             XSubmission_ref;
-    typedef css::uno::Sequence< css::beans::PropertyValue >             PropertyValue_seq;
-    typedef std::vector< XContainer_ref >                               ContainerList;
-    typedef std::vector< XEventTarget_ref >                             EventTargetList;
-
-
     class DataTreeListBox : public SvTreeListBox
     {
     private:
+        std::unique_ptr<VclBuilder> m_xBuilder;
+        VclPtr<PopupMenu>       m_xMenu;
         VclPtr<XFormsPage>      m_pXFormsPage;
         DataGroupType           m_eGroup;
         sal_uInt16              m_nAddId;
@@ -116,11 +103,11 @@ namespace svxform
 
     public:
         DataTreeListBox( vcl::Window* pParent, WinBits nBits );
-        virtual ~DataTreeListBox();
+        virtual ~DataTreeListBox() override;
         virtual void dispose() override;
 
-        virtual std::unique_ptr<PopupMenu> CreateContextMenu() override;
-        virtual void            ExcecuteContextMenuAction( sal_uInt16 _nSelectedPopupEntry ) override;
+        virtual VclPtr<PopupMenu> CreateContextMenu() override;
+        virtual void            ExecuteContextMenuAction( sal_uInt16 _nSelectedPopupEntry ) override;
         virtual sal_Int8        AcceptDrop( const AcceptDropEvent& rEvt ) override;
         virtual sal_Int8        ExecuteDrop( const ExecuteDropEvent& rEvt ) override;
         virtual void            StartDrag( sal_Int8 nAction, const Point& rPosPixel ) override;
@@ -133,7 +120,7 @@ namespace svxform
                                                   sal_uInt16 _nEditId,
                                                   sal_uInt16 _nRemoveId);
         void                    DeleteAndClear();
-        void                    RemoveEntry( SvTreeListEntry* _pEntry );
+        void                    RemoveEntry( SvTreeListEntry const * _pEntry );
     };
 
     class ReplaceString
@@ -142,26 +129,23 @@ namespace svxform
         OUString m_sInstance_UI;
         OUString m_sNone_UI;
 
-        OUString m_sDoc_API;
-        OUString m_sInstance_API;
-        OUString m_sNone_API;
+        static constexpr OUStringLiteral const m_sDoc_API = "all";
+        static constexpr OUStringLiteral const m_sInstance_API = "instance";
+        static constexpr OUStringLiteral const m_sNone_API = "none";
 
         ReplaceString( const ReplaceString& ) = delete;
 
     public:
-        ReplaceString() :
-            m_sDoc_API(      "all" ),
-            m_sInstance_API( "instance" ),
-            m_sNone_API(     "none" )
+        ReplaceString()
         {
-            m_sDoc_UI = SVX_RESSTR(RID_STR_REPLACE_DOC);
-            m_sInstance_UI = SVX_RESSTR(RID_STR_REPLACE_INST);
-            m_sNone_UI = SVX_RESSTR(RID_STR_REPLACE_NONE);
+            m_sDoc_UI = SvxResId(RID_STR_REPLACE_DOC);
+            m_sInstance_UI = SvxResId(RID_STR_REPLACE_INST);
+            m_sNone_UI = SvxResId(RID_STR_REPLACE_NONE);
         }
 
         /** convert submission replace string from API value to UI value.
             Use 'none' as default. */
-        OUString toUI( const OUString& rStr ) const
+        OUString const & toUI( const OUString& rStr ) const
         {
             if( rStr == m_sDoc_API )
                 return m_sDoc_UI;
@@ -190,26 +174,23 @@ namespace svxform
         OUString m_sPut_UI;
         OUString m_sGet_UI;
 
-        OUString m_sPost_API;
-        OUString m_sPut_API;
-        OUString m_sGet_API;
+        static constexpr OUStringLiteral m_sPost_API = "post";
+        static constexpr OUStringLiteral m_sPut_API = "put";
+        static constexpr OUStringLiteral m_sGet_API = "get";
 
         MethodString( const MethodString& ) = delete;
 
     public:
 
-        MethodString() :
-            m_sPost_API( "post" ),
-            m_sPut_API(  "put" ),
-            m_sGet_API(  "get" )
+        MethodString()
         {
-            m_sPost_UI = SVX_RESSTR(RID_STR_METHOD_POST);
-            m_sPut_UI  = SVX_RESSTR(RID_STR_METHOD_PUT);
-            m_sGet_UI  = SVX_RESSTR(RID_STR_METHOD_GET);
+            m_sPost_UI = SvxResId(RID_STR_METHOD_POST);
+            m_sPut_UI  = SvxResId(RID_STR_METHOD_PUT);
+            m_sGet_UI  = SvxResId(RID_STR_METHOD_GET);
         }
 
         /** convert from API to UI; put is default. */
-        OUString toUI( const OUString& rStr ) const
+        OUString const & toUI( const OUString& rStr ) const
         {
             if( rStr == m_sGet_API )
                 return m_sGet_UI;
@@ -231,12 +212,11 @@ namespace svxform
         }
     };
 
-
     class XFormsPage : public TabPage
     {
     private:
-        MethodString                m_aMethodString;
-        ReplaceString               m_aReplaceString;
+        MethodString const                m_aMethodString;
+        ReplaceString const               m_aReplaceString;
 
         VclPtr<ToolBox>             m_pToolBox;
         VclPtr<DataTreeListBox>     m_pItemList;
@@ -246,12 +226,12 @@ namespace svxform
         sal_uInt16                  m_nEditId;
         sal_uInt16                  m_nRemoveId;
 
-        XFormsUIHelper1_ref         m_xUIHelper;
+        css::uno::Reference< css::xforms::XFormsUIHelper1 >
+                                    m_xUIHelper;
 
         VclPtr<DataNavigatorWindow> m_pNaviWin;
         bool                        m_bHasModel;
-        DataGroupType               m_eGroup;
-        ImageList                   m_TbxImageList;
+        DataGroupType const               m_eGroup;
         // these strings are not valid on the Submission and Binding Page
         // mb: furthermore these are properties of an instance, thus
         // it would be much better to get/set them through the UIHelper
@@ -260,53 +240,48 @@ namespace svxform
         OUString                    m_sInstanceURL;
         bool                        m_bLinkOnce;
 
-        DECL_LINK_TYPED(TbxSelectHdl, ToolBox *, void);
-        DECL_LINK_TYPED(ItemSelectHdl, SvTreeListBox*, void);
+        DECL_LINK(TbxSelectHdl, ToolBox *, void);
+        DECL_LINK(ItemSelectHdl, SvTreeListBox*, void);
 
-        void                        AddChildren( SvTreeListEntry* _pParent,
-                                                 const ImageList& _rImgLst,
-                                                 const XNode_ref& _xNode );
+        void                        AddChildren(SvTreeListEntry* _pParent,
+                                                const css::uno::Reference< css::xml::dom::XNode >& _xNode);
         bool                        DoToolBoxAction( sal_uInt16 _nToolBoxID );
-        SvTreeListEntry*            AddEntry( ItemNode* _pNewNode, bool _bIsElement );
-        SvTreeListEntry*            AddEntry( const XPropertySet_ref& _rPropSet );
-        void                        EditEntry( const XPropertySet_ref& _rPropSet );
+        SvTreeListEntry*            AddEntry( std::unique_ptr<ItemNode> _pNewNode, bool _bIsElement );
+        SvTreeListEntry*            AddEntry( const css::uno::Reference< css::beans::XPropertySet >& _rPropSet );
+        void                        EditEntry( const css::uno::Reference< css::beans::XPropertySet >& _rPropSet );
         bool                        RemoveEntry();
 
     protected:
-        virtual bool                Notify( NotifyEvent& rNEvt ) override;
+        virtual bool                EventNotify( NotifyEvent& rNEvt ) override;
 
     public:
         XFormsPage( vcl::Window* pParent, DataNavigatorWindow* _pNaviWin, DataGroupType _eGroup );
-        virtual ~XFormsPage();
+        virtual ~XFormsPage() override;
         virtual void dispose() override;
 
         virtual void                Resize() override;
 
-        inline bool                 HasModel() const { return m_bHasModel; }
-        OUString                    SetModel( const XModel_ref& _xModel, sal_uInt16 _nPagePos );
+        bool                 HasModel() const { return m_bHasModel; }
+        OUString                    SetModel( const css::uno::Reference< css::xforms::XModel > & _xModel, sal_uInt16 _nPagePos );
         void                        ClearModel();
-        OUString                    LoadInstance( const PropertyValue_seq& _xPropSeq,
-                                                  const ImageList& _rImgLst );
+        OUString                    LoadInstance(const css::uno::Sequence< css::beans::PropertyValue >& _xPropSeq);
 
         bool                        DoMenuAction( sal_uInt16 _nMenuID );
         void                        EnableMenuItems( Menu* _pMenu );
 
-        inline const OUString&      GetInstanceName() const { return m_sInstanceName; }
-        inline const OUString&      GetInstanceURL() const { return m_sInstanceURL; }
-        inline bool                 GetLinkOnce() const { return m_bLinkOnce; }
-        inline void                 SetInstanceName( const OUString &name ) { m_sInstanceName=name; }
-        inline void                 SetInstanceURL( const OUString &url ) { m_sInstanceURL=url; }
-        inline void                 SetLinkOnce( bool bLinkOnce ) { m_bLinkOnce=bLinkOnce; }
+        const OUString&      GetInstanceName() const { return m_sInstanceName; }
+        const OUString&      GetInstanceURL() const { return m_sInstanceURL; }
+        bool                 GetLinkOnce() const { return m_bLinkOnce; }
+        void                 SetInstanceName( const OUString &name ) { m_sInstanceName=name; }
+        void                 SetInstanceURL( const OUString &url ) { m_sInstanceURL=url; }
+        void                 SetLinkOnce( bool bLinkOnce ) { m_bLinkOnce=bLinkOnce; }
 
-        inline css::uno::Reference<css::beans::XPropertySet>
-                                    GetBindingForNode( const css::uno::Reference<css::xml::dom::XNode> &xNode ) { return m_xUIHelper->getBindingForNode(xNode,true); }
-        inline OUString             GetServiceNameForNode( const css::uno::Reference<css::xml::dom::XNode> &xNode ) { return m_xUIHelper->getDefaultServiceNameForNode(xNode); }
-        inline XFormsUIHelper1_ref  GetXFormsHelper() const { return m_xUIHelper; }
+        css::uno::Reference<css::beans::XPropertySet>
+                             GetBindingForNode( const css::uno::Reference<css::xml::dom::XNode> &xNode ) { return m_xUIHelper->getBindingForNode(xNode,true); }
+        OUString             GetServiceNameForNode( const css::uno::Reference<css::xml::dom::XNode> &xNode ) { return m_xUIHelper->getDefaultServiceNameForNode(xNode); }
+        const css::uno::Reference< css::xforms::XFormsUIHelper1 >&
+                             GetXFormsHelper() const { return m_xUIHelper; }
     };
-
-
-    typedef std::vector< VclPtr<XFormsPage> >   PageList;
-    typedef ::rtl::Reference < DataListener >   DataListener_ref;
 
     class DataNavigatorWindow : public vcl::Window, public VclBuilderContainer
     {
@@ -323,29 +298,35 @@ namespace svxform
         sal_Int32                   m_nLastSelectedPos;
         bool                        m_bShowDetails;
         bool                        m_bIsNotifyDisabled;
-        ImageList                   m_aItemImageList;
-        PageList                    m_aPageList;
-        ContainerList               m_aContainerList;
-        EventTargetList             m_aEventTargetList;
+        std::vector< VclPtr<XFormsPage> >
+                                    m_aPageList;
+        std::vector< css::uno::Reference< css::container::XContainer >  >
+                                    m_aContainerList;
+        std::vector< css::uno::Reference< css::xml::dom::events::XEventTarget > >
+                                    m_aEventTargetList;
         Timer                       m_aUpdateTimer;
 
-        DataListener_ref            m_xDataListener;
-        XNameContainer_ref          m_xDataContainer;
-        XFrame_ref                  m_xFrame;
-        XFrameModel_ref             m_xFrameModel;
+        ::rtl::Reference < DataListener >
+                                    m_xDataListener;
+        css::uno::Reference< css::container::XNameContainer >
+                                    m_xDataContainer;
+        css::uno::Reference< css::frame::XFrame >
+                                    m_xFrame;
+        css::uno::Reference< css::frame::XModel >
+                                    m_xFrameModel;
 
-        DECL_LINK_TYPED(            ModelSelectListBoxHdl, ListBox&, void );
-        DECL_LINK_TYPED(            MenuSelectHdl, MenuButton *, void );
-        DECL_LINK_TYPED(            MenuActivateHdl, MenuButton *, void );
-        DECL_LINK_TYPED(            ActivatePageHdl, TabControl*, void);
-        DECL_LINK_TYPED(            UpdateHdl, Timer *, void);
-        void ModelSelectHdl(ListBox*);
+        DECL_LINK(            ModelSelectListBoxHdl, ListBox&, void );
+        DECL_LINK(            MenuSelectHdl, MenuButton *, void );
+        DECL_LINK(            MenuActivateHdl, MenuButton *, void );
+        DECL_LINK(            ActivatePageHdl, TabControl*, void);
+        DECL_LINK(            UpdateHdl, Timer *, void);
+        void ModelSelectHdl(ListBox const *);
         XFormsPage*                 GetCurrentPage( sal_uInt16& rCurId );
         void                        LoadModels();
         void                        SetPageModel();
         void                        ClearAllPageModels( bool bClearPages );
         void                        InitPages();
-        void                        CreateInstancePage( const PropertyValue_seq& _xPropSeq );
+        void                        CreateInstancePage( const css::uno::Sequence< css::beans::PropertyValue >& _xPropSeq );
         bool                        HasFirstInstancePage() const;
         sal_uInt16                  GetNewPageId() const;
 
@@ -356,21 +337,19 @@ namespace svxform
         virtual Size                GetOptimalSize() const override;
 
     public:
-        DataNavigatorWindow( vcl::Window* pParent, SfxBindings* pBindings );
-        virtual ~DataNavigatorWindow();
+        DataNavigatorWindow( vcl::Window* pParent, SfxBindings const * pBindings );
+        virtual ~DataNavigatorWindow() override;
         virtual void dispose() override;
 
         static void                 SetDocModified();
         void                        NotifyChanges( bool _bLoadAll = false );
-        void                        AddContainerBroadcaster( const XContainer_ref& xContainer );
-        void                        AddEventBroadcaster( const XEventTarget_ref& xTarget );
+        void                        AddContainerBroadcaster( const css::uno::Reference< css::container::XContainer > & xContainer );
+        void                        AddEventBroadcaster( const css::uno::Reference< css::xml::dom::events::XEventTarget >& xTarget );
         void                        RemoveBroadcaster();
 
-        inline const ImageList&     GetItemImageList() const { return m_aItemImageList; }
-        inline bool                 IsShowDetails() const { return m_bShowDetails; }
-        inline void                 DisableNotify( bool _bDisable ) { m_bIsNotifyDisabled = _bDisable; }
+        bool                        IsShowDetails() const { return m_bShowDetails; }
+        void                        DisableNotify( bool _bDisable ) { m_bIsNotifyDisabled = _bDisable; }
     };
-
 
     class DataNavigator : public SfxDockingWindow, public SfxControllerItem
     {
@@ -379,14 +358,12 @@ namespace svxform
 
     protected:
         virtual void                Resize() override;
-        virtual bool                Close() override;
-        virtual void                GetFocus() override;
         virtual Size                CalcDockingSize( SfxChildAlignment ) override;
         virtual SfxChildAlignment   CheckAlignment( SfxChildAlignment, SfxChildAlignment ) override;
 
     public:
         DataNavigator( SfxBindings* pBindings, SfxChildWindow* pMgr, vcl::Window* pParent );
-        virtual ~DataNavigator();
+        virtual ~DataNavigator() override;
         virtual void dispose() override;
 
         using Window::Update;
@@ -396,7 +373,6 @@ namespace svxform
                                                   const SfxPoolItem* pState ) override;
     };
 
-
     class SVX_DLLPUBLIC DataNavigatorManager : public SfxChildWindow
     {
     public:
@@ -405,50 +381,48 @@ namespace svxform
         SFX_DECL_CHILDWINDOW( DataNavigatorManager );
     };
 
-
-    class AddDataItemDialog : public ModalDialog
+    class AddDataItemDialog : public weld::GenericDialogController
     {
     private:
-
-        VclPtr<VclFrame>    m_pItemFrame;
-        VclPtr<FixedText>   m_pNameFT;
-        VclPtr<Edit>        m_pNameED;
-        VclPtr<FixedText>   m_pDefaultFT;
-        VclPtr<Edit>        m_pDefaultED;
-        VclPtr<PushButton>  m_pDefaultBtn;
-
-        VclPtr<VclFrame>    m_pSettingsFrame;
-
-        VclPtr<FixedText>   m_pDataTypeFT;
-        VclPtr<ListBox>     m_pDataTypeLB;
-
-        VclPtr<CheckBox>    m_pRequiredCB;
-        VclPtr<PushButton>  m_pRequiredBtn;
-        VclPtr<CheckBox>    m_pRelevantCB;
-        VclPtr<PushButton>  m_pRelevantBtn;
-        VclPtr<CheckBox>    m_pConstraintCB;
-        VclPtr<PushButton>  m_pConstraintBtn;
-        VclPtr<CheckBox>    m_pReadonlyCB;
-        VclPtr<PushButton>  m_pReadonlyBtn;
-        VclPtr<CheckBox>    m_pCalculateCB;
-        VclPtr<PushButton>  m_pCalculateBtn;
-
-        VclPtr<OKButton>    m_pOKBtn;
-
-        XFormsUIHelper1_ref m_xUIHelper;
-        XPropertySet_ref    m_xBinding;
-        XPropertySet_ref    m_xTempBinding;
+        css::uno::Reference< css::xforms::XFormsUIHelper1 >
+                            m_xUIHelper;
+        css::uno::Reference< css::beans::XPropertySet >
+                            m_xBinding;
+        css::uno::Reference< css::beans::XPropertySet >
+                            m_xTempBinding;
 
         ItemNode*           m_pItemNode;
         DataItemType        m_eItemType;
-        OUString            m_sFL_Element;
-        OUString            m_sFL_Attribute;
-        OUString            m_sFL_Binding;
-        OUString            m_sFT_BindingExp;
+        OUString const            m_sFL_Element;
+        OUString const            m_sFL_Attribute;
+        OUString const            m_sFL_Binding;
+        OUString const            m_sFT_BindingExp;
 
-        DECL_LINK_TYPED(    CheckHdl, Button*, void );
-        DECL_LINK_TYPED(    ConditionHdl, Button*, void );
-        DECL_LINK_TYPED(    OKHdl, Button*, void);
+        std::unique_ptr<weld::Frame> m_xItemFrame;
+        std::unique_ptr<weld::Label> m_xNameFT;
+        std::unique_ptr<weld::Entry> m_xNameED;
+        std::unique_ptr<weld::Label> m_xDefaultFT;
+        std::unique_ptr<weld::Entry> m_xDefaultED;
+        std::unique_ptr<weld::Button> m_xDefaultBtn;
+        std::unique_ptr<weld::Widget> m_xSettingsFrame;
+        std::unique_ptr<weld::Label> m_xDataTypeFT;
+        std::unique_ptr<weld::ComboBox> m_xDataTypeLB;
+        std::unique_ptr<weld::CheckButton> m_xRequiredCB;
+        std::unique_ptr<weld::Button> m_xRequiredBtn;
+        std::unique_ptr<weld::CheckButton> m_xRelevantCB;
+        std::unique_ptr<weld::Button> m_xRelevantBtn;
+        std::unique_ptr<weld::CheckButton> m_xConstraintCB;
+        std::unique_ptr<weld::Button> m_xConstraintBtn;
+        std::unique_ptr<weld::CheckButton> m_xReadonlyCB;
+        std::unique_ptr<weld::Button> m_xReadonlyBtn;
+        std::unique_ptr<weld::CheckButton> m_xCalculateCB;
+        std::unique_ptr<weld::Button> m_xCalculateBtn;
+        std::unique_ptr<weld::Button> m_xOKBtn;
+
+        void Check(weld::ToggleButton* pBox);
+        DECL_LINK(CheckHdl, weld::ToggleButton&, void);
+        DECL_LINK(ConditionHdl, weld::Button&, void);
+        DECL_LINK(OKHdl, weld::Button&, void);
 
         void                InitDialog();
         void                InitFromNode();
@@ -456,196 +430,189 @@ namespace svxform
 
     public:
         AddDataItemDialog(
-            vcl::Window* pParent, ItemNode* _pNode, const XFormsUIHelper1_ref& _rUIHelper );
-        virtual ~AddDataItemDialog();
-        virtual void dispose() override;
+            weld::Window* pParent, ItemNode* _pNode,
+            const css::uno::Reference< css::xforms::XFormsUIHelper1 >& _rUIHelper );
+        virtual ~AddDataItemDialog() override;
 
         void                InitText( DataItemType _eType );
     };
 
-
-    class AddConditionDialog : public ModalDialog
+    class AddConditionDialog : public weld::GenericDialogController
     {
     private:
-        VclPtr<VclMultiLineEdit>       m_pConditionED;
-        VclPtr<VclMultiLineEdit>       m_pResultWin;
-        VclPtr<PushButton>             m_pEditNamespacesBtn;
-        VclPtr<OKButton>               m_pOKBtn;
+        Idle                           m_aResultIdle;
+        OUString const                       m_sPropertyName;
 
-        Idle                    m_aResultIdle;
-        OUString                m_sPropertyName;
+        css::uno::Reference< css::xforms::XFormsUIHelper1 >
+                                       m_xUIHelper;
+        css::uno::Reference< css::beans::XPropertySet >
+                                       m_xBinding;
 
-        XFormsUIHelper1_ref     m_xUIHelper;
-        XPropertySet_ref        m_xBinding;
+        std::unique_ptr<weld::TextView> m_xConditionED;
+        std::unique_ptr<weld::TextView> m_xResultWin;
+        std::unique_ptr<weld::Button> m_xEditNamespacesBtn;
+        std::unique_ptr<weld::Button> m_xOKBtn;
 
-        DECL_LINK_TYPED(ModifyHdl, Edit&, void);
-        DECL_LINK_TYPED(ResultHdl, Idle *, void);
-        DECL_LINK_TYPED(EditHdl, Button*, void);
-        DECL_LINK_TYPED(OKHdl, Button*, void);
+        DECL_LINK(ModifyHdl, weld::TextView&, void);
+        DECL_LINK(ResultHdl, Timer *, void);
+        DECL_LINK(EditHdl, weld::Button&, void);
+        DECL_LINK(OKHdl, weld::Button&, void);
 
     public:
-        AddConditionDialog(vcl::Window* pParent,
-            const OUString& _rPropertyName, const XPropertySet_ref& _rBinding);
-        virtual ~AddConditionDialog();
-        virtual void dispose() override;
+        AddConditionDialog(weld::Window* pParent,
+            const OUString& _rPropertyName, const css::uno::Reference< css::beans::XPropertySet >& _rBinding);
+        virtual ~AddConditionDialog() override;
 
-        XFormsUIHelper1_ref GetUIHelper() const { return m_xUIHelper; }
-        OUString GetCondition() const { return m_pConditionED->GetText(); }
+        const css::uno::Reference< css::xforms::XFormsUIHelper1 >& GetUIHelper() const { return m_xUIHelper; }
+        OUString GetCondition() const { return m_xConditionED->get_text(); }
         void SetCondition(const OUString& _rCondition)
         {
-            m_pConditionED->SetText(_rCondition);
+            m_xConditionED->set_text(_rCondition);
             m_aResultIdle.Start();
         }
     };
 
-
-    class NamespaceItemDialog : public ModalDialog
+    class NamespaceItemDialog : public weld::GenericDialogController
     {
     private:
-        typedef std::vector< OUString > PrefixList;
+        AddConditionDialog* m_pConditionDlg;
+        std::vector< OUString >    m_aRemovedList;
 
-        VclPtr<SvSimpleTable>      m_pNamespacesList;
-        VclPtr<PushButton>         m_pAddNamespaceBtn;
-        VclPtr<PushButton>         m_pEditNamespaceBtn;
-        VclPtr<PushButton>         m_pDeleteNamespaceBtn;
-        VclPtr<OKButton>           m_pOKBtn;
+        css::uno::Reference< css::container::XNameContainer >&
+                                   m_rNamespaces;
 
-        VclPtr<AddConditionDialog> m_pConditionDlg;
-        PrefixList          m_aRemovedList;
+        std::unique_ptr<weld::TreeView> m_xNamespacesList;
+        std::unique_ptr<weld::Button> m_xAddNamespaceBtn;
+        std::unique_ptr<weld::Button> m_xEditNamespaceBtn;
+        std::unique_ptr<weld::Button> m_xDeleteNamespaceBtn;
+        std::unique_ptr<weld::Button> m_xOKBtn;
 
-        XNameContainer_ref& m_rNamespaces;
-
-        DECL_LINK_TYPED(    SelectHdl, SvTreeListBox*, void );
-        DECL_LINK_TYPED(    ClickHdl, Button*, void );
-        DECL_LINK_TYPED(    OKHdl, Button*, void);
+        DECL_LINK(SelectHdl, weld::TreeView&, void);
+        DECL_LINK(ClickHdl, weld::Button&, void);
+        DECL_LINK(OKHdl, weld::Button&, void);
 
         void                LoadNamespaces();
 
     public:
-        NamespaceItemDialog( AddConditionDialog* pParent, XNameContainer_ref& _rContainer );
-        virtual ~NamespaceItemDialog();
-        virtual void dispose() override;
+        NamespaceItemDialog(AddConditionDialog* pParent, css::uno::Reference< css::container::XNameContainer >& _rContainer);
+        virtual ~NamespaceItemDialog() override;
     };
 
-
-    class ManageNamespaceDialog : public ModalDialog
+    class ManageNamespaceDialog : public weld::GenericDialogController
     {
     private:
-        VclPtr<Edit>               m_pPrefixED;
-        VclPtr<Edit>               m_pUrlED;
-        VclPtr<OKButton>           m_pOKBtn;
+        AddConditionDialog* m_pConditionDlg;
 
-        VclPtr<AddConditionDialog> m_pConditionDlg;
+        std::unique_ptr<weld::Entry> m_xPrefixED;
+        std::unique_ptr<weld::Entry> m_xUrlED;
+        std::unique_ptr<weld::Button> m_xOKBtn;
+        std::unique_ptr<weld::Label> m_xAltTitle;
 
-        DECL_LINK_TYPED(OKHdl, Button*, void);
+        DECL_LINK(OKHdl, weld::Button&, void);
 
     public:
-        ManageNamespaceDialog(vcl::Window* pParent, AddConditionDialog* _pCondDlg, bool bIsEdit);
-        virtual ~ManageNamespaceDialog();
-        virtual void dispose() override;
+        ManageNamespaceDialog(weld::Window* pParent, AddConditionDialog* _pCondDlg, bool bIsEdit);
+        virtual ~ManageNamespaceDialog() override;
 
         void SetNamespace(const OUString& _rPrefix, const OUString& _rURL)
         {
-            m_pPrefixED->SetText( _rPrefix );
-            m_pUrlED->SetText( _rURL );
+            m_xPrefixED->set_text(_rPrefix);
+            m_xUrlED->set_text(_rURL);
         }
-        OUString GetPrefix() const { return m_pPrefixED->GetText(); }
-        OUString GetURL() const { return m_pUrlED->GetText(); }
+        OUString GetPrefix() const { return m_xPrefixED->get_text(); }
+        OUString GetURL() const { return m_xUrlED->get_text(); }
     };
 
-
-    class AddSubmissionDialog : public ModalDialog
+    class AddSubmissionDialog : public weld::GenericDialogController
     {
     private:
-        MethodString        m_aMethodString;
-        ReplaceString       m_aReplaceString;
+        MethodString const        m_aMethodString;
+        ReplaceString const       m_aReplaceString;
 
-        VclPtr<Edit>        m_pNameED;
-        VclPtr<Edit>        m_pActionED;
-        VclPtr<ListBox>     m_pMethodLB;
-        VclPtr<Edit>        m_pRefED;
-        VclPtr<PushButton>  m_pRefBtn;
-        VclPtr<ListBox>     m_pBindLB;
-        VclPtr<ListBox>     m_pReplaceLB;
+        ItemNode* const     m_pItemNode;
 
-        VclPtr<OKButton>    m_pOKBtn;
+        css::uno::Reference< css::xforms::XFormsUIHelper1 >
+                            m_xUIHelper;
+        css::uno::Reference< css::xforms::XSubmission >
+                            m_xNewSubmission;
+        css::uno::Reference< css::beans::XPropertySet >
+                            m_xSubmission;
+        css::uno::Reference< css::beans::XPropertySet >
+                            m_xTempBinding;
+        css::uno::Reference< css::beans::XPropertySet >
+                            m_xCreatedBinding;
 
-        ItemNode*           m_pItemNode;
+        std::unique_ptr<weld::Entry> m_xNameED;
+        std::unique_ptr<weld::Entry> m_xActionED;
+        std::unique_ptr<weld::ComboBox> m_xMethodLB;
+        std::unique_ptr<weld::Entry> m_xRefED;
+        std::unique_ptr<weld::Button> m_xRefBtn;
+        std::unique_ptr<weld::ComboBox> m_xBindLB;
+        std::unique_ptr<weld::ComboBox> m_xReplaceLB;
+        std::unique_ptr<weld::Button> m_xOKBtn;
 
-        XFormsUIHelper1_ref m_xUIHelper;
-        XSubmission_ref     m_xNewSubmission;
-        XPropertySet_ref    m_xSubmission;
-        XPropertySet_ref    m_xTempBinding;
-        XPropertySet_ref    m_xCreatedBinding;
-
-        DECL_LINK_TYPED(RefHdl, Button*, void);
-        DECL_LINK_TYPED(OKHdl, Button*, void);
+        DECL_LINK(RefHdl, weld::Button&, void);
+        DECL_LINK(OKHdl, weld::Button&, void);
 
         void                FillAllBoxes();
 
     public:
-        AddSubmissionDialog( vcl::Window* pParent, ItemNode* _pNode,
-            const XFormsUIHelper1_ref& _rUIHelper );
-        virtual ~AddSubmissionDialog();
-        virtual void dispose() override;
+        AddSubmissionDialog(weld::Window* pParent, ItemNode* pNode,
+            const css::uno::Reference< css::xforms::XFormsUIHelper1 >& rUIHelper);
+        virtual ~AddSubmissionDialog() override;
 
-        inline const XSubmission_ref& GetNewSubmission() const { return m_xNewSubmission; }
+        const css::uno::Reference< css::xforms::XSubmission >& GetNewSubmission() const { return m_xNewSubmission; }
     };
 
-
-    class AddModelDialog : public ModalDialog
+    class AddModelDialog : public weld::GenericDialogController
     {
     private:
-        VclPtr<Edit>     m_pNameED;
-        VclPtr<CheckBox> m_pModifyCB;
+        std::unique_ptr<weld::Entry> m_xNameED;
+        std::unique_ptr<weld::CheckButton> m_xModifyCB;
+        std::unique_ptr<weld::Label> m_xAltTitle;
 
     public:
-        AddModelDialog( vcl::Window* pParent, bool _bEdit );
-        virtual ~AddModelDialog();
-        virtual void dispose() override;
+        AddModelDialog(weld::Window* pParent, bool _bEdit);
+        virtual ~AddModelDialog() override;
 
-        OUString         GetName() const { return m_pNameED->GetText(); }
-        void             SetName( const OUString& _rName ) { m_pNameED->SetText( _rName );}
+        OUString         GetName() const { return m_xNameED->get_text(); }
+        void             SetName( const OUString& _rName ) { m_xNameED->set_text( _rName );}
 
-        bool             GetModifyDoc() const { return bool( m_pModifyCB->IsChecked() ); }
-        void             SetModifyDoc( const bool bModify ) { m_pModifyCB->Check( bModify ); }
+        bool             GetModifyDoc() const { return m_xModifyCB->get_active(); }
+        void             SetModifyDoc( const bool bModify ) { m_xModifyCB->set_active(bModify); }
     };
 
-
-    class AddInstanceDialog : public ModalDialog
+    class AddInstanceDialog : public weld::GenericDialogController
     {
     private:
-        VclPtr<Edit>                   m_pNameED;
-        VclPtr<FixedText>              m_pURLFT;
-        VclPtr<SvtURLBox>              m_pURLED;
-        VclPtr<PushButton>             m_pFilePickerBtn;
-        VclPtr<CheckBox>               m_pLinkInstanceCB;
-
         OUString                m_sAllFilterName;
 
-        DECL_LINK_TYPED(FilePickerHdl, Button*, void);
+        std::unique_ptr<weld::Entry> m_xNameED;
+        std::unique_ptr<weld::Label> m_xURLFT;
+        std::unique_ptr<URLBox> m_xURLED;
+        std::unique_ptr<weld::Button> m_xFilePickerBtn;
+        std::unique_ptr<weld::CheckButton> m_xLinkInstanceCB;
+        std::unique_ptr<weld::Label> m_xAltTitle;
+
+        DECL_LINK(FilePickerHdl, weld::Button&, void);
 
     public:
-        AddInstanceDialog( vcl::Window* pParent, bool _bEdit );
-        virtual ~AddInstanceDialog();
-        virtual void dispose() override;
+        AddInstanceDialog(weld::Window* pParent, bool _bEdit);
+        virtual ~AddInstanceDialog() override;
 
-        OUString         GetName() const { return m_pNameED->GetText(); }
-        void             SetName( const OUString& _rName ) { m_pNameED->SetText( _rName );}
-        OUString         GetURL() const { return m_pURLED->GetText(); }
-        void             SetURL( const OUString& _rURL ) { m_pURLED->SetText( _rURL );}
-        bool             IsLinkInstance() const { return m_pLinkInstanceCB->IsChecked(); }
-        void             SetLinkInstance( bool _bLink ) { m_pLinkInstanceCB->Check(_bLink); }
+        OUString         GetName() const { return m_xNameED->get_text(); }
+        void             SetName( const OUString& _rName ) { m_xNameED->set_text( _rName );}
+        OUString         GetURL() const { return m_xURLED->get_active_text(); }
+        void             SetURL( const OUString& _rURL ) { m_xURLED->SetText( _rURL );}
+        bool             IsLinkInstance() const { return m_xLinkInstanceCB->get_active(); }
+        void             SetLinkInstance( bool _bLink ) { m_xLinkInstanceCB->set_active(_bLink); }
     };
 
-
-    class LinkedInstanceWarningBox : public MessageDialog
+    class LinkedInstanceWarningBox : public weld::MessageDialogController
     {
     public:
-        LinkedInstanceWarningBox( vcl::Window* pParent );
+        LinkedInstanceWarningBox(weld::Widget* pParent);
     };
-
-
 }
 
 

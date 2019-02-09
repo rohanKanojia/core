@@ -18,13 +18,14 @@
  */
 
 
-#include "propbrw.hxx"
-#include "basidesh.hxx"
-#include "dlgedobj.hxx"
-#include "iderid.hxx"
-#include "baside3.hxx"
+#include <propbrw.hxx>
+#include <basidesh.hxx>
+#include <dlgedobj.hxx>
+#include <iderid.hxx>
+#include <baside3.hxx>
+#include <strings.hrc>
 
-#include "dlgresid.hrc"
+#include <strings.hxx>
 #include <svx/svxids.hrc>
 
 #include <com/sun/star/awt/PosSize.hpp>
@@ -32,12 +33,14 @@
 #include <com/sun/star/inspection/XObjectInspector.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <comphelper/types.hxx>
+#include <comphelper/processfactory.hxx>
 #include <cppuhelper/component_context.hxx>
 #include <svx/svditer.hxx>
 #include <svx/svdview.hxx>
 #include <toolkit/helper/vclunohelper.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/stdtext.hxx>
+#include <vcl/weld.hxx>
 
 #include <memory>
 
@@ -122,8 +125,8 @@ void PropBrw::ImplReCreateController()
         // a ComponentContext for the
         ::cppu::ContextEntry_Init aHandlerContextInfo[] =
         {
-            ::cppu::ContextEntry_Init( "DialogParentWindow", makeAny( VCLUnoHelper::GetInterface ( this ) ) ),
-            ::cppu::ContextEntry_Init( "ContextDocument", makeAny( m_xContextDocument ) )
+            ::cppu::ContextEntry_Init( "DialogParentWindow", Any( VCLUnoHelper::GetInterface ( this ) ) ),
+            ::cppu::ContextEntry_Init( "ContextDocument", Any( m_xContextDocument ) )
         };
         Reference< XComponentContext > xInspectorContext(
             ::cppu::createComponentContext( aHandlerContextInfo, SAL_N_ELEMENTS( aHandlerContextInfo ), xOwnContext ) );
@@ -134,7 +137,8 @@ void PropBrw::ImplReCreateController()
         m_xBrowserController.set( xFactory->createInstanceWithContext( s_sControllerServiceName, xInspectorContext ), UNO_QUERY );
         if ( !m_xBrowserController.is() )
         {
-            ShowServiceNotAvailableError( GetParent(), s_sControllerServiceName, true );
+            vcl::Window* pWin = GetParent();
+            ShowServiceNotAvailableError(pWin ? pWin->GetFrameWeld() : nullptr, s_sControllerServiceName, true);
         }
         else
         {
@@ -155,8 +159,8 @@ void PropBrw::ImplReCreateController()
 
         Point aPropWinPos = Point( WIN_BORDER, WIN_BORDER );
         Size  aPropWinSize(STD_WIN_SIZE_X,STD_WIN_SIZE_Y);
-        aPropWinSize.Width() -= (2*WIN_BORDER);
-        aPropWinSize.Height() -= (2*WIN_BORDER);
+        aPropWinSize.AdjustWidth( -(2*WIN_BORDER) );
+        aPropWinSize.AdjustHeight( -(2*WIN_BORDER) );
 
         if ( m_xBrowserComponentWindow.is() )
         {
@@ -216,7 +220,7 @@ void PropBrw::ImplDestroyController()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("basctl");
     }
 
     m_xBrowserController.clear();
@@ -248,7 +252,7 @@ Sequence< Reference< XInterface > >
         std::unique_ptr<SdrObjListIter> pGroupIterator;
         if (pCurrent->IsGroupObject())
         {
-            pGroupIterator.reset(new SdrObjListIter(*pCurrent->GetSubList()));
+            pGroupIterator.reset(new SdrObjListIter(pCurrent->GetSubList()));
             pCurrent = pGroupIterator->IsMore() ? pGroupIterator->Next() : nullptr;
         }
 
@@ -284,8 +288,8 @@ void PropBrw::implSetNewObjectSequence
     {
         xObjectInspector->inspect( _rObjectSeq );
 
-        OUString aText = IDE_RESSTR(RID_STR_BRWTITLE_PROPERTIES);
-        aText += IDE_RESSTR(RID_STR_BRWTITLE_MULTISELECT);
+        OUString aText = IDEResId(RID_STR_BRWTITLE_PROPERTIES)
+                       + IDEResId(RID_STR_BRWTITLE_MULTISELECT);
         SetText( aText );
     }
 }
@@ -296,7 +300,7 @@ void PropBrw::implSetNewObject( const Reference< XPropertySet >& _rxObject )
     if ( m_xBrowserController.is() )
     {
         m_xBrowserController->setPropertyValue( "IntrospectedObject",
-            makeAny( _rxObject )
+            Any( _rxObject )
         );
 
         // set the new title according to the selected object
@@ -312,106 +316,106 @@ OUString PropBrw::GetHeadlineName( const Reference< XPropertySet >& _rxObject )
 
     if (xServiceInfo.is())    // single selection
     {
-        sal_uInt16 nResId = 0;
-        aName = IDE_RESSTR(RID_STR_BRWTITLE_PROPERTIES);
+        OUString sResId;
+        aName = IDEResId(RID_STR_BRWTITLE_PROPERTIES);
 
         if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlDialogModel" ) )
         {
-            nResId = RID_STR_CLASS_DIALOG;
+            sResId = RID_STR_CLASS_DIALOG;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlButtonModel" ) )
         {
-            nResId = RID_STR_CLASS_BUTTON;
+            sResId = RID_STR_CLASS_BUTTON;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlRadioButtonModel" ) )
         {
-            nResId = RID_STR_CLASS_RADIOBUTTON;
+            sResId = RID_STR_CLASS_RADIOBUTTON;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlCheckBoxModel" ) )
         {
-            nResId = RID_STR_CLASS_CHECKBOX;
+            sResId = RID_STR_CLASS_CHECKBOX;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlListBoxModel" ) )
         {
-            nResId = RID_STR_CLASS_LISTBOX;
+            sResId = RID_STR_CLASS_LISTBOX;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlComboBoxModel" ) )
         {
-            nResId = RID_STR_CLASS_COMBOBOX;
+            sResId = RID_STR_CLASS_COMBOBOX;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlGroupBoxModel" ) )
         {
-            nResId = RID_STR_CLASS_GROUPBOX;
+            sResId = RID_STR_CLASS_GROUPBOX;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlEditModel" ) )
         {
-            nResId = RID_STR_CLASS_EDIT;
+            sResId = RID_STR_CLASS_EDIT;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlFixedTextModel" ) )
         {
-            nResId = RID_STR_CLASS_FIXEDTEXT;
+            sResId = RID_STR_CLASS_FIXEDTEXT;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlImageControlModel" ) )
         {
-            nResId = RID_STR_CLASS_IMAGECONTROL;
+            sResId = RID_STR_CLASS_IMAGECONTROL;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlProgressBarModel" ) )
         {
-            nResId = RID_STR_CLASS_PROGRESSBAR;
+            sResId = RID_STR_CLASS_PROGRESSBAR;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlScrollBarModel" ) )
         {
-            nResId = RID_STR_CLASS_SCROLLBAR;
+            sResId = RID_STR_CLASS_SCROLLBAR;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlFixedLineModel" ) )
         {
-            nResId = RID_STR_CLASS_FIXEDLINE;
+            sResId = RID_STR_CLASS_FIXEDLINE;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlDateFieldModel" ) )
         {
-            nResId = RID_STR_CLASS_DATEFIELD;
+            sResId = RID_STR_CLASS_DATEFIELD;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlTimeFieldModel" ) )
         {
-            nResId = RID_STR_CLASS_TIMEFIELD;
+            sResId = RID_STR_CLASS_TIMEFIELD;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlNumericFieldModel" ) )
         {
-            nResId = RID_STR_CLASS_NUMERICFIELD;
+            sResId = RID_STR_CLASS_NUMERICFIELD;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlCurrencyFieldModel" ) )
         {
-            nResId = RID_STR_CLASS_CURRENCYFIELD;
+            sResId = RID_STR_CLASS_CURRENCYFIELD;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlFormattedFieldModel" ) )
         {
-            nResId = RID_STR_CLASS_FORMATTEDFIELD;
+            sResId = RID_STR_CLASS_FORMATTEDFIELD;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlPatternFieldModel" ) )
         {
-            nResId = RID_STR_CLASS_PATTERNFIELD;
+            sResId = RID_STR_CLASS_PATTERNFIELD;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.UnoControlFileControlModel" ) )
         {
-            nResId = RID_STR_CLASS_FILECONTROL;
+            sResId = RID_STR_CLASS_FILECONTROL;
         }
         else if ( xServiceInfo->supportsService( "com.sun.star.awt.tree.TreeControlModel" ) )
         {
-            nResId = RID_STR_CLASS_TREECONTROL;
+            sResId = RID_STR_CLASS_TREECONTROL;
         }
         else
         {
-            nResId = RID_STR_CLASS_CONTROL;
+            sResId = RID_STR_CLASS_CONTROL;
         }
 
-        if (nResId)
+        if (!sResId.isEmpty())
         {
-            aName += IDE_RESSTR(nResId);
+            aName += sResId;
         }
     }
     else if (!_rxObject.is())    // no properties
     {
-        aName = IDE_RESSTR(RID_STR_BRWTITLE_NO_PROPERTIES);
+        aName = IDEResId(RID_STR_BRWTITLE_NO_PROPERTIES);
     }
 
     return aName;
@@ -425,8 +429,8 @@ void PropBrw::Resize()
     // adjust size
     Size aSize_ = GetOutputSizePixel();
     Size aPropWinSize( aSize_ );
-    aPropWinSize.Width() -= (2*WIN_BORDER);
-    aPropWinSize.Height() -= (2*WIN_BORDER);
+    aPropWinSize.AdjustWidth( -(2*WIN_BORDER) );
+    aPropWinSize.AdjustHeight( -(2*WIN_BORDER) );
 
     if (m_xBrowserComponentWindow.is())
     {
@@ -512,7 +516,7 @@ void PropBrw::ImplUpdate( const Reference< XModel >& _rxContextDocument, SdrView
     catch ( const PropertyVetoException& ) { /* silence */ }
     catch ( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("basctl");
     }
 }
 

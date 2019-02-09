@@ -28,7 +28,7 @@
 #include <ViewsWindow.hxx>
 #include <ReportSection.hxx>
 #include <ReportController.hxx>
-#include <uistrings.hrc>
+#include <strings.hxx>
 #include <reportformula.hxx>
 #include <toolkit/helper/property.hxx>
 
@@ -75,14 +75,14 @@ namespace rptui
         }
         catch (uno::Exception const&)
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
 
 
-    void FixedTextColor::setPropertyTextColor(const uno::Reference< awt::XVclWindowPeer >& _xVclWindowPeer, sal_Int32 _nTextColor)
+    void FixedTextColor::setPropertyTextColor(const uno::Reference< awt::XVclWindowPeer >& _xVclWindowPeer, Color _nTextColor)
     {
-        _xVclWindowPeer->setProperty(PROPERTY_TEXTCOLOR, uno::makeAny(sal_Int32(_nTextColor)));
+        _xVclWindowPeer->setProperty(PROPERTY_TEXTCOLOR, uno::makeAny(_nTextColor));
     }
 
 
@@ -103,8 +103,8 @@ namespace rptui
         try
         {
             bool bIsDark = false;
-            const sal_Int32 nBackColor( xFixedText->getControlBackground() );
-            if ((sal_uInt32)nBackColor == COL_TRANSPARENT)
+            const Color nBackColor( xFixedText->getControlBackground() );
+            if (nBackColor == COL_TRANSPARENT)
             {
                 uno::Reference <report::XSection> xSection(xFixedText->getParent(), uno::UNO_QUERY_THROW);
 
@@ -134,24 +134,24 @@ namespace rptui
             {
                 const StyleSettings& aStyleSettings = Application::GetSettings().GetStyleSettings();
                 Color aLabelTextColor  = aStyleSettings.GetLabelTextColor();
-                setPropertyTextColor(xVclWindowPeer, aLabelTextColor.GetColor());
+                setPropertyTextColor(xVclWindowPeer, aLabelTextColor);
             }
             else
             {
                 util::Color aLabelColor = xFixedText->getCharColor();
-                setPropertyTextColor(xVclWindowPeer, aLabelColor);
+                setPropertyTextColor(xVclWindowPeer, ::Color(aLabelColor));
             }
 
         }
         catch( const uno::Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("reportdesign");
         }
     }
 
 
     // XPropertyChangeListener
-    uno::Reference<awt::XControl> FixedTextColor::getXControl(const uno::Reference< report::XFixedText >& _xFixedText) throw(uno::RuntimeException)
+    uno::Reference<awt::XControl> FixedTextColor::getXControl(const uno::Reference< report::XFixedText >& _xFixedText)
     {
 
         uno::Reference<awt::XControl> xControl;
@@ -184,7 +184,7 @@ namespace rptui
     }
 
 
-    uno::Reference<awt::XVclWindowPeer> FixedTextColor::getVclWindowPeer(const uno::Reference< report::XFixedText >& _xComponent) throw(uno::RuntimeException)
+    uno::Reference<awt::XVclWindowPeer> FixedTextColor::getVclWindowPeer(const uno::Reference< report::XFixedText >& _xComponent)
     {
         uno::Reference<awt::XVclWindowPeer> xVclWindowPeer;
         uno::Reference<awt::XControl> xControl = getXControl(_xComponent);

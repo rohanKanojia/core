@@ -18,19 +18,21 @@
  */
 
 #include <cppuhelper/factory.hxx>
-#include <osl/diagnose.h>
-#include "dbu_reghelper.hxx"
-#include "uiservices.hxx"
+#include <dbu_reghelper.hxx>
+#include <uiservices.hxx>
+#include <mutex>
 
 using namespace ::dbaui;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 
-extern "C" void SAL_CALL createRegistryInfo_DBU()
+extern "C" {
+
+static void createRegistryInfo_DBU()
 {
-    static bool bInit = false;
-    if (!bInit)
+    static std::once_flag aInit;
+    std::call_once(aInit, [&]()
     {
         createRegistryInfo_OTableFilterDialog();
         createRegistryInfo_ODataSourcePropertyDialog();
@@ -53,15 +55,16 @@ extern "C" void SAL_CALL createRegistryInfo_DBU()
         createRegistryInfo_OUserSettingsDialog();
         createRegistryInfo_OColumnControlModel();
         createRegistryInfo_OColumnControl();
-        createRegistryInfo_OToolboxController();
         createRegistryInfo_CopyTableWizard();
         createRegistryInfo_OTextConnectionSettingsDialog();
         createRegistryInfo_LimitBoxController();
-        bInit = true;
-    }
+        return true;
+    });
 }
 
-extern "C"  SAL_DLLPUBLIC_EXPORT void* SAL_CALL dbu_component_getFactory(
+}
+
+extern "C"  SAL_DLLPUBLIC_EXPORT void* dbu_component_getFactory(
                     const sal_Char* pImplementationName,
                     void* pServiceManager,
                     void* /*pRegistryKey*/)

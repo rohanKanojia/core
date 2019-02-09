@@ -46,7 +46,6 @@ $(eval $(call gb_Library_use_libraries,rpt,\
     tl \
     utl \
     vcl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_set_componentfile,rpt,reportdesign/util/rpt))
@@ -75,7 +74,6 @@ $(eval $(call gb_Library_add_exception_objects,rpt,\
     reportdesign/source/core/misc/reportformula \
     reportdesign/source/core/resource/core_resource \
     reportdesign/source/core/sdr/formatnormalizer \
-    reportdesign/source/core/sdr/ModuleHelper \
     reportdesign/source/core/sdr/PropertyForward \
     reportdesign/source/core/sdr/ReportDrawPage \
     reportdesign/source/core/sdr/ReportUndoFactory \

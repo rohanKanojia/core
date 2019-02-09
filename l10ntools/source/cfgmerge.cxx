@@ -17,22 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "cfglex.hxx"
-#include "common.hxx"
+#include <cfglex.hxx>
+#include <common.hxx>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 #include <memory>
-#include "rtl/strbuf.hxx"
+#include <rtl/strbuf.hxx>
 
-#include "helper.hxx"
-#include "export.hxx"
-#include "cfgmerge.hxx"
-#include "tokens.h"
+#include <helper.hxx>
+#include <export.hxx>
+#include <cfgmerge.hxx>
+#include <tokens.h>
 
 void yyerror(char const *);
 
@@ -103,9 +103,6 @@ CfgStackData* CfgStack::Push(const OString &rTag, const OString &rId)
 
 CfgStack::~CfgStack()
 {
-    for ( size_t i = 0, n = maList.size(); i < n; i++ )
-        delete maList[ i ];
-    maList.clear();
 }
 
 OString CfgStack::GetAccessPath( size_t nPos )
@@ -161,6 +158,9 @@ void CfgParser::AddText(
     pStackData->sText[ rIsoLang ] = rText;
 }
 
+#if defined _MSC_VER
+#pragma warning(disable: 4702) // unreachable code, bug in MSVC2015, it thinks the std::exit is unreachable
+#endif
 void CfgParser::ExecuteAnalyzedToken( int nToken, char *pToken )
 {
     OString sToken( pToken );
@@ -187,7 +187,7 @@ void CfgParser::ExecuteAnalyzedToken( int nToken, char *pToken )
             sTokenName = sToken.getToken(1, '<').getToken(0, '>').
                 getToken(0, ' ');
 
-              if ( !IsTokenClosed( sToken )) {
+            if ( !IsTokenClosed( sToken )) {
                 OString sSearch;
                 switch ( nToken ) {
                     case CFG_TOKEN_PACKAGE:
@@ -262,11 +262,10 @@ void CfgParser::ExecuteAnalyzedToken( int nToken, char *pToken )
             else
             {
                 OString sError( "Misplaced close tag: " );
-                OString sInFile(" in file ");
                 sError += sToken;
-                sError += sInFile;
+                sError += " in file ";
                 sError += global::inputPathname;
-                Error( sError );
+                yyerror(sError.getStr());
                 std::exit(EXIT_FAILURE);
             }
         }
@@ -329,11 +328,6 @@ void CfgParser::Execute( int nToken, char * pToken )
         break;
     }
     ExecuteAnalyzedToken( nToken, pToken );
-}
-
-void CfgParser::Error(const OString& rError)
-{
-    yyerror(rError.getStr());
 }
 
 
@@ -402,8 +396,7 @@ void CfgExport::WorkOnText(
 CfgMerge::CfgMerge(
     const OString &rMergeSource, const OString &rOutputFile,
     const OString &rFilename, const OString &rLanguage )
-                : pMergeDataFile( nullptr ),
-                sFilename( rFilename ),
+                : sFilename( rFilename ),
                 bEnglish( false )
 {
     pOutputStream.open(
@@ -416,8 +409,8 @@ CfgMerge::CfgMerge(
 
     if (!rMergeSource.isEmpty())
     {
-        pMergeDataFile = new MergeDataFile(
-            rMergeSource, global::inputPathname, true );
+        pMergeDataFile.reset(new MergeDataFile(
+            rMergeSource, global::inputPathname, true ));
         if (rLanguage.equalsIgnoreAsciiCase("ALL") )
         {
             aLanguages = pMergeDataFile->GetLanguages();
@@ -431,7 +424,6 @@ CfgMerge::CfgMerge(
 CfgMerge::~CfgMerge()
 {
     pOutputStream.close();
-    delete pMergeDataFile;
 }
 
 void CfgMerge::WorkOnText(OString &, const OString& rLangIndex)
@@ -461,7 +453,7 @@ void CfgMerge::WorkOnText(OString &, const OString& rLangIndex)
 
 void CfgMerge::Output(const OString& rOutput)
 {
-    pOutputStream << rOutput.getStr();
+    pOutputStream << rOutput;
 }
 
 void CfgMerge::WorkOnResourceEnd()
@@ -476,7 +468,7 @@ void CfgMerge::WorkOnResourceEnd()
                 sCur = aLanguages[ i ];
 
                 OString sContent;
-                pEntrys->GetText( sContent, STRING_TYP_TEXT, sCur , true );
+                pEntrys->GetText( sContent, sCur, true );
                 if (
                     ( !sCur.equalsIgnoreAsciiCase("en-US") ) && !sContent.isEmpty())
                 {

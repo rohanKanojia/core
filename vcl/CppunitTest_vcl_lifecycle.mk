@@ -31,13 +31,9 @@ $(eval $(call gb_CppunitTest_use_libraries,vcl_lifecycle, \
 	tl \
 	unotest \
 	vcl \
-	$(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,vcl_lifecycle,\
-	udkapi \
-	offapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,vcl_lifecycle))
 
 $(eval $(call gb_CppunitTest_use_ure,vcl_lifecycle))
 $(eval $(call gb_CppunitTest_use_vcl,vcl_lifecycle))
@@ -48,8 +44,13 @@ $(eval $(call gb_CppunitTest_use_components,vcl_lifecycle,\
 	ucb/source/core/ucb1 \
 	ucb/source/ucp/file/ucpfile1 \
 	framework/util/fwk \
+	sfx2/util/sfx \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,vcl_lifecycle))
+
+$(eval $(call gb_CppunitTest_use_uiconfigs,vcl_lifecycle, \
+    vcl \
+))
 
 # vim: set noet sw=4 ts=4:

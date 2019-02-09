@@ -18,12 +18,13 @@
  */
 
 #include <svl/itemiter.hxx>
-#include <svtools/imap.hxx>
+#include <vcl/imap.hxx>
 #include <tools/helpers.hxx>
 #include <editeng/protitem.hxx>
 #include <editeng/opaqitem.hxx>
 #include <editeng/ulspitem.hxx>
 #include <editeng/frmdiritem.hxx>
+#include <editeng/outlobj.hxx>
 #include <drawdoc.hxx>
 #include <fmtfsize.hxx>
 #include <fmtclds.hxx>
@@ -32,7 +33,6 @@
 #include <fmtsrnd.hxx>
 #include <fmtornt.hxx>
 #include <fmtcnct.hxx>
-#include <layhelp.hxx>
 #include <ndgrf.hxx>
 #include <tolayoutanchoredobjectposition.hxx>
 #include <fmtfollowtextflow.hxx>
@@ -42,30 +42,41 @@
 #include <swtable.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/svdoashp.hxx>
-#include "layouter.hxx"
-#include "pagefrm.hxx"
-#include "rootfrm.hxx"
-#include "viewimp.hxx"
-#include "viewopt.hxx"
-#include "dcontact.hxx"
-#include "dflyobj.hxx"
-#include "dview.hxx"
-#include "frmtool.hxx"
-#include "hints.hxx"
-#include "tabfrm.hxx"
-#include "txtfrm.hxx"
-#include "notxtfrm.hxx"
-#include "flyfrms.hxx"
-#include "sectfrm.hxx"
+#include <layouter.hxx>
+#include <pagefrm.hxx>
+#include <rootfrm.hxx>
+#include <viewimp.hxx>
+#include <viewopt.hxx>
+#include <dcontact.hxx>
+#include <dflyobj.hxx>
+#include <dview.hxx>
+#include <frmtool.hxx>
+#include <hints.hxx>
+#include <tabfrm.hxx>
+#include <txtfrm.hxx>
+#include <notxtfrm.hxx>
+#include <flyfrms.hxx>
+#include <sectfrm.hxx>
 #include <vcl/svapp.hxx>
 #include <calbck.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <textboxhelper.hxx>
 #include <txtfly.hxx>
+#include <ndindex.hxx>
+#include <pam.hxx>
+#include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
+
+#include <wrtsh.hxx>
+#include <view.hxx>
+#include <edtwin.hxx>
+#include <bodyfrm.hxx>
+#include <FrameControlsManager.hxx>
 
 using namespace ::com::sun::star;
 
+static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame );
 
 SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch ) :
     SwLayoutFrame( pFormat, pSib ),
@@ -76,8 +87,6 @@ SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch
     m_bAtCnt( false ),
     m_bLayout( false ),
     m_bAutoPosition( false ),
-    m_bNoShrink( false ),
-    m_bLockDeleteContent( false ),
     m_bValidContentPos( false )
 {
     mnFrameType = SwFrameType::Fly;
@@ -88,9 +97,8 @@ SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch
 
     // Size setting: Fixed size is always the width
     const SwFormatFrameSize &rFrameSize = pFormat->GetFrameSize();
-    const sal_uInt16 nDir =
-        static_cast<const SvxFrameDirectionItem&>(pFormat->GetFormatAttr( RES_FRAMEDIR )).GetValue();
-    if( FRMDIR_ENVIRONMENT == nDir )
+    const SvxFrameDirection nDir = pFormat->GetFormatAttr( RES_FRAMEDIR ).GetValue();
+    if( SvxFrameDirection::Environment == nDir )
     {
         mbDerivedVert = true;
         mbDerivedR2L = true;
@@ -100,7 +108,7 @@ SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch
         mbInvalidVert = false;
         mbDerivedVert = false;
         mbDerivedR2L = false;
-        if( FRMDIR_HORI_LEFT_TOP == nDir || FRMDIR_HORI_RIGHT_TOP == nDir )
+        if( SvxFrameDirection::Horizontal_LR_TB == nDir || SvxFrameDirection::Horizontal_RL_TB == nDir )
         {
             mbVertLR = false;
             mbVertical = false;
@@ -117,7 +125,7 @@ SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch
             {
                 mbVertical = true;
 
-                if ( FRMDIR_VERT_TOP_LEFT == nDir )
+                if ( SvxFrameDirection::Vertical_LR_TB == nDir )
                     mbVertLR = true;
                 else
                     mbVertLR = false;
@@ -125,14 +133,17 @@ SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch
         }
 
         mbInvalidR2L = false;
-        if( FRMDIR_HORI_RIGHT_TOP == nDir )
+        if( SvxFrameDirection::Horizontal_RL_TB == nDir )
             mbRightToLeft = true;
         else
             mbRightToLeft = false;
     }
 
-    Frame().Width( rFrameSize.GetWidth() );
-    Frame().Height( rFrameSize.GetHeightSizeType() == ATT_VAR_SIZE ? MINFLY : rFrameSize.GetHeight() );
+    {
+        SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+        aFrm.Width( rFrameSize.GetWidth() );
+        aFrm.Height( rFrameSize.GetHeightSizeType() == ATT_VAR_SIZE ? MINFLY : rFrameSize.GetHeight() );
+    }
 
     // Fixed or variable Height?
     if ( rFrameSize.GetHeightSizeType() == ATT_MIN_SIZE )
@@ -153,15 +164,16 @@ SwFlyFrame::SwFlyFrame( SwFlyFrameFormat *pFormat, SwFrame* pSib, SwFrame *pAnch
     InsertCnt();
 
     // Put it somewhere outside so that out document is not formatted unnecessarily often
-    Frame().Pos().setX(FAR_AWAY);
-    Frame().Pos().setY(FAR_AWAY);
+    SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+    aFrm.Pos().setX(FAR_AWAY);
+    aFrm.Pos().setY(FAR_AWAY);
 }
 
 void SwFlyFrame::Chain( SwFrame* _pAnch )
 {
     // Connect to chain neighbours.
-    // No problem, if a neighboor doesn't exist - the construction of the
-    // neighboor will make the connection
+    // No problem, if a neighbor doesn't exist - the construction of the
+    // neighbor will make the connection
     const SwFormatChain& rChain = GetFormat()->GetChain();
     if ( rChain.GetPrev() || rChain.GetNext() )
     {
@@ -196,7 +208,7 @@ void SwFlyFrame::InsertCnt()
         OSL_ENSURE( rContent.GetContentIdx(), ":-( no content prepared." );
         sal_uLong nIndex = rContent.GetContentIdx()->GetIndex();
         // Lower() means SwColumnFrame; the Content then needs to be inserted into the (Column)BodyFrame
-        ::_InsertCnt( Lower() ? static_cast<SwLayoutFrame*>(static_cast<SwLayoutFrame*>(Lower())->Lower()) : static_cast<SwLayoutFrame*>(this),
+        ::InsertCnt_( Lower() ? static_cast<SwLayoutFrame*>(static_cast<SwLayoutFrame*>(Lower())->Lower()) : static_cast<SwLayoutFrame*>(this),
                       GetFormat()->GetDoc(), nIndex );
 
         // NoText always have a fixed height.
@@ -226,8 +238,12 @@ void SwFlyFrame::InsertColumns()
     {
         // Start off PrtArea to be as large as Frame, so that we can put in the columns
         // properly. It'll adjust later on.
-        Prt().Width( Frame().Width() );
-        Prt().Height( Frame().Height() );
+        {
+            SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
+            aPrt.Width( getFrameArea().Width() );
+            aPrt.Height( getFrameArea().Height() );
+        }
+
         const SwFormatCol aOld; // ChgColumns() also needs an old value passed
         ChgColumns( aOld, rCol );
     }
@@ -269,6 +285,9 @@ void SwFlyFrame::DestroyImpl()
     FinitDrawObj();
 
     SwLayoutFrame::DestroyImpl();
+
+    SwWrtShell* pWrtSh = dynamic_cast<SwWrtShell*>(getRootFrame()->GetCurrShell());
+    UpdateUnfloatButton(pWrtSh, false);
 }
 
 SwFlyFrame::~SwFlyFrame()
@@ -292,10 +311,6 @@ void SwFlyFrame::Unchain()
 // OD 2004-01-19 #110582#
 void SwFlyFrame::DeleteCnt()
 {
-    // #110582#-2
-    if ( IsLockDeleteContent() )
-        return;
-
     SwFrame* pFrame = m_pLower;
     while ( pFrame )
     {
@@ -336,86 +351,14 @@ void SwFlyFrame::DeleteCnt()
     InvalidatePage();
 }
 
-sal_uInt32 SwFlyFrame::_GetOrdNumForNewRef( const SwFlyDrawContact* pContact )
-{
-    sal_uInt32 nOrdNum( 0L );
-
-    // search for another Writer fly frame registered at same frame format
-    SwIterator<SwFlyFrame,SwFormat> aIter( *pContact->GetFormat() );
-    const SwFlyFrame* pFlyFrame( nullptr );
-    for ( pFlyFrame = aIter.First(); pFlyFrame; pFlyFrame = aIter.Next() )
-    {
-        if ( pFlyFrame != this )
-        {
-            break;
-        }
-    }
-
-    if ( pFlyFrame )
-    {
-        // another Writer fly frame found. Take its order number
-        nOrdNum = pFlyFrame->GetVirtDrawObj()->GetOrdNum();
-    }
-    else
-    {
-        // no other Writer fly frame found. Take order number of 'master' object
-        // #i35748# - use method <GetOrdNumDirect()> instead
-        // of method <GetOrdNum()> to avoid a recalculation of the order number,
-        // which isn't intended.
-        nOrdNum = pContact->GetMaster()->GetOrdNumDirect();
-    }
-
-    return nOrdNum;
-}
-
-SwVirtFlyDrawObj* SwFlyFrame::CreateNewRef( SwFlyDrawContact *pContact )
-{
-    SwVirtFlyDrawObj *pDrawObj = new SwVirtFlyDrawObj( *pContact->GetMaster(), this );
-    pDrawObj->SetModel( pContact->GetMaster()->GetModel() );
-    pDrawObj->SetUserCall( pContact );
-
-    // The Reader creates the Masters and inserts them into the Page in
-    // order to transport the z-order.
-    // After creating the first Reference the Masters are removed from the
-    // List and are not important anymore.
-    SdrPage* pPg( nullptr );
-    if ( nullptr != ( pPg = pContact->GetMaster()->GetPage() ) )
-    {
-        const size_t nOrdNum = pContact->GetMaster()->GetOrdNum();
-        pPg->ReplaceObject( pDrawObj, nOrdNum );
-    }
-    // #i27030# - insert new <SwVirtFlyDrawObj> instance
-    // into drawing page with correct order number
-    else
-    {
-        pContact->GetFormat()->getIDocumentDrawModelAccess().GetDrawModel()->GetPage( 0 )->
-                        InsertObject( pDrawObj, _GetOrdNumForNewRef( pContact ) );
-    }
-    // #i38889# - assure, that new <SwVirtFlyDrawObj> instance
-    // is in a visible layer.
-    pContact->MoveObjToVisibleLayer( pDrawObj );
-    return pDrawObj;
-}
-
 void SwFlyFrame::InitDrawObj()
 {
-    // Find ContactObject from the Format. If there's already one, we just
-    // need to create a new Ref, else we create the Contact now.
-
-    IDocumentDrawModelAccess& rIDDMA = GetFormat()->getIDocumentDrawModelAccess();
-    SwFlyDrawContact *pContact = SwIterator<SwFlyDrawContact,SwFormat>( *GetFormat() ).First();
-    if ( !pContact )
-    {
-        // #i52858# - method name changed
-        pContact = new SwFlyDrawContact( GetFormat(),
-                                          rIDDMA.GetOrCreateDrawModel() );
-    }
-    OSL_ENSURE( pContact, "InitDrawObj failed" );
     // OD 2004-03-22 #i26791#
-    SetDrawObj( *(CreateNewRef( pContact )) );
+    SetDrawObj(*SwFlyDrawContact::CreateNewRef(this, GetFormat()));
 
     // Set the right Layer
     // OD 2004-01-19 #110582#
+    IDocumentDrawModelAccess& rIDDMA = GetFormat()->getIDocumentDrawModelAccess();
     SdrLayerID nHeavenId = rIDDMA.GetHeavenId();
     SdrLayerID nHellId = rIDDMA.GetHellId();
     // OD 2004-03-22 #i26791#
@@ -426,60 +369,36 @@ void SwFlyFrame::InitDrawObj()
 
 void SwFlyFrame::FinitDrawObj()
 {
-    if ( !GetVirtDrawObj() )
+    if(!GetVirtDrawObj() )
         return;
-
+    SwFormat* pFormat = GetFormat();
     // Deregister from SdrPageViews if the Objects is still selected there.
-    if ( !GetFormat()->GetDoc()->IsInDtor() )
+    if(!pFormat->GetDoc()->IsInDtor())
     {
-        SwViewShell *p1St = getRootFrame()->GetCurrShell();
-        if ( p1St )
+        SwViewShell* p1St = getRootFrame()->GetCurrShell();
+        if(p1St)
         {
             for(SwViewShell& rCurrentShell : p1St->GetRingContainer())
             {   // At the moment the Drawing can do just do an Unmark on everything,
                 // as the Object was already removed
-                if( rCurrentShell.HasDrawView() )
+                if(rCurrentShell.HasDrawView() )
                     rCurrentShell.Imp()->GetDrawView()->UnmarkAll();
             }
         }
     }
 
-    // Take VirtObject to the grave.
-    // If the last VirtObject is destroyed, the DrawObject and the DrawContact
-    // also need to be destroyed.
-    SwFlyDrawContact *pMyContact = nullptr;
-    if ( GetFormat() )
-    {
-        bool bContinue = true;
-        SwIterator<SwFrame,SwFormat> aFrameIter( *GetFormat() );
-        for ( SwFrame* pFrame = aFrameIter.First(); pFrame; pFrame = aFrameIter.Next() )
-            if ( pFrame != this )
-            {
-                // don't delete Contact if there is still a Frame
-                bContinue = false;
-                break;
-            }
+    // Else calls delete of the ContactObj
+    GetVirtDrawObj()->SetUserCall(nullptr);
 
-        if ( bContinue )
-            // no Frame left, find Contact object to destroy
-            pMyContact = SwIterator<SwFlyDrawContact,SwFormat>( *GetFormat() ).First();
-    }
-
-    // OD, OS 2004-03-31 #116203# - clear user call of Writer fly frame 'master'
-    // <SdrObject> to assure, that a <SwXFrame::dispose()> doesn't delete the
-    // Writer fly frame again.
-    if ( pMyContact )
-    {
-        pMyContact->GetMaster()->SetUserCall( nullptr );
-    }
-    GetVirtDrawObj()->SetUserCall( nullptr ); // Else calls delete of the ContactObj
-    delete GetVirtDrawObj();            // Deregisters itself at the Master
-    delete pMyContact;                  // Destroys the Master itself
+    // Deregisters itself at the Master
+    // always use SdrObject::Free(...) for SdrObjects (!)
+    SdrObject* pTemp(GetVirtDrawObj());
+    SdrObject::Free(pTemp);
 }
 
 void SwFlyFrame::ChainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow )
 {
-    OSL_ENSURE( pMaster && pFollow, "uncomplete chain" );
+    OSL_ENSURE( pMaster && pFollow, "incomplete chain" );
     OSL_ENSURE( !pMaster->GetNextLink(), "link can not be changed" );
     OSL_ENSURE( !pFollow->GetPrevLink(), "link can not be changed" );
 
@@ -490,11 +409,11 @@ void SwFlyFrame::ChainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow )
     {
         // To get a text flow we need to invalidate
         SwFrame *pInva = pMaster->FindLastLower();
-        SWRECTFN( pMaster )
-        const long nBottom = (pMaster->*fnRect->fnGetPrtBottom)();
+        SwRectFnSet aRectFnSet(pMaster);
+        const long nBottom = aRectFnSet.GetPrtBottom(*pMaster);
         while ( pInva )
         {
-            if( (pInva->Frame().*fnRect->fnBottomDist)( nBottom ) <= 0 )
+            if( aRectFnSet.BottomDist( pInva->getFrameArea(), nBottom ) <= 0 )
             {
                 pInva->InvalidateSize();
                 pInva->Prepare();
@@ -545,7 +464,7 @@ void SwFlyFrame::UnchainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow )
         {
             SwFrame *pTmp = ::SaveContent( pFoll );
             if ( pTmp )
-                ::RestoreContent( pTmp, pUpper, pMaster->FindLastLower(), true );
+                ::RestoreContent( pTmp, pUpper, pMaster->FindLastLower() );
             pFoll->SetCompletePaint();
             pFoll->InvalidateSize();
             pFoll = pFoll->GetNextLink();
@@ -557,7 +476,7 @@ void SwFlyFrame::UnchainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow )
     OSL_ENSURE( rContent.GetContentIdx(), ":-( No content prepared." );
     sal_uLong nIndex = rContent.GetContentIdx()->GetIndex();
     // Lower() means SwColumnFrame: this one contains another SwBodyFrame
-    ::_InsertCnt( pFollow->Lower() ? const_cast<SwLayoutFrame*>(static_cast<const SwLayoutFrame*>(static_cast<const SwLayoutFrame*>(pFollow->Lower())->Lower()))
+    ::InsertCnt_( pFollow->Lower() ? const_cast<SwLayoutFrame*>(static_cast<const SwLayoutFrame*>(static_cast<const SwLayoutFrame*>(pFollow->Lower())->Lower()))
                                    : static_cast<SwLayoutFrame*>(pFollow),
                   pFollow->GetFormat()->GetDoc(), ++nIndex );
 
@@ -571,7 +490,7 @@ void SwFlyFrame::UnchainFrames( SwFlyFrame *pMaster, SwFlyFrame *pFollow )
     }
 }
 
-SwFlyFrame *SwFlyFrame::FindChainNeighbour( SwFrameFormat &rChain, SwFrame *pAnch )
+SwFlyFrame *SwFlyFrame::FindChainNeighbour( SwFrameFormat const &rChain, SwFrame *pAnch )
 {
     // We look for the Fly that's in the same Area.
     // Areas can for now only be Head/Footer or Flys.
@@ -633,7 +552,7 @@ SwFrame *SwFlyFrame::FindLastLower()
 bool SwFlyFrame::FrameSizeChg( const SwFormatFrameSize &rFrameSize )
 {
     bool bRet = false;
-    SwTwips nDiffHeight = Frame().Height();
+    SwTwips nDiffHeight = getFrameArea().Height();
     if ( rFrameSize.GetHeightSizeType() == ATT_VAR_SIZE )
         mbFixSize = m_bMinHeight = false;
     else
@@ -657,17 +576,27 @@ bool SwFlyFrame::FrameSizeChg( const SwFormatFrameSize &rFrameSize )
         if ( Lower()->IsColumnFrame() )
         {
             const SwRect aOld( GetObjRectWithSpaces() );
-            const Size   aOldSz( Prt().SSize() );
-            const SwTwips nDiffWidth = Frame().Width() - rFrameSize.GetWidth();
-            maFrame.Height( maFrame.Height() - nDiffHeight );
-            maFrame.Width ( maFrame.Width()  - nDiffWidth  );
+            const Size   aOldSz( getFramePrintArea().SSize() );
+            const SwTwips nDiffWidth = getFrameArea().Width() - rFrameSize.GetWidth();
+
+            {
+                SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                aFrm.Height( aFrm.Height() - nDiffHeight );
+                aFrm.Width ( aFrm.Width()  - nDiffWidth  );
+            }
+
             // #i68520#
             InvalidateObjRectWithSpaces();
-            maPrt.Height( maPrt.Height() - nDiffHeight );
-            maPrt.Width ( maPrt.Width()  - nDiffWidth  );
+
+            {
+                SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
+                aPrt.Height( aPrt.Height() - nDiffHeight );
+                aPrt.Width ( aPrt.Width()  - nDiffWidth  );
+            }
+
             ChgLowersProp( aOldSz );
             ::Notify( this, FindPageFrame(), aOld );
-            mbValidPos = false;
+            setFrameAreaPositionValid(false);
             bRet = true;
         }
         else if ( Lower()->IsNoTextFrame() )
@@ -677,6 +606,23 @@ bool SwFlyFrame::FrameSizeChg( const SwFormatFrameSize &rFrameSize )
         }
     }
     return bRet;
+}
+
+void SwFlyFrame::SwClientNotify(const SwModify& rMod, const SfxHint& rHint)
+{
+    SwFrame::SwClientNotify(rMod, rHint);
+    if (auto pGetZOrdnerHint = dynamic_cast<const sw::GetZOrderHint*>(&rHint))
+    {
+        const auto& rFormat(dynamic_cast<const SwFrameFormat&>(rMod));
+        if (rFormat.Which() == RES_FLYFRMFMT && rFormat.getIDocumentLayoutAccess().GetCurrentViewShell()) // #i11176#
+            pGetZOrdnerHint->m_rnZOrder = GetVirtDrawObj()->GetOrdNum();
+    }
+    else if (auto pConnectedHint = dynamic_cast<const sw::GetObjectConnectedHint*>(&rHint))
+    {
+        const auto& rFormat(dynamic_cast<const SwFrameFormat&>(rMod));
+        if (!pConnectedHint->m_risConnected && rFormat.Which() == RES_FLYFRMFMT && (!pConnectedHint->m_pRoot || pConnectedHint->m_pRoot == getRootFrame()))
+            pConnectedHint->m_risConnected = true;
+    }
 }
 
 void SwFlyFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem * pNew )
@@ -691,7 +637,7 @@ void SwFlyFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem * pNew )
         SwAttrSetChg aNewSet( *static_cast<const SwAttrSetChg*>(pNew) );
         while( true )
         {
-            _UpdateAttr( aOIter.GetCurItem(),
+            UpdateAttr_( aOIter.GetCurItem(),
                          aNIter.GetCurItem(), nInvFlags,
                          &aOldSet, &aNewSet );
             if( aNIter.IsAtEnd() )
@@ -703,47 +649,48 @@ void SwFlyFrame::Modify( const SfxPoolItem* pOld, const SfxPoolItem * pNew )
             SwLayoutFrame::Modify( &aOldSet, &aNewSet );
     }
     else
-        _UpdateAttr( pOld, pNew, nInvFlags );
+        UpdateAttr_( pOld, pNew, nInvFlags );
 
-    if ( nInvFlags != 0 )
+    if ( nInvFlags == 0 )
+        return;
+
+    Invalidate_();
+    if ( nInvFlags & 0x01 )
     {
-        _Invalidate();
-        if ( nInvFlags & 0x01 )
-        {
-            _InvalidatePos();
-            // #i68520#
-            InvalidateObjRectWithSpaces();
-        }
-        if ( nInvFlags & 0x02 )
-        {
-            _InvalidateSize();
-            // #i68520#
-            InvalidateObjRectWithSpaces();
-        }
-        if ( nInvFlags & 0x04 )
-            _InvalidatePrt();
-        if ( nInvFlags & 0x08 )
-            SetNotifyBack();
-        if ( nInvFlags & 0x10 )
-            SetCompletePaint();
-        if ( ( nInvFlags & 0x40 ) && Lower() && Lower()->IsNoTextFrame() )
-            ClrContourCache( GetVirtDrawObj() );
-        SwRootFrame *pRoot;
-        if ( nInvFlags & 0x20 && nullptr != (pRoot = getRootFrame()) )
-            pRoot->InvalidateBrowseWidth();
-        // #i28701#
-        if ( nInvFlags & 0x80 )
-        {
-            // update sorted object lists, the Writer fly frame is registered at.
-            UpdateObjInSortedList();
-        }
-
-        // #i87645# - reset flags for the layout process (only if something has been invalidated)
-        ResetLayoutProcessBools();
+        InvalidatePos_();
+        // #i68520#
+        InvalidateObjRectWithSpaces();
     }
+    if ( nInvFlags & 0x02 )
+    {
+        InvalidateSize_();
+        // #i68520#
+        InvalidateObjRectWithSpaces();
+    }
+    if ( nInvFlags & 0x04 )
+        InvalidatePrt_();
+    if ( nInvFlags & 0x08 )
+        SetNotifyBack();
+    if ( nInvFlags & 0x10 )
+        SetCompletePaint();
+    if ( ( nInvFlags & 0x40 ) && Lower() && Lower()->IsNoTextFrame() )
+        ClrContourCache( GetVirtDrawObj() );
+    SwRootFrame *pRoot;
+    if ( nInvFlags & 0x20 && nullptr != (pRoot = getRootFrame()) )
+        pRoot->InvalidateBrowseWidth();
+    // #i28701#
+    if ( nInvFlags & 0x80 )
+    {
+        // update sorted object lists, the Writer fly frame is registered at.
+        UpdateObjInSortedList();
+    }
+
+    // #i87645# - reset flags for the layout process (only if something has been invalidated)
+    ResetLayoutProcessBools();
+
 }
 
-void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
+void SwFlyFrame::UpdateAttr_( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
                             sal_uInt8 &rInvFlags,
                             SwAttrSetChg *pOldSet, SwAttrSetChg *pNewSet )
 {
@@ -779,14 +726,14 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
 
             // By changing the flow of frame-bound Frames, a vertical alignment
             // can be activated/deactivated => MakeFlyPos
-            if( FLY_AT_FLY == GetFormat()->GetAnchor().GetAnchorId() )
+            if( RndStdIds::FLY_AT_FLY == GetFormat()->GetAnchor().GetAnchorId() )
                 rInvFlags |= 0x09;
 
             // Delete contour in the Node if necessary
             if ( Lower() && Lower()->IsNoTextFrame() &&
                  !GetFormat()->GetSurround().IsContour() )
             {
-                SwNoTextNode *pNd = static_cast<SwNoTextNode*>(static_cast<SwContentFrame*>(Lower())->GetNode());
+                SwNoTextNode *pNd = static_cast<SwNoTextNode*>(static_cast<SwNoTextFrame*>(Lower())->GetNode());
                 if ( pNd->HasContour() )
                     pNd->SetContour( nullptr );
             }
@@ -818,8 +765,8 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
                 if ( FrameSizeChg( rNew ) )
                     NotifyDrawObj();
                 rInvFlags |= 0x1A;
-                break;
             }
+            break;
 
         case RES_FRM_SIZE:
         case RES_FMT_CHG:
@@ -828,16 +775,16 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
             if ( FrameSizeChg( rNew ) )
                 NotifyDrawObj();
             rInvFlags |= 0x7F;
-            if ( RES_FMT_CHG == nWhich )
+            if (pOld && RES_FMT_CHG == nWhich)
             {
                 SwRect aNew( GetObjRectWithSpaces() );
-                SwRect aOld( maFrame );
+                SwRect aOld( getFrameArea() );
                 const SvxULSpaceItem &rUL = static_cast<const SwFormatChg*>(pOld)->pChangedFormat->GetULSpace();
                 aOld.Top( std::max( aOld.Top() - long(rUL.GetUpper()), 0L ) );
-                aOld.SSize().Height()+= rUL.GetLower();
+                aOld.SSize().AdjustHeight(rUL.GetLower() );
                 const SvxLRSpaceItem &rLR = static_cast<const SwFormatChg*>(pOld)->pChangedFormat->GetLRSpace();
-                aOld.Left  ( std::max( aOld.Left() - long(rLR.GetLeft()), 0L ) );
-                aOld.SSize().Width() += rLR.GetRight();
+                aOld.Left  ( std::max( aOld.Left() - rLR.GetLeft(), 0L ) );
+                aOld.SSize().AdjustWidth(rLR.GetRight() );
                 aNew.Union( aOld );
                 NotifyBackground( FindPageFrame(), aNew, PREP_CLEAR );
 
@@ -891,9 +838,9 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
             GetVirtDrawObj()->SetResizeProtect( rP.IsSizeProtected() );
 
             if ( pSh )
-                pSh->InvalidateWindows( Frame() );
+                pSh->InvalidateWindows( getFrameArea() );
             const IDocumentDrawModelAccess& rIDDMA = GetFormat()->getIDocumentDrawModelAccess();
-            const sal_uInt8 nId = GetFormat()->GetOpaque().GetValue() ?
+            const SdrLayerID nId = GetFormat()->GetOpaque().GetValue() ?
                              rIDDMA.GetHeavenId() :
                              rIDDMA.GetHellId();
             GetVirtDrawObj()->SetLayer( nId );
@@ -904,7 +851,7 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
                 if( Lower()->IsNoTextFrame() &&
                      !GetFormat()->GetSurround().IsContour() )
                 {
-                    SwNoTextNode *pNd = static_cast<SwNoTextNode*>(static_cast<SwContentFrame*>(Lower())->GetNode());
+                    SwNoTextNode *pNd = static_cast<SwNoTextNode*>(static_cast<SwNoTextFrame*>(Lower())->GetNode());
                     if ( pNd->HasContour() )
                         pNd->SetContour( nullptr );
                 }
@@ -929,20 +876,20 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
             if( pSh && pSh->GetViewOptions()->getBrowseMode() )
                 getRootFrame()->InvalidateBrowseWidth();
             SwRect aNew( GetObjRectWithSpaces() );
-            SwRect aOld( maFrame );
+            SwRect aOld( getFrameArea() );
             if (pNew)
             {
                 if ( RES_UL_SPACE == nWhich )
                 {
                     const SvxULSpaceItem &rUL = *static_cast<const SvxULSpaceItem*>(pNew);
                     aOld.Top( std::max( aOld.Top() - long(rUL.GetUpper()), 0L ) );
-                    aOld.SSize().Height()+= rUL.GetLower();
+                    aOld.SSize().AdjustHeight(rUL.GetLower() );
                 }
                 else
                 {
                     const SvxLRSpaceItem &rLR = *static_cast<const SvxLRSpaceItem*>(pNew);
-                    aOld.Left  ( std::max( aOld.Left() - long(rLR.GetLeft()), 0L ) );
-                    aOld.SSize().Width() += rLR.GetRight();
+                    aOld.Left  ( std::max( aOld.Left() - rLR.GetLeft(), 0L ) );
+                    aOld.SSize().AdjustWidth(rLR.GetRight() );
                 }
             }
             aNew.Union( aOld );
@@ -971,10 +918,10 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
         case RES_OPAQUE:
             {
                 if ( pSh )
-                    pSh->InvalidateWindows( Frame() );
+                    pSh->InvalidateWindows( getFrameArea() );
 
                 const IDocumentDrawModelAccess& rIDDMA = GetFormat()->getIDocumentDrawModelAccess();
-                const sal_uInt8 nId = static_cast<const SvxOpaqueItem*>(pNew)->GetValue() ?
+                const SdrLayerID nId = static_cast<const SvxOpaqueItem*>(pNew)->GetValue() ?
                                     rIDDMA.GetHeavenId() :
                                     rIDDMA.GetHellId();
                 GetVirtDrawObj()->SetLayer( nId );
@@ -1000,12 +947,12 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
                  static_cast<const SwFormatURL*>(pNew)->GetMap() && static_cast<const SwFormatURL*>(pOld)->GetMap() )
             {
                 const SwFormatFrameSize &rSz = GetFormat()->GetFrameSize();
-                if ( rSz.GetHeight() != Frame().Height() ||
-                     rSz.GetWidth()  != Frame().Width() )
+                if ( rSz.GetHeight() != getFrameArea().Height() ||
+                     rSz.GetWidth()  != getFrameArea().Width() )
                 {
                     SwFormatURL aURL( GetFormat()->GetURL() );
-                    Fraction aScaleX( Frame().Width(),  rSz.GetWidth() );
-                    Fraction aScaleY( Frame().Height(), rSz.GetHeight() );
+                    Fraction aScaleX( getFrameArea().Width(),  rSz.GetWidth() );
+                    Fraction aScaleY( getFrameArea().Height(), rSz.GetHeight() );
                     aURL.GetMap()->Scale( aScaleX, aScaleY );
                     SwFrameFormat *pFormat = GetFormat();
                     pFormat->LockModify();
@@ -1055,7 +1002,7 @@ void SwFlyFrame::_UpdateAttr( const SfxPoolItem *pOld, const SfxPoolItem *pNew,
                 else if ( GetPrevLink() )
                     SwFlyFrame::UnchainFrames( GetPrevLink(), this );
             }
-            //fall-through
+            [[fallthrough]];
         default:
             bClear = false;
     }
@@ -1081,7 +1028,7 @@ bool SwFlyFrame::GetInfo( SfxPoolItem & rInfo ) const
     return true;        // Continue searching
 }
 
-void SwFlyFrame::_Invalidate( SwPageFrame *pPage )
+void SwFlyFrame::Invalidate_( SwPageFrame const *pPage )
 {
     InvalidatePage( pPage );
     m_bNotifyBack = m_bInvalid = true;
@@ -1117,116 +1064,117 @@ void SwFlyFrame::_Invalidate( SwPageFrame *pPage )
  */
 void SwFlyFrame::ChgRelPos( const Point &rNewPos )
 {
-    if ( GetCurrRelPos() != rNewPos )
-    {
-        SwFrameFormat *pFormat = GetFormat();
-        const bool bVert = GetAnchorFrame()->IsVertical();
-        const SwTwips nNewY = bVert ? rNewPos.X() : rNewPos.Y();
-        SwTwips nTmpY = nNewY == LONG_MAX ? 0 : nNewY;
-        if( bVert )
-            nTmpY = -nTmpY;
-        SfxItemSet aSet( pFormat->GetDoc()->GetAttrPool(),
-                         RES_VERT_ORIENT, RES_HORI_ORIENT);
+    if ( GetCurrRelPos() == rNewPos )
+        return;
 
-        SwFormatVertOrient aVert( pFormat->GetVertOrient() );
-        const SwTextFrame *pAutoFrame = nullptr;
-        // #i34948# - handle also at-page and at-fly anchored
-        // Writer fly frames
-        const RndStdIds eAnchorType = GetFrameFormat().GetAnchor().GetAnchorId();
-        if ( eAnchorType == FLY_AT_PAGE )
+    SwFrameFormat *pFormat = GetFormat();
+    const bool bVert = GetAnchorFrame()->IsVertical();
+    const SwTwips nNewY = bVert ? rNewPos.X() : rNewPos.Y();
+    SwTwips nTmpY = nNewY == LONG_MAX ? 0 : nNewY;
+    if( bVert )
+        nTmpY = -nTmpY;
+    SfxItemSet aSet( pFormat->GetDoc()->GetAttrPool(),
+                     svl::Items<RES_VERT_ORIENT, RES_HORI_ORIENT>{});
+
+    SwFormatVertOrient aVert( pFormat->GetVertOrient() );
+    const SwTextFrame *pAutoFrame = nullptr;
+    // #i34948# - handle also at-page and at-fly anchored
+    // Writer fly frames
+    const RndStdIds eAnchorType = GetFrameFormat().GetAnchor().GetAnchorId();
+    if ( eAnchorType == RndStdIds::FLY_AT_PAGE )
+    {
+        aVert.SetVertOrient( text::VertOrientation::NONE );
+        aVert.SetRelationOrient( text::RelOrientation::PAGE_FRAME );
+    }
+    else if ( eAnchorType == RndStdIds::FLY_AT_FLY )
+    {
+        aVert.SetVertOrient( text::VertOrientation::NONE );
+        aVert.SetRelationOrient( text::RelOrientation::FRAME );
+    }
+    else if ( IsFlyAtContentFrame() || text::VertOrientation::NONE != aVert.GetVertOrient() )
+    {
+        if( text::RelOrientation::CHAR == aVert.GetRelationOrient() && IsAutoPos() )
         {
-            aVert.SetVertOrient( text::VertOrientation::NONE );
-            aVert.SetRelationOrient( text::RelOrientation::PAGE_FRAME );
+            if( LONG_MAX != nNewY )
+            {
+                aVert.SetVertOrient( text::VertOrientation::NONE );
+                assert(GetAnchorFrame()->IsTextFrame());
+                pAutoFrame = static_cast<const SwTextFrame*>(GetAnchorFrame());
+                TextFrameIndex const nOfs(pAutoFrame->MapModelToViewPos(
+                            *pFormat->GetAnchor().GetContentAnchor()));
+                while( pAutoFrame->GetFollow() &&
+                       pAutoFrame->GetFollow()->GetOfst() <= nOfs )
+                {
+                    if( pAutoFrame == GetAnchorFrame() )
+                        nTmpY += pAutoFrame->GetRelPos().Y();
+                    nTmpY -= pAutoFrame->GetUpper()->getFramePrintArea().Height();
+                    pAutoFrame = pAutoFrame->GetFollow();
+                }
+                nTmpY = static_cast<SwFlyAtContentFrame*>(this)->GetRelCharY(pAutoFrame)-nTmpY;
+            }
+            else
+                aVert.SetVertOrient( text::VertOrientation::CHAR_BOTTOM );
         }
-        else if ( eAnchorType == FLY_AT_FLY )
+        else
         {
             aVert.SetVertOrient( text::VertOrientation::NONE );
             aVert.SetRelationOrient( text::RelOrientation::FRAME );
         }
-        else if ( IsFlyAtContentFrame() || text::VertOrientation::NONE != aVert.GetVertOrient() )
+    }
+    aVert.SetPos( nTmpY );
+    aSet.Put( aVert );
+
+    // For Flys in the Cnt, the horizontal orientation is of no interest,
+    // as it's always 0
+    if ( !IsFlyInContentFrame() )
+    {
+        const SwTwips nNewX = bVert ? rNewPos.Y() : rNewPos.X();
+        SwTwips nTmpX = nNewX == LONG_MAX ? 0 : nNewX;
+        SwFormatHoriOrient aHori( pFormat->GetHoriOrient() );
+        // #i34948# - handle also at-page and at-fly anchored
+        // Writer fly frames
+        if ( eAnchorType == RndStdIds::FLY_AT_PAGE )
         {
-            if( text::RelOrientation::CHAR == aVert.GetRelationOrient() && IsAutoPos() )
+            aHori.SetHoriOrient( text::HoriOrientation::NONE );
+            aHori.SetRelationOrient( text::RelOrientation::PAGE_FRAME );
+            aHori.SetPosToggle( false );
+        }
+        else if ( eAnchorType == RndStdIds::FLY_AT_FLY )
+        {
+            aHori.SetHoriOrient( text::HoriOrientation::NONE );
+            aHori.SetRelationOrient( text::RelOrientation::FRAME );
+            aHori.SetPosToggle( false );
+        }
+        else if ( IsFlyAtContentFrame() || text::HoriOrientation::NONE != aHori.GetHoriOrient() )
+        {
+            aHori.SetHoriOrient( text::HoriOrientation::NONE );
+            if( text::RelOrientation::CHAR == aHori.GetRelationOrient() && IsAutoPos() )
             {
-                if( LONG_MAX != nNewY )
+                if( LONG_MAX != nNewX )
                 {
-                    aVert.SetVertOrient( text::VertOrientation::NONE );
-                    sal_Int32 nOfs =
-                        pFormat->GetAnchor().GetContentAnchor()->nContent.GetIndex();
-                    OSL_ENSURE( GetAnchorFrame()->IsTextFrame(), "TextFrame expected" );
-                    pAutoFrame = static_cast<const SwTextFrame*>(GetAnchorFrame());
-                    while( pAutoFrame->GetFollow() &&
-                           pAutoFrame->GetFollow()->GetOfst() <= nOfs )
+                    if( !pAutoFrame )
                     {
-                        if( pAutoFrame == GetAnchorFrame() )
-                            nTmpY += pAutoFrame->GetRelPos().Y();
-                        nTmpY -= pAutoFrame->GetUpper()->Prt().Height();
-                        pAutoFrame = pAutoFrame->GetFollow();
+                        assert(GetAnchorFrame()->IsTextFrame());
+                        pAutoFrame = static_cast<const SwTextFrame*>(GetAnchorFrame());
+                        TextFrameIndex const nOfs(pAutoFrame->MapModelToViewPos(
+                                    *pFormat->GetAnchor().GetContentAnchor()));
+                        while( pAutoFrame->GetFollow() &&
+                               pAutoFrame->GetFollow()->GetOfst() <= nOfs )
+                            pAutoFrame = pAutoFrame->GetFollow();
                     }
-                    nTmpY = static_cast<SwFlyAtContentFrame*>(this)->GetRelCharY(pAutoFrame)-nTmpY;
+                    nTmpX -= static_cast<SwFlyAtContentFrame*>(this)->GetRelCharX(pAutoFrame);
                 }
-                else
-                    aVert.SetVertOrient( text::VertOrientation::CHAR_BOTTOM );
             }
             else
-            {
-                aVert.SetVertOrient( text::VertOrientation::NONE );
-                aVert.SetRelationOrient( text::RelOrientation::FRAME );
-            }
-        }
-        aVert.SetPos( nTmpY );
-        aSet.Put( aVert );
-
-        // For Flys in the Cnt, the horizontal orientation is of no interest,
-        // as it's always 0
-        if ( !IsFlyInContentFrame() )
-        {
-            const SwTwips nNewX = bVert ? rNewPos.Y() : rNewPos.X();
-            SwTwips nTmpX = nNewX == LONG_MAX ? 0 : nNewX;
-            SwFormatHoriOrient aHori( pFormat->GetHoriOrient() );
-            // #i34948# - handle also at-page and at-fly anchored
-            // Writer fly frames
-            if ( eAnchorType == FLY_AT_PAGE )
-            {
-                aHori.SetHoriOrient( text::HoriOrientation::NONE );
-                aHori.SetRelationOrient( text::RelOrientation::PAGE_FRAME );
-                aHori.SetPosToggle( false );
-            }
-            else if ( eAnchorType == FLY_AT_FLY )
-            {
-                aHori.SetHoriOrient( text::HoriOrientation::NONE );
                 aHori.SetRelationOrient( text::RelOrientation::FRAME );
-                aHori.SetPosToggle( false );
-            }
-            else if ( IsFlyAtContentFrame() || text::HoriOrientation::NONE != aHori.GetHoriOrient() )
-            {
-                aHori.SetHoriOrient( text::HoriOrientation::NONE );
-                if( text::RelOrientation::CHAR == aHori.GetRelationOrient() && IsAutoPos() )
-                {
-                    if( LONG_MAX != nNewX )
-                    {
-                        if( !pAutoFrame )
-                        {
-                            sal_Int32 nOfs = pFormat->GetAnchor().GetContentAnchor()
-                                          ->nContent.GetIndex();
-                            OSL_ENSURE( GetAnchorFrame()->IsTextFrame(), "TextFrame expected");
-                            pAutoFrame = static_cast<const SwTextFrame*>(GetAnchorFrame());
-                            while( pAutoFrame->GetFollow() &&
-                                   pAutoFrame->GetFollow()->GetOfst() <= nOfs )
-                                pAutoFrame = pAutoFrame->GetFollow();
-                        }
-                        nTmpX -= static_cast<SwFlyAtContentFrame*>(this)->GetRelCharX(pAutoFrame);
-                    }
-                }
-                else
-                    aHori.SetRelationOrient( text::RelOrientation::FRAME );
-                aHori.SetPosToggle( false );
-            }
-            aHori.SetPos( nTmpX );
-            aSet.Put( aHori );
+            aHori.SetPosToggle( false );
         }
-        SetCurrRelPos( rNewPos );
-        pFormat->GetDoc()->SetAttr( aSet, *pFormat );
+        aHori.SetPos( nTmpX );
+        aSet.Put( aHori );
     }
+    SetCurrRelPos( rNewPos );
+    pFormat->GetDoc()->SetAttr( aSet, *pFormat );
+
 }
 
 /** "Formats" the Frame; Frame and PrtArea.
@@ -1239,13 +1187,17 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
 
     ColLock();
 
-    if ( !mbValidSize )
+    if ( !isFrameAreaSizeValid() )
     {
-        if ( Frame().Top() == FAR_AWAY && Frame().Left() == FAR_AWAY )
+        if ( getFrameArea().Top() == FAR_AWAY && getFrameArea().Left() == FAR_AWAY )
         {
             // Remove safety switch (see SwFrame::CTor)
-            Frame().Pos().setX(0);
-            Frame().Pos().setY(0);
+            {
+                SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                aFrm.Pos().setX(0);
+                aFrm.Pos().setY(0);
+            }
+
             // #i68520#
             InvalidateObjRectWithSpaces();
         }
@@ -1254,7 +1206,7 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
         if ( Lower() && Lower()->IsColumnFrame() )
             AdjustColumns( nullptr, false );
 
-        mbValidSize = true;
+        setFrameAreaSizeValid(true);
 
         const SwTwips nUL = pAttrs->CalcTopLine()  + pAttrs->CalcBottomLine();
         const SwTwips nLR = pAttrs->CalcLeftLine() + pAttrs->CalcRightLine();
@@ -1264,12 +1216,12 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
         OSL_ENSURE( pAttrs->GetSize().Height() != 0 || rFrameSz.GetHeightPercent(), "FrameAttr height is 0." );
         OSL_ENSURE( pAttrs->GetSize().Width()  != 0 || rFrameSz.GetWidthPercent(), "FrameAttr width is 0." );
 
-        SWRECTFN( this )
+        SwRectFnSet aRectFnSet(this);
         if( !HasFixSize() )
         {
             long nMinHeight = 0;
             if( IsMinHeight() )
-                nMinHeight = bVert ? aRelSize.Width() : aRelSize.Height();
+                nMinHeight = aRectFnSet.IsVert() ? aRelSize.Width() : aRelSize.Height();
 
             SwTwips nRemaining = CalcContentHeight(pAttrs, nMinHeight, nUL);
             if( IsMinHeight() && (nRemaining + nUL) < nMinHeight )
@@ -1284,25 +1236,34 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
             if ( nRemaining < MINFLY )
                 nRemaining = MINFLY;
 
-            (Prt().*fnRect->fnSetHeight)( nRemaining );
-            nRemaining -= (Frame().*fnRect->fnGetHeight)();
-            (Frame().*fnRect->fnAddBottom)( nRemaining + nUL );
+            {
+                SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
+                aRectFnSet.SetHeight( aPrt, nRemaining );
+            }
+
+            nRemaining -= aRectFnSet.GetHeight(getFrameArea());
+
+            {
+                SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                aRectFnSet.AddBottom( aFrm, nRemaining + nUL );
+            }
+
             // #i68520#
             if ( nRemaining + nUL != 0 )
             {
                 InvalidateObjRectWithSpaces();
             }
-            mbValidSize = true;
 
-            std::map<SwFrameFormat*, SwFrameFormat*> aShapes = SwTextBoxHelper::findShapes(GetFormat()->GetDoc());
-            if (aShapes.find(GetFormat()) != aShapes.end())
+            setFrameAreaSizeValid(true);
+
+            if (SwFrameFormat* pShapeFormat = SwTextBoxHelper::getOtherTextBoxFormat(GetFormat(), RES_FLYFRMFMT))
             {
                 // This fly is a textbox of a draw shape.
-                SdrObject* pShape = aShapes[GetFormat()]->FindSdrObject();
+                SdrObject* pShape = pShapeFormat->FindSdrObject();
                 if (SdrObjCustomShape* pCustomShape = dynamic_cast<SdrObjCustomShape*>( pShape) )
                 {
                     // The shape is a customshape: then inform it about the calculated fly size.
-                    Size aSize((Frame().*fnRect->fnGetWidth)(), (Frame().*fnRect->fnGetHeight)());
+                    Size aSize(aRectFnSet.GetWidth(getFrameArea()), aRectFnSet.GetHeight(getFrameArea()));
                     pCustomShape->SuggestTextFrameSize(aSize);
                     // Do the calculations normally done after touching editeng text of the shape.
                     pCustomShape->NbcSetOutlinerParaObjectForText(nullptr, nullptr);
@@ -1311,15 +1272,27 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
         }
         else
         {
-            mbValidSize = true;  // Fixed Frames do not Format itself
+            // Fixed Frames do not Format itself
+            setFrameAreaSizeValid(true);
+
             // Flys set their size using the attr
-            SwTwips nNewSize = bVert ? aRelSize.Width() : aRelSize.Height();
+            SwTwips nNewSize = aRectFnSet.IsVert() ? aRelSize.Width() : aRelSize.Height();
             nNewSize -= nUL;
             if( nNewSize < MINFLY )
                 nNewSize = MINFLY;
-            (Prt().*fnRect->fnSetHeight)( nNewSize );
-            nNewSize += nUL - (Frame().*fnRect->fnGetHeight)();
-            (Frame().*fnRect->fnAddBottom)( nNewSize );
+
+            {
+                SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
+                aRectFnSet.SetHeight( aPrt, nNewSize );
+            }
+
+            nNewSize += nUL - aRectFnSet.GetHeight(getFrameArea());
+
+            {
+                SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                aRectFnSet.AddBottom( aFrm, nNewSize );
+            }
+
             // #i68520#
             if ( nNewSize != 0 )
             {
@@ -1330,12 +1303,12 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
         if ( !m_bFormatHeightOnly )
         {
             OSL_ENSURE( aRelSize == CalcRel( rFrameSz ), "SwFlyFrame::Format CalcRel problem" );
-            SwTwips nNewSize = bVert ? aRelSize.Height() : aRelSize.Width();
+            SwTwips nNewSize = aRectFnSet.IsVert() ? aRelSize.Height() : aRelSize.Width();
 
             if ( rFrameSz.GetWidthSizeType() != ATT_FIX_SIZE )
             {
                 // #i9046# Autowidth for fly frames
-                const SwTwips nAutoWidth = CalcAutoWidth();
+                const SwTwips nAutoWidth = lcl_CalcAutoWidth( *this );
                 if ( nAutoWidth )
                 {
                     if( ATT_MIN_SIZE == rFrameSz.GetWidthSizeType() )
@@ -1349,9 +1322,19 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
 
             if( nNewSize < MINFLY )
                 nNewSize = MINFLY;
-            (Prt().*fnRect->fnSetWidth)( nNewSize );
-            nNewSize += nLR - (Frame().*fnRect->fnGetWidth)();
-            (Frame().*fnRect->fnAddRight)( nNewSize );
+
+            {
+                SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
+                aRectFnSet.SetWidth( aPrt, nNewSize );
+            }
+
+            nNewSize += nLR - aRectFnSet.GetWidth(getFrameArea());
+
+            {
+                SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                aRectFnSet.AddRight( aFrm, nNewSize );
+            }
+
             // #i68520#
             if ( nNewSize != 0 )
             {
@@ -1369,12 +1352,10 @@ void SwFlyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorderA
 // OD 11.04.2003 #108824# - new parameter <bNoCalcFollow> was used by method
 //                          <FormatWidthCols(..)> to avoid follow formatting
 //                          for text frames. But, unformatted follows causes
-//                          problems in method <SwContentFrame::_WouldFit(..)>,
+//                          problems in method <SwContentFrame::WouldFit_(..)>,
 //                          which assumes that the follows are formatted.
 //                          Thus, <bNoCalcFollow> no longer used by <FormatWidthCols(..)>.
-void CalcContent( SwLayoutFrame *pLay,
-                bool bNoColl,
-                bool bNoCalcFollow )
+void CalcContent( SwLayoutFrame *pLay, bool bNoColl )
 {
     vcl::RenderContext* pRenderContext = pLay->getRootFrame()->GetCurrShell()->GetOut();
     SwSectionFrame* pSect;
@@ -1413,7 +1394,7 @@ void CalcContent( SwLayoutFrame *pLay,
                 }
                 return;
             }
-            pFrame->_InvalidatePos();
+            pFrame->InvalidatePos_();
         }
         else
             return;
@@ -1436,11 +1417,11 @@ void CalcContent( SwLayoutFrame *pLay,
         {
             pLast = pFrame;
             if( pFrame->IsVertical() ?
-                ( pFrame->GetUpper()->Prt().Height() != pFrame->Frame().Height() )
-                : ( pFrame->GetUpper()->Prt().Width() != pFrame->Frame().Width() ) )
+                ( pFrame->GetUpper()->getFramePrintArea().Height() != pFrame->getFrameArea().Height() )
+                : ( pFrame->GetUpper()->getFramePrintArea().Width() != pFrame->getFrameArea().Width() ) )
             {
                 pFrame->Prepare( PREP_FIXSIZE_CHG );
-                pFrame->_InvalidateSize();
+                pFrame->InvalidateSize_();
             }
 
             if ( pFrame->IsTabFrame() )
@@ -1456,11 +1437,8 @@ void CalcContent( SwLayoutFrame *pLay,
                 }
             }
 
-            // OD 14.03.2003 #i11760# - forbid format of follow, if requested.
-            if ( bNoCalcFollow && pFrame->IsTextFrame() )
-                static_cast<SwTextFrame*>(pFrame)->ForbidFollowFormat();
-
             {
+                SwFrameDeleteGuard aDeletePageGuard(pSect ? pSect->FindPageFrame() : nullptr);
                 SwFrameDeleteGuard aDeleteGuard(pSect);
                 pFrame->Calc(pRenderContext);
             }
@@ -1487,9 +1465,9 @@ void CalcContent( SwLayoutFrame *pLay,
                                !pTmpFlowFrame->IsFollow() &&
                                !StackHack::IsLocked() && // #i76382#
                                !pTmpFlowFrame->IsJoinLocked() &&
-                               !pTmpPrev->GetValidPosFlag() &&
+                               !pTmpPrev->isFrameAreaPositionValid() &&
                                 pLay->IsAnLower( pTmpPrev ) &&
-                                pTmpPrevFlowFrame->IsKeep( *pTmpPrev->GetAttrSet() ) &&
+                                pTmpPrevFlowFrame->IsKeep(pTmpPrev->GetAttrSet()->GetKeep(), pTmpPrev->GetBreakItem()) &&
                                 pTmpPrevFlowFrame->IsKeepFwdMoveAllowed();
 
             // format floating screen objects anchored to the frame.
@@ -1536,20 +1514,20 @@ void CalcContent( SwLayoutFrame *pLay,
                                 // Prevent oscillation
                                 SwFrameFormat& rFormat = pAnchoredObj->GetFrameFormat();
                                 SwFormatSurround aAttr( rFormat.GetSurround() );
-                                if( SURROUND_THROUGHT != aAttr.GetSurround() )
+                                if( css::text::WrapTextMode_THROUGH != aAttr.GetSurround() )
                                 {
                                     // When on auto position, we can only set it to
                                     // flow through
                                     if ((rFormat.GetAnchor().GetAnchorId() ==
-                                            FLY_AT_CHAR) &&
-                                        (SURROUND_PARALLEL ==
+                                            RndStdIds::FLY_AT_CHAR) &&
+                                        (css::text::WrapTextMode_PARALLEL ==
                                             aAttr.GetSurround()))
                                     {
-                                        aAttr.SetSurround( SURROUND_THROUGHT );
+                                        aAttr.SetSurround( css::text::WrapTextMode_THROUGH );
                                     }
                                     else
                                     {
-                                        aAttr.SetSurround( SURROUND_PARALLEL );
+                                        aAttr.SetSurround( css::text::WrapTextMode_PARALLEL );
                                     }
                                     rFormat.LockModify();
                                     rFormat.SetFormatAttr( aAttr );
@@ -1639,12 +1617,12 @@ void CalcContent( SwLayoutFrame *pLay,
                 {
                     pFrame = static_cast<SwSectionFrame*>(pFrame)->ContainsAny();
                     if( pFrame )
-                        pFrame->_InvalidatePos();
+                        pFrame->InvalidatePos_();
                 }
             }
           // Stay in the pLay
           // Except for SectionFrames with Follow: the first ContentFrame of the Follow
-          // will be formatted, so that it get's a chance to load in the pLay.
+          // will be formatted, so that it gets a chance to load in the pLay.
           // As long as these Frames are loading in pLay, we continue
         } while ( pFrame &&
                   ( pLay->IsAnLower( pFrame ) ||
@@ -1687,10 +1665,10 @@ void CalcContent( SwLayoutFrame *pLay,
 // OD 2004-03-23 #i26791#
 void SwFlyFrame::MakeObjPos()
 {
-    if ( !mbValidPos )
+    if ( !isFrameAreaPositionValid() )
     {
         vcl::RenderContext* pRenderContext = getRootFrame()->GetCurrShell()->GetOut();
-        mbValidPos = true;
+        setFrameAreaPositionValid(true);
 
         // OD 29.10.2003 #113049# - use new class to position object
         GetAnchorFrame()->Calc(pRenderContext);
@@ -1702,9 +1680,13 @@ void SwFlyFrame::MakeObjPos()
         // update relative position
         SetCurrRelPos( aObjPositioning.GetRelPos() );
 
-        SWRECTFN( GetAnchorFrame() );
-        maFrame.Pos( aObjPositioning.GetRelPos() );
-        maFrame.Pos() += (GetAnchorFrame()->Frame().*fnRect->fnGetPos)();
+        {
+            SwRectFnSet aRectFnSet(GetAnchorFrame());
+            SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+            aFrm.Pos( aObjPositioning.GetRelPos() );
+            aFrm.Pos() += aRectFnSet.GetPos(GetAnchorFrame()->getFrameArea());
+        }
+
         // #i69335#
         InvalidateObjRectWithSpaces();
     }
@@ -1712,95 +1694,194 @@ void SwFlyFrame::MakeObjPos()
 
 void SwFlyFrame::MakePrtArea( const SwBorderAttrs &rAttrs )
 {
-    if ( !mbValidPrtArea )
+    if ( !isFramePrintAreaValid() )
     {
-        mbValidPrtArea = true;
+        setFramePrintAreaValid(true);
 
         // OD 31.07.2003 #110978# - consider vertical layout
-        SWRECTFN( this )
-        (this->*fnRect->fnSetXMargins)( rAttrs.CalcLeftLine(),
+        SwRectFnSet aRectFnSet(this);
+        aRectFnSet.SetXMargins( *this, rAttrs.CalcLeftLine(),
                                         rAttrs.CalcRightLine() );
-        (this->*fnRect->fnSetYMargins)( rAttrs.CalcTopLine(),
+        aRectFnSet.SetYMargins( *this, rAttrs.CalcTopLine(),
                                         rAttrs.CalcBottomLine() );
     }
 }
 
 void SwFlyFrame::MakeContentPos( const SwBorderAttrs &rAttrs )
 {
-    if ( !m_bValidContentPos )
+    if ( m_bValidContentPos )
+        return;
+
+    m_bValidContentPos = true;
+
+    const SwTwips nUL = rAttrs.CalcTopLine()  + rAttrs.CalcBottomLine();
+    Size aRelSize( CalcRel( GetFormat()->GetFrameSize() ) );
+
+    SwRectFnSet aRectFnSet(this);
+    long nMinHeight = 0;
+    if( IsMinHeight() )
+        nMinHeight = aRectFnSet.IsVert() ? aRelSize.Width() : aRelSize.Height();
+
+    Point aNewContentPos;
+    aNewContentPos = getFramePrintArea().Pos();
+    const SdrTextVertAdjust nAdjust = GetFormat()->GetTextVertAdjust().GetValue();
+
+    if( nAdjust != SDRTEXTVERTADJUST_TOP )
     {
-        m_bValidContentPos = true;
+        const SwTwips nContentHeight = CalcContentHeight(&rAttrs, nMinHeight, nUL);
+        SwTwips nDiff = 0;
 
-        const SwTwips nUL = rAttrs.CalcTopLine()  + rAttrs.CalcBottomLine();
-        Size aRelSize( CalcRel( GetFormat()->GetFrameSize() ) );
+        if( nContentHeight != 0)
+            nDiff = aRectFnSet.GetHeight(getFramePrintArea()) - nContentHeight;
 
-        SWRECTFN( this )
-        long nMinHeight = 0;
-        if( IsMinHeight() )
-            nMinHeight = bVert ? aRelSize.Width() : aRelSize.Height();
-
-        Point aNewContentPos;
-        aNewContentPos = Prt().Pos();
-        const SdrTextVertAdjust nAdjust = GetFormat()->GetTextVertAdjust().GetValue();
-
-        if( nAdjust != SDRTEXTVERTADJUST_TOP )
+        if( nDiff > 0 )
         {
-            const SwTwips nContentHeight = CalcContentHeight(&rAttrs, nMinHeight, nUL);
-            SwTwips nDiff = 0;
-
-            if( nContentHeight != 0)
-                nDiff = (Prt().*fnRect->fnGetHeight)() - nContentHeight;
-
-            if( nDiff > 0 )
+            if( nAdjust == SDRTEXTVERTADJUST_CENTER )
             {
-                if( nAdjust == SDRTEXTVERTADJUST_CENTER )
-                {
-                    if( bVertL2R )
-                        aNewContentPos.setX(aNewContentPos.getX() + nDiff/2);
-                    else if( bVert )
-                        aNewContentPos.setX(aNewContentPos.getX() - nDiff/2);
-                    else
-                        aNewContentPos.setY(aNewContentPos.getY() + nDiff/2);
-                }
-                else if( nAdjust == SDRTEXTVERTADJUST_BOTTOM )
-                {
-                    if( bVertL2R )
-                        aNewContentPos.setX(aNewContentPos.getX() + nDiff);
-                    else if( bVert )
-                        aNewContentPos.setX(aNewContentPos.getX() - nDiff);
-                    else
-                        aNewContentPos.setY(aNewContentPos.getY() + nDiff);
-                }
+                if( aRectFnSet.IsVertL2R() )
+                    aNewContentPos.setX(aNewContentPos.getX() + nDiff/2);
+                else if( aRectFnSet.IsVert() )
+                    aNewContentPos.setX(aNewContentPos.getX() - nDiff/2);
+                else
+                    aNewContentPos.setY(aNewContentPos.getY() + nDiff/2);
             }
-        }
-        if( aNewContentPos != ContentPos() )
-        {
-            ContentPos() = aNewContentPos;
-            for( SwFrame *pFrame = Lower(); pFrame; pFrame = pFrame->GetNext())
+            else if( nAdjust == SDRTEXTVERTADJUST_BOTTOM )
             {
-                pFrame->InvalidatePos();
+                if( aRectFnSet.IsVertL2R() )
+                    aNewContentPos.setX(aNewContentPos.getX() + nDiff);
+                else if( aRectFnSet.IsVert() )
+                    aNewContentPos.setX(aNewContentPos.getX() - nDiff);
+                else
+                    aNewContentPos.setY(aNewContentPos.getY() + nDiff);
             }
         }
     }
+    if( aNewContentPos != ContentPos() )
+    {
+        ContentPos() = aNewContentPos;
+        for( SwFrame *pFrame = Lower(); pFrame; pFrame = pFrame->GetNext())
+        {
+            pFrame->InvalidatePos();
+        }
+    }
+
 }
 
 void SwFlyFrame::InvalidateContentPos()
 {
     m_bValidContentPos = false;
-    _Invalidate();
+    Invalidate_();
 }
 
-SwTwips SwFlyFrame::_Grow( SwTwips nDist, bool bTst )
+void SwFlyFrame::SelectionHasChanged(SwFEShell* pShell)
 {
-    SWRECTFN( this )
+    SwWrtShell* pWrtSh = dynamic_cast< SwWrtShell* >(pShell);
+    if (pWrtSh == nullptr)
+        return;
+
+    UpdateUnfloatButton(pWrtSh, IsShowUnfloatButton(pWrtSh));
+}
+
+bool SwFlyFrame::IsShowUnfloatButton(SwWrtShell* pWrtSh) const
+{
+    if (pWrtSh == nullptr)
+        return false;
+
+    // In read only mode we don't allow unfloat operation
+    if (pWrtSh->GetViewOptions()->IsReadonly())
+        return false;
+
+    const SdrObject *pObj = GetFrameFormat().FindRealSdrObject();
+    if (pObj == nullptr)
+        return false;
+
+    // SwFlyFrame itself can mean images, ole objects, etc, but we interested in actual text frames
+    if (SwFEShell::GetObjCntType(*pObj) != OBJCNT_FLY)
+        return false;
+
+    // We show the button only for the selected text frame
+    SwDrawView *pView = pWrtSh->Imp()->GetDrawView();
+    if (pView == nullptr)
+        return false;
+
+    // Fly frame can be selected only alone
+    if (pView->GetMarkedObjectList().GetMarkCount() != 1)
+        return false;
+
+    if(!pView->IsObjMarked(pObj))
+        return false;
+
+    // A frame is a floating table if there is only one table (and maybe some whitespaces) inside it
+    int nTableCount = 0;
+    const SwFrame* pLower = GetLower();
+    const SwTabFrame* pTable = nullptr;
+    while (pLower)
+    {
+        if (pLower->IsTabFrame())
+        {
+            pTable = static_cast<const SwTabFrame*>(pLower);
+            ++nTableCount;
+            if (nTableCount > 1 || pTable == nullptr)
+                return false;
+        }
+
+        if (pLower->IsTextFrame())
+        {
+            const SwTextFrame* pTextFrame = static_cast<const SwTextFrame*>(pLower);
+            if (!pTextFrame->GetText().trim().isEmpty())
+                return false;
+        }
+        pLower = pLower->GetNext();
+    }
+
+    if (nTableCount != 1 || pTable == nullptr)
+        return false;
+
+    // Show the unfold button only for multipage tables
+    const SwBodyFrame *pBody = GetAnchorFrame()->FindBodyFrame();
+    if (pBody == nullptr)
+        return false;
+
+    long nBodyHeight = pBody->getFrameArea().Height();
+    long nTableHeight = pTable->getFrameArea().Height();
+    long nFrameOffset = std::abs(GetAnchorFrame()->getFrameArea().Top() - pBody->getFrameArea().Top());
+
+    return nBodyHeight < nTableHeight + nFrameOffset;
+}
+
+void SwFlyFrame::ActiveUnfloatButton(SwWrtShell* pWrtSh)
+{
+    SwEditWin& rEditWin = pWrtSh->GetView().GetEditWin();
+    SwFrameControlsManager& rMngr = rEditWin.GetFrameControlsManager();
+    SwFrameControlPtr pControl = rMngr.GetControl(FloatingTable, this);
+    if (pControl.get() || pControl->GetWindow())
+    {
+        pControl->GetWindow()->MouseButtonDown(MouseEvent());
+    }
+}
+
+void SwFlyFrame::UpdateUnfloatButton(SwWrtShell* pWrtSh, bool bShow) const
+{
+    if (pWrtSh == nullptr)
+        return;
+
+    SwEditWin& rEditWin = pWrtSh->GetView().GetEditWin();
+    SwFrameControlsManager& rMngr = rEditWin.GetFrameControlsManager();
+    Point aBottomRightPixel = rEditWin.LogicToPixel( getFrameArea().BottomRight() );
+    rMngr.SetUnfloatTableButton(this, bShow,  aBottomRightPixel);
+}
+
+SwTwips SwFlyFrame::Grow_( SwTwips nDist, bool bTst )
+{
+    SwRectFnSet aRectFnSet(this);
     if ( Lower() && !IsColLocked() && !HasFixSize() )
     {
-        SwTwips nSize = (Frame().*fnRect->fnGetHeight)();
+        SwTwips nSize = aRectFnSet.GetHeight(getFrameArea());
         if( nSize > 0 && nDist > ( LONG_MAX - nSize ) )
             nDist = LONG_MAX - nSize;
 
-        if ( nDist <= 0L )
-            return 0L;
+        if ( nDist <= 0 )
+            return 0;
 
         if ( Lower()->IsColumnFrame() )
         {   // If it's a Column Frame, the Format takes control of the
@@ -1809,16 +1890,16 @@ SwTwips SwFlyFrame::_Grow( SwTwips nDist, bool bTst )
             {
                 // #i28701# - unlock position of Writer fly frame
                 UnlockPosition();
-                _InvalidatePos();
+                InvalidatePos_();
                 InvalidateSize();
             }
-            return 0L;
+            return 0;
         }
 
         if ( !bTst )
         {
             const SwRect aOld( GetObjRectWithSpaces() );
-            _InvalidateSize();
+            InvalidateSize_();
             const bool bOldLock = m_bLocked;
             Unlock();
             if ( IsFlyFreeFrame() )
@@ -1829,7 +1910,8 @@ SwTwips SwFlyFrame::_Grow( SwTwips nDist, bool bTst )
                 // Writer fly frames - inner Writer fly frames format its
                 // anchor, which grows/shrinks the outer Writer fly frame.
                 // Note: position will be invalidated below.
-                mbValidPos = true;
+                setFrameAreaPositionValid(true);
+
                 // #i55416#
                 // Suppress format of width for autowidth frame, because the
                 // format of the width would call <SwTextFrame::CalcFitToContent()>
@@ -1840,9 +1922,13 @@ SwTwips SwFlyFrame::_Grow( SwTwips nDist, bool bTst )
                 {
                     m_bFormatHeightOnly = true;
                 }
-                static_cast<SwFlyFreeFrame*>(this)->SetNoMoveOnCheckClip( true );
-                static_cast<SwFlyFreeFrame*>(this)->SwFlyFreeFrame::MakeAll(getRootFrame()->GetCurrShell()->GetOut());
-                static_cast<SwFlyFreeFrame*>(this)->SetNoMoveOnCheckClip( false );
+                SwViewShell* pSh = getRootFrame()->GetCurrShell();
+                if (pSh)
+                {
+                    static_cast<SwFlyFreeFrame*>(this)->SetNoMoveOnCheckClip( true );
+                    static_cast<SwFlyFreeFrame*>(this)->SwFlyFreeFrame::MakeAll(pSh->GetOut());
+                    static_cast<SwFlyFreeFrame*>(this)->SetNoMoveOnCheckClip( false );
+                }
                 // #i55416#
                 if ( rFrameSz.GetWidthSizeType() != ATT_FIX_SIZE )
                 {
@@ -1851,26 +1937,26 @@ SwTwips SwFlyFrame::_Grow( SwTwips nDist, bool bTst )
             }
             else
                 MakeAll(getRootFrame()->GetCurrShell()->GetOut());
-            _InvalidateSize();
+            InvalidateSize_();
             InvalidatePos();
             if ( bOldLock )
                 Lock();
             const SwRect aNew( GetObjRectWithSpaces() );
             if ( aOld != aNew )
                 ::Notify( this, FindPageFrame(), aOld );
-            return (aNew.*fnRect->fnGetHeight)()-(aOld.*fnRect->fnGetHeight)();
+            return aRectFnSet.GetHeight(aNew)-aRectFnSet.GetHeight(aOld);
         }
         return nDist;
     }
-    return 0L;
+    return 0;
 }
 
-SwTwips SwFlyFrame::_Shrink( SwTwips nDist, bool bTst )
+SwTwips SwFlyFrame::Shrink_( SwTwips nDist, bool bTst )
 {
-    if( Lower() && !IsColLocked() && !HasFixSize() && !IsNoShrink() )
+    if( Lower() && !IsColLocked() && !HasFixSize() )
     {
-        SWRECTFN( this )
-        SwTwips nHeight = (Frame().*fnRect->fnGetHeight)();
+        SwRectFnSet aRectFnSet(this);
+        SwTwips nHeight = aRectFnSet.GetHeight(getFrameArea());
         if ( nDist > nHeight )
             nDist = nHeight;
 
@@ -1878,13 +1964,13 @@ SwTwips SwFlyFrame::_Shrink( SwTwips nDist, bool bTst )
         if ( IsMinHeight() )
         {
             const SwFormatFrameSize& rFormatSize = GetFormat()->GetFrameSize();
-            SwTwips nFormatHeight = bVert ? rFormatSize.GetWidth() : rFormatSize.GetHeight();
+            SwTwips nFormatHeight = aRectFnSet.IsVert() ? rFormatSize.GetWidth() : rFormatSize.GetHeight();
 
             nVal = std::min( nDist, nHeight - nFormatHeight );
         }
 
-        if ( nVal <= 0L )
-            return 0L;
+        if ( nVal <= 0 )
+            return 0;
 
         if ( Lower()->IsColumnFrame() )
         {   // If it's a Column Frame, the Format takes control of the
@@ -1892,28 +1978,39 @@ SwTwips SwFlyFrame::_Shrink( SwTwips nDist, bool bTst )
             if ( !bTst )
             {
                 SwRect aOld( GetObjRectWithSpaces() );
-                (Frame().*fnRect->fnSetHeight)( nHeight - nVal );
+
+                {
+                    SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+                    aRectFnSet.SetHeight( aFrm, nHeight - nVal );
+                }
+
                 // #i68520#
                 if ( nHeight - nVal != 0 )
                 {
                     InvalidateObjRectWithSpaces();
                 }
-                nHeight = (Prt().*fnRect->fnGetHeight)();
-                (Prt().*fnRect->fnSetHeight)( nHeight - nVal );
-                _InvalidatePos();
+
+                nHeight = aRectFnSet.GetHeight(getFramePrintArea());
+
+                {
+                    SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
+                    aRectFnSet.SetHeight( aPrt, nHeight - nVal );
+                }
+
+                InvalidatePos_();
                 InvalidateSize();
                 ::Notify( this, FindPageFrame(), aOld );
                 NotifyDrawObj();
                 if ( GetAnchorFrame()->IsInFly() )
                     AnchorFrame()->FindFlyFrame()->Shrink( nDist, bTst );
             }
-            return 0L;
+            return 0;
         }
 
         if ( !bTst )
         {
             const SwRect aOld( GetObjRectWithSpaces() );
-            _InvalidateSize();
+            InvalidateSize_();
             const bool bOldLocked = m_bLocked;
             Unlock();
             if ( IsFlyFreeFrame() )
@@ -1924,7 +2021,8 @@ SwTwips SwFlyFrame::_Shrink( SwTwips nDist, bool bTst )
                 // Writer fly frames - inner Writer fly frames format its
                 // anchor, which grows/shrinks the outer Writer fly frame.
                 // Note: position will be invalidated below.
-                mbValidPos = true;
+                setFrameAreaPositionValid(true);
+
                 // #i55416#
                 // Suppress format of width for autowidth frame, because the
                 // format of the width would call <SwTextFrame::CalcFitToContent()>
@@ -1946,7 +2044,7 @@ SwTwips SwFlyFrame::_Shrink( SwTwips nDist, bool bTst )
             }
             else
                 MakeAll(getRootFrame()->GetCurrShell()->GetOut());
-            _InvalidateSize();
+            InvalidateSize_();
             InvalidatePos();
             if ( bOldLocked )
                 Lock();
@@ -1957,12 +2055,12 @@ SwTwips SwFlyFrame::_Shrink( SwTwips nDist, bool bTst )
                 if ( GetAnchorFrame()->IsInFly() )
                     AnchorFrame()->FindFlyFrame()->Shrink( nDist, bTst );
             }
-            return (aOld.*fnRect->fnGetHeight)() -
-                   (aNew.*fnRect->fnGetHeight)();
+            return aRectFnSet.GetHeight(aOld) -
+                   aRectFnSet.GetHeight(aNew);
         }
         return nVal;
     }
-    return 0L;
+    return 0;
 }
 
 Size SwFlyFrame::ChgSize( const Size& aNewSize )
@@ -1989,7 +2087,8 @@ Size SwFlyFrame::ChgSize( const Size& aNewSize )
             }
         }
     }
-    if ( aAdjustedNewSize != Frame().SSize() )
+
+    if ( aAdjustedNewSize != getFrameArea().SSize() )
     {
         SwFrameFormat *pFormat = GetFormat();
         SwFormatFrameSize aSz( pFormat->GetFrameSize() );
@@ -2000,7 +2099,7 @@ Size SwFlyFrame::ChgSize( const Size& aNewSize )
         return aSz.GetSize();
     }
     else
-        return Frame().SSize();
+        return getFrameArea().SSize();
 }
 
 bool SwFlyFrame::IsLowerOf( const SwLayoutFrame* pUpperFrame ) const
@@ -2024,9 +2123,11 @@ void SwFlyFrame::Cut()
 
 void SwFrame::AppendFly( SwFlyFrame *pNew )
 {
-    if ( !mpDrawObjs )
-        mpDrawObjs = new SwSortedObjs();
-    mpDrawObjs->Insert( *pNew );
+    if (!m_pDrawObjs)
+    {
+        m_pDrawObjs.reset(new SwSortedObjs());
+    }
+    m_pDrawObjs->Insert( *pNew );
     pNew->ChgAnchorFrame( this );
 
     // Register at the page
@@ -2066,9 +2167,11 @@ void SwFrame::RemoveFly( SwFlyFrame *pToRemove )
         }
     }
 
-    mpDrawObjs->Remove( *pToRemove );
-    if ( !mpDrawObjs->size() )
-        DELETEZ( mpDrawObjs );
+    m_pDrawObjs->Remove(*pToRemove);
+    if (!m_pDrawObjs->size())
+    {
+        m_pDrawObjs.reset();
+    }
 
     pToRemove->ChgAnchorFrame( nullptr );
 
@@ -2078,7 +2181,7 @@ void SwFrame::RemoveFly( SwFlyFrame *pToRemove )
 
 void SwFrame::AppendDrawObj( SwAnchoredObject& _rNewObj )
 {
-    assert(!mpDrawObjs || mpDrawObjs->is_sorted());
+    assert(!m_pDrawObjs || m_pDrawObjs->is_sorted());
 
     if ( dynamic_cast<const SwAnchoredDrawObject*>( &_rNewObj) ==  nullptr )
     {
@@ -2089,19 +2192,21 @@ void SwFrame::AppendDrawObj( SwAnchoredObject& _rNewObj )
     if ( dynamic_cast<const SwDrawVirtObj*>(_rNewObj.GetDrawObj()) ==  nullptr &&
          _rNewObj.GetAnchorFrame() && _rNewObj.GetAnchorFrame() != this )
     {
-        assert(!mpDrawObjs || mpDrawObjs->is_sorted());
+        assert(!m_pDrawObjs || m_pDrawObjs->is_sorted());
         // perform disconnect from layout, if 'master' drawing object is appended
         // to a new frame.
         static_cast<SwDrawContact*>(::GetUserCall( _rNewObj.GetDrawObj() ))->
                                                 DisconnectFromLayout( false );
-        assert(!mpDrawObjs || mpDrawObjs->is_sorted());
+        assert(!m_pDrawObjs || m_pDrawObjs->is_sorted());
     }
 
     if ( _rNewObj.GetAnchorFrame() != this )
     {
-        if ( !mpDrawObjs )
-            mpDrawObjs = new SwSortedObjs();
-        mpDrawObjs->Insert( _rNewObj );
+        if (!m_pDrawObjs)
+        {
+            m_pDrawObjs.reset(new SwSortedObjs());
+        }
+        m_pDrawObjs->Insert(_rNewObj);
         _rNewObj.ChgAnchorFrame( this );
     }
 
@@ -2127,7 +2232,7 @@ void SwFrame::AppendDrawObj( SwAnchoredObject& _rNewObj )
             }
             //The layer is part of the key used to sort the obj, so update
             //its position if the layer changed.
-            mpDrawObjs->Update(_rNewObj);
+            m_pDrawObjs->Update(_rNewObj);
         }
     }
 
@@ -2147,10 +2252,12 @@ void SwFrame::AppendDrawObj( SwAnchoredObject& _rNewObj )
     {
         SwRootFrame* pLayout = getRootFrame();
         if( pLayout && pLayout->IsAnyShellAccessible() )
-        pSh->Imp()->AddAccessibleObj( _rNewObj.GetDrawObj() );
+        {
+            pSh->Imp()->AddAccessibleObj( _rNewObj.GetDrawObj() );
+        }
     }
 
-    assert(!mpDrawObjs || mpDrawObjs->is_sorted());
+    assert(!m_pDrawObjs || m_pDrawObjs->is_sorted());
 }
 
 void SwFrame::RemoveDrawObj( SwAnchoredObject& _rToRemoveObj )
@@ -2160,8 +2267,8 @@ void SwFrame::RemoveDrawObj( SwAnchoredObject& _rToRemoveObj )
     if( pSh )
     {
         SwRootFrame* pLayout = getRootFrame();
-        if( pLayout && pLayout->IsAnyShellAccessible() )
-        pSh->Imp()->DisposeAccessibleObj( _rToRemoveObj.GetDrawObj() );
+        if (pLayout && pLayout->IsAnyShellAccessible())
+            pSh->Imp()->DisposeAccessibleObj(_rToRemoveObj.GetDrawObj(), false);
     }
 
     // deregister from page frame
@@ -2169,13 +2276,14 @@ void SwFrame::RemoveDrawObj( SwAnchoredObject& _rToRemoveObj )
     if ( pPage && pPage->GetSortedObjs() )
         pPage->RemoveDrawObjFromPage( _rToRemoveObj );
 
-    mpDrawObjs->Remove( _rToRemoveObj );
-    if ( !mpDrawObjs->size() )
-        DELETEZ( mpDrawObjs );
-
+    m_pDrawObjs->Remove(_rToRemoveObj);
+    if (!m_pDrawObjs->size())
+    {
+        m_pDrawObjs.reset();
+    }
     _rToRemoveObj.ChgAnchorFrame( nullptr );
 
-    assert(!mpDrawObjs || mpDrawObjs->is_sorted());
+    assert(!m_pDrawObjs || m_pDrawObjs->is_sorted());
 }
 
 void SwFrame::InvalidateObjs( const bool _bNoInvaOfAsCharAnchoredObjs )
@@ -2187,12 +2295,11 @@ void SwFrame::InvalidateObjs( const bool _bNoInvaOfAsCharAnchoredObjs )
         // page.
         const SwPageFrame* pPageFrame = FindPageFrame();
         // #i28701# - re-factoring
-        for ( size_t i = 0; i < GetDrawObjs()->size(); ++i )
+        for (SwAnchoredObject* pAnchoredObj : *GetDrawObjs())
         {
-            SwAnchoredObject* pAnchoredObj = (*GetDrawObjs())[i];
             if ( _bNoInvaOfAsCharAnchoredObjs &&
                  (pAnchoredObj->GetFrameFormat().GetAnchor().GetAnchorId()
-                    == FLY_AS_CHAR) )
+                    == RndStdIds::FLY_AS_CHAR) )
             {
                 continue;
             }
@@ -2231,8 +2338,8 @@ void SwFrame::InvalidateObjs( const bool _bNoInvaOfAsCharAnchoredObjs )
             if ( dynamic_cast<const SwFlyFrame*>( pAnchoredObj) !=  nullptr )
             {
                 SwFlyFrame* pFly = static_cast<SwFlyFrame*>(pAnchoredObj);
-                pFly->_Invalidate();
-                pFly->_InvalidatePos();
+                pFly->Invalidate_();
+                pFly->InvalidatePos_();
             }
             else
             {
@@ -2254,9 +2361,8 @@ void SwLayoutFrame::NotifyLowerObjs( const bool _bUnlockPosOfObjs )
     if ( pPageFrame && pPageFrame->GetSortedObjs() )
     {
         SwSortedObjs& rObjs = *(pPageFrame->GetSortedObjs());
-        for ( size_t i = 0; i < rObjs.size(); ++i )
+        for (SwAnchoredObject* pObj : rObjs)
         {
-            SwAnchoredObject* pObj = rObjs[i];
             // #i26945# - check, if anchored object is a lower
             // of the layout frame is changed to check, if its anchor frame
             // is a lower of the layout frame.
@@ -2268,7 +2374,7 @@ void SwLayoutFrame::NotifyLowerObjs( const bool _bUnlockPosOfObjs )
             {
                 SwFlyFrame* pFly = static_cast<SwFlyFrame*>(pObj);
 
-                if ( pFly->Frame().Left() == FAR_AWAY )
+                if ( pFly->getFrameArea().Left() == FAR_AWAY )
                     continue;
 
                 if ( pFly->IsAnLower( this ) )
@@ -2280,7 +2386,7 @@ void SwLayoutFrame::NotifyLowerObjs( const bool _bUnlockPosOfObjs )
                 const bool bLow = IsAnLower( pAnchorFrame );
                 if ( bLow || pAnchorFrame->FindPageFrame() != pPageFrame )
                 {
-                    pFly->_Invalidate( pPageFrame );
+                    pFly->Invalidate_( pPageFrame );
                     if ( !bLow || pFly->IsFlyAtContentFrame() )
                     {
                         // #i44016#
@@ -2288,10 +2394,10 @@ void SwLayoutFrame::NotifyLowerObjs( const bool _bUnlockPosOfObjs )
                         {
                             pFly->UnlockPosition();
                         }
-                        pFly->_InvalidatePos();
+                        pFly->InvalidatePos_();
                     }
                     else
-                        pFly->_InvalidatePrt();
+                        pFly->InvalidatePrt_();
                 }
             }
             else
@@ -2323,8 +2429,18 @@ void SwFlyFrame::NotifyDrawObj()
     pObj->SetRectsDirty();
     pObj->SetChanged();
     pObj->BroadcastObjectChange();
+
     if ( GetFormat()->GetSurround().IsContour() )
+    {
         ClrContourCache( pObj );
+    }
+    else if(IsFlyFreeFrame() && static_cast< const SwFlyFreeFrame* >(this)->supportsAutoContour())
+    {
+        // RotateFlyFrame3: Also need to clear when changes happen
+        // Caution: isTransformableSwFrame is already reset when resetting rotation, so
+        // *additionally* reset in SwFlyFreeFrame::MakeAll when no more rotation
+        ClrContourCache( pObj );
+    }
 }
 
 Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
@@ -2343,21 +2459,23 @@ Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
             nRelWidth  = pSh->GetBrowseWidth();
             nRelHeight = pSh->VisArea().Height();
             Size aBorder = pSh->GetOut()->PixelToLogic( pSh->GetBrowseBorder() );
-            long nDiff = nRelWidth - pRel->Prt().Width();
-            if ( nDiff > 0 )
-                nRelWidth -= nDiff;
+            nRelWidth  = std::min( nRelWidth,  pRel->getFramePrintArea().Width() );
             nRelHeight -= 2*aBorder.Height();
-            nDiff = nRelHeight - pRel->Prt().Height();
-            if ( nDiff > 0 )
-                nRelHeight -= nDiff;
+            nRelHeight = std::min( nRelHeight, pRel->getFramePrintArea().Height() );
         }
 
         // At the moment only the "== PAGE_FRAME" and "!= PAGE_FRAME" cases are handled.
         // When size is a relative to page size, ignore size of SwBodyFrame.
         if (rSz.GetWidthPercentRelation() != text::RelOrientation::PAGE_FRAME)
-            nRelWidth  = std::min( nRelWidth,  pRel->Prt().Width() );
+            nRelWidth  = std::min( nRelWidth,  pRel->getFramePrintArea().Width() );
+        else if ( pRel->IsPageFrame() )
+            nRelWidth  = std::min( nRelWidth,  pRel->getFrameArea().Width() );
+
         if (rSz.GetHeightPercentRelation() != text::RelOrientation::PAGE_FRAME)
-            nRelHeight = std::min( nRelHeight, pRel->Prt().Height() );
+            nRelHeight = std::min( nRelHeight, pRel->getFramePrintArea().Height() );
+        else if ( pRel->IsPageFrame() )
+            nRelHeight = std::min( nRelHeight, pRel->getFrameArea().Height() );
+
         if( !pRel->IsPageFrame() )
         {
             const SwPageFrame* pPage = FindPageFrame();
@@ -2365,31 +2483,31 @@ Size SwFlyFrame::CalcRel( const SwFormatFrameSize &rSz ) const
             {
                 if (rSz.GetWidthPercentRelation() == text::RelOrientation::PAGE_FRAME)
                     // Ignore margins of pPage.
-                    nRelWidth  = std::min( nRelWidth,  pPage->Frame().Width() );
+                    nRelWidth  = std::min( nRelWidth,  pPage->getFrameArea().Width() );
                 else
-                    nRelWidth  = std::min( nRelWidth,  pPage->Prt().Width() );
+                    nRelWidth  = std::min( nRelWidth,  pPage->getFramePrintArea().Width() );
                 if (rSz.GetHeightPercentRelation() == text::RelOrientation::PAGE_FRAME)
                     // Ignore margins of pPage.
-                    nRelHeight = std::min( nRelHeight, pPage->Frame().Height() );
+                    nRelHeight = std::min( nRelHeight, pPage->getFrameArea().Height() );
                 else
-                    nRelHeight = std::min( nRelHeight, pPage->Prt().Height() );
+                    nRelHeight = std::min( nRelHeight, pPage->getFramePrintArea().Height() );
             }
         }
 
         if ( rSz.GetWidthPercent() && rSz.GetWidthPercent() != SwFormatFrameSize::SYNCED )
-            aRet.Width() = nRelWidth * rSz.GetWidthPercent() / 100;
+            aRet.setWidth( nRelWidth * rSz.GetWidthPercent() / 100 );
         if ( rSz.GetHeightPercent() && rSz.GetHeightPercent() != SwFormatFrameSize::SYNCED )
-            aRet.Height() = nRelHeight * rSz.GetHeightPercent() / 100;
+            aRet.setHeight( nRelHeight * rSz.GetHeightPercent() / 100 );
 
         if ( rSz.GetWidthPercent() == SwFormatFrameSize::SYNCED )
         {
-            aRet.Width() *= aRet.Height();
-            aRet.Width() /= rSz.GetHeight();
+            aRet.setWidth( aRet.Width() * ( aRet.Height()) );
+            aRet.setWidth( aRet.Width() / ( rSz.GetHeight()) );
         }
         else if ( rSz.GetHeightPercent() == SwFormatFrameSize::SYNCED )
         {
-            aRet.Height() *= aRet.Width();
-            aRet.Height() /= rSz.GetWidth();
+            aRet.setHeight( aRet.Height() * ( aRet.Width()) );
+            aRet.setHeight( aRet.Height() / ( rSz.GetWidth()) );
         }
     }
     return aRet;
@@ -2415,7 +2533,7 @@ static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
         {
             nMin = const_cast<SwTextFrame*>(static_cast<const SwTextFrame*>(pFrame))->CalcFitToContent();
             const SvxLRSpaceItem &rSpace =
-                static_cast<const SwTextFrame*>(pFrame)->GetTextNode()->GetSwAttrSet().GetLRSpace();
+                static_cast<const SwTextFrame*>(pFrame)->GetTextNodeForParaProps()->GetSwAttrSet().GetLRSpace();
             if (!static_cast<const SwTextFrame*>(pFrame)->IsLocked())
                 nMin += rSpace.GetRight() + rSpace.GetTextLeft() + rSpace.GetTextFirstLineOfst();
         }
@@ -2428,8 +2546,8 @@ static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
                 const SwPageFrame* pPage = rFrame.FindPageFrame();
                 // auto width table
                 nMin = pFrame->GetUpper()->IsVertical() ?
-                    pPage->Prt().Height() :
-                    pPage->Prt().Width();
+                    pPage->getFramePrintArea().Height() :
+                    pPage->getFramePrintArea().Width();
             }
             else
             {
@@ -2446,11 +2564,6 @@ static SwTwips lcl_CalcAutoWidth( const SwLayoutFrame& rFrame )
     return nRet;
 }
 
-SwTwips SwFlyFrame::CalcAutoWidth() const
-{
-    return lcl_CalcAutoWidth( *this );
-}
-
 /// OD 16.04.2003 #i13147# - If called for paint and the <SwNoTextFrame> contains
 /// a graphic, load of intrinsic graphic has to be avoided.
 bool SwFlyFrame::GetContour( tools::PolyPolygon&   rContour,
@@ -2458,99 +2571,145 @@ bool SwFlyFrame::GetContour( tools::PolyPolygon&   rContour,
 {
     vcl::RenderContext* pRenderContext = getRootFrame()->GetCurrShell()->GetOut();
     bool bRet = false;
-    if( GetFormat()->GetSurround().IsContour() && Lower() &&
-        Lower()->IsNoTextFrame() )
+    const bool bIsCandidate(Lower() && Lower()->IsNoTextFrame());
+
+    if(bIsCandidate)
     {
-        SwNoTextNode *pNd = const_cast<SwNoTextNode*>(static_cast<const SwNoTextNode*>(static_cast<const SwContentFrame*>(Lower())->GetNode()));
-        // OD 16.04.2003 #i13147# - determine <GraphicObject> instead of <Graphic>
-        // in order to avoid load of graphic, if <SwNoTextNode> contains a graphic
-        // node and method is called for paint.
-        const GraphicObject* pGrfObj = nullptr;
-        bool bGrfObjCreated = false;
-        const SwGrfNode* pGrfNd = pNd->GetGrfNode();
-        if ( pGrfNd && _bForPaint )
+        if(GetFormat()->GetSurround().IsContour())
         {
-            pGrfObj = &(pGrfNd->GetGrfObj());
-        }
-        else
-        {
-            pGrfObj = new GraphicObject( pNd->GetGraphic() );
-            bGrfObjCreated = true;
-        }
-        OSL_ENSURE( pGrfObj, "SwFlyFrame::GetContour() - No Graphic/GraphicObject found at <SwNoTextNode>." );
-        if ( pGrfObj && pGrfObj->GetType() != GRAPHIC_NONE )
-        {
-            if( !pNd->HasContour() )
+            SwNoTextNode *pNd = const_cast<SwNoTextNode*>(static_cast<const SwNoTextNode*>(static_cast<const SwNoTextFrame*>(Lower())->GetNode()));
+            // OD 16.04.2003 #i13147# - determine <GraphicObject> instead of <Graphic>
+            // in order to avoid load of graphic, if <SwNoTextNode> contains a graphic
+            // node and method is called for paint.
+            std::unique_ptr<GraphicObject> xTmpGrfObj;
+            const GraphicObject* pGrfObj = nullptr;
+            const SwGrfNode* pGrfNd = pNd->GetGrfNode();
+            if ( pGrfNd && _bForPaint )
             {
-                // OD 16.04.2003 #i13147# - no <CreateContour> for a graphic
-                // during paint. Thus, return (value of <bRet> should be <false>).
-                if ( pGrfNd && _bForPaint )
-                {
-                    OSL_FAIL( "SwFlyFrame::GetContour() - No Contour found at <SwNoTextNode> during paint." );
-                    return bRet;
-                }
-                pNd->CreateContour();
+                pGrfObj = &(pGrfNd->GetGrfObj());
             }
-            pNd->GetContour( rContour );
-            // The Node holds the Polygon matching the original size of the graphic
-            // We need to include the scaling here
-            SwRect aClip;
-            SwRect aOrig;
-            Lower()->Calc(pRenderContext);
-            static_cast<const SwNoTextFrame*>(Lower())->GetGrfArea( aClip, &aOrig );
-            // OD 16.04.2003 #i13147# - copy method code <SvxContourDlg::ScaleContour(..)>
-            // in order to avoid that graphic has to be loaded for contour scale.
-            //SvxContourDlg::ScaleContour( rContour, aGrf, MAP_TWIP, aOrig.SSize() );
+            else
             {
-                OutputDevice*   pOutDev = Application::GetDefaultDevice();
-                const MapMode   aDispMap( MAP_TWIP );
-                const MapMode   aGrfMap( pGrfObj->GetPrefMapMode() );
-                const Size      aGrfSize( pGrfObj->GetPrefSize() );
-                Size            aOrgSize;
-                Point           aNewPoint;
-                bool            bPixelMap = aGrfMap.GetMapUnit() == MAP_PIXEL;
-
-                if ( bPixelMap )
-                    aOrgSize = pOutDev->PixelToLogic( aGrfSize, aDispMap );
-                else
-                    aOrgSize = OutputDevice::LogicToLogic( aGrfSize, aGrfMap, aDispMap );
-
-                if ( aOrgSize.Width() && aOrgSize.Height() )
+                xTmpGrfObj.reset(new GraphicObject(pNd->GetGraphic()));
+                pGrfObj = xTmpGrfObj.get();
+            }
+            assert(pGrfObj && "SwFlyFrame::GetContour() - No Graphic/GraphicObject found at <SwNoTextNode>.");
+            if (pGrfObj->GetType() != GraphicType::NONE)
+            {
+                if( !pNd->HasContour() )
                 {
-                    double fScaleX = (double) aOrig.Width() / aOrgSize.Width();
-                    double fScaleY = (double) aOrig.Height() / aOrgSize.Height();
-
-                    for ( sal_uInt16 j = 0, nPolyCount = rContour.Count(); j < nPolyCount; j++ )
+                    // OD 16.04.2003 #i13147# - no <CreateContour> for a graphic
+                    // during paint. Thus, return (value of <bRet> should be <false>).
+                    if ( pGrfNd && _bForPaint )
                     {
-                        tools::Polygon& rPoly = rContour[ j ];
+                        OSL_FAIL( "SwFlyFrame::GetContour() - No Contour found at <SwNoTextNode> during paint." );
+                        return bRet;
+                    }
+                    pNd->CreateContour();
+                }
+                pNd->GetContour( rContour );
+                // The Node holds the Polygon matching the original size of the graphic
+                // We need to include the scaling here
+                SwRect aClip;
+                SwRect aOrig;
+                Lower()->Calc(pRenderContext);
+                static_cast<const SwNoTextFrame*>(Lower())->GetGrfArea( aClip, &aOrig );
+                // OD 16.04.2003 #i13147# - copy method code <SvxContourDlg::ScaleContour(..)>
+                // in order to avoid that graphic has to be loaded for contour scale.
+                //SvxContourDlg::ScaleContour( rContour, aGrf, MapUnit::MapTwip, aOrig.SSize() );
+                {
+                    OutputDevice*   pOutDev = Application::GetDefaultDevice();
+                    const MapMode   aDispMap( MapUnit::MapTwip );
+                    const MapMode   aGrfMap( pGrfObj->GetPrefMapMode() );
+                    const Size      aGrfSize( pGrfObj->GetPrefSize() );
+                    Size            aOrgSize;
+                    Point           aNewPoint;
+                    bool            bPixelMap = aGrfMap.GetMapUnit() == MapUnit::MapPixel;
 
-                        for ( sal_uInt16 i = 0, nCount = rPoly.GetSize(); i < nCount; i++ )
+                    if ( bPixelMap )
+                        aOrgSize = pOutDev->PixelToLogic( aGrfSize, aDispMap );
+                    else
+                        aOrgSize = OutputDevice::LogicToLogic( aGrfSize, aGrfMap, aDispMap );
+
+                    if ( aOrgSize.Width() && aOrgSize.Height() )
+                    {
+                        double fScaleX = static_cast<double>(aOrig.Width()) / aOrgSize.Width();
+                        double fScaleY = static_cast<double>(aOrig.Height()) / aOrgSize.Height();
+
+                        for ( sal_uInt16 j = 0, nPolyCount = rContour.Count(); j < nPolyCount; j++ )
                         {
-                            if ( bPixelMap )
-                                aNewPoint = pOutDev->PixelToLogic( rPoly[ i ], aDispMap  );
-                            else
-                                aNewPoint = OutputDevice::LogicToLogic( rPoly[ i ], aGrfMap, aDispMap  );
+                            tools::Polygon& rPoly = rContour[ j ];
 
-                            rPoly[ i ] = Point( FRound( aNewPoint.getX() * fScaleX ), FRound( aNewPoint.getY() * fScaleY ) );
+                            for ( sal_uInt16 i = 0, nCount = rPoly.GetSize(); i < nCount; i++ )
+                            {
+                                if ( bPixelMap )
+                                    aNewPoint = pOutDev->PixelToLogic( rPoly[ i ], aDispMap  );
+                                else
+                                    aNewPoint = OutputDevice::LogicToLogic( rPoly[ i ], aGrfMap, aDispMap  );
+
+                                rPoly[ i ] = Point( FRound( aNewPoint.getX() * fScaleX ), FRound( aNewPoint.getY() * fScaleY ) );
+                            }
                         }
                     }
                 }
+                // OD 17.04.2003 #i13147# - destroy created <GraphicObject>.
+                xTmpGrfObj.reset();
+                rContour.Move( aOrig.Left(), aOrig.Top() );
+                if( !aClip.Width() )
+                    aClip.Width( 1 );
+                if( !aClip.Height() )
+                    aClip.Height( 1 );
+                rContour.Clip( aClip.SVRect() );
+                rContour.Optimize(PolyOptimizeFlags::CLOSE);
+                bRet = true;
             }
-            // OD 17.04.2003 #i13147# - destroy created <GraphicObject>.
-            if ( bGrfObjCreated )
+        }
+        else
+        {
+            const SwFlyFreeFrame* pSwFlyFreeFrame(dynamic_cast< const SwFlyFreeFrame* >(this));
+
+            if(nullptr != pSwFlyFreeFrame &&
+                pSwFlyFreeFrame->supportsAutoContour() &&
+                // isTransformableSwFrame already used in supportsAutoContour(), but
+                // better check twice when it may get changed there...
+                pSwFlyFreeFrame->isTransformableSwFrame())
             {
-                delete pGrfObj;
+                // RotateFlyFrame: use untransformed SwFrame to allow text floating around.
+                // Will be transformed below
+                const TransformableSwFrame* pTransformableSwFrame(pSwFlyFreeFrame->getTransformableSwFrame());
+                const SwRect aFrameArea(pTransformableSwFrame->getUntransformedFrameArea());
+                rContour = tools::PolyPolygon(tools::Polygon(aFrameArea.SVRect()));
+                bRet = (0 != rContour.Count());
             }
-            rContour.Move( aOrig.Left(), aOrig.Top() );
-            if( !aClip.Width() )
-                aClip.Width( 1 );
-            if( !aClip.Height() )
-                aClip.Height( 1 );
-            rContour.Clip( aClip.SVRect() );
-            rContour.Optimize(PolyOptimizeFlags::CLOSE);
-            bRet = true;
+        }
+
+        if(bRet && 0 != rContour.Count())
+        {
+            const SwFlyFreeFrame* pSwFlyFreeFrame(dynamic_cast< const SwFlyFreeFrame* >(this));
+
+            if(nullptr != pSwFlyFreeFrame && pSwFlyFreeFrame->isTransformableSwFrame())
+            {
+                // Need to adapt contour to transformation
+                basegfx::B2DVector aScale, aTranslate;
+                double fRotate, fShearX;
+                getFrameAreaTransformation().decompose(aScale, aTranslate, fRotate, fShearX);
+
+                if(!basegfx::fTools::equalZero(fRotate))
+                {
+                    basegfx::B2DPolyPolygon aSource(rContour.getB2DPolyPolygon());
+                    const basegfx::B2DPoint aCenter(getFrameAreaTransformation() * basegfx::B2DPoint(0.5, 0.5));
+                    const basegfx::B2DHomMatrix aRotateAroundCenter(
+                        basegfx::utils::createRotateAroundPoint(
+                            aCenter.getX(),
+                            aCenter.getY(),
+                            fRotate));
+                    aSource.transform(aRotateAroundCenter);
+                    rContour = tools::PolyPolygon(aSource);
+                }
+            }
         }
     }
+
     return bRet;
 }
 
@@ -2589,7 +2748,7 @@ const SwFrameFormat& SwFlyFrame::GetFrameFormat() const
 
 const SwRect SwFlyFrame::GetObjRect() const
 {
-    return Frame();
+    return getFrameArea();
 }
 
 // #i70122#
@@ -2600,19 +2759,19 @@ const SwRect SwFlyFrame::GetObjBoundRect() const
 }
 
 // #i68520#
-bool SwFlyFrame::_SetObjTop( const SwTwips _nTop )
+bool SwFlyFrame::SetObjTop_( const SwTwips _nTop )
 {
-    const bool bChanged( Frame().Pos().getY() != _nTop );
-
-    Frame().Pos().setY(_nTop);
+    const bool bChanged( getFrameArea().Pos().getY() != _nTop );
+    SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+    aFrm.Pos().setY(_nTop);
 
     return bChanged;
 }
-bool SwFlyFrame::_SetObjLeft( const SwTwips _nLeft )
+bool SwFlyFrame::SetObjLeft_( const SwTwips _nLeft )
 {
-    const bool bChanged( Frame().Pos().getX() != _nLeft );
-
-    Frame().Pos().setX(_nLeft);
+    const bool bChanged( getFrameArea().Pos().getX() != _nLeft );
+    SwFrameAreaDefinition::FrameAreaWriteAccess aFrm(*this);
+    aFrm.Pos().setX(_nLeft);
 
     return bChanged;
 }
@@ -2637,11 +2796,11 @@ bool SwFlyFrame::IsFormatPossible() const
            !IsLocked() && !IsColLocked();
 }
 
-void SwFlyFrame::GetAnchoredObjects( std::list<SwAnchoredObject*>& aList, const SwFormat& rFormat )
+void SwFlyFrame::GetAnchoredObjects( std::vector<SwAnchoredObject*>& aVector, const SwFormat& rFormat )
 {
     SwIterator<SwFlyFrame,SwFormat> aIter( rFormat );
     for( SwFlyFrame* pFlyFrame = aIter.First(); pFlyFrame; pFlyFrame = aIter.Next() )
-        aList.push_back( pFlyFrame );
+        aVector.push_back( pFlyFrame );
 }
 
 const SwFlyFrameFormat * SwFlyFrame::GetFormat() const
@@ -2664,25 +2823,25 @@ void SwFlyFrame::Calc(vcl::RenderContext* pRenderContext) const
 
 SwTwips SwFlyFrame::CalcContentHeight(const SwBorderAttrs *pAttrs, const SwTwips nMinHeight, const SwTwips nUL)
 {
-    SWRECTFN( this )
+    SwRectFnSet aRectFnSet(this);
     SwTwips nHeight = 0;
     if ( Lower() )
     {
         if ( Lower()->IsColumnFrame() )
         {
             FormatWidthCols( *pAttrs, nUL, nMinHeight );
-            nHeight = (Lower()->Frame().*fnRect->fnGetHeight)();
+            nHeight = aRectFnSet.GetHeight(Lower()->getFrameArea());
         }
         else
         {
             SwFrame *pFrame = Lower();
             while ( pFrame )
             {
-                nHeight += (pFrame->Frame().*fnRect->fnGetHeight)();
+                nHeight += aRectFnSet.GetHeight(pFrame->getFrameArea());
                 if( pFrame->IsTextFrame() && static_cast<SwTextFrame*>(pFrame)->IsUndersized() )
                 // This TextFrame would like to be a bit larger
                     nHeight += static_cast<SwTextFrame*>(pFrame)->GetParHeight()
-                            - (pFrame->Prt().*fnRect->fnGetHeight)();
+                            - aRectFnSet.GetHeight(pFrame->getFramePrintArea());
                 else if( pFrame->IsSctFrame() && static_cast<SwSectionFrame*>(pFrame)->IsUndersized() )
                     nHeight += static_cast<SwSectionFrame*>(pFrame)->Undersize();
                 pFrame = pFrame->GetNext();
@@ -2691,9 +2850,9 @@ SwTwips SwFlyFrame::CalcContentHeight(const SwBorderAttrs *pAttrs, const SwTwips
         if ( GetDrawObjs() )
         {
             const size_t nCnt = GetDrawObjs()->size();
-            SwTwips nTop = (Frame().*fnRect->fnGetTop)();
-            SwTwips nBorder = (Frame().*fnRect->fnGetHeight)() -
-            (Prt().*fnRect->fnGetHeight)();
+            SwTwips nTop = aRectFnSet.GetTop(getFrameArea());
+            SwTwips nBorder = aRectFnSet.GetHeight(getFrameArea()) -
+            aRectFnSet.GetHeight(getFramePrintArea());
             for ( size_t i = 0; i < nCnt; ++i )
             {
                 SwAnchoredObject* pAnchoredObj = (*GetDrawObjs())[i];
@@ -2703,11 +2862,10 @@ SwTwips SwFlyFrame::CalcContentHeight(const SwBorderAttrs *pAttrs, const SwTwips
                     // OD 06.11.2003 #i22305# - consider
                     // only Writer fly frames, which follow the text flow.
                     if ( pFly->IsFlyLayFrame() &&
-                        pFly->Frame().Top() != FAR_AWAY &&
+                        pFly->getFrameArea().Top() != FAR_AWAY &&
                         pFly->GetFormat()->GetFollowTextFlow().GetValue() )
                     {
-                        SwTwips nDist = -(pFly->Frame().*fnRect->
-                            fnBottomDist)( nTop );
+                        SwTwips nDist = -aRectFnSet.BottomDist( pFly->getFrameArea(), nTop );
                         if( nDist > nBorder + nHeight )
                             nHeight = nDist - nBorder;
                     }

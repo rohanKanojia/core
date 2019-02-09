@@ -12,8 +12,17 @@ $(eval $(call gb_Module_Module,onlineupdate))
 
 ifneq ($(ENABLE_ONLINE_UPDATE_MAR),)
 $(eval $(call gb_Module_add_targets,onlineupdate,\
+	StaticLibrary_libmar \
+	StaticLibrary_libmarverify \
+	StaticLibrary_updatehelper \
+	$(if $(filter WNT,$(OS)),\
+		Executable_update_service \
+		WinResTarget_updater )\
+	Executable_test_updater_dialog \
 	Executable_mar \
 	Executable_updater \
+	Executable_mbsdiff \
+	CustomTarget_generated \
 ))
 endif
 

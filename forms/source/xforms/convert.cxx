@@ -23,6 +23,7 @@
 #include "unohelper.hxx"
 #include <algorithm>
 #include <functional>
+#include <sstream>
 #include <o3tl/functional.hxx>
 #include <rtl/math.hxx>
 #include <rtl/ustrbuf.hxx>
@@ -59,7 +60,7 @@ namespace
 
 
     Any lcl_toAny_OUString( const OUString& rStr )
-    { Any aAny; aAny <<= rStr; return aAny; }
+    { return Any(rStr); }
 
 
     OUString lcl_toXSD_bool( const Any& rAny )
@@ -287,12 +288,8 @@ void Convert::init()
 Convert& Convert::get()
 {
     // create our Singleton instance on demand
-    static Convert* pConvert = nullptr;
-    if( pConvert == nullptr )
-        pConvert = new Convert();
-
-    OSL_ENSURE( pConvert != nullptr, "no converter?" );
-    return *pConvert;
+    static Convert aConvert;
+    return aConvert;
 }
 
 bool Convert::hasType( const css::uno::Type& rType )
@@ -328,14 +325,14 @@ OUString Convert::collapseWhitespace( const OUString& _rString )
     for( sal_Int32 i = 0; i < nLength; i++ )
     {
         sal_Unicode c = pStr[i];
-        if( c == sal_Unicode(0x08) ||
-            c == sal_Unicode(0x0A) ||
-            c == sal_Unicode(0x0D) ||
-            c == sal_Unicode(0x20) )
+        if( c == u'\x0008' ||
+            c == u'\x000A' ||
+            c == u'\x000D' ||
+            c == u' ' )
         {
             if( ! bStrip )
             {
-                aBuffer.append( sal_Unicode(0x20) );
+                aBuffer.append( u' ' );
                 bStrip = true;
             }
         }
@@ -345,7 +342,7 @@ OUString Convert::collapseWhitespace( const OUString& _rString )
             aBuffer.append( c );
         }
     }
-    if( aBuffer[ aBuffer.getLength() - 1 ] == sal_Unicode( 0x20 ) )
+    if( aBuffer[ aBuffer.getLength() - 1 ] == u' ' )
         aBuffer.setLength( aBuffer.getLength() - 1 );
     return aBuffer.makeStringAndClear();
 }

@@ -24,11 +24,6 @@
 #include <xmloff/dllapi.h>
 #include <xmloff/prstylei.hxx>
 
-namespace com { namespace sun { namespace star { namespace container
-{
-    class XNameContainer;
-} } } }
-
 class XMLOFF_DLLPUBLIC XMLGraphicsDefaultStyle : public XMLPropStyleContext
 {
 public:
@@ -38,9 +33,9 @@ public:
         const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList,
         SvXMLStylesContext& rStyles);
 
-    virtual ~XMLGraphicsDefaultStyle();
+    virtual ~XMLGraphicsDefaultStyle() override;
 
-    virtual SvXMLImportContext *CreateChildContext(
+    virtual SvXMLImportContextRef CreateChildContext(
             sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList ) override;

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "svx/xmlexchg.hxx"
+#include <svx/xmlexchg.hxx>
 #include <sot/formats.hxx>
 #include <sot/exchange.hxx>
 
@@ -50,7 +50,6 @@ namespace svx
     const OXFormsDescriptor &OXFormsTransferable::extractDescriptor( const TransferableDataHelper &_rData ) {
 
         using namespace ::com::sun::star::uno;
-        using namespace ::com::sun::star::datatransfer;
         Reference<XTransferable> &transfer = const_cast<Reference<XTransferable> &>(_rData.GetTransferable());
         XTransferable *pInterface = transfer.get();
         OXFormsTransferable& rThis = dynamic_cast<OXFormsTransferable&>(*pInterface);

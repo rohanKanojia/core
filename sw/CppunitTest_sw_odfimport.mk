@@ -21,13 +21,13 @@ $(eval $(call gb_CppunitTest_use_libraries,sw_odfimport, \
     cppuhelper \
     sal \
 	svt \
+	sfx \
 	sw \
     test \
     unotest \
     vcl \
     tl \
 	utl \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_use_externals,sw_odfimport,\
@@ -44,8 +44,9 @@ $(eval $(call gb_CppunitTest_set_include,sw_odfimport,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sw_odfimport,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sw_odfimport))
@@ -80,12 +81,14 @@ $(eval $(call gb_CppunitTest_use_components,sw_odfimport,\
     unoxml/source/service/unoxml \
     uui/util/uui \
     $(if $(filter-out MACOSX WNT,$(OS)), \
-		$(if $(ENABLE_HEADLESS),, \
+		$(if $(DISABLE_GUI),, \
 			vcl/vcl.unx \
 		) \
     ) \
 	$(if $(filter DESKTOP,$(BUILD_TYPE)),xmlhelp/util/ucpchelp1) \
+	vcl/vcl.common \
     xmloff/util/xo \
+    svgio/svgio \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sw_odfimport))

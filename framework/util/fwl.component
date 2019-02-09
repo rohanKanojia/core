@@ -61,6 +61,9 @@
   <implementation name="com.sun.star.comp.framework.ServiceHandler">
     <service name="com.sun.star.frame.ProtocolHandler"/>
   </implementation>
+  <implementation name="com.sun.star.comp.framework.ToolbarModeMenuController">
+    <service name="com.sun.star.frame.PopupMenuController"/>
+  </implementation>
   <implementation name="com.sun.star.comp.framework.ToolBarsMenuController">
     <service name="com.sun.star.frame.PopupMenuController"/>
   </implementation>
@@ -69,5 +72,8 @@
   </implementation>
   <implementation name="com.sun.star.comp.framework.services.DispatchHelper">
     <service name="com.sun.star.frame.DispatchHelper"/>
+  </implementation>
+  <implementation name="com.sun.star.comp.framework.services.DispatchDisabler">
+    <service name="com.sun.star.frame.DispatchDisabler"/>
   </implementation>
 </component>

@@ -24,6 +24,7 @@
 
  *************************************************************************/
 #include <osl/diagnose.h>
+#include <rtl/ref.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/ucb/CommandFailedException.hpp>
@@ -43,7 +44,6 @@ namespace ucbhelper
 void cancelCommandExecution( const uno::Any & rException,
                              const uno::Reference<
                                         ucb::XCommandEnvironment > & xEnv )
-    throw( uno::Exception )
 {
     if ( xEnv.is() )
     {
@@ -87,7 +87,6 @@ void cancelCommandExecution( const ucb::IOErrorCode eError,
                              const OUString & rMessage,
                              const uno::Reference<
                                     ucb::XCommandProcessor > & xContext )
-    throw( uno::Exception )
 {
     rtl::Reference< ucbhelper::SimpleIOErrorRequest > xRequest
         = new ucbhelper::SimpleIOErrorRequest(

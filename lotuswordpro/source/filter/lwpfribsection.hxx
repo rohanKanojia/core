@@ -61,7 +61,7 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBSECTION_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPFRIBSECTION_HXX
 
-#include "lwpfrib.hxx"
+#include <lwpfrib.hxx>
 #include "lwppara.hxx"
 
 /**
@@ -72,7 +72,6 @@ class LwpMasterPage
 {
 public:
     LwpMasterPage(LwpPara* pPara, LwpPageLayout* pLayout);
-    ~LwpMasterPage(){}
 
 public:
     //for page layout register and parse
@@ -81,8 +80,6 @@ public:
     void ParseSection(LwpFrib* pFrib);
     XFSection* CreateXFSection();
 
-    OUString GetStyleName(){ return m_StyleName;}
-    OUString GetFillerPageStyleName(){ return m_FillerPageStyleName;}
     bool IsNextPageType();
 
 private:
@@ -108,7 +105,7 @@ class LwpFribSection: public LwpFrib
 {
 public:
     explicit LwpFribSection(LwpPara* pPara );
-    virtual ~LwpFribSection();
+    virtual ~LwpFribSection() override;
     void Read(LwpObjectStream* pObjStrm, sal_uInt16 len) override;
     LwpSection * GetSection();
     void RegisterSectionStyle();
@@ -121,7 +118,7 @@ private:
 
 private:
     LwpObjectID m_Section;
-    LwpMasterPage* m_pMasterPage;
+    std::unique_ptr<LwpMasterPage> m_pMasterPage;
 };
 #endif
 

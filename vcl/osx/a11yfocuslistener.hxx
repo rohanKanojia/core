@@ -20,8 +20,8 @@
 #ifndef INCLUDED_VCL_OSX_A11YFOCUSLISTENER_HXX
 #define INCLUDED_VCL_OSX_A11YFOCUSLISTENER_HXX
 
-#include "osx/keyboardfocuslistener.hxx"
-#include "osx/osxvcltypes.h"
+#include <osx/keyboardfocuslistener.hxx>
+#include <osx/osxvcltypes.h>
 
 class AquaA11yFocusListener : public KeyboardFocusListener
 {
@@ -30,15 +30,15 @@ class AquaA11yFocusListener : public KeyboardFocusListener
     static rtl::Reference< AquaA11yFocusListener > theListener;
 
     AquaA11yFocusListener();
-    virtual ~AquaA11yFocusListener() {};
+    virtual ~AquaA11yFocusListener() override {};
 public:
 
-    static rtl::Reference< AquaA11yFocusListener > get();
+    static rtl::Reference< AquaA11yFocusListener > const & get();
 
     id getFocusedUIElement();
 
     // KeyboardFocusListener
-    virtual void SAL_CALL focusedObjectChanged(const css::uno::Reference< css::accessibility::XAccessible >& xAccessible) override;
+    virtual void focusedObjectChanged(const css::uno::Reference< css::accessibility::XAccessible >& xAccessible) override;
 };
 
 #endif // INCLUDED_VCL_OSX_A11YFOCUSLISTENER_HXX

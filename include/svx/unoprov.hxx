@@ -24,6 +24,10 @@
 #include <com/sun/star/uno/Sequence.hxx>
 #include <svl/itemprop.hxx>
 #include <svx/svxdllapi.h>
+#include <editeng/unoipset.hxx>
+#include <rtl/ref.hxx>
+#include <memory>
+
 
 class SvxItemPropertySet;
 class SfxItemPool;
@@ -35,7 +39,7 @@ class SfxItemPool;
 #define UHASHMAP_NOTFOUND sal::static_int_cast< sal_uInt32 >(~0)
 class UHashMap
 {
-    UHashMap() {}
+    UHashMap() = delete;
 public:
     static sal_uInt32 getId( const OUString& rCompareString );
     static OUString getNameFromId (sal_uInt32 nId);
@@ -51,28 +55,27 @@ public:
 #define SVXMAP_DIMENSIONING         2
 #define SVXMAP_CIRCLE               3
 #define SVXMAP_POLYPOLYGON          4
-#define SVXMAP_POLYPOLYGONBEZIER    5
-#define SVXMAP_GRAPHICOBJECT        6
-#define SVXMAP_3DSCENEOBJECT        7
-#define SVXMAP_3DCUBEOBJEKT         8
-#define SVXMAP_3DSPHEREOBJECT       9
-#define SVXMAP_3DLATHEOBJECT        10
-#define SVXMAP_3DEXTRUDEOBJECT      11
-#define SVXMAP_3DPOLYGONOBJECT      12
-#define SVXMAP_ALL                  13
-#define SVXMAP_GROUP                14
-#define SVXMAP_CAPTION              15
-#define SVXMAP_OLE2                 16
-#define SVXMAP_PLUGIN               17
-#define SVXMAP_FRAME                18
-#define SVXMAP_APPLET               19
-#define SVXMAP_CONTROL              20
-#define SVXMAP_TEXT                 21
-#define SVXMAP_CUSTOMSHAPE          22
-#define SVXMAP_MEDIA                23
-#define SVXMAP_TABLE                24
-#define SVXMAP_PAGE                 25
-#define SVXMAP_END                  26  // last+1 !
+#define SVXMAP_GRAPHICOBJECT        5
+#define SVXMAP_3DSCENEOBJECT        6
+#define SVXMAP_3DCUBEOBJECT         7
+#define SVXMAP_3DSPHEREOBJECT       8
+#define SVXMAP_3DLATHEOBJECT        9
+#define SVXMAP_3DEXTRUDEOBJECT      10
+#define SVXMAP_3DPOLYGONOBJECT      11
+#define SVXMAP_ALL                  12
+#define SVXMAP_GROUP                13
+#define SVXMAP_CAPTION              14
+#define SVXMAP_OLE2                 15
+#define SVXMAP_PLUGIN               16
+#define SVXMAP_FRAME                17
+#define SVXMAP_APPLET               18
+#define SVXMAP_CONTROL              19
+#define SVXMAP_TEXT                 20
+#define SVXMAP_CUSTOMSHAPE          21
+#define SVXMAP_MEDIA                22
+#define SVXMAP_TABLE                23
+#define SVXMAP_PAGE                 24
+#define SVXMAP_END                  25  // last+1 !
 
 /**
  * SvxUnoPropertyMapProvider
@@ -81,7 +84,7 @@ public:
 class SVX_DLLPUBLIC SvxUnoPropertyMapProvider
 {
     SfxItemPropertyMapEntry const * aMapArr[SVXMAP_END];
-    SvxItemPropertySet* aSetArr[SVXMAP_END];
+    std::unique_ptr<SvxItemPropertySet> aSetArr[SVXMAP_END];
 public:
     SvxUnoPropertyMapProvider();
     ~SvxUnoPropertyMapProvider();
@@ -98,8 +101,6 @@ const sal_Int16 OBJ_OLE2_PLUGIN = 101;
 
 #define E3D_INVENTOR_FLAG           (0x80000000)
 
-#include <editeng/unoipset.hxx>
-
 /**
  * class SvxPropertySetInfoPool
  */
@@ -113,10 +114,10 @@ namespace comphelper { class PropertySetInfo; }
 class SvxPropertySetInfoPool
 {
 public:
-    SVX_DLLPUBLIC static comphelper::PropertySetInfo* getOrCreate( sal_Int32 nServiceId ) throw();
+    SVX_DLLPUBLIC static rtl::Reference<comphelper::PropertySetInfo> const & getOrCreate( sal_Int32 nServiceId ) throw();
 
 private:
-    static comphelper::PropertySetInfo* mpInfos[SVXUNO_SERVICEID_LASTID+1];
+    static rtl::Reference<comphelper::PropertySetInfo> mxInfos[SVXUNO_SERVICEID_LASTID+1];
 };
 
 #endif

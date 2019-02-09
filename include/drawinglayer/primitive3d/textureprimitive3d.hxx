@@ -36,7 +36,7 @@ namespace drawinglayer
         /** TexturePrimitive3D class
 
             This 3D grouping primitive is used to define a texture for
-            3d geometry by embedding it. It is used as bae class for
+            3d geometry by embedding it. It is used as base class for
             extended texture definitions
          */
         class DRAWINGLAYER_DLLPUBLIC TexturePrimitive3D : public GroupPrimitive3D
@@ -45,7 +45,6 @@ namespace drawinglayer
             /// texture geometry definition
             basegfx::B2DVector                          maTextureSize;
 
-            /// bitfield
             /// flag if texture shall be modulated with white interpolated color
             bool                                        mbModulate : 1;
 

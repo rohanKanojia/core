@@ -24,13 +24,12 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmluconv.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlHelper.hxx"
 #include "xmlEnums.hxx"
 #include <ucbhelper/content.hxx>
-#include <comphelper/namecontainer.hxx>
 #include <com/sun/star/report/GroupOn.hpp>
 #include <com/sun/star/report/KeepTogether.hpp>
-#include <tools/debug.hxx>
 
 namespace rptxml
 {
@@ -39,10 +38,10 @@ namespace rptxml
     using namespace ::com::sun::star::report;
     using namespace ::com::sun::star::xml::sax;
 
-    sal_uInt16 lcl_getKeepTogetherOption(const OUString& _sValue)
+    static sal_Int16 lcl_getKeepTogetherOption(const OUString& _sValue)
     {
-        sal_uInt16 nRet = report::KeepTogether::NO;
-        const SvXMLEnumMapEntry* aXML_EnumMap = OXMLHelper::GetKeepTogetherOptions();
+        sal_Int16 nRet = report::KeepTogether::NO;
+        const SvXMLEnumMapEntry<sal_Int16>* aXML_EnumMap = OXMLHelper::GetKeepTogetherOptions();
         (void)SvXMLUnitConverter::convertEnum( nRet, _sValue, aXML_EnumMap );
         return nRet;
     }
@@ -63,7 +62,7 @@ OXMLGroup::OXMLGroup( ORptFilter& _rImport
 
     const SvXMLNamespaceMap& rMap = _rImport.GetNamespaceMap();
     const SvXMLTokenMap& rTokenMap = _rImport.GetGroupElemTokenMap();
-    m_xGroup->setSortAscending(sal_False);// the default value has to be set
+    m_xGroup->setSortAscending(false);// the default value has to be set
     const sal_Int16 nLength = (_xAttrList.is()) ? _xAttrList->getLength() : 0;
     static const OUString s_sTRUE = ::xmloff::token::GetXMLToken(XML_TRUE);
     for(sal_Int16 i = 0; i < nLength; ++i)
@@ -100,11 +99,10 @@ OXMLGroup::OXMLGroup( ORptFilter& _rImport
                             {
                                 nPos = strlen(s_sChanged);
                                 static const char s_sQuote[] = "\"\"";
-                                static const char s_sSingleQuote[] = "\"";
                                 sal_Int32 nIndex = sValue.indexOf(s_sQuote,nPos);
                                 while ( nIndex > -1 )
                                 {
-                                    sValue = sValue.replaceAt(nIndex,2,s_sSingleQuote);
+                                    sValue = sValue.replaceAt(nIndex,2, "\"");
                                     nIndex = sValue.indexOf(s_sQuote,nIndex+2);
                                 }
                                 nLen = sValue.getLength() - 1;
@@ -181,7 +179,7 @@ OXMLGroup::OXMLGroup( ORptFilter& _rImport
         }
         catch(const Exception&)
         {
-            OSL_FAIL("Exception catched while putting group props!");
+            OSL_FAIL("Exception caught while putting group props!");
         }
     }
 }
@@ -192,7 +190,7 @@ OXMLGroup::~OXMLGroup()
 
 }
 
-SvXMLImportContext* OXMLGroup::CreateChildContext(
+SvXMLImportContextRef OXMLGroup::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
@@ -212,7 +210,7 @@ SvXMLImportContext* OXMLGroup::CreateChildContext(
         case XML_TOK_GROUP_HEADER:
             {
                 rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-                m_xGroup->setHeaderOn(sal_True);
+                m_xGroup->setHeaderOn(true);
                 pContext = new OXMLSection( rImport, nPrefix, rLocalName,xAttrList,m_xGroup->getHeader());
             }
             break;
@@ -223,15 +221,15 @@ SvXMLImportContext* OXMLGroup::CreateChildContext(
         case XML_TOK_GROUP_DETAIL:
             {
                 rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-                Reference<XReportDefinition> m_xComponent = rImport.getReportDefinition();
-                pContext = new OXMLSection( rImport, nPrefix, rLocalName,xAttrList ,m_xComponent->getDetail());
+                Reference<XReportDefinition> xComponent = rImport.getReportDefinition();
+                pContext = new OXMLSection( rImport, nPrefix, rLocalName,xAttrList, xComponent->getDetail());
             }
             break;
 
         case XML_TOK_GROUP_FOOTER:
             {
                 rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-                m_xGroup->setFooterOn(sal_True);
+                m_xGroup->setFooterOn(true);
                 pContext = new OXMLSection( rImport, nPrefix, rLocalName,xAttrList,m_xGroup->getFooter());
             }
             break;
@@ -258,7 +256,7 @@ void OXMLGroup::EndElement()
         m_xGroups->insertByIndex(0,uno::makeAny(m_xGroup));
     }catch(uno::Exception&)
     {
-        OSL_FAIL("Exception catched!");
+        OSL_FAIL("Exception caught!");
     }
 }
 

@@ -21,10 +21,10 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlComponent.hxx"
 #include "xmlCondPrtExpr.hxx"
-#include <tools/debug.hxx>
 #include "xmlFormatCondition.hxx"
 
 
@@ -73,18 +73,16 @@ OXMLReportElement::OXMLReportElement( ORptFilter& rImport,
     }
     catch(Exception&)
     {
-        OSL_FAIL("Exception catched while filling the report definition props");
+        OSL_FAIL("Exception caught while filling the report definition props");
     }
 }
 
 
 OXMLReportElement::~OXMLReportElement()
 {
-
 }
 
-
-SvXMLImportContext* OXMLReportElement::CreateChildContext(
+SvXMLImportContextRef OXMLReportElement::CreateChildContext(
         sal_uInt16 _nPrefix,
         const OUString& _rLocalName,
         const Reference< XAttributeList > & xAttrList )

@@ -43,7 +43,7 @@
 #include <sys/types.h>
 
 /* Make sockets of type AF_UNIX use underlying FS rights */
-#if defined(SOLARIS) && !defined(_XOPEN_SOURCE)
+#if defined(__sun) && !defined(_XOPEN_SOURCE)
 #   define _XOPEN_SOURCE 500
 #   include <sys/socket.h>
 #   undef _XOPEN_SOURCE
@@ -85,7 +85,37 @@
 
 #endif
 
-#if defined(ANDROID) || defined(EMSCRIPTEN)
+#ifdef HAIKU
+#   include <shadow.h>
+#   include <pthread.h>
+#   include <sys/file.h>
+#   include <sys/ioctl.h>
+#   include <sys/uio.h>
+#   include <sys/un.h>
+#   include <netinet/tcp.h>
+#   include <dlfcn.h>
+#   include <endian.h>
+#   include <sys/time.h>
+#   define  IORESOURCE_TRANSFER_BSD
+#   define  IOCHANNEL_TRANSFER_BSD_RENO
+#   define  pthread_testcancel()
+#   define  NO_PTHREAD_PRIORITY
+#   define  NO_PTHREAD_RTL
+#   define  PTHREAD_SIGACTION           pthread_sigaction
+
+#   ifndef ETIME
+#       define ETIME ETIMEDOUT
+#   endif
+#   define SIGIOT SIGABRT
+#   define SOCK_RDM 0
+//  hack: Haiku defines SOL_SOCKET as -1, but this makes GCC complain about
+//  narrowing conversion
+#   undef SOL_SOCKET
+#   define SOL_SOCKET (sal_uInt32) -1
+
+#endif
+
+#if defined(ANDROID)
 #   include <pthread.h>
 #   include <sys/file.h>
 #   include <sys/ioctl.h>
@@ -182,7 +212,7 @@
 #   define  LIBPATH "LIBPATH"
 #endif
 
-#ifdef SOLARIS
+#ifdef __sun
 #   include <shadow.h>
 #   include <sys/un.h>
 #   include <stropts.h>
@@ -197,7 +227,6 @@
 #endif
 
 #ifdef MACOSX
-#define __OPENTRANSPORTPROVIDERS__ // these are already defined
 #define TimeValue CFTimeValue      // Do not conflict with TimeValue in sal/inc/osl/time.h
 #include <Carbon/Carbon.h>
 #undef TimeValue
@@ -241,10 +270,10 @@ int macxp_resolveAlias(char *path, int buflen);
 #if !defined(_WIN32)  && \
     !defined(LINUX)   && !defined(NETBSD) && !defined(FREEBSD) && \
     !defined(AIX)     && \
-    !defined(SOLARIS) && !defined(MACOSX) && \
+    !defined(__sun) && !defined(MACOSX) && \
     !defined(OPENBSD) && !defined(DRAGONFLY) && \
     !defined(IOS) && !defined(ANDROID) && \
-    !defined(EMSCRIPTEN)
+    !defined(HAIKU)
 #   error "Target platform not specified!"
 #endif
 
@@ -271,12 +300,6 @@ int macxp_resolveAlias(char *path, int buflen);
 
 #ifndef INIT_GROUPS
 #   define  INIT_GROUPS(name, gid)  ((setgid((gid)) == 0) && (initgroups((name), (gid)) == 0))
-#endif
-
-#if defined MACOSX
-#define PTHREAD_VALUE(t) reinterpret_cast<unsigned long>(t)
-#else
-#define PTHREAD_VALUE(t) (t)
 #endif
 
 #ifndef PTHREAD_NONE
@@ -334,13 +357,6 @@ int macxp_resolveAlias(char *path, int buflen);
 #ifndef SA_FAMILY_DECL
 #   define SA_FAMILY_DECL short sa_family
 #endif
-
-typedef struct sockaddr_ipx {
-    SA_FAMILY_DECL;
-    char  sa_netnum[4];
-    char  sa_nodenum[6];
-    unsigned short sa_socket;
-} SOCKADDR_IPX;
 
 #define NSPROTO_IPX      1000
 #define NSPROTO_SPX      1256

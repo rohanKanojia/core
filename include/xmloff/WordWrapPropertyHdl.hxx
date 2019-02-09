@@ -21,8 +21,6 @@
 #define INCLUDED_XMLOFF_WORDWRAPPROPERTYHDL_HXX
 
 #include <xmloff/xmlprhdl.hxx>
-#include <xmloff/xmltoken.hxx>
-#include <xmloff/xmlement.hxx>
 
 /**
     PropertyHandler for a named xml bool type:
@@ -31,11 +29,11 @@ class SvXMLImport;
 class XMLWordWrapPropertyHdl : public XMLPropertyHandler
 {
 private:
-    SvXMLImport* mpImport;
+    SvXMLImport* const mpImport;
 
 public:
     XMLWordWrapPropertyHdl( SvXMLImport* pImport );
-    virtual ~XMLWordWrapPropertyHdl();
+    virtual ~XMLWordWrapPropertyHdl() override;
 
     virtual bool importXML( const OUString& rStrImpValue, css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;
     virtual bool exportXML( OUString& rStrExpValue, const css::uno::Any& rValue, const SvXMLUnitConverter& rUnitConverter ) const override;

@@ -26,7 +26,8 @@
 #include <vcl/button.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/layout.hxx>
-#include <svtools/svtabbx.hxx>
+#include <vcl/svtabbx.hxx>
+#include <vcl/waitobj.hxx>
 #include <svl/poolitem.hxx>
 #include <unotools/moduleoptions.hxx>
 
@@ -49,10 +50,10 @@ public:
     explicit SvxPathControl(vcl::Window* pParent);
     HeaderBar* getHeaderBar() { return m_pHeaderBar; }
     XMLFilterListBox* getListBox() { return m_pFocusCtrl; }
-    virtual ~SvxPathControl();
+    virtual ~SvxPathControl() override;
     virtual void dispose() override;
 
-    virtual bool Notify( NotifyEvent& rNEvt ) override;
+    virtual bool EventNotify( NotifyEvent& rNEvt ) override;
 };
 
 class HeaderBar;
@@ -62,22 +63,20 @@ class XMLFilterListBox : public SvTabListBox
 private:
     VclPtr<HeaderBar>  m_pHeaderBar;
 
-    DECL_LINK_TYPED( TabBoxScrollHdl_Impl, SvTreeListBox*, void );
-    DECL_LINK_TYPED( HeaderEndDrag_Impl, HeaderBar*, void );
+    DECL_LINK( TabBoxScrollHdl_Impl, SvTreeListBox*, void );
+    DECL_LINK( HeaderEndDrag_Impl, HeaderBar*, void );
 
     static OUString getEntryString( const filter_info_impl* pInfo );
 
 public:
     XMLFilterListBox(Window* pParent, SvxPathControl* pPathControl);
-    virtual ~XMLFilterListBox();
+    virtual ~XMLFilterListBox() override;
     virtual void dispose() override;
 
     /** adds a new filter info entry to the ui filter list */
     void addFilterEntry( const filter_info_impl* pInfo );
 
     void changeEntry( const filter_info_impl* pInfo );
-
-    virtual void    Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
 };
 
 
@@ -87,14 +86,14 @@ public:
     XMLFilterSettingsDialog(vcl::Window* pParent,
         const css::uno::Reference< css::uno::XComponentContext >& rxContext,
         Dialog::InitFlag eFlag = Dialog::InitFlag::Default);
-    virtual ~XMLFilterSettingsDialog();
+    virtual ~XMLFilterSettingsDialog() override;
     virtual void dispose() override;
 
-    DECL_LINK_TYPED(ClickHdl_Impl, Button *, void );
-    DECL_LINK_TYPED(SelectionChangedHdl_Impl, SvTreeListBox*, void );
-    DECL_LINK_TYPED(DoubleClickHdl_Impl, SvTreeListBox*, bool );
+    DECL_LINK(ClickHdl_Impl, Button *, void );
+    DECL_LINK(SelectionChangedHdl_Impl, SvTreeListBox*, void );
+    DECL_LINK(DoubleClickHdl_Impl, SvTreeListBox*, bool );
 
-    virtual short Execute() override;
+    void    UpdateWindow();
 
     void    onNew();
     void    onEdit();
@@ -102,17 +101,17 @@ public:
     void    onDelete();
     void    onSave();
     void    onOpen();
-    void    onClose();
 
     void    updateStates();
 
-    virtual bool Notify( NotifyEvent& rNEvt ) override;
-
-    bool    isClosable() { return m_bIsClosable;}
+    virtual bool EventNotify( NotifyEvent& rNEvt ) override;
 
 private:
     void    initFilterList();
     void    disposeFilterList();
+
+    void    incBusy() { maBusy.incBusy(this); }
+    void    decBusy() { maBusy.decBusy(); }
 
     bool    insertOrEdit( filter_info_impl* pNewInfo, const filter_info_impl* pOldInfo = nullptr );
 
@@ -121,14 +120,14 @@ private:
     OUString createUniqueInterfaceName( const OUString& rInterfaceName );
 
 private:
-
     css::uno::Reference< css::uno::XComponentContext >    mxContext;
     css::uno::Reference< css::container::XNameContainer > mxFilterContainer;
     css::uno::Reference< css::container::XNameContainer > mxTypeDetection;
     css::uno::Reference< css::container::XNameContainer > mxExtendedTypeDetection;
 
-    std::vector< filter_info_impl* > maFilterVector;
+    std::vector< std::unique_ptr<filter_info_impl> > maFilterVector;
 
+    TopLevelWindowLocker maBusy;
     VclPtr<XMLFilterListBox>   m_pFilterListBox;
     VclPtr<SvxPathControl> m_pCtrlFilterList;
     VclPtr<PushButton> m_pPBNew;
@@ -138,8 +137,6 @@ private:
     VclPtr<PushButton> m_pPBSave;
     VclPtr<PushButton> m_pPBOpen;
     VclPtr<CloseButton> m_pPBClose;
-
-    bool m_bIsClosable;
 
     OUString m_sTemplatePath;
     OUString m_sDocTypePrefix;

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "fupoor.hxx"
+#include <fupoor.hxx>
 
 #include <svx/svxids.hrc>
 #include <svl/aeitem.hxx>
@@ -29,25 +29,24 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/request.hxx>
-#include <vcl/dialog.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/XLayer.hpp>
 #include <com/sun/star/drawing/XLayerManager.hpp>
 #include <com/sun/star/container/XChild.hpp>
 
-#include "FrameView.hxx"
-#include "app.hrc"
-#include "fusel.hxx"
-#include "sdpage.hxx"
-#include "drawview.hxx"
-#include "DrawViewShell.hxx"
-#include "Window.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "zoomlist.hxx"
-#include "Client.hxx"
-#include "slideshow.hxx"
-#include "LayerTabBar.hxx"
+#include <FrameView.hxx>
+#include <app.hrc>
+#include <fusel.hxx>
+#include <sdpage.hxx>
+#include <drawview.hxx>
+#include <DrawViewShell.hxx>
+#include <Window.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <zoomlist.hxx>
+#include <Client.hxx>
+#include <slideshow.hxx>
+#include <LayerTabBar.hxx>
 
 #include <sfx2/viewfrm.hxx>
 
@@ -72,8 +71,6 @@ FuPoor::FuPoor (
       mpDocSh( pDrDoc->GetDocSh() ),
       mpDoc(pDrDoc),
       nSlotId( rReq.GetSlot() ),
-      nSlotValue(0),
-      pDialog(nullptr),
       bIsInDragMode(false),
       bNoScrollUntilInside (true),
       bScrollable (false),
@@ -84,13 +81,13 @@ FuPoor::FuPoor (
 {
     ReceiveRequest(rReq);
 
-    aScrollTimer.SetTimeoutHdl( LINK(this, FuPoor, ScrollHdl) );
+    aScrollTimer.SetInvokeHandler( LINK(this, FuPoor, ScrollHdl) );
     aScrollTimer.SetTimeout(SELENG_AUTOREPEAT_INTERVAL);
 
-    aDragTimer.SetTimeoutHdl( LINK(this, FuPoor, DragHdl) );
+    aDragTimer.SetInvokeHandler( LINK(this, FuPoor, DragHdl) );
     aDragTimer.SetTimeout(SELENG_DRAGDROP_TIMEOUT);
 
-    aDelayToScrollTimer.SetTimeoutHdl( LINK(this, FuPoor, DelayHdl) );
+    aDelayToScrollTimer.SetInvokeHandler( LINK(this, FuPoor, DelayHdl) );
     aDelayToScrollTimer.SetTimeout(2000);
 }
 
@@ -99,15 +96,10 @@ FuPoor::~FuPoor()
     aDragTimer.Stop();
     aScrollTimer.Stop();
     aDelayToScrollTimer.Stop();
-    pDialog.disposeAndClear();
 }
 
 void FuPoor::Activate()
 {
-    if (pDialog)
-    {
-        pDialog->Show();
-    }
 }
 
 void FuPoor::Deactivate()
@@ -116,11 +108,6 @@ void FuPoor::Deactivate()
     aScrollTimer.Stop();
     aDelayToScrollTimer.Stop ();
     bScrollable = bDelayActive = false;
-
-    if (pDialog)
-    {
-        pDialog->Hide();
-    }
 
     if (mpWindow && mpWindow->IsMouseCaptured())
         mpWindow->ReleaseMouse();
@@ -142,7 +129,7 @@ void FuPoor::ForceScroll(const Point& aPixPos)
             !SlideShow::IsRunning( mpViewShell->GetViewShellBase() ) )
     {
         Point aPos = mpWindow->OutputToScreenPixel(aPixPos);
-        const Rectangle& rRect = mpViewShell->GetAllWindowRect();
+        const ::tools::Rectangle& rRect = mpViewShell->GetAllWindowRect();
 
         if ( bNoScrollUntilInside )
         {
@@ -175,7 +162,7 @@ void FuPoor::ForceScroll(const Point& aPixPos)
 /**
  * timer handler for window scrolling
  */
-IMPL_LINK_NOARG_TYPED(FuPoor, ScrollHdl, Timer *, void)
+IMPL_LINK_NOARG(FuPoor, ScrollHdl, Timer *, void)
 {
     Point aPnt(mpWindow->GetPointerPosPixel());
 
@@ -209,18 +196,18 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
 
                     if(pActualPage)
                     {
-                        SdrObjListIter aIter(*pActualPage, IM_DEEPNOGROUPS);
+                        SdrObjListIter aIter(pActualPage, SdrIterMode::DeepNoGroups);
 
                         while(aIter.IsMore() && !pCandidate)
                         {
                             SdrObject* pObj = aIter.Next();
 
-                            if(pObj && dynamic_cast< const SdrTextObj *>( pObj ) !=  nullptr)
+                            if(dynamic_cast< const SdrTextObj *>( pObj ))
                             {
-                                sal_uInt32 nInv(pObj->GetObjInventor());
+                                SdrInventor nInv(pObj->GetObjInventor());
                                 sal_uInt16 nKnd(pObj->GetObjIdentifier());
 
-                                if(SdrInventor == nInv &&
+                                if(SdrInventor::Default == nInv &&
                                     (OBJ_TITLETEXT == nKnd || OBJ_OUTLINETEXT == nKnd || OBJ_TEXT == nKnd))
                                 {
                                     pCandidate = static_cast<SdrTextObj*>(pObj);
@@ -258,7 +245,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                 {
                     SdrObject* pObj = rMarkList.GetMark( 0 )->GetMarkedSdrObj();
 
-                    if( pObj && dynamic_cast< const SdrOle2Obj* >( pObj ) !=  nullptr && !mpDocSh->IsUIActive() )
+                    if( dynamic_cast< const SdrOle2Obj* >( pObj ) && !mpDocSh->IsUIActive() )
                     {
                         //HMHmpView->HideMarkHdl();
                         mpViewShell->ActivateObject( static_cast< SdrOle2Obj* >( pObj ), 0 );
@@ -288,7 +275,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                 const SdrHdlList& rHdlList = mpView->GetHdlList();
                 bool bForward(!rKEvt.GetKeyCode().IsShift());
 
-                ((SdrHdlList&)rHdlList).TravelFocusHdl(bForward);
+                const_cast<SdrHdlList&>(rHdlList).TravelFocusHdl(bForward);
 
                 // guarantee visibility of focused handle
                 SdrHdl* pHdl = rHdlList.GetFocusHdl();
@@ -296,7 +283,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                 if(pHdl)
                 {
                     Point aHdlPosition(pHdl->GetPos());
-                    Rectangle aVisRect(aHdlPosition - Point(100, 100), Size(200, 200));
+                    ::tools::Rectangle aVisRect(aHdlPosition - Point(100, 100), Size(200, 200));
                     mpView->MakeVisible(aVisRect, *mpWindow);
                 }
 
@@ -526,7 +513,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
 
             if(pHdl)
             {
-                if(pHdl->GetKind() == HDL_POLY)
+                if(pHdl->GetKind() == SdrHdlKind::Poly)
                 {
                     // rescue ID of point with focus
                     sal_uInt32 nPol(pHdl->GetPolyNum());
@@ -559,7 +546,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                             SdrHdl* pAct = rHdlList.GetHdl(a);
 
                             if(pAct
-                                && pAct->GetKind() == HDL_POLY
+                                && pAct->GetKind() == SdrHdlKind::Poly
                                 && pAct->GetPolyNum() == nPol
                                 && pAct->GetPointNum() == nPnt)
                             {
@@ -569,7 +556,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
 
                         if(pNewOne)
                         {
-                            ((SdrHdlList&)rHdlList).SetFocusHdl(pNewOne);
+                            const_cast<SdrHdlList&>(rHdlList).SetFocusHdl(pNewOne);
                         }
                     }
 
@@ -624,18 +611,18 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                     bool bOldSuppress = false;
                     SdrEdgeObj* pEdgeObj = nullptr;
 
-                    if(pHdl && pHdl->GetObj() && nullptr != dynamic_cast< const SdrEdgeObj *>( pHdl->GetObj() ) && 0 == pHdl->GetPolyNum())
+                    if(pHdl && dynamic_cast< const SdrEdgeObj *>( pHdl->GetObj() ) && 0 == pHdl->GetPolyNum())
                     {
                         pEdgeObj = static_cast<SdrEdgeObj*>(pHdl->GetObj());
 
-                        if(0L == pHdl->GetPointNum())
+                        if(0 == pHdl->GetPointNum())
                         {
                             if(pEdgeObj->GetConnection(true).GetObject())
                             {
                                 bIsMoveOfConnectedHandle = true;
                             }
                         }
-                        if(1L == pHdl->GetPointNum())
+                        if(1 == pHdl->GetPointNum())
                         {
                             if(pEdgeObj->GetConnection(false).GetObject())
                             {
@@ -692,11 +679,11 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                         if(mpView->IsMoveAllowed())
                         {
                             // restrict movement to WorkArea
-                            const Rectangle& rWorkArea = mpView->GetWorkArea();
+                            const ::tools::Rectangle& rWorkArea = mpView->GetWorkArea();
 
                             if(!rWorkArea.IsEmpty())
                             {
-                                Rectangle aMarkRect(mpView->GetMarkedObjRect());
+                                ::tools::Rectangle aMarkRect(mpView->GetMarkedObjRect());
                                 aMarkRect.Move(nX, nY);
 
                                 if(!aMarkRect.IsInside(rWorkArea))
@@ -735,7 +722,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
                     else
                     {
                         // move handle with index nHandleIndex
-                        if(pHdl && (nX || nY))
+                        if (nX || nY)
                         {
                             // now move the Handle (nX, nY)
                             Point aStartPoint(pHdl->GetPos());
@@ -752,7 +739,7 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
 
                                 // switch snapping off
                                 if(!bWasNoSnap)
-                                    ((SdrDragStat&)rDragStat).SetNoSnap();
+                                    const_cast<SdrDragStat&>(rDragStat).SetNoSnap();
                                 if(bWasSnapEnabled)
                                     mpView->SetSnapEnabled(false);
 
@@ -761,13 +748,13 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
 
                                 // restore snap
                                 if(!bWasNoSnap)
-                                    ((SdrDragStat&)rDragStat).SetNoSnap(bWasNoSnap);
+                                    const_cast<SdrDragStat&>(rDragStat).SetNoSnap(bWasNoSnap);
                                 if(bWasSnapEnabled)
                                     mpView->SetSnapEnabled(bWasSnapEnabled);
                             }
 
                             // make moved handle visible
-                            Rectangle aVisRect(aEndPoint - Point(100, 100), Size(200, 200));
+                            ::tools::Rectangle aVisRect(aEndPoint - Point(100, 100), Size(200, 200));
                             mpView->MakeVisible(aVisRect, *mpWindow);
                         }
                     }
@@ -841,18 +828,18 @@ bool FuPoor::KeyInput(const KeyEvent& rKEvt)
 
                     if(pActualPage)
                     {
-                        SdrObjListIter aIter(*pActualPage, IM_DEEPNOGROUPS);
+                        SdrObjListIter aIter(pActualPage, SdrIterMode::DeepNoGroups);
 
                         while(aIter.IsMore() && !pCandidate)
                         {
                             SdrObject* pObj = aIter.Next();
 
-                            if(pObj && dynamic_cast< const SdrTextObj *>( pObj ) !=  nullptr)
+                            if(dynamic_cast< const SdrTextObj *>( pObj ))
                             {
-                                sal_uInt32 nInv(pObj->GetObjInventor());
+                                SdrInventor nInv(pObj->GetObjInventor());
                                 sal_uInt16 nKnd(pObj->GetObjIdentifier());
 
-                                if(SdrInventor == nInv && OBJ_TITLETEXT == nKnd)
+                                if(SdrInventor::Default == nInv && OBJ_TITLETEXT == nKnd)
                                 {
                                     pCandidate = static_cast<SdrTextObj*>(pObj);
                                 }
@@ -891,7 +878,7 @@ bool FuPoor::MouseMove(const MouseEvent& )
 void FuPoor::SelectionHasChanged()
 {
     const SdrHdlList& rHdlList = mpView->GetHdlList();
-    ((SdrHdlList&)rHdlList).ResetFocusHdl();
+    const_cast<SdrHdlList&>(rHdlList).ResetFocusHdl();
 }
 
 /**
@@ -901,7 +888,7 @@ void FuPoor::DoCut()
 {
     if (mpView)
     {
-        mpView->DoCut(mpWindow);
+        mpView->DoCut();
     }
 }
 
@@ -912,7 +899,7 @@ void FuPoor::DoCopy()
 {
     if (mpView)
     {
-        mpView->DoCopy(mpWindow);
+        mpView->DoCopy();
     }
 }
 
@@ -939,7 +926,7 @@ void FuPoor::DoPasteUnformatted()
         if (aDataHelper.GetTransferable().is())
         {
             mpView->InsertData( aDataHelper,
-                                mpWindow->PixelToLogic( Rectangle( Point(), mpWindow->GetOutputSizePixel() ).Center() ),
+                                mpWindow->PixelToLogic( ::tools::Rectangle( Point(), mpWindow->GetOutputSizePixel() ).Center() ),
                                 nAction, false, SotClipboardFormatId::STRING);
         }
     }
@@ -948,7 +935,7 @@ void FuPoor::DoPasteUnformatted()
 /**
  * Timer handler for Drag&Drop
  */
-IMPL_LINK_NOARG_TYPED(FuPoor, DragHdl, Timer *, void)
+IMPL_LINK_NOARG(FuPoor, DragHdl, Timer *, void)
 {
     if( mpView )
     {
@@ -973,7 +960,7 @@ bool FuPoor::Command(const CommandEvent& rCEvt)
 /**
  * Timer handler for window scrolling
  */
-IMPL_LINK_NOARG_TYPED(FuPoor, DelayHdl, Timer *, void)
+IMPL_LINK_NOARG(FuPoor, DelayHdl, Timer *, void)
 {
     aDelayToScrollTimer.Stop ();
     bScrollable = true;
@@ -1028,41 +1015,27 @@ bool FuPoor::RequestHelp(const HelpEvent& rHEvt)
     return bReturn;
 }
 
-void FuPoor::ReceiveRequest(SfxRequest& rReq)
+void FuPoor::ReceiveRequest(SfxRequest& /*rReq*/)
 {
-    const SfxItemSet* pSet = rReq.GetArgs();
-
-    if (pSet)
-    {
-        if( pSet->GetItemState( nSlotId ) == SfxItemState::SET )
-        {
-            const SfxPoolItem& rItem = pSet->Get( nSlotId );
-
-            if( dynamic_cast< const SfxAllEnumItem *>( &rItem ) !=  nullptr )
-            {
-                nSlotValue = static_cast<const SfxAllEnumItem&>( rItem ).GetValue();
-            }
-        }
-    }
 }
 
-SdrObject* FuPoor::CreateDefaultObject(const sal_uInt16, const Rectangle& )
+SdrObjectUniquePtr FuPoor::CreateDefaultObject(const sal_uInt16, const ::tools::Rectangle& )
 {
     // empty base implementation
     return nullptr;
 }
 
-void FuPoor::ImpForceQuadratic(Rectangle& rRect)
+void FuPoor::ImpForceQuadratic(::tools::Rectangle& rRect)
 {
     if(rRect.GetWidth() > rRect.GetHeight())
     {
-        rRect = Rectangle(
+        rRect = ::tools::Rectangle(
             Point(rRect.Left() + ((rRect.GetWidth() - rRect.GetHeight()) / 2), rRect.Top()),
             Size(rRect.GetHeight(), rRect.GetHeight()));
     }
     else
     {
-        rRect = Rectangle(
+        rRect = ::tools::Rectangle(
             Point(rRect.Left(), rRect.Top() + ((rRect.GetHeight() - rRect.GetWidth()) / 2)),
             Size(rRect.GetWidth(), rRect.GetWidth()));
     }
@@ -1070,11 +1043,8 @@ void FuPoor::ImpForceQuadratic(Rectangle& rRect)
 
 void FuPoor::SwitchLayer (sal_Int32 nOffset)
 {
-    if(mpViewShell && dynamic_cast< const DrawViewShell *>( mpViewShell ) !=  nullptr)
+    if(auto pDrawViewShell = dynamic_cast<DrawViewShell *>( mpViewShell ))
     {
-        DrawViewShell* pDrawViewShell =
-            static_cast<DrawViewShell*>(mpViewShell);
-
         // Calculate the new index.
         sal_Int32 nIndex = pDrawViewShell->GetActiveTabLayerIndex() + nOffset;
 
@@ -1123,7 +1093,7 @@ bool FuPoor::doConstructOrthogonal() const
     // Check whether a media object is selected
     bool bResizeKeepRatio = false;
     // tdf#89758 Avoid interactive crop preview from being proportionally scaled by default.
-    if (mpView->AreObjectsMarked() && mpView->GetDragMode() != SDRDRAG_CROP)
+    if (mpView->AreObjectsMarked() && mpView->GetDragMode() != SdrDragMode::Crop)
     {
         const SdrMarkList& rMarkList = mpView->GetMarkedObjectList();
         if (rMarkList.GetMarkCount() == 1)

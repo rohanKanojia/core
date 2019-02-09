@@ -20,10 +20,10 @@
 #include "SlsRequestFactory.hxx"
 
 #include "SlsGenericPageCache.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageDescriptor.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
-#include "view/SlideSorterView.hxx"
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageDescriptor.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <view/SlideSorterView.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/sdrpagewindow.hxx>
 #include <svx/sdr/contact/viewcontact.hxx>
@@ -38,22 +38,18 @@ void RequestFactory::operator()(
 
     // Add the requests for the visible pages.
     aKeys = rpCacheContext->GetEntryList(true);
-    if (aKeys.get() != nullptr)
+    if (aKeys != nullptr)
     {
-        std::vector<CacheKey>::const_iterator iKey;
-        std::vector<CacheKey>::const_iterator iEnd (aKeys->end());
-        for (iKey=aKeys->begin(); iKey!=iEnd; ++iKey)
-            rRequestQueue.AddRequest(*iKey, VISIBLE_NO_PREVIEW);
+        for (const auto& rKey : *aKeys)
+            rRequestQueue.AddRequest(rKey, VISIBLE_NO_PREVIEW);
     }
 
     // Add the requests for the non-visible pages.
     aKeys = rpCacheContext->GetEntryList(false);
-    if (aKeys.get() != nullptr)
+    if (aKeys != nullptr)
     {
-        std::vector<CacheKey>::const_iterator iKey;
-        std::vector<CacheKey>::const_iterator iEnd (aKeys->end());
-        for (iKey=aKeys->begin(); iKey!=iEnd; ++iKey)
-            rRequestQueue.AddRequest(*iKey, NOT_VISIBLE);
+        for (const auto& rKey : *aKeys)
+            rRequestQueue.AddRequest(rKey, NOT_VISIBLE);
     }
 }
 

@@ -20,8 +20,8 @@
 
 #include <rtl/ustring.hxx>
 
-#include "saxhelper.hxx"
-#include "libxml/parserInternals.h"
+#include <xmlsec/saxhelper.hxx>
+#include <libxml/parserInternals.h>
 
 #ifndef XMLSEC_NO_XSLT
 #include "libxslt/xslt.h"
@@ -32,20 +32,20 @@ namespace cssxs = com::sun::star::xml::sax;
 namespace cssxcsax = com::sun::star::xml::csax;
 
 /**
- * The return value is NULL terminated. The application has the responsibilty to
- * deallocte the return value.
+ * The return value is NULL terminated. The application has the responsibility to
+ * deallocate the return value.
  */
-xmlChar* ous_to_xmlstr( const OUString& oustr )
+static xmlChar* ous_to_xmlstr( const OUString& oustr )
 {
     OString ostr = OUStringToOString( oustr , RTL_TEXTENCODING_UTF8 ) ;
-    return xmlStrndup( reinterpret_cast<xmlChar const *>(ostr.getStr()), ( int )ostr.getLength() ) ;
+    return xmlStrndup( reinterpret_cast<xmlChar const *>(ostr.getStr()), static_cast<int>(ostr.getLength()) ) ;
 }
 
 /**
- * The return value is NULL terminated. The application has the responsibilty to
- * deallocte the return value.
+ * The return value is NULL terminated. The application has the responsibility to
+ * deallocate the return value.
  */
-xmlChar* ous_to_nxmlstr( const OUString& oustr, int& length )
+static xmlChar* ous_to_nxmlstr( const OUString& oustr, int& length )
 {
     OString ostr = OUStringToOString( oustr , RTL_TEXTENCODING_UTF8 ) ;
     length = ostr.getLength();
@@ -55,9 +55,9 @@ xmlChar* ous_to_nxmlstr( const OUString& oustr, int& length )
 
 /**
  * The return value and the referenced value must be NULL terminated.
- * The application has the responsibilty to deallocte the return value.
+ * The application has the responsibility to deallocate the return value.
  */
-const xmlChar** attrlist_to_nxmlstr( const cssu::Sequence< cssxcsax::XMLAttribute >& aAttributes )
+static const xmlChar** attrlist_to_nxmlstr( const cssu::Sequence< cssxcsax::XMLAttribute >& aAttributes )
 {
     xmlChar* attname = nullptr ;
     xmlChar* attvalue = nullptr ;
@@ -131,33 +131,31 @@ SAXHelper::SAXHelper( )
 //      and neither can we call xsltCleanupGlobals()
         throw cssu::RuntimeException() ;
     }
-    else
+
+    xmlSAXVersion(m_pParserCtxt->sax, 1);
+
+    if (m_pParserCtxt->inputTab != nullptr)
     {
-        xmlSAXVersion(m_pParserCtxt->sax, 1);
+        m_pParserCtxt->inputTab[0] = nullptr ;
+    }
 
-        if (m_pParserCtxt->inputTab != nullptr)
-        {
-            m_pParserCtxt->inputTab[0] = nullptr ;
-        }
-
-        if( m_pParserCtxt->sax == nullptr )
-        {
-            xmlFreeParserCtxt( m_pParserCtxt ) ;
+    if( m_pParserCtxt->sax == nullptr )
+    {
+        xmlFreeParserCtxt( m_pParserCtxt ) ;
 
 //      see issue i74334, we cannot call xmlCleanupParser when libxml is still used
 //      in other parts of the office.
 //      xmlCleanupParser() ;
 //      and neither can we call xsltCleanupGlobals()
-            m_pParserCtxt = nullptr ;
-            throw cssu::RuntimeException() ;
-        }
-        else
-        {
-            m_pSaxHandler = m_pParserCtxt->sax ;
+        m_pParserCtxt = nullptr ;
+        throw cssu::RuntimeException() ;
+    }
+    else
+    {
+        m_pSaxHandler = m_pParserCtxt->sax ;
 
-            //Adjust the context
-            m_pParserCtxt->recovery = 1 ;
-        }
+        //Adjust the context
+        m_pParserCtxt->recovery = 1 ;
     }
 }
 
@@ -214,7 +212,6 @@ void SAXHelper::setCurrentNode(const xmlNodePtr pNode)
  * XDocumentHandler -- start an xml document
  */
 void SAXHelper::startDocument()
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     if( m_pParserCtxt == nullptr)
     {
@@ -243,7 +240,6 @@ void SAXHelper::startDocument()
  * XDocumentHandler -- end an xml document
  */
 void SAXHelper::endDocument()
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     m_pSaxHandler->endDocument( m_pParserCtxt ) ;
 }
@@ -254,7 +250,6 @@ void SAXHelper::endDocument()
 void SAXHelper::startElement(
     const OUString& aName,
     const cssu::Sequence< cssxcsax::XMLAttribute >& aAttributes )
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     const xmlChar* fullName = nullptr ;
     const xmlChar** attrs = nullptr ;
@@ -290,7 +285,6 @@ void SAXHelper::startElement(
  * XDocumentHandler -- end an xml element
  */
 void SAXHelper::endElement( const OUString& aName )
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     xmlChar* fullname = nullptr ;
 
@@ -308,7 +302,6 @@ void SAXHelper::endElement( const OUString& aName )
  * XDocumentHandler -- an xml element or cdata characters
  */
 void SAXHelper::characters( const OUString& aChars )
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     const xmlChar* chars = nullptr ;
     int length = 0 ;
@@ -326,7 +319,6 @@ void SAXHelper::characters( const OUString& aChars )
  * XDocumentHandler -- ignorable xml white space
  */
 void SAXHelper::ignorableWhitespace( const OUString& aWhitespaces )
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     const xmlChar* chars = nullptr ;
     int length = 0 ;
@@ -346,7 +338,6 @@ void SAXHelper::ignorableWhitespace( const OUString& aWhitespaces )
 void SAXHelper::processingInstruction(
     const OUString& aTarget,
     const OUString& aData )
-    throw( cssxs::SAXException , cssu::RuntimeException )
 {
     xmlChar* target = nullptr ;
     xmlChar* data = nullptr ;

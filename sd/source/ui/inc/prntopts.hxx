@@ -20,13 +20,9 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_PRNTOPTS_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_PRNTOPTS_HXX
 
-#include <vcl/group.hxx>
-
 #include <vcl/button.hxx>
 #include <sfx2/tabdlg.hxx>
-#include <vcl/fixed.hxx>
 
-class SdModule;
 class SdPrintOptions : public SfxTabPage
 {
  friend class SdModule;
@@ -52,18 +48,18 @@ private:
     VclPtr<CheckBox>            m_pCbxBack;
     VclPtr<CheckBox>            m_pCbxPaperbin;
 
-    DECL_LINK_TYPED( ClickCheckboxHdl, Button*, void );
-    DECL_LINK_TYPED( ClickBookletHdl, Button*, void );
+    DECL_LINK( ClickCheckboxHdl, Button*, void );
+    DECL_LINK( ClickBookletHdl, Button*, void );
 
     void updateControls();
 
     using OutputDevice::SetDrawMode;
 public:
             SdPrintOptions( vcl::Window* pParent, const SfxItemSet& rInAttrs);
-            virtual ~SdPrintOptions();
+            virtual ~SdPrintOptions() override;
     virtual void dispose() override;
 
-    static  VclPtr<SfxTabPage> Create( vcl::Window*, const SfxItemSet* );
+    static  VclPtr<SfxTabPage> Create( TabPageParent, const SfxItemSet* );
 
     virtual bool FillItemSet( SfxItemSet* ) override;
     virtual void Reset( const SfxItemSet * ) override;

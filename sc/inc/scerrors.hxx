@@ -20,55 +20,63 @@
 #ifndef INCLUDED_SC_INC_SCERRORS_HXX
 #define INCLUDED_SC_INC_SCERRORS_HXX
 
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
 
-#define SCERR_NONE 0
+// ErrCodeClass::Read - file related, displays "Read-Error" in MsgBox
+#define SCERR_IMPORT_CONNECT        ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  1 )
+#define SCERR_IMPORT_OPEN           ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  2 )
+#define SCERR_IMPORT_UNKNOWN        ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  3 )
+  // out of memory
+#define SCERR_IMPORT_OUTOFMEM       ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  4 )
+  // unknown WK? format (Lotus 1-2-3)
+#define SCERR_IMPORT_UNKNOWN_WK     ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  5 )
+  // format error during reading (no formula error!)
+#define SCERR_IMPORT_FORMAT         ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  6 )
+  // filter not implemented
+#define SCERR_IMPORT_NI             ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  7 )
+  // unknown BIFF format (Excel)
+#define SCERR_IMPORT_UNKNOWN_BIFF   ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  8 )
+#define SCERR_IMPORT_NI_BIFF        ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read,  9 )
+  // file password protected
+#define SCERR_IMPORT_FILEPASSWD     ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read, 10 )
+  // internal error
+#define SCERR_IMPORT_INTERNAL       ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read, 11 )
+#define SCERR_IMPORT_8K_LIMIT       ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read, 12 )
+#define SCWARN_IMPORT_OPEN_FM3      ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Read, 13 )
+#define SCWARN_IMPORT_WRONG_FM3     ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Read, 14 )
+#define SCWARN_IMPORT_INFOLOST      ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Read, 15 )
+#define SCERR_IMPORT_FILE_ROWCOL    ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read, 16 )
+#define SCERR_IMPORT_FORMAT_ROWCOL  ErrCode( ErrCodeArea::Sc, ErrCodeClass::Read, 17 )
+#define SCWARN_IMPORT_FILE_ROWCOL   ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Read, 18 )
 
-// ERRCODE_CLASS_READ - file related, displays "Read-Error" in MsgBox
-#define SCERR_IMPORT_CONNECT        (   1 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_OPEN           (   2 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_UNKNOWN        (   3 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_OUTOFMEM       (   4 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_UNKNOWN_WK     (   5 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_FORMAT         (   6 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_NI             (   7 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_UNKNOWN_BIFF   (   8 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_NI_BIFF        (   9 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_FILEPASSWD     (  10 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_INTERNAL       (  11 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_8K_LIMIT       (  12 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_OPEN_FM3      (  13 | ERRCODE_CLASS_READ | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_WRONG_FM3     (  14 | ERRCODE_CLASS_READ | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_INFOLOST      (  15 | ERRCODE_CLASS_READ | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_FILE_ROWCOL    (  16 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCERR_IMPORT_FORMAT_ROWCOL  (  17 | ERRCODE_CLASS_READ | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_FILE_ROWCOL   (  18 | ERRCODE_CLASS_READ | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
+// ErrCodeClass::Write - file related, displays "Write-Error" in MsgBox
+#define SCERR_EXPORT_CONNECT        ErrCode( ErrCodeArea::Sc,  ErrCodeClass::Write, 1 )
+#define SCERR_EXPORT_DATA           ErrCode( ErrCodeArea::Sc,  ErrCodeClass::Write, 2 )
+#define SCERR_EXPORT_ENCODING       ErrCode( ErrCodeArea::Sc,  ErrCodeClass::Write, 3 )
+#define SCERR_EXPORT_FIELDWIDTH     ErrCode( ErrCodeArea::Sc,  ErrCodeClass::Write, 4 )
+#define SCERR_EXPORT_SQLEXCEPTION   ErrCode( ErrCodeArea::Sc,  ErrCodeClass::Write, 5 )
 
-// ERRCODE_CLASS_WRITE - file related, displays "Write-Error" in MsgBox
-#define SCERR_EXPORT_CONNECT        (   1 | ERRCODE_CLASS_WRITE | ERRCODE_AREA_SC )
-#define SCERR_EXPORT_DATA           (   2 | ERRCODE_CLASS_WRITE | ERRCODE_AREA_SC )
-#define SCERR_EXPORT_ENCODING       (   3 | ERRCODE_CLASS_WRITE | ERRCODE_AREA_SC )
-#define SCERR_EXPORT_FIELDWIDTH     (   4 | ERRCODE_CLASS_WRITE | ERRCODE_AREA_SC )
-#define SCERR_EXPORT_SQLEXCEPTION   (   5 | ERRCODE_CLASS_WRITE | ERRCODE_AREA_SC )
+// ErrCodeClass::Import - does not display "Read-Error" in MsgBox
+    // overflow of cell coordinates
+    // table restricted to valid area (?)
+#define SCWARN_IMPORT_RANGE_OVERFLOW  ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Import, 1 )
+#define SCWARN_IMPORT_ROW_OVERFLOW    ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Import, 2 )
+#define SCWARN_IMPORT_COLUMN_OVERFLOW ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Import, 3 )
+#define SCWARN_IMPORT_SHEET_OVERFLOW  ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Import, 4 )
+#define SCWARN_IMPORT_CELL_OVERFLOW   ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Import, 5 )
+#define SCWARN_IMPORT_FEATURES_LOST   ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Import, 6 )
 
-// ERRCODE_CLASS_IMPORT - does not display "Read-Error" in MsgBox
-#define SCWARN_IMPORT_RANGE_OVERFLOW (  1 | ERRCODE_CLASS_IMPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_ROW_OVERFLOW  (   2 | ERRCODE_CLASS_IMPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_COLUMN_OVERFLOW ( 3 | ERRCODE_CLASS_IMPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_SHEET_OVERFLOW (  4 | ERRCODE_CLASS_IMPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_CELL_OVERFLOW (   5 | ERRCODE_CLASS_IMPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_IMPORT_FEATURES_LOST (   6 | ERRCODE_CLASS_IMPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
+// ErrCodeClass::Export - does not display "Write-Error" in MsgBox
+#define SCWARN_EXPORT_NONCONVERTIBLE_CHARS  \
+                                    ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Export, 1 )
+#define SCWARN_EXPORT_ASCII         ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Export, 2 )
+#define SCWARN_EXPORT_MAXROW        ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Export, 3 )
+#define SCWARN_EXPORT_MAXCOL        ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Export, 4 )
+#define SCWARN_EXPORT_MAXTAB        ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Export, 5 )
+#define SCWARN_EXPORT_DATALOST      ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::Export, 6 )
 
-// ERRCODE_CLASS_EXPORT - does not display "Write-Error" in MsgBox
-#define SCWARN_EXPORT_NONCONVERTIBLE_CHARS  (   1 | ERRCODE_CLASS_EXPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_EXPORT_ASCII         (   2 | ERRCODE_CLASS_EXPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_EXPORT_MAXROW        (   3 | ERRCODE_CLASS_EXPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_EXPORT_MAXCOL        (   4 | ERRCODE_CLASS_EXPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_EXPORT_MAXTAB        (   5 | ERRCODE_CLASS_EXPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-#define SCWARN_EXPORT_DATALOST      (   6 | ERRCODE_CLASS_EXPORT | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
-
-// ERRCODE_CLASS_GENERAL
-#define SCWARN_CORE_HARD_RECALC     (   1 | ERRCODE_CLASS_GENERAL | ERRCODE_WARNING_MASK | ERRCODE_AREA_SC )
+// ErrCodeClass::General
+#define SCWARN_CORE_HARD_RECALC     ErrCode( WarningFlag::Yes, ErrCodeArea::Sc, ErrCodeClass::General, 1 )
 
 #endif
 

@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "crsrsh.hxx"
-#include "ndtxt.hxx"
+#include <crsrsh.hxx>
+#include <ndtxt.hxx>
+#include <rootfrm.hxx>
+#include <txtfrm.hxx>
 #include <docary.hxx>
-#include "IMark.hxx"
+#include <IMark.hxx>
 #include "callnk.hxx"
-#include "swcrsr.hxx"
+#include <swcrsr.hxx>
 #include <IDocumentMarkAccess.hxx>
 #include <IDocumentSettingAccess.hxx>
 
@@ -32,7 +34,7 @@ namespace
 {
     struct CursorStateHelper
     {
-        explicit CursorStateHelper(SwCursorShell& rShell)
+        explicit CursorStateHelper(SwCursorShell const & rShell)
             : m_pCursor(rShell.GetSwCursor())
             , m_aSaveState(*m_pCursor)
         { }
@@ -50,8 +52,8 @@ namespace
         /// returns true if the Cursor had been rolled back
         bool RollbackIfIllegal()
         {
-            if(m_pCursor->IsSelOvr(nsSwCursorSelOverFlags::SELOVER_CHECKNODESSECTION
-                | nsSwCursorSelOverFlags::SELOVER_TOGGLE))
+            if(m_pCursor->IsSelOvr(SwCursorSelOverFlags::CheckNodeSection
+                | SwCursorSelOverFlags::Toggle))
             {
                 m_pCursor->DeleteMark();
                 m_pCursor->RestoreSavePos();
@@ -61,7 +63,7 @@ namespace
         }
 
         SwCursor* m_pCursor;
-        SwCursorSaveState m_aSaveState;
+        SwCursorSaveState const m_aSaveState;
     };
 
     bool lcl_ReverseMarkOrderingByEnd(const IDocumentMarkAccess::pMark_t& rpFirst,
@@ -80,33 +82,100 @@ namespace
 ::sw::mark::IMark* SwCursorShell::SetBookmark(
     const vcl::KeyCode& rCode,
     const OUString& rName,
-    const OUString& rShortName,
     IDocumentMarkAccess::MarkType eMark)
 {
     StartAction();
     ::sw::mark::IMark* pMark = getIDocumentMarkAccess()->makeMark(
         *GetCursor(),
         rName,
-        eMark);
+        eMark, sw::mark::InsertMode::New);
     ::sw::mark::IBookmark* pBookmark = dynamic_cast< ::sw::mark::IBookmark* >(pMark);
     if(pBookmark)
     {
         pBookmark->SetKeyCode(rCode);
-        pBookmark->SetShortName(rShortName);
+        pBookmark->SetShortName(OUString());
     }
     EndAction();
     return pMark;
 }
 // set CurrentCursor.SPoint
 
+// at CurrentCursor.SPoint
+::sw::mark::IMark* SwCursorShell::SetBookmark2(
+    const vcl::KeyCode& rCode,
+    const OUString& rName,
+    bool bHide,
+    const OUString& rCondition)
+{
+    StartAction();
+    ::sw::mark::IMark* pMark = getIDocumentMarkAccess()->makeMark(
+        *GetCursor(),
+        rName,
+        IDocumentMarkAccess::MarkType::BOOKMARK, sw::mark::InsertMode::New);
+    ::sw::mark::IBookmark* pBookmark = dynamic_cast< ::sw::mark::IBookmark* >(pMark);
+    if (pBookmark)
+    {
+        pBookmark->SetKeyCode(rCode);
+        pBookmark->SetShortName(OUString());
+        pBookmark->Hide(bHide);
+        pBookmark->SetHideCondition(rCondition);
+    }
+    EndAction();
+    return pMark;
+}
+
+namespace sw {
+
+bool IsMarkHidden(SwRootFrame const& rLayout, ::sw::mark::IMark const& rMark)
+{
+    if (!rLayout.IsHideRedlines())
+    {
+        return false;
+    }
+    SwTextNode const& rNode(*rMark.GetMarkPos().nNode.GetNode().GetTextNode());
+    SwTextFrame const*const pFrame(static_cast<SwTextFrame const*>(
+        rNode.getLayoutFrame(&rLayout)));
+    if (!pFrame)
+    {
+        return true;
+    }
+    if (rMark.IsExpanded())
+    {
+        SwTextFrame const*const pOtherFrame(static_cast<SwTextFrame const*>(
+            rMark.GetOtherMarkPos().nNode.GetNode().GetTextNode()->getLayoutFrame(&rLayout)));
+        return pFrame == pOtherFrame
+            && pFrame->MapModelToViewPos(rMark.GetMarkPos())
+                == pFrame->MapModelToViewPos(rMark.GetOtherMarkPos());
+    }
+    else
+    {
+        if (rMark.GetMarkPos().nContent.GetIndex() == rNode.Len())
+        {   // at end of node: never deleted (except if node deleted)
+            return rNode.GetRedlineMergeFlag() == SwNode::Merge::Hidden;
+        }
+        else
+        {   // check character following mark pos
+            return pFrame->MapModelToViewPos(rMark.GetMarkPos())
+                == pFrame->MapModelToView(&rNode, rMark.GetMarkPos().nContent.GetIndex() + 1);
+        }
+    }
+}
+
+} // namespace sw
+
+// set CurrentCursor.SPoint
 bool SwCursorShell::GotoMark(const ::sw::mark::IMark* const pMark, bool bAtStart)
 {
+    if (sw::IsMarkHidden(*GetLayout(), *pMark))
+    {
+        return false;
+    }
     // watch Cursor-Moves
     CursorStateHelper aCursorSt(*this);
     if ( bAtStart )
-        *(aCursorSt.m_pCursor)->GetPoint() = pMark->GetMarkStart();
+        *aCursorSt.m_pCursor->GetPoint() = pMark->GetMarkStart();
     else
-        *(aCursorSt.m_pCursor)->GetPoint() = pMark->GetMarkEnd();
+        *aCursorSt.m_pCursor->GetPoint() = pMark->GetMarkEnd();
 
     if(aCursorSt.RollbackIfIllegal()) return false;
 
@@ -116,6 +185,10 @@ bool SwCursorShell::GotoMark(const ::sw::mark::IMark* const pMark, bool bAtStart
 
 bool SwCursorShell::GotoMark(const ::sw::mark::IMark* const pMark)
 {
+    if (sw::IsMarkHidden(*GetLayout(), *pMark))
+    {
+        return false;
+    }
     // watch Cursor-Moves
     CursorStateHelper aCursorSt(*this);
     aCursorSt.SetCursorToMark(pMark);
@@ -145,6 +218,10 @@ bool SwCursorShell::GoNextBookmark()
     IDocumentMarkAccess::const_iterator_t ppMark = vCandidates.begin();
     for(; ppMark!=vCandidates.end(); ++ppMark)
     {
+        if (sw::IsMarkHidden(*GetLayout(), **ppMark))
+        {
+            continue;
+        }
         aCursorSt.SetCursorToMark(ppMark->get());
         if(!aCursorSt.RollbackIfIllegal())
             break; // found legal move
@@ -190,6 +267,10 @@ bool SwCursorShell::GoPrevBookmark()
         // above)
         if(!(**ppMark).EndsBefore(*GetCursor()->GetPoint()))
             continue;
+        if (sw::IsMarkHidden(*GetLayout(), **ppMark))
+        {
+            continue;
+        }
         aCursorSt.SetCursorToMark(ppMark->get());
         if(!aCursorSt.RollbackIfIllegal())
             break; // found legal move

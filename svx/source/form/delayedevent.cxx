@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "delayedevent.hxx"
+#include <delayedevent.hxx>
 #include <vcl/svapp.hxx>
+#include <sal/log.hxx>
 
 namespace svxform
 {
@@ -37,7 +38,7 @@ namespace svxform
         m_nEventId = nullptr;
     }
 
-    IMPL_LINK_TYPED( DelayedEvent, OnCall, void*, _pArg, void )
+    IMPL_LINK( DelayedEvent, OnCall, void*, _pArg, void )
     {
         m_nEventId = nullptr;
         m_aHandler.Call( _pArg );

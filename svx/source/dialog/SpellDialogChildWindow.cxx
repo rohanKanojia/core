@@ -20,6 +20,7 @@
 #include <svx/SpellDialogChildWindow.hxx>
 
 #include <svx/svxdlg.hxx>
+#include <osl/diagnose.h>
 
 namespace svx {
 
@@ -27,23 +28,20 @@ namespace svx {
 SpellDialogChildWindow::SpellDialogChildWindow (
     vcl::Window* _pParent,
     sal_uInt16 nId,
-    SfxBindings* pBindings,
-    SfxChildWinInfo* /*pInfo*/)
+    SfxBindings* pBindings)
     : SfxChildWindow (_pParent, nId)
-
 {
-
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    DBG_ASSERT(pFact, "SvxAbstractDialogFactory::Create() failed");
-    m_xAbstractSpellDialog.reset(pFact->CreateSvxSpellDialog(_pParent,
+    m_xAbstractSpellDialog = pFact->CreateSvxSpellDialog(_pParent,
                                             pBindings,
-                                            this ));
+                                            this );
     SetWindow( m_xAbstractSpellDialog->GetWindow() );
     SetHideNotDelete(true);
 }
 
 SpellDialogChildWindow::~SpellDialogChildWindow()
 {
+    m_xAbstractSpellDialog.disposeAndClear();
 }
 
 SfxBindings& SpellDialogChildWindow::GetBindings() const

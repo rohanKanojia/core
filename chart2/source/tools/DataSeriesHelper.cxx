@@ -17,11 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DataSeriesHelper.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSource.hxx"
-#include "macros.hxx"
-#include "ContainerHelper.hxx"
+#include <DataSeriesHelper.hxx>
+#include <DataSource.hxx>
+#include <ContainerHelper.hxx>
 #include <unonames.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
@@ -37,9 +35,11 @@
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/chart2/XChartTypeContainer.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
+#include <comphelper/sequence.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
-#include <functional>
 #include <algorithm>
 #include <iterator>
 #include <vector>
@@ -54,7 +54,7 @@ using ::com::sun::star::uno::Sequence;
 namespace
 {
 
-class lcl_MatchesRole : public ::std::unary_function< Reference< chart2::data::XLabeledDataSequence >, bool >
+class lcl_MatchesRole
 {
 public:
     explicit lcl_MatchesRole( const OUString & aRole, bool bMatchPrefix ) :
@@ -76,7 +76,7 @@ public:
 
         return ( xProp.is() &&
                  (xProp->getPropertyValue( "Role" ) >>= aRole ) &&
-                 m_aRole.equals( aRole ));
+                 m_aRole == aRole );
     }
 
 private:
@@ -155,7 +155,7 @@ void lcl_insertOrDeleteDataLabelsToSeriesAndAllPoints( const Reference< chart2::
                 aLabelAtSeries.ShowNumberInPercent = false;
                 aLabelAtSeries.ShowCategoryName = false;
             }
-            xSeriesProperties->setPropertyValue(CHART_UNONAME_LABEL, uno::makeAny(aLabelAtSeries));
+            xSeriesProperties->setPropertyValue(CHART_UNONAME_LABEL, uno::Any(aLabelAtSeries));
             uno::Sequence< sal_Int32 > aAttributedDataPointIndexList;
             if( xSeriesProperties->getPropertyValue( "AttributedDataPoints" ) >>= aAttributedDataPointIndexList )
             {
@@ -172,7 +172,7 @@ void lcl_insertOrDeleteDataLabelsToSeriesAndAllPoints( const Reference< chart2::
                             aLabel.ShowNumberInPercent = false;
                             aLabel.ShowCategoryName = false;
                         }
-                        xPointProp->setPropertyValue(CHART_UNONAME_LABEL, uno::makeAny(aLabel));
+                        xPointProp->setPropertyValue(CHART_UNONAME_LABEL, uno::Any(aLabel));
                     }
                 }
             }
@@ -180,7 +180,7 @@ void lcl_insertOrDeleteDataLabelsToSeriesAndAllPoints( const Reference< chart2::
     }
     catch(const uno::Exception &e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
 }
 
@@ -218,7 +218,7 @@ Reference< chart2::data::XLabeledDataSequence >
     const Reference< chart2::data::XLabeledDataSequence > * pBegin = aLabeledSeq.getConstArray();
     const Reference< chart2::data::XLabeledDataSequence > * pEnd = pBegin + aLabeledSeq.getLength();
     const Reference< chart2::data::XLabeledDataSequence > * pMatch =
-        ::std::find_if( pBegin, pEnd, lcl_MatchesRole( aRole, bMatchPrefix ));
+        std::find_if( pBegin, pEnd, lcl_MatchesRole( aRole, bMatchPrefix ));
 
     if( pMatch != pEnd )
         return *pMatch;
@@ -226,21 +226,21 @@ Reference< chart2::data::XLabeledDataSequence >
     return aNoResult;
 }
 
-::std::vector< Reference< chart2::data::XLabeledDataSequence > >
+std::vector< Reference< chart2::data::XLabeledDataSequence > >
     getAllDataSequencesByRole( const Sequence< Reference< chart2::data::XLabeledDataSequence > > & aDataSequences,
-                               const OUString& aRole, bool bMatchPrefix /* = false */ )
+                               const OUString& aRole )
 {
-    ::std::vector< Reference< chart2::data::XLabeledDataSequence > > aResultVec;
-    ::std::remove_copy_if( aDataSequences.getConstArray(), aDataSequences.getConstArray() + aDataSequences.getLength(),
-                           ::std::back_inserter( aResultVec ),
-                           ::std::not1( lcl_MatchesRole( aRole, bMatchPrefix )));
+    std::vector< Reference< chart2::data::XLabeledDataSequence > > aResultVec;
+    std::copy_if( aDataSequences.begin(), aDataSequences.end(),
+                           std::back_inserter( aResultVec ),
+                           lcl_MatchesRole(aRole, /*bMatchPrefix*/true) );
     return aResultVec;
 }
 
 std::vector<Reference<css::chart2::data::XLabeledDataSequence> >
 getAllDataSequences( const uno::Sequence<uno::Reference<chart2::XDataSeries> >& aSeries )
 {
-    ::std::vector< Reference< chart2::data::XLabeledDataSequence > > aSeqVec;
+    std::vector< Reference< chart2::data::XLabeledDataSequence > > aSeqVec;
 
     for( sal_Int32 i = 0; i < aSeries.getLength(); ++i )
     {
@@ -248,8 +248,8 @@ getAllDataSequences( const uno::Sequence<uno::Reference<chart2::XDataSeries> >& 
         if( xSource.is())
         {
             Sequence< Reference< chart2::data::XLabeledDataSequence > > aSeq( xSource->getDataSequences());
-            ::std::copy( aSeq.begin(), aSeq.end(),
-                         ::std::back_inserter( aSeqVec ));
+            std::copy( aSeq.begin(), aSeq.end(),
+                         std::back_inserter( aSeqVec ));
         }
     }
 
@@ -387,14 +387,11 @@ void setStackModeAtSeries(
     const Reference< chart2::XCoordinateSystem > & xCorrespondingCoordinateSystem,
     StackMode eStackMode )
 {
-    if( eStackMode == StackMode_AMBIGUOUS )
-        return;
-
-    const uno::Any aPropValue = uno::makeAny(
-        ( (eStackMode == StackMode_Y_STACKED) ||
-          (eStackMode == StackMode_Y_STACKED_PERCENT) )
+    const uno::Any aPropValue(
+        ( (eStackMode == StackMode::YStacked) ||
+          (eStackMode == StackMode::YStackedPercent) )
         ? chart2::StackingDirection_Y_STACKING
-        : (eStackMode == StackMode_Z_STACKED )
+        : (eStackMode == StackMode::ZStacked )
         ? chart2::StackingDirection_Z_STACKING
         : chart2::StackingDirection_NO_STACKING );
 
@@ -413,9 +410,9 @@ void setStackModeAtSeries(
                 aAxisIndexSet.insert(nAxisIndex);
             }
         }
-        catch( const uno::Exception & ex )
+        catch( const uno::Exception & )
         {
-            ASSERT_EXCEPTION( ex );
+            DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
 
@@ -427,15 +424,13 @@ void setStackModeAtSeries(
             aAxisIndexSet.insert(0);
         }
 
-        for( ::std::set< sal_Int32 >::const_iterator aIt = aAxisIndexSet.begin();
-            aIt != aAxisIndexSet.end(); ++aIt )
+        for (auto const& axisIndex : aAxisIndexSet)
         {
-            sal_Int32 nAxisIndex = *aIt;
             Reference< chart2::XAxis > xAxis(
-                xCorrespondingCoordinateSystem->getAxisByDimension( 1, nAxisIndex ));
+                xCorrespondingCoordinateSystem->getAxisByDimension(1, axisIndex));
             if( xAxis.is())
             {
-                bool bPercent = (eStackMode == StackMode_Y_STACKED_PERCENT);
+                bool bPercent = (eStackMode == StackMode::YStackedPercent);
                 chart2::ScaleData aScaleData = xAxis->getScaleData();
 
                 if( bPercent != (aScaleData.AxisType==chart2::AxisType::PERCENT) )
@@ -462,9 +457,9 @@ sal_Int32 getAttachedAxisIndex( const Reference< chart2::XDataSeries > & xSeries
             xProp->getPropertyValue( "AttachedAxisIndex" ) >>= nRet;
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
     return nRet;
 }
@@ -485,9 +480,9 @@ sal_Int32 getNumberFormatKeyFromAxis(
         if( xAxisProp.is())
             xAxisProp->getPropertyValue(CHART_UNONAME_NUMFMT) >>= nResult;
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return nResult;
@@ -522,19 +517,19 @@ void deleteSeries(
     try
     {
         Reference< chart2::XDataSeriesContainer > xSeriesCnt( xChartType, uno::UNO_QUERY_THROW );
-        ::std::vector< Reference< chart2::XDataSeries > > aSeries(
+        std::vector< Reference< chart2::XDataSeries > > aSeries(
             ContainerHelper::SequenceToVector( xSeriesCnt->getDataSeries()));
-        ::std::vector< Reference< chart2::XDataSeries > >::iterator aIt =
-              ::std::find( aSeries.begin(), aSeries.end(), xSeries );
+        std::vector< Reference< chart2::XDataSeries > >::iterator aIt =
+              std::find( aSeries.begin(), aSeries.end(), xSeries );
         if( aIt != aSeries.end())
         {
             aSeries.erase( aIt );
             xSeriesCnt->setDataSeries( comphelper::containerToSequence( aSeries ));
         }
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
@@ -545,7 +540,7 @@ void switchSymbolsOnOrOff( const Reference< beans::XPropertySet > & xSeriesPrope
         return;
 
     chart2::Symbol aSymbProp;
-    if( (xSeriesProperties->getPropertyValue( "Symbol") >>= aSymbProp ) )
+    if( xSeriesProperties->getPropertyValue( "Symbol") >>= aSymbProp )
     {
         if( !bSymbolsOn )
             aSymbProp.Style = chart2::SymbolStyle_NONE;
@@ -554,7 +549,7 @@ void switchSymbolsOnOrOff( const Reference< beans::XPropertySet > & xSeriesPrope
             aSymbProp.Style = chart2::SymbolStyle_STANDARD;
             aSymbProp.StandardSymbol = nSeriesIndex;
         }
-        xSeriesProperties->setPropertyValue( "Symbol", uno::makeAny( aSymbProp ));
+        xSeriesProperties->setPropertyValue( "Symbol", uno::Any( aSymbProp ));
     }
     //todo: check attributed data points
 }
@@ -571,11 +566,11 @@ void switchLinesOnOrOff( const Reference< beans::XPropertySet > & xSeriesPropert
         if( (xSeriesProperties->getPropertyValue( "LineStyle") >>= eLineStyle ) &&
             eLineStyle == drawing::LineStyle_NONE )
         {
-            xSeriesProperties->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_SOLID ) );
+            xSeriesProperties->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_SOLID ) );
         }
     }
     else
-        xSeriesProperties->setPropertyValue( "LineStyle", uno::makeAny( drawing::LineStyle_NONE ) );
+        xSeriesProperties->setPropertyValue( "LineStyle", uno::Any( drawing::LineStyle_NONE ) );
 }
 
 void makeLinesThickOrThin( const Reference< beans::XPropertySet > & xSeriesProperties, bool bThick )
@@ -589,7 +584,7 @@ void makeLinesThickOrThin( const Reference< beans::XPropertySet > & xSeriesPrope
         nOldValue != nNewValue )
     {
         if( !(bThick && nOldValue>0))
-            xSeriesProperties->setPropertyValue( "LineWidth", uno::makeAny( nNewValue ) );
+            xSeriesProperties->setPropertyValue( "LineWidth", uno::Any( nNewValue ) );
     }
 }
 
@@ -637,44 +632,6 @@ bool hasAttributedDataPointDifferentValue( const Reference< chart2::XDataSeries 
     return false;
 }
 
-bool areAllSeriesAttachedToSameAxis( const uno::Reference< chart2::XChartType >& xChartType, sal_Int32 & rOutAxisIndex )
-{
-    try
-    {
-        uno::Reference< chart2::XDataSeriesContainer > xDataSeriesContainer( xChartType, uno::UNO_QUERY_THROW );
-        uno::Sequence< uno::Reference< chart2::XDataSeries > > aSeriesSeq( xDataSeriesContainer->getDataSeries());
-
-        const sal_Int32 nSeriesCount( aSeriesSeq.getLength());
-        // AxisIndex can only be 0 or 1
-        sal_Int32 nSeriesAtFirstAxis = 0;
-        sal_Int32 nSeriesAtSecondAxis = 0;
-
-        for( sal_Int32 nI = 0; nI < nSeriesCount; ++nI )
-        {
-            uno::Reference< chart2::XDataSeries > xSeries( aSeriesSeq[nI], uno::UNO_QUERY );
-            sal_Int32 nAxisIndex = DataSeriesHelper::getAttachedAxisIndex( xSeries );
-            if( nAxisIndex == 0 )
-                ++nSeriesAtFirstAxis;
-            else if( nAxisIndex == 1 )
-                ++nSeriesAtSecondAxis;
-        }
-        OSL_ENSURE( nSeriesAtFirstAxis + nSeriesAtSecondAxis == nSeriesCount, "Invalid axis index found" );
-
-        if( nSeriesAtFirstAxis == nSeriesCount )
-            rOutAxisIndex = 0;
-        else if( nSeriesAtSecondAxis == nSeriesCount )
-            rOutAxisIndex = 1;
-
-        return ( nSeriesAtFirstAxis == nSeriesCount ||
-                 nSeriesAtSecondAxis == nSeriesCount );
-    }
-    catch( const uno::Exception & ex )
-    {
-        ASSERT_EXCEPTION( ex );
-        return false;
-    }
-}
-
 namespace
 {
 
@@ -697,9 +654,7 @@ bool lcl_SequenceHasUnhiddenData( const uno::Reference< chart2::data::XDataSeque
             return true;
         }
     }
-    if( xDataSequence->getData().getLength() )
-        return true;
-    return false;
+    return xDataSequence->getData().getLength();
 }
 
 }
@@ -723,14 +678,6 @@ bool hasUnhiddenData( const uno::Reference< chart2::XDataSeries >& xSeries )
     return false;
 }
 
-struct lcl_LessIndex
-{
-    inline bool operator() ( const sal_Int32& first, const sal_Int32& second ) const
-    {
-        return ( first < second );
-    }
-};
-
 sal_Int32 translateIndexFromHiddenToFullSequence( sal_Int32 nIndex, const Reference< chart2::data::XDataSequence >& xDataSequence, bool bTranslate )
 {
     if( !bTranslate )
@@ -745,8 +692,8 @@ sal_Int32 translateIndexFromHiddenToFullSequence( sal_Int32 nIndex, const Refere
             xProp->getPropertyValue( "HiddenValues" ) >>= aHiddenIndicesSeq;
             if( aHiddenIndicesSeq.getLength() )
             {
-                ::std::vector< sal_Int32 > aHiddenIndices( ContainerHelper::SequenceToVector( aHiddenIndicesSeq ) );
-                ::std::sort( aHiddenIndices.begin(), aHiddenIndices.end(), lcl_LessIndex() );
+                std::vector< sal_Int32 > aHiddenIndices( ContainerHelper::SequenceToVector( aHiddenIndicesSeq ) );
+                std::sort( aHiddenIndices.begin(), aHiddenIndices.end() );
 
                 sal_Int32 nHiddenCount = static_cast<sal_Int32>(aHiddenIndices.size());
                 for( sal_Int32 nN = 0; nN < nHiddenCount; ++nN)
@@ -774,13 +721,13 @@ bool hasDataLabelsAtSeries( const Reference< chart2::XDataSeries >& xSeries )
         if( xProp.is() )
         {
             DataPointLabel aLabel;
-            if( (xProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel) )
+            if( xProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel )
                 bRet = aLabel.ShowNumber || aLabel.ShowNumberInPercent || aLabel.ShowCategoryName;
         }
     }
     catch(const uno::Exception &e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     return bRet;
 }
@@ -802,7 +749,7 @@ bool hasDataLabelsAtPoints( const Reference< chart2::XDataSeries >& xSeries )
                     if( xPointProp.is() )
                     {
                         DataPointLabel aLabel;
-                        if( (xPointProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel) )
+                        if( xPointProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel )
                             bRet = aLabel.ShowNumber || aLabel.ShowNumberInPercent || aLabel.ShowCategoryName;
                         if( bRet )
                             break;
@@ -813,7 +760,7 @@ bool hasDataLabelsAtPoints( const Reference< chart2::XDataSeries >& xSeries )
     }
     catch(const uno::Exception &e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     return bRet;
 }
@@ -830,8 +777,8 @@ bool hasDataLabelAtPoint( const Reference< chart2::XDataSeries >& xSeries, sal_I
             uno::Sequence< sal_Int32 > aAttributedDataPointIndexList;
             if( xSeriesProperties->getPropertyValue( "AttributedDataPoints" ) >>= aAttributedDataPointIndexList )
             {
-                ::std::vector< sal_Int32 > aIndices( ContainerHelper::SequenceToVector( aAttributedDataPointIndexList ) );
-                ::std::vector< sal_Int32 >::iterator aIt = ::std::find( aIndices.begin(), aIndices.end(), nPointIndex );
+                std::vector< sal_Int32 > aIndices( ContainerHelper::SequenceToVector( aAttributedDataPointIndexList ) );
+                std::vector< sal_Int32 >::iterator aIt = std::find( aIndices.begin(), aIndices.end(), nPointIndex );
                 if( aIt != aIndices.end())
                     xProp = xSeries->getDataPointByIndex(nPointIndex);
                 else
@@ -840,14 +787,14 @@ bool hasDataLabelAtPoint( const Reference< chart2::XDataSeries >& xSeries, sal_I
             if( xProp.is() )
             {
                 DataPointLabel aLabel;
-                if( (xProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel) )
+                if( xProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel )
                     bRet = aLabel.ShowNumber || aLabel.ShowNumberInPercent || aLabel.ShowCategoryName;
             }
         }
     }
     catch(const uno::Exception &e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
     return bRet;
 }
@@ -871,12 +818,12 @@ void insertDataLabelToPoint( const Reference< beans::XPropertySet >& xPointProp 
             DataPointLabel aLabel;
             xPointProp->getPropertyValue(CHART_UNONAME_LABEL) >>= aLabel;
             aLabel.ShowNumber = true;
-            xPointProp->setPropertyValue(CHART_UNONAME_LABEL, uno::makeAny(aLabel));
+            xPointProp->setPropertyValue(CHART_UNONAME_LABEL, uno::Any(aLabel));
         }
     }
     catch(const uno::Exception &e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
 }
 
@@ -891,12 +838,12 @@ void deleteDataLabelsFromPoint( const Reference< beans::XPropertySet >& xPointPr
             aLabel.ShowNumber = false;
             aLabel.ShowNumberInPercent = false;
             aLabel.ShowCategoryName = false;
-            xPointProp->setPropertyValue(CHART_UNONAME_LABEL, uno::makeAny(aLabel));
+            xPointProp->setPropertyValue(CHART_UNONAME_LABEL, uno::Any(aLabel));
         }
     }
     catch(const uno::Exception &e)
     {
-        ASSERT_EXCEPTION( e );
+        SAL_WARN("chart2", "Exception caught. " << e );
     }
 }
 

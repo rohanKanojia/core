@@ -7,13 +7,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include <SyncDbusSessionHelper.hxx>
+#include "SyncDbusSessionHelper.hxx"
 #include <comphelper/servicedecl.hxx>
 #include <uno/environment.h>
 
 namespace sdecl = ::comphelper::service_decl;
 
-sdecl::class_< ::shell::sessioninstall::SyncDbusSessionHelper> SyncDbusSessionHelperServiceImpl;
+sdecl::class_< ::shell::sessioninstall::SyncDbusSessionHelper> const SyncDbusSessionHelperServiceImpl;
 
 const sdecl::ServiceDecl SyncDbusSessionHelperServiceDecl(
     SyncDbusSessionHelperServiceImpl,
@@ -21,14 +21,14 @@ const sdecl::ServiceDecl SyncDbusSessionHelperServiceDecl(
     "org.freedesktop.PackageKit.SyncDbusSessionHelper");
 
 extern "C"
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL losessioninstall_component_getFactory( sal_Char const* pImplName,
+SAL_DLLPUBLIC_EXPORT void* losessioninstall_component_getFactory( sal_Char const* pImplName,
                                          void*, void* )
 {
     return sdecl::component_getFactoryHelper( pImplName, {&SyncDbusSessionHelperServiceDecl} );
 }
 
 extern "C"
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL sessioninstall_component_getFactory( sal_Char const* pImplName, void* pServiceManager, void* pRegistryKey )
+SAL_DLLPUBLIC_EXPORT void* sessioninstall_component_getFactory( sal_Char const* pImplName, void* pServiceManager, void* pRegistryKey )
 {
     return losessioninstall_component_getFactory(pImplName, pServiceManager, pRegistryKey);
 }

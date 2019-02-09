@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/shapepropertiescontext.hxx"
+#include <drawingml/shapepropertiescontext.hxx>
 
 #include <com/sun/star/xml/sax/FastToken.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
@@ -25,12 +25,15 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 
-#include "drawingml/scene3dcontext.hxx"
-#include "drawingml/linepropertiescontext.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "drawingml/transform2dcontext.hxx"
-#include "drawingml/customshapegeometry.hxx"
+#include <drawingml/scene3dcontext.hxx>
+#include <drawingml/linepropertiescontext.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <drawingml/transform2dcontext.hxx>
+#include <drawingml/customshapegeometry.hxx>
 #include "effectpropertiescontext.hxx"
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace oox::core;
 using namespace ::com::sun::star;
@@ -42,7 +45,7 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace drawingml {
 
 // CT_ShapeProperties
-ShapePropertiesContext::ShapePropertiesContext( ContextHandler2Helper& rParent, Shape& rShape )
+ShapePropertiesContext::ShapePropertiesContext( ContextHandler2Helper const & rParent, Shape& rShape )
 : ContextHandler2( rParent )
 , mrShape( rShape )
 {
@@ -58,7 +61,7 @@ ContextHandlerRef ShapePropertiesContext::onCreateContext( sal_Int32 aElementTok
 
     // GeometryGroup
     case A_TOKEN( custGeom ):   // custom geometry "CT_CustomGeometry2D"
-        return new CustomShapeGeometryContext( *this, rAttribs, *(mrShape.getCustomShapeProperties()) );
+        return new CustomShapeGeometryContext( *this, *mrShape.getCustomShapeProperties() );
 
     case A_TOKEN( prstGeom ):   // preset geometry "CT_PresetGeometry2D"
         {
@@ -101,7 +104,6 @@ ContextHandlerRef ShapePropertiesContext::onCreateContext( sal_Int32 aElementTok
         break;
     }
 
-    // FillPropertiesGroupContext
     return FillPropertiesContext::createFillContext( *this, aElementToken, rAttribs, mrShape.getFillProperties() );
 }
 

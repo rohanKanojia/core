@@ -20,14 +20,10 @@
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/frame/FrameSearchFlag.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XNotifyingDispatch.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/DispatchResultState.hpp>
-#include <com/sun/star/frame/XDispatchResultListener.hpp>
 #include <com/sun/star/util/URL.hpp>
 #include <com/sun/star/util/URLTransformer.hpp>
 #include <com/sun/star/util/XURLTransformer.hpp>
@@ -40,13 +36,13 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/packages/WrongPasswordException.hpp>
 #include <com/sun/star/uno/Sequence.h>
 #include <com/sun/star/ui/dialogs/TemplateDescription.hpp>
 #include <rtl/ustring.hxx>
 
 #include <comphelper/processfactory.hxx>
 #include <comphelper/storagehelper.hxx>
-#include <comphelper/string.hxx>
 #include <comphelper/synchronousdispatch.hxx>
 
 #include <vcl/wrkwin.hxx>
@@ -56,7 +52,7 @@
 #include <svl/eitem.hxx>
 #include <sfx2/doctempl.hxx>
 #include <svtools/sfxecode.hxx>
-#include <framework/preventduplicateinteraction.hxx>
+#include <preventduplicateinteraction.hxx>
 #include <svtools/ehdl.hxx>
 #include <basic/sbxobj.hxx>
 #include <svl/urihelper.hxx>
@@ -68,9 +64,7 @@
 #include <unotools/extendedsecurityoptions.hxx>
 #include <comphelper/docpasswordhelper.hxx>
 #include <vcl/svapp.hxx>
-
-#include <osl/mutex.hxx>
-
+#include <vcl/weld.hxx>
 
 #include <sfx2/app.hxx>
 #include <sfx2/bindings.hxx>
@@ -81,14 +75,14 @@
 #include <sfx2/objitem.hxx>
 #include <sfx2/objsh.hxx>
 #include <svl/slstitm.hxx>
-#include "appopen.hxx"
-#include "objshimp.hxx"
-#include "openflag.hxx"
+#include <appopen.hxx>
+#include <objshimp.hxx>
+#include <openflag.hxx>
 #include <sfx2/passwd.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/sfxresid.hxx>
 #include <sfx2/viewsh.hxx>
-#include "app.hrc"
+#include <sfx2/strings.hrc>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/sfxuno.hxx>
 #include <sfx2/objface.hxx>
@@ -96,7 +90,7 @@
 #include <sfx2/docfac.hxx>
 #include <sfx2/event.hxx>
 #include <sfx2/templatedlg.hxx>
-#include "openuriexternally.hxx"
+#include <openuriexternally.hxx>
 
 #include <officecfg/Office/ProtocolHandler.hxx>
 
@@ -124,7 +118,7 @@ void SetTemplate_Impl( const OUString &rFileName,
 class SfxDocPasswordVerifier : public ::comphelper::IDocPasswordVerifier
 {
 public:
-    inline explicit     SfxDocPasswordVerifier( const Reference< embed::XStorage >& rxStorage ) :
+    explicit     SfxDocPasswordVerifier( const Reference< embed::XStorage >& rxStorage ) :
                             mxStorage( rxStorage ) {}
 
     virtual ::comphelper::DocPasswordVerifierResult
@@ -176,10 +170,9 @@ private:
 }
 
 
-sal_uInt32 CheckPasswd_Impl
+ErrCode CheckPasswd_Impl
 (
     SfxObjectShell*  pDoc,
-    SfxItemPool&     /*rPool*/, // Pool, if a Set has to be created
     SfxMedium*       pFile      // the Medium and its Password shold be obtained
 )
 
@@ -191,9 +184,9 @@ sal_uInt32 CheckPasswd_Impl
     If the set does not exist the it is created.
 */
 {
-    sal_uIntPtr nRet = ERRCODE_NONE;
+    ErrCode nRet = ERRCODE_NONE;
 
-    if( ( !pFile->GetFilter() || pFile->IsStorage() ) )
+    if( !pFile->GetFilter() || pFile->IsStorage() )
     {
         uno::Reference< embed::XStorage > xStorage = pFile->GetStorage();
         if( xStorage.is() )
@@ -202,9 +195,12 @@ sal_uInt32 CheckPasswd_Impl
             if ( xStorageProps.is() )
             {
                 bool bIsEncrypted = false;
+                uno::Sequence< uno::Sequence< beans::NamedValue > > aGpgProperties;
                 try {
                     xStorageProps->getPropertyValue("HasEncryptedEntries")
                         >>= bIsEncrypted;
+                    xStorageProps->getPropertyValue("EncryptionGpGProperties")
+                        >>= aGpgProperties;
                 } catch( uno::Exception& )
                 {
                     // TODO/LATER:
@@ -236,6 +232,12 @@ sal_uInt32 CheckPasswd_Impl
                             const SfxUnoAnyItem* pEncryptionDataItem = SfxItemSet::GetItem<SfxUnoAnyItem>(pSet, SID_ENCRYPTIONDATA, false);
                             if ( pEncryptionDataItem )
                                 pEncryptionDataItem->GetValue() >>= aEncryptionData;
+
+                            // try if one of the public key entries is
+                            // decryptable, then extract session key
+                            // from it
+                            if ( !aEncryptionData.hasElements() && aGpgProperties.hasElements() )
+                                aEncryptionData = ::comphelper::DocPasswordHelper::decryptGpgSession(aGpgProperties);
 
                             SfxDocPasswordVerifier aVerifier( xStorage );
                             aEncryptionData = ::comphelper::DocPasswordHelper::requestAndVerifyDocPassword(
@@ -278,7 +280,7 @@ sal_uInt32 CheckPasswd_Impl
 }
 
 
-sal_uIntPtr SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUString &rFileName, SfxItemSet* pSet )
+ErrCode SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUString &rFileName, std::unique_ptr<SfxItemSet> pSet )
 {
     std::shared_ptr<const SfxFilter> pFilter;
     SfxMedium aMedium( rFileName,  ( StreamMode::READ | StreamMode::SHARE_DENYNONE ) );
@@ -288,31 +290,27 @@ sal_uIntPtr SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUStri
 
     if ( aMedium.GetError() )
     {
-        delete pSet;
         return aMedium.GetErrorCode();
     }
 
     aMedium.UseInteractionHandler( true );
-    sal_uIntPtr nErr = GetFilterMatcher().GuessFilter( aMedium, pFilter, SfxFilterFlags::TEMPLATE, SfxFilterFlags::NONE );
-    if ( 0 != nErr)
+    ErrCode nErr = GetFilterMatcher().GuessFilter( aMedium, pFilter, SfxFilterFlags::TEMPLATE, SfxFilterFlags::NONE );
+    if ( ERRCODE_NONE != nErr)
     {
-        delete pSet;
         return ERRCODE_SFX_NOTATEMPLATE;
     }
 
     if( !pFilter || !pFilter->IsAllowedAsTemplate() )
     {
-        delete pSet;
         return ERRCODE_SFX_NOTATEMPLATE;
     }
 
     if ( pFilter->GetFilterFlags() & SfxFilterFlags::STARONEFILTER )
     {
         DBG_ASSERT( !xDoc.Is(), "Sorry, not implemented!" );
-        delete pSet;
         SfxStringItem aName( SID_FILE_NAME, rFileName );
-        SfxStringItem aReferer( SID_REFERER, OUString("private:user") );
-        SfxStringItem aFlags( SID_OPTIONS, OUString("T") );
+        SfxStringItem aReferer( SID_REFERER, "private:user" );
+        SfxStringItem aFlags( SID_OPTIONS, "T" );
         SfxBoolItem aHidden( SID_HIDDEN, true );
         const SfxPoolItem *pRet = GetDispatcher_Impl()->ExecuteList(
             SID_OPENDOC, SfxCallMode::SYNCHRON,
@@ -340,7 +338,7 @@ sal_uIntPtr SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUStri
             xDoc = SfxObjectShell::CreateObject( pFilter->GetServiceName() );
 
         //pMedium takes ownership of pSet
-        SfxMedium *pMedium = new SfxMedium( rFileName, STREAM_STD_READ, pFilter, pSet );
+        SfxMedium *pMedium = new SfxMedium( rFileName, StreamMode::STD_READ, pFilter, std::move(pSet) );
         if(!xDoc->DoLoad(pMedium))
         {
             ErrCode nErrCode = xDoc->GetErrorCode();
@@ -382,7 +380,7 @@ sal_uIntPtr SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUStri
     css::uno::Reference< css::frame::XModel >  xModel ( xDoc->GetModel(), css::uno::UNO_QUERY );
     if ( xModel.is() )
     {
-        SfxItemSet* pNew = xDoc->GetMedium()->GetItemSet()->Clone();
+        std::unique_ptr<SfxItemSet> pNew = xDoc->GetMedium()->GetItemSet()->Clone();
         pNew->ClearItem( SID_PROGRESS_STATUSBAR_CONTROL );
         pNew->ClearItem( SID_FILTER_NAME );
         css::uno::Sequence< css::beans::PropertyValue > aArgs;
@@ -390,9 +388,8 @@ sal_uIntPtr SfxApplication::LoadTemplate( SfxObjectShellLock& xDoc, const OUStri
         sal_Int32 nLength = aArgs.getLength();
         aArgs.realloc( nLength + 1 );
         aArgs[nLength].Name = "Title";
-        aArgs[nLength].Value <<= OUString( xDoc->GetTitle( SFX_TITLE_DETECT ) );
+        aArgs[nLength].Value <<= xDoc->GetTitle( SFX_TITLE_DETECT );
         xModel->attachResource( OUString(), aArgs );
-        delete pNew;
     }
 
     return xDoc->GetErrorCode();
@@ -405,16 +402,13 @@ void SfxApplication::NewDocDirectExec_Impl( SfxRequest& rReq )
     OUString aFactName;
     if ( pFactoryItem )
         aFactName = pFactoryItem->GetValue();
-   else
+    else
         aFactName = SvtModuleOptions().GetDefaultModuleName();
 
-
     SfxRequest aReq( SID_OPENDOC, SfxCallMode::SYNCHRON, GetPool() );
-    OUString aFact("private:factory/");
-    aFact += aFactName;
-    aReq.AppendItem( SfxStringItem( SID_FILE_NAME, aFact ) );
+    aReq.AppendItem( SfxStringItem( SID_FILE_NAME, "private:factory/" + aFactName ) );
     aReq.AppendItem( SfxFrameItem( SID_DOCFRAME, GetFrame() ) );
-    aReq.AppendItem( SfxStringItem( SID_TARGETNAME, OUString( "_default" ) ) );
+    aReq.AppendItem( SfxStringItem( SID_TARGETNAME, "_default" ) );
 
     // TODO/LATER: Should the other arguments be transferred as well?
     const SfxStringItem* pDefaultPathItem = rReq.GetArg<SfxStringItem>(SID_DEFAULTFILEPATH);
@@ -448,7 +442,16 @@ void SfxApplication::NewDocExec_Impl( SfxRequest& rReq )
         bool bNewWin = false;
         vcl::Window* pTopWin = GetTopWindow();
 
+        SfxObjectShell* pCurrentShell = SfxObjectShell::Current();
+        Reference<XModel> xModel;
+        if(pCurrentShell)
+            xModel = pCurrentShell->GetModel();
+
         ScopedVclPtrInstance< SfxTemplateManagerDlg > aTemplDlg;
+
+        if (xModel.is())
+            aTemplDlg->setDocumentModel(xModel);
+
         int nRet = aTemplDlg->Execute();
         if ( nRet == RET_OK )
         {
@@ -486,7 +489,7 @@ void SfxApplication::NewDocExec_Impl( SfxRequest& rReq )
         }
     }
 
-    sal_uIntPtr lErr = 0;
+    ErrCode lErr = ERRCODE_NONE;
     SfxItemSet* pSet = new SfxAllItemSet( GetPool() );
     pSet->Put( SfxBoolItem( SID_TEMPLATE, true ) );
     if ( !bDirect )
@@ -504,7 +507,7 @@ void SfxApplication::NewDocExec_Impl( SfxRequest& rReq )
 
     if ( lErr != ERRCODE_NONE )
     {
-        sal_uIntPtr lFatalErr = ERRCODE_TOERROR(lErr);
+        ErrCode lFatalErr = lErr.IgnoreWarning();
         if ( lFatalErr )
             ErrorHandler::HandleError(lErr);
     }
@@ -519,7 +522,7 @@ void SfxApplication::NewDocExec_Impl( SfxRequest& rReq )
         {
             DBG_ASSERT( aObj.GetProtocol() != INetProtocol::NotValid, "Illegal URL!" );
 
-            SfxStringItem aName( SID_FILE_NAME, aObj.GetMainURL( INetURLObject::NO_DECODE ) );
+            SfxStringItem aName( SID_FILE_NAME, aObj.GetMainURL( INetURLObject::DecodeMechanism::NONE ) );
             SfxStringItem aTemplName( SID_TEMPLATE_NAME, aTemplateName );
             SfxStringItem aTemplRegionName( SID_TEMPLATE_REGIONNAME, aTemplateRegion );
             pRet = GetDispatcher_Impl()->ExecuteList(SID_OPENDOC, eMode,
@@ -551,12 +554,9 @@ bool lcl_isFilterNativelySupported(const SfxFilter& rFilter)
     if (rFilter.IsOwnFormat())
         return true;
 
-    OUString aName = rFilter.GetFilterName();
-    if (aName.startsWith("MS Excel"))
-        // We can handle all Excel variants natively.
-        return true;
-
-    return false;
+    const OUString& aName = rFilter.GetFilterName();
+    // We can handle all Excel variants natively.
+    return aName.startsWith("MS Excel");
 }
 
 }
@@ -582,7 +582,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         {
             if ( aCommand.startsWith("slot:") )
             {
-                sal_uInt16 nSlotId = (sal_uInt16) aCommand.copy(5).toInt32();
+                sal_uInt16 nSlotId = static_cast<sal_uInt16>(aCommand.copy(5).toInt32());
                 if ( nSlotId == SID_OPENDOC )
                     pFileNameItem = nullptr;
             }
@@ -592,9 +592,9 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
     if ( !pFileNameItem )
     {
         // get FileName from dialog
-        std::vector<OUString> pURLList;
+        std::vector<OUString> aURLList;
         OUString aFilter;
-        SfxItemSet* pSet = nullptr;
+        std::unique_ptr<SfxItemSet> pSet;
         OUString aPath;
         const SfxStringItem* pFolderNameItem = rReq.GetArg<SfxStringItem>(SID_PATH);
         if ( pFolderNameItem )
@@ -602,8 +602,8 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         else if ( nSID == SID_OPENTEMPLATE )
         {
             aPath = SvtPathOptions().GetTemplatePath();
-            sal_Int32 nTokenCount = comphelper::string::getTokenCount(aPath, ';');
-            aPath = aPath.getToken( nTokenCount ? ( nTokenCount - 1 ) : 0 , ';' );
+            if (!aPath.isEmpty())                             // if not empty then get last token
+                aPath = aPath.copy(aPath.lastIndexOf(';')+1); // lastIndexOf+copy works whether separator (';') is there or not
         }
 
         sal_Int16 nDialog = SFX2_IMPL_DIALOG_CONFIG;
@@ -614,6 +614,15 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         const SfxBoolItem* pRemoteDialogItem = rReq.GetArg<SfxBoolItem>(SID_REMOTE_DIALOG);
         if ( pRemoteDialogItem && pRemoteDialogItem->GetValue())
             nDialog = SFX2_IMPL_DIALOG_REMOTE;
+
+        sal_Int16 nDialogType = ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION;
+        FileDialogFlags eDialogFlags = FileDialogFlags::MultiSelection;
+        const SfxBoolItem* pSignPDFItem = rReq.GetArg<SfxBoolItem>(SID_SIGNPDF);
+        if (pSignPDFItem && pSignPDFItem->GetValue())
+        {
+            eDialogFlags |= FileDialogFlags::SignPDF;
+            nDialogType = ui::dialogs::TemplateDescription::FILEOPEN_SIMPLE;
+        }
 
         OUString sStandardDir;
 
@@ -627,26 +636,26 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         if ( pBlackListItem )
             pBlackListItem->GetStringList( aBlackList );
 
-
-        sal_uIntPtr nErr = sfx2::FileOpenDialog_Impl(
-                ui::dialogs::TemplateDescription::FILEOPEN_READONLY_VERSION,
-                SFXWB_MULTISELECTION, OUString(), pURLList,
-                aFilter, pSet, &aPath, nDialog, sStandardDir, aBlackList );
+        vcl::Window* pTopWindow = GetTopWindow();
+        ErrCode nErr = sfx2::FileOpenDialog_Impl(pTopWindow ? pTopWindow->GetFrameWeld() : nullptr,
+                nDialogType,
+                eDialogFlags, aURLList,
+                aFilter, pSet, &aPath, nDialog, sStandardDir, aBlackList);
 
         if ( nErr == ERRCODE_ABORT )
         {
-            pURLList.clear();
+            aURLList.clear();
             return;
         }
 
-        rReq.SetArgs( *static_cast<SfxAllItemSet*>(pSet) );
+        rReq.SetArgs( *static_cast<SfxAllItemSet*>(pSet.get()) );
         if ( !aFilter.isEmpty() )
             rReq.AppendItem( SfxStringItem( SID_FILTER_NAME, aFilter ) );
-        rReq.AppendItem( SfxStringItem( SID_TARGETNAME, OUString("_default") ) );
+        rReq.AppendItem( SfxStringItem( SID_TARGETNAME, "_default" ) );
         rReq.AppendItem( SfxStringItem( SID_REFERER, "private:user" ) );
-        delete pSet;
+        pSet.reset();
 
-        if(!pURLList.empty())
+        if(!aURLList.empty())
         {
             if ( nSID == SID_OPENTEMPLATE )
                 rReq.AppendItem( SfxBoolItem( SID_TEMPLATE, false ) );
@@ -655,9 +664,9 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
             // intercept all incoming interactions and provide useful information
             // later if the following transaction was finished.
 
-            ::framework::PreventDuplicateInteraction*                 pHandler       = new ::framework::PreventDuplicateInteraction(::comphelper::getProcessComponentContext());
-            css::uno::Reference< css::task::XInteractionHandler >     xHandler       (static_cast< css::task::XInteractionHandler* >(pHandler), css::uno::UNO_QUERY);
-            css::uno::Reference< css::task::XInteractionHandler >     xWrappedHandler;
+            sfx2::PreventDuplicateInteraction* pHandler = new sfx2::PreventDuplicateInteraction(comphelper::getProcessComponentContext());
+            uno::Reference<task::XInteractionHandler> xHandler(static_cast< css::task::XInteractionHandler* >(pHandler), css::uno::UNO_QUERY);
+            uno::Reference<task::XInteractionHandler> xWrappedHandler;
 
             // wrap existing handler or create new UUI handler
             const SfxUnoAnyItem* pInteractionItem = rReq.GetArg<SfxUnoAnyItem>(SID_INTERACTIONHANDLER);
@@ -673,8 +682,8 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
             rReq.AppendItem( SfxUnoAnyItem(SID_INTERACTIONHANDLER,css::uno::makeAny(xHandler)) );
 
             // define rules for this handler
-            css::uno::Type                                            aInteraction = ::cppu::UnoType<css::task::ErrorCodeRequest>::get();
-            ::framework::PreventDuplicateInteraction::InteractionInfo aRule        (aInteraction, 1);
+            css::uno::Type aInteraction = ::cppu::UnoType<css::task::ErrorCodeRequest>::get();
+            ::sfx2::PreventDuplicateInteraction::InteractionInfo aRule(aInteraction);
             pHandler->addInteractionRule(aRule);
 
             if (!aDocService.isEmpty())
@@ -683,10 +692,10 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                 rReq.AppendItem(SfxStringItem(SID_DOC_SERVICE, aDocService));
             }
 
-            for(std::vector<OUString>::const_iterator i = pURLList.begin(); i != pURLList.end(); ++i)
+            for (auto const& url : aURLList)
             {
                 rReq.RemoveItem( SID_FILE_NAME );
-                rReq.AppendItem( SfxStringItem( SID_FILE_NAME, *i ) );
+                rReq.AppendItem( SfxStringItem( SID_FILE_NAME, url ) );
 
                 // Run synchronous, so that not the next document is loaded
                 // when rescheduling
@@ -705,9 +714,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                             css::task::ErrorCodeRequest aRequest;
                             if (aRule.m_xRequest->getRequest() >>= aRequest)
                             {
-                                if (aRequest.ErrCode ==
-                                    sal::static_int_cast< sal_Int32 >(
-                                        ERRCODE_SFX_NOMOREDOCUMENTSALLOWED))
+                                if (aRequest.ErrCode == sal_Int32(sal_uInt32(ERRCODE_SFX_NOMOREDOCUMENTSALLOWED)))
                                     break;
                             }
                         }
@@ -715,10 +722,10 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                 }
             }
 
-            pURLList.clear();
+            aURLList.clear();
             return;
         }
-        pURLList.clear();
+        aURLList.clear();
     }
 
     bool bHyperlinkUsed = false;
@@ -766,27 +773,26 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
     const SfxStringItem* pFileFlagsItem = rReq.GetArg<SfxStringItem>(SID_OPTIONS);
     if ( pFileFlagsItem )
     {
-        OUString aFileFlags = pFileFlagsItem->GetValue();
-        aFileFlags = aFileFlags.toAsciiUpperCase();
-        if ( -1 != aFileFlags.indexOf( 0x0054 ) )               // T = 54h
+        const OUString aFileFlags = pFileFlagsItem->GetValue().toAsciiUpperCase();
+        if ( aFileFlags.indexOf('T') >= 0 )
         {
             rReq.RemoveItem( SID_TEMPLATE );
             rReq.AppendItem( SfxBoolItem( SID_TEMPLATE, true ) );
         }
 
-        if ( -1 != aFileFlags.indexOf( 0x0048 ) )               // H = 48h
+        if ( aFileFlags.indexOf('H') >= 0 )
         {
             rReq.RemoveItem( SID_HIDDEN );
             rReq.AppendItem( SfxBoolItem( SID_HIDDEN, true ) );
         }
 
-        if ( -1 != aFileFlags.indexOf( 0x0052 ) )               // R = 52h
+        if ( aFileFlags.indexOf('R') >= 0 )
         {
             rReq.RemoveItem( SID_DOC_READONLY );
             rReq.AppendItem( SfxBoolItem( SID_DOC_READONLY, true ) );
         }
 
-        if ( -1 != aFileFlags.indexOf( 0x0042 ) )               // B = 42h
+        if ( aFileFlags.indexOf('B') >= 0 )
         {
             rReq.RemoveItem( SID_PREVIEW );
             rReq.AppendItem( SfxBoolItem( SID_PREVIEW, true ) );
@@ -798,13 +804,12 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
     // Mark without URL cannot be handled by hyperlink code
     if ( bHyperlinkUsed && !aFileName.isEmpty() && aFileName[0] != '#' )
     {
-        Reference< css::document::XTypeDetection > xTypeDetection( ::comphelper::getProcessServiceFactory()->createInstance(
-                                                                       "com.sun.star.document.TypeDetection"),
-                                                                   UNO_QUERY );
+        uno::Reference<document::XTypeDetection> xTypeDetection(
+            comphelper::getProcessServiceFactory()->createInstance("com.sun.star.document.TypeDetection"), UNO_QUERY);
+
         if ( xTypeDetection.is() )
         {
             URL             aURL;
-            OUString aTypeName;
 
             aURL.Complete = aFileName;
             Reference< util::XURLTransformer > xTrans( util::URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
@@ -819,15 +824,14 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                 SolarMutexGuard aGuard;
                 vcl::Window *pWindow = SfxGetpApp()->GetTopWindow();
 
-                ScopedVclPtrInstance<MessageDialog> aSecurityWarningBox(pWindow,
-                                                  SfxResId(STR_SECURITY_WARNING_NO_HYPERLINKS),
-                                                  VCL_MESSAGE_WARNING);
-                aSecurityWarningBox->SetText( SfxResId(RID_SECURITY_WARNING_TITLE).toString() );
-                aSecurityWarningBox->Execute();
+                std::unique_ptr<weld::MessageDialog> xSecurityWarningBox(Application::CreateMessageDialog(pWindow ? pWindow->GetFrameWeld() : nullptr,
+                                                                         VclMessageType::Warning, VclButtonsType::Ok, SfxResId(STR_SECURITY_WARNING_NO_HYPERLINKS)));
+                xSecurityWarningBox->set_title(SfxResId(RID_SECURITY_WARNING_TITLE));
+                xSecurityWarningBox->run();
                 return;
             }
 
-            aTypeName = xTypeDetection->queryTypeByURL( aURL.Main );
+            const OUString aTypeName { xTypeDetection->queryTypeByURL( aURL.Main ) };
             SfxFilterMatcher& rMatcher = SfxGetpApp()->GetFilterMatcher();
             std::shared_ptr<const SfxFilter> pFilter = rMatcher.GetFilter4EA( aTypeName );
             if (!pFilter || !lcl_isFilterNativelySupported(*pFilter))
@@ -837,7 +841,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                 {
                     // don't dispatch mailto hyperlink to desktop dispatcher
                     rReq.RemoveItem( SID_TARGETNAME );
-                    rReq.AppendItem( SfxStringItem( SID_TARGETNAME, OUString("_self") ) );
+                    rReq.AppendItem( SfxStringItem( SID_TARGETNAME, "_self" ) );
                 }
                 else if ( aINetProtocol == INetProtocol::Ftp ||
                      aINetProtocol == INetProtocol::Http ||
@@ -875,9 +879,9 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                     }
 
                     bool bFound = false;
-                    for ( size_t nProt=0; nProt<aProtocols.size(); nProt++ )
+                    for (const OUString & rProtocol : aProtocols)
                     {
-                        WildCard aPattern(aProtocols[nProt]);
+                        WildCard aPattern(rProtocol);
                         if ( aPattern.Matches( aURL.Complete ) )
                         {
                             bFound = true;
@@ -896,7 +900,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
                         catch ( css::system::SystemShellExecuteException& )
                         {
                             rReq.RemoveItem( SID_TARGETNAME );
-                            rReq.AppendItem( SfxStringItem( SID_TARGETNAME, OUString("_default") ) );
+                            rReq.AppendItem( SfxStringItem( SID_TARGETNAME, "_default" ) );
                             bLoadInternal = true;
                         }
                         if ( !bLoadInternal )
@@ -908,7 +912,7 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
             {
                 // hyperlink document must be loaded into a new frame
                 rReq.RemoveItem( SID_TARGETNAME );
-                rReq.AppendItem( SfxStringItem( SID_TARGETNAME, OUString("_default") ) );
+                rReq.AppendItem( SfxStringItem( SID_TARGETNAME, "_default" ) );
             }
         }
     }
@@ -938,11 +942,11 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         pTargetFrame = &SfxViewFrame::Current()->GetFrame();
 
     // check if caller has set a callback
-    const SfxLinkItem* pLinkItem = rReq.GetArg<SfxLinkItem>(SID_DONELINK);
+    std::unique_ptr<SfxLinkItem> pLinkItem;
 
     // remove from Itemset, because it confuses the parameter transformation
-    if ( pLinkItem )
-        pLinkItem = static_cast<SfxLinkItem*>( pLinkItem->Clone() );
+    if (auto pParamLinkItem = rReq.GetArg<SfxLinkItem>(SID_DONELINK))
+        pLinkItem.reset( static_cast<SfxLinkItem*>( pParamLinkItem->Clone() ) );
 
     rReq.RemoveItem( SID_DONELINK );
 
@@ -992,88 +996,88 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
     }
 
     Reference < XController > xController;
-        // if a frame is given, it must be used for the starting point of the targeting mechanism
-        // this code is also used if asynchronous loading is possible, because loadComponent always is synchron
-        if ( !xTargetFrame.is() )
+    // if a frame is given, it must be used for the starting point of the targeting mechanism
+    // this code is also used if asynchronous loading is possible, because loadComponent always is synchron
+    if ( !xTargetFrame.is() )
+    {
+        if ( pTargetFrame )
         {
-            if ( pTargetFrame )
-            {
-                xTargetFrame = pTargetFrame->GetFrameInterface();
-            }
-            else
-            {
-                xTargetFrame.set( Desktop::create(::comphelper::getProcessComponentContext()), UNO_QUERY );
-            }
-        }
-
-        // make URL ready
-        const SfxStringItem* pURLItem = rReq.GetArg<SfxStringItem>(SID_FILE_NAME);
-        aFileName = pURLItem->GetValue();
-        if( aFileName.startsWith("#") ) // Mark without URL
-        {
-            SfxViewFrame *pView = pTargetFrame ? pTargetFrame->GetCurrentViewFrame() : nullptr;
-            if ( !pView )
-                pView = SfxViewFrame::Current();
-            pView->GetViewShell()->JumpToMark( aFileName.copy(1) );
-            rReq.SetReturnValue( SfxViewFrameItem( pView ) );
-            return;
-        }
-
-        // convert items to properties for framework API calls
-        Sequence < PropertyValue > aArgs;
-        TransformItems( SID_OPENDOC, *rReq.GetArgs(), aArgs );
-        // Any Referer (that was relevant in the above call to
-        // SvtSecurityOptions::isSecureMacroUri) is no longer relevant, assuming
-        // this "open" request is initiated directly by the user:
-        for (sal_Int32 i = 0; i != aArgs.getLength(); ++i) {
-            if (aArgs[i].Name == "Referer") {
-                ++i;
-                for (; i != aArgs.getLength(); ++i) {
-                    aArgs[i - 1] = aArgs[i];
-                }
-                aArgs.realloc(aArgs.getLength()-1);
-                break;
-            }
-        }
-
-        // TODO/LATER: either remove LinkItem or create an asynchronous process for it
-        if( bHidden || pLinkItem || rReq.IsSynchronCall() )
-        {
-            // if loading must be done synchron, we must wait for completion to get a return value
-            // find frame by myself; I must know the exact frame to get the controller for the return value from it
-            Reference < XComponent > xComp;
-
-            try
-            {
-                xComp = ::comphelper::SynchronousDispatch::dispatch( xTargetFrame, aFileName, aTarget, 0, aArgs );
-            }
-            catch(const RuntimeException&)
-            {
-                throw;
-            }
-            catch(const css::uno::Exception&)
-            {
-            }
-
-            Reference < XModel > xModel( xComp, UNO_QUERY );
-            if ( xModel.is() )
-                xController = xModel->getCurrentController();
-            else
-                xController.set( xComp, UNO_QUERY );
-
+            xTargetFrame = pTargetFrame->GetFrameInterface();
         }
         else
         {
-            URL aURL;
-            aURL.Complete = aFileName;
-            Reference< util::XURLTransformer > xTrans( util::URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
-            xTrans->parseStrict( aURL );
-
-            Reference < XDispatchProvider > xProv( xTargetFrame, UNO_QUERY );
-            Reference < XDispatch > xDisp = xProv.is() ? xProv->queryDispatch( aURL, aTarget, FrameSearchFlag::ALL ) : Reference < XDispatch >();
-            if ( xDisp.is() )
-                xDisp->dispatch( aURL, aArgs );
+            xTargetFrame.set( Desktop::create(::comphelper::getProcessComponentContext()), UNO_QUERY );
         }
+    }
+
+    // make URL ready
+    const SfxStringItem* pURLItem = rReq.GetArg<SfxStringItem>(SID_FILE_NAME);
+    aFileName = pURLItem->GetValue();
+    if( aFileName.startsWith("#") ) // Mark without URL
+    {
+        SfxViewFrame *pView = pTargetFrame ? pTargetFrame->GetCurrentViewFrame() : nullptr;
+        if ( !pView )
+            pView = SfxViewFrame::Current();
+        pView->GetViewShell()->JumpToMark( aFileName.copy(1) );
+        rReq.SetReturnValue( SfxViewFrameItem( pView ) );
+        return;
+    }
+
+    // convert items to properties for framework API calls
+    Sequence < PropertyValue > aArgs;
+    TransformItems( SID_OPENDOC, *rReq.GetArgs(), aArgs );
+    // Any Referer (that was relevant in the above call to
+    // SvtSecurityOptions::isSecureMacroUri) is no longer relevant, assuming
+    // this "open" request is initiated directly by the user:
+    for (sal_Int32 i = 0; i != aArgs.getLength(); ++i) {
+        if (aArgs[i].Name == "Referer") {
+            ++i;
+            for (; i != aArgs.getLength(); ++i) {
+                aArgs[i - 1] = aArgs[i];
+            }
+            aArgs.realloc(aArgs.getLength()-1);
+            break;
+        }
+    }
+
+    // TODO/LATER: either remove LinkItem or create an asynchronous process for it
+    if( bHidden || pLinkItem || rReq.IsSynchronCall() )
+    {
+        // if loading must be done synchron, we must wait for completion to get a return value
+        // find frame by myself; I must know the exact frame to get the controller for the return value from it
+        Reference < XComponent > xComp;
+
+        try
+        {
+            xComp = ::comphelper::SynchronousDispatch::dispatch( xTargetFrame, aFileName, aTarget, aArgs );
+        }
+        catch(const RuntimeException&)
+        {
+            throw;
+        }
+        catch(const css::uno::Exception&)
+        {
+        }
+
+        Reference < XModel > xModel( xComp, UNO_QUERY );
+        if ( xModel.is() )
+            xController = xModel->getCurrentController();
+        else
+            xController.set( xComp, UNO_QUERY );
+
+    }
+    else
+    {
+        URL aURL;
+        aURL.Complete = aFileName;
+        Reference< util::XURLTransformer > xTrans( util::URLTransformer::create( ::comphelper::getProcessComponentContext() ) );
+        xTrans->parseStrict( aURL );
+
+        Reference < XDispatchProvider > xProv( xTargetFrame, UNO_QUERY );
+        Reference < XDispatch > xDisp = xProv.is() ? xProv->queryDispatch( aURL, aTarget, FrameSearchFlag::ALL ) : Reference < XDispatch >();
+        if ( xDisp.is() )
+            xDisp->dispatch( aURL, aArgs );
+    }
 
     if ( xController.is() )
     {
@@ -1105,10 +1109,8 @@ void SfxApplication::OpenDocExec_Impl( SfxRequest& rReq )
         const SfxPoolItem* pRetValue = rReq.GetReturnValue();
         if (pRetValue)
         {
-            SfxPoolItem* pClone = pRetValue->Clone();
-            pLinkItem->GetValue().Call(pClone);
+            pLinkItem->GetValue().Call(pRetValue);
         }
-        delete pLinkItem;
     }
 }
 
@@ -1116,6 +1118,12 @@ void SfxApplication::OpenRemoteExec_Impl( SfxRequest& rReq )
 {
     rReq.AppendItem( SfxBoolItem( SID_REMOTE_DIALOG, true ) );
     GetDispatcher_Impl()->Execute( SID_OPENDOC, SfxCallMode::SYNCHRON, *rReq.GetArgs() );
+}
+
+void SfxApplication::SignPDFExec_Impl(SfxRequest& rReq)
+{
+    rReq.AppendItem(SfxBoolItem(SID_SIGNPDF, true));
+    GetDispatcher_Impl()->Execute(SID_OPENDOC, SfxCallMode::SYNCHRON, *rReq.GetArgs());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

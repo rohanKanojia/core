@@ -8,10 +8,10 @@
  */
 
 #include <comphelper/syntaxhighlight.hxx>
-#include "cppunit/TestAssert.h"
-#include "cppunit/TestFixture.h"
-#include "cppunit/extensions/HelperMacros.h"
-#include "cppunit/plugin/TestPlugIn.h"
+#include <cppunit/TestAssert.h>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
 #include <rtl/ustring.hxx>
 
 #include <cassert>
@@ -36,11 +36,6 @@ public:
     CPPUNIT_TEST(testBasic);
     CPPUNIT_TEST_SUITE_END();
 };
-
-std::ostream& operator<<(std::ostream& rStrm, const TokenType& tt)
-{
-    return rStrm << (int)tt;
-}
 
 void SyntaxHighlightTest::testBasicString() {
     OUString s("\"foo\"");
@@ -112,12 +107,11 @@ void SyntaxHighlightTest::testBasic()
         aBasicString, aPortions );
 
     sal_Int32 prevEnd = 0;
-    for(std::vector<HighlightPortion>::const_iterator itr =
-            aPortions.begin(), itrEnd = aPortions.end(); itr != itrEnd; ++itr)
+    for (auto const& portion : aPortions)
     {
-        CPPUNIT_ASSERT_EQUAL(prevEnd, itr->nBegin);
-        CPPUNIT_ASSERT(itr->nBegin < itr->nEnd);
-        prevEnd = itr->nEnd;
+        CPPUNIT_ASSERT_EQUAL(prevEnd, portion.nBegin);
+        CPPUNIT_ASSERT(portion.nBegin < portion.nEnd);
+        prevEnd = portion.nEnd;
     }
     CPPUNIT_ASSERT_EQUAL(aBasicString.getLength(), prevEnd);
 }

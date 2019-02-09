@@ -22,7 +22,7 @@
 #include <memory>
 #include "TblStylePrHandler.hxx"
 
-#include <DomainMapper.hxx>
+#include "DomainMapper.hxx"
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
 #include "PropertyMap.hxx"
@@ -47,14 +47,15 @@ enum StyleType
     STYLE_TYPE_TABLE,
     STYLE_TYPE_LIST
 };
+class StyleSheetTable;
+typedef tools::SvRef<StyleSheetTable> StyleSheetTablePtr;
 
 struct StyleSheetTable_Impl;
-class StyleSheetEntry
+class StyleSheetEntry : public virtual SvRefBase
 {
     std::vector<css::beans::PropertyValue> m_aInteropGrabBag;
 public:
-    OUString sStyleIdentifierI;
-    OUString sStyleIdentifierD;
+    OUString sStyleIdentifierD;   // WW8 name
     bool            bIsDefaultStyle;
     bool            bInvalidHeight;
     bool            bHasUPE; //universal property expansion
@@ -62,7 +63,6 @@ public:
     OUString sBaseStyleIdentifier;
     OUString sNextStyleIdentifier;
     OUString sStyleName;
-    OUString sStyleName1;
     PropertyMapPtr  pProperties;
     OUString sConvertedStyleName;
     std::vector<css::beans::PropertyValue> aLatentStyles; ///< Attributes of latentStyles
@@ -73,11 +73,14 @@ public:
     css::beans::PropertyValue GetInteropGrabBag(); ///< Used for table styles, has a name.
     css::beans::PropertyValues GetInteropGrabBagSeq(); ///< Used for existing styles, just a list of properties.
 
+    // Get all properties, merged with the all of the parent's properties
+    PropertyMapPtr GetMergedInheritedProperties(const StyleSheetTablePtr& pStyleSheetTable);
+
     StyleSheetEntry();
-    virtual ~StyleSheetEntry();
+    virtual ~StyleSheetEntry() override;
 };
 
-typedef std::shared_ptr<StyleSheetEntry> StyleSheetEntryPtr;
+typedef tools::SvRef<StyleSheetEntry> StyleSheetEntryPtr;
 
 class DomainMapper;
 class StyleSheetTable :
@@ -88,22 +91,22 @@ class StyleSheetTable :
 
 public:
     StyleSheetTable(DomainMapper& rDMapper, css::uno::Reference<css::text::XTextDocument> const& xTextDocument, bool bIsNewDoc);
-    virtual ~StyleSheetTable();
+    virtual ~StyleSheetTable() override;
 
     void ApplyStyleSheets( const FontTablePtr& rFontTable );
     const StyleSheetEntryPtr FindStyleSheetByISTD(const OUString& sIndex);
-    const StyleSheetEntryPtr FindStyleSheetByStyleName(const OUString& rIndex);
     const StyleSheetEntryPtr FindStyleSheetByConvertedStyleName(const OUString& rIndex);
     const StyleSheetEntryPtr FindDefaultParaStyle();
-    // returns the parent of the one with the given name - if empty the parent of the current style sheet is returned
-    const StyleSheetEntryPtr FindParentStyleSheet(const OUString& sBaseStyle);
 
     OUString ConvertStyleName( const OUString& rWWName, bool bExtendedSearch = false );
 
     OUString getOrCreateCharStyle( PropertyValueVector_t& rCharProperties, bool bAlwaysCreate );
 
+    PropertyMapPtr const & GetDefaultParaProps();
     /// Returns the default character properties.
-    PropertyMapPtr GetDefaultCharProps();
+    PropertyMapPtr const & GetDefaultCharProps();
+
+    const StyleSheetEntryPtr GetCurrentEntry();
 
 private:
     // Properties
@@ -115,23 +118,12 @@ private:
 
     void applyDefaults(bool bParaProperties);
 };
-typedef std::shared_ptr< StyleSheetTable >    StyleSheetTablePtr;
 
 
 class TableStyleSheetEntry :
     public StyleSheetEntry
 {
-private:
-    typedef std::map<TblStyleType, PropertyMapPtr> TblStylePrs;
-
-    StyleSheetTable* m_pStyleSheet;
-    TblStylePrs m_aStyles;
-
 public:
-
-    short m_nColBandSize;
-    short m_nRowBandSize;
-
     // Adds a new tblStylePr to the table style entry. This method
     // fixes some possible properties conflicts, like borders ones.
     void AddTblStylePr( TblStyleType nType, const PropertyMapPtr& pProps );
@@ -143,10 +135,12 @@ public:
     // @param mask      mask describing which properties to return
     PropertyMapPtr GetProperties( sal_Int32 nMask);
 
-    TableStyleSheetEntry( StyleSheetEntry& aEntry, StyleSheetTable* pStyles );
-    virtual ~TableStyleSheetEntry( );
+    TableStyleSheetEntry( StyleSheetEntry const & aEntry );
+    virtual ~TableStyleSheetEntry( ) override;
 
-protected:
+private:
+    typedef std::map<TblStyleType, PropertyMapPtr> TblStylePrs;
+    TblStylePrs m_aStyles;
     PropertyMapPtr GetLocalPropertiesFromMask( sal_Int32 nMask );
 };
 

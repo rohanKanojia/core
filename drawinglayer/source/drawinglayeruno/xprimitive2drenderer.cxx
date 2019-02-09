@@ -27,17 +27,17 @@
 #include <comphelper/sequence.hxx>
 #include <com/sun/star/xml/sax/XParser.hpp>
 #include <com/sun/star/xml/sax/InputSource.hpp>
-#include <comphelper/processfactory.hxx>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <vcl/bitmapex.hxx>
-#include <drawinglayer/tools/converters.hxx>
 #include <vcl/canvastools.hxx>
 #include <com/sun/star/geometry/RealRectangle2D.hpp>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 
-#include <xprimitive2drenderer.hxx>
+#include <converters.hxx>
+
+#include "xprimitive2drenderer.hxx"
 
 using namespace ::com::sun::star;
 
@@ -52,7 +52,6 @@ namespace drawinglayer
         {
         public:
             XPrimitive2DRenderer();
-            virtual ~XPrimitive2DRenderer();
 
             XPrimitive2DRenderer(const XPrimitive2DRenderer&) = delete;
             const XPrimitive2DRenderer& operator=(const XPrimitive2DRenderer&) = delete;
@@ -64,12 +63,12 @@ namespace drawinglayer
                 ::sal_uInt32 DPI_X,
                 ::sal_uInt32 DPI_Y,
                 const css::geometry::RealRectangle2D& Range,
-                ::sal_uInt32 MaximumQuadraticPixels) throw (uno::RuntimeException, std::exception) override;
+                ::sal_uInt32 MaximumQuadraticPixels) override;
 
             // XServiceInfo
-            virtual OUString SAL_CALL getImplementationName() throw(uno::RuntimeException, std::exception) override;
-            virtual sal_Bool SAL_CALL supportsService(const OUString&) throw(uno::RuntimeException, std::exception) override;
-            virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw(uno::RuntimeException, std::exception) override;
+            virtual OUString SAL_CALL getImplementationName() override;
+            virtual sal_Bool SAL_CALL supportsService(const OUString&) override;
+            virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
         };
     } // end of namespace unorenderer
 } // end of namespace drawinglayer
@@ -91,7 +90,7 @@ namespace drawinglayer
             return OUString( "drawinglayer::unorenderer::XPrimitive2DRenderer" );
         }
 
-        uno::Reference< uno::XInterface > SAL_CALL XPrimitive2DRenderer_createInstance(const uno::Reference< lang::XMultiServiceFactory >&)
+        uno::Reference< uno::XInterface > XPrimitive2DRenderer_createInstance(const uno::Reference< lang::XMultiServiceFactory >&)
         {
             return static_cast< ::cppu::OWeakObject* >(new XPrimitive2DRenderer);
         }
@@ -107,17 +106,13 @@ namespace drawinglayer
         {
         }
 
-        XPrimitive2DRenderer::~XPrimitive2DRenderer()
-        {
-        }
-
         uno::Reference< rendering::XBitmap > XPrimitive2DRenderer::rasterize(
             const uno::Sequence< uno::Reference< graphic::XPrimitive2D > >& aPrimitive2DSequence,
             const uno::Sequence< beans::PropertyValue >& aViewInformationSequence,
             ::sal_uInt32 DPI_X,
             ::sal_uInt32 DPI_Y,
             const css::geometry::RealRectangle2D& Range,
-            ::sal_uInt32 MaximumQuadraticPixels) throw (uno::RuntimeException, std::exception)
+            ::sal_uInt32 MaximumQuadraticPixels)
         {
             uno::Reference< rendering::XBitmap > XBitmap;
 
@@ -150,7 +145,7 @@ namespace drawinglayer
                     const sal_uInt32 nDiscreteHeight(basegfx::fround((fHeight * fFactor100th_mmToInch) * DPI_Y));
 
                     basegfx::B2DHomMatrix aEmbedding(
-                        basegfx::tools::createTranslateB2DHomMatrix(
+                        basegfx::utils::createTranslateB2DHomMatrix(
                             -aRange.getMinX(),
                             -aRange.getMinY()));
 
@@ -165,7 +160,7 @@ namespace drawinglayer
                     const primitive2d::Primitive2DContainer xEmbedSeq { xEmbedRef };
 
                     BitmapEx aBitmapEx(
-                        tools::convertToBitmapEx(
+                        convertToBitmapEx(
                             xEmbedSeq,
                             aViewInformation2D,
                             nDiscreteWidth,
@@ -174,11 +169,9 @@ namespace drawinglayer
 
                     if(!aBitmapEx.IsEmpty())
                     {
-                        const uno::Reference< rendering::XGraphicDevice > xGraphicDevice;
-
-                        aBitmapEx.SetPrefMapMode(MapMode(MAP_100TH_MM));
+                        aBitmapEx.SetPrefMapMode(MapMode(MapUnit::Map100thMM));
                         aBitmapEx.SetPrefSize(Size(basegfx::fround(fWidth), basegfx::fround(fHeight)));
-                        XBitmap = vcl::unotools::xBitmapFromBitmapEx(xGraphicDevice, aBitmapEx);
+                        XBitmap = vcl::unotools::xBitmapFromBitmapEx(aBitmapEx);
                     }
                 }
             }
@@ -186,17 +179,17 @@ namespace drawinglayer
             return XBitmap;
         }
 
-        OUString SAL_CALL XPrimitive2DRenderer::getImplementationName() throw(uno::RuntimeException, std::exception)
+        OUString SAL_CALL XPrimitive2DRenderer::getImplementationName()
         {
-            return(XPrimitive2DRenderer_getImplementationName());
+            return XPrimitive2DRenderer_getImplementationName();
         }
 
-        sal_Bool SAL_CALL XPrimitive2DRenderer::supportsService(const OUString& rServiceName) throw(uno::RuntimeException, std::exception)
+        sal_Bool SAL_CALL XPrimitive2DRenderer::supportsService(const OUString& rServiceName)
         {
             return cppu::supportsService(this, rServiceName);
         }
 
-        uno::Sequence< OUString > SAL_CALL XPrimitive2DRenderer::getSupportedServiceNames() throw(uno::RuntimeException, std::exception)
+        uno::Sequence< OUString > SAL_CALL XPrimitive2DRenderer::getSupportedServiceNames()
         {
             return XPrimitive2DRenderer_getSupportedServiceNames();
         }

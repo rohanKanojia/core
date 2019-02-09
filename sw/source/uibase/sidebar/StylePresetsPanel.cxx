@@ -19,6 +19,7 @@
 #include <svx/svxids.hrc>
 #include <svx/dlgutil.hxx>
 #include <svx/rulritem.hxx>
+#include <vcl/virdev.hxx>
 
 #include <sfx2/sidebar/ControlFactory.hxx>
 #include <sfx2/dispatch.hxx>
@@ -26,58 +27,53 @@
 #include <sfx2/viewsh.hxx>
 #include <sfx2/objsh.hxx>
 
-#include <com/sun/star/frame/XController.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/DocumentTemplates.hpp>
-#include <com/sun/star/frame/XDocumentTemplates.hpp>
-#include <com/sun/star/document/XUndoManagerSupplier.hpp>
 
 #include <sfx2/doctempl.hxx>
 
-#include "shellio.hxx"
-#include "docsh.hxx"
+#include <shellio.hxx>
+#include <docsh.hxx>
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/documentconstants.hxx>
-#include <comphelper/string.hxx>
+#include <sfx2/docfile.hxx>
 
 namespace sw { namespace sidebar {
 
 namespace {
 
 void renderPreview(sfx2::StyleManager* pStyleManager, OutputDevice& aOutputDevice,
-                   OUString const & sName, sal_Int32 nHeight, Rectangle& aRect)
+                   OUString const & sName, sal_Int32 nHeight, tools::Rectangle const & aRect)
 {
-    SfxStyleSheetBase* pStyleSheet = pStyleManager->Search(sName, SFX_STYLE_FAMILY_PARA);
+    SfxStyleSheetBase* pStyleSheet = pStyleManager->Search(sName, SfxStyleFamily::Para);
 
     if (pStyleSheet)
     {
-        sfx2::StylePreviewRenderer* pStylePreviewRenderer;
-        pStylePreviewRenderer = pStyleManager->CreateStylePreviewRenderer(aOutputDevice, pStyleSheet, nHeight);
+        std::unique_ptr<sfx2::StylePreviewRenderer> pStylePreviewRenderer
+            = pStyleManager->CreateStylePreviewRenderer(aOutputDevice, pStyleSheet, nHeight);
         pStylePreviewRenderer->recalculate();
         pStylePreviewRenderer->render(aRect, sfx2::StylePreviewRenderer::RenderAlign::TOP);
     }
 }
 
-BitmapEx GenerateStylePreview(SfxObjectShell& rSource, OUString& aName)
+BitmapEx GenerateStylePreview(SfxObjectShell& rSource, OUString const & aName)
 {
     sfx2::StyleManager* pStyleManager = rSource.GetStyleManager();
 
     ScopedVclPtrInstance<VirtualDevice> pVirtualDev(*Application::GetDefaultDevice());
 
-    sal_Int32 nScalingFactor = pVirtualDev->GetDPIScaleFactor();
+    float fScalingFactor = pVirtualDev->GetDPIScaleFactor();
 
-    sal_Int32 nMargin = 6 * nScalingFactor;
+    sal_Int32 nMargin = 6 * fScalingFactor;
 
-    sal_Int32 nPreviewWidth = 144 * nScalingFactor;
+    sal_Int32 nPreviewWidth = 144 * fScalingFactor;
 
-    sal_Int32 nNameHeight = 16 * nScalingFactor;
-    sal_Int32 nTitleHeight = 32 * nScalingFactor;
-    sal_Int32 nHeadingHeight = 24 * nScalingFactor;
-    sal_Int32 nTextBodyHeight = 16 * nScalingFactor;
-    sal_Int32 nBottomMargin = 2 * nScalingFactor;
+    sal_Int32 nNameHeight = 16 * fScalingFactor;
+    sal_Int32 nTitleHeight = 32 * fScalingFactor;
+    sal_Int32 nHeadingHeight = 24 * fScalingFactor;
+    sal_Int32 nTextBodyHeight = 16 * fScalingFactor;
+    sal_Int32 nBottomMargin = 2 * fScalingFactor;
 
-    sal_Int32 nNameFontSize = 12 * nScalingFactor;
+    sal_Int32 nNameFontSize = 12 * fScalingFactor;
 
     sal_Int32 nPreviewHeight = nNameHeight + nTitleHeight + nHeadingHeight + nTextBodyHeight + nBottomMargin;
 
@@ -91,7 +87,7 @@ BitmapEx GenerateStylePreview(SfxObjectShell& rSource, OUString& aName)
     long y = 0;
     {
         pVirtualDev->SetFillColor(COL_LIGHTGRAY);
-        Rectangle aNameRect(0, y, nPreviewWidth, nNameHeight);
+        tools::Rectangle aNameRect(0, y, nPreviewWidth, nNameHeight);
         pVirtualDev->DrawRect(aNameRect);
 
         vcl::Font aFont;
@@ -110,27 +106,27 @@ BitmapEx GenerateStylePreview(SfxObjectShell& rSource, OUString& aName)
     }
 
     {
-        Rectangle aRenderRect(Point(nMargin, y), aSize);
-        renderPreview(pStyleManager, *pVirtualDev.get(), "Title", nTitleHeight, aRenderRect);
+        tools::Rectangle aRenderRect(Point(nMargin, y), aSize);
+        renderPreview(pStyleManager, *pVirtualDev, "Title", nTitleHeight, aRenderRect);
         y += nTitleHeight;
     }
 
     {
-        Rectangle aRenderRect(Point(nMargin, y), aSize);
-        renderPreview(pStyleManager, *pVirtualDev.get(), "Heading 1", nHeadingHeight, aRenderRect);
+        tools::Rectangle aRenderRect(Point(nMargin, y), aSize);
+        renderPreview(pStyleManager, *pVirtualDev, "Heading 1", nHeadingHeight, aRenderRect);
         y += nHeadingHeight;
     }
     {
-        Rectangle aRenderRect(Point(nMargin, y), aSize);
-        renderPreview(pStyleManager, *pVirtualDev.get(), "Text Body", nTextBodyHeight, aRenderRect);
+        tools::Rectangle aRenderRect(Point(nMargin, y), aSize);
+        renderPreview(pStyleManager, *pVirtualDev, "Text Body", nTextBodyHeight, aRenderRect);
     }
 
     return pVirtualDev->GetBitmapEx(Point(), aSize);
 }
 
-BitmapEx CreatePreview(OUString& aUrl, OUString& aName)
+BitmapEx CreatePreview(OUString const & aUrl, OUString const & aName)
 {
-    SfxMedium aMedium(aUrl, STREAM_STD_READWRITE);
+    SfxMedium aMedium(aUrl, StreamMode::STD_READWRITE);
     SfxObjectShell* pObjectShell = SfxObjectShell::Current();
     SfxObjectShellLock xTemplDoc = SfxObjectShell::CreateObjectByFactoryName(pObjectShell->GetFactory().GetFactoryName(), SfxObjectCreateMode::ORGANIZER);
     xTemplDoc->DoInitNew();
@@ -174,7 +170,7 @@ void StylePresetsPanel::RefreshList()
     for (sal_uInt16 i = 0; i < nCount; ++i)
     {
         OUString aRegionName(aTemplates.GetFullRegionName(i));
-        if (aRegionName == "styles")
+        if (aRegionName == "Styles")
         {
             for (sal_uInt16 j = 0; j < aTemplates.GetCount(i); ++j)
             {
@@ -182,7 +178,7 @@ void StylePresetsPanel::RefreshList()
                 OUString aURL = aTemplates.GetPath(i,j);
                 BitmapEx aPreview = CreatePreview(aURL, aName);
                 mpValueSet->InsertItem(j, Image(aPreview), aName);
-                maTemplateEntries.push_back(std::unique_ptr<TemplateEntry>(new TemplateEntry(aURL)));
+                maTemplateEntries.push_back(std::make_unique<TemplateEntry>(aURL));
                 mpValueSet->SetItemData(j, maTemplateEntries.back().get());
             }
         }
@@ -201,9 +197,9 @@ void StylePresetsPanel::dispose()
     PanelLayout::dispose();
 }
 
-IMPL_LINK_NOARG_TYPED(StylePresetsPanel, DoubleClickHdl, ValueSet*, void)
+IMPL_LINK_NOARG(StylePresetsPanel, DoubleClickHdl, ValueSet*, void)
 {
-    sal_Int32 nItemId = mpValueSet->GetSelectItemId();
+    sal_Int32 nItemId = mpValueSet->GetSelectedItemId();
     TemplateEntry* pEntry = static_cast<TemplateEntry*>(mpValueSet->GetItemData(nItemId));
 
     SwDocShell* pDocSh = static_cast<SwDocShell*>(SfxObjectShell::Current());

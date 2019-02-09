@@ -22,14 +22,15 @@
 #include <sfx2/viewfrm.hxx>
 #include <svl/slstitm.hxx>
 #include <svl/stritem.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 #include <vcl/settings.hxx>
-#include "navipi.hxx"
-#include "popmenu.hxx"
-#include "scresid.hxx"
-#include "sc.hrc"
-#include "globstr.hrc"
+#include <navipi.hxx>
+#include <sc.hrc>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <helpids.h>
+#include <global.hxx>
 
 // class ScScenarioWindow ------------------------------------------------
 
@@ -67,7 +68,7 @@ void ScScenarioListBox::UpdateEntries( const std::vector<OUString> &aNewEntryLis
         default:
         {
             // sheet contains scenarios
-            OSL_ENSURE( aNewEntryList.size() % 3 == 0, "ScScenarioListBox::UpdateEntries - wrong list size" );
+            assert(aNewEntryList.size() % 3 == 0 && "ScScenarioListBox::UpdateEntries - wrong list size");
             SetUpdateMode( false );
 
             std::vector<OUString>::const_iterator iter;
@@ -98,7 +99,7 @@ void ScScenarioListBox::UpdateEntries( const std::vector<OUString> &aNewEntryLis
 
 void ScScenarioListBox::Select()
 {
-    if( const ScenarioEntry* pEntry = GetSelectedEntry() )
+    if( const ScenarioEntry* pEntry = GetSelectedScenarioEntry() )
         mrParent.SetComment( pEntry->maComment );
 }
 
@@ -107,7 +108,7 @@ void ScScenarioListBox::DoubleClick()
     SelectScenario();
 }
 
-bool ScScenarioListBox::Notify( NotifyEvent& rNEvt )
+bool ScScenarioListBox::EventNotify( NotifyEvent& rNEvt )
 {
     bool bHandled = false;
 
@@ -126,41 +127,35 @@ bool ScScenarioListBox::Notify( NotifyEvent& rNEvt )
             break;
         }
     }
-    else if ( rNEvt.GetType() == MouseNotifyEvent::COMMAND && GetSelectEntryCount() )
+    else if ( rNEvt.GetType() == MouseNotifyEvent::COMMAND && GetSelectedEntryCount() )
     {
         const CommandEvent* pCEvt = rNEvt.GetCommandEvent();
         if ( pCEvt && pCEvt->GetCommand() == CommandEventId::ContextMenu )
         {
-            if( const ScenarioEntry* pEntry = GetSelectedEntry() )
+            if( const ScenarioEntry* pEntry = GetSelectedScenarioEntry() )
             {
                 if( !pEntry->mbProtected )
                 {
-                    ScPopupMenu aPopup( ScResId( RID_POPUP_NAVIPI_SCENARIO ) );
-                    aPopup.Execute( this, pCEvt->GetMousePosPixel() );
-                    if (aPopup.WasHit())
-                    {
-                        switch( aPopup.GetSelected() )
-                        {
-                            case RID_NAVIPI_SCENARIO_DELETE:
-                                DeleteScenario();
-                            break;
-                            case RID_NAVIPI_SCENARIO_EDIT:
-                                EditScenario();
-                            break;
-                        }
-                    }
+                    VclBuilder aBuilder(nullptr, VclBuilderContainer::getUIRootDir(), "modules/scalc/ui/scenariomenu.ui", "");
+                    VclPtr<PopupMenu> aPopup(aBuilder.get_menu("menu"));
+                    sal_uInt16 nId = aPopup->Execute(this, pCEvt->GetMousePosPixel());
+                    OString sIdent(aPopup->GetItemIdent(nId));
+                    if (sIdent == "delete")
+                        DeleteScenario();
+                    else if (sIdent == "edit")
+                        EditScenario();
                 }
             }
             bHandled = true;
         }
     }
 
-    return bHandled || ListBox::Notify( rNEvt );
+    return bHandled || ListBox::EventNotify(rNEvt);
 }
 
-const ScScenarioListBox::ScenarioEntry* ScScenarioListBox::GetSelectedEntry() const
+const ScScenarioListBox::ScenarioEntry* ScScenarioListBox::GetSelectedScenarioEntry() const
 {
-    size_t nPos = GetSelectEntryPos();
+    size_t nPos = GetSelectedEntryPos();
     return (nPos < maEntries.size()) ? &maEntries[ nPos ] : nullptr;
 }
 
@@ -168,7 +163,7 @@ void ScScenarioListBox::ExecuteScenarioSlot( sal_uInt16 nSlotId )
 {
     if( SfxViewFrame* pViewFrm = SfxViewFrame::Current() )
     {
-        SfxStringItem aStringItem( nSlotId, GetSelectEntry() );
+        SfxStringItem aStringItem( nSlotId, GetSelectedEntry() );
         pViewFrm->GetDispatcher()->ExecuteList(nSlotId,
                 SfxCallMode::SLOT | SfxCallMode::RECORD, { &aStringItem } );
     }
@@ -176,21 +171,27 @@ void ScScenarioListBox::ExecuteScenarioSlot( sal_uInt16 nSlotId )
 
 void ScScenarioListBox::SelectScenario()
 {
-    if( GetSelectEntryCount() > 0 )
+    if( GetSelectedEntryCount() > 0 )
         ExecuteScenarioSlot( SID_SELECT_SCENARIO );
 }
 
 void ScScenarioListBox::EditScenario()
 {
-    if( GetSelectEntryCount() > 0 )
+    if( GetSelectedEntryCount() > 0 )
         ExecuteScenarioSlot( SID_EDIT_SCENARIO );
 }
 
 void ScScenarioListBox::DeleteScenario()
 {
-    if( GetSelectEntryCount() > 0 )
-        if( ScopedVclPtr<QueryBox>::Create( nullptr, WinBits( WB_YES_NO | WB_DEF_YES ), ScGlobal::GetRscString( STR_QUERY_DELSCENARIO ) )->Execute() == RET_YES )
+    if( GetSelectedEntryCount() > 0 )
+    {
+        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(nullptr,
+                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                       ScResId(STR_QUERY_DELSCENARIO)));
+        xQueryBox->set_default_response(RET_YES);
+        if (xQueryBox->run() == RET_YES)
             ExecuteScenarioSlot( SID_DELETE_SCENARIO );
+    }
 }
 
 // class ScScenarioWindow ------------------------------------------------
@@ -214,7 +215,7 @@ ScScenarioWindow::ScScenarioWindow( vcl::Window* pParent, const OUString& aQH_Li
 
     aLbScenario->SetQuickHelpText(aQH_List);
     aEdComment->SetQuickHelpText(aQH_Comment);
-    aEdComment->SetBackground( Color( COL_LIGHTGRAY ) );
+    aEdComment->SetBackground( COL_LIGHTGRAY );
 
     SfxViewFrame* pViewFrm = SfxViewFrame::Current();
     if (pViewFrm)
@@ -237,7 +238,7 @@ void ScScenarioWindow::dispose()
     vcl::Window::dispose();
 }
 
-void ScScenarioWindow::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void ScScenarioWindow::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     const StyleSettings& rStyleSettings = Application::GetSettings().GetStyleSettings();
     Color aBgColor = rStyleSettings.GetFaceColor();
@@ -253,18 +254,18 @@ void ScScenarioWindow::NotifyState( const SfxPoolItem* pState )
     {
         aLbScenario->Enable();
 
-        if ( dynamic_cast<const SfxStringItem*>( pState) !=  nullptr )
+        if ( auto pStringItem = dynamic_cast<const SfxStringItem*>( pState) )
         {
-            OUString aNewEntry( static_cast<const SfxStringItem*>(pState)->GetValue() );
+            const OUString& aNewEntry( pStringItem->GetValue() );
 
             if ( !aNewEntry.isEmpty() )
                 aLbScenario->SelectEntry( aNewEntry );
             else
                 aLbScenario->SetNoSelection();
         }
-        else if ( dynamic_cast<const SfxStringListItem*>( pState) !=  nullptr )
+        else if ( auto pStringListItem = dynamic_cast<const SfxStringListItem*>( pState) )
         {
-            aLbScenario->UpdateEntries( static_cast<const SfxStringListItem*>(pState)->GetList() );
+            aLbScenario->UpdateEntries( pStringListItem->GetList() );
         }
     }
     else
@@ -274,18 +275,18 @@ void ScScenarioWindow::NotifyState( const SfxPoolItem* pState )
     }
 }
 
-void ScScenarioWindow::SetSizePixel( const Size& rNewSize )
+void ScScenarioWindow::Resize()
 {
-    Size aSize( rNewSize );
+    Window::Resize();
+
+    Size aSize(GetSizePixel());
     long nHeight = aSize.Height() / 2;
 
-    Window::SetSizePixel( aSize );
+    aSize.setHeight( nHeight );
+    aLbScenario->SetSizePixel(aSize);
 
-    aSize.Height() = nHeight;
-    aLbScenario->SetSizePixel( aSize );
-
-    aSize.Height() -= 4;
-    aEdComment->SetPosSizePixel( Point( 0, nHeight+4 ), aSize );
+    aSize.AdjustHeight( -4 );
+    aEdComment->SetPosSizePixel(Point(0, nHeight + 4), aSize);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

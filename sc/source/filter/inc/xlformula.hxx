@@ -22,7 +22,7 @@
 
 #include <osl/diagnose.h>
 #include <formula/opcode.hxx>
-#include "address.hxx"
+#include <address.hxx>
 #include "ftools.hxx"
 #include <map>
 #include <memory>
@@ -275,9 +275,9 @@ enum XclFuncParamConv
  */
 struct XclFuncParamInfo
 {
-    XclFuncParamValidity meValid;       /// Parameter validity.
-    XclFuncParamConv    meConv;         /// Token class conversion type.
-    bool                mbValType;      /// Data type (false = REFTYPE, true = VALTYPE).
+    XclFuncParamValidity  meValid;       /// Parameter validity.
+    XclFuncParamConv     meConv;         /// Token class conversion type.
+    bool                 mbValType;      /// Data type (false = REFTYPE, true = VALTYPE).
 };
 
 // Function data ==============================================================
@@ -312,11 +312,11 @@ struct XclFunctionInfo
 {
     OpCode              meOpCode;           /// Calc function opcode.
     sal_uInt16          mnXclFunc;          /// Excel function index.
-    sal_uInt8           mnMinParamCount;    /// Minimum number of parameters.
-    sal_uInt8           mnMaxParamCount;    /// Maximum number of parameters.
-    sal_uInt8           mnRetClass;         /// Token class of the return value.
-    XclFuncParamInfo    mpParamInfos[ EXC_FUNCINFO_PARAMINFO_COUNT ]; /// Information for all parameters.
-    sal_uInt8           mnFlags;            /// Additional flags (EXC_FUNCFLAG_* constants).
+    sal_uInt8 const           mnMinParamCount;    /// Minimum number of parameters.
+    sal_uInt8 const           mnMaxParamCount;    /// Maximum number of parameters.
+    sal_uInt8 const           mnRetClass;         /// Token class of the return value.
+    XclFuncParamInfo const    mpParamInfos[ EXC_FUNCINFO_PARAMINFO_COUNT ]; /// Information for all parameters.
+    sal_uInt8 const           mnFlags;            /// Additional flags (EXC_FUNCFLAG_* constants).
     const sal_Char*     mpcMacroName;       /** Function name, if simulated by
                                                 a macro call (UTF-8) EXC_FUNCFLAG_ADDINEQUIV is 0;
                                                 or programmatical add-in name
@@ -324,15 +324,15 @@ struct XclFunctionInfo
                                                 EXC_FUNCFLAG_ADDINEQUIV is set. */
 
     /** Returns true, if the function is volatile. */
-    inline bool         IsVolatile() const { return ::get_flag( mnFlags, EXC_FUNCFLAG_VOLATILE ); }
+    bool         IsVolatile() const { return ::get_flag( mnFlags, EXC_FUNCFLAG_VOLATILE ); }
     /** Returns true, if optional parameters are expected to appear in pairs. */
-    inline bool         IsParamPairs() const { return ::get_flag( mnFlags, EXC_FUNCFLAG_PARAMPAIRS ); }
+    bool         IsParamPairs() const { return ::get_flag( mnFlags, EXC_FUNCFLAG_PARAMPAIRS ); }
     /** Returns true, if the function parameter count is fixed. */
-    inline bool         IsFixedParamCount() const { return (mnXclFunc != EXC_FUNCID_EXTERNCALL) && (mnMinParamCount == mnMaxParamCount); }
+    bool         IsFixedParamCount() const { return (mnXclFunc != EXC_FUNCID_EXTERNCALL) && (mnMinParamCount == mnMaxParamCount); }
     /** Returns true, if the function is simulated by a macro call. */
-    inline bool         IsMacroFunc() const { return mpcMacroName != nullptr && !(mnFlags & EXC_FUNCFLAG_ADDINEQUIV); }
+    bool         IsMacroFunc() const { return mpcMacroName != nullptr && !(mnFlags & EXC_FUNCFLAG_ADDINEQUIV); }
     /** Returns true, if the function is stored as an add-in call. */
-    inline bool         IsAddInEquivalent() const { return mpcMacroName != nullptr && (mnFlags & EXC_FUNCFLAG_ADDINEQUIV); }
+    bool         IsAddInEquivalent() const { return mpcMacroName != nullptr && (mnFlags & EXC_FUNCFLAG_ADDINEQUIV); }
     /** Returns the name of the external function as string. */
     OUString            GetMacroFuncName() const;
     /** Returns the programmatical name of the Add-In function as string. */
@@ -383,13 +383,13 @@ public:
     explicit            XclTokenArray( ScfUInt8Vec& rTokVec, ScfUInt8Vec& rExtDataVec, bool bVolatile = false );
 
     /** Returns true, if the token array is empty. */
-    inline bool         Empty() const { return maTokVec.empty(); }
+    bool         Empty() const { return maTokVec.empty(); }
     /** Returns the size of the token array in bytes. */
     sal_uInt16          GetSize() const;
     /** Returns read-only access to the byte vector storing token data. */
-    inline const sal_uInt8* GetData() const { return maTokVec.empty() ? nullptr : &maTokVec.front(); }
+    const sal_uInt8* GetData() const { return maTokVec.empty() ? nullptr : maTokVec.data(); }
     /** Returns true, if the formula contains a volatile function. */
-    inline bool         IsVolatile() const { return mbVolatile; }
+    bool         IsVolatile() const { return mbVolatile; }
 
     /** Reads the size field of the token array. */
     void                ReadSize( XclImpStream& rStrm );
@@ -411,7 +411,7 @@ public:
 private:
     ScfUInt8Vec         maTokVec;       /// Byte vector containing token data.
     ScfUInt8Vec         maExtDataVec;   /// Byte vector containing extended data (arrays, stacked NLRs).
-    bool                mbVolatile;     /// True = Formula contains volatile function.
+    bool const          mbVolatile;     /// True = Formula contains volatile function.
 };
 
 typedef std::shared_ptr< XclTokenArray > XclTokenArrayRef;
@@ -446,11 +446,11 @@ public:
 
     void                Init( const ScTokenArray& rScTokArr, bool bSkipSpaces );
 
-    inline bool         Is() const { return mppScToken != nullptr; }
-    inline bool         operator!() const { return !Is(); }
-    inline const ::formula::FormulaToken* Get() const { return mppScToken ? *mppScToken : nullptr; }
-    inline const ::formula::FormulaToken* operator->() const { return Get(); }
-    inline const ::formula::FormulaToken& operator*() const { return *Get(); }
+    bool         Is() const { return mppScToken != nullptr; }
+    bool         operator!() const { return !Is(); }
+    const ::formula::FormulaToken* Get() const { return mppScToken ? *mppScToken : nullptr; }
+    const ::formula::FormulaToken* operator->() const { return Get(); }
+    const ::formula::FormulaToken& operator*() const { return *Get(); }
 
     XclTokenArrayIterator& operator++();
 
@@ -492,7 +492,7 @@ public:
     inline static sal_uInt8 GetTokenId( sal_uInt8 nBaseId, sal_uInt8 nTokenClass );
 
     /** Returns the token class of the passed token ID. */
-    inline static sal_uInt8 GetTokenClass( sal_uInt8 nTokenId ) { return nTokenId & EXC_TOKCLASS_MASK; }
+    static sal_uInt8 GetTokenClass( sal_uInt8 nTokenId ) { return nTokenId & EXC_TOKCLASS_MASK; }
     /** Changes the token class in the passed classified token ID. */
     inline static void  ChangeTokenClass( sal_uInt8& rnTokenId, sal_uInt8 nTokenClass );
 
@@ -518,13 +518,13 @@ public:
     static bool         GetStringList( OUString& rStringList, const ScTokenArray& rScTokArr, sal_Unicode cSep );
 
     /** Tries to convert a formula that consists of a single string token to a list of strings.
+        Removes leading spaces from each token.
         @descr  Example: The formula ="abc\ndef\nghi" will be converted to the formula
         ="abc";"def";"ghi", if the LF character is specified as separator.
         @param rScTokArr  (in/out-parameter) The token array to modify.
-        @param cStringSep  The separator in the source string.
-        @param bTrimLeadingSpaces  true = remove leading spaces from each token. */
+        @param cStringSep  The separator in the source string. */
     static void ConvertStringToList(
-        ScTokenArray& rScTokArr, svl::SharedStringPool& rSPool, sal_Unicode cStringSep, bool bTrimLeadingSpaces );
+        ScTokenArray& rScTokArr, svl::SharedStringPool& rSPool, sal_Unicode cStringSep );
 
     // multiple operations ----------------------------------------------------
 

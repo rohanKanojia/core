@@ -16,22 +16,31 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
+
 #ifndef INCLUDED_SVX_CHECKLBX_HXX
 #define INCLUDED_SVX_CHECKLBX_HXX
 
-#include <svtools/treelistbox.hxx>
-#include <svtools/svlbitm.hxx>
-
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+#include <vcl/treelistbox.hxx>
 #include <svx/svxdllapi.h>
+#include <tools/contnr.hxx>
+#include <tools/solar.h>
+#include <tools/wintypes.hxx>
+#include <vcl/event.hxx>
+#include <vcl/window.hxx>
+#include <memory>
 
-// class SvxCheckListBox -------------------------------------------------
+class Image;
+class SvLBoxButtonData;
+class SvTreeListEntry;
 
 class SVX_DLLPUBLIC SvxCheckListBox : public SvTreeListBox
 {
     using Window::GetText;
 
 private:
-    SvLBoxButtonData*   pCheckButton;
+    std::unique_ptr<SvLBoxButtonData> pCheckButton;
 
     SVX_DLLPRIVATE void             Init_Impl();
 
@@ -39,13 +48,13 @@ private:
     // Avoid ambiguity with new InsertEntry:
     virtual SvTreeListEntry*    InsertEntry( const OUString& rText, SvTreeListEntry* pParent,
                                          bool bChildrenOnDemand,
-                                         sal_uIntPtr nPos, void* pUserData,
+                                         sal_uLong nPos, void* pUserData,
                                          SvLBoxButtonKind eButtonKind ) override;
 
 public:
     SvxCheckListBox( vcl::Window* pParent, WinBits nWinStyle = 0 );
     void SetNormalStaticImage(const Image& rNormalStaticImage);
-    virtual ~SvxCheckListBox();
+    virtual ~SvxCheckListBox() override;
     virtual void dispose() override;
 
     void            InsertEntry         ( const OUString& rStr,
@@ -55,8 +64,8 @@ public:
     void            RemoveEntry         ( sal_uLong  nPos );
 
     void            SelectEntryPos      ( sal_uLong  nPos );
-    sal_uLong       GetSelectEntryPos   () const;
-    void*           GetSelectEntryData  () const { return GetEntryData(GetSelectEntryPos()); }
+    sal_uLong       GetSelectedEntryPos   () const;
+    void*           GetSelectedEntryData  () const { return GetEntryData(GetSelectedEntryPos()); }
 
     OUString        GetText             ( sal_uLong  nPos ) const;
     sal_uLong       GetCheckedEntryCount() const;

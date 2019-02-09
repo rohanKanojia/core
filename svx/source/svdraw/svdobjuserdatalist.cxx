@@ -7,6 +7,7 @@
 * file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
+#include <memory>
 #include <svdobjuserdatalist.hxx>
 #include <vcl/outdev.hxx>
 
@@ -23,9 +24,9 @@ SdrObjUserData& SdrObjUserDataList::GetUserData(size_t nNum)
     return *maList.at(nNum).get();
 }
 
-void SdrObjUserDataList::AppendUserData(SdrObjUserData* pData)
+void SdrObjUserDataList::AppendUserData(std::unique_ptr<SdrObjUserData> pData)
 {
-    maList.push_back(std::unique_ptr<SdrObjUserData>(pData));
+    maList.push_back(std::move(pData));
 }
 
 void SdrObjUserDataList::DeleteUserData(size_t nNum)

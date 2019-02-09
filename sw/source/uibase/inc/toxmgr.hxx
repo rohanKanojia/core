@@ -20,15 +20,17 @@
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_TOXMGR_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_TOXMGR_HXX
 
-#include "swdllapi.h"
-#include "tox.hxx"
+#include <swdllapi.h>
+#include <tox.hxx>
 #include <authfld.hxx>
+#include <memory>
+#include <boost/optional.hpp>
 
 class SwWrtShell;
 class SwForm;
 
 // manager for directory functionality
-//one single method will be sufficient to insert AND upate indexes
+//one single method will be sufficient to insert AND update indexes
 class SW_DLLPUBLIC SwTOXDescription
 {
     TOXTypes            m_eTOXType;
@@ -36,12 +38,15 @@ class SW_DLLPUBLIC SwTOXDescription
     OUString            m_sSequenceName;
     OUString            m_sMainEntryCharStyle;
     OUString            m_sAutoMarkURL;
-    OUString*           m_pTitle;
-    OUString*           m_pTOUName;
-    SwForm*             m_pForm;
-    sal_uInt16          m_nContent;
-    sal_uInt16          m_nIndexOptions;
-    sal_uInt16          m_nOLEOptions;
+    boost::optional<OUString>
+                        m_aTitle;
+    boost::optional<OUString>
+                        m_aTOUName;
+    std::unique_ptr<SwForm>
+                        m_pForm;
+    SwTOXElement        m_nContent;
+    SwTOIOptions        m_nIndexOptions;
+    SwTOOElements       m_nOLEOptions;
     LanguageType        m_eLanguage;
     OUString            m_sSortAlgorithm;
 
@@ -61,20 +66,17 @@ class SW_DLLPUBLIC SwTOXDescription
     //TODO: TemplateNames
     //const String* pTemplateName = 0, ???
 
-    SwTOXDescription(SwTOXDescription&) = delete;
-    SwTOXDescription & operator= (SwTOXDescription&) = delete;
+    SwTOXDescription(SwTOXDescription const &) = delete;
+    SwTOXDescription & operator= (SwTOXDescription const &) = delete;
 
 public:
     // single argument ctors shall be explicit.
     explicit SwTOXDescription(TOXTypes eType) :
         m_eTOXType(eType),
-        m_pTitle(nullptr),
-        m_pTOUName(nullptr),
-        m_pForm(nullptr),
-        m_nContent(nsSwTOXElement::TOX_MARK | nsSwTOXElement::TOX_OUTLINELEVEL),
-        m_nIndexOptions(nsSwTOIOptions::TOI_SAME_ENTRY|nsSwTOIOptions::TOI_FF|nsSwTOIOptions::TOI_CASE_SENSITIVE),
-        m_nOLEOptions(0),
-        m_eLanguage((LanguageType)::GetAppLanguage()),
+        m_nContent(SwTOXElement::Mark | SwTOXElement::OutlineLevel),
+        m_nIndexOptions(SwTOIOptions::SameEntry|SwTOIOptions::FF|SwTOIOptions::CaseSensitive),
+        m_nOLEOptions(SwTOOElements::NONE),
+        m_eLanguage(::GetAppLanguage()),
         m_eCaptionDisplay(CAPTION_COMPLETE),
         m_nLevel(MAXLEVEL),
         m_bFromObjectNames(false),
@@ -84,12 +86,6 @@ public:
         m_bIsAuthSequence(false),
         m_bSortByDocument(true)
         {}
-    ~SwTOXDescription()
-        {
-            delete m_pTitle;
-            delete m_pForm;
-            delete m_pTOUName;
-        }
 
     TOXTypes        GetTOXType() const { return m_eTOXType;}
 
@@ -101,20 +97,20 @@ public:
     const OUString& GetAutoMarkURL() const { return m_sAutoMarkURL;}
     void            SetAutoMarkURL(const OUString& rSet) {m_sAutoMarkURL = rSet;}
 
-    void            SetTitle(const OUString& pSet) {delete m_pTitle; m_pTitle = new OUString(pSet);}
-    const OUString* GetTitle() const {return m_pTitle; }
+    void            SetTitle(const OUString& rSet) { m_aTitle = rSet; }
+    boost::optional<OUString> const & GetTitle() const {return m_aTitle; }
 
-    void            SetTOUName(const OUString& pSet) {delete m_pTOUName; m_pTOUName = new OUString(pSet);}
-    const OUString* GetTOUName() const {return m_pTOUName; }
+    void            SetTOUName(const OUString& rSet) { m_aTOUName = rSet; }
+    boost::optional<OUString> const & GetTOUName() const { return m_aTOUName; }
 
-    void            SetForm(const SwForm& rSet) {delete m_pForm; m_pForm = new SwForm(rSet);}
-    const SwForm*   GetForm() const {return m_pForm;}
+    void            SetForm(const SwForm& rSet) { m_pForm.reset( new SwForm(rSet) );}
+    const SwForm*   GetForm() const {return m_pForm.get();}
 
-    void            SetContentOptions(sal_uInt16 nSet) { m_nContent = nSet;}
-    sal_uInt16          GetContentOptions() const { return m_nContent;}
+    void            SetContentOptions(SwTOXElement nSet) { m_nContent = nSet;}
+    SwTOXElement    GetContentOptions() const { return m_nContent;}
 
-    void            SetIndexOptions(sal_uInt16 nSet) { m_nIndexOptions = nSet;}
-    sal_uInt16          GetIndexOptions() const { return m_nIndexOptions;}
+    void            SetIndexOptions(SwTOIOptions nSet) { m_nIndexOptions = nSet;}
+    SwTOIOptions    GetIndexOptions() const { return m_nIndexOptions;}
 
     const OUString& GetMainEntryCharStyle() const {return m_sMainEntryCharStyle;}
     void            SetMainEntryCharStyle(const OUString& rSet)  {m_sMainEntryCharStyle = rSet;}
@@ -137,13 +133,13 @@ public:
     void            SetReadonly(bool bSet){m_bReadonly = bSet;}
     bool            IsReadonly() const {return m_bReadonly;}
 
-    sal_uInt16          GetOLEOptions() const {return m_nOLEOptions;}
-    void            SetOLEOptions(sal_uInt16 nOpt) {m_nOLEOptions = nOpt;}
+    SwTOOElements   GetOLEOptions() const {return m_nOLEOptions;}
+    void            SetOLEOptions(SwTOOElements nOpt) {m_nOLEOptions = nOpt;}
 
     bool            IsLevelFromChapter() const {return m_bLevelFromChapter;}
     void            SetLevelFromChapter(bool bSet) {m_bLevelFromChapter = bSet;}
 
-    OUString        GetAuthBrackets() const {return m_sAuthBrackets;}
+    const OUString& GetAuthBrackets() const {return m_sAuthBrackets;}
     void            SetAuthBrackets(const OUString& rSet) {m_sAuthBrackets = rSet;}
 
     bool            IsAuthSequence() const {return m_bIsAuthSequence;}
@@ -156,9 +152,9 @@ public:
                         SwTOXSortKey eKey2,
                             SwTOXSortKey eKey3);
 
-    SwTOXSortKey GetSortKey1() const {return m_eSortKey1;}
-    SwTOXSortKey GetSortKey2() const {return m_eSortKey2;}
-    SwTOXSortKey GetSortKey3() const {return m_eSortKey3;}
+    const SwTOXSortKey& GetSortKey1() const {return m_eSortKey1;}
+    const SwTOXSortKey& GetSortKey2() const {return m_eSortKey2;}
+    const SwTOXSortKey& GetSortKey3() const {return m_eSortKey3;}
 
     LanguageType    GetLanguage() const {return m_eLanguage;}
     void            SetLanguage(LanguageType nLang)  {m_eLanguage = nLang;}
@@ -172,83 +168,59 @@ public:
 
 class SwTOXMarkDescription
 {
-    TOXTypes    eTOXType;
-    int         nLevel;
-    bool        bMainEntry;
+    TOXTypes    meTOXType;
+    int         mnLevel;
+    bool        mbMainEntry;
 
-    OUString*   pPrimKey;
-    OUString*   pSecKey;
-    OUString*   pAltStr;
-    OUString*   pTOUName;
+    boost::optional<OUString>  maPrimKey;
+    boost::optional<OUString>  maSecKey;
+    boost::optional<OUString>  maAltStr;
+    boost::optional<OUString>  maTOUName;
 
-    OUString*   pPhoneticReadingOfAltStr;
-    OUString*   pPhoneticReadingOfPrimKey;
-    OUString*   pPhoneticReadingOfSecKey;
+    boost::optional<OUString>  maPhoneticReadingOfAltStr;
+    boost::optional<OUString>  maPhoneticReadingOfPrimKey;
+    boost::optional<OUString>  maPhoneticReadingOfSecKey;
 
-    SwTOXMarkDescription(SwTOXMarkDescription&) = delete;
-    SwTOXMarkDescription & operator= (SwTOXMarkDescription&) = delete;
+    SwTOXMarkDescription(SwTOXMarkDescription const &) = delete;
+    SwTOXMarkDescription & operator= (SwTOXMarkDescription const &) = delete;
 
 public:
     // single argument ctors shall be explicit.
     explicit SwTOXMarkDescription(TOXTypes eType) :
-        eTOXType(eType),
-        nLevel(0),
-        bMainEntry(false),
-        pPrimKey(nullptr),
-        pSecKey(nullptr),
-        pAltStr(nullptr),
-        pTOUName(nullptr),
-        pPhoneticReadingOfAltStr(nullptr),
-        pPhoneticReadingOfPrimKey(nullptr),
-        pPhoneticReadingOfSecKey(nullptr)
+        meTOXType(eType),
+        mnLevel(0),
+        mbMainEntry(false)
         {
         }
-    ~SwTOXMarkDescription()
-    {
-        delete pPrimKey;
-        delete pSecKey;
-        delete pAltStr;
-        delete pTOUName;
-        delete pPhoneticReadingOfAltStr;
-        delete pPhoneticReadingOfPrimKey;
-        delete pPhoneticReadingOfSecKey;
-    }
 
-    TOXTypes        GetTOXType()const {return eTOXType;}
+    TOXTypes        GetTOXType()const {return meTOXType;}
 
-    void            SetLevel(int nSet) {nLevel = nSet;}
-    int             GetLevel() const {return nLevel;}
+    void            SetLevel(int nSet) {mnLevel = nSet;}
+    int             GetLevel() const {return mnLevel;}
 
-    void            SetMainEntry(bool bSet) {bMainEntry = bSet;}
-    bool            IsMainEntry() const {return bMainEntry;}
+    void            SetMainEntry(bool bSet) {mbMainEntry = bSet;}
+    bool            IsMainEntry() const {return mbMainEntry;}
 
-    void            SetPrimKey(const OUString& rSet)
-                                {delete pPrimKey; pPrimKey = new OUString(rSet);}
-    const OUString* GetPrimKey() const {return pPrimKey;}
+    void            SetPrimKey(const OUString& rSet) { maPrimKey = rSet; }
+    boost::optional<OUString> const & GetPrimKey() const { return maPrimKey; }
 
-    void            SetSecKey(const OUString& rSet)
-                                {delete pSecKey;  pSecKey  = new OUString(rSet);}
-    const OUString* GetSecKey() const { return pSecKey; }
+    void            SetSecKey(const OUString& rSet) { maSecKey = rSet; }
+    boost::optional<OUString> const & GetSecKey() const { return maSecKey; }
 
-    void            SetAltStr(const OUString& rSet)
-                                {delete pAltStr;  pAltStr  = new OUString(rSet);}
-    const OUString* GetAltStr() const { return pAltStr; }
+    void            SetAltStr(const OUString& rSet) { maAltStr = rSet; }
+    boost::optional<OUString> const & GetAltStr() const { return maAltStr; }
 
-    void            SetTOUName(const OUString& rSet)
-                                {delete pTOUName; pTOUName = new OUString(rSet);}
-    const OUString* GetTOUName() const {return pTOUName;}
+    void            SetTOUName(const OUString& rSet) { maTOUName = rSet; }
+    boost::optional<OUString> const & GetTOUName() const { return maTOUName; }
 
-    void            SetPhoneticReadingOfAltStr(const OUString& rSet)
-                                {delete pPhoneticReadingOfAltStr;  pPhoneticReadingOfAltStr  = new OUString(rSet);}
-    const OUString* GetPhoneticReadingOfAltStr() const {    return pPhoneticReadingOfAltStr; }
+    void            SetPhoneticReadingOfAltStr(const OUString& rSet) { maPhoneticReadingOfAltStr = rSet; }
+    boost::optional<OUString> const & GetPhoneticReadingOfAltStr() const { return maPhoneticReadingOfAltStr; }
 
-    void            SetPhoneticReadingOfPrimKey(const OUString& rSet)
-                                {delete pPhoneticReadingOfPrimKey;  pPhoneticReadingOfPrimKey  = new OUString(rSet);}
-    const OUString* GetPhoneticReadingOfPrimKey() const {   return pPhoneticReadingOfPrimKey; }
+    void            SetPhoneticReadingOfPrimKey(const OUString& rSet) { maPhoneticReadingOfPrimKey = rSet; }
+    boost::optional<OUString> const & GetPhoneticReadingOfPrimKey() const { return maPhoneticReadingOfPrimKey; }
 
-    void            SetPhoneticReadingOfSecKey(const OUString& rSet)
-                                {delete pPhoneticReadingOfSecKey;  pPhoneticReadingOfSecKey  = new OUString(rSet);}
-    const OUString* GetPhoneticReadingOfSecKey() const {    return pPhoneticReadingOfSecKey; }
+    void            SetPhoneticReadingOfSecKey(const OUString& rSet) { maPhoneticReadingOfSecKey = rSet; }
+    boost::optional<OUString> const & GetPhoneticReadingOfSecKey() const { return maPhoneticReadingOfSecKey; }
 };
 
 class SW_DLLPUBLIC SwTOXMgr
@@ -281,11 +253,10 @@ public:
 
     // methods for directories
 
-    bool    UpdateOrInsertTOX(const SwTOXDescription& rDesc, SwTOXBase** ppBase = nullptr, const SfxItemSet* pSet = nullptr);
+    bool    UpdateOrInsertTOX(const SwTOXDescription& rDesc, SwTOXBase** ppBase, const SfxItemSet* pSet);
 
     const SwTOXType*    GetTOXType(TOXTypes eTyp) const;
-    const SwTOXBase*    GetCurTOX();
-
+    SwWrtShell * GetShell() { return pSh; }
 };
 
 // inlines

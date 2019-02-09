@@ -21,21 +21,20 @@
 #define INCLUDED_SC_INC_DPFILTEREDCACHE_HXX
 
 #include <sal/types.h>
-#include <osl/mutex.hxx>
-#include "global.hxx"
 #include "dpitemdata.hxx"
 #include "calcmacros.hxx"
+#include "scdllapi.h"
+#include "types.hxx"
 
-#include <memory>
 #include <unordered_set>
 #include <vector>
 
 #include <mdds/flat_segment_tree.hpp>
 
-class ScDPItemData;
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename > class Sequence; } } } }
+
 class ScDPCache;
-class ScDocument;
-class ScRange;
 struct ScDPValue;
 struct ScQueryParam;
 
@@ -65,15 +64,12 @@ public:
     {
     public:
         explicit SingleFilter(const ScDPItemData &rItem);
-        virtual ~SingleFilter() {}
 
         virtual bool match(const ScDPItemData& rCellData) const override;
         virtual std::vector<ScDPItemData> getMatchValues() const override;
 
     private:
-        explicit SingleFilter();
-
-        ScDPItemData maItem;
+        ScDPItemData const maItem;
     };
 
     /** multi-item (group) filter. */
@@ -81,7 +77,6 @@ public:
     {
     public:
         GroupFilter();
-        virtual ~GroupFilter() {}
         virtual bool match(const ScDPItemData& rCellData) const override;
         virtual std::vector<ScDPItemData> getMatchValues() const override;
         void addMatchItem(const ScDPItemData& rItem);
@@ -140,12 +135,11 @@ public:
                      css::uno::Sequence< css::uno::Sequence< css::uno::Any > >& rTabData,
                      const std::unordered_set<sal_Int32>& rRepeatIfEmptyDims);
 
-    static SCROW getOrder(long nDim, SCROW nIndex);
     void clear();
     bool empty() const;
 
-#if DEBUG_PIVOT_TABLE
-    void dumpRowFlag(const RowFlagType& rFlag) const;
+#if DUMP_PIVOT_TABLE
+    static void dumpRowFlag( const RowFlagType& rFlag );
     void dump() const;
 #endif
 
@@ -162,7 +156,7 @@ private:
 
 private:
 
-    /** unique field entires for each field (column). */
+    /** unique field entries for each field (column). */
     ::std::vector< ::std::vector<SCROW> > maFieldEntries;
 
     /** Rows visible by standard filter query. */

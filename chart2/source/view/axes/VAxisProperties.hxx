@@ -20,41 +20,36 @@
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_VAXISPROPERTIES_HXX
 
 #include "TickmarkProperties.hxx"
-#include "PlottingPositionHelper.hxx"
-#include "LabelAlignment.hxx"
-#include "ExplicitCategoriesProvider.hxx"
+#include <LabelAlignment.hxx>
 
 #include <com/sun/star/chart/ChartAxisLabelPosition.hpp>
 #include <com/sun/star/chart/ChartAxisMarkPosition.hpp>
 #include <com/sun/star/chart/ChartAxisPosition.hpp>
-#include <com/sun/star/chart2/XAxis.hpp>
-#include <com/sun/star/chart2/AxisType.hpp>
-#include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/drawing/TextVerticalAdjust.hpp>
-#include <com/sun/star/drawing/TextHorizontalAdjust.hpp>
-#include <com/sun/star/lang/Locale.hpp>
+#include <com/sun/star/uno/Any.hxx>
 
 #include <vector>
 #include <boost/optional.hpp>
 
+namespace chart { class ExplicitCategoriesProvider; }
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { class XAxis; } } } }
+namespace com { namespace sun { namespace star { namespace chart2 { namespace data { class XTextualDataSequence; } } } } }
+
 namespace chart
 {
-
-/**
-*/
 
 //These properties describe how a couple of labels are arranged one to another.
 //The couple can contain all labels for all tickmark depth or just the labels for one single depth or
 //the labels from an coherent range of tick depths (e.g. the major and first minor tickmarks should be handled together).
 //... only allow side by side for different tick depth
-enum AxisLabelStaggering
+enum class AxisLabelStaggering
 {
-      SIDE_BY_SIDE
-    , STAGGER_EVEN
-    , STAGGER_ODD
-    , STAGGER_AUTO
+      SideBySide
+    , StaggerEven
+    , StaggerOdd
+    , StaggerAuto
 };
 
 struct AxisLabelProperties final
@@ -75,7 +70,6 @@ struct AxisLabelProperties final
     double               fRotationAngleDegree;
 
     sal_Int32   nRhythm; //show only each nth label with n==nRhythm
-    bool        bRhythmIsFix; //states whether the given rhythm is fix or may be changed
 
     //methods:
     void init( const css::uno::Reference< css::chart2::XAxis >&  xAxisModel );
@@ -130,7 +124,7 @@ struct AxisProperties final
     */
     sal_Int32                           m_nMajorTickmarks;
     sal_Int32                           m_nMinorTickmarks;
-    ::std::vector<TickmarkProperties>   m_aTickmarkPropertiesList;
+    std::vector<TickmarkProperties>   m_aTickmarkPropertiesList;
 
     VLineProperties                     m_aLineProperties;
 
@@ -141,26 +135,27 @@ struct AxisProperties final
     css::uno::Reference<css::chart2::data::XTextualDataSequence> m_xAxisTextProvider; //for categories or series names
     //<- category axes
 
+    bool                                m_bLimitSpaceForLabels;
+
     //methods:
 
     AxisProperties( const css::uno::Reference< css::chart2::XAxis >& xAxisModel
                   , ExplicitCategoriesProvider* pExplicitCategoriesProvider );
-    AxisProperties( const AxisProperties& rAxisProperties );
 
     void init(bool bCartesian=false);//init from model data (m_xAxisModel)
 
     void initAxisPositioning( const css::uno::Reference< css::beans::XPropertySet >& xAxisProp );
 
     static TickmarkProperties getBiggestTickmarkProperties();
-    TickmarkProperties makeTickmarkPropertiesForComplexCategories( sal_Int32 nTickLength, sal_Int32 nTickStartDistanceToAxis, sal_Int32 nTextLevel ) const;
+    TickmarkProperties makeTickmarkPropertiesForComplexCategories( sal_Int32 nTickLength, sal_Int32 nTickStartDistanceToAxis ) const;
 
 private:
-    AxisProperties();
+    AxisProperties() = delete;
 
     TickmarkProperties  makeTickmarkProperties( sal_Int32 nDepth ) const;
     //@todo get this from somewhere; maybe for each subincrement
     //so far the model does not offer different settings for each tick depth
-    VLineProperties      makeLinePropertiesForDepth( sal_Int32 /*nDepth*/ ) const { return m_aLineProperties; }
+    const VLineProperties&  makeLinePropertiesForDepth() const { return m_aLineProperties; }
 };
 
 } //namespace chart

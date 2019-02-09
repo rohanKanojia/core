@@ -17,40 +17,28 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "lotfntbf.hxx"
+#include <lotfntbf.hxx>
 
-#include "scitems.hxx"
-#include <editeng/contouritem.hxx>
-#include <editeng/crossedoutitem.hxx>
-#include <editeng/eeitem.hxx>
+#include <scitems.hxx>
 #include <editeng/postitem.hxx>
-#include <editeng/shdditem.hxx>
-#include <editeng/escapementitem.hxx>
 #include <editeng/udlnitem.hxx>
 #include <editeng/wghtitem.hxx>
-#include <sfx2/printer.hxx>
+#include <osl/diagnose.h>
+#include <svl/itemset.hxx>
 
-#include "attrib.hxx"
-#include "document.hxx"
-#include "global.hxx"
-#include "docpool.hxx"
-#include "patattr.hxx"
-#include "ftools.hxx"
+#include <global.hxx>
 
 void LotusFontBuffer::Fill( const sal_uInt8 nIndex, SfxItemSet& rItemSet )
 {
     sal_uInt8   nIntIndex = nIndex & 0x07;
 
-    ENTRY*  pAkt = pData + nIntIndex;
+    ENTRY*  pCurrent = pData + nIntIndex;
 
-    if( pAkt->pFont )
-        rItemSet.Put( *pAkt->pFont );
+    if( pCurrent->pFont )
+        rItemSet.Put( *pCurrent->pFont );
 
-    if( pAkt->pHeight )
-        rItemSet.Put( *pAkt->pHeight );
-
-    if( pAkt->pColor )
-        rItemSet.Put( *pAkt->pColor );
+    if( pCurrent->pHeight )
+        rItemSet.Put( *pCurrent->pHeight );
 
     if( nIndex & 0x08 )
     {
@@ -96,7 +84,7 @@ void LotusFontBuffer::SetHeight( const sal_uInt16 nIndex, const sal_uInt16 nHeig
 {
     OSL_ENSURE( nIndex < nSize, "*LotusFontBuffer::SetHeight(): Array too small!" );
     if( nIndex < nSize )
-        pData[ nIndex ].Height( *( new SvxFontHeightItem( ( sal_uLong ) nHeight * 20, 100, ATTR_FONT_HEIGHT ) ) );
+        pData[ nIndex ].Height( std::make_unique<SvxFontHeightItem>( static_cast<sal_uLong>(nHeight) * 20, 100, ATTR_FONT_HEIGHT ) );
 }
 
 void LotusFontBuffer::SetType( const sal_uInt16 nIndex, const sal_uInt16 nType )
@@ -107,7 +95,7 @@ void LotusFontBuffer::SetType( const sal_uInt16 nIndex, const sal_uInt16 nType )
         ENTRY* pEntry = pData + nIndex;
         pEntry->Type( nType );
 
-        if( pEntry->pTmpName )
+        if( pEntry->xTmpName )
             MakeFont( pEntry );
     }
 }
@@ -136,10 +124,9 @@ void LotusFontBuffer::MakeFont( ENTRY* pEntry )
             break;
     }
 
-    pEntry->pFont = new SvxFontItem( eFamily, *pEntry->pTmpName, EMPTY_OUSTRING, ePitch, eCharSet, ATTR_FONT );
+    pEntry->pFont.reset( new SvxFontItem( eFamily, *pEntry->xTmpName, EMPTY_OUSTRING, ePitch, eCharSet, ATTR_FONT ) );
 
-    delete pEntry->pTmpName;
-    pEntry->pTmpName = nullptr;
+    pEntry->xTmpName.reset();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

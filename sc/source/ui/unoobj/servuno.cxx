@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <config_features.h>
 
 #include <sal/macros.h>
@@ -27,30 +28,32 @@
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/text/textfield/Type.hpp>
 
-#include "servuno.hxx"
-#include "unonames.hxx"
-#include "cellsuno.hxx"
-#include "fielduno.hxx"
-#include "styleuno.hxx"
-#include "afmtuno.hxx"
-#include "defltuno.hxx"
-#include "drdefuno.hxx"
-#include "docsh.hxx"
-#include "drwlayer.hxx"
-#include "confuno.hxx"
-#include "shapeuno.hxx"
+#include <editsrc.hxx>
+#include <servuno.hxx>
+#include <unonames.hxx>
+#include <appluno.hxx>
+#include <cellsuno.hxx>
+#include <fielduno.hxx>
+#include <styleuno.hxx>
+#include <afmtuno.hxx>
+#include <defltuno.hxx>
+#include <drdefuno.hxx>
+#include <docsh.hxx>
+#include <drwlayer.hxx>
+#include <confuno.hxx>
+#include <shapeuno.hxx>
 #include "cellvaluebinding.hxx"
 #include "celllistsource.hxx"
-#include "addruno.hxx"
-#include "chart2uno.hxx"
-#include "tokenuno.hxx"
+#include <addruno.hxx>
+#include <chart2uno.hxx>
+#include <tokenuno.hxx>
+#include <PivotTableDataProvider.hxx>
 
-// Support creation of GraphicObjectResolver and EmbeddedObjectResolver
+// Support creation of GraphicStorageHandler and EmbeddedObjectResolver
 #include <svx/xmleohlp.hxx>
 #include <svx/xmlgrhlp.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/docfilt.hxx>
-#include <com/sun/star/script/ScriptEventDescriptor.hpp>
 #include <com/sun/star/script/vba/XVBAEventProcessor.hpp>
 #include <com/sun/star/document/XCodeNameQuery.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
@@ -68,7 +71,9 @@
 
 using namespace ::com::sun::star;
 
-bool isInVBAMode( ScDocShell& rDocSh )
+#if HAVE_FEATURE_SCRIPTING
+
+static bool isInVBAMode( ScDocShell& rDocSh )
 {
     uno::Reference<script::XLibraryContainer> xLibContainer = rDocSh.GetBasicContainer();
     uno::Reference<script::vba::XVBACompatibility> xVBACompat( xLibContainer, uno::UNO_QUERY );
@@ -76,6 +81,8 @@ bool isInVBAMode( ScDocShell& rDocSh )
         return xVBACompat->getVBACompatibilityMode();
     return false;
 }
+
+#endif
 
 class ScVbaObjectForCodeNameProvider : public ::cppu::WeakImplHelper< container::XNameAccess >
 {
@@ -87,12 +94,12 @@ public:
     {
         uno::Sequence< uno::Any > aArgs(2);
         // access the application object ( parent for workbook )
-        aArgs[0] = uno::Any( ooo::vba::createVBAUnoAPIServiceWithArgs( mpDocShell, "ooo.vba.Application", uno::Sequence< uno::Any >() ) );
-        aArgs[1] = uno::Any( mpDocShell->GetModel() );
+        aArgs[0] <<= ooo::vba::createVBAUnoAPIServiceWithArgs( mpDocShell, "ooo.vba.Application", uno::Sequence< uno::Any >() );
+        aArgs[1] <<= mpDocShell->GetModel();
         maWorkbook <<= ooo::vba::createVBAUnoAPIServiceWithArgs( mpDocShell, "ooo.vba.excel.Workbook", aArgs );
     }
 
-    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) throw (css::uno::RuntimeException, std::exception ) override
+    virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override
     {
         SolarMutexGuard aGuard;
         maCachedObject = uno::Any(); // clear cached object
@@ -123,9 +130,9 @@ public:
                         uno::Reference< sheet::XSpreadsheet > xSheet( xIndexAccess->getByIndex( i ), uno::UNO_QUERY_THROW );
                         uno::Sequence< uno::Any > aArgs(3);
                         aArgs[0] = maWorkbook;
-                        aArgs[1] = uno::Any( xModel );
-                        aArgs[2] = uno::Any( OUString( sSheetName ) );
-                        // use the convience function
+                        aArgs[1] <<= xModel;
+                        aArgs[2] <<= sSheetName;
+                        // use the convenience function
                         maCachedObject <<= ooo::vba::createVBAUnoAPIServiceWithArgs( mpDocShell, "ooo.vba.excel.Worksheet", aArgs );
                         break;
                     }
@@ -135,16 +142,14 @@ public:
         return maCachedObject.hasValue();
 
     }
-    css::uno::Any SAL_CALL getByName( const OUString& aName ) throw (css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override
+    css::uno::Any SAL_CALL getByName( const OUString& aName ) override
     {
         SolarMutexGuard aGuard;
-        OSL_TRACE("ScVbaObjectForCodeNameProvider::getByName( %s )",
-            OUStringToOString( aName, RTL_TEXTENCODING_UTF8 ).getStr() );
         if ( !hasByName( aName ) )
             throw css::container::NoSuchElementException();
         return maCachedObject;
     }
-    virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override
     {
         SolarMutexGuard aGuard;
         ScDocument& rDoc = mpDocShell->GetDocument();
@@ -161,8 +166,8 @@ public:
         return aNames;
     }
     // XElemenAccess
-    virtual css::uno::Type SAL_CALL getElementType(  ) throw (css::uno::RuntimeException, std::exception) override { return uno::Type(); }
-    virtual sal_Bool SAL_CALL hasElements(  ) throw (css::uno::RuntimeException, std::exception ) override { return sal_True; }
+    virtual css::uno::Type SAL_CALL getElementType(  ) override { return uno::Type(); }
+    virtual sal_Bool SAL_CALL hasElements(  ) override { return true; }
 
 };
 
@@ -172,7 +177,7 @@ class ScVbaCodeNameProvider : public ::cppu::WeakImplHelper< document::XCodeName
 public:
     explicit ScVbaCodeNameProvider( ScDocShell& rDocShell ) : mrDocShell(rDocShell) {}
     // XCodeNameQuery
-    OUString SAL_CALL getCodeNameForObject( const uno::Reference< uno::XInterface >& xIf ) throw( uno::RuntimeException, std::exception ) override
+    OUString SAL_CALL getCodeNameForObject( const uno::Reference< uno::XInterface >& xIf ) override
     {
         SolarMutexGuard aGuard;
         OUString sCodeName;
@@ -211,8 +216,7 @@ public:
         return sCodeName;
     }
 
-    OUString SAL_CALL getCodeNameForContainer( const uno::Reference<uno::XInterface>& xContainer )
-            throw( uno::RuntimeException, std::exception ) override
+    OUString SAL_CALL getCodeNameForContainer( const uno::Reference<uno::XInterface>& xContainer ) override
     {
         SolarMutexGuard aGuard;
         uno::Reference<drawing::XDrawPagesSupplier> xSupplier(mrDocShell.GetModel(), uno::UNO_QUERY_THROW);
@@ -246,7 +250,7 @@ using Type = ScServiceProvider::Type;
 struct ProvNamesId_Type
 {
     const char *            pName;
-    ScServiceProvider::Type nType;
+    ScServiceProvider::Type const nType;
 };
 
 const ProvNamesId_Type aProvNamesId[] =
@@ -264,7 +268,11 @@ const ProvNamesId_Type aProvNamesId[] =
     { "com.sun.star.style.CellStyle",                   Type::CELLSTYLE },
     { "com.sun.star.style.PageStyle",                   Type::PAGESTYLE },
     { "com.sun.star.sheet.TableAutoFormat",             Type::AUTOFORMAT },
+    { "com.sun.star.sheet.TableAutoFormats",            Type::AUTOFORMATS },
     { "com.sun.star.sheet.SheetCellRanges",             Type::CELLRANGES },
+    { "com.sun.star.sheet.FunctionDescriptions",        Type::FUNCTIONDESCRIPTIONS },
+    { "com.sun.star.sheet.GlobalSheetSettings",         Type::GLOBALSHEETSETTINGS },
+    { "com.sun.star.sheet.RecentFunctions",             Type::RECENTFUNCTIONS },
     { "com.sun.star.drawing.GradientTable",             Type::GRADTAB },
     { "com.sun.star.drawing.HatchTable",                Type::HATCHTAB },
     { "com.sun.star.drawing.BitmapTable",               Type::BITMAPTAB },
@@ -280,9 +288,9 @@ const ProvNamesId_Type aProvNamesId[] =
     { "com.sun.star.image.ImageMapCircleObject",        Type::IMAP_CIRC },
     { "com.sun.star.image.ImageMapPolygonObject",       Type::IMAP_POLY },
 
-    // Support creation of GraphicObjectResolver and EmbeddedObjectResolver
-    { "com.sun.star.document.ExportGraphicObjectResolver",  Type::EXPORT_GOR },
-    { "com.sun.star.document.ImportGraphicObjectResolver",  Type::IMPORT_GOR },
+    // Support creation of GraphicStorageHandler and EmbeddedObjectResolver
+    { "com.sun.star.document.ExportGraphicStorageHandler",  Type::EXPORT_GRAPHIC_STORAGE_HANDLER },
+    { "com.sun.star.document.ImportGraphicStorageHandler",  Type::IMPORT_GRAPHIC_STORAGE_HANDLER },
     { "com.sun.star.document.ExportEmbeddedObjectResolver", Type::EXPORT_EOR },
     { "com.sun.star.document.ImportEmbeddedObjectResolver", Type::IMPORT_EOR },
 
@@ -295,6 +303,7 @@ const ProvNamesId_Type aProvNamesId[] =
     { "com.sun.star.sheet.DocumentSettings",Type::SHEETDOCSET },
 
     { SC_SERVICENAME_CHDATAPROV,            Type::CHDATAPROV },
+    { SC_SERVICENAME_CHART_PIVOTTABLE_DATAPROVIDER, Type::CHART_PIVOTTABLE_DATAPROVIDER },
     { SC_SERVICENAME_FORMULAPARS,           Type::FORMULAPARS },
     { SC_SERVICENAME_OPCODEMAPPER,          Type::OPCODEMAPPER },
     { "ooo.vba.VBAObjectModuleObjectProvider", Type::VBAOBJECTPROVIDER },
@@ -366,21 +375,21 @@ ScServiceProvider::Type ScServiceProvider::GetProviderType(const OUString& rServ
 {
     if (!rServiceName.isEmpty())
     {
-        for (sal_uInt16 i = 0; i < SAL_N_ELEMENTS(aProvNamesId); i++)
+        for (const ProvNamesId_Type & i : aProvNamesId)
         {
-            if (rServiceName.equalsAscii( aProvNamesId[i].pName ))
+            if (rServiceName.equalsAscii( i.pName ))
             {
-                return aProvNamesId[i].nType;
+                return i.nType;
             }
         }
 
-        for (sal_uInt16 i=0; i < SAL_N_ELEMENTS(aOldNames); i++)
+        for (const ProvNamesId_Type & rOldName : aOldNames)
         {
-            OSL_ENSURE( aOldNames[i].pName, "ScServiceProvider::GetProviderType: no oldname => crash");
-            if (rServiceName.equalsAscii( aOldNames[i].pName ))
+            OSL_ENSURE( rOldName.pName, "ScServiceProvider::GetProviderType: no oldname => crash");
+            if (rServiceName.equalsAscii( rOldName.pName ))
             {
                 OSL_FAIL("old service name used");
-                return aOldNames[i].nType;
+                return rOldName.nType;
             }
         }
     }
@@ -391,10 +400,11 @@ uno::Reference<uno::XInterface> ScServiceProvider::MakeInstance(
                                     Type nType, ScDocShell* pDocShell )
 {
     uno::Reference<uno::XInterface> xRet;
+
     switch (nType)
     {
         case Type::SHEET:
-            //  noch nicht eingefuegt - DocShell=Null
+            //  not inserted yet - DocShell=Null
             xRet.set(static_cast<sheet::XSpreadsheet*>(new ScTableSheetObj(nullptr,0)));
             break;
         case Type::URLFIELD:
@@ -412,19 +422,31 @@ uno::Reference<uno::XInterface> ScServiceProvider::MakeInstance(
                 new ScEditFieldObj(xNullContent, nullptr, getFieldType(nType), ESelection())));
         }   break;
         case Type::CELLSTYLE:
-            xRet.set(static_cast<style::XStyle*>(new ScStyleObj( nullptr, SFX_STYLE_FAMILY_PARA, OUString() )));
+            xRet.set(static_cast<style::XStyle*>(new ScStyleObj( nullptr, SfxStyleFamily::Para, OUString() )));
             break;
         case Type::PAGESTYLE:
-            xRet.set(static_cast<style::XStyle*>(new ScStyleObj( nullptr, SFX_STYLE_FAMILY_PAGE, OUString() )));
+            xRet.set(static_cast<style::XStyle*>(new ScStyleObj( nullptr, SfxStyleFamily::Page, OUString() )));
             break;
         case Type::AUTOFORMAT:
             xRet.set(static_cast<container::XIndexAccess*>(new ScAutoFormatObj( SC_AFMTOBJ_INVALID )));
             break;
+        case Type::AUTOFORMATS:
+            xRet.set(static_cast<container::XIndexAccess*>(new ScAutoFormatsObj()));
+            break;
         case Type::CELLRANGES:
-            //  wird nicht eingefuegt, sondern gefuellt
-            //  -> DocShell muss gesetzt sein, aber leere Ranges
+            //  isn't inserted, rather filled
+            //  -> DocShell must be set, but empty ranges
             if (pDocShell)
                 xRet.set(static_cast<sheet::XSheetCellRanges*>(new ScCellRangesObj( pDocShell, ScRangeList() )));
+            break;
+        case Type::FUNCTIONDESCRIPTIONS:
+            xRet.set(static_cast<sheet::XFunctionDescriptions*>(new ScFunctionListObj()));
+            break;
+        case Type::GLOBALSHEETSETTINGS:
+            xRet.set(static_cast<sheet::XGlobalSheetSettings*>(new ScSpreadsheetSettings()));
+            break;
+        case Type::RECENTFUNCTIONS:
+            xRet.set(static_cast<sheet::XRecentFunctions*>(new ScRecentFunctionsObj()));
             break;
         case Type::DOCDEFLTS:
             if (pDocShell)
@@ -483,20 +505,20 @@ uno::Reference<uno::XInterface> ScServiceProvider::MakeInstance(
             xRet.set(SvUnoImageMapPolygonObject_createInstance( ScShapeObj::GetSupportedMacroItems() ));
             break;
 
-        // Support creation of GraphicObjectResolver and EmbeddedObjectResolver
-        case Type::EXPORT_GOR:
-            xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLGraphicHelper( GRAPHICHELPER_MODE_WRITE )));
+        // Support creation of GraphicStorageHandler and EmbeddedObjectResolver
+        case Type::EXPORT_GRAPHIC_STORAGE_HANDLER:
+            xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLGraphicHelper( SvXMLGraphicHelperMode::Write )));
             break;
-        case Type::IMPORT_GOR:
-            xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLGraphicHelper( GRAPHICHELPER_MODE_READ )));
+        case Type::IMPORT_GRAPHIC_STORAGE_HANDLER:
+            xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLGraphicHelper( SvXMLGraphicHelperMode::Read )));
             break;
         case Type::EXPORT_EOR:
             if (pDocShell)
-                xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLEmbeddedObjectHelper( *pDocShell, EMBEDDEDOBJECTHELPER_MODE_WRITE )));
+                xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLEmbeddedObjectHelper( *pDocShell, SvXMLEmbeddedObjectHelperMode::Write )));
             break;
         case Type::IMPORT_EOR:
             if (pDocShell)
-                xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLEmbeddedObjectHelper( *pDocShell, EMBEDDEDOBJECTHELPER_MODE_READ )));
+                xRet.set(static_cast<cppu::OWeakObject *>(new SvXMLEmbeddedObjectHelper( *pDocShell, SvXMLEmbeddedObjectHelperMode::Read )));
             break;
         case Type::VALBIND:
         case Type::LISTCELLBIND:
@@ -526,6 +548,10 @@ uno::Reference<uno::XInterface> ScServiceProvider::MakeInstance(
             if (pDocShell)
                 xRet = *new ScChart2DataProvider( &pDocShell->GetDocument() );
             break;
+        case Type::CHART_PIVOTTABLE_DATAPROVIDER:
+            if (pDocShell)
+                xRet = *new sc::PivotTableDataProvider(&pDocShell->GetDocument());
+            break;
         case Type::FORMULAPARS:
             if (pDocShell)
                 xRet.set(static_cast<sheet::XFormulaParser*>(new ScFormulaParserObj( pDocShell )));
@@ -535,23 +561,21 @@ uno::Reference<uno::XInterface> ScServiceProvider::MakeInstance(
             {
                 ScDocument& rDoc = pDocShell->GetDocument();
                 ScAddress aAddress;
-                ScCompiler* pComp = new ScCompiler(&rDoc,aAddress);
-                pComp->SetGrammar( rDoc.GetGrammar() );
+                ScCompiler* pComp = new ScCompiler(&rDoc, aAddress, rDoc.GetGrammar());
                 xRet.set(static_cast<sheet::XFormulaOpCodeMapper*>(new ScFormulaOpCodeMapperObj(::std::unique_ptr<formula::FormulaCompiler> (pComp))));
                 break;
             }
+            break;
 #if HAVE_FEATURE_SCRIPTING
         case Type::VBAOBJECTPROVIDER:
             if (pDocShell && pDocShell->GetDocument().IsInVBAMode())
             {
-                OSL_TRACE("**** creating VBA Object mapper");
                 xRet.set(static_cast<container::XNameAccess*>(new ScVbaObjectForCodeNameProvider( pDocShell )));
             }
             break;
         case Type::VBACODENAMEPROVIDER:
             if ( pDocShell && isInVBAMode( *pDocShell ) )
             {
-                OSL_TRACE("**** creating VBA Object provider");
                 xRet.set(static_cast<document::XCodeNameQuery*>(new ScVbaCodeNameProvider(*pDocShell)));
             }
             break;

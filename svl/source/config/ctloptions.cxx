@@ -26,9 +26,9 @@
 #include <com/sun/star/uno/Any.h>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <osl/mutex.hxx>
-#include <svl/smplhint.hxx>
 #include <rtl/instance.hxx>
 #include <unotools/syslocale.hxx>
+#include <svl/hint.hxx>
 #include "itemholder2.hxx"
 
 using namespace ::com::sun::star;
@@ -58,7 +58,7 @@ private:
 
 public:
     SvtCTLOptions_Impl();
-    virtual ~SvtCTLOptions_Impl();
+    virtual ~SvtCTLOptions_Impl() override;
 
     virtual void    Notify( const Sequence< OUString >& _aPropertyNames ) override;
     void            Load();
@@ -111,7 +111,7 @@ SvtCTLOptions_Impl::SvtCTLOptions_Impl() :
     utl::ConfigItem("Office.Common/I18N/CTL"),
 
     m_bIsLoaded             ( false ),
-    m_bCTLFontEnabled       ( false ),
+    m_bCTLFontEnabled       ( true ),
     m_bCTLSequenceChecking  ( false ),
     m_bCTLRestricted        ( false ),
     m_bCTLTypeAndReplace    ( false ),
@@ -134,7 +134,7 @@ SvtCTLOptions_Impl::~SvtCTLOptions_Impl()
 void SvtCTLOptions_Impl::Notify( const Sequence< OUString >& )
 {
     Load();
-    NotifyListeners(SFX_HINT_CTL_SETTINGS_CHANGED);
+    NotifyListeners(ConfigurationHints::CtlSettingsChanged);
 }
 
 void SvtCTLOptions_Impl::ImplCommit()
@@ -150,8 +150,6 @@ void SvtCTLOptions_Impl::ImplCommit()
     Any* pValues = aValues.getArray();
     sal_Int32 nRealCount = 0;
 
-    const uno::Type& rType = cppu::UnoType<bool>::get();
-
     for ( int nProp = 0; nProp < nOrgCount; nProp++ )
     {
         switch ( nProp )
@@ -161,7 +159,7 @@ void SvtCTLOptions_Impl::ImplCommit()
                 if (!m_bROCTLFontEnabled)
                 {
                     pNames[nRealCount] = pOrgNames[nProp];
-                    pValues[nRealCount].setValue( &m_bCTLFontEnabled, rType );
+                    pValues[nRealCount] <<= m_bCTLFontEnabled;
                     ++nRealCount;
                 }
             }
@@ -172,7 +170,7 @@ void SvtCTLOptions_Impl::ImplCommit()
                 if (!m_bROCTLSequenceChecking)
                 {
                     pNames[nRealCount] = pOrgNames[nProp];
-                    pValues[nRealCount].setValue( &m_bCTLSequenceChecking, rType );
+                    pValues[nRealCount] <<= m_bCTLSequenceChecking;
                     ++nRealCount;
                 }
             }
@@ -183,7 +181,7 @@ void SvtCTLOptions_Impl::ImplCommit()
                 if (!m_bROCTLCursorMovement)
                 {
                     pNames[nRealCount] = pOrgNames[nProp];
-                    pValues[nRealCount] <<= (sal_Int32)m_eCTLCursorMovement;
+                    pValues[nRealCount] <<= static_cast<sal_Int32>(m_eCTLCursorMovement);
                     ++nRealCount;
                 }
             }
@@ -194,7 +192,7 @@ void SvtCTLOptions_Impl::ImplCommit()
                 if (!m_bROCTLTextNumerals)
                 {
                     pNames[nRealCount] = pOrgNames[nProp];
-                    pValues[nRealCount] <<= (sal_Int32)m_eCTLTextNumerals;
+                    pValues[nRealCount] <<= static_cast<sal_Int32>(m_eCTLTextNumerals);
                     ++nRealCount;
                 }
             }
@@ -205,7 +203,7 @@ void SvtCTLOptions_Impl::ImplCommit()
                 if (!m_bROCTLRestricted)
                 {
                     pNames[nRealCount] = pOrgNames[nProp];
-                    pValues[nRealCount].setValue( &m_bCTLRestricted, rType );
+                    pValues[nRealCount] <<= m_bCTLRestricted;
                     ++nRealCount;
                 }
             }
@@ -215,7 +213,7 @@ void SvtCTLOptions_Impl::ImplCommit()
                 if(!m_bROCTLTypeAndReplace)
                 {
                     pNames[nRealCount] = pOrgNames[nProp];
-                    pValues[nRealCount].setValue( &m_bCTLTypeAndReplace, rType );
+                    pValues[nRealCount] <<= m_bCTLTypeAndReplace;
                     ++nRealCount;
                 }
             }
@@ -226,7 +224,7 @@ void SvtCTLOptions_Impl::ImplCommit()
     aValues.realloc(nRealCount);
     PutProperties( aNames, aValues );
     //broadcast changes
-    NotifyListeners(SFX_HINT_CTL_SETTINGS_CHANGED);
+    NotifyListeners(ConfigurationHints::CtlSettingsChanged);
 }
 
 void SvtCTLOptions_Impl::Load()
@@ -273,48 +271,11 @@ void SvtCTLOptions_Impl::Load()
                 {
                     switch ( nProp )
                     {
-                        case 2: { m_eCTLCursorMovement = (SvtCTLOptions::CursorMovement)nValue; m_bROCTLCursorMovement = pROStates[nProp]; } break;
-                        case 3: { m_eCTLTextNumerals = (SvtCTLOptions::TextNumerals)nValue; m_bROCTLTextNumerals = pROStates[nProp]; } break;
+                        case 2: { m_eCTLCursorMovement = static_cast<SvtCTLOptions::CursorMovement>(nValue); m_bROCTLCursorMovement = pROStates[nProp]; } break;
+                        case 3: { m_eCTLTextNumerals = static_cast<SvtCTLOptions::TextNumerals>(nValue); m_bROCTLTextNumerals = pROStates[nProp]; } break;
                     }
                 }
             }
-        }
-    }
-
-    if (!m_bCTLFontEnabled)
-    {
-        SvtScriptType nScriptType = SvtLanguageOptions::GetScriptTypeOfLanguage(LANGUAGE_SYSTEM);
-        //system locale is CTL
-        bool bAutoEnableCTL = bool(nScriptType & SvtScriptType::COMPLEX);
-
-        LanguageType eSystemLanguage = LANGUAGE_SYSTEM;
-
-        if (!bAutoEnableCTL)
-        {
-            SvtSystemLanguageOptions aSystemLocaleSettings;
-
-            //windows secondary system locale is CTL
-            eSystemLanguage = aSystemLocaleSettings.GetWin16SystemLanguage();
-            if (eSystemLanguage != LANGUAGE_SYSTEM)
-            {
-                SvtScriptType nWinScript = SvtLanguageOptions::GetScriptTypeOfLanguage( eSystemLanguage );
-                bAutoEnableCTL = bool(nWinScript & SvtScriptType::COMPLEX);
-            }
-
-            //CTL keyboard is installed
-            if (!bAutoEnableCTL)
-                bAutoEnableCTL = aSystemLocaleSettings.isCTLKeyboardLayoutInstalled();
-        }
-
-        if (bAutoEnableCTL)
-        {
-            m_bCTLFontEnabled = true;
-            sal_uInt16 nLanguage = SvtSysLocale().GetLanguageTag().getLanguageType();
-            //enable sequence checking for the appropriate languages
-            m_bCTLSequenceChecking = m_bCTLRestricted = m_bCTLTypeAndReplace =
-                (MsLangId::needsSequenceChecking( nLanguage) ||
-                 MsLangId::needsSequenceChecking( eSystemLanguage));
-            Commit();
         }
     }
 
@@ -326,7 +287,7 @@ void SvtCTLOptions_Impl::SetCTLFontEnabled( bool _bEnabled )
     {
         m_bCTLFontEnabled = _bEnabled;
         SetModified();
-        NotifyListeners(0);
+        NotifyListeners(ConfigurationHints::NONE);
     }
 }
 void SvtCTLOptions_Impl::SetCTLSequenceChecking( bool _bEnabled )
@@ -335,7 +296,7 @@ void SvtCTLOptions_Impl::SetCTLSequenceChecking( bool _bEnabled )
     {
         SetModified();
         m_bCTLSequenceChecking = _bEnabled;
-        NotifyListeners(0);
+        NotifyListeners(ConfigurationHints::NONE);
     }
 }
 void SvtCTLOptions_Impl::SetCTLSequenceCheckingRestricted( bool _bEnabled )
@@ -344,7 +305,7 @@ void SvtCTLOptions_Impl::SetCTLSequenceCheckingRestricted( bool _bEnabled )
     {
         SetModified();
         m_bCTLRestricted = _bEnabled;
-        NotifyListeners(0);
+        NotifyListeners(ConfigurationHints::NONE);
     }
 }
 void  SvtCTLOptions_Impl::SetCTLSequenceCheckingTypeAndReplace( bool _bEnabled )
@@ -353,7 +314,7 @@ void  SvtCTLOptions_Impl::SetCTLSequenceCheckingTypeAndReplace( bool _bEnabled )
     {
         SetModified();
         m_bCTLTypeAndReplace = _bEnabled;
-        NotifyListeners(0);
+        NotifyListeners(ConfigurationHints::NONE);
     }
 }
 void SvtCTLOptions_Impl::SetCTLCursorMovement( SvtCTLOptions::CursorMovement _eMovement )
@@ -362,7 +323,7 @@ void SvtCTLOptions_Impl::SetCTLCursorMovement( SvtCTLOptions::CursorMovement _eM
     {
         SetModified();
         m_eCTLCursorMovement = _eMovement;
-        NotifyListeners(0);
+        NotifyListeners(ConfigurationHints::NONE);
     }
 }
 void SvtCTLOptions_Impl::SetCTLTextNumerals( SvtCTLOptions::TextNumerals _eNumerals )
@@ -371,30 +332,35 @@ void SvtCTLOptions_Impl::SetCTLTextNumerals( SvtCTLOptions::TextNumerals _eNumer
     {
         SetModified();
         m_eCTLTextNumerals = _eNumerals;
-        NotifyListeners(0);
+        NotifyListeners(ConfigurationHints::NONE);
     }
 }
-// global
 
-static SvtCTLOptions_Impl*  pCTLOptions = nullptr;
-static sal_Int32            nCTLRefCount = 0;
-namespace { struct CTLMutex : public rtl::Static< osl::Mutex, CTLMutex > {}; }
+namespace {
+
+    // global
+    std::weak_ptr<SvtCTLOptions_Impl> g_pCTLOptions;
+
+    struct CTLMutex : public rtl::Static< osl::Mutex, CTLMutex > {};
+}
 
 SvtCTLOptions::SvtCTLOptions( bool bDontLoad )
 {
     // Global access, must be guarded (multithreading)
     ::osl::MutexGuard aGuard( CTLMutex::get() );
-    if ( !pCTLOptions )
-    {
-        pCTLOptions = new SvtCTLOptions_Impl;
-        ItemHolder2::holdConfigItem(E_CTLOPTIONS);
-    }
-    if( !bDontLoad && !pCTLOptions->IsLoaded() )
-        pCTLOptions->Load();
 
-    ++nCTLRefCount;
-    m_pImp = pCTLOptions;
-    m_pImp->AddListener(this);
+    m_pImpl = g_pCTLOptions.lock();
+    if ( !m_pImpl )
+    {
+        m_pImpl = std::make_shared<SvtCTLOptions_Impl>();
+        g_pCTLOptions = m_pImpl;
+        ItemHolder2::holdConfigItem(EItem::CTLOptions);
+    }
+
+    if( !bDontLoad && !m_pImpl->IsLoaded() )
+        m_pImpl->Load();
+
+    m_pImpl->AddListener(this);
 }
 
 
@@ -403,87 +369,86 @@ SvtCTLOptions::~SvtCTLOptions()
     // Global access, must be guarded (multithreading)
     ::osl::MutexGuard aGuard( CTLMutex::get() );
 
-    m_pImp->RemoveListener(this);
-    if ( !--nCTLRefCount )
-        DELETEZ( pCTLOptions );
+    m_pImpl->RemoveListener(this);
+    m_pImpl.reset();
 }
 
 void SvtCTLOptions::SetCTLFontEnabled( bool _bEnabled )
 {
-    assert(pCTLOptions->IsLoaded());
-    pCTLOptions->SetCTLFontEnabled( _bEnabled );
+    assert(m_pImpl->IsLoaded());
+    m_pImpl->SetCTLFontEnabled( _bEnabled );
 }
 
 bool SvtCTLOptions::IsCTLFontEnabled() const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->IsCTLFontEnabled();
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->IsCTLFontEnabled();
 }
 
 void SvtCTLOptions::SetCTLSequenceChecking( bool _bEnabled )
 {
-    assert(pCTLOptions->IsLoaded());
-    pCTLOptions->SetCTLSequenceChecking(_bEnabled);
+    assert(m_pImpl->IsLoaded());
+    m_pImpl->SetCTLSequenceChecking(_bEnabled);
 }
 
 bool SvtCTLOptions::IsCTLSequenceChecking() const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->IsCTLSequenceChecking();
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->IsCTLSequenceChecking();
 }
 
 void SvtCTLOptions::SetCTLSequenceCheckingRestricted( bool _bEnable )
 {
-    assert(pCTLOptions->IsLoaded());
-    pCTLOptions->SetCTLSequenceCheckingRestricted(_bEnable);
+    assert(m_pImpl->IsLoaded());
+    m_pImpl->SetCTLSequenceCheckingRestricted(_bEnable);
 }
 
 bool SvtCTLOptions::IsCTLSequenceCheckingRestricted() const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->IsCTLSequenceCheckingRestricted();
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->IsCTLSequenceCheckingRestricted();
 }
 
 void SvtCTLOptions::SetCTLSequenceCheckingTypeAndReplace( bool _bEnable )
 {
-    assert(pCTLOptions->IsLoaded());
-    pCTLOptions->SetCTLSequenceCheckingTypeAndReplace(_bEnable);
+    assert(m_pImpl->IsLoaded());
+    m_pImpl->SetCTLSequenceCheckingTypeAndReplace(_bEnable);
 }
 
 bool SvtCTLOptions::IsCTLSequenceCheckingTypeAndReplace() const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->IsCTLSequenceCheckingTypeAndReplace();
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->IsCTLSequenceCheckingTypeAndReplace();
 }
 
 void SvtCTLOptions::SetCTLCursorMovement( SvtCTLOptions::CursorMovement _eMovement )
 {
-    assert(pCTLOptions->IsLoaded());
-    pCTLOptions->SetCTLCursorMovement( _eMovement );
+    assert(m_pImpl->IsLoaded());
+    m_pImpl->SetCTLCursorMovement( _eMovement );
 }
 
 SvtCTLOptions::CursorMovement SvtCTLOptions::GetCTLCursorMovement() const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->GetCTLCursorMovement();
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->GetCTLCursorMovement();
 }
 
 void SvtCTLOptions::SetCTLTextNumerals( SvtCTLOptions::TextNumerals _eNumerals )
 {
-    assert(pCTLOptions->IsLoaded());
-    pCTLOptions->SetCTLTextNumerals( _eNumerals );
+    assert(m_pImpl->IsLoaded());
+    m_pImpl->SetCTLTextNumerals( _eNumerals );
 }
 
 SvtCTLOptions::TextNumerals SvtCTLOptions::GetCTLTextNumerals() const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->GetCTLTextNumerals();
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->GetCTLTextNumerals();
 }
 
 bool SvtCTLOptions::IsReadOnly(EOption eOption) const
 {
-    assert(pCTLOptions->IsLoaded());
-    return pCTLOptions->IsReadOnly(eOption);
+    assert(m_pImpl->IsLoaded());
+    return m_pImpl->IsReadOnly(eOption);
 }
 
 

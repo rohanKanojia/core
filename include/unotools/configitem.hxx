@@ -45,11 +45,11 @@ namespace com{ namespace sun{ namespace star{
 
 enum class ConfigItemMode
 {
-    ImmediateUpdate    = 0x00,
-    DelayedUpdate      = 0x01,
+    NONE               = 0x00,
     AllLocales         = 0x02,
     ReleaseTree        = 0x04,
 };
+
 namespace o3tl
 {
     template<> struct typed_flags<ConfigItemMode> : is_typed_flags<ConfigItemMode, 0x07> {};
@@ -58,18 +58,11 @@ namespace o3tl
 namespace utl
 {
 
-    enum  ConfigNameFormat
+    enum class ConfigNameFormat
     {
-        CONFIG_NAME_PLAINTEXT_NAME, // unescaped local node name, for user display etc.
-        CONFIG_NAME_LOCAL_NAME,     // local node name, for use in XNameAccess etc. ("Item", "Q & A")
-        CONFIG_NAME_LOCAL_PATH,     // one-level relative path, for use when building paths etc.  ("Item", "Typ['Q &amp; A']")
-        CONFIG_NAME_FULL_PATH,       // full absolute path. ("/org.openoffice.Sample/Group/Item", "/org.openoffice.Sample/Set/Typ['Q &amp; A']")
-
-        CONFIG_NAME_DEFAULT = CONFIG_NAME_LOCAL_PATH // default format
+        LocalNode,     // local node name, for use in XNameAccess etc. ("Item", "Q & A")
+        LocalPath,     // one-level relative path, for use when building paths etc.  ("Item", "Typ['Q &amp; A']")
     };
-
-    class ConfigChangeListener_Impl;
-    class ConfigManager;
 
     class UNOTOOLS_DLLPUBLIC ConfigItem : public ConfigurationBroadcaster
     {
@@ -81,7 +74,7 @@ namespace utl
                                         m_xHierarchyAccess;
             css::uno::Reference< css::util::XChangesListener >
                                         xChangeLstnr;
-            ConfigItemMode              m_nMode;
+            ConfigItemMode const              m_nMode;
             bool                        m_bIsModified;
             bool                        m_bEnableInternalNotification;
             sal_Int16                   m_nInValueChange;
@@ -116,7 +109,7 @@ namespace utl
 
         protected:
             explicit ConfigItem(const OUString &rSubTree,
-                        ConfigItemMode nMode = ConfigItemMode::DelayedUpdate);
+                        ConfigItemMode nMode = ConfigItemMode::NONE);
 
             void                    SetModified  (); // mark item as modified
             void                    ClearModified(); // reset state after commit!
@@ -158,7 +151,7 @@ namespace utl
             bool                ClearNodeSet(const OUString& rNode);
             // remove selected members of a set
             bool                ClearNodeElements(const OUString& rNode,
-                                        css::uno::Sequence< OUString >& rElements);
+                                        css::uno::Sequence< OUString > const & rElements);
             // change or add members to a set
             bool                SetSetProperties(const OUString& rNode, const css::uno::Sequence< css::beans::PropertyValue >& rValues);
             // remove, change or add members of a set
@@ -167,7 +160,12 @@ namespace utl
             bool                AddNode(const OUString& rNode, const OUString& rNewNode);
 
         public:
-            virtual ~ConfigItem();
+            virtual ~ConfigItem() override;
+
+            ConfigItem(ConfigItem const &) = default;
+            ConfigItem(ConfigItem &&) = default;
+            ConfigItem & operator =(ConfigItem const &) = delete; // due to const sSubTree
+            ConfigItem & operator =(ConfigItem &&) = delete; // due to const sSubTree
 
             /** is called from the ConfigManager before application ends of from the
                 PropertyChangeListener if the sub tree broadcasts changes. */
@@ -178,8 +176,6 @@ namespace utl
             bool IsModified() const { return m_bIsModified;}
 
             void                    Commit();
-
-            bool IsInValueChange() const { return m_nInValueChange > 0;}
 
             ConfigItemMode GetMode() const { return m_nMode;}
     };

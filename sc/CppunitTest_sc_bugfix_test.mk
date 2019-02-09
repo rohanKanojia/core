@@ -53,7 +53,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_bugfix_test, \
     vbahelper \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_bugfix_test,\
@@ -63,8 +62,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_bugfix_test,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_bugfix_test,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_bugfix_test))
@@ -80,6 +80,8 @@ $(eval $(call gb_CppunitTest_use_components,sc_bugfix_test,\
     embeddedobj/util/embobj \
     eventattacher/source/evtatt \
     filter/source/config/cache/filterconfig1 \
+    filter/source/xmlfilteradaptor/xmlfa \
+    filter/source/xsltfilter/xsltfilter \
     forms/util/frm \
     framework/util/fwk \
     i18npool/source/search/i18nsearch \
@@ -104,20 +106,15 @@ $(eval $(call gb_CppunitTest_use_components,sc_bugfix_test,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     xmloff/util/xo \
     xmlsecurity/util/xmlsecurity \
-    xmlsecurity/util/xsec_fw \
 ))
 
-ifeq ($(OS),WNT)
-$(eval $(call gb_CppunitTest_use_components,sc_bugfix_test,\
-    xmlsecurity/util/xsec_xmlsec.windows \
-))
-else
 $(eval $(call gb_CppunitTest_use_components,sc_bugfix_test,\
     xmlsecurity/util/xsec_xmlsec \
 ))
-endif
 
 $(eval $(call gb_CppunitTest_use_configuration,sc_bugfix_test))
 

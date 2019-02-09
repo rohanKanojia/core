@@ -19,14 +19,14 @@
 
 #include "ColumnControl.hxx"
 #include "ColumnPeer.hxx"
-#include "dbustrings.hrc"
-#include "uiservices.hxx"
-#include "apitools.hxx"
+#include <stringconstants.hxx>
+#include <uiservices.hxx>
+#include <apitools.hxx>
 #include <com/sun/star/awt/PosSize.hpp>
-#include "dbu_reghelper.hxx"
+#include <dbu_reghelper.hxx>
 #include <comphelper/processfactory.hxx>
 
-extern "C" void SAL_CALL createRegistryInfo_OColumnControl()
+extern "C" void createRegistryInfo_OColumnControl()
 {
     static ::dbaui::OMultiInstanceAutoRegistration< ::dbaui::OColumnControl> aAutoRegistration;
 }
@@ -48,7 +48,7 @@ IMPLEMENT_SERVICE_INFO_IMPLNAME_STATIC(OColumnControl, SERVICE_CONTROLDEFAULT)
 IMPLEMENT_SERVICE_INFO_SUPPORTS(OColumnControl)
 IMPLEMENT_SERVICE_INFO_GETSUPPORTED2_STATIC(OColumnControl, "com.sun.star.awt.UnoControl","com.sun.star.sdb.ColumnDescriptorControl")
 
-Reference< XInterface > SAL_CALL OColumnControl::Create(const Reference< XMultiServiceFactory >& _rxORB)
+Reference< XInterface > OColumnControl::Create(const Reference< XMultiServiceFactory >& _rxORB)
 {
     return static_cast< XServiceInfo* >(new OColumnControl(comphelper::getComponentContext(_rxORB)));
 }
@@ -58,7 +58,7 @@ OUString OColumnControl::GetComponentServiceName()
     return OUString("com.sun.star.sdb.ColumnDescriptorControl");
 }
 
-void SAL_CALL OColumnControl::createPeer(const Reference< XToolkit >& /*rToolkit*/, const Reference< XWindowPeer >& rParentPeer) throw( RuntimeException, std::exception )
+void SAL_CALL OColumnControl::createPeer(const Reference< XToolkit >& /*rToolkit*/, const Reference< XWindowPeer >& rParentPeer)
 {
     ::osl::ClearableMutexGuard aGuard( GetMutex() );
     if ( !getPeer().is() )
@@ -70,7 +70,7 @@ void SAL_CALL OColumnControl::createPeer(const Reference< XToolkit >& /*rToolkit
         {
             VCLXWindow* pParent = VCLXWindow::GetImplementation(rParentPeer);
             if (pParent)
-                pParentWin = pParent->GetWindow();
+                pParentWin = pParent->GetWindow().get();
         }
 
         OColumnPeer* pPeer = new OColumnPeer( pParentWin, m_xContext );
@@ -102,10 +102,10 @@ void SAL_CALL OColumnControl::createPeer(const Reference< XToolkit >& /*rToolkit
         }
 
         if (aComponentInfos.bVisible)
-            xW->setVisible(sal_True);
+            xW->setVisible(true);
 
         if (!aComponentInfos.bEnable)
-            xW->setEnable(sal_False);
+            xW->setEnable(false);
 
         if (maWindowListeners.getLength())
             xW->addWindowListener( &maWindowListeners );

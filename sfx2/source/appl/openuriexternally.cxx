@@ -21,49 +21,103 @@
 #include <rtl/ustring.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/sfxresid.hxx>
-#include <vcl/layout.hxx>
 #include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
+#include <openuriexternally.hxx>
+#include <comphelper/lok.hxx>
+#include <LibreOfficeKit/LibreOfficeKitEnums.h>
 
-#include "openuriexternally.hxx"
+#include <sfx2/viewsh.hxx>
+#include <sfx2/strings.hrc>
 
-#include "app.hrc"
+class URITools
+{
+private:
+    Timer aOpenURITimer;
+    OUString msURI;
+    bool mbHandleSystemShellExecuteException;
+    DECL_LINK(onOpenURI, Timer*, void);
 
-bool sfx2::openUriExternally(
-    OUString const & uri, bool handleSystemShellExecuteException)
+public:
+    URITools()
+        : mbHandleSystemShellExecuteException(false)
+    {
+    }
+    void openURI(const OUString& sURI, bool bHandleSystemShellExecuteException);
+};
+
+void URITools::openURI(const OUString& sURI, bool bHandleSystemShellExecuteException)
+{
+    if (comphelper::LibreOfficeKit::isActive())
+    {
+        if (SfxViewShell* pViewShell = SfxViewShell::Current())
+        {
+            pViewShell->libreOfficeKitViewCallback(LOK_CALLBACK_HYPERLINK_CLICKED,
+                                                   sURI.toUtf8().getStr());
+        }
+        delete this;
+        return;
+    }
+
+    mbHandleSystemShellExecuteException = bHandleSystemShellExecuteException;
+    msURI = sURI;
+
+    // tdf#116305 Workaround: Use timer to bring browsers to the front
+    aOpenURITimer.SetInvokeHandler(LINK(this, URITools, onOpenURI));
+#ifdef WNT
+    // 200ms seems to be the best compromise between responsiveness and success rate
+    aOpenURITimer.SetTimeout(200);
+#else
+    aOpenURITimer.SetTimeout(0);
+#endif
+    aOpenURITimer.SetDebugName("sfx2::openUriExternallyTimer");
+    aOpenURITimer.Start();
+}
+
+IMPL_LINK_NOARG(URITools, onOpenURI, Timer*, void)
 {
     css::uno::Reference< css::system::XSystemShellExecute > exec(
         css::system::SystemShellExecute::create(comphelper::getProcessComponentContext()));
     try {
         exec->execute(
-            uri, OUString(),
+            msURI, OUString(),
             css::system::SystemShellExecuteFlags::URIS_ONLY);
-        return true;
+        return;
     } catch (css::lang::IllegalArgumentException & e) {
         if (e.ArgumentPosition != 0) {
             throw css::uno::RuntimeException(
                 "unexpected IllegalArgumentException: " + e.Message);
         }
         SolarMutexGuard g;
-        ScopedVclPtrInstance<MessageDialog> eb(
-            SfxGetpApp()->GetTopWindow(), SfxResId(STR_NO_ABS_URI_REF));
-        eb->set_primary_text(eb->get_primary_text().replaceFirst("$(ARG1)", uri));
-        eb->Execute();
+        vcl::Window *pWindow = SfxGetpApp()->GetTopWindow();
+        std::unique_ptr<weld::MessageDialog> eb(Application::CreateMessageDialog(pWindow ? pWindow->GetFrameWeld() : nullptr,
+                                                                 VclMessageType::Warning, VclButtonsType::Ok,
+                                                                 SfxResId(STR_NO_ABS_URI_REF)));
+        eb->set_primary_text(eb->get_primary_text().replaceFirst("$(ARG1)", msURI));
+        eb->run();
     } catch (css::system::SystemShellExecuteException & e) {
-        if (!handleSystemShellExecuteException) {
+        if (!mbHandleSystemShellExecuteException) {
             throw;
         }
         SolarMutexGuard g;
-        ScopedVclPtrInstance<MessageDialog> eb(
-            SfxGetpApp()->GetTopWindow(),
-            SfxResId(STR_NO_WEBBROWSER_FOUND));
+        vcl::Window *pWindow = SfxGetpApp()->GetTopWindow();
+        std::unique_ptr<weld::MessageDialog> eb(Application::CreateMessageDialog(pWindow ? pWindow->GetFrameWeld() : nullptr,
+                                                                 VclMessageType::Warning, VclButtonsType::Ok,
+                                                                 SfxResId(STR_NO_WEBBROWSER_FOUND)));
         eb->set_primary_text(
-            eb->get_primary_text().replaceFirst("$(ARG1)", uri)
+            eb->get_primary_text().replaceFirst("$(ARG1)", msURI)
             .replaceFirst("$(ARG2)", OUString::number(e.PosixError))
             .replaceFirst("$(ARG3)", e.Message));
             //TODO: avoid subsequent replaceFirst acting on previous replacement
-        eb->Execute();
+        eb->run();
     }
-    return false;
+    delete this;
+}
+
+void sfx2::openUriExternally(const OUString& sURI, bool bHandleSystemShellExecuteException)
+{
+    URITools* uriTools = new URITools;
+    uriTools->openURI(sURI, bHandleSystemShellExecuteException);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

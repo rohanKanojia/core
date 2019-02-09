@@ -20,6 +20,9 @@
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/EmbedVerbs.hpp>
 #include <com/sun/star/embed/EmbedUpdateModes.hpp>
+#include <com/sun/star/embed/ObjectSaveVetoException.hpp>
+#include <com/sun/star/embed/StorageWrappedTargetException.hpp>
+#include <com/sun/star/embed/UnreachableStateException.hpp>
 #include <com/sun/star/embed/XEmbeddedClient.hpp>
 #include <com/sun/star/embed/XInplaceClient.hpp>
 #include <com/sun/star/embed/XWindowSupplier.hpp>
@@ -27,25 +30,25 @@
 #include <com/sun/star/embed/Aspects.hpp>
 
 #include <com/sun/star/awt/XWindowPeer.hpp>
+#include <com/sun/star/io/IOException.hpp>
 #include <com/sun/star/util/XCloseBroadcaster.hpp>
 #include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
-#include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
-#include <com/sun/star/frame/XDispatchProviderInterception.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 
 #include <com/sun/star/embed/EmbedMisc.hpp>
-#include <comphelper/processfactory.hxx>
+#include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/interfacecontainer.hxx>
+#include <comphelper/lok.hxx>
+#include <sal/log.hxx>
 
 #include <vcl/svapp.hxx>
 
 #include <targetstatecontrol.hxx>
 
-#include "commonembobj.hxx"
-#include "intercept.hxx"
+#include <commonembobj.hxx>
+#include <intercept.hxx>
 #include "embedobj.hxx"
 
 using namespace ::com::sun::star;
@@ -57,15 +60,15 @@ awt::Rectangle GetRectangleInterception( const awt::Rectangle& aRect1, const awt
     OSL_ENSURE( aRect1.Width >= 0 && aRect2.Width >= 0 && aRect1.Height >= 0 && aRect2.Height >= 0,
                 "Offset must not be less then zero!" );
 
-    aResult.X = aRect1.X > aRect2.X ? aRect1.X : aRect2.X;
-    aResult.Y = aRect1.Y > aRect2.Y ? aRect1.Y : aRect2.Y;
+    aResult.X = std::max(aRect1.X, aRect2.X);
+    aResult.Y = std::max(aRect1.Y, aRect2.Y);
 
     sal_Int32 nRight1 = aRect1.X + aRect1.Width;
     sal_Int32 nBottom1 = aRect1.Y + aRect1.Height;
     sal_Int32 nRight2 = aRect2.X + aRect2.Width;
     sal_Int32 nBottom2 = aRect2.Y + aRect2.Height;
-    aResult.Width = ( nRight1 < nRight2 ? nRight1 : nRight2 ) - aResult.X;
-    aResult.Height = ( nBottom1 < nBottom2 ? nBottom1 : nBottom2 ) - aResult.Y;
+    aResult.Width = std::min( nRight1, nRight2 ) - aResult.X;
+    aResult.Height = std::min( nBottom1, nBottom2 ) - aResult.Y;
 
     return aResult;
 }
@@ -83,7 +86,7 @@ sal_Int32 OCommonEmbeddedObject::ConvertVerbToState_Impl( sal_Int32 nVerb )
 
 void OCommonEmbeddedObject::Deactivate()
 {
-    uno::Reference< util::XModifiable > xModif( m_pDocHolder->GetComponent(), uno::UNO_QUERY );
+    uno::Reference< util::XModifiable > xModif( m_xDocHolder->GetComponent(), uno::UNO_QUERY );
 
     // no need to lock for the initialization
     uno::Reference< embed::XEmbeddedClient > xClientSite = m_xClientSite;
@@ -99,18 +102,19 @@ void OCommonEmbeddedObject::Deactivate()
         catch( const embed::ObjectSaveVetoException& )
         {
         }
-        catch( const uno::Exception& e )
+        catch( const uno::Exception& )
         {
+            css::uno::Any anyEx = cppu::getCaughtException();
             throw embed::StorageWrappedTargetException(
                 "The client could not store the object!",
                 static_cast< ::cppu::OWeakObject* >( this ),
-                uno::makeAny( e ) );
+                anyEx );
         }
     }
 
-    m_pDocHolder->CloseFrame();
+    m_xDocHolder->CloseFrame();
 
-    xClientSite->visibilityChanged( sal_False );
+    xClientSite->visibilityChanged( false );
 }
 
 
@@ -154,7 +158,7 @@ void OCommonEmbeddedObject::StateChangeNotification_Impl( bool bBeforeChange, sa
 
 void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
 {
-    // TODO: may be needs interaction handler to detect wherether the object state
+    // TODO: may be needs interaction handler to detect whether the object state
     //         can be changed even after errors
 
     if ( m_nObjectState == embed::EmbedStates::LOADED )
@@ -166,7 +170,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
 
             if ( m_bIsLink )
             {
-                m_pDocHolder->SetComponent( LoadLink_Impl(), m_bReadOnly );
+                m_xDocHolder->SetComponent( LoadLink_Impl(), m_bReadOnly );
             }
             else
             {
@@ -179,7 +183,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                     if ( !m_xObjectStorage.is() )
                         throw io::IOException(); //TODO: access denied
 
-                    m_pDocHolder->SetComponent( LoadDocumentFromStorage_Impl(), m_bReadOnly );
+                    m_xDocHolder->SetComponent( LoadDocumentFromStorage_Impl(), m_bReadOnly );
                 }
                 else
                 {
@@ -194,11 +198,11 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                     if ( xChild.is() )
                         xChild->setParent( m_xParent );
 
-                    m_pDocHolder->SetComponent( xDocument, m_bReadOnly );
+                    m_xDocHolder->SetComponent( xDocument, m_bReadOnly );
                 }
             }
 
-            if ( !m_pDocHolder->GetComponent().is() )
+            if ( !m_xDocHolder->GetComponent().is() )
                 throw embed::UnreachableStateException(); //TODO: can't open document
 
             m_nObjectState = nNextState;
@@ -213,11 +217,11 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
     {
         if ( nNextState == embed::EmbedStates::LOADED )
         {
-            m_nClonedMapUnit = m_pDocHolder->GetMapUnit( embed::Aspects::MSOLE_CONTENT );
-            m_bHasClonedSize = m_pDocHolder->GetExtent( embed::Aspects::MSOLE_CONTENT, &m_aClonedSize );
+            m_nClonedMapUnit = m_xDocHolder->GetMapUnit( embed::Aspects::MSOLE_CONTENT );
+            m_bHasClonedSize = m_xDocHolder->GetExtent( embed::Aspects::MSOLE_CONTENT, &m_aClonedSize );
 
             // actually frame should not exist at this point
-            m_pDocHolder->CloseDocument( false, false );
+            m_xDocHolder->CloseDocument( false, false );
 
             m_nObjectState = nNextState;
         }
@@ -229,37 +233,30 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                     throw embed::WrongStateException( "client site not set, yet", *this );
 
                 uno::Reference< embed::XInplaceClient > xInplaceClient( m_xClientSite, uno::UNO_QUERY );
-                if ( xInplaceClient.is() && xInplaceClient->canInplaceActivate() )
-                {
-                    xInplaceClient->activatingInplace();
-
-                    uno::Reference< embed::XWindowSupplier > xClientWindowSupplier( xInplaceClient, uno::UNO_QUERY );
-                    if ( !xClientWindowSupplier.is() )
-                        throw uno::RuntimeException(); // TODO: the inplace client implementation must support XWinSupp
-
-                    m_xClientWindow = xClientWindowSupplier->getWindow();
-                    m_aOwnRectangle = xInplaceClient->getPlacement();
-                    m_aClipRectangle = xInplaceClient->getClipRectangle();
-                    awt::Rectangle aRectangleToShow = GetRectangleInterception( m_aOwnRectangle, m_aClipRectangle );
-
-                    // create own window based on the client window
-                    // place and resize the window according to the rectangles
-                    uno::Reference< awt::XWindowPeer > xClientWindowPeer( m_xClientWindow, uno::UNO_QUERY );
-                    if ( !xClientWindowPeer.is() )
-                        throw uno::RuntimeException(); // TODO: the container window must support the interface
-
-                    // dispatch provider may not be provided
-                    uno::Reference< frame::XDispatchProvider > xContainerDP = xInplaceClient->getInplaceDispatchProvider();
-                    bool bOk = m_pDocHolder->ShowInplace( xClientWindowPeer, aRectangleToShow, xContainerDP );
-                    m_nObjectState = nNextState;
-                    if ( !bOk )
-                    {
-                        SwitchStateTo_Impl( embed::EmbedStates::RUNNING );
-                        throw embed::WrongStateException(); //TODO: can't activate inplace
-                    }
-                }
-                else
+                if ( !xInplaceClient.is() || !xInplaceClient->canInplaceActivate() )
                     throw embed::WrongStateException(); //TODO: can't activate inplace
+                xInplaceClient->activatingInplace();
+
+                uno::Reference< embed::XWindowSupplier > xClientWindowSupplier( xInplaceClient, uno::UNO_QUERY_THROW );
+
+                m_xClientWindow = xClientWindowSupplier->getWindow();
+                m_aOwnRectangle = xInplaceClient->getPlacement();
+                m_aClipRectangle = xInplaceClient->getClipRectangle();
+                awt::Rectangle aRectangleToShow = GetRectangleInterception( m_aOwnRectangle, m_aClipRectangle );
+
+                // create own window based on the client window
+                // place and resize the window according to the rectangles
+                uno::Reference< awt::XWindowPeer > xClientWindowPeer( m_xClientWindow, uno::UNO_QUERY_THROW );
+
+                // dispatch provider may not be provided
+                uno::Reference< frame::XDispatchProvider > xContainerDP = xInplaceClient->getInplaceDispatchProvider();
+                bool bOk = m_xDocHolder->ShowInplace( xClientWindowPeer, aRectangleToShow, xContainerDP );
+                m_nObjectState = nNextState;
+                if ( !bOk )
+                {
+                    SwitchStateTo_Impl( embed::EmbedStates::RUNNING );
+                    throw embed::WrongStateException(); //TODO: can't activate inplace
+                }
             }
             else if ( nNextState == embed::EmbedStates::ACTIVE )
             {
@@ -267,9 +264,9 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                     throw embed::WrongStateException(); //TODO: client site is not set!
 
                 // create frame and load document in the frame
-                m_pDocHolder->Show();
+                m_xDocHolder->Show();
 
-                m_xClientSite->visibilityChanged( sal_True );
+                m_xClientSite->visibilityChanged( true );
                 m_nObjectState = nNextState;
             }
             else
@@ -283,11 +280,9 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
     {
         if ( nNextState == embed::EmbedStates::RUNNING )
         {
-            uno::Reference< embed::XInplaceClient > xInplaceClient( m_xClientSite, uno::UNO_QUERY );
-            if ( !xInplaceClient.is() )
-                throw uno::RuntimeException();
+            uno::Reference< embed::XInplaceClient > xInplaceClient( m_xClientSite, uno::UNO_QUERY_THROW );
 
-            m_xClientSite->visibilityChanged( sal_True );
+            m_xClientSite->visibilityChanged( true );
 
             xInplaceClient->deactivatedInplace();
             Deactivate();
@@ -301,36 +296,38 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                 // TODO:
                 uno::Reference< css::frame::XLayoutManager > xContainerLM =
                             xInplaceClient->getLayoutManager();
-                if ( xContainerLM.is() )
+                if ( !xContainerLM.is() )
+                    throw embed::WrongStateException(); //TODO: can't activate UI
+                // dispatch provider may not be provided
+                uno::Reference< frame::XDispatchProvider > xContainerDP = xInplaceClient->getInplaceDispatchProvider();
+
+                // get the container module name
+                OUString aModuleName;
+                try
                 {
-                    // dispatch provider may not be provided
-                    uno::Reference< frame::XDispatchProvider > xContainerDP = xInplaceClient->getInplaceDispatchProvider();
+                    uno::Reference< embed::XComponentSupplier > xCompSupl( m_xClientSite, uno::UNO_QUERY_THROW );
+                    uno::Reference< uno::XInterface > xContDoc( xCompSupl->getComponent(), uno::UNO_QUERY_THROW );
 
-                    // get the container module name
-                    OUString aModuleName;
-                    try
-                    {
-                        uno::Reference< embed::XComponentSupplier > xCompSupl( m_xClientSite, uno::UNO_QUERY_THROW );
-                        uno::Reference< uno::XInterface > xContDoc( xCompSupl->getComponent(), uno::UNO_QUERY_THROW );
+                    uno::Reference< frame::XModuleManager2 > xManager( frame::ModuleManager::create( m_xContext ) );
 
-                        uno::Reference< frame::XModuleManager2 > xManager( frame::ModuleManager::create( m_xContext ) );
+                    aModuleName = xManager->identify( xContDoc );
+                }
+                catch( const uno::Exception& )
+                {}
 
-                        aModuleName = xManager->identify( xContDoc );
-                    }
-                    catch( const uno::Exception& )
-                    {}
-
+                if (!comphelper::LibreOfficeKit::isActive())
+                {
                     // if currently another object is UIactive it will be deactivated; usually this will activate the LM of
                     // the container. Locking the LM will prevent flicker.
                     xContainerLM->lock();
                     xInplaceClient->activatingUI();
-                    bool bOk = m_pDocHolder->ShowUI( xContainerLM, xContainerDP, aModuleName );
+                    bool bOk = m_xDocHolder->ShowUI( xContainerLM, xContainerDP, aModuleName );
                     xContainerLM->unlock();
 
                     if ( bOk )
                     {
                         m_nObjectState = nNextState;
-                        m_pDocHolder->ResizeHatchWindow();
+                        m_xDocHolder->ResizeHatchWindow();
                     }
                     else
                     {
@@ -338,8 +335,6 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
                         throw embed::WrongStateException(); //TODO: can't activate UI
                     }
                 }
-                else
-                    throw embed::WrongStateException(); //TODO: can't activate UI
             }
         }
         else
@@ -371,16 +366,13 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
 
             bool bOk = false;
             if ( xContainerLM.is() )
-                bOk = m_pDocHolder->HideUI( xContainerLM );
+                bOk = m_xDocHolder->HideUI( xContainerLM );
 
-            if ( bOk )
-            {
-                m_nObjectState = nNextState;
-                m_pDocHolder->ResizeHatchWindow();
-                xInplaceClient->deactivatedUI();
-            }
-            else
+            if ( !bOk )
                 throw embed::WrongStateException(); //TODO: can't activate UI
+            m_nObjectState = nNextState;
+            m_xDocHolder->ResizeHatchWindow();
+            xInplaceClient->deactivatedUI();
         }
     }
     else
@@ -389,7 +381,7 @@ void OCommonEmbeddedObject::SwitchStateTo_Impl( sal_Int32 nNextState )
 }
 
 
-uno::Sequence< sal_Int32 > OCommonEmbeddedObject::GetIntermediateStatesSequence_Impl( sal_Int32 nNewState )
+uno::Sequence< sal_Int32 > const & OCommonEmbeddedObject::GetIntermediateStatesSequence_Impl( sal_Int32 nNewState )
 {
     sal_Int32 nCurInd = 0;
     for ( nCurInd = 0; nCurInd < m_aAcceptedStates.getLength(); nCurInd++ )
@@ -417,78 +409,70 @@ uno::Sequence< sal_Int32 > OCommonEmbeddedObject::GetIntermediateStatesSequence_
 
 
 void SAL_CALL OCommonEmbeddedObject::changeState( sal_Int32 nNewState )
-        throw ( embed::UnreachableStateException,
-                embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
+    ::osl::ResettableMutexGuard aGuard( m_aMutex );
+    if ( m_bDisposed )
+        throw lang::DisposedException(); // TODO
+
+    if ( m_nObjectState == -1 )
+        throw embed::WrongStateException( "The object has no persistence!",
+                                          static_cast< ::cppu::OWeakObject* >(this) );
+
+    sal_Int32 nOldState = m_nObjectState;
+
+    if ( m_nTargetState != -1 )
     {
-        ::osl::ResettableMutexGuard aGuard( m_aMutex );
-        if ( m_bDisposed )
-            throw lang::DisposedException(); // TODO
-
-        if ( m_nObjectState == -1 )
-            throw embed::WrongStateException( "The object has no persistence!",
-                                              static_cast< ::cppu::OWeakObject* >(this) );
-
-        sal_Int32 nOldState = m_nObjectState;
-
-        if ( m_nTargetState != -1 )
-        {
-            // means that the object is currently trying to reach the target state
-            throw embed::StateChangeInProgressException( OUString(),
-                                                        uno::Reference< uno::XInterface >(),
-                                                        m_nTargetState );
-        }
-        else
-        {
-            TargetStateControl_Impl aControl( m_nTargetState, nNewState );
-
-            // in case the object is already in requested state
-            if ( m_nObjectState == nNewState )
-            {
-                // if active object is activated again, bring its window to top
-                if ( m_nObjectState == embed::EmbedStates::ACTIVE )
-                    m_pDocHolder->Show();
-
-                return;
-            }
-
-            // retrieve sequence of states that should be passed to reach desired state
-            uno::Sequence< sal_Int32 > aIntermediateStates = GetIntermediateStatesSequence_Impl( nNewState );
-
-            // notify listeners that the object is going to change the state
-            StateChangeNotification_Impl( true, nOldState, nNewState,aGuard );
-
-            try {
-                for ( sal_Int32 nInd = 0; nInd < aIntermediateStates.getLength(); nInd++ )
-                    SwitchStateTo_Impl( aIntermediateStates[nInd] );
-
-                SwitchStateTo_Impl( nNewState );
-            }
-            catch( const uno::Exception& )
-            {
-                if ( nOldState != m_nObjectState )
-                    // notify listeners that the object has changed the state
-                    StateChangeNotification_Impl( false, nOldState, m_nObjectState, aGuard );
-
-                throw;
-            }
-        }
-
-        // notify listeners that the object has changed the state
-        StateChangeNotification_Impl( false, nOldState, nNewState, aGuard );
-
-        // let the object window be shown
-        if ( nNewState == embed::EmbedStates::UI_ACTIVE || nNewState == embed::EmbedStates::INPLACE_ACTIVE )
-            PostEvent_Impl( "OnVisAreaChanged" );
+        // means that the object is currently trying to reach the target state
+        throw embed::StateChangeInProgressException( OUString(),
+                                                    uno::Reference< uno::XInterface >(),
+                                                    m_nTargetState );
     }
+    else
+    {
+        TargetStateControl_Impl aControl( m_nTargetState, nNewState );
+
+        // in case the object is already in requested state
+        if ( m_nObjectState == nNewState )
+        {
+            // if active object is activated again, bring its window to top
+            if ( m_nObjectState == embed::EmbedStates::ACTIVE )
+                m_xDocHolder->Show();
+
+            return;
+        }
+
+        // retrieve sequence of states that should be passed to reach desired state
+        uno::Sequence< sal_Int32 > aIntermediateStates = GetIntermediateStatesSequence_Impl( nNewState );
+
+        // notify listeners that the object is going to change the state
+        StateChangeNotification_Impl( true, nOldState, nNewState,aGuard );
+
+        try {
+            for ( sal_Int32 nInd = 0; nInd < aIntermediateStates.getLength(); nInd++ )
+                SwitchStateTo_Impl( aIntermediateStates[nInd] );
+
+            SwitchStateTo_Impl( nNewState );
+        }
+        catch( const uno::Exception& )
+        {
+            if ( nOldState != m_nObjectState )
+                // notify listeners that the object has changed the state
+                StateChangeNotification_Impl( false, nOldState, m_nObjectState, aGuard );
+
+            throw;
+        }
+    }
+
+    // notify listeners that the object has changed the state
+    StateChangeNotification_Impl( false, nOldState, nNewState, aGuard );
+
+    // let the object window be shown
+    if ( nNewState == embed::EmbedStates::UI_ACTIVE || nNewState == embed::EmbedStates::INPLACE_ACTIVE )
+        PostEvent_Impl( "OnVisAreaChanged" );
 }
 
 
 uno::Sequence< sal_Int32 > SAL_CALL OCommonEmbeddedObject::getReachableStates()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
@@ -502,8 +486,6 @@ uno::Sequence< sal_Int32 > SAL_CALL OCommonEmbeddedObject::getReachableStates()
 
 
 sal_Int32 SAL_CALL OCommonEmbeddedObject::getCurrentState()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
@@ -517,11 +499,6 @@ sal_Int32 SAL_CALL OCommonEmbeddedObject::getCurrentState()
 
 
 void SAL_CALL OCommonEmbeddedObject::doVerb( sal_Int32 nVerbID )
-        throw ( lang::IllegalArgumentException,
-                embed::WrongStateException,
-                embed::UnreachableStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     SolarMutexGuard aSolarGuard;
         //TODO: a gross hack to avoid deadlocks when this is called from the
@@ -564,8 +541,6 @@ void SAL_CALL OCommonEmbeddedObject::doVerb( sal_Int32 nVerbID )
 
 
 uno::Sequence< embed::VerbDescriptor > SAL_CALL OCommonEmbeddedObject::getSupportedVerbs()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
@@ -580,8 +555,6 @@ uno::Sequence< embed::VerbDescriptor > SAL_CALL OCommonEmbeddedObject::getSuppor
 
 void SAL_CALL OCommonEmbeddedObject::setClientSite(
                 const uno::Reference< embed::XEmbeddedClient >& xClient )
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -600,8 +573,6 @@ void SAL_CALL OCommonEmbeddedObject::setClientSite(
 
 
 uno::Reference< embed::XEmbeddedClient > SAL_CALL OCommonEmbeddedObject::getClientSite()
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
@@ -615,9 +586,6 @@ uno::Reference< embed::XEmbeddedClient > SAL_CALL OCommonEmbeddedObject::getClie
 
 
 void SAL_CALL OCommonEmbeddedObject::update()
-        throw ( embed::WrongStateException,
-                uno::Exception,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -632,8 +600,6 @@ void SAL_CALL OCommonEmbeddedObject::update()
 
 
 void SAL_CALL OCommonEmbeddedObject::setUpdateMode( sal_Int32 nMode )
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -645,14 +611,12 @@ void SAL_CALL OCommonEmbeddedObject::setUpdateMode( sal_Int32 nMode )
 
     OSL_ENSURE( nMode == embed::EmbedUpdateModes::ALWAYS_UPDATE
                     || nMode == embed::EmbedUpdateModes::EXPLICIT_UPDATE,
-                "Unknown update mode!\n" );
+                "Unknown update mode!" );
     m_nUpdateMode = nMode;
 }
 
 
 sal_Int64 SAL_CALL OCommonEmbeddedObject::getStatus( sal_Int64 )
-        throw ( embed::WrongStateException,
-                uno::RuntimeException, std::exception )
 {
     if ( m_bDisposed )
         throw lang::DisposedException(); // TODO
@@ -662,7 +626,6 @@ sal_Int64 SAL_CALL OCommonEmbeddedObject::getStatus( sal_Int64 )
 
 
 void SAL_CALL OCommonEmbeddedObject::setContainerName( const OUString& sName )
-        throw ( uno::RuntimeException, std::exception )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     if ( m_bDisposed )
@@ -671,24 +634,24 @@ void SAL_CALL OCommonEmbeddedObject::setContainerName( const OUString& sName )
     m_aContainerName = sName;
 }
 
-css::uno::Reference< css::uno::XInterface > SAL_CALL OCommonEmbeddedObject::getParent() throw (css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::uno::XInterface > SAL_CALL OCommonEmbeddedObject::getParent()
 {
     return m_xParent;
 }
 
-void SAL_CALL OCommonEmbeddedObject::setParent( const css::uno::Reference< css::uno::XInterface >& xParent ) throw (css::lang::NoSupportException, css::uno::RuntimeException, std::exception)
+void SAL_CALL OCommonEmbeddedObject::setParent( const css::uno::Reference< css::uno::XInterface >& xParent )
 {
     m_xParent = xParent;
     if ( m_nObjectState != -1 && m_nObjectState != embed::EmbedStates::LOADED )
     {
-        uno::Reference < container::XChild > xChild( m_pDocHolder->GetComponent(), uno::UNO_QUERY );
+        uno::Reference < container::XChild > xChild( m_xDocHolder->GetComponent(), uno::UNO_QUERY );
         if ( xChild.is() )
             xChild->setParent( xParent );
     }
 }
 
 // XDefaultSizeTransmitter
-void SAL_CALL OCommonEmbeddedObject::setDefaultSize( const css::awt::Size& rSize_100TH_MM ) throw (css::uno::RuntimeException, std::exception)
+void SAL_CALL OCommonEmbeddedObject::setDefaultSize( const css::awt::Size& rSize_100TH_MM )
 {
     //#i103460# charts do not necessaryly have an own size within ODF files, in this case they need to use the size settings from the surrounding frame, which is made available with this method
     m_aDefaultSizeForChart_In_100TH_MM = rSize_100TH_MM;

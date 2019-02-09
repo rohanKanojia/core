@@ -26,11 +26,12 @@
  *
  ************************************************************************/
 
-#include <osl/diagnose.h>
 #include <osl/mutex.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/PropertyState.hpp>
 #include "NeonHeadRequest.hxx"
+#include "NeonSession.hxx"
 
 using namespace webdav_ucp;
 using namespace com::sun::star;
@@ -46,18 +47,9 @@ void process_headers( ne_request * req,
 
 #if defined SAL_LOG_INFO
     {
-        if( !rHeaderNames.empty() )
+        for ( const auto& rHeader : rHeaderNames )
         {
-            std::vector< OUString >::const_iterator it(
-                rHeaderNames.begin() );
-            const std::vector< OUString >::const_iterator end(
-                rHeaderNames.end() );
-
-            while ( it != end )
-            {
-                SAL_INFO( "ucb.ucp.webdav", "HEAD - requested header: " << (*it) );
-                ++it;
-            }
+            SAL_INFO( "ucb.ucp.webdav", "HEAD - requested header: " << rHeader );
         }
     }
 #endif
@@ -69,37 +61,31 @@ void process_headers( ne_request * req,
         SAL_INFO( "ucb.ucp.webdav", "HEAD - received header: " << aHeaderName << ":" << aHeaderValue);
 
         // Note: Empty vector means that all headers are requested.
-        bool bIncludeIt = ( rHeaderNames.empty() );
+        bool bIncludeIt = rHeaderNames.empty();
 
         if ( !bIncludeIt )
         {
             // Check whether this header was requested.
-            std::vector< OUString >::const_iterator it(
-                rHeaderNames.begin() );
-            const std::vector< OUString >::const_iterator end(
-                rHeaderNames.end() );
+            auto it = std::find_if(rHeaderNames.begin(), rHeaderNames.end(),
+                [&aHeaderName](const OUString& rName) {
+                    // header names are case insensitive
+                    return rName.equalsIgnoreAsciiCase( aHeaderName );
+                });
 
-            while ( it != end )
+            if ( it != rHeaderNames.end() )
             {
-                // header names are case insensitive
-                if ( (*it).equalsIgnoreAsciiCase( aHeaderName ) )
-                {
-                    aHeaderName = (*it);
-                    break;
-                }
-
-                ++it;
-            }
-
-            if ( it != end )
+                aHeaderName = *it;
                 bIncludeIt = true;
+            }
         }
 
         if ( bIncludeIt )
         {
             // Create & set the PropertyValue
             DAVPropertyValue thePropertyValue;
-            thePropertyValue.Name = aHeaderName;
+            // header names are case insensitive, so are the
+            // corresponding property names
+            thePropertyValue.Name = aHeaderName.toAsciiLowerCase();
             thePropertyValue.IsCaseSensitive = false;
             thePropertyValue.Value <<= aHeaderValue;
 
@@ -110,8 +96,6 @@ void process_headers( ne_request * req,
 }
 
 } // namespace
-
-extern osl::Mutex aGlobalNeonMutex;
 
 NeonHeadRequest::NeonHeadRequest( HttpSession * inSession,
                                   const OUString & inPath,
@@ -132,7 +116,7 @@ NeonHeadRequest::NeonHeadRequest( HttpSession * inSession,
                                             RTL_TEXTENCODING_UTF8 ).getStr() );
 
     {
-        osl::Guard< osl::Mutex > theGlobalGuard( aGlobalNeonMutex );
+        osl::Guard< osl::Mutex > theGlobalGuard(getGlobalNeonMutex());
         nError = ne_request_dispatch( req );
     }
 

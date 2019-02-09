@@ -11,7 +11,6 @@ $(eval $(call gb_Library_Library,localedata_others))
 
 $(eval $(call gb_Library_use_libraries,localedata_others,\
 	localedata_en \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_generated_exception_objects,localedata_others,\
@@ -50,12 +49,14 @@ $(eval $(call gb_Library_add_generated_exception_objects,localedata_others,\
 	CustomTarget/i18npool/localedata/localedata_ebo_CG \
 	CustomTarget/i18npool/localedata/localedata_ee_GH \
 	CustomTarget/i18npool/localedata/localedata_en_IN \
+	CustomTarget/i18npool/localedata/localedata_en_MY \
 	CustomTarget/i18npool/localedata/localedata_eo \
 	CustomTarget/i18npool/localedata/localedata_fa_IR \
 	CustomTarget/i18npool/localedata/localedata_gu_IN \
 	CustomTarget/i18npool/localedata/localedata_gug_PY \
 	CustomTarget/i18npool/localedata/localedata_haw_US \
 	CustomTarget/i18npool/localedata/localedata_ha_Latn_GH \
+	CustomTarget/i18npool/localedata/localedata_ha_Latn_NG \
 	CustomTarget/i18npool/localedata/localedata_he_IL \
 	CustomTarget/i18npool/localedata/localedata_hi_IN \
 	CustomTarget/i18npool/localedata/localedata_hil_PH \
@@ -64,6 +65,7 @@ $(eval $(call gb_Library_add_generated_exception_objects,localedata_others,\
 	CustomTarget/i18npool/localedata/localedata_hy_AM \
 	CustomTarget/i18npool/localedata/localedata_ia \
 	CustomTarget/i18npool/localedata/localedata_id_ID \
+	CustomTarget/i18npool/localedata/localedata_ilo_PH \
 	CustomTarget/i18npool/localedata/localedata_iyx_CG \
 	CustomTarget/i18npool/localedata/localedata_ja_JP \
 	CustomTarget/i18npool/localedata/localedata_jbo \

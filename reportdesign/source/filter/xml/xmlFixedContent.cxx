@@ -21,12 +21,11 @@
 #include <xmloff/xmltoken.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/nmspmap.hxx>
+#include <xmloff/ProgressBarHelper.hxx>
 #include "xmlEnums.hxx"
 #include "xmlReportElement.hxx"
-#include <tools/debug.hxx>
-#include <com/sun/star/report/XShape.hpp>
 #include "xmlCell.hxx"
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include <com/sun/star/report/XFormattedField.hpp>
 #include <com/sun/star/report/XFixedText.hpp>
 #include <com/sun/star/text/ControlCharacter.hpp>
@@ -126,40 +125,39 @@ OXMLFixedContent::~OXMLFixedContent()
 }
 
 
-SvXMLImportContext* OXMLFixedContent::_CreateChildContext(
+SvXMLImportContextRef OXMLFixedContent::CreateChildContext_(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList > & xAttrList )
 {
-    SvXMLImportContext *pContext = OXMLReportElementBase::_CreateChildContext(nPrefix,rLocalName,xAttrList);
-    if ( pContext )
-        return pContext;
+    SvXMLImportContextRef xContext = OXMLReportElementBase::CreateChildContext_(nPrefix,rLocalName,xAttrList);
+    if (xContext)
+        return xContext;
 
     static const char s_sStringConcat[] = " & ";
     const SvXMLTokenMap&    rTokenMap   = m_rImport.GetCellElemTokenMap();
-    Reference<XComponentContext> xContext = m_rImport.GetComponentContext();
 
     m_rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
     const sal_uInt16 nToken = rTokenMap.Get( nPrefix, rLocalName );
     switch( nToken )
     {
         case XML_TOK_P:
-            pContext = new OXMLFixedContent(m_rImport,nPrefix, rLocalName,m_rCell,m_pContainer,this);
+            xContext = new OXMLFixedContent(m_rImport,nPrefix, rLocalName,m_rCell,m_pContainer,this);
             break;
         case XML_TOK_TEXT_TAB_STOP:
-            pContext = new OXMLCharContent( m_rImport, this,nPrefix,
+            xContext = new OXMLCharContent( m_rImport, this,nPrefix,
                                                 rLocalName, xAttrList,
                                                 0x0009, false );
             break;
 
         case XML_TOK_TEXT_LINE_BREAK:
-            pContext = new OXMLCharContent( m_rImport, this,nPrefix,
+            xContext = new OXMLCharContent( m_rImport, this,nPrefix,
                                                 rLocalName, xAttrList,
                                                 ControlCharacter::LINE_BREAK );
             break;
 
         case XML_TOK_TEXT_S:
-            pContext = new OXMLCharContent( m_rImport, this,nPrefix,
+            xContext = new OXMLCharContent( m_rImport, this,nPrefix,
                                                 rLocalName, xAttrList,
                                                 0x0020, true );
             break;
@@ -174,7 +172,7 @@ SvXMLImportContext* OXMLFixedContent::_CreateChildContext(
         default:
             ;
     }
-    return pContext;
+    return xContext;
 }
 
 void OXMLFixedContent::EndElement()
@@ -188,20 +186,20 @@ void OXMLFixedContent::EndElement()
             Reference< report::XFormattedField > xControl(xInt,uno::UNO_QUERY);
             xControl->setDataField("rpt:" + m_sPageText);
              OSL_ENSURE(xControl.is(),"Could not create FormattedField!");
-            m_pInP->m_xComponent = xControl.get();
-            m_xComponent = xControl.get();
+            m_pInP->m_xReportComponent = xControl.get();
+            m_xReportComponent = xControl.get();
         }
         else
         {
             Reference< XFixedText > xControl(xFactor->createInstance(SERVICE_FIXEDTEXT),uno::UNO_QUERY);
              OSL_ENSURE(xControl.is(),"Could not create FixedContent!");
-            m_pInP->m_xComponent = xControl.get();
-            m_xComponent = xControl.get();
+            m_pInP->m_xReportComponent = xControl.get();
+            m_xReportComponent = xControl.get();
             xControl->setLabel(m_sLabel);
         }
 
-        m_pContainer->addCell(m_xComponent);
-        m_rCell.setComponent(m_xComponent);
+        m_pContainer->addCell(m_xReportComponent);
+        m_rCell.setComponent(m_xReportComponent);
 
         OXMLReportElementBase::EndElement();
     }

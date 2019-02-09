@@ -12,15 +12,16 @@ $(eval $(call gb_Module_Module,slideshow))
 $(eval $(call gb_Module_add_targets,slideshow,\
     Library_slideshow \
 ))
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(ENABLE_OPENGL_TRANSITIONS),TRUE)
 $(eval $(call gb_Module_add_targets,slideshow,\
     Library_OGLTrans \
     Package_opengl \
  ))
 endif
 
-# not working
-    # CppunitTest_slideshow \
+$(eval $(call gb_Module_add_check_targets,slideshow,\
+	CppunitTest_slideshow \
+))
 
 # not built normally (and unbuildable anyway ;)
     # Executable_demoshow \

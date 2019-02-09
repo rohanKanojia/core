@@ -16,15 +16,13 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#include "metadata.hxx"
-#include <svtools/localresaccess.hxx>
+#include <metadata.hxx>
 #include <com/sun/star/inspection/XPropertyHandler.hpp>
-#include <comphelper/extract.hxx>
-#include "helpids.hrc"
-#include "RptResId.hrc"
-#include "uistrings.hrc"
+#include <core_resource.hxx>
+#include <helpids.h>
+#include <strings.hrc>
+#include <strings.hxx>
 
-#include <functional>
 #include <algorithm>
 
 
@@ -44,19 +42,19 @@ namespace rptui
         OUString        sTranslation;
         OString         sHelpId;
         sal_Int32       nId;
-        sal_uInt32      nUIFlags;
+        PropUIFlags     nUIFlags;
 
         OPropertyInfoImpl(
                         const OUString&        rName,
                         sal_Int32              _nId,
                         const OUString&        aTranslation,
                         const OString&         _sHelpId,
-                        sal_uInt32             _nUIFlags);
+                        PropUIFlags            _nUIFlags);
     };
 
 
     OPropertyInfoImpl::OPropertyInfoImpl(const OUString& _rName, sal_Int32 _nId,
-                                   const OUString& aString, const OString& sHid, sal_uInt32 _nUIFlags)
+                                   const OUString& aString, const OString& sHid, PropUIFlags _nUIFlags)
        :sName(_rName)
        ,sTranslation(aString)
        ,sHelpId(sHid)
@@ -66,8 +64,8 @@ namespace rptui
     }
 
 
-    // Vergleichen von PropertyInfo
-    struct PropertyInfoLessByName : public ::std::binary_function< OPropertyInfoImpl, OPropertyInfoImpl, bool >
+    // compare PropertyInfo
+    struct PropertyInfoLessByName
     {
         bool operator()( const OPropertyInfoImpl& _lhs, const OPropertyInfoImpl& _rhs )
         {
@@ -80,13 +78,13 @@ namespace rptui
 
 #define DEF_INFO( ident, uinameres, helpid, flags )   \
     OPropertyInfoImpl( PROPERTY_##ident, PROPERTY_ID_##ident, \
-            OUString( ModuleRes( RID_STR_##uinameres ) ), HID_RPT_PROP_##helpid, flags )
+                       RptResId( RID_STR_##uinameres ), HID_RPT_PROP_##helpid, flags )
 
 #define DEF_INFO_1( ident, uinameres, helpid, flag1 ) \
-    DEF_INFO( ident, uinameres, helpid, PROP_FLAG_##flag1 )
+    DEF_INFO( ident, uinameres, helpid, PropUIFlags::flag1 )
 
 #define DEF_INFO_2( ident, uinameres, helpid, flag1, flag2 ) \
-    DEF_INFO( ident, uinameres, helpid, PROP_FLAG_##flag1 | PROP_FLAG_##flag2 )
+    DEF_INFO( ident, uinameres, helpid, PropUIFlags::flag1 | PropUIFlags::flag2 )
 
     sal_uInt16              OPropertyInfoService::s_nCount = 0;
     OPropertyInfoImpl*      OPropertyInfoService::s_pPropertyInfos = nullptr;
@@ -96,56 +94,53 @@ namespace rptui
         if ( s_pPropertyInfos )
             return s_pPropertyInfos;
 
-        OModuleClient aResourceAccess;
-        // this ensures that we have our resource file loaded
-
         static OPropertyInfoImpl aPropertyInfos[] =
         {
         /*
-        DEF_INFO_?( propname and id,   resoure id,         help id,           flags ),
+        DEF_INFO_?( propname and id,   resource id,         help id,           flags ),
         */
-             DEF_INFO_1( FORCENEWPAGE,                  FORCENEWPAGE,               FORCENEWPAGE,               COMPOSEABLE )
-            ,DEF_INFO_1( NEWROWORCOL,                   NEWROWORCOL,                NEWROWORCOL,                COMPOSEABLE )
-            ,DEF_INFO_1( KEEPTOGETHER,                  KEEPTOGETHER,               KEEPTOGETHER,               COMPOSEABLE )
-            ,DEF_INFO_1( CANGROW,                       CANGROW,                    CANGROW,                    COMPOSEABLE )
-            ,DEF_INFO_1( CANSHRINK,                     CANSHRINK,                  CANSHRINK,                  COMPOSEABLE )
-            ,DEF_INFO_1( REPEATSECTION,                 REPEATSECTION,              REPEATSECTION,              COMPOSEABLE )
-            ,DEF_INFO_1( PRINTREPEATEDVALUES,           PRINTREPEATEDVALUES,        PRINTREPEATEDVALUES,        COMPOSEABLE )
-            ,DEF_INFO_1( CONDITIONALPRINTEXPRESSION,    CONDITIONALPRINTEXPRESSION, CONDITIONALPRINTEXPRESSION, COMPOSEABLE )
-            ,DEF_INFO_1( STARTNEWCOLUMN,                STARTNEWCOLUMN,             STARTNEWCOLUMN,             COMPOSEABLE )
-            ,DEF_INFO_1( RESETPAGENUMBER,               RESETPAGENUMBER,            RESETPAGENUMBER,            COMPOSEABLE )
-            ,DEF_INFO_1( PRINTWHENGROUPCHANGE,          PRINTWHENGROUPCHANGE,       PRINTWHENGROUPCHANGE,       COMPOSEABLE )
-            ,DEF_INFO_1( VISIBLE,                       VISIBLE,                    VISIBLE,                    COMPOSEABLE )
-            ,DEF_INFO_1( GROUPKEEPTOGETHER,             GROUPKEEPTOGETHER,          GROUPKEEPTOGETHER,          COMPOSEABLE )
-            ,DEF_INFO_1( PAGEHEADEROPTION,              PAGEHEADEROPTION,           PAGEHEADEROPTION,           COMPOSEABLE )
-            ,DEF_INFO_1( PAGEFOOTEROPTION,              PAGEFOOTEROPTION,           PAGEFOOTEROPTION,           COMPOSEABLE )
-            ,DEF_INFO_1( POSITIONX,                     POSITIONX,                  RPT_POSITIONX,              COMPOSEABLE )
-            ,DEF_INFO_1( POSITIONY,                     POSITIONY,                  RPT_POSITIONY,              COMPOSEABLE )
-            ,DEF_INFO_1( WIDTH,                         WIDTH,                      RPT_WIDTH,                  COMPOSEABLE )
-            ,DEF_INFO_1( HEIGHT,                        HEIGHT,                     RPT_HEIGHT,                 COMPOSEABLE )
-            ,DEF_INFO_1( FONT,                          FONT,                       RPT_FONT,                   COMPOSEABLE )
-            ,DEF_INFO_1( PREEVALUATED,                  PREEVALUATED,               PREEVALUATED,               COMPOSEABLE )
-            ,DEF_INFO_1( DEEPTRAVERSING,                DEEPTRAVERSING,             DEEPTRAVERSING,             COMPOSEABLE )
-            ,DEF_INFO_1( FORMULA,                       FORMULA,                    FORMULA,                    COMPOSEABLE )
-            ,DEF_INFO_1( INITIALFORMULA,                INITIALFORMULA,             INITIALFORMULA,             COMPOSEABLE )
-            ,DEF_INFO_2( TYPE,                          TYPE,                       TYPE,                       COMPOSEABLE,DATA_PROPERTY )
-            ,DEF_INFO_2( DATAFIELD,                     DATAFIELD,                  DATAFIELD,                  COMPOSEABLE,DATA_PROPERTY )
-            ,DEF_INFO_2( FORMULALIST,                   FORMULALIST,                FORMULALIST,                COMPOSEABLE,DATA_PROPERTY )
-            ,DEF_INFO_2( SCOPE,                         SCOPE,                      SCOPE,                      COMPOSEABLE,DATA_PROPERTY )
-            ,DEF_INFO_1( PRESERVEIRI,                   PRESERVEIRI,                PRESERVEIRI,                COMPOSEABLE )
-            ,DEF_INFO_1( BACKCOLOR,                     BACKCOLOR,                  BACKCOLOR,                  COMPOSEABLE )
-            ,DEF_INFO_1( CONTROLBACKGROUND,             BACKCOLOR,                  BACKCOLOR,                  COMPOSEABLE )
-            ,DEF_INFO_1( BACKTRANSPARENT,               BACKTRANSPARENT,            BACKTRANSPARENT,            COMPOSEABLE )
+             DEF_INFO_1( FORCENEWPAGE,                  FORCENEWPAGE,               FORCENEWPAGE,               Composeable )
+            ,DEF_INFO_1( NEWROWORCOL,                   NEWROWORCOL,                NEWROWORCOL,                Composeable )
+            ,DEF_INFO_1( KEEPTOGETHER,                  KEEPTOGETHER,               KEEPTOGETHER,               Composeable )
+            ,DEF_INFO_1( CANGROW,                       CANGROW,                    CANGROW,                    Composeable )
+            ,DEF_INFO_1( CANSHRINK,                     CANSHRINK,                  CANSHRINK,                  Composeable )
+            ,DEF_INFO_1( REPEATSECTION,                 REPEATSECTION,              REPEATSECTION,              Composeable )
+            ,DEF_INFO_1( PRINTREPEATEDVALUES,           PRINTREPEATEDVALUES,        PRINTREPEATEDVALUES,        Composeable )
+            ,DEF_INFO_1( CONDITIONALPRINTEXPRESSION,    CONDITIONALPRINTEXPRESSION, CONDITIONALPRINTEXPRESSION, Composeable )
+            ,DEF_INFO_1( STARTNEWCOLUMN,                STARTNEWCOLUMN,             STARTNEWCOLUMN,             Composeable )
+            ,DEF_INFO_1( RESETPAGENUMBER,               RESETPAGENUMBER,            RESETPAGENUMBER,            Composeable )
+            ,DEF_INFO_1( PRINTWHENGROUPCHANGE,          PRINTWHENGROUPCHANGE,       PRINTWHENGROUPCHANGE,       Composeable )
+            ,DEF_INFO_1( VISIBLE,                       VISIBLE,                    VISIBLE,                    Composeable )
+            ,DEF_INFO_1( GROUPKEEPTOGETHER,             GROUPKEEPTOGETHER,          GROUPKEEPTOGETHER,          Composeable )
+            ,DEF_INFO_1( PAGEHEADEROPTION,              PAGEHEADEROPTION,           PAGEHEADEROPTION,           Composeable )
+            ,DEF_INFO_1( PAGEFOOTEROPTION,              PAGEFOOTEROPTION,           PAGEFOOTEROPTION,           Composeable )
+            ,DEF_INFO_1( POSITIONX,                     POSITIONX,                  RPT_POSITIONX,              Composeable )
+            ,DEF_INFO_1( POSITIONY,                     POSITIONY,                  RPT_POSITIONY,              Composeable )
+            ,DEF_INFO_1( WIDTH,                         WIDTH,                      RPT_WIDTH,                  Composeable )
+            ,DEF_INFO_1( HEIGHT,                        HEIGHT,                     RPT_HEIGHT,                 Composeable )
+            ,DEF_INFO_1( FONT,                          FONT,                       RPT_FONT,                   Composeable )
+            ,DEF_INFO_1( PREEVALUATED,                  PREEVALUATED,               PREEVALUATED,               Composeable )
+            ,DEF_INFO_1( DEEPTRAVERSING,                DEEPTRAVERSING,             DEEPTRAVERSING,             Composeable )
+            ,DEF_INFO_1( FORMULA,                       FORMULA,                    FORMULA,                    Composeable )
+            ,DEF_INFO_1( INITIALFORMULA,                INITIALFORMULA,             INITIALFORMULA,             Composeable )
+            ,DEF_INFO_2( TYPE,                          TYPE,                       TYPE,                       Composeable,DataProperty )
+            ,DEF_INFO_2( DATAFIELD,                     DATAFIELD,                  DATAFIELD,                  Composeable,DataProperty )
+            ,DEF_INFO_2( FORMULALIST,                   FORMULALIST,                FORMULALIST,                Composeable,DataProperty )
+            ,DEF_INFO_2( SCOPE,                         SCOPE,                      SCOPE,                      Composeable,DataProperty )
+            ,DEF_INFO_1( PRESERVEIRI,                   PRESERVEIRI,                PRESERVEIRI,                Composeable )
+            ,DEF_INFO_1( BACKCOLOR,                     BACKCOLOR,                  BACKCOLOR,                  Composeable )
+            ,DEF_INFO_1( CONTROLBACKGROUND,             BACKCOLOR,                  BACKCOLOR,                  Composeable )
+            ,DEF_INFO_1( BACKTRANSPARENT,               BACKTRANSPARENT,            BACKTRANSPARENT,            Composeable )
             ,DEF_INFO_1( CONTROLBACKGROUNDTRANSPARENT,  CONTROLBACKGROUNDTRANSPARENT,
-                                                                                    CONTROLBACKGROUNDTRANSPARENT, COMPOSEABLE )
-            ,DEF_INFO_1( CHARTTYPE,                     CHARTTYPE,                  CHARTTYPE,                  COMPOSEABLE )
-            ,DEF_INFO_1( PREVIEW_COUNT,                 PREVIEW_COUNT,              PREVIEW_COUNT,              COMPOSEABLE )
-            ,DEF_INFO_2( MASTERFIELDS,                  MASTERFIELDS,               MASTERFIELDS,               COMPOSEABLE,DATA_PROPERTY )
-            ,DEF_INFO_2( DETAILFIELDS,                  DETAILFIELDS,               DETAILFIELDS,               COMPOSEABLE,DATA_PROPERTY)
-            ,DEF_INFO_1( AREA,                          AREA,                       AREA,                       COMPOSEABLE )
-            ,DEF_INFO_2( MIMETYPE,                      MIMETYPE,                   MIMETYPE,                   COMPOSEABLE,DATA_PROPERTY )
-            ,DEF_INFO_1( PARAADJUST,                    PARAADJUST,                 PARAADJUST,                 COMPOSEABLE )
-            ,DEF_INFO_1( VERTICALALIGN,                 VERTICALALIGN,              VERTICALALIGN,              COMPOSEABLE )
+                                                                                    CONTROLBACKGROUNDTRANSPARENT, Composeable )
+            ,DEF_INFO_1( CHARTTYPE,                     CHARTTYPE,                  CHARTTYPE,                  Composeable )
+            ,DEF_INFO_1( PREVIEW_COUNT,                 PREVIEW_COUNT,              PREVIEW_COUNT,              Composeable )
+            ,DEF_INFO_2( MASTERFIELDS,                  MASTERFIELDS,               MASTERFIELDS,               Composeable,DataProperty )
+            ,DEF_INFO_2( DETAILFIELDS,                  DETAILFIELDS,               DETAILFIELDS,               Composeable,DataProperty)
+            ,DEF_INFO_1( AREA,                          AREA,                       AREA,                       Composeable )
+            ,DEF_INFO_2( MIMETYPE,                      MIMETYPE,                   MIMETYPE,                   Composeable,DataProperty )
+            ,DEF_INFO_1( PARAADJUST,                    PARAADJUST,                 PARAADJUST,                 Composeable )
+            ,DEF_INFO_1( VERTICALALIGN,                 VERTICALALIGN,              VERTICALALIGN,              Composeable )
         };
 
         s_pPropertyInfos = aPropertyInfos;
@@ -166,30 +161,30 @@ namespace rptui
     OUString OPropertyInfoService::getPropertyTranslation(sal_Int32 _nId)
     {
         const OPropertyInfoImpl* pInfo = getPropertyInfo(_nId);
-        return (pInfo) ? pInfo->sTranslation : OUString();
+        return pInfo ? pInfo->sTranslation : OUString();
     }
 
 
     OString OPropertyInfoService::getPropertyHelpId(sal_Int32 _nId)
     {
         const OPropertyInfoImpl* pInfo = getPropertyInfo(_nId);
-        return (pInfo) ? pInfo->sHelpId : OString();
+        return pInfo ? pInfo->sHelpId : OString();
     }
 
 
-    sal_uInt32 OPropertyInfoService::getPropertyUIFlags(sal_Int32 _nId)
+    PropUIFlags OPropertyInfoService::getPropertyUIFlags(sal_Int32 _nId)
     {
         const OPropertyInfoImpl* pInfo = getPropertyInfo(_nId);
-        return (pInfo) ? pInfo->nUIFlags : 0;
+        return pInfo ? pInfo->nUIFlags : PropUIFlags::NONE;
     }
 
 
     const OPropertyInfoImpl* OPropertyInfoService::getPropertyInfo(const OUString& _rName)
     {
-        // intialisierung
+        // initialization
         if(!s_pPropertyInfos)
             getPropertyInfo();
-        OPropertyInfoImpl  aSearch(_rName, 0L, OUString(), "", 0);
+        OPropertyInfoImpl  aSearch(_rName, 0L, OUString(), "", PropUIFlags::NONE);
 
         const OPropertyInfoImpl* pPropInfo = ::std::lower_bound(
             s_pPropertyInfos, s_pPropertyInfos + s_nCount, aSearch, PropertyInfoLessByName() );
@@ -203,7 +198,7 @@ namespace rptui
 
     const OPropertyInfoImpl* OPropertyInfoService::getPropertyInfo(sal_Int32 _nId)
     {
-        // intialisierung
+        // initialization
         if(!s_pPropertyInfos)
             getPropertyInfo();
 
@@ -221,8 +216,8 @@ namespace rptui
         sal_Int32 nId = getPropertyId( _rPropertyName );
         if ( nId != -1 )
         {
-            sal_uInt32 nFlags = getPropertyUIFlags( nId );
-            return ( nFlags & PROP_FLAG_COMPOSEABLE ) != 0;
+            PropUIFlags nFlags = getPropertyUIFlags( nId );
+            return bool( nFlags & PropUIFlags::Composeable );
         }
 
         return _rxFormComponentHandler->isComposable( _rPropertyName );
@@ -232,72 +227,70 @@ namespace rptui
     void OPropertyInfoService::getExcludeProperties(::std::vector< beans::Property >& _rExcludeProperties,const css::uno::Reference< css::inspection::XPropertyHandler >& _xFormComponentHandler)
     {
         uno::Sequence< beans::Property > aProps = _xFormComponentHandler->getSupportedProperties();
-        static const OUString pExcludeProperties[] =
+        static const OUStringLiteral pExcludeProperties[] =
         {
-                OUString("Enabled"),
-                OUString("Printable"),
-                OUString("WordBreak"),
-                OUString("MultiLine"),
-                OUString("Tag"),
-                OUString("HelpText"),
-                OUString("HelpURL"),
-                OUString("MaxTextLen"),
-                OUString("ReadOnly"),
-                OUString("Tabstop"),
-                OUString("TabIndex"),
-                OUString("ValueMin"),
-                OUString("ValueMax"),
-                OUString("Spin"),
-                OUString("SpinValue"),
-                OUString("SpinValueMin"),
-                OUString("SpinValueMax"),
-                OUString("DefaultSpinValue"),
-                OUString("SpinIncrement"),
-                OUString("Repeat"),
-                OUString("RepeatDelay"),
-                OUString("ControlLabel"), /// TODO: has to be checked
-                OUString("LabelControl"),
-                OUString("Title"), // comment this out if you want to have title feature for charts
-                OUString(PROPERTY_MAXTEXTLEN),
-                OUString(PROPERTY_EFFECTIVEDEFAULT),
-                OUString(PROPERTY_EFFECTIVEMAX),
-                OUString(PROPERTY_EFFECTIVEMIN),
-                OUString("HideInactiveSelection"),
-                OUString("SubmitAction"),
-                OUString("InputRequired"),
-                OUString("VerticalAlign"),
-                OUString(PROPERTY_ALIGN),
-                OUString(PROPERTY_EMPTY_IS_NULL),
-                OUString(PROPERTY_FILTERPROPOSAL)
-                ,OUString(PROPERTY_POSITIONX)
-                ,OUString(PROPERTY_POSITIONY)
-                ,OUString(PROPERTY_WIDTH)
-                ,OUString(PROPERTY_HEIGHT)
-                ,OUString(PROPERTY_FONT)
-                ,OUString(PROPERTY_LABEL)
-                ,OUString(PROPERTY_LINECOLOR)
-                ,OUString(PROPERTY_BORDER)
-                ,OUString(PROPERTY_BORDERCOLOR)
-                ,OUString(PROPERTY_BACKTRANSPARENT)
-                ,OUString(PROPERTY_CONTROLBACKGROUND)
-                ,OUString(PROPERTY_BACKGROUNDCOLOR)
-                ,OUString(PROPERTY_CONTROLBACKGROUNDTRANSPARENT)
-                ,OUString(PROPERTY_FORMULALIST)
-                ,OUString(PROPERTY_SCOPE)
-                ,OUString(PROPERTY_TYPE)
-                ,OUString(PROPERTY_DATASOURCENAME)
-                ,OUString(PROPERTY_VERTICALALIGN)
+                "Enabled",
+                "Printable",
+                "WordBreak",
+                "MultiLine",
+                "Tag",
+                "HelpText",
+                "HelpURL",
+                "MaxTextLen",
+                "ReadOnly",
+                "Tabstop",
+                "TabIndex",
+                "ValueMin",
+                "ValueMax",
+                "Spin",
+                "SpinValue",
+                "SpinValueMin",
+                "SpinValueMax",
+                "DefaultSpinValue",
+                "SpinIncrement",
+                "Repeat",
+                "RepeatDelay",
+                "ControlLabel", /// TODO: has to be checked
+                "LabelControl",
+                "Title", // comment this out if you want to have title feature for charts
+                PROPERTY_MAXTEXTLEN,
+                PROPERTY_EFFECTIVEDEFAULT,
+                PROPERTY_EFFECTIVEMAX,
+                PROPERTY_EFFECTIVEMIN,
+                "HideInactiveSelection",
+                "SubmitAction",
+                "InputRequired",
+                "VerticalAlign",
+                PROPERTY_ALIGN,
+                PROPERTY_EMPTY_IS_NULL,
+                PROPERTY_FILTERPROPOSAL
+                ,PROPERTY_POSITIONX
+                ,PROPERTY_POSITIONY
+                ,PROPERTY_WIDTH
+                ,PROPERTY_HEIGHT
+                ,PROPERTY_FONT
+                ,PROPERTY_LABEL
+                ,PROPERTY_LINECOLOR
+                ,PROPERTY_BORDER
+                ,PROPERTY_BORDERCOLOR
+                ,PROPERTY_BACKTRANSPARENT
+                ,PROPERTY_CONTROLBACKGROUND
+                ,PROPERTY_BACKGROUNDCOLOR
+                ,PROPERTY_CONTROLBACKGROUNDTRANSPARENT
+                ,PROPERTY_FORMULALIST
+                ,PROPERTY_SCOPE
+                ,PROPERTY_TYPE
+                ,PROPERTY_DATASOURCENAME
+                ,PROPERTY_VERTICALALIGN
         };
 
-        beans::Property* pPropsIter = aProps.getArray();
-        beans::Property* pPropsEnd = pPropsIter + aProps.getLength();
-        for (; pPropsIter != pPropsEnd; ++pPropsIter)
+        for (beans::Property const & prop : aProps)
         {
             size_t nPos = 0;
-            for (; nPos < SAL_N_ELEMENTS(pExcludeProperties) && pExcludeProperties[nPos] != pPropsIter->Name; ++nPos )
+            for (; nPos < SAL_N_ELEMENTS(pExcludeProperties) && pExcludeProperties[nPos] != prop.Name; ++nPos )
                 ;
             if ( nPos == SAL_N_ELEMENTS(pExcludeProperties) )
-                _rExcludeProperties.push_back(*pPropsIter);
+                _rExcludeProperties.push_back(prop);
         }
     }
 

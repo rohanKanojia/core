@@ -18,10 +18,11 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
@@ -42,9 +43,8 @@ using namespace ::com::sun::star;
 namespace vclcanvas
 {
     SpriteCanvas::SpriteCanvas( const uno::Sequence< uno::Any >&                aArguments,
-                                const uno::Reference< uno::XComponentContext >& rxContext ) :
-        maArguments(aArguments),
-        mxComponentContext( rxContext )
+                                const uno::Reference< uno::XComponentContext >& /*rxContext*/ ) :
+        maArguments(aArguments)
     {
     }
 
@@ -113,23 +113,21 @@ namespace vclcanvas
     {
         SolarMutexGuard aGuard;
 
-        mxComponentContext.clear();
-
         // forward to parent
         SpriteCanvasBaseT::disposeThis();
     }
 
-    sal_Bool SAL_CALL SpriteCanvas::showBuffer( sal_Bool bUpdateAll ) throw (uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL SpriteCanvas::showBuffer( sal_Bool bUpdateAll )
     {
         return updateScreen( bUpdateAll );
     }
 
-    sal_Bool SAL_CALL SpriteCanvas::switchBuffer( sal_Bool bUpdateAll ) throw (uno::RuntimeException)
+    sal_Bool SAL_CALL SpriteCanvas::switchBuffer( sal_Bool bUpdateAll )
     {
         return updateScreen( bUpdateAll );
     }
 
-    sal_Bool SAL_CALL SpriteCanvas::updateScreen( sal_Bool bUpdateAll ) throw (uno::RuntimeException, std::exception)
+    sal_Bool SAL_CALL SpriteCanvas::updateScreen( sal_Bool bUpdateAll )
     {
         SolarMutexGuard aGuard;
 
@@ -140,7 +138,7 @@ namespace vclcanvas
                                                                   mbSurfaceDirty);
     }
 
-    OUString SAL_CALL SpriteCanvas::getServiceName(  ) throw (css::uno::RuntimeException, std::exception)
+    OUString SAL_CALL SpriteCanvas::getServiceName(  )
     {
         return OUString( SPRITECANVAS_SERVICE_NAME );
     }

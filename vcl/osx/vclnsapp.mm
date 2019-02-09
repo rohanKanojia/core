@@ -22,24 +22,26 @@
 
 #include <vector>
 
+#include <stdlib.h>
+
 #include <sal/main.h>
 #include <vcl/commandevent.hxx>
-#include <vcl/implimagetree.hxx>
+#include <vcl/ImageTree.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
 
-#include "osx/saldata.hxx"
-#include "osx/salframe.h"
-#include "osx/salframeview.h"
-#include "osx/salinst.h"
-#include "osx/vclnsapp.h"
-#include "quartz/utils.h"
+#include <osx/saldata.hxx>
+#include <osx/salframe.h>
+#include <osx/salframeview.h>
+#include <osx/salinst.h>
+#include <osx/vclnsapp.h>
+#include <quartz/utils.h>
 
-#include "premac.h"
+#include <premac.h>
 #include <objc/objc-runtime.h>
 #import "Carbon/Carbon.h"
 #import "apple_remote/RemoteControl.h"
-#include "postmac.h"
+#include <postmac.h>
 
 
 @implementation CocoaThreadEnabler
@@ -61,22 +63,39 @@
 {
     (void)pNotification;
 
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // 'NSApplicationDefined' is deprecated: first deprecated in macOS 10.12
     NSEvent* pEvent = [NSEvent otherEventWithType: NSApplicationDefined
                                location: NSZeroPoint
                                modifierFlags: 0
-                               timestamp: 0
+                               timestamp: [[NSProcessInfo processInfo] systemUptime]
                                windowNumber: 0
                                context: nil
                                subtype: AquaSalInstance::AppExecuteSVMain
                                data1: 0
                                data2: 0 ];
-    if( pEvent )
-        [NSApp postEvent: pEvent atStart: NO];
+SAL_WNODEPRECATED_DECLARATIONS_POP
+    assert( pEvent );
+    [NSApp postEvent: pEvent atStart: NO];
+
+    if( [NSWindow respondsToSelector:@selector(allowsAutomaticWindowTabbing)] )
+    {
+        [NSWindow setAllowsAutomaticWindowTabbing:NO];
+    }
 }
 
 -(void)sendEvent:(NSEvent*)pEvent
 {
     NSEventType eType = [pEvent type];
+SAL_WNODEPRECATED_DECLARATIONS_PUSH
+        // 'NSAlternateKeyMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSApplicationDefined' is deprecated: first deprecated in macOS 10.12
+        // 'NSClosableWindowMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSCommandKeyMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSControlKeyMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSKeyDown' is deprecated: first deprecated in macOS 10.12
+        // 'NSMiniaturizableWindowMask' is deprecated: first deprecated in macOS 10.12
+        // 'NSShiftKeyMask' is deprecated: first deprecated in macOS 10.12
     if( eType == NSApplicationDefined )
     {
         AquaSalInstance::handleAppDefinedEvent( pEvent );
@@ -86,26 +105,8 @@
         NSWindow* pKeyWin = [NSApp keyWindow];
         if( pKeyWin && [pKeyWin isKindOfClass: [SalFrameWindow class]] )
         {
-            AquaSalFrame* pFrame = [(SalFrameWindow*)pKeyWin getSalFrame];
-            // handle Cmd-W
-            // FIXME: the correct solution would be to handle this in framework
-            // in the menu code
-            // however that is currently being revised, so let's use a preliminary solution here
-            // this hack is based on assumption
-            // a) Cmd-W is the same in all languages in OOo's menu conig
-            // b) Cmd-W is the same in all languages in on MacOS
-            // for now this seems to be true
+            AquaSalFrame* pFrame = [static_cast<SalFrameWindow*>(pKeyWin) getSalFrame];
             unsigned int nModMask = ([pEvent modifierFlags] & (NSShiftKeyMask|NSControlKeyMask|NSAlternateKeyMask|NSCommandKeyMask));
-            if( (pFrame->mnStyleMask & NSClosableWindowMask) != 0 )
-            {
-                if( nModMask == NSCommandKeyMask
-                    && [[pEvent charactersIgnoringModifiers] isEqualToString: @"w"] )
-                {
-                    [(SalFrameWindow*)pFrame->getNSWindow() windowShouldClose: nil];
-                    return;
-                }
-            }
-
             /*
              * #i98949# - Cmd-M miniaturize window, Cmd-Option-M miniaturize all windows
              */
@@ -120,24 +121,6 @@
                 if ( nModMask == ( NSCommandKeyMask | NSAlternateKeyMask ) )
                 {
                     [NSApp miniaturizeAll: nil];
-                    return;
-                }
-            }
-
-            // #i90083# handle frame switching
-            // FIXME: lousy workaround
-            if( (nModMask & (NSControlKeyMask|NSAlternateKeyMask)) == 0 )
-            {
-                if( [[pEvent characters] isEqualToString: @"<"] ||
-                    [[pEvent characters] isEqualToString: @"~"] )
-                {
-                    [self cycleFrameForward: pFrame];
-                    return;
-                }
-                else if( [[pEvent characters] isEqualToString: @">"] ||
-                         [[pEvent characters] isEqualToString: @"`"] )
-                {
-                    [self cycleFrameBackward: pFrame];
                     return;
                 }
             }
@@ -161,7 +144,8 @@
             // the main menu just beeps for an unknown or disabled key equivalent
             // and swallows the event wholesale
             NSMenu* pMainMenu = [NSApp mainMenu];
-            if( ! bHandled && (pMainMenu == nullptr || ! [pMainMenu performKeyEquivalent: pEvent]) )
+            if( ! bHandled &&
+                (pMainMenu == nullptr || ! [NSMenu menuBarVisible] || ! [pMainMenu performKeyEquivalent: pEvent]) )
             {
                 [[pKeyWin contentView] keyDown: pEvent];
                 bHandled = GetSalData()->maKeyEventAnswer[ pEvent ];
@@ -224,90 +208,13 @@
             }
         }
     }
+SAL_WNODEPRECATED_DECLARATIONS_POP
     [super sendEvent: pEvent];
 }
 
 -(void)sendSuperEvent:(NSEvent*)pEvent
 {
     [super sendEvent: pEvent];
-}
-
--(void)cycleFrameForward: (AquaSalFrame*)pCurFrame
-{
-    // find current frame in list
-    std::list< AquaSalFrame* >& rFrames( GetSalData()->maFrames );
-    std::list< AquaSalFrame* >::iterator it = rFrames.begin();
-    for( ; it != rFrames.end() && *it != pCurFrame; ++it )
-        ;
-    if( it != rFrames.end() )
-    {
-        // now find the next frame (or end)
-        do
-        {
-            ++it;
-            if( it != rFrames.end() )
-            {
-                if( (*it)->mpDockMenuEntry != nullptr &&
-                    (*it)->mbShown )
-                {
-                    [(*it)->getNSWindow() makeKeyAndOrderFront: NSApp];
-                    return;
-                }
-            }
-        } while( it != rFrames.end() );
-        // cycle around, find the next up to pCurFrame
-        it = rFrames.begin();
-        while( *it != pCurFrame )
-        {
-            if( (*it)->mpDockMenuEntry != nullptr &&
-                (*it)->mbShown )
-            {
-                [(*it)->getNSWindow() makeKeyAndOrderFront: NSApp];
-                return;
-            }
-            ++it;
-        }
-    }
-}
-
--(void)cycleFrameBackward: (AquaSalFrame*)pCurFrame
-{
-    // do the same as cycleFrameForward only with a reverse iterator
-
-    // find current frame in list
-    std::list< AquaSalFrame* >& rFrames( GetSalData()->maFrames );
-    std::list< AquaSalFrame* >::reverse_iterator it = rFrames.rbegin();
-    for( ; it != rFrames.rend() && *it != pCurFrame; ++it )
-        ;
-    if( it != rFrames.rend() )
-    {
-        // now find the next frame (or end)
-        do
-        {
-            ++it;
-            if( it != rFrames.rend() )
-            {
-                if( (*it)->mpDockMenuEntry != nullptr &&
-                    (*it)->mbShown )
-                {
-                    [(*it)->getNSWindow() makeKeyAndOrderFront: NSApp];
-                    return;
-                }
-            }
-        } while( it != rFrames.rend() );
-        // cycle around, find the next up to pCurFrame
-        it = rFrames.rbegin();
-        while( *it != pCurFrame )
-        {
-            if( (*it)->mpDockMenuEntry != nullptr &&
-                (*it)->mbShown )
-            {
-                [(*it)->getNSWindow() makeKeyAndOrderFront: NSApp];
-                return;
-            }
-            ++it;
-        }
-    }
 }
 
 -(NSMenu*)applicationDockMenu:(NSApplication *)sender
@@ -323,8 +230,11 @@
     aFile.push_back( GetOUString( pFile ) );
     if( ! AquaSalInstance::isOnCommandLine( aFile[0] ) )
     {
-        const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::TYPE_OPEN, aFile);
+        const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::Type::Open, aFile);
         AquaSalInstance::aAppEventList.push_back( pAppEvent );
+        AquaSalInstance *pInst = GetSalData()->mpInstance;
+        if( pInst )
+            pInst->TriggerUserEventProcessing();
     }
     return YES;
 }
@@ -339,7 +249,7 @@
 
     while( (pFile = [it nextObject]) != nil )
     {
-        const rtl::OUString aFile( GetOUString( pFile ) );
+        const OUString aFile( GetOUString( pFile ) );
         if( ! AquaSalInstance::isOnCommandLine( aFile ) )
         {
             aFileList.push_back( aFile );
@@ -351,8 +261,11 @@
         // we have no back channel here, we have to assume success, in which case
         // replyToOpenOrPrint does not need to be called according to documentation
         // [app replyToOpenOrPrint: NSApplicationDelegateReplySuccess];
-        const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::TYPE_OPEN, aFileList);
+        const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::Type::Open, aFileList);
         AquaSalInstance::aAppEventList.push_back( pAppEvent );
+        AquaSalInstance *pInst = GetSalData()->mpInstance;
+        if( pInst )
+            pInst->TriggerUserEventProcessing();
     }
 }
 
@@ -361,8 +274,11 @@
     (void)app;
     std::vector<OUString> aFile;
     aFile.push_back( GetOUString( pFile ) );
-	const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::TYPE_PRINT, aFile);
-	AquaSalInstance::aAppEventList.push_back( pAppEvent );
+    const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::Type::Print, aFile);
+    AquaSalInstance::aAppEventList.push_back( pAppEvent );
+    AquaSalInstance *pInst = GetSalData()->mpInstance;
+    if( pInst )
+        pInst->TriggerUserEventProcessing();
     return YES;
 }
 -(NSApplicationPrintReply)application: (NSApplication *) app printFiles:(NSArray *)files withSettings: (NSDictionary *)printSettings showPrintPanels:(BOOL)bShowPrintPanels
@@ -380,8 +296,11 @@
     {
         aFileList.push_back( GetOUString( pFile ) );
     }
-	const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::TYPE_PRINT, aFileList);
-	AquaSalInstance::aAppEventList.push_back( pAppEvent );
+    const ApplicationEvent* pAppEvent = new ApplicationEvent(ApplicationEvent::Type::Print, aFileList);
+    AquaSalInstance::aAppEventList.push_back( pAppEvent );
+    AquaSalInstance *pInst = GetSalData()->mpInstance;
+    if( pInst )
+        pInst->TriggerUserEventProcessing();
     // we have no back channel here, we have to assume success
     // correct handling would be NSPrintingReplyLater and then send [app replyToOpenOrPrint]
     return NSPrintingSuccess;
@@ -391,6 +310,7 @@
 {
     (void)aNotification;
     sal_detail_deinitialize();
+    _Exit(0);
 }
 
 -(NSApplicationTerminateReply)applicationShouldTerminate: (NSApplication *) app
@@ -400,20 +320,21 @@
     {
         SolarMutexGuard aGuard;
 
-        SalData* pSalData = GetSalData();
-        if( ! pSalData->maFrames.empty() )
+        AquaSalInstance *pInst = GetSalData()->mpInstance;
+        SalFrame *pAnyFrame = pInst->anyFrame();
+        if( pAnyFrame )
         {
             // the following QueryExit will likely present a message box, activate application
             [NSApp activateIgnoringOtherApps: YES];
-            aReply = pSalData->maFrames.front()->CallCallback( SALEVENT_SHUTDOWN, nullptr ) ? NSTerminateCancel : NSTerminateNow;
+            aReply = pAnyFrame->CallCallback( SalEvent::Shutdown, nullptr ) ? NSTerminateCancel : NSTerminateNow;
         }
 
         if( aReply == NSTerminateNow )
         {
-            ApplicationEvent aEv(ApplicationEvent::TYPE_PRIVATE_DOSHUTDOWN);
+            ApplicationEvent aEv(ApplicationEvent::Type::PrivateDoShutdown);
             GetpApp()->AppEvent( aEv );
-            ImplImageTree::get().shutDown();
-            // DeInitVCL should be called in ImplSVMain - unless someon _exits first which
+            ImageTree::get().shutdown();
+            // DeInitVCL should be called in ImplSVMain - unless someone exits first which
             // can occur in Desktop::doShutdown for example
         }
     }
@@ -426,9 +347,10 @@
     (void)pNotification;
     SolarMutexGuard aGuard;
 
-    const SalData* pSalData = GetSalData();
-	if( !pSalData->maFrames.empty() )
-		pSalData->maFrames.front()->CallCallback( SALEVENT_SETTINGSCHANGED, nullptr );
+    AquaSalInstance *pInst = GetSalData()->mpInstance;
+    SalFrame *pAnyFrame = pInst->anyFrame();
+    if(  pAnyFrame )
+        pAnyFrame->CallCallback( SalEvent::SettingsChanged, nullptr );
 }
 
 -(void)screenParametersChanged: (NSNotification*) pNotification
@@ -436,24 +358,23 @@
     (void)pNotification;
     SolarMutexGuard aGuard;
 
-    SalData* pSalData = GetSalData();
-    std::list< AquaSalFrame* >::iterator it;
-    for( it = pSalData->maFrames.begin(); it != pSalData->maFrames.end(); ++it )
+    for( auto pSalFrame : GetSalData()->mpInstance->getFrames() )
     {
-        (*it)->screenParametersChanged();
+        AquaSalFrame *pFrame = static_cast<AquaSalFrame*>( pSalFrame );
+        pFrame->screenParametersChanged();
     }
 }
 
 -(void)scrollbarVariantChanged: (NSNotification*) pNotification
 {
     (void)pNotification;
-    GetSalData()->mpFirstInstance->delayedSettingsChanged( true );
+    GetSalData()->mpInstance->delayedSettingsChanged( true );
 }
 
 -(void)scrollbarSettingsChanged: (NSNotification*) pNotification
 {
     (void)pNotification;
-    GetSalData()->mpFirstInstance->delayedSettingsChanged( false );
+    GetSalData()->mpInstance->delayedSettingsChanged( false );
 }
 
 -(void)addFallbackMenuItem: (NSMenuItem*)pNewItem

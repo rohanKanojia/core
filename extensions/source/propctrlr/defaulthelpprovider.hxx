@@ -39,7 +39,7 @@ namespace pcr
     typedef ::cppu::WeakImplHelper <   css::inspection::XPropertyControlObserver
                                     ,   css::lang::XInitialization
                                     >   DefaultHelpProvider_Base;
-    class DefaultHelpProvider : public DefaultHelpProvider_Base
+    class DefaultHelpProvider final : public DefaultHelpProvider_Base
     {
     private:
         bool                            m_bConstructed;
@@ -50,26 +50,26 @@ namespace pcr
         DefaultHelpProvider();
 
         // XServiceInfo - static versions
-        static OUString getImplementationName_static(  ) throw(css::uno::RuntimeException);
-        static css::uno::Sequence< OUString > getSupportedServiceNames_static(  ) throw(css::uno::RuntimeException);
-        static css::uno::Reference< css::uno::XInterface > SAL_CALL
+        /// @throws css::uno::RuntimeException
+        static OUString getImplementationName_static(  );
+        /// @throws css::uno::RuntimeException
+        static css::uno::Sequence< OUString > getSupportedServiceNames_static(  );
+        static css::uno::Reference< css::uno::XInterface >
                         Create(const css::uno::Reference< css::uno::XComponentContext >&);
 
-    protected:
-        virtual ~DefaultHelpProvider();
+    private:
+        virtual ~DefaultHelpProvider() override;
 
         // XPropertyControlObserver
-        virtual void SAL_CALL focusGained( const css::uno::Reference< css::inspection::XPropertyControl >& Control ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL valueChanged( const css::uno::Reference< css::inspection::XPropertyControl >& Control ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL focusGained( const css::uno::Reference< css::inspection::XPropertyControl >& Control ) override;
+        virtual void SAL_CALL valueChanged( const css::uno::Reference< css::inspection::XPropertyControl >& Control ) override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
-    protected:
         // Service constructors
         void    create( const css::uno::Reference< css::inspection::XObjectInspectorUI >& _rxUI );
 
-    private:
         static vcl::Window* impl_getVclControlWindow_nothrow( const css::uno::Reference< css::inspection::XPropertyControl >& _rxControl );
         static OUString impl_getHelpText_nothrow( const css::uno::Reference< css::inspection::XPropertyControl >& _rxControl );
     };

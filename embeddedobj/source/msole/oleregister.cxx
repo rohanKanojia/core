@@ -19,6 +19,7 @@
 
 #include <com/sun/star/registry/XRegistryKey.hpp>
 #include <com/sun/star/registry/InvalidRegistryException.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 #include <cppuhelper/factory.hxx>
 
 #include "xolefactory.hxx"
@@ -32,7 +33,7 @@ using namespace ::com::sun::star;
 
 extern "C" {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL emboleobj_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * emboleobj_component_getFactory(
     const sal_Char * pImplName, void * pServiceManager,
     SAL_UNUSED_PARAMETER void * /*pRegistryKey*/ )
 {
@@ -43,7 +44,7 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL emboleobj_component_getFactory(
 
     if ( pServiceManager )
     {
-        if ( aImplName.equals( OleEmbeddedObjectFactory::impl_staticGetImplementationName() ) )
+        if ( aImplName == OleEmbeddedObjectFactory::impl_staticGetImplementationName() )
         {
             xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>( pServiceManager ),
                                                 OleEmbeddedObjectFactory::impl_staticGetImplementationName(),
@@ -54,7 +55,7 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL emboleobj_component_getFactory(
         // the following service makes sense only on windows
         else if ( aImplName.equals( MSOLEDialogObjectCreator::impl_staticGetImplementationName() ) )
         {
-            xFactory= ::cppu::createOneInstanceFactory( reinterpret_cast< lang::XMultiServiceFactory*>( pServiceManager ),
+            xFactory= ::cppu::createOneInstanceFactory( static_cast< lang::XMultiServiceFactory*>( pServiceManager ),
                                                 MSOLEDialogObjectCreator::impl_staticGetImplementationName(),
                                                 MSOLEDialogObjectCreator::impl_staticCreateSelfInstance,
                                                 MSOLEDialogObjectCreator::impl_staticGetSupportedServiceNames() );

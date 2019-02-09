@@ -29,6 +29,7 @@
 
 #include <cppuhelper/implbase.hxx>
 
+#include <svl/listener.hxx>
 #include <sfx2/Metadatable.hxx>
 
 #include <unobaseclass.hxx>
@@ -55,25 +56,23 @@ private:
     ::sw::UnoImplPtr<Impl> m_pImpl;
 
 protected:
-
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::uno::RuntimeException
     void attachToRangeEx(
             const css::uno::Reference< css::text::XTextRange > & xTextRange,
-            IDocumentMarkAccess::MarkType eType)
-        throw (css::lang::IllegalArgumentException,
-                css::uno::RuntimeException );
+            IDocumentMarkAccess::MarkType eType);
+    /// @throws css::lang::IllegalArgumentException
+    /// @throws css::uno::RuntimeException
     virtual void attachToRange(
-            const css::uno::Reference< css::text::XTextRange > & xTextRange)
-        throw (css::lang::IllegalArgumentException,
-                css::uno::RuntimeException);
+            const css::uno::Reference< css::text::XTextRange > & xTextRange);
 
     const ::sw::mark::IMark* GetBookmark() const;
 
     void registerInMark( SwXBookmark& rXMark, ::sw::mark::IMark* const pMarkBase );
 
-    virtual ~SwXBookmark();
+    virtual ~SwXBookmark() override;
 
-    /// @param pDoc and pMark != 0, but not & because of ImplInheritanceHelper
-    SwXBookmark(::sw::mark::IMark *const pMark, SwDoc *const pDoc);
+    SwXBookmark(SwDoc *const pDoc);
 
     /// descriptor
     SwXBookmark();
@@ -95,171 +94,115 @@ public:
 
     // XUnoTunnel
     virtual sal_Int64 SAL_CALL getSomething(
-            const css::uno::Sequence< sal_Int8 >& rIdentifier)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Sequence< sal_Int8 >& rIdentifier) override;
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL supportsService(
-            const OUString& rServiceName)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const OUString& rServiceName) override;
     virtual css::uno::Sequence< OUString > SAL_CALL
-        getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getSupportedServiceNames() override;
 
     // XComponent
-    virtual void SAL_CALL dispose()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL dispose() override;
     virtual void SAL_CALL addEventListener(
-            const css::uno::Reference< css::lang::XEventListener > & xListener)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::lang::XEventListener > & xListener) override;
     virtual void SAL_CALL removeEventListener(
-            const css::uno::Reference< css::lang::XEventListener > & xListener)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::lang::XEventListener > & xListener) override;
 
     // XPropertySet
     virtual css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL
-        getPropertySetInfo()
-        throw (css::uno::RuntimeException, std::exception) override;
+        getPropertySetInfo() override;
     virtual void SAL_CALL setPropertyValue(
             const OUString& rPropertyName,
-            const css::uno::Any& rValue)
-        throw (css::beans::UnknownPropertyException,
-                css::beans::PropertyVetoException,
-                css::lang::IllegalArgumentException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const css::uno::Any& rValue) override;
     virtual css::uno::Any SAL_CALL getPropertyValue(
-            const OUString& rPropertyName)
-        throw (css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const OUString& rPropertyName) override;
     virtual void SAL_CALL addPropertyChangeListener(
             const OUString& rPropertyName,
-            const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener)
-        throw (css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
     virtual void SAL_CALL removePropertyChangeListener(
             const OUString& rPropertyName,
-            const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener)
-        throw (css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::beans::XPropertyChangeListener >& xListener) override;
     virtual void SAL_CALL addVetoableChangeListener(
             const OUString& rPropertyName,
-            const css::uno::Reference< css::beans::XVetoableChangeListener >& xListener)
-        throw (css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::beans::XVetoableChangeListener >& xListener) override;
     virtual void SAL_CALL removeVetoableChangeListener(
             const OUString& rPropertyName,
             const css::uno::Reference<
-                css::beans::XVetoableChangeListener >& xListener)
-        throw (css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+                css::beans::XVetoableChangeListener >& xListener) override;
 
     // XNamed
-    virtual OUString SAL_CALL getName()
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL setName(const OUString& rName)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getName() override;
+    virtual void SAL_CALL setName(const OUString& rName) override;
 
     // XTextContent
     virtual void SAL_CALL attach(
-            const css::uno::Reference< css::text::XTextRange > & xTextRange)
-        throw (css::lang::IllegalArgumentException,
-                css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::text::XTextRange > SAL_CALL getAnchor()
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference< css::text::XTextRange > & xTextRange) override;
+    virtual css::uno::Reference< css::text::XTextRange > SAL_CALL getAnchor() override;
 
 };
 
 class SwXFieldmarkParameters
     : public ::cppu::WeakImplHelper< css::container::XNameContainer>
-    , private SwClient
+    , public SvtListener
 {
+    private:
+        ::sw::mark::IFieldmark* m_pFieldmark;
+        /// @throws css::uno::RuntimeException
+        ::sw::mark::IFieldmark::parameter_map_t* getCoreParameters();
     public:
         SwXFieldmarkParameters(::sw::mark::IFieldmark* const pFieldmark)
+            : m_pFieldmark(pFieldmark)
         {
-            pFieldmark->Add(this);
+            StartListening(pFieldmark->GetNotifier());
         }
 
         // XNameContainer
-        virtual void SAL_CALL insertByName( const OUString& aName, const css::uno::Any& aElement ) throw (css::lang::IllegalArgumentException, css::container::ElementExistException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-        virtual void SAL_CALL removeByName( const OUString& Name ) throw (css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL insertByName( const OUString& aName, const css::uno::Any& aElement ) override;
+        virtual void SAL_CALL removeByName( const OUString& Name ) override;
         // XNameReplace
-        virtual void SAL_CALL replaceByName( const OUString& aName, const css::uno::Any& aElement ) throw (css::lang::IllegalArgumentException, css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL replaceByName( const OUString& aName, const css::uno::Any& aElement ) override;
         // XNameAccess
-        virtual css::uno::Any SAL_CALL getByName( const OUString& aName ) throw (css::container::NoSuchElementException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) throw (css::uno::RuntimeException, std::exception) override;
+        virtual css::uno::Any SAL_CALL getByName( const OUString& aName ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getElementNames(  ) override;
+        virtual sal_Bool SAL_CALL hasByName( const OUString& aName ) override;
         // XElementAccess
-        virtual css::uno::Type SAL_CALL getElementType(  ) throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL hasElements(  ) throw (css::uno::RuntimeException, std::exception) override;
-    protected:
-        //SwClient
-    virtual void Modify( const SfxPoolItem* pOld, const SfxPoolItem *pNew ) override;
-    private:
-        ::sw::mark::IFieldmark::parameter_map_t* getCoreParameters() throw (css::uno::RuntimeException);
+        virtual css::uno::Type SAL_CALL getElementType(  ) override;
+        virtual sal_Bool SAL_CALL hasElements(  ) override;
+
+        virtual void Notify( const SfxHint& rHint ) override;
 };
 
 typedef cppu::ImplInheritanceHelper< SwXBookmark,
     css::text::XFormField > SwXFieldmark_Base;
 
-class SwXFieldmark
+class SwXFieldmark final
     : public SwXFieldmark_Base
 {
-
-private:
     ::sw::mark::ICheckboxFieldmark* getCheckboxFieldmark();
-    bool isReplacementObject;
+    bool const isReplacementObject;
 
-protected:
-
-    SwXFieldmark(bool isReplacementObject,
-            ::sw::mark::IMark* pBkm = nullptr, SwDoc* pDoc = nullptr);
+    SwXFieldmark(bool isReplacementObject, SwDoc* pDoc);
 
 public:
-
     static css::uno::Reference<css::text::XTextContent>
         CreateXFieldmark(SwDoc & rDoc, ::sw::mark::IMark * pMark,
                 bool isReplacementObject = false);
 
     virtual void attachToRange(
-            const css::uno::Reference<css::text::XTextRange > & xTextRange)
-        throw (css::lang::IllegalArgumentException,
-                css::uno::RuntimeException) override;
-    virtual OUString SAL_CALL getFieldType()
-        throw( css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL setFieldType(const OUString& description )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual css::uno::Reference< css::container::XNameContainer > SAL_CALL getParameters(  )
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference<css::text::XTextRange > & xTextRange) override;
+    virtual OUString SAL_CALL getFieldType() override;
+    virtual void SAL_CALL setFieldType(const OUString& description ) override;
+    virtual css::uno::Reference< css::container::XNameContainer > SAL_CALL getParameters(  ) override;
     virtual void SAL_CALL setPropertyValue(
             const OUString& rPropertyName,
-            const css::uno::Any& rValue)
-        throw (css::beans::UnknownPropertyException,
-                css::beans::PropertyVetoException,
-                css::lang::IllegalArgumentException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const css::uno::Any& rValue) override;
 
     virtual css::uno::Any SAL_CALL getPropertyValue(
-            const OUString& rPropertyName)
-        throw (css::beans::UnknownPropertyException,
-                css::lang::WrappedTargetException,
-                css::uno::RuntimeException, std::exception) override;
+            const OUString& rPropertyName) override;
 };
 
-class SwXODFCheckboxField : public SwXFieldmark
-{
-public:
-    SwXODFCheckboxField( ::sw::mark::IMark* pBkm = nullptr, SwDoc* pDoc = nullptr) : SwXFieldmark(true,
-            pBkm, pDoc) {}
-};
 #endif // INCLUDED_SW_SOURCE_CORE_INC_UNOBOOKMARK_HXX
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

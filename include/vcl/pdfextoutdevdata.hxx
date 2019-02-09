@@ -24,14 +24,11 @@
 
 #include <vcl/pdfwriter.hxx>
 #include <vcl/extoutdevdata.hxx>
-#include <vcl/gdimtf.hxx>
-#include <vcl/mapmod.hxx>
 #include <vector>
-#include <deque>
+#include <memory>
 
 class Graphic;
-
-namespace vcl { class PDFWriter; }
+class GDIMetaFile;
 
 namespace vcl
 {
@@ -84,23 +81,22 @@ class VCL_DLLPUBLIC PDFExtOutDevData : public ExtOutDevData
     bool                        mbExportBookmarks;
     bool                        mbExportHiddenSlides;
     bool                        mbExportNDests; //i56629
-    sal_Int32                   mnFormsFormat;
     sal_Int32                   mnPage;
     sal_Int32                   mnCompressionQuality;
-    sal_Int32                   mnMaxImageResolution;
     css::lang::Locale           maDocLocale;
 
-    PageSyncData*               mpPageSyncData;
-    GlobalSyncData*             mpGlobalSyncData;
+    std::unique_ptr<PageSyncData> mpPageSyncData;
+    std::unique_ptr<GlobalSyncData> mpGlobalSyncData;
 
     std::vector< PDFExtOutDevBookmarkEntry > maBookmarks;
+    std::vector<OUString> maChapterNames;
 
 public:
 
     PDFExtOutDevData( const OutputDevice& rOutDev );
-    virtual ~PDFExtOutDevData();
+    virtual ~PDFExtOutDevData() override;
 
-    bool PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAction );
+    bool PlaySyncPageAct( PDFWriter& rWriter, sal_uInt32& rCurGDIMtfAction, const GDIMetaFile& rMtf );
     void ResetSyncData();
 
     void PlayGlobalActions( PDFWriter& rWriter );
@@ -120,8 +116,6 @@ public:
     bool    GetIsExportFormFields() const { return mbExportFormFields;}
     void        SetIsExportFormFields( const bool bExportFormFields );
 
-    void        SetFormsFormat( const sal_Int32 nFormsFormat );
-
     bool    GetIsExportBookmarks() const { return mbExportBookmarks;}
     void        SetIsExportBookmarks( const bool bExportBookmarks );
 
@@ -138,11 +132,7 @@ public:
     bool        GetIsLosslessCompression() const { return mbUseLosslessCompression;}
     void        SetIsLosslessCompression( const bool bLosslessCompression );
 
-    sal_Int32   GetCompressionQuality() const { return mnCompressionQuality; }
     void        SetCompressionQuality( const sal_Int32 nQuality );
-
-    sal_Int32   GetMaxImageResolution() const { return mnMaxImageResolution; }
-    void        SetMaxImageResolution( const sal_Int32 nQuality );
 
     bool        GetIsReduceImageResolution() const { return mbReduceImageResolution;}
     void        SetIsReduceImageResolution( const bool bReduceImageResolution );
@@ -151,8 +141,9 @@ public:
     void        SetDocumentLocale( const css::lang::Locale& rLoc );
 
     std::vector< PDFExtOutDevBookmarkEntry >& GetBookmarks() { return maBookmarks;}
+    const std::vector<OUString>& GetChapterNames() { return maChapterNames; }
 
-    Graphic GetCurrentGraphic() const;
+    const Graphic& GetCurrentGraphic() const;
 
     /** Start a new group of render output
 
@@ -185,13 +176,13 @@ public:
      */
     void        EndGroup( const Graphic&    rGraphic,
                           sal_uInt8         nTransparency,
-                          const Rectangle&  rOutputRect,
-                          const Rectangle&  rVisibleOutputRect );
+                          const tools::Rectangle&  rOutputRect,
+                          const tools::Rectangle&  rVisibleOutputRect );
 
     /// Detect if stream is compressed enough to avoid de-compress / scale & re-compress
     bool        HasAdequateCompression( const Graphic &rGraphic,
-                                        const Rectangle &rOutputRect,
-                                        const Rectangle &rVisibleOutputRect ) const;
+                                        const tools::Rectangle &rOutputRect,
+                                        const tools::Rectangle &rVisibleOutputRect ) const;
 
 //--->i56629
     /** Create a new named destination to be used in a link to this document from another PDF document
@@ -211,9 +202,9 @@ public:
     the destination id (to be used in SetLinkDest) or
     -1 if page id does not exist
     */
-    sal_Int32 CreateNamedDest( const OUString& sDestName,  const Rectangle& rRect, sal_Int32 nPageNr = -1 );
+    sal_Int32 CreateNamedDest( const OUString& sDestName,  const tools::Rectangle& rRect, sal_Int32 nPageNr = -1 );
 
-    /** registers a destination for which a destinatin ID needs to be known immediately, instead of later on setting it via
+    /** registers a destination for which a destination ID needs to be known immediately, instead of later on setting it via
         SetLinkDest.
 
         This is used in contexts where a destination is referenced by means other than a link.
@@ -228,7 +219,7 @@ public:
 
     /** provides detailed information about a destination range which previously has been registered using RegisterDest.
     */
-    void        DescribeRegisteredDest( sal_Int32 nDestId, const Rectangle& rRect, sal_Int32 nPageNr = -1, PDFWriter::DestAreaType eType = PDFWriter::XYZ );
+    void        DescribeRegisteredDest( sal_Int32 nDestId, const tools::Rectangle& rRect, sal_Int32 nPageNr, PDFWriter::DestAreaType eType = PDFWriter::DestAreaType::XYZ );
 
 //<---i56629
 
@@ -248,7 +239,7 @@ public:
     the destination id (to be used in SetLinkDest) or
     -1 if page id does not exist
     */
-    sal_Int32 CreateDest( const Rectangle& rRect, sal_Int32 nPageNr = -1, PDFWriter::DestAreaType eType = PDFWriter::XYZ );
+    sal_Int32 CreateDest( const tools::Rectangle& rRect, sal_Int32 nPageNr = -1, PDFWriter::DestAreaType eType = PDFWriter::DestAreaType::XYZ );
     /** Create a new link on a page
 
     @param rRect
@@ -263,7 +254,11 @@ public:
     the link id (to be used in SetLinkDest, SetLinkURL) or
     -1 if page id does not exist
     */
-    sal_Int32 CreateLink( const Rectangle& rRect, sal_Int32 nPageNr = -1 );
+    sal_Int32 CreateLink( const tools::Rectangle& rRect, sal_Int32 nPageNr = -1 );
+
+    /// Create a Screen annotation.
+    sal_Int32 CreateScreen(const tools::Rectangle& rRect, sal_Int32 nPageNr);
+
     /** Set the destination for a link
         <p>will change a URL type link to a dest link if necessary</p>
 
@@ -272,12 +267,8 @@ public:
 
         @param nDestId
         the dest the link shall point to
-        @returns
-        0 for success
-        -1 in case the link id does not exist
-        -2 in case the dest id does not exist
     */
-    sal_Int32 SetLinkDest( sal_Int32 nLinkId, sal_Int32 nDestId );
+    void SetLinkDest( sal_Int32 nLinkId, sal_Int32 nDestId );
     /** Set the URL for a link
         <p>will change a dest type link to an URL type link if necessary</p>
         @param nLinkId
@@ -289,12 +280,14 @@ public:
         conversion done to this parameter execept this:
         it will be output as 7bit Ascii. The URL
         will appear literally in the PDF file produced
-
-        @returns
-        0 for success
-        -1 in case the link id does not exist
     */
-    sal_Int32 SetLinkURL( sal_Int32 nLinkId, const OUString& rURL );
+    void SetLinkURL( sal_Int32 nLinkId, const OUString& rURL );
+
+    /// Set URL for a linked Screen annotation.
+    void SetScreenURL(sal_Int32 nScreenId, const OUString& rURL);
+    /// Set URL for an embedded Screen annotation.
+    void SetScreenStream(sal_Int32 nScreenId, const OUString& rURL);
+
     /** Create a new outline item
 
         @param nParent
@@ -311,7 +304,7 @@ public:
         @returns
         the outline item id of the new item
     */
-    sal_Int32 CreateOutlineItem( sal_Int32 nParent = 0, const OUString& rText = OUString(), sal_Int32 nDestID = -1 );
+    sal_Int32 CreateOutlineItem( sal_Int32 nParent, const OUString& rText, sal_Int32 nDestID );
 
     /** Create a new note on a page
 
@@ -326,7 +319,7 @@ public:
     number of page the note is on (as returned by NewPage)
     or -1 in which case the current page is used
     */
-    void CreateNote( const Rectangle& rRect, const PDFNote& rNote, sal_Int32 nPageNr = -1 );
+    void CreateNote( const tools::Rectangle& rRect, const PDFNote& rNote, sal_Int32 nPageNr = -1 );
 
     /** begin a new logical structure element
 
@@ -375,7 +368,7 @@ public:
     For different purposes it may be useful to paint a structure element's
     content discontinously. In that case an already existing structure element
     can be appended to by using SetCurrentStructureElement. The
-    refenrenced structure element becomes the current structure element with
+    referenced structure element becomes the current structure element with
     all consequences: all following structure elements are appended as children
     of the current element.
     </p>
@@ -408,12 +401,8 @@ public:
 
     @param eVal
     the value to set the attribute to
-
-    @returns
-    True if the value was valid and the change has been performed,
-    False if the attribute or value was invalid; attribute remains unchanged
      */
-    bool SetStructureAttribute( PDFWriter::StructAttribute eAttr, PDFWriter::StructAttributeValue eVal );
+    void SetStructureAttribute( PDFWriter::StructAttribute eAttr, PDFWriter::StructAttributeValue eVal );
     /** set a structure attribute on the current structural element
 
     SetStructureAttributeNumerical sets an attribute of the current structural element
@@ -426,12 +415,8 @@ public:
 
     @param nValue
     the value to set the attribute to
-
-    @returns
-    True if the value was valid and the change has been performed,
-    False if the attribute or value was invalid; attribute remains unchanged
      */
-    bool SetStructureAttributeNumerical( PDFWriter::StructAttribute eAttr, sal_Int32 nValue );
+    void SetStructureAttributeNumerical( PDFWriter::StructAttribute eAttr, sal_Int32 nValue );
     /** set the bounding box of a structural element
 
     SetStructureBoundingBox sets the BBox attribute to a new value. Since the BBox
@@ -442,7 +427,7 @@ public:
     @param rRect
     the new bounding box for the structural element
      */
-    void SetStructureBoundingBox( const Rectangle& rRect );
+    void SetStructureBoundingBox( const tools::Rectangle& rRect );
 
     /** set the ActualText attribute of a structural element
 

@@ -17,11 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <stdio.h>
 
 #include <xml/imagesdocumenthandler.hxx>
 
 #include <com/sun/star/xml/sax/XExtendedDocumentHandler.hpp>
+#include <com/sun/star/xml/sax/SAXException.hpp>
 
 #include <vcl/svapp.hxx>
 #include <vcl/toolbox.hxx>
@@ -31,10 +33,6 @@
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
-
-#ifdef XMLNS_XLINK
-#undef XMLNS_XLINK
-#endif
 
 #define ELEMENT_IMAGECONTAINER      "imagescontainer"
 #define ELEMENT_IMAGES              "images"
@@ -85,7 +83,7 @@ struct ImageXMLEntryProperty
     char                                            aEntryName[20];
 };
 
-ImageXMLEntryProperty ImagesEntries[OReadImagesDocumentHandler::IMG_XML_ENTRY_COUNT] =
+ImageXMLEntryProperty const ImagesEntries[OReadImagesDocumentHandler::IMG_XML_ENTRY_COUNT] =
 {
     { OReadImagesDocumentHandler::IMG_NS_IMAGE, ELEMENT_IMAGECONTAINER          },
     { OReadImagesDocumentHandler::IMG_NS_IMAGE, ELEMENT_IMAGES                  },
@@ -114,7 +112,7 @@ OReadImagesDocumentHandler::OReadImagesDocumentHandler( ImageListsDescriptor& aI
     m_nHashMaskModeColor    = OUString( ATTRIBUTE_MASKMODE_COLOR ).hashCode();
 
     // create hash map to speed up lookup
-    for ( int i = 0; i < (int)IMG_XML_ENTRY_COUNT; i++ )
+    for ( int i = 0; i < int(IMG_XML_ENTRY_COUNT); i++ )
     {
         OUStringBuffer temp( 20 );
 
@@ -125,17 +123,14 @@ OReadImagesDocumentHandler::OReadImagesDocumentHandler( ImageListsDescriptor& aI
 
         temp.append( XMLNS_FILTER_SEPARATOR );
         temp.appendAscii( ImagesEntries[i].aEntryName );
-        m_aImageMap.insert( ImageHashMap::value_type( temp.makeStringAndClear(), (Image_XML_Entry)i ) );
+        m_aImageMap.emplace( temp.makeStringAndClear(), static_cast<Image_XML_Entry>(i) );
     }
 
     // reset states
     m_bImageContainerStartFound     = false;
     m_bImageContainerEndFound       = false;
     m_bImagesStartFound             = false;
-    m_bImagesEndFound               = false;
-    m_bImageStartFound              = false;
     m_bExternalImagesStartFound     = false;
-    m_bExternalImagesEndFound       = false;
     m_bExternalImageStartFound      = false;
 }
 
@@ -145,17 +140,14 @@ OReadImagesDocumentHandler::~OReadImagesDocumentHandler()
 
 // XDocumentHandler
 void SAL_CALL OReadImagesDocumentHandler::startDocument()
-throw ( SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadImagesDocumentHandler::endDocument()
-throw(  SAXException, RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
-    if (( m_bImageContainerStartFound && !m_bImageContainerEndFound ) ||
-        ( !m_bImageContainerStartFound && m_bImageContainerEndFound )    )
+    if (m_bImageContainerStartFound != m_bImageContainerEndFound)
     {
         OUString aErrorMessage = getErrorLineString();
         aErrorMessage += "No matching start or end element 'image:imagecontainer' found!";
@@ -165,9 +157,6 @@ throw(  SAXException, RuntimeException, std::exception )
 
 void SAL_CALL OReadImagesDocumentHandler::startElement(
     const OUString& aName, const Reference< XAttributeList > &xAttribs )
-        throw(SAXException,
-              RuntimeException,
-              std::exception)
 {
     SolarMutexGuard g;
 
@@ -207,7 +196,7 @@ void SAL_CALL OReadImagesDocumentHandler::startElement(
                 }
 
                 if ( !m_aImageList.pImageList )
-                    m_aImageList.pImageList = new ImageListDescriptor;
+                    m_aImageList.pImageList.reset( new ImageListDescriptor );
 
                 m_bImagesStartFound = true;
                 m_pImages = new ImageListItemDescriptor;
@@ -234,7 +223,7 @@ void SAL_CALL OReadImagesDocumentHandler::startElement(
                                     // the color value is given as #rrggbb and used the hexadecimal system!!
                                     sal_uInt32 nColor = aColor.copy( 1 ).toUInt32( 16 );
 
-                                    m_pImages->aMaskColor = Color( COLORDATA_RGB( nColor ) );
+                                    m_pImages->aMaskColor = Color( nColor );
                                 }
                             }
                             break;
@@ -308,9 +297,7 @@ void SAL_CALL OReadImagesDocumentHandler::startElement(
                 }
 
                 if ( !m_pImages->pImageItemList )
-                    m_pImages->pImageItemList = new ImageItemListDescriptor;
-
-                m_bImageStartFound = true;
+                    m_pImages->pImageItemList.reset( new ImageItemListDescriptor );
 
                 // Create new image item descriptor
                 std::unique_ptr<ImageItemDescriptor> pItem(new ImageItemDescriptor);
@@ -492,9 +479,6 @@ void SAL_CALL OReadImagesDocumentHandler::startElement(
 }
 
 void SAL_CALL OReadImagesDocumentHandler::endElement(const OUString& aName)
-    throw(SAXException,
-          RuntimeException,
-          std::exception)
 {
     SolarMutexGuard g;
 
@@ -521,18 +505,11 @@ void SAL_CALL OReadImagesDocumentHandler::endElement(const OUString& aName)
             }
             break;
 
-            case IMG_ELEMENT_ENTRY:
-            {
-                m_bImageStartFound = false;
-            }
-            break;
-
             case IMG_ELEMENT_EXTERNALIMAGES:
             {
                 if ( m_pExternalImages && !m_aImageList.pExternalImageList )
                 {
-                    if ( !m_aImageList.pExternalImageList )
-                        m_aImageList.pExternalImageList = m_pExternalImages;
+                    m_aImageList.pExternalImageList.reset( m_pExternalImages );
                 }
 
                 m_bExternalImagesStartFound = false;
@@ -546,31 +523,26 @@ void SAL_CALL OReadImagesDocumentHandler::endElement(const OUString& aName)
             }
             break;
 
-                  default:
-                      break;
+            default: break;
         }
     }
 }
 
 void SAL_CALL OReadImagesDocumentHandler::characters(const OUString&)
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadImagesDocumentHandler::ignorableWhitespace(const OUString&)
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadImagesDocumentHandler::processingInstruction(
     const OUString& /*aTarget*/, const OUString& /*aData*/ )
-throw(  SAXException, RuntimeException, std::exception )
 {
 }
 
 void SAL_CALL OReadImagesDocumentHandler::setDocumentLocator(
     const Reference< XLocator > &xLocator)
-throw(  SAXException, RuntimeException, std::exception )
 {
     SolarMutexGuard g;
     m_xLocator = xLocator;
@@ -594,7 +566,7 @@ OUString OReadImagesDocumentHandler::getErrorLineString()
 
 OWriteImagesDocumentHandler::OWriteImagesDocumentHandler(
     const ImageListsDescriptor& aItems,
-    Reference< XDocumentHandler > rWriteDocumentHandler ) :
+    Reference< XDocumentHandler > const & rWriteDocumentHandler ) :
     m_aImageListsItems( aItems ),
     m_xWriteDocumentHandler( rWriteDocumentHandler )
 {
@@ -611,8 +583,7 @@ OWriteImagesDocumentHandler::~OWriteImagesDocumentHandler()
 {
 }
 
-void OWriteImagesDocumentHandler::WriteImagesDocument() throw
-( SAXException, RuntimeException )
+void OWriteImagesDocumentHandler::WriteImagesDocument()
 {
     SolarMutexGuard g;
 
@@ -626,8 +597,7 @@ void OWriteImagesDocumentHandler::WriteImagesDocument() throw
         m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
     }
 
-    ::comphelper::AttributeList* pList = new ::comphelper::AttributeList;
-    Reference< XAttributeList > xList( static_cast<XAttributeList *>(pList) , UNO_QUERY );
+    rtl::Reference<::comphelper::AttributeList> pList = new ::comphelper::AttributeList;
 
     pList->AddAttribute( ATTRIBUTE_XMLNS_IMAGE,
                          m_aAttributeType,
@@ -637,12 +607,12 @@ void OWriteImagesDocumentHandler::WriteImagesDocument() throw
                          m_aAttributeType,
                          XMLNS_XLINK );
 
-    m_xWriteDocumentHandler->startElement( ELEMENT_NS_IMAGESCONTAINER, pList );
+    m_xWriteDocumentHandler->startElement( ELEMENT_NS_IMAGESCONTAINER, pList.get() );
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 
     if ( m_aImageListsItems.pImageList )
     {
-        ImageListDescriptor* pImageList = m_aImageListsItems.pImageList;
+        ImageListDescriptor* pImageList = m_aImageListsItems.pImageList.get();
 
         for ( size_t i = 0; i < m_aImageListsItems.pImageList->size(); i++ )
         {
@@ -653,7 +623,7 @@ void OWriteImagesDocumentHandler::WriteImagesDocument() throw
 
     if ( m_aImageListsItems.pExternalImageList )
     {
-        WriteExternalImageList( m_aImageListsItems.pExternalImageList );
+        WriteExternalImageList( m_aImageListsItems.pExternalImageList.get() );
     }
 
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
@@ -664,8 +634,7 @@ void OWriteImagesDocumentHandler::WriteImagesDocument() throw
 
 //  protected member functions
 
-void OWriteImagesDocumentHandler::WriteImageList( const ImageListItemDescriptor* pImageList ) throw
-( SAXException, RuntimeException )
+void OWriteImagesDocumentHandler::WriteImageList( const ImageListItemDescriptor* pImageList )
 {
     ::comphelper::AttributeList* pList = new ::comphelper::AttributeList;
     Reference< XAttributeList > xList( static_cast<XAttributeList *>(pList) , UNO_QUERY );
@@ -699,7 +668,7 @@ void OWriteImagesDocumentHandler::WriteImageList( const ImageListItemDescriptor*
     else
     {
         OUStringBuffer   aColorStrBuffer( 8 );
-        sal_Int64       nValue = pImageList->aMaskColor.GetRGBColor();
+        sal_Int64       nValue = sal_uInt32(pImageList->aMaskColor.GetRGBColor());
 
         aColorStrBuffer.append( "#" );
         aColorStrBuffer.append( OUString::number( nValue, 16 ));
@@ -723,19 +692,18 @@ void OWriteImagesDocumentHandler::WriteImageList( const ImageListItemDescriptor*
     m_xWriteDocumentHandler->startElement( ELEMENT_NS_IMAGES, xList );
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 
-    ImageItemListDescriptor* pImageItemList = pImageList->pImageItemList;
+    ImageItemListDescriptor* pImageItemList = pImageList->pImageItemList.get();
     if ( pImageItemList )
     {
-        for ( size_t i = 0; i < pImageItemList->size(); i++ )
-            WriteImage( (*pImageItemList)[i].get() );
+        for (std::unique_ptr<ImageItemDescriptor> & i : *pImageItemList)
+            WriteImage( i.get() );
     }
 
     m_xWriteDocumentHandler->endElement( ELEMENT_NS_IMAGES );
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 }
 
-void OWriteImagesDocumentHandler::WriteImage( const ImageItemDescriptor* pImage ) throw
-( SAXException, RuntimeException )
+void OWriteImagesDocumentHandler::WriteImage( const ImageItemDescriptor* pImage )
 {
     ::comphelper::AttributeList* pList = new ::comphelper::AttributeList;
     Reference< XAttributeList > xList( static_cast<XAttributeList *>(pList) , UNO_QUERY );
@@ -755,15 +723,14 @@ void OWriteImagesDocumentHandler::WriteImage( const ImageItemDescriptor* pImage 
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 }
 
-void OWriteImagesDocumentHandler::WriteExternalImageList( const ExternalImageItemListDescriptor* pExternalImageList ) throw
-( SAXException, RuntimeException )
+void OWriteImagesDocumentHandler::WriteExternalImageList( const ExternalImageItemListDescriptor* pExternalImageList )
 {
     m_xWriteDocumentHandler->startElement( ELEMENT_NS_EXTERNALIMAGES, m_xEmptyList );
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 
-    for ( size_t i = 0; i < pExternalImageList->size(); i++ )
+    for (const auto & i : *pExternalImageList)
     {
-        const ExternalImageItemDescriptor* pItem = (*pExternalImageList)[i].get();
+        const ExternalImageItemDescriptor* pItem = i.get();
         WriteExternalImage( pItem );
     }
 
@@ -772,8 +739,7 @@ void OWriteImagesDocumentHandler::WriteExternalImageList( const ExternalImageIte
     m_xWriteDocumentHandler->ignorableWhitespace( OUString() );
 }
 
-void OWriteImagesDocumentHandler::WriteExternalImage( const ExternalImageItemDescriptor* pExternalImage ) throw
-( SAXException, RuntimeException )
+void OWriteImagesDocumentHandler::WriteExternalImage( const ExternalImageItemDescriptor* pExternalImage )
 {
     ::comphelper::AttributeList* pList = new ::comphelper::AttributeList;
     Reference< XAttributeList > xList( static_cast<XAttributeList *>(pList) , UNO_QUERY );

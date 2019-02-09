@@ -7,13 +7,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
+#include <memory>
 #include <string>
 #include <iostream>
 #include <map>
 #include <set>
 
 #include "plugin.hxx"
-#include "compat.hxx"
 #include "clang/AST/CXXInheritance.h"
 
 // Check for local variables that we are calling delete on
@@ -22,10 +22,10 @@ namespace
 {
 
 class MemoryVar:
-    public RecursiveASTVisitor<MemoryVar>, public loplugin::Plugin
+    public loplugin::FilteringPlugin<MemoryVar>
 {
 public:
-    explicit MemoryVar(InstantiationData const & data): Plugin(data) {}
+    explicit MemoryVar(loplugin::InstantiationData const & data): FilteringPlugin(data), mbChecking(false) {}
 
     virtual void run() override {
         TraverseDecl(compiler.getASTContext().getTranslationUnitDecl());
@@ -50,7 +50,7 @@ private:
 StringRef MemoryVar::getFilename(SourceLocation loc)
 {
     SourceLocation spellingLocation = compiler.getSourceManager().getSpellingLoc(loc);
-    StringRef name { compiler.getSourceManager().getFilename(spellingLocation) };
+    StringRef name { getFileNameOfSpellingLoc(spellingLocation) };
     return name;
 }
 
@@ -80,10 +80,10 @@ bool MemoryVar::TraverseFunctionDecl(FunctionDecl * decl)
         // I'm not getting accurate results from clang right now
         StringRef aFileName = getFilename(varLoc);
         // TODO these files are doing some weird stuff I don't know how to ignore yet
-        if (aFileName.startswith(SRCDIR "/vcl/source/filter")) {
+        if (loplugin::hasPathnamePrefix(aFileName, SRCDIR "/vcl/source/filter/")) {
            return true;
         }
-        if (aFileName.startswith(SRCDIR "/sw/source/core/layout/frmtool.cxx")) {
+        if (loplugin::isSamePathname(aFileName, SRCDIR "/sw/source/core/layout/frmtool.cxx")) {
            return true;
         }
 
@@ -101,7 +101,6 @@ bool MemoryVar::TraverseFunctionDecl(FunctionDecl * decl)
                "delete called here",
                maVarDeleteSourceRangeMap[varLoc].getBegin())
             << maVarDeleteSourceRangeMap[varLoc];
-        cout << "xxxx " << aFileName.str() << endl;
     }
     return true;
 }
@@ -146,7 +145,7 @@ bool MemoryVar::VisitCXXNewExpr(const CXXNewExpr *newExpr)
     if (ignoreLocation(newExpr)) {
         return true;
     }
-    const Stmt* stmt = parentStmt(newExpr);
+    const Stmt* stmt = getParentStmt(newExpr);
 
     const DeclStmt* declStmt = dyn_cast<DeclStmt>(stmt);
     if (declStmt) {

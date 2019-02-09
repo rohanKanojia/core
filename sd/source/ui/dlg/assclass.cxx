@@ -20,7 +20,7 @@
 #include <tools/debug.hxx>
 #include <vcl/ctrl.hxx>
 
-#include "assclass.hxx"
+#include <assclass.hxx>
 
 Assistent::Assistent(int nNoOfPages)
     : mnPages(nNoOfPages), mnCurrentPage(1)
@@ -36,11 +36,11 @@ Assistent::Assistent(int nNoOfPages)
 
 bool Assistent::InsertControl(int nDestPage, vcl::Window* pUsedControl)
 {
-    DBG_ASSERT( (nDestPage > 0) && (nDestPage <= mnPages), "Page not aviable!");
+    DBG_ASSERT( (nDestPage > 0) && (nDestPage <= mnPages), "Page not available!");
 
     if((nDestPage>0)&&(nDestPage<=mnPages))
     {
-        maPages[nDestPage-1].push_back(pUsedControl);
+        maPages[nDestPage-1].emplace_back(pUsedControl);
         pUsedControl->Hide();
         pUsedControl->Disable();
         return true;
@@ -77,31 +77,25 @@ void Assistent::PreviousPage()
 
 bool Assistent::GotoPage(const int nPageToGo)
 {
-    DBG_ASSERT( (nPageToGo > 0) && (nPageToGo <= mnPages), "Page not aviable!");
+    DBG_ASSERT( (nPageToGo > 0) && (nPageToGo <= mnPages), "Page not available!");
 
     if((nPageToGo>0)&&(nPageToGo<=mnPages)&&mpPageStatus[nPageToGo-1])
     {
         int nIndex=mnCurrentPage-1;
 
-        auto iter = maPages[nIndex].begin();
-        auto iterEnd = maPages[nIndex].end();
-
-        for(; iter != iterEnd; ++iter)
+        for(auto& rxPage : maPages[nIndex])
         {
-            (*iter)->Disable();
-            (*iter)->Hide();
+            rxPage->Disable();
+            rxPage->Hide();
         }
 
         mnCurrentPage=nPageToGo;
         nIndex=mnCurrentPage-1;
 
-        iter = maPages[nIndex].begin();
-        iterEnd = maPages[nIndex].end();
-
-        for(; iter != iterEnd; ++iter)
+        for(auto& rxPage : maPages[nIndex])
         {
-            (*iter)->Enable();
-            (*iter)->Show();
+            rxPage->Enable();
+            rxPage->Show();
         }
 
         return true;
@@ -136,14 +130,14 @@ bool Assistent::IsFirstPage() const
 
 bool Assistent::IsEnabled( int nPage ) const
 {
-    DBG_ASSERT( (nPage>0) && (nPage <= mnPages), "Page not aviable!" );
+    DBG_ASSERT( (nPage>0) && (nPage <= mnPages), "Page not available!" );
 
     return (nPage>0) && (nPage <= mnPages && mpPageStatus[nPage-1]);
 }
 
 void Assistent::EnablePage( int nPage )
 {
-    DBG_ASSERT( (nPage>0) && (nPage <= mnPages), "Page not aviable!" );
+    DBG_ASSERT( (nPage>0) && (nPage <= mnPages), "Page not available!" );
 
     if((nPage>0) && (nPage < mnPages && !mpPageStatus[nPage-1]))
     {
@@ -153,7 +147,7 @@ void Assistent::EnablePage( int nPage )
 
 void Assistent::DisablePage( int nPage )
 {
-    DBG_ASSERT( (nPage>0) && (nPage <= mnPages), "Page not aviable!" );
+    DBG_ASSERT( (nPage>0) && (nPage <= mnPages), "Page not available!" );
 
     if((nPage>0) && (nPage <= mnPages && mpPageStatus[nPage-1]))
     {

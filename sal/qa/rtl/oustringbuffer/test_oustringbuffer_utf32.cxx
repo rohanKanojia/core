@@ -21,10 +21,10 @@
 #include <cppunit/TestFixture.h>
 #include <cppunit/TestAssert.h>
 #include <cppunit/extensions/HelperMacros.h>
-#include "rtl/strbuf.hxx"
-#include "rtl/ustrbuf.hxx"
-#include "rtl/ustring.h"
-#include "rtl/ustring.hxx"
+#include <rtl/strbuf.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <rtl/ustring.h>
+#include <rtl/ustring.hxx>
 
 namespace test { namespace oustringbuffer {
 
@@ -46,10 +46,10 @@ CPPUNIT_TEST_SUITE_REGISTRATION(test::oustringbuffer::Utf32);
 
 namespace {
 
-void appendString(rtl::OStringBuffer & buffer, rtl::OUString const & string) {
+void appendString(OStringBuffer & buffer, OUString const & string) {
     buffer.append('"');
     for (int i = 0; i < string.getLength(); ++i) {
-        buffer.append(RTL_CONSTASCII_STRINGPARAM("\\u"));
+        buffer.append("\\u");
         sal_Unicode c = string[i];
         if (c < 0x1000) {
             buffer.append('0');
@@ -67,12 +67,12 @@ void appendString(rtl::OStringBuffer & buffer, rtl::OUString const & string) {
 }
 
 void createMessage(
-    rtl::OStringBuffer & message, rtl::OUString const & string1,
-    rtl::OUString const & string2)
+    OStringBuffer & message, OUString const & string1,
+    OUString const & string2)
 {
     message.setLength(0);
     appendString(message, string1);
-    message.append(RTL_CONSTASCII_STRINGPARAM(" vs. "));
+    message.append(" vs. ");
     appendString(message, string2);
 }
 
@@ -85,19 +85,19 @@ void test::oustringbuffer::Utf32::appendUtf32() {
     sal_Unicode const str2[str2Len] = { 'a', 'b', 'c', 'd' };
     int const str3Len = 6;
     sal_Unicode const str3[str3Len] = { 'a', 'b', 'c', 'd', 0xD800, 0xDC00 };
-    rtl::OStringBuffer message;
-    rtl::OUStringBuffer buf1(rtl::OUString(str1, str1Len));
+    OStringBuffer message;
+    OUStringBuffer buf1(OUString(str1, str1Len));
     buf1.appendUtf32('d');
-    rtl::OUString res1(buf1.makeStringAndClear());
-    createMessage(message, res1, rtl::OUString(str2, str2Len));
-    CPPUNIT_ASSERT_MESSAGE(
-        message.getStr(), res1 == rtl::OUString(str2, str2Len));
-    rtl::OUStringBuffer buf2(rtl::OUString(str2, str2Len));
+    OUString res1(buf1.makeStringAndClear());
+    createMessage(message, res1, OUString(str2, str2Len));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(
+        message.getStr(), OUString(str2, str2Len), res1);
+    OUStringBuffer buf2(OUString(str2, str2Len));
     buf2.appendUtf32(0x10000);
-    rtl::OUString res2(buf2.makeStringAndClear());
-    createMessage(message, res2, rtl::OUString(str3, str3Len));
-    CPPUNIT_ASSERT_MESSAGE(
-        message.getStr(), res2 == rtl::OUString(str3, str3Len));
+    OUString res2(buf2.makeStringAndClear());
+    createMessage(message, res2, OUString(str3, str3Len));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(
+        message.getStr(), OUString(str3, str3Len), res2);
 }
 
 void test::oustringbuffer::Utf32::insertUtf32() {
@@ -107,19 +107,19 @@ void test::oustringbuffer::Utf32::insertUtf32() {
     sal_Unicode const str2[str2Len] = { 'a', 'b', 'd', 'c' };
     int const str3Len = 6;
     sal_Unicode const str3[str3Len] = { 'a', 'b', 0xDBFF, 0xDFFF, 'd', 'c' };
-    rtl::OStringBuffer message;
-    rtl::OUStringBuffer buf1(rtl::OUString(str1, str1Len));
+    OStringBuffer message;
+    OUStringBuffer buf1(OUString(str1, str1Len));
     buf1.insertUtf32(2, 'd');
-    rtl::OUString res1(buf1.makeStringAndClear());
-    createMessage(message, res1, rtl::OUString(str2, str2Len));
-    CPPUNIT_ASSERT_MESSAGE(
-        message.getStr(), res1 == rtl::OUString(str2, str2Len));
-    rtl::OUStringBuffer buf2(rtl::OUString(str2, str2Len));
+    OUString res1(buf1.makeStringAndClear());
+    createMessage(message, res1, OUString(str2, str2Len));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(
+        message.getStr(), OUString(str2, str2Len), res1);
+    OUStringBuffer buf2(OUString(str2, str2Len));
     buf2.insertUtf32(2, 0x10FFFF);
-    rtl::OUString res2(buf2.makeStringAndClear());
-    createMessage(message, res2, rtl::OUString(str3, str3Len));
-    CPPUNIT_ASSERT_MESSAGE(
-        message.getStr(), res2 == rtl::OUString(str3, str3Len));
+    OUString res2(buf2.makeStringAndClear());
+    createMessage(message, res2, OUString(str3, str3Len));
+    CPPUNIT_ASSERT_EQUAL_MESSAGE(
+        message.getStr(), OUString(str3, str3Len), res2);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

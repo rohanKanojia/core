@@ -37,18 +37,15 @@ Atom::Atom( const DffRecordHeader& rRecordHeader, SvStream& rStream )
             Atom* pLastAtom = nullptr;
 
             // retrieve file size (to allow sanity checks)
-            const sal_Size nStreamPos = mrStream.Tell();
-            mrStream.Seek( STREAM_SEEK_TO_END );
-            const sal_Size nStreamSize = mrStream.Tell();
-            mrStream.Seek( nStreamPos );
+            sal_uInt64 const nStreamSize = mrStream.TellEnd();
 
-            while( (mrStream.GetError() == 0 )
+            while( (mrStream.GetError() == ERRCODE_NONE )
                 && ( mrStream.Tell() < nStreamSize )
                 && ( mrStream.Tell() < maRecordHeader.GetRecEndFilePos() ) )
             {
                 ReadDffRecordHeader( mrStream, aChildHeader );
 
-                if( mrStream.GetError() == 0 )
+                if( mrStream.GetError() == ERRCODE_NONE )
                 {
                     Atom* pAtom = new Atom( aChildHeader, mrStream );
 
@@ -82,7 +79,7 @@ Atom* Atom::import( const DffRecordHeader& rRootRecordHeader, SvStream& rStCtrl 
 {
     Atom* pRootAtom = new Atom( rRootRecordHeader, rStCtrl );
 
-    if( rStCtrl.GetError() == 0 )
+    if( rStCtrl.GetError() == ERRCODE_NONE )
     {
         return pRootAtom;
     }

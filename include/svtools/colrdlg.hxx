@@ -21,34 +21,33 @@
 #define INCLUDED_SVTOOLS_COLRDLG_HXX
 
 #include <svtools/svtdllapi.h>
-#include <vcl/vclptr.hxx>
 #include <tools/color.hxx>
 
-namespace vcl { class Window; }
+namespace weld { class Window; }
 
 namespace svtools
 {
-    // SELECT is the default
-    enum ColorPickerMode { ColorPickerMode_SELECT = 0, ColorPickerMode_ADD = 1, ColorPickerMode_MODIFY = 2 };
+    // Select is the default.
+    // These values must match the constants used in ColorPickerDialog in cui/source/dialogs/colorpicker.cxx
+    enum class ColorPickerMode { Select = 0, Modify = 2 };
 }
 
-class SVT_DLLPUBLIC SvColorDialog
+class SVT_DLLPUBLIC SvColorDialog final
 {
 public:
-    SvColorDialog( vcl::Window* pParent );
-    virtual ~SvColorDialog();
+    SvColorDialog();
+    ~SvColorDialog();
 
     void            SetColor( const Color& rColor );
     const Color&    GetColor() const { return maColor;}
 
-    void            SetMode( sal_Int16 eMode );
+    void            SetMode( svtools::ColorPickerMode eMode );
 
-    short           Execute();
+    short           Execute(weld::Window* pParent);
 
 private:
-    VclPtr<vcl::Window> mpParent;
     Color               maColor;
-    sal_Int16           meMode;
+    svtools::ColorPickerMode meMode;
 };
 
 #endif // INCLUDED_SVTOOLS_COLRDLG_HXX

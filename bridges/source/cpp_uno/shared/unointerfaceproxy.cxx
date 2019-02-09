@@ -17,14 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "bridges/cpp_uno/shared/unointerfaceproxy.hxx"
+#include <unointerfaceproxy.hxx>
 
-#include "bridges/cpp_uno/shared/bridge.hxx"
+#include <bridge.hxx>
 
-#include "com/sun/star/uno/XInterface.hpp"
-#include "osl/interlck.h"
-#include "typelib/typedescription.h"
-#include "uno/dispatcher.h"
+#include <com/sun/star/uno/XInterface.hpp>
+#include <typelib/typedescription.h>
+#include <uno/dispatcher.h>
 
 namespace bridges { namespace cpp_uno { namespace shared {
 
@@ -51,8 +50,7 @@ void freeUnoInterfaceProxy(uno_ExtEnvironment * pEnv, void * pProxy)
 
 void acquireProxy(uno_Interface * pUnoI)
 {
-    if (1 == osl_atomic_increment(
-            & static_cast< UnoInterfaceProxy * >( pUnoI )->nRef ))
+    if (++static_cast< UnoInterfaceProxy * >( pUnoI )->nRef == 1)
     {
         // rebirth of proxy zombie
         // register at uno env
@@ -73,8 +71,7 @@ void acquireProxy(uno_Interface * pUnoI)
 
 void releaseProxy(uno_Interface * pUnoI)
 {
-    if (! osl_atomic_decrement(
-            & static_cast< UnoInterfaceProxy * >( pUnoI )->nRef ))
+    if (! --static_cast< UnoInterfaceProxy * >( pUnoI )->nRef )
     {
         // revoke from uno env on last release
         (*static_cast< UnoInterfaceProxy * >( pUnoI )->pBridge->getUnoEnv()->

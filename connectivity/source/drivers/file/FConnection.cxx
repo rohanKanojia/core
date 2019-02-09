@@ -21,26 +21,28 @@
 
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/typeprovider.hxx>
-#include "file/FConnection.hxx"
-#include "file/FDatabaseMetaData.hxx"
-#include "file/FDriver.hxx"
-#include "file/FStatement.hxx"
-#include "file/FPreparedStatement.hxx"
+#include <file/FConnection.hxx>
+#include <file/FDatabaseMetaData.hxx>
+#include <file/FDriver.hxx>
+#include <file/FStatement.hxx>
+#include <file/FPreparedStatement.hxx>
 #include <com/sun/star/sdbc/ColumnValue.hpp>
 #include <com/sun/star/sdbc/XRow.hpp>
 #include <com/sun/star/lang/DisposedException.hpp>
 #include <com/sun/star/container/XChild.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <com/sun/star/ucb/XContent.hpp>
 #include <com/sun/star/ucb/XContentIdentifier.hpp>
 #include <tools/urlobj.hxx>
-#include "file/FCatalog.hxx"
+#include <file/FCatalog.hxx>
 #include <unotools/pathoptions.hxx>
 #include <ucbhelper/content.hxx>
 #include <connectivity/dbcharset.hxx>
 #include <connectivity/dbexception.hxx>
+#include <o3tl/any.hxx>
 #include <osl/thread.h>
 #include <osl/nlsupport.h>
-#include "resource/file_res.hrc"
+#include <strings.hrc>
 
 using namespace connectivity::file;
 using namespace dbtools;
@@ -56,9 +58,7 @@ using namespace ::ucbhelper;
 typedef connectivity::OMetaConnection OConnection_BASE;
 
 OConnection::OConnection(OFileDriver*   _pDriver)
-    : OSubComponent<OConnection, OConnection_BASE>(static_cast<cppu::OWeakObject*>(_pDriver), this)
-    , m_pDriver(_pDriver)
-    , m_bClosed(false)
+    : m_pDriver(_pDriver)
     , m_bAutoCommit(false)
     , m_bReadOnly(false)
     , m_bShowDeleted(false)
@@ -75,15 +75,9 @@ OConnection::~OConnection()
         close();
 }
 
-void SAL_CALL OConnection::release() throw()
-{
-    relase_ChildImpl();
-}
-
-
 bool OConnection::matchesExtension( const OUString& _rExt ) const
 {
-    if ( isCaseSensitveExtension() )
+    if ( isCaseSensitiveExtension() )
         return ( getExtension() == _rExt );
 
     OUString sMyExtension( getExtension().toAsciiLowerCase() );
@@ -94,10 +88,6 @@ bool OConnection::matchesExtension( const OUString& _rExt ) const
 
 
 void OConnection::construct(const OUString& url,const Sequence< PropertyValue >& info)
-    throw( css::sdbc::SQLException,
-           css::uno::RuntimeException,
-           css::uno::DeploymentException,
-           std::exception)
 {
     osl_atomic_increment( &m_refCount );
 
@@ -110,15 +100,22 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
             OSL_VERIFY( pIter->Value >>= aExt );
         else if( pIter->Name == "CharSet" )
         {
-            OUString sIanaName;
-            OSL_VERIFY( pIter->Value >>= sIanaName );
-
-            ::dbtools::OCharsetMap aLookupIanaName;
-            ::dbtools::OCharsetMap::const_iterator aLookup = aLookupIanaName.find(sIanaName, ::dbtools::OCharsetMap::IANA());
-            if (aLookup != aLookupIanaName.end())
-                m_nTextEncoding = (*aLookup).getEncoding();
+            if (auto const numeric = o3tl::tryAccess<sal_uInt16>(pIter->Value))
+            {
+                m_nTextEncoding = *numeric;
+            }
             else
-                m_nTextEncoding = RTL_TEXTENCODING_DONTKNOW;
+            {
+                OUString sIanaName;
+                OSL_VERIFY( pIter->Value >>= sIanaName );
+
+                ::dbtools::OCharsetMap aLookupIanaName;
+                ::dbtools::OCharsetMap::const_iterator aLookup = aLookupIanaName.findIanaName(sIanaName);
+                if (aLookup != aLookupIanaName.end())
+                    m_nTextEncoding = (*aLookup).getEncoding();
+                else
+                    m_nTextEncoding = RTL_TEXTENCODING_DONTKNOW;
+            }
         }
         else if( pIter->Name == "ShowDeleted" )
         {
@@ -145,7 +142,7 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
 
         aURL.SetSmartURL(aFileName);
 
-        setURL(aURL.GetMainURL(INetURLObject::NO_DECODE));
+        setURL(aURL.GetMainURL(INetURLObject::DecodeMechanism::NONE));
     }
 
     if ( m_nTextEncoding == RTL_TEXTENCODING_DONTKNOW )
@@ -191,11 +188,11 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
             }
             else
             {
-                OSL_FAIL("OConnection::construct: ::ucbhelper::Content isn't a folder nor a document! How that?!");
+                OSL_FAIL("OConnection::construct: ::ucbhelper::Content is neither a folder nor a document! How's that?!");
                 throw SQLException();
             }
         }
-        catch(Exception& e) // a exception is thrown when no file exists
+        catch(Exception& e) // an exception is thrown when no file exists
         {
             throwUrlNotValid(getURL(),e.Message);
         }
@@ -218,7 +215,7 @@ void OConnection::construct(const OUString& url,const Sequence< PropertyValue >&
 IMPLEMENT_SERVICE_INFO(OConnection, "com.sun.star.sdbc.drivers.file.Connection", "com.sun.star.sdbc.Connection")
 
 
-Reference< XStatement > SAL_CALL OConnection::createStatement(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XStatement > SAL_CALL OConnection::createStatement(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -229,7 +226,7 @@ Reference< XStatement > SAL_CALL OConnection::createStatement(  ) throw(SQLExcep
     return xReturn;
 }
 
-Reference< XPreparedStatement > SAL_CALL OConnection::prepareStatement( const OUString& sql ) throw(SQLException, RuntimeException, std::exception)
+Reference< XPreparedStatement > SAL_CALL OConnection::prepareStatement( const OUString& sql )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -242,18 +239,18 @@ Reference< XPreparedStatement > SAL_CALL OConnection::prepareStatement( const OU
     return pStmt;
 }
 
-Reference< XPreparedStatement > SAL_CALL OConnection::prepareCall( const OUString& /*sql*/ ) throw(SQLException, RuntimeException, std::exception)
+Reference< XPreparedStatement > SAL_CALL OConnection::prepareCall( const OUString& /*sql*/ )
 {
     throwFeatureNotImplementedSQLException( "XConnection::prepareCall", *this );
     return nullptr;
 }
 
-OUString SAL_CALL OConnection::nativeSQL( const OUString& sql ) throw(SQLException, RuntimeException, std::exception)
+OUString SAL_CALL OConnection::nativeSQL( const OUString& sql )
 {
     return sql;
 }
 
-void SAL_CALL OConnection::setAutoCommit( sal_Bool autoCommit ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setAutoCommit( sal_Bool autoCommit )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -261,7 +258,7 @@ void SAL_CALL OConnection::setAutoCommit( sal_Bool autoCommit ) throw(SQLExcepti
     m_bAutoCommit = autoCommit;
 }
 
-sal_Bool SAL_CALL OConnection::getAutoCommit(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnection::getAutoCommit(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -269,22 +266,22 @@ sal_Bool SAL_CALL OConnection::getAutoCommit(  ) throw(SQLException, RuntimeExce
     return m_bAutoCommit;
 }
 
-void SAL_CALL OConnection::commit(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::commit(  )
 {
 }
 
-void SAL_CALL OConnection::rollback(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::rollback(  )
 {
 }
 
-sal_Bool SAL_CALL OConnection::isClosed(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnection::isClosed(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
 
     return OConnection_BASE::rBHelper.bDisposed;
 }
 
-Reference< XDatabaseMetaData > SAL_CALL OConnection::getMetaData(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XDatabaseMetaData > SAL_CALL OConnection::getMetaData(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -300,7 +297,7 @@ Reference< XDatabaseMetaData > SAL_CALL OConnection::getMetaData(  ) throw(SQLEx
     return xMetaData;
 }
 
-void SAL_CALL OConnection::setReadOnly( sal_Bool readOnly ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setReadOnly( sal_Bool readOnly )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -309,7 +306,7 @@ void SAL_CALL OConnection::setReadOnly( sal_Bool readOnly ) throw(SQLException, 
     m_bReadOnly = readOnly;
 }
 
-sal_Bool SAL_CALL OConnection::isReadOnly(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Bool SAL_CALL OConnection::isReadOnly(  )
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     checkDisposed(OConnection_BASE::rBHelper.bDisposed);
@@ -318,37 +315,37 @@ sal_Bool SAL_CALL OConnection::isReadOnly(  ) throw(SQLException, RuntimeExcepti
     return m_bReadOnly;
 }
 
-void SAL_CALL OConnection::setCatalog( const OUString& /*catalog*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setCatalog( const OUString& /*catalog*/ )
 {
     throwFeatureNotImplementedSQLException( "XConnection::setCatalog", *this );
 }
 
-OUString SAL_CALL OConnection::getCatalog(  ) throw(SQLException, RuntimeException, std::exception)
+OUString SAL_CALL OConnection::getCatalog(  )
 {
     return OUString();
 }
 
-void SAL_CALL OConnection::setTransactionIsolation( sal_Int32 /*level*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setTransactionIsolation( sal_Int32 /*level*/ )
 {
     throwFeatureNotImplementedSQLException( "XConnection::setTransactionIsolation", *this );
 }
 
-sal_Int32 SAL_CALL OConnection::getTransactionIsolation(  ) throw(SQLException, RuntimeException, std::exception)
+sal_Int32 SAL_CALL OConnection::getTransactionIsolation(  )
 {
     return 0;
 }
 
-Reference< XNameAccess > SAL_CALL OConnection::getTypeMap(  ) throw(SQLException, RuntimeException, std::exception)
+Reference< XNameAccess > SAL_CALL OConnection::getTypeMap(  )
 {
     return nullptr;
 }
 
-void SAL_CALL OConnection::setTypeMap( const Reference< XNameAccess >& /*typeMap*/ ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::setTypeMap( const Reference< XNameAccess >& /*typeMap*/ )
 {
 }
 
 // XCloseable
-void SAL_CALL OConnection::close(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::close(  )
 {
     {
         ::osl::MutexGuard aGuard( m_aMutex );
@@ -359,12 +356,12 @@ void SAL_CALL OConnection::close(  ) throw(SQLException, RuntimeException, std::
 }
 
 // XWarningsSupplier
-Any SAL_CALL OConnection::getWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+Any SAL_CALL OConnection::getWarnings(  )
 {
     return Any();
 }
 
-void SAL_CALL OConnection::clearWarnings(  ) throw(SQLException, RuntimeException, std::exception)
+void SAL_CALL OConnection::clearWarnings(  )
 {
 }
 
@@ -373,12 +370,9 @@ void OConnection::disposing()
     ::osl::MutexGuard aGuard(m_aMutex);
     OConnection_BASE::disposing();
 
-    m_bClosed   = true;
-m_xDir.clear();
-m_xContent.clear();
+    m_xDir.clear();
+    m_xContent.clear();
     m_xCatalog  = WeakReference< XTablesSupplier>();
-
-    dispose_ChildImpl();
 }
 
 Reference< XTablesSupplier > OConnection::createCatalog()
@@ -409,26 +403,18 @@ Reference< XDynamicResultSet > OConnection::getDir() const
     return xContent;
 }
 
-sal_Int64 SAL_CALL OConnection::getSomething( const Sequence< sal_Int8 >& rId ) throw (RuntimeException, std::exception)
+sal_Int64 SAL_CALL OConnection::getSomething( const Sequence< sal_Int8 >& rId )
 {
     return (rId.getLength() == 16 && 0 == memcmp(getUnoTunnelImplementationId().getConstArray(),  rId.getConstArray(), 16 ) )
         ? reinterpret_cast< sal_Int64 >( this )
-        : (sal_Int64)0;
+        : sal_Int64(0);
 }
 
 Sequence< sal_Int8 > OConnection::getUnoTunnelImplementationId()
 {
-    static ::cppu::OImplementationId * pId = nullptr;
-    if (! pId)
-    {
-        ::osl::MutexGuard aGuard( ::osl::Mutex::getGlobalMutex() );
-        if (! pId)
-        {
-            static ::cppu::OImplementationId aId;
-            pId = &aId;
-        }
-    }
-    return pId->getImplementationId();
+    static ::cppu::OImplementationId implId;
+
+    return implId.getImplementationId();
 }
 
 void OConnection::throwUrlNotValid(const OUString & _rsUrl,const OUString & _rsMessage)

@@ -23,12 +23,12 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <com/sun/star/table/CellContentType.hpp>
 
-#include "svx/svdotable.hxx"
-#include "svx/svdobj.hxx"
-#include "svx/svdundo.hxx"
+#include <svx/svdotable.hxx>
+#include <svx/svdobj.hxx>
+#include <svx/svdundo.hxx>
 #include <svx/sdrobjectuser.hxx>
 
-#include "celltypes.hxx"
+#include <celltypes.hxx>
 
 namespace sdr { namespace properties {
     class TextProperties;
@@ -42,8 +42,8 @@ namespace sdr { namespace table {
 class CellUndo : public SdrUndoAction, public sdr::ObjectUser
 {
 public:
-    CellUndo( const SdrObjectWeakRef& xObjRef, const CellRef& xCell );
-    virtual ~CellUndo();
+    CellUndo( const tools::WeakReference<SdrObject>& xObjRef, const CellRef& xCell );
+    virtual ~CellUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
@@ -58,8 +58,6 @@ private:
         sdr::properties::TextProperties* mpProperties;
         OutlinerParaObject* mpOutlinerParaObject;
 
-        css::table::CellContentType mnCellContentType;
-
         OUString        msFormula;
         double          mfValue;
         ::sal_Int32     mnError;
@@ -70,7 +68,6 @@ private:
         Data()
             : mpProperties(nullptr)
             , mpOutlinerParaObject(nullptr)
-            , mnCellContentType(css::table::CellContentType_EMPTY)
             , mfValue(0)
             , mnError(0)
             , mbMerged(false)
@@ -83,7 +80,7 @@ private:
     void setDataToCell( const Data& rData );
     void getDataFromCell( Data& rData );
 
-    SdrObjectWeakRef mxObjRef;
+    tools::WeakReference<SdrObject> mxObjRef;
     CellRef mxCell;
     Data maUndoData;
     Data maRedoData;
@@ -95,14 +92,14 @@ class InsertRowUndo : public SdrUndoAction
 {
 public:
     InsertRowUndo( const TableModelRef& xTable, sal_Int32 nIndex, RowVector& aNewRows );
-    virtual ~InsertRowUndo();
+    virtual ~InsertRowUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
 
 private:
     TableModelRef mxTable;
-    sal_Int32 mnIndex;
+    sal_Int32 const mnIndex;
     RowVector maRows;
     bool mbUndo;
 };
@@ -112,14 +109,14 @@ class RemoveRowUndo : public SdrUndoAction
 {
 public:
     RemoveRowUndo( const TableModelRef& xTable, sal_Int32 nIndex, RowVector& aRemovedRows );
-    virtual ~RemoveRowUndo();
+    virtual ~RemoveRowUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
 
 private:
     TableModelRef mxTable;
-    sal_Int32 mnIndex;
+    sal_Int32 const mnIndex;
     RowVector maRows;
     bool mbUndo;
 };
@@ -129,14 +126,14 @@ class InsertColUndo : public SdrUndoAction
 {
 public:
     InsertColUndo( const TableModelRef& xTable, sal_Int32 nIndex, ColumnVector& aNewCols, CellVector& aCells );
-    virtual ~InsertColUndo();
+    virtual ~InsertColUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
 
 private:
     TableModelRef mxTable;
-    sal_Int32 mnIndex;
+    sal_Int32 const mnIndex;
     ColumnVector maColumns;
     CellVector maCells;
     bool mbUndo;
@@ -147,14 +144,14 @@ class RemoveColUndo : public SdrUndoAction
 {
 public:
     RemoveColUndo( const TableModelRef& xTable, sal_Int32 nIndex, ColumnVector& aNewCols, CellVector& aCells );
-    virtual ~RemoveColUndo();
+    virtual ~RemoveColUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
 
 private:
     TableModelRef mxTable;
-    sal_Int32 mnIndex;
+    sal_Int32 const mnIndex;
     ColumnVector maColumns;
     CellVector maCells;
     bool mbUndo;
@@ -165,7 +162,7 @@ class TableColumnUndo : public SdrUndoAction
 {
 public:
     explicit TableColumnUndo( const TableColumnRef& xCol );
-    virtual ~TableColumnUndo();
+    virtual ~TableColumnUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
@@ -205,7 +202,7 @@ class TableRowUndo : public SdrUndoAction
 {
 public:
     explicit TableRowUndo( const TableRowRef& xRow );
-    virtual ~TableRowUndo();
+    virtual ~TableRowUndo() override;
 
     virtual void            Undo() override;
     virtual void            Redo() override;
@@ -240,7 +237,7 @@ public:
     virtual void            Redo() override;
 
 private:
-    SdrObjectWeakRef mxObjRef;
+    tools::WeakReference<SdrTableObj> mxObjRef;
 
     struct Data
     {

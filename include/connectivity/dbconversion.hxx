@@ -67,19 +67,21 @@ namespace dbtools
 {
     namespace DBTypeConversion
     {
-        OOO_DLLPUBLIC_DBTOOLS css::util::Date getStandardDate();
+        OOO_DLLPUBLIC_DBTOOLS css::util::Date const & getStandardDate();
+        /// @throws css::lang::IllegalArgumentException
         OOO_DLLPUBLIC_DBTOOLS void setValue(const css::uno::Reference< css::sdb::XColumnUpdate>& xVariant,
                                     const css::uno::Reference< css::util::XNumberFormatter>& xFormatter,
                                     const css::util::Date& rNullDate,
                                     const OUString& rString,
                                     sal_Int32 nKey,
                                     sal_Int16 nFieldType,
-                                    sal_Int16 nKeyType) throw(css::lang::IllegalArgumentException);
+                                    sal_Int16 nKeyType);
 
+        /// @throws css::lang::IllegalArgumentException
         OOO_DLLPUBLIC_DBTOOLS void setValue(const css::uno::Reference< css::sdb::XColumnUpdate>& xVariant,
                              const css::util::Date& rNullDate,
                              const double& rValue,
-                             sal_Int16 nKeyType) throw(css::lang::IllegalArgumentException);
+                             sal_Int16 nKeyType);
 
         OOO_DLLPUBLIC_DBTOOLS double getValue( const css::uno::Reference< css::sdb::XColumn>& xVariant, const css::util::Date& rNullDate );
 
@@ -133,7 +135,7 @@ namespace dbtools
         // return the DateTime in the format %04d-%02d-%02d %02d:%02d:%02d.%09d
         OOO_DLLPUBLIC_DBTOOLS OUString toDateTimeString(const css::util::DateTime& _rDateTime);
         // return the any in an sql standard format
-        OOO_DLLPUBLIC_DBTOOLS OUString toSQLString(sal_Int32 eType, const css::uno::Any& _rVal, bool bQuote,
+        OOO_DLLPUBLIC_DBTOOLS OUString toSQLString(sal_Int32 eType, const css::uno::Any& _rVal,
             const css::uno::Reference< css::script::XTypeConverter >&  _rxTypeConverter);
 
         /** converts a Unicode string into a 8-bit string, using the given encoding

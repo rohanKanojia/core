@@ -19,9 +19,7 @@
 
 #include <unotools/linguprops.hxx>
 #include <unotools/lingucfg.hxx>
-#include <com/sun/star/embed/EmbedStates.hpp>
 #include <hintids.hxx>
-#include <com/sun/star/util/XCloseable.hpp>
 #include <sfx2/progress.hxx>
 #include <svx/svdmodel.hxx>
 #include <svx/svdpage.hxx>
@@ -73,6 +71,8 @@
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
 #include <cntfrm.hxx>
+#include <txtfrm.hxx>
+#include <notxtfrm.hxx>
 #include <flyfrm.hxx>
 #include <fesh.hxx>
 #include <docsh.hxx>
@@ -93,7 +93,7 @@
 #include <ftninfo.hxx>
 #include <pagedesc.hxx>
 #include <PostItMgr.hxx>
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <tools/datetimeutils.hxx>
 
 #include <unoframe.hxx>
@@ -127,8 +127,10 @@ SdrObject* SwDoc::CloneSdrObj( const SdrObject& rObj, bool bMoveWithinDoc,
         getIDocumentDrawModelAccess().GetDrawModel()->InsertPage( pPg );
     }
 
-    SdrObject *pObj = rObj.Clone();
-    if( bMoveWithinDoc && FmFormInventor == pObj->GetObjInventor() )
+    // TTTT Clone directly to target SdrModel
+    SdrObject *pObj(rObj.CloneSdrObject(*getIDocumentDrawModelAccess().GetDrawModel()));
+
+    if( bMoveWithinDoc && SdrInventor::FmForm == pObj->GetObjInventor() )
     {
         // We need to preserve the Name for Controls
         uno::Reference< awt::XControlModel >  xModel = static_cast<SdrUnoObj*>(pObj)->GetUnoControlModel();
@@ -161,7 +163,7 @@ SdrObject* SwDoc::CloneSdrObj( const SdrObject& rObj, bool bMoveWithinDoc,
     return pObj;
 }
 
-SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
+SwFlyFrameFormat* SwDoc::MakeFlySection_( const SwPosition& rAnchPos,
                                     const SwContentNode& rNode,
                                     RndStdIds eRequestId,
                                     const SfxItemSet* pFlySet,
@@ -174,8 +176,8 @@ SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
     if( !mbInReading )
         switch( rNode.GetNodeType() )
         {
-        case ND_GRFNODE:        sName = GetUniqueGrfName();     break;
-        case ND_OLENODE:        sName = GetUniqueOLEName();     break;
+        case SwNodeType::Grf:        sName = GetUniqueGrfName();     break;
+        case SwNodeType::Ole:        sName = GetUniqueOLEName();     break;
         default:                sName = GetUniqueFrameName();   break;
         }
     SwFlyFrameFormat* pFormat = MakeFlyFrameFormat( sName, pFrameFormat );
@@ -208,19 +210,19 @@ SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
     // #i107811# Assure that at-page anchored fly frames have a page num or a
     // content anchor set.
     if ( !pAnchor ||
-         ( FLY_AT_PAGE != pAnchor->GetAnchorId() &&
+         ( RndStdIds::FLY_AT_PAGE != pAnchor->GetAnchorId() &&
            !pAnchor->GetContentAnchor() ) ||
-         ( FLY_AT_PAGE == pAnchor->GetAnchorId() &&
+         ( RndStdIds::FLY_AT_PAGE == pAnchor->GetAnchorId() &&
            !pAnchor->GetContentAnchor() &&
            pAnchor->GetPageNum() == 0 ) )
     {
         // set it again, needed for Undo
         SwFormatAnchor aAnch( pFormat->GetAnchor() );
-        if (pAnchor && (FLY_AT_FLY == pAnchor->GetAnchorId()))
+        if (pAnchor && (RndStdIds::FLY_AT_FLY == pAnchor->GetAnchorId()))
         {
             SwPosition aPos( *rAnchPos.nNode.GetNode().FindFlyStartNode() );
             aAnch.SetAnchor( &aPos );
-            eAnchorId = FLY_AT_FLY;
+            eAnchorId = RndStdIds::FLY_AT_FLY;
         }
         else
         {
@@ -231,7 +233,7 @@ SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
             }
 
             eAnchorId = aAnch.GetAnchorId();
-            if ( FLY_AT_PAGE != eAnchorId || !pAnchor || aAnch.GetPageNum() == 0)
+            if ( RndStdIds::FLY_AT_PAGE != eAnchorId || !pAnchor || aAnch.GetPageNum() == 0)
             {
                 aAnch.SetAnchor( &rAnchPos );
             }
@@ -241,7 +243,7 @@ SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
     else
         eAnchorId = pFormat->GetAnchor().GetAnchorId();
 
-    if ( FLY_AS_CHAR == eAnchorId )
+    if ( RndStdIds::FLY_AS_CHAR == eAnchorId )
     {
         const sal_Int32 nStt = rAnchPos.nContent.GetIndex();
         SwTextNode * pTextNode = rAnchPos.nNode.GetNode().GetTextNode();
@@ -268,7 +270,7 @@ SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
             // Set size
              Size aSize( pNoTextNode->GetTwipSize() );
             if( MINFLY > aSize.Width() )
-                aSize.Width() = DEF_FLY_WIDTH;
+                aSize.setWidth( DEF_FLY_WIDTH );
             aFormatSize.SetWidth( aSize.Width() );
             if( aSize.Height() )
             {
@@ -288,7 +290,7 @@ SwFlyFrameFormat* SwDoc::_MakeFlySection( const SwPosition& rAnchPos,
         sal_uLong nNodeIdx = rAnchPos.nNode.GetIndex();
         const sal_Int32 nCntIdx = rAnchPos.nContent.GetIndex();
         GetIDocumentUndoRedo().AppendUndo(
-            new SwUndoInsLayFormat( pFormat, nNodeIdx, nCntIdx ));
+            std::make_unique<SwUndoInsLayFormat>( pFormat, nNodeIdx, nCntIdx ));
     }
 
     getIDocumentState().SetModified();
@@ -301,7 +303,7 @@ SwFlyFrameFormat* SwDoc::MakeFlySection( RndStdIds eAnchorType,
                                     SwFrameFormat* pFrameFormat, bool bCalledFromShell )
 {
     SwFlyFrameFormat* pFormat = nullptr;
-    if ( !pAnchorPos && (FLY_AT_PAGE != eAnchorType) )
+    if ( !pAnchorPos && (RndStdIds::FLY_AT_PAGE != eAnchorType) )
     {
         const SwFormatAnchor* pAnch;
         if( (pFlySet && SfxItemState::SET == pFlySet->GetItemState(
@@ -309,7 +311,7 @@ SwFlyFrameFormat* SwDoc::MakeFlySection( RndStdIds eAnchorType,
             ( pFrameFormat && SfxItemState::SET == pFrameFormat->GetItemState(
                 RES_ANCHOR, true, reinterpret_cast<const SfxPoolItem**>(&pAnch) )) )
         {
-            if ( (FLY_AT_PAGE != pAnch->GetAnchorId()) )
+            if ( RndStdIds::FLY_AT_PAGE != pAnch->GetAnchorId() )
             {
                 pAnchorPos = pAnch->GetContentAnchor();
             }
@@ -330,7 +332,10 @@ SwFlyFrameFormat* SwDoc::MakeFlySection( RndStdIds eAnchorType,
             (SwNodeIndex( GetNodes().GetEndOfAutotext()),
              getIDocumentStylePoolAccess().GetTextCollFromPool( nCollId ));
         SwContentNode * pAnchorNode = pAnchorPos->nNode.GetNode().GetContentNode();
-        assert(pAnchorNode); // pAnchorNode from cursor, must be valid
+        // pAnchorNode from cursor must be valid, unless a whole table is selected (in which
+        // case the node is not a content node, and pAnchorNode is nullptr). In the latter case,
+        // bCalledFromShell is false.
+        assert(!bCalledFromShell || pAnchorNode);
 
         const SfxPoolItem * pItem = nullptr;
 
@@ -338,10 +343,10 @@ SwFlyFrameFormat* SwDoc::MakeFlySection( RndStdIds eAnchorType,
             SfxItemState::SET == pAnchorNode->GetSwAttrSet().
             GetItemState(RES_PARATR_ADJUST, true, &pItem))
         {
-            static_cast<SwContentNode *>(pNewTextNd)->SetAttr(*pItem);
+            pNewTextNd->SetAttr(*pItem);
         }
 
-         pFormat = _MakeFlySection( *pAnchorPos, *pNewTextNd,
+         pFormat = MakeFlySection_( *pAnchorPos, *pNewTextNd,
                                 eAnchorType, pFlySet, pFrameFormat );
     }
     return pFormat;
@@ -351,9 +356,9 @@ SwFlyFrameFormat* SwDoc::MakeFlyAndMove( const SwPaM& rPam, const SfxItemSet& rS
                                     const SwSelBoxes* pSelBoxes,
                                     SwFrameFormat *pParent )
 {
-    const SwFormatAnchor& rAnch = static_cast<const SwFormatAnchor&>(rSet.Get( RES_ANCHOR ));
+    const SwFormatAnchor& rAnch = rSet.Get( RES_ANCHOR );
 
-    GetIDocumentUndoRedo().StartUndo( UNDO_INSLAYFMT, nullptr );
+    GetIDocumentUndoRedo().StartUndo( SwUndoId::INSLAYFMT, nullptr );
 
     SwFlyFrameFormat* pFormat = MakeFlySection( rAnch.GetAnchorId(), rPam.GetPoint(),
                                         &rSet, pParent );
@@ -460,7 +465,7 @@ SwFlyFrameFormat* SwDoc::MakeFlyAndMove( const SwPaM& rPam, const SfxItemSet& rS
 
     getIDocumentState().SetModified();
 
-    GetIDocumentUndoRedo().EndUndo( UNDO_INSLAYFMT, nullptr );
+    GetIDocumentUndoRedo().EndUndo( SwUndoId::INSLAYFMT, nullptr );
 
     return pFormat;
 }
@@ -483,7 +488,7 @@ static bool lcl_TstFlyRange( const SwPaM* pPam, const SwPosition* pFlyPos,
         const SwPosition* pPaMEnd = pTmp->End();
         const sal_uInt32 nPamStartIndex = pPaMStart->nNode.GetIndex();
         const sal_uInt32 nPamEndIndex = pPaMEnd->nNode.GetIndex();
-        if (FLY_AT_PARA == nAnchorId)
+        if (RndStdIds::FLY_AT_PARA == nAnchorId)
             bOk = (nPamStartIndex < nFlyIndex && nPamEndIndex > nFlyIndex) ||
                (((nPamStartIndex == nFlyIndex) && (pPaMStart->nContent.GetIndex() == 0)) &&
                (nPamEndIndex > nFlyIndex));
@@ -502,7 +507,7 @@ static bool lcl_TstFlyRange( const SwPaM* pPam, const SwPosition* pFlyPos,
                      (nPamEndContentIndex > nFlyContentIndex )));
         }
 
-    } while( !bOk && pPam != ( pTmp = static_cast<const SwPaM*>(pTmp->GetNext()) ));
+    } while( !bOk && pPam != ( pTmp = pTmp->GetNext() ));
     return bOk;
 }
 
@@ -521,15 +526,15 @@ SwPosFlyFrames SwDoc::GetAllFlyFormats( const SwPaM* pCmpRange, bool bDrawAlso,
             const SwFormatAnchor& rAnchor = pFly->GetAnchor();
             SwPosition const*const pAPos = rAnchor.GetContentAnchor();
             if (pAPos &&
-                ((FLY_AT_PARA == rAnchor.GetAnchorId()) ||
-                 (FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
-                 (FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
-                 ((FLY_AS_CHAR == rAnchor.GetAnchorId()) && bAsCharAlso)))
+                ((RndStdIds::FLY_AT_PARA == rAnchor.GetAnchorId()) ||
+                 (RndStdIds::FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
+                 (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
+                 ((RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId()) && bAsCharAlso)))
             {
                 if( pCmpRange &&
                     !lcl_TstFlyRange( pCmpRange, pAPos, rAnchor.GetAnchorId() ))
                         continue;       // not a valid FlyFrame
-                aRetval.insert(SwPosFlyFramePtr(new SwPosFlyFrame(pAPos->nNode, pFly, aRetval.size())));
+                aRetval.insert(std::make_shared<SwPosFlyFrame>(pAPos->nNode, pFly, aRetval.size()));
             }
         }
     }
@@ -547,9 +552,8 @@ SwPosFlyFrames SwDoc::GetAllFlyFormats( const SwPaM* pCmpRange, bool bDrawAlso,
         if( pPage->GetSortedObjs() )
         {
             const SwSortedObjs &rObjs = *pPage->GetSortedObjs();
-            for( size_t i = 0; i < rObjs.size(); ++i)
+            for(SwAnchoredObject* pAnchoredObj : rObjs)
             {
-                SwAnchoredObject* pAnchoredObj = rObjs[i];
                 SwFrameFormat *pFly;
                 if ( dynamic_cast<const SwFlyFrame*>( pAnchoredObj) !=  nullptr )
                     pFly = &(pAnchoredObj->GetFrameFormat());
@@ -559,9 +563,9 @@ SwPosFlyFrames SwDoc::GetAllFlyFormats( const SwPaM* pCmpRange, bool bDrawAlso,
                     continue;
 
                 const SwFormatAnchor& rAnchor = pFly->GetAnchor();
-                if ((FLY_AT_PARA != rAnchor.GetAnchorId()) &&
-                    (FLY_AT_FLY  != rAnchor.GetAnchorId()) &&
-                    (FLY_AT_CHAR != rAnchor.GetAnchorId()))
+                if ((RndStdIds::FLY_AT_PARA != rAnchor.GetAnchorId()) &&
+                    (RndStdIds::FLY_AT_FLY  != rAnchor.GetAnchorId()) &&
+                    (RndStdIds::FLY_AT_CHAR != rAnchor.GetAnchorId()))
                 {
                     const SwContentFrame * pContentFrame = pPage->FindFirstBodyContent();
                     if ( !pContentFrame )
@@ -578,8 +582,10 @@ SwPosFlyFrames SwDoc::GetAllFlyFormats( const SwPaM* pCmpRange, bool bDrawAlso,
                     }
                     if ( pContentFrame )
                     {
-                        SwNodeIndex aIdx( *pContentFrame->GetNode() );
-                        aRetval.insert(SwPosFlyFramePtr(new SwPosFlyFrame(aIdx, pFly, aRetval.size())));
+                        SwNodeIndex aIdx( pContentFrame->IsTextFrame()
+                            ? *static_cast<SwTextFrame const*>(pContentFrame)->GetTextNodeFirst()
+                            : *static_cast<SwNoTextFrame const*>(pContentFrame)->GetNode() );
+                        aRetval.insert(std::make_shared<SwPosFlyFrame>(aIdx, pFly, aRetval.size()));
                     }
                 }
             }
@@ -647,7 +653,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
     OSL_ENSURE( nId == USHRT_MAX  || nId < rDoc.getIDocumentFieldsAccess().GetFieldTypes()->size(),
             "FieldType index out of bounds." );
     SwFieldType *pType = (nId != USHRT_MAX) ? (*rDoc.getIDocumentFieldsAccess().GetFieldTypes())[nId] : nullptr;
-    OSL_ENSURE(!pType || pType->Which() == RES_SETEXPFLD, "wrong Id for Label");
+    OSL_ENSURE(!pType || pType->Which() == SwFieldIds::SetExp, "wrong Id for Label");
 
     SwTextFormatColl * pColl = nullptr;
     if( pType )
@@ -675,7 +681,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
     {
         case LTYPE_TABLE:
             bTable = true;
-            // no break here
+            [[fallthrough]];
         case LTYPE_FLY:
             // At the FlySection's Beginning/End insert the corresponding Node with its Field.
             // The Frame is created automatically.
@@ -733,7 +739,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
 
                 /* #i6447#: Only the selected items are copied from the old
                    format. */
-                SfxItemSet* pNewSet = pNewFormat->GetAttrSet().Clone();
+                std::unique_ptr<SfxItemSet> pNewSet = pNewFormat->GetAttrSet().Clone();
 
                 // Copy only the set attributes.
                 // The others should apply from the Templates.
@@ -794,7 +800,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
                 // To avoid this, we disconnect the attribute from the Format.
 
                 const SwFormatAnchor& rAnchor = pNewFormat->GetAnchor();
-                if ( FLY_AS_CHAR == rAnchor.GetAnchorId() )
+                if ( RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId() )
                 {
                     const SwPosition *pPos = rAnchor.GetContentAnchor();
                     SwTextNode *pTextNode = pPos->nNode.GetNode().GetTextNode();
@@ -803,9 +809,11 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
                     SwTextAttr * const pHint =
                         pTextNode->GetTextAttrForCharAt(nIdx, RES_TXTATR_FLYCNT);
 
-                    OSL_ENSURE( pHint && pHint->Which() == RES_TXTATR_FLYCNT,
+                    assert(pHint && "Missing Hint.");
+
+                    OSL_ENSURE( pHint->Which() == RES_TXTATR_FLYCNT,
                                 "Missing FlyInCnt-Hint." );
-                    OSL_ENSURE( pHint && pHint->GetFlyCnt().GetFrameFormat() == pOldFormat,
+                    OSL_ENSURE( pHint->GetFlyCnt().GetFrameFormat() == pOldFormat,
                                 "Wrong TextFlyCnt-Hint." );
 
                     const_cast<SwFormatFlyCnt&>(pHint->GetFlyCnt()).SetFlyFormat(
@@ -814,10 +822,10 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
 
                 // The old one should not have a flow and it should be adjusted to above and
                 // middle.
-                // Also, the width should be 100% and it should also adjust the hight, if changed.
+                // Also, the width should be 100% and it should also adjust the height, if changed.
                 pNewSet->ClearItem();
 
-                pNewSet->Put( SwFormatSurround( SURROUND_NONE ) );
+                pNewSet->Put( SwFormatSurround( css::text::WrapTextMode_NONE ) );
                 pNewSet->Put( SvxOpaqueItem( RES_OPAQUE, true ) );
 
                 sal_Int16 eVert = bBefore ? text::VertOrientation::BOTTOM : text::VertOrientation::TOP;
@@ -852,7 +860,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
                 pNewSet->Put( SvxULSpaceItem(RES_UL_SPACE) );
 
                 // The old one is paragraph-bound to the paragraph in the new one.
-                SwFormatAnchor aAnch( FLY_AT_PARA );
+                SwFormatAnchor aAnch( RndStdIds::FLY_AT_PARA );
                 SwNodeIndex aAnchIdx( *pNewFormat->GetContent().GetContentIdx(), 1 );
                 pNew = aAnchIdx.GetNode().GetTextNode();
                 SwPosition aPos( aAnchIdx );
@@ -864,7 +872,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
                 else
                     pOldFormat->SetFormatAttr( *pNewSet );
 
-                delete pNewSet;
+                pNewSet.reset();
 
                 // Have only the FlyFrames created.
                 // We leave this to established methods (especially for InCntFlys).
@@ -923,7 +931,7 @@ lcl_InsertLabel(SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable,
                 SwCharFormat* pCharFormat = rDoc.FindCharFormatByName(rCharacterStyle);
                 if( !pCharFormat )
                 {
-                    const sal_uInt16 nMyId = SwStyleNameMapper::GetPoolIdFromUIName(rCharacterStyle, nsSwGetPoolIdFromName::GET_POOLID_CHRFMT);
+                    const sal_uInt16 nMyId = SwStyleNameMapper::GetPoolIdFromUIName(rCharacterStyle, SwGetPoolIdFromName::ChrFmt);
                     pCharFormat = rDoc.getIDocumentStylePoolAccess().GetCharFormatFromPool( nMyId );
                 }
                 if (pCharFormat)
@@ -967,21 +975,21 @@ SwDoc::InsertLabel(
         OUString const& rCharacterStyle,
         bool const bCpyBrd )
 {
-    SwUndoInsertLabel * pUndo(nullptr);
+    std::unique_ptr<SwUndoInsertLabel> pUndo;
     if (GetIDocumentUndoRedo().DoesUndo())
     {
-        pUndo = new SwUndoInsertLabel(
+        pUndo.reset(new SwUndoInsertLabel(
                         eType, rText, rSeparator, rNumberingSeparator,
-                        bBefore, nId, rCharacterStyle, bCpyBrd );
+                        bBefore, nId, rCharacterStyle, bCpyBrd, this ));
     }
 
-    SwFlyFrameFormat *const pNewFormat = lcl_InsertLabel(*this, mpTextFormatCollTable, pUndo,
+    SwFlyFrameFormat *const pNewFormat = lcl_InsertLabel(*this, mpTextFormatCollTable.get(), pUndo.get(),
             eType, rText, rSeparator, rNumberingSeparator, bBefore,
             nId, nNdIdx, rCharacterStyle, bCpyBrd);
 
     if (pUndo)
     {
-        GetIDocumentUndoRedo().AppendUndo(pUndo);
+        GetIDocumentUndoRedo().AppendUndo(std::move(pUndo));
     }
     else
     {
@@ -1008,7 +1016,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
     OSL_ENSURE( nId == USHRT_MAX  || nId < rDoc.getIDocumentFieldsAccess().GetFieldTypes()->size(),
             "FieldType index out of bounds" );
     SwFieldType *pType = nId != USHRT_MAX ? (*rDoc.getIDocumentFieldsAccess().GetFieldTypes())[nId] : nullptr;
-    OSL_ENSURE( !pType || pType->Which() == RES_SETEXPFLD, "Wrong label id" );
+    OSL_ENSURE( !pType || pType->Which() == SwFieldIds::SetExp, "Wrong label id" );
 
     SwTextFormatColl *pColl = nullptr;
     if( pType )
@@ -1050,7 +1058,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
     // The TextAttribute needs to be destroyed.
     // Unfortunately, this also destroys the Format next to the Frames.
     // To avoid this, we disconnect the attribute from the Format.
-    SfxItemSet* pNewSet = pOldFormat->GetAttrSet().Clone( false );
+    std::unique_ptr<SfxItemSet> pNewSet = pOldFormat->GetAttrSet().Clone( false );
 
     // Protect the Frame's size and position
     if ( rSdrObj.IsMoveProtect() || rSdrObj.IsResizeProtect() )
@@ -1111,7 +1119,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
     pNewFormat->SetFormatAttr( *pNewSet );
 
     const SwFormatAnchor& rAnchor = pNewFormat->GetAnchor();
-    if ( FLY_AS_CHAR == rAnchor.GetAnchorId() )
+    if ( RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId() )
     {
         const SwPosition *pPos = rAnchor.GetContentAnchor();
         SwTextNode *pTextNode = pPos->nNode.GetNode().GetTextNode();
@@ -1120,10 +1128,12 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
         SwTextAttr * const pHint =
             pTextNode->GetTextAttrForCharAt( nIdx, RES_TXTATR_FLYCNT );
 
+        assert(pHint && "Missing Hint.");
+
 #if OSL_DEBUG_LEVEL > 0
-        OSL_ENSURE( pHint && pHint->Which() == RES_TXTATR_FLYCNT,
+        OSL_ENSURE( pHint->Which() == RES_TXTATR_FLYCNT,
                     "Missing FlyInCnt-Hint." );
-        OSL_ENSURE( pHint && pHint->GetFlyCnt().
+        OSL_ENSURE( pHint->GetFlyCnt().
                     GetFrameFormat() == static_cast<SwFrameFormat*>(pOldFormat),
                     "Wrong TextFlyCnt-Hint." );
 #endif
@@ -1134,7 +1144,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
     // and it should be adjusted to above and middle.
     pNewSet->ClearItem();
 
-    pNewSet->Put( SwFormatSurround( SURROUND_NONE ) );
+    pNewSet->Put( SwFormatSurround( css::text::WrapTextMode_NONE ) );
     if (nLayerId == rDoc.getIDocumentDrawModelAccess().GetHellId())
     {
     // Consider drawing objects in the 'invisible' hell layer
@@ -1152,7 +1162,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
     pNewSet->Put( SwFormatHoriOrient( 0, text::HoriOrientation::CENTER, text::RelOrientation::FRAME ) );
 
     // The old one is paragraph-bound to the new one's paragraph.
-    SwFormatAnchor aAnch( FLY_AT_PARA );
+    SwFormatAnchor aAnch( RndStdIds::FLY_AT_PARA );
     SwNodeIndex aAnchIdx( *pNewFormat->GetContent().GetContentIdx(), 1 );
     pNew = aAnchIdx.GetNode().GetTextNode();
     SwPosition aPos( aAnchIdx );
@@ -1168,7 +1178,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
     else
         pOldFormat->SetFormatAttr( *pNewSet );
 
-    delete pNewSet;
+    pNewSet.reset();
 
     // Have only the FlyFrames created.
     // We leave this to established methods (especially for InCntFlys).
@@ -1215,7 +1225,7 @@ lcl_InsertDrawLabel( SwDoc & rDoc, SwTextFormatColls *const pTextFormatCollTable
                 SwCharFormat * pCharFormat = rDoc.FindCharFormatByName(rCharacterStyle);
                 if ( !pCharFormat )
                 {
-                    const sal_uInt16 nMyId = SwStyleNameMapper::GetPoolIdFromUIName( rCharacterStyle, nsSwGetPoolIdFromName::GET_POOLID_CHRFMT );
+                    const sal_uInt16 nMyId = SwStyleNameMapper::GetPoolIdFromUIName( rCharacterStyle, SwGetPoolIdFromName::ChrFmt );
                     pCharFormat = rDoc.getIDocumentStylePoolAccess().GetCharFormatFromPool( nMyId );
                 }
                 if ( pCharFormat )
@@ -1250,22 +1260,22 @@ SwFlyFrameFormat* SwDoc::InsertDrawLabel(
     if (!pOldFormat)
         return nullptr;
 
-    SwUndoInsertLabel * pUndo = nullptr;
+    std::unique_ptr<SwUndoInsertLabel> pUndo;
     if (GetIDocumentUndoRedo().DoesUndo())
     {
         GetIDocumentUndoRedo().ClearRedo();
-        pUndo = new SwUndoInsertLabel(
+        pUndo.reset(new SwUndoInsertLabel(
             LTYPE_DRAW, rText, rSeparator, rNumberSeparator, false,
-            nId, rCharacterStyle, false );
+            nId, rCharacterStyle, false, this ));
     }
 
     SwFlyFrameFormat *const pNewFormat = lcl_InsertDrawLabel(
-        *this, mpTextFormatCollTable, pUndo, pOldFormat,
+        *this, mpTextFormatCollTable.get(), pUndo.get(), pOldFormat,
         rText, rSeparator, rNumberSeparator, nId, rCharacterStyle, rSdrObj);
 
     if (pUndo)
     {
-        GetIDocumentUndoRedo().AppendUndo( pUndo );
+        GetIDocumentUndoRedo().AppendUndo( std::move(pUndo) );
     }
     else
     {
@@ -1275,8 +1285,9 @@ SwFlyFrameFormat* SwDoc::InsertDrawLabel(
     return pNewFormat;
 }
 
-static OUString lcl_GetUniqueFlyName(const SwDoc* pDoc, sal_uInt16 nDefStrId, RES_FMT eType)
+static OUString lcl_GetUniqueFlyName(const SwDoc* pDoc, const char* pDefStrId, sal_uInt16 eType)
 {
+    assert(eType >= RES_FMT_BEGIN && eType < RES_FMT_END);
     if( pDoc->IsInMailMerge())
     {
         OUString newName = "MailMergeFly"
@@ -1285,8 +1296,7 @@ static OUString lcl_GetUniqueFlyName(const SwDoc* pDoc, sal_uInt16 nDefStrId, RE
         return newName;
     }
 
-    ResId aId( nDefStrId, *pSwResMgr );
-    OUString aName( aId );
+    OUString aName(SwResId(pDefStrId));
     sal_Int32 nNmLen = aName.getLength();
 
     const SwFrameFormats& rFormats = *pDoc->GetSpzFrameFormats();
@@ -1359,22 +1369,22 @@ OUString SwDoc::GetUniqueShapeName() const
     return lcl_GetUniqueFlyName(this, STR_SHAPE_DEFNAME, RES_DRAWFRMFMT);
 }
 
-const SwFlyFrameFormat* SwDoc::FindFlyByName( const OUString& rName, sal_Int8 nNdTyp ) const
+const SwFlyFrameFormat* SwDoc::FindFlyByName( const OUString& rName, SwNodeType nNdTyp ) const
 {
-    const SwFrameFormats& rFormats = *GetSpzFrameFormats();
-    for( auto n = rFormats.size(); n; )
+    auto range = GetSpzFrameFormats()->rangeFind( RES_FLYFRMFMT, rName );
+    for( auto it = range.first; it != range.second; it++ )
     {
-        const SwFrameFormat* pFlyFormat = rFormats[ --n ];
+        const SwFrameFormat* pFlyFormat = *it;
         const SwNodeIndex* pIdx = nullptr;
         if( RES_FLYFRMFMT == pFlyFormat->Which() && pFlyFormat->GetName() == rName &&
             nullptr != ( pIdx = pFlyFormat->GetContent().GetContentIdx() ) &&
             pIdx->GetNode().GetNodes().IsDocNodes() )
         {
-            if( nNdTyp )
+            if( nNdTyp != SwNodeType::NONE )
             {
                 // query for the right NodeType
                 const SwNode* pNd = GetNodes()[ pIdx->GetIndex()+1 ];
-                if( nNdTyp == ND_TEXTNODE
+                if( nNdTyp == SwNodeType::Text
                         ? !pNd->IsNoTextNode()
                         : nNdTyp == pNd->GetNodeType() )
                     return static_cast<const SwFlyFrameFormat*>(pFlyFormat);
@@ -1391,21 +1401,22 @@ void SwDoc::SetFlyName( SwFlyFrameFormat& rFormat, const OUString& rName )
     OUString sName( rName );
     if( sName.isEmpty() || FindFlyByName( sName ) )
     {
-        sal_uInt16 nTyp = STR_FRAME_DEFNAME;
+        const char* pTyp = STR_FRAME_DEFNAME;
         const SwNodeIndex* pIdx = rFormat.GetContent().GetContentIdx();
         if( pIdx && pIdx->GetNode().GetNodes().IsDocNodes() )
         {
             switch( GetNodes()[ pIdx->GetIndex() + 1 ]->GetNodeType() )
             {
-                case ND_GRFNODE:
-                    nTyp = STR_GRAPHIC_DEFNAME;
+                case SwNodeType::Grf:
+                    pTyp = STR_GRAPHIC_DEFNAME;
                     break;
-                case ND_OLENODE:
-                    nTyp = STR_OBJECT_DEFNAME;
+                case SwNodeType::Ole:
+                    pTyp = STR_OBJECT_DEFNAME;
                     break;
+                default: break;
             }
         }
-        sName = lcl_GetUniqueFlyName(this, nTyp, RES_FLYFRMFMT);
+        sName = lcl_GetUniqueFlyName(this, pTyp, RES_FLYFRMFMT);
     }
     rFormat.SetName( sName, true );
     getIDocumentState().SetModified();
@@ -1415,16 +1426,13 @@ void SwDoc::SetAllUniqueFlyNames()
 {
     sal_Int32 n, nFlyNum = 0, nGrfNum = 0, nOLENum = 0;
 
-    ResId nFrameId( STR_FRAME_DEFNAME, *pSwResMgr ),
-          nGrfId( STR_GRAPHIC_DEFNAME, *pSwResMgr ),
-          nOLEId( STR_OBJECT_DEFNAME, *pSwResMgr );
-    const OUString sFlyNm( nFrameId );
-    const OUString sGrfNm( nGrfId );
-    const OUString sOLENm( nOLEId );
+    const OUString sFlyNm(SwResId(STR_FRAME_DEFNAME));
+    const OUString sGrfNm(SwResId(STR_GRAPHIC_DEFNAME));
+    const OUString sOLENm(SwResId(STR_OBJECT_DEFNAME));
 
     if( 255 < ( n = GetSpzFrameFormats()->size() ))
         n = 255;
-    SwFrameFormats aArr;
+    SwFrameFormatsV aArr;
     aArr.reserve( n );
     SwFrameFormat* pFlyFormat;
     bool bContainsAtPageObjWithContentAnchor = false;
@@ -1433,7 +1441,7 @@ void SwDoc::SetAllUniqueFlyNames()
     {
         if( RES_FLYFRMFMT == (pFlyFormat = (*GetSpzFrameFormats())[ --n ])->Which() )
         {
-            const OUString aNm = pFlyFormat->GetName();
+            const OUString& aNm = pFlyFormat->GetName();
             if ( !aNm.isEmpty() )
             {
                 sal_Int32 *pNum = nullptr;
@@ -1469,7 +1477,7 @@ void SwDoc::SetAllUniqueFlyNames()
         if ( !bContainsAtPageObjWithContentAnchor )
         {
             const SwFormatAnchor& rAnchor = pFlyFormat->GetAnchor();
-            if ( (FLY_AT_PAGE == rAnchor.GetAnchorId()) &&
+            if ( (RndStdIds::FLY_AT_PAGE == rAnchor.GetAnchorId()) &&
                  rAnchor.GetContentAnchor() )
             {
                 bContainsAtPageObjWithContentAnchor = true;
@@ -1487,10 +1495,10 @@ void SwDoc::SetAllUniqueFlyNames()
         {
             switch( GetNodes()[ pIdx->GetIndex() + 1 ]->GetNodeType() )
             {
-            case ND_GRFNODE:
+            case SwNodeType::Grf:
                 pFlyFormat->SetName( sGrfNm + OUString::number( ++nGrfNum ));
                 break;
-            case ND_OLENODE:
+            case SwNodeType::Ole:
                 pFlyFormat->SetName( sOLENm + OUString::number( ++nOLENum ));
                 break;
             default:
@@ -1532,7 +1540,7 @@ bool SwDoc::IsInHeaderFooter( const SwNodeIndex& rIdx ) const
     {
         // get up by using the Anchor
 #if OSL_DEBUG_LEVEL > 0
-        std::list<const SwFrameFormat*> checkFormats;
+        std::vector<const SwFrameFormat*> checkFormats;
         for( auto pFormat : *GetSpzFrameFormats() )
         {
             const SwNodeIndex* pIdx = pFormat->GetContent().GetContentIdx();
@@ -1549,13 +1557,13 @@ bool SwDoc::IsInHeaderFooter( const SwNodeIndex& rIdx ) const
             if( pIdx && pFlyNd == &pIdx->GetNode() )
             {
 #if OSL_DEBUG_LEVEL > 0
-                std::list<const SwFrameFormat*>::iterator checkPos = std::find(
+                auto checkPos = std::find(
                         checkFormats.begin(), checkFormats.end(), pFormat );
                 assert( checkPos != checkFormats.end());
                 checkFormats.erase( checkPos );
 #endif
                 const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
-                if ((FLY_AT_PAGE == rAnchor.GetAnchorId()) ||
+                if ((RndStdIds::FLY_AT_PAGE == rAnchor.GetAnchorId()) ||
                     !rAnchor.GetContentAnchor() )
                 {
                     return false;
@@ -1578,10 +1586,10 @@ bool SwDoc::IsInHeaderFooter( const SwNodeIndex& rIdx ) const
             nullptr != pNd->FindFooterStartNode();
 }
 
-short SwDoc::GetTextDirection( const SwPosition& rPos,
+SvxFrameDirection SwDoc::GetTextDirection( const SwPosition& rPos,
                                const Point* pPt ) const
 {
-    short nRet = -1;
+    SvxFrameDirection nRet = SvxFrameDirection::Unknown;
 
     SwContentNode *pNd = rPos.nNode.GetNode().GetContentNode();
 
@@ -1590,7 +1598,7 @@ short SwDoc::GetTextDirection( const SwPosition& rPos,
     {
         nRet = pNd->GetTextDirection( rPos, pPt );
     }
-    if ( nRet == -1 )
+    if ( nRet == SvxFrameDirection::Unknown )
     {
         const SvxFrameDirectionItem* pItem = nullptr;
         if( pNd )
@@ -1600,11 +1608,11 @@ short SwDoc::GetTextDirection( const SwPosition& rPos,
             while( pFlyFormat )
             {
                 pItem = &pFlyFormat->GetFrameDir();
-                if( FRMDIR_ENVIRONMENT == pItem->GetValue() )
+                if( SvxFrameDirection::Environment == pItem->GetValue() )
                 {
                     pItem = nullptr;
                     const SwFormatAnchor* pAnchor = &pFlyFormat->GetAnchor();
-                    if ((FLY_AT_PAGE != pAnchor->GetAnchorId()) &&
+                    if ((RndStdIds::FLY_AT_PAGE != pAnchor->GetAnchorId()) &&
                         pAnchor->GetContentAnchor())
                     {
                         pFlyFormat = pAnchor->GetContentAnchor()->nNode.
@@ -1625,8 +1633,7 @@ short SwDoc::GetTextDirection( const SwPosition& rPos,
             }
         }
         if( !pItem )
-            pItem = static_cast<const SvxFrameDirectionItem*>(&GetAttrPool().GetDefaultItem(
-                                                            RES_FRAMEDIR ));
+            pItem = &GetAttrPool().GetDefaultItem( RES_FRAMEDIR );
         nRet = pItem->GetValue();
     }
     return nRet;
@@ -1634,8 +1641,8 @@ short SwDoc::GetTextDirection( const SwPosition& rPos,
 
 bool SwDoc::IsInVerticalText( const SwPosition& rPos ) const
 {
-    const short nDir = GetTextDirection( rPos );
-    return FRMDIR_VERT_TOP_RIGHT == nDir || FRMDIR_VERT_TOP_LEFT == nDir;
+    const SvxFrameDirection nDir = GetTextDirection( rPos );
+    return SvxFrameDirection::Vertical_RL_TB == nDir || SvxFrameDirection::Vertical_LR_TB == nDir;
 }
 
 std::set<SwRootFrame*> SwDoc::GetAllLayouts()

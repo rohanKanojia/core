@@ -19,10 +19,11 @@
 #ifndef INCLUDED_CHART2_SOURCE_CONTROLLER_INC_RANGESELECTIONLISTENER_HXX
 #define INCLUDED_CHART2_SOURCE_CONTROLLER_INC_RANGESELECTIONLISTENER_HXX
 
-#include "ControllerLockGuard.hxx"
+#include <ControllerLockGuard.hxx>
 #include <cppuhelper/implbase.hxx>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/sheet/XRangeSelectionListener.hpp>
+
+namespace com { namespace sun { namespace star { namespace frame { class XModel; } } } }
 
 namespace chart
 {
@@ -46,18 +47,15 @@ public:
         RangeSelectionListenerParent & rParent,
         const OUString & rInitialRange,
         const css::uno::Reference< css::frame::XModel >& xModelToLockController );
-    virtual ~RangeSelectionListener();
+    virtual ~RangeSelectionListener() override;
 
 protected:
     // ____ XRangeSelectionListener ____
-    virtual void SAL_CALL done( const css::sheet::RangeSelectionEvent& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
-    virtual void SAL_CALL aborted( const css::sheet::RangeSelectionEvent& aEvent )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL done( const css::sheet::RangeSelectionEvent& aEvent ) override;
+    virtual void SAL_CALL aborted( const css::sheet::RangeSelectionEvent& aEvent ) override;
 
     // ____ XEventListener ____
-    virtual void SAL_CALL disposing( const css::lang::EventObject& Source )
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL disposing( const css::lang::EventObject& Source ) override;
 
 private:
     RangeSelectionListenerParent & m_rParent;

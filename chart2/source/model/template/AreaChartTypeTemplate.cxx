@@ -18,14 +18,15 @@
  */
 
 #include "AreaChartTypeTemplate.hxx"
-#include "macros.hxx"
-#include "servicenames_charttypes.hxx"
-#include "DiagramHelper.hxx"
-#include "DataSeriesHelper.hxx"
-#include "ContainerHelper.hxx"
-#include "PropertyHelper.hxx"
+#include <servicenames_charttypes.hxx>
+#include <DiagramHelper.hxx>
+#include <DataSeriesHelper.hxx>
+#include <PropertyHelper.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <tools/diagnose_ex.h>
 
 #include <algorithm>
 
@@ -34,7 +35,6 @@ using namespace ::com::sun::star;
 using ::com::sun::star::beans::Property;
 using ::com::sun::star::uno::Sequence;
 using ::com::sun::star::uno::Reference;
-using ::osl::MutexGuard;
 
 namespace
 {
@@ -45,14 +45,13 @@ enum
 };
 
 void lcl_AddPropertiesToVector(
-    ::std::vector< Property > & rOutProperties )
+    std::vector< Property > & rOutProperties )
 {
-    rOutProperties.push_back(
-        Property( "Dimension",
+    rOutProperties.emplace_back( "Dimension",
                   PROP_AREA_TEMPLATE_DIMENSION,
                   cppu::UnoType<sal_Int32>::get(),
                   beans::PropertyAttribute::BOUND
-                  | beans::PropertyAttribute::MAYBEDEFAULT ));
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 struct StaticAreaChartTypeTemplateDefaults_Initializer
@@ -60,13 +59,8 @@ struct StaticAreaChartTypeTemplateDefaults_Initializer
     ::chart::tPropertyValueMap* operator()()
     {
         static ::chart::tPropertyValueMap aStaticDefaults;
-        lcl_AddDefaultsToMap( aStaticDefaults );
+        ::chart::PropertyHelper::setPropertyValueDefault< sal_Int32 >( aStaticDefaults, PROP_AREA_TEMPLATE_DIMENSION, 2 );
         return &aStaticDefaults;
-    }
-private:
-    static void lcl_AddDefaultsToMap( ::chart::tPropertyValueMap & rOutMap )
-    {
-        ::chart::PropertyHelper::setPropertyValueDefault< sal_Int32 >( rOutMap, PROP_AREA_TEMPLATE_DIMENSION, 2 );
     }
 };
 
@@ -85,10 +79,10 @@ struct StaticAreaChartTypeTemplateInfoHelper_Initializer
 private:
     static uno::Sequence< Property > lcl_GetPropertySequence()
     {
-        ::std::vector< css::beans::Property > aProperties;
+        std::vector< css::beans::Property > aProperties;
         lcl_AddPropertiesToVector( aProperties );
 
-        ::std::sort( aProperties.begin(), aProperties.end(),
+        std::sort( aProperties.begin(), aProperties.end(),
                      ::chart::PropertyNameLess() );
 
         return comphelper::containerToSequence( aProperties );
@@ -129,7 +123,7 @@ AreaChartTypeTemplate::AreaChartTypeTemplate(
         ::property::OPropertySet( m_aMutex ),
         m_eStackMode( eStackMode )
 {
-    setFastPropertyValue_NoBroadcast( PROP_AREA_TEMPLATE_DIMENSION, uno::makeAny( nDim ));
+    setFastPropertyValue_NoBroadcast( PROP_AREA_TEMPLATE_DIMENSION, uno::Any( nDim ));
 }
 
 AreaChartTypeTemplate::~AreaChartTypeTemplate()
@@ -137,7 +131,6 @@ AreaChartTypeTemplate::~AreaChartTypeTemplate()
 
 // ____ OPropertySet ____
 uno::Any AreaChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
-    throw(beans::UnknownPropertyException)
 {
     const tPropertyValueMap& rStaticDefaults = *StaticAreaChartTypeTemplateDefaults::get();
     tPropertyValueMap::const_iterator aFound( rStaticDefaults.find( nHandle ) );
@@ -153,7 +146,6 @@ uno::Any AreaChartTypeTemplate::GetDefaultValue( sal_Int32 nHandle ) const
 
 // ____ XPropertySet ____
 uno::Reference< beans::XPropertySetInfo > SAL_CALL AreaChartTypeTemplate::getPropertySetInfo()
-    throw (uno::RuntimeException, std::exception)
 {
     return *StaticAreaChartTypeTemplateInfo::get();
 }
@@ -167,9 +159,9 @@ sal_Int32 AreaChartTypeTemplate::getDimension() const
         const_cast< AreaChartTypeTemplate * >( this )->
             getFastPropertyValue( PROP_AREA_TEMPLATE_DIMENSION ) >>= nDim;
     }
-    catch( const beans::UnknownPropertyException & ex )
+    catch( const beans::UnknownPropertyException & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return nDim;
@@ -186,24 +178,21 @@ void SAL_CALL AreaChartTypeTemplate::applyStyle(
     ::sal_Int32 nChartTypeIndex,
     ::sal_Int32 nSeriesIndex,
     ::sal_Int32 nSeriesCount )
-    throw (uno::RuntimeException, std::exception)
 {
     ChartTypeTemplate::applyStyle( xSeries, nChartTypeIndex, nSeriesIndex, nSeriesCount );
-    DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::makeAny( drawing::LineStyle_NONE ) );
+    DataSeriesHelper::setPropertyAlsoToAllAttributedDataPoints( xSeries, "BorderStyle", uno::Any( drawing::LineStyle_NONE ) );
 }
 
 void SAL_CALL AreaChartTypeTemplate::resetStyles( const Reference< chart2::XDiagram >& xDiagram )
-    throw (uno::RuntimeException, std::exception)
 {
     ChartTypeTemplate::resetStyles( xDiagram );
-    ::std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
+    std::vector< Reference< chart2::XDataSeries > > aSeriesVec(
         DiagramHelper::getDataSeriesFromDiagram( xDiagram ));
-    uno::Any aLineStyleAny( uno::makeAny( drawing::LineStyle_NONE ));
-    for( ::std::vector< Reference< chart2::XDataSeries > >::iterator aIt( aSeriesVec.begin());
-         aIt != aSeriesVec.end(); ++aIt )
+    uno::Any aLineStyleAny( drawing::LineStyle_NONE );
+    for (auto const& series : aSeriesVec)
     {
-        Reference< beans::XPropertyState > xState( *aIt, uno::UNO_QUERY );
-        Reference< beans::XPropertySet > xProp( *aIt, uno::UNO_QUERY );
+        Reference< beans::XPropertyState > xState(series, uno::UNO_QUERY);
+        Reference< beans::XPropertySet > xProp(series, uno::UNO_QUERY);
         if( xState.is() &&
             xProp.is() &&
             xProp->getPropertyValue( "BorderStyle") == aLineStyleAny )
@@ -224,9 +213,9 @@ Reference< chart2::XChartType > AreaChartTypeTemplate::getChartTypeForIndex( sal
         xResult.set( xFact->createInstance(
                          CHART2_SERVICE_NAME_CHARTTYPE_AREA ), uno::UNO_QUERY_THROW );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 
     return xResult;
@@ -234,7 +223,6 @@ Reference< chart2::XChartType > AreaChartTypeTemplate::getChartTypeForIndex( sal
 
 Reference< chart2::XChartType > SAL_CALL AreaChartTypeTemplate::getChartTypeForNewSeries(
         const uno::Sequence< Reference< chart2::XChartType > >& aFormerlyUsedChartTypes )
-    throw (uno::RuntimeException, std::exception)
 {
     Reference< chart2::XChartType > xResult( getChartTypeForIndex( 0 ) );
     ChartTypeTemplate::copyPropertiesFromOldToNewCoordinateSystem( aFormerlyUsedChartTypes, xResult );

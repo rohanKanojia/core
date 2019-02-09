@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ppt/backgroundproperties.hxx"
-#include "drawingml/fillpropertiesgroupcontext.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "oox/core/contexthandler2.hxx"
+#include <oox/ppt/backgroundproperties.hxx>
+#include <drawingml/misccontexts.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/core/contexthandler2.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -28,7 +30,7 @@ using namespace ::com::sun::star::xml::sax;
 
 namespace oox { namespace ppt {
 
-BackgroundPropertiesContext::BackgroundPropertiesContext( FragmentHandler2& rParent, ::oox::drawingml::FillProperties& rFillProperties )
+BackgroundPropertiesContext::BackgroundPropertiesContext( FragmentHandler2 const & rParent, ::oox::drawingml::FillProperties& rFillProperties )
 : FragmentHandler2( rParent )
 , mrFillProperties( rFillProperties )
 {
@@ -42,8 +44,7 @@ BackgroundPropertiesContext::BackgroundPropertiesContext( FragmentHandler2& rPar
         return this;
     }
 
-    // FillPropertiesGroupContext
-    return dynamic_cast <ContextHandler *> (::oox::drawingml::FillPropertiesContext::createFillContext( *this, aElementToken, rAttribs, mrFillProperties ).get());
+    return ::oox::drawingml::FillPropertiesContext::createFillContext( *this, aElementToken, rAttribs, mrFillProperties ).get();
 }
 
 } }

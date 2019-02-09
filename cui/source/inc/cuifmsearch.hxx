@@ -30,7 +30,6 @@
 #include <vcl/combobox.hxx>
 #include <vcl/lstbox.hxx>
 #include <tools/link.hxx>
-#include <comphelper/uno3.hxx>
 #include <rtl/ustring.hxx>
 
 namespace svxform {
@@ -42,7 +41,7 @@ struct FmSearchProgress;
 class FmSearchEngine;
 
 /// Dialog for searching in Forms/Tables
-class FmSearchDialog : public ModalDialog
+class FmSearchDialog final : public ModalDialog
 {
     friend class FmSearchEngine;
 
@@ -84,14 +83,14 @@ class FmSearchDialog : public ModalDialog
     Link<FmSearchContext&,sal_uInt32>  m_lnkContextSupplier;       ///< for search in contexts
 
     /// memorize the currently selected field for every context
-    ::std::vector<OUString> m_arrContextFields;
+    std::vector<OUString> m_arrContextFields;
 
-    FmSearchEngine* m_pSearchEngine;
+    std::unique_ptr<FmSearchEngine> m_pSearchEngine;
 
     Timer           m_aDelayedPaint;
     // see EnableSearchUI
 
-    ::svxform::FmSearchConfigItem*      m_pConfig;
+    std::unique_ptr<::svxform::FmSearchConfigItem>      m_pConfig;
 public:
     /** This can search in different sets of fields. There is a number of contexts; their names are in strContexts (separated
         by ';'), the user can choose one of them.
@@ -107,10 +106,10 @@ public:
         (of course needed : the string number i in strUsedFields of a context must correspond with the interface number i in the
         arrFields of the context)
     */
-    FmSearchDialog(vcl::Window* pParent, const OUString& strInitialText, const ::std::vector< OUString >& _rContexts, sal_Int16 nInitialContext,
+    FmSearchDialog(vcl::Window* pParent, const OUString& strInitialText, const std::vector< OUString >& _rContexts, sal_Int16 nInitialContext,
         const Link<FmSearchContext&,sal_uInt32>& lnkContextSupplier);
 
-    virtual ~FmSearchDialog();
+    virtual ~FmSearchDialog() override;
     virtual void dispose() override;
 
     /** The found-handler gets in the 'found'-case a pointer on a FmFoundRecordInformation-structure
@@ -131,7 +130,7 @@ public:
 
     inline void SetActiveField(const OUString& strField);
 
-protected:
+private:
     virtual bool Close() override;
 
     void Init(const OUString& strVisibleFields, const OUString& strInitialText);
@@ -155,25 +154,24 @@ protected:
     void LoadParams();
     void SaveParams() const;
 
-private:
     // Handler for the Controls
-    DECL_LINK_TYPED( OnClickedFieldRadios, Button*, void );
-    DECL_LINK_TYPED(OnClickedSearchAgain, Button *, void);
-    DECL_LINK_TYPED( OnClickedSpecialSettings, Button*, void );
+    DECL_LINK( OnClickedFieldRadios, Button*, void );
+    DECL_LINK(OnClickedSearchAgain, Button *, void);
+    DECL_LINK( OnClickedSpecialSettings, Button*, void );
 
-    DECL_LINK_TYPED(OnSearchTextModified, Edit&, void);
+    DECL_LINK(OnSearchTextModified, Edit&, void);
 
-    DECL_LINK_TYPED( OnPositionSelected, ListBox&, void );
-    DECL_LINK_TYPED( OnFieldSelected, ListBox&, void );
+    DECL_LINK( OnPositionSelected, ListBox&, void );
+    DECL_LINK( OnFieldSelected, ListBox&, void );
 
-    DECL_LINK_TYPED( OnFocusGrabbed, Control&, void );
-    DECL_LINK_TYPED( OnCheckBoxToggled, CheckBox&, void );
+    DECL_LINK( OnFocusGrabbed, Control&, void );
+    DECL_LINK( OnCheckBoxToggled, CheckBox&, void );
 
-    DECL_LINK_TYPED( OnContextSelection, ListBox&, void );
+    DECL_LINK( OnContextSelection, ListBox&, void );
 
-    DECL_LINK_TYPED( OnSearchProgress, const FmSearchProgress*, void );
+    DECL_LINK( OnSearchProgress, const FmSearchProgress*, void );
 
-    DECL_LINK_TYPED( OnDelayedPaint, Timer*, void ); ///< see EnableSearchUI
+    DECL_LINK( OnDelayedPaint, Timer*, void ); ///< see EnableSearchUI
 
     void initCommon( const css::uno::Reference< css::sdbc::XResultSet >& _rxCursor );
 };

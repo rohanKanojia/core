@@ -21,13 +21,16 @@
 
 #include <sal/config.h>
 
+#include <vector>
+
 #include <osl/module.h>
 #include <osl/module.hxx>
 
+class SvGlobalName;
 class SwViewShell;
 
-void _InitCore();   // bastyp/init.cxx
-void _FinitCore();
+void InitCore();   // bastyp/init.cxx
+void FinitCore();
 
 namespace sw {
 
@@ -53,13 +56,19 @@ private:
 }
 
 // layout/newfrm.cxx
-void _FrameInit();
-void _FrameFinit();
+void FrameInit();
+void FrameFinit();
 void SetShell( SwViewShell *pSh );
 
 // text/txtfrm.cxx
-void _TextInit();
-void _TextFinit();
+void TextInit_();
+void TextFinit();
+
+// We collect the GlobalNames of the servers at runtime, who don't want to be notified
+// about printer changes. Thereby saving loading a lot of objects (luckily all foreign
+// objects are mapped to one ID).
+// Initialisation and deinitialisation can be found in init.cxx
+extern std::vector<SvGlobalName> *pGlobalOLEExcludeList;
 
 #endif
 

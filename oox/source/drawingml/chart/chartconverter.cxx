@@ -17,15 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/drawingml/chart/chartconverter.hxx"
+#include <oox/drawingml/chart/chartconverter.hxx>
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
-#include "drawingml/chart/chartspaceconverter.hxx"
-#include "drawingml/chart/chartspacemodel.hxx"
-#include "oox/helper/containerhelper.hxx"
-#include "oox/core/xmlfilterbase.hxx"
+#include <drawingml/chart/chartspaceconverter.hxx>
+#include <drawingml/chart/chartspacemodel.hxx>
+#include <oox/helper/containerhelper.hxx>
+#include <oox/core/xmlfilterbase.hxx>
 #include <osl/diagnose.h>
 
 using ::oox::drawingml::chart::DataSequenceModel;
@@ -44,7 +44,6 @@ using ::oox::core::XmlFilterBase;
 
 static const sal_Unicode API_TOKEN_ARRAY_OPEN      = '{';
 static const sal_Unicode API_TOKEN_ARRAY_CLOSE     = '}';
-static const sal_Unicode API_TOKEN_ARRAY_ROWSEP    = '|';
 static const sal_Unicode API_TOKEN_ARRAY_COLSEP    = ';';
 
 // Code similar to oox/source/xls/formulabase.cxx
@@ -57,28 +56,23 @@ static OUString lclGenerateApiString( const OUString& rString )
     return "\"" + aRetString + "\"";
 }
 
-static OUString lclGenerateApiArray( const Matrix< Any >& rMatrix )
+static OUString lclGenerateApiArray(const std::vector<Any>& rRow)
 {
-    OSL_ENSURE( !rMatrix.empty(), "ChartConverter::lclGenerateApiArray - missing matrix values" );
+    OSL_ENSURE( !rRow.empty(), "ChartConverter::lclGenerateApiArray - missing matrix values" );
     OUStringBuffer aBuffer;
     aBuffer.append( API_TOKEN_ARRAY_OPEN );
-    for( size_t nRow = 0, nHeight = rMatrix.height(); nRow < nHeight; ++nRow )
+    for (auto aBeg = rRow.begin(), aIt = aBeg, aEnd = rRow.end(); aIt != aEnd; ++aIt)
     {
-        if( nRow > 0 )
-            aBuffer.append( API_TOKEN_ARRAY_ROWSEP );
-        for( Matrix< Any >::const_iterator aBeg = rMatrix.row_begin( nRow ), aIt = aBeg, aEnd = rMatrix.row_end( nRow ); aIt != aEnd; ++aIt )
-        {
-            double fValue = 0.0;
-            OUString aString;
-            if( aIt != aBeg )
-                aBuffer.append( API_TOKEN_ARRAY_COLSEP );
-            if( *aIt >>= fValue )
-                aBuffer.append( fValue );
-            else if( *aIt >>= aString )
-                aBuffer.append( lclGenerateApiString( aString ) );
-            else
-                aBuffer.append( "\"\"" );
-        }
+        double fValue = 0.0;
+        OUString aString;
+        if( aIt != aBeg )
+            aBuffer.append( API_TOKEN_ARRAY_COLSEP );
+        if( *aIt >>= fValue )
+            aBuffer.append( fValue );
+        else if( *aIt >>= aString )
+            aBuffer.append( lclGenerateApiString( aString ) );
+        else
+            aBuffer.append( "\"\"" );
     }
     aBuffer.append( API_TOKEN_ARRAY_CLOSE );
     return aBuffer.makeStringAndClear();
@@ -115,7 +109,7 @@ void ChartConverter::createDataProvider( const Reference< XChartDocument >& rxCh
     try
     {
         if( !rxChartDoc->hasInternalDataProvider() )
-            rxChartDoc->createInternalDataProvider( sal_False );
+            rxChartDoc->createInternalDataProvider( false );
     }
     catch( Exception& )
     {
@@ -133,12 +127,11 @@ Reference< XDataSequence > ChartConverter::createDataSequence(
         if( !rDataSeq.maData.empty() )
         {
             // create a single-row array from constant source data
-            Matrix< Any > aMatrix( rDataSeq.maData.size(), 1 );
-            Matrix< Any >::iterator aMIt = aMatrix.begin();
-            // TODO: how to handle missing values in the map?
-            for( DataSequenceModel::AnyMap::const_iterator aDIt = rDataSeq.maData.begin(), aDEnd = rDataSeq.maData.end(); aDIt != aDEnd; ++aDIt, ++aMIt )
-                *aMIt = aDIt->second;
-            aRangeRep = lclGenerateApiArray( aMatrix );
+            std::vector<Any> aRow(rDataSeq.mnPointCount);
+            for (auto const& elem : rDataSeq.maData)
+                aRow.at(elem.first) = elem.second;
+
+            aRangeRep = lclGenerateApiArray(aRow);
         }
 
         if( !aRangeRep.isEmpty() ) try

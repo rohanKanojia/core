@@ -18,13 +18,15 @@
  */
 
 
-#include <cacheddynamicresultsetstub.hxx>
+#include "cacheddynamicresultsetstub.hxx"
 #include <com/sun/star/sdbc/XResultSet.hpp>
-#include <cachedcontentresultsetstub.hxx>
+#include "cachedcontentresultsetstub.hxx"
 #include <com/sun/star/ucb/ContentResultSetCapability.hpp>
 #include <com/sun/star/ucb/SortedDynamicResultSetFactory.hpp>
 #include <osl/diagnose.h>
 #include <comphelper/processfactory.hxx>
+#include <ucbhelper/getcomponentcontext.hxx>
+#include <cppuhelper/queryinterface.hxx>
 
 using namespace com::sun::star::lang;
 using namespace com::sun::star::sdbc;
@@ -33,7 +35,7 @@ using namespace com::sun::star::uno;
 
 
 CachedDynamicResultSetStub::CachedDynamicResultSetStub(
-        Reference< XDynamicResultSet > xOrigin
+        Reference< XDynamicResultSet > const & xOrigin
         , const Reference< XComponentContext > & rxContext )
         : DynamicResultSetWrapper( xOrigin, rxContext )
 {
@@ -47,7 +49,7 @@ CachedDynamicResultSetStub::~CachedDynamicResultSetStub()
 }
 
 //virtual
-void SAL_CALL CachedDynamicResultSetStub
+void CachedDynamicResultSetStub
     ::impl_InitResultSetOne( const Reference< XResultSet >& xResultSet )
 {
     DynamicResultSetWrapper::impl_InitResultSetOne( xResultSet );
@@ -61,7 +63,7 @@ void SAL_CALL CachedDynamicResultSetStub
 }
 
 //virtual
-void SAL_CALL CachedDynamicResultSetStub
+void CachedDynamicResultSetStub
     ::impl_InitResultSetTwo( const Reference< XResultSet >& xResultSet )
 {
     DynamicResultSetWrapper::impl_InitResultSetTwo( xResultSet );
@@ -90,7 +92,6 @@ void SAL_CALL CachedDynamicResultSetStub::release()
 
 Any SAL_CALL CachedDynamicResultSetStub
     ::queryInterface( const Type&  rType )
-    throw ( RuntimeException, std::exception )
 {
     //list all interfaces inclusive baseclasses of interfaces
 
@@ -120,10 +121,21 @@ XTYPEPROVIDER_IMPL_5( CachedDynamicResultSetStub
 
 // XServiceInfo methods.
 
+OUString SAL_CALL CachedDynamicResultSetStub::getImplementationName()
+{
+    return OUString( "com.sun.star.comp.ucb.CachedDynamicResultSetStub" );
+}
 
-XSERVICEINFO_NOFACTORY_IMPL_1( CachedDynamicResultSetStub,
-                        OUString( "com.sun.star.comp.ucb.CachedDynamicResultSetStub" ),
-                        CACHED_DRS_STUB_SERVICE_NAME );
+sal_Bool SAL_CALL CachedDynamicResultSetStub::supportsService( const OUString& ServiceName )
+{
+    return cppu::supportsService( this, ServiceName );
+}
+
+css::uno::Sequence< OUString > SAL_CALL CachedDynamicResultSetStub::getSupportedServiceNames()
+{
+    return { CACHED_DRS_STUB_SERVICE_NAME };
+}
+
 
 
 // class CachedDynamicResultSetStubFactory
@@ -154,12 +166,11 @@ void SAL_CALL CachedDynamicResultSetStubFactory::release()
 }
 
 css::uno::Any SAL_CALL CachedDynamicResultSetStubFactory::queryInterface( const css::uno::Type & rType )
-    throw( css::uno::RuntimeException, std::exception )
 {
     css::uno::Any aRet = cppu::queryInterface( rType,
-                                               (static_cast< XTypeProvider* >(this)),
-                                               (static_cast< XServiceInfo* >(this)),
-                                               (static_cast< XCachedDynamicResultSetStubFactory* >(this))
+                                               static_cast< XTypeProvider* >(this),
+                                               static_cast< XServiceInfo* >(this),
+                                               static_cast< XCachedDynamicResultSetStubFactory* >(this)
                                                );
     return aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType );
 }
@@ -175,11 +186,23 @@ XTYPEPROVIDER_IMPL_3( CachedDynamicResultSetStubFactory,
 
 // CachedDynamicResultSetStubFactory XServiceInfo methods.
 
+XSERVICEINFO_COMMOM_IMPL( CachedDynamicResultSetStubFactory,
+                          OUString( "com.sun.star.comp.ucb.CachedDynamicResultSetStubFactory" ) )
+/// @throws css::uno::Exception
+static css::uno::Reference< css::uno::XInterface >
+CachedDynamicResultSetStubFactory_CreateInstance( const css::uno::Reference< css::lang::XMultiServiceFactory> & rSMgr )
+{
+    css::lang::XServiceInfo* pX =
+        static_cast<css::lang::XServiceInfo*>(new CachedDynamicResultSetStubFactory( ucbhelper::getComponentContext(rSMgr) ));
+    return css::uno::Reference< css::uno::XInterface >::query( pX );
+}
 
-XSERVICEINFO_IMPL_1_CTX( CachedDynamicResultSetStubFactory,
-                     OUString( "com.sun.star.comp.ucb.CachedDynamicResultSetStubFactory" ),
-                     CACHED_DRS_STUB_FACTORY_NAME );
-
+css::uno::Sequence< OUString >
+CachedDynamicResultSetStubFactory::getSupportedServiceNames_Static()
+{
+    css::uno::Sequence< OUString > aSNS { CACHED_DRS_STUB_FACTORY_NAME };
+    return aSNS;
+}
 
 // Service factory implementation.
 
@@ -194,7 +217,6 @@ ONE_INSTANCE_SERVICE_FACTORY_IMPL( CachedDynamicResultSetStubFactory );
 Reference< XDynamicResultSet > SAL_CALL CachedDynamicResultSetStubFactory
     ::createCachedDynamicResultSetStub(
             const Reference< XDynamicResultSet > & Source )
-            throw( RuntimeException, std::exception )
 {
     Reference< XDynamicResultSet > xRet;
     xRet = new CachedDynamicResultSetStub( Source, m_xContext );
@@ -209,9 +231,6 @@ void SAL_CALL CachedDynamicResultSetStubFactory
             , const Sequence< NumberedSortingInfo > & SortingInfo
             , const Reference< XAnyCompareFactory > & CompareFactory
             )
-            throw (  ListenerAlreadySetException
-            , AlreadyInitializedException
-            , RuntimeException, std::exception )
 {
     OSL_ENSURE( Source.is(), "a Source is needed" );
     OSL_ENSURE( TargetCache.is(), "a TargetCache is needed" );

@@ -35,7 +35,6 @@ class SvFileObject : public sfx2::SvLinkSource
     tools::SvRef<SfxMedium>     xMed;
     ImplSVEvent*                nPostUserEventId;
     tools::SvRef<SfxMedium>     mxDelMed;
-    VclPtr<vcl::Window>         pOldParent;
 
     sal_uInt8 nType;
 
@@ -43,23 +42,19 @@ class SvFileObject : public sfx2::SvLinkSource
     bool bSynchron : 1;
     bool bLoadError : 1;
     bool bWaitForData : 1;
-    bool bInNewData : 1;
     bool bDataReady : 1;
-    bool bNativFormat : 1;
     bool bClearMedium : 1;
     bool bStateChangeCalled : 1;
-    bool bInCallDownload : 1;
 
-    bool GetGraphic_Impl( Graphic&, SvStream* pStream = nullptr );
     bool LoadFile_Impl();
     void SendStateChg_Impl( sfx2::LinkManager::LinkState nState );
 
-    DECL_LINK_TYPED( DelMedium_Impl, void*, void );
-    DECL_LINK_TYPED( LoadGrfReady_Impl, void*, void );
-    DECL_LINK_TYPED( DialogClosedHdl, sfx2::FileDialogHelper*, void );
+    DECL_LINK( DelMedium_Impl, void*, void );
+    DECL_LINK( LoadGrfReady_Impl, void*, void );
+    DECL_LINK( DialogClosedHdl, sfx2::FileDialogHelper*, void );
 
 protected:
-    virtual ~SvFileObject();
+    virtual ~SvFileObject() override;
 
 public:
     SvFileObject();
@@ -69,7 +64,7 @@ public:
                             bool bSynchron = false ) override;
 
     virtual bool Connect( sfx2::SvBaseLink* ) override;
-    virtual void Edit( vcl::Window *, sfx2::SvBaseLink *, const Link<const OUString&, void>& rEndEditHdl ) override;
+    virtual void Edit(weld::Window *, sfx2::SvBaseLink *, const Link<const OUString&, void>& rEndEditHdl) override;
 
     // Ask whether you can access data directly or whether it has to be triggered
     virtual bool IsPending() const override;

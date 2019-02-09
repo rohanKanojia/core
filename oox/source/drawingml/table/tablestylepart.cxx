@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/table/tablestylepart.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
+#include <drawingml/table/tablestylepart.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star;
@@ -28,10 +28,6 @@ using namespace ::com::sun::star::beans;
 namespace oox { namespace drawingml { namespace table {
 
 TableStylePart::TableStylePart()
-{
-}
-
-TableStylePart::~TableStylePart()
 {
 }
 

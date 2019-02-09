@@ -22,14 +22,13 @@
 
 #include <sal/config.h>
 
-#include <i18nlangtag/languagetag.hxx>
-#include <com/sun/star/uno/Reference.hxx>
 #include <svtools/svtdllapi.h>
 #include <tools/wintypes.hxx>
 #include <vcl/window.hxx>
 
+namespace com :: sun :: star :: uno { template <typename > class Reference; }
+
 class ExtMultiLineEdit;
-class SvtDocInfoTable_Impl;
 
 namespace com { namespace sun { namespace star {
     namespace document { class XDocumentProperties; }
@@ -42,21 +41,17 @@ class SVT_DLLPUBLIC ODocumentInfoPreview: public vcl::Window {
 public:
     ODocumentInfoPreview(vcl::Window * pParent, WinBits nBits);
 
-    virtual ~ODocumentInfoPreview();
+    virtual ~ODocumentInfoPreview() override;
     virtual void dispose() override;
 
     virtual void Resize() override;
 
     void clear();
 
-    void fill(
-        css::uno::Reference< css::document::XDocumentProperties > const & xDocProps,
-        OUString const & rURL);
+    void fill(css::uno::Reference< css::document::XDocumentProperties > const & xDocProps);
 
 private:
     VclPtr<ExtMultiLineEdit> m_pEditWin;
-    std::unique_ptr< SvtDocInfoTable_Impl > m_xInfoTable;
-    LanguageTag m_aLanguageTag;
 
     void insertEntry(OUString const & title, OUString const & value);
 

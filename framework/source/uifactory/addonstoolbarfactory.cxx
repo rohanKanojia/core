@@ -35,9 +35,6 @@
 #include <rtl/ref.hxx>
 #include <rtl/ustrbuf.hxx>
 
-#include <macros/xinterface.hxx>
-#include <macros/xtypeprovider.hxx>
-#include <macros/xserviceinfo.hxx>
 #include <services.h>
 
 using namespace com::sun::star::uno;
@@ -55,29 +52,24 @@ class AddonsToolBarFactory :  public ::cppu::WeakImplHelper< css::lang::XService
 {
 public:
     explicit AddonsToolBarFactory( const css::uno::Reference< css::uno::XComponentContext >& xContext );
-    virtual ~AddonsToolBarFactory();
 
-    virtual OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual OUString SAL_CALL getImplementationName() override
     {
         return OUString("com.sun.star.comp.framework.AddonsToolBarFactory");
     }
 
-    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName)
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual sal_Bool SAL_CALL supportsService(OUString const & ServiceName) override
     {
         return cppu::supportsService(this, ServiceName);
     }
 
-    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override
+    virtual css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override
     {
-        css::uno::Sequence< OUString > aSeq { "com.sun.star.ui.ToolBarFactory" };
-        return aSeq;
+        return {"com.sun.star.ui.ToolBarFactory"};
     }
 
     // XUIElementFactory
-    virtual css::uno::Reference< css::ui::XUIElement > SAL_CALL createUIElement( const OUString& ResourceURL, const css::uno::Sequence< css::beans::PropertyValue >& Args ) throw ( css::container::NoSuchElementException, css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::ui::XUIElement > SAL_CALL createUIElement( const OUString& ResourceURL, const css::uno::Sequence< css::beans::PropertyValue >& Args ) override;
 
     bool hasButtonsInContext( const css::uno::Sequence< css::uno::Sequence< css::beans::PropertyValue > >& rPropSeq,
                                   const css::uno::Reference< css::frame::XFrame >& rFrame );
@@ -91,10 +83,6 @@ AddonsToolBarFactory::AddonsToolBarFactory(
     const css::uno::Reference< css::uno::XComponentContext >& xContext ) :
     m_xContext( xContext )
     , m_xModuleManager( ModuleManager::create( xContext ) )
-{
-}
-
-AddonsToolBarFactory::~AddonsToolBarFactory()
 {
 }
 
@@ -131,14 +119,14 @@ bool AddonsToolBarFactory::hasButtonsInContext(
 
     // Check before we create a toolbar that we have at least one button in
     // the current frame context.
-    for ( sal_uInt32 i = 0; i < (sal_uInt32)rPropSeqSeq.getLength(); i++ )
+    for ( sal_uInt32 i = 0; i < static_cast<sal_uInt32>(rPropSeqSeq.getLength()); i++ )
     {
         bool    bIsButton( true );
         bool    bIsCorrectContext( false );
         sal_uInt32  nPropChecked( 0 );
 
         const Sequence< PropertyValue >& rPropSeq = rPropSeqSeq[i];
-        for ( sal_uInt32 j = 0; j < (sal_uInt32)rPropSeq.getLength(); j++ )
+        for ( sal_uInt32 j = 0; j < static_cast<sal_uInt32>(rPropSeq.getLength()); j++ )
         {
             if ( rPropSeq[j].Name == "Context" )
             {
@@ -170,9 +158,6 @@ bool AddonsToolBarFactory::hasButtonsInContext(
 Reference< XUIElement > SAL_CALL AddonsToolBarFactory::createUIElement(
     const OUString& ResourceURL,
     const Sequence< PropertyValue >& Args )
-throw ( css::container::NoSuchElementException,
-        css::lang::IllegalArgumentException,
-        css::uno::RuntimeException, std::exception )
 {
     SolarMutexGuard g;
 
@@ -223,7 +208,7 @@ throw ( css::container::NoSuchElementException,
 
 }
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_framework_AddonsToolBarFactory_get_implementation(
     css::uno::XComponentContext *context,
     css::uno::Sequence<css::uno::Any> const &)

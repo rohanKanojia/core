@@ -19,46 +19,41 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_ZOOM_HXX
 #define INCLUDED_CUI_SOURCE_INC_ZOOM_HXX
 
+#include <memory>
 #include <sfx2/basedlgs.hxx>
 #include <svx/zoom_def.hxx>
-#include <vcl/button.hxx>
-#include <vcl/field.hxx>
-#include <vcl/fixed.hxx>
+#include <vcl/weld.hxx>
 
-class SvxZoomDialog : public SfxModalDialog
+class SvxZoomDialog : public SfxDialogController
 {
 private:
-    VclPtr<RadioButton>        m_pOptimalBtn;
-    VclPtr<RadioButton>        m_pWholePageBtn;
-    VclPtr<RadioButton>        m_pPageWidthBtn;
-    VclPtr<RadioButton>        m_p100Btn;
-    VclPtr<RadioButton>        m_pUserBtn;
-    VclPtr<MetricField>        m_pUserEdit;
+    const SfxItemSet&           m_rSet;
+    std::unique_ptr<SfxItemSet> m_pOutSet;
+    bool                        m_bModified;
 
-    VclPtr<VclContainer>       m_pViewFrame;
-    VclPtr<RadioButton>        m_pAutomaticBtn;
-    VclPtr<RadioButton>        m_pSingleBtn;
-    VclPtr<RadioButton>        m_pColumnsBtn;
-    VclPtr<NumericField>       m_pColumnsEdit;
-    VclPtr<CheckBox>           m_pBookModeChk;
+    std::unique_ptr<weld::RadioButton>        m_xOptimalBtn;
+    std::unique_ptr<weld::RadioButton>        m_xWholePageBtn;
+    std::unique_ptr<weld::RadioButton>        m_xPageWidthBtn;
+    std::unique_ptr<weld::RadioButton>        m_x100Btn;
+    std::unique_ptr<weld::RadioButton>        m_xUserBtn;
+    std::unique_ptr<weld::MetricSpinButton>   m_xUserEdit;
+    std::unique_ptr<weld::Widget>             m_xViewFrame;
+    std::unique_ptr<weld::RadioButton>        m_xAutomaticBtn;
+    std::unique_ptr<weld::RadioButton>        m_xSingleBtn;
+    std::unique_ptr<weld::RadioButton>        m_xColumnsBtn;
+    std::unique_ptr<weld::SpinButton>         m_xColumnsEdit;
+    std::unique_ptr<weld::CheckButton>        m_xBookModeChk;
+    std::unique_ptr<weld::Button>             m_xOKBtn;
 
-    VclPtr<OKButton>           m_pOKBtn;
-
-    const SfxItemSet&           mrSet;
-    std::unique_ptr<SfxItemSet> mpOutSet;
-    bool                        mbModified;
-
-    DECL_LINK_TYPED(UserHdl, Button*, void);
-    DECL_LINK_TYPED(SpinHdl, Edit&, void);
-    DECL_LINK_TYPED(ViewLayoutUserHdl, Button*, void);
-    DECL_LINK_TYPED(ViewLayoutSpinHdl, Edit&, void);
-    DECL_LINK_TYPED(ViewLayoutCheckHdl, Button*, void);
-    DECL_LINK_TYPED(OKHdl, Button*, void);
+    DECL_LINK(UserHdl, weld::ToggleButton&, void);
+    DECL_LINK(SpinHdl, weld::MetricSpinButton&, void);
+    DECL_LINK(ViewLayoutUserHdl, weld::ToggleButton&, void);
+    DECL_LINK(ViewLayoutSpinHdl, weld::SpinButton&, void);
+    DECL_LINK(ViewLayoutCheckHdl, weld::ToggleButton&, void);
+    DECL_LINK(OKHdl, weld::Button&, void);
 
 public:
-    SvxZoomDialog(vcl::Window* pParent, const SfxItemSet& rCoreSet);
-    virtual ~SvxZoomDialog();
-    virtual void dispose() override;
+    SvxZoomDialog(weld::Window* pParent, const SfxItemSet& rCoreSet);
 
     const SfxItemSet* GetOutputItemSet() const;
 

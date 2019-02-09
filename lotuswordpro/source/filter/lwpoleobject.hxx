@@ -61,9 +61,9 @@
 #ifndef INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPOLEOBJECT_HXX
 #define INCLUDED_LOTUSWORDPRO_SOURCE_FILTER_LWPOLEOBJECT_HXX
 
-#include "lwpobj.hxx"
-#include "lwpobjhdr.hxx"
-#include "lwpobjid.hxx"
+#include <lwpobj.hxx>
+#include <lwpobjhdr.hxx>
+#include <lwpobjid.hxx>
 #include "lwpstory.hxx"
 #include <tools/gen.hxx>
 #include <svx/svdoole2.hxx>
@@ -97,7 +97,7 @@ typedef struct tagAFID_CACHE
 class LwpGraphicOleObject : public LwpContent
 {
 public:
-    LwpGraphicOleObject(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
+    LwpGraphicOleObject(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     virtual void Read() override;
     void         GetGrafScaledSize(double& fWidth, double& fHeight);
     virtual void GetGrafOrgSize(double& rWidth, double& rHeight);
@@ -115,8 +115,7 @@ protected:
 class LwpOleObject : public LwpGraphicOleObject
 {
 public:
-    LwpOleObject(LwpObjectHeader& objHdr, LwpSvStream* pStrm);
-    virtual ~LwpOleObject(){}
+    LwpOleObject(LwpObjectHeader const & objHdr, LwpSvStream* pStrm);
     virtual void Read() override;
     virtual void Parse(IXFStream* pOutputStream) override;
     virtual void XFConvert(XFContentContainer * pCont) override;
@@ -125,7 +124,7 @@ public:
 private:
     sal_uInt16 cPersistentFlags;
 
-    Rectangle m_SizeRect;
+    tools::Rectangle m_SizeRect;
 };
 
 #endif

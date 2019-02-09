@@ -17,17 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <typeinfo>
 
-namespace salhelper {
-    class Condition;
-    class ConditionModifier;
-    class ConditionWaiter;
-    class ORealDynamicLoader;
-    class SimpleReferenceObject;
-}
+#include <osl/mutex.hxx>
+#include <salhelper/condition.hxx>
+#include <salhelper/dynload.hxx>
+#include <salhelper/simplereferenceobject.hxx>
+#include <cppunit/TestFixture.h>
+#include <cppunit/extensions/HelperMacros.h>
+#include <cppunit/plugin/TestPlugIn.h>
+#include <memory>
 
 namespace {
 
@@ -47,15 +48,6 @@ std::type_info const & getSimpleReferenceObjectTypeInfo()
 { return typeid (salhelper::SimpleReferenceObject *); }
 
 }
-
-#include "osl/mutex.hxx"
-#include "salhelper/condition.hxx"
-#include "salhelper/dynload.hxx"
-#include "salhelper/simplereferenceobject.hxx"
-#include <cppunit/TestFixture.h>
-#include <cppunit/extensions/HelperMacros.h>
-#include <cppunit/plugin/TestPlugIn.h>
-#include <memory>
 
 namespace {
 
@@ -109,65 +101,64 @@ public:
 void Test::testCondition() {
     osl::Mutex mutex;
     std::unique_ptr< salhelper::Condition > p(new DerivedCondition(mutex));
-    CPPUNIT_ASSERT(typeid (*p.get()) != typeid (salhelper::Condition));
-    CPPUNIT_ASSERT(typeid (p.get()) == typeid (salhelper::Condition *));
-    CPPUNIT_ASSERT(
+    CPPUNIT_ASSERT(typeid(*p) != typeid(salhelper::Condition));
+    CPPUNIT_ASSERT(bool(typeid (p.get()) == typeid (salhelper::Condition *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::Condition const * >(p.get()))
-        == typeid (salhelper::Condition const *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::Condition const *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::Condition volatile * >(p.get()))
-        == typeid (salhelper::Condition volatile *));
-    CPPUNIT_ASSERT(typeid (salhelper::Condition *) == getConditionTypeInfo());
+        == typeid (salhelper::Condition volatile *)));
+    CPPUNIT_ASSERT(bool(typeid (salhelper::Condition *) == getConditionTypeInfo()));
 }
 
 #ifdef _MSC_VER
-// MSVC 2012 warns about the "p" being unused
-#pragma warning (push, 1)
-#pragma warning (disable: 4189)
+#pragma warning (push)
+#pragma warning (disable: 4189) // 'p': local variable is initialized but not referenced
 #endif
 
 
 void Test::testConditionModifier() {
     salhelper::ConditionModifier * p = nullptr;
-    CPPUNIT_ASSERT(typeid (*p) == typeid (salhelper::ConditionModifier));
-    CPPUNIT_ASSERT(typeid (p) == typeid (salhelper::ConditionModifier *));
-    CPPUNIT_ASSERT(
+    CPPUNIT_ASSERT(bool(typeid (*p) == typeid (salhelper::ConditionModifier)));
+    CPPUNIT_ASSERT(bool(typeid (p) == typeid (salhelper::ConditionModifier *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ConditionModifier const * >(p))
-        == typeid (salhelper::ConditionModifier const *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::ConditionModifier const *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ConditionModifier volatile * >(p))
-        == typeid (salhelper::ConditionModifier volatile *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::ConditionModifier volatile *)));
+    CPPUNIT_ASSERT(bool(
         typeid (salhelper::ConditionModifier *)
-        == getConditionModifierTypeInfo());
+        == getConditionModifierTypeInfo()));
 }
 
 void Test::testConditionWaiter() {
     salhelper::ConditionWaiter * p = nullptr;
-    CPPUNIT_ASSERT(typeid (*p) == typeid (salhelper::ConditionWaiter));
-    CPPUNIT_ASSERT(typeid (p) == typeid (salhelper::ConditionWaiter *));
-    CPPUNIT_ASSERT(
+    CPPUNIT_ASSERT(bool(typeid (*p) == typeid (salhelper::ConditionWaiter)));
+    CPPUNIT_ASSERT(bool(typeid (p) == typeid (salhelper::ConditionWaiter *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ConditionWaiter const * >(p))
-        == typeid (salhelper::ConditionWaiter const *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::ConditionWaiter const *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ConditionWaiter volatile * >(p))
-        == typeid (salhelper::ConditionWaiter volatile *));
-    CPPUNIT_ASSERT(
-        typeid (salhelper::ConditionWaiter *) == getConditionWaiterTypeInfo());
+        == typeid (salhelper::ConditionWaiter volatile *)));
+    CPPUNIT_ASSERT(bool(
+        typeid (salhelper::ConditionWaiter *) == getConditionWaiterTypeInfo()));
 }
 
 void Test::testConditionWaiterTimedout() {
     salhelper::ConditionWaiter::timedout x;
-    CPPUNIT_ASSERT(typeid (x) == typeid (salhelper::ConditionWaiter::timedout));
-    CPPUNIT_ASSERT(
-        typeid (&x) == typeid (salhelper::ConditionWaiter::timedout *));
-    CPPUNIT_ASSERT(
+    CPPUNIT_ASSERT(bool(typeid (x) == typeid (salhelper::ConditionWaiter::timedout)));
+    CPPUNIT_ASSERT(bool(
+        typeid (&x) == typeid (salhelper::ConditionWaiter::timedout *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ConditionWaiter::timedout const * >(&x))
-        == typeid (salhelper::ConditionWaiter::timedout const *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::ConditionWaiter::timedout const *)));
+    CPPUNIT_ASSERT(bool(
         (typeid
          (const_cast< salhelper::ConditionWaiter::timedout volatile * >(&x)))
-        == typeid (salhelper::ConditionWaiter::timedout volatile *));
+        == typeid (salhelper::ConditionWaiter::timedout volatile *)));
     try {
         throw salhelper::ConditionWaiter::timedout();
     } catch (salhelper::ConditionWaiter::timedout &) {
@@ -179,16 +170,16 @@ void Test::testConditionWaiterTimedout() {
 void Test::testORealDynamicLoader() {
     salhelper::ORealDynamicLoader * p = nullptr;
     CPPUNIT_ASSERT(typeid (p) != typeid (salhelper::ORealDynamicLoader));
-    CPPUNIT_ASSERT(typeid (p) == typeid (salhelper::ORealDynamicLoader *));
-    CPPUNIT_ASSERT(
+    CPPUNIT_ASSERT(bool(typeid (p) == typeid (salhelper::ORealDynamicLoader *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ORealDynamicLoader const * >(p))
-        == typeid (salhelper::ORealDynamicLoader const *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::ORealDynamicLoader const *)));
+    CPPUNIT_ASSERT(bool(
         typeid (const_cast< salhelper::ORealDynamicLoader volatile * >(p))
-        == typeid (salhelper::ORealDynamicLoader volatile *));
-    CPPUNIT_ASSERT(
+        == typeid (salhelper::ORealDynamicLoader volatile *)));
+    CPPUNIT_ASSERT(bool(
         typeid (salhelper::ORealDynamicLoader *)
-        == getORealDynamicLoaderTypeInfo());
+        == getORealDynamicLoaderTypeInfo()));
 }
 
 #ifdef _MSC_VER
@@ -200,18 +191,18 @@ void Test::testSimpleReferenceObject() {
     try {
         CPPUNIT_ASSERT(
             typeid (*p) != typeid (salhelper::SimpleReferenceObject));
-        CPPUNIT_ASSERT(
-            typeid (p) == typeid (salhelper::SimpleReferenceObject *));
-        CPPUNIT_ASSERT(
+        CPPUNIT_ASSERT(bool(
+            typeid (p) == typeid (salhelper::SimpleReferenceObject *)));
+        CPPUNIT_ASSERT(bool(
             typeid (const_cast< salhelper::SimpleReferenceObject const * >(p))
-            == typeid (salhelper::SimpleReferenceObject const *));
-        CPPUNIT_ASSERT(
+            == typeid (salhelper::SimpleReferenceObject const *)));
+        CPPUNIT_ASSERT(bool(
             (typeid
              (const_cast< salhelper::SimpleReferenceObject volatile * >(p)))
-            == typeid (salhelper::SimpleReferenceObject volatile *));
-        CPPUNIT_ASSERT(
+            == typeid (salhelper::SimpleReferenceObject volatile *)));
+        CPPUNIT_ASSERT(bool(
             typeid (salhelper::SimpleReferenceObject *)
-            == getSimpleReferenceObjectTypeInfo());
+            == getSimpleReferenceObjectTypeInfo()));
     } catch (...) {
         delete static_cast< DerivedSimpleReferenceObject * >(p);
         throw;
@@ -221,15 +212,14 @@ void Test::testSimpleReferenceObject() {
 
 void Test::testDerivedCondition() {
     osl::Mutex mutex;
+    // Next line tests that new doesn't throw
     std::unique_ptr< salhelper::Condition > p(new DerivedCondition(mutex));
-    CPPUNIT_ASSERT(dynamic_cast< DerivedCondition * >(p.get()) != nullptr);
 }
 
 void Test::testDerivedConditionWaiterTimedout() {
+    // Next line tests that new doesn't throw
     std::unique_ptr< salhelper::ConditionWaiter::timedout > p(
         new DerivedConditionWaiterTimedout);
-    CPPUNIT_ASSERT(
-        dynamic_cast< DerivedConditionWaiterTimedout * >(p.get()) != nullptr);
     try {
         throw DerivedConditionWaiterTimedout();
     } catch (salhelper::ConditionWaiter::timedout &) {

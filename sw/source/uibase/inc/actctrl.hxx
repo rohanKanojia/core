@@ -20,7 +20,7 @@
 #define INCLUDED_SW_SOURCE_UIBASE_INC_ACTCTRL_HXX
 
 #include <vcl/field.hxx>
-#include "swdllapi.h"
+#include <swdllapi.h>
 
 // numerical input
 class SW_DLLPUBLIC NumEditAction: public NumericField
@@ -28,11 +28,13 @@ class SW_DLLPUBLIC NumEditAction: public NumericField
     Link<NumEditAction&,void> aActionLink;
 
 protected:
-    void Action();
-    virtual bool Notify( NotifyEvent& rNEvt ) override;
+    virtual bool EventNotify( NotifyEvent& rNEvt ) override;
+
 public:
-    NumEditAction( vcl::Window* pParent, const ResId& rResId ) :
-                                NumericField(pParent, rResId) {}
+    NumEditAction(vcl::Window* pParent, WinBits nBits)
+        : NumericField(pParent, nBits)
+    {
+    }
 
     void        SetActionHdl( const Link<NumEditAction&,void>& rLink ) { aActionLink = rLink;}
 };

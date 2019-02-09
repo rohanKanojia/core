@@ -196,13 +196,6 @@ UDK_3_0_0 {
         rtl_reallocateMemory;
         rtl_zeroMemory;
         rtl_findInMemory;
-        rtl_hashentry_destroy;
-        rtl_hashfunc;
-        rtl_hashtable_add;
-        rtl_hashtable_destroy;
-        rtl_hashtable_find;
-        rtl_hashtable_grow;
-        rtl_hashtable_init;
         rtl_locale_equals;
         rtl_locale_getCountry;
         rtl_locale_getDefault;
@@ -695,6 +688,23 @@ LIBO_UDK_5.2 { # symbols available in >= LibO 5.2
         osl_getShortUserName;
 } LIBO_UDK_5.1;
 
+LIBO_UDK_5.3 { # symbols available in >= LibO 5.3
+    global:
+        rtl_math_approxEqual;
+        rtl_uString_newConcatUtf16L;
+        rtl_uString_newReplaceAllAsciiLUtf16L;
+        rtl_uString_newReplaceAllUtf16LAsciiL;
+        rtl_uString_newReplaceAllUtf16LUtf16L;
+        rtl_uString_newReplaceFirstAsciiLUtf16L;
+        rtl_uString_newReplaceFirstUtf16LAsciiL;
+        rtl_uString_newReplaceFirstUtf16LUtf16L;
+} LIBO_UDK_5.2;
+
+LIBO_UDK_6.2 { # symbols available in >= LibO 6.2
+    global:
+        osl_replaceFile;
+} LIBO_UDK_5.3;
+
 PRIVATE_1.0 {
     global:
         osl_detail_ObjectRegistry_storeAddresses;
@@ -715,6 +725,23 @@ PRIVATE_1.2 { # LibreOffice 3.5
         sal_detail_log;
         sal_detail_logFormat;
 } PRIVATE_1.1;
+
+PRIVATE_1.3 { # LibreOffice 5.4
+    global:
+        sal_detail_log_report;
+} PRIVATE_1.2;
+
+PRIVATE_1.4 { # LibreOffice 6.0
+    global:
+        _ZN3sal13backtrace_getEj;
+        _ZN3sal13backtrace_getEm;
+        _ZN3sal19backtrace_to_stringEPNS_14BacktraceStateE;
+} PRIVATE_1.3;
+
+PRIVATE_1.5 { # LibreOffice 6.1
+    global:
+        rtl_alloc_preInit;
+} PRIVATE_1.4;
 
 PRIVATE_textenc.1 { # LibreOffice 3.6
     global:

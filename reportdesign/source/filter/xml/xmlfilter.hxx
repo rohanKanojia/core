@@ -33,9 +33,7 @@
 #include <osl/diagnose.h>
 #include <unotools/tempfile.hxx>
 #include <unotools/localfilehelper.hxx>
-#include <unotools/ucbstreamhelper.hxx>
 #include <xmloff/xmlimp.hxx>
-#include <comphelper/sequence.hxx>
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <map>
 #include <memory>
@@ -70,6 +68,7 @@ private:
     TGroupFunctionMap                               m_aFunctions;
 
     mutable ::std::unique_ptr<SvXMLTokenMap>        m_pDocElemTokenMap;
+    mutable ::std::unique_ptr<SvXMLTokenMap>        m_pDocContentElemTokenMap;
     mutable ::std::unique_ptr<SvXMLTokenMap>        m_pReportElemTokenMap;
     mutable ::std::unique_ptr<SvXMLTokenMap>        m_pGroupElemTokenMap;
     mutable ::std::unique_ptr<SvXMLTokenMap>        m_pSectionElemTokenMap;
@@ -91,46 +90,52 @@ private:
     Reference<XReportDefinition>                    m_xReportDefinition;
     std::shared_ptr<rptui::OReportModel>        m_pReportModel;
 
-    bool                            implImport( const Sequence< PropertyValue >& rDescriptor ) throw (RuntimeException, std::exception);
+    /// @throws RuntimeException
+    bool                            implImport( const Sequence< PropertyValue >& rDescriptor );
 
+public:
+    using SvXMLImport::SetMasterStyles;
     SvXMLImportContext* CreateStylesContext(const OUString& rLocalName,
                                             const Reference< XAttributeList>& xAttrList, bool bIsAutoStyle );
-    SvXMLImportContext* CreateMetaContext(const OUString& rLocalName,
-                                          const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList );
+    SvXMLImportContext* CreateMetaContext(const sal_Int32 nElement);
     SvXMLImportContext* CreateFontDeclsContext(const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList );
 protected:
     // SvXMLImport
-    virtual SvXMLImportContext *CreateContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContext *CreateDocumentContext( sal_uInt16 nPrefix,
             const OUString& rLocalName,
             const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
+    virtual SvXMLImportContext *CreateFastContext( sal_Int32 nElement,
+        const css::uno::Reference< css::xml::sax::XFastAttributeList >& xAttrList ) override;
+
     virtual XMLShapeImportHelper* CreateShapeImport() override;
 
-    virtual ~ORptFilter()  throw();
+    virtual ~ORptFilter()  throw() override;
 public:
 
     ORptFilter( const Reference< XComponentContext >& _rxContext, SvXMLImportFlags nImportFlags = SvXMLImportFlags::ALL );
 
     // XFilter
-    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& rDescriptor ) throw(RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL filter( const Sequence< PropertyValue >& rDescriptor ) override;
 
-    static css::uno::Sequence< OUString > getSupportedServiceNames_Static() throw( css::uno::RuntimeException );
-    static OUString getImplementationName_Static() throw( css::uno::RuntimeException );
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static css::uno::Sequence< OUString > getSupportedServiceNames_Static();
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static();
+    static css::uno::Reference< css::uno::XInterface >
     create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 
-    inline Reference<XReportDefinition> getReportDefinition() const {
+    const Reference<XReportDefinition>& getReportDefinition() const {
         return m_xReportDefinition;
     }
     void FinishStyles();
 
-    virtual void SAL_CALL startDocument()
-    throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL endDocument()
-    throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL startDocument() override;
+    virtual void SAL_CALL endDocument() override;
 
     const SvXMLTokenMap& GetDocElemTokenMap() const;
+    const SvXMLTokenMap& GetDocContentElemTokenMap() const;
     const SvXMLTokenMap& GetReportElemTokenMap() const;
     const SvXMLTokenMap& GetGroupElemTokenMap() const;
     const SvXMLTokenMap& GetSectionElemTokenMap() const;
@@ -144,23 +149,23 @@ public:
     const SvXMLTokenMap& GetColumnTokenMap() const;
     const SvXMLTokenMap& GetCellElemTokenMap() const;
 
-    inline rtl::Reference < XMLPropertySetMapper > GetCellStylesPropertySetMapper()      const   {
+    const rtl::Reference< XMLPropertySetMapper >& GetCellStylesPropertySetMapper()      const   {
         return m_xCellStylesPropertySetMapper;
     }
-    inline rtl::Reference < XMLPropertySetMapper > GetColumnStylesPropertySetMapper()    const   {
+    const rtl::Reference< XMLPropertySetMapper >& GetColumnStylesPropertySetMapper()    const   {
         return m_xColumnStylesPropertySetMapper;
     }
-    inline rtl::Reference < XMLPropertySetMapper > GetRowStylesPropertySetMapper()       const   {
+    const rtl::Reference< XMLPropertySetMapper >& GetRowStylesPropertySetMapper()       const   {
         return m_xRowStylesPropertySetMapper;
     }
-    static OUString convertFormula(const OUString& _sFormula);
+    static const OUString& convertFormula(const OUString& _sFormula);
     /** inserts a new function
     *
     * \param _xFunction
     */
     void insertFunction(const css::uno::Reference< css::report::XFunction > & _xFunction);
     void removeFunction(const OUString& _sFunctionName);
-    inline const TGroupFunctionMap& getFunctions() const {
+    const TGroupFunctionMap& getFunctions() const {
         return m_aFunctions;
     }
 
@@ -174,9 +179,11 @@ public:
 class ORptImportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
     create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
@@ -187,9 +194,11 @@ public:
 class ORptContentImportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
     create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
@@ -200,9 +209,11 @@ public:
 class ORptStylesImportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
     create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
@@ -213,12 +224,29 @@ public:
 class ORptMetaImportHelper
 {
 public:
-    static OUString getImplementationName_Static(  ) throw (css::uno::RuntimeException);
-    static Sequence< OUString > getSupportedServiceNames_Static(  ) throw(css::uno::RuntimeException);
-    static css::uno::Reference< css::uno::XInterface > SAL_CALL
+    /// @throws css::uno::RuntimeException
+    static OUString getImplementationName_Static(  );
+    /// @throws css::uno::RuntimeException
+    static Sequence< OUString > getSupportedServiceNames_Static(  );
+    static css::uno::Reference< css::uno::XInterface >
     create(css::uno::Reference< css::uno::XComponentContext > const & xContext);
 };
 
+
+class RptXMLDocumentBodyContext : public SvXMLImportContext
+{
+public:
+    RptXMLDocumentBodyContext(SvXMLImport & rImport,
+           sal_uInt16 const nPrefix,
+           const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+           const OUString& rLocalName,
+           const css::uno::Reference<css::xml::sax::XAttributeList> & xAttrList) override;
+};
 
 } // rptxml
 

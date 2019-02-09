@@ -33,11 +33,11 @@
 #include <redline.hxx>
 
 SwUndoInserts::SwUndoInserts( SwUndoId nUndoId, const SwPaM& rPam )
-    : SwUndo( nUndoId ), SwUndRng( rPam ),
-    pTextFormatColl( nullptr ), pLastNdColl(nullptr), pFrameFormats( nullptr ), pRedlData( nullptr ),
+    : SwUndo( nUndoId, rPam.GetDoc() ), SwUndRng( rPam ),
+    pTextFormatColl( nullptr ), pLastNdColl(nullptr),
     bSttWasTextNd( true ), nNdDiff( 0 ), nSetPos( 0 )
 {
-    pHistory = new SwHistory;
+    pHistory.reset( new SwHistory );
     SwDoc* pDoc = rPam.GetDoc();
 
     SwTextNode* pTextNd = rPam.GetPoint()->nNode.GetNode().GetTextNode();
@@ -49,34 +49,47 @@ SwUndoInserts::SwUndoInserts( SwUndoId nUndoId, const SwPaM& rPam )
         if( pTextNd->HasSwAttrSet() )
             pHistory->CopyFormatAttr( *pTextNd->GetpSwAttrSet(), nSttNode );
 
-        if( !nSttContent )    // than take the Flys along
+        // We may have some flys anchored to paragraph where we inserting.
+        // These flys will be saved in pFrameFormats array (only flys which exist BEFORE insertion!)
+        // Then in SwUndoInserts::SetInsertRange the flys saved in pFrameFormats will NOT create Undos.
+        // m_FlyUndos will only be filled with newly inserted flys.
+
+        const size_t nArrLen = pDoc->GetSpzFrameFormats()->size();
+        for( size_t n = 0; n < nArrLen; ++n )
         {
-            const size_t nArrLen = pDoc->GetSpzFrameFormats()->size();
-            for( size_t n = 0; n < nArrLen; ++n )
+            SwFrameFormat* pFormat = (*pDoc->GetSpzFrameFormats())[n];
+            SwFormatAnchor const*const  pAnchor = &pFormat->GetAnchor();
+            const SwPosition* pAPos = pAnchor->GetContentAnchor();
+            if (pAPos &&
+                (pAnchor->GetAnchorId() == RndStdIds::FLY_AT_PARA) &&
+                 nSttNode == pAPos->nNode.GetIndex() )
             {
-                SwFrameFormat* pFormat = (*pDoc->GetSpzFrameFormats())[n];
-                SwFormatAnchor const*const  pAnchor = &pFormat->GetAnchor();
-                const SwPosition* pAPos = pAnchor->GetContentAnchor();
-                if (pAPos &&
-                    (pAnchor->GetAnchorId() == FLY_AT_PARA) &&
-                     nSttNode == pAPos->nNode.GetIndex() )
-                {
-                    if( !pFrameFormats )
-                        pFrameFormats = new std::vector<SwFrameFormat*>;
-                    pFrameFormats->push_back( pFormat );
-                }
+                if( !pFrameFormats )
+                    pFrameFormats.reset( new std::vector<SwFrameFormat*> );
+                pFrameFormats->push_back( pFormat );
             }
         }
     }
     // consider Redline
     if( pDoc->getIDocumentRedlineAccess().IsRedlineOn() )
     {
-        pRedlData = new SwRedlineData( nsRedlineType_t::REDLINE_INSERT, pDoc->getIDocumentRedlineAccess().GetRedlineAuthor() );
-        SetRedlineMode( pDoc->getIDocumentRedlineAccess().GetRedlineMode() );
+        pRedlData.reset( new SwRedlineData( nsRedlineType_t::REDLINE_INSERT, pDoc->getIDocumentRedlineAccess().GetRedlineAuthor() ) );
+        SetRedlineFlags( pDoc->getIDocumentRedlineAccess().GetRedlineFlags() );
     }
 }
 
-// set destination after reading input
+// This method does two things:
+// 1. Adjusts SwUndoRng members, required for Undo.
+//  Members are:
+//  SwUndoRng::nSttNode - all nodes starting from this node will be deleted during Undo (in SwUndoInserts::UndoImpl)
+//  SwUndoRng::nSttContent - corresponding content index in SwUndoRng::nSttNode
+//  SwUndoRng::nEndNode - end node for deletion
+//  SwUndoRng::nEndContent - end content index
+// All these members are filled in during construction of SwUndoInserts instance, and can be adjusted using this method
+//
+// 2. Fills in m_FlyUndos array with flys anchored ONLY to first and last paragraphs (first == rPam.Start(), last == rPam.End())
+//  Flys, anchored to any paragraph, but not first and last, are handled by DelContentIndex (see SwUndoInserts::UndoImpl) and are not stored in m_FlyUndos.
+
 void SwUndoInserts::SetInsertRange( const SwPaM& rPam, bool bScanFlys,
                                     bool bSttIsTextNd )
 {
@@ -93,14 +106,16 @@ void SwUndoInserts::SetInsertRange( const SwPaM& rPam, bool bScanFlys,
         nSttNode = pTmpPos->nNode.GetIndex();
         nSttContent = pTmpPos->nContent.GetIndex();
 
-        if( !bSttIsTextNd )      // if a table selection is added ...
+        if( !bSttIsTextNd )      // if a table selection is added...
         {
-            ++nSttNode;         // ... than the CopyPam is not fully correct
+            ++nSttNode;         // ... then the CopyPam is not fully correct
             bSttWasTextNd = false;
         }
     }
 
-    if( bScanFlys && !nSttContent )
+    // Fill m_FlyUndos with flys anchored to first and last paragraphs
+
+    if( bScanFlys)
     {
         // than collect all new Flys
         SwDoc* pDoc = rPam.GetDoc();
@@ -111,8 +126,8 @@ void SwUndoInserts::SetInsertRange( const SwPaM& rPam, bool bScanFlys,
             SwFormatAnchor const*const pAnchor = &pFormat->GetAnchor();
             SwPosition const*const pAPos = pAnchor->GetContentAnchor();
             if (pAPos &&
-                (pAnchor->GetAnchorId() == FLY_AT_PARA) &&
-                nSttNode == pAPos->nNode.GetIndex() )
+                (pAnchor->GetAnchorId() == RndStdIds::FLY_AT_PARA) &&
+                (nSttNode == pAPos->nNode.GetIndex() || nEndNode == pAPos->nNode.GetIndex()))
             {
                 std::vector<SwFrameFormat*>::iterator it;
                 if( !pFrameFormats ||
@@ -126,8 +141,7 @@ void SwUndoInserts::SetInsertRange( const SwPaM& rPam, bool bScanFlys,
                     pFrameFormats->erase( it );
             }
         }
-        delete pFrameFormats;
-        pFrameFormats = nullptr;
+        pFrameFormats.reset();
     }
 }
 
@@ -141,16 +155,37 @@ SwUndoInserts::~SwUndoInserts()
             rUNds.GetEndOfExtras().GetIndex() - m_pUndoNodeIndex->GetIndex());
         m_pUndoNodeIndex.reset();
     }
-    delete pFrameFormats;
-    delete pRedlData;
+    pFrameFormats.reset();
+    pRedlData.reset();
 }
+
+// Undo Insert operation
+//  It's important to note that Undo stores absolute node indexes. I.e. if during insertion, you insert nodes 31 to 33,
+//  during Undo nodes with indices from 31 to 33 will be deleted. Undo doesn't check that nodes 31 to 33 are the same nodes which were inserted.
+//  It just deletes them.
+//  This may seem as bad programming practice, but Undo actions are strongly ordered. If you change your document in some way, a new Undo action is added.
+//  During Undo most recent actions will be executed first. So during execution of particular Undo action indices will be correct.
+//  But storing absolute indices leads to crashes if some action in Undo fails to roll back some modifications.
+
+//  Has following main steps:
+//  1. DelContentIndex to delete footnotes, flys, bookmarks (see comment for this function)
+//     Deleted flys are stored in pHistory array.
+//     First and last paragraphs flys are handled later in this function! They are not deleted by DelContentIndex!
+//     For flys anchored to last paragraph, DelContentIndex re-anchors them to the last paragraph that will remain after Undo.
+//     This is not fully correct, as everything between nSttNode and nEndNode should be deleted (these nodes marks range of inserted nodes).
+//     But due to bug in paste (probably there), during paste all flys are anchored to last paragraph (see https://bugs.documentfoundation.org/show_bug.cgi?id=94225#c38).
+//     So they should be re-anchored.
+//  2. MoveToUndoNds moves nodes to Undo nodes array and removes them from document.
+//  3. m_FlyUndos removes flys anchored to first and last paragraph in Undo range. This array may be empty.
+//  4. Lastly (starting from if(pTextNode)), text from last paragraph is joined to last remaining paragraph and FormatColl for last paragraph is restored.
+//     Format coll for last paragraph is removed during execution of UndoImpl
 
 void SwUndoInserts::UndoImpl(::sw::UndoRedoContext & rContext)
 {
     SwDoc& rDoc = rContext.GetDoc();
     SwPaM& rPam = AddUndoRedoPaM(rContext);
 
-    if( IDocumentRedlineAccess::IsRedlineOn( GetRedlineMode() ))
+    if( IDocumentRedlineAccess::IsRedlineOn( GetRedlineFlags() ))
         rDoc.getIDocumentRedlineAccess().DeleteRedline(rPam, true, USHRT_MAX);
 
     // if Point and Mark are different text nodes so a JoinNext has to be done
@@ -184,11 +219,11 @@ void SwUndoInserts::UndoImpl(::sw::UndoRedoContext & rContext)
             MoveToUndoNds(rPam, m_pUndoNodeIndex.get());
 
             if( !bSttWasTextNd )
-                rPam.Move( fnMoveBackward, fnGoContent );
+                rPam.Move( fnMoveBackward, GoInContent );
         }
     }
 
-    if (m_FlyUndos.size())
+    if (!m_FlyUndos.empty())
     {
         sal_uLong nTmp = rPam.GetPoint()->nNode.GetIndex();
         for (size_t n = m_FlyUndos.size(); 0 < n; --n)
@@ -230,7 +265,7 @@ void SwUndoInserts::UndoImpl(::sw::UndoRedoContext & rContext)
 
             pTextNode->ResetAllAttr();
 
-            if (rDoc.GetTextFormatColls()->Contains(pTextFormatColl))
+            if (rDoc.GetTextFormatColls()->IsAlive(pTextFormatColl))
                 pTextFormatColl = static_cast<SwTextFormatColl*>(pTextNode->ChgFormatColl( pTextFormatColl )) ;
 
             pHistory->SetTmpEnd( nSetPos );
@@ -238,6 +273,9 @@ void SwUndoInserts::UndoImpl(::sw::UndoRedoContext & rContext)
         }
     }
 }
+
+// See SwUndoInserts::UndoImpl comments
+// All actions here should be done in reverse order to what is done in SwUndoInserts::UndoImpl!
 
 void SwUndoInserts::RedoImpl(::sw::UndoRedoContext & rContext)
 {
@@ -269,7 +307,7 @@ void SwUndoInserts::RedoImpl(::sw::UndoRedoContext & rContext)
         rPam.Exchange();
     }
 
-    if( pDoc->GetTextFormatColls()->Contains( pTextFormatColl ))
+    if (pDoc->GetTextFormatColls()->IsAlive(pTextFormatColl))
     {
         SwTextNode* pTextNd = rPam.GetMark()->nNode.GetNode().GetTextNode();
         if( pTextNd )
@@ -277,29 +315,37 @@ void SwUndoInserts::RedoImpl(::sw::UndoRedoContext & rContext)
     }
     pTextFormatColl = pSavTextFormatColl;
 
-    if( pLastNdColl && pDoc->GetTextFormatColls()->Contains( pLastNdColl ) &&
-        rPam.GetPoint()->nNode != rPam.GetMark()->nNode )
+    if (pLastNdColl && pDoc->GetTextFormatColls()->IsAlive(pLastNdColl)
+        && rPam.GetPoint()->nNode != rPam.GetMark()->nNode)
     {
         SwTextNode* pTextNd = rPam.GetPoint()->nNode.GetNode().GetTextNode();
         if( pTextNd )
             pTextNd->ChgFormatColl( pLastNdColl );
     }
 
-    for (size_t n = m_FlyUndos.size(); 0 < n; --n)
+    // tdf#108124 (10/25/2017)
+    // During UNDO we call SwUndoInsLayFormat::UndoImpl in reverse order,
+    //  firstly for m_FlyUndos[ m_FlyUndos.size()-1 ], etc.
+    // As absolute node index of fly stored in SwUndoFlyBase::nNdPgPos we
+    //  should recover from Undo in direct order (last should be recovered first)
+    // During REDO we should recover Flys (Images) in direct order,
+    //  firstly m_FlyUndos[0], then with m_FlyUndos[1] index, etc.
+
+    for (size_t n = 0; m_FlyUndos.size() > n; ++n)
     {
-        m_FlyUndos[ n-1 ]->RedoImpl(rContext);
+        m_FlyUndos[n]->RedoImpl(rContext);
     }
 
     pHistory->Rollback( pDoc, nSetPos );
 
-    if( pRedlData && IDocumentRedlineAccess::IsRedlineOn( GetRedlineMode() ))
+    if( pRedlData && IDocumentRedlineAccess::IsRedlineOn( GetRedlineFlags() ))
     {
-        RedlineMode_t eOld = pDoc->getIDocumentRedlineAccess().GetRedlineMode();
-        pDoc->getIDocumentRedlineAccess().SetRedlineMode_intern((RedlineMode_t)( eOld & ~nsRedlineMode_t::REDLINE_IGNORE ));
+        RedlineFlags eOld = pDoc->getIDocumentRedlineAccess().GetRedlineFlags();
+        pDoc->getIDocumentRedlineAccess().SetRedlineFlags_intern( eOld & ~RedlineFlags::Ignore );
         pDoc->getIDocumentRedlineAccess().AppendRedline( new SwRangeRedline( *pRedlData, rPam ), true);
-        pDoc->getIDocumentRedlineAccess().SetRedlineMode_intern( eOld );
+        pDoc->getIDocumentRedlineAccess().SetRedlineFlags_intern( eOld );
     }
-    else if( !( nsRedlineMode_t::REDLINE_IGNORE & GetRedlineMode() ) &&
+    else if( !( RedlineFlags::Ignore & GetRedlineFlags() ) &&
             !pDoc->getIDocumentRedlineAccess().GetRedlineTable().empty() )
         pDoc->getIDocumentRedlineAccess().SplitRedline(rPam);
 }
@@ -313,12 +359,12 @@ void SwUndoInserts::RepeatImpl(::sw::RepeatContext & rContext)
 }
 
 SwUndoInsDoc::SwUndoInsDoc( const SwPaM& rPam )
-    : SwUndoInserts( UNDO_INSDOKUMENT, rPam )
+    : SwUndoInserts( SwUndoId::INSDOKUMENT, rPam )
 {
 }
 
 SwUndoCpyDoc::SwUndoCpyDoc( const SwPaM& rPam )
-    : SwUndoInserts( UNDO_COPY, rPam )
+    : SwUndoInserts( SwUndoId::COPY, rPam )
 {
 }
 

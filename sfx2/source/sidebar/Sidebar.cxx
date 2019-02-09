@@ -27,15 +27,15 @@ namespace sfx2 { namespace sidebar {
 
 void Sidebar::ShowPanel (
     const OUString& rsPanelId,
-    const css::uno::Reference<frame::XFrame>& rxFrame)
+    const css::uno::Reference<frame::XFrame>& rxFrame, bool bFocus)
 {
     SidebarController* pController = SidebarController::GetSidebarControllerForFrame(rxFrame);
     if (!pController)
         return;
 
-    const PanelDescriptor* pPanelDescriptor = pController->GetResourceManager()->GetPanelDescriptor(rsPanelId);
+    std::shared_ptr<PanelDescriptor> xPanelDescriptor = pController->GetResourceManager()->GetPanelDescriptor(rsPanelId);
 
-    if (!pPanelDescriptor)
+    if (!xPanelDescriptor)
         return;
 
     // This should be a lot more sophisticated:
@@ -44,7 +44,10 @@ void Sidebar::ShowPanel (
 
     // All that is not necessary for the current use cases so lets
     // keep it simple for the time being.
-    pController->OpenThenSwitchToDeck(pPanelDescriptor->msDeckId);
+    pController->OpenThenSwitchToDeck(xPanelDescriptor->msDeckId);
+
+    if (bFocus)
+        pController->GetFocusManager().GrabFocusPanel();
 }
 
 bool Sidebar::IsPanelVisible(
@@ -55,11 +58,11 @@ bool Sidebar::IsPanelVisible(
     if (!pController)
         return false;
 
-    const PanelDescriptor* pPanelDescriptor = pController->GetResourceManager()->GetPanelDescriptor(rsPanelId);
-    if (!pPanelDescriptor)
+    std::shared_ptr<PanelDescriptor> xPanelDescriptor = pController->GetResourceManager()->GetPanelDescriptor(rsPanelId);
+    if (!xPanelDescriptor)
         return false;
 
-    return pController->IsDeckVisible(pPanelDescriptor->msDeckId);
+    return pController->IsDeckVisible(xPanelDescriptor->msDeckId);
 }
 
 } } // end of namespace sfx2::sidebar

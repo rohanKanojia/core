@@ -17,17 +17,18 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/textcharacterproperties.hxx"
+#include <drawingml/textcharacterproperties.hxx>
 #include <com/sun/star/lang/Locale.hpp>
 #include <com/sun/star/awt/FontSlant.hpp>
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <i18nlangtag/languagetag.hxx>
 #include <editeng/escapementitem.hxx>
-#include "oox/helper/helper.hxx"
-#include "oox/helper/propertyset.hxx"
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/drawingml/drawingmltypes.hxx"
-#include "oox/token/tokens.hxx"
+#include <oox/helper/helper.hxx>
+#include <oox/helper/propertyset.hxx>
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
+#include <oox/token/properties.hxx>
+#include <oox/token/tokens.hxx>
 
 using ::oox::core::XmlFilterBase;
 using namespace ::com::sun::star;
@@ -39,7 +40,7 @@ namespace drawingml {
 
 void TextCharacterProperties::assignUsed( const TextCharacterProperties& rSourceProps )
 {
-    // overwrite all properties exisiting in rSourceProps
+    // overwrite all properties existing in rSourceProps
     maHyperlinkPropertyMap.assignUsed( rSourceProps.maHyperlinkPropertyMap );
     maLatinFont.assignIfUsed( rSourceProps.maLatinFont );
     maLatinThemeFont.assignIfUsed( rSourceProps.maLatinThemeFont );
@@ -51,6 +52,7 @@ void TextCharacterProperties::assignUsed( const TextCharacterProperties& rSource
     maHighlightColor.assignIfUsed( rSourceProps.maHighlightColor );
     maUnderlineColor.assignIfUsed( rSourceProps.maUnderlineColor );
     moHeight.assignIfUsed( rSourceProps.moHeight );
+    moFontScale.assignIfUsed(rSourceProps.moFontScale);
     moSpacing.assignIfUsed( rSourceProps.moSpacing );
     moUnderline.assignIfUsed( rSourceProps.moUnderline );
     moBaseline.assignIfUsed( rSourceProps.moBaseline );
@@ -116,12 +118,14 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
     if( moHeight.has() )
     {
         float fHeight = GetFontHeight( moHeight.get() );
+        if (moFontScale.has())
+            fHeight *= (moFontScale.get() / 100000);
         rPropMap.setProperty( PROP_CharHeight, fHeight);
         rPropMap.setProperty( PROP_CharHeightAsian, fHeight);
         rPropMap.setProperty( PROP_CharHeightComplex, fHeight);
     }
 
-    rPropMap.setProperty( PROP_CharKerning, (sal_Int16) GetTextSpacingPoint( moSpacing.get( 0 ) ));
+    rPropMap.setProperty( PROP_CharKerning, static_cast<sal_Int16>(GetTextSpacingPoint( moSpacing.get( 0 ) )));
 
     rPropMap.setProperty( PROP_CharUnderline, GetFontUnderline( moUnderline.get( XML_none ) ));
     rPropMap.setProperty( PROP_CharStrikeout, GetFontStrikeout( moStrikeout.get( XML_noStrike ) ));
@@ -151,9 +155,10 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
         rPropMap.setProperty( PROP_CharUnderlineHasColor, true);
         rPropMap.setProperty( PROP_CharUnderlineColor, maUnderlineColor.getColor( rFilter.getGraphicHelper() ));
     }
+    // TODO If bUnderlineFillFollowText uFillTx (CT_TextUnderlineFillFollowText) is set, fill color of the underline should be the same color as the text
 }
 
-void pushToGrabBag( PropertySet& rPropSet, const std::vector<PropertyValue>& aVectorOfProperyValues )
+static void pushToGrabBag( PropertySet& rPropSet, const std::vector<PropertyValue>& aVectorOfProperyValues )
 {
     if (!rPropSet.hasProperty(PROP_CharInteropGrabBag) || aVectorOfProperyValues.empty())
         return;

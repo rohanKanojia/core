@@ -22,11 +22,10 @@
 #include <com/sun/star/awt/MouseButton.hpp>
 #include <com/sun/star/awt/SystemPointer.hpp>
 #include <com/sun/star/presentation/XShapeEventListener.hpp>
-#include <com/sun/star/presentation/XSlideShowListener.hpp>
 
 #include "shapemanagerimpl.hxx"
 
-#include <boost/mem_fn.hpp>
+#include <functional>
 
 using namespace com::sun::star;
 
@@ -52,46 +51,46 @@ ShapeManagerImpl::ShapeManagerImpl( EventMultiplexer&            rMultiplexer,
 
 void ShapeManagerImpl::activate()
 {
-    if( !mbEnabled )
-    {
-        mbEnabled = true;
+    if( mbEnabled )
+        return;
 
-        // register this handler on EventMultiplexer.
-        // Higher prio (overrides other engine handlers)
-        mrMultiplexer.addMouseMoveHandler( shared_from_this(), 2.0 );
-        mrMultiplexer.addClickHandler( shared_from_this(), 2.0 );
-        mrMultiplexer.addShapeListenerHandler( shared_from_this() );
+    mbEnabled = true;
 
-        // clone listener map
-        uno::Reference<presentation::XShapeEventListener> xDummyListener;
-        for( const auto& rListener : mrGlobalListenersMap )
-            this->listenerAdded( xDummyListener, rListener.first );
+    // register this handler on EventMultiplexer.
+    // Higher prio (overrides other engine handlers)
+    mrMultiplexer.addMouseMoveHandler( shared_from_this(), 2.0 );
+    mrMultiplexer.addClickHandler( shared_from_this(), 2.0 );
+    mrMultiplexer.addShapeListenerHandler( shared_from_this() );
 
-        // clone cursor map
-        for( const auto& rListener : mrGlobalCursorMap )
-            this->cursorChanged( rListener.first, rListener.second );
+    // clone listener map
+    uno::Reference<presentation::XShapeEventListener> xDummyListener;
+    for( const auto& rListener : mrGlobalListenersMap )
+        listenerAdded( xDummyListener, rListener.first );
 
-        if( mpLayerManager )
-            mpLayerManager->activate();
-    }
+    // clone cursor map
+    for( const auto& rListener : mrGlobalCursorMap )
+        cursorChanged( rListener.first, rListener.second );
+
+    if( mpLayerManager )
+        mpLayerManager->activate();
 }
 
 void ShapeManagerImpl::deactivate()
 {
-    if( mbEnabled )
-    {
-        mbEnabled = false;
+    if( !mbEnabled )
+        return;
 
-        if( mpLayerManager )
-            mpLayerManager->deactivate();
+    mbEnabled = false;
 
-        maShapeListenerMap.clear();
-        maShapeCursorMap.clear();
+    if( mpLayerManager )
+        mpLayerManager->deactivate();
 
-        mrMultiplexer.removeShapeListenerHandler( shared_from_this() );
-        mrMultiplexer.removeMouseMoveHandler( shared_from_this() );
-        mrMultiplexer.removeClickHandler( shared_from_this() );
-    }
+    maShapeListenerMap.clear();
+    maShapeCursorMap.clear();
+
+    mrMultiplexer.removeShapeListenerHandler( shared_from_this() );
+    mrMultiplexer.removeMouseMoveHandler( shared_from_this() );
+    mrMultiplexer.removeClickHandler( shared_from_this() );
 }
 
 void ShapeManagerImpl::dispose()
@@ -129,35 +128,30 @@ bool ShapeManagerImpl::handleMouseReleased( awt::MouseEvent const& e )
 
     // find matching shape (scan reversely, to coarsely match
     // paint order)
-    ShapeToListenersMap::reverse_iterator aCurrBroadcaster(
-        maShapeListenerMap.rbegin() );
-    ShapeToListenersMap::reverse_iterator const aEndBroadcasters(
-        maShapeListenerMap.rend() );
-    while( aCurrBroadcaster != aEndBroadcasters )
+    auto aCurrBroadcaster = std::find_if(maShapeListenerMap.rbegin(), maShapeListenerMap.rend(),
+        [&aPosition](const ShapeToListenersMap::value_type& rBroadcaster) {
+            // TODO(F2): Get proper geometry polygon from the
+            // shape, to avoid having areas outside the shape
+            // react on the mouse
+            return rBroadcaster.first->getBounds().isInside( aPosition )
+                && rBroadcaster.first->isVisible();
+        });
+    if (aCurrBroadcaster != maShapeListenerMap.rend())
     {
-        // TODO(F2): Get proper geometry polygon from the
-        // shape, to avoid having areas outside the shape
-        // react on the mouse
-        if( aCurrBroadcaster->first->getBounds().isInside( aPosition ) &&
-            aCurrBroadcaster->first->isVisible() )
-        {
-            // shape hit, and shape is visible. Raise
-            // event.
+        // shape hit, and shape is visible. Raise
+        // event.
 
-            std::shared_ptr<comphelper::OInterfaceContainerHelper2> const pCont(
-                aCurrBroadcaster->second );
-            uno::Reference<drawing::XShape> const xShape(
-                aCurrBroadcaster->first->getXShape() );
+        std::shared_ptr<comphelper::OInterfaceContainerHelper2> const pCont(
+            aCurrBroadcaster->second );
+        uno::Reference<drawing::XShape> const xShape(
+            aCurrBroadcaster->first->getXShape() );
 
-            // DON'T do anything with /this/ after this point!
-            pCont->forEach<presentation::XShapeEventListener>(
-                [&xShape, &e]( const uno::Reference< presentation::XShapeEventListener >& rListener )
-                { return rListener->click( xShape, e ); } );
+        // DON'T do anything with /this/ after this point!
+        pCont->forEach<presentation::XShapeEventListener>(
+            [&xShape, &e]( const uno::Reference< presentation::XShapeEventListener >& rListener )
+            { return rListener->click( xShape, e ); } );
 
-            return true; // handled this event
-        }
-
-        ++aCurrBroadcaster;
+        return true; // handled this event
     }
 
     return false; // did not handle this event
@@ -186,25 +180,19 @@ bool ShapeManagerImpl::handleMouseMoved( const awt::MouseEvent& e )
     {
         // find matching shape (scan reversely, to coarsely match
         // paint order)
-        ShapeToCursorMap::reverse_iterator aCurrCursor(
-            maShapeCursorMap.rbegin() );
-        ShapeToCursorMap::reverse_iterator const aEndCursors(
-            maShapeCursorMap.rend() );
-        while( aCurrCursor != aEndCursors )
+        auto aCurrCursor = std::find_if(maShapeCursorMap.rbegin(), maShapeCursorMap.rend(),
+            [&aPosition](const ShapeToCursorMap::value_type& rCursor) {
+                // TODO(F2): Get proper geometry polygon from the
+                // shape, to avoid having areas outside the shape
+                // react on the mouse
+                return rCursor.first->getBounds().isInside( aPosition )
+                    && rCursor.first->isVisible();
+            });
+        if (aCurrCursor != maShapeCursorMap.rend())
         {
-            // TODO(F2): Get proper geometry polygon from the
-            // shape, to avoid having areas outside the shape
-            // react on the mouse
-            if( aCurrCursor->first->getBounds().isInside( aPosition ) &&
-                aCurrCursor->first->isVisible() )
-            {
-                // shape found, and it's visible. set
-                // requested cursor to shape's
-                nNewCursor = aCurrCursor->second;
-                break;
-            }
-
-            ++aCurrCursor;
+            // shape found, and it's visible. set
+            // requested cursor to shape's
+            nNewCursor = aCurrCursor->second;
         }
     }
 
@@ -297,10 +285,7 @@ bool ShapeManagerImpl::listenerAdded(
     ShapeSharedPtr pShape( lookupShape(xShape) );
     if( pShape )
     {
-        maShapeListenerMap.insert(
-            ShapeToListenersMap::value_type(
-                pShape,
-                aIter->second));
+        maShapeListenerMap.emplace(pShape, aIter->second);
     }
 
     return true;
@@ -344,10 +329,7 @@ void ShapeManagerImpl::cursorChanged( const uno::Reference<drawing::XShape>&   x
         if( (aIter = maShapeCursorMap.find(pShape))
             == maShapeCursorMap.end() )
         {
-            maShapeCursorMap.insert(
-                ShapeToCursorMap::value_type(
-                    pShape,
-                    nCursor ));
+            maShapeCursorMap.emplace(pShape, nCursor);
         }
         else
         {
@@ -393,13 +375,13 @@ void ShapeManagerImpl::removeIntrinsicAnimationHandler( const IntrinsicAnimation
 void ShapeManagerImpl::notifyIntrinsicAnimationsEnabled()
 {
     maIntrinsicAnimationEventHandlers.applyAll(
-        boost::mem_fn(&IntrinsicAnimationEventHandler::enableAnimations));
+        std::mem_fn(&IntrinsicAnimationEventHandler::enableAnimations));
 }
 
 void ShapeManagerImpl::notifyIntrinsicAnimationsDisabled()
 {
     maIntrinsicAnimationEventHandlers.applyAll(
-        boost::mem_fn(&IntrinsicAnimationEventHandler::disableAnimations));
+        std::mem_fn(&IntrinsicAnimationEventHandler::disableAnimations));
 }
 
 

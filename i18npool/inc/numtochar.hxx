@@ -20,9 +20,9 @@
 #ifndef INCLUDED_I18NPOOL_INC_NUMTOCHAR_HXX
 #define INCLUDED_I18NPOOL_INC_NUMTOCHAR_HXX
 
-#include <transliteration_Numeric.hxx>
+#include "transliteration_Numeric.hxx"
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 #define TRANSLITERATION_NUMTOCHAR( name ) \
 class NumToChar##name : public transliteration_Numeric \
@@ -49,7 +49,7 @@ TRANSLITERATION_NUMTOCHAR(Halfwidth)
 
 #undef TRANSLITERATION_NUMTOCHAR
 
-} } } }
+}
 
 #endif // INCLUDED_I18NPOOL_INC_NUMTOCHAR_HXX
 

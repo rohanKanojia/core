@@ -24,16 +24,18 @@
 #include <rtl/ref.hxx>
 #include <rtl/ustring.hxx>
 #include <svl/lstner.hxx>
+#include <svl/svdde.hxx>
 #include <svtools/ehdl.hxx>
 #include <vcl/timer.hxx>
 #include <sfx2/app.hxx>
+#include <o3tl/enumarray.hxx>
 
-#include <com/sun/star/frame/XModel.hpp>
-
-#include "bitset.hxx"
+#include <bitset.hxx>
+#include <memory>
 #include <vector>
 
 class SfxApplication;
+class SfxPickList;
 class SfxProgress;
 class SfxDdeDocTopic_Impl;
 class DdeService;
@@ -45,11 +47,8 @@ class SfxStatusDispatcher;
 class SfxDdeTriggerTopic_Impl;
 class SfxDocumentTemplates;
 class SfxFrame;
-class SfxFrameArr_Impl;
 class SvtSaveOptions;
 class SvtHelpOptions;
-class ResMgr;
-class ResMgr;
 class SfxViewFrame;
 class SfxSlotPool;
 class SfxDispatcher;
@@ -73,27 +72,24 @@ public:
     OUString                            aLastDir;               // for IO dialog
 
     // DDE stuff
-    DdeService*                         pDdeService;
-    SfxDdeDocTopics_Impl*               pDocTopics;
-    SfxDdeTriggerTopic_Impl*            pTriggerTopic;
-    DdeService*                         pDdeService2;
+    std::unique_ptr<DdeService>              pDdeService;
+    std::unique_ptr<SfxDdeDocTopics_Impl>    pDocTopics;
+    std::unique_ptr<SfxDdeTriggerTopic_Impl> pTriggerTopic;
+    std::unique_ptr<DdeService>              pDdeService2;
 
     // single instance classes
     SfxChildWinFactArr_Impl*            pFactArr;
-    SfxFrameArr_Impl*                   pTopFrames;
+    std::vector<SfxFrame*>              vTopFrames;
 
     // application members
     SfxFilterMatcher*                   pMatcher;
-#if HAVE_FEATURE_SCRIPTING
-    ResMgr*                             pBasicResMgr;
-#endif
-    ResMgr*                             pSvtResMgr;
     SfxErrorHandler *m_pToolsErrorHdl;
     SfxErrorHandler *m_pSoErrorHdl;
 #if HAVE_FEATURE_SCRIPTING
     SfxErrorHandler *m_pSbxErrorHdl;
 #endif
-    SfxStatusDispatcher*                pAppDispatch;
+    rtl::Reference<SfxStatusDispatcher> mxAppDispatch;
+    std::unique_ptr<SfxPickList>        mxAppPickList;
     SfxDocumentTemplates*               pTemplates;
 
     // global pointers
@@ -103,9 +99,7 @@ public:
     SfxProgress*                        pProgress;
 
     sal_uInt16                              nDocModalMode;              // counts documents in modal mode
-    sal_uInt16                              nAutoTabPageId;
     sal_uInt16                              nRescheduleLocks;
-    sal_uInt16                              nInReschedule;
 
     rtl::Reference< sfx2::appl::ImeStatusWindow > m_xImeStatusWindow;
 
@@ -114,31 +108,43 @@ public:
     SfxViewFrameArr_Impl*       pViewFrames;
     SfxViewShellArr_Impl*       pViewShells;
     SfxObjectShellArr_Impl*     pObjShells;
-    SfxBasicManagerHolder*      pBasicManager;
-    SfxBasicManagerCreationListener*
+    std::unique_ptr<SfxBasicManagerHolder>
+                                pBasicManager;
+    std::unique_ptr<SfxBasicManagerCreationListener>
                                 pBasMgrListener;
     SfxViewFrame*               pViewFrame;
     SfxSlotPool*                pSlotPool;
     SfxDispatcher*              pAppDispat;     // Dispatcher if no document
-    SfxInterface**              pInterfaces;
     ::rtl::Reference<sfx2::sidebar::Theme> m_pSidebarTheme;
-
-    sal_uInt16                  nInterfaces;
 
     bool                        bDowning:1;   // sal_True on Exit and afterwards
     bool                        bInQuit : 1;
 
-                                SfxAppData_Impl( SfxApplication* );
+                                SfxAppData_Impl();
                                 ~SfxAppData_Impl();
 
     SfxDocumentTemplates*       GetDocumentTemplates();
     void                        DeInitDDE();
+
+    o3tl::enumarray<SfxToolsModule, std::unique_ptr<SfxModule>> aModules;
 
     /** called when the Application's BasicManager has been created. This can happen
         explicitly in SfxApplication::GetBasicManager, or implicitly if a document's
         BasicManager is created before the application's BasicManager exists.
     */
     void                        OnApplicationBasicManagerCreated( BasicManager& _rManager );
+};
+
+class SfxDdeTriggerTopic_Impl : public DdeTopic
+{
+#if defined(_WIN32)
+public:
+    SfxDdeTriggerTopic_Impl()
+        : DdeTopic( "TRIGGER" )
+        {}
+
+    virtual bool Execute( const OUString* ) override { return true; }
+#endif
 };
 
 #endif // INCLUDED_SFX2_SOURCE_INC_APPDATA_HXX

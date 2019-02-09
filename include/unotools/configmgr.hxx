@@ -22,7 +22,7 @@
 
 #include <sal/config.h>
 
-#include <list>
+#include <vector>
 
 #include <com/sun/star/uno/Reference.hxx>
 #include <sal/types.h>
@@ -43,7 +43,9 @@ public:
 
     static OUString getDefaultCurrency();
 
-    static OUString getLocale();
+    static OUString getUILocale();
+
+    static OUString getWorkLocale();
 
     static OUString getProductExtension();
 
@@ -58,7 +60,7 @@ public:
     SAL_DLLPRIVATE static ConfigManager & getConfigManager();
 
     SAL_DLLPRIVATE static css::uno::Reference< css::container::XHierarchicalNameAccess>
-    acquireTree(utl::ConfigItem & item);
+    acquireTree(utl::ConfigItem const & item);
 
     SAL_DLLPRIVATE ConfigManager();
 
@@ -71,11 +73,15 @@ public:
 
     SAL_DLLPRIVATE void registerConfigItem(utl::ConfigItem * item);
 
-    // Avoid using the config layer and rely on defaults
-    // which is only useful for special test tool targets
-    // where start-up speed is of the essence
-    static bool IsAvoidConfig();
-    static void EnableAvoidConfig();
+    // Avoid using the config layer and rely on defaults which is only useful
+    // for special test tool targets (typically fuzzing) where start-up speed
+    // is of the essence
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    static constexpr bool IsFuzzing() { return true; }
+#else
+    static bool IsFuzzing();
+#endif
+    static void EnableFuzzing();
 
 private:
 
@@ -84,7 +90,7 @@ private:
 
     void doStoreConfigItems();
 
-    std::list< ConfigItem * > items_;
+    std::vector< ConfigItem * > items_;
 };
 
 }

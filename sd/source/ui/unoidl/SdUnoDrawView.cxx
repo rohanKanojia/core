@@ -17,20 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "SdUnoDrawView.hxx"
+#include <SdUnoDrawView.hxx>
 
-#include "DrawController.hxx"
-#include "DrawDocShell.hxx"
-#include "DrawViewShell.hxx"
-#include "drawdoc.hxx"
+#include <DrawController.hxx>
+#include <DrawDocShell.hxx>
+#include <DrawViewShell.hxx>
+#include <drawdoc.hxx>
 #include "unolayer.hxx"
-#include "unomodel.hxx"
-#include "unopage.hxx"
-#include "Window.hxx"
-#include "pres.hxx"
+#include <unomodel.hxx>
+#include <unopage.hxx>
+#include <Window.hxx>
+#include <pres.hxx>
 
 #include <comphelper/processfactory.hxx>
-#include <cppuhelper/proptypehlp.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
@@ -65,15 +64,15 @@ SdUnoDrawView::~SdUnoDrawView() throw()
 
 bool SdUnoDrawView::getMasterPageMode() const throw()
 {
-    return (mrDrawViewShell.GetEditMode() == EM_MASTERPAGE);
+    return (mrDrawViewShell.GetEditMode() == EditMode::MasterPage);
 }
 
 void SdUnoDrawView::setMasterPageMode (bool bMasterPageMode) throw()
 {
-    if ((mrDrawViewShell.GetEditMode() == EM_MASTERPAGE) != bMasterPageMode)
+    if ((mrDrawViewShell.GetEditMode() == EditMode::MasterPage) != bMasterPageMode)
     {
         mrDrawViewShell.ChangeEditMode (
-            bMasterPageMode ? EM_MASTERPAGE : EM_PAGE,
+            bMasterPageMode ? EditMode::MasterPage : EditMode::Page,
             mrDrawViewShell.IsLayerModeActive());
     }
 }
@@ -93,7 +92,7 @@ void SdUnoDrawView::setLayerMode (bool bLayerMode) throw()
     }
 }
 
-Reference<drawing::XLayer> SdUnoDrawView::getActiveLayer() throw ()
+Reference<drawing::XLayer> SdUnoDrawView::getActiveLayer()
 {
     Reference<drawing::XLayer> xCurrentLayer;
 
@@ -110,7 +109,7 @@ Reference<drawing::XLayer> SdUnoDrawView::getActiveLayer() throw ()
 
         // From the model get the current SdrLayer object via the layer admin.
         SdrLayerAdmin& rLayerAdmin = pSdModel->GetLayerAdmin ();
-        SdrLayer* pLayer = rLayerAdmin.GetLayer (mrView.GetActiveLayer(), true);
+        SdrLayer* pLayer = rLayerAdmin.GetLayer (mrView.GetActiveLayer());
         if (pLayer == nullptr)
             break;
 
@@ -127,7 +126,6 @@ Reference<drawing::XLayer> SdUnoDrawView::getActiveLayer() throw ()
 }
 
 void SdUnoDrawView::setActiveLayer (const Reference<drawing::XLayer>& rxLayer)
-    throw (uno::RuntimeException, std::exception)
 {
     // Get the SdrLayer object corresponding to the given reference.
     if ( ! rxLayer.is())
@@ -149,9 +147,6 @@ void SdUnoDrawView::setActiveLayer (const Reference<drawing::XLayer>& rxLayer)
 // XSelectionSupplier
 
 sal_Bool SAL_CALL SdUnoDrawView::select( const Any& aSelection )
-    throw (lang::IllegalArgumentException,
-           RuntimeException,
-           std::exception)
 {
     bool bOk = true;
 
@@ -168,7 +163,7 @@ sal_Bool SAL_CALL SdUnoDrawView::select( const Any& aSelection )
         if( pShape && (pShape->GetSdrObject() != nullptr) )
         {
             SdrObject* pObj = pShape->GetSdrObject();
-            pSdrPage = pObj->GetPage();
+            pSdrPage = pObj->getSdrPageFromSdrObject();
             aObjects.push_back( pObj );
         }
         else
@@ -199,9 +194,9 @@ sal_Bool SAL_CALL SdUnoDrawView::select( const Any& aSelection )
 
                     if( pSdrPage == nullptr )
                     {
-                        pSdrPage = pObj->GetPage();
+                        pSdrPage = pObj->getSdrPageFromSdrObject();
                     }
-                    else if( pSdrPage != pObj->GetPage() )
+                    else if( pSdrPage != pObj->getSdrPageFromSdrObject() )
                     {
                         bOk = false;
                         break;
@@ -229,11 +224,8 @@ sal_Bool SAL_CALL SdUnoDrawView::select( const Any& aSelection )
             // first deselect all
             mrView.UnmarkAllObj( pPV );
 
-            ::std::vector<SdrObject*>::iterator aIter( aObjects.begin() );
-            const ::std::vector<SdrObject*>::iterator aEnd( aObjects.end() );
-            while( aIter != aEnd )
+            for( SdrObject* pObj : aObjects )
             {
-                SdrObject* pObj = (*aIter++);
                 mrView.MarkObj( pObj, pPV );
             }
         }
@@ -247,7 +239,6 @@ sal_Bool SAL_CALL SdUnoDrawView::select( const Any& aSelection )
 }
 
 Any SAL_CALL SdUnoDrawView::getSelection()
-    throw (RuntimeException, std::exception)
 {
     Any aAny;
 
@@ -269,10 +260,10 @@ Any SAL_CALL SdUnoDrawView::getSelection()
                     continue;
 
                 SdrObject *pObj = pMark->GetMarkedSdrObj();
-                if(pObj==nullptr || pObj->GetPage() == nullptr)
+                if(pObj==nullptr || pObj->getSdrPageFromSdrObject() == nullptr)
                     continue;
 
-                Reference< drawing::XDrawPage > xPage( pObj->GetPage()->getUnoPage(), UNO_QUERY);
+                Reference< drawing::XDrawPage > xPage( pObj->getSdrPageFromSdrObject()->getUnoPage(), UNO_QUERY);
 
                 if(!xPage.is())
                     continue;
@@ -295,27 +286,16 @@ Any SAL_CALL SdUnoDrawView::getSelection()
 }
 
 void SAL_CALL SdUnoDrawView::addSelectionChangeListener (
-    const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rxListener;
-}
+    const css::uno::Reference<css::view::XSelectionChangeListener>&)
+{}
 
 void SAL_CALL SdUnoDrawView::removeSelectionChangeListener (
-    const css::uno::Reference<css::view::XSelectionChangeListener>& rxListener)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rxListener;
-}
+    const css::uno::Reference<css::view::XSelectionChangeListener>&)
+{}
 
 void SdUnoDrawView::setFastPropertyValue (
     sal_Int32 nHandle,
         const Any& rValue)
-    throw(css::beans::UnknownPropertyException,
-        css::beans::PropertyVetoException,
-        css::lang::IllegalArgumentException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     switch( nHandle )
     {
@@ -371,15 +351,12 @@ void SdUnoDrawView::setFastPropertyValue (
             }
             break;
         default:
-            throw beans::UnknownPropertyException();
+            throw beans::UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
     }
 }
 
 Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
     sal_Int32 nHandle)
-    throw(css::beans::UnknownPropertyException,
-        css::lang::WrappedTargetException,
-        css::uno::RuntimeException, std::exception)
 {
     Any aValue;
     switch( nHandle )
@@ -404,7 +381,7 @@ Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
             aValue <<= GetZoom();
             break;
         case DrawController::PROPERTY_ZOOMTYPE:
-            aValue <<= (sal_Int16)css::view::DocumentZoomType::BY_VALUE;
+            aValue <<= sal_Int16(css::view::DocumentZoomType::BY_VALUE);
             break;
         case DrawController::PROPERTY_VIEWOFFSET:
             aValue <<= GetViewOffset();
@@ -415,7 +392,7 @@ Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
             break;
 
         default:
-            throw beans::UnknownPropertyException();
+            throw beans::UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
     }
 
     return aValue;
@@ -425,7 +402,6 @@ Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
 
 void SAL_CALL SdUnoDrawView::setCurrentPage (
     const Reference< drawing::XDrawPage >& xPage )
-    throw (RuntimeException, std::exception)
 {
     SvxDrawPage* pDrawPage = SvxDrawPage::getImplementation( xPage );
     SdrPage *pSdrPage = pDrawPage ? pDrawPage->GetSdrPage() : nullptr;
@@ -443,7 +419,6 @@ void SAL_CALL SdUnoDrawView::setCurrentPage (
 }
 
 Reference< drawing::XDrawPage > SAL_CALL SdUnoDrawView::getCurrentPage()
-    throw(RuntimeException, std::exception)
 {
     Reference< drawing::XDrawPage >  xPage;
 
@@ -460,7 +435,7 @@ sal_Int16 SdUnoDrawView::GetZoom() const
 {
     if (mrDrawViewShell.GetActiveWindow() )
     {
-        return (sal_Int16)mrDrawViewShell.GetActiveWindow()->GetZoom();
+        return static_cast<sal_Int16>(mrDrawViewShell.GetActiveWindow()->GetZoom());
     }
     else
     {
@@ -551,25 +526,25 @@ Any SdUnoDrawView::getDrawViewMode() const
     Any aRet;
     switch( mrDrawViewShell.GetPageKind() )
     {
-    case PK_NOTES:  aRet <<= DrawViewMode_NOTES; break;
-    case PK_HANDOUT: aRet <<= DrawViewMode_HANDOUT; break;
-    case PK_STANDARD: aRet <<= DrawViewMode_DRAW; break;
+    case PageKind::Notes:  aRet <<= DrawViewMode_NOTES; break;
+    case PageKind::Handout: aRet <<= DrawViewMode_HANDOUT; break;
+    case PageKind::Standard: aRet <<= DrawViewMode_DRAW; break;
     }
     return aRet;
 }
 
 // XServiceInfo
-OUString SAL_CALL SdUnoDrawView::getImplementationName(  ) throw (RuntimeException, std::exception)
+OUString SAL_CALL SdUnoDrawView::getImplementationName(  )
 {
     return OUString( "com.sun.star.comp.sd.SdUnoDrawView") ;
 }
 
-sal_Bool SAL_CALL SdUnoDrawView::supportsService( const OUString& ServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL SdUnoDrawView::supportsService( const OUString& ServiceName )
 {
     return cppu::supportsService( this, ServiceName );
 }
 
-Sequence< OUString > SAL_CALL SdUnoDrawView::getSupportedServiceNames(  ) throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL SdUnoDrawView::getSupportedServiceNames(  )
 {
     OUString aSN("com.sun.star.drawing.DrawingDocumentDrawView");
     uno::Sequence< OUString > aSeq( &aSN, 1 );

@@ -20,16 +20,11 @@
 #include "XMLTableShapesContext.hxx"
 #include "XMLTableShapeImportHelper.hxx"
 #include "xmlimprt.hxx"
-#include "document.hxx"
-#include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 
 using namespace com::sun::star;
 
-ScXMLTableShapesContext::ScXMLTableShapesContext( ScXMLImport& rImport,
-                                      sal_uInt16 nPrfx,
-                                      const OUString& rLName,
-                                      const css::uno::Reference<css::xml::sax::XAttributeList>& /* xAttrList */ ) :
-    SvXMLImportContext( rImport, nPrfx, rLName )
+ScXMLTableShapesContext::ScXMLTableShapesContext( ScXMLImport& rImport ) :
+    ScXMLImportContext( rImport )
 {
     // here are no attributes
 }
@@ -38,7 +33,7 @@ ScXMLTableShapesContext::~ScXMLTableShapesContext()
 {
 }
 
-SvXMLImportContext *ScXMLTableShapesContext::CreateChildContext( sal_uInt16 nPrefix,
+SvXMLImportContextRef ScXMLTableShapesContext::CreateChildContext( sal_uInt16 nPrefix,
                                             const OUString& rLName,
                                             const css::uno::Reference<css::xml::sax::XAttributeList>& xAttrList )
 {
@@ -58,10 +53,6 @@ SvXMLImportContext *ScXMLTableShapesContext::CreateChildContext( sal_uInt16 nPre
         pContext = new SvXMLImportContext( GetImport(), nPrefix, rLName );
 
     return pContext;
-}
-
-void ScXMLTableShapesContext::EndElement()
-{
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

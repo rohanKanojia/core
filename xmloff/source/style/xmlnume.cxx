@@ -24,6 +24,7 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/awt/XBitmap.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
@@ -33,9 +34,10 @@
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 
-#include <rtl/ustrbuf.hxx>
+#include <o3tl/any.hxx>
 
-#include <tools/debug.hxx>
+#include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 
 #include <sax/tools/converter.hxx>
 
@@ -94,8 +96,8 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
     FontPitch eBulletFontPitch = PITCH_DONTKNOW;
     rtl_TextEncoding eBulletFontEncoding = RTL_TEXTENCODING_DONTKNOW;
 
-    OUString sImageURL;
-    uno::Reference< css::awt::XBitmap >  xBitmap;
+    uno::Reference<graphic::XGraphic> xGraphic;
+
     sal_Int32 nImageWidth = 0, nImageHeight = 0;
     sal_Int16 eImageVertOrient = VertOrientation::LINE_CENTER;
 
@@ -129,7 +131,7 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
             rProp.Value >>= sValue;
             if( !sValue.isEmpty() )
             {
-                cBullet = (sal_Unicode)sValue[0];
+                cBullet = sValue[0];
             }
         }
         else if( rProp.Name == "BulletRelSize" )
@@ -151,16 +153,14 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
                 sBulletFontStyleName = rFDesc.StyleName;
                 eBulletFontFamily = static_cast< FontFamily >( rFDesc.Family );
                 eBulletFontPitch = static_cast< FontPitch >( rFDesc.Pitch );
-                eBulletFontEncoding = (rtl_TextEncoding)rFDesc.CharSet;
+                eBulletFontEncoding = static_cast<rtl_TextEncoding>(rFDesc.CharSet);
             }
-        }
-        else if( rProp.Name == "GraphicURL" )
-        {
-            rProp.Value >>= sImageURL;
         }
         else if( rProp.Name == "GraphicBitmap" )
         {
+            uno::Reference<awt::XBitmap> xBitmap;
             rProp.Value >>= xBitmap;
+            xGraphic.set(xBitmap, uno::UNO_QUERY);
         }
         else if( rProp.Name == "BulletColor" )
         {
@@ -237,7 +237,7 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
     if( bOutline && (NumberingType::CHAR_SPECIAL == eType ||
                      NumberingType::BITMAP == eType) )
     {
-        DBG_ASSERT( !bOutline,
+        SAL_WARN_IF( bOutline, "xmloff",
            "SvxXMLNumRuleExport::exportLevelStyle: invalid style for outline" );
         return;
     }
@@ -298,14 +298,13 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
 
         eElem = XML_LIST_LEVEL_STYLE_IMAGE;
 
-
-        if( !sImageURL.isEmpty() )
+        if (xGraphic.is())
         {
-            OUString sURL( GetExport().AddEmbeddedGraphicObject( sImageURL ) );
-            if( !sURL.isEmpty() )
+            OUString sUsedMimeType;
+            OUString sInternalURL = GetExport().AddEmbeddedXGraphic(xGraphic, sUsedMimeType);
+            if (!sInternalURL.isEmpty())
             {
-                GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_HREF, sURL );
-
+                GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_HREF, sInternalURL);
                 GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_TYPE, XML_SIMPLE );
                 GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_SHOW, XML_EMBED );
                 GetExport().AddAttribute( XML_NAMESPACE_XLINK, XML_ACTUATE, XML_ONLOAD );
@@ -313,8 +312,7 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
         }
         else
         {
-            DBG_ASSERT( !xBitmap.is(),
-                        "embedded images are not supported by now" );
+            SAL_WARN_IF(xGraphic.is(), "xmloff", "embedded images are not supported by now");
         }
     }
     else
@@ -336,13 +334,13 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
 
         if( nStartValue != 1 )
         {
-            sTmp.append( (sal_Int32)nStartValue );
+            sTmp.append( static_cast<sal_Int32>(nStartValue) );
             GetExport().AddAttribute( XML_NAMESPACE_TEXT, XML_START_VALUE,
                           sTmp.makeStringAndClear() );
         }
         if( nDisplayLevels > 1 && NumberingType::NUMBER_NONE != eType )
         {
-            sTmp.append( (sal_Int32)nDisplayLevels );
+            sTmp.append( static_cast<sal_Int32>(nDisplayLevels) );
             GetExport().AddAttribute( XML_NAMESPACE_TEXT, XML_DISPLAY_LEVELS,
                           sTmp.makeStringAndClear() );
         }
@@ -406,7 +404,7 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
             enum XMLTokenEnum eValue = XML_TOKEN_INVALID;
             switch( eImageVertOrient )
             {
-            case VertOrientation::BOTTOM:   // yes, its OK: BOTTOM means that the baseline
+            case VertOrientation::BOTTOM:   // yes, it's OK: BOTTOM means that the baseline
                                     // hits the frame at its topmost position
             case VertOrientation::LINE_TOP:
             case VertOrientation::CHAR_TOP:
@@ -417,7 +415,7 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
             case VertOrientation::CHAR_CENTER:
                 eValue = XML_MIDDLE;
                 break;
-            case VertOrientation::TOP:      // yes, its OK: TOP means that the baseline
+            case VertOrientation::TOP:      // yes, it's OK: TOP means that the baseline
                                     // hits the frame at its bottommost position
             case VertOrientation::LINE_BOTTOM:
             case VertOrientation::CHAR_BOTTOM:
@@ -488,6 +486,13 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
                 GetExport().AddAttribute( XML_NAMESPACE_TEXT,
                                           XML_LABEL_FOLLOWED_BY, eValue );
 
+                if (eLabelFollowedBy == LabelFollow::NEWLINE)
+                {
+                    eValue = XML_NEWLINE;
+                    GetExport().AddAttribute( XML_NAMESPACE_LO_EXT,
+                                          XML_LABEL_FOLLOWED_BY, eValue );
+                }
+
                 if ( eLabelFollowedBy == LabelFollow::LISTTAB &&
                      nListtabStopPosition > 0 )
                 {
@@ -540,14 +545,12 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
                 }
                 else
                 {
-                    Any aAny;
                     OUString sTemp;
 
                     const SvXMLUnitConverter& rUnitConv =
                         GetExport().GetMM100UnitConverter();
                     XMLFontFamilyNamePropHdl aFamilyNameHdl;
-                    aAny <<= sBulletFontName;
-                    if( aFamilyNameHdl.exportXML( sTemp, aAny, rUnitConv ) )
+                    if( aFamilyNameHdl.exportXML( sTemp, Any(sBulletFontName), rUnitConv ) )
                         GetExport().AddAttribute( XML_NAMESPACE_FO,
                                                   XML_FONT_FAMILY, sTemp );
 
@@ -557,21 +560,18 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
                                                   sBulletFontStyleName );
 
                     XMLFontFamilyPropHdl aFamilyHdl;
-                    aAny <<= (sal_Int16)eBulletFontFamily;
-                    if( aFamilyHdl.exportXML( sTemp, aAny, rUnitConv  ) )
+                    if( aFamilyHdl.exportXML( sTemp, Any(static_cast<sal_Int16>(eBulletFontFamily)), rUnitConv  ) )
                         GetExport().AddAttribute( XML_NAMESPACE_STYLE,
                                                   XML_FONT_FAMILY_GENERIC,
                                                   sTemp );
 
                     XMLFontPitchPropHdl aPitchHdl;
-                    aAny <<= (sal_Int16)eBulletFontPitch;
-                    if( aPitchHdl.exportXML( sTemp, aAny, rUnitConv  ) )
+                    if( aPitchHdl.exportXML( sTemp, Any(static_cast<sal_Int16>(eBulletFontPitch)), rUnitConv  ) )
                         GetExport().AddAttribute( XML_NAMESPACE_STYLE,
                                                   XML_FONT_PITCH, sTemp );
 
                     XMLFontEncodingPropHdl aEncHdl;
-                    aAny <<= (sal_Int16)eBulletFontEncoding;
-                    if( aEncHdl.exportXML( sTemp, aAny, rUnitConv  ) )
+                    if( aEncHdl.exportXML( sTemp, Any(static_cast<sal_Int16>(eBulletFontEncoding)), rUnitConv  ) )
                         GetExport().AddAttribute( XML_NAMESPACE_STYLE,
                                                   XML_FONT_CHARSET, sTemp );
                 }
@@ -606,25 +606,21 @@ void SvxXMLNumRuleExport::exportLevelStyle( sal_Int32 nLevel,
             SvXMLElementExport aElement( GetExport(), XML_NAMESPACE_STYLE,
                                       XML_TEXT_PROPERTIES, true, true );
         }
-        if( NumberingType::BITMAP == eType && !sImageURL.isEmpty() )
+        if (xGraphic.is() && NumberingType::BITMAP == eType)
         {
             // optional office:binary-data
-            GetExport().AddEmbeddedGraphicObjectAsBase64( sImageURL );
+            GetExport().AddEmbeddedXGraphicAsBase64(xGraphic);
         }
     }
 }
 
 
-void SvxXMLNumRuleExport::AddListStyleAttributes()
-{
-}
-
+static const OUStringLiteral gsNumberingRules( "NumberingRules" );
+static const OUStringLiteral gsIsPhysical( "IsPhysical" );
+static const OUStringLiteral gsIsContinuousNumbering( "IsContinuousNumbering" );
 
 SvxXMLNumRuleExport::SvxXMLNumRuleExport( SvXMLExport& rExp ) :
     rExport( rExp ),
-    sNumberingRules( "NumberingRules" ),
-    sIsPhysical( "IsPhysical" ),
-    sIsContinuousNumbering( "IsContinuousNumbering" ),
     // Let list style creation depend on Load/Save option "ODF format version" (#i89178#)
     mbExportPositionAndSpaceModeLabelAlignment( true )
 {
@@ -676,17 +672,14 @@ void SvxXMLNumRuleExport::exportNumberingRule(
     // text:consecutive-numbering="..."
     bool bContNumbering = false;
     if( xPropSetInfo.is() &&
-        xPropSetInfo->hasPropertyByName( sIsContinuousNumbering ) )
+        xPropSetInfo->hasPropertyByName( gsIsContinuousNumbering ) )
     {
-        Any aAny( xPropSet->getPropertyValue( sIsContinuousNumbering ) );
-        bContNumbering = *static_cast<sal_Bool const *>(aAny.getValue());
+        Any aAny( xPropSet->getPropertyValue( gsIsContinuousNumbering ) );
+        bContNumbering = *o3tl::doAccess<bool>(aAny);
     }
     if( bContNumbering )
         GetExport().AddAttribute( XML_NAMESPACE_TEXT,
                                   XML_CONSECUTIVE_NUMBERING, XML_TRUE );
-
-    // other application specific attributes
-    AddListStyleAttributes();
 
     {
         SvXMLElementExport aElem( GetExport(), XML_NAMESPACE_TEXT, XML_LIST_STYLE ,
@@ -704,14 +697,14 @@ void SvxXMLNumRuleExport::exportStyle( const Reference< XStyle >& rStyle )
 
     // Don't export styles that aren't existing really. This may be the
     // case for StarOffice Writer's pool styles.
-    if( xPropSetInfo->hasPropertyByName( sIsPhysical ) )
+    if( xPropSetInfo->hasPropertyByName( gsIsPhysical ) )
     {
-        aAny = xPropSet->getPropertyValue( sIsPhysical );
-        if( !*static_cast<sal_Bool const *>(aAny.getValue()) )
+        aAny = xPropSet->getPropertyValue( gsIsPhysical );
+        if( !*o3tl::doAccess<bool>(aAny) )
             return;
     }
 
-    aAny = xPropSet->getPropertyValue( sNumberingRules );
+    aAny = xPropSet->getPropertyValue( gsNumberingRules );
     Reference<XIndexReplace> xNumRule;
     aAny >>= xNumRule;
 
@@ -731,12 +724,12 @@ void SvxXMLNumRuleExport::exportOutline()
 {
     Reference< XChapterNumberingSupplier > xCNSupplier( GetExport().GetModel(),
                                                         UNO_QUERY );
-    DBG_ASSERT( xCNSupplier.is(), "no chapter numbering supplier" );
+    SAL_WARN_IF( !xCNSupplier.is(), "xmloff", "no chapter numbering supplier" );
 
     if( xCNSupplier.is() )
     {
         Reference< XIndexReplace > xNumRule( xCNSupplier->getChapterNumberingRules() );
-        DBG_ASSERT( xNumRule.is(), "no chapter numbering rules" );
+        SAL_WARN_IF( !xNumRule.is(), "xmloff", "no chapter numbering rules" );
 
         if( xNumRule.is() )
         {
@@ -796,11 +789,11 @@ void SvxXMLNumRuleExport::exportStyles( bool bUsed,
         exportOutline();
 
     Reference< XStyleFamiliesSupplier > xFamiliesSupp( GetExport().GetModel(), UNO_QUERY );
-    DBG_ASSERT( xFamiliesSupp.is(), "No XStyleFamiliesSupplier from XModel for export!" );
+    SAL_WARN_IF( !xFamiliesSupp.is(), "xmloff", "No XStyleFamiliesSupplier from XModel for export!" );
     if( xFamiliesSupp.is() )
     {
         Reference< XNameAccess > xFamilies( xFamiliesSupp->getStyleFamilies() );
-        DBG_ASSERT( xFamiliesSupp.is(), "getStyleFamilies() from XModel failed for export!" );
+        SAL_WARN_IF( !xFamiliesSupp.is(), "xmloff", "getStyleFamilies() from XModel failed for export!" );
 
         if( xFamilies.is() )
         {
@@ -811,7 +804,7 @@ void SvxXMLNumRuleExport::exportStyles( bool bUsed,
             {
                 xFamilies->getByName( aNumberStyleName ) >>= xStyles;
 
-                DBG_ASSERT( xStyles.is(), "Style not found for export!" );
+                SAL_WARN_IF( !xStyles.is(), "xmloff", "Style not found for export!" );
 
                 if( xStyles.is() )
                 {

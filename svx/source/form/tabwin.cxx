@@ -18,11 +18,11 @@
  */
 
 
-#include "tabwin.hxx"
-#include "svx/fmtools.hxx"
-#include "fmservs.hxx"
-#include "stringlistresource.hxx"
+#include <tabwin.hxx>
+#include <svx/fmtools.hxx>
+#include <fmservs.hxx>
 
+#include <svx/strings.hrc>
 #include <svx/svxids.hrc>
 #include <svx/dbaexchange.hxx>
 #include <com/sun/star/sdb/CommandType.hpp>
@@ -32,17 +32,17 @@
 #include <com/sun/star/awt/XControlContainer.hpp>
 #include <com/sun/star/util/XLocalizedAliases.hpp>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/types.hxx>
 
-#include "fmhelp.hrc"
+#include <helpids.h>
 #include <svx/fmshell.hxx>
-#include "fmshimp.hxx"
+#include <fmshimp.hxx>
 #include <svx/fmpage.hxx>
 
-#include "fmpgeimp.hxx"
+#include <fmpgeimp.hxx>
 
-#include "fmprop.hrc"
+#include <fmprop.hxx>
 
-#include "svx/fmresids.hrc"
 #include <svx/dialmgr.hxx>
 #include <svx/svdpagv.hxx>
 #include <sfx2/objitem.hxx>
@@ -50,8 +50,9 @@
 #include <comphelper/property.hxx>
 #include <sfx2/frame.hxx>
 #include <svx/dataaccessdescriptor.hxx>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
 #include <vcl/settings.hxx>
+#include <tabwin.hrc>
 
 const long STD_WIN_SIZE_X = 120;
 const long STD_WIN_SIZE_Y = 150;
@@ -75,7 +76,7 @@ namespace {
 
 struct ColumnInfo
 {
-    OUString sColumnName;
+    OUString const sColumnName;
     explicit ColumnInfo(const OUString& i_sColumnName)
         : sColumnName(i_sColumnName)
     {
@@ -152,17 +153,16 @@ void FmFieldWinListBox::StartDrag( sal_Int8 /*_nAction*/, const Point& /*_rPosPi
         return;
 
     svx::ODataAccessDescriptor aDescriptor;
-    aDescriptor[ daDataSource ] <<= pTabWin->GetDatabaseName();
-    aDescriptor[ daConnection ] <<= pTabWin->GetConnection().getTyped();
-    aDescriptor[ daCommand ]    <<= pTabWin->GetObjectName();
-    aDescriptor[ daCommandType ]<<= pTabWin->GetObjectType();
+    aDescriptor[ DataAccessDescriptorProperty::DataSource ] <<= pTabWin->GetDatabaseName();
+    aDescriptor[ DataAccessDescriptorProperty::Connection ] <<= pTabWin->GetConnection().getTyped();
+    aDescriptor[ DataAccessDescriptorProperty::Command ]    <<= pTabWin->GetObjectName();
+    aDescriptor[ DataAccessDescriptorProperty::CommandType ]<<= pTabWin->GetObjectType();
     ColumnInfo* pInfo = static_cast<ColumnInfo*>(pSelected->GetUserData());
-    aDescriptor[ daColumnName ] <<= pInfo->sColumnName;
+    aDescriptor[ DataAccessDescriptorProperty::ColumnName ] <<= pInfo->sColumnName;
 
-    TransferableHelper* pTransferColumn = new OColumnTransferable(
+    rtl::Reference<OColumnTransferable> pTransferColumn = new OColumnTransferable(
         aDescriptor, ColumnTransferFormatFlags::FIELD_DESCRIPTOR | ColumnTransferFormatFlags::CONTROL_EXCHANGE | ColumnTransferFormatFlags::COLUMN_DESCRIPTOR
     );
-    Reference< XTransferable> xEnsureDelete = pTransferColumn;
     EndSelection();
     pTransferColumn->StartDrag( this, DND_ACTION_COPY );
 }
@@ -172,7 +172,6 @@ FmFieldWin::FmFieldWin(SfxBindings* _pBindings, SfxChildWindow* _pMgr, vcl::Wind
             ,SfxControllerItem(SID_FM_FIELDS_CONTROL, *_pBindings)
             ,::comphelper::OPropertyChangeListener(m_aMutex)
             ,m_nObjectType(0)
-            ,m_pChangeListener(nullptr)
 {
     SetHelpId( HID_FIELD_SEL_WIN );
 
@@ -191,11 +190,10 @@ FmFieldWin::~FmFieldWin()
 
 void FmFieldWin::dispose()
 {
-    if (m_pChangeListener)
+    if (m_pChangeListener.is())
     {
         m_pChangeListener->dispose();
-        m_pChangeListener->release();
-        //  delete m_pChangeListener;
+        m_pChangeListener.clear();
     }
     pListBox.disposeAndClear();
     ::SfxControllerItem::dispose();
@@ -221,12 +219,12 @@ bool FmFieldWin::createSelectionControls( )
         ODataAccessDescriptor aDescr;
         aDescr.setDataSource(GetDatabaseName());
 
-        aDescr[ daConnection ]  <<= GetConnection().getTyped();
+        aDescr[ DataAccessDescriptorProperty::Connection ]  <<= GetConnection().getTyped();
 
-        aDescr[ daCommand ]     <<= GetObjectName();
-        aDescr[ daCommandType ] <<= GetObjectType();
+        aDescr[ DataAccessDescriptorProperty::Command ]     <<= GetObjectName();
+        aDescr[ DataAccessDescriptorProperty::CommandType ] <<= GetObjectType();
         ColumnInfo* pInfo = static_cast<ColumnInfo*>(pSelected->GetUserData());
-        aDescr[ daColumnName ]  <<= pInfo->sColumnName;//OUString( pListBox->GetEntryText( pSelected) );
+        aDescr[ DataAccessDescriptorProperty::ColumnName ]  <<= pInfo->sColumnName;//OUString( pListBox->GetEntryText( pSelected) );
 
         // transfer this to the SFX world
         SfxUnoAnyItem aDescriptorItem( SID_FM_DATACCESS_DESCRIPTOR, makeAny( aDescr.createPropertyValueSequence() ) );
@@ -259,13 +257,7 @@ bool FmFieldWin::PreNotify( NotifyEvent& _rNEvt )
 }
 
 
-bool FmFieldWin::Close()
-{
-    return SfxFloatingWindow::Close();
-}
-
-
-void FmFieldWin::_propertyChanged(const css::beans::PropertyChangeEvent& evt) throw( css::uno::RuntimeException, std::exception )
+void FmFieldWin::_propertyChanged(const css::beans::PropertyChangeEvent& evt)
 {
     css::uno::Reference< css::form::XForm >  xForm(evt.Source, css::uno::UNO_QUERY);
     UpdateContent(xForm);
@@ -287,16 +279,16 @@ void FmFieldWin::StateChanged(sal_uInt16 nSID, SfxItemState eState, const SfxPoo
 }
 
 
-void FmFieldWin::UpdateContent(FmFormShell* pShell)
+void FmFieldWin::UpdateContent(FmFormShell const * pShell)
 {
     pListBox->Clear();
-    OUString aTitle(SVX_RESSTR(RID_STR_FIELDSELECTION));
+    OUString aTitle(SvxResId(RID_STR_FIELDSELECTION));
     SetText( aTitle );
 
     if (!pShell || !pShell->GetImpl())
         return;
 
-    Reference< XForm >  xForm = pShell->GetImpl()->getCurrentForm();
+    Reference<XForm> const xForm = pShell->GetImpl()->getCurrentForm_Lock();
     if ( xForm.is() )
         UpdateContent( xForm );
 }
@@ -308,13 +300,12 @@ void FmFieldWin::UpdateContent(const css::uno::Reference< css::form::XForm > & x
     {
         // delete ListBox
         pListBox->Clear();
-        OUString aTitle(SVX_RES(RID_STR_FIELDSELECTION));
+        OUString aTitle(SvxResId(RID_STR_FIELDSELECTION));
         SetText(aTitle);
 
         if (!xForm.is())
             return;
 
-        Reference< XPreparedStatement >  xStatement;
         Reference< XPropertySet >  xSet(xForm, UNO_QUERY);
 
         m_aObjectName   = ::comphelper::getString(xSet->getPropertyValue(FM_PROP_COMMAND));
@@ -323,7 +314,7 @@ void FmFieldWin::UpdateContent(const css::uno::Reference< css::form::XForm > & x
 
         // get the connection of the form
         m_aConnection.reset(
-            connectRowset( Reference< XRowSet >( xForm, UNO_QUERY ), ::comphelper::getProcessComponentContext(), true ),
+            connectRowset( Reference< XRowSet >( xForm, UNO_QUERY ), ::comphelper::getProcessComponentContext() ),
             SharedConnection::NoTakeOwnership
         );
         // TODO: When incompatible changes (such as extending the "virtualdbtools" interface by ensureRowSetConnection)
@@ -342,35 +333,33 @@ void FmFieldWin::UpdateContent(const css::uno::Reference< css::form::XForm > & x
 
         // set prefix
         OUString  aPrefix;
-        StringListResource aPrefixes( SVX_RES( RID_RSC_TABWIN_PREFIX ) );
 
         switch (m_nObjectType)
         {
             case CommandType::TABLE:
-                aPrefix = aPrefixes[0];
+                aPrefix = SvxResId(RID_RSC_TABWIN_PREFIX[0]);
                 break;
             case CommandType::QUERY:
-                aPrefix = aPrefixes[1];
+                aPrefix = SvxResId(RID_RSC_TABWIN_PREFIX[1]);
                 break;
             default:
-                aPrefix = aPrefixes[2];
+                aPrefix = SvxResId(RID_RSC_TABWIN_PREFIX[2]);
                 break;
         }
 
         // listen for changes at ControlSource in PropertySet
-        if (m_pChangeListener)
+        if (m_pChangeListener.is())
         {
             m_pChangeListener->dispose();
-            m_pChangeListener->release();
+            m_pChangeListener.clear();
         }
         m_pChangeListener = new ::comphelper::OPropertyChangeMultiplexer(this, xSet);
-        m_pChangeListener->acquire();
         m_pChangeListener->addProperty(FM_PROP_DATASOURCE);
         m_pChangeListener->addProperty(FM_PROP_COMMAND);
         m_pChangeListener->addProperty(FM_PROP_COMMANDTYPE);
 
-        // Titel setzen
-        aTitle = aTitle + " " + aPrefix + " " + OUString(m_aObjectName.getStr());
+        // set title
+        aTitle += " " + aPrefix + " " + m_aObjectName;
         SetText( aTitle );
     }
     catch( const Exception& )
@@ -390,8 +379,8 @@ void FmFieldWin::Resize()
     // adapt size of css::form::ListBox
     Point aLBPos( LISTBOX_BORDER, LISTBOX_BORDER );
     Size aLBSize( aOutputSize );
-    aLBSize.Width() -= (2*LISTBOX_BORDER);
-    aLBSize.Height() -= (2*LISTBOX_BORDER);
+    aLBSize.AdjustWidth( -(2*LISTBOX_BORDER) );
+    aLBSize.AdjustHeight( -(2*LISTBOX_BORDER) );
 
     pListBox->SetPosSizePixel( aLBPos, aLBSize );
 }
@@ -407,7 +396,7 @@ SFX_IMPL_FLOATINGWINDOW(FmFieldWinMgr, SID_FM_ADD_FIELD)
 
 
 FmFieldWinMgr::FmFieldWinMgr(vcl::Window* _pParent, sal_uInt16 _nId,
-               SfxBindings* _pBindings, SfxChildWinInfo* _pInfo)
+               SfxBindings* _pBindings, SfxChildWinInfo const * _pInfo)
               :SfxChildWindow(_pParent, _nId)
 {
     SetWindow( VclPtr<FmFieldWin>::Create(_pBindings, this, _pParent) );

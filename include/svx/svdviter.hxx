@@ -59,26 +59,21 @@ class SdrPageView;
 class SdrModel;
 class SdrPage;
 class SdrObject;
-class SetOfByte;
+class SdrLayerIDSet;
 
 class SVX_DLLPUBLIC SdrViewIter
 {
     const SdrModel*                                     mpModel;
     const SdrPage*                                      mpPage;
     const SdrObject*                                    mpObject;
-    SdrView*                                            mpAktView;
+    SdrView*                                            mpCurrentView;
 
     size_t                                              mnListenerNum;
-    sal_uInt32                                          mnPageViewNum;
-    sal_uInt32                                          mnOutDevNum;
-
-    // bitfield
-    bool                                                mbNoMasterPage : 1;
 
 private:
     SVX_DLLPRIVATE void          ImpInitVars();
     SVX_DLLPRIVATE SdrView*      ImpFindView();
-    SVX_DLLPRIVATE bool          ImpCheckPageView(SdrPageView* pPV) const;
+    SVX_DLLPRIVATE bool          ImpCheckPageView(SdrPageView const * pPV) const;
 
 public:
     SdrViewIter(const SdrPage* pPage);

@@ -17,31 +17,34 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "rangelst.hxx"
-#include "scitems.hxx"
+#include <rangelst.hxx>
+#include <scitems.hxx>
 #include <sfx2/dispatch.hxx>
 #include <svl/zforlist.hxx>
-#include <vcl/msgbox.hxx>
+#include <vcl/weld.hxx>
 
-#include "uiitems.hxx"
-#include "reffact.hxx"
-#include "document.hxx"
-#include "scresid.hxx"
-#include "globstr.hrc"
-#include "sc.hrc"
-#include "solvrdlg.hxx"
+#include <uiitems.hxx>
+#include <reffact.hxx>
+#include <document.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <sc.hrc>
+#include <solvrdlg.hxx>
 
 namespace
 {
-    void lclErrorDialog( vcl::Window* pParent, const OUString& aString )
+    void lclErrorDialog(weld::Window* pParent, const OUString& rString, const std::function<void(sal_Int32)>& func)
     {
-        ScopedVclPtrInstance<MessageDialog>::Create(pParent, aString)->Execute();
+        std::shared_ptr<weld::MessageDialog> xBox(Application::CreateMessageDialog(pParent,
+                                                  VclMessageType::Warning, VclButtonsType::Ok,
+                                                  rString));
+        xBox->runAsync(func);
     }
 }
 
 ScSolverDlg::ScSolverDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                           ScDocument* pDocument,
-                          ScAddress aCursorPos )
+                          const ScAddress& aCursorPos )
 
     : ScAnyRefDlg(pB, pCW, pParent, "GoalSeekDialog", "modules/scalc/ui/goalseekdlg.ui")
     , theFormulaCell(aCursorPos)
@@ -50,10 +53,10 @@ ScSolverDlg::ScSolverDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pPa
     , nCurTab(aCursorPos.Tab())
     , pEdActive(nullptr)
     , bDlgLostFocus(false)
-    , errMsgInvalidVar(ScGlobal::GetRscString(STR_INVALIDVAR))
-    , errMsgInvalidForm(ScGlobal::GetRscString(STR_INVALIDFORM))
-    , errMsgNoFormula(ScGlobal::GetRscString(STR_NOFORMULA))
-    , errMsgInvalidVal(ScGlobal::GetRscString(STR_INVALIDVAL))
+    , errMsgInvalidVar(ScResId(STR_INVALIDVAR))
+    , errMsgInvalidForm(ScResId(STR_INVALIDFORM))
+    , errMsgNoFormula(ScResId(STR_NOFORMULA))
+    , errMsgInvalidVal(ScResId(STR_INVALIDVAL))
 {
     get(m_pFtFormulaCell, "formulatext");
     get(m_pEdFormulaCell, "formulaedit");
@@ -163,23 +166,31 @@ void ScSolverDlg::RaiseError( ScSolverErr eError )
     switch ( eError )
     {
         case SOLVERR_NOFORMULA:
-            lclErrorDialog( this, errMsgNoFormula );
-            m_pEdFormulaCell->GrabFocus();
+            lclErrorDialog(GetFrameWeld(), errMsgNoFormula,
+                [this](sal_Int32 /*nResult*/) {
+                    m_pEdFormulaCell->GrabFocus();
+                });
             break;
 
         case SOLVERR_INVALID_FORMULA:
-            lclErrorDialog( this, errMsgInvalidForm );
-            m_pEdFormulaCell->GrabFocus();
+            lclErrorDialog(GetFrameWeld(), errMsgInvalidForm,
+                [this](sal_Int32 /*nResult*/) {
+                    m_pEdFormulaCell->GrabFocus();
+                });
             break;
 
         case SOLVERR_INVALID_VARIABLE:
-            lclErrorDialog( this, errMsgInvalidVar );
-            m_pEdVariableCell->GrabFocus();
+            lclErrorDialog(GetFrameWeld(), errMsgInvalidVar,
+                [this](sal_Int32 /*nResult*/) {
+                    m_pEdVariableCell->GrabFocus();
+                });
             break;
 
         case SOLVERR_INVALID_TARGETVALUE:
-            lclErrorDialog( this, errMsgInvalidVal );
-            m_pEdTargetVal->GrabFocus();
+            lclErrorDialog(GetFrameWeld(), errMsgInvalidVal,
+                [this](sal_Int32 /*nResult*/) {
+                    m_pEdTargetVal->GrabFocus();
+                });
             break;
     }
 }
@@ -199,7 +210,7 @@ bool ScSolverDlg::CheckTargetValue( const OUString& rStrVal )
 
 // Handler:
 
-IMPL_LINK_TYPED( ScSolverDlg, BtnHdl, Button*, pBtn, void )
+IMPL_LINK( ScSolverDlg, BtnHdl, Button*, pBtn, void )
 {
     if (pBtn == m_pBtnOk)
     {
@@ -255,7 +266,7 @@ IMPL_LINK_TYPED( ScSolverDlg, BtnHdl, Button*, pBtn, void )
     }
 }
 
-IMPL_LINK_TYPED( ScSolverDlg, GetFocusHdl, Control&, rCtrl, void )
+IMPL_LINK( ScSolverDlg, GetFocusHdl, Control&, rCtrl, void )
 {
     Edit* pEdit = nullptr;
     pEdActive = nullptr;
@@ -271,7 +282,7 @@ IMPL_LINK_TYPED( ScSolverDlg, GetFocusHdl, Control&, rCtrl, void )
         pEdit->SetSelection( Selection( 0, SELECTION_MAX ) );
 }
 
-IMPL_LINK_NOARG_TYPED(ScSolverDlg, LoseFocusHdl, Control&, void)
+IMPL_LINK_NOARG(ScSolverDlg, LoseFocusHdl, Control&, void)
 {
     bDlgLostFocus = !IsActive();
 }

@@ -26,6 +26,7 @@
 #include <com/sun/star/document/XCompatWriterDocProperties.hpp>
 #include <com/sun/star/uno/Exception.hpp>
 #include <rtl/ustring.hxx>
+#include <sal/log.hxx>
 #include <tools/debug.hxx>
 #include <comphelper/string.hxx>
 #include <sot/storage.hxx>
@@ -44,7 +45,7 @@ using namespace ::com::sun::star;
 
 namespace sfx2 {
 
-sal_uInt32 LoadOlePropertySet(
+ErrCode LoadOlePropertySet(
     const uno::Reference< document::XDocumentProperties>& i_xDocProps,
     SotStorage* i_pStorage )
 {
@@ -148,11 +149,10 @@ sal_uInt32 LoadOlePropertySet(
             i_xDocProps->getUserDefinedProperties(), uno::UNO_QUERY_THROW);
         ::std::vector< sal_Int32 > aPropIds;
         xCustomSect->GetPropertyIds( aPropIds );
-        for( ::std::vector< sal_Int32 >::const_iterator aIt = aPropIds.begin(),
-             aEnd = aPropIds.end(); aIt != aEnd; ++aIt )
+        for( const auto& rPropId : aPropIds )
         {
-            OUString aPropName = xCustomSect->GetPropertyName( *aIt );
-            uno::Any aPropValue = xCustomSect->GetAnyValue( *aIt );
+            const OUString aPropName = xCustomSect->GetPropertyName( rPropId );
+            uno::Any aPropValue = xCustomSect->GetAnyValue( rPropId );
             if( !aPropName.isEmpty() && aPropValue.hasValue() )
             {
                 try
@@ -197,9 +197,9 @@ sal_uInt32 LoadOlePropertySet(
 bool SaveOlePropertySet(
     const uno::Reference< document::XDocumentProperties>& i_xDocProps,
     SotStorage* i_pStorage,
-    const uno::Sequence<sal_uInt8> * i_pThumb,
-    const uno::Sequence<sal_uInt8> * i_pGuid,
-    const uno::Sequence<sal_uInt8> * i_pHyperlinks)
+    const uno::Sequence<sal_Int8> * i_pThumb,
+    const uno::Sequence<sal_Int8> * i_pGuid,
+    const uno::Sequence<sal_Int8> * i_pHyperlinks)
 {
     // *** global properties into stream "005SummaryInformation" ***
 
@@ -209,7 +209,7 @@ bool SaveOlePropertySet(
     SfxOleSection& rGlobSect = aGlobSet.AddSection( SECTION_GLOBAL );
     rGlobSect.SetStringValue( PROPID_TITLE,    i_xDocProps->getTitle() );
     rGlobSect.SetStringValue( PROPID_SUBJECT,  i_xDocProps->getSubject() );
-    OUString aStr = ::comphelper::string::convertCommaSeparated(
+    const OUString aStr = ::comphelper::string::convertCommaSeparated(
         i_xDocProps->getKeywords() );
     rGlobSect.SetStringValue( PROPID_KEYWORDS, aStr );
     rGlobSect.SetStringValue( PROPID_TEMPLATE, i_xDocProps->getTemplateName() );
@@ -270,7 +270,6 @@ bool SaveOlePropertySet(
 
     uno::Reference<beans::XPropertySet> xUserDefinedProps(
         i_xDocProps->getUserDefinedProperties(), uno::UNO_QUERY_THROW);
-    DBG_ASSERT(xUserDefinedProps.is(), "UserDefinedProperties is null");
     uno::Reference<beans::XPropertySetInfo> xPropInfo =
         xUserDefinedProps->getPropertySetInfo();
     DBG_ASSERT(xPropInfo.is(), "UserDefinedProperties Info is null");
@@ -305,7 +304,7 @@ bool SaveOlePropertySet(
     return (nGlobError == ERRCODE_NONE) && (nDocError == ERRCODE_NONE);
 }
 
-uno::Sequence<sal_uInt8> convertMetaFile(GDIMetaFile* i_pThumb)
+uno::Sequence<sal_Int8> convertMetaFile(GDIMetaFile const * i_pThumb)
 {
     if (i_pThumb) {
         BitmapEx aBitmap;
@@ -313,17 +312,10 @@ uno::Sequence<sal_uInt8> convertMetaFile(GDIMetaFile* i_pThumb)
         if (i_pThumb->CreateThumbnail(aBitmap))
         {
             WriteDIB(aBitmap.GetBitmap(), aStream, false, false);
-            aStream.Seek(STREAM_SEEK_TO_END);
-            uno::Sequence<sal_uInt8> aSeq(aStream.Tell());
-            const sal_uInt8* pBlob(
-                static_cast<const sal_uInt8*>(aStream.GetData()));
-            for (sal_Int32 j = 0; j < aSeq.getLength(); ++j) {
-                aSeq[j] = pBlob[j];
-            }
-            return aSeq;
+            return uno::Sequence<sal_Int8>(static_cast< const sal_Int8* >( aStream.GetData() ), aStream.TellEnd());
         }
     }
-    return uno::Sequence<sal_uInt8>();
+    return uno::Sequence<sal_Int8>();
 }
 
 } // namespace sfx2

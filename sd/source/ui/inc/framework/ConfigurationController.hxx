@@ -20,35 +20,27 @@
 #ifndef INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_CONFIGURATIONCONTROLLER_HXX
 #define INCLUDED_SD_SOURCE_UI_INC_FRAMEWORK_CONFIGURATIONCONTROLLER_HXX
 
-#include "MutexOwner.hxx"
+#include <MutexOwner.hxx>
 
 #include <com/sun/star/drawing/framework/XConfigurationController.hpp>
-#include <com/sun/star/drawing/framework/XConfigurationChangeRequest.hpp>
-#include <com/sun/star/drawing/framework/XConfiguration.hpp>
-#include <com/sun/star/drawing/framework/XControllerManager.hpp>
-#include <com/sun/star/drawing/framework/XResourceFactoryManager.hpp>
-#include <com/sun/star/drawing/framework/XResourceId.hpp>
-#include <com/sun/star/drawing/framework/ConfigurationChangeEvent.hpp>
 #include <com/sun/star/lang/XInitialization.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <cppuhelper/compbase.hxx>
-#include <rtl/ref.hxx>
 
 #include <memory>
 
-namespace {
+
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfiguration; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XConfigurationChangeRequest; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { class XResourceId; } } } } }
+namespace com { namespace sun { namespace star { namespace drawing { namespace framework { struct ConfigurationChangeEvent; } } } } }
+
+namespace sd { namespace framework {
 
 typedef ::cppu::WeakComponentImplHelper <
     css::drawing::framework::XConfigurationController,
     css::lang::XInitialization
     > ConfigurationControllerInterfaceBase;
-
-} // end of anonymous namespace.
-
-namespace sd { class ViewShellBase; }
-
-namespace sd { namespace framework {
 
 /** The configuration controller is responsible for maintaining the current
     configuration.
@@ -62,7 +54,7 @@ class ConfigurationController
 {
 public:
     ConfigurationController() throw();
-    virtual ~ConfigurationController() throw();
+    virtual ~ConfigurationController() throw() override;
     ConfigurationController(const ConfigurationController&) = delete;
     ConfigurationController& operator=(const ConfigurationController&) = delete;
 
@@ -83,46 +75,35 @@ public:
 
     // XConfigurationController
 
-    virtual void SAL_CALL lock()
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+    virtual void SAL_CALL lock() override;
 
-    virtual void SAL_CALL unlock()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL unlock() override;
 
     virtual void SAL_CALL requestResourceActivation (
         const css::uno::Reference<css::drawing::framework::XResourceId>& rxResourceId,
-        css::drawing::framework::ResourceActivationMode eMode)
-        throw (css::uno::RuntimeException, std::exception) override;
+        css::drawing::framework::ResourceActivationMode eMode) override;
 
     virtual void SAL_CALL requestResourceDeactivation (
         const css::uno::Reference<css::drawing::framework::XResourceId>&
-            rxResourceId)
-        throw (css::uno::RuntimeException, std::exception) override;
+            rxResourceId) override;
 
     virtual css::uno::Reference<css::drawing::framework::XResource>
         SAL_CALL getResource (
-            const css::uno::Reference<css::drawing::framework::XResourceId>& rxResourceId)
-        throw (css::uno::RuntimeException, std::exception) override;
+            const css::uno::Reference<css::drawing::framework::XResourceId>& rxResourceId) override;
 
-    virtual void SAL_CALL update()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL update() override;
 
     virtual  css::uno::Reference<
         css::drawing::framework::XConfiguration>
-        SAL_CALL getRequestedConfiguration()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getRequestedConfiguration() override;
 
     virtual  css::uno::Reference<
         css::drawing::framework::XConfiguration>
-        SAL_CALL getCurrentConfiguration()
-        throw (css::uno::RuntimeException, std::exception) override;
+        SAL_CALL getCurrentConfiguration() override;
 
     virtual void SAL_CALL restoreConfiguration (
         const css::uno::Reference<css::drawing::framework::XConfiguration>&
-        rxConfiguration)
-        throw (css::uno::RuntimeException,
-               std::exception) override;
+        rxConfiguration) override;
 
     // XConfigurationControllerBroadcaster
 
@@ -130,53 +111,43 @@ public:
         const css::uno::Reference<
             css::drawing::framework::XConfigurationChangeListener>& rxListener,
         const OUString& rsEventType,
-        const css::uno::Any& rUserData)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Any& rUserData) override;
 
     virtual void SAL_CALL removeConfigurationChangeListener (
         const css::uno::Reference<
-            css::drawing::framework::XConfigurationChangeListener>& rxListener)
-        throw (css::uno::RuntimeException, std::exception) override;
+            css::drawing::framework::XConfigurationChangeListener>& rxListener) override;
 
     virtual void SAL_CALL notifyEvent (
-        const css::drawing::framework::ConfigurationChangeEvent& rEvent)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::drawing::framework::ConfigurationChangeEvent& rEvent) override;
 
     // XConfigurationRequestQueue
 
-    virtual sal_Bool SAL_CALL hasPendingRequests()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL hasPendingRequests() override;
 
     virtual void SAL_CALL postChangeRequest (
         const css::uno::Reference<
-            css::drawing::framework::XConfigurationChangeRequest>& rxRequest)
-        throw (css::uno::RuntimeException, std::exception) override;
+            css::drawing::framework::XConfigurationChangeRequest>& rxRequest) override;
 
     // XResourceFactoryManager
 
     virtual void SAL_CALL addResourceFactory(
         const OUString& sResourceURL,
-        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxResourceFactory)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxResourceFactory) override;
 
     virtual void SAL_CALL removeResourceFactoryForURL(
-        const OUString& sResourceURL)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const OUString& sResourceURL) override;
 
     virtual void SAL_CALL removeResourceFactoryForReference(
-        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxResourceFactory)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::drawing::framework::XResourceFactory>& rxResourceFactory) override;
 
     virtual css::uno::Reference<css::drawing::framework::XResourceFactory>
         SAL_CALL getResourceFactory (
-        const OUString& sResourceURL)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const OUString& sResourceURL) override;
 
     // XInitialization
 
     virtual void SAL_CALL initialize(
-        const css::uno::Sequence<css::uno::Any>& rArguments)
-        throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        const css::uno::Sequence<css::uno::Any>& rArguments) override;
 
     /** Use this class instead of calling lock() and unlock() directly in
         order to be exception safe.
@@ -199,9 +170,11 @@ private:
 
     /** When the called object has already been disposed this method throws
         an exception and does not return.
+
+        @throws css::lang::DisposedException
+        @throws css::uno::RuntimeException
     */
-    void ThrowIfDisposed () const
-        throw (css::lang::DisposedException, css::uno::RuntimeException);
+    void ThrowIfDisposed () const;
 };
 
 } } // end of namespace sd::framework

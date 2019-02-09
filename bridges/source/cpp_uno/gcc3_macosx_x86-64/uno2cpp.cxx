@@ -22,17 +22,17 @@
 #include <exception>
 #include <typeinfo>
 
-#include "rtl/alloc.h"
-#include "rtl/ustrbuf.hxx"
+#include <rtl/alloc.h>
 
 #include <com/sun/star/uno/genfunc.hxx>
-#include "com/sun/star/uno/RuntimeException.hpp"
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <o3tl/runtimetooustring.hxx>
 #include <uno/data.h>
 
-#include <bridges/cpp_uno/shared/bridge.hxx>
-#include <bridges/cpp_uno/shared/types.hxx>
-#include "bridges/cpp_uno/shared/unointerfaceproxy.hxx"
-#include "bridges/cpp_uno/shared/vtables.hxx"
+#include <bridge.hxx>
+#include <types.hxx>
+#include <unointerfaceproxy.hxx>
+#include <vtables.hxx>
 
 #include "abi.hxx"
 #include "callvirtualmethod.hxx"
@@ -95,14 +95,6 @@ void INSERT_INT8(
         *pDS++ = *static_cast<sal_uInt8 const *>( pSV );
 }
 
-void appendCString(OUStringBuffer & buffer, char const * text) {
-    if (text != nullptr) {
-        buffer.append(
-            OStringToOUString(OString(text), RTL_TEXTENCODING_ISO_8859_1));
-            // use 8859-1 to avoid conversion failure
-    }
-}
-
 }
 
 static void cpp_call(
@@ -112,7 +104,7 @@ static void cpp_call(
     sal_Int32 nParams, typelib_MethodParameter * pParams,
     void * pUnoReturn, void * pUnoArgs[], uno_Any ** ppUnoExc )
 {
-    // Maxium space for [complex ret ptr], values | ptr ...
+    // Maximum space for [complex ret ptr], values | ptr ...
     // (but will be used less - some of the values will be in pGPR and pFPR)
       sal_uInt64 *pStack = static_cast<sal_uInt64 *>(__builtin_alloca( (nParams + 3) * sizeof(sal_uInt64) ));
       sal_uInt64 *pStackStart = pStack;
@@ -242,18 +234,13 @@ static void cpp_call(
                 pAdjustedThisPtr, aVtableSlot.index,
                 pCppReturn, pReturnTypeRef, bSimpleReturn,
                 pStackStart, ( pStack - pStackStart ),
-                pGPR, nGPR,
-                pFPR, nFPR );
+                pGPR, pFPR );
         } catch (const Exception &) {
             throw;
         } catch (const std::exception & e) {
-            OUStringBuffer buf;
-            buf.append("C++ code threw ");
-            appendCString(buf, typeid(e).name());
-            buf.append(": ");
-            appendCString(buf, e.what());
             throw RuntimeException(
-                buf.makeStringAndClear());
+                "C++ code threw " + o3tl::runtimeToOUString(typeid(e).name())
+                + ": " + o3tl::runtimeToOUString(e.what()));
         } catch (...) {
             throw RuntimeException("C++ code threw unknown exception");
         }
@@ -293,10 +280,10 @@ static void cpp_call(
             uno_destructData( pCppReturn, pReturnTypeDescr, cpp_release );
         }
     }
-     catch (...)
-     {
-          // fill uno exception
-        fillUnoException( __cxa_get_globals()->caughtExceptions, *ppUnoExc, pThis->getBridge()->getCpp2Uno() );
+    catch (...)
+    {
+        // fill uno exception
+        CPPU_CURRENT_NAMESPACE::fillUnoException(*ppUnoExc, pThis->getBridge()->getCpp2Uno());
 
         // temporary params
         for ( ; nTempIndices--; )
@@ -356,8 +343,8 @@ void unoInterfaceProxyDispatch(
             typelib_MethodParameter aParam;
             aParam.pTypeRef =
                 reinterpret_cast<typelib_InterfaceAttributeTypeDescription const *>(pMemberDescr)->pAttributeTypeRef;
-            aParam.bIn      = sal_True;
-            aParam.bOut     = sal_False;
+            aParam.bIn      = true;
+            aParam.bOut     = false;
 
             typelib_TypeDescriptionReference * pReturnTypeRef = nullptr;
             OUString aVoidName("void");
@@ -424,7 +411,8 @@ void unoInterfaceProxyDispatch(
                 }
                 TYPELIB_DANGER_RELEASE( pTD );
             }
-        } // else perform queryInterface()
+            [[fallthrough]]; // else perform queryInterface()
+        }
         default:
             // dependent dispatch
             cpp_call(
@@ -439,7 +427,7 @@ void unoInterfaceProxyDispatch(
     default:
     {
         ::com::sun::star::uno::RuntimeException aExc(
-            OUString("illegal member type description!"),
+            "illegal member type description!",
             ::com::sun::star::uno::Reference< ::com::sun::star::uno::XInterface >() );
 
         Type const & rExcType = cppu::UnoType<decltype(aExc)>::get();

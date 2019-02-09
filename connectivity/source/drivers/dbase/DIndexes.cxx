@@ -17,12 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbase/DIndexes.hxx"
-#include "dbase/DIndex.hxx"
+#include <dbase/DIndexes.hxx>
+#include <dbase/DIndex.hxx>
 #include <connectivity/dbexception.hxx>
 #include <unotools/ucbhelper.hxx>
-#include <comphelper/types.hxx>
-#include "resource/dbase_res.hrc"
+#include <strings.hrc>
 
 using namespace ::comphelper;
 
@@ -52,7 +51,7 @@ sdbcx::ObjectType ODbaseIndexes::createObject(const OUString& _rName)
     }
 
     sdbcx::ObjectType xRet;
-    SvStream* pFileStream = ::connectivity::file::OFileTable::createStream_simpleError(sFile, StreamMode::READ | StreamMode::NOCREATE | StreamMode::SHARE_DENYWRITE);
+    std::unique_ptr<SvStream> pFileStream = ::connectivity::file::OFileTable::createStream_simpleError(sFile, StreamMode::READ | StreamMode::NOCREATE | StreamMode::SHARE_DENYWRITE);
     if(pFileStream)
     {
         pFileStream->SetEndian(SvStreamEndian::LITTLE);
@@ -60,8 +59,8 @@ sdbcx::ObjectType ODbaseIndexes::createObject(const OUString& _rName)
         ODbaseIndex::NDXHeader aHeader;
 
         pFileStream->Seek(0);
-        pFileStream->Read(&aHeader,DINDEX_PAGE_SIZE);
-        delete pFileStream;
+        ReadHeader(*pFileStream, aHeader);
+        pFileStream.reset();
 
         ODbaseIndex* pIndex = new ODbaseIndex(m_pTable,aHeader,_rName);
         xRet = pIndex;
@@ -78,7 +77,7 @@ sdbcx::ObjectType ODbaseIndexes::createObject(const OUString& _rName)
     return xRet;
 }
 
-void ODbaseIndexes::impl_refresh(  ) throw(RuntimeException)
+void ODbaseIndexes::impl_refresh(  )
 {
     if(m_pTable)
         m_pTable->refreshIndexes();
@@ -96,8 +95,9 @@ sdbcx::ObjectType ODbaseIndexes::appendObject( const OUString& _rForName, const 
     if(xTunnel.is())
     {
         ODbaseIndex* pIndex = reinterpret_cast< ODbaseIndex* >( xTunnel->getSomething(ODbaseIndex::getUnoTunnelImplementationId()) );
-        if(!pIndex || !pIndex->CreateImpl())
+        if(!pIndex)
             throw SQLException();
+        pIndex->CreateImpl();
     }
 
     return createObject( _rForName );

@@ -7,8 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mar.h"
-#include "mar_cmdline.h"
+#include <onlineupdate/mar.h>
+#include <onlineupdate/mar_cmdline.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -16,10 +16,13 @@
 #define chdir _chdir
 #else
 #include <unistd.h>
+#include <errno.h>
 #endif
 
-#define MOZ_APP_VERSION "5" /* Dummy value; replace or remove in the
-                               future */
+#ifndef APP_VERSION
+#error "Missing APP_VERSION"
+#endif
+
 #define MAR_CHANNEL_ID "LOOnlineUpdater" /* Dummy value; replace or
                                             remove in the future */
 
@@ -36,7 +39,7 @@ int mar_repackage_and_sign(const char *NSSConfigDir,
                            const char * dest);
 
 static void print_version(void) {
-  printf("Version: %s\n", MOZ_APP_VERSION);
+  printf("Version: %s\n", APP_VERSION);
   printf("Default Channel ID: %s\n", MAR_CHANNEL_ID);
 }
 
@@ -45,6 +48,8 @@ static void print_usage(void) {
   printf("Create a MAR file:\n");
   printf("  mar [-H MARChannelID] [-V ProductVersion] [-C workingDir] "
          "-c archive.mar [files...]\n");
+  printf("  mar [-H MARChannelID] [-V ProductVersion] [-C workingDir] "
+         "-c archive.mar -f input_file.txt\n");
 
   printf("Extract a MAR file:\n");
   printf("  mar [-C workingDir] -x archive.mar\n");
@@ -123,7 +128,7 @@ int main(int argc, char **argv) {
   char *NSSConfigDir = NULL;
   const char *certNames[MAX_SIGNATURES];
   char *MARChannelID = MAR_CHANNEL_ID;
-  char *productVersion = MOZ_APP_VERSION;
+  char *productVersion = APP_VERSION;
 #ifndef NO_SIGN_VERIFY
   uint32_t k;
 #endif
@@ -247,7 +252,40 @@ int main(int argc, char **argv) {
     struct ProductInformationBlock infoBlock;
     infoBlock.MARChannelID = MARChannelID;
     infoBlock.productVersion = productVersion;
-    return mar_create(argv[2], argc - 3, argv + 3, &infoBlock);
+    if (argv[argc - 2][0] == '-' && argv[argc - 2][1] == 'f')
+    {
+      char buf[1000];
+      FILE* file;
+      char** files;
+      int num_files = 0;
+
+      files = (char **)malloc(sizeof(char*)*10000);
+      errno = 0;
+      file = fopen(argv[argc - 1], "r");
+      if (!file)
+      {
+        printf("%d %s", errno, strerror(errno));
+        printf("Could not open file: %s", argv[argc - 1]);
+        exit(1);
+      }
+
+      while(fgets(buf, 1000, file) != NULL)
+      {
+        int j;
+        size_t str_len;
+        for (j=strlen(buf)-1;j>=0 && (buf[j]=='\n' || buf[j]=='\r');j--)
+          ;
+        buf[j+1]='\0';
+        str_len = strlen(buf) + 1;
+        files[num_files] = (char*)malloc(sizeof(char)*str_len);
+        strcpy(files[num_files], buf);
+        ++num_files;
+      }
+      fclose(file);
+      return mar_create(argv[2], num_files, files, &infoBlock);
+    }
+    else
+      return mar_create(argv[2], argc - 3, argv + 3, &infoBlock);
   }
   case 'i': {
     struct ProductInformationBlock infoBlock;
@@ -289,6 +327,7 @@ int main(int argc, char **argv) {
     printf("\n");
     /* The fall through from 'T' to 't' is intentional */
   }
+  /* Fall through */
   case 't':
     return mar_test(argv[2]);
 

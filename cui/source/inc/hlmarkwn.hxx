@@ -21,9 +21,9 @@
 #define INCLUDED_CUI_SOURCE_INC_HLMARKWN_HXX
 
 #include <com/sun/star/container/XNameAccess.hpp>
-#include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
-#include <svtools/treelistbox.hxx>
+#include <vcl/floatwin.hxx>
+#include <vcl/treelistbox.hxx>
 
 #include "hlmarkwn_def.hxx"
 class SvxHyperlinkTabPageBase;
@@ -43,7 +43,7 @@ private:
 
 public:
     SvxHlmarkTreeLBox(vcl::Window* pParent, WinBits nStyle);
-    virtual ~SvxHlmarkTreeLBox();
+    virtual ~SvxHlmarkTreeLBox() override;
     virtual void dispose() override;
 
     void SetParentWnd(SvxHlinkDlgMarkWnd* pParent)
@@ -51,7 +51,7 @@ public:
         mpParentWnd = pParent;
     }
 
-    virtual void Paint( vcl::RenderContext& rRenderContext, const Rectangle& rRect ) override;
+    virtual void Paint( vcl::RenderContext& rRenderContext, const ::tools::Rectangle& rRect ) override;
     virtual Size GetOptimalSize() const override;
 };
 
@@ -59,7 +59,7 @@ public:
 //#                                                                      #
 //# Window-Class                                                         #
 //#                                                                      #
-class SvxHlinkDlgMarkWnd : public ModalDialog //FloatingWindow
+class SvxHlinkDlgMarkWnd : public FloatingWindow //FloatingWindow
 {
 private:
     friend class SvxHlmarkTreeLBox;
@@ -86,13 +86,13 @@ protected:
 
     virtual void Move () override;
 
-    DECL_LINK_TYPED( ClickApplyHdl_Impl, Button*, void );
-    DECL_LINK_TYPED( DoubleClickApplyHdl_Impl, SvTreeListBox*, bool );
-    DECL_LINK_TYPED( ClickCloseHdl_Impl, Button*, void );
+    DECL_LINK( ClickApplyHdl_Impl, Button*, void );
+    DECL_LINK( DoubleClickApplyHdl_Impl, SvTreeListBox*, bool );
+    DECL_LINK( ClickCloseHdl_Impl, Button*, void );
 
 public:
     SvxHlinkDlgMarkWnd (SvxHyperlinkTabPageBase *pParent);
-    virtual ~SvxHlinkDlgMarkWnd();
+    virtual ~SvxHlinkDlgMarkWnd() override;
     virtual void dispose() override;
 
     bool MoveTo ( Point aNewPos );

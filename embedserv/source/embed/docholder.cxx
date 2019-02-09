@@ -16,20 +16,19 @@
  *   except in compliance with the License. You may obtain a copy of
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
-#ifdef _MSC_VER
-#pragma warning(disable : 4917 4555)
+
+#include <docholder.hxx>
+#include <embeddoc.hxx>
+#include <intercept.hxx>
+#include <syswinwrapper.hxx>
+#include <iipaobj.hxx>
+#include <common.h>
+
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
-
-
-#include "xwin.hxx"
-#include "docholder.hxx"
-#include "embeddoc.hxx"
-#include "intercept.hxx"
-#include "syswinwrapper.hxx"
-#include "iipaobj.hxx"
-
-#include "common.h"
 #include <windows.h>
+
 #include <com/sun/star/awt/XTopWindow.hpp>
 #include <com/sun/star/awt/PosSize.hpp>
 #include <com/sun/star/awt/XView.hpp>
@@ -46,28 +45,26 @@
 #include <com/sun/star/document/MacroExecMode.hpp>
 #include <com/sun/star/embed/EmbedMapUnits.hpp>
 #include <com/sun/star/embed/XVisualObject.hpp>
+#include <com/sun/star/frame/TerminationVetoException.hpp>
 #include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/frame/Frame.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
-#include <com/sun/star/frame/FrameSearchFlag.hpp>
 #include <com/sun/star/frame/XStatusListener.hpp>
-#include <com/sun/star/frame/XDispatchProviderInterception.hpp>
 #include <com/sun/star/lang/SystemDependent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/task/InteractionHandler.hpp>
 #include <com/sun/star/ui/XUIElement.hpp>
+#include <com/sun/star/util/CloseVetoException.hpp>
 #include <com/sun/star/util/XCloseBroadcaster.hpp>
-#include <com/sun/star/util/XCloseAble.hpp>
+#include <com/sun/star/util/XCloseable.hpp>
 #include <com/sun/star/util/XModifyBroadcaster.hpp>
 #include <comphelper/processfactory.hxx>
+#include <o3tl/any.hxx>
 #include <osl/diagnose.h>
 #include <rtl/process.h>
 
 using namespace ::com::sun::star;
-
-extern OUString  getFilterNameFromGUID_Impl( GUID* );
 
 // add mutex locking ???
 
@@ -76,24 +73,24 @@ DocumentHolder::DocumentHolder(
     const ::rtl::Reference< EmbeddedDocumentInstanceAccess_Impl >& xOleAccess )
     :
     m_bAllowInPlace(true),
-    m_pIOleIPSite(0),
-    m_pIOleIPFrame(0),
-    m_pIOleIPUIWindow(0),
-    m_pCHatchWin(0),
+    m_pIOleIPSite(nullptr),
+    m_pIOleIPFrame(nullptr),
+    m_pIOleIPUIWindow(nullptr),
+    m_pCHatchWin(nullptr),
     m_xOleAccess( xOleAccess ),
-    m_pInterceptor(0),
+    m_pInterceptor(nullptr),
     m_xFactory( xFactory ),
     m_bOnDeactivate(false),
-    m_hWndxWinParent(NULL),
-    m_hWndxWinCont(NULL),
-    m_nMenuHandle(NULL),
-    m_nMenuShared(NULL),
-    m_nOLEMenu(NULL),
+    m_hWndxWinParent(nullptr),
+    m_hWndxWinCont(nullptr),
+    m_nMenuHandle(nullptr),
+    m_nMenuShared(nullptr),
+    m_nOLEMenu(nullptr),
     m_nMacroExecMode( document::MacroExecMode::USE_CONFIG ),
-    m_bLink( sal_False )
+    m_bLink( false )
 {
     uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
-    xDesktop->addTerminateListener( (frame::XTerminateListener*)this );
+    xDesktop->addTerminateListener( static_cast<frame::XTerminateListener*>(this) );
 }
 
 
@@ -105,70 +102,62 @@ DocumentHolder::~DocumentHolder()
 }
 
 
-void DocumentHolder::LoadDocInFrame( sal_Bool bPluginMode )
+void DocumentHolder::LoadDocInFrame( bool bPluginMode )
 {
     uno::Reference<frame::XComponentLoader> xComponentLoader(
         m_xFrame,uno::UNO_QUERY);
     if( xComponentLoader.is() && m_xDocument.is() )
     {
         uno::Reference< task::XInteractionHandler2 > xHandler(
-            task::InteractionHandler::createWithParent(comphelper::getComponentContext(m_xFactory), 0) );
+            task::InteractionHandler::createWithParent(comphelper::getComponentContext(m_xFactory), nullptr) );
 
-        uno::Any aAny;
         sal_Int32 nLen = 3;
         uno::Sequence<beans::PropertyValue> aSeq( nLen );
 
-        aAny <<= uno::Reference<uno::XInterface>(
-            m_xDocument, uno::UNO_QUERY);
         aSeq[0] = beans::PropertyValue(
-            OUString("Model"),
+            "Model",
             -1,
-            aAny,
+            uno::Any(uno::Reference<uno::XInterface>(m_xDocument, uno::UNO_QUERY)),
             beans::PropertyState_DIRECT_VALUE);
 
-        aAny <<= sal_False;
         aSeq[1] = beans::PropertyValue(
-            OUString("ReadOnly"),
+            "ReadOnly",
             -1,
-            aAny,
+            uno::Any(false),
             beans::PropertyState_DIRECT_VALUE);
 
-        aAny <<= (sal_Bool) sal_True;
         aSeq[2] = beans::PropertyValue(
-            OUString("NoAutoSave"),
+            "NoAutoSave",
             -1,
-            aAny,
+            uno::Any(true),
             beans::PropertyState_DIRECT_VALUE);
 
         if ( bPluginMode )
         {
             aSeq.realloc( ++nLen );
-            aAny <<= (sal_Int16) 3;
             aSeq[nLen-1] = beans::PropertyValue(
-                OUString("PluginMode"),
+                "PluginMode",
                 -1,
-                aAny,
+                uno::Any(sal_Int16(3)),
                 beans::PropertyState_DIRECT_VALUE);
         }
 
         aSeq.realloc( nLen+=2 );
-        aAny <<= xHandler;
         aSeq[nLen-2] = beans::PropertyValue(
-            OUString("InteractionHandler"),
+            "InteractionHandler",
             -1,
-            aAny,
+            uno::Any(xHandler),
             beans::PropertyState_DIRECT_VALUE);
 
-        aAny <<= m_nMacroExecMode;
         aSeq[nLen-1] = beans::PropertyValue(
-            OUString("MacroExecutionMode"),
+            "MacroExecutionMode",
             -1,
-            aAny,
+            uno::Any(m_nMacroExecMode),
             beans::PropertyState_DIRECT_VALUE);
 
         xComponentLoader->loadComponentFromURL(
-            OUString("private:object"),
-            OUString("_self"),
+            "private:object",
+            "_self",
             0,
             aSeq);
 
@@ -200,7 +189,7 @@ void DocumentHolder::DisableInplaceActivation(BOOL b)
 
 BOOL DocumentHolder::isActive() const
 {
-    return m_pIOleIPSite != 0;
+    return m_pIOleIPSite != nullptr;
 }
 
 HRESULT DocumentHolder::InPlaceActivate(
@@ -218,10 +207,10 @@ HRESULT DocumentHolder::InPlaceActivate(
     RECT                    rcClip;
     OLEINPLACEFRAMEINFO     frameInfo;
 
-    if (NULL==pActiveSite)
+    if (nullptr==pActiveSite)
         return ResultFromScode(E_INVALIDARG);
 
-    if (NULL!=m_pIOleIPSite)
+    if (nullptr!=m_pIOleIPSite)
     {
         if (fIncludeUI)
             UIActivate();
@@ -235,7 +224,7 @@ HRESULT DocumentHolder::InPlaceActivate(
     //1.  Initialization, obtaining interfaces, OnInPlaceActivate.
     hr=pActiveSite->QueryInterface(
         IID_IOleInPlaceSite,
-        (void**) &m_pIOleIPSite);
+        reinterpret_cast<void**>(&m_pIOleIPSite));
 
     if (FAILED(hr))
         return hr;
@@ -244,7 +233,8 @@ HRESULT DocumentHolder::InPlaceActivate(
 
     if (NOERROR!=hr)
     {
-        m_pIOleIPSite->Release(), m_pIOleIPSite=NULL;
+        m_pIOleIPSite->Release();
+        m_pIOleIPSite=nullptr;
         return ResultFromScode(E_FAIL);
     }
 
@@ -263,13 +253,13 @@ HRESULT DocumentHolder::InPlaceActivate(
     // initialize the office as, with hwnd as parentwindow
     uno::Any                      aAny;
     uno::Sequence<sal_Int8> aProcessIdent(16);
-    rtl_getGlobalProcessId((sal_uInt8*)aProcessIdent.getArray());
+    rtl_getGlobalProcessId(reinterpret_cast<sal_uInt8*>(aProcessIdent.getArray()));
 
     try
     {
         if(!m_xEditWindow.is())
         {   // determine XWindow and window handle of parent
-            HWND                          hWndxWinParent(0);
+            HWND                          hWndxWinParent(nullptr);
             uno::Reference<awt::XWindow>  xWin;
 
             uno::Reference<awt::XToolkit2> xToolkit =
@@ -280,21 +270,21 @@ HRESULT DocumentHolder::InPlaceActivate(
                 m_pCHatchWin = new winwrap::CHatchWin(
                     m_hInstance,this);
 
-            if(m_pCHatchWin->Init(hWndSite,/*ID_HATCHWINDOW*/2000, NULL)) {
+            if(m_pCHatchWin->Init(hWndSite,/*ID_HATCHWINDOW*/2000, nullptr)) {
                 m_pCHatchWin->RectsSet(&rcPos,&rcClip); //set visible area
                 hWndxWinParent = m_pCHatchWin->Window();
                 ShowWindow(hWndxWinParent,SW_SHOW);  //Make visible.
             }
             else {
                 // no success initializing hatch window
-                delete m_pCHatchWin, m_pCHatchWin = 0;
+                delete m_pCHatchWin;
+                m_pCHatchWin = nullptr;
                 hWndxWinParent = hWndSite;
             }
 
-            aAny <<= sal_Int32(hWndxWinParent);
             xWin.set(
                 xToolkit->createSystemChild(
-                    aAny,
+                    uno::Any(sal_Int32(hWndxWinParent)),
                     aProcessIdent,
                     lang::SystemDependent::SYSTEM_WIN32),
                 uno::UNO_QUERY);
@@ -306,7 +296,7 @@ HRESULT DocumentHolder::InPlaceActivate(
                     rcPos.right-rcPos.left,
                     rcPos.bottom - rcPos.top,
                     awt::PosSize::POSSIZE);
-                xWin->setVisible(sal_True);
+                xWin->setVisible(true);
 
                 m_xEditWindow = xWin;
                 m_hWndxWinParent = hWndxWinParent;
@@ -329,7 +319,7 @@ HRESULT DocumentHolder::InPlaceActivate(
                     0,
                     0,
                     awt::PosSize::POSSIZE);
-            m_xEditWindow->setVisible(sal_True);
+            m_xEditWindow->setVisible(true);
         }
 
         if(m_xContainerWindow.is()) {
@@ -359,17 +349,16 @@ HRESULT DocumentHolder::InPlaceActivate(
                 m_xLayoutManager->setDockingAreaAcceptor(this);
 
             // load the model into the frame
-            LoadDocInFrame( sal_True );
+            LoadDocInFrame( true );
 
             uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
             xDesktop->getFrames()->append(m_xFrame);
 
-            // determine the menuhandle to get menutitems.
+            // determine the menuhandle to get menuitems.
             if(m_xLayoutManager.is()) {
                 uno::Reference< css::ui::XUIElement > xUIEl(
                     m_xLayoutManager->getElement(
-                        OUString(
-                            "private:resource/menubar/menubar")));
+                        "private:resource/menubar/menubar"));
                 OSL_ENSURE(xUIEl.is(),"no menubar");
                 uno::Reference<awt::XSystemDependentMenuPeer> xSDMP(
                     xUIEl->getRealInterface(),
@@ -380,8 +369,7 @@ HRESULT DocumentHolder::InPlaceActivate(
                 if( aAny >>= tmp )
                     m_nMenuHandle = HMENU(tmp);
                 m_xLayoutManager->hideElement(
-                    OUString(
-                            "private:resource/menubar/menubar" ));
+                    "private:resource/menubar/menubar" );
             }
         }
 
@@ -428,13 +416,13 @@ void DocumentHolder::InPlaceDeactivate()
     if(m_xEditWindow.is()) {
         m_xEditWindow->setVisible(false);
         ShowWindow(m_hWndxWinParent,SW_HIDE);
-        SetParent(m_hWndxWinParent,0);
+        SetParent(m_hWndxWinParent,nullptr);
     }
 
     if(m_xContainerWindow.is()) {
         m_xContainerWindow->setVisible(false);
         ShowWindow(m_hWndxWinCont,SW_HIDE);
-        SetParent(m_hWndxWinCont,0);
+        SetParent(m_hWndxWinCont,nullptr);
     }
 
     // TODO/cd: Workaround for status indicator bug. It always makes the
@@ -444,12 +432,12 @@ void DocumentHolder::InPlaceDeactivate()
     if (m_xLayoutManager.is())
         m_xLayoutManager->setVisible(false);
 
-    if (NULL!=m_pIOleIPSite)
+    if (nullptr!=m_pIOleIPSite)
         m_pIOleIPSite->OnInPlaceDeactivate();
 
-    if(m_pIOleIPFrame) m_pIOleIPFrame->Release(); m_pIOleIPFrame = 0;
-    if(m_pIOleIPUIWindow) m_pIOleIPUIWindow->Release(); m_pIOleIPUIWindow = 0;
-    if(m_pIOleIPSite) m_pIOleIPSite->Release(); m_pIOleIPSite = 0;
+    if(m_pIOleIPFrame) m_pIOleIPFrame->Release(); m_pIOleIPFrame = nullptr;
+    if(m_pIOleIPUIWindow) m_pIOleIPUIWindow->Release(); m_pIOleIPUIWindow = nullptr;
+    if(m_pIOleIPSite) m_pIOleIPSite->Release(); m_pIOleIPSite = nullptr;
 
     if ( m_xOleAccess.is() )
     {
@@ -467,7 +455,7 @@ void DocumentHolder::InPlaceDeactivate()
 HRESULT DocumentHolder::UIActivate()
 {
     // 1.  Call IOleInPlaceSite::UIActivate
-    if (NULL!=m_pIOleIPSite)
+    if (nullptr!=m_pIOleIPSite)
         m_pIOleIPSite->OnUIActivate();
 
     //2.  Critical for accelerators to work initially.
@@ -479,11 +467,11 @@ HRESULT DocumentHolder::UIActivate()
     OLECHAR starOffice[] = {'S','t','a','r','O','f','f','i','c','e',0};
     CComPtr< IOleInPlaceActiveObject > pObj = new CIIAObj( this );
 
-    if (NULL!=m_pIOleIPFrame)
+    if (nullptr!=m_pIOleIPFrame)
         m_pIOleIPFrame->SetActiveObject(
             pObj, starOffice );
 
-    if (NULL!=m_pIOleIPUIWindow)
+    if (nullptr!=m_pIOleIPUIWindow)
         m_pIOleIPUIWindow->SetActiveObject(
             pObj, starOffice );
 
@@ -498,36 +486,35 @@ void DocumentHolder::UIDeactivate()
     //1.  Remove the shared menu.
     InPlaceMenuDestroy();
 
-    if (NULL!=m_pIOleIPFrame)
-        m_pIOleIPFrame->SetActiveObject(NULL, NULL);
+    if (nullptr!=m_pIOleIPFrame)
+        m_pIOleIPFrame->SetActiveObject(nullptr, nullptr);
 
-    if (NULL!=m_pIOleIPUIWindow)
-        m_pIOleIPUIWindow->SetActiveObject(NULL, NULL);
+    if (nullptr!=m_pIOleIPUIWindow)
+        m_pIOleIPUIWindow->SetActiveObject(nullptr, nullptr);
 
     //3.  Call IOleInPlaceSite::OnUIDeactivate
-    if (NULL!=m_pIOleIPSite)
+    if (nullptr!=m_pIOleIPSite)
         m_pIOleIPSite->OnUIDeactivate(FALSE);
 
     return;
 }
 
-void CopyToOLEMenu(HMENU hOrig,WORD origPos,HMENU hDest,WORD destPos)
+static void CopyToOLEMenu(HMENU hOrig,WORD origPos,HMENU hDest,WORD destPos)
 {
-    HMENU subMenu(NULL);
-    UINT uTemp = MF_BYPOSITION | MF_POPUP;
-    char buffer[256];
+    HMENU subMenu(nullptr);
+    wchar_t buffer[256];
 
     subMenu = GetSubMenu(hOrig,origPos);
-    GetMenuString(hOrig,origPos,buffer,256,MF_BYPOSITION);
-    InsertMenu(hDest,destPos,uTemp,
-               (UINT)subMenu,LPCTSTR(buffer));
+    GetMenuStringW(hOrig,origPos,buffer,256,MF_BYPOSITION);
+    InsertMenuW(hDest,destPos,MF_BYPOSITION | MF_POPUP,
+               reinterpret_cast<UINT_PTR>(subMenu),buffer);
 
     MENUITEMINFOW mi;
     memset(&mi,0,sizeof(mi));
     mi.cbSize = sizeof(mi);
     mi.fMask = MIIM_DATA;
     if(GetMenuItemInfoW(hOrig,origPos,TRUE,&mi))
-        SetMenuItemInfoW(hDest,(WORD)destPos,TRUE,&mi);
+        SetMenuItemInfoW(hDest,destPos,TRUE,&mi);
 }
 
 BOOL DocumentHolder::InPlaceMenuCreate()
@@ -548,18 +535,18 @@ BOOL DocumentHolder::InPlaceMenuCreate()
     int help = count-1;
 
     // start with 1, because we don't include "File"
-    WORD pos = (WORD)mgw.width[0];
+    WORD pos = static_cast<WORD>(mgw.width[0]);
     CopyToOLEMenu(m_nMenuHandle,1,hMenu,pos);
     mgw.width[1] = 1;
 
     // insert object menu here
-    pos = ((WORD)(mgw.width[0] + mgw.width[1] + mgw.width[2]));
+    pos = static_cast<WORD>(mgw.width[0] + mgw.width[1] + mgw.width[2]);
     for(WORD i = 2; i < help-1; ++i,++pos)
         CopyToOLEMenu(m_nMenuHandle,i,hMenu,pos);
     mgw.width[3] = help - 3;
 
     // insert help menu
-    pos = (WORD)(mgw.width[0] + mgw.width[1] + mgw.width[2] +
+    pos = static_cast<WORD>(mgw.width[0] + mgw.width[1] + mgw.width[2] +
                  mgw.width[3] + mgw.width[4]);
     CopyToOLEMenu(m_nMenuHandle,WORD(help),hMenu,pos);
     mgw.width[5] = 1;
@@ -570,11 +557,11 @@ BOOL DocumentHolder::InPlaceMenuCreate()
     uno::Reference<awt::XSystemDependentWindowPeer> xSysDepWin(m_xContainerWindow,uno::UNO_QUERY);
     if(xSysDepWin.is()) {
         uno::Sequence<sal_Int8> aProcessIdent(16);
-        rtl_getGlobalProcessId((sal_uInt8*)aProcessIdent.getArray());
+        rtl_getGlobalProcessId(reinterpret_cast<sal_uInt8*>(aProcessIdent.getArray()));
         uno::Any aAny = xSysDepWin->getWindowHandle(aProcessIdent,lang::SystemDependent::SYSTEM_WIN32);
         sal_Int64 tmp;
         aAny >>= tmp;
-        HWND aHwnd = (HWND) tmp;
+        HWND aHwnd = reinterpret_cast<HWND>(tmp);
         m_pIOleIPFrame->SetMenu(
             m_nMenuShared,m_nOLEMenu,aHwnd);
     }
@@ -586,12 +573,13 @@ BOOL DocumentHolder::InPlaceMenuCreate()
 
 BOOL DocumentHolder::InPlaceMenuDestroy()
 {
-    if( NULL == m_nMenuShared )
+    if( nullptr == m_nMenuShared )
         return TRUE;
 
-    m_pIOleIPFrame->SetMenu(NULL,NULL,NULL);
+    m_pIOleIPFrame->SetMenu(nullptr,nullptr,nullptr);
 
-    OleDestroyMenuDescriptor(m_nOLEMenu),m_nOLEMenu = NULL;
+    OleDestroyMenuDescriptor(m_nOLEMenu);
+    m_nOLEMenu = nullptr;
     return TRUE;
 }
 
@@ -611,15 +599,15 @@ void DocumentHolder::FreeOffice()
 {
     uno::Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create(comphelper::getComponentContext(m_xFactory));
     xDesktop->removeTerminateListener(
-        (frame::XTerminateListener*)this );
+        static_cast<frame::XTerminateListener*>(this) );
 }
 
-void DocumentHolder::DisconnectFrameDocument( sal_Bool bComplete )
+void DocumentHolder::DisconnectFrameDocument( bool bComplete )
 {
     try
     {
         uno::Reference< util::XModifyBroadcaster > xModifiable( m_xDocument, uno::UNO_QUERY_THROW );
-        xModifiable->removeModifyListener( (util::XModifyListener*)this );
+        xModifiable->removeModifyListener( static_cast<util::XModifyListener*>(this) );
     }
     catch( const uno::Exception& )
     {}
@@ -628,7 +616,7 @@ void DocumentHolder::DisconnectFrameDocument( sal_Bool bComplete )
     {
         uno::Reference< util::XCloseBroadcaster > xBroadcaster(
             m_xDocument, uno::UNO_QUERY_THROW );
-        xBroadcaster->removeCloseListener( (util::XCloseListener*)this );
+        xBroadcaster->removeCloseListener( static_cast<util::XCloseListener*>(this) );
     }
     catch( const uno::Exception& )
     {}
@@ -637,7 +625,7 @@ void DocumentHolder::DisconnectFrameDocument( sal_Bool bComplete )
     {
         uno::Reference< util::XCloseBroadcaster > xBroadcaster(
             m_xFrame, uno::UNO_QUERY_THROW );
-        xBroadcaster->removeCloseListener( (util::XCloseListener*)this );
+        xBroadcaster->removeCloseListener( static_cast<util::XCloseListener*>(this) );
     }
     catch( const uno::Exception& )
     {}
@@ -645,7 +633,7 @@ void DocumentHolder::DisconnectFrameDocument( sal_Bool bComplete )
     if ( bComplete )
     {
         m_xFrame.clear();
-        m_pIDispatch = NULL;
+        m_pIDispatch = nullptr;
         m_xDocument.clear();
     }
 }
@@ -661,13 +649,13 @@ void DocumentHolder::CloseDocument()
     {
         try
         {
-            xCloseable->close( sal_True );
+            xCloseable->close( true );
         }
         catch( const uno::Exception& )
         {}
     }
 
-    m_pIDispatch = NULL;
+    m_pIDispatch = nullptr;
     m_xDocument.clear();
 }
 
@@ -678,7 +666,7 @@ void DocumentHolder::CloseFrame()
     {
         uno::Reference< util::XCloseBroadcaster > xBroadcaster(
             m_xFrame, uno::UNO_QUERY_THROW );
-        xBroadcaster->removeCloseListener( (util::XCloseListener*)this );
+        xBroadcaster->removeCloseListener( static_cast<util::XCloseListener*>(this) );
     }
     catch( const uno::Exception& )
     {}
@@ -687,7 +675,7 @@ void DocumentHolder::CloseFrame()
         m_xFrame,uno::UNO_QUERY);
     if(xCloseable.is())
         try {
-            xCloseable->close(sal_True);
+            xCloseable->close(true);
         }
         catch( const uno::Exception& ) {
         }
@@ -700,7 +688,7 @@ void DocumentHolder::CloseFrame()
     m_xFrame.clear();
 }
 
-void DocumentHolder::SetDocument( const uno::Reference< frame::XModel >& xDoc, sal_Bool bLink )
+void DocumentHolder::SetDocument( const uno::Reference< frame::XModel >& xDoc, bool bLink )
 {
     if ( m_xDocument.is() )
         CloseDocument();
@@ -712,19 +700,19 @@ void DocumentHolder::SetDocument( const uno::Reference< frame::XModel >& xDoc, s
         m_xDocument, uno::UNO_QUERY );
 
     if ( xBroadcaster.is() )
-        xBroadcaster->addCloseListener( (util::XCloseListener*)this );
+        xBroadcaster->addCloseListener( static_cast<util::XCloseListener*>(this) );
 
     if ( m_xDocument.is() && !m_bLink )
     {
         // set the document mode to embedded
         uno::Sequence< beans::PropertyValue > aSeq(1);
         aSeq[0].Name = "SetEmbedded";
-        aSeq[0].Value <<= sal_True;
+        aSeq[0].Value <<= true;
         m_xDocument->attachResource(OUString(),aSeq);
     }
 }
 
-sal_Bool DocumentHolder::ExecuteSuspendCloseFrame()
+bool DocumentHolder::ExecuteSuspendCloseFrame()
 {
     if ( m_xFrame.is() && m_xFactory.is() )
     {
@@ -733,15 +721,15 @@ sal_Bool DocumentHolder::ExecuteSuspendCloseFrame()
             uno::Reference< frame::XController > xController = m_xFrame->getController();
             if ( xController.is() )
             {
-                if ( !xController->suspend( sal_True ) )
-                    return sal_False;
+                if ( !xController->suspend( true ) )
+                    return false;
 
                 FreeOffice();
                 try
                 {
                     uno::Reference<util::XCloseable> xCloseable( m_xFrame, uno::UNO_QUERY );
                     if ( xCloseable.is() )
-                        xCloseable->close(sal_True);
+                        xCloseable->close(true);
                     else
                     {
                         m_xFrame->dispose();
@@ -750,7 +738,7 @@ sal_Bool DocumentHolder::ExecuteSuspendCloseFrame()
                 catch( const util::CloseVetoException& )
                 {
                     // should be called if the frame could not be closed
-                    xController->suspend( sal_False );
+                    xController->suspend( false );
                 }
             }
         }
@@ -761,7 +749,7 @@ sal_Bool DocumentHolder::ExecuteSuspendCloseFrame()
         m_xFrame.clear();
     }
 
-    return sal_True;
+    return true;
 }
 
 uno::Reference< frame::XFrame2 > DocumentHolder::DocumentFrame()
@@ -776,14 +764,14 @@ uno::Reference< frame::XFrame2 > DocumentHolder::DocumentFrame()
         // is loaded into the frame in ::show() method the terminate listener will be removed
         // this is so only for outplace activation
         if( xFrame.is() )
-            m_xFrame.set( xFrame->findFrame( OUString("_blank"), 0 ), uno::UNO_QUERY );
+            m_xFrame.set( xFrame->findFrame( "_blank", 0 ), uno::UNO_QUERY );
 
         uno::Reference< util::XCloseBroadcaster > xBroadcaster(
             m_xFrame, uno::UNO_QUERY );
 
         if ( xBroadcaster.is() )
         {
-            xBroadcaster->addCloseListener( (util::XCloseListener*)this );
+            xBroadcaster->addCloseListener( static_cast<util::XCloseListener*>(this) );
             FreeOffice(); // the frame is part of the desktop
         }
     }
@@ -817,14 +805,14 @@ void DocumentHolder::ClearInterceptorInternally()
         m_pInterceptor->DisconnectDocHolder();
 
     m_xInterceptorLocker.clear();
-    m_pInterceptor = 0;
+    m_pInterceptor = nullptr;
 }
 
 void DocumentHolder::ClearInterceptor()
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     m_xInterceptorLocker.clear();
-    m_pInterceptor = 0;
+    m_pInterceptor = nullptr;
 }
 
 
@@ -842,7 +830,7 @@ void DocumentHolder::show()
         }
         else if( DocumentFrame().is() )
         {
-            LoadDocInFrame( sal_False );
+            LoadDocInFrame( false );
 
             // get rid of second closer if it is there
             uno::Reference< beans::XPropertySet > xLMProps( m_xFrame->getLayoutManager(), uno::UNO_QUERY );
@@ -857,7 +845,7 @@ void DocumentHolder::show()
                 try
                 {
                     uno::Reference< util::XModifyBroadcaster > xModifiable( m_xDocument, uno::UNO_QUERY_THROW );
-                    xModifiable->addModifyListener( (util::XModifyListener*)this );
+                    xModifiable->addModifyListener( static_cast<util::XModifyListener*>(this) );
                 }
                 catch( const uno::Exception& )
                 {}
@@ -869,7 +857,7 @@ void DocumentHolder::show()
     }
     catch( const uno::Exception& )
     {
-        OSL_FAIL( "Can not show the frame!\n" );
+        OSL_FAIL( "Can not show the frame!" );
     }
 
 }
@@ -897,7 +885,7 @@ void DocumentHolder::resizeWin( const SIZEL& rNewSize )
 
             if ( aOldSize.cx != rNewSize.cx || aOldSize.cy != rNewSize.cy )
             {
-                HDC hdc = GetDC( NULL );
+                HDC hdc = GetDC( nullptr );
                 SetMapMode( hdc, MM_HIMETRIC );
 
                 POINT aOldOffset;
@@ -910,7 +898,7 @@ void DocumentHolder::resizeWin( const SIZEL& rNewSize )
                 aNewOffset.y = rNewSize.cy;
                 bIsOk = LPtoDP( hdc, &aNewOffset, 1 );
 
-                ReleaseDC( NULL, hdc );
+                ReleaseDC( nullptr, hdc );
 
                 awt::Rectangle aWinRect = xWindow->getPosSize();
 
@@ -961,7 +949,7 @@ void DocumentHolder::setTitle(const OUString& aDocumentName)
                     {
                         for(sal_Int32 j = 0; j < aSeq.getLength(); ++j)
                             if(aSeq[j].Name ==
-                               OUString("UIName"))
+                               "UIName")
                             {
                                 aSeq[j].Value >>= m_aFilterName;
                                 break;
@@ -977,10 +965,10 @@ void DocumentHolder::setTitle(const OUString& aDocumentName)
         // set the title
         static const sal_Unicode u[] = { ' ','(',0 };
         static const sal_Unicode c[] = { ')',0 };
-        rtl::OUString aTotalName(m_aFilterName);
-        aTotalName += rtl::OUString(u);
+        OUString aTotalName(m_aFilterName);
+        aTotalName += OUString(u);
         aTotalName += aDocumentName;
-        aTotalName += rtl::OUString(c);
+        aTotalName += OUString(c);
         try {
             m_xFrame->setTitle( aTotalName );
         }
@@ -994,7 +982,7 @@ void DocumentHolder::setTitle(const OUString& aDocumentName)
     {
         ::osl::ClearableMutexGuard aGuard( m_aMutex );
 
-        Interceptor* pTmpInter = NULL;
+        Interceptor* pTmpInter = nullptr;
         uno::Reference< frame::XDispatchProviderInterceptor > xLock( m_xInterceptorLocker );
         if ( xLock.is() && m_pInterceptor )
             pTmpInter = m_pInterceptor;
@@ -1034,7 +1022,7 @@ IDispatch* DocumentHolder::GetIDispatch()
         if ( xSupplier.is() )
         {
             uno::Sequence< sal_Int8 > aProcId( 16 );
-            rtl_getGlobalProcessId( (sal_uInt8*)aProcId.getArray() );
+            rtl_getGlobalProcessId( reinterpret_cast<sal_uInt8*>(aProcId.getArray()) );
 
             try {
                 uno::Any anyResult = xSupplier->createBridge(
@@ -1043,10 +1031,9 @@ IDispatch* DocumentHolder::GetIDispatch()
                     bridge::ModelDependent::UNO,
                     bridge::ModelDependent::OLE );
 
-                if ( anyResult.getValueTypeClass() ==
-                     cppu::UnoType<sal_uInt32>::get().getTypeClass() )
+                if ( auto var = o3tl::tryAccess<sal_uIntPtr>(anyResult) )
                 {
-                    VARIANT* pVariant = *(VARIANT**)anyResult.getValue();
+                    VARIANT* pVariant = reinterpret_cast<VARIANT*>(*var);
                     if ( pVariant->vt == VT_DISPATCH )
                         m_pIDispatch = pVariant->pdispVal;
 
@@ -1163,7 +1150,7 @@ HRESULT DocumentHolder::SetContRects(LPCRECT aRect)
         RECT wi;
         memset(&wi,0,sizeof(wi));
         if(m_pIOleIPFrame) {
-            m_pIOleIPFrame->GetBorder((LPRECT)&wi);
+            m_pIOleIPFrame->GetBorder(&wi);
             m_xContainerWindow->setPosSize(
                 0,0,
                 wi.right - wi.left,
@@ -1186,24 +1173,26 @@ HRESULT DocumentHolder::SetContRects(LPCRECT aRect)
 
 HRESULT DocumentHolder::SetObjectRects(LPCRECT aRect, LPCRECT aClip)
 {
-    ((LPRECT)aRect)->left -= m_aBorder.left;
-    ((LPRECT)aRect)->right += m_aBorder.right;
-    ((LPRECT)aRect)->top -= m_aBorder.top;
-    ((LPRECT)aRect)->bottom += m_aBorder.bottom;
-    ((LPRECT)aClip)->left -= m_aBorder.left;
-    ((LPRECT)aClip)->right += m_aBorder.right;
-    ((LPRECT)aClip)->top -= m_aBorder.top;
-    ((LPRECT)aClip)->bottom += m_aBorder.bottom;
+    auto rect = *aRect;
+    rect.left -= m_aBorder.left;
+    rect.right += m_aBorder.right;
+    rect.top -= m_aBorder.top;
+    rect.bottom += m_aBorder.bottom;
+    auto clip = *aClip;
+    clip.left -= m_aBorder.left;
+    clip.right += m_aBorder.right;
+    clip.top -= m_aBorder.top;
+    clip.bottom += m_aBorder.bottom;
 
     if(m_pCHatchWin)
-        m_pCHatchWin->RectsSet((LPRECT)aRect, (LPRECT)aClip);
+        m_pCHatchWin->RectsSet(&rect, &clip);
     if(m_xEditWindow.is()) {
         m_xEditWindow->setVisible(false);
         m_xEditWindow->setPosSize(
             m_pCHatchWin ? HATCHWIN_BORDERWIDTHDEFAULT : 0,
             m_pCHatchWin ? HATCHWIN_BORDERWIDTHDEFAULT : 0,
-            aRect->right - aRect->left,
-            aRect->bottom - aRect->top,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
             awt::PosSize::POSSIZE);
         m_xEditWindow->setVisible(true);
     }
@@ -1212,14 +1201,11 @@ HRESULT DocumentHolder::SetObjectRects(LPCRECT aRect, LPCRECT aClip)
 
 
 css::uno::Reference< css::awt::XWindow> SAL_CALL DocumentHolder::getContainerWindow()
-    throw (
-        css::uno::RuntimeException
-    )
 {
     if(m_xContainerWindow.is())
         return m_xContainerWindow;
 
-    uno::Reference<awt::XWindow> xWin(0);
+    uno::Reference<awt::XWindow> xWin;
 
     uno::Reference<awt::XToolkit2> xToolkit = awt::Toolkit::create( comphelper::getComponentContext(m_xFactory) );
 
@@ -1228,20 +1214,18 @@ css::uno::Reference< css::awt::XWindow> SAL_CALL DocumentHolder::getContainerWin
         m_pIOleIPFrame->GetWindow(&hWnd);
 
         uno::Sequence<sal_Int8> aProcessIdent(16);
-        rtl_getGlobalProcessId((sal_uInt8*)aProcessIdent.getArray());
+        rtl_getGlobalProcessId(reinterpret_cast<sal_uInt8*>(aProcessIdent.getArray()));
 
-        uno::Any aAny;
-        aAny <<= sal_Int32(hWnd);
         xWin.set(
             xToolkit->createSystemChild(
-                aAny,
+                uno::Any(sal_Int32(hWnd)),
                 aProcessIdent,
                 lang::SystemDependent::SYSTEM_WIN32),
             uno::UNO_QUERY);
 
         RECT wi;
         memset(&wi,0,sizeof(wi));
-        if(xWin.is() && m_pIOleIPFrame->GetBorder((LPRECT)&wi) == NOERROR) {
+        if(xWin.is() && m_pIOleIPFrame->GetBorder(&wi) == NOERROR) {
             xWin->setVisible(true);
             xWin->setPosSize(
                 0,0,
@@ -1252,11 +1236,11 @@ css::uno::Reference< css::awt::XWindow> SAL_CALL DocumentHolder::getContainerWin
             uno::Reference<awt::XSystemDependentWindowPeer> xSysWin(
                 xWin,uno::UNO_QUERY);
             if(xSysWin.is()) {
-                aAny = xSysWin->getWindowHandle(
+                uno::Any aAny = xSysWin->getWindowHandle(
                     aProcessIdent,lang::SystemDependent::SYSTEM_WIN32);
                 sal_Int64 tmp;
                 if( aAny >>= tmp )
-                    SetContainerWindowHandle((HWND) tmp);
+                    SetContainerWindowHandle(reinterpret_cast<HWND>(tmp));
             }
         }
     }
@@ -1267,34 +1251,28 @@ css::uno::Reference< css::awt::XWindow> SAL_CALL DocumentHolder::getContainerWin
 
 
 sal_Bool SAL_CALL DocumentHolder::requestDockingAreaSpace( const css::awt::Rectangle& RequestedSpace )
-    throw(
-        css::uno::RuntimeException
-    )
 {
     if(m_bOnDeactivate)
-        return sal_True;
+        return true;
 
     BORDERWIDTHS bw;
-    SetRect((LPRECT)&bw,
+    SetRect(&bw,
             RequestedSpace.X,RequestedSpace.Y,
             RequestedSpace.Width,RequestedSpace.Height);
     if( m_pIOleIPFrame )
         return m_pIOleIPFrame->RequestBorderSpace(&bw) == NOERROR ;
     else
-        return sal_Bool(false);
+        return false;
 }
 
 
 void SAL_CALL DocumentHolder::setDockingAreaSpace( const css::awt::Rectangle& BorderSpace )
-    throw (
-        css::uno::RuntimeException
-    )
 {
     if(m_bOnDeactivate)
         return;
 
     BORDERWIDTHS bw;
-    SetRect((LPRECT)&bw,
+    SetRect(&bw,
             BorderSpace.X,BorderSpace.Y,
             BorderSpace.Width,BorderSpace.Height);
     if( m_pIOleIPFrame ) {
@@ -1321,11 +1299,10 @@ void SAL_CALL DocumentHolder::setDockingAreaSpace( const css::awt::Rectangle& Bo
 
 
 void SAL_CALL DocumentHolder::disposing( const css::lang::EventObject& aSource )
-        throw( uno::RuntimeException )
 {
     if ( m_xDocument.is() && m_xDocument == aSource.Source )
     {
-        m_pIDispatch = NULL;
+        m_pIDispatch = nullptr;
         m_xDocument.clear();
     }
 
@@ -1339,9 +1316,6 @@ DocumentHolder::queryClosing(
     const lang::EventObject& aSource,
     sal_Bool /*bGetsOwnership*/
 )
-    throw(
-        util::CloseVetoException
-    )
 {
     if (!m_bLink
         && ((m_xDocument.is() && m_xDocument == aSource.Source)
@@ -1353,13 +1327,12 @@ DocumentHolder::queryClosing(
 void SAL_CALL
 DocumentHolder::notifyClosing(
     const lang::EventObject& aSource )
-        throw( uno::RuntimeException )
 {
     try
     {
         uno::Reference< util::XCloseBroadcaster > xEventBroadcaster(
             aSource.Source, uno::UNO_QUERY_THROW );
-        xEventBroadcaster->removeCloseListener( (util::XCloseListener*)this );
+        xEventBroadcaster->removeCloseListener( static_cast<util::XCloseListener*>(this) );
     }
     catch( const uno::Exception& )
     {}
@@ -1367,7 +1340,7 @@ DocumentHolder::notifyClosing(
     if ( m_xDocument.is() && m_xDocument == aSource.Source )
     {
         // can happen only in case of links
-        m_pIDispatch = NULL;
+        m_pIDispatch = nullptr;
         m_xDocument.clear();
         m_xFrame.clear();
 
@@ -1383,9 +1356,6 @@ void SAL_CALL
 DocumentHolder::queryTermination(
     const lang::EventObject& /*aSource*/
 )
-    throw(
-        frame::TerminationVetoException
-    )
 {
     if ( m_xDocument.is() )
         throw frame::TerminationVetoException();
@@ -1395,19 +1365,17 @@ void SAL_CALL
 DocumentHolder::notifyTermination(
     const lang::EventObject& aSource
 )
-        throw( uno::RuntimeException )
 {
     OSL_ENSURE( !m_xDocument.is(), "Just a disaster..." );
     uno::Reference< frame::XDesktop > xDesktop(
         aSource.Source, uno::UNO_QUERY );
 
     if ( xDesktop.is() )
-        xDesktop->removeTerminateListener( (frame::XTerminateListener*)this );
+        xDesktop->removeTerminateListener( static_cast<frame::XTerminateListener*>(this) );
 }
 
 
 void SAL_CALL DocumentHolder::modified( const lang::EventObject& /*aEvent*/ )
-    throw (uno::RuntimeException)
 {
     if ( m_xOleAccess.is() )
     {

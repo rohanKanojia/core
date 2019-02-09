@@ -17,74 +17,57 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "winmtf.hxx"
 #include "emfwr.hxx"
 #include "wmfwr.hxx"
 #include <vcl/wmf.hxx>
 #include <vcl/gdimetafiletools.hxx>
 #include <comphelper/scopeguard.hxx>
 
-bool ConvertWMFToGDIMetaFile( SvStream & rStreamWMF, GDIMetaFile & rGDIMetaFile, FilterConfigItem* pConfigItem, WMF_EXTERNALHEADER *pExtHeader )
-{
-    sal_uInt32 nMetaType;
-    sal_uInt32 nOrgPos = rStreamWMF.Tell();
-    SvStreamEndian nOrigNumberFormat = rStreamWMF.GetEndian();
-    rStreamWMF.SetEndian( SvStreamEndian::LITTLE );
-    rStreamWMF.Seek( 0x28 );
-    rStreamWMF.ReadUInt32( nMetaType );
-    rStreamWMF.Seek( nOrgPos );
-    if ( nMetaType == 0x464d4520 )
-    {
-        if ( !EnhWMFReader( rStreamWMF, rGDIMetaFile, pConfigItem ).ReadEnhWMF() )
-            rStreamWMF.SetError( SVSTREAM_FILEFORMAT_ERROR );
-    }
-    else
-    {
-        WMFReader( rStreamWMF, rGDIMetaFile, pConfigItem, pExtHeader ).ReadWMF( );
-    }
-
-#ifdef DBG_UTIL
-    // #i123216# allow a look at CheckSum and ByteSize for debugging
-    SAL_INFO("vcl.emf", "\t\t\tchecksum: 0x" << std::hex << rGDIMetaFile.GetChecksum() << std::dec);
-    SAL_INFO("vcl.emf", "\t\t\tsize: " << rGDIMetaFile.GetSizeBytes());
-#endif
-
-    rStreamWMF.SetEndian( nOrigNumberFormat );
-    return !rStreamWMF.GetError();
-}
-
 bool ReadWindowMetafile( SvStream& rStream, GDIMetaFile& rMTF )
 {
-    sal_uInt32 nMetaType(0);
-    sal_uInt32 nOrgPos = rStream.Tell();
+    // tdf#111484 Use new method to import Metafile. Take current StreamPos
+    // into account (used by SwWW8ImplReader::ReadGrafFile and by
+    // SwWw6ReadMetaStream, so do *not* ignore. OTOH XclImpDrawing::ReadWmf
+    // is nice enough to copy to an own MemStream to avoid that indirect
+    // parameter passing...)
+    const sal_uInt32 nStreamStart(rStream.Tell());
+    const sal_uInt32 nStreamEnd(rStream.TellEnd());
 
-    SvStreamEndian nOrigNumberFormat = rStream.GetEndian();
-    rStream.SetEndian( SvStreamEndian::LITTLE );
-    //exception-safe reset nOrigNumberFormat at end of scope
-    const ::comphelper::ScopeGuard aScopeGuard( [&rStream, nOrigNumberFormat] () { rStream.SetEndian( nOrigNumberFormat ); } );
-
-    rStream.Seek( 0x28 );
-    rStream.ReadUInt32( nMetaType );
-    rStream.Seek( nOrgPos );
-
-    if (!rStream.good())
+    if (nStreamStart >= nStreamEnd)
+    {
         return false;
-
-    if ( nMetaType == 0x464d4520 )
-    {
-        if ( !EnhWMFReader( rStream, rMTF, nullptr ).ReadEnhWMF() )
-            rStream.SetError( SVSTREAM_FILEFORMAT_ERROR );
     }
-    else
+
+    // Read binary data to mem array
+    const sal_uInt32 nStreamLength(nStreamEnd - nStreamStart);
+    VectorGraphicDataArray aNewData(nStreamLength);
+    rStream.ReadBytes(aNewData.begin(), nStreamLength);
+    rStream.Seek(nStreamStart);
+
+    if (rStream.good())
     {
-        WMFReader( rStream, rMTF, nullptr ).ReadWMF();
+        // Throw into VectorGraphicData to get the import. Do not care
+        // too much for type, this will be checked there. Also no path
+        // needed, it is a temporary object
+        VectorGraphicDataPtr aVectorGraphicDataPtr(
+            new VectorGraphicData(
+                aNewData,
+                OUString(),
+                VectorGraphicDataType::Emf));
+
+        // create a Graphic and grep Metafile from it
+        const Graphic aGraphic(aVectorGraphicDataPtr);
+
+        // get the Metafile from it, done
+        rMTF = aGraphic.GetGDIMetaFile();
+        return true;
     }
 
     return rStream.good();
 }
 
 bool ConvertGDIMetaFileToWMF( const GDIMetaFile & rMTF, SvStream & rTargetStream,
-                              FilterConfigItem* pConfigItem, bool bPlaceable)
+                              FilterConfigItem const * pConfigItem, bool bPlaceable)
 {
     WMFWriter aWMFWriter;
     GDIMetaFile aGdiMetaFile(rMTF);

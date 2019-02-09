@@ -17,11 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "action.hxx"
-#include "smdll.hxx"
-#include "document.hxx"
-#include "starmath.hrc"
-
+#include <action.hxx>
+#include <document.hxx>
+#include <strings.hxx>
 
 SmFormatAction::SmFormatAction(SmDocShell *pDocSh,
                                const SmFormat& rOldFormat,
@@ -49,8 +47,7 @@ void SmFormatAction::Repeat(SfxRepeatTarget& rDocSh)
 
 OUString SmFormatAction::GetComment() const
 {
-    return SmResId(RID_UNDOFORMATNAME).toString();
+    return OUString(RID_UNDOFORMATNAME);
 }
-
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

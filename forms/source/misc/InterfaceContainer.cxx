@@ -18,31 +18,34 @@
  */
 
 
-#include "frm_resource.hrc"
-#include "frm_resource.hxx"
-#include "InterfaceContainer.hxx"
-#include "componenttools.hxx"
-#include "property.hrc"
-#include "services.hxx"
+#include <strings.hrc>
+#include <frm_resource.hxx>
+#include <InterfaceContainer.hxx>
+#include <componenttools.hxx>
+#include <services.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <com/sun/star/io/XMarkableStream.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
+#include <com/sun/star/lang/ServiceNotRegisteredException.hpp>
 #include <com/sun/star/lang/WrappedTargetRuntimeException.hpp>
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
 #include <com/sun/star/form/XForm.hpp>
 
-#include <comphelper/container.hxx>
 #include <comphelper/enumhelper.hxx>
 #include <comphelper/eventattachermgr.hxx>
 #include <comphelper/property.hxx>
 #include <comphelper/sequence.hxx>
+#include <comphelper/types.hxx>
 #include <cppuhelper/exc_hlp.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <tools/debug.hxx>
 #include <tools/diagnose_ex.h>
+#include <sal/log.hxx>
 
 #include <algorithm>
 #include <memory>
@@ -51,7 +54,6 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/document/XCodeNameQuery.hpp>
 #include <ooo/vba/XVBAToOOEventDescGen.hpp>
-#include <comphelper/processfactory.hxx>
 
 namespace frm
 {
@@ -77,36 +79,32 @@ namespace
     }
 }
 
-bool
+static bool
 lcl_hasVbaEvents( const Sequence< ScriptEventDescriptor >& sEvents  )
 {
-    const ScriptEventDescriptor* pDesc = sEvents.getConstArray();
-    const ScriptEventDescriptor* pEnd = ( pDesc + sEvents.getLength() );
-    for ( ; pDesc != pEnd; ++pDesc )
+    for ( auto const& rDesc : sEvents )
     {
-        if ( pDesc->ScriptType == "VBAInterop" )
+        if ( rDesc.ScriptType == "VBAInterop" )
             return true;
     }
     return false;
 }
 
-Sequence< ScriptEventDescriptor >
+static Sequence< ScriptEventDescriptor >
 lcl_stripVbaEvents( const Sequence< ScriptEventDescriptor >& sEvents )
 {
     Sequence< ScriptEventDescriptor > sStripped( sEvents.getLength() );
+    ScriptEventDescriptor* pStripped = sStripped.getArray();
 
-    const ScriptEventDescriptor* pDesc = sEvents.getConstArray();
-    const ScriptEventDescriptor* pEnd = ( pDesc + sEvents.getLength() );
     sal_Int32 nCopied = 0;
-    for ( ; pDesc != pEnd; ++pDesc )
+    for ( auto const& rDesc : sEvents )
     {
-        if ( pDesc->ScriptType != "VBAInterop" )
+        if ( rDesc.ScriptType != "VBAInterop" )
         {
-            sStripped[ nCopied++ ] = *pDesc;
+            pStripped[ nCopied++ ] = rDesc;
         }
     }
-    if ( nCopied )
-        sStripped.realloc( nCopied );
+    sStripped.realloc( nCopied );
     return sStripped;
 }
 
@@ -161,7 +159,7 @@ void OInterfaceContainer::impl_addVbEvents_nolck_nothrow(  const sal_Int32 i_nIn
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.misc");
     }
 
 }
@@ -170,10 +168,6 @@ ElementDescription::ElementDescription( )
 {
 }
 
-
-ElementDescription::~ElementDescription()
-{
-}
 
 OInterfaceContainer::OInterfaceContainer(
                 const Reference<XComponentContext>& _rxContext,
@@ -199,7 +193,7 @@ OInterfaceContainer::OInterfaceContainer( ::osl::Mutex& _rMutex, const OInterfac
     impl_createEventAttacher_nothrow();
 }
 
-void OInterfaceContainer::clonedFrom(const OInterfaceContainer& _cloneSource) throw(RuntimeException, std::exception)
+void OInterfaceContainer::clonedFrom(const OInterfaceContainer& _cloneSource)
 {
     try
     {
@@ -234,7 +228,7 @@ void OInterfaceContainer::impl_createEventAttacher_nothrow()
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.misc");
     }
 }
 
@@ -299,12 +293,12 @@ namespace
         if ( !_rxManager.is() )
             return;
 
-        ::std::vector< Sequence< ScriptEventDescriptor > >::const_iterator aLoop = _rSave.begin();
-        ::std::vector< Sequence< ScriptEventDescriptor > >::const_iterator aEnd = _rSave.end();
-        for ( sal_Int32 i=0; aLoop != aEnd; ++aLoop, ++i )
+        sal_Int32 i=0;
+        for (auto const& elem : _rSave)
         {
             _rxManager->revokeScriptEvents( i );
-            _rxManager->registerScriptEvents( i, *aLoop );
+            _rxManager->registerScriptEvents(i, elem);
+            ++i;
         }
     }
 }
@@ -319,7 +313,7 @@ void SAL_CALL OInterfaceContainer::writeEvents(const Reference<XObjectOutputStre
     if ( m_xEventAttacher.is() )
         lcl_saveEvents( aSave, m_xEventAttacher, m_aItems.size() );
 
-    transformEvents( efVersionSO5x );
+    transformEvents();
 
     try
     {
@@ -354,7 +348,7 @@ void SAL_CALL OInterfaceContainer::writeEvents(const Reference<XObjectOutputStre
 }
 
 
-struct TransformEventTo52Format : public ::std::unary_function< ScriptEventDescriptor, void >
+struct TransformEventTo52Format
 {
     void operator()( ScriptEventDescriptor& _rDescriptor )
     {
@@ -377,23 +371,7 @@ struct TransformEventTo52Format : public ::std::unary_function< ScriptEventDescr
 };
 
 
-struct TransformEventTo60Format : public ::std::unary_function< ScriptEventDescriptor, void >
-{
-    void operator()( ScriptEventDescriptor& _rDescriptor )
-    {
-        if ( _rDescriptor.ScriptType == "StarBasic" )
-        {   // it's a starbasic macro
-            if ( _rDescriptor.ScriptCode.indexOf( ':' ) < 0 )
-            {   // the macro name does not already contain a :
-                // -> default the type to "document"
-                _rDescriptor.ScriptCode = "document:" + _rDescriptor.ScriptCode;
-            }
-        }
-    }
-};
-
-
-void OInterfaceContainer::transformEvents( const EventFormat _eTargetFormat )
+void OInterfaceContainer::transformEvents()
 {
     OSL_ENSURE( m_xEventAttacher.is(), "OInterfaceContainer::transformEvents: no event attacher manager!" );
     if ( !m_xEventAttacher.is() )
@@ -412,15 +390,8 @@ void OInterfaceContainer::transformEvents( const EventFormat _eTargetFormat )
 
             if ( aChildEvents.getLength() )
             {
-                // the "iterators" for the events for this child
-                ScriptEventDescriptor* pChildEvents     =                       aChildEvents.getArray();
-                ScriptEventDescriptor* pChildEventsEnd  =   pChildEvents    +   aChildEvents.getLength();
-
                 // do the transformation
-                if ( efVersionSO6x == _eTargetFormat )
-                    ::std::for_each( pChildEvents, pChildEventsEnd, TransformEventTo60Format() );
-                else
-                    ::std::for_each( pChildEvents, pChildEventsEnd, TransformEventTo52Format() );
+                ::std::for_each( aChildEvents.begin(), aChildEvents.end(), TransformEventTo52Format() );
 
                 // revoke the script events
                 m_xEventAttacher->revokeScriptEvents( i );
@@ -431,7 +402,7 @@ void OInterfaceContainer::transformEvents( const EventFormat _eTargetFormat )
     }
     catch( const Exception& )
     {
-        DBG_UNHANDLED_EXCEPTION();
+        DBG_UNHANDLED_EXCEPTION("forms.misc");
     }
 }
 
@@ -457,19 +428,18 @@ void SAL_CALL OInterfaceContainer::readEvents(const Reference<XObjectInputStream
     // Read Attachment
     if ( m_xEventAttacher.is() )
     {
-        OInterfaceArray::const_iterator aAttach = m_aItems.begin();
-        OInterfaceArray::const_iterator aAttachEnd = m_aItems.end();
-        for ( sal_Int32 i=0; aAttach != aAttachEnd; ++aAttach, ++i )
+        sal_Int32 i=0;
+        for (auto const& item : m_aItems)
         {
-            Reference< XInterface > xAsIFace( *aAttach, UNO_QUERY );    // important to normalize this ....
+            Reference< XInterface > xAsIFace( item, UNO_QUERY );    // important to normalize this ....
             Reference< XPropertySet > xAsSet( xAsIFace, UNO_QUERY );
-            m_xEventAttacher->attach( i, xAsIFace, makeAny( xAsSet ) );
+            m_xEventAttacher->attach( i++, xAsIFace, makeAny( xAsSet ) );
         }
     }
 }
 
 
-void SAL_CALL OInterfaceContainer::write( const Reference< XObjectOutputStream >& _rxOutStream ) throw(IOException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::write( const Reference< XObjectOutputStream >& _rxOutStream )
 {
     ::osl::MutexGuard aGuard( m_rMutex );
     sal_Int32 nLen = m_aItems.size();
@@ -527,7 +497,7 @@ namespace
 }
 
 
-void SAL_CALL OInterfaceContainer::read( const Reference< XObjectInputStream >& _rxInStream ) throw(IOException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::read( const Reference< XObjectInputStream >& _rxInStream )
 {
     ::osl::MutexGuard aGuard( m_rMutex );
 
@@ -542,7 +512,7 @@ void SAL_CALL OInterfaceContainer::read( const Reference< XObjectInputStream >& 
     if (nLen)
     {
         // 1. Version
-        sal_uInt16 nVersion = _rxInStream->readShort(); (void)nVersion;
+        _rxInStream->readShort();
 
         // 2. Objects
         for (sal_Int32 i = 0; i < nLen; i++)
@@ -609,27 +579,27 @@ void SAL_CALL OInterfaceContainer::read( const Reference< XObjectInputStream >& 
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("forms.misc");
         }
     }
 }
 
 // XContainer
 
-void SAL_CALL OInterfaceContainer::addContainerListener(const Reference<XContainerListener>& _rxListener) throw( RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::addContainerListener(const Reference<XContainerListener>& _rxListener)
 {
     m_aContainerListeners.addInterface(_rxListener);
 }
 
 
-void SAL_CALL OInterfaceContainer::removeContainerListener(const Reference<XContainerListener>& _rxListener) throw( RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::removeContainerListener(const Reference<XContainerListener>& _rxListener)
 {
     m_aContainerListeners.removeInterface(_rxListener);
 }
 
 // XEventListener
 
-void SAL_CALL OInterfaceContainer::disposing(const css::lang::EventObject& _rSource) throw( RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::disposing(const css::lang::EventObject& _rSource)
 {
     ::osl::MutexGuard aGuard( m_rMutex );
 
@@ -674,37 +644,38 @@ void SAL_CALL OInterfaceContainer::disposing(const css::lang::EventObject& _rSou
 
 // XPropertyChangeListener
 
-void OInterfaceContainer::propertyChange(const PropertyChangeEvent& evt)
-throw (css::uno::RuntimeException, std::exception) {
+void OInterfaceContainer::propertyChange(const PropertyChangeEvent& evt) {
     if (evt.PropertyName == PROPERTY_NAME)
     {
         ::osl::MutexGuard aGuard( m_rMutex );
-        OInterfaceMap::iterator i = m_aMap.find(::comphelper::getString(evt.OldValue));
-        if (i != m_aMap.end() && (*i).second != evt.Source)
-        {
-            css::uno::Reference<css::uno::XInterface>  xCorrectType((*i).second);
-            m_aMap.erase(i);
-            m_aMap.insert(::std::pair<const OUString, css::uno::Reference<css::uno::XInterface> >(::comphelper::getString(evt.NewValue),xCorrectType));
-        }
+        auto range = m_aMap.equal_range(::comphelper::getString(evt.OldValue));
+        for (auto it = range.first; it != range.second; ++it)
+            if (it->second == evt.Source)
+            {
+                css::uno::Reference<css::uno::XInterface>  xCorrectType(it->second);
+                m_aMap.erase(it);
+                m_aMap.insert(::std::pair<const OUString, css::uno::Reference<css::uno::XInterface> >(::comphelper::getString(evt.NewValue),xCorrectType));
+                break;
+            }
     }
 }
 
 // XElementAccess
 
-sal_Bool SAL_CALL OInterfaceContainer::hasElements() throw( RuntimeException, std::exception )
+sal_Bool SAL_CALL OInterfaceContainer::hasElements()
 {
     return !m_aMap.empty();
 }
 
 
-Type SAL_CALL OInterfaceContainer::getElementType() throw(RuntimeException, std::exception)
+Type SAL_CALL OInterfaceContainer::getElementType()
 {
     return m_aElementType;
 }
 
 // XEnumerationAccess
 
-Reference<XEnumeration> SAL_CALL OInterfaceContainer::createEnumeration() throw( RuntimeException, std::exception )
+Reference<XEnumeration> SAL_CALL OInterfaceContainer::createEnumeration()
 {
     ::osl::MutexGuard aGuard( m_rMutex );
     return new ::comphelper::OEnumerationByIndex(static_cast<XIndexAccess*>(this));
@@ -712,7 +683,7 @@ Reference<XEnumeration> SAL_CALL OInterfaceContainer::createEnumeration() throw(
 
 // XNameAccess
 
-Any SAL_CALL OInterfaceContainer::getByName( const OUString& _rName ) throw(NoSuchElementException, WrappedTargetException, RuntimeException, std::exception)
+Any SAL_CALL OInterfaceContainer::getByName( const OUString& _rName )
 {
     ::std::pair <OInterfaceMap::iterator,
           OInterfaceMap::iterator> aPair = m_aMap.equal_range(_rName);
@@ -724,13 +695,13 @@ Any SAL_CALL OInterfaceContainer::getByName( const OUString& _rName ) throw(NoSu
 }
 
 
-css::uno::Sequence<OUString> SAL_CALL OInterfaceContainer::getElementNames() throw(RuntimeException, std::exception)
+css::uno::Sequence<OUString> SAL_CALL OInterfaceContainer::getElementNames()
 {
     return comphelper::mapKeysToSequence(m_aMap);
 }
 
 
-sal_Bool SAL_CALL OInterfaceContainer::hasByName( const OUString& _rName ) throw(RuntimeException, std::exception)
+sal_Bool SAL_CALL OInterfaceContainer::hasByName( const OUString& _rName )
 {
     ::std::pair <OInterfaceMap::iterator,
           OInterfaceMap::iterator> aPair = m_aMap.equal_range(_rName);
@@ -739,15 +710,15 @@ sal_Bool SAL_CALL OInterfaceContainer::hasByName( const OUString& _rName ) throw
 
 // XIndexAccess
 
-sal_Int32 OInterfaceContainer::getCount() throw( RuntimeException, std::exception )
+sal_Int32 OInterfaceContainer::getCount()
 {
     return m_aItems.size();
 }
 
 
-Any OInterfaceContainer::getByIndex(sal_Int32 _nIndex) throw( IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
+Any OInterfaceContainer::getByIndex(sal_Int32 _nIndex)
 {
-    if (_nIndex < 0 || (_nIndex >= (sal_Int32)m_aItems.size()))
+    if (_nIndex < 0 || (_nIndex >= static_cast<sal_Int32>(m_aItems.size())))
         throw IndexOutOfBoundsException();
 
     return m_aItems[_nIndex]->queryInterface( m_aElementType );
@@ -789,7 +760,7 @@ void OInterfaceContainer::approveNewElement( const Reference< XPropertySet >& _r
 
 
 void OInterfaceContainer::implInsert(sal_Int32 _nIndex, const Reference< XPropertySet >& _rxElement,
-    bool _bEvents, ElementDescription* _pApprovalResult, bool _bFire ) throw( IllegalArgumentException )
+    bool _bEvents, ElementDescription* _pApprovalResult, bool _bFire )
 {
     const bool bHandleEvents = _bEvents && m_xEventAttacher.is();
 
@@ -820,7 +791,7 @@ void OInterfaceContainer::implInsert(sal_Int32 _nIndex, const Reference< XProper
     _rxElement->addPropertyChangeListener(PROPERTY_NAME, this);
 
     // insert the object into our internal structures
-    if (_nIndex > (sal_Int32)m_aItems.size()) // Calculate the actual index
+    if (_nIndex > static_cast<sal_Int32>(m_aItems.size())) // Calculate the actual index
     {
         _nIndex = m_aItems.size();
         m_aItems.push_back( pElementMetaData->xInterface );
@@ -913,13 +884,13 @@ void OInterfaceContainer::removeElementsNoEvents()
 
 void OInterfaceContainer::implInserted( const ElementDescription* /*_pElement*/ )
 {
-    // not inrerested in
+    // not interested in
 }
 
 
 void OInterfaceContainer::implRemoved( const css::uno::Reference<css::uno::XInterface>& /*_rxObject*/ )
 {
-    // not inrerested in
+    // not interested in
 }
 
 
@@ -931,7 +902,7 @@ void OInterfaceContainer::impl_replacedElement( const ContainerEvent& _rEvent, :
 
 // XIndexContainer
 
-void SAL_CALL OInterfaceContainer::insertByIndex( sal_Int32 _nIndex, const Any& _rElement ) throw(IllegalArgumentException, IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::insertByIndex( sal_Int32 _nIndex, const Any& _rElement )
 {
     Reference< XPropertySet > xElement;
     _rElement >>= xElement;
@@ -941,11 +912,12 @@ void SAL_CALL OInterfaceContainer::insertByIndex( sal_Int32 _nIndex, const Any& 
 
 void OInterfaceContainer::implReplaceByIndex( const sal_Int32 _nIndex, const Any& _rNewElement, ::osl::ClearableMutexGuard& _rClearBeforeNotify )
 {
-    OSL_PRECOND( ( _nIndex >= 0 ) && ( _nIndex < (sal_Int32)m_aItems.size() ), "OInterfaceContainer::implReplaceByIndex: precondition not met (index)!" );
+    OSL_PRECOND( ( _nIndex >= 0 ) && ( _nIndex < static_cast<sal_Int32>(m_aItems.size()) ), "OInterfaceContainer::implReplaceByIndex: precondition not met (index)!" );
 
     // approve the new object
     std::unique_ptr< ElementDescription > aElementMetaData( createElementMetaData() );
-    DBG_ASSERT( aElementMetaData.get(), "OInterfaceContainer::implReplaceByIndex: createElementMetaData returned nonsense!" );
+    DBG_ASSERT(aElementMetaData,
+               "OInterfaceContainer::implReplaceByIndex: createElementMetaData returned nonsense!");
     {
         Reference< XPropertySet > xElementProps;
         _rNewElement >>= xElementProps;
@@ -985,27 +957,30 @@ void OInterfaceContainer::implReplaceByIndex( const sal_Int32 _nIndex, const Any
 
     // examine the new element
     OUString sName;
-    DBG_ASSERT( aElementMetaData.get()->xPropertySet.is(), "OInterfaceContainer::implReplaceByIndex: what did approveNewElement do?" );
+    DBG_ASSERT(aElementMetaData->xPropertySet.is(),
+               "OInterfaceContainer::implReplaceByIndex: what did approveNewElement do?");
 
-    aElementMetaData.get()->xPropertySet->getPropertyValue(PROPERTY_NAME) >>= sName;
-    aElementMetaData.get()->xPropertySet->addPropertyChangeListener(PROPERTY_NAME, this);
+    aElementMetaData->xPropertySet->getPropertyValue(PROPERTY_NAME) >>= sName;
+    aElementMetaData->xPropertySet->addPropertyChangeListener(PROPERTY_NAME, this);
 
     // insert the new one
-    m_aMap.insert( ::std::pair<const OUString, css::uno::Reference<css::uno::XInterface>  >( sName, aElementMetaData.get()->xInterface ) );
-    m_aItems[ _nIndex ] = aElementMetaData.get()->xInterface;
+    m_aMap.insert(::std::pair<const OUString, css::uno::Reference<css::uno::XInterface>>(
+        sName, aElementMetaData->xInterface));
+    m_aItems[_nIndex] = aElementMetaData->xInterface;
 
-    aElementMetaData.get()->xChild->setParent(static_cast<XContainer*>(this));
+    aElementMetaData->xChild->setParent(static_cast<XContainer*>(this));
 
     if ( m_xEventAttacher.is() )
     {
         m_xEventAttacher->insertEntry( _nIndex );
-        m_xEventAttacher->attach( _nIndex, aElementMetaData.get()->xInterface, makeAny( aElementMetaData.get()->xPropertySet ) );
+        m_xEventAttacher->attach(_nIndex, aElementMetaData->xInterface,
+                                 makeAny(aElementMetaData->xPropertySet));
     }
 
     ContainerEvent aReplaceEvent;
     aReplaceEvent.Source   = static_cast< XContainer* >( this );
     aReplaceEvent.Accessor <<= _nIndex;
-    aReplaceEvent.Element  = aElementMetaData.get()->xInterface->queryInterface( m_aElementType );
+    aReplaceEvent.Element = aElementMetaData->xInterface->queryInterface(m_aElementType);
     aReplaceEvent.ReplacedElement = xOldElement->queryInterface( m_aElementType );
 
     impl_replacedElement( aReplaceEvent, _rClearBeforeNotify );
@@ -1014,12 +989,12 @@ void OInterfaceContainer::implReplaceByIndex( const sal_Int32 _nIndex, const Any
 
 void OInterfaceContainer::implCheckIndex( const sal_Int32 _nIndex )
 {
-    if (_nIndex < 0 || _nIndex >= (sal_Int32)m_aItems.size())
+    if (_nIndex < 0 || _nIndex >= static_cast<sal_Int32>(m_aItems.size()))
         throw IndexOutOfBoundsException();
 }
 
 
-void SAL_CALL OInterfaceContainer::replaceByIndex(sal_Int32 _nIndex, const Any& Element) throw( IllegalArgumentException, IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::replaceByIndex(sal_Int32 _nIndex, const Any& Element)
 {
     ::osl::ClearableMutexGuard aGuard( m_rMutex );
     // check the index
@@ -1031,7 +1006,7 @@ void SAL_CALL OInterfaceContainer::replaceByIndex(sal_Int32 _nIndex, const Any& 
 
 void OInterfaceContainer::implRemoveByIndex( const sal_Int32 _nIndex, ::osl::ClearableMutexGuard& _rClearBeforeNotify )
 {
-    OSL_PRECOND( ( _nIndex >= 0 ) && ( _nIndex < (sal_Int32)m_aItems.size() ), "OInterfaceContainer::implRemoveByIndex: precondition not met (index)!" );
+    OSL_PRECOND( ( _nIndex >= 0 ) && ( _nIndex < static_cast<sal_Int32>(m_aItems.size()) ), "OInterfaceContainer::implRemoveByIndex: precondition not met (index)!" );
 
     OInterfaceArray::iterator i = m_aItems.begin() + _nIndex;
     css::uno::Reference<css::uno::XInterface>  xElement(*i);
@@ -1072,7 +1047,7 @@ void OInterfaceContainer::implRemoveByIndex( const sal_Int32 _nIndex, ::osl::Cle
 }
 
 
-void SAL_CALL OInterfaceContainer::removeByIndex(sal_Int32 _nIndex) throw( IndexOutOfBoundsException, WrappedTargetException, RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::removeByIndex(sal_Int32 _nIndex)
 {
     ::osl::ClearableMutexGuard aGuard( m_rMutex );
     // check the index
@@ -1088,12 +1063,13 @@ ElementDescription* OInterfaceContainer::createElementMetaData( )
 }
 
 
-void SAL_CALL OInterfaceContainer::insertByName(const OUString& _rName, const Any& _rElement) throw( IllegalArgumentException, ElementExistException, WrappedTargetException, RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::insertByName(const OUString& _rName, const Any& _rElement)
 {
     Reference< XPropertySet > xElementProps;
 
     std::unique_ptr< ElementDescription > aElementMetaData( createElementMetaData() );
-    DBG_ASSERT( aElementMetaData.get(), "OInterfaceContainer::insertByName: createElementMetaData returned nonsense!" );
+    DBG_ASSERT(aElementMetaData,
+               "OInterfaceContainer::insertByName: createElementMetaData returned nonsense!");
 
     // ensure the correct name of the element
     try
@@ -1119,7 +1095,7 @@ void SAL_CALL OInterfaceContainer::insertByName(const OUString& _rName, const An
 }
 
 
-void SAL_CALL OInterfaceContainer::replaceByName(const OUString& Name, const Any& Element) throw( IllegalArgumentException, NoSuchElementException, WrappedTargetException, RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::replaceByName(const OUString& Name, const Any& Element)
 {
     ::osl::ClearableMutexGuard aGuard( m_rMutex );
     ::std::pair <OInterfaceMap::iterator,
@@ -1147,7 +1123,7 @@ void SAL_CALL OInterfaceContainer::replaceByName(const OUString& Name, const Any
 }
 
 
-void SAL_CALL OInterfaceContainer::removeByName(const OUString& Name) throw( NoSuchElementException, WrappedTargetException, RuntimeException, std::exception )
+void SAL_CALL OInterfaceContainer::removeByName(const OUString& Name)
 {
     ::osl::MutexGuard aGuard( m_rMutex );
     ::std::pair <OInterfaceMap::iterator,
@@ -1162,7 +1138,7 @@ void SAL_CALL OInterfaceContainer::removeByName(const OUString& Name) throw( NoS
 
 // XEventAttacherManager
 
-void SAL_CALL OInterfaceContainer::registerScriptEvent( sal_Int32 nIndex, const ScriptEventDescriptor& aScriptEvent ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::registerScriptEvent( sal_Int32 nIndex, const ScriptEventDescriptor& aScriptEvent )
 {
     ::osl::ClearableMutexGuard aGuard( m_rMutex );
     if ( m_xEventAttacher.is() )
@@ -1174,7 +1150,7 @@ void SAL_CALL OInterfaceContainer::registerScriptEvent( sal_Int32 nIndex, const 
 }
 
 
-void SAL_CALL OInterfaceContainer::registerScriptEvents( sal_Int32 nIndex, const Sequence< ScriptEventDescriptor >& aScriptEvents ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::registerScriptEvents( sal_Int32 nIndex, const Sequence< ScriptEventDescriptor >& aScriptEvents )
 {
     ::osl::ClearableMutexGuard aGuard( m_rMutex );
     if ( m_xEventAttacher.is() )
@@ -1186,35 +1162,35 @@ void SAL_CALL OInterfaceContainer::registerScriptEvents( sal_Int32 nIndex, const
 }
 
 
-void SAL_CALL OInterfaceContainer::revokeScriptEvent( sal_Int32 nIndex, const OUString& aListenerType, const OUString& aEventMethod, const OUString& aRemoveListenerParam ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::revokeScriptEvent( sal_Int32 nIndex, const OUString& aListenerType, const OUString& aEventMethod, const OUString& aRemoveListenerParam )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->revokeScriptEvent( nIndex, aListenerType, aEventMethod, aRemoveListenerParam );
 }
 
 
-void SAL_CALL OInterfaceContainer::revokeScriptEvents( sal_Int32 nIndex ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::revokeScriptEvents( sal_Int32 nIndex )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->revokeScriptEvents( nIndex );
 }
 
 
-void SAL_CALL OInterfaceContainer::insertEntry( sal_Int32 nIndex ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::insertEntry( sal_Int32 nIndex )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->insertEntry( nIndex );
 }
 
 
-void SAL_CALL OInterfaceContainer::removeEntry( sal_Int32 nIndex ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::removeEntry( sal_Int32 nIndex )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->removeEntry( nIndex );
 }
 
 
-Sequence< ScriptEventDescriptor > SAL_CALL OInterfaceContainer::getScriptEvents( sal_Int32 nIndex ) throw(IllegalArgumentException, RuntimeException, std::exception)
+Sequence< ScriptEventDescriptor > SAL_CALL OInterfaceContainer::getScriptEvents( sal_Int32 nIndex )
 {
     Sequence< ScriptEventDescriptor > aReturn;
     if ( m_xEventAttacher.is() )
@@ -1229,28 +1205,28 @@ Sequence< ScriptEventDescriptor > SAL_CALL OInterfaceContainer::getScriptEvents(
 }
 
 
-void SAL_CALL OInterfaceContainer::attach( sal_Int32 nIndex, const Reference< XInterface >& xObject, const Any& aHelper ) throw(IllegalArgumentException, ServiceNotRegisteredException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::attach( sal_Int32 nIndex, const Reference< XInterface >& xObject, const Any& aHelper )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->attach( nIndex, xObject, aHelper );
 }
 
 
-void SAL_CALL OInterfaceContainer::detach( sal_Int32 nIndex, const Reference< XInterface >& xObject ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::detach( sal_Int32 nIndex, const Reference< XInterface >& xObject )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->detach( nIndex, xObject );
 }
 
 
-void SAL_CALL OInterfaceContainer::addScriptListener( const Reference< XScriptListener >& xListener ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::addScriptListener( const Reference< XScriptListener >& xListener )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->addScriptListener( xListener );
 }
 
 
-void SAL_CALL OInterfaceContainer::removeScriptListener( const Reference< XScriptListener >& xListener ) throw(IllegalArgumentException, RuntimeException, std::exception)
+void SAL_CALL OInterfaceContainer::removeScriptListener( const Reference< XScriptListener >& xListener )
 {
     if ( m_xEventAttacher.is() )
         m_xEventAttacher->removeScriptListener( xListener );
@@ -1260,7 +1236,7 @@ void SAL_CALL OInterfaceContainer::removeScriptListener( const Reference< XScrip
 //= OFormComponents
 
 
-Any SAL_CALL OFormComponents::queryAggregation(const Type& _rType) throw(RuntimeException, std::exception)
+Any SAL_CALL OFormComponents::queryAggregation(const Type& _rType)
 {
     Any aReturn = OFormComponents_BASE::queryInterface(_rType);
     if (!aReturn.hasValue())
@@ -1268,21 +1244,21 @@ Any SAL_CALL OFormComponents::queryAggregation(const Type& _rType) throw(Runtime
         aReturn = OInterfaceContainer::queryInterface(_rType);
 
         if (!aReturn.hasValue())
-            aReturn = FormComponentsBase::queryAggregation(_rType);
+            aReturn =  ::cppu::OComponentHelper::queryAggregation(_rType);
     }
 
     return aReturn;
 }
 
 
-Sequence<Type> SAL_CALL OFormComponents::getTypes() throw(RuntimeException, std::exception)
+Sequence<Type> SAL_CALL OFormComponents::getTypes()
 {
-    return ::comphelper::concatSequences(OInterfaceContainer::getTypes(), FormComponentsBase::getTypes(), OFormComponents_BASE::getTypes());
+    return ::comphelper::concatSequences(OInterfaceContainer::getTypes(),  ::cppu::OComponentHelper::getTypes(), OFormComponents_BASE::getTypes());
 }
 
 
 OFormComponents::OFormComponents(const Reference<XComponentContext>& _rxFactory)
-    :FormComponentsBase( m_aMutex )
+    : ::cppu::OComponentHelper( m_aMutex )
     ,OInterfaceContainer( _rxFactory, m_aMutex, cppu::UnoType<XFormComponent>::get() )
     ,OFormComponents_BASE()
 {
@@ -1290,7 +1266,7 @@ OFormComponents::OFormComponents(const Reference<XComponentContext>& _rxFactory)
 
 
 OFormComponents::OFormComponents( const OFormComponents& _cloneSource )
-    :FormComponentsBase( m_aMutex )
+    : ::cppu::OComponentHelper( m_aMutex )
     ,OInterfaceContainer( m_aMutex, _cloneSource )
     ,OFormComponents_BASE()
 {
@@ -1299,7 +1275,7 @@ OFormComponents::OFormComponents( const OFormComponents& _cloneSource )
 
 OFormComponents::~OFormComponents()
 {
-    if (!FormComponentsBase::rBHelper.bDisposed)
+    if (! ::cppu::OComponentHelper::rBHelper.bDisposed)
     {
         acquire();
         dispose();
@@ -1311,20 +1287,20 @@ OFormComponents::~OFormComponents()
 void OFormComponents::disposing()
 {
     OInterfaceContainer::disposing();
-    FormComponentsBase::disposing();
+     ::cppu::OComponentHelper::disposing();
     m_xParent = nullptr;
 }
 
 //XChild
 
-void OFormComponents::setParent(const css::uno::Reference<css::uno::XInterface>& Parent) throw( NoSupportException, RuntimeException, std::exception )
+void OFormComponents::setParent(const css::uno::Reference<css::uno::XInterface>& Parent)
 {
     ::osl::MutexGuard aGuard( m_aMutex );
     m_xParent = Parent;
 }
 
 
-css::uno::Reference<css::uno::XInterface> OFormComponents::getParent() throw( RuntimeException, std::exception )
+css::uno::Reference<css::uno::XInterface> OFormComponents::getParent()
 {
     return m_xParent;
 }

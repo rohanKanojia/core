@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <X11_transferable.hxx>
+#include "X11_transferable.hxx"
 #include <X11/Xatom.h>
+#include <com/sun/star/datatransfer/UnsupportedFlavorException.hpp>
 #include <com/sun/star/io/IOException.hpp>
+#include <sal/log.hxx>
 
 using namespace com::sun::star::datatransfer;
 using namespace com::sun::star::lang;
@@ -44,7 +46,6 @@ X11Transferable::~X11Transferable()
 }
 
 Any SAL_CALL X11Transferable::getTransferData( const DataFlavor& rFlavor )
-    throw(UnsupportedFlavorException, IOException, RuntimeException, std::exception)
 {
     Any aRet;
     Sequence< sal_Int8 > aData;
@@ -62,7 +63,7 @@ Any SAL_CALL X11Transferable::getTransferData( const DataFlavor& rFlavor )
         if( reinterpret_cast<sal_Unicode const *>(aData.getConstArray())[nLen-1] == 0 )
             nLen--;
         OUString aString( reinterpret_cast<sal_Unicode const *>(aData.getConstArray()), nLen );
-        SAL_INFO( "vcl", "X11Transferable::getTransferData( \"" << rFlavor.MimeType << "\" )\n -> \"" << aString << "\"\n");
+        SAL_INFO( "vcl.unx.dtrans", "X11Transferable::getTransferData( \"" << rFlavor.MimeType << "\" )\n -> \"" << aString << "\"");
         aRet <<= aString.replaceAll("\r\n", "\n");
     }
     else
@@ -71,7 +72,6 @@ Any SAL_CALL X11Transferable::getTransferData( const DataFlavor& rFlavor )
 }
 
 Sequence< DataFlavor > SAL_CALL X11Transferable::getTransferDataFlavors()
-    throw(RuntimeException, std::exception)
 {
     Sequence< DataFlavor > aFlavorList;
     bool bSuccess = m_rManager.getPasteDataTypes( m_aSelection ? m_aSelection : XA_PRIMARY, aFlavorList );
@@ -82,7 +82,6 @@ Sequence< DataFlavor > SAL_CALL X11Transferable::getTransferDataFlavors()
 }
 
 sal_Bool SAL_CALL X11Transferable::isDataFlavorSupported( const DataFlavor& aFlavor )
-    throw(RuntimeException, std::exception)
 {
     if( aFlavor.DataType != cppu::UnoType<Sequence< sal_Int8 >>::get() )
     {

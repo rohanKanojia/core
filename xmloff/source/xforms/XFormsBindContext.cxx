@@ -32,10 +32,9 @@
 #include <com/sun/star/container/XNameContainer.hpp>
 #include <com/sun/star/xforms/XModel2.hpp>
 
-#include <tools/debug.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 
-using com::sun::star::beans::XPropertySet;
 using com::sun::star::uno::Reference;
 using com::sun::star::uno::makeAny;
 using com::sun::star::uno::UNO_QUERY;
@@ -60,7 +59,7 @@ static const struct SvXMLTokenMapEntry aAttributeMap[] =
 
 // helper function; see below
 static void lcl_fillNamespaceContainer( const SvXMLNamespaceMap&,
-                                 Reference<XNameContainer>& );
+                                 Reference<XNameContainer> const & );
 
 XFormsBindContext::XFormsBindContext(
     SvXMLImport& rImport,
@@ -68,17 +67,12 @@ XFormsBindContext::XFormsBindContext(
     const OUString& rLocalName,
     const Reference<XModel2>& xModel ) :
         TokenContext( rImport, nPrefix, rLocalName, aAttributeMap, aEmptyMap ),
-        mxModel( xModel ),
-        mxBinding( nullptr )
+        mxModel( xModel )
 {
     // attach binding to model
     mxBinding = mxModel->createBinding();
-    DBG_ASSERT( mxBinding.is(), "can't create binding" );
+    SAL_WARN_IF( !mxBinding.is(), "xmloff", "can't create binding" );
     mxModel->getBindings()->insert( makeAny( mxBinding ) );
-}
-
-XFormsBindContext::~XFormsBindContext()
-{
 }
 
 void XFormsBindContext::HandleAttribute( sal_uInt16 nToken,
@@ -127,7 +121,7 @@ void XFormsBindContext::StartElement(
         mxBinding->getPropertyValue( "BindingNamespaces" ),
         UNO_QUERY );
 
-    DBG_ASSERT( xContainer.is(), "binding should have a namespace container" );
+    SAL_WARN_IF( !xContainer.is(), "xmloff", "binding should have a namespace container" );
     if( xContainer.is() )
         lcl_fillNamespaceContainer( GetImport().GetNamespaceMap(), xContainer);
 
@@ -149,7 +143,7 @@ SvXMLImportContext* XFormsBindContext::HandleChild(
 
 static void lcl_fillNamespaceContainer(
     const SvXMLNamespaceMap& aMap,
-    Reference<XNameContainer>& xContainer )
+    Reference<XNameContainer> const & xContainer )
 {
     sal_uInt16 nKeyIter = aMap.GetFirstKey();
     do
@@ -159,9 +153,9 @@ static void lcl_fillNamespaceContainer(
         const OUString& sNamespace = aMap.GetNameByKey( nKeyIter );
 
         // as a hack, we will ignore our own 'default' namespaces
-        DBG_ASSERT( !sPrefix.isEmpty(), "no prefix?" );
+        SAL_WARN_IF( sPrefix.isEmpty(), "xmloff", "no prefix?" );
         if( !sPrefix.startsWith("_") &&
-            nKeyIter >= XML_OLD_NAMESPACE_META_IDX )
+            nKeyIter >= XML_OLD_NAMESPACE_META)
         {
             // insert prefix (use replace if already known)
             if( xContainer->hasByName( sPrefix ) )

@@ -13,6 +13,7 @@ $(eval $(call gb_Library_Library,ado))
 $(eval $(call gb_Library_set_componentfile,ado,connectivity/source/drivers/ado/ado))
 
 $(eval $(call gb_Library_set_include,ado,\
+	-I$(SRCDIR)/connectivity/inc \
 	-I$(SRCDIR)/connectivity/source/inc \
 	$$(INCLUDE) \
 	-I$(WORKDIR)/YaccTarget/connectivity/source/parse \
@@ -43,7 +44,6 @@ $(eval $(call gb_Library_use_libraries,ado,\
 	salhelper \
 	dbtools \
 	comphelper \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_add_exception_objects,ado,\
@@ -78,5 +78,8 @@ $(eval $(call gb_Library_add_exception_objects,ado,\
 	connectivity/source/drivers/ado/Awrapado \
 	connectivity/source/drivers/ado/adoimp \
 ))
+
+# Runtime dependency for unit-tests
+$(call gb_Library_get_target,ado) :| $(call gb_Library_get_target,affine_uno_uno)
 
 # vim: set noet sw=4 ts=4:

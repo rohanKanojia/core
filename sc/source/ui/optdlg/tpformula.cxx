@@ -22,21 +22,17 @@
 #include <scmod.hxx>
 #include <svl/eitem.hxx>
 #include <svl/stritem.hxx>
-#include "tpformula.hxx"
-#include "formulaopt.hxx"
-#include "sc.hrc"
-#include "scresid.hxx"
+#include <tpformula.hxx>
+#include <formulaopt.hxx>
+#include <sc.hrc>
+#include <strings.hrc>
+#include <scresid.hxx>
 #include <formula/grammar.hxx>
 #include "calcoptionsdlg.hxx"
-#include <vcl/msgbox.hxx>
+#include <vcl/edit.hxx>
 
 #include <unotools/localedatawrapper.hxx>
 
-#include <com/sun/star/lang/Locale.hpp>
-#include <com/sun/star/i18n/LocaleDataItem.hpp>
-
-using ::com::sun::star::lang::Locale;
-using ::com::sun::star::i18n::LocaleDataItem;
 
 ScTpFormulaOptions::ScTpFormulaOptions(vcl::Window* pParent, const SfxItemSet& rCoreAttrs) :
     SfxTabPage(pParent, "OptFormula", "modules/scalc/ui/optformula.ui", &rCoreAttrs),
@@ -54,9 +50,9 @@ ScTpFormulaOptions::ScTpFormulaOptions(vcl::Window* pParent, const SfxItemSet& r
     get(mpLbOOXMLRecalcOptions, "ooxmlrecalc");
     get(mpLbODFRecalcOptions, "odfrecalc");
 
-    mpLbFormulaSyntax->InsertEntry(ScResId(SCSTR_FORMULA_SYNTAX_CALC_A1).toString());
-    mpLbFormulaSyntax->InsertEntry(ScResId(SCSTR_FORMULA_SYNTAX_XL_A1).toString());
-    mpLbFormulaSyntax->InsertEntry(ScResId(SCSTR_FORMULA_SYNTAX_XL_R1C1).toString());
+    mpLbFormulaSyntax->InsertEntry(ScResId(SCSTR_FORMULA_SYNTAX_CALC_A1));
+    mpLbFormulaSyntax->InsertEntry(ScResId(SCSTR_FORMULA_SYNTAX_XL_A1));
+    mpLbFormulaSyntax->InsertEntry(ScResId(SCSTR_FORMULA_SYNTAX_XL_R1C1));
 
     Link<Button*,void> aLink2 = LINK( this, ScTpFormulaOptions, ButtonHdl );
     mpBtnSepReset->SetClickHdl(aLink2);
@@ -76,11 +72,10 @@ ScTpFormulaOptions::ScTpFormulaOptions(vcl::Window* pParent, const SfxItemSet& r
 
     // Get the decimal separator for current locale.
     OUString aSep = ScGlobal::GetpLocaleData()->getNumDecimalSep();
-    mnDecSep = aSep.isEmpty() ? sal_Unicode('.') : aSep[0];
+    mnDecSep = aSep.isEmpty() ? u'.' : aSep[0];
 
-    maSavedDocOptions = ScDocOptions(
-        static_cast<const ScTpCalcItem&>(rCoreAttrs.Get(
-            GetWhich(SID_SCDOCOPTIONS))).GetDocOptions());
+    maSavedDocOptions = static_cast<const ScTpCalcItem&>(rCoreAttrs.Get(
+            GetWhich(SID_SCDOCOPTIONS))).GetDocOptions();
 }
 
 ScTpFormulaOptions::~ScTpFormulaOptions()
@@ -120,7 +115,7 @@ void ScTpFormulaOptions::OnFocusSeparatorInput(Edit* pEdit)
 
     // Make sure the entire text is selected.
     sal_Int32 nLen = pEdit->GetText().getLength();
-    Selection aSel(0, (sal_uInt16)nLen);
+    Selection aSel(0, static_cast<sal_uInt16>(nLen));
     pEdit->SetSelection(aSel);
     maOldSepValue = pEdit->GetText();
 }
@@ -143,12 +138,11 @@ void ScTpFormulaOptions::UpdateCustomCalcRadioButtons(bool bDefault)
 
 void ScTpFormulaOptions::LaunchCustomCalcSettings()
 {
-    ScopedVclPtrInstance< ScCalcOptionsDialog > aDlg(this, maCurrentConfig,
-                                                     maCurrentDocOptions.IsWriteCalcConfig());
-    if (aDlg->Execute() == RET_OK)
+    ScCalcOptionsDialog aDlg(GetFrameWeld(), maCurrentConfig, maCurrentDocOptions.IsWriteCalcConfig());
+    if (aDlg.run() == RET_OK)
     {
-        maCurrentConfig = aDlg->GetConfig();
-        maCurrentDocOptions.SetWriteCalcConfig( aDlg->GetWriteCalcConfig());
+        maCurrentConfig = aDlg.GetConfig();
+        maCurrentDocOptions.SetWriteCalcConfig(aDlg.GetWriteCalcConfig());
     }
 }
 
@@ -195,13 +189,10 @@ bool ScTpFormulaOptions::IsValidSeparatorSet() const
     // Make sure the column and row separators are different.
     OUString aColStr = mpEdSepArrayCol->GetText();
     OUString aRowStr = mpEdSepArrayRow->GetText();
-    if (aColStr == aRowStr)
-        return false;
-
-    return true;
+    return aColStr != aRowStr;
 }
 
-IMPL_LINK_TYPED( ScTpFormulaOptions, ButtonHdl, Button*, pBtn, void )
+IMPL_LINK( ScTpFormulaOptions, ButtonHdl, Button*, pBtn, void )
 {
     if (pBtn == mpBtnSepReset)
         ResetSeparators();
@@ -213,7 +204,7 @@ IMPL_LINK_TYPED( ScTpFormulaOptions, ButtonHdl, Button*, pBtn, void )
         LaunchCustomCalcSettings();
 }
 
-IMPL_LINK_TYPED( ScTpFormulaOptions, SepModifyHdl, Edit&, rEdit, void )
+IMPL_LINK( ScTpFormulaOptions, SepModifyHdl, Edit&, rEdit, void )
 {
     OUString aStr = rEdit.GetText();
     if (aStr.getLength() > 1)
@@ -231,14 +222,14 @@ IMPL_LINK_TYPED( ScTpFormulaOptions, SepModifyHdl, Edit&, rEdit, void )
     OnFocusSeparatorInput(&rEdit);
 }
 
-IMPL_LINK_TYPED( ScTpFormulaOptions, SepEditOnFocusHdl, Control&, rControl, void )
+IMPL_LINK( ScTpFormulaOptions, SepEditOnFocusHdl, Control&, rControl, void )
 {
     OnFocusSeparatorInput(static_cast<Edit*>(&rControl));
 }
 
-VclPtr<SfxTabPage> ScTpFormulaOptions::Create(vcl::Window* pParent, const SfxItemSet* rCoreSet)
+VclPtr<SfxTabPage> ScTpFormulaOptions::Create(TabPageParent pParent, const SfxItemSet* rCoreSet)
 {
-    return VclPtr<ScTpFormulaOptions>::Create(pParent, *rCoreSet);
+    return VclPtr<ScTpFormulaOptions>::Create(pParent.pParent, *rCoreSet);
 }
 
 bool ScTpFormulaOptions::FillItemSet(SfxItemSet* rCoreSet)
@@ -246,12 +237,12 @@ bool ScTpFormulaOptions::FillItemSet(SfxItemSet* rCoreSet)
     bool bRet = false;
     ScFormulaOptions aOpt;
     bool bEnglishFuncName = mpCbEnglishFuncName->IsChecked();
-    sal_Int16 aSyntaxPos      = mpLbFormulaSyntax->GetSelectEntryPos();
+    sal_Int16 aSyntaxPos      = mpLbFormulaSyntax->GetSelectedEntryPos();
     OUString aSep             = mpEdSepFuncArg->GetText();
     OUString aSepArrayCol     = mpEdSepArrayCol->GetText();
     OUString aSepArrayRow     = mpEdSepArrayRow->GetText();
-    sal_Int16 nOOXMLRecalcMode = mpLbOOXMLRecalcOptions->GetSelectEntryPos();
-    sal_Int16 nODFRecalcMode = mpLbODFRecalcOptions->GetSelectEntryPos();
+    sal_Int16 nOOXMLRecalcMode = mpLbOOXMLRecalcOptions->GetSelectedEntryPos();
+    sal_Int16 nODFRecalcMode = mpLbODFRecalcOptions->GetSelectedEntryPos();
 
     if (mpBtnCustomCalcDefault->IsChecked())
     {
@@ -261,9 +252,9 @@ bool ScTpFormulaOptions::FillItemSet(SfxItemSet* rCoreSet)
 
     if ( mpLbFormulaSyntax->GetSavedValue() != aSyntaxPos
          || mpCbEnglishFuncName->GetSavedValue() != (bEnglishFuncName ? 1 : 0)
-         || static_cast<OUString>(mpEdSepFuncArg->GetSavedValue()) != aSep
-         || static_cast<OUString>(mpEdSepArrayCol->GetSavedValue()) != aSepArrayCol
-         || static_cast<OUString>(mpEdSepArrayRow->GetSavedValue()) != aSepArrayRow
+         || mpEdSepFuncArg->GetSavedValue() != aSep
+         || mpEdSepArrayCol->GetSavedValue() != aSepArrayCol
+         || mpEdSepArrayRow->GetSavedValue() != aSepArrayRow
          || mpLbOOXMLRecalcOptions->GetSavedValue() != nOOXMLRecalcMode
          || mpLbODFRecalcOptions->GetSavedValue() != nODFRecalcMode
          || maSavedConfig != maCurrentConfig
@@ -297,7 +288,7 @@ bool ScTpFormulaOptions::FillItemSet(SfxItemSet* rCoreSet)
         aOpt.SetODFRecalcOptions(eODFRecalc);
         aOpt.SetWriteCalcConfig( maCurrentDocOptions.IsWriteCalcConfig());
 
-        rCoreSet->Put( ScTpFormulaItem( SID_SCFORMULAOPTIONS, aOpt ) );
+        rCoreSet->Put( ScTpFormulaItem( aOpt ) );
         rCoreSet->Put( ScTpCalcItem( SID_SCDOCOPTIONS, maCurrentDocOptions ) );
 
         bRet = true;
@@ -376,10 +367,10 @@ void ScTpFormulaOptions::Reset(const SfxItemSet* rCoreSet)
     maCurrentDocOptions = maSavedDocOptions;
 }
 
-SfxTabPage::sfxpg ScTpFormulaOptions::DeactivatePage(SfxItemSet* /*pSet*/)
+DeactivateRC ScTpFormulaOptions::DeactivatePage(SfxItemSet* /*pSet*/)
 {
     // What's this method for ?
-    return KEEP_PAGE;
+    return DeactivateRC::KeepPage;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

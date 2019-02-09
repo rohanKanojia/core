@@ -17,27 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
-#include "cppuhelper/factory.hxx"
-#include "cppuhelper/implementationentry.hxx"
+#include <cppuhelper/factory.hxx>
+#include <cppuhelper/implementationentry.hxx>
 #include <cppuhelper/implbase.hxx>
 #include <cppuhelper/supportsservice.hxx>
-#include "com/sun/star/lang/XServiceInfo.hpp"
-#include "com/sun/star/inspection/XStringRepresentation.hpp"
-#include "com/sun/star/lang/XInitialization.hpp"
-#include "com/sun/star/script/XTypeConverter.hpp"
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/inspection/XStringRepresentation.hpp>
+#include <com/sun/star/lang/XInitialization.hpp>
+#include <com/sun/star/script/CannotConvertException.hpp>
+#include <com/sun/star/script/XTypeConverter.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/reflection/XConstantsTypeDescription.hpp>
 #include <com/sun/star/beans/XIntrospection.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/Time.hpp>
-#include <comphelper/sequence.hxx>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <connectivity/dbconversion.hxx>
-#include "formresid.hrc"
+#include <osl/diagnose.h>
+#include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
+#include <strings.hrc>
+#include <yesno.hrc>
 #include "pcrservices.hxx"
-#include <tools/StringListResource.hxx>
 #include <comphelper/types.hxx>
 #include "modulepcr.hxx"
 
@@ -50,9 +54,9 @@ namespace comp_StringRepresentation {
 using namespace ::com::sun::star;
 
 // component and service helper functions:
-OUString SAL_CALL _getImplementationName();
-uno::Sequence< OUString > SAL_CALL _getSupportedServiceNames();
-uno::Reference< uno::XInterface > SAL_CALL _create( uno::Reference< uno::XComponentContext > const & context );
+static OUString _getImplementationName();
+static uno::Sequence< OUString > _getSupportedServiceNames();
+static uno::Reference< uno::XInterface > _create( uno::Reference< uno::XComponentContext > const & context );
 
 } // closing component helper namespace
 
@@ -74,19 +78,19 @@ public:
     StringRepresentation& operator=(const StringRepresentation&) = delete;
 
     // lang::XServiceInfo:
-    virtual OUString SAL_CALL getImplementationName() throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() throw (uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
+    virtual sal_Bool SAL_CALL supportsService(const OUString & ServiceName) override;
+    virtual uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
     // inspection::XStringRepresentation:
-    virtual OUString SAL_CALL convertToControlValue(const uno::Any & PropertyValue) throw (uno::RuntimeException, uno::Exception, std::exception) override;
-    virtual uno::Any SAL_CALL convertToPropertyValue(const OUString & ControlValue, const uno::Type & ControlValueType) throw (uno::RuntimeException, uno::Exception, std::exception) override;
+    virtual OUString SAL_CALL convertToControlValue(const uno::Any & PropertyValue) override;
+    virtual uno::Any SAL_CALL convertToPropertyValue(const OUString & ControlValue, const uno::Type & ControlValueType) override;
 
     // lang::XInitialization:
-    virtual void SAL_CALL initialize(const uno::Sequence< uno::Any > & aArguments) throw (uno::RuntimeException, uno::Exception, std::exception) override;
+    virtual void SAL_CALL initialize(const uno::Sequence< uno::Any > & aArguments) override;
 
 private:
-    virtual ~StringRepresentation() {}
+    virtual ~StringRepresentation() override {}
 
     /** converts a generic value into a string representation
 
@@ -124,7 +128,7 @@ private:
 
     /** converts a string into his constant value if it exists, otherwise the type converter is used.
     * \param _rValue the value to be converted
-    * \param _ePropertyType the type of the propery to be converted into
+    * \param _ePropertyType the type of the property to be converted into
     * \return the converted value
     */
     uno::Any convertStringToSimple( const OUString& _rValue,const uno::TypeClass& _ePropertyType );
@@ -142,23 +146,23 @@ StringRepresentation::StringRepresentation(uno::Reference< uno::XComponentContex
 {}
 
 // com.sun.star.uno.XServiceInfo:
-OUString  SAL_CALL StringRepresentation::getImplementationName() throw (uno::RuntimeException, std::exception)
+OUString  SAL_CALL StringRepresentation::getImplementationName()
 {
     return comp_StringRepresentation::_getImplementationName();
 }
 
-sal_Bool SAL_CALL StringRepresentation::supportsService(OUString const & serviceName) throw (uno::RuntimeException, std::exception)
+sal_Bool SAL_CALL StringRepresentation::supportsService(OUString const & serviceName)
 {
     return cppu::supportsService(this, serviceName);
 }
 
-uno::Sequence< OUString >  SAL_CALL StringRepresentation::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+uno::Sequence< OUString >  SAL_CALL StringRepresentation::getSupportedServiceNames()
 {
     return comp_StringRepresentation::_getSupportedServiceNames();
 }
 
 // inspection::XStringRepresentation:
-OUString SAL_CALL StringRepresentation::convertToControlValue(const uno::Any & PropertyValue) throw (uno::RuntimeException, uno::Exception, std::exception)
+OUString SAL_CALL StringRepresentation::convertToControlValue(const uno::Any & PropertyValue)
 {
     OUString sReturn;
     if ( !convertGenericValueToString( PropertyValue, sReturn ) )
@@ -167,10 +171,9 @@ OUString SAL_CALL StringRepresentation::convertToControlValue(const uno::Any & P
 #ifdef DBG_UTIL
         if ( sReturn.isEmpty() && PropertyValue.hasValue() )
         {
-            OString sMessage( "StringRepresentation::convertPropertyValueToStringRepresentation: cannot convert values of type '" );
-            sMessage += OString( PropertyValue.getValueType().getTypeName().getStr(), PropertyValue.getValueType().getTypeName().getLength(), RTL_TEXTENCODING_ASCII_US );
-            sMessage += OString( "'!" );
-            OSL_FAIL( sMessage.getStr() );
+            SAL_WARN( "extensions.propctrlr", "StringRepresentation::convertPropertyValueToStringRepresentation: cannot convert values of type '"
+                        << PropertyValue.getValueType().getTypeName()
+                        << "'!" );
         }
 #endif
     }
@@ -178,7 +181,7 @@ OUString SAL_CALL StringRepresentation::convertToControlValue(const uno::Any & P
     return sReturn;
 }
 
-uno::Any SAL_CALL StringRepresentation::convertToPropertyValue(const OUString & ControlValue, const uno::Type & ControlValueType) throw (uno::RuntimeException, uno::Exception, std::exception)
+uno::Any SAL_CALL StringRepresentation::convertToPropertyValue(const OUString & ControlValue, const uno::Type & ControlValueType)
 {
     uno::Any aReturn;
 
@@ -212,10 +215,8 @@ uno::Any SAL_CALL StringRepresentation::convertToPropertyValue(const OUString & 
         // could not convert ...
         if ( !bCanConvert && !ControlValue.isEmpty() )
         {
-            OString sMessage( "StringRepresentation::convertStringRepresentationToPropertyValue: cannot convert into values of type '" );
-            sMessage += OString( ControlValueType.getTypeName().getStr(), ControlValueType.getTypeName().getLength(), RTL_TEXTENCODING_ASCII_US );
-            sMessage += OString( "'!" );
-            OSL_FAIL( sMessage.getStr() );
+            SAL_WARN( "extensions.propctrlr", "StringRepresentation::convertStringRepresentationToPropertyValue: cannot convert into values of type '"
+            << ControlValueType.getTypeName() << "'!" );
         }
     #endif
     }
@@ -242,7 +243,7 @@ struct CompareConstants {
 }
 
 // lang::XInitialization:
-void SAL_CALL StringRepresentation::initialize(const uno::Sequence< uno::Any > & aArguments) throw (uno::RuntimeException, uno::Exception, std::exception)
+void SAL_CALL StringRepresentation::initialize(const uno::Sequence< uno::Any > & aArguments)
 {
     sal_Int32 nLength = aArguments.getLength();
     if ( nLength )
@@ -333,20 +334,18 @@ namespace
     template < class ElementType, class Transformer >
     OUString composeSequenceElements( const Sequence< ElementType >& _rElements, const Transformer& _rTransformer )
     {
-        OUString sCompose;
+        OUStringBuffer sCompose;
 
         // loop through the elements and concatenate the string representations of the integers
         // (separated by a line break)
-        const ElementType* pElements = _rElements.getConstArray();
-        const ElementType* pElementsEnd = pElements + _rElements.getLength();
-        for ( ; pElements != pElementsEnd; ++pElements )
+        for (const auto& rElement : _rElements)
         {
-            sCompose += OUString( _rTransformer( *pElements ) );
-            if ( pElements != pElementsEnd )
-                sCompose += "\n";
+            sCompose.append(OUString(_rTransformer(rElement)));
+            sCompose.append("\n");
         }
+        sCompose.stripEnd('\n');
 
-        return sCompose;
+        return sCompose.makeStringAndClear();
     }
 
     template < class ElementType, class Transformer >
@@ -378,11 +377,10 @@ bool StringRepresentation::convertGenericValueToString( const uno::Any& _rValue,
 
     case uno::TypeClass_BOOLEAN:
     {
-        ::std::vector< OUString > aListEntries;
-        tools::StringListResource aRes(PcrRes(RID_RSC_ENUM_YESNO),aListEntries);
         bool bValue = false;
         _rValue >>= bValue;
-        _rStringRep = bValue ? aListEntries[1] : aListEntries[0];
+        _rStringRep = bValue ? PcrRes(RID_RSC_ENUM_YESNO[1])
+                             : PcrRes(RID_RSC_ENUM_YESNO[0]);
     }
     break;
 
@@ -490,7 +488,7 @@ uno::Any StringRepresentation::convertStringToSimple( const OUString& _rValue,co
                     if ( *pIter == _rValue )
                     {
                         OSL_ENSURE(i < m_aConstants.getLength() ,"StringRepresentation::convertSimpleToString: Index is not in range of m_aValues");
-                        aReturn <<= m_aConstants[i]->getConstantValue();
+                        aReturn = m_aConstants[i]->getConstantValue();
                         break;
                     }
                 }
@@ -517,9 +515,7 @@ bool StringRepresentation::convertStringToGenericValue( const OUString& _rString
 
     case uno::TypeClass_BOOLEAN:
     {
-        ::std::vector< OUString > aListEntries;
-        tools::StringListResource aRes(PcrRes(RID_RSC_ENUM_YESNO),aListEntries);
-        _rValue <<= aListEntries[0] != _rStringRep;
+        _rValue <<= PcrRes(RID_RSC_ENUM_YESNO[0]) != _rStringRep;
     }
     break;
 
@@ -527,48 +523,47 @@ bool StringRepresentation::convertStringToGenericValue( const OUString& _rString
     {
         uno::Type aElementType = ::comphelper::getSequenceElementType( _rTargetType );
 
-        OUString aStr( _rStringRep );
         switch ( aElementType.getTypeClass() )
         {
             case uno::TypeClass_STRING:
             {
                 Sequence< OUString > aElements;
-                splitComposedStringToSequence( aStr, aElements, StringIdentity() );
+                splitComposedStringToSequence( _rStringRep, aElements, StringIdentity() );
                 _rValue <<= aElements;
             }
             break;
             case uno::TypeClass_SHORT:
             {
                 Sequence< sal_Int16 > aElements;
-                splitComposedStringToSequence( aStr, aElements, ConvertIntegerFromAndToString() );
+                splitComposedStringToSequence( _rStringRep, aElements, ConvertIntegerFromAndToString() );
                 _rValue <<= aElements;
             }
             break;
             case uno::TypeClass_UNSIGNED_SHORT:
             {
                 Sequence< sal_uInt16 > aElements;
-                splitComposedStringToSequence( aStr, aElements, ConvertIntegerFromAndToString() );
+                splitComposedStringToSequence( _rStringRep, aElements, ConvertIntegerFromAndToString() );
                 _rValue <<= aElements;
             }
             break;
             case uno::TypeClass_LONG:
             {
                 Sequence< sal_Int32 > aElements;
-                splitComposedStringToSequence( aStr, aElements, ConvertIntegerFromAndToString() );
+                splitComposedStringToSequence( _rStringRep, aElements, ConvertIntegerFromAndToString() );
                 _rValue <<= aElements;
             }
             break;
             case uno::TypeClass_UNSIGNED_LONG:
             {
                 Sequence< sal_uInt32 > aElements;
-                splitComposedStringToSequence( aStr, aElements, ConvertIntegerFromAndToString() );
+                splitComposedStringToSequence( _rStringRep, aElements, ConvertIntegerFromAndToString() );
                 _rValue <<= aElements;
             }
             break;
             case uno::TypeClass_BYTE:
             {
                 Sequence< sal_Int8 > aElements;
-                splitComposedStringToSequence( aStr, aElements, ConvertIntegerFromAndToString() );
+                splitComposedStringToSequence( _rStringRep, aElements, ConvertIntegerFromAndToString() );
                 _rValue <<= aElements;
             }
             break;
@@ -617,18 +612,18 @@ bool StringRepresentation::convertStringToGenericValue( const OUString& _rString
 // component helper namespace
 namespace comp_StringRepresentation {
 
-OUString SAL_CALL _getImplementationName() {
+OUString _getImplementationName() {
     return OUString(
         "StringRepresentation");
 }
 
-uno::Sequence< OUString > SAL_CALL _getSupportedServiceNames()
+uno::Sequence< OUString > _getSupportedServiceNames()
 {
     uno::Sequence< OUString > s { "com.sun.star.inspection.StringRepresentation" };
     return s;
 }
 
-uno::Reference< uno::XInterface > SAL_CALL _create(
+uno::Reference< uno::XInterface > _create(
     const uno::Reference< uno::XComponentContext > & context)
 {
     return static_cast< ::cppu::OWeakObject * >(new pcr::StringRepresentation(context));
@@ -637,7 +632,7 @@ uno::Reference< uno::XInterface > SAL_CALL _create(
 } // closing component helper namespace
 
 
-extern "C" void SAL_CALL createRegistryInfo_StringRepresentation()
+extern "C" void createRegistryInfo_StringRepresentation()
 {
     ::pcr::PcrModule::getInstance().registerImplementation(
             comp_StringRepresentation::_getImplementationName(),

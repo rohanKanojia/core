@@ -17,11 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <sal/config.h>
 
-#include "eventqueue.hxx"
+#include <com/sun/star/lang/NoSupportException.hpp>
+
+#include <eventqueue.hxx>
 #include "animationaudionode.hxx"
-#include "delayevent.hxx"
-#include "tools.hxx"
+#include <delayevent.hxx>
+#include <tools.hxx>
 #include "nodetools.hxx"
 
 using namespace com::sun::star;
@@ -116,7 +119,7 @@ void AnimationAudioNode::deactivate_st( NodeState /*eDestState*/ )
     AnimationEventHandlerSharedPtr aHandler(
         std::dynamic_pointer_cast<AnimationEventHandler>( getSelf() ) );
     OSL_ENSURE( aHandler,
-                "could not cas self to AnimationEventHandler?" );
+                "could not cast self to AnimationEventHandler?" );
     getContext().mrEventMultiplexer.removeCommandStopAudioHandler( aHandler );
 
     // force-end sound
@@ -149,7 +152,8 @@ void AnimationAudioNode::createPlayer() const
     {
         mpPlayer = SoundPlayer::create( getContext().mrEventMultiplexer,
                                         maSoundURL,
-                                        getContext().mxComponentContext );
+                                        getContext().mxComponentContext,
+                                        getContext().mrMediaFileManager);
     }
     catch( lang::NoSupportException& )
     {

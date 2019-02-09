@@ -14,6 +14,9 @@ from testcollections_base import CollectionsTestBase
 from com.sun.star.beans import PropertyValue
 
 
+def getScriptName():
+    return 'macro://Standard.Module1.MySave()'
+
 # Tests behaviour of objects implementing XNameReplace using the new-style
 # collection accessors
 # The objects chosen have no special meaning, they just happen to implement the
@@ -28,15 +31,16 @@ class TestXNameReplace(CollectionsTestBase):
     def test_XNameReplace_ReplaceName(self):
         # Given
         doc = self.createBlankTextDocument()
-        scriptName = 'macro://Standard.Module1.MySave()'
-        eventProperties = (PropertyValue(Name='Script', Value=scriptName),)
+        event_properties = (PropertyValue(Name='Script', Value=getScriptName()),)
 
         # When
-        doc.Events['OnSave'] = eventProperties
+        doc.Events['OnSave'] = event_properties
 
         # Then
-        onSave = [p.Value for p in doc.Events['OnSave'] if p.Name == 'Script'][0]
-        self.assertEqual(scriptName, onSave)
+        on_save = [p.Value for p in doc.Events['OnSave'] if p.Name == 'Script'][0]
+        self.assertEqual(getScriptName(), on_save)
+
+        doc.close(True)
 
     # Tests syntax:
     #    obj[key] = val              # Replace by key
@@ -45,12 +49,13 @@ class TestXNameReplace(CollectionsTestBase):
     def test_XNameReplace_ReplaceName_Invalid(self):
         # Given
         doc = self.createBlankTextDocument()
-        scriptName = 'macro://Standard.Module1.MySave()'
-        eventProperties = (PropertyValue(Name='Script', Value=scriptName),)
+        event_properties = (PropertyValue(Name='Script', Value=getScriptName()),)
 
         # When / Then
         with self.assertRaises(KeyError):
-            doc.Events['qqqqq'] = eventProperties
+            doc.Events['qqqqq'] = event_properties
+
+        doc.close(True)
 
     # Tests syntax:
     #    obj[key] = val              # Replace by key
@@ -59,12 +64,13 @@ class TestXNameReplace(CollectionsTestBase):
     def test_XNameReplace_ReplaceName_Invalid(self):
         # Given
         doc = self.createBlankTextDocument()
-        scriptName = 'macro://Standard.Module1.MySave()'
-        eventProperties = (PropertyValue(Name='Script', Value=scriptName),)
+        event_properties = (PropertyValue(Name='Script', Value=getScriptName()),)
 
         # When / Then
         with self.assertRaises(TypeError):
-            doc.Events[12.34] = eventProperties
+            doc.Events[12.34] = event_properties
+
+        doc.close(True)
 
 
 if __name__ == '__main__':

@@ -21,15 +21,13 @@
 #include <rtl/ustring.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/polygon/b2dpolypolygon.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 
 #include <com/sun/star/rendering/XCanvas.hpp>
 
 #include <canvas/canvastools.hxx>
 #include <cppcanvas/polypolygon.hxx>
 
-#include "implfont.hxx"
-#include "implcolor.hxx"
 #include "implcanvas.hxx"
 
 
@@ -82,11 +80,6 @@ namespace cppcanvas
         ::basegfx::B2DPolyPolygon const* ImplCanvas::getClip() const
         {
             return !maClipPolyPolygon ? nullptr : &(*maClipPolyPolygon);
-        }
-
-        ColorSharedPtr ImplCanvas::createColor() const
-        {
-            return ColorSharedPtr( new ImplColor( getUNOCanvas()->getDevice() ) );
         }
 
         CanvasSharedPtr ImplCanvas::clone() const

@@ -1,4 +1,6 @@
 #!/usr/bin/python
+# -*- tab-width: 4; indent-tabs-mode: nil; py-indent-offset: 4 -*-
+#
 # This file is part of the LibreOffice project.
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
@@ -17,7 +19,6 @@ import xml.etree.ElementTree as ET
 main_xcd_discard = [
     'org.openoffice.Office/TableWizard', # huge
 
-    'org.openoffice.Office/WebWizard',
     'org.openoffice.Office.DataAccess/Drivers', # no database
     'org.openoffice.Office/Addons', # no addons
 
@@ -64,14 +65,14 @@ if __name__ == '__main__':
         size = len(ET.tostring(child));
         key = '%s/%s' % (package, section)
         if key in main_xcd_discard:
-            print 'removed %s - saving %d' % (key, size)
+            print('removed %s - saving %d' % (key, size))
             saved = saved + size
             to_remove.append(child)
 
     for child in to_remove:
         root.remove(child)
 
-    print "saved %d of %d bytes: %2.f%%" % (saved, total, saved*100.0/total)
+    print("saved %d of %d bytes: %2.f%%" % (saved, total, saved*100.0/total))
 
     # Don't do pointless Word -> Writer and similar conversions when we have no UI.
     nsDict = {
@@ -112,4 +113,4 @@ if __name__ == '__main__':
 
     tree.write(sys.argv[2], 'UTF-8', True)
 
-# vim:set shiftwidth=4 softtabstop=4 expandtab:
+# vim: set shiftwidth=4 softtabstop=4 expandtab:

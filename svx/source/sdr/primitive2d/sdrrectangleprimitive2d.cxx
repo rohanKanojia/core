@@ -24,6 +24,7 @@
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
 #include <drawinglayer/primitive2d/sdrdecompositiontools2d.hxx>
 #include <basegfx/polygon/b2dpolygon.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
 
 
 using namespace com::sun::star;
@@ -33,12 +34,12 @@ namespace drawinglayer
 {
     namespace primitive2d
     {
-        Primitive2DContainer SdrRectanglePrimitive2D::create2DDecomposition(const geometry::ViewInformation2D& /*aViewInformation*/) const
+        void SdrRectanglePrimitive2D::create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& /*aViewInformation*/) const
         {
             Primitive2DContainer aRetval;
 
             // create unit outline polygon
-            const basegfx::B2DPolygon aUnitOutline(basegfx::tools::createPolygonFromRect(
+            const basegfx::B2DPolygon aUnitOutline(basegfx::utils::createPolygonFromRect(
                 basegfx::B2DRange(0.0, 0.0, 1.0, 1.0),
                 getCornerRadiusX(),
                 getCornerRadiusY()));
@@ -99,7 +100,6 @@ namespace drawinglayer
                         getSdrLFSTAttribute().getText(),
                         getSdrLFSTAttribute().getLine(),
                         false,
-                        false,
                         false));
             }
 
@@ -111,7 +111,7 @@ namespace drawinglayer
                     getSdrLFSTAttribute().getShadow());
             }
 
-            return aRetval;
+            rContainer.insert(rContainer.end(), aRetval.begin(), aRetval.end());
         }
 
         SdrRectanglePrimitive2D::SdrRectanglePrimitive2D(

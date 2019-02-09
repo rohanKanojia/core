@@ -11,10 +11,7 @@ $(eval $(call gb_CppunitTest_CppunitTest,unotools_fontdefs))
 
 $(eval $(call gb_CppunitTest_use_external,unotools_fontdefs,boost_headers))
 
-$(eval $(call gb_CppunitTest_use_api,unotools_fontdefs, \
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,unotools_fontdefs))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,unotools_fontdefs, \
     unotools/qa/unit/testGetEnglishSearchName \
@@ -28,7 +25,6 @@ $(eval $(call gb_CppunitTest_use_libraries,unotools_fontdefs, \
 	sal \
 	svt \
 	utl \
-    $(gb_UWINAPI) \
 ))
 
 # vim: set noet sw=4 ts=4:

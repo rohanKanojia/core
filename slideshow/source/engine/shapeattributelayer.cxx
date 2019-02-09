@@ -48,21 +48,21 @@ namespace slideshow
         */
         void ShapeAttributeLayer::updateStateIds()
         {
-            if( haveChild() )
-            {
-                if( mnTransformationState != mpChild->getTransformationState() )
-                    ++mnTransformationState;
-                if( mnClipState != mpChild->getClipState() )
-                    ++mnClipState;
-                if( mnAlphaState != mpChild->getAlphaState() )
-                    ++mnAlphaState;
-                if( mnPositionState != mpChild->getPositionState() )
-                    ++mnPositionState;
-                if( mnContentState != mpChild->getContentState() )
-                    ++mnContentState;
-                if( mnVisibilityState != mpChild->getVisibilityState() )
-                    ++mnVisibilityState;
-            }
+            if( !haveChild() )
+                return;
+
+            if( mnTransformationState != mpChild->getTransformationState() )
+                ++mnTransformationState;
+            if( mnClipState != mpChild->getClipState() )
+                ++mnClipState;
+            if( mnAlphaState != mpChild->getAlphaState() )
+                ++mnAlphaState;
+            if( mnPositionState != mpChild->getPositionState() )
+                ++mnPositionState;
+            if( mnContentState != mpChild->getContentState() )
+                ++mnContentState;
+            if( mnVisibilityState != mpChild->getVisibilityState() )
+                ++mnVisibilityState;
         }
 
         /** Calc attribute value.
@@ -139,7 +139,6 @@ namespace slideshow
             mnShearXAngle(),
             mnShearYAngle(),
             mnAlpha(),
-            mnCharRotationAngle(),
             mnCharScale(),
             mnCharWeight(),
 
@@ -178,7 +177,6 @@ namespace slideshow
 
             mbAlphaValid( false ),
 
-            mbCharRotationAngleValid( false ),
             mbCharScaleValid( false ),
 
             mbDimColorValid( false ),
@@ -236,7 +234,7 @@ namespace slideshow
             return true;
         }
 
-        ShapeAttributeLayerSharedPtr  ShapeAttributeLayer::getChildLayer() const
+        const ShapeAttributeLayerSharedPtr&  ShapeAttributeLayer::getChildLayer() const
         {
             return mpChild;
         }
@@ -571,7 +569,7 @@ namespace slideshow
         void ShapeAttributeLayer::setFillStyle( const sal_Int16& rStyle )
         {
             // TODO(Q1): Check range here.
-            meFillStyle = (drawing::FillStyle)rStyle;
+            meFillStyle = static_cast<drawing::FillStyle>(rStyle);
             mbFillStyleValid = true;
             ++mnContentState;
         }
@@ -596,7 +594,7 @@ namespace slideshow
         void ShapeAttributeLayer::setLineStyle( const sal_Int16& rStyle )
         {
             // TODO(Q1): Check range here.
-            meLineStyle = (drawing::LineStyle)rStyle;
+            meLineStyle = static_cast<drawing::LineStyle>(rStyle);
             mbLineStyleValid = true;
             ++mnContentState;
         }
@@ -642,29 +640,6 @@ namespace slideshow
         {
             maCharColor = nNewColor;
             mbCharColorValid = true;
-            ++mnContentState;
-        }
-
-        bool ShapeAttributeLayer::isCharRotationAngleValid() const
-        {
-            return mbCharRotationAngleValid || ( haveChild() && mpChild->isCharRotationAngleValid() );
-        }
-
-        double ShapeAttributeLayer::getCharRotationAngle() const
-        {
-            return calcValue( mnCharRotationAngle,
-                              mbCharRotationAngleValid,
-                              &ShapeAttributeLayer::isCharRotationAngleValid,
-                              &ShapeAttributeLayer::getCharRotationAngle );
-        }
-
-        void ShapeAttributeLayer::setCharRotationAngle( const double& rNewAngle )
-        {
-            ENSURE_OR_THROW( ::rtl::math::isFinite(rNewAngle),
-                              "ShapeAttributeLayer::setCharRotationAngle(): Invalid angle" );
-
-            mnCharRotationAngle = rNewAngle;
-            mbCharRotationAngleValid = true;
             ++mnContentState;
         }
 
@@ -762,7 +737,7 @@ namespace slideshow
         void ShapeAttributeLayer::setCharPosture( const sal_Int16& rStyle )
         {
             // TODO(Q1): Check range here.
-            meCharPosture = (awt::FontSlant)rStyle;
+            meCharPosture = static_cast<awt::FontSlant>(rStyle);
             mbCharPostureValid = true;
             ++mnContentState;
         }

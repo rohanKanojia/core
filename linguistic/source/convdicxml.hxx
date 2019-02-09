@@ -20,7 +20,6 @@
 #ifndef INCLUDED_LINGUISTIC_SOURCE_CONVDICXML_HXX
 #define INCLUDED_LINGUISTIC_SOURCE_CONVDICXML_HXX
 
-#include <com/sun/star/linguistic2/XConversionDictionary.hpp>
 #include <com/sun/star/util/XFlushable.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
@@ -30,7 +29,7 @@
 #include <xmloff/xmlimp.hxx>
 #include <cppuhelper/interfacecontainer.h>
 #include <rtl/ustring.hxx>
-#include "linguistic/misc.hxx"
+#include <linguistic/misc.hxx>
 #include "defs.hxx"
 
 
@@ -45,14 +44,11 @@ class ConvDicXMLExport : public SvXMLExport
 public:
     ConvDicXMLExport( ConvDic &rConvDic,
         const OUString &rFileName,
-        css::uno::Reference< css::xml::sax::XDocumentHandler > &rHandler) :
+        css::uno::Reference< css::xml::sax::XDocumentHandler > const &rHandler) :
         SvXMLExport ( comphelper::getProcessComponentContext(), "com.sun.star.lingu2.ConvDicXMLExport", rFileName,
                       css::util::MeasureUnit::CM, rHandler ),
         rDic        ( rConvDic ),
         bSuccess    ( false )
-    {
-    }
-    virtual ~ConvDicXMLExport()
     {
     }
 
@@ -60,7 +56,7 @@ public:
     void ExportAutoStyles_() override    {}
     void ExportMasterStyles_() override  {}
     void ExportContent_() override;
-    sal_uInt32 exportDoc( enum ::xmloff::token::XMLTokenEnum eClass ) override;
+    ErrCode exportDoc( enum ::xmloff::token::XMLTokenEnum eClass = ::xmloff::token::XML_TOKEN_INVALID ) override;
 
     bool    Export();
 };
@@ -75,9 +71,8 @@ class ConvDicXMLImport : public SvXMLImport
                                 //   but the language and conversion type will
                                 //   still be determined!
 
-    sal_Int16       nLanguage;          // language of the dictionary
+    LanguageType    nLanguage;          // language of the dictionary
     sal_Int16       nConversionType;    // conversion type the dictionary is used for
-    bool        bSuccess;
 
 public:
 
@@ -88,26 +83,20 @@ public:
     {
         nLanguage       = LANGUAGE_NONE;
         nConversionType = -1;
-        bSuccess        = false;
     }
 
-    virtual ~ConvDicXMLImport() throw ()
-    {
-    }
+    virtual void SAL_CALL startDocument() override;
 
-    virtual void SAL_CALL startDocument() throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-    virtual void SAL_CALL endDocument() throw( css::xml::sax::SAXException, css::uno::RuntimeException, std::exception ) override;
-
-    virtual SvXMLImportContext * CreateContext(
+    virtual SvXMLImportContext * CreateDocumentContext(
         sal_uInt16 nPrefix, const OUString &rLocalName,
         const css::uno::Reference < css::xml::sax::XAttributeList > &rxAttrList ) override;
 
-    ConvDic *   GetDic()                    { return pDic; }
-    sal_Int16   GetLanguage() const         { return nLanguage; }
-    sal_Int16   GetConversionType() const   { return nConversionType; }
+    ConvDic *    GetDic()                    { return pDic; }
+    LanguageType GetLanguage() const         { return nLanguage; }
+    sal_Int16    GetConversionType() const   { return nConversionType; }
 
-    void        SetLanguage( sal_Int16 nLang )              { nLanguage = nLang; }
-    void        SetConversionType( sal_Int16 nType )    { nConversionType = nType; }
+    void         SetLanguage( LanguageType nLang )              { nLanguage = nLang; }
+    void         SetConversionType( sal_Int16 nType )    { nConversionType = nType; }
 };
 
 

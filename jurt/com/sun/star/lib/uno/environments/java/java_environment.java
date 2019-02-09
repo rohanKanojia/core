@@ -1,3 +1,4 @@
+/* -*- Mode: Java; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -139,7 +140,7 @@ public final class java_environment implements IEnvironment {
     // Java side, and recorded in the java_environment.  The same OID is then
     // bridged in over another bridge B.  If there were only one
     // java_environment shared by both bridges, the proxy from bridge A would be
-    // reused.  If now bridge A is taken down programatically (e.g., because
+    // reused.  If now bridge A is taken down programmatically (e.g., because
     // some controlling code somehow deduced that no objects are mapped over
     // that bridge any longer), but the proxy is still used by bridge B, using
     // the proxy would now result in errors.  The explicit API to control
@@ -307,3 +308,5 @@ public final class java_environment implements IEnvironment {
     private final Object context;
     private final Registry proxies = new Registry();
 }
+
+/* vim:set shiftwidth=4 softtabstop=4 expandtab: */

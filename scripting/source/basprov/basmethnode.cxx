@@ -24,7 +24,6 @@
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/lang/XMultiComponentFactory.hpp>
 #include <com/sun/star/script/browse/BrowseNodeTypes.hpp>
-#include <osl/mutex.hxx>
 #include <vcl/svapp.hxx>
 #include <basic/sbstar.hxx>
 #include <basic/sbmeth.hxx>
@@ -114,7 +113,7 @@ namespace basprov
     // XBrowseNode
 
 
-    OUString BasicMethodNodeImpl::getName(  ) throw (RuntimeException, std::exception)
+    OUString BasicMethodNodeImpl::getName(  )
     {
         SolarMutexGuard aGuard;
 
@@ -126,26 +125,20 @@ namespace basprov
     }
 
 
-    Sequence< Reference< browse::XBrowseNode > > BasicMethodNodeImpl::getChildNodes(  ) throw (RuntimeException, std::exception)
+    Sequence< Reference< browse::XBrowseNode > > BasicMethodNodeImpl::getChildNodes(  )
     {
-        SolarMutexGuard aGuard;
-
         return Sequence< Reference< browse::XBrowseNode > >();
     }
 
 
-    sal_Bool BasicMethodNodeImpl::hasChildNodes(  ) throw (RuntimeException, std::exception)
+    sal_Bool BasicMethodNodeImpl::hasChildNodes(  )
     {
-        SolarMutexGuard aGuard;
-
-        return sal_False;
+        return false;
     }
 
 
-    sal_Int16 BasicMethodNodeImpl::getType(  ) throw (RuntimeException, std::exception)
+    sal_Int16 BasicMethodNodeImpl::getType(  )
     {
-        SolarMutexGuard aGuard;
-
         return browse::BrowseNodeTypes::SCRIPT;
     }
 
@@ -173,7 +166,7 @@ namespace basprov
     // XPropertySet
 
 
-    Reference< XPropertySetInfo > BasicMethodNodeImpl::getPropertySetInfo(  ) throw (RuntimeException, std::exception)
+    Reference< XPropertySetInfo > BasicMethodNodeImpl::getPropertySetInfo(  )
     {
         Reference< XPropertySetInfo > xInfo( createPropertySetInfo( getInfoHelper() ) );
         return xInfo;
@@ -183,122 +176,108 @@ namespace basprov
     // XInvocation
 
 
-    Reference< XIntrospectionAccess > BasicMethodNodeImpl::getIntrospection(  ) throw (RuntimeException, std::exception)
+    Reference< XIntrospectionAccess > BasicMethodNodeImpl::getIntrospection(  )
     {
         return Reference< XIntrospectionAccess >();
     }
 
 
-    Any BasicMethodNodeImpl::invoke( const OUString& aFunctionName, const Sequence< Any >& aParams,
-        Sequence< sal_Int16 >& aOutParamIndex, Sequence< Any >& aOutParam )
-        throw (IllegalArgumentException, script::CannotConvertException,
-               reflection::InvocationTargetException, RuntimeException, std::exception)
+    Any BasicMethodNodeImpl::invoke( const OUString& aFunctionName, const Sequence< Any >&,
+        Sequence< sal_Int16 >&, Sequence< Any >& )
     {
-        (void)aParams;
-        (void)aOutParamIndex;
-        (void)aOutParam;
-
-        if ( aFunctionName == BASPROV_PROPERTY_EDITABLE )
-        {
-            OUString sDocURL, sLibName, sModName;
-            sal_uInt16 nLine1 = 0, nLine2;
-
-            if ( !m_bIsAppScript )
-            {
-                Reference< frame::XModel > xModel = MiscUtils::tDocUrlToModel( m_sScriptingContext );
-
-                if ( xModel.is() )
-                {
-                    sDocURL = xModel->getURL();
-                    if ( sDocURL.isEmpty() )
-                    {
-                        Sequence < PropertyValue > aProps = xModel->getArgs();
-                        sal_Int32 nProps = aProps.getLength();
-                        const PropertyValue* pProps = aProps.getConstArray();
-                        for ( sal_Int32 i = 0; i < nProps; ++i )
-                        {
-                            // TODO: according to MBA the property 'Title' may change in future
-                            if ( pProps[i].Name == "Title" )
-                            {
-                                pProps[i].Value >>= sDocURL;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ( m_pMethod )
-            {
-                m_pMethod->GetLineRange( nLine1, nLine2 );
-                SbModule* pModule = m_pMethod->GetModule();
-                if ( pModule )
-                {
-                    sModName = pModule->GetName();
-                    StarBASIC* pBasic = static_cast< StarBASIC* >( pModule->GetParent() );
-                    if ( pBasic )
-                        sLibName = pBasic->GetName();
-                }
-            }
-
-            if ( m_xContext.is() )
-            {
-                Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( m_xContext );
-
-                Reference < frame::XDispatchProvider > xProv( xDesktop->getCurrentFrame(), UNO_QUERY );
-
-                if ( xProv.is() )
-                {
-                    Reference< frame::XDispatchHelper > xHelper( frame::DispatchHelper::create( m_xContext ) );
-
-                    Sequence < PropertyValue > aArgs(7);
-                    aArgs[0].Name = "Document";
-                    aArgs[0].Value <<= sDocURL;
-                    aArgs[1].Name = "LibName";
-                    aArgs[1].Value <<= sLibName;
-                    aArgs[2].Name = "Name";
-                    aArgs[2].Value <<= sModName;
-                    aArgs[3].Name = "Type";
-                    aArgs[3].Value <<= OUString("Module");
-                    aArgs[4].Name = "Line";
-                    aArgs[4].Value <<= static_cast< sal_uInt32 >( nLine1 );
-                    xHelper->executeDispatch( xProv, ".uno:BasicIDEAppear", OUString(), 0, aArgs );
-                }
-            }
-        }
-        else
+        if ( aFunctionName != BASPROV_PROPERTY_EDITABLE )
         {
             throw IllegalArgumentException(
                 "BasicMethodNodeImpl::invoke: function name not supported!",
                 Reference< XInterface >(), 1 );
         }
 
+        OUString sDocURL, sLibName, sModName;
+        sal_uInt16 nLine1 = 0, nLine2;
+
+        if ( !m_bIsAppScript )
+        {
+            Reference< frame::XModel > xModel = MiscUtils::tDocUrlToModel( m_sScriptingContext );
+
+            if ( xModel.is() )
+            {
+                sDocURL = xModel->getURL();
+                if ( sDocURL.isEmpty() )
+                {
+                    Sequence < PropertyValue > aProps = xModel->getArgs();
+                    sal_Int32 nProps = aProps.getLength();
+                    const PropertyValue* pProps = aProps.getConstArray();
+                    for ( sal_Int32 i = 0; i < nProps; ++i )
+                    {
+                        // TODO: according to MBA the property 'Title' may change in future
+                        if ( pProps[i].Name == "Title" )
+                        {
+                            pProps[i].Value >>= sDocURL;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ( m_pMethod )
+        {
+            m_pMethod->GetLineRange( nLine1, nLine2 );
+            SbModule* pModule = m_pMethod->GetModule();
+            if ( pModule )
+            {
+                sModName = pModule->GetName();
+                StarBASIC* pBasic = static_cast< StarBASIC* >( pModule->GetParent() );
+                if ( pBasic )
+                    sLibName = pBasic->GetName();
+            }
+        }
+
+        if ( m_xContext.is() )
+        {
+            Reference< frame::XDesktop2 > xDesktop = frame::Desktop::create( m_xContext );
+
+            Reference < frame::XDispatchProvider > xProv( xDesktop->getCurrentFrame(), UNO_QUERY );
+
+            if ( xProv.is() )
+            {
+                Reference< frame::XDispatchHelper > xHelper( frame::DispatchHelper::create( m_xContext ) );
+
+                Sequence < PropertyValue > aArgs(7);
+                aArgs[0].Name = "Document";
+                aArgs[0].Value <<= sDocURL;
+                aArgs[1].Name = "LibName";
+                aArgs[1].Value <<= sLibName;
+                aArgs[2].Name = "Name";
+                aArgs[2].Value <<= sModName;
+                aArgs[3].Name = "Type";
+                aArgs[3].Value <<= OUString("Module");
+                aArgs[4].Name = "Line";
+                aArgs[4].Value <<= static_cast< sal_uInt32 >( nLine1 );
+                xHelper->executeDispatch( xProv, ".uno:BasicIDEAppear", OUString(), 0, aArgs );
+            }
+        }
+
+
         return Any();
     }
 
 
-    void BasicMethodNodeImpl::setValue( const OUString& aPropertyName, const Any& aValue )
-        throw (UnknownPropertyException, script::CannotConvertException,
-               reflection::InvocationTargetException, RuntimeException, std::exception)
+    void BasicMethodNodeImpl::setValue( const OUString&, const Any& )
     {
-        (void)aPropertyName;
-        (void)aValue;
-
         throw UnknownPropertyException(
             "BasicMethodNodeImpl::setValue: property name is unknown!" );
     }
 
 
-    Any BasicMethodNodeImpl::getValue( const OUString& aPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any BasicMethodNodeImpl::getValue( const OUString& )
     {
-        (void)aPropertyName;
-
         throw UnknownPropertyException(
             "BasicMethodNodeImpl::getValue: property name is unknown!" );
     }
 
 
-    sal_Bool BasicMethodNodeImpl::hasMethod( const OUString& aName ) throw (RuntimeException, std::exception)
+    sal_Bool BasicMethodNodeImpl::hasMethod( const OUString& aName )
     {
         bool bReturn = false;
         if ( aName == BASPROV_PROPERTY_EDITABLE )
@@ -308,11 +287,9 @@ namespace basprov
     }
 
 
-    sal_Bool BasicMethodNodeImpl::hasProperty( const OUString& aName ) throw (RuntimeException, std::exception)
+    sal_Bool BasicMethodNodeImpl::hasProperty( const OUString& )
     {
-        (void)aName;
-
-        return sal_False;
+        return false;
     }
 
 

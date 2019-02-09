@@ -18,7 +18,7 @@
  */
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_TOCNTNTANCHOREDOBJECTPOSITION_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_TOCNTNTANCHOREDOBJECTPOSITION_HXX
-#include <anchoredobjectposition.hxx>
+#include "anchoredobjectposition.hxx"
 
 class SwFrame;
 class SwTextFrame;
@@ -68,11 +68,11 @@ namespace objectpositioning
                 @return constant reference to <SwFrame> object, at which the
                 horizontal position is determined.
             */
-            const SwFrame& _GetHoriVirtualAnchor( const SwLayoutFrame& _pProposedFrame ) const;
+            const SwFrame& GetHoriVirtualAnchor( const SwLayoutFrame& _pProposedFrame ) const;
 
         public:
             SwToContentAnchoredObjectPosition( SdrObject& _rDrawObj );
-            virtual ~SwToContentAnchoredObjectPosition();
+            virtual ~SwToContentAnchoredObjectPosition() override;
 
             /** calculate position of object
             */

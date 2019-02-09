@@ -21,8 +21,7 @@
 #define INCLUDED_IDL_INC_BASOBJ_HXX
 
 #include <tools/ref.hxx>
-#include <bastype.hxx>
-#include <tools/pstm.hxx>
+#include "bastype.hxx"
 #include <functional>
 #include <vector>
 
@@ -73,17 +72,16 @@ public:
         p->AddFirstRef();
     }
 
-    T pop_back()
+    void pop_back()
     {
         T p = base_t::back();
         base_t::pop_back();
         if( p )
             p->ReleaseRef();
-        return p;
     }
 };
 
-class SvMetaObject : public SvRttiBase
+class SvMetaObject : public SvRefBase
 {
 protected:
     OString      aName;
@@ -103,7 +101,6 @@ public:
     void                      SetName( const OString& rName );
     virtual const OString &  GetName() const { return aName; }
 
-    virtual bool        Test( SvTokenStream & rInStm );
     virtual bool        ReadSvIdl( SvIdlDataBase &, SvTokenStream & rInStm );
 };
 
@@ -116,13 +113,13 @@ public:
 
     const OString &     GetName() const override
                         {
-                            return ( !aRef.Is()
+                            return ( !aRef.is()
                                     || !SvMetaObject::GetName().isEmpty() )
                                 ? SvMetaObject::GetName()
                                 : aRef->GetName();
                         }
 
-    SvMetaReference *   GetRef() const { return aRef; }
+    SvMetaReference *   GetRef() const { return aRef.get(); }
     void                SetRef( SvMetaReference * pRef  )
                         { aRef = pRef; }
 };

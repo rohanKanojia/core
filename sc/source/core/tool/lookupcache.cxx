@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "lookupcache.hxx"
-#include "document.hxx"
-#include "queryentry.hxx"
+#include <lookupcache.hxx>
+#include <document.hxx>
+#include <queryentry.hxx>
 #include <brdcst.hxx>
+
+#include <sal/log.hxx>
 
 ScLookupCache::QueryCriteria::QueryCriteria( const ScQueryEntry& rEntry ) :
     mfVal(0.0), mbAlloc(false), mbString(false)
@@ -66,9 +68,10 @@ ScLookupCache::QueryCriteria::~QueryCriteria()
     deleteString();
 }
 
-ScLookupCache::ScLookupCache( ScDocument * pDoc, const ScRange & rRange ) :
+ScLookupCache::ScLookupCache( ScDocument * pDoc, const ScRange & rRange, ScLookupCacheMap & cacheMap ) :
     maRange( rRange),
-    mpDoc( pDoc)
+    mpDoc( pDoc),
+    mCacheMap(cacheMap)
 {
 }
 
@@ -79,7 +82,7 @@ ScLookupCache::~ScLookupCache()
 ScLookupCache::Result ScLookupCache::lookup( ScAddress & o_rResultAddress,
         const QueryCriteria & rCriteria, const ScAddress & rQueryAddress ) const
 {
-    QueryMap::const_iterator it( maQueryMap.find( QueryKey( rQueryAddress,
+    auto it( maQueryMap.find( QueryKey( rQueryAddress,
                     rCriteria.getQueryOp())));
     if (it == maQueryMap.end())
         return NOT_CACHED;
@@ -90,6 +93,20 @@ ScLookupCache::Result ScLookupCache::lookup( ScAddress & o_rResultAddress,
         return NOT_AVAILABLE;
     o_rResultAddress = rResult.maAddress;
     return FOUND;
+}
+
+SCROW ScLookupCache::lookup( const QueryCriteria & rCriteria ) const
+{
+    // try to find the row index for which we have already performed lookup
+    auto it = std::find_if(maQueryMap.begin(), maQueryMap.end(),
+        [&rCriteria](const std::pair<QueryKey, QueryCriteriaAndResult>& rEntry) {
+            return rEntry.second.maCriteria == rCriteria;
+        });
+    if (it != maQueryMap.end())
+        return it->first.mnRow;
+
+    // not found
+    return -1;
 }
 
 bool ScLookupCache::insert( const ScAddress & rResultAddress,
@@ -111,7 +128,7 @@ void ScLookupCache::Notify( const SfxHint& rHint )
     if (!mpDoc->IsInDtorClear())
     {
         const ScHint* p = dynamic_cast<const ScHint*>(&rHint);
-        if ((p && (p->GetId() & SC_HINT_DATACHANGED)) || dynamic_cast<const ScAreaChangedHint*>(&rHint))
+        if ((p && (p->GetId() == SfxHintId::ScDataChanged)) || dynamic_cast<const ScAreaChangedHint*>(&rHint))
         {
             mpDoc->RemoveLookupCache( *this);
             delete this;

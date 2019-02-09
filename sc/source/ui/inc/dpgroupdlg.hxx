@@ -20,13 +20,12 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_DPGROUPDLG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_DPGROUPDLG_HXX
 
-#include <vcl/fixed.hxx>
 #include <vcl/dialog.hxx>
 #include <vcl/button.hxx>
 #include <vcl/field.hxx>
 #include <svx/checklbx.hxx>
 #include "editfield.hxx"
-#include "dpgroup.hxx"
+#include <dpnumgroupinfo.hxx>
 
 class ScDPGroupEditHelper
 {
@@ -46,7 +45,7 @@ private:
     virtual bool        ImplGetValue( double& rfValue ) const = 0;
     virtual void        ImplSetValue( double fValue ) = 0;
 
-    DECL_LINK_TYPED( ClickHdl, Button*, void );
+    DECL_LINK( ClickHdl, Button*, void );
 
 private:
     VclPtr<RadioButton>        mpRbAuto;
@@ -85,14 +84,14 @@ private:
 
 private:
     VclPtr<DateField>          mpEdValue;
-    Date                maNullDate;
+    Date const                maNullDate;
 };
 
 class ScDPNumGroupDlg : public ModalDialog
 {
 public:
     explicit            ScDPNumGroupDlg( vcl::Window* pParent, const ScDPNumGroupInfo& rInfo );
-    virtual             ~ScDPNumGroupDlg();
+    virtual             ~ScDPNumGroupDlg() override;
     virtual void        dispose() override;
     ScDPNumGroupInfo    GetGroupInfo() const;
 
@@ -113,14 +112,14 @@ class ScDPDateGroupDlg : public ModalDialog
 public:
     explicit            ScDPDateGroupDlg( vcl::Window* pParent, const ScDPNumGroupInfo& rInfo,
                             sal_Int32 nDatePart, const Date& rNullDate );
-    virtual             ~ScDPDateGroupDlg();
+    virtual             ~ScDPDateGroupDlg() override;
     virtual void        dispose() override;
     ScDPNumGroupInfo    GetGroupInfo() const;
     sal_Int32           GetDatePart() const;
 
 private:
-    DECL_LINK_TYPED( ClickHdl, Button*, void );
-    DECL_LINK_TYPED( CheckHdl, SvTreeListBox*, void );
+    DECL_LINK( ClickHdl, Button*, void );
+    DECL_LINK( CheckHdl, SvTreeListBox*, void );
 
 private:
     VclPtr<RadioButton>         mpRbAutoStart;

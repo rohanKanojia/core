@@ -17,40 +17,43 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "xlroot.hxx"
-#include <rtl/strbuf.hxx>
+#include <memory>
+#include <xlroot.hxx>
+#include <sal/log.hxx>
 #include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
-#include <com/sun/star/frame/XFramesSupplier.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <comphelper/processfactory.hxx>
+#include <sot/storage.hxx>
 #include <vcl/svapp.hxx>
 #include <svl/stritem.hxx>
 #include <svl/languageoptions.hxx>
 #include <sfx2/objsh.hxx>
-#include <sfx2/printer.hxx>
 #include <sfx2/docfile.hxx>
+#include <sfx2/sfxsids.hrc>
 #include <vcl/font.hxx>
 #include <vcl/settings.hxx>
 
 #include <editeng/editstat.hxx>
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <editeng/eeitem.hxx>
-#include "document.hxx"
-#include "docpool.hxx"
-#include "docuno.hxx"
-#include "editutil.hxx"
-#include "drwlayer.hxx"
-#include "scextopt.hxx"
-#include "patattr.hxx"
-#include "fapihelper.hxx"
-#include "xlconst.hxx"
-#include "xlstyle.hxx"
-#include "xlchart.hxx"
-#include "xltracer.hxx"
+#include <document.hxx>
+#include <docpool.hxx>
+#include <docuno.hxx>
+#include <editutil.hxx>
+#include <drwlayer.hxx>
+#include <scextopt.hxx>
+#include <patattr.hxx>
+#include <fapihelper.hxx>
+#include <xlconst.hxx>
+#include <xlstyle.hxx>
+#include <xlchart.hxx>
+#include <xltracer.hxx>
+#include <xltools.hxx>
+#include <unotools/configmgr.hxx>
 #include <unotools/useroptions.hxx>
-#include "root.hxx"
+#include <root.hxx>
 
 namespace ApiScriptType = ::com::sun::star::i18n::ScriptType;
 
@@ -61,8 +64,6 @@ using ::com::sun::star::uno::UNO_SET_THROW;
 using ::com::sun::star::awt::XDevice;
 using ::com::sun::star::awt::DeviceInfo;
 using ::com::sun::star::frame::XFrame;
-using ::com::sun::star::frame::XFramesSupplier;
-using ::com::sun::star::lang::XMultiServiceFactory;
 
 using namespace ::com::sun::star;
 
@@ -75,14 +76,15 @@ XclDebugObjCounter::~XclDebugObjCounter()
 }
 #endif
 
+const OUStringLiteral XclRootData::gaDefPassword( "VelvetSweatshop" );
+
 XclRootData::XclRootData( XclBiff eBiff, SfxMedium& rMedium,
-        tools::SvRef<SotStorage> xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc, bool bExport ) :
+        tools::SvRef<SotStorage> const & xRootStrg, ScDocument& rDoc, rtl_TextEncoding eTextEnc, bool bExport ) :
     meBiff( eBiff ),
     meOutput( EXC_OUTPUT_BINARY ),
     mrMedium( rMedium ),
     mxRootStrg( xRootStrg ),
     mrDoc( rDoc ),
-    maDefPassword( "VelvetSweatshop" ),
     meTextEnc( eTextEnc ),
     meSysLang( Application::GetSettings().GetLanguageTag().getLanguageType() ),
     meDocLang( Application::GetSettings().GetLanguageTag().getLanguageType() ),
@@ -100,8 +102,9 @@ XclRootData::XclRootData( XclBiff eBiff, SfxMedium& rMedium,
     mnScTab( 0 ),
     mbExport( bExport )
 {
- maUserName = SvtUserOptions().GetLastName();
-    if( maUserName.isEmpty() )
+    if (!utl::ConfigManager::IsFuzzing())
+        maUserName = SvtUserOptions().GetLastName();
+    if (maUserName.isEmpty())
         maUserName = "Calc";
 
     switch( ScGlobal::GetDefaultScriptType() )
@@ -128,7 +131,7 @@ XclRootData::XclRootData( XclBiff eBiff, SfxMedium& rMedium,
 
     // document URL and path
     if( const SfxItemSet* pItemSet = mrMedium.GetItemSet() )
-        if( const SfxStringItem* pItem = static_cast< const SfxStringItem* >( pItemSet->GetItem( SID_FILE_NAME ) ) )
+        if( const SfxStringItem* pItem = pItemSet->GetItem<SfxStringItem>( SID_FILE_NAME ) )
             maDocUrl = pItem->GetValue();
     maBasePath = maDocUrl.copy( 0, maDocUrl.lastIndexOf( '/' ) + 1 );
 
@@ -150,7 +153,7 @@ XclRootData::XclRootData( XclBiff eBiff, SfxMedium& rMedium,
     }
     catch( const Exception& e)
     {
-        SAL_WARN( "sc", "XclRootData::XclRootData - cannot get output device info: " << e.Message );
+        SAL_WARN( "sc", "XclRootData::XclRootData - cannot get output device info: " << e );
     }
 }
 
@@ -208,7 +211,11 @@ void XclRoot::SetCharWidth( const XclFontData& rFontData )
         aFont.SetCharSet( rFontData.GetFontEncoding() );
         aFont.SetWeight( rFontData.GetScWeight() );
         pPrinter->SetFont( aFont );
-        mrData.mnCharWidth = pPrinter->GetTextWidth( OUString('0') );
+        // Usually digits have the same width, but in some fonts they don't ...
+        // Match the import in sc/source/filter/oox/unitconverter.cxx
+        // UnitConverter::finalizeImport()
+        for (sal_Unicode cChar = '0'; cChar <= '9'; ++cChar)
+            mrData.mnCharWidth = std::max( pPrinter->GetTextWidth( OUString(cChar)), mrData.mnCharWidth);
     }
     if( mrData.mnCharWidth <= 0 )
     {
@@ -231,17 +238,17 @@ sal_Int32 XclRoot::GetHmmFromPixelY( double fPixelY ) const
 uno::Sequence< beans::NamedValue > XclRoot::RequestEncryptionData( ::comphelper::IDocPasswordVerifier& rVerifier ) const
 {
     ::std::vector< OUString > aDefaultPasswords;
-    aDefaultPasswords.push_back( mrData.maDefPassword );
+    aDefaultPasswords.push_back( XclRootData::gaDefPassword );
     return ScfApiHelper::QueryEncryptionDataForMedium( mrData.mrMedium, rVerifier, &aDefaultPasswords );
 }
 
 bool XclRoot::HasVbaStorage() const
 {
     tools::SvRef<SotStorage> xRootStrg = GetRootStorage();
-    return xRootStrg.Is() && xRootStrg->IsContained( EXC_STORAGE_VBA_PROJECT );
+    return xRootStrg.is() && xRootStrg->IsContained( EXC_STORAGE_VBA_PROJECT );
 }
 
-tools::SvRef<SotStorage> XclRoot::OpenStorage( tools::SvRef<SotStorage> xStrg, const OUString& rStrgName ) const
+tools::SvRef<SotStorage> XclRoot::OpenStorage( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrgName ) const
 {
     return mrData.mbExport ?
         ScfTools::OpenStorageWrite( xStrg, rStrgName ) :
@@ -253,7 +260,7 @@ tools::SvRef<SotStorage> XclRoot::OpenStorage( const OUString& rStrgName ) const
     return OpenStorage( GetRootStorage(), rStrgName );
 }
 
-tools::SvRef<SotStorageStream> XclRoot::OpenStream( tools::SvRef<SotStorage> xStrg, const OUString& rStrmName ) const
+tools::SvRef<SotStorageStream> XclRoot::OpenStream( tools::SvRef<SotStorage> const & xStrg, const OUString& rStrmName ) const
 {
     return mrData.mbExport ?
         ScfTools::OpenStorageStreamWrite( xStrg, rStrmName ) :
@@ -314,7 +321,7 @@ SvNumberFormatter& XclRoot::GetFormatter() const
 
 DateTime XclRoot::GetNullDate() const
 {
-    return *GetFormatter().GetNullDate();
+    return GetFormatter().GetNullDate();
 }
 
 sal_uInt16 XclRoot::GetBaseYear() const
@@ -323,11 +330,16 @@ sal_uInt16 XclRoot::GetBaseYear() const
     return (GetNullDate().GetYear() == 1904) ? 1904 : 1900;
 }
 
+static const DateTime theOurCompatNullDate( Date( 30, 12, 1899 ));
+static const DateTime theExcelCutOverDate( Date( 1, 3, 1900 ));
+
 double XclRoot::GetDoubleFromDateTime( const DateTime& rDateTime ) const
 {
     double fValue = rDateTime - GetNullDate();
     // adjust dates before 1900-03-01 to get correct time values in the range [0.0,1.0)
-    if( rDateTime < DateTime( Date( 1, 3, 1900 ) ) )
+    /* XXX: this is only used when reading BIFF, otherwise we'd have to check
+     * for dateCompatibility==true as mentioned below. */
+    if( rDateTime < theExcelCutOverDate && GetNullDate() == theOurCompatNullDate )
         fValue -= 1.0;
     return fValue;
 }
@@ -336,8 +348,12 @@ DateTime XclRoot::GetDateTimeFromDouble( double fValue ) const
 {
     DateTime aDateTime = GetNullDate() + fValue;
     // adjust dates before 1900-03-01 to get correct time values
-    if( aDateTime < DateTime( Date( 1, 3, 1900 ) ) )
-        aDateTime += 1L;
+    /* FIXME: correction should only be done when writing BIFF or OOXML
+     * transitional with dateCompatibility==true (or absent for default true),
+     * but not if strict ISO/IEC 29500 which does not have the Excel error
+     * compatibility and the null date is the same 1899-12-30 as ours. */
+    if( aDateTime < theExcelCutOverDate && GetNullDate() == theOurCompatNullDate )
+        aDateTime.AddDays(1);
     return aDateTime;
 }
 
@@ -347,7 +363,7 @@ ScEditEngineDefaulter& XclRoot::GetEditEngine() const
     {
         mrData.mxEditEngine.reset( new ScEditEngineDefaulter( GetDoc().GetEnginePool() ) );
         ScEditEngineDefaulter& rEE = *mrData.mxEditEngine;
-        rEE.SetRefMapMode( MAP_100TH_MM );
+        rEE.SetRefMapMode(MapMode(MapUnit::Map100thMM));
         rEE.SetEditTextObjectPool( GetDoc().GetEditPool() );
         rEE.SetUpdateMode( false );
         rEE.EnableUndo( false );
@@ -362,19 +378,22 @@ ScHeaderEditEngine& XclRoot::GetHFEditEngine() const
     {
         mrData.mxHFEditEngine.reset( new ScHeaderEditEngine( EditEngine::CreatePool() ) );
         ScHeaderEditEngine& rEE = *mrData.mxHFEditEngine;
-        rEE.SetRefMapMode( MAP_TWIP );  // headers/footers use twips as default metric
+        rEE.SetRefMapMode(MapMode(MapUnit::MapTwip)); // headers/footers use twips as default metric
         rEE.SetUpdateMode( false );
         rEE.EnableUndo( false );
         rEE.SetControlWord( rEE.GetControlWord() & ~EEControlBits::ALLOWBIGOBJS );
 
         // set Calc header/footer defaults
         SfxItemSet* pEditSet = new SfxItemSet( rEE.GetEmptyItemSet() );
-        SfxItemSet aItemSet( *GetDoc().GetPool(), ATTR_PATTERN_START, ATTR_PATTERN_END );
+        SfxItemSet aItemSet( *GetDoc().GetPool(), svl::Items<ATTR_PATTERN_START, ATTR_PATTERN_END>{} );
         ScPatternAttr::FillToEditItemSet( *pEditSet, aItemSet );
         // FillToEditItemSet() adjusts font height to 1/100th mm, we need twips
-        pEditSet->Put( aItemSet.Get( ATTR_FONT_HEIGHT ), EE_CHAR_FONTHEIGHT );
-        pEditSet->Put( aItemSet.Get( ATTR_CJK_FONT_HEIGHT ), EE_CHAR_FONTHEIGHT_CJK );
-        pEditSet->Put( aItemSet.Get( ATTR_CTL_FONT_HEIGHT ), EE_CHAR_FONTHEIGHT_CTL );
+        std::unique_ptr<SfxPoolItem> pNewItem( aItemSet.Get( ATTR_FONT_HEIGHT ).CloneSetWhich(EE_CHAR_FONTHEIGHT));
+        pEditSet->Put( *pNewItem );
+        pNewItem = aItemSet.Get( ATTR_CJK_FONT_HEIGHT ).CloneSetWhich(EE_CHAR_FONTHEIGHT_CJK);
+        pEditSet->Put( *pNewItem );
+        pNewItem = aItemSet.Get( ATTR_CTL_FONT_HEIGHT ).CloneSetWhich(EE_CHAR_FONTHEIGHT_CTL);
+        pEditSet->Put( *pNewItem );
         rEE.SetDefaults( pEditSet );    // takes ownership
    }
     return *mrData.mxHFEditEngine;
@@ -386,7 +405,7 @@ EditEngine& XclRoot::GetDrawEditEngine() const
     {
         mrData.mxDrawEditEng.reset( new EditEngine( &GetDoc().GetDrawLayer()->GetItemPool() ) );
         EditEngine& rEE = *mrData.mxDrawEditEng;
-        rEE.SetRefMapMode( MAP_100TH_MM );
+        rEE.SetRefMapMode(MapMode(MapUnit::Map100thMM));
         rEE.SetUpdateMode( false );
         rEE.EnableUndo( false );
         rEE.SetControlWord( rEE.GetControlWord() & ~EEControlBits::ALLOWBIGOBJS );

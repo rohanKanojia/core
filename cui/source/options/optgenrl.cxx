@@ -18,20 +18,29 @@
  */
 
 #include <comphelper/string.hxx>
+#include <comphelper/processfactory.hxx>
+
+#include <config_gpgme.h>
+#if HAVE_FEATURE_GPGME
+# include <com/sun/star/xml/crypto/GPGSEInitializer.hpp>
+# include <com/sun/star/xml/crypto/XXMLSecurityContext.hpp>
+#endif
+
+#include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include <unotools/saveopt.hxx>
 #include <svl/intitem.hxx>
 #include <vcl/edit.hxx>
+#include <vcl/lstbox.hxx>
 #include <vcl/settings.hxx>
 
-#include <cuires.hrc>
 #include <unotools/useroptions.hxx>
-#include "cuioptgenrl.hxx"
-#include <dialmgr.hxx>
+#include <cuioptgenrl.hxx>
 #include <svx/dlgutil.hxx>
 #include <svx/svxids.hrc>
+
+using namespace css;
 
 namespace
 {
@@ -191,7 +200,7 @@ public:
         //We want all widgets inside a container, so each row of the toplevel
         //grid has another container in it. To avoid adding spacing to these
         //empty grids they all default to invisible, so show them if their
-        //children are visibles
+        //children are visible
         pEdit->GetParent()->Show();
         pEdit->Show();
     }
@@ -203,7 +212,18 @@ SvxGeneralTabPage::SvxGeneralTabPage(vcl::Window* pParent, const SfxItemSet& rCo
     : SfxTabPage(pParent, "OptUserPage", "cui/ui/optuserpage.ui", &rCoreSet)
 {
     get(m_pUseDataCB, "usefordocprop");
+
+    get(m_pCryptoFrame, "cryptography");
+    get(m_pSigningKeyLB, "signingkey");
+    get(m_pEncryptionKeyLB, "encryptionkey");
+    get(m_pEncryptToSelfCB, "encrypttoself");
     InitControls();
+#if HAVE_FEATURE_GPGME
+    InitCryptography();
+#else
+    m_pCryptoFrame->Hide();
+#endif
+
     SetExchangeSupport(); // this page needs ExchangeSupport
     SetLinks();
 }
@@ -216,6 +236,10 @@ SvxGeneralTabPage::~SvxGeneralTabPage()
 void SvxGeneralTabPage::dispose()
 {
     m_pUseDataCB.clear();
+    m_pSigningKeyLB.clear();
+    m_pEncryptionKeyLB.clear();
+    m_pEncryptToSelfCB.clear();
+    m_pCryptoFrame.clear();
     SfxTabPage::dispose();
 }
 
@@ -226,20 +250,17 @@ void SvxGeneralTabPage::InitControls ()
 {
     // which language bit do we use? (see Lang and vRowInfo[] above)
     unsigned LangBit;
-    switch (LanguageType const eLang = Application::GetSettings().GetUILanguageTag().getLanguageType())
+    LanguageType l = Application::GetSettings().GetUILanguageTag().getLanguageType();
+    if (l == LANGUAGE_ENGLISH_US)
+        LangBit = Lang::US;
+    else if (l == LANGUAGE_RUSSIAN)
+        LangBit = Lang::Russian;
+    else
     {
-        case LANGUAGE_ENGLISH_US:
-            LangBit = Lang::US;
-            break;
-        case LANGUAGE_RUSSIAN:
-            LangBit = Lang::Russian;
-            break;
-        default:
-            if (MsLangId::isFamilyNameFirst(eLang))
-                LangBit = Lang::Eastern;
-            else
-                LangBit = Lang::Others;
-            break;
+        if (MsLangId::isFamilyNameFirst(l))
+            LangBit = Lang::Eastern;
+        else
+            LangBit = Lang::Others;
     }
 
     // creating rows
@@ -277,6 +298,48 @@ void SvxGeneralTabPage::InitControls ()
     }
 }
 
+void SvxGeneralTabPage::InitCryptography()
+{
+#if HAVE_FEATURE_GPGME
+    m_pCryptoFrame->Show();
+
+    uno::Reference< xml::crypto::XSEInitializer > xSEInitializer;
+    try
+    {
+        xSEInitializer = xml::crypto::GPGSEInitializer::create( comphelper::getProcessComponentContext() );
+        uno::Reference<xml::crypto::XXMLSecurityContext> xSC = xSEInitializer->createSecurityContext( OUString() );
+        if (xSC.is())
+        {
+            uno::Reference<xml::crypto::XSecurityEnvironment> xSE = xSC->getSecurityEnvironment();
+            uno::Sequence<uno::Reference<security::XCertificate>> xCertificates = xSE->getPersonalCertificates();
+
+            if (xCertificates.hasElements())
+            {
+                for (auto& xCert : xCertificates)
+                {
+                    m_pSigningKeyLB->InsertEntry( xCert->getIssuerName());
+                    m_pEncryptionKeyLB->InsertEntry( xCert->getIssuerName());
+                }
+            }
+
+             //tdf#115015: wrap checkbox text and listboxes if necessary
+            Size aPrefSize(m_pEncryptToSelfCB->get_preferred_size());
+            Size aSize(m_pEncryptToSelfCB->CalcMinimumSize(40*approximate_char_width()));
+            if (aPrefSize.Width() > aSize.Width())
+            {
+                 m_pSigningKeyLB->set_width_request(aSize.Width());
+                 m_pEncryptionKeyLB->set_width_request(aSize.Width());
+                 m_pEncryptToSelfCB->set_width_request(aSize.Width());
+                 m_pEncryptToSelfCB->set_height_request(aSize.Height());
+            }
+
+        }
+    }
+    catch ( uno::Exception const & )
+    {}
+#endif
+
+}
 
 void SvxGeneralTabPage::SetLinks ()
 {
@@ -288,19 +351,19 @@ void SvxGeneralTabPage::SetLinks ()
 }
 
 
-VclPtr<SfxTabPage> SvxGeneralTabPage::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+VclPtr<SfxTabPage> SvxGeneralTabPage::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxGeneralTabPage>::Create( pParent, *rAttrSet );
+    return VclPtr<SvxGeneralTabPage>::Create( pParent.pParent, *rAttrSet );
 }
 
 bool SvxGeneralTabPage::FillItemSet( SfxItemSet* )
 {
     // remove leading and trailing whitespaces
-    for (unsigned i = 0; i != vFields.size(); ++i)
-        vFields[i]->pEdit->SetText(comphelper::string::strip(vFields[i]->pEdit->GetText(), ' '));
+    for (auto const & i: vFields)
+        i->pEdit->SetText(comphelper::string::strip(i->pEdit->GetText(), ' '));
 
     bool bModified = false;
-    bModified |= GetAddress_Impl();
+    bModified |= GetData_Impl();
     SvtSaveOptions aSaveOpt;
     if ( m_pUseDataCB->IsChecked() != aSaveOpt.IsUseUserData() )
     {
@@ -312,7 +375,7 @@ bool SvxGeneralTabPage::FillItemSet( SfxItemSet* )
 
 void SvxGeneralTabPage::Reset( const SfxItemSet* rSet )
 {
-    SetAddress_Impl();
+    SetData_Impl();
 
     sal_uInt16 const nWhich = GetWhich(SID_FIELD_GRABFOCUS);
 
@@ -321,9 +384,9 @@ void SvxGeneralTabPage::Reset( const SfxItemSet* rSet )
         EditPosition nField = static_cast<EditPosition>(static_cast<const SfxUInt16Item&>(rSet->Get(nWhich)).GetValue());
         if (nField != EditPosition::UNKNOWN)
         {
-            for (unsigned i = 0; i != vFields.size(); ++i)
-                if (nField == vFieldInfo[vFields[i]->iField].nGrabFocusId)
-                    vFields[i]->pEdit->GrabFocus();
+            for (auto const & i: vFields)
+                if (nField == vFieldInfo[i->iField].nGrabFocusId)
+                    i->pEdit->GrabFocus();
         }
         else
             vFields.front()->pEdit->GrabFocus();
@@ -336,7 +399,7 @@ void SvxGeneralTabPage::Reset( const SfxItemSet* rSet )
 // ModifyHdl_Impl()
 // This handler updates the initials (short name)
 // when one of the name fields was updated.
-IMPL_LINK_TYPED( SvxGeneralTabPage, ModifyHdl_Impl, Edit&, rEdit, void )
+IMPL_LINK( SvxGeneralTabPage, ModifyHdl_Impl, Edit&, rEdit, void )
 {
     // short name field and row
     Field& rShortName = *vFields[nShortNameField];
@@ -355,45 +418,67 @@ IMPL_LINK_TYPED( SvxGeneralTabPage, ModifyHdl_Impl, Edit&, rEdit, void )
     {
         OUString sShortName = rShortName.pEdit->GetText();
         // clear short name if it contains more characters than the number of initials
-        if ((unsigned)sShortName.getLength() > nInits)
+        if (static_cast<unsigned>(sShortName.getLength()) > nInits)
         {
             rShortName.pEdit->SetText(OUString());
         }
-        while ((unsigned)sShortName.getLength() < nInits)
+        while (static_cast<unsigned>(sShortName.getLength()) < nInits)
             sShortName += " ";
         OUString sName = rEdit.GetText();
         OUString sLetter = sName.isEmpty()
-            ? OUString(sal_Unicode(' ')) : sName.copy(0, 1);
+            ? OUString(u' ') : sName.copy(0, 1);
         rShortName.pEdit->SetText(sShortName.replaceAt(nField, 1, sLetter).trim());
     }
 }
 
 
-bool SvxGeneralTabPage::GetAddress_Impl()
+bool SvxGeneralTabPage::GetData_Impl()
 {
     // updating
     SvtUserOptions aUserOpt;
-    for (unsigned i = 0; i != vFields.size(); ++i)
+    for (auto const & i: vFields)
         aUserOpt.SetToken(
-            vFieldInfo[vFields[i]->iField].nUserOptionsId,
-            vFields[i]->pEdit->GetText()
+            vFieldInfo[i->iField].nUserOptionsId,
+            i->pEdit->GetText()
         );
 
     // modified?
-    for (unsigned i = 0; i != vFields.size(); ++i)
-        if (vFields[i]->pEdit->IsValueChangedFromSaved())
-            return true;
-    return false;
+    bool bModified = false;
+    for (auto const & i: vFields)
+    {
+        if (i->pEdit->IsValueChangedFromSaved())
+        {
+            bModified = true;
+            break;
+        }
+    }
+
+#if HAVE_FEATURE_GPGME
+    OUString aSK = m_pSigningKeyLB->GetSelectedEntryPos() == 0 ? OUString() //i.e. no key
+                       : m_pSigningKeyLB->GetSelectedEntry();
+    OUString aEK = m_pEncryptionKeyLB->GetSelectedEntryPos() == 0 ? OUString()
+                       : m_pEncryptionKeyLB->GetSelectedEntry();
+
+    aUserOpt.SetToken( UserOptToken::SigningKey, aSK );
+    aUserOpt.SetToken( UserOptToken::EncryptionKey, aEK );
+    aUserOpt.SetBoolValue( UserOptToken::EncryptToSelf, m_pEncryptToSelfCB->IsChecked() );
+
+    bModified |= m_pSigningKeyLB->IsValueChangedFromSaved() ||
+                 m_pEncryptionKeyLB->IsValueChangedFromSaved() ||
+                 m_pEncryptToSelfCB->IsValueChangedFromSaved();
+#endif
+
+    return bModified;
 }
 
 
-void SvxGeneralTabPage::SetAddress_Impl()
+void SvxGeneralTabPage::SetData_Impl()
 {
     // updating and disabling edit boxes
     SvtUserOptions aUserOpt;
-    for (unsigned iRow = 0; iRow != vRows.size(); ++iRow)
+    for (auto const & i: vRows)
     {
-        Row& rRow = *vRows[iRow];
+        Row& rRow = *i;
         // the label is enabled if any of its edit fields are enabled
         bool bEnableLabel = false;
         for (unsigned iField = rRow.nFirstField; iField != rRow.nLastField; ++iField)
@@ -411,16 +496,28 @@ void SvxGeneralTabPage::SetAddress_Impl()
     }
 
     // saving
-    for (unsigned i = 0; i != vFields.size(); ++i)
-        vFields[i]->pEdit->SaveValue();
+    for (auto const & i: vFields)
+        i->pEdit->SaveValue();
+
+#if HAVE_FEATURE_GPGME
+    OUString aSK = aUserOpt.GetToken(UserOptToken::SigningKey);
+    aSK.isEmpty() ? m_pSigningKeyLB->SelectEntryPos( 0 ) //i.e. 'No Key'
+                  : m_pSigningKeyLB->SelectEntry( aSK );
+
+    OUString aEK = aUserOpt.GetToken(UserOptToken::EncryptionKey);
+    aEK.isEmpty() ? m_pEncryptionKeyLB->SelectEntryPos( 0 ) //i.e. 'No Key'
+                  : m_pEncryptionKeyLB->SelectEntry( aEK );
+
+    m_pEncryptToSelfCB->Check( aUserOpt.GetEncryptToSelf() );
+#endif
 }
 
 
-SvxGeneralTabPage::sfxpg SvxGeneralTabPage::DeactivatePage( SfxItemSet* pSet_ )
+DeactivateRC SvxGeneralTabPage::DeactivatePage( SfxItemSet* pSet_ )
 {
     if ( pSet_ )
         FillItemSet( pSet_ );
-    return LEAVE_PAGE;
+    return DeactivateRC::LeavePage;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

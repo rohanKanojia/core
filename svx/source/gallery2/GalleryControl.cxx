@@ -17,13 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "GalleryControl.hxx"
+#include <GalleryControl.hxx>
 
-#include "gallery.hrc"
-#include "svx/galmisc.hxx"
-#include "svx/gallery1.hxx"
+#include <svx/galmisc.hxx>
+#include <svx/gallery1.hxx>
 #include "galbrws1.hxx"
-#include "galbrws2.hxx"
+#include <galbrws2.hxx>
 #include "GallerySplitter.hxx"
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
@@ -34,22 +33,20 @@ namespace svx { namespace sidebar {
 static const sal_Int32 gnInitialVerticalSplitPosition (150);
 
 GalleryControl::GalleryControl (
-    SfxBindings* /*pBindings*/,
     vcl::Window* pParentWindow)
     : Window(pParentWindow, WB_SIZEABLE|WB_MOVEABLE|WB_CLOSEABLE|WB_HIDE),
       mpGallery (Gallery::GetGalleryInstance()),
       mpSplitter(VclPtr<GallerySplitter>::Create(
-
               this,
               WB_HSCROLL,
               [this] () { return this->InitSettings(); })),
       mpBrowser1(VclPtr<GalleryBrowser1>::Create(
-
               this,
               mpGallery,
-              [this] (KeyEvent const& rEvent, vcl::Window *const pWindow)
-                  { return this->GalleryKeyInput(rEvent, pWindow); },
-              [this] () { return this->ThemeSelectionHasChanged(); })),
+              [this] (KeyEvent const& rEvent, vcl::Window *const /*pWindow*/)
+                  { return this->GalleryKeyInput(rEvent); },
+              [this] ()
+                  { return mpBrowser2->SelectTheme(mpBrowser1->GetSelectedTheme()); })),
       mpBrowser2(VclPtr<GalleryBrowser2>::Create(this, mpGallery)),
       maLastSize(GetOutputSizePixel()),
       mbIsInitialResize(true)
@@ -133,7 +130,7 @@ void GalleryControl::Resize()
     }
     mbIsInitialResize = false;
 
-    const long nFrameLen = LogicToPixel( Size( 3, 0 ), MAP_APPFONT ).Width();
+    const long nFrameLen = LogicToPixel(Size(3, 0), MapMode(MapUnit::MapAppFont)).Width();
     const long nFrameLen2 = nFrameLen << 1;
 
     if(bNewLayoutHorizontal)
@@ -147,7 +144,7 @@ void GalleryControl::Resize()
             Size( nSplitSize, aNewSize.Height() ) );
 
         mpSplitter->SetDragRectPixel(
-            Rectangle(
+            tools::Rectangle(
                 Point( nFrameLen2, 0 ),
                 Size( aNewSize.Width() - ( nFrameLen2 << 1 ) - nSplitSize, aNewSize.Height() ) ) );
 
@@ -166,7 +163,7 @@ void GalleryControl::Resize()
             Size( aNewSize.Width(), nSplitSize ) );
 
         mpSplitter->SetDragRectPixel(
-            Rectangle(
+            tools::Rectangle(
                 Point( 0, nFrameLen2 ),
                 Size( aNewSize.Width(), aNewSize.Height() - ( nFrameLen2 << 1 ) - nSplitSize ) ));
 
@@ -178,7 +175,7 @@ void GalleryControl::Resize()
     maLastSize = aNewSize;
 }
 
-bool GalleryControl::GalleryKeyInput( const KeyEvent& rKEvt, vcl::Window* )
+bool GalleryControl::GalleryKeyInput( const KeyEvent& rKEvt )
 {
     const sal_uInt16    nCode = rKEvt.GetKeyCode().GetCode();
     bool            bRet = ( !rKEvt.GetKeyCode().IsMod1() &&
@@ -188,25 +185,35 @@ bool GalleryControl::GalleryKeyInput( const KeyEvent& rKEvt, vcl::Window* )
     {
         if( !rKEvt.GetKeyCode().IsShift() )
         {
-            if( mpBrowser1->mpThemes->HasChildPathFocus( true ) )
-                mpBrowser2->GetViewWindow()->GrabFocus();
-            else if( mpBrowser2->GetViewWindow()->HasFocus() )
+            if( mpBrowser1->maNewTheme->HasFocus() )
+                mpBrowser1->mpThemes->GrabFocus();
+            else if( mpBrowser1->mpThemes->HasChildPathFocus( true ) )
                 mpBrowser2->maViewBox->GrabFocus();
             else if( mpBrowser2->maViewBox->HasFocus() )
-                mpBrowser1->maNewTheme->GrabFocus();
+                mpBrowser2->GetViewWindow()->GrabFocus();
             else
-                mpBrowser1->mpThemes->GrabFocus();
+            {
+                if( mpBrowser1->maNewTheme->IsEnabled() )
+                    mpBrowser1->maNewTheme->GrabFocus();
+                else
+                    mpBrowser1->mpThemes->GrabFocus();
+            }
         }
         else
         {
-            if( mpBrowser1->mpThemes->HasChildPathFocus( true ) )
-                mpBrowser1->maNewTheme->GrabFocus();
-            else if( mpBrowser1->maNewTheme->HasFocus() )
+            if( mpBrowser2->GetViewWindow()->HasFocus() )
                 mpBrowser2->maViewBox->GrabFocus();
             else if( mpBrowser2->maViewBox->HasFocus() )
-                mpBrowser2->GetViewWindow()->GrabFocus();
-            else
                 mpBrowser1->mpThemes->GrabFocus();
+            else if( mpBrowser1->mpThemes->HasChildPathFocus( true ) )
+            {
+                if( mpBrowser1->maNewTheme->IsEnabled() )
+                    mpBrowser1->maNewTheme->GrabFocus();
+                else
+                    mpBrowser2->GetViewWindow()->GrabFocus();
+            }
+            else
+                mpBrowser2->GetViewWindow()->GrabFocus();
         }
     }
 
@@ -220,12 +227,7 @@ void GalleryControl::GetFocus()
         mpBrowser1->GrabFocus();
 }
 
-void GalleryControl::ThemeSelectionHasChanged()
-{
-    mpBrowser2->SelectTheme(mpBrowser1->GetSelectedTheme());
-}
-
-IMPL_LINK_NOARG_TYPED( GalleryControl, SplitHdl, Splitter*, void )
+IMPL_LINK_NOARG( GalleryControl, SplitHdl, Splitter*, void )
 {
     if(mpSplitter->IsHorizontal())
     {

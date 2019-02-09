@@ -9,8 +9,8 @@
 
 #include "ChartLinePanel.hxx"
 
-#include "PropertyHelper.hxx"
-#include "ChartController.hxx"
+#include <PropertyHelper.hxx>
+#include <ChartController.hxx>
 
 #include <svx/xlnwtit.hxx>
 #include <svx/xlinjoit.hxx>
@@ -23,6 +23,8 @@
 #include <vcl/svapp.hxx>
 
 #include <com/sun/star/view/XSelectionSupplier.hpp>
+#include <com/sun/star/util/XModifyBroadcaster.hpp>
+#include <com/sun/star/chart2/XDiagram.hpp>
 
 namespace chart { namespace sidebar {
 
@@ -174,7 +176,7 @@ void ChartLinePanel::Initialize()
     SvxColorToolBoxControl* pToolBoxColor = getColorToolBoxControl(mpTBColor.get());
     pToolBoxColor->setColorSelectFunction(maLineColorWrapper);
 
-    setMapUnit(SFX_MAPUNIT_100TH_MM);
+    setMapUnit(MapUnit::Map100thMM);
     updateData();
 }
 
@@ -255,7 +257,7 @@ void ChartLinePanel::setLineStyle(const XLineStyleItem& rItem)
         return;
 
     PreventUpdate aPreventUpdate(mbUpdate);
-    xPropSet->setPropertyValue("LineStyle", css::uno::makeAny(rItem.GetValue()));
+    xPropSet->setPropertyValue("LineStyle", css::uno::Any(rItem.GetValue()));
 }
 
 void ChartLinePanel::setLineDash(const XLineDashItem& rItem)
@@ -273,7 +275,7 @@ void ChartLinePanel::setLineDash(const XLineDashItem& rItem)
             css::uno::Reference<css::lang::XMultiServiceFactory>(mxModel, css::uno::UNO_QUERY),
             "");
     xPropSet->setPropertyValue("LineDash", aAny);
-    xPropSet->setPropertyValue("LineDashName", css::uno::makeAny(aDashName));
+    xPropSet->setPropertyValue("LineDashName", css::uno::Any(aDashName));
 }
 
 void ChartLinePanel::setLineEndStyle(const XLineEndItem* /*pItem*/)
@@ -294,7 +296,7 @@ void ChartLinePanel::setLineJoint(const XLineJointItem* pItem)
 
     PreventUpdate aPreventUpdate(mbUpdate);
     if (pItem)
-        xPropSet->setPropertyValue("LineJoint", css::uno::makeAny(pItem->GetValue()));
+        xPropSet->setPropertyValue("LineJoint", css::uno::Any(pItem->GetValue()));
 }
 
 void ChartLinePanel::setLineCap(const XLineCapItem* /*pItem*/)
@@ -310,7 +312,7 @@ void ChartLinePanel::setLineTransparency(const XLineTransparenceItem& rItem)
         return;
 
     PreventUpdate aPreventUpdate(mbUpdate);
-    xPropSet->setPropertyValue("LineTransparence", css::uno::makeAny(rItem.GetValue()));
+    xPropSet->setPropertyValue("LineTransparence", css::uno::Any(rItem.GetValue()));
 }
 
 void ChartLinePanel::setLineWidth(const XLineWidthItem& rItem)
@@ -322,7 +324,7 @@ void ChartLinePanel::setLineWidth(const XLineWidthItem& rItem)
         return;
 
     PreventUpdate aPreventUpdate(mbUpdate);
-    xPropSet->setPropertyValue("LineWidth", css::uno::makeAny(rItem.GetValue()));
+    xPropSet->setPropertyValue("LineWidth", css::uno::Any(rItem.GetValue()));
 }
 
 } }

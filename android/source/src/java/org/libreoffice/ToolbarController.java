@@ -8,27 +8,15 @@
  */
 package org.libreoffice;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
-import android.support.v7.app.ActionBar;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.widget.ImageButton;
 import android.widget.Toast;
-
-import org.libreoffice.canvas.ImageUtils;
-import org.libreoffice.kit.Document;
-
-import java.sql.SQLOutput;
-import java.util.Arrays;
 
 /**
  * Controls the changes to the toolbar.
@@ -37,13 +25,16 @@ public class ToolbarController implements Toolbar.OnMenuItemClickListener {
     private static final String LOGTAG = ToolbarController.class.getSimpleName();
     private final Toolbar mToolbarTop;
 
-    private final ActionBar mActionBar;
-    private LibreOfficeMainActivity mContext;
-    private Menu mMainMenu;
+    private final LibreOfficeMainActivity mContext;
+    private final Menu mMainMenu;
 
-    public ToolbarController(LibreOfficeMainActivity context, ActionBar actionBar, Toolbar toolbarTop) {
+    private boolean isEditModeOn = false;
+    private String clipboardText = null;
+    ClipboardManager clipboardManager;
+    ClipData clipData;
+
+    public ToolbarController(LibreOfficeMainActivity context, Toolbar toolbarTop) {
         mToolbarTop = toolbarTop;
-        mActionBar = actionBar;
         mContext = context;
 
         mToolbarTop.inflateMenu(R.menu.main);
@@ -51,6 +42,7 @@ public class ToolbarController implements Toolbar.OnMenuItemClickListener {
         switchToViewMode();
 
         mMainMenu = mToolbarTop.getMenu();
+        clipboardManager = (ClipboardManager)mContext.getSystemService(Context.CLIPBOARD_SERVICE);
     }
 
     public void disableMenuItem(final int menuItemId, final boolean disabled) {
@@ -66,22 +58,80 @@ public class ToolbarController implements Toolbar.OnMenuItemClickListener {
         });
     }
 
+    public void setEditModeOn(boolean enabled) {
+        isEditModeOn = enabled;
+    }
+
+    public boolean getEditModeStatus() {
+        return isEditModeOn;
+    }
+
     /**
      * Change the toolbar to edit mode.
      */
     void switchToEditMode() {
         if (!LOKitShell.isEditingEnabled())
             return;
-
         // Ensure the change is done on UI thread
         LOKitShell.getMainHandler().post(new Runnable() {
             @Override
             public void run() {
                 mMainMenu.setGroupVisible(R.id.group_edit_actions, true);
+                if (!LibreOfficeMainActivity.isDeveloperMode() && mMainMenu.findItem(R.id.action_UNO_commands) != null) {
+                    mMainMenu.findItem(R.id.action_UNO_commands).setVisible(false);
+                } else {
+                    mMainMenu.findItem(R.id.action_UNO_commands).setVisible(true);
+                }
+                if(mContext.getTileProvider() != null && mContext.getTileProvider().isSpreadsheet()){
+                    mMainMenu.setGroupVisible(R.id.group_spreadsheet_options, true);
+                } else if(mContext.getTileProvider() != null && mContext.getTileProvider().isPresentation()){
+                    mMainMenu.setGroupVisible(R.id.group_presentation_options, true);
+                }
                 mToolbarTop.setNavigationIcon(R.drawable.ic_check);
-                mToolbarTop.setTitle(null);
                 mToolbarTop.setLogo(null);
+                setEditModeOn(true);
+            }
+        });
+    }
 
+    /**
+     * Show clipboard Actions on the toolbar
+     * */
+    void showClipboardActions(final String value){
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                if(value  != null){
+                    mMainMenu.setGroupVisible(R.id.group_edit_actions, false);
+                    mMainMenu.setGroupVisible(R.id.group_edit_clipboard, true);
+                    if(getEditModeStatus()){
+                        showHideClipboardCutAndCopy(true);
+                    } else {
+                        mMainMenu.findItem(R.id.action_cut).setVisible(false);
+                        mMainMenu.findItem(R.id.action_paste).setVisible(false);
+                    }
+                    clipboardText = value;
+                }
+            }
+        });
+    }
+
+    void hideClipboardActions(){
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mMainMenu.setGroupVisible(R.id.group_edit_actions, getEditModeStatus());
+                mMainMenu.setGroupVisible(R.id.group_edit_clipboard, false);
+            }
+        });
+    }
+
+    void showHideClipboardCutAndCopy(final boolean option){
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mMainMenu.findItem(R.id.action_copy).setVisible(option);
+                mMainMenu.findItem(R.id.action_cut).setVisible(option);
             }
         });
     }
@@ -90,17 +140,21 @@ public class ToolbarController implements Toolbar.OnMenuItemClickListener {
      * Change the toolbar to view mode.
      */
     void switchToViewMode() {
-        if (!LOKitShell.isEditingEnabled())
-            return;
-
         // Ensure the change is done on UI thread
         LOKitShell.getMainHandler().post(new Runnable() {
             @Override
             public void run() {
                 mMainMenu.setGroupVisible(R.id.group_edit_actions, false);
                 mToolbarTop.setNavigationIcon(R.drawable.lo_icon);
-                mToolbarTop.setTitle(null);
                 mToolbarTop.setLogo(null);
+                setEditModeOn(false);
+                mContext.hideBottomToolbar();
+                mContext.hideSoftKeyboard();
+                if(mContext.getTileProvider() != null && mContext.getTileProvider().isSpreadsheet()){
+                    mMainMenu.setGroupVisible(R.id.group_spreadsheet_options, false);
+                } else if(mContext.getTileProvider() != null && mContext.getTileProvider().isPresentation()){
+                    mMainMenu.setGroupVisible(R.id.group_presentation_options, false);
+                }
             }
         });
     }
@@ -118,10 +172,20 @@ public class ToolbarController implements Toolbar.OnMenuItemClickListener {
                 mContext.showAbout();
                 return true;
             case R.id.action_save:
-                mContext.saveDocument();
+                if (mContext.isNewDocument) {
+                    mContext.saveAs();
+                } else {
+                    mContext.getTileProvider().saveDocument();
+                }
                 return true;
             case R.id.action_parts:
                 mContext.openDrawer();
+                return true;
+            case R.id.action_exportToPDF:
+                mContext.getTileProvider().exportToPDF(false);
+                return true;
+            case R.id.action_print:
+                mContext.getTileProvider().exportToPDF(true);
                 return true;
             case R.id.action_settings:
                 mContext.showSettings();
@@ -135,17 +199,78 @@ public class ToolbarController implements Toolbar.OnMenuItemClickListener {
             case R.id.action_redo:
                 LOKitShell.sendEvent(new LOEvent(LOEvent.UNO_COMMAND, ".uno:Redo"));
                 return true;
+            case R.id.action_presentation:
+                mContext.preparePresentation();
+                return true;
+            case R.id.action_add_slide:
+                mContext.addPart();
+                return true;
+            case R.id.action_add_worksheet:
+                mContext.addPart();
+                return true;
+            case R.id.action_rename_worksheet:
+            case R.id.action_rename_slide:
+                mContext.renamePart();
+                return true;
+            case R.id.action_delete_worksheet:
+                mContext.deletePart();
+                return true;
+            case R.id.action_delete_slide:
+                mContext.deletePart();
+                return true;
+            case R.id.action_back:
+                hideClipboardActions();
+                return true;
+            case R.id.action_copy:
+                LOKitShell.sendEvent(new LOEvent(LOEvent.UNO_COMMAND, ".uno:Copy"));
+                clipData = ClipData.newPlainText("clipboard data", clipboardText);
+                clipboardManager.setPrimaryClip(clipData);
+                Toast.makeText(mContext, mContext.getResources().getString(R.string.action_text_copied), Toast.LENGTH_SHORT).show();
+                return true;
+            case R.id.action_paste:
+                clipData = clipboardManager.getPrimaryClip();
+                ClipData.Item clipItem = clipData.getItemAt(0);
+                mContext.setDocumentChanged(true);
+                return mContext.getTileProvider().paste("text/plain;charset=utf-16", clipItem.getText().toString());
+            case R.id.action_cut:
+                clipData = ClipData.newPlainText("clipboard data", clipboardText);
+                clipboardManager.setPrimaryClip(clipData);
+                LOKitShell.sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL));
+                mContext.setDocumentChanged(true);
+                return true;
+            case R.id.action_UNO_commands:
+                mContext.showUNOCommandsToolbar();
+                return true;
         }
         return false;
     }
 
-    public void setupToolbars() {
-        LibreOfficeMainActivity activity = mContext;
-        if (activity.usesTemporaryFile()) {
+    void setupToolbars() {
+        if (mContext.usesTemporaryFile()) {
             disableMenuItem(R.id.action_save, true);
-            Toast.makeText(activity, activity.getString(R.string.temp_file_saving_disabled), Toast.LENGTH_LONG).show();
+            Toast.makeText(mContext, mContext.getString(R.string.temp_file_saving_disabled), Toast.LENGTH_LONG).show();
         }
-        mMainMenu.findItem(R.id.action_parts).setVisible(activity.isDrawerEnabled());
+        mMainMenu.findItem(R.id.action_parts).setVisible(mContext.isDrawerEnabled());
+    }
+
+    public void showItem(final int item){
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mMainMenu.findItem(item).setVisible(true);
+
+            }
+        });
+    }
+
+    public void hideItem(final int item){
+        LOKitShell.getMainHandler().post(new Runnable() {
+            @Override
+            public void run() {
+                mMainMenu.findItem(item).setVisible(false);
+
+            }
+        });
     }
 
 }

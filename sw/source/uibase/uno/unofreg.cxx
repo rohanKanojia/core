@@ -19,12 +19,11 @@
 
 #include <config_features.h>
 
-#include "SwXFilterOptions.hxx"
-#include "swdll.hxx"
-#include "unofreg.hxx"
-#include "unomailmerge.hxx"
+#include <SwXFilterOptions.hxx>
+#include <swdll.hxx>
+#include <unofreg.hxx>
+#include <unomailmerge.hxx>
 #include <sal/types.h>
-#include <osl/diagnose.h>
 #include <cppuhelper/factory.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
 #include <vcl/svapp.hxx>
@@ -41,7 +40,7 @@ using namespace ::com::sun::star::lang;
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void * SAL_CALL sw_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void * sw_component_getFactory(
     const sal_Char * pImplName,
     void * pServiceManager,
     void * )
@@ -63,14 +62,6 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL sw_component_getFactory(
                 SwTextDocument_createInstance,
                 SwTextDocument_getSupportedServiceNames() );
         }
-        else if( SwUnoModule_getImplementationName().equalsAsciiL(
-                                                    pImplName, nImplNameLen ) )
-        {
-            xFactory = ::cppu::createSingleFactory( xMSF,
-                SwUnoModule_getImplementationName(),
-                SwUnoModule_createInstance,
-                SwUnoModule_getSupportedServiceNames() );
-        }
 
         if( xFactory.is())
         {
@@ -83,7 +74,7 @@ SAL_DLLPUBLIC_EXPORT void * SAL_CALL sw_component_getFactory(
 
 } // extern "C"
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface* SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface*
 SwXMailMerge_get_implementation(css::uno::XComponentContext*,
                                 css::uno::Sequence<css::uno::Any> const &)
 {

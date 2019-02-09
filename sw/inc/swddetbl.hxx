@@ -25,14 +25,15 @@ class SwDDEFieldType;
 
 class SwDDETable : public SwTable
 {
-    SwDepend aDepend;
+    sw::WriterMultiListener m_aDepends;
+    SwDDEFieldType* m_pDDEType;
 public:
 
     // Ctor moves all lines/boxes from SwTable to it.
     // After that SwTable is empty and has to be deleted.
     SwDDETable( SwTable& rTable, SwDDEFieldType* pDDEType,
                 bool bUpdate = true );
-    virtual ~SwDDETable();
+    virtual ~SwDDETable() override;
 
     void ChangeContent();
     bool  NoDDETable();

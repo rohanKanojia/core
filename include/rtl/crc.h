@@ -20,39 +20,28 @@
 #ifndef INCLUDED_RTL_CRC_H
 #define INCLUDED_RTL_CRC_H
 
-#include <sal/config.h>
+#include "sal/config.h"
 
-#include <sal/saldllapi.h>
-#include <sal/types.h>
+#include "sal/saldllapi.h"
+#include "sal/types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*========================================================================
- *
- * rtl_crc32 interface.
- *
- *======================================================================*/
 /** Evaluate CRC32 over given data.
 
     This function evaluates the CRC polynomial 0xEDB88320.
 
-    @param  Crc    [in] CRC32 over previous data or zero.
-    @param  Data   [in] data buffer.
-    @param  DatLen [in] data buffer length.
+    @param[in] Crc    CRC32 over previous data or zero.
+    @param[in] Data   data buffer.
+    @param[in] DatLen data buffer length.
     @return new CRC32 value.
  */
 SAL_DLLPUBLIC sal_uInt32 SAL_CALL rtl_crc32 (
     sal_uInt32  Crc,
     const void *Data, sal_uInt32 DatLen
 ) SAL_THROW_EXTERN_C();
-
-/*========================================================================
- *
- * The End.
- *
- *======================================================================*/
 
 #ifdef __cplusplus
 }

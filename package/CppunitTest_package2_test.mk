@@ -22,13 +22,9 @@ $(eval $(call gb_CppunitTest_use_libraries,package2_test, \
     sal \
     tl \
     unotest \
-    $(gb_UWINAPI) \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,package2_test,\
-    offapi \
-    udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,package2_test))
 
 $(eval $(call gb_CppunitTest_use_components,package2_test,\
     configmgr/source/configmgr \

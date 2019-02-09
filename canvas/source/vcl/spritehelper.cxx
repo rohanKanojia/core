@@ -18,6 +18,7 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/numeric/ftools.hxx>
@@ -28,7 +29,7 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <basegfx/polygon/b2dpolygontriangulator.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
-#include <basegfx/tools/canvastools.hxx>
+#include <basegfx/utils/canvastools.hxx>
 #include <rtl/math.hxx>
 #include <tools/diagnose_ex.h>
 #include <vcl/alpha.hxx>
@@ -36,8 +37,11 @@
 #include <vcl/bitmapex.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/outdev.hxx>
+#include <vcl/BitmapMonochromeFilter.hxx>
+#include <vcl/opengl/OpenGLHelper.hxx>
 
 #include <canvas/canvastools.hxx>
+#include <config_features.h>
 
 #include "spritehelper.hxx"
 
@@ -128,7 +132,7 @@ namespace vclcanvas
 
             if( bNeedBitmapUpdate )
             {
-                Bitmap aBmp( mpBackBuffer->getOutDev().GetBitmap( aEmptyPoint,
+                BitmapEx aBmp( mpBackBuffer->getOutDev().GetBitmapEx( aEmptyPoint,
                                                                   aOutputSize ) );
 
                 if( isContentFullyOpaque() )
@@ -137,13 +141,13 @@ namespace vclcanvas
                     // opaque. Note: since we retrieved aBmp directly
                     // from an OutDev, it's already a 'display bitmap'
                     // on windows.
-                    maContent = BitmapEx( aBmp );
+                    maContent = aBmp;
                 }
                 else
                 {
                     // sprite content might contain alpha, create
                     // BmpEx, then.
-                    Bitmap aMask( mpBackBufferMask->getOutDev().GetBitmap( aEmptyPoint,
+                    BitmapEx aMask( mpBackBufferMask->getOutDev().GetBitmapEx( aEmptyPoint,
                                                                            aOutputSize ) );
 
                     // bitmasks are much faster than alphamasks on some platforms
@@ -153,14 +157,16 @@ namespace vclcanvas
                     {
                         OSL_FAIL("CanvasCustomSprite::redraw(): Mask bitmap is not "
                                    "monochrome (performance!)");
-                        aMask.MakeMono(255);
+                        BitmapEx aMaskEx(aMask);
+                        BitmapFilter::Filter(aMaskEx, BitmapMonochromeFilter(255));
+                        aMask = aMaskEx.GetBitmap();
                     }
 #endif
 
                     // Note: since we retrieved aBmp and aMask
                     // directly from an OutDev, it's already a
                     // 'display bitmap' on windows.
-                    maContent = BitmapEx( aBmp, aMask );
+                    maContent = BitmapEx( aBmp.GetBitmap(), aMask.GetBitmap() );
                 }
             }
 
@@ -179,8 +185,14 @@ namespace vclcanvas
 
             if( !bIdentityTransform )
             {
-                if( !::basegfx::fTools::equalZero( aTransform.get(0,1) ) ||
-                    !::basegfx::fTools::equalZero( aTransform.get(1,0) ) )
+                // Avoid the trick with the negative width in the OpenGL case,
+                // OutputDevice::DrawDeviceAlphaBitmap() doesn't like it.
+                if (!::basegfx::fTools::equalZero( aTransform.get(0,1) ) ||
+                    !::basegfx::fTools::equalZero( aTransform.get(1,0) )
+#if HAVE_FEATURE_UI
+                    || OpenGLHelper::isVCLOpenGLEnabled()
+#endif
+                   )
                 {
                     // "complex" transformation, employ affine
                     // transformator
@@ -196,17 +208,15 @@ namespace vclcanvas
                                                                                         rOrigOutputSize.getY()),
                                                                 aTransform );
 
-                    aOutPos.X() = ::basegfx::fround( aDestRect.getMinX() );
-                    aOutPos.Y() = ::basegfx::fround( aDestRect.getMinY() );
+                    aOutPos.setX( ::basegfx::fround( aDestRect.getMinX() ) );
+                    aOutPos.setY( ::basegfx::fround( aDestRect.getMinY() ) );
 
                     // TODO(P3): Use optimized bitmap transformation here.
 
                     // actually re-create the bitmap ONLY if necessary
                     if( bNeedBitmapUpdate )
                         maContent = tools::transformBitmap( *maContent,
-                                                            aTransform,
-                                                            uno::Sequence<double>(),
-                                                            tools::MODULATE_NONE );
+                                                            aTransform );
 
                     aOutputSize = maContent->GetSizePixel();
                 }
@@ -219,8 +229,8 @@ namespace vclcanvas
                     aOutputSize.setHeight(
                         ::basegfx::fround( rOrigOutputSize.getY() * aTransform.get(1,1) ) );
 
-                    aOutPos.X() = ::basegfx::fround( aTransform.get(0,2) );
-                    aOutPos.Y() = ::basegfx::fround( aTransform.get(1,2) );
+                    aOutPos.setX( ::basegfx::fround( aTransform.get(0,2) ) );
+                    aOutPos.setY( ::basegfx::fround( aTransform.get(1,2) ) );
                 }
             }
 
@@ -228,10 +238,6 @@ namespace vclcanvas
             // scales.
             if( !!(*maContent) )
             {
-                // when true, fast path for slide transition has
-                // already redrawn the sprite.
-                bool bSpriteRedrawn( false );
-
                 rTargetSurface.Push( PushFlags::CLIPREGION );
 
                 // apply clip (if any)
@@ -262,35 +268,32 @@ namespace vclcanvas
                     }
                 }
 
-                if( !bSpriteRedrawn )
+                if( ::rtl::math::approxEqual(fAlpha, 1.0) )
                 {
-                    if( ::rtl::math::approxEqual(fAlpha, 1.0) )
-                    {
-                        // no alpha modulation -> just copy to output
-                        if( maContent->IsTransparent() )
-                            rTargetSurface.DrawBitmapEx( aOutPos, aOutputSize, *maContent );
-                        else
-                            rTargetSurface.DrawBitmap( aOutPos, aOutputSize, maContent->GetBitmap() );
-                    }
+                    // no alpha modulation -> just copy to output
+                    if( maContent->IsTransparent() )
+                        rTargetSurface.DrawBitmapEx( aOutPos, aOutputSize, *maContent );
                     else
-                    {
-                        // TODO(P3): Switch to OutputDevice::DrawTransparent()
-                        // here
+                        rTargetSurface.DrawBitmap( aOutPos, aOutputSize, maContent->GetBitmap() );
+                }
+                else
+                {
+                    // TODO(P3): Switch to OutputDevice::DrawTransparent()
+                    // here
 
-                        // draw semi-transparent
-                        sal_uInt8 nColor( static_cast<sal_uInt8>( ::basegfx::fround( 255.0*(1.0 - fAlpha) + .5) ) );
-                        AlphaMask aAlpha( maContent->GetSizePixel(),
-                                          &nColor );
+                    // draw semi-transparent
+                    sal_uInt8 nColor( static_cast<sal_uInt8>( ::basegfx::fround( 255.0*(1.0 - fAlpha) + .5) ) );
+                    AlphaMask aAlpha( maContent->GetSizePixel(),
+                                      &nColor );
 
-                        // mask out fully transparent areas
-                        if( maContent->IsTransparent() )
-                            aAlpha.Replace( maContent->GetMask(), 255 );
+                    // mask out fully transparent areas
+                    if( maContent->IsTransparent() )
+                        aAlpha.Replace( maContent->GetMask(), 255 );
 
-                        // alpha-blend to output
-                        rTargetSurface.DrawBitmapEx( aOutPos, aOutputSize,
-                                                     BitmapEx( maContent->GetBitmap(),
-                                                               aAlpha ) );
-                    }
+                    // alpha-blend to output
+                    rTargetSurface.DrawBitmapEx( aOutPos, aOutputSize,
+                                                 BitmapEx( maContent->GetBitmap(),
+                                                           aAlpha ) );
                 }
 
                 rTargetSurface.Pop();
@@ -310,7 +313,7 @@ namespace vclcanvas
 
                     for( int i=0; i<aMarkerPoly.Count(); ++i )
                     {
-                        rTargetSurface.DrawPolyLine( aMarkerPoly.GetObject((sal_uInt16)i) );
+                        rTargetSurface.DrawPolyLine( aMarkerPoly.GetObject(static_cast<sal_uInt16>(i)) );
                     }
 
                     // paint sprite prio

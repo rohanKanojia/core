@@ -21,8 +21,8 @@
 
 #include "UnoGraphicExporter.hxx"
 #include "shapeimpl.hxx"
-#include "svx/unoshprp.hxx"
-#include "svx/svdotable.hxx"
+#include <svx/unoshprp.hxx>
+#include <svx/svdotable.hxx>
 #include <svx/svdpool.hxx>
 
 
@@ -35,23 +35,20 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::beans;
 
-SvxTableShape::SvxTableShape( SdrObject* pObj ) throw()
+SvxTableShape::SvxTableShape(SdrObject* pObj)
 :   SvxShape( pObj, getSvxMapProvider().GetMap(SVXMAP_TABLE), getSvxMapProvider().GetPropertySet(SVXMAP_TABLE, SdrObject::GetGlobalDrawObjectItemPool()) )
 {
     SetShapeType( "com.sun.star.drawing.TableShape" );
 }
 
-
 SvxTableShape::~SvxTableShape() throw()
 {
 }
-
 
 bool SvxTableShape::setPropertyValueImpl(
     const OUString& rName,
     const SfxItemPropertySimpleEntry* pProperty,
     const css::uno::Any& rValue )
-        throw(css::beans::UnknownPropertyException, css::beans::PropertyVetoException, css::lang::IllegalArgumentException, css::lang::WrappedTargetException, css::uno::RuntimeException)
 {
     switch( pProperty->nWID )
     {
@@ -62,8 +59,8 @@ bool SvxTableShape::setPropertyValueImpl(
         if( !(rValue >>= xTemplate) )
             throw IllegalArgumentException();
 
-        if( mpObj.is() )
-            static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->setTableStyle(xTemplate);
+        if( HasSdrObject() )
+            static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->setTableStyle(xTemplate);
 
         return true;
     }
@@ -74,9 +71,9 @@ bool SvxTableShape::setPropertyValueImpl(
     case OWN_ATTR_TABLETEMPLATE_BANDINGROWS:
     case OWN_ATTR_TABLETEMPLATE_BANDINGCOULUMNS:
     {
-        if( mpObj.is() )
+        if( HasSdrObject() )
         {
-            TableStyleSettings aSettings( static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->getTableStyleSettings() );
+            TableStyleSettings aSettings( static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->getTableStyleSettings() );
 
             switch( pProperty->nWID )
             {
@@ -88,7 +85,7 @@ bool SvxTableShape::setPropertyValueImpl(
             case OWN_ATTR_TABLETEMPLATE_BANDINGCOULUMNS:    rValue >>= aSettings.mbUseColumnBanding; break;
             }
 
-            static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->setTableStyleSettings(aSettings);
+            static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->setTableStyleSettings(aSettings);
         }
 
         return true;
@@ -104,31 +101,30 @@ bool SvxTableShape::getPropertyValueImpl(
     const OUString& rName,
     const SfxItemPropertySimpleEntry* pProperty,
     css::uno::Any& rValue )
-        throw(css::beans::UnknownPropertyException, css::lang::WrappedTargetException, css::uno::RuntimeException, std::exception)
 {
     switch( pProperty->nWID )
     {
     case OWN_ATTR_OLEMODEL:
     {
-        if( mpObj.is() )
+        if( HasSdrObject() )
         {
-            rValue <<= static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->getTable();
+            rValue <<= static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->getTable();
         }
         return true;
     }
     case OWN_ATTR_TABLETEMPLATE:
     {
-        if( mpObj.is() )
+        if( HasSdrObject() )
         {
-            rValue <<= static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->getTableStyle();
+            rValue <<= static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->getTableStyle();
         }
         return true;
     }
-    case OWN_ATTR_BITMAP:
+    case OWN_ATTR_REPLACEMENT_GRAPHIC:
     {
-        if( mpObj.is() )
+        if( HasSdrObject() )
         {
-            Graphic aGraphic( SvxGetGraphicForShape( *mpObj.get(), true ) );
+            Graphic aGraphic( SvxGetGraphicForShape( *GetSdrObject() ) );
             rValue <<= aGraphic.GetXGraphic();
         }
         return true;
@@ -140,9 +136,9 @@ bool SvxTableShape::getPropertyValueImpl(
     case OWN_ATTR_TABLETEMPLATE_BANDINGROWS:
     case OWN_ATTR_TABLETEMPLATE_BANDINGCOULUMNS:
     {
-        if( mpObj.is() )
+        if( HasSdrObject() )
         {
-            TableStyleSettings aSettings( static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->getTableStyleSettings() );
+            TableStyleSettings aSettings( static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->getTableStyleSettings() );
 
             switch( pProperty->nWID )
             {
@@ -167,14 +163,14 @@ bool SvxTableShape::getPropertyValueImpl(
 void SvxTableShape::lock()
 {
     SvxShape::lock();
-    if( mpObj.is() )
-        static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->uno_lock();
+    if( HasSdrObject() )
+        static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->uno_lock();
 }
 
 void SvxTableShape::unlock()
 {
-    if( mpObj.is() )
-        static_cast< sdr::table::SdrTableObj* >( mpObj.get() )->uno_unlock();
+    if( HasSdrObject() )
+        static_cast< sdr::table::SdrTableObj* >( GetSdrObject() )->uno_unlock();
     SvxShape::unlock();
 }
 

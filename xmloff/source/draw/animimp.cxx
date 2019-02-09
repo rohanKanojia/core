@@ -33,8 +33,8 @@
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/nmspmap.hxx>
-#include "anim.hxx"
-#include "animimp.hxx"
+#include <anim.hxx>
+#include <animimp.hxx>
 
 using namespace ::std;
 using namespace ::cppu;
@@ -48,7 +48,7 @@ using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::presentation;
 using namespace ::xmloff::token;
 
-SvXMLEnumMapEntry aXML_AnimationEffect_EnumMap[] =
+const SvXMLEnumMapEntry<XMLEffect> aXML_AnimationEffect_EnumMap[] =
 {
     { XML_NONE,         EK_none },
     { XML_FADE,         EK_fade },
@@ -67,10 +67,10 @@ SvXMLEnumMapEntry aXML_AnimationEffect_EnumMap[] =
     { XML_CHECKERBOARD, EK_checkerboard },
     { XML_ROTATE,       EK_rotate },
     { XML_STRETCH,      EK_stretch },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, XMLEffect(0) }
 };
 
-SvXMLEnumMapEntry aXML_AnimationDirection_EnumMap[] =
+const SvXMLEnumMapEntry<XMLEffectDirection> aXML_AnimationDirection_EnumMap[] =
 {
     { XML_NONE,             ED_none },
     { XML_FROM_LEFT,        ED_from_left },
@@ -100,15 +100,15 @@ SvXMLEnumMapEntry aXML_AnimationDirection_EnumMap[] =
     { XML_TO_CENTER,        ED_to_center },
     { XML_CLOCKWISE,        ED_clockwise },
     { XML_COUNTER_CLOCKWISE,ED_cclockwise },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, XMLEffectDirection(0) }
 };
 
-SvXMLEnumMapEntry aXML_AnimationSpeed_EnumMap[] =
+const SvXMLEnumMapEntry<AnimationSpeed> aXML_AnimationSpeed_EnumMap[] =
 {
     { XML_SLOW,     AnimationSpeed_SLOW },
     { XML_MEDIUM,   AnimationSpeed_MEDIUM },
     { XML_FAST,     AnimationSpeed_FAST },
-    { XML_TOKEN_INVALID, 0 }
+    { XML_TOKEN_INVALID, AnimationSpeed(0) }
 };
 
 AnimationEffect ImplSdXMLgetEffect( XMLEffect eKind, XMLEffectDirection eDirection, sal_Int16 nStartScale, bool /*bIn*/ )
@@ -321,33 +321,18 @@ public:
     Reference< XPropertySet > mxLastShape;
     OUString maLastShapeId;
 
-    OUString msDimColor;
-    OUString msDimHide;
-    OUString msDimPrev;
-    OUString msEffect;
-    OUString msPlayFull;
-    OUString msSound;
-    OUString msSoundOn;
-    OUString msSpeed;
-    OUString msTextEffect;
-    OUString msPresShapeService;
-    OUString msAnimPath;
-    OUString msIsAnimation;
-
-    AnimImpImpl()
-    :   msDimColor( "DimColor" ),
-        msDimHide( "DimHide" ),
-        msDimPrev( "DimPrevious" ),
-        msEffect( "Effect" ),
-        msPlayFull( "PlayFull" ),
-        msSound( "Sound" ),
-        msSoundOn( "SoundOn" ),
-        msSpeed( "Speed" ),
-        msTextEffect( "TextEffect" ),
-        msPresShapeService( "com.sun.star.presentation.Shape" ),
-        msAnimPath( "AnimationPath" ),
-        msIsAnimation( "IsAnimation" )
-    {}
+    static constexpr OUStringLiteral gsDimColor = "DimColor";
+    static constexpr OUStringLiteral gsDimHide = "DimHide";
+    static constexpr OUStringLiteral gsDimPrev = "DimPrevious";
+    static constexpr OUStringLiteral gsEffect = "Effect";
+    static constexpr OUStringLiteral gsPlayFull = "PlayFull";
+    static constexpr OUStringLiteral gsSound = "Sound";
+    static constexpr OUStringLiteral gsSoundOn = "SoundOn";
+    static constexpr OUStringLiteral gsSpeed = "Speed";
+    static constexpr OUStringLiteral gsTextEffect = "TextEffect";
+    static constexpr OUStringLiteral gsPresShapeService = "com.sun.star.presentation.Shape";
+    static constexpr OUStringLiteral gsAnimPath = "AnimationPath";
+    static constexpr OUStringLiteral gsIsAnimation = "IsAnimation";
 };
 
 enum XMLActionKind
@@ -361,7 +346,7 @@ enum XMLActionKind
 class XMLAnimationsEffectContext : public SvXMLImportContext
 {
 public:
-    AnimImpImpl*    mpImpl;
+    std::shared_ptr<AnimImpImpl> mpImpl;
 
     XMLActionKind   meKind;
     bool        mbTextEffect;
@@ -383,30 +368,26 @@ public:
         sal_uInt16 nPrfx,
         const OUString& rLocalName,
         const Reference< XAttributeList >& xAttrList,
-        AnimImpImpl* pImpl);
-    virtual ~XMLAnimationsEffectContext();
+        const std::shared_ptr<AnimImpImpl>& pImpl);
 
     virtual void EndElement() override;
 
-    virtual SvXMLImportContext * CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const Reference< XAttributeList >& xAttrList ) override;
 };
 
 class XMLAnimationsSoundContext : public SvXMLImportContext
 {
-    XMLAnimationsEffectContext* mpParent;
-
 public:
 
     XMLAnimationsSoundContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName, const Reference< XAttributeList >& xAttrList, XMLAnimationsEffectContext* pParent );
-    virtual ~XMLAnimationsSoundContext();
 };
 
 
 XMLAnimationsSoundContext::XMLAnimationsSoundContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName, const Reference< XAttributeList >& xAttrList, XMLAnimationsEffectContext* pParent )
-: SvXMLImportContext( rImport, nPrfx, rLocalName ), mpParent( pParent )
+: SvXMLImportContext( rImport, nPrfx, rLocalName )
 {
-    if( mpParent && nPrfx == XML_NAMESPACE_PRESENTATION && IsXMLToken( rLocalName, XML_SOUND ) )
+    if( pParent && nPrfx == XML_NAMESPACE_PRESENTATION && IsXMLToken( rLocalName, XML_SOUND ) )
     {
         const sal_Int16 nAttrCount = xAttrList.is() ? xAttrList->getLength() : 0;
         for(sal_Int16 i=0; i < nAttrCount; i++)
@@ -421,25 +402,20 @@ XMLAnimationsSoundContext::XMLAnimationsSoundContext( SvXMLImport& rImport, sal_
             case XML_NAMESPACE_XLINK:
                 if( IsXMLToken( aLocalName, XML_HREF ) )
                 {
-                    mpParent->maSoundURL = rImport.GetAbsoluteReference(sValue);
+                    pParent->maSoundURL = rImport.GetAbsoluteReference(sValue);
                 }
                 break;
             case XML_NAMESPACE_PRESENTATION:
                 if( IsXMLToken( aLocalName, XML_PLAY_FULL ) )
                 {
-                    mpParent->mbPlayFull = IsXMLToken( sValue, XML_TRUE );
+                    pParent->mbPlayFull = IsXMLToken( sValue, XML_TRUE );
                 }
             }
         }
     }
 }
 
-XMLAnimationsSoundContext::~XMLAnimationsSoundContext()
-{
-}
-
-
-XMLAnimationsEffectContext::XMLAnimationsEffectContext( SvXMLImport& rImport,  sal_uInt16 nPrfx, const OUString& rLocalName,  const Reference< XAttributeList >& xAttrList, AnimImpImpl* pImpl )
+XMLAnimationsEffectContext::XMLAnimationsEffectContext( SvXMLImport& rImport,  sal_uInt16 nPrfx, const OUString& rLocalName,  const Reference< XAttributeList >& xAttrList, const std::shared_ptr<AnimImpImpl>& pImpl )
 :   SvXMLImportContext(rImport, nPrfx, rLocalName),
     mpImpl( pImpl ),
     meKind( XMLE_SHOW ), mbTextEffect( false ),
@@ -503,27 +479,21 @@ XMLAnimationsEffectContext::XMLAnimationsEffectContext( SvXMLImport& rImport,  s
         case XML_NAMESPACE_PRESENTATION:
             if( IsXMLToken( aLocalName, XML_EFFECT ) )
             {
-                sal_uInt16 eEnum;
-                if( SvXMLUnitConverter::convertEnum( eEnum, sValue, aXML_AnimationEffect_EnumMap ) )
-                    meEffect = (XMLEffect)eEnum;
+                SvXMLUnitConverter::convertEnum( meEffect, sValue, aXML_AnimationEffect_EnumMap );
             }
             else if( IsXMLToken(aLocalName, XML_DIRECTION ) )
             {
-                sal_uInt16 eEnum;
-                if( SvXMLUnitConverter::convertEnum( eEnum, sValue, aXML_AnimationDirection_EnumMap ) )
-                    meDirection = (XMLEffectDirection)eEnum;
+                SvXMLUnitConverter::convertEnum( meDirection, sValue, aXML_AnimationDirection_EnumMap );
             }
             else if( IsXMLToken( aLocalName, XML_START_SCALE ) )
             {
                 sal_Int32 nScale;
                 if (::sax::Converter::convertPercent( nScale, sValue ))
-                    mnStartScale = (sal_Int16)nScale;
+                    mnStartScale = static_cast<sal_Int16>(nScale);
             }
             else if( IsXMLToken( aLocalName, XML_SPEED ) )
             {
-                sal_uInt16 eEnum;
-                if( SvXMLUnitConverter::convertEnum( eEnum, sValue, aXML_AnimationSpeed_EnumMap ) )
-                    meSpeed = (AnimationSpeed)eEnum;
+                SvXMLUnitConverter::convertEnum( meSpeed, sValue, aXML_AnimationSpeed_EnumMap );
             }
             else if( IsXMLToken( aLocalName, XML_PATH_ID ) )
             {
@@ -534,11 +504,7 @@ XMLAnimationsEffectContext::XMLAnimationsEffectContext( SvXMLImport& rImport,  s
     }
 }
 
-XMLAnimationsEffectContext::~XMLAnimationsEffectContext()
-{
-}
-
-SvXMLImportContext * XMLAnimationsEffectContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList>& xAttrList )
+SvXMLImportContextRef XMLAnimationsEffectContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const Reference< XAttributeList>& xAttrList )
 {
     return new XMLAnimationsSoundContext( GetImport(), nPrefix, rLocalName, xAttrList, this );
 }
@@ -550,7 +516,6 @@ void XMLAnimationsEffectContext::EndElement()
     try
     {
         rtl::Reference< XMLShapeImportHelper > xShapeImport( GetImport().GetShapeImport() );
-        Any aAny;
 
         if( !maShapeId.isEmpty() )
         {
@@ -563,7 +528,7 @@ void XMLAnimationsEffectContext::EndElement()
                     // check for presentation shape service
                     {
                         Reference< XServiceInfo > xServiceInfo( xSet, UNO_QUERY );
-                        if( !xServiceInfo.is() || !xServiceInfo->supportsService( mpImpl->msPresShapeService ) )
+                        if( !xServiceInfo.is() || !xServiceInfo->supportsService( AnimImpImpl::gsPresShapeService ) )
                             return;
                     }
 
@@ -580,16 +545,13 @@ void XMLAnimationsEffectContext::EndElement()
             {
                 if( meKind == XMLE_DIM )
                 {
-                    aAny <<= true;
-                    xSet->setPropertyValue( mpImpl->msDimPrev, aAny );
+                    xSet->setPropertyValue( AnimImpImpl::gsDimPrev, Any(true) );
 
-                    aAny <<= maDimColor;
-                    xSet->setPropertyValue( mpImpl->msDimColor, aAny );
+                    xSet->setPropertyValue( AnimImpImpl::gsDimColor, Any(maDimColor) );
                 }
                 else if( meKind == XMLE_PLAY )
                 {
-                    aAny <<= true;
-                    xSet->setPropertyValue( mpImpl->msIsAnimation, aAny );
+                    xSet->setPropertyValue( AnimImpImpl::gsIsAnimation, Any(true) );
 
                     // #i42894# speed is not supported for the old group animation fallback, so no need to set it
                     // aAny <<= meSpeed;
@@ -599,21 +561,21 @@ void XMLAnimationsEffectContext::EndElement()
                 {
                     if( meKind == XMLE_HIDE && !mbTextEffect && meEffect == EK_none )
                     {
-                        aAny <<= true;
-                        xSet->setPropertyValue( mpImpl->msDimHide, aAny );
+                        xSet->setPropertyValue( AnimImpImpl::gsDimHide, Any(true) );
                     }
                     else
                     {
                         const AnimationEffect eEffect = ImplSdXMLgetEffect( meEffect, meDirection, mnStartScale, meKind == XMLE_SHOW );
 
-                        xSet->setPropertyValue( mbTextEffect ? mpImpl->msTextEffect : mpImpl->msEffect, makeAny( eEffect ) );
-                        xSet->setPropertyValue( mpImpl->msSpeed, makeAny( meSpeed ) );
+                        OUString s = mbTextEffect ? AnimImpImpl::gsTextEffect : AnimImpImpl::gsEffect;
+                        xSet->setPropertyValue( s, makeAny( eEffect ) );
+                        xSet->setPropertyValue( AnimImpImpl::gsSpeed, makeAny( meSpeed ) );
 
                         if( eEffect == AnimationEffect_PATH && !maPathShapeId.isEmpty() )
                         {
                             Reference< XShape > xPath( GetImport().getInterfaceToIdentifierMapper().getReference( maPathShapeId ), UNO_QUERY );
                             if( xPath.is() )
-                                xSet->setPropertyValue( mpImpl->msAnimPath, makeAny( xPath ) );
+                                xSet->setPropertyValue( AnimImpImpl::gsAnimPath, makeAny( xPath ) );
                         }
                     }
                 }
@@ -622,14 +584,9 @@ void XMLAnimationsEffectContext::EndElement()
             {
                 if( xSet.is() )
                 {
-                    aAny <<= maSoundURL;
-                    xSet->setPropertyValue( mpImpl->msSound, aAny );
-
-                    aAny <<= mbPlayFull;
-                    xSet->setPropertyValue( mpImpl->msPlayFull, aAny );
-
-                    aAny <<= true;
-                    xSet->setPropertyValue( mpImpl->msSoundOn, aAny );
+                    xSet->setPropertyValue( AnimImpImpl::gsSound, Any(maSoundURL) );
+                    xSet->setPropertyValue( AnimImpImpl::gsPlayFull, Any(mbPlayFull) );
+                    xSet->setPropertyValue( AnimImpImpl::gsSoundOn, Any(true) );
                 }
                 else
                 {
@@ -648,16 +605,11 @@ void XMLAnimationsEffectContext::EndElement()
 XMLAnimationsContext::XMLAnimationsContext( SvXMLImport& rImport, sal_uInt16 nPrfx, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& )
 : SvXMLImportContext(rImport, nPrfx, rLocalName)
+, mpImpl(std::make_shared<AnimImpImpl>())
 {
-    mpImpl = new AnimImpImpl();
 }
 
-XMLAnimationsContext::~XMLAnimationsContext()
-{
-    delete mpImpl;
-}
-
-SvXMLImportContext * XMLAnimationsContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
+SvXMLImportContextRef XMLAnimationsContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName,
         const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList )
 {
     return new XMLAnimationsEffectContext( GetImport(), nPrefix, rLocalName,  xAttrList, mpImpl );

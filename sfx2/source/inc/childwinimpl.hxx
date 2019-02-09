@@ -36,7 +36,7 @@ public:
     size_t size() const;
     const SfxChildWinContextFactory& operator []( size_t i ) const;
     SfxChildWinContextFactory& operator []( size_t i );
-    void push_back( SfxChildWinContextFactory* p );
+    void push_back( std::unique_ptr<SfxChildWinContextFactory> p );
 };
 
 class SfxChildWinFactArr_Impl
@@ -51,32 +51,10 @@ public:
     size_t size() const;
     const SfxChildWinFactory& operator []( size_t i ) const;
     SfxChildWinFactory& operator []( size_t i );
-    void push_back( SfxChildWinFactory* p );
+    void push_back( std::unique_ptr<SfxChildWinFactory> p );
     void erase( const iterator& it );
 
     iterator begin();
-};
-
-class SfxFrameArr_Impl
-{
-    typedef std::vector<SfxFrame*> DataType;
-    DataType maData;
-
-public:
-    typedef DataType::iterator iterator;
-
-    iterator begin();
-    iterator end();
-
-    SfxFrame* front();
-
-    void erase( const iterator& it );
-
-    SfxFrame* operator[] ( size_t i );
-
-    void push_back( SfxFrame* p );
-    size_t size() const;
-    bool empty() const;
 };
 
 #endif

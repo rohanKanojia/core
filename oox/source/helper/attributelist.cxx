@@ -17,13 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/helper/attributelist.hxx"
+#include <oox/helper/attributelist.hxx>
 
 #include <cassert>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
 #include <sax/fastattribs.hxx>
-#include "oox/token/tokenmap.hxx"
+#include <oox/token/tokenmap.hxx>
 
 namespace oox {
 
@@ -116,8 +116,7 @@ sax_fastparser::FastAttributeList *AttributeList::getAttribList() const
 {
     if( mpAttribList == nullptr )
     {
-        assert( dynamic_cast< sax_fastparser::FastAttributeList *>( mxAttribs.get() ) != nullptr );
-        mpAttribList = static_cast< sax_fastparser::FastAttributeList *>( mxAttribs.get() );
+        mpAttribList = sax_fastparser::FastAttributeList::castToFastAttributeList( mxAttribs );
     }
     return mpAttribList;
 }

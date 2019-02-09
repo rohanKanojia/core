@@ -7,7 +7,7 @@ Dim result As String
 
 Function doUnitTest() As String
 result = verify_testDateSerial()
-If failCount <> 0 And passCount > 0 Then
+If failCount <> 0 Or passCount = 0 Then
     doUnitTest = result
 Else
     doUnitTest = "OK"
@@ -16,8 +16,6 @@ End Function
 
 Function verify_testDateSerial() as String
     Dim testName As String
-    Dim TestDateTime As Date
-    Dim TestStr As String
     Dim date1, date2 As Date
     passCount = 0
     failCount = 0

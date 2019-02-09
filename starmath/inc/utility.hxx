@@ -23,12 +23,9 @@
 
 #include <sal/log.hxx>
 #include <vcl/font.hxx>
-#include <vcl/fixed.hxx>
-#include <vcl/combobox.hxx>
-#include <vcl/lstbox.hxx>
+#include <vcl/weld.hxx>
 #include <tools/fract.hxx>
 #include <deque>
-
 
 inline long SmPtsTo100th_mm(long nNumPts)
     // returns the length (in 100th of mm) that corresponds to the length
@@ -84,8 +81,6 @@ public:
         Font(rFont), nBorderWidth(-1) { Impl_Init(); }
     SmFace(const OUString& rName, const Size& rSize) :
         Font(rName, rSize), nBorderWidth(-1) { Impl_Init(); }
-    SmFace( FontFamily eFamily, const Size& rSize) :
-        Font(eFamily, rSize), nBorderWidth(-1) { Impl_Init(); }
 
     SmFace(const SmFace &rFace) :
         Font(rFace), nBorderWidth(-1) { Impl_Init(); }
@@ -116,16 +111,11 @@ protected:
     sal_uInt16 nMaxItems;
     std::deque<vcl::Font> aFontVec;
 
-    static bool     CompareItem(const vcl::Font & rFirstFont, const vcl::Font & rSecondFont);
-    static OUString GetStringItem(const vcl::Font &rItem);
-
 public:
-    SmFontPickList(sal_uInt16 nMax = 5) : nMaxItems(nMax) {}
+    explicit SmFontPickList(sal_uInt16 nMax = 5) : nMaxItems(nMax) {}
     virtual ~SmFontPickList() { Clear(); }
 
     virtual void    Insert(const vcl::Font &rFont);
-    void            Update(const vcl::Font &rFont, const vcl::Font &rNewFont);
-    void            Remove(const vcl::Font &rFont);
 
     void            Clear();
     vcl::Font       Get(sal_uInt16 nPos = 0) const;
@@ -140,19 +130,17 @@ public:
 //  SmFontPickListBox
 
 
-class SmFontPickListBox : public SmFontPickList, public ListBox
+class SmFontPickListBox final : public SmFontPickList
 {
-protected:
-    DECL_LINK_TYPED(SelectHdl, ListBox&, void);
+private:
+    std::unique_ptr<weld::ComboBox> m_xWidget;
+
+    DECL_LINK(SelectHdl, weld::ComboBox&, void);
 
 public:
-    SmFontPickListBox(vcl::Window* pParent, WinBits nBits);
-
+    SmFontPickListBox(std::unique_ptr<weld::ComboBox> pWidget);
     SmFontPickListBox& operator = (const SmFontPickList& rList);
-
     virtual void    Insert(const vcl::Font &rFont) override;
-    using   Window::Update;
-    using SmFontPickList::Update;
 };
 
 #endif

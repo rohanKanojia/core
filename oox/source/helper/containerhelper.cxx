@@ -17,7 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/helper/containerhelper.hxx"
+#include <algorithm>
+
+#include <oox/helper/containerhelper.hxx>
 
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/container/XNameContainer.hpp>
@@ -25,7 +27,7 @@
 #include <com/sun/star/uno/XComponentContext.hpp>
 #include <osl/diagnose.h>
 #include <rtl/ustrbuf.hxx>
-#include "oox/helper/helper.hxx"
+#include <oox/helper/helper.hxx>
 
 namespace oox {
 
@@ -37,7 +39,7 @@ namespace {
 
 struct ValueRangeComp
 {
-    inline bool operator()( const ValueRange& rLHS, const ValueRange& rRHS ) const
+    bool operator()( const ValueRange& rLHS, const ValueRange& rRHS ) const
     {
         return rLHS.mnLast < rRHS.mnFirst;
     }
@@ -84,7 +86,7 @@ OUString ContainerHelper::getUnusedName(
     OUString aNewName = rSuggestedName;
     sal_Int32 nIndex = -1;
     while( rxNameAccess->hasByName( aNewName ) )
-        aNewName = OUStringBuffer( rSuggestedName ).append( cSeparator ).append( nIndex++ ).makeStringAndClear();
+        aNewName = rSuggestedName + OUStringLiteral1(cSeparator) + OUString::number( nIndex++ );
     return aNewName;
 }
 

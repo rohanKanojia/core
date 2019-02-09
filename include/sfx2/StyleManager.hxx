@@ -15,9 +15,10 @@
 #include <vcl/outdev.hxx>
 
 #include <sfx2/StylePreviewRenderer.hxx>
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 
 #include <sfx2/objsh.hxx>
+#include <memory>
 
 namespace sfx2
 {
@@ -37,9 +38,9 @@ public:
 
     SfxStyleSheetBase* Search(const OUString& rStyleName, SfxStyleFamily eFamily);
 
-    virtual StylePreviewRenderer* CreateStylePreviewRenderer(
+    virtual std::unique_ptr<StylePreviewRenderer> CreateStylePreviewRenderer(
                     OutputDevice& rOutputDev, SfxStyleSheetBase* pStyle,
-                    long nMaxHeight = 32) = 0;
+                    long nMaxHeight) = 0;
 };
 
 } // end namespace sfx2

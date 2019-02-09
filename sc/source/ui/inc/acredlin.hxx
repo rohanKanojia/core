@@ -20,29 +20,22 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_ACREDLIN_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_ACREDLIN_HXX
 
-#include <vcl/morebtn.hxx>
-#include <vcl/combobox.hxx>
-#include <vcl/group.hxx>
-#include <svtools/headbar.hxx>
-#include <svtools/simptabl.hxx>
-#include <svtools/svtabbx.hxx>
-#include "rangenam.hxx"
-#include "anyrefdg.hxx"
-#include <vcl/lstbox.hxx>
 #include <svx/ctredlin.hxx>
-#include "chgtrack.hxx"
-#include "chgviset.hxx"
-#include <vcl/timer.hxx>
+#include <chgtrack.hxx>
+#include <chgviset.hxx>
 #include <vcl/idle.hxx>
 
 class ScViewData;
 class ScDocument;
+class SvSimpleTable;
+
+struct SfxChildWinInfo;
 
 class ScRedlinData : public RedlinData
 {
 public:
                     ScRedlinData();
-                    virtual ~ScRedlinData();
+                    virtual ~ScRedlinData() override;
     SCTAB           nTable;
     SCCOL           nCol;
     SCROW           nRow;
@@ -52,12 +45,11 @@ public:
     bool            bIsAcceptable;
 };
 
-class ScAcceptChgDlg : public SfxModelessDialog
+class ScAcceptChgDlg final : public SfxModelessDialog
 {
-private:
-
     Idle                    aSelectionIdle;
     Idle                    aReOpenIdle;
+    VclPtr<PopupMenu>       m_xPopup;
     VclPtr<SvxAcceptChgCtr> m_pAcceptChgCtr;
     ScViewData*             pViewData;
     ScDocument*             pDoc;
@@ -75,44 +67,38 @@ private:
     OUString           aStrMove;
     OUString           aStrContent;
     OUString           aStrReject;
-    OUString           aStrAllAccepted;
-    OUString           aStrAllRejected;
-    OUString           aStrNoEntry;
-    OUString           aStrContentWithChild;
-    OUString           aStrChildContent;
-    OUString           aStrChildOrgContent;
-    OUString           aStrEmpty;
+    OUString const     aStrAllAccepted;
+    OUString const     aStrAllRejected;
+    OUString const     aStrNoEntry;
+    OUString const     aStrContentWithChild;
+    OUString const     aStrChildContent;
+    OUString const     aStrChildOrgContent;
+    OUString const     aStrEmpty;
     OUString           aUnknown;
     sal_uLong                   nAcceptCount;
     sal_uLong                   nRejectCount;
-    bool                    bAcceptEnableFlag:1;
-    bool                    bRejectEnableFlag:1;
-    bool                    bNeedsUpdate:1;
     bool                    bIgnoreMsg:1;
     bool                    bNoSelection:1;
     bool                    bHasFilterEntry:1;
     bool                    bUseColor:1;
 
     void            Init();
-    void            InitFilter();
 
-    DECL_LINK_TYPED( FilterHandle, SvxTPFilter*, void );
-    DECL_LINK_TYPED( RefHandle, SvxTPFilter*, void );
-    DECL_LINK_TYPED( RejectHandle, SvxTPView*, void );
-    DECL_LINK_TYPED( AcceptHandle, SvxTPView*, void );
-    DECL_LINK_TYPED( RejectAllHandle, SvxTPView*, void );
-    DECL_LINK_TYPED( AcceptAllHandle, SvxTPView*, void );
-    DECL_LINK_TYPED( ExpandingHandle, SvTreeListBox*, bool );
-    DECL_LINK_TYPED( SelectHandle, SvTreeListBox*, void );
-    DECL_LINK_TYPED( RefInfoHandle, const OUString*, void );
+    DECL_LINK( FilterHandle, SvxTPFilter*, void );
+    DECL_LINK( RefHandle, SvxTPFilter*, void );
+    DECL_LINK( RejectHandle, SvxTPView*, void );
+    DECL_LINK( AcceptHandle, SvxTPView*, void );
+    DECL_LINK( RejectAllHandle, SvxTPView*, void );
+    DECL_LINK( AcceptAllHandle, SvxTPView*, void );
+    DECL_LINK( ExpandingHandle, SvTreeListBox*, bool );
+    DECL_LINK( SelectHandle, SvTreeListBox*, void );
+    DECL_LINK( RefInfoHandle, const OUString*, void );
 
-    DECL_LINK_TYPED( UpdateSelectionHdl, Idle*, void );
-    DECL_LINK_TYPED( ChgTrackModHdl, ScChangeTrack&, void );
-    DECL_LINK_TYPED( CommandHdl, SvSimpleTable*, void );
-    DECL_LINK_TYPED( ReOpenTimerHdl, Idle*, void );
-    DECL_LINK_TYPED( ColCompareHdl, const SvSortData*, sal_Int32 );
-
-protected:
+    DECL_LINK( UpdateSelectionHdl, Timer*, void );
+    DECL_LINK( ChgTrackModHdl, ScChangeTrack&, void );
+    DECL_LINK( CommandHdl, SvSimpleTable*, void );
+    DECL_LINK( ReOpenTimerHdl, Timer*, void );
+    DECL_LINK( ColCompareHdl, const SvSortData*, sal_Int32 );
 
     void            RejectFiltered();
     void            AcceptFiltered();
@@ -121,15 +107,15 @@ protected:
 
     OUString* MakeTypeString(ScChangeActionType eType);
 
-    SvTreeListEntry* InsertChangeAction(
-        const ScChangeAction* pScChangeAction,ScChangeActionState eState,
+    SvTreeListEntry* AppendChangeAction(
+        const ScChangeAction* pScChangeAction,
         SvTreeListEntry* pParent=nullptr,bool bDelMaster = false,
-        bool bDisabled = false,sal_uLong nPos = TREELIST_APPEND);
+        bool bDisabled = false);
 
-    SvTreeListEntry* InsertFilteredAction(
+    SvTreeListEntry* AppendFilteredAction(
         const ScChangeAction* pScChangeAction,ScChangeActionState eState,
         SvTreeListEntry* pParent = nullptr,bool bDelMaster = false,
-        bool bDisabled = false, sal_uLong nPos = TREELIST_APPEND);
+        bool bDisabled = false);
 
     SvTreeListEntry*    InsertChangeActionContent(const ScChangeActionContent* pScChangeAction,
                                               SvTreeListEntry* pParent,sal_uLong nSpecial);
@@ -147,28 +133,25 @@ protected:
 
     bool            InsertChildren( ScChangeActionMap* pActionMap, SvTreeListEntry* pParent );
 
-    void            AppendChanges(ScChangeTrack* pChanges,sal_uLong nStartAction, sal_uLong nEndAction,
-                                    sal_uLong nPos=TREELIST_APPEND);
+    void            AppendChanges(const ScChangeTrack* pChanges,sal_uLong nStartAction, sal_uLong nEndAction);
 
     void            RemoveEntrys(sal_uLong nStartAction,sal_uLong nEndAction);
-    void            UpdateEntrys(ScChangeTrack* pChgTrack, sal_uLong nStartAction,sal_uLong nEndAction);
+    void            UpdateEntrys(const ScChangeTrack* pChgTrack, sal_uLong nStartAction,sal_uLong nEndAction);
 
     void            UpdateView();
     void            ClearView();
 
-    bool            Expand(ScChangeTrack* pChanges,const ScChangeAction* pScChangeAction,
+    bool            Expand(const ScChangeTrack* pChanges,const ScChangeAction* pScChangeAction,
                            SvTreeListEntry* pEntry, bool bFilter = false);
 
 public:
                     ScAcceptChgDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                ScViewData*      ptrViewData);
 
-                    virtual ~ScAcceptChgDlg();
+                    virtual ~ScAcceptChgDlg() override;
     virtual void    dispose() override;
 
     void            ReInit(ScViewData* ptrViewData);
-
-    virtual bool    PreNotify( NotifyEvent& rNEvt ) override;
 
     void            Initialize (SfxChildWinInfo* pInfo);
     virtual void    FillInfo(SfxChildWinInfo&) const override;

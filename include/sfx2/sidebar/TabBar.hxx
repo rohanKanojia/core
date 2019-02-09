@@ -19,7 +19,8 @@
 #ifndef INCLUDED_SFX2_SOURCE_SIDEBAR_TABBAR_HXX
 #define INCLUDED_SFX2_SOURCE_SIDEBAR_TABBAR_HXX
 
-#include "DeckDescriptor.hxx"
+#include <sfx2//dllapi.h>
+#include <sfx2/sidebar/DeckDescriptor.hxx>
 #include <sfx2/sidebar/ResourceManager.hxx>
 
 
@@ -30,6 +31,7 @@
 
 #include <functional>
 
+#include <svtools/acceleratorexecute.hxx>
 
 class Button;
 class CheckBox;
@@ -55,36 +57,36 @@ public:
     class DeckMenuData
     {
     public:
-        ::rtl::OUString msDisplayName;
-        ::rtl::OUString msDeckId;
+        OUString msDisplayName;
+        OUString msDeckId;
         bool mbIsCurrentDeck;
         bool mbIsActive;
         bool mbIsEnabled;
     };
     typedef ::std::function<void (
-            const Rectangle&,
+            const tools::Rectangle&,
             const ::std::vector<DeckMenuData>& rMenuData)> PopupMenuProvider;
     TabBar (
         vcl::Window* pParentWindow,
         const css::uno::Reference<css::frame::XFrame>& rxFrame,
-        const ::std::function<void (const ::rtl::OUString&rsDeckId)>& rDeckActivationFunctor,
+        const ::std::function<void (const OUString& rsDeckId)>& rDeckActivationFunctor,
         const PopupMenuProvider& rPopupMenuProvider,
         SidebarController* rParentSidebarController);
 
-    virtual ~TabBar();
+    virtual ~TabBar() override;
     virtual void dispose() override;
 
-    virtual void Paint (vcl::RenderContext& /*rRenderContext*/, const Rectangle& rUpdateArea) override;
+    virtual void Paint (vcl::RenderContext& /*rRenderContext*/, const tools::Rectangle& rUpdateArea) override;
     virtual void DataChanged (const DataChangedEvent& rDataChangedEvent) override;
-    virtual bool Notify (NotifyEvent& rEvent) override;
+    virtual bool EventNotify (NotifyEvent& rEvent) override;
 
     static sal_Int32 GetDefaultWidth();
 
     void SetDecks (
         const ResourceManager::DeckContextDescriptorContainer& rDecks);
-    void HighlightDeck (const ::rtl::OUString& rsDeckId);
+    void HighlightDeck (const OUString& rsDeckId);
     void RemoveDeckHighlight ();
-    const ::rtl::OUString GetDeckIdForIndex (const sal_Int32 nIndex) const;
+    OUString const & GetDeckIdForIndex (const sal_Int32 nIndex) const;
     void ToggleHideFlag (const sal_Int32 nIndex);
     void RestoreHideFlags();
 
@@ -96,27 +98,28 @@ private:
     class Item
     {
     public:
-        DECL_LINK_TYPED(HandleClick, Button*, void);
+        DECL_LINK(HandleClick, Button*, void);
         VclPtr<RadioButton> mpButton;
         OUString msDeckId;
-        ::std::function<void (const ::rtl::OUString&rsDeckId)> maDeckActivationFunctor;
+        ::std::function<void (const OUString& rsDeckId)> maDeckActivationFunctor;
         bool mbIsHidden;
         bool mbIsHiddenByDefault;
     };
     typedef ::std::vector<Item> ItemContainer;
     ItemContainer maItems;
-    const ::std::function<void (const ::rtl::OUString&rsDeckId)> maDeckActivationFunctor;
+    const ::std::function<void (const OUString& rsDeckId)> maDeckActivationFunctor;
     sal_Int32 mnMenuSeparatorY;
-    PopupMenuProvider maPopupMenuProvider;
+    PopupMenuProvider const maPopupMenuProvider;
 
     VclPtr<RadioButton> CreateTabItem (const DeckDescriptor& rDeckDescriptor);
     Image GetItemImage (const DeckDescriptor& rDeskDescriptor) const;
     void Layout();
     void UpdateButtonIcons();
 
-    DECL_LINK_TYPED(OnToolboxClicked, Button*, void);
+    DECL_LINK(OnToolboxClicked, Button*, void);
 
     SidebarController* pParentSidebarController;
+    std::unique_ptr<svt::AcceleratorExecute> mpAccel;
 
 };
 

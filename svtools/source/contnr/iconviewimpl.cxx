@@ -20,6 +20,7 @@
 #include <vcl/svapp.hxx>
 #include <svtools/iconview.hxx>
 #include <iconviewimpl.hxx>
+#include <tools/debug.hxx>
 
 IconViewImpl::IconViewImpl( SvTreeListBox* pTreeListBox, SvTreeList* pTreeList, WinBits nWinStyle )
 : SvImpLBox( pTreeListBox, pTreeList, nWinStyle )
@@ -36,20 +37,20 @@ void IconViewImpl::CursorUp()
     for(short i = 0; i < pView->GetColumnsCount() && pPrevFirstToDraw; i++)
         pPrevFirstToDraw = pView->PrevVisible(pPrevFirstToDraw);
 
-    if( pPrevFirstToDraw )
-    {
-        nFlags &= (~F_FILLING);
-        long nEntryHeight = pView->GetEntryHeight();
-        ShowCursor( false );
-        pView->Update();
-        pStartEntry = pPrevFirstToDraw;
-        Rectangle aArea( GetVisibleArea() );
-        aArea.Bottom() -= nEntryHeight;
-        pView->Scroll( 0, nEntryHeight, aArea, ScrollFlags::NoChildren );
-        pView->Update();
-        ShowCursor( true );
-        pView->NotifyScrolled();
-    }
+    if( !pPrevFirstToDraw )
+        return;
+
+    nFlags &= ~LBoxFlags::Filling;
+    long nEntryHeight = pView->GetEntryHeight();
+    ShowCursor( false );
+    pView->Update();
+    pStartEntry = pPrevFirstToDraw;
+    tools::Rectangle aArea( GetVisibleArea() );
+    aArea.AdjustBottom( -nEntryHeight );
+    pView->Scroll( 0, nEntryHeight, aArea, ScrollFlags::NoChildren );
+    pView->Update();
+    ShowCursor( true );
+    pView->NotifyScrolled();
 }
 
 void IconViewImpl::CursorDown()
@@ -64,11 +65,11 @@ void IconViewImpl::CursorDown()
 
     if( pNextFirstToDraw )
     {
-        nFlags &= (~F_FILLING);
+        nFlags &= ~LBoxFlags::Filling;
         ShowCursor( false );
         pView->Update();
         pStartEntry = pNextFirstToDraw;
-        Rectangle aArea( GetVisibleArea() );
+        tools::Rectangle aArea( GetVisibleArea() );
         pView->Scroll( 0, -(pView->GetEntryHeight()), aArea, ScrollFlags::NoChildren );
         pView->Update();
         ShowCursor( true );
@@ -92,7 +93,7 @@ void IconViewImpl::PageDown( sal_uInt16 nDelta )
 
     ShowCursor( false );
 
-    nFlags &= (~F_FILLING);
+    nFlags &= ~LBoxFlags::Filling;
     pView->Update();
     pStartEntry = pNext;
 
@@ -103,7 +104,7 @@ void IconViewImpl::PageDown( sal_uInt16 nDelta )
     }
     else
     {
-        Rectangle aArea( GetVisibleArea() );
+        tools::Rectangle aArea( GetVisibleArea() );
         long nScroll = pView->GetEntryHeight() * static_cast<long>(nRealDelta);
         nScroll = -nScroll;
         pView->Update();
@@ -128,7 +129,7 @@ void IconViewImpl::PageUp( sal_uInt16 nDelta )
     if( pPrev == pStartEntry )
         return;
 
-    nFlags &= (~F_FILLING);
+    nFlags &= ~LBoxFlags::Filling;
     ShowCursor( false );
 
     pView->Update();
@@ -141,7 +142,7 @@ void IconViewImpl::PageUp( sal_uInt16 nDelta )
     else
     {
         long nEntryHeight = pView->GetEntryHeight();
-        Rectangle aArea( GetVisibleArea() );
+        tools::Rectangle aArea( GetVisibleArea() );
         pView->Update();
         pView->Scroll( 0, nEntryHeight*nRealDelta, aArea, ScrollFlags::NoChildren );
         pView->Update();
@@ -167,12 +168,12 @@ void IconViewImpl::KeyDown( bool bPageDown )
     if( nDelta <= 0 )
         return;
 
-    nFlags &= (~F_FILLING);
+    nFlags &= ~LBoxFlags::Filling;
     BeginScroll();
 
     aVerSBar->SetThumbPos( nThumbPos+nDelta );
     if( bPageDown )
-        PageDown( (short)nDelta );
+        PageDown( static_cast<short>(nDelta) );
     else
         CursorDown();
 
@@ -198,12 +199,12 @@ void IconViewImpl::KeyUp( bool bPageUp )
     if( nDelta < 0 )
         return;
 
-    nFlags &= (~F_FILLING);
+    nFlags &= ~LBoxFlags::Filling;
     BeginScroll();
 
     aVerSBar->SetThumbPos( nThumbPos - nDelta );
     if( bPageUp )
-        PageUp( (short)nDelta );
+        PageUp( static_cast<short>(nDelta) );
     else
         CursorUp();
 
@@ -238,8 +239,8 @@ SvTreeListEntry* IconViewImpl::GetClickedEntry( const Point& rPoint ) const
     if( pView->GetEntryCount() == 0 || !pStartEntry || !pView->GetEntryHeight() || !pView->GetEntryWidth())
         return nullptr;
 
-    sal_uInt16 nY = (sal_uInt16)(rPoint.Y() / pView->GetEntryHeight() );
-    sal_uInt16 nX = (sal_uInt16)(rPoint.X() / pView->GetEntryWidth() );
+    sal_uInt16 nY = static_cast<sal_uInt16>(rPoint.Y() / pView->GetEntryHeight() );
+    sal_uInt16 nX = static_cast<sal_uInt16>(rPoint.X() / pView->GetEntryWidth() );
     sal_uInt16 nTemp = nY * pView->GetColumnsCount() + nX;
 
     SvTreeListEntry* pEntry = pView->NextVisible(pStartEntry, nTemp);
@@ -262,10 +263,7 @@ bool IconViewImpl::IsEntryInView( SvTreeListEntry* pEntry ) const
         return false;
 
     long nStart = GetEntryLine( pEntry ) - GetEntryLine( pStartEntry );
-    if( nStart < 0 )
-        return false;
-
-    return true;
+    return nStart >= 0;
 }
 
 void IconViewImpl::AdjustScrollBars( Size& rSize )
@@ -293,7 +291,6 @@ void IconViewImpl::AdjustScrollBars( Size& rSize )
     if( bVerSBar || nTotalCount > nVisibleCount )
     {
         nResult = 1;
-        nFlags |= F_HOR_SBARSIZE_WITH_VBAR;
     }
 
     PositionScrollBars( aOSize, nResult );
@@ -301,7 +298,7 @@ void IconViewImpl::AdjustScrollBars( Size& rSize )
     // adapt Range, VisibleRange etc.
 
     // refresh output size, in case we have to scroll
-    Rectangle aRect;
+    tools::Rectangle aRect;
     aRect.SetSize( aOSize );
     aSelEng.SetVisibleArea( aRect );
 
@@ -313,7 +310,7 @@ void IconViewImpl::AdjustScrollBars( Size& rSize )
     }
     else
     {
-        nFlags |= F_ENDSCROLL_SET_VIS_SIZE;
+        nFlags |= LBoxFlags::EndScrollSetVisSize;
     }
 
     if( nResult & 0x0001 )
@@ -333,7 +330,7 @@ SvTreeListEntry* IconViewImpl::GetEntry( const Point& rPoint ) const
         || !pView->GetEntryWidth())
         return nullptr;
 
-    sal_uInt16 nClickedEntry = (sal_uInt16)(rPoint.Y() / pView->GetEntryHeight() * pView->GetColumnsCount() + rPoint.X() / pView->GetEntryWidth() );
+    sal_uInt16 nClickedEntry = static_cast<sal_uInt16>(rPoint.Y() / pView->GetEntryHeight() * pView->GetColumnsCount() + rPoint.X() / pView->GetEntryWidth() );
     sal_uInt16 nTemp = nClickedEntry;
     SvTreeListEntry* pEntry = pView->NextVisible(pStartEntry, nTemp);
     if( nTemp != nClickedEntry )
@@ -368,14 +365,14 @@ void IconViewImpl::UpdateAll( bool bInvalidateCompleteView )
         pView->Invalidate( GetVisibleArea() );
 }
 
-void IconViewImpl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rRect)
+void IconViewImpl::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     if (!pView->GetVisibleCount())
         return;
 
-    nFlags |= F_IN_PAINT;
+    nFlags |= LBoxFlags::InPaint;
 
-    if (nFlags & F_FILLING)
+    if (nFlags & LBoxFlags::Filling)
     {
         SvTreeListEntry* pFirst = pView->First();
         if (pFirst != pStartEntry)
@@ -417,10 +414,10 @@ void IconViewImpl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rR
 
     vcl::Region aClipRegion(GetClipRegionRect());
 
-    if (!pCursor && ((nExtendedWinBits & EWB_NO_AUTO_CURENTRY) == 0))
+    if (!pCursor && !mbNoAutoCurEntry)
     {
         // do not select if multiselection or explicit set
-        bool bNotSelect = (aSelEng.GetSelectionMode() == MULTIPLE_SELECTION ) || ((m_nStyle & WB_NOINITIALSELECTION) == WB_NOINITIALSELECTION);
+        bool bNotSelect = (aSelEng.GetSelectionMode() == SelectionMode::Multiple ) || ((m_nStyle & WB_NOINITIALSELECTION) == WB_NOINITIALSELECTION);
         SetCursor(pStartEntry, bNotSelect);
     }
 
@@ -437,30 +434,26 @@ void IconViewImpl::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rR
         pEntry = pView->NextVisible(pEntry);
     }
 
-    nFlags &= (~F_DESEL_ALL);
+    nFlags &= ~LBoxFlags::DeselectAll;
     rRenderContext.SetClipRegion();
-    if (!(nFlags & F_PAINTED))
-    {
-        nFlags |= F_PAINTED;
-    }
-    nFlags &= (~F_IN_PAINT);
+    nFlags &= ~LBoxFlags::InPaint;
 }
 
 void IconViewImpl::InvalidateEntry( long nId ) const
 {
-    if( !(nFlags & F_IN_PAINT ))
-    {
-        Rectangle aRect( GetVisibleArea() );
-        long nMaxBottom = aRect.Bottom();
-        aRect.Top() = nId / pView->GetColumnsCount() * pView->GetEntryHeight();
-        aRect.Bottom() = aRect.Top(); aRect.Bottom() += pView->GetEntryHeight();
+    if( nFlags & LBoxFlags::InPaint )
+        return;
 
-        if( aRect.Top() > nMaxBottom )
-            return;
-        if( aRect.Bottom() > nMaxBottom )
-            aRect.Bottom() = nMaxBottom;
-        pView->Invalidate( aRect );
-    }
+    tools::Rectangle aRect( GetVisibleArea() );
+    long nMaxBottom = aRect.Bottom();
+    aRect.SetTop( nId / pView->GetColumnsCount() * pView->GetEntryHeight() );
+    aRect.SetBottom( aRect.Top() ); aRect.AdjustBottom(pView->GetEntryHeight() );
+
+    if( aRect.Top() > nMaxBottom )
+        return;
+    if( aRect.Bottom() > nMaxBottom )
+        aRect.SetBottom( nMaxBottom );
+    pView->Invalidate( aRect );
 }
 
 bool IconViewImpl::KeyInput( const KeyEvent& rKEvt )
@@ -470,14 +463,12 @@ bool IconViewImpl::KeyInput( const KeyEvent& rKEvt )
     if( rKeyCode.IsMod2() )
         return false; // don't evaluate Alt key
 
-    nFlags &= (~F_FILLING);
+    nFlags &= ~LBoxFlags::Filling;
 
     if( !pCursor )
         pCursor = pStartEntry;
     if( !pCursor )
         return false;
-
-    bool bKeyUsed = true;
 
     sal_uInt16  aCode = rKeyCode.GetCode();
 
@@ -665,7 +656,7 @@ bool IconViewImpl::KeyInput( const KeyEvent& rKEvt )
     if(!bHandled)
         return SvImpLBox::KeyInput( rKEvt );
 
-    return bKeyUsed;
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

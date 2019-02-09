@@ -16,6 +16,8 @@
 
 namespace sw { class Filters; }
 
+class SvxAutoCorrCfg;
+
 class SwDLL
 {
 public:
@@ -24,7 +26,7 @@ public:
     static void RegisterControls();
 
     SwDLL();
-    ~SwDLL();
+    ~SwDLL() COVERITY_NOEXCEPT_FALSE;
 
     sw::Filters & getFilters();
 
@@ -33,6 +35,7 @@ private:
     SwDLL& operator=(SwDLL const&) = delete;
 
     std::unique_ptr< sw::Filters > filters_;
+    SvxAutoCorrCfg *m_pAutoCorrCfg;
 };
 
 #endif

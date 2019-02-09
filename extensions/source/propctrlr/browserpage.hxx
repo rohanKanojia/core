@@ -37,8 +37,8 @@ namespace pcr
         virtual void StateChanged(StateChangedType nType) override;
 
     public:
-        OBrowserPage(vcl::Window* pParent);
-        virtual ~OBrowserPage();
+        explicit OBrowserPage(vcl::Window* pParent);
+        virtual ~OBrowserPage() override;
         virtual void dispose() override;
 
         sal_Int32 getMinimumWidth();

@@ -20,7 +20,8 @@
 #include "diagramdefinitioncontext.hxx"
 #include "layoutnodecontext.hxx"
 #include "datamodelcontext.hxx"
-#include <osl/diagnose.h>
+#include <oox/helper/attributelist.hxx>
+#include <oox/token/namespaces.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::uno;
@@ -29,13 +30,12 @@ using namespace ::com::sun::star::xml::sax;
 namespace oox { namespace drawingml {
 
 // CT_DiagramDefinition
-DiagramDefinitionContext::DiagramDefinitionContext( ContextHandler2Helper& rParent,
+DiagramDefinitionContext::DiagramDefinitionContext( ContextHandler2Helper const & rParent,
                                                     const AttributeList& rAttributes,
                                                     const DiagramLayoutPtr &pLayout )
     : ContextHandler2( rParent )
     , mpLayout( pLayout )
 {
-    OSL_TRACE( "OOX: DiagramDefinitionContext::DiagramDefinitionContext()" );
     mpLayout->setDefStyle( rAttributes.getString( XML_defStyle ).get() );
     OUString sValue = rAttributes.getString( XML_minVer ).get();
     if( sValue.isEmpty() )
@@ -67,7 +67,7 @@ DiagramDefinitionContext::onCreateContext( ::sal_Int32 aElement,
         break;
     case DGM_TOKEN( layoutNode ):
     {
-        LayoutNodePtr pNode( new LayoutNode() );
+        LayoutNodePtr pNode( new LayoutNode(mpLayout->getDiagram()) );
         mpLayout->getNode() = pNode;
         pNode->setChildOrder( rAttribs.getToken( XML_chOrder, XML_b ) );
         pNode->setMoveWith( rAttribs.getString( XML_moveWith ).get() );

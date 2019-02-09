@@ -17,8 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "listviewitems.hxx"
-#include "svtools/viewdataentry.hxx"
+#include <listviewitems.hxx>
+#include <vcl/viewdataentry.hxx>
 
 namespace dbaui
 {
@@ -39,9 +39,9 @@ namespace dbaui
         pView->Pop();
     }
 
-    sal_uInt16 OBoldListboxString::GetType() const
+    SvLBoxItemType OBoldListboxString::GetType() const
     {
-        return SV_ITEM_ID_BOLDLBSTRING;
+        return SvLBoxItemType::String;
     }
 
     void OBoldListboxString::Paint(const Point& rPos, SvTreeListBox& rDev, vcl::RenderContext& rRenderContext,

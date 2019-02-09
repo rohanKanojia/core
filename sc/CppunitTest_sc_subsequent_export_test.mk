@@ -50,7 +50,6 @@ $(eval $(call gb_CppunitTest_use_libraries,sc_subsequent_export_test, \
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_CppunitTest_set_include,sc_subsequent_export_test,\
@@ -60,8 +59,9 @@ $(eval $(call gb_CppunitTest_set_include,sc_subsequent_export_test,\
 ))
 
 $(eval $(call gb_CppunitTest_use_api,sc_subsequent_export_test,\
-    offapi \
-    udkapi \
+	udkapi \
+	offapi \
+	oovbaapi \
 ))
 
 $(eval $(call gb_CppunitTest_use_ure,sc_subsequent_export_test))
@@ -76,6 +76,8 @@ $(eval $(call gb_CppunitTest_use_components,sc_subsequent_export_test,\
     embeddedobj/util/embobj \
     eventattacher/source/evtatt \
     filter/source/config/cache/filterconfig1 \
+	filter/source/odfflatxml/odfflatxml \
+	filter/source/xmlfilteradaptor/xmlfa \
     forms/util/frm \
     framework/util/fwk \
     i18npool/source/search/i18nsearch \
@@ -100,25 +102,27 @@ $(eval $(call gb_CppunitTest_use_components,sc_subsequent_export_test,\
     unotools/util/utl \
     unoxml/source/rdf/unordf \
     unoxml/source/service/unoxml \
+    uui/util/uui \
+    vcl/vcl.common \
     xmloff/util/xo \
     xmlsecurity/util/xmlsecurity \
-    xmlsecurity/util/xsec_fw \
+    emfio/emfio \
 ))
 
-ifeq ($(OS),WNT)
-$(eval $(call gb_CppunitTest_use_components,sc_subsequent_export_test,\
-    xmlsecurity/util/xsec_xmlsec.windows \
-))
-else
 $(eval $(call gb_CppunitTest_use_components,sc_subsequent_export_test,\
     xmlsecurity/util/xsec_xmlsec \
 ))
-endif
 
 $(eval $(call gb_CppunitTest_use_custom_headers,sc_subsequent_export_test,\
 	officecfg/registry \
 ))
 
 $(eval $(call gb_CppunitTest_use_configuration,sc_subsequent_export_test))
+
+$(eval $(call gb_CppunitTest_use_packages,sc_subsequent_export_test, \
+    oox_generated \
+))
+
+$(eval $(call gb_CppunitTest_use_more_fonts,subsequent_export_test))
 
 # vim: set noet sw=4 ts=4:

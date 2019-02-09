@@ -77,7 +77,6 @@ $(eval $(call gb_Library_use_libraries,svxcore,\
     utl \
     vcl \
     xo \
-	$(gb_UWINAPI) \
 ))
 
 $(eval $(call gb_Library_use_externals,svxcore,\
@@ -85,10 +84,11 @@ $(eval $(call gb_Library_use_externals,svxcore,\
 	icuuc \
 	icu_headers \
 	libxml2 \
+	$(if $(filter PDFIUM,$(BUILD_TYPE)),pdfium) \
 ))
-ifeq ($(ENABLE_OPENGL),TRUE)
+ifeq ($(DISABLE_GUI),)
 $(eval $(call gb_Library_use_externals,svxcore,\
-     glew \
+     epoxy \
  ))
 endif
 
@@ -105,7 +105,6 @@ $(eval $(call gb_Library_use_system_darwin_frameworks,svxcore,\
 endif
 
 $(eval $(call gb_Library_add_exception_objects,svxcore,\
-    svx/source/core/coreservices \
     svx/source/core/extedit \
     svx/source/core/graphichelper \
     svx/source/customshapes/EnhancedCustomShape2d \
@@ -115,10 +114,17 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/dialog/checklbx \
     svx/source/dialog/dialmgr \
     svx/source/dialog/dlgutil \
+    svx/source/dialog/hexcolorcontrol \
     svx/source/dialog/framelink \
+    svx/source/dialog/framelinkarray \
     svx/source/dialog/langbox \
+    svx/source/dialog/pagenumberlistbox \
+    svx/source/dialog/papersizelistbox \
+    svx/source/dialog/samecontentlistbox \
+    svx/source/dialog/spacinglistbox \
     svx/source/dialog/stddlg \
     svx/source/dialog/svxdlg \
+    svx/source/dialog/SvxNumOptionsTabPageHelper \
     svx/source/engine3d/camera3d \
     svx/source/engine3d/cube3d \
     svx/source/engine3d/deflt3d \
@@ -132,7 +138,6 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/engine3d/obj3d \
     svx/source/engine3d/objfac3d \
     svx/source/engine3d/polygn3d \
-    svx/source/engine3d/polysc3d \
     svx/source/engine3d/scene3d \
     svx/source/engine3d/sphere3d \
     svx/source/engine3d/svx3ditems \
@@ -245,6 +250,7 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/sdr/primitive2d/sdrcaptionprimitive2d \
     svx/source/sdr/primitive2d/sdrconnectorprimitive2d \
     svx/source/sdr/primitive2d/sdrmeasureprimitive2d \
+    svx/source/sdr/primitive2d/sdrframeborderprimitive2d \
     svx/source/sdr/primitive2d/sdrattributecreator \
     svx/source/sdr/primitive2d/sdrdecompositiontools \
     svx/source/sdr/primitive3d/sdrattributecreator3d \
@@ -333,6 +339,7 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/svdraw/svdovirt \
     svx/source/svdraw/svdpage \
     svx/source/svdraw/svdpagv \
+    svx/source/svdraw/svdpdf \
     svx/source/svdraw/svdpntv \
     svx/source/svdraw/svdpoev \
     svx/source/svdraw/svdsnpv \
@@ -370,6 +377,7 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/tbxctrls/tbcontrl \
     svx/source/tbxctrls/tbxcolorupdate \
     svx/source/tbxctrls/SvxColorValueSet \
+    svx/source/tbxctrls/SvxPresetListBox \
     svx/source/toolbars/extrusionbar \
     svx/source/toolbars/fontworkbar \
     svx/source/unodraw/gluepts \
@@ -402,7 +410,6 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/xoutdev/xattr \
     svx/source/xoutdev/xattr2 \
     svx/source/xoutdev/xattrbmp \
-    svx/source/xoutdev/xexch \
     svx/source/xoutdev/_xoutbmp \
     svx/source/xoutdev/_xpoly \
     svx/source/xoutdev/xpool \
@@ -412,6 +419,7 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/xoutdev/xtabgrdt \
     svx/source/xoutdev/xtabhtch \
     svx/source/xoutdev/xtable \
+    svx/source/xoutdev/xtabptrn \
     svx/source/xoutdev/XPropertyEntry \
     svx/source/xoutdev/xtablend \
 ))
@@ -435,7 +443,6 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/form/fmdpage \
     svx/source/form/fmexch \
     svx/source/form/fmexpl \
-    svx/source/form/fmitems \
     svx/source/form/fmmodel \
     svx/source/form/fmobj \
     svx/source/form/fmpage \
@@ -463,9 +470,9 @@ $(eval $(call gb_Library_add_exception_objects,svxcore,\
     svx/source/form/ParseContext \
     svx/source/form/sdbdatacolumn \
     svx/source/form/sqlparserclient \
-    svx/source/form/stringlistresource \
     svx/source/form/typemap \
     svx/source/form/xfm_addcondition \
+    svx/source/uitest/sdrobject \
 ))
 
 $(eval $(call gb_SdiTarget_SdiTarget,svx/sdi/svxslots,svx/sdi/svx))
@@ -476,8 +483,5 @@ $(eval $(call gb_SdiTarget_set_include,svx/sdi/svxslots,\
     -I$(SRCDIR)/svx/sdi \
     -I$(SRCDIR)/sfx2/sdi \
 ))
-
-# Runtime dependency for unit-tests
-$(eval $(call gb_Library_use_restarget,svxcore,svx))
 
 # vim: set noet sw=4 ts=4:

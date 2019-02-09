@@ -35,13 +35,15 @@ class ToolBox;
 class DocumentFocusListener;
 
 
-class AquaA11yFocusTracker : public rtl::Static< AquaA11yFocusTracker, AquaA11yFocusTracker>
+class AquaA11yFocusTracker
 {
 
 public:
     AquaA11yFocusTracker();
 
-    css::uno::Reference< css::accessibility::XAccessible > getFocusedObject() { return m_xFocusedObject; };
+    ~AquaA11yFocusTracker();
+
+    css::uno::Reference< css::accessibility::XAccessible > const & getFocusedObject() { return m_xFocusedObject; };
 
     // sets the currently focus object and notifies the FocusEventListener (if any)
     void setFocusedObject(const css::uno::Reference< css::accessibility::XAccessible >& xAccessible);
@@ -58,7 +60,7 @@ protected:
     void toolbox_highlight_on(vcl::Window *pWindow);
 
     // received a TOOLBOX_HIGHLIGHTOFF event for this window
-    void toolbox_highlight_off(vcl::Window *pWindow);
+    void toolbox_highlight_off(vcl::Window const *pWindow);
 
     // received a TABPAGE_ACTIVATE event for this window
     void tabpage_activated(vcl::Window *pWindow);
@@ -89,8 +91,12 @@ private:
     Link<VclSimpleEvent&,void> m_aWindowEventLink;
 
     // the UNO XAccessibilityEventListener for Documents and other non VCL objects
-    const css::uno::Reference< DocumentFocusListener > m_xDocumentFocusListener;
+    const rtl::Reference< DocumentFocusListener > m_xDocumentFocusListener;
 };
+
+struct TheAquaA11yFocusTracker:
+    rtl::Static<AquaA11yFocusTracker, TheAquaA11yFocusTracker>
+{};
 
 #endif // INCLUDED_VCL_INC_OSX_A11YFOCUSTRACKER_HXX
 

@@ -9,7 +9,7 @@
 
 #include <swmodeltestbase.hxx>
 
-#if !defined(_WIN32)
+
 
 #include <com/sun/star/drawing/EnhancedCustomShapeParameterPair.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
@@ -23,6 +23,7 @@
 #include <com/sun/star/style/LineSpacing.hpp>
 #include <com/sun/star/style/LineSpacingMode.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
+#include <com/sun/star/text/VertOrientation.hpp>
 
 #include <comphelper/sequenceashashmap.hxx>
 
@@ -37,7 +38,7 @@ protected:
      */
     bool mustTestImportOf(const char* filename) const override {
         // If the testcase is stored in some other format, it's pointless to test.
-        return (OString(filename).endsWith(".docx"));
+        return OString(filename).endsWith(".docx");
     }
 };
 
@@ -88,6 +89,7 @@ DECLARE_OOXMLEXPORT_TEST(testDmlGroupshapeRelsize, "dml-groupshape-relsize.docx"
 DECLARE_OOXMLEXPORT_TEST(testDmlTextshape, "dml-textshape.docx")
 {
     uno::Reference<container::XIndexAccess> xGroup(getShape(1), uno::UNO_QUERY);
+    CPPUNIT_ASSERT_EQUAL(text::VertOrientation::TOP, getProperty<sal_Int16>(xGroup, "VertOrient"));
     uno::Reference<drawing::XShape> xShape(xGroup->getByIndex(1), uno::UNO_QUERY);
     // This was drawing::FillStyle_NONE.
     CPPUNIT_ASSERT_EQUAL(drawing::FillStyle_SOLID, getProperty<drawing::FillStyle>(xShape, "FillStyle"));
@@ -105,11 +107,28 @@ DECLARE_OOXMLEXPORT_TEST(testDmlTextshape, "dml-textshape.docx")
     CPPUNIT_ASSERT_EQUAL(OUString("ooxml-bentConnector3"), aType);
     // Connector was incorrectly shifted towards the top left corner, X was 552, Y was 0.
     CPPUNIT_ASSERT_EQUAL(sal_Int32(4018), xShape->getPosition().X);
-    CPPUNIT_ASSERT_EQUAL(sal_Int32(1256), xShape->getPosition().Y);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-4487), xShape->getPosition().Y);
 
     xShape.set(xGroup->getByIndex(5), uno::UNO_QUERY);
     // This was incorrectly shifted towards the top of the page, Y was 106.
-    CPPUNIT_ASSERT_EQUAL(sal_Int32(1016), xShape->getPosition().Y);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-4727), xShape->getPosition().Y);
+}
+
+DECLARE_OOXMLEXPORT_TEST(testDmlTextshapeB, "dml-textshapeB.docx")
+{
+    uno::Reference<container::XIndexAccess> xGroup(getShape(1), uno::UNO_QUERY);
+    xmlDocPtr pXmlDocument = parseExport("word/document.xml");
+    if (!pXmlDocument)
+        return;
+
+    uno::Reference<drawing::XShape> xShape(xGroup->getByIndex(3), uno::UNO_QUERY);
+    // Connector was incorrectly shifted towards the top left corner, X was 192, Y was -5743.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(3778), xShape->getPosition().X);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-5064), xShape->getPosition().Y);
+
+    xShape.set(xGroup->getByIndex(5), uno::UNO_QUERY);
+    // This was incorrectly shifted towards the top of the page, Y was -5011.
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(-4713), xShape->getPosition().Y);
 }
 
 DECLARE_OOXMLEXPORT_TEST(testDMLSolidfillAlpha, "dml-solidfill-alpha.docx")
@@ -429,7 +448,7 @@ DECLARE_OOXMLEXPORT_TEST(testTableFloatingMargins, "table-floating-margins.docx"
     xmlDocPtr pXmlDoc = parseExport();
     if (!pXmlDoc)
         return;
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent/mc:Fallback/w:pict/v:rect/v:textbox/w:txbxContent/w:tbl/w:tr[1]/w:tc[1]/w:p/w:pPr/w:spacing", "after", "0");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:tbl/w:tr[1]/w:tc[1]/w:p/w:pPr/w:spacing", "after", "0");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo69636, "fdo69636.docx")
@@ -455,7 +474,7 @@ DECLARE_OOXMLEXPORT_TEST(testVMLData, "TestVMLData.docx")
     xmlDocPtr pXmlDoc = parseExport("word/header2.xml");
     if (!pXmlDoc)
         return;
-    CPPUNIT_ASSERT(getXPath(pXmlDoc, "/w:hdr/w:p/w:r/mc:AlternateContent/mc:Fallback/w:pict/v:rect", "stroked").match("f"));
+    CPPUNIT_ASSERT(getXPath(pXmlDoc, "/w:hdr/w:p/w:r/mc:AlternateContent/mc:Fallback/w:pict/v:shape", "stroked").match("f"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testImageData, "image_data.docx")
@@ -465,7 +484,7 @@ DECLARE_OOXMLEXPORT_TEST(testImageData, "image_data.docx")
     xmlDocPtr pXmlDoc = parseExport("word/header2.xml");
     if (!pXmlDoc)
         return;
-    CPPUNIT_ASSERT(getXPath(pXmlDoc, "/w:hdr/w:p/w:r/mc:AlternateContent/mc:Fallback/w:pict/v:rect/v:imagedata", "detectmouseclick").match("t"));
+    CPPUNIT_ASSERT(getXPath(pXmlDoc, "/w:hdr/w:p/w:r/mc:AlternateContent/mc:Fallback/w:pict/v:shape/v:imagedata", "detectmouseclick").match("t"));
 }
 
 DECLARE_OOXMLEXPORT_TEST(testFdo70838, "fdo70838.docx")
@@ -618,7 +637,7 @@ DECLARE_OOXMLEXPORT_TEST(testBehinddoc, "behinddoc.docx")
 
 DECLARE_OOXMLEXPORT_TEST(testSmartArtAnchoredInline, "fdo73227.docx")
 {
-    /* Given file conatins 3 DrawingML objects as 1Picture,1SmartArt and 1Shape.
+    /* Given file contains 3 DrawingML objects as 1Picture,1SmartArt and 1Shape.
      * Check for SmartArt.
     *  SmartArt should get written as "Floating Object" i.e. inside <wp:anchor> tag.
     *  Also check for value of attribute "id" of <wp:docPr>. It should be unique for
@@ -752,7 +771,7 @@ DECLARE_OOXMLEXPORT_TEST(testShapeThemePreservation, "shape-theme-preservation.d
     OUString sFillColor = getXPath(pXmlDocument,
             "/w:document/w:body/w:p[5]/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:solidFill/a:srgbClr",
             "val");
-    CPPUNIT_ASSERT_EQUAL(sFillColor.toInt32(16), sal_Int32(0x00b050));
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(0x00b050), sFillColor.toInt32(16));
     sal_Int32 nLineColor = getXPath(pXmlDocument,
             "/w:document/w:body/w:p[5]/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:solidFill/a:srgbClr",
             "val").toInt32(16);
@@ -767,7 +786,7 @@ DECLARE_OOXMLEXPORT_TEST(testShapeThemePreservation, "shape-theme-preservation.d
             "/w:document/w:body/w:p[5]/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:miter",
             1);
     assertXPath(pXmlDocument,
-            "/w:document/w:body/w:p[5]/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:custDash",
+            "/w:document/w:body/w:p[5]/w:r/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash",
             1);
 
     uno::Reference<drawing::XShape> xShape1 = getShape(1);
@@ -821,13 +840,19 @@ DECLARE_OOXMLEXPORT_TEST(testAlignForShape,"Shape.docx")
 DECLARE_OOXMLEXPORT_TEST(testLineStyle_DashType, "LineStyle_DashType.docx")
 {
     /* DOCX contatining Shape with LineStyle as Dash Type should get preserved inside
-     * an XMl tag <a:prstDash> with value "dash".
+     * an XMl tag <a:prstDash> with value "dash", "sysDot", "lgDot", etc.
      */
     xmlDocPtr pXmlDoc = parseExport("word/document.xml");
     if (!pXmlDoc)
         return;
 
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r[1]/mc:AlternateContent/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "dash");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[7]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "lgDashDotDot");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[6]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "lgDashDot");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[5]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "lgDash");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[4]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "dashDot");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[3]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "dash");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[2]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "sysDash");
+    assertXPath(pXmlDoc, "/w:document/w:body/w:p/w:r/mc:AlternateContent[1]/mc:Choice/w:drawing/wp:anchor/a:graphic/a:graphicData/wps:wsp/wps:spPr/a:ln/a:prstDash", "val", "sysDot");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testGradientFillPreservation, "gradient-fill-preservation.docx")
@@ -901,7 +926,7 @@ DECLARE_OOXMLEXPORT_TEST(testOuterShdw,"testOuterShdw.docx")
     xmlDocPtr pXmlDoc = parseExport("word/document.xml");
     if (!pXmlDoc)
         return;
-    assertXPath(pXmlDoc, "//mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:effectLst[1]/a:outerShdw[1]", "dist", "57811035");
+    assertXPath(pXmlDoc, "//mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/a:graphic[1]/a:graphicData[1]/wps:wsp[1]/wps:spPr[1]/a:effectLst[1]/a:outerShdw[1]", "dist", "1041400");
 }
 
 DECLARE_OOXMLEXPORT_TEST(testExtentValue, "fdo74605.docx")
@@ -909,7 +934,9 @@ DECLARE_OOXMLEXPORT_TEST(testExtentValue, "fdo74605.docx")
     xmlDocPtr pXmlDoc = parseExport();
     if (!pXmlDoc)
         return;
-    assertXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/wp:extent","cx","0");
+    sal_Int32 nX = getXPath(pXmlDoc, "/w:document/w:body/w:p[2]/w:r[1]/mc:AlternateContent[1]/mc:Choice[1]/w:drawing[1]/wp:anchor[1]/wp:extent", "cx").toInt32();
+    // This was negative.
+    CPPUNIT_ASSERT(nX >= 0);
 }
 
 // part of tdf#93676, word gives the frame in the exported .docx a huge height,
@@ -923,11 +950,9 @@ DECLARE_OOXMLEXPORT_TEST(testSyncedRelativePercent, "tdf93676-1.odt")
         return;
 
     // check no explicit pctHeight has been exported, all we care
-    // about at this point is that its not 255000
+    // about at this point is that it's not 255000
     assertXPath(pXmlDoc, "//wp14:pctHeight", 0);
 }
-
-#endif
 
 CPPUNIT_PLUGIN_IMPLEMENT();
 

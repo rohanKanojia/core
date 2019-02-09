@@ -41,10 +41,10 @@ namespace sdr
             E3dLatheProperties(const E3dLatheProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~E3dLatheProperties();
+            virtual ~E3dLatheProperties() override;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
         };
     } // end of namespace properties
 } // end of namespace sdr

@@ -24,36 +24,37 @@
 
 #include <vcl/virdev.hxx>
 #include <tools/bigint.hxx>
-#include <tools/debug.hxx>
 #include <unotools/syslocale.hxx>
+#include <unotools/localedatawrapper.hxx>
+#include <sal/log.hxx>
 
 void MoveXPoly(XPolygon& rPoly, const Size& S)
 {
     rPoly.Move(S.Width(),S.Height());
 }
 
-void ResizeRect(Rectangle& rRect, const Point& rRef, const Fraction& rxFact, const Fraction& ryFact)
+void ResizeRect(tools::Rectangle& rRect, const Point& rRef, const Fraction& rxFact, const Fraction& ryFact)
 {
-    Fraction xFact(rxFact);
-    Fraction yFact(ryFact);
+    Fraction aXFact(rxFact);
+    Fraction aYFact(ryFact);
 
-    if (!xFact.IsValid()) {
+    if (!aXFact.IsValid()) {
         SAL_WARN( "svx.svdraw", "invalid fraction xFract, using Fraction(1,1)" );
-        xFact = Fraction(1,1);
+        aXFact = Fraction(1,1);
         long nWdt = rRect.Right() - rRect.Left();
-        if (nWdt == 0) rRect.Right()++;
+        if (nWdt == 0) rRect.AdjustRight( 1 );
     }
-    rRect.Left()  = rRef.X() + svx::Round( (rRect.Left()  - rRef.X()) * double(xFact) );
-    rRect.Right() = rRef.X() + svx::Round( (rRect.Right() - rRef.X()) * double(xFact) );
+    rRect.SetLeft( rRef.X() + FRound( (rRect.Left()  - rRef.X()) * double(aXFact) ) );
+    rRect.SetRight( rRef.X() + FRound( (rRect.Right() - rRef.X()) * double(aXFact) ) );
 
-    if (!yFact.IsValid()) {
+    if (!aYFact.IsValid()) {
         SAL_WARN( "svx.svdraw", "invalid fraction yFract, using Fraction(1,1)" );
-        yFact = Fraction(1,1);
+        aYFact = Fraction(1,1);
         long nHgt = rRect.Bottom() - rRect.Top();
-        if (nHgt == 0) rRect.Bottom()++;
+        if (nHgt == 0) rRect.AdjustBottom( 1 );
     }
-    rRect.Top()    = rRef.Y() + svx::Round( (rRect.Top()    - rRef.Y()) * double(yFact) );
-    rRect.Bottom() = rRef.Y() + svx::Round( (rRect.Bottom() - rRef.Y()) * double(yFact) );
+    rRect.SetTop( rRef.Y() + FRound( (rRect.Top()    - rRef.Y()) * double(aYFact) ) );
+    rRect.SetBottom( rRef.Y() + FRound( (rRect.Bottom() - rRef.Y()) * double(aYFact) ) );
 
     rRect.Justify();
 }
@@ -105,20 +106,20 @@ void MirrorPoint(Point& rPnt, const Point& rRef1, const Point& rRef2)
     long my=rRef2.Y()-rRef1.Y();
     if (mx==0) { // vertical axis
         long dx=rRef1.X()-rPnt.X();
-        rPnt.X()+=2*dx;
+        rPnt.AdjustX(2*dx );
     } else if (my==0) { // horizontal axis
         long dy=rRef1.Y()-rPnt.Y();
-        rPnt.Y()+=2*dy;
+        rPnt.AdjustY(2*dy );
     } else if (mx==my) { // diagonal axis '\'
         long dx1=rPnt.X()-rRef1.X();
         long dy1=rPnt.Y()-rRef1.Y();
-        rPnt.X()=rRef1.X()+dy1;
-        rPnt.Y()=rRef1.Y()+dx1;
+        rPnt.setX(rRef1.X()+dy1 );
+        rPnt.setY(rRef1.Y()+dx1 );
     } else if (mx==-my) { // diagonal axis '/'
         long dx1=rPnt.X()-rRef1.X();
         long dy1=rPnt.Y()-rRef1.Y();
-        rPnt.X()=rRef1.X()-dy1;
-        rPnt.Y()=rRef1.Y()-dx1;
+        rPnt.setX(rRef1.X()-dy1 );
+        rPnt.setY(rRef1.Y()-dx1 );
     } else { // arbitrary axis
         // TODO: Optimize this! Raise perpendicular on the mirroring axis..?
         long nRefWink=GetAngle(rRef2-rRef1);
@@ -173,36 +174,36 @@ double CrookRotateXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCent
     if (bC1) {
         if (bVert) {
             // move into the direction of the center, as a basic position for the rotation
-            pC1->Y()-=y0;
+            pC1->AdjustY( -y0 );
             // resize, account for the distance from the center
-            pC1->Y()=svx::Round(((double)pC1->Y()) /rRad.X()*(cx-pC1->X()));
-            pC1->Y()+=cy;
+            pC1->setY(FRound(static_cast<double>(pC1->Y()) /rRad.X()*(cx-pC1->X())) );
+            pC1->AdjustY(cy );
         } else {
             // move into the direction of the center, as a basic position for the rotation
-            pC1->X()-=x0;
+            pC1->AdjustX( -x0 );
             // resize, account for the distance from the center
             long nPntRad=cy-pC1->Y();
-            double nFact=(double)nPntRad/(double)rRad.Y();
-            pC1->X()=svx::Round((double)pC1->X()*nFact);
-            pC1->X()+=cx;
+            double nFact=static_cast<double>(nPntRad)/static_cast<double>(rRad.Y());
+            pC1->setX(FRound(static_cast<double>(pC1->X())*nFact) );
+            pC1->AdjustX(cx );
         }
         RotatePoint(*pC1,rCenter,sn,cs);
     }
     if (bC2) {
         if (bVert) {
             // move into the direction of the center, as a basic position for the rotation
-            pC2->Y()-=y0;
+            pC2->AdjustY( -y0 );
             // resize, account for the distance from the center
-            pC2->Y()=svx::Round(((double)pC2->Y()) /rRad.X()*(rCenter.X()-pC2->X()));
-            pC2->Y()+=cy;
+            pC2->setY(FRound(static_cast<double>(pC2->Y()) /rRad.X()*(rCenter.X()-pC2->X())) );
+            pC2->AdjustY(cy );
         } else {
             // move into the direction of the center, as a basic position for the rotation
-            pC2->X()-=x0;
+            pC2->AdjustX( -x0 );
             // resize, account for the distance from the center
             long nPntRad=rCenter.Y()-pC2->Y();
-            double nFact=(double)nPntRad/(double)rRad.Y();
-            pC2->X()=svx::Round((double)pC2->X()*nFact);
-            pC2->X()+=cx;
+            double nFact=static_cast<double>(nPntRad)/static_cast<double>(rRad.Y());
+            pC2->setX(FRound(static_cast<double>(pC2->X())*nFact) );
+            pC2->AdjustX(cx );
         }
         RotatePoint(*pC2,rCenter,sn,cs);
     }
@@ -224,42 +225,42 @@ double CrookSlantXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCente
     if (bVert) {
         long nStart=rCenter.X()-rRad.X();
         dx1=rPnt.X()-nStart;
-        rPnt.X()=nStart;
+        rPnt.setX(nStart );
         if (bC1) {
             dxC1=pC1->X()-nStart;
-            pC1->X()=nStart;
+            pC1->setX(nStart );
         }
         if (bC2) {
             dxC2=pC2->X()-nStart;
-            pC2->X()=nStart;
+            pC2->setX(nStart );
         }
     } else {
         long nStart=rCenter.Y()-rRad.Y();
         dy1=rPnt.Y()-nStart;
-        rPnt.Y()=nStart;
+        rPnt.setY(nStart );
         if (bC1) {
             dyC1=pC1->Y()-nStart;
-            pC1->Y()=nStart;
+            pC1->setY(nStart );
         }
         if (bC2) {
             dyC2=pC2->Y()-nStart;
-            pC2->Y()=nStart;
+            pC2->setY(nStart );
         }
     }
     double nAngle=GetCrookAngle(rPnt,rCenter,rRad,bVert);
     double sn=sin(nAngle);
     double cs=cos(nAngle);
     RotatePoint(rPnt,rCenter,sn,cs);
-    if (bC1) { if (bVert) pC1->Y()-=y0-rCenter.Y(); else pC1->X()-=x0-rCenter.X(); RotatePoint(*pC1,rCenter,sn,cs); }
-    if (bC2) { if (bVert) pC2->Y()-=y0-rCenter.Y(); else pC2->X()-=x0-rCenter.X(); RotatePoint(*pC2,rCenter,sn,cs); }
+    if (bC1) { if (bVert) pC1->AdjustY( -(y0-rCenter.Y()) ); else pC1->AdjustX( -(x0-rCenter.X()) ); RotatePoint(*pC1,rCenter,sn,cs); }
+    if (bC2) { if (bVert) pC2->AdjustY( -(y0-rCenter.Y()) ); else pC2->AdjustX( -(x0-rCenter.X()) ); RotatePoint(*pC2,rCenter,sn,cs); }
     if (bVert) {
-        rPnt.X()+=dx1;
-        if (bC1) pC1->X()+=dxC1;
-        if (bC2) pC2->X()+=dxC2;
+        rPnt.AdjustX(dx1 );
+        if (bC1) pC1->AdjustX(dxC1 );
+        if (bC2) pC2->AdjustX(dxC2 );
     } else {
-        rPnt.Y()+=dy1;
-        if (bC1) pC1->Y()+=dyC1;
-        if (bC2) pC2->Y()+=dyC2;
+        rPnt.AdjustY(dy1 );
+        if (bC1) pC1->AdjustY(dyC1 );
+        if (bC2) pC2->AdjustY(dyC2 );
     }
     rSin=sn;
     rCos=cs;
@@ -268,7 +269,7 @@ double CrookSlantXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCente
 
 double CrookStretchXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCenter,
                           const Point& rRad, double& rSin, double& rCos, bool bVert,
-                          const Rectangle& rRefRect)
+                          const tools::Rectangle& rRefRect)
 {
     long y0=rPnt.Y();
     CrookSlantXPoint(rPnt,pC1,pC2,rCenter,rRad,rSin,rCos,bVert);
@@ -278,9 +279,9 @@ double CrookStretchXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCen
         long nBtm=rRefRect.Bottom();
         long nHgt=nBtm-nTop;
         long dy=rPnt.Y()-y0;
-        double a=((double)(y0-nTop))/nHgt;
+        double a=static_cast<double>(y0-nTop)/nHgt;
         a*=dy;
-        rPnt.Y()=y0+svx::Round(a);
+        rPnt.setY(y0+FRound(a) );
     } return 0.0;
 }
 
@@ -288,19 +289,19 @@ double CrookStretchXPoint(Point& rPnt, Point* pC1, Point* pC2, const Point& rCen
 void CrookRotatePoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert)
 {
     double nSin,nCos;
-    sal_uInt16 nPointAnz=rPoly.GetPointCount();
+    sal_uInt16 nPointCnt=rPoly.GetPointCount();
     sal_uInt16 i=0;
-    while (i<nPointAnz) {
+    while (i<nPointCnt) {
         Point* pPnt=&rPoly[i];
         Point* pC1=nullptr;
         Point* pC2=nullptr;
-        if (i+1<nPointAnz && rPoly.IsControl(i)) { // control point to the left
+        if (i+1<nPointCnt && rPoly.IsControl(i)) { // control point to the left
             pC1=pPnt;
             i++;
             pPnt=&rPoly[i];
         }
         i++;
-        if (i<nPointAnz && rPoly.IsControl(i)) { // control point to the right
+        if (i<nPointCnt && rPoly.IsControl(i)) { // control point to the right
             pC2=&rPoly[i];
             i++;
         }
@@ -311,19 +312,19 @@ void CrookRotatePoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, b
 void CrookSlantPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert)
 {
     double nSin,nCos;
-    sal_uInt16 nPointAnz=rPoly.GetPointCount();
+    sal_uInt16 nPointCnt=rPoly.GetPointCount();
     sal_uInt16 i=0;
-    while (i<nPointAnz) {
+    while (i<nPointCnt) {
         Point* pPnt=&rPoly[i];
         Point* pC1=nullptr;
         Point* pC2=nullptr;
-        if (i+1<nPointAnz && rPoly.IsControl(i)) { // control point to the left
+        if (i+1<nPointCnt && rPoly.IsControl(i)) { // control point to the left
             pC1=pPnt;
             i++;
             pPnt=&rPoly[i];
         }
         i++;
-        if (i<nPointAnz && rPoly.IsControl(i)) { // control point to the right
+        if (i<nPointCnt && rPoly.IsControl(i)) { // control point to the right
             pC2=&rPoly[i];
             i++;
         }
@@ -331,22 +332,22 @@ void CrookSlantPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bo
     }
 }
 
-void CrookStretchPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const Rectangle& rRefRect)
+void CrookStretchPoly(XPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const tools::Rectangle& rRefRect)
 {
     double nSin,nCos;
-    sal_uInt16 nPointAnz=rPoly.GetPointCount();
+    sal_uInt16 nPointCnt=rPoly.GetPointCount();
     sal_uInt16 i=0;
-    while (i<nPointAnz) {
+    while (i<nPointCnt) {
         Point* pPnt=&rPoly[i];
         Point* pC1=nullptr;
         Point* pC2=nullptr;
-        if (i+1<nPointAnz && rPoly.IsControl(i)) { //  control point to the left
+        if (i+1<nPointCnt && rPoly.IsControl(i)) { //  control point to the left
             pC1=pPnt;
             i++;
             pPnt=&rPoly[i];
         }
         i++;
-        if (i<nPointAnz && rPoly.IsControl(i)) { // control point to the right
+        if (i<nPointCnt && rPoly.IsControl(i)) { // control point to the right
             pC2=&rPoly[i];
             i++;
         }
@@ -371,7 +372,7 @@ void CrookSlantPoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad
     }
 }
 
-void CrookStretchPoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const Rectangle& rRefRect)
+void CrookStretchPoly(XPolyPolygon& rPoly, const Point& rCenter, const Point& rRad, bool bVert, const tools::Rectangle& rRefRect)
 {
     sal_uInt16 nPolyCount=rPoly.Count();
     for (sal_uInt16 nPolyNum=0; nPolyNum<nPolyCount; nPolyNum++) {
@@ -389,19 +390,19 @@ long GetAngle(const Point& rPnt)
         if (rPnt.Y()>0) a=-9000;
         else a=9000;
     } else {
-        a=svx::Round((atan2((double)-rPnt.Y(),(double)rPnt.X())/nPi180));
+        a=FRound(atan2(static_cast<double>(-rPnt.Y()),static_cast<double>(rPnt.X()))/nPi180);
     }
     return a;
 }
 
-long NormAngle180(long a)
+long NormAngle18000(long a)
 {
-    while (a<18000) a+=36000;
+    while (a<-18000) a+=36000;
     while (a>=18000) a-=36000;
     return a;
 }
 
-long NormAngle360(long a)
+long NormAngle36000(long a)
 {
     while (a<0) a+=36000;
     while (a>=36000) a-=36000;
@@ -426,7 +427,7 @@ long GetLen(const Point& rPnt)
         x*=x;
         y*=y;
         x+=y;
-        x=svx::Round(sqrt((double)x));
+        x=FRound(sqrt(static_cast<double>(x)));
         return x;
     } else {
         double nx=x;
@@ -438,7 +439,7 @@ long GetLen(const Point& rPnt)
         if (nx>0x7FFFFFFF) {
             return 0x7FFFFFFF; // we can't go any further, for fear of an overrun!
         } else {
-            return svx::Round(nx);
+            return FRound(nx);
         }
     }
 }
@@ -467,7 +468,7 @@ void GeoStat::RecalcTan()
 }
 
 
-tools::Polygon Rect2Poly(const Rectangle& rRect, const GeoStat& rGeo)
+tools::Polygon Rect2Poly(const tools::Rectangle& rRect, const GeoStat& rGeo)
 {
     tools::Polygon aPol(5);
     aPol[0]=rRect.TopLeft();
@@ -480,10 +481,10 @@ tools::Polygon Rect2Poly(const Rectangle& rRect, const GeoStat& rGeo)
     return aPol;
 }
 
-void Poly2Rect(const tools::Polygon& rPol, Rectangle& rRect, GeoStat& rGeo)
+void Poly2Rect(const tools::Polygon& rPol, tools::Rectangle& rRect, GeoStat& rGeo)
 {
     rGeo.nRotationAngle=GetAngle(rPol[1]-rPol[0]);
-    rGeo.nRotationAngle=NormAngle360(rGeo.nRotationAngle);
+    rGeo.nRotationAngle=NormAngle36000(rGeo.nRotationAngle);
     // rotation successful
     rGeo.RecalcSinCos();
 
@@ -499,7 +500,7 @@ void Poly2Rect(const tools::Polygon& rPol, Rectangle& rRect, GeoStat& rGeo)
 
     long nShW=GetAngle(aPt3);
     nShW-=27000; // ShearWink is measured against a vertical line
-    nShW=-nShW;  // Negieren, denn '+' ist Rechtskursivierung
+    nShW=-nShW;  // negating, because '+' is shearing clock-wise
 
     bool bMirr=aPt3.Y()<0;
     if (bMirr) { // "exchange of points" when mirroring
@@ -507,18 +508,18 @@ void Poly2Rect(const tools::Polygon& rPol, Rectangle& rRect, GeoStat& rGeo)
         nShW+=18000;
         aPt0=rPol[3];
     }
-    nShW=NormAngle180(nShW);
+    nShW=NormAngle18000(nShW);
     if (nShW<-9000 || nShW>9000) {
-        nShW=NormAngle180(nShW+18000);
+        nShW=NormAngle18000(nShW+18000);
     }
     if (nShW<-SDRMAXSHEAR) nShW=-SDRMAXSHEAR; // limit ShearWinkel (shear angle) to +/- 89.00 deg
     if (nShW>SDRMAXSHEAR)  nShW=SDRMAXSHEAR;
     rGeo.nShearAngle=nShW;
     rGeo.RecalcTan();
     Point aRU(aPt0);
-    aRU.X()+=nWdt;
-    aRU.Y()+=nHgt;
-    rRect=Rectangle(aPt0,aRU);
+    aRU.AdjustX(nWdt );
+    aRU.AdjustY(nHgt );
+    rRect=tools::Rectangle(aPt0,aRU);
 }
 
 
@@ -529,12 +530,12 @@ void OrthoDistance8(const Point& rPt0, Point& rPt, bool bBigOrtho)
     long dxa=std::abs(dx);
     long dya=std::abs(dy);
     if (dx==0 || dy==0 || dxa==dya) return;
-    if (dxa>=dya*2) { rPt.Y()=rPt0.Y(); return; }
-    if (dya>=dxa*2) { rPt.X()=rPt0.X(); return; }
+    if (dxa>=dya*2) { rPt.setY(rPt0.Y() ); return; }
+    if (dya>=dxa*2) { rPt.setX(rPt0.X() ); return; }
     if ((dxa<dya) != bBigOrtho) {
-        rPt.Y()=rPt0.Y()+(dxa* (dy>=0 ? 1 : -1) );
+        rPt.setY(rPt0.Y()+(dxa* (dy>=0 ? 1 : -1) ) );
     } else {
-        rPt.X()=rPt0.X()+(dya* (dx>=0 ? 1 : -1) );
+        rPt.setX(rPt0.X()+(dya* (dx>=0 ? 1 : -1) ) );
     }
 }
 
@@ -545,9 +546,9 @@ void OrthoDistance4(const Point& rPt0, Point& rPt, bool bBigOrtho)
     long dxa=std::abs(dx);
     long dya=std::abs(dy);
     if ((dxa<dya) != bBigOrtho) {
-        rPt.Y()=rPt0.Y()+(dxa* (dy>=0 ? 1 : -1) );
+        rPt.setY(rPt0.Y()+(dxa* (dy>=0 ? 1 : -1) ) );
     } else {
-        rPt.X()=rPt0.X()+(dya* (dx>=0 ? 1 : -1) );
+        rPt.setX(rPt0.X()+(dya* (dx>=0 ? 1 : -1) ) );
     }
 }
 
@@ -572,30 +573,30 @@ long BigMulDiv(long nVal, long nMul, long nDiv)
 // How many eU units fit into a mm, respectively an inch?
 // Or: How many mm, respectively inches, are there in an eU (and then give me the inverse)
 
-FrPair GetInchOrMM(MapUnit eU)
+static FrPair GetInchOrMM(MapUnit eU)
 {
     switch (eU) {
-        case MAP_1000TH_INCH: return FrPair(1000,1);
-        case MAP_100TH_INCH : return FrPair( 100,1);
-        case MAP_10TH_INCH  : return FrPair(  10,1);
-        case MAP_INCH       : return FrPair(   1,1);
-        case MAP_POINT      : return FrPair(  72,1);
-        case MAP_TWIP       : return FrPair(1440,1);
-        case MAP_100TH_MM   : return FrPair( 100,1);
-        case MAP_10TH_MM    : return FrPair(  10,1);
-        case MAP_MM         : return FrPair(   1,1);
-        case MAP_CM         : return FrPair(   1,10);
-        case MAP_PIXEL      : {
+        case MapUnit::Map1000thInch: return FrPair(1000,1);
+        case MapUnit::Map100thInch : return FrPair( 100,1);
+        case MapUnit::Map10thInch  : return FrPair(  10,1);
+        case MapUnit::MapInch       : return FrPair(   1,1);
+        case MapUnit::MapPoint      : return FrPair(  72,1);
+        case MapUnit::MapTwip       : return FrPair(1440,1);
+        case MapUnit::Map100thMM   : return FrPair( 100,1);
+        case MapUnit::Map10thMM    : return FrPair(  10,1);
+        case MapUnit::MapMM         : return FrPair(   1,1);
+        case MapUnit::MapCM         : return FrPair(   1,10);
+        case MapUnit::MapPixel      : {
             ScopedVclPtrInstance< VirtualDevice > pVD;
-            pVD->SetMapMode(MapMode(MAP_100TH_MM));
+            pVD->SetMapMode(MapMode(MapUnit::Map100thMM));
             Point aP(pVD->PixelToLogic(Point(64,64))); // 64 pixels for more accuracy
             return FrPair(6400,aP.X(),6400,aP.Y());
         }
-        case MAP_APPFONT: case MAP_SYSFONT: {
+        case MapUnit::MapAppFont: case MapUnit::MapSysFont: {
             ScopedVclPtrInstance< VirtualDevice > pVD;
             pVD->SetMapMode(MapMode(eU));
             Point aP(pVD->LogicToPixel(Point(32,32))); // 32 units for more accuracy
-            pVD->SetMapMode(MapMode(MAP_100TH_MM));
+            pVD->SetMapMode(MapMode(MapUnit::Map100thMM));
             aP=pVD->PixelToLogic(aP);
             return FrPair(3200,aP.X(),3200,aP.Y());
         }
@@ -604,20 +605,20 @@ FrPair GetInchOrMM(MapUnit eU)
     return Fraction(1,1);
 }
 
-FrPair GetInchOrMM(FieldUnit eU)
+static FrPair GetInchOrMM(FieldUnit eU)
 {
     switch (eU) {
-        case FUNIT_INCH       : return FrPair(   1,1);
-        case FUNIT_POINT      : return FrPair(  72,1);
-        case FUNIT_TWIP       : return FrPair(1440,1);
-        case FUNIT_100TH_MM   : return FrPair( 100,1);
-        case FUNIT_MM         : return FrPair(   1,1);
-        case FUNIT_CM         : return FrPair(   1,10);
-        case FUNIT_M          : return FrPair(   1,1000);
-        case FUNIT_KM         : return FrPair(   1,1000000);
-        case FUNIT_PICA       : return FrPair(   6,1);
-        case FUNIT_FOOT       : return FrPair(   1,12);
-        case FUNIT_MILE       : return FrPair(   1,63360);
+        case FieldUnit::INCH       : return FrPair(   1,1);
+        case FieldUnit::POINT      : return FrPair(  72,1);
+        case FieldUnit::TWIP       : return FrPair(1440,1);
+        case FieldUnit::MM_100TH   : return FrPair( 100,1);
+        case FieldUnit::MM         : return FrPair(   1,1);
+        case FieldUnit::CM         : return FrPair(   1,10);
+        case FieldUnit::M          : return FrPair(   1,1000);
+        case FieldUnit::KM         : return FrPair(   1,1000000);
+        case FieldUnit::PICA       : return FrPair(   6,1);
+        case FieldUnit::FOOT       : return FrPair(   1,12);
+        case FieldUnit::MILE       : return FrPair(   1,63360);
         default: break;
     }
     return Fraction(1,1);
@@ -660,98 +661,55 @@ FrPair GetMapFactor(FieldUnit eS, FieldUnit eD)
     // 1 yd      =  3 ft      =     36" =       914,4mm
     // 1 ft      = 12 "       =      1" =       304,8mm
 
-void GetMeterOrInch(MapUnit eMU, short& rnKomma, long& rnMul, long& rnDiv, bool& rbMetr, bool& rbInch)
+static void GetMeterOrInch(MapUnit eMU, short& rnComma, long& rnMul, long& rnDiv, bool& rbMetr, bool& rbInch)
 {
     rnMul=1; rnDiv=1;
-    short nKomma=0;
+    short nComma=0;
     bool bMetr = false, bInch = false;
     switch (eMU) {
-        // Metrisch
-        case MAP_100TH_MM   : bMetr = true; nKomma=5; break;
-        case MAP_10TH_MM    : bMetr = true; nKomma=4; break;
-        case MAP_MM         : bMetr = true; nKomma=3; break;
-        case MAP_CM         : bMetr = true; nKomma=2; break;
+        // Metrically
+        case MapUnit::Map100thMM   : bMetr = true; nComma=5; break;
+        case MapUnit::Map10thMM    : bMetr = true; nComma=4; break;
+        case MapUnit::MapMM         : bMetr = true; nComma=3; break;
+        case MapUnit::MapCM         : bMetr = true; nComma=2; break;
         // Inch
-        case MAP_1000TH_INCH: bInch = true; nKomma=3; break;
-        case MAP_100TH_INCH : bInch = true; nKomma=2; break;
-        case MAP_10TH_INCH  : bInch = true; nKomma=1; break;
-        case MAP_INCH       : bInch = true; nKomma=0; break;
-        case MAP_POINT      : bInch = true; rnDiv=72;  break;          // 1Pt   = 1/72"
-        case MAP_TWIP       : bInch = true; rnDiv=144; nKomma=1; break; // 1Twip = 1/1440"
-        // Sonstiges
-        case MAP_PIXEL      : break;
-        case MAP_SYSFONT    : break;
-        case MAP_APPFONT    : break;
-        case MAP_RELATIVE   : break;
+        case MapUnit::Map1000thInch: bInch = true; nComma=3; break;
+        case MapUnit::Map100thInch : bInch = true; nComma=2; break;
+        case MapUnit::Map10thInch  : bInch = true; nComma=1; break;
+        case MapUnit::MapInch       : bInch = true; nComma=0; break;
+        case MapUnit::MapPoint      : bInch = true; rnDiv=72;  break;          // 1Pt   = 1/72"
+        case MapUnit::MapTwip       : bInch = true; rnDiv=144; nComma=1; break; // 1Twip = 1/1440"
+        // Others
+        case MapUnit::MapPixel      : break;
+        case MapUnit::MapSysFont    : break;
+        case MapUnit::MapAppFont    : break;
+        case MapUnit::MapRelative   : break;
         default: break;
     } // switch
-    rnKomma=nKomma;
+    rnComma=nComma;
     rbMetr=bMetr;
     rbInch=bInch;
 }
 
-void GetMeterOrInch(FieldUnit eFU, short& rnKomma, long& rnMul, long& rnDiv, bool& rbMetr, bool& rbInch)
-{
-    rnMul=1; rnDiv=1;
-    short nKomma=0;
-    bool bMetr = false, bInch = false;
-    switch (eFU) {
-        case FUNIT_NONE     : break;
-        // metrically
-        case FUNIT_100TH_MM : bMetr = true; nKomma=5; break;
-        case FUNIT_MM       : bMetr = true; nKomma=3; break;
-        case FUNIT_CM       : bMetr = true; nKomma=2; break;
-        case FUNIT_M        : bMetr = true; nKomma=0; break;
-        case FUNIT_KM       : bMetr = true; nKomma=-3; break;
-        // Inch
-        case FUNIT_TWIP     : bInch = true; rnDiv=144; nKomma=1; break;  // 1Twip = 1/1440"
-        case FUNIT_POINT    : bInch = true; rnDiv=72; break;   // 1Pt   = 1/72"
-        case FUNIT_PICA     : bInch = true; rnDiv=6; break;    // 1Pica = 1/6"  ?
-        case FUNIT_INCH     : bInch = true; break;             // 1"    = 1"
-        case FUNIT_FOOT     : bInch = true; rnMul=12; break;   // 1Ft   = 12"
-        case FUNIT_MILE     : bInch = true; rnMul=6336; nKomma=-1; break; // 1mile = 63360"
-        // others
-        case FUNIT_CUSTOM   : break;
-        case FUNIT_PERCENT  : nKomma=2; break;
-        // TODO: Add code to handle the following (added to remove warning)
-        case FUNIT_CHAR     : break;
-        case FUNIT_LINE     : break;
-        case FUNIT_PIXEL    : break;
-        case FUNIT_DEGREE   : break;
-        case FUNIT_SECOND   : break;
-        case FUNIT_MILLISECOND   : break;
-    } // switch
-    rnKomma=nKomma;
-    rbMetr=bMetr;
-    rbInch=bInch;
-}
 
 void SdrFormatter::Undirty()
 {
     bool bSrcMetr,bSrcInch,bDstMetr,bDstInch;
     long nMul1,nDiv1,nMul2,nDiv2;
-    short nKomma1,nKomma2;
+    short nComma1,nComma2;
     // first: normalize to m or in
-    if (!bSrcFU) {
-        GetMeterOrInch(eSrcMU,nKomma1,nMul1,nDiv1,bSrcMetr,bSrcInch);
-    } else {
-        GetMeterOrInch(eSrcFU,nKomma1,nMul1,nDiv1,bSrcMetr,bSrcInch);
-    }
-    if (!bDstFU) {
-        GetMeterOrInch(eDstMU,nKomma2,nMul2,nDiv2,bDstMetr,bDstInch);
-    } else {
-        GetMeterOrInch(eDstFU,nKomma2,nMul2,nDiv2,bDstMetr,bDstInch);
-    }
+    GetMeterOrInch(eSrcMU,nComma1,nMul1,nDiv1,bSrcMetr,bSrcInch);
+    GetMeterOrInch(eDstMU,nComma2,nMul2,nDiv2,bDstMetr,bDstInch);
     nMul1*=nDiv2;
     nDiv1*=nMul2;
-    nKomma1=nKomma1-nKomma2;
+    nComma1=nComma1-nComma2;
 
     if (bSrcInch && bDstMetr) {
-        nKomma1+=4;
+        nComma1+=4;
         nMul1*=254;
     }
     if (bSrcMetr && bDstInch) {
-        nKomma1-=4;
+        nComma1-=4;
         nDiv1*=254;
     }
 
@@ -762,7 +720,7 @@ void SdrFormatter::Undirty()
 
     nMul_=nMul1;
     nDiv_=nDiv1;
-    nKomma_=nKomma1;
+    nComma_=nComma1;
     bDirty=false;
 }
 
@@ -782,9 +740,10 @@ void SdrFormatter::TakeStr(long nVal, OUString& rStr) const
     SvtSysLocale aSysLoc;
     const LocaleDataWrapper& rLoc = aSysLoc.GetLocaleData();
 
-    ForceUndirty();
+    if (bDirty)
+        const_cast<SdrFormatter*>(this)->Undirty();
 
-    sal_Int16 nC(nKomma_);
+    sal_Int16 nC(nComma_);
 
     if(bNeg)
         nVal = -nVal;
@@ -853,7 +812,7 @@ void SdrFormatter::TakeStr(long nVal, OUString& rStr) const
     // add in thousands separator (if necessary)
     if( nForComma > 3 )
     {
-        OUString aThoSep( rLoc.getNumThousandSep() );
+        const OUString& aThoSep( rLoc.getNumThousandSep() );
         if ( aThoSep.getLength() > 0 )
         {
             sal_Unicode cTho( aThoSep[0] );
@@ -883,76 +842,76 @@ void SdrFormatter::TakeUnitStr(MapUnit eUnit, OUString& rStr)
     switch(eUnit)
     {
         // metrically
-        case MAP_100TH_MM   :
+        case MapUnit::Map100thMM   :
         {
             rStr = "/100mm";
             break;
         }
-        case MAP_10TH_MM    :
+        case MapUnit::Map10thMM    :
         {
             rStr = "/10mm";
             break;
         }
-        case MAP_MM         :
+        case MapUnit::MapMM         :
         {
             rStr = "mm";
             break;
         }
-        case MAP_CM         :
+        case MapUnit::MapCM         :
         {
             rStr = "cm";
             break;
         }
 
         // Inch
-        case MAP_1000TH_INCH:
+        case MapUnit::Map1000thInch:
         {
             rStr = "/1000\"";
             break;
         }
-        case MAP_100TH_INCH :
+        case MapUnit::Map100thInch :
         {
             rStr = "/100\"";
             break;
         }
-        case MAP_10TH_INCH  :
+        case MapUnit::Map10thInch  :
         {
             rStr = "/10\"";
             break;
         }
-        case MAP_INCH       :
+        case MapUnit::MapInch       :
         {
             rStr = "\"";
             break;
         }
-        case MAP_POINT      :
+        case MapUnit::MapPoint      :
         {
             rStr = "pt";
             break;
         }
-        case MAP_TWIP       :
+        case MapUnit::MapTwip       :
         {
             rStr = "twip";
             break;
         }
 
         // others
-        case MAP_PIXEL      :
+        case MapUnit::MapPixel      :
         {
             rStr = "pixel";
             break;
         }
-        case MAP_SYSFONT    :
+        case MapUnit::MapSysFont    :
         {
             rStr = "sysfont";
             break;
         }
-        case MAP_APPFONT    :
+        case MapUnit::MapAppFont    :
         {
             rStr = "appfont";
             break;
         }
-        case MAP_RELATIVE   :
+        case MapUnit::MapRelative   :
         {
             rStr = "%";
             break;
@@ -966,74 +925,74 @@ void SdrFormatter::TakeUnitStr(FieldUnit eUnit, OUString& rStr)
     switch(eUnit)
     {
         default             :
-        case FUNIT_NONE     :
-        case FUNIT_CUSTOM   :
+        case FieldUnit::NONE     :
+        case FieldUnit::CUSTOM   :
         {
             rStr.clear();
             break;
         }
 
         // metrically
-        case FUNIT_100TH_MM:
+        case FieldUnit::MM_100TH:
         {
             rStr = "/100mm";
             break;
         }
-        case FUNIT_MM     :
+        case FieldUnit::MM     :
         {
             rStr = "mm";
             break;
         }
-        case FUNIT_CM     :
+        case FieldUnit::CM     :
         {
             rStr = "cm";
             break;
         }
-        case FUNIT_M      :
+        case FieldUnit::M      :
         {
             rStr = "m";
             break;
         }
-        case FUNIT_KM     :
+        case FieldUnit::KM     :
         {
             rStr = "km";
             break;
         }
 
         // Inch
-        case FUNIT_TWIP   :
+        case FieldUnit::TWIP   :
         {
             rStr = "twip";
             break;
         }
-        case FUNIT_POINT  :
+        case FieldUnit::POINT  :
         {
             rStr = "pt";
             break;
         }
-        case FUNIT_PICA   :
+        case FieldUnit::PICA   :
         {
             rStr = "pica";
             break;
         }
-        case FUNIT_INCH   :
+        case FieldUnit::INCH   :
         {
             rStr = "\"";
             break;
         }
-        case FUNIT_FOOT   :
+        case FieldUnit::FOOT   :
         {
             rStr = "ft";
             break;
         }
-        case FUNIT_MILE   :
+        case FieldUnit::MILE   :
         {
             rStr = "mile(s)";
             break;
         }
 
         // others
-        case FUNIT_PERCENT:
+        case FieldUnit::PERCENT:
         {
             rStr = "%";
             break;

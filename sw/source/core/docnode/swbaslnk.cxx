@@ -29,6 +29,7 @@
 #include <editeng/boxitem.hxx>
 #include <svx/svxids.hrc>
 #include <sfx2/linkmgr.hxx>
+#include <sfx2/event.hxx>
 #include <svtools/soerr.hxx>
 #include <fmtfsize.hxx>
 #include <fmtanchr.hxx>
@@ -60,10 +61,10 @@ static bool SetGrfFlySize( const Size& rGrfSz, SwGrfNode* pGrfNd, const Size &rO
 
 static void lcl_CallModify( SwGrfNode& rGrfNd, SfxPoolItem& rItem )
 {
-    //call fist all not SwNoTextFrames, then the SwNoTextFrames.
+    //call first all not SwNoTextFrames, then the SwNoTextFrames.
     //              The reason is, that in the SwNoTextFrames the Graphic
     //              after a Paint will be swapped out! So all other "behind"
-    //              them havent't a loaded Graphic.
+    //              them haven't a loaded Graphic.
     rGrfNd.LockModify();
     {
         SwIterator<SwClient,SwGrfNode> aIter(rGrfNd);
@@ -82,22 +83,21 @@ static void lcl_CallModify( SwGrfNode& rGrfNd, SfxPoolItem& rItem )
 ::sfx2::SvBaseLink::UpdateResult SwBaseLink::DataChanged(
     const OUString& rMimeType, const uno::Any & rValue )
 {
-    if( !pContentNode )
+    if( !m_pContentNode )
     {
         OSL_ENSURE(false, "DataChanged without ContentNode" );
         return ERROR_GENERAL;
     }
 
-    SwDoc* pDoc = pContentNode->GetDoc();
-    if( pDoc->IsInDtor() || ChkNoDataFlag() || bIgnoreDataChanged )
+    SwDoc* pDoc = m_pContentNode->GetDoc();
+    if( pDoc->IsInDtor() || ChkNoDataFlag() )
     {
-        bIgnoreDataChanged = false;
         return SUCCESS;
     }
 
     SotClipboardFormatId nFormat = SotExchange::GetFormatIdFromMimeType( rMimeType );
 
-    if( pContentNode->IsNoTextNode() &&
+    if( m_pContentNode->IsNoTextNode() &&
         nFormat == sfx2::LinkManager::RegisterStatusInfoId() )
     {
         // Only a status change - serve Events?
@@ -105,16 +105,16 @@ static void lcl_CallModify( SwGrfNode& rGrfNd, SfxPoolItem& rItem )
 
         if( rValue.hasValue() && ( rValue >>= sState ))
         {
-            sal_uInt16 nEvent = 0;
+            SvMacroItemId nEvent = SvMacroItemId::NONE;
             switch( sState.toInt32() )
             {
-            case sfx2::LinkManager::STATE_LOAD_OK:      nEvent = SVX_EVENT_IMAGE_LOAD;  break;
-            case sfx2::LinkManager::STATE_LOAD_ERROR:   nEvent = SVX_EVENT_IMAGE_ERROR; break;
-            case sfx2::LinkManager::STATE_LOAD_ABORT:   nEvent = SVX_EVENT_IMAGE_ABORT; break;
+            case sfx2::LinkManager::STATE_LOAD_OK:      nEvent = SvMacroItemId::OnImageLoadDone;  break;
+            case sfx2::LinkManager::STATE_LOAD_ERROR:   nEvent = SvMacroItemId::OnImageLoadError; break;
+            case sfx2::LinkManager::STATE_LOAD_ABORT:   nEvent = SvMacroItemId::OnImageLoadCancel; break;
             }
 
             SwFrameFormat* pFormat;
-            if( nEvent && nullptr != ( pFormat = pContentNode->GetFlyFormat() ))
+            if( nEvent != SvMacroItemId::NONE && nullptr != ( pFormat = m_pContentNode->GetFlyFormat() ))
             {
                 SwCallMouseEvent aCallEvent;
                 aCallEvent.Set( EVENT_OBJECT_IMAGE, pFormat );
@@ -125,164 +125,62 @@ static void lcl_CallModify( SwGrfNode& rGrfNd, SfxPoolItem& rItem )
     }
 
     bool bUpdate = false;
-    bool bGraphicArrived = false;
-    bool bGraphicPieceArrived = false;
-    bool bDontNotify = false;
+    bool bFrameInPaint = false;
     Size aGrfSz, aOldSz;
 
     SwGrfNode* pSwGrfNode = nullptr;
 
-    if (pContentNode->IsGrfNode())
+    if (m_pContentNode->IsGrfNode())
     {
-        pSwGrfNode = pContentNode->GetGrfNode();
+        pSwGrfNode = m_pContentNode->GetGrfNode();
         assert(pSwGrfNode && "Error, pSwGrfNode expected when node answers IsGrfNode() with true (!)");
         aOldSz = pSwGrfNode->GetTwipSize();
         const GraphicObject& rGrfObj = pSwGrfNode->GetGrfObj();
 
-        bDontNotify = pSwGrfNode->IsFrameInPaint();
-
-        bGraphicArrived = GetObj()->IsDataComplete();
-        bGraphicPieceArrived = GetObj()->IsPending();
-        pSwGrfNode->SetGraphicArrived( bGraphicArrived );
+        bFrameInPaint = pSwGrfNode->IsFrameInPaint();
 
         Graphic aGrf;
 
-        if( sfx2::LinkManager::GetGraphicFromAny( rMimeType, rValue, aGrf ) &&
-            ( GRAPHIC_DEFAULT != aGrf.GetType() ||
-              GRAPHIC_DEFAULT != rGrfObj.GetType() ) )
+        OUString sReferer;
+        SfxObjectShell * sh = pDoc->GetPersist();
+        if (sh != nullptr && sh->HasName())
+        {
+            sReferer = sh->GetMedium()->GetName();
+        }
+
+        if( sfx2::LinkManager::GetGraphicFromAny(rMimeType, rValue, sReferer, aGrf) &&
+            ( GraphicType::Default != aGrf.GetType() ||
+              GraphicType::Default != rGrfObj.GetType() ) )
         {
             aGrfSz = ::GetGraphicSizeTwip( aGrf, nullptr );
 
-            if( bGraphicPieceArrived && GRAPHIC_DEFAULT != aGrf.GetType() &&
-                ( !aOldSz.Width() || !aOldSz.Height() ) )
-            {
-                // If only a part arrives, but the size is not set
-                // we need to go through bGraphicArrived down there.
-                // Or else the graphic is painted at its definitive size
-                bGraphicArrived = true;
-                bGraphicPieceArrived = false;
-            }
-
-            pSwGrfNode->SetGraphic(aGrf, rGrfObj.GetLink());
+            pSwGrfNode->SetGraphic(aGrf);
             bUpdate = true;
 
-            // In order for the Node to have the right transparency status
-            // without having to access the graphic.
-            // Or else we cause a SwapIn.
-            if( bGraphicArrived )
+            // Always use the correct graphic size
+            if( aGrfSz.Height() && aGrfSz.Width() &&
+                aOldSz.Height() && aOldSz.Width() &&
+                aGrfSz != aOldSz )
             {
-                // Always use the correct graphic size
-                if( aGrfSz.Height() && aGrfSz.Width() &&
-                    aOldSz.Height() && aOldSz.Width() &&
-                    aGrfSz != aOldSz )
-                {
-                    pSwGrfNode->SetTwipSize( aGrfSz );
-                    aOldSz = aGrfSz;
-                }
+                pSwGrfNode->SetTwipSize(aGrfSz);
+                aOldSz = aGrfSz;
             }
         }
-        if ( bUpdate && !bGraphicArrived && !bGraphicPieceArrived )
-            pSwGrfNode->SetTwipSize( Size(0,0) );
     }
-    else if( pContentNode->IsOLENode() )
+    else if( m_pContentNode->IsOLENode() )
         bUpdate = true;
 
-    SwViewShell *pSh = pDoc->getIDocumentLayoutAccess().GetCurrentViewShell();
-    SwEditShell* pESh = pDoc->GetEditShell();
+    if ( !bUpdate || bFrameInPaint )
+        return SUCCESS;
 
-    if ( bUpdate && bGraphicPieceArrived && !(bSwapIn || bDontNotify) )
+    if (pSwGrfNode)
     {
-        // Send hint without Actions; triggers direct paint
-        if ( (!pSh || !pSh->ActionPend()) && (!pESh || !pESh->ActionPend()) )
+        if (!SetGrfFlySize(aGrfSz, pSwGrfNode, aOldSz))
         {
-            SwMsgPoolItem aMsgHint( RES_GRAPHIC_PIECE_ARRIVED );
-            pContentNode->ModifyNotification( &aMsgHint, &aMsgHint );
-            bUpdate = false;
+            SwMsgPoolItem aMsgHint(RES_GRAPHIC_ARRIVED);
+            lcl_CallModify(*pSwGrfNode, aMsgHint);
+            return SUCCESS;
         }
-    }
-
-    static bool bInNotifyLinks = false;
-    if( bUpdate && !bDontNotify && (!bSwapIn || bGraphicArrived) &&
-        !bInNotifyLinks)
-    {
-        bool bLockView = false;
-        if( pSh )
-        {
-            bLockView = pSh->IsViewLocked();
-            pSh->LockView( true );
-        }
-
-        if( pESh )
-            pESh->StartAllAction();
-        else if( pSh )
-            pSh->StartAction();
-
-        SwMsgPoolItem aMsgHint( static_cast<sal_uInt16>(
-            bGraphicArrived ? RES_GRAPHIC_ARRIVED : RES_UPDATE_ATTR ) );
-
-        if ( bGraphicArrived )
-        {
-            // Notify all who are listening at the same link
-            bInNotifyLinks = true;
-
-            const ::sfx2::SvBaseLinks& rLnks = pDoc->getIDocumentLinksAdministration().GetLinkManager().GetLinks();
-            for( auto n = rLnks.size(); n; )
-            {
-                ::sfx2::SvBaseLink* pLnk = &(*rLnks[ --n ]);
-                if( pLnk && OBJECT_CLIENT_GRF == pLnk->GetObjType() &&
-                    dynamic_cast<const SwBaseLink*>( pLnk) !=  nullptr && pLnk->GetObj() == GetObj() )
-                {
-                    SwBaseLink* pBLink = static_cast<SwBaseLink*>(pLnk);
-                    SwGrfNode* pGrfNd = static_cast<SwGrfNode*>(pBLink->pContentNode);
-
-                    if( pBLink != this &&
-                        ( !bSwapIn ||
-                            GRAPHIC_DEFAULT == pGrfNd->GetGrfObj().GetType()))
-                    {
-                        Size aPreArriveSize(pGrfNd->GetTwipSize());
-
-                        pBLink->bIgnoreDataChanged = false;
-                        pBLink->DataChanged( rMimeType, rValue );
-                        pBLink->bIgnoreDataChanged = true;
-
-                        pGrfNd->SetGraphicArrived( static_cast<SwGrfNode*>(pContentNode)->
-                                                    IsGraphicArrived() );
-
-                        // Adjust the Fly's graphic
-                        if (!::SetGrfFlySize(aGrfSz, pGrfNd, aPreArriveSize))
-                            ::lcl_CallModify( *pGrfNd, aMsgHint );
-                    }
-                    else if (pBLink == this)
-                    {
-                        assert(pGrfNd == pSwGrfNode && "fdo#87083 needs a different fix");
-                        if (!::SetGrfFlySize(aGrfSz, pGrfNd, aOldSz))
-                        {
-                            // Adjust the Fly's graphic
-                            ::lcl_CallModify( *pGrfNd, aMsgHint );
-                        }
-                    }
-                }
-            }
-
-            bInNotifyLinks = false;
-        }
-        else
-        {
-            pContentNode->ModifyNotification( &aMsgHint, &aMsgHint );
-        }
-
-        if( pESh )
-        {
-            const bool bEndActionByVirDev = pESh->IsEndActionByVirDev();
-            pESh->SetEndActionByVirDev( true );
-            pESh->EndAllAction();
-            pESh->SetEndActionByVirDev( bEndActionByVirDev );
-        }
-        else if( pSh )
-            pSh->EndAction();
-
-        if( pSh && !bLockView )
-            pSh->LockView( false );
     }
 
     return SUCCESS;
@@ -300,28 +198,29 @@ static bool SetGrfFlySize( const Size& rGrfSz, SwGrfNode* pGrfNd, const Size& rO
     if ( !(aSz.Width() && aSz.Height()) &&
             rGrfSz.Width() && rGrfSz.Height() )
     {
-        SwFrameFormat* pFormat;
-        if( pGrfNd->IsChgTwipSize() &&
-            nullptr != (pFormat = pGrfNd->GetFlyFormat()) )
+        SwFrameFormat* pFormat = nullptr;
+        if (pGrfNd->IsChgTwipSize())
+            pFormat = pGrfNd->GetFlyFormat();
+        if (nullptr != pFormat)
         {
             Size aCalcSz( aSz );
             if ( !aSz.Height() && aSz.Width() )
                 // Calculate the right height
-                aCalcSz.Height() = rGrfSz.Height() *
-                        aSz.Width() / rGrfSz.Width();
+                aCalcSz.setHeight( rGrfSz.Height() *
+                        aSz.Width() / rGrfSz.Width() );
             else if ( !aSz.Width() && aSz.Height() )
                 // Calculate the right width
-                aCalcSz.Width() = rGrfSz.Width() *
-                        aSz.Height() / rGrfSz.Height();
+                aCalcSz.setWidth( rGrfSz.Width() *
+                        aSz.Height() / rGrfSz.Height() );
             else
                 // Take over height and width
                 aCalcSz = rGrfSz;
 
             const SvxBoxItem     &rBox = pFormat->GetBox();
-            aCalcSz.Width() += rBox.CalcLineSpace(SvxBoxItemLine::LEFT) +
-                               rBox.CalcLineSpace(SvxBoxItemLine::RIGHT);
-            aCalcSz.Height()+= rBox.CalcLineSpace(SvxBoxItemLine::TOP) +
-                               rBox.CalcLineSpace(SvxBoxItemLine::BOTTOM);
+            aCalcSz.AdjustWidth(rBox.CalcLineSpace(SvxBoxItemLine::LEFT) +
+                               rBox.CalcLineSpace(SvxBoxItemLine::RIGHT) );
+            aCalcSz.AdjustHeight(rBox.CalcLineSpace(SvxBoxItemLine::TOP) +
+                               rBox.CalcLineSpace(SvxBoxItemLine::BOTTOM) );
             const SwFormatFrameSize& rOldAttr = pFormat->GetFrameSize();
             if( rOldAttr.GetSize() != aCalcSz )
             {
@@ -337,11 +236,8 @@ static bool SetGrfFlySize( const Size& rGrfSz, SwGrfNode* pGrfNd, const Size& rO
                 // the table rows
                 const SwDoc *pDoc = pGrfNd->GetDoc();
                 const SwPosition* pAPos = pFormat->GetAnchor().GetContentAnchor();
-                SwNode *pANd;
                 SwTableNode *pTableNd;
-                if( pAPos &&
-                    nullptr != (pANd = & pAPos->nNode.GetNode()) &&
-                    nullptr != (pTableNd = pANd->FindTableNode()) )
+                if (pAPos && nullptr != (pTableNd = pAPos->nNode.GetNode().FindTableNode()))
                 {
                     const bool bLastGrf = !pTableNd->GetTable().DecGrfsThatResize();
                     SwHTMLTableLayout *pLayout =
@@ -371,24 +267,12 @@ static bool SetGrfFlySize( const Size& rGrfSz, SwGrfNode* pGrfNd, const Size& rO
 
 bool SwBaseLink::SwapIn( bool bWaitForData, bool bNativFormat )
 {
-    bSwapIn = true;
-
     if( !GetObj() && ( bNativFormat || ( !IsSynchron() && bWaitForData ) ))
     {
         AddNextRef();
         GetRealObject_();
         ReleaseRef();
     }
-
-#if OSL_DEBUG_LEVEL > 1
-    {
-        OUString sGrfNm;
-        if(GetLinkManager())
-            GetLinkManager()->GetDisplayNames( this, 0, &sGrfNm, 0, 0 );
-        int x = 0;
-        ++x;
-    }
-#endif
 
     bool bRes = false;
 
@@ -407,9 +291,6 @@ bool SwBaseLink::SwapIn( bool bWaitForData, bool bNativFormat )
             bRes = aValue.hasValue();
             if ( bRes )
             {
-                // The Flag needs to be reset on a SwapIn, because
-                // we want to reapply the data.
-                bIgnoreDataChanged = false;
                 DataChanged( aMimeType, aValue );
             }
         }
@@ -423,35 +304,34 @@ bool SwBaseLink::SwapIn( bool bWaitForData, bool bNativFormat )
     else
         bRes = Update();
 
-    bSwapIn = false;
     return bRes;
 }
 
 void SwBaseLink::Closed()
 {
-    if( pContentNode && !pContentNode->GetDoc()->IsInDtor() )
+    if( m_pContentNode && !m_pContentNode->GetDoc()->IsInDtor() )
     {
         // Delete the connection
-        if( pContentNode->IsGrfNode() )
-            static_cast<SwGrfNode*>(pContentNode)->ReleaseLink();
+        if( m_pContentNode->IsGrfNode() )
+            static_cast<SwGrfNode*>(m_pContentNode)->ReleaseLink();
     }
     SvBaseLink::Closed();
 }
 
 const SwNode* SwBaseLink::GetAnchor() const
 {
-    if (pContentNode)
+    if (m_pContentNode)
     {
-        SwFrameFormat *const pFormat = pContentNode->GetFlyFormat();
+        SwFrameFormat *const pFormat = m_pContentNode->GetFlyFormat();
         if (pFormat)
         {
             const SwFormatAnchor& rAnchor = pFormat->GetAnchor();
             SwPosition const*const pAPos = rAnchor.GetContentAnchor();
             if (pAPos &&
-                ((FLY_AS_CHAR == rAnchor.GetAnchorId()) ||
-                 (FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
-                 (FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
-                 (FLY_AT_PARA == rAnchor.GetAnchorId())))
+                ((RndStdIds::FLY_AS_CHAR == rAnchor.GetAnchorId()) ||
+                 (RndStdIds::FLY_AT_CHAR == rAnchor.GetAnchorId()) ||
+                 (RndStdIds::FLY_AT_FLY  == rAnchor.GetAnchorId()) ||
+                 (RndStdIds::FLY_AT_PARA == rAnchor.GetAnchorId())))
             {
                     return &pAPos->nNode.GetNode();
             }
@@ -466,7 +346,7 @@ const SwNode* SwBaseLink::GetAnchor() const
 bool SwBaseLink::IsRecursion( const SwBaseLink* pChkLnk ) const
 {
     tools::SvRef<SwServerObject> aRef( static_cast<SwServerObject*>(GetObj()) );
-    if( aRef.Is() )
+    if( aRef.is() )
     {
         // As it's a ServerObject, we query all contained Links
         // if we are contained in them. Else we have a recursion.
@@ -475,7 +355,7 @@ bool SwBaseLink::IsRecursion( const SwBaseLink* pChkLnk ) const
     return false;
 }
 
-bool SwBaseLink::IsInRange( sal_uLong, sal_uLong, sal_Int32, sal_Int32 ) const
+bool SwBaseLink::IsInRange( sal_uLong, sal_uLong ) const
 {
     // Not Graphic or OLE Links
     // Fields or Sections have their own derivation!

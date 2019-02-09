@@ -20,7 +20,6 @@
 #define INCLUDED_WRITERFILTER_SOURCE_DMAPPER_CELLMARGINHANDLER_HXX
 
 #include "LoggedResources.hxx"
-#include <memory>
 #include <vector>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
@@ -56,13 +55,12 @@ public:
 
 public:
     CellMarginHandler( );
-    virtual ~CellMarginHandler();
+    virtual ~CellMarginHandler() override;
 
     void enableInteropGrabBag(const OUString& aName);
     css::beans::PropertyValue getInteropGrabBag();
 
 };
-typedef std::shared_ptr< CellMarginHandler >          CellMarginHandlerPtr;
 }}
 
 #endif

@@ -18,32 +18,33 @@
 #include <vcl/fontcharmap.hxx>
 #include <fontinstance.hxx>
 #include <impfontcharmap.hxx>
+#include <sal/log.hxx>
 
 #include <vector>
 #include <set>
 
 CmapResult::CmapResult( bool bSymbolic,
-    const sal_UCS4* pRangeCodes, int nRangeCount,
-    const int* pStartGlyphs, const sal_uInt16* pExtraGlyphIds )
+    const sal_UCS4* pRangeCodes, int nRangeCount )
 :   mpRangeCodes( pRangeCodes)
-,   mpStartGlyphs( pStartGlyphs)
-,   mpGlyphIds( pExtraGlyphIds)
+,   mpStartGlyphs( nullptr)
+,   mpGlyphIds( nullptr)
 ,   mnRangeCount( nRangeCount)
 ,   mbSymbolic( bSymbolic)
 ,   mbRecoded( false)
 {}
 
-static ImplFontCharMapPtr pDefaultImplFontCharMap;
+static ImplFontCharMapRef g_pDefaultImplFontCharMap;
 static const sal_UCS4 aDefaultUnicodeRanges[] = {0x0020,0xD800, 0xE000,0xFFF0};
 static const sal_UCS4 aDefaultSymbolRanges[] = {0x0020,0x0100, 0xF020,0xF100};
 
 ImplFontCharMap::~ImplFontCharMap()
 {
-    if( isDefaultMap() )
-        return;
-    delete[] mpRangeCodes;
-    delete[] mpStartGlyphs;
-    delete[] mpGlyphIds;
+    if( !isDefaultMap() )
+    {
+        delete[] mpRangeCodes;
+        delete[] mpStartGlyphs;
+        delete[] mpGlyphIds;
+    }
 }
 
 ImplFontCharMap::ImplFontCharMap( const CmapResult& rCR )
@@ -52,7 +53,6 @@ ImplFontCharMap::ImplFontCharMap( const CmapResult& rCR )
 ,   mpGlyphIds( rCR.mpGlyphIds )
 ,   mnRangeCount( rCR.mnRangeCount )
 ,   mnCharCount( 0 )
-,   mnRefCount( 0 )
 {
     const sal_UCS4* pRangePtr = mpRangeCodes;
     for( int i = mnRangeCount; --i >= 0; pRangePtr += 2 )
@@ -63,20 +63,20 @@ ImplFontCharMap::ImplFontCharMap( const CmapResult& rCR )
     }
 }
 
-ImplFontCharMapPtr ImplFontCharMap::getDefaultMap( bool bSymbols )
+ImplFontCharMapRef const & ImplFontCharMap::getDefaultMap( bool bSymbols )
 {
     const sal_UCS4* pRangeCodes = aDefaultUnicodeRanges;
-    int nCodesCount = sizeof(aDefaultUnicodeRanges) / sizeof(*pRangeCodes);
+    int nCodesCount = SAL_N_ELEMENTS(aDefaultUnicodeRanges);
     if( bSymbols )
     {
         pRangeCodes = aDefaultSymbolRanges;
-        nCodesCount = sizeof(aDefaultSymbolRanges) / sizeof(*pRangeCodes);
+        nCodesCount = SAL_N_ELEMENTS(aDefaultSymbolRanges);
     }
 
     CmapResult aDefaultCR( bSymbols, pRangeCodes, nCodesCount/2 );
-    pDefaultImplFontCharMap.reset( new ImplFontCharMap( aDefaultCR ) );
+    g_pDefaultImplFontCharMap = ImplFontCharMapRef(new ImplFontCharMap(aDefaultCR));
 
-    return pDefaultImplFontCharMap;
+    return g_pDefaultImplFontCharMap;
 }
 
 bool ImplFontCharMap::isDefaultMap() const
@@ -169,8 +169,7 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
     sal_UCS4* pCodePairs = nullptr;
     int* pStartGlyphs = nullptr;
 
-    typedef std::vector<sal_uInt16> U16Vector;
-    U16Vector aGlyphIdArray;
+    std::vector<sal_uInt16> aGlyphIdArray;
     aGlyphIdArray.reserve( 0x1000 );
     aGlyphIdArray.push_back( 0 );
 
@@ -205,7 +204,7 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
                 pStartGlyphs[i] = (cMinChar + nGlyphDelta) & 0xFFFF;
             } else {
                 // update the glyphid-array with the glyphs in this range
-                pStartGlyphs[i] = -(int)aGlyphIdArray.size();
+                pStartGlyphs[i] = -static_cast<int>(aGlyphIdArray.size());
                 const unsigned char* pGlyphIdPtr = pOffsetBase + 2*i + nRangeOffset;
                 const size_t nRemainingSize = pEndValidArea - pGlyphIdPtr;
                 const size_t nMaxPossibleRecords = nRemainingSize/2;
@@ -290,9 +289,8 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
 
     if( aConverter && aCvtContext )
     {
-        // determine the set of supported unicodes from encoded ranges
-        typedef std::set<sal_UCS4> Ucs4Set;
-        Ucs4Set aSupportedUnicodes;
+        // determine the set of supported code points from encoded ranges
+        std::set<sal_UCS4> aSupportedCodePoints;
 
         static const int NINSIZE = 64;
         static const int NOUTSIZE = 64;
@@ -324,30 +322,28 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
                     &nCvtInfo, &nSrcCvtBytes );
 
                 for( j = 0; j < nOutLen; ++j )
-                    aSupportedUnicodes.insert( cCharsOut[j] );
+                    aSupportedCodePoints.insert( cCharsOut[j] );
             }
         }
 
         rtl_destroyTextToUnicodeConverter( aCvtContext );
         rtl_destroyTextToUnicodeConverter( aConverter );
 
-        // convert the set of supported unicodes to ranges
-        typedef std::vector<sal_UCS4> Ucs4Vector;
-        Ucs4Vector aSupportedRanges;
+        // convert the set of supported code points to ranges
+        std::vector<sal_UCS4> aSupportedRanges;
 
-        Ucs4Set::const_iterator itChar = aSupportedUnicodes.begin();
-        for(; itChar != aSupportedUnicodes.end(); ++itChar )
+        for (auto const& supportedPoint : aSupportedCodePoints)
         {
             if( aSupportedRanges.empty()
-            || (aSupportedRanges.back() != *itChar) )
+            || (aSupportedRanges.back() != supportedPoint) )
             {
                 // add new range beginning with current unicode
-                aSupportedRanges.push_back( *itChar );
+                aSupportedRanges.push_back(supportedPoint);
                 aSupportedRanges.push_back( 0 );
             }
 
             // extend existing range to include current unicode
-            aSupportedRanges.back() = *itChar + 1;
+            aSupportedRanges.back() = supportedPoint + 1;
         }
 
         // glyph mapping for non-unicode fonts not implemented
@@ -361,9 +357,9 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
         if( nRangeCount <= 0 )
             return false;
         pCodePairs = new sal_UCS4[ nRangeCount * 2 ];
-        Ucs4Vector::const_iterator itInt = aSupportedRanges.begin();
-        for( pCP = pCodePairs; itInt != aSupportedRanges.end(); ++itInt )
-            *(pCP++) = *itInt;
+        pCP = pCodePairs;
+        for (auto const& supportedRange : aSupportedRanges)
+            *(pCP++) = supportedRange;
     }
 
     // prepare the glyphid-array if needed
@@ -373,9 +369,8 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
     {
         pGlyphIds = new sal_uInt16[ aGlyphIdArray.size() ];
         sal_uInt16* pOut = pGlyphIds;
-        U16Vector::const_iterator it = aGlyphIdArray.begin();
-        while( it != aGlyphIdArray.end() )
-            *(pOut++) = *(it++);
+        for (auto const& glyphId : aGlyphIdArray)
+            *(pOut++) = glyphId;
     }
 
     // update the result struct
@@ -388,19 +383,17 @@ bool ParseCMAP( const unsigned char* pCmap, int nLength, CmapResult& rResult )
 
 FontCharMap::FontCharMap()
     : mpImplFontCharMap( ImplFontCharMap::getDefaultMap() )
-    , mnRefCount(0)
-{}
+{
+}
 
-FontCharMap::FontCharMap( ImplFontCharMapPtr pIFCMap )
+FontCharMap::FontCharMap( ImplFontCharMapRef const & pIFCMap )
     : mpImplFontCharMap( pIFCMap )
-    , mnRefCount(0)
-{}
+{
+}
 
 FontCharMap::FontCharMap( const CmapResult& rCR )
-    : mnRefCount(0)
+    : mpImplFontCharMap(new ImplFontCharMap(rCR))
 {
-    ImplFontCharMapPtr pImplFontCharMap( new ImplFontCharMap(rCR) );
-    mpImplFontCharMap = pImplFontCharMap;
 }
 
 FontCharMap::~FontCharMap()
@@ -408,10 +401,10 @@ FontCharMap::~FontCharMap()
     mpImplFontCharMap = nullptr;
 }
 
-FontCharMapPtr FontCharMap::GetDefaultMap( bool bSymbol )
+FontCharMapRef FontCharMap::GetDefaultMap( bool bSymbol )
 {
-    FontCharMapPtr pFontCharMap( new FontCharMap( ImplFontCharMap::getDefaultMap( bSymbol ) ) );
-    return pFontCharMap;
+    FontCharMapRef xFontCharMap( new FontCharMap( ImplFontCharMap::getDefaultMap( bSymbol ) ) );
+    return xFontCharMap;
 }
 
 bool FontCharMap::IsDefaultMap() const

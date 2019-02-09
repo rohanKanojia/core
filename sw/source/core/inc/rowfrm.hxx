@@ -19,8 +19,6 @@
 #ifndef INCLUDED_SW_SOURCE_CORE_INC_ROWFRM_HXX
 #define INCLUDED_SW_SOURCE_CORE_INC_ROWFRM_HXX
 
-#include <tools/mempool.hxx>
-
 #include "layfrm.hxx"
 
 class SwTableLine;
@@ -45,8 +43,10 @@ class SwRowFrame: public SwLayoutFrame
     bool m_bIsRepeatedHeadline;
     bool m_bIsRowSpanLine;
 
+    bool m_bIsInSplit;
+
     virtual void DestroyImpl() override;
-    virtual ~SwRowFrame();
+    virtual ~SwRowFrame() override;
 
 protected:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
@@ -95,13 +95,28 @@ public:
     // <-- split table rows
 
     // #131283# Table row keep feature
-    bool ShouldRowKeepWithNext() const;
+    bool ShouldRowKeepWithNext( const bool bCheckParents = true ) const;
 
     // #i4032# NEW TABLES
     bool IsRowSpanLine() const { return m_bIsRowSpanLine; }
     void SetRowSpanLine( bool bNew ) { m_bIsRowSpanLine = bNew; }
 
-    DECL_FIXEDMEMPOOL_NEWDEL(SwRowFrame)
+    // A row may only be split if the minimum height of the row frame
+    // fits into the vertical space left.
+    // The minimum height is found as maximum of two values: minimal
+    // contents of the row (e.g., height of first line of text, or an
+    // object, or lower table cell), and the minimum height setting.
+    // As the minimum height setting should not prevent the row to
+    // flow, (it only should ensure that *total* height is no less), we
+    // should not consider the setting when the split is performed
+    // (we should be able to keep on first page as little as required).
+    // When IsInSplit is true, lcl_CalcMinRowHeight will ignore the
+    // minimum height setting. It is set in lcl_RecalcSplitLine around
+    // lcl_RecalcRow and SwRowFrame::Calc that decide if it's possible
+    // to keep part of row's content on first page, and update table's
+    // height to fit the rest of space.
+    bool IsInSplit() const { return m_bIsInSplit; }
+    void SetInSplit(bool bNew = true) { m_bIsInSplit = bNew; }
 };
 
 #endif

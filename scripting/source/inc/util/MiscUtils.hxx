@@ -30,6 +30,7 @@
 #include <com/sun/star/frame/XTransientDocumentsDocumentContentFactory.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/container/XContentEnumerationAccess.hpp>
+#include <com/sun/star/ucb/ContentCreationException.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
 #include <com/sun/star/ucb/XContentAccess.hpp>
@@ -126,7 +127,7 @@ static css::uno::Reference< css::frame::XModel > tDocUrlToModel( const OUString&
 }
 
 
-static css::uno::Any getUCBProperty( ::ucbhelper::Content& content, OUString& prop )
+static css::uno::Any getUCBProperty( ::ucbhelper::Content& content, OUString const & prop )
 {
     css::uno::Any result;
     try

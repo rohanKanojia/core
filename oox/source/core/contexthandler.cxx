@@ -17,9 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/core/contexthandler.hxx"
+#include <oox/core/contexthandler.hxx>
 
-#include "oox/core/fragmenthandler.hxx"
+#include <oox/core/fragmenthandler.hxx>
 
 namespace oox {
 namespace core {
@@ -28,7 +28,7 @@ using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::xml::sax;
 
 ContextHandler::ContextHandler( const ContextHandler& rParent ) :
-    ContextHandler_BASE(),
+    ContextHandler_BASE(rParent),
     mxBaseData( rParent.mxBaseData )
 {
 }
@@ -84,33 +84,33 @@ void ContextHandler::implSetLocator( const Reference< XLocator >& rxLocator )
 
 // com.sun.star.xml.sax.XFastContextHandler interface -------------------------
 
-void ContextHandler::startFastElement( sal_Int32, const Reference< XFastAttributeList >& ) throw( SAXException, RuntimeException, std::exception )
+void ContextHandler::startFastElement( sal_Int32, const Reference< XFastAttributeList >& )
 {
 }
 
-void ContextHandler::startUnknownElement( const OUString&, const OUString&, const Reference< XFastAttributeList >& ) throw( SAXException, RuntimeException, std::exception )
+void ContextHandler::startUnknownElement( const OUString&, const OUString&, const Reference< XFastAttributeList >& )
 {
 }
 
-void ContextHandler::endFastElement( sal_Int32 ) throw( SAXException, RuntimeException, std::exception )
+void ContextHandler::endFastElement( sal_Int32 )
 {
 }
 
-void ContextHandler::endUnknownElement( const OUString&, const OUString& ) throw( SAXException, RuntimeException, std::exception )
+void ContextHandler::endUnknownElement( const OUString&, const OUString& )
 {
 }
 
-Reference< XFastContextHandler > ContextHandler::createFastChildContext( sal_Int32, const Reference< XFastAttributeList >& ) throw( SAXException, RuntimeException, std::exception )
-{
-    return nullptr;
-}
-
-Reference< XFastContextHandler > ContextHandler::createUnknownChildContext( const OUString&, const OUString&, const Reference< XFastAttributeList >& ) throw( SAXException, RuntimeException, std::exception )
+Reference< XFastContextHandler > ContextHandler::createFastChildContext( sal_Int32, const Reference< XFastAttributeList >& )
 {
     return nullptr;
 }
 
-void ContextHandler::characters( const OUString& ) throw( SAXException, RuntimeException, std::exception )
+Reference< XFastContextHandler > ContextHandler::createUnknownChildContext( const OUString&, const OUString&, const Reference< XFastAttributeList >& )
+{
+    return nullptr;
+}
+
+void ContextHandler::characters( const OUString& )
 {
 }
 

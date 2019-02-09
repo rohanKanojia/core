@@ -20,13 +20,14 @@
 #ifndef INCLUDED_SW_INC_IDOCUMENTSETTINGACCESS_HXX
 #define INCLUDED_SW_INC_IDOCUMENTSETTINGACCESS_HXX
 
-#include <tools/solar.h>
-#include <rtl/ref.hxx>
-#include <chcmprse.hxx>
-#include <fldupde.hxx>
+#include <sal/types.h>
+#include "fldupde.hxx"
+#include <i18nlangtag/lang.h>
+#include <memory>
 
 class SvxForbiddenCharactersTable;
 namespace com { namespace sun { namespace star { namespace i18n { struct ForbiddenCharacters; } } } }
+enum class CharCompressType;
 
 enum class DocumentSettingId
 {
@@ -52,13 +53,16 @@ enum class DocumentSettingId
 
     IGNORE_FIRST_LINE_INDENT_IN_NUMBERING,
     DO_NOT_JUSTIFY_LINES_WITH_MANUAL_BREAK,
+    TREAT_SINGLE_COLUMN_BREAK_AS_PAGE_BREAK,
     DO_NOT_RESET_PARA_ATTRS_FOR_NUM_FONT,
-    OUTLINE_LEVEL_YIELDS_OUTLINE_RULE,
 
     DO_NOT_CAPTURE_DRAW_OBJS_ON_PAGE,
     TABLE_ROW_KEEP,
     IGNORE_TABS_AND_BLANKS_FOR_LINE_CALCULATION,
     CLIP_AS_CHARACTER_ANCHORED_WRITER_FLY_FRAME,
+
+    // tdf#104349 tdf#104668
+    MS_WORD_COMP_TRAILING_BLANKS,
 
     UNIX_FORCE_ZERO_EXT_LEADING,
     TABS_RELATIVE_TO_INDENT,
@@ -77,6 +81,9 @@ enum class DocumentSettingId
     SURROUND_TEXT_WRAP_SMALL,
     PROP_LINE_SPACING_SHRINKS_FIRST_LINE,
     SUBTRACT_FLYS,
+    // tdf#112443 disable off-page content positioning
+    DISABLE_OFF_PAGE_POSITIONING,
+    EMPTY_DB_FIELD_HIDES_PARA,
     // COMPATIBILITY FLAGS END
     BROWSE_MODE,
     HTML_MODE,
@@ -89,6 +96,10 @@ enum class DocumentSettingId
     STYLES_NODEFAULT,
     FLOATTABLE_NOMARGINS,
     EMBED_FONTS,
+    EMBED_USED_FONTS,
+    EMBED_LATIN_SCRIPT_FONTS,
+    EMBED_ASIAN_SCRIPT_FONTS,
+    EMBED_COMPLEX_SCRIPT_FONTS,
     EMBED_SYSTEM_FONTS,
     APPLY_PARAGRAPH_MARK_FORMAT_TO_NUMBERING,
 };
@@ -133,7 +144,7 @@ enum class DocumentSettingId
        a list of forbidden characters.
     */
     virtual const css::i18n::ForbiddenCharacters*
-        getForbiddenCharacters(/*[in]*/ sal_uInt16 nLang, /*[in]*/ bool bLocaleData ) const = 0;
+        getForbiddenCharacters(/*[in]*/ LanguageType nLang, /*[in]*/ bool bLocaleData ) const = 0;
 
     /** Set the forbidden characters.
 
@@ -143,7 +154,7 @@ enum class DocumentSettingId
        @param rForbiddenCharacters
        [in] the new list of forbidden characters for language lang.
     */
-    virtual void setForbiddenCharacters(/*[in]*/ sal_uInt16 nLang,
+    virtual void setForbiddenCharacters(/*[in]*/ LanguageType nLang,
                                         /*[in]*/ const css::i18n::ForbiddenCharacters& rForbiddenCharacters ) = 0;
 
     /** Get the forbidden character table and creates one if necessary.
@@ -151,14 +162,14 @@ enum class DocumentSettingId
        @returns
        the forbidden characters table.
     */
-    virtual rtl::Reference<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() = 0;
+    virtual std::shared_ptr<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() = 0;
 
     /** Get the forbidden character table.
 
        @returns
        the forbidden characters table.
     */
-    virtual const rtl::Reference<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() const = 0;
+    virtual const std::shared_ptr<SvxForbiddenCharactersTable>& getForbiddenCharacterTable() const = 0;
 
     /** Get the current link update mode.
 
@@ -201,14 +212,14 @@ enum class DocumentSettingId
        @returns
        the current character compression mode.
     */
-    virtual SwCharCompressType getCharacterCompressionType() const = 0;
+    virtual CharCompressType getCharacterCompressionType() const = 0;
 
     /** Set the character compression type for Asian characters.
 
        @param nMode
        [in] the new character compression type.
     */
-    virtual void setCharacterCompressionType( /*[in]*/SwCharCompressType nType ) = 0;
+    virtual void setCharacterCompressionType( /*[in]*/CharCompressType nType ) = 0;
 
     /** Get the n32DummyCompatabilityOptions1
     */

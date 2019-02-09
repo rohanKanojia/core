@@ -18,9 +18,12 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
+#include <DocumentSettingManager.hxx>
 #include <hintids.hxx>
 #include <editeng/xmlcnitm.hxx>
+#include <editeng/rsiditem.hxx>
 #include <svl/whiter.hxx>
 #include <svl/itemiter.hxx>
 #include <svl/stylepool.hxx>
@@ -62,6 +65,7 @@
 #include <pam.hxx>
 #include <ndtxt.hxx>
 #include <txtfrm.hxx>
+#include <rootfrm.hxx>
 #include <rolbck.hxx>
 #include <ddefld.hxx>
 #include <docufld.hxx>
@@ -72,10 +76,12 @@
 #include <istyleaccess.hxx>
 #include <dcontact.hxx>
 #include <docsh.hxx>
-#include <svl/smplhint.hxx>
 #include <algorithm>
 #include <map>
 #include <memory>
+
+#include <rdfhelper.hxx>
+#include <hints.hxx>
 
 #ifdef DBG_UTIL
 #define CHECK           Check(true);
@@ -86,11 +92,12 @@
 
 using namespace ::com::sun::star::i18n;
 
-SwpHints::SwpHints()
-    : m_pHistory(nullptr)
+SwpHints::SwpHints(const SwTextNode& rParent)
+    : m_rParent(rParent)
+    , m_pHistory(nullptr)
     , m_bInSplitNode(false)
     , m_bCalcHiddenParaField(false)
-    , m_bHasHiddenParaField(false)
+    , m_bHiddenByParaField(false)
     , m_bFootnote(false)
     , m_bDDEFields(false)
 {
@@ -242,7 +249,7 @@ MakeTextAttrNesting(SwTextNode & rNode, SwTextAttrNesting & rNesting,
     return static_txtattr_cast<SwTextAttrNesting*>(pNew);
 }
 
-typedef ::std::vector<SwTextAttrNesting *> NestList_t;
+typedef std::vector<SwTextAttrNesting *> NestList_t;
 
 static void
 lcl_DoSplitNew(NestList_t & rSplits, SwTextNode & rNode,
@@ -250,10 +257,10 @@ lcl_DoSplitNew(NestList_t & rSplits, SwTextNode & rNode,
     const sal_Int32 nOtherStart, const sal_Int32 nOtherEnd, bool bOtherDummy)
 {
     const bool bSplitAtStart(nNewStart < nOtherStart);
-    const sal_Int32 nSplitPos( (bSplitAtStart) ? nOtherStart : nOtherEnd );
+    const sal_Int32 nSplitPos( bSplitAtStart ? nOtherStart : nOtherEnd );
     // first find the portion that is split (not necessarily the last one!)
     NestList_t::iterator const iter(
-        ::std::find_if( rSplits.begin(), rSplits.end(),
+        std::find_if( rSplits.begin(), rSplits.end(),
             [nSplitPos](SwTextAttrEnd * const pAttr) {
                 return TextAttrContains(nSplitPos, pAttr);
             } ) );
@@ -294,7 +301,7 @@ into a hyperlink.
 
 Unfortunately the UNO API for Hyperlink and Ruby consists of the properties
 Hyperlink* and Ruby* of the css.text.CharacterProperties service.  In other
-words, they are treated as formatting attributes, not as content entites.
+words, they are treated as formatting attributes, not as content entities.
 Furthermore, for API users it is not possible to easily test whether a certain
 range would be overlapping with other nested attributes, and most importantly,
 <em>which ones</em>, so we can hardly refuse to insert these in cases of
@@ -339,7 +346,7 @@ after the CH_TXTATR).
 It would probably be a bad idea to add another nesting hint without
 CH_TXTATR; on the other hand, it would be difficult adding a CH_TXTATR to
 RES_TXTATR_INETFMT and RES_TXTATR_CJK_RUBY, due to the overwriting and
-splitting of exising hints that is necessary for backward compatibility.
+splitting of existing hints that is necessary for backward compatibility.
 
     @param rNode    the text node
     @param rHint    the hint to be inserted
@@ -375,7 +382,7 @@ SwpHints::TryInsertNesting( SwTextNode & rNode, SwTextAttrNesting & rNewHint )
         {
             const sal_uInt16 nOtherWhich( pOther->Which() );
             const sal_Int32 nOtherStart( pOther->GetStart() );
-            const sal_Int32 nOtherEnd  ( *(pOther)->GetEnd()   );
+            const sal_Int32 nOtherEnd  ( *pOther->GetEnd()   );
             if (isOverlap(nNewStart, nNewEnd, nOtherStart, nOtherEnd ))
             {
                 switch (splitPolicy(nNewWhich, nOtherWhich))
@@ -438,41 +445,39 @@ SwpHints::TryInsertNesting( SwTextNode & rNode, SwTextAttrNesting & rNewHint )
     // so any hint in OverlappingExisting can be split at most by one hint
     // in SplitNew, or even not at all (this is not true for existing hints
     // that go _around_ new hint, which is the reason d'^etre for pass 4)
-    for (NestList_t::iterator itOther = OverlappingExisting.begin();
-            itOther != OverlappingExisting.end(); ++itOther)
+    for (auto& rpOther : OverlappingExisting)
     {
-        const sal_Int32 nOtherStart( (*itOther)->GetStart() );
-        const sal_Int32 nOtherEnd  ( *(*itOther)->GetEnd()   );
+        const sal_Int32 nOtherStart( rpOther->GetStart() );
+        const sal_Int32 nOtherEnd  ( *rpOther->GetEnd()   );
 
-        for (NestList_t::iterator itNew = SplitNew.begin();
-                itNew != SplitNew.end(); ++itNew)
+        for (const auto& rpNew : SplitNew)
         {
-            const sal_Int32 nSplitNewStart( (*itNew)->GetStart() );
-            const sal_Int32 nSplitNewEnd  ( *(*itNew)->GetEnd()   );
+            const sal_Int32 nSplitNewStart( rpNew->GetStart() );
+            const sal_Int32 nSplitNewEnd  ( *rpNew->GetEnd()   );
             // 4 cases: within, around, overlap l, overlap r, (OTHER: no action)
             const bool bRemoveOverlap(
-                !bNewSelfNestable && (nNewWhich == (*itOther)->Which()) );
+                !bNewSelfNestable && (nNewWhich == rpOther->Which()) );
 
             switch (ComparePosition(nSplitNewStart, nSplitNewEnd,
                                     nOtherStart,    nOtherEnd))
             {
-                case POS_INSIDE:
+                case SwComparePosition::Inside:
                     {
                         assert(!bRemoveOverlap &&
                             "this one should be in OverwrittenExisting?");
                     }
                     break;
-                case POS_OUTSIDE:
-                case POS_EQUAL:
+                case SwComparePosition::Outside:
+                case SwComparePosition::Equal:
                     {
                         assert(!"existing hint inside new hint: why?");
                     }
                     break;
-                case POS_OVERLAP_BEFORE:
+                case SwComparePosition::OverlapBefore:
                     {
-                        Delete( *itOther ); // this also does NoteInHistory!
-                        (*itOther)->GetStart() = nSplitNewEnd;
-                        InsertNesting( **itOther );
+                        Delete( rpOther ); // this also does NoteInHistory!
+                        rpOther->GetStart() = nSplitNewEnd;
+                        InsertNesting( *rpOther );
                         if (!bRemoveOverlap)
                         {
                             if ( MAX_HINTS <= Count() )
@@ -481,17 +486,17 @@ SwpHints::TryInsertNesting( SwTextNode & rNode, SwTextAttrNesting & rNewHint )
                                 return false;
                             }
                             SwTextAttrNesting * const pOtherLeft(
-                                MakeTextAttrNesting( rNode, **itOther,
+                                MakeTextAttrNesting( rNode, *rpOther,
                                     nOtherStart, nSplitNewEnd ) );
                             InsertNesting( *pOtherLeft );
                         }
                     }
                     break;
-                case POS_OVERLAP_BEHIND:
+                case SwComparePosition::OverlapBehind:
                     {
-                        Delete( *itOther ); // this also does NoteInHistory!
-                        *(*itOther)->GetEnd() = nSplitNewStart;
-                        InsertNesting( **itOther );
+                        Delete( rpOther ); // this also does NoteInHistory!
+                        *rpOther->GetEnd() = nSplitNewStart;
+                        InsertNesting( *rpOther );
                         if (!bRemoveOverlap)
                         {
                             if ( MAX_HINTS <= Count() )
@@ -500,7 +505,7 @@ SwpHints::TryInsertNesting( SwTextNode & rNode, SwTextAttrNesting & rNewHint )
                                 return false;
                             }
                             SwTextAttrNesting * const pOtherRight(
-                                MakeTextAttrNesting( rNode, **itOther,
+                                MakeTextAttrNesting( rNode, *rpOther,
                                     nSplitNewStart, nOtherEnd ) );
                             InsertNesting( *pOtherRight );
                         }
@@ -519,52 +524,50 @@ SwpHints::TryInsertNesting( SwTextNode & rNode, SwTextAttrNesting & rNewHint )
     }
 
     // pass 3: insert new hints
-    for (NestList_t::iterator iter = SplitNew.begin();
-            iter != SplitNew.end(); ++iter)
+    for (const auto& rpHint : SplitNew)
     {
-        InsertNesting(**iter);
+        InsertNesting(*rpHint);
     }
 
     // pass 4: handle overwritten hints
     // RES_TXTATR_INETFMT and RES_TXTATR_CJK_RUBY should displace attributes
     // of the same kind.
-    for (NestList_t::iterator itOther = OverwrittenExisting.begin();
-            itOther != OverwrittenExisting.end(); ++itOther)
+    for (auto& rpOther : OverwrittenExisting)
     {
-        const sal_Int32 nOtherStart( (*itOther)->GetStart() );
-        const sal_Int32 nOtherEnd  ( *(*itOther)->GetEnd()   );
+        const sal_Int32 nOtherStart( rpOther->GetStart() );
+        const sal_Int32 nOtherEnd  ( *rpOther->GetEnd()   );
 
         // overwritten portion is given by start/end of inserted hint
         if ((nNewStart <= nOtherStart) && (nOtherEnd <= nNewEnd))
         {
-            Delete(*itOther);
-            rNode.DestroyAttr( *itOther );
+            Delete(rpOther);
+            rNode.DestroyAttr( rpOther );
         }
         else
         {
            assert((nOtherStart < nNewStart) || (nNewEnd < nOtherEnd));
         // scenario: there is a RUBY, and contained within that a META;
-        // now a RUBY is inserted within the META => the exising RUBY is split:
+        // now a RUBY is inserted within the META => the existing RUBY is split:
         // here it is not possible to simply insert the left/right fragment
         // of the existing RUBY because they <em>overlap</em> with the META!
-            Delete( *itOther ); // this also does NoteInHistory!
+            Delete( rpOther ); // this also does NoteInHistory!
             if (nNewEnd < nOtherEnd)
             {
                 SwTextAttrNesting * const pOtherRight(
                     MakeTextAttrNesting(
-                        rNode, **itOther, nNewEnd, nOtherEnd ) );
+                        rNode, *rpOther, nNewEnd, nOtherEnd ) );
                 bool const bSuccess( TryInsertNesting(rNode, *pOtherRight) );
                 SAL_WARN_IF(!bSuccess, "sw.core", "recursive call 1 failed?");
             }
             if (nOtherStart < nNewStart)
             {
-                *(*itOther)->GetEnd() = nNewStart;
-                bool const bSuccess( TryInsertNesting(rNode, **itOther) );
+                *rpOther->GetEnd() = nNewStart;
+                bool const bSuccess( TryInsertNesting(rNode, *rpOther) );
                 SAL_WARN_IF(!bSuccess, "sw.core", "recursive call 2 failed?");
             }
             else
             {
-                rNode.DestroyAttr(*itOther);
+                rNode.DestroyAttr(rpOther);
             }
         }
     }
@@ -590,7 +593,6 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
     const bool bNoLengthAttribute = nThisStart == nThisEnd;
 
     std::vector<SwTextAttr*> aInsDelHints;
-    std::vector<SwTextAttr*>::iterator aIter;
 
     assert( RES_TXTATR_CHARFMT == rNewHint.Which() ||
             RES_TXTATR_AUTOFMT == rNewHint.Which() );
@@ -651,10 +653,10 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
         }
 
         // Insert the newly created attributes:
-        for ( aIter = aInsDelHints.begin(); aIter != aInsDelHints.end(); ++aIter )
+        for ( const auto& rpHint : aInsDelHints )
         {
-            Insert( *aIter );
-            NoteInHistory( *aIter, true );
+            Insert( rpHint );
+            NoteInHistory( rpHint, true );
         }
     }
 
@@ -730,13 +732,12 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
             // This should ensure, that pNewHint comes behind the already present
             // character style
             sal_uInt16 nCharStyleCount = 0;
-            aIter = aInsDelHints.begin();
-            while ( aIter != aInsDelHints.end() )
+            for ( const auto& rpHint : aInsDelHints )
             {
-                if ( RES_TXTATR_CHARFMT == (*aIter)->Which() )
+                if ( RES_TXTATR_CHARFMT == rpHint->Which() )
                 {
                     // #i74589#
-                    const SwFormatCharFormat& rOtherCharFormat = (*aIter)->GetCharFormat();
+                    const SwFormatCharFormat& rOtherCharFormat = rpHint->GetCharFormat();
                     const SwFormatCharFormat& rThisCharFormat = rNewHint.GetCharFormat();
                     const bool bSameCharFormat = rOtherCharFormat.GetCharFormat() == rThisCharFormat.GetCharFormat();
 
@@ -748,8 +749,8 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
                            bSameCharFormat ) )
                     {
                         // Remove old hint
-                        Delete( *aIter );
-                        rNode.DestroyAttr( *aIter );
+                        Delete( rpHint );
+                        rNode.DestroyAttr( rpHint );
                     }
                     else
                         ++nCharStyleCount;
@@ -758,8 +759,8 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
                 {
                     // remove all attributes from auto styles, which are explicitly set in
                     // the new character format:
-                    OSL_ENSURE( RES_TXTATR_AUTOFMT == (*aIter)->Which(), "AUTOSTYLES - Misc trouble" );
-                    SwTextAttr* pOther = *aIter;
+                    OSL_ENSURE( RES_TXTATR_AUTOFMT == rpHint->Which(), "AUTOSTYLES - Misc trouble" );
+                    SwTextAttr* pOther = rpHint;
                     std::shared_ptr<SfxItemSet> pOldStyle = static_cast<const SwFormatAutoFormat&>(pOther->GetAttr()).GetStyleHandle();
 
                     // For each attribute in the automatic style check if it
@@ -794,7 +795,6 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
                         NoteInHistory( pNewAttr, true );
                     }
                 }
-                ++aIter;
             }
 
             // If there is no current hint and start and end of rNewHint
@@ -818,14 +818,12 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
             // Find the current autostyle. Mix attributes if necessary.
             SwTextAttr* pCurrentAutoStyle = nullptr;
             SwTextAttr* pCurrentCharFormat = nullptr;
-            aIter = aInsDelHints.begin();
-            while ( aIter != aInsDelHints.end() )
+            for ( const auto& rpHint : aInsDelHints )
             {
-                if ( RES_TXTATR_AUTOFMT == (*aIter)->Which() )
-                    pCurrentAutoStyle = *aIter;
-                else if ( RES_TXTATR_CHARFMT == (*aIter)->Which() )
-                    pCurrentCharFormat = *aIter;
-                ++aIter;
+                if ( RES_TXTATR_AUTOFMT == rpHint->Which() )
+                    pCurrentAutoStyle = rpHint;
+                else if ( RES_TXTATR_CHARFMT == rpHint->Which() )
+                    pCurrentCharFormat = rpHint;
             }
 
             std::shared_ptr<SfxItemSet> pNewStyle = static_cast<const SwFormatAutoFormat&>(rNewHint.GetAttr()).GetStyleHandle();
@@ -877,7 +875,7 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
                 // #i81764# This should not be applied for no length attributes!!! <--
                 if ( !bNoLengthAttribute && rNode.HasSwAttrSet() && pNewStyle->Count() )
                 {
-                    SfxItemSet* pNewSet = nullptr;
+                    std::unique_ptr<SfxItemSet> pNewSet;
 
                     SfxItemIter aIter2( *pNewStyle );
                     const SfxPoolItem* pItem = aIter2.GetCurItem();
@@ -907,8 +905,6 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
                             pNewStyle = rNode.getIDocumentStyleAccess().getAutomaticStyle( *pNewSet, IStyleAccess::AUTO_STYLE_CHAR );
                         else
                             pNewStyle.reset();
-
-                        delete pNewSet;
                     }
                 }
 
@@ -950,7 +946,7 @@ void SwpHints::BuildPortions( SwTextNode& rNode, SwTextAttr& rNewHint,
         rNode.DestroyAttr( &rNewHint );
 }
 
-SwTextAttr* MakeRedlineTextAttr( SwDoc & rDoc, SfxPoolItem & rAttr )
+SwTextAttr* MakeRedlineTextAttr( SwDoc & rDoc, SfxPoolItem const & rAttr )
 {
     // this is intended _only_ for special-purpose redline attributes!
     switch (rAttr.Which())
@@ -968,7 +964,7 @@ SwTextAttr* MakeRedlineTextAttr( SwDoc & rDoc, SfxPoolItem & rAttr )
         case RES_CHRATR_BACKGROUND:
             break;
         default:
-            OSL_FAIL("unsupported redline attribute");
+            assert(!"unsupported redline attribute");
             break;
     }
 
@@ -985,7 +981,7 @@ SwTextAttr* MakeTextAttr(
     SfxPoolItem& rAttr,
     sal_Int32 const nStt,
     sal_Int32 const nEnd,
-    CopyOrNew_t const bIsCopy,
+    CopyOrNewType const bIsCopy,
     SwTextNode *const pTextNode )
 {
     if ( isCHRATR(rAttr.Which()) )
@@ -994,7 +990,7 @@ SwTextAttr* MakeTextAttr(
         // Sorry, this is not allowed any longer.
         // You'll get a brand new autostyle attribute:
         SfxItemSet aItemSet( rDoc.GetAttrPool(),
-                RES_CHRATR_BEGIN, RES_CHRATR_END );
+                svl::Items<RES_CHRATR_BEGIN, RES_CHRATR_END>{} );
         aItemSet.Put( rAttr );
         return MakeTextAttr( rDoc, aItemSet, nStt, nEnd );
     }
@@ -1004,7 +1000,7 @@ SwTextAttr* MakeTextAttr(
     {
         // If the attribute is an auto-style which refers to a pool that is
         // different from rDoc's pool, we have to correct this:
-        const StylePool::SfxItemSet_Pointer_t pAutoStyle = static_cast<const SwFormatAutoFormat&>(rAttr).GetStyleHandle();
+        const std::shared_ptr<SfxItemSet> pAutoStyle = static_cast<const SwFormatAutoFormat&>(rAttr).GetStyleHandle();
         std::unique_ptr<const SfxItemSet> pNewSet(
                 pAutoStyle->SfxItemSet::Clone( true, &rDoc.GetAttrPool() ));
         SwTextAttr* pNew = MakeTextAttr( rDoc, *pNewSet, nStt, nEnd );
@@ -1042,7 +1038,7 @@ SwTextAttr* MakeTextAttr(
     case RES_TXTATR_ANNOTATION:
         {
             pNew = new SwTextAnnotationField( static_cast<SwFormatField &>(rNew), nStt, rDoc.IsClipBoard() );
-            if (bIsCopy == COPY)
+            if (bIsCopy == CopyOrNewType::Copy)
             {
                 // On copy of the annotation field do not keep the annotated text range by removing
                 // the relation to its annotation mark (relation established via annotation field's name).
@@ -1060,19 +1056,18 @@ SwTextAttr* MakeTextAttr(
 
     case RES_TXTATR_FLYCNT:
         {
-            // erst hier wird das Frame-Format kopiert (mit Inhalt) !!
+            // finally, copy the frame format (with content)
             pNew = new SwTextFlyCnt( static_cast<SwFormatFlyCnt&>(rNew), nStt );
-            // Kopie von einem Text-Attribut
             if ( static_cast<const SwFormatFlyCnt &>(rAttr).GetTextFlyCnt() )
             {
-                // then the format must be copied
+                // if it has an existing attr then the format must be copied
                 static_cast<SwTextFlyCnt *>(pNew)->CopyFlyFormat( &rDoc );
             }
         }
         break;
     case RES_TXTATR_FTN:
         pNew = new SwTextFootnote( static_cast<SwFormatFootnote&>(rNew), nStt );
-        // ggfs. SeqNo kopieren
+        // copy note's SeqNo
         if( static_cast<SwFormatFootnote&>(rAttr).GetTextFootnote() )
             static_cast<SwTextFootnote*>(pNew)->SetSeqNo( static_cast<SwFormatFootnote&>(rAttr).GetTextFootnote()->GetSeqRefNo() );
         break;
@@ -1090,7 +1085,7 @@ SwTextAttr* MakeTextAttr(
     case RES_TXTATR_META:
     case RES_TXTATR_METAFIELD:
         pNew = SwTextMeta::CreateTextMeta( rDoc.GetMetaFieldManager(), pTextNode,
-                static_cast<SwFormatMeta&>(rNew), nStt, nEnd, bIsCopy == COPY );
+                static_cast<SwFormatMeta&>(rNew), nStt, nEnd, bIsCopy == CopyOrNewType::Copy );
         break;
     default:
         assert(RES_TXTATR_AUTOFMT == rNew.Which());
@@ -1105,28 +1100,26 @@ SwTextAttr* MakeTextAttr( SwDoc & rDoc, const SfxItemSet& rSet,
                         sal_Int32 nStt, sal_Int32 nEnd )
 {
     IStyleAccess& rStyleAccess = rDoc.GetIStyleAccess();
-    const StylePool::SfxItemSet_Pointer_t pAutoStyle = rStyleAccess.getAutomaticStyle( rSet, IStyleAccess::AUTO_STYLE_CHAR );
+    const std::shared_ptr<SfxItemSet> pAutoStyle = rStyleAccess.getAutomaticStyle( rSet, IStyleAccess::AUTO_STYLE_CHAR );
     SwFormatAutoFormat aNewAutoFormat;
     aNewAutoFormat.SetStyleHandle( pAutoStyle );
     SwTextAttr* pNew = MakeTextAttr( rDoc, aNewAutoFormat, nStt, nEnd );
     return pNew;
 }
 
-// loesche das Text-Attribut (muss beim Pool abgemeldet werden!)
+// delete the text attribute and unregister its item at the pool
 void SwTextNode::DestroyAttr( SwTextAttr* pAttr )
 {
     if( pAttr )
     {
-        // einige Sachen muessen vorm Loeschen der "Format-Attribute" erfolgen
+        // some things need to be done before deleting the formatting attribute
         SwDoc* pDoc = GetDoc();
         switch( pAttr->Which() )
         {
         case RES_TXTATR_FLYCNT:
             {
-                // siehe auch die Anmerkung "Loeschen von Formaten
-                // zeichengebundener Frames" in fesh.cxx, SwFEShell::DelFormat()
                 SwFrameFormat* pFormat = pAttr->GetFlyCnt().GetFrameFormat();
-                if( pFormat )      // vom Undo auf 0 gesetzt ??
+                if( pFormat )      // set to 0 by Undo?
                     pDoc->getIDocumentLayoutAccess().DelLayoutFormat( pFormat );
             }
             break;
@@ -1146,41 +1139,42 @@ void SwTextNode::DestroyAttr( SwTextAttr* pAttr )
             if( !pDoc->IsInDtor() )
             {
                 SwTextField *const pTextField(static_txtattr_cast<SwTextField*>(pAttr));
-                // Wenn wir ein HiddenParaField sind, dann muessen wir
-                // ggf. fuer eine Neuberechnung des Visible-Flags sorgen.
-                const SwField* pField = pAttr->GetFormatField().GetField();
+                SwFieldType* pFieldType = pAttr->GetFormatField().GetField()->GetTyp();
 
-                //JP 06-08-95: DDE-Felder bilden eine Ausnahme
-                OSL_ENSURE( RES_DDEFLD == pField->GetTyp()->Which() ||
-                        this == pTextField->GetpTextNode(),
-                        "Wo steht denn dieses Feld?" );
+                //JP 06-08-95: DDE-fields are an exception
+                assert(SwFieldIds::Dde == pFieldType->Which() ||
+                       this == pTextField->GetpTextNode());
 
-                // bestimmte Felder mussen am Doc das Calculations-Flag updaten
-                switch( pField->GetTyp()->Which() )
-                {
-                case RES_HIDDENPARAFLD:
+                // certain fields must update the SwDoc's calculation flags
+
+                // Certain fields (like HiddenParaField) must trigger recalculation of visible flag
+                if (FieldCanHideParaWeight(pFieldType->Which()))
                     SetCalcHiddenParaField();
-                    // no break
-                case RES_DBSETNUMBERFLD:
-                case RES_GETEXPFLD:
-                case RES_DBFLD:
-                case RES_SETEXPFLD:
-                case RES_HIDDENTXTFLD:
-                case RES_DBNUMSETFLD:
-                case RES_DBNEXTSETFLD:
+
+                switch( pFieldType->Which() )
+                {
+                case SwFieldIds::HiddenPara:
+                case SwFieldIds::DbSetNumber:
+                case SwFieldIds::GetExp:
+                case SwFieldIds::Database:
+                case SwFieldIds::SetExp:
+                case SwFieldIds::HiddenText:
+                case SwFieldIds::DbNumSet:
+                case SwFieldIds::DbNextSet:
                     if( !pDoc->getIDocumentFieldsAccess().IsNewFieldLst() && GetNodes().IsDocNodes() )
                         pDoc->getIDocumentFieldsAccess().InsDelFieldInFieldLst(false, *pTextField);
                     break;
-                case RES_DDEFLD:
+                case SwFieldIds::Dde:
                     if (GetNodes().IsDocNodes() && pTextField->GetpTextNode())
-                        static_cast<SwDDEFieldType*>(pField->GetTyp())->DecRefCnt();
+                        static_cast<SwDDEFieldType*>(pFieldType)->DecRefCnt();
                     break;
-                case RES_POSTITFLD:
+                case SwFieldIds::Postit:
                     {
                         const_cast<SwFormatField&>(pAttr->GetFormatField()).Broadcast(
                             SwFormatFieldHint(&pTextField->GetFormatField(), SwFormatFieldHintWhich::REMOVED));
                         break;
                     }
+                default: break;
                 }
             }
             static_cast<SwFormatField&>(pAttr->GetAttr()).InvalidateField();
@@ -1196,7 +1190,22 @@ void SwTextNode::DestroyAttr( SwTextAttr* pAttr )
 
         case RES_TXTATR_META:
         case RES_TXTATR_METAFIELD:
+        {
+            auto pTextMeta = static_txtattr_cast<SwTextMeta*>(pAttr);
+            SwFormatMeta & rFormatMeta( static_cast<SwFormatMeta &>(pTextMeta->GetAttr()) );
+            if (::sw::Meta* pMeta = rFormatMeta.GetMeta())
+            {
+                if (SwDocShell* pDocSh = pDoc->GetDocShell())
+                {
+                    static const OUString metaNS("urn:bails");
+                    const css::uno::Reference<css::rdf::XResource> xSubject(pMeta->MakeUnoObject(), uno::UNO_QUERY);
+                    uno::Reference<frame::XModel> xModel = pDocSh->GetBaseModel();
+                    SwRDFHelper::clearStatements(xModel, metaNS, xSubject);
+                }
+            }
+
             static_txtattr_cast<SwTextMeta*>(pAttr)->ChgTextNode(nullptr);
+        }
             break;
 
         default:
@@ -1214,7 +1223,7 @@ SwTextAttr* SwTextNode::InsertItem(
     const SetAttrMode nMode )
 {
     // character attributes will be inserted as automatic styles:
-    OSL_ENSURE( !isCHRATR(rAttr.Which()), "AUTOSTYLES - "
+    assert( !isCHRATR(rAttr.Which()) && "AUTOSTYLES - "
         "SwTextNode::InsertItem should not be called with character attributes");
 
     SwTextAttr *const pNew =
@@ -1223,7 +1232,7 @@ SwTextAttr* SwTextNode::InsertItem(
             rAttr,
             nStart,
             nEnd,
-            (nMode & SetAttrMode::IS_COPY) ? COPY : NEW,
+            (nMode & SetAttrMode::IS_COPY) ? CopyOrNewType::Copy : CopyOrNewType::New,
             this );
 
     if ( pNew )
@@ -1246,15 +1255,16 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
 {
     bool bHiddenPara = false;
 
-    OSL_ENSURE( pAttr && pAttr->GetStart() <= Len(), "StartIdx out of bounds!" );
-    OSL_ENSURE( !pAttr->GetEnd() || (*pAttr->GetEnd() <= Len()),
-            "EndIdx out of bounds!" );
+    assert(pAttr && pAttr->GetStart() <= Len());
+    assert(!pAttr->GetEnd() || (*pAttr->GetEnd() <= Len()));
 
     // translate from SetAttrMode to InsertMode (for hints with CH_TXTATR)
     const SwInsertFlags nInsertFlags =
-        (nMode & SetAttrMode::FORCEHINTEXPAND)
-        ? (SwInsertFlags::FORCEHINTEXPAND | SwInsertFlags::EMPTYEXPAND)
-        : SwInsertFlags::EMPTYEXPAND;
+        (nMode & SetAttrMode::NOHINTEXPAND)
+        ? SwInsertFlags::NOHINTEXPAND
+        : (nMode & SetAttrMode::FORCEHINTEXPAND)
+            ? (SwInsertFlags::FORCEHINTEXPAND | SwInsertFlags::EMPTYEXPAND)
+            : SwInsertFlags::EMPTYEXPAND;
 
     // need this after TryInsertHint, when pAttr may be deleted
     const sal_Int32 nStart( pAttr->GetStart() );
@@ -1270,14 +1280,13 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                 SwFrameFormat* pFormat = pAttr->GetFlyCnt().GetFrameFormat();
                 if( !(SetAttrMode::NOTXTATRCHR & nInsMode) )
                 {
-                    // Wir muessen zuerst einfuegen, da in SetAnchor()
-                    // dem FlyFrame GetStart() uebermittelt wird.
-                    //JP 11.05.98: falls das Anker-Attribut schon richtig
-                    // gesetzt ist, dann korrigiere dieses nach dem Einfuegen
-                    // des Zeichens. Sonst muesste das immer  ausserhalb
-                    // erfolgen (Fehleranfaellig !)
+                    // Need to insert char first, because SetAnchor() reads
+                    // GetStart().
+                    //JP 11.05.98: if the anchor is already set correctly,
+                    // fix it after inserting the char, so that clients don't
+                    // have to worry about it.
                     const SwFormatAnchor* pAnchor = nullptr;
-                    pFormat->GetItemState( RES_ANCHOR, false,
+                    (void)pFormat->GetItemState( RES_ANCHOR, false,
                         reinterpret_cast<const SfxPoolItem**>(&pAnchor) );
 
                     SwIndex aIdx( this, pAttr->GetStart() );
@@ -1294,7 +1303,7 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                     nInsMode |= SetAttrMode::NOTXTATRCHR;
 
                     if (pAnchor &&
-                        (FLY_AS_CHAR == pAnchor->GetAnchorId()) &&
+                        (RndStdIds::FLY_AS_CHAR == pAnchor->GetAnchorId()) &&
                         pAnchor->GetContentAnchor() &&
                         pAnchor->GetContentAnchor()->nNode == *this &&
                         pAnchor->GetContentAnchor()->nContent == aIdx )
@@ -1305,36 +1314,30 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                 }
                 pFly->SetAnchor( this );
 
-                // Format-Pointer kann sich im SetAnchor geaendert haben!
-                // (Kopieren in andere Docs!)
+                // format pointer could have changed in SetAnchor,
+                // when copying to other docs!
                 pFormat = pAttr->GetFlyCnt().GetFrameFormat();
                 SwDoc *pDoc = pFormat->GetDoc();
 
-                // OD 26.06.2003 #108784# - allow drawing objects in header/footer.
+                // OD 26.06.2003 - allow drawing objects in header/footer.
                 // But don't allow control objects in header/footer
                 if( RES_DRAWFRMFMT == pFormat->Which() &&
                     pDoc->IsInHeaderFooter( pFormat->GetAnchor().GetContentAnchor()->nNode ) )
                 {
-                    SwDrawContact* pDrawContact =
-                        static_cast<SwDrawContact*>(pFormat->FindContactObj());
-                    if ( pDrawContact &&
-                         pDrawContact->GetMaster() &&
-                         ::CheckControlLayer( pDrawContact->GetMaster() ) )
+                    bool bCheckControlLayer = false;
+                    pFormat->CallSwClientNotify(sw::CheckDrawFrameFormatLayerHint(&bCheckControlLayer));
+                    if( bCheckControlLayer )
                     {
-                        // das soll nicht meoglich sein; hier verhindern
-                        // Der Dtor des TextHints loescht nicht das Zeichen.
-                        // Wenn ein CH_TXTATR_.. vorliegt, dann muss man
-                        // dieses explizit loeschen
+                        // This should not be allowed, prevent it here.
+                        // The dtor of the SwTextAttr does not delete the
+                        // char, so delete it explicitly here.
                         if( SetAttrMode::NOTXTATRCHR & nInsMode )
                         {
-                            // loesche das Zeichen aus dem String !
-                            OSL_ENSURE( ( CH_TXTATR_BREAKWORD ==
-                                        m_Text[pAttr->GetStart()] ||
-                                      CH_TXTATR_INWORD ==
-                                        m_Text[pAttr->GetStart()]),
-                                    "where is my attribute character?" );
+                            // delete the char from the string
+                            assert(CH_TXTATR_BREAKWORD == m_Text[pAttr->GetStart()]
+                                || CH_TXTATR_INWORD == m_Text[pAttr->GetStart()]);
                             m_Text = m_Text.replaceAt(pAttr->GetStart(), 1, "");
-                            // Indizies Updaten
+                            // Update SwIndexes
                             SwIndex aTmpIdx( this, pAttr->GetStart() );
                             Update( aTmpIdx, 1, true );
                         }
@@ -1349,28 +1352,23 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
 
         case RES_TXTATR_FTN :
             {
-                // Fussnoten, man kommt an alles irgendwie heran.
-                // ContentNode erzeugen und in die Inserts-Section stellen
+                // Footnotes: create text node and put it into Inserts-section
                 SwDoc *pDoc = GetDoc();
                 SwNodes &rNodes = pDoc->GetNodes();
 
-                // FussNote in nicht Content-/Redline-Bereich einfuegen ??
+                // check that footnote is inserted into body or redline section
                 if( StartOfSectionIndex() < rNodes.GetEndOfAutotext().GetIndex() )
                 {
-                    // das soll nicht meoglich sein; hier verhindern
-                    // Der Dtor des TextHints loescht nicht das Zeichen.
-                    // Wenn ein CH_TXTATR_.. vorliegt, dann muss man
-                    // dieses explizit loeschen
+                    // This should not be allowed, prevent it here.
+                    // The dtor of the SwTextAttr does not delete the
+                    // char, so delete it explicitly here.
                     if( SetAttrMode::NOTXTATRCHR & nInsMode )
                     {
-                        // loesche das Zeichen aus dem String !
-                        OSL_ENSURE( ( CH_TXTATR_BREAKWORD ==
-                                      m_Text[pAttr->GetStart()] ||
-                                  CH_TXTATR_INWORD ==
-                                      m_Text[pAttr->GetStart()]),
-                                "where is my attribute character?" );
+                        // delete the char from the string
+                        assert(CH_TXTATR_BREAKWORD == m_Text[pAttr->GetStart()]
+                            || CH_TXTATR_INWORD == m_Text[pAttr->GetStart()]);
                         m_Text = m_Text.replaceAt(pAttr->GetStart(), 1, "");
-                        // Indizies Updaten
+                        // Update SwIndexes
                         SwIndex aTmpIdx( this, pAttr->GetStart() );
                         Update( aTmpIdx, 1, true );
                     }
@@ -1378,7 +1376,7 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                     return false;
                 }
 
-                // wird eine neue Fussnote eingefuegt ??
+                // is a new footnote being inserted?
                 bool bNewFootnote = nullptr == static_cast<SwTextFootnote*>(pAttr)->GetStartNode();
                 if( bNewFootnote )
                 {
@@ -1390,7 +1388,8 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                 }
                 else if ( !GetpSwpHints() || !GetpSwpHints()->IsInSplitNode() )
                 {
-                    // loesche alle Frames der Section, auf die der StartNode zeigt
+                    // existing footnote: delete all layout frames of its
+                    // footnote section
                     sal_uLong nSttIdx =
                         static_cast<SwTextFootnote*>(pAttr)->GetStartNode()->GetIndex();
                     sal_uLong nEndIdx = rNodes[ nSttIdx++ ]->EndOfSectionIndex();
@@ -1398,15 +1397,19 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                     {
                         SwContentNode* pCNd = rNodes[ nSttIdx ]->GetContentNode();
                         if( nullptr != pCNd )
-                            pCNd->DelFrames();
+                            pCNd->DelFrames(nullptr);
+                        else if (SwTableNode *const pTable = rNodes[nSttIdx]->GetTableNode())
+                        {
+                            pTable->DelFrames();
+                        }
                     }
                 }
 
                 if( !(SetAttrMode::NOTXTATRCHR & nInsMode) )
                 {
-                    // Wir muessen zuerst einfuegen, da sonst gleiche Indizes
-                    // entstehen koennen und das Attribut im _SortArr_ am
-                    // Dokument nicht eingetrage wird.
+                    // must insert first, to prevent identical indexes
+                    // that could later prevent insertion into SwDoc's
+                    // footnote array
                     SwIndex aNdIdx( this, pAttr->GetStart() );
                     const OUString c(GetCharOfTextAttr(*pAttr));
                     OUString const ins( InsertText(c, aNdIdx, nInsertFlags) );
@@ -1418,36 +1421,33 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                     nInsMode |= SetAttrMode::NOTXTATRCHR;
                 }
 
-                // Wir tragen uns am FootnoteIdx-Array des Docs ein ...
+                // insert into SwDoc's footnote index array
                 SwTextFootnote* pTextFootnote = nullptr;
                 if( !bNewFootnote )
                 {
-                    // eine alte Footnote wird umgehaengt (z.B. SplitNode)
+                    // moving an existing footnote (e.g. SplitNode)
                     for( size_t n = 0; n < pDoc->GetFootnoteIdxs().size(); ++n )
                         if( pAttr == pDoc->GetFootnoteIdxs()[n] )
                         {
-                            // neuen Index zuweisen, dafuer aus dem SortArray
-                            // loeschen und neu eintragen
+                            // assign new index by removing and re-inserting
                             pTextFootnote = pDoc->GetFootnoteIdxs()[n];
                             pDoc->GetFootnoteIdxs().erase( pDoc->GetFootnoteIdxs().begin() + n );
                             break;
                         }
-                        // wenn ueber Undo der StartNode gesetzt wurde, kann
-                        // der Index noch gar nicht in der Verwaltung stehen !!
+                        // if the Undo set the StartNode, the Index isn't
+                        // in the doc's array yet!
                 }
                 if( !pTextFootnote )
                     pTextFootnote = static_cast<SwTextFootnote*>(pAttr);
 
-                // fuers Update der Nummern und zum Sortieren
-                // muss der Node gesetzt sein.
+                // to update the numbers and for sorting, the Node must be set
                 static_cast<SwTextFootnote*>(pAttr)->ChgTextNode( this );
 
-                // FussNote im Redline-Bereich NICHT ins FootnoteArray einfuegen!
+                // do not insert footnote in redline section into footnote array
                 if( StartOfSectionIndex() > rNodes.GetEndOfRedlines().GetIndex() )
                 {
                     const bool bSuccess = pDoc->GetFootnoteIdxs().insert(pTextFootnote).second;
                     OSL_ENSURE( bSuccess, "FootnoteIdx not inserted." );
-                    (void) bSuccess; // unused in non-debug
                 }
                 SwNodeIndex aTmpIndex( *this );
                 pDoc->GetFootnoteIdxs().UpdateFootnote( aTmpIndex);
@@ -1457,9 +1457,9 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
 
             case RES_TXTATR_FIELD:
                 {
-                    // fuer HiddenParaFields Benachrichtigungsmechanismus
-                    // anwerfen
-                    if( RES_HIDDENPARAFLD == pAttr->GetFormatField().GetField()->GetTyp()->Which() )
+                    // trigger notification for relevant fields, like HiddenParaFields
+                    if (FieldCanHideParaWeight(
+                            pAttr->GetFormatField().GetField()->GetTyp()->Which()))
                     {
                         bHiddenPara = true;
                     }
@@ -1467,10 +1467,9 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                 break;
 
         }
-        // Fuer SwTextHints ohne Endindex werden CH_TXTATR_..
-        // eingefuegt, aStart muss danach um einen zurueckgesetzt werden.
-        // Wenn wir im SwTextNode::Copy stehen, so wurde das Zeichen bereits
-        // mitkopiert. In solchem Fall ist SETATTR_NOTXTATRCHR angegeben worden.
+        // CH_TXTATR_* are inserted for SwTextHints without EndIndex
+        // If the caller is SwTextNode::Copy, the char has already been copied,
+        // and SETATTR_NOTXTATRCHR prevents inserting it again here.
         if( !(SetAttrMode::NOTXTATRCHR & nInsMode) )
         {
             SwIndex aIdx( this, pAttr->GetStart() );
@@ -1508,17 +1507,14 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                     if( !(SetAttrMode::NOTXTATRCHR & nMode) )
                     {
                         SwIndex aIdx( this, pAttr->GetStart() );
-                        const OUString aContent = OUStringLiteral1<CH_TXT_ATR_INPUTFIELDSTART>()
-                            + pTextInputField->GetFieldContent() + OUStringLiteral1<CH_TXT_ATR_INPUTFIELDEND>();
+                        const OUString aContent = OUStringLiteral1(CH_TXT_ATR_INPUTFIELDSTART)
+                            + pTextInputField->GetFieldContent() + OUStringLiteral1(CH_TXT_ATR_INPUTFIELDEND);
                         InsertText( aContent, aIdx, nInsertFlags );
 
                         sal_Int32* const pEnd(pAttr->GetEnd());
-                        OSL_ENSURE( pEnd != nullptr, "<SwTextNode::InsertHint(..)> - missing end of RES_TXTATR_INPUTFIELD!" );
-                        if ( pEnd != nullptr )
-                        {
-                            *pEnd = *pEnd + aContent.getLength();
-                            nEnd = *pEnd;
-                        }
+                        assert(pEnd != nullptr);
+                        *pEnd = *pEnd + aContent.getLength();
+                        nEnd = *pEnd;
                     }
                     else
                     {
@@ -1529,20 +1525,16 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
                             InsertText( OUString(CH_TXT_ATR_INPUTFIELDSTART), aIdx, nInsertFlags );
                             bInputFieldStartCharInserted = true;
                             sal_Int32* const pEnd(pAttr->GetEnd());
-                            OSL_ENSURE( pEnd != nullptr, "<SwTextNode::InsertHint(..)> - missing end of RES_TXTATR_INPUTFIELD!" );
-                            if ( pEnd != nullptr )
-                            {
-                                *pEnd = *pEnd + 1;
-                                nEnd = *pEnd;
-                            }
+                            assert(pEnd != nullptr);
+                            *pEnd = *pEnd + 1;
+                            nEnd = *pEnd;
                         }
 
                         sal_Int32* const pEnd(pAttr->GetEnd());
-                        OSL_ENSURE( pEnd != nullptr, "<SwTextNode::InsertHint(..)> - missing end of RES_TXTATR_INPUTFIELD!" );
-                        if ( pEnd != nullptr
-                             && m_Text[ *(pEnd) - 1 ] != CH_TXT_ATR_INPUTFIELDEND )
+                        assert(pEnd != nullptr);
+                        if (m_Text[ *pEnd - 1 ] != CH_TXT_ATR_INPUTFIELDEND)
                         {
-                            SwIndex aIdx( this, *(pEnd) );
+                            SwIndex aIdx( this, *pEnd );
                             InsertText( OUString(CH_TXT_ATR_INPUTFIELDEND), aIdx, nInsertFlags );
                             bInputFieldEndCharInserted = true;
                             *pEnd = *pEnd + 1;
@@ -1583,7 +1575,6 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
         }
     }
 
-    // 4263: AttrInsert durch TextInsert => kein Adjust
     const bool bRet = bInsertHint
                       && m_pSwpHints->TryInsertHint( pAttr, *this, nMode );
 
@@ -1596,9 +1587,8 @@ bool SwTextNode::InsertHint( SwTextAttr * const pAttr, const SetAttrMode nMode )
             // N.B. cannot insert the dummy character after inserting the hint,
             // because if the hint has no extent it will be moved in InsertText,
             // resulting in infinite recursion
-            OSL_ENSURE( ( CH_TXTATR_BREAKWORD == m_Text[nStart] ||
-                          CH_TXTATR_INWORD    == m_Text[nStart] ),
-                    "where is my attribute character?" );
+            assert((CH_TXTATR_BREAKWORD == m_Text[nStart] ||
+                    CH_TXTATR_INWORD    == m_Text[nStart] ));
             SwIndex aIdx( this, nStart );
             EraseText( aIdx, 1 );
         }
@@ -1647,7 +1637,7 @@ void SwTextNode::DeleteAttribute( SwTextAttr * const pAttr )
 
     if ( pAttr->HasDummyChar() )
     {
-        // Unbedingt Copy-konstruieren!
+        // copy index!
         const SwIndex aIdx( this, pAttr->GetStart() );
         // erase the CH_TXTATR, which will also delete pAttr
         EraseText( aIdx, 1 );
@@ -1655,7 +1645,7 @@ void SwTextNode::DeleteAttribute( SwTextAttr * const pAttr )
     else if ( pAttr->HasContent() )
     {
         const SwIndex aIdx( this, pAttr->GetStart() );
-        OSL_ENSURE( pAttr->End() != nullptr, "<SwTextNode::DeleteAttribute(..)> - missing End() at <SwTextAttr> instance which has content" );
+        assert(pAttr->End() != nullptr);
         EraseText( aIdx, *pAttr->End() - pAttr->GetStart() );
     }
     else
@@ -1695,7 +1685,7 @@ void SwTextNode::DeleteAttributes(
         {
             if ( nWhich == RES_CHRATR_HIDDEN  )
             {
-                OSL_FAIL("hey, that's a CHRATR! how did that get in?");
+                assert(!"hey, that's a CHRATR! how did that get in?");
                 SetCalcHiddenCharFlags();
             }
             else if ( nWhich == RES_TXTATR_CHARFMT )
@@ -1721,7 +1711,7 @@ void SwTextNode::DeleteAttributes(
 
             if ( pTextHt->HasDummyChar() )
             {
-                // Unbedingt Copy-konstruieren!
+                // copy index!
                 const SwIndex aIdx( this, nStart );
                 // erase the CH_TXTATR, which will also delete pTextHt
                 EraseText( aIdx, 1 );
@@ -1734,16 +1724,15 @@ void SwTextNode::DeleteAttributes(
             }
             else if( *pEndIdx == nEnd )
             {
-                // den MsgHint jetzt fuettern, weil gleich sind
-                // Start und End weg.
-                // Das CalcVisibleFlag bei HiddenParaFields entfaellt,
-                // da dies das Feld im Dtor selbst erledigt.
+                // Create MsgHint before Start and End are gone.
+                // For HiddenParaFields it's not necessary to call
+                // SetCalcHiddenParaField because the dtor does that.
                 SwUpdateAttr aHint(
                     nStart,
                     *pEndIdx,
                     nWhich);
 
-                m_pSwpHints->DeleteAtPos( nPos );    // gefunden, loeschen,
+                m_pSwpHints->DeleteAtPos( nPos );
                 SwTextAttr::Destroy( pTextHt, GetDoc()->GetAttrPool() );
                 NotifyClients( nullptr, &aHint );
             }
@@ -1778,7 +1767,7 @@ bool SwTextNode::IsIgnoredCharFormatForNumbering(const sal_uInt16 nWhich)
 //Font underline;
 //Font Italic of Western, CJK and CTL;
 //Font Bold of Wertern, CJK and CTL;
-bool lcl_IsIgnoredCharFormatForBullets(const sal_uInt16 nWhich)
+static bool lcl_IsIgnoredCharFormatForBullets(const sal_uInt16 nWhich)
 {
     return (nWhich == RES_CHRATR_UNDERLINE || nWhich == RES_CHRATR_POSTURE || nWhich == RES_CHRATR_WEIGHT
         || nWhich == RES_CHRATR_CJK_POSTURE || nWhich == RES_CHRATR_CJK_WEIGHT
@@ -1791,23 +1780,22 @@ bool lcl_IsIgnoredCharFormatForBullets(const sal_uInt16 nWhich)
 //The node should be counted in a list, if not, make it to be;
 //The item should not conflict to any exist and non-default item inside the character of specified number rule level;
 //The item should not be ignored depend on the exact number rule type;
-bool SwTextNode::TryCharSetExpandToNum(const SfxItemSet& aCharSet)
+void SwTextNode::TryCharSetExpandToNum(const SfxItemSet& aCharSet)
 {
-    bool bRet = false;
     SfxItemIter aIter( aCharSet );
     const SfxPoolItem* pItem = aIter.FirstItem();
     if (!pItem)
-        return bRet;
+        return;
     const sal_uInt16 nWhich = pItem->Which();
 
     const SfxPoolItem& rInnerItem = GetAttr(nWhich,false);
 
     if (!IsDefaultItem(&rInnerItem) &&  !IsInvalidItem(&rInnerItem))
-        return bRet;
+        return;
 
     if (!IsInList() && GetNumRule() && !GetListId().isEmpty())
     {
-        return bRet;
+        return;
     }
 
     SwNumRule* pCurrNum = GetNumRule(false);
@@ -1820,9 +1808,9 @@ bool SwTextNode::TryCharSetExpandToNum(const SfxItemSet& aCharSet)
         if (pCurrNumFormat)
         {
             if (pCurrNumFormat->IsItemize() && lcl_IsIgnoredCharFormatForBullets(nWhich))
-                return bRet;
+                return;
             if (pCurrNumFormat->IsEnumeration() && SwTextNode::IsIgnoredCharFormatForNumbering(nWhich))
-                return bRet;
+                return;
             SwCharFormat* pCurrCharFormat =pCurrNumFormat->GetCharFormat();
 
             if (pCurrCharFormat && pCurrCharFormat->GetItemState(nWhich,false) != SfxItemState::SET)
@@ -1831,16 +1819,13 @@ bool SwTextNode::TryCharSetExpandToNum(const SfxItemSet& aCharSet)
                 SwNumFormat aNewNumFormat(*pCurrNumFormat);
                 aNewNumFormat.SetCharFormat(pCurrCharFormat);
                 pCurrNum->Set(nLevel,aNewNumFormat);
-                bRet = true;
             }
         }
     }
-
-    return bRet;
 }
 
-// setze diese Attribute am TextNode. Wird der gesamte Bereich umspannt,
-// dann setze sie nur im AutoAttrSet (SwContentNode:: SetAttr)
+// Set these attributes on SwTextNode.  If they apply to the entire paragraph
+// text, set them in the SwTextNode's item set (SwContentNode::SetAttr).
 bool SwTextNode::SetAttr(
     const SfxItemSet& rSet,
     const sal_Int32 nStt,
@@ -1850,16 +1835,16 @@ bool SwTextNode::SetAttr(
     if( !rSet.Count() )
         return false;
 
-    // teil die Sets auf (fuer Selektion in Nodes)
+    // split sets (for selection in nodes)
     const SfxItemSet* pSet = &rSet;
-    SfxItemSet aTextSet( *rSet.GetPool(), RES_TXTATR_BEGIN, RES_TXTATR_END-1 );
+    SfxItemSet aTextSet( *rSet.GetPool(), svl::Items<RES_TXTATR_BEGIN, RES_TXTATR_END-1>{} );
 
-    // gesamter Bereich
+    // entire paragraph
     if ( !nStt && (nEnd == m_Text.getLength()) &&
          !(nMode & SetAttrMode::NOFORMATATTR ) )
     {
-        // sind am Node schon Zeichenvorlagen gesetzt, muss man diese Attribute
-        // (rSet) immer als TextAttribute setzen, damit sie angezeigt werden.
+        // if the node already has CharFormat hints, the new attributes must
+        // be set as hints too to override those.
         bool bHasCharFormats = false;
         if ( HasHints() )
         {
@@ -1911,7 +1896,7 @@ bool SwTextNode::SetAttr(
 
     do
     {
-        if ( pItem && (reinterpret_cast<SfxPoolItem*>(-1) != pItem))
+        if ( pItem && !IsInvalidItem(pItem) )
         {
             const sal_uInt16 nWhich = pItem->Which();
             OSL_ENSURE( isCHRATR(nWhich) || isTXTATR(nWhich),
@@ -1942,7 +1927,7 @@ bool SwTextNode::SetAttr(
                         {
                             if ( nEnd != nStt && !pNew->GetEnd() )
                             {
-                                OSL_FAIL("Attribut without end, but area marked");
+                                OSL_FAIL("Attribute without end, but area marked");
                                 DestroyAttr( pNew ); // do not insert
                             }
                             else if ( InsertHint( pNew, nMode ) )
@@ -2018,16 +2003,19 @@ static void lcl_MergeAttr_ExpandChrFormat( SfxItemSet& rSet, const SfxPoolItem& 
         }
     }
 
-    // aufnehmen als MergeWert (falls noch nicht gesetzt neu setzen!)
+/* If multiple attributes overlap, the last one wins!
+   Probably this can only happen between a RES_TXTATR_INETFMT and one of the
+   other hints, because BuildPortions ensures that CHARFMT/AUTOFMT don't
+   overlap.  But there may be multiple CHARFMT/AUTOFMT with exactly the same
+   start/end, sorted by BuildPortions, in which case the same logic applies.
 
-/* wenn mehrere Attribute ueberlappen gewinnt der letze !!
- z.B
             1234567890123456789
               |------------|        Font1
                  |------|           Font2
                     ^  ^
-                    |--|        Abfragebereich: -> Gueltig ist Font2
+                    |--|        query range: -> Font2
 */
+    // merge into set
     rSet.Put( rAttr );
 }
 
@@ -2060,49 +2048,60 @@ static void lcl_MergeListLevelIndentAsLRSpaceItem( const SwTextNode& rTextNode,
     }
 }
 
-// erfrage die Attribute vom TextNode ueber den Bereich
-bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
+// request the attributes of the TextNode at the range
+bool SwTextNode::GetParaAttr(SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                          const bool bOnlyTextAttr, const bool bGetFromChrFormat,
-                         const bool bMergeIndentValuesOfNumRule ) const
+                         const bool bMergeIndentValuesOfNumRule,
+                         SwRootFrame const*const pLayout) const
 {
+    assert(!rSet.Count()); // handled inconsistently, typically an error?
+
+    if (pLayout && pLayout->IsHideRedlines())
+    {
+        if (GetRedlineMergeFlag() == SwNode::Merge::Hidden)
+        {
+            return false; // ignore deleted node
+        }
+    }
+
+    // get the node's automatic attributes
+    SfxItemSet aFormatSet( *rSet.GetPool(), rSet.GetRanges() );
+    if (!bOnlyTextAttr)
+    {
+        SwTextNode const& rParaPropsNode(
+                sw::GetAttrMerged(aFormatSet, *this, pLayout));
+        if (bMergeIndentValuesOfNumRule)
+        {
+            lcl_MergeListLevelIndentAsLRSpaceItem(rParaPropsNode, aFormatSet);
+        }
+    }
+
     if( HasHints() )
     {
-        /* stelle erstmal fest, welche Text-Attribut in dem Bereich gueltig
-         * sind. Dabei gibt es folgende Faelle:
-         *  UnEindeutig wenn: (wenn != Format-Attribut)
-         *      - das Attribut liegt vollstaendig im Bereich
-         *      - das Attributende liegt im Bereich
-         *      - der Attributanfang liegt im Bereich:
-         * Eindeutig (im Set mergen):
-         *      - das Attrib umfasst den Bereich
-         * nichts tun:
-         *      das Attribut liegt ausserhalb des Bereiches
-         */
+        // First, check which text attributes are valid in the range.
+        // cases:
+        // Ambiguous, if
+        //  * the attribute is wholly contained in the range
+        //  * the attribute end is in the range
+        //  * the attribute start is in the range
+        // Unambiguous (merge into set), if
+        //  * the attribute wholly contains the range
+        // Ignored, if
+        //  * the attribute is wholly outside the range
 
         void (*fnMergeAttr)( SfxItemSet&, const SfxPoolItem& )
             = bGetFromChrFormat ? &lcl_MergeAttr_ExpandChrFormat
                              : &lcl_MergeAttr;
 
-        // dann besorge mal die Auto-(Format)Attribute
-        SfxItemSet aFormatSet( *rSet.GetPool(), rSet.GetRanges() );
-        if( !bOnlyTextAttr )
-        {
-            SwContentNode::GetAttr( aFormatSet );
-            if ( bMergeIndentValuesOfNumRule )
-            {
-                lcl_MergeListLevelIndentAsLRSpaceItem( *this, aFormatSet );
-            }
-        }
-
         const size_t nSize = m_pSwpHints->Count();
 
-        if( nStt == nEnd )             // kein Bereich:
+        if (nStt == nEnd)               // no range:
         {
             for (size_t n = 0; n < nSize; ++n)
             {
                 const SwTextAttr* pHt = m_pSwpHints->Get(n);
                 const sal_Int32 nAttrStart = pHt->GetStart();
-                if( nAttrStart > nEnd )         // ueber den Bereich hinaus
+                if (nAttrStart > nEnd)         // behind the range
                     break;
 
                 const sal_Int32* pAttrEnd = pHt->End();
@@ -2117,7 +2116,7 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                     (*fnMergeAttr)( rSet, pHt->GetAttr() );
             }
         }
-        else                            // es ist ein Bereich definiert
+        else                            // a query range is defined
         {
             // #i75299#
             std::unique_ptr< std::vector< SwPoolItemEndPair > > pAttrArr;
@@ -2128,7 +2127,7 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
             {
                 const SwTextAttr* pHt = m_pSwpHints->Get(n);
                 const sal_Int32 nAttrStart = pHt->GetStart();
-                if( nAttrStart > nEnd )         // ueber den Bereich hinaus
+                if (nAttrStart > nEnd)         // outside, behind
                     break;
 
                 const sal_Int32* pAttrEnd = pHt->End();
@@ -2136,25 +2135,25 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                     continue;
 
                 bool bChkInvalid = false;
-                if( nAttrStart <= nStt )       // vor oder genau Start
+                if (nAttrStart <= nStt)        // before or exactly Start
                 {
-                    if( *pAttrEnd <= nStt )    // liegt davor
+                    if (*pAttrEnd <= nStt)     // outside, before
                         continue;
 
-                    if( nEnd <= *pAttrEnd )     // hinter oder genau Ende
+                    if (nEnd <= *pAttrEnd)     // behind or exactly End
                         (*fnMergeAttr)( aFormatSet, pHt->GetAttr() );
                     else
 //                  else if( pHt->GetAttr() != aFormatSet.Get( pHt->Which() ) )
-                        // uneindeutig
+                        // ambiguous
                         bChkInvalid = true;
                 }
-                else if( nAttrStart < nEnd      // reicht in den Bereich
+                else if (nAttrStart < nEnd     // starts in the range
 )//                      && pHt->GetAttr() != aFormatSet.Get( pHt->Which() ) )
                     bChkInvalid = true;
 
                 if( bChkInvalid )
                 {
-                    // uneindeutig ?
+                    // ambiguous?
                     std::unique_ptr< SfxItemIter > pItemIter;
                     const SfxPoolItem* pItem = nullptr;
 
@@ -2178,7 +2177,7 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                         OSL_ENSURE(!isUNKNOWNATR(nHintWhich),
                                 "SwTextNode::GetAttr(): unknown attribute?");
 
-                        if ( !pAttrArr.get() )
+                        if (!pAttrArr)
                         {
                             pAttrArr.reset(
                                 new std::vector< SwPoolItemEndPair >(coArrSz));
@@ -2204,7 +2203,7 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                                     if( nAttrStart > nStt )
                                     {
                                         rSet.InvalidateItem( nHintWhich );
-                                        pPrev->mpItem = reinterpret_cast<SfxPoolItem*>(-1);
+                                        pPrev->mpItem = INVALID_POOL_ITEM;
                                     }
                                     else
                                     {
@@ -2213,7 +2212,7 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                                     }
                                 }
                             }
-                            else if( reinterpret_cast<SfxPoolItem*>(-1) != pPrev->mpItem )
+                            else if( !IsInvalidItem(pPrev->mpItem) )
                             {
                                 if( pPrev->mnEndPos == nAttrStart &&
                                     *pPrev->mpItem == *pItem )
@@ -2224,7 +2223,7 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                                 else
                                 {
                                     rSet.InvalidateItem( nHintWhich );
-                                    pPrev->mpItem = reinterpret_cast<SfxPoolItem*>(-1);
+                                    pPrev->mpItem = INVALID_POOL_ITEM;
                                 }
                             }
                         }
@@ -2235,23 +2234,23 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
                 }
             }
 
-            if ( pAttrArr.get() )
+            if (pAttrArr)
             {
                 for (size_t n = 0; n < coArrSz; ++n)
                 {
                     const SwPoolItemEndPair& rItemPair = (*pAttrArr)[ n ];
-                    if( (nullptr != rItemPair.mpItem) && (reinterpret_cast<SfxPoolItem*>(-1) != rItemPair.mpItem) )
+                    if( rItemPair.mpItem && !IsInvalidItem(rItemPair.mpItem) )
                     {
                         const sal_uInt16 nWh =
                             static_cast<sal_uInt16>(n + RES_CHRATR_BEGIN);
 
-                        if( nEnd <= rItemPair.mnEndPos ) // hinter oder genau Ende
+                        if (nEnd <= rItemPair.mnEndPos) // behind or exactly end
                         {
                             if( *rItemPair.mpItem != aFormatSet.Get( nWh ) )
                                 (*fnMergeAttr)( rSet, *rItemPair.mpItem );
                         }
                         else
-                            // uneindeutig
+                            // ambiguous
                             rSet.InvalidateItem( nWh );
                     }
                 }
@@ -2259,20 +2258,15 @@ bool SwTextNode::GetAttr( SfxItemSet& rSet, sal_Int32 nStt, sal_Int32 nEnd,
         }
         if( aFormatSet.Count() )
         {
-            // aus dem Format-Set alle entfernen, die im TextSet auch gesetzt sind
+            // remove all from the format-set that are also set in the text-set
             aFormatSet.Differentiate( rSet );
-            // jetzt alle zusammen "mergen"
-            rSet.Put( aFormatSet );
         }
     }
-    else if( !bOnlyTextAttr )
+
+    if (aFormatSet.Count())
     {
-        // dann besorge mal die Auto-(Format)Attribute
-        SwContentNode::GetAttr( rSet );
-        if ( bMergeIndentValuesOfNumRule )
-        {
-            lcl_MergeListLevelIndentAsLRSpaceItem( *this, rSet );
-        }
+        // now "merge" everything
+        rSet.Put( aFormatSet );
     }
 
     return rSet.Count() != 0;
@@ -2355,14 +2349,13 @@ lcl_CollectHintSpans(const SwpHints& i_rHints, const sal_Int32 nLength,
         if (nWhich == RES_TXTATR_CHARFMT || nWhich == RES_TXTATR_AUTOFMT)
         {
             const AttrSpan_t aSpan(pHint->GetStart(), *pHint->End());
-            o_rSpanMap.insert(AttrSpanMap_t::value_type(aSpan, pHint));
+            o_rSpanMap.emplace(aSpan, pHint);
 
             // < not != because there may be multiple CHARFMT at same range
             if (nLastEnd < aSpan.first)
             {
                 // insert dummy span covering the gap
-                o_rSpanMap.insert(AttrSpanMap_t::value_type(
-                    AttrSpan_t(nLastEnd, aSpan.first), nullptr));
+                o_rSpanMap.emplace( AttrSpan_t(nLastEnd, aSpan.first), nullptr );
             }
 
             nLastEnd = aSpan.second;
@@ -2372,8 +2365,7 @@ lcl_CollectHintSpans(const SwpHints& i_rHints, const sal_Int32 nLength,
     // no hints at the end (special case: no hints at all in i_rHints)
     if (nLastEnd != nLength && nLength != 0)
     {
-        o_rSpanMap.insert(
-            AttrSpanMap_t::value_type(AttrSpan_t(nLastEnd, nLength), nullptr));
+        o_rSpanMap.emplace(AttrSpan_t(nLastEnd, nLength), nullptr);
     }
 }
 
@@ -2582,7 +2574,7 @@ void SwpHints::CalcFlags()
         case RES_TXTATR_FIELD:
             {
                 const SwField* pField = pAttr->GetFormatField().GetField();
-                if( RES_DDEFLD == pField->GetTyp()->Which() )
+                if( SwFieldIds::Dde == pField->GetTyp()->Which() )
                 {
                     m_bDDEFields = true;
                     if ( m_bFootnote )
@@ -2594,38 +2586,41 @@ void SwpHints::CalcFlags()
     }
 }
 
-bool SwpHints::CalcHiddenParaField()
+bool SwpHints::CalcHiddenParaField() const
 {
     m_bCalcHiddenParaField = false;
-    bool bOldHasHiddenParaField = m_bHasHiddenParaField;
-    bool bNewHasHiddenParaField  = false;
+    const bool bOldHiddenByParaField = m_bHiddenByParaField;
+    bool bNewHiddenByParaField = false;
+    int nNewResultWeight = 0;
     const size_t nSize = Count();
-    const SwTextAttr *pTextHt;
+    const SwTextAttr* pTextHt;
 
-    for( size_t nPos = 0; nPos < nSize; ++nPos )
+    for (size_t nPos = 0; nPos < nSize; ++nPos)
     {
         pTextHt = Get(nPos);
         const sal_uInt16 nWhich = pTextHt->Which();
 
-        if( RES_TXTATR_FIELD == nWhich )
+        if (RES_TXTATR_FIELD == nWhich)
         {
+            // see also SwTextFrame::IsHiddenNow()
             const SwFormatField& rField = pTextHt->GetFormatField();
-            if( RES_HIDDENPARAFLD == rField.GetField()->GetTyp()->Which() )
+            int nCurWeight = m_rParent.FieldCanHideParaWeight(rField.GetField()->GetTyp()->Which());
+            if (nCurWeight > nNewResultWeight)
             {
-                if( !static_cast<const SwHiddenParaField*>(rField.GetField())->IsHidden() )
-                {
-                    SetHiddenParaField(false);
-                    return bOldHasHiddenParaField != bNewHasHiddenParaField;
-                }
-                else
-                {
-                    bNewHasHiddenParaField = true;
-                }
+                nNewResultWeight = nCurWeight;
+                bNewHiddenByParaField = m_rParent.FieldHidesPara(*rField.GetField());
+            }
+            else if (nCurWeight == nNewResultWeight && bNewHiddenByParaField)
+            {
+                // Currently, for both supported hiding types (HiddenPara, Database), "Don't hide"
+                // takes precedence - i.e., if there's a "Don't hide" field of that weight, we only
+                // care about fields of higher weight.
+                bNewHiddenByParaField = m_rParent.FieldHidesPara(*rField.GetField());
             }
         }
     }
-    SetHiddenParaField( bNewHasHiddenParaField );
-    return bOldHasHiddenParaField != bNewHasHiddenParaField;
+    SetHiddenByParaField(bNewHiddenByParaField);
+    return bOldHiddenByParaField != bNewHiddenByParaField;
 }
 
 void SwpHints::NoteInHistory( SwTextAttr *pAttr, const bool bNew )
@@ -2727,8 +2722,8 @@ bool SwpHints::MergePortions( SwTextNode& rNode )
         // this loop needs to handle the case where one has a CHARFMT and the
         // other CHARFMT + RSID-only AUTOFMT, so...
         // want to skip over RSID-only AUTOFMT here, hence the -1
-        if ((nAttributesInPor1 - ((isRsidOnlyAutoFormat1) ? 1 : 0)) ==
-            (nAttributesInPor2 - ((isRsidOnlyAutoFormat2) ? 1 : 0))
+        if ((nAttributesInPor1 - (isRsidOnlyAutoFormat1 ? 1 : 0)) ==
+            (nAttributesInPor2 - (isRsidOnlyAutoFormat2 ? 1 : 0))
             && (nAttributesInPor1 != 0 || nAttributesInPor2 != 0))
         {
             // _if_ there is one element more either in aRange1 or aRange2
@@ -2791,10 +2786,9 @@ bool SwpHints::MergePortions( SwTextNode& rNode )
                                  pItem1 = iter1.NextItem(),
                                  pItem2 = iter2.NextItem())
                             {
-                                if (pItem1 != pItem2 ||
-                                    pItem1->Which() != pItem2->Which() ||
-                                    *pItem1 != *pItem2)
+                                if (pItem1 != pItem2) // all are poolable
                                 {
+                                    assert(IsInvalidItem(pItem1) || IsInvalidItem(pItem2) || pItem1->Which() != pItem2->Which() || *pItem1 != *pItem2);
                                     eMerge = DIFFER;
                                     break;
                                 }
@@ -2953,12 +2947,6 @@ bool SwpHints::TryInsertHint(
         return false;
     }
 
-    // Felder bilden eine Ausnahme:
-    // 1) Sie koennen nie ueberlappen
-    // 2) Wenn zwei Felder genau aneinander liegen,
-    //    sollen sie nicht zu einem verschmolzen werden.
-    // Wir koennen also auf die while-Schleife verzichten
-
     sal_Int32 *pHtEnd = pHint->GetEnd();
     const sal_uInt16 nWhich = pHint->Which();
     std::vector<sal_uInt16> aWhichSublist;
@@ -2997,9 +2985,9 @@ bool SwpHints::TryInsertHint(
         const sal_uInt16 *pRanges = pSet->GetRanges();
         while( (*pRanges) != 0 )
         {
-            const sal_uInt16 nBeg = (*pRanges);
+            const sal_uInt16 nBeg = *pRanges;
             ++pRanges;
-            const sal_uInt16 nEnd = (*pRanges);
+            const sal_uInt16 nEnd = *pRanges;
             ++pRanges;
             for( sal_uInt16 nSubElem = nBeg; nSubElem <= nEnd; ++nSubElem )
                 if( pSet->HasItem( nSubElem ) )
@@ -3023,16 +3011,15 @@ bool SwpHints::TryInsertHint(
 
             if( !pDoc->getIDocumentFieldsAccess().IsNewFieldLst() )
             {
-                // was fuer ein Feld ist es denn ??
-                // bestimmte Felder mussen am Doc das Calculations-Flag updaten
+                // certain fields must update the SwDoc's calculation flags
                 switch( pField->GetTyp()->Which() )
                 {
-                case RES_DBFLD:
-                case RES_SETEXPFLD:
-                case RES_HIDDENPARAFLD:
-                case RES_HIDDENTXTFLD:
-                case RES_DBNUMSETFLD:
-                case RES_DBNEXTSETFLD:
+                case SwFieldIds::Database:
+                case SwFieldIds::SetExp:
+                case SwFieldIds::HiddenPara:
+                case SwFieldIds::HiddenText:
+                case SwFieldIds::DbNumSet:
+                case SwFieldIds::DbNextSet:
                     {
                         if( bDelFirst )
                             pDoc->getIDocumentFieldsAccess().InsDelFieldInFieldLst(false, *pTextField);
@@ -3040,25 +3027,26 @@ bool SwpHints::TryInsertHint(
                             pDoc->getIDocumentFieldsAccess().InsDelFieldInFieldLst(true, *pTextField);
                     }
                     break;
-                case RES_DDEFLD:
+                case SwFieldIds::Dde:
                     if( rNode.GetNodes().IsDocNodes() )
                         static_cast<SwDDEFieldType*>(pField->GetTyp())->IncRefCnt();
                     break;
+                default: break;
                 }
             }
 
-            // gehts ins normale Nodes-Array?
+            // insert into real document's nodes-array?
             if( rNode.GetNodes().IsDocNodes() )
             {
                 bool bInsFieldType = false;
                 switch( pField->GetTyp()->Which() )
                 {
-                case RES_SETEXPFLD:
+                case SwFieldIds::SetExp:
                     bInsFieldType = static_cast<SwSetExpFieldType*>(pField->GetTyp())->IsDeleted();
                     if( nsSwGetSetExpType::GSE_SEQ & static_cast<SwSetExpFieldType*>(pField->GetTyp())->GetType() )
                     {
-                        // bevor die ReferenzNummer gesetzt wird, sollte
-                        // das Feld am richtigen FeldTypen haengen!
+                        // register the field at its FieldType before setting
+                        // the sequence reference number!
                         SwSetExpFieldType* pFieldType = static_cast<SwSetExpFieldType*>(
                                     pDoc->getIDocumentFieldsAccess().InsertFieldType( *pField->GetTyp() ) );
                         if( pFieldType != pField->GetTyp() )
@@ -3070,23 +3058,24 @@ bool SwpHints::TryInsertHint(
                         pFieldType->SetSeqRefNo( *const_cast<SwSetExpField*>(static_cast<const SwSetExpField*>(pField)) );
                     }
                     break;
-                case RES_USERFLD:
+                case SwFieldIds::User:
                     bInsFieldType = static_cast<SwUserFieldType*>(pField->GetTyp())->IsDeleted();
                     break;
 
-                case RES_DDEFLD:
+                case SwFieldIds::Dde:
                     if( pDoc->getIDocumentFieldsAccess().IsNewFieldLst() )
                         static_cast<SwDDEFieldType*>(pField->GetTyp())->IncRefCnt();
                     bInsFieldType = static_cast<SwDDEFieldType*>(pField->GetTyp())->IsDeleted();
                     break;
 
-                case RES_POSTITFLD:
+                case SwFieldIds::Postit:
                     if ( pDoc->GetDocShell() )
                     {
                         pDoc->GetDocShell()->Broadcast( SwFormatFieldHint(
                             &pTextField->GetFormatField(), SwFormatFieldHintWhich::INSERTED));
                     }
                     break;
+                default: break;
                 }
                 if( bInsFieldType )
                     pDoc->getIDocumentFieldsAccess().InsDeletedFieldType( *pField->GetTyp() );
@@ -3117,15 +3106,15 @@ bool SwpHints::TryInsertHint(
                     bool bDelOld = true, bChgStart = false, bChgEnd = false;
                     switch( eCmp )
                     {
-                    case POS_BEFORE:
-                    case POS_BEHIND:    bDelOld = false; break;
+                    case SwComparePosition::Before:
+                    case SwComparePosition::Behind:    bDelOld = false; break;
 
-                    case POS_OUTSIDE:   bChgStart = bChgEnd = true; break;
+                    case SwComparePosition::Outside:   bChgStart = bChgEnd = true; break;
 
-                    case POS_COLLIDE_END:
-                    case POS_OVERLAP_BEFORE:    bChgStart = true; break;
-                    case POS_COLLIDE_START:
-                    case POS_OVERLAP_BEHIND:    bChgEnd = true; break;
+                    case SwComparePosition::CollideEnd:
+                    case SwComparePosition::OverlapBefore:    bChgStart = true; break;
+                    case SwComparePosition::CollideStart:
+                    case SwComparePosition::OverlapBehind:    bChgEnd = true; break;
                     default: break;
                     }
 
@@ -3165,20 +3154,21 @@ bool SwpHints::TryInsertHint(
     if( SetAttrMode::DONTEXPAND & nMode )
         pHint->SetDontExpand( true );
 
-    // SwTextAttrs ohne Ende werden sonderbehandelt:
-    // Sie werden natuerlich in das Array insertet, aber sie werden nicht
-    // in die pPrev/Next/On/Off-Verkettung aufgenommen.
-    // Der Formatierer erkennt diese TextHints an dem CH_TXTATR_.. im Text !
+    // special handling for SwTextAttrs without end:
+    // 1) they cannot overlap
+    // 2) if two fields are adjacent, they must not be merged into one
+    // this is guaranteed by inserting a CH_TXTATR_* into the paragraph text!
     sal_Int32 nHtStart = pHint->GetStart();
     if( !pHtEnd )
     {
         Insert( pHint );
+        NoteInHistory(pHint, true);
         CalcFlags();
 #ifdef DBG_UTIL
         if( !rNode.GetDoc()->IsInReading() )
             CHECK;
 #endif
-        // ... und die Abhaengigen benachrichtigen
+        // ... and notify listeners
         if(rNode.HasWriterListeners())
         {
             SwUpdateAttr aHint(
@@ -3192,14 +3182,13 @@ bool SwpHints::TryInsertHint(
         return true;
     }
 
-    // Ab hier gibt es nur noch pHint mit einem EndIdx !!!
+    // from here on, pHint is known to have an end index!
 
     if( *pHtEnd < nHtStart )
     {
-        OSL_ENSURE( *pHtEnd >= nHtStart,
-                    "+SwpHints::Insert: invalid hint, end < start" );
+        assert(*pHtEnd >= nHtStart);
 
-        // Wir drehen den Quatsch einfach um:
+        // just swap the nonsense:
         pHint->GetStart() = *pHtEnd;
         *pHtEnd = nHtStart;
         nHtStart = pHint->GetStart();
@@ -3227,10 +3216,9 @@ bool SwpHints::TryInsertHint(
          ( RES_TXTATR_AUTOFMT == nWhich ||
            RES_TXTATR_CHARFMT == nWhich ) )
     {
-        OSL_ENSURE( nWhich != RES_TXTATR_AUTOFMT ||
+        assert( nWhich != RES_TXTATR_AUTOFMT ||
                 static_cast<const SwFormatAutoFormat&>(pHint->GetAttr()).GetStyleHandle()->GetPool() ==
-                &rNode.GetDoc()->GetAttrPool(),
-                "AUTOSTYLES - Pool mismatch" );
+                &rNode.GetDoc()->GetAttrPool());
 
         BuildPortions( rNode, *pHint, nMode );
 
@@ -3247,7 +3235,7 @@ bool SwpHints::TryInsertHint(
         // multiple times
         // FME 2007-11-08 #i82989# in NOHINTADJUST mode, we want to insert
         // character attributes directly
-        if ( ( RES_TXTATR_CHARFMT  == nWhich && !bNoHintAdjustMode ) )
+        if ( RES_TXTATR_CHARFMT  == nWhich && !bNoHintAdjustMode )
         {
             BuildPortions( rNode, *pHint, nMode );
         }
@@ -3262,13 +3250,10 @@ bool SwpHints::TryInsertHint(
         }
     }
 
-    // ... und die Abhaengigen benachrichtigen
+    // ... and notify listeners
     if ( rNode.HasWriterListeners() )
     {
-        SwUpdateAttr aHint(
-            nHtStart,
-            nHtStart == nHintEnd ? nHintEnd + 1 : nHintEnd,
-            nWhich);
+        SwUpdateAttr aHint(nHtStart, nHintEnd, nWhich, aWhichSublist);
 
         rNode.ModifyNotification( nullptr, &aHint );
     }
@@ -3295,21 +3280,21 @@ void SwpHints::DeleteAtPos( const size_t nPos )
 
     bool const done = m_HintsByEnd.erase(pHt);
     assert(done);
-    (void) done; // unused in NDEBUG
+    (void)done; // unused in NDEBUG
 
     if( pHint->Which() == RES_TXTATR_FIELD )
     {
         SwTextField *const pTextField(static_txtattr_cast<SwTextField*>(pHint));
         const SwFieldType* pFieldTyp = pTextField->GetFormatField().GetField()->GetTyp();
-        if( RES_DDEFLD == pFieldTyp->Which() )
+        if( SwFieldIds::Dde == pFieldTyp->Which() )
         {
             const SwTextNode* pNd = pTextField->GetpTextNode();
             if( pNd && pNd->GetNodes().IsDocNodes() )
                 const_cast<SwDDEFieldType*>(static_cast<const SwDDEFieldType*>(pFieldTyp))->DecRefCnt();
             pTextField->ChgTextNode(nullptr);
         }
-        else if ( m_bHasHiddenParaField &&
-                 RES_HIDDENPARAFLD == pFieldTyp->Which() )
+        else if (m_bHiddenByParaField
+                 && m_rParent.FieldCanHideParaWeight(pFieldTyp->Which()))
         {
             m_bCalcHiddenParaField = true;
         }
@@ -3325,14 +3310,12 @@ void SwpHints::DeleteAtPos( const size_t nPos )
     CHECK_NOTMERGED; // called from BuildPortions
 }
 
-// Ist der Hint schon bekannt, dann suche die Position und loesche ihn.
-// Ist er nicht im Array, so gibt es ein OSL_ENSURE(!!
-
-void SwpHints::Delete( SwTextAttr* pTextHt )
+/// delete the hint
+/// precondition: pTextHt must be in this array
+void SwpHints::Delete( SwTextAttr const * pTextHt )
 {
-    // Attr 2.0: SwpHintsArr::Delete( pTextHt );
     const size_t nPos = GetIndexOf( pTextHt );
-    OSL_ENSURE( SAL_MAX_SIZE != nPos, "Attribut nicht im Attribut-Array!" );
+    assert(SAL_MAX_SIZE != nPos);
     if( SAL_MAX_SIZE != nPos )
         DeleteAtPos( nPos );
 }
@@ -3374,10 +3357,10 @@ void SwTextNode::ClearSwpHintsArr( bool bDelFields )
     }
 }
 
-sal_uInt16 SwTextNode::GetLang( const sal_Int32 nBegin, const sal_Int32 nLen,
+LanguageType SwTextNode::GetLang( const sal_Int32 nBegin, const sal_Int32 nLen,
                            sal_uInt16 nScript ) const
 {
-    sal_uInt16 nRet = LANGUAGE_DONTKNOW;
+    LanguageType nRet = LANGUAGE_DONTKNOW;
 
     if ( ! nScript )
     {
@@ -3393,7 +3376,6 @@ sal_uInt16 SwTextNode::GetLang( const sal_Int32 nBegin, const sal_Int32 nLen,
         const size_t nSize = m_pSwpHints->Count();
         for ( size_t i = 0; i < nSize; ++i )
         {
-            // ist der Attribut-Anfang schon groesser als der Idx ?
             const SwTextAttr *pHt = m_pSwpHints->Get(i);
             const sal_Int32 nAttrStart = pHt->GetStart();
             if( nEnd < nAttrStart )
@@ -3405,8 +3387,7 @@ sal_uInt16 SwTextNode::GetLang( const sal_Int32 nBegin, const sal_Int32 nLen,
                     ( ( pHt->IsCharFormatAttr() || RES_TXTATR_AUTOFMT == nWhich ) && CharFormat::IsItemIncluded( nWhichId, pHt ) ) )
             {
                 const sal_Int32 *pEndIdx = pHt->End();
-                // Ueberlappt das Attribut den Bereich?
-
+                // do the attribute and the range overlap?
                 if( !pEndIdx )
                     continue;
                 if( nLen )
@@ -3422,13 +3403,13 @@ sal_uInt16 SwTextNode::GetLang( const sal_Int32 nBegin, const sal_Int32 nLen,
                         continue;
                 }
                 const SfxPoolItem* pItem = CharFormat::GetItem( *pHt, nWhichId );
-                const sal_uInt16 nLng = static_cast<const SvxLanguageItem*>(pItem)->GetLanguage();
+                const LanguageType nLng = static_cast<const SvxLanguageItem*>(pItem)->GetLanguage();
 
-                // Umfasst das Attribut den Bereich komplett?
+                // does the attribute completely cover the range?
                 if( nAttrStart <= nBegin && nEnd <= *pEndIdx )
                     nRet = nLng;
                 else if( LANGUAGE_DONTKNOW == nRet )
-                    nRet = nLng; // partielle Ueberlappung, der 1. gewinnt
+                    nRet = nLng; // partial overlap, the first one wins
             }
         }
     }
@@ -3436,7 +3417,7 @@ sal_uInt16 SwTextNode::GetLang( const sal_Int32 nBegin, const sal_Int32 nLen,
     {
         nRet = static_cast<const SvxLanguageItem&>(GetSwAttrSet().Get( nWhichId )).GetLanguage();
         if( LANGUAGE_DONTKNOW == nRet )
-            nRet = static_cast<sal_uInt16>(GetAppLanguage());
+            nRet = GetAppLanguage();
     }
     return nRet;
 }
@@ -3463,7 +3444,7 @@ sal_Unicode GetCharOfTextAttr( const SwTextAttr& rAttr )
         break;
 
         default:
-            OSL_FAIL("GetCharOfTextAttr: unknown attr");
+            assert(!"GetCharOfTextAttr: unknown attr");
             break;
     }
     return cRet;

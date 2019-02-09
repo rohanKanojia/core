@@ -19,14 +19,14 @@
 #ifndef INCLUDED_UNO_CURRENT_CONTEXT_HXX
 #define INCLUDED_UNO_CURRENT_CONTEXT_HXX
 
-#include <sal/config.h>
+#include "sal/config.h"
 
 #include <cstddef>
 
-#include <uno/current_context.h>
-#include <uno/lbnames.h>
+#include "uno/current_context.h"
+#include "uno/lbnames.h"
 
-#include <com/sun/star/uno/XCurrentContext.hpp>
+#include "com/sun/star/uno/XCurrentContext.hpp"
 
 
 namespace com
@@ -61,7 +61,7 @@ inline bool SAL_CALL setCurrentContext(
     Reference< XCurrentContext > const & xContext )
 {
     ::rtl::OUString aEnvTypeName( CPPU_CURRENT_LANGUAGE_BINDING_NAME );
-    return (::uno_setCurrentContext( xContext.get(), aEnvTypeName.pData, NULL ) != sal_False);
+    return ::uno_setCurrentContext( xContext.get(), aEnvTypeName.pData, NULL );
 }
 
 /** Objects of this class are used for applying a current context until they are destructed, i.e.
@@ -92,7 +92,7 @@ public:
 
         @return the previously set context
     */
-    inline Reference< XCurrentContext > SAL_CALL getPreviousContext() const
+    Reference< XCurrentContext > SAL_CALL getPreviousContext() const
         { return m_xPreviousContext; }
 };
 

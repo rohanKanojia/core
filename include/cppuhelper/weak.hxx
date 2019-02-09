@@ -21,10 +21,10 @@
 
 #include <cassert>
 #include <cstddef>
-#include <osl/interlck.h>
-#include <rtl/alloc.h>
-#include <com/sun/star/uno/XWeak.hpp>
-#include <cppuhelper/cppuhelperdllapi.h>
+#include "osl/interlck.h"
+#include "rtl/alloc.h"
+#include "com/sun/star/uno/XWeak.hpp"
+#include "cppuhelper/cppuhelperdllapi.h"
 
 
 namespace cppu
@@ -51,7 +51,7 @@ protected:
         Despite the fact that a RuntimeException is allowed to be thrown, you must not throw any
         exception upon destruction!
     */
-    virtual ~OWeakObject();
+    virtual ~OWeakObject() COVERITY_NOEXCEPT_FALSE;
 
     /** disposes and resets m_pWeakConnectionPoint
         @pre
@@ -81,13 +81,13 @@ protected:
 public:
     /// @cond INTERNAL
     // these are here to force memory de/allocation to sal lib.
-    inline static void * SAL_CALL operator new( size_t nSize )
+    static void * SAL_CALL operator new( size_t nSize )
         { return ::rtl_allocateMemory( nSize ); }
-    inline static void SAL_CALL operator delete( void * pMem )
+    static void SAL_CALL operator delete( void * pMem )
         { ::rtl_freeMemory( pMem ); }
-    inline static void * SAL_CALL operator new( size_t, void * pMem )
+    static void * SAL_CALL operator new( size_t, void * pMem )
         { return pMem; }
-    inline static void SAL_CALL operator delete( void *, void * )
+    static void SAL_CALL operator delete( void *, void * )
         {}
     /// @endcond
 
@@ -99,29 +99,25 @@ public:
 #else
     /** Default Constructor.  Sets the reference count to zero.
     */
-    inline OWeakObject()
+    OWeakObject()
         : m_refCount( 0 )
         , m_pWeakConnectionPoint( NULL )
         , m_pReserved(NULL)
         {}
 #endif
     /** Dummy copy constructor.  Set the reference count to zero.
-
-        @param rObj dummy param
     */
-    inline OWeakObject( const OWeakObject & rObj )
+    OWeakObject( const OWeakObject & )
         : css::uno::XWeak()
         , m_refCount( 0 )
         , m_pWeakConnectionPoint( NULL )
         , m_pReserved(NULL)
-        {
-            (void) rObj;
-        }
+        {}
     /** Dummy assignment operator. Does not affect reference count.
 
         @return this OWeakObject
     */
-    inline OWeakObject & SAL_CALL operator = ( const OWeakObject &)
+    OWeakObject & SAL_CALL operator = ( const OWeakObject &)
         { return *this; }
 
     /** Basic queryInterface() implementation supporting com::sun::star::uno::XWeak and
@@ -131,8 +127,7 @@ public:
         @return demanded type or empty any
     */
     virtual css::uno::Any SAL_CALL queryInterface(
-        const css::uno::Type & rType )
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+        const css::uno::Type & rType ) SAL_OVERRIDE;
     /** increasing m_refCount
     */
     virtual void SAL_CALL acquire()
@@ -146,14 +141,13 @@ public:
 
         @return a com::sun::star::uno::XAdapter reference
     */
-    virtual css::uno::Reference< css::uno::XAdapter > SAL_CALL queryAdapter()
-        throw (css::uno::RuntimeException, std::exception) SAL_OVERRIDE;
+    virtual css::uno::Reference< css::uno::XAdapter > SAL_CALL queryAdapter() SAL_OVERRIDE;
 
     /** Cast operator to XInterface reference.
 
         @return XInterface reference
     */
-    inline SAL_CALL operator css::uno::Reference< css::uno::XInterface > ()
+    SAL_CALL operator css::uno::Reference< css::uno::XInterface > ()
         { return this; }
 };
 

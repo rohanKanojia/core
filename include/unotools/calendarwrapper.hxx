@@ -24,7 +24,6 @@
 #include <com/sun/star/uno/Reference.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/i18n/Calendar2.hpp>
-#include <com/sun/star/lang/Locale.hpp>
 #include <unotools/unotoolsdllapi.h>
 
 namespace com { namespace sun { namespace star {
@@ -39,11 +38,13 @@ namespace com { namespace sun { namespace star {
     }
 }}}
 
+namespace com { namespace sun { namespace star { namespace lang { struct Locale; } } } }
+
 class UNOTOOLS_DLLPUBLIC CalendarWrapper
 {
     css::uno::Reference< css::i18n::XCalendar4 >   xC;
 
-            DateTime            aEpochStart;        // 1Jan1970
+    const DateTime aEpochStart;        // 1Jan1970
 
 public:
                                 CalendarWrapper(
@@ -70,7 +71,6 @@ public:
     void setValue( sal_Int16 nFieldIndex, sal_Int16 nValue );
     bool isValid() const;
     sal_Int16 getValue( sal_Int16 nFieldIndex ) const;
-    void addValue( sal_Int16 nFieldIndex, sal_Int32 nAmount );
     sal_Int16 getFirstDayOfWeek() const;
     sal_Int16 getNumberOfMonthsInYear() const;
     sal_Int16 getNumberOfDaysInWeek() const;
@@ -98,11 +98,11 @@ public:
     // convenience methods
 
     /// get epoch start (should be 01Jan1970)
-    inline  const DateTime&     getEpochStart() const
+    const DateTime&     getEpochStart() const
                                     { return aEpochStart; }
 
     /// set a local (!) Gregorian DateTime
-    inline  void                setGregorianDateTime( const DateTime& rDateTime )
+    void                setGregorianDateTime( const DateTime& rDateTime )
                                     { setLocalDateTime( rDateTime - aEpochStart ); }
 
 };

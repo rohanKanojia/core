@@ -17,65 +17,39 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
-
-#include <comphelper/processfactory.hxx>
-#include <svx/svdobj.hxx>
-#include <svx/svditer.hxx>
-#include <svx/svdpage.hxx>
-#include <editeng/lrspitem.hxx>
-#include <editeng/ulspitem.hxx>
-#include <svl/intitem.hxx>
-#include <svl/zformat.hxx>
-#include <sot/storage.hxx>
 #include <sfx2/objsh.hxx>
 #include <rtl/ustring.hxx>
 
-#include "formulacell.hxx"
-#include "dociter.hxx"
-#include "document.hxx"
-#include "rangenam.hxx"
-#include "dbdata.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
-#include "progress.hxx"
-#include "conditio.hxx"
-#include "dpobject.hxx"
-#include "attrib.hxx"
-#include "scextopt.hxx"
-#include "stlsheet.hxx"
-#include "stlpool.hxx"
-#include "olinetab.hxx"
-#include "unonames.hxx"
-#include "convuno.hxx"
-#include "patattr.hxx"
-#include "docoptio.hxx"
-#include "tabprotection.hxx"
-#include "postit.hxx"
+#include <document.hxx>
+#include <scextopt.hxx>
+#include <docoptio.hxx>
+#include <tabprotection.hxx>
+#include <postit.hxx>
+#include <root.hxx>
 
-#include "excdoc.hxx"
-#include "namebuff.hxx"
-#include "xeextlst.hxx"
+#include <excdoc.hxx>
+#include <xeextlst.hxx>
+#include <biffhelper.hxx>
 
-#include "xcl97rec.hxx"
-#include "xcl97esc.hxx"
-#include "xetable.hxx"
-#include "xelink.hxx"
-#include "xename.hxx"
-#include "xepage.hxx"
-#include "xeview.hxx"
-#include "xecontent.hxx"
-#include "xeescher.hxx"
-#include "xepivot.hxx"
-#include "XclExpChangeTrack.hxx"
+#include <xcl97rec.hxx>
+#include <xetable.hxx>
+#include <xelink.hxx>
+#include <xepage.hxx>
+#include <xeview.hxx>
+#include <xecontent.hxx>
+#include <xeescher.hxx>
+#include <xepivot.hxx>
+#include <XclExpChangeTrack.hxx>
 #include <xepivotxml.hxx>
-#include "xedbdata.hxx"
+#include <xedbdata.hxx>
+#include <xlcontent.hxx>
+#include <xlname.hxx>
+#include <xllink.hxx>
+#include <xltools.hxx>
 
-#include <math.h>
-
-#include <com/sun/star/document/XDocumentProperties.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <oox/token/tokens.hxx>
+#include <oox/token/namespaces.hxx>
 #include <memory>
 
 using namespace oox;
@@ -86,14 +60,14 @@ static OUString lcl_GetVbaTabName( SCTAB n )
     return aRet;
 }
 
-static void lcl_AddBookviews( XclExpRecordList<>& aRecList, ExcTable& self )
+static void lcl_AddBookviews( XclExpRecordList<>& aRecList, const ExcTable& self )
 {
     aRecList.AppendNewRecord( new XclExpXmlStartElementRecord( XML_bookViews ) );
     aRecList.AppendNewRecord( new XclExpWindow1( self.GetRoot() ) );
     aRecList.AppendNewRecord( new XclExpXmlEndElementRecord( XML_bookViews ) );
 }
 
-static void lcl_AddCalcPr( XclExpRecordList<>& aRecList, ExcTable& self )
+static void lcl_AddCalcPr( XclExpRecordList<>& aRecList, const ExcTable& self )
 {
     ScDocument& rDoc = self.GetDoc();
 
@@ -105,11 +79,11 @@ static void lcl_AddCalcPr( XclExpRecordList<>& aRecList, ExcTable& self )
     aRecList.AppendNewRecord( new XclRefmode( rDoc ) );
     aRecList.AppendNewRecord( new XclIteration( rDoc ) );
     aRecList.AppendNewRecord( new XclDelta( rDoc ) );
-    aRecList.AppendNewRecord( new XclExpBoolRecord(0x005F, true) ); // SAVERECALC
+    aRecList.AppendNewRecord( new XclExpBoolRecord(oox::xls::BIFF_ID_SAVERECALC, true) );
     aRecList.AppendNewRecord( new XclExpXmlEndSingleElementRecord() );  // XML_calcPr
 }
 
-static void lcl_AddWorkbookProtection( XclExpRecordList<>& aRecList, ExcTable& self )
+static void lcl_AddWorkbookProtection( XclExpRecordList<>& aRecList, const ExcTable& self )
 {
     aRecList.AppendNewRecord( new XclExpXmlStartSingleElementRecord( XML_workbookProtection ) );
 
@@ -136,7 +110,6 @@ ExcTable::ExcTable( const XclExpRoot& rRoot ) :
     XclExpRoot( rRoot ),
     mnScTab( SCTAB_GLOBAL ),
     nExcTab( EXC_NOTAB ),
-    pTabNames( new NameBuffer( nullptr, 16 ) ),
     mxNoteList( new XclExpNoteList )
 {
 }
@@ -145,14 +118,12 @@ ExcTable::ExcTable( const XclExpRoot& rRoot, SCTAB nScTab ) :
     XclExpRoot( rRoot ),
     mnScTab( nScTab ),
     nExcTab( rRoot.GetTabInfo().GetXclTab( nScTab ) ),
-    pTabNames( new NameBuffer( nullptr, 16 ) ),
     mxNoteList( new XclExpNoteList )
 {
 }
 
 ExcTable::~ExcTable()
 {
-    delete pTabNames;
 }
 
 void ExcTable::Add( XclExpRecordBase* pRec )
@@ -174,9 +145,6 @@ void ExcTable::FillAsHeaderBinary( ExcBoundsheetList& rBoundsheetList )
     else
         Add( new ExcBofW8 );
 
-    SCTAB   nC;
-    OUString aTmpString;
-    SCTAB  nScTabCount     = rTabInfo.GetScTabCount();
     sal_uInt16  nExcTabCount    = rTabInfo.GetXclTabCount();
     sal_uInt16  nCodenames      = static_cast< sal_uInt16 >( GetExtDocOptions().GetCodeNameCount() );
 
@@ -228,15 +196,6 @@ void ExcTable::FillAsHeaderBinary( ExcBoundsheetList& rBoundsheetList )
     }
 
     Add( new XclExpUInt16Record( EXC_ID_FNGROUPCOUNT, 14 ) );
-
-    // first setup table names and contents
-
-    for( nC = 0 ; nC < nScTabCount ; nC++ )
-        if( rTabInfo.IsExportTab( nC ) )
-        {
-            rDoc.GetName( nC, aTmpString );
-            *pTabNames << aTmpString;
-        }
 
     if ( GetBiff() <= EXC_BIFF5 )
     {
@@ -290,6 +249,8 @@ void ExcTable::FillAsHeaderBinary( ExcBoundsheetList& rBoundsheetList )
     aRecList.AppendRecord( CreateRecord( EXC_ID_XFLIST ) );
     aRecList.AppendRecord( CreateRecord( EXC_ID_PALETTE ) );
 
+    SCTAB   nC;
+    SCTAB  nScTabCount     = rTabInfo.GetScTabCount();
     if( GetBiff() <= EXC_BIFF5 )
     {
         // Bundlesheet
@@ -326,6 +287,7 @@ void ExcTable::FillAsHeaderBinary( ExcBoundsheetList& rBoundsheetList )
                 rBoundsheetList.AppendRecord( xBoundsheet );
             }
 
+        OUString aTmpString;
         for( SCTAB nAdd = 0; nC < static_cast<SCTAB>(nCodenames) ; nC++, nAdd++ )
         {
             aTmpString = lcl_GetVbaTabName( nAdd );
@@ -362,23 +324,11 @@ void ExcTable::FillAsHeaderXml( ExcBoundsheetList& rBoundsheetList )
     ScDocument& rDoc = GetDoc();
     XclExpTabInfo& rTabInfo = GetTabInfo();
 
-    SCTAB   nC;
-    OUString aTmpString;
-    SCTAB  nScTabCount     = rTabInfo.GetScTabCount();
     sal_uInt16  nExcTabCount    = rTabInfo.GetXclTabCount();
     sal_uInt16  nCodenames      = static_cast< sal_uInt16 >( GetExtDocOptions().GetCodeNameCount() );
 
     rR.pTabId = new XclExpChTrTabId( std::max( nExcTabCount, nCodenames ) );
     Add( rR.pTabId );
-
-    // first setup table names and contents
-
-    for( nC = 0 ; nC < nScTabCount ; nC++ )
-        if( rTabInfo.IsExportTab( nC ) )
-        {
-            rDoc.GetName( nC, aTmpString );
-            *pTabNames << aTmpString;
-        }
 
     Add( new XclExpXmlStartSingleElementRecord( XML_workbookPr ) );
     Add( new XclExpBoolRecord(0x0040, false, XML_backupFile ) );    // BACKUP
@@ -418,6 +368,8 @@ void ExcTable::FillAsHeaderXml( ExcBoundsheetList& rBoundsheetList )
     lcl_AddBookviews( aRecList, *this );
 
     // Bundlesheet
+    SCTAB nC;
+    SCTAB nScTabCount = rTabInfo.GetScTabCount();
     aRecList.AppendNewRecord( new XclExpXmlStartElementRecord( XML_sheets ) );
     for( nC = 0 ; nC < nScTabCount ; nC++ )
         if( rTabInfo.IsExportTab( nC ) )
@@ -428,6 +380,7 @@ void ExcTable::FillAsHeaderXml( ExcBoundsheetList& rBoundsheetList )
         }
     aRecList.AppendNewRecord( new XclExpXmlEndElementRecord( XML_sheets ) );
 
+    OUString aTmpString;
     for( SCTAB nAdd = 0; nC < static_cast<SCTAB>(nCodenames) ; nC++, nAdd++ )
     {
         aTmpString = lcl_GetVbaTabName( nAdd );
@@ -469,12 +422,12 @@ void ExcTable::FillAsTableBinary( SCTAB nCodeNameIdx )
     //export cell notes
     std::vector<sc::NoteEntry> aNotes;
     rDoc.GetAllNoteEntries(aNotes);
-    for (std::vector<sc::NoteEntry>::const_iterator it = aNotes.begin(), itEnd = aNotes.end(); it != itEnd; ++it)
+    for (const auto& rNote : aNotes)
     {
-        if (it->maPos.Tab() != mnScTab)
+        if (rNote.maPos.Tab() != mnScTab)
             continue;
 
-        mxNoteList->AppendNewRecord(new XclExpNote(GetRoot(), it->maPos, it->mpNote, OUString()));
+        mxNoteList->AppendNewRecord(new XclExpNote(GetRoot(), rNote.maPos, rNote.mpNote, OUString()));
     }
 
     // WSBOOL needs data from page settings, create it here, add it later
@@ -510,8 +463,9 @@ void ExcTable::FillAsTableBinary( SCTAB nCodeNameIdx )
     if (pTabProtect && pTabProtect->isProtected())
     {
         Add( new XclExpProtection(true) );
-        Add( new XclExpBoolRecord(0x00DD, pTabProtect->isOptionEnabled(ScTableProtection::SCENARIOS)) );
-        Add( new XclExpBoolRecord(0x0063, pTabProtect->isOptionEnabled(ScTableProtection::OBJECTS)) );
+        Add( new XclExpBoolRecord(oox::xls::BIFF_ID_SCENPROTECT, pTabProtect->isOptionEnabled(ScTableProtection::SCENARIOS)) );
+        if (pTabProtect->isOptionEnabled(ScTableProtection::OBJECTS))
+            Add( new XclExpBoolRecord(oox::xls::BIFF_ID_OBJECTPROTECT, true ));
         Add( new XclExpPassHash(pTabProtect->getPasswordHash(PASSHASH_XL)) );
     }
 
@@ -556,10 +510,9 @@ void ExcTable::FillAsTableBinary( SCTAB nCodeNameIdx )
         if (pTabProtect)
         {
             const ::std::vector<ScEnhancedProtection>& rProts( pTabProtect->getEnhancedProtection());
-            for (::std::vector<ScEnhancedProtection>::const_iterator it( rProts.begin()), itEnd( rProts.end());
-                    it != itEnd; ++it)
+            for (const auto& rProt : rProts)
             {
-                Add( new XclExpSheetEnhancedProtection( GetRoot(), *it));
+                Add( new XclExpSheetEnhancedProtection( GetRoot(), rProt));
             }
         }
 
@@ -581,9 +534,9 @@ void ExcTable::FillAsTableBinary( SCTAB nCodeNameIdx )
     if( rR.pUserBViewList )
     {
         XclExpUserBViewList::const_iterator iter;
-        for ( iter = rR.pUserBViewList->begin(); iter != rR.pUserBViewList->end(); ++iter)
+        for ( iter = rR.pUserBViewList->cbegin(); iter != rR.pUserBViewList->cend(); ++iter)
         {
-            Add( new XclExpUsersViewBegin( (*iter)->GetGUID(), nExcTab ) );
+            Add( new XclExpUsersViewBegin( (*iter).GetGUID(), nExcTab ) );
             Add( new XclExpUsersViewEnd );
         }
     }
@@ -610,12 +563,12 @@ void ExcTable::FillAsTableXml()
     //export cell notes
     std::vector<sc::NoteEntry> aNotes;
     rDoc.GetAllNoteEntries(aNotes);
-    for (std::vector<sc::NoteEntry>::const_iterator it = aNotes.begin(), itEnd = aNotes.end(); it != itEnd; ++it)
+    for (const auto& rNote : aNotes)
     {
-        if (it->maPos.Tab() != mnScTab)
+        if (rNote.maPos.Tab() != mnScTab)
             continue;
 
-        mxNoteList->AppendNewRecord(new XclExpNote(GetRoot(), it->maPos, it->mpNote, OUString()));
+        mxNoteList->AppendNewRecord(new XclExpNote(GetRoot(), rNote.maPos, rNote.mpNote, OUString()));
     }
 
     // WSBOOL needs data from page settings, create it here, add it later
@@ -661,8 +614,8 @@ void ExcTable::FillAsTableXml()
 
     // list of HLINK records, generated by the cell table
     XclExpRecordRef xHyperlinks = mxCellTable->CreateRecord( EXC_ID_HLINK );
-    XclExpHyperlinkList* xHyperlinkList = dynamic_cast<XclExpHyperlinkList*>(xHyperlinks.get());
-    if( xHyperlinkList != nullptr && !xHyperlinkList->IsEmpty() )
+    XclExpHyperlinkList* pHyperlinkList = dynamic_cast<XclExpHyperlinkList*>(xHyperlinks.get());
+    if( pHyperlinkList != nullptr && !pHyperlinkList->IsEmpty() )
     {
         aRecList.AppendNewRecord( new XclExpXmlStartElementRecord( XML_hyperlinks ) );
         aRecList.AppendRecord( xHyperlinks );
@@ -734,8 +687,8 @@ void ExcTable::WriteXml( XclExpXmlStream& rStrm )
     rStrm.PushStream( pWorksheet );
 
     pWorksheet->startElement( XML_worksheet,
-            XML_xmlns, "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-            FSNS( XML_xmlns, XML_r ), "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            XML_xmlns, XclXmlUtils::ToOString(rStrm.getNamespaceURL(OOX_NS(xls))).getStr(),
+            FSNS( XML_xmlns, XML_r ), XclXmlUtils::ToOString(rStrm.getNamespaceURL(OOX_NS(officeRel))).getStr(),
             FSEND );
 
     SetCurrScTab( mnScTab );
@@ -753,15 +706,13 @@ void ExcTable::WriteXml( XclExpXmlStream& rStrm )
 
 ExcDocument::ExcDocument( const XclExpRoot& rRoot ) :
     XclExpRoot( rRoot ),
-    aHeader( rRoot ),
-    pExpChangeTrack( nullptr )
+    aHeader( rRoot )
 {
 }
 
 ExcDocument::~ExcDocument()
 {
     maTableList.RemoveAllRecords();    // for the following assertion!
-    delete pExpChangeTrack;
 }
 
 void ExcDocument::ReadDoc()
@@ -808,7 +759,7 @@ void ExcDocument::ReadDoc()
 
         // change tracking
         if ( GetDoc().GetChangeTrack() )
-            pExpChangeTrack = new XclExpChangeTrack( GetRoot() );
+            m_xExpChangeTrack.reset(new XclExpChangeTrack( GetRoot() ));
     }
 }
 
@@ -839,8 +790,8 @@ void ExcDocument::Write( SvStream& rSvStrm )
         for( size_t nBSheet = 0, nBSheetCount = maBoundsheetList.GetSize(); nBSheet < nBSheetCount; ++nBSheet )
             maBoundsheetList.GetRecord( nBSheet )->UpdateStreamPos( aXclStrm );
     }
-    if( pExpChangeTrack )
-        pExpChangeTrack->Write();
+    if( m_xExpChangeTrack )
+        m_xExpChangeTrack->Write();
 }
 
 void ExcDocument::WriteXml( XclExpXmlStream& rStrm )
@@ -851,12 +802,13 @@ void ExcDocument::WriteXml( XclExpXmlStream& rStrm )
     uno::Reference<document::XDocumentPropertiesSupplier> xDPS( pDocShell->GetModel(), uno::UNO_QUERY_THROW );
     uno::Reference<document::XDocumentProperties> xDocProps = xDPS->getDocumentProperties();
 
-    rStrm.exportDocumentProperties( xDocProps );
+    rStrm.exportDocumentProperties(xDocProps, pDocShell->IsSecurityOptOpenReadOnly());
+    rStrm.exportCustomFragments();
 
     sax_fastparser::FSHelperPtr& rWorkbook = rStrm.GetCurrentStream();
     rWorkbook->startElement( XML_workbook,
-            XML_xmlns, "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-            FSNS(XML_xmlns, XML_r), "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            XML_xmlns, XclXmlUtils::ToOString(rStrm.getNamespaceURL(OOX_NS(xls))).getStr(),
+            FSNS(XML_xmlns, XML_r), XclXmlUtils::ToOString(rStrm.getNamespaceURL(OOX_NS(officeRel))).getStr(),
             FSEND );
     rWorkbook->singleElement( XML_fileVersion,
             XML_appName, "Calc",
@@ -879,8 +831,8 @@ void ExcDocument::WriteXml( XclExpXmlStream& rStrm )
         }
     }
 
-    if( pExpChangeTrack )
-        pExpChangeTrack->WriteXml( rStrm );
+    if( m_xExpChangeTrack )
+        m_xExpChangeTrack->WriteXml( rStrm );
 
     XclExpXmlPivotCaches& rCaches = GetXmlPivotTableManager().GetCaches();
     if (rCaches.HasCaches())

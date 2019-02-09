@@ -17,15 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "dbexchange.hxx"
-#include "dbtreelistbox.hxx"
+#include <dbexchange.hxx>
+#include <dbtreelistbox.hxx>
 #include "dbtreemodel.hxx"
 #include "dbtreeview.hxx"
-#include "dbu_brw.hrc"
-#include "dbustrings.hrc"
-#include "QEnumTypes.hxx"
-#include "UITools.hxx"
-#include "unodatbr.hxx"
+#include <stringconstants.hxx>
+#include <QEnumTypes.hxx>
+#include <UITools.hxx>
+#include <unodatbr.hxx>
 
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/sdb/CommandType.hpp>
@@ -37,7 +36,8 @@
 #include <svx/dataaccessdescriptor.hxx>
 #include <tools/diagnose_ex.h>
 #include <osl/diagnose.h>
-#include "svtools/treelistentry.hxx"
+#include <vcl/treelistentry.hxx>
+#include <vcl/svapp.hxx>
 
 #include <algorithm>
 #include <functional>
@@ -66,7 +66,7 @@ namespace dbaui
         try
         {
             OUString aName = GetEntryText( _pApplyTo );
-            OUString aDSName = getDataSourceAcessor( m_pTreeView->getListBox().GetRootLevelParent( _pApplyTo ) );
+            OUString aDSName = getDataSourceAccessor( m_pTreeView->getListBox().GetRootLevelParent( _pApplyTo ) );
 
             ODataClipboard* pData = nullptr;
             SharedConnection xConnection;
@@ -88,7 +88,7 @@ namespace dbaui
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("dbaccess");
         }
         return nullptr;
     }
@@ -109,7 +109,7 @@ namespace dbaui
                 if ( xChild.is() )
                     xStore.set( getDataSourceOrModel(xChild->getParent()), UNO_QUERY );
                 // check for the concrete type
-                if ( xStore.is() && !xStore->isReadonly() && ::std::any_of(_rFlavors.begin(),_rFlavors.end(),TAppSupportedSotFunctor(E_TABLE)) )
+                if ( xStore.is() && !xStore->isReadonly() && std::any_of(_rFlavors.begin(),_rFlavors.end(),TAppSupportedSotFunctor(E_TABLE)) )
                     return DND_ACTION_COPY;
             }
         }
@@ -186,21 +186,20 @@ namespace dbaui
         if (!isObject(eEntryType))
             return false;
 
-        TransferableHelper* pTransfer = implCopyObject( pHitEntry, ( etTableOrView == eEntryType ) ? CommandType::TABLE : CommandType::QUERY);
-        Reference< XTransferable> xEnsureDelete = pTransfer;
+        rtl::Reference<TransferableHelper> pTransfer = implCopyObject( pHitEntry, ( etTableOrView == eEntryType ) ? CommandType::TABLE : CommandType::QUERY);
 
         if (pTransfer)
             pTransfer->StartDrag( &m_pTreeView->getListBox(), DND_ACTION_COPY );
 
-        return nullptr != pTransfer;
+        return pTransfer.is();
     }
-    IMPL_LINK_NOARG_TYPED(SbaTableQueryBrowser, OnCopyEntry, LinkParamNone*, void)
+    IMPL_LINK_NOARG(SbaTableQueryBrowser, OnCopyEntry, LinkParamNone*, void)
     {
         SvTreeListEntry* pSelected = m_pTreeView->getListBox().FirstSelected();
         if( isEntryCopyAllowed( pSelected ) )
             copyEntry( pSelected );
     }
-    bool SbaTableQueryBrowser::isEntryCopyAllowed(SvTreeListEntry* _pEntry) const
+    bool SbaTableQueryBrowser::isEntryCopyAllowed(SvTreeListEntry const * _pEntry) const
     {
         EntryType eType = getEntryType(_pEntry);
         return  ( eType == etTableOrView || eType == etQuery );
@@ -215,7 +214,7 @@ namespace dbaui
         if (pTransfer)
             pTransfer->CopyToClipboard(getView());
     }
-    IMPL_LINK_NOARG_TYPED( SbaTableQueryBrowser, OnAsyncDrop, void*, void )
+    IMPL_LINK_NOARG( SbaTableQueryBrowser, OnAsyncDrop, void*, void )
     {
         m_nAsyncDrop = nullptr;
         SolarMutexGuard aSolarGuard;
@@ -227,7 +226,7 @@ namespace dbaui
             if ( ensureConnection( m_aAsyncDrop.pDroppedAt, xDestConnection ) && xDestConnection.is() )
             {
                 SvTreeListEntry* pDataSourceEntry = m_pTreeView->getListBox().GetRootLevelParent(m_aAsyncDrop.pDroppedAt);
-                m_aTableCopyHelper.asyncCopyTagTable( m_aAsyncDrop, getDataSourceAcessor( pDataSourceEntry ), xDestConnection );
+                m_aTableCopyHelper.asyncCopyTagTable( m_aAsyncDrop, getDataSourceAccessor( pDataSourceEntry ), xDestConnection );
             }
         }
 
@@ -235,10 +234,11 @@ namespace dbaui
     }
     void SbaTableQueryBrowser::clearTreeModel()
     {
-        if (m_pTreeModel)
+        if (m_pTreeView)
         {
+            auto pTreeModel = m_pTreeView->GetTreeModel();
             // clear the user data of the tree model
-            SvTreeListEntry* pEntryLoop = m_pTreeModel->First();
+            SvTreeListEntry* pEntryLoop = pTreeModel->First();
             while (pEntryLoop)
             {
                 DBTreeListUserData* pData = static_cast<DBTreeListUserData*>(pEntryLoop->GetUserData());
@@ -258,7 +258,7 @@ namespace dbaui
 
                     delete pData;
                 }
-                pEntryLoop = m_pTreeModel->Next(pEntryLoop);
+                pEntryLoop = pTreeModel->Next(pEntryLoop);
             }
         }
         m_pCurrentlyDisplayed = nullptr;

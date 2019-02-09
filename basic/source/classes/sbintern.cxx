@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sbintern.hxx"
-#include "sbunoobj.hxx"
-#include "token.hxx"
-#include "symtbl.hxx"
-#include "parser.hxx"
-#include "codegen.hxx"
+#include <sbintern.hxx>
+#include <sbunoobj.hxx>
+#include <token.hxx>
+#include <symtbl.hxx>
+#include <parser.hxx>
+#include <codegen.hxx>
 #include <basic/basmgr.hxx>
 
 SbiGlobals* SbiGlobals::pGlobals = nullptr;
@@ -46,10 +46,10 @@ SbiGlobals::SbiGlobals()
     pMod  = nullptr;
     pCompMod = nullptr; // JSM
     nInst = 0;
-    nCode = 0;
+    nCode = ERRCODE_NONE;
     nLine = 0;
     nCol1 = nCol2 = 0;
-    bCompiler = false;
+    bCompilerError = false;
     bGlobalInitErr = false;
     bRunInit = false;
     pTransliterationWrapper = nullptr;
@@ -60,9 +60,9 @@ SbiGlobals::SbiGlobals()
 
 SbiGlobals::~SbiGlobals()
 {
-    delete pSbFac;
-    delete pUnoFac;
-    delete pTransliterationWrapper;
+    pSbFac.reset();
+    pUnoFac.reset();
+    pTransliterationWrapper.reset();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

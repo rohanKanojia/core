@@ -28,13 +28,16 @@
 #include <com/sun/star/ucb/CertificateValidationRequest.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 
-#include <osl/mutex.hxx>
+#include <comphelper/lok.hxx>
+#include <comphelper/sequence.hxx>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <svl/zforlist.hxx>
+#include <unotools/resmgr.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/settings.hxx>
 
-#include "ids.hrc"
+#include <ids.hxx>
+#include <ids.hrc>
 #include "getcontinuations.hxx"
 #include "sslwarndlg.hxx"
 #include "unknownauthdlg.hxx"
@@ -42,9 +45,6 @@
 #include "iahndl.hxx"
 
 #include <memory>
-
-#define DESCRIPTION_1 1
-#define TITLE 3
 
 #define OID_SUBJECT_ALTERNATIVE_NAME "2.5.29.17"
 
@@ -120,14 +120,14 @@ getLocalizedDatTimeStr(
     SvNumberFormatter *pNumberFormatter = new SvNumberFormatter( xContext, eUILang );
     OUString      aTmpStr;
     Color*      pColor = nullptr;
-    Date*       pNullDate = pNumberFormatter->GetNullDate();
+    const Date&  rNullDate = pNumberFormatter->GetNullDate();
     sal_uInt32  nFormat
-        = pNumberFormatter->GetStandardFormat( css::util::NumberFormat::DATE, eUILang );
+        = pNumberFormatter->GetStandardFormat( SvNumFormatType::DATE, eUILang );
 
-    pNumberFormatter->GetOutputString( aDate - *pNullDate, nFormat, aTmpStr, &pColor );
+    pNumberFormatter->GetOutputString( aDate - rNullDate, nFormat, aTmpStr, &pColor );
     aDateTimeStr = aTmpStr + " ";
 
-    nFormat = pNumberFormatter->GetStandardFormat( css::util::NumberFormat::TIME, eUILang );
+    nFormat = pNumberFormatter->GetStandardFormat( SvNumFormatType::TIME, eUILang );
     pNumberFormatter->GetOutputString(
         aTime.GetTimeInDays(), nFormat, aTmpStr, &pColor );
     aDateTimeStr += aTmpStr;
@@ -137,116 +137,97 @@ getLocalizedDatTimeStr(
 
 bool
 executeUnknownAuthDialog(
-    vcl::Window * pParent,
+    weld::Window * pParent,
     uno::Reference< uno::XComponentContext > const & xContext,
     const uno::Reference< security::XCertificate >& rXCert)
 {
-    try
-    {
-        SolarMutexGuard aGuard;
+    SolarMutexGuard aGuard;
 
-        ScopedVclPtrInstance< UnknownAuthDialog > xDialog(pParent, rXCert, xContext);
+    UnknownAuthDialog aDialog(pParent, rXCert, xContext);
 
-        // Get correct resource string
-        OUString aMessage;
+    // Get correct resource string
+    OUString aMessage;
 
-        std::vector< OUString > aArguments;
-        aArguments.push_back( getContentPart( rXCert->getSubjectName()) );
+    std::vector< OUString > aArguments;
+    aArguments.push_back( getContentPart( rXCert->getSubjectName()) );
 
-        std::unique_ptr< ResMgr > xManager(ResMgr::CreateResMgr("uui"));
-        if (xManager.get())
-        {
-            ResId aResId(RID_UUI_ERRHDL, *xManager.get());
-            if (ErrorResource(aResId).getString(
-                    ERRCODE_UUI_UNKNOWNAUTH_UNTRUSTED, aMessage))
-            {
-                aMessage = UUIInteractionHelper::replaceMessageWithArguments(
-                    aMessage, aArguments );
-                xDialog->setDescriptionText( aMessage );
-            }
-        }
+    std::locale aResLocale(Translate::Create("uui"));
+    ErrorResource aErrorResource(RID_UUI_ERRHDL, aResLocale);
 
-        return static_cast<bool>(xDialog->Execute());
-    }
-    catch (std::bad_alloc const &)
-    {
-        throw uno::RuntimeException("out of memory");
-    }
+    aMessage = Translate::get(STR_UUI_UNKNOWNAUTH_UNTRUSTED, aResLocale);
+    aMessage = UUIInteractionHelper::replaceMessageWithArguments(
+            aMessage, aArguments );
+    aDialog.setDescriptionText( aMessage );
+
+    return static_cast<bool>(aDialog.run());
 }
+
+enum class SslWarnType {
+    DOMAINMISMATCH, EXPIRED, INVALID
+};
 
 bool
 executeSSLWarnDialog(
-    vcl::Window * pParent,
+    weld::Window * pParent,
     uno::Reference< uno::XComponentContext > const & xContext,
     const uno::Reference< security::XCertificate >& rXCert,
-    sal_Int32 const & failure,
+    SslWarnType failure,
     const OUString & hostName )
 {
-    try
+    SolarMutexGuard aGuard;
+
+    SSLWarnDialog aDialog(pParent, rXCert, xContext);
+
+    // Get correct resource string
+    std::vector< OUString > aArguments_1;
+    char const * pMessageKey = nullptr;
+    char const * pTitleKey = nullptr;
+
+    switch( failure )
     {
-        SolarMutexGuard aGuard;
-
-        ScopedVclPtrInstance< SSLWarnDialog > xDialog(pParent, rXCert, xContext);
-
-        // Get correct resource string
-        OUString aMessage_1;
-        std::vector< OUString > aArguments_1;
-
-        switch( failure )
-        {
-            case SSLWARN_TYPE_DOMAINMISMATCH:
-                aArguments_1.push_back( hostName );
-                aArguments_1.push_back(
-                    getContentPart( rXCert->getSubjectName()) );
-                aArguments_1.push_back( hostName );
-                break;
-            case SSLWARN_TYPE_EXPIRED:
-                aArguments_1.push_back(
-                    getContentPart( rXCert->getSubjectName()) );
-                aArguments_1.push_back(
-                    getLocalizedDatTimeStr( xContext,
-                                            rXCert->getNotValidAfter() ) );
-                aArguments_1.push_back(
-                    getLocalizedDatTimeStr( xContext,
-                                            rXCert->getNotValidAfter() ) );
-                break;
-            case SSLWARN_TYPE_INVALID:
-                break;
-        }
-
-        std::unique_ptr< ResMgr > xManager(ResMgr::CreateResMgr("uui"));
-
-        if (xManager.get())
-        {
-            ResId aResId(RID_UUI_ERRHDL, *xManager.get());
-            if (ErrorResource(aResId).getString(
-                    ERRCODE_AREA_UUI_UNKNOWNAUTH + failure + DESCRIPTION_1,
-                    aMessage_1))
-            {
-                aMessage_1 = UUIInteractionHelper::replaceMessageWithArguments(
-                    aMessage_1, aArguments_1 );
-                xDialog->setDescription1Text( aMessage_1 );
-            }
-
-            OUString aTitle;
-            if (ErrorResource(aResId).getString(
-                ERRCODE_AREA_UUI_UNKNOWNAUTH + failure + TITLE, aTitle))
-            {
-                xDialog->SetText(aTitle);
-            }
-        }
-
-        return static_cast<bool>(xDialog->Execute());
+        case SslWarnType::DOMAINMISMATCH:
+            pMessageKey = STR_UUI_SSLWARN_DOMAINMISMATCH;
+            pTitleKey = STR_UUI_SSLWARN_DOMAINMISMATCH_TITLE;
+            aArguments_1.push_back( hostName );
+            aArguments_1.push_back(
+                getContentPart( rXCert->getSubjectName()) );
+            aArguments_1.push_back( hostName );
+            break;
+        case SslWarnType::EXPIRED:
+            pMessageKey = STR_UUI_SSLWARN_EXPIRED;
+            pTitleKey = STR_UUI_SSLWARN_EXPIRED_TITLE;
+            aArguments_1.push_back(
+                getContentPart( rXCert->getSubjectName()) );
+            aArguments_1.push_back(
+                getLocalizedDatTimeStr( xContext,
+                                        rXCert->getNotValidAfter() ) );
+            aArguments_1.push_back(
+                getLocalizedDatTimeStr( xContext,
+                                        rXCert->getNotValidAfter() ) );
+            break;
+        case SslWarnType::INVALID:
+            pMessageKey = STR_UUI_SSLWARN_INVALID;
+            pTitleKey = STR_UUI_SSLWARN_INVALID_TITLE;
+            break;
+        default: assert(false);
     }
-    catch (std::bad_alloc const &)
-    {
-        throw uno::RuntimeException("out of memory");
-    }
+
+    std::locale aResLocale(Translate::Create("uui"));
+
+    OUString aMessage_1 = Translate::get(pMessageKey, aResLocale);
+    aMessage_1 = UUIInteractionHelper::replaceMessageWithArguments(
+            aMessage_1, aArguments_1 );
+    aDialog.setDescription1Text( aMessage_1 );
+
+    OUString aTitle = Translate::get(pTitleKey, aResLocale);
+    aDialog.set_title(aTitle);
+
+    return static_cast<bool>(aDialog.run());
 }
 
 void
 handleCertificateValidationRequest_(
-    vcl::Window * pParent,
+    weld::Window * pParent,
     uno::Reference< uno::XComponentContext > const & xContext,
     ucb::CertificateValidationRequest const & rRequest,
     uno::Sequence< uno::Reference< task::XInteractionContinuation > > const &
@@ -255,6 +236,12 @@ handleCertificateValidationRequest_(
     uno::Reference< task::XInteractionApprove > xApprove;
     uno::Reference< task::XInteractionAbort > xAbort;
     getContinuations(rContinuations, &xApprove, &xAbort);
+
+    if ( comphelper::LibreOfficeKit::isActive() && xApprove.is() )
+    {
+        xApprove->select();
+        return;
+    }
 
     sal_Int32 failures = rRequest.CertificateValidity;
     bool trustCert = true;
@@ -272,27 +259,33 @@ handleCertificateValidationRequest_(
     }
 
     uno::Sequence< uno::Reference< security::XCertificateExtension > > extensions = rRequest.Certificate->getExtensions();
-    uno::Sequence< security::CertAltNameEntry > altNames;
-    for (sal_Int32 i = 0 ; i < extensions.getLength(); i++){
+    uno::Reference< security::XSanExtension > sanExtension;
+    for (sal_Int32 i = 0 ; i < extensions.getLength(); ++i)
+    {
         uno::Reference< security::XCertificateExtension >element = extensions[i];
-
         OString aId ( reinterpret_cast<const char *>(element->getExtensionId().getConstArray()), element->getExtensionId().getLength());
-        if (aId.equals(OID_SUBJECT_ALTERNATIVE_NAME))
+        if (aId == OID_SUBJECT_ALTERNATIVE_NAME)
         {
-           uno::Reference< security::XSanExtension > sanExtension ( element, uno::UNO_QUERY );
-           altNames =  sanExtension->getAlternativeNames();
+           sanExtension = uno::Reference<security::XSanExtension>(element, uno::UNO_QUERY);
            break;
         }
     }
 
+    std::vector<security::CertAltNameEntry> altNames;
+    if (sanExtension.is())
+    {
+        altNames = comphelper::sequenceToContainer<std::vector<security::CertAltNameEntry>>(sanExtension->getAlternativeNames());
+    }
+
     OUString certHostName = getContentPart( rRequest.Certificate->getSubjectName() );
-    uno::Sequence< OUString > certHostNames(altNames.getLength() + 1);
+    uno::Sequence< OUString > certHostNames(altNames.size() + 1);
 
     certHostNames[0] = certHostName;
 
-    for(int n = 0; n < altNames.getLength(); ++n)
+    for (size_t n = 0; n < altNames.size(); ++n)
     {
-        if (altNames[n].Type ==  security::ExtAltNameType_DNS_NAME){
+        if (altNames[n].Type ==  security::ExtAltNameType_DNS_NAME)
+        {
            altNames[n].Value >>= certHostNames[n+1];
         }
     }
@@ -305,7 +298,7 @@ handleCertificateValidationRequest_(
         trustCert = executeSSLWarnDialog( pParent,
                                           xContext,
                                           rRequest.Certificate,
-                                          SSLWARN_TYPE_DOMAINMISMATCH,
+                                          SslWarnType::DOMAINMISMATCH,
                                           rRequest.HostName );
     }
 
@@ -318,7 +311,7 @@ handleCertificateValidationRequest_(
         trustCert = executeSSLWarnDialog( pParent,
                                           xContext,
                                           rRequest.Certificate,
-                                          SSLWARN_TYPE_EXPIRED,
+                                          SslWarnType::EXPIRED,
                                           rRequest.HostName );
     }
 
@@ -335,7 +328,7 @@ handleCertificateValidationRequest_(
         trustCert = executeSSLWarnDialog( pParent,
                                           xContext,
                                           rRequest.Certificate,
-                                          SSLWARN_TYPE_INVALID,
+                                          SslWarnType::INVALID,
                                           rRequest.HostName );
     }
 
@@ -362,7 +355,8 @@ UUIInteractionHelper::handleCertificateValidationRequest(
     ucb::CertificateValidationRequest aCertificateValidationRequest;
     if (aAnyRequest >>= aCertificateValidationRequest)
     {
-        handleCertificateValidationRequest_(getParentProperty(),
+        uno::Reference<awt::XWindow> xParent = getParentXWindow();
+        handleCertificateValidationRequest_(Application::GetFrameWeld(xParent),
                                             m_xContext,
                                             aCertificateValidationRequest,
                                             rRequest->getContinuations());

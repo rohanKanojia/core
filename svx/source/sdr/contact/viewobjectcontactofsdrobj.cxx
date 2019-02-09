@@ -22,7 +22,7 @@
 #include <svx/sdr/contact/viewcontactofsdrobj.hxx>
 #include <svx/sdr/contact/objectcontact.hxx>
 #include <svx/sdr/contact/displayinfo.hxx>
-#include <sdr/contact/objectcontactofpageview.hxx>
+#include <svx/sdr/contact/objectcontactofpageview.hxx>
 #include <sdr/contact/viewcontactofsdrole2obj.hxx>
 #include <svx/sdrpagewindow.hxx>
 #include <svx/sdrpaintwindow.hxx>
@@ -30,8 +30,9 @@
 #include <svx/svdoole2.hxx>
 #include <svx/svdview.hxx>
 #include <vcl/outdev.hxx>
+#include <vcl/canvastools.hxx>
 
-#include "fmobj.hxx"
+#include <fmobj.hxx>
 
 namespace sdr { namespace contact {
 
@@ -49,7 +50,7 @@ ViewObjectContactOfSdrObj::~ViewObjectContactOfSdrObj()
 {
 }
 
-bool ViewObjectContactOfSdrObj::isPrimitiveVisibleOnAnyLayer(const SetOfByte& aLayers) const
+bool ViewObjectContactOfSdrObj::isPrimitiveVisibleOnAnyLayer(const SdrLayerIDSet& aLayers) const
 {
     return aLayers.IsSet(getSdrObject().GetLayer());
 }
@@ -136,6 +137,22 @@ bool ViewObjectContactOfSdrObj::isPrimitiveVisible(const DisplayInfo& rDisplayIn
                     return false;
                 }
             }
+        }
+    }
+
+    // tdf#91260 check if the object is anchored on a different Writer page
+    // than the one being painted, and if so ignore it (Writer has only one
+    // SdrPage, so the part of the object that should be visible will be
+    // painted on the page where it is anchored)
+    // Note that we cannot check the ViewInformation2D ViewPort for this
+    // because it is only the part of the page that is currently visible.
+    basegfx::B2IPoint const& rAnchor(vcl::unotools::b2IPointFromPoint(getSdrObject().GetAnchorPos()));
+    if (rAnchor.getX() || rAnchor.getY()) // only Writer sets anchor position
+    {
+        if (!rDisplayInfo.GetWriterPageFrame().isEmpty() &&
+            !rDisplayInfo.GetWriterPageFrame().isInside(rAnchor))
+        {
+            return false;
         }
     }
 

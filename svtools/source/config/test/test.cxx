@@ -39,12 +39,11 @@
 #include <rtl/ustring>
 #include <rtl/ustrbuf.hxx>
 #include <osl/diagnose.h>
-#include <osl/mutex.hxx>
+#include <sal/log.hxx>
 
 #include <vcl/event.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/wrkwin.hxx>
-#include <vcl/msgbox.hxx>
 
 using namespace ::osl                       ;
 using namespace ::comphelper                ;
@@ -99,7 +98,7 @@ void TestApplication::Main()
     // Init global servicemanager and set it for external services.
     ::comphelper::setProcessServiceFactory( TestApplication::getUNOServiceManager() );
     // Control success of operation.
-    OSL_ENSURE( !(::comphelper::getProcessServiceFactory()!=TestApplication::getUNOServiceManager()), "TestApplication::Main()\nGlobal servicemanager not right initialized.\n" );
+    OSL_ENSURE( !(::comphelper::getProcessServiceFactory()!=TestApplication::getUNOServiceManager()), "TestApplication::Main() Global servicemanager not right initialized." );
 
     /**-***********************************************************************************************************
         test area
@@ -110,7 +109,7 @@ void TestApplication::Main()
     #endif
 
 //  Execute();
-    OSL_FAIL( "Test was successful!\n" );
+    OSL_FAIL( "Test was successful!" );
 }
 
 
@@ -129,25 +128,25 @@ void TestApplication::impl_testDynamicMenuOptions()
     //      }
     //      output content
 
-    Sequence< Sequence< PropertyValue > > lNewMenu    = aCFG.GetMenu( E_NEWMENU    );
-    Sequence< Sequence< PropertyValue > > lWizardMenu = aCFG.GetMenu( E_WIZARDMENU );
+    Sequence< Sequence< PropertyValue > > lNewMenu    = aCFG.GetMenu( EDynamicMenuType::NewMenu    );
+    Sequence< Sequence< PropertyValue > > lWizardMenu = aCFG.GetMenu( EDynamicMenuType::WizardMenu );
 
     if( lNewMenu.getLength() < 1 )
     {
-        aCFG.AppendItem( E_NEWMENU, "private:factory/swriter", "new writer", "icon_writer", "_blank");
-        aCFG.AppendItem( E_NEWMENU, "private:factory/scalc",   "new calc",   "icon_calc",   "_blank");
-        aCFG.AppendItem( E_NEWMENU, "private:factory/sdraw",   "new draw",   "icon_draw",   "_blank");
+        aCFG.AppendItem( EDynamicMenuType::NewMenu, "private:factory/swriter", "new writer", "icon_writer", "_blank");
+        aCFG.AppendItem( EDynamicMenuType::NewMenu, "private:factory/scalc",   "new calc",   "icon_calc",   "_blank");
+        aCFG.AppendItem( EDynamicMenuType::NewMenu, "private:factory/sdraw",   "new draw",   "icon_draw",   "_blank");
 
-        lNewMenu = aCFG.GetMenu( E_NEWMENU );
+        lNewMenu = aCFG.GetMenu( EDynamicMenuType::NewMenu );
     }
 
     if( lWizardMenu.getLength() < 1 )
     {
-        aCFG.AppendItem( E_WIZARDMENU, "file://a", "system file", "icon_file", "_self");
-        aCFG.AppendItem( E_WIZARDMENU, "ftp://b",  "ftp host",    "icon_ftp",  "_self");
-        aCFG.AppendItem( E_WIZARDMENU, "http://c", "www",         "icon_www",  "_self");
+        aCFG.AppendItem( EDynamicMenuType::WizardMenu, "file://a", "system file", "icon_file", "_self");
+        aCFG.AppendItem( EDynamicMenuType::WizardMenu, "ftp://b",  "ftp host",    "icon_ftp",  "_self");
+        aCFG.AppendItem( EDynamicMenuType::WizardMenu, "http://c", "www",         "icon_www",  "_self");
 
-        lWizardMenu = aCFG.GetMenu( E_WIZARDMENU );
+        lWizardMenu = aCFG.GetMenu( EDynamicMenuType::WizardMenu );
     }
 
     sal_uInt32     nItemCount    ;
@@ -195,7 +194,7 @@ void TestApplication::impl_testDynamicMenuOptions()
         }
     }
 
-    OSL_FAIL( OUStringToOString( sOut.makeStringAndClear(), RTL_TEXTENCODING_UTF8 ).getStr() );
+    SAL_WARN( "svtools", sOut );
 }
 
 

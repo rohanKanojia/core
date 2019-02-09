@@ -21,7 +21,6 @@
 
 #include <viewsh.hxx>
 #include "ftnboss.hxx"
-#include <tools/mempool.hxx>
 
 #include <SidebarWindowsTypes.hxx>
 
@@ -36,19 +35,13 @@ namespace vcl { class Font; }
 class SwSortedObjs;
 class SwAnchoredObject;
 
-enum SwPageChg
-{
-    CHG_NEWPAGE,
-    CHG_CUTPAGE,
-    CHG_CHGPAGE
-};
-
-/// A page of the document layout.
+/// A page of the document layout. Upper frame is expected to be an SwRootFrame
+/// instance. At least an SwBodyFrame lower is expected.
 class SwPageFrame: public SwFootnoteBossFrame
 {
     friend class SwFrame;
 
-    SwSortedObjs *m_pSortedObjs;
+    std::unique_ptr<SwSortedObjs> m_pSortedObjs;
 
     SwPageDesc *m_pDesc; //PageDesc that describes the Page
 
@@ -70,7 +63,7 @@ class SwPageFrame: public SwFootnoteBossFrame
 
     static const sal_Int8 mnShadowPxWidth;
 
-    void _UpdateAttr( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 &,
+    void UpdateAttr_( const SfxPoolItem*, const SfxPoolItem*, sal_uInt8 &,
                       SwAttrSetChg *pa = nullptr, SwAttrSetChg *pb = nullptr );
 
     /// Adapt the max. footnote height in each single column
@@ -96,14 +89,14 @@ class SwPageFrame: public SwFootnoteBossFrame
 
     static void GetHorizontalShadowRect( const SwRect& _rPageRect,
                                      const SwViewShell*    _pViewShell,
-                                     OutputDevice* pRenderContext,
+                                     OutputDevice const * pRenderContext,
                                      SwRect&       _orBottomShadowRect,
                                      bool bPaintLeftShadow,
                                      bool bPaintRightShadow,
                                      bool bRightSidebar );
 
     virtual void DestroyImpl() override;
-    virtual ~SwPageFrame();
+    virtual ~SwPageFrame() override;
 
 protected:
     virtual void MakeAll(vcl::RenderContext* pRenderContext) override;
@@ -114,8 +107,6 @@ protected:
     size_t GetContentHeight(const long nTop, const long nBottom) const;
 
 public:
-    DECL_FIXEDMEMPOOL_NEWDEL(SwPageFrame)
-
     SwPageFrame( SwFrameFormat*, SwFrame*, SwPageDesc* );
 
     /// Make this public, so that the SwViewShell can access it when switching from browse mode
@@ -123,8 +114,8 @@ public:
     void PrepareHeader();
     void PrepareFooter();
 
-    const SwSortedObjs  *GetSortedObjs() const  { return m_pSortedObjs; }
-          SwSortedObjs  *GetSortedObjs()          { return m_pSortedObjs; }
+    const SwSortedObjs *GetSortedObjs() const { return m_pSortedObjs.get(); }
+          SwSortedObjs *GetSortedObjs()       { return m_pSortedObjs.get(); }
 
     void AppendDrawObjToPage( SwAnchoredObject& _rNewObj );
     void RemoveDrawObjFromPage( SwAnchoredObject& _rToRemoveObj );
@@ -143,7 +134,7 @@ public:
     inline const SwContentFrame  *FindFirstBodyContent() const;
     inline const SwContentFrame  *FindLastBodyContent() const;
 
-    SwRect GetBoundRect(OutputDevice* pOutputDevice) const;
+    SwRect GetBoundRect(OutputDevice const * pOutputDevice) const;
 
     // Specialized GetContentPos() for Field in Frames
     void GetContentPosition( const Point &rPt, SwPosition &rPos ) const;
@@ -176,7 +167,7 @@ public:
     virtual void Paste( SwFrame* pParent, SwFrame* pSibling = nullptr ) override;
     virtual void CheckDirection( bool bVert ) override;
     void CheckGrid( bool bInvalidate );
-    void PaintGrid( OutputDevice* pOut, SwRect &rRect ) const;
+    void PaintGrid( OutputDevice const * pOut, SwRect const &rRect ) const;
     bool HasGrid() const { return m_bHasGrid; }
 
     void PaintDecorators( ) const;
@@ -195,10 +186,8 @@ public:
     void SetFootnotePage( bool b )                       { m_bFootnotePage = b; }
     void SetEndNotePage( bool b )                   { m_bEndNotePage = b; }
 
-    inline  sal_uInt16 GetPhyPageNum() const        { return m_nPhyPageNum;}
-    inline  void SetPhyPageNum( sal_uInt16 nNum )   { m_nPhyPageNum = nNum;}
-    inline  void DecrPhyPageNum()               { --m_nPhyPageNum;     }
-    inline  void IncrPhyPageNum()               { ++m_nPhyPageNum;     }
+    sal_uInt16 GetPhyPageNum() const        { return m_nPhyPageNum;}
+    void SetPhyPageNum( sal_uInt16 nNum )   { m_nPhyPageNum = nNum;}
 
     /// Validate, invalidate and query the Page status
     /// Layout/Content and Fly/non-Fly respectively are inspected separately
@@ -257,7 +246,7 @@ public:
         has to be generated.
     */
     void PaintMarginArea( const SwRect& _rOutputRect,
-                          SwViewShell* _pViewShell ) const;
+                          SwViewShell const * _pViewShell ) const;
 
     /** paint page border and shadow
 
@@ -304,7 +293,7 @@ public:
     */
     static void GetBorderAndShadowBoundRect( const SwRect& _rPageRect,
                                              const SwViewShell*    _pViewShell,
-                                             OutputDevice* pRenderContext,
+                                             OutputDevice const * pRenderContext,
                                              SwRect& _orBorderAndShadowBoundRect,
                                              const bool bLeftShadow,
                                              const bool bRightShadow,
@@ -312,7 +301,7 @@ public:
                                             );
 
     static void PaintNotesSidebar(const SwRect& _rPageRect, SwViewShell* _pViewShell, sal_uInt16 nPageNum, bool bRight);
-    static void PaintNotesSidebarArrows(const Point &rMiddleFirst, const Point &rMiddleSecond, SwViewShell* _pViewShell, const Color& rColorUp, const Color& rColorDown);
+    static void PaintNotesSidebarArrows(const Point &rMiddleFirst, const Point &rMiddleSecond, SwViewShell const * _pViewShell, const Color& rColorUp, const Color& rColorDown);
     /**
         asks the page on which side a margin should be shown, e.g for notes
         returns true for left side, false for right side

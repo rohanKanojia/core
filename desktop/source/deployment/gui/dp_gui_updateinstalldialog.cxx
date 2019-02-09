@@ -24,11 +24,8 @@
 #include <osl/file.hxx>
 #include <osl/conditn.hxx>
 #include <cppuhelper/exc_hlp.hxx>
-#include <tools/resid.hxx>
 #include <vcl/dialog.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/svapp.hxx>
-#include <osl/mutex.hxx>
 #include <cppuhelper/implbase.hxx>
 
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -40,6 +37,7 @@
 #include <com/sun/star/ucb/InteractiveAugmentedIOException.hpp>
 #include <com/sun/star/ucb/XCommandEnvironment.hpp>
 #include <com/sun/star/ucb/XProgressHandler.hpp>
+#include <com/sun/star/deployment/DeploymentException.hpp>
 #include <com/sun/star/deployment/XExtensionManager.hpp>
 #include <com/sun/star/deployment/ExtensionManager.hpp>
 #include <com/sun/star/deployment/XUpdateInformationProvider.hpp>
@@ -53,20 +51,19 @@
 #include <com/sun/star/task/XInteractionAbort.hpp>
 #include <com/sun/star/task/XInteractionApprove.hpp>
 
-#include "dp_descriptioninfoset.hxx"
-#include "dp_gui.hrc"
+#include <dp_descriptioninfoset.hxx>
+#include <strings.hrc>
 #include "dp_gui_updateinstalldialog.hxx"
-#include "dp_gui_shared.hxx"
-#include "dp_ucb.h"
-#include "dp_misc.h"
-#include "dp_version.hxx"
+#include <dp_shared.hxx>
+#include <dp_ucb.h>
+#include <dp_misc.h>
+#include <dp_version.hxx>
 #include "dp_gui_extensioncmdqueue.hxx"
 #include <ucbhelper/content.hxx>
 #include <rtl/ref.hxx>
 #include <salhelper/thread.hxx>
 #include <com/sun/star/uno/Sequence.h>
 #include <comphelper/anytostring.hxx>
-#include <toolkit/helper/vclunohelper.hxx>
 
 #include <vector>
 
@@ -81,17 +78,17 @@ namespace dp_gui {
 class UpdateInstallDialog::Thread: public salhelper::Thread {
     friend class UpdateCommandEnv;
 public:
-    Thread(cssu::Reference< cssu::XComponentContext > ctx,
+    Thread(cssu::Reference< cssu::XComponentContext > const & ctx,
         UpdateInstallDialog & dialog, std::vector< dp_gui::UpdateData > & aVecUpdateData);
 
     void stop();
 
 private:
-    virtual ~Thread();
+    virtual ~Thread() override;
 
     virtual void execute() override;
     void downloadExtensions();
-    void download(OUString const & aUrls, UpdateData & aUpdatData);
+    bool download(OUString const & aUrls, UpdateData & aUpdatData);
     void installExtensions();
     void removeTempDownloads();
 
@@ -121,32 +118,28 @@ class UpdateCommandEnv
     cssu::Reference< cssu::XComponentContext > m_xContext;
 
 public:
-    virtual ~UpdateCommandEnv();
     UpdateCommandEnv( cssu::Reference< cssu::XComponentContext > const & xCtx,
         ::rtl::Reference<UpdateInstallDialog::Thread>const & thread);
 
     // XCommandEnvironment
     virtual cssu::Reference<css::task::XInteractionHandler > SAL_CALL
-    getInteractionHandler() throw (cssu::RuntimeException, std::exception) override;
+    getInteractionHandler() override;
     virtual cssu::Reference<css::ucb::XProgressHandler >
-    SAL_CALL getProgressHandler() throw (cssu::RuntimeException, std::exception) override;
+    SAL_CALL getProgressHandler() override;
 
     // XInteractionHandler
     virtual void SAL_CALL handle(
-        cssu::Reference<css::task::XInteractionRequest > const & xRequest )
-        throw (cssu::RuntimeException, std::exception) override;
+        cssu::Reference<css::task::XInteractionRequest > const & xRequest ) override;
 
     // XProgressHandler
-    virtual void SAL_CALL push( cssu::Any const & Status )
-        throw (cssu::RuntimeException, std::exception) override;
-    virtual void SAL_CALL update( cssu::Any const & Status )
-        throw (cssu::RuntimeException, std::exception) override;
-    virtual void SAL_CALL pop() throw (cssu::RuntimeException, std::exception) override;
+    virtual void SAL_CALL push( cssu::Any const & Status ) override;
+    virtual void SAL_CALL update( cssu::Any const & Status ) override;
+    virtual void SAL_CALL pop() override;
 };
 
 
 UpdateInstallDialog::Thread::Thread(
-    cssu::Reference< cssu::XComponentContext> xCtx,
+    cssu::Reference< cssu::XComponentContext> const & xCtx,
     UpdateInstallDialog & dialog,
     std::vector< dp_gui::UpdateData > & aVecUpdateData):
     salhelper::Thread("dp_gui_updateinstalldialog"),
@@ -208,14 +201,14 @@ UpdateInstallDialog::UpdateInstallDialog(
         m_thread(new Thread(xCtx, *this, aVecUpdateData)),
         m_bError(false),
         m_bNoEntry(true),
-        m_sInstalling(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_INSTALLING)),
-        m_sFinished(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_FINISHED)),
-        m_sNoErrors(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_NO_ERRORS)),
-        m_sErrorDownload(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_ERROR_DOWNLOAD)),
-        m_sErrorInstallation(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_ERROR_INSTALLATION)),
-        m_sErrorLicenseDeclined(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_ERROR_LIC_DECLINED)),
-        m_sNoInstall(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_EXTENSION_NOINSTALL)),
-        m_sThisErrorOccurred(DPGUI_RESSTR(RID_DLG_UPDATE_INSTALL_THIS_ERROR_OCCURRED))
+        m_sInstalling(DpResId(RID_DLG_UPDATE_INSTALL_INSTALLING)),
+        m_sFinished(DpResId(RID_DLG_UPDATE_INSTALL_FINISHED)),
+        m_sNoErrors(DpResId(RID_DLG_UPDATE_INSTALL_NO_ERRORS)),
+        m_sErrorDownload(DpResId(RID_DLG_UPDATE_INSTALL_ERROR_DOWNLOAD)),
+        m_sErrorInstallation(DpResId(RID_DLG_UPDATE_INSTALL_ERROR_INSTALLATION)),
+        m_sErrorLicenseDeclined(DpResId(RID_DLG_UPDATE_INSTALL_ERROR_LIC_DECLINED)),
+        m_sNoInstall(DpResId(RID_DLG_UPDATE_INSTALL_EXTENSION_NOINSTALL)),
+        m_sThisErrorOccurred(DpResId(RID_DLG_UPDATE_INSTALL_THIS_ERROR_OCCURRED))
 {
     get(m_pFt_action, "DOWNLOADING");
     get(m_pStatusbar, "STATUSBAR");
@@ -223,9 +216,9 @@ UpdateInstallDialog::UpdateInstallDialog(
     get(m_pMle_info, "INFO");
     m_pMle_info->set_height_request(m_pMle_info->GetTextHeight() * 5);
     m_pMle_info->set_width_request(m_pMle_info->approximate_char_width() * 56);
-    get(m_pHelp, "HELP");
-    get(m_pOk, "OK");
-    get(m_pCancel, "CANCEL");
+    get(m_pHelp, "help");
+    get(m_pOk, "ok");
+    get(m_pCancel, "cancel");
 
     m_xExtensionManager = css::deployment::ExtensionManager::get( xCtx );
 
@@ -320,7 +313,7 @@ void UpdateInstallDialog::setError(OUString const & exceptionMessage)
     m_pMle_info->SetText(m_pMle_info->GetText() + exceptionMessage + "\n");
 }
 
-IMPL_LINK_NOARG_TYPED(UpdateInstallDialog, cancelHandler, Button*, void)
+IMPL_LINK_NOARG(UpdateInstallDialog, cancelHandler, Button*, void)
 {
     m_thread->stop();
     EndDialog();
@@ -351,21 +344,20 @@ void UpdateInstallDialog::Thread::downloadExtensions()
             dp_misc::create_folder(nullptr, destFolder, m_updateCmdEnv.get() );
         } catch (const cssu::Exception & e)
         {
-            throw cssu::Exception(e.Message + " No extensions will be installed.", nullptr);
+            css::uno::Any anyEx = cppu::getCaughtException();
+            throw css::lang::WrappedTargetException( e.Message + " No extensions will be installed",
+                            nullptr, anyEx );
         }
 
 
         sal_uInt16 count = 0;
-        typedef std::vector<UpdateData>::iterator It;
-        for (It i = m_aVecUpdateData.begin(); i != m_aVecUpdateData.end(); ++i)
+        for (auto & updateData : m_aVecUpdateData)
         {
-            UpdateData & curData = *i;
-
-            if (!curData.aUpdateInfo.is() || curData.aUpdateSource.is())
+            if (!updateData.aUpdateInfo.is() || updateData.aUpdateSource.is())
                 continue;
             //We assume that m_aVecUpdateData contains only information about extensions which
             //can be downloaded directly.
-            OSL_ASSERT(curData.sWebsiteURL.isEmpty());
+            OSL_ASSERT(updateData.sWebsiteURL.isEmpty());
 
             //update the name of the extension which is to be downloaded
             {
@@ -373,14 +365,14 @@ void UpdateInstallDialog::Thread::downloadExtensions()
                 if (m_stop) {
                     return;
                 }
-                m_dialog.m_pFt_extension_name->SetText(curData.aInstalledPackage->getDisplayName());
+                m_dialog.m_pFt_extension_name->SetText(updateData.aInstalledPackage->getDisplayName());
                 sal_uInt16 prog = (sal::static_int_cast<sal_uInt16>(100) * ++count) /
                     sal::static_int_cast<sal_uInt16>(m_aVecUpdateData.size());
                 m_dialog.m_pStatusbar->SetValue(prog);
             }
-            dp_misc::DescriptionInfoset info(m_xComponentContext, curData.aUpdateInfo);
+            dp_misc::DescriptionInfoset info(m_xComponentContext, updateData.aUpdateInfo);
             //remember occurring exceptions in case we need to print out error information
-            ::std::vector< ::std::pair<OUString, cssu::Exception> > vecExceptions;
+            std::vector< std::pair<OUString, cssu::Exception> > vecExceptions;
             cssu::Sequence<OUString> seqDownloadURLs = info.getUpdateDownloadUrls();
             OSL_ENSURE(seqDownloadURLs.getLength() > 0, "No download URL provided!");
             for (sal_Int32 j = 0; j < seqDownloadURLs.getLength(); j++)
@@ -388,13 +380,13 @@ void UpdateInstallDialog::Thread::downloadExtensions()
                 try
                 {
                     OSL_ENSURE(!seqDownloadURLs[j].isEmpty(), "Download URL is empty!");
-                    download(seqDownloadURLs[j], curData);
-                    if (!curData.sLocalURL.isEmpty())
+                    bool bCancelled = download(seqDownloadURLs[j], updateData);
+                    if (bCancelled || !updateData.sLocalURL.isEmpty())
                         break;
                 }
                 catch ( cssu::Exception & e )
                 {
-                    vecExceptions.push_back( ::std::make_pair(seqDownloadURLs[j], e));
+                    vecExceptions.emplace_back(seqDownloadURLs[j], e);
                     //There can be several different errors, for example, the URL is wrong, webserver cannot be reached,
                     //name cannot be resolved. The UCB helper API does not specify different special exceptions for these
                     //cases. Therefore ignore and continue.
@@ -407,21 +399,22 @@ void UpdateInstallDialog::Thread::downloadExtensions()
                 if (m_stop) {
                     return;
                 }
-                if (curData.sLocalURL.isEmpty())
+                if (updateData.sLocalURL.isEmpty())
                 {
                     //Construct a string of all messages contained in the exceptions plus the respective download URLs
                     OUStringBuffer buf(256);
-                    typedef ::std::vector< ::std::pair<OUString, cssu::Exception > >::const_iterator CIT;
-                    for (CIT j = vecExceptions.begin(); j != vecExceptions.end(); ++j)
+                    size_t nPos = 0;
+                    for (auto const& elem : vecExceptions)
                     {
-                        if (j != vecExceptions.begin())
+                        if (nPos)
                             buf.append("\n");
                         buf.append("Could not download ");
-                        buf.append(j->first);
+                        buf.append(elem.first);
                         buf.append(". ");
-                        buf.append(j->second.Message);
+                        buf.append(elem.second.Message);
+                        ++nPos;
                     }
-                    m_dialog.setError(UpdateInstallDialog::ERROR_DOWNLOAD, curData.aInstalledPackage->getDisplayName(),
+                    m_dialog.setError(UpdateInstallDialog::ERROR_DOWNLOAD, updateData.aInstalledPackage->getDisplayName(),
                         buf.makeStringAndClear());
                 }
             }
@@ -451,8 +444,7 @@ void UpdateInstallDialog::Thread::installExtensions()
     }
 
     sal_uInt16 count = 0;
-    typedef std::vector<UpdateData>::iterator It;
-    for (It i = m_aVecUpdateData.begin(); i != m_aVecUpdateData.end(); ++i, ++count)
+    for (auto const& updateData : m_aVecUpdateData)
     {
         //update the name of the extension which is to be installed
         {
@@ -466,17 +458,16 @@ void UpdateInstallDialog::Thread::installExtensions()
                 (sal::static_int_cast<sal_uInt16>(100) * count) /
                 sal::static_int_cast<sal_uInt16>(m_aVecUpdateData.size()));
              }
-            m_dialog.m_pFt_extension_name->SetText(i->aInstalledPackage->getDisplayName());
+            m_dialog.m_pFt_extension_name->SetText(updateData.aInstalledPackage->getDisplayName());
         }
         bool bError = false;
         bool bLicenseDeclined = false;
         cssu::Reference<css::deployment::XPackage> xExtension;
-        UpdateData & curData = *i;
         cssu::Exception exc;
         try
         {
             cssu::Reference< css::task::XAbortChannel > xAbortChannel(
-                curData.aInstalledPackage->createAbortChannel() );
+                updateData.aInstalledPackage->createAbortChannel() );
             {
                 SolarMutexGuard g;
                 if (m_stop) {
@@ -484,33 +475,33 @@ void UpdateInstallDialog::Thread::installExtensions()
                 }
                 m_abort = xAbortChannel;
             }
-            if (!curData.aUpdateSource.is() && !curData.sLocalURL.isEmpty())
+            if (!updateData.aUpdateSource.is() && !updateData.sLocalURL.isEmpty())
             {
                 css::beans::NamedValue prop("EXTENSION_UPDATE", css::uno::makeAny(OUString("1")));
-                if (!curData.bIsShared)
+                if (!updateData.bIsShared)
                     xExtension = m_dialog.getExtensionManager()->addExtension(
-                        curData.sLocalURL, css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
+                        updateData.sLocalURL, css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
                         "user", xAbortChannel, m_updateCmdEnv.get());
                 else
                     xExtension = m_dialog.getExtensionManager()->addExtension(
-                        curData.sLocalURL, css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
+                        updateData.sLocalURL, css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
                         "shared", xAbortChannel, m_updateCmdEnv.get());
             }
-            else if (curData.aUpdateSource.is())
+            else if (updateData.aUpdateSource.is())
             {
-                OSL_ASSERT(curData.aUpdateSource.is());
+                OSL_ASSERT(updateData.aUpdateSource.is());
                 //I am not sure if we should obtain the install properties and pass them into
                 //add extension. Currently it contains only "SUPPRESS_LICENSE". So it could happen
                 //that a license is displayed when updating from the shared repository, although the
                 //shared extension was installed using "SUPPRESS_LICENSE".
                 css::beans::NamedValue prop("EXTENSION_UPDATE", css::uno::makeAny(OUString("1")));
-                if (!curData.bIsShared)
+                if (!updateData.bIsShared)
                     xExtension = m_dialog.getExtensionManager()->addExtension(
-                        curData.aUpdateSource->getURL(), css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
+                        updateData.aUpdateSource->getURL(), css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
                         "user", xAbortChannel, m_updateCmdEnv.get());
                 else
                     xExtension = m_dialog.getExtensionManager()->addExtension(
-                        curData.aUpdateSource->getURL(), css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
+                        updateData.aUpdateSource->getURL(), css::uno::Sequence<css::beans::NamedValue>(&prop, 1),
                         "shared", xAbortChannel, m_updateCmdEnv.get());
             }
         }
@@ -539,7 +530,7 @@ void UpdateInstallDialog::Thread::installExtensions()
                 return;
             }
             m_dialog.setError(UpdateInstallDialog::ERROR_LICENSE_DECLINED,
-                curData.aInstalledPackage->getDisplayName(), OUString());
+                updateData.aInstalledPackage->getDisplayName(), OUString());
         }
         else if (!xExtension.is() || bError)
         {
@@ -548,8 +539,9 @@ void UpdateInstallDialog::Thread::installExtensions()
                 return;
             }
             m_dialog.setError(UpdateInstallDialog::ERROR_INSTALLATION,
-                curData.aInstalledPackage->getDisplayName(), exc.Message);
+                updateData.aInstalledPackage->getDisplayName(), exc.Message);
         }
+        ++count;
     }
     {
         SolarMutexGuard g;
@@ -575,12 +567,12 @@ void UpdateInstallDialog::Thread::removeTempDownloads()
     }
 }
 
-void UpdateInstallDialog::Thread::download(OUString const & sDownloadURL, UpdateData & aUpdateData)
+bool UpdateInstallDialog::Thread::download(OUString const & sDownloadURL, UpdateData & aUpdateData)
 {
     {
         SolarMutexGuard g;
         if (m_stop) {
-            return;
+            return m_stop;
         }
     }
 
@@ -602,24 +594,25 @@ void UpdateInstallDialog::Thread::download(OUString const & sDownloadURL, Update
     dp_misc::create_folder( &destFolderContent, destFolder, m_updateCmdEnv.get() );
 
     ::ucbhelper::Content sourceContent;
-    dp_misc::create_ucb_content( &sourceContent, sDownloadURL, m_updateCmdEnv.get() );
+    (void)dp_misc::create_ucb_content(&sourceContent, sDownloadURL, m_updateCmdEnv.get());
 
     const OUString sTitle( StrTitle::getTitle( sourceContent ) );
 
-    if (destFolderContent.transferContent(
-            sourceContent, ::ucbhelper::InsertOperation_COPY,
-            sTitle, css::ucb::NameClash::OVERWRITE ))
+    destFolderContent.transferContent(
+            sourceContent, ::ucbhelper::InsertOperation::Copy,
+            sTitle, css::ucb::NameClash::OVERWRITE );
+
     {
         //the user may have cancelled the dialog because downloading took to long
-        {
-            SolarMutexGuard g;
-            if (m_stop) {
-                return;
-            }
-            //all errors should be handled by the command environment.
-            aUpdateData.sLocalURL = destFolder + "/" + sTitle;
+        SolarMutexGuard g;
+        if (m_stop) {
+            return m_stop;
         }
+        //all errors should be handled by the command environment.
+        aUpdateData.sLocalURL = destFolder + "/" + sTitle;
     }
+
+    return m_stop;
 }
 
 UpdateCommandEnv::UpdateCommandEnv( cssu::Reference< cssu::XComponentContext > const & xCtx,
@@ -629,19 +622,13 @@ UpdateCommandEnv::UpdateCommandEnv( cssu::Reference< cssu::XComponentContext > c
 {
 }
 
-UpdateCommandEnv::~UpdateCommandEnv()
-{
-}
-
 // XCommandEnvironment
 cssu::Reference<css::task::XInteractionHandler> UpdateCommandEnv::getInteractionHandler()
-throw (cssu::RuntimeException, std::exception)
 {
     return this;
 }
 
 cssu::Reference<css::ucb::XProgressHandler> UpdateCommandEnv::getProgressHandler()
-throw (cssu::RuntimeException, std::exception)
 {
     return this;
 }
@@ -649,7 +636,6 @@ throw (cssu::RuntimeException, std::exception)
 // XInteractionHandler
 void UpdateCommandEnv::handle(
     cssu::Reference< css::task::XInteractionRequest> const & xRequest )
-    throw (cssu::RuntimeException, std::exception)
 {
     cssu::Any request( xRequest->getRequest() );
     OSL_ASSERT( request.getValueTypeClass() == cssu::TypeClass_EXCEPTION );
@@ -698,16 +684,14 @@ void UpdateCommandEnv::handle(
 
 // XProgressHandler
 void UpdateCommandEnv::push( cssu::Any const & /*Status*/ )
-throw (cssu::RuntimeException, std::exception)
 {
 }
 
 void UpdateCommandEnv::update( cssu::Any const & /*Status */)
-throw (cssu::RuntimeException, std::exception)
 {
 }
 
-void UpdateCommandEnv::pop() throw (cssu::RuntimeException, std::exception)
+void UpdateCommandEnv::pop()
 {
 }
 

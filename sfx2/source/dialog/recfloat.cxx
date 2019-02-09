@@ -17,117 +17,25 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/frame/XDispatchRecorderSupplier.hpp>
-#include <com/sun/star/frame/ModuleManager.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/theUICommandDescription.hpp>
-
 #include <svl/eitem.hxx>
-#include <svtools/generictoolboxcontroller.hxx>
-#include <vcl/msgbox.hxx>
-#include <comphelper/processfactory.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/weld.hxx>
 
-#include "recfloat.hxx"
-#include "dialog.hrc"
+#include <recfloat.hxx>
+#include <sfx2/strings.hrc>
 #include <sfx2/sfxresid.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <sfx2/viewsh.hxx>
-#include <sfx2/imagemgr.hxx>
-
-using namespace ::com::sun::star;
-
-static OUString GetLabelFromCommandURL( const OUString& rCommandURL, const uno::Reference< frame::XFrame >& xFrame )
-{
-    OUString aLabel;
-    OUString aModuleIdentifier;
-    uno::Reference< container::XNameAccess > xUICommandLabels;
-    uno::Reference< uno::XComponentContext > xContext;
-    uno::Reference< container::XNameAccess > xUICommandDescription;
-    uno::Reference< css::frame::XModuleManager2 > xModuleManager;
-
-    static uno::WeakReference< uno::XComponentContext > xTmpContext;
-    static uno::WeakReference< container::XNameAccess > xTmpNameAccess;
-    static uno::WeakReference< css::frame::XModuleManager2 > xTmpModuleMgr;
-
-    xContext = xTmpContext;
-    if ( !xContext.is() )
-    {
-        xContext = ::comphelper::getProcessComponentContext();
-        xTmpContext = xContext;
-    }
-
-    xUICommandDescription = xTmpNameAccess;
-    if ( !xUICommandDescription.is() )
-    {
-        xUICommandDescription = frame::theUICommandDescription::get(xContext);
-        xTmpNameAccess = xUICommandDescription;
-    }
-
-    xModuleManager = xTmpModuleMgr;
-    if ( !xModuleManager.is() )
-    {
-        xModuleManager = frame::ModuleManager::create(xContext);
-        xTmpModuleMgr = xModuleManager;
-    }
-
-    // Retrieve label from UI command description service
-    try
-    {
-        try
-        {
-            aModuleIdentifier = xModuleManager->identify( xFrame );
-        }
-        catch( uno::Exception& )
-        {
-        }
-
-        uno::Any a = xUICommandDescription->getByName( aModuleIdentifier );
-        uno::Reference< container::XNameAccess > xUICommands;
-        a >>= xUICommandLabels;
-    }
-    catch ( uno::Exception& )
-    {
-    }
-
-    if ( xUICommandLabels.is() )
-    {
-        try
-        {
-            if ( !rCommandURL.isEmpty() )
-            {
-                uno::Sequence< beans::PropertyValue > aPropSeq;
-                uno::Any a( xUICommandLabels->getByName( rCommandURL ));
-                if ( a >>= aPropSeq )
-                {
-                    for ( sal_Int32 i = 0; i < aPropSeq.getLength(); i++ )
-                    {
-                        if ( aPropSeq[i].Name == "Label" )
-                        {
-                            aPropSeq[i].Value >>= aLabel;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        catch (uno::Exception& )
-        {
-        }
-    }
-
-    return aLabel;
-}
 
 SFX_IMPL_FLOATINGWINDOW( SfxRecordingFloatWrapper_Impl, SID_RECORDING_FLOATWINDOW );
 
 SfxRecordingFloatWrapper_Impl::SfxRecordingFloatWrapper_Impl( vcl::Window* pParentWnd ,
                                                 sal_uInt16 nId ,
                                                 SfxBindings* pBind ,
-                                                SfxChildWinInfo* pInfo )
+                                                SfxChildWinInfo const * pInfo )
                     : SfxChildWindow( pParentWnd, nId )
                     , pBindings( pBind )
 {
@@ -152,9 +60,14 @@ bool SfxRecordingFloatWrapper_Impl::QueryClose()
     css::uno::Reference< css::frame::XDispatchRecorder > xRecorder = pBindings->GetRecorder();
     if ( xRecorder.is() && !xRecorder->getRecordedMacro().isEmpty() )
     {
-        ScopedVclPtrInstance< QueryBox > aBox(GetWindow(), WB_YES_NO | WB_DEF_NO , SfxResId(STR_MACRO_LOSS).toString());
-        aBox->SetText( SfxResId(STR_CANCEL_RECORDING).toString() );
-        bRet = ( aBox->Execute() == RET_YES );
+        vcl::Window* pWin = GetWindow();
+        std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(pWin ? pWin->GetFrameWeld() : nullptr,
+                                                       VclMessageType::Question, VclButtonsType::YesNo,
+                                                       SfxResId(STR_MACRO_LOSS)));
+        xQueryBox->set_default_response(RET_NO);
+
+        xQueryBox->set_title(SfxResId(STR_CANCEL_RECORDING));
+        bRet = (xQueryBox->run() == RET_YES);
     }
 
     return bRet;
@@ -169,29 +82,6 @@ SfxRecordingFloat_Impl::SfxRecordingFloat_Impl(
                          pParent,
                          "FloatingRecord", "sfx/ui/floatingrecord.ui", pBind->GetActiveFrame() )
 {
-    get(m_pTbx, "toolbar");
-
-    // Retrieve label from helper function
-    uno::Reference< frame::XFrame > xFrame = getFrame();
-    OUString aCommandStr( ".uno:StopRecording" );
-    sal_uInt16 nItemId = m_pTbx->GetItemId(aCommandStr);
-    m_pTbx->SetItemText( nItemId, GetLabelFromCommandURL( aCommandStr, xFrame ));
-
-    // create a generic toolbox controller for our internal toolbox
-    svt::GenericToolboxController* pController = new svt::GenericToolboxController(
-                                                    ::comphelper::getProcessComponentContext(),
-                                                    xFrame,
-                                                    m_pTbx,
-                                                    nItemId,
-                                                    aCommandStr );
-    xStopRecTbxCtrl.set( static_cast< cppu::OWeakObject* >( pController ),
-                         uno::UNO_QUERY );
-    uno::Reference< util::XUpdatable > xUpdate( xStopRecTbxCtrl, uno::UNO_QUERY );
-    if ( xUpdate.is() )
-        xUpdate->update();
-
-    m_pTbx->SetSelectHdl( LINK( this, SfxRecordingFloat_Impl, Select ) );
-
     // start recording
     SfxBoolItem aItem( SID_RECORDMACRO, true );
     GetBindings().GetDispatcher()->ExecuteList(SID_RECORDMACRO,
@@ -201,23 +91,6 @@ SfxRecordingFloat_Impl::SfxRecordingFloat_Impl(
 SfxRecordingFloat_Impl::~SfxRecordingFloat_Impl()
 {
     disposeOnce();
-}
-
-void SfxRecordingFloat_Impl::dispose()
-{
-    try
-    {
-        if ( xStopRecTbxCtrl.is() )
-        {
-            uno::Reference< lang::XComponent > xComp( xStopRecTbxCtrl, uno::UNO_QUERY );
-            xComp->dispose();
-        }
-    }
-    catch ( uno::Exception& )
-    {
-    }
-    m_pTbx.clear();
-    SfxFloatingWindow::dispose();
 }
 
 bool SfxRecordingFloat_Impl::Close()
@@ -241,20 +114,12 @@ void SfxRecordingFloat_Impl::StateChanged( StateChangedType nStateChange )
 
         Point aPoint = pEditWin->OutputToScreenPixel( pEditWin->GetPosPixel() );
         aPoint = GetParent()->ScreenToOutputPixel( aPoint );
-        aPoint.X() += 20;
-        aPoint.Y() += 10;
+        aPoint.AdjustX(20 );
+        aPoint.AdjustY(10 );
         SetPosPixel( aPoint );
     }
 
     SfxFloatingWindow::StateChanged( nStateChange );
-}
-
-IMPL_LINK_TYPED( SfxRecordingFloat_Impl, Select, ToolBox*, pToolBar, void )
-{
-    (void)pToolBar;
-    sal_Int16   nKeyModifier( (sal_Int16)m_pTbx->GetModifier() );
-    if ( xStopRecTbxCtrl.is() )
-        xStopRecTbxCtrl->execute( nKeyModifier );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

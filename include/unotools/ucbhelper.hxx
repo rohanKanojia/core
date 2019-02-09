@@ -22,8 +22,9 @@
 
 #include <sal/config.h>
 
-#include <sal/types.h>
 #include <unotools/unotoolsdllapi.h>
+#include <rtl/ustring.hxx>
+#include <com/sun/star/uno/Reference.hxx>
 
 namespace com { namespace sun { namespace star {
     namespace uno {
@@ -64,11 +65,6 @@ UNOTOOLS_DLLPUBLIC bool ensureFolder(
     const css::uno::Reference< css::ucb::XCommandEnvironment >& xEnv,
     const OUString& rFolder, ucbhelper::Content & result) throw();
 
-/// @return the value of the "Size" property of the given content, or zero if
-///     obtaining the property yields a void value or raises a
-///     non-RuntimeException (RuntimeExceptions are passed through)
-UNOTOOLS_DLLPUBLIC sal_Int64 GetSize(OUString const & url);
-
 UNOTOOLS_DLLPUBLIC bool IsYounger(
     OUString const & younger, OUString const & older);
 
@@ -79,6 +75,36 @@ UNOTOOLS_DLLPUBLIC bool IsSubPath(
 
 UNOTOOLS_DLLPUBLIC bool EqualURLs(
     OUString const & url1, OUString const & url2);
+
+/**
+* Returns a default XCommandEnvironment to be used
+* when creating a ucbhelper::Content.
+*
+* Due to the way the WebDAV UCP provider works, an interaction handler
+* is always needed:
+* 1) to activate the credential dialog or to provide the cached credentials
+* whenever the server requests them;
+*
+* 2) in case of ssl connection (https) to activate the dialog to show the
+* certificate if said certificate looks wrong or dubious.
+*
+* This helper provides the XCommandEnvironment with an interaction
+* handler that intercepts:
+* 1) css::ucb::AuthenticationRequest()
+* 2) css::ucb::CertificateValidationRequest()
+* 3) css::ucb::InteractiveIOException()
+* 4) css::ucb::UnsupportedDataSinkException()
+*
+* Exception 1) and 2) will be passed to the UI handler, e.g. shown to
+* the user for interaction.
+*
+* Exception 3) and 4) will be have a default 'Abort' result.
+* See comphelper::StillReadWriteInteraction for details.
+* comphelper::StillReadWriteInteraction was introduced in
+* commit bbe51f039dffca2506ea542feb78571b6358b981.
+*/
+UNOTOOLS_DLLPUBLIC
+    css::uno::Reference< css::ucb::XCommandEnvironment > getDefaultCommandEnvironment();
 
 } }
 

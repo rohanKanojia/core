@@ -20,41 +20,39 @@
 #define INCLUDED_SW_INC_FMTSRND_HXX
 
 #include "swdllapi.h"
-#include <hintids.hxx>
-#include <format.hxx>
+#include <com/sun/star/text/WrapTextMode.hpp>
+#include "hintids.hxx"
+#include "format.hxx"
 #include <svl/eitem.hxx>
 
-#include <fmtsrndenum.hxx>
 class IntlWrapper;
 
 // SwFormatSurround: How document content under the frame shall behave.
-class SW_DLLPUBLIC SwFormatSurround: public SfxEnumItem
+class SW_DLLPUBLIC SwFormatSurround: public SfxEnumItem<css::text::WrapTextMode>
 {
     bool    bAnchorOnly :1;
     bool    bContour    :1;
     bool    bOutside    :1;
 public:
-    SwFormatSurround( SwSurround eNew = SURROUND_PARALLEL );
-    SwFormatSurround( const SwFormatSurround & );
-    inline SwFormatSurround &operator=( const SwFormatSurround &rCpy );
+    SwFormatSurround( css::text::WrapTextMode eNew = css::text::WrapTextMode_PARALLEL );
 
     // "Pure virtual Methods" of SfxPoolItem.
     virtual bool            operator==( const SfxPoolItem& ) const override;
     virtual SfxPoolItem*    Clone( SfxItemPool* pPool = nullptr ) const override;
-    virtual sal_uInt16          GetValueCount() const override;
+    virtual sal_uInt16      GetValueCount() const override;
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper*    pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
     virtual bool             QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId = 0 ) const override;
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
-    SwSurround GetSurround()const { return SwSurround( GetValue() ); }
+    css::text::WrapTextMode GetSurround() const { return GetValue(); }
     bool    IsAnchorOnly()  const { return bAnchorOnly; }
     bool    IsContour()     const { return bContour; }
     bool    IsOutside()     const { return bOutside; }
-    void    SetSurround  ( SwSurround eNew ){ SfxEnumItem::SetValue( sal_uInt16( eNew ) ); }
+    void    SetSurround  ( css::text::WrapTextMode eNew ) { SetValue( eNew ); }
     void    SetAnchorOnly( bool bNew )      { bAnchorOnly = bNew; }
     void    SetContour( bool bNew )         { bContour = bNew; }
     void    SetOutside( bool bNew )         { bOutside = bNew; }
@@ -62,17 +60,8 @@ public:
     void dumpAsXml(struct _xmlTextWriter* pWriter) const override;
 };
 
-inline SwFormatSurround &SwFormatSurround::operator=( const SwFormatSurround &rCpy )
-{
-    bAnchorOnly = rCpy.IsAnchorOnly();
-    bContour = rCpy.IsContour();
-    bOutside = rCpy.IsOutside();
-    SfxEnumItem::SetValue( rCpy.GetValue() );
-    return *this;
-}
-
 inline const SwFormatSurround &SwAttrSet::GetSurround(bool bInP) const
-    { return static_cast<const SwFormatSurround&>(Get( RES_SURROUND,bInP)); }
+    { return Get( RES_SURROUND,bInP); }
 
 inline const SwFormatSurround &SwFormat::GetSurround(bool bInP) const
     { return m_aSet.GetSurround(bInP); }

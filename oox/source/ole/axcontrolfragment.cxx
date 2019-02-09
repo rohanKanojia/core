@@ -17,14 +17,17 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ole/axcontrolfragment.hxx"
+#include <oox/ole/axcontrolfragment.hxx>
 
-#include "oox/core/xmlfilterbase.hxx"
-#include "oox/helper/binaryinputstream.hxx"
-#include "oox/helper/binaryoutputstream.hxx"
-#include "oox/ole/axcontrol.hxx"
-#include "oox/ole/olehelper.hxx"
-#include "oox/ole/olestorage.hxx"
+#include <oox/core/xmlfilterbase.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/helper/binaryinputstream.hxx>
+#include <oox/helper/binaryoutputstream.hxx>
+#include <oox/ole/axcontrol.hxx>
+#include <oox/ole/olehelper.hxx>
+#include <oox/ole/olestorage.hxx>
+#include <oox/token/namespaces.hxx>
+#include <oox/token/tokens.hxx>
 
 #include <osl/diagnose.h>
 
@@ -39,7 +42,7 @@ using ::oox::core::ContextHandlerRef;
 using ::oox::core::FragmentHandler2;
 using ::oox::core::XmlFilterBase;
 
-AxControlPropertyContext::AxControlPropertyContext( FragmentHandler2& rFragment, ControlModelBase& rModel ) :
+AxControlPropertyContext::AxControlPropertyContext( FragmentHandler2 const & rFragment, ControlModelBase& rModel ) :
     ContextHandler2( rFragment ),
     mrModel( rModel ),
     mnPropId( XML_TOKEN_INVALID )
@@ -127,11 +130,30 @@ ContextHandlerRef AxControlFragment::onCreateContext( sal_Int32 nElement, const 
                     Reference< XInputStream > xStrgStrm = getFilter().openInputStream( aFragmentPath );
                     if( xStrgStrm.is() )
                     {
+                        // Try to import as a parent control
+                        bool bImportedAsParent = false;
                         OleStorage aStorage( getFilter().getComponentContext(), xStrgStrm, false );
                         BinaryXInputStream aInStrm( aStorage.openInputStream( "f" ), true );
                         if( !aInStrm.isEof() )
+                        {
                             if( AxContainerModelBase* pModel = dynamic_cast< AxContainerModelBase* >( mrControl.createModelFromGuid( aClassId ) ) )
+                            {
                                 pModel->importBinaryModel( aInStrm );
+                                bImportedAsParent = true;
+                            }
+                        }
+                        // Import it as a non-parent control
+                        if(!bImportedAsParent)
+                        {
+                            BinaryXInputStream aInStrm2(aStorage.openInputStream("contents"), true);
+                            if (!aInStrm2.isEof())
+                            {
+                                if (ControlModelBase* pModel = mrControl.createModelFromGuid(aClassId))
+                                {
+                                    pModel->importBinaryModel(aInStrm2);
+                                }
+                            }
+                        }
                     }
                 }
             }

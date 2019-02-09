@@ -25,7 +25,7 @@ shell basctl_Shell
     import BasicIDEView;
 
 
-    // Current, je nach aktuellem Fenster:
+    // Current, according to current window:
 
     SID_SHOWLINES
     [
@@ -99,28 +99,43 @@ shell basctl_Shell
         StateMethod = GetState;
     ]
 
-    SID_SEARCH_OPTIONS
-    [
-        ExecMethod  = ExecuteCurrent;
-        StateMethod = GetState;
-    ]
-
-    SID_SEARCH_ITEM
-    [
-        ExecMethod  = ExecuteCurrent;
-        StateMethod = GetState;
-    ]
-
     SID_GOTOLINE
     [
         ExecMethod  = ExecuteCurrent;
         StateMethod = GetState;
     ]
 
+
+    // Search in IDE Basic
+
+    SID_SEARCH_OPTIONS
+    [
+        ExecMethod  = ExecuteSearch;
+        StateMethod = GetState;
+    ]
+
+    SID_SEARCH_ITEM
+    [
+        ExecMethod  = ExecuteSearch;
+        StateMethod = GetState;
+    ]
+
     FID_SEARCH_NOW
     [
-        ExecMethod  = ExecuteCurrent;
+        ExecMethod  = ExecuteSearch;
         StateMethod = GetState;
+    ]
+
+    SID_BASICIDE_REPEAT_SEARCH
+    [
+        ExecMethod  = ExecuteSearch;
+        StateMethod = GetState;
+    ]
+
+    FID_SEARCH_ON // status()
+    [
+        ExecMethod = ExecuteSearch;
+        Export = FALSE;
     ]
 
     FID_SEARCH_OFF
@@ -130,7 +145,7 @@ shell basctl_Shell
     ]
 
 
-    // Global: Egal, welches Fenster gerade aktiv ist:
+    // Global: Whatever, which window is currently active:
 
     SID_BASICIDE_LIBSELECTOR
     [
@@ -209,7 +224,7 @@ shell basctl_Shell
         StateMethod = GetState;
     ]
 
-    // Ab hier normal...
+    // From here on normal ...
     SID_BASICIDE_CHOOSEMACRO
     [
         ExecMethod  = ExecuteGlobal;
@@ -282,12 +297,6 @@ shell basctl_Shell
         StateMethod = GetState;
     ]
 
-    SID_BASICIDE_NEWJAVAMODULE
-    [
-        ExecMethod  = ExecuteGlobal;
-        StateMethod = GetState;
-    ]
-
     SID_BASICIDE_NEWDIALOG
     [
         ExecMethod  = ExecuteGlobal;
@@ -318,7 +327,7 @@ shell basctl_Shell
     ]
 
 
-    // Nur, wenn BasicFenster oben
+    // Only, when BasicWindow up
 
     SID_BASICRUN
     [
@@ -405,9 +414,128 @@ shell basctl_Shell
     ]
 
 
-    // Nur, wenn Dialogfenster oben
+    // Only, when dialog window up
 
     SID_CHOOSE_CONTROLS
+    [
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_PUSHBUTTON
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_CHECKBOX
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_RADIOBUTTON
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_SPINBUTTON
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_FIXEDTEXT
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_GROUPBOX
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_LISTBOX
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_COMBOBOX
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_EDIT
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_HSCROLLBAR
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_VSCROLLBAR
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_SELECT
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_IMAGECONTROL
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_PROGRESSBAR
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_HFIXEDLINE
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_VFIXEDLINE
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_DATEFIELD
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_TIMEFIELD
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_NUMERICFIELD
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_CURRENCYFIELD
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_FORMATTEDFIELD
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_PATTERNFIELD
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_FILECONTROL
+    [
+        ExecMethod      = ExecuteDialog;
+        StateMethod     = GetState;
+    ]
+    SID_INSERT_TREECONTROL
     [
         ExecMethod      = ExecuteDialog;
         StateMethod     = GetState;

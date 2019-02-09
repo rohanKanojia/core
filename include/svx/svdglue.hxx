@@ -20,15 +20,16 @@
 #ifndef INCLUDED_SVX_SVDGLUE_HXX
 #define INCLUDED_SVX_SVDGLUE_HXX
 
+#include <tools/gen.hxx>
+#include <svx/svxdllapi.h>
+#include <memory>
+#include <vector>
+#include <o3tl/typed_flags_set.hxx>
+
 namespace vcl { class Window; }
 class OutputDevice;
 class SvStream;
 class SdrObject;
-
-#include <tools/gen.hxx>
-#include <svx/svxdllapi.h>
-#include <vector>
-#include <o3tl/typed_flags_set.hxx>
 
 
 enum class SdrEscapeDirection
@@ -67,7 +68,7 @@ namespace o3tl
 class SVX_DLLPUBLIC SdrGluePoint {
     // Reference Point is SdrObject::GetSnapRect().Center()
     // bNoPercent=false: position is -5000..5000 (1/100)% or 0..10000 (depending on align)
-    // bNoPercent=true : position is in log unit, relativ to the reference point
+    // bNoPercent=true : position is in log unit, relative to the reference point
     Point    aPos;
     SdrEscapeDirection nEscDir;
     sal_uInt16   nId;
@@ -96,9 +97,9 @@ public:
     SdrAlign     GetAlign() const                           { return nAlign; }
     void         SetAlign(SdrAlign nAlg)                    { nAlign=nAlg; }
     SdrAlign     GetHorzAlign() const                       { return nAlign & static_cast<SdrAlign>(0x00FF); }
-    void         SetHorzAlign(SdrAlign nAlg)                { assert((nAlg & static_cast<SdrAlign>(0xff)) == SdrAlign::NONE); nAlign = SdrAlign(nAlign & static_cast<SdrAlign>(0xFF00)) | (nAlg & static_cast<SdrAlign>(0x00FF)); }
+    void         SetHorzAlign(SdrAlign nAlg)                { assert((nAlg & static_cast<SdrAlign>(0xFF00)) == SdrAlign::NONE); nAlign = SdrAlign(nAlign & static_cast<SdrAlign>(0xFF00)) | (nAlg & static_cast<SdrAlign>(0x00FF)); }
     SdrAlign     GetVertAlign() const                       { return nAlign & static_cast<SdrAlign>(0xFF00); }
-    void         SetVertAlign(SdrAlign nAlg)                { assert((nAlg & static_cast<SdrAlign>(0xff00)) == SdrAlign::NONE); nAlign = SdrAlign(nAlign & static_cast<SdrAlign>(0x00FF)) | (nAlg & static_cast<SdrAlign>(0xFF00)); }
+    void         SetVertAlign(SdrAlign nAlg)                { assert((nAlg & static_cast<SdrAlign>(0x00FF)) == SdrAlign::NONE); nAlign = SdrAlign(nAlign & static_cast<SdrAlign>(0x00FF)) | (nAlg & static_cast<SdrAlign>(0xFF00)); }
     bool         IsHit(const Point& rPnt, const OutputDevice& rOut, const SdrObject* pObj) const;
     void         Invalidate(vcl::Window& rWin, const SdrObject* pObj) const;
     Point        GetAbsolutePos(const SdrObject& rObj) const;
@@ -109,33 +110,29 @@ public:
     static SdrEscapeDirection EscAngleToDir(long nAngle);
     void         Rotate(const Point& rRef, long nAngle, double sn, double cs, const SdrObject* pObj);
     void         Mirror(const Point& rRef1, const Point& rRef2, long nAngle, const SdrObject* pObj);
-    void         Shear (const Point& rRef, long nAngle, double tn, bool bVShear, const SdrObject* pObj);
+    void         Shear (const Point& rRef, double tn, bool bVShear, const SdrObject* pObj);
 };
 
 #define SDRGLUEPOINT_NOTFOUND 0xFFFF
 
 class SVX_DLLPUBLIC SdrGluePointList {
-    std::vector<SdrGluePoint*> aList;
-protected:
-    SdrGluePoint* GetObject(sal_uInt16 i) const { return aList[i]; }
+    std::vector<std::unique_ptr<SdrGluePoint>> aList;
 public:
-    SdrGluePointList(): aList() {}
-    SdrGluePointList(const SdrGluePointList& rSrcList): aList()     { *this=rSrcList; }
-    ~SdrGluePointList()                                                     { Clear(); }
+    SdrGluePointList() {};
+    SdrGluePointList(const SdrGluePointList& rSrcList) { *this=rSrcList; }
+
     void                Clear();
-    void                operator=(const SdrGluePointList& rSrcList);
+    SdrGluePointList&   operator=(const SdrGluePointList& rSrcList);
     sal_uInt16          GetCount() const                                    { return sal_uInt16(aList.size()); }
     // At insert, the object (GluePoint) automatically gets an ID assigned.
     // Return value is the index of the new GluePoint in the list.
     sal_uInt16          Insert(const SdrGluePoint& rGP);
     void                Delete(sal_uInt16 nPos)
     {
-        SdrGluePoint* p = aList[nPos];
         aList.erase(aList.begin()+nPos);
-        delete p;
     }
-    SdrGluePoint&       operator[](sal_uInt16 nPos)                             { return *GetObject(nPos); }
-    const SdrGluePoint& operator[](sal_uInt16 nPos) const                       { return *GetObject(nPos); }
+    SdrGluePoint&       operator[](sal_uInt16 nPos)                             { return *aList[nPos]; }
+    const SdrGluePoint& operator[](sal_uInt16 nPos) const                       { return *aList[nPos]; }
     sal_uInt16          FindGluePoint(sal_uInt16 nId) const;
     sal_uInt16          HitTest(const Point& rPnt, const OutputDevice& rOut, const SdrObject* pObj) const;
     void                Invalidate(vcl::Window& rWin, const SdrObject* pObj) const;
@@ -144,7 +141,7 @@ public:
     void                Rotate(const Point& rRef, long nAngle, double sn, double cs, const SdrObject* pObj);
     void                Mirror(const Point& rRef1, const Point& rRef2, const SdrObject* pObj);
     void                Mirror(const Point& rRef1, const Point& rRef2, long nAngle, const SdrObject* pObj);
-    void                Shear (const Point& rRef, long nAngle, double tn, bool bVShear, const SdrObject* pObj);
+    void                Shear (const Point& rRef, double tn, bool bVShear, const SdrObject* pObj);
 };
 
 

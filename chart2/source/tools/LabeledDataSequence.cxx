@@ -17,10 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "LabeledDataSequence.hxx"
-#include "ModifyListenerHelper.hxx"
-#include "macros.hxx"
+#include <LabeledDataSequence.hxx>
+#include <ModifyListenerHelper.hxx>
 #include <cppuhelper/supportsservice.hxx>
+#include <tools/diagnose_ex.h>
+
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 using namespace ::com::sun::star;
 
@@ -66,14 +68,12 @@ LabeledDataSequence::~LabeledDataSequence()
 
 // ____ XLabeledDataSequence ____
 uno::Reference< chart2::data::XDataSequence > SAL_CALL LabeledDataSequence::getValues()
-    throw (uno::RuntimeException, std::exception)
 {
     return m_xData;
 }
 
 void SAL_CALL LabeledDataSequence::setValues(
     const uno::Reference< chart2::data::XDataSequence >& xSequence )
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_xData != xSequence )
     {
@@ -84,14 +84,12 @@ void SAL_CALL LabeledDataSequence::setValues(
 }
 
 uno::Reference< chart2::data::XDataSequence > SAL_CALL LabeledDataSequence::getLabel()
-    throw (uno::RuntimeException, std::exception)
 {
     return m_xLabel;
 }
 
 void SAL_CALL LabeledDataSequence::setLabel(
     const uno::Reference< chart2::data::XDataSequence >& xSequence )
-    throw (uno::RuntimeException, std::exception)
 {
     if( m_xLabel != xSequence )
     {
@@ -103,7 +101,6 @@ void SAL_CALL LabeledDataSequence::setLabel(
 
 // ____ XCloneable ____
 uno::Reference< util::XCloneable > SAL_CALL LabeledDataSequence::createClone()
-    throw (uno::RuntimeException, std::exception)
 {
     uno::Reference< chart2::data::XDataSequence > xNewValues( m_xData );
     uno::Reference< chart2::data::XDataSequence > xNewLabel( m_xLabel );
@@ -122,66 +119,49 @@ uno::Reference< util::XCloneable > SAL_CALL LabeledDataSequence::createClone()
 
 // ____ XModifyBroadcaster ____
 void SAL_CALL LabeledDataSequence::addModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->addModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
 void SAL_CALL LabeledDataSequence::removeModifyListener( const Reference< util::XModifyListener >& aListener )
-    throw (uno::RuntimeException, std::exception)
 {
     try
     {
         Reference< util::XModifyBroadcaster > xBroadcaster( m_xModifyEventForwarder, uno::UNO_QUERY_THROW );
         xBroadcaster->removeModifyListener( aListener );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception & )
     {
-        ASSERT_EXCEPTION( ex );
+        DBG_UNHANDLED_EXCEPTION("chart2");
     }
 }
 
-Sequence< OUString > LabeledDataSequence::getSupportedServiceNames_Static()
-{
-    Sequence<OUString> aServices { "com.sun.star.chart2.data.LabeledDataSequence" };
-    return aServices;
-}
-
-// implement XServiceInfo methods basing upon getSupportedServiceNames_Static
 OUString SAL_CALL LabeledDataSequence::getImplementationName()
-    throw( css::uno::RuntimeException, std::exception )
-{
-    return getImplementationName_Static();
-}
-
-OUString LabeledDataSequence::getImplementationName_Static()
 {
     return OUString("com.sun.star.comp.chart2.LabeledDataSequence");
 }
 
 sal_Bool SAL_CALL LabeledDataSequence::supportsService( const OUString& rServiceName )
-    throw( css::uno::RuntimeException, std::exception )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 css::uno::Sequence< OUString > SAL_CALL LabeledDataSequence::getSupportedServiceNames()
-    throw( css::uno::RuntimeException, std::exception )
 {
-    return getSupportedServiceNames_Static();
+    return { "com.sun.star.chart2.data.LabeledDataSequence" };
 }
 
 } //  namespace chart
 
-extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface * SAL_CALL
+extern "C" SAL_DLLPUBLIC_EXPORT css::uno::XInterface *
 com_sun_star_comp_chart2_LabeledDataSequence_get_implementation(css::uno::XComponentContext *,
         css::uno::Sequence<css::uno::Any> const &)
 {

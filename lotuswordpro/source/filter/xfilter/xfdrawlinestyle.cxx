@@ -57,20 +57,18 @@
  * @file
  * Line style of Drawing object.
  ************************************************************************/
-#include "xfdrawlinestyle.hxx"
+#include <xfilter/xfdrawlinestyle.hxx>
 
 XFDrawLineStyle::XFDrawLineStyle()
-{
-    m_eLineStyle = enumXFLineSolid;
-
-    m_fWidth = 0;
-    m_nTransparency = 0;
-    m_nNumber1 = 1;
-    m_nNumber2 = 1;
-    m_fSpace = 0;
-    m_fLength1 = 0;
-    m_fLength2 = 0;
-}
+    : m_eLineStyle(enumXFLineSolid)
+    , m_fWidth(0)
+    , m_nTransparency(0)
+    , m_nNumber1(1)
+    , m_nNumber2(1)
+    , m_fSpace(0)
+    , m_fLength1(0)
+    , m_fLength2(0)
+{}
 
 enumXFStyle XFDrawLineStyle::GetStyleFamily()
 {

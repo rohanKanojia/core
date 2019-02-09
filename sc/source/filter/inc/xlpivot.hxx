@@ -20,22 +20,17 @@
 #ifndef INCLUDED_SC_SOURCE_FILTER_INC_XLPIVOT_HXX
 #define INCLUDED_SC_SOURCE_FILTER_INC_XLPIVOT_HXX
 
-#include <com/sun/star/sheet/GeneralFunction.hpp>
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
-#include <com/sun/star/sheet/DataPilotFieldSortMode.hpp>
-#include <com/sun/star/sheet/DataPilotFieldShowItemsMode.hpp>
-#include <com/sun/star/sheet/DataPilotFieldLayoutMode.hpp>
-#include <com/sun/star/sheet/DataPilotFieldReferenceType.hpp>
-#include <com/sun/star/sheet/DataPilotFieldReferenceItemType.hpp>
 #include <tools/datetime.hxx>
 #include "ftools.hxx"
 #include "xladdress.hxx"
-#include "dpobject.hxx"
+#include <dpobject.hxx>
 
-#include <memory>
+#include <boost/optional.hpp>
 
 class XclImpStream;
 class XclExpStream;
+enum class ScGeneralFunction;
 
 // Constants and Enumerations =================================================
 
@@ -363,6 +358,9 @@ const sal_uInt16 EXC_SXFDBTYPE_DEFAULT      = 0x0000;
 // (0x0810) SXVIEWEX9 ---------------------------------------------------------
 const sal_uInt16 EXC_ID_SXVIEWEX9       = 0x0810;
 
+// (0x0864) SXADDL ("Pivot Table Additional Info") ----------------------------
+const sal_uInt16 EXC_ID_SXADDL       = 0x0864;
+
 // Pivot cache
 
 /** Represents a data item of any type in a pivot cache. Supposed as base class for import and export. */
@@ -372,23 +370,28 @@ public:
     explicit            XclPCItem();
     virtual             ~XclPCItem();
 
+    XclPCItem(XclPCItem const &) = default;
+    XclPCItem(XclPCItem &&) = default;
+    XclPCItem & operator =(XclPCItem const &) = default;
+    XclPCItem & operator =(XclPCItem &&) = default;
+
     /** Sets the item to 'empty' type. */
     void                SetEmpty();
     /** Sets the item to 'text' type and adds the passed text. */
     void                SetText( const OUString& rText );
     /** Sets the item to 'double' type and adds the passed value. */
-    void                SetDouble( double fValue );
+    void                SetDouble( double fValue, const OUString& rText = OUString() );
     /** Sets the item to 'date/time' type and adds the passed date. */
-    void                SetDateTime( const DateTime& rDateTime );
+    void                SetDateTime( const DateTime& rDateTime, const OUString& rText = OUString() );
     /** Sets the item to 'integer' type and adds the passed value. */
     void                SetInteger( sal_Int16 nValue );
     /** Sets the item to 'error' type and adds the passed Excel error code. */
     void                SetError( sal_uInt16 nError );
     /** Sets the item to 'boolean' type and adds the passed Boolean value. */
-    void                SetBool( bool bValue );
+    void                SetBool( bool bValue, const OUString& rText = OUString() );
 
     /** Returns the text representation of the item. */
-    inline const OUString& ConvertToText() const { return maText; }
+    const OUString& ConvertToText() const { return maText; }
 
     /** Returns true, if the passed term equals this item. */
     bool                IsEqual( const XclPCItem& rItem ) const;
@@ -407,6 +410,9 @@ public:
     const sal_uInt16*   GetError() const;
     /** Returns pointer to Boolean value, if the item type is 'boolean', otherwise 0. */
     const bool*         GetBool() const;
+
+    /** Returns the type of the item */
+    XclPCItemType GetType() const;
 
 private:
     XclPCItemType       meType;         /// Type of the item.
@@ -475,7 +481,7 @@ public:
     virtual             ~XclPCField();
 
     /** Returns the index of this field in the containing pivot cache. */
-    inline sal_uInt16   GetFieldIndex() const { return mnFieldIdx; }
+    sal_uInt16   GetFieldIndex() const { return mnFieldIdx; }
 
     /** Returns true, if the type of the field is supported by Calc. */
     bool                IsSupportedField() const;
@@ -509,7 +515,7 @@ public:
 protected:
     XclPCFieldInfo      maFieldInfo;        /// Pivot cache field info (SXFIELD record).
     XclPCFieldType      meFieldType;        /// Type of this pivot cache field.
-    sal_uInt16          mnFieldIdx;         /// Own field index in pivot cache.
+    sal_uInt16 const    mnFieldIdx;         /// Own field index in pivot cache.
     ScfUInt16Vec        maGroupOrder;       /// Order of items in a grouping field (SXGROUPINFO record).
     XclPCNumGroupInfo   maNumGroupInfo;     /// Info for numeric grouping (SXNUMGROUP record).
 };
@@ -544,7 +550,7 @@ struct XclPTCachedName
     OUString       maName;         /// The visible name, if used.
     bool                mbUseCache;     /// true = Use name in cache instead of maName.
 
-    inline explicit     XclPTCachedName() : mbUseCache( true ) {}
+    explicit     XclPTCachedName() : mbUseCache( true ) {}
 };
 
 XclImpStream& operator>>( XclImpStream& rStrm, XclPTCachedName& rCachedName );
@@ -556,7 +562,7 @@ struct XclPTVisNameInfo
     XclPTCachedName     maVisName;      /// The displayed name of the item.
 
     /** Returns true, if the name is set explicitly (maVisName.mbUseCache is false). */
-    inline bool         HasVisName() const { return !maVisName.mbUseCache; }
+    bool         HasVisName() const { return !maVisName.mbUseCache; }
     /** Returns the name, if set explicitly (maVisName.mbUseCache is false). */
     const OUString* GetVisName() const;
     /** Sets the visible name and enables usage of cache if name is empty. */
@@ -580,7 +586,7 @@ XclExpStream& operator<<( XclExpStream& rStrm, const XclPTItemInfo& rInfo );
 
 // General field settings =====================================================
 
-typedef ::std::vector< sal_uInt16 > XclPTSubtotalVec;
+typedef ::std::vector< ScGeneralFunction > XclPTSubtotalVec;
 
 /** Contains data for a pivot table field (SXVD record). */
 struct XclPTFieldInfo : public XclPTVisNameInfo
@@ -618,7 +624,7 @@ struct XclPTFieldExtInfo
     sal_uInt16          mnSortField;    /// Index to data field sorting bases on.
     sal_uInt16          mnShowField;    /// Index to data field AutoShow bases on.
     sal_uInt16          mnNumFmt;
-    std::unique_ptr<OUString> mpFieldTotalName;
+    boost::optional<OUString> mpFieldTotalName;
 
     explicit            XclPTFieldExtInfo();
 
@@ -676,9 +682,9 @@ struct XclPTDataFieldInfo : public XclPTVisNameInfo
     explicit            XclPTDataFieldInfo();
 
     /** Returns the API enum representing the aggregation function. */
-    css::sheet::GeneralFunction GetApiAggFunc() const;
+    ScGeneralFunction GetApiAggFunc() const;
     /** Sets the aggregation function represented by the passed API enum. */
-    void                SetApiAggFunc( css::sheet::GeneralFunction eAggFunc );
+    void                SetApiAggFunc( ScGeneralFunction eAggFunc );
 
     /** Returns the API constant representing the result reference type. */
     sal_Int32           GetApiRefType() const;
@@ -756,6 +762,15 @@ struct XclPTViewEx9Info
 
 XclImpStream& operator>>( XclImpStream& rStrm, XclPTViewEx9Info& rInfo );
 XclExpStream& operator<<( XclExpStream& rStrm, const XclPTViewEx9Info& rInfo );
+
+/** Additional pivot table settings (SXADDL record). */
+struct XclPTAddl
+{
+    bool          mbCompactMode;
+    explicit      XclPTAddl();
+};
+
+XclImpStream& operator>>(XclImpStream& rStrm, XclPTAddl& rInfo);
 
 #endif
 

@@ -17,18 +17,26 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawDocShell.hxx"
-#include <vcl/svapp.hxx>
+#include <DrawDocShell.hxx>
 
+#include <officecfg/Office/Common.hxx>
+#include <unotools/moduleoptions.hxx>
+#include <unotools/configmgr.hxx>
+
+#include <vcl/svapp.hxx>
 #include <sfx2/docfac.hxx>
 #include <sfx2/objface.hxx>
 #include <sfx2/request.hxx>
 #include <svx/svxids.hrc>
 #include <svl/srchitem.hxx>
 #include <svx/srchdlg.hxx>
+#include <svx/svdoutl.hxx>
+#include <svx/svditer.hxx>
 #include <editeng/flstitem.hxx>
+#include <editeng/eeitem.hxx>
 #include <svl/eitem.hxx>
 #include <svl/intitem.hxx>
+#include <svl/slstitm.hxx>
 #include <sfx2/printer.hxx>
 #include <sfx2/docfile.hxx>
 #include <svx/drawitem.hxx>
@@ -36,41 +44,38 @@
 #include <svl/whiter.hxx>
 #include <svl/itempool.hxx>
 #include <svtools/ctrltool.hxx>
+#include <svtools/langtab.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <comphelper/classids.hxx>
 #include <svl/cjkoptions.hxx>
 #include <svl/visitem.hxx>
 
-#include <svx/svdoutl.hxx>
-
 #include <sfx2/fcontnr.hxx>
 
-#include "app.hrc"
-#include "sdmod.hxx"
-#include "strmname.h"
-#include "stlpool.hxx"
-#include "strings.hrc"
-#include "View.hxx"
-#include "drawdoc.hxx"
-#include "sdpage.hxx"
-#include "glob.hrc"
-#include "res_bmp.hrc"
-#include "fupoor.hxx"
-#include "fusearch.hxx"
-#include "ViewShell.hxx"
-#include "sdresid.hxx"
-#include "slideshow.hxx"
-#include "drawview.hxx"
-#include "FrameView.hxx"
-#include "unomodel.hxx"
-#include "undo/undomanager.hxx"
-#include "undo/undofactory.hxx"
-#include "OutlineView.hxx"
-#include "ViewShellBase.hxx"
+#include <app.hrc>
+#include <sdmod.hxx>
+#include <strmname.h>
+#include <stlpool.hxx>
+#include <View.hxx>
+#include <drawdoc.hxx>
+#include <sdpage.hxx>
+
+#include <fupoor.hxx>
+#include <fusearch.hxx>
+#include <ViewShell.hxx>
+#include <slideshow.hxx>
+#include <drawview.hxx>
+#include <FrameView.hxx>
+#include <unomodel.hxx>
+#include <undo/undomanager.hxx>
+#include <undo/undofactory.hxx>
+#include <OutlineView.hxx>
+#include <ViewShellBase.hxx>
+#include <sfx2/notebookbar/SfxNotebookBar.hxx>
 
 using namespace sd;
-#define DrawDocShell
-#include "sdslots.hxx"
+#define ShellClass_DrawDocShell
+#include <sdslots.hxx>
 
 SFX_IMPL_SUPERCLASS_INTERFACE(DrawDocShell, SfxObjectShell);
 
@@ -88,13 +93,12 @@ namespace sd {
 SFX_IMPL_OBJECTFACTORY(
     DrawDocShell,
     SvGlobalName(SO3_SIMPRESS_CLASSID),
-    SfxObjectShellFlags::STD_NORMAL,
     "simpress" )
 
 void DrawDocShell::Construct( bool bClipboard )
 {
     mbInDestruction = false;
-    SetSlotFilter();     // setzt Filter zurueck
+    SetSlotFilter();     // resets the filter
 
     mbOwnDocument = mpDoc == nullptr;
     if( mbOwnDocument )
@@ -106,11 +110,19 @@ void DrawDocShell::Construct( bool bClipboard )
 
     SetBaseModel( new SdXImpressDocument( this, bClipboard ) );
     SetPool( &mpDoc->GetItemPool() );
-    mpUndoManager = new sd::UndoManager;
-    mpDoc->SetSdrUndoManager( mpUndoManager );
+    std::unique_ptr<sd::UndoManager> pUndoManager(new sd::UndoManager);
+    pUndoManager->SetDocShell(this);
+    mpUndoManager = std::move(pUndoManager);
+
+    if (!utl::ConfigManager::IsFuzzing()
+        && officecfg::Office::Common::Undo::Steps::get() < 1)
+    {
+        mpUndoManager->EnableUndo(false); // tdf#108863 disable if 0 steps
+    }
+    mpDoc->SetSdrUndoManager( mpUndoManager.get() );
     mpDoc->SetSdrUndoFactory( new sd::UndoFactory );
     UpdateTablePointers();
-    SetStyleFamily(5);       //CL: actually SFX_STYLE_FAMILY_PSEUDO
+    SetStyleFamily(SfxStyleFamily::Pseudo);
 }
 
 DrawDocShell::DrawDocShell(SfxObjectCreateMode eMode,
@@ -118,15 +130,11 @@ DrawDocShell::DrawDocShell(SfxObjectCreateMode eMode,
                                DocumentType eDocumentType) :
     SfxObjectShell( eMode == SfxObjectCreateMode::INTERNAL ?  SfxObjectCreateMode::EMBEDDED : eMode),
     mpDoc(nullptr),
-    mpUndoManager(nullptr),
     mpPrinter(nullptr),
     mpViewShell(nullptr),
-    mpFontList(nullptr),
     meDocType(eDocumentType),
-    mpFilterSIDs(nullptr),
     mbSdDataObj(bDataObject),
-    mbOwnPrinter(false),
-    mbNewDocument( true )
+    mbOwnPrinter(false)
 {
     Construct( eMode == SfxObjectCreateMode::INTERNAL );
 }
@@ -134,15 +142,11 @@ DrawDocShell::DrawDocShell(SfxObjectCreateMode eMode,
 DrawDocShell::DrawDocShell( SfxModelFlags nModelCreationFlags, bool bDataObject, DocumentType eDocumentType ) :
     SfxObjectShell( nModelCreationFlags ),
     mpDoc(nullptr),
-    mpUndoManager(nullptr),
     mpPrinter(nullptr),
     mpViewShell(nullptr),
-    mpFontList(nullptr),
     meDocType(eDocumentType),
-    mpFilterSIDs(nullptr),
     mbSdDataObj(bDataObject),
-    mbOwnPrinter(false),
-    mbNewDocument( true )
+    mbOwnPrinter(false)
 {
     Construct( false );
 }
@@ -152,15 +156,11 @@ DrawDocShell::DrawDocShell(SdDrawDocument* pDoc, SfxObjectCreateMode eMode,
                                DocumentType eDocumentType) :
     SfxObjectShell(eMode == SfxObjectCreateMode::INTERNAL ?  SfxObjectCreateMode::EMBEDDED : eMode),
     mpDoc(pDoc),
-    mpUndoManager(nullptr),
     mpPrinter(nullptr),
     mpViewShell(nullptr),
-    mpFontList(nullptr),
     meDocType(eDocumentType),
-    mpFilterSIDs(nullptr),
     mbSdDataObj(bDataObject),
-    mbOwnPrinter(false),
-    mbNewDocument( true )
+    mbOwnPrinter(false)
 {
     Construct( eMode == SfxObjectCreateMode::INTERNAL );
 }
@@ -171,17 +171,17 @@ DrawDocShell::~DrawDocShell()
     // destroyed.  This has been introduced for the PreviewRenderer to
     // free its view (that uses the item poll of the doc shell) but
     // may be useful in other places as well.
-    Broadcast(SfxSimpleHint(SFX_HINT_DYING));
+    Broadcast(SfxHint(SfxHintId::Dying));
 
     mbInDestruction = true;
 
     SetDocShellFunction(nullptr);
 
-    delete mpFontList;
+    mpFontList.reset();
 
     if( mpDoc )
         mpDoc->SetSdrUndoManager( nullptr );
-    delete mpUndoManager;
+    mpUndoManager.reset();
 
     if (mbOwnPrinter)
         mpPrinter.disposeAndClear();
@@ -219,7 +219,7 @@ void DrawDocShell::GetState(SfxItemSet &rSet)
         switch ( nSlotId )
         {
             case SID_ATTR_CHAR_FONTLIST:
-                rSet.Put( SvxFontListItem( mpFontList, nSlotId ) );
+                rSet.Put( SvxFontListItem( mpFontList.get(), nSlotId ) );
             break;
 
             case SID_SEARCH_ITEM:
@@ -266,8 +266,58 @@ void DrawDocShell::GetState(SfxItemSet &rSet)
             break;
             case SID_LANGUAGE_STATUS:
             {
-                // Keeping this enabled for the time being
-                rSet.Put(SfxVisibilityItem(nWhich, true));
+                SdrObject* pObj = nullptr;
+                bool bLanguageFound = false;
+                OutlinerParaObject* pParaObj = nullptr;
+                LanguageType eLanguage( LANGUAGE_DONTKNOW );
+                sal_uInt16 nCount = mpDoc->GetPageCount();
+                for ( sal_uInt16 itPage = 0; itPage < nCount && !bLanguageFound; itPage++ )
+                {
+                    SdrObjListIter aListIter(mpDoc->GetPage(itPage), SdrIterMode::DeepWithGroups);
+                    while ( aListIter.IsMore() && !bLanguageFound )
+                    {
+                        pObj = aListIter.Next();
+                        if ( pObj )
+                        {
+                            pParaObj = pObj->GetOutlinerParaObject();
+                            if ( pParaObj )
+                            {
+                                SdrOutliner aOutliner(&mpDoc->GetPool(), OutlinerMode::TextObject);
+                                aOutliner.SetText(*pParaObj);
+                                eLanguage = aOutliner.GetLanguage(0, 0);
+                                bLanguageFound = eLanguage != LANGUAGE_DONTKNOW;
+                            }
+                        }
+                    }
+                }
+
+                if ( eLanguage == LANGUAGE_DONTKNOW )
+                {
+                    eLanguage = mpDoc->GetLanguage( EE_CHAR_LANGUAGE );
+                }
+
+                rSet.Put(SfxStringItem(nWhich, SvtLanguageTable::GetLanguageString(eLanguage)));
+            }
+            break;
+
+            case SID_NOTEBOOKBAR:
+            {
+                if (mpViewShell)
+                {
+                    bool bImpress = mpDoc->GetDocumentType() == DocumentType::Impress;
+                    bool bVisible = false;
+                    if(bImpress)
+                    {
+                        bVisible = sfx2::SfxNotebookBar::StateMethod(mpViewShell->GetFrame()->GetBindings(),
+                                                                      "modules/simpress/ui/");
+                    }
+                    else
+                    {
+                        bVisible = sfx2::SfxNotebookBar::StateMethod(mpViewShell->GetFrame()->GetBindings(),
+                                                                      "modules/sdraw/ui/");
+                    }
+                    rSet.Put( SfxBoolItem( SID_NOTEBOOKBAR, bVisible ) );
+                }
             }
             break;
 
@@ -289,55 +339,6 @@ void DrawDocShell::GetState(SfxItemSet &rSet)
     }
 }
 
-void DrawDocShell::InPlaceActivate( bool bActive )
-{
-    SfxViewFrame* pSfxViewFrame = SfxViewFrame::GetFirst(this, false);
-    std::vector<FrameView*> &rViews = mpDoc->GetFrameViewList();
-
-    if( !bActive )
-    {
-        std::vector<FrameView*>::iterator pIter;
-        for ( pIter = rViews.begin(); pIter != rViews.end(); ++pIter )
-            delete *pIter;
-
-        rViews.clear();
-
-        while (pSfxViewFrame)
-        {
-            // determine the number of FrameViews
-            SfxViewShell* pSfxViewSh = pSfxViewFrame->GetViewShell();
-            ViewShell* pViewSh = dynamic_cast<ViewShell*>(pSfxViewSh);
-
-            if ( pViewSh && pViewSh->GetFrameView() )
-            {
-                pViewSh->WriteFrameViewData();
-                rViews.push_back( new FrameView( mpDoc, pViewSh->GetFrameView() ) );
-            }
-
-            pSfxViewFrame = SfxViewFrame::GetNext(*pSfxViewFrame, this, false);
-        }
-    }
-
-    SfxObjectShell::InPlaceActivate( bActive );
-
-    if( bActive )
-    {
-        for( sal_uInt32 i = 0; pSfxViewFrame && (i < rViews.size()); i++ )
-        {
-            // determine the number of FrameViews
-            SfxViewShell* pSfxViewSh = pSfxViewFrame->GetViewShell();
-            ViewShell* pViewSh = dynamic_cast<ViewShell*>(pSfxViewSh);
-
-            if ( pViewSh )
-            {
-                pViewSh->ReadFrameViewData( rViews[ i ] );
-            }
-
-            pSfxViewFrame = SfxViewFrame::GetNext(*pSfxViewFrame, this, false);
-        }
-    }
-}
-
 void DrawDocShell::Activate( bool bMDI)
 {
     if (bMDI)
@@ -351,9 +352,9 @@ void DrawDocShell::Deactivate( bool )
 {
 }
 
-::svl::IUndoManager* DrawDocShell::GetUndoManager()
+SfxUndoManager* DrawDocShell::GetUndoManager()
 {
-    return mpUndoManager;
+    return mpUndoManager.get();
 }
 
 void DrawDocShell::UpdateTablePointers()
@@ -362,6 +363,7 @@ void DrawDocShell::UpdateTablePointers()
     PutItem( SvxGradientListItem( mpDoc->GetGradientList(), SID_GRADIENT_LIST ) );
     PutItem( SvxHatchListItem( mpDoc->GetHatchList(), SID_HATCH_LIST ) );
     PutItem( SvxBitmapListItem( mpDoc->GetBitmapList(), SID_BITMAP_LIST ) );
+    PutItem( SvxPatternListItem( mpDoc->GetPatternList(), SID_PATTERN_LIST ) );
     PutItem( SvxDashListItem( mpDoc->GetDashList(), SID_DASH_LIST ) );
     PutItem( SvxLineEndListItem( mpDoc->GetLineEndList(), SID_LINEEND_LIST ) );
 
@@ -392,8 +394,8 @@ void DrawDocShell::ApplySlotFilter() const
         {
             SfxDispatcher* pDispatcher = pTestViewShell->GetViewFrame()->GetDispatcher();
 
-            if( mpFilterSIDs )
-                pDispatcher->SetSlotFilter( mbFilterEnable ? SfxSlotFilterState::ENABLED : SfxSlotFilterState::DISABLED, mnFilterCount, mpFilterSIDs );
+            if( !mpFilterSIDs.empty() )
+                pDispatcher->SetSlotFilter( mbFilterEnable ? SfxSlotFilterState::ENABLED : SfxSlotFilterState::DISABLED, mpFilterSIDs );
             else
                 pDispatcher->SetSlotFilter();
 
@@ -416,7 +418,7 @@ void DrawDocShell::SetModified( bool bSet /* = true */ )
         if ( mpDoc )
             mpDoc->NbcSetChanged( bSet );
 
-        Broadcast( SfxSimpleHint( SFX_HINT_DOCCHANGED ) );
+        Broadcast( SfxHint( SfxHintId::DocChanged ) );
     }
 }
 
@@ -425,7 +427,7 @@ void DrawDocShell::SetModified( bool bSet /* = true */ )
  */
 // ExecuteSpellPopup now handled by DrawDocShell. This is necessary
 // to get hands on the outliner and the text object.
-IMPL_LINK_TYPED(DrawDocShell, OnlineSpellCallback, SpellCallbackInfo&, rInfo, void)
+IMPL_LINK(DrawDocShell, OnlineSpellCallback, SpellCallbackInfo&, rInfo, void)
 {
     SdrObject* pObj = nullptr;
     SdrOutliner* pOutl = nullptr;
@@ -466,15 +468,9 @@ void DrawDocShell::ClearUndoBuffer()
         pSfxViewFrame = SfxViewFrame::GetNext(*pSfxViewFrame, this, false);
     }
 
-    ::svl::IUndoManager* pUndoManager = GetUndoManager();
+    SfxUndoManager* pUndoManager = GetUndoManager();
     if(pUndoManager && pUndoManager->GetUndoActionCount())
         pUndoManager->Clear();
-}
-
-void DrawDocShell::libreOfficeKitCallback(int nType, const char* pPayload) const
-{
-    if (mpDoc)
-        mpDoc->libreOfficeKitCallback(nType, pPayload);
 }
 
 } // end of namespace sd

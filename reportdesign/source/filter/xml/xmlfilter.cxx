@@ -18,16 +18,22 @@
  */
 
 #include <sal/config.h>
+#include <sal/log.hxx>
 
+#include <com/sun/star/packages/WrongPasswordException.hpp>
 #include <com/sun/star/packages/zip/ZipIOException.hpp>
 #include <com/sun/star/embed/ElementModes.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/sdb/XOfficeDatabaseDocument.hpp>
 #include <com/sun/star/util/MeasureUnit.hpp>
 #include <com/sun/star/xml/sax/Parser.hpp>
+#include <com/sun/star/xml/sax/SAXParseException.hpp>
+#include <com/sun/star/document/GraphicStorageHandler.hpp>
+#include <com/sun/star/document/XEmbeddedObjectResolver.hpp>
 #include "xmlfilter.hxx"
 #include "xmlGroup.hxx"
 #include "xmlReport.hxx"
+#include <vcl/errinf.hxx>
 #include "xmlHelper.hxx"
 #include <vcl/svapp.hxx>
 #include <vcl/window.hxx>
@@ -41,8 +47,8 @@
 #include <com/sun/star/xml/sax/XParser.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 
-#include <comphelper/processfactory.hxx>
 #include <comphelper/genericpropertyset.hxx>
+#include <comphelper/propertysetinfo.hxx>
 #include <unotools/mediadescriptor.hxx>
 #include <xmloff/ProgressBarHelper.hxx>
 #include <sfx2/docfile.hxx>
@@ -52,14 +58,13 @@
 #include <xmloff/xmluconv.hxx>
 #include <xmloff/xmlmetai.hxx>
 #include <com/sun/star/util/XModifiable.hpp>
-#include <osl/mutex.hxx>
 #include <svtools/sfxecode.hxx>
 #include "xmlEnums.hxx"
 #include "xmlStyleImport.hxx"
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include "xmlPropertyHandler.hxx"
 #include <xmloff/txtprmap.hxx>
-#include "ReportDefinition.hxx"
+#include <ReportDefinition.hxx>
 
 namespace rptxml
 {
@@ -77,10 +82,6 @@ using namespace ::com::sun::star::xml::sax;
 using namespace xmloff;
 using namespace ::com::sun::star::util;
 
-    sal_Char const sXML_np__rpt[] = "_report";
-    sal_Char const sXML_np___rpt[] = "__report";
-
-
 class RptMLMasterStylesContext_Impl:
     public XMLTextMasterStylesContext
 {
@@ -93,7 +94,7 @@ public:
             ORptFilter& rImport, sal_uInt16 nPrfx,
             const OUString& rLName ,
             const uno::Reference< xml::sax::XAttributeList > & xAttrList );
-    virtual ~RptMLMasterStylesContext_Impl();
+
     RptMLMasterStylesContext_Impl(const RptMLMasterStylesContext_Impl&) = delete;
     RptMLMasterStylesContext_Impl& operator=(const RptMLMasterStylesContext_Impl&) = delete;
     virtual void EndElement() override;
@@ -108,10 +109,6 @@ RptMLMasterStylesContext_Impl::RptMLMasterStylesContext_Impl(
 {
 }
 
-RptMLMasterStylesContext_Impl::~RptMLMasterStylesContext_Impl()
-{
-}
-
 void RptMLMasterStylesContext_Impl::EndElement()
 {
     FinishStyles( true );
@@ -119,13 +116,11 @@ void RptMLMasterStylesContext_Impl::EndElement()
 }
 
     /// read a component (file + filter version)
-sal_Int32 ReadThroughComponent(
+static ErrCode ReadThroughComponent(
     const uno::Reference<XInputStream>& xInputStream,
     const uno::Reference<XComponent>& xModelComponent,
-    const sal_Char* /*pStreamName*/,
     const uno::Reference<XComponentContext> & rContext,
-    const uno::Reference< XDocumentHandler >& _xFilter,
-    bool /*bEncrypted*/ )
+    const uno::Reference< XDocumentHandler >& _xFilter )
 {
     OSL_ENSURE(xInputStream.is(), "input stream missing");
     OSL_ENSURE(xModelComponent.is(), "document missing");
@@ -141,7 +136,7 @@ sal_Int32 ReadThroughComponent(
     // get filter
     OSL_ENSURE( _xFilter.is(), "Can't instantiate filter component." );
     if( !_xFilter.is() )
-        return 1;
+        return ErrCode(1);
 
     // connect parser and filter
     xParser->setDocumentHandler( _xFilter );
@@ -157,22 +152,14 @@ sal_Int32 ReadThroughComponent(
     }
     catch (const SAXParseException& r)
     {
-#if OSL_DEBUG_LEVEL > 1
-        OStringBuffer aError("SAX parse exception caught while importing:\n");
-        aError.append(OUStringToOString(r.Message,
-            RTL_TEXTENCODING_ASCII_US));
-        aError.append(r.LineNumber);
-        aError.append(',');
-        aError.append(r.ColumnNumber);
-        OSL_FAIL(aError.getStr());
-#else
-        (void)r;
-#endif
-        return 1;
+        SAL_WARN( "reportdesign", "SAX parse exception caught while importing: "
+                    << r << " "
+                    << r.LineNumber << ',' << r.ColumnNumber );
+        return ErrCode(1);
     }
     catch (const SAXException&)
     {
-        return 1;
+        return ErrCode(1);
     }
     catch (const packages::zip::ZipIOException&)
     {
@@ -180,25 +167,25 @@ sal_Int32 ReadThroughComponent(
     }
     catch (const IOException&)
     {
-        return 1;
+        return ErrCode(1);
     }
     catch (const Exception&)
     {
-        return 1;
+        return ErrCode(1);
     }
 
     // success!
-    return 0;
+    return ERRCODE_NONE;
 }
 
 /// read a component (storage version)
-sal_Int32 ReadThroughComponent(
-    uno::Reference< embed::XStorage > xStorage,
+static ErrCode ReadThroughComponent(
+    const uno::Reference< embed::XStorage >& xStorage,
     const uno::Reference<XComponent>& xModelComponent,
     const sal_Char* pStreamName,
     const sal_Char* pCompatibilityStreamName,
     const uno::Reference<XComponentContext> & rxContext,
-    const Reference< document::XGraphicObjectResolver > & _xGraphicObjectResolver,
+    const Reference<document::XGraphicStorageHandler> & rxGraphicStorageHandler,
     const Reference<document::XEmbeddedObjectResolver>& _xEmbeddedObjectResolver,
     const OUString& _sFilterName
     ,const uno::Reference<beans::XPropertySet>& _xProp)
@@ -209,7 +196,6 @@ sal_Int32 ReadThroughComponent(
     if ( xStorage.is() )
     {
         uno::Reference< io::XStream > xDocStream;
-        bool bEncrypted = false;
 
         try
         {
@@ -222,19 +208,16 @@ sal_Int32 ReadThroughComponent(
 
                 // do we even have an alternative name?
                 if ( nullptr == pCompatibilityStreamName )
-                    return 0;
+                    return ERRCODE_NONE;
 
                 // if so, does the stream exist?
                 sStreamName = OUString::createFromAscii(pCompatibilityStreamName);
                 if ( !xStorage->hasByName( sStreamName ) || !xStorage->isStreamElement( sStreamName ) )
-                    return 0;
+                    return ERRCODE_NONE;
             }
 
             // get input stream
             xDocStream = xStorage->openStreamElement( sStreamName, embed::ElementModes::READ );
-
-            uno::Reference< beans::XPropertySet > xProps( xDocStream, uno::UNO_QUERY_THROW );
-            xProps->getPropertyValue("Encrypted") >>= bEncrypted;
         }
         catch (const packages::WrongPasswordException&)
         {
@@ -242,11 +225,11 @@ sal_Int32 ReadThroughComponent(
         }
         catch (const uno::Exception&)
         {
-            return 1; // TODO/LATER: error handling
+            return ErrCode(1); // TODO/LATER: error handling
         }
 
         sal_Int32 nArgs = 0;
-        if( _xGraphicObjectResolver.is())
+        if (rxGraphicStorageHandler.is())
             nArgs++;
         if( _xEmbeddedObjectResolver.is())
             nArgs++;
@@ -256,8 +239,8 @@ sal_Int32 ReadThroughComponent(
         uno::Sequence< uno::Any > aFilterCompArgs( nArgs );
 
         nArgs = 0;
-        if( _xGraphicObjectResolver.is())
-            aFilterCompArgs[nArgs++] <<= _xGraphicObjectResolver;
+        if (rxGraphicStorageHandler.is())
+            aFilterCompArgs[nArgs++] <<= rxGraphicStorageHandler;
         if( _xEmbeddedObjectResolver.is())
             aFilterCompArgs[ nArgs++ ] <<= _xEmbeddedObjectResolver;
         if ( _xProp.is() )
@@ -270,14 +253,12 @@ sal_Int32 ReadThroughComponent(
         // read from the stream
         return ReadThroughComponent( xInputStream
                                     ,xModelComponent
-                                    ,pStreamName
                                     ,rxContext
-                                    ,xDocHandler
-                                    ,bEncrypted );
+                                    ,xDocHandler );
     }
 
     // TODO/LATER: better error handling
-    return 1;
+    return ErrCode(1);
 }
 
 
@@ -286,12 +267,12 @@ uno::Reference< uno::XInterface > ORptImportHelper::create(uno::Reference< uno::
     return static_cast< XServiceInfo* >(new ORptFilter(xContext, SvXMLImportFlags::SETTINGS ));
 }
 
-OUString ORptImportHelper::getImplementationName_Static(  ) throw (RuntimeException)
+OUString ORptImportHelper::getImplementationName_Static(  )
 {
     return OUString(SERVICE_SETTINGSIMPORTER);
 }
 
-Sequence< OUString > ORptImportHelper::getSupportedServiceNames_Static(  ) throw(RuntimeException)
+Sequence< OUString > ORptImportHelper::getSupportedServiceNames_Static(  )
 {
     Sequence< OUString > aSupported { SERVICE_IMPORTFILTER };
     return aSupported;
@@ -303,12 +284,12 @@ Reference< XInterface > ORptContentImportHelper::create(const Reference< XCompon
         SvXMLImportFlags::FONTDECLS ));
 }
 
-OUString ORptContentImportHelper::getImplementationName_Static(  ) throw (RuntimeException)
+OUString ORptContentImportHelper::getImplementationName_Static(  )
 {
     return OUString(SERVICE_CONTENTIMPORTER);
 }
 
-Sequence< OUString > ORptContentImportHelper::getSupportedServiceNames_Static(  ) throw(RuntimeException)
+Sequence< OUString > ORptContentImportHelper::getSupportedServiceNames_Static(  )
 {
     Sequence< OUString > aSupported { SERVICE_IMPORTFILTER };
     return aSupported;
@@ -322,12 +303,12 @@ Reference< XInterface > ORptStylesImportHelper::create(Reference< XComponentCont
         SvXMLImportFlags::FONTDECLS ));
 }
 
-OUString ORptStylesImportHelper::getImplementationName_Static(  ) throw (RuntimeException)
+OUString ORptStylesImportHelper::getImplementationName_Static(  )
 {
     return OUString(SERVICE_STYLESIMPORTER);
 }
 
-Sequence< OUString > ORptStylesImportHelper::getSupportedServiceNames_Static(  ) throw(RuntimeException)
+Sequence< OUString > ORptStylesImportHelper::getSupportedServiceNames_Static(  )
 {
     Sequence< OUString > aSupported { SERVICE_IMPORTFILTER };
     return aSupported;
@@ -340,12 +321,12 @@ Reference< XInterface > ORptMetaImportHelper::create(Reference< XComponentContex
         SvXMLImportFlags::META));
 }
 
-OUString ORptMetaImportHelper::getImplementationName_Static(  ) throw (RuntimeException)
+OUString ORptMetaImportHelper::getImplementationName_Static(  )
 {
     return OUString(SERVICE_METAIMPORTER);
 }
 
-Sequence< OUString > ORptMetaImportHelper::getSupportedServiceNames_Static(  ) throw(RuntimeException)
+Sequence< OUString > ORptMetaImportHelper::getSupportedServiceNames_Static(  )
 {
     Sequence< OUString > aSupported { SERVICE_IMPORTFILTER };
     return aSupported;
@@ -357,11 +338,11 @@ ORptFilter::ORptFilter( const uno::Reference< XComponentContext >& _rxContext, S
 {
     GetMM100UnitConverter().SetCoreMeasureUnit(util::MeasureUnit::MM_100TH);
     GetMM100UnitConverter().SetXMLMeasureUnit(util::MeasureUnit::CM);
-    GetNamespaceMap().Add( sXML_np__rpt,
+    GetNamespaceMap().Add( "_report",
                         GetXMLToken(XML_N_RPT),
                         XML_NAMESPACE_REPORT );
 
-    GetNamespaceMap().Add( sXML_np___rpt,
+    GetNamespaceMap().Add( "__report",
                         GetXMLToken(XML_N_RPT_OASIS),
                         XML_NAMESPACE_REPORT );
 
@@ -383,12 +364,12 @@ uno::Reference< XInterface > ORptFilter::create(uno::Reference< XComponentContex
 }
 
 
-OUString ORptFilter::getImplementationName_Static(  ) throw(uno::RuntimeException)
+OUString ORptFilter::getImplementationName_Static(  )
 {
     return OUString("com.sun.star.comp.report.OReportFilter");
 }
 
-uno::Sequence< OUString > ORptFilter::getSupportedServiceNames_Static(  ) throw(uno::RuntimeException)
+uno::Sequence< OUString > ORptFilter::getSupportedServiceNames_Static(  )
 {
     uno::Sequence< OUString > aServices { SERVICE_IMPORTFILTER };
 
@@ -396,7 +377,6 @@ uno::Sequence< OUString > ORptFilter::getSupportedServiceNames_Static(  ) throw(
 }
 
 sal_Bool SAL_CALL ORptFilter::filter( const Sequence< PropertyValue >& rDescriptor )
-    throw (RuntimeException, std::exception)
 {
     vcl::Window*     pFocusWindow = Application::GetFocusWindow();
     bool    bRet = false;
@@ -414,7 +394,6 @@ sal_Bool SAL_CALL ORptFilter::filter( const Sequence< PropertyValue >& rDescript
 }
 
 bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
-    throw (RuntimeException, std::exception)
 {
     OUString                     sFileName;
     uno::Reference< embed::XStorage >   xStorage;
@@ -453,7 +432,7 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
         tools::SvRef<SfxMedium> pMedium = new SfxMedium(
                 sFileName, ( StreamMode::READ | StreamMode::NOCREATE ) );
 
-        if( pMedium )
+        if( pMedium.is() )
         {
             try
             {
@@ -468,9 +447,6 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
     if ( bRet )
     {
         m_xReportDefinition.set(GetModel(),UNO_QUERY_THROW);
-        OSL_ENSURE(m_xReportDefinition.is(),"ReportDefinition is NULL!");
-        if ( !m_xReportDefinition.is() )
-            return false;
 
 #if OSL_DEBUG_LEVEL > 1
         uno::Reference < container::XNameAccess > xAccess( xStorage, uno::UNO_QUERY );
@@ -483,18 +459,18 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
         }
 #endif
 
-        Reference< document::XGraphicObjectResolver > xGraphicObjectResolver;
+        uno::Reference<document::XGraphicStorageHandler> xGraphicStorageHandler;
         uno::Reference<document::XEmbeddedObjectResolver> xEmbeddedObjectResolver;
         uno::Reference< uno::XComponentContext > xContext = GetComponentContext();
 
-        uno::Sequence< uno::Any > aArgs(1);
+        uno::Sequence<uno::Any> aArgs(1);
         aArgs[0] <<= xStorage;
-        xGraphicObjectResolver.set(
+        xGraphicStorageHandler.set(
                 xContext->getServiceManager()->createInstanceWithArgumentsAndContext("com.sun.star.comp.Svx.GraphicImportHelper", aArgs, xContext),
-                uno::UNO_QUERY );
+                uno::UNO_QUERY);
 
         uno::Reference< lang::XMultiServiceFactory > xReportServiceFactory( m_xReportDefinition, uno::UNO_QUERY);
-        aArgs[0] <<= beans::NamedValue(OUString("Storage"),uno::makeAny(xStorage));
+        aArgs[0] <<= beans::NamedValue("Storage",uno::makeAny(xStorage));
         xEmbeddedObjectResolver.set( xReportServiceFactory->createInstanceWithArguments("com.sun.star.document.ImportEmbeddedObjectResolver",aArgs) , uno::UNO_QUERY);
 
         static const char s_sOld[] = "OldFormat";
@@ -519,12 +495,12 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
         static const char s_sMeta[] = "meta.xml";
         static const char s_sStreamName[] = "StreamName";
         xProp->setPropertyValue(s_sStreamName, uno::makeAny(OUString(s_sMeta)));
-        sal_Int32 nRet = ReadThroughComponent( xStorage
+        ErrCode nRet = ReadThroughComponent( xStorage
                                     ,xModel
                                     ,"meta.xml"
                                     ,"Meta.xml"
                                     ,GetComponentContext()
-                                    ,xGraphicObjectResolver
+                                    ,xGraphicStorageHandler
                                     ,xEmbeddedObjectResolver
                                     ,SERVICE_METAIMPORTER
                                     ,xProp
@@ -537,10 +513,10 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
         }
         catch (const uno::Exception&)
         {
-            xProp->setPropertyValue(s_sOld,uno::makeAny(sal_True));
+            xProp->setPropertyValue(s_sOld,uno::makeAny(true));
         }
 
-        if ( nRet == 0 )
+        if ( nRet == ERRCODE_NONE )
         {
             xProp->setPropertyValue(s_sStreamName, uno::makeAny(OUString("settings.xml")));
             nRet = ReadThroughComponent( xStorage
@@ -548,13 +524,13 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
                                     ,"settings.xml"
                                     ,"Settings.xml"
                                     ,GetComponentContext()
-                                    ,xGraphicObjectResolver
+                                    ,xGraphicStorageHandler
                                     ,xEmbeddedObjectResolver
                                     ,SERVICE_SETTINGSIMPORTER
                                     ,xProp
                                     );
         }
-        if ( nRet == 0 )
+        if ( nRet == ERRCODE_NONE )
         {
             xProp->setPropertyValue(s_sStreamName, uno::makeAny(OUString("styles.xml")));
             nRet = ReadThroughComponent(xStorage
@@ -562,13 +538,13 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
                                     ,"styles.xml"
                                     ,"Styles.xml"
                                     ,GetComponentContext()
-                                    ,xGraphicObjectResolver
+                                    ,xGraphicStorageHandler
                                     ,xEmbeddedObjectResolver
                                     ,SERVICE_STYLESIMPORTER
                                     ,xProp);
         }
 
-        if ( nRet == 0 )
+        if ( nRet == ERRCODE_NONE )
         {
             xProp->setPropertyValue(s_sStreamName, uno::makeAny(OUString("content.xml")));
             nRet = ReadThroughComponent( xStorage
@@ -576,7 +552,7 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
                                     ,"content.xml"
                                     ,"Content.xml"
                                     ,GetComponentContext()
-                                    ,xGraphicObjectResolver
+                                    ,xGraphicStorageHandler
                                     ,xEmbeddedObjectResolver
                                     ,SERVICE_CONTENTIMPORTER
                                     ,xProp
@@ -584,30 +560,22 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
         }
 
 
-        bRet = nRet == 0;
+        bRet = nRet == ERRCODE_NONE;
 
         if ( bRet )
         {
-            m_xReportDefinition->setModified(sal_False);
+            m_xReportDefinition->setModified(false);
         }
         else
         {
-            switch( nRet )
+            if( nRet == ERRCODE_IO_BROKENPACKAGE && xStorage.is() )
+                ; // TODO/LATER: no way to transport the error outside from the filter!
+            else
             {
-                case ERRCODE_IO_BROKENPACKAGE:
-                    if( xStorage.is() )
-                    {
-                        // TODO/LATER: no way to transport the error outside from the filter!
-                        break;
-                    }
-                    // fall through intended
-                default:
-                    {
-                        // TODO/LATER: this is completely wrong! Filter code should never call ErrorHandler directly! But for now this is the only way!
-                        ErrorHandler::HandleError( nRet );
-                        if( nRet & ERRCODE_WARNING_MASK )
-                            bRet = true;
-                    }
+                // TODO/LATER: this is completely wrong! Filter code should never call ErrorHandler directly! But for now this is the only way!
+                ErrorHandler::HandleError( nRet );
+                if( nRet.IsWarning() )
+                    bRet = true;
             }
         }
     }
@@ -615,7 +583,151 @@ bool ORptFilter::implImport( const Sequence< PropertyValue >& rDescriptor )
     return bRet;
 }
 
-SvXMLImportContext* ORptFilter::CreateContext( sal_uInt16 nPrefix,
+class RptXMLDocumentSettingsContext : public SvXMLImportContext
+{
+public:
+    RptXMLDocumentSettingsContext(SvXMLImport & rImport,
+           sal_uInt16 const nPrefix,
+           const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+           const OUString& rLocalName,
+           const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        if (nPrefix == XML_NAMESPACE_OFFICE && IsXMLToken(rLocalName, XML_SETTINGS))
+        {
+            return new XMLDocumentSettingsContext(GetImport(), nPrefix, rLocalName, xAttrList);
+        }
+        else
+        {
+            return new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+        }
+    }
+};
+
+class RptXMLDocumentStylesContext : public SvXMLImportContext
+{
+public:
+    RptXMLDocumentStylesContext(SvXMLImport & rImport,
+            sal_uInt16 const nPrefix,
+            const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+        const OUString& rLocalName,
+        const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        SvXMLImportContext *pContext = nullptr;
+
+        ORptFilter & rImport(static_cast<ORptFilter&>(GetImport()));
+        const SvXMLTokenMap& rTokenMap = rImport.GetDocContentElemTokenMap();
+        switch (rTokenMap.Get(nPrefix, rLocalName))
+        {
+            case XML_TOK_CONTENT_STYLES:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateStylesContext(rLocalName, xAttrList, false);
+                break;
+            case XML_TOK_CONTENT_AUTOSTYLES:
+                // don't use the autostyles from the styles-document for the progress
+                pContext = rImport.CreateStylesContext(rLocalName, xAttrList, true);
+                break;
+            case XML_TOK_CONTENT_FONTDECLS:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateFontDeclsContext(rLocalName, xAttrList);
+                break;
+            case XML_TOK_CONTENT_MASTERSTYLES:
+                {
+                    SvXMLStylesContext* pStyleContext = new RptMLMasterStylesContext_Impl(rImport, nPrefix, rLocalName, xAttrList);//CreateMasterStylesContext( rLocalName,xAttrList );
+                    pContext = pStyleContext;
+                    rImport.SetMasterStyles(pStyleContext);
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (!pContext)
+            pContext = new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+
+        return pContext;
+    }
+};
+
+SvXMLImportContextRef RptXMLDocumentBodyContext::CreateChildContext(
+        sal_uInt16 const nPrefix,
+        const OUString& rLocalName,
+        const uno::Reference<xml::sax::XAttributeList> & xAttrList)
+{
+    ORptFilter & rImport(static_cast<ORptFilter&>(GetImport()));
+    if ((XML_NAMESPACE_OFFICE == nPrefix || XML_NAMESPACE_OOO == nPrefix)
+        && IsXMLToken(rLocalName, XML_REPORT))
+    {
+        rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+        const SvXMLStylesContext* pAutoStyles = rImport.GetAutoStyles();
+        if (pAutoStyles)
+        {
+            XMLPropStyleContext* pAutoStyle = const_cast<XMLPropStyleContext*>(dynamic_cast<const XMLPropStyleContext *>(pAutoStyles->FindStyleChildContext(XML_STYLE_FAMILY_PAGE_MASTER, "pm1")));
+            if (pAutoStyle)
+            {
+                pAutoStyle->FillPropertySet(rImport.getReportDefinition().get());
+            }
+        }
+        return new OXMLReport(rImport, nPrefix, rLocalName, xAttrList, rImport.getReportDefinition());
+    }
+    else
+    {
+        return new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+    }
+}
+
+class RptXMLDocumentContentContext : public SvXMLImportContext
+{
+public:
+    RptXMLDocumentContentContext(SvXMLImport & rImport,
+            sal_uInt16 const nPrefix,
+            const OUString& rLocalName)
+        : SvXMLImportContext(rImport, nPrefix, rLocalName)
+    {
+    }
+
+    virtual SvXMLImportContextRef CreateChildContext(sal_uInt16 const nPrefix,
+        const OUString& rLocalName,
+        const uno::Reference<xml::sax::XAttributeList> & xAttrList) override
+    {
+        SvXMLImportContext *pContext = nullptr;
+
+        ORptFilter & rImport(static_cast<ORptFilter&>(GetImport()));
+        const SvXMLTokenMap& rTokenMap = rImport.GetDocContentElemTokenMap();
+        switch (rTokenMap.Get(nPrefix, rLocalName))
+        {
+            case XML_TOK_CONTENT_AUTOSTYLES:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateStylesContext(rLocalName, xAttrList, true);
+                break;
+            case XML_TOK_CONTENT_FONTDECLS:
+                rImport.GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+                pContext = rImport.CreateFontDeclsContext(rLocalName, xAttrList);
+                break;
+            case XML_TOK_CONTENT_BODY:
+                pContext = new RptXMLDocumentBodyContext(rImport, nPrefix, rLocalName);
+                break;
+            default:
+                break;
+        }
+
+        if (!pContext)
+            pContext = new SvXMLImportContext(GetImport(), nPrefix, rLocalName);
+
+        return pContext;
+    }
+};
+
+SvXMLImportContext* ORptFilter::CreateDocumentContext( sal_uInt16 nPrefix,
                                       const OUString& rLocalName,
                                       const uno::Reference< xml::sax::XAttributeList >& xAttrList )
 {
@@ -626,71 +738,50 @@ SvXMLImportContext* ORptFilter::CreateContext( sal_uInt16 nPrefix,
     {
         case XML_TOK_DOC_SETTINGS:
             GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = new XMLDocumentSettingsContext( *this, nPrefix, rLocalName,xAttrList );
-            break;
-        case XML_TOK_DOC_REPORT:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            {
-                const SvXMLStylesContext* pAutoStyles = GetAutoStyles();
-                if ( pAutoStyles )
-                {
-                    XMLPropStyleContext* pAutoStyle = const_cast<XMLPropStyleContext*>(dynamic_cast< const XMLPropStyleContext *>(pAutoStyles->FindStyleChildContext(XML_STYLE_FAMILY_PAGE_MASTER,"pm1")));
-                    if ( pAutoStyle )
-                    {
-                        pAutoStyle->FillPropertySet(getReportDefinition().get());
-                    }
-                }
-                pContext = new OXMLReport( *this, nPrefix, rLocalName,xAttrList,getReportDefinition(),nullptr );
-            }
+            pContext = new RptXMLDocumentSettingsContext(*this, nPrefix, rLocalName);
             break;
         case XML_TOK_DOC_STYLES:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = CreateStylesContext( rLocalName, xAttrList, false);
+            pContext = new RptXMLDocumentStylesContext(*this, nPrefix, rLocalName);
             break;
-        case XML_TOK_DOC_AUTOSTYLES:
-            // don't use the autostyles from the styles-document for the progress
-            if ( ! IsXMLToken( rLocalName, XML_DOCUMENT_STYLES ) )
-                GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = CreateStylesContext( rLocalName, xAttrList, true);
-            break;
-        case XML_TOK_DOC_FONTDECLS:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = CreateFontDeclsContext( rLocalName,xAttrList );
-            break;
-        case XML_TOK_DOC_MASTERSTYLES:
-            {
-                SvXMLStylesContext* pStyleContext = new RptMLMasterStylesContext_Impl(*this, nPrefix, rLocalName,xAttrList);//CreateMasterStylesContext( rLocalName,xAttrList );
-                pContext = pStyleContext;
-                SetMasterStyles( pStyleContext );
-            }
-            break;
-        case XML_TOK_DOC_META:
-            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
-            pContext = CreateMetaContext( rLocalName,xAttrList );
+        case XML_TOK_DOC_CONTENT:
+            pContext = new RptXMLDocumentContentContext(*this, nPrefix, rLocalName);
             break;
         default:
             break;
     }
 
     if ( !pContext )
-        pContext = SvXMLImport::CreateContext( nPrefix, rLocalName, xAttrList );
+        pContext = SvXMLImport::CreateDocumentContext( nPrefix, rLocalName, xAttrList );
 
+    return pContext;
+}
+
+SvXMLImportContext *ORptFilter::CreateFastContext( sal_Int32 nElement,
+        const uno::Reference< xml::sax::XFastAttributeList >& /*xAttrList*/ )
+{
+    SvXMLImportContext *pContext = nullptr;
+
+    switch (nElement)
+    {
+        case XML_ELEMENT( OFFICE, XML_DOCUMENT_META ):
+            GetProgressBarHelper()->Increment( PROGRESS_BAR_STEP );
+            pContext = CreateMetaContext( nElement );
+            break;
+        default:
+            pContext = new SvXMLImportContext(*this);
+    }
     return pContext;
 }
 
 const SvXMLTokenMap& ORptFilter::GetDocElemTokenMap() const
 {
-    if ( !m_pDocElemTokenMap.get() )
+    if (!m_pDocElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
-            { XML_NAMESPACE_OFFICE, XML_SETTINGS,           XML_TOK_DOC_SETTINGS    },
-            { XML_NAMESPACE_OFFICE, XML_STYLES,             XML_TOK_DOC_STYLES      },
-            { XML_NAMESPACE_OFFICE, XML_AUTOMATIC_STYLES,   XML_TOK_DOC_AUTOSTYLES  },
-            { XML_NAMESPACE_OFFICE, XML_REPORT,             XML_TOK_DOC_REPORT      },
-            { XML_NAMESPACE_OOO,    XML_REPORT,             XML_TOK_DOC_REPORT      },
-            { XML_NAMESPACE_OFFICE, XML_FONT_FACE_DECLS,    XML_TOK_DOC_FONTDECLS   },
-            { XML_NAMESPACE_OFFICE, XML_MASTER_STYLES,      XML_TOK_DOC_MASTERSTYLES    },
+            { XML_NAMESPACE_OFFICE, XML_DOCUMENT_SETTINGS,  XML_TOK_DOC_SETTINGS    },
+            { XML_NAMESPACE_OFFICE, XML_DOCUMENT_CONTENT,   XML_TOK_DOC_CONTENT     },
+            { XML_NAMESPACE_OFFICE, XML_DOCUMENT_STYLES,    XML_TOK_DOC_STYLES      },
             { XML_NAMESPACE_OFFICE, XML_DOCUMENT_META,      XML_TOK_DOC_META        },
             XML_TOKEN_MAP_END
         };
@@ -699,23 +790,41 @@ const SvXMLTokenMap& ORptFilter::GetDocElemTokenMap() const
     return *m_pDocElemTokenMap;
 }
 
+const SvXMLTokenMap& ORptFilter::GetDocContentElemTokenMap() const
+{
+    if (!m_pDocContentElemTokenMap)
+    {
+        static const SvXMLTokenMapEntry aElemTokenMap[]=
+        {
+            { XML_NAMESPACE_OFFICE, XML_STYLES,             XML_TOK_CONTENT_STYLES      },
+            { XML_NAMESPACE_OFFICE, XML_AUTOMATIC_STYLES,   XML_TOK_CONTENT_AUTOSTYLES  },
+            { XML_NAMESPACE_OFFICE, XML_FONT_FACE_DECLS,    XML_TOK_CONTENT_FONTDECLS   },
+            { XML_NAMESPACE_OFFICE, XML_MASTER_STYLES,      XML_TOK_CONTENT_MASTERSTYLES},
+            { XML_NAMESPACE_OFFICE, XML_BODY,               XML_TOK_CONTENT_BODY        },
+            XML_TOKEN_MAP_END
+        };
+        m_pDocContentElemTokenMap.reset(new SvXMLTokenMap( aElemTokenMap ));
+    }
+    return *m_pDocContentElemTokenMap;
+}
+
 const SvXMLTokenMap& ORptFilter::GetReportElemTokenMap() const
 {
-    if ( !m_pReportElemTokenMap.get() )
+    if (!m_pReportElemTokenMap)
         m_pReportElemTokenMap.reset(OXMLHelper::GetReportElemTokenMap());
     return *m_pReportElemTokenMap;
 }
 
 const SvXMLTokenMap& ORptFilter::GetSubDocumentElemTokenMap() const
 {
-    if ( !m_pSubDocumentElemTokenMap.get() )
+    if (!m_pSubDocumentElemTokenMap)
         m_pSubDocumentElemTokenMap.reset(OXMLHelper::GetSubDocumentElemTokenMap());
     return *m_pSubDocumentElemTokenMap;
 }
 
 const SvXMLTokenMap& ORptFilter::GetFunctionElemTokenMap() const
 {
-    if ( !m_pFunctionElemTokenMap.get() )
+    if (!m_pFunctionElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -733,7 +842,7 @@ const SvXMLTokenMap& ORptFilter::GetFunctionElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetFormatElemTokenMap() const
 {
-    if ( !m_pFormatElemTokenMap.get() )
+    if (!m_pFormatElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -749,7 +858,7 @@ const SvXMLTokenMap& ORptFilter::GetFormatElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetGroupElemTokenMap() const
 {
-    if ( !m_pGroupElemTokenMap.get() )
+    if (!m_pGroupElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -775,7 +884,7 @@ const SvXMLTokenMap& ORptFilter::GetGroupElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetReportElementElemTokenMap() const
 {
-    if ( !m_pElemTokenMap.get() )
+    if (!m_pElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -793,7 +902,7 @@ const SvXMLTokenMap& ORptFilter::GetReportElementElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetControlElemTokenMap() const
 {
-    if ( !m_pControlElemTokenMap.get() )
+    if (!m_pControlElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -815,7 +924,7 @@ const SvXMLTokenMap& ORptFilter::GetControlElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetControlPropertyElemTokenMap() const
 {
-    if ( !m_pControlElemTokenMap.get() )
+    if (!m_pControlElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -837,7 +946,7 @@ const SvXMLTokenMap& ORptFilter::GetControlPropertyElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetComponentElemTokenMap() const
 {
-    if ( !m_pComponentElemTokenMap.get() )
+    if (!m_pComponentElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -853,7 +962,7 @@ const SvXMLTokenMap& ORptFilter::GetComponentElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetColumnTokenMap() const
 {
-    if ( !m_pColumnTokenMap.get() )
+    if (!m_pColumnTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -877,7 +986,7 @@ const SvXMLTokenMap& ORptFilter::GetColumnTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetSectionElemTokenMap() const
 {
-    if ( !m_pSectionElemTokenMap.get() )
+    if (!m_pSectionElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -900,7 +1009,7 @@ const SvXMLTokenMap& ORptFilter::GetSectionElemTokenMap() const
 
 const SvXMLTokenMap& ORptFilter::GetCellElemTokenMap() const
 {
-    if ( !m_pCellElemTokenMap.get() )
+    if (!m_pCellElemTokenMap)
     {
         static const SvXMLTokenMapEntry aElemTokenMap[]=
         {
@@ -961,27 +1070,21 @@ void ORptFilter::FinishStyles()
         GetStyles()->FinishStyles( true );
 }
 
-OUString ORptFilter::convertFormula(const OUString& _sFormula)
+const OUString& ORptFilter::convertFormula(const OUString& _sFormula)
 {
     return _sFormula;
 }
 
 void SAL_CALL ORptFilter::startDocument()
-    throw( xml::sax::SAXException, uno::RuntimeException, std::exception )
 {
     m_xReportDefinition.set(GetModel(),UNO_QUERY_THROW);
-    OSL_ENSURE(m_xReportDefinition.is(),"ReportDefinition is NULL!");
-    if ( m_xReportDefinition.is() )
-    {
-        m_pReportModel = reportdesign::OReportDefinition::getSdrModel(m_xReportDefinition);
-        OSL_ENSURE(m_pReportModel,"Report model is NULL!");
+    m_pReportModel = reportdesign::OReportDefinition::getSdrModel(m_xReportDefinition);
+    OSL_ENSURE(m_pReportModel,"Report model is NULL!");
 
-        SvXMLImport::startDocument();
-    }
+    SvXMLImport::startDocument();
 }
 
 void ORptFilter::endDocument()
-    throw( xml::sax::SAXException, uno::RuntimeException, std::exception )
 {
     OSL_ENSURE( GetModel().is(), "model missing; maybe startDocument wasn't called?" );
     if( !GetModel().is() )
@@ -1006,17 +1109,17 @@ void ORptFilter::removeFunction(const OUString& _sFunctionName)
 
 void ORptFilter::insertFunction(const css::uno::Reference< css::report::XFunction > & _xFunction)
 {
-    m_aFunctions.insert(TGroupFunctionMap::value_type(_xFunction->getName(),_xFunction));
+    m_aFunctions.emplace(_xFunction->getName(),_xFunction);
 }
 
-SvXMLImportContext* ORptFilter::CreateMetaContext(const OUString& rLocalName,const uno::Reference<xml::sax::XAttributeList>&)
+SvXMLImportContext* ORptFilter::CreateMetaContext(const sal_Int32 /*nElement*/)
 {
     SvXMLImportContext* pContext = nullptr;
 
-    if ( (getImportFlags() & SvXMLImportFlags::META) )
+    if ( getImportFlags() & SvXMLImportFlags::META )
     {
         uno::Reference<document::XDocumentPropertiesSupplier> xDPS(GetModel(), uno::UNO_QUERY_THROW);
-        pContext = new SvXMLMetaDocumentContext(*this,XML_NAMESPACE_OFFICE, rLocalName,xDPS->getDocumentProperties());
+        pContext = new SvXMLMetaDocumentContext(*this, xDPS->getDocumentProperties());
     }
     return pContext;
 }

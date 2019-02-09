@@ -34,7 +34,6 @@
 #include "strings.hxx"
 #include <osl/diagnose.h>
 
-#include <functional>
 #include <algorithm>
 
 namespace xmloff
@@ -80,15 +79,15 @@ namespace
         return getTypedModelNode< XModel >( _rxModelNode );
     }
 
-    struct StringCompare : public ::std::unary_function< OUString, bool >
+    struct StringCompare
     {
     private:
-        const OUString m_sReference;
+        const OUString & m_sReference;
 
     public:
         explicit StringCompare( const OUString& _rReference ) : m_sReference( _rReference ) { }
 
-        inline bool operator()( const OUString& _rCompare )
+        bool operator()( const OUString& _rCompare )
         {
             return ( _rCompare == m_sReference );
         }
@@ -252,15 +251,7 @@ bool FormCellBindingHelper::isSpreadsheetDocumentWhichSupplies( const Reference<
             if ( xDocumentFactory.is() )
                 aAvailableServices = xDocumentFactory->getAvailableServiceNames( );
 
-            const OUString* pFound = ::std::find_if(
-                aAvailableServices.getConstArray(),
-                aAvailableServices.getConstArray() + aAvailableServices.getLength(),
-                StringCompare( _rService )
-            );
-            if ( pFound - aAvailableServices.getConstArray() < aAvailableServices.getLength() )
-            {
-                bYesItIs = true;
-            }
+            bYesItIs = std::any_of( aAvailableServices.begin(), aAvailableServices.end(), StringCompare( _rService ) );
         }
     }
     catch( const Exception& )

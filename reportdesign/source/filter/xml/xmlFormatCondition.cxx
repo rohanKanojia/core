@@ -24,17 +24,13 @@
 #include <xmloff/xmluconv.hxx>
 #include "xmlEnums.hxx"
 #include "xmlHelper.hxx"
-#include <com/sun/star/report/XReportControlFormat.hpp>
-#include <comphelper/genericpropertyset.hxx>
 #include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
-#include "xmlstrings.hrc"
+#include <strings.hxx>
 #include "xmlStyleImport.hxx"
-#include <tools/debug.hxx>
 
 namespace rptxml
 {
-    using namespace ::comphelper;
     using namespace ::com::sun::star;
     using namespace ::com::sun::star::report;
     using namespace ::com::sun::star::uno;
@@ -82,7 +78,7 @@ OXMLFormatCondition::OXMLFormatCondition( ORptFilter& rImport,
     }
     catch(Exception&)
     {
-        OSL_FAIL("Exception catched while filling the report definition props");
+        OSL_FAIL("Exception caught while filling the report definition props");
     }
 }
 

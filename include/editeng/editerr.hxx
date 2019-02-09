@@ -19,12 +19,11 @@
 #ifndef INCLUDED_EDITENG_EDITERR_HXX
 #define INCLUDED_EDITENG_EDITERR_HXX
 
-#include <tools/errcode.hxx>
+#include <vcl/errcode.hxx>
 
-#define ERRCODE_SVX_LINGU_LANGUAGENOTEXISTS    (2UL | ERRCODE_AREA_SVX)
+#define ERRCODE_SVX_LINGU_LANGUAGENOTEXISTS    ErrCode(ErrCodeArea::Svx, 2)
+#define ERRCODE_SVX_GRAPHIC_WRONG_FILEFORMAT   ErrCode(ErrCodeArea::Svx, ErrCodeClass::Read, 8)
 
-#define ERRCODE_SVX_GRAPHIC_WRONG_FILEFORMAT   (8UL | ERRCODE_AREA_SVX | \
-                                                ERRCODE_CLASS_READ )
 #endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

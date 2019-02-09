@@ -20,9 +20,14 @@
 #ifndef INCLUDED_SVX_SDR_PROPERTIES_DEFAULTPROPERTIES_HXX
 #define INCLUDED_SVX_SDR_PROPERTIES_DEFAULTPROPERTIES_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <svx/sdr/properties/properties.hxx>
 #include <svx/svxdllapi.h>
 
+struct _xmlTextWriter;
 
 namespace sdr
 {
@@ -32,10 +37,10 @@ namespace sdr
         {
         protected:
             // the to be used ItemSet
-            SfxItemSet*                                     mpItemSet;
+            std::unique_ptr<SfxItemSet> mpItemSet;
 
             // create a new itemset
-            virtual SfxItemSet* CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
+            virtual std::unique_ptr<SfxItemSet> CreateObjectSpecificItemSet(SfxItemPool& rPool) override;
 
             // test changeability for a single item
             virtual bool AllowItemChange(const sal_uInt16 nWhich, const SfxPoolItem* pNewItem = nullptr) const override;
@@ -49,6 +54,9 @@ namespace sdr
             // react on ItemSet changes
             virtual void ItemSetChanged(const SfxItemSet& rSet) override;
 
+            // check if SfxItemSet exists
+            bool HasSfxItemSet() const { return bool(mpItemSet); }
+
         public:
             // basic constructor
             explicit DefaultProperties(SdrObject& rObj);
@@ -57,10 +65,12 @@ namespace sdr
             DefaultProperties(const DefaultProperties& rProps, SdrObject& rObj);
 
             // destructor
-            virtual ~DefaultProperties();
+            virtual ~DefaultProperties() override;
+
+            void dumpAsXml(struct _xmlTextWriter * pWriter) const;
 
             // Clone() operator, normally just calls the local copy constructor
-            virtual BaseProperties& Clone(SdrObject& rObj) const override;
+            virtual std::unique_ptr<BaseProperties> Clone(SdrObject& rObj) const override;
 
             // get itemset
             virtual const SfxItemSet& GetObjectItemSet() const override;
@@ -75,8 +85,8 @@ namespace sdr
             virtual void ClearObjectItem(const sal_uInt16 nWhich = 0) override;
 
             // clear single item direct, do not do any notifies or things like that.
-            // Also supports complete deleteion of items when default parameter 0 is used.
-            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich = 0) override;
+            // Also supports complete deletion of items when default parameter 0 is used.
+            virtual void ClearObjectItemDirect(const sal_uInt16 nWhich) override;
 
             // set complete item set
             virtual void SetObjectItemSet(const SfxItemSet& rSet) override;
@@ -91,9 +101,6 @@ namespace sdr
             // DefaultProperties::GetObjectItemSet() if a new ItemSet is created.
             // Default implementation does nothing.
             virtual void ForceDefaultAttributes();
-
-            // Scale the included ItemSet.
-            virtual void Scale(const Fraction& rScale) override;
         };
     } // end of namespace properties
 } // end of namespace sdr

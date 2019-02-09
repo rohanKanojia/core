@@ -22,28 +22,23 @@
 #include <com/sun/star/chart2/XChartDocument.hpp>
 #include <com/sun/star/chart2/data/XDataProvider.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
-#include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
 
 #include <sfx2/objsh.hxx>
 #include <svx/svditer.hxx>
 #include <svx/svdoole2.hxx>
-#include <svx/svdpage.hxx>
 #include <svtools/embedhlp.hxx>
 
-#include "document.hxx"
-#include "table.hxx"
-#include "drwlayer.hxx"
-#include "chartarr.hxx"
-#include "chartlis.hxx"
-#include "chartlock.hxx"
-#include "refupdat.hxx"
-#include <tools/globname.hxx>
-#include <sot/exchange.hxx>
+#include <document.hxx>
+#include <table.hxx>
+#include <drwlayer.hxx>
+#include <chartlis.hxx>
+#include <chartlock.hxx>
+#include <refupdat.hxx>
 
-#include "miscuno.hxx"
-#include "chart2uno.hxx"
-#include "charthelper.hxx"
+#include <miscuno.hxx>
+#include <chart2uno.hxx>
+#include <charthelper.hxx>
 
 using namespace ::com::sun::star;
 
@@ -72,7 +67,7 @@ static void lcl_GetChartParameters( const uno::Reference< chart2::XChartDocument
             if ( aPropName == "CellRangeRepresentation" )
                 rProp.Value >>= rRanges;
             else if ( aPropName == "DataRowSource" )
-                rDataRowSource = (chart::ChartDataRowSource)ScUnoHelpFunctions::GetEnumFromAny( rProp.Value );
+                rDataRowSource = static_cast<chart::ChartDataRowSource>(ScUnoHelpFunctions::GetEnumFromAny( rProp.Value ));
             else if ( aPropName == "HasCategories" )
                 rHasCategories = ScUnoHelpFunctions::GetBoolFromAny( rProp.Value );
             else if ( aPropName == "FirstCellAsLabel" )
@@ -89,110 +84,29 @@ static void lcl_SetChartParameters( const uno::Reference< chart2::data::XDataRec
     {
         uno::Sequence< beans::PropertyValue > aArgs( 4 );
         aArgs[0] = beans::PropertyValue(
-            OUString("CellRangeRepresentation"), -1,
+            "CellRangeRepresentation", -1,
             uno::makeAny( rRanges ), beans::PropertyState_DIRECT_VALUE );
         aArgs[1] = beans::PropertyValue(
-            OUString("HasCategories"), -1,
+            "HasCategories", -1,
             uno::makeAny( bHasCategories ), beans::PropertyState_DIRECT_VALUE );
         aArgs[2] = beans::PropertyValue(
-            OUString("FirstCellAsLabel"), -1,
+            "FirstCellAsLabel", -1,
             uno::makeAny( bFirstCellAsLabel ), beans::PropertyState_DIRECT_VALUE );
         aArgs[3] = beans::PropertyValue(
-            OUString("DataRowSource"), -1,
+            "DataRowSource", -1,
             uno::makeAny( eDataRowSource ), beans::PropertyState_DIRECT_VALUE );
         xReceiver->setArguments( aArgs );
     }
 }
 
-// update charts after loading old document
-
-void ScDocument::UpdateAllCharts()
-{
-    if ( !pDrawLayer || !pShell )
-        return;
-
-    if (pChartCollection->empty())
-        return ;        // nothing to do
-
-    size_t nDataCount = pChartCollection->size();
-
-    SCTAB nSize = static_cast<SCTAB>(maTabs.size());
-    for (SCTAB nTab=0; nTab< nSize; nTab++)
-    {
-        if (maTabs[nTab])
-        {
-            SdrPage* pPage = pDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
-            OSL_ENSURE(pPage,"Page ?");
-
-            ScRange aRange;
-            SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
-            SdrObject* pObject = aIter.Next();
-            while (pObject)
-            {
-                if ( pObject->GetObjIdentifier() == OBJ_OLE2 )
-                {
-                    uno::Reference< embed::XEmbeddedObject > xIPObj = static_cast<SdrOle2Obj*>(pObject)->GetObjRef();
-                    if ( xIPObj.is() )
-                    {
-                        OUString aIPName = static_cast<SdrOle2Obj*>(pObject)->GetPersistName();
-
-                        for (size_t nPos = 0; nPos < nDataCount; ++nPos)
-                        {
-                            ScChartArray* pChartObj = (*pChartCollection)[nPos];
-                            if (pChartObj->GetName() == aIPName)
-                            {
-                                ScRangeListRef aRanges = pChartObj->GetRangeList();
-                                OUString sRangeStr;
-                                aRanges->Format( sRangeStr, ScRefFlags::RANGE_ABS_3D, this, GetAddressConvention() );
-
-                                chart::ChartDataRowSource eDataRowSource = chart::ChartDataRowSource_COLUMNS;
-                                bool bHasCategories = pChartObj->HasRowHeaders();
-                                bool bFirstCellAsLabel = pChartObj->HasColHeaders();
-
-                                // Calc -> DataProvider
-                                uno::Reference< chart2::data::XDataProvider > xDataProvider =
-                                        new ScChart2DataProvider( this );
-                                // Chart -> DataReceiver
-                                uno::Reference< chart2::data::XDataReceiver > xReceiver;
-                                uno::Reference< embed::XComponentSupplier > xCompSupp( xIPObj, uno::UNO_QUERY );
-                                if( xCompSupp.is())
-                                    xReceiver.set( xCompSupp->getComponent(), uno::UNO_QUERY );
-                                if( xReceiver.is())
-                                {
-                                    // connect
-                                    xReceiver->attachDataProvider( xDataProvider );
-                                    uno::Reference< util::XNumberFormatsSupplier > xNumberFormatsSupplier(
-                                            pShell->GetModel(), uno::UNO_QUERY );
-                                    xReceiver->attachNumberFormatsSupplier( xNumberFormatsSupplier );
-
-                                    lcl_SetChartParameters( xReceiver, sRangeStr, eDataRowSource,
-                                                            bHasCategories, bFirstCellAsLabel );
-                                }
-
-                                ScChartListener* pCL = new ScChartListener(
-                                    aIPName, this, pChartObj->GetRangeList() );
-                                pChartListenerCollection->insert( pCL );
-                                pCL->StartListeningTo();
-                            }
-                        }
-                    }
-                }
-                pObject = aIter.Next();
-            }
-        }
-    }
-
-    pChartCollection->clear();
-}
-
 bool ScDocument::HasChartAtPoint( SCTAB nTab, const Point& rPos, OUString& rName )
 {
-    if (pDrawLayer && nTab < static_cast<SCTAB>(maTabs.size()) && maTabs[nTab])
+    if (mpDrawLayer && nTab < static_cast<SCTAB>(maTabs.size()) && maTabs[nTab])
     {
-        SdrPage* pPage = pDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
+        SdrPage* pPage = mpDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
         OSL_ENSURE(pPage,"Page ?");
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject)
         {
@@ -203,7 +117,7 @@ bool ScDocument::HasChartAtPoint( SCTAB nTab, const Point& rPos, OUString& rName
 
                 if (IsChart(pObject))
                 {
-                    rName = (static_cast<SdrOle2Obj*>(pObject))->GetPersistName();
+                    rName = static_cast<SdrOle2Obj*>(pObject)->GetPersistName();
                     return true;
                 }
             }
@@ -219,8 +133,7 @@ void ScDocument::UpdateChartArea( const OUString& rChartName,
             const ScRange& rNewArea, bool bColHeaders, bool bRowHeaders,
             bool bAdd )
 {
-    ScRangeListRef aRLR( new ScRangeList );
-    aRLR->Append( rNewArea );
+    ScRangeListRef aRLR( new ScRangeList(rNewArea) );
     UpdateChartArea( rChartName, aRLR, bColHeaders, bRowHeaders, bAdd );
 }
 
@@ -228,21 +141,21 @@ uno::Reference< chart2::XChartDocument > ScDocument::GetChartByName( const OUStr
 {
     uno::Reference< chart2::XChartDocument > xReturn;
 
-    if (pDrawLayer)
+    if (mpDrawLayer)
     {
-        sal_uInt16 nCount = pDrawLayer->GetPageCount();
+        sal_uInt16 nCount = mpDrawLayer->GetPageCount();
         SCTAB nSize = static_cast<SCTAB>(maTabs.size());
         for (sal_uInt16 nTab=0; nTab<nCount && nTab < nSize; nTab++)
         {
-            SdrPage* pPage = pDrawLayer->GetPage(nTab);
+            SdrPage* pPage = mpDrawLayer->GetPage(nTab);
             OSL_ENSURE(pPage,"Page ?");
 
-            SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+            SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
             SdrObject* pObject = aIter.Next();
             while (pObject)
             {
                 if ( pObject->GetObjIdentifier() == OBJ_OLE2 &&
-                        OUString(static_cast<SdrOle2Obj*>(pObject)->GetPersistName()) == rChartName )
+                        static_cast<SdrOle2Obj*>(pObject)->GetPersistName() == rChartName )
                 {
                     xReturn.set( ScChartHelper::GetChartFromSdrObject( pObject ) );
                     return xReturn;
@@ -253,7 +166,7 @@ uno::Reference< chart2::XChartDocument > ScDocument::GetChartByName( const OUStr
     }
     return xReturn;
 }
-void ScDocument::GetChartRanges( const OUString& rChartName, ::std::vector< ScRangeList >& rRangesVector, ScDocument* pSheetNameDoc )
+void ScDocument::GetChartRanges( const OUString& rChartName, ::std::vector< ScRangeList >& rRangesVector, const ScDocument* pSheetNameDoc )
 {
     rRangesVector.clear();
     uno::Reference< chart2::XChartDocument > xChartDoc( GetChartByName( rChartName ) );
@@ -261,10 +174,10 @@ void ScDocument::GetChartRanges( const OUString& rChartName, ::std::vector< ScRa
     {
         std::vector< OUString > aRangeStrings;
         ScChartHelper::GetChartRanges( xChartDoc, aRangeStrings );
-        for( size_t nN=0; nN<aRangeStrings.size(); nN++ )
+        for(const OUString & aRangeString : aRangeStrings)
         {
             ScRangeList aRanges;
-            aRanges.Parse( aRangeStrings[nN], pSheetNameDoc, ScRefFlags::VALID, pSheetNameDoc->GetAddressConvention() );
+            aRanges.Parse( aRangeString, pSheetNameDoc, pSheetNameDoc->GetAddressConvention() );
             rRangesVector.push_back(aRanges);
         }
     }
@@ -293,21 +206,21 @@ void ScDocument::GetOldChartParameters( const OUString& rName,
 {
     // used for undo of changing chart source area
 
-    if (!pDrawLayer)
+    if (!mpDrawLayer)
         return;
 
-    sal_uInt16 nCount = pDrawLayer->GetPageCount();
+    sal_uInt16 nCount = mpDrawLayer->GetPageCount();
     for (sal_uInt16 nTab=0; nTab<nCount && nTab < static_cast<SCTAB>(maTabs.size()); nTab++)
     {
-        SdrPage* pPage = pDrawLayer->GetPage(nTab);
+        SdrPage* pPage = mpDrawLayer->GetPage(nTab);
         OSL_ENSURE(pPage,"Page ?");
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject)
         {
             if ( pObject->GetObjIdentifier() == OBJ_OLE2 &&
-                    OUString(static_cast<SdrOle2Obj*>(pObject)->GetPersistName()) == rName )
+                    static_cast<SdrOle2Obj*>(pObject)->GetPersistName() == rName )
             {
                 uno::Reference< chart2::XChartDocument > xChartDoc( ScChartHelper::GetChartFromSdrObject( pObject ) );
                 if ( xChartDoc.is() )
@@ -341,20 +254,20 @@ void ScDocument::UpdateChartArea( const OUString& rChartName,
             const ScRangeListRef& rNewList, bool bColHeaders, bool bRowHeaders,
             bool bAdd )
 {
-    if (!pDrawLayer)
+    if (!mpDrawLayer)
         return;
 
     for (SCTAB nTab=0; nTab< static_cast<SCTAB>(maTabs.size()) && maTabs[nTab]; nTab++)
     {
-        SdrPage* pPage = pDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
+        SdrPage* pPage = mpDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
         OSL_ENSURE(pPage,"Page ?");
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject)
         {
             if ( pObject->GetObjIdentifier() == OBJ_OLE2 &&
-                    OUString(static_cast<SdrOle2Obj*>(pObject)->GetPersistName()) == rChartName )
+                    static_cast<SdrOle2Obj*>(pObject)->GetPersistName() == rChartName )
             {
                 uno::Reference< chart2::XChartDocument > xChartDoc( ScChartHelper::GetChartFromSdrObject( pObject ) );
                 uno::Reference< chart2::data::XDataReceiver > xReceiver( xChartDoc, uno::UNO_QUERY );
@@ -377,7 +290,7 @@ void ScDocument::UpdateChartArea( const OUString& rChartName,
                         aNewRanges->Parse( aRangesStr, this );
 
                         for ( size_t nAdd = 0, nAddCount = rNewList->size(); nAdd < nAddCount; ++nAdd )
-                            aNewRanges->Append( *(*rNewList)[nAdd] );
+                            aNewRanges->push_back( (*rNewList)[nAdd] );
                     }
                     else
                     {
@@ -396,13 +309,13 @@ void ScDocument::UpdateChartArea( const OUString& rChartName,
                         aNewRanges = rNewList;
                     }
 
-                    if ( bInternalData && pShell )
+                    if ( bInternalData && mpShell )
                     {
                         // Calc -> DataProvider
                         uno::Reference< chart2::data::XDataProvider > xDataProvider = new ScChart2DataProvider( this );
                         xReceiver->attachDataProvider( xDataProvider );
                         uno::Reference< util::XNumberFormatsSupplier > xNumberFormatsSupplier(
-                                pShell->GetModel(), uno::UNO_QUERY );
+                                mpShell->GetModel(), uno::UNO_QUERY );
                         xReceiver->attachNumberFormatsSupplier( xNumberFormatsSupplier );
                     }
 
@@ -423,7 +336,7 @@ void ScDocument::UpdateChartArea( const OUString& rChartName,
 
 void ScDocument::UpdateChart( const OUString& rChartName )
 {
-    if (!pDrawLayer || bInDtorClear)
+    if (!mpDrawLayer || bInDtorClear)
         return;
     uno::Reference< chart2::XChartDocument > xChartDoc( GetChartByName( rChartName ) );
     if( xChartDoc.is() )
@@ -431,7 +344,7 @@ void ScDocument::UpdateChart( const OUString& rChartName )
         try
         {
             uno::Reference< util::XModifiable > xModif( xChartDoc, uno::UNO_QUERY_THROW );
-            if( apTemporaryChartLock.get() )
+            if (apTemporaryChartLock)
                 apTemporaryChartLock->AlsoLockThisChart( uno::Reference< frame::XModel >( xModif, uno::UNO_QUERY ) );
             xModif->setModified( true );
         }
@@ -470,7 +383,7 @@ void ScDocument::RestoreChartListener( const OUString& rName )
                 ScRange aRange;
                 ScAddress::Details aDetails(GetAddressConvention(), 0, 0);
                 if ( aRange.ParseAny( aRepresentations[i], this, aDetails ) & ScRefFlags::VALID )
-                    aRanges->Append( aRange );
+                    aRanges->push_back( aRange );
             }
 
             pChartListenerCollection->ChangeListening( rName, aRanges );
@@ -481,9 +394,9 @@ void ScDocument::RestoreChartListener( const OUString& rName )
 void ScDocument::UpdateChartRef( UpdateRefMode eUpdateRefMode,
                                     SCCOL nCol1, SCROW nRow1, SCTAB nTab1,
                                     SCCOL nCol2, SCROW nRow2, SCTAB nTab2,
-                                    SCsCOL nDx, SCsROW nDy, SCsTAB nDz )
+                                    SCCOL nDx, SCROW nDy, SCTAB nDz )
 {
-    if (!pDrawLayer)
+    if (!mpDrawLayer)
         return;
 
     ScChartListenerCollection::ListenersType& rListeners = pChartListenerCollection->getListeners();
@@ -496,13 +409,13 @@ void ScDocument::UpdateChartRef( UpdateRefMode eUpdateRefMode,
         bool bDataChanged = false;
         for ( size_t i = 0, nListSize = aRLR->size(); i < nListSize; ++i )
         {
-            ScRange* pR = (*aRLR)[i];
-            SCCOL theCol1 = pR->aStart.Col();
-            SCROW theRow1 = pR->aStart.Row();
-            SCTAB theTab1 = pR->aStart.Tab();
-            SCCOL theCol2 = pR->aEnd.Col();
-            SCROW theRow2 = pR->aEnd.Row();
-            SCTAB theTab2 = pR->aEnd.Tab();
+            ScRange& rRange = (*aRLR)[i];
+            SCCOL theCol1 = rRange.aStart.Col();
+            SCROW theRow1 = rRange.aStart.Row();
+            SCTAB theTab1 = rRange.aStart.Tab();
+            SCCOL theCol2 = rRange.aEnd.Col();
+            SCROW theRow2 = rRange.aEnd.Row();
+            SCTAB theTab2 = rRange.aEnd.Tab();
             ScRefUpdateRes eRes = ScRefUpdate::Update(
                 this, eUpdateRefMode,
                 nCol1,nRow1,nTab1, nCol2,nRow2,nTab2,
@@ -512,60 +425,58 @@ void ScDocument::UpdateChartRef( UpdateRefMode eUpdateRefMode,
             if ( eRes != UR_NOTHING )
             {
                 bChanged = true;
-                aNewRLR->Append( ScRange(
+                aNewRLR->push_back( ScRange(
                     theCol1, theRow1, theTab1,
                     theCol2, theRow2, theTab2 ));
                 if ( eUpdateRefMode == URM_INSDEL
                     && !bDataChanged
                     && (eRes == UR_INVALID ||
-                        ((pR->aEnd.Col() - pR->aStart.Col()
+                        ((rRange.aEnd.Col() - rRange.aStart.Col()
                         != theCol2 - theCol1)
-                    || (pR->aEnd.Row() - pR->aStart.Row()
+                    || (rRange.aEnd.Row() - rRange.aStart.Row()
                         != theRow2 - theRow1)
-                    || (pR->aEnd.Tab() - pR->aStart.Tab()
+                    || (rRange.aEnd.Tab() - rRange.aStart.Tab()
                         != theTab2 - theTab1))) )
                 {
                     bDataChanged = true;
                 }
             }
             else
-                aNewRLR->Append( *pR );
+                aNewRLR->push_back( rRange );
         }
         if ( bChanged )
         {
+            // Force the chart to be loaded now, so it registers itself for UNO events.
+            // UNO broadcasts are done after UpdateChartRef, so the chart will get this
+            // reference change.
+
+            uno::Reference<embed::XEmbeddedObject> xIPObj =
+                FindOleObjectByName(pChartListener->GetName());
+
+            svt::EmbeddedObjectRef::TryRunningState( xIPObj );
+
+            // After the change, chart keeps track of its own data source ranges,
+            // the listener doesn't need to listen anymore, except the chart has
+            // an internal data provider.
+            bool bInternalDataProvider = false;
+            if ( xIPObj.is() )
             {
-                // Force the chart to be loaded now, so it registers itself for UNO events.
-                // UNO broadcasts are done after UpdateChartRef, so the chart will get this
-                // reference change.
-
-                uno::Reference<embed::XEmbeddedObject> xIPObj =
-                    FindOleObjectByName(pChartListener->GetName());
-
-                svt::EmbeddedObjectRef::TryRunningState( xIPObj );
-
-                // After the change, chart keeps track of its own data source ranges,
-                // the listener doesn't need to listen anymore, except the chart has
-                // an internal data provider.
-                bool bInternalDataProvider = false;
-                if ( xIPObj.is() )
+                try
                 {
-                    try
-                    {
-                        uno::Reference< chart2::XChartDocument > xChartDoc( xIPObj->getComponent(), uno::UNO_QUERY_THROW );
-                        bInternalDataProvider = xChartDoc->hasInternalDataProvider();
-                    }
-                    catch ( uno::Exception& )
-                    {
-                    }
+                    uno::Reference< chart2::XChartDocument > xChartDoc( xIPObj->getComponent(), uno::UNO_QUERY_THROW );
+                    bInternalDataProvider = xChartDoc->hasInternalDataProvider();
                 }
-                if ( bInternalDataProvider )
+                catch ( uno::Exception& )
                 {
-                    pChartListener->ChangeListening( aNewRLR, bDataChanged );
                 }
-                else
-                {
-                    pChartListener->ChangeListening( new ScRangeList, bDataChanged );
-                }
+            }
+            if ( bInternalDataProvider )
+            {
+                pChartListener->ChangeListening( aNewRLR, bDataChanged );
+            }
+            else
+            {
+                pChartListener->ChangeListening( new ScRangeList, bDataChanged );
             }
         }
     }
@@ -576,20 +487,20 @@ void ScDocument::SetChartRangeList( const OUString& rChartName,
 {
     // called from ChartListener
 
-    if (!pDrawLayer)
+    if (!mpDrawLayer)
         return;
 
     for (SCTAB nTab=0; nTab< static_cast<SCTAB>(maTabs.size()) && maTabs[nTab]; nTab++)
     {
-        SdrPage* pPage = pDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
+        SdrPage* pPage = mpDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
         OSL_ENSURE(pPage,"Page ?");
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject)
         {
             if ( pObject->GetObjIdentifier() == OBJ_OLE2 &&
-                    OUString(static_cast<SdrOle2Obj*>(pObject)->GetPersistName()) == rChartName )
+                    static_cast<SdrOle2Obj*>(pObject)->GetPersistName() == rChartName )
             {
                 uno::Reference< chart2::XChartDocument > xChartDoc( ScChartHelper::GetChartFromSdrObject( pObject ) );
                 uno::Reference< chart2::data::XDataReceiver > xReceiver( xChartDoc, uno::UNO_QUERY );
@@ -627,19 +538,19 @@ bool ScDocument::HasData( SCCOL nCol, SCROW nRow, SCTAB nTab )
 uno::Reference< embed::XEmbeddedObject >
     ScDocument::FindOleObjectByName( const OUString& rName )
 {
-    if (!pDrawLayer)
+    if (!mpDrawLayer)
         return uno::Reference< embed::XEmbeddedObject >();
 
     //  take the pages here from Draw-Layer, as they might not match with the tables
     //  (e.g. delete Redo of table; Draw-Redo happens before DeleteTab)
 
-    sal_uInt16 nCount = pDrawLayer->GetPageCount();
+    sal_uInt16 nCount = mpDrawLayer->GetPageCount();
     for (sal_uInt16 nTab=0; nTab<nCount; nTab++)
     {
-        SdrPage* pPage = pDrawLayer->GetPage(nTab);
+        SdrPage* pPage = mpDrawLayer->GetPage(nTab);
         OSL_ENSURE(pPage,"Page ?");
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         SdrObject* pObject = aIter.Next();
         while (pObject)
         {
@@ -647,7 +558,7 @@ uno::Reference< embed::XEmbeddedObject >
             {
                 SdrOle2Obj * pOleObject ( dynamic_cast< SdrOle2Obj * >( pObject ));
                 if( pOleObject &&
-                    OUString(pOleObject->GetPersistName()) == rName )
+                    pOleObject->GetPersistName() == rName )
                 {
                     return pOleObject->GetObjRef();
                 }
@@ -661,10 +572,10 @@ uno::Reference< embed::XEmbeddedObject >
 
 void ScDocument::UpdateChartListenerCollection()
 {
-    OSL_ASSERT(pChartListenerCollection);
+    assert(pChartListenerCollection);
 
     bChartListenerCollectionNeedsUpdate = false;
-    if (!pDrawLayer)
+    if (!mpDrawLayer)
         return;
 
     for (SCTAB nTab=0; nTab< static_cast<SCTAB>(maTabs.size()); nTab++)
@@ -672,13 +583,13 @@ void ScDocument::UpdateChartListenerCollection()
         if (!maTabs[nTab])
             continue;
 
-        SdrPage* pPage = pDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
+        SdrPage* pPage = mpDrawLayer->GetPage(static_cast<sal_uInt16>(nTab));
         OSL_ENSURE(pPage,"Page ?");
 
         if (!pPage)
             continue;
 
-        SdrObjListIter aIter( *pPage, IM_DEEPNOGROUPS );
+        SdrObjListIter aIter( pPage, SdrIterMode::DeepNoGroups );
         ScChartListenerCollection::StringSetType& rNonOleObjects =
             pChartListenerCollection->getNonOleObjectNames();
 
@@ -737,7 +648,7 @@ void ScDocument::UpdateChartListenerCollection()
 
 void ScDocument::AddOLEObjectToCollection(const OUString& rName)
 {
-    OSL_ASSERT(pChartListenerCollection);
+    assert(pChartListenerCollection);
     ScChartListenerCollection::StringSetType& rNonOleObjects =
         pChartListenerCollection->getNonOleObjectNames();
 

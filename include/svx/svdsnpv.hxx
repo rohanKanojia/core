@@ -72,26 +72,25 @@ enum class SdrSnap
 {
     NOTSNAPPED = 0x00,
     XSNAPPED   = 0x01,
-    YSNAPPED   = 0x02,
-    XYSNAPPED  = XSNAPPED | YSNAPPED,
+    YSNAPPED   = 0x02
 };
 namespace o3tl
 {
     template<> struct typed_flags<SdrSnap> : is_typed_flags<SdrSnap, 3> {};
 }
 
-// SDRCROOK_STRETCH is not implemented yet!
-enum SdrCrookMode {
-    SDRCROOK_ROTATE,
-    SDRCROOK_SLANT,
-    SDRCROOK_STRETCH
+// TODO SdrCrookMode::Stretch is not implemented yet!
+enum class SdrCrookMode {
+    Rotate,
+    Slant,
+    Stretch
 };
 
 
 // #114409#-1 Migrate PageOrigin
 class ImplPageOriginOverlay;
 
-class SVX_DLLPUBLIC SdrSnapView: public SdrPaintView
+class SVX_DLLPUBLIC SdrSnapView : public SdrPaintView
 {
 protected:
     // #114409#-1 Migrate PageOrigin
@@ -124,13 +123,15 @@ protected:
     bool                        bMoveOnlyDragging : 1;       // only move objects while Resize/Rotate/...
     bool                        bSlantButShear : 1;          // use slant instead of shear
     bool                        bCrookNoContortion : 1;      // no contorsion while Crook
-    bool                        bHlplFixed : 1;              // sal_True= fixed auxiliary lines, so it isn't movable
     bool                        bEliminatePolyPoints : 1;
 
 protected:
     // #i71538# make constructors of SdrView sub-components protected to avoid incomplete incarnations which may get casted to SdrView
-    SdrSnapView(SdrModel* pModel1, OutputDevice* pOut = nullptr);
-    virtual ~SdrSnapView();
+    SdrSnapView(
+        SdrModel& rSdrModel,
+        OutputDevice* pOut);
+
+    virtual ~SdrSnapView() override;
 
 public:
     virtual bool IsAction() const override;
@@ -138,7 +139,7 @@ public:
     virtual void EndAction() override;
     virtual void BckAction() override;
     virtual void BrkAction() override; // break actions for derived classes e.g. interrupt dragging.
-    virtual void TakeActionRect(Rectangle& rRect) const override;
+    virtual void TakeActionRect(tools::Rectangle& rRect) const override;
 
     void SetSnapGridWidth(const Fraction& rX, const Fraction& rY) { aSnapWdtX=rX; aSnapWdtY=rY; }
     const Fraction& GetSnapGridWidthX() const { return aSnapWdtX; }
@@ -157,7 +158,7 @@ public:
     // SdrSnap::YSNAPPED or SdrSnap::XYSNAPPED
     SdrSnap SnapPos(Point& rPnt, const SdrPageView* pPV) const;
     Point GetSnapPos(const Point& rPnt, const SdrPageView* pPV) const;
-    void CheckSnap(const Point& rPt, const SdrPageView* pPV, long& nBestXSnap, long& nBestYSnap, bool& bXSnapped, bool& bYSnapped) const;
+    void CheckSnap(const Point& rPt, long& nBestXSnap, long& nBestYSnap, bool& bXSnapped, bool& bYSnapped) const;
 
     // All attitudes to snap are persistent.
     bool IsSnapEnabled() const { return bSnapEnab; }
@@ -241,7 +242,7 @@ public:
     //     - circle object angle: nothing
     //     - line keeps while Dragging the angle and is only stretched/ contracted
     // Default value for Ortho is off. persistent.
-    void SetOrtho(bool bOn) { bOrtho=bOn; } // unvollstaendig
+    void SetOrtho(bool bOn) { bOrtho=bOn; } // incomplete
     bool IsOrtho() const { return bOrtho; }
 
     // BigOrtho is only relevant if Ortho is switched on.
@@ -271,7 +272,7 @@ public:
     void SetCrookNoContortion(bool bOn) { bCrookNoContortion=bOn; }
     bool IsCrookNoContortion() const { return bCrookNoContortion; }
 
-    // Crook-Mode. persistent. Default=SDRCROOK_ROTATE. (ni)
+    // Crook-Mode. persistent. Default=SdrCrookMode::Rotate. (ni)
     void SetCrookMode(SdrCrookMode eMode) { eCrookMode=eMode; }
     SdrCrookMode GetCrookMode() const { return eCrookMode; }
 

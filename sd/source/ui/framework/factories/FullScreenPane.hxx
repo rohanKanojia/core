@@ -21,14 +21,13 @@
 #define INCLUDED_SD_SOURCE_UI_FRAMEWORK_FACTORIES_FULLSCREENPANE_HXX
 
 #include "FrameWindowPane.hxx"
-#include <com/sun/star/frame/XLayoutManager.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
-#include <vcl/vclevent.hxx>
-#include <memory>
+#include <tools/link.hxx>
 
 class WorkWindow;
+class VclWindowEvent;
 
-namespace sd { class ViewShellBase; }
+namespace vcl { class Window; }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
 
 namespace sd { namespace framework {
 
@@ -52,31 +51,26 @@ public:
         const css::uno::Reference<css::uno::XComponentContext>& rxComponentContext,
         const css::uno::Reference<css::drawing::framework::XResourceId>& rxPaneId,
         const vcl::Window* pViewShellWindow);
-    virtual ~FullScreenPane() throw();
+    virtual ~FullScreenPane() throw() override;
 
     virtual void SAL_CALL disposing() override;
 
     //----- XPane -------------------------------------------------------------
 
-    virtual sal_Bool SAL_CALL isVisible()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual sal_Bool SAL_CALL isVisible() override;
 
-    virtual void SAL_CALL setVisible (sal_Bool bIsVisible)
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual void SAL_CALL setVisible (sal_Bool bIsVisible) override;
 
-    virtual css::uno::Reference<css::accessibility::XAccessible> SAL_CALL getAccessible()
-        throw (css::uno::RuntimeException, std::exception) override;
+    virtual css::uno::Reference<css::accessibility::XAccessible> SAL_CALL getAccessible() override;
 
     virtual void SAL_CALL setAccessible (
-        const css::uno::Reference<css::accessibility::XAccessible>& rxAccessible)
-        throw (css::uno::RuntimeException, std::exception) override;
+        const css::uno::Reference<css::accessibility::XAccessible>& rxAccessible) override;
 
-    DECL_LINK_TYPED(WindowEventHandler, VclWindowEvent&, void);
+    DECL_LINK(WindowEventHandler, VclWindowEvent&, void);
 
 protected:
     virtual css::uno::Reference<css::rendering::XCanvas>
-        CreateCanvas()
-        throw (css::uno::RuntimeException) override;
+        CreateCanvas() override;
 
 private:
     css::uno::Reference<css::uno::XComponentContext> mxComponentContext;

@@ -17,33 +17,32 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "decl.h"
-#include "lotform.hxx"
-#include "compiler.hxx"
+#include <decl.h>
+#include <lotform.hxx>
 #include "lotfilter.hxx"
-#include "lotrange.hxx"
-#include "namebuff.hxx"
-#include "root.hxx"
-#include "ftools.hxx"
-#include "tool.h"
+#include <lotrange.hxx>
+#include <namebuff.hxx>
+#include <root.hxx>
+#include <ftools.hxx>
+#include <tool.h>
 
-#include <math.h>
 #include <comphelper/string.hxx>
+#include <sal/log.hxx>
 #include <memory>
 
 static const sal_Char*      GetAddInName( const sal_uInt8 nIndex );
 
 static DefTokenId           lcl_KnownAddIn(const OString& rTest);
 
-void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtString )
+void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nCnt, const sal_Char* pExtString )
 {
     TokenId                     eParam[ 256 ];
-    sal_Int32                       nLauf;
-    TokenId                     nMerk0, nMerk1;
+    sal_Int32                   nPass;
+    TokenId                     nBuf0, nBuf1;
 
     bool                        bAddIn = false;
 
-    OSL_ENSURE( nAnz < 128, "-LotusToSc::DoFunc(): Too many (128)!" );
+    SAL_WARN_IF( nCnt > 128, "sc.filter", "-LotusToSc::DoFunc(): Too many (128)!" );
 
     if( eOc == ocNoName )
     {
@@ -71,44 +70,48 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
         if( eOc == ocNoName )
         {
             bAddIn = true;
-            nMerk0 = aPool.Store(eOc, OStringToOUString(t, eSrcChar));
+            nBuf0 = aPool.Store(eOc, OStringToOUString(t, eSrcChar));
 
-            aPool << nMerk0;
+            aPool << nBuf0;
         }
     }
 
-    for( nLauf = 0 ; nLauf < nAnz ; nLauf++ )
-        aStack >> eParam[ nLauf ];
+    for( nPass = 0 ; nPass < nCnt && aStack.HasMoreTokens() ; nPass++ )
+        aStack >> eParam[ nPass ];
+
+    if (nPass < nCnt)
+        // Adapt count to reality. All sort of binary crap is possible.
+        nCnt = static_cast<sal_uInt8>(nPass);
 
     // special cases...
     switch( eOc )
     {
         case ocIndex:
-            OSL_ENSURE( nAnz > 2, "+LotusToSc::DoFunc(): ocIndex needs at least 2 parameters!" );
-            nMerk0 = eParam[ 0 ];
+            SAL_WARN_IF( nCnt < 2, "sc.filter", "+LotusToSc::DoFunc(): ocIndex needs at least 2 parameters!" );
+            nBuf0 = eParam[ 0 ];
             eParam[ 0 ] = eParam[ 1 ];
-            eParam[ 1 ] = nMerk0;
+            eParam[ 1 ] = nBuf0;
             IncToken( eParam[ 0 ] );
             IncToken( eParam[ 1 ] );
             break;
         case ocIRR:
         {
-            OSL_ENSURE( nAnz == 2, "+LotusToSc::DoFunc(): ocIRR needs 2 parameters!" );
-            nMerk0 = eParam[ 0 ];
+            SAL_WARN_IF( nCnt != 2, "sc.filter", "+LotusToSc::DoFunc(): ocIRR needs 2 parameters!" );
+            nBuf0 = eParam[ 0 ];
             eParam[ 0 ] = eParam[ 1 ];
-            eParam[ 1 ] = nMerk0;
+            eParam[ 1 ] = nBuf0;
         }
             break;
         case ocGetYear:
         {
-            nMerk0 = aPool.Store( 1900.0 );
+            nBuf0 = aPool.Store( 1900.0 );
             aPool << ocOpen;
         }
             break;
         case ocChoose:
         {// 1. Parameter ++
-            if (nAnz >= 1)
-                IncToken( eParam[ nAnz - 1 ] );
+            if (nCnt >= 1)
+                IncToken( eParam[ nCnt - 1 ] );
         }
             break;
         case ocFind:
@@ -121,16 +124,16 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
         case ocMid:
         case ocReplace:
         {// 2. Parameter ++
-            if (nAnz >= 2)
-                IncToken( eParam[ nAnz - 2 ] );
+            if (nCnt >= 2)
+                IncToken( eParam[ nCnt - 2 ] );
         }
             break;
         case ocRate:
         {
             // new quantity = 4!
-            OSL_ENSURE( nAnz == 3,
+            SAL_WARN_IF( nCnt != 3, "sc.filter",
                 "*LotusToSc::DoFunc(): ZINS() needs 3 parameters!" );
-            nAnz = 4;
+            nCnt = 4;
             eParam[ 3 ] = eParam[ 0 ];  // 3. -> 1.
             eParam[ 0 ] = eParam[ 2 ];  // 1. -> 4.
             NegToken( eParam[ 1 ] );    // 2. -> -2. (+ 2. -> 3.)
@@ -139,9 +142,9 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
             break;
         case ocNper:
         {
-            OSL_ENSURE( nAnz == 3,
+            SAL_WARN_IF( nCnt != 3, "sc.filter",
                 "*LotusToSc::DoFunc(): TERM() or CTERM() need 3 parameters!" );
-            nAnz = 4;
+            nCnt = 4;
             if ( OString(pExtString) == "TERM" )
             {
                 // @TERM(pmt,int,fv) -> NPER(int,-pmt,pv=0,fv)
@@ -153,9 +156,9 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
             {
                 // @CTERM(int,fv,pv) -> NPER(int,pmt=0,-pv,fv)
                 NegToken( eParam[ 0 ] );
-                nMerk0 = eParam[ 1 ];
+                nBuf0 = eParam[ 1 ];
                 eParam[ 1 ] = eParam[ 0 ];
-                eParam[ 0 ] = nMerk0;
+                eParam[ 0 ] = nBuf0;
                 eParam[ 3 ] = eParam[ 2 ];
                 eParam[ 2 ] = aPool.Store( 0.0 );
             }
@@ -165,11 +168,11 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
         case ocRoundDown:
         {
             // omit optional 3rd parameter
-            if ( nAnz == 3 )
+            if ( nCnt == 3 )
             {
                 eParam[ 0 ] = eParam[ 1 ];
                 eParam[ 1 ] = eParam[ 2 ];
-                nAnz = 2;
+                nCnt = 2;
             }
 
         }
@@ -182,30 +185,39 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
 
     aPool << ocOpen;
 
-    if( nAnz > 0 )
+    if( nCnt > 0 )
     {
-            // ATTENTION: 0 is the last parameter, nAnz-1 the first one
+            // ATTENTION: 0 is the last parameter, nCnt-1 the first one
 
-        sal_Int16 nLast = nAnz - 1;
+        sal_Int16 nLast = nCnt - 1;
 
         if( eOc == ocPMT )
-        {   // special case ocPMT, ignore (negate?) last parameter!
-            // zusaetzlich: 1. -> 3., 3. -> 2., 2. -> 1.
-            OSL_ENSURE( nAnz == 3,
-                "+LotusToSc::DoFunc(): ocPMT needs 3 parameters!" );
-            aPool << eParam[ 1 ] << ocSep << eParam[ 0 ] << ocSep
-                << ocNegSub << eParam[ 2 ];
+        {   // special case ocPMT, negate last parameter!
+            // additionally: 1. -> 3., 3. -> 2., 2. -> 1.
+            SAL_WARN_IF( nCnt != 3, "sc.filter", "+LotusToSc::DoFunc(): ocPMT needs 3 parameters!" );
+            // There should be at least 3 arguments, but with binary crap may not..
+            switch (nCnt)
+            {
+                case 1:
+                    aPool << eParam[ 1 ];
+                break;
+                case 2:
+                    aPool << eParam[ 1 ] << ocSep << eParam[ 0 ];
+                break;
+                default:
+                case 3:
+                    aPool << eParam[ 1 ] << ocSep << eParam[ 0 ] << ocSep << ocNegSub << eParam[ 2 ];
+                break;
+            }
         }
         else
         {   // default
             // [Parameter{;Parameter}]
             aPool << eParam[ nLast ];
 
-            sal_Int16 nNull = -1;   // lists the parameter to be excluded
-            for( nLauf = nLast - 1 ; nLauf >= 0 ; nLauf-- )
+            for( nPass = nLast - 1 ; nPass >= 0 ; nPass-- )
             {
-                if( nLauf != nNull )
-                    aPool << ocSep << eParam[ nLauf ];
+                aPool << ocSep << eParam[nPass];
             }
         }
     }
@@ -213,7 +225,7 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
     // special cases ...
     if( eOc == ocGetYear )
     {
-        aPool << ocClose << ocSub << nMerk0;
+        aPool << ocClose << ocSub << nBuf0;
     }
     else if( eOc == ocFixed )
     {
@@ -221,9 +233,9 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
     }
     else if( eOc == ocFind )
     {
-        nMerk1 = aPool.Store();
-        DecToken( nMerk1 );
-        aPool << nMerk1;
+        nBuf1 = aPool.Store();
+        DecToken( nBuf1 );
+        aPool << nBuf1;
     }
 
     aPool << ocClose;
@@ -233,7 +245,7 @@ void LotusToSc::DoFunc( DefTokenId eOc, sal_uInt8 nAnz, const sal_Char* pExtStri
 
 void LotusToSc::LotusRelToScRel( sal_uInt16 nCol, sal_uInt16 nRow, ScSingleRefData& rSRD )
 {
-    // Col
+    // Column
     if( nCol & 0x8000 )
     {
         if( nCol & 0x0080 )
@@ -273,7 +285,7 @@ void LotusToSc::LotusRelToScRel( sal_uInt16 nCol, sal_uInt16 nRow, ScSingleRefDa
                     nRow &= 0x1FFF;
                 break;
             default:
-                OSL_FAIL( "*LotusToSc::LotusRelToScRel(): unhandeled case?" );
+                SAL_WARN( "sc.filter", "*LotusToSc::LotusRelToScRel(): unhandled case? " << m_rContext.eTyp );
         }
     }
     else
@@ -293,7 +305,7 @@ void LotusToSc::LotusRelToScRel( sal_uInt16 nCol, sal_uInt16 nRow, ScSingleRefDa
                 nRow &= 0x3FFF;
                 break;
             default:
-                OSL_FAIL( "*LotusToSc::LotusRelToScRel(): unhandeled case?" );
+                SAL_WARN( "sc.filter", "*LotusToSc::LotusRelToScRel(): unhandled case? " << m_rContext.eTyp );
         }
     }
 
@@ -358,7 +370,7 @@ void LotusToSc::Reset( const ScAddress& rEingPos )
 
 LotusToSc::LotusToSc(LotusContext &rContext, SvStream &rStream, svl::SharedStringPool& rSPool,
     rtl_TextEncoding e, bool b)
-    : LotusConverterBase(rStream, rSPool, 128)
+    : LotusConverterBase(rStream, rSPool)
     , m_rContext(rContext)
 {
     eSrcChar = e;
@@ -369,15 +381,15 @@ LotusToSc::LotusToSc(LotusContext &rContext, SvStream &rStream, svl::SharedStrin
 typedef FUNC_TYPE ( FuncType1 ) ( sal_uInt8 );
 typedef DefTokenId ( FuncType2 ) ( sal_uInt8 );
 
-void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
+void LotusToSc::Convert( std::unique_ptr<ScTokenArray>& rpErg, sal_Int32& rRest )
 {
     sal_uInt8               nOc;
-    sal_uInt8               nAnz;
+    sal_uInt8               nCnt;
     sal_uInt8               nRelBits;
     sal_uInt16              nStrLen;
     sal_uInt16              nRngIndex;
     FUNC_TYPE           eType = FT_NOP;
-    TokenId             nMerk0;
+    TokenId             nBuf0;
     DefTokenId          eOc;
     const sal_Char*     pExtName = nullptr;
     RangeNameBufferWK3& rRangeNameBufferWK3 = *m_rContext.pLotusRoot->pRngNmBffWK3;
@@ -389,7 +401,7 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
     LR_ID               nId;
     TokenId             nNewId;
 
-    LotusRangeList&     rRangeList = *m_rContext.pLotusRoot->pRangeNames;
+    LotusRangeList&     rRangeList = m_rContext.pLotusRoot->maRangeNames;
 
     FuncType1*          pIndexToType;
     FuncType2*          pIndexToToken;
@@ -423,12 +435,12 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
 
         if( nBytesLeft < 0 )
         {
-            rpErg = aPool[ aStack.Get() ];
+            rpErg = aPool.GetTokenArray( aStack.Get());
             return;
         }
 
-        eType = ( pIndexToType )( nOc );
-        eOc = ( pIndexToToken)( nOc );
+        eType = pIndexToType( nOc );
+        eOc   = pIndexToToken( nOc );
         if( eOc == ocNoName )
             pExtName = GetAddInName( nOc );
 
@@ -447,16 +459,16 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
             case FT_FuncFix3:   DoFunc( eOc, 3, pExtName ); break;
             case FT_FuncFix4:   DoFunc( eOc, 4, pExtName ); break;
                 case FT_FuncVar:
-                Read( nAnz );
-                DoFunc( eOc, nAnz, pExtName );
+                Read( nCnt );
+                DoFunc( eOc, nCnt, pExtName );
                 break;
             case FT_Neg:
                 aPool << ocOpen << ocNegSub << aStack << ocClose;
                 aPool >> aStack;
                 break;
             case FT_Op:
-                aStack >> nMerk0;
-                aPool << aStack << eOc << nMerk0;
+                aStack >> nBuf0;
+                aPool << aStack << eOc << nBuf0;
                 aPool >> aStack;
                 break;
             case FT_ConstFloat:
@@ -484,7 +496,7 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
                         // missing range
                         nNewId = aPool.Store( rR );
                     else
-                        nNewId = aPool.Store( ( sal_uInt16 ) nId );
+                        nNewId = aPool.Store( static_cast<sal_uInt16>(nId) );
                 }
 
                 aStack << nNewId;
@@ -511,7 +523,7 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
                         // missing range
                         nNewId = aPool.Store( aCRD );
                     else
-                        nNewId = aPool.Store( ( sal_uInt16 ) nId );
+                        nNewId = aPool.Store( static_cast<sal_uInt16>(nId) );
                 }
 
                 aStack << nNewId;
@@ -525,7 +537,7 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
             {
                 sal_Int16   nVal;
                 Read( nVal );
-                aStack << aPool.Store( ( double ) nVal );
+                aStack << aPool.Store( static_cast<double>(nVal) );
             }
                 break;
             case FT_ConstString:
@@ -590,7 +602,7 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
                 break;
             case FT_Splfunc:
             {
-                Read( nAnz );
+                Read( nCnt );
                 Read( nStrLen );
 
                 const size_t nMaxEntries = aIn.remainingSize();
@@ -602,16 +614,16 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
                     std::unique_ptr<sal_Char[]> p(new (::std::nothrow) sal_Char[ nStrLen + 1 ]);
                     if (p)
                     {
-                        aIn.Read( p.get(), nStrLen );
+                        aIn.ReadBytes(p.get(), nStrLen);
                         p[ nStrLen ] = 0x00;
 
-                        DoFunc( ocNoName, nAnz, p.get() );
+                        DoFunc( ocNoName, nCnt, p.get() );
                     }
                     else
-                        DoFunc( ocNoName, nAnz, nullptr );
+                        DoFunc( ocNoName, nCnt, nullptr );
                 }
                 else
-                    DoFunc( ocNoName, nAnz, nullptr );
+                    DoFunc( ocNoName, nCnt, nullptr );
             }
                 break;
             case FT_Const10Float:
@@ -624,7 +636,7 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
                     else aStack << aPool.Store( ScfTools::ReadLongDouble( aIn ) );
                     break;
             case FT_Snum:
-                    if ( bWK123 )
+                if ( bWK123 )
                 {
                          sal_uInt32   nValue;
 
@@ -639,18 +651,18 @@ void LotusToSc::Convert( const ScTokenArray*& rpErg, sal_Int32& rRest )
                         aStack << aPool.Store( SnumToDouble( nVal ) );
                 }
                 break;
-                default:
-                OSL_FAIL( "*LotusToSc::Convert(): unknown enum!" );
+            default:
+                    SAL_WARN( "sc.filter", "*LotusToSc::Convert(): unknown enum!" );
         }
     }
 
-    rpErg = aPool[ aStack.Get() ];
+    rpErg = aPool.GetTokenArray( aStack.Get());
 
-    OSL_ENSURE( nBytesLeft >= 0, "*LotusToSc::Convert(): processed too much!");
-    OSL_ENSURE( nBytesLeft <= 0, "*LotusToSc::Convert(): what happens with the rest?" );
+    SAL_WARN_IF( nBytesLeft < 0, "sc.filter", "*LotusToSc::Convert(): processed too much!");
+    SAL_WARN_IF( nBytesLeft > 0, "sc.filter", "*LotusToSc::Convert(): what happens with the rest?" );
 
     if( rRest )
-        aIn.SeekRel( nBytesLeft );  // eventuellen Rest/Ueberlauf korrigieren
+        aIn.SeekRel( nBytesLeft );  // Correct any remainder/overflow
 
     rRest = 0;
 }
@@ -663,14 +675,14 @@ FUNC_TYPE LotusToSc::IndexToType( sal_uInt8 nIndex )
         FT_Variable,        //    1 Variable
         FT_Range,           //    2 Range
         FT_Return,          //    3 return
-        FT_Braces,          //    4 Bracket
-        FT_ConstInt,        //    5 2-Byte-Integer
-        FT_ConstString,     //    6 ASCII-String
+        FT_Braces,          //    4 Braces
+        FT_ConstInt,        //    5 2-Byte integer
+        FT_ConstString,     //    6 ASCII string
         FT_NOP,             //    7 NOP
         FT_Neg,             //    8 Negation
         FT_Op,              //    9 Addition
         FT_Op,              //   10 Subtraction
-        FT_Op,              //   11 Multiplikation
+        FT_Op,              //   11 Multiplication
         FT_Op,              //   12 Division
         FT_Op,              //   13 Power of
         FT_Op,              //   14 equal
@@ -696,15 +708,15 @@ FUNC_TYPE LotusToSc::IndexToType( sal_uInt8 nIndex )
         FT_FuncFix1,        //   34 Integer INT()
         FT_FuncFix1,        //   35 Square Root
         FT_FuncFix1,        //   36 Log10
-        FT_FuncFix1,        //   37 Natural Logarithmus
+        FT_FuncFix1,        //   37 Natural Logarithm
         FT_FuncFix0,        //   38 PI
         FT_FuncFix1,        //   39 Sine
         FT_FuncFix1,        //   40 Cosine
         FT_FuncFix1,        //   41 Tangens
-        FT_FuncFix2,        //   42 Arcus-Tangens 2 (4.Quadrant) <- TODO: correct?
-        FT_FuncFix1,        //   43 Arcus-Tangens (2.Quadrant)
-        FT_FuncFix1,        //   44 Arcus-Sinus
-        FT_FuncFix1,        //   45 Arcus-Cosinus
+        FT_FuncFix2,        //   42 Arctangens 2 (4.Quadrant) <- TODO: correct?
+        FT_FuncFix1,        //   43 Arctangens (2.Quadrant)
+        FT_FuncFix1,        //   44 Arcsine
+        FT_FuncFix1,        //   45 Arccosine
         FT_FuncFix1,        //   46 Exponential function
         FT_FuncFix2,        //   47 Modulo
         FT_FuncVar,         //   48 Selection
@@ -758,7 +770,7 @@ FUNC_TYPE LotusToSc::IndexToType( sal_uInt8 nIndex )
         FT_FuncFix3,        //   96 ?
         FT_FuncFix3,        //   97 ?
         FT_FuncFix3,        //   98 Index() <- TODO: correct?
-        FT_FuncFix1,        //   99 Cols()
+        FT_FuncFix1,        //   99 Columns()
         FT_FuncFix1,        //  100 Rows()
         FT_FuncFix2,        //  101 Repeat()
         FT_FuncFix1,        //  102 Upper()
@@ -771,7 +783,7 @@ FUNC_TYPE LotusToSc::IndexToType( sal_uInt8 nIndex )
         FT_FuncFix1,        //  109 Trim()
         FT_FuncFix1,        //  110 Clean()
         FT_FuncFix1,        //  111 F()
-        FT_FuncFix1,        //  112 Wert() (or W()?)
+        FT_FuncFix1,        //  112 W()
         FT_FuncFix2,        //  113 Exact()
         FT_NotImpl,         //  114 Call()
         FT_FuncFix1,        //  115 @@()
@@ -927,9 +939,9 @@ DefTokenId LotusToSc::IndexToToken( sal_uInt8 nIndex )
         ocPush,             //    1 Variable
         ocPush,             //    2 Range
         ocPush,             //    3 return
-        ocPush,             //    4 Bracket
-        ocPush,             //    5 2-Byte-Integer
-        ocPush,             //    6 ASCII-String
+        ocPush,             //    4 Braces
+        ocPush,             //    5 2-Byte integer
+        ocPush,             //    6 ASCII string
         ocPush,             //    7 NOP
         ocNegSub,           //    8 Negation
         ocAdd,              //    9 Addition
@@ -965,10 +977,10 @@ DefTokenId LotusToSc::IndexToToken( sal_uInt8 nIndex )
         ocSin,              //   39 Sine
         ocCos,              //   40 Cosine
         ocTan,              //   41 Tangens
-        ocArcTan2,          //   42 Arcus-Tangens 2 (4.Quadrant)
-        ocArcTan,           //   43 Arcus-Tangens (2.Quadrant)
-        ocArcSin,           //   44 Arcus-Sinus
-        ocArcCos,           //   45 Arcus-Cosinus
+        ocArcTan2,          //   42 Arctangens 2 (4.Quadrant)
+        ocArcTan,           //   43 Arctangens (2.Quadrant)
+        ocArcSin,           //   44 Arcsine
+        ocArcCos,           //   45 Arccosine
         ocExp,              //   46 Exponential function
         ocMod,              //   47 Modulo
         ocChoose,           //   48 Selection
@@ -1022,7 +1034,7 @@ DefTokenId LotusToSc::IndexToToken( sal_uInt8 nIndex )
         ocDBVarP,           //   96 XlfDvar
         ocDBStdDevP,        //   97 XlfDstdev
         ocIndex,            //   98 Index()
-        ocColumns,          //   99 Cols()
+        ocColumns,          //   99 Columns()
         ocRows,             //  100 Rows()
         ocRept,             //  101 Repeat()
         ocUpper,            //  102 Upper()
@@ -1192,11 +1204,11 @@ FUNC_TYPE LotusToSc::IndexToTypeWK123( sal_uInt8 nIndex )
         FT_Cref,            //    1 Cell Reference
         FT_Rref,            //    2 Area Reference
         FT_Return,          //    3 return
-        FT_Braces,          //    4 Bracket
-        FT_Snum,            //    5 Short-Number
-        FT_ConstString,     //    6 ASCII-String
+        FT_Braces,          //    4 Braces
+        FT_Snum,            //    5 Short number
+        FT_ConstString,     //    6 ASCII string
         FT_Nrref,           //    7 Named range reference
-        FT_Absnref,         //    8 Absolut named range
+        FT_Absnref,         //    8 Absolute named range
         FT_Erref,           //    9 Err range reference
         FT_Ecref,           //   10 Err cell reference
         FT_Econstant,       //   11 Err constant
@@ -1230,11 +1242,11 @@ FUNC_TYPE LotusToSc::IndexToTypeWK123( sal_uInt8 nIndex )
         FT_FuncFix1,        //   39 Sine
         FT_FuncFix1,        //   40 Cosine
         FT_FuncFix1,        //   41 Tangens
-        FT_FuncFix2,        //   42 Arcus-Tangens 2 (4.Quadrant)
-        FT_FuncFix1,        //   43 Arcus-Tangens (2.Quadrant)
-        FT_FuncFix1,        //   44 Arcus-Sinus
-        FT_FuncFix1,        //   45 Arcus-Cosinus
-        FT_FuncFix1,        //   46 Exponentialfunction
+        FT_FuncFix2,        //   42 Arctangens 2 (4.Quadrant)
+        FT_FuncFix1,        //   43 Arctangens (2.Quadrant)
+        FT_FuncFix1,        //   44 Arcsine
+        FT_FuncFix1,        //   45 Arccosine
+        FT_FuncFix1,        //   46 Exponential function
         FT_FuncFix2,        //   47 Modulo
         FT_FuncVar,         //   48 Selection
         FT_FuncFix1,        //   49 Is not applicable?
@@ -1249,7 +1261,7 @@ FUNC_TYPE LotusToSc::IndexToTypeWK123( sal_uInt8 nIndex )
         FT_FuncFix3,        //   58 Future Value
         FT_FuncFix3,        //   59 If ... then ... else ...
         FT_FuncFix1,        //   60 Day of Month
-        FT_FuncFix1,        //   61 Monat
+        FT_FuncFix1,        //   61 Month
         FT_FuncFix1,        //   62 Year
         FT_FuncFix2,        //   63 Round
         FT_FuncFix3,        //   64 Time
@@ -1287,7 +1299,7 @@ FUNC_TYPE LotusToSc::IndexToTypeWK123( sal_uInt8 nIndex )
         FT_FuncVar,         //   96 Dvar                 <- new
         FT_FuncVar,         //   97 Dstd                 <- new
         FT_FuncVar,         //   98 Index()              <- change!
-        FT_FuncFix1,        //   99 Cols()               <- new
+        FT_FuncFix1,        //   99 Columns()             <- new
         FT_FuncFix1,        //  100 Rows()               <- new
         FT_FuncFix2,        //  101 Repeat()             <- new
         FT_FuncFix1,        //  102 Upper()              <- new
@@ -1454,13 +1466,13 @@ DefTokenId LotusToSc::IndexToTokenWK123( sal_uInt8 nIndex )
     {                       // Code Description
         ocPush,             //    0 8-Byte-IEEE-Long-Numbers
         ocPush,             //    1 Variable
-        ocPush,             //    2 Bereich
+        ocPush,             //    2 Range
         ocPush,             //    3 return
-        ocPush,             //    4 Klammer
+        ocPush,             //    4 Braces
         ocPush,             //    5 Numbers
-        ocPush,             //    6 ASCII-String
+        ocPush,             //    6 ASCII string
         ocPush,             //    7 Named range reference
-        ocPush,             //    8 Absolut named range
+        ocPush,             //    8 Absolute named range
         ocPush,             //    9 Err range reference
         ocPush,             //   10 Err cell reference
         ocPush,             //   11 Err constant
@@ -1468,10 +1480,10 @@ DefTokenId LotusToSc::IndexToTokenWK123( sal_uInt8 nIndex )
         ocPush,             //   13
         ocNegSub,           //   14 Negation
         ocAdd,              //   15 Addition
-        ocSub,              //   16 Subtraktion
-        ocMul,              //   17 Multiplikation
+        ocSub,              //   16 Subtraction
+        ocMul,              //   17 Multiplication
         ocDiv,              //   18 Division
-        ocPow,              //   19 Potenzierung
+        ocPow,              //   19 Power of
         ocEqual,            //   20 Equality
         ocNotEqual,         //   21 Inequality
         ocLessEqual,        //   22 <=
@@ -1488,19 +1500,19 @@ DefTokenId LotusToSc::IndexToTokenWK123( sal_uInt8 nIndex )
         ocAbs,              //   33 Absolute Value ABS()
         ocInt,              //   34 Integer INT()
         ocSqrt,             //   35 Square Root
-        ocLog10,            //   36 Zehnerlogarithmus
-        ocLn,               //   37 Natuerlicher Logarithmus
+        ocLog10,            //   36 log10
+        ocLn,               //   37 Natural logarithm
         ocPi,               //   38 Pi
-        ocSin,              //   39 Sinus
-        ocCos,              //   40 Cosinus
+        ocSin,              //   39 Sine
+        ocCos,              //   40 Cosine
         ocTan,              //   41 Tangens
-        ocArcTan2,          //   42 Arcus-Tangens 2 (4.Quadrant)
-        ocArcTan,           //   43 Arcus-Tangens (2.Quadrant)
-        ocArcSin,           //   44 Arcus-Sinus
-        ocArcCos,           //   45 Arcus-Cosinus
-        ocExp,              //   46 Exponentialfunction
+        ocArcTan2,          //   42 Arctangens 2 (4.Quadrant)
+        ocArcTan,           //   43 Arctangens (2.Quadrant)
+        ocArcSin,           //   44 Arcsine
+        ocArcCos,           //   45 Arccosine
+        ocExp,              //   46 Exponential function
         ocMod,              //   47 Modulo
-        ocChoose,            //   48 Selection
+        ocChoose,           //   48 Selection
         ocIsNA,             //   49 Is not available?
         ocIsError,          //   50 Is Error?
         ocFalse,            //   51 FALSE
@@ -1524,7 +1536,7 @@ DefTokenId LotusToSc::IndexToTokenWK123( sal_uInt8 nIndex )
         ocIsString,         //   69 Is text?
         ocLen,              //   70 Len()
         ocValue,            //   71 Val()
-        ocFixed,            //   72 String()    ocFixed ersatzweise + Spezialfall
+        ocFixed,            //   72 String()    ocFixed alternatively + special case
         ocMid,              //   73 Mid()
         ocChar,             //   74 Char()
         ocCode,             //   75 Ascii()
@@ -1618,7 +1630,7 @@ DefTokenId LotusToSc::IndexToTokenWK123( sal_uInt8 nIndex )
         ocNoName,           //  163 Fv2
         ocNoName,           //  164 Term2
         ocNoName,           //  165--                  <- new quantity ?
-        ocGetDiffDate360,   //  166 D360 (US-Version, ersatzweise wie ander D360-function)
+        ocGetDiffDate360,   //  166 D360 (US-Version, alternatively as other D360 function)
         ocNoName,           //  167
         ocNoName,           //  168
         ocNoName,           //  169
@@ -1719,13 +1731,13 @@ const sal_Char* GetAddInName( const sal_uInt8 n )
     {
         nullptr,                       //    0 8-Byte-IEEE-Float
         nullptr,                       //    1 Variable
-        nullptr,                       //    2 Bereich
+        nullptr,                       //    2 Range
         nullptr,                       //    3 return
-        nullptr,                       //    4 Bracket
-        nullptr,                       //    5 2-Byte-Integer
-        nullptr,                       //    6 ASCII-String
+        nullptr,                       //    4 Braces
+        nullptr,                       //    5 2-Byte integer
+        nullptr,                       //    6 ASCII string
         nullptr,                       //    7 Named range reference
-        nullptr,                       //    8 Absolut named range
+        nullptr,                       //    8 Absolute named range
         nullptr,                       //    9 Err range reference
         nullptr,                       //   10 Err cell reference
         nullptr,                       //   11 Err constant
@@ -1733,10 +1745,10 @@ const sal_Char* GetAddInName( const sal_uInt8 n )
         nullptr,                       //   13
         nullptr,                       //   14 Negation
         nullptr,                       //   15 Addition
-        nullptr,                       //   16 Subtraktion
-        nullptr,                       //   17 Multiplikation
+        nullptr,                       //   16 Subtraction
+        nullptr,                       //   17 Multiplication
         nullptr,                       //   18 Division
-        nullptr,                       //   19 Potenzierung
+        nullptr,                       //   19 Power of
         nullptr,                       //   20 equal
         nullptr,                       //   21 unequal
         nullptr,                       //   22 <=
@@ -1753,19 +1765,19 @@ const sal_Char* GetAddInName( const sal_uInt8 n )
         nullptr,                       //   33 Absolute Value ABS()
         nullptr,                       //   34 Integer INT()
         nullptr,                       //   35 Square Root
-        nullptr,                       //   36 Zehnerlogarithmus
-        nullptr,                       //   37 Natuerlicher Logarithmus
+        nullptr,                       //   36 log10
+        nullptr,                       //   37 Natural logarithm
         nullptr,                       //   38 PI
-        nullptr,                       //   39 Sinus
-        nullptr,                       //   40 Cosinus
+        nullptr,                       //   39 Sine
+        nullptr,                       //   40 Cosine
         nullptr,                       //   41 Tangens
-        nullptr,                       //   42 Arcus-Tangens 2 (4.Quadrant)
-        nullptr,                       //   43 Arcus-Tangens (2.Quadrant)
-        nullptr,                       //   44 Arcus-Sinus
-        nullptr,                       //   45 Arcus-Cosinus
-        nullptr,                       //   46 Exponentialfunction
+        nullptr,                       //   42 Arctangens 2 (4.Quadrant)
+        nullptr,                       //   43 Arctangens (2.Quadrant)
+        nullptr,                       //   44 Arcsine
+        nullptr,                       //   45 Arccosine
+        nullptr,                       //   46 Exponential function
         nullptr,                       //   47 Modulo
-        nullptr,                       //   48 Auswahl
+        nullptr,                       //   48 Selection
         nullptr,                       //   49 Is not applicable?
         nullptr,                       //   50 Is Error?
         nullptr,                       //   51 FALSE
@@ -1778,7 +1790,7 @@ const sal_Char* GetAddInName( const sal_uInt8 n )
         nullptr,                       //   58 Future Value
         nullptr,                       //   59 If ... then ... else ...
         nullptr,                       //   60 Day of Month
-        nullptr,                       //   61 Monat
+        nullptr,                       //   61 Month
         nullptr,                       //   62 Year
         nullptr,                       //   63 Round
         nullptr,                       //   64 Time

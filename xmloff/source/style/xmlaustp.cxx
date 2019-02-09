@@ -18,7 +18,6 @@
  */
 
 #include <com/sun/star/container/XIndexReplace.hpp>
-#include <tools/debug.hxx>
 #include "impastpl.hxx"
 #include <xmloff/xmlaustp.hxx>
 #include <xmloff/families.hxx>
@@ -30,7 +29,8 @@
 
 #include <xmloff/PageMasterStyleMap.hxx>
 #include "PageMasterExportPropMapper.hxx"
-#include "XMLBackgroundImageExport.hxx"
+#include <XMLBackgroundImageExport.hxx>
+#include <osl/diagnose.h>
 
 
 using namespace ::std;
@@ -69,38 +69,32 @@ void SvXMLAutoStylePoolP::exportStyleAttributes(
 {
     if ( XML_STYLE_FAMILY_CONTROL_ID == nFamily )
     {   // it's a control-related style
-        rtl::Reference< XMLPropertySetMapper > aPropertyMapper = rPropExp.getPropertySetMapper();
+        const rtl::Reference< XMLPropertySetMapper >& aPropertyMapper = rPropExp.getPropertySetMapper();
 
-        for (   vector< XMLPropertyState >::const_iterator pProp = rProperties.begin();
-                pProp != rProperties.end();
-                ++pProp
-            )
+        for (const auto& rProp : rProperties)
         {
-            if  (   ( pProp->mnIndex > -1 )
-                &&  ( CTF_FORMS_DATA_STYLE == aPropertyMapper->GetEntryContextId( pProp->mnIndex ) )
+            if  (   ( rProp.mnIndex > -1 )
+                &&  ( CTF_FORMS_DATA_STYLE == aPropertyMapper->GetEntryContextId( rProp.mnIndex ) )
                 )
             {   // it's the data-style for a grid column
-                lcl_exportDataStyle( GetExport(), aPropertyMapper, *pProp );
+                lcl_exportDataStyle( GetExport(), aPropertyMapper, rProp );
             }
         }
     }
 
     if( (XML_STYLE_FAMILY_SD_GRAPHICS_ID == nFamily) || (XML_STYLE_FAMILY_SD_PRESENTATION_ID == nFamily) )
     {   // it's a graphics style
-        rtl::Reference< XMLPropertySetMapper > aPropertyMapper = rPropExp.getPropertySetMapper();
+        const rtl::Reference< XMLPropertySetMapper >& aPropertyMapper = rPropExp.getPropertySetMapper();
         assert(aPropertyMapper.is());
 
         bool bFoundControlShapeDataStyle = false;
         bool bFoundNumberingRulesName = false;
 
-        for (   vector< XMLPropertyState >::const_iterator pProp = rProperties.begin();
-                pProp != rProperties.end();
-                ++pProp
-            )
+        for (const auto& rProp : rProperties)
         {
-            if (pProp->mnIndex > -1)
+            if (rProp.mnIndex > -1)
             {   // it's a valid property
-                switch( aPropertyMapper->GetEntryContextId(pProp->mnIndex) )
+                switch( aPropertyMapper->GetEntryContextId(rProp.mnIndex) )
                 {
                 case CTF_SD_CONTROL_SHAPE_DATA_STYLE:
                     {   // it's the control shape data style property
@@ -112,7 +106,7 @@ void SvXMLAutoStylePoolP::exportStyleAttributes(
                             break;
                         }
 
-                        lcl_exportDataStyle( GetExport(), aPropertyMapper, *pProp );
+                        lcl_exportDataStyle( GetExport(), aPropertyMapper, rProp );
 
                         // check if there is another property with the special context id we're handling here
                         bFoundControlShapeDataStyle = true;
@@ -128,7 +122,7 @@ void SvXMLAutoStylePoolP::exportStyleAttributes(
                         }
 
                         uno::Reference< container::XIndexReplace > xNumRule;
-                        pProp->maValue >>= xNumRule;
+                        rProp.maValue >>= xNumRule;
                         if( xNumRule.is() && (xNumRule->getCount() > 0 ) )
                         {
                             const OUString sName(const_cast<XMLTextListAutoStylePool*>(&GetExport().GetTextParagraphExport()->GetListAutoStylePool())->Add( xNumRule ));
@@ -146,12 +140,12 @@ void SvXMLAutoStylePoolP::exportStyleAttributes(
 
     if( nFamily == XML_STYLE_FAMILY_PAGE_MASTER )
     {
-        for( vector< XMLPropertyState >::const_iterator pProp = rProperties.begin(); pProp != rProperties.end(); ++pProp )
+        for( const auto& rProp : rProperties )
         {
-            if (pProp->mnIndex > -1)
+            if (rProp.mnIndex > -1)
             {
-                rtl::Reference< XMLPropertySetMapper > aPropMapper = rPropExp.getPropertySetMapper();
-                sal_Int32 nIndex = pProp->mnIndex;
+                const rtl::Reference< XMLPropertySetMapper >& aPropMapper = rPropExp.getPropertySetMapper();
+                sal_Int32 nIndex = rProp.mnIndex;
                 sal_Int16 nContextID = aPropMapper->GetEntryContextId( nIndex );
                 switch( nContextID )
                 {
@@ -160,7 +154,7 @@ void SvXMLAutoStylePoolP::exportStyleAttributes(
                         OUString sValue;
                         const XMLPropertyHandler* pPropHdl = aPropMapper->GetPropertyHandler( nIndex );
                         if( pPropHdl &&
-                            pPropHdl->exportXML( sValue, pProp->maValue,
+                            pPropHdl->exportXML( sValue, rProp.maValue,
                                                  GetExport().GetMM100UnitConverter() ) &&
                             ( ! IsXMLToken( sValue, XML_ALL ) ) )
                         {
@@ -183,82 +177,83 @@ void SvXMLAutoStylePoolP::exportStyleContent(
         const SvXMLNamespaceMap&
         ) const
 {
-    if( nFamily == XML_STYLE_FAMILY_PAGE_MASTER )
+    if( nFamily != XML_STYLE_FAMILY_PAGE_MASTER )
+        return;
+
+    sal_Int32       nHeaderStartIndex(-1);
+    sal_Int32       nHeaderEndIndex(-1);
+    sal_Int32       nFooterStartIndex(-1);
+    sal_Int32       nFooterEndIndex(-1);
+    bool        bHeaderStartIndex(false);
+    bool        bHeaderEndIndex(false);
+    bool        bFooterStartIndex(false);
+    bool        bFooterEndIndex(false);
+
+    const rtl::Reference< XMLPropertySetMapper >& aPropMapper = rPropExp.getPropertySetMapper();
+
+    sal_Int32 nIndex(0);
+    while(nIndex < aPropMapper->GetEntryCount())
     {
-        sal_Int32       nHeaderStartIndex(-1);
-        sal_Int32       nHeaderEndIndex(-1);
-        sal_Int32       nFooterStartIndex(-1);
-        sal_Int32       nFooterEndIndex(-1);
-        bool        bHeaderStartIndex(false);
-        bool        bHeaderEndIndex(false);
-        bool        bFooterStartIndex(false);
-        bool        bFooterEndIndex(false);
-
-        rtl::Reference< XMLPropertySetMapper > aPropMapper = rPropExp.getPropertySetMapper();
-
-        sal_Int32 nIndex(0);
-        while(nIndex < aPropMapper->GetEntryCount())
+        switch( aPropMapper->GetEntryContextId( nIndex ) & CTF_PM_FLAGMASK )
         {
-            switch( aPropMapper->GetEntryContextId( nIndex ) & CTF_PM_FLAGMASK )
+            case CTF_PM_HEADERFLAG:
             {
-                case CTF_PM_HEADERFLAG:
+                if (!bHeaderStartIndex)
                 {
-                    if (!bHeaderStartIndex)
-                    {
-                        nHeaderStartIndex = nIndex;
-                        bHeaderStartIndex = true;
-                    }
-                    if (bFooterStartIndex && !bFooterEndIndex)
-                    {
-                        nFooterEndIndex = nIndex;
-                        bFooterEndIndex = true;
-                    }
+                    nHeaderStartIndex = nIndex;
+                    bHeaderStartIndex = true;
                 }
-                break;
-                case CTF_PM_FOOTERFLAG:
+                if (bFooterStartIndex && !bFooterEndIndex)
                 {
-                    if (!bFooterStartIndex)
-                    {
-                        nFooterStartIndex = nIndex;
-                        bFooterStartIndex = true;
-                    }
-                    if (bHeaderStartIndex && !bHeaderEndIndex)
-                    {
-                        nHeaderEndIndex = nIndex;
-                        bHeaderEndIndex = true;
-                    }
+                    nFooterEndIndex = nIndex;
+                    bFooterEndIndex = true;
                 }
-                break;
             }
-            nIndex++;
+            break;
+            case CTF_PM_FOOTERFLAG:
+            {
+                if (!bFooterStartIndex)
+                {
+                    nFooterStartIndex = nIndex;
+                    bFooterStartIndex = true;
+                }
+                if (bHeaderStartIndex && !bHeaderEndIndex)
+                {
+                    nHeaderEndIndex = nIndex;
+                    bHeaderEndIndex = true;
+                }
+            }
+            break;
         }
-        if (!bHeaderEndIndex)
-            nHeaderEndIndex = nIndex;
-        if (!bFooterEndIndex)
-            nFooterEndIndex = nIndex;
-
-        // export header style element
-        {
-            SvXMLElementExport aElem(
-                GetExport(), XML_NAMESPACE_STYLE, XML_HEADER_STYLE,
-                true, true );
-
-            rPropExp.exportXML(
-                GetExport(), rProperties,
-                nHeaderStartIndex, nHeaderEndIndex, SvXmlExportFlags::IGN_WS);
-        }
-
-        // export footer style
-        {
-            SvXMLElementExport aElem(
-                GetExport(), XML_NAMESPACE_STYLE, XML_FOOTER_STYLE,
-                true, true );
-
-            rPropExp.exportXML(
-                GetExport(), rProperties,
-                nFooterStartIndex, nFooterEndIndex, SvXmlExportFlags::IGN_WS);
-        }
+        nIndex++;
     }
+    if (!bHeaderEndIndex)
+        nHeaderEndIndex = nIndex;
+    if (!bFooterEndIndex)
+        nFooterEndIndex = nIndex;
+
+    // export header style element
+    {
+        SvXMLElementExport aElem(
+            GetExport(), XML_NAMESPACE_STYLE, XML_HEADER_STYLE,
+            true, true );
+
+        rPropExp.exportXML(
+            GetExport(), rProperties,
+            nHeaderStartIndex, nHeaderEndIndex, SvXmlExportFlags::IGN_WS);
+    }
+
+    // export footer style
+    {
+        SvXMLElementExport aElem(
+            GetExport(), XML_NAMESPACE_STYLE, XML_FOOTER_STYLE,
+            true, true );
+
+        rPropExp.exportXML(
+            GetExport(), rProperties,
+            nFooterStartIndex, nFooterEndIndex, SvXmlExportFlags::IGN_WS);
+    }
+
 }
 
 SvXMLAutoStylePoolP::SvXMLAutoStylePoolP( SvXMLExport& rExport )
@@ -309,6 +304,12 @@ void SvXMLAutoStylePoolP::RegisterName( sal_Int32 nFamily,
     pImpl->RegisterName( nFamily, rName );
 }
 
+void SvXMLAutoStylePoolP::RegisterDefinedName( sal_Int32 nFamily,
+                                         const OUString& rName )
+{
+    pImpl->RegisterDefinedName( nFamily, rName );
+}
+
 void SvXMLAutoStylePoolP::GetRegisteredNames(
     uno::Sequence<sal_Int32>& rFamilies,
     uno::Sequence<OUString>& rNames )
@@ -317,8 +318,8 @@ void SvXMLAutoStylePoolP::GetRegisteredNames(
 }
 
 void SvXMLAutoStylePoolP::RegisterNames(
-    uno::Sequence<sal_Int32>& aFamilies,
-    uno::Sequence<OUString>& aNames )
+    uno::Sequence<sal_Int32> const & aFamilies,
+    uno::Sequence<OUString> const & aNames )
 {
     assert(aFamilies.getLength() == aNames.getLength());
 
@@ -366,22 +367,19 @@ OUString SvXMLAutoStylePoolP::Find( sal_Int32 nFamily,
     return pImpl->Find( nFamily, rParent, rProperties );
 }
 
-void SvXMLAutoStylePoolP::exportXML( sal_Int32 nFamily,
-    const uno::Reference< css::xml::sax::XDocumentHandler > &,
-    const SvXMLUnitConverter&,
-    const SvXMLNamespaceMap&
-    ) const
+void SvXMLAutoStylePoolP::exportXML( sal_Int32 nFamily ) const
 {
-    pImpl->exportXML( nFamily,
-                      GetExport().GetDocHandler(),
-                      GetExport().GetMM100UnitConverter(),
-                      GetExport().GetNamespaceMap(),
-                      this);
+    pImpl->exportXML( nFamily, this );
 }
 
 void SvXMLAutoStylePoolP::ClearEntries()
 {
     pImpl->ClearEntries();
+}
+
+std::vector<xmloff::AutoStyleEntry> SvXMLAutoStylePoolP::GetAutoStyleEntries() const
+{
+    return pImpl->GetAutoStyleEntries();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

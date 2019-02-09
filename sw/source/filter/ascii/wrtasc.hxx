@@ -30,13 +30,13 @@ class SwASCWriter : public Writer
 {
     OUString m_sLineEnd;
 
-    virtual sal_uLong WriteStream() override;
+    virtual ErrCode WriteStream() override;
 
 public:
     SwASCWriter( const OUString& rFilterName );
-    virtual ~SwASCWriter();
+    virtual ~SwASCWriter() override;
 
-    OUString GetLineEnd() const { return m_sLineEnd; }
+    const OUString& GetLineEnd() const { return m_sLineEnd; }
 };
 
 #endif  //  _ INCLUDED_SW_SOURCE_FILTER_ASCII_WRTASC_HXX

@@ -17,24 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "drawingml/transform2dcontext.hxx"
-#include "oox/helper/attributelist.hxx"
-#include "oox/drawingml/shape.hxx"
-#include "drawingml/customshapeproperties.hxx"
-#include "drawingml/textbody.hxx"
+#include <drawingml/transform2dcontext.hxx>
+#include <oox/helper/attributelist.hxx>
+#include <oox/drawingml/shape.hxx>
+#include <drawingml/customshapeproperties.hxx>
+#include <drawingml/textbody.hxx>
+#include <oox/token/namespaces.hxx>
 
 using namespace ::com::sun::star;
-using ::com::sun::star::uno::RuntimeException;
-using ::com::sun::star::xml::sax::SAXException;
-using ::com::sun::star::xml::sax::XFastAttributeList;
-using ::com::sun::star::xml::sax::XFastContextHandler;
 using ::oox::core::ContextHandlerRef;
 
 namespace oox {
 namespace drawingml {
 
 /** context to import a CT_Transform2D */
-Transform2DContext::Transform2DContext( ContextHandler2Helper& rParent, const AttributeList& rAttribs, Shape& rShape, bool btxXfrm ) throw()
+Transform2DContext::Transform2DContext( ContextHandler2Helper const & rParent, const AttributeList& rAttribs, Shape& rShape, bool btxXfrm ) throw()
 : ContextHandler2( rParent )
 , mrShape( rShape )
 , mbtxXfrm ( btxXfrm )

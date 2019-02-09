@@ -18,14 +18,14 @@
  */
 
 #include "zipexcptn.hxx"
-#include "zipfile.hxx"
-#include "global.hxx"
-#include "types.hxx"
-#include "stream_helper.hxx"
+#include <zipfile.hxx>
+#include <global.hxx>
+#include <types.hxx>
+#include <stream_helper.hxx>
 
 #include <malloc.h>
 #include <algorithm>
-#include <functional>
+#include <memory>
 
 #include <string.h>
 
@@ -50,7 +50,6 @@ struct LocalFileHeader
         : min_version(0), general_flag(0), compression(0), lastmod_time(0), lastmod_date(0),
           crc32(0), compressed_size(0), uncompressed_size(0), filename_size(0), extra_field_size(0),
           filename(), extra_field() {}
-    ~LocalFileHeader() {}
 };
 
 struct CentralDirectoryEntry
@@ -79,7 +78,6 @@ struct CentralDirectoryEntry
           lastmod_date(0), crc32(0), compressed_size(0), uncompressed_size(0), filename_size(0),
           extra_field_size(0), file_comment_size(0), disk_num(0), internal_attr(0),
           external_attr(0), offset(0), filename(), extra_field(), file_comment() {}
-    ~CentralDirectoryEntry() {}
 };
 
 struct CentralDirectoryEnd
@@ -95,7 +93,6 @@ struct CentralDirectoryEnd
     CentralDirectoryEnd()
         : disk_num(0), cdir_disk(0), disk_entries(0), cdir_entries(0),
           cdir_size(0), cdir_offset(0), comment_size(0), comment() {}
-    ~CentralDirectoryEnd() {}
 };
 
 #define CDIR_ENTRY_SIG 0x02014b50
@@ -105,7 +102,7 @@ struct CentralDirectoryEnd
 // This little lot performs in a truly appalling way without
 // buffering eg. on an IStream.
 
-static unsigned short readShort(StreamInterface *stream)
+unsigned short readShort(StreamInterface *stream)
 {
     if (!stream || stream->stell() == -1)
         throw IOException(-1);
@@ -117,7 +114,7 @@ static unsigned short readShort(StreamInterface *stream)
     return tmpBuf;
 }
 
-static unsigned readInt(StreamInterface *stream)
+unsigned readInt(StreamInterface *stream)
 {
     if (!stream || stream->stell() == -1)
         throw IOException(-1);
@@ -129,24 +126,22 @@ static unsigned readInt(StreamInterface *stream)
     return tmpBuf;
 }
 
-static std::string readString(StreamInterface *stream, unsigned long size)
+std::string readString(StreamInterface *stream, unsigned long size)
 {
     if (!stream || stream->stell() == -1)
         throw IOException(-1);
-    unsigned char *tmp = new unsigned char[size];
-    unsigned long numBytesRead = stream->sread(tmp, size);
+    auto tmp = std::unique_ptr<unsigned char[]>(new unsigned char[size]);
+    unsigned long numBytesRead = stream->sread(tmp.get(), size);
     if (numBytesRead != size)
     {
-        delete [] tmp;
         throw IOException(-1);
     }
 
-    std::string aStr((char *)tmp, size);
-    delete [] tmp;
+    std::string aStr(reinterpret_cast<char *>(tmp.get()), size);
     return aStr;
 }
 
-static bool readCentralDirectoryEnd(StreamInterface *stream, CentralDirectoryEnd &end)
+bool readCentralDirectoryEnd(StreamInterface *stream, CentralDirectoryEnd &end)
 {
     try
     {
@@ -170,7 +165,7 @@ static bool readCentralDirectoryEnd(StreamInterface *stream, CentralDirectoryEnd
     return true;
 }
 
-static bool readCentralDirectoryEntry(StreamInterface *stream, CentralDirectoryEntry &entry)
+bool readCentralDirectoryEntry(StreamInterface *stream, CentralDirectoryEntry &entry)
 {
     try
     {
@@ -205,7 +200,7 @@ static bool readCentralDirectoryEntry(StreamInterface *stream, CentralDirectoryE
     return true;
 }
 
-static bool readLocalFileHeader(StreamInterface *stream, LocalFileHeader &header)
+bool readLocalFileHeader(StreamInterface *stream, LocalFileHeader &header)
 {
     try
     {
@@ -233,7 +228,7 @@ static bool readLocalFileHeader(StreamInterface *stream, LocalFileHeader &header
     return true;
 }
 
-static bool areHeadersConsistent(const LocalFileHeader &header, const CentralDirectoryEntry &entry)
+bool areHeadersConsistent(const LocalFileHeader &header, const CentralDirectoryEntry &entry)
 {
     if (header.min_version != entry.min_version)
         return false;
@@ -255,7 +250,7 @@ static bool areHeadersConsistent(const LocalFileHeader &header, const CentralDir
 
 #define BLOCK_SIZE 0x800
 
-static bool findSignatureAtOffset(StreamInterface *stream, unsigned long nOffset)
+bool findSignatureAtOffset(StreamInterface *stream, unsigned long nOffset)
 {
     // read in reasonably sized chunk, and read more, to get overlapping sigs
     unsigned char aBuffer[ BLOCK_SIZE + 4 ];
@@ -277,7 +272,7 @@ static bool findSignatureAtOffset(StreamInterface *stream, unsigned long nOffset
     return false;
 }
 
-static bool findCentralDirectoryEnd(StreamInterface *stream)
+bool findCentralDirectoryEnd(StreamInterface *stream)
 {
     if (!stream)
         return false;
@@ -304,7 +299,7 @@ static bool findCentralDirectoryEnd(StreamInterface *stream)
     }
 }
 
-static bool isZipStream(StreamInterface *stream)
+bool isZipStream(StreamInterface *stream)
 {
     if (!findCentralDirectoryEnd(stream))
         return false;
@@ -329,7 +324,7 @@ static bool isZipStream(StreamInterface *stream)
 namespace internal
 {
 /* for case in-sensitive string comparison */
-struct stricmp : public std::unary_function<std::string, bool>
+struct stricmp
 {
     explicit stricmp(const std::string &str) : str_(str)
     {}
@@ -356,7 +351,7 @@ struct stricmp : public std::unary_function<std::string, bool>
             IOException if the specified file doesn't exist
             AccessViolationException if read access to the file is denied
 */
-bool ZipFile::IsZipFile(const std::string& /*FileName*/)
+bool ZipFile::IsZipFile(const std::wstring& /*FileName*/)
 {
     return true;
 }
@@ -382,7 +377,7 @@ bool ZipFile::IsZipFile(void* /*stream*/)
             IOException if the specified file doesn't exist or is no zip file
             AccessViolationException if read access to the file is denied
 */
-bool ZipFile::IsValidZipFileVersionNumber(const std::string& /*FileName*/)
+bool ZipFile::IsValidZipFileVersionNumber(const std::wstring& /*FileName*/)
 {
     return true;
 }
@@ -405,15 +400,15 @@ bool ZipFile::IsValidZipFileVersionNumber(void* /* stream*/)
             WrongZipVersionException if the zip file cannot be uncompressed
             with the used zlib version
 */
-ZipFile::ZipFile(const std::string &FileName) :
-    m_pStream(0),
+ZipFile::ZipFile(const std::wstring &FileName) :
+    m_pStream(nullptr),
     m_bShouldFree(true)
 {
     m_pStream = new FileStream(FileName.c_str());
-    if (m_pStream && !isZipStream(m_pStream))
+    if (!isZipStream(m_pStream))
     {
         delete m_pStream;
-        m_pStream = 0;
+        m_pStream = nullptr;
     }
 }
 
@@ -422,7 +417,7 @@ ZipFile::ZipFile(StreamInterface *stream) :
     m_bShouldFree(false)
 {
     if (!isZipStream(stream))
-        m_pStream = 0;
+        m_pStream = nullptr;
 }
 
 
@@ -449,7 +444,7 @@ void ZipFile::GetUncompressedContent(
         return;
     m_pStream->sseek(end.cdir_offset, SEEK_SET);
     CentralDirectoryEntry entry;
-    while (m_pStream->stell() != -1 && (unsigned long)m_pStream->stell() < end.cdir_offset + end.cdir_size)
+    while (m_pStream->stell() != -1 && static_cast<unsigned long>(m_pStream->stell()) < end.cdir_offset + end.cdir_size)
     {
         if (!readCentralDirectoryEntry(m_pStream, entry))
             return;
@@ -469,7 +464,7 @@ void ZipFile::GetUncompressedContent(
     ContentBuffer.clear();
     ContentBuffer = ZipContentBuffer_t(entry.uncompressed_size);
     if (!entry.compression)
-        m_pStream->sread((unsigned char *)&ContentBuffer[0], entry.uncompressed_size);
+        m_pStream->sread(reinterpret_cast<unsigned char *>(&ContentBuffer[0]), entry.uncompressed_size);
     else
     {
         int ret;
@@ -521,7 +516,7 @@ ZipFile::DirectoryPtr_t ZipFile::GetDirectory() const
         return dir;
     m_pStream->sseek(end.cdir_offset, SEEK_SET);
     CentralDirectoryEntry entry;
-    while (m_pStream->stell() != -1 && (unsigned long)m_pStream->stell() < end.cdir_offset + end.cdir_size)
+    while (m_pStream->stell() != -1 && static_cast<unsigned long>(m_pStream->stell()) < end.cdir_offset + end.cdir_size)
     {
         if (!readCentralDirectoryEntry(m_pStream, entry))
             return dir;
@@ -540,10 +535,8 @@ bool ZipFile::HasContent(const std::string &ContentName) const
     //case in-sensitive as it is not defined that such
     //names must be handled case sensitive
     DirectoryPtr_t dir = GetDirectory();
-    Directory_t::iterator iter =
-        std::find_if(dir->begin(), dir->end(), internal::stricmp(ContentName));
 
-    return (iter != dir->end());
+    return std::any_of(dir->begin(), dir->end(), internal::stricmp(ContentName));
 }
 
 
@@ -560,7 +553,7 @@ long ZipFile::GetFileLongestFileNameLength() const
         return lmax;
     m_pStream->sseek(end.cdir_offset, SEEK_SET);
     CentralDirectoryEntry entry;
-    while (m_pStream->stell() != -1 && (unsigned long)m_pStream->stell() < end.cdir_offset + end.cdir_size)
+    while (m_pStream->stell() != -1 && static_cast<unsigned long>(m_pStream->stell()) < end.cdir_offset + end.cdir_size)
     {
         if (!readCentralDirectoryEntry(m_pStream, entry))
             return lmax;

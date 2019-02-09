@@ -13,15 +13,12 @@
 #include <rtl/strbuf.hxx>
 #include <osl/file.hxx>
 
-#include <com/sun/star/frame/XDesktop.hpp>
-
 #include <com/sun/star/lang/XComponent.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/SearchOptions2.hpp>
 #include <com/sun/star/util/SearchAlgorithms2.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
-#include <com/sun/star/frame/XComponentLoader.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/document/MacroExecMode.hpp>
 #include <com/sun/star/document/XEmbeddedScripts.hpp>
@@ -39,12 +36,14 @@
 #include <com/sun/star/awt/XControlModel.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 
+#include <i18nutil/searchopt.hxx>
 #include <sfx2/app.hxx>
 #include <sfx2/docfilt.hxx>
 #include <sfx2/docfile.hxx>
 #include <sfx2/sfxmodelfactory.hxx>
 #include <svl/intitem.hxx>
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <comphelper/scopeguard.hxx>
 
 #include <basic/sbxdef.hxx>
@@ -54,9 +53,10 @@
 #include <ndtxt.hxx>
 #include <doc.hxx>
 #include <IDocumentLayoutAccess.hxx>
+#include <IDocumentMarkAccess.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentContentOperations.hxx>
-#include "docsh.hxx"
+#include <docsh.hxx>
 #include <unotxdoc.hxx>
 
 typedef tools::SvRef<SwDocShell> SwDocShellRef;
@@ -160,11 +160,10 @@ void SwMacrosTest::testVba()
             OUString("vnd.sun.Star.script:Project.NewMacros.Macro1?language=Basic&location=document")
         }
     };
-    OUString aFileExtension( "doc" );
-    for ( sal_uInt32  i=0; i<SAL_N_ELEMENTS( testInfo ); ++i )
+    for ( size_t  i=0; i<SAL_N_ELEMENTS( testInfo ); ++i )
     {
         OUString aFileName;
-        createFileURL(testInfo[i].sFileBaseName, aFileExtension, aFileName);
+        createFileURL(testInfo[i].sFileBaseName, "doc", aFileName);
         uno::Reference< css::lang::XComponent > xComponent = loadFromDesktop(aFileName, "com.sun.star.text.TextDocument");
         OUStringBuffer sMsg( "Failed to load " );
         sMsg.append ( aFileName );
@@ -182,7 +181,7 @@ void SwMacrosTest::testVba()
         SfxObjectShell::CallXScript(xComponent, sUrl, aParams, aRet, aOutParamIndex,aOutParam);
         OUString aStringRes;
         aRet >>= aStringRes;
-        std::cout << "value of Ret " << OUStringToOString( aStringRes, RTL_TEXTENCODING_UTF8 ).getStr() << std::endl;
+        std::cout << "value of Ret " << aStringRes << std::endl;
         //CPPUNIT_ASSERT_MESSAGE( "script reported failure",aStringRes == "OK" );
         pFoundShell->DoClose();
     }
@@ -202,29 +201,30 @@ void SwMacrosTest::testBookmarkDeleteAndJoin()
     rIDCO.AppendTextNode(*aPaM.GetPoint());
     rIDCO.InsertString(aPaM, "A");
     rIDCO.AppendTextNode(*aPaM.GetPoint());
-    aPaM.Move(fnMoveBackward, fnGoNode);
-    aPaM.Move(fnMoveBackward, fnGoNode);
-    aPaM.Move(fnMoveBackward, fnGoContent);
+    aPaM.Move(fnMoveBackward, GoInNode);
+    aPaM.Move(fnMoveBackward, GoInNode);
+    aPaM.Move(fnMoveBackward, GoInContent);
     aPaM.SetMark();
-    aPaM.Move(fnMoveForward, fnGoDoc);
+    aPaM.Move(fnMoveForward, GoInDoc);
     IDocumentMarkAccess & rIDMA = *pDoc->getIDocumentMarkAccess();
     sw::mark::IMark *pMark =
-            rIDMA.makeMark(aPaM, "test", IDocumentMarkAccess::MarkType::BOOKMARK);
+        rIDMA.makeMark(aPaM, "test", IDocumentMarkAccess::MarkType::BOOKMARK,
+            ::sw::mark::InsertMode::New);
     CPPUNIT_ASSERT(pMark);
     // select so pMark start position is on a node that is fully deleted
-    aPaM.Move(fnMoveBackward, fnGoNode);
+    aPaM.Move(fnMoveBackward, GoInNode);
     // must leave un-selected content in last node to get the bJoinPrev flag!
-    aPaM.Move(fnMoveBackward, fnGoContent);
+    aPaM.Move(fnMoveBackward, GoInContent);
     aPaM.Exchange();
-    aPaM.Move(fnMoveBackward, fnGoDoc);
+    aPaM.Move(fnMoveBackward, GoInDoc);
     // delete
     rIDCO.DeleteAndJoin(aPaM);
 
     for (IDocumentMarkAccess::const_iterator_t i = rIDMA.getAllMarksBegin(); i != rIDMA.getAllMarksEnd(); ++i)
     {
         // problem was that the nContent was pointing at deleted node
-        CPPUNIT_ASSERT((*i)->GetMarkStart().nNode.GetNode().GetContentNode() ==
-            static_cast<const SwContentNode*>((*i)->GetMarkStart().nContent.GetIdxReg()));
+        CPPUNIT_ASSERT_EQUAL(static_cast<const SwContentNode*>((*i)->GetMarkStart().nContent.GetIdxReg()),
+            static_cast<const SwContentNode*>((*i)->GetMarkStart().nNode.GetNode().GetContentNode()));
     }
 }
 
@@ -238,12 +238,13 @@ void SwMacrosTest::testBookmarkDeleteTdf90816()
     IDocumentContentOperations & rIDCO(pDoc->getIDocumentContentOperations());
     rIDCO.AppendTextNode(*aPaM.GetPoint());
     rIDCO.InsertString(aPaM, "ABC");
-    aPaM.Move(fnMoveBackward, fnGoContent);
+    aPaM.Move(fnMoveBackward, GoInContent);
     aPaM.SetMark();
-    aPaM.Move(fnMoveBackward, fnGoContent);
+    aPaM.Move(fnMoveBackward, GoInContent);
     IDocumentMarkAccess & rIDMA = *pDoc->getIDocumentMarkAccess();
     sw::mark::IMark *pMark =
-        rIDMA.makeMark(aPaM, "test", IDocumentMarkAccess::MarkType::BOOKMARK);
+        rIDMA.makeMark(aPaM, "test", IDocumentMarkAccess::MarkType::BOOKMARK,
+            ::sw::mark::InsertMode::New);
     CPPUNIT_ASSERT(pMark);
 
     // delete the same selection as the bookmark
@@ -253,8 +254,8 @@ void SwMacrosTest::testBookmarkDeleteTdf90816()
     auto iter = rIDMA.getAllMarksBegin();
     CPPUNIT_ASSERT_MESSAGE("the bookmark was deleted",
             iter != rIDMA.getAllMarksEnd());
-    CPPUNIT_ASSERT(*aPaM.Start() == (*iter)->GetMarkPos());
-    CPPUNIT_ASSERT(*aPaM.End() == (*iter)->GetOtherMarkPos());
+    CPPUNIT_ASSERT_EQUAL((*iter)->GetMarkPos(), *aPaM.Start());
+    CPPUNIT_ASSERT_EQUAL((*iter)->GetOtherMarkPos(), *aPaM.End());
 }
 
 #if 0
@@ -405,13 +406,12 @@ void SwMacrosTest::testFdo68983()
     CPPUNIT_ASSERT_MESSAGE("Failed to load fdo68983.odt", xComponent.is());
 
     Reference< frame::XStorable > xDocStorable(xComponent, UNO_QUERY_THROW);
-    CPPUNIT_ASSERT(xDocStorable.is());
 
     utl::TempFile aTempFile;
     aTempFile.EnableKillingFile();
-    Sequence<beans::PropertyValue> desc(1);
-    desc[0].Name = "FilterName";
-    desc[0].Value <<= OUString("writer8");
+    Sequence<beans::PropertyValue> desc( comphelper::InitPropertySequence({
+            { "FilterName", Any(OUString("writer8")) }
+        }));
     xDocStorable->storeAsURL(aTempFile.GetURL(), desc);
 
     Reference<util::XCloseable>(xComponent, UNO_QUERY_THROW)->close(false);
@@ -442,9 +442,9 @@ void SwMacrosTest::testFdo87530()
     utl::TempFile aTempFile;
     aTempFile.EnableKillingFile();
 
-    Sequence<beans::PropertyValue> desc(1);
-    desc[0].Name = "FilterName";
-    desc[0].Value <<= OUString("writer8");
+    Sequence<beans::PropertyValue> desc( comphelper::InitPropertySequence({
+            { "FilterName", Any(OUString("writer8")) }
+        }));
 
     {
         // insert initial password protected library
@@ -458,8 +458,6 @@ void SwMacrosTest::testFdo87530()
         xBasLibPwd->changeLibraryPassword("BarLibrary", "", "foo");
 
         Reference<frame::XStorable> xDocStorable(xComponent, UNO_QUERY_THROW);
-        CPPUNIT_ASSERT(xDocStorable.is());
-
         xDocStorable->storeAsURL(aTempFile.GetURL(), desc);
     }
 
@@ -480,7 +478,7 @@ void SwMacrosTest::testFdo87530()
         CPPUNIT_ASSERT(xBasLib->isLibraryLoaded("BarLibrary"));
         Reference<container::XNameContainer> xLibrary(xBasLib->getByName("BarLibrary"), UNO_QUERY);
         Any module(xLibrary->getByName("BarModule"));
-        CPPUNIT_ASSERT_EQUAL(module.get<OUString>(), OUString("Sub Main\nEnd Sub\n"));
+        CPPUNIT_ASSERT_EQUAL(OUString("Sub Main\nEnd Sub\n"), module.get<OUString>());
 
         // add a second module now - tdf#87530 happened here
         Reference<container::XNameContainer> xFooLib(xBasLib->createLibrary("FooLibrary"));
@@ -490,8 +488,6 @@ void SwMacrosTest::testFdo87530()
 
         // store again
         Reference<frame::XStorable> xDocStorable(xComponent, UNO_QUERY_THROW);
-        CPPUNIT_ASSERT(xDocStorable.is());
-
         xDocStorable->store();
     }
 
@@ -511,7 +507,7 @@ void SwMacrosTest::testFdo87530()
     CPPUNIT_ASSERT(xBasLib->isLibraryLoaded("FooLibrary"));
     Reference<container::XNameContainer> xLibrary(xBasLib->getByName("FooLibrary"), UNO_QUERY);
     Any module(xLibrary->getByName("FooModule"));
-    CPPUNIT_ASSERT_EQUAL(module.get<OUString>(), OUString("Sub Main\nEnd Sub\n"));
+    CPPUNIT_ASSERT_EQUAL(OUString("Sub Main\nEnd Sub\n"), module.get<OUString>());
 
     // close
     Reference<util::XCloseable>(xComponent, UNO_QUERY_THROW)->close(false);
@@ -524,7 +520,7 @@ void SwMacrosTest::testFindReplace()
     Reference<lang::XComponent> const xComponent =
         loadFromDesktop("private:factory/swriter", "com.sun.star.text.TextDocument");
 
-    const ::comphelper::ScopeGuard xComponentScopeGuard(
+    const ::comphelper::ScopeGuard aComponentScopeGuard(
         [&xComponent]() { xComponent->dispose(); } );
 
     SwXTextDocument *const pTextDoc = dynamic_cast<SwXTextDocument *>(xComponent.get());
@@ -540,10 +536,10 @@ void SwMacrosTest::testFindReplace()
     rIDCO.InsertString(*pPaM, "bar");
     rIDCO.AppendTextNode(*pPaM->GetPoint());
     rIDCO.InsertString(*pPaM, "baz");
-    pPaM->Move(fnMoveBackward, fnGoDoc);
+    pPaM->Move(fnMoveBackward, GoInDoc);
 
     bool bCancel(false);
-    util::SearchOptions2 opts(
+    i18nutil::SearchOptions2 opts(
             util::SearchAlgorithms_REGEXP,
             65536,
             "$",
@@ -552,34 +548,35 @@ void SwMacrosTest::testFindReplace()
             2,
             2,
             2,
-            1073745152,
+            TransliterationFlags::IGNORE_CASE | TransliterationFlags::IGNORE_WIDTH |
+            TransliterationFlags::IGNORE_KASHIDA_CTL | TransliterationFlags::IGNORE_DIACRITICS_CTL,
             util::SearchAlgorithms2::REGEXP,
             '\\');
 
     // find newline on 1st paragraph
-    bool bFound = pPaM->Find(
-            opts, false, DOCPOS_CURR, DOCPOS_END, bCancel);
+    bool bFound = pPaM->Find_Text(
+            opts, false, SwDocPositions::Curr, SwDocPositions::End, bCancel, FindRanges::InBody);
     CPPUNIT_ASSERT(bFound);
     CPPUNIT_ASSERT(pPaM->HasMark());
-    CPPUNIT_ASSERT_EQUAL(OUString(""), pPaM->GetText());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pPaM->GetText());
 
     // now do another Find, inside the selection from the first Find
 //    opts.searchFlags = 71680;
-    bFound = pPaM->Find(
-            opts, false, DOCPOS_CURR, DOCPOS_END, bCancel, FND_IN_SEL);
+    bFound = pPaM->Find_Text(
+            opts, false, SwDocPositions::Curr, SwDocPositions::End, bCancel, FindRanges::InSel);
     CPPUNIT_ASSERT(bFound);
     CPPUNIT_ASSERT(pPaM->HasMark());
-    CPPUNIT_ASSERT_EQUAL(OUString(""), pPaM->GetText());
+    CPPUNIT_ASSERT_EQUAL(OUString(), pPaM->GetText());
 
     rIDCO.ReplaceRange(*pPaM, " ", true);
 
     pPaM->DeleteMark();
-    pPaM->Move(fnMoveBackward, fnGoDoc);
+    pPaM->Move(fnMoveBackward, GoInDoc);
 
     // problem was that after the 2nd Find, the wrong newline was selected
     CPPUNIT_ASSERT_EQUAL(OUString("foo bar"),
             pPaM->Start()->nNode.GetNode().GetTextNode()->GetText());
-    pPaM->Move(fnMoveForward, fnGoNode);
+    pPaM->Move(fnMoveForward, GoInNode);
     CPPUNIT_ASSERT_EQUAL(OUString("baz"),
             pPaM->End()->nNode.GetNode().GetTextNode()->GetText());
 }
@@ -597,7 +594,7 @@ void SwMacrosTest::setUp()
     // which is a private symbol to us, gets called
     m_xWriterComponent =
         getMultiServiceFactory()->createInstance("com.sun.star.comp.Writer.TextDocument");
-    CPPUNIT_ASSERT_MESSAGE("no calc component!", m_xWriterComponent.is());
+    CPPUNIT_ASSERT_MESSAGE("no writer component!", m_xWriterComponent.is());
     mxDesktop = css::frame::Desktop::create( comphelper::getComponentContext(getMultiServiceFactory()) );
 }
 

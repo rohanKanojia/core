@@ -20,18 +20,20 @@
 #include <cassert>
 
 #include <sal/types.h>
+#include <sal/log.hxx>
 
 #include <memory>
+#include <vcl/gdimtf.hxx>
+#include <vcl/metaact.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/virdev.hxx>
 #include <vcl/window.hxx>
 
-#include "outdata.hxx"
-#include "salgdi.hxx"
+#include <outdata.hxx>
+#include <salgdi.hxx>
 
 Color OutputDevice::GetPixel( const Point& rPt ) const
 {
-
     Color aColor;
 
     if ( mpGraphics || AcquireGraphics() )
@@ -43,10 +45,7 @@ Color OutputDevice::GetPixel( const Point& rPt ) const
         {
             const long nX = ImplLogicXToDevicePixel( rPt.X() );
             const long nY = ImplLogicYToDevicePixel( rPt.Y() );
-            const SalColor aSalCol = mpGraphics->GetPixel( nX, nY, this );
-            aColor.SetRed( SALCOLOR_RED( aSalCol ) );
-            aColor.SetGreen( SALCOLOR_GREEN( aSalCol ) );
-            aColor.SetBlue( SALCOLOR_BLUE( aSalCol ) );
+            aColor = mpGraphics->GetPixel( nX, nY, this );
         }
     }
     return aColor;
@@ -105,77 +104,10 @@ void OutputDevice::DrawPixel( const Point& rPt, const Color& rColor )
     if ( mbOutputClipped )
         return;
 
-    mpGraphics->DrawPixel( aPt.X(), aPt.Y(), ImplColorToSal( aColor ), this );
+    mpGraphics->DrawPixel( aPt.X(), aPt.Y(), aColor, this );
 
     if( mpAlphaVDev )
         mpAlphaVDev->DrawPixel( rPt );
-}
-
-void OutputDevice::DrawPixel( const tools::Polygon& rPts, const Color* pColors )
-{
-    assert(!is_double_buffered_window());
-
-    if ( !pColors )
-    {
-        DrawPixel( rPts, GetLineColor() );
-    }
-    else
-    {
-        DBG_ASSERT( pColors, "OutputDevice::DrawPixel: No color array specified" );
-
-        const sal_uInt16 nSize = rPts.GetSize();
-
-        if ( nSize )
-        {
-            if ( mpMetaFile )
-            {
-                for ( sal_uInt16 i = 0; i < nSize; i++ )
-                {
-                    mpMetaFile->AddAction( new MetaPixelAction( rPts[ i ], pColors[ i ] ) );
-                }
-            }
-            if ( !IsDeviceOutputNecessary() || ImplIsRecordLayout() )
-                return;
-
-            if ( mpGraphics || AcquireGraphics() )
-            {
-                if ( mbInitClipRegion )
-                    InitClipRegion();
-
-                if ( mbOutputClipped )
-                    return;
-
-                for ( sal_uInt16 i = 0; i < nSize; i++ )
-                {
-                    const Point aPt( ImplLogicToDevicePixel( rPts[ i ] ) );
-                    mpGraphics->DrawPixel( aPt.X(), aPt.Y(), ImplColorToSal( pColors[ i ] ), this );
-                }
-            }
-        }
-    }
-
-    if( mpAlphaVDev )
-        mpAlphaVDev->DrawPixel( rPts, pColors );
-}
-
-void OutputDevice::DrawPixel( const tools::Polygon& rPts, const Color& rColor )
-{
-    assert(!is_double_buffered_window());
-
-    if( rColor != COL_TRANSPARENT && ! ImplIsRecordLayout() )
-    {
-        const sal_uInt16 nSize = rPts.GetSize();
-        std::unique_ptr<Color[]> pColArray(new Color[ nSize ]);
-
-        for( sal_uInt16 i = 0; i < nSize; i++ )
-        {
-            pColArray[ i ] = rColor;
-        }
-        DrawPixel( rPts, pColArray.get() );
-    }
-
-    if( mpAlphaVDev )
-        mpAlphaVDev->DrawPixel( rPts, rColor );
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

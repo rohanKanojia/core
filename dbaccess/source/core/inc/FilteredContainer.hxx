@@ -19,6 +19,11 @@
 #ifndef INCLUDED_DBACCESS_SOURCE_CORE_INC_FILTEREDCONTAINER_HXX
 #define INCLUDED_DBACCESS_SOURCE_CORE_INC_FILTEREDCONTAINER_HXX
 
+#include <sal/config.h>
+
+#include <atomic>
+#include <cstddef>
+
 #include <com/sun/star/container/XNameAccess.hpp>
 #include <com/sun/star/sdbc/XConnection.hpp>
 
@@ -39,9 +44,8 @@ namespace dbaccess
         mutable bool m_bConstructed;        // late ctor called
 
     protected:
-        ::dbtools::WarningsContainer*  m_pWarningsContainer;
         IRefreshListener*               m_pRefreshListener;
-        oslInterlockedCount&            m_nInAppend;
+        std::atomic<std::size_t>&       m_nInAppend;
 
         // holds the original container which where set in construct but they can be null
         css::uno::Reference< css::container::XNameAccess >    m_xMasterContainer;
@@ -53,35 +57,35 @@ namespace dbaccess
         */
         virtual OUString getTableTypeRestriction() const = 0;
 
-        inline virtual void addMasterContainerListener(){}
-        inline virtual void removeMasterContainerListener(){}
+        virtual void addMasterContainerListener(){}
+        virtual void removeMasterContainerListener(){}
 
         // ::connectivity::sdbcx::OCollection
-        virtual void impl_refresh() throw(css::uno::RuntimeException) override;
+        virtual void impl_refresh() override;
 
         virtual OUString getNameForObject(const ::connectivity::sdbcx::ObjectType& _xObject) override;
 
         /** tell the container to free all elements and all additional resources.<BR>
             After using this method the object may be reconstructed by calling one of the <code>construct</code> methods.
         */
-        virtual void SAL_CALL disposing() override;
+        virtual void disposing() override;
 
         class EnsureReset
         {
         public:
-            EnsureReset( oslInterlockedCount& _rValueLocation)
+            EnsureReset( std::atomic<std::size_t>& _rValueLocation)
                 :m_rValue( _rValueLocation )
             {
-                osl_atomic_increment(&m_rValue);
+                ++m_rValue;
             }
 
             ~EnsureReset()
             {
-                osl_atomic_decrement(&m_rValue);
+                --m_rValue;
             }
 
         private:
-            oslInterlockedCount&   m_rValue;
+            std::atomic<std::size_t>&   m_rValue;
         };
 
         /** retrieve a table type filter to pass to <member scope="css::sdbc">XDatabaseMetaData::getTables</member>,
@@ -104,11 +108,10 @@ namespace dbaccess
                             const css::uno::Reference< css::sdbc::XConnection >& _xCon,
                             bool _bCase,
                             IRefreshListener*   _pRefreshListener,
-                            ::dbtools::WarningsContainer* _pWarningsContainer,
-                            oslInterlockedCount& _nInAppend
+                            std::atomic<std::size_t>& _nInAppend
                         );
 
-        inline void dispose() { disposing(); }
+        void dispose() { disposing(); }
 
         /** late ctor. The container will fill itself with the data got by the connection meta data, considering the
             filters given (the connection is the parent object you passed in the ctor).
@@ -127,7 +130,7 @@ namespace dbaccess
             const css::uno::Sequence< OUString >& _rTableTypeFilter
             );
 
-        inline bool isInitialized() const { return m_bConstructed; }
+        bool isInitialized() const { return m_bConstructed; }
     };
 } // namespace
 

@@ -17,20 +17,21 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/dump/dumperbase.hxx"
+#include <oox/dump/dumperbase.hxx>
 
 #include <algorithm>
+#include <string_view>
+
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/io/XActiveDataSource.hpp>
 #include <com/sun/star/io/TextOutputStream.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
-#include <comphelper/docpasswordhelper.hxx>
 #include <osl/file.hxx>
 #include <rtl/math.hxx>
 #include <rtl/tencinfo.h>
-#include "oox/core/filterbase.hxx"
-#include "oox/helper/binaryoutputstream.hxx"
-#include "oox/helper/textinputstream.hxx"
+#include <oox/core/filterbase.hxx>
+#include <oox/helper/binaryoutputstream.hxx>
+#include <oox/helper/textinputstream.hxx>
 #include <tools/time.hxx>
 
 #if OOX_INCLUDE_DUMPER
@@ -497,7 +498,7 @@ void StringHelper::appendEncString( OUStringBuffer& rStr, const OUString& rData,
             if( (nBeg == 0) && (nIdx == nEnd) )
                 rStr.append( rData );
             else
-                rStr.append( rData.copy( nBeg, nIdx - nBeg ) );
+                rStr.append( std::u16string_view(rData).substr(nBeg, nIdx - nBeg) );
         }
         // append characters to be encoded
         while( (nIdx < nEnd) && (rData[ nIdx ] < 0x20) )
@@ -519,16 +520,11 @@ void StringHelper::appendToken( OUStringBuffer& rStr, const OUString& rToken, sa
     rStr.append( rToken );
 }
 
-void StringHelper::appendIndex( OUStringBuffer& rStr, const OUString& rIdx )
-{
-    rStr.append( '[' ).append( rIdx ).append( ']' );
-}
-
 void StringHelper::appendIndex( OUStringBuffer& rStr, sal_Int64 nIdx )
 {
     OUStringBuffer aToken;
     appendDec( aToken, nIdx );
-    appendIndex( rStr, aToken.makeStringAndClear() );
+    rStr.append( '[' ).append( aToken.makeStringAndClear() ).append( ']' );
 }
 
 OUString StringHelper::getToken( const OUString& rData, sal_Int32& rnPos, sal_Unicode cSep )
@@ -568,7 +564,7 @@ OUString lclTrimQuotedStringList( const OUString& rStr )
             {
                 // seek to next quote character and add text portion to token buffer
                 sal_Int32 nEnd = lclIndexOf( rStr, OOX_DUMP_CFG_QUOTE, nPos );
-                aToken.append( rStr.copy( nPos, nEnd - nPos ) );
+                aToken.append( std::u16string_view(rStr).substr(nPos, nEnd - nPos) );
                 // process literal quotes
                 while( (nEnd + 1 < nLen) && (rStr[ nEnd ] == OOX_DUMP_CFG_QUOTE) && (rStr[ nEnd + 1 ] == OOX_DUMP_CFG_QUOTE) )
                 {
@@ -591,7 +587,7 @@ OUString lclTrimQuotedStringList( const OUString& rStr )
         {
             // find list separator, add token text to buffer
             sal_Int32 nEnd = lclIndexOf( rStr, OOX_DUMP_CFG_LISTSEP, nPos );
-            aBuffer.append( rStr.copy( nPos, nEnd - nPos ) );
+            aBuffer.append( std::u16string_view(rStr).substr(nPos, nEnd - nPos) );
             if( nEnd < nLen )
                 aBuffer.append( OOX_DUMP_LF );
             // set current position behind list separator
@@ -688,7 +684,7 @@ bool StringHelper::convertFromDec( sal_Int64& ornData, const OUString& rData )
         sal_Unicode cChar = rData[ nPos ];
         if( (cChar < '0') || (cChar > '9') )
             return false;
-        (ornData *= 10) += (cChar - '0');
+        ornData = (ornData * 10) + (cChar - '0');
     }
     if( bNeg )
         ornData *= -1;
@@ -709,7 +705,7 @@ bool StringHelper::convertFromHex( sal_Int64& ornData, const OUString& rData )
             cChar -= ('a' - 10);
         else
             return false;
-        (ornData <<= 4) += cChar;
+        ornData = (ornData << 4) + cChar;
     }
     return true;
 }
@@ -877,8 +873,8 @@ void NameListBase::includeList( const NameListRef& rxList )
 {
     if( rxList.get() )
     {
-        for( const_iterator aIt = rxList->begin(), aEnd = rxList->end(); aIt != aEnd; ++aIt )
-            maMap[ aIt->first ] = aIt->second;
+        for (auto const& elem : *rxList)
+            maMap[ elem.first ] = elem.second;
         implIncludeList( *rxList );
     }
 }
@@ -920,23 +916,25 @@ void NameListBase::include( const OUString& rListKeys )
 {
     OUStringVector aVec;
     StringHelper::convertStringToStringList( aVec, rListKeys, true );
-    for( OUStringVector::const_iterator aIt = aVec.begin(), aEnd = aVec.end(); aIt != aEnd; ++aIt )
-        includeList( mrCfgData.getNameList( *aIt ) );
+    for (auto const& elem : aVec)
+        includeList( mrCfgData.getNameList(elem) );
 }
 
 void NameListBase::exclude( const OUString& rKeys )
 {
     Int64Vector aVec;
     StringHelper::convertStringToIntList( aVec, rKeys, true );
-    for( Int64Vector::const_iterator aIt = aVec.begin(), aEnd = aVec.end(); aIt != aEnd; ++aIt )
-        maMap.erase( *aIt );
+    for (auto const& elem : aVec)
+        maMap.erase(elem);
 }
 
 void ItemFormatMap::insertFormats( const NameListRef& rxNameList )
 {
     if( Base::isValid( rxNameList ) )
-        for( NameListBase::const_iterator aIt = rxNameList->begin(), aEnd = rxNameList->end(); aIt != aEnd; ++aIt )
-            maMap[ aIt->first ].parse( aIt->second );
+    {
+        for (auto const& elemName : *rxNameList)
+            maMap[ elemName.first ].parse( elemName.second );
+    }
 }
 
 ConstList::ConstList( const SharedConfigData& rCfgData ) :
@@ -950,7 +948,7 @@ void ConstList::implProcessConfigItemStr(
         TextInputStream& rStrm, const OUString& rKey, const OUString& rData )
 {
     if ( rKey == "default" )
-        setDefaultName( rData );
+        maDefName = rData; // Sets a default name for unknown keys.
     else if ( rKey == "quote-names" )
         setQuoteNames( StringHelper::convertStringToBool( rData ) );
     else
@@ -998,9 +996,12 @@ MultiList::MultiList( const SharedConfigData& rCfgData ) :
 void MultiList::setNamesFromVec( sal_Int64 nStartKey, const OUStringVector& rNames )
 {
     sal_Int64 nKey = nStartKey;
-    for( OUStringVector::const_iterator aIt = rNames.begin(), aEnd = rNames.end(); aIt != aEnd; ++aIt, ++nKey )
-        if( !mbIgnoreEmpty || !aIt->isEmpty() )
-            insertRawName( nKey, *aIt );
+    for (auto const& name : rNames)
+    {
+        if( !mbIgnoreEmpty || !name.isEmpty() )
+            insertRawName( nKey, name);
+        ++nKey;
+    }
 }
 
 void MultiList::implProcessConfigItemStr(
@@ -1124,13 +1125,12 @@ void CombiList::implSetName( sal_Int64 nKey, const OUString& rName )
 {
     if( (nKey & (nKey - 1)) != 0 )  // more than a single bit set?
     {
-        typedef ::std::set< ExtItemFormatKey > ExtItemFormatKeySet;
         ::std::set< ExtItemFormatKey > aItemKeys;
         ExtItemFormat aItemFmt;
         OUStringVector aRemain = aItemFmt.parse( rName );
-        for( OUStringVector::iterator aIt = aRemain.begin(), aEnd = aRemain.end(); aIt != aEnd; ++aIt )
+        for (auto const& elemRemain : aRemain)
         {
-            OUStringPair aPair = StringHelper::convertStringToPair( *aIt );
+            OUStringPair aPair = StringHelper::convertStringToPair(elemRemain);
             if ( aPair.first == "noshift" )
             {
                 aItemFmt.mbShiftValue = StringHelper::convertStringToBool( aPair.second );
@@ -1150,8 +1150,8 @@ void CombiList::implSetName( sal_Int64 nKey, const OUString& rName )
         }
         if( aItemKeys.empty() )
             aItemKeys.insert( ExtItemFormatKey( nKey ) );
-        for( ExtItemFormatKeySet::iterator aIt = aItemKeys.begin(), aEnd = aItemKeys.end(); aIt != aEnd; ++aIt )
-            maFmtMap[ *aIt ] = aItemFmt;
+        for (auto const& itemKey : aItemKeys)
+            maFmtMap[itemKey] = aItemFmt;
     }
     else
     {
@@ -1164,13 +1164,13 @@ OUString CombiList::implGetName( const Config& rCfg, sal_Int64 nKey ) const
     sal_Int64 nFound = 0;
     OUStringBuffer aName;
     // add known flag fields
-    for( ExtItemFormatMap::const_iterator aIt = maFmtMap.begin(), aEnd = maFmtMap.end(); aIt != aEnd; ++aIt )
+    for (auto const& fmt : maFmtMap)
     {
-        const ExtItemFormatKey& rMapKey = aIt->first;
+        const ExtItemFormatKey& rMapKey = fmt.first;
         sal_Int64 nMask = rMapKey.mnKey;
         if( (nMask != 0) && ((nKey & rMapKey.maFilter.first) == rMapKey.maFilter.second) )
         {
-            const ExtItemFormat& rItemFmt = aIt->second;
+            const ExtItemFormat& rItemFmt = fmt.second;
 
             sal_uInt64 nUFlags = static_cast< sal_uInt64 >( nKey );
             sal_uInt64 nUMask = static_cast< sal_uInt64 >( nMask );
@@ -1260,8 +1260,7 @@ SharedConfigData::SharedConfigData( const OUString& rFileName,
     mxContext( rxContext ),
     mxRootStrg( rxRootStrg ),
     maSysFileName( rSysFileName ),
-    mbLoaded( false ),
-    mbPwCancelled( false )
+    mbLoaded( false )
 {
     OUString aFileUrl = InputOutputHelper::convertFileNameToUrl( rFileName );
     if( !aFileUrl.isEmpty() )
@@ -1274,11 +1273,6 @@ SharedConfigData::SharedConfigData( const OUString& rFileName,
 
 SharedConfigData::~SharedConfigData()
 {
-}
-
-void SharedConfigData::setOption( const OUString& rKey, const OUString& rData )
-{
-    maConfigData[ rKey ] = rData;
 }
 
 const OUString* SharedConfigData::getOption( const OUString& rKey ) const
@@ -1330,7 +1324,7 @@ void SharedConfigData::implProcessConfigItemStr(
     else if ( rKey == "unitconverter" )
         createUnitConverter( rData );
     else
-        setOption( rKey, rData );
+        maConfigData[ rKey ] = rData;
 }
 
 bool SharedConfigData::readConfigFile( const OUString& rFileUrl )
@@ -1393,12 +1387,6 @@ void SharedConfigData::createUnitConverter( const OUString& rData )
     }
 }
 
-Config::Config( const Config& rParent ) :
-    Base()  // c'tor needs to be called explicitly to avoid compiler warning
-{
-    construct( rParent );
-}
-
 Config::Config( const sal_Char* pcEnvVar, const FilterBase& rFilter )
 {
     construct( pcEnvVar, rFilter );
@@ -1411,11 +1399,6 @@ Config::Config( const sal_Char* pcEnvVar, const Reference< XComponentContext >& 
 
 Config::~Config()
 {
-}
-
-void Config::construct( const Config& rParent )
-{
-    *this = rParent;
 }
 
 void Config::construct( const sal_Char* pcEnvVar, const FilterBase& rFilter )
@@ -1460,12 +1443,7 @@ void Config::eraseNameList( const String& rListName )
 
 NameListRef Config::getNameList( const String& rListName ) const
 {
-    return implGetNameList( rListName );
-}
-
-bool Config::isPasswordCancelled() const
-{
-    return mxCfgData->isPasswordCancelled();
+    return mxCfgData->getNameList( rListName );
 }
 
 bool Config::implIsValid() const
@@ -1476,11 +1454,6 @@ bool Config::implIsValid() const
 const OUString* Config::implGetOption( const OUString& rKey ) const
 {
     return mxCfgData->getOption( rKey );
-}
-
-NameListRef Config::implGetNameList( const OUString& rListName ) const
-{
-    return mxCfgData->getNameList( rListName );
 }
 
 Output::Output( const Reference< XComponentContext >& rxContext, const OUString& rFileName ) :
@@ -1665,7 +1638,7 @@ void Output::writeString( const OUString& rStr )
     StringHelper::appendEncString( maLine, rStr );
 }
 
-void Output::writeArray( const sal_uInt8* pnData, sal_Size nSize, sal_Unicode cSep )
+void Output::writeArray( const sal_uInt8* pnData, std::size_t nSize, sal_Unicode cSep )
 {
     const sal_uInt8* pnEnd = pnData ? (pnData + nSize) : nullptr;
     for( const sal_uInt8* pnByte = pnData; pnByte < pnEnd; ++pnByte )
@@ -1855,13 +1828,13 @@ void StorageObjectBase::implDumpBaseStream( const BinaryInputStreamRef&, const O
 void StorageObjectBase::addPreferredStream( const String& rStrmName )
 {
     if( rStrmName.has() )
-        maPreferred.push_back( PreferredItem( rStrmName, false ) );
+        maPreferred.emplace_back( rStrmName, false );
 }
 
 void StorageObjectBase::addPreferredStorage( const String& rStrgPath )
 {
     if( rStrgPath.has() )
-        maPreferred.push_back( PreferredItem( rStrgPath, true ) );
+        maPreferred.emplace_back( rStrgPath, true );
 }
 
 OUString StorageObjectBase::getSysFileName( const OUString& rStrmName, const OUString& rSysOutPath )
@@ -1873,8 +1846,8 @@ OUString StorageObjectBase::getSysFileName( const OUString& rStrmName, const OUS
     // replace all characters reserved in file system
     OUString aFileName = aBuffer.makeStringAndClear();
     static const sal_Unicode spcReserved[] = { '/', '\\', ':', '*', '?', '<', '>', '|' };
-    for( const sal_Unicode* pcChar = spcReserved; pcChar < STATIC_ARRAY_END( spcReserved ); ++pcChar )
-        aFileName = aFileName.replace( *pcChar, '_' );
+    for(const sal_Unicode cChar : spcReserved)
+        aFileName = aFileName.replace(cChar, '_');
 
     // build full path
     return rSysOutPath + "/" + aFileName;
@@ -1903,8 +1876,10 @@ void StorageObjectBase::extractStorage( const StorageRef& rxStrg, const OUString
 
     // process preferred storages and streams in root storage first
     if( rStrgPath.isEmpty() )
-        for( PreferredItemVector::iterator aIt = maPreferred.begin(), aEnd = maPreferred.end(); aIt != aEnd; ++aIt )
-            extractItem( rxStrg, rStrgPath, aIt->maName, rSysPath, aIt->mbStorage, !aIt->mbStorage );
+    {
+        for (auto const& elemPreferred : maPreferred)
+            extractItem( rxStrg, rStrgPath, elemPreferred.maName, rSysPath, elemPreferred.mbStorage, !elemPreferred.mbStorage );
+    }
 
     // process children of the storage
     for( StorageIterator aIt( rxStrg ); aIt.isValid(); ++aIt )
@@ -1913,8 +1888,14 @@ void StorageObjectBase::extractStorage( const StorageRef& rxStrg, const OUString
         OUString aItemName = aIt.getName();
         bool bFound = false;
         if( rStrgPath.isEmpty() )
-            for( PreferredItemVector::iterator aIIt = maPreferred.begin(), aIEnd = maPreferred.end(); !bFound && (aIIt != aIEnd); ++aIIt )
-                bFound = aIIt->maName == aItemName;
+        {
+            for (auto const& elemPreferred : maPreferred)
+            {
+                bFound = elemPreferred.maName == aItemName;
+                if (bFound)
+                    break;
+            }
+        }
         if( !bFound )
             extractItem( rxStrg, rStrgPath, aItemName, rSysPath, aIt.isStorage(), aIt.isStream() );
     }
@@ -1991,7 +1972,7 @@ void OutputObjectBase::writeStringItem( const String& rName, const OUString& rDa
         mxOut->writeAscii( ",cut" );
 }
 
-void OutputObjectBase::writeArrayItem( const String& rName, const sal_uInt8* pnData, sal_Size nSize, sal_Unicode cSep )
+void OutputObjectBase::writeArrayItem( const String& rName, const sal_uInt8* pnData, std::size_t nSize, sal_Unicode cSep )
 {
     ItemGuard aItem( mxOut, rName );
     mxOut->writeArray( pnData, nSize, cSep );
@@ -2169,10 +2150,10 @@ OUString InputObjectBase::dumpCharArray( const String& rName, sal_Int32 nLen, rt
     OUString aString;
     if( nDumpSize > 0 )
     {
-        ::std::vector< sal_Char > aBuffer( static_cast< sal_Size >( nLen ) + 1 );
-        sal_Int32 nCharsRead = mxStrm->readMemory( &aBuffer.front(), nLen );
+        ::std::vector< sal_Char > aBuffer( static_cast< std::size_t >( nLen ) + 1 );
+        sal_Int32 nCharsRead = mxStrm->readMemory(aBuffer.data(), nLen);
         aBuffer[ nCharsRead ] = 0;
-        aString = OStringToOUString( OString( &aBuffer.front() ), eTextEnc );
+        aString = OStringToOUString(OString(aBuffer.data()), eTextEnc);
     }
     if( bHideTrailingNul )
         aString = StringHelper::trimTrailingNul( aString );
@@ -2399,7 +2380,7 @@ void XmlStreamObject::implDumpText( TextInputStream& rTextStrm )
         {
             while( (nPos < aElem.getLength()) && (aElem[ nPos ] >= 32) ) ++nPos;
             if( nPos < aElem.getLength() )
-                aElem = OUStringBuffer( aElem.copy( 0, nPos ) ).append( ' ' ).append( aElem.copy( nPos ).trim() ).makeStringAndClear();
+                aElem = aElem.copy( 0, nPos ) + OUStringLiteral1(' ') + aElem.copy( nPos ).trim();
             ++nPos;
         }
 
@@ -2474,7 +2455,7 @@ bool RecordObjectBase::implIsValid() const
 
 void RecordObjectBase::implDump()
 {
-    NameListRef xRecNames = getRecNames();
+    NameListRef xRecNames = maRecNames.getNameList( cfg() );
     ItemFormatMap aSimpleRecs( maSimpleRecs.getNameList( cfg() ) );
 
     while( implStartRecord( *mxBaseStrm, mnRecPos, mnRecId, mnRecSize ) )
@@ -2576,11 +2557,6 @@ DumperBase::~DumperBase()
 bool DumperBase::isImportEnabled() const
 {
     return !isValid() || cfg().isImportEnabled();
-}
-
-bool DumperBase::isImportCancelled() const
-{
-    return isValid() && cfg().isPasswordCancelled();
 }
 
 void DumperBase::construct( const ConfigRef& rxConfig )

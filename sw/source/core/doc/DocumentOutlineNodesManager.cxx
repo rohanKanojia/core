@@ -19,6 +19,9 @@
 #include <DocumentOutlineNodesManager.hxx>
 #include <doc.hxx>
 #include <ndtxt.hxx>
+#include <txtfrm.hxx>
+#include <rootfrm.hxx>
+#include <modeltoviewhelper.hxx>
 
 namespace sw
 {
@@ -27,30 +30,81 @@ DocumentOutlineNodesManager::DocumentOutlineNodesManager( SwDoc& i_rSwdoc ) : m_
 {
 }
 
-sal_Int32 DocumentOutlineNodesManager::getOutlineNodesCount() const
+IDocumentOutlineNodes::tSortedOutlineNodeList::size_type DocumentOutlineNodesManager::getOutlineNodesCount() const
 {
     return m_rDoc.GetNodes().GetOutLineNds().size();
 }
 
-int DocumentOutlineNodesManager::getOutlineLevel( const sal_Int32 nIdx ) const
+int DocumentOutlineNodesManager::getOutlineLevel( const tSortedOutlineNodeList::size_type nIdx ) const
 {
     return m_rDoc.GetNodes().GetOutLineNds()[ nIdx ]->
                                 GetTextNode()->GetAttrOutlineLevel()-1;
 }
 
-OUString DocumentOutlineNodesManager::getOutlineText( const sal_Int32 nIdx,
+OUString GetExpandTextMerged(SwRootFrame const*const pLayout,
+        SwTextNode const& rNode, bool const bWithNumber,
+        bool const bWithSpacesForLevel, ExpandMode const i_mode)
+{
+    if (pLayout && pLayout->IsHideRedlines())
+    {
+        SwTextFrame const*const pFrame(static_cast<SwTextFrame*>(rNode.getLayoutFrame(pLayout)));
+        if (pFrame)
+        {
+            sw::MergedPara const*const pMerged = pFrame->GetMergedPara();
+            if (pMerged)
+            {
+                if (&rNode != pMerged->pParaPropsNode)
+                {
+                    return OUString();
+                }
+                else
+                {
+                    ExpandMode const mode(ExpandMode::HideDeletions | i_mode);
+                    OUStringBuffer ret(rNode.GetExpandText(pLayout, 0, -1,
+                        bWithNumber, bWithNumber, bWithSpacesForLevel, mode));
+                    for (sal_uLong i = rNode.GetIndex() + 1;
+                         i <= pMerged->pLastNode->GetIndex(); ++i)
+                    {
+                        SwNode *const pTmp(rNode.GetNodes()[i]);
+                        if (pTmp->GetRedlineMergeFlag() == SwNode::Merge::NonFirst)
+                        {
+                            ret.append(pTmp->GetTextNode()->GetExpandText(
+                                pLayout, 0, -1, false, false, false, mode));
+                        }
+                    }
+                    return ret.makeStringAndClear();
+                }
+            }
+        }
+    }
+    return rNode.GetExpandText(pLayout, 0, -1, bWithNumber,
+                    bWithNumber, bWithSpacesForLevel, i_mode);
+}
+
+OUString DocumentOutlineNodesManager::getOutlineText(
+                              const tSortedOutlineNodeList::size_type nIdx,
+                              SwRootFrame const*const pLayout,
                               const bool bWithNumber,
                               const bool bWithSpacesForLevel,
                               const bool bWithFootnote ) const
 {
-    return m_rDoc.GetNodes().GetOutLineNds()[ nIdx ]->
-                GetTextNode()->GetExpandText( 0, -1, bWithNumber,
-                                            bWithNumber, bWithSpacesForLevel, bWithFootnote );
+    SwTextNode const*const pNode(m_rDoc.GetNodes().GetOutLineNds()[ nIdx ]->GetTextNode());
+    return GetExpandTextMerged(pLayout, *pNode,
+            bWithNumber, bWithSpacesForLevel,
+            (bWithFootnote ? ExpandMode::ExpandFootnote : ExpandMode(0)));
 }
 
-SwTextNode* DocumentOutlineNodesManager::getOutlineNode( const sal_Int32 nIdx ) const
+SwTextNode* DocumentOutlineNodesManager::getOutlineNode( const tSortedOutlineNodeList::size_type nIdx ) const
 {
     return m_rDoc.GetNodes().GetOutLineNds()[ nIdx ]->GetTextNode();
+}
+
+bool DocumentOutlineNodesManager::isOutlineInLayout(
+        const tSortedOutlineNodeList::size_type nIdx,
+        SwRootFrame const& rLayout) const
+{
+    auto const pNode(m_rDoc.GetNodes().GetOutLineNds()[ nIdx ]->GetTextNode());
+    return sw::IsParaPropsNode(rLayout, *pNode);
 }
 
 void DocumentOutlineNodesManager::getOutlineNodes( IDocumentOutlineNodes::tSortedOutlineNodeList& orOutlineNodeList ) const
@@ -58,8 +112,8 @@ void DocumentOutlineNodesManager::getOutlineNodes( IDocumentOutlineNodes::tSorte
     orOutlineNodeList.clear();
     orOutlineNodeList.reserve( getOutlineNodesCount() );
 
-    const sal_Int32 nOutlCount = getOutlineNodesCount();
-    for ( sal_Int32 i = 0; i < nOutlCount; ++i )
+    const tSortedOutlineNodeList::size_type nOutlCount = getOutlineNodesCount();
+    for ( tSortedOutlineNodeList::size_type i = 0; i < nOutlCount; ++i )
     {
         orOutlineNodeList.push_back(
             m_rDoc.GetNodes().GetOutLineNds()[i]->GetTextNode() );

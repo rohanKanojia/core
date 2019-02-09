@@ -18,51 +18,49 @@
  */
 
 #include <sal/config.h>
-#include <sfx2/docfile.hxx>
+#include <sal/log.hxx>
 
-#include "qproform.hxx"
-#include "qpro.hxx"
-#include "qprostyle.hxx"
+#include <qproform.hxx>
+#include <qpro.hxx>
+#include <qprostyle.hxx>
 
-#include "global.hxx"
-#include "scerrors.hxx"
-#include "docpool.hxx"
-#include "patattr.hxx"
-#include "filter.hxx"
-#include "document.hxx"
-#include "formulacell.hxx"
-#include "biff.hxx"
+#include <scerrors.hxx>
+#include <ftools.hxx>
+#include <document.hxx>
+#include <formulacell.hxx>
 #include <tools/stream.hxx>
+#include <unotools/configmgr.hxx>
+#include <docoptio.hxx>
+#include <scdll.hxx>
 #include <memory>
 
-FltError ScQProReader::readSheet( SCTAB nTab, ScDocument* pDoc, ScQProStyle *pStyle )
+ErrCode ScQProReader::readSheet( SCTAB nTab, ScDocument* pDoc, ScQProStyle *pStyle )
 {
-    FltError eRet = eERR_OK;
+    ErrCode eRet = ERRCODE_NONE;
     sal_uInt8  nCol, nDummy;
     sal_uInt16 nRow;
     sal_uInt16 nStyle;
     bool bEndOfSheet = false;
 
-    SAL_INFO("sc", "Read sheet " << nTab << "\n");
+    SAL_INFO("sc", "Read sheet " << nTab);
 
-    while( eERR_OK == eRet && !bEndOfSheet && nextRecord() )
+    while( ERRCODE_NONE == eRet && !bEndOfSheet && nextRecord() )
     {
         switch( getId() )
         {
             case 0x000f:{ // Label cell
-                OUString aLabel;
                 mpStream->ReadUChar( nCol ).ReadUChar( nDummy ).ReadUInt16( nRow ).ReadUInt16( nStyle ).ReadUChar( nDummy );
                 sal_uInt16 nLen = getLength();
                 if (nLen >= 7)
                 {
-                    readString( aLabel, nLen - 7 );
+                    OUString aLabel(readString(nLen - 7));
                     nStyle = nStyle >> 3;
                     pStyle->SetFormat( pDoc, nCol, nRow, nTab, nStyle );
                     pDoc->EnsureTable(nTab);
                     pDoc->SetTextCell(ScAddress(nCol,nRow,nTab), aLabel);
                 }
                 else
-                    eRet = eERR_FORMAT;
+                    eRet = SCERR_IMPORT_FORMAT;
                 }
                 break;
 
@@ -102,15 +100,20 @@ FltError ScQProReader::readSheet( SCTAB nTab, ScDocument* pDoc, ScQProStyle *pSt
                 double nValue;
                 sal_uInt16 nState, nLen;
                 mpStream->ReadUChar( nCol ).ReadUChar( nDummy ).ReadUInt16( nRow ).ReadUInt16( nStyle ).ReadDouble( nValue ).ReadUInt16( nState ).ReadUInt16( nLen );
+                if (!mpStream->good())
+                {
+                    eRet = SCERR_IMPORT_FORMAT;
+                    break;
+                }
                 ScAddress aAddr( nCol, nRow, nTab );
-                const ScTokenArray *pArray;
+                std::unique_ptr<ScTokenArray> pArray;
 
                 QProToSc aConv(*mpStream, pDoc->GetSharedStringPool(), aAddr);
-                if (ConvOK != aConv.Convert( pArray ))
-                    eRet = eERR_FORMAT;
+                if (ConvErr::OK != aConv.Convert( pArray ))
+                    eRet = SCERR_IMPORT_FORMAT;
                 else
                 {
-                    ScFormulaCell* pFormula = new ScFormulaCell(pDoc, aAddr, *pArray);
+                    ScFormulaCell* pFormula = new ScFormulaCell(pDoc, aAddr, std::move(pArray));
                     nStyle = nStyle >> 3;
                     pFormula->AddRecalcMode( ScRecalcMode::ONLOAD_ONCE );
                     pStyle->SetFormat( pDoc, nCol, nRow, nTab, nStyle );
@@ -124,32 +127,48 @@ FltError ScQProReader::readSheet( SCTAB nTab, ScDocument* pDoc, ScQProStyle *pSt
     return eRet;
 }
 
-FltError ScFormatFilterPluginImpl::ScImportQuattroPro( SfxMedium &rMedium, ScDocument *pDoc )
+ErrCode ScFormatFilterPluginImpl::ScImportQuattroPro(SvStream *pStream, ScDocument *pDoc)
 {
-    ScQProReader aReader( rMedium );
-    FltError eRet = aReader.import( pDoc );
+    ScQProReader aReader(pStream);
+    ErrCode eRet = aReader.import( pDoc );
     return eRet;
 }
 
-ScQProReader::ScQProReader( SfxMedium &rMedium ):
-    ScBiffReader( rMedium )
+ScQProReader::ScQProReader(SvStream* pStream)
+    : mnId(0)
+    , mnLength(0)
+    , mnOffset(0)
+    , mpStream(pStream)
+    , mbEndOfFile(false)
+    , mnMaxTab(utl::ConfigManager::IsFuzzing() ? 128 : MAXTAB)
 {
+    if( mpStream )
+    {
+        mpStream->SetBufferSize( 65535 );
+        mpStream->SetStreamCharSet( RTL_TEXTENCODING_MS_1252 );
+    }
 }
 
-FltError ScQProReader::import( ScDocument *pDoc )
+ScQProReader::~ScQProReader()
 {
-    FltError eRet = eERR_OK;
+    if( mpStream )
+        mpStream->SetBufferSize( 0 );
+}
+
+ErrCode ScQProReader::parse( ScDocument *pDoc )
+{
+    ErrCode eRet = ERRCODE_NONE;
     sal_uInt16 nVersion;
     sal_uInt16 i = 1, j = 1;
     SCTAB nTab = 0;
     SetEof( false );
 
     if( !recordsLeft() )
-        return eERR_OPEN;
+        return SCERR_IMPORT_OPEN;
 
-    ScQProStyle *pStyleElement = new ScQProStyle;
+    std::unique_ptr<ScQProStyle> pStyleElement( new ScQProStyle );
 
-    while( nextRecord() && eRet == eERR_OK)
+    while( nextRecord() && eRet == ERRCODE_NONE)
     {
         switch( getId() )
         {
@@ -158,18 +177,18 @@ FltError ScQProReader::import( ScDocument *pDoc )
                 break;
 
             case 0x00ca: // Beginning of sheet
-                if( nTab <= MAXTAB )
+                if (nTab <= mnMaxTab)
                 {
                     if( nTab < 26 )
                     {
                         OUString aName;
-                        aName += OUString( sal_Unicode( 'A' + nTab ) );
+                        aName += OUStringLiteral1( 'A' + nTab );
                         if (!nTab)
-                            pDoc->RenameTab( nTab, aName, false );
+                            pDoc->RenameTab( nTab, aName );
                         else
                             pDoc->InsertTab( nTab, aName );
                     }
-                    eRet = readSheet( nTab, pDoc, pStyleElement );
+                    eRet = readSheet( nTab, pDoc, pStyleElement.get() );
                     nTab++;
                 }
                 break;
@@ -195,38 +214,92 @@ FltError ScQProReader::import( ScDocument *pDoc )
                 pStyleElement->setFontRecord( j, nFontAttr, nPtSize );
                 sal_uInt16 nLen = getLength();
                 if (nLen >= 4)
-                    readString( aLabel, nLen - 4 );
+                    aLabel = readString(nLen - 4);
                 else
-                    eRet = eERR_FORMAT;
+                    eRet = SCERR_IMPORT_FORMAT;
                 pStyleElement->setFontType( j, aLabel );
                 j++;
                 }
                 break;
         }
     }
-    pDoc->CalcAfterLoad();
-    delete pStyleElement;
     return eRet;
+}
+
+ErrCode ScQProReader::import( ScDocument *pDoc )
+{
+    ErrCode eRet = parse(pDoc);
+    pDoc->CalcAfterLoad();
+    return eRet;
+}
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool TestImportQPW(SvStream &rStream)
+{
+    ScDLL::Init();
+    ScDocument aDocument;
+    ScDocOptions aDocOpt = aDocument.GetDocOptions();
+    aDocOpt.SetLookUpColRowNames(false);
+    aDocument.SetDocOptions(aDocOpt);
+    aDocument.MakeTable(0);
+    aDocument.EnableExecuteLink(false);
+    aDocument.SetInsertingFromOtherDoc(true);
+    aDocument.SetImportingXML(true);
+
+    ScQProReader aReader(&rStream);
+    ErrCode eRet = aReader.parse(&aDocument);
+    return eRet == ERRCODE_NONE;
 }
 
 bool ScQProReader::recordsLeft()
 {
-    bool bValue = ScBiffReader::recordsLeft();
-    return bValue;
+    return mpStream && mpStream->good();
 }
 
 bool ScQProReader::nextRecord()
 {
-    bool bValue = ScBiffReader::nextRecord();
-    return bValue;
+    if( !recordsLeft() )
+        return false;
+
+    if( mbEndOfFile )
+        return false;
+
+    sal_uInt32 nPos = mpStream->Tell();
+    if( nPos != mnOffset + mnLength )
+        mpStream->Seek( mnOffset + mnLength );
+
+    mnLength = mnId = 0;
+    mpStream->ReadUInt16( mnId ).ReadUInt16( mnLength );
+
+    mnOffset = mpStream->Tell();
+#ifdef DEBUG_SC_QPRO
+    fprintf( stderr, "Read record 0x%x length 0x%x at offset 0x%x\n",
+        (unsigned)mnId, (unsigned)mnLength, (unsigned)mnOffset );
+
+#if 1  // rather verbose
+    int len = mnLength;
+    while (len > 0) {
+        int i, chunk = std::min(len, 16);
+        unsigned char data[16];
+        mpStream->Read( data, chunk );
+
+        for (i = 0; i < chunk; i++)
+            fprintf( stderr, "%.2x ", data[i] );
+        fprintf( stderr, "| " );
+        for (i = 0; i < chunk; i++)
+            fprintf( stderr, "%c", data[i] < 127 && data[i] > 30 ? data[i] : '.' );
+        fprintf( stderr, "\n" );
+
+        len -= chunk;
+    }
+    mpStream->Seek( mnOffset );
+#endif
+#endif
+    return true;
 }
 
-void ScQProReader::readString( OUString &rString, sal_uInt16 nLength )
+OUString ScQProReader::readString(sal_uInt16 nLength)
 {
-    std::unique_ptr<sal_Char[]> pText(new sal_Char[ nLength + 1 ]);
-    nLength = mpStream->Read(pText.get(), nLength);
-    pText[ nLength ] = 0;
-    rString = OUString( pText.get(), strlen(pText.get()), mpStream->GetStreamCharSet() );
+    return read_uInt8s_ToOUString(*mpStream, nLength, mpStream->GetStreamCharSet());
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

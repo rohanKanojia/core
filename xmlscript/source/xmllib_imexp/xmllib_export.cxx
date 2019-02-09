@@ -17,8 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <rtl/ref.hxx>
 #include <xmlscript/xmllib_imexp.hxx>
 #include <xmlscript/xml_helper.hxx>
+#include <xmlscript/xmlns.h>
+#include <com/sun/star/xml/sax/XWriter.hpp>
 
 using namespace com::sun::star::uno;
 using namespace com::sun::star;
@@ -30,7 +33,7 @@ const char aTrueStr[] = "true";
 const char aFalseStr[] = "false";
 
 void
-SAL_CALL exportLibraryContainer(
+exportLibraryContainer(
     Reference< xml::sax::XWriter > const & xOut,
     const LibDescriptorArray* pLibArray )
 {
@@ -88,7 +91,7 @@ SAL_CALL exportLibraryContainer(
 }
 
 void
-SAL_CALL exportLibrary(
+exportLibrary(
     css::uno::Reference< css::xml::sax::XWriter > const & xOut,
     const LibDescriptor& rLib )
 {
@@ -99,8 +102,7 @@ SAL_CALL exportLibrary(
         " \"library.dtd\">" );
     xOut->ignorableWhitespace( OUString() );
 
-    XMLElement* pLibElement = new XMLElement( XMLNS_LIBRARY_PREFIX ":library" );
-    Reference< xml::sax::XAttributeList > xAttributes( pLibElement );
+    rtl::Reference<XMLElement> pLibElement = new XMLElement( XMLNS_LIBRARY_PREFIX ":library" );
 
     pLibElement->addAttribute( "xmlns:" XMLNS_LIBRARY_PREFIX, XMLNS_LIBRARY_URI );
 

@@ -7,21 +7,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "orcusinterface.hxx"
+#include <memory>
+#include <orcusinterface.hxx>
 
-#include "document.hxx"
-#include "formulacell.hxx"
-#include "rangenam.hxx"
-#include "tokenarray.hxx"
-#include "globalnames.hxx"
-#include "docoptio.hxx"
-#include "globstr.hrc"
-#include "compiler.hxx"
-#include "dbdata.hxx"
-#include "stlpool.hxx"
-#include "scitems.hxx"
-#include "patattr.hxx"
-#include "docpool.hxx"
+#include <document.hxx>
+#include <formulacell.hxx>
+#include <rangenam.hxx>
+#include <tokenarray.hxx>
+#include <globalnames.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <compiler.hxx>
+#include <stlpool.hxx>
+#include <scitems.hxx>
+#include <patattr.hxx>
+#include <docpool.hxx>
+#include <attrib.hxx>
 
 #include <editeng/postitem.hxx>
 #include <editeng/wghtitem.hxx>
@@ -30,58 +31,277 @@
 #include <editeng/udlnitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/borderline.hxx>
+#include <editeng/fontitem.hxx>
+#include <editeng/fhgtitem.hxx>
+#include <editeng/lineitem.hxx>
+#include <editeng/crossedoutitem.hxx>
+#include <editeng/justifyitem.hxx>
 
-#include <formula/token.hxx>
-#include <tools/datetime.hxx>
 #include <svl/sharedstringpool.hxx>
-#include <o3tl/make_unique.hxx>
-
+#include <svl/zforlist.hxx>
+#include <svl/intitem.hxx>
 #include <com/sun/star/task/XStatusIndicator.hpp>
+#include <i18nlangtag/lang.h>
+#include <tools/fontenum.hxx>
+#include <sal/log.hxx>
+
+#include <stylesbuffer.hxx>
 
 using namespace com::sun::star;
 
 namespace os = orcus::spreadsheet;
 
-ScOrcusGlobalSettings::ScOrcusGlobalSettings(ScDocumentImport& rDoc) : mrDoc(rDoc) {}
+namespace {
+
+formula::FormulaGrammar::Grammar getCalcGrammarFromOrcus( os::formula_grammar_t grammar )
+{
+    formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_ODFF;
+    switch(grammar)
+    {
+        case orcus::spreadsheet::formula_grammar_t::ods:
+            eGrammar = formula::FormulaGrammar::GRAM_ODFF;
+            break;
+        case orcus::spreadsheet::formula_grammar_t::xlsx_2007:
+        case orcus::spreadsheet::formula_grammar_t::xlsx_2010:
+            eGrammar = formula::FormulaGrammar::GRAM_OOXML;
+            break;
+        case orcus::spreadsheet::formula_grammar_t::gnumeric:
+            eGrammar = formula::FormulaGrammar::GRAM_ENGLISH_XL_A1;
+            break;
+        case orcus::spreadsheet::formula_grammar_t::xls_xml:
+            eGrammar = formula::FormulaGrammar::GRAM_ENGLISH_XL_R1C1;
+            break;
+        case orcus::spreadsheet::formula_grammar_t::unknown:
+            break;
+    }
+
+    return eGrammar;
+}
+
+}
+
+ScOrcusGlobalSettings::ScOrcusGlobalSettings(ScDocumentImport& rDoc)
+    : mrDoc(rDoc)
+    , meCalcGrammar(formula::FormulaGrammar::GRAM_UNSPECIFIED)
+    , meOrcusGrammar(os::formula_grammar_t::unknown)
+    , mnTextEncoding(RTL_TEXTENCODING_UTF8)
+{
+}
 
 void ScOrcusGlobalSettings::set_origin_date(int year, int month, int day)
 {
     mrDoc.setOriginDate(year, month, day);
 }
 
-void ScOrcusGlobalSettings::set_default_formula_grammar(orcus::spreadsheet::formula_grammar_t /*grammar*/)
+void ScOrcusGlobalSettings::set_character_set(orcus::character_set_t cs)
 {
+    switch (cs)
+    {
+        case orcus::character_set_t::iso_2022_jp:
+        case orcus::character_set_t::iso_2022_jp_2:
+            mnTextEncoding = RTL_TEXTENCODING_ISO_2022_JP;
+            break;
+        case orcus::character_set_t::jis_x0201:
+            mnTextEncoding = RTL_TEXTENCODING_JIS_X_0201;
+            break;
+        case orcus::character_set_t::shift_jis:
+            mnTextEncoding = RTL_TEXTENCODING_SHIFT_JIS;
+            break;
+        case orcus::character_set_t::us_ascii:
+            mnTextEncoding = RTL_TEXTENCODING_ASCII_US;
+            break;
+        case orcus::character_set_t::utf_7:
+            mnTextEncoding = RTL_TEXTENCODING_UTF7;
+            break;
+        case orcus::character_set_t::windows_1250:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1250;
+            break;
+        case orcus::character_set_t::windows_1251:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1251;
+            break;
+        case orcus::character_set_t::windows_1252:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1252;
+            break;
+        case orcus::character_set_t::windows_1253:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1253;
+            break;
+        case orcus::character_set_t::windows_1254:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1254;
+            break;
+        case orcus::character_set_t::windows_1255:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1255;
+            break;
+        case orcus::character_set_t::windows_1256:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1256;
+            break;
+        case orcus::character_set_t::windows_1257:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1257;
+            break;
+        case orcus::character_set_t::windows_1258:
+            mnTextEncoding = RTL_TEXTENCODING_MS_1258;
+            break;
+        default:
+            ; // Add more as needed.
+    }
+}
+
+void ScOrcusGlobalSettings::set_default_formula_grammar(os::formula_grammar_t grammar)
+{
+    meCalcGrammar = getCalcGrammarFromOrcus(grammar);
+    meOrcusGrammar = grammar;
 }
 
 orcus::spreadsheet::formula_grammar_t ScOrcusGlobalSettings::get_default_formula_grammar() const
 {
-    return orcus::spreadsheet::formula_grammar_t::unknown;
+    return meOrcusGrammar;
 }
 
-ScOrcusFactory::StringCellCache::StringCellCache(const ScAddress& rPos, size_t nIndex) :
-    maPos(rPos), mnIndex(nIndex) {}
+ScOrcusRefResolver::ScOrcusRefResolver( const ScOrcusGlobalSettings& rGS ) :
+    mrGlobalSettings(rGS) {}
 
-ScOrcusFactory::ScOrcusFactory(ScDocument& rDoc) :
+os::address_t ScOrcusRefResolver::resolve_address(const char* p, size_t n)
+{
+    OUString aStr(p, n, mrGlobalSettings.getTextEncoding());
+
+    ScAddress aAddr;
+    aAddr.Parse(aStr, nullptr,
+        formula::FormulaGrammar::extractRefConvention(
+            mrGlobalSettings.getCalcGrammar()));
+
+    os::address_t ret;
+    ret.column = 0;
+    ret.row = 0;
+
+    if (aAddr.IsValid())
+    {
+        ret.column = aAddr.Col();
+        ret.row = aAddr.Row();
+    }
+
+    return ret;
+}
+
+os::range_t ScOrcusRefResolver::resolve_range(const char* p, size_t n)
+{
+    OUString aStr(p, n, mrGlobalSettings.getTextEncoding());
+
+    ScRange aRange;
+    aRange.Parse(aStr, nullptr,
+        formula::FormulaGrammar::extractRefConvention(
+            mrGlobalSettings.getCalcGrammar()));
+
+    os::range_t ret;
+    ret.first.column = 0;
+    ret.first.row = 0;
+    ret.last.column = 0;
+    ret.last.row = 0;
+
+    if (aRange.IsValid())
+    {
+        ret.first.column = aRange.aStart.Col();
+        ret.first.row    = aRange.aStart.Row();
+        ret.last.column  = aRange.aEnd.Col();
+        ret.last.row     = aRange.aEnd.Row();
+    }
+
+    return ret;
+}
+
+ScOrcusNamedExpression::ScOrcusNamedExpression(
+    ScDocumentImport& rDoc, const ScOrcusGlobalSettings& rGS, SCTAB nTab ) :
+    mrDoc(rDoc), mrGlobalSettings(rGS), mnTab(nTab) {}
+
+void ScOrcusNamedExpression::define_name(const char* p_name, size_t n_name, const char* p_exp, size_t n_exp)
+{
+    OUString aName(p_name, n_name, mrGlobalSettings.getTextEncoding());
+    OUString aExpr(p_exp, n_exp, mrGlobalSettings.getTextEncoding());
+
+    ScRangeName* pNames = mnTab >= 0 ? mrDoc.getDoc().GetRangeName(mnTab) : mrDoc.getDoc().GetRangeName();
+    if (!pNames)
+        return;
+
+    ScRangeData* pRange = new ScRangeData(
+        &mrDoc.getDoc(), aName, aExpr, ScAddress(), ScRangeData::Type::Name,
+        mrGlobalSettings.getCalcGrammar());
+
+    pNames->insert(pRange, false);
+}
+
+ScOrcusFactory::CellStoreToken::CellStoreToken(const ScAddress& rPos, Type eType)
+    : maPos(rPos)
+    , meType(eType)
+    , mnIndex1(0)
+    , mnIndex2(0)
+    , meGrammar(formula::FormulaGrammar::GRAM_UNSPECIFIED)
+{
+    rtl::math::setNan(&mfValue);
+}
+
+ScOrcusFactory::CellStoreToken::CellStoreToken(const ScAddress& rPos, double fValue)
+    : maPos(rPos)
+    , meType(Type::Numeric)
+    , mfValue(fValue)
+    , mnIndex1(0)
+    , mnIndex2(0)
+    , meGrammar(formula::FormulaGrammar::GRAM_UNSPECIFIED)
+{
+}
+
+ScOrcusFactory::CellStoreToken::CellStoreToken(const ScAddress& rPos, uint32_t nIndex)
+    : maPos(rPos)
+    , meType(Type::String)
+    , mnIndex1(nIndex)
+    , mnIndex2(0)
+    , meGrammar(formula::FormulaGrammar::GRAM_UNSPECIFIED)
+{
+    rtl::math::setNan(&mfValue);
+}
+
+ScOrcusFactory::CellStoreToken::CellStoreToken(const ScAddress& rPos, const OUString& rFormula,
+        formula::FormulaGrammar::Grammar eGrammar)
+    : maPos(rPos)
+    , meType(Type::Formula)
+    , maStr1(rFormula)
+    , mnIndex1(0)
+    , mnIndex2(0)
+    , meGrammar(eGrammar)
+{
+    rtl::math::setNan(&mfValue);
+}
+
+ScOrcusFactory::ScOrcusFactory(ScDocument& rDoc, bool bSkipDefaultStyles) :
     maDoc(rDoc),
     maGlobalSettings(maDoc),
     maSharedStrings(*this),
-    maStyles(rDoc),
+    maNamedExpressions(maDoc, maGlobalSettings),
+    maStyles(*this, bSkipDefaultStyles),
     mnProgress(0) {}
 
-orcus::spreadsheet::iface::import_sheet* ScOrcusFactory::append_sheet(const char* sheet_name, size_t sheet_name_length)
+orcus::spreadsheet::iface::import_sheet* ScOrcusFactory::append_sheet(
+    orcus::spreadsheet::sheet_t sheet_index, const char* sheet_name, size_t sheet_name_length)
 {
-    OUString aTabName(sheet_name, sheet_name_length, RTL_TEXTENCODING_UTF8);
+    OUString aTabName(sheet_name, sheet_name_length, maGlobalSettings.getTextEncoding());
+
+    if (sheet_index == 0)
+    {
+        // The calc document initializes with one sheet already present.
+        assert(maDoc.getSheetCount() == 1);
+        maDoc.setSheetName(0, aTabName);
+        maSheets.push_back(std::make_unique<ScOrcusSheet>(maDoc, 0, *this));
+        return maSheets.back().get();
+    }
+
     if (!maDoc.appendSheet(aTabName))
         return nullptr;
 
     SCTAB nTab = maDoc.getSheetCount() - 1;
-    maSheets.push_back(o3tl::make_unique<ScOrcusSheet>(maDoc, nTab, *this));
+    maSheets.push_back(std::make_unique<ScOrcusSheet>(maDoc, nTab, *this));
     return maSheets.back().get();
 }
 
-class FindSheetByIndex : public std::unary_function< std::unique_ptr<ScOrcusSheet>, bool>
+class FindSheetByIndex
 {
-    SCTAB mnTab;
+    SCTAB const mnTab;
 public:
     explicit FindSheetByIndex(SCTAB nTab) : mnTab(nTab) {}
     bool operator() (const std::unique_ptr<ScOrcusSheet>& rSheet) const
@@ -92,7 +312,7 @@ public:
 
 orcus::spreadsheet::iface::import_sheet* ScOrcusFactory::get_sheet(const char* sheet_name, size_t sheet_name_length)
 {
-    OUString aTabName(sheet_name, sheet_name_length, RTL_TEXTENCODING_UTF8);
+    OUString aTabName(sheet_name, sheet_name_length, maGlobalSettings.getTextEncoding());
     SCTAB nTab = maDoc.getSheetIndex(aTabName);
     if (nTab < 0)
         // Sheet by that name not found.
@@ -107,7 +327,7 @@ orcus::spreadsheet::iface::import_sheet* ScOrcusFactory::get_sheet(const char* s
         return it->get();
 
     // Create a new orcus sheet instance for this.
-    maSheets.push_back(o3tl::make_unique<ScOrcusSheet>(maDoc, nTab, *this));
+    maSheets.push_back(std::make_unique<ScOrcusSheet>(maDoc, nTab, *this));
     return maSheets.back().get();
 }
 
@@ -123,7 +343,7 @@ orcus::spreadsheet::iface::import_sheet* ScOrcusFactory::get_sheet(orcus::spread
         return it->get();
 
     // Create a new orcus sheet instance for this.
-    maSheets.push_back(o3tl::make_unique<ScOrcusSheet>(maDoc, nTab, *this));
+    maSheets.push_back(std::make_unique<ScOrcusSheet>(maDoc, nTab, *this));
     return maSheets.back().get();
 }
 
@@ -137,6 +357,11 @@ orcus::spreadsheet::iface::import_shared_strings* ScOrcusFactory::get_shared_str
     return &maSharedStrings;
 }
 
+orcus::spreadsheet::iface::import_named_expression* ScOrcusFactory::get_named_expression()
+{
+    return &maNamedExpressions;
+}
+
 orcus::spreadsheet::iface::import_styles* ScOrcusFactory::get_styles()
 {
     return &maStyles;
@@ -144,16 +369,112 @@ orcus::spreadsheet::iface::import_styles* ScOrcusFactory::get_styles()
 
 void ScOrcusFactory::finalize()
 {
-    int nCellCount = 0;
-    StringCellCaches::const_iterator it = maStringCells.begin(), itEnd = maStringCells.end();
-    for (; it != itEnd; ++it)
+    auto toFormulaCell = [this]( const CellStoreToken& rToken ) -> std::unique_ptr<ScFormulaCell>
     {
-        if (it->mnIndex >= maStrings.size())
-            // String index out-of-bound!  Something is up.
-            continue;
+        const ScOrcusSheet& rSheet = *maSheets.at(rToken.maPos.Tab());
+        const sc::SharedFormulaGroups& rSFG = rSheet.getSharedFormulaGroups();
+        const ScTokenArray* pArray = rSFG.get(rToken.mnIndex1);
+        if (!pArray)
+            return std::unique_ptr<ScFormulaCell>();
 
-        maDoc.setStringCell(it->maPos, maStrings[it->mnIndex]);
-        ++nCellCount;
+        return std::make_unique<ScFormulaCell>(&maDoc.getDoc(), rToken.maPos, *pArray);
+    };
+
+    int nCellCount = 0;
+
+    for (const CellStoreToken& rToken : maCellStoreTokens)
+    {
+        switch (rToken.meType)
+        {
+            case CellStoreToken::Type::Auto:
+            {
+                maDoc.setAutoInput(rToken.maPos, rToken.maStr1);
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::String:
+            {
+                if (rToken.mnIndex1 >= maStrings.size())
+                    // String index out-of-bound!  Something is up.
+                    break;
+
+                maDoc.setStringCell(rToken.maPos, maStrings[rToken.mnIndex1]);
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::Numeric:
+            {
+                maDoc.setNumericCell(rToken.maPos, rToken.mfValue);
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::Formula:
+            {
+                maDoc.setFormulaCell(
+                    rToken.maPos, rToken.maStr1, rToken.meGrammar);
+
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::FormulaWithResult:
+            {
+                if (rtl::math::isFinite(rToken.mfValue))
+                    maDoc.setFormulaCell(rToken.maPos, rToken.maStr1, rToken.meGrammar, &rToken.mfValue);
+                else
+                    maDoc.setFormulaCell(rToken.maPos, rToken.maStr1, rToken.meGrammar, rToken.maStr2);
+
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::SharedFormula:
+            {
+                std::unique_ptr<ScFormulaCell> pCell = toFormulaCell(rToken);
+                if (!pCell)
+                    break;
+
+                maDoc.setFormulaCell(rToken.maPos, pCell.release());
+
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::SharedFormulaWithResult:
+            {
+                std::unique_ptr<ScFormulaCell> pCell = toFormulaCell(rToken);
+                if (!pCell)
+                    break;
+
+                if (rtl::math::isFinite(rToken.mfValue))
+                    pCell->SetResultDouble(rToken.mfValue);
+                else
+                    pCell->SetHybridString(
+                        maDoc.getDoc().GetSharedStringPool().intern(rToken.maStr2));
+
+                maDoc.setFormulaCell(rToken.maPos, pCell.release());
+
+                ++nCellCount;
+                break;
+            }
+            case CellStoreToken::Type::Matrix:
+            {
+                if (!rToken.mnIndex1 || !rToken.mnIndex2)
+                    break;
+
+                ScRange aRange(rToken.maPos);
+                aRange.aEnd.IncCol(rToken.mnIndex1-1);
+                aRange.aEnd.IncRow(rToken.mnIndex2-1);
+
+                ScCompiler aComp(&maDoc.getDoc(), aRange.aStart, rToken.meGrammar);
+                std::unique_ptr<ScTokenArray> pArray(aComp.CompileString(rToken.maStr1));
+                if (!pArray)
+                    break;
+
+                maDoc.setMatrixCells(aRange, *pArray, rToken.meGrammar);
+                break;
+            }
+            default:
+                ;
+        }
+
         if (nCellCount == 100000)
         {
             incrementProgress();
@@ -167,11 +488,16 @@ void ScOrcusFactory::finalize()
     maDoc.finalize();
 }
 
+ScDocumentImport& ScOrcusFactory::getDoc()
+{
+    return maDoc;
+}
+
 size_t ScOrcusFactory::appendString(const OUString& rStr)
 {
     size_t nPos = maStrings.size();
     maStrings.push_back(rStr);
-    maStringHash.insert(StringHashType::value_type(rStr, nPos));
+    maStringHash.emplace(rStr, nPos);
 
     return nPos;
 }
@@ -186,9 +512,101 @@ size_t ScOrcusFactory::addString(const OUString& rStr)
     return appendString(rStr);
 }
 
-void ScOrcusFactory::pushStringCell(const ScAddress& rPos, size_t nStrIndex)
+const OUString* ScOrcusFactory::getString(size_t nIndex) const
 {
-    maStringCells.push_back(StringCellCache(rPos, nStrIndex));
+    return nIndex < maStrings.size() ? &maStrings[nIndex] : nullptr;
+}
+
+void ScOrcusFactory::pushCellStoreAutoToken( const ScAddress& rPos, const OUString& rVal )
+{
+    maCellStoreTokens.emplace_back(rPos, CellStoreToken::Type::Auto);
+    maCellStoreTokens.back().maStr1 = rVal;
+}
+
+void ScOrcusFactory::pushCellStoreToken( const ScAddress& rPos, uint32_t nStrIndex )
+{
+    maCellStoreTokens.emplace_back(rPos, nStrIndex);
+}
+
+void ScOrcusFactory::pushCellStoreToken( const ScAddress& rPos, double fValue )
+{
+    maCellStoreTokens.emplace_back(rPos, fValue);
+}
+
+void ScOrcusFactory::pushCellStoreToken(
+    const ScAddress& rPos, const OUString& rFormula, formula::FormulaGrammar::Grammar eGrammar )
+{
+    maCellStoreTokens.emplace_back(rPos, rFormula, eGrammar);
+}
+
+void ScOrcusFactory::pushSharedFormulaToken( const ScAddress& rPos, uint32_t nIndex )
+{
+    maCellStoreTokens.emplace_back(rPos, CellStoreToken::Type::SharedFormula);
+    maCellStoreTokens.back().mnIndex1 = nIndex;
+}
+
+void ScOrcusFactory::pushMatrixFormulaToken(
+    const ScAddress& rPos, const OUString& rFormula, formula::FormulaGrammar::Grammar eGrammar,
+    uint32_t nRowRange, uint32_t nColRange )
+{
+    maCellStoreTokens.emplace_back(rPos, CellStoreToken::Type::Matrix);
+    CellStoreToken& rT = maCellStoreTokens.back();
+    rT.maStr1 = rFormula;
+    rT.meGrammar = eGrammar;
+    rT.mnIndex1 = nColRange;
+    rT.mnIndex2 = nRowRange;
+}
+
+void ScOrcusFactory::pushFormulaResult( const ScAddress& rPos, double fValue )
+{
+    // Formula result is expected to be pushed immediately following the
+    // formula token it belongs.
+    if (maCellStoreTokens.empty())
+        return;
+
+    CellStoreToken& rToken = maCellStoreTokens.back();
+    if (rToken.maPos != rPos)
+        return;
+
+    switch (rToken.meType)
+    {
+        case CellStoreToken::Type::Formula:
+            rToken.meType = CellStoreToken::Type::FormulaWithResult;
+            break;
+        case CellStoreToken::Type::SharedFormula:
+            rToken.meType = CellStoreToken::Type::SharedFormulaWithResult;
+            break;
+        default:
+            return;
+    }
+
+    rToken.mfValue = fValue;
+}
+
+void ScOrcusFactory::pushFormulaResult( const ScAddress& rPos, const OUString& rValue )
+{
+    // Formula result is expected to be pushed immediately following the
+    // formula token it belongs.
+    if (maCellStoreTokens.empty())
+        return;
+
+    CellStoreToken& rToken = maCellStoreTokens.back();
+    if (rToken.maPos != rPos)
+        return;
+
+    switch (rToken.meType)
+    {
+        case CellStoreToken::Type::Formula:
+            rToken.meType = CellStoreToken::Type::FormulaWithResult;
+            break;
+        case CellStoreToken::Type::SharedFormula:
+            rToken.meType = CellStoreToken::Type::SharedFormulaWithResult;
+            break;
+        default:
+            return;
+    }
+
+    rToken.maStr2 = rValue;
 }
 
 void ScOrcusFactory::incrementProgress()
@@ -201,7 +619,7 @@ void ScOrcusFactory::incrementProgress()
     // in all cases.
 
     if (!mnProgress)
-        mxStatusIndicator->start(ScGlobal::GetRscString(STR_LOAD_DOC), 100);
+        mxStatusIndicator->start(ScResId(STR_LOAD_DOC), 100);
 
     if (mnProgress == 99)
         return;
@@ -213,6 +631,11 @@ void ScOrcusFactory::incrementProgress()
 void ScOrcusFactory::setStatusIndicator(const uno::Reference<task::XStatusIndicator>& rIndicator)
 {
     mxStatusIndicator = rIndicator;
+}
+
+const ScOrcusGlobalSettings& ScOrcusFactory::getGlobalSettings() const
+{
+    return maGlobalSettings;
 }
 
 ScOrcusSheetProperties::ScOrcusSheetProperties(SCTAB nTab, ScDocumentImport& rDoc):
@@ -244,7 +667,8 @@ double translateToInternal(double nVal, orcus::length_unit_t unit)
             return nVal * 20.0 * 72.0 / 2.54;
             break;
         case orcus::length_unit_t::unknown:
-            SAL_WARN("sc.orcus", "unknown unit");
+            if (nVal != 0)
+                SAL_WARN("sc.orcus", "unknown unit");
             break;
         default:
             break;
@@ -279,17 +703,17 @@ void ScOrcusSheetProperties::set_row_hidden(os::row_t row, bool hidden)
         mrDoc.getDoc().SetRowHidden(row, row, mnTab, hidden);
 }
 
-void ScOrcusSheetProperties::set_merge_cell_range(const char* /*p_range*/, size_t /*n_range*/)
+void ScOrcusSheetProperties::set_merge_cell_range(const orcus::spreadsheet::range_t& range)
 {
+    mrDoc.setMergedCells(mnTab, range.first.column, range.first.row, range.last.column, range.last.row);
 }
 
 ScOrcusConditionalFormat::ScOrcusConditionalFormat(SCTAB nTab, ScDocument& rDoc):
     mnTab(nTab),
     mrDoc(rDoc),
     mpCurrentFormat(new ScConditionalFormat(0, &mrDoc)),
-    meEntryType(condformat::CONDITION)
+    meEntryType(ScFormatEntry::Type::Condition)
 {
-    (void)mnTab;
 }
 
 ScOrcusConditionalFormat::~ScOrcusConditionalFormat()
@@ -304,7 +728,7 @@ void ScOrcusConditionalFormat::set_color(os::color_elem_t /*alpha*/, os::color_e
 
 void ScOrcusConditionalFormat::set_condition_type(os::condition_type_t /*type*/)
 {
-    assert(meEntryType == condformat::CONDITION);
+    assert(meEntryType == ScFormatEntry::Type::Condition);
     SAL_INFO("sc.orcus.condformat", "set_condition_type");
 }
 
@@ -315,7 +739,7 @@ void ScOrcusConditionalFormat::set_formula(const char* /*p*/, size_t /*n*/)
 
 void ScOrcusConditionalFormat::set_date(os::condition_date_t /*date*/)
 {
-    assert(meEntryType == condformat::DATE);
+    assert(meEntryType == ScFormatEntry::Type::Date);
     SAL_INFO("sc.orcus.condformat", "set_date");
 }
 
@@ -326,45 +750,45 @@ void ScOrcusConditionalFormat::commit_condition()
 
 void ScOrcusConditionalFormat::set_icon_name(const char* /*p*/, size_t /*n*/)
 {
-    assert(meEntryType == condformat::ICONSET);
+    assert(meEntryType == ScFormatEntry::Type::Iconset);
     SAL_INFO("sc.orcus.condformat", "set_icon_name");
 }
 
 void ScOrcusConditionalFormat::set_databar_gradient(bool /*gradient*/)
 {
-    assert(meEntryType == condformat::DATABAR);
+    assert(meEntryType == ScFormatEntry::Type::Databar);
     SAL_INFO("sc.orcus.condformat", "set_databar_gradient");
 }
 
 void ScOrcusConditionalFormat::set_databar_axis(os::databar_axis_t /*axis*/)
 {
-    assert(meEntryType == condformat::DATABAR);
+    assert(meEntryType == ScFormatEntry::Type::Databar);
     SAL_INFO("sc.orcus.condformat", "set_databar_axis");
 }
 
 void ScOrcusConditionalFormat::set_databar_color_positive(os::color_elem_t /*alpha*/, os::color_elem_t /*red*/,
         os::color_elem_t /*green*/, os::color_elem_t /*blue*/)
 {
-    assert(meEntryType == condformat::DATABAR);
+    assert(meEntryType == ScFormatEntry::Type::Databar);
     SAL_INFO("sc.orcus.condformat", "set_databar_color_positive");
 }
 
 void ScOrcusConditionalFormat::set_databar_color_negative(os::color_elem_t /*alpha*/, os::color_elem_t /*red*/,
         os::color_elem_t /*green*/, os::color_elem_t /*blue*/)
 {
-    assert(meEntryType == condformat::DATABAR);
+    assert(meEntryType == ScFormatEntry::Type::Databar);
     SAL_INFO("sc.orcus.condformat", "set_databar_color_negative");
 }
 
 void ScOrcusConditionalFormat::set_min_databar_length(double /*length*/)
 {
-    assert(meEntryType == condformat::DATABAR);
+    assert(meEntryType == ScFormatEntry::Type::Databar);
     SAL_INFO("sc.orcus.condformat", "set_min_databar_length");
 }
 
 void ScOrcusConditionalFormat::set_max_databar_length(double /*length*/)
 {
-    assert(meEntryType == condformat::DATABAR);
+    assert(meEntryType == ScFormatEntry::Type::Databar);
     SAL_INFO("sc.orcus.condformat", "set_max_databar_length");
 }
 
@@ -375,7 +799,7 @@ void ScOrcusConditionalFormat::set_show_value(bool /*show*/)
 
 void ScOrcusConditionalFormat::set_iconset_reverse(bool /*reverse*/)
 {
-    assert(meEntryType == condformat::ICONSET);
+    assert(meEntryType == ScFormatEntry::Type::Iconset);
     SAL_INFO("sc.orcus.condformat", "set_iconset_reverse");
 }
 
@@ -395,7 +819,7 @@ void ScOrcusConditionalFormat::set_type(os::conditional_format_t type)
     {
         case os::conditional_format_t::condition:
         case os::conditional_format_t::formula:
-            meEntryType = condformat::CONDITION;
+            meEntryType = ScFormatEntry::Type::Condition;
             // mpCurrentEntry.reset(new ScCondFormatEntry());
         break;
         case os::conditional_format_t::date:
@@ -442,11 +866,199 @@ ScOrcusSheet::ScOrcusSheet(ScDocumentImport& rDoc, SCTAB nTab, ScOrcusFactory& r
     mnTab(nTab),
     mrFactory(rFactory),
     mrStyles(static_cast<ScOrcusStyles&>(*mrFactory.get_styles())),
-    maAutoFilter(rDoc.getDoc()),
+    maAutoFilter(rFactory.getGlobalSettings()),
     maProperties(mnTab, mrDoc),
     maConditionalFormat(mnTab, rDoc.getDoc()),
+    maNamedExpressions(rDoc, rFactory.getGlobalSettings(), nTab),
+    maFormula(*this),
+    maArrayFormula(*this),
     mnCellCount(0)
 {
+}
+
+void ScOrcusFormula::reset()
+{
+    mnCol = -1;
+    mnRow = -1;
+    maFormula.clear();
+    meGrammar = formula::FormulaGrammar::GRAM_UNSPECIFIED;
+    mnSharedFormulaIndex = 0;
+    mbShared = false;
+    meResType = ResultType::NotSet;
+    mnResult = 0;
+    mfResult = 0.0;
+}
+
+ScOrcusFormula::ScOrcusFormula( ScOrcusSheet& rSheet ) :
+    mrSheet(rSheet),
+    mnCol(-1),
+    mnRow(-1),
+    meGrammar(formula::FormulaGrammar::GRAM_UNSPECIFIED),
+    mnSharedFormulaIndex(0),
+    mbShared(false),
+    meResType(ResultType::NotSet),
+    mnResult(0),
+    mfResult(0.0) {}
+
+ScOrcusFormula::~ScOrcusFormula() {}
+
+void ScOrcusFormula::set_position(os::row_t row, os::col_t col)
+{
+    mnCol = col;
+    mnRow = row;
+}
+
+void ScOrcusFormula::set_formula(os::formula_grammar_t grammar, const char* p, size_t n)
+{
+    maFormula = OUString(p, n, mrSheet.getFactory().getGlobalSettings().getTextEncoding());
+    meGrammar = getCalcGrammarFromOrcus(grammar);
+}
+
+void ScOrcusFormula::set_shared_formula_index(size_t index)
+{
+    mnSharedFormulaIndex = index;
+    mbShared = true;
+}
+
+void ScOrcusFormula::set_result_value(double value)
+{
+    meResType = ResultType::Value;
+    mfResult = value;
+}
+
+void ScOrcusFormula::set_result_string(size_t sindex)
+{
+    meResType = ResultType::String;
+    mnResult = sindex;
+}
+
+void ScOrcusFormula::set_result_empty()
+{
+    meResType = ResultType::Empty;
+}
+
+void ScOrcusFormula::set_result_bool(bool value)
+{
+    meResType = ResultType::Value;
+    mfResult = value ? 1.0 : 0.0;
+}
+
+void ScOrcusFormula::commit()
+{
+    ScOrcusFactory& rFactory = mrSheet.getFactory();
+    sc::SharedFormulaGroups& rGroups = mrSheet.getSharedFormulaGroups();
+    ScAddress aPos(mnCol, mnRow, mrSheet.getIndex());
+
+    if (mbShared)
+    {
+        if (maFormula.isEmpty())
+        {
+            // shared formula that references existing formula token.
+            const ScTokenArray* pArray = rGroups.get(mnSharedFormulaIndex);
+            if (!pArray)
+                return;
+        }
+        else
+        {
+            // topmost shared formula with new formula token.
+
+            // Compile the formula expression into tokens.
+            ScCompiler aComp(&mrSheet.getDoc().getDoc(), aPos, meGrammar);
+            std::unique_ptr<ScTokenArray> pArray = aComp.CompileString(maFormula);
+            if (!pArray)
+                // Tokenization failed.
+                return;
+
+            rGroups.set(mnSharedFormulaIndex, std::move(pArray));
+        }
+        rFactory.pushSharedFormulaToken(aPos, mnSharedFormulaIndex);
+    }
+    else
+    {
+        // non-shared formula
+        rFactory.pushCellStoreToken(aPos, maFormula, meGrammar);
+    }
+
+    switch (meResType)
+    {
+        case ResultType::String:
+        {
+            const OUString* pStr = rFactory.getString(mnResult);
+            if (pStr)
+                rFactory.pushFormulaResult(aPos, *pStr);
+            break;
+        }
+        case ResultType::Value:
+            rFactory.pushFormulaResult(aPos, mfResult);
+            break;
+        default:
+            ;
+    }
+
+    mrSheet.cellInserted();
+}
+
+void ScOrcusArrayFormula::reset()
+{
+    mnCol = -1;
+    mnRow = -1;
+    mnColRange = 0;
+    mnRowRange = 0;
+
+    maFormula.clear();
+    meGrammar = formula::FormulaGrammar::GRAM_UNSPECIFIED;
+}
+
+ScOrcusArrayFormula::ScOrcusArrayFormula( ScOrcusSheet& rSheet ) :
+    mrSheet(rSheet),
+    mnCol(-1),
+    mnRow(-1),
+    mnColRange(0),
+    mnRowRange(0),
+    meGrammar(formula::FormulaGrammar::GRAM_UNSPECIFIED) {}
+
+ScOrcusArrayFormula::~ScOrcusArrayFormula() {}
+
+void ScOrcusArrayFormula::set_range(const os::range_t& range)
+{
+    mnCol = range.first.column;
+    mnRow = range.first.row;
+
+    mnColRange = range.last.column - range.first.column + 1;
+    mnRowRange = range.last.row - range.first.column + 1;
+}
+
+void ScOrcusArrayFormula::set_formula(os::formula_grammar_t grammar, const char* p, size_t n)
+{
+    meGrammar = getCalcGrammarFromOrcus(grammar);
+    maFormula = OUString(p, n, mrSheet.getFactory().getGlobalSettings().getTextEncoding());
+}
+
+void ScOrcusArrayFormula::set_result_value(os::row_t /*row*/, os::col_t /*col*/, double /*value*/)
+{
+    // TODO : implement result cache for matrix
+}
+
+void ScOrcusArrayFormula::set_result_string(os::row_t /*row*/, os::col_t /*col*/, size_t /*sindex*/)
+{
+    // TODO : implement result cache for matrix
+}
+
+void ScOrcusArrayFormula::set_result_empty(os::row_t /*row*/, os::col_t /*col*/)
+{
+    // TODO : implement result cache for matrix
+}
+
+void ScOrcusArrayFormula::set_result_bool(os::row_t /*row*/, os::col_t /*col*/, bool /*value*/)
+{
+    // TODO : implement result cache for matrix
+}
+
+void ScOrcusArrayFormula::commit()
+{
+    ScAddress aPos(mnCol, mnRow, mrSheet.getIndex());
+    mrSheet.getFactory().pushMatrixFormulaToken(aPos, maFormula, meGrammar, mnRowRange, mnColRange);
+    mrSheet.cellInserted();
 }
 
 void ScOrcusSheet::cellInserted()
@@ -457,6 +1069,16 @@ void ScOrcusSheet::cellInserted()
         mrFactory.incrementProgress();
         mnCellCount = 0;
     }
+}
+
+ScDocumentImport& ScOrcusSheet::getDoc()
+{
+    return mrDoc;
+}
+
+os::iface::import_auto_filter* ScOrcusSheet::get_auto_filter()
+{
+    return &maAutoFilter;
 }
 
 os::iface::import_table* ScOrcusSheet::get_table()
@@ -474,33 +1096,45 @@ os::iface::import_conditional_format* ScOrcusSheet::get_conditional_format()
     return &maConditionalFormat;
 }
 
+os::iface::import_named_expression* ScOrcusSheet::get_named_expression()
+{
+    return &maNamedExpressions;
+}
+
+os::iface::import_formula* ScOrcusSheet::get_formula()
+{
+    maFormula.reset();
+    return &maFormula;
+}
+
+os::iface::import_array_formula* ScOrcusSheet::get_array_formula()
+{
+    maArrayFormula.reset();
+    return &maArrayFormula;
+}
+
 void ScOrcusSheet::set_auto(os::row_t row, os::col_t col, const char* p, size_t n)
 {
-    OUString aVal(p, n, RTL_TEXTENCODING_UTF8);
-    mrDoc.setAutoInput(ScAddress(col, row, mnTab), aVal);
+    OUString aVal(p, n, mrFactory.getGlobalSettings().getTextEncoding());
+    mrFactory.pushCellStoreAutoToken(ScAddress(col, row, mnTab), aVal);
     cellInserted();
 }
 
 void ScOrcusSheet::set_string(os::row_t row, os::col_t col, size_t sindex)
 {
-    // We need to defer string cells since the shared string pool is not yet
-    // populated at the time this method is called.  Orcus imports string
-    // table after the cells get imported.  We won't need to do this once we
-    // implement true shared strings in Calc core.
-
-    mrFactory.pushStringCell(ScAddress(col, row, mnTab), sindex);
+    mrFactory.pushCellStoreToken(ScAddress(col, row, mnTab), uint32_t(sindex));
     cellInserted();
 }
 
 void ScOrcusSheet::set_value(os::row_t row, os::col_t col, double value)
 {
-    mrDoc.setNumericCell(ScAddress(col, row, mnTab), value);
+    mrFactory.pushCellStoreToken(ScAddress(col, row, mnTab), value);
     cellInserted();
 }
 
 void ScOrcusSheet::set_bool(os::row_t row, os::col_t col, bool value)
 {
-    mrDoc.setNumericCell(ScAddress(col, row, mnTab), value ? 1.0 : 0.0);
+    mrFactory.pushCellStoreToken(ScAddress(col, row, mnTab), value ? 1.0 : 0.0);
     cellInserted();
 }
 
@@ -513,8 +1147,7 @@ void ScOrcusSheet::set_date_time(
     sal_uInt32 nSec = floor(second);
     sal_uInt32 nNanoSec = (second - nSec) * ::tools::Time::nanoSecPerSec;
     tools::Time aTime(hour, minute, nSec, nNanoSec);
-    Date aNullDate(*pFormatter->GetNullDate());
-    long nDateDiff = aDate - aNullDate;
+    long nDateDiff = aDate - pFormatter->GetNullDate();
 
     double fTime =
         static_cast<double>(aTime.GetNanoSec()) / ::tools::Time::nanoSecPerSec +
@@ -524,13 +1157,17 @@ void ScOrcusSheet::set_date_time(
 
     fTime /= DATE_TIME_FACTOR;
 
-    mrDoc.setNumericCell(ScAddress(col, row, mnTab), nDateDiff + fTime);
+    mrFactory.pushCellStoreToken(ScAddress(col, row, mnTab), nDateDiff + fTime);
     cellInserted();
 }
 
-void ScOrcusSheet::set_format(os::row_t /*row*/, os::col_t /*col*/, size_t xf_index)
+void ScOrcusSheet::set_format(os::row_t row, os::col_t col, size_t xf_index)
 {
     SAL_INFO("sc.orcus.style", "set format: " << xf_index);
+
+    ScPatternAttr aPattern(mrDoc.getDoc().GetPool());
+    mrStyles.applyXfToItemSet(aPattern.GetItemSet(), xf_index);
+    mrDoc.getDoc().ApplyPattern(col, row, mnTab, aPattern);
 }
 
 void ScOrcusSheet::set_format(os::row_t row_start, os::col_t col_start,
@@ -542,138 +1179,28 @@ void ScOrcusSheet::set_format(os::row_t row_start, os::col_t col_start,
     mrDoc.getDoc().ApplyPatternAreaTab(col_start, row_start, col_end, row_end, mnTab, aPattern);
 }
 
-namespace {
-
-formula::FormulaGrammar::Grammar getCalcGrammarFromOrcus( os::formula_grammar_t grammar )
+orcus::spreadsheet::range_size_t ScOrcusSheet::get_sheet_size() const
 {
-    formula::FormulaGrammar::Grammar eGrammar = formula::FormulaGrammar::GRAM_ODFF;
-    switch(grammar)
-    {
-        case orcus::spreadsheet::formula_grammar_t::ods:
-            eGrammar = formula::FormulaGrammar::GRAM_ODFF;
-            break;
-        case orcus::spreadsheet::formula_grammar_t::xlsx_2007:
-        case orcus::spreadsheet::formula_grammar_t::xlsx_2010:
-            eGrammar = formula::FormulaGrammar::GRAM_OOXML;
-            break;
-        case orcus::spreadsheet::formula_grammar_t::gnumeric:
-            eGrammar = formula::FormulaGrammar::GRAM_ENGLISH_XL_A1;
-            break;
-        case orcus::spreadsheet::formula_grammar_t::unknown:
-            break;
-    }
+    orcus::spreadsheet::range_size_t ret;
+    ret.rows = MAXROWCOUNT;
+    ret.columns = MAXCOLCOUNT;
 
-    return eGrammar;
+    return ret;
 }
 
+const sc::SharedFormulaGroups& ScOrcusSheet::getSharedFormulaGroups() const
+{
+    return maFormulaGroups;
 }
 
-void ScOrcusSheet::set_formula(
-    os::row_t row, os::col_t col, os::formula_grammar_t grammar, const char* p, size_t n)
+sc::SharedFormulaGroups& ScOrcusSheet::getSharedFormulaGroups()
 {
-    OUString aFormula(p, n, RTL_TEXTENCODING_UTF8);
-    formula::FormulaGrammar::Grammar eGrammar = getCalcGrammarFromOrcus( grammar );
-    mrDoc.setFormulaCell(ScAddress(col,row,mnTab), aFormula, eGrammar);
-    cellInserted();
+    return maFormulaGroups;
 }
 
-void ScOrcusSheet::set_formula_result(os::row_t row, os::col_t col, const char* p, size_t n)
+ScOrcusFactory& ScOrcusSheet::getFactory()
 {
-    ScFormulaCell* pCell = mrDoc.getDoc().GetFormulaCell(ScAddress(col, row, mnTab));
-    if (!pCell)
-    {
-        SAL_WARN("sc", "trying to set formula result for non formula \
-                cell! Col: " << col << ";Row: " << row << ";Tab: " << mnTab);
-        return;
-    }
-    OUString aResult( p, n, RTL_TEXTENCODING_UTF8);
-    pCell->SetHybridString(mrDoc.getDoc().GetSharedStringPool().intern(aResult));
-}
-
-void ScOrcusSheet::set_formula_result(os::row_t row, os::col_t col, double /*val*/)
-{
-    ScFormulaCell* pCell = mrDoc.getDoc().GetFormulaCell(ScAddress(col, row, mnTab));
-    if (!pCell)
-    {
-        SAL_WARN("sc", "trying to set formula result for non formula \
-                cell! Col: " << col << ";Row: " << row << ";Tab: " << mnTab);
-        return;
-    }
-
-    // TODO: FIXME
-}
-
-void ScOrcusSheet::set_shared_formula(
-    os::row_t row, os::col_t col, os::formula_grammar_t grammar, size_t sindex,
-    const char* p_formula, size_t n_formula)
-{
-    ScAddress aPos(col, row, mnTab);
-    OUString aFormula(p_formula, n_formula, RTL_TEXTENCODING_UTF8);
-    formula::FormulaGrammar::Grammar eGram = getCalcGrammarFromOrcus(grammar);
-
-    // Compile the formula expression into tokens.
-    ScCompiler aComp(&mrDoc.getDoc(), aPos);
-    aComp.SetGrammar(eGram);
-    ScTokenArray* pArray = aComp.CompileString(aFormula);
-    if (!pArray)
-        // Tokenization failed.
-        return;
-
-    maFormulaGroups.set(sindex, pArray);
-
-    ScFormulaCell* pCell = new ScFormulaCell(&mrDoc.getDoc(), aPos, *pArray);
-    mrDoc.setFormulaCell(aPos, pCell);
-    cellInserted();
-
-    // For now, orcus doesn't support setting cached result. Mark it for re-calculation.
-    pCell->SetDirty();
-}
-
-void ScOrcusSheet::set_shared_formula(
-    os::row_t row, os::col_t col, os::formula_grammar_t grammar, size_t sindex,
-    const char* p_formula, size_t n_formula, const char* /*p_range*/, size_t /*n_range*/)
-{
-    set_shared_formula(row, col, grammar, sindex, p_formula, n_formula);
-}
-
-void ScOrcusSheet::set_shared_formula(os::row_t row, os::col_t col, size_t sindex)
-{
-    ScAddress aPos(col, row, mnTab);
-
-    const ScTokenArray* pArray = maFormulaGroups.get(sindex);
-    if (!pArray)
-        return;
-
-    ScFormulaCell* pCell = new ScFormulaCell(&mrDoc.getDoc(), aPos, *pArray);
-    mrDoc.setFormulaCell(aPos, pCell);
-    cellInserted();
-
-    // For now, orcus doesn't support setting cached result. Mark it for re-calculation.
-    pCell->SetDirty();
-}
-
-void ScOrcusSheet::set_array_formula(
-    os::row_t row, os::col_t col, os::formula_grammar_t grammar,
-    const char* p, size_t n, os::row_t array_rows, os::col_t array_cols)
-{
-    formula::FormulaGrammar::Grammar eGrammar = getCalcGrammarFromOrcus( grammar );
-    OUString aFormula(p, n, RTL_TEXTENCODING_UTF8);
-
-    ScRange aRange(col, row, mnTab, col+array_cols, row + array_rows, mnTab);
-
-    ScCompiler aComp(&mrDoc.getDoc(), aRange.aStart);
-    aComp.SetGrammar(eGrammar);
-    std::unique_ptr<ScTokenArray> pArray(aComp.CompileString(aFormula));
-    if (!pArray)
-        return;
-
-    mrDoc.setMatrixCells(aRange, *pArray, eGrammar);
-}
-
-void ScOrcusSheet::set_array_formula(
-    os::row_t /*row*/, os::col_t /*col*/, os::formula_grammar_t /*grammar*/,
-    const char* /*p*/, size_t /*n*/, const char* /*p_range*/, size_t /*n_range*/)
-{
+    return mrFactory;
 }
 
 ScOrcusSharedStrings::ScOrcusSharedStrings(ScOrcusFactory& rFactory) :
@@ -681,13 +1208,13 @@ ScOrcusSharedStrings::ScOrcusSharedStrings(ScOrcusFactory& rFactory) :
 
 size_t ScOrcusSharedStrings::append(const char* s, size_t n)
 {
-    OUString aNewString(s, n, RTL_TEXTENCODING_UTF8);
+    OUString aNewString(s, n, mrFactory.getGlobalSettings().getTextEncoding());
     return mrFactory.appendString(aNewString);
 }
 
 size_t ScOrcusSharedStrings::add(const char* s, size_t n)
 {
-    OUString aNewString(s, n, RTL_TEXTENCODING_UTF8);
+    OUString aNewString(s, n, mrFactory.getGlobalSettings().getTextEncoding());
     return mrFactory.addString(aNewString);
 }
 
@@ -726,20 +1253,43 @@ void ScOrcusSharedStrings::append_segment(const char* s, size_t n)
 size_t ScOrcusSharedStrings::commit_segments()
 {
     OString aStr = maCurSegment.makeStringAndClear();
-    return mrFactory.addString(OStringToOUString(aStr, RTL_TEXTENCODING_UTF8));
+    return mrFactory.addString(
+        OStringToOUString(aStr, mrFactory.getGlobalSettings().getTextEncoding()));
 }
 
-ScOrcusStyles::ScOrcusStyles(ScDocument& rDoc):
-    mrDoc(rDoc)
+ScOrcusStyles::ScOrcusStyles( ScOrcusFactory& rFactory, bool bSkipDefaultStyles ) :
+    mrFactory(rFactory)
 {
-    mrDoc.GetStyleSheetPool()->CreateStandardStyles();
+    ScDocument& rDoc = rFactory.getDoc().getDoc();
+    if (!bSkipDefaultStyles && !rDoc.GetStyleSheetPool()->HasStandardStyles())
+        rDoc.GetStyleSheetPool()->CreateStandardStyles();
 }
 
 ScOrcusStyles::font::font():
     mbBold(false),
     mbItalic(false),
     mnSize(10),
-    meUnderline(LINESTYLE_NONE)
+    maColor(COL_BLACK),
+    mbHasFontAttr(false),
+    mbHasUnderlineAttr(false),
+    mbHasStrikeout(false),
+    meUnderline(LINESTYLE_NONE),
+    maUnderlineColor(COL_WHITE),
+    meStrikeout(STRIKEOUT_NONE)
+{
+}
+
+ScOrcusStyles::fill::fill():
+    mePattern(orcus::spreadsheet::fill_pattern_t::none),
+    maFgColor(COL_WHITE),
+    maBgColor(COL_WHITE),
+    mbHasFillAttr(false)
+{
+}
+
+ScOrcusStyles::number_format::number_format():
+    maCode(""),
+    mbHasNumberFormatAttr(false)
 {
 }
 
@@ -757,39 +1307,69 @@ std::ostream& operator<<(std::ostream& rStrm, const Color& rColor)
 
 void ScOrcusStyles::font::applyToItemSet(SfxItemSet& rSet) const
 {
-    FontItalic eItalic = mbItalic ? ITALIC_NORMAL : ITALIC_NONE;
-    rSet.Put(SvxPostureItem(eItalic, ATTR_FONT_POSTURE));
+    if (mbHasFontAttr)
+    {
+        FontItalic eItalic = mbItalic ? ITALIC_NORMAL : ITALIC_NONE;
+        rSet.Put(SvxPostureItem(eItalic, ATTR_FONT_POSTURE));
 
-    FontWeight eWeight = mbBold ? WEIGHT_BOLD : WEIGHT_NORMAL;
-    rSet.Put(SvxWeightItem(eWeight, ATTR_FONT_WEIGHT));
+        FontWeight eWeight = mbBold ? WEIGHT_BOLD : WEIGHT_NORMAL;
+        rSet.Put(SvxWeightItem(eWeight, ATTR_FONT_WEIGHT));
 
-    rSet.Put(SvxColorItem(maColor, ATTR_FONT_COLOR));
-    rSet.Put(SvxUnderlineItem(meUnderline, ATTR_FONT_UNDERLINE));
+        rSet.Put( SvxColorItem(maColor, ATTR_FONT_COLOR));
+
+        if(!maName.isEmpty())
+            rSet.Put( SvxFontItem( FAMILY_DONTKNOW, maName, maName, PITCH_DONTKNOW, RTL_TEXTENCODING_DONTKNOW, ATTR_FONT ));
+
+        rSet.Put( SvxFontHeightItem (translateToInternal(mnSize, orcus::length_unit_t::point), 100, ATTR_FONT_HEIGHT));
+    }
+
+    if (mbHasUnderlineAttr)
+    {
+        SvxUnderlineItem aUnderline(meUnderline, ATTR_FONT_UNDERLINE);
+        aUnderline.SetColor(maUnderlineColor);
+        rSet.Put(aUnderline);
+    }
+
+    if (mbHasStrikeout)
+        rSet.Put(SvxCrossedOutItem(meStrikeout, ATTR_FONT_CROSSEDOUT));
 }
 
 void ScOrcusStyles::fill::applyToItemSet(SfxItemSet& rSet) const
 {
-    if (maPattern.equalsIgnoreAsciiCase("none"))
+    if (mePattern == orcus::spreadsheet::fill_pattern_t::none)
     {
         SAL_INFO("sc.orcus.style", "no fill style");
         return;
     }
 
-    rSet.Put(SvxBrushItem(maBgColor, ATTR_BACKGROUND));
+    if (mePattern == orcus::spreadsheet::fill_pattern_t::solid)
+        rSet.Put(SvxBrushItem(maFgColor, ATTR_BACKGROUND));
 }
 
 ScOrcusStyles::protection::protection():
     mbHidden(false),
-    mbLocked(false)
+    mbLocked(true),
+    mbPrintContent(false),
+    mbFormulaHidden(false),
+    mbHasProtectionAttr(false)
 {
 }
 
-void ScOrcusStyles::protection::applyToItemSet(SfxItemSet& /*rSet*/) const
+void ScOrcusStyles::protection::applyToItemSet(SfxItemSet& rSet) const
 {
-    (void)this; // loplugin:staticmethods
+    rSet.Put(ScProtectionAttr(mbLocked, mbFormulaHidden, mbHidden, mbPrintContent));
 }
 
-ScOrcusStyles::border::border()
+ScOrcusStyles::border::border():
+    mbHasBorderAttr(false)
+{
+    border_line();
+}
+
+ScOrcusStyles::border::border_line::border_line():
+    meStyle(SvxBorderLineStyle::SOLID),
+    maColor(COL_BLACK),
+    mnWidth(0)
 {
 }
 
@@ -803,13 +1383,13 @@ SvxBoxItemLine getDirection(os::border_direction_t dir)
             return SvxBoxItemLine::RIGHT;
         break;
         case os::border_direction_t::left:
-            return SvxBoxItemLine::RIGHT;
+            return SvxBoxItemLine::LEFT;
         break;
         case os::border_direction_t::top:
-            return SvxBoxItemLine::RIGHT;
+            return SvxBoxItemLine::TOP;
         break;
         case os::border_direction_t::bottom:
-            return SvxBoxItemLine::RIGHT;
+            return SvxBoxItemLine::BOTTOM;
         break;
         default:
         break;
@@ -821,21 +1401,52 @@ SvxBoxItemLine getDirection(os::border_direction_t dir)
 
 void ScOrcusStyles::border::applyToItemSet(SfxItemSet& rSet) const
 {
-    SvxBoxItem aItem(ATTR_BORDER);
+    SvxBoxItem aBoxItem(ATTR_BORDER);
+    SvxLineItem aDiagonal_TLBR(ATTR_BORDER_TLBR);
+    SvxLineItem aDiagonal_BLTR(ATTR_BORDER_BLTR);
 
     for (auto& current_border_line : border_lines)
     {
         SvxBoxItemLine eDir = getDirection(current_border_line.first);
-        editeng::SvxBorderLine aLine(&current_border_line.second.maColor, 1);
-        aItem.SetLine(&aLine, eDir);
-    }
 
-    rSet.Put(aItem);
+        if (current_border_line.first == orcus::spreadsheet::border_direction_t::diagonal_tl_br)
+        {
+            editeng::SvxBorderLine aLine(&current_border_line.second.maColor, current_border_line.second.mnWidth, current_border_line.second.meStyle);
+            aDiagonal_TLBR.SetLine(&aLine);
+        }
+        else if (current_border_line.first == orcus::spreadsheet::border_direction_t::diagonal_bl_tr)
+        {
+            editeng::SvxBorderLine aLine(&current_border_line.second.maColor, current_border_line.second.mnWidth, current_border_line.second.meStyle);
+            aDiagonal_BLTR.SetLine(&aLine);
+        }
+        else
+        {
+            editeng::SvxBorderLine aLine(&current_border_line.second.maColor, current_border_line.second.mnWidth, current_border_line.second.meStyle);
+            aBoxItem.SetLine(&aLine, eDir);
+        }
+    }
+    rSet.Put(aDiagonal_BLTR);
+    rSet.Put(aDiagonal_TLBR);
+    rSet.Put(aBoxItem);
 }
 
-void ScOrcusStyles::number_format::applyToItemSet(SfxItemSet& /*rSet*/) const
+void ScOrcusStyles::number_format::applyToItemSet(SfxItemSet& rSet, const ScDocument& rDoc) const
 {
-    (void)this; // loplugin:staticmethods
+    sal_uInt32 nKey;
+    sal_Int32 nCheckPos;
+    SvNumberFormatter* pFormatter = rDoc.GetFormatTable();
+    OUString Code = maCode; /* <-- Done because the SvNumberFormatter::PutEntry demands a non const NumFormat Code*/
+    SvNumFormatType type = SvNumFormatType::ALL;
+
+    if (pFormatter->PutEntry(Code, nCheckPos, type, nKey, LANGUAGE_ENGLISH_US))
+    {
+        if (nCheckPos == 0)
+        {
+            rSet.Put(SfxUInt32Item(ATTR_VALUE_FORMAT, nKey));
+        }
+    }
+    else
+        SAL_WARN("sc.orcus.style", "Cannot set Number Format");
 }
 
 ScOrcusStyles::xf::xf():
@@ -844,11 +1455,17 @@ ScOrcusStyles::xf::xf():
     mnBorderId(0),
     mnProtectionId(0),
     mnNumberFormatId(0),
-    mnStyleXf(0)
+    mnStyleXf(0),
+    mbAlignment(false),
+    meHorAlignment(SvxCellHorJustify::Standard),
+    meVerAlignment(SvxCellVerJustify::Standard),
+    meHorAlignMethod(SvxCellJustifyMethod::Auto),
+    meVerAlignMethod(SvxCellJustifyMethod::Auto)
 {
 }
 
 ScOrcusStyles::cell_style::cell_style():
+    maParentName("Default"),
     mnXFId(0),
     mnBuiltInId(0)
 {
@@ -874,7 +1491,8 @@ void ScOrcusStyles::applyXfToItemSet(SfxItemSet& rSet, const xf& rXf)
     }
 
     const fill& rFill = maFills[nFillId];
-    rFill.applyToItemSet(rSet);
+    if (rFill.mbHasFillAttr)
+        rFill.applyToItemSet(rSet);
 
     size_t nBorderId = rXf.mnBorderId;
     if (nBorderId >= maBorders.size())
@@ -883,7 +1501,8 @@ void ScOrcusStyles::applyXfToItemSet(SfxItemSet& rSet, const xf& rXf)
         return;
     }
     const border& rBorder = maBorders[nBorderId];
-    rBorder.applyToItemSet(rSet);
+    if (rBorder.mbHasBorderAttr)
+        rBorder.applyToItemSet(rSet);
 
     size_t nProtectionId = rXf.mnProtectionId;
     if (nProtectionId >= maProtections.size())
@@ -892,7 +1511,8 @@ void ScOrcusStyles::applyXfToItemSet(SfxItemSet& rSet, const xf& rXf)
         return;
     }
     const protection& rProtection = maProtections[nProtectionId];
-    rProtection.applyToItemSet(rSet);
+    if (rProtection.mbHasProtectionAttr)
+        rProtection.applyToItemSet(rSet);
 
     size_t nNumberFormatId = rXf.mnNumberFormatId;
     if (nNumberFormatId >= maNumberFormats.size())
@@ -901,7 +1521,16 @@ void ScOrcusStyles::applyXfToItemSet(SfxItemSet& rSet, const xf& rXf)
         return;
     }
     const number_format& rFormat = maNumberFormats[nNumberFormatId];
-    rFormat.applyToItemSet(rSet);
+    if (rFormat.mbHasNumberFormatAttr)
+        rFormat.applyToItemSet(rSet, mrFactory.getDoc().getDoc());
+
+    if(rXf.mbAlignment)
+    {
+        rSet.Put(SvxHorJustifyItem(rXf.meHorAlignment, ATTR_HOR_JUSTIFY));
+        rSet.Put(SvxVerJustifyItem(rXf.meVerAlignment, ATTR_VER_JUSTIFY));
+        rSet.Put(SvxJustifyMethodItem(rXf.meHorAlignMethod, ATTR_HOR_JUSTIFY_METHOD));
+        rSet.Put(SvxJustifyMethodItem(rXf.meVerAlignMethod, ATTR_VER_JUSTIFY_METHOD));
+    }
 }
 
 void ScOrcusStyles::applyXfToItemSet(SfxItemSet& rSet, size_t xfId)
@@ -925,22 +1554,26 @@ void ScOrcusStyles::set_font_count(size_t /*n*/)
 void ScOrcusStyles::set_font_bold(bool b)
 {
     maCurrentFont.mbBold = b;
+    maCurrentFont.mbHasFontAttr = true;
 }
 
 void ScOrcusStyles::set_font_italic(bool b)
 {
     maCurrentFont.mbItalic = b;
+    maCurrentFont.mbHasFontAttr = true;
 }
 
 void ScOrcusStyles::set_font_name(const char* s, size_t n)
 {
-    OUString aName(s, n, RTL_TEXTENCODING_UTF8);
+    OUString aName(s, n, mrFactory.getGlobalSettings().getTextEncoding());
     maCurrentFont.maName = aName;
+    maCurrentFont.mbHasFontAttr = true;
 }
 
 void ScOrcusStyles::set_font_size(double point)
 {
     maCurrentFont.mnSize = point;
+    maCurrentFont.mbHasFontAttr = true;
 }
 
 void ScOrcusStyles::set_font_underline(orcus::spreadsheet::underline_t e)
@@ -958,15 +1591,166 @@ void ScOrcusStyles::set_font_underline(orcus::spreadsheet::underline_t e)
         case orcus::spreadsheet::underline_t::none:
             maCurrentFont.meUnderline = LINESTYLE_NONE;
             break;
+        case orcus::spreadsheet::underline_t::dotted:
+            maCurrentFont.meUnderline = LINESTYLE_DOTTED;
+            break;
+        case orcus::spreadsheet::underline_t::dash:
+            maCurrentFont.meUnderline = LINESTYLE_DASH;
+            break;
+        case orcus::spreadsheet::underline_t::long_dash:
+            maCurrentFont.meUnderline = LINESTYLE_LONGDASH;
+            break;
+        case orcus::spreadsheet::underline_t::dot_dash:
+            maCurrentFont.meUnderline = LINESTYLE_DASHDOT;
+            break;
+        case orcus::spreadsheet::underline_t::dot_dot_dot_dash:
+            maCurrentFont.meUnderline = LINESTYLE_DASHDOTDOT; // dot-dot-dot-dash is absent from underline types in libo
+            break;
+        case orcus::spreadsheet::underline_t::wave:
+            maCurrentFont.meUnderline = LINESTYLE_WAVE;
+            break;
+        default:
+            ;
     }
+    maCurrentFont.mbHasUnderlineAttr = true;
 }
 
-void ScOrcusStyles::set_font_color(orcus::spreadsheet::color_elem_t alpha,
+void ScOrcusStyles::set_font_underline_width(orcus::spreadsheet::underline_width_t e )
+{
+    if (e == orcus::spreadsheet::underline_width_t::bold || e == orcus::spreadsheet::underline_width_t::thick)
+    {
+        switch(maCurrentFont.meUnderline)
+        {
+            case LINESTYLE_NONE:
+            case LINESTYLE_SINGLE:
+                maCurrentFont.meUnderline = LINESTYLE_BOLD;
+                break;
+            case LINESTYLE_DOTTED:
+                maCurrentFont.meUnderline = LINESTYLE_BOLDDOTTED;
+                break;
+            case LINESTYLE_DASH:
+                maCurrentFont.meUnderline = LINESTYLE_BOLDDASH;
+                break;
+            case LINESTYLE_LONGDASH:
+                maCurrentFont.meUnderline = LINESTYLE_BOLDLONGDASH;
+                break;
+            case LINESTYLE_DASHDOT:
+                maCurrentFont.meUnderline = LINESTYLE_BOLDDASHDOT;
+                break;
+            case LINESTYLE_DASHDOTDOT:
+                maCurrentFont.meUnderline = LINESTYLE_BOLDDASHDOTDOT;
+                break;
+            case LINESTYLE_WAVE:
+                maCurrentFont.meUnderline = LINESTYLE_BOLDWAVE;
+                break;
+            default:
+                ;
+        }
+    }
+    maCurrentFont.mbHasUnderlineAttr = true;
+}
+
+void ScOrcusStyles::set_font_underline_mode(orcus::spreadsheet::underline_mode_t /* e */)
+{
+
+}
+
+void ScOrcusStyles::set_font_underline_type(orcus::spreadsheet::underline_type_t  e )
+{
+    if (e == orcus::spreadsheet::underline_type_t::double_type)
+    {
+        switch(maCurrentFont.meUnderline)
+        {
+            case LINESTYLE_NONE:
+            case LINESTYLE_SINGLE:
+                maCurrentFont.meUnderline = LINESTYLE_DOUBLE;
+                break;
+            case LINESTYLE_WAVE:
+                maCurrentFont.meUnderline = LINESTYLE_DOUBLEWAVE;
+                break;
+            default:
+                ;
+        }
+    }
+    maCurrentFont.mbHasUnderlineAttr = true;
+}
+
+void ScOrcusStyles::set_font_underline_color(orcus::spreadsheet::color_elem_t alpha,
             orcus::spreadsheet::color_elem_t red,
             orcus::spreadsheet::color_elem_t green,
             orcus::spreadsheet::color_elem_t blue)
 {
-    maCurrentFont.maColor = Color(alpha, red, green, blue);
+    maCurrentFont.maUnderlineColor = Color(alpha, red, green, blue);
+}
+
+void ScOrcusStyles::set_font_color(orcus::spreadsheet::color_elem_t /*alpha*/,
+            orcus::spreadsheet::color_elem_t red,
+            orcus::spreadsheet::color_elem_t green,
+            orcus::spreadsheet::color_elem_t blue)
+{
+    // Ignore the alpha value for now.
+    maCurrentFont.maColor = Color(red, green, blue);
+    maCurrentFont.mbHasFontAttr = true;
+}
+
+void ScOrcusStyles::set_strikethrough_style(orcus::spreadsheet::strikethrough_style_t /*s*/)
+{
+}
+
+void ScOrcusStyles::set_strikethrough_type(orcus::spreadsheet::strikethrough_type_t s)
+{
+    if (maCurrentFont.meStrikeout != STRIKEOUT_BOLD &&
+        maCurrentFont.meStrikeout != STRIKEOUT_SLASH &&
+        maCurrentFont.meStrikeout != STRIKEOUT_X)
+    {
+        switch (s)
+        {
+            case os::strikethrough_type_t::unknown:
+                maCurrentFont.meStrikeout = STRIKEOUT_DONTKNOW;
+                break;
+            case os::strikethrough_type_t::none:
+                maCurrentFont.meStrikeout = STRIKEOUT_NONE;
+                break;
+            case os::strikethrough_type_t::single:
+                maCurrentFont.meStrikeout = STRIKEOUT_SINGLE;
+                break;
+            case os::strikethrough_type_t::double_type:
+                maCurrentFont.meStrikeout = STRIKEOUT_DOUBLE;
+                break;
+            default:
+                ;
+        }
+    }
+    maCurrentFont.mbHasStrikeout = true;
+}
+
+void ScOrcusStyles::set_strikethrough_width(orcus::spreadsheet::strikethrough_width_t s)
+{
+    switch (s)
+    {
+        case os::strikethrough_width_t::bold:
+            maCurrentFont.meStrikeout = STRIKEOUT_BOLD;
+            break;
+        default:
+            ;
+    }
+    maCurrentFont.mbHasStrikeout = true;
+}
+
+void ScOrcusStyles::set_strikethrough_text(orcus::spreadsheet::strikethrough_text_t s)
+{
+    switch (s)
+    {
+        case os::strikethrough_text_t::slash:
+            maCurrentFont.meStrikeout = STRIKEOUT_SLASH;
+            break;
+        case os::strikethrough_text_t::cross:
+            maCurrentFont.meStrikeout = STRIKEOUT_X;
+            break;
+        default:
+            ;
+    }
+    maCurrentFont.mbHasStrikeout = true;
 }
 
 size_t ScOrcusStyles::commit_font()
@@ -984,19 +1768,25 @@ void ScOrcusStyles::set_fill_count(size_t /*n*/)
     // needed at all?
 }
 
-void ScOrcusStyles::set_fill_pattern_type(const char* s, size_t n)
+void ScOrcusStyles::set_fill_pattern_type(orcus::spreadsheet::fill_pattern_t fp)
 {
-    maCurrentFill.maPattern = OUString(s, n, RTL_TEXTENCODING_UTF8);
+    maCurrentFill.mePattern = fp;
 }
 
-void ScOrcusStyles::set_fill_fg_color(orcus::spreadsheet::color_elem_t alpha, orcus::spreadsheet::color_elem_t red, orcus::spreadsheet::color_elem_t green, orcus::spreadsheet::color_elem_t blue)
+void ScOrcusStyles::set_fill_fg_color(
+    orcus::spreadsheet::color_elem_t /*alpha*/, orcus::spreadsheet::color_elem_t red, orcus::spreadsheet::color_elem_t green, orcus::spreadsheet::color_elem_t blue)
 {
-    maCurrentFill.maFgColor = Color(alpha, red, green, blue);
+    // Ignore the alpha element for now.
+    maCurrentFill.maFgColor = Color(red, green, blue);
+    maCurrentFill.mbHasFillAttr = true;
 }
 
-void ScOrcusStyles::set_fill_bg_color(orcus::spreadsheet::color_elem_t alpha, orcus::spreadsheet::color_elem_t red, orcus::spreadsheet::color_elem_t green, orcus::spreadsheet::color_elem_t blue)
+void ScOrcusStyles::set_fill_bg_color(
+    orcus::spreadsheet::color_elem_t /*alpha*/, orcus::spreadsheet::color_elem_t red, orcus::spreadsheet::color_elem_t green, orcus::spreadsheet::color_elem_t blue)
 {
-    maCurrentFill.maBgColor = Color(alpha, red, green, blue);
+    // Ignore the alpha element for now.
+    maCurrentFill.maBgColor = Color(red, green, blue);
+    maCurrentFill.mbHasFillAttr = true;
 }
 
 size_t ScOrcusStyles::commit_fill()
@@ -1014,25 +1804,89 @@ void ScOrcusStyles::set_border_count(size_t /*n*/)
     // needed at all?
 }
 
-void ScOrcusStyles::set_border_style(orcus::spreadsheet::border_direction_t /*dir*/, const char* /*s*/, size_t /*n*/)
-{
-    // implement later
-}
-
 void ScOrcusStyles::set_border_style(
-    orcus::spreadsheet::border_direction_t /*dir*/, orcus::spreadsheet::border_style_t /*style*/)
+    orcus::spreadsheet::border_direction_t dir, orcus::spreadsheet::border_style_t style)
 {
-    // implement later
+    border::border_line& current_line = maCurrentBorder.border_lines[dir];
+    switch (style)
+    {
+        case orcus::spreadsheet::border_style_t::solid:
+            current_line.meStyle = SvxBorderLineStyle::SOLID;
+            current_line.mnWidth = oox::xls::API_LINE_THIN;
+            break;
+        case orcus::spreadsheet::border_style_t::hair:
+            current_line.meStyle = SvxBorderLineStyle::SOLID;
+            current_line.mnWidth = oox::xls::API_LINE_HAIR;
+            break;
+        case orcus::spreadsheet::border_style_t::medium:
+            current_line.meStyle = SvxBorderLineStyle::SOLID;
+            current_line.mnWidth = oox::xls::API_LINE_MEDIUM;
+            break;
+        case orcus::spreadsheet::border_style_t::thick:
+            current_line.meStyle = SvxBorderLineStyle::SOLID;
+            current_line.mnWidth = oox::xls::API_LINE_THICK;
+            break;
+        case orcus::spreadsheet::border_style_t::thin:
+            current_line.meStyle = SvxBorderLineStyle::SOLID;
+            current_line.mnWidth = oox::xls::API_LINE_THIN;
+            break;
+        case orcus::spreadsheet::border_style_t::dash_dot:
+            current_line.meStyle = SvxBorderLineStyle::DASH_DOT;
+            current_line.mnWidth = oox::xls::API_LINE_THIN;
+            break;
+        case orcus::spreadsheet::border_style_t::dash_dot_dot:
+            current_line.meStyle = SvxBorderLineStyle::DASH_DOT_DOT;
+            current_line.mnWidth = oox::xls::API_LINE_THIN;
+            break;
+        case orcus::spreadsheet::border_style_t::dashed:
+            current_line.meStyle = SvxBorderLineStyle::DASHED;
+            current_line.mnWidth = oox::xls::API_LINE_THIN;
+            break;
+        case orcus::spreadsheet::border_style_t::dotted:
+            current_line.meStyle = SvxBorderLineStyle::DOTTED;
+            current_line.mnWidth = oox::xls::API_LINE_THIN;
+            break;
+        case orcus::spreadsheet::border_style_t::double_border:
+            current_line.meStyle = SvxBorderLineStyle::DOUBLE;
+            current_line.mnWidth = oox::xls::API_LINE_THICK;
+            break;
+        case orcus::spreadsheet::border_style_t::medium_dash_dot:
+        case orcus::spreadsheet::border_style_t::slant_dash_dot:
+            current_line.meStyle = SvxBorderLineStyle::DASH_DOT;
+            current_line.mnWidth = oox::xls::API_LINE_MEDIUM;
+            break;
+        case orcus::spreadsheet::border_style_t::medium_dash_dot_dot:
+            current_line.meStyle = SvxBorderLineStyle::DASH_DOT_DOT;
+            current_line.mnWidth = oox::xls::API_LINE_MEDIUM;
+            break;
+        case orcus::spreadsheet::border_style_t::medium_dashed:
+            current_line.meStyle = SvxBorderLineStyle::DASHED;
+            current_line.mnWidth = oox::xls::API_LINE_MEDIUM;
+            break;
+        case orcus::spreadsheet::border_style_t::unknown:
+        case orcus::spreadsheet::border_style_t::none:
+            current_line.mnWidth = oox::xls::API_LINE_NONE;
+            break;
+        default:
+            ;
+    }
+    maCurrentBorder.mbHasBorderAttr = true;
 }
 
 void ScOrcusStyles::set_border_color(orcus::spreadsheet::border_direction_t dir,
-            orcus::spreadsheet::color_elem_t alpha,
+            orcus::spreadsheet::color_elem_t /*alpha*/,
             orcus::spreadsheet::color_elem_t red,
             orcus::spreadsheet::color_elem_t green,
             orcus::spreadsheet::color_elem_t blue)
 {
     border::border_line& current_line = maCurrentBorder.border_lines[dir];
-    current_line.maColor = Color(alpha, red, green, blue);
+    current_line.maColor = Color(red, green, blue);
+}
+
+void ScOrcusStyles::set_border_width(orcus::spreadsheet::border_direction_t  dir, double val, orcus::length_unit_t  unit )
+{
+    border::border_line& current_line = maCurrentBorder.border_lines[dir];
+    current_line.mnWidth = translateToInternal(val, unit);
 }
 
 size_t ScOrcusStyles::commit_border()
@@ -1047,11 +1901,25 @@ size_t ScOrcusStyles::commit_border()
 void ScOrcusStyles::set_cell_hidden(bool b)
 {
     maCurrentProtection.mbHidden = b;
+    maCurrentProtection.mbHasProtectionAttr = true;
 }
 
 void ScOrcusStyles::set_cell_locked(bool b)
 {
     maCurrentProtection.mbLocked = b;
+    maCurrentProtection.mbHasProtectionAttr = true;
+}
+
+void ScOrcusStyles::set_cell_print_content(bool b )
+{
+    maCurrentProtection.mbPrintContent = b;
+    maCurrentProtection.mbHasProtectionAttr = true;
+}
+
+void ScOrcusStyles::set_cell_formula_hidden(bool b )
+{
+    maCurrentProtection.mbFormulaHidden = b;
+    maCurrentProtection.mbHasProtectionAttr = true;
 }
 
 size_t ScOrcusStyles::commit_cell_protection()
@@ -1072,8 +1940,9 @@ void ScOrcusStyles::set_number_format_identifier(size_t)
 
 void ScOrcusStyles::set_number_format_code(const char* s, size_t n)
 {
-    OUString aCode(s, n, RTL_TEXTENCODING_UTF8);
+    OUString aCode(s, n, mrFactory.getGlobalSettings().getTextEncoding());
     maCurrentNumberFormat.maCode = aCode;
+    maCurrentNumberFormat.mbHasNumberFormatAttr = true;
 }
 
 size_t ScOrcusStyles::commit_number_format()
@@ -1159,12 +2028,62 @@ void ScOrcusStyles::set_xf_apply_alignment(bool /*b*/)
 {
 }
 
-void ScOrcusStyles::set_xf_horizontal_alignment(orcus::spreadsheet::hor_alignment_t /*align*/)
+void ScOrcusStyles::set_xf_horizontal_alignment(orcus::spreadsheet::hor_alignment_t align)
 {
+    switch (align)
+    {
+        case os::hor_alignment_t::left:
+            maCurrentXF.meHorAlignment = SvxCellHorJustify::Left;
+            break;
+        case os::hor_alignment_t::right:
+            maCurrentXF.meHorAlignment = SvxCellHorJustify::Right;
+            break;
+        case os::hor_alignment_t::center:
+            maCurrentXF.meHorAlignment = SvxCellHorJustify::Center;
+            break;
+        case os::hor_alignment_t::justified:
+            maCurrentXF.meHorAlignment = SvxCellHorJustify::Block;
+            break;
+        case os::hor_alignment_t::distributed:
+            maCurrentXF.meHorAlignment = SvxCellHorJustify::Block;
+            maCurrentXF.meHorAlignMethod = SvxCellJustifyMethod::Distribute;
+            break;
+        case os::hor_alignment_t::unknown:
+            maCurrentXF.meHorAlignment = SvxCellHorJustify::Standard;
+            break;
+        default:
+            ;
+    }
+    maCurrentXF.mbAlignment = true;
 }
 
-void ScOrcusStyles::set_xf_vertical_alignment(orcus::spreadsheet::ver_alignment_t /*align*/)
+void ScOrcusStyles::set_xf_vertical_alignment(orcus::spreadsheet::ver_alignment_t align)
 {
+    switch (align)
+    {
+        case os::ver_alignment_t::top:
+            maCurrentXF.meVerAlignment = SvxCellVerJustify::Top;
+            break;
+        case os::ver_alignment_t::bottom:
+            maCurrentXF.meVerAlignment = SvxCellVerJustify::Bottom;
+            break;
+        case os::ver_alignment_t::middle:
+            maCurrentXF.meVerAlignment = SvxCellVerJustify::Center;
+            break;
+        case os::ver_alignment_t::justified:
+            maCurrentXF.meVerAlignment = SvxCellVerJustify::Block;
+            break;
+        case os::ver_alignment_t::distributed:
+            maCurrentXF.meVerAlignment = SvxCellVerJustify::Block;
+            maCurrentXF.meVerAlignMethod = SvxCellJustifyMethod::Distribute;
+            break;
+        case os::ver_alignment_t::unknown:
+            maCurrentXF.meVerAlignment = SvxCellVerJustify::Standard;
+            break;
+        default:
+            ;
+    }
+    maCurrentXF.mbAlignment = true;
 }
 
 // cell style entry
@@ -1177,7 +2096,7 @@ void ScOrcusStyles::set_cell_style_count(size_t /*n*/)
 
 void ScOrcusStyles::set_cell_style_name(const char* s, size_t n)
 {
-    OUString aName(s, n, RTL_TEXTENCODING_UTF8);
+    OUString aName(s, n, mrFactory.getGlobalSettings().getTextEncoding());
     maCurrentCellStyle.maName = aName;
 }
 
@@ -1192,9 +2111,10 @@ void ScOrcusStyles::set_cell_style_builtin(size_t index)
     maCurrentCellStyle.mnBuiltInId = index;
 }
 
-void ScOrcusStyles::set_cell_style_parent_name(const char* /*s*/, size_t /*n*/)
+void ScOrcusStyles::set_cell_style_parent_name(const char* s, size_t n)
 {
-    // place holder
+    OUString aParentName(s, n, mrFactory.getGlobalSettings().getTextEncoding());
+    maCurrentCellStyle.maParentName = aParentName;
 }
 
 size_t ScOrcusStyles::commit_cell_style()
@@ -1205,20 +2125,29 @@ size_t ScOrcusStyles::commit_cell_style()
         SAL_WARN("sc.orcus.style", "invalid xf id for commit cell style");
         return 0;
     }
+    if (maCurrentCellStyle.mnXFId == 0)
+    {
+        return 0;
+    }
 
-    ScStyleSheetPool* pPool = mrDoc.GetStyleSheetPool();
-    SfxStyleSheetBase& rBase = pPool->Make(maCurrentCellStyle.maName, SFX_STYLE_FAMILY_PARA);
+    ScStyleSheetPool* pPool = mrFactory.getDoc().getDoc().GetStyleSheetPool();
+    SfxStyleSheetBase& rBase = pPool->Make(maCurrentCellStyle.maName, SfxStyleFamily::Para);
+    rBase.SetParent(maCurrentCellStyle.maParentName);
     SfxItemSet& rSet = rBase.GetItemSet();
 
     xf& rXf = maCellStyleXfs[maCurrentCellStyle.mnXFId];
     applyXfToItemSet(rSet, rXf);
+
+    maCurrentXF = ScOrcusStyles::xf();
+    maCurrentCellStyle = ScOrcusStyles::cell_style();
 
     return 0;
 }
 
 // auto filter import
 
-ScOrcusAutoFilter::ScOrcusAutoFilter(ScDocument&)
+ScOrcusAutoFilter::ScOrcusAutoFilter( const ScOrcusGlobalSettings& rGS ) :
+    mrGlobalSettings(rGS)
 {
 }
 
@@ -1226,12 +2155,12 @@ ScOrcusAutoFilter::~ScOrcusAutoFilter()
 {
 }
 
-void ScOrcusAutoFilter::set_range(const char* p_ref, size_t n_ref)
+void ScOrcusAutoFilter::set_range(const orcus::spreadsheet::range_t& range)
 {
-    OUString aRange(p_ref, n_ref, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.autofilter", "set_range: " << aRange);
-
-    maRange.Parse(aRange);
+    maRange.aStart.SetRow(range.first.row);
+    maRange.aStart.SetCol(range.first.column);
+    maRange.aEnd.SetRow(range.last.row);
+    maRange.aEnd.SetCol(range.last.column);
 }
 
 void ScOrcusAutoFilter::set_column(orcus::spreadsheet::col_t col)
@@ -1241,7 +2170,7 @@ void ScOrcusAutoFilter::set_column(orcus::spreadsheet::col_t col)
 
 void ScOrcusAutoFilter::append_column_match_value(const char* p, size_t n)
 {
-    OUString aString(p, n, RTL_TEXTENCODING_UTF8);
+    OUString aString(p, n, mrGlobalSettings.getTextEncoding());
     SAL_INFO("sc.orcus.autofilter", "append_column_match_value: " << aString);
 }
 
@@ -1253,140 +2182,6 @@ void ScOrcusAutoFilter::commit_column()
 void ScOrcusAutoFilter::commit()
 {
     SAL_INFO("sc.orcus.autofilter", "commit");
-}
-
-ScOrcusTable::ScOrcusTable(SCTAB nTab, ScDocument& rDoc):
-    mnTab(nTab),
-    mrDoc(rDoc),
-    maAutoFilter(rDoc)
-{
-}
-
-ScOrcusTable::~ScOrcusTable()
-{
-}
-
-os::iface::import_auto_filter* ScOrcusTable::get_auto_filter()
-{
-    return &maAutoFilter;
-}
-
-void ScOrcusTable::set_identifier(size_t id)
-{
-    SAL_INFO("sc.orcus.table", "set_identifier :" << id);
-}
-
-namespace {
-
-std::ostream& operator<<(std::ostream& rStrm, const ScAddress& rAddr)
-{
-    rStrm << "Col: " << rAddr.Col() << ", Row: " << rAddr.Row() << ", Tab: " << rAddr.Tab();
-    return rStrm;
-}
-
-std::ostream& operator<<(std::ostream& rStrm, const ScRange& rRange)
-{
-    rStrm << "aStart: " << rRange.aStart << std::endl;
-    rStrm << "aEnd: " << rRange.aEnd;
-    return rStrm;
-}
-
-}
-
-void ScOrcusTable::set_range(const char* p_ref, size_t n_ref)
-{
-    OUString aRange(p_ref, n_ref, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.table", "set_range: " << aRange);
-
-    maRange.Parse(aRange);
-    SAL_INFO("sc.orcus.table", "set_range translated range: " << maRange);
-}
-
-void ScOrcusTable::set_totals_row_count(size_t row_count)
-{
-    SAL_INFO("sc.orcus.table", "set_totals_row_count: " << row_count);
-}
-
-void ScOrcusTable::set_name(const char* p, size_t n)
-{
-    maName = OUString(p, n, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.table", "set_name: " << maName);
-}
-
-void ScOrcusTable::set_display_name(const char* p, size_t n)
-{
-    OUString aName(p, n, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.table", "set_display_name: " << aName);
-}
-
-void ScOrcusTable::set_column_count(size_t n)
-{
-    SAL_INFO("sc.orcus.table", "set_column_count: " << n);
-}
-
-void ScOrcusTable::set_column_identifier(size_t id)
-{
-    SAL_INFO("sc.orcus.table", "set_column_identifier: " << id);
-}
-
-void ScOrcusTable::set_column_name(const char* p, size_t n)
-{
-    OUString aName(p, n, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.table", "set_column_name: " << aName);
-}
-
-void ScOrcusTable::set_column_totals_row_label(const char* p, size_t n)
-{
-    OUString aLabel(p, n, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.table", "set_column_totals_row_label: " << aLabel);
-}
-
-void ScOrcusTable::set_column_totals_row_function(os::totals_row_function_t )
-{
-    SAL_INFO("sc.orcus.table", "set_column_totals_row_function");
-}
-
-void ScOrcusTable::commit_column()
-{
-    SAL_INFO("sc.orcus.table", "commit_column");
-}
-
-void ScOrcusTable::set_style_name(const char* p, size_t n)
-{
-    OUString aName(p, n, RTL_TEXTENCODING_UTF8);
-    SAL_INFO("sc.orcus.table", "set_style_name: " << aName);
-}
-
-void ScOrcusTable::set_style_show_first_column(bool b)
-{
-    SAL_INFO("sc.orcus.table", "set_style_show_first_column: " << b);
-}
-
-void ScOrcusTable::set_style_show_last_column(bool b)
-{
-    SAL_INFO("sc.orcus.table", "set_style_show_last_column: " << b);
-}
-
-void ScOrcusTable::set_style_show_row_stripes(bool b)
-{
-    SAL_INFO("sc.orcus.table", "set_style_show_row_stripes: " << b);
-}
-
-void ScOrcusTable::set_style_show_column_stripes(bool b)
-{
-    SAL_INFO("sc.orcus.table", "set_style_show_column_stripes: " << b);
-}
-
-void ScOrcusTable::commit()
-{
-    SAL_INFO("sc.orcus.table", "commit");
-
-    ScDBData* pDBData = new ScDBData(maName, mnTab,
-                        maRange.aStart.Col(), maRange.aStart.Row(),
-                        maRange.aEnd.Col(), maRange.aEnd.Row());
-
-    if(!mrDoc.GetDBCollection()->getNamedDBs().insert(pDBData))
-        delete pDBData;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

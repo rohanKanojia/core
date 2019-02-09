@@ -21,9 +21,10 @@
 #define INCLUDED_TOOLS_SVBORDER_HXX
 
 #include <tools/toolsdllapi.h>
-#include <tools/gen.hxx>
 
-class TOOLS_DLLPUBLIC SvBorder
+namespace tools { class Rectangle; }
+
+class SAL_WARN_UNUSED TOOLS_DLLPUBLIC SvBorder
 {
     long nTop, nRight, nBottom, nLeft;
 
@@ -31,11 +32,6 @@ public:
     SvBorder()
     {
         nTop = nRight = nBottom = nLeft = 0;
-    }
-    SvBorder( const Size & rSz )
-    {
-        nTop = nBottom = rSz.Height();
-        nRight = nLeft = rSz.Width();
     }
     SvBorder( long nLeftP, long nTopP, long nRightP, long nBottomP )
     {
@@ -51,14 +47,6 @@ public:
             }
     bool    operator != ( const SvBorder & rObj ) const
             { return !(*this == rObj); }
-    SvBorder & operator = ( const SvBorder & rBorder )
-            {
-                Left()   = rBorder.Left();
-                Top()    = rBorder.Top();
-                Right()  = rBorder.Right();
-                Bottom() = rBorder.Bottom();
-                return *this;
-            }
     SvBorder & operator += ( const SvBorder & rBorder )
             {
                 Left()   += rBorder.Left();
@@ -77,7 +65,7 @@ public:
     long    Left()   const { return nLeft; }
 };
 
-TOOLS_DLLPUBLIC Rectangle & operator += ( Rectangle & rRect, const SvBorder & rBorder );
+TOOLS_DLLPUBLIC tools::Rectangle & operator += ( tools::Rectangle & rRect, const SvBorder & rBorder );
 
 #endif
 

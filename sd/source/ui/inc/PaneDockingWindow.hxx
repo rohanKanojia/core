@@ -21,11 +21,6 @@
 #define INCLUDED_SD_SOURCE_UI_INC_PANEDOCKINGWINDOW_HXX
 
 #include <sfx2/titledockwin.hxx>
-#include <sfx2/viewfrm.hxx>
-
-#include <memory>
-
-class SplitWindow;
 
 namespace sd {
 
@@ -50,7 +45,7 @@ public:
         vcl::Window* pParent,
         const OUString& rsTitle);
 
-    virtual ~PaneDockingWindow();
+    virtual ~PaneDockingWindow() override;
     virtual void StateChanged( StateChangedType nType ) override;
     virtual void MouseButtonDown (const MouseEvent& rEvent) override;
     /** When docked the given range is passed to the parent SplitWindow.

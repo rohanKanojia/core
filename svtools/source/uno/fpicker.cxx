@@ -39,12 +39,8 @@ static OUString FilePicker_getSystemPickerServiceName()
 {
 #ifdef UNX
     OUString aDesktopEnvironment (Application::GetDesktopEnvironment());
-    if (aDesktopEnvironment.equalsIgnoreAsciiCase("tde"))
-        return OUString ("com.sun.star.ui.dialogs.TDEFilePicker");
-    else if (aDesktopEnvironment.equalsIgnoreAsciiCase("kde"))
-        return OUString ("com.sun.star.ui.dialogs.KDEFilePicker");
-    else if (aDesktopEnvironment.equalsIgnoreAsciiCase("kde4"))
-        return OUString ("com.sun.star.ui.dialogs.KDE4FilePicker");
+    if (aDesktopEnvironment.equalsIgnoreAsciiCase("kde5"))
+        return OUString ("com.sun.star.ui.dialogs.KDE5FilePicker");
     else if (aDesktopEnvironment.equalsIgnoreAsciiCase("macosx"))
         return OUString ("com.sun.star.ui.dialogs.AquaFilePicker");
     else
@@ -99,7 +95,7 @@ Reference< css::uno::XInterface > FilePicker_CreateInstance (
     return xResult;
 }
 
-OUString SAL_CALL FilePicker_getImplementationName()
+OUString FilePicker_getImplementationName()
 {
     return OUString("com.sun.star.comp.svt.FilePicker");
 }
@@ -117,9 +113,7 @@ static OUString FolderPicker_getSystemPickerServiceName()
 {
 #ifdef UNX
     OUString aDesktopEnvironment (Application::GetDesktopEnvironment());
-    if (aDesktopEnvironment.equalsIgnoreAsciiCase("tde"))
-        return OUString("com.sun.star.ui.dialogs.TDEFolderPicker");
-    else if (aDesktopEnvironment.equalsIgnoreAsciiCase("kde"))
+    if (aDesktopEnvironment.equalsIgnoreAsciiCase("kde5"))
         return OUString("com.sun.star.ui.dialogs.KDEFolderPicker");
     else if (aDesktopEnvironment.equalsIgnoreAsciiCase("macosx"))
         return OUString("com.sun.star.ui.dialogs.AquaFolderPicker");
@@ -168,7 +162,7 @@ Reference< css::uno::XInterface > FolderPicker_CreateInstance (
     return xResult;
 }
 
-OUString SAL_CALL FolderPicker_getImplementationName()
+OUString FolderPicker_getImplementationName()
 {
     return OUString("com.sun.star.comp.svt.FolderPicker");
 }

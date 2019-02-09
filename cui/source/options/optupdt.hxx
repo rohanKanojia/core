@@ -23,6 +23,7 @@
 #include <sfx2/tabdlg.hxx>
 #include <vcl/fixed.hxx>
 #include <com/sun/star/container/XNameReplace.hpp>
+#include <com/sun/star/configuration/XReadWriteAccess.hpp>
 
 // class SvxPathTabPage --------------------------------------------------
 
@@ -44,22 +45,23 @@ private:
     OUString       m_aNeverChecked;
     OUString       m_aLastCheckedTemplate;
 
-    DECL_LINK_TYPED(FileDialogHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(CheckNowHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(AutoCheckHdl_Impl, Button*, void);
-    DECL_LINK_TYPED(ExtrasCheckHdl_Impl, Button*, void);
+    DECL_LINK(FileDialogHdl_Impl, Button*, void);
+    DECL_LINK(CheckNowHdl_Impl, Button*, void);
+    DECL_LINK(AutoCheckHdl_Impl, Button*, void);
+    DECL_LINK(ExtrasCheckHdl_Impl, Button*, void);
 
     css::uno::Reference< css::container::XNameReplace > m_xUpdateAccess;
+    css::uno::Reference<css::configuration::XReadWriteAccess> m_xReadWriteAccess;
 
     void                    UpdateLastCheckedText();
     void                    UpdateUserAgent();
 
 public:
     SvxOnlineUpdateTabPage( vcl::Window* pParent, const SfxItemSet& rSet );
-    virtual ~SvxOnlineUpdateTabPage();
+    virtual ~SvxOnlineUpdateTabPage() override;
     virtual void dispose() override;
 
-    static VclPtr<SfxTabPage>      Create( vcl::Window* pParent, const SfxItemSet* rSet );
+    static VclPtr<SfxTabPage>      Create( TabPageParent pParent, const SfxItemSet* rSet );
 
     virtual bool            FillItemSet( SfxItemSet* rSet ) override;
     virtual void            Reset( const SfxItemSet* rSet ) override;

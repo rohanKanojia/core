@@ -25,7 +25,7 @@
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <drawinglayer/primitive2d/textenumsprimitive2d.hxx>
 
-namespace basegfx { namespace tools {
+namespace basegfx { namespace utils {
     class B2DHomMatrixBufferedOnDemandDecompose;
 }}
 
@@ -56,7 +56,6 @@ namespace drawinglayer
             TextEmphasisMark                            meTextEmphasisMark;
             TextRelief                                  meTextRelief;
 
-            /// bitfield
             bool                                        mbUnderlineAbove : 1;
             bool                                        mbWordLineMode : 1;
             bool                                        mbEmphasisMarkAbove : 1;
@@ -66,7 +65,7 @@ namespace drawinglayer
             /// helper methods
             void impCreateGeometryContent(
                 std::vector< Primitive2DReference >& rTarget,
-                basegfx::tools::B2DHomMatrixBufferedOnDemandDecompose& rDecTrans,
+                basegfx::utils::B2DHomMatrixBufferedOnDemandDecompose const & rDecTrans,
                 const OUString& rText,
                 sal_Int32 nTextPosition,
                 sal_Int32 nTextLength,
@@ -75,7 +74,7 @@ namespace drawinglayer
 
         protected:
             /// local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& rViewInformation) const override;
 
         public:
             /// constructor
@@ -99,7 +98,7 @@ namespace drawinglayer
                 bool bUnderlineAbove = false,
                 TextStrikeout eTextStrikeout = TEXT_STRIKEOUT_NONE,
                 bool bWordLineMode = false,
-                TextEmphasisMark eTextEmphasisMark = TEXT_EMPHASISMARK_NONE,
+                TextEmphasisMark eTextEmphasisMark = TEXT_FONT_EMPHASIS_MARK_NONE,
                 bool bEmphasisMarkAbove = true,
                 bool bEmphasisMarkBelow = false,
                 TextRelief eTextRelief = TEXT_RELIEF_NONE,
@@ -118,10 +117,6 @@ namespace drawinglayer
             bool getEmphasisMarkAbove() const { return mbEmphasisMarkAbove; }
             bool getEmphasisMarkBelow() const { return mbEmphasisMarkBelow; }
             bool getShadow() const { return mbShadow; }
-
-            /// check if this needs to be a TextDecoratedPortionPrimitive2D or
-            /// if a TextSimplePortionPrimitive2D would be suficcient
-            bool decoratedIsNeeded() const;
 
             /// compare operator
             virtual bool operator==( const BasePrimitive2D& rPrimitive ) const override;

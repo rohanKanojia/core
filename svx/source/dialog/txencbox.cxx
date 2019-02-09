@@ -19,11 +19,12 @@
 
 #include <config_features.h>
 
-#include "svx/txencbox.hxx"
-#include "svx/txenctab.hxx"
-#include <svx/dialogs.hrc>
+#include <svx/txencbox.hxx>
+#include <svx/dialmgr.hxx>
+#include <svx/txenctab.hxx>
+#include <svx/strings.hrc>
 #if HAVE_FEATURE_DBCONNECTIVITY
-#include "svx/dbcharsethelper.hxx"
+#include <svx/dbcharsethelper.hxx>
 #endif
 #include <vcl/builderfactory.hxx>
 #include <vcl/svapp.hxx>
@@ -31,21 +32,22 @@
 #include <rtl/tencinfo.h>
 #include <rtl/locale.h>
 #include <rtl/strbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/nlsupport.h>
+#include <txenctab.hrc>
 
 SvxTextEncodingBox::SvxTextEncodingBox( vcl::Window* pParent, WinBits nBits )
     : ListBox( pParent, nBits )
 {
-    m_pEncTable = new SvxTextEncodingTable;
 }
 
-VCL_BUILDER_DECL_FACTORY(SvxTextEncodingBox)
+extern "C" SAL_DLLPUBLIC_EXPORT void makeSvxTextEncodingBox(VclPtr<vcl::Window> & rRet, VclPtr<vcl::Window> & pParent, VclBuilder::stringmap & rMap)
 {
     WinBits nWinBits = WB_LEFT|WB_VCENTER|WB_3DLOOK|WB_SIMPLEMODE;
-    bool bDropdown = VclBuilder::extractDropdown(rMap);
+    bool bDropdown = BuilderUtils::extractDropdown(rMap);
     if (bDropdown)
         nWinBits |= WB_DROPDOWN;
-    OString sBorder = VclBuilder::extractCustomProperty(rMap);
+    OUString sBorder = BuilderUtils::extractCustomProperty(rMap);
     if (!sBorder.isEmpty())
         nWinBits |= WB_BORDER;
     VclPtrInstance<SvxTextEncodingBox> pListBox(pParent, nWinBits);
@@ -57,12 +59,6 @@ VCL_BUILDER_DECL_FACTORY(SvxTextEncodingBox)
 SvxTextEncodingBox::~SvxTextEncodingBox()
 {
     disposeOnce();
-}
-
-void SvxTextEncodingBox::dispose()
-{
-    delete m_pEncTable;
-    ListBox::dispose();
 }
 
 sal_Int32 SvxTextEncodingBox::EncodingToPos_Impl( rtl_TextEncoding nEnc ) const
@@ -83,11 +79,11 @@ void SvxTextEncodingBox::FillFromTextEncodingTable(
 {
     rtl_TextEncodingInfo aInfo;
     aInfo.StructSize = sizeof(rtl_TextEncodingInfo);
-    sal_uInt32 nCount = m_pEncTable->Count();
-    for ( sal_uInt32 j=0; j<nCount; j++ )
+    const sal_uInt32 nCount = SAL_N_ELEMENTS(RID_SVXSTR_TEXTENCODING_TABLE);
+    for (sal_uInt32 j = 0; j < nCount; ++j)
     {
         bool bInsert = true;
-        rtl_TextEncoding nEnc = rtl_TextEncoding( m_pEncTable->GetValue( j ) );
+        rtl_TextEncoding nEnc = RID_SVXSTR_TEXTENCODING_TABLE[j].second;
         if ( nExcludeInfoFlags )
         {
             if ( !rtl_getTextEncodingInfo( nEnc, &aInfo ) )
@@ -120,7 +116,7 @@ void SvxTextEncodingBox::FillFromTextEncodingTable(
                 }
             }
             if ( bInsert )
-                InsertTextEncoding( nEnc, m_pEncTable->GetString( j ) );
+                InsertTextEncoding(nEnc, SvxResId(RID_SVXSTR_TEXTENCODING_TABLE[j].first));
         }
     }
 }
@@ -132,7 +128,6 @@ void SvxTextEncodingBox::FillFromDbTextEncodingMap(
 #if !HAVE_FEATURE_DBCONNECTIVITY
     (void)bExcludeImportSubsets;
     (void)nExcludeInfoFlags;
-    (void)nButIncludeInfoFlags;
 #else
     rtl_TextEncodingInfo aInfo;
     aInfo.StructSize = sizeof(rtl_TextEncodingInfo);
@@ -202,7 +197,7 @@ void SvxTextEncodingBox::InsertTextEncoding( const rtl_TextEncoding nEnc,
 
 void SvxTextEncodingBox::InsertTextEncoding( const rtl_TextEncoding nEnc )
 {
-    const OUString& rEntry = m_pEncTable->GetTextString( nEnc );
+    const OUString& rEntry = SvxTextEncodingTable::GetTextString(nEnc);
     if ( !rEntry.isEmpty() )
         InsertTextEncoding( nEnc, rEntry );
     else
@@ -212,7 +207,7 @@ void SvxTextEncodingBox::InsertTextEncoding( const rtl_TextEncoding nEnc )
 
 rtl_TextEncoding SvxTextEncodingBox::GetSelectTextEncoding() const
 {
-    sal_Int32 nPos = GetSelectEntryPos();
+    sal_Int32 nPos = GetSelectedEntryPos();
 
     if ( nPos != LISTBOX_ENTRY_NOTFOUND )
         return rtl_TextEncoding( reinterpret_cast<sal_uIntPtr>(GetEntryData(nPos)) );
@@ -227,6 +222,63 @@ void SvxTextEncodingBox::SelectTextEncoding( const rtl_TextEncoding nEnc )
 
     if ( nAt != LISTBOX_ENTRY_NOTFOUND )
         SelectEntryPos( nAt );
+}
+
+TextEncodingBox::TextEncodingBox(std::unique_ptr<weld::ComboBox> pControl)
+    : m_xControl(std::move(pControl))
+{
+    m_xControl->make_sorted();
+}
+
+TextEncodingBox::~TextEncodingBox()
+{
+}
+
+void TextEncodingBox::FillFromTextEncodingTable(
+        bool bExcludeImportSubsets )
+{
+    m_xControl->freeze();
+    const sal_uInt32 nCount = SAL_N_ELEMENTS(RID_SVXSTR_TEXTENCODING_TABLE);
+    for (sal_uInt32 j = 0; j < nCount; ++j)
+    {
+        bool bInsert = true;
+        rtl_TextEncoding nEnc = RID_SVXSTR_TEXTENCODING_TABLE[j].second;
+        if ( bExcludeImportSubsets )
+        {
+            switch ( nEnc )
+            {
+                // subsets of RTL_TEXTENCODING_GB_18030
+                case RTL_TEXTENCODING_GB_2312 :
+                case RTL_TEXTENCODING_GBK :
+                case RTL_TEXTENCODING_MS_936 :
+                    bInsert = false;
+                break;
+            }
+        }
+        if ( bInsert )
+            InsertTextEncoding(nEnc, SvxResId(RID_SVXSTR_TEXTENCODING_TABLE[j].first));
+    }
+    m_xControl->thaw();
+}
+
+void TextEncodingBox::InsertTextEncoding( const rtl_TextEncoding nEnc,
+            const OUString& rEntry )
+{
+    m_xControl->append(OUString::number(nEnc), rEntry);
+}
+
+rtl_TextEncoding TextEncodingBox::GetSelectTextEncoding() const
+{
+    OUString sId(m_xControl->get_active_id());
+    if (!sId.isEmpty())
+        return rtl_TextEncoding(sId.toInt32());
+    else
+        return RTL_TEXTENCODING_DONTKNOW;
+}
+
+void TextEncodingBox::SelectTextEncoding( const rtl_TextEncoding nEnc )
+{
+    m_xControl->set_active_id(OUString::number(nEnc));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

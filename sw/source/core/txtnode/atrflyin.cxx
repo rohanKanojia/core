@@ -17,99 +17,93 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "hintids.hxx"
-#include "cntfrm.hxx"
-#include "doc.hxx"
+#include <hintids.hxx>
+#include <cntfrm.hxx>
+#include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentLayoutAccess.hxx>
-#include "pam.hxx"
-#include "flyfrm.hxx"
-#include "ndtxt.hxx"
-#include "frmfmt.hxx"
+#include <pam.hxx>
+#include <flyfrm.hxx>
+#include <ndtxt.hxx>
+#include <frmfmt.hxx>
 #include <fmtflcnt.hxx>
 #include <txtflcnt.hxx>
 #include <fmtanchr.hxx>
-#include "swfont.hxx"
-#include "txtfrm.hxx"
-#include "flyfrms.hxx"
+#include <swfont.hxx>
+#include <txtfrm.hxx>
+#include <flyfrms.hxx>
 #include <objectformatter.hxx>
 #include <calbck.hxx>
 
 SwFormatFlyCnt::SwFormatFlyCnt( SwFrameFormat *pFrameFormat )
     : SfxPoolItem( RES_TXTATR_FLYCNT ),
-    pTextAttr( nullptr ),
-    pFormat( pFrameFormat )
+    m_pTextAttr( nullptr ),
+    m_pFormat( pFrameFormat )
 {
 }
 
 bool SwFormatFlyCnt::operator==( const SfxPoolItem& rAttr ) const
 {
     assert(SfxPoolItem::operator==(rAttr));
-    return( pTextAttr && static_cast<const SwFormatFlyCnt&>(rAttr).pTextAttr &&
-            pTextAttr->GetStart() == static_cast<const SwFormatFlyCnt&>(rAttr).pTextAttr->GetStart() &&
-            pFormat == static_cast<const SwFormatFlyCnt&>(rAttr).GetFrameFormat() );
+    return( m_pTextAttr && static_cast<const SwFormatFlyCnt&>(rAttr).m_pTextAttr &&
+            m_pTextAttr->GetStart() == static_cast<const SwFormatFlyCnt&>(rAttr).m_pTextAttr->GetStart() &&
+            m_pFormat == static_cast<const SwFormatFlyCnt&>(rAttr).GetFrameFormat() );
 }
 
 SfxPoolItem* SwFormatFlyCnt::Clone( SfxItemPool* ) const
 {
-    return new SwFormatFlyCnt( pFormat );
+    return new SwFormatFlyCnt( m_pFormat );
 }
 
 SwTextFlyCnt::SwTextFlyCnt( SwFormatFlyCnt& rAttr, sal_Int32 nStartPos )
     : SwTextAttr( rAttr, nStartPos )
 {
-    rAttr.pTextAttr = this;
+    rAttr.m_pTextAttr = this;
     SetHasDummyChar(true);
 }
 
-/*
- * An dieser Stelle soll einmal der Gesamtzusammenhang bei der Erzeugung
- * eines neuen SwTextFlyCnt erlaeutert werden.
- * Das MakeTextHint() wird z.B. im SwTextNode::Copy() gerufen.
- * Fuer die komplette Verdopplung sind folgende Schritte notwendig:
- * 1) Duplizieren des pFormat incl. Inhalt, Attributen etc.
- * 2) Setzen des Ankers
- * 3) Benachrichtigung
- * Da fuer die Bewaeltigung der Aufgaben nicht immer alle Informationen
- * bereitstehen und darueber hinaus bestimmte Methoden erst zu einem
- * spaeteren Zeitpunkt gerufen werden duerfen (weil nocht nicht alle
- * Nodeinformationen vorliegen), verteilt sich der Ablauf.
- * ad 1) MakeTextHint() wird durch den Aufruf von SwDoc::CopyLayout()
- * der das neue FlyFrameFormat erzeugt und mit dem duplizierten Inhalt des
- * FlyFrame verbunden.
- * ad 2) SetAnchor() wird von SwTextNode::Insert() gerufen und sorgt fuer das
- * setzen des Ankers (die SwPosition des Dummy-Zeichens wird dem FlyFrameFormat
- * per SetAttr bekannt gegeben). Dies kann nicht im MakeTextHint erledigt
- * werden, da der Zielnode unbestimmt ist.
- * ad 3) _GetFlyFrame() wird im Formatierungsprozess vom LineIter gerufen
- * und sucht den FlyFrame zum Dummyzeichen des aktuellen ContentFrame. Wird keiner
- * gefunden, so wird ein neuer FlyFrame angelegt.
- * Kritisch an diesem Vorgehen ist, dass das pContent->AppendFly() eine
- * sofortige Neuformatierung von pContent anstoesst. Die Rekursion kommt
- * allerdings durch den Lockmechanismus in SwTextFrame::Format() nicht
- * zu stande.
- * Attraktiv ist der Umstand, dass niemand ueber die vom Node abhaengigen
- * ContentFrames iterieren braucht, um die FlyInContentFrame anzulegen. Dies geschieht
- * bei der Arbeit.
+/** An overview of how a new SwTextFlyCnt is created:
+ * MakeTextAttr() is called e.g. by SwTextNode::CopyText().
+ * The following steps are required to clone:
+ * 1) copying the pFormat with content, attributes etc.
+ * 2) setting the anchor
+ * 3) notification
+ * Because not all required information is available at all times,
+ * the steps are distributed variously:
+ * ad 1) MakeTextAttr() calls DocumentLayoutManager::CopyLayoutFormat()
+ *  which creates the new SwFlyFrameFormat and copies the content of the
+ *  fly frame.
+ * ad 2) SetAnchor() is called by SwTextNode::InsertHint() and sets the anchor
+ *  position in the SwFlyFrameFormat to the SwPosition of the dummy
+ *  CH_TXTATR_BREAKWORD.  This cannot be done in MakeTextAttr() because it
+ *  doesn't know the target text node.
+ * ad 3) GetFlyFrame_() is called during text formatting by SwTextFormatter
+ *  and searches for the SwFlyFrame for the dummy char of the current
+ *  SwTextFrame.  If none is found, a new SwFlyInContentFrame is created.
+ *  Important: pTextFrame->AppendFly() immediately triggers a reformat
+ *  of pTextFrame.  However, the recursion is blocked by the lock mechanism
+ *  in SwTextFrame::Format().
+ * The advantage of all this is that it's not necessary to explicitly iterate
+ * over all SwTextFrames that depend on the SwTextNode to create the
+ * SwFlyInContentFrame - this is done automatically already.
  */
 
 void SwTextFlyCnt::CopyFlyFormat( SwDoc* pDoc )
 {
     SwFrameFormat* pFormat = GetFlyCnt().GetFrameFormat();
-    OSL_ENSURE( pFormat, "von welchem Format soll ich eine Kopie erzeugen?" );
-    // Das FlyFrameFormat muss dupliziert werden.
-    // In CopyLayoutFormat (siehe doclay.cxx) wird das FlyFrameFormat erzeugt
-    // und der Inhalt dupliziert.
+    assert(pFormat);
+    // The FlyFrameFormat must be copied - CopyLayoutFormat
+    // (DocumentLayoutManager.cxx) creates the FlyFrameFormat and copies the
+    // content.
 
     // disable undo while copying attribute
     ::sw::UndoGuard const undoGuard(pDoc->GetIDocumentUndoRedo());
     SwFormatAnchor aAnchor( pFormat->GetAnchor() );
-    if ((FLY_AT_PAGE != aAnchor.GetAnchorId()) &&
+    if ((RndStdIds::FLY_AT_PAGE != aAnchor.GetAnchorId()) &&
         (pDoc != pFormat->GetDoc()))   // different documents?
     {
-        // JP 03.06.96: dann sorge dafuer, das der koperierte Anker auf
-        //              gueltigen Content zeigt! Die Umsetzung auf die
-        //              richtige Position erfolgt spaeter.
+        // JP 03.06.96: ensure that the copied anchor points to valid content!
+        //              setting it to the correct position is done later.
         SwNodeIndex aIdx( pDoc->GetNodes().GetEndOfExtras(), +2 );
         SwContentNode* pCNd = aIdx.GetNode().GetContentNode();
         if( !pCNd )
@@ -117,32 +111,30 @@ void SwTextFlyCnt::CopyFlyFormat( SwDoc* pDoc )
 
         SwPosition pos = *aAnchor.GetContentAnchor();
         pos.nNode = aIdx;
-        if (FLY_AS_CHAR == aAnchor.GetAnchorId())
+        if (RndStdIds::FLY_AS_CHAR == aAnchor.GetAnchorId())
         {
             pos.nContent.Assign( pCNd, 0 );
         }
         else
         {
             pos.nContent.Assign( nullptr, 0 );
-            OSL_ENSURE( false, "CopyFlyFormat: Was fuer ein Anker?" );
+            assert(false);
         }
         aAnchor.SetAnchor( &pos );
     }
 
     SwFrameFormat* pNew = pDoc->getIDocumentLayoutAccess().CopyLayoutFormat( *pFormat, aAnchor, false, false );
-    ((SwFormatFlyCnt&)GetFlyCnt()).SetFlyFormat( pNew );
+    const_cast<SwFormatFlyCnt&>(GetFlyCnt()).SetFlyFormat( pNew );
 }
 
-// SetAnchor() wird von SwTextNode::Insert() gerufen und sorgt fuer das
-// setzen des Ankers (die SwPosition des Dummy-Zeichens wird dem FlyFrameFormat
-// per SetAttr bekannt gegeben). Dies kann nicht im MakeTextHint erledigt
-// werden, da der Zielnode unbestimmt ist.
-// (siehe Kommentar in SwTextFlyCnt::MakeTextHint)
+/** SetAnchor() is called by SwTextNode::InsertHint() and sets the anchor
+ *  position in the SwFlyFrameFormat to the SwPosition of the dummy
+ *  CH_TXTATR_BREAKWORD.  This cannot be done in MakeTextAttr() because it
+ *  doesn't know the target text node.
+ */
 void SwTextFlyCnt::SetAnchor( const SwTextNode *pNode )
 {
-    // fuers Undo muss der neue Anker schon bekannt sein !
-
-    // Wir ermitteln den Index im Nodesarray zum Node
+    // for Undo, the new anchor must be known already!
 
     SwDoc* pDoc = const_cast<SwDoc*>(pNode->GetDoc());
 
@@ -164,17 +156,17 @@ void SwTextFlyCnt::SetAnchor( const SwTextNode *pNode )
         aPos.nNode = *pOldNode;
     }
 
-    aAnchor.SetType( FLY_AS_CHAR );        // default!
+    aAnchor.SetType( RndStdIds::FLY_AS_CHAR );        // default!
     aAnchor.SetAnchor( &aPos );
 
-    // beim Ankerwechsel werden immer alle FlyFrames vom Attribut geloescht
-    // JP 25.04.95: wird innerhalb des SplitNodes die Frames verschoben
-    //              koennen die Frames erhalten bleiben.
+    // in case of anchor change, delete all FlyFrames
+    // JP 25.04.95: if the Frames can be moved within SplitNode, they don't
+    //              need to be deleted
     if( ( !pNode->GetpSwpHints() || !pNode->GetpSwpHints()->IsInSplitNode() )
         && RES_DRAWFRMFMT != pFormat->Which() )
         pFormat->DelFrames();
 
-    // stehen wir noch im falschen Dokument ?
+    // copy into a different document?
     if( pDoc != pFormat->GetDoc() )
     {
         // disable undo while copying attribute
@@ -184,14 +176,14 @@ void SwTextFlyCnt::SetAnchor( const SwTextNode *pNode )
         ::sw::UndoGuard const undoGuardFormat(
             pFormat->GetDoc()->GetIDocumentUndoRedo());
         pFormat->GetDoc()->getIDocumentLayoutAccess().DelLayoutFormat( pFormat );
-        ((SwFormatFlyCnt&)GetFlyCnt()).SetFlyFormat( pNew );
+        const_cast<SwFormatFlyCnt&>(GetFlyCnt()).SetFlyFormat( pNew );
     }
     else if( pNode->GetpSwpHints() &&
             pNode->GetpSwpHints()->IsInSplitNode() &&
             RES_DRAWFRMFMT != pFormat->Which() )
     {
         pFormat->LockModify();
-        pFormat->SetFormatAttr( aAnchor );        // nur den Anker neu setzen
+        pFormat->SetFormatAttr( aAnchor );  // only set the anchor
         // tdf#91228 must notify the anchor nodes despite LockModify
         assert(pOldNode);
         pOldNode->RemoveAnchoredFly(pFormat);
@@ -201,28 +193,29 @@ void SwTextFlyCnt::SetAnchor( const SwTextNode *pNode )
     else
     {
         assert(!pFormat->IsModifyLocked()); // need to notify anchor node
-        pFormat->SetFormatAttr( aAnchor );        // nur den Anker neu setzen
+        pFormat->SetFormatAttr( aAnchor );  // only set the anchor
     }
 
-    // Am Node haengen u.a. abhaengige ContentFrames.
-    // Fuer jeden ContentFrame wird ein SwFlyInContentFrame angelegt.
+    // The node may have several SwTextFrames - for every SwTextFrame a
+    // SwFlyInContentFrame is created.
 }
 
-// _GetFlyFrame() wird im Formatierungsprozess vom LineIter gerufen
-// und sucht den FlyFrame zum Dummyzeichen des aktuellen ContentFrame. Wird keiner
-// gefunden, so wird ein neuer FlyFrame angelegt.
-// (siehe Kommentar ind SwTextFlyCnt::MakeTextHint)
-SwFlyInContentFrame *SwTextFlyCnt::_GetFlyFrame( const SwFrame *pCurrFrame )
+
+/** GetFlyFrame_() is called during text formatting by SwTextFormatter
+ *  and searches for the SwFlyFrame for the dummy char of the current
+ *  SwTextFrame.  If none is found, a new SwFlyInContentFrame is created.
+ */
+SwFlyInContentFrame *SwTextFlyCnt::GetFlyFrame_( const SwFrame *pCurrFrame )
 {
     SwFrameFormat* pFrameFormat = GetFlyCnt().GetFrameFormat();
     if( RES_DRAWFRMFMT == pFrameFormat->Which() )
     {
-        OSL_ENSURE(  false, "SwTextFlyCnt::_GetFlyFrame: DrawInCnt-Baustelle!" );
+        OSL_ENSURE(  false, "SwTextFlyCnt::GetFlyFrame_: DrawInCnt-under construction!" );
         return nullptr;
     }
 
-    SwIterator<SwFlyFrame,SwFormat> aIter( *GetFlyCnt().pFormat );
-    OSL_ENSURE( pCurrFrame->IsTextFrame(), "SwTextFlyCnt::_GetFlyFrame for TextFrames only." );
+    SwIterator<SwFlyFrame,SwFormat> aIter( *GetFlyCnt().m_pFormat );
+    assert(pCurrFrame->IsTextFrame());
     SwFrame* pFrame = aIter.First();
     if ( pFrame )
     {
@@ -250,18 +243,16 @@ SwFlyInContentFrame *SwTextFlyCnt::_GetFlyFrame( const SwFrame *pCurrFrame )
         } while( pFrame );
     }
 
-    // Wir haben keinen passenden FlyFrame gefunden, deswegen wird ein
-    // neuer angelegt.
-    // Dabei wird eine sofortige Neuformatierung von pCurrFrame angestossen.
-    // Die Rekursion wird durch den Lockmechanismus in SwTextFrame::Format()
-    // abgewuergt.
+    // We did not find a matching FlyFrame, so create a new one.
+    // AppendFly() triggers a reformat of pCurrentFrame.  However, the
+    // recursion is blocked by the lock mechanism in SwTextFrame::Format().
     SwFrame* pCurrentFrame = const_cast<SwFrame*>(pCurrFrame);
     SwFlyInContentFrame *pFly = new SwFlyInContentFrame(static_cast<SwFlyFrameFormat*>(pFrameFormat), pCurrentFrame, pCurrentFrame);
     pCurrentFrame->AppendFly(pFly);
     pFly->RegistFlys();
 
-    // 7922: Wir muessen dafuer sorgen, dass der Inhalt des FlyInCnt
-    // nach seiner Konstruktion stramm durchformatiert wird.
+    // We must ensure that the content of the FlyInCnt is fully formatted
+    // right after construction.
     // #i26945# - Use new object formatter to format Writer
     // fly frame and its content.
     SwObjectFormatter::FormatObj( *pFly, const_cast<SwFrame*>(pCurrFrame),

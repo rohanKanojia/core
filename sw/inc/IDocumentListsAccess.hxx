@@ -31,10 +31,9 @@ class IDocumentListsAccess
     public:
         virtual SwList* createList( const OUString& rListId,
                                     const OUString& rDefaultListStyleName ) = 0;
-        virtual void deleteList( const OUString& rListId ) = 0;
         virtual SwList* getListByName( const OUString& rListId ) const = 0;
 
-        virtual SwList* createListForListStyle( const OUString& rListStyleName ) = 0;
+        virtual void createListForListStyle( const OUString& rListStyleName ) = 0;
         virtual SwList* getListForListStyle( const OUString& rListStyleName ) const = 0;
         virtual void deleteListForListStyle( const OUString& rListStyleName ) = 0;
         virtual void deleteListsByDefaultListStyle( const OUString& rListStyleName ) = 0;

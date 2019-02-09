@@ -20,6 +20,10 @@
 #ifndef INCLUDED_SVX_XFLASIT_HXX
 #define INCLUDED_SVX_XFLASIT_HXX
 
+#include <sal/config.h>
+
+#include <memory>
+
 #include <svl/poolitem.hxx>
 #include <svx/svxdllapi.h>
 
@@ -27,14 +31,12 @@
 class SVX_DLLPUBLIC XFillAttrSetItem : public SfxSetItem
 {
 public:
-                            XFillAttrSetItem(SfxItemSet* pItemSet );
+                            XFillAttrSetItem(std::unique_ptr<SfxItemSet>&& pItemSet );
                             XFillAttrSetItem(SfxItemPool* pItemPool);
                             XFillAttrSetItem(const XFillAttrSetItem& rAttr);
                             XFillAttrSetItem(const XFillAttrSetItem& rAttr,
                                              SfxItemPool* pItemPool);
-    virtual SfxPoolItem*    Clone( SfxItemPool* pToPool ) const override;
-    virtual SfxPoolItem*    Create( SvStream& rStream, sal_uInt16 nVersion ) const override;
-    virtual SvStream&       Store( SvStream& rStream, sal_uInt16 nItemVersion ) const override;
+    virtual SfxPoolItem*    Clone( SfxItemPool* pToPool = nullptr ) const override;
 };
 
 #endif

@@ -21,29 +21,19 @@
 #define INCLUDED_SVTOOLS_RTFOUT_HXX
 
 #include <svtools/svtdllapi.h>
-#include <tools/solar.h>
 
+#include <rtl/ustring.hxx>
 #include <rtl/textenc.h>
 
-namespace rtl {
-  class OUString;
-};
 class SvStream;
 
-class SVT_DLLPUBLIC RTFOutFuncs
-{
-public:
-    static SvStream& Out_Char( SvStream&, sal_Unicode cChar,
-                    int *pUCMode,
-                    rtl_TextEncoding eDestEnc = RTL_TEXTENCODING_MS_1252,
-                    bool bWriteHelpFile = false );
-    static SvStream& Out_String( SvStream&, const rtl::OUString&,
-                    rtl_TextEncoding eDestEnc = RTL_TEXTENCODING_MS_1252,
-                    bool bWriteHelpFile = false );
+namespace RTFOutFuncs {
 
-    static SvStream& Out_Hex( SvStream&, sal_uLong nHex, sal_uInt8 nLen );
-};
+SVT_DLLPUBLIC SvStream& Out_String(
+    SvStream&, const OUString&,
+    rtl_TextEncoding eDestEnc = RTL_TEXTENCODING_MS_1252 );
 
+}
 
 #endif
 

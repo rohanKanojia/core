@@ -19,7 +19,9 @@
 
 #include <comphelper/numbers.hxx>
 #include <osl/diagnose.h>
+#include <sal/log.hxx>
 #include <com/sun/star/util/NumberFormat.hpp>
+#include <com/sun/star/util/XNumberFormatter.hpp>
 #include <com/sun/star/util/XNumberFormatTypes.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/lang/Locale.hpp>
@@ -41,7 +43,7 @@ sal_Int16 getNumberFormatType(const css::uno::Reference<css::util::XNumberFormat
         }
         catch(...)
         {
-            OSL_TRACE("getNumberFormatType : invalid key! (maybe created with another formatter ?)");
+            SAL_WARN("comphelper", "getNumberFormatType : invalid key! (maybe created with another formatter ?)");
         }
     }
     return nReturn;
@@ -72,10 +74,10 @@ css::uno::Any getNumberFormatDecimals(const css::uno::Reference<css::util::XNumb
         }
         catch(...)
         {
-            OSL_TRACE("getNumberFormatDecimals : invalid key! (may be created with another formatter ?)");
+            SAL_WARN("comphelper", "getNumberFormatDecimals : invalid key! (may be created with another formatter ?)");
         }
     }
-    return css::uno::makeAny((sal_Int16)0);
+    return css::uno::Any(sal_Int16(0));
 }
 
 

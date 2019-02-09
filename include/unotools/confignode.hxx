@@ -20,25 +20,19 @@
 #define INCLUDED_UNOTOOLS_CONFIGNODE_HXX
 
 #include <unotools/unotoolsdllapi.h>
-#include <com/sun/star/container/XHierarchicalNameAccess.hpp>
-#include <com/sun/star/container/XNameAccess.hpp>
-#include <com/sun/star/container/XNameContainer.hpp>
-#include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/util/XChangesBatch.hpp>
-#include <com/sun/star/uno/XComponentContext.hpp>
 #include <unotools/eventlisteneradapter.hxx>
 
-namespace comphelper
-{
-    class ComponentContext;
-}
+namespace com { namespace sun { namespace star { namespace container { class XHierarchicalNameAccess; } } } }
+namespace com { namespace sun { namespace star { namespace container { class XNameAccess; } } } }
+namespace com { namespace sun { namespace star { namespace container { class XNameContainer; } } } }
+namespace com { namespace sun { namespace star { namespace container { class XNameReplace; } } } }
+namespace com { namespace sun { namespace star { namespace lang { class XMultiServiceFactory; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XComponentContext; } } } }
+namespace com { namespace sun { namespace star { namespace util { class XChangesBatch; } } } }
 
 namespace utl
 {
 
-    //= OConfigurationNode
-
-    class OConfigurationTreeRoot;
     /** a small wrapper around a configuration node.<p/>
         Nodes in the terminology used herein are <em>inner</em> nodes of a configuration
         tree, which means <em>no leafs</em>.
@@ -56,8 +50,6 @@ namespace utl
                     m_xContainerAccess;     /// modifying set nodes  (optional interface of our UNO object)
         bool        m_bEscapeNames;         /// escape names before accessing children ?
 
-        OUString    m_sCompletePath;
-
         OConfigurationNode  insertNode(const OUString& _rName,const css::uno::Reference< css::uno::XInterface >& _xNode) const throw();
 
     protected:
@@ -74,12 +66,12 @@ namespace utl
         OConfigurationNode() :m_bEscapeNames(false) { }
         /// copy ctor
         OConfigurationNode(const OConfigurationNode& _rSource);
+        /// move ctor
+        OConfigurationNode(OConfigurationNode&& _rSource);
 
-        /// assigment
-        const OConfigurationNode& operator=(const OConfigurationNode& _rSource);
-
-        /// dtor
-        virtual ~OConfigurationNode() {}
+        /// assignment
+        OConfigurationNode& operator=(const OConfigurationNode& _rSource);
+        OConfigurationNode& operator=(OConfigurationNode&& _rSource);
 
         /// returns the local name of the node
         OUString     getLocalName() const;
@@ -142,13 +134,6 @@ namespace utl
         css::uno::Sequence< OUString >
                             getNodeNames() const throw();
 
-        /** enables or disables name escaping when accessing direct children<p/>
-            Escaping is disabled by default, usually you enable it for set nodes (e.g. with calling setEscape(isSetNode)).
-            Once escaping is enabled, you should not access indirect children (e.g. openNode("child/grandchild"), 'cause
-            escaping for such names may not be supported by the underlying API objects.
-            @see getEscape
-        */
-        void        setEscape(bool _bEnable = true);
         /** get the flag specifying the current escape behaviour
             @see setEscape
         */
@@ -230,10 +215,6 @@ namespace utl
             const bool i_bUpdatable
         );
 
-        /// copy ctor
-        OConfigurationTreeRoot(const OConfigurationTreeRoot& _rSource)
-            :OConfigurationNode(_rSource), m_xCommitter(_rSource.m_xCommitter) { }
-
         /** open a new top-level configuration node
 
             opens a new node which is the root if an own configuration sub tree. This is what "top level" means: The
@@ -252,9 +233,8 @@ namespace utl
         static OConfigurationTreeRoot createWithProvider(
                 const css::uno::Reference< css::lang::XMultiServiceFactory >& _rxConfProvider,
                 const OUString& _rPath,
-                sal_Int32 _nDepth = -1,
-                CREATION_MODE _eMode = CM_UPDATABLE,
-                bool _bLazyWrite = true
+                sal_Int32 _nDepth,
+                CREATION_MODE _eMode
             );
 
         /** open a new top-level configuration node<p/>
@@ -270,7 +250,7 @@ namespace utl
             @param      _eMode          specifies which privileges should be applied when retrieving the node
         */
         static OConfigurationTreeRoot createWithComponentContext(const css::uno::Reference< css::uno::XComponentContext >& _rxContext,
-            const OUString& _rPath, sal_Int32 _nDepth = -1, CREATION_MODE _eMode = CM_UPDATABLE, bool _bLazyWrite = true);
+            const OUString& _rPath, sal_Int32 _nDepth = -1, CREATION_MODE _eMode = CM_UPDATABLE);
 
         /** tolerant version of the <member>createWithServiceFactory</member>
 

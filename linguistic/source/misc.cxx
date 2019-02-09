@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <sal/macros.h>
-#include <tools/debug.hxx>
+#include <sal/log.hxx>
 #include <unotools/pathoptions.hxx>
 #include <svl/lngmisc.hxx>
 #include <ucbhelper/content.hxx>
@@ -27,7 +28,6 @@
 #include <com/sun/star/beans/XFastPropertySet.hpp>
 #include <com/sun/star/beans/XPropertyChangeListener.hpp>
 #include <com/sun/star/beans/PropertyValues.hpp>
-#include <com/sun/star/frame/XTerminateListener.hpp>
 #include <com/sun/star/frame/Desktop.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/linguistic2/DictionaryType.hpp>
@@ -39,13 +39,15 @@
 #include <comphelper/processfactory.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <unotools/syslocale.hxx>
+#include <svtools/strings.hrc>
+#include <unotools/resmgr.hxx>
 
 #include <rtl/instance.hxx>
 
-#include "linguistic/misc.hxx"
+#include <linguistic/misc.hxx>
 #include "defs.hxx"
-#include "linguistic/lngprops.hxx"
-#include "linguistic/hyphdta.hxx"
+#include <linguistic/lngprops.hxx>
+#include <linguistic/hyphdta.hxx>
 
 using namespace osl;
 using namespace com::sun::star;
@@ -68,14 +70,12 @@ osl::Mutex &    GetLinguMutex()
     return LinguMutex::get();
 }
 
-LocaleDataWrapper & GetLocaleDataWrapper( sal_Int16 nLang )
+const LocaleDataWrapper & GetLocaleDataWrapper( LanguageType nLang )
 {
     static LocaleDataWrapper aLclDtaWrp( SvtSysLocale().GetLanguageTag() );
 
-    const LanguageTag &rLcl = aLclDtaWrp.getLoadedLanguageTag();
-    LanguageTag aLcl( nLang );
-    if (aLcl != rLcl)
-        aLclDtaWrp.setLanguageTag( aLcl );
+    if (nLang != aLclDtaWrp.getLoadedLanguageTag().getLanguageType())
+        aLclDtaWrp.setLanguageTag( LanguageTag( nLang ) );
     return aLclDtaWrp;
 }
 
@@ -95,14 +95,10 @@ css::lang::Locale LinguLanguageToLocale( LanguageType nLanguage )
 
 bool LinguIsUnspecified( LanguageType nLanguage )
 {
-    switch (nLanguage)
-    {
-        case LANGUAGE_NONE:
-        case LANGUAGE_UNDETERMINED:
-        case LANGUAGE_MULTIPLE:
-            return true;
-    }
-    return false;
+    return nLanguage.anyOf(
+         LANGUAGE_NONE,
+         LANGUAGE_UNDETERMINED,
+         LANGUAGE_MULTIPLE);
 }
 
 // When adding anything keep both LinguIsUnspecified() methods in sync!
@@ -113,26 +109,22 @@ bool LinguIsUnspecified( const OUString & rBcp47 )
 {
     if (rBcp47.getLength() != 3)
         return false;
-    if (rBcp47 == "zxx" || rBcp47 == "und" || rBcp47 == "mul")
-        return true;
-    return false;
+    return rBcp47 == "zxx" || rBcp47 == "und" || rBcp47 == "mul";
 }
 
-static inline sal_Int32 Minimum( sal_Int32 n1, sal_Int32 n2, sal_Int32 n3 )
+static sal_Int32 Minimum( sal_Int32 n1, sal_Int32 n2, sal_Int32 n3 )
 {
-    sal_Int32 nMin = n1 < n2 ? n1 : n2;
-    return nMin < n3 ? nMin : n3;
+    return std::min(std::min(n1, n2), n3);
 }
 
 class IntArray2D
 {
 private:
-    sal_Int32  *pData;
-    int         n1, n2;
+    std::unique_ptr<sal_Int32[]>  pData;
+    int                           n1, n2;
 
 public:
     IntArray2D( int nDim1, int nDim2 );
-    ~IntArray2D();
 
     sal_Int32 & Value( int i, int k  );
 };
@@ -141,19 +133,14 @@ IntArray2D::IntArray2D( int nDim1, int nDim2 )
 {
     n1 = nDim1;
     n2 = nDim2;
-    pData = new sal_Int32[n1 * n2];
-}
-
-IntArray2D::~IntArray2D()
-{
-    delete[] pData;
+    pData.reset( new sal_Int32[n1 * n2] );
 }
 
 sal_Int32 & IntArray2D::Value( int i, int k  )
 {
-    DBG_ASSERT( 0 <= i && i < n1, "first index out of range" );
-    DBG_ASSERT( 0 <= k && k < n2, "first index out of range" );
-    DBG_ASSERT( i * n2 + k < n1 * n2, "index out of range" );
+    assert( (0 <= i && i < n1) && "first index out of range" );
+    assert( (0 <= k && k < n2) && "second index out of range" );
+    assert( (i * n2 + k < n1 * n2) && "index out of range" );
     return pData[ i * n2 + k ];
 }
 
@@ -274,7 +261,7 @@ static bool lcl_HasHyphInfo( const uno::Reference<XDictionaryEntry> &xEntry )
 
 uno::Reference< XDictionaryEntry > SearchDicList(
         const uno::Reference< XSearchableDictionaryList > &xDicList,
-        const OUString &rWord, sal_Int16 nLanguage,
+        const OUString &rWord, LanguageType nLanguage,
         bool bSearchPosDics, bool bSearchSpellEntry )
 {
     MutexGuard  aGuard( GetLinguMutex() );
@@ -296,13 +283,13 @@ uno::Reference< XDictionaryEntry > SearchDicList(
         uno::Reference< XDictionary > axDic( pDic[i], UNO_QUERY );
 
         DictionaryType  eType = axDic->getDictionaryType();
-        sal_Int16           nLang = LinguLocaleToLanguage( axDic->getLocale() );
+        LanguageType    nLang = LinguLocaleToLanguage( axDic->getLocale() );
 
         if ( axDic.is() && axDic->isActive()
             && (nLang == nLanguage  ||  LinguIsUnspecified( nLang)) )
         {
-            DBG_ASSERT( eType != DictionaryType_MIXED,
-                "lng : unexpected dictionary type" );
+            // DictionaryType_MIXED is deprecated
+            SAL_WARN_IF(eType == DictionaryType_MIXED, "linguistic", "unexpected dictionary type");
 
             if (   (!bSearchPosDics  &&  eType == DictionaryType_NEGATIVE)
                 || ( bSearchPosDics  &&  eType == DictionaryType_POSITIVE))
@@ -351,9 +338,9 @@ bool SaveDictionaries( const uno::Reference< XSearchableDictionaryList > &xDicLi
 }
 
 DictionaryError AddEntryToDic(
-        uno::Reference< XDictionary >  &rxDic,
+        uno::Reference< XDictionary > const &rxDic,
         const OUString &rWord, bool bIsNeg,
-        const OUString &rRplcTxt, sal_Int16 /* nRplcLang */,
+        const OUString &rRplcTxt,
         bool bStripDot )
 {
     if (!rxDic.is())
@@ -390,8 +377,24 @@ DictionaryError AddEntryToDic(
     return nRes;
 }
 
+std::vector< LanguageType >
+    LocaleSeqToLangVec( uno::Sequence< Locale > const &rLocaleSeq )
+{
+    const Locale *pLocale = rLocaleSeq.getConstArray();
+    sal_Int32 nCount = rLocaleSeq.getLength();
+
+    std::vector< LanguageType >   aLangs;
+    aLangs.reserve(nCount);
+    for (sal_Int32 i = 0; i < nCount; ++i)
+    {
+        aLangs.push_back( LinguLocaleToLanguage( pLocale[i] ) );
+    }
+
+    return aLangs;
+}
+
 uno::Sequence< sal_Int16 >
-    LocaleSeqToLangSeq( uno::Sequence< Locale > &rLocaleSeq )
+     LocaleSeqToLangSeq( uno::Sequence< Locale > const &rLocaleSeq )
 {
     const Locale *pLocale = rLocaleSeq.getConstArray();
     sal_Int32 nCount = rLocaleSeq.getLength();
@@ -400,12 +403,11 @@ uno::Sequence< sal_Int16 >
     sal_Int16 *pLang = aLangs.getArray();
     for (sal_Int32 i = 0;  i < nCount;  ++i)
     {
-        pLang[i] = LinguLocaleToLanguage( pLocale[i] );
+        pLang[i] = static_cast<sal_uInt16>(LinguLocaleToLanguage( pLocale[i] ));
     }
 
     return aLangs;
 }
-
 bool    IsReadOnly( const OUString &rURL, bool *pbExist )
 {
     bool bRes = false;
@@ -437,7 +439,7 @@ bool    IsReadOnly( const OUString &rURL, bool *pbExist )
 }
 
 static bool GetAltSpelling( sal_Int16 &rnChgPos, sal_Int16 &rnChgLen, OUString &rRplc,
-        uno::Reference< XHyphenatedWord > &rxHyphWord )
+        uno::Reference< XHyphenatedWord > const &rxHyphWord )
 {
     bool bRes = rxHyphWord->isAlternativeSpelling();
     if (bRes)
@@ -479,7 +481,7 @@ static bool GetAltSpelling( sal_Int16 &rnChgPos, sal_Int16 &rnChgLen, OUString &
 
         rnChgPos = sal::static_int_cast< sal_Int16 >(nPosL);
         rnChgLen = sal::static_int_cast< sal_Int16 >(nAltPosR - nPosL);
-        DBG_ASSERT( rnChgLen >= 0, "nChgLen < 0");
+        assert( rnChgLen >= 0 && "nChgLen < 0");
 
         sal_Int32 nTxtStart = nPosL;
         sal_Int32 nTxtLen   = nAltPosR - nPosL + 1;
@@ -522,7 +524,7 @@ sal_Int32 GetPosInWordToCheck( const OUString &rTxt, sal_Int32 nPos )
 
 uno::Reference< XHyphenatedWord > RebuildHyphensAndControlChars(
         const OUString &rOrigWord,
-        uno::Reference< XHyphenatedWord > &rxHyphWord )
+        uno::Reference< XHyphenatedWord > const &rxHyphWord )
 {
     uno::Reference< XHyphenatedWord > xRes;
     if (!rOrigWord.isEmpty() && rxHyphWord.is())
@@ -568,11 +570,11 @@ uno::Reference< XHyphenatedWord > RebuildHyphensAndControlChars(
 
         if (nOrigHyphenPos == -1  ||  nOrigHyphenationPos == -1)
         {
-            DBG_ASSERT( false, "failed to get nOrigHyphenPos or nOrigHyphenationPos" );
+            SAL_WARN( "linguistic", "failed to get nOrigHyphenPos or nOrigHyphenationPos" );
         }
         else
         {
-            sal_Int16 nLang = LinguLocaleToLanguage( rxHyphWord->getLocale() );
+            LanguageType nLang = LinguLocaleToLanguage( rxHyphWord->getLocale() );
             xRes = new HyphenatedWord(
                         rOrigWord, nLang, nOrigHyphenationPos,
                         aOrigHyphenatedWord, nOrigHyphenPos );
@@ -588,13 +590,13 @@ static CharClass & lcl_GetCharClass()
     return aCC;
 }
 
-osl::Mutex & lcl_GetCharClassMutex()
+static osl::Mutex & lcl_GetCharClassMutex()
 {
     static osl::Mutex   aMutex;
     return aMutex;
 }
 
-bool IsUpper( const OUString &rText, sal_Int32 nPos, sal_Int32 nLen, sal_Int16 nLanguage )
+bool IsUpper( const OUString &rText, sal_Int32 nPos, sal_Int32 nLen, LanguageType nLanguage )
 {
     MutexGuard  aGuard( lcl_GetCharClassMutex() );
 
@@ -605,16 +607,15 @@ bool IsUpper( const OUString &rText, sal_Int32 nPos, sal_Int32 nLen, sal_Int16 n
             && !(nFlags & KCharacterType::LOWER);
 }
 
-CapType SAL_CALL capitalType(const OUString& aTerm, CharClass * pCC)
+CapType capitalType(const OUString& aTerm, CharClass const * pCC)
 {
         sal_Int32 tlen = aTerm.getLength();
-        if ((pCC) && (tlen))
+        if (pCC && tlen)
         {
-            OUString aStr(aTerm);
             sal_Int32 nc = 0;
             for (sal_Int32 tindex = 0; tindex < tlen; ++tindex)
             {
-                if (pCC->getCharacterType(aStr,tindex) &
+                if (pCC->getCharacterType(aTerm,tindex) &
                    css::i18n::KCharacterType::UPPER) nc++;
             }
 
@@ -622,7 +623,7 @@ CapType SAL_CALL capitalType(const OUString& aTerm, CharClass * pCC)
                 return CapType::NOCAP;
             if (nc == tlen)
                 return CapType::ALLCAP;
-            if ((nc == 1) && (pCC->getCharacterType(aStr,0) &
+            if ((nc == 1) && (pCC->getCharacterType(aTerm,0) &
                   css::i18n::KCharacterType::UPPER))
                 return CapType::INITCAP;
 
@@ -631,7 +632,7 @@ CapType SAL_CALL capitalType(const OUString& aTerm, CharClass * pCC)
         return CapType::UNKNOWN;
 }
 
-OUString ToLower( const OUString &rText, sal_Int16 nLanguage )
+OUString ToLower( const OUString &rText, LanguageType nLanguage )
 {
     MutexGuard  aGuard( lcl_GetCharClassMutex() );
 
@@ -681,16 +682,14 @@ static const sal_uInt32 the_aDigitZeroes [] =
 
 bool HasDigits( const OUString &rText )
 {
-    static const int nNumDigitZeroes = SAL_N_ELEMENTS(the_aDigitZeroes);
     const sal_Int32 nLen = rText.getLength();
 
     sal_Int32 i = 0;
     while (i < nLen) // for all characters ...
     {
         const sal_uInt32 nCodePoint = rText.iterateCodePoints( &i );    // handle unicode surrogates correctly...
-        for (int j = 0; j < nNumDigitZeroes; ++j)   // ... check in all 0..9 ranges
+        for (unsigned int nDigitZero : the_aDigitZeroes)   // ... check in all 0..9 ranges
         {
-            sal_uInt32 nDigitZero = the_aDigitZeroes[ j ];
             if (nDigitZero > nCodePoint)
                 break;
             if (/*nDigitZero <= nCodePoint &&*/ nCodePoint <= nDigitZero + 9)
@@ -710,7 +709,7 @@ bool IsNumeric( const OUString &rText )
         for(sal_Int32 i = 0; i < nLen; ++i)
         {
             sal_Unicode cChar = rText[ i ];
-            if ( !((sal_Unicode)'0' <= cChar  &&  cChar <= (sal_Unicode)'9') )
+            if ( !('0' <= cChar  &&  cChar <= '9') )
             {
                 bRes = false;
                 break;
@@ -735,7 +734,7 @@ uno::Reference< XSearchableDictionaryList > GetDictionaryList()
     }
     catch (const uno::Exception &)
     {
-        DBG_ASSERT( false, "createInstance failed" );
+        SAL_WARN( "linguistic", "createInstance failed" );
     }
 
     return xRef;
@@ -746,14 +745,17 @@ uno::Reference< XDictionary > GetIgnoreAllList()
     uno::Reference< XDictionary > xRes;
     uno::Reference< XSearchableDictionaryList > xDL( GetDictionaryList() );
     if (xDL.is())
-        xRes = xDL->getDictionaryByName( "IgnoreAllList" );
+    {
+        std::locale loc(Translate::Create("svt"));
+        xRes = xDL->getDictionaryByName( Translate::get(STR_DESCRIPTION_IGNOREALLLIST, loc) );
+    }
     return xRes;
 }
 
 AppExitListener::AppExitListener()
 {
     // add object to Desktop EventListeners in order to properly call
-    // the AtExit function at appliction exit.
+    // the AtExit function at application exit.
     uno::Reference< XComponentContext > xContext( comphelper::getProcessComponentContext() );
 
     try
@@ -762,7 +764,7 @@ AppExitListener::AppExitListener()
     }
     catch (const uno::Exception &)
     {
-        DBG_ASSERT( false, "createInstance failed" );
+        SAL_WARN( "linguistic", "createInstance failed" );
     }
 }
 
@@ -784,7 +786,6 @@ void AppExitListener::Deactivate()
 
 void SAL_CALL
     AppExitListener::disposing( const EventObject& rEvtSource )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 
@@ -796,13 +797,11 @@ void SAL_CALL
 
 void SAL_CALL
     AppExitListener::queryTermination( const EventObject& /*rEvtSource*/ )
-        throw(frame::TerminationVetoException, RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL
     AppExitListener::notifyTermination( const EventObject& rEvtSource )
-        throw(RuntimeException, std::exception)
 {
     MutexGuard  aGuard( GetLinguMutex() );
 

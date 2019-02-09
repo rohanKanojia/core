@@ -23,13 +23,14 @@
 #include "pcrservices.hxx"
 
 #include <com/sun/star/inspection/XObjectInspectorUI.hpp>
+#include <com/sun/star/lang/NullPointerException.hpp>
 
 #define TEXTTYPE_SINGLELINE     0
 #define TEXTTYPE_MULTILINE      1
 #define TEXTTYPE_RICHTEXT       2
 
 
-extern "C" void SAL_CALL createRegistryInfo_EditPropertyHandler()
+extern "C" void createRegistryInfo_EditPropertyHandler()
 {
     ::pcr::EditPropertyHandler::registerImplementation();
 }
@@ -61,20 +62,20 @@ namespace pcr
     }
 
 
-    OUString SAL_CALL EditPropertyHandler::getImplementationName_static(  ) throw (RuntimeException)
+    OUString EditPropertyHandler::getImplementationName_static(  )
     {
         return OUString( "com.sun.star.comp.extensions.EditPropertyHandler" );
     }
 
 
-    Sequence< OUString > SAL_CALL EditPropertyHandler::getSupportedServiceNames_static(  ) throw (RuntimeException)
+    Sequence< OUString > EditPropertyHandler::getSupportedServiceNames_static(  )
     {
         Sequence<OUString> aSupported { "com.sun.star.form.inspection.EditPropertyHandler" };
         return aSupported;
     }
 
 
-    Any SAL_CALL EditPropertyHandler::getPropertyValue( const OUString& _rPropertyName ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    Any SAL_CALL EditPropertyHandler::getPropertyValue( const OUString& _rPropertyName )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
@@ -91,7 +92,7 @@ namespace pcr
                 bool bHasHScroll = false;
                 m_xComponent->getPropertyValue( PROPERTY_HSCROLL ) >>= bHasHScroll;
 
-                aReturn <<= (sal_Int32)( ( bHasVScroll ? 2 : 0 ) + ( bHasHScroll ? 1 : 0 ) );
+                aReturn <<= static_cast<sal_Int32>( ( bHasVScroll ? 2 : 0 ) + ( bHasHScroll ? 1 : 0 ) );
             }
             break;
 
@@ -130,7 +131,7 @@ namespace pcr
     }
 
 
-    void SAL_CALL EditPropertyHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue ) throw (UnknownPropertyException, RuntimeException, std::exception)
+    void SAL_CALL EditPropertyHandler::setPropertyValue( const OUString& _rPropertyName, const Any& _rValue )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
         PropertyId nPropId( impl_getPropertyId_throwUnknownProperty( _rPropertyName ) );
@@ -209,9 +210,9 @@ namespace pcr
     }
 
 
-    Sequence< Property > SAL_CALL EditPropertyHandler::doDescribeSupportedProperties() const
+    Sequence< Property > EditPropertyHandler::doDescribeSupportedProperties() const
     {
-        ::std::vector< Property > aProperties;
+        std::vector< Property > aProperties;
 
         if ( implHaveBothScrollBarProperties() )
             addInt32PropertyDescription( aProperties, PROPERTY_SHOW_SCROLLBARS );
@@ -225,19 +226,19 @@ namespace pcr
     }
 
 
-    Sequence< OUString > SAL_CALL EditPropertyHandler::getSupersededProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EditPropertyHandler::getSupersededProperties( )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        ::std::vector< OUString > aSuperseded;
+        std::vector< OUString > aSuperseded;
         if ( implHaveBothScrollBarProperties() )
         {
-            aSuperseded.push_back( static_cast<const OUString&>(PROPERTY_HSCROLL) );
-            aSuperseded.push_back( static_cast<const OUString&>(PROPERTY_VSCROLL) );
+            aSuperseded.push_back( PROPERTY_HSCROLL );
+            aSuperseded.push_back( PROPERTY_VSCROLL );
         }
         if ( implHaveTextTypeProperty() )
         {
-            aSuperseded.push_back(  static_cast<const OUString&>(PROPERTY_RICHTEXT) );
-            aSuperseded.push_back(  static_cast<const OUString&>(PROPERTY_MULTILINE) );
+            aSuperseded.push_back(  PROPERTY_RICHTEXT );
+            aSuperseded.push_back(  PROPERTY_MULTILINE );
         }
         if ( aSuperseded.empty() )
             return Sequence< OUString >();
@@ -245,18 +246,18 @@ namespace pcr
     }
 
 
-    Sequence< OUString > SAL_CALL EditPropertyHandler::getActuatingProperties( ) throw (RuntimeException, std::exception)
+    Sequence< OUString > SAL_CALL EditPropertyHandler::getActuatingProperties( )
     {
         ::osl::MutexGuard aGuard( m_aMutex );
-        ::std::vector< OUString > aInterestingActuatingProps;
+        std::vector< OUString > aInterestingActuatingProps;
         if ( implHaveTextTypeProperty() )
-            aInterestingActuatingProps.push_back(  static_cast<const OUString&>(PROPERTY_TEXTTYPE) );
-        aInterestingActuatingProps.push_back( static_cast<const OUString&>(PROPERTY_MULTILINE) );
+            aInterestingActuatingProps.push_back(  PROPERTY_TEXTTYPE );
+        aInterestingActuatingProps.push_back( PROPERTY_MULTILINE );
         return Sequence< OUString >( &(*aInterestingActuatingProps.begin()), aInterestingActuatingProps.size() );
     }
 
 
-    void SAL_CALL EditPropertyHandler::actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& _rxInspectorUI, sal_Bool ) throw (NullPointerException, RuntimeException, std::exception)
+    void SAL_CALL EditPropertyHandler::actuatingPropertyChanged( const OUString& _rActuatingPropertyName, const Any& _rNewValue, const Any& /*_rOldValue*/, const Reference< XObjectInspectorUI >& _rxInspectorUI, sal_Bool )
     {
         if ( !_rxInspectorUI.is() )
             throw NullPointerException();

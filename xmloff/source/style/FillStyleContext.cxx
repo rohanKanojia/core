@@ -18,12 +18,14 @@
  */
 
 #include <com/sun/star/container/XNameContainer.hpp>
+#include <com/sun/star/graphic/XGraphic.hpp>
+#include <com/sun/star/awt/XBitmap.hpp>
 #include "FillStyleContext.hxx"
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/GradientStyle.hxx>
 #include <xmloff/HatchStyle.hxx>
 #include <xmloff/ImageStyle.hxx>
-#include "TransGradientStyle.hxx"
+#include <TransGradientStyle.hxx>
 #include <xmloff/MarkerStyle.hxx>
 #include <xmloff/DashStyle.hxx>
 #include <xmloff/families.hxx>
@@ -125,15 +127,14 @@ XMLBitmapStyleContext::XMLBitmapStyleContext( SvXMLImport& rImport, sal_uInt16 n
 :   SvXMLStyleContext(rImport, nPrfx, rLName, xAttrList)
 {
     // start import
-    XMLImageStyle aBitmapStyle;
-    aBitmapStyle.importXML( xAttrList, maAny, maStrName, rImport );
+    XMLImageStyle::importXML( xAttrList, maAny, maStrName, rImport );
 }
 
 XMLBitmapStyleContext::~XMLBitmapStyleContext()
 {
 }
 
-SvXMLImportContext* XMLBitmapStyleContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList )
+SvXMLImportContextRef XMLBitmapStyleContext::CreateChildContext( sal_uInt16 nPrefix, const OUString& rLocalName, const css::uno::Reference< css::xml::sax::XAttributeList > & xAttrList )
 {
     SvXMLImportContext *pContext = nullptr;
     if( (XML_NAMESPACE_OFFICE == nPrefix) && xmloff::token::IsXMLToken( rLocalName, xmloff::token::XML_BINARY_DATA ) )
@@ -159,34 +160,30 @@ SvXMLImportContext* XMLBitmapStyleContext::CreateChildContext( sal_uInt16 nPrefi
 
 void XMLBitmapStyleContext::EndElement()
 {
-    OUString sURL;
-    maAny >>= sURL;
-
-    if( sURL.isEmpty() && mxBase64Stream.is() )
+    if (maAny.has<uno::Reference<graphic::XGraphic>>())
     {
-        sURL = GetImport().ResolveGraphicObjectURLFromBase64( mxBase64Stream );
-        mxBase64Stream = nullptr;
-        maAny <<= sURL;
-    }
+        uno::Reference<container::XNameContainer> xBitmapContainer(GetImport().GetBitmapHelper());
 
-    uno::Reference< container::XNameContainer > xBitmap( GetImport().GetBitmapHelper() );
+        uno::Reference<graphic::XGraphic> xGraphic = maAny.get<uno::Reference<graphic::XGraphic>>();
+        uno::Reference<awt::XBitmap> xBitmap(xGraphic, uno::UNO_QUERY);
 
-    try
-    {
-        if(xBitmap.is())
+        try
         {
-            if( xBitmap->hasByName( maStrName ) )
+            if (xBitmapContainer.is())
             {
-                xBitmap->replaceByName( maStrName, maAny );
-            }
-            else
-            {
-                xBitmap->insertByName( maStrName, maAny );
+                if (xBitmapContainer->hasByName(maStrName))
+                {
+                    xBitmapContainer->replaceByName(maStrName, uno::Any(xBitmap));
+                }
+                else
+                {
+                    xBitmapContainer->insertByName(maStrName, uno::Any(xBitmap));
+                }
             }
         }
+        catch (container::ElementExistException&)
+        {}
     }
-    catch( container::ElementExistException& )
-    {}
 }
 
 bool XMLBitmapStyleContext::IsTransient() const

@@ -17,12 +17,14 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <unoidx.hxx>
 #include <unoidxcoll.hxx>
 
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/container/XIndexReplace.hpp>
 #include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/lang/IndexOutOfBoundsException.hpp>
 #include <com/sun/star/text/ChapterFormat.hpp>
 #include <com/sun/star/text/ReferenceFieldPart.hpp>
 #include <com/sun/star/text/BibliographyDataField.hpp>
@@ -33,7 +35,9 @@
 #include <comphelper/interfacecontainer2.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <vcl/svapp.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <editeng/unolingu.hxx>
+#include <editeng/memberids.h>
 #include <hints.hxx>
 #include <cmdid.h>
 #include <swtypes.hxx>
@@ -43,7 +47,6 @@
 #include <IDocumentLayoutAccess.hxx>
 #include <docary.hxx>
 #include <poolfmt.hxx>
-#include <poolfmt.hrc>
 #include <pagedesc.hxx>
 #include <fmtcntnt.hxx>
 #include <unomap.hxx>
@@ -62,11 +65,13 @@
 #include <comphelper/servicehelper.hxx>
 #include <comphelper/string.hxx>
 #include <cppuhelper/implbase.hxx>
+#include <svl/itemprop.hxx>
 
 using namespace ::com::sun::star;
 
+/// @throws lang::IllegalArgumentException
 static OUString
-lcl_AnyToString(uno::Any const& rVal) throw (lang::IllegalArgumentException)
+lcl_AnyToString(uno::Any const& rVal)
 {
     OUString sRet;
     if(!(rVal >>= sRet))
@@ -76,8 +81,9 @@ lcl_AnyToString(uno::Any const& rVal) throw (lang::IllegalArgumentException)
     return sRet;
 }
 
+/// @throws lang::IllegalArgumentException
 static sal_Int16
-lcl_AnyToInt16(uno::Any const& rVal) throw (lang::IllegalArgumentException)
+lcl_AnyToInt16(uno::Any const& rVal)
 {
     sal_Int16 nRet = 0;
     if(!(rVal >>= nRet))
@@ -87,8 +93,9 @@ lcl_AnyToInt16(uno::Any const& rVal) throw (lang::IllegalArgumentException)
     return nRet;
 }
 
+/// @throws lang::IllegalArgumentException
 static bool
-lcl_AnyToBool(uno::Any const& rVal) throw (lang::IllegalArgumentException)
+lcl_AnyToBool(uno::Any const& rVal)
 {
     bool bRet = false;
     if(!(rVal >>= bRet))
@@ -98,21 +105,21 @@ lcl_AnyToBool(uno::Any const& rVal) throw (lang::IllegalArgumentException)
     return bRet;
 }
 
-static void
-lcl_AnyToBitMask(uno::Any const& rValue,
-        sal_uInt16 & rBitMask, const sal_uInt16 nBit)
-throw (lang::IllegalArgumentException)
+/// @throws lang::IllegalArgumentException
+template<typename T>
+static void lcl_AnyToBitMask(uno::Any const& rValue,
+        T & rBitMask, const T nBit)
 {
     rBitMask = lcl_AnyToBool(rValue)
         ? (rBitMask |  nBit)
         : (rBitMask & ~nBit);
 }
 
-static void
-lcl_BitMaskToAny(uno::Any & o_rValue,
-        const sal_uInt16 nBitMask, const sal_uInt16 nBit)
+template<typename T>
+static void lcl_BitMaskToAny(uno::Any & o_rValue,
+        const T nBitMask, const T nBit)
 {
-    const bool bRet = 0 != (nBitMask & nBit);
+    const bool bRet(nBitMask & nBit);
     o_rValue <<= bRet;
 }
 
@@ -193,35 +200,29 @@ private:
     /// can be destroyed threadsafely, so no UnoImplPtr here
     ::rtl::Reference<SwXDocumentIndex> m_xParent;
 
-    virtual ~StyleAccess_Impl();
+    virtual ~StyleAccess_Impl() override;
 
 public:
     explicit StyleAccess_Impl(SwXDocumentIndex& rParentIdx);
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL
-        supportsService(const OUString& rServiceName)
-        throw (uno::RuntimeException, std::exception) override;
+        supportsService(const OUString& rServiceName) override;
     virtual uno::Sequence< OUString > SAL_CALL
-        getSupportedServiceNames() throw (uno::RuntimeException, std::exception) override;
+        getSupportedServiceNames() override;
 
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType() throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements() throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Any SAL_CALL getByIndex(sal_Int32 nIndex)
-        throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
-                uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getCount() override;
+    virtual uno::Any SAL_CALL getByIndex(sal_Int32 nIndex) override;
 
     // XIndexReplace
     virtual void SAL_CALL
-        replaceByIndex(sal_Int32 Index, const uno::Any& rElement)
-        throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
-                lang::WrappedTargetException, uno::RuntimeException, std::exception) override;
+        replaceByIndex(sal_Int32 Index, const uno::Any& rElement) override;
 
 };
 
@@ -238,43 +239,37 @@ private:
     /// can be destroyed threadsafely, so no UnoImplPtr here
     ::rtl::Reference<SwXDocumentIndex> m_xParent;
 
-    virtual ~TokenAccess_Impl();
+    virtual ~TokenAccess_Impl() override;
 
 public:
 
     explicit TokenAccess_Impl(SwXDocumentIndex& rParentIdx);
 
     // XServiceInfo
-    virtual OUString SAL_CALL getImplementationName()
-        throw (uno::RuntimeException, std::exception) override;
+    virtual OUString SAL_CALL getImplementationName() override;
     virtual sal_Bool SAL_CALL
-        supportsService(const OUString& rServiceName)
-        throw (uno::RuntimeException, std::exception) override;
+        supportsService(const OUString& rServiceName) override;
     virtual uno::Sequence< OUString > SAL_CALL
-        getSupportedServiceNames() throw (uno::RuntimeException, std::exception) override;
+        getSupportedServiceNames() override;
 
     // XElementAccess
-    virtual uno::Type SAL_CALL getElementType() throw (uno::RuntimeException, std::exception) override;
-    virtual sal_Bool SAL_CALL hasElements() throw (uno::RuntimeException, std::exception) override;
+    virtual uno::Type SAL_CALL getElementType() override;
+    virtual sal_Bool SAL_CALL hasElements() override;
 
     // XIndexAccess
-    virtual sal_Int32 SAL_CALL getCount() throw (uno::RuntimeException, std::exception) override;
-    virtual uno::Any SAL_CALL getByIndex(sal_Int32 nIndex)
-        throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
-                uno::RuntimeException, std::exception) override;
+    virtual sal_Int32 SAL_CALL getCount() override;
+    virtual uno::Any SAL_CALL getByIndex(sal_Int32 nIndex) override;
 
     // XIndexReplace
     virtual void SAL_CALL
-        replaceByIndex(sal_Int32 Index, const uno::Any& rElement)
-        throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
-                lang::WrappedTargetException, uno::RuntimeException, std::exception) override;
+        replaceByIndex(sal_Int32 Index, const uno::Any& rElement) override;
 
 };
 
 class SwDocIndexDescriptorProperties_Impl
 {
 private:
-    ::std::unique_ptr<SwTOXBase> m_pTOXBase;
+    std::unique_ptr<SwTOXBase> m_pTOXBase;
     OUString m_sUserTOXTypeName;
 
 public:
@@ -290,7 +285,7 @@ SwDocIndexDescriptorProperties_Impl::SwDocIndexDescriptorProperties_Impl(
 {
     SwForm aForm(pType->GetType());
     m_pTOXBase.reset(new SwTOXBase(pType, aForm,
-                             nsSwTOXElement::TOX_MARK, pType->GetTypeName()));
+                             SwTOXElement::Mark, pType->GetTypeName()));
     if(pType->GetType() == TOX_CONTENT || pType->GetType() == TOX_USER)
     {
         m_pTOXBase->SetLevel(MAXLEVEL);
@@ -328,14 +323,14 @@ public:
     const TOXTypes              m_eTOXType;
     bool                        m_bIsDescriptor;
     SwDoc *                     m_pDoc;
-    ::std::unique_ptr<SwDocIndexDescriptorProperties_Impl> m_pProps;
+    std::unique_ptr<SwDocIndexDescriptorProperties_Impl> m_pProps;
     uno::WeakReference<container::XIndexReplace> m_wStyleAccess;
     uno::WeakReference<container::XIndexReplace> m_wTokenAccess;
 
     Impl(   SwDoc & rDoc,
             const TOXTypes eType,
             SwTOXBaseSection *const pBaseSection)
-        : SwClient((pBaseSection) ? pBaseSection->GetFormat() : nullptr)
+        : SwClient(pBaseSection ? pBaseSection->GetFormat() : nullptr)
         , m_Listeners(m_Mutex)
         , m_rPropSet(
             *aSwMapProvider.GetPropertySet(lcl_TypeToPropertyMap_Index(eType)))
@@ -358,7 +353,7 @@ public:
         SwSectionFormat *const pSectionFormat(GetSectionFormat());
         SwTOXBase *const pTOXSection( (m_bIsDescriptor)
             ?  &m_pProps->GetTOXBase()
-            : ((pSectionFormat)
+            : (pSectionFormat
                 ? static_cast<SwTOXBaseSection*>(pSectionFormat->GetSection())
                 : nullptr));
         if (!pTOXSection)
@@ -429,7 +424,7 @@ SwXDocumentIndex::CreateXDocumentIndex(
     }
     if (!xIndex.is())
     {
-        SwXDocumentIndex *const pIndex((pSection)
+        SwXDocumentIndex *const pIndex(pSection
                 ? new SwXDocumentIndex(*pSection, rDoc)
                 : new SwXDocumentIndex(eTypes, rDoc));
         xIndex.set(pIndex);
@@ -455,26 +450,24 @@ const uno::Sequence< sal_Int8 > & SwXDocumentIndex::getUnoTunnelId()
 
 sal_Int64 SAL_CALL
 SwXDocumentIndex::getSomething(const uno::Sequence< sal_Int8 >& rId)
-throw (uno::RuntimeException, std::exception)
 {
     return ::sw::UnoTunnelImpl<SwXDocumentIndex>(rId, this);
 }
 
 OUString SAL_CALL
-SwXDocumentIndex::getImplementationName() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::getImplementationName()
 {
     return OUString("SwXDocumentIndex");
 }
 
 sal_Bool SAL_CALL
 SwXDocumentIndex::supportsService(const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
-SwXDocumentIndex::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::getSupportedServiceNames()
 {
     SolarMutexGuard g;
 
@@ -509,24 +502,23 @@ SwXDocumentIndex::getSupportedServiceNames() throw (uno::RuntimeException, std::
 }
 
 OUString SAL_CALL SwXDocumentIndex::getServiceName()
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard g;
 
-    sal_uInt16 nObjectType = SW_SERVICE_TYPE_INDEX;
+    SwServiceType nObjectType = SwServiceType::TypeIndex;
     switch (m_pImpl->m_eTOXType)
     {
-        case TOX_USER:          nObjectType = SW_SERVICE_USER_INDEX;
+        case TOX_USER:          nObjectType = SwServiceType::UserIndex;
         break;
-        case TOX_CONTENT:       nObjectType = SW_SERVICE_CONTENT_INDEX;
+        case TOX_CONTENT:       nObjectType = SwServiceType::ContentIndex;
         break;
-        case TOX_ILLUSTRATIONS: nObjectType = SW_SERVICE_INDEX_ILLUSTRATIONS;
+        case TOX_ILLUSTRATIONS: nObjectType = SwServiceType::IndexIllustrations;
         break;
-        case TOX_OBJECTS:       nObjectType = SW_SERVICE_INDEX_OBJECTS;
+        case TOX_OBJECTS:       nObjectType = SwServiceType::IndexObjects;
         break;
-        case TOX_TABLES:        nObjectType = SW_SERVICE_INDEX_TABLES;
+        case TOX_TABLES:        nObjectType = SwServiceType::IndexTables;
         break;
-        case TOX_AUTHORITIES:   nObjectType = SW_SERVICE_INDEX_BIBLIOGRAPHY;
+        case TOX_AUTHORITIES:   nObjectType = SwServiceType::IndexBibliography;
         break;
         default:
         break;
@@ -534,13 +526,13 @@ throw (uno::RuntimeException, std::exception)
     return SwXServiceProvider::GetProviderName(nObjectType);
 }
 
-void SAL_CALL SwXDocumentIndex::update() throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwXDocumentIndex::update()
 {
     return refresh(); // update is from deprecated XDocumentIndex
 }
 
 uno::Reference< beans::XPropertySetInfo > SAL_CALL
-SwXDocumentIndex::getPropertySetInfo() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::getPropertySetInfo()
 {
     SolarMutexGuard g;
 
@@ -552,9 +544,6 @@ SwXDocumentIndex::getPropertySetInfo() throw (uno::RuntimeException, std::except
 void SAL_CALL
 SwXDocumentIndex::setPropertyValue(
         const OUString& rPropertyName, const uno::Any& rValue)
-throw (beans::UnknownPropertyException, beans::PropertyVetoException,
-    lang::IllegalArgumentException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -576,11 +565,11 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
     SwSectionFormat *const pSectionFormat(m_pImpl->GetSectionFormat());
     SwTOXBase & rTOXBase( m_pImpl->GetTOXSectionOrThrow() );
 
-    sal_uInt16 nCreate = rTOXBase.GetCreateType();
-    sal_uInt16 nOLEOptions = rTOXBase.GetOLEOptions();
+    SwTOXElement nCreate = rTOXBase.GetCreateType();
+    SwTOOElements nOLEOptions = rTOXBase.GetOLEOptions();
     const TOXTypes eTxBaseType = rTOXBase.GetTOXType()->GetType();
-    sal_uInt16 nTOIOptions = (eTxBaseType == TOX_INDEX)
-        ? rTOXBase.GetOptions() : 0;
+    SwTOIOptions nTOIOptions = (eTxBaseType == TOX_INDEX)
+        ? rTOXBase.GetOptions() : SwTOIOptions::NONE;
     SwForm  aForm(rTOXBase.GetTOXForm());
     bool bForm = false;
     switch (pEntry->nWID)
@@ -657,36 +646,36 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
         case WID_TOC_BOOKMARK:
         {
            rTOXBase.SetBookmarkName(lcl_AnyToString(rValue));
-           nCreate = nsSwTOXElement::TOX_BOOKMARK;
+           nCreate = SwTOXElement::Bookmark;
            rTOXBase.SetCreate(nCreate);
         }
         break;
         case WID_INDEX_ENTRY_TYPE:
         {
             rTOXBase.SetEntryTypeName(lcl_AnyToString(rValue));
-            nCreate = nsSwTOXElement::TOX_INDEX_ENTRY_TYPE;
+            nCreate = SwTOXElement::IndexEntryType;
             rTOXBase.SetCreate(nCreate);
         }
         break;
         case WID_CREATE_FROM_MARKS:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_MARK);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Mark);
         break;
         case WID_CREATE_FROM_OUTLINE:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_OUTLINELEVEL);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::OutlineLevel);
         break;
         case WID_TOC_PARAGRAPH_OUTLINE_LEVEL:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_PARAGRAPH_OUTLINE_LEVEL);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::ParagraphOutlineLevel);
         break;
         case WID_TAB_IN_TOC:
-             lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_TAB_IN_TOC);
+             lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::TableInToc);
         break;
         case WID_TOC_NEWLINE:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_NEWLINE);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Newline);
         break;
 //          case WID_PARAGRAPH_STYLE_NAMES             :OSL_FAIL("not implemented")
 //          break;
         case WID_HIDE_TABLEADER_PAGENUMBERS:
-              lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_TABLEADER);
+              lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::TableLeader);
         break ;
         case WID_CREATE_FROM_CHAPTER:
             rTOXBase.SetFromChapter(lcl_AnyToBool(rValue));
@@ -706,29 +695,29 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
         break;
         case WID_USE_ALPHABETICAL_SEPARATORS:
             lcl_AnyToBitMask(rValue, nTOIOptions,
-                    nsSwTOIOptions::TOI_ALPHA_DELIMITTER);
+                    SwTOIOptions::AlphaDelimiter);
         break;
         case WID_USE_KEY_AS_ENTRY:
             lcl_AnyToBitMask(rValue, nTOIOptions,
-                    nsSwTOIOptions::TOI_KEY_AS_ENTRY);
+                    SwTOIOptions::KeyAsEntry);
         break;
         case WID_USE_COMBINED_ENTRIES:
             lcl_AnyToBitMask(rValue, nTOIOptions,
-                    nsSwTOIOptions::TOI_SAME_ENTRY);
+                    SwTOIOptions::SameEntry);
         break;
         case WID_IS_CASE_SENSITIVE:
             lcl_AnyToBitMask(rValue, nTOIOptions,
-                    nsSwTOIOptions::TOI_CASE_SENSITIVE);
+                    SwTOIOptions::CaseSensitive);
         break;
         case WID_USE_P_P:
-            lcl_AnyToBitMask(rValue, nTOIOptions, nsSwTOIOptions::TOI_FF);
+            lcl_AnyToBitMask(rValue, nTOIOptions, SwTOIOptions::FF);
         break;
         case WID_USE_DASH:
-            lcl_AnyToBitMask(rValue, nTOIOptions, nsSwTOIOptions::TOI_DASH);
+            lcl_AnyToBitMask(rValue, nTOIOptions, SwTOIOptions::Dash);
         break;
         case WID_USE_UPPER_CASE:
             lcl_AnyToBitMask(rValue, nTOIOptions,
-                    nsSwTOIOptions::TOI_INITIAL_CAPS);
+                    SwTOIOptions::InitialCaps);
         break;
         case WID_IS_COMMA_SEPARATED:
             bForm = true;
@@ -770,43 +759,43 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
         {
             OUString aString;
             SwStyleNameMapper::FillUIName(lcl_AnyToString(rValue),
-                aString, nsSwGetPoolIdFromName::GET_POOLID_CHRFMT, true);
+                aString, SwGetPoolIdFromName::ChrFmt);
             rTOXBase.SetMainEntryCharStyle( aString );
         }
         break;
         case WID_CREATE_FROM_TABLES:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_TABLE);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Table);
         break;
         case WID_CREATE_FROM_TEXT_FRAMES:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_FRAME);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Frame);
         break;
         case WID_CREATE_FROM_GRAPHIC_OBJECTS:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_GRAPHIC);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Graphic);
         break;
         case WID_CREATE_FROM_EMBEDDED_OBJECTS:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_OLE);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Ole);
         break;
         case WID_CREATE_FROM_STAR_MATH:
-            lcl_AnyToBitMask(rValue, nOLEOptions, nsSwTOOElements::TOO_MATH);
+            lcl_AnyToBitMask(rValue, nOLEOptions, SwTOOElements::Math);
         break;
         case WID_CREATE_FROM_STAR_CHART:
-            lcl_AnyToBitMask(rValue, nOLEOptions, nsSwTOOElements::TOO_CHART);
+            lcl_AnyToBitMask(rValue, nOLEOptions, SwTOOElements::Chart);
         break;
         case WID_CREATE_FROM_STAR_CALC:
-            lcl_AnyToBitMask(rValue, nOLEOptions, nsSwTOOElements::TOO_CALC);
+            lcl_AnyToBitMask(rValue, nOLEOptions, SwTOOElements::Calc);
         break;
         case WID_CREATE_FROM_STAR_DRAW:
             lcl_AnyToBitMask(rValue, nOLEOptions,
-                    nsSwTOOElements::TOO_DRAW_IMPRESS);
+                    SwTOOElements::DrawImpress);
         break;
         case WID_CREATE_FROM_OTHER_EMBEDDED_OBJECTS:
-            lcl_AnyToBitMask(rValue, nOLEOptions, nsSwTOOElements::TOO_OTHER);
+            lcl_AnyToBitMask(rValue, nOLEOptions, SwTOOElements::Other);
         break;
         case WID_PARA_HEAD:
         {
             OUString aString;
             SwStyleNameMapper::FillUIName( lcl_AnyToString(rValue),
-                aString, nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL, true);
+                aString, SwGetPoolIdFromName::TxtColl);
             bForm = true;
             // Header is on Pos 0
             aForm.SetTemplate( 0, aString );
@@ -821,12 +810,12 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
             OUString aString;
             bForm = true;
             SwStyleNameMapper::FillUIName( lcl_AnyToString(rValue),
-                aString, nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL, true);
+                aString, SwGetPoolIdFromName::TxtColl);
             aForm.SetTemplate( 1, aString );
         }
         break;
         case WID_CREATE_FROM_PARAGRAPH_STYLES:
-            lcl_AnyToBitMask(rValue, nCreate, nsSwTOXElement::TOX_TEMPLATE);
+            lcl_AnyToBitMask(rValue, nCreate, SwTOXElement::Template);
         break;
 
         case WID_PARA_LEV1:
@@ -845,7 +834,7 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
             const sal_uInt16 nLPos = rTOXBase.GetType() == TOX_INDEX ? 2 : 1;
             OUString aString;
             SwStyleNameMapper::FillUIName( lcl_AnyToString(rValue),
-                aString, nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL, true);
+                aString, SwGetPoolIdFromName::TxtColl);
             aForm.SetTemplate(nLPos + pEntry->nWID - WID_PARA_LEV1, aString );
         }
         break;
@@ -887,8 +876,6 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
 
 uno::Any SAL_CALL
 SwXDocumentIndex::getPropertyValue(const OUString& rPropertyName)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -900,6 +887,11 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
         throw beans::UnknownPropertyException(
             "Unknown property: " + rPropertyName,
             static_cast< cppu::OWeakObject * >(this));
+    }
+    // TODO: is this the best approach to tell API clients about the change?
+    if (pEntry->nWID == RES_BACKGROUND && pEntry->nMemberId == MID_GRAPHIC_URL)
+    {
+        throw uno::RuntimeException("Getting GraphicURL property is not supported");
     }
 
     SwSectionFormat *const pSectionFormat( m_pImpl->GetSectionFormat() );
@@ -914,12 +906,12 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
     }
     if(pTOXBase)
     {
-        const sal_uInt16 nCreate = pTOXBase->GetCreateType();
-        const sal_uInt16 nOLEOptions = pTOXBase->GetOLEOptions();
-        const sal_uInt16 nTOIOptions =
+        const SwTOXElement nCreate = pTOXBase->GetCreateType();
+        const SwTOOElements nOLEOptions = pTOXBase->GetOLEOptions();
+        const SwTOIOptions nTOIOptions =
             (pTOXBase->GetTOXType()->GetType() == TOX_INDEX)
             ? pTOXBase->GetOptions()
-            : 0U;
+            : SwTOIOptions::NONE;
         const SwForm& rForm = pTOXBase->GetTOXForm();
         switch(pEntry->nWID)
         {
@@ -935,10 +927,9 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
                 {
                     SwSections aSectArr;
                     pSectionFormat->GetChildSections(aSectArr,
-                            SORTSECT_NOT, false);
-                    for(size_t i = 0; i < aSectArr.size(); ++i)
+                            SectionSort::Not, false);
+                    for(SwSection* pSect : aSectArr)
                     {
-                        SwSection* pSect = aSectArr[i];
                         if(pSect->GetType() == TOX_HEADER_SECTION)
                         {
                             const uno::Reference <text::XTextSection> xHeader =
@@ -984,11 +975,11 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
                aRet <<= pTOXBase->GetEntryTypeName();
             break;
             case WID_CREATE_FROM_MARKS:
-                lcl_BitMaskToAny(aRet, nCreate, nsSwTOXElement::TOX_MARK);
+                lcl_BitMaskToAny(aRet, nCreate, SwTOXElement::Mark);
             break;
             case WID_CREATE_FROM_OUTLINE:
                 lcl_BitMaskToAny(aRet, nCreate,
-                        nsSwTOXElement::TOX_OUTLINELEVEL);
+                        SwTOXElement::OutlineLevel);
             break;
             case WID_CREATE_FROM_CHAPTER:
             {
@@ -1010,29 +1001,29 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
             break;
             case WID_USE_ALPHABETICAL_SEPARATORS:
                 lcl_BitMaskToAny(aRet, nTOIOptions,
-                        nsSwTOIOptions::TOI_ALPHA_DELIMITTER);
+                        SwTOIOptions::AlphaDelimiter);
             break;
             case WID_USE_KEY_AS_ENTRY:
                 lcl_BitMaskToAny(aRet, nTOIOptions,
-                        nsSwTOIOptions::TOI_KEY_AS_ENTRY);
+                        SwTOIOptions::KeyAsEntry);
             break;
             case WID_USE_COMBINED_ENTRIES:
                 lcl_BitMaskToAny(aRet, nTOIOptions,
-                        nsSwTOIOptions::TOI_SAME_ENTRY);
+                        SwTOIOptions::SameEntry);
             break;
             case WID_IS_CASE_SENSITIVE:
                 lcl_BitMaskToAny(aRet, nTOIOptions,
-                        nsSwTOIOptions::TOI_CASE_SENSITIVE);
+                        SwTOIOptions::CaseSensitive);
             break;
             case WID_USE_P_P:
-                lcl_BitMaskToAny(aRet, nTOIOptions, nsSwTOIOptions::TOI_FF);
+                lcl_BitMaskToAny(aRet, nTOIOptions, SwTOIOptions::FF);
             break;
             case WID_USE_DASH:
-                lcl_BitMaskToAny(aRet, nTOIOptions, nsSwTOIOptions::TOI_DASH);
+                lcl_BitMaskToAny(aRet, nTOIOptions, SwTOIOptions::Dash);
             break;
             case WID_USE_UPPER_CASE:
                 lcl_BitMaskToAny(aRet, nTOIOptions,
-                        nsSwTOIOptions::TOI_INITIAL_CAPS);
+                        SwTOIOptions::InitialCaps);
             break;
             case WID_IS_COMMA_SEPARATED:
             {
@@ -1103,48 +1094,47 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
                 SwStyleNameMapper::FillProgName(
                         pTOXBase->GetMainEntryCharStyle(),
                         aString,
-                        nsSwGetPoolIdFromName::GET_POOLID_CHRFMT,
-                        true);
+                        SwGetPoolIdFromName::ChrFmt);
                 aRet <<= aString;
             }
             break;
             case WID_CREATE_FROM_TABLES:
-                lcl_BitMaskToAny(aRet, nCreate, nsSwTOXElement::TOX_TABLE);
+                lcl_BitMaskToAny(aRet, nCreate, SwTOXElement::Table);
             break;
             case WID_CREATE_FROM_TEXT_FRAMES:
-                lcl_BitMaskToAny(aRet, nCreate, nsSwTOXElement::TOX_FRAME);
+                lcl_BitMaskToAny(aRet, nCreate, SwTOXElement::Frame);
             break;
             case WID_CREATE_FROM_GRAPHIC_OBJECTS:
-                lcl_BitMaskToAny(aRet, nCreate, nsSwTOXElement::TOX_GRAPHIC);
+                lcl_BitMaskToAny(aRet, nCreate, SwTOXElement::Graphic);
             break;
             case WID_CREATE_FROM_EMBEDDED_OBJECTS:
-                lcl_BitMaskToAny(aRet, nCreate, nsSwTOXElement::TOX_OLE);
+                lcl_BitMaskToAny(aRet, nCreate, SwTOXElement::Ole);
             break;
             case WID_CREATE_FROM_STAR_MATH:
-                lcl_BitMaskToAny(aRet, nOLEOptions, nsSwTOOElements::TOO_MATH);
+                lcl_BitMaskToAny(aRet, nOLEOptions, SwTOOElements::Math);
             break;
             case WID_CREATE_FROM_STAR_CHART:
-                lcl_BitMaskToAny(aRet, nOLEOptions, nsSwTOOElements::TOO_CHART);
+                lcl_BitMaskToAny(aRet, nOLEOptions, SwTOOElements::Chart);
             break;
             case WID_CREATE_FROM_STAR_CALC:
-                lcl_BitMaskToAny(aRet, nOLEOptions, nsSwTOOElements::TOO_CALC);
+                lcl_BitMaskToAny(aRet, nOLEOptions, SwTOOElements::Calc);
             break;
             case WID_CREATE_FROM_STAR_DRAW:
                 lcl_BitMaskToAny(aRet, nOLEOptions,
-                        nsSwTOOElements::TOO_DRAW_IMPRESS);
+                        SwTOOElements::DrawImpress);
             break;
             case WID_CREATE_FROM_OTHER_EMBEDDED_OBJECTS:
-                lcl_BitMaskToAny(aRet, nOLEOptions, nsSwTOOElements::TOO_OTHER);
+                lcl_BitMaskToAny(aRet, nOLEOptions, SwTOOElements::Other);
             break;
             case WID_CREATE_FROM_PARAGRAPH_STYLES:
-                lcl_BitMaskToAny(aRet, nCreate, nsSwTOXElement::TOX_TEMPLATE);
+                lcl_BitMaskToAny(aRet, nCreate, SwTOXElement::Template);
             break;
             case WID_PARA_HEAD:
             {
                 //Header steht an Pos 0
                 OUString aString;
                 SwStyleNameMapper::FillProgName(rForm.GetTemplate( 0 ), aString,
-                        nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL, true );
+                        SwGetPoolIdFromName::TxtColl );
                 aRet <<= aString;
             }
             break;
@@ -1154,8 +1144,7 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
                 SwStyleNameMapper::FillProgName(
                         rForm.GetTemplate( 1 ),
                         aString,
-                        nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL,
-                        true);
+                        SwGetPoolIdFromName::TxtColl);
                 aRet <<= aString;
             }
             break;
@@ -1176,8 +1165,7 @@ throw (beans::UnknownPropertyException, lang::WrappedTargetException,
                 SwStyleNameMapper::FillProgName(
                         rForm.GetTemplate(nLPos + pEntry->nWID - WID_PARA_LEV1),
                         aString,
-                        nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL,
-                        true);
+                        SwGetPoolIdFromName::TxtColl);
                 aRet <<= aString;
             }
             break;
@@ -1221,8 +1209,6 @@ void SAL_CALL
 SwXDocumentIndex::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndex::addPropertyChangeListener(): not implemented");
 }
@@ -1231,8 +1217,6 @@ void SAL_CALL
 SwXDocumentIndex::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndex::removePropertyChangeListener(): not implemented");
 }
@@ -1241,8 +1225,6 @@ void SAL_CALL
 SwXDocumentIndex::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndex::addVetoableChangeListener(): not implemented");
 }
@@ -1251,13 +1233,11 @@ void SAL_CALL
 SwXDocumentIndex::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndex::removeVetoableChangeListener(): not implemented");
 }
 
-void lcl_CalcLayout(SwDoc *pDoc)
+static void lcl_CalcLayout(SwDoc *pDoc)
 {
     SwViewShell *pViewShell = nullptr;
     SwEditShell* pEditShell = nullptr;
@@ -1278,13 +1258,13 @@ void lcl_CalcLayout(SwDoc *pDoc)
 }
 
 // XRefreshable
-void SAL_CALL SwXDocumentIndex::refresh() throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwXDocumentIndex::refresh()
 {
     {
         SolarMutexGuard g;
 
         SwSectionFormat *const pFormat = m_pImpl->GetSectionFormat();
-        SwTOXBaseSection *const pTOXBase = (pFormat) ?
+        SwTOXBaseSection *const pTOXBase = pFormat ?
             static_cast<SwTOXBaseSection*>(pFormat->GetSection()) : nullptr;
         if (!pTOXBase)
         {
@@ -1292,7 +1272,7 @@ void SAL_CALL SwXDocumentIndex::refresh() throw (uno::RuntimeException, std::exc
                     "SwXDocumentIndex::refresh: must be in attached state",
                      static_cast< ::cppu::OWeakObject*>(this));
         }
-        pTOXBase->Update();
+        pTOXBase->Update(nullptr, m_pImpl->m_pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
 
         // the insertion of TOC will affect the document layout
         lcl_CalcLayout(m_pImpl->m_pDoc);
@@ -1313,7 +1293,6 @@ void SAL_CALL SwXDocumentIndex::refresh() throw (uno::RuntimeException, std::exc
 
 void SAL_CALL SwXDocumentIndex::addRefreshListener(
         const uno::Reference<util::XRefreshListener>& xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_Listeners.addInterface(
@@ -1322,7 +1301,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL SwXDocumentIndex::removeRefreshListener(
         const uno::Reference<util::XRefreshListener>& xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_Listeners.removeInterface(
@@ -1331,7 +1309,6 @@ throw (uno::RuntimeException, std::exception)
 
 void SAL_CALL
 SwXDocumentIndex::attach(const uno::Reference< text::XTextRange > & xTextRange)
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1346,7 +1323,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
         ::sw::UnoTunnelGetImplementation<OTextCursorHelper>(xRangeTunnel);
 
     SwDoc *const pDoc =
-        (pRange) ? &pRange->GetDoc() : ((pCursor) ? pCursor->GetDoc() : nullptr);
+        pRange ? &pRange->GetDoc() : (pCursor ? pCursor->GetDoc() : nullptr);
     if (!pDoc)
     {
         throw lang::IllegalArgumentException();
@@ -1363,21 +1340,18 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
     }
 
     UnoActionContext aAction(pDoc);
-    if (aPam.HasMark())
-    {
-        pDoc->getIDocumentContentOperations().DeleteAndJoin(aPam);
-    }
 
     SwTOXBase & rTOXBase = m_pImpl->m_pProps->GetTOXBase();
     SwTOXType const*const pTOXType = rTOXBase.GetTOXType();
     if ((TOX_USER == pTOXType->GetType()) &&
-        !m_pImpl->m_pProps->GetTypeName().equals(pTOXType->GetTypeName()))
+        m_pImpl->m_pProps->GetTypeName() != pTOXType->GetTypeName())
     {
         lcl_ReAssignTOXType(pDoc, rTOXBase, m_pImpl->m_pProps->GetTypeName());
     }
     //TODO: apply Section attributes (columns and background)
     SwTOXBaseSection *const pTOX =
-        pDoc->InsertTableOf( *aPam.GetPoint(), rTOXBase );
+        pDoc->InsertTableOf( aPam, rTOXBase, nullptr, false,
+                m_pImpl->m_pDoc->getIDocumentLayoutAccess().GetCurrentLayout());
 
     pDoc->SetTOXBaseName(*pTOX, m_pImpl->m_pProps->GetTOXBase().GetTOXName());
 
@@ -1392,7 +1366,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 }
 
 uno::Reference< text::XTextRange > SAL_CALL
-SwXDocumentIndex::getAnchor() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::getAnchor()
 {
     SolarMutexGuard aGuard;
 
@@ -1407,17 +1381,17 @@ SwXDocumentIndex::getAnchor() throw (uno::RuntimeException, std::exception)
     if (pIdx && pIdx->GetNode().GetNodes().IsDocNodes())
     {
         SwPaM aPaM(*pIdx);
-        aPaM.Move( fnMoveForward, fnGoContent );
+        aPaM.Move( fnMoveForward, GoInContent );
         aPaM.SetMark();
         aPaM.GetPoint()->nNode = *pIdx->GetNode().EndOfSectionNode();
-        aPaM.Move( fnMoveBackward, fnGoContent );
+        aPaM.Move( fnMoveBackward, GoInContent );
         xRet = SwXTextRange::CreateXTextRange(*pSectionFormat->GetDoc(),
             *aPaM.GetMark(), aPaM.GetPoint());
     }
     return xRet;
 }
 
-void SAL_CALL SwXDocumentIndex::dispose() throw (uno::RuntimeException, std::exception)
+void SAL_CALL SwXDocumentIndex::dispose()
 {
     SolarMutexGuard aGuard;
 
@@ -1433,7 +1407,6 @@ void SAL_CALL SwXDocumentIndex::dispose() throw (uno::RuntimeException, std::exc
 void SAL_CALL
 SwXDocumentIndex::addEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_Listeners.addInterface(
@@ -1443,36 +1416,32 @@ throw (uno::RuntimeException, std::exception)
 void SAL_CALL
 SwXDocumentIndex::removeEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_Listeners.removeInterface(
             cppu::UnoType<lang::XEventListener>::get(), xListener);
 }
 
-OUString SAL_CALL SwXDocumentIndex::getName() throw (uno::RuntimeException, std::exception)
+OUString SAL_CALL SwXDocumentIndex::getName()
 {
     SolarMutexGuard g;
 
-    OUString uRet;
     SwSectionFormat *const pSectionFormat( m_pImpl->GetSectionFormat() );
     if (m_pImpl->m_bIsDescriptor)
     {
-        uRet = m_pImpl->m_pProps->GetTOXBase().GetTOXName();
+        return m_pImpl->m_pProps->GetTOXBase().GetTOXName();
     }
-    else if(pSectionFormat)
-    {
-        uRet = pSectionFormat->GetSection()->GetSectionName();
-    }
-    else
+
+    if(!pSectionFormat)
     {
         throw uno::RuntimeException();
     }
-    return uRet;
+
+    return pSectionFormat->GetSection()->GetSectionName();
 }
 
 void SAL_CALL
-SwXDocumentIndex::setName(const OUString& rName) throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::setName(const OUString& rName)
 {
     SolarMutexGuard g;
 
@@ -1514,7 +1483,7 @@ uno::Reference<frame::XModel> SwXDocumentIndex::GetModel()
     if (pSectionFormat)
     {
         SwDocShell const*const pShell( pSectionFormat->GetDoc()->GetDocShell() );
-        return (pShell) ? pShell->GetModel() : nullptr;
+        return pShell ? pShell->GetModel() : nullptr;
     }
     return nullptr;
 }
@@ -1544,32 +1513,33 @@ private:
 public:
 
     uno::WeakReference<uno::XInterface> m_wThis;
-    SfxItemPropertySet const&   m_rPropSet;
-    const TOXTypes              m_eTOXType;
+    SfxItemPropertySet const& m_rPropSet;
+    const TOXTypes m_eTOXType;
     ::comphelper::OInterfaceContainerHelper2 m_EventListeners;
-    bool                        m_bIsDescriptor;
-    SwDepend                    m_TypeDepend;
-    const SwTOXMark *           m_pTOXMark;
-    SwDoc *                     m_pDoc;
+    bool m_bIsDescriptor;
+    sw::WriterMultiListener m_aListener;
+    const SwTOXType* m_pTOXType;
+    const SwTOXMark* m_pTOXMark;
+    SwDoc* m_pDoc;
 
-    bool                    m_bMainEntry;
-    sal_uInt16                  m_nLevel;
-    OUString                    m_aBookmarkName;
-    OUString                    m_aEntryTypeName;
-    OUString                    m_sAltText;
-    OUString                    m_sPrimaryKey;
-    OUString                    m_sSecondaryKey;
-    OUString                    m_sTextReading;
-    OUString                    m_sPrimaryKeyReading;
-    OUString                    m_sSecondaryKeyReading;
-    OUString                    m_sUserIndexName;
-    OUString                    m_sCitaitonText;
+    bool m_bMainEntry;
+    sal_uInt16 m_nLevel;
+    OUString m_aBookmarkName;
+    OUString m_aEntryTypeName;
+    OUString m_sAltText;
+    OUString m_sPrimaryKey;
+    OUString m_sSecondaryKey;
+    OUString m_sTextReading;
+    OUString m_sPrimaryKeyReading;
+    OUString m_sSecondaryKeyReading;
+    OUString m_sUserIndexName;
+    OUString m_sCitaitonText;
 
-    Impl(   SwXDocumentIndexMark & rThis,
-            SwDoc *const pDoc,
+    Impl(SwXDocumentIndexMark& rThis,
+            SwDoc* const pDoc,
             const enum TOXTypes eType,
-            SwTOXType *const pType, SwTOXMark const*const pMark)
-        : SwClient(const_cast<SwTOXMark*>(pMark))
+            SwTOXType* const pType, SwTOXMark const*const pMark)
+        : SwClient()
         , m_rThis(rThis)
         , m_bInReplaceMark(false)
         , m_rPropSet(
@@ -1577,23 +1547,24 @@ public:
         , m_eTOXType(eType)
         , m_EventListeners(m_Mutex)
         , m_bIsDescriptor(nullptr == pMark)
-        , m_TypeDepend(this, pType)
+        , m_aListener(*this)
+        , m_pTOXType(pType)
         , m_pTOXMark(pMark)
         , m_pDoc(pDoc)
         , m_bMainEntry(false)
         , m_nLevel(0)
     {
+        m_aListener.StartListening(const_cast<SwTOXMark*>(pMark));
+        m_aListener.StartListening(pType);
     }
 
-    SwTOXType * GetTOXType() const {
-        return static_cast<SwTOXType*>(
-                const_cast<SwModify *>(m_TypeDepend.GetRegisteredIn()));
+    SwTOXType* GetTOXType() const {
+        return const_cast<SwTOXType*>(m_pTOXType);
     }
 
     void DeleteTOXMark()
     {
-        m_pDoc->DeleteTOXMark(m_pTOXMark); // calls Invalidate() via Modify!
-        m_pTOXMark = nullptr;
+        m_pDoc->DeleteTOXMark(m_pTOXMark); // calls Invalidate() via Notify
     }
 
     void InsertTOXMark(SwTOXType & rTOXType, SwTOXMark & rMark, SwPaM & rPam,
@@ -1618,20 +1589,11 @@ public:
     void    Invalidate();
 protected:
     // SwClient
-    virtual void Modify(const SfxPoolItem *pOld, const SfxPoolItem *pNew) override;
+    virtual void SwClientNotify(const SwModify&, const SfxHint& ) override;
 };
 
 void SwXDocumentIndexMark::Impl::Invalidate()
 {
-    if (GetRegisteredIn())
-    {
-        GetRegisteredIn()->Remove(this);
-        if (m_TypeDepend.GetRegisteredIn())
-        {
-            m_TypeDepend.GetRegisteredIn()->Remove(
-                &m_TypeDepend);
-        }
-    }
     if (!m_bInReplaceMark) // #i109983# only dispose on delete, not on replace!
     {
         uno::Reference<uno::XInterface> const xThis(m_wThis);
@@ -1642,17 +1604,21 @@ void SwXDocumentIndexMark::Impl::Invalidate()
             m_EventListeners.disposeAndClear(ev);
         }
     }
+    m_aListener.EndListeningAll();
     m_pDoc = nullptr;
     m_pTOXMark = nullptr;
+    m_pTOXType = nullptr;
 }
 
-void SwXDocumentIndexMark::Impl::Modify(const SfxPoolItem *pOld, const SfxPoolItem *pNew)
+void SwXDocumentIndexMark::Impl::SwClientNotify(const SwModify& rModify, const SfxHint& rHint)
 {
-    ClientModify(this, pOld, pNew);
-
-    if (!GetRegisteredIn()) // removed => dispose
+    assert(!GetRegisteredIn()); // we should only listen with the WriterMultiListener from now on
+    if(auto pModifyChangedHint = dynamic_cast<const sw::ModifyChangedHint*>(&rHint))
     {
-        Invalidate();
+        if(pModifyChangedHint->m_pNew == nullptr || &rModify == m_pTOXMark)
+            Invalidate();
+        else if(&rModify == m_pTOXType)
+            m_pTOXType = dynamic_cast<const SwTOXType*>(pModifyChangedHint->m_pNew);
     }
 }
 
@@ -1686,7 +1652,7 @@ SwXDocumentIndexMark::CreateXDocumentIndexMark(
     }
     if (!xTOXMark.is())
     {
-        SwXDocumentIndexMark *const pNew((pMark)
+        SwXDocumentIndexMark *const pNew(pMark
             ? new SwXDocumentIndexMark(rDoc,
                     *const_cast<SwTOXType*>(pMark->GetTOXType()), *pMark)
             : new SwXDocumentIndexMark(eType));
@@ -1713,51 +1679,42 @@ const uno::Sequence< sal_Int8 > & SwXDocumentIndexMark::getUnoTunnelId()
 
 sal_Int64 SAL_CALL
 SwXDocumentIndexMark::getSomething(const uno::Sequence< sal_Int8 >& rId)
-throw (uno::RuntimeException, std::exception)
 {
     return ::sw::UnoTunnelImpl<SwXDocumentIndexMark>(rId, this);
 }
 
-static const sal_Char cBaseMark[]      = "com.sun.star.text.BaseIndexMark";
-static const sal_Char cContentMark[]   = "com.sun.star.text.ContentIndexMark";
-static const sal_Char cIdxMark[]       = "com.sun.star.text.DocumentIndexMark";
-static const sal_Char cIdxMarkAsian[]  = "com.sun.star.text.DocumentIndexMarkAsian";
-static const sal_Char cUserMark[]      = "com.sun.star.text.UserIndexMark";
-static const sal_Char cTextContent[]   = "com.sun.star.text.TextContent";
-
 OUString SAL_CALL
-SwXDocumentIndexMark::getImplementationName() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexMark::getImplementationName()
 {
     return OUString("SwXDocumentIndexMark");
 }
 
 sal_Bool SAL_CALL SwXDocumentIndexMark::supportsService(const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
-SwXDocumentIndexMark::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexMark::getSupportedServiceNames()
 {
     SolarMutexGuard g;
 
     const sal_Int32 nCnt = (m_pImpl->m_eTOXType == TOX_INDEX) ? 4 : 3;
     uno::Sequence< OUString > aRet(nCnt);
     OUString* pArray = aRet.getArray();
-    pArray[0] = cBaseMark;
-    pArray[1] = cTextContent;
+    pArray[0] = "com.sun.star.text.BaseIndexMark";
+    pArray[1] = "com.sun.star.text.TextContent";
     switch (m_pImpl->m_eTOXType)
     {
         case TOX_USER:
-            pArray[2] = cUserMark;
+            pArray[2] = "com.sun.star.text.UserIndexMark";
         break;
         case TOX_CONTENT:
-            pArray[2] = cContentMark;
+            pArray[2] = "com.sun.star.text.ContentIndexMark";
         break;
         case TOX_INDEX:
-            pArray[2] = cIdxMark;
-            pArray[3] = cIdxMarkAsian;
+            pArray[2] = "com.sun.star.text.DocumentIndexMark";
+            pArray[3] = "com.sun.star.text.DocumentIndexMarkAsian";
         break;
 
         default:
@@ -1767,30 +1724,26 @@ SwXDocumentIndexMark::getSupportedServiceNames() throw (uno::RuntimeException, s
 }
 
 OUString SAL_CALL
-SwXDocumentIndexMark::getMarkEntry() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexMark::getMarkEntry()
 {
     SolarMutexGuard aGuard;
 
-    OUString sRet;
     SwTOXType *const pType = m_pImpl->GetTOXType();
     if (pType && m_pImpl->m_pTOXMark)
     {
-        sRet = m_pImpl->m_pTOXMark->GetAlternativeText();
+        return m_pImpl->m_pTOXMark->GetAlternativeText();
     }
-    else if (m_pImpl->m_bIsDescriptor)
-    {
-        sRet = m_pImpl->m_sAltText;
-    }
-    else
+
+    if (!m_pImpl->m_bIsDescriptor)
     {
         throw uno::RuntimeException();
     }
-    return sRet;
+
+    return m_pImpl->m_sAltText;
 }
 
 void SAL_CALL
 SwXDocumentIndexMark::setMarkEntry(const OUString& rIndexEntry)
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1825,7 +1778,6 @@ throw (uno::RuntimeException, std::exception)
 void SAL_CALL
 SwXDocumentIndexMark::attach(
         const uno::Reference< text::XTextRange > & xTextRange)
-throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -1840,7 +1792,7 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
     OTextCursorHelper *const pCursor =
         ::sw::UnoTunnelGetImplementation<OTextCursorHelper>(xRangeTunnel);
     SwDoc *const pDoc =
-        (pRange) ? &pRange->GetDoc() : ((pCursor) ? pCursor->GetDoc() : nullptr);
+        pRange ? &pRange->GetDoc() : (pCursor ? pCursor->GetDoc() : nullptr);
     if (!pDoc)
     {
         throw lang::IllegalArgumentException();
@@ -1951,11 +1903,11 @@ throw (lang::IllegalArgumentException, uno::RuntimeException, std::exception)
 
 template<typename T> struct NotContainedIn
 {
-    ::std::vector<T> const& m_rVector;
-    explicit NotContainedIn(::std::vector<T> const& rVector)
+    std::vector<T> const& m_rVector;
+    explicit NotContainedIn(std::vector<T> const& rVector)
         : m_rVector(rVector) { }
     bool operator() (T const& rT) {
-        return ::std::find(m_rVector.begin(), m_rVector.end(), rT)
+        return std::find(m_rVector.begin(), m_rVector.end(), rT)
                     == m_rVector.end();
     }
 };
@@ -1978,16 +1930,16 @@ void SwXDocumentIndexMark::Impl::InsertTOXMark(
     // thus use a space - is this really the ideal solution?
     if (!bMark && rMark.GetAlternativeText().isEmpty())
     {
-        rMark.SetAlternativeText( OUString(' ') );
+        rMark.SetAlternativeText( " " );
     }
 
     const bool bForceExpandHints( !bMark && pTextCursor && pTextCursor->IsAtEndOfMeta() );
-    const SetAttrMode nInsertFlags = (bForceExpandHints)
+    const SetAttrMode nInsertFlags = bForceExpandHints
         ?   ( SetAttrMode::FORCEHINTEXPAND
             | SetAttrMode::DONTEXPAND)
         : SetAttrMode::DONTEXPAND;
 
-    ::std::vector<SwTextAttr *> oldMarks;
+    std::vector<SwTextAttr *> oldMarks;
     if (bMark)
     {
         oldMarks = rPam.GetNode().GetTextNode()->GetTextAttrsAt(
@@ -2006,13 +1958,13 @@ void SwXDocumentIndexMark::Impl::InsertTOXMark(
     {
         // #i107672#
         // ensure that we do not retrieve a different mark at the same position
-        ::std::vector<SwTextAttr *> const newMarks(
+        std::vector<SwTextAttr *> const newMarks(
             rPam.GetNode().GetTextNode()->GetTextAttrsAt(
                 rPam.GetPoint()->nContent.GetIndex(), RES_TXTATR_TOXMARK));
-        ::std::vector<SwTextAttr *>::const_iterator const iter(
-            ::std::find_if(newMarks.begin(), newMarks.end(),
+        std::vector<SwTextAttr *>::const_iterator const iter(
+            std::find_if(newMarks.begin(), newMarks.end(),
                 NotContainedIn<SwTextAttr *>(oldMarks)));
-        OSL_ASSERT(newMarks.end() != iter);
+        assert(newMarks.end() != iter);
         if (newMarks.end() != iter)
         {
             pTextAttr = *iter;
@@ -2032,13 +1984,15 @@ void SwXDocumentIndexMark::Impl::InsertTOXMark(
     }
 
     m_pDoc = pDoc;
-    m_pTOXMark = & pTextAttr->GetTOXMark();
-    const_cast<SwTOXMark*>(m_pTOXMark)->Add(this);
-    const_cast<SwTOXType &>(rTOXType).Add(& m_TypeDepend);
+    m_pTOXMark = &pTextAttr->GetTOXMark();
+    m_pTOXType = &rTOXType;
+    m_aListener.EndListeningAll();
+    m_aListener.StartListening(const_cast<SwTOXMark*>(m_pTOXMark));
+    m_aListener.StartListening(const_cast<SwTOXType*>(m_pTOXType));
 }
 
 uno::Reference< text::XTextRange > SAL_CALL
-SwXDocumentIndexMark::getAnchor() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexMark::getAnchor()
 {
     SolarMutexGuard aGuard;
 
@@ -2072,7 +2026,7 @@ SwXDocumentIndexMark::getAnchor() throw (uno::RuntimeException, std::exception)
 }
 
 void SAL_CALL
-SwXDocumentIndexMark::dispose() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexMark::dispose()
 {
     SolarMutexGuard aGuard;
 
@@ -2086,7 +2040,6 @@ SwXDocumentIndexMark::dispose() throw (uno::RuntimeException, std::exception)
 void SAL_CALL
 SwXDocumentIndexMark::addEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_EventListeners.addInterface(xListener);
@@ -2095,14 +2048,13 @@ throw (uno::RuntimeException, std::exception)
 void SAL_CALL
 SwXDocumentIndexMark::removeEventListener(
         const uno::Reference< lang::XEventListener > & xListener)
-throw (uno::RuntimeException, std::exception)
 {
     // no need to lock here as m_pImpl is const and container threadsafe
     m_pImpl->m_EventListeners.removeInterface(xListener);
 }
 
 uno::Reference< beans::XPropertySetInfo > SAL_CALL
-SwXDocumentIndexMark::getPropertySetInfo() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexMark::getPropertySetInfo()
 {
     SolarMutexGuard g;
 
@@ -2133,9 +2085,6 @@ SwXDocumentIndexMark::getPropertySetInfo() throw (uno::RuntimeException, std::ex
 void SAL_CALL
 SwXDocumentIndexMark::setPropertyValue(
         const OUString& rPropertyName, const uno::Any& rValue)
-throw (beans::UnknownPropertyException, beans::PropertyVetoException,
-    lang::IllegalArgumentException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2217,14 +2166,11 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
             case WID_LEVEL:
             {
                 const sal_Int16 nVal = lcl_AnyToInt16(rValue);
-                if(nVal >= 0 && nVal < MAXLEVEL)
-                {
-                    m_pImpl->m_nLevel = nVal;
-                }
-                else
+                if(nVal < 0 || nVal >= MAXLEVEL)
                 {
                     throw lang::IllegalArgumentException();
                 }
+                m_pImpl->m_nLevel = nVal;
             }
             break;
             case WID_TOC_BOOKMARK :
@@ -2281,8 +2227,6 @@ throw (beans::UnknownPropertyException, beans::PropertyVetoException,
 
 uno::Any SAL_CALL
 SwXDocumentIndexMark::getPropertyValue(const OUString& rPropertyName)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2398,8 +2342,6 @@ void SAL_CALL
 SwXDocumentIndexMark::addPropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndexMark::addPropertyChangeListener(): not implemented");
 }
@@ -2408,8 +2350,6 @@ void SAL_CALL
 SwXDocumentIndexMark::removePropertyChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XPropertyChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndexMark::removePropertyChangeListener(): not implemented");
 }
@@ -2418,8 +2358,6 @@ void SAL_CALL
 SwXDocumentIndexMark::addVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndexMark::addVetoableChangeListener(): not implemented");
 }
@@ -2428,8 +2366,6 @@ void SAL_CALL
 SwXDocumentIndexMark::removeVetoableChangeListener(
         const OUString& /*rPropertyName*/,
         const uno::Reference< beans::XVetoableChangeListener >& /*xListener*/)
-throw (beans::UnknownPropertyException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     OSL_FAIL("SwXDocumentIndexMark::removeVetoableChangeListener(): not implemented");
 }
@@ -2444,7 +2380,7 @@ SwXDocumentIndexes::~SwXDocumentIndexes()
 }
 
 OUString SAL_CALL
-SwXDocumentIndexes::getImplementationName() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexes::getImplementationName()
 {
     return OUString("SwXDocumentIndexes");
 }
@@ -2455,20 +2391,19 @@ static char const*const g_ServicesDocumentIndexes[] =
 };
 
 sal_Bool SAL_CALL SwXDocumentIndexes::supportsService(const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
-SwXDocumentIndexes::getSupportedServiceNames() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexes::getSupportedServiceNames()
 {
     return ::sw::GetSupportedServiceNamesImpl(
         SAL_N_ELEMENTS(g_ServicesDocumentIndexes), g_ServicesDocumentIndexes);
 }
 
 sal_Int32 SAL_CALL
-SwXDocumentIndexes::getCount() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexes::getCount()
 {
     SolarMutexGuard aGuard;
 
@@ -2491,8 +2426,6 @@ SwXDocumentIndexes::getCount() throw (uno::RuntimeException, std::exception)
 
 uno::Any SAL_CALL
 SwXDocumentIndexes::getByIndex(sal_Int32 nIndex)
-throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2523,8 +2456,6 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
 
 uno::Any SAL_CALL
 SwXDocumentIndexes::getByName(const OUString& rName)
-throw (container::NoSuchElementException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2552,7 +2483,7 @@ throw (container::NoSuchElementException, lang::WrappedTargetException,
 }
 
 uno::Sequence< OUString > SAL_CALL
-SwXDocumentIndexes::getElementNames() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexes::getElementNames()
 {
     SolarMutexGuard aGuard;
 
@@ -2588,7 +2519,6 @@ SwXDocumentIndexes::getElementNames() throw (uno::RuntimeException, std::excepti
 
 sal_Bool SAL_CALL
 SwXDocumentIndexes::hasByName(const OUString& rName)
-throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2605,21 +2535,21 @@ throw (uno::RuntimeException, std::exception)
             if (static_cast<SwTOXBaseSection const*>(pSect)->GetTOXName()
                     == rName)
             {
-                return sal_True;
+                return true;
             }
         }
     }
-    return sal_False;
+    return false;
 }
 
 uno::Type SAL_CALL
-SwXDocumentIndexes::getElementType() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexes::getElementType()
 {
     return cppu::UnoType<text::XDocumentIndex>::get();
 }
 
 sal_Bool SAL_CALL
-SwXDocumentIndexes::hasElements() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndexes::hasElements()
 {
     return 0 != getCount();
 }
@@ -2636,7 +2566,6 @@ SwXDocumentIndex::StyleAccess_Impl::~StyleAccess_Impl()
 
 OUString SAL_CALL
 SwXDocumentIndex::StyleAccess_Impl::getImplementationName()
-throw (uno::RuntimeException, std::exception)
 {
     return OUString("SwXDocumentIndex::StyleAccess_Impl");
 }
@@ -2648,14 +2577,12 @@ static char const*const g_ServicesIndexStyleAccess[] =
 
 sal_Bool SAL_CALL
 SwXDocumentIndex::StyleAccess_Impl::supportsService(const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
 SwXDocumentIndex::StyleAccess_Impl::getSupportedServiceNames()
-throw (uno::RuntimeException, std::exception)
 {
     return ::sw::GetSupportedServiceNamesImpl(
         SAL_N_ELEMENTS(g_ServicesIndexStyleAccess),
@@ -2665,8 +2592,6 @@ throw (uno::RuntimeException, std::exception)
 void SAL_CALL
 SwXDocumentIndex::StyleAccess_Impl::replaceByIndex(
         sal_Int32 nIndex, const uno::Any& rElement)
-throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
-          lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2685,31 +2610,29 @@ throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
 
     const sal_Int32 nStyles = aSeq.getLength();
     const OUString* pStyles = aSeq.getConstArray();
-    OUString sSetStyles;
+    OUStringBuffer sSetStyles;
     OUString aString;
     for(sal_Int32 i = 0; i < nStyles; i++)
     {
         if(i)
         {
-            sSetStyles += OUStringLiteral1<TOX_STYLE_DELIMITER>();
+            sSetStyles.append(TOX_STYLE_DELIMITER);
         }
         SwStyleNameMapper::FillUIName(pStyles[i], aString,
-                nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL, true);
-        sSetStyles +=  aString;
+                SwGetPoolIdFromName::TxtColl);
+        sSetStyles.append(aString);
     }
-    rTOXBase.SetStyleNames(sSetStyles, static_cast<sal_uInt16>(nIndex));
+    rTOXBase.SetStyleNames(sSetStyles.makeStringAndClear(), static_cast<sal_uInt16>(nIndex));
 }
 
 sal_Int32 SAL_CALL
-SwXDocumentIndex::StyleAccess_Impl::getCount() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::StyleAccess_Impl::getCount()
 {
     return MAXLEVEL;
 }
 
 uno::Any SAL_CALL
 SwXDocumentIndex::StyleAccess_Impl::getByIndex(sal_Int32 nIndex)
-throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
-        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2732,8 +2655,7 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
         SwStyleNameMapper::FillProgName(
             rStyles.getToken(0, TOX_STYLE_DELIMITER, nPos),
             aString,
-            nsSwGetPoolIdFromName::GET_POOLID_TXTCOLL,
-            true);
+            SwGetPoolIdFromName::TxtColl);
         pStyles[i] = aString;
     }
     uno::Any aRet(&aStyles, cppu::UnoType<uno::Sequence<OUString>>::get());
@@ -2742,15 +2664,14 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
 
 uno::Type SAL_CALL
 SwXDocumentIndex::StyleAccess_Impl::getElementType()
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<uno::Sequence<OUString>>::get();
 }
 
 sal_Bool SAL_CALL
-SwXDocumentIndex::StyleAccess_Impl::hasElements() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::StyleAccess_Impl::hasElements()
 {
-    return sal_True;
+    return true;
 }
 
 SwXDocumentIndex::TokenAccess_Impl::TokenAccess_Impl(
@@ -2765,7 +2686,6 @@ SwXDocumentIndex::TokenAccess_Impl::~TokenAccess_Impl()
 
 OUString SAL_CALL
 SwXDocumentIndex::TokenAccess_Impl::getImplementationName()
-throw (uno::RuntimeException, std::exception)
 {
     return OUString("SwXDocumentIndex::TokenAccess_Impl");
 }
@@ -2777,14 +2697,12 @@ static char const*const g_ServicesIndexTokenAccess[] =
 
 sal_Bool SAL_CALL SwXDocumentIndex::TokenAccess_Impl::supportsService(
         const OUString& rServiceName)
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::supportsService(this, rServiceName);
 }
 
 uno::Sequence< OUString > SAL_CALL
 SwXDocumentIndex::TokenAccess_Impl::getSupportedServiceNames()
-throw (uno::RuntimeException, std::exception)
 {
     return ::sw::GetSupportedServiceNamesImpl(
             SAL_N_ELEMENTS(g_ServicesIndexTokenAccess),
@@ -2793,7 +2711,7 @@ throw (uno::RuntimeException, std::exception)
 
 struct TokenType_ {
     const char *pName;
-    enum FormTokenType eTokenType;
+    enum FormTokenType const eTokenType;
 };
 
 static const struct TokenType_ g_TokenTypes[] =
@@ -2813,8 +2731,6 @@ static const struct TokenType_ g_TokenTypes[] =
 void SAL_CALL
 SwXDocumentIndex::TokenAccess_Impl::replaceByIndex(
         sal_Int32 nIndex, const uno::Any& rElement)
-throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
-        lang::WrappedTargetException, uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -2831,7 +2747,7 @@ throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
         throw lang::IllegalArgumentException();
     }
 
-    OUString sPattern;
+    OUStringBuffer sPattern;
     const sal_Int32 nTokens = aSeq.getLength();
     const beans::PropertyValues* pTokens = aSeq.getConstArray();
     for(sal_Int32 i = 0; i < nTokens; i++)
@@ -2862,17 +2778,16 @@ throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
                 SwStyleNameMapper::FillUIName(
                         lcl_AnyToString(pProperties[j].Value),
                         sCharStyleName,
-                        nsSwGetPoolIdFromName::GET_POOLID_CHRFMT,
-                        true);
+                        SwGetPoolIdFromName::ChrFmt);
                 aToken.sCharStyleName = sCharStyleName;
                 aToken.nPoolId = SwStyleNameMapper::GetPoolIdFromUIName (
-                    sCharStyleName, nsSwGetPoolIdFromName::GET_POOLID_CHRFMT );
+                    sCharStyleName, SwGetPoolIdFromName::ChrFmt );
             }
             else if ( pProperties[j].Name == "TabStopRightAligned" )
             {
                 const bool bRight = lcl_AnyToBool(pProperties[j].Value);
                 aToken.eTabAlign = bRight ?
-                                    SVX_TAB_ADJUST_END : SVX_TAB_ADJUST_LEFT;
+                                    SvxTabAdjust::End : SvxTabAdjust::Left;
             }
             else if ( pProperties[j].Name == "TabStopPosition" )
             {
@@ -2985,15 +2900,15 @@ throw (lang::IllegalArgumentException, lang::IndexOutOfBoundsException,
                 throw lang::IllegalArgumentException();
             }
         }
-        sPattern += aToken.GetString();
+        sPattern.append(aToken.GetString());
     }
     SwForm aForm(rTOXBase.GetTOXForm());
-    aForm.SetPattern(static_cast<sal_uInt16>(nIndex), sPattern);
+    aForm.SetPattern(static_cast<sal_uInt16>(nIndex), sPattern.makeStringAndClear());
     rTOXBase.SetTOXForm(aForm);
 }
 
 sal_Int32 SAL_CALL
-SwXDocumentIndex::TokenAccess_Impl::getCount() throw (uno::RuntimeException, std::exception)
+SwXDocumentIndex::TokenAccess_Impl::getCount()
 {
     SolarMutexGuard aGuard;
 
@@ -3003,8 +2918,6 @@ SwXDocumentIndex::TokenAccess_Impl::getCount() throw (uno::RuntimeException, std
 
 uno::Any SAL_CALL
 SwXDocumentIndex::TokenAccess_Impl::getByIndex(sal_Int32 nIndex)
-throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
-    uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
 
@@ -3018,25 +2931,22 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
     // #i21237#
     SwFormTokens aPattern = rTOXBase.GetTOXForm().
         GetPattern(static_cast<sal_uInt16>(nIndex));
-    SwFormTokens::iterator aIt = aPattern.begin();
 
     sal_Int32 nTokenCount = 0;
     uno::Sequence< beans::PropertyValues > aRetSeq;
     OUString aProgCharStyle;
-    while(aIt != aPattern.end()) // #i21237#
+    for(const SwFormToken& aToken : aPattern) // #i21237#
     {
         nTokenCount++;
         aRetSeq.realloc(nTokenCount);
         beans::PropertyValues* pTokenProps = aRetSeq.getArray();
-        SwFormToken  aToken = *aIt; // #i21237#
 
         uno::Sequence< beans::PropertyValue >& rCurTokenSeq =
             pTokenProps[nTokenCount-1];
         SwStyleNameMapper::FillProgName(
                         aToken.sCharStyleName,
                         aProgCharStyle,
-                        nsSwGetPoolIdFromName::GET_POOLID_CHRFMT,
-                        true );
+                        SwGetPoolIdFromName::ChrFmt);
         switch(aToken.eTokenType)
         {
             case TOKEN_ENTRY_NO:
@@ -3115,7 +3025,7 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
                 pArr[0].Name = "TokenType";
                 pArr[0].Value <<= OUString("TokenTabStop");
 
-                if(SVX_TAB_ADJUST_END == aToken.eTabAlign)
+                if(SvxTabAdjust::End == aToken.eTabAlign)
                 {
                     pArr[1].Name = "TabStopRightAligned";
                     pArr[1].Value <<= true;
@@ -3123,10 +3033,10 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
                 else
                 {
                     pArr[1].Name = "TabStopPosition";
-                    sal_Int32 nPos = (convertTwipToMm100(aToken.nTabStopPosition));
+                    sal_Int32 nPos = convertTwipToMm100(aToken.nTabStopPosition);
                     if(nPos < 0)
                         nPos = 0;
-                    pArr[1].Value <<= (sal_Int32)nPos;
+                    pArr[1].Value <<= nPos;
                 }
                 pArr[2].Name = "TabStopFillCharacter";
                 pArr[2].Value <<= OUString(aToken.cTabFillChar);
@@ -3243,8 +3153,6 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
             default:
                 ;
         }
-
-        ++aIt; // #i21237#
     }
 
     uno::Any aRet;
@@ -3254,16 +3162,14 @@ throw (lang::IndexOutOfBoundsException, lang::WrappedTargetException,
 
 uno::Type SAL_CALL
 SwXDocumentIndex::TokenAccess_Impl::getElementType()
-throw (uno::RuntimeException, std::exception)
 {
     return cppu::UnoType<uno::Sequence< beans::PropertyValues >>::get();
 }
 
 sal_Bool SAL_CALL
 SwXDocumentIndex::TokenAccess_Impl::hasElements()
-throw (uno::RuntimeException, std::exception)
 {
-    return sal_True;
+    return true;
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

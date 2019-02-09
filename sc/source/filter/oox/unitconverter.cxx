@@ -17,20 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "unitconverter.hxx"
+#include <unitconverter.hxx>
 
 #include <com/sun/star/awt/DeviceInfo.hpp>
-#include <com/sun/star/awt/FontDescriptor.hpp>
 #include <com/sun/star/awt/XDevice.hpp>
 #include <com/sun/star/awt/XFont.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/util/Date.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 #include <osl/diagnose.h>
-#include <rtl/math.hxx>
 #include <oox/core/filterbase.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/token/properties.hxx>
-#include "stylesbuffer.hxx"
+#include <stylesbuffer.hxx>
+#include <biffhelper.hxx>
+
+namespace com { namespace sun { namespace star { namespace awt { struct FontDescriptor; } } } }
 
 namespace oox {
 namespace xls {
@@ -47,7 +49,7 @@ const double MM100_PER_TWIP         = MM100_PER_POINT / 20.0;
 const double MM100_PER_EMU          = 1.0 / 360.0;
 
 /** Returns true, if the passed year is a leap year. */
-inline bool lclIsLeapYear( sal_Int32 nYear )
+bool lclIsLeapYear( sal_Int32 nYear )
 {
     return ((nYear % 4) == 0) && (((nYear % 100) != 0) || ((nYear % 400) == 0));
 }
@@ -89,21 +91,18 @@ sal_Int32 lclGetDays( const util::Date& rDate )
 
 UnitConverter::UnitConverter( const WorkbookHelper& rHelper ) :
     WorkbookHelper( rHelper ),
-    maCoeffs( UNIT_ENUM_SIZE, 1.0 ),
     mnNullDate( lclGetDays( util::Date( 30, 12, 1899 ) ) )
 {
     // initialize constant and default coefficients
     const DeviceInfo& rDeviceInfo = getBaseFilter().getGraphicHelper().getDeviceInfo();
-    maCoeffs[ UNIT_INCH ]    = MM100_PER_INCH;
-    maCoeffs[ UNIT_POINT ]   = MM100_PER_POINT;
-    maCoeffs[ UNIT_TWIP ]    = MM100_PER_TWIP;
-    maCoeffs[ UNIT_EMU ]     = MM100_PER_EMU;
-    maCoeffs[ UNIT_SCREENX ] = (rDeviceInfo.PixelPerMeterX > 0) ? (100000.0 / rDeviceInfo.PixelPerMeterX) : 50.0;
-    maCoeffs[ UNIT_SCREENY ] = (rDeviceInfo.PixelPerMeterY > 0) ? (100000.0 / rDeviceInfo.PixelPerMeterY) : 50.0;
-    maCoeffs[ UNIT_REFDEVX ] = 12.5;                 // default: 1 px = 0.125 mm
-    maCoeffs[ UNIT_REFDEVY ] = 12.5;                 // default: 1 px = 0.125 mm
-    maCoeffs[ UNIT_DIGIT ]   = 200.0;                // default: 1 digit = 2 mm
-    maCoeffs[ UNIT_SPACE ]   = 100.0;                // default  1 space = 1 mm
+    maCoeffs[ Unit::Inch ]    = MM100_PER_INCH;
+    maCoeffs[ Unit::Point ]   = MM100_PER_POINT;
+    maCoeffs[ Unit::Twip ]    = MM100_PER_TWIP;
+    maCoeffs[ Unit::Emu ]     = MM100_PER_EMU;
+    maCoeffs[ Unit::ScreenX ] = (rDeviceInfo.PixelPerMeterX > 0) ? (100000.0 / rDeviceInfo.PixelPerMeterX) : 50.0;
+    maCoeffs[ Unit::ScreenY ] = (rDeviceInfo.PixelPerMeterY > 0) ? (100000.0 / rDeviceInfo.PixelPerMeterY) : 50.0;
+    maCoeffs[ Unit::Digit ]   = 200.0;                // default: 1 digit = 2 mm
+    maCoeffs[ Unit::Space ]   = 100.0;                // default  1 space = 1 mm
 
     // error code maps
     addErrorCode( BIFF_ERR_NULL,  "#NULL!" );
@@ -121,29 +120,24 @@ void UnitConverter::finalizeImport()
     Reference< XDevice > xDevice( aDocProps.getAnyProperty( PROP_ReferenceDevice ), UNO_QUERY );
     if( xDevice.is() )
     {
-        // get reference device metric first, needed to get character widths below
-        DeviceInfo aInfo = xDevice->getInfo();
-        maCoeffs[ UNIT_REFDEVX ] = 100000.0 / aInfo.PixelPerMeterX;
-        maCoeffs[ UNIT_REFDEVY ] = 100000.0 / aInfo.PixelPerMeterY;
-
         // get character widths from default font
         if( const oox::xls::Font* pDefFont = getStyles().getDefaultFont().get() )
         {
             // XDevice expects pixels in font descriptor, but font contains twips
-            FontDescriptor aDesc = pDefFont->getFontDescriptor();
+            const FontDescriptor& aDesc = pDefFont->getFontDescriptor();
             Reference< XFont > xFont = xDevice->getFont( aDesc );
             if( xFont.is() )
             {
                 // get maximum width of all digits
                 sal_Int32 nDigitWidth = 0;
                 for( sal_Unicode cChar = '0'; cChar <= '9'; ++cChar )
-                    nDigitWidth = ::std::max( nDigitWidth, scaleToMm100( xFont->getCharWidth( cChar ), UNIT_TWIP ) );
+                    nDigitWidth = ::std::max( nDigitWidth, scaleToMm100( xFont->getCharWidth( cChar ), Unit::Twip ) );
                 if( nDigitWidth > 0 )
-                    maCoeffs[ UNIT_DIGIT ] = nDigitWidth;
+                    maCoeffs[ Unit::Digit ] = nDigitWidth;
                 // get width of space character
-                sal_Int32 nSpaceWidth = scaleToMm100( xFont->getCharWidth( ' ' ), UNIT_TWIP );
+                sal_Int32 nSpaceWidth = scaleToMm100( xFont->getCharWidth( ' ' ), Unit::Twip );
                 if( nSpaceWidth > 0 )
-                    maCoeffs[ UNIT_SPACE ] = nSpaceWidth;
+                    maCoeffs[ Unit::Space ] = nSpaceWidth;
             }
         }
     }
@@ -214,14 +208,14 @@ util::DateTime UnitConverter::calcDateTimeFromSerial( double fSerial ) const
 
 sal_uInt8 UnitConverter::calcBiffErrorCode( const OUString& rErrorCode ) const
 {
-    OoxErrorCodeMap::const_iterator aIt = maOoxErrCodes.find( rErrorCode );
+    auto aIt = maOoxErrCodes.find( rErrorCode );
     return (aIt == maOoxErrCodes.end()) ? BIFF_ERR_NA : aIt->second;
 }
 
 OUString UnitConverter::calcErrorString( sal_uInt8 nErrorCode ) const
 {
-    OoxErrorCodeMap::const_iterator iFail( maOoxErrCodes.end());
-    for (OoxErrorCodeMap::const_iterator aIt( maOoxErrCodes.begin()); aIt != maOoxErrCodes.end(); ++aIt)
+    auto iFail( maOoxErrCodes.cend());
+    for (auto aIt( maOoxErrCodes.cbegin()); aIt != maOoxErrCodes.cend(); ++aIt)
     {
         if (aIt->second == nErrorCode)
             return aIt->first;
@@ -239,8 +233,7 @@ void UnitConverter::addErrorCode( sal_uInt8 nErrorCode, const OUString& rErrorCo
 
 double UnitConverter::getCoefficient( Unit eUnit ) const
 {
-    OSL_ENSURE( static_cast< size_t >( eUnit ) < UNIT_ENUM_SIZE, "UnitConverter::getCoefficient - invalid unit" );
-    return maCoeffs[ static_cast< size_t >( eUnit ) ];
+    return maCoeffs[ eUnit ];
 }
 
 } // namespace xls

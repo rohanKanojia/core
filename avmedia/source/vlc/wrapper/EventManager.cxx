@@ -7,9 +7,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-#include "EventManager.hxx"
+#include <wrapper/EventManager.hxx>
 #include "SymbolLoader.hxx"
-#include "EventHandler.hxx"
+#include <wrapper/EventHandler.hxx>
 #include "Types.hxx"
 
 namespace
@@ -47,7 +47,7 @@ void EventManager::Handler( const libvlc_event_t *event, void *pData )
 
 bool EventManager::LoadSymbols()
 {
-    ApiMap VLC_EVENT_MANAGER_API[] =
+    static ApiMap const VLC_EVENT_MANAGER_API[] =
     {
         SYM_MAP( libvlc_media_player_event_manager ),
         SYM_MAP( libvlc_event_attach ),

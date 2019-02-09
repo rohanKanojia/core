@@ -114,7 +114,7 @@ public class _XPrintable extends MultiMethodTest {
      * exists. <p>
      *
      * @throws StatusException if service
-     * <code>com.sun.star.ucb.SimpleFileAccess</code> cann't be
+     * <code>com.sun.star.ucb.SimpleFileAccess</code> can't be
      * created.
      */
     public void _print() throws Exception {
@@ -164,7 +164,7 @@ public class _XPrintable extends MultiMethodTest {
                 result &= fileExists ;
             }
         } catch (com.sun.star.uno.Exception e) {
-            log.println("Error while while checking file '" +
+            log.println("Error while checking file '" +
                 fileURL + "': ");
             e.printStackTrace(log);
             result = false ;

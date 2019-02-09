@@ -20,22 +20,9 @@
 #ifndef INCLUDED_SW_INC_SWEVENT_HXX
 #define INCLUDED_SW_INC_SWEVENT_HXX
 
-#include <tools/solar.h>
-#include <sfx2/sfx.hrc>
-
-#define     SW_EVENT_OBJECT_SELECT        ( EVENT_APP_START + 0 )
-#define     SW_EVENT_START_INS_GLOSSARY   ( EVENT_APP_START + 1 )
-#define     SW_EVENT_END_INS_GLOSSARY     ( EVENT_APP_START + 2 )
-#define     SW_EVENT_MAIL_MERGE           ( EVENT_APP_START + 3 )
-#define     SW_EVENT_FRM_KEYINPUT_ALPHA   ( EVENT_APP_START + 4 )
-#define     SW_EVENT_FRM_KEYINPUT_NOALPHA ( EVENT_APP_START + 5 )
-#define     SW_EVENT_FRM_RESIZE           ( EVENT_APP_START + 6 )
-#define     SW_EVENT_FRM_MOVE             ( EVENT_APP_START + 7 )
-#define     SW_EVENT_PAGE_COUNT           ( EVENT_APP_START + 8 )
-#define     SW_EVENT_MAIL_MERGE_END       ( EVENT_APP_START + 9 )
-#define     SW_EVENT_FIELD_MERGE          ( EVENT_APP_START + 10 )
-#define     SW_EVENT_FIELD_MERGE_FINISHED ( EVENT_APP_START + 11 )
-#define     SW_EVENT_LAYOUT_FINISHED      ( EVENT_APP_START + 12 )
+#include "calbck.hxx"
+#include "frmfmt.hxx"
+#include "hints.hxx"
 
 #define     STR_SW_EVENT_PAGE_COUNT           0
 #define     STR_SW_EVENT_MAIL_MERGE           1
@@ -51,7 +38,6 @@
 #define     STR_SW_EVENT_FRM_RESIZE           11
 #define     STR_SW_EVENT_FRM_MOVE             12
 
-class SwFrameFormat;
 class SwFormatINetFormat;
 class IMapObject;
 
@@ -68,6 +54,7 @@ enum SwCallEventObjectType
 // Structure for the exchange between UI/CORE.
 
 struct SwCallMouseEvent
+    : public SwClient
 {
     SwCallEventObjectType eType;
     union
@@ -90,14 +77,21 @@ struct SwCallMouseEvent
         : eType( EVENT_OBJECT_NONE )
         { PTR.pFormat = nullptr; PTR.IMAP.pIMapObj = nullptr; }
 
+    SwCallMouseEvent(SwCallMouseEvent const& rOther)
+        : SwClient(rOther.GetRegisteredInNonConst())
+        , eType(rOther.eType)
+    {
+        memcpy(&PTR, &rOther.PTR, sizeof(PTR));
+    }
+
     void Set( SwCallEventObjectType eTyp, const SwFrameFormat* pFormat )
-        { eType = eTyp; PTR.pFormat = pFormat; PTR.IMAP.pIMapObj = nullptr; }
+        { Clear(); eType = eTyp; PTR.pFormat = pFormat; PTR.IMAP.pIMapObj = nullptr; assert(pFormat); const_cast<SwFrameFormat*>(pFormat)->Add(this); }
 
     void Set( const SwFrameFormat* pFormat, const IMapObject* pIMapObj )
-        { eType = EVENT_OBJECT_IMAGEMAP; PTR.pFormat = pFormat; PTR.IMAP.pIMapObj = pIMapObj; }
+        { Clear(); eType = EVENT_OBJECT_IMAGEMAP; PTR.pFormat = pFormat; PTR.IMAP.pIMapObj = pIMapObj; assert(pFormat); const_cast<SwFrameFormat*>(pFormat)->Add(this); }
 
     void Set( const SwFormatINetFormat* pINetAttr )
-        { eType = EVENT_OBJECT_INETATTR; PTR.pINetAttr = pINetAttr; PTR.IMAP.pIMapObj = nullptr; }
+        { Clear(); eType = EVENT_OBJECT_INETATTR; PTR.pINetAttr = pINetAttr; PTR.IMAP.pIMapObj = nullptr; }
 
     bool operator==( const SwCallMouseEvent& rEvent ) const
         {
@@ -109,9 +103,32 @@ struct SwCallMouseEvent
         {   return !( *this == rEvent );    }
 
     void Clear()
-        { eType = EVENT_OBJECT_NONE; PTR.pFormat = nullptr; PTR.IMAP.pIMapObj = nullptr; }
+        {
+            if (EVENT_OBJECT_IMAGE == eType || EVENT_OBJECT_URLITEM == eType || EVENT_OBJECT_IMAGEMAP == eType)
+            {
+                // note: pFormat is not necessarily the same as
+                // GetRegisteredIn() here; see ~SwFormat()
+                assert(PTR.pFormat);
+                EndListeningAll();
+            }
+            eType = EVENT_OBJECT_NONE; PTR.pFormat = nullptr; PTR.IMAP.pIMapObj = nullptr;
+        }
 
     bool HasEvent() const { return EVENT_OBJECT_NONE != eType; }
+
+    virtual void Modify(SfxPoolItem const*const pOldValue, SfxPoolItem const*const pNewValue) override
+    {
+        assert(EVENT_OBJECT_IMAGE == eType || EVENT_OBJECT_URLITEM == eType || EVENT_OBJECT_IMAGEMAP == eType);
+        SwClient::Modify(pOldValue, pNewValue);
+        if (!GetRegisteredIn()
+            || (RES_FMT_CHG == pOldValue->Which()
+                && static_cast<SwFormatChg const*>(pOldValue)->pChangedFormat == PTR.pFormat)
+            || (RES_REMOVE_UNO_OBJECT == pOldValue->Which()
+                && static_cast<SwPtrMsgPoolItem const*>(pOldValue)->pObject == PTR.pFormat))
+        {
+            Clear();
+        }
+    }
 };
 
 #endif

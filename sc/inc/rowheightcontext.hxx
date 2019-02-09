@@ -16,18 +16,18 @@
 #include <vcl/vclptr.hxx>
 #include <vcl/outdev.hxx>
 
-#include <vector>
+#include "segmenttree.hxx"
 
 namespace sc {
 
 class SC_DLLPUBLIC RowHeightContext
 {
-    std::vector<sal_uInt16> maHeights;
+    ScFlatUInt16RowSegments maHeights;
 
-    double mfPPTX;
-    double mfPPTY;
-    Fraction maZoomX;
-    Fraction maZoomY;
+    double const mfPPTX;
+    double const mfPPTY;
+    Fraction const maZoomX;
+    Fraction const maZoomY;
     VclPtr<OutputDevice> mpOutDev;
 
     sal_uInt16 mnExtraHeight;
@@ -53,7 +53,7 @@ public:
     void setForceAutoSize( bool b );
     bool isForceAutoSize() const { return mbForceAutoSize;}
 
-    std::vector<sal_uInt16>& getHeightArray();
+    ScFlatUInt16RowSegments& getHeightArray();
 };
 
 }

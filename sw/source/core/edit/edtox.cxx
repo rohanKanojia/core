@@ -17,11 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <com/sun/star/util/SearchOptions2.hpp>
 #include <com/sun/star/util/SearchAlgorithms2.hpp>
 #include <com/sun/star/util/SearchFlags.hpp>
-#include <com/sun/star/i18n/TransliterationModules.hpp>
-#include <comphelper/string.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <i18nutil/transliteration.hxx>
+#include <i18nutil/searchopt.hxx>
 #include <svl/fstathelper.hxx>
 #include <osl/thread.h>
 #include <unotools/textsearch.hxx>
@@ -47,7 +47,7 @@
 #include <doctxm.hxx>
 #include <docary.hxx>
 #include <mdiexp.hxx>
-#include <statstr.hrc>
+#include <strings.hrc>
 #include <bookmrk.hxx>
 
 using namespace ::com::sun::star;
@@ -80,12 +80,12 @@ void SwEditShell::Insert(const SwTOXMark& rMark)
     EndAllAction();
 }
 
-void SwEditShell::DeleteTOXMark( SwTOXMark* pMark )
+void SwEditShell::DeleteTOXMark( SwTOXMark const * pMark )
 {
     SET_CURR_SHELL( this );
     StartAllAction();
 
-    mpDoc->DeleteTOXMark( pMark );
+    mxDoc->DeleteTOXMark( pMark );
 
     EndAllAction();
 }
@@ -136,8 +136,8 @@ void SwEditShell::InsertTableOf( const SwTOXBase& rTOX, const SfxItemSet* pSet )
     ::SetProgressText( STR_STATSTR_TOX_INSERT, pDocSh );
 
     // Insert listing
-    const SwTOXBaseSection* pTOX = mpDoc->InsertTableOf(
-                                        *GetCursor()->GetPoint(), rTOX, pSet, true );
+    const SwTOXBaseSection* pTOX = mxDoc->InsertTableOf(
+                *GetCursor()->GetPoint(), rTOX, pSet, true, GetLayout() );
     OSL_ENSURE(pTOX, "No current TOx");
 
     // start formatting
@@ -155,46 +155,42 @@ void SwEditShell::InsertTableOf( const SwTOXBase& rTOX, const SfxItemSet* pSet )
 }
 
 /// update tables of content
-bool SwEditShell::UpdateTableOf( const SwTOXBase& rTOX, const SfxItemSet* pSet )
+void SwEditShell::UpdateTableOf(const SwTOXBase& rTOX, const SfxItemSet* pSet)
 {
-    bool bRet = false;
-
-    OSL_ENSURE( dynamic_cast<const SwTOXBaseSection*>( &rTOX) !=  nullptr,  "no TOXBaseSection!" );
-    SwTOXBaseSection* pTOX = const_cast<SwTOXBaseSection*>(static_cast<const SwTOXBaseSection*>(&rTOX));
-    OSL_ENSURE(pTOX, "no current listing");
-    if( pTOX && nullptr != pTOX->GetFormat()->GetSectionNode() )
+    assert(dynamic_cast<const SwTOXBaseSection*>(&rTOX) && "no TOXBaseSection!");
+    SwTOXBaseSection& rTOXSect = static_cast<SwTOXBaseSection&>(const_cast<SwTOXBase&>(rTOX));
+    if (rTOXSect.GetFormat()->GetSectionNode())
     {
         SwDoc* pMyDoc = GetDoc();
         SwDocShell* pDocSh = pMyDoc->GetDocShell();
 
-        bool bInIndex = pTOX == GetCurTOX();
+        bool bInIndex = &rTOX == GetCurTOX();
         SET_CURR_SHELL( this );
         StartAllAction();
 
         ::StartProgress( STR_STATSTR_TOX_UPDATE, 0, 0, pDocSh );
         ::SetProgressText( STR_STATSTR_TOX_UPDATE, pDocSh );
 
-        pMyDoc->GetIDocumentUndoRedo().StartUndo(UNDO_TOXCHANGE, nullptr);
+        pMyDoc->GetIDocumentUndoRedo().StartUndo(SwUndoId::TOXCHANGE, nullptr);
 
         // create listing stub
-        pTOX->Update(pSet);
+        rTOXSect.Update(pSet, GetLayout());
 
         // correct Cursor
         if( bInIndex )
-            pTOX->SetPosAtStartEnd( *GetCursor()->GetPoint() );
+            rTOXSect.SetPosAtStartEnd(*GetCursor()->GetPoint());
 
         // start formatting
         CalcLayout();
 
         // insert page numbering
-        pTOX->UpdatePageNum();
+        rTOXSect.UpdatePageNum();
 
-        pMyDoc->GetIDocumentUndoRedo().EndUndo(UNDO_TOXCHANGE, nullptr);
+        pMyDoc->GetIDocumentUndoRedo().EndUndo(SwUndoId::TOXCHANGE, nullptr);
 
         ::EndProgress( pDocSh );
         EndAllAction();
     }
-    return bRet;
 }
 
 /// Get current listing before or at the Cursor
@@ -205,21 +201,21 @@ const SwTOXBase* SwEditShell::GetCurTOX() const
 
 bool SwEditShell::DeleteTOX( const SwTOXBase& rTOXBase, bool bDelNodes )
 {
-    return GetDoc()->DeleteTOX( (SwTOXBase&)rTOXBase, bDelNodes );
+    return GetDoc()->DeleteTOX( rTOXBase, bDelNodes );
 }
 
 // manage types of listings
 
 const SwTOXType* SwEditShell::GetTOXType(TOXTypes eTyp, sal_uInt16 nId) const
 {
-    return mpDoc->GetTOXType(eTyp, nId);
+    return mxDoc->GetTOXType(eTyp, nId);
 }
 
 // manage keys for the alphabetical index
 
-sal_uInt16 SwEditShell::GetTOIKeys( SwTOIKeyType eTyp, std::vector<OUString>& rArr ) const
+void SwEditShell::GetTOIKeys( SwTOIKeyType eTyp, std::vector<OUString>& rArr ) const
 {
-    return GetDoc()->GetTOIKeys( eTyp, rArr );
+    GetDoc()->GetTOIKeys( eTyp, rArr, *GetLayout() );
 }
 
 sal_uInt16 SwEditShell::GetTOXCount() const
@@ -265,7 +261,7 @@ bool SwEditShell::IsUpdateTOX() const
     return GetDoc()->IsUpdateTOX();
 }
 
-OUString SwEditShell::GetTOIAutoMarkURL() const
+OUString const & SwEditShell::GetTOIAutoMarkURL() const
 {
     return GetDoc()->GetTOIAutoMarkURL();
 }
@@ -302,29 +298,27 @@ void SwEditShell::ApplyAutoMark()
         }
 
         //2.
-        SfxMedium aMedium( sAutoMarkURL, STREAM_STD_READ );
+        SfxMedium aMedium( sAutoMarkURL, StreamMode::STD_READ );
         SvStream& rStrm = *aMedium.GetInStream();
         Push();
         rtl_TextEncoding eChrSet = ::osl_getThreadTextEncoding();
 
         // SearchOptions to be used in loop below
-        sal_Int32 nLEV_Other    = 2;    //  -> changedChars;
-        sal_Int32 nLEV_Longer   = 3;    //! -> deletedChars;
-        sal_Int32 nLEV_Shorter  = 1;    //! -> insertedChars;
-        sal_Int32 nTransliterationFlags = 0;
+        sal_Int32 const nLEV_Other    = 2;    //  -> changedChars;
+        sal_Int32 const nLEV_Longer   = 3;    //! -> deletedChars;
+        sal_Int32 const nLEV_Shorter  = 1;    //! -> insertedChars;
 
-        sal_Int32 nSrchFlags = SearchFlags::LEV_RELAXED;
-
-        SearchOptions2 aSearchOpt(
-                            SearchAlgorithms_ABSOLUTE, nSrchFlags,
+        i18nutil::SearchOptions2 aSearchOpt(
+                            SearchAlgorithms_ABSOLUTE,
+                            SearchFlags::LEV_RELAXED,
                             "", "",
                             SvtSysLocale().GetLanguageTag().getLocale(),
                             nLEV_Other, nLEV_Longer, nLEV_Shorter,
-                            nTransliterationFlags,
+                            TransliterationFlags::NONE,
                             SearchAlgorithms2::ABSOLUTE,
                             '\\' );
 
-        while( !rStrm.GetError() && !rStrm.IsEof() )
+        while (rStrm.good())
         {
             OString aRdLine;
             rStrm.ReadLine( aRdLine );
@@ -354,12 +348,12 @@ void SwEditShell::ApplyAutoMark()
                     if (!bCaseSensitive)
                     {
                         aSearchOpt.transliterateFlags |=
-                                     TransliterationModules_IGNORE_CASE;
+                                     TransliterationFlags::IGNORE_CASE;
                     }
                     else
                     {
                         aSearchOpt.transliterateFlags &=
-                                    ~TransliterationModules_IGNORE_CASE;
+                                    ~TransliterationFlags::IGNORE_CASE;
                     }
                     if ( bWordOnly)
                         aSearchOpt.searchFlag |=  SearchFlags::NORM_WORD_ONLY;
@@ -372,9 +366,8 @@ void SwEditShell::ApplyAutoMark()
                     bool bCancel;
 
                     // todo/mba: assuming that notes shouldn't be searched
-                    bool bSearchInNotes = false;
-                    sal_uLong nRet = Find( aSearchOpt,  bSearchInNotes, DOCPOS_START, DOCPOS_END, bCancel,
-                                    (FindRanges)(FND_IN_SELALL) );
+                    sal_uLong nRet = Find_Text(aSearchOpt, false/*bSearchInNotes*/, SwDocPositions::Start, SwDocPositions::End, bCancel,
+                                    FindRanges::InSelAll );
 
                     if(nRet)
                     {
@@ -396,7 +389,7 @@ void SwEditShell::ApplyAutoMark()
             }
         }
         KillPams();
-        Pop(false);
+        Pop(PopMode::DeleteCurrent);
     }
     DoUndo(bDoesUndo);
     EndAllAction();

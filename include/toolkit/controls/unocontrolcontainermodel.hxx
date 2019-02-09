@@ -22,8 +22,6 @@
 
 
 #include <toolkit/controls/unocontrolmodel.hxx>
-#include <toolkit/helper/macros.hxx>
-#include <toolkit/helper/servicenames.hxx>
 
 
 //  class css::awt::UnoControlContainerModel
@@ -38,20 +36,18 @@ public:
                         UnoControlContainerModel( const css::uno::Reference< css::uno::XComponentContext >& i_factory );
                         UnoControlContainerModel( const UnoControlContainerModel& rModel ) : UnoControlModel( rModel ) {}
 
-    UnoControlModel*    Clone() const override { return new UnoControlContainerModel( *this ); }
+    rtl::Reference<UnoControlModel> Clone() const override { return new UnoControlContainerModel( *this ); }
 
     // css::beans::XMultiPropertySet
-    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) throw(css::uno::RuntimeException, std::exception) override;
+    css::uno::Reference< css::beans::XPropertySetInfo > SAL_CALL getPropertySetInfo(  ) override;
 
     // css::io::XPersistObject
-    OUString SAL_CALL getServiceName() throw(css::uno::RuntimeException, std::exception) override;
+    OUString SAL_CALL getServiceName() override;
 
     // css::lang::XServiceInfo
-    OUString SAL_CALL getImplementationName()
-        throw (css::uno::RuntimeException, std::exception) override;
+    OUString SAL_CALL getImplementationName() override;
 
-    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames()
-        throw (css::uno::RuntimeException, std::exception) override;
+    css::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override;
 };
 
 

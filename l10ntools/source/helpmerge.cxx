@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "sal/config.h"
+#include <sal/config.h>
 
 #include <fstream>
 #include <functional>
@@ -28,7 +28,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "helpmerge.hxx"
+#include <helpmerge.hxx>
 #include <algorithm>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -36,22 +36,25 @@
 #include <vector>
 #include <rtl/strbuf.hxx>
 #ifdef _WIN32
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #undef CopyFile
 #include <direct.h>
 #endif
 
-#include "export.hxx"
-#include "common.hxx"
-#include "helper.hxx"
-#include "po.hxx"
+#include <export.hxx>
+#include <common.hxx>
+#include <helper.hxx>
+#include <po.hxx>
 
 #if OSL_DEBUG_LEVEL > 2
 void HelpParser::Dump(XMLHashMap* rElem_in)
 {
-    for(XMLHashMap::iterator pos = rElem_in->begin();pos != rElem_in->end(); ++pos)
+    for (auto const& pos : *rElem_in)
     {
-        Dump(pos->second,pos->first);
+        Dump(pos.second,pos.first);
     }
 }
 
@@ -60,10 +63,10 @@ void HelpParser::Dump(LangHashMap* rElem_in,const OString & sKey_in)
     OString x;
     OString y;
     fprintf(stdout,"+------------%s-----------+\n",sKey_in.getStr() );
-    for(LangHashMap::iterator posn=rElem_in->begin();posn!=rElem_in->end();++posn)
+    for (auto const& posn : *rElem_in)
     {
-        x=posn->first;
-        y=posn->second->ToOString();
+        x=posn.first;
+        y=posn.second->ToOString();
         fprintf(stdout,"key=%s value=%s\n",x.getStr(),y.getStr());
     }
     fprintf(stdout,"+--------------------------+\n");
@@ -78,13 +81,11 @@ HelpParser::HelpParser( const OString &rHelpFile )
 bool HelpParser::CreatePO(
 /*****************************************************************************/
     const OString &rPOFile_in, const OString &sHelpFile,
-    XMLFile *pXmlFile, const OString &rGsi1){
+    XMLFile* pXmlFile, const OString &rGsi1){
     SimpleXMLParser aParser;
     //TODO: explicit BOM handling?
 
-    std::unique_ptr <XMLFile> file ( aParser.Execute( sHelpFile, pXmlFile ) );
-
-    if(file.get() == nullptr)
+    if (!aParser.Execute( sHelpFile, pXmlFile ))
     {
         printf(
             "%s: %s\n",
@@ -92,8 +93,8 @@ bool HelpParser::CreatePO(
             aParser.GetError().m_sMessage.getStr());
         exit(-1);
     }
-    file->Extract();
-    if( !file->CheckExportStatus() ){
+    pXmlFile->Extract();
+    if( !pXmlFile->CheckExportStatus() ){
         return true;
     }
 
@@ -104,15 +105,13 @@ bool HelpParser::CreatePO(
         return false;
     }
 
-    XMLHashMap* aXMLStrHM = file->GetStrings();
+    XMLHashMap* aXMLStrHM = pXmlFile->GetStrings();
 
-    std::vector<OString> order = file->getOrder();
-    std::vector<OString>::iterator pos;
-    XMLHashMap::iterator posm;
+    std::vector<OString> order = pXmlFile->getOrder();
 
-    for( pos = order.begin(); pos != order.end() ; ++pos )
+    for (auto const& pos : order)
     {
-        posm = aXMLStrHM->find( *pos );
+        auto posm = aXMLStrHM->find(pos);
         LangHashMap* pElem = posm->second;
 
         XMLElement* pXMLElement = (*pElem)[ "en-US" ];
@@ -126,7 +125,7 @@ bool HelpParser::CreatePO(
 
             common::writePoEntry(
                 "Helpex", aPoOutput, sHelpFile, rGsi1,
-                posm->first, pXMLElement->GetOldref(), OString(), data);
+                posm->first, OString(), OString(), data);
 
             pXMLElement=nullptr;
         }
@@ -142,43 +141,37 @@ bool HelpParser::CreatePO(
     return true;
 }
 
-bool HelpParser::Merge( const OString &rPOFile, const OString &rDestinationFile,
+bool HelpParser::Merge( const OString &rDestinationFile,
     const OString& rLanguage , MergeDataFile* pMergeDataFile )
 {
-
-    (void) rPOFile;
-
     SimpleXMLParser aParser;
 
     //TODO: explicit BOM handling?
 
-    XMLFile* xmlfile = ( aParser.Execute( sHelpFile, new XMLFile( OString('0') ) ) );
-    if (!xmlfile)
+    std::unique_ptr<XMLFile> xmlfile(new XMLFile( OString('0') ));
+    if (!aParser.Execute( sHelpFile, xmlfile.get()))
     {
         SAL_WARN("l10ntools", "could not parse " << sHelpFile);
         return false;
     }
-    bool hasNoError = MergeSingleFile( xmlfile , pMergeDataFile , rLanguage , rDestinationFile );
-    delete xmlfile;
-    return hasNoError;
+    MergeSingleFile( xmlfile.get() , pMergeDataFile , rLanguage , rDestinationFile );
+    return true;
 }
 
-bool HelpParser::MergeSingleFile( XMLFile* file , MergeDataFile* pMergeDataFile , const OString& sLanguage ,
+void HelpParser::MergeSingleFile( XMLFile* file , MergeDataFile* pMergeDataFile , const OString& sLanguage ,
                                   OString const & sPath )
 {
     file->Extract();
 
     XMLHashMap* aXMLStrHM = file->GetStrings();
-    static  ResData pResData("","");
-    pResData.sResTyp   = "help";
+    static ResData s_ResData("","");
+    s_ResData.sResTyp   = "help";
 
     std::vector<OString> order = file->getOrder();
-    std::vector<OString>::iterator pos;
-    XMLHashMap::iterator posm;
 
-    for( pos = order.begin(); pos != order.end() ; ++pos ) // Merge every l10n related string in the same order as export
+    for (auto const& pos : order) // Merge every l10n related string in the same order as export
     {
-        posm = aXMLStrHM->find( *pos );
+        auto posm = aXMLStrHM->find(pos);
         LangHashMap*  aLangHM = posm->second;
 #if OSL_DEBUG_LEVEL > 2
         printf("*********************DUMPING HASHMAP***************************************");
@@ -186,23 +179,20 @@ bool HelpParser::MergeSingleFile( XMLFile* file , MergeDataFile* pMergeDataFile 
         printf("DBG: sHelpFile = %s\n",sHelpFile.getStr() );
 #endif
 
-        pResData.sGId      =  posm->first;
-        pResData.sFilename  =  sHelpFile;
+        s_ResData.sGId      =  posm->first;
+        s_ResData.sFilename  =  sHelpFile;
 
-        ProcessHelp( aLangHM , sLanguage, &pResData , pMergeDataFile );
+        ProcessHelp( aLangHM , sLanguage, &s_ResData , pMergeDataFile );
      }
 
     file->Write(sPath);
-    return true;
 }
 
-/* ProcessHelp Methode: search for en-US entry and replace it with the current language*/
+/* ProcessHelp method: search for en-US entry and replace it with the current language*/
 void HelpParser::ProcessHelp( LangHashMap* aLangHM , const OString& sCur , ResData *pResData , MergeDataFile* pMergeDataFile ){
 
     XMLElement*   pXMLElement = nullptr;
     MergeEntrys   *pEntrys    = nullptr;
-
-    OString sLId;
 
     pEntrys = nullptr;
 
@@ -214,24 +204,21 @@ void HelpParser::ProcessHelp( LangHashMap* aLangHM , const OString& sCur , ResDa
         }
         if( pXMLElement != nullptr )
         {
-            sLId    = pXMLElement->GetOldref();
-            pResData->sId     =  sLId;
-
             OString sNewText;
             OString sNewdata;
             OString sSourceText(
             pXMLElement->ToOString().
                 replaceAll(
-                    OString("\n"),
+                    "\n",
                     OString()).
                 replaceAll(
-                    OString("\t"),
+                    "\t",
                     OString()));
             // re-add spaces to the beginning of translated string,
             // important for indentation of Basic code examples
             sal_Int32 nPreSpaces = 0;
             sal_Int32 nLen = sSourceText.getLength();
-            while ( (nPreSpaces < nLen) && (*(sSourceText.getStr()+nPreSpaces) == ' ') )
+            while ( (nPreSpaces < nLen) && (sSourceText[nPreSpaces] == ' ') )
                 nPreSpaces++;
             if( sCur == "qtz" )
             {
@@ -243,7 +230,7 @@ void HelpParser::ProcessHelp( LangHashMap* aLangHM , const OString& sCur , ResDa
                 pEntrys = pMergeDataFile->GetMergeEntrys( pResData );
                 if( pEntrys != nullptr)
                 {
-                    pEntrys->GetText( sNewText, STRING_TYP_TEXT, sCur, true );
+                    pEntrys->GetText( sNewText, sCur, true );
                     if (helper::isWellFormedXML(XMLUtil::QuotHTML(sNewText)))
                     {
                         sNewdata = sSourceText.copy(0,nPreSpaces) + sNewText;
@@ -264,8 +251,7 @@ void HelpParser::ProcessHelp( LangHashMap* aLangHM , const OString& sCur , ResDa
             {
                 SAL_WARN(
                     "l10ntools",
-                    "Can't find GID=" << pResData->sGId.getStr() << " LID="
-                        << pResData->sId.getStr() << " TYP=" << pResData->sResTyp.getStr());
+                    "Can't find GID=" << pResData->sGId << " TYP=" << pResData->sResTyp);
             }
             pXMLElement->ChangeLanguageTag(sCur);
         }

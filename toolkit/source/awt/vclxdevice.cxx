@@ -20,6 +20,7 @@
 #include <com/sun/star/awt/DeviceCapability.hpp>
 
 #include <com/sun/star/util/MeasureUnit.hpp>
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 
 #include <toolkit/awt/vclxdevice.hxx>
 #include <toolkit/awt/vclxfont.hxx>
@@ -38,12 +39,11 @@
 #include <vcl/virdev.hxx>
 #include <vcl/bitmapex.hxx>
 #include <vcl/font.hxx>
-
+#include <vcl/metric.hxx>
 
 //  class VCLXDevice
 
 VCLXDevice::VCLXDevice()
-    : nFlags(0)
 {
 }
 
@@ -54,22 +54,14 @@ VCLXDevice::~VCLXDevice()
     mpOutputDevice.reset();
 }
 
-void VCLXDevice::SetCreatedWithToolkit( bool bCreatedWithToolkit )
-{
-    if ( bCreatedWithToolkit )
-        nFlags |= FLAGS_CREATEDWITHTOOLKIT;
-    else
-        nFlags &= ~FLAGS_CREATEDWITHTOOLKIT;
-}
-
 // css::uno::XInterface
-css::uno::Any VCLXDevice::queryInterface( const css::uno::Type & rType ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Any VCLXDevice::queryInterface( const css::uno::Type & rType )
 {
     css::uno::Any aRet = ::cppu::queryInterface( rType,
-                                        (static_cast< css::awt::XDevice* >(this)),
-                                        (static_cast< css::lang::XUnoTunnel* >(this)),
-                                        (static_cast< css::lang::XTypeProvider* >(this)),
-                                        (static_cast< css::awt::XUnitConversion* >(this)) );
+                                        static_cast< css::awt::XDevice* >(this),
+                                        static_cast< css::lang::XUnoTunnel* >(this),
+                                        static_cast< css::lang::XTypeProvider* >(this),
+                                        static_cast< css::awt::XUnitConversion* >(this) );
     return (aRet.hasValue() ? aRet : OWeakObject::queryInterface( rType ));
 }
 
@@ -84,7 +76,7 @@ IMPL_XTYPEPROVIDER_END
 
 
 // css::awt::XDevice,
-css::uno::Reference< css::awt::XGraphics > VCLXDevice::createGraphics(  ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::awt::XGraphics > VCLXDevice::createGraphics(  )
 {
     SolarMutexGuard aGuard;
 
@@ -96,7 +88,7 @@ css::uno::Reference< css::awt::XGraphics > VCLXDevice::createGraphics(  ) throw(
     return xRef;
 }
 
-css::uno::Reference< css::awt::XDevice > VCLXDevice::createDevice( sal_Int32 nWidth, sal_Int32 nHeight ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::awt::XDevice > VCLXDevice::createDevice( sal_Int32 nWidth, sal_Int32 nHeight )
 {
     SolarMutexGuard aGuard;
 
@@ -112,7 +104,7 @@ css::uno::Reference< css::awt::XDevice > VCLXDevice::createDevice( sal_Int32 nWi
     return xRef;
 }
 
-css::awt::DeviceInfo VCLXDevice::getInfo() throw(css::uno::RuntimeException, std::exception)
+css::awt::DeviceInfo VCLXDevice::getInfo()
 {
     SolarMutexGuard aGuard;
 
@@ -149,7 +141,7 @@ css::awt::DeviceInfo VCLXDevice::getInfo() throw(css::uno::RuntimeException, std
         aInfo.Width = aDevSz.Width();
         aInfo.Height = aDevSz.Height();
 
-        Size aTmpSz = mpOutputDevice->LogicToPixel( Size( 1000, 1000 ), MapMode( MAP_CM ) );
+        Size aTmpSz = mpOutputDevice->LogicToPixel( Size( 1000, 1000 ), MapMode( MapUnit::MapCM ) );
         aInfo.PixelPerMeterX = aTmpSz.Width()/10;
         aInfo.PixelPerMeterY = aTmpSz.Height()/10;
 
@@ -163,7 +155,7 @@ css::awt::DeviceInfo VCLXDevice::getInfo() throw(css::uno::RuntimeException, std
     return aInfo;
 }
 
-css::uno::Sequence< css::awt::FontDescriptor > VCLXDevice::getFontDescriptors(  ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Sequence< css::awt::FontDescriptor > VCLXDevice::getFontDescriptors(  )
 {
     SolarMutexGuard aGuard;
 
@@ -182,7 +174,7 @@ css::uno::Sequence< css::awt::FontDescriptor > VCLXDevice::getFontDescriptors(  
     return aFonts;
 }
 
-css::uno::Reference< css::awt::XFont > VCLXDevice::getFont( const css::awt::FontDescriptor& rDescriptor ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::awt::XFont > VCLXDevice::getFont( const css::awt::FontDescriptor& rDescriptor )
 {
     SolarMutexGuard aGuard;
 
@@ -196,23 +188,23 @@ css::uno::Reference< css::awt::XFont > VCLXDevice::getFont( const css::awt::Font
     return xRef;
 }
 
-css::uno::Reference< css::awt::XBitmap > VCLXDevice::createBitmap( sal_Int32 nX, sal_Int32 nY, sal_Int32 nWidth, sal_Int32 nHeight ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::awt::XBitmap > VCLXDevice::createBitmap( sal_Int32 nX, sal_Int32 nY, sal_Int32 nWidth, sal_Int32 nHeight )
 {
     SolarMutexGuard aGuard;
 
     css::uno::Reference< css::awt::XBitmap >  xBmp;
     if( mpOutputDevice )
     {
-        Bitmap aBmp = mpOutputDevice->GetBitmap( Point( nX, nY ), Size( nWidth, nHeight ) );
+        BitmapEx aBmp = mpOutputDevice->GetBitmapEx( Point( nX, nY ), Size( nWidth, nHeight ) );
 
         VCLXBitmap* pBmp = new VCLXBitmap;
-        pBmp->SetBitmap( BitmapEx( aBmp ) );
+        pBmp->SetBitmap( aBmp );
         xBmp = pBmp;
     }
     return xBmp;
 }
 
-css::uno::Reference< css::awt::XDisplayBitmap > VCLXDevice::createDisplayBitmap( const css::uno::Reference< css::awt::XBitmap >& rxBitmap ) throw(css::uno::RuntimeException, std::exception)
+css::uno::Reference< css::awt::XDisplayBitmap > VCLXDevice::createDisplayBitmap( const css::uno::Reference< css::awt::XBitmap >& rxBitmap )
 {
     SolarMutexGuard aGuard;
 
@@ -232,9 +224,8 @@ VCLXVirtualDevice::~VCLXVirtualDevice()
 
 // Interface implementation of css::awt::XUnitConversion
 
-css::awt::Point SAL_CALL VCLXDevice::convertPointToLogic( const css::awt::Point& aPoint, ::sal_Int16 TargetUnit ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::awt::Point SAL_CALL VCLXDevice::convertPointToLogic( const css::awt::Point& aPoint, ::sal_Int16 TargetUnit )
 {
-    (void)aPoint;
     SolarMutexGuard aGuard;
     if (TargetUnit == css::util::MeasureUnit::PERCENT )
     {
@@ -257,9 +248,8 @@ css::awt::Point SAL_CALL VCLXDevice::convertPointToLogic( const css::awt::Point&
 }
 
 
-css::awt::Point SAL_CALL VCLXDevice::convertPointToPixel( const css::awt::Point& aPoint, ::sal_Int16 SourceUnit ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::awt::Point SAL_CALL VCLXDevice::convertPointToPixel( const css::awt::Point& aPoint, ::sal_Int16 SourceUnit )
 {
-    (void)aPoint;
     SolarMutexGuard aGuard;
     if (SourceUnit == css::util::MeasureUnit::PERCENT ||
         SourceUnit == css::util::MeasureUnit::PIXEL )
@@ -281,9 +271,8 @@ css::awt::Point SAL_CALL VCLXDevice::convertPointToPixel( const css::awt::Point&
     return aAWTPoint;
 }
 
-css::awt::Size SAL_CALL VCLXDevice::convertSizeToLogic( const css::awt::Size& aSize, ::sal_Int16 TargetUnit ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::awt::Size SAL_CALL VCLXDevice::convertSizeToLogic( const css::awt::Size& aSize, ::sal_Int16 TargetUnit )
 {
-    (void)aSize;
     SolarMutexGuard aGuard;
     if (TargetUnit == css::util::MeasureUnit::PERCENT)
     {
@@ -306,9 +295,8 @@ css::awt::Size SAL_CALL VCLXDevice::convertSizeToLogic( const css::awt::Size& aS
     return aAWTSize;
 }
 
-css::awt::Size SAL_CALL VCLXDevice::convertSizeToPixel( const css::awt::Size& aSize, ::sal_Int16 SourceUnit ) throw (css::lang::IllegalArgumentException, css::uno::RuntimeException, std::exception)
+css::awt::Size SAL_CALL VCLXDevice::convertSizeToPixel( const css::awt::Size& aSize, ::sal_Int16 SourceUnit )
 {
-    (void)aSize;
     SolarMutexGuard aGuard;
     if (SourceUnit == css::util::MeasureUnit::PERCENT ||
         SourceUnit == css::util::MeasureUnit::PIXEL)

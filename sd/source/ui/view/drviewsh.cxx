@@ -17,27 +17,27 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "DrawViewShell.hxx"
+#include <DrawViewShell.hxx>
 #include <svl/aeitem.hxx>
 #include <svl/itemset.hxx>
 #include <sfx2/request.hxx>
 #include <svx/svxids.hrc>
 
+#include <sal/log.hxx>
 #include <svx/fmshell.hxx>
 #include <sfx2/dispatch.hxx>
+#include <comphelper/lok.hxx>
 
-#include "app.hrc"
-#include "strings.hrc"
-#include "sdpage.hxx"
-#include "FrameView.hxx"
-#include "sdresid.hxx"
-#include "drawdoc.hxx"
-#include "DrawDocShell.hxx"
-#include "Window.hxx"
-#include "GraphicViewShell.hxx"
-#include "drawview.hxx"
+#include <app.hrc>
+#include <sdpage.hxx>
+#include <FrameView.hxx>
+#include <drawdoc.hxx>
+#include <DrawDocShell.hxx>
+#include <Window.hxx>
+#include <GraphicViewShell.hxx>
+#include <drawview.hxx>
 
-#include "slideshow.hxx"
+#include <slideshow.hxx>
 
 namespace sd {
 
@@ -57,13 +57,16 @@ void DrawViewShell::GotoBookmark(const OUString& rBookmark)
 |*
 \************************************************************************/
 
-void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
+void DrawViewShell::MakeVisible(const ::tools::Rectangle& rRect, vcl::Window& rWin)
 {
+    if ( (IsMouseButtonDown() && !IsMouseSelecting()) || SlideShow::IsRunning( GetViewShellBase() ) )
+        return;
+
     // tdf#98646 check if Rectangle which contains the bounds of the region to
     // be shown eventually contains values that cause overflows when processing
     // e.g. when calling GetWidth()
-    const bool bOverflowInX(!rtl::math::approxEqual((double)rRect.getWidth(), (double)rRect.Right() - (double)rRect.Left()));
-    const bool bOverflowInY(!rtl::math::approxEqual((double)rRect.getHeight(), (double)rRect.Bottom() - (double)rRect.Top()));
+    const bool bOverflowInX(!rtl::math::approxEqual(static_cast<double>(rRect.getWidth()), static_cast<double>(rRect.Right()) - static_cast<double>(rRect.Left())));
+    const bool bOverflowInY(!rtl::math::approxEqual(static_cast<double>(rRect.getHeight()), static_cast<double>(rRect.Bottom()) - static_cast<double>(rRect.Top())));
 
     if(bOverflowInX || bOverflowInY)
     {
@@ -73,17 +76,26 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
 
     // In older versions, if in X or Y the size of the object was
     // smaller than the visible area, the user-defined zoom was
-    // changed. This was decided to be a bug for 6.x, thus I developed a
+    // changed. This was decided to be a bug for
+    // StarOffice 6.x (Apr 2002), thus I developed a
     // version which instead handles X/Y bigger/smaller and visibility
     // questions separately
     const Size aLogicSize(rRect.GetSize());
 
     // visible area
     Size aVisSizePixel(rWin.GetOutputSizePixel());
-    Rectangle aVisArea(rWin.PixelToLogic(Rectangle(Point(0,0), aVisSizePixel)));
+    bool bTiledRendering = comphelper::LibreOfficeKit::isActive() && !rWin.IsMapModeEnabled();
+    if (bTiledRendering)
+    {
+        rWin.Push(PushFlags::MAPMODE);
+        rWin.EnableMapMode();
+    }
+    ::tools::Rectangle aVisArea(rWin.PixelToLogic(::tools::Rectangle(Point(0,0), aVisSizePixel)));
+    if (bTiledRendering)
+        rWin.Pop();
     Size aVisAreaSize(aVisArea.GetSize());
 
-    if (!aVisArea.IsInside(rRect) && !SlideShow::IsRunning( GetViewShellBase() ) )
+    if ( !aVisArea.IsInside(rRect) )
     {
         // object is not entirely in visible area
         sal_Int32 nFreeSpaceX(aVisAreaSize.Width() - aLogicSize.Width());
@@ -91,7 +103,7 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
 
         // allow a mode for move-only visibility without zooming.
         const sal_Int32 nPercentBorder(30);
-        const Rectangle aInnerRectangle(
+        const ::tools::Rectangle aInnerRectangle(
             aVisArea.Left() + ((aVisAreaSize.Width() * nPercentBorder) / 200),
             aVisArea.Top() + ((aVisAreaSize.Height() * nPercentBorder) / 200),
             aVisArea.Right() - ((aVisAreaSize.Width() * nPercentBorder) / 200),
@@ -104,13 +116,13 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
             if(aInnerRectangle.Left() > rRect.Right())
             {
                 // object moves out to the left
-                aNewPos.X() -= aVisAreaSize.Width() / 2;
+                aNewPos.AdjustX( -(aVisAreaSize.Width() / 2) );
             }
 
             if(aInnerRectangle.Right() < rRect.Left())
             {
                 // object moves out to the right
-                aNewPos.X() += aVisAreaSize.Width() / 2;
+                aNewPos.AdjustX(aVisAreaSize.Width() / 2 );
             }
         }
         else
@@ -126,12 +138,12 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
             }
             else
             {
-                const long distRight(rRect.Right() - aNewPos.X() + aVisAreaSize.Width());
+                const long distRight(rRect.Right() - aNewPos.X() - aVisAreaSize.Width());
 
                 if(distRight > 0)
                 {
                     long mult = (distRight / nFreeSpaceX) + 1;
-                    aNewPos.X() += mult * nFreeSpaceX;
+                    aNewPos.AdjustX(mult * nFreeSpaceX );
                 }
 
                 const long distLeft(aNewPos.X() - rRect.Left());
@@ -139,7 +151,7 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
                 if(distLeft > 0)
                 {
                     long mult = (distLeft / nFreeSpaceX) + 1;
-                    aNewPos.X() -= mult * nFreeSpaceX;
+                    aNewPos.AdjustX( -(mult * nFreeSpaceX) );
                 }
             }
         }
@@ -149,13 +161,13 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
             if(aInnerRectangle.Top() > rRect.Bottom())
             {
                 // object moves out to the top
-                aNewPos.Y() -= aVisAreaSize.Height() / 2;
+                aNewPos.AdjustY( -(aVisAreaSize.Height() / 2) );
             }
 
             if(aInnerRectangle.Bottom() < rRect.Top())
             {
                 // object moves out to the right
-                aNewPos.Y() += aVisAreaSize.Height() / 2;
+                aNewPos.AdjustY(aVisAreaSize.Height() / 2 );
             }
         }
         else
@@ -171,12 +183,12 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
             }
             else
             {
-                const long distBottom(rRect.Bottom() - aNewPos.Y() + aVisAreaSize.Height());
+                const long distBottom(rRect.Bottom() - aNewPos.Y() - aVisAreaSize.Height());
 
                 if(distBottom > 0)
                 {
                     long mult = (distBottom / nFreeSpaceY) + 1;
-                    aNewPos.Y() += mult * nFreeSpaceY;
+                    aNewPos.AdjustY(mult * nFreeSpaceY );
                 }
 
                 const long distTop(aNewPos.Y() - rRect.Top());
@@ -184,7 +196,7 @@ void DrawViewShell::MakeVisible(const Rectangle& rRect, vcl::Window& rWin)
                 if(distTop > 0)
                 {
                     long mult = (distTop / nFreeSpaceY) + 1;
-                    aNewPos.Y() -= mult * nFreeSpaceY;
+                    aNewPos.AdjustY( -(mult * nFreeSpaceY) );
                 }
             }
         }

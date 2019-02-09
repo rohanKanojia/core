@@ -20,23 +20,25 @@
 #include <string.h>
 #include <rtl/character.hxx>
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <osl/diagnose.h>
-#include "tvread.hxx"
+#include <tvread.hxx>
 #include <expat.h>
 #include <osl/file.hxx>
 #include <unotools/configmgr.hxx>
 #include <com/sun/star/configuration/theDefaultProvider.hpp>
 #include <com/sun/star/ucb/SimpleFileAccess.hpp>
-#include <com/sun/star/frame/XConfigManager.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 
 #include <comphelper/processfactory.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <com/sun/star/deployment/thePackageManagerFactory.hpp>
 #include <com/sun/star/util/theMacroExpander.hpp>
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 #include <com/sun/star/uri/XVndSunStarExpandUrl.hpp>
 #include <i18nlangtag/languagetag.hxx>
 #include <unotools/pathoptions.hxx>
+#include <memory>
 
 namespace treeview {
 
@@ -48,29 +50,22 @@ namespace treeview {
     public:
 
         explicit TVDom( TVDom* arent = nullptr )
-            : kind( other ),
+            : kind( Kind::other ),
               parent( arent ),
               children( 0 )
         {
         }
 
-        ~TVDom()
-        {
-            for( size_t i = 0; i < children.size(); ++i )
-                delete children[i];
-        }
-
         TVDom* newChild()
         {
-            children.push_back( new TVDom( this ) );
-            return children.back();
+            children.emplace_back( new TVDom( this ) );
+            return children.back().get();
         }
 
-        TVDom* newChild(TVDom* p)
+        void newChild(std::unique_ptr<TVDom> p)
         {
-            children.push_back( p );
-            p->parent = this;
-            return children.back();
+            children.emplace_back(std::move(p));
+            children.back()->parent = this;
         }
 
         TVDom* getParent() const
@@ -81,14 +76,13 @@ namespace treeview {
                 return const_cast<TVDom*>(this);    // I am my own parent, if I am the root
         }
 
-        enum Kind {
-            tree_view,
+        enum class Kind {
             tree_node,
             tree_leaf,
             other
         };
 
-        bool isLeaf() const { return kind == TVDom::tree_leaf; }
+        bool isLeaf() const { return kind == TVDom::Kind::tree_leaf; }
         void setKind( Kind ind ) { kind = ind; }
 
         void setApplication( const char* appl )
@@ -126,7 +120,7 @@ namespace treeview {
                                     RTL_TEXTENCODING_UTF8 );
         }
 
-        OUString getTargetURL()
+        OUString const & getTargetURL()
         {
             if( targetURL.isEmpty() )
             {
@@ -159,7 +153,7 @@ namespace treeview {
         OUString  targetURL;
 
         TVDom *parent;
-        std::vector< TVDom* > children;
+        std::vector< std::unique_ptr<TVDom> > children;
     };
 
 }
@@ -171,7 +165,6 @@ using namespace com::sun::star::beans;
 using namespace com::sun::star::configuration;
 using namespace com::sun::star::lang;
 using namespace com::sun::star::util;
-using namespace com::sun::star::frame;
 using namespace com::sun::star::container;
 using namespace com::sun::star::deployment;
 
@@ -185,7 +178,7 @@ ConfigData::ConfigData()
     memset(m_vAdd, 0, sizeof(m_vAdd));
 }
 
-void SAL_CALL ConfigData::replaceName( OUString& oustring ) const
+void ConfigData::replaceName( OUString& oustring ) const
 {
     sal_Int32 idx = -1,k = 0,off;
     bool cap = false;
@@ -239,7 +232,7 @@ TVRead::TVRead( const ConfigData& configData,TVDom* tvDom )
     configData.replaceName( Title );
     if( tvDom->isLeaf() )
     {
-        TargetURL = ( tvDom->getTargetURL() + configData.appendix );
+        TargetURL = tvDom->getTargetURL() + configData.appendix;
         if( !tvDom->anchor.isEmpty() )
             TargetURL += "#" + tvDom->anchor;
     }
@@ -255,9 +248,6 @@ TVRead::~TVRead()
 
 Any SAL_CALL
 TVRead::getByName( const OUString& aName )
-    throw( NoSuchElementException,
-           WrappedTargetException,
-           RuntimeException, std::exception )
 {
     bool found( true );
     Any aAny;
@@ -281,7 +271,6 @@ TVRead::getByName( const OUString& aName )
 
 Sequence< OUString > SAL_CALL
 TVRead::getElementNames( )
-    throw( RuntimeException, std::exception )
 {
     Sequence< OUString > seq( 3 );
 
@@ -294,7 +283,6 @@ TVRead::getElementNames( )
 
 sal_Bool SAL_CALL
 TVRead::hasByName( const OUString& aName )
-    throw( RuntimeException, std::exception )
 {
     if( aName == "Title"     ||
         aName == "TargetURL" ||
@@ -308,31 +296,22 @@ TVRead::hasByName( const OUString& aName )
 
 Any SAL_CALL
 TVRead::getByHierarchicalName( const OUString& aName )
-    throw( NoSuchElementException,
-           RuntimeException, std::exception )
 {
-    sal_Int32 idx;
-    OUString name( aName );
+    OUString aRest;
+    if( aName.startsWith("Children/", &aRest) )
+        return Children->getByHierarchicalName( aRest );
 
-    if( ( idx = name.indexOf( '/' ) ) != -1  &&
-        name.copy( 0,idx ) == "Children" )
-        return Children->getByHierarchicalName( name.copy( 1 + idx ) );
-
-    return getByName( name );
+    return getByName( aName );
 }
 
 sal_Bool SAL_CALL
 TVRead::hasByHierarchicalName( const OUString& aName )
-    throw( RuntimeException, std::exception )
 {
-    sal_Int32 idx;
-    OUString name( aName );
+    OUString aRest;
+    if( aName.startsWith("Children/", &aRest) )
+        return Children->hasByHierarchicalName( aRest );
 
-       if( ( idx = name.indexOf( '/' ) ) != -1  &&
-        name.copy( 0,idx ) == "Children" )
-        return Children->hasByHierarchicalName( name.copy( 1 + idx ) );
-
-    return hasByName( name );
+    return hasByName( aName );
 }
 
 /**************************************************************************/
@@ -341,7 +320,9 @@ TVRead::hasByHierarchicalName( const OUString& aName )
 /*                                                                        */
 /**************************************************************************/
 
-extern "C" void start_handler(void *userData,
+extern "C" {
+
+static void start_handler(void *userData,
                    const XML_Char *name,
                    const XML_Char **atts)
 {
@@ -349,9 +330,9 @@ extern "C" void start_handler(void *userData,
 
     if( strcmp( name,"help_section" ) == 0  ||
         strcmp( name,"node" ) == 0 )
-        kind = TVDom::tree_node;
+        kind = TVDom::Kind::tree_node;
     else if( strcmp( name,"topic" ) == 0 )
-        kind = TVDom::tree_leaf;
+        kind = TVDom::Kind::tree_leaf;
     else
         return;
 
@@ -378,16 +359,14 @@ extern "C" void start_handler(void *userData,
     }
 }
 
-extern "C" void end_handler(void *userData,
-                 const XML_Char *name )
+static void end_handler(void *userData,
+                 SAL_UNUSED_PARAMETER const XML_Char * )
 {
-    (void)name;
-
     TVDom **tvDom = static_cast< TVDom** >( userData );
     *tvDom = (*tvDom)->getParent();
 }
 
-extern "C" void data_handler( void *userData,
+static void data_handler( void *userData,
                    const XML_Char *s,
                    int len)
 {
@@ -396,11 +375,13 @@ extern "C" void data_handler( void *userData,
         (*tvDom)->setTitle( s,len );
 }
 
+}
+
 TVChildTarget::TVChildTarget( const ConfigData& configData,TVDom* tvDom )
 {
     Elements.resize( tvDom->children.size() );
     for( size_t i = 0; i < Elements.size(); ++i )
-        Elements[i] = new TVRead( configData,tvDom->children[i] );
+        Elements[i] = new TVRead( configData,tvDom->children[i].get() );
 }
 
 TVChildTarget::TVChildTarget( const Reference< XComponentContext >& xContext )
@@ -419,10 +400,10 @@ TVChildTarget::TVChildTarget( const Reference< XComponentContext >& xContext )
     while( j )
     {
         len = configData.vFileLen[--j];
-        char* s = new char[ int(len) ];  // the buffer to hold the installed files
+        std::unique_ptr<char[]> s(new char[ int(len) ]);  // the buffer to hold the installed files
         osl::File aFile( configData.vFileURL[j] );
         aFile.open( osl_File_OpenFlag_Read );
-        aFile.read( s,len,ret );
+        aFile.read( s.get(),len,ret );
         aFile.close();
 
         XML_Parser parser = XML_ParserCreate( nullptr );
@@ -433,12 +414,11 @@ TVChildTarget::TVChildTarget( const Reference< XComponentContext >& xContext )
                                      data_handler);
         XML_SetUserData( parser,&pTVDom ); // does not return this
 
-        XML_Status const parsed = XML_Parse(parser, s, int(len), j==0);
+        XML_Status const parsed = XML_Parse(parser, s.get(), int(len), j==0);
         SAL_WARN_IF(XML_STATUS_ERROR == parsed, "xmlhelp",
                 "TVChildTarget::TVChildTarget(): Tree file parsing failed");
 
         XML_ParserFree( parser );
-        delete[] s;
 
         Check(pTVDom);
     }
@@ -446,7 +426,7 @@ TVChildTarget::TVChildTarget( const Reference< XComponentContext >& xContext )
 
     Elements.resize( tvDom.children.size() );
     for( size_t i = 0; i < Elements.size(); ++i )
-        Elements[i] = new TVRead( configData,tvDom.children[i] );
+        Elements[i] = new TVRead( configData,tvDom.children[i].get() );
 }
 
 TVChildTarget::~TVChildTarget()
@@ -468,10 +448,16 @@ void TVChildTarget::Check(TVDom* tvDom)
             if (((tvDom->children[i])->application == (tvDom->children[tvDom->children.size()-1])->application) &&
                 ((tvDom->children[i])->id == (tvDom->children[tvDom->children.size()-1])->id))
             {
-                TVDom* p = tvDom->children[tvDom->children.size()-1];
+                TVDom* p = tvDom->children.back().get();
 
-                for(size_t k=0; k<p->children.size(); ++k)
-                    if (!SearchAndInsert(p->children[k], tvDom->children[i]))       tvDom->children[i]->newChild(p->children[k]);
+                for(auto & k : p->children)
+                {
+                    std::unique_ptr<TVDom> tmp(SearchAndInsert(std::move(k), tvDom->children[i].get()));
+                    if (tmp)
+                    {
+                        tvDom->children[i]->newChild(std::move(tmp));
+                    }
+                }
 
                 tvDom->children.pop_back();
                 h = true;
@@ -480,14 +466,15 @@ void TVChildTarget::Check(TVDom* tvDom)
         }
 }
 
-bool TVChildTarget::SearchAndInsert(TVDom* p, TVDom* tvDom)
+std::unique_ptr<TVDom>
+TVChildTarget::SearchAndInsert(std::unique_ptr<TVDom> p, TVDom* tvDom)
 {
-    if (p->isLeaf()) return false;
+    if (p->isLeaf()) return p;
 
     bool h = false;
     sal_Int32 max = 0;
 
-    std::vector< TVDom* >::iterator max_It, i;
+    std::vector< std::unique_ptr<TVDom> >::iterator max_It, i;
     max_It = tvDom->children.begin();
 
     sal_Int32 c_int;
@@ -503,8 +490,8 @@ bool TVChildTarget::SearchAndInsert(TVDom* p, TVDom* tvDom)
 
             if (p_int==c_int)
             {
-                (*(tvDom->children.insert(i+1, p)))->parent = tvDom;
-                return true;
+                (*(tvDom->children.insert(i+1, std::move(p))))->parent = tvDom;
+                return nullptr;
             }
             else if(c_int>max && c_int < p_int)
             {
@@ -512,39 +499,37 @@ bool TVChildTarget::SearchAndInsert(TVDom* p, TVDom* tvDom)
                 max_It = i+1;
             }
         }
-    if (h) (*(tvDom->children.insert(max_It, p)))->parent = tvDom;
+    if (h)
+    {
+        (*(tvDom->children.insert(max_It, std::move(p))))->parent = tvDom;
+        return nullptr;
+    }
     else
     {
-        i = tvDom->children.begin();
-        while ((i!=tvDom->children.end()) && (!h))
+        for (auto& child : tvDom->children)
         {
-            h = SearchAndInsert(p, *i);
-            ++i;
+            p = SearchAndInsert(std::move(p), child.get());
+            if (p == nullptr)
+                break;
         }
+        return p;
     }
-    return h;
 }
 
 Any SAL_CALL
 TVChildTarget::getByName( const OUString& aName )
-    throw( NoSuchElementException,
-           WrappedTargetException,
-           RuntimeException, std::exception )
 {
-    OUString num( aName.getStr()+2,aName.getLength()-4 );
+    OUString num( aName.copy( 2, aName.getLength()-4 ) );
     sal_Int32 idx = num.toInt32() - 1;
     if( idx < 0 || Elements.size() <= sal_uInt32( idx ) )
         throw NoSuchElementException();
 
-    Any aAny;
     cppu::OWeakObject* p = Elements[idx].get();
-    aAny <<= Reference< XInterface >( p );
-    return aAny;
+    return Any( Reference< XInterface >( p ) );
 }
 
 Sequence< OUString > SAL_CALL
 TVChildTarget::getElementNames( )
-    throw( RuntimeException, std::exception )
 {
     Sequence< OUString > seq( Elements.size() );
     for( size_t i = 0; i < Elements.size(); ++i )
@@ -555,9 +540,8 @@ TVChildTarget::getElementNames( )
 
 sal_Bool SAL_CALL
 TVChildTarget::hasByName( const OUString& aName )
-    throw( RuntimeException, std::exception )
 {
-    OUString num( aName.getStr()+2,aName.getLength()-4 );
+    OUString num( aName.copy( 2, aName.getLength()-4 ) );
     sal_Int32 idx = num.toInt32() - 1;
     if( idx < 0 || Elements.size() <= sal_uInt32( idx ) )
         return false;
@@ -569,44 +553,39 @@ TVChildTarget::hasByName( const OUString& aName )
 
 Any SAL_CALL
 TVChildTarget::getByHierarchicalName( const OUString& aName )
-    throw( NoSuchElementException,
-           RuntimeException, std::exception )
 {
     sal_Int32 idx;
-    OUString name( aName );
 
-    if( ( idx = name.indexOf( '/' ) ) != -1 )
+    if( ( idx = aName.indexOf( '/' ) ) != -1 )
     {
-        OUString num( name.getStr()+2,idx-4 );
+        OUString num( aName.copy( 2, idx-4 ) );
         sal_Int32 pref = num.toInt32() - 1;
 
         if( pref < 0 || Elements.size() <= sal_uInt32( pref ) )
             throw NoSuchElementException();
 
-        return Elements[pref]->getByHierarchicalName( name.copy( 1 + idx ) );
+        return Elements[pref]->getByHierarchicalName( aName.copy( 1 + idx ) );
     }
     else
-        return getByName( name );
+        return getByName( aName );
 }
 
 sal_Bool SAL_CALL
 TVChildTarget::hasByHierarchicalName( const OUString& aName )
-    throw( RuntimeException, std::exception )
 {
     sal_Int32 idx;
-    OUString name( aName );
 
-       if( ( idx = name.indexOf( '/' ) ) != -1 )
+    if( ( idx = aName.indexOf( '/' ) ) != -1 )
     {
-        OUString num( name.getStr()+2,idx-4 );
+        OUString num( aName.copy( 2, idx-4 ) );
         sal_Int32 pref = num.toInt32() - 1;
         if( pref < 0 || Elements.size() <= sal_uInt32( pref ) )
             return false;
 
-        return Elements[pref]->hasByHierarchicalName( name.copy( 1 + idx ) );
+        return Elements[pref]->hasByHierarchicalName( aName.copy( 1 + idx ) );
     }
     else
-        return hasByName( name );
+        return hasByName( aName );
 }
 
 ConfigData TVChildTarget::init( const Reference< XComponentContext >& xContext )
@@ -644,11 +623,10 @@ ConfigData TVChildTarget::init( const Reference< XComponentContext >& xContext )
     {
         Reference< lang::XMultiServiceFactory > xConfigProvider = theDefaultProvider::get( xContext );
 
-        uno::Sequence < uno::Any > lParams(1);
-        beans::PropertyValue                       aParam ;
-        aParam.Name    = "nodepath";
-        aParam.Value <<= OUString("/org.openoffice.Setup/Product");
-        lParams[0] = uno::makeAny(aParam);
+        uno::Sequence<uno::Any> lParams(comphelper::InitAnyPropertySequence(
+        {
+            {"nodepath", uno::Any(OUString("/org.openoffice.Setup/Product"))}
+        }));
 
         // open it
         uno::Reference< uno::XInterface > xCFG( xConfigProvider->createInstanceWithArguments(
@@ -870,7 +848,7 @@ void TVChildTarget::subst( OUString& instpath )
 static const char aHelpMediaType[] = "application/vnd.sun.star.help";
 
 ExtensionIteratorBase::ExtensionIteratorBase( const OUString& aLanguage )
-        : m_eState( USER_EXTENSIONS )
+        : m_eState( IteratorState::UserExtensions )
         , m_aLanguage( aLanguage )
 {
     init();
@@ -895,7 +873,7 @@ void ExtensionIteratorBase::init()
 }
 
 Reference< deployment::XPackage > ExtensionIteratorBase::implGetHelpPackageFromPackage
-    ( Reference< deployment::XPackage > xPackage, Reference< deployment::XPackage >& o_xParentPackageBundle )
+    ( const Reference< deployment::XPackage >& xPackage, Reference< deployment::XPackage >& o_xParentPackageBundle )
 {
     o_xParentPackageBundle.clear();
 
@@ -963,7 +941,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextUserHelpPack
 
     if( m_iUserPackage == m_aUserPackagesSeq.getLength() )
     {
-        m_eState = SHARED_EXTENSIONS;       // Later: SHARED_MODULE
+        m_eState = IteratorState::SharedExtensions;       // Later: SHARED_MODULE
     }
     else
     {
@@ -993,7 +971,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextSharedHelpPa
 
     if( m_iSharedPackage == m_aSharedPackagesSeq.getLength() )
     {
-        m_eState = BUNDLED_EXTENSIONS;
+        m_eState = IteratorState::BundledExtensions;
     }
     else
     {
@@ -1023,7 +1001,7 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextBundledHelpP
 
     if( m_iBundledPackage == m_aBundledPackagesSeq.getLength() )
     {
-        m_eState = END_REACHED;
+        m_eState = IteratorState::EndReached;
     }
     else
     {
@@ -1036,13 +1014,13 @@ Reference< deployment::XPackage > ExtensionIteratorBase::implGetNextBundledHelpP
     return xHelpPackage;
 }
 
-inline bool isLetter( sal_Unicode c )
+static bool isLetter( sal_Unicode c )
 {
     return rtl::isAsciiAlpha(c);
 }
 
 void ExtensionIteratorBase::implGetLanguageVectorFromPackage( ::std::vector< OUString > &rv,
-    css::uno::Reference< css::deployment::XPackage > xPackage )
+    const css::uno::Reference< css::deployment::XPackage >& xPackage )
 {
     rv.clear();
     OUString aExtensionPath = xPackage->getURL();
@@ -1079,11 +1057,11 @@ OUString TreeFileIterator::nextTreeFile( sal_Int32& rnFileSize )
 {
     OUString aRetFile;
 
-    while( aRetFile.isEmpty() && m_eState != END_REACHED )
+    while( aRetFile.isEmpty() && m_eState != IteratorState::EndReached )
     {
         switch( m_eState )
         {
-            case USER_EXTENSIONS:
+            case IteratorState::UserExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextUserHelpPackage( xParentPackageBundle );
@@ -1094,7 +1072,7 @@ OUString TreeFileIterator::nextTreeFile( sal_Int32& rnFileSize )
                 break;
             }
 
-            case SHARED_EXTENSIONS:
+            case IteratorState::SharedExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextSharedHelpPackage( xParentPackageBundle );
@@ -1104,7 +1082,7 @@ OUString TreeFileIterator::nextTreeFile( sal_Int32& rnFileSize )
                 aRetFile = implGetTreeFileFromPackage( rnFileSize, xHelpPackage );
                 break;
             }
-            case BUNDLED_EXTENSIONS:
+            case IteratorState::BundledExtensions:
             {
                 Reference< deployment::XPackage > xParentPackageBundle;
                 Reference< deployment::XPackage > xHelpPackage = implGetNextBundledHelpPackage( xParentPackageBundle );
@@ -1115,8 +1093,8 @@ OUString TreeFileIterator::nextTreeFile( sal_Int32& rnFileSize )
                 break;
             }
 
-        case END_REACHED:
-                OSL_FAIL( "DataBaseIterator::nextTreeFile(): Invalid case END_REACHED" );
+        case IteratorState::EndReached:
+                OSL_FAIL( "DataBaseIterator::nextTreeFile(): Invalid case IteratorState::EndReached" );
                 break;
         }
     }
@@ -1156,7 +1134,7 @@ OUString TreeFileIterator::expandURL( const OUString& aURL )
 }
 
 OUString TreeFileIterator::implGetTreeFileFromPackage
-    ( sal_Int32& rnFileSize, Reference< deployment::XPackage > xPackage )
+    ( sal_Int32& rnFileSize, const Reference< deployment::XPackage >& xPackage )
 {
     OUString aRetFile;
     OUString aLanguage = m_aLanguage;

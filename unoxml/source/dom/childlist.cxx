@@ -17,12 +17,12 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <childlist.hxx>
+#include "childlist.hxx"
 
 #include <libxml/tree.h>
 
 #include <node.hxx>
-#include <document.hxx>
+#include "document.hxx"
 
 using namespace css::uno;
 using namespace css::xml::dom;
@@ -39,7 +39,7 @@ namespace DOM
     /**
     The number of nodes in the list.
     */
-    sal_Int32 SAL_CALL CChildList::getLength() throw (RuntimeException, std::exception)
+    sal_Int32 SAL_CALL CChildList::getLength()
     {
         ::osl::MutexGuard const g(m_rMutex);
 
@@ -63,7 +63,6 @@ namespace DOM
     Returns the indexth item in the collection.
     */
     Reference< XNode > SAL_CALL CChildList::item(sal_Int32 index)
-        throw (RuntimeException, std::exception)
     {
         ::osl::MutexGuard const g(m_rMutex);
 

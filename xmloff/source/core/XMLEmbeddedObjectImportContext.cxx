@@ -18,9 +18,9 @@
  */
 
 #include <com/sun/star/document/XImporter.hpp>
+#include <com/sun/star/uno/XComponentContext.hpp>
 #include <com/sun/star/util/XModifiable.hpp>
 #include <com/sun/star/util/XModifiable2.hpp>
-#include <com/sun/star/frame/XStorable.hpp>
 #include <tools/globname.hxx>
 #include <comphelper/classids.hxx>
 #include <xmloff/nmspmap.hxx>
@@ -30,43 +30,15 @@
 #include <xmloff/xmlerror.hxx>
 #include <xmloff/attrlist.hxx>
 #include <xmloff/XMLFilterServiceNames.h>
-#include "XMLEmbeddedObjectImportContext.hxx"
+#include <XMLEmbeddedObjectImportContext.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::util;
 using namespace ::com::sun::star::beans;
 using namespace ::com::sun::star::lang;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::document;
 using namespace ::com::sun::star::xml::sax;
 using namespace ::xmloff::token;
-
-namespace {
-
-struct XMLServiceMapEntry_Impl
-{
-    enum XMLTokenEnum eClass;
-    const sal_Char *sFilterService;
-    sal_Int32      nFilterServiceLen;
-};
-
-}
-
-#define SERVICE_MAP_ENTRY( cls, app ) \
-    { XML_##cls, \
-      XML_IMPORT_FILTER_##app, sizeof(XML_IMPORT_FILTER_##app)-1}
-
-const XMLServiceMapEntry_Impl aServiceMap[] =
-{
-    SERVICE_MAP_ENTRY( TEXT, WRITER ),
-    SERVICE_MAP_ENTRY( ONLINE_TEXT, WRITER ),
-    SERVICE_MAP_ENTRY( SPREADSHEET, CALC ),
-    SERVICE_MAP_ENTRY( DRAWING, DRAW ),
-    SERVICE_MAP_ENTRY( GRAPHICS, DRAW ),
-    SERVICE_MAP_ENTRY( PRESENTATION, IMPRESS ),
-    SERVICE_MAP_ENTRY( CHART, CHART ),
-    { XML_TOKEN_INVALID, nullptr, 0 }
-};
 
 class XMLEmbeddedObjectImportContext_Impl : public SvXMLImportContext
 {
@@ -78,9 +50,7 @@ public:
                                     const OUString& rLName,
     const css::uno::Reference< css::xml::sax::XDocumentHandler >& rHandler );
 
-    virtual ~XMLEmbeddedObjectImportContext_Impl();
-
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                                    const OUString& rLocalName,
                                    const css::uno::Reference< css::xml::sax::XAttributeList >& xAttrList ) override;
 
@@ -101,11 +71,7 @@ XMLEmbeddedObjectImportContext_Impl::XMLEmbeddedObjectImportContext_Impl(
 {
 }
 
-XMLEmbeddedObjectImportContext_Impl::~XMLEmbeddedObjectImportContext_Impl()
-{
-}
-
-SvXMLImportContext *XMLEmbeddedObjectImportContext_Impl::CreateChildContext(
+SvXMLImportContextRef XMLEmbeddedObjectImportContext_Impl::CreateChildContext(
         sal_uInt16 nPrefix,
         const OUString& rLocalName,
         const Reference< XAttributeList >& )
@@ -135,8 +101,7 @@ void XMLEmbeddedObjectImportContext_Impl::Characters( const OUString& rChars )
 }
 
 
-void XMLEmbeddedObjectImportContext::SetComponent(
-        Reference< XComponent >& rComp )
+void XMLEmbeddedObjectImportContext::SetComponent( Reference< XComponent > const & rComp )
 {
     if( !rComp.is() || sFilterService.isEmpty() )
         return;
@@ -151,6 +116,9 @@ void XMLEmbeddedObjectImportContext::SetComponent(
 
     if( !xHandler.is() )
         return;
+
+    if (SvXMLImport *pFastHandler = dynamic_cast<SvXMLImport*>(xHandler.get()))
+        xHandler.set( new SvXMLLegacyToFastDocHandler( pFastHandler ) );
 
     try
     {
@@ -200,36 +168,37 @@ XMLEmbeddedObjectImportContext::XMLEmbeddedObjectImportContext(
         }
 
         OUString sClass;
-        static const char * aTmp[] =
-        {
+        static OUStringLiteral const prefixes[] = {
             "application/vnd.oasis.openoffice.",
             "application/x-vnd.oasis.openoffice.",
             "application/vnd.oasis.opendocument.",
-            "application/x-vnd.oasis.opendocument.",
-            nullptr
-        };
-        for (int k=0; aTmp[k]; k++)
+            "application/x-vnd.oasis.opendocument."};
+        for (auto const & p: prefixes)
         {
-            OUString sTmpString = OUString::createFromAscii(aTmp[k]);
-            if( sMime.matchAsciiL( aTmp[k], sTmpString.getLength() ) )
+            if (sMime.startsWith(p, &sClass))
             {
-                sClass = sMime.copy( sTmpString.getLength() );
                 break;
             }
         }
 
         if( !sClass.isEmpty() )
         {
-            const XMLServiceMapEntry_Impl *pEntry = aServiceMap;
-            while( pEntry->eClass != XML_TOKEN_INVALID )
+            static struct { XMLTokenEnum eClass; OUStringLiteral sFilterService;
+            } const aServiceMap[] = {
+                { XML_TEXT,         OUStringLiteral(XML_IMPORT_FILTER_WRITER) },
+                { XML_ONLINE_TEXT,  OUStringLiteral(XML_IMPORT_FILTER_WRITER) },
+                { XML_SPREADSHEET,  OUStringLiteral(XML_IMPORT_FILTER_CALC) },
+                { XML_DRAWING,      OUStringLiteral(XML_IMPORT_FILTER_DRAW) },
+                { XML_GRAPHICS,     OUStringLiteral(XML_IMPORT_FILTER_DRAW) },
+                { XML_PRESENTATION, OUStringLiteral(XML_IMPORT_FILTER_IMPRESS) },
+                { XML_CHART,        OUStringLiteral(XML_IMPORT_FILTER_CHART) }};
+            for (auto const & entry: aServiceMap)
             {
-                if( IsXMLToken( sClass, pEntry->eClass ) )
+                if( IsXMLToken( sClass, entry.eClass ) )
                 {
-                    sFilterService = OUString( pEntry->sFilterService,
-                                               pEntry->nFilterServiceLen,
-                                               RTL_TEXTENCODING_ASCII_US );
+                    sFilterService = entry.sFilterService;
 
-                    switch( pEntry->eClass )
+                    switch( entry.eClass )
                     {
                     case XML_TEXT:          aName = SvGlobalName(SO3_SW_CLASSID); break;
                     case XML_ONLINE_TEXT:   aName = SvGlobalName(SO3_SWWEB_CLASSID); break;
@@ -245,7 +214,6 @@ XMLEmbeddedObjectImportContext::XMLEmbeddedObjectImportContext(
 
                     break;
                 }
-                pEntry++;
             }
         }
     }
@@ -257,7 +225,7 @@ XMLEmbeddedObjectImportContext::~XMLEmbeddedObjectImportContext()
 {
 }
 
-SvXMLImportContext *XMLEmbeddedObjectImportContext::CreateChildContext(
+SvXMLImportContextRef XMLEmbeddedObjectImportContext::CreateChildContext(
         sal_uInt16 nPrefix, const OUString& rLocalName,
         const Reference< XAttributeList >& )
 {
@@ -308,7 +276,7 @@ void XMLEmbeddedObjectImportContext::EndElement()
     {
         Reference < XModifiable2 > xModifiable2( xComp, UNO_QUERY_THROW );
         xModifiable2->enableSetModified();
-        xModifiable2->setModified( sal_True ); // trigger new replacement image generation
+        xModifiable2->setModified( true ); // trigger new replacement image generation
     }
     catch( Exception& )
     {

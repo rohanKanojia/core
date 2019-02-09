@@ -20,13 +20,10 @@
 #ifndef INCLUDED_CHART2_SOURCE_VIEW_AXES_TICKMARKPROPERTIES_HXX
 #define INCLUDED_CHART2_SOURCE_VIEW_AXES_TICKMARKPROPERTIES_HXX
 
-#include "VLineProperties.hxx"
+#include <VLineProperties.hxx>
 
 namespace chart
 {
-
-/**
-*/
 
 struct TickmarkProperties
 {

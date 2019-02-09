@@ -23,56 +23,54 @@
 #include <sal/types.h>
 #include <rtl/ustring.hxx>
 
-#if defined _MSC_VER
-#pragma warning(push,1)
+#if !defined WIN32_LEAN_AND_MEAN
+# define WIN32_LEAN_AND_MEAN
 #endif
 #include <windows.h>
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+#include <objidl.h>
 
 // target device and formatetc helper
-void      SAL_CALL DeleteTargetDevice(DVTARGETDEVICE* ptd);
-sal_Bool  SAL_CALL CopyFormatEtc(LPFORMATETC petcDest, LPFORMATETC petcSrc);
-sal_Int32 SAL_CALL CompareFormatEtc( const FORMATETC* pFetcLeft, const FORMATETC* pFetcRight);
-sal_Bool  SAL_CALL CompareTargetDevice(DVTARGETDEVICE* ptdLeft, DVTARGETDEVICE* ptdRight);
-DVTARGETDEVICE* SAL_CALL CopyTargetDevice(DVTARGETDEVICE* ptdSrc);
+void DeleteTargetDevice(DVTARGETDEVICE* ptd);
+bool CopyFormatEtc(LPFORMATETC petcDest, LPFORMATETC petcSrc);
+sal_Int32 CompareFormatEtc( const FORMATETC* pFetcLeft, const FORMATETC* pFetcRight);
+bool CompareTargetDevice(DVTARGETDEVICE* ptdLeft, DVTARGETDEVICE const * ptdRight);
+DVTARGETDEVICE* CopyTargetDevice(DVTARGETDEVICE* ptdSrc);
 
 // some codepage helper functions
 
 // returns a windows codepage appropriate to the
 // given mime charset parameter value
 
-sal_uInt32 SAL_CALL getWinCPFromMimeCharset(
+sal_uInt32 getWinCPFromMimeCharset(
     const OUString& charset );
 
 // returns a windows codepage appropriate to the
 // given locale and locale type
 
-OUString SAL_CALL getWinCPFromLocaleId(
+OUString getWinCPFromLocaleId(
     LCID lcid, LCTYPE lctype );
 
 // returns a mime charset parameter value appropriate
 // to the given codepage, optional a prefix can be
 // given, e.g. "windows-" or "cp"
 
-OUString SAL_CALL getMimeCharsetFromWinCP(
+OUString getMimeCharsetFromWinCP(
     sal_uInt32 cp, const OUString& aPrefix );
 
 // returns a mime charset parameter value appropriate
 // to the given locale id and locale type, optional a
 // prefix can be given, e.g. "windows-" or "cp"
 
-OUString SAL_CALL getMimeCharsetFromLocaleId(
+OUString getMimeCharsetFromLocaleId(
     LCID lcid, LCTYPE lctype, const OUString& aPrefix  );
 
 // returns true, if a given codepage is an oem codepage
 
-sal_Bool SAL_CALL IsOEMCP( sal_uInt32 codepage );
+bool IsOEMCP( sal_uInt32 codepage );
 
 // converts a codepage into a string representation
 
-OUString SAL_CALL cptostr( sal_uInt32 codepage );
+OUString cptostr( sal_uInt32 codepage );
 
 #endif
 

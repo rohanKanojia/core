@@ -132,7 +132,7 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageBackgroun
         {
             aInitColor = pPageView->GetApplicationDocumentColor();
 
-            if(Color(COL_AUTO) == aInitColor)
+            if(COL_AUTO == aInitColor)
             {
                 const svtools::ColorConfig aColorConfig;
                 aInitColor = aColorConfig.GetColorValue(svtools::DOCCOLOR).nColor;
@@ -215,8 +215,8 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageFill::cre
     {
         const SdrPage& rPage = getPage();
 
-        const basegfx::B2DRange aPageFillRange(0.0, 0.0, (double)rPage.GetWdt(), (double)rPage.GetHgt());
-        const basegfx::B2DPolygon aPageFillPolygon(basegfx::tools::createPolygonFromRect(aPageFillRange));
+        const basegfx::B2DRange aPageFillRange(0.0, 0.0, static_cast<double>(rPage.GetWidth()), static_cast<double>(rPage.GetHeight()));
+        const basegfx::B2DPolygon aPageFillPolygon(basegfx::utils::createPolygonFromRect(aPageFillRange));
         Color aPageFillColor;
 
         if(pPageView->GetApplicationDocumentColor() != COL_AUTO)
@@ -311,12 +311,7 @@ bool ViewObjectContactOfOuterPageBorder::isPrimitiveVisible(const DisplayInfo& r
 
     const SdrView& rView = pSdrPageView->GetView();
 
-    if(!rView.IsPageVisible() && rView.IsPageBorderVisible())
-    {
-        return false;
-    }
-
-    return true;
+    return rView.IsPageVisible() || !rView.IsPageBorderVisible();
 }
 
 ViewObjectContactOfInnerPageBorder::ViewObjectContactOfInnerPageBorder(ObjectContact& rObjectContact, ViewContact& rViewContact)
@@ -349,7 +344,7 @@ bool ViewObjectContactOfInnerPageBorder::isPrimitiveVisible(const DisplayInfo& r
 
     const SdrPage& rPage = getPage();
 
-    if(!rPage.GetLftBorder() && !rPage.GetUppBorder() && !rPage.GetRgtBorder() && !rPage.GetLwrBorder())
+    if(!rPage.GetLeftBorder() && !rPage.GetUpperBorder() && !rPage.GetRightBorder() && !rPage.GetLowerBorder())
     {
         return false;
     }
@@ -438,7 +433,7 @@ bool ViewObjectContactOfPageGrid::isPrimitiveVisible(const DisplayInfo& rDisplay
         return false;
     }
 
-    if(static_cast< ViewContactOfGrid& >(GetViewContact()).getFront() != (bool)rView.IsGridFront())
+    if(static_cast< ViewContactOfGrid& >(GetViewContact()).getFront() != rView.IsGridFront())
     {
         return false;
     }
@@ -459,10 +454,10 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageGrid::cre
         const basegfx::BColor aRGBGridColor(aGridColor.getBColor());
 
         basegfx::B2DHomMatrix aGridMatrix;
-        aGridMatrix.set(0, 0, (double)(rPage.GetWdt() - (rPage.GetRgtBorder() + rPage.GetLftBorder())));
-        aGridMatrix.set(1, 1, (double)(rPage.GetHgt() - (rPage.GetLwrBorder() + rPage.GetUppBorder())));
-        aGridMatrix.set(0, 2, (double)rPage.GetLftBorder());
-        aGridMatrix.set(1, 2, (double)rPage.GetUppBorder());
+        aGridMatrix.set(0, 0, static_cast<double>(rPage.GetWidth() - (rPage.GetRightBorder() + rPage.GetLeftBorder())));
+        aGridMatrix.set(1, 1, static_cast<double>(rPage.GetHeight() - (rPage.GetLowerBorder() + rPage.GetUpperBorder())));
+        aGridMatrix.set(0, 2, static_cast<double>(rPage.GetLeftBorder()));
+        aGridMatrix.set(1, 2, static_cast<double>(rPage.GetUpperBorder()));
 
         const Size aRaw(rView.GetGridCoarse());
         const Size aFine(rView.GetGridFine());
@@ -516,7 +511,7 @@ bool ViewObjectContactOfPageHelplines::isPrimitiveVisible(const DisplayInfo& rDi
         return false;
     }
 
-    if(static_cast< ViewContactOfHelplines& >(GetViewContact()).getFront() != (bool)rView.IsHlplFront())
+    if(static_cast< ViewContactOfHelplines& >(GetViewContact()).getFront() != rView.IsHlplFront())
     {
         return false;
     }
@@ -540,32 +535,32 @@ drawinglayer::primitive2d::Primitive2DContainer ViewObjectContactOfPageHelplines
             const basegfx::BColor aRGBColorB(0.0, 0.0, 0.0);
             xRetval.resize(nCount);
 
-            for(sal_uInt32 a(0L); a < nCount; a++)
+            for(sal_uInt32 a(0); a < nCount; a++)
             {
-                const SdrHelpLine& rHelpLine = rHelpLineList[(sal_uInt16)a];
-                const basegfx::B2DPoint aPosition((double)rHelpLine.GetPos().X(), (double)rHelpLine.GetPos().Y());
+                const SdrHelpLine& rHelpLine = rHelpLineList[static_cast<sal_uInt16>(a)];
+                const basegfx::B2DPoint aPosition(static_cast<double>(rHelpLine.GetPos().X()), static_cast<double>(rHelpLine.GetPos().Y()));
                 const double fDiscreteDashLength(4.0);
 
                 switch(rHelpLine.GetKind())
                 {
-                    default : // SDRHELPLINE_POINT
+                    default : // SdrHelpLineKind::Point
                     {
                         xRetval[a] = drawinglayer::primitive2d::Primitive2DReference(new drawinglayer::primitive2d::HelplinePrimitive2D(
-                            aPosition, basegfx::B2DVector(1.0, 0.0), drawinglayer::primitive2d::HELPLINESTYLE2D_POINT,
+                            aPosition, basegfx::B2DVector(1.0, 0.0), drawinglayer::primitive2d::HelplineStyle2D::Point,
                             aRGBColorA, aRGBColorB, fDiscreteDashLength));
                         break;
                     }
-                    case SDRHELPLINE_VERTICAL :
+                    case SdrHelpLineKind::Vertical :
                     {
                         xRetval[a] = drawinglayer::primitive2d::Primitive2DReference(new drawinglayer::primitive2d::HelplinePrimitive2D(
-                            aPosition, basegfx::B2DVector(0.0, 1.0), drawinglayer::primitive2d::HELPLINESTYLE2D_LINE,
+                            aPosition, basegfx::B2DVector(0.0, 1.0), drawinglayer::primitive2d::HelplineStyle2D::Line,
                             aRGBColorA, aRGBColorB, fDiscreteDashLength));
                         break;
                     }
-                    case SDRHELPLINE_HORIZONTAL :
+                    case SdrHelpLineKind::Horizontal :
                     {
                         xRetval[a] = drawinglayer::primitive2d::Primitive2DReference(new drawinglayer::primitive2d::HelplinePrimitive2D(
-                            aPosition, basegfx::B2DVector(1.0, 0.0), drawinglayer::primitive2d::HELPLINESTYLE2D_LINE,
+                            aPosition, basegfx::B2DVector(1.0, 0.0), drawinglayer::primitive2d::HelplineStyle2D::Line,
                             aRGBColorA, aRGBColorB, fDiscreteDashLength));
                         break;
                     }

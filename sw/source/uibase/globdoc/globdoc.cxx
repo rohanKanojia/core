@@ -17,21 +17,22 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <comphelper/fileformat.h>
 #include <comphelper/classids.hxx>
 #include <unotools/moduleoptions.hxx>
+#include <osl/diagnose.h>
 
 #include <unomid.h>
 
-#include "swtypes.hxx"
-#include "shellio.hxx"
-#include "globdoc.hxx"
-#include "globdoc.hrc"
-#include "cfgid.h"
+#include <swtypes.hxx>
+#include <shellio.hxx>
+#include <globdoc.hxx>
+#include <strings.hrc>
 
 // Description: Register all filters
 
 
-SFX_IMPL_OBJECTFACTORY( SwGlobalDocShell, SvGlobalName(SO3_SWGLOB_CLASSID), SfxObjectShellFlags::STD_NORMAL|SfxObjectShellFlags::HASMENU, "swriter/GlobalDocument" )
+SFX_IMPL_OBJECTFACTORY( SwGlobalDocShell, SvGlobalName(SO3_SWGLOB_CLASSID), "swriter/GlobalDocument" )
 
 SwGlobalDocShell::SwGlobalDocShell(SfxObjectCreateMode eMode ) :
         SwDocShell(eMode)
@@ -54,17 +55,17 @@ void SwGlobalDocShell::FillClass( SvGlobalName * pClassName,
     {
         *pClassName = SvGlobalName( SO3_SWGLOB_CLASSID_60 );
         *pClipFormat = SotClipboardFormatId::STARWRITERGLOB_60;
-        *pLongUserName = SW_RESSTR(STR_WRITER_GLOBALDOC_FULLTYPE);
+        *pLongUserName = SwResId(STR_WRITER_GLOBALDOC_FULLTYPE);
         OSL_ENSURE( !bTemplate, "No template for Writer Global" );
     }
     else if (nVersion == SOFFICE_FILEFORMAT_8)
     {
         *pClassName     = SvGlobalName( SO3_SWGLOB_CLASSID_60 );
         *pClipFormat    = bTemplate ? SotClipboardFormatId::STARWRITERGLOB_8_TEMPLATE : SotClipboardFormatId::STARWRITERGLOB_8;
-        *pLongUserName = SW_RESSTR(STR_WRITER_GLOBALDOC_FULLTYPE);
+        *pLongUserName = SwResId(STR_WRITER_GLOBALDOC_FULLTYPE);
     }
 
-    *pUserName = SW_RESSTR(STR_HUMAN_SWGLOBDOC_NAME);
+    *pUserName = SwResId(STR_HUMAN_SWGLOBDOC_NAME);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

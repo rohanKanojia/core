@@ -10,270 +10,234 @@
 #ifndef INCLUDED_COMPILERPLUGINS_CLANG_COMPAT_HXX
 #define INCLUDED_COMPILERPLUGINS_CLANG_COMPAT_HXX
 
-#include <memory>
-#include <string>
+#include <cstddef>
+#include <utility>
 
 #include "clang/AST/Decl.h"
-#include "clang/AST/DeclBase.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/Expr.h"
-#include "clang/AST/Type.h"
-#include "clang/Basic/Diagnostic.h"
-#include "clang/Basic/DiagnosticIDs.h"
-#include "clang/Basic/Linkage.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/Basic/Visibility.h"
 #include "clang/Frontend/CompilerInstance.h"
-#include "clang/Lex/PPCallbacks.h"
-#include "clang/Lex/Preprocessor.h"
+#include "clang/Lex/Lexer.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/FileSystem.h"
-#include "llvm/Support/raw_ostream.h"
 
 #include "config_clang.h"
-
-#if CLANG_VERSION >= 30400
-#define LO_COMPILERPLUGINS_CLANG_COMPAT_HAVE_isAtEndOfImmediateMacroExpansion \
-    true
-#else
-#define LO_COMPILERPLUGINS_CLANG_COMPAT_HAVE_isAtEndOfImmediateMacroExpansion \
-    false
-#endif
 
 // Compatibility wrapper to abstract over (trivial) changes in the Clang API:
 namespace compat {
 
-inline bool isLookupContext(clang::DeclContext const & ctxt) {
-#if CLANG_VERSION >= 30700
-    return ctxt.isLookupContext();
+inline clang::SourceLocation getBeginLoc(clang::Decl const * decl) {
+#if CLANG_VERSION >= 80000
+    return decl->getBeginLoc();
 #else
-    return !ctxt.isFunctionOrMethod()
-        && ctxt.getDeclKind() != clang::Decl::LinkageSpec;
+    return decl->getLocStart();
 #endif
 }
 
-inline bool isExternCContext(clang::DeclContext const & ctxt) {
-#if CLANG_VERSION >= 30400
-    return ctxt.isExternCContext();
+inline clang::SourceLocation getEndLoc(clang::Decl const * decl) {
+#if CLANG_VERSION >= 80000
+    return decl->getEndLoc();
 #else
-    for (clang::DeclContext const * c = &ctxt;
-         c->getDeclKind() != clang::Decl::TranslationUnit; c = c->getParent())
-    {
-        if (c->getDeclKind() == clang::Decl::LinkageSpec) {
-            return llvm::cast<clang::LinkageSpecDecl>(c)->getLanguage()
-                == clang::LinkageSpecDecl::lang_c;
-        }
+    return decl->getLocEnd();
+#endif
+}
+
+inline clang::SourceLocation getBeginLoc(clang::DeclarationNameInfo const & info) {
+#if CLANG_VERSION >= 80000
+    return info.getBeginLoc();
+#else
+    return info.getLocStart();
+#endif
+}
+
+inline clang::SourceLocation getEndLoc(clang::DeclarationNameInfo const & info) {
+#if CLANG_VERSION >= 80000
+    return info.getEndLoc();
+#else
+    return info.getLocEnd();
+#endif
+}
+
+inline clang::SourceLocation getBeginLoc(clang::Stmt const * stmt) {
+#if CLANG_VERSION >= 80000
+    return stmt->getBeginLoc();
+#else
+    return stmt->getLocStart();
+#endif
+}
+
+inline clang::SourceLocation getEndLoc(clang::Stmt const * stmt) {
+#if CLANG_VERSION >= 80000
+    return stmt->getEndLoc();
+#else
+    return stmt->getLocEnd();
+#endif
+}
+
+inline clang::SourceLocation getBeginLoc(clang::CXXBaseSpecifier const * spec) {
+#if CLANG_VERSION >= 80000
+    return spec->getBeginLoc();
+#else
+    return spec->getLocStart();
+#endif
+}
+
+inline clang::SourceLocation getEndLoc(clang::CXXBaseSpecifier const * spec) {
+#if CLANG_VERSION >= 80000
+    return spec->getEndLoc();
+#else
+    return spec->getLocEnd();
+#endif
+}
+
+inline std::pair<clang::SourceLocation, clang::SourceLocation> getImmediateExpansionRange(
+    clang::SourceManager const & SM, clang::SourceLocation Loc)
+{
+#if CLANG_VERSION >= 70000
+    auto const csr = SM.getImmediateExpansionRange(Loc);
+    if (csr.isCharRange()) { /*TODO*/ }
+    return {csr.getBegin(), csr.getEnd()};
+#else
+    return SM.getImmediateExpansionRange(Loc);
+#endif
+}
+
+inline bool isPointWithin(
+    clang::SourceManager const & SM, clang::SourceLocation Location, clang::SourceLocation Start,
+    clang::SourceLocation End)
+{
+#if CLANG_VERSION >= 60000
+    return SM.isPointWithin(Location, Start, End);
+#else
+    return
+        Location == Start || Location == End
+        || (SM.isBeforeInTranslationUnit(Start, Location)
+            && SM.isBeforeInTranslationUnit(Location, End));
+#endif
+}
+
+inline clang::Expr const * IgnoreImplicit(clang::Expr const * expr) {
+#if CLANG_VERSION >= 80000
+    return expr->IgnoreImplicit();
+#else
+    using namespace clang;
+    // Copy from Clang's lib/AST/Stmt.cpp, including <https://reviews.llvm.org/D50666> "Fix
+    // Stmt::ignoreImplicit":
+    Stmt const *s = expr;
+
+    Stmt const *lasts = nullptr;
+
+    while (s != lasts) {
+        lasts = s;
+
+        if (auto *ewc = dyn_cast<ExprWithCleanups>(s))
+            s = ewc->getSubExpr();
+
+        if (auto *mte = dyn_cast<MaterializeTemporaryExpr>(s))
+            s = mte->GetTemporaryExpr();
+
+        if (auto *bte = dyn_cast<CXXBindTemporaryExpr>(s))
+            s = bte->getSubExpr();
+
+        if (auto *ice = dyn_cast<ImplicitCastExpr>(s))
+            s = ice->getSubExpr();
     }
-    return false;
+
+    return static_cast<Expr const *>(s);
 #endif
 }
 
-inline bool isInExternCContext(clang::FunctionDecl const & decl) {
-#if CLANG_VERSION >= 30400
-    return decl.isInExternCContext();
+inline bool CPlusPlus17(clang::LangOptions const & opts) {
+#if CLANG_VERSION >= 60000
+    return opts.CPlusPlus17;
 #else
-    return isExternCContext(*decl.getCanonicalDecl()->getDeclContext());
+    return opts.CPlusPlus1z;
 #endif
 }
 
-inline bool forallBases(
-    clang::CXXRecordDecl const & decl,
-    clang::CXXRecordDecl::ForallBasesCallback BaseMatches,
-    void* callbackParam,
-    bool AllowShortCircuit)
-{
-#if CLANG_VERSION >= 30800
-    (void) callbackParam;
-    return decl.forallBases(BaseMatches, AllowShortCircuit);
+inline bool EvaluateAsInt(clang::Expr const * expr, llvm::APSInt& intRes, const clang::ASTContext& ctx) {
+#if CLANG_VERSION >= 80000
+    clang::Expr::EvalResult res;
+    bool b = expr->EvaluateAsInt(res, ctx);
+    if (b && res.Val.isInt())
+        intRes = res.Val.getInt();
+    return b;
 #else
-    return decl.forallBases(BaseMatches, callbackParam, AllowShortCircuit);
+    return expr->EvaluateAsInt(intRes, ctx);
 #endif
 }
 
-#if CLANG_VERSION >= 30300
-typedef clang::LinkageInfo LinkageInfo;
-#else
-typedef clang::NamedDecl::LinkageInfo LinkageInfo;
-#endif
+// Work around <http://reviews.llvm.org/D22128>:
+//
+// SfxErrorHandler::GetClassString (svtools/source/misc/ehdl.cxx):
+//
+//   ErrorResource_Impl aEr(aId, (sal_uInt16)lClassId);
+//   if(aEr)
+//   {
+//       rStr = static_cast<ResString>(aEr).GetString();
+//   }
+//
+// expr->dump():
+//  CXXStaticCastExpr 0x2b74e8e657b8 'class ResString' static_cast<class ResString> <ConstructorConversion>
+//  `-CXXBindTemporaryExpr 0x2b74e8e65798 'class ResString' (CXXTemporary 0x2b74e8e65790)
+//    `-CXXConstructExpr 0x2b74e8e65758 'class ResString' 'void (class ResString &&) noexcept(false)' elidable
+//      `-MaterializeTemporaryExpr 0x2b74e8e65740 'class ResString' xvalue
+//        `-CXXBindTemporaryExpr 0x2b74e8e65720 'class ResString' (CXXTemporary 0x2b74e8e65718)
+//          `-ImplicitCastExpr 0x2b74e8e65700 'class ResString' <UserDefinedConversion>
+//            `-CXXMemberCallExpr 0x2b74e8e656d8 'class ResString'
+//              `-MemberExpr 0x2b74e8e656a0 '<bound member function type>' .operator ResString 0x2b74e8dc1f00
+//                `-DeclRefExpr 0x2b74e8e65648 'struct ErrorResource_Impl' lvalue Var 0x2b74e8e653b0 'aEr' 'struct ErrorResource_Impl'
+// expr->getSubExprAsWritten()->dump():
+//  MaterializeTemporaryExpr 0x2b74e8e65740 'class ResString' xvalue
+//  `-CXXBindTemporaryExpr 0x2b74e8e65720 'class ResString' (CXXTemporary 0x2b74e8e65718)
+//    `-ImplicitCastExpr 0x2b74e8e65700 'class ResString' <UserDefinedConversion>
+//      `-CXXMemberCallExpr 0x2b74e8e656d8 'class ResString'
+//        `-MemberExpr 0x2b74e8e656a0 '<bound member function type>' .operator ResString 0x2b74e8dc1f00
+//          `-DeclRefExpr 0x2b74e8e65648 'struct ErrorResource_Impl' lvalue Var 0x2b74e8e653b0 'aEr' 'struct ErrorResource_Impl'
+//
+// Copies code from Clang's lib/AST/Expr.cpp:
+namespace detail {
+  inline clang::Expr *skipImplicitTemporary(clang::Expr *expr) {
+    // Skip through reference binding to temporary.
+    if (clang::MaterializeTemporaryExpr *Materialize
+                                  = clang::dyn_cast<clang::MaterializeTemporaryExpr>(expr))
+      expr = Materialize->GetTemporaryExpr();
 
-inline clang::Linkage getLinkage(LinkageInfo const & info) {
-#if CLANG_VERSION >= 30300
-    return info.getLinkage();
-#else
-    return info.linkage();
-#endif
+    // Skip any temporary bindings; they're implicit.
+    if (clang::CXXBindTemporaryExpr *Binder = clang::dyn_cast<clang::CXXBindTemporaryExpr>(expr))
+      expr = Binder->getSubExpr();
+
+    return expr;
+  }
 }
+inline clang::Expr *getSubExprAsWritten(clang::CastExpr *This) {
+  clang::Expr *SubExpr = nullptr;
+  clang::CastExpr *E = This;
+  do {
+    SubExpr = detail::skipImplicitTemporary(E->getSubExpr());
 
-inline clang::Visibility getVisibility(LinkageInfo const & info) {
-#if CLANG_VERSION >= 30300
-    return info.getVisibility();
-#else
-    return info.visibility();
-#endif
+    // Conversions by constructor and conversion functions have a
+    // subexpression describing the call; strip it off.
+    if (E->getCastKind() == clang::CK_ConstructorConversion)
+      SubExpr =
+        detail::skipImplicitTemporary(clang::cast<clang::CXXConstructExpr>(SubExpr)->getArg(0));
+    else if (E->getCastKind() == clang::CK_UserDefinedConversion) {
+      assert((clang::isa<clang::CXXMemberCallExpr>(SubExpr) ||
+              clang::isa<clang::BlockExpr>(SubExpr)) &&
+             "Unexpected SubExpr for CK_UserDefinedConversion.");
+      if (clang::isa<clang::CXXMemberCallExpr>(SubExpr))
+        SubExpr = clang::cast<clang::CXXMemberCallExpr>(SubExpr)->getImplicitObjectArgument();
+    }
+
+    // If the subexpression we're left with is an implicit cast, look
+    // through that, too.
+  } while ((E = clang::dyn_cast<clang::ImplicitCastExpr>(SubExpr)));
+
+  return SubExpr;
 }
-
-inline bool isFirstDecl(clang::FunctionDecl const & decl) {
-#if CLANG_VERSION >= 30400
-    return decl.isFirstDecl();
-#else
-    return decl.isFirstDeclaration();
-#endif
-}
-
-inline clang::QualType getReturnType(clang::FunctionDecl const & decl) {
-#if CLANG_VERSION >= 30500
-    return decl.getReturnType();
-#else
-    return decl.getResultType();
-#endif
-}
-
-inline clang::QualType getReturnType(clang::FunctionProtoType const & type) {
-#if CLANG_VERSION >= 30500
-    return type.getReturnType();
-#else
-    return type.getResultType();
-#endif
-}
-
-inline unsigned getNumParams(clang::FunctionProtoType const & type) {
-#if CLANG_VERSION >= 30500
-    return type.getNumParams();
-#else
-    return type.getNumArgs();
-#endif
-}
-
-inline clang::QualType getParamType(
-    clang::FunctionProtoType const & type, unsigned i)
-{
-#if CLANG_VERSION >= 30500
-    return type.getParamType(i);
-#else
-    return type.getArgType(i);
-#endif
-}
-
-inline clang::Stmt::const_child_iterator begin(
-    clang::Stmt::const_child_range const & range)
-{
-#if CLANG_VERSION >= 30800
-    return range.begin();
-#else
-    return range.first;
-#endif
-}
-
-inline clang::Stmt::const_child_iterator end(
-    clang::Stmt::const_child_range const & range)
-{
-#if CLANG_VERSION >= 30800
-    return range.end();
-#else
-    return range.second;
-#endif
-}
-
-inline unsigned getBuiltinCallee(clang::CallExpr const & expr) {
-#if CLANG_VERSION >= 30500
-    return expr.getBuiltinCallee();
-#else
-    return expr.isBuiltinCall();
-#endif
-}
-
-inline bool isInMainFile(
-    clang::SourceManager const & manager, clang::SourceLocation Loc)
-{
-#if CLANG_VERSION >= 30400
-    return manager.isInMainFile(Loc);
-#else
-    return manager.isFromMainFile(Loc);
-#endif
-}
-
-inline unsigned getCustomDiagID(
-    clang::DiagnosticsEngine & engine, clang::DiagnosticsEngine::Level L,
-    llvm::StringRef FormatString)
-{
-#if CLANG_VERSION >= 30500
-    return engine.getDiagnosticIDs()->getCustomDiagID(
-        static_cast<clang::DiagnosticIDs::Level>(L), FormatString);
-#else
-    return engine.getCustomDiagID(L, FormatString);
-#endif
-}
-
-inline std::unique_ptr<llvm::raw_fd_ostream> create_raw_fd_ostream(
-    char const * Filename, std::string & ErrorInfo)
-{
-#if CLANG_VERSION >= 30600
-    std::error_code ec;
-    std::unique_ptr<llvm::raw_fd_ostream> s(
-        new llvm::raw_fd_ostream(Filename, ec, llvm::sys::fs::F_None));
-    ErrorInfo = ec ? "error: " + ec.message() : std::string();
-    return s;
-#elif CLANG_VERSION >= 30500
-    return std::unique_ptr<llvm::raw_fd_ostream>(
-        new llvm::raw_fd_ostream(Filename, ErrorInfo, llvm::sys::fs::F_None));
-#else
-    return std::unique_ptr<llvm::raw_fd_ostream>(
-        new llvm::raw_fd_ostream(Filename, ErrorInfo));
-#endif
-}
-
-#if CLANG_VERSION >= 30700
-typedef clang::DeclContext::lookup_result DeclContextLookupResult;
-typedef clang::DeclContext::lookup_iterator DeclContextLookupIterator;
-#else
-typedef clang::DeclContext::lookup_const_result DeclContextLookupResult;
-typedef clang::DeclContext::lookup_const_iterator DeclContextLookupIterator;
-#endif
-
-inline DeclContextLookupIterator begin(DeclContextLookupResult const & result) {
-#if CLANG_VERSION >= 30300
-    return result.begin();
-#else
-    return result.first;
-#endif
-}
-
-inline DeclContextLookupIterator end(DeclContextLookupResult const & result) {
-#if CLANG_VERSION >= 30300
-    return result.end();
-#else
-    return result.second;
-#endif
-}
-
-inline void addPPCallbacks(
-    clang::Preprocessor & preprocessor, clang::PPCallbacks * C)
-{
-#if CLANG_VERSION >= 30600
-    preprocessor.addPPCallbacks(std::unique_ptr<clang::PPCallbacks>(C));
-#else
-    preprocessor.addPPCallbacks(C);
-#endif
-}
-
-inline bool isMacroBodyExpansion(clang::CompilerInstance& compiler, clang::SourceLocation location)
-{
-#if CLANG_VERSION >= 30300
-    return compiler.getSourceManager().isMacroBodyExpansion(location);
-#else
-    return location.isMacroID()
-        && !compiler.getSourceManager().isMacroArgExpansion(location);
-#endif
-}
-
-inline auto getAsTagDecl(clang::Type const& t) -> clang::TagDecl *
-{
-#if CLANG_VERSION >= 30500
-    // TODO not sure if it works with clang 3.6, trunk is known to work
-    return t.getAsTagDecl();
-#else
-    return t.getAs<clang::TagType>()->getDecl();
-#endif
+inline const clang::Expr *getSubExprAsWritten(const clang::CastExpr *This) {
+  return getSubExprAsWritten(const_cast<clang::CastExpr *>(This));
 }
 
 }

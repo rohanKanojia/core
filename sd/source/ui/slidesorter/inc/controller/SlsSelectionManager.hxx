@@ -20,13 +20,10 @@
 #ifndef INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSSELECTIONMANAGER_HXX
 #define INCLUDED_SD_SOURCE_UI_SLIDESORTER_INC_CONTROLLER_SLSSELECTIONMANAGER_HXX
 
-#include "model/SlsSharedPageDescriptor.hxx"
-#include "controller/SlsAnimator.hxx"
 #include <sal/types.h>
-#include <tools/gen.hxx>
 #include <tools/link.hxx>
-#include <basegfx/range/b2irectangle.hxx>
 #include <vector>
+#include <memory>
 
 class SdPage;
 
@@ -83,7 +80,7 @@ public:
     /** Remove a listener that was called when the selection of the slide
         sorter changes.
         @param rListener
-            It is save to pass a listener that was not added are has been
+            It is safe to pass a listener that was not added are has been
             removed previously.  Such calls are ignored.
     */
     void RemoveSelectionChangeListener (const Link<LinkParamNone*,void>& rListener);
@@ -103,7 +100,7 @@ public:
     */
     void SetInsertionPosition (const sal_Int32 nInsertionPosition);
 
-    std::shared_ptr<SelectionObserver> GetSelectionObserver() const { return mpSelectionObserver;}
+    const std::shared_ptr<SelectionObserver>& GetSelectionObserver() const { return mpSelectionObserver;}
 
 private:
     SlideSorter& mrSlideSorter;
@@ -111,21 +108,11 @@ private:
 
     ::std::vector<Link<LinkParamNone*,void>> maSelectionChangeListeners;
 
-    /** When this flag is set then on the next call to Paint() the selection
-        is moved into the visible area.
-    */
-    bool mbIsMakeSelectionVisiblePending;
-
     /** The insertion position is only temporarily valid.  Negative values
         indicate that the explicit insertion position is not valid.  In this
         case GetInsertionPosition() calculates it from the current selection.
     */
     sal_Int32 mnInsertionPosition;
-
-    /** Animation id for a scroll animation the will eventually set the top
-        and left of the visible area to maRequestedTopLeft.
-    */
-    Animator::AnimationId mnAnimationId;
 
     std::shared_ptr<SelectionObserver> mpSelectionObserver;
 

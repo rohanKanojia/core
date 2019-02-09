@@ -17,10 +17,10 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "reffind.hxx"
-#include "global.hxx"
-#include "compiler.hxx"
-#include "document.hxx"
+#include <reffind.hxx>
+#include <global.hxx>
+#include <compiler.hxx>
+#include <document.hxx>
 
 namespace {
 
@@ -29,7 +29,7 @@ const sal_Unicode pDelimiters[] = {
     '=','(',')','+','-','*','/','^','&',' ','{','}','<','>',':', 0
 };
 
-inline bool IsText( sal_Unicode c )
+bool IsText( sal_Unicode c )
 {
     bool bFound = ScGlobal::UnicodeStrChr( pDelimiters, c );
     if (bFound)
@@ -41,7 +41,7 @@ inline bool IsText( sal_Unicode c )
     return c != sep;
 }
 
-inline bool IsText( bool& bQuote, sal_Unicode c )
+bool IsText( bool& bQuote, sal_Unicode c )
 {
     if (c == '\'')
     {
@@ -217,9 +217,9 @@ ScRefFinder::~ScRefFinder()
 
 static ScRefFlags lcl_NextFlags( ScRefFlags nOld )
 {
-    const ScRefFlags Mask_ABS = (ScRefFlags::COL_ABS | ScRefFlags::ROW_ABS | ScRefFlags::TAB_ABS);
+    const ScRefFlags Mask_ABS = ScRefFlags::COL_ABS | ScRefFlags::ROW_ABS | ScRefFlags::TAB_ABS;
     ScRefFlags nNew = nOld & Mask_ABS;
-    nNew = ScRefFlags( (std::underlying_type<ScRefFlags>::type)(nNew) - 1 ) & Mask_ABS; // weiterzaehlen
+    nNew = ScRefFlags( static_cast<std::underlying_type<ScRefFlags>::type>(nNew) - 1 ) & Mask_ABS; // weiterzaehlen
 
     if (!(nOld & ScRefFlags::TAB_3D))
         nNew &= ~ScRefFlags::TAB_ABS; // not 3D -> never absolute!
@@ -241,7 +241,7 @@ void ScRefFinder::ToggleRel( sal_Int32 nStartPos, sal_Int32 nEndPos )
 
     ExpandToText(pSource, nLen, nStartPos, nEndPos, meConv);
 
-    OUString aResult;
+    OUStringBuffer aResult;
     OUString aExpr;
     OUString aSep;
     ScAddress aAddr;
@@ -314,14 +314,14 @@ void ScRefFinder::ToggleRel( sal_Int32 nStartPos, sal_Int32 nEndPos )
 
         // assemble
 
-        aResult += aSep;
-        aResult += aExpr;
+        aResult.append(aSep);
+        aResult.append(aExpr);
 
         nLoopStart = nEEnd;
     }
 
     OUString aTotal = maFormula.copy(0, nStartPos);
-    aTotal += aResult;
+    aTotal += aResult.makeStringAndClear();
     if (nEndPos < maFormula.getLength()-1)
         aTotal += maFormula.copy(nEndPos+1);
 

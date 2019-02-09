@@ -28,8 +28,8 @@ namespace oox { namespace drawingml { namespace table {
 class TableStyleCellStyleContext : public ::oox::core::ContextHandler2
 {
 public:
-    TableStyleCellStyleContext( ::oox::core::ContextHandler2Helper& rParent, TableStylePart& rTableStylePart );
-    virtual ~TableStyleCellStyleContext();
+    TableStyleCellStyleContext( ::oox::core::ContextHandler2Helper const & rParent, TableStylePart& rTableStylePart );
+    virtual ~TableStyleCellStyleContext() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( ::sal_Int32 Element, const ::oox::AttributeList& rAttribs ) override;
 

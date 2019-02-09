@@ -62,39 +62,27 @@ void SAL_CALL PresenterCurrentSlideObserver::disposing()
 //----- XSlideShowListener ----------------------------------------------------
 
 void SAL_CALL PresenterCurrentSlideObserver::beginEvent (
-    const Reference<animations::XAnimationNode>& rNode)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rNode;
-}
+    const Reference<animations::XAnimationNode>&)
+{}
 
 void SAL_CALL PresenterCurrentSlideObserver::endEvent (
-    const Reference<animations::XAnimationNode>& rNode)
-    throw(css::uno::RuntimeException, std::exception)
-{
-    (void)rNode;
-}
+    const Reference<animations::XAnimationNode>&)
+{}
 
 void SAL_CALL PresenterCurrentSlideObserver::repeat (
-    const css::uno::Reference<css::animations::XAnimationNode>& rNode,
+    const css::uno::Reference<css::animations::XAnimationNode>&,
     sal_Int32)
-    throw (css::uno::RuntimeException, std::exception)
-{
-    (void)rNode;
-}
+{}
 
 void SAL_CALL PresenterCurrentSlideObserver::paused()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL PresenterCurrentSlideObserver::resumed()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL PresenterCurrentSlideObserver::slideEnded (sal_Bool bReverse)
-    throw (css::uno::RuntimeException, std::exception)
 {
     // Determine whether the new current slide (the one after the one that
     // just ended) is the slide past the last slide in the presentation,
@@ -106,24 +94,20 @@ void SAL_CALL PresenterCurrentSlideObserver::slideEnded (sal_Bool bReverse)
 }
 
 void SAL_CALL PresenterCurrentSlideObserver::hyperLinkClicked (const OUString &)
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL PresenterCurrentSlideObserver::slideTransitionStarted()
-    throw (css::uno::RuntimeException, std::exception)
 {
     if( mpPresenterController.is() )
         mpPresenterController->UpdateCurrentSlide(0);
 }
 
 void SAL_CALL PresenterCurrentSlideObserver::slideTransitionEnded()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
 void SAL_CALL PresenterCurrentSlideObserver::slideAnimationsEnded()
-    throw (css::uno::RuntimeException, std::exception)
 {
 }
 
@@ -131,7 +115,6 @@ void SAL_CALL PresenterCurrentSlideObserver::slideAnimationsEnded()
 
 void SAL_CALL PresenterCurrentSlideObserver::disposing (
     const lang::EventObject& rEvent)
-    throw (RuntimeException, std::exception)
 {
     if (rEvent.Source == Reference<XInterface>(static_cast<XWeak*>(mpPresenterController.get())))
         dispose();

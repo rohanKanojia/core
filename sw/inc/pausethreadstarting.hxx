@@ -19,19 +19,19 @@
 #ifndef INCLUDED_SW_INC_PAUSETHREADSTARTING_HXX
 #define INCLUDED_SW_INC_PAUSETHREADSTARTING_HXX
 
+#include <sal/types.h>
+
 /** Helper class to pause starting of threads during existence of an instance
     of this class
 
     #i73788#
-
-    @author OD
 */
 class SwPauseThreadStarting
 {
     public:
 
         SwPauseThreadStarting();
-        ~SwPauseThreadStarting();
+        ~SwPauseThreadStarting() COVERITY_NOEXCEPT_FALSE;
 
     private:
 

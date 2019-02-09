@@ -54,12 +54,12 @@ private:
 
 public:
     ScHeaderFooterEditSource(ScHeaderFooterTextData& rData);
-    virtual ~ScHeaderFooterEditSource();
+    virtual ~ScHeaderFooterEditSource() override;
 
     //  GetEditEngine is needed because the forwarder doesn't have field functions
     virtual ScEditEngineDefaulter* GetEditEngine() override;
 
-    virtual SvxEditSource*      Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual void                UpdateData() override;
 };
@@ -74,16 +74,16 @@ public:
 class ScCellEditSource : public ScEditSource
 {
 private:
-    ScCellTextData* pCellTextData;
+    std::unique_ptr<ScCellTextData> pCellTextData;
 
 public:
     ScCellEditSource(ScDocShell* pDocSh, const ScAddress& rP);
-    virtual ~ScCellEditSource();
+    virtual ~ScCellEditSource() override;
 
     //  GetEditEngine is needed because the forwarder doesn't have field functions
     virtual ScEditEngineDefaulter* GetEditEngine() override;
 
-    virtual SvxEditSource* Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder* GetTextForwarder() override;
 
     virtual void UpdateData() override;
@@ -96,17 +96,17 @@ class ScAnnotationEditSource : public SvxEditSource, public SfxListener
 {
 private:
     ScDocShell*             pDocShell;
-    ScAddress               aCellPos;
-    ScEditEngineDefaulter*  pEditEngine;
-    SvxEditEngineForwarder* pForwarder;
+    ScAddress const         aCellPos;
+    std::unique_ptr<ScEditEngineDefaulter>  pEditEngine;
+    std::unique_ptr<SvxEditEngineForwarder> pForwarder;
     bool                    bDataValid;
 
     SdrObject*                  GetCaptionObj();
 public:
                                 ScAnnotationEditSource(ScDocShell* pDocSh, const ScAddress& rP);
-    virtual                     ~ScAnnotationEditSource();
+    virtual                     ~ScAnnotationEditSource() override;
 
-    virtual SvxEditSource*      Clone() const override ;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override ;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual void                UpdateData() override;
 
@@ -118,13 +118,13 @@ public:
 class ScSimpleEditSource : public SvxEditSource
 {
 private:
-    SvxTextForwarder*   pForwarder;
+    SvxTextForwarder* const   pForwarder;
 
 public:
                         ScSimpleEditSource( SvxTextForwarder* pForw );
-    virtual             ~ScSimpleEditSource();
+    virtual             ~ScSimpleEditSource() override;
 
-    virtual SvxEditSource*      Clone() const override ;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override ;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual void                UpdateData() override;
 
@@ -137,9 +137,9 @@ private:
 
 public:
                         ScAccessibilityEditSource( ::std::unique_ptr < ScAccessibleTextData > && pAccessibleCellTextData );
-    virtual             ~ScAccessibilityEditSource();
+    virtual             ~ScAccessibilityEditSource() override;
 
-    virtual SvxEditSource*      Clone() const override;
+    virtual std::unique_ptr<SvxEditSource> Clone() const override;
     virtual SvxTextForwarder*   GetTextForwarder() override;
     virtual SvxViewForwarder*   GetViewForwarder() override;
     virtual SvxEditViewForwarder*   GetEditViewForwarder( bool bCreate = false ) override;

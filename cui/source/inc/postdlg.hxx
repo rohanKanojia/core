@@ -19,13 +19,7 @@
 #ifndef INCLUDED_CUI_SOURCE_INC_POSTDLG_HXX
 #define INCLUDED_CUI_SOURCE_INC_POSTDLG_HXX
 
-#include <vcl/button.hxx>
-#include <vcl/edit.hxx>
-#include <vcl/group.hxx>
-#include <vcl/layout.hxx>
-#include <svtools/stdctrl.hxx>
 #include <sfx2/basedlgs.hxx>
-#include <svtools/svmedit.hxx>
 
 // class SvxPostItDialog -------------------------------------------------
 /*
@@ -35,69 +29,73 @@
     over this list with links.
 
     [Items]
-    <SvxPostitAuthorItem><SID_ATTR_POSTIT_AUTHOR>
-    <SvxPostitDateItem><SID_ATTR_POSTIT_DATE>
-    <SvxPostitTextItem><SID_ATTR_POSTIT_TEXT>
+    <SvxPostItAuthorItem><SID_ATTR_POSTIT_AUTHOR>
+    <SvxPostItDateItem><SID_ATTR_POSTIT_DATE>
+    <SvxPostItTextItem><SID_ATTR_POSTIT_TEXT>
 */
 
-class SvxPostItDialog : public SfxModalDialog
+class SvxPostItDialog : public SfxDialogController
 {
 public:
-    SvxPostItDialog(vcl::Window* pParent, const SfxItemSet& rCoreSet,
-                     bool bPrevNext = false);
-    virtual ~SvxPostItDialog();
-    virtual void dispose() override;
+    SvxPostItDialog(weld::Window* pParent, const SfxItemSet& rCoreSet,
+                     bool bPrevNext);
+    virtual ~SvxPostItDialog() override;
 
     static const sal_uInt16*      GetRanges();
-    const SfxItemSet*   GetOutputItemSet() const { return pOutSet; }
+    const SfxItemSet*   GetOutputItemSet() { return m_xOutSet.get(); }
 
     void                SetPrevHdl( const Link<SvxPostItDialog&,void>& rLink )
-                            { aPrevHdlLink = rLink; }
+                            { m_aPrevHdlLink = rLink; }
     void                SetNextHdl( const Link<SvxPostItDialog&,void>& rLink )
-                            { aNextHdlLink = rLink; }
+                            { m_aNextHdlLink = rLink; }
 
     void EnableTravel(bool bNext, bool bPrev);
-    OUString GetNote()
+    OUString GetNote() const
     {
-        return m_pEditED->GetText();
+        return m_xEditED->get_text();
     }
     void SetNote(const OUString& rTxt)
     {
-        m_pEditED->SetText(rTxt);
+        m_xEditED->set_text(rTxt);
     }
     void ShowLastAuthor(const OUString& rAuthor, const OUString& rDate);
     void DontChangeAuthor()
     {
-        m_pAuthorBtn->Enable(false);
+        m_xAuthorBtn->set_sensitive(false);
     }
     void HideAuthor()
     {
-        m_pInsertAuthor->Hide();
+        m_xInsertAuthor->hide();
+    }
+    void set_title(const OUString& rTitle)
+    {
+        m_xDialog->set_title(rTitle);
+    }
+    std::shared_ptr<weld::Dialog> const & GetDialog()
+    {
+        return m_xDialog;
     }
 
 private:
-    VclPtr<FixedText>          m_pLastEditFT;
+    const SfxItemSet&   m_rSet;
+    std::unique_ptr<SfxItemSet>     m_xOutSet;
 
-    VclPtr<VclMultiLineEdit>   m_pEditED;
+    Link<SvxPostItDialog&,void>  m_aPrevHdlLink;
+    Link<SvxPostItDialog&,void>  m_aNextHdlLink;
 
-    VclPtr<VclContainer>       m_pInsertAuthor;
-    VclPtr<PushButton>         m_pAuthorBtn;
+    std::unique_ptr<weld::Label>    m_xLastEditFT;
+    std::unique_ptr<weld::Label>    m_xAltTitle;
+    std::unique_ptr<weld::TextView> m_xEditED;
+    std::unique_ptr<weld::Widget>   m_xInsertAuthor;
+    std::unique_ptr<weld::Button>   m_xAuthorBtn;
+    std::unique_ptr<weld::Button>   m_xOKBtn;
+    std::unique_ptr<weld::Button>   m_xPrevBtn;
+    std::unique_ptr<weld::Button>   m_xNextBtn;
 
-    VclPtr<OKButton>           m_pOKBtn;
-
-    VclPtr<PushButton>         m_pPrevBtn;
-    VclPtr<PushButton>         m_pNextBtn;
-
-    const SfxItemSet&   rSet;
-    SfxItemSet*         pOutSet;
-
-    Link<SvxPostItDialog&,void>  aPrevHdlLink;
-    Link<SvxPostItDialog&,void>  aNextHdlLink;
-
-    DECL_LINK_TYPED(Stamp, Button*, void);
-    DECL_LINK_TYPED(OKHdl, Button*, void);
-    DECL_LINK_TYPED(PrevHdl, Button*, void);
-    DECL_LINK_TYPED(NextHdl, Button*, void);
+    DECL_LINK(Stamp, weld::Button&, void);
+    DECL_LINK(OKHdl, weld::Button&, void);
+    DECL_LINK(PrevHdl, weld::Button&, void);
+    DECL_LINK(NextHdl, weld::Button&, void);
 };
 
 #endif

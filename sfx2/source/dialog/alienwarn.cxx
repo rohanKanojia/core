@@ -19,69 +19,60 @@
 
 
 #include <sal/macros.h>
-#include <sfx2/sfxresid.hxx>
 #include <sfx2/sfxuno.hxx>
 #include <unotools/saveopt.hxx>
-#include <vcl/msgbox.hxx>
-#include "alienwarn.hxx"
+#include <vcl/svapp.hxx>
+#include <alienwarn.hxx>
 
-SfxAlienWarningDialog::SfxAlienWarningDialog(vcl::Window* pParent, const OUString& _rFormatName,
+SfxAlienWarningDialog::SfxAlienWarningDialog(weld::Window* pParent, const OUString& _rFormatName,
                                              const OUString& _rDefaultExtension, bool rDefaultIsAlien)
-    : MessageDialog(pParent, "AlienWarnDialog", "sfx/ui/alienwarndialog.ui")
+    : MessageDialogController(pParent, "sfx/ui/alienwarndialog.ui", "AlienWarnDialog", "ask")
+    , m_xKeepCurrentBtn(m_xBuilder->weld_button("save"))
+    , m_xUseDefaultFormatBtn(m_xBuilder->weld_button("cancel"))
+    , m_xWarningOnBox(m_xBuilder->weld_check_button("ask"))
 {
-    get(m_pWarningOnBox, "ask");
-    //fdo#75121, a bit tricky because the widgets we want to align with
-    //don't actually exist in the ui description, they're implied
-    m_pWarningOnBox->set_margin_left(QueryBox::GetStandardImage().GetSizePixel().Width() + 12);
-
-    get(m_pKeepCurrentBtn, "save");
-    get(m_pUseDefaultFormatBtn, "cancel");
-
     OUString aExtension = "ODF";
 
     // replace formatname (text)
-    OUString sInfoText = get_primary_text();
+    OUString sInfoText = m_xDialog->get_primary_text();
     sInfoText = sInfoText.replaceAll( "%FORMATNAME", _rFormatName );
-    set_primary_text(sInfoText);
+    m_xDialog->set_primary_text(sInfoText);
 
     // replace formatname (button)
-    sInfoText = m_pKeepCurrentBtn->GetText();
+    sInfoText = m_xKeepCurrentBtn->get_label();
     sInfoText = sInfoText.replaceAll( "%FORMATNAME", _rFormatName );
-    m_pKeepCurrentBtn->SetText( sInfoText );
+    m_xKeepCurrentBtn->set_label(sInfoText);
 
     // hide ODF explanation if default format is alien
     // and set the proper extension in the button
     if( rDefaultIsAlien )
     {
-        set_secondary_text(OUString());
+        m_xDialog->set_secondary_text(OUString());
         aExtension = _rDefaultExtension.toAsciiUpperCase();
     }
 
     // replace defaultextension (button)
-    sInfoText = m_pUseDefaultFormatBtn->GetText();
+    sInfoText = m_xUseDefaultFormatBtn->get_label();
     sInfoText = sInfoText.replaceAll( "%DEFAULTEXTENSION", aExtension );
-    m_pUseDefaultFormatBtn->SetText( sInfoText );
+    m_xUseDefaultFormatBtn->set_label(sInfoText);
 
     // load value of "warning on" checkbox from save options
-    m_pWarningOnBox->Check( SvtSaveOptions().IsWarnAlienFormat() );
+    m_xWarningOnBox->set_active(SvtSaveOptions().IsWarnAlienFormat());
 }
 
 SfxAlienWarningDialog::~SfxAlienWarningDialog()
 {
-    disposeOnce();
-}
-
-void SfxAlienWarningDialog::dispose()
-{
-    // save value of "warning off" checkbox, if necessary
-    SvtSaveOptions aSaveOpt;
-    bool bChecked = m_pWarningOnBox->IsChecked();
-    if ( aSaveOpt.IsWarnAlienFormat() != bChecked )
-        aSaveOpt.SetWarnAlienFormat( bChecked );
-    m_pKeepCurrentBtn.clear();
-    m_pUseDefaultFormatBtn.clear();
-    m_pWarningOnBox.clear();
-    MessageDialog::dispose();
+    try
+    {
+        // save value of "warning off" checkbox, if necessary
+        SvtSaveOptions aSaveOpt;
+        bool bChecked = m_xWarningOnBox->get_active();
+        if (aSaveOpt.IsWarnAlienFormat() != bChecked)
+            aSaveOpt.SetWarnAlienFormat(bChecked);
+    }
+    catch (...)
+    {
+    }
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

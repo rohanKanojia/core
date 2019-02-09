@@ -17,9 +17,11 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "tokenuno.hxx"
+#include <memory>
+#include <tokenuno.hxx>
 
 #include <sal/macros.h>
+#include <sal/log.hxx>
 
 #include <com/sun/star/sheet/ComplexReference.hpp>
 #include <com/sun/star/sheet/ExternalReference.hpp>
@@ -31,15 +33,15 @@
 #include <svl/itemprop.hxx>
 #include <vcl/svapp.hxx>
 
-#include "miscuno.hxx"
-#include "convuno.hxx"
-#include "unonames.hxx"
-#include "token.hxx"
-#include "compiler.hxx"
-#include "tokenarray.hxx"
-#include "docsh.hxx"
-#include "rangeseq.hxx"
-#include "externalrefmgr.hxx"
+#include <miscuno.hxx>
+#include <convuno.hxx>
+#include <unonames.hxx>
+#include <token.hxx>
+#include <compiler.hxx>
+#include <tokenarray.hxx>
+#include <docsh.hxx>
+#include <rangeseq.hxx>
+#include <externalrefmgr.hxx>
 
 using namespace ::formula;
 using namespace ::com::sun::star;
@@ -80,8 +82,7 @@ ScFormulaParserObj::~ScFormulaParserObj()
 
 void ScFormulaParserObj::Notify( SfxBroadcaster&, const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if ( pSimpleHint && pSimpleHint->GetId() == SFX_HINT_DYING )
+    if ( rHint.GetId() == SfxHintId::Dying )
         mpDocShell = nullptr;
 }
 
@@ -124,7 +125,6 @@ void ScFormulaParserObj::SetCompilerFlags( ScCompiler& rCompiler ) const
 
 uno::Sequence<sheet::FormulaToken> SAL_CALL ScFormulaParserObj::parseFormula(
     const OUString& aFormula, const table::CellAddress& rReferencePos )
-        throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     uno::Sequence<sheet::FormulaToken> aRet;
@@ -136,13 +136,11 @@ uno::Sequence<sheet::FormulaToken> SAL_CALL ScFormulaParserObj::parseFormula(
 
         ScAddress aRefPos( ScAddress::UNINITIALIZED );
         ScUnoConversion::FillScAddress( aRefPos, rReferencePos );
-        ScCompiler aCompiler( &rDoc, aRefPos);
-        aCompiler.SetGrammar(rDoc.GetGrammar());
+        ScCompiler aCompiler( &rDoc, aRefPos, rDoc.GetGrammar());
         SetCompilerFlags( aCompiler );
 
-        ScTokenArray* pCode = aCompiler.CompileString( aFormula );
-        (void)ScTokenConversion::ConvertToTokenSequence( rDoc, aRet, *pCode );
-        delete pCode;
+        std::unique_ptr<ScTokenArray> pCode = aCompiler.CompileString( aFormula );
+        ScTokenConversion::ConvertToTokenSequence( rDoc, aRet, *pCode );
     }
 
     return aRet;
@@ -150,7 +148,6 @@ uno::Sequence<sheet::FormulaToken> SAL_CALL ScFormulaParserObj::parseFormula(
 
 OUString SAL_CALL ScFormulaParserObj::printFormula(
         const uno::Sequence<sheet::FormulaToken>& aTokens, const table::CellAddress& rReferencePos )
-                                throw (uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     OUString aRet;
@@ -162,8 +159,7 @@ OUString SAL_CALL ScFormulaParserObj::printFormula(
         (void)ScTokenConversion::ConvertToTokenArray( rDoc, aCode, aTokens );
         ScAddress aRefPos( ScAddress::UNINITIALIZED );
         ScUnoConversion::FillScAddress( aRefPos, rReferencePos );
-        ScCompiler aCompiler( &rDoc, aRefPos, aCode);
-        aCompiler.SetGrammar(rDoc.GetGrammar());
+        ScCompiler aCompiler( &rDoc, aRefPos, aCode, rDoc.GetGrammar());
         SetCompilerFlags( aCompiler );
 
         OUStringBuffer aBuffer;
@@ -177,7 +173,6 @@ OUString SAL_CALL ScFormulaParserObj::printFormula(
 // XPropertySet
 
 uno::Reference<beans::XPropertySetInfo> SAL_CALL ScFormulaParserObj::getPropertySetInfo()
-                                                        throw(uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     static uno::Reference< beans::XPropertySetInfo > aRef(new SfxItemPropertySetInfo( lcl_GetFormulaParserMap() ));
@@ -186,56 +181,48 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScFormulaParserObj::getProperty
 
 void SAL_CALL ScFormulaParserObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
-                throw(beans::UnknownPropertyException, beans::PropertyVetoException,
-                        lang::IllegalArgumentException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
-    OUString aString(aPropertyName);
-    if ( aString == SC_UNO_COMPILEFAP )
+    if ( aPropertyName == SC_UNO_COMPILEFAP )
     {
         aValue >>= mbCompileFAP;
     }
-    else if ( aString == SC_UNO_COMPILEENGLISH )
+    else if ( aPropertyName == SC_UNO_COMPILEENGLISH )
     {
         bool bOldEnglish = mbEnglish;
-        if (aValue >>= mbEnglish)
-        {
-            // Need to recreate the symbol map to change English property
-            // because the map is const. So for performance reasons set
-            // CompileEnglish _before_ OpCodeMap!
-            if (mxOpCodeMap.get() && mbEnglish != bOldEnglish)
-            {
-                ScDocument& rDoc = mpDocShell->GetDocument();
-                ScCompiler aCompiler( &rDoc, ScAddress());
-                aCompiler.SetGrammar(rDoc.GetGrammar());
-                mxOpCodeMap = formula::FormulaCompiler::CreateOpCodeMap( maOpCodeMapping, mbEnglish);
-            }
-        }
-        else
+        if (!(aValue >>= mbEnglish))
             throw lang::IllegalArgumentException();
+
+        // Need to recreate the symbol map to change English property
+        // because the map is const. So for performance reasons set
+        // CompileEnglish _before_ OpCodeMap!
+        if (mxOpCodeMap.get() && mbEnglish != bOldEnglish)
+        {
+            ScDocument& rDoc = mpDocShell->GetDocument();
+            ScCompiler aCompiler( &rDoc, ScAddress(), rDoc.GetGrammar());
+            mxOpCodeMap = formula::FormulaCompiler::CreateOpCodeMap( maOpCodeMapping, mbEnglish);
+        }
+
     }
-    else if ( aString == SC_UNO_FORMULACONVENTION )
+    else if ( aPropertyName == SC_UNO_FORMULACONVENTION )
     {
         aValue >>= mnConv;
     }
-    else if ( aString == SC_UNO_IGNORELEADING )
+    else if ( aPropertyName == SC_UNO_IGNORELEADING )
     {
         aValue >>= mbIgnoreSpaces;
     }
-    else if ( aString == SC_UNO_OPCODEMAP )
+    else if ( aPropertyName == SC_UNO_OPCODEMAP )
     {
-        if (aValue >>= maOpCodeMapping)
-        {
-            ScDocument& rDoc = mpDocShell->GetDocument();
-            ScCompiler aCompiler( &rDoc, ScAddress());
-            aCompiler.SetGrammar(rDoc.GetGrammar());
-            mxOpCodeMap = formula::FormulaCompiler::CreateOpCodeMap( maOpCodeMapping, mbEnglish);
-        }
-        else
+        if (!(aValue >>= maOpCodeMapping))
             throw lang::IllegalArgumentException();
+
+        ScDocument& rDoc = mpDocShell->GetDocument();
+        ScCompiler aCompiler( &rDoc, ScAddress(), rDoc.GetGrammar());
+        mxOpCodeMap = formula::FormulaCompiler::CreateOpCodeMap( maOpCodeMapping, mbEnglish);
+
     }
-    else if ( aString == SC_UNO_EXTERNALLINKS )
+    else if ( aPropertyName == SC_UNO_EXTERNALLINKS )
     {
         if (!(aValue >>= maExternalLinks))
             throw lang::IllegalArgumentException();
@@ -245,33 +232,30 @@ void SAL_CALL ScFormulaParserObj::setPropertyValue(
 }
 
 uno::Any SAL_CALL ScFormulaParserObj::getPropertyValue( const OUString& aPropertyName )
-                throw(beans::UnknownPropertyException, lang::WrappedTargetException,
-                        uno::RuntimeException, std::exception)
 {
     SolarMutexGuard aGuard;
     uno::Any aRet;
-    OUString aString(aPropertyName);
-    if ( aString == SC_UNO_COMPILEFAP )
+    if ( aPropertyName == SC_UNO_COMPILEFAP )
     {
         aRet <<= mbCompileFAP;
     }
-    else if ( aString == SC_UNO_COMPILEENGLISH )
+    else if ( aPropertyName == SC_UNO_COMPILEENGLISH )
     {
         aRet <<= mbEnglish;
     }
-    else if ( aString == SC_UNO_FORMULACONVENTION )
+    else if ( aPropertyName == SC_UNO_FORMULACONVENTION )
     {
         aRet <<= mnConv;
     }
-    else if ( aString == SC_UNO_IGNORELEADING )
+    else if ( aPropertyName == SC_UNO_IGNORELEADING )
     {
         aRet <<= mbIgnoreSpaces;
     }
-    else if ( aString == SC_UNO_OPCODEMAP )
+    else if ( aPropertyName == SC_UNO_OPCODEMAP )
     {
         aRet <<= maOpCodeMapping;
     }
-    else if ( aString == SC_UNO_EXTERNALLINKS )
+    else if ( aPropertyName == SC_UNO_EXTERNALLINKS )
     {
         aRet <<= maExternalLinks;
     }
@@ -368,11 +352,9 @@ bool ScTokenConversion::ConvertToTokenArray( ScDocument& rDoc,
     return !rTokenArray.Fill(rSequence, rDoc.GetSharedStringPool(), rDoc.GetExternalRefManager());
 }
 
-bool ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
+void ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
         uno::Sequence<sheet::FormulaToken>& rSequence, const ScTokenArray& rTokenArray )
 {
-    bool bError = false;
-
     sal_Int32 nLen = static_cast<sal_Int32>(rTokenArray.GetLen());
     formula::FormulaToken** pTokens = rTokenArray.GetArray();
     if ( pTokens )
@@ -390,7 +372,7 @@ bool ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
                 case svByte:
                     // Only the count of spaces is stored as "long". Parameter count is ignored.
                     if ( eOpCode == ocSpaces )
-                        rAPI.Data <<= (sal_Int32) rToken.GetByte();
+                        rAPI.Data <<= static_cast<sal_Int32>(rToken.GetByte());
                     else
                         rAPI.Data.clear();      // no data
                     break;
@@ -403,7 +385,7 @@ bool ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
                 case svExternal:
                     // Function name is stored as string.
                     // Byte (parameter count) is ignored.
-                    rAPI.Data <<= OUString( rToken.GetExternal() );
+                    rAPI.Data <<= rToken.GetExternal();
                     break;
                 case svSingleRef:
                     {
@@ -424,8 +406,7 @@ bool ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
                     {
                         sheet::NameToken aNameToken;
                         aNameToken.Index = static_cast<sal_Int32>( rToken.GetIndex() );
-                        /* FIXME: we need a new token with sheet number */
-                        aNameToken.Global = (rToken.GetSheet() < 0);
+                        aNameToken.Sheet = rToken.GetSheet();
                         rAPI.Data <<= aNameToken;
                     }
                     break;
@@ -478,11 +459,12 @@ bool ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
                     }
                     break;
                 default:
-                    OSL_TRACE( "ScTokenConversion::ConvertToTokenSequence: unhandled token type SvStackVar %d", rToken.GetType());
-                    //fall-through
-                case svSep:     // occurs with ocSep, ocOpen, ocClose, ocArray*
+                    SAL_WARN("sc",  "ScTokenConversion::ConvertToTokenSequence: unhandled token type " << StackVarEnumToString(rToken.GetType()));
+                    [[fallthrough]];
                 case svJump:    // occurs with ocIf, ocChoose
+                case svError:   // seems to be fairly common, and probably not exceptional and not worth a warning?
                 case svMissing: // occurs with ocMissing
+                case svSep:     // occurs with ocSep, ocOpen, ocClose, ocArray*
                     rAPI.Data.clear();      // no data
             }
             rAPI.OpCode = static_cast<sal_Int32>(eOpCode);      //! assuming equal values for the moment
@@ -490,8 +472,6 @@ bool ScTokenConversion::ConvertToTokenSequence( const ScDocument& rDoc,
     }
     else
         rSequence.realloc(0);
-
-    return !bError;
 }
 
 ScFormulaOpCodeMapperObj::ScFormulaOpCodeMapperObj(::std::unique_ptr<formula::FormulaCompiler> && _pCompiler)

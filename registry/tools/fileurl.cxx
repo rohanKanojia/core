@@ -19,11 +19,11 @@
 
 #include "fileurl.hxx"
 
-#include "rtl/ustring.hxx"
-#include "osl/diagnose.h"
-#include "osl/file.hxx"
-#include "osl/process.h"
-#include "osl/thread.h"
+#include <rtl/ustring.hxx>
+#include <osl/diagnose.h>
+#include <osl/file.hxx>
+#include <osl/process.h>
+#include <osl/thread.h>
 
 #include <string.h>
 
@@ -52,17 +52,17 @@ OUString convertToFileUrl(char const * filename, sal_Int32 length)
     OUString uFileUrl;
     if (length > 0)
     {
-        if ((filename[0] == '.') || (filename[0] != SEPARATOR))
+        if (filename[0] != SEPARATOR)
         {
             // relative path name.
             OUString uWorkingDir;
             if (osl_getProcessWorkingDir(&uWorkingDir.pData) != osl_Process_E_None)
             {
-                OSL_ASSERT(false);
+                assert(false);
             }
             if (FileBase::getAbsoluteFileURL(uWorkingDir, uFileName, uFileUrl) != FileBase::E_None)
             {
-                OSL_ASSERT(false);
+                assert(false);
             }
         }
         else
@@ -70,7 +70,7 @@ OUString convertToFileUrl(char const * filename, sal_Int32 length)
             // absolute path name.
             if (FileBase::getFileURLFromSystemPath(uFileName, uFileUrl) != FileBase::E_None)
             {
-                OSL_ASSERT(false);
+                assert(false);
             }
         }
     }

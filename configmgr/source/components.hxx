@@ -61,8 +61,7 @@ public:
         OUString * canonicRepresenation, std::vector<OUString> * path, int * finalizedLayer)
         const;
 
-    rtl::Reference< Node > getTemplate(
-        int layer, OUString const & fullName) const;
+    rtl::Reference< Node > getTemplate( OUString const & fullName) const;
 
     void addRootAccess(rtl::Reference< RootAccess > const & access);
 
@@ -140,7 +139,7 @@ private:
 
     void parseModificationLayer(int layer, OUString const & url);
 
-    int getExtensionLayer(bool shared);
+    int getExtensionLayer(bool shared) const;
 
     typedef std::set< RootAccess * > WeakRootSet;
 

@@ -45,7 +45,7 @@ class i_xml_parser_event_handler;
 class xml_parser
 {
 public:
-    xml_parser(const XML_Char* EncodingName = nullptr);
+    xml_parser();
 
     ~xml_parser();
 
@@ -68,7 +68,7 @@ public:
         @throws     SaxException
                     If the used Sax parser returns an error. The SaxException
                     contains detailed information about the error.  */
-    void parse(const char* XmlData, size_t Length, bool IsFinal = true);
+    void parse(const char* XmlData, size_t Length, bool IsFinal);
 
     /** Set a document handler
 
@@ -97,7 +97,7 @@ private:
 
 private:
     i_xml_parser_event_handler* document_handler_;
-    XML_Parser xml_parser_;
+    XML_Parser const xml_parser_;
 
 private:
     xml_parser(const xml_parser&) = delete;

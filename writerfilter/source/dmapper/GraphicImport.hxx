@@ -24,6 +24,8 @@
 
 #include "LoggedResources.hxx"
 
+#include <com/sun/star/graphic/XGraphic.hpp>
+
 namespace com { namespace sun { namespace star {
     namespace uno
     {
@@ -71,9 +73,11 @@ class GraphicImport : public LoggedProperties, public LoggedTable
     css::uno::Reference<css::text::XTextContent> m_xGraphicObject;
 
     css::uno::Reference<css::drawing::XShape> m_xShape;
-    void ProcessShapeOptions(Value & val);
+    void ProcessShapeOptions(Value const & val);
 
-    css::uno::Reference<css::text::XTextContent > createGraphicObject(const css::beans::PropertyValues& aMediaProperties, const css::uno::Reference<css::beans::XPropertySet>& xShapeProps);
+    css::uno::Reference<css::text::XTextContent>
+            createGraphicObject(css::uno::Reference<css::graphic::XGraphic> const & rxGraphic,
+                                css::uno::Reference<css::beans::XPropertySet> const & xShapeProps);
 
     void putPropertyToFrameGrabBag( const OUString& sPropertyName, const css::uno::Any& aPropertyValue );
 
@@ -85,13 +89,13 @@ public:
                             std::pair<OUString, OUString>& rPositionOffsets,
                             std::pair<OUString, OUString>& rAligns,
                             std::queue<OUString>& rPositivePercentages);
-    virtual ~GraphicImport();
+    virtual ~GraphicImport() override;
 
     // BinaryObj
     virtual void data(const sal_uInt8* buffer, size_t len, writerfilter::Reference<Properties>::Pointer_t ref) override;
 
     css::uno::Reference<css::text::XTextContent> GetGraphicObject();
-    css::uno::Reference<css::drawing::XShape> GetXShapeObject() { return m_xShape;}
+    const css::uno::Reference<css::drawing::XShape>& GetXShapeObject() { return m_xShape;}
     bool IsGraphic() const;
 
  private:
@@ -122,7 +126,7 @@ public:
     void handleWrapTextValue(sal_uInt32 nVal);
 };
 
-typedef std::shared_ptr<GraphicImport> GraphicImportPtr;
+typedef tools::SvRef<GraphicImport> GraphicImportPtr;
 
 }}
 

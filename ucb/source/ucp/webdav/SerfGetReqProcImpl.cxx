@@ -26,18 +26,18 @@ namespace http_dav_ucp
 
 SerfGetReqProcImpl::SerfGetReqProcImpl( const char* inPath,
                                         const DAVRequestHeaders& inRequestHeaders,
-                                        const css::uno::Reference< SerfInputStream > & xioInStrm )
+                                        const rtl::Reference< SerfInputStream > & xioInStrm )
     : SerfRequestProcessorImpl( inPath, inRequestHeaders )
     , xInputStream( xioInStrm )
     , xOutputStream()
-    , mpHeaderNames( 0 )
-    , mpResource( 0 )
+    , mpHeaderNames( nullptr )
+    , mpResource( nullptr )
 {
 }
 
 SerfGetReqProcImpl::SerfGetReqProcImpl( const char* inPath,
                                         const DAVRequestHeaders& inRequestHeaders,
-                                        const css::uno::Reference< SerfInputStream > & xioInStrm,
+                                        const rtl::Reference< SerfInputStream > & xioInStrm,
                                         const std::vector< OUString > & inHeaderNames,
                                         DAVResource & ioResource )
     : SerfRequestProcessorImpl( inPath, inRequestHeaders )
@@ -54,8 +54,8 @@ SerfGetReqProcImpl::SerfGetReqProcImpl( const char* inPath,
     : SerfRequestProcessorImpl( inPath, inRequestHeaders )
     , xInputStream()
     , xOutputStream( xioOutStrm )
-    , mpHeaderNames( 0 )
-    , mpResource( 0 )
+    , mpHeaderNames( nullptr )
+    , mpResource( nullptr )
 {
 }
 
@@ -82,7 +82,7 @@ serf_bucket_t * SerfGetReqProcImpl::createSerfRequestBucket( serf_request_t * in
     serf_bucket_t *req_bkt = serf_request_bucket_request_create( inSerfRequest,
                                                                  "GET",
                                                                  getPathStr(),
-                                                                 0,
+                                                                 nullptr,
                                                                  serf_request_get_alloc( inSerfRequest ) );
 
     // set request header fields
@@ -124,10 +124,10 @@ namespace
 void SerfGetReqProcImpl::handleEndOfResponseData( serf_bucket_t * inSerfResponseBucket )
 {
     // read response header, if requested
-    if ( mpHeaderNames != 0 && mpResource != 0 )
+    if ( mpHeaderNames != nullptr && mpResource != nullptr )
     {
         serf_bucket_t* SerfHeaderBucket = serf_bucket_response_get_headers( inSerfResponseBucket );
-        if ( SerfHeaderBucket != 0 )
+        if ( SerfHeaderBucket != nullptr )
         {
             serf_bucket_headers_do( SerfHeaderBucket,
                                     Serf_ProcessResponseHeader,
@@ -151,22 +151,11 @@ void SerfGetReqProcImpl::processSingleResponseHeader( const char* inHeaderName,
     else
     {
         // store only header fields which are requested
-        std::vector< OUString >::const_iterator it( mpHeaderNames->begin() );
-        const std::vector< OUString >::const_iterator end( mpHeaderNames->end() );
-
-        while ( it != end )
-        {
-            // header names are case insensitive
-            if ( (*it).equalsIgnoreAsciiCase( aHeaderName ) )
-            {
-                bStoreHeaderField = true;
-                break;
-            }
-            else
-            {
-                ++it;
-            }
-        }
+        bStoreHeaderField = std::any_of(mpHeaderNames->begin(), mpHeaderNames->end(),
+            [&aHeaderName](const OUString& rHeaderName) {
+                // header names are case insensitive
+                return rHeaderName.equalsIgnoreAsciiCase( aHeaderName );
+            });
     }
 
     if ( bStoreHeaderField )

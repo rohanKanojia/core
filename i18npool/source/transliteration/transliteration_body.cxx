@@ -18,34 +18,34 @@
  */
 
 #include <rtl/ustrbuf.hxx>
+#include <rtl/ref.hxx>
 #include <i18nutil/casefolding.hxx>
 #include <i18nutil/unicode.hxx>
-
+#include <com/sun/star/i18n/MultipleCharsOutputException.hpp>
 #include <comphelper/processfactory.hxx>
-#include <comphelper/string.hxx>
-#include <osl/diagnose.h>
 
 #include <string.h>
 
-#include "characterclassificationImpl.hxx"
-#include "breakiteratorImpl.hxx"
+#include <characterclassificationImpl.hxx>
+#include <breakiteratorImpl.hxx>
 
-#include "transliteration_body.hxx"
+#include <transliteration_body.hxx>
 #include <memory>
 
 using namespace ::com::sun::star::uno;
+using namespace ::com::sun::star::i18n;
 using namespace ::com::sun::star::lang;
 
-namespace com { namespace sun { namespace star { namespace i18n {
+namespace i18npool {
 
 Transliteration_body::Transliteration_body()
 {
-    nMappingType = 0;
+    nMappingType = MappingType::NONE;
     transliterationName = "Transliteration_body";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_body";
 }
 
-sal_Int16 SAL_CALL Transliteration_body::getType() throw(RuntimeException, std::exception)
+sal_Int16 SAL_CALL Transliteration_body::getType()
 {
     return TransliterationType::ONE_TO_ONE;
 }
@@ -53,14 +53,12 @@ sal_Int16 SAL_CALL Transliteration_body::getType() throw(RuntimeException, std::
 sal_Bool SAL_CALL Transliteration_body::equals(
     const OUString& /*str1*/, sal_Int32 /*pos1*/, sal_Int32 /*nCount1*/, sal_Int32& /*nMatch1*/,
     const OUString& /*str2*/, sal_Int32 /*pos2*/, sal_Int32 /*nCount2*/, sal_Int32& /*nMatch2*/)
-    throw(RuntimeException, std::exception)
 {
     throw RuntimeException();
 }
 
 Sequence< OUString > SAL_CALL
 Transliteration_body::transliterateRange( const OUString& str1, const OUString& str2 )
-    throw( RuntimeException, std::exception)
 {
     Sequence< OUString > ostr(2);
     ostr[0] = str1;
@@ -68,33 +66,32 @@ Transliteration_body::transliterateRange( const OUString& str1, const OUString& 
     return ostr;
 }
 
-static sal_uInt8 lcl_getMappingTypeForToggleCase( sal_uInt8 nMappingType, sal_Unicode cChar )
+static MappingType lcl_getMappingTypeForToggleCase( MappingType nMappingType, sal_Unicode cChar )
 {
-    sal_uInt8 nRes = nMappingType;
+    MappingType nRes = nMappingType;
 
     // take care of TOGGLE_CASE transliteration:
     // nMappingType should not be a combination of flags, thuse we decide now
     // which one to use.
-    if (nMappingType == (MappingTypeLowerToUpper | MappingTypeUpperToLower))
+    if (nMappingType == (MappingType::LowerToUpper | MappingType::UpperToLower))
     {
         const sal_Int16 nType = unicode::getUnicodeType( cChar );
         if (nType & 0x02 /* lower case*/)
-            nRes = MappingTypeLowerToUpper;
+            nRes = MappingType::LowerToUpper;
         else
         {
             // should also work properly for non-upper characters like white spaces, numbers, ...
-            nRes = MappingTypeUpperToLower;
+            nRes = MappingType::UpperToLower;
         }
     }
 
     return nRes;
 }
 
-OUString SAL_CALL
-Transliteration_body::transliterate(
+OUString
+Transliteration_body::transliterateImpl(
     const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-    Sequence< sal_Int32 >& offset)
-    throw(RuntimeException, std::exception)
+    Sequence< sal_Int32 >& offset, bool useOffset)
 {
     const sal_Unicode *in = inStr.getStr() + startPos;
 
@@ -106,11 +103,11 @@ Transliteration_body::transliterate(
         for (i = 0; i < nCount; i++)
         {
             // take care of TOGGLE_CASE transliteration:
-            sal_uInt8 nTmpMappingType = nMappingType;
-            if (nMappingType == (MappingTypeLowerToUpper | MappingTypeUpperToLower))
+            MappingType nTmpMappingType = nMappingType;
+            if (nMappingType == (MappingType::LowerToUpper | MappingType::UpperToLower))
                 nTmpMappingType = lcl_getMappingTypeForToggleCase( nMappingType, in[i] );
 
-            const Mapping &map = casefolding::getValue( in, i, nCount, aLocale, nTmpMappingType );
+            const i18nutil::Mapping &map = i18nutil::casefolding::getValue( in, i, nCount, aLocale, nTmpMappingType );
             nOffCount += map.nmap;
         }
         rtl_uString* pStr = rtl_uString_alloc(nOffCount);
@@ -124,11 +121,11 @@ Transliteration_body::transliterate(
         for (i = 0; i < nCount; i++)
         {
             // take care of TOGGLE_CASE transliteration:
-            sal_uInt8 nTmpMappingType = nMappingType;
-            if (nMappingType == (MappingTypeLowerToUpper | MappingTypeUpperToLower))
+            MappingType nTmpMappingType = nMappingType;
+            if (nMappingType == (MappingType::LowerToUpper | MappingType::UpperToLower))
                 nTmpMappingType = lcl_getMappingTypeForToggleCase( nMappingType, in[i] );
 
-            const Mapping &map = casefolding::getValue( in, i, nCount, aLocale, nTmpMappingType );
+            const i18nutil::Mapping &map = i18nutil::casefolding::getValue( in, i, nCount, aLocale, nTmpMappingType );
             for (sal_Int32 k = 0; k < map.nmap; k++)
             {
                 pArr[j] = i + startPos;
@@ -164,11 +161,11 @@ Transliteration_body::transliterate(
         for ( sal_Int32 i = 0; i < nCount; i++)
         {
             // take care of TOGGLE_CASE transliteration:
-            sal_uInt8 nTmpMappingType = nMappingType;
-            if (nMappingType == (MappingTypeLowerToUpper | MappingTypeUpperToLower))
+            MappingType nTmpMappingType = nMappingType;
+            if (nMappingType == (MappingType::LowerToUpper | MappingType::UpperToLower))
                 nTmpMappingType = lcl_getMappingTypeForToggleCase( nMappingType, in[i] );
 
-            const Mapping &map = casefolding::getValue( in, i, nCount, aLocale, nTmpMappingType );
+            const i18nutil::Mapping &map = i18nutil::casefolding::getValue( in, i, nCount, aLocale, nTmpMappingType );
             for (sal_Int32 k = 0; k < map.nmap; k++)
             {
                 out[j++] = map.map[k];
@@ -181,9 +178,9 @@ Transliteration_body::transliterate(
 }
 
 OUString SAL_CALL
-Transliteration_body::transliterateChar2String( sal_Unicode inChar ) throw(RuntimeException, std::exception)
+Transliteration_body::transliterateChar2String( sal_Unicode inChar )
 {
-    const Mapping &map = casefolding::getValue(&inChar, 0, 1, aLocale, nMappingType);
+    const i18nutil::Mapping &map = i18nutil::casefolding::getValue(&inChar, 0, 1, aLocale, nMappingType);
     rtl_uString* pStr = rtl_uString_alloc(map.nmap);
     sal_Unicode* out = pStr->buffer;
     sal_Int32 i;
@@ -196,30 +193,30 @@ Transliteration_body::transliterateChar2String( sal_Unicode inChar ) throw(Runti
 }
 
 sal_Unicode SAL_CALL
-Transliteration_body::transliterateChar2Char( sal_Unicode inChar ) throw(MultipleCharsOutputException, RuntimeException, std::exception)
+Transliteration_body::transliterateChar2Char( sal_Unicode inChar )
 {
-    const Mapping &map = casefolding::getValue(&inChar, 0, 1, aLocale, nMappingType);
+    const i18nutil::Mapping &map = i18nutil::casefolding::getValue(&inChar, 0, 1, aLocale, nMappingType);
     if (map.nmap > 1)
         throw MultipleCharsOutputException();
     return map.map[0];
 }
 
-OUString SAL_CALL
-Transliteration_body::folding( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-    Sequence< sal_Int32 >& offset) throw(RuntimeException, std::exception)
+OUString
+Transliteration_body::foldingImpl( const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
+    Sequence< sal_Int32 >& offset, bool useOffset)
 {
-    return this->transliterate(inStr, startPos, nCount, offset);
+    return transliterateImpl(inStr, startPos, nCount, offset, useOffset);
 }
 
 Transliteration_casemapping::Transliteration_casemapping()
 {
-    nMappingType = 0;
+    nMappingType = MappingType::NONE;
     transliterationName = "casemapping(generic)";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_casemapping";
 }
 
-void SAL_CALL
-Transliteration_casemapping::setMappingType( const sal_uInt8 rMappingType, const Locale& rLocale )
+void
+Transliteration_casemapping::setMappingType( const MappingType rMappingType, const Locale& rLocale )
 {
     nMappingType = rMappingType;
     aLocale = rLocale;
@@ -227,14 +224,14 @@ Transliteration_casemapping::setMappingType( const sal_uInt8 rMappingType, const
 
 Transliteration_u2l::Transliteration_u2l()
 {
-    nMappingType = MappingTypeUpperToLower;
+    nMappingType = MappingType::UpperToLower;
     transliterationName = "upper_to_lower(generic)";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_u2l";
 }
 
 Transliteration_l2u::Transliteration_l2u()
 {
-    nMappingType = MappingTypeLowerToUpper;
+    nMappingType = MappingType::LowerToUpper;
     transliterationName = "lower_to_upper(generic)";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_l2u";
 }
@@ -245,23 +242,23 @@ Transliteration_togglecase::Transliteration_togglecase()
     // but we take care of that problem in Transliteration_body::transliterate above
     // before that value is used. There we will decide which of both is to be used on
     // a per character basis.
-    nMappingType = MappingTypeLowerToUpper | MappingTypeUpperToLower;
+    nMappingType = MappingType::LowerToUpper | MappingType::UpperToLower;
     transliterationName = "toggle(generic)";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_togglecase";
 }
 
 Transliteration_titlecase::Transliteration_titlecase()
 {
-    nMappingType = MappingTypeToTitle;
+    nMappingType = MappingType::ToTitle;
     transliterationName = "title(generic)";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_titlecase";
 }
 
+/// @throws RuntimeException
 static OUString transliterate_titlecase_Impl(
     const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
     const Locale &rLocale,
     Sequence< sal_Int32 >& offset )
-    throw(RuntimeException)
 {
     const OUString aText( inStr.copy( startPos, nCount ) );
 
@@ -269,7 +266,7 @@ static OUString transliterate_titlecase_Impl(
     if (!aText.isEmpty())
     {
         Reference< XComponentContext > xContext = ::comphelper::getProcessComponentContext();
-        Reference< CharacterClassificationImpl > xCharClassImpl( new CharacterClassificationImpl( xContext ) );
+        rtl::Reference< CharacterClassificationImpl > xCharClassImpl( new CharacterClassificationImpl( xContext ) );
 
         // because xCharClassImpl.toTitle does not handle ligatures or Beta but will raise
         // an exception we need to handle the first chara manually...
@@ -306,31 +303,29 @@ static OUString transliterate_titlecase_Impl(
 
 // this function expects to be called on a word-by-word basis,
 // namely that startPos points to the first char of the word
-OUString SAL_CALL Transliteration_titlecase::transliterate(
+OUString Transliteration_titlecase::transliterateImpl(
     const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-    Sequence< sal_Int32 >& offset )
-    throw(RuntimeException, std::exception)
+    Sequence< sal_Int32 >& offset, bool )
 {
     return transliterate_titlecase_Impl( inStr, startPos, nCount, aLocale, offset );
 }
 
 Transliteration_sentencecase::Transliteration_sentencecase()
 {
-    nMappingType = MappingTypeToTitle;  // though only to be applied to the first word...
+    nMappingType = MappingType::ToTitle;  // though only to be applied to the first word...
     transliterationName = "sentence(generic)";
     implementationName = "com.sun.star.i18n.Transliteration.Transliteration_sentencecase";
 }
 
 // this function expects to be called on a sentence-by-sentence basis,
 // namely that startPos points to the first word (NOT first char!) in the sentence
-OUString SAL_CALL Transliteration_sentencecase::transliterate(
+OUString Transliteration_sentencecase::transliterateImpl(
     const OUString& inStr, sal_Int32 startPos, sal_Int32 nCount,
-    Sequence< sal_Int32 >& offset )
-    throw(RuntimeException, std::exception)
+    Sequence< sal_Int32 >& offset, bool )
 {
     return transliterate_titlecase_Impl( inStr, startPos, nCount, aLocale, offset );
 }
 
-} } } }
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

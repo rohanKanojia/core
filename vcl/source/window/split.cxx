@@ -17,7 +17,6 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <tools/rc.h>
 #include <tools/poly.hxx>
 
 #include <vcl/event.hxx>
@@ -49,19 +48,6 @@ namespace
     };
 }
 
-void Splitter::ImplInitSplitterData()
-{
-    ImplGetWindowImpl()->mbSplitter        = true;
-    mpRefWin          = nullptr;
-    mnSplitPos        = 0;
-    mnLastSplitPos    = 0;
-    mnStartSplitPos   = 0;
-    mbDragFull        = false;
-    mbKbdSplitting    = false;
-    mbInKeyEvent      = 0;
-    mnKeyboardStepSize = SPLITTER_DEFAULTSTEPSIZE;
-}
-
 // Should only be called from a ImplInit method for initialization or
 // after checking bNew is different from the current mbHorzSplit value.
 // The public method that does that check is Splitter::SetHorizontal().
@@ -75,12 +61,12 @@ void Splitter::ImplInitHorVer(bool bNew)
     if ( mbHorzSplit )
     {
         ePointerStyle = PointerStyle::HSplit;
-        SetSizePixel( Size( rSettings.GetSplitSize(), rSettings.GetScrollBarSize() ) );
+        SetSizePixel( Size( StyleSettings::GetSplitSize(), rSettings.GetScrollBarSize() ) );
     }
     else
     {
         ePointerStyle = PointerStyle::VSplit;
-        SetSizePixel( Size( rSettings.GetScrollBarSize(), rSettings.GetSplitSize() ) );
+        SetSizePixel( Size( rSettings.GetScrollBarSize(), StyleSettings::GetSplitSize() ) );
     }
 
     SetPointer( Pointer( ePointerStyle ) );
@@ -108,41 +94,50 @@ void Splitter::ImplSplitMousePos( Point& rPos )
     if ( mbHorzSplit )
     {
         if ( rPos.X() > maDragRect.Right()-1 )
-            rPos.X() = maDragRect.Right()-1;
+            rPos.setX( maDragRect.Right()-1 );
         if ( rPos.X() < maDragRect.Left()+1 )
-            rPos.X() = maDragRect.Left()+1;
+            rPos.setX( maDragRect.Left()+1 );
     }
     else
     {
         if ( rPos.Y() > maDragRect.Bottom()-1 )
-            rPos.Y() = maDragRect.Bottom()-1;
+            rPos.setY( maDragRect.Bottom()-1 );
         if ( rPos.Y() < maDragRect.Top()+1 )
-            rPos.Y() = maDragRect.Top()+1;
+            rPos.setY( maDragRect.Top()+1 );
     }
 }
 
 void Splitter::ImplDrawSplitter()
 {
-    Rectangle aInvRect( maDragRect );
+    tools::Rectangle aInvRect( maDragRect );
 
     if ( mbHorzSplit )
     {
-        aInvRect.Left()     = maDragPos.X() - 1;
-        aInvRect.Right()    = maDragPos.X() + 1;
+        aInvRect.SetLeft( maDragPos.X() - 1 );
+        aInvRect.SetRight( maDragPos.X() + 1 );
     }
     else
     {
-        aInvRect.Top()      = maDragPos.Y() - 1;
-        aInvRect.Bottom()   = maDragPos.Y() + 1;
+        aInvRect.SetTop( maDragPos.Y() - 1 );
+        aInvRect.SetBottom( maDragPos.Y() + 1 );
     }
 
-    mpRefWin->InvertTracking( mpRefWin->PixelToLogic(aInvRect), SHOWTRACK_SPLIT );
+    mpRefWin->InvertTracking( mpRefWin->PixelToLogic(aInvRect), ShowTrackFlags::Split );
 }
 
 Splitter::Splitter( vcl::Window* pParent, WinBits nStyle ) :
-    Window( WINDOW_SPLITTER )
+    Window( WindowType::SPLITTER ),
+    mpRefWin( nullptr ),
+    mnSplitPos( 0 ),
+    mnLastSplitPos( 0 ),
+    mnStartSplitPos( 0 ),
+    mbDragFull( false ),
+    mbKbdSplitting( false ),
+    mbInKeyEvent( false ),
+    mnKeyboardStepSize( SPLITTER_DEFAULTSTEPSIZE )
 {
-    ImplInitSplitterData();
+    ImplGetWindowImpl()->mbSplitter        = true;
+
     ImplInit( pParent, nStyle );
 
     SetLineColor();
@@ -168,7 +163,7 @@ void Splitter::dispose()
 
 void Splitter::SetHorizontal(bool bNew)
 {
-    if(bNew != (bool)mbHorzSplit)
+    if(bNew != mbHorzSplit)
     {
         ImplInitHorVer(bNew);
     }
@@ -204,7 +199,7 @@ bool Splitter::ImplSplitterActive()
     bool bActive = true;
     const StyleSettings& rSettings = GetSettings().GetStyleSettings();
     long nA = rSettings.GetScrollBarSize();
-    long nB = rSettings.GetSplitSize();
+    long nB = StyleSettings::GetSplitSize();
 
     Size aSize = GetOutputSize();
     if ( mbHorzSplit )
@@ -229,9 +224,9 @@ void Splitter::MouseButtonDown( const MouseEvent& rMEvt )
             StartSplit();
             Point aPos = rMEvt.GetPosPixel();
             if ( mbHorzSplit )
-                aPos.X() = mnLastSplitPos;
+                aPos.setX( mnLastSplitPos );
             else
-                aPos.Y() = mnLastSplitPos;
+                aPos.setY( mnLastSplitPos );
             ImplSplitMousePos( aPos );
             long nTemp = mnSplitPos;
             if ( mbHorzSplit )
@@ -387,16 +382,16 @@ void Splitter::ImplKbdTracking( vcl::KeyCode aKeyCode )
             switch( nCode )
             {
             case KEY_LEFT:
-                aNewPos.X()-=delta;
+                aNewPos.AdjustX( -delta );
                 break;
             case KEY_RIGHT:
-                aNewPos.X()+=delta;
+                aNewPos.AdjustX(delta );
                 break;
             case KEY_UP:
-                aNewPos.Y()-=delta;
+                aNewPos.AdjustY( -delta );
                 break;
             case KEY_DOWN:
-                aNewPos.Y()+=delta;
+                aNewPos.AdjustY(delta );
                 break;
             default:
                 maxiter = 0;    // leave loop
@@ -447,7 +442,7 @@ void Splitter::EndSplit()
     maEndSplitHdl.Call( this );
 }
 
-void Splitter::SetDragRectPixel( const Rectangle& rDragRect, vcl::Window* _pRefWin )
+void Splitter::SetDragRectPixel( const tools::Rectangle& rDragRect, vcl::Window* _pRefWin )
 {
     maDragRect = rDragRect;
     if ( !_pRefWin )
@@ -520,9 +515,9 @@ void Splitter::ImplRestoreSplitter()
     {
         // restore last pos if it was a useful position (>5)
         if ( mbHorzSplit )
-            aPos.X() = mnLastSplitPos;
+            aPos.setX( mnLastSplitPos );
         else
-            aPos.Y() = mnLastSplitPos;
+            aPos.setY( mnLastSplitPos );
     }
 
     ImplSplitMousePos( aPos );
@@ -560,7 +555,7 @@ void Splitter::KeyInput( const KeyEvent& rKEvt )
     if( mbInKeyEvent )
         return;
 
-    mbInKeyEvent = 1;
+    mbInKeyEvent = true;
 
     Splitter *pSibling = ImplFindSibling();
     vcl::KeyCode aKeyCode = rKEvt.GetKeyCode();
@@ -612,9 +607,9 @@ void Splitter::KeyInput( const KeyEvent& rKEvt )
                 StartSplit();
                 Point aPos;
                 if ( mbHorzSplit )
-                    aPos.X() = 0;
+                    aPos.setX( 0 );
                 else
-                    aPos.Y() = 0;
+                    aPos.setY( 0 );
                 ImplSplitMousePos( aPos );
                 long nTemp = mnSplitPos;
                 if ( mbHorzSplit )
@@ -649,12 +644,7 @@ void Splitter::KeyInput( const KeyEvent& rKEvt )
             GrabFocusToDocument();
             break;
     }
-    mbInKeyEvent = 0;
-}
-
-bool Splitter::Notify( NotifyEvent& rNEvt )
-{
-    return Window::Notify( rNEvt );
+    mbInKeyEvent = false;
 }
 
 void Splitter::DataChanged( const DataChangedEvent& rDCEvt )
@@ -678,7 +668,7 @@ void Splitter::DataChanged( const DataChangedEvent& rDCEvt )
     }
 }
 
-void Splitter::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rPaintRect)
+void Splitter::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rPaintRect)
 {
     rRenderContext.DrawRect(rPaintRect);
 
@@ -688,7 +678,7 @@ void Splitter::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rPaint
 
     if (mbKbdSplitting)
     {
-        LineInfo aInfo( LINE_DASH );
+        LineInfo aInfo( LineStyle::Dash );
         //aInfo.SetDashLen( 2 );
         //aInfo.SetDashCount( 1 );
         aInfo.SetDistance( 1 );
@@ -701,6 +691,11 @@ void Splitter::Paint(vcl::RenderContext& rRenderContext, const Rectangle& rPaint
     {
         rRenderContext.DrawRect(rPaintRect);
     }
+}
+
+Size Splitter::GetOptimalSize() const
+{
+    return LogicToPixel(Size(3, 3), MapMode(MapUnit::MapAppFont));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

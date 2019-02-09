@@ -25,8 +25,10 @@ ifneq ($(origin AR),default)
 gb_AR := $(AR)
 endif
 
+# do not define SOLARIS - use #ifdef __sun instead
+#	-D$(OS) \
+
 gb_OSDEFS := \
-	-D$(OS) \
 	-DSYSV \
 	-DSUN \
 	-DSUN4 \
@@ -36,6 +38,7 @@ gb_OSDEFS := \
 	-DUNIX \
 	-DUNX \
 	$(PTHREAD_CFLAGS) \
+	$(LFS_CFLAGS) \
 
 gb_CFLAGS := \
 	$(gb_CFLAGS_COMMON) \
@@ -78,11 +81,7 @@ gb_LinkTarget_LDFLAGS += \
 endif
 
 ifneq ($(HAVE_LD_BSYMBOLIC_FUNCTIONS),)
-gb_LinkTarget_LDFLAGS += \
-	-Wl,--dynamic-list-cpp-new \
-	-Wl,--dynamic-list-cpp-typeinfo \
-	-Wl,-Bsymbolic-functions \
-
+gb_LinkTarget_LDFLAGS += -Wl,-Bsymbolic-functions
 endif
 
 # sun ld doesn't understand -O1 optimize flag
@@ -110,11 +109,6 @@ gb_LinkTarget__RPATHS := \
 
 gb_LinkTarget_CFLAGS := $(gb_CFLAGS) $(gb_CFLAGS_WERROR)
 gb_LinkTarget_CXXFLAGS := $(gb_CXXFLAGS) $(gb_CFLAGS_WERROR)
-
-ifeq ($(gb_SYMBOL),$(true))
-gb_LinkTarget_CXXFLAGS += $(gb_DEBUGINFO_FLAGS)
-gb_LinkTarget_CFLAGS += $(gb_DEBUGINFO_FLAGS)
-endif
 
 # note that `cat $(extraobjectlist)` is needed to build with older gcc versions, e.g. 4.1.2 on SLED10
 # we want to use @$(extraobjectlist) in the long run
@@ -320,8 +314,6 @@ $(call gb_InstallModuleTarget_add_defs,$(1),\
 	$(gb_CPUDEFS) \
 	$(gb_OSDEFS) \
 	-DCOMID=gcc3 \
-	-DSHORTSTDC3=$(gb_SHORTSTDC3) \
-	-DSHORTSTDCPP3=$(gb_SHORTSTDCPP3) \
 	-D_gcc3 \
 )
 
@@ -363,7 +355,7 @@ endef
 gb_UIMenubarTarget_UIMenubarTarget_platform :=
 
 # Python
-gb_Python_PRECOMMAND := $(gb_Helper_set_ld_path) PYTHONHOME="$(INSTDIR)/program/python-core-$(PYTHON_VERSION)" PYTHONPATH="$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib:$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib/lib-dynload"
+gb_Python_PRECOMMAND := $(gb_Helper_set_ld_path) PYTHONHOME="$(INSTDIR)/program/python-core-$(PYTHON_VERSION)" PYTHONPATH="$${PYPATH:+$$PYPATH:}$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib:$(INSTDIR)/program/python-core-$(PYTHON_VERSION)/lib/lib-dynload:$(INSTDIR)/program"
 gb_Python_INSTALLED_EXECUTABLE := /bin/sh $(INSTROOT)/program/python
 # this is passed to gdb as executable when running tests
 gb_Python_INSTALLED_EXECUTABLE_GDB := $(INSTROOT)/program/python.bin

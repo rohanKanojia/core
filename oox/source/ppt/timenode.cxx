@@ -17,30 +17,31 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/ppt/timenode.hxx"
+#include <oox/ppt/timenode.hxx>
 
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
-#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/animations/XAnimateColor.hpp>
 #include <com/sun/star/animations/XAnimateMotion.hpp>
 #include <com/sun/star/animations/XAnimateTransform.hpp>
 #include <com/sun/star/animations/XCommand.hpp>
+#include <com/sun/star/animations/XAudio.hpp>
 #include <com/sun/star/animations/XIterateContainer.hpp>
-#include <com/sun/star/animations/XAnimationNodeSupplier.hpp>
 #include <com/sun/star/animations/XTimeContainer.hpp>
+#include <com/sun/star/animations/XTransitionFilter.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
 #include <com/sun/star/animations/Event.hpp>
 #include <com/sun/star/animations/EventTrigger.hpp>
 #include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
-#include "oox/helper/helper.hxx"
-#include "oox/core/xmlfilterbase.hxx"
+#include <oox/helper/helper.hxx>
+#include <oox/core/xmlfilterbase.hxx>
 #include <oox/ppt/pptfilterhelpers.hxx>
-#include "sal/log.hxx"
+#include <oox/token/tokens.hxx>
+#include <sal/log.hxx>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::beans;
@@ -48,7 +49,6 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::animations;
-using namespace ::com::sun::star::frame;
 using namespace ::com::sun::star::presentation;
 
 namespace oox { namespace ppt {
@@ -66,6 +66,9 @@ namespace oox { namespace ppt {
                 break;
             case AnimationNodeType::ANIMATE:
                 sServiceName = "com.sun.star.animations.Animate";
+                break;
+            case AnimationNodeType::ITERATE:
+                sServiceName = "com.sun.star.animations.IterateContainer";
                 break;
             case AnimationNodeType::ANIMATECOLOR:
                 sServiceName = "com.sun.star.animations.AnimateColor";
@@ -152,7 +155,7 @@ namespace oox { namespace ppt {
                                     {
                                         // first effect does not start on click, so correct
                                         // first click nodes begin to 0s
-                                        xClickNode->setBegin( makeAny( (double)0.0 ) );
+                                        xClickNode->setBegin( makeAny( 0.0 ) );
                                         break;
                                     }
                                 }
@@ -195,18 +198,25 @@ namespace oox { namespace ppt {
     void TimeNode::addNode( const XmlFilterBase& rFilter, const Reference< XAnimationNode >& rxNode, const SlidePersistPtr & pSlide )
     {
         try {
-            OUString sServiceName = getServiceName( mnNodeType );
+            sal_Int16 nNodeType = mnNodeType;
+
+            if (mnNodeType == AnimationNodeType::PAR && maNodeProperties[NP_ITERATETYPE].hasValue())
+                nNodeType = AnimationNodeType::ITERATE;
+
+            OUString sServiceName = getServiceName(nNodeType);
+
             Reference< XAnimationNode > xNode = createAndInsert( rFilter, sServiceName, rxNode );
-            setNode( rFilter, xNode, pSlide );
+            if (!xNode)
+                return;
+            setNode(rFilter, xNode, pSlide, rxNode);
         }
         catch( const Exception& e )
         {
-            SAL_INFO("oox.ppt","OOX: exception raised in TimeNode::addNode() - " <<
-                                 OUStringToOString( e.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
+            SAL_INFO("oox.ppt","OOX: exception raised in TimeNode::addNode() - " << e );
         }
     }
 
-    void TimeNode::setNode( const XmlFilterBase& rFilter, const Reference< XAnimationNode >& xNode, const SlidePersistPtr & pSlide )
+    void TimeNode::setNode(const XmlFilterBase& rFilter, const Reference< XAnimationNode >& xNode, const SlidePersistPtr & pSlide, const Reference<XAnimationNode>& xParent)
     {
         SAL_WARN_IF( !xNode.is(), "oox.ppt", "null node passed" );
 
@@ -229,7 +239,7 @@ namespace oox { namespace ppt {
             if( !maStCondList.empty() )
             {
                 Any aAny = AnimationCondition::convertList( pSlide, maStCondList );
-                 if( aAny.hasValue() )
+                if( aAny.hasValue() )
                 {
                     xNode->setBegin( aAny );
                 }
@@ -271,10 +281,11 @@ namespace oox { namespace ppt {
             {
                 Sequence< NamedValue > aUserDataSeq( static_cast< sal_Int32 >( maUserData.size() ) );
                 NamedValue* pValues = aUserDataSeq.getArray();
-                for( UserDataMap::const_iterator aIt = maUserData.begin(), aEnd = maUserData.end(); aIt != aEnd; ++aIt, ++pValues )
+                for (auto const& elem : maUserData)
                 {
-                    pValues->Name = aIt->first;
-                    pValues->Value = aIt->second;
+                    pValues->Name = elem.first;
+                    pValues->Value = elem.second;
+                    ++pValues;
                 }
                 maNodeProperties[ NP_USERDATA ] <<= aUserDataSeq;
             }
@@ -284,6 +295,7 @@ namespace oox { namespace ppt {
             Reference< XAnimateMotion > xAnimateMotion( xNode, UNO_QUERY );
             Reference< XAnimateTransform > xAnimateTransform( xNode, UNO_QUERY );
             Reference< XCommand > xCommand( xNode, UNO_QUERY );
+            Reference< XAudio > xAudio( xNode, UNO_QUERY );
             Reference< XIterateContainer > xIterateContainer( xNode, UNO_QUERY );
             sal_Int16 nInt16 = 0;
             bool bBool = false;
@@ -291,7 +303,7 @@ namespace oox { namespace ppt {
             OUString sString;
             Sequence< NamedValue > aSeq;
 
-            for( int i = 0; i < _NP_SIZE; i++)
+            for( int i = 0; i < NP_SIZE_; i++)
             {
                 Any & aValue( maNodeProperties[ i ] );
                 if( aValue.hasValue() )
@@ -311,8 +323,22 @@ namespace oox { namespace ppt {
                             xAnimate->setBy( aValue );
                         break;
                     case NP_TARGET:
-                        if( xAnimate.is() )
-                            xAnimate->setTarget( aValue );
+
+                        if (xParent.is() && xParent->getType() == AnimationNodeType::ITERATE)
+                        {
+                            Reference<XIterateContainer> xParentContainer(xParent, UNO_QUERY);
+                            if (xParentContainer.is())
+                                xParentContainer->setTarget(aValue);
+                        }
+                        else
+                        {
+                            if (xAnimate.is())
+                                xAnimate->setTarget(aValue);
+                            if (xCommand.is())
+                                xCommand->setTarget(aValue);
+                            if (xAudio.is())
+                                xAudio->setSource(aValue);
+                        }
                         break;
                     case NP_SUBITEM:
                         if( xAnimate.is() )
@@ -558,7 +584,7 @@ namespace oox { namespace ppt {
         }
         catch( const Exception& e )
         {
-            SAL_INFO("oox.ppt","OOX: exception raised in TimeNode::setNode() - " << e.Message );
+            SAL_INFO("oox.ppt","OOX: exception raised in TimeNode::setNode() - " << e );
         }
     }
 
@@ -576,7 +602,7 @@ namespace oox { namespace ppt {
         }
         catch( const Exception& e )
         {
-            SAL_INFO("oox.ppt","OOX: exception raised in TimeNode::createAndInsert() trying to create a service " <<  OUStringToOString( rServiceName, RTL_TEXTENCODING_ASCII_US).getStr() << " = " << OUStringToOString( e.Message, RTL_TEXTENCODING_ASCII_US ).getStr() );
+            SAL_INFO("oox.ppt", "OOX: exception raised in TimeNode::createAndInsert() trying to create a service " << rServiceName << " = " << e );
         }
 
         return Reference< XAnimationNode >();

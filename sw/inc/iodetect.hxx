@@ -20,12 +20,11 @@
 #ifndef INCLUDED_SW_INC_IODETECT_HXX
 #define INCLUDED_SW_INC_IODETECT_HXX
 
-#include <osl/endian.h>
+#include <memory>
 #include <rtl/ustring.hxx>
-#include <sfx2/docfilt.hxx>
-#include <sfx2/docfile.hxx>
-#include <sfx2/fcontnr.hxx>
-#include <swdllapi.h>
+#include <tools/lineend.hxx>
+#include <tools/solar.h>
+#include "swdllapi.h"
 
 #define FILTER_RTF      "RTF"       ///< RTF filter
 #define sRtfWH          "WH_RTF"
@@ -36,12 +35,20 @@
 #define FILTER_XML      "CXML"      ///< XML filter
 #define FILTER_XMLV     "CXMLV"     ///< XML filter
 #define FILTER_XMLVW    "CXMLVWEB"  ///< XML filter
+#define FILTER_DOCX     "OXML"
 #define sHTML           "HTML"
 #define sWW5            "WW6"
 #define sWW6            "CWW6"
 
 #define sSWRITER        "swriter"
 #define sSWRITERWEB     "swriter/web"
+
+class SfxFilter;
+class SfxFilterContainer;
+class SotStorage;
+class SvStream;
+namespace com { namespace sun { namespace star { namespace embed { class XStorage; } } } }
+namespace com { namespace sun { namespace star { namespace uno { template <typename> class Reference; } } } }
 
 struct SwIoDetect
 {
@@ -69,6 +76,7 @@ enum ReaderWriterEnum {
     READER_WRITER_XML,
     READER_WRITER_TEXT_DLG,
     READER_WRITER_TEXT,
+    READER_WRITER_DOCX,
     MAXFILTER
 };
 
@@ -96,10 +104,12 @@ public:
     static bool IsValidStgFilter( const css::uno::Reference < css::embed::XStorage >& rStg, const SfxFilter& rFilter);
 
     static bool IsDetectableText( const sal_Char* pBuf, sal_uLong &rLen,
-            rtl_TextEncoding *pCharSet=nullptr, bool *pSwap=nullptr, LineEnd *pLineEnd=nullptr, bool bEncodedFilter = false );
+            rtl_TextEncoding *pCharSet, bool *pSwap, LineEnd *pLineEnd );
 
     static const OUString GetSubStorageName( const SfxFilter& rFltr );
 };
+
+extern "C" SAL_DLLPUBLIC_EXPORT bool SAL_CALL TestImportFODT(SvStream &rStream);
 
 #endif
 

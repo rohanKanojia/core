@@ -18,7 +18,7 @@
  */
 
 
-#include "formfeaturedispatcher.hxx"
+#include <formfeaturedispatcher.hxx>
 
 #include <comphelper/namedvaluecollection.hxx>
 #include <tools/diagnose_ex.h>
@@ -43,7 +43,6 @@ namespace svx
         ,m_aFeatureURL( _rFeatureURL )
         ,m_nFormFeature( _nFormFeature )
         ,m_bLastKnownEnabled( false )
-        ,m_bDisposed( false )
     {
     }
 
@@ -56,7 +55,7 @@ namespace svx
 
         _rState.FeatureURL = m_aFeatureURL;
         _rState.IsEnabled = aState.Enabled;
-        _rState.Requery = sal_False;
+        _rState.Requery = false;
         _rState.State = aState.State;
     }
 
@@ -120,13 +119,11 @@ namespace svx
     }
 
 
-    void SAL_CALL OSingleFeatureDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& _rArguments ) throw (RuntimeException, std::exception)
+    void SAL_CALL OSingleFeatureDispatcher::dispatch( const URL& _rURL, const Sequence< PropertyValue >& _rArguments )
     {
         ::osl::ClearableMutexGuard aGuard( m_rMutex );
-        checkAlive();
 
         OSL_ENSURE( _rURL.Complete == m_aFeatureURL.Complete, "OSingleFeatureDispatcher::dispatch: not responsible for this URL!" );
-        (void)_rURL;
 
         if ( !m_xFormOperations->isEnabled( m_nFormFeature ) )
             return;
@@ -154,27 +151,19 @@ namespace svx
         }
         catch( const Exception& )
         {
-            DBG_UNHANDLED_EXCEPTION();
+            DBG_UNHANDLED_EXCEPTION("svx");
         }
     }
 
 
-    void SAL_CALL OSingleFeatureDispatcher::addStatusListener( const Reference< XStatusListener >& _rxControl, const URL& _rURL ) throw (RuntimeException, std::exception)
+    void SAL_CALL OSingleFeatureDispatcher::addStatusListener( const Reference< XStatusListener >& _rxControl, const URL& _rURL )
     {
-        (void)_rURL;
         OSL_ENSURE( _rURL.Complete == m_aFeatureURL.Complete, "OSingleFeatureDispatcher::addStatusListener: unexpected URL!" );
         OSL_ENSURE( _rxControl.is(), "OSingleFeatureDispatcher::addStatusListener: senseless call!" );
         if ( !_rxControl.is() )
             return;
 
         ::osl::ClearableMutexGuard aGuard( m_rMutex );
-        if ( m_bDisposed )
-        {
-            EventObject aDisposeEvent( *this );
-            aGuard.clear();
-            _rxControl->disposing( aDisposeEvent );
-            return;
-        }
 
         m_aStatusListeners.addInterface( _rxControl );
 
@@ -183,25 +172,16 @@ namespace svx
     }
 
 
-    void SAL_CALL OSingleFeatureDispatcher::removeStatusListener( const Reference< XStatusListener >& _rxControl, const URL& _rURL ) throw (RuntimeException, std::exception)
+    void SAL_CALL OSingleFeatureDispatcher::removeStatusListener( const Reference< XStatusListener >& _rxControl, const URL& _rURL )
     {
-        (void)_rURL;
         OSL_ENSURE( _rURL.Complete == m_aFeatureURL.Complete, "OSingleFeatureDispatcher::removeStatusListener: unexpected URL!" );
         OSL_ENSURE( _rxControl.is(), "OSingleFeatureDispatcher::removeStatusListener: senseless call!" );
         if ( !_rxControl.is() )
             return;
 
         ::osl::MutexGuard aGuard( m_rMutex );
-        checkAlive();
 
         m_aStatusListeners.removeInterface( _rxControl );
-    }
-
-
-    void OSingleFeatureDispatcher::checkAlive() const
-    {
-        if ( m_bDisposed )
-            throw DisposedException( OUString(), *const_cast< OSingleFeatureDispatcher* >( this ) );
     }
 
 

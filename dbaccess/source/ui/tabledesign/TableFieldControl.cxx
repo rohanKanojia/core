@@ -18,15 +18,16 @@
  */
 
 #include "TableFieldControl.hxx"
-#include "TableController.hxx"
-#include "TableDesignView.hxx"
+#include <TableController.hxx>
+#include <TableDesignView.hxx>
 #include "TEditControl.hxx"
-#include "dbustrings.hrc"
+#include <stringconstants.hxx>
+#include <strings.hxx>
 #include <com/sun/star/sdbc/XDatabaseMetaData.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <comphelper/types.hxx>
-#include "TypeInfo.hxx"
-#include "UITools.hxx"
+#include <TypeInfo.hxx>
+#include <UITools.hxx>
 
 using namespace ::com::sun::star::uno;
 using namespace ::com::sun::star::beans;
@@ -62,7 +63,7 @@ bool OTableFieldControl::IsReadOnly()
             bRead = true;
         else
         {
-             std::shared_ptr<OTableRow>  pCurRow = GetCtrl()->GetActRow();
+            std::shared_ptr<OTableRow>  pCurRow = GetCtrl()->GetActRow();
             if( pCurRow )
                 bRead = pCurRow->IsReadOnly();
         }

@@ -22,7 +22,7 @@
 
 #include <drawinglayer/primitive2d/baseprimitive2d.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
-#include <svtools/grfmgr.hxx>
+#include <vcl/GraphicObject.hxx>
 #include <svx/sdr/attribute/sdrlinefillshadowtextattribute.hxx>
 
 
@@ -36,14 +36,14 @@ namespace drawinglayer
         class SdrGrafPrimitive2D : public BufferedDecompositionPrimitive2D
         {
         private:
-            ::basegfx::B2DHomMatrix                     maTransform;
-            attribute::SdrLineFillShadowTextAttribute   maSdrLFSTAttribute;
-            GraphicObject                               maGraphicObject;
+            ::basegfx::B2DHomMatrix const                     maTransform;
+            attribute::SdrLineFillShadowTextAttribute const   maSdrLFSTAttribute;
+            GraphicObject const                               maGraphicObject;
             GraphicAttr                                 maGraphicAttr;
 
         protected:
             // local decomposition.
-            virtual Primitive2DContainer create2DDecomposition(const geometry::ViewInformation2D& aViewInformation) const override;
+            virtual void create2DDecomposition(Primitive2DContainer& rContainer, const geometry::ViewInformation2D& aViewInformation) const override;
 
         public:
             SdrGrafPrimitive2D(

@@ -17,7 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 #include <sfx2/bindings.hxx>
 #include <sfx2/viewsh.hxx>
 #include <sfx2/dispatch.hxx>
@@ -29,7 +29,6 @@
 #include <svl/cjkoptions.hxx>
 #include <svl/ctloptions.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/msgbox.hxx>
 #include <vcl/wrkwin.hxx>
 #include <vcl/settings.hxx>
 #include <sfx2/request.hxx>
@@ -37,15 +36,12 @@
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 
-#include <com/sun/star/i18n/TransliterationModules.hpp>
-#include <com/sun/star/i18n/TransliterationModulesExtra.hpp>
-
-#include "viewutil.hxx"
-#include "global.hxx"
-#include "chgtrack.hxx"
-#include "chgviset.hxx"
-#include "markdata.hxx"
-#include "document.hxx"
+#include <viewutil.hxx>
+#include <global.hxx>
+#include <chgtrack.hxx>
+#include <chgviset.hxx>
+#include <markdata.hxx>
+#include <document.hxx>
 
 #include <svx/svxdlg.hxx>
 #include <svx/dialogs.hrc>
@@ -64,12 +60,15 @@ void ScViewUtil::PutItemScript( SfxItemSet& rShellSet, const SfxItemSet& rCoreSe
     aSetItem.GetItemSet().PutExtended( rCoreSet, SfxItemState::DONTCARE, SfxItemState::SET );
     const SfxPoolItem* pI = aSetItem.GetItemOfScript( nScript );
     if (pI)
-        rShellSet.Put( *pI, nWhichId );
+    {
+        std::unique_ptr<SfxPoolItem> pNewItem(pI->CloneSetWhich(nWhichId));
+        rShellSet.Put( *pNewItem );
+    }
     else
         rShellSet.InvalidateItem( nWhichId );
 }
 
-sal_uInt16 ScViewUtil::GetEffLanguage( ScDocument* pDoc, const ScAddress& rPos )
+LanguageType ScViewUtil::GetEffLanguage( ScDocument* pDoc, const ScAddress& rPos )
 {
     //  used for thesaurus
 
@@ -81,7 +80,7 @@ sal_uInt16 ScViewUtil::GetEffLanguage( ScDocument* pDoc, const ScAddress& rPos )
     LanguageType eLnge;
     if (pLangIt)
     {
-        eLnge = (LanguageType) pLangIt->GetValue();
+        eLnge = pLangIt->GetValue();
         if (eLnge == LANGUAGE_DONTKNOW)                 //! can this happen?
         {
             LanguageType eLatin, eCjk, eCtl;
@@ -98,37 +97,37 @@ sal_uInt16 ScViewUtil::GetEffLanguage( ScDocument* pDoc, const ScAddress& rPos )
     return eLnge;
 }
 
-sal_Int32 ScViewUtil::GetTransliterationType( sal_uInt16 nSlotID )
+TransliterationFlags ScViewUtil::GetTransliterationType( sal_uInt16 nSlotID )
 {
-    sal_Int32 nType = 0;
+    TransliterationFlags nType = TransliterationFlags::NONE;
     switch ( nSlotID )
     {
         case SID_TRANSLITERATE_SENTENCE_CASE:
-            nType = css::i18n::TransliterationModulesExtra::SENTENCE_CASE;
+            nType = TransliterationFlags::SENTENCE_CASE;
             break;
         case SID_TRANSLITERATE_TITLE_CASE:
-            nType = css::i18n::TransliterationModulesExtra::TITLE_CASE;
+            nType = TransliterationFlags::TITLE_CASE;
             break;
         case SID_TRANSLITERATE_TOGGLE_CASE:
-            nType = css::i18n::TransliterationModulesExtra::TOGGLE_CASE;
+            nType = TransliterationFlags::TOGGLE_CASE;
             break;
         case SID_TRANSLITERATE_UPPER:
-            nType = css::i18n::TransliterationModules_LOWERCASE_UPPERCASE;
+            nType = TransliterationFlags::LOWERCASE_UPPERCASE;
             break;
         case SID_TRANSLITERATE_LOWER:
-            nType = css::i18n::TransliterationModules_UPPERCASE_LOWERCASE;
+            nType = TransliterationFlags::UPPERCASE_LOWERCASE;
             break;
         case SID_TRANSLITERATE_HALFWIDTH:
-            nType = css::i18n::TransliterationModules_FULLWIDTH_HALFWIDTH;
+            nType = TransliterationFlags::FULLWIDTH_HALFWIDTH;
             break;
         case SID_TRANSLITERATE_FULLWIDTH:
-            nType = css::i18n::TransliterationModules_HALFWIDTH_FULLWIDTH;
+            nType = TransliterationFlags::HALFWIDTH_FULLWIDTH;
             break;
         case SID_TRANSLITERATE_HIRAGANA:
-            nType = css::i18n::TransliterationModules_KATAKANA_HIRAGANA;
+            nType = TransliterationFlags::KATAKANA_HIRAGANA;
             break;
         case SID_TRANSLITERATE_KATAGANA:
-            nType = css::i18n::TransliterationModules_HIRAGANA_KATAKANA;
+            nType = TransliterationFlags::HIRAGANA_KATAKANA;
             break;
     }
     return nType;
@@ -147,18 +146,8 @@ bool ScViewUtil::IsActionShown( const ScChangeAction& rAction,
     if ( !rSettings.IsShowAccepted() && rAction.IsAccepted() && !rAction.IsRejecting() )
         return false;
 
-    if ( rSettings.HasAuthor() )
-    {
-        if ( rSettings.IsEveryoneButMe() )
-        {
-            // GetUser() at ChangeTrack is the current user
-            ScChangeTrack* pTrack = rDocument.GetChangeTrack();
-            if ( !pTrack || rAction.GetUser().equals(pTrack->GetUser()) )
-                return false;
-        }
-        else if ( !rAction.GetUser().equals(rSettings.GetTheAuthorToShow()) )
-            return false;
-    }
+    if ( rSettings.HasAuthor() && rAction.GetUser() != rSettings.GetTheAuthorToShow() )
+        return false;
 
     if ( rSettings.HasComment() )
     {
@@ -237,7 +226,7 @@ bool ScViewUtil::IsActionShown( const ScChangeAction& rAction,
     return true;
 }
 
-void ScViewUtil::UnmarkFiltered( ScMarkData& rMark, ScDocument* pDoc )
+void ScViewUtil::UnmarkFiltered( ScMarkData& rMark, const ScDocument* pDoc )
 {
     rMark.MarkToMulti();
 
@@ -249,10 +238,8 @@ void ScViewUtil::UnmarkFiltered( ScMarkData& rMark, ScDocument* pDoc )
     SCROW nEndRow = aMultiArea.aEnd.Row();
 
     bool bChanged = false;
-    ScMarkData::iterator itr = rMark.begin(), itrEnd = rMark.end();
-    for (; itr != itrEnd; ++itr)
+    for (const SCTAB& nTab : rMark)
     {
-        SCTAB nTab = *itr;
         for (SCROW nRow = nStartRow; nRow <= nEndRow; ++nRow)
         {
             SCROW nLastRow = nRow;
@@ -274,7 +261,7 @@ void ScViewUtil::UnmarkFiltered( ScMarkData& rMark, ScDocument* pDoc )
     rMark.MarkToSimple();
 }
 
-bool ScViewUtil::FitToUnfilteredRows( ScRange & rRange, ScDocument * pDoc, size_t nRows )
+bool ScViewUtil::FitToUnfilteredRows( ScRange & rRange, const ScDocument * pDoc, size_t nRows )
 {
     SCTAB nTab = rRange.aStart.Tab();
     bool bOneTabOnly = (nTab == rRange.aEnd.Tab());
@@ -288,7 +275,7 @@ bool ScViewUtil::FitToUnfilteredRows( ScRange & rRange, ScDocument * pDoc, size_
     return static_cast<size_t>(nCount) == nRows && bOneTabOnly;
 }
 
-bool ScViewUtil::HasFiltered( const ScRange& rRange, ScDocument* pDoc )
+bool ScViewUtil::HasFiltered( const ScRange& rRange, const ScDocument* pDoc )
 {
     SCROW nStartRow = rRange.aStart.Row();
     SCROW nEndRow = rRange.aEnd.Row();
@@ -323,8 +310,6 @@ void ScViewUtil::HideDisabledSlot( SfxItemSet& rSet, SfxBindings& rBindings, sal
 
         case SID_INSERT_RLM:
         case SID_INSERT_LRM:
-        case SID_INSERT_ZWNBSP:
-        case SID_INSERT_ZWSP:
             bEnabled = aCTLOptions.IsCTLFontEnabled();
         break;
 
@@ -338,34 +323,18 @@ void ScViewUtil::HideDisabledSlot( SfxItemSet& rSet, SfxBindings& rBindings, sal
         rSet.DisableItem( nSlotId );
 }
 
-bool ScViewUtil::ExecuteCharMap( const SvxFontItem& rOldFont,
-                                 SfxViewFrame& rFrame,
-                                 SvxFontItem&       rNewFont,
-                                 OUString&          rString )
+void ScViewUtil::ExecuteCharMap( const SvxFontItem& rOldFont,
+                                 SfxViewFrame& rFrame )
 {
-    bool bRet = false;
     SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    if(pFact)
-    {
-        SfxAllItemSet aSet( rFrame.GetObjectShell()->GetPool() );
-        aSet.Put( SfxBoolItem( FN_PARAM_1, false ) );
-        aSet.Put( SvxFontItem( rOldFont.GetFamily(), rOldFont.GetFamilyName(), rOldFont.GetStyleName(), rOldFont.GetPitch(), rOldFont.GetCharSet(), aSet.GetPool()->GetWhich( SID_ATTR_CHAR_FONT ) ) );
-        std::unique_ptr<SfxAbstractDialog> pDlg(pFact->CreateSfxDialog( &rFrame.GetWindow(), aSet, rFrame.GetFrame().GetFrameInterface(), RID_SVXDLG_CHARMAP ));
-        if ( pDlg->Execute() == RET_OK )
-        {
-            const SfxStringItem* pItem = SfxItemSet::GetItem<SfxStringItem>(pDlg->GetOutputItemSet(), SID_CHARMAP, false);
-            const SvxFontItem* pFontItem = SfxItemSet::GetItem<SvxFontItem>(pDlg->GetOutputItemSet(), SID_ATTR_CHAR_FONT, false);
-            if ( pItem )
-                rString  = pItem->GetValue();
-            if ( pFontItem )
-                rNewFont = SvxFontItem( pFontItem->GetFamily(), pFontItem->GetFamilyName(), pFontItem->GetStyleName(), pFontItem->GetPitch(), pFontItem->GetCharSet(), rNewFont.Which() );
-            bRet = true;
-        }
-    }
-    return bRet;
+    SfxAllItemSet aSet( rFrame.GetObjectShell()->GetPool() );
+    aSet.Put( SfxBoolItem( FN_PARAM_1, false ) );
+    aSet.Put( SvxFontItem( rOldFont.GetFamily(), rOldFont.GetFamilyName(), rOldFont.GetStyleName(), rOldFont.GetPitch(), rOldFont.GetCharSet(), aSet.GetPool()->GetWhich( SID_ATTR_CHAR_FONT ) ) );
+    ScopedVclPtr<SfxAbstractDialog> pDlg(pFact->CreateCharMapDialog(rFrame.GetWindow().GetFrameWeld(), aSet, true));
+    pDlg->Execute();
 }
 
-bool ScViewUtil::IsFullScreen( SfxViewShell& rViewShell )
+bool ScViewUtil::IsFullScreen( const SfxViewShell& rViewShell )
 {
     SfxBindings&    rBindings       = rViewShell.GetViewFrame()->GetBindings();
     std::unique_ptr<SfxPoolItem> pItem;
@@ -377,7 +346,7 @@ bool ScViewUtil::IsFullScreen( SfxViewShell& rViewShell )
     return bIsFullScreen;
 }
 
-void ScViewUtil::SetFullScreen( SfxViewShell& rViewShell, bool bSet )
+void ScViewUtil::SetFullScreen( const SfxViewShell& rViewShell, bool bSet )
 {
     if( IsFullScreen( rViewShell ) != bSet )
     {

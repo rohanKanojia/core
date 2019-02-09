@@ -21,9 +21,7 @@
 #define INCLUDED_SC_SOURCE_UI_INC_TABOPDLG_HXX
 
 #include <vcl/fixed.hxx>
-#include <vcl/group.hxx>
-#include "global.hxx"
-#include "address.hxx"
+#include <address.hxx>
 #include "anyrefdg.hxx"
 
 enum ScTabOpErr
@@ -43,7 +41,7 @@ public:
                     ScTabOpDlg( SfxBindings* pB, SfxChildWindow* pCW, vcl::Window* pParent,
                                 ScDocument*     pDocument,
                                 const ScRefAddress& rCursorPos );
-                    virtual ~ScTabOpDlg();
+                    virtual ~ScTabOpDlg() override;
     virtual void    dispose() override;
 
     virtual void    SetReference( const ScRange& rRef, ScDocument* pDoc ) override;
@@ -73,7 +71,7 @@ private:
     ScRefAddress    theRowCell;
     ScRefAddress    theColCell;
 
-    ScDocument*         pDoc;
+    ScDocument* const         pDoc;
     const SCTAB         nCurTab;
     VclPtr<formula::RefEdit>   pEdActive;
     bool                bDlgLostFocus;
@@ -87,9 +85,9 @@ private:
     void    Init();
     void    RaiseError( ScTabOpErr eError );
 
-    DECL_LINK_TYPED( BtnHdl, Button*, void );
-    DECL_LINK_TYPED( GetFocusHdl, Control&, void );
-    DECL_LINK_TYPED( LoseFocusHdl, Control&, void );
+    DECL_LINK( BtnHdl, Button*, void );
+    DECL_LINK( GetFocusHdl, Control&, void );
+    DECL_LINK( LoseFocusHdl, Control&, void );
 };
 
 #endif // INCLUDED_SC_SOURCE_UI_INC_TABOPDLG_HXX

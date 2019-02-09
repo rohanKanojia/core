@@ -11,30 +11,26 @@
 #ifndef INCLUDED_SC_SOURCE_UI_INC_PIVOTLAYOUTDIALOG_HXX
 #define INCLUDED_SC_SOURCE_UI_INC_PIVOTLAYOUTDIALOG_HXX
 
-#include <svx/checklbx.hxx>
 #include <vcl/lstbox.hxx>
 #include "anyrefdg.hxx"
-#include "dpobject.hxx"
-#include "dpsave.hxx"
-#include "dpshttab.hxx"
-#include "document.hxx"
+#include <dpobject.hxx>
 #include "viewdata.hxx"
 
 #include "PivotLayoutTreeList.hxx"
 #include "PivotLayoutTreeListData.hxx"
 #include "PivotLayoutTreeListLabel.hxx"
 
-class ScItemValue
+class ScItemValue final
 {
 public:
-    OUString maName;
+    OUString const maName;
     ScPivotFuncData maFunctionData;
     ScItemValue* mpOriginalItemValue;
 
-    ScItemValue(OUString const & aName, SCCOL nColumn, sal_uInt16 nFunctionMask);
-    ScItemValue(ScItemValue* pInputItemValue);
+    ScItemValue(OUString const & aName, SCCOL nColumn, PivotFunc nFunctionMask);
+    ScItemValue(const ScItemValue* pInputItemValue);
 
-    virtual ~ScItemValue();
+    ~ScItemValue();
 };
 
 class ScPivotLayoutDialog : public ScAnyRefDlg
@@ -43,13 +39,12 @@ public:
     ScDPObject maPivotTableObject;
 
     VclPtr<ScPivotLayoutTreeListBase> mpPreviouslyFocusedListBox;
-    VclPtr<ScPivotLayoutTreeListBase> mpCurrentlyFocusedListBox;
 
 private:
     ScViewData* mpViewData;
-    ScDocument* mpDocument;
+    ScDocument* const mpDocument;
 
-    bool mbNewPivotTable;
+    bool const mbNewPivotTable;
 
     VclPtr<ScPivotLayoutTreeListLabel> mpListBoxField;
     VclPtr<ScPivotLayoutTreeList>      mpListBoxPage;
@@ -83,17 +78,17 @@ private:
     VclPtr<CancelButton>     mpBtnCancel;
 
     VclPtr<formula::RefEdit>   mpActiveEdit;
-    ScAddress::Details  maAddressDetails;
+    ScAddress::Details const  maAddressDetails;
     bool                mbDialogLostFocus;
 
-    DECL_LINK_TYPED(CancelClicked,       Button*, void);
-    DECL_LINK_TYPED(OKClicked,           Button*, void);
-    DECL_LINK_TYPED(GetFocusHandler,     Control&, void);
-    DECL_LINK_TYPED(LoseFocusHandler,    Control&, void);
-    DECL_LINK_TYPED(ToggleSource,        RadioButton&, void);
-    DECL_LINK_TYPED(ToggleDestination,   RadioButton&, void);
-    DECL_LINK_TYPED(SourceListSelected,  ListBox&, void);
-    DECL_LINK_TYPED(SourceEditModified,  Edit&, void);
+    DECL_LINK(CancelClicked,       Button*, void);
+    DECL_LINK(OKClicked,           Button*, void);
+    DECL_LINK(GetFocusHandler,     Control&, void);
+    DECL_LINK(LoseFocusHandler,    Control&, void);
+    DECL_LINK(ToggleSource,        RadioButton&, void);
+    DECL_LINK(ToggleDestination,   RadioButton&, void);
+    DECL_LINK(SourceListSelected,  ListBox&, void);
+    DECL_LINK(SourceEditModified,  Edit&, void);
     void ToggleSource();
     void ToggleDestination();
     virtual bool Close() override;
@@ -111,20 +106,20 @@ private:
 public:
     ScPivotLayoutDialog(SfxBindings* pSfxBindings, SfxChildWindow* pChildWindow, vcl::Window* pParent,
                              ScViewData* pViewData, const ScDPObject* pPivotTableObject, bool bCreateNewPivotTable);
-    virtual ~ScPivotLayoutDialog();
+    virtual ~ScPivotLayoutDialog() override;
     virtual void dispose() override;
 
     virtual void SetReference(const ScRange& rReferenceRange, ScDocument* pDocument) override;
     virtual void SetActive() override;
     virtual bool IsRefInputMode() const override;
 
-    void ItemInserted(ScItemValue* pItemValue, ScPivotLayoutTreeList::SvPivotTreeListType eType);
+    void ItemInserted(const ScItemValue* pItemValue, ScPivotLayoutTreeList::SvPivotTreeListType eType);
 
     void UpdateSourceRange();
 
     void ApplyChanges();
     void ApplySaveData(ScDPSaveData& rSaveData);
-    void ApplyLabelData(ScDPSaveData& rSaveData);
+    void ApplyLabelData(const ScDPSaveData& rSaveData);
 
     ScItemValue* GetItem(SCCOL nColumn);
     bool IsDataElement(SCCOL nColumn);
@@ -132,6 +127,8 @@ public:
     ScDPLabelData& GetLabelData(SCCOL nColumn);
     ScDPLabelDataVector& GetLabelDataVector() { return maPivotParameters.maLabelArray;}
     void PushDataFieldNames(std::vector<ScDPName>& rDataFieldNames);
+
+    ScPivotLayoutTreeListBase* FindListBoxFor(const SvTreeListEntry *pEntry);
 };
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

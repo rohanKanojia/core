@@ -27,7 +27,7 @@
 
 namespace accessibility {
 
-AccessibleShape* CreateSvxAccessibleShape (
+static AccessibleShape* CreateSvxAccessibleShape (
     const AccessibleShapeInfo& rShapeInfo,
     const AccessibleShapeTreeInfo& rShapeTreeInfo,
     ShapeTypeId nId)
@@ -89,7 +89,7 @@ void RegisterDrawShapeTypes()
     /** List of shape type descriptors corresponding to the
         <type>SvxShapeTypes</type> enum.
     */
-    ShapeTypeDescriptor aSvxShapeTypeList[] = {
+    static ShapeTypeDescriptor const aSvxShapeTypeList[] = {
         ShapeTypeDescriptor ( DRAWING_TEXT, "com.sun.star.drawing.TextShape",
             CreateSvxAccessibleShape),
         ShapeTypeDescriptor (DRAWING_RECTANGLE, "com.sun.star.drawing.RectangleShape",
@@ -155,7 +155,7 @@ void RegisterDrawShapeTypes()
 
     };
 
-    // Crash while inserting callout with activated accesibility (#i37790#)
+    // Crash while inserting callout with activated accessibility (#i37790#)
     ShapeTypeHandler::Instance().AddShapeTypeList ( DRAWING_END, aSvxShapeTypeList);
 }
 

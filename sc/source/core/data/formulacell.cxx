@@ -1,4 +1,4 @@
-/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
+/* -*- Mode: C++; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4; fill-column: 100 -*- */
 /*
  * This file is part of the LibreOffice project.
  *
@@ -17,50 +17,55 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <sal/config.h>
+#include <sal/log.hxx>
+#include <osl/diagnose.h>
 
 #include <cassert>
 #include <cstdlib>
 
-#include "formulacell.hxx"
-#include "grouptokenconverter.hxx"
+#include <formulacell.hxx>
+#include <grouptokenconverter.hxx>
 
-#include "compiler.hxx"
-#include "document.hxx"
-#include "globalnames.hxx"
-#include "cellvalue.hxx"
-#include "interpre.hxx"
-#include "macromgr.hxx"
-#include "refupdat.hxx"
-#include "recursionhelper.hxx"
-#include "docoptio.hxx"
-#include "rangenam.hxx"
-#include "dbdata.hxx"
-#include "progress.hxx"
-#include "scmatrix.hxx"
-#include "rechead.hxx"
-#include "scitems.hxx"
-#include "validat.hxx"
-#include "editutil.hxx"
-#include "chgtrack.hxx"
-#include "tokenarray.hxx"
+#include <compiler.hxx>
+#include <document.hxx>
+#include <cellvalue.hxx>
+#include <interpre.hxx>
+#include <macromgr.hxx>
+#include <refupdat.hxx>
+#include <recursionhelper.hxx>
+#include <docoptio.hxx>
+#include <rangenam.hxx>
+#include <rangelst.hxx>
+#include <dbdata.hxx>
+#include <progress.hxx>
+#include <scmatrix.hxx>
+#include <rechead.hxx>
+#include <scitems.hxx>
+#include <validat.hxx>
+#include <editutil.hxx>
+#include <chgtrack.hxx>
+#include <tokenarray.hxx>
 
-#include <config_features.h>
+#include <comphelper/threadpool.hxx>
+#include <editeng/editobj.hxx>
+#include <tools/cpuid.hxx>
 #include <formula/errorcodes.hxx>
-#include <formula/vectortoken.hxx>
 #include <svl/intitem.hxx>
-#include <o3tl/make_unique.hxx>
-#include <rtl/strbuf.hxx>
-#include "formulagroup.hxx"
-#include "listenercontext.hxx"
-#include "types.hxx"
-#include "scopetools.hxx"
-#include "refupdatecontext.hxx"
+#include <formulagroup.hxx>
+#include <listenercontext.hxx>
+#include <types.hxx>
+#include <scopetools.hxx>
+#include <refupdatecontext.hxx>
 #include <tokenstringcontext.hxx>
 #include <refhint.hxx>
 #include <listenerquery.hxx>
 #include <listenerqueryids.hxx>
 #include <grouparealistener.hxx>
+#include <formulalogger.hxx>
+#include <com/sun/star/sheet/FormulaLanguage.hpp>
 
 #if HAVE_FEATURE_OPENCL
 #include <opencl/openclwrapper.hxx>
@@ -68,10 +73,9 @@
 
 #include <memory>
 #include <map>
+#include <vector>
 
 using namespace formula;
-
-IMPL_FIXEDMEMPOOL_NEWDEL( ScFormulaCell )
 
 #define DEBUG_CALCULATION 0
 #if DEBUG_CALCULATION
@@ -151,10 +155,10 @@ static struct DebugCalculation
             mvPos.back().maResult = rtl::math::doubleToUString( fVal, rtl_math_StringFormat_G, 2, '.', true);
     }
 
-    void storeResultError( const sal_uInt16& nErr )
+    void storeResultError( FormulaError nErr )
     {
         if (mbActive && !mvPos.empty())
-            mvPos.back().maResult = "Err:" + OUString::number( nErr);
+            mvPos.back().maResult = "Err:" + OUString::number( int( nErr ));
     }
 
     void enterGroup()
@@ -223,8 +227,6 @@ namespace {
 // Allow for a year's calendar (366).
 const sal_uInt16 MAXRECURSION = 400;
 
-using std::deque;
-
 typedef SCCOLROW(*DimensionSelector)(const ScAddress&, const ScSingleRefData&);
 
 SCCOLROW lcl_GetCol(const ScAddress& rPos, const ScSingleRefData& rData)
@@ -279,11 +281,11 @@ lcl_checkRangeDimensions(
 bool
 lcl_checkRangeDimensions(
     const ScAddress& rPos,
-    const deque<formula::FormulaToken*>::const_iterator& rBegin,
-    const deque<formula::FormulaToken*>::const_iterator& rEnd,
+    const std::vector<formula::FormulaToken*>::const_iterator& rBegin,
+    const std::vector<formula::FormulaToken*>::const_iterator& rEnd,
     bool& bCol, bool& bRow, bool& bTab)
 {
-    deque<formula::FormulaToken*>::const_iterator aCur(rBegin);
+    std::vector<formula::FormulaToken*>::const_iterator aCur(rBegin);
     ++aCur;
     const SingleDoubleRefProvider aRef(**rBegin);
     bool bOk(false);
@@ -302,17 +304,13 @@ lcl_checkRangeDimensions(
         ++aCur;
     }
 
-    if (bOk && aCur == rEnd)
-    {
-        return true;
-    }
-    return false;
+    return bOk && aCur == rEnd;
 }
 
-class LessByReference : public std::binary_function<const formula::FormulaToken*, const formula::FormulaToken*, bool>
+class LessByReference
 {
-    ScAddress maPos;
-    DimensionSelector maFunc;
+    ScAddress const maPos;
+    DimensionSelector const maFunc;
 public:
     LessByReference(const ScAddress& rPos, const DimensionSelector& rFunc) :
         maPos(rPos), maFunc(rFunc) {}
@@ -330,10 +328,10 @@ public:
  * denoted by token p1. Dimension, in which the comparison takes place, is
  * given by maFunc.
  */
-class AdjacentByReference : public std::binary_function<const formula::FormulaToken*, const formula::FormulaToken*, bool>
+class AdjacentByReference
 {
-    ScAddress maPos;
-    DimensionSelector maFunc;
+    ScAddress const maPos;
+    DimensionSelector const maFunc;
 public:
     AdjacentByReference(const ScAddress& rPos, DimensionSelector aFunc) :
         maPos(rPos), maFunc(aFunc) {}
@@ -348,12 +346,11 @@ public:
 
 bool
 lcl_checkIfAdjacent(
-    const ScAddress& rPos, const deque<formula::FormulaToken*>& rReferences, const DimensionSelector aWhich)
+    const ScAddress& rPos, const std::vector<formula::FormulaToken*>& rReferences, const DimensionSelector aWhich)
 {
-    typedef deque<formula::FormulaToken*>::const_iterator Iter;
-    Iter aBegin(rReferences.begin());
-    Iter aEnd(rReferences.end());
-    Iter aBegin1(aBegin);
+    auto aBegin(rReferences.cbegin());
+    auto aEnd(rReferences.cend());
+    auto aBegin1(aBegin);
     ++aBegin1;
     --aEnd;
     return std::equal(aBegin, aEnd, aBegin1, AdjacentByReference(rPos, aWhich));
@@ -361,7 +358,7 @@ lcl_checkIfAdjacent(
 
 void
 lcl_fillRangeFromRefList(
-    const ScAddress& aPos, const deque<formula::FormulaToken*>& rReferences, ScRange& rRange)
+    const ScAddress& aPos, const std::vector<formula::FormulaToken*>& rReferences, ScRange& rRange)
 {
     const ScSingleRefData aStart(
             SingleDoubleRefProvider(*rReferences.front()).Ref1);
@@ -373,7 +370,7 @@ lcl_fillRangeFromRefList(
 
 bool
 lcl_refListFormsOneRange(
-        const ScAddress& rPos, deque<formula::FormulaToken*>& rReferences,
+        const ScAddress& rPos, std::vector<formula::FormulaToken*>& rReferences,
         ScRange& rRange)
 {
     if (rReferences.size() == 1)
@@ -424,370 +421,25 @@ bool lcl_isReference(const FormulaToken& rToken)
         rToken.GetType() == svDoubleRef;
 }
 
-enum MightReferenceSheet
-{
-    UNKNOWN,
-    NONE,
-    CODE,
-    NAME
-};
-
-MightReferenceSheet mightRangeNameReferenceSheet( ScRangeData* pData, SCTAB nRefTab)
-{
-    ScTokenArray* pCode = pData->GetCode();
-    if (!pCode)
-        return MightReferenceSheet::NONE;
-
-    for (const FormulaToken* p = pCode->First(); p; p = pCode->Next())
-    {
-        if (p->GetOpCode() == ocName)
-            return MightReferenceSheet::NAME;
-    }
-
-    return pCode->ReferencesSheet( nRefTab, pData->GetPos().Tab()) ?
-        MightReferenceSheet::CODE : MightReferenceSheet::NONE;
-}
-
-// See also lcl_FindRangeNamesInUse() below.
-/** Recursively find all named expressions that directly or indirectly (nested)
-    reference a given sheet.
-
-    @param  pToken
-            A token of type svIndex with OpCode ocName.
- */
-bool findRangeNamesReferencingSheet( sc::UpdatedRangeNames& rIndexes, const FormulaToken* pToken,
-        const ScDocument* pDoc, SCTAB nGlobalRefTab, SCTAB nLocalRefTab,
-        SCTAB nOldTokenTab, SCTAB nOldTokenTabReplacement, bool bSameDoc, int nRecursion)
-{
-    const sal_uInt16 nTokenIndex = pToken->GetIndex();
-    SCTAB nTokenTab = pToken->GetSheet();
-    if (nTokenTab < -1)
-    {
-        SAL_WARN("sc.core", "findRangeNamesReferencingSheet - nTokenTab < -1 : " <<
-                nTokenTab << ", nTokenIndex " << nTokenIndex << " Fix the creator!");
-#if OSL_DEBUG_LEVEL > 0
-        const ScRangeData* pData = pDoc->FindRangeNameByIndexAndSheet( nTokenIndex, nTokenTab);
-        SAL_WARN_IF( pData, "sc.core", "findRangeNamesReferencingSheet - named expression is: " << pData->GetName());
-#endif
-        nTokenTab = -1;
-    }
-    SCTAB nRefTab = nGlobalRefTab;
-    if (nTokenTab == nOldTokenTab)
-    {
-        nTokenTab = nOldTokenTabReplacement;
-        nRefTab = nLocalRefTab;
-    }
-    else if (nTokenTab == nOldTokenTabReplacement)
-    {
-        nRefTab = nLocalRefTab;
-    }
-
-    if (rIndexes.isNameUpdated( nTokenTab, nTokenIndex))
-        return true;
-
-    ScRangeData* pData = pDoc->FindRangeNameByIndexAndSheet( nTokenIndex, nTokenTab);
-    if (!pData)
-        return false;
-
-    ScTokenArray* pCode = pData->GetCode();
-    if (!pCode)
-        return false;
-
-    bool bRef = !bSameDoc;  // include every name used when copying to other doc
-    if (nRecursion < 126)   // whatever.. 42*3
-    {
-        for (const FormulaToken* p = pCode->First(); p; p = pCode->Next())
-        {
-            if (p->GetOpCode() == ocName)
-            {
-                bRef |= findRangeNamesReferencingSheet( rIndexes, p, pDoc, nGlobalRefTab, nLocalRefTab,
-                        nOldTokenTab, nOldTokenTabReplacement, bSameDoc, nRecursion+1);
-            }
-        }
-    }
-
-    if (!bRef)
-    {
-        SCTAB nPosTab = pData->GetPos().Tab();
-        if (nPosTab == nOldTokenTab)
-            nPosTab = nOldTokenTabReplacement;
-        bRef = pCode->ReferencesSheet( nRefTab, nPosTab);
-    }
-    if (bRef)
-        rIndexes.setUpdatedName( nTokenTab, nTokenIndex);
-
-    return bRef;
-}
-
-ScRangeData* copyRangeName( const ScRangeData* pOldRangeData, ScDocument& rNewDoc, const ScDocument* pOldDoc,
-        const ScAddress& rNewPos, const ScAddress& rOldPos, bool bGlobalNamesToLocal,
-        SCTAB nOldSheet, const SCTAB nNewSheet, bool bSameDoc)
-{
-    ScAddress aRangePos( pOldRangeData->GetPos());
-    if (nNewSheet >= 0)
-        aRangePos.SetTab( nNewSheet);
-    ScRangeData* pRangeData = new ScRangeData(*pOldRangeData, &rNewDoc, &aRangePos);
-    pRangeData->SetIndex(0);    // needed for insert to assign a new index
-    ScTokenArray* pRangeNameToken = pRangeData->GetCode();
-    if (bSameDoc && nNewSheet >= 0)
-    {
-        if (bGlobalNamesToLocal && nOldSheet < 0)
-        {
-            nOldSheet = rOldPos.Tab();
-            if (rNewPos.Tab() <= nOldSheet)
-                // Sheet was inserted before and references already updated.
-                ++nOldSheet;
-        }
-        pRangeNameToken->AdjustSheetLocalNameReferences( nOldSheet, nNewSheet);
-    }
-    if (!bSameDoc)
-    {
-        pRangeNameToken->ReadjustAbsolute3DReferences(pOldDoc, &rNewDoc, pRangeData->GetPos(), true);
-        pRangeNameToken->AdjustAbsoluteRefs(pOldDoc, rOldPos, rNewPos, true);
-    }
-
-    bool bInserted;
-    if (nNewSheet < 0)
-        bInserted = rNewDoc.GetRangeName()->insert(pRangeData);
-    else
-        bInserted = rNewDoc.GetRangeName(nNewSheet)->insert(pRangeData);
-
-    return bInserted ? pRangeData : nullptr;
-}
-
-struct SheetIndex
-{
-    SCTAB       mnSheet;
-    sal_uInt16  mnIndex;
-
-    SheetIndex( SCTAB nSheet, sal_uInt16 nIndex ) : mnSheet(nSheet < -1 ? -1 : nSheet), mnIndex(nIndex) {}
-    bool operator<( const SheetIndex& r ) const
-    {
-        // Ascending order sheet, index
-        if (mnSheet < r.mnSheet)
-            return true;
-        if (mnSheet == r.mnSheet)
-            return mnIndex < r.mnIndex;
-        return false;
-    }
-};
-typedef std::map< SheetIndex, SheetIndex > SheetIndexMap;
-
-ScRangeData* copyRangeNames( SheetIndexMap& rSheetIndexMap, std::vector<ScRangeData*>& rRangeDataVec,
-        const sc::UpdatedRangeNames& rReferencingNames, SCTAB nTab,
-        const ScRangeData* pOldRangeData, ScDocument& rNewDoc, const ScDocument* pOldDoc,
-        const ScAddress& rNewPos, const ScAddress& rOldPos, bool bGlobalNamesToLocal,
-        const SCTAB nOldSheet, const SCTAB nNewSheet, bool bSameDoc)
-{
-    ScRangeData* pRangeData = nullptr;
-    const ScRangeName* pOldRangeName = (nTab < 0 ? pOldDoc->GetRangeName() : pOldDoc->GetRangeName(nTab));
-    if (pOldRangeName)
-    {
-        const ScRangeName* pNewRangeName = (nNewSheet < 0 ? rNewDoc.GetRangeName() : rNewDoc.GetRangeName(nNewSheet));
-        sc::UpdatedRangeNames::NameIndicesType aSet( rReferencingNames.getUpdatedNames(nTab));
-        for (auto const & rIndex : aSet)
-        {
-            const ScRangeData* pCopyData = pOldRangeName->findByIndex(rIndex);
-            if (pCopyData)
-            {
-                // Match the original pOldRangeData to adapt the current
-                // token's values later. For that no check for an already
-                // copied name is needed as we only enter here if there was
-                // none.
-                if (pCopyData == pOldRangeData)
-                {
-                    pRangeData = copyRangeName( pCopyData, rNewDoc, pOldDoc, rNewPos, rOldPos,
-                            bGlobalNamesToLocal, nOldSheet, nNewSheet, bSameDoc);
-                    if (pRangeData)
-                    {
-                        rRangeDataVec.push_back(pRangeData);
-                        rSheetIndexMap.insert( std::make_pair( SheetIndex( nOldSheet, pCopyData->GetIndex()),
-                                    SheetIndex( nNewSheet, pRangeData->GetIndex())));
-                    }
-                }
-                else
-                {
-                    // First check if the name is already available as copy.
-                    const ScRangeData* pFoundData = pNewRangeName->findByUpperName( pCopyData->GetUpperName());
-                    if (pFoundData)
-                    {
-                        // Just add the resulting sheet/index mapping.
-                        rSheetIndexMap.insert( std::make_pair( SheetIndex( nOldSheet, pCopyData->GetIndex()),
-                                    SheetIndex( nNewSheet, pFoundData->GetIndex())));
-                    }
-                    else
-                    {
-                        ScRangeData* pTmpData = copyRangeName( pCopyData, rNewDoc, pOldDoc, rNewPos, rOldPos,
-                                bGlobalNamesToLocal, nOldSheet, nNewSheet, bSameDoc);
-                        if (pTmpData)
-                        {
-                            rRangeDataVec.push_back(pTmpData);
-                            rSheetIndexMap.insert( std::make_pair( SheetIndex( nOldSheet, pCopyData->GetIndex()),
-                                        SheetIndex( nNewSheet, pTmpData->GetIndex())));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return pRangeData;
-}
-
 void adjustRangeName(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScDocument* pOldDoc,
         const ScAddress& rNewPos, const ScAddress& rOldPos, bool bGlobalNamesToLocal)
 {
-    bool bSameDoc = (rNewDoc.GetPool() == const_cast<ScDocument*>(pOldDoc)->GetPool());
-    const SCTAB nOldSheet = pToken->GetSheet();
-    if (bSameDoc && ((nOldSheet < 0 && !bGlobalNamesToLocal) || (nOldSheet >= 0 && nOldSheet != rOldPos.Tab())))
-        // Same doc and global name, if not copied to local name, or
-        // sheet-local name on other sheet stays the same.
-        return;
-
-    SAL_WARN_IF( !bSameDoc && nOldSheet >= 0 && nOldSheet != rOldPos.Tab(),
-            "sc.core", "adjustRangeName - sheet-local name was on other sheet in other document");
-    /* TODO: can we do something about that? e.g. loop over sheets? */
-
-    OUString aRangeName;
-    int nOldIndex = pToken->GetIndex();
-    ScRangeData* pOldRangeData = nullptr;
-
-    // XXX bGlobalNamesToLocal is also a synonym for copied sheet.
-    bool bInsertingBefore = (bGlobalNamesToLocal && bSameDoc && rNewPos.Tab() <= rOldPos.Tab());
-
-    // The Tab where an old local name is to be found or that a global name
-    // references. May differ below from nOldSheet if a sheet was inserted
-    // before the old position. Global names and local names other than on the
-    // old sheet or new sheet are already updated, local names on the old sheet
-    // or inserted sheet will be updated later. Confusing stuff. Watch out.
-    SCTAB nOldTab = (nOldSheet < 0 ? rOldPos.Tab() : nOldSheet);
-    if (bInsertingBefore)
-        // Sheet was already inserted before old position.
-        ++nOldTab;
-
-    // Search the name of the RangeName.
-    if (nOldSheet >= 0)
-    {
-        const ScRangeName* pRangeName = pOldDoc->GetRangeName(nOldTab);
-        pOldRangeData = pRangeName ? pRangeName->findByIndex(nOldIndex) : nullptr;
-        if (!pOldRangeData)
-            return;     // might be an error in the formula array
-        aRangeName = pOldRangeData->GetUpperName();
-    }
-    else
-    {
-        pOldRangeData = pOldDoc->GetRangeName()->findByIndex(nOldIndex);
-        if (!pOldRangeData)
-            return;     // might be an error in the formula array
-        aRangeName = pOldRangeData->GetUpperName();
-    }
-
-    // Find corresponding range name in new document.
-    // First search for local range name then global range names.
-    SCTAB nNewSheet = rNewPos.Tab();
-    ScRangeName* pRangeName = rNewDoc.GetRangeName(nNewSheet);
     ScRangeData* pRangeData = nullptr;
-    // Search local range names.
-    if (pRangeName)
-    {
-        pRangeData = pRangeName->findByUpperName(aRangeName);
-    }
-    // Search global range names.
-    if (!pRangeData && !bGlobalNamesToLocal)
-    {
-        nNewSheet = -1;
-        pRangeName = rNewDoc.GetRangeName();
-        if (pRangeName)
-            pRangeData = pRangeName->findByUpperName(aRangeName);
-    }
-    // If no range name was found copy it.
+    SCTAB nSheet = pToken->GetSheet();
+    sal_uInt16 nIndex = pToken->GetIndex();
+    if (!pOldDoc->CopyAdjustRangeName( nSheet, nIndex, pRangeData, rNewDoc, rNewPos, rOldPos, bGlobalNamesToLocal, true))
+        return; // nothing to do
+
     if (!pRangeData)
     {
-        bool bEarlyBailOut = (nOldSheet < 0 && bSameDoc);
-        MightReferenceSheet eMightReference = mightRangeNameReferenceSheet( pOldRangeData, nOldTab);
-        if (bEarlyBailOut && eMightReference == MightReferenceSheet::NONE)
-            return;
-
-        if (eMightReference == MightReferenceSheet::NAME)
-        {
-            // Name these to clarify what is passed where.
-            const SCTAB nGlobalRefTab = nOldTab;
-            const SCTAB nLocalRefTab = (bInsertingBefore ? nOldTab-1 : nOldTab);
-            const SCTAB nOldTokenTab = (nOldSheet < 0 ? (bInsertingBefore ? nOldTab-1 : nOldTab) : nOldSheet);
-            const SCTAB nOldTokenTabReplacement = nOldTab;
-            sc::UpdatedRangeNames aReferencingNames;
-            findRangeNamesReferencingSheet( aReferencingNames, pToken, pOldDoc,
-                    nGlobalRefTab, nLocalRefTab, nOldTokenTab, nOldTokenTabReplacement, bSameDoc, 0);
-            if (bEarlyBailOut && aReferencingNames.isEmpty(-1) && aReferencingNames.isEmpty(nOldTokenTabReplacement))
-                return;
-
-            SheetIndexMap aSheetIndexMap;
-            std::vector<ScRangeData*> aRangeDataVec;
-            if (!aReferencingNames.isEmpty(nOldTokenTabReplacement))
-            {
-                const SCTAB nTmpOldSheet = (nOldSheet < 0 ? nOldTab : nOldSheet);
-                nNewSheet = rNewPos.Tab();
-                pRangeData = copyRangeNames( aSheetIndexMap, aRangeDataVec, aReferencingNames, nOldTab,
-                        pOldRangeData, rNewDoc, pOldDoc, rNewPos, rOldPos,
-                        bGlobalNamesToLocal, nTmpOldSheet, nNewSheet, bSameDoc);
-            }
-            if ((bGlobalNamesToLocal || !bSameDoc) && !aReferencingNames.isEmpty(-1))
-            {
-                const SCTAB nTmpOldSheet = -1;
-                const SCTAB nTmpNewSheet = (bGlobalNamesToLocal ? rNewPos.Tab() : -1);
-                ScRangeData* pTmpData = copyRangeNames( aSheetIndexMap, aRangeDataVec, aReferencingNames, -1,
-                        pOldRangeData, rNewDoc, pOldDoc, rNewPos, rOldPos,
-                        bGlobalNamesToLocal, nTmpOldSheet, nTmpNewSheet, bSameDoc);
-                if (!pRangeData)
-                {
-                    pRangeData = pTmpData;
-                    nNewSheet = nTmpNewSheet;
-                }
-            }
-
-            // Adjust copied nested names to new sheet/index.
-            for (auto & iRD : aRangeDataVec)
-            {
-                ScTokenArray* pCode = iRD->GetCode();
-                if (pCode)
-                {
-                    for (FormulaToken* p = pCode->First(); p; p = pCode->Next())
-                    {
-                        if (p->GetOpCode() == ocName)
-                        {
-                            auto it = aSheetIndexMap.find( SheetIndex( p->GetSheet(), p->GetIndex()));
-                            if (it != aSheetIndexMap.end())
-                            {
-                                p->SetSheet( it->second.mnSheet);
-                                p->SetIndex( it->second.mnIndex);
-                            }
-                            else if (!bSameDoc)
-                            {
-                                SAL_WARN("sc.core","adjustRangeName - mapping to new name in other doc missing");
-                                p->SetIndex(0);     // #NAME? error instead of arbitrary name.
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            nNewSheet = ((nOldSheet < 0 && !bGlobalNamesToLocal) ? -1 : rNewPos.Tab());
-            pRangeData = copyRangeName( pOldRangeData, rNewDoc, pOldDoc, rNewPos, rOldPos, bGlobalNamesToLocal,
-                    nOldSheet, nNewSheet, bSameDoc);
-        }
-
-        if (!pRangeData)
-        {
-            // If this happened we have a real problem.
-            pToken->SetIndex(0);
-            OSL_FAIL("inserting the range name should not fail");
-            return;
-        }
+        // If this happened we have a real problem.
+        pToken->SetIndex(0);
+        OSL_FAIL("inserting the range name should not fail");
+        return;
     }
-    sal_Int32 nIndex = pRangeData->GetIndex();
+
     pToken->SetIndex(nIndex);
-    pToken->SetSheet(nNewSheet);
+    pToken->SetSheet(nSheet);
 }
 
 void adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScDocument* pOldDoc)
@@ -805,15 +457,15 @@ void adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScD
     ScDBCollection* pNewDBCollection = rNewDoc.GetDBCollection();
     if (!pNewDBCollection)
     {
-        pNewDBCollection = new ScDBCollection(&rNewDoc);
-        rNewDoc.SetDBCollection(pNewDBCollection);
+        rNewDoc.SetDBCollection(std::unique_ptr<ScDBCollection>(new ScDBCollection(&rNewDoc)));
+        pNewDBCollection = rNewDoc.GetDBCollection();
     }
     ScDBCollection::NamedDBs& aNewNamedDBs = pNewDBCollection->getNamedDBs();
     ScDBData* pNewDBData = aNewNamedDBs.findByUpperName(aDBName);
     if (!pNewDBData)
     {
         pNewDBData = new ScDBData(*pDBData);
-        bool ins = aNewNamedDBs.insert(pNewDBData);
+        bool ins = aNewNamedDBs.insert(std::unique_ptr<ScDBData>(pNewDBData));
         assert(ins); (void)ins;
     }
     pToken->SetIndex(pNewDBData->GetIndex());
@@ -821,9 +473,9 @@ void adjustDBRange(formula::FormulaToken* pToken, ScDocument& rNewDoc, const ScD
 
 struct AreaListenerKey
 {
-    ScRange maRange;
-    bool mbStartFixed;
-    bool mbEndFixed;
+    ScRange const maRange;
+    bool const mbStartFixed;
+    bool const mbEndFixed;
 
     AreaListenerKey( const ScRange& rRange, bool bStartFixed, bool bEndFixed ) :
         maRange(rRange), mbStartFixed(bStartFixed), mbEndFixed(bEndFixed) {}
@@ -863,35 +515,32 @@ struct ScFormulaCellGroup::Impl
 ScFormulaCellGroup::ScFormulaCellGroup() :
     mpImpl(new Impl),
     mnRefCount(0),
-    mpCode(nullptr),
     mpTopCell(nullptr),
     mnLength(0),
-    mnFormatType(css::util::NumberFormat::NUMBER),
+    mnWeight(0),
+    mnFormatType(SvNumFormatType::NUMBER),
     mbInvariant(false),
     mbSubTotal(false),
+    mbPartOfCycle(false),
     meCalcState(sc::GroupCalcEnabled)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCellGroup ctor this " << this);
 }
 
 ScFormulaCellGroup::~ScFormulaCellGroup()
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCellGroup dtor this " << this);
-    delete mpCode;
 }
 
 void ScFormulaCellGroup::setCode( const ScTokenArray& rCode )
 {
-    delete mpCode;
     mpCode = rCode.Clone();
     mbInvariant = mpCode->IsInvariant();
     mpCode->GenHash();
 }
 
-void ScFormulaCellGroup::setCode( ScTokenArray* pCode )
+void ScFormulaCellGroup::setCode( std::unique_ptr<ScTokenArray> pCode )
 {
-    delete mpCode;
-    mpCode = pCode; // takes ownership of the token array.
+    mpCode = std::move(pCode); // takes ownership of the token array.
+    mpCode->Finalize(); // Reduce memory usage if needed.
     mbInvariant = mpCode->IsInvariant();
     mpCode->GenHash();
 }
@@ -902,10 +551,10 @@ void ScFormulaCellGroup::compileCode(
     if (!mpCode)
         return;
 
-    if (mpCode->GetLen() && !mpCode->GetCodeError() && !mpCode->GetCodeLen())
+    if (mpCode->GetLen() && mpCode->GetCodeError() == FormulaError::NONE && !mpCode->GetCodeLen())
     {
-        ScCompiler aComp(&rDoc, rPos, *mpCode);
-        aComp.SetGrammar(eGram);
+        bool bMatrixFormula = mpTopCell->GetMatrixFlag() != ScMatrixMode::NONE;
+        ScCompiler aComp(&rDoc, rPos, *mpCode, eGram, true, bMatrixFormula);
         mbSubTotal = aComp.CompileTokenArray();
         mnFormatType = aComp.GetNumFormatType();
     }
@@ -925,7 +574,7 @@ sc::FormulaGroupAreaListener* ScFormulaCellGroup::getAreaListener(
     {
         // Insert a new one.
         it = mpImpl->m_AreaListeners.insert(
-            it, std::make_pair(aKey, o3tl::make_unique<sc::FormulaGroupAreaListener>(
+            it, std::make_pair(aKey, std::make_unique<sc::FormulaGroupAreaListener>(
                 rRange, *(*ppTopCell)->GetDocument(), (*ppTopCell)->aPos, mnLength, bStartFixed, bEndFixed)));
     }
 
@@ -948,6 +597,23 @@ void ScFormulaCellGroup::endAllGroupListening( ScDocument& rDoc )
 }
 
 ScFormulaCell::ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos ) :
+    bDirty(false),
+    bTableOpDirty(false),
+    bChanged(false),
+    bRunning(false),
+    bCompile(false),
+    bSubTotal(false),
+    bIsIterCell(false),
+    bInChangeTrack(false),
+    bNeedListening(false),
+    mbNeedsNumberFormat(false),
+    mbAllowNumberFormatChange(false),
+    mbPostponedDirty(false),
+    mbIsExtRef(false),
+    mbSeenInPath(false),
+    cMatrixFlag(ScMatrixMode::NONE),
+    nSeenInIteration(0),
+    nFormatType(SvNumFormatType::NUMBER),
     eTempGrammar(formula::FormulaGrammar::GRAM_DEFAULT),
     pCode(new ScTokenArray),
     pDocument(pDoc),
@@ -955,30 +621,31 @@ ScFormulaCell::ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos ) :
     pNext(nullptr),
     pPreviousTrack(nullptr),
     pNextTrack(nullptr),
-    nSeenInIteration(0),
-    nFormatType(css::util::NumberFormat::NUMBER),
-    cMatrixFlag(MM_NONE),
-    bDirty(false),
-    bChanged(false),
-    bRunning(false),
-    bCompile(false),
-    bSubTotal(false),
-    bIsIterCell(false),
-    bInChangeTrack(false),
-    bTableOpDirty(false),
-    bNeedListening(false),
-    mbNeedsNumberFormat(false),
-    mbPostponedDirty(false),
-    mbIsExtRef(false),
     aPos(rPos)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell ctor this " << this);
 }
 
 ScFormulaCell::ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos,
                               const OUString& rFormula,
                               const FormulaGrammar::Grammar eGrammar,
-                              sal_uInt8 cMatInd ) :
+                              ScMatrixMode cMatInd ) :
+    bDirty( true ), // -> Because of the use of the Auto Pilot Function was: cMatInd != 0
+    bTableOpDirty( false ),
+    bChanged( false ),
+    bRunning( false ),
+    bCompile( false ),
+    bSubTotal( false ),
+    bIsIterCell( false ),
+    bInChangeTrack( false ),
+    bNeedListening( false ),
+    mbNeedsNumberFormat( false ),
+    mbAllowNumberFormatChange(false),
+    mbPostponedDirty(false),
+    mbIsExtRef(false),
+    mbSeenInPath(false),
+    cMatrixFlag ( cMatInd ),
+    nSeenInIteration(0),
+    nFormatType ( SvNumFormatType::NUMBER ),
     eTempGrammar( eGrammar),
     pCode( nullptr ),
     pDocument( pDoc ),
@@ -986,25 +653,8 @@ ScFormulaCell::ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos,
     pNext(nullptr),
     pPreviousTrack(nullptr),
     pNextTrack(nullptr),
-    nSeenInIteration(0),
-    nFormatType ( css::util::NumberFormat::NUMBER ),
-    cMatrixFlag ( cMatInd ),
-    bDirty( true ), // -> Because of the use of the Auto Pilot Function was: cMatInd != 0
-    bChanged( false ),
-    bRunning( false ),
-    bCompile( false ),
-    bSubTotal( false ),
-    bIsIterCell( false ),
-    bInChangeTrack( false ),
-    bTableOpDirty( false ),
-    bNeedListening( false ),
-    mbNeedsNumberFormat( false ),
-    mbPostponedDirty(false),
-    mbIsExtRef(false),
     aPos(rPos)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell ctor this " << this);
-
     Compile( rFormula, true, eGrammar );    // bNoListening, Insert does that
     if (!pCode)
         // We need to have a non-NULL token array instance at all times.
@@ -1012,40 +662,42 @@ ScFormulaCell::ScFormulaCell( ScDocument* pDoc, const ScAddress& rPos,
 }
 
 ScFormulaCell::ScFormulaCell(
-    ScDocument* pDoc, const ScAddress& rPos, ScTokenArray* pArray,
-    const FormulaGrammar::Grammar eGrammar, sal_uInt8 cMatInd ) :
-    eTempGrammar( eGrammar),
-    pCode(pArray),
-    pDocument( pDoc ),
-    pPrevious(nullptr),
-    pNext(nullptr),
-    pPreviousTrack(nullptr),
-    pNextTrack(nullptr),
-    nSeenInIteration(0),
-    nFormatType ( css::util::NumberFormat::NUMBER ),
-    cMatrixFlag ( cMatInd ),
+    ScDocument* pDoc, const ScAddress& rPos, std::unique_ptr<ScTokenArray> pArray,
+    const FormulaGrammar::Grammar eGrammar, ScMatrixMode cMatInd ) :
     bDirty( true ),
+    bTableOpDirty( false ),
     bChanged( false ),
     bRunning( false ),
     bCompile( false ),
     bSubTotal( false ),
     bIsIterCell( false ),
     bInChangeTrack( false ),
-    bTableOpDirty( false ),
     bNeedListening( false ),
     mbNeedsNumberFormat( false ),
+    mbAllowNumberFormatChange(false),
     mbPostponedDirty(false),
     mbIsExtRef(false),
+    mbSeenInPath(false),
+    cMatrixFlag ( cMatInd ),
+    nSeenInIteration(0),
+    nFormatType ( SvNumFormatType::NUMBER ),
+    eTempGrammar( eGrammar),
+    pCode(pArray.release()),
+    pDocument( pDoc ),
+    pPrevious(nullptr),
+    pNext(nullptr),
+    pPreviousTrack(nullptr),
+    pNextTrack(nullptr),
     aPos(rPos)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell ctor this " << this);
-    assert(pArray); // Never pass a NULL pointer here.
+    assert(pCode); // Never pass a NULL pointer here.
+
+    pCode->Finalize(); // Reduce memory usage if needed.
 
     // Generate RPN token array.
-    if (pCode->GetLen() && !pCode->GetCodeError() && !pCode->GetCodeLen())
+    if (pCode->GetLen() && pCode->GetCodeError() == FormulaError::NONE && !pCode->GetCodeLen())
     {
-        ScCompiler aComp( pDocument, aPos, *pCode);
-        aComp.SetGrammar(eTempGrammar);
+        ScCompiler aComp( pDocument, aPos, *pCode, eTempGrammar, true, cMatrixFlag != ScMatrixMode::NONE );
         bSubTotal = aComp.CompileTokenArray();
         nFormatType = aComp.GetNumFormatType();
     }
@@ -1063,38 +715,37 @@ ScFormulaCell::ScFormulaCell(
 
 ScFormulaCell::ScFormulaCell(
     ScDocument* pDoc, const ScAddress& rPos, const ScTokenArray& rArray,
-    const FormulaGrammar::Grammar eGrammar, sal_uInt8 cMatInd ) :
-    eTempGrammar( eGrammar),
-    pCode(new ScTokenArray(rArray)),
-    pDocument( pDoc ),
-    pPrevious(nullptr),
-    pNext(nullptr),
-    pPreviousTrack(nullptr),
-    pNextTrack(nullptr),
-    nSeenInIteration(0),
-    nFormatType ( css::util::NumberFormat::NUMBER ),
-    cMatrixFlag ( cMatInd ),
+    const FormulaGrammar::Grammar eGrammar, ScMatrixMode cMatInd ) :
     bDirty( true ),
+    bTableOpDirty( false ),
     bChanged( false ),
     bRunning( false ),
     bCompile( false ),
     bSubTotal( false ),
     bIsIterCell( false ),
     bInChangeTrack( false ),
-    bTableOpDirty( false ),
     bNeedListening( false ),
     mbNeedsNumberFormat( false ),
+    mbAllowNumberFormatChange(false),
     mbPostponedDirty(false),
     mbIsExtRef(false),
+    mbSeenInPath(false),
+    cMatrixFlag ( cMatInd ),
+    nSeenInIteration(0),
+    nFormatType ( SvNumFormatType::NUMBER ),
+    eTempGrammar( eGrammar),
+    pCode(new ScTokenArray(rArray)), // also implicitly does Finalize() on the array
+    pDocument( pDoc ),
+    pPrevious(nullptr),
+    pNext(nullptr),
+    pPreviousTrack(nullptr),
+    pNextTrack(nullptr),
     aPos(rPos)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell ctor this " << this);
-
     // RPN array generation
-    if( pCode->GetLen() && !pCode->GetCodeError() && !pCode->GetCodeLen() )
+    if( pCode->GetLen() && pCode->GetCodeError() == FormulaError::NONE && !pCode->GetCodeLen() )
     {
-        ScCompiler aComp( pDocument, aPos, *pCode);
-        aComp.SetGrammar(eTempGrammar);
+        ScCompiler aComp( pDocument, aPos, *pCode, eTempGrammar, true, cMatrixFlag != ScMatrixMode::NONE );
         bSubTotal = aComp.CompileTokenArray();
         nFormatType = aComp.GetNumFormatType();
     }
@@ -1112,40 +763,57 @@ ScFormulaCell::ScFormulaCell(
 
 ScFormulaCell::ScFormulaCell(
     ScDocument* pDoc, const ScAddress& rPos, const ScFormulaCellGroupRef& xGroup,
-    const FormulaGrammar::Grammar eGrammar, sal_uInt8 cInd ) :
+    const FormulaGrammar::Grammar eGrammar, ScMatrixMode cInd ) :
     mxGroup(xGroup),
-    eTempGrammar( eGrammar),
-    pCode(xGroup->mpCode ? xGroup->mpCode : new ScTokenArray),
-    pDocument( pDoc ),
-    pPrevious(nullptr),
-    pNext(nullptr),
-    pPreviousTrack(nullptr),
-    pNextTrack(nullptr),
-    nSeenInIteration(0),
-    nFormatType(xGroup->mnFormatType),
-    cMatrixFlag ( cInd ),
     bDirty(true),
+    bTableOpDirty( false ),
     bChanged( false ),
     bRunning( false ),
     bCompile( false ),
     bSubTotal(xGroup->mbSubTotal),
     bIsIterCell( false ),
     bInChangeTrack( false ),
-    bTableOpDirty( false ),
     bNeedListening( false ),
     mbNeedsNumberFormat( false ),
+    mbAllowNumberFormatChange(false),
     mbPostponedDirty(false),
     mbIsExtRef(false),
+    mbSeenInPath(false),
+    cMatrixFlag ( cInd ),
+    nSeenInIteration(0),
+    nFormatType(xGroup->mnFormatType),
+    eTempGrammar( eGrammar),
+    pCode(xGroup->mpCode ? xGroup->mpCode.get() : new ScTokenArray),
+    pDocument( pDoc ),
+    pPrevious(nullptr),
+    pNext(nullptr),
+    pPreviousTrack(nullptr),
+    pNextTrack(nullptr),
     aPos(rPos)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell ctor this " << this);
-
     if (bSubTotal)
         pDocument->AddSubTotalCell(this);
 }
 
-ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, const ScAddress& rPos, int nCloneFlags ) :
+ScFormulaCell::ScFormulaCell(const ScFormulaCell& rCell, ScDocument& rDoc, const ScAddress& rPos, ScCloneFlags nCloneFlags) :
     SvtListener(),
+    bDirty( rCell.bDirty ),
+    bTableOpDirty( false ),
+    bChanged( rCell.bChanged ),
+    bRunning( false ),
+    bCompile( rCell.bCompile ),
+    bSubTotal( rCell.bSubTotal ),
+    bIsIterCell( false ),
+    bInChangeTrack( false ),
+    bNeedListening( false ),
+    mbNeedsNumberFormat( rCell.mbNeedsNumberFormat ),
+    mbAllowNumberFormatChange(false),
+    mbPostponedDirty(false),
+    mbIsExtRef(false),
+    mbSeenInPath(false),
+    cMatrixFlag ( rCell.cMatrixFlag ),
+    nSeenInIteration(0),
+    nFormatType( rCell.nFormatType ),
     aResult( rCell.aResult ),
     eTempGrammar( rCell.eTempGrammar),
     pDocument( &rDoc ),
@@ -1153,33 +821,16 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
     pNext(nullptr),
     pPreviousTrack(nullptr),
     pNextTrack(nullptr),
-    nSeenInIteration(0),
-    nFormatType( rCell.nFormatType ),
-    cMatrixFlag ( rCell.cMatrixFlag ),
-    bDirty( rCell.bDirty ),
-    bChanged( rCell.bChanged ),
-    bRunning( false ),
-    bCompile( rCell.bCompile ),
-    bSubTotal( rCell.bSubTotal ),
-    bIsIterCell( false ),
-    bInChangeTrack( false ),
-    bTableOpDirty( false ),
-    bNeedListening( false ),
-    mbNeedsNumberFormat( false ),
-    mbPostponedDirty(false),
-    mbIsExtRef(false),
     aPos(rPos)
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell ctor this " << this);
-
-    pCode = rCell.pCode->Clone();
+    pCode = rCell.pCode->Clone().release();
 
     //  set back any errors and recompile
     //  not in the Clipboard - it must keep the received error flag
     //  Special Length=0: as bad cells are generated, then they are also retained
-    if ( pCode->GetCodeError() && !pDocument->IsClipboard() && pCode->GetLen() )
+    if ( pCode->GetCodeError() != FormulaError::NONE && !pDocument->IsClipboard() && pCode->GetLen() )
     {
-        pCode->SetCodeError( 0 );
+        pCode->SetCodeError( FormulaError::NONE );
         bCompile = true;
     }
     // Compile ColRowNames on URM_MOVE/URM_COPY _after_ UpdateReference !
@@ -1191,9 +842,10 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
     {
         if (!pDocument->IsClipboardSource() || aPos.Tab() != rCell.aPos.Tab())
         {
-            bool bGlobalNamesToLocal = ((nCloneFlags & SC_CLONECELL_NAMES_TO_LOCAL) != 0);
+            bool bGlobalNamesToLocal = ((nCloneFlags & ScCloneFlags::NamesToLocal) != ScCloneFlags::Default);
             formula::FormulaToken* pToken = nullptr;
-            while((pToken = pCode->GetNextName())!= nullptr)
+            formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+            while((pToken = aIter.GetNextName())!= nullptr)
             {
                 OpCode eOpCode = pToken->GetOpCode();
                 if (eOpCode == ocName)
@@ -1204,7 +856,7 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
         }
 
         bool bCopyBetweenDocs = pDocument->GetPool() != rCell.pDocument->GetPool();
-        if (bCopyBetweenDocs && !(nCloneFlags & SC_CLONECELL_NOMAKEABS_EXTERNAL))
+        if (bCopyBetweenDocs && !(nCloneFlags & ScCloneFlags::NoMakeAbsExternal))
         {
             pCode->ReadjustAbsolute3DReferences( rCell.pDocument, &rDoc, rCell.aPos);
         }
@@ -1219,14 +871,11 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
         pCode->AdjustReferenceOnCopy( aPos);
     }
 
-    if ( nCloneFlags & SC_CLONECELL_ADJUST3DREL )
-        pCode->ReadjustRelative3DReferences( rCell.aPos, aPos );
-
     if( !bCompile )
     {   // Name references with references and ColRowNames
-        pCode->Reset();
+        formula::FormulaTokenArrayPlainIterator aIter(*pCode);
         formula::FormulaToken* t;
-        while ( ( t = pCode->GetNextReferenceOrName() ) != nullptr && !bCompile )
+        while ( ( t = aIter.GetNextReferenceOrName() ) != nullptr && !bCompile )
         {
             if ( t->IsExternalRef() )
             {
@@ -1235,7 +884,7 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
             }
             else if ( t->GetType() == svIndex )
             {
-                const ScRangeData* pRangeData = rDoc.FindRangeNameByIndexAndSheet( t->GetIndex(), t->GetSheet());
+                const ScRangeData* pRangeData = rDoc.FindRangeNameBySheetAndIndex( t->GetSheet(), t->GetIndex());
                 if( pRangeData )
                 {
                     if( pRangeData->HasReferences() )
@@ -1269,7 +918,7 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
         }
     }
 
-    if( nCloneFlags & SC_CLONECELL_STARTLISTENING )
+    if( nCloneFlags & ScCloneFlags::StartListening )
         StartListeningTo( &rDoc );
 
     if (bSubTotal)
@@ -1278,8 +927,6 @@ ScFormulaCell::ScFormulaCell( const ScFormulaCell& rCell, ScDocument& rDoc, cons
 
 ScFormulaCell::~ScFormulaCell()
 {
-    SAL_INFO( "sc.core.formulacell", "ScFormulaCell dtor this " << this);
-
     pDocument->RemoveFromFormulaTrack( this );
     pDocument->RemoveFromFormulaTree( this );
     pDocument->RemoveSubTotalCell(this);
@@ -1301,7 +948,7 @@ ScFormulaCell* ScFormulaCell::Clone() const
 
 ScFormulaCell* ScFormulaCell::Clone( const ScAddress& rPos ) const
 {
-    return new ScFormulaCell(*this, *pDocument, rPos, SC_CLONECELL_DEFAULT);
+    return new ScFormulaCell(*this, *pDocument, rPos, ScCloneFlags::Default);
 }
 
 size_t ScFormulaCell::GetHash() const
@@ -1315,22 +962,22 @@ ScFormulaVectorState ScFormulaCell::GetVectorState() const
 }
 
 void ScFormulaCell::GetFormula( OUStringBuffer& rBuffer,
-                                const FormulaGrammar::Grammar eGrammar ) const
+                                const FormulaGrammar::Grammar eGrammar, const ScInterpreterContext* pContext ) const
 {
-    if( pCode->GetCodeError() && !pCode->GetLen() )
+    if( pCode->GetCodeError() != FormulaError::NONE && !pCode->GetLen() )
     {
-        rBuffer = OUStringBuffer( ScGlobal::GetErrorString( pCode->GetCodeError()));
+        rBuffer = ScGlobal::GetErrorString(pCode->GetCodeError());
         return;
     }
-    else if( cMatrixFlag == MM_REFERENCE )
+    else if( cMatrixFlag == ScMatrixMode::Reference )
     {
         // Reference to another cell that contains a matrix formula.
-        pCode->Reset();
-        formula::FormulaToken* p = pCode->GetNextReferenceRPN();
+        formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+        formula::FormulaToken* p = aIter.GetNextReferenceRPN();
         if( p )
         {
             /* FIXME: original GetFormula() code obtained
-             * pCell only if (!this->IsInChangeTrack()),
+             * pCell only if (!IsInChangeTrack()),
              * GetEnglishFormula() omitted that test.
              * Can we live without in all cases? */
             ScFormulaCell* pCell = nullptr;
@@ -1341,13 +988,12 @@ void ScFormulaCell::GetFormula( OUStringBuffer& rBuffer,
 
             if (pCell)
             {
-                pCell->GetFormula( rBuffer, eGrammar);
+                pCell->GetFormula( rBuffer, eGrammar, pContext );
                 return;
             }
             else
             {
-                ScCompiler aComp( pDocument, aPos, *pCode);
-                aComp.SetGrammar(eGrammar);
+                ScCompiler aComp( pDocument, aPos, *pCode, eGrammar, false, false, pContext );
                 aComp.CreateStringFromTokenArray( rBuffer );
             }
         }
@@ -1358,43 +1004,46 @@ void ScFormulaCell::GetFormula( OUStringBuffer& rBuffer,
     }
     else
     {
-        ScCompiler aComp( pDocument, aPos, *pCode);
-        aComp.SetGrammar(eGrammar);
+        ScCompiler aComp( pDocument, aPos, *pCode, eGrammar, false, false, pContext );
         aComp.CreateStringFromTokenArray( rBuffer );
     }
 
     rBuffer.insert( 0, '=');
-    if( cMatrixFlag )
+    if( cMatrixFlag != ScMatrixMode::NONE )
     {
         rBuffer.insert( 0, '{');
         rBuffer.append( '}');
     }
 }
 
-void ScFormulaCell::GetFormula( OUString& rFormula, const FormulaGrammar::Grammar eGrammar ) const
+void ScFormulaCell::GetFormula( OUString& rFormula, const FormulaGrammar::Grammar eGrammar,
+    const ScInterpreterContext* pContext ) const
 {
     OUStringBuffer rBuffer( rFormula );
-    GetFormula( rBuffer, eGrammar );
+    GetFormula( rBuffer, eGrammar, pContext );
     rFormula = rBuffer.makeStringAndClear();
 }
 
-OUString ScFormulaCell::GetFormula( sc::CompileFormulaContext& rCxt ) const
+OUString ScFormulaCell::GetFormula( sc::CompileFormulaContext& rCxt, const ScInterpreterContext* pContext ) const
 {
     OUStringBuffer aBuf;
-    if (pCode->GetCodeError() && !pCode->GetLen())
+    if (pCode->GetCodeError() != FormulaError::NONE && !pCode->GetLen())
     {
-        aBuf = OUStringBuffer( ScGlobal::GetErrorString( pCode->GetCodeError()));
+        ScTokenArray aCode;
+        aCode.AddToken( FormulaErrorToken( pCode->GetCodeError()));
+        ScCompiler aComp(rCxt, aPos, aCode, false, false, pContext);
+        aComp.CreateStringFromTokenArray(aBuf);
         return aBuf.makeStringAndClear();
     }
-    else if( cMatrixFlag == MM_REFERENCE )
+    else if( cMatrixFlag == ScMatrixMode::Reference )
     {
         // Reference to another cell that contains a matrix formula.
-        pCode->Reset();
-        formula::FormulaToken* p = pCode->GetNextReferenceRPN();
+        formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+        formula::FormulaToken* p = aIter.GetNextReferenceRPN();
         if( p )
         {
             /* FIXME: original GetFormula() code obtained
-             * pCell only if (!this->IsInChangeTrack()),
+             * pCell only if (!IsInChangeTrack()),
              * GetEnglishFormula() omitted that test.
              * Can we live without in all cases? */
             ScFormulaCell* pCell = nullptr;
@@ -1409,7 +1058,7 @@ OUString ScFormulaCell::GetFormula( sc::CompileFormulaContext& rCxt ) const
             }
             else
             {
-                ScCompiler aComp(rCxt, aPos, *pCode);
+                ScCompiler aComp(rCxt, aPos, *pCode, false, false, pContext);
                 aComp.CreateStringFromTokenArray(aBuf);
             }
         }
@@ -1420,12 +1069,12 @@ OUString ScFormulaCell::GetFormula( sc::CompileFormulaContext& rCxt ) const
     }
     else
     {
-        ScCompiler aComp(rCxt, aPos, *pCode);
+        ScCompiler aComp(rCxt, aPos, *pCode, false, false, pContext);
         aComp.CreateStringFromTokenArray(aBuf);
     }
 
     aBuf.insert( 0, '=');
-    if( cMatrixFlag )
+    if( cMatrixFlag != ScMatrixMode::NONE )
     {
         aBuf.insert( 0, '{');
         aBuf.append( '}');
@@ -1439,7 +1088,7 @@ void ScFormulaCell::GetResultDimensions( SCSIZE& rCols, SCSIZE& rRows )
     MaybeInterpret();
 
     const ScMatrix* pMat = nullptr;
-    if (!pCode->GetCodeError() && aResult.GetType() == svMatrixCell &&
+    if (pCode->GetCodeError() == FormulaError::NONE && aResult.GetType() == svMatrixCell &&
             ((pMat = aResult.GetToken().get()->GetMatrix()) != nullptr))
         pMat->GetDimensions( rCols, rRows );
     else
@@ -1457,7 +1106,10 @@ void ScFormulaCell::SetNeedsDirty( bool bVar )
     mbPostponedDirty = bVar;
 }
 
-void ScFormulaCell::SetNeedNumberFormat( bool bVal ) { mbNeedsNumberFormat = bVal; }
+void ScFormulaCell::SetNeedNumberFormat( bool bVal )
+{
+    mbNeedsNumberFormat = mbAllowNumberFormatChange = bVal;
+}
 
 void ScFormulaCell::Compile( const OUString& rFormula, bool bNoListening,
                             const FormulaGrammar::Grammar eGrammar )
@@ -1471,11 +1123,10 @@ void ScFormulaCell::Compile( const OUString& rFormula, bool bNoListening,
     if ( pCode )
         pCode->Clear();
     ScTokenArray* pCodeOld = pCode;
-    ScCompiler aComp( pDocument, aPos);
-    aComp.SetGrammar(eGrammar);
-    pCode = aComp.CompileString( rFormula );
+    ScCompiler aComp( pDocument, aPos, eGrammar);
+    pCode = aComp.CompileString( rFormula ).release();
     delete pCodeOld;
-    if( !pCode->GetCodeError() )
+    if( pCode->GetCodeError() == FormulaError::NONE )
     {
         if ( !pCode->GetLen() && !aResult.GetHybridFormula().isEmpty() && rFormula == aResult.GetHybridFormula() )
         {   // not recursive CompileTokenArray/Compile/CompileTokenArray
@@ -1507,9 +1158,9 @@ void ScFormulaCell::Compile(
         pCode->Clear();
     ScTokenArray* pCodeOld = pCode;
     ScCompiler aComp(rCxt, aPos);
-    pCode = aComp.CompileString( rFormula );
+    pCode = aComp.CompileString( rFormula ).release();
     delete pCodeOld;
-    if( !pCode->GetCodeError() )
+    if( pCode->GetCodeError() == FormulaError::NONE )
     {
         if ( !pCode->GetLen() && !aResult.GetHybridFormula().isEmpty() && rFormula == aResult.GetHybridFormula() )
         {   // not recursive CompileTokenArray/Compile/CompileTokenArray
@@ -1535,7 +1186,7 @@ void ScFormulaCell::CompileTokenArray( bool bNoListening )
     {
         Compile( aResult.GetHybridFormula(), bNoListening, eTempGrammar);
     }
-    else if( bCompile && !pDocument->IsClipOrUndo() && !pCode->GetCodeError() )
+    else if( bCompile && !pDocument->IsClipOrUndo() && pCode->GetCodeError() == FormulaError::NONE )
     {
         // RPN length may get changed
         bool bWasInFormulaTree = pDocument->IsInFormulaTree( this );
@@ -1548,10 +1199,9 @@ void ScFormulaCell::CompileTokenArray( bool bNoListening )
 
         if( !bNoListening && pCode->GetCodeLen() )
             EndListeningTo( pDocument );
-        ScCompiler aComp(pDocument, aPos, *pCode);
-        aComp.SetGrammar(pDocument->GetGrammar());
+        ScCompiler aComp(pDocument, aPos, *pCode, pDocument->GetGrammar(), true, cMatrixFlag != ScMatrixMode::NONE);
         bSubTotal = aComp.CompileTokenArray();
-        if( !pCode->GetCodeError() )
+        if( pCode->GetCodeError() == FormulaError::NONE )
         {
             nFormatType = aComp.GetNumFormatType();
             bChanged = true;
@@ -1576,7 +1226,7 @@ void ScFormulaCell::CompileTokenArray( sc::CompileFormulaContext& rCxt, bool bNo
         rCxt.setGrammar(eTempGrammar);
         Compile(rCxt, aResult.GetHybridFormula(), bNoListening);
     }
-    else if( bCompile && !pDocument->IsClipOrUndo() && !pCode->GetCodeError() )
+    else if( bCompile && !pDocument->IsClipOrUndo() && pCode->GetCodeError() == FormulaError::NONE)
     {
         // RPN length may get changed
         bool bWasInFormulaTree = pDocument->IsInFormulaTree( this );
@@ -1589,9 +1239,9 @@ void ScFormulaCell::CompileTokenArray( sc::CompileFormulaContext& rCxt, bool bNo
 
         if( !bNoListening && pCode->GetCodeLen() )
             EndListeningTo( pDocument );
-        ScCompiler aComp(rCxt, aPos, *pCode);
+        ScCompiler aComp(rCxt, aPos, *pCode, true, cMatrixFlag != ScMatrixMode::NONE);
         bSubTotal = aComp.CompileTokenArray();
-        if( !pCode->GetCodeError() )
+        if( pCode->GetCodeError() == FormulaError::NONE )
         {
             nFormatType = aComp.GetNumFormatType();
             bChanged = true;
@@ -1610,12 +1260,16 @@ void ScFormulaCell::CompileTokenArray( sc::CompileFormulaContext& rCxt, bool bNo
 
 void ScFormulaCell::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rProgress )
 {
-    if ( cMatrixFlag == MM_REFERENCE )
+    if ( cMatrixFlag == ScMatrixMode::Reference )
     {   // is already token code via ScDocFunc::EnterMatrix, ScDocument::InsertMatrixFormula
         // just establish listeners
         StartListeningTo( pDocument );
         return ;
     }
+
+    // Error constant formula cell stays as is.
+    if (!pCode->GetLen() && pCode->GetCodeError() != FormulaError::NONE)
+        return;
 
     // Compilation changes RPN count, remove and reinsert to FormulaTree if it
     // was in to update its count.
@@ -1623,7 +1277,7 @@ void ScFormulaCell::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rPr
     if (bWasInFormulaTree)
         pDocument->RemoveFromFormulaTree( this);
     rCxt.setGrammar(eTempGrammar);
-    ScCompiler aComp(rCxt, aPos, *pCode);
+    ScCompiler aComp(rCxt, aPos, *pCode, true, cMatrixFlag != ScMatrixMode::NONE);
     OUString aFormula, aFormulaNmsp;
     aComp.CreateStringFromXMLTokenArray( aFormula, aFormulaNmsp );
     pDocument->DecXMLImportedFormulaCount( aFormula.getLength() );
@@ -1631,24 +1285,26 @@ void ScFormulaCell::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rPr
     // pCode may not deleted for queries, but must be empty
     pCode->Clear();
 
-    bool bSkipCompile = false;
+    bool bDoCompile = true;
 
     if ( !mxGroup && aFormulaNmsp.isEmpty() ) // optimization
     {
         ScAddress aPreviousCell( aPos );
         aPreviousCell.IncRow( -1 );
         ScFormulaCell *pPreviousCell = pDocument->GetFormulaCell( aPreviousCell );
-        if( pPreviousCell )
+        if (pPreviousCell && pPreviousCell->GetCode()->IsShareable())
         {
-            // Now try to convert to a string quickly ...
+            // Build formula string using the tokens from the previous cell,
+            // but use the current cell position.
             ScCompiler aBackComp( rCxt, aPos, *(pPreviousCell->pCode) );
             OUStringBuffer aShouldBeBuf;
             aBackComp.CreateStringFromTokenArray( aShouldBeBuf );
 
-            assert( aFormula[0] == '=' );
+            // The initial '=' is optional in ODFF.
+            const sal_Int32 nLeadingEqual = (aFormula.getLength() > 0 && aFormula[0] == '=') ? 1 : 0;
             OUString aShouldBe = aShouldBeBuf.makeStringAndClear();
-            if( aFormula.getLength() == aShouldBe.getLength() + 1 &&
-                aFormula.match( aShouldBe, 1 ) ) // initial '='
+            if (aFormula.getLength() == aShouldBe.getLength() + nLeadingEqual &&
+                    aFormula.match( aShouldBe, nLeadingEqual))
             {
                 // Put them in the same formula group.
                 ScFormulaCellGroupRef xGroup = pPreviousCell->GetCellGroup();
@@ -1667,34 +1323,31 @@ void ScFormulaCell::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rPr
                 if (bSubTotal)
                     pDocument->AddSubTotalCell(this);
 
-                bSkipCompile = true;
+                bDoCompile = false;
                 pCode = pPreviousCell->pCode;
                 if (pPreviousCell->mbIsExtRef)
                     pDocument->GetExternalRefManager()->insertRefCellFromTemplate( pPreviousCell, this );
-
-                SAL_INFO( "sc", "merged '" << aFormula << "' == '" << aShouldBe
-                          << "'extend group to " << xGroup->mnLength );
             }
         }
     }
 
-    if (!bSkipCompile)
+    if (bDoCompile)
     {
         ScTokenArray* pCodeOld = pCode;
-        pCode = aComp.CompileString( aFormula, aFormulaNmsp );
+        pCode = aComp.CompileString( aFormula, aFormulaNmsp ).release();
         delete pCodeOld;
 
-        if( !pCode->GetCodeError() )
+        if( pCode->GetCodeError() == FormulaError::NONE )
         {
             if ( !pCode->GetLen() )
             {
-                if ( aFormula[0] == '=' )
+                if ( !aFormula.isEmpty() && aFormula[0] == '=' )
                     pCode->AddBad( aFormula.copy( 1 ) );
                 else
                     pCode->AddBad( aFormula );
             }
             bSubTotal = aComp.CompileTokenArray();
-            if( !pCode->GetCodeError() )
+            if( pCode->GetCodeError() == FormulaError::NONE )
             {
                 nFormatType = aComp.GetNumFormatType();
                 bChanged = true;
@@ -1708,14 +1361,12 @@ void ScFormulaCell::CompileXML( sc::CompileFormulaContext& rCxt, ScProgress& rPr
             bChanged = true;
     }
 
-    //  Same as in Load: after loading, it must be known if ocMacro is in any formula
-    //  (for macro warning, CompileXML is called at the end of loading XML file)
-    if ( !pDocument->GetHasMacroFunc() && pCode->HasOpCodeRPN( ocMacro ) )
-        pDocument->SetHasMacroFunc( true );
+    //  After loading, it must be known if ocDde/ocWebservice is in any formula
+    //  (for external links warning, CompileXML is called at the end of loading XML file)
+    pDocument->CheckLinkFormulaNeedingCheck(*pCode);
 
     //volatile cells must be added here for import
-    if( pCode->IsRecalcModeAlways() || pCode->IsRecalcModeForced() ||
-        pCode->IsRecalcModeOnLoad() || pCode->IsRecalcModeOnLoadOnce() )
+    if( !pCode->IsRecalcModeNormal() || pCode->IsRecalcModeForced())
     {
         // During load, only those cells that are marked explicitly dirty get
         // recalculated.  So we need to set it dirty here.
@@ -1741,9 +1392,9 @@ void ScFormulaCell::CalcAfterLoad( sc::CompileFormulaContext& rCxt, bool bStartL
         bNewCompiled = true;
     }
     // The RPN array is not created when a Calc 3.0-Doc has been read as the Range Names exist until now.
-    if( pCode->GetLen() && !pCode->GetCodeLen() && !pCode->GetCodeError() )
+    if( pCode->GetLen() && !pCode->GetCodeLen() && pCode->GetCodeError() == FormulaError::NONE )
     {
-        ScCompiler aComp(rCxt, aPos, *pCode);
+        ScCompiler aComp(rCxt, aPos, *pCode, true, cMatrixFlag != ScMatrixMode::NONE);
         bSubTotal = aComp.CompileTokenArray();
         nFormatType = aComp.GetNumFormatType();
         bDirty = true;
@@ -1760,22 +1411,22 @@ void ScFormulaCell::CalcAfterLoad( sc::CompileFormulaContext& rCxt, bool bStartL
     if ( aResult.IsValue() && !::rtl::math::isFinite( aResult.GetDouble() ) )
     {
         OSL_FAIL("Formula cell INFINITY!!! Where does this document come from?");
-        aResult.SetResultError( errIllegalFPOperation );
+        aResult.SetResultError( FormulaError::IllegalFPOperation );
         bDirty = true;
     }
 
     // DoubleRefs for binary operators were always a Matrix before version v5.0.
-    // Now this is only the case when when in an array formula, otherwise it's an implicit intersection
-    if ( pDocument->GetSrcVersion() < SC_MATRIX_DOUBLEREF &&
-            GetMatrixFlag() == MM_NONE && pCode->HasMatrixDoubleRefOps() )
+    // Now this is only the case when in an array formula, otherwise it's an implicit intersection
+    if ( ScDocument::GetSrcVersion() < SC_MATRIX_DOUBLEREF &&
+            GetMatrixFlag() == ScMatrixMode::NONE && pCode->HasMatrixDoubleRefOps() )
     {
-        cMatrixFlag = MM_FORMULA;
+        cMatrixFlag = ScMatrixMode::Formula;
         SetMatColsRows( 1, 1);
     }
 
     // Do the cells need to be calculated? After Load cells can contain an error code, and then start
     // the listener and Recalculate (if needed) if not ScRecalcMode::NORMAL
-    if( !bNewCompiled || !pCode->GetCodeError() )
+    if( !bNewCompiled || pCode->GetCodeError() == FormulaError::NONE )
     {
         if (bStartListening)
             StartListeningTo(pDocument);
@@ -1801,8 +1452,15 @@ class RecursionCounter
 {
     ScRecursionHelper&  rRec;
     bool                bStackedInIteration;
+#if defined DBG_UTIL && !defined NDEBUG
+    const ScFormulaCell* cell;
+#endif
 public:
-    RecursionCounter( ScRecursionHelper& r, ScFormulaCell* p ) : rRec(r)
+    RecursionCounter( ScRecursionHelper& r, ScFormulaCell* p )
+        : rRec(r)
+#if defined DBG_UTIL && !defined NDEBUG
+        , cell(p)
+#endif
     {
         bStackedInIteration = rRec.IsDoingIteration();
         if (bStackedInIteration)
@@ -1813,13 +1471,63 @@ public:
     {
         rRec.DecRecursionCount();
         if (bStackedInIteration)
+        {
+#if defined DBG_UTIL && !defined NDEBUG
+            assert(rRec.GetRecursionInIterationStack().top() == cell);
+#endif
             rRec.GetRecursionInIterationStack().pop();
+        }
     }
 };
-}
 
-void ScFormulaCell::Interpret()
+// Forced calculation: OpenCL and threads require formula groups, so force even single cells to be a "group".
+// Remove the group again at the end, since there are some places throughout the code
+// that do not handle well groups with just 1 cell. Remove the groups only when the recursion level
+// reaches 0 again (groups contain some info such as disabling threading because of cycles, so removing
+// a group immediately would remove the info), for this reason affected cells are stored in the recursion
+// helper.
+struct TemporaryCellGroupMaker
 {
+    TemporaryCellGroupMaker( ScFormulaCell* cell, bool enable )
+        : mCell( cell )
+        , mEnabled( enable )
+    {
+        if( mEnabled && mCell->GetCellGroup() == nullptr )
+        {
+            mCell->CreateCellGroup( 1, false );
+            mCell->GetDocument()->GetRecursionHelper().AddTemporaryGroupCell( mCell );
+        }
+    }
+    ~TemporaryCellGroupMaker() COVERITY_NOEXCEPT_FALSE
+    {
+        if( mEnabled )
+            mCell->GetDocument()->GetRecursionHelper().CleanTemporaryGroupCells();
+    }
+    ScFormulaCell* mCell;
+    const bool mEnabled;
+};
+
+} // namespace
+
+bool ScFormulaCell::Interpret(SCROW nStartOffset, SCROW nEndOffset)
+{
+    ScRecursionHelper& rRecursionHelper = pDocument->GetRecursionHelper();
+    bool bGroupInterpreted = false;
+
+    static ForceCalculationType forceType = ScCalcConfig::getForceCalculationType();
+    TemporaryCellGroupMaker cellGroupMaker( this, forceType != ForceCalculationNone && forceType != ForceCalculationCore );
+
+    ScFormulaCell* pTopCell = mxGroup ? mxGroup->mpTopCell : this;
+
+    if (pTopCell->mbSeenInPath && rRecursionHelper.GetDepComputeLevel())
+    {
+        // This call arose from a dependency calculation and we just found a cycle.
+        aResult.SetResultError( FormulaError::CircularReference );
+        // This will mark all elements in the cycle as parts-of-cycle.
+        ScFormulaGroupCycleCheckGuard aCycleCheckGuard(rRecursionHelper, pTopCell);
+        return bGroupInterpreted;
+    }
+
 #if DEBUG_CALCULATION
     static bool bDebugCalculationInit = true;
     if (bDebugCalculationInit)
@@ -1831,41 +1539,40 @@ void ScFormulaCell::Interpret()
     DebugCalculationStacker aDebugEntry( aPos, pDocument);
 #endif
 
-    if (!IsDirtyOrInTableOpDirty() || pDocument->GetRecursionHelper().IsInReturn())
-        return;     // no double/triple processing
+    if (!IsDirtyOrInTableOpDirty() || rRecursionHelper.IsInReturn())
+        return bGroupInterpreted;     // no double/triple processing
 
     //FIXME:
     //  If the call originates from a Reschedule in DdeLink update, leave dirty
     //  Better: Do a Dde Link Update without Reschedule or do it completely asynchronously!
     if ( pDocument->IsInDdeLinkUpdate() )
-        return;
+        return bGroupInterpreted;
 
     if (bRunning)
     {
         if (!pDocument->GetDocOptions().IsIter())
         {
-            aResult.SetResultError( errCircularReference );
-            return;
+            aResult.SetResultError( FormulaError::CircularReference );
+            return bGroupInterpreted;
         }
 
-        if (aResult.GetResultError() == errCircularReference)
-            aResult.SetResultError( 0 );
+        if (aResult.GetResultError() == FormulaError::CircularReference)
+            aResult.SetResultError( FormulaError::NONE );
 
         // Start or add to iteration list.
-        if (!pDocument->GetRecursionHelper().IsDoingIteration() ||
-                !pDocument->GetRecursionHelper().GetRecursionInIterationStack().top()->bIsIterCell)
-            pDocument->GetRecursionHelper().SetInIterationReturn( true);
+        if (!rRecursionHelper.IsDoingIteration() ||
+                !rRecursionHelper.GetRecursionInIterationStack().top()->bIsIterCell)
+            rRecursionHelper.SetInIterationReturn( true);
 
-        return;
+        return bGroupInterpreted;
     }
     // no multiple interprets for GetErrCode, IsValue, GetValue and
     // different entry point recursions. Would also lead to premature
     // convergence in iterations.
-    if (pDocument->GetRecursionHelper().GetIteration() && nSeenInIteration ==
-            pDocument->GetRecursionHelper().GetIteration())
-        return ;
+    if (rRecursionHelper.GetIteration() && nSeenInIteration ==
+            rRecursionHelper.GetIteration())
+        return bGroupInterpreted;
 
-    ScRecursionHelper& rRecursionHelper = pDocument->GetRecursionHelper();
     bool bOldRunning = bRunning;
     if (rRecursionHelper.GetRecursionCount() > MAXRECURSION)
     {
@@ -1874,24 +1581,35 @@ void ScFormulaCell::Interpret()
     }
     else
     {
-        // Do not attempt to interpret a group when calculations are already
-        // running, otherwise we may run into a circular reference hell. See
-        // tdf#95748
-        if (rRecursionHelper.GetRecursionCount())
-            InterpretTail( SCITP_NORMAL);
-        else
-        {
+        pDocument->IncInterpretLevel();
+
 #if DEBUG_CALCULATION
-            aDC.enterGroup();
-            bool bGroupInterpreted = InterpretFormulaGroup();
-            aDC.leaveGroup();
-            if (!bGroupInterpreted)
-                InterpretTail( SCITP_NORMAL);
-#else
-            if (!InterpretFormulaGroup())
-                InterpretTail( SCITP_NORMAL);
+        aDC.enterGroup();
 #endif
+        bool bPartOfCycleBefore = mxGroup && mxGroup->mbPartOfCycle;
+        bGroupInterpreted = InterpretFormulaGroup(nStartOffset, nEndOffset);
+        bool bPartOfCycleAfter = mxGroup && mxGroup->mbPartOfCycle;
+
+#if DEBUG_CALCULATION
+        aDC.leaveGroup();
+#endif
+        if (!bGroupInterpreted)
+        {
+            // Dependency calc inside InterpretFormulaGroup() failed due to
+            // detection of a cycle and there are parent FG's in the cycle.
+            // Skip InterpretTail() in such cases, only run InterpretTail for the "cycle-starting" FG
+            if (!bPartOfCycleBefore && bPartOfCycleAfter && rRecursionHelper.AnyParentFGInCycle())
+            {
+                pDocument->DecInterpretLevel();
+                return bGroupInterpreted;
+            }
+
+            ScFormulaGroupCycleCheckGuard aCycleCheckGuard(rRecursionHelper, this);
+            ScInterpreterContextGetterGuard aContextGetterGuard(*pDocument, pDocument->GetFormatTable());
+            InterpretTail( *aContextGetterGuard.GetInterpreterContext(), SCITP_NORMAL);
         }
+
+        pDocument->DecInterpretLevel();
     }
 
     // While leaving a recursion or iteration stack, insert its cells to the
@@ -1910,7 +1628,6 @@ void ScFormulaCell::Interpret()
                         !rRecursionHelper.IsDoingIteration()) ||
                     bIterationFromRecursion || bResumeIteration)
             {
-                ScFormulaCell* pIterCell = this; // scope for debug convenience
                 bool & rDone = rRecursionHelper.GetConvergingReference();
                 rDone = false;
                 if (!bIterationFromRecursion && bResumeIteration)
@@ -1925,19 +1642,19 @@ void ScFormulaCell::Interpret()
                                 rRecursionHelper.GetIterationStart()); aIter !=
                             aOldStart; ++aIter)
                     {
-                        pIterCell = (*aIter).pCell;
+                        ScFormulaCell* pIterCell = (*aIter).pCell;
                         pIterCell->bIsIterCell = true;
                     }
                     // Mark older cells dirty again, in case they converted
                     // without accounting for all remaining cells in the circle
                     // that weren't touched so far, e.g. conditional. Restore
-                    // backuped result.
+                    // backupped result.
                     sal_uInt16 nIteration = rRecursionHelper.GetIteration();
                     for (ScFormulaRecursionList::const_iterator aIter(
                                 aOldStart); aIter !=
                             rRecursionHelper.GetIterationEnd(); ++aIter)
                     {
-                        pIterCell = (*aIter).pCell;
+                        ScFormulaCell* pIterCell = (*aIter).pCell;
                         if (pIterCell->nSeenInIteration == nIteration)
                         {
                             if (!pIterCell->bDirty || aIter == aOldStart)
@@ -1952,17 +1669,33 @@ void ScFormulaCell::Interpret()
                 else
                 {
                     bResumeIteration = false;
-                    // Close circle once.
-                    rRecursionHelper.GetList().back().pCell->InterpretTail(
-                            SCITP_CLOSE_ITERATION_CIRCLE);
+                    // Close circle once. If 'this' is self-referencing only
+                    // (e.g. counter or self-adder) then it is already
+                    // implicitly closed.
+                    /* TODO: does this even make sense anymore? The last cell
+                     * added above with rRecursionHelper.Insert() should always
+                     * be 'this', shouldn't it? */
+                    ScFormulaCell* pLastCell = nullptr;
+                    if (rRecursionHelper.GetList().size() > 1 &&
+                            ((pLastCell = rRecursionHelper.GetList().back().pCell) != this))
+                    {
+                        pDocument->IncInterpretLevel();
+                        ScInterpreterContextGetterGuard aContextGetterGuard(*pDocument, pDocument->GetFormatTable());
+                        pLastCell->InterpretTail(
+                            *aContextGetterGuard.GetInterpreterContext(), SCITP_CLOSE_ITERATION_CIRCLE);
+                        pDocument->DecInterpretLevel();
+                    }
                     // Start at 1, init things.
                     rRecursionHelper.StartIteration();
-                    // Mark all cells being in iteration.
+                    // Mark all cells being in iteration. Reset results to
+                    // original values, formula cells have been interpreted
+                    // already, discard that step.
                     for (ScFormulaRecursionList::const_iterator aIter(
                                 rRecursionHelper.GetIterationStart()); aIter !=
                             rRecursionHelper.GetIterationEnd(); ++aIter)
                     {
-                        pIterCell = (*aIter).pCell;
+                        ScFormulaCell* pIterCell = (*aIter).pCell;
+                        pIterCell->aResult = (*aIter).aPreviousResult;
                         pIterCell->bIsIterCell = true;
                     }
                 }
@@ -1971,21 +1704,33 @@ void ScFormulaCell::Interpret()
                 for ( ; rRecursionHelper.GetIteration() <= nIterMax && !rDone;
                         rRecursionHelper.IncIteration())
                 {
-                    rDone = true;
+                    rDone = false;
+                    bool bFirst = true;
                     for ( ScFormulaRecursionList::iterator aIter(
                                 rRecursionHelper.GetIterationStart()); aIter !=
                             rRecursionHelper.GetIterationEnd() &&
                             !rRecursionHelper.IsInReturn(); ++aIter)
                     {
-                        pIterCell = (*aIter).pCell;
+                        ScFormulaCell* pIterCell = (*aIter).pCell;
                         if (pIterCell->IsDirtyOrInTableOpDirty() &&
                                 rRecursionHelper.GetIteration() !=
                                 pIterCell->GetSeenInIteration())
                         {
                             (*aIter).aPreviousResult = pIterCell->aResult;
-                            pIterCell->InterpretTail( SCITP_FROM_ITERATION);
+                            pDocument->IncInterpretLevel();
+                            ScInterpreterContextGetterGuard aContextGetterGuard(*pDocument, pDocument->GetFormatTable());
+                            pIterCell->InterpretTail( *aContextGetterGuard.GetInterpreterContext(), SCITP_FROM_ITERATION);
+                            pDocument->DecInterpretLevel();
                         }
-                        rDone = rDone && !pIterCell->IsDirtyOrInTableOpDirty();
+                        if (bFirst)
+                        {
+                            rDone = !pIterCell->IsDirtyOrInTableOpDirty();
+                            bFirst = false;
+                        }
+                        else if (rDone)
+                        {
+                            rDone = !pIterCell->IsDirtyOrInTableOpDirty();
+                        }
                     }
                     if (rRecursionHelper.IsInReturn())
                     {
@@ -2003,7 +1748,7 @@ void ScFormulaCell::Interpret()
                                 aIter != rRecursionHelper.GetIterationEnd();
                                 ++aIter)
                         {
-                            pIterCell = (*aIter).pCell;
+                            ScFormulaCell* pIterCell = (*aIter).pCell;
                             pIterCell->bIsIterCell = false;
                             pIterCell->nSeenInIteration = 0;
                             pIterCell->bRunning = (*aIter).bOldRunning;
@@ -2016,16 +1761,30 @@ void ScFormulaCell::Interpret()
                                 aIter != rRecursionHelper.GetIterationEnd();
                                 ++aIter)
                         {
-                            pIterCell = (*aIter).pCell;
+                            ScFormulaCell* pIterCell = (*aIter).pCell;
                             pIterCell->bIsIterCell = false;
                             pIterCell->nSeenInIteration = 0;
                             pIterCell->bRunning = (*aIter).bOldRunning;
+                            pIterCell->ResetDirty();
+                            // The difference to Excel is that Excel does not
+                            // produce an error for non-convergence thus a
+                            // delta of 0.001 still works to execute the
+                            // maximum number of iterations and display the
+                            // results no matter if the result anywhere reached
+                            // near delta, but also never indicates whether the
+                            // result actually makes sense in case of
+                            // non-counter context. Calc does check the delta
+                            // in every case. If we wanted to support what
+                            // Excel does then add another option "indicate
+                            // non-convergence error" (default on) and execute
+                            // the following block only if set.
+#if 1
                             // If one cell didn't converge, all cells of this
                             // circular dependency don't, no matter whether
                             // single cells did.
-                            pIterCell->ResetDirty();
-                            pIterCell->aResult.SetResultError( errNoConvergence);
+                            pIterCell->aResult.SetResultError( FormulaError::NoConvergence);
                             pIterCell->bChanged = true;
+#endif
                         }
                     }
                     // End this iteration and remove entries.
@@ -2053,7 +1812,10 @@ void ScFormulaCell::Interpret()
                         ScFormulaCell* pCell = (*aIter).pCell;
                         if (pCell->IsDirtyOrInTableOpDirty())
                         {
-                            pCell->InterpretTail( SCITP_NORMAL);
+                            pDocument->IncInterpretLevel();
+                            ScInterpreterContextGetterGuard aContextGetterGuard(*pDocument, pDocument->GetFormatTable());
+                            pCell->InterpretTail( *aContextGetterGuard.GetInterpreterContext(), SCITP_NORMAL);
+                            pDocument->DecInterpretLevel();
                             if (!pCell->IsDirtyOrInTableOpDirty() && !pCell->IsIterCell())
                                 pCell->bRunning = (*aIter).bOldRunning;
                         }
@@ -2077,20 +1839,25 @@ void ScFormulaCell::Interpret()
     }
 
 #if DEBUG_CALCULATION
-    if (sal_uInt16 nErr = aResult.GetResultError())
+    FormulaError nErr = aResult.GetResultError();
+    if (nErr != FormulaError::NONE)
         aDC.storeResultError( nErr);
     else if (aResult.IsValue())
         aDC.storeResult( aResult.GetDouble());
     else
         aDC.storeResult( aResult.GetString());
 #endif
+
+    return bGroupInterpreted;
 }
 
-void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
+void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTailParameter eTailParam )
 {
     RecursionCounter aRecursionCounter( pDocument->GetRecursionHelper(), this);
-    nSeenInIteration = pDocument->GetRecursionHelper().GetIteration();
-    if( !pCode->GetCodeLen() && !pCode->GetCodeError() )
+    // TODO If this cell is not an iteration cell, add it to the list of iteration cells?
+    if(bIsIterCell)
+        nSeenInIteration = pDocument->GetRecursionHelper().GetIteration();
+    if( !pCode->GetCodeLen() && pCode->GetCodeError() == FormulaError::NONE )
     {
         // #i11719# no RPN and no error and no token code but result string present
         // => interpretation of this cell during name-compilation and unknown names
@@ -2103,10 +1870,9 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         // condition further down.
         if ( !pCode->GetLen() && !aResult.GetHybridFormula().isEmpty() )
         {
-            pCode->SetCodeError( errNoCode );
+            pCode->SetCodeError( FormulaError::NoCode );
             // This is worth an assertion; if encountered in daily work
             // documents we might need another solution. Or just confirm correctness.
-            OSL_FAIL( "ScFormulaCell::Interpret: no RPN, no error, no token, but hybrid formula string" );
             return;
         }
         CompileTokenArray();
@@ -2114,46 +1880,35 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
 
     if( pCode->GetCodeLen() && pDocument )
     {
-        class StackCleaner
-        {
-            ScDocument*     pDoc;
-            ScInterpreter*  pInt;
-            public:
-            StackCleaner( ScDocument* pD, ScInterpreter* pI )
-                : pDoc(pD), pInt(pI)
-                {}
-            ~StackCleaner()
-            {
-                delete pInt;
-                pDoc->DecInterpretLevel();
-            }
-        };
-        pDocument->IncInterpretLevel();
-        ScInterpreter* p = new ScInterpreter( this, pDocument, aPos, *pCode );
-        StackCleaner aStackCleaner( pDocument, p);
-        sal_uInt16 nOldErrCode = aResult.GetResultError();
+        std::unique_ptr<ScInterpreter> pInterpreter(new ScInterpreter( this, pDocument, rContext, aPos, *pCode ));
+        FormulaError nOldErrCode = aResult.GetResultError();
         if ( nSeenInIteration == 0 )
         {   // Only the first time
             // With bChanged=false, if a newly compiled cell has a result of
             // 0.0, no change is detected and the cell will not be repainted.
             // bChanged = false;
-            aResult.SetResultError( 0 );
+            aResult.SetResultError( FormulaError::NONE );
         }
 
         switch ( aResult.GetResultError() )
         {
-            case errCircularReference :     // will be determined again if so
-                aResult.SetResultError( 0 );
+            case FormulaError::CircularReference :     // will be determined again if so
+                aResult.SetResultError( FormulaError::NONE );
             break;
+            default: break;
         }
 
         bool bOldRunning = bRunning;
         bRunning = true;
-        p->Interpret();
+        pInterpreter->Interpret();
         if (pDocument->GetRecursionHelper().IsInReturn() && eTailParam != SCITP_CLOSE_ITERATION_CIRCLE)
         {
             if (nSeenInIteration > 0)
                 --nSeenInIteration;     // retry when iteration is resumed
+
+            if ( aResult.GetType() == formula::svUnknown )
+                aResult.SetToken( pInterpreter->GetResultToken().get() );
+
             return;
         }
         bRunning = bOldRunning;
@@ -2163,20 +1918,20 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         bool bContentChanged = false;
 
         // Do not create a HyperLink() cell if the formula results in an error.
-        if( p->GetError() && pCode->IsHyperLink())
+        if( pInterpreter->GetError() != FormulaError::NONE && pCode->IsHyperLink())
             pCode->SetHyperLink(false);
 
-        if( p->GetError() && p->GetError() != errCircularReference)
+        if( pInterpreter->GetError() != FormulaError::NONE && pInterpreter->GetError() != FormulaError::CircularReference)
         {
             bChanged = true;
 
-            if (p->GetError() == errRetryCircular)
+            if (pInterpreter->GetError() == FormulaError::RetryCircular)
             {
                 // Array formula matrix calculation corner case. Keep dirty
                 // state, do not remove from formula tree or anything else, but
-                // store errCircularReference in case this cell does not get
+                // store FormulaError::CircularReference in case this cell does not get
                 // recalculated.
-                aResult.SetResultError( errCircularReference);
+                aResult.SetResultError( FormulaError::CircularReference);
                 return;
             }
 
@@ -2187,11 +1942,11 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         {
             bool bIsValue = aResult.IsValue();  // the previous type
             // Did it converge?
-            if ((bIsValue && p->GetResultType() == svDouble && fabs(
-                            p->GetNumResult() - aResult.GetDouble()) <=
+            if ((bIsValue && pInterpreter->GetResultType() == svDouble && fabs(
+                            pInterpreter->GetNumResult() - aResult.GetDouble()) <=
                         pDocument->GetDocOptions().GetIterEps()) ||
-                    (!bIsValue && p->GetResultType() == svString &&
-                     p->GetStringResult() == aResult.GetString()))
+                    (!bIsValue && pInterpreter->GetResultType() == svString &&
+                     pInterpreter->GetStringResult() == aResult.GetString()))
             {
                 // A convergence in the first iteration doesn't necessarily
                 // mean that it's done, it may be as not all related cells
@@ -2209,7 +1964,7 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         }
 
         // New error code?
-        if( p->GetError() != nOldErrCode )
+        if( pInterpreter->GetError() != nOldErrCode )
         {
             bChanged = true;
             // bContentChanged only has to be set if the file content would be changed
@@ -2217,21 +1972,91 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
                 bContentChanged = true;
         }
 
-        ScFormulaResult aNewResult( p->GetResultToken().get());
+        ScFormulaResult aNewResult( pInterpreter->GetResultToken().get());
 
-        if( mbNeedsNumberFormat )
+        // For IF() and other jumps or changed formatted source data the result
+        // format may change for different runs, e.g. =IF(B1,B1) with first
+        // B1:0 boolean FALSE next B1:23 numeric 23, we don't want the 23
+        // displayed as TRUE. Do not force a general format though if
+        // mbNeedsNumberFormat is set (because there was a general format..).
+        // Note that nFormatType may be out of sync here if a format was
+        // applied or cleared after the last run, but obtaining the current
+        // format always just to check would be expensive. There may be
+        // cases where the format should be changed but is not. If that turns
+        // out to be a real problem then obtain the current format type after
+        // the initial check when needed.
+        bool bForceNumberFormat = (mbAllowNumberFormatChange && !mbNeedsNumberFormat &&
+                !SvNumberFormatter::IsCompatible( nFormatType, pInterpreter->GetRetFormatType()));
+
+        // We have some requirements additionally to IsCompatible().
+        // * Do not apply a NumberFormat::LOGICAL if the result value is not
+        //   1.0 or 0.0
+        // * Do not override an already set numeric number format if the result
+        //   is of type NumberFormat::LOGICAL, it could be user applied.
+        //   On the other hand, for an empty jump path instead of FALSE an
+        //   unexpected for example 0% could be displayed. YMMV.
+        // * Never override a non-standard number format that indicates user
+        //   applied.
+        // * NumberFormat::TEXT does not force a change.
+        if (bForceNumberFormat)
+        {
+            sal_uInt32 nOldFormatIndex = NUMBERFORMAT_ENTRY_NOT_FOUND;
+            const SvNumFormatType nRetType = pInterpreter->GetRetFormatType();
+            if (nRetType == SvNumFormatType::LOGICAL)
+            {
+                double fVal;
+                if ((fVal = aNewResult.GetDouble()) != 1.0 && fVal != 0.0)
+                    bForceNumberFormat = false;
+                else
+                {
+                    nOldFormatIndex = pDocument->GetNumberFormat( rContext, aPos);
+                    nFormatType = rContext.GetFormatTable()->GetType( nOldFormatIndex);
+                    switch (nFormatType)
+                    {
+                        case SvNumFormatType::PERCENT:
+                        case SvNumFormatType::CURRENCY:
+                        case SvNumFormatType::SCIENTIFIC:
+                        case SvNumFormatType::FRACTION:
+                            bForceNumberFormat = false;
+                        break;
+                        case SvNumFormatType::NUMBER:
+                            if ((nOldFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) != 0)
+                                bForceNumberFormat = false;
+                        break;
+                        default: break;
+                    }
+                }
+            }
+            else if (nRetType == SvNumFormatType::TEXT)
+            {
+                bForceNumberFormat = false;
+            }
+            if (bForceNumberFormat)
+            {
+                if (nOldFormatIndex == NUMBERFORMAT_ENTRY_NOT_FOUND)
+                {
+                    nOldFormatIndex = pDocument->GetNumberFormat( rContext, aPos);
+                    nFormatType = rContext.GetFormatTable()->GetType( nOldFormatIndex);
+                }
+                if (nOldFormatIndex !=
+                        ScGlobal::GetStandardFormat( *rContext.GetFormatTable(), nOldFormatIndex, nFormatType))
+                    bForceNumberFormat = false;
+            }
+        }
+
+        if( mbNeedsNumberFormat || bForceNumberFormat )
         {
             bool bSetFormat = true;
-            const short nOldFormatType = nFormatType;
-            nFormatType = p->GetRetFormatType();
-            sal_uInt32 nFormatIndex = p->GetRetFormatIndex();
+            const SvNumFormatType nOldFormatType = nFormatType;
+            nFormatType = pInterpreter->GetRetFormatType();
+            sal_uInt32 nFormatIndex = pInterpreter->GetRetFormatIndex();
 
-            if (nFormatType == css::util::NumberFormat::TEXT)
+            if (nFormatType == SvNumFormatType::TEXT)
             {
                 // Don't set text format as hard format.
                 bSetFormat = false;
             }
-            else if (nFormatType == css::util::NumberFormat::LOGICAL && cMatrixFlag != MM_NONE)
+            else if (nFormatType == SvNumFormatType::LOGICAL && cMatrixFlag != ScMatrixMode::NONE)
             {
                 // In a matrix range do not set an (inherited) logical format
                 // as hard format if the value does not represent a strict TRUE
@@ -2244,7 +2069,7 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
                 // some other elements should be. We'd need to transport type
                 // or format information on arrays.
                 StackVar eNewCellResultType = aNewResult.GetCellResultType();
-                if (eNewCellResultType != svError || cMatrixFlag == MM_REFERENCE)
+                if (eNewCellResultType != svError || cMatrixFlag == ScMatrixMode::Reference)
                 {
                     double fVal;
                     if (eNewCellResultType != svDouble)
@@ -2255,13 +2080,13 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
                     else if ((fVal = aNewResult.GetDouble()) != 1.0 && fVal != 0.0)
                     {
                         bSetFormat = false;
-                        nFormatType = css::util::NumberFormat::NUMBER;
+                        nFormatType = SvNumFormatType::NUMBER;
                     }
                 }
             }
 
-            if (bSetFormat && (nFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) == 0)
-                nFormatIndex = ScGlobal::GetStandardFormat(*pDocument->GetFormatTable(),
+            if (bSetFormat && (bForceNumberFormat || ((nFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) == 0)))
+                nFormatIndex = ScGlobal::GetStandardFormat(*rContext.GetFormatTable(),
                         nFormatIndex, nFormatType);
 
             // Do not replace a General format (which was the reason why
@@ -2272,10 +2097,19 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
             // XXX if mbNeedsNumberFormat was set even if the current format
             // was not General then we'd have to obtain the current format here
             // and check at least the types.
-            if (bSetFormat && (nFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) != 0)
+            if (bSetFormat && (bForceNumberFormat || ((nFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) != 0)))
             {
                 // set number format explicitly
-                pDocument->SetNumberFormat( aPos, nFormatIndex );
+                if (!pDocument->IsThreadedGroupCalcInProgress())
+                    pDocument->SetNumberFormat( aPos, nFormatIndex );
+                else
+                {
+                    // SetNumberFormat() is not thread-safe (modifies ScAttrArray), delay the work
+                    // to the main thread. Since thread calculations operate on formula groups,
+                    // it's enough to store just the row.
+                    DelayedSetNumberFormat data = { aPos.Row(), nFormatIndex };
+                    rContext.maDelayedSetNumberFormat.push_back( data );
+                }
                 bChanged = true;
             }
 
@@ -2299,7 +2133,7 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
                 }
                 else
                 {
-                    if ( eOld == svHybridCell || eOld == svHybridValueCell )     // string result from SetFormulaResultString?
+                    if ( eOld == svHybridCell )     // string result from SetFormulaResultString?
                         eOld = svString;            // ScHybridCellToken has a valid GetString method
 
                     // #i106045# use approxEqual to compare with stored value
@@ -2309,7 +2143,7 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
                 }
             }
 
-            aResult.SetToken( p->GetResultToken().get() );
+            aResult.SetToken( pInterpreter->GetResultToken().get() );
         }
         else
         {
@@ -2324,7 +2158,7 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
             if ( bChanged && !bContentChanged && pDocument->IsStreamValid(aPos.Tab()) )
             {
                 if ((eOld == svUnknown && (eNew == svError || (eNew == svDouble && aNewResult.GetDouble() == 0.0))) ||
-                        ((eOld == svHybridCell || eOld == svHybridValueCell) &&
+                        ((eOld == svHybridCell) &&
                          eNew == svString && aResult.GetString() == aNewResult.GetString()) ||
                         (eOld == svDouble && eNew == svDouble &&
                          rtl::math::approxEqual( aResult.GetDouble(), aNewResult.GetDouble())))
@@ -2339,15 +2173,15 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         }
 
         // Precision as shown?
-        if ( aResult.IsValue() && !p->GetError()
+        if ( aResult.IsValue() && pInterpreter->GetError() == FormulaError::NONE
           && pDocument->GetDocOptions().IsCalcAsShown()
-          && nFormatType != css::util::NumberFormat::DATE
-          && nFormatType != css::util::NumberFormat::TIME
-          && nFormatType != css::util::NumberFormat::DATETIME )
+          && nFormatType != SvNumFormatType::DATE
+          && nFormatType != SvNumFormatType::TIME
+          && nFormatType != SvNumFormatType::DATETIME )
         {
-            sal_uLong nFormat = pDocument->GetNumberFormat( aPos );
+            sal_uInt32 nFormat = pDocument->GetNumberFormat( rContext, aPos );
             aResult.SetDouble( pDocument->RoundValueAsShown(
-                        aResult.GetDouble(), nFormat));
+                        aResult.GetDouble(), nFormat, &rContext));
         }
         if (eTailParam == SCITP_NORMAL)
         {
@@ -2357,13 +2191,13 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         {
             // If the formula wasn't entered as a matrix formula, live on with
             // the upper left corner and let reference counting delete the matrix.
-            if( cMatrixFlag != MM_FORMULA && !pCode->IsHyperLink() )
+            if( cMatrixFlag != ScMatrixMode::Formula && !pCode->IsHyperLink() )
                 aResult.SetToken( aResult.GetCellResultToken().get());
         }
         if ( aResult.IsValue() && !::rtl::math::isFinite( aResult.GetDouble() ) )
         {
             // Coded double error may occur via filter import.
-            sal_uInt16 nErr = GetDoubleErrorValue( aResult.GetDouble());
+            FormulaError nErr = GetDoubleErrorValue( aResult.GetDouble());
             aResult.SetResultError( nErr);
             bChanged = bContentChanged = true;
         }
@@ -2374,15 +2208,15 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
             // a changed result must still reset the stream flag
             pDocument->SetStreamValid(aPos.Tab(), false, true);
         }
-        if ( !pCode->IsRecalcModeAlways() )
+        if ( !pDocument->IsThreadedGroupCalcInProgress() && !pCode->IsRecalcModeAlways() )
             pDocument->RemoveFromFormulaTree( this );
 
         //  FORCED cells also immediately tested for validity (start macro possibly)
 
         if ( pCode->IsRecalcModeForced() )
         {
-            sal_uLong nValidation = static_cast<const SfxUInt32Item*>(pDocument->GetAttr(
-                    aPos.Col(), aPos.Row(), aPos.Tab(), ATTR_VALIDDATA ))->GetValue();
+            sal_uLong nValidation = pDocument->GetAttr(
+                    aPos.Col(), aPos.Row(), aPos.Tab(), ATTR_VALIDDATA )->GetValue();
             if ( nValidation )
             {
                 const ScValidationData* pData = pDocument->GetValidationEntry( nValidation );
@@ -2393,18 +2227,65 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
         }
 
         // Reschedule slows the whole thing down considerably, thus only execute on percent change
-        ScProgress *pProgress = ScProgress::GetInterpretProgress();
-        if (pProgress && pProgress->Enabled())
+        if (!pDocument->IsThreadedGroupCalcInProgress())
         {
-            pProgress->SetStateCountDownOnPercent(
-                pDocument->GetFormulaCodeInTree()/MIN_NO_CODES_PER_PROGRESS_UPDATE );
-        }
+            ScProgress *pProgress = ScProgress::GetInterpretProgress();
+            if (pProgress && pProgress->Enabled())
+            {
+                pProgress->SetStateCountDownOnPercent(
+                    pDocument->GetFormulaCodeInTree()/MIN_NO_CODES_PER_PROGRESS_UPDATE );
+            }
 
-        switch (p->GetVolatileType())
+            switch (pInterpreter->GetVolatileType())
+            {
+                case ScInterpreter::VOLATILE:
+                    // Volatile via built-in volatile functions.  No actions needed.
+                break;
+                case ScInterpreter::VOLATILE_MACRO:
+                    // The formula contains a volatile macro.
+                    pCode->SetExclusiveRecalcModeAlways();
+                    pDocument->PutInFormulaTree(this);
+                    StartListeningTo(pDocument);
+                break;
+                case ScInterpreter::NOT_VOLATILE:
+                    if (pCode->IsRecalcModeAlways())
+                    {
+                        // The formula was previously volatile, but no more.
+                        EndListeningTo(pDocument);
+                        pCode->SetExclusiveRecalcModeNormal();
+                    }
+                    else
+                    {
+                        // non-volatile formula.  End listening to the area in case
+                        // it's listening due to macro module change.
+                        pDocument->EndListeningArea(BCA_LISTEN_ALWAYS, false, this);
+                    }
+                    pDocument->RemoveFromFormulaTree(this);
+                break;
+                default:
+                    ;
+            }
+        }
+    }
+    else
+    {
+        // Cells with compiler errors should not be marked dirty forever
+        OSL_ENSURE( pCode->GetCodeError() != FormulaError::NONE, "no RPN code and no errors ?!?!" );
+        ResetDirty();
+    }
+}
+
+void ScFormulaCell::HandleStuffAfterParallelCalculation()
+{
+    if( pCode->GetCodeLen() && pDocument )
+    {
+        if ( !pCode->IsRecalcModeAlways() )
+            pDocument->RemoveFromFormulaTree( this );
+
+        std::unique_ptr<ScInterpreter> pInterpreter(new ScInterpreter( this, pDocument, pDocument->GetNonThreadedContext(), aPos, *pCode ));
+
+        switch (pInterpreter->GetVolatileType())
         {
-            case ScInterpreter::VOLATILE:
-                // Volatile via built-in volatile functions.  No actions needed.
-            break;
             case ScInterpreter::VOLATILE_MACRO:
                 // The formula contains a volatile macro.
                 pCode->SetExclusiveRecalcModeAlways();
@@ -2415,7 +2296,7 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
                 if (pCode->IsRecalcModeAlways())
                 {
                     // The formula was previously volatile, but no more.
-                    pDocument->EndListeningArea(BCA_LISTEN_ALWAYS, false, this);
+                    EndListeningTo(pDocument);
                     pCode->SetExclusiveRecalcModeNormal();
                 }
                 else
@@ -2429,12 +2310,6 @@ void ScFormulaCell::InterpretTail( ScInterpretTailParameter eTailParam )
             default:
                 ;
         }
-    }
-    else
-    {
-        // Cells with compiler errors should not be marked dirty forever
-        OSL_ENSURE( pCode->GetCodeError(), "no RPN code und no errors ?!?!" );
-        ResetDirty();
     }
 }
 
@@ -2476,12 +2351,11 @@ void ScFormulaCell::SetInChangeTrack( bool bVal )
 
 void ScFormulaCell::Notify( const SfxHint& rHint )
 {
-    const SfxSimpleHint* pSimpleHint = dynamic_cast<const SfxSimpleHint*>(&rHint);
-    if (!pSimpleHint)
+    if (pDocument->IsInDtorClear())
         return;
 
-    const sal_uInt32 nHint = pSimpleHint->GetId();
-    if (nHint == SC_HINT_REFERENCE)
+    const SfxHintId nHint = rHint.GetId();
+    if (nHint == SfxHintId::ScReference)
     {
         const sc::RefHint& rRefHint = static_cast<const sc::RefHint&>(rHint);
 
@@ -2546,12 +2420,12 @@ void ScFormulaCell::Notify( const SfxHint& rHint )
         return;
     }
 
-    if ( !pDocument->IsInDtorClear() && pDocument->GetHardRecalcState() == ScDocument::HARDRECALCSTATE_OFF )
+    if ( pDocument->GetHardRecalcState() == ScDocument::HardRecalcState::OFF )
     {
-        if (nHint & (SC_HINT_DATACHANGED | SC_HINT_TABLEOPDIRTY))
+        if (nHint == SfxHintId::ScDataChanged || nHint == SfxHintId::ScTableOpDirty || (bSubTotal && nHint == SfxHintId::ScHiddenRowsChanged))
         {
             bool bForceTrack = false;
-            if ( nHint & SC_HINT_TABLEOPDIRTY )
+            if ( nHint == SfxHintId::ScTableOpDirty )
             {
                 bForceTrack = !bTableOpDirty;
                 if ( !bTableOpDirty )
@@ -2603,7 +2477,7 @@ void ScFormulaCell::SetDirty( bool bDirtyFlag )
     if (IsInChangeTrack())
         return;
 
-    if ( pDocument->GetHardRecalcState() != ScDocument::HARDRECALCSTATE_OFF )
+    if ( pDocument->GetHardRecalcState() != ScDocument::HardRecalcState::OFF )
     {
         SetDirtyVar();
         pDocument->SetStreamValid(aPos.Tab(), false);
@@ -2637,7 +2511,10 @@ void ScFormulaCell::SetDirtyVar()
     bDirty = true;
     mbPostponedDirty = false;
     if (mxGroup && mxGroup->meCalcState == sc::GroupCalcRunning)
+    {
         mxGroup->meCalcState = sc::GroupCalcEnabled;
+        mxGroup->mbPartOfCycle = false;
+    }
 
     // mark the sheet of this cell to be calculated
     //#FIXME do we need to revert this remnant of old fake vba events? pDocument->AddCalculateTable( aPos.Tab() );
@@ -2646,7 +2523,7 @@ void ScFormulaCell::SetDirtyVar()
 void ScFormulaCell::SetDirtyAfterLoad()
 {
     bDirty = true;
-    if ( pDocument->GetHardRecalcState() == ScDocument::HARDRECALCSTATE_OFF )
+    if ( pDocument->GetHardRecalcState() == ScDocument::HardRecalcState::OFF )
         pDocument->PutInFormulaTree( this );
 }
 
@@ -2659,7 +2536,7 @@ void ScFormulaCell::SetTableOpDirty()
 {
     if ( !IsInChangeTrack() )
     {
-        if ( pDocument->GetHardRecalcState() != ScDocument::HARDRECALCSTATE_OFF )
+        if ( pDocument->GetHardRecalcState() != ScDocument::HardRecalcState::OFF )
             bTableOpDirty = true;
         else
         {
@@ -2671,15 +2548,10 @@ void ScFormulaCell::SetTableOpDirty()
                     bTableOpDirty = true;
                 }
                 pDocument->AppendToFormulaTrack( this );
-                pDocument->TrackFormulas( SC_HINT_TABLEOPDIRTY );
+                pDocument->TrackFormulas( SfxHintId::ScTableOpDirty );
             }
         }
     }
-}
-
-bool ScFormulaCell::IsDirtyOrInTableOpDirty() const
-{
-    return bDirty || (bTableOpDirty && pDocument->IsInInterpreterTableOp());
 }
 
 void ScFormulaCell::SetResultDouble( double n )
@@ -2697,12 +2569,17 @@ svl::SharedString ScFormulaCell::GetResultString() const
     return aResult.GetString();
 }
 
-void ScFormulaCell::SetResultMatrix( SCCOL nCols, SCROW nRows, const ScConstMatrixRef& pMat, formula::FormulaToken* pUL )
+bool ScFormulaCell::HasHybridStringResult() const
+{
+    return aResult.GetType() == formula::svHybridCell && !aResult.GetString().isEmpty();
+}
+
+void ScFormulaCell::SetResultMatrix( SCCOL nCols, SCROW nRows, const ScConstMatrixRef& pMat, const formula::FormulaToken* pUL )
 {
     aResult.SetMatrix(nCols, nRows, pMat, pUL);
 }
 
-void ScFormulaCell::SetErrCode( sal_uInt16 n )
+void ScFormulaCell::SetErrCode( FormulaError n )
 {
     /* FIXME: check the numerous places where ScTokenArray::GetCodeError() is
      * used whether it is solely for transport of a simple result error and get
@@ -2714,18 +2591,18 @@ void ScFormulaCell::SetErrCode( sal_uInt16 n )
     aResult.SetResultError( n );
 }
 
-void ScFormulaCell::SetResultError( sal_uInt16 n )
+void ScFormulaCell::SetResultError( FormulaError n )
 {
     aResult.SetResultError( n );
 }
 
 void ScFormulaCell::AddRecalcMode( ScRecalcMode nBits )
 {
-    if ( (nBits & RECALCMODE_EMASK) != ScRecalcMode::NORMAL )
+    if ( (nBits & ScRecalcMode::EMask) != ScRecalcMode::NORMAL )
         SetDirtyVar();
     if ( nBits & ScRecalcMode::ONLOAD_ONCE )
     {   // OnLoadOnce is used only to set Dirty after filter import.
-        nBits = (nBits & ~RECALCMODE_EMASK) | ScRecalcMode::NORMAL;
+        nBits = (nBits & ~ScRecalcMode::EMask) | ScRecalcMode::NORMAL;
     }
     pCode->AddRecalcMode( nBits );
 }
@@ -2740,13 +2617,18 @@ void ScFormulaCell::SetHybridString( const svl::SharedString& r )
     aResult.SetHybridString( r);
 }
 
+void ScFormulaCell::SetHybridEmptyDisplayedAsString()
+{
+    aResult.SetHybridEmptyDisplayedAsString();
+}
+
 void ScFormulaCell::SetHybridFormula( const OUString& r,
                                     const formula::FormulaGrammar::Grammar eGrammar )
 {
     aResult.SetHybridFormula( r); eTempGrammar = eGrammar;
 }
 
-OUString ScFormulaCell::GetHybridFormula() const
+const OUString& ScFormulaCell::GetHybridFormula() const
 {
     return aResult.GetHybridFormula();
 }
@@ -2763,7 +2645,7 @@ void ScFormulaCell::GetURLResult( OUString& rURL, OUString& rCellText )
     const sal_uInt32 nCellFormat = pDocument->GetNumberFormat( aPos );
     SvNumberFormatter* pFormatter = pDocument->GetFormatTable();
 
-    const sal_uInt32 nURLFormat = ScGlobal::GetStandardFormat( *pFormatter, nCellFormat, css::util::NumberFormat::NUMBER);
+    const sal_uInt32 nURLFormat = ScGlobal::GetStandardFormat( *pFormatter, nCellFormat, SvNumFormatType::NUMBER);
 
     if ( IsValue() )
     {
@@ -2802,26 +2684,12 @@ bool ScFormulaCell::IsMultilineResult()
     return false;
 }
 
-bool ScFormulaCell::NeedsInterpret() const
-{
-    if (!IsDirtyOrInTableOpDirty())
-        return false;
-
-    return (pDocument->GetAutoCalc() || (cMatrixFlag != MM_NONE));
-}
-
-void ScFormulaCell::MaybeInterpret()
-{
-    if (NeedsInterpret())
-        Interpret();
-}
-
 bool ScFormulaCell::IsHyperLinkCell() const
 {
     return pCode && pCode->IsHyperLink();
 }
 
-EditTextObject* ScFormulaCell::CreateURLObject()
+std::unique_ptr<EditTextObject> ScFormulaCell::CreateURLObject()
 {
     OUString aCellText;
     OUString aURL;
@@ -2851,7 +2719,7 @@ bool ScFormulaCell::IsValue()
 bool ScFormulaCell::IsValueNoError()
 {
     MaybeInterpret();
-    if (pCode->GetCodeError())
+    if (pCode->GetCodeError() != FormulaError::NONE)
         return false;
 
     return aResult.IsValueNoError();
@@ -2863,31 +2731,36 @@ bool ScFormulaCell::IsValueNoError() const
         // false if the cell is dirty & needs to be interpreted.
         return false;
 
-    if (pCode->GetCodeError())
+    if (pCode->GetCodeError() != FormulaError::NONE)
         return false;
 
     return aResult.IsValueNoError();
 }
 
-bool ScFormulaCell::IsHybridValueCell()
-{
-    return aResult.GetType() == formula::svHybridValueCell;
-}
-
 double ScFormulaCell::GetValue()
 {
     MaybeInterpret();
-    if ((!pCode->GetCodeError() || pCode->GetCodeError() == errDoubleRef) &&
-            !aResult.GetResultError())
-        return aResult.GetDouble();
-    return 0.0;
+    return GetRawValue();
 }
 
 svl::SharedString ScFormulaCell::GetString()
 {
     MaybeInterpret();
-    if ((!pCode->GetCodeError() || pCode->GetCodeError() == errDoubleRef) &&
-            !aResult.GetResultError())
+    return GetRawString();
+}
+
+double ScFormulaCell::GetRawValue() const
+{
+    if ((pCode->GetCodeError() == FormulaError::NONE) &&
+            aResult.GetResultError() == FormulaError::NONE)
+        return aResult.GetDouble();
+    return 0.0;
+}
+
+svl::SharedString ScFormulaCell::GetRawString() const
+{
+    if ((pCode->GetCodeError() == FormulaError::NONE) &&
+            aResult.GetResultError() == FormulaError::NONE)
         return aResult.GetString();
 
     return svl::SharedString::getEmptyString();
@@ -2899,7 +2772,7 @@ const ScMatrix* ScFormulaCell::GetMatrix()
     {
         if( IsDirtyOrInTableOpDirty()
         // Was stored !bDirty but an accompanying matrix cell was bDirty?
-        || (!bDirty && cMatrixFlag == MM_FORMULA && !aResult.GetMatrix()))
+        || (!bDirty && cMatrixFlag == ScMatrixMode::Formula && !aResult.GetMatrix()))
             Interpret();
     }
     return aResult.GetMatrix().get();
@@ -2909,13 +2782,13 @@ bool ScFormulaCell::GetMatrixOrigin( ScAddress& rPos ) const
 {
     switch ( cMatrixFlag )
     {
-        case MM_FORMULA :
+        case ScMatrixMode::Formula :
             rPos = aPos;
             return true;
-        case MM_REFERENCE :
+        case ScMatrixMode::Reference :
         {
-            pCode->Reset();
-            formula::FormulaToken* t = pCode->GetNextReferenceRPN();
+            formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+            formula::FormulaToken* t = aIter.GetNextReferenceRPN();
             if( t )
             {
                 ScSingleRefData& rRef = *t->GetSingleRef();
@@ -2928,44 +2801,33 @@ bool ScFormulaCell::GetMatrixOrigin( ScAddress& rPos ) const
             }
         }
         break;
+        default: break;
     }
     return false;
 }
 
-/*
- Edge-Values:
-
-   8
- 4   16
-   2
-
- inside: 1
- outside: 0
- (reserved: open: 32)
- */
-
-sal_uInt16 ScFormulaCell::GetMatrixEdge( ScAddress& rOrgPos ) const
+sc::MatrixEdge ScFormulaCell::GetMatrixEdge( ScAddress& rOrgPos ) const
 {
     switch ( cMatrixFlag )
     {
-        case MM_FORMULA :
-        case MM_REFERENCE :
+        case ScMatrixMode::Formula :
+        case ScMatrixMode::Reference :
         {
-            static SCCOL nC;
-            static SCROW nR;
+            static thread_local SCCOL nC;
+            static thread_local SCROW nR;
             ScAddress aOrg;
             if ( !GetMatrixOrigin( aOrg ) )
-                return 0;               // bad luck..
+                return sc::MatrixEdge::Nothing;
             if ( aOrg != rOrgPos )
             {   // First time or a different matrix than last time.
                 rOrgPos = aOrg;
                 const ScFormulaCell* pFCell;
-                if ( cMatrixFlag == MM_REFERENCE )
+                if ( cMatrixFlag == ScMatrixMode::Reference )
                     pFCell = pDocument->GetFormulaCell(aOrg);
                 else
-                    pFCell = this;      // this MM_FORMULA
+                    pFCell = this;      // this ScMatrixMode::Formula
                 // There's only one this, don't compare pFCell==this.
-                if (pFCell && pFCell->cMatrixFlag == MM_FORMULA)
+                if (pFCell && pFCell->cMatrixFlag == ScMatrixMode::Formula)
                 {
                     pFCell->GetMatColsRows( nC, nR );
                     if ( nC == 0 || nR == 0 )
@@ -2981,7 +2843,7 @@ sal_uInt16 ScFormulaCell::GetMatrixEdge( ScAddress& rOrgPos ) const
                         do
                         {
                             pCell = pDocument->GetFormulaCell(aAdr);
-                            if (pCell && pCell->cMatrixFlag == MM_REFERENCE &&
+                            if (pCell && pCell->cMatrixFlag == ScMatrixMode::Reference &&
                                 pCell->GetMatrixOrigin(aTmpOrg) && aTmpOrg == aOrg)
                             {
                                 nC++;
@@ -2996,7 +2858,7 @@ sal_uInt16 ScFormulaCell::GetMatrixEdge( ScAddress& rOrgPos ) const
                         do
                         {
                             pCell = pDocument->GetFormulaCell(aAdr);
-                            if (pCell && pCell->cMatrixFlag == MM_REFERENCE &&
+                            if (pCell && pCell->cMatrixFlag == ScMatrixMode::Reference &&
                                 pCell->GetMatrixOrigin(aTmpOrg) && aTmpOrg == aOrg)
                             {
                                 nR++;
@@ -3012,88 +2874,76 @@ sal_uInt16 ScFormulaCell::GetMatrixEdge( ScAddress& rOrgPos ) const
                 else
                 {
 #if OSL_DEBUG_LEVEL > 0
-                    OStringBuffer aMsg("broken Matrix, no MatFormula at origin, Pos: ");
-                    OUString aTmp(aPos.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument));
-                    aMsg.append(OUStringToOString(aTmp, RTL_TEXTENCODING_ASCII_US));
-                    aMsg.append(", MatOrg: ");
-                    aTmp = aOrg.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument);
-                    aMsg.append(OUStringToOString(aTmp, RTL_TEXTENCODING_ASCII_US));
-                    OSL_FAIL(aMsg.getStr());
+                    SAL_WARN( "sc", "broken Matrix, no MatFormula at origin, Pos: "
+                                << aPos.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument)
+                                << ", MatOrg: "
+                                << aOrg.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument) );
 #endif
-                    return 0;           // bad luck ...
+                    return sc::MatrixEdge::Nothing;
                 }
             }
             // here we are, healthy and clean, somewhere in between
-            SCsCOL dC = aPos.Col() - aOrg.Col();
-            SCsROW dR = aPos.Row() - aOrg.Row();
-            sal_uInt16 nEdges = 0;
+            SCCOL dC = aPos.Col() - aOrg.Col();
+            SCROW dR = aPos.Row() - aOrg.Row();
+            sc::MatrixEdge nEdges = sc::MatrixEdge::Nothing;
             if ( dC >= 0 && dR >= 0 && dC < nC && dR < nR )
             {
                 if ( dC == 0 )
-                    nEdges |= sc::MatrixEdgeLeft;            // left edge
+                    nEdges |= sc::MatrixEdge::Left;
                 if ( dC+1 == nC )
-                    nEdges |= sc::MatrixEdgeRight;           // right edge
+                    nEdges |= sc::MatrixEdge::Right;
                 if ( dR == 0 )
-                    nEdges |= sc::MatrixEdgeTop;            // top edge
+                    nEdges |= sc::MatrixEdge::Top;
                 if ( dR+1 == nR )
-                    nEdges |= sc::MatrixEdgeBottom;            // bottom edge
-                if ( !nEdges )
-                    nEdges = sc::MatrixEdgeInside;             // inside
+                    nEdges |= sc::MatrixEdge::Bottom;
+                if ( nEdges == sc::MatrixEdge::Nothing )
+                    nEdges = sc::MatrixEdge::Inside;
             }
-#if OSL_DEBUG_LEVEL > 0
             else
             {
-                OStringBuffer aMsg( "broken Matrix, Pos: " );
-                OUString aTmp(aPos.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument));
-                aMsg.append(OUStringToOString(aTmp, RTL_TEXTENCODING_UTF8 ));
-                aMsg.append(", MatOrg: ");
-                aTmp = aOrg.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument);
-                aMsg.append(OUStringToOString(aTmp, RTL_TEXTENCODING_UTF8 ));
-                aMsg.append(", MatCols: ");
-                aMsg.append(static_cast<sal_Int32>( nC ));
-                aMsg.append(", MatRows: ");
-                aMsg.append(static_cast<sal_Int32>( nR ));
-                aMsg.append(", DiffCols: ");
-                aMsg.append(static_cast<sal_Int32>( dC ));
-                aMsg.append(", DiffRows: ");
-                aMsg.append(static_cast<sal_Int32>( dR ));
-                OSL_FAIL( aMsg.makeStringAndClear().getStr());
+                SAL_WARN( "sc", "broken Matrix, Pos: "
+                    << aPos.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument)
+                    << ", MatOrg: "
+                    << aOrg.Format(ScRefFlags::COL_VALID | ScRefFlags::ROW_VALID, pDocument)
+                    << ", MatCols: " << static_cast<sal_Int32>( nC )
+                    << ", MatRows: " << static_cast<sal_Int32>( nR )
+                    << ", DiffCols: " << static_cast<sal_Int32>( dC )
+                    << ", DiffRows: " << static_cast<sal_Int32>( dR ));
             }
-#endif
             return nEdges;
         }
         default:
-            return 0;
+            return sc::MatrixEdge::Nothing;
     }
 }
 
-sal_uInt16 ScFormulaCell::GetErrCode()
+FormulaError ScFormulaCell::GetErrCode()
 {
     MaybeInterpret();
 
     /* FIXME: If ScTokenArray::SetCodeError() was really only for code errors
      * and not also abused for signaling other error conditions we could bail
      * out even before attempting to interpret broken code. */
-    sal_uInt16 nErr =  pCode->GetCodeError();
-    if (nErr)
+    FormulaError nErr =  pCode->GetCodeError();
+    if (nErr != FormulaError::NONE)
         return nErr;
     return aResult.GetResultError();
 }
 
-sal_uInt16 ScFormulaCell::GetRawError()
+FormulaError ScFormulaCell::GetRawError()
 {
-    sal_uInt16 nErr =  pCode->GetCodeError();
-    if (nErr)
+    FormulaError nErr =  pCode->GetCodeError();
+    if (nErr != FormulaError::NONE)
         return nErr;
     return aResult.GetResultError();
 }
 
-bool ScFormulaCell::GetErrorOrValue( sal_uInt16& rErr, double& rVal )
+bool ScFormulaCell::GetErrorOrValue( FormulaError& rErr, double& rVal )
 {
     MaybeInterpret();
 
     rErr = pCode->GetCodeError();
-    if (rErr)
+    if (rErr != FormulaError::NONE)
         return true;
 
     return aResult.GetErrorOrDouble(rErr, rVal);
@@ -3103,8 +2953,8 @@ sc::FormulaResultValue ScFormulaCell::GetResult()
 {
     MaybeInterpret();
 
-    sal_uInt16 nErr = pCode->GetCodeError();
-    if (nErr)
+    FormulaError nErr = pCode->GetCodeError();
+    if (nErr != FormulaError::NONE)
         return sc::FormulaResultValue(nErr);
 
     return aResult.GetResult();
@@ -3112,8 +2962,8 @@ sc::FormulaResultValue ScFormulaCell::GetResult()
 
 sc::FormulaResultValue ScFormulaCell::GetResult() const
 {
-    sal_uInt16 nErr = pCode->GetCodeError();
-    if (nErr)
+    FormulaError nErr = pCode->GetCodeError();
+    if (nErr != FormulaError::NONE)
         return sc::FormulaResultValue(nErr);
 
     return aResult.GetResult();
@@ -3121,9 +2971,9 @@ sc::FormulaResultValue ScFormulaCell::GetResult() const
 
 bool ScFormulaCell::HasOneReference( ScRange& r ) const
 {
-    pCode->Reset();
-    formula::FormulaToken* p = pCode->GetNextReferenceRPN();
-    if( p && !pCode->GetNextReferenceRPN() )        // only one!
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+    formula::FormulaToken* p = aIter.GetNextReferenceRPN();
+    if( p && !aIter.GetNextReferenceRPN() )        // only one!
     {
         SingleDoubleRefProvider aProv( *p );
         r.aStart = aProv.Ref1.toAbs(aPos);
@@ -3151,23 +3001,23 @@ ScFormulaCell::HasRefListExpressibleAsOneReference(ScRange& rRange) const
     if (HasOneReference( rRange))
         return true;
 
-    pCode->Reset();
     // Get first reference, if any
-    formula::FormulaToken* const pFirstReference(pCode->GetNextReferenceRPN());
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+    formula::FormulaToken* const pFirstReference(aIter.GetNextReferenceRPN());
     if (pFirstReference)
     {
         // Collect all consecutive references, starting by the one
         // already found
-        std::deque<formula::FormulaToken*> aReferences;
+        std::vector<formula::FormulaToken*> aReferences;
         aReferences.push_back(pFirstReference);
-        FormulaToken* pToken(pCode->NextRPN());
+        FormulaToken* pToken(aIter.NextRPN());
         FormulaToken* pFunction(nullptr);
         while (pToken)
         {
             if (lcl_isReference(*pToken))
             {
                 aReferences.push_back(pToken);
-                pToken = pCode->NextRPN();
+                pToken = aIter.NextRPN();
             }
             else
             {
@@ -3178,7 +3028,7 @@ ScFormulaCell::HasRefListExpressibleAsOneReference(ScRange& rRange) const
                 break;
             }
         }
-        if (pFunction && !pCode->GetNextReferenceRPN()
+        if (pFunction && !aIter.GetNextReferenceRPN()
                 && (pFunction->GetParamCount() == aReferences.size()))
         {
             return lcl_refListFormsOneRange(aPos, aReferences, rRange);
@@ -3187,18 +3037,34 @@ ScFormulaCell::HasRefListExpressibleAsOneReference(ScRange& rRange) const
     return false;
 }
 
-bool ScFormulaCell::HasRelNameReference() const
+ScFormulaCell::RelNameRef ScFormulaCell::HasRelNameReference() const
 {
-    pCode->Reset();
+    RelNameRef eRelNameRef = RelNameRef::NONE;
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
     formula::FormulaToken* t;
-    while ( ( t = pCode->GetNextReferenceRPN() ) != nullptr )
+    while ( ( t = aIter.GetNextReferenceRPN() ) != nullptr )
     {
-        if ( t->GetSingleRef()->IsRelName() ||
-                (t->GetType() == formula::svDoubleRef &&
-                t->GetDoubleRef()->Ref2.IsRelName()) )
-            return true;
+        switch (t->GetType())
+        {
+            case formula::svSingleRef:
+                if (t->GetSingleRef()->IsRelName() && eRelNameRef == RelNameRef::NONE)
+                    eRelNameRef = RelNameRef::SINGLE;
+            break;
+            case formula::svDoubleRef:
+                if (t->GetDoubleRef()->Ref1.IsRelName() || t->GetDoubleRef()->Ref2.IsRelName())
+                    // May originate from individual cell names, in which case
+                    // it needs recompilation.
+                    return RelNameRef::DOUBLE;
+                /* TODO: have an extra flag at ScComplexRefData if range was
+                 * extended? or too cumbersome? might narrow recompilation to
+                 * only needed cases.
+                 * */
+            break;
+            default:
+                ;   // nothing
+        }
     }
-    return false;
+    return eRelNameRef;
 }
 
 bool ScFormulaCell::UpdatePosOnShift( const sc::RefUpdateContext& rCxt )
@@ -3231,7 +3097,7 @@ namespace {
  * Check if we need to re-compile column or row names.
  */
 bool checkCompileColRowName(
-    const sc::RefUpdateContext& rCxt, ScDocument& rDoc, ScTokenArray& rCode,
+    const sc::RefUpdateContext& rCxt, ScDocument& rDoc, const ScTokenArray& rCode,
     const ScAddress& aOldPos, const ScAddress& aPos, bool bValChanged)
 {
     switch (rCxt.meMode)
@@ -3241,11 +3107,11 @@ bool checkCompileColRowName(
             if (rCxt.mnColDelta <= 0 && rCxt.mnRowDelta <= 0)
                 return false;
 
+            formula::FormulaTokenArrayPlainIterator aIter(rCode);
             formula::FormulaToken* t;
             ScRangePairList* pColList = rDoc.GetColNameRanges();
             ScRangePairList* pRowList = rDoc.GetRowNameRanges();
-            rCode.Reset();
-            while ((t = rCode.GetNextColRowName()) != nullptr)
+            while ((t = aIter.GetNextColRowName()) != nullptr)
             {
                 ScSingleRefData& rRef = *t->GetSingleRef();
                 if (rCxt.mnRowDelta > 0 && rRef.IsColRel())
@@ -3282,15 +3148,15 @@ bool checkCompileColRowName(
         }
         break;
         case URM_MOVE:
-        {   // Recomplie for Move/D&D when ColRowName was moved or this Cell
+        {   // Recompile for Move/D&D when ColRowName was moved or this Cell
             // points to one and was moved.
             bool bMoved = (aPos != aOldPos);
             if (bMoved)
                 return true;
 
-            rCode.Reset();
-            const formula::FormulaToken* t = rCode.GetNextColRowName();
-            for (; t; t = rCode.GetNextColRowName())
+            formula::FormulaTokenArrayPlainIterator aIter(rCode);
+            const formula::FormulaToken* t = aIter.GetNextColRowName();
+            for (; t; t = aIter.GetNextColRowName())
             {
                 const ScSingleRefData& rRef = *t->GetSingleRef();
                 ScAddress aAbs = rRef.toAbs(aPos);
@@ -3312,7 +3178,7 @@ bool checkCompileColRowName(
 }
 
 void setOldCodeToUndo(
-    ScDocument* pUndoDoc, const ScAddress& aUndoPos, ScTokenArray* pOldCode, FormulaGrammar::Grammar eTempGrammar, sal_uInt8 cMatrixFlag)
+    ScDocument* pUndoDoc, const ScAddress& aUndoPos, const ScTokenArray* pOldCode, FormulaGrammar::Grammar eTempGrammar, ScMatrixMode cMatrixFlag)
 {
     // Copy the cell to aUndoPos, which is its current position in the document,
     // so this works when UpdateReference is called before moving the cells
@@ -3353,9 +3219,8 @@ bool ScFormulaCell::UpdateReferenceOnShift(
     bool bHasColRowNames = false;
     if (!bHasRefs)
     {
-        pCode->Reset();
-        bHasColRowNames = (pCode->GetNextColRowName() != nullptr);
-        bHasRefs = bHasRefs || bHasColRowNames;
+        bHasColRowNames = (formula::FormulaTokenArrayPlainIterator(*pCode).GetNextColRowName() != nullptr);
+        bHasRefs = bHasColRowNames;
     }
     bool bOnRefMove = pCode->IsRecalcModeOnRefMove();
 
@@ -3366,7 +3231,7 @@ bool ScFormulaCell::UpdateReferenceOnShift(
 
     std::unique_ptr<ScTokenArray> pOldCode;
     if (pUndoDoc)
-        pOldCode.reset(pCode->Clone());
+        pOldCode = pCode->Clone();
 
     bool bValChanged = false;
     bool bRefModified = false;
@@ -3403,7 +3268,13 @@ bool ScFormulaCell::UpdateReferenceOnShift(
         bInDeleteUndo = (pChangeTrack && pChangeTrack->IsInDeleteUndo());
 
         // RelNameRefs are always moved
-        bool bHasRelName = HasRelNameReference();
+        bool bHasRelName = false;
+        if (!bRecompile)
+        {
+            RelNameRef eRelNameRef = HasRelNameReference();
+            bHasRelName = (eRelNameRef != RelNameRef::NONE);
+            bRecompile = (eRelNameRef == RelNameRef::DOUBLE);
+        }
         // Reference changed and new listening needed?
         // Except in Insert/Delete without specialties.
         bNewListening = (bRefModified || bRecompile
@@ -3460,7 +3331,9 @@ bool ScFormulaCell::UpdateReferenceOnMove(
         aUndoPos = *pUndoCellPos;
     ScAddress aOldPos( aPos );
 
-    if (rCxt.maRange.In(aPos))
+    bool bCellInMoveTarget = rCxt.maRange.In(aPos);
+
+    if ( bCellInMoveTarget )
     {
         // The cell is being moved or copied to a new position. I guess the
         // position has been updated prior to this call?  Determine
@@ -3474,9 +3347,8 @@ bool ScFormulaCell::UpdateReferenceOnMove(
     bool bHasColRowNames = false;
     if (!bHasRefs)
     {
-        pCode->Reset();
-        bHasColRowNames = (pCode->GetNextColRowName() != nullptr);
-        bHasRefs = bHasRefs || bHasColRowNames;
+        bHasColRowNames = (formula::FormulaTokenArrayPlainIterator(*pCode).GetNextColRowName() != nullptr);
+        bHasRefs = bHasColRowNames;
     }
     bool bOnRefMove = pCode->IsRecalcModeOnRefMove();
 
@@ -3488,7 +3360,7 @@ bool ScFormulaCell::UpdateReferenceOnMove(
     bool bCellStateChanged = false;
     std::unique_ptr<ScTokenArray> pOldCode;
     if (pUndoDoc)
-        pOldCode.reset(pCode->Clone());
+        pOldCode = pCode->Clone();
 
     bool bValChanged = false;
     bool bRefModified = false;
@@ -3527,7 +3399,9 @@ bool ScFormulaCell::UpdateReferenceOnMove(
         bInDeleteUndo = (pChangeTrack && pChangeTrack->IsInDeleteUndo());
 
         // RelNameRefs are always moved
-        bHasRelName = HasRelNameReference();
+        RelNameRef eRelNameRef = HasRelNameReference();
+        bHasRelName = (eRelNameRef != RelNameRef::NONE);
+        bCompile |= (eRelNameRef == RelNameRef::DOUBLE);
         // Reference changed and new listening needed?
         // Except in Insert/Delete without specialties.
         bNewListening = (bRefModified || bColRowNameCompile
@@ -3547,7 +3421,7 @@ bool ScFormulaCell::UpdateReferenceOnMove(
          (bValChanged && bHasRelName ) || bOnRefMove)
         bNeedDirty = true;
 
-    if (pUndoDoc && (bValChanged || bRefModified || bOnRefMove))
+    if (pUndoDoc && !bCellInMoveTarget && (bValChanged || bRefModified || bOnRefMove))
         setOldCodeToUndo(pUndoDoc, aUndoPos, pOldCode.get(), eTempGrammar, cMatrixFlag);
 
     bValChanged = false;
@@ -3570,7 +3444,7 @@ bool ScFormulaCell::UpdateReferenceOnMove(
 
     if (bNeedDirty)
     {   // Cut off references, invalid or similar?
-        sc::AutoCalcSwitch(*pDocument, false);
+        sc::AutoCalcSwitch aACSwitch(*pDocument, false);
         SetDirty();
     }
 
@@ -3599,8 +3473,7 @@ bool ScFormulaCell::UpdateReferenceOnCopy(
 
     // Check presence of any references or column row names.
     bool bHasRefs = pCode->HasReferences();
-    pCode->Reset();
-    bool bHasColRowNames = (pCode->GetNextColRowName() != nullptr);
+    bool bHasColRowNames = (formula::FormulaTokenArrayPlainIterator(*pCode).GetNextColRowName() != nullptr);
     bHasRefs = bHasRefs || bHasColRowNames;
     bool bOnRefMove = pCode->IsRecalcModeOnRefMove();
 
@@ -3611,7 +3484,7 @@ bool ScFormulaCell::UpdateReferenceOnCopy(
 
     std::unique_ptr<ScTokenArray> pOldCode;
     if (pUndoDoc)
-        pOldCode.reset(pCode->Clone());
+        pOldCode = pCode->Clone();
 
     if (bOnRefMove)
         // Cell may reference itself, e.g. ocColumn, ocRow without parameter
@@ -3630,7 +3503,7 @@ bool ScFormulaCell::UpdateReferenceOnCopy(
 
     if (bNeedDirty)
     {   // Cut off references, invalid or similar?
-        sc::AutoCalcSwitch(*pDocument, false);
+        sc::AutoCalcSwitch aACSwitch(*pDocument, false);
         SetDirty();
     }
 
@@ -3673,7 +3546,7 @@ bool ScFormulaCell::UpdateReference(
     return false;
 }
 
-void ScFormulaCell::UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt )
+void ScFormulaCell::UpdateInsertTab( const sc::RefUpdateInsertTabContext& rCxt )
 {
     // Adjust tokens only when it's not grouped or grouped top cell.
     bool bAdjustCode = !mxGroup || mxGroup->mpTopCell == this;
@@ -3703,7 +3576,7 @@ void ScFormulaCell::UpdateInsertTab( sc::RefUpdateInsertTabContext& rCxt )
     // no StartListeningTo because the new sheets have not been inserted yet.
 }
 
-void ScFormulaCell::UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt )
+void ScFormulaCell::UpdateDeleteTab( const sc::RefUpdateDeleteTabContext& rCxt )
 {
     // Adjust tokens only when it's not grouped or grouped top cell.
     bool bAdjustCode = !mxGroup || mxGroup->mpTopCell == this;
@@ -3716,7 +3589,7 @@ void ScFormulaCell::UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt )
     }
 
     EndListeningTo( pDocument );
-    // IncTab _after_ EndListeningTo und _before_ Compiler UpdateDeleteTab!
+    // IncTab _after_ EndListeningTo and _before_ Compiler UpdateDeleteTab!
     ScAddress aOldPos = aPos;
     if (bPosChanged)
         aPos.IncTab(-1*rCxt.mnSheets);
@@ -3730,7 +3603,7 @@ void ScFormulaCell::UpdateDeleteTab( sc::RefUpdateDeleteTabContext& rCxt )
         bCompile = true;
 }
 
-void ScFormulaCell::UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt, SCTAB nTabNo )
+void ScFormulaCell::UpdateMoveTab( const sc::RefUpdateMoveTabContext& rCxt, SCTAB nTabNo )
 {
     // Adjust tokens only when it's not grouped or grouped top cell.
     bool bAdjustCode = !mxGroup || mxGroup->mpTopCell == this;
@@ -3743,7 +3616,7 @@ void ScFormulaCell::UpdateMoveTab( sc::RefUpdateMoveTabContext& rCxt, SCTAB nTab
 
     EndListeningTo(pDocument);
     ScAddress aOldPos = aPos;
-    // SetTab _after_ EndListeningTo und _before_ Compiler UpdateMoveTab !
+    // SetTab _after_ EndListeningTo and _before_ Compiler UpdateMoveTab !
     aPos.SetTab(nTabNo);
 
     // no StartListeningTo because pTab[nTab] not yet correct!
@@ -3766,8 +3639,8 @@ void ScFormulaCell::UpdateInsertTabAbs(SCTAB nTable)
     if (!bAdjustCode)
         return;
 
-    pCode->Reset();
-    formula::FormulaToken* p = pCode->GetNextReferenceRPN();
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+    formula::FormulaToken* p = aIter.GetNextReferenceRPN();
     while (p)
     {
         ScSingleRefData& rRef1 = *p->GetSingleRef();
@@ -3779,7 +3652,7 @@ void ScFormulaCell::UpdateInsertTabAbs(SCTAB nTable)
             if (!rRef2.IsTabRel() && nTable <= rRef2.Tab())
                 rRef2.IncTab(1);
         }
-        p = pCode->GetNextReferenceRPN();
+        p = aIter.GetNextReferenceRPN();
     }
 }
 
@@ -3793,8 +3666,8 @@ bool ScFormulaCell::TestTabRefAbs(SCTAB nTable)
         return false;
 
     bool bRet = false;
-    pCode->Reset();
-    formula::FormulaToken* p = pCode->GetNextReferenceRPN();
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+    formula::FormulaToken* p = aIter.GetNextReferenceRPN();
     while (p)
     {
         ScSingleRefData& rRef1 = *p->GetSingleRef();
@@ -3816,7 +3689,7 @@ bool ScFormulaCell::TestTabRefAbs(SCTAB nTable)
                     rRef2.SetAbsTab(aPos.Tab());
             }
         }
-        p = pCode->GetNextReferenceRPN();
+        p = aIter.GetNextReferenceRPN();
     }
     return bRet;
 }
@@ -3826,7 +3699,7 @@ void ScFormulaCell::UpdateCompile( bool bForceIfNameInUse )
     if ( bForceIfNameInUse && !bCompile )
         bCompile = pCode->HasNameOrColRowName();
     if ( bCompile )
-        pCode->SetCodeError( 0 );   // make sure it will really be compiled
+        pCode->SetCodeError( FormulaError::NONE );   // make sure it will really be compiled
     CompileTokenArray();
 }
 
@@ -3834,9 +3707,9 @@ void ScFormulaCell::UpdateCompile( bool bForceIfNameInUse )
 void ScFormulaCell::TransposeReference()
 {
     bool bFound = false;
-    pCode->Reset();
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
     formula::FormulaToken* t;
-    while ( ( t = pCode->GetNextReference() ) != nullptr )
+    while ( ( t = aIter.GetNextReference() ) != nullptr )
     {
         ScSingleRefData& rRef1 = *t->GetSingleRef();
         if ( rRef1.IsColRel() && rRef1.IsRowRel() )
@@ -3882,29 +3755,28 @@ void ScFormulaCell::UpdateTranspose( const ScRange& rSource, const ScAddress& rD
     if ( aDestRange.In( aOldPos ) )
     {
         // Count back Positions
-        SCsCOL nRelPosX = aOldPos.Col();
-        SCsROW nRelPosY = aOldPos.Row();
-        SCsTAB nRelPosZ = aOldPos.Tab();
+        SCCOL nRelPosX = aOldPos.Col();
+        SCROW nRelPosY = aOldPos.Row();
+        SCTAB nRelPosZ = aOldPos.Tab();
         ScRefUpdate::DoTranspose( nRelPosX, nRelPosY, nRelPosZ, pDocument, aDestRange, rSource.aStart );
         aOldPos.Set( nRelPosX, nRelPosY, nRelPosZ );
         bPosChanged = true;
     }
 
-    ScTokenArray* pOld = pUndoDoc ? pCode->Clone() : nullptr;
+    std::unique_ptr<ScTokenArray> pOld;
+    if (pUndoDoc)
+        pOld = pCode->Clone();
     bool bRefChanged = false;
-    formula::FormulaToken* t;
 
-    pCode->Reset();
-    while( (t = pCode->GetNextReferenceOrName()) != nullptr )
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
+    formula::FormulaToken* t;
+    while( (t = aIter.GetNextReferenceOrName()) != nullptr )
     {
         if( t->GetOpCode() == ocName )
         {
-            const ScRangeData* pName = pDocument->FindRangeNameByIndexAndSheet( t->GetIndex(), t->GetSheet());
-            if (pName)
-            {
-                if (pName->IsModified())
-                    bRefChanged = true;
-            }
+            const ScRangeData* pName = pDocument->FindRangeNameBySheetAndIndex( t->GetSheet(), t->GetIndex());
+            if (pName && pName->IsModified())
+                bRefChanged = true;
         }
         else if( t->GetType() != svIndex )
         {
@@ -3937,8 +3809,6 @@ void ScFormulaCell::UpdateTranspose( const ScRange& rSource, const ScAddress& rD
     }
     else
         StartListeningTo( pDocument ); // Listener as previous
-
-    delete pOld;
 }
 
 void ScFormulaCell::UpdateGrow( const ScRange& rArea, SCCOL nGrowX, SCROW nGrowY )
@@ -3946,19 +3816,17 @@ void ScFormulaCell::UpdateGrow( const ScRange& rArea, SCCOL nGrowX, SCROW nGrowY
     EndListeningTo( pDocument );
 
     bool bRefChanged = false;
+
+    formula::FormulaTokenArrayPlainIterator aIter(*pCode);
     formula::FormulaToken* t;
 
-    pCode->Reset();
-    while( (t = pCode->GetNextReferenceOrName()) != nullptr )
+    while( (t = aIter.GetNextReferenceOrName()) != nullptr )
     {
         if( t->GetOpCode() == ocName )
         {
-            const ScRangeData* pName = pDocument->FindRangeNameByIndexAndSheet( t->GetIndex(), t->GetSheet());
-            if (pName)
-            {
-                if (pName->IsModified())
-                    bRefChanged = true;
-            }
+            const ScRangeData* pName = pDocument->FindRangeNameBySheetAndIndex( t->GetSheet(), t->GetIndex());
+            if (pName && pName->IsModified())
+                bRefChanged = true;
         }
         else if( t->GetType() != svIndex )
         {
@@ -3984,11 +3852,12 @@ void ScFormulaCell::UpdateGrow( const ScRange& rArea, SCCOL nGrowX, SCROW nGrowY
         StartListeningTo( pDocument ); // Listener as previous
 }
 
-// See also findRangeNamesReferencingSheet() above.
-static void lcl_FindRangeNamesInUse(sc::UpdatedRangeNames& rIndexes, ScTokenArray* pCode, const ScDocument* pDoc,
+// See also ScDocument::FindRangeNamesReferencingSheet()
+static void lcl_FindRangeNamesInUse(sc::UpdatedRangeNames& rIndexes, const ScTokenArray* pCode, const ScDocument* pDoc,
         int nRecursion)
 {
-    for (FormulaToken* p = pCode->First(); p; p = pCode->Next())
+    FormulaTokenArrayPlainIterator aIter(*pCode);
+    for (FormulaToken* p = aIter.First(); p; p = aIter.Next())
     {
         if (p->GetOpCode() == ocName)
         {
@@ -3998,7 +3867,7 @@ static void lcl_FindRangeNamesInUse(sc::UpdatedRangeNames& rIndexes, ScTokenArra
 
             if (nRecursion < 126)   // whatever.. 42*3
             {
-                ScRangeData* pSubName = pDoc->FindRangeNameByIndexAndSheet( nTokenIndex, nTab);
+                ScRangeData* pSubName = pDoc->FindRangeNameBySheetAndIndex( nTab, nTokenIndex);
                 if (pSubName)
                     lcl_FindRangeNamesInUse(rIndexes, pSubName->GetCode(), pDoc, nRecursion+1);
             }
@@ -4016,11 +3885,11 @@ void ScFormulaCell::SetChanged(bool b)
     bChanged = b;
 }
 
-void ScFormulaCell::SetCode( ScTokenArray* pNew )
+void ScFormulaCell::SetCode( std::unique_ptr<ScTokenArray> pNew )
 {
     assert(!mxGroup); // Don't call this if it's shared.
     delete pCode;
-    pCode = pNew; // takes ownership.
+    pCode = pNew.release(); // takes ownership.
 }
 
 void ScFormulaCell::SetRunning( bool bVal )
@@ -4030,7 +3899,8 @@ void ScFormulaCell::SetRunning( bool bVal )
 
 void ScFormulaCell::CompileDBFormula( sc::CompileFormulaContext& rCxt )
 {
-    for( FormulaToken* p = pCode->First(); p; p = pCode->Next() )
+    FormulaTokenArrayPlainIterator aIter(*pCode);
+    for( FormulaToken* p = aIter.First(); p; p = aIter.Next() )
     {
         OpCode eOp = p->GetOpCode();
         if ( eOp == ocDBArea || eOp == ocTableRef )
@@ -4045,8 +3915,8 @@ void ScFormulaCell::CompileDBFormula( sc::CompileFormulaContext& rCxt )
 
 void ScFormulaCell::CompileColRowNameFormula( sc::CompileFormulaContext& rCxt )
 {
-    pCode->Reset();
-    for ( FormulaToken* p = pCode->First(); p; p = pCode->Next() )
+    FormulaTokenArrayPlainIterator aIter(*pCode);
+    for ( FormulaToken* p = aIter.First(); p; p = aIter.Next() )
     {
         if ( p->GetOpCode() == ocColRowName )
         {
@@ -4077,7 +3947,7 @@ ScFormulaCellGroupRef ScFormulaCell::CreateCellGroup( SCROW nLen, bool bInvarian
     mxGroup->mpTopCell = this;
     mxGroup->mbInvariant = bInvariant;
     mxGroup->mnLength = nLen;
-    mxGroup->mpCode = pCode; // Move this to the shared location.
+    mxGroup->mpCode.reset(pCode); // Move this to the shared location.
     return mxGroup;
 }
 
@@ -4087,7 +3957,7 @@ void ScFormulaCell::SetCellGroup( const ScFormulaCellGroupRef &xRef )
     {
         // Make this cell a non-grouped cell.
         if (mxGroup)
-            pCode = mxGroup->mpCode->Clone();
+            pCode = mxGroup->mpCode->Clone().release();
 
         mxGroup = xRef;
         return;
@@ -4099,17 +3969,21 @@ void ScFormulaCell::SetCellGroup( const ScFormulaCellGroupRef &xRef )
         delete pCode;
 
     mxGroup = xRef;
-    pCode = mxGroup->mpCode;
+    pCode = mxGroup->mpCode.get();
+    mxGroup->mnWeight = 0;      // invalidate
 }
 
-ScFormulaCell::CompareState ScFormulaCell::CompareByTokenArray( ScFormulaCell& rOther ) const
+ScFormulaCell::CompareState ScFormulaCell::CompareByTokenArray( const ScFormulaCell& rOther ) const
 {
     // no Matrix formulae yet.
-    if ( GetMatrixFlag() != MM_NONE )
+    if ( GetMatrixFlag() != ScMatrixMode::NONE )
         return NotEqual;
 
     // are these formulas at all similar ?
     if ( GetHash() != rOther.GetHash() )
+        return NotEqual;
+
+    if (!pCode->IsShareable() || !rOther.pCode->IsShareable())
         return NotEqual;
 
     FormulaToken **pThis = pCode->GetCode();
@@ -4124,6 +3998,13 @@ ScFormulaCell::CompareState ScFormulaCell::CompareByTokenArray( ScFormulaCell& r
     }
 
     if ( nThisLen != nOtherLen )
+        return NotEqual;
+
+    // No tokens can be an error cell so check error code, otherwise we could
+    // end up with a series of equal error values instead of individual error
+    // values. Also if for any reason different errors are set even if all
+    // tokens are equal, the cells are not equal.
+    if (pCode->GetCodeError() != rOther.pCode->GetCodeError())
         return NotEqual;
 
     bool bInvariant = true;
@@ -4212,6 +4093,12 @@ ScFormulaCell::CompareState ScFormulaCell::CompareByTokenArray( ScFormulaCell& r
                     return NotEqual;
             }
             break;
+            case formula::svError:
+            {
+                if (pThisTok->GetError() != pOtherTok->GetError())
+                    return NotEqual;
+            }
+            break;
             default:
                 ;
         }
@@ -4249,12 +4136,57 @@ ScFormulaCell::CompareState ScFormulaCell::CompareByTokenArray( ScFormulaCell& r
 
         switch (pThisTok->GetType())
         {
+            // ScCompiler::HandleIIOpCode() may optimize some refs only in RPN code,
+            // resulting in identical RPN references that could lead to creating
+            // a formula group from formulas that should not be merged into a group,
+            // so check also the formula itself.
+            case formula::svSingleRef:
+            {
+                // Single cell reference.
+                const ScSingleRefData& rRef = *pThisTok->GetSingleRef();
+                if (rRef != *pOtherTok->GetSingleRef())
+                    return NotEqual;
+
+                if (rRef.IsRowRel())
+                    bInvariant = false;
+            }
+            break;
+            case formula::svDoubleRef:
+            {
+                // Range reference.
+                const ScSingleRefData& rRef1 = *pThisTok->GetSingleRef();
+                const ScSingleRefData& rRef2 = *pThisTok->GetSingleRef2();
+                if (rRef1 != *pOtherTok->GetSingleRef())
+                    return NotEqual;
+
+                if (rRef2 != *pOtherTok->GetSingleRef2())
+                    return NotEqual;
+
+                if (rRef1.IsRowRel())
+                    bInvariant = false;
+
+                if (rRef2.IsRowRel())
+                    bInvariant = false;
+            }
+            break;
             // All index tokens are names. Different categories already had
             // different OpCode values.
             case formula::svIndex:
                 {
-                    if (pThisTok->GetIndex() != pOtherTok->GetIndex() || pThisTok->GetSheet() != pOtherTok->GetSheet())
+                    if (pThisTok->GetIndex() != pOtherTok->GetIndex())
                         return NotEqual;
+                    switch (pThisTok->GetOpCode())
+                    {
+                        case ocTableRef:
+                            // nothing, sheet value assumed as -1, silence
+                            // ScTableRefToken::GetSheet() SAL_WARN about
+                            // unhandled
+                            ;
+                            break;
+                        default:    // ocName, ocDBArea
+                            if (pThisTok->GetSheet() != pOtherTok->GetSheet())
+                                return NotEqual;
+                    }
                 }
                 break;
             default:
@@ -4295,47 +4227,597 @@ int splitup(int N, int K, int& A)
 
 } // anonymous namespace
 
-bool ScFormulaCell::InterpretFormulaGroup()
+struct ScDependantsCalculator
+{
+    ScDocument& mrDoc;
+    const ScTokenArray& mrCode;
+    const ScFormulaCellGroupRef& mxGroup;
+    const SCROW mnLen;
+    const ScAddress& mrPos;
+    const bool mFromFirstRow;
+    const SCROW mnStartOffset;
+    const SCROW mnEndOffset;
+    const SCROW mnSpanLen;
+
+    ScDependantsCalculator(ScDocument& rDoc, const ScTokenArray& rCode, const ScFormulaCell& rCell,
+            const ScAddress& rPos, bool fromFirstRow, SCROW nStartOffset, SCROW nEndOffset) :
+        mrDoc(rDoc),
+        mrCode(rCode),
+        mxGroup(rCell.GetCellGroup()),
+        mnLen(mxGroup->mnLength),
+        mrPos(rPos),
+        // ScColumn::FetchVectorRefArray() always fetches data from row 0, even if the data is used
+        // only from further rows. This data fetching could also lead to Interpret() calls, so
+        // in OpenCL mode the formula in practice depends on those cells too.
+        mFromFirstRow(fromFirstRow),
+        mnStartOffset(nStartOffset),
+        mnEndOffset(nEndOffset),
+        mnSpanLen(nEndOffset - nStartOffset + 1)
+    {
+    }
+
+    // FIXME: copy-pasted from ScGroupTokenConverter. factor out somewhere else
+    // (note already modified a bit, mFromFirstRow)
+
+    // I think what this function does is to check whether the relative row reference nRelRow points
+    // to a row that is inside the range of rows covered by the formula group.
+
+    bool isSelfReferenceRelative(const ScAddress& rRefPos, SCROW nRelRow)
+    {
+        if (rRefPos.Col() != mrPos.Col() || rRefPos.Tab() != mrPos.Tab())
+            return false;
+
+        SCROW nEndRow = mrPos.Row() + mnLen - 1;
+
+        if (nRelRow <= 0)
+        {
+            SCROW nTest = nEndRow;
+            nTest += nRelRow;
+            if (nTest >= mrPos.Row())
+                return true;
+        }
+        else
+        {
+            SCROW nTest = mrPos.Row(); // top row.
+            nTest += nRelRow;
+            if (nTest <= nEndRow)
+                return true;
+            // If pointing below the formula, it's always included if going from first row.
+            if (mFromFirstRow)
+                return true;
+        }
+
+        return false;
+    }
+
+    // FIXME: another copy-paste
+
+    // And this correspondingly checks whether an absolute row is inside the range of rows covered
+    // by the formula group.
+
+    bool isSelfReferenceAbsolute(const ScAddress& rRefPos)
+    {
+        if (rRefPos.Col() != mrPos.Col() || rRefPos.Tab() != mrPos.Tab())
+            return false;
+
+        SCROW nEndRow = mrPos.Row() + mnLen - 1;
+
+        if (rRefPos.Row() < mrPos.Row())
+            return false;
+
+        // If pointing below the formula, it's always included if going from first row.
+        if (rRefPos.Row() > nEndRow && !mFromFirstRow)
+            return false;
+
+        return true;
+    }
+
+    // Checks if the doubleref engulfs all of formula group cells
+    // Note : does not check if there is a partial overlap, that can be done by calling
+    //        isSelfReference[Absolute|Relative]() on both the start and end of the double ref
+    bool isDoubleRefSpanGroupRange(const ScRange& rAbs, bool bIsRef1RowRel, bool bIsRef2RowRel)
+    {
+        if (rAbs.aStart.Col() > mrPos.Col() || rAbs.aEnd.Col() < mrPos.Col()
+            || rAbs.aStart.Tab() > mrPos.Tab() || rAbs.aEnd.Tab() < mrPos.Tab())
+        {
+            return false;
+        }
+
+        SCROW nStartRow    = mrPos.Row();
+        SCROW nEndRow      = nStartRow + mnLen - 1;
+        SCROW nRefStartRow = rAbs.aStart.Row();
+        SCROW nRefEndRow   = rAbs.aEnd.Row();
+
+        if (bIsRef1RowRel && bIsRef2RowRel &&
+            ((nRefStartRow <= nStartRow && nRefEndRow >= nEndRow) ||
+             ((nRefStartRow + mnLen - 1) <= nStartRow &&
+              (nRefEndRow + mnLen - 1) >= nEndRow)))
+            return true;
+
+        if (!bIsRef1RowRel && nRefStartRow <= nStartRow &&
+            (nRefEndRow >= nEndRow || (nRefEndRow + mnLen - 1) >= nEndRow))
+            return true;
+
+        if (!bIsRef2RowRel &&
+            nRefStartRow <= nStartRow && nRefEndRow >= nEndRow)
+            return true;
+
+        // If going from first row, the referenced range must be entirely above the formula,
+        // otherwise the formula would be included.
+        if (mFromFirstRow && nRefEndRow >= nStartRow)
+            return true;
+
+        return false;
+    }
+
+    // FIXME: another copy-paste
+    SCROW trimLength(SCTAB nTab, SCCOL nCol1, SCCOL nCol2, SCROW nRow, SCROW nRowLen)
+    {
+        SCROW nLastRow = nRow + nRowLen - 1; // current last row.
+        nLastRow = mrDoc.GetLastDataRow(nTab, nCol1, nCol2, nLastRow);
+        if (nLastRow < (nRow + nRowLen - 1))
+        {
+            // This can end up negative! Was that the original intent, or
+            // is it accidental? Was it not like that originally but the
+            // surrounding conditions changed?
+            nRowLen = nLastRow - nRow + 1;
+            // Anyway, let's assume it doesn't make sense to return a
+            // negative or zero value here.
+            if (nRowLen <= 0)
+                nRowLen = 1;
+        }
+        else if (nLastRow == 0)
+            // Column is empty.
+            nRowLen = 1;
+
+        return nRowLen;
+    }
+
+    bool DoIt()
+    {
+        // Partially from ScGroupTokenConverter::convert in sc/source/core/data/grouptokenconverter.cxx
+
+        ScRangeList aRangeList;
+
+        // Self references should be checked by considering the entire formula-group not just the provided span.
+        bool bHasSelfReferences = false;
+
+        for (auto p: mrCode.RPNTokens())
+        {
+            switch (p->GetType())
+            {
+            case svSingleRef:
+                {
+                    ScSingleRefData aRef = *p->GetSingleRef(); // =Sheet1!A1
+                    if( aRef.IsDeleted())
+                        return false;
+                    ScAddress aRefPos = aRef.toAbs(mrPos);
+
+                    if (!mrDoc.TableExists(aRefPos.Tab()))
+                        return false; // or true?
+
+                    if (aRef.IsRowRel())
+                    {
+                        if (isSelfReferenceRelative(aRefPos, aRef.Row()))
+                        {
+                            bHasSelfReferences = true;
+                            continue;
+                        }
+
+                        // Trim data array length to actual data range.
+                        SCROW nTrimLen = trimLength(aRefPos.Tab(), aRefPos.Col(), aRefPos.Col(), aRefPos.Row() + mnStartOffset, mnSpanLen);
+
+                        aRangeList.Join(ScRange(aRefPos.Col(), aRefPos.Row() + mnStartOffset, aRefPos.Tab(),
+                                                aRefPos.Col(), aRefPos.Row() + mnStartOffset + nTrimLen - 1, aRefPos.Tab()));
+                    }
+                    else
+                    {
+                        if (isSelfReferenceAbsolute(aRefPos))
+                        {
+                            bHasSelfReferences = true;
+                            continue;
+                        }
+
+                        aRangeList.Join(ScRange(aRefPos.Col(), aRefPos.Row(), aRefPos.Tab()));
+                    }
+                }
+                break;
+            case svDoubleRef:
+                {
+                    ScComplexRefData aRef = *p->GetDoubleRef();
+                    if( aRef.IsDeleted())
+                        return false;
+                    ScRange aAbs = aRef.toAbs(mrPos);
+
+                    // Multiple sheet
+                    if (aRef.Ref1.Tab() != aRef.Ref2.Tab())
+                        return false;
+
+                    bool bIsRef1RowRel = aRef.Ref1.IsRowRel();
+                    // Check for self reference.
+                    if (bIsRef1RowRel)
+                    {
+                        if (isSelfReferenceRelative(aAbs.aStart, aRef.Ref1.Row()))
+                        {
+                            bHasSelfReferences = true;
+                            continue;
+                        }
+                    }
+                    else if (isSelfReferenceAbsolute(aAbs.aStart))
+                    {
+                        bHasSelfReferences = true;
+                        continue;
+                    }
+
+                    bool bIsRef2RowRel = aRef.Ref2.IsRowRel();
+                    if (bIsRef2RowRel)
+                    {
+                        if (isSelfReferenceRelative(aAbs.aEnd, aRef.Ref2.Row()))
+                        {
+                            bHasSelfReferences = true;
+                            continue;
+                        }
+                    }
+                    else if (isSelfReferenceAbsolute(aAbs.aEnd))
+                    {
+                        bHasSelfReferences = true;
+                        continue;
+                    }
+
+                    if (isDoubleRefSpanGroupRange(aAbs, bIsRef1RowRel, bIsRef2RowRel))
+                    {
+                        bHasSelfReferences = true;
+                        continue;
+                    }
+
+                    // The first row that will be referenced through the doubleref.
+                    SCROW nFirstRefRow = bIsRef1RowRel ? aAbs.aStart.Row() + mnStartOffset : aAbs.aStart.Row();
+                    // The last row that will be referenced through the doubleref.
+                    SCROW nLastRefRow =  bIsRef2RowRel ? aAbs.aEnd.Row() + mnEndOffset : aAbs.aEnd.Row();
+                    // Number of rows to be evaluated from nFirstRefRow.
+                    SCROW nArrayLength = nLastRefRow - nFirstRefRow + 1;
+                    assert(nArrayLength > 0);
+
+                    // Trim trailing empty rows.
+                    nArrayLength = trimLength(aAbs.aStart.Tab(), aAbs.aStart.Col(), aAbs.aEnd.Col(), nFirstRefRow, nArrayLength);
+
+                    aRangeList.Join(ScRange(aAbs.aStart.Col(), nFirstRefRow, aAbs.aStart.Tab(),
+                               aAbs.aEnd.Col(), nFirstRefRow + nArrayLength - 1, aAbs.aEnd.Tab()));
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
+        // Compute dependencies irrespective of the presence of any self references.
+        // These dependencies would get computed via InterpretTail anyway when we disable group calc, so lets do it now.
+        // The advantage is that the FG's get marked for cycles early if present, and can avoid lots of complications.
+        for (size_t i = 0; i < aRangeList.size(); ++i)
+        {
+            const ScRange & rRange = aRangeList[i];
+            assert(rRange.aStart.Tab() == rRange.aEnd.Tab());
+            for (auto nCol = rRange.aStart.Col(); nCol <= rRange.aEnd.Col(); nCol++)
+            {
+                SCROW nStartRow = rRange.aStart.Row();
+                SCROW nLength = rRange.aEnd.Row() - rRange.aStart.Row() + 1;
+                if( mFromFirstRow )
+                {   // include also all previous rows
+                    nLength += nStartRow;
+                    nStartRow = 0;
+                }
+                if (!mrDoc.HandleRefArrayForParallelism(ScAddress(nCol, nStartRow, rRange.aStart.Tab()),
+                                                        nLength, mxGroup))
+                    return false;
+            }
+        }
+        return !bHasSelfReferences;
+    }
+};
+
+bool ScFormulaCell::InterpretFormulaGroup(SCROW nStartOffset, SCROW nEndOffset)
 {
     if (!mxGroup || !pCode)
         return false;
 
+    auto aScope = sc::FormulaLogger::get().enterGroup(*pDocument, *this);
+    ScRecursionHelper& rRecursionHelper = pDocument->GetRecursionHelper();
+
+    if (mxGroup->mbPartOfCycle)
+    {
+        aScope.addMessage("This formula-group is part of a cycle");
+        return false;
+    }
+
     if (mxGroup->meCalcState == sc::GroupCalcDisabled)
-        return false;
-
-    if (GetWeight() < ScInterpreter::GetGlobalConfig().mnOpenCLMinimumFormulaGroupSize)
     {
-        mxGroup->meCalcState = sc::GroupCalcDisabled;
+        aScope.addMessage("group calc disabled");
         return false;
     }
 
-    if (cMatrixFlag != MM_NONE)
+    // Use SC_TEST_CALCULATION=opencl/threads to force calculation e.g. for unittests
+    static ForceCalculationType forceType = ScCalcConfig::getForceCalculationType();
+    if (forceType == ForceCalculationCore
+        || ( GetWeight() < ScInterpreter::GetGlobalConfig().mnOpenCLMinimumFormulaGroupSize
+            && forceType != ForceCalculationOpenCL
+            && forceType != ForceCalculationThreads))
     {
         mxGroup->meCalcState = sc::GroupCalcDisabled;
+        aScope.addGroupSizeThresholdMessage(*this);
         return false;
     }
 
-    switch (pCode->GetVectorState())
+    if (cMatrixFlag != ScMatrixMode::NONE)
     {
-        case FormulaVectorEnabled:
-        case FormulaVectorCheckReference:
-            // Good.
-        break;
-        case FormulaVectorDisabled:
-        case FormulaVectorUnknown:
-        default:
-            // Not good.
+        mxGroup->meCalcState = sc::GroupCalcDisabled;
+        aScope.addMessage("matrix skipped");
+        return false;
+    }
+
+    if( forceType != ForceCalculationNone )
+    {
+        // ScConditionEntry::Interpret() creates a temporary cell and interprets it
+        // without it actually being in the document at the specified position.
+        // That would confuse opencl/threading code, as they refer to the cell group
+        // also using the position. This is normally not triggered (single cells
+        // are normally not in a cell group), but if forced, check for this explicitly.
+        if( pDocument->GetFormulaCell( aPos ) != this )
+        {
+            mxGroup->meCalcState = sc::GroupCalcDisabled;
+            aScope.addMessage("cell not in document");
             return false;
+        }
     }
-
-    if (!ScCalcConfig::isOpenCLEnabled() && !ScCalcConfig::isSwInterpreterEnabled())
-        return false;
 
     // Guard against endless recursion of Interpret() calls, for this to work
     // ScFormulaCell::InterpretFormulaGroup() must never be called through
     // anything else than ScFormulaCell::Interpret(), same as
     // ScFormulaCell::InterpretTail()
-    RecursionCounter aRecursionCounter( pDocument->GetRecursionHelper(), this);
+    RecursionCounter aRecursionCounter( rRecursionHelper, this);
+
+    bool bDependencyComputed = false;
+    bool bDependencyCheckFailed = false;
+
+    // Get rid of -1's in offsets (defaults) or any invalid offsets.
+    SCROW nMaxOffset = mxGroup->mnLength - 1;
+    nStartOffset = nStartOffset < 0 ? 0 : std::min(nStartOffset, nMaxOffset);
+    nEndOffset = nEndOffset < 0 ? nMaxOffset : std::min(nEndOffset, nMaxOffset);
+
+    if (nEndOffset < nStartOffset)
+    {
+        nStartOffset = 0;
+        nEndOffset = nMaxOffset;
+    }
+
+    // Preference order: First try OpenCL, then threading.
+    // TODO: Do formula-group span computation for OCL too if nStartOffset/nEndOffset are non default.
+    if( InterpretFormulaGroupOpenCL(aScope, bDependencyComputed, bDependencyCheckFailed))
+        return true;
+
+    if( InterpretFormulaGroupThreading(aScope, bDependencyComputed, bDependencyCheckFailed, nStartOffset, nEndOffset))
+        return true;
+
+    return false;
+}
+
+bool ScFormulaCell::CheckComputeDependencies(sc::FormulaLogger::GroupScope& rScope, bool fromFirstRow, SCROW nStartOffset, SCROW nEndOffset)
+{
+    ScRecursionHelper& rRecursionHelper = pDocument->GetRecursionHelper();
+    // iterate over code in the formula ...
+    // ensure all input is pre-calculated -
+    // to avoid writing during the calculation
+
+    bool bOKToParallelize = false;
+    {
+        ScFormulaGroupCycleCheckGuard aCycleCheckGuard(rRecursionHelper, this);
+        if (mxGroup->mbPartOfCycle)
+        {
+            mxGroup->meCalcState = sc::GroupCalcDisabled;
+            rScope.addMessage("found circular formula-group dependencies");
+            return false;
+        }
+
+        ScFormulaGroupDependencyComputeGuard aDepComputeGuard(rRecursionHelper);
+        ScDependantsCalculator aCalculator(*pDocument, *pCode, *this, mxGroup->mpTopCell->aPos, fromFirstRow, nStartOffset, nEndOffset);
+        bOKToParallelize = aCalculator.DoIt();
+    }
+
+    if (rRecursionHelper.IsInRecursionReturn())
+    {
+        mxGroup->meCalcState = sc::GroupCalcDisabled;
+        rScope.addMessage("Recursion limit reached, cannot thread this formula group now");
+        return false;
+    }
+
+    if (mxGroup->mbPartOfCycle)
+    {
+        mxGroup->meCalcState = sc::GroupCalcDisabled;
+        rScope.addMessage("found circular formula-group dependencies");
+        return false;
+    }
+
+    if (!bOKToParallelize)
+    {
+        mxGroup->meCalcState = sc::GroupCalcDisabled;
+        rScope.addMessage("could not do new dependencies calculation thing");
+        return false;
+    }
+
+    return true;
+}
+
+// To be called only from InterpretFormulaGroup().
+bool ScFormulaCell::InterpretFormulaGroupThreading(sc::FormulaLogger::GroupScope& aScope,
+                                                   bool& bDependencyComputed,
+                                                   bool& bDependencyCheckFailed,
+                                                   SCROW nStartOffset,
+                                                   SCROW nEndOffset)
+{
+    static const bool bThreadingProhibited = std::getenv("SC_NO_THREADED_CALCULATION");
+    if (!bDependencyCheckFailed && !bThreadingProhibited &&
+        pCode->IsEnabledForThreading() &&
+        ScCalcConfig::isThreadingEnabled())
+    {
+        if(!bDependencyComputed && !CheckComputeDependencies(aScope, false, nStartOffset, nEndOffset))
+        {
+            bDependencyComputed = true;
+            bDependencyCheckFailed = true;
+            return false;
+        }
+
+        bDependencyComputed = true;
+
+        const static bool bHyperThreadingActive = tools::cpuid::hasHyperThreading();
+
+        // Then do the threaded calculation
+
+        class Executor : public comphelper::ThreadTask
+        {
+        private:
+            const unsigned mnThisThread;
+            const unsigned mnThreadsTotal;
+            ScDocument* mpDocument;
+            ScInterpreterContext* mpContext;
+            const ScAddress& mrTopPos;
+            SCROW const mnStartOffset;
+            SCROW const mnEndOffset;
+
+        public:
+            Executor(const std::shared_ptr<comphelper::ThreadTaskTag>& rTag,
+                     unsigned nThisThread,
+                     unsigned nThreadsTotal,
+                     ScDocument* pDocument2,
+                     ScInterpreterContext* pContext,
+                     const ScAddress& rTopPos,
+                     SCROW nStartOff,
+                     SCROW nEndOff) :
+                comphelper::ThreadTask(rTag),
+                mnThisThread(nThisThread),
+                mnThreadsTotal(nThreadsTotal),
+                mpDocument(pDocument2),
+                mpContext(pContext),
+                mrTopPos(rTopPos),
+                mnStartOffset(nStartOff),
+                mnEndOffset(nEndOff)
+            {
+            }
+
+            virtual void doWork() override
+            {
+                ScAddress aStartPos(mrTopPos.Col(), mrTopPos.Row() + mnStartOffset, mrTopPos.Tab());
+                mpDocument->CalculateInColumnInThread(*mpContext, aStartPos, mnEndOffset - mnStartOffset + 1, mnThisThread, mnThreadsTotal);
+                ScDocumentThreadSpecific::MergeBackIntoNonThreadedData(mpDocument->maNonThreaded);
+            }
+
+        };
+
+        SvNumberFormatter* pNonThreadedFormatter = pDocument->GetNonThreadedContext().GetFormatTable();
+
+        comphelper::ThreadPool& rThreadPool(comphelper::ThreadPool::getSharedOptimalPool());
+        sal_Int32 nThreadCount = rThreadPool.getWorkerCount();
+
+        if ( bHyperThreadingActive && nThreadCount >= 2 )
+            nThreadCount /= 2;
+
+        SAL_INFO("sc.threaded", "Running " << nThreadCount << " threads");
+        {
+            assert(!pDocument->IsThreadedGroupCalcInProgress());
+            pDocument->SetThreadedGroupCalcInProgress(true);
+
+            ScMutationDisable aGuard(pDocument, ScMutationGuardFlags::CORE);
+
+            // Start nThreadCount new threads
+            std::shared_ptr<comphelper::ThreadTaskTag> aTag = comphelper::ThreadPool::createThreadTaskTag();
+            ScThreadedInterpreterContextGetterGuard aContextGetterGuard(nThreadCount, *pDocument, pNonThreadedFormatter);
+            ScInterpreterContext* context = nullptr;
+
+            for (int i = 0; i < nThreadCount; ++i)
+            {
+                context = aContextGetterGuard.GetInterpreterContextForThreadIdx(i);
+                ScDocument::SetupFromNonThreadedContext(*context, i);
+                rThreadPool.pushTask(std::make_unique<Executor>(aTag, i, nThreadCount, pDocument, context, mxGroup->mpTopCell->aPos,
+                                                                nStartOffset, nEndOffset));
+            }
+
+            SAL_INFO("sc.threaded", "Joining threads");
+            rThreadPool.waitUntilDone(aTag);
+
+            pDocument->SetThreadedGroupCalcInProgress(false);
+
+            for (int i = 0; i < nThreadCount; ++i)
+            {
+                context = aContextGetterGuard.GetInterpreterContextForThreadIdx(i);
+                // This is intentionally done in this main thread in order to avoid locking.
+                pDocument->MergeBackIntoNonThreadedContext(*context, i);
+            }
+
+            SAL_INFO("sc.threaded", "Done");
+        }
+
+        ScAddress aStartPos(mxGroup->mpTopCell->aPos);
+        SCROW nSpanLen = nEndOffset - nStartOffset + 1;
+        aStartPos.SetRow(aStartPos.Row() + nStartOffset);
+        pDocument->HandleStuffAfterParallelCalculation(aStartPos, nSpanLen);
+
+        return true;
+    }
+
+    return false;
+}
+
+// To be called only from InterpretFormulaGroup().
+bool ScFormulaCell::InterpretFormulaGroupOpenCL(sc::FormulaLogger::GroupScope& aScope,
+                                                bool& bDependencyComputed,
+                                                bool& bDependencyCheckFailed)
+{
+    bool bCanVectorize = pCode->IsEnabledForOpenCL();
+    switch (pCode->GetVectorState())
+    {
+        case FormulaVectorEnabled:
+        case FormulaVectorCheckReference:
+        break;
+
+        // Not good.
+        case FormulaVectorDisabledByOpCode:
+            aScope.addMessage("group calc disabled due to vector state (non-vector-supporting opcode)");
+            break;
+        case FormulaVectorDisabledByStackVariable:
+            aScope.addMessage("group calc disabled due to vector state (non-vector-supporting stack variable)");
+            break;
+        case FormulaVectorDisabledNotInSubSet:
+            aScope.addMessage("group calc disabled due to vector state (opcode not in subset)");
+            break;
+        case FormulaVectorDisabled:
+        case FormulaVectorUnknown:
+        default:
+            aScope.addMessage("group calc disabled due to vector state (unknown)");
+            return false;
+    }
+
+    if (!bCanVectorize)
+        return false;
+
+    if (!ScCalcConfig::isOpenCLEnabled())
+    {
+        aScope.addMessage("opencl not enabled");
+        return false;
+    }
+
+    // TableOp does tricks with using a cell with different values, just bail out.
+    if(pDocument->IsInInterpreterTableOp())
+        return false;
+
+    if (bDependencyCheckFailed)
+        return false;
+
+    if(!bDependencyComputed && !CheckComputeDependencies(aScope, true, 0, mxGroup->mnLength - 1))
+    {
+        bDependencyComputed = true;
+        bDependencyCheckFailed = true;
+        return false;
+    }
+
+    bDependencyComputed = true;
 
     // TODO : Disable invariant formula group interpretation for now in order
     // to get implicit intersection to work.
@@ -4347,9 +4829,8 @@ bool ScFormulaCell::InterpretFormulaGroup()
 #ifdef _WIN32
     // Heuristic: Certain old low-end OpenCL implementations don't
     // work for us with too large group lengths. 1000 was determined
-    // empirically to be a good compromise. Looking at the preferred
-    // float vector width seems to be a way to detect these devices.
-    if (opencl::gpuEnv.mnPreferredVectorWidthFloat == 4)
+    // empirically to be a good compromise.
+    if (openclwrapper::gpuEnv.mbNeedsTDRAvoidance)
         nMaxGroupLength = 1000;
 #endif
 
@@ -4379,14 +4860,31 @@ bool ScFormulaCell::InterpretFormulaGroup()
             xGroup->mpTopCell->aPos.IncRow(nOffset);
             xGroup->mbInvariant = mxGroup->mbInvariant;
             xGroup->mnLength = nCurChunkSize;
-            xGroup->mpCode = mxGroup->mpCode;
+            xGroup->mpCode.reset( mxGroup->mpCode.get() );
         }
 
         ScTokenArray aCode;
         ScGroupTokenConverter aConverter(aCode, *pDocument, *this, xGroup->mpTopCell->aPos);
-        if (!aConverter.convert(*pCode))
+        // TODO avoid this extra compilation
+        ScCompiler aComp( pDocument, xGroup->mpTopCell->aPos, *pCode, formula::FormulaGrammar::GRAM_UNSPECIFIED, true, cMatrixFlag != ScMatrixMode::NONE );
+        aComp.CompileTokenArray();
+        if (aComp.HasUnhandledPossibleImplicitIntersections() || !aConverter.convert(*pCode, aScope))
         {
-            SAL_INFO("sc.opencl", "conversion of group " << this << " failed, disabling");
+            if(aComp.HasUnhandledPossibleImplicitIntersections())
+            {
+                SAL_INFO("sc.opencl", "group " << xGroup->mpTopCell->aPos << " has unhandled implicit intersections, disabling");
+#ifdef DBG_UTIL
+                for( const OpCode opcode : aComp.UnhandledPossibleImplicitIntersectionsOpCodes())
+                {
+                    SAL_INFO("sc.opencl", "unhandled implicit intersection opcode "
+                        << formula::FormulaCompiler().GetOpCodeMap(com::sun::star::sheet::FormulaLanguage::ENGLISH)->getSymbol(opcode)
+                        << "(" << int(opcode) << ")");
+                }
+#endif
+            }
+            else
+                SAL_INFO("sc.opencl", "conversion of group " << xGroup->mpTopCell->aPos << " failed, disabling");
+
             mxGroup->meCalcState = sc::GroupCalcDisabled;
 
             // Undo the hack above
@@ -4394,9 +4892,10 @@ bool ScFormulaCell::InterpretFormulaGroup()
             {
                 mxGroup->mpTopCell->aPos = aOrigPos;
                 xGroup->mpTopCell = nullptr;
-                xGroup->mpCode = nullptr;
+                xGroup->mpCode.release();
             }
 
+            aScope.addMessage("group token conversion failed");
             return false;
         }
 
@@ -4404,10 +4903,12 @@ bool ScFormulaCell::InterpretFormulaGroup()
         // generate them.
         xGroup->meCalcState = mxGroup->meCalcState = sc::GroupCalcRunning;
         sc::FormulaGroupInterpreter *pInterpreter = sc::FormulaGroupInterpreter::getStatic();
+
         if (pInterpreter == nullptr ||
             !pInterpreter->interpret(*pDocument, xGroup->mpTopCell->aPos, xGroup, aCode))
         {
-            SAL_INFO("sc.opencl", "interpreting group " << mxGroup << " (state " << (int) mxGroup->meCalcState << ") failed, disabling");
+            SAL_INFO("sc.opencl", "interpreting group " << mxGroup->mpTopCell->aPos
+                << " (state " << static_cast<int>(mxGroup->meCalcState) << ") failed, disabling");
             mxGroup->meCalcState = sc::GroupCalcDisabled;
 
             // Undo the hack above
@@ -4418,8 +4919,12 @@ bool ScFormulaCell::InterpretFormulaGroup()
                 xGroup->mpCode = nullptr;
             }
 
+            aScope.addMessage("group interpretation unsuccessful");
             return false;
         }
+
+        aScope.setCalcComplete();
+
         if (nNumParts > 1)
         {
             xGroup->mpTopCell = nullptr;
@@ -4441,8 +4946,8 @@ bool ScFormulaCell::InterpretInvariantFormulaGroup()
         // external references are allowed.
 
         ScTokenArray aCode;
-        pCode->Reset();
-        for (const formula::FormulaToken* p = pCode->First(); p; p = pCode->Next())
+        FormulaTokenArrayPlainIterator aIter(*pCode);
+        for (const formula::FormulaToken* p = aIter.First(); p; p = aIter.Next())
         {
             switch (p->GetType())
             {
@@ -4473,17 +4978,16 @@ bool ScFormulaCell::InterpretInvariantFormulaGroup()
             }
         }
 
-        ScCompiler aComp(pDocument, aPos, aCode);
-        aComp.SetGrammar(pDocument->GetGrammar());
+        ScCompiler aComp(pDocument, aPos, aCode, pDocument->GetGrammar(), true, cMatrixFlag != ScMatrixMode::NONE);
         aComp.CompileTokenArray(); // Create RPN token array.
-        ScInterpreter aInterpreter(this, pDocument, aPos, aCode);
+        ScInterpreter aInterpreter(this, pDocument, pDocument->GetNonThreadedContext(), aPos, aCode);
         aInterpreter.Interpret();
         aResult.SetToken(aInterpreter.GetResultToken().get());
     }
     else
     {
         // Formula contains no references.
-        ScInterpreter aInterpreter(this, pDocument, aPos, *pCode);
+        ScInterpreter aInterpreter(this, pDocument, pDocument->GetNonThreadedContext(), aPos, *pCode);
         aInterpreter.Interpret();
         aResult.SetToken(aInterpreter.GetResultToken().get());
     }
@@ -4495,7 +4999,7 @@ bool ScFormulaCell::InterpretInvariantFormulaGroup()
         ScFormulaCell* pCell = pDocument->GetFormulaCell(aTmpPos);
         if (!pCell)
         {
-            SAL_WARN("sc", "GetFormulaCell not found");
+            SAL_WARN("sc.core.formulacell", "GetFormulaCell not found");
             continue;
         }
 
@@ -4552,11 +5056,13 @@ void ScFormulaCell::StartListeningTo( ScDocument* pDoc )
     if( pArr->IsRecalcModeAlways() )
     {
         pDoc->StartListeningArea(BCA_LISTEN_ALWAYS, false, this);
+        SetNeedsListening( false);
+        return;
     }
 
-    pArr->Reset();
+    formula::FormulaTokenArrayPlainIterator aIter(*pArr);
     formula::FormulaToken* t;
-    while ( ( t = pArr->GetNextReferenceRPN() ) != nullptr )
+    while ( ( t = aIter.GetNextReferenceRPN() ) != nullptr )
     {
         switch (t->GetType())
         {
@@ -4593,11 +5099,13 @@ void ScFormulaCell::StartListeningTo( sc::StartListeningContext& rCxt )
     if( pArr->IsRecalcModeAlways() )
     {
         rDoc.StartListeningArea(BCA_LISTEN_ALWAYS, false, this);
+        SetNeedsListening( false);
+        return;
     }
 
-    pArr->Reset();
+    formula::FormulaTokenArrayPlainIterator aIter(*pArr);
     formula::FormulaToken* t;
-    while ( ( t = pArr->GetNextReferenceRPN() ) != nullptr )
+    while ( ( t = aIter.GetNextReferenceRPN() ) != nullptr )
     {
         switch (t->GetType())
         {
@@ -4664,6 +5172,7 @@ void ScFormulaCell::EndListeningTo( ScDocument* pDoc, ScTokenArray* pArr,
     if ( GetCode()->IsRecalcModeAlways() )
     {
         pDoc->EndListeningArea(BCA_LISTEN_ALWAYS, false, this);
+        return;
     }
 
     if (!pArr)
@@ -4671,9 +5180,9 @@ void ScFormulaCell::EndListeningTo( ScDocument* pDoc, ScTokenArray* pArr,
         pArr = GetCode();
         aCellPos = aPos;
     }
-    pArr->Reset();
+    formula::FormulaTokenArrayPlainIterator aIter(*pArr);
     formula::FormulaToken* t;
-    while ( ( t = pArr->GetNextReferenceRPN() ) != nullptr )
+    while ( ( t = aIter.GetNextReferenceRPN() ) != nullptr )
     {
         switch (t->GetType())
         {
@@ -4715,11 +5224,12 @@ void ScFormulaCell::EndListeningTo( sc::EndListeningContext& rCxt )
     if (pArr->IsRecalcModeAlways())
     {
         rDoc.EndListeningArea(BCA_LISTEN_ALWAYS, false, this);
+        return;
     }
 
-    pArr->Reset();
+    formula::FormulaTokenArrayPlainIterator aIter(*pArr);
     formula::FormulaToken* t;
-    while ( ( t = pArr->GetNextReferenceRPN() ) != nullptr )
+    while ( ( t = aIter.GetNextReferenceRPN() ) != nullptr )
     {
         switch (t->GetType())
         {
@@ -4764,23 +5274,30 @@ SCROW ScFormulaCell::GetSharedLength() const
 
 sal_Int32 ScFormulaCell::GetWeight() const
 {
-#if 0
     if (!mxGroup)
-        return pCode->GetWeight();
-    return GetSharedLength() * GetSharedCode()->GetWeight();
-#else
-    return GetSharedLength();
-#endif
+        return 1;
+
+    if (mxGroup->mnWeight > 0)
+        return mxGroup->mnWeight;
+
+    double nSharedCodeWeight = GetSharedCode()->GetWeight();
+    double nResult = nSharedCodeWeight * GetSharedLength();
+    if (nResult < SAL_MAX_INT32)
+        mxGroup->mnWeight = nResult;
+    else
+        mxGroup->mnWeight = SAL_MAX_INT32;
+
+    return mxGroup->mnWeight;
 }
 
 ScTokenArray* ScFormulaCell::GetSharedCode()
 {
-    return mxGroup ? mxGroup->mpCode : nullptr;
+    return mxGroup ? mxGroup->mpCode.get() : nullptr;
 }
 
 const ScTokenArray* ScFormulaCell::GetSharedCode() const
 {
-    return mxGroup ? mxGroup->mpCode : nullptr;
+    return mxGroup ? mxGroup->mpCode.get() : nullptr;
 }
 
 void ScFormulaCell::SyncSharedCode()
@@ -4789,7 +5306,57 @@ void ScFormulaCell::SyncSharedCode()
         // Not a shared formula cell.
         return;
 
-    pCode = mxGroup->mpCode;
+    pCode = mxGroup->mpCode.get();
 }
+
+#if DUMP_COLUMN_STORAGE
+
+void ScFormulaCell::Dump() const
+{
+    cout << "-- formula cell (" << aPos.Format(ScRefFlags::VALID | ScRefFlags::TAB_3D, pDocument) << ")" << endl;
+    cout << "  * shared: " << (mxGroup ? "true" : "false") << endl;
+    if (mxGroup)
+    {
+        cout << "    * shared length: " << mxGroup->mnLength << endl;
+        cout << "    * shared calc state: " << mxGroup->meCalcState << endl;
+    }
+
+    sc::TokenStringContext aCxt(pDocument, pDocument->GetGrammar());
+    cout << "  * code: " << pCode->CreateString(aCxt, aPos) << endl;
+
+    FormulaError nErrCode = pCode->GetCodeError();
+    cout << "  * code error: ";
+    if (nErrCode == FormulaError::NONE)
+        cout << "(none)";
+    else
+    {
+        OUString aStr = ScGlobal::GetErrorString(nErrCode);
+        cout << "  * code error: " << aStr << " (" << int(nErrCode) << ")";
+    }
+    cout << endl;
+
+    cout << "  * result: ";
+    sc::FormulaResultValue aRV = aResult.GetResult();
+    switch (aRV.meType)
+    {
+        case sc::FormulaResultValue::Value:
+            cout << aRV.mfValue << " (value)";
+            break;
+        case sc::FormulaResultValue::String:
+            cout << aRV.maString.getString() << " (string)";
+            break;
+        case sc::FormulaResultValue::Error:
+            cout << ScGlobal::GetErrorString(aRV.mnError) << " (error: " << int(aRV.mnError) << ")";
+            break;
+        case sc::FormulaResultValue::Invalid:
+            cout << "(invalid)";
+            break;
+        default:
+            ;
+    }
+    cout << endl;
+}
+
+#endif
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

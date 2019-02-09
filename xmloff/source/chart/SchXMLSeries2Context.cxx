@@ -30,9 +30,11 @@
 #include <com/sun/star/chart2/XRegressionCurveContainer.hpp>
 #include <com/sun/star/chart2/data/XDataSink.hpp>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
+#include <com/sun/star/chart2/data/XPivotTableDataProvider.hpp>
 
 #include <com/sun/star/chart/ChartAxisAssign.hpp>
 #include <com/sun/star/chart/ChartSymbolType.hpp>
+#include <com/sun/star/chart/XChartDocument.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/chart/ChartLegendPosition.hpp>
@@ -44,13 +46,15 @@
 #include <comphelper/processfactory.hxx>
 
 #include <rtl/ustrbuf.hxx>
+#include <sal/log.hxx>
 #include <xmloff/xmlnmspe.hxx>
 #include <xmloff/xmlimp.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/SchXMLSeriesHelper.hxx>
-#include "SchXMLImport.hxx"
+#include <SchXMLImport.hxx>
 #include <xmloff/prstylei.hxx>
 #include <xmloff/xmlprmap.hxx>
+#include <tools/diagnose_ex.h>
 
 #include <typeinfo>
 
@@ -73,7 +77,6 @@ public:
                           sal_uInt16 nPrefix,
                           const OUString& rLocalName,
                           ::std::vector< OUString > & rAddresses );
-    virtual ~SchXMLDomain2Context();
     virtual void StartElement( const Reference< xml::sax::XAttributeList >& xAttrList ) override;
 };
 
@@ -84,10 +87,6 @@ SchXMLDomain2Context::SchXMLDomain2Context(
     ::std::vector< OUString > & rAddresses ) :
         SvXMLImportContext( rImport, nPrefix, rLocalName ),
         mrAddresses( rAddresses )
-{
-}
-
-SchXMLDomain2Context::~SchXMLDomain2Context()
 {
 }
 
@@ -104,7 +103,6 @@ void SchXMLDomain2Context::StartElement( const uno::Reference< xml::sax::XAttrib
         if( nPrefix == XML_NAMESPACE_TABLE &&
             IsXMLToken( aLocalName, XML_CELL_RANGE_ADDRESS ) )
         {
-            Reference< chart2::XChartDocument > xNewDoc( GetImport().GetModel(), uno::UNO_QUERY );
             mrAddresses.push_back( xAttrList->getValueByIndex( i ));
         }
     }
@@ -190,9 +188,8 @@ void lcl_insertErrorBarLSequencesToMap(
         for( sal_Int32 nIndex = 0; nIndex < aLSequences.getLength(); ++nIndex )
         {
             // use "0" as data index. This is ok, as it is not used for error bars
-            rInOutMap.insert(
-                tSchXMLLSequencesPerIndex::value_type(
-                    tSchXMLIndexWithPart( 0, SCH_XML_PART_ERROR_BARS ), aLSequences[ nIndex ] ));
+            rInOutMap.emplace(
+                    tSchXMLIndexWithPart( 0, SCH_XML_PART_ERROR_BARS ), aLSequences[ nIndex ] );
         }
     }
 }
@@ -235,7 +232,7 @@ Reference< chart2::data::XLabeledDataSequence2 > lcl_createAndAddSequenceToSerie
 XMLPropStyleContext* lcl_GetStylePropContext(
                         const SvXMLStylesContext* pStylesCtxt,
                         const SvXMLStyleContext*& rpStyle,
-                        OUString& rStyleName )
+                        OUString const & rStyleName )
 {
     rpStyle = pStylesCtxt->FindStyleChildContext( SchXMLImportHelper::GetChartFamilyID(), rStyleName );
     XMLPropStyleContext* pPropStyleContext =
@@ -250,8 +247,8 @@ SchXMLSeries2Context::SchXMLSeries2Context(
     SvXMLImport& rImport, const OUString& rLocalName,
     const Reference< chart2::XChartDocument > & xNewDoc,
     std::vector< SchXMLAxis >& rAxes,
-    ::std::list< DataRowPointStyle >& rStyleList,
-    ::std::list< RegressionStyle >& rRegressionStyleList,
+    ::std::vector< DataRowPointStyle >& rStyleVector,
+    ::std::vector< RegressionStyle >& rRegressionStyleVector,
     sal_Int32 nSeriesIndex,
     bool bStockHasVolume,
     GlobalSeriesImportInfo& rGlobalSeriesImportInfo,
@@ -263,9 +260,8 @@ SchXMLSeries2Context::SchXMLSeries2Context(
         mrImportHelper( rImpHelper ),
         mxNewDoc( xNewDoc ),
         mrAxes( rAxes ),
-        mrStyleList( rStyleList ),
-        mrRegressionStyleList( rRegressionStyleList ),
-        m_xSeries(nullptr),
+        mrStyleVector( rStyleVector ),
+        mrRegressionStyleVector( rRegressionStyleVector ),
         mnSeriesIndex( nSeriesIndex ),
         mnDataPointIndex( 0 ),
         m_bStockHasVolume( bStockHasVolume ),
@@ -302,6 +298,7 @@ void SchXMLSeries2Context::StartElement( const uno::Reference< xml::sax::XAttrib
     bool bHasRange = false;
     OUString aSeriesLabelRange;
     OUString aSeriesLabelString;
+    bool bHideLegend = false;
 
     for( sal_Int16 i = 0; i < nAttrCount; i++ )
     {
@@ -327,7 +324,7 @@ void SchXMLSeries2Context::StartElement( const uno::Reference< xml::sax::XAttrib
                     sal_Int32 nNumOfAxes = mrAxes.size();
                     for( sal_Int32 nCurrent = 0; nCurrent < nNumOfAxes; nCurrent++ )
                     {
-                        if( aValue.equals( mrAxes[ nCurrent ].aName ) &&
+                        if( aValue == mrAxes[ nCurrent ].aName &&
                             mrAxes[ nCurrent ].eDimension == SCH_XML_AXIS_Y )
                         {
                             mpAttachedAxis = &( mrAxes[ nCurrent ] );
@@ -350,6 +347,9 @@ void SchXMLSeries2Context::StartElement( const uno::Reference< xml::sax::XAttrib
                     if( maSeriesChartTypeName.isEmpty())
                         maSeriesChartTypeName = aClassName;
                 }
+                break;
+            case XML_TOK_SERIES_HIDE_LEGEND:
+                bHideLegend = aValue.toBoolean();
                 break;
         }
     }
@@ -389,78 +389,97 @@ void SchXMLSeries2Context::StartElement( const uno::Reference< xml::sax::XAttrib
             }
         }
         if( ! mrGlobalChartTypeUsedBySeries )
-            mrGlobalChartTypeUsedBySeries = (maSeriesChartTypeName.equals( maGlobalChartTypeName ));
-        sal_Int32 nCoordinateSystemIndex = 0;//so far we can only import one coordinate system
+            mrGlobalChartTypeUsedBySeries = (maSeriesChartTypeName == maGlobalChartTypeName);
+        sal_Int32 const nCoordinateSystemIndex = 0;//so far we can only import one coordinate system
         m_xSeries.set(
             SchXMLImportHelper::GetNewDataSeries( mxNewDoc, nCoordinateSystemIndex, maSeriesChartTypeName, ! mrGlobalChartTypeUsedBySeries ));
         Reference< chart2::data::XLabeledDataSequence > xLabeledSeq( SchXMLTools::GetNewLabeledDataSequence(), uno::UNO_QUERY_THROW );
 
-        if( bIsCandleStick )
+        Reference< beans::XPropertySet > xSeriesProp( m_xSeries, uno::UNO_QUERY );
+        if (xSeriesProp.is())
         {
-            // set default color for range-line to black (before applying styles)
-            Reference< beans::XPropertySet > xSeriesProp( m_xSeries, uno::UNO_QUERY );
-            if( xSeriesProp.is())
+            if (bHideLegend)
+                xSeriesProp->setPropertyValue("ShowLegendEntry", uno::makeAny(false));
+
+            if( bIsCandleStick )
+            {
+                // set default color for range-line to black (before applying styles)
                 xSeriesProp->setPropertyValue("Color",
-                                               uno::makeAny( sal_Int32( 0x000000 ))); // black
-        }
-        else if ( maSeriesChartTypeName == "com.sun.star.chart2.PieChartType" )
-        {
-            //@todo: this property should be saved
-            Reference< beans::XPropertySet > xSeriesProp( m_xSeries, uno::UNO_QUERY );
-            if( xSeriesProp.is())
+                        uno::makeAny( sal_Int32( 0x000000 ))); // black
+            }
+            else if ( maSeriesChartTypeName == "com.sun.star.chart2.PieChartType" )
+            {
+                //@todo: this property should be saved
                 xSeriesProp->setPropertyValue("VaryColorsByPoint",
-                                               uno::makeAny( true ));
+                        uno::makeAny( true ));
+            }
+
         }
+
+        Reference<chart2::data::XDataProvider> xDataProvider(mxNewDoc->getDataProvider());
+        Reference<chart2::data::XPivotTableDataProvider> xPivotTableDataProvider(xDataProvider, uno::UNO_QUERY);
+
+        Reference<chart2::data::XDataSequence> xSequenceValues;
 
         // values
-        Reference< chart2::data::XDataSequence > xSeq;
-        if( bHasRange && !m_aSeriesRange.isEmpty() )
-            xSeq = SchXMLTools::CreateDataSequence( m_aSeriesRange, mxNewDoc );
+        if (xPivotTableDataProvider.is()) // is pivot chart
+        {
+            xSequenceValues.set(xPivotTableDataProvider->createDataSequenceOfValuesByIndex(mnSeriesIndex));
+        }
+        else
+        {
+            if (bHasRange && !m_aSeriesRange.isEmpty())
+                xSequenceValues = SchXMLTools::CreateDataSequence(m_aSeriesRange, mxNewDoc);
+        }
 
-        Reference< beans::XPropertySet > xSeqProp( xSeq, uno::UNO_QUERY );
-        if( xSeqProp.is())
+        Reference<beans::XPropertySet> xSeqProp(xSequenceValues, uno::UNO_QUERY);
+        if (xSeqProp.is())
         {
             OUString aMainRole("values-y");
-            if ( maSeriesChartTypeName == "com.sun.star.chart2.BubbleChartType" )
+            if (maSeriesChartTypeName == "com.sun.star.chart2.BubbleChartType")
                 aMainRole = "values-size";
-            xSeqProp->setPropertyValue("Role", uno::makeAny( aMainRole ));
+            xSeqProp->setPropertyValue("Role", uno::makeAny(aMainRole));
         }
-        xLabeledSeq->setValues( xSeq );
+        xLabeledSeq->setValues(xSequenceValues);
 
         // register for setting local data if external data provider is not present
-        maPostponedSequences.insert(
-            tSchXMLLSequencesPerIndex::value_type(
-                tSchXMLIndexWithPart( m_rGlobalSeriesImportInfo.nCurrentDataIndex, SCH_XML_PART_VALUES ), xLabeledSeq ));
+        maPostponedSequences.emplace(
+                tSchXMLIndexWithPart( m_rGlobalSeriesImportInfo.nCurrentDataIndex, SCH_XML_PART_VALUES ), xLabeledSeq );
 
         // label
-        if( !aSeriesLabelRange.isEmpty() )
+        Reference<chart2::data::XDataSequence> xSequenceLabel;
+
+        if (xPivotTableDataProvider.is())
         {
-            Reference< chart2::data::XDataSequence > xLabelSequence =
-                SchXMLTools::CreateDataSequence( aSeriesLabelRange, mxNewDoc );
-            xLabeledSeq->setLabel( xLabelSequence );
+            xSequenceLabel.set(xPivotTableDataProvider->createDataSequenceOfLabelsByIndex(mnSeriesIndex));
         }
-        else if( !aSeriesLabelString.isEmpty() )
+        else
         {
-            Reference< chart2::data::XDataSequence > xLabelSequence =
-                SchXMLTools::CreateDataSequenceWithoutConvert( aSeriesLabelString, mxNewDoc );
-            xLabeledSeq->setLabel( xLabelSequence );
+            if (!aSeriesLabelRange.isEmpty())
+            {
+                xSequenceLabel.set(SchXMLTools::CreateDataSequence(aSeriesLabelRange, mxNewDoc));
+            }
+            else if (!aSeriesLabelString.isEmpty())
+            {
+                xSequenceLabel.set(SchXMLTools::CreateDataSequenceWithoutConvert(aSeriesLabelString, mxNewDoc));
+            }
         }
+        xLabeledSeq->setLabel(xSequenceLabel);
 
         // Note: Even if we have no label, we have to register the label
         // for creation, because internal data always has labels. If
         // they don't exist in the original, auto-generated labels are
         // used for the internal data.
-        maPostponedSequences.insert(
-            tSchXMLLSequencesPerIndex::value_type(
-                tSchXMLIndexWithPart( m_rGlobalSeriesImportInfo.nCurrentDataIndex, SCH_XML_PART_LABEL ), xLabeledSeq ));
+        maPostponedSequences.emplace(
+                tSchXMLIndexWithPart( m_rGlobalSeriesImportInfo.nCurrentDataIndex, SCH_XML_PART_LABEL ), xLabeledSeq );
 
         Sequence< Reference< chart2::data::XLabeledDataSequence > > aSeq( &xLabeledSeq, 1 );
         Reference< chart2::data::XDataSink > xSink( m_xSeries, uno::UNO_QUERY_THROW );
         xSink->setData( aSeq );
     }
-    catch( const uno::Exception & ex )
+    catch( const uno::Exception &)
     {
-        SAL_WARN("xmloff.chart", "Exception caught. Type: " << OUString::createFromAscii( typeid( ex ).name()) << ", Message: " << ex.Message);
+        DBG_UNHANDLED_EXCEPTION("xmloff.chart");
     }
 
     //init mbSymbolSizeIsMissingInFile:
@@ -493,7 +512,7 @@ struct DomainInfo
         : aRole(rRole), aRange(rRange), nIndexForLocalData(nIndex)
     {}
 
-    OUString aRole;
+    OUString const aRole;
     OUString aRange;
     sal_Int32 nIndexForLocalData;
 };
@@ -511,7 +530,7 @@ void SchXMLSeries2Context::EndElement()
     //different handling for different chart types necessary
     if( bIsScatterChart || ( nDomainCount==1 && !bIsBubbleChart ) )
     {
-        DomainInfo aDomainInfo( OUString( "values-x" ), m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress, m_rGlobalSeriesImportInfo.nFirstFirstDomainIndex ) ;
+        DomainInfo aDomainInfo( "values-x", m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress, m_rGlobalSeriesImportInfo.nFirstFirstDomainIndex ) ;
         bool bCreateXValues = true;
         if( !maDomainAddresses.empty() )
         {
@@ -544,7 +563,7 @@ void SchXMLSeries2Context::EndElement()
     {
         if( nDomainCount>1 )
         {
-            DomainInfo aDomainInfo( OUString( "values-x" ), maDomainAddresses[1], m_rGlobalSeriesImportInfo.nCurrentDataIndex ) ;
+            DomainInfo aDomainInfo( "values-x", maDomainAddresses[1], m_rGlobalSeriesImportInfo.nCurrentDataIndex ) ;
             if( m_rGlobalSeriesImportInfo.aFirstSecondDomainAddress.isEmpty() )
             {
                 //for bubble chart the second domain contains the x values which should become an index smaller than y values for own data table
@@ -557,12 +576,12 @@ void SchXMLSeries2Context::EndElement()
         }
         else if( !m_rGlobalSeriesImportInfo.aFirstSecondDomainAddress.isEmpty() )
         {
-            DomainInfo aDomainInfo( OUString( "values-x" ), m_rGlobalSeriesImportInfo.aFirstSecondDomainAddress, m_rGlobalSeriesImportInfo.nFirstSecondDomainIndex ) ;
+            DomainInfo aDomainInfo( "values-x", m_rGlobalSeriesImportInfo.aFirstSecondDomainAddress, m_rGlobalSeriesImportInfo.nFirstSecondDomainIndex ) ;
             aDomainInfos.push_back( aDomainInfo );
         }
         if( nDomainCount>0)
         {
-            DomainInfo aDomainInfo( OUString( "values-y" ), maDomainAddresses.front(), m_rGlobalSeriesImportInfo.nCurrentDataIndex ) ;
+            DomainInfo aDomainInfo( "values-y", maDomainAddresses.front(), m_rGlobalSeriesImportInfo.nCurrentDataIndex ) ;
             if( m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress.isEmpty() )
             {
                 m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress = maDomainAddresses.front();
@@ -573,7 +592,7 @@ void SchXMLSeries2Context::EndElement()
         }
         else if( !m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress.isEmpty() )
         {
-            DomainInfo aDomainInfo( OUString("values-y"), m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress, m_rGlobalSeriesImportInfo.nFirstFirstDomainIndex ) ;
+            DomainInfo aDomainInfo( "values-y", m_rGlobalSeriesImportInfo.aFirstFirstDomainAddress, m_rGlobalSeriesImportInfo.nFirstFirstDomainIndex ) ;
             aDomainInfos.push_back( aDomainInfo );
         }
     }
@@ -595,7 +614,7 @@ void SchXMLSeries2Context::EndElement()
                 -1, 1,
                 msAutoStyleName, mnAttachedAxis );
             aStyle.mbSymbolSizeForSeriesIsMissingInFile=mbSymbolSizeIsMissingInFile;
-            mrStyleList.push_back( aStyle );
+            mrStyleVector.push_back( aStyle );
         }
     }
 
@@ -607,29 +626,25 @@ void SchXMLSeries2Context::EndElement()
         if( xLabeledSeq.is() )
         {
             // register for setting local data if external data provider is not present
-            mrLSequencesPerIndex.insert(
-                tSchXMLLSequencesPerIndex::value_type(
+            mrLSequencesPerIndex.emplace(
                     tSchXMLIndexWithPart( aDomainInfo.nIndexForLocalData, SCH_XML_PART_VALUES ),
-                    Reference< chart2::data::XLabeledDataSequence >(xLabeledSeq, uno::UNO_QUERY_THROW) ));
+                    Reference< chart2::data::XLabeledDataSequence >(xLabeledSeq, uno::UNO_QUERY_THROW) );
         }
     }
 
     if( !bDeleteSeries )
     {
-        for( tSchXMLLSequencesPerIndex::const_iterator aIt( maPostponedSequences.begin());
-            aIt != maPostponedSequences.end(); ++aIt )
+        for (auto const& postponedSequence : maPostponedSequences)
         {
-            sal_Int32 nNewIndex = aIt->first.first + nDomainCount;
-            mrLSequencesPerIndex.insert(
-                tSchXMLLSequencesPerIndex::value_type(
-                    tSchXMLIndexWithPart( nNewIndex, aIt->first.second ), aIt->second ));
+            sal_Int32 nNewIndex = postponedSequence.first.first + nDomainCount;
+            mrLSequencesPerIndex.emplace( tSchXMLIndexWithPart( nNewIndex, postponedSequence.first.second ), postponedSequence.second );
         }
         m_rGlobalSeriesImportInfo.nCurrentDataIndex++;
     }
     maPostponedSequences.clear();
 }
 
-SvXMLImportContext* SchXMLSeries2Context::CreateChildContext(
+SvXMLImportContextRef SchXMLSeries2Context::CreateChildContext(
     sal_uInt16 nPrefix,
     const OUString& rLocalName,
     const uno::Reference< xml::sax::XAttributeList >&  )
@@ -654,28 +669,28 @@ SvXMLImportContext* SchXMLSeries2Context::CreateChildContext(
             pContext = new SchXMLStatisticsObjectContext(
                 mrImportHelper, GetImport(),
                 nPrefix, rLocalName, msAutoStyleName,
-                mrStyleList, m_xSeries,
+                mrStyleVector, m_xSeries,
                 SchXMLStatisticsObjectContext::CONTEXT_TYPE_MEAN_VALUE_LINE,
                 mrLSequencesPerIndex );
             break;
         case XML_TOK_SERIES_REGRESSION_CURVE:
             pContext = new SchXMLRegressionCurveObjectContext(
                 mrImportHelper, GetImport(),
-                nPrefix, rLocalName, mrRegressionStyleList,
+                nPrefix, rLocalName, mrRegressionStyleVector,
                 m_xSeries, maChartSize );
             break;
         case XML_TOK_SERIES_ERROR_INDICATOR:
             pContext = new SchXMLStatisticsObjectContext(
                 mrImportHelper, GetImport(),
                 nPrefix, rLocalName, msAutoStyleName,
-                mrStyleList, m_xSeries,
+                mrStyleVector, m_xSeries,
                 SchXMLStatisticsObjectContext::CONTEXT_TYPE_ERROR_INDICATOR,
                 mrLSequencesPerIndex );
             break;
 
         case XML_TOK_SERIES_DATA_POINT:
             pContext = new SchXMLDataPointContext( GetImport(), rLocalName,
-                                                   mrStyleList, m_xSeries, mnDataPointIndex, mbSymbolSizeIsMissingInFile );
+                                                   mrStyleVector, m_xSeries, mnDataPointIndex, mbSymbolSizeIsMissingInFile );
             break;
         case XML_TOK_SERIES_PROPERTY_MAPPING:
             pContext = new SchXMLPropertyMappingContext( mrImportHelper,
@@ -694,47 +709,44 @@ SvXMLImportContext* SchXMLSeries2Context::CreateChildContext(
 void SchXMLSeries2Context::initSeriesPropertySets( SeriesDefaultsAndStyles& rSeriesDefaultsAndStyles
         , const uno::Reference< frame::XModel >& xChartModel )
 {
-    ::std::list< DataRowPointStyle >::iterator iStyle;
-
     // iterate over series first and remind propertysets in map
     // new api <-> old api wrapper
     ::std::map< Reference< chart2::XDataSeries >, Reference< beans::XPropertySet > > aSeriesMap;
-    for( iStyle = rSeriesDefaultsAndStyles.maSeriesStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maSeriesStyleList.end(); ++iStyle )
+    for (auto & seriesStyle : rSeriesDefaultsAndStyles.maSeriesStyleVector)
     {
-        if( iStyle->meType != DataRowPointStyle::DATA_SERIES )
+        if( seriesStyle.meType != DataRowPointStyle::DATA_SERIES )
             continue;
 
-        if( !iStyle->m_xOldAPISeries.is() )
-            iStyle->m_xOldAPISeries = SchXMLSeriesHelper::createOldAPISeriesPropertySet( iStyle->m_xSeries, xChartModel );
+        if( !seriesStyle.m_xOldAPISeries.is() )
+            seriesStyle.m_xOldAPISeries = SchXMLSeriesHelper::createOldAPISeriesPropertySet( seriesStyle.m_xSeries, xChartModel );
 
-        aSeriesMap[iStyle->m_xSeries] = iStyle->m_xOldAPISeries;
+        aSeriesMap[seriesStyle.m_xSeries] = seriesStyle.m_xOldAPISeries;
 
     }
 
     //initialize m_xOldAPISeries for all other styles also
-    for( iStyle = rSeriesDefaultsAndStyles.maSeriesStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maSeriesStyleList.end(); ++iStyle )
+    for (auto & seriesStyle : rSeriesDefaultsAndStyles.maSeriesStyleVector)
     {
-        if( iStyle->meType == DataRowPointStyle::DATA_SERIES )
+        if( seriesStyle.meType == DataRowPointStyle::DATA_SERIES )
             continue;
-        iStyle->m_xOldAPISeries = aSeriesMap[iStyle->m_xSeries];
+        seriesStyle.m_xOldAPISeries = aSeriesMap[seriesStyle.m_xSeries];
     }
 }
 
 //static
 void SchXMLSeries2Context::setDefaultsToSeries( SeriesDefaultsAndStyles& rSeriesDefaultsAndStyles )
 {
-    ::std::list< DataRowPointStyle >::iterator iStyle;
     // iterate over series
     // call initSeriesPropertySets first
 
-    for( iStyle = rSeriesDefaultsAndStyles.maSeriesStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maSeriesStyleList.end(); ++iStyle )
+    for (auto & seriesStyle : rSeriesDefaultsAndStyles.maSeriesStyleVector)
     {
-        if( iStyle->meType != DataRowPointStyle::DATA_SERIES )
+        if( seriesStyle.meType != DataRowPointStyle::DATA_SERIES )
             continue;
 
         try
         {
-            uno::Reference< beans::XPropertySet > xSeries( iStyle->m_xOldAPISeries );
+            uno::Reference< beans::XPropertySet > xSeries( seriesStyle.m_xOldAPISeries );
             if( !xSeries.is() )
                 continue;
 
@@ -778,30 +790,28 @@ void SchXMLSeries2Context::setStylesToSeries( SeriesDefaultsAndStyles& rSeriesDe
         , bool bIsStockChart
         , tSchXMLLSequencesPerIndex & rInOutLSequencesPerIndex )
 {
-    ::std::list< DataRowPointStyle >::iterator iStyle;
-
     // iterate over series
-    for( iStyle = rSeriesDefaultsAndStyles.maSeriesStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maSeriesStyleList.end(); ++iStyle )
+    for (auto & seriesStyle : rSeriesDefaultsAndStyles.maSeriesStyleVector)
     {
-        if( iStyle->meType == DataRowPointStyle::DATA_SERIES )
+        if( seriesStyle.meType == DataRowPointStyle::DATA_SERIES )
         {
             try
             {
-                uno::Reference< beans::XPropertySet > xSeriesProp( iStyle->m_xOldAPISeries );
+                uno::Reference< beans::XPropertySet > xSeriesProp( seriesStyle.m_xOldAPISeries );
                 if( !xSeriesProp.is() )
                     continue;
 
-                if( iStyle->mnAttachedAxis != 1 )
+                if( seriesStyle.mnAttachedAxis != 1 )
                 {
                     xSeriesProp->setPropertyValue("Axis"
                         , uno::makeAny(chart::ChartAxisAssign::SECONDARY_Y) );
                 }
 
-                if( !(iStyle->msStyleName).isEmpty())
+                if( !seriesStyle.msStyleName.isEmpty())
                 {
-                    if( ! rCurrStyleName.equals( iStyle->msStyleName ))
+                    if( rCurrStyleName != seriesStyle.msStyleName )
                     {
-                        rCurrStyleName = iStyle->msStyleName;
+                        rCurrStyleName = seriesStyle.msStyleName;
                         rpStyle = pStylesCtxt->FindStyleChildContext(
                             SchXMLImportHelper::GetChartFamilyID(), rCurrStyleName );
                     }
@@ -836,14 +846,14 @@ void SchXMLSeries2Context::setStylesToSeries( SeriesDefaultsAndStyles& rSeriesDe
                         bool bIsMinMaxSeries = false;
                         if( bIsStockChart )
                         {
-                            if( SchXMLSeriesHelper::isCandleStickSeries( iStyle->m_xSeries
+                            if( SchXMLSeriesHelper::isCandleStickSeries( seriesStyle.m_xSeries
                                     , uno::Reference< frame::XModel >( rImportHelper.GetChartDocument(), uno::UNO_QUERY ) ) )
                                 bIsMinMaxSeries = true;
                         }
                         if( !bIsMinMaxSeries )
                         {
                             pPropStyleContext->FillPropertySet( xSeriesProp );
-                            if( iStyle->mbSymbolSizeForSeriesIsMissingInFile )
+                            if( seriesStyle.mbSymbolSizeForSeriesIsMissingInFile )
                                 lcl_setSymbolSizeIfNeeded( xSeriesProp, rImport );
                             if( bHasErrorBarRangesFromData )
                                 lcl_insertErrorBarLSequencesToMap( rInOutLSequencesPerIndex, xSeriesProp );
@@ -853,7 +863,7 @@ void SchXMLSeries2Context::setStylesToSeries( SeriesDefaultsAndStyles& rSeriesDe
             }
             catch( const uno::Exception & rEx )
             {
-                SAL_INFO("xmloff.chart", "Exception caught during setting styles to series: " << rEx.Message );
+                SAL_INFO("xmloff.chart", "Exception caught during setting styles to series: " << rEx );
             }
         }
     }
@@ -864,12 +874,10 @@ void SchXMLSeries2Context::setStylesToRegressionCurves(
                                 SeriesDefaultsAndStyles& rSeriesDefaultsAndStyles,
                                 const SvXMLStylesContext* pStylesCtxt,
                                 const SvXMLStyleContext*& rpStyle,
-                                OUString& rCurrentStyleName )
+                                OUString const & rCurrentStyleName )
 {
-    std::list< RegressionStyle >::iterator iStyle;
-
-    // iterate over regession etc
-    for( iStyle = rSeriesDefaultsAndStyles.maRegressionStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maRegressionStyleList.end(); ++iStyle )
+    // iterate over regression etc
+    for (auto const& regressionStyle : rSeriesDefaultsAndStyles.maRegressionStyleVector)
     {
         try
         {
@@ -890,9 +898,9 @@ void SchXMLSeries2Context::setStylesToRegressionCurves(
                 }
             }
 
-            if (!iStyle->msStyleName.isEmpty())
+            if (!regressionStyle.msStyleName.isEmpty())
             {
-                XMLPropStyleContext* pCurrent = lcl_GetStylePropContext(pStylesCtxt, rpStyle, iStyle->msStyleName);
+                XMLPropStyleContext* pCurrent = lcl_GetStylePropContext(pStylesCtxt, rpStyle, regressionStyle.msStyleName);
                 if( pCurrent )
                 {
                     pPropStyleContext = pCurrent;
@@ -908,23 +916,20 @@ void SchXMLSeries2Context::setStylesToRegressionCurves(
             {
                 Reference< lang::XMultiServiceFactory > xMSF( comphelper::getProcessServiceFactory(), uno::UNO_QUERY );
                 Reference< chart2::XRegressionCurve > xRegCurve( xMSF->createInstance( aServiceName ), uno::UNO_QUERY_THROW );
-                Reference< chart2::XRegressionCurveContainer > xRegCurveCont( iStyle->m_xSeries, uno::UNO_QUERY_THROW );
+                Reference< chart2::XRegressionCurveContainer > xRegCurveCont( regressionStyle.m_xSeries, uno::UNO_QUERY_THROW );
 
-                if( xRegCurve.is())
-                {
-                    Reference< beans::XPropertySet > xCurveProperties( xRegCurve, uno::UNO_QUERY );
-                    if( pPropStyleContext != nullptr)
-                        pPropStyleContext->FillPropertySet( xCurveProperties );
+                Reference< beans::XPropertySet > xCurveProperties( xRegCurve, uno::UNO_QUERY );
+                if( pPropStyleContext != nullptr)
+                    pPropStyleContext->FillPropertySet( xCurveProperties );
 
-                    xRegCurve->setEquationProperties( iStyle->m_xEquationProperties );
-                }
+                xRegCurve->setEquationProperties( regressionStyle.m_xEquationProperties );
 
                 xRegCurveCont->addRegressionCurve( xRegCurve );
             }
         }
         catch( const uno::Exception& rEx )
         {
-            SAL_INFO("xmloff.chart", "Exception caught during setting styles to series: " << rEx.Message );
+            SAL_INFO("xmloff.chart", "Exception caught during setting styles to series: " << rEx );
         }
 
     }
@@ -936,36 +941,34 @@ void SchXMLSeries2Context::setStylesToStatisticsObjects( SeriesDefaultsAndStyles
         , const SvXMLStyleContext*& rpStyle
         , OUString& rCurrStyleName )
 {
-    ::std::list< DataRowPointStyle >::iterator iStyle;
-
-    // iterate over regession etc
-    for( iStyle = rSeriesDefaultsAndStyles.maSeriesStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maSeriesStyleList.end(); ++iStyle )
+    // iterate over regression etc
+    for (auto const& seriesStyle : rSeriesDefaultsAndStyles.maSeriesStyleVector)
     {
-        if( iStyle->meType == DataRowPointStyle::ERROR_INDICATOR ||
-            iStyle->meType == DataRowPointStyle::MEAN_VALUE )
+        if( seriesStyle.meType == DataRowPointStyle::ERROR_INDICATOR ||
+            seriesStyle.meType == DataRowPointStyle::MEAN_VALUE )
         {
-            if ( iStyle->meType == DataRowPointStyle::ERROR_INDICATOR )
+            if ( seriesStyle.meType == DataRowPointStyle::ERROR_INDICATOR )
             {
-                uno::Reference< beans::XPropertySet > xNewSeriesProp(iStyle->m_xSeries,uno::UNO_QUERY);
+                uno::Reference< beans::XPropertySet > xNewSeriesProp(seriesStyle.m_xSeries,uno::UNO_QUERY);
 
-                if (iStyle->m_xErrorXProperties.is())
-                    xNewSeriesProp->setPropertyValue("ErrorBarX",uno::makeAny(iStyle->m_xErrorXProperties));
+                if (seriesStyle.m_xErrorXProperties.is())
+                    xNewSeriesProp->setPropertyValue("ErrorBarX",uno::makeAny(seriesStyle.m_xErrorXProperties));
 
-                if (iStyle->m_xErrorYProperties.is())
-                    xNewSeriesProp->setPropertyValue("ErrorBarY",uno::makeAny(iStyle->m_xErrorYProperties));
+                if (seriesStyle.m_xErrorYProperties.is())
+                    xNewSeriesProp->setPropertyValue("ErrorBarY",uno::makeAny(seriesStyle.m_xErrorYProperties));
             }
 
             try
             {
-                uno::Reference< beans::XPropertySet > xSeriesProp( iStyle->m_xOldAPISeries );
+                uno::Reference< beans::XPropertySet > xSeriesProp( seriesStyle.m_xOldAPISeries );
                 if( !xSeriesProp.is() )
                     continue;
 
-                if( !(iStyle->msStyleName).isEmpty())
+                if( !seriesStyle.msStyleName.isEmpty())
                 {
-                    if( ! rCurrStyleName.equals( iStyle->msStyleName ))
+                    if( rCurrStyleName != seriesStyle.msStyleName )
                     {
-                        rCurrStyleName = iStyle->msStyleName;
+                        rCurrStyleName = seriesStyle.msStyleName;
                         rpStyle = pStylesCtxt->FindStyleChildContext(
                             SchXMLImportHelper::GetChartFamilyID(), rCurrStyleName );
                     }
@@ -977,7 +980,7 @@ void SchXMLSeries2Context::setStylesToStatisticsObjects( SeriesDefaultsAndStyles
                     if( pPropStyleContext )
                     {
                         Reference< beans::XPropertySet > xStatPropSet;
-                        switch( iStyle->meType )
+                        switch( seriesStyle.meType )
                         {
                             case DataRowPointStyle::MEAN_VALUE:
                                 xSeriesProp->getPropertyValue("DataMeanValueProperties") >>= xStatPropSet;
@@ -995,7 +998,7 @@ void SchXMLSeries2Context::setStylesToStatisticsObjects( SeriesDefaultsAndStyles
             }
             catch( const uno::Exception & rEx )
             {
-                SAL_INFO("xmloff.chart", "Exception caught during setting styles to series: " << rEx.Message );
+                SAL_INFO("xmloff.chart", "Exception caught during setting styles to series: " << rEx );
             }
         }
     }
@@ -1010,34 +1013,33 @@ void SchXMLSeries2Context::setStylesToDataPoints( SeriesDefaultsAndStyles& rSeri
         , const SvXMLImport& rImport
         , bool bIsStockChart, bool bIsDonutChart, bool bSwitchOffLinesForScatter )
 {
-    ::std::list< DataRowPointStyle >::iterator iStyle;
-    for( iStyle = rSeriesDefaultsAndStyles.maSeriesStyleList.begin(); iStyle != rSeriesDefaultsAndStyles.maSeriesStyleList.end(); ++iStyle )
+    for (auto const& seriesStyle : rSeriesDefaultsAndStyles.maSeriesStyleVector)
     {
-        if( iStyle->meType != DataRowPointStyle::DATA_POINT )
+        if( seriesStyle.meType != DataRowPointStyle::DATA_POINT )
             continue;
 
-        if( iStyle->m_nPointIndex == -1 )
+        if( seriesStyle.m_nPointIndex == -1 )
+            continue;
+
+        uno::Reference< beans::XPropertySet > xSeriesProp( seriesStyle.m_xOldAPISeries );
+        if(!xSeriesProp.is())
             continue;
 
         //ignore datapoint properties for stock charts
         //... todo ...
         if( bIsStockChart )
         {
-            if( SchXMLSeriesHelper::isCandleStickSeries( iStyle->m_xSeries, uno::Reference< frame::XModel >( rImportHelper.GetChartDocument(), uno::UNO_QUERY ) ) )
+            if( SchXMLSeriesHelper::isCandleStickSeries( seriesStyle.m_xSeries, uno::Reference< frame::XModel >( rImportHelper.GetChartDocument(), uno::UNO_QUERY ) ) )
                 continue;
         }
 
         // data point style
-        for( sal_Int32 i = 0; i < iStyle->m_nPointRepeat; i++ )
+        for( sal_Int32 i = 0; i < seriesStyle.m_nPointRepeat; i++ )
         {
             try
             {
-                uno::Reference< beans::XPropertySet > xSeriesProp( iStyle->m_xOldAPISeries );
-                if(!xSeriesProp.is())
-                    continue;
-
                 uno::Reference< beans::XPropertySet > xPointProp(
-                    SchXMLSeriesHelper::createOldAPIDataPointPropertySet( iStyle->m_xSeries, iStyle->m_nPointIndex + i
+                    SchXMLSeriesHelper::createOldAPIDataPointPropertySet( seriesStyle.m_xSeries, seriesStyle.m_nPointIndex + i
                         , uno::Reference< frame::XModel >( rImportHelper.GetChartDocument(), uno::UNO_QUERY ) ) );
 
                 if( !xPointProp.is() )
@@ -1046,9 +1048,9 @@ void SchXMLSeries2Context::setStylesToDataPoints( SeriesDefaultsAndStyles& rSeri
                 if( bIsDonutChart )
                 {
                     //set special series styles for donut charts first
-                    if( !rCurrStyleName.equals( iStyle->msSeriesStyleNameForDonuts ) )
+                    if( rCurrStyleName != seriesStyle.msSeriesStyleNameForDonuts )
                     {
-                        rCurrStyleName = iStyle->msSeriesStyleNameForDonuts;
+                        rCurrStyleName = seriesStyle.msSeriesStyleNameForDonuts;
                         rpStyle = pStylesCtxt->FindStyleChildContext(
                             SchXMLImportHelper::GetChartFamilyID(), rCurrStyleName );
                     }
@@ -1065,15 +1067,15 @@ void SchXMLSeries2Context::setStylesToDataPoints( SeriesDefaultsAndStyles& rSeri
                 {
                     //need to set this explicitly here for old files as the new api does not support this property fully anymore
                     if( bSwitchOffLinesForScatter )
-                        xPointProp->setPropertyValue("Lines",uno::makeAny(sal_False));
+                        xPointProp->setPropertyValue("Lines",uno::makeAny(false));
                 }
                 catch( const uno::Exception & )
                 {
                 }
 
-                if( !rCurrStyleName.equals( iStyle->msStyleName ) )
+                if( rCurrStyleName != seriesStyle.msStyleName )
                 {
-                    rCurrStyleName = iStyle->msStyleName;
+                    rCurrStyleName = seriesStyle.msStyleName;
                     rpStyle = pStylesCtxt->FindStyleChildContext(
                         SchXMLImportHelper::GetChartFamilyID(), rCurrStyleName );
                 }
@@ -1085,36 +1087,34 @@ void SchXMLSeries2Context::setStylesToDataPoints( SeriesDefaultsAndStyles& rSeri
                 if( pPropStyleContext )
                 {
                     pPropStyleContext->FillPropertySet( xPointProp );
-                    if( iStyle->mbSymbolSizeForSeriesIsMissingInFile )
+                    if( seriesStyle.mbSymbolSizeForSeriesIsMissingInFile )
                         lcl_resetSymbolSizeForPointsIfNecessary( xPointProp, rImport, pPropStyleContext, pStylesCtxt );
                 }
             }
             catch( const uno::Exception & rEx )
             {
-                SAL_INFO("xmloff.chart", "Exception caught during setting styles to data points: " << rEx.Message );
+                SAL_INFO("xmloff.chart", "Exception caught during setting styles to data points: " << rEx );
             }
         }
     }   // styles iterator
 }
 
 //static
-void SchXMLSeries2Context::switchSeriesLinesOff( ::std::list< DataRowPointStyle >& rSeriesStyleList )
+void SchXMLSeries2Context::switchSeriesLinesOff( ::std::vector< DataRowPointStyle >& rSeriesStyleVector )
 {
-    ::std::list< DataRowPointStyle >::iterator iStyle;
     // iterate over series
-
-    for( iStyle = rSeriesStyleList.begin(); iStyle != rSeriesStyleList.end(); ++iStyle )
+    for (auto const& seriesStyle : rSeriesStyleVector)
     {
-        if( iStyle->meType != DataRowPointStyle::DATA_SERIES )
+        if( seriesStyle.meType != DataRowPointStyle::DATA_SERIES )
             continue;
 
         try
         {
-            uno::Reference< beans::XPropertySet > xSeries( iStyle->m_xOldAPISeries );
+            uno::Reference< beans::XPropertySet > xSeries( seriesStyle.m_xOldAPISeries );
             if( !xSeries.is() )
                 continue;
 
-            xSeries->setPropertyValue("Lines",uno::makeAny(sal_False));
+            xSeries->setPropertyValue("Lines",uno::makeAny(false));
         }
         catch( uno::Exception &  )
         {

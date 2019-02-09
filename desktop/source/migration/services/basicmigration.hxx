@@ -37,9 +37,9 @@ namespace migration
 {
 
 
-    OUString SAL_CALL BasicMigration_getImplementationName();
-    css::uno::Sequence< OUString > SAL_CALL BasicMigration_getSupportedServiceNames();
-    css::uno::Reference< css::uno::XInterface > SAL_CALL BasicMigration_create(
+    OUString BasicMigration_getImplementationName();
+    css::uno::Sequence< OUString > BasicMigration_getSupportedServiceNames();
+    css::uno::Reference< css::uno::XInterface > BasicMigration_create(
         css::uno::Reference< css::uno::XComponentContext > const & xContext );
 
 
@@ -58,30 +58,24 @@ namespace migration
         OUString         m_sSourceDir;
 
         TStringVectorPtr        getFiles( const OUString& rBaseURL ) const;
-        void                    checkAndCreateDirectory( INetURLObject& rDirURL );
+        void                    checkAndCreateDirectory( INetURLObject const & rDirURL );
         void                    copyFiles();
 
     public:
         BasicMigration();
-        virtual ~BasicMigration();
+        virtual ~BasicMigration() override;
 
         // XServiceInfo
-        virtual OUString SAL_CALL getImplementationName()
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName )
-            throw (css::uno::RuntimeException, std::exception) override;
-        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames()
-            throw (css::uno::RuntimeException, std::exception) override;
+        virtual OUString SAL_CALL getImplementationName() override;
+        virtual sal_Bool SAL_CALL supportsService( const OUString& rServiceName ) override;
+        virtual css::uno::Sequence< OUString > SAL_CALL getSupportedServiceNames() override;
 
         // XInitialization
-        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments )
-            throw (css::uno::Exception, css::uno::RuntimeException, std::exception) override;
+        virtual void SAL_CALL initialize( const css::uno::Sequence< css::uno::Any >& aArguments ) override;
 
         // XJob
         virtual css::uno::Any SAL_CALL execute(
-            const css::uno::Sequence< css::beans::NamedValue >& Arguments )
-            throw (css::lang::IllegalArgumentException, css::uno::Exception,
-                css::uno::RuntimeException, std::exception) override;
+            const css::uno::Sequence< css::beans::NamedValue >& Arguments ) override;
     };
 
 

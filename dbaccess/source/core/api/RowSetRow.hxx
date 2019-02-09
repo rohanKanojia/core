@@ -21,15 +21,14 @@
 
 #include <rtl/ref.hxx>
 #include <connectivity/CommonTools.hxx>
-#include "connectivity/FValue.hxx"
-#include <comphelper/types.hxx>
+#include <connectivity/FValue.hxx>
 #include <salhelper/simplereferenceobject.hxx>
 
 namespace dbaccess
 {
     typedef connectivity::ORowVector< connectivity::ORowSetValue >  ORowSetValueVector;
     typedef ::rtl::Reference< ORowSetValueVector >                      ORowSetRow;
-    typedef ::std::vector< ORowSetRow >                             ORowSetMatrix;
+    typedef std::vector< ORowSetRow >                             ORowSetMatrix;
 
     class ORowSetOldRowHelper : public salhelper::SimpleReferenceObject
     {
@@ -38,14 +37,13 @@ namespace dbaccess
         ORowSetOldRowHelper& operator=(const ORowSetOldRowHelper& _rRH) = delete;
         ORowSetOldRowHelper(const ORowSetOldRowHelper& _rRh) = delete;
     public:
-        ORowSetOldRowHelper(){}
         explicit ORowSetOldRowHelper(const ORowSetRow& _rRow)
             : m_aRow(_rRow)
         {}
 
         const ORowSetRow& getRow() const { return m_aRow; }
-        inline void clearRow() { m_aRow = nullptr; }
-        inline void setRow(const ORowSetRow& _rRow) { m_aRow = _rRow; }
+        void clearRow() { m_aRow = nullptr; }
+        void setRow(const ORowSetRow& _rRow) { m_aRow = _rRow; }
     };
 
     typedef ::rtl::Reference< ORowSetOldRowHelper > TORowSetOldRowHelperRef;

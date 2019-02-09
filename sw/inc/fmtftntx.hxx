@@ -20,9 +20,9 @@
 #define INCLUDED_SW_INC_FMTFTNTX_HXX
 
 #include <svl/eitem.hxx>
-#include <hintids.hxx>
-#include <format.hxx>
-#include <numrule.hxx>
+#include <editeng/numitem.hxx>
+#include "hintids.hxx"
+#include "format.hxx"
 #include "swdllapi.h"
 
 enum SwFootnoteEndPosEnum
@@ -34,7 +34,7 @@ enum SwFootnoteEndPosEnum
     FTNEND_ATTXTEND_END
 };
 
-class SW_DLLPUBLIC SwFormatFootnoteEndAtTextEnd : public SfxEnumItem
+class SW_DLLPUBLIC SwFormatFootnoteEndAtTextEnd : public SfxEnumItem<SwFootnoteEndPosEnum>
 {
     OUString sPrefix;
     OUString sSuffix;
@@ -43,16 +43,11 @@ class SW_DLLPUBLIC SwFormatFootnoteEndAtTextEnd : public SfxEnumItem
 
 protected:
     SwFormatFootnoteEndAtTextEnd( sal_uInt16 nWhichL, SwFootnoteEndPosEnum ePos )
-        : SfxEnumItem( nWhichL, sal::static_int_cast< sal_uInt16 >(ePos) ), nOffset( 0 )
-    {}
-    SwFormatFootnoteEndAtTextEnd( const SwFormatFootnoteEndAtTextEnd& rAttr )
-        : SfxEnumItem( rAttr ), sPrefix( rAttr.sPrefix ),
-        sSuffix( rAttr.sSuffix ), aFormat( rAttr.aFormat ),
-        nOffset( rAttr.nOffset )
+        : SfxEnumItem( nWhichL, ePos ), nOffset( 0 )
     {}
 
 public:
-    virtual sal_uInt16          GetValueCount() const override;
+    virtual sal_uInt16       GetValueCount() const override;
 
     virtual bool             operator==( const SfxPoolItem& ) const override;
 
@@ -60,17 +55,19 @@ public:
     virtual bool             PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId ) override;
 
     virtual bool GetPresentation( SfxItemPresentation ePres,
-                                    SfxMapUnit eCoreMetric,
-                                    SfxMapUnit ePresMetric,
-                                    OUString &rText,
-                                    const IntlWrapper* pIntl = nullptr ) const override;
+                                  MapUnit eCoreMetric,
+                                  MapUnit ePresMetric,
+                                  OUString &rText,
+                                  const IntlWrapper& rIntl ) const override;
 
-    inline bool IsAtEnd() const { return FTNEND_ATPGORDOCEND != GetValue(); }
+    bool IsAtEnd() const { return FTNEND_ATPGORDOCEND != GetValue(); }
 
     SwFormatFootnoteEndAtTextEnd & operator=( const SwFormatFootnoteEndAtTextEnd & rAttr );
+    SwFormatFootnoteEndAtTextEnd(SwFormatFootnoteEndAtTextEnd const &) = default;
+        // SfxPoolItem copy function dichotomy
 
-    sal_Int16 GetNumType() const        { return aFormat.GetNumberingType(); }
-    void SetNumType( sal_Int16 eType )  { aFormat.SetNumberingType(eType); }
+    SvxNumType GetNumType() const        { return aFormat.GetNumberingType(); }
+    void SetNumType( SvxNumType eType )  { aFormat.SetNumberingType(eType); }
 
     const SvxNumberType& GetSwNumType() const   { return aFormat; }
 
@@ -107,9 +104,9 @@ public:
 };
 
 inline const SwFormatFootnoteAtTextEnd &SwAttrSet::GetFootnoteAtTextEnd(bool bInP) const
-    { return static_cast<const SwFormatFootnoteAtTextEnd&>(Get( RES_FTN_AT_TXTEND, bInP)); }
+    { return Get( RES_FTN_AT_TXTEND, bInP); }
 inline const SwFormatEndAtTextEnd &SwAttrSet::GetEndAtTextEnd(bool bInP) const
-    { return static_cast<const SwFormatEndAtTextEnd&>(Get( RES_END_AT_TXTEND, bInP)); }
+    { return Get( RES_END_AT_TXTEND, bInP); }
 
 inline const SwFormatFootnoteAtTextEnd &SwFormat::GetFootnoteAtTextEnd(bool bInP) const
     { return m_aSet.GetFootnoteAtTextEnd(bInP); }

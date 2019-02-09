@@ -26,7 +26,7 @@ namespace ooxml
 using namespace ::com::sun::star;
 
 OOXMLBinaryObjectReference::OOXMLBinaryObjectReference
-(OOXMLStream::Pointer_t pStream)
+(OOXMLStream::Pointer_t const & pStream)
 : mpStream(pStream), mbRead(false)
 {
 }
@@ -52,7 +52,7 @@ void OOXMLBinaryObjectReference::read()
         nSize += nBytesRead;
         mSequence.resize(nSize);
 
-        memcpy(&mSequence.data()[nOldSize], aSeq.getArray(), nBytesRead);
+        memcpy(&mSequence[nOldSize], aSeq.getArray(), nBytesRead);
     }
 
     mbRead = true;

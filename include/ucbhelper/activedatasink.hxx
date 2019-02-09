@@ -22,29 +22,28 @@
 
 #include <com/sun/star/io/XActiveDataSink.hpp>
 #include <ucbhelper/ucbhelperdllapi.h>
-#include <cppuhelper/implbase1.hxx>
+#include <cppuhelper/implbase.hxx>
 
 namespace ucbhelper
 {
+
+// workaround for incremental linking bugs in MSVC2015
+class SAL_DLLPUBLIC_TEMPLATE ActiveDataSink_Base : public cppu::WeakImplHelper< css::io::XActiveDataSink > {};
 
 /**
   * This class implements the interface css::io::XActiveDataSink.
   * Instances of this class can be passed with the parameters of an
   * "open" command.
   */
-
-class UCBHELPER_DLLPUBLIC ActiveDataSink :
-        public cppu::WeakImplHelper1< css::io::XActiveDataSink >
+class UCBHELPER_DLLPUBLIC ActiveDataSink : public ActiveDataSink_Base
 {
     css::uno::Reference< css::io::XInputStream > m_xStream;
 
 public:
     // XActiveDataSink methods.
-    virtual void SAL_CALL setInputStream( const css::uno::Reference< css::io::XInputStream >& aStream )
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual void SAL_CALL setInputStream( const css::uno::Reference< css::io::XInputStream >& aStream ) override;
 
-    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getInputStream()
-        throw( css::uno::RuntimeException, std::exception ) override;
+    virtual css::uno::Reference< css::io::XInputStream > SAL_CALL getInputStream() override;
 };
 
 } /* namespace ucbhelper */

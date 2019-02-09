@@ -37,10 +37,10 @@ public:
     XMLScriptContext( SvXMLImport& rImport,
                       const OUString& rLName,
                       const css::uno::Reference< css::frame::XModel>& rDocModel );
-    virtual ~XMLScriptContext();
+    virtual ~XMLScriptContext() override;
 
     // Create child element.
-    virtual SvXMLImportContext *CreateChildContext( sal_uInt16 nPrefix,
+    virtual SvXMLImportContextRef CreateChildContext( sal_uInt16 nPrefix,
                 const OUString& rLocalName,
                 const css::uno::Reference< css::xml::sax::XAttributeList>& xAttrList ) override;
 

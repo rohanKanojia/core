@@ -23,7 +23,7 @@
  **************************************************************************
 
  *************************************************************************/
-#include "ucbhelper/activedatastreamer.hxx"
+#include <ucbhelper/activedatastreamer.hxx>
 
 using namespace com::sun::star;
 
@@ -35,16 +35,12 @@ namespace ucbhelper
 
 // virtual
 void SAL_CALL ActiveDataStreamer::setStream( const uno::Reference< io::XStream >& xStream )
-    throw( uno::RuntimeException,
-           std::exception )
 {
     m_xStream = xStream;
 }
 
 // virtual
 uno::Reference< io::XStream > SAL_CALL ActiveDataStreamer::getStream()
-    throw( uno::RuntimeException,
-           std::exception )
 {
     return m_xStream;
 }

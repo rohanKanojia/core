@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "scitems.hxx"
+#include <scitems.hxx>
 
+#include <comphelper/lok.hxx>
 #include <svl/slstitm.hxx>
 #include <svl/stritem.hxx>
 #include <svl/whiter.hxx>
@@ -33,70 +34,71 @@
 #include <sfx2/objface.hxx>
 #include <sfx2/request.hxx>
 #include <sfx2/viewfrm.hxx>
-#include <sfx2/sidebar/EnumContext.hxx>
+#include <vcl/EnumContext.hxx>
 #include <svx/clipfmtitem.hxx>
 #include <svx/sidebar/ContextChangeEventMultiplexer.hxx>
 #include <editeng/langitem.hxx>
 
-#include "cellsh.hxx"
-#include "sc.hrc"
-#include "docsh.hxx"
-#include "attrib.hxx"
-#include "scresid.hxx"
-#include "tabvwsh.hxx"
-#include "impex.hxx"
-#include "formulacell.hxx"
-#include "scmod.hxx"
-#include "globstr.hrc"
-#include "transobj.hxx"
-#include "drwtrans.hxx"
-#include "scabstdlg.hxx"
-#include "dociter.hxx"
-#include "postit.hxx"
-#include "cliputil.hxx"
-#include "clipparam.hxx"
-#include "markdata.hxx"
+#include <cellsh.hxx>
+#include <sc.hrc>
+#include <docsh.hxx>
+#include <attrib.hxx>
+#include <tabvwsh.hxx>
+#include <impex.hxx>
+#include <formulacell.hxx>
+#include <scmod.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
+#include <transobj.hxx>
+#include <drwtrans.hxx>
+#include <scabstdlg.hxx>
+#include <dociter.hxx>
+#include <postit.hxx>
+#include <cliputil.hxx>
+#include <clipparam.hxx>
+#include <markdata.hxx>
 #include <gridwin.hxx>
 
-#define ScCellShell
-#define CellMovement
-#include "scslots.hxx"
+#define ShellClass_ScCellShell
+#define ShellClass_CellMovement
+#include <scslots.hxx>
 
 
 SFX_IMPL_INTERFACE(ScCellShell, ScFormatShell)
 
 void ScCellShell::InitInterface_Impl()
 {
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT | SFX_VISIBILITY_STANDARD | SFX_VISIBILITY_SERVER,
-                                            RID_OBJECTBAR_FORMAT);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT,
+                                            SfxVisibilityFlags::Standard | SfxVisibilityFlags::Server,
+                                            ToolbarId::Objectbar_Format);
 
     GetStaticInterface()->RegisterPopupMenu("cell");
 }
 
-ScCellShell::ScCellShell(ScViewData* pData) :
+ScCellShell::ScCellShell(ScViewData* pData, const VclPtr<vcl::Window>& frameWin) :
     ScFormatShell(pData),
     pImpl( new CellShell_Impl() ),
-    bPastePossible(false)
+    bPastePossible(false),
+    pFrameWin(frameWin)
 {
-    SetHelpId(HID_SCSHELL_CELLSH);
     SetName("Cell");
-    SfxShell::SetContextName(sfx2::sidebar::EnumContext::GetContextName(sfx2::sidebar::EnumContext::Context_Cell));
+    SfxShell::SetContextName(vcl::EnumContext::GetContextName(vcl::EnumContext::Context::Cell));
 }
 
 ScCellShell::~ScCellShell()
 {
-    if ( pImpl->m_pClipEvtLstnr )
+    if ( pImpl->m_xClipEvtLstnr.is() )
     {
-        pImpl->m_pClipEvtLstnr->AddRemoveListener( GetViewData()->GetActiveWin(), false );
+        pImpl->m_xClipEvtLstnr->RemoveListener( GetViewData()->GetActiveWin() );
 
         //  The listener may just now be waiting for the SolarMutex and call the link
         //  afterwards, in spite of RemoveListener. So the link has to be reset, too.
-        pImpl->m_pClipEvtLstnr->ClearCallbackLink();
+        pImpl->m_xClipEvtLstnr->ClearCallbackLink();
 
-        pImpl->m_pClipEvtLstnr->release();
+        pImpl->m_xClipEvtLstnr.clear();
     }
 
-    delete pImpl->m_pLinkedDlg;
+    pImpl->m_pLinkedDlg.disposeAndClear();
     delete pImpl->m_pRequest;
 }
 
@@ -129,6 +131,8 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
             case FID_FILL_TO_BOTTOM:    // fill to top / bottom
             {
                 bDisable = !bSimpleArea || (nRow1 == 0 && nRow2 == 0);
+                if (!bDisable && GetViewData()->SelectionForbidsCellFill())
+                    bDisable = true;
                 if ( !bDisable && bEditable )
                 {   // do not damage matrix
                     bDisable = pDoc->HasSelectedBlockMatrixFragment(
@@ -139,6 +143,8 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
             case FID_FILL_TO_TOP:
             {
                 bDisable = (!bSimpleArea) || (nRow1 == MAXROW && nRow2 == MAXROW);
+                if (!bDisable && GetViewData()->SelectionForbidsCellFill())
+                    bDisable = true;
                 if ( !bDisable && bEditable )
                 {   // do not damage matrix
                     bDisable = pDoc->HasSelectedBlockMatrixFragment(
@@ -149,6 +155,8 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
             case FID_FILL_TO_RIGHT:     // fill to left / right
             {
                 bDisable = !bSimpleArea || (nCol1 == 0 && nCol2 == 0);
+                if (!bDisable && GetViewData()->SelectionForbidsCellFill())
+                    bDisable = true;
                 if ( !bDisable && bEditable )
                 {   // do not damage matrix
                     bDisable = pDoc->HasSelectedBlockMatrixFragment(
@@ -159,6 +167,8 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
             case FID_FILL_TO_LEFT:
             {
                 bDisable = (!bSimpleArea) || (nCol1 == MAXCOL && nCol2 == MAXCOL);
+                if (!bDisable && GetViewData()->SelectionForbidsCellFill())
+                    bDisable = true;
                 if ( !bDisable && bEditable )
                 {   // do not damage matrix
                     bDisable = pDoc->HasSelectedBlockMatrixFragment(
@@ -168,6 +178,8 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
             break;
 
             case SID_RANDOM_NUMBER_GENERATOR_DIALOG:
+                bDisable = !bSimpleArea || GetViewData()->SelectionForbidsCellFill();
+            break;
             case SID_SAMPLING_DIALOG:
             case SID_DESCRIPTIVE_STATISTICS_DIALOG:
             case SID_ANALYSIS_OF_VARIANCE_DIALOG:
@@ -184,6 +196,9 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
                     bDisable = true;
                 else
                     bDisable = (!bSimpleArea) || (nCol1 == nCol2 && nRow1 == nRow2);
+
+                if (!bDisable && GetViewData()->SelectionForbidsCellFill())
+                    bDisable = true;
 
                 if ( !bDisable && bEditable && nWhich == FID_FILL_SERIES )
                 {   // do not damage matrix
@@ -205,9 +220,31 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
                 bDisable = (!bSimpleArea);
                 break;
 
+            case SID_PASTE:
+            case SID_PASTE_SPECIAL:
+            case SID_PASTE_UNFORMATTED:
+            case SID_PASTE_ONLY_VALUE:
+            case SID_PASTE_ONLY_TEXT:
+            case SID_PASTE_ONLY_FORMULA:
+                bDisable = GetViewData()->SelectionForbidsCellFill();
+                break;
+
             case FID_INS_ROW:
             case FID_INS_ROWS_BEFORE:           // insert rows
             case FID_INS_ROWS_AFTER:
+            {
+                sc::ColRowEditAction eAction = sc::ColRowEditAction::InsertRowsBefore;
+                if (nWhich == FID_INS_ROWS_AFTER)
+                    eAction = sc::ColRowEditAction::InsertRowsAfter;
+
+                bDisable = (!bSimpleArea) || GetViewData()->SimpleColMarked();
+                if (!bEditable && nCol1 == 0 && nCol2 == MAXCOL)
+                {
+                    // See if row insertions are allowed.
+                    bEditable = pDoc->IsEditActionAllowed(eAction, rMark, nRow1, nRow2);
+                }
+                break;
+            }
             case FID_INS_CELLSDOWN:
                 bDisable = (!bSimpleArea) || GetViewData()->SimpleColMarked();
                 break;
@@ -215,6 +252,19 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
             case FID_INS_COLUMN:
             case FID_INS_COLUMNS_BEFORE:        // insert columns
             case FID_INS_COLUMNS_AFTER:
+            {
+                sc::ColRowEditAction eAction = sc::ColRowEditAction::InsertColumnsBefore;
+                if (nWhich == FID_INS_COLUMNS_AFTER)
+                    eAction = sc::ColRowEditAction::InsertColumnsAfter;
+
+                bDisable = (!bSimpleArea) || GetViewData()->SimpleRowMarked();
+                if (!bEditable && nRow1 == 0 && nRow2 == MAXROW)
+                {
+                    // See if row insertions are allowed.
+                    bEditable = pDoc->IsEditActionAllowed(eAction, rMark, nCol1, nCol2);
+                }
+                break;
+            }
             case FID_INS_CELLSRIGHT:
                 bDisable = (!bSimpleArea) || GetViewData()->SimpleRowMarked();
                 break;
@@ -249,7 +299,6 @@ void ScCellShell::GetBlockState( SfxItemSet& rSet )
                     }
                 }
                 break;
-
             case SID_TRANSLITERATE_HALFWIDTH:
             case SID_TRANSLITERATE_FULLWIDTH:
             case SID_TRANSLITERATE_HIRAGANA:
@@ -287,7 +336,7 @@ void ScCellShell::GetCellState( SfxItemSet& rSet )
     ScDocument& rDoc = GetViewData()->GetDocShell()->GetDocument();
     ScAddress aCursor( GetViewData()->GetCurX(), GetViewData()->GetCurY(),
                         GetViewData()->GetTabNo() );
-
+    bool isLOKNoTiledAnnotations = comphelper::LibreOfficeKit::isActive() && !comphelper::LibreOfficeKit::isTiledAnnotations();
     SfxWhichIter aIter(rSet);
     sal_uInt16 nWhich = aIter.FirstWhich();
     while ( nWhich )
@@ -303,7 +352,7 @@ void ScCellShell::GetCellState( SfxItemSet& rSet )
                     if (!bDisable)
                     {
                         //  test for available languages
-                        sal_uInt16 nLang = ScViewUtil::GetEffLanguage( &rDoc, aCursor );
+                        LanguageType nLang = ScViewUtil::GetEffLanguage( &rDoc, aCursor );
                         bDisable = !ScModule::HasThesaurusLanguage( nLang );
                     }
                 }
@@ -346,14 +395,8 @@ void ScCellShell::GetCellState( SfxItemSet& rSet )
             case SID_EDIT_POSTIT:
                 {
                     ScAddress aPos( GetViewData()->GetCurX(), GetViewData()->GetCurY(), GetViewData()->GetTabNo() );
-                    if( rDoc.GetNote(aPos) )
-                    {
-                        bDisable = false;
-                    }
-                    else
-                    {
-                        bDisable = true;
-                    }
+                    // Allow editing annotation by Id (without selecting the cell) for LOK
+                    bDisable = !(isLOKNoTiledAnnotations || rDoc.GetNote(aPos));
                 }
                 break;
         }
@@ -379,7 +422,7 @@ static bool lcl_TestFormat( SvxClipboardFormatItem& rFormats, const Transferable
         if ( nFormatId == SotClipboardFormatId::EMBED_SOURCE )
         {
             TransferableObjectDescriptor aDesc;
-            if ( ((TransferableDataHelper&)rDataHelper).GetTransferableObjectDescriptor(
+            if ( const_cast<TransferableDataHelper&>(rDataHelper).GetTransferableObjectDescriptor(
                                         SotClipboardFormatId::OBJECTDESCRIPTOR, aDesc ) )
                 aStrVal = aDesc.maTypeName;
         }
@@ -404,7 +447,7 @@ static bool lcl_TestFormat( SvxClipboardFormatItem& rFormats, const Transferable
 void ScCellShell::GetPossibleClipboardFormats( SvxClipboardFormatItem& rFormats )
 {
     vcl::Window* pWin = GetViewData()->GetActiveWin();
-    bool bDraw = ( ScDrawTransferObj::GetOwnClipboard( pWin ) != nullptr );
+    bool bDraw = ScDrawTransferObj::GetOwnClipboard(ScTabViewShell::GetClipData(pWin)) != nullptr;
 
     TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( pWin ) );
 
@@ -419,8 +462,10 @@ void ScCellShell::GetPossibleClipboardFormats( SvxClipboardFormatItem& rFormats 
     {
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::LINK );
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::STRING );
+        lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::STRING_TSVC );
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::DIF );
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::RTF );
+        lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::RICHTEXT );
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::HTML );
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::HTML_SIMPLE );
         lcl_TestFormat( rFormats, aDataHelper, SotClipboardFormatId::BIFF_8 );
@@ -436,7 +481,8 @@ void ScCellShell::GetPossibleClipboardFormats( SvxClipboardFormatItem& rFormats 
 static bool lcl_IsCellPastePossible( const TransferableDataHelper& rData )
 {
     bool bPossible = false;
-    if ( ScTransferObj::GetOwnClipboard( nullptr ) || ScDrawTransferObj::GetOwnClipboard( nullptr ) )
+    css::uno::Reference< css::datatransfer::XTransferable2 > xTransferable(rData.GetXTransferable(), css::uno::UNO_QUERY);
+    if ( ScTransferObj::GetOwnClipboard(xTransferable) || ScDrawTransferObj::GetOwnClipboard(xTransferable) )
         bPossible = true;
     else
     {
@@ -446,12 +492,14 @@ static bool lcl_IsCellPastePossible( const TransferableDataHelper& rData )
              rData.HasFormat( SotClipboardFormatId::SVXB ) ||
              rData.HasFormat( SotClipboardFormatId::PRIVATE ) ||
              rData.HasFormat( SotClipboardFormatId::RTF ) ||
+             rData.HasFormat( SotClipboardFormatId::RICHTEXT ) ||
              rData.HasFormat( SotClipboardFormatId::EMBED_SOURCE ) ||
              rData.HasFormat( SotClipboardFormatId::LINK_SOURCE ) ||
              rData.HasFormat( SotClipboardFormatId::EMBED_SOURCE_OLE ) ||
              rData.HasFormat( SotClipboardFormatId::LINK_SOURCE_OLE ) ||
              rData.HasFormat( SotClipboardFormatId::EMBEDDED_OBJ_OLE ) ||
              rData.HasFormat( SotClipboardFormatId::STRING ) ||
+             rData.HasFormat( SotClipboardFormatId::STRING_TSVC ) ||
              rData.HasFormat( SotClipboardFormatId::SYLK ) ||
              rData.HasFormat( SotClipboardFormatId::LINK ) ||
              rData.HasFormat( SotClipboardFormatId::HTML ) ||
@@ -464,13 +512,21 @@ static bool lcl_IsCellPastePossible( const TransferableDataHelper& rData )
     return bPossible;
 }
 
-IMPL_LINK_TYPED( ScCellShell, ClipboardChanged, TransferableDataHelper*, pDataHelper, void )
+bool ScCellShell::HasClipboardFormat( SotClipboardFormatId nFormatId )
+{
+    vcl::Window* pWin = GetViewData()->GetActiveWin();
+    TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( pWin ));
+    return aDataHelper.HasFormat( nFormatId );
+}
+
+IMPL_LINK( ScCellShell, ClipboardChanged, TransferableDataHelper*, pDataHelper, void )
 {
     bPastePossible = lcl_IsCellPastePossible( *pDataHelper );
 
     SfxBindings& rBindings = GetViewData()->GetBindings();
     rBindings.Invalidate( SID_PASTE );
     rBindings.Invalidate( SID_PASTE_SPECIAL );
+    rBindings.Invalidate( SID_PASTE_UNFORMATTED );
     rBindings.Invalidate( SID_PASTE_ONLY_VALUE );
     rBindings.Invalidate( SID_PASTE_ONLY_TEXT );
     rBindings.Invalidate( SID_PASTE_ONLY_FORMULA );
@@ -490,6 +546,9 @@ bool checkDestRanges(ScViewData& rViewData)
             return false;
     }
 
+    if (rViewData.SelectionForbidsCellFill())
+        return false;
+
     // Multiple destination ranges.
 
     ScDocument* pDoc = rViewData.GetDocument();
@@ -497,7 +556,7 @@ bool checkDestRanges(ScViewData& rViewData)
     if (!pWin)
         return false;
 
-    ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard(pWin);
+    const ScTransferObj* pOwnClip = ScTransferObj::GetOwnClipboard(ScTabViewShell::GetClipData(pWin));
     if (!pOwnClip)
         // If it's not a Calc document, we won't be picky.
         return true;
@@ -524,15 +583,15 @@ void ScCellShell::GetClipState( SfxItemSet& rSet )
 {
 // SID_PASTE
 // SID_PASTE_SPECIAL
+// SID_PASTE_UNFORMATTED
 // SID_CLIPBOARD_FORMAT_ITEMS
 
-    if ( !pImpl->m_pClipEvtLstnr )
+    if ( !pImpl->m_xClipEvtLstnr.is() )
     {
         // create listener
-        pImpl->m_pClipEvtLstnr = new TransferableClipboardListener( LINK( this, ScCellShell, ClipboardChanged ) );
-        pImpl->m_pClipEvtLstnr->acquire();
+        pImpl->m_xClipEvtLstnr = new TransferableClipboardListener( LINK( this, ScCellShell, ClipboardChanged ) );
         vcl::Window* pWin = GetViewData()->GetActiveWin();
-        pImpl->m_pClipEvtLstnr->AddRemoveListener( pWin, true );
+        pImpl->m_xClipEvtLstnr->AddListener( pWin );
 
         // get initial state
         TransferableDataHelper aDataHelper( TransferableDataHelper::CreateFromSystemClipboard( pWin ) );
@@ -552,7 +611,7 @@ void ScCellShell::GetClipState( SfxItemSet& rSet )
         if (!rDoc.IsBlockEditable( nTab, nCol,nRow, nCol,nRow ))
             bDisable = true;
 
-        if (!checkDestRanges(*GetViewData()))
+        if (!bDisable && !checkDestRanges(*GetViewData()))
             bDisable = true;
     }
 
@@ -560,6 +619,7 @@ void ScCellShell::GetClipState( SfxItemSet& rSet )
     {
         rSet.DisableItem( SID_PASTE );
         rSet.DisableItem( SID_PASTE_SPECIAL );
+        rSet.DisableItem( SID_PASTE_UNFORMATTED );
         rSet.DisableItem( SID_PASTE_ONLY_VALUE );
         rSet.DisableItem( SID_PASTE_ONLY_TEXT );
         rSet.DisableItem( SID_PASTE_ONLY_FORMULA );
@@ -647,14 +707,6 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                 rSet.Put( SfxInt16Item( nWhich, nTab+1 ) );
                 break;
 
-            case SID_RANGE_VALUE:
-                {
-                    double nValue;
-                    pDoc->GetValue( nPosX, nPosY, nTab, nValue );
-                    rSet.Put( ScDoubleItem( nWhich, nValue ) );
-                }
-                break;
-
             case SID_RANGE_FORMULA:
                 {
                     OUString aString;
@@ -697,7 +749,7 @@ void ScCellShell::GetState(SfxItemSet &rSet)
 
             case SID_STATUS_DOCPOS:
                 {
-                    OUString aStr = ScGlobal::GetRscString( STR_TABLE_COUNT );
+                    OUString aStr = ScResId( STR_TABLE_COUNT );
 
                     aStr = aStr.replaceFirst("%1", OUString::number( nTab + 1  ) );
                     aStr = aStr.replaceFirst("%2", OUString::number( nTabCount ) );
@@ -717,9 +769,14 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                     nRow2 = aMarkRange.aEnd.Row();
                     if( nCol2 != nCol1 || nRow1 != nRow2 )
                     {
-                        OUString aStr = ScGlobal::GetRscString( STR_ROWCOL_SELCOUNT );
-                        aStr = aStr.replaceAll( "$1", OUString::number( nRow2 - nRow1 + 1 ));
-                        aStr = aStr.replaceAll( "$2", OUString::number( nCol2 - nCol1 + 1 ));
+                        const auto nRows = nRow2 - nRow1 + 1;
+                        const auto nCols = nCol2 - nCol1 + 1;
+                        const LocaleDataWrapper& rLocaleData = Application::GetSettings().GetUILocaleDataWrapper();
+                        OUString aRowArg = ScResId(STR_SELCOUNT_ROWARG, nRows).replaceAll("$1", rLocaleData.getNum(nRows, 0));
+                        OUString aColArg = ScResId(STR_SELCOUNT_COLARG, nCols).replaceAll("$1", rLocaleData.getNum(nCols, 0));
+                        OUString aStr = ScResId(STR_SELCOUNT);
+                        aStr = aStr.replaceAll("$1", aRowArg);
+                        aStr = aStr.replaceAll("$2", aColArg);
                         rSet.Put( SfxStringItem( nWhich, aStr ) );
                     }
                     else
@@ -728,7 +785,7 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                         pDoc->GetFilterSelCount( nPosX, nPosY, nTab, nSelected, nTotal );
                         if( nTotal )
                         {
-                            OUString aStr = ScGlobal::GetRscString( STR_FILTER_SELCOUNT );
+                            OUString aStr = ScResId( STR_FILTER_SELCOUNT );
                             aStr = aStr.replaceAll( "$1", OUString::number( nSelected ) );
                             aStr = aStr.replaceAll( "$2", OUString::number( nTotal ) );
                             rSet.Put( SfxStringItem( nWhich, aStr ) );
@@ -751,13 +808,10 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                         rSet.Put( SfxStringItem( nWhich, OUString("...") ) );
                     else
                     {
-                        sal_uInt16 nErrCode = 0;
+                        FormulaError nErrCode = FormulaError::NONE;
                         ScFormulaCell* pCell = pDoc->GetFormulaCell(ScAddress(nPosX, nPosY, nTab));
-                        if (pCell)
-                        {
-                            if (!pCell->IsRunning())
-                                nErrCode = pCell->GetErrCode();
-                        }
+                        if (pCell && !pCell->IsRunning())
+                            nErrCode = pCell->GetErrCode();
 
                         OUString aFuncStr;
                         if ( pTabViewShell->GetFunction( aFuncStr, nErrCode ) )
@@ -774,10 +828,15 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                     rSet.DisableItem( nWhich );
                 break;
 
+            case FID_CURRENTVALIDATION:
+                if ( !pDoc->HasValidationData( nPosX, nPosY, nTab ))
+                    rSet.DisableItem( nWhich );
+                break;
+
             case SID_STATUS_SUM:
                 {
                     OUString aFuncStr;
-                    if ( pTabViewShell->GetFunction( aFuncStr ) )
+                    if ( pTabViewShell->GetFunction( aFuncStr, FormulaError::NONE ) )
                         rSet.Put( SfxStringItem( nWhich, aFuncStr ) );
                 }
                 break;
@@ -807,28 +866,37 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                 break;
 
             case FID_INS_ROWBRK:
-                if ( nPosY==0 || (pDoc->HasRowBreak(nPosY, nTab) & BREAK_MANUAL) )
+                if ( nPosY==0 || (pDoc->HasRowBreak(nPosY, nTab) & ScBreakType::Manual) || pDoc->IsTabProtected(nTab) )
                     rSet.DisableItem( nWhich );
                 break;
 
             case FID_INS_COLBRK:
-                if ( nPosX==0 || (pDoc->HasColBreak(nPosX, nTab) & BREAK_MANUAL) )
+                if ( nPosX==0 || (pDoc->HasColBreak(nPosX, nTab) & ScBreakType::Manual) || pDoc->IsTabProtected(nTab) )
                     rSet.DisableItem( nWhich );
                 break;
 
             case FID_DEL_ROWBRK:
-                if ( nPosY==0 || (pDoc->HasRowBreak(nPosY, nTab) & BREAK_MANUAL) == 0 )
+                if ( nPosY==0 || !(pDoc->HasRowBreak(nPosY, nTab) & ScBreakType::Manual) || pDoc->IsTabProtected(nTab) )
                     rSet.DisableItem( nWhich );
                 break;
 
             case FID_DEL_COLBRK:
-                if ( nPosX==0 || (pDoc->HasColBreak(nPosX, nTab) & BREAK_MANUAL) == 0 )
+                if ( nPosX==0 || !(pDoc->HasColBreak(nPosX, nTab) & ScBreakType::Manual) || pDoc->IsTabProtected(nTab) )
                     rSet.DisableItem( nWhich );
                 break;
 
             case FID_FILL_TAB:
                 if ( nTabSelCount < 2 )
                     rSet.DisableItem( nWhich );
+                break;
+
+            case SID_INSERT_CURRENT_DATE:
+            case SID_INSERT_CURRENT_TIME:
+                {
+                    if ( pDoc->IsTabProtected(nTab) &&
+                            pDoc->HasAttrib(nPosX, nPosY, nTab, nPosX, nPosY, nTab, HasAttrFlags::Protected))
+                        rSet.DisableItem( nWhich );
+                }
                 break;
 
             case SID_SELECT_SCENARIO:
@@ -839,7 +907,7 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                     if ( !pDoc->IsScenario(nTab) )
                     {
                         OUString aStr;
-                        sal_uInt16 nFlags;
+                        ScScenarioFlags nFlags;
                         SCTAB nScTab = nTab + 1;
                         bool bSheetProtected = pDoc->IsTabProtected(nTab);
 
@@ -850,14 +918,14 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                             pDoc->GetScenarioData( nScTab, aStr, aDummyCol, nFlags );
                             aList.push_back(aStr);
                             // Protection is sal_True if both Sheet and Scenario are protected
-                            aList.push_back((bSheetProtected && (nFlags & SC_SCENARIO_PROTECT)) ? OUString("1") : OUString("0"));
+                            aList.push_back((bSheetProtected && (nFlags & ScScenarioFlags::Protected)) ? OUString("1") : OUString("0"));
                             ++nScTab;
                         }
                     }
                     else
                     {
                         OUString aComment;
-                        sal_uInt16  nDummyFlags;
+                        ScScenarioFlags nDummyFlags;
                         pDoc->GetScenarioData( nTab, aComment, aDummyCol, nDummyFlags );
                         OSL_ENSURE( aList.empty(), "List not empty!" );
                         aList.push_back(aComment);
@@ -993,13 +1061,12 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                         ScRangeList aRanges = *aRangesRef;
                         std::vector<sc::NoteEntry> aNotes;
                         pDoc->GetNotesInRange(aRanges, aNotes);
-                        for(std::vector<sc::NoteEntry>::const_iterator itr = aNotes.begin(),
-                                itrEnd = aNotes.end(); itr != itrEnd; ++itr)
+                        for(const auto& rNote : aNotes)
                         {
-                            const ScAddress& rAdr = itr->maPos;
+                            const ScAddress& rAdr = rNote.maPos;
                             if( pDoc->IsBlockEditable( rAdr.Tab(), rAdr.Col(), rAdr.Row(), rAdr.Col(), rAdr.Row() ))
                             {
-                                if (itr->mpNote->IsCaptionShown() != bSearchForHidden)
+                                if (rNote.mpNote->IsCaptionShown() != bSearchForHidden)
                                 {
                                     bEnable = true;
                                     break;
@@ -1010,6 +1077,51 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                     }
                     if ( !bEnable )
                         rSet.DisableItem( nWhich );
+                }
+                break;
+
+            case FID_SHOW_ALL_NOTES:
+            case FID_HIDE_ALL_NOTES:
+            case FID_DELETE_ALL_NOTES:
+                {
+                    bool bHasNotes = false;
+
+                    for (auto const& rTab : rMark.GetSelectedTabs())
+                    {
+                        if (pDoc->HasTabNotes( rTab ))
+                        {
+                            bHasNotes = true;
+                            break;
+                        }
+                    }
+
+                    if ( !bHasNotes )
+                        rSet.DisableItem( nWhich );
+                }
+                break;
+
+            case SID_TOGGLE_NOTES:
+                {
+                    bool bHasNotes = false;
+                    ScRangeList aRanges;
+
+                    for (auto const& rTab : rMark.GetSelectedTabs())
+                    {
+                        if (pDoc->HasTabNotes( rTab ))
+                        {
+                            bHasNotes = true;
+                            aRanges.push_back(ScRange(0,0,rTab,MAXCOL,MAXROW,rTab));
+                        }
+                    }
+
+                    if ( !bHasNotes )
+                        rSet.DisableItem( nWhich );
+                    else
+                    {
+                         CommentCaptionState eState = pDoc->GetAllNoteCaptionsState( aRanges );
+                         bool bAllNotesInShown = !(eState == ALLHIDDEN || eState == MIXED);
+                         rSet.Put( SfxBoolItem( SID_TOGGLE_NOTES, bAllNotesInShown) );
+                    }
                 }
                 break;
 
@@ -1074,6 +1186,19 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                 }
                 break;
 
+            case FID_DEFINE_CURRENT_NAME:
+            {
+                ScAddress aCurrentAddress = ScAddress( nPosX, nPosY, nTab );
+
+                if ( pDoc &&
+                     !pDoc->IsAddressInRangeName( RangeNameScope::GLOBAL, aCurrentAddress ) &&
+                     !pDoc->IsAddressInRangeName( RangeNameScope::SHEET, aCurrentAddress ))
+                {
+                    rSet.DisableItem( nWhich );
+                }
+            }
+            break;
+
             case SID_SPELL_DIALOG:
                 {
                     if ( pDoc && pData && pDoc->IsTabProtected( pData->GetTabNo() ) )
@@ -1093,6 +1218,24 @@ void ScCellShell::GetState(SfxItemSet &rSet)
                         {
                             rSet.DisableItem( nWhich );
                         }
+                    }
+                }
+                break;
+
+            case SID_OPENDLG_CURRENTCONDFRMT:
+            case SID_OPENDLG_CURRENTCONDFRMT_MANAGER:
+                {
+                    if ( pDoc )
+                    {
+                        const SfxPoolItem* pItem = pDoc->GetAttr( nPosX, nPosY, nTab, ATTR_CONDITIONAL );
+                        const ScCondFormatItem* pCondFormatItem = static_cast<const ScCondFormatItem*>(pItem);
+
+                        if ( pCondFormatItem->GetCondFormatData().empty() )
+                            rSet.DisableItem( nWhich );
+                        else if ( pCondFormatItem->GetCondFormatData().size() == 1 )
+                            rSet.DisableItem( SID_OPENDLG_CURRENTCONDFRMT_MANAGER );
+                        else if ( pCondFormatItem->GetCondFormatData().size() > 1 )
+                            rSet.DisableItem( SID_OPENDLG_CURRENTCONDFRMT );
                     }
                 }
                 break;

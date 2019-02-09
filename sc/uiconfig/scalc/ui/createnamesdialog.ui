@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.18.3 -->
-<interface>
-  <requires lib="gtk+" version="3.0"/>
+<!-- Generated with glade 3.20.4 -->
+<interface domain="sc">
+  <requires lib="gtk+" version="3.18"/>
   <object class="GtkDialog" id="CreateNamesDialog">
     <property name="can_focus">False</property>
     <property name="border_width">6</property>
-    <property name="title" translatable="yes">Create Names</property>
+    <property name="title" translatable="yes" context="createnamesdialog|CreateNamesDialog">Create Names</property>
     <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="default_width">0</property>
+    <property name="default_height">0</property>
     <property name="type_hint">dialog</property>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
@@ -93,7 +96,7 @@
                     <property name="spacing">6</property>
                     <child>
                       <object class="GtkCheckButton" id="top">
-                        <property name="label" translatable="yes">_Top row</property>
+                        <property name="label" translatable="yes" context="createnamesdialog|top">_Top row</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -109,7 +112,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="left">
-                        <property name="label" translatable="yes">_Left column</property>
+                        <property name="label" translatable="yes" context="createnamesdialog|left">_Left column</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -125,7 +128,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="bottom">
-                        <property name="label" translatable="yes">_Bottom row</property>
+                        <property name="label" translatable="yes" context="createnamesdialog|bottom">_Bottom row</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -143,7 +146,7 @@
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="right">
-                        <property name="label" translatable="yes">_Right column</property>
+                        <property name="label" translatable="yes" context="createnamesdialog|right">_Right column</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="receives_default">False</property>
@@ -165,8 +168,8 @@
               <object class="GtkLabel" id="label1">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="label" translatable="yes" context="createnamesdialog|label1">Create Names From</property>
                 <property name="xalign">0.49000000953674316</property>
-                <property name="label" translatable="yes">Create Names From</property>
                 <attributes>
                   <attribute name="weight" value="bold"/>
                 </attributes>
@@ -182,9 +185,12 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="0">ok</action-widget>
-      <action-widget response="0">cancel</action-widget>
-      <action-widget response="0">help</action-widget>
+      <action-widget response="-5">ok</action-widget>
+      <action-widget response="-6">cancel</action-widget>
+      <action-widget response="-11">help</action-widget>
     </action-widgets>
+    <child>
+      <placeholder/>
+    </child>
   </object>
 </interface>

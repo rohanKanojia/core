@@ -9,12 +9,18 @@
 #ifndef INCLUDED_OOX_MATHML_IMPORTUTILS_HXX
 #define INCLUDED_OOX_MATHML_IMPORTUTILS_HXX
 
-#include <com/sun/star/xml/sax/XFastAttributeList.hpp>
-#include <oox/token/tokens.hxx>
 #include <map>
 #include <vector>
 
+#include <com/sun/star/uno/Reference.hxx>
 #include <oox/dllapi.h>
+#include <oox/token/tokens.hxx>
+#include <rtl/ustring.hxx>
+#include <sal/types.h>
+
+namespace com { namespace sun { namespace star {
+    namespace xml { namespace sax { class XFastAttributeList; } }
+} } }
 
 namespace oox
 {
@@ -114,7 +120,7 @@ public:
     struct OOX_DLLPUBLIC AttributeList
     {
         OUString& operator[] (int token);
-        OUString attribute( int token, const OUString& def = OUString()) const;
+        OUString attribute( int token, const OUString& def) const;
         bool attribute( int token, bool def ) const;
         sal_Unicode attribute( int token, sal_Unicode def ) const;
         // when adding more attribute() overloads, add also to XmlStream itself
@@ -127,8 +133,7 @@ public:
     struct OOX_DLLPUBLIC Tag
     {
         Tag( int token = XML_TOKEN_INVALID,
-            const css::uno::Reference< css::xml::sax::XFastAttributeList >& attributes = css::uno::Reference< css::xml::sax::XFastAttributeList >(),
-            const OUString& text = OUString());
+            const css::uno::Reference< css::xml::sax::XFastAttributeList >& attributes = css::uno::Reference< css::xml::sax::XFastAttributeList >());
         Tag( int token,
             const AttributeList& attribs);
         int token; ///< tag type, or XML_TOKEN_INVALID
@@ -186,7 +191,7 @@ public:
     Tag checkOpeningTag( int token );
     /**
      Ensures that a closing tag with the given token is read. Like ensureOpeningTag(),
-     if not, writes out a warning and tries to recover by skiping tags until found (or until the current element would end).
+     if not, writes out a warning and tries to recover by skipping tags until found (or until the current element would end).
      If found, the position in the stream is afterwards moved to the next tag.
     */
     void ensureClosingTag( int token );

@@ -34,10 +34,10 @@ public:
     virtual sdr::properties::BaseProperties& GetProperties() const override;
 
 protected:
-    virtual sdr::contact::ViewContact* CreateObjectSpecificViewContact() override;
+    virtual std::unique_ptr<sdr::contact::ViewContact> CreateObjectSpecificViewContact() override;
 
     SdrObject&                  rRefObj; // Referenced drawing object
-    Rectangle                   aSnapRect;
+    tools::Rectangle            aSnapRect;
 
 protected:
     virtual void Notify(SfxBroadcaster& rBC, const SfxHint& rHint) override;
@@ -46,34 +46,38 @@ protected:
     virtual void SaveGeoData(SdrObjGeoData& rGeo) const override;
     virtual void RestGeoData(const SdrObjGeoData& rGeo) override;
 
+    // protected destructor
+    virtual ~SdrVirtObj() override;
+
 public:
-    SdrVirtObj(SdrObject& rNewObj);
-    virtual ~SdrVirtObj();
+    SdrVirtObj(
+        SdrModel& rSdrModel,
+        SdrObject& rNewObj);
+
     SdrObject& ReferencedObj();
     const SdrObject& GetReferencedObj() const;
     virtual void NbcSetAnchorPos(const Point& rAnchorPos) override;
-    virtual void SetModel(SdrModel* pNewModel) override;
 
     virtual void TakeObjInfo(SdrObjTransformInfoRec& rInfo) const override;
-    virtual sal_uInt32 GetObjInventor() const override;
+    virtual SdrInventor GetObjInventor() const override;
     virtual sal_uInt16 GetObjIdentifier() const override;
     virtual SdrObjList* GetSubList() const override;
 
-    virtual const Rectangle& GetCurrentBoundRect() const override;
-    virtual const Rectangle& GetLastBoundRect() const override;
+    virtual const tools::Rectangle& GetCurrentBoundRect() const override;
+    virtual const tools::Rectangle& GetLastBoundRect() const override;
     virtual void RecalcBoundRect() override;
-    virtual void SetChanged() override;
-    virtual SdrVirtObj* Clone() const override;
+    virtual SdrVirtObj* CloneSdrObject(SdrModel& rTargetModel) const override;
     SdrVirtObj& operator=(const SdrVirtObj& rObj);
 
     virtual OUString TakeObjNameSingul() const override;
     virtual OUString TakeObjNamePlural() const override;
 
+    // RotGrfFlyFrame: If true, this SdrObject supports only limited rotation
+    virtual bool HasLimitedRotation() const override;
+
     virtual basegfx::B2DPolyPolygon TakeXorPoly() const override;
     virtual sal_uInt32 GetHdlCount() const override;
-    virtual SdrHdl* GetHdl(sal_uInt32 nHdlNum) const override;
-    virtual sal_uInt32 GetPlusHdlCount(const SdrHdl& rHdl) const override;
-    virtual SdrHdl* GetPlusHdl(const SdrHdl& rHdl, sal_uInt32 nPlNum) const override;
+    virtual void AddToPlusHdlList(SdrHdlList& rHdlList, SdrHdl& rHdl) const override;
     virtual void AddToHdlList(SdrHdlList& rHdlList) const override;
 
     // special drag methods
@@ -107,13 +111,13 @@ public:
     virtual void Shear(const Point& rRef, long nAngle, double tn, bool bVShear) override;
 
     virtual void RecalcSnapRect() override;
-    virtual const Rectangle& GetSnapRect() const override;
-    virtual void SetSnapRect(const Rectangle& rRect) override;
-    virtual void NbcSetSnapRect(const Rectangle& rRect) override;
+    virtual const tools::Rectangle& GetSnapRect() const override;
+    virtual void SetSnapRect(const tools::Rectangle& rRect) override;
+    virtual void NbcSetSnapRect(const tools::Rectangle& rRect) override;
 
-    virtual const Rectangle& GetLogicRect() const override;
-    virtual void SetLogicRect(const Rectangle& rRect) override;
-    virtual void NbcSetLogicRect(const Rectangle& rRect) override;
+    virtual const tools::Rectangle& GetLogicRect() const override;
+    virtual void SetLogicRect(const tools::Rectangle& rRect) override;
+    virtual void NbcSetLogicRect(const tools::Rectangle& rRect) override;
 
     virtual long GetRotateAngle() const override;
     virtual long GetShearAngle(bool bVertical = false) const override;
@@ -130,14 +134,12 @@ public:
     virtual void SetGeoData(const SdrObjGeoData& rGeo) override;
 
     virtual void NbcReformatText() override;
-    virtual void ReformatText() override;
 
     virtual bool HasMacro() const override;
     virtual SdrObject* CheckMacroHit (const SdrObjMacroHitRec& rRec) const override;
     virtual Pointer GetMacroPointer (const SdrObjMacroHitRec& rRec) const override;
-    virtual void PaintMacro (OutputDevice& rOut, const Rectangle& rDirtyRect, const SdrObjMacroHitRec& rRec) const override;
+    virtual void PaintMacro (OutputDevice& rOut, const tools::Rectangle& rDirtyRect, const SdrObjMacroHitRec& rRec) const override;
     virtual bool DoMacro (const SdrObjMacroHitRec& rRec) override;
-    virtual OUString GetMacroPopupComment(const SdrObjMacroHitRec& rRec) const override;
 
     // #i73248# for default SdrVirtObj, offset is aAnchor, not (0,0)
     virtual const Point GetOffset() const;

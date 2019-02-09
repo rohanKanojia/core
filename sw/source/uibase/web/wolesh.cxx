@@ -22,18 +22,14 @@
 #include <sfx2/objface.hxx>
 #include <svl/srchitem.hxx>
 
-#include "wrtsh.hxx"
-#include "view.hxx"
-#include "helpid.h"
-#include "globals.hrc"
-#include "web.hrc"
-#include "popup.hrc"
-#include "shells.hrc"
-#include "wolesh.hxx"
-#include "cmdid.h"
+#include <wrtsh.hxx>
+#include <view.hxx>
+#include <globals.hrc>
+#include <wolesh.hxx>
+#include <cmdid.h>
 
-#define SwWebOleShell
-#include "swslots.hxx"
+#define ShellClass_SwWebOleShell
+#include <swslots.hxx>
 
 SFX_IMPL_INTERFACE(SwWebOleShell, SwOleShell)
 
@@ -41,15 +37,13 @@ void SwWebOleShell::InitInterface_Impl()
 {
     GetStaticInterface()->RegisterPopupMenu("oleobject");
 
-    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, RID_WEBOLE_TOOLBOX);
+    GetStaticInterface()->RegisterObjectBar(SFX_OBJECTBAR_OBJECT, SfxVisibilityFlags::Invisible, ToolbarId::Webole_Toolbox);
 }
 
 SwWebOleShell::SwWebOleShell(SwView &_rView) :
     SwOleShell(_rView)
-
 {
     SetName("Object");
-    SetHelpId(SW_OLESHELL);
 }
 
 SwWebOleShell::~SwWebOleShell()

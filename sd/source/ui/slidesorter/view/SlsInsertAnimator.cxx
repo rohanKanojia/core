@@ -17,13 +17,15 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "view/SlsInsertAnimator.hxx"
-#include "controller/SlideSorterController.hxx"
-#include "controller/SlsAnimationFunction.hxx"
-#include "view/SlideSorterView.hxx"
-#include "view/SlsLayouter.hxx"
-#include "model/SlideSorterModel.hxx"
-#include "model/SlsPageEnumerationProvider.hxx"
+#include <view/SlsInsertAnimator.hxx>
+#include <controller/SlideSorterController.hxx>
+#include <controller/SlsAnimationFunction.hxx>
+#include <view/SlideSorterView.hxx>
+#include <view/SlsLayouter.hxx>
+#include <model/SlideSorterModel.hxx>
+#include <model/SlsPageEnumerationProvider.hxx>
+#include <SlideSorter.hxx>
+#include <Window.hxx>
 
 #include <memory>
 #include <set>
@@ -39,13 +41,13 @@ class AnimatorAccess
 public:
     virtual void AddRun (const std::shared_ptr<PageObjectRun>& rRun) = 0;
     virtual void RemoveRun (const std::shared_ptr<PageObjectRun>& rRun) = 0;
-    virtual model::SlideSorterModel& GetModel (void) const = 0;
-    virtual view::SlideSorterView& GetView (void) const = 0;
-    virtual std::shared_ptr<controller::Animator> GetAnimator (void) = 0;
-    virtual VclPtr<sd::Window> GetContentWindow (void) = 0;
+    virtual model::SlideSorterModel& GetModel () const = 0;
+    virtual view::SlideSorterView& GetView () const = 0;
+    virtual std::shared_ptr<controller::Animator> GetAnimator () = 0;
+    virtual VclPtr<sd::Window> GetContentWindow () = 0;
 
 protected:
-    ~AnimatorAccess() {}
+    ~AnimatorAccess() COVERITY_NOEXCEPT_FALSE {}
 };
 
 /** Controller of the position offsets of all page objects in one row or one
@@ -59,7 +61,6 @@ public:
         const sal_Int32 nRunIndex,
         const sal_Int32 nStartIndex,
         const sal_Int32 nEndIndex);
-    ~PageObjectRun();
 
     void operator () (const double nTime);
 
@@ -69,14 +70,14 @@ public:
     void ResetOffsets (const controller::Animator::AnimationMode eMode);
 
     /// Index of the row or column that this run represents.
-    sal_Int32 mnRunIndex;
+    sal_Int32 const mnRunIndex;
     /// The index at which to make place for the insertion indicator (-1 for
     /// no indicator).
     sal_Int32 mnLocalInsertIndex;
     /// Index of the first page in the run.
-    sal_Int32 mnStartIndex;
+    sal_Int32 const mnStartIndex;
     /// Index of the last page in the run.
-    sal_Int32 mnEndIndex;
+    sal_Int32 const mnEndIndex;
     /// Offset of each item in the run at the start of the current animation.
     ::std::vector<Point> maStartOffset;
     /// Target offset of each item in the run at the end of the current animation.
@@ -96,7 +97,7 @@ public:
 private:
     controller::Animator::AnimationId mnAnimationId;
     AnimatorAccess& mrAnimatorAccess;
-    ::std::function<double (double)> maAccelerationFunction;
+    ::std::function<double (double)> const maAccelerationFunction;
 
     void RestartAnimation();
 };
@@ -139,7 +140,7 @@ private:
     InsertPosition maInsertPosition;
 
     SharedPageObjectRun GetRun (
-        view::Layouter& rLayouter,
+        view::Layouter const & rLayouter,
         const InsertPosition& rInsertPosition);
     RunContainer::const_iterator FindRun (const sal_Int32 nRunIndex) const;
 };
@@ -191,11 +192,8 @@ void InsertAnimator::Implementation::SetInsertPosition (
 
     // When the new insert position is in a different run then move the page
     // objects in the old run to their default positions.
-    if (pOldRun != pCurrentRun)
-    {
-        if (pOldRun)
-            pOldRun->ResetOffsets(eMode);
-    }
+    if (pOldRun != pCurrentRun && pOldRun)
+        pOldRun->ResetOffsets(eMode);
 
     if (pCurrentRun)
     {
@@ -204,7 +202,7 @@ void InsertAnimator::Implementation::SetInsertPosition (
 }
 
 SharedPageObjectRun InsertAnimator::Implementation::GetRun (
-    view::Layouter& rLayouter,
+    view::Layouter const & rLayouter,
     const InsertPosition& rInsertPosition)
 {
     const sal_Int32 nRow (rInsertPosition.GetRow());
@@ -216,11 +214,11 @@ SharedPageObjectRun InsertAnimator::Implementation::GetRun (
     {
         // There is only one run that contains all slides.
         if (maRuns.empty())
-            maRuns.insert(SharedPageObjectRun(new PageObjectRun(
+            maRuns.insert(std::make_shared<PageObjectRun>(
                 *this,
                 0,
                 0,
-                mrModel.GetPageCount()-1)));
+                mrModel.GetPageCount()-1));
         iRun = maRuns.begin();
     }
     else
@@ -233,11 +231,11 @@ SharedPageObjectRun InsertAnimator::Implementation::GetRun (
             const sal_Int32 nEndIndex (rLayouter.GetIndex(nRow, rLayouter.GetColumnCount()-1));
             if (nStartIndex <= nEndIndex)
             {
-                iRun = maRuns.insert(SharedPageObjectRun(new PageObjectRun(
+                iRun = maRuns.insert(std::make_shared<PageObjectRun>(
                     *this,
                     nRow,
                     nStartIndex,
-                    nEndIndex))).first;
+                    nEndIndex)).first;
                 OSL_ASSERT(iRun != maRuns.end());
             }
         }
@@ -316,10 +314,6 @@ PageObjectRun::PageObjectRun (
     maEndOffset.resize(nEndIndex - nStartIndex + 1);
 }
 
-PageObjectRun::~PageObjectRun()
-{
-}
-
 void PageObjectRun::UpdateOffsets(
     const InsertPosition& rInsertPosition,
     const view::Layouter& rLayouter)
@@ -343,9 +337,9 @@ void PageObjectRun::UpdateOffsets(
                 ? rInsertPosition.GetLeadingOffset()
                 : rInsertPosition.GetTrailingOffset();
             if (bIsVertical)
-                maEndOffset[nIndex].X() = 0;
+                maEndOffset[nIndex].setX( 0 );
             else
-                maEndOffset[nIndex].Y() = 0;
+                maEndOffset[nIndex].setY( 0 );
         }
         RestartAnimation();
     }
@@ -366,7 +360,7 @@ void PageObjectRun::ResetOffsets (const controller::Animator::AnimationMode eMod
                 maStartOffset[nIndex] = pDescriptor->GetVisualState().GetLocationOffset();
             else
             {
-                const Rectangle aOldBoundingBox (pDescriptor->GetBoundingBox());
+                const ::tools::Rectangle aOldBoundingBox (pDescriptor->GetBoundingBox());
                 pDescriptor->GetVisualState().SetLocationOffset(Point(0,0));
                 rView.RequestRepaint(aOldBoundingBox);
                 rView.RequestRepaint(pDescriptor);
@@ -393,7 +387,6 @@ void PageObjectRun::RestartAnimation()
     auto sharedThis(shared_from_this());
     mnAnimationId = mrAnimatorAccess.GetAnimator()->AddAnimation(
         [this] (double const val) { (*this)(val); },
-        300,
         [sharedThis] () { sharedThis->mrAnimatorAccess.RemoveRun(sharedThis); }
         );
 }
@@ -415,7 +408,7 @@ void PageObjectRun::operator () (const double nGlobalTime)
         model::SharedPageDescriptor pDescriptor (rModel.GetPageDescriptor(nIndex));
         if ( ! pDescriptor)
             continue;
-        const Rectangle aOldBoundingBox (pDescriptor->GetBoundingBox());
+        const ::tools::Rectangle aOldBoundingBox (pDescriptor->GetBoundingBox());
         pDescriptor->GetVisualState().SetLocationOffset(
             Blend(
                 maStartOffset[nIndex-mnStartIndex],

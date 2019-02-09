@@ -17,9 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <optaccessibility.hxx>
-#include <dialmgr.hxx>
-#include <cuires.hrc>
+#include "optaccessibility.hxx"
 #include <vcl/settings.hxx>
 #include <vcl/svapp.hxx>
 #include <officecfg/Office/Common.hxx>
@@ -61,9 +59,9 @@ void SvxAccessibilityOptionsTabPage::dispose()
     SfxTabPage::dispose();
 }
 
-VclPtr<SfxTabPage> SvxAccessibilityOptionsTabPage::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet )
+VclPtr<SfxTabPage> SvxAccessibilityOptionsTabPage::Create( TabPageParent pParent, const SfxItemSet* rAttrSet )
 {
-    return VclPtr<SvxAccessibilityOptionsTabPage>::Create(pParent, *rAttrSet);
+    return VclPtr<SvxAccessibilityOptionsTabPage>::Create(pParent.pParent, *rAttrSet);
 }
 
 bool SvxAccessibilityOptionsTabPage::FillItemSet( SfxItemSet* )
@@ -122,7 +120,7 @@ void SvxAccessibilityOptionsTabPage::Reset( const SfxItemSet* )
         m_pAutoDetectHC->Disable();
 
     AllSettings aAllSettings = Application::GetSettings();
-    MiscSettings aMiscSettings = aAllSettings.GetMiscSettings();
+    const MiscSettings& aMiscSettings = aAllSettings.GetMiscSettings();
     m_pAccessibilityTool->Check(aMiscSettings.GetEnableATToolSupport());
 }
 

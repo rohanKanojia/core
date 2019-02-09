@@ -23,8 +23,9 @@ $(eval $(call gb_CppunitTest_use_libraries,extensions_test_update, \
 	sal \
 	salhelper \
 	test \
+	utl \
 	unotest \
-	$(gb_UWINAPI) \
+	vcl \
 ))
 
 $(eval $(call gb_CppunitTest_use_library_objects,extensions_test_update, \
@@ -46,10 +47,7 @@ $(eval $(call gb_CppunitTest_set_include,extensions_test_update,\
 	-I$(SRCDIR)/extensions/inc \
 ))
 
-$(eval $(call gb_CppunitTest_use_api,extensions_test_update,\
-	offapi \
-	udkapi \
-))
+$(eval $(call gb_CppunitTest_use_sdk_api,extensions_test_update))
 
 $(eval $(call gb_CppunitTest_use_ure,extensions_test_update))
 $(eval $(call gb_CppunitTest_use_vcl,extensions_test_update))

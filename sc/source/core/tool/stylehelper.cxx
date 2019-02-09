@@ -17,12 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include <rsc/rscsfx.hxx>
+#include <svl/style.hxx>
 #include <osl/diagnose.h>
 
-#include "stylehelper.hxx"
-#include "global.hxx"
-#include "globstr.hrc"
+#include <stylehelper.hxx>
+#include <global.hxx>
+#include <globstr.hrc>
+#include <scresid.hxx>
 
 //  conversion programmatic <-> display (visible) name
 //  currently, the core always has the visible names
@@ -36,57 +37,50 @@
 #define SC_STYLE_PROG_HEADLINE1     "Heading1"
 #define SC_STYLE_PROG_REPORT        "Report"
 
+#define SC_PIVOT_STYLE_PROG_INNER                  "Pivot Table Value"
+#define SC_PIVOT_STYLE_PROG_RESULT                 "Pivot Table Result"
+#define SC_PIVOT_STYLE_PROG_CATEGORY               "Pivot Table Category"
+#define SC_PIVOT_STYLE_PROG_TITLE                  "Pivot Table Title"
+#define SC_PIVOT_STYLE_PROG_FIELDNAME              "Pivot Table Field"
+#define SC_PIVOT_STYLE_PROG_TOP                    "Pivot Table Corner"
+
 struct ScDisplayNameMap
 {
     OUString  aDispName;
     OUString  aProgName;
 };
 
-static const ScDisplayNameMap* lcl_GetStyleNameMap( sal_uInt16 nType )
+static const ScDisplayNameMap* lcl_GetStyleNameMap( SfxStyleFamily nType )
 {
-    if ( nType == SFX_STYLE_FAMILY_PARA )
+    if ( nType == SfxStyleFamily::Para )
     {
-        static bool bCellMapFilled = false;
-        static ScDisplayNameMap aCellMap[6];
-        if ( !bCellMapFilled )
+        static ScDisplayNameMap const aCellMap[]
         {
-            aCellMap[0].aDispName = ScGlobal::GetRscString( STR_STYLENAME_STANDARD );
-            aCellMap[0].aProgName = SC_STYLE_PROG_STANDARD;
-
-            aCellMap[1].aDispName = ScGlobal::GetRscString( STR_STYLENAME_RESULT );
-            aCellMap[1].aProgName = SC_STYLE_PROG_RESULT;
-
-            aCellMap[2].aDispName = ScGlobal::GetRscString( STR_STYLENAME_RESULT1 );
-            aCellMap[2].aProgName = SC_STYLE_PROG_RESULT1;
-
-            aCellMap[3].aDispName = ScGlobal::GetRscString( STR_STYLENAME_HEADLINE );
-            aCellMap[3].aProgName = SC_STYLE_PROG_HEADLINE;
-
-            aCellMap[4].aDispName = ScGlobal::GetRscString( STR_STYLENAME_HEADLINE1 );
-            aCellMap[4].aProgName = SC_STYLE_PROG_HEADLINE1;
-
+            { ScResId( STR_STYLENAME_STANDARD ), OUString(SC_STYLE_PROG_STANDARD) },
+            { ScResId( STR_STYLENAME_RESULT ), OUString(SC_STYLE_PROG_RESULT) },
+            { ScResId( STR_STYLENAME_RESULT1 ), OUString(SC_STYLE_PROG_RESULT1) },
+            { ScResId( STR_STYLENAME_HEADLINE ), OUString(SC_STYLE_PROG_HEADLINE) },
+            { ScResId( STR_STYLENAME_HEADLINE1 ), OUString(SC_STYLE_PROG_HEADLINE1) },
+            { ScResId( STR_PIVOT_STYLENAME_INNER ), OUString(SC_PIVOT_STYLE_PROG_INNER) },
+            { ScResId( STR_PIVOT_STYLENAME_RESULT ), OUString(SC_PIVOT_STYLE_PROG_RESULT) },
+            { ScResId( STR_PIVOT_STYLENAME_CATEGORY ), OUString(SC_PIVOT_STYLE_PROG_CATEGORY) },
+            { ScResId( STR_PIVOT_STYLENAME_TITLE ), OUString(SC_PIVOT_STYLE_PROG_TITLE) },
+            { ScResId( STR_PIVOT_STYLENAME_FIELDNAME ), OUString(SC_PIVOT_STYLE_PROG_FIELDNAME) },
+            { ScResId( STR_PIVOT_STYLENAME_TOP ), OUString(SC_PIVOT_STYLE_PROG_TOP) },
             //  last entry remains empty
-
-            bCellMapFilled = true;
-        }
+            { OUString(), OUString() },
+        };
         return aCellMap;
     }
-    else if ( nType == SFX_STYLE_FAMILY_PAGE )
+    else if ( nType == SfxStyleFamily::Page )
     {
-        static bool bPageMapFilled = false;
-        static ScDisplayNameMap aPageMap[3];
-        if ( !bPageMapFilled )
+        static ScDisplayNameMap const aPageMap[]
         {
-            aPageMap[0].aDispName = ScGlobal::GetRscString( STR_STYLENAME_STANDARD );
-            aPageMap[0].aProgName = SC_STYLE_PROG_STANDARD;
-
-            aPageMap[1].aDispName = ScGlobal::GetRscString( STR_STYLENAME_REPORT );
-            aPageMap[1].aProgName = SC_STYLE_PROG_REPORT;
-
+            { ScResId( STR_STYLENAME_STANDARD ), OUString(SC_STYLE_PROG_STANDARD) },
+            { ScResId( STR_STYLENAME_REPORT ),   OUString(SC_STYLE_PROG_REPORT) },
             //  last entry remains empty
-
-            bPageMapFilled = true;
-        }
+            { OUString(), OUString() },
+        };
         return aPageMap;
     }
     OSL_FAIL("invalid family");
@@ -104,7 +98,7 @@ static bool lcl_EndsWithUser( const OUString& rString )
     return rString.endsWith(SC_SUFFIX_USER);
 }
 
-OUString ScStyleNameConversion::DisplayToProgrammaticName( const OUString& rDispName, sal_uInt16 nType )
+OUString ScStyleNameConversion::DisplayToProgrammaticName( const OUString& rDispName, SfxStyleFamily nType )
 {
     bool bDisplayIsProgrammatic = false;
 
@@ -131,7 +125,7 @@ OUString ScStyleNameConversion::DisplayToProgrammaticName( const OUString& rDisp
     return rDispName;
 }
 
-OUString ScStyleNameConversion::ProgrammaticToDisplayName( const OUString& rProgName, sal_uInt16 nType )
+OUString ScStyleNameConversion::ProgrammaticToDisplayName( const OUString& rProgName, SfxStyleFamily nType )
 {
     if ( lcl_EndsWithUser( rProgName ) )
     {

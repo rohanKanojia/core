@@ -20,6 +20,7 @@
 #define INCLUDED_SW_SOURCE_FILTER_XML_WRTXML_HXX
 
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/task/XStatusIndicator.hpp>
 #include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <shellio.hxx>
@@ -38,20 +39,20 @@ namespace com { namespace sun { namespace star {
 
 class SwXMLWriter : public StgWriter
 {
-    sal_uInt32 _Write( const css::uno::Reference < css::task::XStatusIndicator>&, const OUString&  );
+    ErrCode Write_( const css::uno::Reference < css::task::XStatusIndicator>&, const OUString&  );
 
     using StgWriter::Write;
 
 protected:
-    virtual sal_uLong WriteStorage() override;
-    virtual sal_uLong WriteMedium( SfxMedium& aTargetMedium ) override;
+    virtual ErrCode WriteStorage() override;
+    virtual ErrCode WriteMedium( SfxMedium& aTargetMedium ) override;
 
 public:
 
     SwXMLWriter( const OUString& rBaseURL );
-    virtual ~SwXMLWriter();
+    virtual ~SwXMLWriter() override;
 
-    virtual sal_uLong Write( SwPaM&, SfxMedium&, const OUString* = nullptr ) override;
+    virtual ErrCode Write( SwPaM&, SfxMedium&, const OUString* ) override;
 
 private:
 

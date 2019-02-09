@@ -21,9 +21,8 @@
 #define INCLUDED_SVTOOLS_TEMPLATEFOLDERCACHE_HXX
 
 #include <svtools/svtdllapi.h>
-#include <sal/types.h>
+#include <o3tl/deleter.hxx>
 #include <memory>
-
 
 namespace svt
 {
@@ -60,7 +59,7 @@ namespace svt
     class SVT_DLLPUBLIC TemplateFolderCache
     {
     private:
-        std::unique_ptr<TemplateFolderCacheImpl>     m_pImpl;
+        std::unique_ptr<TemplateFolderCacheImpl, o3tl::default_delete<TemplateFolderCacheImpl>> m_pImpl;
 
     public:
         /** ctor.

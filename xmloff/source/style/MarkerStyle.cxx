@@ -17,8 +17,9 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <memory>
 #include <xmloff/MarkerStyle.hxx>
-#include "xexptran.hxx"
+#include <xexptran.hxx>
 #include <xmloff/attrlist.hxx>
 #include <xmloff/nmspmap.hxx>
 #include <xmloff/xmluconv.hxx>
@@ -57,7 +58,7 @@ void XMLMarkerStyleImport::importXML(
     bool bHasPathData   = false;
     OUString aDisplayName;
 
-    SdXMLImExViewBox* pViewBox = nullptr;
+    std::unique_ptr<SdXMLImExViewBox> xViewBox;
 
     SvXMLNamespaceMap& rNamespaceMap = rImport.GetNamespaceMap();
     SvXMLUnitConverter& rUnitConverter = rImport.GetMM100UnitConverter();
@@ -82,7 +83,7 @@ void XMLMarkerStyleImport::importXML(
         }
         else if( IsXMLToken( aStrAttrName, XML_VIEWBOX ) )
         {
-            pViewBox = new SdXMLImExViewBox( aStrValue, rUnitConverter );
+            xViewBox.reset(new SdXMLImExViewBox(aStrValue, rUnitConverter));
             bHasViewBox = true;
 
         }
@@ -97,23 +98,24 @@ void XMLMarkerStyleImport::importXML(
     {
         basegfx::B2DPolyPolygon aPolyPolygon;
 
-        if(basegfx::tools::importFromSvgD(aPolyPolygon, strPathData, rImport.needFixPositionAfterZ(), nullptr))
+        if(basegfx::utils::importFromSvgD(aPolyPolygon, strPathData, rImport.needFixPositionAfterZ(), nullptr))
         {
             if(aPolyPolygon.count())
             {
                 // ViewBox probably not used, but stay with former processing inside of
                 // SdXMLImExSvgDElement
                 const basegfx::B2DRange aSourceRange(
-                    pViewBox->GetX(), pViewBox->GetY(),
-                    pViewBox->GetX() + pViewBox->GetWidth(), pViewBox->GetY() + pViewBox->GetHeight());
+                    xViewBox->GetX(), xViewBox->GetY(),
+                    xViewBox->GetX() + xViewBox->GetWidth(),
+                    xViewBox->GetY() + xViewBox->GetHeight());
                 const basegfx::B2DRange aTargetRange(
                     0.0, 0.0,
-                    pViewBox->GetWidth(), pViewBox->GetHeight());
+                    xViewBox->GetWidth(), xViewBox->GetHeight());
 
                 if(!aSourceRange.equal(aTargetRange))
                 {
                     aPolyPolygon.transform(
-                        basegfx::tools::createSourceRangeTargetRangeTransform(
+                        basegfx::utils::createSourceRangeTargetRangeTransform(
                             aSourceRange,
                             aTargetRange));
                 }
@@ -121,7 +123,7 @@ void XMLMarkerStyleImport::importXML(
                 // always use PolyPolygonBezierCoords here
                 drawing::PolyPolygonBezierCoords aSourcePolyPolygon;
 
-                basegfx::tools::B2DPolyPolygonToUnoPolyPolygonBezierCoords(
+                basegfx::utils::B2DPolyPolygonToUnoPolyPolygonBezierCoords(
                     aPolyPolygon,
                     aSourcePolyPolygon);
                 rValue <<= aSourcePolyPolygon;
@@ -136,7 +138,7 @@ void XMLMarkerStyleImport::importXML(
         }
     }
 
-    delete pViewBox;
+    xViewBox.reset();
 }
 
 // Export
@@ -162,17 +164,16 @@ void XMLMarkerStyleExport::exportXML(
         {
             // Name
             bool bEncoded(false);
-            OUString aStrName( rStrName );
 
-            rExport.AddAttribute(XML_NAMESPACE_DRAW, XML_NAME, rExport.EncodeStyleName( aStrName, &bEncoded ) );
+            rExport.AddAttribute(XML_NAMESPACE_DRAW, XML_NAME, rExport.EncodeStyleName( rStrName, &bEncoded ) );
 
             if( bEncoded )
             {
-                rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_DISPLAY_NAME, aStrName );
+                rExport.AddAttribute( XML_NAMESPACE_DRAW, XML_DISPLAY_NAME, rStrName );
             }
 
             const basegfx::B2DPolyPolygon aPolyPolygon(
-                basegfx::tools::UnoPolyPolygonBezierCoordsToB2DPolyPolygon(
+                basegfx::utils::UnoPolyPolygonBezierCoordsToB2DPolyPolygon(
                     aBezier));
             const basegfx::B2DRange aPolyPolygonRange(aPolyPolygon.getB2DRange());
 
@@ -188,7 +189,7 @@ void XMLMarkerStyleExport::exportXML(
 
             // Pathdata
             const OUString aPolygonString(
-                basegfx::tools::exportToSvgD(
+                basegfx::utils::exportToSvgD(
                     aPolyPolygon,
                     true,           // bUseRelativeCoordinates
                     false,          // bDetectQuadraticBeziers: not used in old, but maybe activated now

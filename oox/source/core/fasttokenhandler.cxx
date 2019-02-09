@@ -17,35 +17,19 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
-#include "oox/core/fasttokenhandler.hxx"
+#include <oox/core/fasttokenhandler.hxx>
 
 #include <com/sun/star/uno/XComponentContext.hpp>
-#include "oox/helper/helper.hxx"
-#include "oox/token/tokenmap.hxx"
+#include <oox/helper/helper.hxx>
+#include <oox/token/tokenmap.hxx>
 #include <cppuhelper/supportsservice.hxx>
 
-#include <services.hxx>
+using namespace ::com::sun::star;
 
 namespace oox {
 namespace core {
 
 using namespace ::com::sun::star::uno;
-
-OUString SAL_CALL FastTokenHandler_getImplementationName()
-{
-    return OUString( "com.sun.star.comp.oox.core.FastTokenHandler" );
-}
-
-Sequence< OUString > SAL_CALL FastTokenHandler_getSupportedServiceNames()
-{
-    Sequence<OUString> aServiceNames { "com.sun.star.xml.sax.FastTokenHandler" };
-    return aServiceNames;
-}
-
-Reference< XInterface > SAL_CALL FastTokenHandler_createInstance( const Reference< XComponentContext >& /*rxContext*/ ) throw (Exception)
-{
-    return static_cast< ::cppu::OWeakObject* >( new FastTokenHandler );
-}
 
 FastTokenHandler::FastTokenHandler() :
     mrTokenMap( StaticTokenMap::get() )
@@ -57,27 +41,28 @@ FastTokenHandler::~FastTokenHandler()
 }
 
 // XServiceInfo
-OUString SAL_CALL FastTokenHandler::getImplementationName() throw (RuntimeException, std::exception)
+OUString SAL_CALL FastTokenHandler::getImplementationName()
 {
-    return FastTokenHandler_getImplementationName();
+    return OUString( "com.sun.star.comp.oox.core.FastTokenHandler" );
 }
 
-sal_Bool SAL_CALL FastTokenHandler::supportsService( const OUString& rServiceName ) throw (RuntimeException, std::exception)
+sal_Bool SAL_CALL FastTokenHandler::supportsService( const OUString& rServiceName )
 {
     return cppu::supportsService(this, rServiceName);
 }
 
-Sequence< OUString > SAL_CALL FastTokenHandler::getSupportedServiceNames() throw (RuntimeException, std::exception)
+Sequence< OUString > SAL_CALL FastTokenHandler::getSupportedServiceNames()
 {
-    return FastTokenHandler_getSupportedServiceNames();
+    Sequence<OUString> aServiceNames { "com.sun.star.xml.sax.FastTokenHandler" };
+    return aServiceNames;
 }
 
-Sequence< sal_Int8 > FastTokenHandler::getUTF8Identifier( sal_Int32 nToken ) throw( RuntimeException, std::exception )
+Sequence< sal_Int8 > FastTokenHandler::getUTF8Identifier( sal_Int32 nToken )
 {
     return mrTokenMap.getUtf8TokenName( nToken );
 }
 
-sal_Int32 FastTokenHandler::getTokenFromUTF8( const Sequence< sal_Int8 >& rIdentifier ) throw( RuntimeException, std::exception )
+sal_Int32 FastTokenHandler::getTokenFromUTF8( const Sequence< sal_Int8 >& rIdentifier )
 {
     return mrTokenMap.getTokenFromUtf8( rIdentifier );
 }
@@ -89,5 +74,12 @@ sal_Int32 FastTokenHandler::getTokenDirect( const char *pToken, sal_Int32 nLengt
 
 } // namespace core
 } // namespace oox
+
+extern "C" SAL_DLLPUBLIC_EXPORT uno::XInterface*
+com_sun_star_comp_oox_core_FastTokenHandler_get_implementation(
+    uno::XComponentContext* /*pCtx*/, uno::Sequence<uno::Any> const& /*rSeq*/)
+{
+    return cppu::acquire(new oox::core::FastTokenHandler());
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

@@ -19,6 +19,7 @@
 
 #include <cppuhelper/factory.hxx>
 #include <com/sun/star/container/XSet.hpp>
+#include <com/sun/star/lang/XSingleServiceFactory.hpp>
 
 #include "SalAquaFilePicker.hxx"
 #include "SalAquaFolderPicker.hxx"
@@ -31,15 +32,14 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::lang;
 using namespace ::com::sun::star::registry;
 using namespace ::cppu;
-using ::com::sun::star::ui::dialogs::XFilePicker;
 
 
-static Reference< XInterface > SAL_CALL createFileInstance( const Reference< XMultiServiceFactory >&  )
+static Reference< XInterface > createFileInstance( const Reference< XMultiServiceFactory >&  )
 {
     return Reference< XInterface >( *new SalAquaFilePicker );
 }
 
-static Reference< XInterface > SAL_CALL createFolderInstance(
+static Reference< XInterface > createFolderInstance(
     const Reference< XMultiServiceFactory >& rServiceManager )
 {
     return Reference< XInterface >(
@@ -49,7 +49,7 @@ static Reference< XInterface > SAL_CALL createFolderInstance(
 extern "C"
 {
 
-SAL_DLLPUBLIC_EXPORT void* SAL_CALL fps_aqua_component_getFactory(
+SAL_DLLPUBLIC_EXPORT void* fps_aqua_component_getFactory(
     const sal_Char* pImplName, void* pSrvManager, void* /*pRegistryKey*/ )
 {
     void* pRet = nullptr;

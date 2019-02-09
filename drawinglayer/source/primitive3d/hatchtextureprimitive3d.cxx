@@ -68,7 +68,7 @@ namespace drawinglayer
                                 {
                                     // polyPolygonMaterialPrimitive3D, check texturing and hatching
                                     const PolyPolygonMaterialPrimitive3D& rPrimitive = static_cast< const PolyPolygonMaterialPrimitive3D& >(*pBasePrimitive);
-                                    const basegfx::B3DPolyPolygon aFillPolyPolygon(rPrimitive.getB3DPolyPolygon());
+                                    const basegfx::B3DPolyPolygon& aFillPolyPolygon(rPrimitive.getB3DPolyPolygon());
 
                                     if(maHatch.isFillBackground())
                                     {
@@ -88,7 +88,7 @@ namespace drawinglayer
 
                                         for(sal_uInt32 b(0); b < nPolyCount; b++)
                                         {
-                                            const basegfx::B3DPolygon aPartPoly(aFillPolyPolygon.getB3DPolygon(b));
+                                            const basegfx::B3DPolygon& aPartPoly(aFillPolyPolygon.getB3DPolygon(b));
                                             const sal_uInt32 nPointCount(aPartPoly.count());
                                             basegfx::B2DPolygon aTexPolygon;
 
@@ -132,15 +132,15 @@ namespace drawinglayer
                                         {
                                             // found two linearly independent 2D vectors
                                             // get 2d range of texture coordinates
-                                            const basegfx::B2DRange aOutlineRange(basegfx::tools::getRange(aTexPolyPolygon));
+                                            const basegfx::B2DRange aOutlineRange(basegfx::utils::getRange(aTexPolyPolygon));
                                             const basegfx::BColor aHatchColor(getHatch().getColor());
                                             const double fAngle(getHatch().getAngle());
-                                            ::std::vector< basegfx::B2DHomMatrix > aMatrices;
+                                            std::vector< basegfx::B2DHomMatrix > aMatrices;
 
                                             // get hatch transformations
                                             switch(getHatch().getStyle())
                                             {
-                                                case attribute::HATCHSTYLE_TRIPLE:
+                                                case attribute::HatchStyle::Triple:
                                                 {
                                                     // rotated 45 degrees
                                                     texture::GeoTexSvxHatch aHatch(
@@ -150,8 +150,10 @@ namespace drawinglayer
                                                         fAngle - F_PI4);
 
                                                     aHatch.appendTransformations(aMatrices);
+
+                                                    [[fallthrough]];
                                                 }
-                                                case attribute::HATCHSTYLE_DOUBLE:
+                                                case attribute::HatchStyle::Double:
                                                 {
                                                     // rotated 90 degrees
                                                     texture::GeoTexSvxHatch aHatch(
@@ -161,8 +163,10 @@ namespace drawinglayer
                                                         fAngle - F_PI2);
 
                                                     aHatch.appendTransformations(aMatrices);
+
+                                                    [[fallthrough]];
                                                 }
-                                                case attribute::HATCHSTYLE_SINGLE:
+                                                case attribute::HatchStyle::Single:
                                                 {
                                                     // angle as given
                                                     texture::GeoTexSvxHatch aHatch(
@@ -181,9 +185,8 @@ namespace drawinglayer
                                             a2DUnitLine.append(basegfx::B2DPoint(0.0, 0.0));
                                             a2DUnitLine.append(basegfx::B2DPoint(1.0, 0.0));
 
-                                            for(size_t c(0); c < aMatrices.size(); c++)
+                                            for(basegfx::B2DHomMatrix & rMatrix : aMatrices)
                                             {
-                                                const basegfx::B2DHomMatrix& rMatrix = aMatrices[c];
                                                 basegfx::B2DPolygon aNewLine(a2DUnitLine);
                                                 aNewLine.transform(rMatrix);
                                                 a2DHatchLines.append(aNewLine);
@@ -192,7 +195,7 @@ namespace drawinglayer
                                             if(a2DHatchLines.count())
                                             {
                                                 // clip against texture polygon
-                                                a2DHatchLines = basegfx::tools::clipPolyPolygonOnPolyPolygon(a2DHatchLines, aTexPolyPolygon, true, true);
+                                                a2DHatchLines = basegfx::utils::clipPolyPolygonOnPolyPolygon(a2DHatchLines, aTexPolyPolygon, true, true);
                                             }
 
                                             if(a2DHatchLines.count())
@@ -212,8 +215,8 @@ namespace drawinglayer
                                                 a2D.invert();
                                                 a2DHatchLines.transform(a2D);
 
-                                                // expand back-transformated geometry tpo 3D
-                                                basegfx::B3DPolyPolygon a3DHatchLines(basegfx::tools::createB3DPolyPolygonFromB2DPolyPolygon(a2DHatchLines, 0.0));
+                                                // expand back-transformed geometry to 3D
+                                                basegfx::B3DPolyPolygon a3DHatchLines(basegfx::utils::createB3DPolyPolygonFromB2DPolyPolygon(a2DHatchLines, 0.0));
 
                                                 // create 3d matrix with 3d vectors as column vectors (0,0,1 as Z) and 3d point as offset, this represents
                                                 // a coordinate system transformation from unit coordinates to the object's 3d coordinate system
@@ -305,7 +308,7 @@ namespace drawinglayer
             if(getBuffered3DDecomposition().empty())
             {
                 const Primitive3DContainer aNewSequence(impCreate3DDecomposition());
-                const_cast< HatchTexturePrimitive3D* >(this)->setBuffered3DDecomposition(aNewSequence);
+                const_cast< HatchTexturePrimitive3D* >(this)->maBuffered3DDecomposition = aNewSequence;
             }
 
             return getBuffered3DDecomposition();

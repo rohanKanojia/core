@@ -24,13 +24,14 @@
 #include <vcl/dllapi.h>
 
 #include <rtl/ustring.hxx>
-#include <com/sun/star/awt/Size.hpp>
-#include <com/sun/star/uno/Any.h>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/uno/Reference.h>
-#include <com/sun/star/uno/XInterface.hpp>
-#include <com/sun/star/beans/XPropertySet.hpp>
-#include <com/sun/star/beans/XPropertyAccess.hpp>
-#include <com/sun/star/task/XStatusIndicator.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+
+namespace com { namespace sun { namespace star { namespace beans { class XPropertySet; } } } }
+namespace com { namespace sun { namespace star { namespace task { class XStatusIndicator; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class Any; } } } }
+namespace com { namespace sun { namespace star { namespace uno { class XInterface; } } } }
 
 class VCL_DLLPUBLIC FilterConfigItem
 {
@@ -42,8 +43,7 @@ class VCL_DLLPUBLIC FilterConfigItem
 
     static bool ImplGetPropertyValue( css::uno::Any& rAny,
                             const css::uno::Reference< css::beans::XPropertySet >& rXPropSet,
-                            const OUString& rPropName,
-                            bool bTestPropertyAvailability );
+                            const OUString& rPropName );
 
     void     ImpInitTree( const OUString& rTree );
 
@@ -58,8 +58,8 @@ class VCL_DLLPUBLIC FilterConfigItem
 public:
 
     FilterConfigItem( const OUString& rSubTree );
-    FilterConfigItem( css::uno::Sequence< css::beans::PropertyValue >* pFilterData );
-    FilterConfigItem( const OUString& rSubTree, css::uno::Sequence< css::beans::PropertyValue >* pFilterData );
+    FilterConfigItem( css::uno::Sequence< css::beans::PropertyValue > const * pFilterData );
+    FilterConfigItem( const OUString& rSubTree, css::uno::Sequence< css::beans::PropertyValue > const * pFilterData );
     /// Writes config in destructor
     ~FilterConfigItem();
     /// Writes config and sets unmodified state again.
@@ -79,7 +79,7 @@ public:
     void        WriteBool( const OUString& rKey, bool bValue );
     void        WriteInt32( const OUString& rKey, sal_Int32 nValue );
 
-    css::uno::Sequence< css::beans::PropertyValue > GetFilterData() const { return aFilterData;}
+    const css::uno::Sequence< css::beans::PropertyValue >& GetFilterData() const { return aFilterData;}
 
     // GetStatusIndicator is returning the "StatusIndicator" property of the FilterData sequence
     css::uno::Reference< css::task::XStatusIndicator > GetStatusIndicator() const;

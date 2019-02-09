@@ -21,33 +21,32 @@
 #define INCLUDED_FONTCHARMAP_HXX
 
 #include <vcl/dllapi.h>
-#include <vcl/font.hxx>
-#include <vcl/outdev.hxx>
-
-#include <boost/intrusive_ptr.hpp>
+#include <tools/ref.hxx>
 
 class ImplFontCharMap;
 class CmapResult;
+class FontCharMap;
+class OutputDevice;
 
 typedef sal_uInt32 sal_UCS4;
-typedef boost::intrusive_ptr< ImplFontCharMap > ImplFontCharMapPtr;
-typedef boost::intrusive_ptr< FontCharMap > FontCharMapPtr;
+typedef tools::SvRef<ImplFontCharMap> ImplFontCharMapRef;
+typedef tools::SvRef<FontCharMap> FontCharMapRef;
 
-class VCL_DLLPUBLIC FontCharMap
+class VCL_DLLPUBLIC FontCharMap : public SvRefBase
 {
 public:
     /** A new FontCharMap is created based on a "default" map, which includes
         all codepoints in the Unicode BMP range, including surrogates.
      **/
-                        FontCharMap();
-                        FontCharMap( const CmapResult& rCR );
-                        ~FontCharMap();
+    FontCharMap();
+    FontCharMap( const CmapResult& rCR );
+    virtual ~FontCharMap() override;
 
     /** Get the default font character map
 
         @returns the default font character map.
      */
-    static FontCharMapPtr GetDefaultMap( bool bSymbols=false );
+    static FontCharMapRef GetDefaultMap( bool bSymbols );
 
     /** Determines if the font character map is the "default". The default map
         includes all codepoints in the Unicode BMP range, including surrogates.
@@ -66,7 +65,7 @@ public:
         are inside the unicode range from cMin to cMax (inclusive).
 
         @param  cMin        Lowest codepoint in range to be counted
-        @param  cMax        Highest codepoitn in range to be counted
+        @param  cMax        Highest codepoint in range to be counted
 
         @returns number of characters in the font charmap between the two
                  codepoints.
@@ -136,42 +135,25 @@ public:
     int                 GetGlyphIndex( sal_UCS4 ) const;
 
 private:
-    ImplFontCharMapPtr  mpImplFontCharMap;
+    ImplFontCharMapRef mpImplFontCharMap;
 
     friend class ::OutputDevice;
-    friend void intrusive_ptr_release(FontCharMap* pFontCharMap);
-    friend void intrusive_ptr_add_ref(FontCharMap* pFontCharMap);
 
     int                 findRangeIndex( sal_uInt32 ) const;
 
-                        FontCharMap( ImplFontCharMapPtr pIFCMap );
-
-    sal_uInt32          mnRefCount;
+                        FontCharMap( ImplFontCharMapRef const & pIFCMap );
 
     // prevent assignment and copy construction
                         FontCharMap( const FontCharMap& ) = delete;
     void                operator=( const FontCharMap& ) = delete;
 };
 
-inline void intrusive_ptr_add_ref(FontCharMap* pFontCharMap)
-{
-    ++pFontCharMap->mnRefCount;
-}
-
-inline void intrusive_ptr_release(FontCharMap* pFontCharMap)
-{
-    if (--pFontCharMap->mnRefCount == 0)
-        delete pFontCharMap;
-}
-
-
 // CmapResult is a normalized version of the many CMAP formats
 class VCL_PLUGIN_PUBLIC CmapResult
 {
 public:
     explicit            CmapResult( bool bSymbolic = false,
-                            const sal_uInt32* pRangeCodes = nullptr, int nRangeCount = 0,
-                            const int* pStartGlyphs = nullptr, const sal_uInt16* pGlyphIds = nullptr );
+                            const sal_uInt32* pRangeCodes = nullptr, int nRangeCount = 0 );
 
     const sal_uInt32*   mpRangeCodes;
     const int*          mpStartGlyphs;

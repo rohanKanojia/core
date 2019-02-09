@@ -18,6 +18,7 @@
  */
 #ifndef INCLUDED_SW_SOURCE_UIBASE_INC_CONTENT_HXX
 #define INCLUDED_SW_SOURCE_UIBASE_INC_CONTENT_HXX
+#include <memory>
 #include <limits.h>
 #include "swcont.hxx"
 
@@ -35,20 +36,20 @@ class SwRangeRedline;
 
 class SwOutlineContent : public SwContent
 {
-    sal_uInt16  nOutlinePos;
-    sal_uInt8   nOutlineLevel;
-    bool    bIsMoveable;
+    SwOutlineNodes::size_type const nOutlinePos;
+    sal_uInt8 const   nOutlineLevel;
+    bool const    bIsMoveable;
     public:
         SwOutlineContent(   const SwContentType* pCnt,
                             const OUString& rName,
-                            sal_uInt16 nArrPos,
+                            SwOutlineNodes::size_type nArrPos,
                             sal_uInt8 nLevel,
                             bool bMove,
                             long nYPos) :
             SwContent(pCnt, rName, nYPos),
             nOutlinePos(nArrPos), nOutlineLevel(nLevel), bIsMoveable(bMove) {}
 
-    sal_uInt16  GetPos() const {return nOutlinePos;}
+    SwOutlineNodes::size_type GetOutlinePos() const {return nOutlinePos;}
     sal_uInt8   GetOutlineLevel() const {return nOutlineLevel;}
     bool        IsMoveable() const {return bIsMoveable;};
 };
@@ -56,7 +57,7 @@ class SwOutlineContent : public SwContent
 class SwRegionContent : public SwContent
 {
 
-    sal_uInt8   nRegionLevel;
+    sal_uInt8 const   nRegionLevel;
 
     public:
         SwRegionContent(    const SwContentType* pCnt,
@@ -70,7 +71,7 @@ class SwRegionContent : public SwContent
 
 class SwURLFieldContent : public SwContent
 {
-    OUString sURL;
+    OUString const sURL;
     const SwTextINetFormat* pINetAttr;
 
 public:
@@ -90,8 +91,6 @@ public:
 class SwPostItContent : public SwContent
 {
     const SwFormatField*     pField;
-    SwRangeRedline*     pRedline;
-    bool                mbPostIt;
 public:
     SwPostItContent( const SwContentType* pCnt,
                             const OUString& rName,
@@ -99,33 +98,20 @@ public:
                             long nYPos )
         : SwContent(pCnt, rName, nYPos)
         , pField(pFormatField)
-        , pRedline(nullptr)
-        , mbPostIt(true)
-    {}
-    SwPostItContent( const SwContentType* pCnt,
-                            const OUString& rName,
-                            SwRangeRedline* pRed,
-                            long nYPos )
-        : SwContent(pCnt, rName, nYPos)
-        , pField(nullptr)
-        , pRedline(pRed)
-        , mbPostIt(false)
     {}
 
     const SwFormatField* GetPostIt() const  { return pField; }
-    SwRangeRedline* GetRedline() { return pRedline; }
     virtual bool    IsProtect()     const override;
-    bool            IsPostIt()   const {return mbPostIt; }
 };
 
 class SwGraphicContent : public SwContent
 {
-    OUString      sLink;
+    OUString const      sLink;
 public:
     SwGraphicContent(const SwContentType* pCnt, const OUString& rName, const OUString& rLink, long nYPos)
         : SwContent( pCnt, rName, nYPos ), sLink( rLink )
         {}
-    virtual ~SwGraphicContent();
+    virtual ~SwGraphicContent() override;
 
     const OUString&   GetLink() const {return sLink;}
 };
@@ -137,7 +123,7 @@ public:
     SwTOXBaseContent(const SwContentType* pCnt, const OUString& rName, long nYPos, const SwTOXBase& rBase)
         : SwContent( pCnt, rName, nYPos ), pBase(&rBase)
         {}
-    virtual ~SwTOXBaseContent();
+    virtual ~SwTOXBaseContent() override;
 
     const SwTOXBase* GetTOXBase() const {return pBase;}
 };
@@ -153,12 +139,13 @@ public:
 class SwContentType : public SwTypeNumber
 {
     SwWrtShell*         pWrtShell;
-    SwContentArr*       pMember;            // array for content
-    OUString            sContentTypeName;   // name of content type
-    OUString            sSingleContentTypeName; // name of content type, singular
+    std::unique_ptr<SwContentArr>
+                        pMember;            // array for content
+    OUString const      sContentTypeName;   // name of content type
+    OUString const      sSingleContentTypeName; // name of content type, singular
     OUString            sTypeToken;         // attachment for URL
     size_t              nMemberCount;       // content count
-    ContentTypeId       nContentType;       // content type's Id
+    ContentTypeId const nContentType;       // content type's Id
     sal_uInt8           nOutlineLevel;
     bool                bDataValid :    1;
     bool                bEdit:          1;  // can this type be edited?
@@ -167,7 +154,7 @@ protected:
         static OUString     RemoveNewline(const OUString&);
 public:
         SwContentType(SwWrtShell* pParent, ContentTypeId nType, sal_uInt8 nLevel );
-        virtual ~SwContentType();
+        virtual ~SwContentType() override;
 
         void                Init(bool* pbInvalidateWindow = nullptr);
 

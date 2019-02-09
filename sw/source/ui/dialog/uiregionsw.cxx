@@ -22,7 +22,7 @@
 #include <svl/urihelper.hxx>
 #include <svl/PasswordHelper.hxx>
 #include <vcl/svapp.hxx>
-#include <vcl/layout.hxx>
+#include <vcl/weld.hxx>
 #include <svl/stritem.hxx>
 #include <svl/eitem.hxx>
 #include <sfx2/passwd.hxx>
@@ -34,9 +34,8 @@
 #include <sfx2/filedlghelper.hxx>
 #include <editeng/sizeitem.hxx>
 #include <svtools/htmlcfg.hxx>
-#include <svtools/treelistentry.hxx>
+#include <vcl/treelistentry.hxx>
 
-#include <comphelper/storagehelper.hxx>
 #include <uitool.hxx>
 #include <IMark.hxx>
 #include <section.hxx>
@@ -52,11 +51,10 @@
 #include <fmtfsize.hxx>
 #include <shellio.hxx>
 
-#include <helpid.h>
 #include <cmdid.h>
-#include <../../uibase/dialog/regionsw.hrc>
-#include <comcore.hrc>
+#include <strings.hrc>
 #include <globals.hrc>
+#include <bitmaps.hlst>
 #include <sfx2/bindings.hxx>
 #include <sfx2/htmlmode.hxx>
 #include <svx/dlgutil.hxx>
@@ -66,6 +64,17 @@
 #include <memory>
 
 using namespace ::com::sun::star;
+
+namespace {
+
+Image BuildBitmap(bool bProtect, bool bHidden)
+{
+    if (bProtect)
+        return Image(StockImage::Yes, bHidden ? OUString(RID_BMP_PROT_HIDE) : OUString(RID_BMP_PROT_NO_HIDE));
+    return Image(StockImage::Yes, bHidden ? OUString(RID_BMP_HIDE) : OUString(RID_BMP_NO_HIDE));
+}
+
+}
 
 static void   lcl_ReadSections( SfxMedium& rMedium, ComboBox& rBox );
 
@@ -94,7 +103,7 @@ static void lcl_FillList( SwWrtShell& rSh, ComboBox& rSubRegions, ComboBox* pAva
     else
     {
         SwSections aTmpArr;
-        pNewFormat->GetChildSections(aTmpArr, SORTSECT_POS);
+        pNewFormat->GetChildSections(aTmpArr, SectionSort::Pos);
         if( !aTmpArr.empty() )
         {
             SectionType eTmpType;
@@ -182,7 +191,7 @@ public:
 SectRepr::SectRepr( size_t nPos, SwSection& rSect )
     : m_SectionData( rSect )
     , m_Brush( RES_BACKGROUND )
-    , m_FrameDirItem( FRMDIR_ENVIRONMENT, RES_FRAMEDIR )
+    , m_FrameDirItem( SvxFrameDirection::Environment, RES_FRAMEDIR )
     , m_LRSpaceItem( RES_LR_SPACE )
     , m_nArrPos(nPos)
     , m_bContent(m_SectionData.GetLinkFileName().isEmpty())
@@ -204,17 +213,17 @@ SectRepr::SectRepr( size_t nPos, SwSection& rSect )
 void SectRepr::SetFile( const OUString& rFile )
 {
     OUString sNewFile( INetURLObject::decode( rFile,
-                                           INetURLObject::DECODE_UNAMBIGUOUS ));
+                                           INetURLObject::DecodeMechanism::Unambiguous ));
     const OUString sOldFileName( m_SectionData.GetLinkFileName() );
     const OUString sSub( sOldFileName.getToken( 2, sfx2::cTokenSeparator ) );
 
     if( !rFile.isEmpty() || !sSub.isEmpty() )
     {
-        sNewFile += OUString(sfx2::cTokenSeparator);
+        sNewFile += OUStringLiteral1(sfx2::cTokenSeparator);
         if( !rFile.isEmpty() ) // Filter only with FileName
             sNewFile += sOldFileName.getToken( 1, sfx2::cTokenSeparator );
 
-        sNewFile += OUString(sfx2::cTokenSeparator) + sSub;
+        sNewFile += OUStringLiteral1(sfx2::cTokenSeparator) + sSub;
     }
 
     m_SectionData.SetLinkFileName( sNewFile );
@@ -233,14 +242,15 @@ void SectRepr::SetFilter( const OUString& rFilter )
 {
     OUString sNewFile;
     const OUString sOldFileName( m_SectionData.GetLinkFileName() );
-    const OUString sFile( sOldFileName.getToken( 0, sfx2::cTokenSeparator ) );
-    const OUString sSub( sOldFileName.getToken( 2, sfx2::cTokenSeparator ) );
+    sal_Int32 nIdx{ 0 };
+    const OUString sFile( sOldFileName.getToken( 0, sfx2::cTokenSeparator, nIdx ) ); // token 0
+    const OUString sSub( sOldFileName.getToken( 1, sfx2::cTokenSeparator, nIdx ) );  // token 2
 
     if( !sFile.isEmpty() )
-        sNewFile = sFile + OUString(sfx2::cTokenSeparator) +
-                   rFilter + OUString(sfx2::cTokenSeparator) + sSub;
+        sNewFile = sFile + OUStringLiteral1(sfx2::cTokenSeparator) +
+                   rFilter + OUStringLiteral1(sfx2::cTokenSeparator) + sSub;
     else if( !sSub.isEmpty() )
-        sNewFile = OUString(sfx2::cTokenSeparator) + OUString(sfx2::cTokenSeparator) + sSub;
+        sNewFile = OUStringLiteral1(sfx2::cTokenSeparator) + OUStringLiteral1(sfx2::cTokenSeparator) + sSub;
 
     m_SectionData.SetLinkFileName( sNewFile );
 
@@ -259,8 +269,8 @@ void SectRepr::SetSubRegion(const OUString& rSubRegion)
     const OUString sFilter( sLinkFileName.getToken( 0, sfx2::cTokenSeparator, n ) );
 
     if( !rSubRegion.isEmpty() || !sOldFileName.isEmpty() )
-        sNewFile = sOldFileName + OUString(sfx2::cTokenSeparator) +
-                   sFilter + OUString(sfx2::cTokenSeparator) + rSubRegion;
+        sNewFile = sOldFileName + OUStringLiteral1(sfx2::cTokenSeparator) +
+                   sFilter + OUStringLiteral1(sfx2::cTokenSeparator) + rSubRegion;
 
     m_SectionData.SetLinkFileName( sNewFile );
 
@@ -285,11 +295,11 @@ OUString SectRepr::GetFile() const
     if (DDE_LINK_SECTION == m_SectionData.GetType())
     {
         sal_Int32 n = 0;
-        return sLinkFile.replaceFirst( OUString(sfx2::cTokenSeparator), " ", &n )
-                        .replaceFirst( OUString(sfx2::cTokenSeparator), " ", &n );
+        return sLinkFile.replaceFirst( OUStringLiteral1(sfx2::cTokenSeparator), " ", &n )
+                        .replaceFirst( OUStringLiteral1(sfx2::cTokenSeparator), " ", &n );
     }
     return INetURLObject::decode( sLinkFile.getToken( 0, sfx2::cTokenSeparator ),
-                                  INetURLObject::DECODE_UNAMBIGUOUS );
+                                  INetURLObject::DecodeMechanism::Unambiguous );
 }
 
 OUString SectRepr::GetSubRegion() const
@@ -305,10 +315,7 @@ SwEditRegionDlg::SwEditRegionDlg( vcl::Window* pParent, SwWrtShell& rWrtSh )
     : SfxModalDialog(pParent, "EditSectionDialog",
         "modules/swriter/ui/editsectiondialog.ui")
     , m_bSubRegionsFilled(false)
-    , aImageIL(SW_RES(IL_SECTION_BITMAPS))
     , rSh(rWrtSh)
-    , m_pDocInserter(nullptr)
-    , m_pOldDefDlgParent(nullptr)
     , bDontCheckPasswd(true)
 {
     get(m_pCurName, "curname");
@@ -340,7 +347,7 @@ SwEditRegionDlg::SwEditRegionDlg( vcl::Window* pParent, SwWrtShell& rWrtSh )
     get(m_pDismiss, "remove");
     get(m_pOK, "ok");
 
-    bWeb = dynamic_cast<SwWebDocShell*>( rSh.GetView().GetDocShell() ) != nullptr;
+    bool bWeb = dynamic_cast<SwWebDocShell*>( rSh.GetView().GetDocShell() ) != nullptr;
 
     m_pTree->SetSelectHdl(LINK(this, SwEditRegionDlg, GetFirstEntryHdl));
     m_pTree->SetDeselectHdl(LINK(this, SwEditRegionDlg, DeselectHdl));
@@ -363,7 +370,7 @@ SwEditRegionDlg::SwEditRegionDlg( vcl::Window* pParent, SwWrtShell& rWrtSh )
     m_pSubRegionED->AddEventListener(LINK(this, SwEditRegionDlg, SubRegionEventHdl));
     m_pSubRegionED->EnableAutocomplete(true, true);
 
-    m_pTree->SetSelectionMode( MULTIPLE_SELECTION );
+    m_pTree->SetSelectionMode( SelectionMode::Multiple );
     m_pTree->SetStyle(m_pTree->GetStyle()|WB_HASBUTTONSATROOT|WB_CLIPCHILDREN|WB_HSCROLL);
     m_pTree->SetSpaceBetweenEntries(0);
     m_pTree->SetAllEntriesAccessibleRoleType(SvTreeAccRoleType::TREE);
@@ -399,11 +406,11 @@ bool SwEditRegionDlg::CheckPasswd(CheckBox* pBox)
         if (!pRepr->GetTempPasswd().getLength()
             && pRepr->GetSectionData().GetPassword().getLength())
         {
-            ScopedVclPtrInstance< SfxPasswordDialog > aPasswdDlg(this);
+            SfxPasswordDialog aPasswdDlg(GetFrameWeld());
             bRet = false;
-            if (aPasswdDlg->Execute())
+            if (aPasswdDlg.run())
             {
-                const OUString sNewPasswd( aPasswdDlg->GetPassword() );
+                const OUString sNewPasswd(aPasswdDlg.GetPassword());
                 css::uno::Sequence <sal_Int8 > aNewPasswd;
                 SvPasswordHelper::GetHashPassword( aNewPasswd, sNewPasswd );
                 if (SvPasswordHelper::CompareHashPassword(
@@ -414,7 +421,10 @@ bool SwEditRegionDlg::CheckPasswd(CheckBox* pBox)
                 }
                 else
                 {
-                    ScopedVclPtrInstance<MessageDialog>::Create(this, SW_RES(STR_WRONG_PASSWORD), VCL_MESSAGE_INFO)->Execute();
+                    std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                                  VclMessageType::Info, VclButtonsType::Ok,
+                                                                  SwResId(STR_WRONG_PASSWORD)));
+                    xInfoBox->run();
                 }
             }
         }
@@ -433,7 +443,7 @@ bool SwEditRegionDlg::CheckPasswd(CheckBox* pBox)
 }
 
 // recursively look for child-sections
-void SwEditRegionDlg::RecurseList( const SwSectionFormat* pFormat, SvTreeListEntry* pEntry )
+void SwEditRegionDlg::RecurseList(const SwSectionFormat* pFormat, SvTreeListEntry* pEntry)
 {
     SvTreeListEntry* pSelEntry = nullptr;
     if (!pFormat)
@@ -450,13 +460,13 @@ void SwEditRegionDlg::RecurseList( const SwSectionFormat* pFormat, SvTreeListEnt
                 SwSection *pSect = pFormat->GetSection();
                 SectRepr* pSectRepr = new SectRepr( n, *pSect );
                 Image aImg = BuildBitmap( pSect->IsProtect(),pSect->IsHidden());
-                pEntry = m_pTree->InsertEntry(pSect->GetSectionName(), aImg, aImg);
-                pEntry->SetUserData(pSectRepr);
-                RecurseList( pFormat, pEntry );
-                if (pEntry->HasChildren())
-                    m_pTree->Expand(pEntry);
+                SvTreeListEntry* pNewEntry = m_pTree->InsertEntry(pSect->GetSectionName(), aImg, aImg);
+                pNewEntry->SetUserData(pSectRepr);
+                RecurseList( pFormat, pNewEntry );
+                if (pNewEntry->HasChildren())
+                    m_pTree->Expand(pNewEntry);
                 if (pCurrSect==pSect)
-                    m_pTree->Select(pEntry);
+                    m_pTree->Select(pNewEntry);
             }
         }
     }
@@ -464,30 +474,27 @@ void SwEditRegionDlg::RecurseList( const SwSectionFormat* pFormat, SvTreeListEnt
     {
         SwSections aTmpArr;
         SvTreeListEntry* pNEntry;
-        pFormat->GetChildSections(aTmpArr, SORTSECT_POS);
-        if( !aTmpArr.empty() )
+        pFormat->GetChildSections(aTmpArr, SectionSort::Pos);
+        for( const auto pSect : aTmpArr )
         {
-            for( const auto pSect : aTmpArr )
+            SectionType eTmpType;
+            pFormat = pSect->GetFormat();
+            if( pFormat->IsInNodesArr() &&
+                (eTmpType = pFormat->GetSection()->GetType()) != TOX_CONTENT_SECTION
+                && TOX_HEADER_SECTION != eTmpType )
             {
-                SectionType eTmpType;
-                pFormat = pSect->GetFormat();
-                if( pFormat->IsInNodesArr() &&
-                    (eTmpType = pFormat->GetSection()->GetType()) != TOX_CONTENT_SECTION
-                    && TOX_HEADER_SECTION != eTmpType )
-                {
-                    SectRepr* pSectRepr=new SectRepr(
-                                    FindArrPos( pSect->GetFormat() ), *pSect );
-                    Image aImage = BuildBitmap( pSect->IsProtect(),
-                                            pSect->IsHidden());
-                    pNEntry = m_pTree->InsertEntry(
-                        pSect->GetSectionName(), aImage, aImage, pEntry);
-                    pNEntry->SetUserData(pSectRepr);
-                    RecurseList( pSect->GetFormat(), pNEntry );
-                    if( pNEntry->HasChildren())
-                        m_pTree->Expand(pNEntry);
-                    if (pCurrSect==pSect)
-                        pSelEntry = pNEntry;
-                }
+                SectRepr* pSectRepr=new SectRepr(
+                                FindArrPos( pSect->GetFormat() ), *pSect );
+                Image aImage = BuildBitmap( pSect->IsProtect(),
+                                        pSect->IsHidden());
+                pNEntry = m_pTree->InsertEntry(
+                    pSect->GetSectionName(), aImage, aImage, pEntry);
+                pNEntry->SetUserData(pSectRepr);
+                RecurseList( pSect->GetFormat(), pNEntry );
+                if( pNEntry->HasChildren())
+                    m_pTree->Expand(pNEntry);
+                if (pCurrSect==pSect)
+                    pSelEntry = pNEntry;
             }
         }
     }
@@ -523,7 +530,7 @@ void SwEditRegionDlg::dispose()
         pEntry = m_pTree->Next( pEntry );
     }
 
-    delete m_pDocInserter;
+    m_pDocInserter.reset();
     m_pCurName.clear();
     m_pTree.clear();
     m_pFileCB.clear();
@@ -545,7 +552,6 @@ void SwEditRegionDlg::dispose()
     m_pOK.clear();
     m_pOptionsPB.clear();
     m_pDismiss.clear();
-    m_pOldDefDlgParent.clear();
     SfxModalDialog::dispose();
 }
 
@@ -569,7 +575,7 @@ void    SwEditRegionDlg::SelectSection(const OUString& rSectionName)
 
 // selected entry in TreeListBox is showed in Edit window in case of
 // multiselection some controls are disabled
-IMPL_LINK_TYPED( SwEditRegionDlg, GetFirstEntryHdl, SvTreeListBox *, pBox, void )
+IMPL_LINK( SwEditRegionDlg, GetFirstEntryHdl, SvTreeListBox *, pBox, void )
 {
     bDontCheckPasswd = true;
     SvTreeListEntry* pEntry=pBox->FirstSelected();
@@ -729,30 +735,31 @@ IMPL_LINK_TYPED( SwEditRegionDlg, GetFirstEntryHdl, SvTreeListBox *, pBox, void 
     bDontCheckPasswd = false;
 }
 
-IMPL_LINK_TYPED( SwEditRegionDlg, DeselectHdl, SvTreeListBox *, pBox, void )
+IMPL_LINK( SwEditRegionDlg, DeselectHdl, SvTreeListBox *, pBox, void )
 {
-    if( !pBox->GetSelectionCount() )
-    {
-        m_pHideCB->Enable(false);
-        m_pProtectCB->Enable(false);
-        // edit in readonly sections
-        m_pEditInReadonlyCB->Enable(false);
+    if( pBox->GetSelectionCount() )
+        return;
 
-        m_pPasswdCB->Enable(false);
-        m_pConditionFT->Enable(false);
-        m_pConditionED->Enable(false);
-        m_pFileCB->Enable(false);
-        m_pDDEFrame->Enable(false);
-        m_pDDECB->Enable(false);
-        m_pCurName->Enable(false);
+    m_pHideCB->Enable(false);
+    m_pProtectCB->Enable(false);
+    // edit in readonly sections
+    m_pEditInReadonlyCB->Enable(false);
 
-        UseFileHdl(m_pFileCB);
-        DDEHdl(m_pDDECB);
-    }
+    m_pPasswdCB->Enable(false);
+    m_pConditionFT->Enable(false);
+    m_pConditionED->Enable(false);
+    m_pFileCB->Enable(false);
+    m_pDDEFrame->Enable(false);
+    m_pDDECB->Enable(false);
+    m_pCurName->Enable(false);
+
+    UseFileHdl(m_pFileCB);
+    DDEHdl(m_pDDECB);
+
 }
 
 // in OkHdl the modified settings are being applied and reversed regions are deleted
-IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, OkHdl, Button*, void)
+IMPL_LINK_NOARG(SwEditRegionDlg, OkHdl, Button*, void)
 {
     // temp. Array because during changing of a region the position
     // inside of the "Core-Arrays" can be shifted:
@@ -829,7 +836,7 @@ IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, OkHdl, Button*, void)
 }
 
 // Toggle protect
-IMPL_LINK_TYPED( SwEditRegionDlg, ChangeProtectHdl, Button *, pButton, void )
+IMPL_LINK( SwEditRegionDlg, ChangeProtectHdl, Button *, pButton, void )
 {
     TriStateBox* pBox = static_cast<TriStateBox*>(pButton);
     if(!CheckPasswd(pBox))
@@ -853,7 +860,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, ChangeProtectHdl, Button *, pButton, void )
 }
 
 // Toggle hide
-IMPL_LINK_TYPED( SwEditRegionDlg, ChangeHideHdl, Button *, pButton, void )
+IMPL_LINK( SwEditRegionDlg, ChangeHideHdl, Button *, pButton, void )
 {
     TriStateBox* pBox = static_cast<TriStateBox*>(pButton);
     if(!CheckPasswd(pBox))
@@ -880,7 +887,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, ChangeHideHdl, Button *, pButton, void )
 }
 
 // Toggle edit in readonly
-IMPL_LINK_TYPED( SwEditRegionDlg, ChangeEditInReadonlyHdl, Button *, pButton, void )
+IMPL_LINK( SwEditRegionDlg, ChangeEditInReadonlyHdl, Button *, pButton, void )
 {
     TriStateBox* pBox = static_cast<TriStateBox*>(pButton);
     if(!CheckPasswd(pBox))
@@ -898,7 +905,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, ChangeEditInReadonlyHdl, Button *, pButton, vo
 }
 
 // clear selected region
-IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, ChangeDismissHdl, Button*, void)
+IMPL_LINK_NOARG(SwEditRegionDlg, ChangeDismissHdl, Button*, void)
 {
     if(!CheckPasswd())
         return;
@@ -940,30 +947,31 @@ IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, ChangeDismissHdl, Button*, void)
             m_pTree->GetModel()->Remove( pRemove );
     }
 
-    if ( m_pTree->FirstSelected() == nullptr )
-    {
-        m_pConditionFT->Enable(false);
-        m_pConditionED->Enable(false);
-        m_pDismiss->       Enable(false);
-        m_pCurName->Enable(false);
-        m_pProtectCB->Enable(false);
-        m_pPasswdCB->Enable(false);
-        m_pHideCB->Enable(false);
-        // edit in readonly sections
-        m_pEditInReadonlyCB->Enable(false);
-        m_pEditInReadonlyCB->SetState(TRISTATE_FALSE);
-        m_pProtectCB->SetState(TRISTATE_FALSE);
-        m_pPasswdCB->Check(false);
-        m_pHideCB->SetState(TRISTATE_FALSE);
-        m_pFileCB->Check(false);
-        // otherwise the focus would be on HelpButton
-        m_pOK->GrabFocus();
-        UseFileHdl(m_pFileCB);
-    }
+    if ( m_pTree->FirstSelected() )
+        return;
+
+    m_pConditionFT->Enable(false);
+    m_pConditionED->Enable(false);
+    m_pDismiss->       Enable(false);
+    m_pCurName->Enable(false);
+    m_pProtectCB->Enable(false);
+    m_pPasswdCB->Enable(false);
+    m_pHideCB->Enable(false);
+    // edit in readonly sections
+    m_pEditInReadonlyCB->Enable(false);
+    m_pEditInReadonlyCB->SetState(TRISTATE_FALSE);
+    m_pProtectCB->SetState(TRISTATE_FALSE);
+    m_pPasswdCB->Check(false);
+    m_pHideCB->SetState(TRISTATE_FALSE);
+    m_pFileCB->Check(false);
+    // otherwise the focus would be on HelpButton
+    m_pOK->GrabFocus();
+    UseFileHdl(m_pFileCB);
+
 }
 
 // link CheckBox to file?
-IMPL_LINK_TYPED( SwEditRegionDlg, UseFileHdl, Button *, pButton, void )
+IMPL_LINK( SwEditRegionDlg, UseFileHdl, Button *, pButton, void )
 {
     CheckBox* pBox = static_cast<CheckBox*>(pButton);
     if(!CheckPasswd(pBox))
@@ -980,16 +988,19 @@ IMPL_LINK_TYPED( SwEditRegionDlg, UseFileHdl, Button *, pButton, void )
             bool bContent = pSectRepr->IsContent();
             if( pBox->IsChecked() && bContent && rSh.HasSelection() )
             {
-                if (RET_NO == ScopedVclPtrInstance<MessageDialog>::Create(this, SW_RES(STR_QUERY_CONNECT), VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO)->Execute())
+                std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                               VclMessageType::Question, VclButtonsType::YesNo,
+                                                               SwResId(STR_QUERY_CONNECT)));
+                if (RET_NO == xQueryBox->run())
                     pBox->Check( false );
             }
             if( bFile )
                 pSectRepr->SetContent(false);
             else
             {
-                pSectRepr->SetFile(aEmptyOUStr);
-                pSectRepr->SetSubRegion(aEmptyOUStr);
-                pSectRepr->GetSectionData().SetLinkFilePassword(aEmptyOUStr);
+                pSectRepr->SetFile(OUString());
+                pSectRepr->SetSubRegion(OUString());
+                pSectRepr->GetSectionData().SetLinkFilePassword(OUString());
             }
 
             pEntry = m_pTree->NextSelected(pEntry);
@@ -1020,118 +1031,116 @@ IMPL_LINK_TYPED( SwEditRegionDlg, UseFileHdl, Button *, pButton, void )
 }
 
 // call dialog paste file
-IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, FileSearchHdl, Button*, void)
+IMPL_LINK_NOARG(SwEditRegionDlg, FileSearchHdl, Button*, void)
 {
     if(!CheckPasswd())
         return;
-    m_pOldDefDlgParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent( this );
-    delete m_pDocInserter;
-    m_pDocInserter =
-        new ::sfx2::DocumentInserter( "swriter" );
+    m_pDocInserter.reset(new ::sfx2::DocumentInserter(GetFrameWeld(), "swriter"));
     m_pDocInserter->StartExecuteModal( LINK( this, SwEditRegionDlg, DlgClosedHdl ) );
 }
 
-IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, OptionsHdl, Button*, void)
+IMPL_LINK_NOARG(SwEditRegionDlg, OptionsHdl, Button*, void)
 {
     if(!CheckPasswd())
         return;
     SvTreeListEntry* pEntry = m_pTree->FirstSelected();
 
-    if(pEntry)
+    if(!pEntry)
+        return;
+
+    SectRepr* pSectRepr = static_cast<SectRepr*>(pEntry->GetUserData());
+    SfxItemSet aSet(
+        rSh.GetView().GetPool(),
+        svl::Items<
+            RES_FRM_SIZE, RES_FRM_SIZE,
+            RES_LR_SPACE, RES_LR_SPACE,
+            RES_BACKGROUND, RES_BACKGROUND,
+            RES_COL, RES_COL,
+            RES_FTN_AT_TXTEND, RES_FRAMEDIR,
+            XATTR_FILL_FIRST, XATTR_FILL_LAST,
+            SID_ATTR_PAGE_SIZE, SID_ATTR_PAGE_SIZE>{});
+
+    aSet.Put( pSectRepr->GetCol() );
+    aSet.Put( pSectRepr->GetBackground() );
+    aSet.Put( pSectRepr->GetFootnoteNtAtEnd() );
+    aSet.Put( pSectRepr->GetEndNtAtEnd() );
+    aSet.Put( pSectRepr->GetBalance() );
+    aSet.Put( pSectRepr->GetFrameDir() );
+    aSet.Put( pSectRepr->GetLRSpace() );
+
+    const SwSectionFormats& rDocFormats = rSh.GetDoc()->GetSections();
+    SwSectionFormats aOrigArray(rDocFormats);
+
+    SwSectionFormat* pFormat = aOrigArray[pSectRepr->GetArrPos()];
+    long nWidth = rSh.GetSectionWidth(*pFormat);
+    aOrigArray.clear();
+    if (!nWidth)
+        nWidth = USHRT_MAX;
+
+    aSet.Put(SwFormatFrameSize(ATT_VAR_SIZE, nWidth));
+    aSet.Put(SvxSizeItem(SID_ATTR_PAGE_SIZE, Size(nWidth, nWidth)));
+
+    ScopedVclPtrInstance< SwSectionPropertyTabDialog > aTabDlg(this, aSet, rSh);
+    if(RET_OK == aTabDlg->Execute())
     {
-        SectRepr* pSectRepr = static_cast<SectRepr*>(pEntry->GetUserData());
-        SfxItemSet aSet(rSh.GetView().GetPool(),
-                            RES_COL, RES_COL,
-                            RES_COLUMNBALANCE, RES_FRAMEDIR,
-                            RES_BACKGROUND, RES_BACKGROUND,
-                            RES_FRM_SIZE, RES_FRM_SIZE,
-                            SID_ATTR_PAGE_SIZE, SID_ATTR_PAGE_SIZE,
-                            RES_LR_SPACE, RES_LR_SPACE,
-                            RES_FTN_AT_TXTEND, RES_END_AT_TXTEND,
-                            0);
-
-        aSet.Put( pSectRepr->GetCol() );
-        aSet.Put( pSectRepr->GetBackground() );
-        aSet.Put( pSectRepr->GetFootnoteNtAtEnd() );
-        aSet.Put( pSectRepr->GetEndNtAtEnd() );
-        aSet.Put( pSectRepr->GetBalance() );
-        aSet.Put( pSectRepr->GetFrameDir() );
-        aSet.Put( pSectRepr->GetLRSpace() );
-
-        const SwSectionFormats& rDocFormats = rSh.GetDoc()->GetSections();
-        SwSectionFormats aOrigArray(rDocFormats);
-
-        SwSectionFormat* pFormat = aOrigArray[pSectRepr->GetArrPos()];
-        long nWidth = rSh.GetSectionWidth(*pFormat);
-        aOrigArray.clear();
-        if (!nWidth)
-            nWidth = USHRT_MAX;
-
-        aSet.Put(SwFormatFrameSize(ATT_VAR_SIZE, nWidth));
-        aSet.Put(SvxSizeItem(SID_ATTR_PAGE_SIZE, Size(nWidth, nWidth)));
-
-        ScopedVclPtrInstance< SwSectionPropertyTabDialog > aTabDlg(this, aSet, rSh);
-        if(RET_OK == aTabDlg->Execute())
+        const SfxItemSet* pOutSet = aTabDlg->GetOutputItemSet();
+        if( pOutSet && pOutSet->Count() )
         {
-            const SfxItemSet* pOutSet = aTabDlg->GetOutputItemSet();
-            if( pOutSet && pOutSet->Count() )
+            const SfxPoolItem *pColItem, *pBrushItem,
+                              *pFootnoteItem, *pEndItem, *pBalanceItem,
+                              *pFrameDirItem, *pLRSpaceItem;
+            SfxItemState eColState = pOutSet->GetItemState(
+                                    RES_COL, false, &pColItem );
+            SfxItemState eBrushState = pOutSet->GetItemState(
+                                    RES_BACKGROUND, false, &pBrushItem );
+            SfxItemState eFootnoteState = pOutSet->GetItemState(
+                                    RES_FTN_AT_TXTEND, false, &pFootnoteItem );
+            SfxItemState eEndState = pOutSet->GetItemState(
+                                    RES_END_AT_TXTEND, false, &pEndItem );
+            SfxItemState eBalanceState = pOutSet->GetItemState(
+                                    RES_COLUMNBALANCE, false, &pBalanceItem );
+            SfxItemState eFrameDirState = pOutSet->GetItemState(
+                                    RES_FRAMEDIR, false, &pFrameDirItem );
+            SfxItemState eLRState = pOutSet->GetItemState(
+                                    RES_LR_SPACE, false, &pLRSpaceItem);
+
+            if( SfxItemState::SET == eColState ||
+                SfxItemState::SET == eBrushState ||
+                SfxItemState::SET == eFootnoteState ||
+                SfxItemState::SET == eEndState ||
+                SfxItemState::SET == eBalanceState||
+                SfxItemState::SET == eFrameDirState||
+                SfxItemState::SET == eLRState)
             {
-                const SfxPoolItem *pColItem, *pBrushItem,
-                                  *pFootnoteItem, *pEndItem, *pBalanceItem,
-                                  *pFrameDirItem, *pLRSpaceItem;
-                SfxItemState eColState = pOutSet->GetItemState(
-                                        RES_COL, false, &pColItem );
-                SfxItemState eBrushState = pOutSet->GetItemState(
-                                        RES_BACKGROUND, false, &pBrushItem );
-                SfxItemState eFootnoteState = pOutSet->GetItemState(
-                                        RES_FTN_AT_TXTEND, false, &pFootnoteItem );
-                SfxItemState eEndState = pOutSet->GetItemState(
-                                        RES_END_AT_TXTEND, false, &pEndItem );
-                SfxItemState eBalanceState = pOutSet->GetItemState(
-                                        RES_COLUMNBALANCE, false, &pBalanceItem );
-                SfxItemState eFrameDirState = pOutSet->GetItemState(
-                                        RES_FRAMEDIR, false, &pFrameDirItem );
-                SfxItemState eLRState = pOutSet->GetItemState(
-                                        RES_LR_SPACE, false, &pLRSpaceItem);
-
-                if( SfxItemState::SET == eColState ||
-                    SfxItemState::SET == eBrushState ||
-                    SfxItemState::SET == eFootnoteState ||
-                    SfxItemState::SET == eEndState ||
-                    SfxItemState::SET == eBalanceState||
-                    SfxItemState::SET == eFrameDirState||
-                    SfxItemState::SET == eLRState)
+                SvTreeListEntry* pSelEntry = m_pTree->FirstSelected();
+                while( pSelEntry )
                 {
-                    SvTreeListEntry* pSelEntry = m_pTree->FirstSelected();
-                    while( pSelEntry )
-                    {
-                        SectRepr* pRepr = static_cast<SectRepr*>(pSelEntry->GetUserData());
-                        if( SfxItemState::SET == eColState )
-                            pRepr->GetCol() = *static_cast<const SwFormatCol*>(pColItem);
-                        if( SfxItemState::SET == eBrushState )
-                            pRepr->GetBackground() = *static_cast<const SvxBrushItem*>(pBrushItem);
-                        if( SfxItemState::SET == eFootnoteState )
-                            pRepr->GetFootnoteNtAtEnd() = *static_cast<const SwFormatFootnoteAtTextEnd*>(pFootnoteItem);
-                        if( SfxItemState::SET == eEndState )
-                            pRepr->GetEndNtAtEnd() = *static_cast<const SwFormatEndAtTextEnd*>(pEndItem);
-                        if( SfxItemState::SET == eBalanceState )
-                            pRepr->GetBalance().SetValue(static_cast<const SwFormatNoBalancedColumns*>(pBalanceItem)->GetValue());
-                        if( SfxItemState::SET == eFrameDirState )
-                            pRepr->GetFrameDir().SetValue(static_cast<const SvxFrameDirectionItem*>(pFrameDirItem)->GetValue());
-                        if( SfxItemState::SET == eLRState )
-                            pRepr->GetLRSpace() = *static_cast<const SvxLRSpaceItem*>(pLRSpaceItem);
+                    SectRepr* pRepr = static_cast<SectRepr*>(pSelEntry->GetUserData());
+                    if( SfxItemState::SET == eColState )
+                        pRepr->GetCol() = *static_cast<const SwFormatCol*>(pColItem);
+                    if( SfxItemState::SET == eBrushState )
+                        pRepr->GetBackground() = *static_cast<const SvxBrushItem*>(pBrushItem);
+                    if( SfxItemState::SET == eFootnoteState )
+                        pRepr->GetFootnoteNtAtEnd() = *static_cast<const SwFormatFootnoteAtTextEnd*>(pFootnoteItem);
+                    if( SfxItemState::SET == eEndState )
+                        pRepr->GetEndNtAtEnd() = *static_cast<const SwFormatEndAtTextEnd*>(pEndItem);
+                    if( SfxItemState::SET == eBalanceState )
+                        pRepr->GetBalance().SetValue(static_cast<const SwFormatNoBalancedColumns*>(pBalanceItem)->GetValue());
+                    if( SfxItemState::SET == eFrameDirState )
+                        pRepr->GetFrameDir().SetValue(static_cast<const SvxFrameDirectionItem*>(pFrameDirItem)->GetValue());
+                    if( SfxItemState::SET == eLRState )
+                        pRepr->GetLRSpace() = *static_cast<const SvxLRSpaceItem*>(pLRSpaceItem);
 
-                        pSelEntry = m_pTree->NextSelected(pSelEntry);
-                    }
+                    pSelEntry = m_pTree->NextSelected(pSelEntry);
                 }
             }
         }
     }
+
 }
 
 // Applying of the filename or the linked region
-IMPL_LINK_TYPED( SwEditRegionDlg, FileNameHdl, Edit&, rEdit, void )
+IMPL_LINK( SwEditRegionDlg, FileNameHdl, Edit&, rEdit, void )
 {
     Selection aSelect = rEdit.GetSelection();
     if(!CheckPasswd())
@@ -1148,10 +1157,10 @@ IMPL_LINK_TYPED( SwEditRegionDlg, FileNameHdl, Edit&, rEdit, void )
         {
             OUString sLink( SwSectionData::CollapseWhiteSpaces(rEdit.GetText()) );
             sal_Int32 nPos = 0;
-            sLink = sLink.replaceFirst( " ", OUString(sfx2::cTokenSeparator), &nPos );
+            sLink = sLink.replaceFirst( " ", OUStringLiteral1(sfx2::cTokenSeparator), &nPos );
             if (nPos>=0)
             {
-                sLink = sLink.replaceFirst( " ", OUString(sfx2::cTokenSeparator), &nPos );
+                sLink = sLink.replaceFirst( " ", OUStringLiteral1(sfx2::cTokenSeparator), &nPos );
             }
 
             pSectRepr->GetSectionData().SetLinkFileName( sLink );
@@ -1170,7 +1179,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, FileNameHdl, Edit&, rEdit, void )
                     aAbs, sTmp, URIHelper::GetMaybeFileHdl() );
             }
             pSectRepr->SetFile( sTmp );
-            pSectRepr->GetSectionData().SetLinkFilePassword( aEmptyOUStr );
+            pSectRepr->GetSectionData().SetLinkFilePassword(OUString());
         }
     }
     else
@@ -1179,7 +1188,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, FileNameHdl, Edit&, rEdit, void )
     }
 }
 
-IMPL_LINK_TYPED( SwEditRegionDlg, DDEHdl, Button*, pButton, void )
+IMPL_LINK( SwEditRegionDlg, DDEHdl, Button*, pButton, void )
 {
     CheckBox* pBox = static_cast<CheckBox*>(pButton);
     if(!CheckPasswd(pBox))
@@ -1228,7 +1237,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, DDEHdl, Button*, pButton, void )
     }
 }
 
-IMPL_LINK_TYPED( SwEditRegionDlg, ChangePasswdHdl, Button *, pBox, void )
+IMPL_LINK( SwEditRegionDlg, ChangePasswdHdl, Button *, pBox, void )
 {
     bool bChange = pBox == m_pPasswdPB;
     if(!CheckPasswd())
@@ -1247,18 +1256,21 @@ IMPL_LINK_TYPED( SwEditRegionDlg, ChangePasswdHdl, Button *, pBox, void )
         {
             if(!pRepr->GetTempPasswd().getLength() || bChange)
             {
-                ScopedVclPtrInstance< SfxPasswordDialog > aPasswdDlg(this);
-                aPasswdDlg->ShowExtras(SfxShowExtras::CONFIRM);
-                if(RET_OK == aPasswdDlg->Execute())
+                SfxPasswordDialog aPasswdDlg(GetFrameWeld());
+                aPasswdDlg.ShowExtras(SfxShowExtras::CONFIRM);
+                if (RET_OK == aPasswdDlg.run())
                 {
-                    const OUString sNewPasswd( aPasswdDlg->GetPassword() );
-                    if( aPasswdDlg->GetConfirm() == sNewPasswd )
+                    const OUString sNewPasswd(aPasswdDlg.GetPassword());
+                    if (aPasswdDlg.GetConfirm() == sNewPasswd)
                     {
                         SvPasswordHelper::GetHashPassword( pRepr->GetTempPasswd(), sNewPasswd );
                     }
                     else
                     {
-                        ScopedVclPtrInstance<MessageDialog>::Create(pBox, SW_RES(STR_WRONG_PASSWD_REPEAT), VCL_MESSAGE_INFO)->Execute();
+                        std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(pBox->GetFrameWeld(),
+                                                                      VclMessageType::Info, VclButtonsType::Ok,
+                                                                      SwResId(STR_WRONG_PASSWD_REPEAT)));
+                        xInfoBox->run();
                         ChangePasswdHdl(pBox);
                         break;
                     }
@@ -1282,7 +1294,7 @@ IMPL_LINK_TYPED( SwEditRegionDlg, ChangePasswdHdl, Button *, pBox, void )
 
 // the current region name is being added to the TreeListBox immediately during
 // editing, with empty string no Ok()
-IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, NameEditHdl, Edit&, void)
+IMPL_LINK_NOARG(SwEditRegionDlg, NameEditHdl, Edit&, void)
 {
     if(!CheckPasswd())
         return;
@@ -1299,7 +1311,7 @@ IMPL_LINK_NOARG_TYPED(SwEditRegionDlg, NameEditHdl, Edit&, void)
     }
 }
 
-IMPL_LINK_TYPED( SwEditRegionDlg, ConditionEditHdl, Edit&, rEdit, void )
+IMPL_LINK( SwEditRegionDlg, ConditionEditHdl, Edit&, rEdit, void )
 {
     Selection aSelect = rEdit.GetSelection();
     if(!CheckPasswd())
@@ -1315,15 +1327,15 @@ IMPL_LINK_TYPED( SwEditRegionDlg, ConditionEditHdl, Edit&, rEdit, void )
     }
 }
 
-IMPL_LINK_TYPED( SwEditRegionDlg, DlgClosedHdl, sfx2::FileDialogHelper *, _pFileDlg, void )
+IMPL_LINK( SwEditRegionDlg, DlgClosedHdl, sfx2::FileDialogHelper *, _pFileDlg, void )
 {
     OUString sFileName, sFilterName, sPassword;
     if ( _pFileDlg->GetError() == ERRCODE_NONE )
     {
-        std::unique_ptr<SfxMedium> pMedium(m_pDocInserter->CreateMedium());
+        std::unique_ptr<SfxMedium> pMedium(m_pDocInserter->CreateMedium("sglobal"));
         if ( pMedium )
         {
-            sFileName = pMedium->GetURLObject().GetMainURL( INetURLObject::NO_DECODE );
+            sFileName = pMedium->GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE );
             sFilterName = pMedium->GetFilter()->GetFilterName();
             const SfxPoolItem* pItem;
             if ( SfxItemState::SET == pMedium->GetItemSet()->GetItemState( SID_PASSWORD, false, &pItem ) )
@@ -1342,13 +1354,11 @@ IMPL_LINK_TYPED( SwEditRegionDlg, DlgClosedHdl, sfx2::FileDialogHelper *, _pFile
         pSectRepr->GetSectionData().SetLinkFilePassword(sPassword);
         m_pFileNameED->SetText(pSectRepr->GetFile());
     }
-
-    Application::SetDefDialogParent( m_pOldDefDlgParent );
 }
 
-IMPL_LINK_TYPED( SwEditRegionDlg, SubRegionEventHdl, VclWindowEvent&, rEvent, void )
+IMPL_LINK( SwEditRegionDlg, SubRegionEventHdl, VclWindowEvent&, rEvent, void )
 {
-    if( !m_bSubRegionsFilled && rEvent.GetId() == VCLEVENT_DROPDOWN_PRE_OPEN )
+    if( !m_bSubRegionsFilled && rEvent.GetId() == VclEventId::DropdownPreOpen )
     {
         //if necessary fill the names bookmarks/sections/tables now
 
@@ -1363,8 +1373,8 @@ IMPL_LINK_TYPED( SwEditRegionDlg, SubRegionEventHdl, VclWindowEvent&, rEvent, vo
                     aAbs, sFileName, URIHelper::GetMaybeFileHdl() );
 
             //load file and set the shell
-            SfxMedium aMedium( sFileName, STREAM_STD_READ );
-            sFileName = aMedium.GetURLObject().GetMainURL( INetURLObject::NO_DECODE );
+            SfxMedium aMedium( sFileName, StreamMode::STD_READ );
+            sFileName = aMedium.GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE );
             ::lcl_ReadSections(aMedium, *m_pSubRegionED);
         }
         else
@@ -1373,28 +1383,22 @@ IMPL_LINK_TYPED( SwEditRegionDlg, SubRegionEventHdl, VclWindowEvent&, rEvent, vo
     }
 }
 
-Image SwEditRegionDlg::BuildBitmap( bool bProtect, bool bHidden )
-{
-    ImageList& rImgLst = aImageIL;
-    return rImgLst.GetImage((int(!bHidden)+((bProtect ? 1 : 0)<<1)) + 1);
-}
-
-// helper function - read region names from medium
+// helper function - read section names from medium
 static void lcl_ReadSections( SfxMedium& rMedium, ComboBox& rBox )
 {
     rBox.Clear();
     uno::Reference < embed::XStorage > xStg;
     if( rMedium.IsStorage() && (xStg = rMedium.GetStorage()).is() )
     {
-        std::vector<OUString*> aArr;
+        std::vector<OUString> aArr;
         SotClipboardFormatId nFormat = SotStorage::GetFormatID( xStg );
         if ( nFormat == SotClipboardFormatId::STARWRITER_60 || nFormat == SotClipboardFormatId::STARWRITERGLOB_60 ||
             nFormat == SotClipboardFormatId::STARWRITER_8 || nFormat == SotClipboardFormatId::STARWRITERGLOB_8)
             SwGetReaderXML()->GetSectionList( rMedium, aArr );
 
-        for(std::vector<OUString*>::const_iterator it(aArr.begin()); it != aArr.end(); ++it) {
-            rBox.InsertEntry( **it );
-            delete *it;
+        for (auto const& it : aArr)
+        {
+            rBox.InsertEntry(it);
         }
     }
 }
@@ -1406,12 +1410,11 @@ SwInsertSectionTabDialog::SwInsertSectionTabDialog(
     , rWrtSh(rSh)
 {
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "Dialog creation failed!");
-    m_nSectionPageId = AddTabPage("section", SwInsertSectionTabPage::Create, nullptr);
-    m_nColumnPageId = AddTabPage("columns",   SwColumnPage::Create,    nullptr);
-    m_nBackPageId = AddTabPage("background", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BACKGROUND ), nullptr);
-    m_nNotePageId = AddTabPage("notes", SwSectionFootnoteEndTabPage::Create, nullptr);
-    m_nIndentPage = AddTabPage("indents", SwSectionIndentTabPage::Create, nullptr);
+    m_nSectionPageId = AddTabPage("section", SwInsertSectionTabPage::Create);
+    m_nColumnPageId = AddTabPage("columns",   SwColumnPage::Create);
+    m_nBackPageId = AddTabPage("background", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BKG ));
+    m_nNotePageId = AddTabPage("notes", SwSectionFootnoteEndTabPage::Create);
+    m_nIndentPage = AddTabPage("indents", SwSectionIndentTabPage::Create);
 
     SvxHtmlOptions& rHtmlOpt = SvxHtmlOptions::Get();
     long nHtmlMode = rHtmlOpt.GetExportMode();
@@ -1443,7 +1446,7 @@ void SwInsertSectionTabDialog::PageCreated( sal_uInt16 nId, SfxTabPage &rPage )
     }
     else if (nId == m_nColumnPageId)
     {
-        const SwFormatFrameSize& rSize = static_cast<const SwFormatFrameSize&>(GetInputSetImpl()->Get(RES_FRM_SIZE));
+        const SwFormatFrameSize& rSize = GetInputSetImpl()->Get(RES_FRM_SIZE);
         static_cast<SwColumnPage&>(rPage).SetPageWidth(rSize.GetWidth());
         static_cast<SwColumnPage&>(rPage).ShowBalance(true);
         static_cast<SwColumnPage&>(rPage).SetInSection(true);
@@ -1460,8 +1463,7 @@ void SwInsertSectionTabDialog::SetSectionData(SwSectionData const& rSect)
 short   SwInsertSectionTabDialog::Ok()
 {
     short nRet = SfxTabDialog::Ok();
-    OSL_ENSURE(m_pSectionData.get(),
-            "SwInsertSectionTabDialog: no SectionData?");
+    OSL_ENSURE(m_pSectionData, "SwInsertSectionTabDialog: no SectionData?");
     const SfxItemSet* pOutputItemSet = GetOutputItemSet();
     rWrtSh.InsertSection(*m_pSectionData, pOutputItemSet);
     SfxViewFrame* pViewFrame = rWrtSh.GetView().GetViewFrame();
@@ -1503,8 +1505,6 @@ SwInsertSectionTabPage::SwInsertSectionTabPage(
     : SfxTabPage(pParent, "SectionPage",
         "modules/swriter/ui/sectionpage.ui", &rAttrSet)
     , m_pWrtSh(nullptr)
-    , m_pDocInserter(nullptr)
-    , m_pOldDefDlgParent(nullptr)
 {
     get(m_pCurName, "sectionnames");
     m_pCurName->SetStyle(m_pCurName->GetStyle() | WB_SORT);
@@ -1546,7 +1546,7 @@ SwInsertSectionTabPage::~SwInsertSectionTabPage()
 
 void SwInsertSectionTabPage::dispose()
 {
-    delete m_pDocInserter;
+    m_pDocInserter.reset();
     m_pCurName.clear();
     m_pFileCB.clear();
     m_pDDECB.clear();
@@ -1563,7 +1563,6 @@ void SwInsertSectionTabPage::dispose()
     m_pConditionFT.clear();
     m_pConditionED.clear();
     m_pEditInReadonlyCB.clear();
-    m_pOldDefDlgParent.clear();
     SfxTabPage::dispose();
 }
 
@@ -1627,10 +1626,10 @@ bool SwInsertSectionTabPage::FillItemSet( SfxItemSet* )
         {
             aLinkFile = SwSectionData::CollapseWhiteSpaces(sFileName);
             sal_Int32 nPos = 0;
-            aLinkFile = aLinkFile.replaceFirst( " ", OUString(sfx2::cTokenSeparator), &nPos );
+            aLinkFile = aLinkFile.replaceFirst( " ", OUStringLiteral1(sfx2::cTokenSeparator), &nPos );
             if (nPos>=0)
             {
-                aLinkFile = aLinkFile.replaceFirst( " ", OUString(sfx2::cTokenSeparator), &nPos );
+                aLinkFile = aLinkFile.replaceFirst( " ", OUStringLiteral1(sfx2::cTokenSeparator), &nPos );
             }
         }
         else
@@ -1646,8 +1645,8 @@ bool SwInsertSectionTabPage::FillItemSet( SfxItemSet* )
                 aSection.SetLinkFilePassword( m_sFilePasswd );
             }
 
-            aLinkFile += OUString(sfx2::cTokenSeparator) + m_sFilterName
-                      +  OUString(sfx2::cTokenSeparator) + sSubRegion;
+            aLinkFile += OUStringLiteral1(sfx2::cTokenSeparator) + m_sFilterName
+                      +  OUStringLiteral1(sfx2::cTokenSeparator) + sSubRegion;
         }
 
         aSection.SetLinkFileName(aLinkFile);
@@ -1666,27 +1665,27 @@ void SwInsertSectionTabPage::Reset( const SfxItemSet* )
 {
 }
 
-VclPtr<SfxTabPage> SwInsertSectionTabPage::Create( vcl::Window* pParent,
+VclPtr<SfxTabPage> SwInsertSectionTabPage::Create( TabPageParent pParent,
                                                    const SfxItemSet* rAttrSet)
 {
-    return VclPtr<SwInsertSectionTabPage>::Create(pParent, *rAttrSet);
+    return VclPtr<SwInsertSectionTabPage>::Create(pParent.pParent, *rAttrSet);
 }
 
-IMPL_LINK_TYPED( SwInsertSectionTabPage, ChangeHideHdl, Button *, pBox, void )
+IMPL_LINK( SwInsertSectionTabPage, ChangeHideHdl, Button *, pBox, void )
 {
     bool bHide = static_cast<CheckBox*>(pBox)->IsChecked();
     m_pConditionED->Enable(bHide);
     m_pConditionFT->Enable(bHide);
 }
 
-IMPL_LINK_TYPED( SwInsertSectionTabPage, ChangeProtectHdl, Button *, pBox, void )
+IMPL_LINK( SwInsertSectionTabPage, ChangeProtectHdl, Button *, pBox, void )
 {
     bool bCheck = static_cast<CheckBox*>(pBox)->IsChecked();
     m_pPasswdCB->Enable(bCheck);
     m_pPasswdPB->Enable(bCheck);
 }
 
-IMPL_LINK_TYPED( SwInsertSectionTabPage, ChangePasswdHdl, Button *, pButton, void )
+IMPL_LINK( SwInsertSectionTabPage, ChangePasswdHdl, Button *, pButton, void )
 {
     bool bChange = pButton == m_pPasswdPB;
     bool bSet = bChange ? bChange : m_pPasswdCB->IsChecked();
@@ -1694,18 +1693,21 @@ IMPL_LINK_TYPED( SwInsertSectionTabPage, ChangePasswdHdl, Button *, pButton, voi
     {
         if(!m_aNewPasswd.getLength() || bChange)
         {
-            ScopedVclPtrInstance< SfxPasswordDialog > aPasswdDlg(this);
-            aPasswdDlg->ShowExtras(SfxShowExtras::CONFIRM);
-            if(RET_OK == aPasswdDlg->Execute())
+            SfxPasswordDialog aPasswdDlg(GetFrameWeld());
+            aPasswdDlg.ShowExtras(SfxShowExtras::CONFIRM);
+            if (RET_OK == aPasswdDlg.run())
             {
-                const OUString sNewPasswd( aPasswdDlg->GetPassword() );
-                if( aPasswdDlg->GetConfirm() == sNewPasswd )
+                const OUString sNewPasswd(aPasswdDlg.GetPassword());
+                if (aPasswdDlg.GetConfirm() == sNewPasswd)
                 {
                     SvPasswordHelper::GetHashPassword( m_aNewPasswd, sNewPasswd );
                 }
                 else
                 {
-                    ScopedVclPtrInstance<MessageDialog>::Create(pButton, SW_RES(STR_WRONG_PASSWD_REPEAT), VCL_MESSAGE_INFO)->Execute();
+                    std::unique_ptr<weld::MessageDialog> xInfoBox(Application::CreateMessageDialog(pButton->GetFrameWeld(),
+                                                                  VclMessageType::Info, VclButtonsType::Ok,
+                                                                  SwResId(STR_WRONG_PASSWD_REPEAT)));
+                    xInfoBox->run();
                 }
             }
             else if(!bChange)
@@ -1716,21 +1718,26 @@ IMPL_LINK_TYPED( SwInsertSectionTabPage, ChangePasswdHdl, Button *, pButton, voi
         m_aNewPasswd.realloc(0);
 }
 
-IMPL_LINK_NOARG_TYPED(SwInsertSectionTabPage, NameEditHdl, Edit&, void)
+IMPL_LINK_NOARG(SwInsertSectionTabPage, NameEditHdl, Edit&, void)
 {
     const OUString aName = m_pCurName->GetText();
     GetTabDialog()->GetOKButton().Enable(!aName.isEmpty() &&
             m_pCurName->GetEntryPos( aName ) == LISTBOX_ENTRY_NOTFOUND);
 }
 
-IMPL_LINK_TYPED( SwInsertSectionTabPage, UseFileHdl, Button *, pButton, void )
+IMPL_LINK( SwInsertSectionTabPage, UseFileHdl, Button *, pButton, void )
 {
     CheckBox* pBox = static_cast<CheckBox*>(pButton);
     if( pBox->IsChecked() )
     {
-        if( m_pWrtSh->HasSelection() &&
-            RET_NO == ScopedVclPtrInstance<MessageDialog>::Create(this, SW_RES(STR_QUERY_CONNECT), VCL_MESSAGE_QUESTION, VCL_BUTTONS_YES_NO)->Execute())
-            pBox->Check( false );
+        if (m_pWrtSh->HasSelection())
+        {
+            std::unique_ptr<weld::MessageDialog> xQueryBox(Application::CreateMessageDialog(GetFrameWeld(),
+                                                           VclMessageType::Question, VclButtonsType::YesNo,
+                                                           SwResId(STR_QUERY_CONNECT)));
+            if (RET_NO == xQueryBox->run())
+                pBox->Check( false );
+        }
     }
 
     bool bFile = pBox->IsChecked();
@@ -1753,16 +1760,13 @@ IMPL_LINK_TYPED( SwInsertSectionTabPage, UseFileHdl, Button *, pButton, void )
     }
 }
 
-IMPL_LINK_NOARG_TYPED(SwInsertSectionTabPage, FileSearchHdl, Button*, void)
+IMPL_LINK_NOARG(SwInsertSectionTabPage, FileSearchHdl, Button*, void)
 {
-    m_pOldDefDlgParent = Application::GetDefDialogParent();
-    Application::SetDefDialogParent( this );
-    delete m_pDocInserter;
-    m_pDocInserter = new ::sfx2::DocumentInserter( "swriter" );
+    m_pDocInserter.reset(new ::sfx2::DocumentInserter(GetFrameWeld(), "swriter"));
     m_pDocInserter->StartExecuteModal( LINK( this, SwInsertSectionTabPage, DlgClosedHdl ) );
 }
 
-IMPL_LINK_TYPED( SwInsertSectionTabPage, DDEHdl, Button*, pButton, void )
+IMPL_LINK( SwInsertSectionTabPage, DDEHdl, Button*, pButton, void )
 {
     CheckBox* pBox = static_cast<CheckBox*>(pButton);
     bool bDDE = pBox->IsChecked();
@@ -1789,104 +1793,74 @@ IMPL_LINK_TYPED( SwInsertSectionTabPage, DDEHdl, Button*, pButton, void )
     }
 }
 
-IMPL_LINK_TYPED( SwInsertSectionTabPage, DlgClosedHdl, sfx2::FileDialogHelper *, _pFileDlg, void )
+IMPL_LINK( SwInsertSectionTabPage, DlgClosedHdl, sfx2::FileDialogHelper *, _pFileDlg, void )
 {
     if ( _pFileDlg->GetError() == ERRCODE_NONE )
     {
-        std::unique_ptr<SfxMedium> pMedium(m_pDocInserter->CreateMedium());
+        std::unique_ptr<SfxMedium> pMedium(m_pDocInserter->CreateMedium("sglobal"));
         if ( pMedium )
         {
-            m_sFileName = pMedium->GetURLObject().GetMainURL( INetURLObject::NO_DECODE );
+            m_sFileName = pMedium->GetURLObject().GetMainURL( INetURLObject::DecodeMechanism::NONE );
             m_sFilterName = pMedium->GetFilter()->GetFilterName();
             const SfxPoolItem* pItem;
             if ( SfxItemState::SET == pMedium->GetItemSet()->GetItemState( SID_PASSWORD, false, &pItem ) )
                 m_sFilePasswd = static_cast<const SfxStringItem*>(pItem)->GetValue();
             m_pFileNameED->SetText( INetURLObject::decode(
-                m_sFileName, INetURLObject::DECODE_UNAMBIGUOUS ) );
+                m_sFileName, INetURLObject::DecodeMechanism::Unambiguous ) );
             ::lcl_ReadSections(*pMedium, *m_pSubRegionED);
         }
     }
     else
-        m_sFilterName = m_sFilePasswd = aEmptyOUStr;
-
-    Application::SetDefDialogParent( m_pOldDefDlgParent );
+    {
+        m_sFilterName.clear();
+        m_sFilePasswd.clear();
+    }
 }
 
-SwSectionFootnoteEndTabPage::SwSectionFootnoteEndTabPage( vcl::Window *pParent,
-                                                const SfxItemSet &rAttrSet)
-    : SfxTabPage( pParent, "FootnotesEndnotesTabPage", "modules/swriter/ui/footnotesendnotestabpage.ui", &rAttrSet )
-
+SwSectionFootnoteEndTabPage::SwSectionFootnoteEndTabPage(TabPageParent pParent, const SfxItemSet &rAttrSet)
+    : SfxTabPage(pParent, "modules/swriter/ui/footnotesendnotestabpage.ui", "FootnotesEndnotesTabPage", &rAttrSet)
+    , m_xFootnoteNtAtTextEndCB(m_xBuilder->weld_check_button("ftnntattextend"))
+    , m_xFootnoteNtNumCB(m_xBuilder->weld_check_button("ftnntnum"))
+    , m_xFootnoteOffsetLbl(m_xBuilder->weld_label("ftnoffset_label"))
+    , m_xFootnoteOffsetField(m_xBuilder->weld_spin_button("ftnoffset"))
+    , m_xFootnoteNtNumFormatCB(m_xBuilder->weld_check_button("ftnntnumfmt"))
+    , m_xFootnotePrefixFT(m_xBuilder->weld_label("ftnprefix_label"))
+    , m_xFootnotePrefixED(m_xBuilder->weld_entry("ftnprefix"))
+    , m_xFootnoteNumViewBox(new SwNumberingTypeListBox(m_xBuilder->weld_combo_box("ftnnumviewbox")))
+    , m_xFootnoteSuffixFT(m_xBuilder->weld_label("ftnsuffix_label"))
+    , m_xFootnoteSuffixED(m_xBuilder->weld_entry("ftnsuffix"))
+    , m_xEndNtAtTextEndCB(m_xBuilder->weld_check_button("endntattextend"))
+    , m_xEndNtNumCB(m_xBuilder->weld_check_button("endntnum"))
+    , m_xEndOffsetLbl(m_xBuilder->weld_label("endoffset_label"))
+    , m_xEndOffsetField(m_xBuilder->weld_spin_button("endoffset"))
+    , m_xEndNtNumFormatCB(m_xBuilder->weld_check_button("endntnumfmt"))
+    , m_xEndPrefixFT(m_xBuilder->weld_label("endprefix_label"))
+    , m_xEndPrefixED(m_xBuilder->weld_entry("endprefix"))
+    , m_xEndNumViewBox(new SwNumberingTypeListBox(m_xBuilder->weld_combo_box("endnumviewbox")))
+    , m_xEndSuffixFT(m_xBuilder->weld_label("endsuffix_label"))
+    , m_xEndSuffixED(m_xBuilder->weld_entry("endsuffix"))
 {
-    get(m_pFootnoteNtAtTextEndCB,"ftnntattextend");
+    m_xFootnoteNumViewBox->Reload(SwInsertNumTypes::Extended);
+    m_xEndNumViewBox->Reload(SwInsertNumTypes::Extended);
 
-    get(m_pFootnoteNtNumCB,"ftnntnum");
-    get(m_pFootnoteOffsetLbl,"ftnoffset_label");
-    get(m_pFootnoteOffsetField,"ftnoffset");
-
-    get(m_pFootnoteNtNumFormatCB,"ftnntnumfmt");
-    get(m_pFootnotePrefixFT,"ftnprefix_label");
-    get(m_pFootnotePrefixED,"ftnprefix");
-    get(m_pFootnoteNumViewBox,"ftnnumviewbox");
-    get(m_pFootnoteSuffixFT,"ftnsuffix_label");
-    get(m_pFootnoteSuffixED,"ftnsuffix");
-
-    get(m_pEndNtAtTextEndCB,"endntattextend");
-
-    get(m_pEndNtNumCB,"endntnum");
-    get(m_pEndOffsetLbl,"endoffset_label");
-    get(m_pEndOffsetField,"endoffset");
-
-    get(m_pEndNtNumFormatCB,"endntnumfmt");
-    get(m_pEndPrefixFT,"endprefix_label");
-    get(m_pEndPrefixED,"endprefix");
-    get(m_pEndNumViewBox,"endnumviewbox");
-    get(m_pEndSuffixFT,"endsuffix_label");
-    get(m_pEndSuffixED,"endsuffix");
-
-    Link<Button*,void> aLk( LINK( this, SwSectionFootnoteEndTabPage, FootEndHdl));
-    m_pFootnoteNtAtTextEndCB->SetClickHdl( aLk );
-    m_pFootnoteNtNumCB->SetClickHdl( aLk );
-    m_pEndNtAtTextEndCB->SetClickHdl( aLk );
-    m_pEndNtNumCB->SetClickHdl( aLk );
-    m_pFootnoteNtNumFormatCB->SetClickHdl( aLk );
-    m_pEndNtNumFormatCB->SetClickHdl( aLk );
+    Link<weld::ToggleButton&,void> aLk( LINK( this, SwSectionFootnoteEndTabPage, FootEndHdl));
+    m_xFootnoteNtAtTextEndCB->connect_toggled( aLk );
+    m_xFootnoteNtNumCB->connect_toggled( aLk );
+    m_xEndNtAtTextEndCB->connect_toggled( aLk );
+    m_xEndNtNumCB->connect_toggled( aLk );
+    m_xFootnoteNtNumFormatCB->connect_toggled( aLk );
+    m_xEndNtNumFormatCB->connect_toggled( aLk );
 }
 
 SwSectionFootnoteEndTabPage::~SwSectionFootnoteEndTabPage()
 {
-    disposeOnce();
-}
-
-void SwSectionFootnoteEndTabPage::dispose()
-{
-    m_pFootnoteNtAtTextEndCB.clear();
-    m_pFootnoteNtNumCB.clear();
-    m_pFootnoteOffsetLbl.clear();
-    m_pFootnoteOffsetField.clear();
-    m_pFootnoteNtNumFormatCB.clear();
-    m_pFootnotePrefixFT.clear();
-    m_pFootnotePrefixED.clear();
-    m_pFootnoteNumViewBox.clear();
-    m_pFootnoteSuffixFT.clear();
-    m_pFootnoteSuffixED.clear();
-    m_pEndNtAtTextEndCB.clear();
-    m_pEndNtNumCB.clear();
-    m_pEndOffsetLbl.clear();
-    m_pEndOffsetField.clear();
-    m_pEndNtNumFormatCB.clear();
-    m_pEndPrefixFT.clear();
-    m_pEndPrefixED.clear();
-    m_pEndNumViewBox.clear();
-    m_pEndSuffixFT.clear();
-    m_pEndSuffixED.clear();
-    SfxTabPage::dispose();
 }
 
 bool SwSectionFootnoteEndTabPage::FillItemSet( SfxItemSet* rSet )
 {
-    SwFormatFootnoteAtTextEnd aFootnote( m_pFootnoteNtAtTextEndCB->IsChecked()
-                            ? ( m_pFootnoteNtNumCB->IsChecked()
-                                ? ( m_pFootnoteNtNumFormatCB->IsChecked()
+    SwFormatFootnoteAtTextEnd aFootnote( m_xFootnoteNtAtTextEndCB->get_active()
+                            ? ( m_xFootnoteNtNumCB->get_active()
+                                ? ( m_xFootnoteNtNumFormatCB->get_active()
                                     ? FTNEND_ATTXTEND_OWNNUMANDFMT
                                     : FTNEND_ATTXTEND_OWNNUMSEQ )
                                 : FTNEND_ATTXTEND )
@@ -1895,19 +1869,20 @@ bool SwSectionFootnoteEndTabPage::FillItemSet( SfxItemSet* rSet )
     switch( aFootnote.GetValue() )
     {
     case FTNEND_ATTXTEND_OWNNUMANDFMT:
-        aFootnote.SetNumType( m_pFootnoteNumViewBox->GetSelectedNumberingType() );
-        aFootnote.SetPrefix( m_pFootnotePrefixED->GetText().replaceAll("\\t", "\t") ); // fdo#65666
-        aFootnote.SetSuffix( m_pFootnoteSuffixED->GetText().replaceAll("\\t", "\t") );
-        // no break;
+        aFootnote.SetNumType( m_xFootnoteNumViewBox->GetSelectedNumberingType() );
+        aFootnote.SetPrefix( m_xFootnotePrefixED->get_text().replaceAll("\\t", "\t") ); // fdo#65666
+        aFootnote.SetSuffix( m_xFootnoteSuffixED->get_text().replaceAll("\\t", "\t") );
+        [[fallthrough]];
 
     case FTNEND_ATTXTEND_OWNNUMSEQ:
-        aFootnote.SetOffset( static_cast< sal_uInt16 >( m_pFootnoteOffsetField->GetValue()-1 ) );
-        // no break;
+        aFootnote.SetOffset( static_cast< sal_uInt16 >( m_xFootnoteOffsetField->get_value()-1 ) );
+        break;
+    default: break;
     }
 
-    SwFormatEndAtTextEnd aEnd( m_pEndNtAtTextEndCB->IsChecked()
-                            ? ( m_pEndNtNumCB->IsChecked()
-                                ? ( m_pEndNtNumFormatCB->IsChecked()
+    SwFormatEndAtTextEnd aEnd( m_xEndNtAtTextEndCB->get_active()
+                            ? ( m_xEndNtNumCB->get_active()
+                                ? ( m_xEndNtNumFormatCB->get_active()
                                     ? FTNEND_ATTXTEND_OWNNUMANDFMT
                                     : FTNEND_ATTXTEND_OWNNUMSEQ )
                                 : FTNEND_ATTXTEND )
@@ -1916,14 +1891,15 @@ bool SwSectionFootnoteEndTabPage::FillItemSet( SfxItemSet* rSet )
     switch( aEnd.GetValue() )
     {
     case FTNEND_ATTXTEND_OWNNUMANDFMT:
-        aEnd.SetNumType( m_pEndNumViewBox->GetSelectedNumberingType() );
-        aEnd.SetPrefix( m_pEndPrefixED->GetText().replaceAll("\\t", "\t") );
-        aEnd.SetSuffix( m_pEndSuffixED->GetText().replaceAll("\\t", "\t") );
-        // no break;
+        aEnd.SetNumType( m_xEndNumViewBox->GetSelectedNumberingType() );
+        aEnd.SetPrefix( m_xEndPrefixED->get_text().replaceAll("\\t", "\t") );
+        aEnd.SetSuffix( m_xEndSuffixED->get_text().replaceAll("\\t", "\t") );
+        [[fallthrough]];
 
     case FTNEND_ATTXTEND_OWNNUMSEQ:
-        aEnd.SetOffset( static_cast< sal_uInt16 >( m_pEndOffsetField->GetValue()-1 ) );
-        // no break;
+        aEnd.SetOffset( static_cast< sal_uInt16 >( m_xEndOffsetField->get_value()-1 ) );
+        break;
+    default: break;
     }
 
     rSet->Put( aFootnote );
@@ -1935,149 +1911,147 @@ bool SwSectionFootnoteEndTabPage::FillItemSet( SfxItemSet* rSet )
 void SwSectionFootnoteEndTabPage::ResetState( bool bFootnote,
                                          const SwFormatFootnoteEndAtTextEnd& rAttr )
 {
-    CheckBox *pNtAtTextEndCB, *pNtNumCB, *pNtNumFormatCB;
-    FixedText*pPrefixFT, *pSuffixFT;
-    Edit *pPrefixED, *pSuffixED;
+    weld::CheckButton *pNtAtTextEndCB, *pNtNumCB, *pNtNumFormatCB;
+    weld::Label *pPrefixFT, *pSuffixFT;
+    weld::Entry *pPrefixED, *pSuffixED;
     SwNumberingTypeListBox *pNumViewBox;
-    FixedText* pOffsetText;
-    NumericField *pOffsetField;
+    weld::Label *pOffsetText;
+    weld::SpinButton *pOffsetField;
 
     if( bFootnote )
     {
-        pNtAtTextEndCB = m_pFootnoteNtAtTextEndCB;
-        pNtNumCB = m_pFootnoteNtNumCB;
-        pNtNumFormatCB = m_pFootnoteNtNumFormatCB;
-        pPrefixFT = m_pFootnotePrefixFT;
-        pPrefixED = m_pFootnotePrefixED;
-        pSuffixFT = m_pFootnoteSuffixFT;
-        pSuffixED = m_pFootnoteSuffixED;
-        pNumViewBox = m_pFootnoteNumViewBox;
-        pOffsetText = m_pFootnoteOffsetLbl;
-        pOffsetField = m_pFootnoteOffsetField;
+        pNtAtTextEndCB = m_xFootnoteNtAtTextEndCB.get();
+        pNtNumCB = m_xFootnoteNtNumCB.get();
+        pNtNumFormatCB = m_xFootnoteNtNumFormatCB.get();
+        pPrefixFT = m_xFootnotePrefixFT.get();
+        pPrefixED = m_xFootnotePrefixED.get();
+        pSuffixFT = m_xFootnoteSuffixFT.get();
+        pSuffixED = m_xFootnoteSuffixED.get();
+        pNumViewBox = m_xFootnoteNumViewBox.get();
+        pOffsetText = m_xFootnoteOffsetLbl.get();
+        pOffsetField = m_xFootnoteOffsetField.get();
     }
     else
     {
-        pNtAtTextEndCB = m_pEndNtAtTextEndCB;
-        pNtNumCB = m_pEndNtNumCB;
-        pNtNumFormatCB = m_pEndNtNumFormatCB;
-        pPrefixFT = m_pEndPrefixFT;
-        pPrefixED = m_pEndPrefixED;
-        pSuffixFT = m_pEndSuffixFT;
-        pSuffixED = m_pEndSuffixED;
-        pNumViewBox = m_pEndNumViewBox;
-        pOffsetText = m_pEndOffsetLbl;
-        pOffsetField = m_pEndOffsetField;
+        pNtAtTextEndCB = m_xEndNtAtTextEndCB.get();
+        pNtNumCB = m_xEndNtNumCB.get();
+        pNtNumFormatCB = m_xEndNtNumFormatCB.get();
+        pPrefixFT = m_xEndPrefixFT.get();
+        pPrefixED = m_xEndPrefixED.get();
+        pSuffixFT = m_xEndSuffixFT.get();
+        pSuffixED = m_xEndSuffixED.get();
+        pNumViewBox = m_xEndNumViewBox.get();
+        pOffsetText = m_xEndOffsetLbl.get();
+        pOffsetField = m_xEndOffsetField.get();
     }
 
     const sal_uInt16 eState = rAttr.GetValue();
     switch( eState )
     {
     case FTNEND_ATTXTEND_OWNNUMANDFMT:
-        pNtNumFormatCB->SetState( TRISTATE_TRUE );
-        // no break;
+        pNtNumFormatCB->set_state( TRISTATE_TRUE );
+        [[fallthrough]];
 
     case FTNEND_ATTXTEND_OWNNUMSEQ:
-        pNtNumCB->SetState( TRISTATE_TRUE );
-        // no break;
+        pNtNumCB->set_state( TRISTATE_TRUE );
+        [[fallthrough]];
 
     case FTNEND_ATTXTEND:
-        pNtAtTextEndCB->SetState( TRISTATE_TRUE );
+        pNtAtTextEndCB->set_state( TRISTATE_TRUE );
         // no break;
     }
 
     pNumViewBox->SelectNumberingType( rAttr.GetNumType() );
-    pOffsetField->SetValue( rAttr.GetOffset() + 1 );
-    pPrefixED->SetText( rAttr.GetPrefix().replaceAll("\t", "\\t") );
-    pSuffixED->SetText( rAttr.GetSuffix().replaceAll("\t", "\\t") );
+    pOffsetField->set_value( rAttr.GetOffset() + 1 );
+    pPrefixED->set_text( rAttr.GetPrefix().replaceAll("\t", "\\t") );
+    pSuffixED->set_text( rAttr.GetSuffix().replaceAll("\t", "\\t") );
 
     switch( eState )
     {
     case FTNEND_ATPGORDOCEND:
-        pNtNumCB->Enable( false );
-        // no break;
+        pNtNumCB->set_sensitive( false );
+        [[fallthrough]];
 
     case FTNEND_ATTXTEND:
-        pNtNumFormatCB->Enable( false );
-        pOffsetField->Enable( false );
-        pOffsetText->Enable( false );
-        // no break;
+        pNtNumFormatCB->set_sensitive( false );
+        pOffsetField->set_sensitive( false );
+        pOffsetText->set_sensitive( false );
+        [[fallthrough]];
 
     case FTNEND_ATTXTEND_OWNNUMSEQ:
         pNumViewBox->Enable( false );
-        pPrefixFT->Enable( false );
-        pPrefixED->Enable( false );
-        pSuffixFT->Enable( false );
-        pSuffixED->Enable( false );
+        pPrefixFT->set_sensitive( false );
+        pPrefixED->set_sensitive( false );
+        pSuffixFT->set_sensitive( false );
+        pSuffixED->set_sensitive( false );
         // no break;
     }
 }
 
 void SwSectionFootnoteEndTabPage::Reset( const SfxItemSet* rSet )
 {
-    ResetState( true, static_cast<const SwFormatFootnoteAtTextEnd&>(rSet->Get(
-                                    RES_FTN_AT_TXTEND, false )));
-    ResetState( false, static_cast<const SwFormatEndAtTextEnd&>(rSet->Get(
-                                    RES_END_AT_TXTEND, false )));
+    ResetState( true, rSet->Get( RES_FTN_AT_TXTEND, false ));
+    ResetState( false, rSet->Get( RES_END_AT_TXTEND, false ));
 }
 
-VclPtr<SfxTabPage> SwSectionFootnoteEndTabPage::Create( vcl::Window* pParent,
+VclPtr<SfxTabPage> SwSectionFootnoteEndTabPage::Create( TabPageParent pParent,
                                                    const SfxItemSet* rAttrSet)
 {
     return VclPtr<SwSectionFootnoteEndTabPage>::Create(pParent, *rAttrSet);
 }
 
-IMPL_LINK_TYPED( SwSectionFootnoteEndTabPage, FootEndHdl, Button *, pBox, void )
+IMPL_LINK( SwSectionFootnoteEndTabPage, FootEndHdl, weld::ToggleButton&, rBox, void )
 {
-    bool bFoot = m_pFootnoteNtAtTextEndCB == pBox || m_pFootnoteNtNumCB == pBox ||
-                    m_pFootnoteNtNumFormatCB == pBox ;
+    bool bFoot = m_xFootnoteNtAtTextEndCB.get() == &rBox || m_xFootnoteNtNumCB.get() == &rBox ||
+                    m_xFootnoteNtNumFormatCB.get() == &rBox ;
 
-    CheckBox *pNumBox, *pNumFormatBox, *pEndBox;
+    weld::CheckButton *pNumBox, *pNumFormatBox, *pEndBox;
     SwNumberingTypeListBox* pNumViewBox;
-    FixedText* pOffsetText;
-    NumericField *pOffsetField;
-    FixedText*pPrefixFT, *pSuffixFT;
-    Edit *pPrefixED, *pSuffixED;
+    weld::Label *pOffsetText;
+    weld::SpinButton *pOffsetField;
+    weld::Label *pPrefixFT, *pSuffixFT;
+    weld::Entry *pPrefixED, *pSuffixED;
 
     if( bFoot )
     {
-        pEndBox = m_pFootnoteNtAtTextEndCB;
-        pNumBox = m_pFootnoteNtNumCB;
-        pNumFormatBox = m_pFootnoteNtNumFormatCB;
-        pNumViewBox = m_pFootnoteNumViewBox;
-        pOffsetText = m_pFootnoteOffsetLbl;
-        pOffsetField = m_pFootnoteOffsetField;
-        pPrefixFT = m_pFootnotePrefixFT;
-        pSuffixFT = m_pFootnoteSuffixFT;
-        pPrefixED = m_pFootnotePrefixED;
-        pSuffixED = m_pFootnoteSuffixED;
+        pEndBox = m_xFootnoteNtAtTextEndCB.get();
+        pNumBox = m_xFootnoteNtNumCB.get();
+        pNumFormatBox = m_xFootnoteNtNumFormatCB.get();
+        pNumViewBox = m_xFootnoteNumViewBox.get();
+        pOffsetText = m_xFootnoteOffsetLbl.get();
+        pOffsetField = m_xFootnoteOffsetField.get();
+        pPrefixFT = m_xFootnotePrefixFT.get();
+        pSuffixFT = m_xFootnoteSuffixFT.get();
+        pPrefixED = m_xFootnotePrefixED.get();
+        pSuffixED = m_xFootnoteSuffixED.get();
     }
     else
     {
-        pEndBox = m_pEndNtAtTextEndCB;
-        pNumBox = m_pEndNtNumCB;
-        pNumFormatBox = m_pEndNtNumFormatCB;
-        pNumViewBox = m_pEndNumViewBox;
-        pOffsetText = m_pEndOffsetLbl;
-        pOffsetField = m_pEndOffsetField;
-        pPrefixFT = m_pEndPrefixFT;
-        pSuffixFT = m_pEndSuffixFT;
-        pPrefixED = m_pEndPrefixED;
-        pSuffixED = m_pEndSuffixED;
+        pEndBox = m_xEndNtAtTextEndCB.get();
+        pNumBox = m_xEndNtNumCB.get();
+        pNumFormatBox = m_xEndNtNumFormatCB.get();
+        pNumViewBox = m_xEndNumViewBox.get();
+        pOffsetText = m_xEndOffsetLbl.get();
+        pOffsetField = m_xEndOffsetField.get();
+        pPrefixFT = m_xEndPrefixFT.get();
+        pSuffixFT = m_xEndSuffixFT.get();
+        pPrefixED = m_xEndPrefixED.get();
+        pSuffixED = m_xEndSuffixED.get();
     }
 
-    bool bEnableAtEnd = TRISTATE_TRUE == pEndBox->GetState();
-    bool bEnableNum = bEnableAtEnd && TRISTATE_TRUE == pNumBox->GetState();
-    bool bEnableNumFormat = bEnableNum && TRISTATE_TRUE == pNumFormatBox->GetState();
+    bool bEnableAtEnd = TRISTATE_TRUE == pEndBox->get_state();
+    bool bEnableNum = bEnableAtEnd && TRISTATE_TRUE == pNumBox->get_state();
+    bool bEnableNumFormat = bEnableNum && TRISTATE_TRUE == pNumFormatBox->get_state();
 
-    pNumBox->Enable( bEnableAtEnd );
-    pOffsetText->Enable( bEnableNum );
-    pOffsetField->Enable( bEnableNum );
-    pNumFormatBox->Enable( bEnableNum );
+    pNumBox->set_sensitive( bEnableAtEnd );
+    pOffsetText->set_sensitive( bEnableNum );
+    pOffsetField->set_sensitive( bEnableNum );
+    pNumFormatBox->set_sensitive( bEnableNum );
     pNumViewBox->Enable( bEnableNumFormat );
-    pPrefixED->Enable( bEnableNumFormat );
-    pSuffixED->Enable( bEnableNumFormat );
-    pPrefixFT->Enable( bEnableNumFormat );
-    pSuffixFT->Enable( bEnableNumFormat );
+    pPrefixED->set_sensitive( bEnableNumFormat );
+    pSuffixED->set_sensitive( bEnableNumFormat );
+    pPrefixFT->set_sensitive( bEnableNumFormat );
+    pSuffixFT->set_sensitive( bEnableNumFormat );
 }
 
 SwSectionPropertyTabDialog::SwSectionPropertyTabDialog(
@@ -2087,11 +2061,10 @@ SwSectionPropertyTabDialog::SwSectionPropertyTabDialog(
     , rWrtSh(rSh)
 {
     SfxAbstractDialogFactory* pFact = SfxAbstractDialogFactory::Create();
-    OSL_ENSURE(pFact, "Dialog creation failed!");
-    m_nColumnPageId = AddTabPage("columns",   SwColumnPage::Create,    nullptr);
-    m_nBackPageId = AddTabPage("background", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BACKGROUND ), nullptr );
-    m_nNotePageId = AddTabPage("notes", SwSectionFootnoteEndTabPage::Create, nullptr);
-    m_nIndentPage = AddTabPage("indents", SwSectionIndentTabPage::Create, nullptr);
+    m_nColumnPageId = AddTabPage("columns",   SwColumnPage::Create);
+    m_nBackPageId = AddTabPage("background", pFact->GetTabPageCreatorFunc( RID_SVXPAGE_BKG ) );
+    m_nNotePageId = AddTabPage("notes", SwSectionFootnoteEndTabPage::Create);
+    m_nIndentPage = AddTabPage("indents", SwSectionIndentTabPage::Create);
 
     SvxHtmlOptions& rHtmlOpt = SvxHtmlOptions::Get();
     long nHtmlMode = rHtmlOpt.GetExportMode();
@@ -2126,38 +2099,28 @@ void SwSectionPropertyTabDialog::PageCreated( sal_uInt16 nId, SfxTabPage &rPage 
         static_cast<SwSectionIndentTabPage&>(rPage).SetWrtShell(rWrtSh);
 }
 
-SwSectionIndentTabPage::SwSectionIndentTabPage(vcl::Window *pParent, const SfxItemSet &rAttrSet)
-    : SfxTabPage(pParent, "IndentPage", "modules/swriter/ui/indentpage.ui", &rAttrSet)
+SwSectionIndentTabPage::SwSectionIndentTabPage(TabPageParent pParent, const SfxItemSet &rAttrSet)
+    : SfxTabPage(pParent, "modules/swriter/ui/indentpage.ui", "IndentPage", &rAttrSet)
+    , m_xBeforeMF(m_xBuilder->weld_metric_spin_button("before", FieldUnit::CM))
+    , m_xAfterMF(m_xBuilder->weld_metric_spin_button("after", FieldUnit::CM))
+    , m_xPreviewWin(new weld::CustomWeld(*m_xBuilder, "preview", m_aPreviewWin))
 {
-    get(m_pBeforeMF, "before");
-    get(m_pAfterMF, "after");
-    get(m_pPreviewWin, "preview");
-    Link<Edit&,void> aLk = LINK(this, SwSectionIndentTabPage, IndentModifyHdl);
-    m_pBeforeMF->SetModifyHdl(aLk);
-    m_pAfterMF->SetModifyHdl(aLk);
+    Link<weld::MetricSpinButton&,void> aLk = LINK(this, SwSectionIndentTabPage, IndentModifyHdl);
+    m_xBeforeMF->connect_value_changed(aLk);
+    m_xAfterMF->connect_value_changed(aLk);
 }
 
 SwSectionIndentTabPage::~SwSectionIndentTabPage()
 {
-    disposeOnce();
 }
 
-void SwSectionIndentTabPage::dispose()
+bool SwSectionIndentTabPage::FillItemSet(SfxItemSet* rSet)
 {
-    m_pBeforeMF.clear();
-    m_pAfterMF.clear();
-    m_pPreviewWin.clear();
-    SfxTabPage::dispose();
-}
-
-bool SwSectionIndentTabPage::FillItemSet( SfxItemSet* rSet)
-{
-    if(m_pBeforeMF->IsValueModified() ||
-            m_pAfterMF->IsValueModified())
+    if (m_xBeforeMF->get_value_changed_from_saved() || m_xAfterMF->get_value_changed_from_saved())
     {
         SvxLRSpaceItem aLRSpace(
-                static_cast< long >(m_pBeforeMF->Denormalize(m_pBeforeMF->GetValue(FUNIT_TWIP))) ,
-                static_cast< long >(m_pAfterMF->Denormalize(m_pAfterMF->GetValue(FUNIT_TWIP))), 0, 0, RES_LR_SPACE);
+                m_xBeforeMF->denormalize(m_xBeforeMF->get_value(FieldUnit::TWIP)) ,
+                m_xAfterMF->denormalize(m_xAfterMF->get_value(FieldUnit::TWIP)), 0, 0, RES_LR_SPACE);
         rSet->Put(aLRSpace);
     }
     return true;
@@ -2167,48 +2130,48 @@ void SwSectionIndentTabPage::Reset( const SfxItemSet* rSet)
 {
     //this page doesn't show up in HTML mode
     FieldUnit aMetric = ::GetDfltMetric(false);
-    SetMetric(*m_pBeforeMF, aMetric);
-    SetMetric(*m_pAfterMF , aMetric);
+    SetFieldUnit(*m_xBeforeMF, aMetric);
+    SetFieldUnit(*m_xAfterMF , aMetric);
 
     SfxItemState eItemState = rSet->GetItemState( RES_LR_SPACE );
     if ( eItemState >= SfxItemState::DEFAULT )
     {
         const SvxLRSpaceItem& rSpace =
-            static_cast<const SvxLRSpaceItem&>(rSet->Get( RES_LR_SPACE ));
+            rSet->Get( RES_LR_SPACE );
 
-        m_pBeforeMF->SetValue( m_pBeforeMF->Normalize(rSpace.GetLeft()), FUNIT_TWIP );
-        m_pAfterMF->SetValue( m_pAfterMF->Normalize(rSpace.GetRight()), FUNIT_TWIP );
+        m_xBeforeMF->set_value(m_xBeforeMF->normalize(rSpace.GetLeft()), FieldUnit::TWIP);
+        m_xAfterMF->set_value(m_xAfterMF->normalize(rSpace.GetRight()), FieldUnit::TWIP);
     }
     else
     {
-        m_pBeforeMF->SetEmptyFieldValue();
-        m_pAfterMF->SetEmptyFieldValue();
+        m_xBeforeMF->set_text("");
+        m_xAfterMF->set_text("");
     }
-    m_pBeforeMF->SaveValue();
-    m_pAfterMF->SaveValue();
-    IndentModifyHdl(*m_pBeforeMF);
+    m_xBeforeMF->save_value();
+    m_xAfterMF->save_value();
+    IndentModifyHdl(*m_xBeforeMF);
 }
 
-VclPtr<SfxTabPage> SwSectionIndentTabPage::Create( vcl::Window* pParent, const SfxItemSet* rAttrSet)
+VclPtr<SfxTabPage> SwSectionIndentTabPage::Create(TabPageParent pParent, const SfxItemSet* rAttrSet)
 {
     return VclPtr<SwSectionIndentTabPage>::Create(pParent, *rAttrSet);
 }
 
-void SwSectionIndentTabPage::SetWrtShell(SwWrtShell& rSh)
+void SwSectionIndentTabPage::SetWrtShell(SwWrtShell const & rSh)
 {
     //set sensible values at the preview
-    m_pPreviewWin->SetAdjust(SVX_ADJUST_BLOCK);
-    m_pPreviewWin->SetLastLine(SVX_ADJUST_BLOCK);
-    const SwRect& rPageRect = rSh.GetAnyCurRect( RECT_PAGE );
+    m_aPreviewWin.SetAdjust(SvxAdjust::Block);
+    m_aPreviewWin.SetLastLine(SvxAdjust::Block);
+    const SwRect& rPageRect = rSh.GetAnyCurRect( CurRectType::Page );
     Size aPageSize(rPageRect.Width(), rPageRect.Height());
-    m_pPreviewWin->SetSize(aPageSize);
+    m_aPreviewWin.SetSize(aPageSize);
 }
 
-IMPL_LINK_NOARG_TYPED(SwSectionIndentTabPage, IndentModifyHdl, Edit&, void)
+IMPL_LINK_NOARG(SwSectionIndentTabPage, IndentModifyHdl, weld::MetricSpinButton&, void)
 {
-    m_pPreviewWin->SetLeftMargin( static_cast< long >(m_pBeforeMF->Denormalize(m_pBeforeMF->GetValue(FUNIT_TWIP))) );
-    m_pPreviewWin->SetRightMargin( static_cast< long >(m_pAfterMF->Denormalize(m_pAfterMF->GetValue(FUNIT_TWIP))) );
-    m_pPreviewWin->Invalidate();
+    m_aPreviewWin.SetLeftMargin(m_xBeforeMF->denormalize(m_xBeforeMF->get_value(FieldUnit::TWIP)));
+    m_aPreviewWin.SetRightMargin(m_xAfterMF->denormalize(m_xAfterMF->get_value(FieldUnit::TWIP)));
+    m_aPreviewWin.Invalidate();
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
